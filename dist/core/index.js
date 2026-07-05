@@ -19,4 +19,6 @@ __exportStar(require("./state"), exports);
 __exportStar(require("./yaml-parser"), exports);
 __exportStar(require("./template-engine"), exports);
 __exportStar(require("./validator"), exports);
+__exportStar(require("./intent-recognition"), exports);
+__exportStar(require("./global-layer"), exports);
 //# sourceMappingURL=index.js.map

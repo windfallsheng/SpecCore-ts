@@ -12,7 +12,7 @@ if [ -d "$TEST_DIR" ]; then
 fi
 
 echo "========================================"
-echo "🚀 SpecCore CLI 验证脚本"
+echo "🚀 SpecCore 验证脚本"
 echo "========================================"
 echo ""
 

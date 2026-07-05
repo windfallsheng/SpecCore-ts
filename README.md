@@ -1,4 +1,4 @@
-# SpecCore CLI
+# SpecCore
 
 > **Code by Spec, Not by Vibe.**
 
@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
 
-SpecCore CLI 是 [SpecCore](https://github.com/spec-core/spec-core) 规范驱动开发框架的官方命令行工具。它将确定性操作（文件创建、目录管理、格式校验、状态统计）从 AI 中剥离，由代码直接执行，提升效率并降低 Token 消耗。
+SpecCore 是 [SpecCore](https://github.com/spec-core/spec-core) 规范驱动开发框架的官方命令行工具。它将确定性操作（文件创建、目录管理、格式校验、状态统计）从 AI 中剥离，由代码直接执行，提升效率并降低 Token 消耗。
 
 ---
 
@@ -364,7 +364,7 @@ speccore validate --json
 | 项目 | 说明 | GitHub | Gitee |
 | :--- | :--- | :--- | :--- |
 | **SpecCore** | 规范驱动开发框架（方法论 + 文件模板 + Slash Commands） | [windfallsheng/SpecCore](https://github.com/windfallsheng/SpecCore) | [windfullsheng/spec-core](https://gitee.com/windfullsheng/spec-core) |
-| **SpecCore CLI** | CLI 工具（确定性操作执行引擎） | [windfallsheng/SpecCore-ts](https://github.com/windfallsheng/SpecCore-ts) | [windfullsheng/spec-core-ts](https://gitee.com/windfullsheng/spec-core-ts) |
+| **SpecCore** | CLI 工具（确定性操作执行引擎） | [windfallsheng/SpecCore-ts](https://github.com/windfallsheng/SpecCore-ts) | [windfullsheng/spec-core-ts](https://gitee.com/windfullsheng/spec-core-ts) |
 
 ---
 
