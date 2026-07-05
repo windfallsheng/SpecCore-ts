@@ -361,10 +361,10 @@ speccore validate --json
 
 ## 相关项目
 
-| 项目 | 说明 | 链接 |
-| :--- | :--- | :--- |
-| **SpecCore** | 规范驱动开发框架（方法论 + 文件模板 + Slash Commands） | [github.com/spec-core/spec-core](https://github.com/spec-core/spec-core) |
-| **SpecCore CLI** | CLI 工具（确定性操作执行引擎） | 本仓库 |
+| 项目 | 说明 | GitHub | Gitee |
+| :--- | :--- | :--- | :--- |
+| **SpecCore** | 规范驱动开发框架（方法论 + 文件模板 + Slash Commands） | [windfallsheng/SpecCore](https://github.com/windfallsheng/SpecCore) | [windfullsheng/spec-core](https://gitee.com/windfullsheng/spec-core) |
+| **SpecCore CLI** | CLI 工具（确定性操作执行引擎） | [windfallsheng/SpecCore-ts](https://github.com/windfallsheng/SpecCore-ts) | [windfullsheng/spec-core-ts](https://gitee.com/windfullsheng/spec-core-ts) |
 
 ---
 
