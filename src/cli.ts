@@ -37,6 +37,8 @@ import { impactCommand } from './commands/impact';
 import { baselineCommand } from './commands/baseline';
 import { dashboardCommand } from './commands/dashboard';
 import { auditCommand } from './commands/audit';
+// rename 命令
+import { renameCommand } from './commands/rename';
 
 program
   .name('speccore')
@@ -446,6 +448,19 @@ program
   .option('--fix', 'Auto-fix fixable issues')
   .option('--detail', 'Show detailed analysis')
   .action(auditCommand);
+
+// 重命名
+program
+  .command('rename')
+  .alias('rn')
+  .description('Rename iteration or task, auto-update all references')
+  .option('--target <name>', 'Current name (required for single rename)')
+  .option('--new-name <name>', 'New name (required for single rename)')
+  .option('--batch', 'Batch rename mode')
+  .option('--pattern <pattern>', 'Batch pattern to match')
+  .option('--replacement <replacement>', 'Batch replacement string')
+  .option('--force', 'Skip preview and execute')
+  .action(renameCommand);
 
 // ================================================================
 // 快捷别名（顶层别名）
