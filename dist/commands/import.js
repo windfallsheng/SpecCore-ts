@@ -1,13 +1,28 @@
 "use strict";
+/**
+ * import - 多项目导入命令
+ * 将存量项目导入到全量层（GLOBAL/PROJECTS/），填充全量需求和索引
+ */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.importCommand = importCommand;
 const fs_extra_1 = require("fs-extra");
 const path_1 = require("path");
 const logger_1 = require("../utils/logger");
+const global_layer_1 = require("../core/global-layer");
 async function importCommand(options) {
-    const spinner = new logger_1.Spinner('Importing project');
+    const spinner = new logger_1.Spinner('Importing project to global layer');
     spinner.start();
     try {
+        // 新逻辑：多项目导入到全量层
+        if (options.project) {
+            const projectName = options.project;
+            const projectPath = options.path || `./${projectName}`;
+            const projectType = (options.type || 'backend');
+            await importToGlobalLayer(projectName, projectPath, projectType);
+            spinner.stop('Project imported to global layer');
+            return;
+        }
+        // 兼容旧逻辑
         const sources = (options.source || 'all').split(',');
         const results = [];
         for (const source of sources) {
@@ -38,48 +53,284 @@ async function importCommand(options) {
         throw error;
     }
 }
+/**
+ * 多项目导入到全量层
+ */
+async function importToGlobalLayer(projectName, projectPath, projectType) {
+    // 1. 检查路径
+    if (!(await (0, fs_extra_1.pathExists)(projectPath))) {
+        throw new Error(`Project path not found: ${projectPath}`);
+    }
+    // 2. 检查全局层是否已初始化
+    const globalDir = (0, path_1.join)(process.cwd(), '.speccore', 'GLOBAL');
+    if (!(await (0, fs_extra_1.pathExists)(globalDir))) {
+        throw new Error('Global layer not initialized. Run: speccore init');
+    }
+    // 3. 读取当前全量索引
+    const index = await (0, global_layer_1.readGlobalIndex)();
+    // 4. 扫描项目代码
+    logger_1.logger.info(`🔍 Scanning project: ${projectName} (${projectType})`);
+    const scanResult = await scanProject(projectPath, projectType);
+    logger_1.logger.info(`   Found ${scanResult.apis.length} API endpoints, ${scanResult.models.length} data models`);
+    // 5. 生成需求条目
+    const requirements = [];
+    let nextId = parseInt((0, global_layer_1.getNextReqId)(index).replace('REQ-', ''), 10);
+    for (const api of scanResult.apis) {
+        const reqId = `REQ-${String(nextId++).padStart(3, '0')}`;
+        requirements.push({
+            id: reqId,
+            name: api.name,
+            description: `API: ${api.method} ${api.path}\n${api.description || '从代码分析提取的功能描述'}`,
+        });
+    }
+    // 如果没有扫描到 API，生成一个占位需求
+    if (requirements.length === 0) {
+        const reqId = `REQ-${String(nextId++).padStart(3, '0')}`;
+        requirements.push({
+            id: reqId,
+            name: `${projectName} 项目导入`,
+            description: `从 ${projectPath} 导入的项目，类型: ${projectType}`,
+        });
+    }
+    // 6. 创建项目目录和文件
+    await (0, global_layer_1.ensureProjectDir)(projectName);
+    const entries = await (0, global_layer_1.writeProjectRequirements)(projectName, projectType, requirements, scanResult.techStack);
+    await (0, global_layer_1.writeProjectMetadata)(projectName, projectType, scanResult.techStack, scanResult.repoUrl);
+    // 7. 更新全量索引
+    for (const entry of entries) {
+        await (0, global_layer_1.appendReqToIndex)(entry);
+    }
+    await (0, global_layer_1.upsertProjectInIndex)({
+        name: projectName,
+        type: projectType,
+        reqCount: entries.length,
+        implemented: entries.filter((e) => e.status === '📦 已有实现').length,
+        inProgress: 0,
+        pending: 0,
+        lastImport: new Date().toISOString().split('T')[0],
+    });
+    // 8. 更新版本
+    const newVersion = (0, global_layer_1.bumpGlobalVersion)(index.version);
+    await (0, global_layer_1.updateIndexVersion)(newVersion);
+    // 9. 更新 OVERVIEW.md 和 CHANGELOG.md
+    await updateGlobalOverview(projectName, projectType);
+    await updateGlobalChangelog(`导入项目 ${projectName}`, newVersion);
+    // 10. 输出报告
+    logger_1.logger.info('');
+    logger_1.logger.info('✅ 项目导入完成！');
+    logger_1.logger.info('');
+    logger_1.logger.info('📊 导入摘要:');
+    logger_1.logger.info(`   项目名称: ${projectName}`);
+    logger_1.logger.info(`   项目类型: ${projectType}`);
+    logger_1.logger.info(`   识别接口: ${scanResult.apis.length} 个`);
+    logger_1.logger.info(`   数据模型: ${scanResult.models.length} 个`);
+    logger_1.logger.info(`   生成需求: ${entries.map((e) => e.id).join(', ')}`);
+    logger_1.logger.info('');
+    logger_1.logger.info('📁 已创建:');
+    logger_1.logger.info(`   GLOBAL/PROJECTS/${projectName}/REQUIREMENT.md`);
+    logger_1.logger.info(`   GLOBAL/PROJECTS/${projectName}/METADATA.md`);
+    logger_1.logger.info('');
+    logger_1.logger.info('📋 已更新:');
+    logger_1.logger.info('   GLOBAL/INDEX.md（需求映射 + 项目列表）');
+    logger_1.logger.info('   GLOBAL/OVERVIEW.md');
+    logger_1.logger.info('');
+    logger_1.logger.info('📋 下一步:');
+    logger_1.logger.info('   speccore global-status  查看全量层状态');
+    logger_1.logger.info('   speccore iteration-from-global  从全量层生成期次');
+}
+async function scanProject(projectPath, projectType) {
+    const result = {
+        apis: [],
+        models: [],
+        techStack: '',
+        repoUrl: '',
+    };
+    const absPath = (0, path_1.join)(process.cwd(), projectPath);
+    if (projectType === 'backend') {
+        // 扫描后端项目
+        // 尝试读取 pom.xml (Java/Maven)
+        const pomPath = (0, path_1.join)(absPath, 'pom.xml');
+        if (await (0, fs_extra_1.pathExists)(pomPath)) {
+            const pom = await (0, fs_extra_1.readFile)(pomPath, 'utf-8');
+            const groupMatch = pom.match(/<groupId>([^<]+)<\/groupId>/);
+            const artifactMatch = pom.match(/<artifactId>([^<]+)<\/artifactId>/);
+            if (groupMatch && artifactMatch) {
+                result.techStack = `Java Maven: ${groupMatch[1]}:${artifactMatch[1]}`;
+            }
+        }
+        // 扫描 package.json (Node.js)
+        const pkgPath = (0, path_1.join)(absPath, 'package.json');
+        if (await (0, fs_extra_1.pathExists)(pkgPath)) {
+            const pkg = JSON.parse(await (0, fs_extra_1.readFile)(pkgPath, 'utf-8'));
+            result.techStack = `Node.js: ${pkg.name || 'unnamed'}`;
+            const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+            if (deps['@nestjs/core'])
+                result.techStack += ' (NestJS)';
+            else if (deps['express'])
+                result.techStack += ' (Express)';
+        }
+        // 扫描 src/ 目录寻找 Controller/路由
+        const srcDir = (0, path_1.join)(absPath, 'src');
+        if (await (0, fs_extra_1.pathExists)(srcDir)) {
+            result.apis = await scanApiEndpoints(srcDir);
+        }
+    }
+    else if (['web', 'h5', 'miniapp'].includes(projectType)) {
+        // 扫描前端项目
+        const pkgPath = (0, path_1.join)(absPath, 'package.json');
+        if (await (0, fs_extra_1.pathExists)(pkgPath)) {
+            const pkg = JSON.parse(await (0, fs_extra_1.readFile)(pkgPath, 'utf-8'));
+            result.techStack = `${projectType}: ${pkg.name || 'unnamed'}`;
+            const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+            if (deps['vue'])
+                result.techStack += ' (Vue)';
+            else if (deps['react'])
+                result.techStack += ' (React)';
+            else if (deps['@angular/core'])
+                result.techStack += ' (Angular)';
+            // 扫描 pages/ 目录
+            const pagesDir = (0, path_1.join)(absPath, 'src', 'pages');
+            if (await (0, fs_extra_1.pathExists)(pagesDir)) {
+                const pages = await (0, fs_extra_1.readdir)(pagesDir, { withFileTypes: true });
+                for (const page of pages.filter((p) => p.isDirectory())) {
+                    result.apis.push({
+                        method: 'PAGE',
+                        path: `/${page.name}`,
+                        name: `${page.name} 页面`,
+                        description: `${projectType} 页面`,
+                    });
+                }
+            }
+        }
+    }
+    return result;
+}
+/**
+ * 递归扫描 API 端点
+ */
+async function scanApiEndpoints(srcDir) {
+    const apis = [];
+    async function scan(dir) {
+        if (!(await (0, fs_extra_1.pathExists)(dir)))
+            return;
+        const entries = await (0, fs_extra_1.readdir)(dir, { withFileTypes: true });
+        for (const entry of entries) {
+            const fullPath = (0, path_1.join)(dir, entry.name);
+            if (entry.isDirectory()) {
+                await scan(fullPath);
+            }
+            else if ([
+                '.java', '.ts', '.js', '.go', '.py',
+            ].includes((0, path_1.extname)(entry.name))) {
+                const content = await (0, fs_extra_1.readFile)(fullPath, 'utf-8');
+                // Java Spring
+                const javaMatches = content.matchAll(/@(GetMapping|PostMapping|PutMapping|DeleteMapping|PatchMapping|RequestMapping)\s*(?:\([^)]*\))?\s*(?:@[^(\n]*\s*)*(?:public\s+\S+\s+)?(\w+)\s*\(/g);
+                for (const match of javaMatches) {
+                    const annMethod = match[1];
+                    const funcName = match[2];
+                    // Try to extract path
+                    const pathMatch = content.substring(match.index || 0, (match.index || 0) + 200).match(/@\w+Mapping\s*\(\s*(?:value\s*=\s*)?["']([^"']+)["']/);
+                    const apiPath = pathMatch ? pathMatch[1] : '/';
+                    apis.push({
+                        method: annMethod.replace('Mapping', '').toUpperCase(),
+                        path: apiPath,
+                        name: funcName ? funcName.replace(/([A-Z])/g, ' $1').trim() : apiPath,
+                        description: `从 ${entry.name} 扫描到的 API 端点`,
+                    });
+                }
+                // TypeScript NestJS
+                const tsMatches = content.matchAll(/@(Get|Post|Put|Delete|Patch)\s*\(\s*(?:['"]([^'"]*)['"]\s*)?\)/g);
+                for (const match of tsMatches) {
+                    apis.push({
+                        method: match[1],
+                        path: match[2] || '/',
+                        name: match[2] ? match[2].replace(/^\//, '').replace(/\//g, ' ') : 'API',
+                        description: `从 ${entry.name} 扫描到的 NestJS 端点`,
+                    });
+                }
+                // Express routes
+                const expressMatches = content.matchAll(/(?:app|router)\.(get|post|put|delete|patch)\s*\(\s*['"]([^'"]+)['"]/g);
+                for (const match of expressMatches) {
+                    apis.push({
+                        method: match[1].toUpperCase(),
+                        path: match[2],
+                        name: match[2].replace(/^\//, '').replace(/\//g, ' '),
+                        description: `从 ${entry.name} 扫描到的 Express 路由`,
+                    });
+                }
+            }
+        }
+    }
+    await scan(srcDir);
+    return apis;
+}
+// ============================================================
+// 全局文件更新
+// ============================================================
+async function updateGlobalOverview(projectName, projectType) {
+    const overviewPath = (0, path_1.join)(process.cwd(), '.speccore', 'GLOBAL', 'OVERVIEW.md');
+    if (!(await (0, fs_extra_1.pathExists)(overviewPath)))
+        return;
+    let content = await (0, fs_extra_1.readFile)(overviewPath, 'utf-8');
+    const today = new Date().toISOString().split('T')[0];
+    const newEntry = `| ${projectName} | ${projectType} | 已导入 | - |`;
+    if (content.includes('_待导入_')) {
+        content = content.replace('| _待导入_ | - | - | - |', newEntry);
+    }
+    await (0, fs_extra_1.writeFile)(overviewPath, content);
+}
+async function updateGlobalChangelog(description, version) {
+    const changelogPath = (0, path_1.join)(process.cwd(), '.speccore', 'GLOBAL', 'CHANGELOG.md');
+    if (!(await (0, fs_extra_1.pathExists)(changelogPath)))
+        return;
+    let content = await (0, fs_extra_1.readFile)(changelogPath, 'utf-8');
+    const today = new Date().toISOString().split('T')[0];
+    const newEntry = `| ${today} | ${version} | 导入 | ${description} | SpecCore |`;
+    if (content.includes('_暂无记录_')) {
+        content = content.replace('| _暂无记录_ | v1.0 | 创建 | 全量层模板初始化 | - |', newEntry);
+    }
+    else {
+        // 在变更记录表后面追加
+        const firstEntry = content.indexOf('|', content.indexOf('## 变更记录'));
+        const endOfLine = content.indexOf('\n', firstEntry);
+        if (endOfLine > 0) {
+            content = content.slice(0, endOfLine + 1) + newEntry + '\n' + content.slice(endOfLine + 1);
+        }
+    }
+    await (0, fs_extra_1.writeFile)(changelogPath, content);
+}
+// ============================================================
+// 旧版兼容函数
+// ============================================================
 async function importCode(sourcePath) {
     if (!(await (0, fs_extra_1.pathExists)(sourcePath))) {
         throw new Error(`Path not found: ${sourcePath}`);
     }
-    const stats = await (0, fs_extra_1.stat)(sourcePath);
-    if (!stats.isDirectory()) {
+    const statsObj = await (0, fs_extra_1.stat)(sourcePath);
+    if (!statsObj.isDirectory()) {
         throw new Error(`Path must be a directory: ${sourcePath}`);
     }
-    // Scan for API files
     const entries = await (0, fs_extra_1.readdir)(sourcePath, { withFileTypes: true });
-    const files = entries.filter(e => e.isFile() &&
-        ['.java', '.ts', '.js', '.py', '.go'].includes((0, path_1.extname)(e.name)));
-    const summary = `Found ${files.length} source files in ${sourcePath}`;
-    logger_1.logger.info(summary);
-    // Generate API contracts from source code
-    for (const file of files) {
-        const content = await (0, fs_extra_1.readFile)((0, path_1.join)(sourcePath, file.name), 'utf-8');
-        // Detect API endpoints (simple regex matching)
-        const endpointMatches = content.matchAll(/@(Get|Post|Put|Delete|Patch)Mapping\s*\(\s*["']([^"']+)/g);
-        for (const match of endpointMatches) {
-            logger_1.logger.info(`  Detected endpoint: ${match[2]} (${match[1]})`);
-        }
-    }
-    return summary;
+    const files = entries.filter((e) => e.isFile() && ['.java', '.ts', '.js', '.py', '.go'].includes((0, path_1.extname)(e.name)));
+    logger_1.logger.info(`Legacy mode: Found ${files.length} source files.`);
+    logger_1.logger.info('💡 Tip: Use speccore import --project=<name> --path=<path> --type=<type> for global layer import.');
+    return `Found ${files.length} source files in ${sourcePath}`;
 }
 async function importPRD(prdPath) {
     if (!(await (0, fs_extra_1.pathExists)(prdPath))) {
         throw new Error(`PRD file not found: ${prdPath}`);
     }
     const content = await (0, fs_extra_1.readFile)(prdPath, 'utf-8');
-    // Extract requirements
     const requirements = extractRequirements(content);
-    logger_1.logger.info(`Extracted ${requirements.length} requirements`);
-    return `Imported PRD from ${prdPath}: ${requirements.length} requirements extracted`;
+    logger_1.logger.info(`Extracted ${requirements.length} requirements (legacy mode)`);
+    return `Imported PRD from ${prdPath}: ${requirements.length} requirements`;
 }
 function extractRequirements(content) {
     const requirements = [];
-    // Match common requirement patterns
     const patterns = [
         /(?:需求|Requirement)\s*[:：]\s*(.+)/g,
         /(?:功能|Feature)\s*[:：]\s*(.+)/g,
-        /\d+\.\s+(.+)/g
+        /\d+\.\s+(.+)/g,
     ];
     for (const pattern of patterns) {
         const matches = content.matchAll(pattern);
@@ -97,13 +348,12 @@ async function importPrototype(url) {
     return `Prototype imported from ${url}`;
 }
 async function autoDetectImport(sourcePath) {
+    logger_1.logger.info('💡 Tip: Use speccore import --project=<name> --path=<path> --type=<type> for global layer import.');
     logger_1.logger.info('Auto-detecting project structure...');
     const results = [];
-    // Check for code
     if (await (0, fs_extra_1.pathExists)((0, path_1.join)(sourcePath, 'src'))) {
         results.push(await importCode(sourcePath));
     }
-    // Check for PRD
     const prdFiles = ['PRD.md', 'README.md', 'docs/PRD.md'];
     for (const prdFile of prdFiles) {
         if (await (0, fs_extra_1.pathExists)((0, path_1.join)(sourcePath, prdFile))) {

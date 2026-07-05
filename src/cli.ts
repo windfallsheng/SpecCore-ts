@@ -14,37 +14,98 @@ import { iterationSplitCommand } from './commands/iteration/split';
 import { taskNewCommand } from './commands/task/new';
 import { planCommand } from './commands/plan';
 import { executeCommand } from './commands/execute';
+// 新增命令
+import { specCommand } from './commands/spec';
+import { goalCommand } from './commands/goal';
+import { bugfixCommand } from './commands/bugfix';
+import { researchCommand } from './commands/research';
+import { changeCommand } from './commands/change';
+import { syncCommand } from './commands/sync';
+import { handoverCommand } from './commands/handover';
+import { retroCommand } from './commands/retro';
+import { templateAddCommand } from './commands/template-add';
+import { helpCommand } from './commands/help';
+import { demoCommand } from './commands/demo';
+import { welcomeCommand } from './commands/welcome';
+// 全量层命令
+import { iterationFromGlobalCommand } from './commands/iteration-from-global';
+import { syncGlobalCommand } from './commands/sync-global';
+import { globalStatusCommand } from './commands/global-status';
+import { historyCommand } from './commands/history';
+// P0/P1/P2 新增命令
+import { impactCommand } from './commands/impact';
+import { baselineCommand } from './commands/baseline';
+import { dashboardCommand } from './commands/dashboard';
+import { auditCommand } from './commands/audit';
+// rename 命令
+import { renameCommand } from './commands/rename';
 
 program
   .name('speccore')
-  .description('SpecCore CLI - Code by Spec, Not by Vibe.')
+  .description('SpecCore - Code by Spec, Not by Vibe.')
   .version(version, '-v, --version', 'Display current version');
 
-// ==================== 初始化命令 ====================
+// ================================================================
+// 🔍 智能入口
+// ================================================================
+program
+  .command('spec [input...]')
+  .description('Smart entry: natural language intent recognition')
+  .action((input: string[]) => specCommand(input.join(' '), {}));
+
+// ================================================================
+// 👋 引导与体验
+// ================================================================
+program
+  .command('welcome')
+  .alias('wc')
+  .description('First-time setup guide (interactive)')
+  .option('--force', 'Force re-initialization')
+  .action(welcomeCommand);
+
+program
+  .command('demo')
+  .alias('dm')
+  .description('Quick experience demo (5 min)')
+  .option('--project <key>', 'Demo project type: book, todo, blog', 'book')
+  .option('--list', 'List available demo projects')
+  .action(demoCommand);
+
+// ================================================================
+// 🏗️ 初始化与导入
+// ================================================================
 program
   .command('init')
+  .alias('in')
   .description('Initialize SpecCore in current project')
   .option('--mode <mode>', 'Initialization mode: fresh or migration', 'fresh')
   .option('--force', 'Force overwrite existing configuration')
   .action(initCommand);
 
-// ==================== 导入命令 ====================
 program
   .command('import')
-  .description('Import existing project into SpecCore')
+  .alias('imp')
+  .description('Import project into global layer (multi-project support)')
   .option('--source <source>', 'Source type: code, prd, prototype, all', 'all')
-  .option('--path <path>', 'Source path', './')
+  .option('--path <path>', 'Project source path', './')
   .option('--url <url>', 'Prototype URL')
   .option('--iteration <iteration>', 'Target iteration name')
+  .option('--project <name>', 'Project name for global layer import')
+  .option('--type <type>', 'Project type: backend, web, h5, miniapp', 'backend')
+  .option('--force', 'Force overwrite')
   .action(importCommand);
 
-// ==================== 期次命令 ====================
+// ================================================================
+// 📋 期次管理
+// ================================================================
 const iterationCmd = program
   .command('iteration')
+  .alias('it')
   .description('Iteration management commands');
 
 iterationCmd
   .command('create')
+  .alias('cr')
   .description('Create a new iteration')
   .option('-n, --name <name>', 'Iteration name (required)')
   .option('--from <date>', 'Start date', new Date().toISOString().split('T')[0])
@@ -53,6 +114,7 @@ iterationCmd
 
 iterationCmd
   .command('split')
+  .alias('sp')
   .description('Split requirements into tasks')
   .option('-f, --file <file>', 'Requirement file path', '00-需求文档/REQUIREMENT.md')
   .option('-i, --iteration <iteration>', 'Target iteration')
@@ -61,13 +123,17 @@ iterationCmd
   .option('--dry-run', 'Preview without creating')
   .action(iterationSplitCommand);
 
-// ==================== 任务命令 ====================
+// ================================================================
+// 📝 任务管理
+// ================================================================
 const taskCmd = program
   .command('task')
+  .alias('tk')
   .description('Task management commands');
 
 taskCmd
   .command('new')
+  .alias('add')
   .description('Create a new atomic task')
   .option('-n, --name <name>', 'Task name (required)')
   .option('-t, --type <type>', 'Task type: feature, bugfix, research, optimization, migration, document', 'feature')
@@ -80,9 +146,51 @@ taskCmd
   .option('-i, --iteration <iteration>', 'Target iteration')
   .action(taskNewCommand);
 
-// ==================== 调度命令 ====================
+// 完整需求交付
+program
+  .command('goal')
+  .alias('gl')
+  .description('Complete requirement delivery (from requirement to code)')
+  .option('-n, --name <name>', 'Feature name')
+  .option('-d, --desc <desc>', 'Feature description')
+  .option('-t, --type <type>', 'Task type', 'feature')
+  .option('--id <id>', 'Task ID')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('--backend-only', 'Backend only')
+  .option('--frontend-only', 'Frontend only')
+  .action(goalCommand);
+
+// Bug 修复
+program
+  .command('bugfix')
+  .alias('bf')
+  .description('Quick bug fix: create fix task + impact analysis')
+  .option('-n, --name <name>', 'Bug name')
+  .option('-d, --desc <desc>', 'Bug description')
+  .option('--id <id>', 'Task ID')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('--affected-task <task>', 'Affected task for regression')
+  .action(bugfixCommand);
+
+// 技术调研
+program
+  .command('research')
+  .alias('rs')
+  .description('Technical research: evaluate solutions and compare options')
+  .option('-n, --name <name>', 'Research topic')
+  .option('-d, --desc <desc>', 'Research description')
+  .option('-t, --topic <topic>', 'Research topic (alias for --name)')
+  .option('--options <options>', 'Comparison options (comma-separated)')
+  .option('--id <id>', 'Task ID')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .action(researchCommand);
+
+// ================================================================
+// ⚡ 执行与调度
+// ================================================================
 program
   .command('plan')
+  .alias('pl')
   .description('Generate execution plan based on task dependencies')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('-t, --team <count>', 'Team member count', '3')
@@ -94,9 +202,9 @@ program
   .option('--dry-run', 'Preview without saving')
   .action(planCommand);
 
-// ==================== 执行命令 ====================
 program
   .command('execute')
+  .alias('ex')
   .description('Execute tasks based on filters')
   .option('--all', 'Execute all pending tasks')
   .option('-a, --assignee <assignee>', 'Filter by assignee')
@@ -114,9 +222,38 @@ program
   .option('--force', 'Skip preview and execute directly')
   .action(executeCommand);
 
-// ==================== 验证命令 ====================
+// ================================================================
+// 🔄 变更管理
+// ================================================================
+program
+  .command('change')
+  .alias('ch')
+  .description('Requirement change: update linked spec files automatically')
+  .option('-t, --task <task>', 'Target task')
+  .option('-d, --desc <desc>', 'Change description (required)')
+  .option('--global', 'Global layer change (CONSTITUTION.md)')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('--dry-run', 'Preview impact without modifying')
+  .option('--force', 'Skip preview and apply directly')
+  .action(changeCommand);
+
+program
+  .command('sync')
+  .alias('sy')
+  .description('Reverse sync: detect code-spec differences and update')
+  .option('-t, --task <task>', 'Target task')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('--auto', 'Auto-apply sync without confirmation')
+  .option('--dry-run', 'Preview differences without modifying')
+  .option('--force', 'Skip preview')
+  .action(syncCommand);
+
+// ================================================================
+// ✅ 审查与验证
+// ================================================================
 program
   .command('validate')
+  .alias('vl')
   .description('Validate Spec compliance and integrity')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('-t, --task <task>', 'Validate specific task')
@@ -126,21 +263,12 @@ program
   .option('--format <format>', 'Output format: text, json', 'text')
   .action(validateCommand);
 
-// ==================== 归档命令 ====================
-program
-  .command('archive')
-  .description('Archive completed tasks')
-  .option('-t, --task <task>', 'Archive specific task')
-  .option('--all', 'Archive all completed tasks')
-  .option('-i, --iteration <iteration>', 'Archive entire iteration')
-  .option('--list', 'List archived tasks')
-  .option('--restore <task>', 'Restore archived task')
-  .option('--force', 'Skip preview and archive directly')
-  .action(archiveCommand);
-
-// ==================== 进度命令 ====================
+// ================================================================
+// 📊 进度与状态
+// ================================================================
 program
   .command('progress')
+  .alias('pg')
   .description('Display project progress overview')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('-a, --assignee <assignee>', 'Filter by assignee')
@@ -150,27 +278,71 @@ program
   .option('--format <format>', 'Output format: text, json, csv', 'text')
   .action(progressCommand);
 
-// ==================== 状态命令 ====================
 program
   .command('status')
+  .alias('st')
   .description('Display current project status')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('-a, --assignee <assignee>', 'Filter by assignee')
   .option('--type <type>', 'Filter by task type')
   .action(statusCommand);
 
-// ==================== 健康度命令 ====================
 program
   .command('health')
+  .alias('hl')
   .description('Generate project health report')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('--format <format>', 'Output format: text, json', 'text')
   .option('--trend', 'Include trend comparison')
   .action(healthCommand);
 
-// ==================== 报告命令 ====================
+// ================================================================
+// 📦 归档与交接
+// ================================================================
+program
+  .command('archive')
+  .alias('ar')
+  .description('Archive completed tasks')
+  .option('-t, --task <task>', 'Archive specific task')
+  .option('--all', 'Archive all completed tasks')
+  .option('-i, --iteration <iteration>', 'Archive entire iteration')
+  .option('--list', 'List archived tasks')
+  .option('--restore <task>', 'Restore archived task')
+  .option('--force', 'Skip preview and archive directly')
+  .action(archiveCommand);
+
+program
+  .command('handover')
+  .alias('ho')
+  .description('Generate handover documentation for current iteration')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('-o, --output <path>', 'Output file path')
+  .option('--format <format>', 'Output format: md', 'md')
+  .action(handoverCommand);
+
+program
+  .command('retro')
+  .alias('rt')
+  .description('Iteration retrospective: summarize experience and improvements')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('-o, --output <path>', 'Output file path')
+  .action(retroCommand);
+
+// ================================================================
+// ⚙️ 配置与工具
+// ================================================================
+program
+  .command('config')
+  .alias('cf')
+  .description('Manage SpecCore configuration')
+  .option('--get <key>', 'Get configuration value')
+  .option('--set <key=value>', 'Set configuration value')
+  .option('--reset', 'Reset to default configuration')
+  .action(configCommand);
+
 program
   .command('report')
+  .alias('rp')
   .description('Generate project report')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('--format <format>', 'Output format: markdown, html, json', 'markdown')
@@ -180,14 +352,137 @@ program
   .option('--trend', 'Include trend comparison')
   .action(reportCommand);
 
-// ==================== 配置命令 ====================
 program
-  .command('config')
-  .description('Manage SpecCore configuration')
-  .option('--get <key>', 'Get configuration value')
-  .option('--set <key=value>', 'Set configuration value')
-  .option('--reset', 'Reset to default configuration')
-  .action(configCommand);
+  .command('template-add')
+  .alias('ta')
+  .description('Add code generation template from existing code')
+  .option('-n, --name <name>', 'Template name (required)')
+  .option('-t, --type <type>', 'Template type: crud, auth, export, report', 'crud')
+  .option('-f, --files <files>', 'Code file paths (comma-separated, required)')
+  .option('-d, --desc <desc>', 'Template description')
+  .action(templateAddCommand);
+
+// ================================================================
+// 📖 帮助
+// ================================================================
+program
+  .command('help')
+  .alias('h')
+  .description('Display command help and search')
+  .option('--command <command>', 'Show detailed help for specific command')
+  .option('--search <keyword>', 'Search commands by keyword')
+  .action(helpCommand);
+
+// ================================================================
+// 🌐 全量层命令
+// ================================================================
+program
+  .command('iteration-from-global')
+  .alias('ifg')
+  .description('Generate iteration from global layer requirements')
+  .option('--reqs <reqs>', 'Requirement IDs (comma-separated, required)')
+  .option('--name <name>', 'Iteration name (required)')
+  .option('--force', 'Force overwrite existing iteration')
+  .action(iterationFromGlobalCommand);
+
+program
+  .command('sync-global')
+  .alias('sg')
+  .description('Bidirectional sync between iteration and global layer')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('--direction <direction>', 'Sync direction: to_global, from_global', 'to_global')
+  .option('--auto', 'Auto-apply without confirmation')
+  .option('--dry-run', 'Preview changes without applying')
+  .option('--force', 'Skip preview and execute')
+  .action(syncGlobalCommand);
+
+program
+  .command('global-status')
+  .alias('gs')
+  .description('View global layer status: all projects, requirements, architecture')
+  .option('--project <name>', 'Filter by project name')
+  .action(globalStatusCommand);
+
+program
+  .command('history')
+  .alias('hs')
+  .description('View requirement change history')
+  .option('--req <id>', 'Requirement ID (e.g., REQ-001)')
+  .action(historyCommand);
+
+// ================================================================
+// 🔗 P0/P1/P2 新增命令
+// ================================================================
+program
+  .command('impact')
+  .alias('if')
+  .description('Intelligent impact analysis: analyze upstream/downstream effects of changes')
+  .option('--req <id>', 'Requirement ID (e.g., REQ-001)')
+  .option('--task <id>', 'Task ID (e.g., Task-001)')
+  .option('--depth <n>', 'Trace depth (default: 3)', '3')
+  .option('--output <format>', 'Output format: report, graph', 'report')
+  .action(impactCommand);
+
+program
+  .command('baseline')
+  .alias('bl')
+  .description('Version baseline: create snapshots, compare, list, and rollback')
+  .option('--name <name>', 'Baseline name')
+  .option('--list', 'List all baselines')
+  .option('--compare <name>', 'Compare current state with baseline')
+  .option('--restore <name>', 'Restore to baseline')
+  .option('--req <id>', 'Requirement ID for rollback')
+  .action(baselineCommand);
+
+program
+  .command('dashboard')
+  .alias('db')
+  .description('Generate visual dashboard (HTML + Chart.js)')
+  .option('-o, --output <path>', 'Output file path', './speccore-dashboard.html')
+  .action(dashboardCommand);
+
+program
+  .command('audit')
+  .alias('ad')
+  .description('AI-powered audit: detect duplicates, ambiguity, and orphaned requirements')
+  .option('--fix', 'Auto-fix fixable issues')
+  .option('--detail', 'Show detailed analysis')
+  .action(auditCommand);
+
+// 重命名
+program
+  .command('rename')
+  .alias('rn')
+  .description('Rename iteration or task, auto-update all references')
+  .option('--target <name>', 'Current name (required for single rename)')
+  .option('--new-name <name>', 'New name (required for single rename)')
+  .option('--batch', 'Batch rename mode')
+  .option('--pattern <pattern>', 'Batch pattern to match')
+  .option('--replacement <replacement>', 'Batch replacement string')
+  .option('--force', 'Skip preview and execute')
+  .action(renameCommand);
+
+// ================================================================
+// 快捷别名（顶层别名）
+// ================================================================
+// 为常用命令提供顶层快捷访问
+program
+  .command('nt')
+  .description('[Alias] speccore task new')
+  .option('-n, --name <name>', 'Task name')
+  .option('-t, --type <type>', 'Task type', 'feature')
+  .option('-d, --desc <desc>', 'Task description')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .action(taskNewCommand);
+
+program
+  .command('rv')
+  .description('[Alias] speccore validate')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('-t, --task <task>', 'Validate specific task')
+  .option('--strict', 'Strict mode')
+  .option('--fix', 'Auto-fix')
+  .action(validateCommand);
 
 // Parse arguments
 program.parse();

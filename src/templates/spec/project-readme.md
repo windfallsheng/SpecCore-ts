@@ -6,7 +6,7 @@
 
 ### 环境准备
 - AI 辅助工具: WorkBuddy / Qcoder / Trae
-- SpecCore CLI: `npm install -g SpecCore`
+- SpecCore: `npm install -g SpecCore`
 
 ### 开发流程
 1. `speccore init` - 初始化项目
@@ -26,4 +26,4 @@
 ```
 
 ## 相关文档
-- [SpecCore CLI 文档](https://github.com/spec-core/cli)
+- [SpecCore 文档](https://github.com/spec-core/cli)
