@@ -39,6 +39,8 @@ const impact_1 = require("./commands/impact");
 const baseline_1 = require("./commands/baseline");
 const dashboard_1 = require("./commands/dashboard");
 const audit_1 = require("./commands/audit");
+// rename 命令
+const rename_1 = require("./commands/rename");
 commander_1.program
     .name('speccore')
     .description('SpecCore - Code by Spec, Not by Vibe.')
@@ -411,6 +413,18 @@ commander_1.program
     .option('--fix', 'Auto-fix fixable issues')
     .option('--detail', 'Show detailed analysis')
     .action(audit_1.auditCommand);
+// 重命名
+commander_1.program
+    .command('rename')
+    .alias('rn')
+    .description('Rename iteration or task, auto-update all references')
+    .option('--target <name>', 'Current name (required for single rename)')
+    .option('--new-name <name>', 'New name (required for single rename)')
+    .option('--batch', 'Batch rename mode')
+    .option('--pattern <pattern>', 'Batch pattern to match')
+    .option('--replacement <replacement>', 'Batch replacement string')
+    .option('--force', 'Skip preview and execute')
+    .action(rename_1.renameCommand);
 // ================================================================
 // 快捷别名（顶层别名）
 // ================================================================

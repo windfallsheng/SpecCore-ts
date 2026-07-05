@@ -41,7 +41,8 @@ export type IntentType =
   | 'impact'              // 影响分析
   | 'baseline'            // 版本基线
   | 'dashboard'           // 仪表盘
-  | 'audit';              // 智能审计
+  | 'audit'               // 智能审计
+  | 'rename';             // 重命名
 
 /** 意图匹配结果 */
 export interface IntentResult {
@@ -354,6 +355,15 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     triggers: ['审计', '扫描', '检查', '重复', '歧义'],
     patterns: ['智能审计', '扫描全量层', '检查重复需求'],
     description: 'AI 智能审计 — 发现重复需求、歧义描述、孤立需求',
+  },
+  // 重命名
+  {
+    id: 'rename',
+    intent: 'rename',
+    priority: 78,
+    triggers: ['重命名', '改名', '修改名称', '更换名称', '改成', '改名为', '更名为'],
+    patterns: ['把(.*)改成(.*)', '重命名(.*)为(.*)', '修改(.*)名称为(.*)', '(.*)改名为(.*)'],
+    description: '重命名期次/任务 — 自动更新所有关联引用',
   },
 ];
 
