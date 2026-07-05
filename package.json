@@ -1,0 +1,46 @@
+{
+  "name": "speccore",
+  "version": "1.0.0",
+  "description": "SpecCore CLI - Code by Spec, Not by Vibe.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "speccore": "./bin/speccore"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "prepublish": "npm run build",
+    "test": "jest",
+    "lint": "eslint src/**/*.ts"
+  },
+  "keywords": [
+    "spec-driven-development",
+    "ai",
+    "cli",
+    "code-generation",
+    "spec"
+  ],
+  "author": "SpecCore Team",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "bin",
+    "templates"
+  ],
+  "dependencies": {
+    "commander": "^11.1.0",
+    "fs-extra": "^11.2.0",
+    "glob": "^10.3.10",
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.10.5",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
