@@ -3,6 +3,15 @@ export interface Context {
     currentTask: string;
     currentAssignee: string;
     lastUpdated: string;
+    lastAction: string;
+    lastIntent: string;
+    interruptedAt: string;
+    iterationStatus: string;
+    pendingTasks: number;
+    inProgressTasks: number;
+    completedTasks: number;
+    blockedTasks: number;
+    customAliases: Record<string, string>;
     history: ContextHistoryEntry[];
 }
 export interface ContextHistoryEntry {

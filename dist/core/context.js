@@ -52,6 +52,15 @@ async function loadContext() {
         currentTask: '',
         currentAssignee: '',
         lastUpdated: '',
+        lastAction: '',
+        lastIntent: '',
+        interruptedAt: '',
+        iterationStatus: '',
+        pendingTasks: 0,
+        inProgressTasks: 0,
+        completedTasks: 0,
+        blockedTasks: 0,
+        customAliases: {},
         history: []
     };
 }

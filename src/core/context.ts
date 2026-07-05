@@ -6,6 +6,15 @@ export interface Context {
   currentTask: string;
   currentAssignee: string;
   lastUpdated: string;
+  lastAction: string;
+  lastIntent: string;
+  interruptedAt: string;
+  iterationStatus: string;
+  pendingTasks: number;
+  inProgressTasks: number;
+  completedTasks: number;
+  blockedTasks: number;
+  customAliases: Record<string, string>;
   history: ContextHistoryEntry[];
 }
 
@@ -27,6 +36,15 @@ export async function loadContext(): Promise<Context> {
     currentTask: '',
     currentAssignee: '',
     lastUpdated: '',
+    lastAction: '',
+    lastIntent: '',
+    interruptedAt: '',
+    iterationStatus: '',
+    pendingTasks: 0,
+    inProgressTasks: 0,
+    completedTasks: 0,
+    blockedTasks: 0,
+    customAliases: {},
     history: []
   };
 }

@@ -1,4 +1,4 @@
-# SpecCore CLI
+# SpecCore
 
 > **Code by Spec, Not by Vibe.**
 
@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
 
-SpecCore CLI is the official command-line tool for the [SpecCore](https://github.com/spec-core/spec-core) specification-driven development framework. It decouples deterministic operations (file creation, directory management, format validation, status statistics) from AI, executing them directly through code to improve efficiency and reduce Token consumption.
+SpecCore is the official command-line tool for the [SpecCore](https://github.com/spec-core/spec-core) specification-driven development framework. It decouples deterministic operations (file creation, directory management, format validation, status statistics) from AI, executing them directly through code to improve efficiency and reduce Token consumption.
 
 ---
 
@@ -325,7 +325,7 @@ speccore --version
 | Project | Description | GitHub | Gitee |
 | :--- | :--- | :--- | :--- |
 | **SpecCore** | Specification-driven development framework (methodology + file templates + Slash Commands) | [windfallsheng/SpecCore](https://github.com/windfallsheng/SpecCore) | [windfullsheng/spec-core](https://gitee.com/windfullsheng/spec-core) |
-| **SpecCore CLI** | CLI tool (deterministic operation execution engine) | [windfallsheng/SpecCore-ts](https://github.com/windfallsheng/SpecCore-ts) | [windfullsheng/spec-core-ts](https://gitee.com/windfullsheng/spec-core-ts) |
+| **SpecCore** | CLI tool (deterministic operation execution engine) | [windfallsheng/SpecCore-ts](https://github.com/windfallsheng/SpecCore-ts) | [windfullsheng/spec-core-ts](https://gitee.com/windfullsheng/spec-core-ts) |
 
 ---
 
