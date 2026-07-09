@@ -10,6 +10,9 @@ export interface ImportOptions {
     project?: string;
     type?: string;
     force?: boolean;
+    scope?: string;
+    ignore?: string;
+    update?: boolean;
 }
 export declare function importCommand(options: ImportOptions): Promise<void>;
 //# sourceMappingURL=import.d.ts.map

@@ -3,6 +3,7 @@ export interface ProgressOptions {
     assignee?: string;
     type?: string;
     task?: string;
+    platform?: string;
     detail?: boolean;
     format?: string;
 }

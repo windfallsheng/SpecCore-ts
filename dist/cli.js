@@ -41,6 +41,11 @@ const dashboard_1 = require("./commands/dashboard");
 const audit_1 = require("./commands/audit");
 // rename 命令
 const rename_1 = require("./commands/rename");
+// v4.0.0 新增命令
+const new_task_1 = require("./commands/new-task");
+const platform_add_1 = require("./commands/platform-add");
+const index_update_1 = require("./commands/index-update");
+const context_1 = require("./commands/context");
 commander_1.program
     .name('speccore')
     .description('SpecCore - Code by Spec, Not by Vibe.')
@@ -88,6 +93,9 @@ commander_1.program
     .option('--iteration <iteration>', 'Target iteration name')
     .option('--project <name>', 'Project name for global layer import')
     .option('--type <type>', 'Project type: backend, web, h5, miniapp', 'backend')
+    .option('--scope <scope>', 'Selective import: all, core, api', 'all')
+    .option('--ignore <packages>', 'Ignore specific packages (comma-separated)')
+    .option('--update', 'Incremental sync mode')
     .option('--force', 'Force overwrite')
     .action(import_1.importCommand);
 // ================================================================
@@ -200,6 +208,7 @@ commander_1.program
     .option('--status <status>', 'Filter by status')
     .option('--backend', 'Backend tasks only')
     .option('--frontend', 'Frontend tasks only')
+    .option('--platform <platform>', 'Filter by frontend platform (web/h5/miniapp)')
     .option('--interactive', 'Interactive selection')
     .option('--dry-run', 'Preview execution plan')
     .option('--resume', 'Resume from last interruption')
@@ -257,6 +266,7 @@ commander_1.program
     .option('--type <type>', 'Filter by task type')
     .option('--task <task>', 'Show specific task progress')
     .option('--detail', 'Show detailed progress')
+    .option('--platform <platform>', 'Filter by frontend platform (web/h5/miniapp)')
     .option('--format <format>', 'Output format: text, json, csv', 'text')
     .action(progress_1.progressCommand);
 commander_1.program
@@ -426,17 +436,45 @@ commander_1.program
     .option('--force', 'Skip preview and execute')
     .action(rename_1.renameCommand);
 // ================================================================
+// 🆕 v4.0.0 新增命令
+// ================================================================
+commander_1.program
+    .command('new-task')
+    .alias('nt')
+    .description('Create multi-platform task with --platforms support (v4.0)')
+    .option('--name <name>', 'Task name (required)')
+    .option('--type <type>', 'Task type: feature, bugfix, research, optimization, migration, document')
+    .option('--desc <desc>', 'Task description')
+    .option('--platforms <platforms>', 'Frontend platforms: web,h5,miniapp or "all"')
+    .option('--backend-only', 'Create backend specs only')
+    .option('--frontend-only', 'Create frontend specs only')
+    .option('--iteration <iteration>', 'Target iteration')
+    .action(new_task_1.newTaskCommand);
+commander_1.program
+    .command('platform-add')
+    .alias('padd')
+    .description('Dynamically add a frontend platform type (v4.0)')
+    .option('--name <name>', 'Platform identifier (required, e.g. tablet)')
+    .option('--description <desc>', 'Platform display name')
+    .option('--tech <tech>', 'Tech stack description')
+    .option('--no-sync', 'Skip syncing to existing tasks')
+    .action(platform_add_1.platformAddCommand);
+commander_1.program
+    .command('index-update')
+    .alias('iu')
+    .description('Scan requirements and rebuild GLOBAL/INDEX.md (v4.0)')
+    .option('--dry-run', 'Preview mode, no actual changes')
+    .action(index_update_1.indexUpdateCommand);
+commander_1.program
+    .command('context')
+    .alias('ctx')
+    .description('View task context loading status and dependency chain (v4.0)')
+    .option('--task <task>', 'Target task (default: current task)')
+    .action(context_1.contextCommand);
+// ================================================================
 // 快捷别名（顶层别名）
 // ================================================================
 // 为常用命令提供顶层快捷访问
-commander_1.program
-    .command('nt')
-    .description('[Alias] speccore task new')
-    .option('-n, --name <name>', 'Task name')
-    .option('-t, --type <type>', 'Task type', 'feature')
-    .option('-d, --desc <desc>', 'Task description')
-    .option('-i, --iteration <iteration>', 'Target iteration')
-    .action(new_1.taskNewCommand);
 commander_1.program
     .command('rv')
     .description('[Alias] speccore validate')

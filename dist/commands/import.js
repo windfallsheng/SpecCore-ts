@@ -18,7 +18,7 @@ async function importCommand(options) {
             const projectName = options.project;
             const projectPath = options.path || `./${projectName}`;
             const projectType = (options.type || 'backend');
-            await importToGlobalLayer(projectName, projectPath, projectType);
+            await importToGlobalLayer(projectName, projectPath, projectType, options);
             spinner.stop('Project imported to global layer');
             return;
         }
@@ -56,7 +56,7 @@ async function importCommand(options) {
 /**
  * 多项目导入到全量层
  */
-async function importToGlobalLayer(projectName, projectPath, projectType) {
+async function importToGlobalLayer(projectName, projectPath, projectType, options) {
     // 1. 检查路径
     if (!(await (0, fs_extra_1.pathExists)(projectPath))) {
         throw new Error(`Project path not found: ${projectPath}`);
@@ -66,11 +66,18 @@ async function importToGlobalLayer(projectName, projectPath, projectType) {
     if (!(await (0, fs_extra_1.pathExists)(globalDir))) {
         throw new Error('Global layer not initialized. Run: speccore init');
     }
+    // 增量同步模式：检查项目是否已存在
+    if (options.update) {
+        const existingDir = (0, path_1.join)(globalDir, 'PROJECTS', projectName);
+        if (await (0, fs_extra_1.pathExists)(existingDir)) {
+            logger_1.logger.info(`🔄 Incremental update mode: ${projectName} already exists, syncing changes...`);
+        }
+    }
     // 3. 读取当前全量索引
     const index = await (0, global_layer_1.readGlobalIndex)();
     // 4. 扫描项目代码
     logger_1.logger.info(`🔍 Scanning project: ${projectName} (${projectType})`);
-    const scanResult = await scanProject(projectPath, projectType);
+    const scanResult = await scanProject(projectPath, projectType, options);
     logger_1.logger.info(`   Found ${scanResult.apis.length} API endpoints, ${scanResult.models.length} data models`);
     // 5. 生成需求条目
     const requirements = [];
@@ -138,7 +145,7 @@ async function importToGlobalLayer(projectName, projectPath, projectType) {
     logger_1.logger.info('   speccore global-status  查看全量层状态');
     logger_1.logger.info('   speccore iteration-from-global  从全量层生成期次');
 }
-async function scanProject(projectPath, projectType) {
+async function scanProject(projectPath, projectType, options) {
     const result = {
         apis: [],
         models: [],
@@ -146,6 +153,9 @@ async function scanProject(projectPath, projectType) {
         repoUrl: '',
     };
     const absPath = (0, path_1.join)(process.cwd(), projectPath);
+    // Handle --scope and --ignore
+    const scope = options?.scope || 'all';
+    const ignores = (options?.ignore || '').split(',').filter(Boolean).map(s => s.trim());
     if (projectType === 'backend') {
         // 扫描后端项目
         // 尝试读取 pom.xml (Java/Maven)
@@ -172,7 +182,7 @@ async function scanProject(projectPath, projectType) {
         // 扫描 src/ 目录寻找 Controller/路由
         const srcDir = (0, path_1.join)(absPath, 'src');
         if (await (0, fs_extra_1.pathExists)(srcDir)) {
-            result.apis = await scanApiEndpoints(srcDir);
+            result.apis = await scanApiEndpoints(srcDir, ignores, scope);
         }
     }
     else if (['web', 'h5', 'miniapp'].includes(projectType)) {
@@ -208,7 +218,7 @@ async function scanProject(projectPath, projectType) {
 /**
  * 递归扫描 API 端点
  */
-async function scanApiEndpoints(srcDir) {
+async function scanApiEndpoints(srcDir, ignores = [], scope = 'all') {
     const apis = [];
     async function scan(dir) {
         if (!(await (0, fs_extra_1.pathExists)(dir)))
@@ -216,12 +226,20 @@ async function scanApiEndpoints(srcDir) {
         const entries = await (0, fs_extra_1.readdir)(dir, { withFileTypes: true });
         for (const entry of entries) {
             const fullPath = (0, path_1.join)(dir, entry.name);
+            // 跳过忽略的包
+            if (ignores.some(ign => fullPath.includes(ign)))
+                continue;
             if (entry.isDirectory()) {
                 await scan(fullPath);
             }
             else if ([
                 '.java', '.ts', '.js', '.go', '.py',
             ].includes((0, path_1.extname)(entry.name))) {
+                // scope 过滤
+                if (scope === 'core' && !fullPath.includes('controller') && !fullPath.includes('service'))
+                    continue;
+                if (scope === 'api' && !fullPath.includes('controller') && !fullPath.includes('route'))
+                    continue;
                 const content = await (0, fs_extra_1.readFile)(fullPath, 'utf-8');
                 // Java Spring
                 const javaMatches = content.matchAll(/@(GetMapping|PostMapping|PutMapping|DeleteMapping|PatchMapping|RequestMapping)\s*(?:\([^)]*\))?\s*(?:@[^(\n]*\s*)*(?:public\s+\S+\s+)?(\w+)\s*\(/g);

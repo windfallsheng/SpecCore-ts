@@ -39,6 +39,11 @@ import { dashboardCommand } from './commands/dashboard';
 import { auditCommand } from './commands/audit';
 // rename 命令
 import { renameCommand } from './commands/rename';
+// v4.0.0 新增命令
+import { newTaskCommand } from './commands/new-task';
+import { platformAddCommand } from './commands/platform-add';
+import { indexUpdateCommand } from './commands/index-update';
+import { contextCommand } from './commands/context';
 
 program
   .name('speccore')
@@ -92,6 +97,9 @@ program
   .option('--iteration <iteration>', 'Target iteration name')
   .option('--project <name>', 'Project name for global layer import')
   .option('--type <type>', 'Project type: backend, web, h5, miniapp', 'backend')
+  .option('--scope <scope>', 'Selective import: all, core, api', 'all')
+  .option('--ignore <packages>', 'Ignore specific packages (comma-separated)')
+  .option('--update', 'Incremental sync mode')
   .option('--force', 'Force overwrite')
   .action(importCommand);
 
@@ -214,6 +222,7 @@ program
   .option('--status <status>', 'Filter by status')
   .option('--backend', 'Backend tasks only')
   .option('--frontend', 'Frontend tasks only')
+  .option('--platform <platform>', 'Filter by frontend platform (web/h5/miniapp)')
   .option('--interactive', 'Interactive selection')
   .option('--dry-run', 'Preview execution plan')
   .option('--resume', 'Resume from last interruption')
@@ -275,6 +284,7 @@ program
   .option('--type <type>', 'Filter by task type')
   .option('--task <task>', 'Show specific task progress')
   .option('--detail', 'Show detailed progress')
+  .option('--platform <platform>', 'Filter by frontend platform (web/h5/miniapp)')
   .option('--format <format>', 'Output format: text, json, csv', 'text')
   .action(progressCommand);
 
@@ -463,18 +473,49 @@ program
   .action(renameCommand);
 
 // ================================================================
+// 🆕 v4.0.0 新增命令
+// ================================================================
+program
+  .command('new-task')
+  .alias('nt')
+  .description('Create multi-platform task with --platforms support (v4.0)')
+  .option('--name <name>', 'Task name (required)')
+  .option('--type <type>', 'Task type: feature, bugfix, research, optimization, migration, document')
+  .option('--desc <desc>', 'Task description')
+  .option('--platforms <platforms>', 'Frontend platforms: web,h5,miniapp or "all"')
+  .option('--backend-only', 'Create backend specs only')
+  .option('--frontend-only', 'Create frontend specs only')
+  .option('--iteration <iteration>', 'Target iteration')
+  .action(newTaskCommand);
+
+program
+  .command('platform-add')
+  .alias('padd')
+  .description('Dynamically add a frontend platform type (v4.0)')
+  .option('--name <name>', 'Platform identifier (required, e.g. tablet)')
+  .option('--description <desc>', 'Platform display name')
+  .option('--tech <tech>', 'Tech stack description')
+  .option('--no-sync', 'Skip syncing to existing tasks')
+  .action(platformAddCommand);
+
+program
+  .command('index-update')
+  .alias('iu')
+  .description('Scan requirements and rebuild GLOBAL/INDEX.md (v4.0)')
+  .option('--dry-run', 'Preview mode, no actual changes')
+  .action(indexUpdateCommand);
+
+program
+  .command('context')
+  .alias('ctx')
+  .description('View task context loading status and dependency chain (v4.0)')
+  .option('--task <task>', 'Target task (default: current task)')
+  .action(contextCommand);
+
+// ================================================================
 // 快捷别名（顶层别名）
 // ================================================================
 // 为常用命令提供顶层快捷访问
-program
-  .command('nt')
-  .description('[Alias] speccore task new')
-  .option('-n, --name <name>', 'Task name')
-  .option('-t, --type <type>', 'Task type', 'feature')
-  .option('-d, --desc <desc>', 'Task description')
-  .option('-i, --iteration <iteration>', 'Target iteration')
-  .action(taskNewCommand);
-
 program
   .command('rv')
   .description('[Alias] speccore validate')

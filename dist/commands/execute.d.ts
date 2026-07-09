@@ -5,6 +5,7 @@ export interface ExecuteOptions {
     type?: string;
     priority?: string;
     status?: string;
+    platform?: string;
     backend?: boolean;
     frontend?: boolean;
     interactive?: boolean;

@@ -47,12 +47,13 @@ function printProgress(iteration, tasks, options) {
             inProgress,
             pending,
             archived,
-            completionRate
+            completionRate,
+            platform: options.platform || null,
         }, null, 2));
         return;
     }
     logger_1.logger.info('');
-    logger_1.logger.info(`📊 Progress Report: ${iteration}`);
+    logger_1.logger.info(`📊 Progress Report: ${iteration}${options.platform ? ` (${options.platform})` : ''}`);
     logger_1.logger.info('');
     logger_1.logger.info(`Total: ${total} | Completed: ${completed} | In Progress: ${inProgress} | Pending: ${pending} | Archived: ${archived}`);
     logger_1.logger.info(`Completion Rate: ${completionRate}%`);

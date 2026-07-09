@@ -29,8 +29,11 @@ SpecCore 是 [SpecCore](https://github.com/spec-core/spec-core) 规范驱动开�
 - **📊 实时进度追踪**：自动识别活跃期次，统计任务完成率
 - **🏥 健康度看板**：4 维度 12 指标评估项目健康状态
 - **📈 一键报告**：支持 Markdown/HTML/JSON 格式输出项目报告
+- **🧠 意图识别引擎**：23 种意图类型，200+ 关键词匹配，自然语言→命令自动匹配
 - **🧠 上下文感知**：自动读取 `.speccore/local/context.json`，智能填充默认值
 - **🔄 确定性执行**：文件操作、格式校验、状态统计全部本地代码执行，零 Token 消耗
+- **🌐 多项目全量层**：GLOBAL/ 目录管理跨项目需求索引、架构、技术栈
+- **📱 多平台支持**：Web/H5/小程序多端 Task 管理，平台动态添加
 
 ---
 
@@ -190,50 +193,102 @@ speccore report --team --risk
 
 ### 初始化与导入
 
-| 命令 | 说明 | 对应 Slash Command | 确定性 |
+| 命令 | 别名 | 说明 | 确定性 |
 | :--- | :--- | :--- | :--- |
-| `speccore init` | 初始化 SpecCore 项目 | `/spec-init` | ✅ |
-| `speccore import` | 导入现有项目 | `/spec-import` | ✅ |
+| `speccore init` | `in` | 初始化 SpecCore 项目（含 WorkBuddy 集成） | ✅ |
+| `speccore import` | `imp` | 导入项目到全量层（支持 --scope/--ignore/--update） | ✅ |
+
+### 智能入口
+
+| 命令 | 别名 | 说明 | 确定性 |
+| :--- | :--- | :--- | :--- |
+| `speccore spec "<query>"` | — | 自然语言意图识别，自动匹配命令 | ⚠️ |
 
 ### 期次管理
 
-| 命令 | 说明 | 对应 Slash Command | 确定性 |
+| 命令 | 别名 | 说明 | 确定性 |
 | :--- | :--- | :--- | :--- |
-| `speccore iteration create` | 创建期次 | `/spec-iteration-create` | ✅ |
-| `speccore iteration split` | 需求拆分（需 AI 传入任务列表） | `/spec-iteration-split` | ⚠️ |
+| `speccore iteration create` | `it cr` | 创建期次 | ✅ |
+| `speccore iteration split` | `it sp` | 需求拆分 | ⚠️ |
+| `speccore iteration-from-global` | `ifg` | 从全量层生成期次 | ⚠️ |
 
-### 任务管理
+### 任务管理 (v4.0 增强)
 
-| 命令 | 说明 | 对应 Slash Command | 确定性 |
+| 命令 | 别名 | 说明 | 确定性 |
 | :--- | :--- | :--- | :--- |
-| `speccore task new` | 创建原子任务 | `/spec-new-task` | ✅ |
+| `speccore new-task` | `nt` | 创建多平台原子任务（--platforms） | ✅ |
+| `speccore task new` | `ch nt-` | 创建传统单任务 | ✅ |
 
-### 执行与调度
+### 执行与调度 (v4.0 增强)
 
-| 命令 | 说明 | 对应 Slash Command | 确定性 |
+| 命令 | 别名 | 说明 | 确定性 |
 | :--- | :--- | :--- | :--- |
-| `speccore plan` | 生成调度方案（DAG 分析） | `/spec-plan` | ✅ |
-| `speccore execute` | 执行任务（需 AI 协同） | `/spec-execute` | ⚠️ |
+| `speccore plan` | `pl` | 生成调度方案（DAG 分析） | ✅ |
+| `speccore execute` | `ex` | 执行任务（支持 --platform/--priority/--status） | ⚠️ |
+
+### 变更与同步
+
+| 命令 | 别名 | 说明 | 确定性 |
+| :--- | :--- | :--- | :--- |
+| `speccore change` | `cg` | 需求变更联动 | ⚠️ |
+| `speccore sync` | `sy` | 代码→Spec 反向同步 | ⚠️ |
+| `speccore sync-global` | `sg` | 期次↔全量层双向同步 | ✅ |
 
 ### 验证与审查
 
-| 命令 | 说明 | 对应 Slash Command | 确定性 |
+| 命令 | 别名 | 说明 | 确定性 |
 | :--- | :--- | :--- | :--- |
-| `speccore validate` | 合规性检查 | `/spec-validate` | ✅ |
-| `speccore progress` | 进度查看 | `/spec-progress` | ✅ |
-| `speccore status` | 项目状态 | `/spec-status` | ✅ |
-| `speccore health` | 健康度看板（4维度12指标） | `/spec-health` | ✅ |
-| `speccore report` | 生成项目报告 | `/spec-report` | ✅ |
+| `speccore validate` | `rv` | 合规性检查 | ✅ |
+| `speccore progress` | `pg` | 进度查看（支持 --platform） | ✅ |
+| `speccore status` | `st` | 项目状态 | ✅ |
+| `speccore health` | `hl` | 健康度看板（4维度12指标） | ✅ |
+| `speccore report` | `rp` | 生成项目报告 | ✅ |
 
-### 归档与配置
+### 分析审计
 
-| 命令 | 说明 | 对应 Slash Command | 确定性 |
+| 命令 | 别名 | 说明 | 确定性 |
 | :--- | :--- | :--- | :--- |
-| `speccore archive` | 归档任务 | `/spec-archive` | ✅ |
-| `speccore config` | 配置管理 | `/spec-config` | ✅ |
+| `speccore impact` | `if` | 变更影响分析 | ⚠️ |
+| `speccore baseline` | `bl` | 版本基线管理 | ✅ |
+| `speccore dashboard` | `db` | 可视化仪表盘（Chart.js HTML） | ✅ |
+| `speccore audit` | `ad` | AI 智能审计 | ⚠️ |
+
+### 全量层管理
+
+| 命令 | 别名 | 说明 | 确定性 |
+| :--- | :--- | :--- | :--- |
+| `speccore global-status` | `gs` | 全量层状态总览 | ✅ |
+| `speccore history` | `hs` | 需求变更历史 | ✅ |
+| `speccore index-update` | `iu` | 扫描需求重建 GLOBAL/INDEX | ✅ |
+
+### 工具与场景 (v4.0 新增)
+
+| 命令 | 别名 | 说明 | 确定性 |
+| :--- | :--- | :--- | :--- |
+| `speccore goal` | — | 完整需求交付（需求→代码全流程） | ⚠️ |
+| `speccore bugfix` | `bf` | 快速 Bug 修复 | ⚠️ |
+| `speccore research` | `rs` | 技术调研 | ⚠️ |
+| `speccore handover` | `ho` | 交接文档生成 | ✅ |
+| `speccore retro` | `rt` | 期次回顾总结 | ⚠️ |
+| `speccore rename` | `rn` | 重命名期次/任务（自动更新引用） | ✅ |
+| `speccore platform-add` | `padd` | 动态添加前端平台类型 | ✅ |
+| `speccore context` | `ctx` | 查看 Task 上下文和依赖链 | ✅ |
+
+### 辅助命令
+
+| 命令 | 别名 | 说明 | 确定性 |
+| :--- | :--- | :--- | :--- |
+| `speccore template-add` | `ta` | 添加代码模板 | ✅ |
+| `speccore archive` | `ar` | 归档任务 | ✅ |
+| `speccore config` | `cf` | 配置管理 | ✅ |
+| `speccore help` | `hp` | 命令帮助 | ✅ |
+| `speccore demo` | `dm` | 快速体验 | ✅ |
+| `speccore welcome` | `wc` | 首次使用引导 | ✅ |
 
 - **✅** 纯确定性逻辑，可完全由代码执行
-- **⚠️** 需要 AI 参与理解/生成（如需求拆分、代码生成）
+- **⚠️** 需要 AI 参与理解/生成
+
+> **命令总数：39 个**（v4.0.0）
 
 ---
 
@@ -382,9 +437,32 @@ speccore validate --json
 
 ## 更新日志
 
+### v4.0.0 (2026-07-09) — 最新
+
+- 🆕 **新增命令**：`new-task`（多平台任务创建）、`platform-add`（动态添加平台）、`index-update`（重建全量索引）、`context`（上下文查看）
+- 📱 **多平台支持**：.speccore/config/platforms.yaml 平台配置，Task 目录支持 frontend/{web,h5,miniapp}/
+- 🔧 **命令增强**：`execute` 增加 --platform；`progress` 增加 --platform；`import` 增加 --scope/--ignore/--update
+- 🧠 **意图识别升级**：31 种意图类型（新增 new_task/platform_add/index_update/context）
+- 🤖 **WorkBuddy 集成**：`speccore init` 自动创建 .workbuddy/ skill 和 memory 文件
+- 📋 **命令总数**：39 个（原 35 + 新增 4）
+
+### v3.0.0 (2026-07-05)
+
+- 🌐 **多项目全量层**：GLOBAL/ 目录管理跨项目需求索引、架构、技术栈
+- 🔗 **全链路可追溯**：需求→Task→代码双向追踪
+- 📊 **P0/P1/P2 命令**：impact（影响分析）、baseline（基线管理）、dashboard（仪表盘）、audit（智能审计）
+- ✏️ **rename 命令**：重命名期次/任务自动更新引用
+- 📋 **命令总数**：35 个（原 26 + 新增 4 + rename + 全量层）
+
+### v2.0.0 (2026-07-05)
+
+- 🧠 **意图识别引擎**：12 种意图类型、100+ 关键词匹配
+- 🚀 **新增命令**：spec（智能入口）、goal、bugfix、research、change、sync、handover、retro、template-add、help、demo、welcome
+- 📋 **命令总数**：26 个
+
 ### v1.0.0 (2026-07-05)
 
-- 初始版本发布
+- 🎉 初始版本发布
 - 支持 14 个 CLI 命令
 - 核心引擎：上下文管理、状态管理、YAML 解析、模板渲染、合规检查
 - 内置模板：Spring Boot Controller/Service/Test、NestJS Controller

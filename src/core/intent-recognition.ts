@@ -1,7 +1,7 @@
 /**
  * 意图识别引擎
- * 基于 SpecCore v2.0 的自然语言意图识别引擎
- * 支持 12 种意图类型、100+ 关键词匹配、置信度计算、上下文感知增强
+ * 基于 SpecCore v4.0 的自然语言意图识别引擎
+ * 支持 31 种意图类型、200+ 关键词匹配、置信度计算、上下文感知增强
  */
 
 import { loadContext, detectActiveIteration, Context } from './context';
@@ -42,7 +42,11 @@ export type IntentType =
   | 'baseline'            // 版本基线
   | 'dashboard'           // 仪表盘
   | 'audit'               // 智能审计
-  | 'rename';             // 重命名
+  | 'rename'              // 重命名
+  | 'new_task'            // 新建多平台Task
+  | 'platform_add'        // 添加平台
+  | 'index_update'        // 更新索引
+  | 'context';            // 查看上下文
 
 /** 意图匹配结果 */
 export interface IntentResult {
@@ -364,6 +368,45 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     triggers: ['重命名', '改名', '修改名称', '更换名称', '改成', '改名为', '更名为'],
     patterns: ['把(.*)改成(.*)', '重命名(.*)为(.*)', '修改(.*)名称为(.*)', '(.*)改名为(.*)'],
     description: '重命名期次/任务 — 自动更新所有关联引用',
+  },
+  // ============================================================
+  // v4.0.0 新增命令
+  // ============================================================
+  // 新建多平台 Task (v4.0)
+  {
+    id: 'new-task',
+    intent: 'new_task',
+    priority: 84,
+    triggers: ['新建任务', '创建任务', '多端任务', '全平台任务'],
+    patterns: ['新建(.*)任务', '创建(.*)任务', '做一个(.*)任务', '为(.*)创建任务'],
+    description: '创建多平台任务 — 支持 --platforms 指定前端平台',
+  },
+  // 添加平台 (v4.0)
+  {
+    id: 'platform-add',
+    intent: 'platform_add',
+    priority: 62,
+    triggers: ['添加平台', '新增平台', '增加端', '新平台'],
+    patterns: ['添加(.*)平台', '新增(.*)端', '增加(.*)平台'],
+    description: '动态添加平台 — 自动同步到 platforms.yaml 和现有 Task',
+  },
+  // 更新索引 (v4.0)
+  {
+    id: 'index-update',
+    intent: 'index_update',
+    priority: 58,
+    triggers: ['更新索引', '重建索引', '刷新索引'],
+    patterns: ['更新索引', '重建索引', '刷新索引'],
+    description: '索引更新 — 扫描需求文档自动重建 GLOBAL/INDEX.md',
+  },
+  // 查看上下文 (v4.0)
+  {
+    id: 'context',
+    intent: 'context',
+    priority: 60,
+    triggers: ['上下文', '上下文状态', '加载状态', '当前状态', '查看上下文'],
+    patterns: ['查看上下文', '上下文状态', '加载状态'],
+    description: '上下文查看 — 查看 Task 的 Spec 文件加载状态和平台覆盖',
   },
 ];
 

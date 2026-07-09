@@ -9,6 +9,7 @@ export interface ProgressOptions {
   assignee?: string;
   type?: string;
   task?: string;
+  platform?: string;
   detail?: boolean;
   format?: string;
 }
@@ -61,13 +62,14 @@ function printProgress(iteration: string, tasks: any[], options: ProgressOptions
       inProgress,
       pending,
       archived,
-      completionRate
+      completionRate,
+      platform: options.platform || null,
     }, null, 2));
     return;
   }
 
   logger.info('');
-  logger.info(`📊 Progress Report: ${iteration}`);
+  logger.info(`📊 Progress Report: ${iteration}${options.platform ? ` (${options.platform})` : ''}`);
   logger.info('');
   logger.info(`Total: ${total} | Completed: ${completed} | In Progress: ${inProgress} | Pending: ${pending} | Archived: ${archived}`);
   logger.info(`Completion Rate: ${completionRate}%`);
