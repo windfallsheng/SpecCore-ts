@@ -232,9 +232,21 @@ my-project/
 
 ---
 
+## 💡 CLI vs AI Commands
+
+| Execute in | Prefix | Example |
+| :--- | :--- | :--- |
+| 🔧 Terminal | `speccore` | `speccore init`、`speccore new-task --platforms=web,h5` |
+| 🤖 AI Tool | `/spec-` | `/spec-init`、`/spec-new-task --platforms=web,h5` |
+
+Both share the same logic. AI commands call CLI commands internally when used in WorkBuddy / Cursor / Claude Code.
+
+---
+
 ## Next Steps
 
 - [Command Reference](commands.en.md) — Full command list with params and aliases
 - [Tool Adaptation](tool-adaptation.en.md) — WorkBuddy integration details
 - [README](../README.en.md) — Back to overview
 - [CHANGELOG](../CHANGELOG.md) — Version history
+- [中文：快速开始](快速开始.md) | [中文：命令参考](命令参考.md)
