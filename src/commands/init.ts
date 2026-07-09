@@ -39,12 +39,16 @@ export async function initCommand(options: InitOptions): Promise<void> {
     await ensureDir(join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'export'));
     await ensureDir(join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'report'));
     await ensureDir(join(speccoreDir, 'GLOBAL', 'BASELINES'));
+    await ensureDir(join(speccoreDir, 'config'));
 
     // Create default files
     await createDefaultFiles(speccoreDir);
 
     // Create GLOBAL layer files
     await createGlobalFiles(speccoreDir);
+
+    // Create config files
+    await createConfigFiles(speccoreDir);
 
     // Create context.json
     await writeFile(
@@ -646,6 +650,52 @@ _暂无需求，等待 \`speccore import\` 导入_
 | 基线名称 | 创建时间 | 需求数 | 项目数 | 备注 |
 | :--- | :--- | :--- | :--- | :--- |
 | _暂无基线_ | - | - | - | - |
+`
+  );
+}
+
+/**
+ * 创建配置文件（platforms.yaml 等）
+ */
+async function createConfigFiles(speccoreDir: string): Promise<void> {
+  const configDir = join(speccoreDir, 'config');
+
+  // platforms.yaml — 前端平台配置
+  await writeFile(
+    join(configDir, 'platforms.yaml'),
+    `# 前端平台配置
+# 由 speccore platform-add 自动维护，也可手动编辑
+
+platforms:
+  web:
+    name: "Web端"
+    description: "PC Web 端"
+    default: true
+    tech_stack: "Vue 3 + TypeScript + Vite"
+    enabled: true
+
+  h5:
+    name: "H5端"
+    description: "移动端 H5"
+    default: true
+    tech_stack: "Vue 3 + Vant + Vite"
+    enabled: true
+
+  miniapp:
+    name: "小程序端"
+    description: "微信小程序"
+    default: true
+    tech_stack: "Taro + TypeScript"
+    enabled: true
+
+# 用户动态添加的平台会追加在此
+# 示例：
+#  tablet:
+#    name: "平板端"
+#    description: "平板端应用"
+#    default: false
+#    tech_stack: "React Native"
+#    enabled: true
 `
   );
 }

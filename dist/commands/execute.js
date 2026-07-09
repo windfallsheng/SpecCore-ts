@@ -44,6 +44,9 @@ async function executeCommand(options) {
         if (options.frontend) {
             tasks = tasks.filter(t => t.id.includes('frontend'));
         }
+        if (options.platform) {
+            tasks = await filterByPlatform(tasks, iteration, options.platform);
+        }
         if (tasks.length === 0) {
             spinner.fail('No tasks match the specified filters');
             return;
@@ -123,5 +126,20 @@ async function simulateTaskExecution(task, iteration) {
     }
     // Simulate work time
     await new Promise(resolve => setTimeout(resolve, 100));
+}
+/**
+ * 按前端平台过滤任务：检查是否存在 frontend/{platform}/ 目录
+ */
+async function filterByPlatform(tasks, iteration, platform) {
+    const filtered = [];
+    const iterDir = (0, path_1.join)(process.cwd(), `期次-${iteration}`);
+    for (const task of tasks) {
+        const taskPath = (0, path_1.join)(iterDir, task.id);
+        const platformDir = (0, path_1.join)(taskPath, 'frontend', platform);
+        if (await (0, fs_extra_1.pathExists)(platformDir)) {
+            filtered.push(task);
+        }
+    }
+    return filtered;
 }
 //# sourceMappingURL=execute.js.map
