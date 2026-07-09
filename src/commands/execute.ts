@@ -11,6 +11,7 @@ export interface ExecuteOptions {
   type?: string;
   priority?: string;
   status?: string;
+  platform?: string;
   backend?: boolean;
   frontend?: boolean;
   interactive?: boolean;
@@ -63,6 +64,9 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
     }
     if (options.frontend) {
       tasks = tasks.filter(t => t.id.includes('frontend'));
+    }
+    if (options.platform) {
+      tasks = await filterByPlatform(tasks, iteration, options.platform);
     }
 
     if (tasks.length === 0) {
@@ -160,4 +164,22 @@ async function simulateTaskExecution(task: any, iteration: string): Promise<void
   
   // Simulate work time
   await new Promise(resolve => setTimeout(resolve, 100));
+}
+
+/**
+ * 按前端平台过滤任务：检查是否存在 frontend/{platform}/ 目录
+ */
+async function filterByPlatform(tasks: any[], iteration: string, platform: string): Promise<any[]> {
+  const filtered: any[] = [];
+  const iterDir = join(process.cwd(), `期次-${iteration}`);
+
+  for (const task of tasks) {
+    const taskPath = join(iterDir, task.id);
+    const platformDir = join(taskPath, 'frontend', platform);
+    if (await pathExists(platformDir)) {
+      filtered.push(task);
+    }
+  }
+
+  return filtered;
 }

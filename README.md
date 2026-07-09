@@ -1,4 +1,4 @@
-# SpecCore
+# SpecCore CLI
 
 > **Code by Spec, Not by Vibe.**
 
@@ -6,30 +6,67 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
 
-SpecCore 是 [SpecCore](https://github.com/spec-core/spec-core) 规范驱动开发框架的官方命令行工具。它将确定性操作（文件创建、目录管理、格式校验、状态统计）从 AI 中剥离，由代码直接执行，提升效率并降低 Token 消耗。
+SpecCore CLI 是 [SpecCore 规范驱动开发框架](https://github.com/windfallsheng/SpecCore) 的官方 TypeScript 命令行工具。它将确定性操作（文件创建、目录管理、格式校验、状态统计）从 AI 中剥离，由代码直接执行，提升效率并降低 Token 消耗。
 
 ---
 
-## 一分钟了解
+## 🧩 两种使用方式
 
-| 问题 | 答案 |
-| :--- | :--- |
-| **这是什么？** | SpecCore 框架的 CLI 工具，确定性操作由代码执行，智能决策由 AI 负责 |
-| **解决什么问题？** | AI 做文件操作容易出错、Token 消耗高、上下文窗口浪费 |
-| **需要安装什么？** | Node.js >= 18，执行 `npm install -g speccore` |
-| **和 Slash Command 的关系？** | CLI 是 Slash Command 的底层执行引擎，AI 负责决策，CLI 负责执行 |
+SpecCore 由两部分组成，**职责明确，互不混淆**：
+
+| | 🔧 终端命令（CLI） | 🤖 AI 命令（Slash Command） |
+| :--- | :--- | :--- |
+| **在哪里执行** | 终端 / Terminal | AI 编程工具（WorkBuddy / Cursor / Claude 等） |
+| **怎么用** | `speccore init` | 输入 `/spec-xxx` |
+| **什么原理** | TypeScript 编译，直接操作文件 | Markdown 指令，AI 读取后执行 |
+| **数量** | 39 个 CLI 命令 | 39 个 Slash Command |
+| **何时用** | 项目初始化、文件校验、批量操作 | 日常开发：需求管理、开发执行、审查归档 |
+
+> 💡 **简单记忆**：`speccore` 开头 → 终端执行；`/spec` 开头 → AI 工具中执行。
+
+---
+
+## 📦 安装
+
+```bash
+npm install -g speccore          # 全局安装（推荐）
+npx speccore --version           # 或使用 npx
+```
+
+---
+
+## 🚀 快速开始（5 分钟）
+
+```bash
+# 1. 初始化项目
+cd my-project && speccore init
+
+# 2. 导入项目到全量层
+speccore import --project=user-service --path=./backend --type=backend
+
+# 3. 创建期次
+speccore iteration create --name 2026-07-用户系统
+
+# 4. 创建多平台 Task
+speccore new-task --name 用户登录 --platforms=web,h5
+
+# 5. 自然语言入口
+speccore spec "进度怎么样了"
+```
+
+> 📚 更多场景和详细步骤见 [快速开始指南](docs/快速开始.md)
 
 ---
 
 ## 特性亮点
 
-- **🚀 快速初始化**：一行命令初始化完整的 SpecCore 项目结构
-- **📁 智能目录管理**：自动创建期次、任务、共享资源目录，符合规范
+- **🚀 快速初始化**：一行命令初始化完整 SpecCore 项目结构，自动集成 WorkBuddy
+- **📱 多平台支持**：`--platforms=web,h5,miniapp` 按端管理 Task，动态添加平台类型
+- **🧠 意图识别引擎**：31 种意图类型，200+ 关键词，自然语言自动匹配命令
+- **🌐 多项目全量层**：GLOBAL/ 统一管理跨项目需求索引、架构和技术栈
+- **📊 实时进度追踪**：自动识别活跃期次，统计任务完成率，按平台/人员/类型统计
 - **✅ 自动合规检查**：扫描所有 Spec 文件，检查必填项和格式
-- **📊 实时进度追踪**：自动识别活跃期次，统计任务完成率
-- **🏥 健康度看板**：4 维度 12 指标评估项目健康状态
-- **📈 一键报告**：支持 Markdown/HTML/JSON 格式输出项目报告
-- **🧠 上下文感知**：自动读取 `.speccore/local/context.json`，智能填充默认值
+- **🏥 项目健康度**：4 维度 12 指标评估项目健康状态
 - **🔄 确定性执行**：文件操作、格式校验、状态统计全部本地代码执行，零 Token 消耗
 
 ---
@@ -40,15 +77,15 @@ SpecCore 采用**确定性逻辑与智能逻辑解耦**的架构：
 
 | 逻辑类型 | 职责 | 执行方 | 示例 |
 | :--- | :--- | :--- | :--- |
-| **确定性逻辑** | 结构化操作 | CLI 代码 | 创建目录、移动文件、解析 YAML、校验格式、统计状态 |
-| **智能逻辑** | 理解与决策 | AI | 理解需求、拆分任务、生成代码、审查产出 |
+| **确定性逻辑** | 结构化操作 | CLI 代码 | 创建目录、读写文件、解析 YAML、校验格式、统计状态 |
+| **智能逻辑** | 理解与决策 | AI 工具 | 理解需求、拆分任务、生成代码、审查产出 |
 
 ```
-用户输入 (Slash Command)
+用户输入（自然语言 / Slash Command）
         │
         ▼
 ┌───────────────────────────────────────┐
-│   AI 层 (智能决策)                     │
+│   AI 层（智能决策）                     │
 │   - 理解用户意图                       │
 │   - 决定执行哪些操作                   │
 │   - 生成代码内容                       │
@@ -56,241 +93,93 @@ SpecCore 采用**确定性逻辑与智能逻辑解耦**的架构：
         │ 调用 CLI 命令
         ▼
 ┌───────────────────────────────────────┐
-│   CLI 层 (确定性执行)                  │
+│   CLI 层（确定性执行）                  │
 │   - 创建目录结构                       │
-│   - 读写文件                           │
+│   - 读写配置和 Spec 文件               │
 │   - 解析 YAML                          │
-│   - 校验格式                           │
-│   - 输出 JSON 结果                     │
+│   - 合规校验                           │
+│   - 输出结构化结果（JSON/Markdown）      │
 └───────────────────────────────────────┘
 ```
 
-**核心收益**：目录检查、YAML 解析、状态统计由代码确定执行，AI 只负责"解读结果"和"格式化输出"，Token 消耗大幅降低。
+---
+
+## 🤖 AI 命令速查（39 个，按分类）
+
+| 分类 | 命令 | 说明 |
+| :--- | :--- | :--- |
+| 🧠 智能入口 | `speccore spec "<query>"` | 自然语言意图识别 |
+| 🌐 初始化/导入 | `speccore init` / `import` | 项目初始化 + 多项目导入 |
+| 📐 计划 | `speccore iteration create/split` / `new-task` / `plan` | 期次管理 + Task 创建 |
+| | `speccore iteration-from-global` | 从全量层生成期次 |
+| ⚡ 执行 | `speccore execute` | 执行控制中心（--platform / --priority） |
+| 🔄 变更 | `speccore change` / `sync` / `sync-global` | 需求变更 + 反向同步 + 全量同步 |
+| ✅ 审查 | `speccore validate` | 合规性检查（--fix） |
+| 📊 进度 | `speccore progress` / `status` | 进度总览（--platform / --detail） |
+| 🔬 分析 | `speccore impact` / `baseline` / `dashboard` / `audit` | 影响分析 + 基线 + 仪表盘 + 审计 |
+| 🌐 全量层 | `speccore global-status` / `history` / `index-update` | 全量状态 + 历史 + 索引更新 |
+| 📱 平台 | `speccore platform-add` / `context` | 动态平台 + 上下文查看 |
+| 🎯 场景 | `speccore goal` / `bugfix` / `research` / `handover` / `retro` | 端到端需求 + Bug + 调研 + 交接 + 回顾 |
+| 🛠️ 工具 | `speccore health` / `report` / `archive` / `config` / `rename` / `template-add` / `help` / `demo` / `welcome` | 健康度 + 报告 + 归档 + 配置 + 重命名等 |
+
+> 📋 完整命令参数和别名见 [命令参考手册](docs/命令参考.md) | 🧠 31 种意图映射见 [命令参考—意图映射](docs/命令参考.md#自然语言意图映射31-种)
 
 ---
 
-## 环境要求
-
-- **Node.js**: >= 18.0.0
-- **操作系统**: macOS / Linux / Windows
-
----
-
-## 安装
-
-```bash
-# 全局安装（推荐）
-npm install -g speccore
-
-# 或使用 npx（无需安装，每次使用最新版）
-npx speccore --version
-
-# 或安装指定版本
-npm install -g speccore@1.0.0
-```
-
----
-
-## 快速开始
-
-### 1. 初始化项目
-
-```bash
-# 进入你的项目目录
-cd my-project
-
-# 初始化 SpecCore
-speccore init --mode fresh
-
-# 或迁移现有项目
-speccore init --mode migration
-```
-
-执行后，当前目录会生成：
+## 🏗️ 架构
 
 ```
-.speccore/                          # 全局配置目录
-├── CONSTITUTION.md                 # 技术宪法（定义技术栈、规范）
-├── SETTINGS.md                     # 框架配置（开关、模式）
-├── ITERATIONS/                     # 期次记录
-├── PATTERNS/                       # 模式库
-├── PROJECT/                        # 项目级资产
-│   ├── OVERVIEW.md
-│   ├── TEAM.md
-│   └── ...
-├── RULES/                          # 裁决规则
-└── local/                          # 本地状态
-    └── context.json                # 当前上下文（期次、任务、用户）
-```
-
-### 2. 创建期次
-
-```bash
-speccore iteration create --name 2026-07-用户系统
-```
-
-生成 `期次-2026-07-用户系统/` 目录，包含：
-- `00-需求文档/REQUIREMENT.md`
-- `00-技术文档/ARCHITECTURE.md`
-- `00-期次总览/PROJECT_GRAPH.md`
-
-### 3. 创建任务
-
-```bash
-speccore task new --name 用户登录 --type feature
-speccore task new --name 手机号注册 --type feature
-speccore task new --name 密码重置 --type bugfix
-```
-
-### 4. 查看进度
-
-```bash
-# 查看整体进度
-speccore progress
-
-# JSON 格式输出（适合 CI/CD）
-speccore progress --format json
-
-# 查看详细进度
-speccore progress --detail
-```
-
-### 5. 验证合规性
-
-```bash
-# 验证所有任务
-speccore validate
-
-# 自动修复可修复的问题
-speccore validate --fix
-
-# JSON 格式输出（AI 可直接读取）
-speccore validate --format json
-```
-
-### 6. 生成报告
-
-```bash
-# Markdown 格式（默认）
-speccore report
-
-# HTML 格式（适合邮件发送）
-speccore report --format html --output ./report.html
-
-# JSON 格式（适合导入其他系统）
-speccore report --format json
-
-# 包含团队分析和风险分析
-speccore report --team --risk
+.speccore/GLOBAL/   ← 全量层：多项目统一需求管理
+.speccore/           ← 全局层：项目宪法、配置、模式
+期次-XXX/            ← 期次层：这一期做什么
+  └── Task-XXX/      ← 任务层：这个功能怎么做
+      ├── _shared/   ← 共享层：API Contract + 业务规则
+      ├── backend/   ← 后端 Spec
+      └── frontend/  ← 前端多端 Spec（web / h5 / miniapp）
 ```
 
 ---
 
-## 完整命令列表
+## 🛠️ 工具适配
 
-### 初始化与导入
+| 国内 | 国际 |
+| :--- | :--- |
+| WorkBuddy / Qcoder / Trae | Cursor / Claude Code / Windsurf / Gemini CLI / OpenCode |
 
-| 命令 | 说明 | 对应 Slash Command | 确定性 |
-| :--- | :--- | :--- | :--- |
-| `speccore init` | 初始化 SpecCore 项目 | `/spec-init` | ✅ |
-| `speccore import` | 导入现有项目 | `/spec-import` | ✅ |
+SpecCore CLI 原生集成 WorkBuddy（`speccore init` 自动创建 `.workbuddy/` skill 和 memory）。其他工具通过 SpecCore 源项目适配。
 
-### 期次管理
-
-| 命令 | 说明 | 对应 Slash Command | 确定性 |
-| :--- | :--- | :--- | :--- |
-| `speccore iteration create` | 创建期次 | `/spec-iteration-create` | ✅ |
-| `speccore iteration split` | 需求拆分（需 AI 传入任务列表） | `/spec-iteration-split` | ⚠️ |
-
-### 任务管理
-
-| 命令 | 说明 | 对应 Slash Command | 确定性 |
-| :--- | :--- | :--- | :--- |
-| `speccore task new` | 创建原子任务 | `/spec-new-task` | ✅ |
-
-### 执行与调度
-
-| 命令 | 说明 | 对应 Slash Command | 确定性 |
-| :--- | :--- | :--- | :--- |
-| `speccore plan` | 生成调度方案（DAG 分析） | `/spec-plan` | ✅ |
-| `speccore execute` | 执行任务（需 AI 协同） | `/spec-execute` | ⚠️ |
-
-### 验证与审查
-
-| 命令 | 说明 | 对应 Slash Command | 确定性 |
-| :--- | :--- | :--- | :--- |
-| `speccore validate` | 合规性检查 | `/spec-validate` | ✅ |
-| `speccore progress` | 进度查看 | `/spec-progress` | ✅ |
-| `speccore status` | 项目状态 | `/spec-status` | ✅ |
-| `speccore health` | 健康度看板（4维度12指标） | `/spec-health` | ✅ |
-| `speccore report` | 生成项目报告 | `/spec-report` | ✅ |
-
-### 归档与配置
-
-| 命令 | 说明 | 对应 Slash Command | 确定性 |
-| :--- | :--- | :--- | :--- |
-| `speccore archive` | 归档任务 | `/spec-archive` | ✅ |
-| `speccore config` | 配置管理 | `/spec-config` | ✅ |
-
-- **✅** 纯确定性逻辑，可完全由代码执行
-- **⚠️** 需要 AI 参与理解/生成（如需求拆分、代码生成）
+> 📚 完整适配说明见 [工具适配说明](docs/工具适配说明.md)
 
 ---
 
-## 项目结构
+## 📚 文档
 
-```
-speccore/
-├── package.json
-├── tsconfig.json
-├── README.md
-├── bin/
-│   └── speccore                    # CLI 入口脚本
-├── src/
-│   ├── index.ts                    # 入口文件
-│   ├── cli.ts                      # CLI 命令注册（Commander.js）
-│   │
-│   ├── commands/                   # 所有 CLI 命令实现
-│   │   ├── init.ts                 # 初始化项目
-│   │   ├── import.ts               # 导入现有项目
-│   │   ├── iteration/
-│   │   │   ├── create.ts           # 创建期次
-│   │   │   └── split.ts            # 需求拆分
-│   │   ├── task/
-│   │   │   └── new.ts              # 创建任务
-│   │   ├── plan.ts                 # 生成调度方案
-│   │   ├── execute.ts              # 执行任务
-│   │   ├── validate.ts             # 合规性检查
-│   │   ├── archive.ts              # 归档任务
-│   │   ├── progress.ts             # 进度查看
-│   │   ├── status.ts               # 项目状态
-│   │   ├── health.ts               # 健康度看板
-│   │   ├── report.ts               # 生成报告
-│   │   └── config.ts               # 配置管理
-│   │
-│   ├── core/                       # 核心引擎
-│   │   ├── context.ts              # 上下文管理（读取 context.json）
-│   │   ├── state.ts                # 状态管理（读取 PROJECT_GRAPH.md）
-│   │   ├── yaml-parser.ts          # YAML 解析
-│   │   ├── template-engine.ts      # 模板渲染（Handlebars）
-│   │   └── validator.ts            # 合规性检查引擎
-│   │
-│   ├── templates/                  # 内置模板
-│   │   ├── spec/                   # Spec 文件模板
-│   │   │   └── project-readme.md
-│   │   └── code/                   # 代码生成模板
-│   │       ├── spring-controller.java
-│   │       ├── spring-service.java
-│   │       ├── spring-test.java
-│   │       └── nest-controller.ts
-│   │
-│   └── utils/
-│       ├── file.ts                 # 文件工具
-│       ├── git.ts                  # Git 工具（获取用户名等）
-│       └── logger.ts               # 日志输出（含进度条、Spinner）
-│
-└── dist/                           # 编译输出（TypeScript → JavaScript）
-```
+| 文档 | 语言 | 内容 |
+| :--- | :--- | :--- |
+| [快速开始指南](docs/快速开始.md) | 🇨🇳 | 安装 → 初始化 → 导入 → 多端 Task → 场景速查 |
+| [Quick Start](docs/quick-start.en.md) | 🇬🇧 | Install → Init → Import → Multi-platform → Scenarios |
+| [命令参考手册](docs/命令参考.md) | 🇨🇳 | 39 个命令完整参数 + 31 种意图映射 + 别名速查 |
+| [Command Reference](docs/commands.en.md) | 🇬🇧 | 39 commands full params + 31 intents + aliases |
+| [工具适配说明](docs/工具适配说明.md) | 🇨🇳 | WorkBuddy 集成原理 + 工作流程 + 安全检查 |
+| [Tool Adaptation](docs/tool-adaptation.en.md) | 🇬🇧 | WorkBuddy integration + workflow + security |
+| [CHANGELOG](CHANGELOG.md) | 🇨🇳 | 版本历史与更新日志（v1.0.0 → v4.0.0） |
+| [README.en.md](README.en.md) | 🇬🇧 | English project overview |
+
+---
+
+## 常见问题
+
+| 问题 | 答案 |
+| :--- | :--- |
+| **安装后命令找不到？** | 确保 npm bin 目录在 PATH 中：`export PATH="$(npm bin -g):$PATH"` |
+| **如何更新？** | `npm update -g speccore` |
+| **同一个功能多端怎么管理？** | `speccore new-task --platforms=web,h5,miniapp`，按端执行和统计 |
+| **如何添加新平台？** | `speccore platform-add --name=tablet --tech="React Native"` |
+| **期次/Task 想改名？** | `speccore rename --target=旧名 --new-name=新名` |
+| **批量重命名？** | `speccore rename --batch --pattern="Task-" --replacement="Feature-"` |
+| **手动改了文档，需要同步？** | `speccore sync --task=Task-001` 或 `speccore sync-global` |
+| **需求编号重复？** | `speccore validate --fix` 自动检测修复 |
+| **如何重建需求索引？** | `speccore index-update`（--dry-run 预览） |
 
 ---
 
@@ -298,73 +187,38 @@ speccore/
 
 ```bash
 # 克隆仓库
-git clone https://github.com/spec-core/speccore.git
-cd speccore
+git clone https://github.com/windfallsheng/SpecCore-ts.git
+cd SpecCore-ts/ts-cli
 
-# 安装依赖
-npm install
+# 安装依赖 + 编译
+npm install && npm run build
 
-# 编译 TypeScript
-npm run build
-
-# 开发模式（监听文件变化自动编译）
+# 开发模式
 npm run watch
 
 # 本地测试
-node bin/speccore --version
+npm link && speccore --version
 
-# 链接到全局（开发测试）
-npm link
-speccore --version
-```
-
----
-
-## 常见问题
-
-### Q: 安装后命令找不到？
-
-A: 确保 npm 全局 bin 目录在 PATH 中：
-
-```bash
-# 查看全局安装路径
-npm bin -g
-
-# 添加到 PATH（macOS/Linux）
-export PATH="$(npm bin -g):$PATH"
-```
-
-### Q: 如何更新到最新版本？
-
-```bash
-npm update -g speccore
-```
-
-### Q: 如何卸载？
-
-```bash
-npm uninstall -g speccore
-```
-
-### Q: 与 AI 工具如何配合？
-
-A: AI 工具（如 WorkBuddy）通过调用 CLI 命令来执行确定性操作。例如：
-
-```bash
-# AI 执行 /spec-validate 时，内部调用：
-speccore validate --json
-
-# AI 读取 JSON 结果，生成用户友好的中文报告
+# 运行验证脚本
+bash verify.sh
 ```
 
 ---
 
 ## 相关项目
 
-| 项目 | 说明 | GitHub | Gitee |
-| :--- | :--- | :--- | :--- |
-| **SpecCore** | 规范驱动开发框架（方法论 + 文件模板 + Slash Commands） | [windfallsheng/SpecCore](https://github.com/windfallsheng/SpecCore) | [windfullsheng/spec-core](https://gitee.com/windfullsheng/spec-core) |
-| **SpecCore** | CLI 工具（确定性操作执行引擎） | [windfallsheng/SpecCore-ts](https://github.com/windfallsheng/SpecCore-ts) | [windfullsheng/spec-core-ts](https://gitee.com/windfullsheng/spec-core-ts) |
+| 项目 | 说明 | 链接 |
+| :--- | :--- | :--- |
+| **SpecCore 框架** | 规范驱动开发方法论 + Slash Commands + 模板 | [GitHub](https://github.com/windfallsheng/SpecCore) |
+| **SpecCore CLI** | TypeScript CLI 工具（确定性操作执行引擎） | [GitHub](https://github.com/windfallsheng/SpecCore-ts) |
+
+---
+
+## 版本
+
+v4.0.0 | 🔧 CLI 命令 39 个 | 🧠 意图识别 31 种
+
+版本历史见 [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
@@ -377,18 +231,6 @@ speccore validate --json
 3. 提交更改：`git commit -m 'feat: add some feature'`
 4. 推送分支：`git push origin feature/my-feature`
 5. 创建 Pull Request
-
----
-
-## 更新日志
-
-### v1.0.0 (2026-07-05)
-
-- 初始版本发布
-- 支持 14 个 CLI 命令
-- 核心引擎：上下文管理、状态管理、YAML 解析、模板渲染、合规检查
-- 内置模板：Spring Boot Controller/Service/Test、NestJS Controller
-- 支持 JSON/Markdown/HTML 多格式输出
 
 ---
 
