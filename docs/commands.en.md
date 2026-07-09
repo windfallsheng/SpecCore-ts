@@ -4,6 +4,17 @@
 
 ---
 
+## 💡 Two Ways to Use
+
+| | 🔧 Terminal | 🤖 AI Slash Command |
+| :--- | :--- | :--- |
+| **Prefix** | `speccore` | `/spec-` |
+| **Example** | `speccore init` | `/spec-init` |
+| **Where** | Terminal | AI tools (WorkBuddy / Cursor etc.) |
+| **Mapping** | — | `speccore xxx` ↔ `/spec-xxx` |
+
+---
+
 ## 🧠 Smart Entry (1)
 
 | Command | Alias | Function | Parameters |

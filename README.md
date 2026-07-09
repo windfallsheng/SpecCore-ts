@@ -104,7 +104,9 @@ SpecCore 采用**确定性逻辑与智能逻辑解耦**的架构：
 
 ---
 
-## 🤖 AI 命令速查（39 个，按分类）
+## 🔧 终端命令速查（39 个 CLI 命令）
+
+> 在终端中执行，所有命令以 `speccore` 开头。
 
 | 分类 | 命令 | 说明 |
 | :--- | :--- | :--- |
@@ -122,7 +124,24 @@ SpecCore 采用**确定性逻辑与智能逻辑解耦**的架构：
 | 🎯 场景 | `speccore goal` / `bugfix` / `research` / `handover` / `retro` | 端到端需求 + Bug + 调研 + 交接 + 回顾 |
 | 🛠️ 工具 | `speccore health` / `report` / `archive` / `config` / `rename` / `template-add` / `help` / `demo` / `welcome` | 健康度 + 报告 + 归档 + 配置 + 重命名等 |
 
-> 📋 完整命令参数和别名见 [命令参考手册](docs/命令参考.md) | 🧠 31 种意图映射见 [命令参考—意图映射](docs/命令参考.md#自然语言意图映射31-种)
+## 🤖 AI 命令（Slash Command）对应关系
+
+> 在 AI 工具（WorkBuddy / Cursor / Claude Code 等）中输入 `/` + 命令。AI 命令在底层调用对应的 CLI 命令执行。
+
+| CLI 终端命令 | AI Slash Command | 用途 |
+| :--- | :--- | :--- |
+| `speccore init` | `/spec-init` | 项目初始化 |
+| `speccore import` | `/spec-import` | 导入项目到全量层 |
+| `speccore iteration create` | `/spec-iteration-create` | 创建期次 |
+| `speccore new-task` | `/spec-new-task` | 创建多平台 Task |
+| `speccore execute` | `/spec-execute` | 执行开发任务 |
+| `speccore progress` | `/spec-progress` | 查看进度 |
+| `speccore validate` | `/spec-validate` | 合规性检查 |
+| `speccore impact` | `/spec-impact` | 变更影响分析 |
+| `speccore audit` | `/spec-ai-audit` | AI 智能审计 |
+| `speccore spec "查询"` | `/spec 查询` | 自然语言智能入口 |
+
+> 📋 完整命令参数见 [命令参考手册](docs/命令参考.md) | 🧠 31 种意图映射见 [意图映射表](docs/命令参考.md#自然语言意图映射31-种)
 
 ---
 

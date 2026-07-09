@@ -105,7 +105,9 @@ User Input (Natural Language / Slash Command)
 
 ---
 
-## 🤖 Command Quick Reference (39 total)
+## 🔧 CLI Commands Quick Reference (39 total)
+
+> Run in terminal. All commands start with `speccore`.
 
 | Category | Key Commands |
 | :--- | :--- |
@@ -121,6 +123,23 @@ User Input (Natural Language / Slash Command)
 | 🔗 Analysis | `impact` / `dashboard` / `audit` |
 | 📱 Platform | `platform-add` / `context` |
 | 🛠️ Tools | `health` / `report` / `template-add` / `help` / `demo` / `welcome` |
+
+## 🤖 AI Commands (Slash Command) Mapping
+
+> Type `/` in AI tools (WorkBuddy / Cursor / Claude Code etc.). AI commands call the corresponding CLI command internally.
+
+| CLI Command | AI Slash Command | Purpose |
+| :--- | :--- | :--- |
+| `speccore init` | `/spec-init` | Initialize project |
+| `speccore import` | `/spec-import` | Import to global layer |
+| `speccore iteration create` | `/spec-iteration-create` | Create iteration |
+| `speccore new-task` | `/spec-new-task` | Create multi-platform task |
+| `speccore execute` | `/spec-execute` | Execute development |
+| `speccore progress` | `/spec-progress` | View progress |
+| `speccore validate` | `/spec-validate` | Compliance check |
+| `speccore impact` | `/spec-impact` | Impact analysis |
+| `speccore audit` | `/spec-ai-audit` | AI smart audit |
+| `speccore spec "query"` | `/spec query` | Natural language intent |
 
 > 📋 Full command reference: [Command Reference](docs/commands.en.md) | 🧠 Intent mapping: [Intent Map](docs/commands.en.md#natural-language-intent-mapping-31-types)
 
