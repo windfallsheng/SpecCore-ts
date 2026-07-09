@@ -154,12 +154,16 @@ SpecCore CLI 原生集成 WorkBuddy（`speccore init` 自动创建 `.workbuddy/`
 
 ## 📚 文档
 
-| 文档 | 内容 |
-| :--- | :--- |
-| [快速开始指南](docs/快速开始.md) | 从零上手：安装 → 初始化 → 创建期次 → 导入项目 → 多端 Task → 场景速查 |
-| [命令参考手册](docs/命令参考.md) | 39 个命令完整参数 + 31 种意图映射 + 别名速查 |
-| [工具适配说明](docs/工具适配说明.md) | WorkBuddy 集成原理 + 工作流程 + 安全检查 |
-| [CHANGELOG](CHANGELOG.md) | 版本历史与更新日志（v1.0.0 → v4.0.0） |
+| 文档 | 语言 | 内容 |
+| :--- | :--- | :--- |
+| [快速开始指南](docs/快速开始.md) | 🇨🇳 | 安装 → 初始化 → 导入 → 多端 Task → 场景速查 |
+| [Quick Start](docs/quick-start.en.md) | 🇬🇧 | Install → Init → Import → Multi-platform → Scenarios |
+| [命令参考手册](docs/命令参考.md) | 🇨🇳 | 39 个命令完整参数 + 31 种意图映射 + 别名速查 |
+| [Command Reference](docs/commands.en.md) | 🇬🇧 | 39 commands full params + 31 intents + aliases |
+| [工具适配说明](docs/工具适配说明.md) | 🇨🇳 | WorkBuddy 集成原理 + 工作流程 + 安全检查 |
+| [Tool Adaptation](docs/tool-adaptation.en.md) | 🇬🇧 | WorkBuddy integration + workflow + security |
+| [CHANGELOG](CHANGELOG.md) | 🇨🇳 | 版本历史与更新日志（v1.0.0 → v4.0.0） |
+| [README.en.md](README.en.md) | 🇬🇧 | English project overview |
 
 ---
 
