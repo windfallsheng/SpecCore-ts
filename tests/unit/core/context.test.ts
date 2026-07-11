@@ -106,8 +106,8 @@ describe('Context — JSON Persistence', () => {
       blockedTasks: 0,
       customAliases: {},
       history: [
-        { action: 'execute', target: 'Task-001', timestamp: '2026-07-09T10:00:00Z' },
-        { action: 'validate', target: 'Task-001', timestamp: '2026-07-09T10:05:00Z' },
+        { command: 'execute', iteration: '期次-2026-07', task: 'Task-001', timestamp: '2026-07-09T10:00:00Z' },
+        { command: 'validate', iteration: '期次-2026-07', task: 'Task-001', timestamp: '2026-07-09T10:05:00Z' },
       ],
     };
 
