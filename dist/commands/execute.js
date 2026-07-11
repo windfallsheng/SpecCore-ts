@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.executeCommand = executeCommand;
 const fs_extra_1 = require("fs-extra");
@@ -6,6 +39,7 @@ const path_1 = require("path");
 const logger_1 = require("../utils/logger");
 const context_1 = require("../core/context");
 const state_1 = require("../core/state");
+const transaction_1 = require("../core/transaction");
 async function executeCommand(options) {
     const spinner = new logger_1.Spinner('Preparing execution');
     spinner.start();
@@ -107,21 +141,35 @@ function printExecutionPreview(tasks, iteration) {
     logger_1.logger.info('Estimated total duration: 3-5 minutes');
 }
 async function simulateTaskExecution(task, iteration) {
-    // Simulate task execution
-    // In real implementation, this would:
-    // 1. Read task spec files
-    // 2. Call AI to generate code
-    // 3. Write generated code to files
-    // 4. Update task status
     const taskDir = (0, path_1.join)(`期次-${iteration}`, task.id);
-    // Check if task directory exists
     if (await (0, fs_extra_1.pathExists)(taskDir)) {
-        // Update task status in TASK.md
+        const tx = new transaction_1.FileTransaction();
+        // 后端 TASK.md 状态更新
         const taskMdPath = (0, path_1.join)(taskDir, 'backend', 'TASK.md');
         if (await (0, fs_extra_1.pathExists)(taskMdPath)) {
             const content = await (0, fs_extra_1.readFile)(taskMdPath, 'utf-8');
             const updated = content.replace('状态: 🔲 待开发', '状态: 🔄 进行中');
-            await require('fs-extra').writeFile(taskMdPath, updated);
+            tx.write(taskMdPath, updated);
+        }
+        // 前端各平台 TASK.md 状态更新
+        const frontendDir = (0, path_1.join)(taskDir, 'frontend');
+        if (await (0, fs_extra_1.pathExists)(frontendDir)) {
+            const { readdir: rd } = await Promise.resolve().then(() => __importStar(require('fs-extra')));
+            const platformDirs = await rd(frontendDir, { withFileTypes: true });
+            for (const pd of platformDirs) {
+                if (pd.isDirectory()) {
+                    const ftaskPath = (0, path_1.join)(frontendDir, pd.name, 'TASK.md');
+                    if (await (0, fs_extra_1.pathExists)(ftaskPath)) {
+                        const content = await (0, fs_extra_1.readFile)(ftaskPath, 'utf-8');
+                        const updated = content.replace('状态: 🔲 待开发', '状态: 🔄 进行中');
+                        tx.write(ftaskPath, updated);
+                    }
+                }
+            }
+        }
+        // 事务提交 — 原子更新所有状态
+        if (tx.length > 0) {
+            await tx.commit();
         }
     }
     // Simulate work time
