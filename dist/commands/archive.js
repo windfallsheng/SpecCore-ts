@@ -38,6 +38,7 @@ const fs_extra_1 = require("fs-extra");
 const path_1 = require("path");
 const logger_1 = require("../utils/logger");
 const context_1 = require("../core/context");
+const transaction_1 = require("../core/transaction");
 async function archiveCommand(options) {
     const spinner = new logger_1.Spinner('Archiving tasks');
     spinner.start();
@@ -61,20 +62,33 @@ async function archiveCommand(options) {
         const archiveDir = (0, path_1.join)(iterationDir, 'archived');
         await (0, fs_extra_1.ensureDir)(archiveDir);
         if (options.all) {
-            // Archive all completed tasks
+            // Archive all completed tasks with transaction
             const { readdir } = await Promise.resolve().then(() => __importStar(require('fs-extra')));
             const entries = await readdir(iterationDir, { withFileTypes: true });
             const tasks = entries
                 .filter(e => e.isDirectory() && e.name.startsWith('Task-'))
                 .map(e => e.name);
+            // 事务归档：全部移动或全部回滚
+            const tx = new transaction_1.FileTransaction();
             for (const task of tasks) {
-                await archiveTask(iterationDir, task, archiveDir);
+                const taskPath = (0, path_1.join)(iterationDir, task);
+                const targetPath = (0, path_1.join)(archiveDir, task);
+                if (await (0, fs_extra_1.pathExists)(taskPath) && !(await (0, fs_extra_1.pathExists)(targetPath))) {
+                    tx.move(taskPath, targetPath);
+                }
             }
-            spinner.stop(`Archived ${tasks.length} tasks`);
+            await tx.commit();
+            spinner.stop(`Archived ${tasks.length} tasks (事务保护)`);
         }
         else if (options.task) {
-            await archiveTask(iterationDir, options.task, archiveDir);
-            spinner.stop(`Archived: ${options.task}`);
+            const taskPath = (0, path_1.join)(iterationDir, options.task);
+            const targetPath = (0, path_1.join)(archiveDir, options.task);
+            if (await (0, fs_extra_1.pathExists)(taskPath) && !(await (0, fs_extra_1.pathExists)(targetPath))) {
+                const tx = new transaction_1.FileTransaction();
+                tx.move(taskPath, targetPath);
+                await tx.commit();
+            }
+            spinner.stop(`Archived: ${options.task} (事务保护)`);
         }
         else {
             spinner.fail('Please specify --task or --all');
@@ -113,8 +127,10 @@ async function restoreTask(taskId, iteration) {
     if (!(await (0, fs_extra_1.pathExists)(archivedPath))) {
         throw new Error(`Archived task not found: ${taskId}`);
     }
-    await (0, fs_extra_1.move)(archivedPath, targetPath);
-    logger_1.logger.info(`Restored: ${taskId}`);
+    const tx = new transaction_1.FileTransaction();
+    tx.move(archivedPath, targetPath);
+    await tx.commit();
+    logger_1.logger.info(`Restored: ${taskId} (事务保护)`);
 }
 async function listArchived() {
     const { readdir } = await Promise.resolve().then(() => __importStar(require('fs-extra')));
