@@ -44,6 +44,8 @@ import { newTaskCommand } from './commands/new-task';
 import { platformAddCommand } from './commands/platform-add';
 import { indexUpdateCommand } from './commands/index-update';
 import { contextCommand } from './commands/context';
+// v4.6.0 迁移命令
+import { migrateCommand } from './commands/migrate';
 
 program
   .name('speccore')
@@ -103,6 +105,14 @@ program
   .option('--update', 'Incremental sync mode')
   .option('--force', 'Force overwrite')
   .action(importCommand);
+
+program
+  .command('migrate')
+  .alias('mg')
+  .description('Migrate Shell v3.x config to CLI v4.x (v4.6)')
+  .option('--dry-run', 'Preview migration, no changes')
+  .option('--force', 'Skip confirmation')
+  .action(migrateCommand);
 
 // ================================================================
 // 📋 期次管理
