@@ -1,12 +1,12 @@
 # {{projectName}}
 
-> 基于 SpecCore 框架开发
+> 基于 SpecCore 规范驱动开发
 
 ## 快速开始
 
 ### 环境准备
 - AI 辅助工具: WorkBuddy / Qcoder / Trae
-- SpecCore: `npm install -g SpecCore`
+- SpecCore: `npm install -g speccore`
 
 ### 开发流程
 1. `speccore init` - 初始化项目
@@ -26,4 +26,5 @@
 ```
 
 ## 相关文档
-- [SpecCore 文档](https://github.com/spec-core/cli)
+- [SpecCore 文档](https://github.com/windfallsheng/SpecCore-ts)
+- [npm 包](https://www.npmjs.com/package/speccore)

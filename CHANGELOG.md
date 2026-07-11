@@ -1,4 +1,4 @@
-# SpecCore CLI 版本历史
+# SpecCore 版本历史
 
 ---
 

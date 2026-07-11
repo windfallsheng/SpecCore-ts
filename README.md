@@ -1,4 +1,4 @@
-# SpecCore CLI
+# SpecCore
 
 > **Code by Spec, Not by Vibe.**
 
@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
 
-SpecCore CLI 是 [SpecCore 规范驱动开发框架](https://github.com/windfallsheng/SpecCore) 的官方 TypeScript 命令行工具。它将确定性操作（文件创建、目录管理、格式校验、状态统计）从 AI 中剥离，由代码直接执行，提升效率并降低 Token 消耗。
+SpecCore 是一套可落地的、面向 AI 原生团队的规范驱动研发工程框架。它将确定性操作（文件创建、目录管理、格式校验、状态统计）从 AI 中剥离，由代码直接执行，提升效率并降低 Token 消耗。
 
 ---
 
@@ -165,7 +165,7 @@ SpecCore 采用**确定性逻辑与智能逻辑解耦**的架构：
 | :--- | :--- |
 | WorkBuddy / Qcoder / Trae | Cursor / Claude Code / Windsurf / Gemini CLI / OpenCode |
 
-SpecCore CLI 原生集成 WorkBuddy（`speccore init` 自动创建 `.workbuddy/` skill 和 memory）。其他工具通过 SpecCore 源项目适配。
+SpecCore 原生集成 WorkBuddy（`speccore init` 自动创建 `.workbuddy/` skill 和 memory）。
 
 > 📚 完整适配说明见 [工具适配说明](docs/工具适配说明.md)
 
@@ -261,15 +261,6 @@ npm link && speccore --version
 # 运行验证脚本
 bash verify.sh
 ```
-
----
-
-## 相关项目
-
-| 项目 | 说明 | 链接 |
-| :--- | :--- | :--- |
-| **SpecCore 框架** | 规范驱动开发方法论 + Slash Commands + 模板 | [GitHub](https://github.com/windfallsheng/SpecCore) |
-| **SpecCore CLI** | TypeScript CLI 工具（确定性操作执行引擎） | [GitHub](https://github.com/windfallsheng/SpecCore-ts) |
 
 ---
 

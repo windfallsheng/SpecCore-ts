@@ -1,4 +1,4 @@
-# SpecCore CLI
+# SpecCore
 
 > **Code by Spec, Not by Vibe.**
 
@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
 
-SpecCore CLI is the official TypeScript command-line tool for the [SpecCore specification-driven development framework](https://github.com/windfallsheng/SpecCore). It decouples deterministic operations (file creation, directory management, format validation, status statistics) from AI, executing them directly through code to improve efficiency and reduce Token consumption.
+SpecCore is a specification-driven development framework for AI-native teams. It decouples deterministic operations (file creation, directory management, format validation, status statistics) from AI, executing them directly through code to improve efficiency and reduce Token consumption.
 
 > 💡 **v4.0.0** | 39 Commands | 31 Intent Types | Multi-Platform
 
@@ -165,7 +165,7 @@ Iteration-XXX/       ← Iteration Layer: what this iteration does
 | :--- | :--- |
 | WorkBuddy / Qcoder / Trae | Cursor / Claude Code / Windsurf / Gemini CLI / OpenCode |
 
-SpecCore CLI natively integrates WorkBuddy. Other tools supported via the SpecCore framework.
+SpecCore natively integrates WorkBuddy.
 
 > 📚 See [Tool Adaptation](docs/tool-adaptation.en.md)
 
@@ -224,15 +224,6 @@ npm run watch           # Dev mode
 npm link && speccore --version   # Local test
 bash verify.sh          # Run tests
 ```
-
----
-
-## Related Projects
-
-| Project | Description | Link |
-| :--- | :--- | :--- |
-| **SpecCore Framework** | Spec-driven methodology + Slash Commands + templates | [GitHub](https://github.com/windfallsheng/SpecCore) |
-| **SpecCore CLI** | TypeScript CLI tool (deterministic execution engine) | [GitHub](https://github.com/windfallsheng/SpecCore-ts) |
 
 ---
 
