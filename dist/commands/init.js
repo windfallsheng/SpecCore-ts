@@ -5,8 +5,13 @@ const fs_extra_1 = require("fs-extra");
 const path_1 = require("path");
 const logger_1 = require("../utils/logger");
 const context_1 = require("../core/context");
+const i18n_1 = require("../i18n");
 async function initCommand(options) {
-    const spinner = new logger_1.Spinner('Initializing SpecCore');
+    // 支持 --lang 参数动态切换
+    if (options.lang === 'en' || options.lang === 'en-US') {
+        i18n_1.i18n.setLocale('en-US');
+    }
+    const spinner = new logger_1.Spinner(i18n_1.i18n.t('cmd.init.start'));
     spinner.start();
     try {
         const projectRoot = process.cwd();
@@ -61,9 +66,9 @@ async function initCommand(options) {
         await updateGitignore(projectRoot);
         // Update context
         await (0, context_1.updateContext)({ lastUpdated: new Date().toISOString() });
-        spinner.stop('SpecCore initialized successfully!');
+        spinner.stop(i18n_1.i18n.t('cmd.init.success'));
         logger_1.logger.info('');
-        logger_1.logger.info('Next steps:');
+        logger_1.logger.info(i18n_1.i18n.t('common.next_steps') + ':');
         logger_1.logger.info('  1. Edit .speccore/CONSTITUTION.md to define your tech stack');
         logger_1.logger.info('  2. Edit .speccore/PROJECT/TEAM.md to add team members');
         logger_1.logger.info('  3. Run: speccore import --project=<name> --path=<path> to import projects');

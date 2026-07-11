@@ -49,7 +49,8 @@ const context_1 = require("./commands/context");
 commander_1.program
     .name('speccore')
     .description('SpecCore - Code by Spec, Not by Vibe.')
-    .version(package_json_1.version, '-v, --version', 'Display current version');
+    .version(package_json_1.version, '-v, --version', 'Display current version')
+    .option('--lang <locale>', 'Language: zh-CN (default) or en-US', 'zh-CN');
 // ================================================================
 // 🔍 智能入口
 // ================================================================
