@@ -28,16 +28,31 @@ export async function diffCommand(options: DiffOptions): Promise<void> {
   logger.info('');
 
   // Compare as iterations
-  const srcExists = await pathExists(join(process.cwd(), options.source));
-  const tgtExists = await pathExists(join(process.cwd(), options.target));
+  const srcAsIter = await pathExists(join(process.cwd(), options.source));
+  const tgtAsIter = await pathExists(join(process.cwd(), options.target));
 
-  if (srcExists && tgtExists) {
+  if (srcAsIter && tgtAsIter) {
     await diffIterations(options.source, options.target);
     return;
   }
 
   // Compare as baselines
-  await diffBaselines(options.source, options.target);
+  const baseDir = join(process.cwd(), '.speccore', 'GLOBAL', 'BASELINES');
+  const srcAsBase = await pathExists(join(baseDir, options.source));
+  const tgtAsBase = await pathExists(join(baseDir, options.target));
+
+  if (srcAsBase && tgtAsBase) {
+    await diffBaselines(options.source, options.target);
+    return;
+  }
+
+  // Neither found
+  if (!srcAsIter && !srcAsBase) {
+    logger.error(`Source "${options.source}" not found as iteration or baseline`);
+  }
+  if (!tgtAsIter && !tgtAsBase) {
+    logger.error(`Target "${options.target}" not found as iteration or baseline`);
+  }
 }
 
 async function diffIterations(src: string, tgt: string): Promise<void> {

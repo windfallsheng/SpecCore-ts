@@ -1,6 +1,5 @@
 import { readFile, pathExists } from 'fs-extra';
 import { join } from 'path';
-import { glob } from 'glob';
 
 export interface TaskState {
   id: string;
