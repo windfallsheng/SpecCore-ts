@@ -5,6 +5,7 @@
 
 import { logger, Spinner } from '../utils/logger';
 import { ensureDir, writeFile, pathExists, readFile } from 'fs-extra';
+import { FileTransaction } from '../core/transaction';
 import { join } from 'path';
 import { readGlobalIndex, readRequirementDetail, appendIterationLink, updateReqInIndex, updateIndexVersion, bumpGlobalVersion } from '../core/global-layer';
 import { updateContext, Context } from '../core/context';

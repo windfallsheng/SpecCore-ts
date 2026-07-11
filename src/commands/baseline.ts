@@ -6,6 +6,7 @@
 import { logger, Spinner } from '../utils/logger';
 import { readGlobalIndex } from '../core/global-layer';
 import { ensureDir, pathExists, readFile, writeFile, readdir, copy } from 'fs-extra';
+import { FileTransaction } from '../core/transaction';
 import { join } from 'path';
 
 export interface BaselineOptions {
