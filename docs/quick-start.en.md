@@ -249,4 +249,4 @@ Both share the same logic. AI commands call CLI commands internally when used in
 - [Tool Adaptation](tool-adaptation.en.md) — WorkBuddy integration details
 - [README](../README.en.md) — Back to overview
 - [CHANGELOG](../CHANGELOG.md) — Version history
-- [中文：快速开始](快速开始.md) | [中文：命令参考](命令参考.md)
+- [中文：快速开始](快速开始.md) | [中文：命令参考](命令参考.md) | [中文：使用指南](使用指南.md)
