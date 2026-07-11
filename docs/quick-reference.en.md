@@ -15,9 +15,11 @@ speccore execute --all --batch-size=3 # Batch execution
 speccore validate                     # Compliance check
 speccore progress --platform=web      # View progress
 speccore update --task=T-001 --status=completed  # Update status
+speccore sync                         # Reverse sync @spec → TASK.md
 speccore diff --source=A --target=B   # Compare iterations
 speccore trace --req=REQ-001          # Trace chain
 speccore backup                       # Backup state
+speccore current --commit             # Generate commit message
 ```
 
 ## 🤖 AI Commands (/spec prefix, in AI tools)

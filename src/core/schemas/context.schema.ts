@@ -7,9 +7,10 @@ import { z } from 'zod';
 
 // 历史记录条目
 export const HistoryEntrySchema = z.object({
-  action: z.string(),
-  target: z.string(),
-  timestamp: z.string().datetime(),
+  command: z.string(),
+  timestamp: z.string(),
+  iteration: z.string().optional(),
+  task: z.string().optional(),
 });
 
 // 上下文核心 Schema

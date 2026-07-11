@@ -183,7 +183,7 @@ SpecCore 原生集成 WorkBuddy（`speccore init` 自动创建 `.workbuddy/` ski
 | [使用指南](docs/使用指南.md) | 文件操作安全指南：可手动改 vs 必须用命令 |
 | [工作空间组织](docs/工作空间组织.md) | 推荐目录结构 + 多工程协作 |
 | [迁移指南](docs/migration-guide.md) | Shell v3.x → CLI v5.x 迁移步骤 |
-| [CHANGELOG](CHANGELOG.md) | 版本历史与更新日志（v1.0.0 → v5.3.0） |
+| [CHANGELOG](CHANGELOG.md) | 版本历史与更新日志（v1.0.0 → v5.4.1） |
 | [README.en.md](README.en.md) | English project overview |
 
 ---
