@@ -4,6 +4,7 @@
  */
 
 import { pathExists, readdir, readFile, stat, writeFile, ensureDir } from 'fs-extra';
+import { FileTransaction } from '../core/transaction';
 import { join, extname } from 'path';
 import { logger, Spinner } from '../utils/logger';
 import {

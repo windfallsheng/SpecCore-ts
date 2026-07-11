@@ -6,6 +6,8 @@ const path_1 = require("path");
 const logger_1 = require("../utils/logger");
 const context_1 = require("../core/context");
 const i18n_1 = require("../i18n");
+const schemas_1 = require("../core/schemas");
+const error_feedback_1 = require("../core/error-feedback");
 async function initCommand(options) {
     // 支持 --lang 参数动态切换
     if (options.lang === 'en' || options.lang === 'en-US') {
@@ -45,8 +47,8 @@ async function initCommand(options) {
         await createGlobalFiles(speccoreDir);
         // Create config files
         await createConfigFiles(speccoreDir);
-        // Create context.json
-        await (0, fs_extra_1.writeFile)((0, path_1.join)(speccoreDir, 'local', 'context.json'), JSON.stringify({
+        // Create context.json (with Zod validation)
+        const contextData = {
             currentIteration: '',
             currentTask: '',
             currentAssignee: '',
@@ -60,8 +62,16 @@ async function initCommand(options) {
             completedTasks: 0,
             blockedTasks: 0,
             customAliases: {},
-            history: []
-        }, null, 2));
+            history: [],
+        };
+        const validated = (0, error_feedback_1.safeValidate)(schemas_1.ContextSchema, contextData, 'context');
+        if (!validated.success) {
+            logger_1.logger.warn('Context validation warning:');
+            for (const e of validated.errors) {
+                logger_1.logger.warn(`  ${e.message}`);
+            }
+        }
+        await (0, fs_extra_1.writeFile)((0, path_1.join)(speccoreDir, 'local', 'context.json'), JSON.stringify(validated.success ? validated.data : contextData, null, 2));
         // Create .gitignore entry
         await updateGitignore(projectRoot);
         // Update context
