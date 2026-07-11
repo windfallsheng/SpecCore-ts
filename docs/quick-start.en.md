@@ -14,8 +14,29 @@
 ```bash
 npm install -g speccore
 
+# Zero-install (npx)
+npx speccore demo     # Run demo project
+npx speccore --help   # Show help
+
 # Verify
 speccore --version
+```
+
+---
+
+## 🎬 Zero-Install Experience
+
+Try SpecCore without installing:
+
+```bash
+# Run demo (5 min)
+npx speccore demo
+
+# Init current directory
+npx speccore init
+
+# View help
+npx speccore --help
 ```
 
 ---

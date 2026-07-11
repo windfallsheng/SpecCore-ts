@@ -109,9 +109,11 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
 }
 
 // ============================================================
-// Interactive selection
+// Interactive selection (real prompt via inquirer)
 // ============================================================
 async function interactiveSelect(tasks: any[], iteration: string, options: ExecuteOptions): Promise<void> {
+  const inquirer = await loadInquirer();
+
   logger.info('');
   logger.info(`📋 Preparing ${tasks.length} tasks:`);
   logger.info('');
@@ -122,19 +124,86 @@ async function interactiveSelect(tasks: any[], iteration: string, options: Execu
     logger.info(`  ${i + 1}. ${t.id} ${t.name || ''} ${pri}`);
   }
 
-  logger.info('');
-  logger.info('Select execution mode:');
-  logger.info('  [1] Execute all (serial)');
-  logger.info('  [2] Execute all (parallel, max 2)');
-  logger.info('  [3] Select specific tasks');
-  logger.info('  [4] Cancel');
+  const { mode } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'mode',
+      message: 'Please select execution mode:',
+      choices: [
+        { name: '[1] Execute all (serial)', value: 'all' },
+        { name: '[2] Execute all (parallel, max 2)', value: 'parallel2' },
+        { name: '[3] Select specific tasks', value: 'select' },
+        { name: '[4] Cancel', value: 'cancel' },
+      ],
+    },
+  ]);
 
-  // In interactive mode, default to "all serial" (--force style)
-  logger.info('');
-  logger.info('💡 Auto-selecting mode [1] (all serial). Use --interactive in AI tools for full prompts.');
-  logger.info('');
+  if (mode === 'cancel') {
+    logger.info('Cancelled.');
+    return;
+  }
 
-  await executeWithProgress(tasks, iteration);
+  let selectedTasks = tasks;
+
+  if (mode === 'select') {
+    const choices = tasks.map((t: any) => ({
+      name: `${t.id} ${t.name || ''} (${t.priority || 'medium'})`,
+      value: t.id,
+      checked: t.priority === 'high',
+    }));
+
+    const { picked } = await inquirer.prompt([
+      {
+        type: 'checkbox',
+        name: 'picked',
+        message: 'Select tasks to execute (space to toggle, enter to confirm):',
+        choices,
+      },
+    ]);
+
+    if (picked.length === 0) {
+      logger.info('No tasks selected. Cancelled.');
+      return;
+    }
+
+    selectedTasks = tasks.filter((t: any) => picked.includes(t.id));
+  }
+
+  const { confirm } = await inquirer.prompt([
+    {
+      type: 'confirm',
+      name: 'confirm',
+      message: `Execute ${selectedTasks.length} task(s)?`,
+      default: true,
+    },
+  ]);
+
+  if (!confirm) {
+    logger.info('Cancelled.');
+    return;
+  }
+
+  await executeWithProgress(selectedTasks, iteration);
+}
+
+async function loadInquirer(): Promise<any> {
+  try {
+    return await import('inquirer');
+  } catch {
+    // Fallback for environments without inquirer
+    return {
+      prompt: async (questions: any[]) => {
+        logger.info('⚠️ Inquirer not available, auto-selecting defaults.');
+        const result: any = {};
+        for (const q of questions) {
+          if (q.name === 'mode') result[q.name] = 'all';
+          if (q.name === 'picked') result[q.name] = [];
+          if (q.name === 'confirm') result[q.name] = true;
+        }
+        return result;
+      },
+    };
+  }
 }
 
 // ============================================================
