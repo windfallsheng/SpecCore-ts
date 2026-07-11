@@ -1,0 +1,71 @@
+{
+  "cmd.init.success": "✅ 项目初始化完成！",
+  "cmd.init.fail": "❌ 初始化失败: {error}",
+  "cmd.init.existing": "⚠️ .speccore/ 已存在，跳过",
+  "cmd.init.created": "已创建: {path}",
+  
+  "task.status.pending": "待开发",
+  "task.status.in_progress": "开发中",
+  "task.status.completed": "已完成",
+  "task.status.blocked": "已阻塞",
+  "task.status.archived": "已归档",
+  
+  "task.type.feature": "功能开发",
+  "task.type.bugfix": "Bug 修复",
+  "task.type.research": "技术调研",
+  "task.type.optimization": "性能优化",
+  "task.type.migration": "数据迁移",
+  "task.type.document": "文档编写",
+
+  "platform.web": "Web 端",
+  "platform.h5": "H5 端",
+  "platform.miniapp": "小程序端",
+  "platform.tablet": "平板端",
+  "platform.tv": "智能电视端",
+
+  "iteration.status.planning": "规划中",
+  "iteration.status.in_progress": "进行中",
+  "iteration.status.completed": "已完成",
+  "iteration.status.archived": "已归档",
+
+  "priority.high": "高",
+  "priority.medium": "中",
+  "priority.low": "低",
+
+  "execute.executed": "{count} 个 Task 已标记为进行中",
+  "execute.skipped": "{count} 个 Task 已跳过",
+  "execute.dry_run": "🔍 预览模式 — 未实际执行",
+  "execute.assignee_assigned": "执行人已分配: {name}",
+
+  "sync.complete": "同步完成，{count} 个 Task 已更新",
+  "sync.no_tasks": "无 Task 需要同步",
+
+  "change.updated": "变更已应用: {description}",
+  "change.preview": "📋 将更新 {count} 个文件",
+  "change.cascade": "级联更新: {files}",
+
+  "archive.moved": "已归档: {task}",
+  "archive.skipped": "跳过: {task} ({reason})",
+  "archive.none": "没有需要归档的 Task",
+
+  "plan.generated": "调度方案已生成: {count} 个 Task",
+  "plan.team_size": "团队规模: {size} 人",
+
+  "validate.pass": "✅ 验证通过",
+  "validate.fail": "❌ 发现 {count} 个错误",
+  "validate.warn": "⚠️ 发现 {count} 个警告",
+
+  "global.index_rebuilt": "✅ 索引已重建（{count} 个项目，{reqs} 个需求）",
+  "global.no_requirements": "⚠️ 未找到需求条目",
+
+  "error.not_found": "{item} 不存在",
+  "error.permission": "权限不足: {path}",
+  "error.parse": "解析失败: {file}",
+
+  "cli.version": "v{version}",
+  "cli.help_title": "SpecCore CLI — Code by Spec, Not by Vibe.",
+  "cli.help_commands": "🔧 可用命令：",
+  "cli.help_init": "init          初始化项目",
+  "cli.help_migrate": "migrate       从 Shell 版迁移",
+  "cli.help_help": "help          帮助信息"
+}

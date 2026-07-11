@@ -1,11 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.planCommand = planCommand;
-const fs_extra_1 = require("fs-extra");
 const path_1 = require("path");
 const logger_1 = require("../utils/logger");
 const context_1 = require("../core/context");
 const state_1 = require("../core/state");
+const transaction_1 = require("../core/transaction");
 async function planCommand(options) {
     const spinner = new logger_1.Spinner('Generating execution plan');
     spinner.start();
@@ -53,10 +53,12 @@ async function planCommand(options) {
             printPlan(plan, iteration);
             return;
         }
-        // Save plan to file
+        // Save plan to file with transaction
         const planPath = (0, path_1.join)(`期次-${iteration}`, '00-期次总览', 'PLAN.md');
-        await (0, fs_extra_1.writeFile)(planPath, formatPlanMarkdown(plan, iteration));
-        spinner.stop(`Execution plan generated: ${planPath}`);
+        const tx = new transaction_1.FileTransaction();
+        tx.write(planPath, formatPlanMarkdown(plan, iteration));
+        await tx.commit();
+        spinner.stop(`Execution plan generated: ${planPath} (事务保护)`);
         printPlan(plan, iteration);
     }
     catch (error) {

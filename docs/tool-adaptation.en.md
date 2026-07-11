@@ -1,6 +1,6 @@
-# SpecCore CLI — Tool Adaptation Guide
+# SpecCore — Tool Adaptation Guide
 
-> SpecCore CLI automatically creates AI tool integration files via `speccore init`. This document explains the mechanism and configuration.
+> SpecCore automatically creates AI tool integration files via `speccore init`. This document explains the mechanism and configuration.
 
 ---
 
@@ -8,16 +8,16 @@
 
 | Tool | Region | Integration Method | Status |
 | :--- | :--- | :--- | :--- |
-| **WorkBuddy** | CN | `.workbuddy/skills/speccore/SKILL.md` + `.workbuddy/memory/MEMORY.md` | ✅ Full |
-| **Qcoder** | CN | Via SpecCore framework templates | ✅ Supported |
-| **Trae** | CN | Via SpecCore framework templates | ✅ Supported |
-| **Cursor** | Global | Via SpecCore framework templates | ✅ Supported |
-| **Claude Code** | Global | Via SpecCore framework templates | ✅ Supported |
-| **Windsurf** | Global | Via SpecCore framework templates | ✅ Supported |
-| **Gemini CLI** | Global | Via SpecCore framework templates | ✅ Supported |
-| **OpenCode** | Global | Via SpecCore framework templates | ✅ Supported |
+| **WorkBuddy** | CN | `.workbuddy/skills/speccore/SKILL.md` + `.workbuddy/memory/MEMORY.md` | ✅ |
+| **Qcoder** | CN | Via AI command templates | ✅ |
+| **Trae** | CN | Via AI command templates | ✅ |
+| **Cursor** | Global | Via AI command templates | ✅ |
+| **Claude Code** | Global | Via AI command templates | ✅ |
+| **Windsurf** | Global | Via AI command templates | ✅ |
+| **Gemini CLI** | Global | Via AI command templates | ✅ |
+| **OpenCode** | Global | Via AI command templates | ✅ |
 
-> 💡 SpecCore CLI natively integrates WorkBuddy. Other tools are supported through the [SpecCore framework](https://github.com/windfallsheng/SpecCore).
+> 💡 SpecCore natively integrates WorkBuddy.
 
 ---
 

@@ -1,0 +1,71 @@
+{
+  "cmd.init.success": "✅ Project initialized!",
+  "cmd.init.fail": "❌ Init failed: {error}",
+  "cmd.init.existing": "⚠️ .speccore/ already exists, skipped",
+  "cmd.init.created": "Created: {path}",
+  
+  "task.status.pending": "Pending",
+  "task.status.in_progress": "In Progress",
+  "task.status.completed": "Completed",
+  "task.status.blocked": "Blocked",
+  "task.status.archived": "Archived",
+  
+  "task.type.feature": "Feature",
+  "task.type.bugfix": "Bug Fix",
+  "task.type.research": "Research",
+  "task.type.optimization": "Optimization",
+  "task.type.migration": "Migration",
+  "task.type.document": "Documentation",
+
+  "platform.web": "Web",
+  "platform.h5": "H5",
+  "platform.miniapp": "Mini App",
+  "platform.tablet": "Tablet",
+  "platform.tv": "Smart TV",
+
+  "iteration.status.planning": "Planning",
+  "iteration.status.in_progress": "In Progress",
+  "iteration.status.completed": "Completed",
+  "iteration.status.archived": "Archived",
+
+  "priority.high": "High",
+  "priority.medium": "Medium",
+  "priority.low": "Low",
+
+  "execute.executed": "{count} task(s) marked in progress",
+  "execute.skipped": "{count} task(s) skipped",
+  "execute.dry_run": "🔍 Dry run mode — no changes applied",
+  "execute.assignee_assigned": "Assignee assigned: {name}",
+
+  "sync.complete": "Sync complete, {count} task(s) updated",
+  "sync.no_tasks": "No tasks to sync",
+
+  "change.updated": "Change applied: {description}",
+  "change.preview": "📋 Will update {count} file(s)",
+  "change.cascade": "Cascade update: {files}",
+
+  "archive.moved": "Archived: {task}",
+  "archive.skipped": "Skipped: {task} ({reason})",
+  "archive.none": "No tasks to archive",
+
+  "plan.generated": "Schedule generated: {count} task(s)",
+  "plan.team_size": "Team size: {size}",
+
+  "validate.pass": "✅ Validation passed",
+  "validate.fail": "❌ {count} error(s) found",
+  "validate.warn": "⚠️ {count} warning(s) found",
+
+  "global.index_rebuilt": "✅ Index rebuilt ({count} projects, {reqs} requirements)",
+  "global.no_requirements": "⚠️ No requirements found",
+
+  "error.not_found": "{item} not found",
+  "error.permission": "Permission denied: {path}",
+  "error.parse": "Parse failed: {file}",
+
+  "cli.version": "v{version}",
+  "cli.help_title": "SpecCore CLI — Code by Spec, Not by Vibe.",
+  "cli.help_commands": "🔧 Available commands:",
+  "cli.help_init": "init          Initialize project",
+  "cli.help_migrate": "migrate       Migrate from Shell edition",
+  "cli.help_help": "help          Show help"
+}

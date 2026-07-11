@@ -1,0 +1,64 @@
+#!/bin/bash
+# speccore - SpecCore CLI 入口
+# 用法: speccore <命令> [参数...]
+# 这是 SpecCore 的终端工具入口，AI 命令（/spec-xxx）请在 AI 工具中使用。
+
+set -e
+
+SPECCORE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPTS_DIR="$SPECCORE_ROOT/scripts"
+
+show_help() {
+    cat << 'EOF'
+SpecCore CLI — 规范驱动研发框架终端工具
+
+用法: speccore <命令> [参数]
+
+🔧 终端命令（在命令行中执行）：
+  init               初始化项目（等同于 scripts/init-project.sh）
+  validate           验证 Spec 文件合规性
+  hooks install      安装 Git Pre-commit Hook
+
+🤖 AI 命令（在 AI 工具中输入）：
+  /spec              智能入口（自然语言意图识别）
+  /spec-xxx          所有 AI 命令，详见 README
+
+📋 示例：
+  speccore init                        # 初始化 SpecCore
+  speccore hooks install               # 安装 Git Hook
+EOF
+}
+
+case "${1:-help}" in
+    init)
+        shift
+        exec "$SCRIPTS_DIR/init-project.sh" "$@"
+        ;;
+    validate)
+        shift
+        exec "$SCRIPTS_DIR/validate.sh" "$@" 2>/dev/null || {
+            echo "🔍 Spec 文件合规性检查..."
+            python3 "$SCRIPTS_DIR/scan-project.py" "$@"
+        }
+        ;;
+    hooks)
+        case "${2:-}" in
+            install)
+                exec "$SCRIPTS_DIR/install-hooks.sh"
+                ;;
+            *)
+                echo "用法: speccore hooks install"
+                exit 1
+                ;;
+        esac
+        ;;
+    -h|--help|help)
+        show_help
+        ;;
+    *)
+        echo "❌ 未知命令: $1"
+        echo ""
+        show_help
+        exit 1
+        ;;
+esac

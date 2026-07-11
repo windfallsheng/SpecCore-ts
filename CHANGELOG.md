@@ -1,8 +1,67 @@
-# SpecCore CLI 版本历史
+# SpecCore 版本历史
 
 ---
 
-## v4.0.0 (2026-07-09) — 最新
+## v4.6.0 (2026-07-11) — 最新
+
+### 🆕 新增
+- **迁移命令**：`speccore migrate` Shell v3.x → CLI v4.x 自动迁移（检测/补充全量层/platforms.yaml/context.json升级）
+- **迁移指南**：`docs/migration-guide.md` 迁移步骤 + 前后对比
+
+### 📝 文档
+- 新增 `docs/使用指南.md`：文件操作安全指南（安全区/高风险区/慎改区 + 实用速查表）
+
+### 📊 统计
+- **命令总数**：40 个（新增 migrate）
+- **测试**：8 文件 / 133 用例
+
+---
+
+## v4.5.0 (2026-07-11)
+
+### 🆕 新增
+- **i18n 国际化引擎**：`SPEC_LOCALE=en-US` 中英切换，默认中文
+- **语言资源**：`src/locales/zh-CN.json` + `en-US.json`（9 模块 + 通用词条）
+- **CLI 全局选项**：`speccore --lang=en-US init`
+
+---
+
+## v4.4.0 (2026-07-11)
+
+### 🔄 增强
+- **全部命令事务化**：`execute`、`plan`、`archive` 使用 FileTransaction 保护多文件操作
+- 5 个关键写操作命令（sync/change/execute/plan/archive）全部具备事务性保证
+
+---
+
+## v4.3.0 (2026-07-11)
+
+### 🆕 新增
+- **FileTransaction 模块**：write/delete/move 原子操作 + commit/rollback
+- **sync/change 事务化**：多文件修改失败自动回滚
+
+---
+
+## v4.2.0 (2026-07-11)
+
+### 🆕 新增
+- **yaml-parser 测试**：22 tests，纯函数覆盖率 96.42%
+- **核心模块测试扩展**：global-layer +11 / validator +9
+
+### 📊 统计
+- 6 文件 / 104 用例 → 7 文件 / 123 用例
+
+---
+
+## v4.1.0 (2026-07-11)
+
+### 🆕 新增
+- **Vitest 测试框架**：替代 Jest，8 文件 133 用例
+- **Zod 数据模型**：Task / Iteration / Platform / Context Schema（100% 覆盖率）
+
+---
+
+## v4.0.0 (2026-07-09)
 
 ### 🆕 新增功能
 - **多平台任务管理**：`speccore new-task --platforms=web,h5,miniapp`
@@ -95,4 +154,4 @@
 - **次版本号**：新增命令或功能模块
 - **修订版本号**：Bug 修复或小幅增强
 
-当前版本：**v4.0.0**
+当前版本：**v4.6.0**

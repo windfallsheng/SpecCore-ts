@@ -1,6 +1,6 @@
 {
   "name": "speccore",
-  "version": "4.0.2",
+  "version": "4.6.1",
   "description": "SpecCore - Code by Spec, Not by Vibe.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -11,7 +11,9 @@
     "build": "tsc",
     "watch": "tsc --watch",
     "prepublish": "npm run build",
-    "test": "jest",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "lint": "eslint src/**/*.ts"
   },
   "keywords": [
@@ -35,13 +37,16 @@
     "commander": "^11.1.0",
     "fs-extra": "^11.2.0",
     "glob": "^10.3.10",
-    "js-yaml": "^4.1.0"
+    "js-yaml": "^4.1.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/fs-extra": "^11.0.4",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.10.5",
-    "typescript": "^5.3.3"
+    "@vitest/coverage-v8": "^4.1.10",
+    "typescript": "^5.3.3",
+    "vitest": "^4.1.10"
   },
   "engines": {
     "node": ">=18.0.0"

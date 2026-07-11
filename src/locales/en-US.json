@@ -1,0 +1,95 @@
+{
+  "_meta": {
+    "locale": "en-US",
+    "name": "English"
+  },
+  "cmd": {
+    "init": {
+      "start": "Initializing SpecCore project...",
+      "success": "Project initialized!",
+      "already": "Project already initialized, use --force to overwrite"
+    },
+    "import": {
+      "start": "Importing project to global layer...",
+      "success": "Project import complete",
+      "scanning": "Scanning project: {project} ({type})",
+      "found": "Found {count} API endpoints, {models} data models"
+    },
+    "execute": {
+      "start": "Preparing execution...",
+      "preview": "Execution Preview",
+      "executing": "Executing {task}...",
+      "success": "Execution complete!",
+      "dry_run": "Dry run mode — no actual changes",
+      "no_tasks": "No matching tasks found"
+    },
+    "plan": {
+      "start": "Generating execution plan...",
+      "success": "Execution plan generated: {path}"
+    },
+    "validate": {
+      "start": "Validating Spec files...",
+      "success": "Validation passed",
+      "fail": "Found {count} issues",
+      "fix": "Auto-fixed {count} issues"
+    },
+    "change": {
+      "start": "Analyzing change impact...",
+      "success": "Change applied, updated {count} files",
+      "dry_run": "Change preview — no actual changes"
+    },
+    "sync": {
+      "start": "Detecting Spec differences...",
+      "success": "Spec sync complete, synced {count} files",
+      "dry_run": "Diff analysis complete (preview mode)"
+    },
+    "progress": {
+      "total": "Total",
+      "completed": "Completed",
+      "in_progress": "In Progress",
+      "pending": "Pending",
+      "completion_rate": "Completion Rate"
+    },
+    "archive": {
+      "start": "Archiving tasks...",
+      "success": "Archived {count} tasks",
+      "restore": "Restored: {task}"
+    }
+  },
+  "task": {
+    "status": {
+      "pending": "Pending",
+      "in_progress": "In Progress",
+      "completed": "Completed",
+      "blocked": "Blocked",
+      "archived": "Archived"
+    },
+    "type": {
+      "feature": "Feature",
+      "bugfix": "Bug Fix",
+      "research": "Research",
+      "optimization": "Optimization",
+      "migration": "Migration",
+      "document": "Document"
+    },
+    "priority": {
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    }
+  },
+  "common": {
+    "error": "Error",
+    "warning": "Warning",
+    "success": "Success",
+    "info": "Info",
+    "yes": "Yes",
+    "no": "No",
+    "aborted": "Aborted",
+    "transaction_protected": "transaction protected",
+    "file_not_found": "File not found",
+    "dir_not_found": "Directory not found",
+    "no_iteration": "No active iteration found, please create one first",
+    "next_steps": "Next Steps"
+  }
+}

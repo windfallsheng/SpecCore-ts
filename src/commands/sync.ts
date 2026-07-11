@@ -7,6 +7,7 @@ import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
 import { readFile, writeFile, pathExists } from 'fs-extra';
 import { join } from 'path';
+import { FileTransaction } from '../core/transaction';
 
 export interface SyncOptions {
   task?: string;
@@ -105,6 +106,7 @@ async function analyzeTaskDiff(task: string, iteration: string): Promise<void> {
 
 async function syncTaskSpec(task: string, iteration: string, auto: boolean): Promise<void> {
   const taskDir = join(process.cwd(), iteration, task);
+  const tx = new FileTransaction();
 
   if (!await pathExists(taskDir)) {
     logger.error(`任务目录不存在: ${taskDir}`);
@@ -119,23 +121,49 @@ async function syncTaskSpec(task: string, iteration: string, auto: boolean): Pro
 
     if (!auto) {
       logger.info(`当前 TASK.md 状态:`);
-      // 提取变更履历的最后 3 条
       const historyMatch = content.match(/变更履历[\s\S]*?(?=\n##\s)/);
       if (historyMatch) {
         logger.info(historyMatch[0].substring(0, 300));
       }
     }
 
-    // 自动模式下添加上下文更新记录
+    // 自动模式下添加上下文更新记录（使用事务）
     if (auto) {
       const syncEntry = `| ${now} | auto | 自动反向同步: 更新 Spec 文件 | SpecCore |\n`;
-      content = content.replace(
+      const updated = content.replace(
         /(\| :--- \| :--- \| :--- \| :--- \|)/,
         `$1\n${syncEntry}`
       );
-      await writeFile(taskMdPath, content);
-      logger.info(`✅ 已同步: ${task}/backend/TASK.md`);
+      tx.write(taskMdPath, updated);
     }
+  }
+
+  // 同步前端各平台 TASK.md
+  const frontendDir = join(taskDir, 'frontend');
+  if (await pathExists(frontendDir)) {
+    const { readdir } = await import('fs-extra');
+    const platformDirs = await readdir(frontendDir, { withFileTypes: true });
+    for (const pd of platformDirs) {
+      if (pd.isDirectory()) {
+        const ftaskPath = join(frontendDir, pd.name, 'TASK.md');
+        if (await pathExists(ftaskPath) && auto) {
+          let content = await readFile(ftaskPath, 'utf-8');
+          const now = new Date().toISOString().split('T')[0];
+          const syncEntry = `| ${now} | auto | 自动反向同步: 更新 Spec 文件 | SpecCore |\n`;
+          const updated = content.replace(
+            /(\| :--- \| :--- \| :--- \| :--- \|)/,
+            `$1\n${syncEntry}`
+          );
+          tx.write(ftaskPath, updated);
+        }
+      }
+    }
+  }
+
+  // 提交事务 — 原子写入所有变更
+  if (tx.length > 0) {
+    await tx.commit();
+    logger.info(`✅ 已同步: ${task}/ (${tx.length} 个文件，事务保护)`);
   }
 }
 
