@@ -1,6 +1,6 @@
 # SpecCore — Command Reference
 
-> 🔧 Commands: 42 | 🧠 Intent Types: 31 | See [README](../README.en.md)
+> 🔧 Commands: 44 | 🧠 Intent Types: 35 | See [README](../README.en.md)
 
 ---
 
@@ -155,11 +155,12 @@
 | `dm` | demo | `wc` | welcome |
 | `up` | update | `bk` | backup |
 | `cm` | completion | `hk` | hooks |
-| `cr` | current | | |
+| `cr` | current | `df` | diff |
+| `tr` | trace | | |
 
 ---
 
-## 🆕 v4.7~v4.8 New Commands (5)
+## 🆕 v4.7~v5.3 New Commands (7)
 
 | Command | Alias | Description | Options |
 | :--- | :--- | :--- | :--- |
@@ -168,6 +169,8 @@
 | `speccore completion` | `cm` | Generate shell completion script | `[bash\|zsh]` |
 | `speccore hooks` | `hk` | Install Git hooks (pre-commit + pre-push) | — |
 | `speccore current` | `cr` | Show current branch task mapping | `--commit` `--pr` |
+| `speccore diff` | `df` | Compare iterations/baselines (v5.3) | `--source=<name>` `--target=<name>` |
+| `speccore trace` | `tr` | REQ→Task→Code trace chain (v5.3) | `--req=<id>` `--task=<id>` `--full` |
 
 Examples:
 ```bash

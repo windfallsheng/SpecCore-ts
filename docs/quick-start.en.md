@@ -267,6 +267,10 @@ Both share the same logic. AI commands call CLI commands internally when used in
 ## Next Steps
 
 - [Command Reference](commands.en.md) — Full command list with params and aliases
+- [Usage Guide](usage-guide.en.md) — File safety guide: manual edit vs CLI command
+- [Workspace Layout](workspace-organization.en.md) — Recommended directory structure
+- [Migration Guide](migration-guide.en.md) — Shell v3.x → CLI v5.x
+- [SDD Methodology](sdd-methodology.en.md) — What, why, how
 - [Tool Adaptation](tool-adaptation.en.md) — WorkBuddy integration details
 - [README](../README.en.md) — Back to overview
 - [CHANGELOG](../CHANGELOG.md) — Version history

@@ -173,26 +173,18 @@ SpecCore natively integrates WorkBuddy.
 
 ## 📚 Documentation
 
-| Document | Lang | Content |
-| :--- | :--- | :--- |
-| [SDD Methodology](docs/sdd-methodology.en.md) | 🇬🇧 | What is SDD, why, how |
-| [Quick Reference](docs/quick-reference.en.md) | 🇬🇧 | One-page: commands + safety rules + CI |
-| [Quick Start](docs/quick-start.en.md) | 🇬🇧 | Install → Init → Import → Multi-platform → Scenarios |
-| [Command Reference](docs/commands.en.md) | 🇬🇧 | 44 commands full params + 31 intents + aliases |
-| [Tool Adaptation](docs/tool-adaptation.en.md) | 🇬🇧 | WorkBuddy integration + workflow + security |
-| [Usage Guide](docs/usage-guide.en.md) | 🇬🇧 | File safety: what to edit manually vs via command |
-| [Workspace Layout](docs/workspace-organization.en.md) | 🇬🇧 | Recommended directory structure + multi-project workflow |
-| [Migration Guide](docs/migration-guide.en.md) | 🇬🇧 | Shell v3.x → CLI v5.x |
-| [SDD 方法论](docs/SDD方法论.md) | 🇨🇳 | SDD 是什么、为什么、怎么做 |
-| [速查卡](docs/速查卡.md) | 🇨🇳 | 一页掌握：常用命令 + 安全口诀 + CI |
-| [快速开始指南](docs/快速开始.md) | 🇨🇳 | 安装 → 初始化 → 导入 → 多端 Task → 场景速查 |
-| [命令参考手册](docs/命令参考.md) | 🇨🇳 | 44 个命令完整参数 + 31 种意图映射 + 别名速查 |
-| [工具适配说明](docs/工具适配说明.md) | 🇨🇳 | WorkBuddy 集成原理 + 工作流程 + 安全检查 |
-| [使用指南](docs/使用指南.md) | 🇨🇳 | 文件操作安全指南 |
-| [工作空间组织](docs/工作空间组织.md) | 🇨🇳 | 推荐目录结构 + 多工程协作 |
-| [迁移指南](docs/migration-guide.md) | 🇨🇳 | Shell v3.x → CLI v5.x |
-| [CHANGELOG](CHANGELOG.md) | 🇨🇳 | Version history (v1.0.0 → v5.3.0) |
-| [README.md](README.md) | 🇨🇳 | 中文项目概述 |
+| Document | Content |
+| :--- | :--- |
+| [SDD Methodology](docs/sdd-methodology.en.md) | What is SDD, why, how |
+| [Quick Reference](docs/quick-reference.en.md) | One-page: commands + safety + CI |
+| [Quick Start](docs/quick-start.en.md) | Install → Init → Import → Multi-platform → Scenarios |
+| [Command Reference](docs/commands.en.md) | 44 commands full params + 35 intents |
+| [Tool Adaptation](docs/tool-adaptation.en.md) | WorkBuddy integration + workflow + security |
+| [Usage Guide](docs/usage-guide.en.md) | File safety: manual edit vs CLI command |
+| [Workspace Layout](docs/workspace-organization.en.md) | Recommended directory structure |
+| [Migration Guide](docs/migration-guide.en.md) | Shell v3.x → CLI v5.x |
+| [CHANGELOG](CHANGELOG.en.md) | Version history (v1.0.0 → v5.3.1) |
+| [README.md](README.md) | 中文项目概述 |
 
 ---
 
