@@ -1,6 +1,6 @@
-# SpecCore CLI — Quick Start Guide
+# SpecCore — Quick Start Guide
 
-> Get started with SpecCore CLI. Read the [README](../README.en.md) first for an overview, then follow this guide.
+> Get started with SpecCore. Read the [README](../README.en.md) first for an overview, then follow this guide.
 
 ---
 
