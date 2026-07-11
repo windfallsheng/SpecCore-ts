@@ -1,0 +1,95 @@
+{
+  "_meta": {
+    "locale": "zh-CN",
+    "name": "简体中文"
+  },
+  "cmd": {
+    "init": {
+      "start": "正在初始化 SpecCore 项目...",
+      "success": "项目初始化完成！",
+      "already": "项目已初始化，使用 --force 强制覆盖"
+    },
+    "import": {
+      "start": "正在导入项目到全量层...",
+      "success": "项目导入完成",
+      "scanning": "正在扫描项目: {project} ({type})",
+      "found": "发现 {count} 个 API 端点, {models} 个数据模型"
+    },
+    "execute": {
+      "start": "正在准备执行...",
+      "preview": "执行预览",
+      "executing": "正在执行 {task}...",
+      "success": "执行完成！",
+      "dry_run": "预览模式 — 未实际执行",
+      "no_tasks": "未找到匹配的任务"
+    },
+    "plan": {
+      "start": "正在生成执行方案...",
+      "success": "执行方案已生成: {path}"
+    },
+    "validate": {
+      "start": "正在验证 Spec 文件...",
+      "success": "验证通过",
+      "fail": "验证发现 {count} 个问题",
+      "fix": "已自动修复 {count} 个问题"
+    },
+    "change": {
+      "start": "正在分析变更影响...",
+      "success": "需求变更已生效, 已更新 {count} 个文件",
+      "dry_run": "变更预览 — 未实际修改"
+    },
+    "sync": {
+      "start": "正在检测 Spec 差异...",
+      "success": "Spec 同步完成, 已同步 {count} 个文件",
+      "dry_run": "差异分析完成（预览模式）"
+    },
+    "progress": {
+      "total": "总计",
+      "completed": "已完成",
+      "in_progress": "进行中",
+      "pending": "待开发",
+      "completion_rate": "完成率"
+    },
+    "archive": {
+      "start": "正在归档任务...",
+      "success": "已归档 {count} 个任务",
+      "restore": "已恢复: {task}"
+    }
+  },
+  "task": {
+    "status": {
+      "pending": "待开发",
+      "in_progress": "开发中",
+      "completed": "已完成",
+      "blocked": "阻塞",
+      "archived": "已归档"
+    },
+    "type": {
+      "feature": "功能",
+      "bugfix": "修复",
+      "research": "调研",
+      "optimization": "优化",
+      "migration": "迁移",
+      "document": "文档"
+    },
+    "priority": {
+      "high": "高",
+      "medium": "中",
+      "low": "低"
+    }
+  },
+  "common": {
+    "error": "错误",
+    "warning": "警告",
+    "success": "成功",
+    "info": "信息",
+    "yes": "是",
+    "no": "否",
+    "aborted": "已取消",
+    "transaction_protected": "事务保护",
+    "file_not_found": "文件未找到",
+    "dir_not_found": "目录未找到",
+    "no_iteration": "未找到活跃期次，请先创建期次",
+    "next_steps": "下一步"
+  }
+}
