@@ -3,6 +3,7 @@ import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
 import { updateContext } from '../core/context';
 import { i18n } from '../i18n';
+import { FileTransaction } from '../core/transaction';
 
 export interface InitOptions {
   mode?: string;

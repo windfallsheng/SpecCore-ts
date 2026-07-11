@@ -88,8 +88,8 @@
 | :--- | :--- | :--- | :--- |
 | `speccore impact` | `if` | Change impact analysis | `--req <id>` `--task <id>` |
 | `speccore baseline` | `bl` | Version baseline management | `create --name <name>` `list` `compare --name <name>` `restore --name <name> --req <id>` |
-| `speccore dashboard` | `db` | Visual dashboard (Chart.js) | `--iteration <name>` `--output <path>` |
-| `speccore audit` | `ad` | AI smart audit | `--strict` `--fix` |
+| `speccore dashboard` | `db` | Visual dashboard (Chart.js) | `--output <path>` |
+| `speccore audit` | `ad` | AI smart audit | `--fix` |
 
 ---
 
@@ -108,8 +108,8 @@
 | Command | Alias | Function | Parameters |
 | :--- | :--- | :--- | :--- |
 | `speccore goal` | — | End-to-end requirement delivery | `--name <name>` `--desc <text>` `--iteration <name>` |
-| `speccore bugfix` | `bf` | Quick bug fix | `--title <text>` `--desc <text>` `--iteration <name>` |
-| `speccore research` | `rs` | Technology research | `--topic <text>` `--criteria <list>` |
+| `speccore bugfix` | `bf` | Quick bug fix | `--name <text>` `--desc <text>` `--iteration <name>` |
+| `speccore research` | `rs` | Technology research | `--topic <text>` `--options <list>` |
 | `speccore handover` | `ho` | Generate handover document | `--iteration <name>` |
 | `speccore retro` | `rt` | Iteration retrospective | `--iteration <name>` |
 | `speccore rename` | `rn` | Rename | `--target <old>` `--new-name <new>` `--batch` `--pattern <p>` `--replacement <r>` `--force` |
@@ -122,7 +122,7 @@
 
 | Command | Alias | Function | Parameters |
 | :--- | :--- | :--- | :--- |
-| `speccore template-add` | `ta` | Add code template | `--name <name>` `--type <type>` `--path <path>` |
+| `speccore template-add` | `ta` | Add code template | `--name <name>` `--type <type>` `--files <files>` |
 | `speccore archive` | `ar` | Archive completed tasks | `--all` `--task <id>` `--iteration <name>` |
 | `speccore config` | `cf` | Framework configuration | `--set <key=value>` `--get <key>` |
 | `speccore help` | `hp` | Categorized help | `--category <name>` |
