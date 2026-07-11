@@ -2,7 +2,26 @@
 
 ---
 
-## v5.3.0 (2026-07-11) — Latest
+## v5.4.0 (2026-07-11) — Latest
+
+### 🔴 Bidirectional Trace
+- **Reverse sync**: `speccore sync` scans `@spec` annotations in code, auto-updates TASK.md
+- **Auto-generated TRACE.md**: `_shared/TRACE.md` records code→Spec trace chain
+- **Code scanner**: `src/core/reverse-sync.ts` supports 9 languages
+
+### 🔴 Git Integration
+- **Auto branch**: `speccore execute --task=Task-001` auto-creates `feature/Task-001-xxx`
+- **Branch mapping**: auto-writes `.speccore/.git-mapping.json`
+
+### 🔴 Bug Fixes
+- 14 audit findings fixed (Zod Schema / dead code / null safety / regex compat)
+
+### 📝 Docs
+- Quick Start / Quick Reference updated with bidirectional trace guides
+
+---
+
+## v5.3.0 (2026-07-11)
 
 ### 🆕 Added
 - **`speccore diff`**: Compare iterations/baselines for task differences
@@ -193,4 +212,4 @@
 | Minor | New commands or modules |
 | Patch | Bug fixes or doc updates |
 
-Current: **v5.3.1**
+Current: **v5.4.1**

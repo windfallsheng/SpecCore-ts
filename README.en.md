@@ -183,7 +183,7 @@ SpecCore natively integrates WorkBuddy.
 | [Usage Guide](docs/usage-guide.en.md) | File safety: manual edit vs CLI command |
 | [Workspace Layout](docs/workspace-organization.en.md) | Recommended directory structure |
 | [Migration Guide](docs/migration-guide.en.md) | Shell v3.x → CLI v5.x |
-| [CHANGELOG](CHANGELOG.en.md) | Version history (v1.0.0 → v5.3.1) |
+| [CHANGELOG](CHANGELOG.en.md) | Version history (v1.0.0 → v5.4.1) |
 | [README.md](README.md) | 中文项目概述 |
 
 ---
