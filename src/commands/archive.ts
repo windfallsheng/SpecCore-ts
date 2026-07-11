@@ -2,6 +2,7 @@ import { pathExists, ensureDir, move, readdir } from 'fs-extra';
 import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration, updateContext } from '../core/context';
+import { FileTransaction } from '../core/transaction';
 
 export interface ArchiveOptions {
   task?: string;
@@ -40,21 +41,35 @@ export async function archiveCommand(options: ArchiveOptions): Promise<void> {
     await ensureDir(archiveDir);
 
     if (options.all) {
-      // Archive all completed tasks
+      // Archive all completed tasks with transaction
       const { readdir } = await import('fs-extra');
       const entries = await readdir(iterationDir, { withFileTypes: true });
       const tasks = entries
         .filter(e => e.isDirectory() && e.name.startsWith('Task-'))
         .map(e => e.name);
 
+      // 事务归档：全部移动或全部回滚
+      const tx = new FileTransaction();
       for (const task of tasks) {
-        await archiveTask(iterationDir, task, archiveDir);
+        const taskPath = join(iterationDir, task);
+        const targetPath = join(archiveDir, task);
+        if (await pathExists(taskPath) && !(await pathExists(targetPath))) {
+          tx.move(taskPath, targetPath);
+        }
       }
+      await tx.commit();
 
-      spinner.stop(`Archived ${tasks.length} tasks`);
+      spinner.stop(`Archived ${tasks.length} tasks (事务保护)`);
     } else if (options.task) {
-      await archiveTask(iterationDir, options.task, archiveDir);
-      spinner.stop(`Archived: ${options.task}`);
+      const taskPath = join(iterationDir, options.task);
+      const targetPath = join(archiveDir, options.task);
+
+      if (await pathExists(taskPath) && !(await pathExists(targetPath))) {
+        const tx = new FileTransaction();
+        tx.move(taskPath, targetPath);
+        await tx.commit();
+      }
+      spinner.stop(`Archived: ${options.task} (事务保护)`);
     } else {
       spinner.fail('Please specify --task or --all');
     }
@@ -100,8 +115,10 @@ async function restoreTask(taskId: string, iteration?: string): Promise<void> {
     throw new Error(`Archived task not found: ${taskId}`);
   }
 
-  await move(archivedPath, targetPath);
-  logger.info(`Restored: ${taskId}`);
+  const tx = new FileTransaction();
+  tx.move(archivedPath, targetPath);
+  await tx.commit();
+  logger.info(`Restored: ${taskId} (事务保护)`);
 }
 
 async function listArchived(): Promise<void> {
