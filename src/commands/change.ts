@@ -7,6 +7,7 @@ import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
 import { readFile, writeFile, pathExists, readdir } from 'fs-extra';
 import { join } from 'path';
+import { FileTransaction } from '../core/transaction';
 
 export interface ChangeOptions {
   task?: string;
@@ -115,42 +116,74 @@ async function applyTaskChange(options: ChangeOptions, iteration: string): Promi
     return;
   }
 
-  // 更新 REQ.md
+  const tx = new FileTransaction();
+  const now = new Date().toISOString().split('T')[0];
+
+  // 更新 REQ.md（事务保护）
   const reqPath = join(taskDir, 'backend', 'REQ.md');
   if (await pathExists(reqPath)) {
     let content = await readFile(reqPath, 'utf-8');
-    const now = new Date().toISOString().split('T')[0];
     const changeNote = `\n## 变更记录\n\n| ${now} | v1.1 | ${options.desc} | SpecCore |\n`;
-    content += changeNote;
-    await writeFile(reqPath, content);
-    logger.info(`✅ 已更新: ${options.task}/backend/REQ.md`);
+    tx.write(reqPath, content + changeNote);
   }
 
-  // 更新 TASK.md 变更履历
+  // 更新 TASK.md 变更履历（事务保护）
   const taskMdPath = join(taskDir, 'backend', 'TASK.md');
   if (await pathExists(taskMdPath)) {
     let content = await readFile(taskMdPath, 'utf-8');
-    const now = new Date().toISOString().split('T')[0];
     const changeEntry = `| ${now} | v1.1 | 需求变更: ${options.desc} | SpecCore |\n`;
-    // 在变更履历表格后插入
-    content = content.replace(
+    const updated = content.replace(
       /(\| :--- \| :--- \| :--- \| :--- \|)/,
       `$1\n${changeEntry}`
     );
-    await writeFile(taskMdPath, content);
-    logger.info(`✅ 已更新: ${options.task}/backend/TASK.md`);
+    tx.write(taskMdPath, updated);
+  }
+
+  // 同步前端各平台 TASK.md（事务保护）
+  const frontendDir = join(taskDir, 'frontend');
+  if (await pathExists(frontendDir)) {
+    const { readdir: rd } = await import('fs-extra');
+    const platformDirs = await rd(frontendDir, { withFileTypes: true });
+    for (const pd of platformDirs) {
+      if (pd.isDirectory()) {
+        const ftaskPath = join(frontendDir, pd.name, 'TASK.md');
+        if (await pathExists(ftaskPath)) {
+          let content = await readFile(ftaskPath, 'utf-8');
+          const changeEntry = `| ${now} | v1.1 | 需求变更: ${options.desc} | SpecCore |\n`;
+          const updated = content.replace(
+            /(\| :--- \| :--- \| :--- \| :--- \|)/,
+            `$1\n${changeEntry}`
+          );
+          tx.write(ftaskPath, updated);
+        }
+      }
+    }
+  }
+
+  // 提交事务 — 原子写入，失败回滚
+  if (tx.length > 0) {
+    await tx.commit();
+    logger.info(`✅ 已更新 ${tx.length} 个文件（事务保护）`);
+    logger.info(`   ${options.task}/backend/REQ.md`);
+    logger.info(`   ${options.task}/backend/TASK.md`);
   }
 }
 
 async function applyGlobalChange(options: ChangeOptions): Promise<void> {
-  // 更新 CONSTITUTION.md 的变更记录
+  const tx = new FileTransaction();
+
+  // 更新 CONSTITUTION.md 的变更记录（事务保护）
   const constPath = join(process.cwd(), '.speccore', 'CONSTITUTION.md');
   if (await pathExists(constPath)) {
     let content = await readFile(constPath, 'utf-8');
     const now = new Date().toISOString().split('T')[0];
     content += `\n## 变更记录\n\n| ${now} | ${options.desc} | SpecCore |\n`;
-    await writeFile(constPath, content);
-    logger.info('✅ 已更新: .speccore/CONSTITUTION.md');
+    tx.write(constPath, content);
+  }
+
+  if (tx.length > 0) {
+    await tx.commit();
+    logger.info('✅ 已更新: .speccore/CONSTITUTION.md（事务保护）');
   }
 }
 
