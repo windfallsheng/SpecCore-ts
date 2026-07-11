@@ -14,6 +14,7 @@ import {
   canResume,
   ExecutionState,
 } from '../core/execution-state';
+import { createTaskBranch } from '../core/git-integration';
 
 export interface ExecuteOptions {
   all?: boolean;
@@ -213,6 +214,15 @@ async function executeWithProgress(tasks: any[], iteration: string): Promise<voi
   const total = tasks.length;
   const startTime = Date.now();
   const completed: string[] = [];
+
+  // Auto-create git branch for single task
+  if (tasks.length === 1) {
+    const task = tasks[0];
+    const branch = createTaskBranch(task.id, task.name || 'feature');
+    if (branch) {
+      logger.info(`🌿 Created branch: ${branch}`);
+    }
+  }
 
   logOperation('speccore execute', `${total} tasks`);
 

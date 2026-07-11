@@ -42,6 +42,7 @@ const state_1 = require("../core/state");
 const transaction_1 = require("../core/transaction");
 const operation_log_1 = require("../core/operation-log");
 const execution_state_1 = require("../core/execution-state");
+const git_integration_1 = require("../core/git-integration");
 async function executeCommand(options) {
     try {
         const iteration = await (0, context_1.getDefaultIteration)(options.iteration);
@@ -208,6 +209,14 @@ async function executeWithProgress(tasks, iteration) {
     const total = tasks.length;
     const startTime = Date.now();
     const completed = [];
+    // Auto-create git branch for single task
+    if (tasks.length === 1) {
+        const task = tasks[0];
+        const branch = (0, git_integration_1.createTaskBranch)(task.id, task.name || 'feature');
+        if (branch) {
+            logger_1.logger.info(`🌿 Created branch: ${branch}`);
+        }
+    }
     (0, operation_log_1.logOperation)('speccore execute', `${total} tasks`);
     logger_1.logger.info('');
     logger_1.logger.info(`⏳ Executing ${total} task(s) in iteration: ${iteration}`);
