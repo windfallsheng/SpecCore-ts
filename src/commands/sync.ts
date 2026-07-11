@@ -8,6 +8,7 @@ import { getDefaultIteration } from '../core/context';
 import { readFile, writeFile, pathExists } from 'fs-extra';
 import { join } from 'path';
 import { FileTransaction } from '../core/transaction';
+import { reverseSync } from '../core/reverse-sync';
 
 export interface SyncOptions {
   task?: string;
@@ -35,6 +36,12 @@ export async function syncCommand(options: SyncOptions): Promise<void> {
 
     if (options.dryRun) {
       await dryRunSync(options, iteration);
+      // Show reverse sync preview in dry-run mode
+      const rootDir = process.cwd();
+      logger.info('');
+      logger.info('🔍 Scanning code for @spec annotations...');
+      const refs = await (await import('../core/reverse-sync')).scanCodeForSpecAnnotations(rootDir);
+      logger.info(`   Found ${refs.length} @spec references in code`);
       spinner.stop('差异分析完成（--dry-run 模式，未实际同步）');
       return;
     }
@@ -47,6 +54,16 @@ export async function syncCommand(options: SyncOptions): Promise<void> {
 
     spinner.stop('Spec 同步完成');
     logger.info('');
+
+    // Real time reverse sync: scan code → update TASK.md
+    const rootDir = process.cwd();
+    logger.info('🔄 Reverse sync: scanning code for @spec annotations...');
+    const result = await reverseSync(rootDir, iteration);
+    if (result.length > 0) {
+      logger.success(`Reverse sync complete: ${result.length} tasks updated`);
+    } else {
+      logger.info('   No @spec references found in code');
+    }
     logger.info('💡 提示: 运行 speccore validate 确保同步后的 Spec 完整性');
   } catch (error) {
     spinner.fail(`同步失败: ${error}`);
