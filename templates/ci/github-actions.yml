@@ -1,0 +1,44 @@
+# SpecCore CI — GitHub Actions
+# Copy this file to your project: .github/workflows/speccore-ci.yml
+
+name: SpecCore Validate
+
+on:
+  push:
+    branches: [main, feature/*]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install SpecCore
+        run: npm install -g speccore
+
+      - name: Validate Specs
+        run: |
+          speccore validate --full
+          if [ $? -ne 0 ]; then
+            echo "⚠️ Spec validation failed. Please fix the issues above."
+            exit 1
+          fi
+
+      - name: Check Project Health
+        run: speccore health
+
+      - name: Progress Report
+        run: speccore progress --format=json > progress.json
+
+      - name: Upload Progress Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: spec-progress
+          path: progress.json

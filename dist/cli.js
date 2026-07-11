@@ -56,6 +56,9 @@ const hooks_1 = require("./commands/hooks");
 const current_1 = require("./commands/current");
 // v4.9.0 完善
 const update_1 = require("./commands/update");
+// v5.3.0 新增
+const diff_1 = require("./commands/diff");
+const trace_1 = require("./commands/trace");
 commander_1.program
     .name('speccore')
     .description('SpecCore - Code by Spec, Not by Vibe.')
@@ -539,6 +542,22 @@ commander_1.program
     .option('-i, --iteration <name>', 'Target iteration')
     .option('--force', 'Skip confirmation')
     .action(update_1.updateCommand);
+// v5.3.0 新增命令
+commander_1.program
+    .command('diff')
+    .alias('df')
+    .description('Compare two iterations or baselines (v5.3)')
+    .requiredOption('--source <name>', 'Source iteration/baseline')
+    .requiredOption('--target <name>', 'Target iteration/baseline')
+    .action(diff_1.diffCommand);
+commander_1.program
+    .command('trace')
+    .alias('tr')
+    .description('Show REQ → Task → Code trace chain (v5.3)')
+    .option('--req <id>', 'Trace from requirement ID')
+    .option('--task <id>', 'Trace from task ID')
+    .option('--full', 'Full project trace')
+    .action(trace_1.traceCommand);
 // Parse arguments
 commander_1.program.parse();
 //# sourceMappingURL=cli.js.map
