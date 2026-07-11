@@ -139,5 +139,5 @@ ln -s ../spec-project/.codebuddy/commands .codebuddy/commands
 ## Related Docs
 
 - [Quick Start](quick-start.en.md)
-- [Usage Guide (CN)](使用指南.md)
+- [Usage Guide](usage-guide.en.md)
 - [README](../README.en.md)

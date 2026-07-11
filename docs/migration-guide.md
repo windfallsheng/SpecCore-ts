@@ -1,4 +1,4 @@
-# SpecCore 迁移指南：Shell v3.x → CLI v4.x
+# SpecCore 迁移指南：Shell v3.x → CLI v5.x
 
 > 从 Shell 版 Speccore 迁移到 CLI 版的完整指南。
 
@@ -20,7 +20,7 @@ speccore migrate --dry-run
 2. 统计现有期次和任务数量
 3. 补充缺失的 GLOBAL/ 全量层目录
 4. 创建 `.speccore/config/platforms.yaml` 多平台配置
-5. 更新 `context.json` 到 v4 格式（保留已有数据）
+5. 更新 `context.json` 到 v5 格式（保留已有数据）
 6. 创建/更新 `.gitignore`
 
 ---
@@ -61,8 +61,8 @@ speccore init --force
 | 方面 | Shell 版 (v3.x) | CLI 版 (v4.x) |
 | :--- | :--- | :--- |
 | 安装方式 | git clone + PATH | `npm install -g speccore` |
-| CLI 命令 | 3 个脚本 | 39 个命令 |
-| 测试覆盖 | 无 | 133 个测试用例 |
+| CLI 命令 | 3 个脚本 | 44 个命令 |
+| 测试覆盖 | 无 | 148 个测试用例 |
 | 数据模型 | 无 | Zod Schema |
 | 文件操作 | 直接写入 | 事务保护 |
 | 国际化 | 仅中文 | 中英双语 |

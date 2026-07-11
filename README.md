@@ -173,26 +173,18 @@ SpecCore 原生集成 WorkBuddy（`speccore init` 自动创建 `.workbuddy/` ski
 
 ## 📚 文档
 
-| 文档 | 语言 | 内容 |
-| :--- | :--- | :--- |
-| [SDD Methodology](docs/sdd-methodology.en.md) | 🇬🇧 | What is SDD, why, how |
-| [SDD 方法论](docs/SDD方法论.md) | 🇨🇳 | SDD 是什么、为什么、怎么做 |
-| [Quick Reference](docs/quick-reference.en.md) | 🇬🇧 | One-page: commands + safety + CI |
-| [速查卡](docs/速查卡.md) | 🇨🇳 | 一页掌握：常用命令 + 安全口诀 + CI 模板 |
-| [Quick Start](docs/quick-start.en.md) | 🇬🇧 | Install → Init → Import → Multi-platform → Scenarios |
-| [快速开始指南](docs/快速开始.md) | 🇨🇳 | 安装 → 初始化 → 导入 → 多端 Task → 场景速查 |
-| [Command Reference](docs/commands.en.md) | 🇬🇧 | 44 commands full params + 31 intents + aliases |
-| [命令参考手册](docs/命令参考.md) | 🇨🇳 | 44 个命令完整参数 + 31 种意图映射 + 别名速查 |
-| [Tool Adaptation](docs/tool-adaptation.en.md) | 🇬🇧 | WorkBuddy integration + workflow + security |
-| [工具适配说明](docs/工具适配说明.md) | 🇨🇳 | WorkBuddy 集成原理 + 工作流程 + 安全检查 |
-| [Usage Guide](docs/usage-guide.en.md) | 🇬🇧 | File safety: manual edit vs CLI command |
-| [使用指南](docs/使用指南.md) | 🇨🇳 | 文件操作安全指南：可手动改 vs 必须用命令 |
-| [Workspace Layout](docs/workspace-organization.en.md) | 🇬🇧 | Recommended directory structure |
-| [工作空间组织](docs/工作空间组织.md) | 🇨🇳 | 推荐目录结构 + 多工程协作 |
-| [Migration Guide](docs/migration-guide.en.md) | 🇬🇧 | Shell v3.x → CLI v5.x |
-| [迁移指南](docs/migration-guide.md) | 🇨🇳 | Shell v3.x → CLI v5.x 迁移步骤 |
-| [CHANGELOG](CHANGELOG.md) | 🇨🇳 | 版本历史与更新日志（v1.0.0 → v5.3.0） |
-| [README.en.md](README.en.md) | 🇬🇧 | English project overview |
+| 文档 | 内容 |
+| :--- | :--- |
+| [SDD 方法论](docs/SDD方法论.md) | SDD 是什么、为什么、怎么做 |
+| [速查卡](docs/速查卡.md) | 一页掌握：常用命令 + 安全口诀 + CI 模板 |
+| [快速开始指南](docs/快速开始.md) | 安装 → 初始化 → 导入 → 多端 Task → 场景速查 |
+| [命令参考手册](docs/命令参考.md) | 44 个命令完整参数 + 35 种意图映射 |
+| [工具适配说明](docs/工具适配说明.md) | WorkBuddy 集成原理 + 工作流程 + 安全检查 |
+| [使用指南](docs/使用指南.md) | 文件操作安全指南：可手动改 vs 必须用命令 |
+| [工作空间组织](docs/工作空间组织.md) | 推荐目录结构 + 多工程协作 |
+| [迁移指南](docs/migration-guide.md) | Shell v3.x → CLI v5.x 迁移步骤 |
+| [CHANGELOG](CHANGELOG.md) | 版本历史与更新日志（v1.0.0 → v5.3.0） |
+| [README.en.md](README.en.md) | English project overview |
 
 ---
 
