@@ -182,8 +182,9 @@ SpecCore 原生集成 WorkBuddy（`speccore init` 自动创建 `.workbuddy/` ski
 | [工具适配说明](docs/工具适配说明.md) | 🇨🇳 | WorkBuddy 集成原理 + 工作流程 + 安全检查 |
 | [Tool Adaptation](docs/tool-adaptation.en.md) | 🇬🇧 | WorkBuddy integration + workflow + security |
 | [使用指南](docs/使用指南.md) | 🇨🇳 | 文件操作安全指南：哪些可手动改、哪些必须用命令 |
+| [工作空间组织](docs/工作空间组织.md) | 🇨🇳 | 推荐目录结构 + 多工程协作方式 |
 | [迁移指南](docs/migration-guide.md) | 🇨🇳 | Shell v3.x → CLI v4.x 迁移步骤 |
-| [CHANGELOG](CHANGELOG.md) | 🇨🇳 | 版本历史与更新日志（v1.0.0 → v4.6.0） |
+| [CHANGELOG](CHANGELOG.md) | 🇨🇳 | 版本历史与更新日志（v1.0.0 → v4.8.0） |
 | [README.en.md](README.en.md) | 🇬🇧 | English project overview |
 
 ---
@@ -266,7 +267,7 @@ bash verify.sh
 
 ## 版本
 
-v4.6.0 | 🔧 CLI 命令 40 个 | 🧠 意图识别 31 种
+v4.8.0 | 🔧 CLI 命令 42 个 | 🧠 意图识别 31 种
 
 版本历史见 [CHANGELOG.md](CHANGELOG.md)
 
