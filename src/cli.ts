@@ -49,6 +49,9 @@ import { migrateCommand } from './commands/migrate';
 // v4.7.0 体验增强
 import { completionCommand } from './commands/completion';
 import { backupCommand } from './commands/backup';
+// v4.8.0 高级功能
+import { hooksCommand } from './commands/hooks';
+import { currentCommand } from './commands/current';
 
 program
   .name('speccore')
@@ -240,6 +243,7 @@ program
   .option('--interactive', 'Interactive selection')
   .option('--dry-run', 'Preview execution plan')
   .option('--resume', 'Resume from last interruption')
+  .option('--batch-size <n>', 'Batch size for context isolation (default 3)')
   .option('--parallel <count>', 'Parallel execution count', '1')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('--force', 'Skip preview and execute directly')
@@ -552,6 +556,20 @@ program
   .option('--list', 'List existing backups')
   .option('--restore <name>', 'Restore from backup')
   .action(backupCommand);
+
+// v4.8.0 高级功能
+program
+  .command('hooks')
+  .description('Install Git hooks (pre-commit + pre-push)')
+  .action(hooksCommand);
+
+program
+  .command('current')
+  .alias('cr')
+  .description('Show current branch task mapping (v4.8)')
+  .option('--commit', 'Generate commit message')
+  .option('--pr', 'Generate PR description')
+  .action(currentCommand);
 
 // Parse arguments
 program.parse();

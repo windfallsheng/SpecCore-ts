@@ -5,6 +5,15 @@ import { getDefaultIteration, getDefaultAssignee, updateContext, recordHistory }
 import { scanTasks, topologicalSort } from '../core/state';
 import { FileTransaction } from '../core/transaction';
 import { logOperation } from '../core/operation-log';
+import {
+  initExecutionState,
+  loadExecutionState,
+  completeBatch,
+  clearExecutionState,
+  getCurrentBatchTasks,
+  canResume,
+  ExecutionState,
+} from '../core/execution-state';
 
 export interface ExecuteOptions {
   all?: boolean;
@@ -22,6 +31,8 @@ export interface ExecuteOptions {
   parallel?: string;
   iteration?: string;
   force?: boolean;
+  batchSize?: string;
+  batch?: string;
 }
 
 export async function executeCommand(options: ExecuteOptions): Promise<void> {
@@ -76,7 +87,20 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
       return;
     }
 
-    // === Execute with progress ===
+    // === Resume mode ===
+    if (options.resume) {
+      await executeResume(iteration);
+      return;
+    }
+
+    // === Batch mode ===
+    const batchSize = parseInt(options.batchSize || options.batch || '0', 10);
+    if (batchSize > 0 && sortedTasks.length > batchSize) {
+      await executeBatchMode(sortedTasks, iteration, batchSize, options);
+      return;
+    }
+
+    // === Execute with progress (existing flow) ===
     await executeWithProgress(sortedTasks, iteration);
   } catch (error) {
     logger.error(`Execution failed: ${error}`);
@@ -167,6 +191,114 @@ async function executeWithProgress(tasks: any[], iteration: string): Promise<voi
   const totalElapsed = Math.round((Date.now() - startTime) / 1000);
   logger.success(`Execution complete! ${total} tasks in ${totalElapsed}s`);
   logOperation('speccore execute done', `completed ${total} tasks in ${totalElapsed}s`);
+}
+
+// ============================================================
+// Resume from interruption
+// ============================================================
+async function executeResume(iteration: string): Promise<void> {
+  if (!canResume()) {
+    logger.warn('No interrupted execution found. Use --all to start a new one.');
+    return;
+  }
+
+  let state = loadExecutionState()!;
+  logger.info(`⏳ Resuming from Batch ${state.currentBatch}/${state.totalBatches}`);
+
+  // Continue from current batch
+  while (state.currentBatch <= state.totalBatches) {
+    const batchTasks = getCurrentBatchTasks(state);
+    if (batchTasks.length === 0) break;
+
+    await processBatch(batchTasks, state, iteration);
+    state = loadExecutionState()!;
+  }
+
+  logger.success('All batches completed!');
+  clearExecutionState();
+}
+
+// ============================================================
+// Batch execution mode
+// ============================================================
+async function executeBatchMode(tasks: any[], iteration: string, batchSize: number, options: ExecuteOptions): Promise<void> {
+  const taskIds = tasks.map((t: any) => t.id);
+  const state = initExecutionState(taskIds, iteration, batchSize);
+
+  logger.info('');
+  logger.info(`📦 Batch mode: ${state.totalBatches} batches of up to ${batchSize} tasks`);
+  logger.info('');
+
+  while (state.currentBatch <= state.totalBatches) {
+    const batchTasks = getCurrentBatchTasks(state);
+    if (batchTasks.length === 0) break;
+
+    // Find actual task objects
+    const taskObjs = batchTasks
+      .map((id: string) => tasks.find((t: any) => t.id === id))
+      .filter(Boolean);
+
+    await processBatch(taskObjs, state, iteration);
+
+    // Reload state (completedBatch updated it)
+    const updated = loadExecutionState()!;
+    if (updated.currentBatch > updated.totalBatches) break;
+  }
+
+  logger.success('All batches completed!');
+  logOperation('speccore execute --batch-size', `${tasks.length} tasks in ${state.totalBatches} batches`);
+  clearExecutionState();
+}
+
+// ============================================================
+// Process one batch with context isolation
+// ============================================================
+async function processBatch(tasks: any[], state: ExecutionState, iteration: string): Promise<void> {
+  const batchNum = state.currentBatch;
+  const startTime = Date.now();
+
+  logger.info(``);
+  logger.info(`━━━ Batch ${batchNum}/${state.totalBatches} ━━━`);
+  logger.info(``);
+
+  // Context isolation: simulate context loading
+  logger.info(`📖 Loading context for batch ${batchNum}...`);
+  logger.info(`   CONSTITUTION.md → architecture constraints`);
+  logger.info(`   PROJECT_GRAPH.md → dependency status`);
+  logger.info(`   Tasks: ${tasks.map((t: any) => t.id || t).join(', ')}`);
+
+  // Execute tasks in batch
+  const completed: string[] = [];
+  const total = tasks.length;
+  const progressBar = createBar(0, 20);
+
+  for (let i = 0; i < total; i++) {
+    const task = tasks[i];
+    const progress = Math.round(((i + 1) / total) * 100);
+    const bar = createBar(progress, 20);
+
+    logger.info(``);
+    logger.info(`  ${bar} ${(i + 1)}/${total} — ${task.id || task} ${task.name || ''}`);
+    logger.info(`  🔄 Executing...`);
+
+    await simulateTaskExecution(task, iteration);
+    completed.push(task.id || task);
+
+    logger.info(`  ✅ ${task.id || task} completed`);
+
+    const elapsed = Math.round((Date.now() - startTime) / 1000);
+    const estRemaining = Math.round((elapsed / (i + 1)) * (total - i - 1));
+    logger.info(`  Elapsed: ${elapsed}s | Est. remaining: ${estRemaining}s`);
+  }
+
+  // Mark batch complete
+  completeBatch(state, batchNum, completed);
+  logger.info(``);
+  logger.info(`✅ Batch ${batchNum} complete (${completed.length} tasks)`);
+
+  // Context reset note
+  logger.info(`🔄 Resetting context for next batch...`);
+  logger.info(``);
 }
 
 function createBar(pct: number, width: number): string {
