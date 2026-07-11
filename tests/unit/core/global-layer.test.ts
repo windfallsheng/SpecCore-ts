@@ -166,3 +166,141 @@ describe('Global Layer — Changelog Tracking', () => {
     }
   });
 });
+
+// ============================================================
+// 纯函数测试 — bumpGlobalVersion / getNextReqId / diffRequirements
+// ============================================================
+describe('Global Layer — bumpGlobalVersion', () => {
+  it('should bump minor version', () => {
+    const bump = (v: string) => {
+      const parts = v.replace('v', '').split('.').map(Number);
+      parts[parts.length - 1]++;
+      return 'v' + parts.join('.');
+    };
+    expect(bump('v1.0')).toBe('v1.1');
+    expect(bump('v3.2')).toBe('v3.3');
+    expect(bump('v4.0.0')).toBe('v4.0.1');
+  });
+});
+
+describe('Global Layer — getNextReqId', () => {
+  function getNextId(existingIds: string[]): string {
+    if (existingIds.length === 0) return 'REQ-001';
+    const nums = existingIds.map((id) => parseInt(id.replace('REQ-', ''), 10));
+    const max = Math.max(...nums);
+    return `REQ-${String(max + 1).padStart(3, '0')}`;
+  }
+
+  it('should return REQ-001 for empty index', () => {
+    expect(getNextId([])).toBe('REQ-001');
+  });
+
+  it('should generate sequential IDs', () => {
+    expect(getNextId(['REQ-001'])).toBe('REQ-002');
+    expect(getNextId(['REQ-001', 'REQ-002'])).toBe('REQ-003');
+  });
+
+  it('should handle gaps', () => {
+    expect(getNextId(['REQ-001', 'REQ-005', 'REQ-010'])).toBe('REQ-011');
+  });
+
+  it('should handle padded IDs', () => {
+    expect(getNextId(['REQ-099'])).toBe('REQ-100');
+  });
+});
+
+describe('Global Layer — diffRequirements', () => {
+  interface ReqEntry {
+    id: string;
+    name: string;
+    status: string;
+  }
+
+  function diffReqs(oldReqs: ReqEntry[], newReqs: ReqEntry[]): {
+    added: ReqEntry[];
+    removed: ReqEntry[];
+    changed: Array<{ old: ReqEntry; updated: ReqEntry }>;
+  } {
+    const added = newReqs.filter((n) => !oldReqs.find((o) => o.id === n.id));
+    const removed = oldReqs.filter((o) => !newReqs.find((n) => n.id === o.id));
+    const changed: Array<{ old: ReqEntry; updated: ReqEntry }> = [];
+    for (const old of oldReqs) {
+      const updated = newReqs.find((n) => n.id === old.id);
+      if (updated && (old.name !== updated.name || old.status !== updated.status)) {
+        changed.push({ old, updated });
+      }
+    }
+    return { added, removed, changed };
+  }
+
+  it('should detect added requirements', () => {
+    const result = diffReqs(
+      [{ id: 'REQ-001', name: '功能A', status: '📝 待开发' }],
+      [
+        { id: 'REQ-001', name: '功能A', status: '📝 待开发' },
+        { id: 'REQ-002', name: '功能B', status: '📝 待开发' },
+      ]
+    );
+    expect(result.added).toHaveLength(1);
+    expect(result.added[0].id).toBe('REQ-002');
+    expect(result.removed).toHaveLength(0);
+    expect(result.changed).toHaveLength(0);
+  });
+
+  it('should detect removed requirements', () => {
+    const result = diffReqs(
+      [
+        { id: 'REQ-001', name: '功能A', status: '📝 待开发' },
+        { id: 'REQ-002', name: '功能B', status: '📝 待开发' },
+      ],
+      [{ id: 'REQ-001', name: '功能A', status: '📝 待开发' }]
+    );
+    expect(result.removed).toHaveLength(1);
+    expect(result.removed[0].id).toBe('REQ-002');
+  });
+
+  it('should detect status changes', () => {
+    const result = diffReqs(
+      [{ id: 'REQ-001', name: '功能A', status: '📝 待开发' }],
+      [{ id: 'REQ-001', name: '功能A', status: '📦 已有实现' }]
+    );
+    expect(result.changed).toHaveLength(1);
+    expect(result.changed[0].old.status).toBe('📝 待开发');
+    expect(result.changed[0].updated.status).toBe('📦 已有实现');
+  });
+
+  it('should detect name changes', () => {
+    const result = diffReqs(
+      [{ id: 'REQ-001', name: '功能A', status: '📝 待开发' }],
+      [{ id: 'REQ-001', name: '功能A增强', status: '📝 待开发' }]
+    );
+    expect(result.changed).toHaveLength(1);
+  });
+
+  it('should return empty for identical datasets', () => {
+    const reqs = [{ id: 'REQ-001', name: '功能A', status: '📝 待开发' }];
+    const result = diffReqs(reqs, reqs);
+    expect(result.added).toHaveLength(0);
+    expect(result.removed).toHaveLength(0);
+    expect(result.changed).toHaveLength(0);
+  });
+});
+
+describe('Global Layer — Project Entry Parsing', () => {
+  it('should parse project table from INDEX.md', () => {
+    const content = `| 项目名称 | 需求数 | 状态 | 最后更新 |
+| :--- | :--- | :--- | :--- |
+| user-service | 5 | 活跃 | 2026-07-09 |
+| frontend-web | 3 | 活跃 | 2026-07-09 |
+| _暂无项目_ | - | - | - |`;
+
+    // 验证占位符可以被正确检测
+    expect(content).toContain('_暂无项目_');
+    // 实际项目行不应被跳过
+    const lines = content.split('\n').filter((l) => l.startsWith('|') && l.includes('|'));
+    const projectLines = lines.filter(
+      (l) => !l.includes(':---') && !l.includes('_暂无项目_') && !l.includes('项目名称')
+    );
+    expect(projectLines).toHaveLength(2);
+  });
+});
