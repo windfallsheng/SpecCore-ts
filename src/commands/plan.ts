@@ -3,6 +3,7 @@ import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration, detectCurrentAssignee } from '../core/context';
 import { readProjectGraph, topologicalSort, calculateCompletionRate, scanTasks } from '../core/state';
+import { FileTransaction } from '../core/transaction';
 
 export interface PlanOptions {
   iteration?: string;
@@ -72,11 +73,13 @@ export async function planCommand(options: PlanOptions): Promise<void> {
       return;
     }
 
-    // Save plan to file
+    // Save plan to file with transaction
     const planPath = join(`期次-${iteration}`, '00-期次总览', 'PLAN.md');
-    await writeFile(planPath, formatPlanMarkdown(plan, iteration));
+    const tx = new FileTransaction();
+    tx.write(planPath, formatPlanMarkdown(plan, iteration));
+    await tx.commit();
 
-    spinner.stop(`Execution plan generated: ${planPath}`);
+    spinner.stop(`Execution plan generated: ${planPath} (事务保护)`);
     printPlan(plan, iteration);
   } catch (error) {
     spinner.fail(`Plan generation failed: ${error}`);

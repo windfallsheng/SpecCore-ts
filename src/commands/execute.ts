@@ -3,6 +3,7 @@ import { join } from 'path';
 import { logger, Spinner, ProgressBar } from '../utils/logger';
 import { getDefaultIteration, getDefaultAssignee, updateContext, recordHistory } from '../core/context';
 import { scanTasks, topologicalSort } from '../core/state';
+import { FileTransaction } from '../core/transaction';
 
 export interface ExecuteOptions {
   all?: boolean;
@@ -142,23 +143,39 @@ function printExecutionPreview(tasks: any[], iteration: string): void {
 }
 
 async function simulateTaskExecution(task: any, iteration: string): Promise<void> {
-  // Simulate task execution
-  // In real implementation, this would:
-  // 1. Read task spec files
-  // 2. Call AI to generate code
-  // 3. Write generated code to files
-  // 4. Update task status
-  
   const taskDir = join(`期次-${iteration}`, task.id);
   
-  // Check if task directory exists
   if (await pathExists(taskDir)) {
-    // Update task status in TASK.md
+    const tx = new FileTransaction();
+
+    // 后端 TASK.md 状态更新
     const taskMdPath = join(taskDir, 'backend', 'TASK.md');
     if (await pathExists(taskMdPath)) {
       const content = await readFile(taskMdPath, 'utf-8');
       const updated = content.replace('状态: 🔲 待开发', '状态: 🔄 进行中');
-      await require('fs-extra').writeFile(taskMdPath, updated);
+      tx.write(taskMdPath, updated);
+    }
+
+    // 前端各平台 TASK.md 状态更新
+    const frontendDir = join(taskDir, 'frontend');
+    if (await pathExists(frontendDir)) {
+      const { readdir: rd } = await import('fs-extra');
+      const platformDirs = await rd(frontendDir, { withFileTypes: true });
+      for (const pd of platformDirs) {
+        if (pd.isDirectory()) {
+          const ftaskPath = join(frontendDir, pd.name, 'TASK.md');
+          if (await pathExists(ftaskPath)) {
+            const content = await readFile(ftaskPath, 'utf-8');
+            const updated = content.replace('状态: 🔲 待开发', '状态: 🔄 进行中');
+            tx.write(ftaskPath, updated);
+          }
+        }
+      }
+    }
+
+    // 事务提交 — 原子更新所有状态
+    if (tx.length > 0) {
+      await tx.commit();
     }
   }
   
