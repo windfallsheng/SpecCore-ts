@@ -181,7 +181,9 @@ SpecCore CLI 原生集成 WorkBuddy（`speccore init` 自动创建 `.workbuddy/`
 | [Command Reference](docs/commands.en.md) | 🇬🇧 | 39 commands full params + 31 intents + aliases |
 | [工具适配说明](docs/工具适配说明.md) | 🇨🇳 | WorkBuddy 集成原理 + 工作流程 + 安全检查 |
 | [Tool Adaptation](docs/tool-adaptation.en.md) | 🇬🇧 | WorkBuddy integration + workflow + security |
-| [CHANGELOG](CHANGELOG.md) | 🇨🇳 | 版本历史与更新日志（v1.0.0 → v4.0.0） |
+| [使用指南](docs/使用指南.md) | 🇨🇳 | 文件操作安全指南：哪些可手动改、哪些必须用命令 |
+| [迁移指南](docs/migration-guide.md) | 🇨🇳 | Shell v3.x → CLI v4.x 迁移步骤 |
+| [CHANGELOG](CHANGELOG.md) | 🇨🇳 | 版本历史与更新日志（v1.0.0 → v4.6.0） |
 | [README.en.md](README.en.md) | 🇬🇧 | English project overview |
 
 ---
@@ -199,6 +201,44 @@ SpecCore CLI 原生集成 WorkBuddy（`speccore init` 自动创建 `.workbuddy/`
 | **手动改了文档，需要同步？** | `speccore sync --task=Task-001` 或 `speccore sync-global` |
 | **需求编号重复？** | `speccore validate --fix` 自动检测修复 |
 | **如何重建需求索引？** | `speccore index-update`（--dry-run 预览） |
+| **哪些文件可以手动改？** | 见下方 [文件操作安全指南](#文件操作安全指南) |
+
+---
+
+## 文件操作安全指南
+
+SpecCore 不禁止手动编辑文件，但不同文件的安全级别不同。
+
+### ✅ 安全区 — 可以直接手动改
+
+这些文件是"描述性文字"，CLI 不会覆盖它们：
+
+| 文件 | 内容 | 改完后 |
+| :--- | :--- | :--- |
+| `REQ.md` | 需求描述、背景、业务规则 | `speccore sync --reverse --task=xxx` 回写数据库 |
+| `TECH.md` | 技术方案描述、设计思路 | 直接改即可，无需同步 |
+| `GLOSSARY.md` | 术语定义 | `speccore sync --reverse` 更新索引 |
+| `*.md` 注释行 | 备注、TODO、注意事项 | 不影响任何流程 |
+
+### ❌ 高风险区 — 必须用命令修改
+
+这些文件是"元数据/状态/关系"，手动改会被 CLI 覆盖或导致解析失败：
+
+| 文件 | 错改后果 | 正确方式 |
+| :--- | :--- | :--- |
+| `PROJECT_GRAPH.md` 表格 | CLI 执行时直接覆盖 | `speccore plan --assign=张三` |
+| `.task-type` | 类型错误影响整个生命周期 | `speccore new-task --type=feature` |
+| `API_CONTRACT.yaml` | 缩进错误导致校验失败 | 编辑后用 `speccore validate` 验证 |
+| `.speccore/data/*.json` | Zod 枚举拼写错误导致卡死 | `speccore change Task-001 "描述"` |
+
+### ⚠️ 慎改区 — 手动改完必须立即同步
+
+| 文件 | 正确流程 |
+| :--- | :--- |
+| `GLOBAL/REQUIREMENT.md` | 改完立即 `speccore sync-global` |
+| `CHANGELOG.md` | 建议用 `speccore change` 自动追加 |
+
+> 📚 完整指南见 [使用指南](docs/使用指南.md)
 
 ---
 
@@ -235,7 +275,7 @@ bash verify.sh
 
 ## 版本
 
-v4.0.0 | 🔧 CLI 命令 39 个 | 🧠 意图识别 31 种
+v4.6.0 | 🔧 CLI 命令 40 个 | 🧠 意图识别 31 种
 
 版本历史见 [CHANGELOG.md](CHANGELOG.md)
 

@@ -181,7 +181,9 @@ SpecCore CLI natively integrates WorkBuddy. Other tools supported via the SpecCo
 | [命令参考手册](docs/命令参考.md) | 🇨🇳 | 39 个命令完整参数 + 31 种意图映射 + 别名速查 |
 | [Tool Adaptation](docs/tool-adaptation.en.md) | 🇬🇧 | WorkBuddy integration + workflow + security |
 | [工具适配说明](docs/工具适配说明.md) | 🇨🇳 | WorkBuddy 集成原理 + 工作流程 + 安全检查 |
-| [CHANGELOG](CHANGELOG.md) | 🇨🇳 | Version history (v1.0.0 → v4.0.0) |
+| [Usage Guide](docs/使用指南.md) | 🇨🇳 | File safety: what to edit manually vs via command |
+| [Migration Guide](docs/migration-guide.md) | 🇨🇳 | Shell v3.x → CLI v4.x migration |
+| [CHANGELOG](CHANGELOG.md) | 🇨🇳 | Version history (v1.0.0 → v4.6.0) |
 | [README.md](README.md) | 🇨🇳 | 中文项目概述 |
 
 ---
@@ -197,6 +199,18 @@ SpecCore CLI natively integrates WorkBuddy. Other tools supported via the SpecCo
 | **Rename iteration/task?** | `speccore rename --target=old --new-name=new` |
 | **Batch rename?** | `speccore rename --batch --pattern="Task-" --replacement="Feature-"` |
 | **Rebuild requirement index?** | `speccore index-update` (--dry-run to preview) |
+
+| **Which files are safe to edit manually?** | See [Usage Guide](docs/使用指南.md). TL;DR: `REQ.md`/`TECH.md` safe; `API_CONTRACT.yaml`/`.json` require CLI commands. |
+
+---
+
+## File Safety Quick Reference
+
+| Zone | Files | Rule |
+| :--- | :--- | :--- |
+| ✅ Safe | `REQ.md`, `TECH.md`, `GLOSSARY.md`, `*.md` comments | Edit directly, then `speccore sync --reverse` |
+| ❌ Danger | `PROJECT_GRAPH.md` tables, `.task-type`, `API_CONTRACT.yaml`, `.json` data | Use `speccore` commands instead |
+| ⚠️ Caution | `GLOBAL/REQUIREMENT.md`, `CHANGELOG.md` | Edit then immediately run `speccore sync-global` |
 
 ---
 
@@ -224,7 +238,7 @@ bash verify.sh          # Run tests
 
 ## Version
 
-v4.0.0 | 🔧 CLI Commands: 39 | 🧠 Intents: 31
+v4.6.0 | 🔧 CLI Commands: 40 | 🧠 Intents: 31
 
 Changelog: [CHANGELOG.md](CHANGELOG.md)
 
