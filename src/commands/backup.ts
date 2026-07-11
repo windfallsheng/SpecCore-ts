@@ -4,7 +4,7 @@
  * 在每次修改前自动创建时间戳备份，支持查看和恢复
  */
 
-import { ensureDir, pathExists, readdir, copy, rmSync } from 'fs-extra';
+import { ensureDir, pathExists, readdir, copy } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
 
