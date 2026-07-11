@@ -54,6 +54,9 @@ import { hooksCommand } from './commands/hooks';
 import { currentCommand } from './commands/current';
 // v4.9.0 完善
 import { updateCommand } from './commands/update';
+// v5.3.0 新增
+import { diffCommand } from './commands/diff';
+import { traceCommand } from './commands/trace';
 
 program
   .name('speccore')
@@ -586,6 +589,24 @@ program
   .option('-i, --iteration <name>', 'Target iteration')
   .option('--force', 'Skip confirmation')
   .action(updateCommand);
+
+// v5.3.0 新增命令
+program
+  .command('diff')
+  .alias('df')
+  .description('Compare two iterations or baselines (v5.3)')
+  .requiredOption('--source <name>', 'Source iteration/baseline')
+  .requiredOption('--target <name>', 'Target iteration/baseline')
+  .action(diffCommand);
+
+program
+  .command('trace')
+  .alias('tr')
+  .description('Show REQ → Task → Code trace chain (v5.3)')
+  .option('--req <id>', 'Trace from requirement ID')
+  .option('--task <id>', 'Trace from task ID')
+  .option('--full', 'Full project trace')
+  .action(traceCommand);
 
 // Parse arguments
 program.parse();
