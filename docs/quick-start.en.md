@@ -253,6 +253,34 @@ my-project/
 
 ---
 
+---
+
+## Bidirectional Trace: Code ↔ Spec
+
+Add `@spec` annotations in your code, SpecCore maintains the trace chain:
+
+```java
+// @spec Task-001-user-login
+@RestController
+public class AuthController { ... }
+```
+
+```bash
+# Execute task (auto-creates Git branch)
+speccore execute --task=Task-001 --force
+
+# Reverse sync (scan @spec → update TASK.md)
+speccore sync --dry-run     # Preview
+speccore sync               # Write
+
+# View trace chain
+speccore trace --req=REQ-001
+speccore trace --full
+speccore current --commit    # Generate commit message
+```
+
+---
+
 ## 💡 CLI vs AI Commands
 
 | Execute in | Prefix | Example |
