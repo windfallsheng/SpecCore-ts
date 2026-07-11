@@ -1,6 +1,6 @@
 {
   "name": "speccore",
-  "version": "4.6.1",
+  "version": "5.3.0",
   "description": "SpecCore - Code by Spec, Not by Vibe.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -37,11 +37,13 @@
     "commander": "^11.1.0",
     "fs-extra": "^11.2.0",
     "glob": "^10.3.10",
+    "inquirer": "^14.0.2",
     "js-yaml": "^4.1.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/fs-extra": "^11.0.4",
+    "@types/inquirer": "^9.0.10",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.10.5",
     "@vitest/coverage-v8": "^4.1.10",

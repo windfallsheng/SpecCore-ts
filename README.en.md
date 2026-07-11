@@ -182,8 +182,9 @@ SpecCore natively integrates WorkBuddy.
 | [Tool Adaptation](docs/tool-adaptation.en.md) | 🇬🇧 | WorkBuddy integration + workflow + security |
 | [工具适配说明](docs/工具适配说明.md) | 🇨🇳 | WorkBuddy 集成原理 + 工作流程 + 安全检查 |
 | [Usage Guide](docs/使用指南.md) | 🇨🇳 | File safety: what to edit manually vs via command |
+| [Workspace Layout](docs/工作空间组织.md) | 🇨🇳 | Recommended directory structure + multi-project workflow |
 | [Migration Guide](docs/migration-guide.md) | 🇨🇳 | Shell v3.x → CLI v4.x migration |
-| [CHANGELOG](CHANGELOG.md) | 🇨🇳 | Version history (v1.0.0 → v4.6.0) |
+| [CHANGELOG](CHANGELOG.md) | 🇨🇳 | Version history (v1.0.0 → v4.8.0) |
 | [README.md](README.md) | 🇨🇳 | 中文项目概述 |
 
 ---

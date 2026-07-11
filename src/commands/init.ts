@@ -3,6 +3,9 @@ import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
 import { updateContext } from '../core/context';
 import { i18n } from '../i18n';
+import { FileTransaction } from '../core/transaction';
+import { ContextSchema } from '../core/schemas';
+import { safeValidate } from '../core/error-feedback';
 
 export interface InitOptions {
   mode?: string;
@@ -57,25 +60,35 @@ export async function initCommand(options: InitOptions): Promise<void> {
     // Create config files
     await createConfigFiles(speccoreDir);
 
-    // Create context.json
+    // Create context.json (with Zod validation)
+    const contextData = {
+      currentIteration: '',
+      currentTask: '',
+      currentAssignee: '',
+      lastUpdated: new Date().toISOString(),
+      lastAction: '',
+      lastIntent: '',
+      interruptedAt: '',
+      iterationStatus: '',
+      pendingTasks: 0,
+      inProgressTasks: 0,
+      completedTasks: 0,
+      blockedTasks: 0,
+      customAliases: {},
+      history: [],
+    };
+
+    const validated = safeValidate(ContextSchema, contextData, 'context');
+    if (!validated.success) {
+      logger.warn('Context validation warning:');
+      for (const e of validated.errors) {
+        logger.warn(`  ${e.message}`);
+      }
+    }
+
     await writeFile(
       join(speccoreDir, 'local', 'context.json'),
-      JSON.stringify({
-        currentIteration: '',
-        currentTask: '',
-        currentAssignee: '',
-        lastUpdated: new Date().toISOString(),
-        lastAction: '',
-        lastIntent: '',
-        interruptedAt: '',
-        iterationStatus: '',
-        pendingTasks: 0,
-        inProgressTasks: 0,
-        completedTasks: 0,
-        blockedTasks: 0,
-        customAliases: {},
-        history: []
-      }, null, 2)
+      JSON.stringify(validated.success ? validated.data : contextData, null, 2)
     );
 
     // Create .gitignore entry

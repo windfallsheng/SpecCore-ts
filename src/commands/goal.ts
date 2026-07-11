@@ -6,6 +6,8 @@
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
 import { ensureDir, writeFile, pathExists } from 'fs-extra';
+import { FileTransaction } from '../core/transaction';
+import { generateTaskId } from '../utils/task-utils';
 import { join } from 'path';
 
 export interface GoalOptions {
@@ -103,24 +105,6 @@ export async function goalCommand(options: GoalOptions): Promise<void> {
     spinner.fail(`需求交付创建失败: ${error}`);
     throw error;
   }
-}
-
-async function generateTaskId(iteration: string): Promise<string> {
-  // 查找当前期次下的最大 Task ID
-  let maxId = 0;
-  const iterationDir = join(process.cwd(), iteration);
-  if (await pathExists(iterationDir)) {
-    const { readdir } = await import('fs-extra');
-    const entries = await readdir(iterationDir);
-    for (const entry of entries) {
-      const match = entry.match(/^Task-(\d+)$/);
-      if (match) {
-        const id = parseInt(match[1], 10);
-        if (id > maxId) maxId = id;
-      }
-    }
-  }
-  return `Task-${String(maxId + 1).padStart(3, '0')}`;
 }
 
 function generateBackendReq(name: string, desc: string): string {

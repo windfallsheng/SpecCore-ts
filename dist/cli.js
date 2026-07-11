@@ -48,6 +48,17 @@ const index_update_1 = require("./commands/index-update");
 const context_1 = require("./commands/context");
 // v4.6.0 迁移命令
 const migrate_1 = require("./commands/migrate");
+// v4.7.0 体验增强
+const completion_1 = require("./commands/completion");
+const backup_1 = require("./commands/backup");
+// v4.8.0 高级功能
+const hooks_1 = require("./commands/hooks");
+const current_1 = require("./commands/current");
+// v4.9.0 完善
+const update_1 = require("./commands/update");
+// v5.3.0 新增
+const diff_1 = require("./commands/diff");
+const trace_1 = require("./commands/trace");
 commander_1.program
     .name('speccore')
     .description('SpecCore - Code by Spec, Not by Vibe.')
@@ -222,6 +233,7 @@ commander_1.program
     .option('--interactive', 'Interactive selection')
     .option('--dry-run', 'Preview execution plan')
     .option('--resume', 'Resume from last interruption')
+    .option('--batch-size <n>', 'Batch size for context isolation (default 3)')
     .option('--parallel <count>', 'Parallel execution count', '1')
     .option('-i, --iteration <iteration>', 'Target iteration')
     .option('--force', 'Skip preview and execute directly')
@@ -493,6 +505,59 @@ commander_1.program
     .option('--strict', 'Strict mode')
     .option('--fix', 'Auto-fix')
     .action(validate_1.validateCommand);
+// v4.7.0 体验增强命令
+commander_1.program
+    .command('completion [shell]')
+    .description('Generate shell completion script (bash/zsh)')
+    .action(completion_1.completionCommand);
+commander_1.program
+    .command('backup')
+    .alias('bk')
+    .description('Create backup of current state (v4.7)')
+    .option('--list', 'List existing backups')
+    .option('--restore <name>', 'Restore from backup')
+    .action(backup_1.backupCommand);
+// v4.8.0 高级功能
+commander_1.program
+    .command('hooks')
+    .description('Install Git hooks (pre-commit + pre-push)')
+    .action(hooks_1.hooksCommand);
+commander_1.program
+    .command('current')
+    .alias('cr')
+    .description('Show current branch task mapping (v4.8)')
+    .option('--commit', 'Generate commit message')
+    .option('--pr', 'Generate PR description')
+    .action(current_1.currentCommand);
+// v4.9.0 完善
+commander_1.program
+    .command('update')
+    .alias('up')
+    .description('Update task attributes (v4.9)')
+    .option('-t, --task <id>', 'Task ID (e.g. Task-001)')
+    .option('--status <status>', 'Status: pending/in_progress/completed/blocked')
+    .option('--priority <priority>', 'Priority: high/medium/low')
+    .option('--assignee <name>', 'Assignee name')
+    .option('--type <type>', 'Task type')
+    .option('-i, --iteration <name>', 'Target iteration')
+    .option('--force', 'Skip confirmation')
+    .action(update_1.updateCommand);
+// v5.3.0 新增命令
+commander_1.program
+    .command('diff')
+    .alias('df')
+    .description('Compare two iterations or baselines (v5.3)')
+    .requiredOption('--source <name>', 'Source iteration/baseline')
+    .requiredOption('--target <name>', 'Target iteration/baseline')
+    .action(diff_1.diffCommand);
+commander_1.program
+    .command('trace')
+    .alias('tr')
+    .description('Show REQ → Task → Code trace chain (v5.3)')
+    .option('--req <id>', 'Trace from requirement ID')
+    .option('--task <id>', 'Trace from task ID')
+    .option('--full', 'Full project trace')
+    .action(trace_1.traceCommand);
 // Parse arguments
 commander_1.program.parse();
 //# sourceMappingURL=cli.js.map

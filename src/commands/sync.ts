@@ -85,21 +85,26 @@ async function analyzeTaskDiff(task: string, iteration: string): Promise<void> {
 
   logger.info(`📋 ${task}:`);
 
-  // 检查必需文件
-  const requiredFiles = [
-    '.task-type',
-    'backend/REQ.md',
-    'backend/TECH.md',
-    'backend/TASK.md',
-    '_shared/API_CONTRACT.yaml',
+  // 检查必需文件 + 内容分析
+  const checks = [
+    { file: '.task-type', label: '任务类型' },
+    { file: 'backend/REQ.md', label: '后端需求', check: (c: string) => c.includes('## 需求描述'), warn: '缺少需求描述章节' },
+    { file: 'backend/TECH.md', label: '后端方案', check: (c: string) => c.includes('## 技术'), warn: '缺少技术方案章节' },
+    { file: 'backend/TASK.md', label: '任务追踪', check: (c: string) => c.includes('变更履历'), warn: '缺少变更履历' },
+    { file: '_shared/API_CONTRACT.yaml', label: 'API契约', check: (c: string) => c.includes('api:') || c.includes('paths:'), warn: '缺少 API 定义' },
   ];
 
-  for (const file of requiredFiles) {
+  for (const { file, label, check, warn } of checks) {
     const filePath = join(taskDir, file);
     if (await pathExists(filePath)) {
-      logger.info(`   ✅ ${file}`);
+      const content = await readFile(filePath, 'utf-8');
+      if (check && !check(content)) {
+        logger.warn(`   ⚠️ ${label}: ${warn}`);
+      } else {
+        logger.info(`   ✅ ${label}`);
+      }
     } else {
-      logger.warn(`   ⚠️ ${file} - 缺失`);
+      logger.warn(`   ❌ ${label}: 文件缺失`);
     }
   }
 }

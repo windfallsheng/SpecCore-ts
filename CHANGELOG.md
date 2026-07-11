@@ -2,7 +2,52 @@
 
 ---
 
-## v4.6.0 (2026-07-11) — 最新
+## v4.9.0 (2026-07-11) — 最新
+
+### 🆕 新增
+- **`speccore update`**：更新 Task 属性（status/priority/assignee），事务保护
+- **交互模式升级**：`--interactive` 接入 inquirer 真实交互（模式选择/任务多选/确认）
+- **SDD 方法论文档**：`docs/SDD方法论.md` — 痛点分析/TDD-BDD对比/五大实践/完整工作流
+- **英文工作空间指南**：`docs/workspace-organization.en.md`
+- **集成测试**：`tests/unit/core/integration.test.ts` — 7 个真实文件系统测试案例
+
+### 📝 文档
+- 命令参考手册中英文同步更新（42 命令 + 5 个 v4.7~v4.8 新增命令说明）
+
+### 📊
+- **命令总数**：43 个（新增 update）
+- **测试**：9 文件 / 140 用例
+
+---
+
+## v4.8.0 (2026-07-11)
+
+### 🆕 新增
+- **分批执行**：`speccore execute --all --batch-size=3` 自动分批 + 上下文隔离
+- **断点续传**：`speccore execute --resume` 从上次中断处继续
+- **执行状态追踪**：`.speccore/local/execution-state.json` 批次进度持久化
+- **Git 工作流整合**：`speccore current` 分支↔任务映射、Commit/PR 生成
+- **Git Hooks**：`speccore hooks install` 安装 pre-commit + pre-push
+- **协作锁**：`src/core/task-lock.ts` 30 分钟超时
+
+### 📝 文档
+- 新增 `docs/工作空间组织.md`：目录结构 + 多工程协作指南
+
+---
+
+## v4.7.0 (2026-07-11)
+
+### 🆕 新增
+- **交互式确认**：`speccore execute --interactive`
+- **进度反馈**：实时进度条 + 任务状态 + 耗时统计
+- **Zod 错误友好翻译**：`src/core/error-feedback.ts`
+- **操作日志**：`.speccore/logs/` 记录所有关键命令
+- **自动备份**：`speccore backup` (create/list/restore)
+- **Shell 补全**：`speccore completion [bash/zsh]`
+
+---
+
+## v4.6.0 (2026-07-11)
 
 ### 🆕 新增
 - **迁移命令**：`speccore migrate` Shell v3.x → CLI v4.x 自动迁移（检测/补充全量层/platforms.yaml/context.json升级）
@@ -154,4 +199,4 @@
 - **次版本号**：新增命令或功能模块
 - **修订版本号**：Bug 修复或小幅增强
 
-当前版本：**v4.6.0**
+当前版本：**v4.9.0**
