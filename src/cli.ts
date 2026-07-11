@@ -52,6 +52,8 @@ import { backupCommand } from './commands/backup';
 // v4.8.0 高级功能
 import { hooksCommand } from './commands/hooks';
 import { currentCommand } from './commands/current';
+// v4.9.0 完善
+import { updateCommand } from './commands/update';
 
 program
   .name('speccore')
@@ -570,6 +572,20 @@ program
   .option('--commit', 'Generate commit message')
   .option('--pr', 'Generate PR description')
   .action(currentCommand);
+
+// v4.9.0 完善
+program
+  .command('update')
+  .alias('up')
+  .description('Update task attributes (v4.9)')
+  .option('-t, --task <id>', 'Task ID (e.g. Task-001)')
+  .option('--status <status>', 'Status: pending/in_progress/completed/blocked')
+  .option('--priority <priority>', 'Priority: high/medium/low')
+  .option('--assignee <name>', 'Assignee name')
+  .option('--type <type>', 'Task type')
+  .option('-i, --iteration <name>', 'Target iteration')
+  .option('--force', 'Skip confirmation')
+  .action(updateCommand);
 
 // Parse arguments
 program.parse();
