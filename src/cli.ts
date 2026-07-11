@@ -46,6 +46,9 @@ import { indexUpdateCommand } from './commands/index-update';
 import { contextCommand } from './commands/context';
 // v4.6.0 迁移命令
 import { migrateCommand } from './commands/migrate';
+// v4.7.0 体验增强
+import { completionCommand } from './commands/completion';
+import { backupCommand } from './commands/backup';
 
 program
   .name('speccore')
@@ -535,6 +538,20 @@ program
   .option('--strict', 'Strict mode')
   .option('--fix', 'Auto-fix')
   .action(validateCommand);
+
+// v4.7.0 体验增强命令
+program
+  .command('completion [shell]')
+  .description('Generate shell completion script (bash/zsh)')
+  .action(completionCommand);
+
+program
+  .command('backup')
+  .alias('bk')
+  .description('Create backup of current state (v4.7)')
+  .option('--list', 'List existing backups')
+  .option('--restore <name>', 'Restore from backup')
+  .action(backupCommand);
 
 // Parse arguments
 program.parse();
