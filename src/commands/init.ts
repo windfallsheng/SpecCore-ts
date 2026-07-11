@@ -2,14 +2,21 @@ import { ensureDir, writeFile, pathExists, readFile } from 'fs-extra';
 import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
 import { updateContext } from '../core/context';
+import { i18n } from '../i18n';
 
 export interface InitOptions {
   mode?: string;
   force?: boolean;
+  lang?: string;
 }
 
 export async function initCommand(options: InitOptions): Promise<void> {
-  const spinner = new Spinner('Initializing SpecCore');
+  // 支持 --lang 参数动态切换
+  if (options.lang === 'en' || options.lang === 'en-US') {
+    i18n.setLocale('en-US');
+  }
+
+  const spinner = new Spinner(i18n.t('cmd.init.start'));
   spinner.start();
 
   try {
@@ -77,9 +84,9 @@ export async function initCommand(options: InitOptions): Promise<void> {
     // Update context
     await updateContext({ lastUpdated: new Date().toISOString() });
 
-    spinner.stop('SpecCore initialized successfully!');
+    spinner.stop(i18n.t('cmd.init.success'));
     logger.info('');
-    logger.info('Next steps:');
+    logger.info(i18n.t('common.next_steps') + ':');
     logger.info('  1. Edit .speccore/CONSTITUTION.md to define your tech stack');
     logger.info('  2. Edit .speccore/PROJECT/TEAM.md to add team members');
     logger.info('  3. Run: speccore import --project=<name> --path=<path> to import projects');

@@ -48,7 +48,8 @@ import { contextCommand } from './commands/context';
 program
   .name('speccore')
   .description('SpecCore - Code by Spec, Not by Vibe.')
-  .version(version, '-v, --version', 'Display current version');
+  .version(version, '-v, --version', 'Display current version')
+  .option('--lang <locale>', 'Language: zh-CN (default) or en-US', 'zh-CN');
 
 // ================================================================
 // 🔍 智能入口
