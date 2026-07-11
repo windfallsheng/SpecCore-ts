@@ -153,6 +153,30 @@
 | `rn` | rename | `ta` | template-add |
 | `cf` | config | `hp` | help |
 | `dm` | demo | `wc` | welcome |
+| `up` | update | `bk` | backup |
+| `cm` | completion | `hk` | hooks |
+| `cr` | current | | |
+
+---
+
+## 🆕 v4.7~v4.8 New Commands (5)
+
+| Command | Alias | Description | Options |
+| :--- | :--- | :--- | :--- |
+| `speccore update` | `up` | Update task attributes (status/priority/assignee) | `--task=<id>` `--status=<s>` `--priority=<p>` `--assignee=<n>` |
+| `speccore backup` | `bk` | Backup current state | `--list` `--restore=<name>` |
+| `speccore completion` | `cm` | Generate shell completion script | `[bash\|zsh]` |
+| `speccore hooks` | `hk` | Install Git hooks (pre-commit + pre-push) | — |
+| `speccore current` | `cr` | Show current branch task mapping | `--commit` `--pr` |
+
+Examples:
+```bash
+speccore update --task=Task-001 --status=completed
+speccore backup --list
+speccore completion bash > /usr/local/etc/bash_completion.d/speccore
+speccore hooks install
+speccore current --pr
+```
 
 ---
 
