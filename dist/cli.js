@@ -46,6 +46,8 @@ const new_task_1 = require("./commands/new-task");
 const platform_add_1 = require("./commands/platform-add");
 const index_update_1 = require("./commands/index-update");
 const context_1 = require("./commands/context");
+// v4.6.0 迁移命令
+const migrate_1 = require("./commands/migrate");
 commander_1.program
     .name('speccore')
     .description('SpecCore - Code by Spec, Not by Vibe.')
@@ -99,6 +101,13 @@ commander_1.program
     .option('--update', 'Incremental sync mode')
     .option('--force', 'Force overwrite')
     .action(import_1.importCommand);
+commander_1.program
+    .command('migrate')
+    .alias('mg')
+    .description('Migrate Shell v3.x config to CLI v4.x (v4.6)')
+    .option('--dry-run', 'Preview migration, no changes')
+    .option('--force', 'Skip confirmation')
+    .action(migrate_1.migrateCommand);
 // ================================================================
 // 📋 期次管理
 // ================================================================
