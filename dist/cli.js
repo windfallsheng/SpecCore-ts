@@ -59,11 +59,18 @@ const update_1 = require("./commands/update");
 // v5.3.0 新增
 const diff_1 = require("./commands/diff");
 const trace_1 = require("./commands/trace");
+const i18n_1 = require("./i18n");
 commander_1.program
     .name('speccore')
     .description('SpecCore - Code by Spec, Not by Vibe.')
     .version(package_json_1.version, '-v, --version', 'Display current version')
-    .option('--lang <locale>', 'Language: zh-CN (default) or en-US', 'zh-CN');
+    .option('--lang <locale>', 'Language: zh-CN (default) or en-US', 'zh-CN')
+    .hook('preAction', (thisCommand) => {
+    const opts = thisCommand.opts();
+    if (opts.lang && (opts.lang === 'zh-CN' || opts.lang === 'en-US')) {
+        i18n_1.i18n.setLocale(opts.lang);
+    }
+});
 // ================================================================
 // 🔍 智能入口
 // ================================================================
