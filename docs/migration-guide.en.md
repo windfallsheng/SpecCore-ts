@@ -61,7 +61,7 @@ speccore init --force
 | Aspect | Shell (v3.x) | CLI (v5.x) |
 | :--- | :--- | :--- |
 | Installation | git clone + PATH | `npm install -g speccore` |
-| Commands | 3 scripts | 44 commands |
+| Commands | 3 scripts | 46 commands |
 | Test coverage | None | 148 tests |
 | Data model | None | Zod Schema |
 | File operations | Direct writes | Transaction-protected |
