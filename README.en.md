@@ -175,6 +175,7 @@ SpecCore natively integrates WorkBuddy.
 
 | Document | Content |
 | :--- | :--- |
+| [Scenarios](docs/scenarios.en.md) | 12 real-world scenarios: new project → daily dev → CI/CD |
 | [SDD Methodology](docs/sdd-methodology.en.md) | What is SDD, why, how |
 | [Quick Reference](docs/quick-reference.en.md) | One-page: commands + safety + CI |
 | [Quick Start](docs/quick-start.en.md) | Install → Init → Import → Multi-platform → Scenarios |
