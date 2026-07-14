@@ -1,5 +1,3 @@
-import { pathExists, readFile, readdir } from 'fs-extra';
-import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
 import { readProjectGraph, scanTasks } from '../core/state';

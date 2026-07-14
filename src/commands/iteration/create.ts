@@ -19,7 +19,9 @@ export async function iterationCreateCommand(options: IterationCreateOptions): P
   spinner.start();
 
   try {
-    const iterationDir = `期次-${options.name}`;
+    // Strip leading 期次- prefix if user already included it
+    const iterName = options.name.replace(/^期次-/, '');
+    const iterationDir = `期次-${iterName}`;
 
     // Check if already exists
     if (await pathExists(iterationDir)) {
@@ -38,9 +40,9 @@ export async function iterationCreateCommand(options: IterationCreateOptions): P
     // Update ITERATIONS index
     await updateIterationsIndex(options.name, options);
 
-    // Update context
+    // Update context (store without 期次- prefix for consistency)
     await updateContext({
-      currentIteration: options.name,
+      currentIteration: iterName,
       lastUpdated: new Date().toISOString()
     });
 

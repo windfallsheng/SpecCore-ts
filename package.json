@@ -1,6 +1,6 @@
 {
   "name": "speccore",
-  "version": "5.4.4",
+  "version": "5.6.10",
   "description": "SpecCore - Code by Spec, Not by Vibe.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -8,7 +8,7 @@
     "speccore": "./bin/speccore"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cp -r src/locales dist/",
     "watch": "tsc --watch",
     "prepublish": "npm run build",
     "test": "vitest run",
@@ -36,7 +36,6 @@
   "dependencies": {
     "commander": "^11.1.0",
     "fs-extra": "^11.2.0",
-    "glob": "^10.3.10",
     "inquirer": "^14.0.2",
     "js-yaml": "^4.1.0",
     "zod": "^4.4.3"

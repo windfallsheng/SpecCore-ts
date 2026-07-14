@@ -6,7 +6,6 @@
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
 import { writeFile, pathExists, readFile, readdir } from 'fs-extra';
-import { FileTransaction } from '../core/transaction';
 import { join } from 'path';
 
 export interface RetroOptions {
@@ -20,6 +19,7 @@ export async function retroCommand(options: RetroOptions): Promise<void> {
 
   try {
     const iteration = await getDefaultIteration(options.iteration);
+  const iterDir = iteration.startsWith("期次-") ? iteration : `期次-${iteration}`;
     if (!iteration) {
       spinner.fail('未找到活跃期次。请先运行: speccore iteration create --name <名称>');
       return;
@@ -27,7 +27,7 @@ export async function retroCommand(options: RetroOptions): Promise<void> {
 
     const doc = await generateRetroDoc(iteration);
     const outputPath =
-      options.output || join(process.cwd(), iteration, '00-期次总览', '回顾总结.md');
+      options.output || join(process.cwd(), iterDir, '00-期次总览', '回顾总结.md');
 
     await writeFile(outputPath, doc);
 

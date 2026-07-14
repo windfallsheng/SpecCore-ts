@@ -13,7 +13,9 @@ async function iterationCreateCommand(options) {
     const spinner = new logger_1.Spinner(`Creating iteration: ${options.name}`);
     spinner.start();
     try {
-        const iterationDir = `期次-${options.name}`;
+        // Strip leading 期次- prefix if user already included it
+        const iterName = options.name.replace(/^期次-/, '');
+        const iterationDir = `期次-${iterName}`;
         // Check if already exists
         if (await (0, fs_extra_1.pathExists)(iterationDir)) {
             spinner.fail(`Iteration already exists: ${options.name}`);
@@ -27,9 +29,9 @@ async function iterationCreateCommand(options) {
         await createIterationFiles(iterationDir, options);
         // Update ITERATIONS index
         await updateIterationsIndex(options.name, options);
-        // Update context
+        // Update context (store without 期次- prefix for consistency)
         await (0, context_1.updateContext)({
-            currentIteration: options.name,
+            currentIteration: iterName,
             lastUpdated: new Date().toISOString()
         });
         spinner.stop(`Iteration created: ${options.name}`);

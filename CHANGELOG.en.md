@@ -2,7 +2,79 @@
 
 ---
 
-## v5.4.0 (2026-07-11) — Latest
+
+## v5.6.0 (2026-07-14)
+
+## v5.6.1 (2026-07-14)
+
+### 🔴 Bug Fixes
+- search: positional arg action signature fixed
+- platform-add: --no-sync field name aligned
+- update: null iteration early return
+- 4 dead code cleanups
+
+## v5.6.2 (2026-07-14)
+
+### 🔴 Bug Fixes
+- goal/bugfix/research: --id→--task-id CLI option alignment
+- task new: double Task- prefix fixed
+- execute: resume null state check added
+- 8 error swallowing fixes
+
+## v5.6.3 (2026-07-14)
+
+### 🧹 Mass Cleanup
+- 5 dead modules removed (file/git/safe-write/tx-wrapper/task-lock)
+- 18 unused imports removed
+- Unused dependency glob removed
+- rv alias --format option added
+
+## v5.6.4 (2026-07-14)
+
+### 📝 Docs
+- Scenario count 12/20→22 unified
+- 30 CN/EN doc inconsistencies fixed
+
+## v5.6.5 (2026-07-14)
+
+### 🔴 Bug Fixes
+- i18n: locale JSON copy in build script
+- Iteration name: auto-strip duplicate 期次- prefix
+
+## v5.6.6 (2026-07-14)
+
+### 🔧 UX
+- execute: short --task=Task-001 auto-matches full name
+
+## v5.6.7 (2026-07-14)
+
+### 🔴 Bug Fixes
+- handover/retro: missing 期次- prefix crash fixed
+- change: --req option added
+
+## v5.6.8 (2026-07-14)
+
+### 🆕 i18n
+- Full i18n coverage + t() helper function
+- en-US.json: 120+ translation keys
+- search/delete/execute bilingual verified
+
+## v5.6.9 (2026-07-14) — Latest
+
+### 🔴 Root Cause Fix
+- Double prefix fixed at source: context stores raw name
+- Verified: trace/delete/handover/retro all correct
+
+
+### 🆕 Added
+- **`speccore delete`**: Safe task/iteration deletion (trash + auto-clean INDEX/context/git-mapping)
+- Supports `--task=<id>` `--iteration=<name>` `--force`
+- Supports manual recovery (mv back + index-update)
+
+### 📝 Docs
+- Command reference / quick reference / scenarios updated with delete command
+- Command count: 46→47
+
 
 ### 🔴 Bidirectional Trace
 - **Reverse sync**: `speccore sync` scans `@spec` annotations in code, auto-updates TASK.md
@@ -212,4 +284,4 @@
 | Minor | New commands or modules |
 | Patch | Bug fixes or doc updates |
 
-Current: **v5.4.4**
+Current: **v5.6.9**

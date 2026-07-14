@@ -57,6 +57,11 @@ import { updateCommand } from './commands/update';
 // v5.3.0 新增
 import { diffCommand } from './commands/diff';
 import { traceCommand } from './commands/trace';
+// v5.5.0 新增
+import { deleteCommand } from './commands/delete';
+// v5.6.0 新增
+import { searchCommand } from './commands/search';
+import { watchCommand } from './commands/watch';
 import { i18n } from './i18n';
 
 program
@@ -115,7 +120,7 @@ program
   .option('--source <source>', 'Source type: code, prd, prototype, all', 'all')
   .option('--path <path>', 'Project source path', './')
   .option('--url <url>', 'Prototype URL')
-  .option('--iteration <iteration>', 'Target iteration name')
+  .option('-i, --iteration <iteration>', 'Target iteration name')
   .option('--project <name>', 'Project name for global layer import')
   .option('--type <type>', 'Project type: backend, web, h5, miniapp', 'backend')
   .option('--scope <scope>', 'Selective import: all, core, api', 'all')
@@ -174,7 +179,7 @@ taskCmd
   .description('Create a new atomic task')
   .option('-n, --name <name>', 'Task name (required)')
   .option('-t, --type <type>', 'Task type: feature, bugfix, research, optimization, migration, document', 'feature')
-  .option('--id <id>', 'Task ID (auto-generated if omitted)')
+  .option('--task-id <id>', 'Task ID (auto-generated if omitted)')
   .option('-d, --desc <desc>', 'Task description')
   .option('--file <file>', 'Requirement file path')
   .option('--sections <sections>', 'Sections to extract from file')
@@ -191,7 +196,7 @@ program
   .option('-n, --name <name>', 'Feature name')
   .option('-d, --desc <desc>', 'Feature description')
   .option('-t, --type <type>', 'Task type', 'feature')
-  .option('--id <id>', 'Task ID')
+  .option('--task-id <id>', 'Task ID')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('--backend-only', 'Backend only')
   .option('--frontend-only', 'Frontend only')
@@ -204,7 +209,7 @@ program
   .description('Quick bug fix: create fix task + impact analysis')
   .option('-n, --name <name>', 'Bug name')
   .option('-d, --desc <desc>', 'Bug description')
-  .option('--id <id>', 'Task ID')
+  .option('--task-id <id>', 'Task ID')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('--affected-task <task>', 'Affected task for regression')
   .action(bugfixCommand);
@@ -218,7 +223,7 @@ program
   .option('-d, --desc <desc>', 'Research description')
   .option('-t, --topic <topic>', 'Research topic (alias for --name)')
   .option('--options <options>', 'Comparison options (comma-separated)')
-  .option('--id <id>', 'Task ID')
+  .option('--task-id <id>', 'Task ID')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .action(researchCommand);
 
@@ -232,7 +237,8 @@ program
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('-t, --team <count>', 'Team member count', '3')
   .option('-a, --assign <members>', 'Assign to specific members (comma-separated)')
-  .option('--task <task>', 'Analyze specific task')
+  .option('--req <req>')
+    .option('--task <task>', 'Analyze specific task')
   .option('--type <type>', 'Filter by task type')
   .option('--priority <priority>', 'Filter by priority')
   .option('--mode <mode>', 'Plan mode: auto, claim, parallel', 'auto')
@@ -269,6 +275,7 @@ program
   .alias('ch')
   .description('Requirement change: update linked spec files automatically')
   .option('-t, --task <task>', 'Target task')
+  .option('-r, --req <req>', 'Requirement ID')
   .option('-d, --desc <desc>', 'Change description (required)')
   .option('--global', 'Global layer change (CONSTITUTION.md)')
   .option('-i, --iteration <iteration>', 'Target iteration')
@@ -312,7 +319,8 @@ program
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('-a, --assignee <assignee>', 'Filter by assignee')
   .option('--type <type>', 'Filter by task type')
-  .option('--task <task>', 'Show specific task progress')
+  .option('--req <req>')
+    .option('--task <task>', 'Show specific task progress')
   .option('--detail', 'Show detailed progress')
   .option('--platform <platform>', 'Filter by frontend platform (web/h5/miniapp)')
   .option('--format <format>', 'Output format: text, json, csv', 'text')
@@ -515,7 +523,7 @@ program
   .option('--platforms <platforms>', 'Frontend platforms: web,h5,miniapp or "all"')
   .option('--backend-only', 'Create backend specs only')
   .option('--frontend-only', 'Create frontend specs only')
-  .option('--iteration <iteration>', 'Target iteration')
+  .option('-i, --iteration <iteration>', 'Target iteration')
   .action(newTaskCommand);
 
 program
@@ -539,7 +547,8 @@ program
   .command('context')
   .alias('ctx')
   .description('View task context loading status and dependency chain (v4.0)')
-  .option('--task <task>', 'Target task (default: current task)')
+  .option('--req <req>')
+    .option('--task <task>', 'Target task (default: current task)')
   .action(contextCommand);
 
 // ================================================================
@@ -553,6 +562,7 @@ program
   .option('-t, --task <task>', 'Validate specific task')
   .option('--strict', 'Strict mode')
   .option('--fix', 'Auto-fix')
+  .option('--format <format>', 'Output format: text or json', 'text')
   .action(validateCommand);
 
 // v4.7.0 体验增强命令
@@ -614,6 +624,33 @@ program
   .option('--task <id>', 'Trace from task ID')
   .option('--full', 'Full project trace')
   .action(traceCommand);
+
+// v5.5.0 新增命令
+program
+  .command('delete')
+  .alias('dl')
+  .description('Delete a task or iteration (moves to trash + cleans references) (v5.5)')
+  .option('--task <id>', 'Task ID to delete')
+  .option('--iteration <name>', 'Iteration name to delete')
+  .option('--force', 'Skip confirmation prompt')
+  .action(deleteCommand);
+
+// v5.6.0 新增命令
+program
+  .command('search <query>')
+  .alias('sh')
+  .description('Search across all Spec files for a keyword (v5.6)')
+  .option('--task <id>', 'Limit search to a task')
+  .option('--iteration <name>', 'Limit search to an iteration')
+  .action((query: string, opts: any) => searchCommand({ ...opts, query }));
+
+program
+  .command('watch')
+  .alias('wch')
+  .description('Watch Spec files and auto-validate on save (v5.6)')
+  .option('--task <id>', 'Watch a specific task')
+  .option('--iteration <name>', 'Watch a specific iteration')
+  .action(watchCommand);
 
 // Parse arguments
 program.parse();

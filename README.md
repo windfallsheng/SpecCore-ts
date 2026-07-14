@@ -19,7 +19,7 @@ SpecCore 由两部分组成，**职责明确，互不混淆**：
 | **在哪里执行** | 终端 / Terminal | AI 编程工具（WorkBuddy / Cursor / Claude 等） |
 | **怎么用** | `speccore init` | 输入 `/spec-xxx` |
 | **什么原理** | TypeScript 编译，直接操作文件 | Markdown 指令，AI 读取后执行 |
-| **数量** | 46 个 CLI 命令 | 46 个 Slash Command |
+| **数量** | 49 个 CLI 命令 | 49 个 Slash Command |
 | **何时用** | 项目初始化、文件校验、批量操作 | 日常开发：需求管理、开发执行、审查归档 |
 
 > 💡 **简单记忆**：`speccore` 开头 → 终端执行；`/spec` 开头 → AI 工具中执行。
@@ -62,7 +62,7 @@ speccore spec "进度怎么样了"
 
 - **🚀 快速初始化**：一行命令初始化完整 SpecCore 项目结构，自动集成 WorkBuddy
 - **📱 多平台支持**：`--platforms=web,h5,miniapp` 按端管理 Task，动态添加平台类型
-- **🧠 意图识别引擎**：31 种意图类型，200+ 关键词，自然语言自动匹配命令
+- **🧠 意图识别引擎**：35 种意图类型，200+ 关键词，自然语言自动匹配命令
 - **🌐 多项目全量层**：GLOBAL/ 统一管理跨项目需求索引、架构和技术栈
 - **📊 实时进度追踪**：自动识别活跃期次，统计任务完成率，按平台/人员/类型统计
 - **✅ 自动合规检查**：扫描所有 Spec 文件，检查必填项和格式
@@ -104,7 +104,7 @@ SpecCore 采用**确定性逻辑与智能逻辑解耦**的架构：
 
 ---
 
-## 🔧 终端命令速查（46 个 CLI 命令）
+## 🔧 终端命令速查（49 个 CLI 命令）
 
 > 在终端中执行，所有命令以 `speccore` 开头。
 
@@ -141,7 +141,7 @@ SpecCore 采用**确定性逻辑与智能逻辑解耦**的架构：
 | `speccore audit` | `/spec-ai-audit` | AI 智能审计 |
 | `speccore spec "查询"` | `/spec 查询` | 自然语言智能入口 |
 
-> 📋 完整命令参数见 [命令参考手册](docs/命令参考.md) | 🧠 31 种意图映射见 [意图映射表](docs/命令参考.md#自然语言意图映射31-种)
+> 📋 完整命令参数见 [命令参考手册](docs/命令参考.md) | 🧠 31 种意图映射见 [意图映射表](docs/命令参考.md#自然语言意图映射35-种)
 
 ---
 
@@ -175,16 +175,17 @@ SpecCore 原生集成 WorkBuddy（`speccore init` 自动创建 `.workbuddy/` ski
 
 | 文档 | 内容 |
 | :--- | :--- |
-| [场景实战](docs/场景实战.md) | 12 个真实场景：从零启动→日常开发→CI/CD，逐步演示 |
+| [场景实战](docs/场景实战.md) | 22 个真实场景：从零启动→日常开发→CI/CD→变更处理等 |
 | [SDD 方法论](docs/SDD方法论.md) | SDD 是什么、为什么、怎么做 |
 | [速查卡](docs/速查卡.md) | 一页掌握：常用命令 + 安全口诀 + CI 模板 |
 | [快速开始指南](docs/快速开始.md) | 安装 → 初始化 → 导入 → 多端 Task → 场景速查 |
-| [命令参考手册](docs/命令参考.md) | 46 个命令完整参数 + 35 种意图映射 |
+| [命令参考手册](docs/命令参考.md) | 49 个命令完整参数 + 35 种意图映射 |
 | [工具适配说明](docs/工具适配说明.md) | WorkBuddy 集成原理 + 工作流程 + 安全检查 |
 | [使用指南](docs/使用指南.md) | 文件操作安全指南：可手动改 vs 必须用命令 |
 | [工作空间组织](docs/工作空间组织.md) | 推荐目录结构 + 多工程协作 |
 | [迁移指南](docs/migration-guide.md) | Shell v3.x → CLI v5.x 迁移步骤 |
-| [CHANGELOG](CHANGELOG.md) | 版本历史与更新日志（v1.0.0 → v5.4.1） |
+| [示例项目](examples/task-management/README.md) | 完整演示：需求→Spec→生成代码 |
+| [CHANGELOG](CHANGELOG.md) | 版本历史与更新日志（v1.0.0 → v5.6.10） |
 | [README.en.md](README.en.md) | English project overview |
 
 ---
@@ -267,7 +268,7 @@ bash verify.sh
 
 ## 版本
 
-v5.4.3 | 🔧 CLI 命令 46 个 | 🧠 意图识别 35 种
+v5.6.3 | 🔧 CLI 命令 49 个 | 🧠 意图识别 35 种
 
 版本历史见 [CHANGELOG.md](CHANGELOG.md)
 

@@ -1,19 +1,18 @@
 {
-  "_meta": {
-    "locale": "en-US",
-    "name": "English"
-  },
+  "_meta": { "locale": "en-US", "name": "English" },
   "cmd": {
     "init": {
       "start": "Initializing SpecCore project...",
       "success": "Project initialized!",
-      "already": "Project already initialized, use --force to overwrite"
+      "already": "SpecCore already initialized. Use --force to overwrite.",
+      "force": "Re-initializing with --force..."
     },
     "import": {
       "start": "Importing project to global layer...",
-      "success": "Project import complete",
+      "success": "Project imported to global layer",
       "scanning": "Scanning project: {project} ({type})",
-      "found": "Found {count} API endpoints, {models} data models"
+      "found": "Found {count} API endpoints, {models} data models",
+      "generated_req": "Generated requirement: {req}"
     },
     "execute": {
       "start": "Preparing execution...",
@@ -21,75 +20,117 @@
       "executing": "Executing {task}...",
       "success": "Execution complete!",
       "dry_run": "Dry run mode — no actual changes",
-      "no_tasks": "No matching tasks found"
+      "no_tasks": "No matching tasks found",
+      "batch_start": "Batch mode: {batches} batches of up to {size} tasks",
+      "task_not_found": "Task \"{task}\" not found. Available: {list}",
+      "completed": "Task {task} completed",
+      "branch_created": "Created branch: {branch}"
     },
     "plan": {
       "start": "Generating execution plan...",
-      "success": "Execution plan generated: {path}"
+      "success": "Execution plan generated",
+      "assigned": "Assigned {assignee} to {task}"
     },
     "validate": {
-      "start": "Validating Spec files...",
-      "success": "Validation passed",
-      "fail": "Found {count} issues",
-      "fix": "Auto-fixed {count} issues"
-    },
-    "change": {
-      "start": "Analyzing change impact...",
-      "success": "Change applied, updated {count} files",
-      "dry_run": "Change preview — no actual changes"
-    },
-    "sync": {
-      "start": "Detecting Spec differences...",
-      "success": "Spec sync complete, synced {count} files",
-      "dry_run": "Diff analysis complete (preview mode)"
+      "start": "Validating specs...",
+      "success": "Validation complete",
+      "failed": "Validation failed: {error}",
+      "pass_rate": "Pass Rate: {rate}%",
+      "total_checks": "Total Checks: {total}",
+      "errors": "Errors: {errors}",
+      "warnings": "Warnings: {warnings}"
     },
     "progress": {
-      "total": "Total",
-      "completed": "Completed",
-      "in_progress": "In Progress",
-      "pending": "Pending",
-      "completion_rate": "Completion Rate"
+      "start": "Loading progress...",
+      "success": "Progress loaded",
+      "report": "Progress Report: {iteration}",
+      "total": "Total: {total} | Completed: {done} | In Progress: {wip} | Pending: {pending} | Archived: {archived}",
+      "completion_rate": "Completion Rate: {rate}%",
+      "no_tasks": "No tasks found"
+    },
+    "health": {
+      "start": "Generating health report...",
+      "success": "Health report generated",
+      "overall": "Overall Health: {score}%",
+      "dimensions": "Dimensions:"
     },
     "archive": {
-      "start": "Archiving tasks...",
-      "success": "Archived {count} tasks",
-      "restore": "Restored: {task}"
-    }
-  },
-  "task": {
+      "start": "Archiving tasks",
+      "success": "Task archived: {task}",
+      "all_success": "{count} tasks archived",
+      "list": "Archived tasks listed",
+      "restore": "Task restored: {task}",
+      "not_found": "Task not found: {task}"
+    },
+    "delete": {
+      "moved": "Moved to: {path}",
+      "success": "Task \"{task}\" deleted and all references cleaned.",
+      "recover_hint": "To recover: mv the directory back from .speccore/trash/",
+      "not_found": "Task \"{task}\" not found in any iteration."
+    },
+    "search": {
+      "result": "Search: \"{query}\" — {count} matches",
+      "no_match": "No matches found."
+    },
+    "sync": {
+      "start": "Syncing specs...",
+      "success": "Spec sync complete",
+      "reverse_scan": "Reverse sync: scanning code for @spec annotations...",
+      "reverse_no_refs": "No @spec references found in code",
+      "reverse_complete": "Reverse sync complete: {count} tasks updated"
+    },
+    "change": {
+      "success": "Change recorded",
+      "require_task": "Please specify a task. Usage: speccore change --task=<id> --desc=\"<description>\""
+    },
+    "backup": {
+      "created": "Backup created: {path}",
+      "list": "Backup list",
+      "restore": "Backup restored: {name}"
+    },
     "status": {
-      "pending": "Pending",
-      "in_progress": "In Progress",
-      "completed": "Completed",
-      "blocked": "Blocked",
-      "archived": "Archived"
+      "success": "Status loaded",
+      "report": "Status Report: {iteration}"
     },
-    "type": {
-      "feature": "Feature",
-      "bugfix": "Bug Fix",
-      "research": "Research",
-      "optimization": "Optimization",
-      "migration": "Migration",
-      "document": "Document"
+    "report": {
+      "success": "Report generated: {path}"
     },
-    "priority": {
-      "high": "High",
-      "medium": "Medium",
-      "low": "Low"
+    "hooks": {
+      "installed": "Git hooks installed: pre-commit + pre-push",
+      "not_git": "Not a Git repository"
+    },
+    "current": {
+      "no_task": "No task associated with current branch.",
+      "hint": "Use \"speccore execute --task=Task-XXX\" to create an associated branch."
+    },
+    "migrate": {
+      "success": "Migration complete",
+      "dry_run": "Dry run — no changes applied",
+      "file_changes": "{count} file changes pending. Remove --dry-run to apply."
+    },
+    "iteration": {
+      "created": "Iteration created: {name}",
+      "exists": "Iteration already exists: {name}"
+    },
+    "task": {
+      "created": "Task created successfully",
+      "task_created": "Task {id} created: {name}",
+      "exists": "Task already exists: {id}"
+    },
+    "handover": {
+      "generated": "Handover doc generated: {path}"
+    },
+    "retro": {
+      "generated": "Retrospective generated: {path}"
     }
   },
   "common": {
-    "error": "Error",
-    "warning": "Warning",
-    "success": "Success",
-    "info": "Info",
-    "yes": "Yes",
-    "no": "No",
-    "aborted": "Aborted",
-    "transaction_protected": "transaction protected",
-    "file_not_found": "File not found",
-    "dir_not_found": "Directory not found",
-    "no_iteration": "No active iteration found, please create one first",
-    "next_steps": "Next Steps"
+    "next_steps": "Next steps:",
+    "error": "Error: {msg}",
+    "warning": "Warning: {msg}",
+    "no_iteration": "No active iteration found. Use --iteration=<name> to specify.",
+    "usage": "Usage: {cmd}",
+    "loading": "Loading...",
+    "done": "Done"
   }
 }

@@ -53,7 +53,8 @@ async function taskNewCommand(options) {
         }
         const iterationDir = `期次-${iteration}`;
         // Determine task ID
-        const taskId = options.id || await findNextTaskId(iterationDir);
+        const rawId = options.id || await findNextTaskId(iterationDir);
+        const taskId = rawId.replace(/^Task-/, '');
         const taskDir = (0, path_1.join)(iterationDir, `Task-${taskId}`);
         if (await (0, fs_extra_1.pathExists)(taskDir)) {
             spinner.fail(`Task already exists: Task-${taskId}`);

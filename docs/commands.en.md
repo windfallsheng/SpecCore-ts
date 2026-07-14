@@ -1,6 +1,6 @@
 # SpecCore — Command Reference
 
-> 🔧 Commands: 46 | 🧠 Intent Types: 35 | See [README](../README.en.md)
+> 🔧 Commands: 49 | 🧠 Intent Types: 35 | See [README](../README.en.md)
 
 ---
 
@@ -202,6 +202,9 @@ speccore context --task=Task-001
 | `speccore demo` | `dm` | 5-minute quick demo | — |
 | `speccore welcome` | `wc` | First-use interactive guide | — |
 | `speccore migrate` | `mg` | Shell v3→CLI v5 migration | `--dry-run` |
+| `speccore search` | `sh` | Search across all Spec files | `<query>` `--task=<id>` `--iteration=<name>` |
+| `speccore watch` | `wch` | Watch files + auto-validate on save | `--task=<id>` `--iteration=<name>` |
+| `speccore delete` | `dl` | Delete task/iteration (trash + auto-clean) | `--task=<id>` `--iteration=<name>` `--force` |
 
 ```bash
 speccore template-add --name="crud" --type=backend --files="./templates/*"
@@ -213,11 +216,13 @@ speccore help --category=execute
 speccore demo
 speccore welcome
 speccore migrate --dry-run
+speccore delete --task=Task-005           # Delete task
+speccore delete --iteration=2026-07-Sprint --force  # Delete iteration
 ```
 
 ---
 
-## 🆕 v4.7~v5.4 New Commands
+## 🆕 v4.7~v5.6 New Commands
 
 | Command | Alias | Description | Options |
 | :--- | :--- | :--- | :--- |
@@ -287,6 +292,8 @@ speccore trace --full
 | `cm` | completion | `hk` | hooks |
 | `cr` | current | `df` | diff |
 | `tr` | trace | `up` | update |
+| `dl` | delete | `sh` | search |
+| `wch` | watch | | |
 
 ---
 

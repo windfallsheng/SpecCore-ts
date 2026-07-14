@@ -56,8 +56,22 @@ async function executeCommand(options) {
             return;
         }
         // Apply filters
-        if (options.task)
-            tasks = tasks.filter(t => t.id === options.task);
+        if (options.task) {
+            // Support both exact match and prefix match (Task-001 → Task-001-用户登录)
+            const filtered = tasks.filter(t => t.id === options.task);
+            if (filtered.length > 0) {
+                tasks = filtered;
+            }
+            else {
+                const prefixMatch = tasks.filter(t => t.id && t.id.startsWith(options.task));
+                if (prefixMatch.length > 0) {
+                    tasks = prefixMatch;
+                }
+                else {
+                    logger_1.logger.warn(`Task "${options.task}" not found. Available: ${tasks.map(t => t.id).join(', ')}`);
+                }
+            }
+        }
         if (options.type)
             tasks = tasks.filter(t => t.type === options.type);
         if (options.priority)

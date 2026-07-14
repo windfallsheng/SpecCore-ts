@@ -1,4 +1,3 @@
-import { pathExists, readFile, writeFile } from 'fs-extra';
 import { join } from 'path';
 import { logger, Spinner, formatTable } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';

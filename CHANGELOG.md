@@ -2,7 +2,79 @@
 
 ---
 
-## v5.4.0 (2026-07-11) — 最新
+
+## v5.6.0 (2026-07-14)
+
+## v5.6.1 (2026-07-14)
+
+### 🔴 Bug 修复
+- search: 位置参数 action 签名修复，搜索功能现已可用
+- platform-add: --no-sync 字段名对齐
+- update: 空迭代名称 early return
+- 4 处死代码清理
+
+## v5.6.2 (2026-07-14)
+
+### 🔴 Bug 修复
+- goal/bugfix/research: --id→--task-id CLI 选项对齐
+- task new: Task-Task-xxx 双前缀修复
+- execute: resume null state 显式检查
+- 8 处错误吞没修复
+
+## v5.6.3 (2026-07-14)
+
+### 🧹 大规模清理
+- 删除 5 个死模块 (file/git/safe-write/tx-wrapper/task-lock)
+- 18 处未使用导入清理
+- 移除无用依赖 glob
+- rv 别名补充 --format 选项
+
+## v5.6.4 (2026-07-14)
+
+### 📝 文档
+- 场景数引用 12/20→22 统一
+- 中英文 30 处错误修复
+
+## v5.6.5 (2026-07-14)
+
+### 🔴 Bug 修复
+- i18n: 翻译键显示修复 (build 脚本拷贝 locale JSON)
+- 迭代名: 自动去除多余 期次- 前缀
+
+## v5.6.6 (2026-07-14)
+
+### 🔧 体验增强
+- execute: --task=Task-001 短 ID 自动前缀匹配全名
+
+## v5.6.7 (2026-07-14)
+
+### 🔴 Bug 修复
+- handover/retro: 路径缺少 期次- 前缀导致崩溃
+- change: 补充 --req 选项
+
+## v5.6.8 (2026-07-14)
+
+### 🆕 国际化
+- i18n 翻译全覆盖 + t() 辅助函数
+- en-US.json 120+ 翻译键
+- search/delete/execute 双语验证通过
+
+## v5.6.9 (2026-07-14) — 最新
+
+### 🔴 根源修复
+- 迭代名双重前缀根治: context 存储 raw name, 目录构建加前缀
+- 验证: trace/delete/handover/retro 全部正确
+
+
+### 🆕 新增
+- **`speccore delete`**: 安全删除 Task/期次，移至 .speccore/trash/ 并自动清理 INDEX / context / git-mapping
+- 支持 `--task=<id>` `--iteration=<name>` `--force`
+- 支持手动恢复（mv 回原位 + index-update）
+
+### 📝 文档
+- 命令参考/速查卡/场景实战中英文同步补充 delete 命令
+- 命令数更新: 46→47
+
 
 ### 🔴 双向追溯
 - **反向同步**：`speccore sync` 扫描代码中 `@spec` 注释，自动更新 TASK.md 产出物清单
@@ -224,4 +296,4 @@
 | 次版本号 | 新增命令或功能模块 |
 | 修订版本号 | Bug 修复或文档增强 |
 
-当前版本：**v5.4.4**
+当前版本：**v5.6.9**

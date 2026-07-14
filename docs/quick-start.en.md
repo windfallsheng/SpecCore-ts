@@ -125,7 +125,7 @@ speccore context --task=Task-001
 
 ## Smart Entry: Natural Language
 
-**Can't remember commands? Use `speccore spec` + natural language!** 31 intent types, 200+ keywords.
+**Can't remember commands? Use `speccore spec` + natural language!** 35 intent types, 200+ keywords.
 
 ```bash
 speccore spec "Create a login feature"       # → matches goal
@@ -252,7 +252,6 @@ my-project/
 ```
 
 ---
-
 ---
 
 ## Bidirectional Trace: Code ↔ Spec
@@ -301,5 +300,5 @@ Both share the same logic. AI commands call CLI commands internally when used in
 - [SDD Methodology](sdd-methodology.en.md) — What, why, how
 - [Tool Adaptation](tool-adaptation.en.md) — WorkBuddy integration details
 - [README](../README.en.md) — Back to overview
-- [CHANGELOG](../CHANGELOG.md) — Version history
+- [CHANGELOG](../CHANGELOG.en.md) — Version history
 - [中文：快速开始](快速开始.md) | [中文：命令参考](命令参考.md) | [中文：使用指南](使用指南.md)

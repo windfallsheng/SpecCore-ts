@@ -34,7 +34,8 @@ export async function taskNewCommand(options: TaskNewOptions): Promise<void> {
     const iterationDir = `期次-${iteration}`;
     
     // Determine task ID
-    const taskId = options.id || await findNextTaskId(iterationDir);
+    const rawId = options.id || await findNextTaskId(iterationDir);
+    const taskId = rawId.replace(/^Task-/, '');
     const taskDir = join(iterationDir, `Task-${taskId}`);
 
     if (await pathExists(taskDir)) {
