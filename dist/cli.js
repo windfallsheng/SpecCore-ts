@@ -116,7 +116,7 @@ commander_1.program
     .option('--source <source>', 'Source type: code, prd, prototype, all', 'all')
     .option('--path <path>', 'Project source path', './')
     .option('--url <url>', 'Prototype URL')
-    .option('--iteration <iteration>', 'Target iteration name')
+    .option('-i, --iteration <iteration>', 'Target iteration name')
     .option('--project <name>', 'Project name for global layer import')
     .option('--type <type>', 'Project type: backend, web, h5, miniapp', 'backend')
     .option('--scope <scope>', 'Selective import: all, core, api', 'all')
@@ -169,7 +169,7 @@ taskCmd
     .description('Create a new atomic task')
     .option('-n, --name <name>', 'Task name (required)')
     .option('-t, --type <type>', 'Task type: feature, bugfix, research, optimization, migration, document', 'feature')
-    .option('--id <id>', 'Task ID (auto-generated if omitted)')
+    .option('--task-id <id>', 'Task ID (auto-generated if omitted)')
     .option('-d, --desc <desc>', 'Task description')
     .option('--file <file>', 'Requirement file path')
     .option('--sections <sections>', 'Sections to extract from file')
@@ -185,7 +185,7 @@ commander_1.program
     .option('-n, --name <name>', 'Feature name')
     .option('-d, --desc <desc>', 'Feature description')
     .option('-t, --type <type>', 'Task type', 'feature')
-    .option('--id <id>', 'Task ID')
+    .option('--task-id <id>', 'Task ID')
     .option('-i, --iteration <iteration>', 'Target iteration')
     .option('--backend-only', 'Backend only')
     .option('--frontend-only', 'Frontend only')
@@ -197,7 +197,7 @@ commander_1.program
     .description('Quick bug fix: create fix task + impact analysis')
     .option('-n, --name <name>', 'Bug name')
     .option('-d, --desc <desc>', 'Bug description')
-    .option('--id <id>', 'Task ID')
+    .option('--task-id <id>', 'Task ID')
     .option('-i, --iteration <iteration>', 'Target iteration')
     .option('--affected-task <task>', 'Affected task for regression')
     .action(bugfix_1.bugfixCommand);
@@ -210,7 +210,7 @@ commander_1.program
     .option('-d, --desc <desc>', 'Research description')
     .option('-t, --topic <topic>', 'Research topic (alias for --name)')
     .option('--options <options>', 'Comparison options (comma-separated)')
-    .option('--id <id>', 'Task ID')
+    .option('--task-id <id>', 'Task ID')
     .option('-i, --iteration <iteration>', 'Target iteration')
     .action(research_1.researchCommand);
 // ================================================================
@@ -482,7 +482,7 @@ commander_1.program
     .option('--platforms <platforms>', 'Frontend platforms: web,h5,miniapp or "all"')
     .option('--backend-only', 'Create backend specs only')
     .option('--frontend-only', 'Create frontend specs only')
-    .option('--iteration <iteration>', 'Target iteration')
+    .option('-i, --iteration <iteration>', 'Target iteration')
     .action(new_task_1.newTaskCommand);
 commander_1.program
     .command('platform-add')

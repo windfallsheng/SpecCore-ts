@@ -4,7 +4,7 @@
  * 监听 Spec 文件变化，保存时自动运行 validate
  */
 
-import { watch } from 'fs';
+import { watch, FSWatcher } from 'fs';
 import { join } from 'path';
 import { pathExists } from 'fs-extra';
 import { logger } from '../utils/logger';
@@ -75,7 +75,9 @@ function watchRecursive(dir: string, callback: (path: string) => void): void {
         callback(join(dir, filename));
       }
     });
-  } catch {}
+  } catch (err) {
+    logger.warn(`Watch error: ${err}`);
+  }
 }
 
 async function findIterationForTask(cwd: string, taskId: string): Promise<string> {
