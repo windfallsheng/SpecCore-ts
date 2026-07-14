@@ -586,7 +586,7 @@ commander_1.program
     .description('Search across all Spec files for a keyword (v5.6)')
     .option('--task <id>', 'Limit search to a task')
     .option('--iteration <name>', 'Limit search to an iteration')
-    .action(search_1.searchCommand);
+    .action((query, opts) => (0, search_1.searchCommand)({ ...opts, query }));
 commander_1.program
     .command('watch')
     .alias('wch')

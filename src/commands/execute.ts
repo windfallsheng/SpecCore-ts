@@ -33,7 +33,6 @@ export interface ExecuteOptions {
   iteration?: string;
   force?: boolean;
   batchSize?: string;
-  batch?: string;
 }
 
 export async function executeCommand(options: ExecuteOptions): Promise<void> {

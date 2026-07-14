@@ -25,6 +25,11 @@ export interface UpdateOptions {
 export async function updateCommand(options: UpdateOptions): Promise<void> {
   const iter = await getDefaultIteration(options.iteration);
 
+  if (!iter) {
+    logger.error('No active iteration found. Use --iteration=<name> to specify.');
+    return;
+  }
+
   if (options.task) {
     await updateTask(iter, options.task, options);
     logOperation('speccore update', `task=${options.task}`);
