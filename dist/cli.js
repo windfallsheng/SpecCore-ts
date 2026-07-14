@@ -223,6 +223,7 @@ commander_1.program
     .option('-i, --iteration <iteration>', 'Target iteration')
     .option('-t, --team <count>', 'Team member count', '3')
     .option('-a, --assign <members>', 'Assign to specific members (comma-separated)')
+    .option('--req <req>')
     .option('--task <task>', 'Analyze specific task')
     .option('--type <type>', 'Filter by task type')
     .option('--priority <priority>', 'Filter by priority')
@@ -258,6 +259,7 @@ commander_1.program
     .alias('ch')
     .description('Requirement change: update linked spec files automatically')
     .option('-t, --task <task>', 'Target task')
+    .option('-r, --req <req>', 'Requirement ID')
     .option('-d, --desc <desc>', 'Change description (required)')
     .option('--global', 'Global layer change (CONSTITUTION.md)')
     .option('-i, --iteration <iteration>', 'Target iteration')
@@ -298,6 +300,7 @@ commander_1.program
     .option('-i, --iteration <iteration>', 'Target iteration')
     .option('-a, --assignee <assignee>', 'Filter by assignee')
     .option('--type <type>', 'Filter by task type')
+    .option('--req <req>')
     .option('--task <task>', 'Show specific task progress')
     .option('--detail', 'Show detailed progress')
     .option('--platform <platform>', 'Filter by frontend platform (web/h5/miniapp)')
@@ -503,6 +506,7 @@ commander_1.program
     .command('context')
     .alias('ctx')
     .description('View task context loading status and dependency chain (v4.0)')
+    .option('--req <req>')
     .option('--task <task>', 'Target task (default: current task)')
     .action(context_1.contextCommand);
 // ================================================================
