@@ -223,4 +223,4 @@
 | Minor | New commands or modules |
 | Patch | Bug fixes or doc updates |
 
-Current: **v5.6.1**
+Current: **v5.6.3**
