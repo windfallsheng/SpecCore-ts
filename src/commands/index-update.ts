@@ -3,7 +3,6 @@
  */
 
 import { pathExists, readFile, writeFile, readdir } from 'fs-extra';
-import { FileTransaction } from '../core/transaction';
 import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
 import { readGlobalIndex, getNextReqId } from '../core/global-layer';

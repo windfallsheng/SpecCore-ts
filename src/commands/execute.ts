@@ -1,4 +1,4 @@
-import { pathExists, readdir, readFile, ensureDir } from 'fs-extra';
+import { pathExists, readdir, readFile } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
 import { getDefaultIteration, updateContext, recordHistory } from '../core/context';

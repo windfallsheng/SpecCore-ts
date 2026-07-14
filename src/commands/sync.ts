@@ -5,7 +5,7 @@
 
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
-import { readFile, writeFile, pathExists } from 'fs-extra';
+import { readFile, pathExists } from 'fs-extra';
 import { join } from 'path';
 import { FileTransaction } from '../core/transaction';
 import { reverseSync } from '../core/reverse-sync';

@@ -6,7 +6,6 @@
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
 import { ensureDir, writeFile, pathExists } from 'fs-extra';
-import { FileTransaction } from '../core/transaction';
 import { join } from 'path';
 
 export interface BugfixOptions {
