@@ -8,7 +8,7 @@
 
 SpecCore is a specification-driven development framework for AI-native teams. It decouples deterministic operations (file creation, directory management, format validation, status statistics) from AI, executing them directly through code to improve efficiency and reduce Token consumption.
 
-> 💡 **v4.0.0** | 39 Commands | 31 Intent Types | Multi-Platform
+> 💡 **v5.6.3** | 49 Commands | 35 Intent Types | Multi-Platform
 
 ---
 
@@ -64,7 +64,7 @@ speccore spec "How's the progress?"
 
 - **🚀 Quick Init**: One command initializes the full project structure, auto-integrates WorkBuddy
 - **📱 Multi-Platform**: `--platforms=web,h5,miniapp` per-platform Task management, dynamic platform types
-- **🧠 Intent Recognition**: 31 intent types, 200+ keywords, natural language → command matching
+- **🧠 Intent Recognition**: 35 intent types, 200+ keywords, natural language → command matching
 - **🌐 Global Layer**: Cross-project requirement indexing via GLOBAL/ architecture
 - **📊 Progress Tracking**: Auto-detect active iteration, per-platform/per-assignee stats
 - **✅ Auto Compliance**: Scan all Spec files, check required fields and format
@@ -141,7 +141,7 @@ User Input (Natural Language / Slash Command)
 | `speccore audit` | `/spec-ai-audit` | AI smart audit |
 | `speccore spec "query"` | `/spec query` | Natural language intent |
 
-> 📋 Full command reference: [Command Reference](docs/commands.en.md) | 🧠 Intent mapping: [Intent Map](docs/commands.en.md#natural-language-intent-mapping-31-types)
+> 📋 Full command reference: [Command Reference](docs/commands.en.md) | 🧠 Intent mapping: [Intent Map](docs/commands.en.md#natural-language-intent-mapping-35-types)
 
 ---
 
@@ -201,7 +201,7 @@ SpecCore natively integrates WorkBuddy.
 | **Batch rename?** | `speccore rename --batch --pattern="Task-" --replacement="Feature-"` |
 | **Rebuild requirement index?** | `speccore index-update` (--dry-run to preview) |
 
-| **Which files are safe to edit manually?** | See [Usage Guide](docs/使用指南.md). TL;DR: `REQ.md`/`TECH.md` safe; `API_CONTRACT.yaml`/`.json` require CLI commands. |
+| **Which files are safe to edit manually?** | See [Usage Guide](docs/usage-guide.en.md). TL;DR: `REQ.md`/`TECH.md` safe; `API_CONTRACT.yaml`/`.json` require CLI commands. |
 
 ---
 

@@ -58,7 +58,7 @@ speccore init --force
 
 ## 迁移前后对比
 
-| 方面 | Shell 版 (v3.x) | CLI 版 (v4.x) |
+| 方面 | Shell 版 (v3.x) | CLI 版 (v5.x) |
 | :--- | :--- | :--- |
 | 安装方式 | git clone + PATH | `npm install -g speccore` |
 | CLI 命令 | 3 个脚本 | 49 个命令 |
