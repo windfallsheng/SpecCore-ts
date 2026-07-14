@@ -13,7 +13,9 @@ async function iterationCreateCommand(options) {
     const spinner = new logger_1.Spinner(`Creating iteration: ${options.name}`);
     spinner.start();
     try {
-        const iterationDir = `期次-${options.name}`;
+        // Strip leading 期次- prefix if user already included it
+        const iterName = options.name.replace(/^期次-/, '');
+        const iterationDir = `期次-${iterName}`;
         // Check if already exists
         if (await (0, fs_extra_1.pathExists)(iterationDir)) {
             spinner.fail(`Iteration already exists: ${options.name}`);
