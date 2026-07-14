@@ -4,20 +4,24 @@
 
 ## 1. 需求背景
 
-任务列表需要支持多条件筛选：按优先级、状态、负责人、截止日期范围筛选，支持关键词搜索。
+任务列表需要支持多条件组合筛选和关键词搜索。
 
 ## 2. 功能描述
 
-- 按优先级筛选：GET /api/v1/tasks?priority=HIGH
-- 按状态筛选：GET /api/v1/tasks?status=TODO
-- 按负责人筛选：GET /api/v1/tasks?assignee=张三
-- 日期范围：GET /api/v1/tasks?from=2026-01-01&to=2026-12-31
-- 关键词搜索：GET /api/v1/tasks?keyword=登录（搜索标题+描述）
-- 组合筛选：上述条件可任意组合
+| 筛选条件 | 参数 | 示例 |
+| :--- | :--- | :--- |
+| 按优先级 | priority=HIGH | /api/v1/tasks?priority=HIGH |
+| 按状态 | status=TODO | /api/v1/tasks?status=TODO |
+| 按负责人 | assignee=张三 | /api/v1/tasks?assignee=张三 |
+| 日期范围 | from/to | /api/v1/tasks?from=2026-01-01&to=2026-06-30 |
+| 关键词搜索 | keyword | 搜索标题和描述字段 |
+
+以上条件可任意组合（AND 逻辑）。
 
 ## 3. 验收标准
 
 - [ ] 单一条件筛选正确
-- [ ] 多条件组合筛选正确（AND 逻辑）
-- [ ] 关键词搜索支持标题和描述字段
-- [ ] 空结果返回空列表而非 404
+- [ ] 多条件组合为 AND 逻辑
+- [ ] 关键词搜索匹配标题和描述
+- [ ] 空结果返回 { total: 0, data: [] }
+- [ ] 非法参数值返回 400

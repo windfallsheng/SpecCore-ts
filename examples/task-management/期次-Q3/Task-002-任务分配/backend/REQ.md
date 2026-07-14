@@ -4,22 +4,19 @@
 
 ## 1. 需求背景
 
-任务创建后需要分配给具体成员。支持单个分配和批量分配，分配后发送通知。
+任务创建后需要分配给具体成员。支持单个分配、批量分配和取消分配。
 
 ## 2. 功能描述
 
-- 单个分配：PUT /api/v1/tasks/{id}/assign — 指定 assignee
-- 批量分配：POST /api/v1/tasks/batch-assign — 一次分配多个任务
+- 单个分配：PUT /api/v1/tasks/{id}/assign
+- 批量分配：POST /api/v1/tasks/batch-assign
 - 取消分配：DELETE /api/v1/tasks/{id}/assign
 - 查询某人任务：GET /api/v1/tasks?assignee={name}
 
-## 3. 接口定义
-
-详见 `_shared/API_CONTRACT.yaml`
-
-## 4. 验收标准
+## 3. 验收标准
 
 - [ ] 单个分配成功返回 200
-- [ ] 批量分配成功返回 200 + 成功/失败计数
-- [ ] 分配后 task.updated_at 自动更新
-- [ ] 分配日志写入 audit_log 表
+- [ ] 批量分配返回 { success: N, failed: M }
+- [ ] 取消分配后 assignee 置为 NULL
+- [ ] 操作写入 audit_log 表
+- [ ] assignee 为空时校验失败返回 400
