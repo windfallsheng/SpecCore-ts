@@ -571,3 +571,25 @@ speccore sync
 # Verify trace chain
 speccore trace --task=Task-001
 ```
+
+---
+
+## Scenario 21: Cross-Spec Search + Auto-Validate
+
+```bash
+# 1. Search all Specs for a keyword
+speccore search "payment"
+# → Task-003/backend/REQ.md:12  payment API design
+# → .speccore/GLOBAL/INDEX.md:3  REQ-005 payment module
+
+# 2. Limit search to a task
+speccore search "authentication" --task=Task-001
+
+# 3. Auto-validate on save
+speccore watch
+# → ✅ Task-001/backend/REQ.md  (valid)
+# → ⚠️ Task-002/_shared/API_CONTRACT.yaml  (tab indentation)
+
+# 4. Watch specific iteration only
+speccore watch --iteration=2026-07-Sprint
+```
