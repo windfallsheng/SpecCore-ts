@@ -40,9 +40,9 @@ export async function iterationCreateCommand(options: IterationCreateOptions): P
     // Update ITERATIONS index
     await updateIterationsIndex(options.name, options);
 
-    // Update context
+    // Update context (store without 期次- prefix for consistency)
     await updateContext({
-      currentIteration: options.name,
+      currentIteration: iterName,
       lastUpdated: new Date().toISOString()
     });
 
