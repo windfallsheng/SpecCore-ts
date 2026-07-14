@@ -355,3 +355,70 @@ speccore new-task --name="User Register" --platforms=web --type=feature
 # After filling REQ.md content, sync to global layer
 speccore sync-global --iteration=2026-07-Sprint
 ```
+
+---
+
+## Scenario 15: Archive & Restore
+
+```bash
+# 1. Archive a single task
+speccore archive --task=Task-001
+
+# 2. Archive all completed tasks in an iteration
+speccore archive --all --iteration=2026-07-Sprint
+
+# 3. List archived tasks
+speccore archive --list
+
+# 4. Restore an archived task
+speccore archive --restore=Task-001 --iteration=2026-07-Sprint
+```
+
+**When to use:** End of iteration cleanup, keeping completed tasks out of progress/execute.
+
+---
+
+## Scenario 16: Mid-development Requirement Changes
+
+```bash
+# 1. Create pre-change baseline
+speccore baseline --name=before-login-change
+
+# 2. Analyze impact
+speccore impact --req=REQ-001
+# → Affects: Task-001(Login), Task-003(Permissions)
+
+# 3. Record the change
+speccore change --req=REQ-001 --desc="Add SMS verification to login" --task=Task-001
+
+# 4. Manually update affected Spec files
+#    Edit Task-001/backend/REQ.md
+#    Edit Task-001/_shared/API_CONTRACT.yaml
+
+# 5. Update task status
+speccore update --task=Task-001 --status=in_progress
+
+# 6. Re-sync to global layer
+speccore sync-global --iteration=2026-07-Sprint
+
+# 7. Compare before/after
+speccore diff --source=before-login-change --target=2026-07-Sprint
+
+# 8. Validate
+speccore validate
+```
+
+### Major Iteration Overhaul
+
+```bash
+# 1. Snapshot first
+speccore baseline --name=before-refactor
+
+# 2. Process each task with impact → change → edit Spec → validate
+
+# 3. If entire iteration needs a restart
+speccore delete --iteration=2026-07-Sprint-old --force
+speccore iteration-from-global --reqs=REQ-001,REQ-002 --name=2026-07-Sprint-new
+```
+
+**Mantra:** `baseline → impact → change → edit Spec → validate`
