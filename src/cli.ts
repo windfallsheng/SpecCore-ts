@@ -637,7 +637,7 @@ program
   .description('Search across all Spec files for a keyword (v5.6)')
   .option('--task <id>', 'Limit search to a task')
   .option('--iteration <name>', 'Limit search to an iteration')
-  .action(searchCommand);
+  .action((query: string, opts: any) => searchCommand({ ...opts, query }));
 
 program
   .command('watch')

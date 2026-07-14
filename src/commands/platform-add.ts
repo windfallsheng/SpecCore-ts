@@ -13,7 +13,7 @@ export interface PlatformAddOptions {
   name: string;
   description?: string;
   tech?: string;
-  syncExisting?: boolean;
+  sync?: boolean;
 }
 
 export async function platformAddCommand(options: PlatformAddOptions): Promise<void> {
@@ -62,9 +62,9 @@ export async function platformAddCommand(options: PlatformAddOptions): Promise<v
 
     // 同步到现有 Task
     let syncedCount = 0;
-    if (options.syncExisting !== false) {
-      syncedCount = await syncPlatformToExistingTasks(options.name);
-    }
+  if (options.sync !== false) {
+    syncedCount = await syncPlatformToExistingTasks(options.name);
+  }
 
     spinner.stop('Platform added successfully');
     logger.info('');

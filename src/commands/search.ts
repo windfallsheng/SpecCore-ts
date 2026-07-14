@@ -10,7 +10,6 @@ export interface SearchOptions {
   query: string;
   task?: string;
   iteration?: string;
-  glob?: string;
 }
 
 interface SearchResult {
