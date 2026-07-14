@@ -185,6 +185,7 @@ SpecCore natively integrates WorkBuddy.
 | [Workspace Layout](docs/workspace-organization.en.md) | Recommended directory structure |
 | [Migration Guide](docs/migration-guide.en.md) | Shell v3.x → CLI v5.x |
 | [CHANGELOG](CHANGELOG.en.md) | Version history (v1.0.0 → v5.6.1) |
+| [Example](examples/task-management/README.md) | Full demo: req→Spec→generated code |
 | [README.md](README.md) | 中文项目概述 |
 
 ---
