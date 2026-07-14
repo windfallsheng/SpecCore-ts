@@ -4,6 +4,18 @@
 
 ## v5.4.0 (2026-07-11) — 最新
 
+## v5.5.0 (2026-07-14) — 最新
+
+### 🆕 新增
+- **`speccore delete`**: 安全删除 Task/期次，移至 .speccore/trash/ 并自动清理 INDEX / context / git-mapping
+- 支持 `--task=<id>` `--iteration=<name>` `--force`
+- 支持手动恢复（mv 回原位 + index-update）
+
+### 📝 文档
+- 命令参考/速查卡/场景实战中英文同步补充 delete 命令
+- 命令数更新: 46→47
+
+
 ### 🔴 双向追溯
 - **反向同步**：`speccore sync` 扫描代码中 `@spec` 注释，自动更新 TASK.md 产出物清单
 - **自动生成 TRACE.md**：`_shared/TRACE.md` 记录代码→Spec 追溯链
@@ -224,4 +236,4 @@
 | 次版本号 | 新增命令或功能模块 |
 | 修订版本号 | Bug 修复或文档增强 |
 
-当前版本：**v5.4.4**
+当前版本：**v5.5.0**

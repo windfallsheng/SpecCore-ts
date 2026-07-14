@@ -304,3 +304,19 @@ speccore baseline --list
 | Global Layer | `speccore global-status` | `iteration-from-global → sync-global` |
 | Migration | `speccore migrate --dry-run` | migrate → validate |
 | Health Check | `speccore health` | `progress → report → dashboard` |
+
+---
+
+## Scenario 13: Clean Up
+
+```bash
+# 1. Delete a test task
+speccore delete --task=Task-005-test
+
+# 2. Delete entire test iteration (skip confirm)
+speccore delete --iteration=2026-07-Test --force
+
+# 3. Recover accidental delete (manual restore)
+mv .speccore/trash/2026-07-Test-TIMESTAMP 2026-07-Test
+speccore index-update
+```
