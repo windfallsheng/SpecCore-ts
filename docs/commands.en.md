@@ -222,7 +222,7 @@ speccore delete --iteration=2026-07-Sprint --force  # Delete iteration
 
 ---
 
-## 🆕 v4.7~v5.4 New Commands
+## 🆕 v4.7~v5.6 New Commands
 
 | Command | Alias | Description | Options |
 | :--- | :--- | :--- | :--- |
