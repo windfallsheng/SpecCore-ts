@@ -2,7 +2,6 @@
 
 ---
 
-## v5.4.0 (2026-07-11) — Latest
 
 ## v5.6.0 (2026-07-14) — Latest
 
@@ -224,4 +223,4 @@
 | Minor | New commands or modules |
 | Patch | Bug fixes or doc updates |
 
-Current: **v5.6.0**
+Current: **v5.6.1**
