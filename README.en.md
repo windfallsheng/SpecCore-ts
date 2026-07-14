@@ -230,7 +230,7 @@ bash verify.sh          # Run tests
 
 ## Version
 
-v5.6.1 | 🔧 CLI Commands: 49 | 🧠 Intents: 35
+v5.6.3 | 🔧 CLI Commands: 49 | 🧠 Intents: 35
 
 Changelog: [CHANGELOG.en.md](CHANGELOG.en.md)
 
