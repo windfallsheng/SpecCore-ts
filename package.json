@@ -1,6 +1,6 @@
 {
   "name": "speccore",
-  "version": "5.6.4",
+  "version": "5.6.5",
   "description": "SpecCore - Code by Spec, Not by Vibe.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -8,7 +8,7 @@
     "speccore": "./bin/speccore"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cp -r src/locales dist/",
     "watch": "tsc --watch",
     "prepublish": "npm run build",
     "test": "vitest run",
