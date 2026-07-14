@@ -422,3 +422,152 @@ speccore iteration-from-global --reqs=REQ-001,REQ-002 --name=2026-07-Sprint-new
 ```
 
 **Mantra:** `baseline → impact → change → edit Spec → validate`
+
+---
+
+## Scenario 17: Spec Validation Errors — How to Fix
+
+```bash
+# 1. Check entire project
+speccore validate
+# → ❌ Task-001/backend/REQ.md: Missing "## 3. API Definition" section
+# → ❌ Task-002/_shared/API_CONTRACT.yaml: YAML syntax error line 15
+
+# 2. Check specific task
+speccore validate --task=Task-001
+
+# 3. Auto-fix (fill missing sections)
+speccore validate --task=Task-001 --fix
+
+# 4. JSON output (for CI)
+speccore validate --format=json
+
+# 5. Install Git hooks (validate before push)
+speccore hooks install
+```
+
+**Common errors:**
+- REQ.md missing sections (use `--fix` to auto-fill)
+- API_CONTRACT.yaml indentation (align to 2 spaces)
+- PROJECT_GRAPH.md broken format (don't edit manually, use commands)
+
+---
+
+## Scenario 18: Platform Pitfalls
+
+### Forgot a platform
+
+```bash
+# Created with web only, later need h5
+speccore new-task --name="User Login" --platforms=web --type=feature
+
+# ❌ Don't delete and recreate — just add the platform
+speccore platform-add --name=h5 --tech="H5 Mobile"
+# Then manually edit Task-001/_shared/TASK.md for h5 responsibilities
+```
+
+### Too many platforms
+
+```bash
+# Created with web,h5,miniapp but only doing web
+speccore new-task --name="Admin Panel" --platforms=web,h5,miniapp --type=feature
+
+# Just run/filter by web — other platforms are skipped, no errors
+speccore execute --platform=web
+speccore progress --platform=web
+```
+
+### Add new platform to project
+
+```bash
+speccore platform-add --name=tablet --description="Tablet UI" --tech="React Native"
+# Now new-task can use tablet
+speccore new-task --name="xxx" --platforms=web,tablet
+```
+
+---
+
+## Scenario 19: File Operation Mistakes
+
+### Manually edited PROJECT_GRAPH.md
+
+```bash
+# ❌ Edited PROJECT_GRAPH.md status table directly
+# Result: next execute/plan overwrites your manual changes
+
+# ✅ Correct approach
+speccore update --task=Task-001 --status=completed
+speccore plan --iteration=2026-07-Sprint
+```
+
+### Manually edited context.json
+
+```bash
+# ❌ Edited .speccore/local/context.json currentTask directly
+# Result: next command reads stale values
+
+# ✅ Correct approach
+speccore execute --task=Task-003  # Auto-updates currentTask
+```
+
+### Manually deleted a Task folder
+
+```bash
+# ❌ rm -rf 2026-07-Sprint/Task-005
+# Result: orphan references in INDEX.md, wrong context counts
+
+# ✅ Fix
+speccore index-update             # Clean index
+speccore validate                 # Check consistency
+
+# ✅ Proper way
+speccore delete --task=Task-005   # Safe delete
+```
+
+---
+
+## Scenario 20: State Recovery
+
+### Lost track of progress
+
+```bash
+# 1. View current context
+speccore context --task=Task-001
+
+# 2. Overall progress
+speccore progress --iteration=2026-07-Sprint --detail
+
+# 3. Health check
+speccore health
+
+# 4. Generate handover report
+speccore handover --iteration=2026-07-Sprint
+speccore report --format=html --output=status.html --team
+```
+
+### Git branch confusion
+
+```bash
+# Check which task the current branch maps to
+speccore current
+
+# Re-associate
+git checkout feature/Task-001-user-login
+speccore execute --task=Task-001 --force
+
+# Generate correct commit message
+speccore current --commit
+```
+
+### Suspect Spec vs code mismatch
+
+```bash
+# Scan @spec annotations in code
+speccore sync --dry-run
+
+# Actual sync
+speccore sync
+
+# Verify trace chain
+speccore trace --task=Task-001
+```
