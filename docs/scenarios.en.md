@@ -574,7 +574,7 @@ speccore trace --task=Task-001
 
 ---
 
-## Scenario 21: Cross-Spec Search + Auto-Validate
+## Scenario 21: Cross-Spec Search
 
 ```bash
 # 1. Search all Specs for a keyword
@@ -585,11 +585,52 @@ speccore search "payment"
 # 2. Limit search to a task
 speccore search "authentication" --task=Task-001
 
-# 3. Auto-validate on save
-speccore watch
-# → ✅ Task-001/backend/REQ.md  (valid)
-# → ⚠️ Task-002/_shared/API_CONTRACT.yaml  (tab indentation)
+# 3. Limit to iteration
+speccore search "API" --iteration=2026-07-Sprint
+```
 
-# 4. Watch specific iteration only
+---
+
+## Scenario 22: Auto-Validate on Save — `speccore watch`
+
+### Comparison: Manual vs Watch
+
+| | Manual `validate` | `speccore watch` |
+| :--- | :--- | :--- |
+| **Feedback timing** | Run command after writing | Instant on save |
+| **Error discovery** | After the fact (easy to forget) | Immediately (seconds) |
+| **YAML indentation** | `--fix` batches | 1st save catches Tab issues |
+| **REQ missing sections** | 3-4 errors at once | Each caught separately |
+| **Usage** | Type command every time | Open terminal, hands-off |
+
+### Workflow
+
+```bash
+# Terminal 1: start watch
+speccore watch
+# → 👀 Watching Spec files... (Ctrl+C to stop)
+
+# Terminal 2: edit Spec files
+vim Task-001/backend/REQ.md
+
+# Every Ctrl+S → Terminal 1 gives instant feedback:
+#   ✅ Task-001/backend/REQ.md
+#   ⚠️ Task-001/_shared/API_CONTRACT.yaml (tab indentation — use 2 spaces)
+#   ⚠️ Task-001/backend/REQ.md (missing: API Definition, Acceptance Criteria)
+
+# Watch specific iteration only
 speccore watch --iteration=2026-07-Sprint
+```
+
+### Without watch (comparison)
+
+```bash
+# Edit Spec... Ctrl+S
+# Edit Spec... Ctrl+S
+# Edit Spec... Ctrl+S
+# (No feedback throughout, no idea if there are issues)
+
+# Run once at the end
+speccore validate
+# → ❌ 3 errors → fix one by one → run validate again → fix more...
 ```
