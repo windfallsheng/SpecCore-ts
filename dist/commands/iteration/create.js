@@ -29,9 +29,9 @@ async function iterationCreateCommand(options) {
         await createIterationFiles(iterationDir, options);
         // Update ITERATIONS index
         await updateIterationsIndex(options.name, options);
-        // Update context
+        // Update context (store without 期次- prefix for consistency)
         await (0, context_1.updateContext)({
-            currentIteration: options.name,
+            currentIteration: iterName,
             lastUpdated: new Date().toISOString()
         });
         spinner.stop(`Iteration created: ${options.name}`);
