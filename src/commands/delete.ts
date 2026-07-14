@@ -1,4 +1,5 @@
 /**
+
  * delete — 安全删除 Task 或期次，自动清理所有关联引用
  *
  * 不会直接 rm -rf，而是移动到 .speccore/trash/ 并清理：
@@ -11,6 +12,7 @@
 import { pathExists, move, readFile, writeFile, readdir, ensureDir } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
+import { t } from '../i18n/t';
 import { FileTransaction } from '../core/transaction';
 import { logOperation } from '../core/operation-log';
 
@@ -77,7 +79,7 @@ async function deleteTask(cwd: string, taskId: string, force?: boolean): Promise
   // 7. 日志
   logOperation('speccore delete', `Task: ${taskId}`);
 
-  logger.success(`✅ Task "${taskId}" deleted and all references cleaned.`);
+  logger.success(t('cmd.delete.success', '✅ Task "{task}" deleted and all references cleaned.', { task: taskId }));
   logger.info('   To recover: mv the directory back from .speccore/trash/');
 }
 

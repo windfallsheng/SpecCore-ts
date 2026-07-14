@@ -5,6 +5,7 @@
 import { pathExists, readFile, readdir } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
+import { t } from '../i18n/t';
 
 export interface SearchOptions {
   query: string;
@@ -39,11 +40,11 @@ export async function searchCommand(options: SearchOptions): Promise<void> {
 
   // 2. Output
   logger.info('');
-  logger.info(`🔍 搜索: "${options.query}" — ${results.length} 个匹配`);
+  logger.info(t('cmd.search.result', '🔍 搜索: "{query}" — {count} 个匹配', { query: options.query, count: results.length }));
   logger.info('');
 
   if (results.length === 0) {
-    logger.info('  暂无匹配结果。');
+    logger.info('  ' + t('cmd.search.no_match', '暂无匹配结果。'));
     return;
   }
 
