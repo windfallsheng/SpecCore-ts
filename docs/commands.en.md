@@ -292,7 +292,8 @@ speccore trace --full
 | `cm` | completion | `hk` | hooks |
 | `cr` | current | `df` | diff |
 | `tr` | trace | `up` | update |
-| `dl` | delete | | |
+| `dl` | delete | `sh` | search |
+| `wch` | watch | | |
 
 ---
 
