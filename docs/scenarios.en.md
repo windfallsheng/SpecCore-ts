@@ -320,3 +320,38 @@ speccore delete --iteration=2026-07-Test --force
 mv .speccore/trash/2026-07-Test-TIMESTAMP 2026-07-Test
 speccore index-update
 ```
+
+---
+
+## Scenario 14: Requirement Breakdown (Global → Iteration → Tasks)
+
+```bash
+# 1. View global requirement pool
+speccore global-status
+# → REQ-001  User Auth   Planned
+# → REQ-002  Messaging   Planned
+
+# 2. Pull requirements → create iteration
+speccore iteration-from-global --reqs=REQ-001,REQ-002 --name=2026-Q3-Sprint
+
+# 3. Preview split plan
+speccore iteration split --iteration=2026-Q3-Sprint --dry-run
+
+# 4. Execute split (auto-generates Task dirs + Spec stubs)
+speccore iteration split --iteration=2026-Q3-Sprint
+
+# 5. Check progress
+speccore progress --iteration=2026-Q3-Sprint --detail
+```
+
+### Simplified Flow (no global layer)
+
+```bash
+# Create iteration → manually add tasks
+speccore iteration create --name=2026-07-Sprint --goal="User System"
+speccore new-task --name="User Login" --platforms=web,h5 --type=feature
+speccore new-task --name="User Register" --platforms=web --type=feature
+
+# After filling REQ.md content, sync to global layer
+speccore sync-global --iteration=2026-07-Sprint
+```
