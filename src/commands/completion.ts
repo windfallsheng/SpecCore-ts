@@ -7,15 +7,14 @@
 import { logger } from '../utils/logger';
 
 const COMMANDS = [
-  'init', 'import', 'spec', 'new-task', 'task',
-  'iteration', 'execute', 'plan', 'change', 'sync',
-  'validate', 'progress', 'status', 'health', 'report',
-  'impact', 'baseline', 'dashboard', 'audit',
-  'global-status', 'history', 'index-update',
-  'platform-add', 'context', 'migrate', 'backup',
-  'goal', 'bugfix', 'research', 'handover', 'retro',
-  'rename', 'template-add', 'archive', 'config',
-  'help', 'demo', 'welcome', 'completion',
+  'init', 'import', 'validate', 'archive', 'progress', 'status', 'health',
+  'report', 'config', 'iteration', 'task', 'plan', 'execute', 'spec',
+  'goal', 'bugfix', 'research', 'change', 'sync', 'handover', 'retro',
+  'template-add', 'help', 'demo', 'welcome', 'iteration-from-global',
+  'sync-global', 'global-status', 'history', 'impact', 'baseline',
+  'dashboard', 'audit', 'rename', 'new-task', 'platform-add', 'index-update',
+  'context', 'migrate', 'completion', 'backup', 'hooks', 'current',
+  'update', 'diff', 'trace', 'delete', 'search', 'watch',
 ];
 
 /**
@@ -29,8 +28,8 @@ _speccore_completion() {
   cur="\${COMP_WORDS[COMP_CWORD]}"
   prev="\${COMP_WORDS[COMP_CWORD-1]}"
 
-  # Top-level commands
-  if [ $COMP_CWORD -eq 1 ]; then
+  # Complete subcommands
+  if [[ \${COMP_CWORD} -eq 1 ]]; then
     opts="${COMMANDS.join(' ')} --help --version --lang"
     COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
     return 0

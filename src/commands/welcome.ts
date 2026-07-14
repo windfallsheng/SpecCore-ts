@@ -4,8 +4,8 @@
  */
 
 import { logger, Spinner } from '../utils/logger';
-import { ensureDir, writeFile, pathExists, readFile } from 'fs-extra';
 import { join } from 'path';
+import { pathExists, ensureDir, writeFile } from 'fs-extra';
 
 export interface WelcomeOptions {
   force?: boolean;

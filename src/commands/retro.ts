@@ -6,7 +6,6 @@
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
 import { writeFile, pathExists, readFile, readdir } from 'fs-extra';
-import { FileTransaction } from '../core/transaction';
 import { join } from 'path';
 
 export interface RetroOptions {

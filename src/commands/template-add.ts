@@ -5,7 +5,6 @@
 
 import { logger, Spinner } from '../utils/logger';
 import { ensureDir, copy, pathExists, writeFile, readFile } from 'fs-extra';
-import { FileTransaction } from '../core/transaction';
 import { join, basename } from 'path';
 
 export interface TemplateAddOptions {

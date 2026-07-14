@@ -6,7 +6,6 @@
 import { logger, Spinner } from '../utils/logger';
 import { readGlobalIndex } from '../core/global-layer';
 import { writeFile } from 'fs-extra';
-import { FileTransaction } from '../core/transaction';
 import { join } from 'path';
 
 export interface DashboardOptions {

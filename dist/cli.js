@@ -516,6 +516,7 @@ commander_1.program
     .option('-t, --task <task>', 'Validate specific task')
     .option('--strict', 'Strict mode')
     .option('--fix', 'Auto-fix')
+    .option('--format <format>', 'Output format: text or json', 'text')
     .action(validate_1.validateCommand);
 // v4.7.0 体验增强命令
 commander_1.program
