@@ -1,6 +1,6 @@
 # SpecCore — Command Reference
 
-> 🔧 Commands: 47 | 🧠 Intent Types: 35 | See [README](../README.en.md)
+> 🔧 Commands: 49 | 🧠 Intent Types: 35 | See [README](../README.en.md)
 
 ---
 
@@ -202,6 +202,8 @@ speccore context --task=Task-001
 | `speccore demo` | `dm` | 5-minute quick demo | — |
 | `speccore welcome` | `wc` | First-use interactive guide | — |
 | `speccore migrate` | `mg` | Shell v3→CLI v5 migration | `--dry-run` |
+| `speccore search` | `sh` | Search across all Spec files | `<query>` `--task=<id>` `--iteration=<name>` |
+| `speccore watch` | `wch` | Watch files + auto-validate on save | `--task=<id>` `--iteration=<name>` |
 | `speccore delete` | `dl` | Delete task/iteration (trash + auto-clean) | `--task=<id>` `--iteration=<name>` `--force` |
 
 ```bash

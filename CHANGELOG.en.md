@@ -4,7 +4,7 @@
 
 ## v5.4.0 (2026-07-11) — Latest
 
-## v5.5.0 (2026-07-14) — Latest
+## v5.6.0 (2026-07-14) — Latest
 
 ### 🆕 Added
 - **`speccore delete`**: Safe task/iteration deletion (trash + auto-clean INDEX/context/git-mapping)
@@ -224,4 +224,4 @@
 | Minor | New commands or modules |
 | Patch | Bug fixes or doc updates |
 
-Current: **v5.5.0**
+Current: **v5.6.0**

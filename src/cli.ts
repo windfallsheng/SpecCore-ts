@@ -59,6 +59,9 @@ import { diffCommand } from './commands/diff';
 import { traceCommand } from './commands/trace';
 // v5.5.0 新增
 import { deleteCommand } from './commands/delete';
+// v5.6.0 新增
+import { searchCommand } from './commands/search';
+import { watchCommand } from './commands/watch';
 import { i18n } from './i18n';
 
 program
@@ -626,6 +629,23 @@ program
   .option('--iteration <name>', 'Iteration name to delete')
   .option('--force', 'Skip confirmation prompt')
   .action(deleteCommand);
+
+// v5.6.0 新增命令
+program
+  .command('search <query>')
+  .alias('sh')
+  .description('Search across all Spec files for a keyword (v5.6)')
+  .option('--task <id>', 'Limit search to a task')
+  .option('--iteration <name>', 'Limit search to an iteration')
+  .action(searchCommand);
+
+program
+  .command('watch')
+  .alias('wch')
+  .description('Watch Spec files and auto-validate on save (v5.6)')
+  .option('--task <id>', 'Watch a specific task')
+  .option('--iteration <name>', 'Watch a specific iteration')
+  .action(watchCommand);
 
 // Parse arguments
 program.parse();

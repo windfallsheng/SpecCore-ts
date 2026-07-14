@@ -61,6 +61,9 @@ const diff_1 = require("./commands/diff");
 const trace_1 = require("./commands/trace");
 // v5.5.0 新增
 const delete_1 = require("./commands/delete");
+// v5.6.0 新增
+const search_1 = require("./commands/search");
+const watch_1 = require("./commands/watch");
 const i18n_1 = require("./i18n");
 commander_1.program
     .name('speccore')
@@ -576,6 +579,21 @@ commander_1.program
     .option('--iteration <name>', 'Iteration name to delete')
     .option('--force', 'Skip confirmation prompt')
     .action(delete_1.deleteCommand);
+// v5.6.0 新增命令
+commander_1.program
+    .command('search <query>')
+    .alias('sh')
+    .description('Search across all Spec files for a keyword (v5.6)')
+    .option('--task <id>', 'Limit search to a task')
+    .option('--iteration <name>', 'Limit search to an iteration')
+    .action(search_1.searchCommand);
+commander_1.program
+    .command('watch')
+    .alias('wch')
+    .description('Watch Spec files and auto-validate on save (v5.6)')
+    .option('--task <id>', 'Watch a specific task')
+    .option('--iteration <name>', 'Watch a specific iteration')
+    .action(watch_1.watchCommand);
 // Parse arguments
 commander_1.program.parse();
 //# sourceMappingURL=cli.js.map
