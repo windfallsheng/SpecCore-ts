@@ -111,7 +111,7 @@ The CLI never prevents manual edits. But it WILL overwrite structural metadata (
 
 ## Related Docs
 
-- [Scenarios](scenarios.en.md) — 20 real-world scenarios
+- [Scenarios](scenarios.en.md) — 22 real-world scenarios
 - [Command Reference](commands.en.md) — Full command params
 - [Quick Start](quick-start.en.md) — Get started
 - [README](../README.en.md) — Project overview
