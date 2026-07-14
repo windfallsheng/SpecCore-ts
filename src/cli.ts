@@ -57,6 +57,8 @@ import { updateCommand } from './commands/update';
 // v5.3.0 新增
 import { diffCommand } from './commands/diff';
 import { traceCommand } from './commands/trace';
+// v5.5.0 新增
+import { deleteCommand } from './commands/delete';
 import { i18n } from './i18n';
 
 program
@@ -614,6 +616,16 @@ program
   .option('--task <id>', 'Trace from task ID')
   .option('--full', 'Full project trace')
   .action(traceCommand);
+
+// v5.5.0 新增命令
+program
+  .command('delete')
+  .alias('dl')
+  .description('Delete a task or iteration (moves to trash + cleans references) (v5.5)')
+  .option('--task <id>', 'Task ID to delete')
+  .option('--iteration <name>', 'Iteration name to delete')
+  .option('--force', 'Skip confirmation prompt')
+  .action(deleteCommand);
 
 // Parse arguments
 program.parse();

@@ -59,6 +59,8 @@ const update_1 = require("./commands/update");
 // v5.3.0 新增
 const diff_1 = require("./commands/diff");
 const trace_1 = require("./commands/trace");
+// v5.5.0 新增
+const delete_1 = require("./commands/delete");
 const i18n_1 = require("./i18n");
 commander_1.program
     .name('speccore')
@@ -565,6 +567,15 @@ commander_1.program
     .option('--task <id>', 'Trace from task ID')
     .option('--full', 'Full project trace')
     .action(trace_1.traceCommand);
+// v5.5.0 新增命令
+commander_1.program
+    .command('delete')
+    .alias('dl')
+    .description('Delete a task or iteration (moves to trash + cleans references) (v5.5)')
+    .option('--task <id>', 'Task ID to delete')
+    .option('--iteration <name>', 'Iteration name to delete')
+    .option('--force', 'Skip confirmation prompt')
+    .action(delete_1.deleteCommand);
 // Parse arguments
 commander_1.program.parse();
 //# sourceMappingURL=cli.js.map

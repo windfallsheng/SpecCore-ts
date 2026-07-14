@@ -179,7 +179,7 @@ SpecCore natively integrates WorkBuddy.
 | [SDD Methodology](docs/sdd-methodology.en.md) | What is SDD, why, how |
 | [Quick Reference](docs/quick-reference.en.md) | One-page: commands + safety + CI |
 | [Quick Start](docs/quick-start.en.md) | Install → Init → Import → Multi-platform → Scenarios |
-| [Command Reference](docs/commands.en.md) | 46 commands full params + 35 intents |
+| [Command Reference](docs/commands.en.md) | 47 commands full params + 35 intents |
 | [Tool Adaptation](docs/tool-adaptation.en.md) | WorkBuddy integration + workflow + security |
 | [Usage Guide](docs/usage-guide.en.md) | File safety: manual edit vs CLI command |
 | [Workspace Layout](docs/workspace-organization.en.md) | Recommended directory structure |
@@ -230,7 +230,7 @@ bash verify.sh          # Run tests
 
 ## Version
 
-v5.4.3 | 🔧 CLI Commands: 46 | 🧠 Intents: 35
+v5.4.3 | 🔧 CLI Commands: 47 | 🧠 Intents: 35
 
 Changelog: [CHANGELOG.en.md](CHANGELOG.en.md)
 

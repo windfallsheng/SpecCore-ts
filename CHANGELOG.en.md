@@ -4,6 +4,18 @@
 
 ## v5.4.0 (2026-07-11) — Latest
 
+## v5.5.0 (2026-07-14) — Latest
+
+### 🆕 Added
+- **`speccore delete`**: Safe task/iteration deletion (trash + auto-clean INDEX/context/git-mapping)
+- Supports `--task=<id>` `--iteration=<name>` `--force`
+- Supports manual recovery (mv back + index-update)
+
+### 📝 Docs
+- Command reference / quick reference / scenarios updated with delete command
+- Command count: 46→47
+
+
 ### 🔴 Bidirectional Trace
 - **Reverse sync**: `speccore sync` scans `@spec` annotations in code, auto-updates TASK.md
 - **Auto-generated TRACE.md**: `_shared/TRACE.md` records code→Spec trace chain
@@ -212,4 +224,4 @@
 | Minor | New commands or modules |
 | Patch | Bug fixes or doc updates |
 
-Current: **v5.4.4**
+Current: **v5.5.0**

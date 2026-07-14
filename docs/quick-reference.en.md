@@ -19,6 +19,7 @@ speccore sync                         # Reverse sync @spec → TASK.md
 speccore diff --source=A --target=B   # Compare iterations
 speccore trace --req=REQ-001          # Trace chain
 speccore backup                       # Backup state
+speccore delete --task=Task-005           # Safe delete (trash + clean refs)
 speccore current --commit             # Generate commit message
 ```
 
