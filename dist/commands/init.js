@@ -121,6 +121,19 @@ async function createDefaultFiles(speccoreDir) {
 | 1001 | 用户不存在 | 登录时手机号未注册 |
 | 1002 | 密码错误 | 登录密码不匹配 |
 | ... | ... | ... |
+
+## 核心宪法与冲突裁决
+
+### 核心原则
+- **反向同步铁律**：代码与 Spec 冲突时，必须先更新 Spec，再修改代码
+- **Spec 是唯一事实源**：文档和代码冲突时，错的一定是代码
+
+### 冲突裁决规则
+| 等级 | 场景 | 处理方式 |
+| :--- | :--- | :--- |
+| L1 | 明确冲突 | 立即修正代码 |
+| L2 | Spec 缺陷 | 暂停，提交裁决 |
+| L3 | 环境不可行 | 升级至架构评审 |
 `);
     // PROJECT files
     await (0, fs_extra_1.writeFile)((0, path_1.join)(speccoreDir, 'PROJECT', 'INDEX.md'), `# 项目索引
