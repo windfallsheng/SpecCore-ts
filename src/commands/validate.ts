@@ -1,6 +1,6 @@
 import { validateProject, formatValidationResult, autoFix } from '../core/validator';
 import { logger, Spinner } from '../utils/logger';
-import { getDefaultIteration } from '../core/context';
+import { getDefaultIteration, getHotfixStatus } from '../core/context';
 
 export interface ValidateOptions {
   iteration?: string;
@@ -17,7 +17,10 @@ export async function validateCommand(options: ValidateOptions): Promise<void> {
 
   try {
     const iteration = await getDefaultIteration(options.iteration);
-    
+
+    // Hotfix check: warn if hotfix is active
+    await checkHotfix();
+
     const result = await validateProject(
       iteration || undefined,
       options.task || undefined,
@@ -51,5 +54,24 @@ export async function validateCommand(options: ValidateOptions): Promise<void> {
   } catch (error) {
     spinner.fail(`Validation failed: ${error}`);
     throw error;
+  }
+}
+
+async function checkHotfix(): Promise<void> {
+  const hotfix = await getHotfixStatus();
+  if (!hotfix) return;
+
+  if (hotfix.mandatoryExpired) {
+    logger.error(`🚨 热修复 "${hotfix.taskId}" 补录超时（超过 24 小时）！`);
+    logger.error('  请立即运行: speccore sync --reverse');
+    throw new Error('Hotfix sync deadline exceeded. Run speccore sync --reverse first.');
+  }
+
+  if (hotfix.graceExpired) {
+    logger.warn(`⚠️  热修复宽限期已过 "${hotfix.taskId}"，请在 24 小时内完成反向同步`);
+    logger.warn('  运行: speccore sync --reverse');
+  } else {
+    logger.info(`⚠️  检测到热修复模式: ${hotfix.taskId}`);
+    logger.info('  宽限期内（剩余 < 30 min），允许跳过反向同步');
   }
 }

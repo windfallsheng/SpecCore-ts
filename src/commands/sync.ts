@@ -4,7 +4,7 @@
  */
 
 import { logger, Spinner } from '../utils/logger';
-import { getDefaultIteration } from '../core/context';
+import { getDefaultIteration, clearHotfix } from '../core/context';
 import { readFile, pathExists } from 'fs-extra';
 import { join } from 'path';
 import { FileTransaction } from '../core/transaction';
@@ -64,6 +64,7 @@ export async function syncCommand(options: SyncOptions): Promise<void> {
     } else {
       logger.info('   No @spec references found in code');
     }
+    await clearHotfix(); // 反向同步完成，清除 hotfix 标记
     logger.info('💡 提示: 运行 speccore validate 确保同步后的 Spec 完整性');
   } catch (error) {
     spinner.fail(`同步失败: ${error}`);
