@@ -122,6 +122,11 @@ async function executeCommand(options) {
         }
         // === Execute with progress (existing flow) ===
         await executeWithProgress(sortedTasks, iteration);
+        // Hotfix tracking
+        if (options.hotfix && sortedTasks.length > 0) {
+            await (0, context_1.startHotfix)(sortedTasks[0].id);
+            logger_1.logger.info('⚠️  Hotfix Mode Active — 30min grace, 24h mandatory sync');
+        }
     }
     catch (error) {
         logger_1.logger.error(`Execution failed: ${error}`);
@@ -553,5 +558,22 @@ async function filterByPlatform(tasks, iteration, platform) {
             filtered.push(task);
     }
     return filtered;
+}
+// ============================================================
+// Hotfix 跟踪
+// ============================================================
+async function handleHotfix(options, taskIds) {
+    if (!options.hotfix)
+        return;
+    const taskId = taskIds[0];
+    if (!taskId)
+        return;
+    await (0, context_1.startHotfix)(taskId);
+    logger_1.logger.info('');
+    logger_1.logger.warn('⚠️  Hotfix Mode Active');
+    logger_1.logger.warn(`   Task: ${taskId}`);
+    logger_1.logger.warn('   Grace period: 30 min (skip reverse sync)');
+    logger_1.logger.warn('   Mandatory sync deadline: 24 hours');
+    logger_1.logger.warn('   Run: speccore sync --reverse to complete');
 }
 //# sourceMappingURL=execute.js.map

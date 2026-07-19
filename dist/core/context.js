@@ -41,6 +41,9 @@ exports.detectActiveIteration = detectActiveIteration;
 exports.detectCurrentAssignee = detectCurrentAssignee;
 exports.getDefaultIteration = getDefaultIteration;
 exports.getDefaultAssignee = getDefaultAssignee;
+exports.startHotfix = startHotfix;
+exports.clearHotfix = clearHotfix;
+exports.getHotfixStatus = getHotfixStatus;
 const fs_extra_1 = require("fs-extra");
 const CONTEXT_PATH = '.speccore/local/context.json';
 async function loadContext() {
@@ -141,5 +144,39 @@ async function getDefaultAssignee(assignee) {
     if (assignee)
         return assignee;
     return await detectCurrentAssignee();
+}
+// ============================================
+// Hotfix 例外流程
+// ============================================
+/** 标记任务为 hotfix，宽限期 30 分钟 */
+async function startHotfix(taskId) {
+    const now = new Date();
+    const graceEnds = new Date(now.getTime() + 30 * 60 * 1000); // +30min
+    const mustSync = new Date(now.getTime() + 24 * 60 * 60 * 1000); // +24h
+    await updateContext({
+        hotfix: {
+            taskId,
+            startedAt: now.toISOString(),
+            graceEndsAt: graceEnds.toISOString(),
+            mustSyncBy: mustSync.toISOString(),
+        }
+    });
+}
+/** 清除 hotfix 标记 */
+async function clearHotfix() {
+    await updateContext({ hotfix: undefined });
+}
+/** 获取当前 hotfix 状态（给 validate/progress 用） */
+async function getHotfixStatus() {
+    const ctx = await loadContext();
+    if (!ctx.hotfix)
+        return null;
+    const now = new Date();
+    return {
+        inHotfix: true,
+        taskId: ctx.hotfix.taskId,
+        graceExpired: now > new Date(ctx.hotfix.graceEndsAt),
+        mandatoryExpired: now > new Date(ctx.hotfix.mustSyncBy),
+    };
 }
 //# sourceMappingURL=context.js.map

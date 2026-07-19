@@ -2,7 +2,7 @@ import { pathExists, readdir, readFile } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
 import { t } from '../i18n/t';
-import { getDefaultIteration, updateContext, recordHistory } from '../core/context';
+import { getDefaultIteration, updateContext, recordHistory, startHotfix } from '../core/context';
 import { scanTasks, topologicalSort } from '../core/state';
 import { FileTransaction } from '../core/transaction';
 
@@ -35,6 +35,7 @@ export interface ExecuteOptions {
   iteration?: string;
   force?: boolean;
   batchSize?: string;
+  hotfix?: boolean;
 }
 
 export async function executeCommand(options: ExecuteOptions): Promise<void> {
@@ -117,6 +118,12 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
 
     // === Execute with progress (existing flow) ===
     await executeWithProgress(sortedTasks, iteration);
+
+    // Hotfix tracking
+    if (options.hotfix && sortedTasks.length > 0) {
+      await startHotfix(sortedTasks[0].id);
+      logger.info('⚠️  Hotfix Mode Active — 30min grace, 24h mandatory sync');
+    }
   } catch (error) {
     logger.error(`Execution failed: ${error}`);
     throw error;
@@ -610,4 +617,21 @@ async function filterByPlatform(tasks: any[], iteration: string, platform: strin
     if (await pathExists(platformDir)) filtered.push(task);
   }
   return filtered;
+}
+
+// ============================================================
+// Hotfix 跟踪
+// ============================================================
+async function handleHotfix(options: ExecuteOptions, taskIds: string[]): Promise<void> {
+  if (!options.hotfix) return;
+  const taskId = taskIds[0];
+  if (!taskId) return;
+
+  await startHotfix(taskId);
+  logger.info('');
+  logger.warn('⚠️  Hotfix Mode Active');
+  logger.warn(`   Task: ${taskId}`);
+  logger.warn('   Grace period: 30 min (skip reverse sync)');
+  logger.warn('   Mandatory sync deadline: 24 hours');
+  logger.warn('   Run: speccore sync --reverse to complete');
 }
