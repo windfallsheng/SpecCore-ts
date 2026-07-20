@@ -40,6 +40,7 @@ const logger_1 = require("../utils/logger");
 const context_1 = require("../core/context");
 const state_1 = require("../core/state");
 const transaction_1 = require("../core/transaction");
+const spec_rules_1 = require("../core/spec-rules");
 const operation_log_1 = require("../core/operation-log");
 const execution_state_1 = require("../core/execution-state");
 const git_integration_1 = require("../core/git-integration");
@@ -392,6 +393,8 @@ async function simulateTaskExecution(task, iteration) {
     let filesUpdated = 0;
     if (await (0, fs_extra_1.pathExists)(taskDir)) {
         const tx = new transaction_1.FileTransaction();
+        // 加载全局 Spec 规则（会被注入到生成的代码中）
+        const specRules = await (0, spec_rules_1.loadSpecRules)();
         // 读取后端 Spec 生成代码骨架
         const backendDir = (0, path_1.join)(taskDir, 'backend');
         if (await (0, fs_extra_1.pathExists)(backendDir)) {
@@ -404,7 +407,7 @@ async function simulateTaskExecution(task, iteration) {
             // 生成 Controller 骨架
             if (await (0, fs_extra_1.pathExists)(reqPath)) {
                 const req = await (0, fs_extra_1.readFile)(reqPath, 'utf-8');
-                const controllerCode = generateJavaController(className, packageName, req);
+                const controllerCode = generateJavaController(className, packageName, req, specRules);
                 const ctrlPath = (0, path_1.join)(backendDir, `${className}Controller.java`);
                 tx.write(ctrlPath, controllerCode);
                 filesUpdated++;
@@ -459,16 +462,13 @@ async function simulateTaskExecution(task, iteration) {
 // ============================================================
 // Code generation helpers
 // ============================================================
-function generateJavaController(className, pkg, req) {
+function generateJavaController(className, pkg, req, rules) {
     const desc = extractDescription(req);
-    // 尝试解析 API_CONTRACT.yaml 生成方法骨架
-    const methodStubs = generateMethodStubs(req);
+    const methodStubs = generateMethodStubs(req, rules);
+    const imports = (0, spec_rules_1.generateImports)(rules, className);
     return `package ${pkg}.controller;
 
-import org.springframework.web.bind.annotation.*;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
-import ${pkg}.service.${className}Service;
+${imports}
 
 /**
  * ${desc}
@@ -485,7 +485,7 @@ ${methodStubs}
 `;
 }
 /** 从 REQ.md 的接口表格中提取方法签名 */
-function generateMethodStubs(req) {
+function generateMethodStubs(req, rules) {
     // 匹配 REQ.md 中的接口定义表格: | METHOD | /path | description |
     const tableRegex = /\|\s*(GET|POST|PUT|DELETE|PATCH)\s*\|\s*(\/[^\s|]+)\s*\|([^|]*)\|/gi;
     const methods = [];
@@ -494,12 +494,16 @@ function generateMethodStubs(req) {
         const method = match[1].toUpperCase();
         const path = match[2].trim();
         const desc = match[3].trim();
-        methods.push(formatControllerMethod(method, path, desc));
+        methods.push(formatControllerMethod(method, path, desc, rules));
     }
     return methods.length > 0 ? methods.join('\n') : '\n    // TODO: 请在 REQ.md 中补充接口表格';
 }
-function formatControllerMethod(method, path, desc) {
-    const pathName = path.split('/').filter(Boolean).pop() || 'resource';
+function formatControllerMethod(method, path, desc, rules) {
+    const rt = rules || { exceptionHandler: 'none', responseFormat: 'ResponseEntity' };
+    const returnType = rt.responseFormat === 'Result' ? 'Result<?>' : 'ResponseEntity<?>';
+    const bodyHint = rt.exceptionHandler === 'BusinessException'
+        ? 'throw new BusinessException("Not implemented");'
+        : 'return ResponseEntity.ok().build();';
     const hasId = path.includes('{id}');
     const hasPage = path.includes('page');
     let annotation;
@@ -508,49 +512,48 @@ function formatControllerMethod(method, path, desc) {
         case 'GET':
             if (hasId) {
                 annotation = `@GetMapping("${path}")`;
-                signature = `public ResponseEntity<?> getById(@PathVariable Long id)`;
+                signature = `public ${returnType} getById(@PathVariable Long id)`;
             }
             else if (hasPage || path.endsWith('s')) {
                 annotation = `@GetMapping("${path}")`;
-                signature = `public ResponseEntity<?> list(@RequestParam(defaultValue = "1") int page, @RequestParam(defaultValue = "20") int size)`;
+                signature = `public ${returnType} list(@RequestParam(defaultValue = "1") int page, @RequestParam(defaultValue = "20") int size)`;
             }
             else {
                 annotation = `@GetMapping("${path}")`;
-                signature = `public ResponseEntity<?> get()`;
+                signature = `public ${returnType} get()`;
             }
             break;
         case 'POST':
             annotation = `@PostMapping("${path}")`;
-            signature = `public ResponseEntity<?> create(@RequestBody Object body)`;
+            signature = `public ${returnType} create(@RequestBody Object body)`;
             break;
         case 'PUT':
             annotation = `@PutMapping("${path}")`;
             if (hasId) {
-                signature = `public ResponseEntity<?> update(@PathVariable Long id, @RequestBody Object body)`;
+                signature = `public ${returnType} update(@PathVariable Long id, @RequestBody Object body)`;
             }
             else {
-                signature = `public ResponseEntity<?> update(@RequestBody Object body)`;
+                signature = `public ${returnType} update(@RequestBody Object body)`;
             }
             break;
         case 'DELETE':
             annotation = `@DeleteMapping("${path}")`;
             if (hasId) {
-                signature = `public ResponseEntity<?> delete(@PathVariable Long id)`;
+                signature = `public ${returnType} delete(@PathVariable Long id)`;
             }
             else {
-                signature = `public ResponseEntity<?> delete()`;
+                signature = `public ${returnType} delete()`;
             }
             break;
         default:
             annotation = `@PostMapping("${path}")`;
-            signature = `public ResponseEntity<?> handle(@RequestBody Object body)`;
+            signature = `public ${returnType} handle(@RequestBody Object body)`;
     }
     return `
     /** ${desc} */
     ${annotation}
     ${signature} {
-        // TODO: Implement — see TASK.md for acceptance criteria
-        return ResponseEntity.ok().build();
+        ${bodyHint}
     }`;
 }
 const uncapitalize = (s) => s.charAt(0).toLowerCase() + s.slice(1);
