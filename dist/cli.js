@@ -23,6 +23,7 @@ const bugfix_1 = require("./commands/bugfix");
 const research_1 = require("./commands/research");
 const change_1 = require("./commands/change");
 const sync_1 = require("./commands/sync");
+const pattern_1 = require("./commands/pattern");
 const handover_1 = require("./commands/handover");
 const retro_1 = require("./commands/retro");
 const template_add_1 = require("./commands/template-add");
@@ -276,6 +277,7 @@ commander_1.program
     .option('--auto', 'Auto-apply sync without confirmation')
     .option('--dry-run', 'Preview differences without modifying')
     .option('--force', 'Skip preview')
+    .option('--detect', 'Detect code-spec discrepancies (read-only, no changes)')
     .action(sync_1.syncCommand);
 // ================================================================
 // ✅ 审查与验证
@@ -414,6 +416,21 @@ commander_1.program
     .option('--dry-run', 'Preview changes without applying')
     .option('--force', 'Skip preview and execute')
     .action(sync_global_1.syncGlobalCommand);
+// ================================================================
+// 📦 模式保存
+// ================================================================
+commander_1.program
+    .command('pattern')
+    .alias('p')
+    .description('Save current task as reusable pattern template')
+    .option('-n, --name <name>', 'Pattern name')
+    .option('-t, --task <task>', 'Source task ID')
+    .option('-c, --content <content>', 'Manual content')
+    .option('-f, --file <file>', 'Read from file path')
+    .option('-d, --desc <desc>', 'Pattern description')
+    .option('-i, --iteration <iteration>', 'Target iteration')
+    .option('--force', 'Overwrite existing pattern')
+    .action(pattern_1.patternCommand);
 commander_1.program
     .command('global-status')
     .alias('gs')

@@ -21,6 +21,7 @@ import { bugfixCommand } from './commands/bugfix';
 import { researchCommand } from './commands/research';
 import { changeCommand } from './commands/change';
 import { syncCommand } from './commands/sync';
+import { patternCommand } from './commands/pattern';
 import { handoverCommand } from './commands/handover';
 import { retroCommand } from './commands/retro';
 import { templateAddCommand } from './commands/template-add';
@@ -293,6 +294,7 @@ program
   .option('--auto', 'Auto-apply sync without confirmation')
   .option('--dry-run', 'Preview differences without modifying')
   .option('--force', 'Skip preview')
+  .option('--detect', 'Detect code-spec discrepancies (read-only, no changes)')
   .action(syncCommand);
 
 // ================================================================
@@ -444,6 +446,22 @@ program
   .option('--dry-run', 'Preview changes without applying')
   .option('--force', 'Skip preview and execute')
   .action(syncGlobalCommand);
+
+// ================================================================
+// 📦 模式保存
+// ================================================================
+program
+  .command('pattern')
+  .alias('p')
+  .description('Save current task as reusable pattern template')
+  .option('-n, --name <name>', 'Pattern name')
+  .option('-t, --task <task>', 'Source task ID')
+  .option('-c, --content <content>', 'Manual content')
+  .option('-f, --file <file>', 'Read from file path')
+  .option('-d, --desc <desc>', 'Pattern description')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('--force', 'Overwrite existing pattern')
+  .action(patternCommand);
 
 program
   .command('global-status')
