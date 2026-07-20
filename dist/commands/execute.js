@@ -395,6 +395,8 @@ async function simulateTaskExecution(task, iteration) {
         const tx = new transaction_1.FileTransaction();
         // 加载全局 Spec 规则（会被注入到生成的代码中）
         const specRules = await (0, spec_rules_1.loadSpecRules)();
+        const techStack = await (0, spec_rules_1.loadTechStack)();
+        logger_1.logger.info(`   Tech Stack: ${techStack.backendFramework} + ${techStack.frontendFramework}`);
         // 读取后端 Spec 生成代码骨架
         const backendDir = (0, path_1.join)(taskDir, 'backend');
         if (await (0, fs_extra_1.pathExists)(backendDir)) {

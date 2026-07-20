@@ -5,7 +5,7 @@ import { t } from '../i18n/t';
 import { getDefaultIteration, updateContext, recordHistory, startHotfix } from '../core/context';
 import { scanTasks, topologicalSort } from '../core/state';
 import { FileTransaction } from '../core/transaction';
-import { loadSpecRules, generateImports, getTodoHint, SpecRules } from '../core/spec-rules';
+import { loadSpecRules, generateImports, getTodoHint, SpecRules, loadTechStack, TechStack } from '../core/spec-rules';
 
 import { logOperation } from '../core/operation-log';
 import {
@@ -439,6 +439,8 @@ async function simulateTaskExecution(task: any, iteration: string): Promise<void
 
     // 加载全局 Spec 规则（会被注入到生成的代码中）
     const specRules = await loadSpecRules();
+    const techStack = await loadTechStack();
+    logger.info(`   Tech Stack: ${techStack.backendFramework} + ${techStack.frontendFramework}`);
 
     // 读取后端 Spec 生成代码骨架
     const backendDir = join(taskDir, 'backend');
