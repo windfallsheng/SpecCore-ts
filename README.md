@@ -185,8 +185,9 @@ SpecCore 原生集成 WorkBuddy（`speccore init` 自动创建 `.workbuddy/` ski
 | [工作空间组织](docs/工作空间组织.md) | 推荐目录结构 + 多工程协作 |
 | [迁移指南](docs/migration-guide.md) | Shell v3.x → CLI v5.x 迁移步骤 |
 | [CI/CD 集成](docs/CI-CD与spec注释集成指南.md) | @spec 注释 + GitHub Actions + 工作流 |
+| [Spec 加载机制](docs/Spec三层加载机制.md) | 三层 Spec 协同：全局约束 → 期次上下文 → Task 执行 |
 | [示例项目](examples/task-management/README.md) | 完整演示：需求→Spec→生成代码 |
-| [CHANGELOG](CHANGELOG.md) | 版本历史与更新日志（v1.0.0 → v5.6.10） |
+| [CHANGELOG](CHANGELOG.md) | 版本历史与更新日志（v1.0.0 → v5.8.1） |
 | [README.en.md](README.en.md) | English project overview |
 
 ---
