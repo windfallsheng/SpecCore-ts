@@ -444,7 +444,8 @@ async function simulateTaskExecution(task: any, iteration: string): Promise<void
       const contractPath = join(taskDir, '_shared', 'API_CONTRACT.yaml');
 
       let className = convertToClassName(task.name || task.id);
-      let packageName = task.name ? task.name.replace(/[^\w]/g, '-').toLowerCase() : 'feature';
+      // 使用安全的 Java 包名：com.example.{className小写}
+      let packageName = `com.example.${className.toLowerCase()}`;
 
       // 生成 Controller 骨架
       if (await pathExists(reqPath)) {
@@ -514,10 +515,13 @@ async function simulateTaskExecution(task: any, iteration: string): Promise<void
 // ============================================================
 function generateJavaController(className: string, pkg: string, req: string): string {
   const desc = extractDescription(req);
+  // 尝试解析 API_CONTRACT.yaml 生成方法骨架
+  const methodStubs = generateMethodStubs(req);
   return `package ${pkg}.controller;
 
 import org.springframework.web.bind.annotation.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import ${pkg}.service.${className}Service;
 
 /**
@@ -529,12 +533,83 @@ import ${pkg}.service.${className}Service;
 public class ${className}Controller {
 
     @Autowired
-    private ${className}Service ${className.substring(0, 1).toLowerCase() + className.substring(1)}Service;
-
-    // TODO: Add endpoints based on API_CONTRACT.yaml
+    private ${className}Service ${uncapitalize(className)}Service;
+${methodStubs}
 }
 `;
 }
+
+/** 从 REQ.md 的接口表格中提取方法签名 */
+function generateMethodStubs(req: string): string {
+  // 匹配 REQ.md 中的接口定义表格: | METHOD | /path | description |
+  const tableRegex = /\|\s*(GET|POST|PUT|DELETE|PATCH)\s*\|\s*(\/[^\s|]+)\s*\|([^|]*)\|/gi;
+  const methods: string[] = [];
+  let match;
+  while ((match = tableRegex.exec(req)) !== null) {
+    const method = match[1].toUpperCase();
+    const path = match[2].trim();
+    const desc = match[3].trim();
+    methods.push(formatControllerMethod(method, path, desc));
+  }
+  return methods.length > 0 ? methods.join('\n') : '\n    // TODO: 请在 REQ.md 中补充接口表格';
+}
+
+function formatControllerMethod(method: string, path: string, desc: string): string {
+  const pathName = path.split('/').filter(Boolean).pop() || 'resource';
+  const hasId = path.includes('{id}');
+  const hasPage = path.includes('page');
+  
+  let annotation: string;
+  let signature: string;
+  
+  switch (method) {
+    case 'GET':
+      if (hasId) {
+        annotation = `@GetMapping("${path}")`;
+        signature = `public ResponseEntity<?> getById(@PathVariable Long id)`;
+      } else if (hasPage || path.endsWith('s')) {
+        annotation = `@GetMapping("${path}")`;
+        signature = `public ResponseEntity<?> list(@RequestParam(defaultValue = "1") int page, @RequestParam(defaultValue = "20") int size)`;
+      } else {
+        annotation = `@GetMapping("${path}")`;
+        signature = `public ResponseEntity<?> get()`;
+      }
+      break;
+    case 'POST':
+      annotation = `@PostMapping("${path}")`;
+      signature = `public ResponseEntity<?> create(@RequestBody Object body)`;
+      break;
+    case 'PUT':
+      annotation = `@PutMapping("${path}")`;
+      if (hasId) {
+        signature = `public ResponseEntity<?> update(@PathVariable Long id, @RequestBody Object body)`;
+      } else {
+        signature = `public ResponseEntity<?> update(@RequestBody Object body)`;
+      }
+      break;
+    case 'DELETE':
+      annotation = `@DeleteMapping("${path}")`;
+      if (hasId) {
+        signature = `public ResponseEntity<?> delete(@PathVariable Long id)`;
+      } else {
+        signature = `public ResponseEntity<?> delete()`;
+      }
+      break;
+    default:
+      annotation = `@PostMapping("${path}")`;
+      signature = `public ResponseEntity<?> handle(@RequestBody Object body)`;
+  }
+  
+  return `
+    /** ${desc} */
+    ${annotation}
+    ${signature} {
+        // TODO: Implement — see TASK.md for acceptance criteria
+        return ResponseEntity.ok().build();
+    }`;
+}
+
+const uncapitalize = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 
 function generateJavaService(className: string, pkg: string): string {
   return `package ${pkg}.service;
@@ -591,10 +666,16 @@ function generateVueComponent(componentName: string): string {
 
 function convertToClassName(name: string): string {
   if (!name || !name.trim()) return 'UnknownFeature';
+  // 提取 Task ID 的纯数字部分作为类名前缀，避免中文混入类名
+  // "Task-001-任务CRUD" → "Task001"
+  const idMatch = name.match(/Task-(\d+)/i);
+  if (idMatch) {
+    return `Task${idMatch[1].padStart(3, '0')}`;
+  }
+  // 回退：只保留 ASCII 字母数字
   return name
-    .split(/[-\s_]+/)
-    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join('');
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .replace(/^[a-z]/, c => c.toUpperCase()) || 'Feature';
 }
 
 function toKebab(name: string): string {

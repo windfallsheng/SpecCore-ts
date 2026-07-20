@@ -1,17 +1,8 @@
-```markdown
- # P-001: 用户认证与JWT生成模式
-
-## 适用场景
-新项目需要用户登录功能
-
-## 核心实现片段
- ```java
- public String generateToken(Long userId) {
-     return Jwts.builder()
-         .setSubject(userId.toString())
-         .signWith(getSignKey(), SignatureAlgorithm.HS256)
-         .compact();
- }
 ```
+模式沉淀：在每个 Feature 的 TASK.md 末尾记录经验
 
-
+### 踩坑记录
+- ⚠️ 坑点: 未处理 ExpiredJwtException，返回HTTP 500
+- ✅ 解决: 全局异常处理器统一捕获，返回HTTP 401
+- 📝 下次: 所有认证接口需检查 JWT 过期处理
+```
