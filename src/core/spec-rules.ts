@@ -121,3 +121,59 @@ export function getTodoHint(rules: SpecRules): string {
   }
   return '// TODO: Implement — see TASK.md\n        ' + hints[0] + ';';
 }
+
+// ============================================
+// Tech Stack 解析
+// ============================================
+
+export type SupportedLanguage = 'java' | 'typescript' | 'go' | 'python' | 'unknown';
+
+export interface TechStack {
+  language: SupportedLanguage;
+  backendFramework: string;
+  orm: string;
+  frontendFramework: string;
+}
+
+const DEFAULT_TECH_STACK: TechStack = {
+  language: 'java',
+  backendFramework: 'Spring Boot',
+  orm: 'JPA',
+  frontendFramework: 'Vue',
+};
+
+/** 从 TECH_STACK.md 加载技术栈配置 */
+export async function loadTechStack(): Promise<TechStack> {
+  const techPath = join(process.cwd(), '.speccore', 'GLOBAL', 'TECH_STACK.md');
+  if (!(await pathExists(techPath))) {
+    return { ...DEFAULT_TECH_STACK };
+  }
+
+  const content = await readFile(techPath, 'utf-8');
+  const stack = { ...DEFAULT_TECH_STACK };
+
+  // 解析 <!-- tech-stack: backend --> 区块
+  const backendMatch = content.match(/<!--\s*tech-stack:\s*backend\s*-->([\s\S]*?)<!--\s*\/tech-stack\s*-->/);
+  if (backendMatch) {
+    const body = backendMatch[1];
+    if (body.includes('Java')) stack.language = 'java';
+    else if (body.includes('TypeScript') || body.includes('Node')) stack.language = 'typescript';
+    else if (body.includes('Go') || body.includes('Golang')) stack.language = 'go';
+    else if (body.includes('Python')) stack.language = 'python';
+
+    const fwMatch = body.match(/框架[:：]\s*(\S+)/);
+    if (fwMatch) stack.backendFramework = fwMatch[1];
+    const ormMatch = body.match(/ORM[:：]\s*(\S+)/);
+    if (ormMatch) stack.orm = ormMatch[1];
+  }
+
+  // 解析 <!-- tech-stack: frontend --> 区块
+  const frontendMatch = content.match(/<!--\s*tech-stack:\s*frontend\s*-->([\s\S]*?)<!--\s*\/tech-stack\s*-->/);
+  if (frontendMatch) {
+    const body = frontendMatch[1];
+    const fwMatch = body.match(/框架[:：]\s*(\S+)/);
+    if (fwMatch) stack.frontendFramework = fwMatch[1];
+  }
+
+  return stack;
+}
