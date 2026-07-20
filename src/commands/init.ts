@@ -138,6 +138,38 @@ async function createDefaultFiles(speccoreDir: string): Promise<void> {
 - 数据库：snake_case
 - 代码：camelCase / PascalCase
 
+## 代码规范（会被 execute 自动注入）
+
+<!-- spec-rule: exception-handler -->
+- 统一异常：所有 Controller 方法抛出 BusinessException
+- 全局捕获：@ControllerAdvice 统一处理，返回 { code, message, data }
+- 禁止：直接返回 null 或不处理异常
+<!-- /spec-rule -->
+
+<!-- spec-rule: response-format -->
+- 统一返回类型：Result<T> = { code: Integer, message: String, data: T }
+- Controller 方法签名：public Result<XxxDTO> methodName(...)
+<!-- /spec-rule -->
+
+<!-- spec-rule: orm -->
+- ORM 框架：MyBatis-Plus 3.5
+- 数据访问：XxxRepository extends BaseMapper<Xxx>，禁止手写 SQL
+- 软删除：@TableLogic 注解，查询自动过滤已删除记录
+<!-- /spec-rule -->
+
+<!-- spec-rule: naming -->
+- Controller：XxxController
+- Service：XxxService（接口）+ XxxServiceImpl（实现）
+- Repository：XxxRepository extends BaseMapper<Xxx>
+- DTO：CreateXxxDTO / UpdateXxxDTO / XxxPageDTO
+<!-- /spec-rule -->
+
+<!-- spec-rule: validation -->
+- 参数校验：Controller 层 @Valid + JSR-303 注解
+- DTO：@NotBlank / @NotNull / @Pattern
+- 失败返回：MethodArgumentNotValidException → 400 + 错误详情
+<!-- /spec-rule -->
+
 ## 异常码体系
 | 错误码 | 含义 | 场景 |
 | :--- | :--- | :--- |

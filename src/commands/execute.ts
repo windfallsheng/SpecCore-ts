@@ -5,6 +5,7 @@ import { t } from '../i18n/t';
 import { getDefaultIteration, updateContext, recordHistory, startHotfix } from '../core/context';
 import { scanTasks, topologicalSort } from '../core/state';
 import { FileTransaction } from '../core/transaction';
+import { loadSpecRules, generateImports, getTodoHint, SpecRules } from '../core/spec-rules';
 
 import { logOperation } from '../core/operation-log';
 import {
@@ -436,6 +437,9 @@ async function simulateTaskExecution(task: any, iteration: string): Promise<void
   if (await pathExists(taskDir)) {
     const tx = new FileTransaction();
 
+    // 加载全局 Spec 规则（会被注入到生成的代码中）
+    const specRules = await loadSpecRules();
+
     // 读取后端 Spec 生成代码骨架
     const backendDir = join(taskDir, 'backend');
     if (await pathExists(backendDir)) {
@@ -450,7 +454,7 @@ async function simulateTaskExecution(task: any, iteration: string): Promise<void
       // 生成 Controller 骨架
       if (await pathExists(reqPath)) {
         const req = await readFile(reqPath, 'utf-8');
-        const controllerCode = generateJavaController(className, packageName, req);
+        const controllerCode = generateJavaController(className, packageName, req, specRules);
         const ctrlPath = join(backendDir, `${className}Controller.java`);
         tx.write(ctrlPath, controllerCode);
         filesUpdated++;
@@ -513,16 +517,13 @@ async function simulateTaskExecution(task: any, iteration: string): Promise<void
 // ============================================================
 // Code generation helpers
 // ============================================================
-function generateJavaController(className: string, pkg: string, req: string): string {
+function generateJavaController(className: string, pkg: string, req: string, rules: SpecRules): string {
   const desc = extractDescription(req);
-  // 尝试解析 API_CONTRACT.yaml 生成方法骨架
-  const methodStubs = generateMethodStubs(req);
+  const methodStubs = generateMethodStubs(req, rules);
+  const imports = generateImports(rules, className);
   return `package ${pkg}.controller;
 
-import org.springframework.web.bind.annotation.*;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
-import ${pkg}.service.${className}Service;
+${imports}
 
 /**
  * ${desc}
@@ -540,7 +541,7 @@ ${methodStubs}
 }
 
 /** 从 REQ.md 的接口表格中提取方法签名 */
-function generateMethodStubs(req: string): string {
+function generateMethodStubs(req: string, rules?: SpecRules): string {
   // 匹配 REQ.md 中的接口定义表格: | METHOD | /path | description |
   const tableRegex = /\|\s*(GET|POST|PUT|DELETE|PATCH)\s*\|\s*(\/[^\s|]+)\s*\|([^|]*)\|/gi;
   const methods: string[] = [];
@@ -549,13 +550,18 @@ function generateMethodStubs(req: string): string {
     const method = match[1].toUpperCase();
     const path = match[2].trim();
     const desc = match[3].trim();
-    methods.push(formatControllerMethod(method, path, desc));
+    methods.push(formatControllerMethod(method, path, desc, rules));
   }
   return methods.length > 0 ? methods.join('\n') : '\n    // TODO: 请在 REQ.md 中补充接口表格';
 }
 
-function formatControllerMethod(method: string, path: string, desc: string): string {
-  const pathName = path.split('/').filter(Boolean).pop() || 'resource';
+function formatControllerMethod(method: string, path: string, desc: string, rules?: SpecRules): string {
+  const rt = rules || { exceptionHandler: 'none', responseFormat: 'ResponseEntity' } as SpecRules;
+  const returnType = rt.responseFormat === 'Result' ? 'Result<?>' : 'ResponseEntity<?>';
+  const bodyHint = rt.exceptionHandler === 'BusinessException'
+    ? 'throw new BusinessException("Not implemented");'
+    : 'return ResponseEntity.ok().build();';
+  
   const hasId = path.includes('{id}');
   const hasPage = path.includes('page');
   
@@ -566,46 +572,45 @@ function formatControllerMethod(method: string, path: string, desc: string): str
     case 'GET':
       if (hasId) {
         annotation = `@GetMapping("${path}")`;
-        signature = `public ResponseEntity<?> getById(@PathVariable Long id)`;
+        signature = `public ${returnType} getById(@PathVariable Long id)`;
       } else if (hasPage || path.endsWith('s')) {
         annotation = `@GetMapping("${path}")`;
-        signature = `public ResponseEntity<?> list(@RequestParam(defaultValue = "1") int page, @RequestParam(defaultValue = "20") int size)`;
+        signature = `public ${returnType} list(@RequestParam(defaultValue = "1") int page, @RequestParam(defaultValue = "20") int size)`;
       } else {
         annotation = `@GetMapping("${path}")`;
-        signature = `public ResponseEntity<?> get()`;
+        signature = `public ${returnType} get()`;
       }
       break;
     case 'POST':
       annotation = `@PostMapping("${path}")`;
-      signature = `public ResponseEntity<?> create(@RequestBody Object body)`;
+      signature = `public ${returnType} create(@RequestBody Object body)`;
       break;
     case 'PUT':
       annotation = `@PutMapping("${path}")`;
       if (hasId) {
-        signature = `public ResponseEntity<?> update(@PathVariable Long id, @RequestBody Object body)`;
+        signature = `public ${returnType} update(@PathVariable Long id, @RequestBody Object body)`;
       } else {
-        signature = `public ResponseEntity<?> update(@RequestBody Object body)`;
+        signature = `public ${returnType} update(@RequestBody Object body)`;
       }
       break;
     case 'DELETE':
       annotation = `@DeleteMapping("${path}")`;
       if (hasId) {
-        signature = `public ResponseEntity<?> delete(@PathVariable Long id)`;
+        signature = `public ${returnType} delete(@PathVariable Long id)`;
       } else {
-        signature = `public ResponseEntity<?> delete()`;
+        signature = `public ${returnType} delete()`;
       }
       break;
     default:
       annotation = `@PostMapping("${path}")`;
-      signature = `public ResponseEntity<?> handle(@RequestBody Object body)`;
+      signature = `public ${returnType} handle(@RequestBody Object body)`;
   }
   
   return `
     /** ${desc} */
     ${annotation}
     ${signature} {
-        // TODO: Implement — see TASK.md for acceptance criteria
-        return ResponseEntity.ok().build();
+        ${bodyHint}
     }`;
 }
 
