@@ -9,6 +9,36 @@ export interface IterationSplitOptions {
   sections?: string;
   target?: string;
   dryRun?: boolean;
+  platforms?: string;
+}
+
+async function detectPlatforms(iterationDir: string, specified?: string): Promise<string[]> {
+  if (specified) return specified.split(',').map(p => p.trim()).filter(Boolean);
+  
+  // Auto-detect from INDEX.md (populated by word2spec)
+  const indexPath = join(iterationDir, '00-需求文档', 'INDEX.md');
+  if (await pathExists(indexPath)) {
+    const content = await readFile(indexPath, 'utf-8');
+    // Parse table rows: skip header and separator lines
+    const lines = content.split('\n');
+    const platforms = new Set<string>();
+    let inTable = false;
+    for (const line of lines) {
+      if (line.startsWith('|') && !line.includes(':---')) {
+        const cols = line.split('|').map(c => c.trim()).filter(Boolean);
+        // First column is platform name, skip header row
+        if (cols[0] && cols[0] !== '端' && !String(cols[0]).includes('文件')) {
+          platforms.add(cols[0]);
+          inTable = true;
+        }
+      }
+    }
+    // Also check for common date patterns in first col and filter them
+    const filtered = [...platforms].filter(p => !/^\d{4}-\d{2}-\d{2}$/.test(p));
+    if (filtered.length > 0) return filtered;
+  }
+  
+  return ['web']; // default
 }
 
 export async function iterationSplitCommand(options: IterationSplitOptions): Promise<void> {
@@ -39,6 +69,9 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     }
 
     logger.info(`Found ${sections.length} sections to split`);
+    
+    const platforms = await detectPlatforms(iterationDir, options.platforms);
+    logger.info(`Platforms: ${platforms.join(', ')}`);
 
     if (options.dryRun) {
       spinner.stop('Dry run complete - no files created');
@@ -51,7 +84,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     // Create tasks
     for (let i = 0; i < sections.length; i++) {
       const taskId = `Task-${String(i + 1).padStart(3, '0')}`;
-      await createTaskFromSection(iterationDir, taskId, sections[i]);
+      await createTaskFromSection(iterationDir, taskId, sections[i], platforms);
     }
 
     // Update PROJECT_GRAPH.md
@@ -111,12 +144,16 @@ function extractSections(content: string, sectionFilter?: string): Section[] {
   return sections;
 }
 
-async function createTaskFromSection(iterationDir: string, taskId: string, section: Section): Promise<void> {
+async function createTaskFromSection(iterationDir: string, taskId: string, section: Section, platforms: string[]): Promise<void> {
   const taskDir = join(iterationDir, taskId);
   
   await ensureDir(join(taskDir, 'backend'));
-  await ensureDir(join(taskDir, 'frontend'));
   await ensureDir(join(taskDir, '_shared'));
+
+  // Create per-platform frontend directories
+  for (const platform of platforms) {
+    await ensureDir(join(taskDir, 'frontend', platform));
+  }
 
   // Write task type
   await writeFile(join(taskDir, '.task-type'), 'feature');
@@ -180,15 +217,21 @@ ${section.content}
 `
   );
 
-  // Copy to frontend
+  // Copy to each frontend platform
   const reqContent = await readFile(join(taskDir, 'backend', 'REQ.md'), 'utf-8');
-  await writeFile(join(taskDir, 'frontend', 'REQ.md'), reqContent);
+  for (const platform of platforms) {
+    await writeFile(join(taskDir, 'frontend', platform, 'REQ.md'), reqContent);
+  }
   
   const techContent = await readFile(join(taskDir, 'backend', 'TECH.md'), 'utf-8');
-  await writeFile(join(taskDir, 'frontend', 'TECH.md'), techContent);
+  for (const platform of platforms) {
+    await writeFile(join(taskDir, 'frontend', platform, 'TECH.md'), techContent);
+  }
   
   const taskContent = await readFile(join(taskDir, 'backend', 'TASK.md'), 'utf-8');
-  await writeFile(join(taskDir, 'frontend', 'TASK.md'), taskContent);
+  for (const platform of platforms) {
+    await writeFile(join(taskDir, 'frontend', platform, 'TASK.md'), taskContent);
+  }
 }
 
 async function updateProjectGraph(iterationDir: string, sections: Section[]): Promise<void> {

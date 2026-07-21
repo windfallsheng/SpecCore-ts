@@ -161,10 +161,11 @@ iterationCmd
   .command('split')
   .alias('sp')
   .description('Split requirements into tasks')
-  .option('-f, --file <file>', 'Requirement file path', '00-需求文档/REQUIREMENT.md')
+  .option('-f, --file <file>', 'Requirement file path', 'REQUIREMENT.md')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('--sections <sections>', 'Specific sections to split')
   .option('--target <target>', 'Merge into existing task')
+  .option('-p, --platforms <platforms>', 'Comma-separated platforms (auto-detected if omitted)')
   .option('--dry-run', 'Preview without creating')
   .action(iterationSplitCommand);
 
