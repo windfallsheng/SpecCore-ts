@@ -245,7 +245,7 @@ async function executeWithProgress(tasks, iteration, base) {
         if (!base) {
             base = await detectDependencyBase(iteration, task.id);
         }
-        const branch = (0, git_integration_1.createTaskBranch)(task.id, task.name || 'feature', base);
+        const branch = (0, git_integration_1.createTaskBranch)(task.id, task.id, base);
         if (branch) {
             const baseInfo = base ? ` (from ${base})` : '';
             logger_1.logger.info(`🌿 Created branch: ${branch}${baseInfo}`);
