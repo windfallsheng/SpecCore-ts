@@ -32,6 +32,7 @@ speccore spec "create user login feature"
 | Command | Alias | Description | Options |
 | :--- | :--- | :--- | :--- |
 | `speccore init` | `in` | Initialize SpecCore project | `--force` |
+| `speccore word2spec` | `w2s` | Convert Word (.docx/.doc) → SpecCore Markdown | `--file <path>` `--iteration <name>` `--platform <name>` |
 | `speccore import` | `imp` | Import project to global layer | `--project <name>` `--path <path>` `--type <type>` `--scope <scope>` `--ignore <pkgs>` `--update` |
 
 ```bash

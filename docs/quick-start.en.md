@@ -1,6 +1,7 @@
 # SpecCore — Quick Start Guide
 
-> Get started with SpecCore. Read the [README](../README.en.md) first for an overview, then follow this guide.
+> Get started with SpecCore. All operations support three entry modes:
+> ⌨️ **CLI**: `speccore init` | 🤖 **AI Slash**: `/spec-init` | 💬 **AI Chat**: "Initialize a project"
 
 ---
 
@@ -8,6 +9,7 @@
 
 - **Node.js**: >= 18.0.0
 - **OS**: macOS / Linux / Windows
+- **Optional**: pandoc (for `speccore word2spec` Word import; command prompts for auto-install if missing)
 
 ## Install
 
@@ -48,6 +50,7 @@ npx speccore --help
 ```bash
 cd my-project
 speccore init
+# 💬 "Initialize a SpecCore project"
 ```
 
 Initialization auto-completes:
