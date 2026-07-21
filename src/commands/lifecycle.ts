@@ -7,6 +7,7 @@ import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
 import { scanTasks } from '../core/state';
 
+import { showNextSteps } from '../core/next-steps';
 export interface LifecycleOptions {
   task?: string;
   status?: string;     // 手动设置状态
@@ -169,6 +170,7 @@ function updateState(content: string, from: State, to: State): string {
 
 function showLifecycleDiagram(): void {
   logger.info('\n📋 任务生命周期流程:\n');
+  showNextSteps('lifecycle');
   logger.info('  🔲 pending        → 待开发');
   logger.info('       ↓ speccore execute');
   logger.info('  🔵 in_progress    → 开发中');

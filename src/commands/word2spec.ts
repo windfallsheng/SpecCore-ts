@@ -17,6 +17,7 @@ import { execSync } from 'child_process';
 import { pathExists, ensureDir, readFile, writeFile, readdir, stat, unlink } from 'fs-extra';
 import { join, basename } from 'path';
 
+import { showNextSteps } from '../core/next-steps';
 function findCommand(cmd: string): string | null {
   try {
     return execSync(`which ${cmd}`, { stdio: 'pipe', encoding: 'utf-8' }).trim();
