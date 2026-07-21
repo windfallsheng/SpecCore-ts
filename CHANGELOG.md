@@ -2,6 +2,25 @@
 
 ---
 
+## v5.11.0 (2026-07-21)
+
+### 🆕 word2spec — Word 需求文档一键导入
+- `speccore word2spec` 命令 (.docx/.doc → SpecCore Markdown)
+- 图片自动提取到 `期次/00-需求文档/images/`
+- Task 共享引用路径: `../../00-需求文档/images/`
+- .doc 旧格式自动升级 (via LibreOffice)
+- INDEX.md 自动生成 + 接口表格智能检测
+
+### 📦 word2spec / word2md Skills
+- 对话式: "把 Q3 的 PRD 转成 Spec"
+- Shell 脚本: `scripts/convert.sh` 可独立运行
+- word2md: 纯格式转换（无 SpecCore 依赖）
+
+### 🐛 Bug 修复
+- Controller body 与返回类型一致 (Result<?> → Result.error())
+- 口语标准化「修了个bug」→「修复: bug」等 3 处修复
+- any 类型 28→6，未使用 import 全面清理
+
 ## v5.10.0 (2026-07-21)
 
 ### 🆕 备份与回滚
