@@ -43,6 +43,7 @@ const baseline_1 = require("./commands/baseline");
 const dashboard_1 = require("./commands/dashboard");
 const audit_1 = require("./commands/audit");
 const analyze_1 = require("./commands/analyze");
+const lifecycle_1 = require("./commands/lifecycle");
 // rename 命令
 const rename_1 = require("./commands/rename");
 // v4.0.0 新增命令
@@ -578,6 +579,17 @@ commander_1.program
     .option('--format <format>', 'Output format: text or json', 'text')
     .action(validate_1.validateCommand);
 // v4.7.0 体验增强命令
+commander_1.program;
+commander_1.program
+    .command('lifecycle')
+    .alias('lc')
+    .description('Task lifecycle: pending → dev → test → review → done')
+    .option('-t, --task <task>', 'Target task')
+    .option('-s, --status <status>', 'Set status: pending/testing/review/done')
+    .option('-i, --iteration <iteration>', 'Target iteration')
+    .option('--check', 'Check TEST.md/REVIEW.md progress')
+    .option('--all', 'Show all tasks kanban board')
+    .action(lifecycle_1.lifecycleCommand);
 commander_1.program
     .command('completion [shell]')
     .description('Generate shell completion script (bash/zsh)')

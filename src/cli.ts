@@ -41,6 +41,7 @@ import { baselineCommand } from './commands/baseline';
 import { dashboardCommand } from './commands/dashboard';
 import { auditCommand } from './commands/audit';
 import { analyzeCommand } from './commands/analyze';
+import { lifecycleCommand } from './commands/lifecycle';
 // rename 命令
 import { renameCommand } from './commands/rename';
 // v4.0.0 新增命令
@@ -625,6 +626,18 @@ program
   .action(validateCommand);
 
 // v4.7.0 体验增强命令
+program
+program
+  .command('lifecycle')
+  .alias('lc')
+  .description('Task lifecycle: pending → dev → test → review → done')
+  .option('-t, --task <task>', 'Target task')
+  .option('-s, --status <status>', 'Set status: pending/testing/review/done')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('--check', 'Check TEST.md/REVIEW.md progress')
+  .option('--all', 'Show all tasks kanban board')
+  .action(lifecycleCommand);
+
 program
   .command('completion [shell]')
   .description('Generate shell completion script (bash/zsh)')
