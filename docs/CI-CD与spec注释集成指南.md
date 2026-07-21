@@ -51,7 +51,17 @@ jobs:
         run: speccore progress --format=json
 ```
 
-### 3. 完整 CI 结构
+### 3. 各阶段检查项
+
+| CI 阶段 | 检查命令 | 拦截什么 |
+| :--- | :--- | :--- |
+| Pre-commit | `speccore validate` | REQ.md 格式错误、接口表缺失 |
+| Pre-push | `speccore sync --all --detect` | Spec 与代码不一致 |
+| PR 检查 | `speccore audit` | 全局合规性 |
+| 合并后 | `speccore sync-global --direction=to_global` | 更新视角索引 |
+| 发版前 | `speccore dashboard` | 整体进度、健康度一张图 |
+
+### 4. 完整 CI 结构
 
 ```
 项目根目录/
