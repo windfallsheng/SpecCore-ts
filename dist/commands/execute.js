@@ -103,6 +103,10 @@ async function executeCommand(options) {
             (0, operation_log_1.logOperation)(`speccore execute --dry-run`, `${sortedTasks.length} tasks`);
             return;
         }
+        // === Strict mode: pre-flight check before executing ===
+        if (options.strict) {
+            await preFlightCheck(sortedTasks, iteration, options);
+        }
         // === Preview (default, unless --force) ===
         if (!options.force) {
             printExecutionPreview(sortedTasks, iteration);
@@ -660,5 +664,110 @@ async function handleHotfix(options, taskIds) {
     logger_1.logger.warn('   Grace period: 30 min (skip reverse sync)');
     logger_1.logger.warn('   Mandatory sync deadline: 24 hours');
     logger_1.logger.warn('   Run: speccore sync --reverse to complete');
+}
+// ============================================================
+// Strict mode pre-flight check
+// ============================================================
+async function preFlightCheck(tasks, iteration, options) {
+    const iterDir = `期次-${iteration}`;
+    const ask = (q) => {
+        logger_1.logger.info(q);
+        return new Promise((resolve) => {
+            process.stdin.resume();
+            process.stdin.once('data', (data) => {
+                process.stdin.pause();
+                resolve(data.toString().split('\n')[0].trim());
+            });
+        });
+    };
+    logger_1.logger.info('\n╔══════════════════════════════════════════════╗');
+    logger_1.logger.info('║  🔍 Strict Mode — Pre-Flight Check           ║');
+    logger_1.logger.info('╚══════════════════════════════════════════════╝\n');
+    let issues = [];
+    for (const task of tasks) {
+        const taskDir = (0, path_1.join)(iterDir, task.id);
+        logger_1.logger.info(`\n── ${task.id} ──\n`);
+        // 1. Requirement completeness
+        const reqPath = (0, path_1.join)(taskDir, 'backend', 'REQ.md');
+        if (await (0, fs_extra_1.pathExists)(reqPath)) {
+            const req = await (0, fs_extra_1.readFile)(reqPath, 'utf-8');
+            const sections = (req.match(/^###?\s+.+/gm) || []).length;
+            const apis = (req.match(/\| (GET|POST|PUT|DELETE|PATCH) \|/g) || []).length;
+            logger_1.logger.info(`  1. 需求分析: ${sections} 章节 / ${apis} 接口`);
+            if (sections === 0 && apis === 0) {
+                issues.push(`${task.id}: 需求文档为空，建议补充 REQ.md`);
+            }
+        }
+        else {
+            issues.push(`${task.id}: 缺少 REQ.md`);
+        }
+        // 2. Tech plan
+        const techPath = (0, path_1.join)(taskDir, 'backend', 'TECH.md');
+        if (await (0, fs_extra_1.pathExists)(techPath)) {
+            const tech = await (0, fs_extra_1.readFile)(techPath, 'utf-8');
+            const hasDb = tech.includes('数据库') || tech.includes('表');
+            const hasDep = tech.includes('依赖') || tech.includes('MQ') || tech.includes('Redis');
+            logger_1.logger.info(`  2. 技术方案: ${hasDb ? '含DB变更' : '无DB变更'} / ${hasDep ? '含新依赖' : '无新依赖'}`);
+        }
+        else {
+            issues.push(`${task.id}: 缺少 TECH.md（技术方案）`);
+        }
+        // 3. Test cases
+        const testPath = (0, path_1.join)(taskDir, 'backend', 'TEST.md');
+        if (await (0, fs_extra_1.pathExists)(testPath)) {
+            const test = await (0, fs_extra_1.readFile)(testPath, 'utf-8');
+            const total = (test.match(/⬜|✅|❌/g) || []).length;
+            logger_1.logger.info(`  3. 测试用例: ${total} 项（请在开发后填写）`);
+        }
+        // 4. Review checklist
+        const reviewPath = (0, path_1.join)(taskDir, 'backend', 'REVIEW.md');
+        if (await (0, fs_extra_1.pathExists)(reviewPath)) {
+            logger_1.logger.info(`  4. 审查清单: ✅ 已就绪`);
+        }
+        // 5. API contract
+        const apiPath = (0, path_1.join)(taskDir, '_shared', 'API_CONTRACT.yaml');
+        if (await (0, fs_extra_1.pathExists)(apiPath)) {
+            const api = await (0, fs_extra_1.readFile)(apiPath, 'utf-8');
+            const hasEndpoints = api.includes('/api/') || api.includes('path:');
+            logger_1.logger.info(`  5. API 契约: ${hasEndpoints ? '✅ 已定义接口' : '⚠️ 接口未定义'}`);
+            if (!hasEndpoints)
+                issues.push(`${task.id}: API_CONTRACT.yaml 缺少接口定义`);
+        }
+        // 6. Platform
+        const frontendDir = (0, path_1.join)(taskDir, 'frontend');
+        if (await (0, fs_extra_1.pathExists)(frontendDir)) {
+            const fsa = require('fs');
+            const platforms = fsa.readdirSync(frontendDir, { withFileTypes: true })
+                .filter((d) => d.isDirectory()).map((d) => d.name);
+            logger_1.logger.info(`  6. 涉及端: ${platforms.join(', ')}`);
+        }
+        // 7. Constitution compliance
+        logger_1.logger.info(`  7. 宪法合规: 待 speccore validate 校验`);
+    }
+    // ── Summary ──
+    logger_1.logger.info('\n──────────────────────────────────────────────');
+    if (issues.length > 0) {
+        logger_1.logger.warn('⚠️  发现问题:\n');
+        for (const i of issues)
+            logger_1.logger.warn(`  - ${i}`);
+        logger_1.logger.info('');
+        const fix = await ask('  是否继续开发？[y/N] ');
+        if (fix.toLowerCase() !== 'y') {
+            logger_1.logger.info('\n❌ 已取消。请修复上述问题后重试。');
+            process.exit(0);
+        }
+        logger_1.logger.info('\n✅ 确认继续（已知悉风险）');
+    }
+    else {
+        logger_1.logger.info('✅ 未发现阻断问题');
+    }
+    // ── Final confirm ──
+    logger_1.logger.info(`\n  将生成 ${tasks.length} 个任务`);
+    const confirm = await ask('  确认开始开发？[y/N] ');
+    if (confirm.toLowerCase() !== 'y') {
+        logger_1.logger.info('\n❌ 已取消。');
+        process.exit(0);
+    }
+    logger_1.logger.info('\n✅ 确认通过，开始执行...\n');
 }
 //# sourceMappingURL=execute.js.map
