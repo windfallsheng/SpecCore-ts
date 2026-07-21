@@ -1,6 +1,7 @@
 import { join } from 'path';
 import { logger, Spinner, formatTable } from '../utils/logger';
-import { getDefaultIteration, getHotfixStatus } from '../core/context';
+import { getDefaultIteration, getHotfixStatus } from "../core/context";
+import { TaskState } from "../core/state";;
 import { readProjectGraph, scanTasks } from '../core/state';
 
 export interface ProgressOptions {
@@ -46,7 +47,8 @@ export async function progressCommand(options: ProgressOptions): Promise<void> {
   }
 }
 
-function printProgress(iteration: string, tasks: any[], options: ProgressOptions): void {
+function printProgress(iteration: string, 
+tasks: TaskState[], options: ProgressOptions): void {
   const total = tasks.length;
   const completed = tasks.filter(t => t.status === 'completed').length;
   const inProgress = tasks.filter(t => t.status === 'in_progress').length;
@@ -95,7 +97,7 @@ function printProgress(iteration: string, tasks: any[], options: ProgressOptions
   }
 }
 
-function printTaskProgress(task: any): void {
+function printTaskProgress(task: TaskState): void {
   logger.info('');
   logger.info(`📋 Task: ${task.id} - ${task.name}`);
   logger.info(`  Type: ${task.type}`);

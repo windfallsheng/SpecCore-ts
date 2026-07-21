@@ -287,10 +287,12 @@ async function executeResume(iteration) {
     logger_1.logger.info(`⏳ Resuming from Batch ${state.currentBatch}/${state.totalBatches}`);
     // Continue from current batch
     while (state.currentBatch <= state.totalBatches) {
+        // Convert string IDs to TaskState objects for processBatch
         const batchTasks = (0, execution_state_1.getCurrentBatchTasks)(state);
         if (batchTasks.length === 0)
             break;
-        await processBatch(batchTasks, state, iteration);
+        const taskObjs = batchTasks.map(id => ({ id, name: id, type: 'unknown', status: 'pending', assignee: '', dependencies: [], priority: 'medium', progress: 0 }));
+        await processBatch(taskObjs, state, iteration);
         state = (0, execution_state_1.loadExecutionState)();
     }
     logger_1.logger.success('All batches completed!');
@@ -311,8 +313,8 @@ async function executeBatchMode(tasks, iteration, batchSize, options) {
             break;
         // Find actual task objects
         const taskObjs = batchTasks
-            .map((id) => tasks.find((t) => t.id === id))
-            .filter(Boolean);
+            .map((id) => tasks.find(t => t.id === id))
+            .filter((t) => t !== undefined);
         await processBatch(taskObjs, state, iteration);
         // Reload state (completedBatch updated it)
         const updated = (0, execution_state_1.loadExecutionState)();
@@ -336,7 +338,7 @@ async function processBatch(tasks, state, iteration) {
     logger_1.logger.info(`📖 Loading context for batch ${batchNum}...`);
     logger_1.logger.info(`   CONSTITUTION.md → architecture constraints`);
     logger_1.logger.info(`   PROJECT_GRAPH.md → dependency status`);
-    logger_1.logger.info(`   Tasks: ${tasks.map((t) => t.id || t).join(', ')}`);
+    logger_1.logger.info(`   Tasks: ${tasks.map(t => t.id).join(', ')}`);
     // Execute tasks in batch
     const completed = [];
     const total = tasks.length;
@@ -346,10 +348,10 @@ async function processBatch(tasks, state, iteration) {
         const progress = Math.round(((i + 1) / total) * 100);
         const bar = createBar(progress, 20);
         logger_1.logger.info(``);
-        logger_1.logger.info(`  ${bar} ${(i + 1)}/${total} — ${task.id || task} ${task.name || ''}`);
+        logger_1.logger.info(`  ${bar} ${(i + 1)}/${total} — ${task.id} ${task.name}`);
         logger_1.logger.info(`  🔄 Executing...`);
         await simulateTaskExecution(task, iteration);
-        completed.push(task.id || task);
+        completed.push(task.id);
         logger_1.logger.info(`  ✅ ${task.id || task} completed`);
         const elapsed = Math.round((Date.now() - startTime) / 1000);
         const estRemaining = Math.round((elapsed / (i + 1)) * (total - i - 1));

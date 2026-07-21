@@ -1,7 +1,8 @@
 import { pathExists, readFile, writeFile, ensureDir } from 'fs-extra';
 import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
-import { getDefaultIteration } from '../core/context';
+import { getDefaultIteration } from "../core/context";
+import { TaskState } from "../core/state";;
 import { readProjectGraph, scanTasks } from '../core/state';
 
 export interface ReportOptions {
@@ -43,7 +44,7 @@ export async function reportCommand(options: ReportOptions): Promise<void> {
   }
 }
 
-function generateReport(iteration: string, tasks: any[], options: ReportOptions): string {
+function generateReport(iteration: string, tasks: TaskState[], options: ReportOptions): string {
   const total = tasks.length;
   const completed = tasks.filter(t => t.status === 'completed').length;
   const inProgress = tasks.filter(t => t.status === 'in_progress').length;
@@ -76,7 +77,7 @@ function generateReport(iteration: string, tasks: any[], options: ReportOptions)
 
 function generateMarkdownReport(
   iteration: string, total: number, completed: number, inProgress: number, pending: number,
-  completionRate: number, tasks: any[], options: ReportOptions
+  completionRate: number, tasks: TaskState[], options: ReportOptions
 ): string {
   const lines: string[] = [];
   lines.push(`# Project Report - ${iteration}`);
@@ -108,7 +109,7 @@ function generateMarkdownReport(
 
 function generateHtmlReport(
   iteration: string, total: number, completed: number, inProgress: number, pending: number,
-  completionRate: number, tasks: any[]
+  completionRate: number, tasks: TaskState[]
 ): string {
   return `<!DOCTYPE html>
 <html>

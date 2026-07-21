@@ -171,7 +171,7 @@ async function printTaskDetails(taskDir: string, indent: string): Promise<void> 
 async function findFiles(dir: string, ext: string): Promise<string[]> {
   try {
     const entries = await readdir(dir, { withFileTypes: true, recursive: true });
-    return entries.filter((e: any) => e.isFile() && e.name.endsWith(ext)).map((e: any) => e.name);
+    return entries.filter((e: import("fs-extra").Dirent) => e.isFile() && e.name.endsWith(ext)).map((e: any) => e.name);
   } catch {
     return [];
   }

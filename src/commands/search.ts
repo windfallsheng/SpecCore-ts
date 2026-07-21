@@ -105,9 +105,10 @@ async function searchInDir(dir: string, keyword: string, results: SearchResult[]
             });
           }
         }
-      } catch (err: any) {
-      if (err?.code !== "ENOENT") logger.warn(`Search skip: encoding error in ${fullPath}`);
-    }
+      } catch (err) {
+        const e = err as NodeJS.ErrnoException;
+        if (e.code !== "ENOENT") logger.warn(`Search skip: encoding error in ${fullPath}`);
+      }
     }
   }
 }

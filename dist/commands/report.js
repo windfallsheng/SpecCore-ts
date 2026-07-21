@@ -5,6 +5,7 @@ const fs_extra_1 = require("fs-extra");
 const path_1 = require("path");
 const logger_1 = require("../utils/logger");
 const context_1 = require("../core/context");
+;
 const state_1 = require("../core/state");
 async function reportCommand(options) {
     const spinner = new logger_1.Spinner('Generating project report');
