@@ -385,9 +385,11 @@ program
 program
   .command('config')
   .alias('cf')
-  .description('Manage SpecCore configuration')
+  .description('Manage SpecCore configuration and code rules')
   .option('--get <key>', 'Get configuration value')
-  .option('--set <key=value>', 'Set configuration value')
+  .option('--set <key=value>', 'Set configuration value (SETTINGS.md)')
+  .option('-r, --rule <name>', 'Target spec-rule (CONSTITUTION.md)')
+  .option('-t, --tech <target>', 'Target tech-stack (TECH_STACK.md): backend | frontend')
   .option('--reset', 'Reset to default configuration')
   .action(configCommand);
 
