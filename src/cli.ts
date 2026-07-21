@@ -29,6 +29,7 @@ import { templateAddCommand } from './commands/template-add';
 import { helpCommand } from './commands/help';
 import { demoCommand } from './commands/demo';
 import { welcomeCommand } from './commands/welcome';
+import { word2specCommand } from './commands/word2spec';
 // 全量层命令
 import { iterationFromGlobalCommand } from './commands/iteration-from-global';
 import { syncGlobalCommand } from './commands/sync-global';
@@ -438,6 +439,15 @@ program
   .option('--name <name>', 'Iteration name (required)')
   .option('--force', 'Force overwrite existing iteration')
   .action(iterationFromGlobalCommand);
+
+program
+  .command('word2spec')
+  .alias('w2s')
+  .description('Convert Word (.docx/.doc) requirement docs to SpecCore Markdown')
+  .option('-f, --file <path>', 'Source Word file path (required)')
+  .option('-i, --iteration <name>', 'Target iteration name (required)')
+  .option('-p, --platform <name>', 'Platform/end identifier (e.g. 后台/Web/小程序)')
+  .action(word2specCommand);
 
 program
   .command('sync-global')
