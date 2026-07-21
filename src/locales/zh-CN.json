@@ -1,5 +1,8 @@
 {
-  "_meta": { "locale": "zh-CN", "name": "中文" },
+  "_meta": {
+    "locale": "zh-CN",
+    "name": "中文"
+  },
   "cmd": {
     "init": {
       "start": "初始化 SpecCore 项目...",
@@ -132,5 +135,19 @@
     "usage": "用法: {cmd}",
     "loading": "加载中...",
     "done": "完成"
+  },
+  "task": {
+    "status": {
+      "pending": "待开发",
+      "in_progress": "开发中",
+      "completed": "已完成",
+      "blocked": "已阻塞",
+      "archived": "已归档"
+    },
+    "type": {
+      "feature": "功能",
+      "bugfix": "修复",
+      "research": "调研"
+    }
   }
 }

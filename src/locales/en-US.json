@@ -1,5 +1,8 @@
 {
-  "_meta": { "locale": "en-US", "name": "English" },
+  "_meta": {
+    "locale": "en-US",
+    "name": "English"
+  },
   "cmd": {
     "init": {
       "start": "Initializing SpecCore project...",
@@ -132,5 +135,19 @@
     "usage": "Usage: {cmd}",
     "loading": "Loading...",
     "done": "Done"
+  },
+  "task": {
+    "status": {
+      "pending": "Pending",
+      "in_progress": "In Progress",
+      "completed": "Completed",
+      "blocked": "Blocked",
+      "archived": "Archived"
+    },
+    "type": {
+      "feature": "Feature",
+      "bugfix": "Bug Fix",
+      "research": "Research"
+    }
   }
 }
