@@ -639,27 +639,35 @@ speccore validate
 
 ## Scenario 23: Word Requirement Import
 
-**Background**: PM provided a Word document (.docx/.doc) PRD that needs to be imported into SpecCore.
+**Background**: PM provides multiple Word (.docx/.doc) PRDs — different documents for different platforms.
 
 **Steps**:
 ```bash
-# CLI
-speccore word2spec -f api-prd.docx -i Q3 -p backend
-speccore word2spec -f web-requirements.doc -i Q3 -p web
+# Import each platform's Word doc (auto-merged to REQUIREMENT.md)
+speccore word2spec -f backend-prd.docx -i Q3 -p backend
+speccore word2spec -f web-requirements.docx -i Q3 -p web
+speccore word2spec -f mobile-requirements.doc -i Q3 -p mobile
 # 💬 "Convert the Q3 backend PRD Word doc to Spec"
 ```
 
-**Notes**:
-- Embedded images are auto-extracted to `iteration-Q3/00-requirements/images/`
-- Missing interface tables get an auto-hint appended
-- INDEX.md is auto-updated
+**Auto-processing**:
+- Each Word → `{platform}-requirements.md` + auto-merged into `REQUIREMENT.md` (organized as `## {platform} requirements`)
+- Embedded images extracted to `00-requirements/images/`
+- Missing interface tables get auto-hints
+- INDEX.md auto-updated (used by `iteration split` for platform detection)
 - All Tasks share images via `../../00-requirements/images/xxx.png`
 - Requires pandoc; command prompts for auto-install if missing
 
 **Verify**:
 ```bash
 ls iteration-Q3/00-requirements/
-# → backend-requirements.md  web-requirements.md  images/  INDEX.md
+# → backend-requirements.md  web-requirements.md  REQUIREMENT.md  images/  INDEX.md
+
+# REQUIREMENT.md is auto-structured as:
+# ## backend requirements
+#   ### Order Management
+# ## web requirements
+#   ### Dashboard
 ```
 
 ---
