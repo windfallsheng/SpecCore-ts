@@ -162,10 +162,14 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
 
     let sourceFile = options.file;
     let cleanupFile: string | null = null;
-
-    // .doc → .docx via LibreOffice
     const ext = sourceFile.split('.').pop()?.toLowerCase();
-    if (ext === 'doc') {
+
+    // .md 文件直接导入，不需要 pandoc
+    if (ext === 'md') {
+      const converted = await readFile(sourceFile, 'utf-8');
+      await writeFile(outputPath, converted);
+      logger.info('   📝 .md 直接导入（跳过 pandoc）');
+    } else if (ext === 'doc') {
       try {
         execSync(`soffice --headless --convert-to docx "${sourceFile}" --outdir /tmp/`, { stdio: 'pipe' });
         const name = basename(sourceFile, '.doc');
@@ -181,16 +185,18 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
       }
     }
 
-    // pandoc
-    try {
-      execSync(
-        `LANG=zh_CN.UTF-8 pandoc "${sourceFile}" -f docx -t gfm --wrap=none --extract-media="${imageDir}" -o "${outputPath}"`,
-        { stdio: 'pipe', encoding: 'utf-8' }
-      );
-    } catch (e: any) {
-      spinner.fail(`pandoc 转换失败: ${e.message}`);
-      logger.info('请确保已安装 pandoc: brew install pandoc');
-      return;
+    if (ext !== 'md') {
+      // pandoc conversion for .docx/.doc
+      try {
+        execSync(
+          `LANG=zh_CN.UTF-8 pandoc "${sourceFile}" -f docx -t gfm --wrap=none --extract-media="${imageDir}" -o "${outputPath}"`,
+          { stdio: 'pipe', encoding: 'utf-8' }
+        );
+      } catch (e: any) {
+        spinner.fail(`pandoc 转换失败: ${e.message}`);
+        logger.info('请确保已安装 pandoc: brew install pandoc');
+        return;
+      }
     }
 
     // 清理临时文件
