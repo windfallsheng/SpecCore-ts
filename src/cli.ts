@@ -22,6 +22,7 @@ import { researchCommand } from './commands/research';
 import { changeCommand } from './commands/change';
 import { syncCommand } from './commands/sync';
 import { patternCommand } from './commands/pattern';
+import { rollbackCommand } from './commands/rollback';
 import { handoverCommand } from './commands/handover';
 import { retroCommand } from './commands/retro';
 import { templateAddCommand } from './commands/template-add';
@@ -464,6 +465,19 @@ program
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('--force', 'Overwrite existing pattern')
   .action(patternCommand);
+
+// ================================================================
+// 🔙 回滚
+// ================================================================
+program
+  .command('rollback')
+  .alias('rb')
+  .description('Restore Spec files from .bak backups')
+  .option('-t, --task <task>', 'Target task')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('--list', 'List backups only, do not restore')
+  .option('--confirm', 'Confirm restore (required to execute)')
+  .action(rollbackCommand);
 
 program
   .command('global-status')
