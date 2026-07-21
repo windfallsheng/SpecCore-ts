@@ -53,6 +53,13 @@
 - 失败返回：MethodArgumentNotValidException → 400 + 错误详情
 <!-- /spec-rule -->
 
+<!-- spec-rule: git-branch -->
+- 分支命名格式: {YYYYMMDD}-{任务名}-{姓名缩写}
+- 示例: 260715-订单管理-zs
+- 开发前自动创建分支: git checkout -b {日期}-{任务名}-{缩写}
+- 姓名缩写参见 PROJECT/TEAM.md
+<!-- /spec-rule -->
+
 ## 异常码体系
 | 错误码 | 含义 | 场景 |
 | :--- | :--- | :--- |
