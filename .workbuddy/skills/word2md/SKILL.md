@@ -109,3 +109,21 @@ echo "✅ 完成 $(ls *.docx | wc -l | tr -d ' ') 个文件"
 | 后处理 | 引号、空行 | 标题层级、接口表格提示 |
 | 依赖 SpecCore | ❌ | ✅ |
 | 使用场景 | 任意 Word → MD | PRD → SpecCore 需求文档 |
+
+---
+
+## 可执行脚本
+
+```bash
+# 基本用法
+skills/word2md/scripts/convert.sh report.docx
+
+# 自定义输出路径
+skills/word2md/scripts/convert.sh report.docx ./docs/report.md
+
+# 自定义图片目录
+skills/word2md/scripts/convert.sh report.docx report.md ./docs/images
+
+# 批量
+for f in *.docx; do skills/word2md/scripts/convert.sh "$f"; done
+```
