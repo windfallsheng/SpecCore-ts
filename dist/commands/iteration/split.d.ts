@@ -5,6 +5,7 @@ export interface IterationSplitOptions {
     target?: string;
     dryRun?: boolean;
     platforms?: string;
+    strict?: boolean;
 }
 export declare function iterationSplitCommand(options: IterationSplitOptions): Promise<void>;
 //# sourceMappingURL=split.d.ts.map
