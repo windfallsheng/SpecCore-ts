@@ -445,9 +445,10 @@ program
   .command('word2spec')
   .alias('w2s')
   .description('Convert Word (.docx/.doc) requirement docs to SpecCore Markdown')
-  .option('-f, --file <path>', 'Source Word file path (required)')
+  .option('-f, --file <path>', 'Source Word file path')
   .option('-i, --iteration <name>', 'Target iteration name (required)')
-  .option('-p, --platform <name>', 'Platform/end identifier (e.g. 后台/Web/小程序)')
+  .option('-p, --platform <name>', 'Platform identifier (e.g. 后台/Web/小程序)')
+  .option('--files <files>', 'Batch: "path1.docx=平台1,path2.docx=平台2"')
   .action(word2specCommand);
 
 program
