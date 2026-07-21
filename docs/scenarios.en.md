@@ -637,38 +637,49 @@ speccore validate
 
 ---
 
-## Scenario 23: Word Requirement Import
+## Scenario 23: Requirement Import (Word + Markdown)
 
-**Background**: PM provides multiple Word (.docx/.doc) PRDs — different documents for different platforms.
+**Background**: PM provides requirements in various formats — Word (.docx/.doc) and Markdown (.md), for different platforms and backend services.
 
-**Steps**:
+### Word Conversion
+
 ```bash
-# Import each platform's Word doc (auto-merged to REQUIREMENT.md)
-speccore word2spec -f backend-prd.docx -i Q3 -p backend
-speccore word2spec -f web-requirements.docx -i Q3 -p web
-speccore word2spec -f mobile-requirements.doc -i Q3 -p mobile
-# 💬 "Convert the Q3 backend PRD Word doc to Spec"
+# Batch: one command, all files
+speccore word2spec --files \
+  "backend-prd.docx=backend-admin,backend-api.docx=backend-h5,web.docx=web,mobile.docx=mobile" \
+  -i Q3
 ```
 
-**Auto-processing**:
-- Each Word → `{platform}-requirements.md` + auto-merged into `REQUIREMENT.md` (organized as `## {platform} requirements`)
-- Embedded images extracted to `00-requirements/images/`
-- Missing interface tables get auto-hints
-- INDEX.md auto-updated (used by `iteration split` for platform detection)
-- All Tasks share images via `../../00-requirements/images/xxx.png`
-- Requires pandoc; command prompts for auto-install if missing
+### Markdown Direct Import
 
-**Verify**:
 ```bash
-ls iteration-Q3/00-requirements/
-# → backend-requirements.md  web-requirements.md  REQUIREMENT.md  images/  INDEX.md
+# .md files — no pandoc needed
+speccore word2spec --files \
+  "api-docs.md=backend-admin,web-pages.md=web,mobile-screens.md=mobile" \
+  -i Q3
 
-# REQUIREMENT.md is auto-structured as:
-# ## backend requirements
-#   ### Order Management
-# ## web requirements
-#   ### Dashboard
+# Mix Word + Markdown
+speccore word2spec --files "backend.docx=backend-admin,web.md=web" -i Q3
 ```
+
+### Generated File Structure
+
+| File | Type | Purpose |
+| :--- | :--- | :--- |
+| `{platform}-requirements.md` | Manual | Per-platform standalone requirement doc |
+| `REQUIREMENT.md` | **Auto-generated** | Aggregated view for `iteration split` |
+| `INDEX.md` | **Auto-generated** | Platform index for automatic detection |
+
+### When Requirements Change
+
+| Source | Action |
+| :--- | :--- |
+| New Word doc from PM | Re-run `word2spec --files` (overwrites per-platform + refreshes REQUIREMENT.md) |
+| Minor dev tweak | Use `speccore change --task=Task-001 --desc="xxx"` |
+| Adjust platform split | Edit `{platform}-requirements.md`, then re-`word2spec` |
+| Sync to global | `speccore sync-global --direction=to_global` |
+
+> ⚠️ `REQUIREMENT.md` and `INDEX.md` are derived files — next `word2spec` will overwrite them. **Do not manually edit.**
 
 ---
 
