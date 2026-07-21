@@ -111,7 +111,7 @@ SpecCore 采用**确定性逻辑与智能逻辑解耦**的架构：
 | 分类 | 命令 | 说明 |
 | :--- | :--- | :--- |
 | 🧠 智能入口 | `speccore spec "<query>"` | 自然语言意图识别 |
-| 🌐 初始化/导入 | `speccore init` / `import` | 项目初始化 + 多项目导入 |
+| 🌐 初始化/导入 | `speccore init` / `import` / `word2spec` | 项目初始化 + 多项目导入 + Word 需求导入 |
 | 📐 计划 | `speccore iteration create/split` / `new-task` / `plan` | 期次管理 + Task 创建 |
 | | `speccore iteration-from-global` | 从全量层生成期次 |
 | ⚡ 执行 | `speccore execute` | 执行控制中心（--platform / --priority） |
@@ -132,6 +132,7 @@ SpecCore 采用**确定性逻辑与智能逻辑解耦**的架构：
 | :--- | :--- | :--- |
 | `speccore init` | `/spec-init` | 项目初始化 |
 | `speccore import` | `/spec-import` | 导入项目到全量层 |
+| `speccore word2spec` | `/spec-word2spec` | Word 文档导入 |
 | `speccore iteration create` | `/spec-iteration-create` | 创建期次 |
 | `speccore new-task` | `/spec-new-task` | 创建多平台 Task |
 | `speccore execute` | `/spec-execute` | 执行开发任务 |
