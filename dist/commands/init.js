@@ -147,6 +147,13 @@ async function createDefaultFiles(speccoreDir) {
 - 失败返回：MethodArgumentNotValidException → 400 + 错误详情
 <!-- /spec-rule -->
 
+<!-- spec-rule: git-branch -->
+- 分支命名格式: {YYYYMMDD}-{任务名}-{姓名缩写}
+- 示例: 260715-订单管理-zs
+- 开发前自动创建分支: git checkout -b {日期}-{任务名}-{缩写}
+- 姓名缩写参见 PROJECT/TEAM.md
+<!-- /spec-rule -->
+
 ## 异常码体系
 | 错误码 | 含义 | 场景 |
 | :--- | :--- | :--- |
@@ -225,19 +232,40 @@ AI 修改任何 Spec 文件前，必须先复制原文件为同目录下的 .bak
 - [TEAM.md](TEAM.md) - 团队与 Git 映射
 - [GLOSSARY.md](GLOSSARY.md) - 术语表
 `);
-    await (0, fs_extra_1.writeFile)((0, path_1.join)(speccoreDir, 'PROJECT', 'TEAM.md'), `# 团队与 Git 映射
+    await (0, fs_extra_1.writeFile)((0, path_1.join)(speccoreDir, 'PROJECT', 'TEAM.md'), `# 团队信息
 
-| 成员 | Git 用户名 | 角色 | 技术栈 | 负责模块 |
-| :--- | :--- | :--- | :--- | :--- |
-| | | | | |
-`);
+## 分支命名规则
+
+格式: {YYYYMMDD}-{任务名}-{姓名缩写}
+示例: 260715-订单管理-zs
+
+> AI 创建 Task 分支时自动遵守此格式。
+
+## 成员列表
+
+| 姓名 | 缩写 | 邮箱 | 角色 |
+| :--- | :--- | :--- | :--- |
+| _待填写_ | - | - | - |
+
+## 分支操作
+
+\`\`\`bash
+# 手动创建
+git checkout -b 260715-订单管理-zs
+
+# AI 对话创建
+"开发 Task-001" → AI 自动创建分支
+\`\`\`
+`
+    // ITERATIONS/README.md
+    , 
     // ITERATIONS/README.md
     await (0, fs_extra_1.writeFile)((0, path_1.join)(speccoreDir, 'ITERATIONS', 'README.md'), `# 期次索引
 
 | 期次名称 | 时间范围 | 状态 | 负责人 | 备注 |
 | :--- | :--- | :--- | :--- | :--- |
 | | | | | |
-`);
+`));
     // SETTINGS.md
     await (0, fs_extra_1.writeFile)((0, path_1.join)(speccoreDir, 'SETTINGS.md'), `# SpecCore 框架配置
 
@@ -538,13 +566,24 @@ flowchart TB
     // GLOBAL/CODE_INDEX.md - 全量代码索引
     await (0, fs_extra_1.writeFile)((0, path_1.join)(globalDir, 'CODE_INDEX.md'), `# 全量代码索引
 
-> 本文档是多工程代码路径映射，将所有项目的代码路径统一索引。
+> 本文档是工程 → 代码路径映射。Task 创建时，AI 根据此表确定代码生成目录。
 
-## 工程映射
+## 工程 → 路径 映射
 
-| 工程名称 | 类型 | 本地路径 | Git 仓库 | 分支 |
-| :--- | :--- | :--- | :--- | :--- |
-| _待导入_ | - | - | - | - |
+| 工程 | 代码路径 | 技术栈 | 关联 Task |
+| :--- | :--- | :--- | :--- |
+| backend | src/main/java/com/example | Spring Boot | — |
+| frontend-web | src/frontend/web | Vue 3 | — |
+| frontend-mini | src/frontend/mini | uni-app | — |
+
+## Task → 工程 映射
+
+| Task | 涉及工程 | 说明 |
+| :--- | :--- | :--- |
+| _待添加_ | — | — |
+
+> 📌 新增 Task 时，在此追加一行对应关系。
+| _待导入_ | - | - | - |
 
 ## 关键目录说明
 
