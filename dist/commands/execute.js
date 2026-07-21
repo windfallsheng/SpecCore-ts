@@ -131,7 +131,7 @@ async function executeCommand(options) {
             return;
         }
         // === Execute with progress (existing flow) ===
-        await executeWithProgress(sortedTasks, iteration);
+        await executeWithProgress(sortedTasks, iteration, options.base);
         // Hotfix tracking
         if (options.hotfix && sortedTasks.length > 0) {
             await (0, context_1.startHotfix)(sortedTasks[0].id);
@@ -206,7 +206,7 @@ async function interactiveSelect(tasks, iteration, options) {
         logger_1.logger.info('Cancelled.');
         return;
     }
-    await executeWithProgress(selectedTasks, iteration);
+    await executeWithProgress(selectedTasks, iteration, options.base);
 }
 async function loadInquirer() {
     try {
@@ -234,16 +234,21 @@ async function loadInquirer() {
 // ============================================================
 // Progress feedback execution
 // ============================================================
-async function executeWithProgress(tasks, iteration) {
+async function executeWithProgress(tasks, iteration, base) {
     const total = tasks.length;
     const startTime = Date.now();
     const completed = [];
     // Auto-create git branch for single task
     if (tasks.length === 1) {
         const task = tasks[0];
-        const branch = (0, git_integration_1.createTaskBranch)(task.id, task.name || 'feature');
+        // Auto-detect dependency base from IMPACT.md
+        if (!base) {
+            base = await detectDependencyBase(iteration, task.id);
+        }
+        const branch = (0, git_integration_1.createTaskBranch)(task.id, task.name || 'feature', base);
         if (branch) {
-            logger_1.logger.info(`🌿 Created branch: ${branch}`);
+            const baseInfo = base ? ` (from ${base})` : '';
+            logger_1.logger.info(`🌿 Created branch: ${branch}${baseInfo}`);
         }
     }
     (0, operation_log_1.logOperation)('speccore execute', `${total} tasks`);
@@ -764,5 +769,38 @@ async function preFlightCheck(tasks, iteration, options) {
     }
     logger_1.logger.info('\n✅ 开始执行...\n');
     return approved;
+}
+/**
+ * 从 IMPACT.md 检测任务依赖，返回应作为 base 的依赖任务 ID
+ */
+async function detectDependencyBase(iteration, taskId) {
+    const impactPath = (0, path_1.join)(`期次-${iteration}`, 'IMPACT.md');
+    if (!(await (0, fs_extra_1.pathExists)(impactPath)))
+        return undefined;
+    const impact = await (0, fs_extra_1.readFile)(impactPath, 'utf-8');
+    const lines = impact.split('\n');
+    // Parse: | Task-002: 订单导出 | → | Task-001: 用户管理 | `/api/users` |
+    for (const line of lines) {
+        if (line.includes('→') && line.includes(taskId)) {
+            const match = line.match(/→\s*\|\s*([^|]+)/);
+            if (match) {
+                const depTaskId = match[1].trim().split(':')[0].trim();
+                logger_1.logger.info(`\n🔗 检测到依赖: ${taskId} 依赖 ${depTaskId}`);
+                logger_1.logger.info(`   🎯 自动从分支 feature/${depTaskId}-* 创建（避免实体重复）`);
+                // Find actual branch name matching this task
+                try {
+                    const branches = require('child_process').execSync('git branch', { encoding: 'utf-8' });
+                    const branchMatch = branches.split('\n').find((b) => b.trim().startsWith(`feature/${depTaskId}-`));
+                    if (branchMatch) {
+                        const actualBranch = branchMatch.trim().replace(/^\*?\s*/, '');
+                        return actualBranch || `feature/${depTaskId}`;
+                    }
+                }
+                catch { }
+                return `feature/${depTaskId}`;
+            }
+        }
+    }
+    return undefined;
 }
 //# sourceMappingURL=execute.js.map
