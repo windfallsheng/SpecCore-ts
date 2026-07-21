@@ -24,6 +24,7 @@ const research_1 = require("./commands/research");
 const change_1 = require("./commands/change");
 const sync_1 = require("./commands/sync");
 const pattern_1 = require("./commands/pattern");
+const rollback_1 = require("./commands/rollback");
 const handover_1 = require("./commands/handover");
 const retro_1 = require("./commands/retro");
 const template_add_1 = require("./commands/template-add");
@@ -433,6 +434,18 @@ commander_1.program
     .option('-i, --iteration <iteration>', 'Target iteration')
     .option('--force', 'Overwrite existing pattern')
     .action(pattern_1.patternCommand);
+// ================================================================
+// 🔙 回滚
+// ================================================================
+commander_1.program
+    .command('rollback')
+    .alias('rb')
+    .description('Restore Spec files from .bak backups')
+    .option('-t, --task <task>', 'Target task')
+    .option('-i, --iteration <iteration>', 'Target iteration')
+    .option('--list', 'List backups only, do not restore')
+    .option('--confirm', 'Confirm restore (required to execute)')
+    .action(rollback_1.rollbackCommand);
 commander_1.program
     .command('global-status')
     .alias('gs')

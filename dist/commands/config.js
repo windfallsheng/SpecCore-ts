@@ -154,8 +154,9 @@ async function setSpecRule(ruleName, value) {
     logger_1.logger.info('  💡 下次 speccore execute 将自动应用此规则');
 }
 function normalizeRuleValue(ruleName, value) {
-    // 去掉语气词
+    // 去掉语气词 + 口语前缀
     let v = value.replace(/[了啦啊呢嗯哈哦]$/, '').trim();
+    v = v.replace(/^(改成|换成?|用|用的是|统一用|使用)\s*/i, '').trim();
     switch (ruleName) {
         case 'exception-handler':
             return `统一异常: ${v}`;
