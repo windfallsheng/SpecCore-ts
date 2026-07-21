@@ -42,6 +42,7 @@ const impact_1 = require("./commands/impact");
 const baseline_1 = require("./commands/baseline");
 const dashboard_1 = require("./commands/dashboard");
 const audit_1 = require("./commands/audit");
+const analyze_1 = require("./commands/analyze");
 // rename 命令
 const rename_1 = require("./commands/rename");
 // v4.0.0 新增命令
@@ -497,6 +498,14 @@ commander_1.program
     .description('Generate visual dashboard (HTML + Chart.js)')
     .option('-o, --output <path>', 'Output file path', './speccore-dashboard.html')
     .action(dashboard_1.dashboardCommand);
+commander_1.program
+    .command('analyze')
+    .alias('al')
+    .description('Analyze requirements: completeness + code mapping + architecture impact → ANALYSIS.md')
+    .option('-i, --iteration <iteration>', 'Target iteration')
+    .option('-o, --output <file>', 'Output filename', 'ANALYSIS.md')
+    .option('--auto', 'Non-interactive mode: generate report directly')
+    .action(analyze_1.analyzeCommand);
 commander_1.program
     .command('audit')
     .alias('ad')
