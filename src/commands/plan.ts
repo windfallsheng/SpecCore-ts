@@ -1,7 +1,7 @@
 import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration, detectCurrentAssignee } from '../core/context';
-import { readProjectGraph, topologicalSort, calculateCompletionRate, scanTasks, TaskState } from '../core/state';
+import { readProjectGraph, topologicalSort, scanTasks, TaskState } from '../core/state';
 import { FileTransaction } from '../core/transaction';
 
 export interface PlanOptions {

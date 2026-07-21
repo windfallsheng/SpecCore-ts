@@ -1,4 +1,3 @@
-import { join } from 'path';
 import { logger, Spinner, formatTable } from '../utils/logger';
 import { getDefaultIteration, getHotfixStatus } from "../core/context";
 import { TaskState } from "../core/state";;

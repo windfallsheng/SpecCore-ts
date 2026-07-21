@@ -5,7 +5,7 @@
  *      speccore update --iteration=xxx --assignee=张三
  */
 
-import { pathExists, readFile, writeFile } from 'fs-extra';
+import { pathExists, readFile } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';

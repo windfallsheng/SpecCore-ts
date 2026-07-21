@@ -1,4 +1,4 @@
-import { ensureDir, writeFile, pathExists, readFile } from 'fs-extra';
+import { ensureDir, writeFile, pathExists } from 'fs-extra';
 import { join } from 'path';
 import { logger, Spinner } from '../../utils/logger';
 import { getDefaultIteration, updateContext } from '../../core/context';
