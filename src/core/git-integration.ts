@@ -27,8 +27,7 @@ interface GitMapping {
  */
 export function createTaskBranch(taskId: string, taskName: string, baseBranch?: string): string | null {
   try {
-    const safeName = taskName.replace(/[^\w\u4e00-\u9fa5-]/g, '-').replace(/-+/g, '-');
-    const branchName = `feature/${taskId}-${safeName}`.substring(0, 100);
+    const branchName = `feature/${taskId}`.substring(0, 100);
 
     // If base branch specified, branch from it
     if (baseBranch) {
