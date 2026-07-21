@@ -17,6 +17,14 @@ import { execSync } from 'child_process';
 import { pathExists, ensureDir, readFile, writeFile, readdir, stat, unlink } from 'fs-extra';
 import { join, basename } from 'path';
 
+function findCommand(cmd: string): string | null {
+  try {
+    return execSync(`which ${cmd}`, { stdio: 'pipe', encoding: 'utf-8' }).trim();
+  } catch {
+    return null;
+  }
+}
+
 export interface Word2SpecOptions {
   file: string;
   iteration: string;
@@ -35,6 +43,18 @@ export async function word2specCommand(options: Word2SpecOptions): Promise<void>
 
   if (!(await pathExists(options.file))) {
     logger.error(`文件不存在: ${options.file}`);
+    return;
+  }
+
+  // pandoc 前置检测
+  if (!findCommand('pandoc')) {
+    logger.error('❌ 未检测到 pandoc。word2spec 依赖 pandoc 进行 Word → Markdown 转换。');
+    logger.info('');
+    logger.info('📦 安装 pandoc（二选一）：');
+    logger.info('   brew install pandoc              # macOS');
+    logger.info('   sudo apt install pandoc           # Ubuntu/Debian');
+    logger.info('');
+    logger.info('💡 替代方案：用 AI 对话中的 word2md 技能转换，或 Word 另存为 .md。');
     return;
   }
 
