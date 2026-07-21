@@ -30,12 +30,13 @@ export async function nextIterationId(name: string): Promise<{ id: string; num: 
   return { id: `期次-${padded}-${name}`, num: c.iterations };
 }
 
-export async function nextTaskId(): Promise<{ id: string; num: number }> {
+export async function nextTaskId(name?: string): Promise<{ id: string; num: number }> {
   const c = await getCounters();
   c.tasks++;
   await save(c);
   const padded = String(c.tasks).padStart(3, '0');
-  return { id: `Task-${padded}`, num: c.tasks };
+  const suffix = name ? `-${name.slice(0, 20)}` : '';
+  return { id: `Task-${padded}${suffix}`, num: c.tasks };
 }
 
 export async function initCounters(): Promise<void> {

@@ -84,7 +84,7 @@ async function iterationSplitCommand(options) {
         }
         // Create tasks
         for (let i = 0; i < sections.length; i++) {
-            const { id: taskId } = await (0, global_counters_1.nextTaskId)();
+            const { id: taskId } = await (0, global_counters_1.nextTaskId)(sections[i].name);
             await createTaskFromSection(iterationDir, taskId, sections[i], platforms);
         }
         // ── Generate impact graph + risk scores ──
@@ -282,7 +282,7 @@ async function updateProjectGraph(iterationDir, sections) {
         content = await (0, fs_extra_1.readFile)(graphPath, 'utf-8');
     }
     for (let i = 0; i < sections.length; i++) {
-        const { id: taskId } = await (0, global_counters_1.nextTaskId)();
+        const { id: taskId } = await (0, global_counters_1.nextTaskId)(sections[i].name);
         const taskName = sections[i].name;
         if (!content.includes(taskId)) {
             const taskEntry = `| ${taskId} | ${taskName} | feature | 0% | 🔲 待开发 | |\n`;
