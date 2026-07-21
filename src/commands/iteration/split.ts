@@ -4,6 +4,7 @@ import { logger, Spinner } from '../../utils/logger';
 import { getDefaultIteration } from '../../core/context';
 import { scoreRisk } from '../../core/risk-scorer';
 
+import { showNextSteps } from '../../core/next-steps';
 export interface IterationSplitOptions {
   file?: string;
   iteration?: string;
@@ -115,6 +116,8 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     await updateProjectGraph(iterationDir, sections);
 
     spinner.stop(`Created ${sections.length} tasks from requirements`);
+    
+    showNextSteps('split');
   } catch (error) {
     spinner.fail(`Split failed: ${error}`);
     throw error;
@@ -512,8 +515,8 @@ async function strictSplitPreview(
 
   logger.info(`\n  将创建 ${approved.length}/${sections.length} 个任务`);
   const confirm = await ask('  确认创建？[y/N] ');
-  if (confirm.toLowerCase() !== 'y') { logger.info('\n❌ 已取消'); return []; }
   logger.info('\n✅ 确认创建...\n');
+  showNextSteps('split');
 
   return approved;
 }

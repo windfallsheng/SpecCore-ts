@@ -6,6 +6,7 @@ import { i18n } from '../i18n';
 import { ContextSchema } from '../core/schemas';
 import { safeValidate } from '../core/error-feedback';
 
+import { showNextSteps } from '../core/next-steps';
 export interface InitOptions {
   mode?: string;
   force?: boolean;

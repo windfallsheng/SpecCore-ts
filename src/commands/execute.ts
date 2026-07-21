@@ -7,6 +7,7 @@ import { FileTransaction } from '../core/transaction';
 import { loadSpecRules, generateImports, SpecRules, loadTechStack } from '../core/spec-rules';
 
 import { logOperation } from '../core/operation-log';
+import { showNextSteps } from '../core/next-steps';
 import {
   initExecutionState,
   loadExecutionState,
@@ -731,6 +732,7 @@ async function handleHotfix(options: ExecuteOptions, taskIds: string[]): Promise
   logger.warn('   Grace period: 30 min (skip reverse sync)');
   logger.warn('   Mandatory sync deadline: 24 hours');
   logger.warn('   Run: speccore sync --reverse to complete');
+  showNextSteps('execute');
 }
 
 // ============================================================

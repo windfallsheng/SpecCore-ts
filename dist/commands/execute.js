@@ -42,6 +42,7 @@ const state_1 = require("../core/state");
 const transaction_1 = require("../core/transaction");
 const spec_rules_1 = require("../core/spec-rules");
 const operation_log_1 = require("../core/operation-log");
+const next_steps_1 = require("../core/next-steps");
 const execution_state_1 = require("../core/execution-state");
 const git_integration_1 = require("../core/git-integration");
 async function executeCommand(options) {
@@ -668,6 +669,7 @@ async function handleHotfix(options, taskIds) {
     logger_1.logger.warn('   Grace period: 30 min (skip reverse sync)');
     logger_1.logger.warn('   Mandatory sync deadline: 24 hours');
     logger_1.logger.warn('   Run: speccore sync --reverse to complete');
+    (0, next_steps_1.showNextSteps)('execute');
 }
 // ============================================================
 // Strict mode pre-flight check

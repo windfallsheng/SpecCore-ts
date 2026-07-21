@@ -7,6 +7,7 @@ import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
 
+import { showNextSteps } from '../core/next-steps';
 export interface AnalyzeOptions {
   iteration?: string;
   output?: string;
@@ -70,6 +71,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       logger.info(`   详细报告: ${outputPath}`);
     } else {
       logger.info('\n✅ 未发现阻断问题，可以继续拆分任务。');
+  showNextSteps('analyze');
     }
 
   } catch (error) {

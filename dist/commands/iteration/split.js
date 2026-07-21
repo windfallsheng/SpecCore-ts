@@ -6,6 +6,7 @@ const path_1 = require("path");
 const logger_1 = require("../../utils/logger");
 const context_1 = require("../../core/context");
 const risk_scorer_1 = require("../../core/risk-scorer");
+const next_steps_1 = require("../../core/next-steps");
 async function detectPlatforms(iterationDir, specified) {
     if (specified)
         return specified.split(',').map(p => p.trim()).filter(Boolean);
@@ -92,6 +93,7 @@ async function iterationSplitCommand(options) {
         // Update PROJECT_GRAPH.md
         await updateProjectGraph(iterationDir, sections);
         spinner.stop(`Created ${sections.length} tasks from requirements`);
+        (0, next_steps_1.showNextSteps)('split');
     }
     catch (error) {
         spinner.fail(`Split failed: ${error}`);
@@ -427,11 +429,8 @@ async function strictSplitPreview(sections, platforms, iterationDir) {
         return [];
     logger_1.logger.info(`\n  将创建 ${approved.length}/${sections.length} 个任务`);
     const confirm = await ask('  确认创建？[y/N] ');
-    if (confirm.toLowerCase() !== 'y') {
-        logger_1.logger.info('\n❌ 已取消');
-        return [];
-    }
     logger_1.logger.info('\n✅ 确认创建...\n');
+    (0, next_steps_1.showNextSteps)('split');
     return approved;
 }
 /**
