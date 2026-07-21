@@ -25,10 +25,15 @@ interface GitMapping {
 /**
  * 为任务创建 Git 分支
  */
-export function createTaskBranch(taskId: string, taskName: string): string | null {
+export function createTaskBranch(taskId: string, taskName: string, baseBranch?: string): string | null {
   try {
     const safeName = taskName.replace(/[^\w\u4e00-\u9fa5-]/g, '-').replace(/-+/g, '-');
     const branchName = `feature/${taskId}-${safeName}`.substring(0, 100);
+
+    // If base branch specified, branch from it
+    if (baseBranch) {
+      execSync(`git checkout "${baseBranch}"`, { stdio: 'pipe' });
+    }
 
     execSync(`git checkout -b "${branchName}"`, { stdio: 'pipe' });
 
