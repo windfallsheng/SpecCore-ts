@@ -103,7 +103,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
 
     // Create tasks
     for (let i = 0; i < sections.length; i++) {
-      const { id: taskId } = await nextTaskId();
+      const { id: taskId } = await nextTaskId(sections[i].name);
       await createTaskFromSection(iterationDir, taskId, sections[i], platforms);
     }
 
@@ -343,7 +343,7 @@ async function updateProjectGraph(iterationDir: string, sections: Section[]): Pr
   }
 
   for (let i = 0; i < sections.length; i++) {
-    const { id: taskId } = await nextTaskId();
+    const { id: taskId } = await nextTaskId(sections[i].name);
     const taskName = sections[i].name;
     
     if (!content.includes(taskId)) {
