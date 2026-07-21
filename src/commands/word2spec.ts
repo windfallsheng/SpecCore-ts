@@ -208,6 +208,9 @@ export async function word2specCommand(options: Word2SpecOptions): Promise<void>
     }
     await writeFile(indexPath, indexContent);
 
+    // ── 自动合并到 REQUIREMENT.md（汇总各端需求，供 iteration split 使用）──
+    await mergeToRequirement(iterDir, targetDir, platform);
+
     // ── 统计 ──
     const imageCount = (await pathExists(imageDir))
       ? (await readdir(imageDir, { recursive: true })).filter((f: string | Buffer) => 
@@ -231,4 +234,52 @@ export async function word2specCommand(options: Word2SpecOptions): Promise<void>
     spinner.fail(`转换失败: ${error}`);
     throw error;
   }
+}
+
+/**
+ * 将各端需求文档自动合并到统一的 REQUIREMENT.md
+ * 格式: ## {端名}需求（取自 {端名}需求.md 的 ## 接口定义 表格）
+ */
+async function mergeToRequirement(iterDir: string, targetDir: string, platform: string): Promise<void> {
+  const reqPath = join(targetDir, `${platform}需求.md`);
+  const globalReqPath = join(targetDir, 'REQUIREMENT.md');
+
+  if (!(await pathExists(reqPath))) return;
+
+  const platformContent = await readFile(reqPath, 'utf-8');
+
+  // 提取接口表格
+  const tableMatch = platformContent.match(/\| 方法 \|.*\n(?:\|[: -]+\|.*\n)+(?:\|.*\|.*\n)+/);
+  const apiSection = tableMatch ? `\n\n### ${platform}端接口\n\n${tableMatch[0]}` : '';
+
+  // 提取需求描述（跳过 HTML 注释和接口表格）
+  const descContent = platformContent
+    .replace(/^<!--[\s\S]*?-->\n/gm, '')
+    .replace(/\| 方法 \|.*(\n\|.*)*/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  // 检查是否已有此端的内容
+  let globalContent = '';
+  if (await pathExists(globalReqPath)) {
+    globalContent = await readFile(globalReqPath, 'utf-8');
+  } else {
+    globalContent = `# 本期需求文档\n\n> 由 word2spec 自动合并各端需求\n\n`;
+  }
+
+  const platformSection = `\n## ${platform}端需求\n\n${descContent.slice(0, 500)}${apiSection}\n`;
+  
+  // 去重：如果已有同端内容，替换
+  const sectionRegex = new RegExp(`\\n## ${platform}端需求[\\s\\S]*?(?=\\n## |$)`, 'g');
+  if (globalContent.match(sectionRegex)) {
+    globalContent = globalContent.replace(sectionRegex, platformSection);
+  } else {
+    globalContent += platformSection;
+  }
+
+  // 清理模板占位符（避免 split 时拆出无意义章节）
+  globalContent = globalContent
+    .replace(/#{1,3}\s+\d+\.\s*(需求概述|功能需求|非功能需求|验收标准|附录)[\s\S]*?(?=#{1,3}\s|$)/g, '');
+
+  await writeFile(globalReqPath, globalContent);
 }
