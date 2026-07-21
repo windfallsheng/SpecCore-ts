@@ -3,7 +3,7 @@ import { join } from 'path';
 import { logger } from '../utils/logger';
 import { t } from '../i18n/t';
 import { getDefaultIteration, updateContext, recordHistory, startHotfix } from '../core/context';
-import { scanTasks, topologicalSort } from '../core/state';
+import { scanTasks, topologicalSort, TaskState } from '../core/state';
 import { FileTransaction } from '../core/transaction';
 import { loadSpecRules, generateImports, getTodoHint, SpecRules, loadTechStack, TechStack } from '../core/spec-rules';
 
@@ -134,7 +134,7 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
 // ============================================================
 // Interactive selection (real prompt via inquirer)
 // ============================================================
-async function interactiveSelect(tasks: any[], iteration: string, options: ExecuteOptions): Promise<void> {
+async function interactiveSelect(tasks: TaskState[], iteration: string, options: ExecuteOptions): Promise<void> {
   const inquirer = await loadInquirer();
 
   logger.info('');
@@ -169,7 +169,7 @@ async function interactiveSelect(tasks: any[], iteration: string, options: Execu
   let selectedTasks = tasks;
 
   if (mode === 'select') {
-    const choices = tasks.map((t: any) => ({
+    const choices = tasks.map((t: TaskState) => ({
       name: `${t.id} ${t.name || ''} (${t.priority || 'medium'})`,
       value: t.id,
       checked: t.priority === 'high',
@@ -189,7 +189,7 @@ async function interactiveSelect(tasks: any[], iteration: string, options: Execu
       return;
     }
 
-    selectedTasks = tasks.filter((t: any) => picked.includes(t.id));
+    selectedTasks = tasks.filter((t: TaskState) => picked.includes(t.id));
   }
 
   const { confirm } = await inquirer.prompt([
@@ -215,9 +215,9 @@ async function loadInquirer(): Promise<any> {
   } catch {
     // Fallback for environments without inquirer
     return {
-      prompt: async (questions: any[]) => {
+      prompt: async (questions: { name: string }[]) => {
         logger.info('⚠️ Inquirer not available, auto-selecting defaults.');
-        const result: any = {};
+        const result: Record<string, unknown> = {};
         for (const q of questions) {
           if (q.name === 'mode') result[q.name] = 'all';
           if (q.name === 'picked') result[q.name] = [];
@@ -232,7 +232,7 @@ async function loadInquirer(): Promise<any> {
 // ============================================================
 // Progress feedback execution
 // ============================================================
-async function executeWithProgress(tasks: any[], iteration: string): Promise<void> {
+async function executeWithProgress(tasks: TaskState[], iteration: string): Promise<void> {
   const total = tasks.length;
   const startTime = Date.now();
   const completed: string[] = [];
@@ -308,10 +308,12 @@ async function executeResume(iteration: string): Promise<void> {
 
   // Continue from current batch
   while (state.currentBatch <= state.totalBatches) {
+    // Convert string IDs to TaskState objects for processBatch
     const batchTasks = getCurrentBatchTasks(state);
     if (batchTasks.length === 0) break;
+    const taskObjs: TaskState[] = batchTasks.map(id => ({ id, name: id, type: 'unknown', status: 'pending' as const, assignee: '', dependencies: [], priority: 'medium' as const, progress: 0 }));
 
-    await processBatch(batchTasks, state, iteration);
+    await processBatch(taskObjs, state, iteration);
     state = loadExecutionState()!;
   }
 
@@ -322,8 +324,8 @@ async function executeResume(iteration: string): Promise<void> {
 // ============================================================
 // Batch execution mode
 // ============================================================
-async function executeBatchMode(tasks: any[], iteration: string, batchSize: number, options: ExecuteOptions): Promise<void> {
-  const taskIds = tasks.map((t: any) => t.id);
+async function executeBatchMode(tasks: TaskState[], iteration: string, batchSize: number, options: ExecuteOptions): Promise<void> {
+  const taskIds = tasks.map((t: TaskState) => t.id);
   const state = initExecutionState(taskIds, iteration, batchSize);
 
   logger.info('');
@@ -336,8 +338,8 @@ async function executeBatchMode(tasks: any[], iteration: string, batchSize: numb
 
     // Find actual task objects
     const taskObjs = batchTasks
-      .map((id: string) => tasks.find((t: any) => t.id === id))
-      .filter(Boolean);
+      .map((id: string) => tasks.find(t => t.id === id))
+      .filter((t): t is TaskState => t !== undefined);
 
     await processBatch(taskObjs, state, iteration);
 
@@ -354,7 +356,7 @@ async function executeBatchMode(tasks: any[], iteration: string, batchSize: numb
 // ============================================================
 // Process one batch with context isolation
 // ============================================================
-async function processBatch(tasks: any[], state: ExecutionState, iteration: string): Promise<void> {
+async function processBatch(tasks: TaskState[], state: ExecutionState, iteration: string): Promise<void> {
   const batchNum = state.currentBatch;
   const startTime = Date.now();
 
@@ -366,7 +368,7 @@ async function processBatch(tasks: any[], state: ExecutionState, iteration: stri
   logger.info(`📖 Loading context for batch ${batchNum}...`);
   logger.info(`   CONSTITUTION.md → architecture constraints`);
   logger.info(`   PROJECT_GRAPH.md → dependency status`);
-  logger.info(`   Tasks: ${tasks.map((t: any) => t.id || t).join(', ')}`);
+  logger.info(`   Tasks: ${tasks.map(t => t.id).join(', ')}`);
 
   // Execute tasks in batch
   const completed: string[] = [];
@@ -379,11 +381,11 @@ async function processBatch(tasks: any[], state: ExecutionState, iteration: stri
     const bar = createBar(progress, 20);
 
     logger.info(``);
-    logger.info(`  ${bar} ${(i + 1)}/${total} — ${task.id || task} ${task.name || ''}`);
+    logger.info(`  ${bar} ${(i + 1)}/${total} — ${task.id} ${task.name}`);
     logger.info(`  🔄 Executing...`);
 
     await simulateTaskExecution(task, iteration);
-    completed.push(task.id || task);
+    completed.push(task.id);
 
     logger.info(`  ✅ ${task.id || task} completed`);
 
@@ -410,7 +412,7 @@ function createBar(pct: number, width: number): string {
 // ============================================================
 // Execution preview
 // ============================================================
-function printExecutionPreview(tasks: any[], iteration: string): void {
+function printExecutionPreview(tasks: TaskState[], iteration: string): void {
   logger.info('');
   logger.info('📋 Execution Preview');
   logger.info('');
@@ -430,7 +432,7 @@ function printExecutionPreview(tasks: any[], iteration: string): void {
 // ============================================================
 // Task execution (transaction protected)
 // ============================================================
-async function simulateTaskExecution(task: any, iteration: string): Promise<void> {
+async function simulateTaskExecution(task: TaskState, iteration: string): Promise<void> {
   const taskDir = join(`期次-${iteration}`, task.id);
   let filesUpdated = 0;
 
@@ -697,8 +699,8 @@ function extractDescription(req: string): string {
   return match ? match[1].trim() : 'Generated by SpecCore';
 }
 
-async function filterByPlatform(tasks: any[], iteration: string, platform: string): Promise<any[]> {
-  const filtered: any[] = [];
+async function filterByPlatform(tasks: TaskState[], iteration: string, platform: string): Promise<TaskState[]> {
+  const filtered: TaskState[] = [];
   const iterDir = join(process.cwd(), `期次-${iteration}`);
   for (const task of tasks) {
     const platformDir = join(iterDir, task.id, 'frontend', platform);

@@ -1,6 +1,6 @@
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
-import { readProjectGraph, scanTasks } from '../core/state';
+import { readProjectGraph, scanTasks, TaskState } from '../core/state';
 
 export interface HealthOptions {
   iteration?: string;
@@ -50,7 +50,7 @@ interface HealthMetrics {
   details: Record<string, any>;
 }
 
-function calculateHealth(iteration: string, tasks: any[]): HealthMetrics {
+function calculateHealth(iteration: string, tasks: TaskState[]): HealthMetrics {
   const total = tasks.length;
   const completed = tasks.filter(t => t.status === 'completed').length;
   const inProgress = tasks.filter(t => t.status === 'in_progress').length;

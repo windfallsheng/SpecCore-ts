@@ -32,7 +32,7 @@ export async function platformAddCommand(options: PlatformAddOptions): Promise<v
     // 确保配置目录存在
     await ensureDir(configDir);
 
-    let config: any = { platforms: {} };
+    let config: { platforms: Record<string, unknown> } = { platforms: {} };
 
     // 读取现有配置
     if (await pathExists(platformsYaml)) {
