@@ -256,6 +256,7 @@ commander_1.program
     .option('--parallel <count>', 'Parallel execution count', '1')
     .option('-i, --iteration <iteration>', 'Target iteration')
     .option('--force', 'Skip preview and execute directly')
+    .option('--strict', 'Pre-flight check: review req/tech/test before code gen')
     .option('--hotfix', 'Emergency fix: skip reverse sync (30min grace, 24h mandatory)')
     .action(execute_1.executeCommand);
 // ================================================================
