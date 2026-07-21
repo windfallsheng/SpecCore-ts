@@ -105,7 +105,11 @@ async function executeCommand(options) {
         }
         // === Strict mode: pre-flight check before executing ===
         if (options.strict) {
-            await preFlightCheck(sortedTasks, iteration, options);
+            const approved = await preFlightCheck(sortedTasks, iteration, options);
+            if (approved.length === 0)
+                return;
+            sortedTasks.length = 0;
+            sortedTasks.push(...approved);
         }
         // === Preview (default, unless --force) ===
         if (!options.force) {
@@ -683,91 +687,80 @@ async function preFlightCheck(tasks, iteration, options) {
     logger_1.logger.info('\n╔══════════════════════════════════════════════╗');
     logger_1.logger.info('║  🔍 Strict Mode — Pre-Flight Check           ║');
     logger_1.logger.info('╚══════════════════════════════════════════════╝\n');
-    let issues = [];
+    const approved = [];
     for (const task of tasks) {
         const taskDir = (0, path_1.join)(iterDir, task.id);
-        logger_1.logger.info(`\n── ${task.id} ──\n`);
+        logger_1.logger.info(`\n── ${task.id} ──`);
+        let issues = [];
         // 1. Requirement completeness
         const reqPath = (0, path_1.join)(taskDir, 'backend', 'REQ.md');
         if (await (0, fs_extra_1.pathExists)(reqPath)) {
             const req = await (0, fs_extra_1.readFile)(reqPath, 'utf-8');
             const sections = (req.match(/^###?\s+.+/gm) || []).length;
             const apis = (req.match(/\| (GET|POST|PUT|DELETE|PATCH) \|/g) || []).length;
-            logger_1.logger.info(`  1. 需求分析: ${sections} 章节 / ${apis} 接口`);
-            if (sections === 0 && apis === 0) {
-                issues.push(`${task.id}: 需求文档为空，建议补充 REQ.md`);
-            }
+            logger_1.logger.info(`  1. 需求: ${sections} 章节 / ${apis} 接口`);
+            if (sections === 0 && apis === 0)
+                issues.push('REQ.md 内容为空');
         }
         else {
-            issues.push(`${task.id}: 缺少 REQ.md`);
+            issues.push('缺少 REQ.md');
         }
         // 2. Tech plan
         const techPath = (0, path_1.join)(taskDir, 'backend', 'TECH.md');
         if (await (0, fs_extra_1.pathExists)(techPath)) {
             const tech = await (0, fs_extra_1.readFile)(techPath, 'utf-8');
-            const hasDb = tech.includes('数据库') || tech.includes('表');
-            const hasDep = tech.includes('依赖') || tech.includes('MQ') || tech.includes('Redis');
-            logger_1.logger.info(`  2. 技术方案: ${hasDb ? '含DB变更' : '无DB变更'} / ${hasDep ? '含新依赖' : '无新依赖'}`);
+            const s = [tech.includes('数据库') && 'DB', tech.includes('Redis') && 'Redis', tech.includes('MQ') && 'MQ'].filter(Boolean).join('/');
+            logger_1.logger.info(`  2. 方案: ${s || '待补充'}`);
         }
         else {
-            issues.push(`${task.id}: 缺少 TECH.md（技术方案）`);
+            issues.push('缺少 TECH.md');
         }
         // 3. Test cases
         const testPath = (0, path_1.join)(taskDir, 'backend', 'TEST.md');
         if (await (0, fs_extra_1.pathExists)(testPath)) {
             const test = await (0, fs_extra_1.readFile)(testPath, 'utf-8');
-            const total = (test.match(/⬜|✅|❌/g) || []).length;
-            logger_1.logger.info(`  3. 测试用例: ${total} 项（请在开发后填写）`);
+            const n = (test.match(/⬜|✅|❌/g) || []).length;
+            logger_1.logger.info(`  3. 测试: ${n} 用例`);
         }
-        // 4. Review checklist
-        const reviewPath = (0, path_1.join)(taskDir, 'backend', 'REVIEW.md');
-        if (await (0, fs_extra_1.pathExists)(reviewPath)) {
-            logger_1.logger.info(`  4. 审查清单: ✅ 已就绪`);
-        }
-        // 5. API contract
-        const apiPath = (0, path_1.join)(taskDir, '_shared', 'API_CONTRACT.yaml');
-        if (await (0, fs_extra_1.pathExists)(apiPath)) {
-            const api = await (0, fs_extra_1.readFile)(apiPath, 'utf-8');
-            const hasEndpoints = api.includes('/api/') || api.includes('path:');
-            logger_1.logger.info(`  5. API 契约: ${hasEndpoints ? '✅ 已定义接口' : '⚠️ 接口未定义'}`);
-            if (!hasEndpoints)
-                issues.push(`${task.id}: API_CONTRACT.yaml 缺少接口定义`);
-        }
+        // 4. Review
+        logger_1.logger.info(`  4. 审查: ${await (0, fs_extra_1.pathExists)((0, path_1.join)(taskDir, 'backend', 'REVIEW.md')) ? '✅' : '❌'}`);
+        // 5. API
+        logger_1.logger.info(`  5. 契约: ${await (0, fs_extra_1.pathExists)((0, path_1.join)(taskDir, '_shared', 'API_CONTRACT.yaml')) ? '✅' : '⚠️'}`);
         // 6. Platform
-        const frontendDir = (0, path_1.join)(taskDir, 'frontend');
-        if (await (0, fs_extra_1.pathExists)(frontendDir)) {
-            const fsa = require('fs');
-            const platforms = fsa.readdirSync(frontendDir, { withFileTypes: true })
-                .filter((d) => d.isDirectory()).map((d) => d.name);
-            logger_1.logger.info(`  6. 涉及端: ${platforms.join(', ')}`);
+        const fd = (0, path_1.join)(taskDir, 'frontend');
+        if (await (0, fs_extra_1.pathExists)(fd)) {
+            const pf = require('fs').readdirSync(fd, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
+            logger_1.logger.info(`  6. 端: ${pf.join(', ')}`);
         }
-        // 7. Constitution compliance
-        logger_1.logger.info(`  7. 宪法合规: 待 speccore validate 校验`);
-    }
-    // ── Summary ──
-    logger_1.logger.info('\n──────────────────────────────────────────────');
-    if (issues.length > 0) {
-        logger_1.logger.warn('⚠️  发现问题:\n');
-        for (const i of issues)
-            logger_1.logger.warn(`  - ${i}`);
+        // 7. Constitution
+        logger_1.logger.info(`  7. 合规: 待 validate ${issues.length > 0 ? '⚠️  ' + issues.join(', ') : ''}`);
+        // ── Per-task decision ──
+        const answer = (await ask(`  → 开发？[y]确认 [N]跳过 [q]全部取消: `)).toLowerCase();
+        if (answer === 'q') {
+            logger_1.logger.info('❌ 取消');
+            approved.length = 0;
+            break;
+        }
+        if (answer === 'y' || answer === 'yes') {
+            approved.push(task);
+            logger_1.logger.info(`  ✅ 已加入`);
+        }
+        else {
+            logger_1.logger.info(`  ⏭️ 跳过`);
+        }
         logger_1.logger.info('');
-        const fix = await ask('  是否继续开发？[y/N] ');
-        if (fix.toLowerCase() !== 'y') {
-            logger_1.logger.info('\n❌ 已取消。请修复上述问题后重试。');
-            process.exit(0);
-        }
-        logger_1.logger.info('\n✅ 确认继续（已知悉风险）');
     }
-    else {
-        logger_1.logger.info('✅ 未发现阻断问题');
+    if (approved.length === 0) {
+        logger_1.logger.info('\n❌ 没有任务通过确认。');
+        return [];
     }
-    // ── Final confirm ──
-    logger_1.logger.info(`\n  将生成 ${tasks.length} 个任务`);
-    const confirm = await ask('  确认开始开发？[y/N] ');
+    logger_1.logger.info(`\n  将执行 ${approved.length}/${tasks.length} 个任务`);
+    const confirm = await ask('  确认开始？[y/N] ');
     if (confirm.toLowerCase() !== 'y') {
-        logger_1.logger.info('\n❌ 已取消。');
+        logger_1.logger.info('\n❌ 已取消');
         process.exit(0);
     }
-    logger_1.logger.info('\n✅ 确认通过，开始执行...\n');
+    logger_1.logger.info('\n✅ 开始执行...\n');
+    return approved;
 }
 //# sourceMappingURL=execute.js.map
