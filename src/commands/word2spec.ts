@@ -25,6 +25,45 @@ function findCommand(cmd: string): string | null {
   }
 }
 
+function detectPlatform(): 'macos' | 'linux' | 'win' {
+  if (process.platform === 'darwin') return 'macos';
+  if (process.platform === 'win32') return 'win';
+  return 'linux';
+}
+
+function getInstallCmd(tool: string): string {
+  const map: Record<string, Record<string, string>> = {
+    pandoc: { macos: 'brew install pandoc', linux: 'sudo apt install pandoc', win: 'winget install Pandoc.Pandoc' },
+    libreoffice: { macos: 'brew install libreoffice', linux: 'sudo apt install libreoffice', win: 'winget install LibreOffice.LibreOffice' },
+  };
+  return map[tool]?.[detectPlatform()] || tool;
+}
+
+async function promptUser(question: string, defaultYes = false): Promise<boolean> {
+  const suffix = defaultYes ? ' (Y/n) ' : ' (y/N) ';
+  try {
+    process.stdout.write(question + suffix);
+    return new Promise((resolve) => {
+      const onData = (data: Buffer) => {
+        const answer = data.toString().trim().toLowerCase();
+        process.stdin.removeListener('data', onData);
+        if (process.stdin.isTTY) process.stdin.pause();
+        resolve(answer === 'y' || answer === 'yes' || (defaultYes && answer === ''));
+      };
+      if (process.stdin.isTTY) {
+        process.stdin.resume();
+      }
+      process.stdin.once('data', onData);
+      // Non-TTY fallback: auto-deny
+      if (!process.stdin.isTTY) {
+        resolve(false);
+      }
+    });
+  } catch {
+    return false;
+  }
+}
+
 export interface Word2SpecOptions {
   file: string;
   iteration: string;
@@ -48,14 +87,31 @@ export async function word2specCommand(options: Word2SpecOptions): Promise<void>
 
   // pandoc 前置检测
   if (!findCommand('pandoc')) {
-    logger.error('❌ 未检测到 pandoc。word2spec 依赖 pandoc 进行 Word → Markdown 转换。');
+    const installCmd = getInstallCmd('pandoc');
+    logger.warn('⚠️  未检测到 pandoc。word2spec 依赖 pandoc 进行 Word → Markdown 转换。');
     logger.info('');
-    logger.info('📦 安装 pandoc（二选一）：');
-    logger.info('   brew install pandoc              # macOS');
-    logger.info('   sudo apt install pandoc           # Ubuntu/Debian');
+    logger.info(`   📦 安装命令: ${installCmd}`);
+    logger.info('   💡 替代方案: AI 对话中可用 word2md 技能（无需 pandoc）');
+    logger.info('   📄 备选方案: 在 Word 中用"另存为" → 选择 .md 格式');
     logger.info('');
-    logger.info('💡 替代方案：用 AI 对话中的 word2md 技能转换，或 Word 另存为 .md。');
-    return;
+
+    const answer = await promptUser('是否要自动安装 pandoc？');
+    if (answer) {
+      logger.info(`正在安装 pandoc: ${installCmd}`);
+      try {
+        execSync(installCmd, { stdio: 'inherit' });
+        logger.success('pandoc 安装成功！继续转换...\n');
+      } catch {
+        logger.error('自动安装失败，请手动执行: ' + installCmd);
+        return;
+      }
+    } else {
+      logger.info('跳过安装。你可以：');
+      logger.info(`  1. 手动执行: ${installCmd}`);
+      logger.info('  2. 使用 word2md 技能（对话中可用）');
+      logger.info('  3. 在 Word 中另存为 .md 后手动放到 00-需求文档/');
+      return;
+    }
   }
 
   const spinner = new Spinner('正在转换 Word → Markdown...');
