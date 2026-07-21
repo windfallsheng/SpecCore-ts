@@ -181,13 +181,13 @@ SpecCore 原生集成 WorkBuddy（`speccore init` 自动创建 `.workbuddy/` ski
 | [快速开始指南](docs/快速开始.md) | 安装 → 初始化 → 导入 → 多端 Task → 场景速查 |
 | [命令参考手册](docs/命令参考.md) | 49 个命令完整参数 + 35 种意图映射 |
 | [工具适配说明](docs/工具适配说明.md) | WorkBuddy 集成原理 + 工作流程 + 安全检查 |
-| [使用指南](docs/使用指南.md) | 文件操作安全指南：可手动改 vs 必须用命令 |
+| [使用指南](docs/使用指南.md) | 完整使用方式：💬 自然语言对话 + ⌨️ CLI 命令对照 |
 | [工作空间组织](docs/工作空间组织.md) | 推荐目录结构 + 多工程协作 |
 | [迁移指南](docs/migration-guide.md) | Shell v3.x → CLI v5.x 迁移步骤 |
 | [CI/CD 集成](docs/CI-CD与spec注释集成指南.md) | @spec 注释 + GitHub Actions + 工作流 |
 | [Spec 加载机制](docs/Spec三层加载机制.md) | 三层 Spec 协同：全局约束 → 期次上下文 → Task 执行 |
 | [示例项目](examples/task-management/README.md) | 完整演示：需求→Spec→生成代码 |
-| [CHANGELOG](CHANGELOG.md) | 版本历史与更新日志（v1.0.0 → v5.8.1） |
+| [CHANGELOG](CHANGELOG.md) | 版本历史与更新日志（v1.0.0 → v5.9.1） |
 | [README.en.md](README.en.md) | English project overview |
 
 ---

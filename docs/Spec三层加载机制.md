@@ -128,6 +128,30 @@ Task-001-订单管理/
 
 ## 五、完整开发流程
 
+### 💬 对话式（推荐新用户）
+
+```
+1. "我的 Java 项目用 Spring Boot + JPA，异常统一用 ApiException"
+   → AI 自动创建 CONSTITUTION.md spec-rule + TECH_STACK.md
+
+2. "创建 Q3 期次"
+   → AI 调用 speccore iteration create --name=Q3
+
+3. "创建一个订单管理的 Feature 任务"
+   → AI 调用 speccore new-task --name="订单管理"
+
+4. "订单管理 Task-001 需要 CRUD，加上分页和软删除"
+   → AI 填充 REQ.md 接口表格
+
+5. "开发 Task-001"
+   → AI 调用 speccore execute --task=Task-001 --force
+
+6. "检查代码和 Spec 是否一致"
+   → AI 调用 speccore sync --task=Task-001 --detect
+```
+
+### ⌨️ 命令行式
+
 ```bash
 # 1. 配置全局规则（一次性）
 vim .speccore/CONSTITUTION.md      # 加 spec-rule 标记
