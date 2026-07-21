@@ -504,7 +504,9 @@ function formatControllerMethod(method, path, desc, rules) {
     const returnType = rt.responseFormat === 'Result' ? 'Result<?>' : 'ResponseEntity<?>';
     const bodyHint = rt.exceptionHandler === 'BusinessException'
         ? 'throw new BusinessException("Not implemented");'
-        : 'return ResponseEntity.ok().build();';
+        : rt.responseFormat === 'Result'
+            ? 'return Result.error("Not implemented");'
+            : 'return ResponseEntity.ok().build();';
     const hasId = path.includes('{id}');
     const hasPage = path.includes('page');
     let annotation;
