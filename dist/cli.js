@@ -44,6 +44,7 @@ const dashboard_1 = require("./commands/dashboard");
 const audit_1 = require("./commands/audit");
 const analyze_1 = require("./commands/analyze");
 const lifecycle_1 = require("./commands/lifecycle");
+const done_1 = require("./commands/done");
 // rename 命令
 const rename_1 = require("./commands/rename");
 // v4.0.0 新增命令
@@ -592,6 +593,15 @@ commander_1.program
     .option('--check', 'Check TEST.md/REVIEW.md progress')
     .option('--all', 'Show all tasks kanban board')
     .action(lifecycle_1.lifecycleCommand);
+commander_1.program
+    .command('done')
+    .alias('dn')
+    .description('Complete a task: validate → archive → sync-global')
+    .option('-t, --task <task>', 'Target task')
+    .option('-i, --iteration <iteration>', 'Target iteration')
+    .option('--skip-validate', 'Skip validation step')
+    .option('--skip-sync', 'Skip global sync step')
+    .action(done_1.doneCommand);
 commander_1.program
     .command('completion [shell]')
     .description('Generate shell completion script (bash/zsh)')

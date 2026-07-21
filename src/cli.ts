@@ -42,6 +42,7 @@ import { dashboardCommand } from './commands/dashboard';
 import { auditCommand } from './commands/audit';
 import { analyzeCommand } from './commands/analyze';
 import { lifecycleCommand } from './commands/lifecycle';
+import { doneCommand } from './commands/done';
 // rename 命令
 import { renameCommand } from './commands/rename';
 // v4.0.0 新增命令
@@ -639,6 +640,16 @@ program
   .option('--check', 'Check TEST.md/REVIEW.md progress')
   .option('--all', 'Show all tasks kanban board')
   .action(lifecycleCommand);
+
+program
+  .command('done')
+  .alias('dn')
+  .description('Complete a task: validate → archive → sync-global')
+  .option('-t, --task <task>', 'Target task')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('--skip-validate', 'Skip validation step')
+  .option('--skip-sync', 'Skip global sync step')
+  .action(doneCommand);
 
 program
   .command('completion [shell]')

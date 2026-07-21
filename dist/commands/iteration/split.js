@@ -146,7 +146,28 @@ function extractSections(content, sectionFilter) {
             return filters.some(f => s.name.includes(f));
         });
     }
-    return sections;
+    // Filter template noise: skip empty/template placeholder sections
+    return filterTemplateNoise(sections);
+}
+const TEMPLATE_PATTERNS = [
+    /^\d+\.\d+\s*(背景|目标|范围)\s*$/,
+    /^\d+\.\d+\s*(性能|安全|兼容性)\s*$/,
+    /^\d+\.\s*(需求概述|功能需求|非功能需求|验收标准|附录)\s*$/,
+    /^功能模块[一二三四五]\s*$/,
+];
+function filterTemplateNoise(sections) {
+    return sections.filter(s => {
+        // Skip sections matching template patterns
+        for (const pattern of TEMPLATE_PATTERNS) {
+            if (pattern.test(s.name))
+                return false;
+        }
+        // Skip sections with effectively empty content
+        const meaningful = (s.content || '').replace(/[\s\n>#*-|]/g, '').length;
+        if (meaningful < 3)
+            return false;
+        return true;
+    });
 }
 async function createTaskFromSection(iterationDir, taskId, section, allPlatforms) {
     const taskDir = (0, path_1.join)(iterationDir, taskId);
@@ -585,5 +606,30 @@ async function generateEnvExample(iterationDir, sections) {
     env += [...needs].join('\n') + '\n';
     await (0, fs_extra_1.writeFile)(envPath, env);
     logger_1.logger.info(`Env example: ${iterationDir}/.env.example`);
+}
+async function injectTechFromAnalysis(iterationDir, taskDir, sectionName) {
+    const analysisPath = (0, path_1.join)(iterationDir, '00-需求文档', 'ANALYSIS.md');
+    if (!(await (0, fs_extra_1.pathExists)(analysisPath)))
+        return;
+    const analysis = await (0, fs_extra_1.readFile)(analysisPath, 'utf-8');
+    // Extract relevant tech stack section
+    const techSection = analysis.match(/### 技术选型[\s\S]*?(?=###|$)/);
+    const dbSection = analysis.match(/### 数据库变更[\s\S]*?(?=###|$)/);
+    const depSection = analysis.match(/### 接口依赖[\s\S]*?(?=###|$)/);
+    if (!techSection && !dbSection && !depSection)
+        return;
+    const techPath = (0, path_1.join)(taskDir, 'backend', 'TECH.md');
+    let tech = await (0, fs_extra_1.readFile)(techPath, 'utf-8');
+    const note = '\n\n> 以下内容自动从 ANALYSIS.md 注入\n\n';
+    if (techSection && !tech.includes(techSection[0].trim())) {
+        tech += note + techSection[0].trim() + '\n';
+    }
+    if (dbSection && !tech.includes(dbSection[0].trim())) {
+        tech += dbSection[0].trim() + '\n';
+    }
+    if (depSection && !tech.includes(depSection[0].trim())) {
+        tech += depSection[0].trim() + '\n';
+    }
+    await (0, fs_extra_1.writeFile)(techPath, tech);
 }
 //# sourceMappingURL=split.js.map
