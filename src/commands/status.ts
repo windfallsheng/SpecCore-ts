@@ -1,5 +1,6 @@
 import { logger, Spinner } from '../utils/logger';
-import { getDefaultIteration } from '../core/context';
+import { getDefaultIteration } from "../core/context";
+import { TaskState } from "../core/state";;
 import { readProjectGraph, scanTasks } from '../core/state';
 
 export interface StatusOptions {
@@ -30,7 +31,7 @@ export async function statusCommand(options: StatusOptions): Promise<void> {
   }
 }
 
-function printStatus(iteration: string, tasks: any[], options: StatusOptions): void {
+function printStatus(iteration: string, tasks: TaskState[], options: StatusOptions): void {
   const total = tasks.length;
   const completed = tasks.filter(t => t.status === 'completed').length;
   const inProgress = tasks.filter(t => t.status === 'in_progress').length;

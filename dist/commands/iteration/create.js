@@ -29,6 +29,8 @@ async function iterationCreateCommand(options) {
         await createIterationFiles(iterationDir, options);
         // Update ITERATIONS index
         await updateIterationsIndex(options.name, options);
+        // Update GLOBAL index
+        await updateGlobalIndex(options.name, options);
         // Update context (store without 期次- prefix for consistency)
         await (0, context_1.updateContext)({
             currentIteration: iterName,
@@ -139,5 +141,40 @@ async function updateIterationsIndex(name, options) {
     const newEntry = `| ${name} | ${dateRange} | 🔄 进行中 | | |\n`;
     content += newEntry;
     await (0, fs_extra_1.writeFile)(indexPath, content);
+}
+async function updateGlobalIndex(name, options) {
+    const globalIndexPath = (0, path_1.join)('.speccore', 'GLOBAL', 'INDEX.md');
+    if (!(await (0, fs_extra_1.pathExists)(globalIndexPath)))
+        return;
+    let content = await (0, fs_extra_1.readFile)(globalIndexPath, 'utf-8');
+    // 避免重复
+    if (content.includes(`| ${name} |`))
+        return;
+    const dateRange = `${options.from || '未指定'} ~ ${options.to || '未指定'}`;
+    const today = new Date().toISOString().split('T')[0];
+    const newEntry = `| ${name} | - | 🔄 进行中 | ${today} |`;
+    // 找到期次关联表格并追加
+    if (content.includes('## 期次关联')) {
+        // 在 "## 期次关联" 之后的表格末尾插入
+        const lines = content.split('\n');
+        const sectionIdx = lines.findIndex(l => l.startsWith('## 期次关联'));
+        if (sectionIdx >= 0) {
+            // 找到表格的最后一行数据（非标题非分隔线）
+            let insertIdx = sectionIdx + 3; // 跳过标题+表头+分隔线
+            for (let i = insertIdx; i < lines.length; i++) {
+                if (lines[i].startsWith('|'))
+                    insertIdx = i + 1;
+                else if (lines[i].startsWith('##') || lines[i].startsWith('---'))
+                    break;
+            }
+            lines.splice(insertIdx, 0, newEntry);
+            content = lines.join('\n');
+        }
+    }
+    else {
+        // 没有期次关联章节，追加简单条目
+        content += `\n## 期次关联\n\n| 期次名称 | 包含需求 | 状态 | 创建日期 |\n| :--- | :--- | :--- | :--- |\n${newEntry}\n`;
+    }
+    await (0, fs_extra_1.writeFile)(globalIndexPath, content);
 }
 //# sourceMappingURL=create.js.map

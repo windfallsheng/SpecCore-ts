@@ -19,7 +19,7 @@ SpecCore 由两部分组成，**职责明确，互不混淆**：
 | **在哪里执行** | 终端 / Terminal | AI 编程工具（WorkBuddy / Cursor / Claude 等） |
 | **怎么用** | `speccore init` | 输入 `/spec-xxx` |
 | **什么原理** | TypeScript 编译，直接操作文件 | Markdown 指令，AI 读取后执行 |
-| **数量** | 49 个 CLI 命令 | 49 个 Slash Command |
+| **数量** | 54 个 CLI 命令 | 54 个 Slash Command |
 | **何时用** | 项目初始化、文件校验、批量操作 | 日常开发：需求管理、开发执行、审查归档 |
 
 > 💡 **简单记忆**：`speccore` 开头 → 终端执行；`/spec` 开头 → AI 工具中执行。
@@ -104,7 +104,7 @@ SpecCore 采用**确定性逻辑与智能逻辑解耦**的架构：
 
 ---
 
-## 🔧 终端命令速查（49 个 CLI 命令）
+## 🔧 终端命令速查（54 个 CLI 命令）
 
 > 在终端中执行，所有命令以 `speccore` 开头。
 
@@ -179,14 +179,15 @@ SpecCore 原生集成 WorkBuddy（`speccore init` 自动创建 `.workbuddy/` ski
 | [SDD 方法论](docs/SDD方法论.md) | SDD 是什么、为什么、怎么做 |
 | [速查卡](docs/速查卡.md) | 一页掌握：常用命令 + 安全口诀 + CI 模板 |
 | [快速开始指南](docs/快速开始.md) | 安装 → 初始化 → 导入 → 多端 Task → 场景速查 |
-| [命令参考手册](docs/命令参考.md) | 49 个命令完整参数 + 35 种意图映射 |
+| [命令参考手册](docs/命令参考.md) | 54 个命令完整参数 + 36 种意图映射 |
 | [工具适配说明](docs/工具适配说明.md) | WorkBuddy 集成原理 + 工作流程 + 安全检查 |
-| [使用指南](docs/使用指南.md) | 文件操作安全指南：可手动改 vs 必须用命令 |
+| [使用指南](docs/使用指南.md) | 完整使用方式：💬 自然语言对话 + ⌨️ CLI 命令对照 |
 | [工作空间组织](docs/工作空间组织.md) | 推荐目录结构 + 多工程协作 |
 | [迁移指南](docs/migration-guide.md) | Shell v3.x → CLI v5.x 迁移步骤 |
 | [CI/CD 集成](docs/CI-CD与spec注释集成指南.md) | @spec 注释 + GitHub Actions + 工作流 |
+| [Spec 加载机制](docs/Spec三层加载机制.md) | 三层 Spec 协同：全局约束 → 期次上下文 → Task 执行 |
 | [示例项目](examples/task-management/README.md) | 完整演示：需求→Spec→生成代码 |
-| [CHANGELOG](CHANGELOG.md) | 版本历史与更新日志（v1.0.0 → v5.6.10） |
+| [CHANGELOG](CHANGELOG.md) | 版本历史与更新日志（v1.0.0 → v5.11.0） |
 | [README.en.md](README.en.md) | English project overview |
 
 ---
@@ -269,7 +270,7 @@ bash verify.sh
 
 ## 版本
 
-v5.6.3 | 🔧 CLI 命令 49 个 | 🧠 意图识别 35 种
+v5.11.0 | 🔧 CLI 命令 54 个 | 🧠 意图识别 36 种
 
 版本历史见 [CHANGELOG.md](CHANGELOG.md)
 

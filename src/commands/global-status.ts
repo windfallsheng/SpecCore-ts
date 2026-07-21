@@ -3,7 +3,7 @@
  * 基于 GLOBAL/INDEX.md 展示所有项目、需求、技术架构的状态
  */
 
-import { logger, Spinner, formatTable } from '../utils/logger';
+import { logger, Spinner } from '../utils/logger';
 import { readGlobalIndex } from '../core/global-layer';
 
 export interface GlobalStatusOptions {

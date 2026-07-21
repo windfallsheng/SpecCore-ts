@@ -21,12 +21,15 @@ import { bugfixCommand } from './commands/bugfix';
 import { researchCommand } from './commands/research';
 import { changeCommand } from './commands/change';
 import { syncCommand } from './commands/sync';
+import { patternCommand } from './commands/pattern';
+import { rollbackCommand } from './commands/rollback';
 import { handoverCommand } from './commands/handover';
 import { retroCommand } from './commands/retro';
 import { templateAddCommand } from './commands/template-add';
 import { helpCommand } from './commands/help';
 import { demoCommand } from './commands/demo';
 import { welcomeCommand } from './commands/welcome';
+import { word2specCommand } from './commands/word2spec';
 // 全量层命令
 import { iterationFromGlobalCommand } from './commands/iteration-from-global';
 import { syncGlobalCommand } from './commands/sync-global';
@@ -265,6 +268,7 @@ program
   .option('--parallel <count>', 'Parallel execution count', '1')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('--force', 'Skip preview and execute directly')
+  .option('--hotfix', 'Emergency fix: skip reverse sync (30min grace, 24h mandatory)')
   .action(executeCommand);
 
 // ================================================================
@@ -292,6 +296,7 @@ program
   .option('--auto', 'Auto-apply sync without confirmation')
   .option('--dry-run', 'Preview differences without modifying')
   .option('--force', 'Skip preview')
+  .option('--detect', 'Detect code-spec discrepancies (read-only, no changes)')
   .action(syncCommand);
 
 // ================================================================
@@ -382,9 +387,11 @@ program
 program
   .command('config')
   .alias('cf')
-  .description('Manage SpecCore configuration')
+  .description('Manage SpecCore configuration and code rules')
   .option('--get <key>', 'Get configuration value')
-  .option('--set <key=value>', 'Set configuration value')
+  .option('--set <key=value>', 'Set configuration value (SETTINGS.md)')
+  .option('-r, --rule <name>', 'Target spec-rule (CONSTITUTION.md)')
+  .option('-t, --tech <target>', 'Target tech-stack (TECH_STACK.md): backend | frontend')
   .option('--reset', 'Reset to default configuration')
   .action(configCommand);
 
@@ -434,6 +441,15 @@ program
   .action(iterationFromGlobalCommand);
 
 program
+  .command('word2spec')
+  .alias('w2s')
+  .description('Convert Word (.docx/.doc) requirement docs to SpecCore Markdown')
+  .option('-f, --file <path>', 'Source Word file path (required)')
+  .option('-i, --iteration <name>', 'Target iteration name (required)')
+  .option('-p, --platform <name>', 'Platform/end identifier (e.g. 后台/Web/小程序)')
+  .action(word2specCommand);
+
+program
   .command('sync-global')
   .alias('sg')
   .description('Bidirectional sync between iteration and global layer')
@@ -443,6 +459,35 @@ program
   .option('--dry-run', 'Preview changes without applying')
   .option('--force', 'Skip preview and execute')
   .action(syncGlobalCommand);
+
+// ================================================================
+// 📦 模式保存
+// ================================================================
+program
+  .command('pattern')
+  .alias('p')
+  .description('Save current task as reusable pattern template')
+  .option('-n, --name <name>', 'Pattern name')
+  .option('-t, --task <task>', 'Source task ID')
+  .option('-c, --content <content>', 'Manual content')
+  .option('-f, --file <file>', 'Read from file path')
+  .option('-d, --desc <desc>', 'Pattern description')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('--force', 'Overwrite existing pattern')
+  .action(patternCommand);
+
+// ================================================================
+// 🔙 回滚
+// ================================================================
+program
+  .command('rollback')
+  .alias('rb')
+  .description('Restore Spec files from .bak backups')
+  .option('-t, --task <task>', 'Target task')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('--list', 'List backups only, do not restore')
+  .option('--confirm', 'Confirm restore (required to execute)')
+  .action(rollbackCommand);
 
 program
   .command('global-status')

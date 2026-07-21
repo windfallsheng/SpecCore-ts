@@ -61,7 +61,7 @@ export async function indexUpdateCommand(options: IndexUpdateOptions): Promise<v
         totalReqs++;
 
         // 从 GLOBAL/INDEX 查找现有状态
-        const existingEntry = index.reqs?.find((r: any) => r.id === reqId);
+        const existingEntry = index.reqs?.find((r: { id: string }) => r.id === reqId);
 
         const name = extractField(reqBody, '需求名称') || proj;
         const status = extractField(reqBody, '状态') || '📝 待开发';

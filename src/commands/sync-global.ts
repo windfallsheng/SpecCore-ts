@@ -4,7 +4,7 @@
  */
 
 import { logger, Spinner } from '../utils/logger';
-import { pathExists, readFile, writeFile } from 'fs-extra';
+import { pathExists, readFile } from 'fs-extra';
 import { join } from 'path';
 import {
   readGlobalIndex,

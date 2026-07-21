@@ -1,7 +1,7 @@
 import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration, detectCurrentAssignee } from '../core/context';
-import { readProjectGraph, topologicalSort, calculateCompletionRate, scanTasks } from '../core/state';
+import { readProjectGraph, topologicalSort, scanTasks, TaskState } from '../core/state';
 import { FileTransaction } from '../core/transaction';
 
 export interface PlanOptions {
@@ -93,7 +93,7 @@ interface PlanEntry {
   estimatedDuration: number;
 }
 
-function generatePlan(tasks: any[], teamSize: number, mode: string): PlanEntry[] {
+function generatePlan(tasks: TaskState[], teamSize: number, mode: string): PlanEntry[] {
   const phases: PlanEntry[] = [];
   
   if (mode === 'claim') {

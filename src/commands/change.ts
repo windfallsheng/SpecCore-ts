@@ -5,9 +5,10 @@
 
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
-import { readFile, writeFile, pathExists, readdir } from 'fs-extra';
+import { readFile, pathExists } from 'fs-extra';
 import { join } from 'path';
 import { FileTransaction } from '../core/transaction';
+import { scanTasks } from '../core/state';
 
 export interface ChangeOptions {
   task?: string;
@@ -29,6 +30,13 @@ export async function changeCommand(options: ChangeOptions): Promise<void> {
     return;
   }
 
+  // 规范化描述：口语 → 结构化
+  const normalized = normalizeDescription(options.desc);
+  if (normalized !== options.desc) {
+    logger.info(`📝 描述已规范化: "${options.desc}" → "${normalized}"`);
+    options.desc = normalized;
+  }
+
   const spinner = new Spinner('正在分析变更影响...');
   spinner.start();
 
@@ -37,6 +45,19 @@ export async function changeCommand(options: ChangeOptions): Promise<void> {
     if (!iteration && !options.global) {
       spinner.fail('未找到活跃期次。请先运行: speccore iteration create --name <名称>');
       return;
+    }
+
+    // 短 Task ID 支持: Task-001 → Task-001-订单管理
+    if (options.task) {
+      const tasks = await scanTasks(iteration);
+      const exact = tasks.find(t => t.id === options.task);
+      if (!exact) {
+        const prefix = tasks.filter(t => t.id.startsWith(options.task!));
+        if (prefix.length === 1) {
+          logger.info(`📎 Task 短名匹配: ${options.task} → ${prefix[0].id}`);
+          options.task = prefix[0].id;
+        }
+      }
     }
 
     if (options.dryRun) {
@@ -204,4 +225,38 @@ function findDependentTasks(graphContent: string, taskName: string): string[] {
     }
   }
   return deps;
+}
+
+/**
+ * 规范化变更描述：口语 → 结构化
+ * "加了个批量删除" → "新增接口: 批量删除"
+ * "修登录bug" → "修复: 登录异常"
+ * "改一下密码规则" → "修改: 密码规则"
+ */
+function normalizeDescription(desc: string): string {
+  const lower = desc.replace(/\s+/g, '');
+
+  // 新增类
+  if (/^(加|新增?|添?加|创建|做了?)/.test(lower)) {
+    const cleaned = lower.replace(/^(加|新增?|添加|创建|做了?)了?(个|一下)?/, '').replace(/[了啦啊]$/, '');
+    return `新增${cleaned ? `: ${cleaned}` : ''}`;
+  }
+  // 修复类
+  if (/^(修|fix|修复|改bug|解决)/.test(lower)) {
+    const cleaned = lower.replace(/^(修|fix|修复|改bug|解决)了?(个|一下)?/, '').replace(/[了啦啊]$/, '');
+    return `修复${cleaned ? `: ${cleaned}` : ''}`;
+  }
+  // 修改类
+  if (/^(改|调整|修改|换成?|更新|升级)/.test(lower)) {
+    const cleaned = lower.replace(/^(改|调整|修改|换成?|更新|升级)了?(个|一下)?/, '').replace(/[了啦啊]$/, '');
+    return `修改${cleaned ? `: ${cleaned}` : ''}`;
+  }
+  // 删除/移除类
+  if (/^(删|移除|去掉|干掉)/.test(lower)) {
+    const cleaned = lower.replace(/^(删|移除|去掉|干掉)了?(个|一下)?/, '').replace(/[了啦啊]$/, '');
+    return `删除${cleaned ? `: ${cleaned}` : ''}`;
+  }
+
+  // 无法识别，原样返回但去语气词
+  return desc.replace(/[了啦啊呢嗯哦哈]$/, '').trim();
 }

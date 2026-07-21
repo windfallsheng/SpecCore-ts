@@ -1,6 +1,6 @@
-import { join } from 'path';
 import { logger, Spinner, formatTable } from '../utils/logger';
-import { getDefaultIteration } from '../core/context';
+import { getDefaultIteration, getHotfixStatus } from "../core/context";
+import { TaskState } from "../core/state";;
 import { readProjectGraph, scanTasks } from '../core/state';
 
 export interface ProgressOptions {
@@ -39,13 +39,15 @@ export async function progressCommand(options: ProgressOptions): Promise<void> {
 
     spinner.stop('Progress loaded');
     printProgress(iteration, tasks, options);
+    await printHotfixStatus();
   } catch (error) {
     spinner.fail(`Progress loading failed: ${error}`);
     throw error;
   }
 }
 
-function printProgress(iteration: string, tasks: any[], options: ProgressOptions): void {
+function printProgress(iteration: string, 
+tasks: TaskState[], options: ProgressOptions): void {
   const total = tasks.length;
   const completed = tasks.filter(t => t.status === 'completed').length;
   const inProgress = tasks.filter(t => t.status === 'in_progress').length;
@@ -94,7 +96,7 @@ function printProgress(iteration: string, tasks: any[], options: ProgressOptions
   }
 }
 
-function printTaskProgress(task: any): void {
+function printTaskProgress(task: TaskState): void {
   logger.info('');
   logger.info(`📋 Task: ${task.id} - ${task.name}`);
   logger.info(`  Type: ${task.type}`);
@@ -103,5 +105,19 @@ function printTaskProgress(task: any): void {
   logger.info(`  Assignee: ${task.assignee || 'Unassigned'}`);
   if (task.dependencies.length > 0) {
     logger.info(`  Dependencies: ${task.dependencies.join(', ')}`);
+  }
+}
+
+async function printHotfixStatus(): Promise<void> {
+  const hotfix = await getHotfixStatus();
+  if (!hotfix) return;
+
+  logger.warn('⚠️  Hotfix: ' + hotfix.taskId);
+  if (hotfix.mandatoryExpired) {
+    logger.error('🚨 已超 24h！立即运行: speccore sync --reverse');
+  } else if (hotfix.graceExpired) {
+    logger.warn('   宽限期已过，运行: speccore sync --reverse');
+  } else {
+    logger.info('   宽限期内，可跳过反向同步');
   }
 }

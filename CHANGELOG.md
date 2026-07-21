@@ -2,24 +2,89 @@
 
 ---
 
+## v5.11.0 (2026-07-21)
 
-## v5.6.0 (2026-07-14)
+### 🆕 word2spec — Word 需求文档一键导入
+- `speccore word2spec` 命令 (.docx/.doc → SpecCore Markdown)
+- 图片自动提取到 `期次/00-需求文档/images/`
+- Task 共享引用路径: `../../00-需求文档/images/`
+- .doc 旧格式自动升级 (via LibreOffice)
+- INDEX.md 自动生成 + 接口表格智能检测
 
-## v5.6.1 (2026-07-14)
+### 📦 word2spec / word2md Skills
+- 对话式: "把 Q3 的 PRD 转成 Spec"
+- Shell 脚本: `scripts/convert.sh` 可独立运行
+- word2md: 纯格式转换（无 SpecCore 依赖）
 
-### 🔴 Bug 修复
-- search: 位置参数 action 签名修复，搜索功能现已可用
-- platform-add: --no-sync 字段名对齐
-- update: 空迭代名称 early return
-- 4 处死代码清理
+### 🐛 Bug 修复
+- Controller body 与返回类型一致 (Result<?> → Result.error())
+- 口语标准化「修了个bug」→「修复: bug」等 3 处修复
+- any 类型 28→6，未使用 import 全面清理
 
-## v5.6.2 (2026-07-14)
+## v5.10.0 (2026-07-21)
 
-### 🔴 Bug 修复
-- goal/bugfix/research: --id→--task-id CLI 选项对齐
-- task new: Task-Task-xxx 双前缀修复
-- execute: resume null state 显式检查
-- 8 处错误吞没修复
+### 🆕 备份与回滚
+- `speccore rollback` 命令：从 .bak 恢复 Spec 文件
+- `--list` 列出备份 / `--confirm` 确认恢复
+- CONSTITUTION.md AI 规则：修改 Spec 前自动创建 .bak
+
+### 📐 AI 操作规则
+- 两阶段确认流程（变更分析 → 执行计划）
+- 变更履历自动追加
+- 影响范围自动评估
+
+## v5.9.2 (2026-07-21)
+
+### 🔧 config 增强
+- `--rule <name> --set <value>` → 写入 CONSTITUTION.md spec-rule
+- `--tech <target> --set <value>` → 写入 TECH_STACK.md
+- 口语自动标准化
+
+## v5.9.1 (2026-07-21)
+
+### 🔧 iteration create 增强
+- 自动更新 GLOBAL/INDEX.md 期次关联表格
+
+## v5.9.0 (2026-07-20)
+
+### 🆕 sync --detect
+- 扫描代码 vs REQ.md 差异检测
+- 报告: + 代码有 Spec 没有 / - Spec 有代码没有
+
+### 🆕 pattern save
+- 三种输入: --task / --content / --file
+- 自动占位符 {{Entity}} 替换
+
+## v5.8.1 (2026-07-20)
+
+### 📐 TECH_STACK.md 解析
+- `loadTechStack()` 检测语言/框架
+- execute 显示当前技术栈
+
+## v5.8.0 (2026-07-20)
+
+### 🆕 三层 Spec 协同
+- CONSTITUTION.md spec-rule 区块解析
+- 规则自动注入代码生成（异常/返回/ORM/校验）
+- 新增 `src/core/spec-rules.ts`
+
+## v5.7.2 (2026-07-20)
+
+### 🔧 change 增强
+- 口语描述自动标准化
+- 短 Task ID 支持
+
+## v5.7.1 (2026-07-19)
+
+### 🔧 execute 代码生成优化
+- Java 包名/类名修复
+- REQ.md 接口表格 → 方法骨架自动生成
+
+## v5.7.0 (2026-07-19)
+
+### 🆕 Hotfix 例外流程
+- `execute --hotfix`: 30min 宽限 + 24h 强制补录
+- validate/progress 显示 hotfix 状态
 
 ## v5.6.3 (2026-07-14)
 
@@ -296,4 +361,4 @@
 | 次版本号 | 新增命令或功能模块 |
 | 修订版本号 | Bug 修复或文档增强 |
 
-当前版本：**v5.6.9**
+当前版本：**v5.11.0**

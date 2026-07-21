@@ -1,4 +1,4 @@
-import { pathExists, ensureDir, move, readdir } from 'fs-extra';
+import { pathExists, ensureDir, move } from 'fs-extra';
 import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration, updateContext } from '../core/context';
@@ -82,7 +82,7 @@ export async function archiveCommand(options: ArchiveOptions): Promise<void> {
   }
 }
 
-async function archiveTask(iterationDir: string, taskId: string, archiveDir: string): Promise<void> {
+async function _archiveTask(iterationDir: string, taskId: string, archiveDir: string): Promise<void> {
   const taskPath = join(iterationDir, taskId);
   const targetPath = join(archiveDir, taskId);
 

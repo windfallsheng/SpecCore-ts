@@ -4,8 +4,8 @@
  */
 
 import { logger, Spinner } from '../utils/logger';
-import { getDefaultIteration } from '../core/context';
-import { readFile, pathExists } from 'fs-extra';
+import { getDefaultIteration, clearHotfix } from '../core/context';
+import { readFile, pathExists, readdir } from 'fs-extra';
 import { join } from 'path';
 import { FileTransaction } from '../core/transaction';
 import { reverseSync } from '../core/reverse-sync';
@@ -16,6 +16,7 @@ export interface SyncOptions {
   auto?: boolean;
   dryRun?: boolean;
   force?: boolean;
+  detect?: boolean;
 }
 
 export async function syncCommand(options: SyncOptions): Promise<void> {
@@ -31,6 +32,13 @@ export async function syncCommand(options: SyncOptions): Promise<void> {
     const iteration = await getDefaultIteration(options.iteration);
     if (!iteration) {
       spinner.fail('未找到活跃期次。请先运行: speccore iteration create --name <名称>');
+      return;
+    }
+
+    // --detect 模式：只检测差异，不修改
+    if (options.detect) {
+      spinner.stop('差异检测完成');
+      await detectDiscrepancies(options, iteration);
       return;
     }
 
@@ -64,6 +72,7 @@ export async function syncCommand(options: SyncOptions): Promise<void> {
     } else {
       logger.info('   No @spec references found in code');
     }
+    await clearHotfix(); // 反向同步完成，清除 hotfix 标记
     logger.info('💡 提示: 运行 speccore validate 确保同步后的 Spec 完整性');
   } catch (error) {
     spinner.fail(`同步失败: ${error}`);
@@ -210,4 +219,95 @@ async function syncIterationSpec(iteration: string, auto: boolean): Promise<void
   }
 
   logger.info(`✅ 已同步 ${synced}/${total} 个任务`);
+}
+
+// ============================================================
+// --detect: 代码 → Spec 差异检测
+// ============================================================
+async function detectDiscrepancies(options: SyncOptions, iteration: string): Promise<void> {
+  if (!options.task) {
+    logger.info('请指定 --task，查看具体任务的差异');
+    return;
+  }
+
+  const cwd = process.cwd();
+  const iterDir = join(cwd, `期次-${iteration}`);
+  const taskDir = join(iterDir, options.task);
+  const reqPath = join(taskDir, 'backend', 'REQ.md');
+
+  if (!(await pathExists(reqPath))) {
+    logger.warn(`REQ.md 不存在: ${reqPath}`);
+    return;
+  }
+
+  const reqContent = await readFile(reqPath, 'utf-8');
+  const specApis = extractApiFromSpec(reqContent);
+  logger.info(`Spec定义: ${specApis.length} 个接口`);
+
+  const srcDir = join(cwd, 'src');
+  const codeApis = await scanCodeForApis(srcDir);
+  logger.info(`代码实现: ${codeApis.length} 个接口`);
+
+  const added: string[] = [];
+  const removed: string[] = [];
+  const matched: string[] = [];
+
+  for (const ca of codeApis) {
+    if (specApis.includes(ca)) matched.push(ca);
+    else added.push(ca);
+  }
+  for (const sa of specApis) {
+    if (!codeApis.includes(sa)) removed.push(sa);
+  }
+
+  logger.info('');
+  if (added.length === 0 && removed.length === 0) {
+    logger.success('Spec 与代码完全一致');
+  } else {
+    if (added.length > 0) {
+      logger.warn('代码有但Spec没有:');
+      added.forEach(a => logger.warn('  + ' + a));
+    }
+    if (removed.length > 0) {
+      logger.error('Spec有但代码没有:');
+      removed.forEach(r => logger.error('  - ' + r));
+    }
+  }
+  logger.info('一致: ' + matched.length + ' 个接口');
+}
+
+function extractApiFromSpec(content: string): string[] {
+  const apis: string[] = [];
+  const regex = /\|\s*(GET|POST|PUT|DELETE|PATCH)\s*\|\s*(\/[^\s|]+)/gi;
+  let m;
+  while ((m = regex.exec(content)) !== null) {
+    apis.push(m[1].toUpperCase() + ' ' + m[2].trim());
+  }
+  return apis;
+}
+
+async function scanCodeForApis(dir: string): Promise<string[]> {
+  const apis: string[] = [];
+  if (!(await pathExists(dir))) return apis;
+
+  async function scanDir(d: string) {
+    const entries = await readdir(d, { withFileTypes: true });
+    for (const e of entries) {
+      const full = join(d, e.name);
+      if (e.isDirectory() && !e.name.startsWith('.') && e.name !== 'node_modules') {
+        await scanDir(full);
+      } else if (/\.(java|ts|go|py)$/.test(e.name)) {
+        const code = await readFile(full, 'utf-8');
+        const annotations = code.match(/@(?:Get|Post|Put|Delete|Patch)Mapping\s*\(\s*\"([^\"]+)\"/gi);
+        if (annotations) {
+          for (const a of annotations) {
+            const m = a.match(/@(\w+)Mapping\s*\(\s*\"([^\"]+)\"/);
+            if (m) apis.push(m[1].toUpperCase() + ' ' + m[2]);
+          }
+        }
+      }
+    }
+  }
+  await scanDir(dir);
+  return [...new Set(apis)].sort();
 }

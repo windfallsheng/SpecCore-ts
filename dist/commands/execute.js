@@ -40,6 +40,7 @@ const logger_1 = require("../utils/logger");
 const context_1 = require("../core/context");
 const state_1 = require("../core/state");
 const transaction_1 = require("../core/transaction");
+const spec_rules_1 = require("../core/spec-rules");
 const operation_log_1 = require("../core/operation-log");
 const execution_state_1 = require("../core/execution-state");
 const git_integration_1 = require("../core/git-integration");
@@ -122,6 +123,11 @@ async function executeCommand(options) {
         }
         // === Execute with progress (existing flow) ===
         await executeWithProgress(sortedTasks, iteration);
+        // Hotfix tracking
+        if (options.hotfix && sortedTasks.length > 0) {
+            await (0, context_1.startHotfix)(sortedTasks[0].id);
+            logger_1.logger.info('⚠️  Hotfix Mode Active — 30min grace, 24h mandatory sync');
+        }
     }
     catch (error) {
         logger_1.logger.error(`Execution failed: ${error}`);
@@ -281,10 +287,12 @@ async function executeResume(iteration) {
     logger_1.logger.info(`⏳ Resuming from Batch ${state.currentBatch}/${state.totalBatches}`);
     // Continue from current batch
     while (state.currentBatch <= state.totalBatches) {
+        // Convert string IDs to TaskState objects for processBatch
         const batchTasks = (0, execution_state_1.getCurrentBatchTasks)(state);
         if (batchTasks.length === 0)
             break;
-        await processBatch(batchTasks, state, iteration);
+        const taskObjs = batchTasks.map(id => ({ id, name: id, type: 'unknown', status: 'pending', assignee: '', dependencies: [], priority: 'medium', progress: 0 }));
+        await processBatch(taskObjs, state, iteration);
         state = (0, execution_state_1.loadExecutionState)();
     }
     logger_1.logger.success('All batches completed!');
@@ -305,8 +313,8 @@ async function executeBatchMode(tasks, iteration, batchSize, options) {
             break;
         // Find actual task objects
         const taskObjs = batchTasks
-            .map((id) => tasks.find((t) => t.id === id))
-            .filter(Boolean);
+            .map((id) => tasks.find(t => t.id === id))
+            .filter((t) => t !== undefined);
         await processBatch(taskObjs, state, iteration);
         // Reload state (completedBatch updated it)
         const updated = (0, execution_state_1.loadExecutionState)();
@@ -330,20 +338,19 @@ async function processBatch(tasks, state, iteration) {
     logger_1.logger.info(`📖 Loading context for batch ${batchNum}...`);
     logger_1.logger.info(`   CONSTITUTION.md → architecture constraints`);
     logger_1.logger.info(`   PROJECT_GRAPH.md → dependency status`);
-    logger_1.logger.info(`   Tasks: ${tasks.map((t) => t.id || t).join(', ')}`);
+    logger_1.logger.info(`   Tasks: ${tasks.map(t => t.id).join(', ')}`);
     // Execute tasks in batch
     const completed = [];
     const total = tasks.length;
-    const progressBar = createBar(0, 20);
     for (let i = 0; i < total; i++) {
         const task = tasks[i];
         const progress = Math.round(((i + 1) / total) * 100);
         const bar = createBar(progress, 20);
         logger_1.logger.info(``);
-        logger_1.logger.info(`  ${bar} ${(i + 1)}/${total} — ${task.id || task} ${task.name || ''}`);
+        logger_1.logger.info(`  ${bar} ${(i + 1)}/${total} — ${task.id} ${task.name}`);
         logger_1.logger.info(`  🔄 Executing...`);
         await simulateTaskExecution(task, iteration);
-        completed.push(task.id || task);
+        completed.push(task.id);
         logger_1.logger.info(`  ✅ ${task.id || task} completed`);
         const elapsed = Math.round((Date.now() - startTime) / 1000);
         const estRemaining = Math.round((elapsed / (i + 1)) * (total - i - 1));
@@ -387,18 +394,21 @@ async function simulateTaskExecution(task, iteration) {
     let filesUpdated = 0;
     if (await (0, fs_extra_1.pathExists)(taskDir)) {
         const tx = new transaction_1.FileTransaction();
+        // 加载全局 Spec 规则（会被注入到生成的代码中）
+        const specRules = await (0, spec_rules_1.loadSpecRules)();
+        const techStack = await (0, spec_rules_1.loadTechStack)();
+        logger_1.logger.info(`   Tech Stack: ${techStack.backendFramework} + ${techStack.frontendFramework}`);
         // 读取后端 Spec 生成代码骨架
         const backendDir = (0, path_1.join)(taskDir, 'backend');
         if (await (0, fs_extra_1.pathExists)(backendDir)) {
             const reqPath = (0, path_1.join)(backendDir, 'REQ.md');
-            const techPath = (0, path_1.join)(backendDir, 'TECH.md');
-            const contractPath = (0, path_1.join)(taskDir, '_shared', 'API_CONTRACT.yaml');
             let className = convertToClassName(task.name || task.id);
-            let packageName = task.name ? task.name.replace(/[^\w]/g, '-').toLowerCase() : 'feature';
+            // 使用安全的 Java 包名：com.example.{className小写}
+            let packageName = `com.example.${className.toLowerCase()}`;
             // 生成 Controller 骨架
             if (await (0, fs_extra_1.pathExists)(reqPath)) {
                 const req = await (0, fs_extra_1.readFile)(reqPath, 'utf-8');
-                const controllerCode = generateJavaController(className, packageName, req);
+                const controllerCode = generateJavaController(className, packageName, req, specRules);
                 const ctrlPath = (0, path_1.join)(backendDir, `${className}Controller.java`);
                 tx.write(ctrlPath, controllerCode);
                 filesUpdated++;
@@ -453,13 +463,13 @@ async function simulateTaskExecution(task, iteration) {
 // ============================================================
 // Code generation helpers
 // ============================================================
-function generateJavaController(className, pkg, req) {
+function generateJavaController(className, pkg, req, rules) {
     const desc = extractDescription(req);
+    const methodStubs = generateMethodStubs(req, rules);
+    const imports = (0, spec_rules_1.generateImports)(rules, className);
     return `package ${pkg}.controller;
 
-import org.springframework.web.bind.annotation.*;
-import org.springframework.beans.factory.annotation.Autowired;
-import ${pkg}.service.${className}Service;
+${imports}
 
 /**
  * ${desc}
@@ -470,12 +480,86 @@ import ${pkg}.service.${className}Service;
 public class ${className}Controller {
 
     @Autowired
-    private ${className}Service ${className.substring(0, 1).toLowerCase() + className.substring(1)}Service;
-
-    // TODO: Add endpoints based on API_CONTRACT.yaml
+    private ${className}Service ${uncapitalize(className)}Service;
+${methodStubs}
 }
 `;
 }
+/** 从 REQ.md 的接口表格中提取方法签名 */
+function generateMethodStubs(req, rules) {
+    // 匹配 REQ.md 中的接口定义表格: | METHOD | /path | description |
+    const tableRegex = /\|\s*(GET|POST|PUT|DELETE|PATCH)\s*\|\s*(\/[^\s|]+)\s*\|([^|]*)\|/gi;
+    const methods = [];
+    let match;
+    while ((match = tableRegex.exec(req)) !== null) {
+        const method = match[1].toUpperCase();
+        const path = match[2].trim();
+        const desc = match[3].trim();
+        methods.push(formatControllerMethod(method, path, desc, rules));
+    }
+    return methods.length > 0 ? methods.join('\n') : '\n    // TODO: 请在 REQ.md 中补充接口表格';
+}
+function formatControllerMethod(method, path, desc, rules) {
+    const rt = rules || { exceptionHandler: 'none', responseFormat: 'ResponseEntity' };
+    const returnType = rt.responseFormat === 'Result' ? 'Result<?>' : 'ResponseEntity<?>';
+    const bodyHint = rt.exceptionHandler === 'BusinessException'
+        ? 'throw new BusinessException("Not implemented");'
+        : rt.responseFormat === 'Result'
+            ? 'return Result.error("Not implemented");'
+            : 'return ResponseEntity.ok().build();';
+    const hasId = path.includes('{id}');
+    const hasPage = path.includes('page');
+    let annotation;
+    let signature;
+    switch (method) {
+        case 'GET':
+            if (hasId) {
+                annotation = `@GetMapping("${path}")`;
+                signature = `public ${returnType} getById(@PathVariable Long id)`;
+            }
+            else if (hasPage || path.endsWith('s')) {
+                annotation = `@GetMapping("${path}")`;
+                signature = `public ${returnType} list(@RequestParam(defaultValue = "1") int page, @RequestParam(defaultValue = "20") int size)`;
+            }
+            else {
+                annotation = `@GetMapping("${path}")`;
+                signature = `public ${returnType} get()`;
+            }
+            break;
+        case 'POST':
+            annotation = `@PostMapping("${path}")`;
+            signature = `public ${returnType} create(@RequestBody Object body)`;
+            break;
+        case 'PUT':
+            annotation = `@PutMapping("${path}")`;
+            if (hasId) {
+                signature = `public ${returnType} update(@PathVariable Long id, @RequestBody Object body)`;
+            }
+            else {
+                signature = `public ${returnType} update(@RequestBody Object body)`;
+            }
+            break;
+        case 'DELETE':
+            annotation = `@DeleteMapping("${path}")`;
+            if (hasId) {
+                signature = `public ${returnType} delete(@PathVariable Long id)`;
+            }
+            else {
+                signature = `public ${returnType} delete()`;
+            }
+            break;
+        default:
+            annotation = `@PostMapping("${path}")`;
+            signature = `public ${returnType} handle(@RequestBody Object body)`;
+    }
+    return `
+    /** ${desc} */
+    ${annotation}
+    ${signature} {
+        ${bodyHint}
+    }`;
+}
+const uncapitalize = (s) => s.charAt(0).toLowerCase() + s.slice(1);
 function generateJavaService(className, pkg) {
     return `package ${pkg}.service;
 
@@ -529,10 +613,16 @@ function generateVueComponent(componentName) {
 function convertToClassName(name) {
     if (!name || !name.trim())
         return 'UnknownFeature';
+    // 提取 Task ID 的纯数字部分作为类名前缀，避免中文混入类名
+    // "Task-001-任务CRUD" → "Task001"
+    const idMatch = name.match(/Task-(\d+)/i);
+    if (idMatch) {
+        return `Task${idMatch[1].padStart(3, '0')}`;
+    }
+    // 回退：只保留 ASCII 字母数字
     return name
-        .split(/[-\s_]+/)
-        .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-        .join('');
+        .replace(/[^a-zA-Z0-9]/g, '')
+        .replace(/^[a-z]/, c => c.toUpperCase()) || 'Feature';
 }
 function toKebab(name) {
     return name
@@ -553,5 +643,22 @@ async function filterByPlatform(tasks, iteration, platform) {
             filtered.push(task);
     }
     return filtered;
+}
+// ============================================================
+// Hotfix 跟踪
+// ============================================================
+async function handleHotfix(options, taskIds) {
+    if (!options.hotfix)
+        return;
+    const taskId = taskIds[0];
+    if (!taskId)
+        return;
+    await (0, context_1.startHotfix)(taskId);
+    logger_1.logger.info('');
+    logger_1.logger.warn('⚠️  Hotfix Mode Active');
+    logger_1.logger.warn(`   Task: ${taskId}`);
+    logger_1.logger.warn('   Grace period: 30 min (skip reverse sync)');
+    logger_1.logger.warn('   Mandatory sync deadline: 24 hours');
+    logger_1.logger.warn('   Run: speccore sync --reverse to complete');
 }
 //# sourceMappingURL=execute.js.map

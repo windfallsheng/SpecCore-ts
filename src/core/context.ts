@@ -1,5 +1,5 @@
 import { ensureDir, readJson, writeJson, pathExists } from 'fs-extra';
-import { join } from 'path';
+import { join } from "path";
 
 export interface Context {
   currentIteration: string;
@@ -16,6 +16,14 @@ export interface Context {
   blockedTasks: number;
   customAliases: Record<string, string>;
   history: ContextHistoryEntry[];
+  hotfix?: HotfixEntry;
+}
+
+export interface HotfixEntry {
+  taskId: string;
+  startedAt: string;      // ISO timestamp
+  graceEndsAt: string;    // 30min: can skip reverse sync
+  mustSyncBy: string;     // 24h: mandatory deadline
 }
 
 export interface ContextHistoryEntry {
@@ -136,4 +144,47 @@ export async function getDefaultIteration(iteration?: string): Promise<string> {
 export async function getDefaultAssignee(assignee?: string): Promise<string> {
   if (assignee) return assignee;
   return await detectCurrentAssignee();
+}
+
+// ============================================
+// Hotfix 例外流程
+// ============================================
+
+/** 标记任务为 hotfix，宽限期 30 分钟 */
+export async function startHotfix(taskId: string): Promise<void> {
+  const now = new Date();
+  const graceEnds = new Date(now.getTime() + 30 * 60 * 1000);    // +30min
+  const mustSync = new Date(now.getTime() + 24 * 60 * 60 * 1000); // +24h
+  await updateContext({
+    hotfix: {
+      taskId,
+      startedAt: now.toISOString(),
+      graceEndsAt: graceEnds.toISOString(),
+      mustSyncBy: mustSync.toISOString(),
+    }
+  });
+}
+
+/** 清除 hotfix 标记 */
+export async function clearHotfix(): Promise<void> {
+  await updateContext({ hotfix: undefined });
+}
+
+/** 获取当前 hotfix 状态（给 validate/progress 用） */
+export async function getHotfixStatus(): Promise<{
+  inHotfix: boolean;
+  graceExpired: boolean;
+  mandatoryExpired: boolean;
+  taskId: string;
+} | null> {
+  const ctx = await loadContext();
+  if (!ctx.hotfix) return null;
+
+  const now = new Date();
+  return {
+    inHotfix: true,
+    taskId: ctx.hotfix.taskId,
+    graceExpired: now > new Date(ctx.hotfix.graceEndsAt),
+    mandatoryExpired: now > new Date(ctx.hotfix.mustSyncBy),
+  };
 }

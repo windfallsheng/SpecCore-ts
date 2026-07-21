@@ -5,9 +5,8 @@
 
 import { logger, Spinner } from '../utils/logger';
 import { pathExists, move, readdir, readFile, writeFile } from 'fs-extra';
-import { join, dirname } from 'path';
+import { join } from 'path';
 import { readGlobalIndex, updateReqInIndex, updateIndexVersion, bumpGlobalVersion } from '../core/global-layer';
-import { FileTransaction } from '../core/transaction';
 
 export interface RenameOptions {
   target?: string;

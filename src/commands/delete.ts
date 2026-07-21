@@ -9,7 +9,7 @@
  *   4. 操作日志
  */
 
-import { pathExists, move, readFile, writeFile, readdir, ensureDir } from 'fs-extra';
+import { pathExists, move, readFile, readdir, ensureDir } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
 import { t } from '../i18n/t';
@@ -191,7 +191,7 @@ async function cleanContext(cwd: string, taskId: string): Promise<void> {
   // 清理 history 中的引用
   if (ctx.history) {
     ctx.history = ctx.history.filter(
-      (h: any) => h.task !== taskId
+      (h: { task: string; timestamp: string }) => h.task !== taskId
     );
   }
 

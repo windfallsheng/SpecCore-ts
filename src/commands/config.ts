@@ -1,11 +1,12 @@
 import { pathExists, readFile, writeFile, ensureDir } from 'fs-extra';
-import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
 
 export interface ConfigOptions {
   get?: string;
   set?: string;
   reset?: boolean;
+  rule?: string;
+  tech?: string;
 }
 
 interface ConfigData {
@@ -19,6 +20,20 @@ export async function configCommand(options: ConfigOptions): Promise<void> {
   spinner.start();
 
   try {
+    // CONSTITUTION.md spec-rule 配置
+    if (options.rule && options.set) {
+      spinner.stop();
+      await setSpecRule(options.rule, options.set);
+      return;
+    }
+
+    // TECH_STACK.md 技术栈配置
+    if (options.tech && options.set) {
+      spinner.stop();
+      await setTechStack(options.tech, options.set);
+      return;
+    }
+
     if (options.get) {
       const value = await getConfig(options.get);
       spinner.stop(`Config value: ${value}`);
@@ -128,4 +143,90 @@ async function resetConfig(): Promise<void> {
 
   await ensureDir('.speccore');
   await writeFile(CONFIG_PATH, defaultConfig);
+}
+
+// ============================================================
+// CONSTITUTION.md spec-rule 写入
+// ============================================================
+const CONSTITUTION_PATH = '.speccore/CONSTITUTION.md';
+
+async function setSpecRule(ruleName: string, value: string): Promise<void> {
+  if (!(await pathExists(CONSTITUTION_PATH))) {
+    logger.error('CONSTITUTION.md 不存在，请先运行 speccore init');
+    return;
+  }
+
+  let content = await readFile(CONSTITUTION_PATH, 'utf-8');
+  // 标准化口语描述
+  const normalized = normalizeRuleValue(ruleName, value);
+  const ruleBlock = `<!-- spec-rule: ${ruleName} -->\n- ${normalized}\n<!-- /spec-rule -->`;
+
+  // 查找已有 spec-rule 区块并更新
+  const ruleRegex = new RegExp(`<!--\\s*spec-rule:\\s*${ruleName}\\s*-->[\\s\\S]*?<!--\\s*/spec-rule\\s*-->`, 'i');
+  if (ruleRegex.test(content)) {
+    content = content.replace(ruleRegex, ruleBlock);
+    logger.info(`已更新 spec-rule: ${ruleName}`);
+  } else {
+    // 找到 ## 代码规范 章节并追加
+    if (content.includes('## 代码规范')) {
+      content = content.replace(/(## 代码规范[^\n]*\n)/, `$1${ruleBlock}\n`);
+    } else {
+      // 追加到文件末尾
+      content += `\n\n## 代码规范\n\n${ruleBlock}\n`;
+    }
+    logger.info(`已新增 spec-rule: ${ruleName}`);
+  }
+
+  await writeFile(CONSTITUTION_PATH, content);
+  logger.info(`  规则: ${ruleName} → "${normalized}"`);
+  logger.info('  💡 下次 speccore execute 将自动应用此规则');
+}
+
+function normalizeRuleValue(ruleName: string, value: string): string {
+  // 去掉语气词 + 口语前缀
+  let v = value.replace(/[了啦啊呢嗯哈哦]$/, '').trim();
+  v = v.replace(/^(改成|换成?|用|用的是|统一用|使用)\s*/i, '').trim();
+
+  switch (ruleName) {
+    case 'exception-handler':
+      return `统一异常: ${v}`;
+    case 'response-format':
+      return `统一返回: ${v}`;
+    case 'orm':
+      return `ORM 框架: ${v}`;
+    case 'naming':
+      return v;
+    case 'validation':
+      return `参数校验: ${v}`;
+    default:
+      return v;
+  }
+}
+
+// ============================================================
+// TECH_STACK.md 技术栈写入
+// ============================================================
+const TECH_STACK_PATH = '.speccore/GLOBAL/TECH_STACK.md';
+
+async function setTechStack(target: string, value: string): Promise<void> {
+  if (!(await pathExists(TECH_STACK_PATH))) {
+    logger.error('TECH_STACK.md 不存在，请先运行 speccore init');
+    return;
+  }
+
+  let content = await readFile(TECH_STACK_PATH, 'utf-8');
+  const tag = `tech-stack: ${target}`;
+  const entry = `<!-- ${tag} -->\n- ${value}\n<!-- /tech-stack -->`;
+  const regex = new RegExp(`<!--\\s*${tag}\\s*-->[\\s\\S]*?<!--\\s*/tech-stack\\s*-->`, 'i');
+
+  if (regex.test(content)) {
+    content = content.replace(regex, entry);
+    logger.info(`已更新技术栈: ${target}`);
+  } else {
+    logger.warn(`未找到 tech-stack: ${target} 区块，请在 TECH_STACK.md 中手动添加`);
+  }
+
+  await writeFile(TECH_STACK_PATH, content);
+  logger.info(`  ${target}: ${value}`);
+  logger.info('  💡 下次 speccore execute 将显示此技术栈');
 }

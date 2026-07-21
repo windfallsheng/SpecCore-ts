@@ -23,12 +23,15 @@ const bugfix_1 = require("./commands/bugfix");
 const research_1 = require("./commands/research");
 const change_1 = require("./commands/change");
 const sync_1 = require("./commands/sync");
+const pattern_1 = require("./commands/pattern");
+const rollback_1 = require("./commands/rollback");
 const handover_1 = require("./commands/handover");
 const retro_1 = require("./commands/retro");
 const template_add_1 = require("./commands/template-add");
 const help_1 = require("./commands/help");
 const demo_1 = require("./commands/demo");
 const welcome_1 = require("./commands/welcome");
+const word2spec_1 = require("./commands/word2spec");
 // 全量层命令
 const iteration_from_global_1 = require("./commands/iteration-from-global");
 const sync_global_1 = require("./commands/sync-global");
@@ -250,6 +253,7 @@ commander_1.program
     .option('--parallel <count>', 'Parallel execution count', '1')
     .option('-i, --iteration <iteration>', 'Target iteration')
     .option('--force', 'Skip preview and execute directly')
+    .option('--hotfix', 'Emergency fix: skip reverse sync (30min grace, 24h mandatory)')
     .action(execute_1.executeCommand);
 // ================================================================
 // 🔄 变更管理
@@ -275,6 +279,7 @@ commander_1.program
     .option('--auto', 'Auto-apply sync without confirmation')
     .option('--dry-run', 'Preview differences without modifying')
     .option('--force', 'Skip preview')
+    .option('--detect', 'Detect code-spec discrepancies (read-only, no changes)')
     .action(sync_1.syncCommand);
 // ================================================================
 // ✅ 审查与验证
@@ -357,9 +362,11 @@ commander_1.program
 commander_1.program
     .command('config')
     .alias('cf')
-    .description('Manage SpecCore configuration')
+    .description('Manage SpecCore configuration and code rules')
     .option('--get <key>', 'Get configuration value')
-    .option('--set <key=value>', 'Set configuration value')
+    .option('--set <key=value>', 'Set configuration value (SETTINGS.md)')
+    .option('-r, --rule <name>', 'Target spec-rule (CONSTITUTION.md)')
+    .option('-t, --tech <target>', 'Target tech-stack (TECH_STACK.md): backend | frontend')
     .option('--reset', 'Reset to default configuration')
     .action(config_1.configCommand);
 commander_1.program
@@ -404,6 +411,14 @@ commander_1.program
     .option('--force', 'Force overwrite existing iteration')
     .action(iteration_from_global_1.iterationFromGlobalCommand);
 commander_1.program
+    .command('word2spec')
+    .alias('w2s')
+    .description('Convert Word (.docx/.doc) requirement docs to SpecCore Markdown')
+    .option('-f, --file <path>', 'Source Word file path (required)')
+    .option('-i, --iteration <name>', 'Target iteration name (required)')
+    .option('-p, --platform <name>', 'Platform/end identifier (e.g. 后台/Web/小程序)')
+    .action(word2spec_1.word2specCommand);
+commander_1.program
     .command('sync-global')
     .alias('sg')
     .description('Bidirectional sync between iteration and global layer')
@@ -413,6 +428,33 @@ commander_1.program
     .option('--dry-run', 'Preview changes without applying')
     .option('--force', 'Skip preview and execute')
     .action(sync_global_1.syncGlobalCommand);
+// ================================================================
+// 📦 模式保存
+// ================================================================
+commander_1.program
+    .command('pattern')
+    .alias('p')
+    .description('Save current task as reusable pattern template')
+    .option('-n, --name <name>', 'Pattern name')
+    .option('-t, --task <task>', 'Source task ID')
+    .option('-c, --content <content>', 'Manual content')
+    .option('-f, --file <file>', 'Read from file path')
+    .option('-d, --desc <desc>', 'Pattern description')
+    .option('-i, --iteration <iteration>', 'Target iteration')
+    .option('--force', 'Overwrite existing pattern')
+    .action(pattern_1.patternCommand);
+// ================================================================
+// 🔙 回滚
+// ================================================================
+commander_1.program
+    .command('rollback')
+    .alias('rb')
+    .description('Restore Spec files from .bak backups')
+    .option('-t, --task <task>', 'Target task')
+    .option('-i, --iteration <iteration>', 'Target iteration')
+    .option('--list', 'List backups only, do not restore')
+    .option('--confirm', 'Confirm restore (required to execute)')
+    .action(rollback_1.rollbackCommand);
 commander_1.program
     .command('global-status')
     .alias('gs')

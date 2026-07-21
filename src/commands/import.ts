@@ -3,7 +3,7 @@
  * 将存量项目导入到全量层（GLOBAL/PROJECTS/），填充全量需求和索引
  */
 
-import { pathExists, readdir, readFile, stat, writeFile, ensureDir } from 'fs-extra';
+import { pathExists, readdir, readFile, stat, writeFile } from 'fs-extra';
 import { FileTransaction } from '../core/transaction';
 import { join, extname } from 'path';
 import { logger, Spinner } from '../utils/logger';

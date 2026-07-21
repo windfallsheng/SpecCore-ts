@@ -89,12 +89,6 @@ async function findTaskDir(taskName: string): Promise<string | null> {
   const cwd = process.cwd();
   const entries = await readdir(cwd, { withFileTypes: true });
 
-  // 直接匹配
-  const directPaths = [
-    join(cwd, taskName),
-    join(cwd, `期次-*/*${taskName}*`),
-  ];
-
   const exactMatch = join(cwd, taskName);
   if (await pathExists(exactMatch)) return exactMatch;
 

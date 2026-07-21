@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.statusCommand = statusCommand;
 const logger_1 = require("../utils/logger");
 const context_1 = require("../core/context");
+;
 const state_1 = require("../core/state");
 async function statusCommand(options) {
     const spinner = new logger_1.Spinner('Checking status');

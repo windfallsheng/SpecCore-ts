@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.progressCommand = progressCommand;
 const logger_1 = require("../utils/logger");
 const context_1 = require("../core/context");
+;
 const state_1 = require("../core/state");
 async function progressCommand(options) {
     const spinner = new logger_1.Spinner('Loading progress');
@@ -26,6 +27,7 @@ async function progressCommand(options) {
         }
         spinner.stop('Progress loaded');
         printProgress(iteration, tasks, options);
+        await printHotfixStatus();
     }
     catch (error) {
         spinner.fail(`Progress loading failed: ${error}`);
@@ -85,6 +87,21 @@ function printTaskProgress(task) {
     logger_1.logger.info(`  Assignee: ${task.assignee || 'Unassigned'}`);
     if (task.dependencies.length > 0) {
         logger_1.logger.info(`  Dependencies: ${task.dependencies.join(', ')}`);
+    }
+}
+async function printHotfixStatus() {
+    const hotfix = await (0, context_1.getHotfixStatus)();
+    if (!hotfix)
+        return;
+    logger_1.logger.warn('⚠️  Hotfix: ' + hotfix.taskId);
+    if (hotfix.mandatoryExpired) {
+        logger_1.logger.error('🚨 已超 24h！立即运行: speccore sync --reverse');
+    }
+    else if (hotfix.graceExpired) {
+        logger_1.logger.warn('   宽限期已过，运行: speccore sync --reverse');
+    }
+    else {
+        logger_1.logger.info('   宽限期内，可跳过反向同步');
     }
 }
 //# sourceMappingURL=progress.js.map
