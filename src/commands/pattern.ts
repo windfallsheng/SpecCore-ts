@@ -4,7 +4,7 @@
 import { logger } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
 import { scanTasks } from '../core/state';
-import { readFile, writeFile, pathExists, ensureDir, copy } from 'fs-extra';
+import { readFile, writeFile, pathExists, ensureDir } from 'fs-extra';
 import { join } from 'path';
 
 export interface PatternOptions {

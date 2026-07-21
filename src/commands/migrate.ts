@@ -12,7 +12,7 @@
  *  - Migration report generation
  */
 
-import { pathExists, readdir, readFile, writeFile, ensureDir } from 'fs-extra';
+import { pathExists, readdir, readFile, ensureDir } from 'fs-extra';
 import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
 import { FileTransaction } from '../core/transaction';

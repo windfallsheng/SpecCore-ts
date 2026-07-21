@@ -4,7 +4,6 @@
  */
 
 import { pathExists, readFile, writeFile, readdir, ensureDir } from 'fs-extra';
-import { FileTransaction } from '../core/transaction';
 import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
 import yaml from 'js-yaml';

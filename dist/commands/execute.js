@@ -342,7 +342,6 @@ async function processBatch(tasks, state, iteration) {
     // Execute tasks in batch
     const completed = [];
     const total = tasks.length;
-    const progressBar = createBar(0, 20);
     for (let i = 0; i < total; i++) {
         const task = tasks[i];
         const progress = Math.round(((i + 1) / total) * 100);
@@ -403,8 +402,6 @@ async function simulateTaskExecution(task, iteration) {
         const backendDir = (0, path_1.join)(taskDir, 'backend');
         if (await (0, fs_extra_1.pathExists)(backendDir)) {
             const reqPath = (0, path_1.join)(backendDir, 'REQ.md');
-            const techPath = (0, path_1.join)(backendDir, 'TECH.md');
-            const contractPath = (0, path_1.join)(taskDir, '_shared', 'API_CONTRACT.yaml');
             let className = convertToClassName(task.name || task.id);
             // 使用安全的 Java 包名：com.example.{className小写}
             let packageName = `com.example.${className.toLowerCase()}`;
