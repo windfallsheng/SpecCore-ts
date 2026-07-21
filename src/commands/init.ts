@@ -1,6 +1,7 @@
 import { ensureDir, writeFile, pathExists, readFile } from 'fs-extra';
 import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
+import { initCounters } from '../core/global-counters';
 import { updateContext } from '../core/context';
 import { i18n } from '../i18n';
 import { ContextSchema } from '../core/schemas';
@@ -44,6 +45,9 @@ export async function initCommand(options: InitOptions): Promise<void> {
     await ensureDir(join(speccoreDir, 'GLOBAL'));
     await ensureDir(join(speccoreDir, 'GLOBAL', 'PROJECTS'));
     await ensureDir(join(speccoreDir, 'GLOBAL', 'PROJECTS', '_template'));
+
+    // Initialize global counters
+    await initCounters();
     await ensureDir(join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'crud'));
     await ensureDir(join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'auth'));
     await ensureDir(join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'export'));

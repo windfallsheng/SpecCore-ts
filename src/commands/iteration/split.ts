@@ -3,6 +3,7 @@ import { join } from 'path';
 import { logger, Spinner } from '../../utils/logger';
 import { getDefaultIteration } from '../../core/context';
 import { scoreRisk } from '../../core/risk-scorer';
+import { nextTaskId } from '../../core/global-counters';
 
 import { showNextSteps } from '../../core/next-steps';
 export interface IterationSplitOptions {
@@ -102,7 +103,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
 
     // Create tasks
     for (let i = 0; i < sections.length; i++) {
-      const taskId = `Task-${String(i + 1).padStart(3, '0')}`;
+      const { id: taskId } = await nextTaskId();
       await createTaskFromSection(iterationDir, taskId, sections[i], platforms);
     }
 
@@ -342,7 +343,7 @@ async function updateProjectGraph(iterationDir: string, sections: Section[]): Pr
   }
 
   for (let i = 0; i < sections.length; i++) {
-    const taskId = `Task-${String(i + 1).padStart(3, '0')}`;
+    const { id: taskId } = await nextTaskId();
     const taskName = sections[i].name;
     
     if (!content.includes(taskId)) {

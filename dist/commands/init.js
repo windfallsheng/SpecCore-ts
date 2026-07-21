@@ -4,6 +4,7 @@ exports.initCommand = initCommand;
 const fs_extra_1 = require("fs-extra");
 const path_1 = require("path");
 const logger_1 = require("../utils/logger");
+const global_counters_1 = require("../core/global-counters");
 const context_1 = require("../core/context");
 const i18n_1 = require("../i18n");
 const schemas_1 = require("../core/schemas");
@@ -35,6 +36,8 @@ async function initCommand(options) {
         await (0, fs_extra_1.ensureDir)((0, path_1.join)(speccoreDir, 'GLOBAL'));
         await (0, fs_extra_1.ensureDir)((0, path_1.join)(speccoreDir, 'GLOBAL', 'PROJECTS'));
         await (0, fs_extra_1.ensureDir)((0, path_1.join)(speccoreDir, 'GLOBAL', 'PROJECTS', '_template'));
+        // Initialize global counters
+        await (0, global_counters_1.initCounters)();
         await (0, fs_extra_1.ensureDir)((0, path_1.join)(speccoreDir, 'PATTERNS', 'TEMPLATES', 'crud'));
         await (0, fs_extra_1.ensureDir)((0, path_1.join)(speccoreDir, 'PATTERNS', 'TEMPLATES', 'auth'));
         await (0, fs_extra_1.ensureDir)((0, path_1.join)(speccoreDir, 'PATTERNS', 'TEMPLATES', 'export'));
