@@ -5,6 +5,34 @@ const fs_extra_1 = require("fs-extra");
 const path_1 = require("path");
 const logger_1 = require("../../utils/logger");
 const context_1 = require("../../core/context");
+async function detectPlatforms(iterationDir, specified) {
+    if (specified)
+        return specified.split(',').map(p => p.trim()).filter(Boolean);
+    // Auto-detect from INDEX.md (populated by word2spec)
+    const indexPath = (0, path_1.join)(iterationDir, '00-需求文档', 'INDEX.md');
+    if (await (0, fs_extra_1.pathExists)(indexPath)) {
+        const content = await (0, fs_extra_1.readFile)(indexPath, 'utf-8');
+        // Parse table rows: skip header and separator lines
+        const lines = content.split('\n');
+        const platforms = new Set();
+        let inTable = false;
+        for (const line of lines) {
+            if (line.startsWith('|') && !line.includes(':---')) {
+                const cols = line.split('|').map(c => c.trim()).filter(Boolean);
+                // First column is platform name, skip header row
+                if (cols[0] && cols[0] !== '端' && !String(cols[0]).includes('文件')) {
+                    platforms.add(cols[0]);
+                    inTable = true;
+                }
+            }
+        }
+        // Also check for common date patterns in first col and filter them
+        const filtered = [...platforms].filter(p => !/^\d{4}-\d{2}-\d{2}$/.test(p));
+        if (filtered.length > 0)
+            return filtered;
+    }
+    return ['web']; // default
+}
 async function iterationSplitCommand(options) {
     const spinner = new logger_1.Spinner('Splitting requirements into tasks');
     spinner.start();
@@ -27,6 +55,8 @@ async function iterationSplitCommand(options) {
             return;
         }
         logger_1.logger.info(`Found ${sections.length} sections to split`);
+        const platforms = await detectPlatforms(iterationDir, options.platforms);
+        logger_1.logger.info(`Platforms: ${platforms.join(', ')}`);
         if (options.dryRun) {
             spinner.stop('Dry run complete - no files created');
             for (const section of sections) {
@@ -37,7 +67,7 @@ async function iterationSplitCommand(options) {
         // Create tasks
         for (let i = 0; i < sections.length; i++) {
             const taskId = `Task-${String(i + 1).padStart(3, '0')}`;
-            await createTaskFromSection(iterationDir, taskId, sections[i]);
+            await createTaskFromSection(iterationDir, taskId, sections[i], platforms);
         }
         // Update PROJECT_GRAPH.md
         await updateProjectGraph(iterationDir, sections);
@@ -84,11 +114,14 @@ function extractSections(content, sectionFilter) {
     }
     return sections;
 }
-async function createTaskFromSection(iterationDir, taskId, section) {
+async function createTaskFromSection(iterationDir, taskId, section, platforms) {
     const taskDir = (0, path_1.join)(iterationDir, taskId);
     await (0, fs_extra_1.ensureDir)((0, path_1.join)(taskDir, 'backend'));
-    await (0, fs_extra_1.ensureDir)((0, path_1.join)(taskDir, 'frontend'));
     await (0, fs_extra_1.ensureDir)((0, path_1.join)(taskDir, '_shared'));
+    // Create per-platform frontend directories
+    for (const platform of platforms) {
+        await (0, fs_extra_1.ensureDir)((0, path_1.join)(taskDir, 'frontend', platform));
+    }
     // Write task type
     await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, '.task-type'), 'feature');
     // Write REQ.md
@@ -138,13 +171,19 @@ ${section.content}
 | TECH.md | ✅ | ./TECH.md |
 | TASK.md | ✅ | ./TASK.md |
 `);
-    // Copy to frontend
+    // Copy to each frontend platform
     const reqContent = await (0, fs_extra_1.readFile)((0, path_1.join)(taskDir, 'backend', 'REQ.md'), 'utf-8');
-    await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', 'REQ.md'), reqContent);
+    for (const platform of platforms) {
+        await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'REQ.md'), reqContent);
+    }
     const techContent = await (0, fs_extra_1.readFile)((0, path_1.join)(taskDir, 'backend', 'TECH.md'), 'utf-8');
-    await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', 'TECH.md'), techContent);
+    for (const platform of platforms) {
+        await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'TECH.md'), techContent);
+    }
     const taskContent = await (0, fs_extra_1.readFile)((0, path_1.join)(taskDir, 'backend', 'TASK.md'), 'utf-8');
-    await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', 'TASK.md'), taskContent);
+    for (const platform of platforms) {
+        await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'TASK.md'), taskContent);
+    }
 }
 async function updateProjectGraph(iterationDir, sections) {
     const graphPath = (0, path_1.join)(iterationDir, '00-期次总览', 'PROJECT_GRAPH.md');
