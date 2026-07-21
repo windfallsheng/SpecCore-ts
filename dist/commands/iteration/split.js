@@ -130,11 +130,21 @@ async function createTaskFromSection(iterationDir, taskId, section, allPlatforms
     const taskDir = (0, path_1.join)(iterationDir, taskId);
     // 如果 section 有指定平台则只创建该平台，否则创建全部平台
     const taskPlatforms = section.platform ? [section.platform] : allPlatforms;
-    await (0, fs_extra_1.ensureDir)((0, path_1.join)(taskDir, 'backend'));
     await (0, fs_extra_1.ensureDir)((0, path_1.join)(taskDir, '_shared'));
-    // Create per-platform frontend directories
+    // Create per-platform directories: backend services under backend/, frontend under frontend/
     for (const platform of taskPlatforms) {
-        await (0, fs_extra_1.ensureDir)((0, path_1.join)(taskDir, 'frontend', platform));
+        if (platform.startsWith('后台') || platform === 'backend') {
+            // Backend service: e.g., 后台管理端 → backend/管理端
+            const service = platform.replace(/^后台/, '').trim() || 'default';
+            await (0, fs_extra_1.ensureDir)((0, path_1.join)(taskDir, 'backend', service || platform));
+        }
+        else {
+            await (0, fs_extra_1.ensureDir)((0, path_1.join)(taskDir, 'frontend', platform));
+        }
+    }
+    // Always create a common backend directory for shared backend specs
+    if (!taskPlatforms.some(p => p.startsWith('后台'))) {
+        await (0, fs_extra_1.ensureDir)((0, path_1.join)(taskDir, 'backend'));
     }
     // Write task type
     await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, '.task-type'), 'feature');
@@ -185,18 +195,24 @@ ${section.content}
 | TECH.md | ✅ | ./TECH.md |
 | TASK.md | ✅ | ./TASK.md |
 `);
-    // Copy to each frontend platform
+    // Copy to each platform directory (backend services + frontend platforms)
     const reqContent = await (0, fs_extra_1.readFile)((0, path_1.join)(taskDir, 'backend', 'REQ.md'), 'utf-8');
-    for (const platform of taskPlatforms) {
-        await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'REQ.md'), reqContent);
-    }
     const techContent = await (0, fs_extra_1.readFile)((0, path_1.join)(taskDir, 'backend', 'TECH.md'), 'utf-8');
-    for (const platform of taskPlatforms) {
-        await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'TECH.md'), techContent);
-    }
     const taskContent = await (0, fs_extra_1.readFile)((0, path_1.join)(taskDir, 'backend', 'TASK.md'), 'utf-8');
     for (const platform of taskPlatforms) {
-        await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'TASK.md'), taskContent);
+        if (platform.startsWith('后台') || platform === 'backend') {
+            const service = platform.replace(/^后台/, '').trim() || platform;
+            await (0, fs_extra_1.ensureDir)((0, path_1.join)(taskDir, 'backend', service));
+            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', service, 'REQ.md'), reqContent);
+            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', service, 'TECH.md'), techContent);
+            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', service, 'TASK.md'), taskContent);
+        }
+        else {
+            await (0, fs_extra_1.ensureDir)((0, path_1.join)(taskDir, 'frontend', platform));
+            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'REQ.md'), reqContent);
+            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'TECH.md'), techContent);
+            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'TASK.md'), taskContent);
+        }
     }
 }
 async function updateProjectGraph(iterationDir, sections) {

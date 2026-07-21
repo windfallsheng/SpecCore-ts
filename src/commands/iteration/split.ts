@@ -164,12 +164,22 @@ async function createTaskFromSection(iterationDir: string, taskId: string, secti
   // 如果 section 有指定平台则只创建该平台，否则创建全部平台
   const taskPlatforms = section.platform ? [section.platform] : allPlatforms;
   
-  await ensureDir(join(taskDir, 'backend'));
   await ensureDir(join(taskDir, '_shared'));
 
-  // Create per-platform frontend directories
+  // Create per-platform directories: backend services under backend/, frontend under frontend/
   for (const platform of taskPlatforms) {
-    await ensureDir(join(taskDir, 'frontend', platform));
+    if (platform.startsWith('后台') || platform === 'backend') {
+      // Backend service: e.g., 后台管理端 → backend/管理端
+      const service = platform.replace(/^后台/, '').trim() || 'default';
+      await ensureDir(join(taskDir, 'backend', service || platform));
+    } else {
+      await ensureDir(join(taskDir, 'frontend', platform));
+    }
+  }
+  
+  // Always create a common backend directory for shared backend specs
+  if (!taskPlatforms.some(p => p.startsWith('后台'))) {
+    await ensureDir(join(taskDir, 'backend'));
   }
 
   // Write task type
@@ -234,20 +244,24 @@ ${section.content}
 `
   );
 
-  // Copy to each frontend platform
+  // Copy to each platform directory (backend services + frontend platforms)
   const reqContent = await readFile(join(taskDir, 'backend', 'REQ.md'), 'utf-8');
-  for (const platform of taskPlatforms) {
-    await writeFile(join(taskDir, 'frontend', platform, 'REQ.md'), reqContent);
-  }
-  
   const techContent = await readFile(join(taskDir, 'backend', 'TECH.md'), 'utf-8');
-  for (const platform of taskPlatforms) {
-    await writeFile(join(taskDir, 'frontend', platform, 'TECH.md'), techContent);
-  }
-  
   const taskContent = await readFile(join(taskDir, 'backend', 'TASK.md'), 'utf-8');
+  
   for (const platform of taskPlatforms) {
-    await writeFile(join(taskDir, 'frontend', platform, 'TASK.md'), taskContent);
+    if (platform.startsWith('后台') || platform === 'backend') {
+      const service = platform.replace(/^后台/, '').trim() || platform;
+      await ensureDir(join(taskDir, 'backend', service));
+      await writeFile(join(taskDir, 'backend', service, 'REQ.md'), reqContent);
+      await writeFile(join(taskDir, 'backend', service, 'TECH.md'), techContent);
+      await writeFile(join(taskDir, 'backend', service, 'TASK.md'), taskContent);
+    } else {
+      await ensureDir(join(taskDir, 'frontend', platform));
+      await writeFile(join(taskDir, 'frontend', platform, 'REQ.md'), reqContent);
+      await writeFile(join(taskDir, 'frontend', platform, 'TECH.md'), techContent);
+      await writeFile(join(taskDir, 'frontend', platform, 'TASK.md'), taskContent);
+    }
   }
 }
 
