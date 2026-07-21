@@ -9,7 +9,7 @@
  *   4. 操作日志
  */
 
-import { pathExists, move, readFile, writeFile, readdir, ensureDir } from 'fs-extra';
+import { pathExists, move, readFile, readdir, ensureDir } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
 import { t } from '../i18n/t';

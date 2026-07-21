@@ -1,11 +1,10 @@
-import { pathExists, readdir, readFile } from 'fs-extra';
+import { pathExists, readFile } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
-import { t } from '../i18n/t';
 import { getDefaultIteration, updateContext, recordHistory, startHotfix } from '../core/context';
 import { scanTasks, topologicalSort, TaskState } from '../core/state';
 import { FileTransaction } from '../core/transaction';
-import { loadSpecRules, generateImports, getTodoHint, SpecRules, loadTechStack, TechStack } from '../core/spec-rules';
+import { loadSpecRules, generateImports, SpecRules, loadTechStack } from '../core/spec-rules';
 
 import { logOperation } from '../core/operation-log';
 import {
