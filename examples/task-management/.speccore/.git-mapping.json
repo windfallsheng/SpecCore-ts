@@ -1,0 +1,12 @@
+{
+  "feature/Task-001-任务CRUD-Task-001-任务CRUD-后端任务": {
+    "taskId": "Task-001-任务CRUD",
+    "taskName": "Task-001 任务CRUD - 后端任务",
+    "createdAt": "2026-07-21T03:09:42.935Z"
+  },
+  "feature/Task-002-用户认证-Task-002-用户认证-后端任务": {
+    "taskId": "Task-002-用户认证",
+    "taskName": "Task-002 用户认证 - 后端任务",
+    "createdAt": "2026-07-21T03:09:43.250Z"
+  }
+}

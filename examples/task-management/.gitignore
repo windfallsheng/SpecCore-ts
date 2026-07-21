@@ -1,2 +1,3 @@
-node_modules/
-.workbuddy/
+# SpecCore local config
+.speccore/local/
+期次-*/.local/
