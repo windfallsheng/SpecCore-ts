@@ -265,7 +265,9 @@ speccore progress --platform=h5 --detail
 speccore report --format=html --output=report.html --team --risk
 
 # 4. Visual dashboard
-speccore dashboard --output=dashboard.html
+speccore dashboard
+# Or one command:
+speccore done --task=Task-001 --output=dashboard.html
 ```
 
 ---
@@ -771,6 +773,8 @@ speccore current --task=Task-001 --status=done
 
 # 6. View final dashboard
 speccore dashboard
+# Or one command:
+speccore done --task=Task-001
 ```
 
 **AI dialog equivalent**:
