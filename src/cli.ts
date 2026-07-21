@@ -284,6 +284,8 @@ program
   .option('-r, --req <req>', 'Requirement ID')
   .option('-d, --desc <desc>', 'Change description (required)')
   .option('--global', 'Global layer change (CONSTITUTION.md)')
+  .option('--requirement', 'Also update REQUIREMENT.md (iteration-level)')
+  .option('--analysis', 'Also update ANALYSIS.md (tech plan)')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('--dry-run', 'Preview impact without modifying')
   .option('--force', 'Skip preview and apply directly')
