@@ -5,7 +5,7 @@
 
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
-import { readFile, pathExists } from 'fs-extra';
+import { readFile, writeFile, pathExists } from 'fs-extra';
 import { join } from 'path';
 import { FileTransaction } from '../core/transaction';
 import { scanTasks } from '../core/state';
@@ -16,6 +16,8 @@ export interface ChangeOptions {
   global?: boolean;
   iteration?: string;
   dryRun?: boolean;
+  requirement?: boolean;  // 同步更新 REQUIREMENT.md
+  analysis?: boolean;     // 同步更新 ANALYSIS.md
   force?: boolean;
 }
 
@@ -187,6 +189,14 @@ async function applyTaskChange(options: ChangeOptions, iteration: string): Promi
     logger.info(`✅ 已更新 ${tx.length} 个文件（事务保护）`);
     logger.info(`   ${options.task}/backend/REQ.md`);
     logger.info(`   ${options.task}/backend/TASK.md`);
+
+    // ── 联动更新上层文档 ──
+    if (options.requirement && options.task) {
+      await syncToRequirement(iteration, options.task, options.desc!);
+    }
+    if (options.analysis && options.task) {
+      await syncToAnalysis(iteration, options.task, options.desc!);
+    }
   }
 }
 
@@ -259,4 +269,77 @@ function normalizeDescription(desc: string): string {
 
   // 无法识别，原样返回但去语气词
   return desc.replace(/[了啦啊呢嗯哦哈]$/, '').trim();
+}
+
+/**
+ * 同步变更到 REQUIREMENT.md（期次聚合需求文档）
+ */
+async function syncToRequirement(iteration: string, taskId: string, desc: string): Promise<void> {
+  const iterDir = `期次-${iteration}`;
+  const reqPath = join(iterDir, '00-需求文档', 'REQUIREMENT.md');
+  
+  if (!(await pathExists(reqPath))) {
+    logger.warn(`  ⚠️ REQUIREMENT.md 不存在，跳过同步`);
+    return;
+  }
+
+  const content = await readFile(reqPath, 'utf-8');
+  const now = new Date().toISOString().split('T')[0];
+  const entry = `\n| ${now} | ${taskId}: ${desc} | 变更 |`;
+  
+  // 在变更履历部分追加，或在末尾追加
+  const changelogMatch = content.match(/## 变更履历/);
+  let updated = '';
+  if (changelogMatch) {
+    const idx = content.indexOf('## 变更履历');
+    const nextSection = content.indexOf('\n## ', idx + 1);
+    if (nextSection > 0) {
+      updated = content.slice(0, nextSection) + entry + '\n' + content.slice(nextSection);
+    } else {
+      updated = content + entry + '\n';
+    }
+  } else {
+    updated = content + '\n## 变更履历\n\n| 时间 | 内容 | 类型 |\n| :--- | :--- | :--- |' + entry + '\n';
+  }
+  
+  await writeFile(reqPath, updated);
+  logger.info(`   → 已同步到 REQUIREMENT.md`);
+}
+
+/**
+ * 同步变更到 ANALYSIS.md（技术方案文档）
+ */
+async function syncToAnalysis(iteration: string, taskId: string, desc: string): Promise<void> {
+  const iterDir = `期次-${iteration}`;
+  const analysisPath = join(iterDir, '00-需求文档', 'ANALYSIS.md');
+  
+  if (!(await pathExists(analysisPath))) {
+    logger.warn(`  ⚠️ ANALYSIS.md 不存在，跳过同步。请先运行 speccore analyze`);
+    return;
+  }
+
+  const content = await readFile(analysisPath, 'utf-8');
+  const now = new Date().toISOString().split('T')[0];
+  const entry = `| ${now} | ${taskId} | ${desc} |`;
+  
+  // 在技术方案末尾追加变更记录
+  const marker = '可以开始拆分任务';
+  const idx = content.lastIndexOf(marker);
+  if (idx > 0) {
+    const before = content.slice(0, idx + marker.length);
+    const after = content.slice(idx + marker.length);
+    
+    if (after.includes('## 变更记录')) {
+      const updated = before + after.replace(/## 变更记录[\s\S]*$/, 
+        '## 变更记录\n\n| 时间 | 任务 | 变更内容 |\n| :--- | :--- | :--- |' + entry + '\n');
+      await writeFile(analysisPath, updated);
+    } else {
+      const updated = before + '\n\n## 变更记录\n\n| 时间 | 任务 | 变更内容 |\n| :--- | :--- | :--- |' + entry + '\n' + after;
+      await writeFile(analysisPath, updated);
+    }
+  } else {
+    await writeFile(analysisPath, content + '\n\n## 变更记录\n\n| 时间 | 任务 | 变更内容 |\n| :--- | :--- | :--- |' + entry + '\n');
+  }
+  
+  logger.info(`   → 已同步到 ANALYSIS.md`);
 }
