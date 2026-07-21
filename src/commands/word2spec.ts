@@ -25,6 +25,14 @@ function findCommand(cmd: string): string | null {
   }
 }
 
+function parseBatchFiles(files: string): [string, string][] {
+  return files.split(',').map(pair => {
+    const eq = pair.lastIndexOf('=');
+    if (eq < 0) return null;
+    return [pair.substring(0, eq).trim(), pair.substring(eq + 1).trim()] as [string, string];
+  }).filter(Boolean) as [string, string][];
+}
+
 function detectPlatform(): 'macos' | 'linux' | 'win' {
   if (process.platform === 'darwin') return 'macos';
   if (process.platform === 'win32') return 'win';
@@ -68,15 +76,39 @@ export interface Word2SpecOptions {
   file: string;
   iteration: string;
   platform?: string;
+  files?: string;  // batch: "path1.docx=平台1,path2.docx=平台2"
 }
 
 export async function word2specCommand(options: Word2SpecOptions): Promise<void> {
-  if (!options.file) {
-    logger.error('请指定 Word 文件: speccore word2spec --file=<路径>');
+  // ── 批量模式 ──
+  if (options.files) {
+    const pairs = parseBatchFiles(options.files);
+    if (pairs.length === 0) {
+      logger.error('格式错误。用法: --files "path1.docx=平台1,path2.docx=平台2"');
+      return;
+    }
+    logger.info(`📦 批量导入 ${pairs.length} 个文件...\n`);
+    let success = 0;
+    for (const [file, platform] of pairs) {
+      logger.info(`  → ${file} (${platform})`);
+      await processSingle({ ...options, file, platform });
+      success++;
+    }
+    logger.info(`\n✅ ${success}/${pairs.length} 个文件导入完成`);
     return;
   }
+
+  // ── 单文件模式 ──
+  if (!options.file) {
+    logger.error('请指定 Word 文件: speccore word2spec --file=<路径> 或 --files');
+    return;
+  }
+  await processSingle(options);
+}
+
+async function processSingle(options: Word2SpecOptions): Promise<void> {
   if (!options.iteration) {
-    logger.error('请指定期次: speccore word2spec --file=<路径> --iteration=<期次>');
+    logger.error('请指定期次: speccore word2spec --iteration=<期次>');
     return;
   }
 
@@ -267,10 +299,11 @@ async function mergeToRequirement(iterDir: string, targetDir: string, platform: 
     globalContent = `# 本期需求文档\n\n> 由 word2spec 自动合并各端需求\n\n`;
   }
 
-  const platformSection = `\n## ${platform}端需求\n\n${descContent.slice(0, 500)}${apiSection}\n`;
+  const sectionLabel = platform.endsWith('端') ? platform + '需求' : platform + '端需求';
+  const platformSection = `\n## ${sectionLabel}\n\n${descContent.slice(0, 500)}${apiSection}\n`;
   
   // 去重：如果已有同端内容，替换
-  const sectionRegex = new RegExp(`\\n## ${platform}端需求[\\s\\S]*?(?=\\n## |$)`, 'g');
+  const sectionRegex = new RegExp(`\\n## ${platform.replace(/端$/, '')}端?需求[\\s\\S]*?(?=\\n## |$)`, 'g');
   if (globalContent.match(sectionRegex)) {
     globalContent = globalContent.replace(sectionRegex, platformSection);
   } else {
