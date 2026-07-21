@@ -42,6 +42,9 @@ const impact_1 = require("./commands/impact");
 const baseline_1 = require("./commands/baseline");
 const dashboard_1 = require("./commands/dashboard");
 const audit_1 = require("./commands/audit");
+const analyze_1 = require("./commands/analyze");
+const lifecycle_1 = require("./commands/lifecycle");
+const done_1 = require("./commands/done");
 // rename 命令
 const rename_1 = require("./commands/rename");
 // v4.0.0 新增命令
@@ -153,11 +156,13 @@ iterationCmd
     .command('split')
     .alias('sp')
     .description('Split requirements into tasks')
-    .option('-f, --file <file>', 'Requirement file path', '00-需求文档/REQUIREMENT.md')
+    .option('-f, --file <file>', 'Requirement file path', 'REQUIREMENT.md')
     .option('-i, --iteration <iteration>', 'Target iteration')
     .option('--sections <sections>', 'Specific sections to split')
     .option('--target <target>', 'Merge into existing task')
+    .option('-p, --platforms <platforms>', 'Comma-separated platforms (auto-detected if omitted)')
     .option('--dry-run', 'Preview without creating')
+    .option('--strict', 'Review each section before creating tasks')
     .action(split_1.iterationSplitCommand);
 // ================================================================
 // 📝 任务管理
@@ -253,6 +258,8 @@ commander_1.program
     .option('--parallel <count>', 'Parallel execution count', '1')
     .option('-i, --iteration <iteration>', 'Target iteration')
     .option('--force', 'Skip preview and execute directly')
+    .option('--strict', 'Pre-flight check: review req/tech/test before code gen')
+    .option('--base <branch>', 'Base branch for task branching (default: current)')
     .option('--hotfix', 'Emergency fix: skip reverse sync (30min grace, 24h mandatory)')
     .action(execute_1.executeCommand);
 // ================================================================
@@ -266,6 +273,8 @@ commander_1.program
     .option('-r, --req <req>', 'Requirement ID')
     .option('-d, --desc <desc>', 'Change description (required)')
     .option('--global', 'Global layer change (CONSTITUTION.md)')
+    .option('--requirement', 'Also update REQUIREMENT.md (iteration-level)')
+    .option('--analysis', 'Also update ANALYSIS.md (tech plan)')
     .option('-i, --iteration <iteration>', 'Target iteration')
     .option('--dry-run', 'Preview impact without modifying')
     .option('--force', 'Skip preview and apply directly')
@@ -414,9 +423,10 @@ commander_1.program
     .command('word2spec')
     .alias('w2s')
     .description('Convert Word (.docx/.doc) requirement docs to SpecCore Markdown')
-    .option('-f, --file <path>', 'Source Word file path (required)')
+    .option('-f, --file <path>', 'Source Word file path')
     .option('-i, --iteration <name>', 'Target iteration name (required)')
-    .option('-p, --platform <name>', 'Platform/end identifier (e.g. 后台/Web/小程序)')
+    .option('-p, --platform <name>', 'Platform identifier (e.g. 后台/Web/小程序)')
+    .option('--files <files>', 'Batch: "path1.docx=平台1,path2.docx=平台2"')
     .action(word2spec_1.word2specCommand);
 commander_1.program
     .command('sync-global')
@@ -496,6 +506,14 @@ commander_1.program
     .option('-o, --output <path>', 'Output file path', './speccore-dashboard.html')
     .action(dashboard_1.dashboardCommand);
 commander_1.program
+    .command('analyze')
+    .alias('al')
+    .description('Analyze requirements: completeness + code mapping + architecture impact → ANALYSIS.md')
+    .option('-i, --iteration <iteration>', 'Target iteration')
+    .option('-o, --output <file>', 'Output filename', 'ANALYSIS.md')
+    .option('--auto', 'Non-interactive mode: generate report directly')
+    .action(analyze_1.analyzeCommand);
+commander_1.program
     .command('audit')
     .alias('ad')
     .description('AI-powered audit: detect duplicates, ambiguity, and orphaned requirements')
@@ -565,6 +583,26 @@ commander_1.program
     .option('--format <format>', 'Output format: text or json', 'text')
     .action(validate_1.validateCommand);
 // v4.7.0 体验增强命令
+commander_1.program;
+commander_1.program
+    .command('lifecycle')
+    .alias('lc')
+    .description('Task lifecycle: pending → dev → test → review → done')
+    .option('-t, --task <task>', 'Target task')
+    .option('-s, --status <status>', 'Set status: pending/testing/review/done')
+    .option('-i, --iteration <iteration>', 'Target iteration')
+    .option('--check', 'Check TEST.md/REVIEW.md progress')
+    .option('--all', 'Show all tasks kanban board')
+    .action(lifecycle_1.lifecycleCommand);
+commander_1.program
+    .command('done')
+    .alias('dn')
+    .description('Complete a task: validate → archive → sync-global')
+    .option('-t, --task <task>', 'Target task')
+    .option('-i, --iteration <iteration>', 'Target iteration')
+    .option('--skip-validate', 'Skip validation step')
+    .option('--skip-sync', 'Skip global sync step')
+    .action(done_1.doneCommand);
 commander_1.program
     .command('completion [shell]')
     .description('Generate shell completion script (bash/zsh)')

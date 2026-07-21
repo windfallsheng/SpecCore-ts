@@ -40,6 +40,9 @@ import { impactCommand } from './commands/impact';
 import { baselineCommand } from './commands/baseline';
 import { dashboardCommand } from './commands/dashboard';
 import { auditCommand } from './commands/audit';
+import { analyzeCommand } from './commands/analyze';
+import { lifecycleCommand } from './commands/lifecycle';
+import { doneCommand } from './commands/done';
 // rename 命令
 import { renameCommand } from './commands/rename';
 // v4.0.0 新增命令
@@ -161,11 +164,13 @@ iterationCmd
   .command('split')
   .alias('sp')
   .description('Split requirements into tasks')
-  .option('-f, --file <file>', 'Requirement file path', '00-需求文档/REQUIREMENT.md')
+  .option('-f, --file <file>', 'Requirement file path', 'REQUIREMENT.md')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('--sections <sections>', 'Specific sections to split')
   .option('--target <target>', 'Merge into existing task')
+  .option('-p, --platforms <platforms>', 'Comma-separated platforms (auto-detected if omitted)')
   .option('--dry-run', 'Preview without creating')
+  .option('--strict', 'Review each section before creating tasks')
   .action(iterationSplitCommand);
 
 // ================================================================
@@ -268,6 +273,8 @@ program
   .option('--parallel <count>', 'Parallel execution count', '1')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('--force', 'Skip preview and execute directly')
+  .option('--strict', 'Pre-flight check: review req/tech/test before code gen')
+  .option('--base <branch>', 'Base branch for task branching (default: current)')
   .option('--hotfix', 'Emergency fix: skip reverse sync (30min grace, 24h mandatory)')
   .action(executeCommand);
 
@@ -282,6 +289,8 @@ program
   .option('-r, --req <req>', 'Requirement ID')
   .option('-d, --desc <desc>', 'Change description (required)')
   .option('--global', 'Global layer change (CONSTITUTION.md)')
+  .option('--requirement', 'Also update REQUIREMENT.md (iteration-level)')
+  .option('--analysis', 'Also update ANALYSIS.md (tech plan)')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('--dry-run', 'Preview impact without modifying')
   .option('--force', 'Skip preview and apply directly')
@@ -444,9 +453,10 @@ program
   .command('word2spec')
   .alias('w2s')
   .description('Convert Word (.docx/.doc) requirement docs to SpecCore Markdown')
-  .option('-f, --file <path>', 'Source Word file path (required)')
+  .option('-f, --file <path>', 'Source Word file path')
   .option('-i, --iteration <name>', 'Target iteration name (required)')
-  .option('-p, --platform <name>', 'Platform/end identifier (e.g. 后台/Web/小程序)')
+  .option('-p, --platform <name>', 'Platform identifier (e.g. 后台/Web/小程序)')
+  .option('--files <files>', 'Batch: "path1.docx=平台1,path2.docx=平台2"')
   .action(word2specCommand);
 
 program
@@ -535,6 +545,15 @@ program
   .action(dashboardCommand);
 
 program
+  .command('analyze')
+  .alias('al')
+  .description('Analyze requirements: completeness + code mapping + architecture impact → ANALYSIS.md')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('-o, --output <file>', 'Output filename', 'ANALYSIS.md')
+  .option('--auto', 'Non-interactive mode: generate report directly')
+  .action(analyzeCommand);
+
+program
   .command('audit')
   .alias('ad')
   .description('AI-powered audit: detect duplicates, ambiguity, and orphaned requirements')
@@ -611,6 +630,28 @@ program
   .action(validateCommand);
 
 // v4.7.0 体验增强命令
+program
+program
+  .command('lifecycle')
+  .alias('lc')
+  .description('Task lifecycle: pending → dev → test → review → done')
+  .option('-t, --task <task>', 'Target task')
+  .option('-s, --status <status>', 'Set status: pending/testing/review/done')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('--check', 'Check TEST.md/REVIEW.md progress')
+  .option('--all', 'Show all tasks kanban board')
+  .action(lifecycleCommand);
+
+program
+  .command('done')
+  .alias('dn')
+  .description('Complete a task: validate → archive → sync-global')
+  .option('-t, --task <task>', 'Target task')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('--skip-validate', 'Skip validation step')
+  .option('--skip-sync', 'Skip global sync step')
+  .action(doneCommand);
+
 program
   .command('completion [shell]')
   .description('Generate shell completion script (bash/zsh)')

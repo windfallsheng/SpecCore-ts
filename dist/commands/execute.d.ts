@@ -16,6 +16,8 @@ export interface ExecuteOptions {
     force?: boolean;
     batchSize?: string;
     hotfix?: boolean;
+    strict?: boolean;
+    base?: string;
 }
 export declare function executeCommand(options: ExecuteOptions): Promise<void>;
 //# sourceMappingURL=execute.d.ts.map

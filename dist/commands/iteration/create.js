@@ -5,6 +5,7 @@ const fs_extra_1 = require("fs-extra");
 const path_1 = require("path");
 const logger_1 = require("../../utils/logger");
 const context_1 = require("../../core/context");
+const global_counters_1 = require("../../core/global-counters");
 async function iterationCreateCommand(options) {
     if (!options.name) {
         logger_1.logger.error('Iteration name is required. Use --name <name>');
@@ -13,9 +14,10 @@ async function iterationCreateCommand(options) {
     const spinner = new logger_1.Spinner(`Creating iteration: ${options.name}`);
     spinner.start();
     try {
-        // Strip leading 期次- prefix if user already included it
-        const iterName = options.name.replace(/^期次-/, '');
-        const iterationDir = `期次-${iterName}`;
+        // Generate globally unique iteration ID
+        const rawName = options.name.replace(/^期次-/, '');
+        const { id: fullName } = await (0, global_counters_1.nextIterationId)(rawName);
+        const iterationDir = fullName; // e.g. 期次-001-Q3
         // Check if already exists
         if (await (0, fs_extra_1.pathExists)(iterationDir)) {
             spinner.fail(`Iteration already exists: ${options.name}`);
@@ -33,7 +35,7 @@ async function iterationCreateCommand(options) {
         await updateGlobalIndex(options.name, options);
         // Update context (store without 期次- prefix for consistency)
         await (0, context_1.updateContext)({
-            currentIteration: iterName,
+            currentIteration: fullName,
             lastUpdated: new Date().toISOString()
         });
         spinner.stop(`Iteration created: ${options.name}`);

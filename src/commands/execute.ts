@@ -7,6 +7,7 @@ import { FileTransaction } from '../core/transaction';
 import { loadSpecRules, generateImports, SpecRules, loadTechStack } from '../core/spec-rules';
 
 import { logOperation } from '../core/operation-log';
+import { showNextSteps } from '../core/next-steps';
 import {
   initExecutionState,
   loadExecutionState,
@@ -36,6 +37,8 @@ export interface ExecuteOptions {
   force?: boolean;
   batchSize?: string;
   hotfix?: boolean;
+  strict?: boolean;
+  base?: string;       // base branch for task branching   // 严格模式: 编码前逐项确认
 }
 
 export async function executeCommand(options: ExecuteOptions): Promise<void> {
@@ -95,6 +98,14 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
       return;
     }
 
+    // === Strict mode: pre-flight check before executing ===
+    if (options.strict) {
+      const approved = await preFlightCheck(sortedTasks, iteration, options);
+      if (approved.length === 0) return;
+      sortedTasks.length = 0;
+      sortedTasks.push(...approved);
+    }
+
     // === Preview (default, unless --force) ===
     if (!options.force) {
       printExecutionPreview(sortedTasks, iteration);
@@ -117,7 +128,7 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
     }
 
     // === Execute with progress (existing flow) ===
-    await executeWithProgress(sortedTasks, iteration);
+    await executeWithProgress(sortedTasks, iteration, options.base);
 
     // Hotfix tracking
     if (options.hotfix && sortedTasks.length > 0) {
@@ -205,7 +216,7 @@ async function interactiveSelect(tasks: TaskState[], iteration: string, options:
     return;
   }
 
-  await executeWithProgress(selectedTasks, iteration);
+  await executeWithProgress(selectedTasks, iteration, options.base);
 }
 
 async function loadInquirer(): Promise<any> {
@@ -231,7 +242,7 @@ async function loadInquirer(): Promise<any> {
 // ============================================================
 // Progress feedback execution
 // ============================================================
-async function executeWithProgress(tasks: TaskState[], iteration: string): Promise<void> {
+async function executeWithProgress(tasks: TaskState[], iteration: string, base?: string): Promise<void> {
   const total = tasks.length;
   const startTime = Date.now();
   const completed: string[] = [];
@@ -239,9 +250,16 @@ async function executeWithProgress(tasks: TaskState[], iteration: string): Promi
   // Auto-create git branch for single task
   if (tasks.length === 1) {
     const task = tasks[0];
-    const branch = createTaskBranch(task.id, task.name || 'feature');
+    
+    // Auto-detect dependency base from IMPACT.md
+    if (!base) {
+      base = await detectDependencyBase(iteration, task.id);
+    }
+    
+    const branch = createTaskBranch(task.id, task.name || 'feature', base);
     if (branch) {
-      logger.info(`🌿 Created branch: ${branch}`);
+      const baseInfo = base ? ` (from ${base})` : '';
+      logger.info(`🌿 Created branch: ${branch}${baseInfo}`);
     }
   }
 
@@ -722,4 +740,135 @@ async function handleHotfix(options: ExecuteOptions, taskIds: string[]): Promise
   logger.warn('   Grace period: 30 min (skip reverse sync)');
   logger.warn('   Mandatory sync deadline: 24 hours');
   logger.warn('   Run: speccore sync --reverse to complete');
+  showNextSteps('execute');
+}
+
+// ============================================================
+// Strict mode pre-flight check
+// ============================================================
+
+async function preFlightCheck(tasks: TaskState[], iteration: string, options: ExecuteOptions): Promise<TaskState[]> {
+  const iterDir = `期次-${iteration}`;
+  const ask = (q: string): Promise<string> => {
+    logger.info(q);
+    return new Promise((resolve) => {
+      process.stdin.resume();
+      process.stdin.once('data', (data: Buffer) => {
+        process.stdin.pause();
+        resolve(data.toString().split('\n')[0].trim());
+      });
+    });
+  };
+
+  logger.info('\n╔══════════════════════════════════════════════╗');
+  logger.info('║  🔍 Strict Mode — Pre-Flight Check           ║');
+  logger.info('╚══════════════════════════════════════════════╝\n');
+
+  const approved: TaskState[] = [];
+
+  for (const task of tasks) {
+    const taskDir = join(iterDir, task.id);
+    logger.info(`\n── ${task.id} ──`);
+    
+    let issues: string[] = [];
+
+    // 1. Requirement completeness
+    const reqPath = join(taskDir, 'backend', 'REQ.md');
+    if (await pathExists(reqPath)) {
+      const req = await readFile(reqPath, 'utf-8');
+      const sections = (req.match(/^###?\s+.+/gm) || []).length;
+      const apis = (req.match(/\| (GET|POST|PUT|DELETE|PATCH) \|/g) || []).length;
+      logger.info(`  1. 需求: ${sections} 章节 / ${apis} 接口`);
+      if (sections === 0 && apis === 0) issues.push('REQ.md 内容为空');
+    } else {
+      issues.push('缺少 REQ.md');
+    }
+
+    // 2. Tech plan
+    const techPath = join(taskDir, 'backend', 'TECH.md');
+    if (await pathExists(techPath)) {
+      const tech = await readFile(techPath, 'utf-8');
+      const s = [tech.includes('数据库') && 'DB', tech.includes('Redis') && 'Redis', tech.includes('MQ') && 'MQ'].filter(Boolean).join('/');
+      logger.info(`  2. 方案: ${s || '待补充'}`);
+    } else {
+      issues.push('缺少 TECH.md');
+    }
+
+    // 3. Test cases
+    const testPath = join(taskDir, 'backend', 'TEST.md');
+    if (await pathExists(testPath)) {
+      const test = await readFile(testPath, 'utf-8');
+      const n = (test.match(/⬜|✅|❌/g) || []).length;
+      logger.info(`  3. 测试: ${n} 用例`);
+    }
+
+    // 4. Review
+    logger.info(`  4. 审查: ${await pathExists(join(taskDir, 'backend', 'REVIEW.md')) ? '✅' : '❌'}`);
+
+    // 5. API
+    logger.info(`  5. 契约: ${await pathExists(join(taskDir, '_shared', 'API_CONTRACT.yaml')) ? '✅' : '⚠️'}`);
+
+    // 6. Platform
+    const fd = join(taskDir, 'frontend');
+    if (await pathExists(fd)) {
+      const pf = require('fs').readdirSync(fd, { withFileTypes: true }).filter((d: any) => d.isDirectory()).map((d: any) => d.name);
+      logger.info(`  6. 端: ${pf.join(', ')}`);
+    }
+
+    // 7. Constitution
+    logger.info(`  7. 合规: 待 validate ${issues.length > 0 ? '⚠️  ' + issues.join(', ') : ''}`);
+
+    // ── Per-task decision ──
+    const answer = (await ask(`  → 开发？[y]确认 [N]跳过 [q]全部取消: `)).toLowerCase();
+    if (answer === 'q') { logger.info('❌ 取消'); approved.length = 0; break; }
+    if (answer === 'y' || answer === 'yes') { approved.push(task); logger.info(`  ✅ 已加入`); }
+    else { logger.info(`  ⏭️ 跳过`); }
+    logger.info('');
+  }
+
+  if (approved.length === 0) {
+    logger.info('\n❌ 没有任务通过确认。');
+    return [];
+  }
+
+  logger.info(`\n  将执行 ${approved.length}/${tasks.length} 个任务`);
+  const confirm = await ask('  确认开始？[y/N] ');
+  if (confirm.toLowerCase() !== 'y') { logger.info('\n❌ 已取消'); process.exit(0); }
+  logger.info('\n✅ 开始执行...\n');
+  return approved;
+}
+
+/**
+ * 从 IMPACT.md 检测任务依赖，返回应作为 base 的依赖任务 ID
+ */
+async function detectDependencyBase(iteration: string, taskId: string): Promise<string | undefined> {
+  const impactPath = join(`期次-${iteration}`, 'IMPACT.md');
+  if (!(await pathExists(impactPath))) return undefined;
+
+  const impact = await readFile(impactPath, 'utf-8');
+  const lines = impact.split('\n');
+  
+  // Parse: | Task-002: 订单导出 | → | Task-001: 用户管理 | `/api/users` |
+  for (const line of lines) {
+    if (line.includes('→') && line.includes(taskId)) {
+      const match = line.match(/→\s*\|\s*([^|]+)/);
+      if (match) {
+        const depTaskId = match[1].trim().split(':')[0].trim();
+        logger.info(`\n🔗 检测到依赖: ${taskId} 依赖 ${depTaskId}`);
+        logger.info(`   🎯 自动从分支 feature/${depTaskId}-* 创建（避免实体重复）`);
+        // Find actual branch name matching this task
+      try {
+        const branches = require('child_process').execSync('git branch', { encoding: 'utf-8' });
+        const branchMatch = branches.split('\n').find((b: string) => b.trim().startsWith(`feature/${depTaskId}-`));
+        if (branchMatch) {
+          const actualBranch = branchMatch.trim().replace(/^\*?\s*/, '');
+          return actualBranch || `feature/${depTaskId}`;
+        }
+      } catch {}
+      return `feature/${depTaskId}`;
+      }
+    }
+  }
+
+  return undefined;
 }

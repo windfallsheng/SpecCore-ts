@@ -111,7 +111,7 @@ SpecCore 采用**确定性逻辑与智能逻辑解耦**的架构：
 | 分类 | 命令 | 说明 |
 | :--- | :--- | :--- |
 | 🧠 智能入口 | `speccore spec "<query>"` | 自然语言意图识别 |
-| 🌐 初始化/导入 | `speccore init` / `import` | 项目初始化 + 多项目导入 |
+| 🌐 初始化/导入 | `speccore init` / `import` / `word2spec` | 项目初始化 + 多项目导入 + Word 需求导入 |
 | 📐 计划 | `speccore iteration create/split` / `new-task` / `plan` | 期次管理 + Task 创建 |
 | | `speccore iteration-from-global` | 从全量层生成期次 |
 | ⚡ 执行 | `speccore execute` | 执行控制中心（--platform / --priority） |
@@ -126,18 +126,23 @@ SpecCore 采用**确定性逻辑与智能逻辑解耦**的架构：
 
 ## 🤖 AI 命令（Slash Command）对应关系
 
-> 在 AI 工具（WorkBuddy / Cursor / Claude Code 等）中输入 `/` + 命令。AI 命令在底层调用对应的 CLI 命令执行。
+> 在 AI 工具（WorkBuddy / Cursor / Claude Code 等）中输入 `/` + 命令。AI 命令在底层调用对应的 CLI 命令执行。54 个 CLI 命令都有对应的 `/spec-*` 形式。
 
 | CLI 终端命令 | AI Slash Command | 用途 |
 | :--- | :--- | :--- |
 | `speccore init` | `/spec-init` | 项目初始化 |
 | `speccore import` | `/spec-import` | 导入项目到全量层 |
+| `speccore word2spec` | `/spec-word2spec` | Word 文档导入 |
 | `speccore iteration create` | `/spec-iteration-create` | 创建期次 |
+| `speccore iteration split` | `/spec-iteration-split` | 拆分需求为 Task |
 | `speccore new-task` | `/spec-new-task` | 创建多平台 Task |
 | `speccore execute` | `/spec-execute` | 执行开发任务 |
-| `speccore progress` | `/spec-progress` | 查看进度 |
+| `speccore change` | `/spec-change` | 需求变更 |
+| `speccore sync` | `/spec-sync` | Spec-代码同步 |
 | `speccore validate` | `/spec-validate` | 合规性检查 |
-| `speccore impact` | `/spec-impact` | 变更影响分析 |
+| `speccore archive` | `/spec-archive` | 归档任务 |
+| `speccore rollback` | `/spec-rollback` | 从备份恢复 |
+| `speccore dashboard` | `/spec-dashboard` | 仪表盘总览 |
 | `speccore audit` | `/spec-ai-audit` | AI 智能审计 |
 | `speccore spec "查询"` | `/spec 查询` | 自然语言智能入口 |
 
@@ -175,7 +180,7 @@ SpecCore 原生集成 WorkBuddy（`speccore init` 自动创建 `.workbuddy/` ski
 
 | 文档 | 内容 |
 | :--- | :--- |
-| [场景实战](docs/场景实战.md) | 22 个真实场景：从零启动→日常开发→CI/CD→变更处理等 |
+| [场景实战](docs/场景实战.md) | 25 个真实场景：从零启动→日常开发→CI/CD→变更处理等 |
 | [SDD 方法论](docs/SDD方法论.md) | SDD 是什么、为什么、怎么做 |
 | [速查卡](docs/速查卡.md) | 一页掌握：常用命令 + 安全口诀 + CI 模板 |
 | [快速开始指南](docs/快速开始.md) | 安装 → 初始化 → 导入 → 多端 Task → 场景速查 |

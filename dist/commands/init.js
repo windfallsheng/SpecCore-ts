@@ -4,6 +4,7 @@ exports.initCommand = initCommand;
 const fs_extra_1 = require("fs-extra");
 const path_1 = require("path");
 const logger_1 = require("../utils/logger");
+const global_counters_1 = require("../core/global-counters");
 const context_1 = require("../core/context");
 const i18n_1 = require("../i18n");
 const schemas_1 = require("../core/schemas");
@@ -35,6 +36,8 @@ async function initCommand(options) {
         await (0, fs_extra_1.ensureDir)((0, path_1.join)(speccoreDir, 'GLOBAL'));
         await (0, fs_extra_1.ensureDir)((0, path_1.join)(speccoreDir, 'GLOBAL', 'PROJECTS'));
         await (0, fs_extra_1.ensureDir)((0, path_1.join)(speccoreDir, 'GLOBAL', 'PROJECTS', '_template'));
+        // Initialize global counters
+        await (0, global_counters_1.initCounters)();
         await (0, fs_extra_1.ensureDir)((0, path_1.join)(speccoreDir, 'PATTERNS', 'TEMPLATES', 'crud'));
         await (0, fs_extra_1.ensureDir)((0, path_1.join)(speccoreDir, 'PATTERNS', 'TEMPLATES', 'auth'));
         await (0, fs_extra_1.ensureDir)((0, path_1.join)(speccoreDir, 'PATTERNS', 'TEMPLATES', 'export'));
@@ -564,21 +567,30 @@ flowchart TB
     // GLOBAL/CODE_INDEX.md - 全量代码索引
     await (0, fs_extra_1.writeFile)((0, path_1.join)(globalDir, 'CODE_INDEX.md'), `# 全量代码索引
 
-> 本文档是工程 → 代码路径映射。Task 创建时，AI 根据此表确定代码生成目录。
+> 本文档是工程 → 代码路径 + Git 仓库映射。Task 创建时，AI 根据此表确定代码生成目录和 Git 分支。
 
-## 工程 → 路径 映射
+## 工程 → 路径 + Git 映射
 
-| 工程 | 代码路径 | 技术栈 | 关联 Task |
-| :--- | :--- | :--- | :--- |
-| backend | src/main/java/com/example | Spring Boot | — |
-| frontend-web | src/frontend/web | Vue 3 | — |
-| frontend-mini | src/frontend/mini | uni-app | — |
+| 工程 | 代码路径 | Git 仓库 | 默认分支 | 技术栈 |
+| :--- | :--- | :--- | :--- | :--- |
+| backend | src/main/java/com/example | git@xxx:team/backend.git | main | Spring Boot |
+| frontend-web | src/frontend/web | git@xxx:team/frontend-web.git | main | Vue 3 |
+| frontend-mini | src/frontend/mini | git@xxx:team/frontend-mini.git | main | uni-app |
+
+## 分支命名规则
+
+格式: {YYYYMMDD}-{任务名}-{姓名缩写}，从 {默认分支} 拉出。
+示例: 260715-订单管理-zs（从 main 拉出）
+
+> 姓名缩写参见 PROJECT/TEAM.md。AI 在 Task 关联多个工程时，为每个工程创建同名分支。
 
 ## Task → 工程 映射
 
 | Task | 涉及工程 | 说明 |
 | :--- | :--- | :--- |
 | _待添加_ | — | — |
+
+> 📌 新增 Task/工程时，在此追加对应行。
 
 > 📌 新增 Task 时，在此追加一行对应关系。
 | _待导入_ | - | - | - |

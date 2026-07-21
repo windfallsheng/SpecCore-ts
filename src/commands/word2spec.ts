@@ -17,25 +17,134 @@ import { execSync } from 'child_process';
 import { pathExists, ensureDir, readFile, writeFile, readdir, stat, unlink } from 'fs-extra';
 import { join, basename } from 'path';
 
+import { showNextSteps } from '../core/next-steps';
+function findCommand(cmd: string): string | null {
+  try {
+    return execSync(`which ${cmd}`, { stdio: 'pipe', encoding: 'utf-8' }).trim();
+  } catch {
+    return null;
+  }
+}
+
+function parseBatchFiles(files: string): [string, string][] {
+  return files.split(',').map(pair => {
+    const eq = pair.lastIndexOf('=');
+    if (eq < 0) return null;
+    return [pair.substring(0, eq).trim(), pair.substring(eq + 1).trim()] as [string, string];
+  }).filter(Boolean) as [string, string][];
+}
+
+function detectPlatform(): 'macos' | 'linux' | 'win' {
+  if (process.platform === 'darwin') return 'macos';
+  if (process.platform === 'win32') return 'win';
+  return 'linux';
+}
+
+function getInstallCmd(tool: string): string {
+  const map: Record<string, Record<string, string>> = {
+    pandoc: { macos: 'brew install pandoc', linux: 'sudo apt install pandoc', win: 'winget install Pandoc.Pandoc' },
+    libreoffice: { macos: 'brew install libreoffice', linux: 'sudo apt install libreoffice', win: 'winget install LibreOffice.LibreOffice' },
+  };
+  return map[tool]?.[detectPlatform()] || tool;
+}
+
+async function promptUser(question: string, defaultYes = false): Promise<boolean> {
+  const suffix = defaultYes ? ' (Y/n) ' : ' (y/N) ';
+  try {
+    process.stdout.write(question + suffix);
+    return new Promise((resolve) => {
+      const onData = (data: Buffer) => {
+        const answer = data.toString().trim().toLowerCase();
+        process.stdin.removeListener('data', onData);
+        if (process.stdin.isTTY) process.stdin.pause();
+        resolve(answer === 'y' || answer === 'yes' || (defaultYes && answer === ''));
+      };
+      if (process.stdin.isTTY) {
+        process.stdin.resume();
+      }
+      process.stdin.once('data', onData);
+      // Non-TTY fallback: auto-deny
+      if (!process.stdin.isTTY) {
+        resolve(false);
+      }
+    });
+  } catch {
+    return false;
+  }
+}
+
 export interface Word2SpecOptions {
   file: string;
   iteration: string;
   platform?: string;
+  files?: string;  // batch: "path1.docx=平台1,path2.docx=平台2"
 }
 
 export async function word2specCommand(options: Word2SpecOptions): Promise<void> {
-  if (!options.file) {
-    logger.error('请指定 Word 文件: speccore word2spec --file=<路径>');
+  // ── 批量模式 ──
+  if (options.files) {
+    const pairs = parseBatchFiles(options.files);
+    if (pairs.length === 0) {
+      logger.error('格式错误。用法: --files "path1.docx=平台1,path2.docx=平台2"');
+      return;
+    }
+    logger.info(`📦 批量导入 ${pairs.length} 个文件...\n`);
+    let success = 0;
+    for (const [file, platform] of pairs) {
+      logger.info(`  → ${file} (${platform})`);
+      await processSingle({ ...options, file, platform });
+      success++;
+    }
+    logger.info(`\n✅ ${success}/${pairs.length} 个文件导入完成`);
     return;
   }
+
+  // ── 单文件模式 ──
+  if (!options.file) {
+    logger.error('请指定 Word 文件: speccore word2spec --file=<路径> 或 --files');
+    return;
+  }
+  await processSingle(options);
+}
+
+async function processSingle(options: Word2SpecOptions): Promise<void> {
   if (!options.iteration) {
-    logger.error('请指定期次: speccore word2spec --file=<路径> --iteration=<期次>');
+    logger.error('请指定期次: speccore word2spec --iteration=<期次>');
     return;
   }
 
   if (!(await pathExists(options.file))) {
     logger.error(`文件不存在: ${options.file}`);
     return;
+  }
+
+  // pandoc 前置检测
+  if (!findCommand('pandoc')) {
+    const installCmd = getInstallCmd('pandoc');
+    logger.warn('⚠️  未检测到 pandoc。word2spec 依赖 pandoc 进行 Word → Markdown 转换。');
+    logger.info('');
+    logger.info(`   📦 安装命令: ${installCmd}`);
+    logger.info('   💡 替代方案: AI 对话中可用 word2md 技能（无需 pandoc）');
+    logger.info('   📄 备选方案: 在 Word 中用"另存为" → 选择 .md 格式');
+    logger.info('');
+
+    const answer = await promptUser('是否要自动安装 pandoc？');
+    if (answer) {
+      logger.info(`正在安装 pandoc: ${installCmd}`);
+      try {
+        execSync(installCmd, { stdio: 'inherit' });
+        logger.success('pandoc 安装成功！继续转换...\n');
+      } catch {
+        logger.error('自动安装失败，请手动执行: ' + installCmd);
+        return;
+      }
+    } else {
+      logger.info('跳过安装。你可以：');
+      logger.info(`  1. 手动执行: ${installCmd}`);
+      logger.info('  2. 使用 word2md 技能（对话中可用）');
+      logger.info('  3. 在 Word 中另存为 .md 后手动放到 00-需求文档/');
+      return;
+    }
   }
 
   const spinner = new Spinner('正在转换 Word → Markdown...');
@@ -54,10 +163,14 @@ export async function word2specCommand(options: Word2SpecOptions): Promise<void>
 
     let sourceFile = options.file;
     let cleanupFile: string | null = null;
-
-    // .doc → .docx via LibreOffice
     const ext = sourceFile.split('.').pop()?.toLowerCase();
-    if (ext === 'doc') {
+
+    // .md 文件直接导入，不需要 pandoc
+    if (ext === 'md') {
+      const converted = await readFile(sourceFile, 'utf-8');
+      await writeFile(outputPath, converted);
+      logger.info('   📝 .md 直接导入（跳过 pandoc）');
+    } else if (ext === 'doc') {
       try {
         execSync(`soffice --headless --convert-to docx "${sourceFile}" --outdir /tmp/`, { stdio: 'pipe' });
         const name = basename(sourceFile, '.doc');
@@ -73,16 +186,18 @@ export async function word2specCommand(options: Word2SpecOptions): Promise<void>
       }
     }
 
-    // pandoc
-    try {
-      execSync(
-        `LANG=zh_CN.UTF-8 pandoc "${sourceFile}" -f docx -t gfm --wrap=none --extract-media="${imageDir}" -o "${outputPath}"`,
-        { stdio: 'pipe', encoding: 'utf-8' }
-      );
-    } catch (e: any) {
-      spinner.fail(`pandoc 转换失败: ${e.message}`);
-      logger.info('请确保已安装 pandoc: brew install pandoc');
-      return;
+    if (ext !== 'md') {
+      // pandoc conversion for .docx/.doc
+      try {
+        execSync(
+          `LANG=zh_CN.UTF-8 pandoc "${sourceFile}" -f docx -t gfm --wrap=none --extract-media="${imageDir}" -o "${outputPath}"`,
+          { stdio: 'pipe', encoding: 'utf-8' }
+        );
+      } catch (e: any) {
+        spinner.fail(`pandoc 转换失败: ${e.message}`);
+        logger.info('请确保已安装 pandoc: brew install pandoc');
+        return;
+      }
     }
 
     // 清理临时文件
@@ -132,6 +247,9 @@ export async function word2specCommand(options: Word2SpecOptions): Promise<void>
     }
     await writeFile(indexPath, indexContent);
 
+    // ── 自动合并到 REQUIREMENT.md（汇总各端需求，供 iteration split 使用）──
+    await mergeToRequirement(iterDir, targetDir, platform);
+
     // ── 统计 ──
     const imageCount = (await pathExists(imageDir))
       ? (await readdir(imageDir, { recursive: true })).filter((f: string | Buffer) => 
@@ -155,4 +273,53 @@ export async function word2specCommand(options: Word2SpecOptions): Promise<void>
     spinner.fail(`转换失败: ${error}`);
     throw error;
   }
+}
+
+/**
+ * 将各端需求文档自动合并到统一的 REQUIREMENT.md
+ * 格式: ## {端名}需求（取自 {端名}需求.md 的 ## 接口定义 表格）
+ */
+async function mergeToRequirement(iterDir: string, targetDir: string, platform: string): Promise<void> {
+  const reqPath = join(targetDir, `${platform}需求.md`);
+  const globalReqPath = join(targetDir, 'REQUIREMENT.md');
+
+  if (!(await pathExists(reqPath))) return;
+
+  const platformContent = await readFile(reqPath, 'utf-8');
+
+  // 提取接口表格
+  const tableMatch = platformContent.match(/\| 方法 \|.*\n(?:\|[: -]+\|.*\n)+(?:\|.*\|.*\n)+/);
+  const apiSection = tableMatch ? `\n\n### ${platform}端接口\n\n${tableMatch[0]}` : '';
+
+  // 提取需求描述（跳过 HTML 注释和接口表格）
+  const descContent = platformContent
+    .replace(/^<!--[\s\S]*?-->\n/gm, '')
+    .replace(/\| 方法 \|.*(\n\|.*)*/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  // 检查是否已有此端的内容
+  let globalContent = '';
+  if (await pathExists(globalReqPath)) {
+    globalContent = await readFile(globalReqPath, 'utf-8');
+  } else {
+    globalContent = `# 本期需求文档\n\n> 由 word2spec 自动合并各端需求\n\n`;
+  }
+
+  const sectionLabel = platform.endsWith('端') ? platform + '需求' : platform + '端需求';
+  const platformSection = `\n## ${sectionLabel}\n\n${descContent.slice(0, 500)}${apiSection}\n`;
+  
+  // 去重：如果已有同端内容，替换
+  const sectionRegex = new RegExp(`\\n## ${platform.replace(/端$/, '')}端?需求[\\s\\S]*?(?=\\n## |$)`, 'g');
+  if (globalContent.match(sectionRegex)) {
+    globalContent = globalContent.replace(sectionRegex, platformSection);
+  } else {
+    globalContent += platformSection;
+  }
+
+  // 清理模板占位符（避免 split 时拆出无意义章节）
+  globalContent = globalContent
+    .replace(/#{1,3}\s+\d+\.\s*(需求概述|功能需求|非功能需求|验收标准|附录)[\s\S]*?(?=#{1,3}\s|$)/g, '');
+
+  await writeFile(globalReqPath, globalContent);
 }

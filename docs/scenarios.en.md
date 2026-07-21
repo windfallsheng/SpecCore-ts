@@ -265,7 +265,9 @@ speccore progress --platform=h5 --detail
 speccore report --format=html --output=report.html --team --risk
 
 # 4. Visual dashboard
-speccore dashboard --output=dashboard.html
+speccore dashboard
+# Or one command:
+speccore done --task=Task-001 --output=dashboard.html
 ```
 
 ---
@@ -335,7 +337,9 @@ speccore global-status
 speccore iteration-from-global --reqs=REQ-001,REQ-002 --name=2026-Q3-Sprint
 
 # 3. Preview split plan
-speccore iteration split --iteration=2026-Q3-Sprint --dry-run
+speccore iteration split
+# Strict: speccore iteration split --strict  (preview each section)
+# Outputs: IMPACT.md (risk + dependencies), .env.example --iteration=2026-Q3-Sprint --dry-run
 
 # 4. Execute split (auto-generates Task dirs + Spec stubs)
 speccore iteration split --iteration=2026-Q3-Sprint
@@ -633,4 +637,216 @@ speccore watch --iteration=2026-07-Sprint
 # Run once at the end
 speccore validate
 # → ❌ 3 errors → fix one by one → run validate again → fix more...
+```
+
+---
+
+## Scenario 23: Requirement Import (Word + Markdown)
+
+**Background**: PM provides requirements in various formats — Word (.docx/.doc) and Markdown (.md), for different platforms and backend services.
+
+### Word Conversion
+
+```bash
+# Batch: one command, all files
+speccore word2spec --files \
+  "backend-prd.docx=backend-admin,backend-api.docx=backend-h5,web.docx=web,mobile.docx=mobile" \
+  -i Q3
+```
+
+### Markdown Direct Import
+
+```bash
+# .md files — no pandoc needed
+speccore word2spec --files \
+  "api-docs.md=backend-admin,web-pages.md=web,mobile-screens.md=mobile" \
+  -i Q3
+
+# Mix Word + Markdown
+speccore word2spec --files "backend.docx=backend-admin,web.md=web" -i Q3
+```
+
+### Generated File Structure
+
+| File | Type | Purpose |
+| :--- | :--- | :--- |
+| `{platform}-requirements.md` | Manual | Per-platform standalone requirement doc |
+| `REQUIREMENT.md` | **Auto-generated** | Aggregated view for `iteration split` |
+| `INDEX.md` | **Auto-generated** | Platform index for automatic detection |
+
+### When Requirements Change
+
+| Source | Action |
+| :--- | :--- |
+| New Word doc from PM | Re-run `word2spec --files` (overwrites per-platform + refreshes REQUIREMENT.md) |
+| Minor dev tweak | Use `speccore change --task=Task-001 --desc="xxx"` |
+| Adjust platform split | Edit `{platform}-requirements.md`, then re-`word2spec` |
+| Sync to global | `speccore sync-global --direction=to_global` |
+
+> ⚠️ `REQUIREMENT.md` and `INDEX.md` are derived files — next `word2spec` will overwrite them. **Do not manually edit.**
+
+---
+
+## Scenario 24: Task Lifecycle
+
+```bash
+speccore lifecycle                         # Show state machine
+speccore lifecycle --all                   # Kanban board
+speccore lifecycle --task=Task-001 --status=testing
+speccore lifecycle --task=Task-001 --check # Check TEST/REVIEW progress
+```
+
+## Scenario 25: Task Output Files
+
+Each task now generates 8 files:
+
+| File | Purpose | When |
+| :--- | :--- | :--- |
+| REQ.md | Requirements | Always |
+| TECH.md | Tech plan | Always |
+| TASK.md | Task tracking | Always |
+| TEST.md | Test outline | Always |
+| REVIEW.md | Review checklist | Always |
+| SCHEMA.md | DB DDL/indexes | Only DB-related |
+| DEPLOY.md | Deploy checklist | Always |
+| .risk | Risk score | Always |
+
+Iteration outputs: IMPACT.md (risk + deps), .env.example
+
+## Scenario 26: Multi-Developer Parallel Work
+
+**Background**: Alice works on Task-001, Bob works on Task-002 — need conflict-free parallel development.
+
+**Steps**:
+```bash
+# Alice
+git checkout -b 260715-order-management-alice
+vim iteration-Q3/Task-001-OrderManagement/backend/REQ.md
+speccore execute --task=Task-001 --force
+speccore sync --task=Task-001 --detect
+
+# Bob (simultaneously)
+git checkout -b 260715-user-auth-bob
+vim iteration-Q3/Task-002-UserAuth/backend/REQ.md
+speccore execute --task=Task-002 --force
+speccore sync --task=Task-002 --detect
+```
+
+**Key Rules**:
+
+| Rule | Note |
+| :--- | :--- |
+| Different Tasks | No conflicts, fully parallel |
+| Same Task | Never edit the same platform (backend/frontend) simultaneously |
+| Global config | Coordinate when changing GLOBAL/* or CONSTITUTION |
+| Before PR merge | Each runs `speccore sync --detect` to confirm consistency |
+
+**Verify**:
+```bash
+speccore progress              # Overall progress
+speccore health --task=Task-001  # Health check
+```
+
+---
+
+## Scenario 25: Task Wrap-Up
+
+**Background**: Task development complete, PR merged. Run the full wrap-up pipeline.
+
+**Steps**:
+```bash
+# 1. Final consistency check
+speccore sync --task=Task-001 --detect
+speccore validate
+
+# 2. Generate audit report
+speccore audit 2>&1 > iteration-Q3/review/Task-001-audit.md
+
+# 3. Archive (close task, clean hotfix flags)
+speccore archive --task=Task-001
+
+# 4. Sync iteration requirements to global
+speccore sync-global --iteration=Q3 --direction=to_global
+
+# 5. Update context (mark as done)
+speccore current --task=Task-001 --status=done
+
+# 6. View final dashboard
+speccore dashboard
+# Or one command:
+speccore done --task=Task-001
+```
+
+**AI dialog equivalent**:
+```
+"Wrap up Task-001"
+"Archive and sync to global"
+```
+
+---
+
+## Scenario 26: Troubleshooting
+
+### Corrupted/Lost context.json
+
+```bash
+# Symptom: every command reports "cannot find current iteration"
+# Fix
+speccore current                     # Re-select current iteration
+# 💬 "Relocate current iteration"
+```
+
+### Manually Deleted Task Directory
+
+```bash
+# Symptom: speccore execute --task=Task-003 reports "Task not found"
+# Fix: restore from .bak
+speccore rollback --task=Task-003 --list      # View recoverable backups
+speccore rollback --task=Task-003 --confirm   # Restore latest backup
+```
+
+### Corrupted .speccore/ Configuration
+
+```bash
+# Symptom: all commands fail with strange errors
+# Fix: reinitialize (does not delete existing data)
+speccore init --force               # Force rebuild .speccore/
+# 💬 "Reinitialize SpecCore"
+```
+
+### Git Conflicts in Spec Files
+
+```bash
+# Symptom: git merge conflicts in .md files
+# Fix: SpecCore files use timestamps — keep the newer one
+speccore validate --fix             # Auto-fix common format issues
+# 💬 "Validate and fix Spec format issues"
+```
+
+
+## Scenario 29: Dependent Task Branching
+
+When tasks depend on each other, branch from the dependency to avoid entity duplication.
+
+```bash
+# 1. Check dependencies
+cat iteration-001-Q3/IMPACT.md
+# | Task-002: OrderQuery | -> | Task-001: UserMgmt | `/api/users` |
+
+# 2. Execute dependency-free task first
+speccore execute --task=Task-001 --force
+# -> 🌿 Created branch: feature/Task-001-UserMgmt
+
+# 3. Execute dependent task (auto-detect base)
+speccore execute --task=Task-002 --force
+# -> 🔗 Dependency detected -> 🎯 Branching from Task-001
+# -> 🌿 Created branch: feature/Task-002-OrderQuery (from feature/Task-001-UserMgmt)
+```
+
+**Result**: Task-002 inherits Task-001's entities. Merge produces incremental changes only.
+
+**Custom base branch** in `.speccore/SETTINGS.md`:
+```yaml
+git:
+  default_base: develop
 ```

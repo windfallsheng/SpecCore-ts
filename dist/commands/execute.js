@@ -42,6 +42,7 @@ const state_1 = require("../core/state");
 const transaction_1 = require("../core/transaction");
 const spec_rules_1 = require("../core/spec-rules");
 const operation_log_1 = require("../core/operation-log");
+const next_steps_1 = require("../core/next-steps");
 const execution_state_1 = require("../core/execution-state");
 const git_integration_1 = require("../core/git-integration");
 async function executeCommand(options) {
@@ -103,6 +104,14 @@ async function executeCommand(options) {
             (0, operation_log_1.logOperation)(`speccore execute --dry-run`, `${sortedTasks.length} tasks`);
             return;
         }
+        // === Strict mode: pre-flight check before executing ===
+        if (options.strict) {
+            const approved = await preFlightCheck(sortedTasks, iteration, options);
+            if (approved.length === 0)
+                return;
+            sortedTasks.length = 0;
+            sortedTasks.push(...approved);
+        }
         // === Preview (default, unless --force) ===
         if (!options.force) {
             printExecutionPreview(sortedTasks, iteration);
@@ -122,7 +131,7 @@ async function executeCommand(options) {
             return;
         }
         // === Execute with progress (existing flow) ===
-        await executeWithProgress(sortedTasks, iteration);
+        await executeWithProgress(sortedTasks, iteration, options.base);
         // Hotfix tracking
         if (options.hotfix && sortedTasks.length > 0) {
             await (0, context_1.startHotfix)(sortedTasks[0].id);
@@ -197,7 +206,7 @@ async function interactiveSelect(tasks, iteration, options) {
         logger_1.logger.info('Cancelled.');
         return;
     }
-    await executeWithProgress(selectedTasks, iteration);
+    await executeWithProgress(selectedTasks, iteration, options.base);
 }
 async function loadInquirer() {
     try {
@@ -225,16 +234,21 @@ async function loadInquirer() {
 // ============================================================
 // Progress feedback execution
 // ============================================================
-async function executeWithProgress(tasks, iteration) {
+async function executeWithProgress(tasks, iteration, base) {
     const total = tasks.length;
     const startTime = Date.now();
     const completed = [];
     // Auto-create git branch for single task
     if (tasks.length === 1) {
         const task = tasks[0];
-        const branch = (0, git_integration_1.createTaskBranch)(task.id, task.name || 'feature');
+        // Auto-detect dependency base from IMPACT.md
+        if (!base) {
+            base = await detectDependencyBase(iteration, task.id);
+        }
+        const branch = (0, git_integration_1.createTaskBranch)(task.id, task.name || 'feature', base);
         if (branch) {
-            logger_1.logger.info(`🌿 Created branch: ${branch}`);
+            const baseInfo = base ? ` (from ${base})` : '';
+            logger_1.logger.info(`🌿 Created branch: ${branch}${baseInfo}`);
         }
     }
     (0, operation_log_1.logOperation)('speccore execute', `${total} tasks`);
@@ -660,5 +674,133 @@ async function handleHotfix(options, taskIds) {
     logger_1.logger.warn('   Grace period: 30 min (skip reverse sync)');
     logger_1.logger.warn('   Mandatory sync deadline: 24 hours');
     logger_1.logger.warn('   Run: speccore sync --reverse to complete');
+    (0, next_steps_1.showNextSteps)('execute');
+}
+// ============================================================
+// Strict mode pre-flight check
+// ============================================================
+async function preFlightCheck(tasks, iteration, options) {
+    const iterDir = `期次-${iteration}`;
+    const ask = (q) => {
+        logger_1.logger.info(q);
+        return new Promise((resolve) => {
+            process.stdin.resume();
+            process.stdin.once('data', (data) => {
+                process.stdin.pause();
+                resolve(data.toString().split('\n')[0].trim());
+            });
+        });
+    };
+    logger_1.logger.info('\n╔══════════════════════════════════════════════╗');
+    logger_1.logger.info('║  🔍 Strict Mode — Pre-Flight Check           ║');
+    logger_1.logger.info('╚══════════════════════════════════════════════╝\n');
+    const approved = [];
+    for (const task of tasks) {
+        const taskDir = (0, path_1.join)(iterDir, task.id);
+        logger_1.logger.info(`\n── ${task.id} ──`);
+        let issues = [];
+        // 1. Requirement completeness
+        const reqPath = (0, path_1.join)(taskDir, 'backend', 'REQ.md');
+        if (await (0, fs_extra_1.pathExists)(reqPath)) {
+            const req = await (0, fs_extra_1.readFile)(reqPath, 'utf-8');
+            const sections = (req.match(/^###?\s+.+/gm) || []).length;
+            const apis = (req.match(/\| (GET|POST|PUT|DELETE|PATCH) \|/g) || []).length;
+            logger_1.logger.info(`  1. 需求: ${sections} 章节 / ${apis} 接口`);
+            if (sections === 0 && apis === 0)
+                issues.push('REQ.md 内容为空');
+        }
+        else {
+            issues.push('缺少 REQ.md');
+        }
+        // 2. Tech plan
+        const techPath = (0, path_1.join)(taskDir, 'backend', 'TECH.md');
+        if (await (0, fs_extra_1.pathExists)(techPath)) {
+            const tech = await (0, fs_extra_1.readFile)(techPath, 'utf-8');
+            const s = [tech.includes('数据库') && 'DB', tech.includes('Redis') && 'Redis', tech.includes('MQ') && 'MQ'].filter(Boolean).join('/');
+            logger_1.logger.info(`  2. 方案: ${s || '待补充'}`);
+        }
+        else {
+            issues.push('缺少 TECH.md');
+        }
+        // 3. Test cases
+        const testPath = (0, path_1.join)(taskDir, 'backend', 'TEST.md');
+        if (await (0, fs_extra_1.pathExists)(testPath)) {
+            const test = await (0, fs_extra_1.readFile)(testPath, 'utf-8');
+            const n = (test.match(/⬜|✅|❌/g) || []).length;
+            logger_1.logger.info(`  3. 测试: ${n} 用例`);
+        }
+        // 4. Review
+        logger_1.logger.info(`  4. 审查: ${await (0, fs_extra_1.pathExists)((0, path_1.join)(taskDir, 'backend', 'REVIEW.md')) ? '✅' : '❌'}`);
+        // 5. API
+        logger_1.logger.info(`  5. 契约: ${await (0, fs_extra_1.pathExists)((0, path_1.join)(taskDir, '_shared', 'API_CONTRACT.yaml')) ? '✅' : '⚠️'}`);
+        // 6. Platform
+        const fd = (0, path_1.join)(taskDir, 'frontend');
+        if (await (0, fs_extra_1.pathExists)(fd)) {
+            const pf = require('fs').readdirSync(fd, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
+            logger_1.logger.info(`  6. 端: ${pf.join(', ')}`);
+        }
+        // 7. Constitution
+        logger_1.logger.info(`  7. 合规: 待 validate ${issues.length > 0 ? '⚠️  ' + issues.join(', ') : ''}`);
+        // ── Per-task decision ──
+        const answer = (await ask(`  → 开发？[y]确认 [N]跳过 [q]全部取消: `)).toLowerCase();
+        if (answer === 'q') {
+            logger_1.logger.info('❌ 取消');
+            approved.length = 0;
+            break;
+        }
+        if (answer === 'y' || answer === 'yes') {
+            approved.push(task);
+            logger_1.logger.info(`  ✅ 已加入`);
+        }
+        else {
+            logger_1.logger.info(`  ⏭️ 跳过`);
+        }
+        logger_1.logger.info('');
+    }
+    if (approved.length === 0) {
+        logger_1.logger.info('\n❌ 没有任务通过确认。');
+        return [];
+    }
+    logger_1.logger.info(`\n  将执行 ${approved.length}/${tasks.length} 个任务`);
+    const confirm = await ask('  确认开始？[y/N] ');
+    if (confirm.toLowerCase() !== 'y') {
+        logger_1.logger.info('\n❌ 已取消');
+        process.exit(0);
+    }
+    logger_1.logger.info('\n✅ 开始执行...\n');
+    return approved;
+}
+/**
+ * 从 IMPACT.md 检测任务依赖，返回应作为 base 的依赖任务 ID
+ */
+async function detectDependencyBase(iteration, taskId) {
+    const impactPath = (0, path_1.join)(`期次-${iteration}`, 'IMPACT.md');
+    if (!(await (0, fs_extra_1.pathExists)(impactPath)))
+        return undefined;
+    const impact = await (0, fs_extra_1.readFile)(impactPath, 'utf-8');
+    const lines = impact.split('\n');
+    // Parse: | Task-002: 订单导出 | → | Task-001: 用户管理 | `/api/users` |
+    for (const line of lines) {
+        if (line.includes('→') && line.includes(taskId)) {
+            const match = line.match(/→\s*\|\s*([^|]+)/);
+            if (match) {
+                const depTaskId = match[1].trim().split(':')[0].trim();
+                logger_1.logger.info(`\n🔗 检测到依赖: ${taskId} 依赖 ${depTaskId}`);
+                logger_1.logger.info(`   🎯 自动从分支 feature/${depTaskId}-* 创建（避免实体重复）`);
+                // Find actual branch name matching this task
+                try {
+                    const branches = require('child_process').execSync('git branch', { encoding: 'utf-8' });
+                    const branchMatch = branches.split('\n').find((b) => b.trim().startsWith(`feature/${depTaskId}-`));
+                    if (branchMatch) {
+                        const actualBranch = branchMatch.trim().replace(/^\*?\s*/, '');
+                        return actualBranch || `feature/${depTaskId}`;
+                    }
+                }
+                catch { }
+                return `feature/${depTaskId}`;
+            }
+        }
+    }
+    return undefined;
 }
 //# sourceMappingURL=execute.js.map

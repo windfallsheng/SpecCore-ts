@@ -2,7 +2,7 @@ import { ensureDir, writeFile, pathExists, readFile } from 'fs-extra';
 import { join } from 'path';
 import { logger, Spinner } from '../../utils/logger';
 import { updateContext } from '../../core/context';
-
+import { nextIterationId } from '../../core/global-counters';
 export interface IterationCreateOptions {
   name?: string;
   from?: string;
@@ -19,9 +19,10 @@ export async function iterationCreateCommand(options: IterationCreateOptions): P
   spinner.start();
 
   try {
-    // Strip leading 期次- prefix if user already included it
-    const iterName = options.name.replace(/^期次-/, '');
-    const iterationDir = `期次-${iterName}`;
+    // Generate globally unique iteration ID
+    const rawName = options.name.replace(/^期次-/, '');
+    const { id: fullName } = await nextIterationId(rawName);
+    const iterationDir = fullName; // e.g. 期次-001-Q3
 
     // Check if already exists
     if (await pathExists(iterationDir)) {
@@ -45,7 +46,7 @@ export async function iterationCreateCommand(options: IterationCreateOptions): P
 
     // Update context (store without 期次- prefix for consistency)
     await updateContext({
-      currentIteration: iterName,
+      currentIteration: fullName,
       lastUpdated: new Date().toISOString()
     });
 
