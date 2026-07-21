@@ -126,7 +126,7 @@ SpecCore 采用**确定性逻辑与智能逻辑解耦**的架构：
 
 ## 🤖 AI 命令（Slash Command）对应关系
 
-> 在 AI 工具（WorkBuddy / Cursor / Claude Code 等）中输入 `/` + 命令。AI 命令在底层调用对应的 CLI 命令执行。
+> 在 AI 工具（WorkBuddy / Cursor / Claude Code 等）中输入 `/` + 命令。AI 命令在底层调用对应的 CLI 命令执行。54 个 CLI 命令都有对应的 `/spec-*` 形式。
 
 | CLI 终端命令 | AI Slash Command | 用途 |
 | :--- | :--- | :--- |
@@ -134,11 +134,15 @@ SpecCore 采用**确定性逻辑与智能逻辑解耦**的架构：
 | `speccore import` | `/spec-import` | 导入项目到全量层 |
 | `speccore word2spec` | `/spec-word2spec` | Word 文档导入 |
 | `speccore iteration create` | `/spec-iteration-create` | 创建期次 |
+| `speccore iteration split` | `/spec-iteration-split` | 拆分需求为 Task |
 | `speccore new-task` | `/spec-new-task` | 创建多平台 Task |
 | `speccore execute` | `/spec-execute` | 执行开发任务 |
-| `speccore progress` | `/spec-progress` | 查看进度 |
+| `speccore change` | `/spec-change` | 需求变更 |
+| `speccore sync` | `/spec-sync` | Spec-代码同步 |
 | `speccore validate` | `/spec-validate` | 合规性检查 |
-| `speccore impact` | `/spec-impact` | 变更影响分析 |
+| `speccore archive` | `/spec-archive` | 归档任务 |
+| `speccore rollback` | `/spec-rollback` | 从备份恢复 |
+| `speccore dashboard` | `/spec-dashboard` | 仪表盘总览 |
 | `speccore audit` | `/spec-ai-audit` | AI 智能审计 |
 | `speccore spec "查询"` | `/spec 查询` | 自然语言智能入口 |
 
