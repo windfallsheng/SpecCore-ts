@@ -7,6 +7,7 @@ import { execSync } from 'child_process';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
 import { showNextSteps } from '../core/next-steps';
+import { extractQuestions, showQuestionChecklist } from '../core/question-checklist';
 
 export interface DoneOptions {
   task?: string;
@@ -99,6 +100,13 @@ export async function doneCommand(options: DoneOptions): Promise<void> {
   // ── Summary ──
   const okCount = steps.filter(s => s.ok).length;
   spinner.stop(`✅ ${taskId} 收尾完成 (${okCount}/${steps.length})`);
+
+  
+  // Final question review
+  const qs = await extractQuestions(iterDir);
+  if (qs.length > 0) {
+    showQuestionChecklist(qs, '收尾前最终审查');
+  }
 
   logger.info('');
   showNextSteps('archive');
