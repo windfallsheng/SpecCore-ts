@@ -634,3 +634,140 @@ speccore watch --iteration=2026-07-Sprint
 speccore validate
 # → ❌ 3 errors → fix one by one → run validate again → fix more...
 ```
+
+---
+
+## Scenario 23: Word Requirement Import
+
+**Background**: PM provided a Word document (.docx/.doc) PRD that needs to be imported into SpecCore.
+
+**Steps**:
+```bash
+# CLI
+speccore word2spec -f api-prd.docx -i Q3 -p backend
+speccore word2spec -f web-requirements.doc -i Q3 -p web
+# 💬 "Convert the Q3 backend PRD Word doc to Spec"
+```
+
+**Notes**:
+- Embedded images are auto-extracted to `iteration-Q3/00-requirements/images/`
+- Missing interface tables get an auto-hint appended
+- INDEX.md is auto-updated
+- All Tasks share images via `../../00-requirements/images/xxx.png`
+- Requires pandoc; command prompts for auto-install if missing
+
+**Verify**:
+```bash
+ls iteration-Q3/00-requirements/
+# → backend-requirements.md  web-requirements.md  images/  INDEX.md
+```
+
+---
+
+## Scenario 24: Multi-Developer Parallel Work
+
+**Background**: Alice works on Task-001, Bob works on Task-002 — need conflict-free parallel development.
+
+**Steps**:
+```bash
+# Alice
+git checkout -b 260715-order-management-alice
+vim iteration-Q3/Task-001-OrderManagement/backend/REQ.md
+speccore execute --task=Task-001 --force
+speccore sync --task=Task-001 --detect
+
+# Bob (simultaneously)
+git checkout -b 260715-user-auth-bob
+vim iteration-Q3/Task-002-UserAuth/backend/REQ.md
+speccore execute --task=Task-002 --force
+speccore sync --task=Task-002 --detect
+```
+
+**Key Rules**:
+
+| Rule | Note |
+| :--- | :--- |
+| Different Tasks | No conflicts, fully parallel |
+| Same Task | Never edit the same platform (backend/frontend) simultaneously |
+| Global config | Coordinate when changing GLOBAL/* or CONSTITUTION |
+| Before PR merge | Each runs `speccore sync --detect` to confirm consistency |
+
+**Verify**:
+```bash
+speccore progress              # Overall progress
+speccore health --task=Task-001  # Health check
+```
+
+---
+
+## Scenario 25: Task Wrap-Up
+
+**Background**: Task development complete, PR merged. Run the full wrap-up pipeline.
+
+**Steps**:
+```bash
+# 1. Final consistency check
+speccore sync --task=Task-001 --detect
+speccore validate
+
+# 2. Generate audit report
+speccore audit 2>&1 > iteration-Q3/review/Task-001-audit.md
+
+# 3. Archive (close task, clean hotfix flags)
+speccore archive --task=Task-001
+
+# 4. Sync iteration requirements to global
+speccore sync-global --iteration=Q3 --direction=to_global
+
+# 5. Update context (mark as done)
+speccore current --task=Task-001 --status=done
+
+# 6. View final dashboard
+speccore dashboard
+```
+
+**AI dialog equivalent**:
+```
+"Wrap up Task-001"
+"Archive and sync to global"
+```
+
+---
+
+## Scenario 26: Troubleshooting
+
+### Corrupted/Lost context.json
+
+```bash
+# Symptom: every command reports "cannot find current iteration"
+# Fix
+speccore current                     # Re-select current iteration
+# 💬 "Relocate current iteration"
+```
+
+### Manually Deleted Task Directory
+
+```bash
+# Symptom: speccore execute --task=Task-003 reports "Task not found"
+# Fix: restore from .bak
+speccore rollback --task=Task-003 --list      # View recoverable backups
+speccore rollback --task=Task-003 --confirm   # Restore latest backup
+```
+
+### Corrupted .speccore/ Configuration
+
+```bash
+# Symptom: all commands fail with strange errors
+# Fix: reinitialize (does not delete existing data)
+speccore init --force               # Force rebuild .speccore/
+# 💬 "Reinitialize SpecCore"
+```
+
+### Git Conflicts in Spec Files
+
+```bash
+# Symptom: git merge conflicts in .md files
+# Fix: SpecCore files use timestamps — keep the newer one
+speccore validate --fix             # Auto-fix common format issues
+# 💬 "Validate and fix Spec format issues"
+```
