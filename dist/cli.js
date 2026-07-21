@@ -31,6 +31,7 @@ const template_add_1 = require("./commands/template-add");
 const help_1 = require("./commands/help");
 const demo_1 = require("./commands/demo");
 const welcome_1 = require("./commands/welcome");
+const word2spec_1 = require("./commands/word2spec");
 // 全量层命令
 const iteration_from_global_1 = require("./commands/iteration-from-global");
 const sync_global_1 = require("./commands/sync-global");
@@ -409,6 +410,14 @@ commander_1.program
     .option('--name <name>', 'Iteration name (required)')
     .option('--force', 'Force overwrite existing iteration')
     .action(iteration_from_global_1.iterationFromGlobalCommand);
+commander_1.program
+    .command('word2spec')
+    .alias('w2s')
+    .description('Convert Word (.docx/.doc) requirement docs to SpecCore Markdown')
+    .option('-f, --file <path>', 'Source Word file path (required)')
+    .option('-i, --iteration <name>', 'Target iteration name (required)')
+    .option('-p, --platform <name>', 'Platform/end identifier (e.g. 后台/Web/小程序)')
+    .action(word2spec_1.word2specCommand);
 commander_1.program
     .command('sync-global')
     .alias('sg')
