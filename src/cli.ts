@@ -169,6 +169,7 @@ iterationCmd
   .option('--target <target>', 'Merge into existing task')
   .option('-p, --platforms <platforms>', 'Comma-separated platforms (auto-detected if omitted)')
   .option('--dry-run', 'Preview without creating')
+  .option('--strict', 'Review each section before creating tasks')
   .action(iterationSplitCommand);
 
 // ================================================================

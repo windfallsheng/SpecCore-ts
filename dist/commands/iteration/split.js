@@ -57,6 +57,21 @@ async function iterationSplitCommand(options) {
         logger_1.logger.info(`Found ${sections.length} sections to split`);
         const platforms = await detectPlatforms(iterationDir, options.platforms);
         logger_1.logger.info(`Platforms: ${platforms.join(', ')}`);
+        // ── Strict mode: preview + confirm each task's split plan ──
+        if (options.strict) {
+            const approved = await strictSplitPreview(sections, platforms, iterationDir);
+            if (approved.length === 0) {
+                spinner.stop('已取消，未创建任何任务');
+                return;
+            }
+            for (const section of approved) {
+                const idx = sections.indexOf(section);
+                const taskId = `Task-${String(idx + 1).padStart(3, '0')}`;
+                await createTaskFromSection(iterationDir, taskId, section, platforms);
+            }
+            spinner.stop(`✅ 创建了 ${approved.length} 个任务`);
+            return;
+        }
         if (options.dryRun) {
             spinner.stop('Dry run complete - no files created');
             for (const section of sections) {
@@ -344,5 +359,68 @@ function generateReviewChecklist(section) {
     checklist += `- [ ] 相关的 \`REQ.md\` 已更新（如有变化）\n`;
     checklist += `- [ ] PR 描述写清楚了「做了什么 + 怎么测」\n`;
     return checklist;
+}
+/**
+ * 严格模式：预览拆分方案，逐 section 确认
+ */
+async function strictSplitPreview(sections, platforms, iterationDir) {
+    const ask = (q) => {
+        process.stdout.write(q);
+        return new Promise((resolve) => {
+            process.stdin.resume();
+            process.stdin.once('data', (data) => {
+                process.stdin.pause();
+                resolve(data.toString().split('\n')[0].trim());
+            });
+        });
+    };
+    logger_1.logger.info('\n╔══════════════════════════════════════════╗');
+    logger_1.logger.info('║  🔍 Strict Split — 预览拆分方案          ║');
+    logger_1.logger.info('╚══════════════════════════════════════════╝\n');
+    logger_1.logger.info(`检测到 ${sections.length} 个章节，${platforms.length} 个端: ${platforms.join(', ')}\n`);
+    const approved = [];
+    for (let i = 0; i < sections.length; i++) {
+        const s = sections[i];
+        const taskId = `Task-${String(i + 1).padStart(3, '0')}`;
+        // Determine target directory
+        const target = s.platform
+            ? (s.platform.startsWith('后台') ? `backend/${s.platform.replace(/^后台/, '')}` : `frontend/${s.platform}`)
+            : platforms.join(' + ');
+        logger_1.logger.info(`── ${taskId}: ${s.name} ──`);
+        logger_1.logger.info(`   端: ${target}`);
+        logger_1.logger.info(`   内容: ${(s.content || '').slice(0, 60).replace(/\n/g, ' ')}...`);
+        const answer = (await ask(`   → 保留？[y]确认 [e]编辑名称 [N]跳过 [q]取消: `)).toLowerCase();
+        if (answer === 'q') {
+            logger_1.logger.info('  ❌ 取消全部\n');
+            approved.length = 0;
+            break;
+        }
+        if (answer === 'e') {
+            const newName = await ask(`   → 新名称: `);
+            if (newName) {
+                s.name = newName;
+                logger_1.logger.info(`  📝 已改名: ${newName}`);
+            }
+            approved.push(s);
+        }
+        else if (answer === 'y' || answer === 'yes') {
+            approved.push(s);
+            logger_1.logger.info(`  ✅ 保留`);
+        }
+        else {
+            logger_1.logger.info(`  ⏭️  跳过`);
+        }
+        logger_1.logger.info('');
+    }
+    if (approved.length === 0)
+        return [];
+    logger_1.logger.info(`\n  将创建 ${approved.length}/${sections.length} 个任务`);
+    const confirm = await ask('  确认创建？[y/N] ');
+    if (confirm.toLowerCase() !== 'y') {
+        logger_1.logger.info('\n❌ 已取消');
+        return [];
+    }
+    logger_1.logger.info('\n✅ 确认创建...\n');
+    return approved;
 }
 //# sourceMappingURL=split.js.map
