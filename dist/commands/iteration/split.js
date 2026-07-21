@@ -148,6 +148,10 @@ async function createTaskFromSection(iterationDir, taskId, section, allPlatforms
     }
     // Write task type
     await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, '.task-type'), 'feature');
+    // Write TEST.md — auto-generated test outline
+    await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', 'TEST.md'), generateTestOutline(section));
+    // Write REVIEW.md — auto-generated code review checklist
+    await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', 'REVIEW.md'), generateReviewChecklist(section));
     // Write REQ.md
     await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', 'REQ.md'), `# ${section.name}
 
@@ -199,6 +203,8 @@ ${section.content}
     const reqContent = await (0, fs_extra_1.readFile)((0, path_1.join)(taskDir, 'backend', 'REQ.md'), 'utf-8');
     const techContent = await (0, fs_extra_1.readFile)((0, path_1.join)(taskDir, 'backend', 'TECH.md'), 'utf-8');
     const taskContent = await (0, fs_extra_1.readFile)((0, path_1.join)(taskDir, 'backend', 'TASK.md'), 'utf-8');
+    const testContent = await (0, fs_extra_1.readFile)((0, path_1.join)(taskDir, 'backend', 'TEST.md'), 'utf-8');
+    const reviewContent = await (0, fs_extra_1.readFile)((0, path_1.join)(taskDir, 'backend', 'REVIEW.md'), 'utf-8');
     for (const platform of taskPlatforms) {
         if (platform.startsWith('后台') || platform === 'backend') {
             const service = platform.replace(/^后台/, '').trim() || platform;
@@ -206,12 +212,16 @@ ${section.content}
             await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', service, 'REQ.md'), reqContent);
             await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', service, 'TECH.md'), techContent);
             await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', service, 'TASK.md'), taskContent);
+            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', service, 'TEST.md'), testContent);
+            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', service, 'REVIEW.md'), reviewContent);
         }
         else {
             await (0, fs_extra_1.ensureDir)((0, path_1.join)(taskDir, 'frontend', platform));
             await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'REQ.md'), reqContent);
             await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'TECH.md'), techContent);
             await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'TASK.md'), taskContent);
+            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'TEST.md'), testContent);
+            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'REVIEW.md'), reviewContent);
         }
     }
 }
@@ -230,5 +240,109 @@ async function updateProjectGraph(iterationDir, sections) {
         }
     }
     await (0, fs_extra_1.writeFile)(graphPath, content);
+}
+/**
+ * 根据需求内容自动生成测试用例框架
+ */
+function generateTestOutline(section) {
+    const name = section.name;
+    const content = section.content || '';
+    const isBackend = section.platform?.startsWith('后台') || false;
+    const hasApi = content.includes('/api/') || content.includes('接口');
+    const hasDb = content.includes('数据表') || content.includes('数据库') || content.includes('表');
+    let outline = `# ${name} — 测试用例\n\n`;
+    outline += `> 自动生成于 split，请在编码后补充具体用例\n\n`;
+    outline += `## 1. 单元测试\n\n`;
+    if (isBackend && hasApi) {
+        outline += `| 用例 | 接口 | 输入 | 预期 | 状态 |\n`;
+        outline += `| :--- | :--- | :--- | :--- | :--- |\n`;
+        outline += `| 正常请求 | | | 200 | ⬜ |\n`;
+        outline += `| 参数校验 | | | 400 | ⬜ |\n`;
+        outline += `| 未授权 | | | 401 | ⬜ |\n`;
+    }
+    else {
+        outline += `| 用例 | 场景 | 输入 | 预期 | 状态 |\n`;
+        outline += `| :--- | :--- | :--- | :--- | :--- |\n`;
+        outline += `| 正常渲染 | 默认 | | | ⬜ |\n`;
+        outline += `| 空数据 | 无数据 | | | ⬜ |\n`;
+    }
+    if (hasDb) {
+        outline += `\n## 2. 数据库测试\n\n`;
+        outline += `| 用例 | 表 | 操作 | 预期 | 状态 |\n`;
+        outline += `| :--- | :--- | :--- | :--- | :--- |\n`;
+        outline += `| 事务回滚 | | INSERT/UPDATE | 异常时回滚 | ⬜ |\n`;
+        outline += `| 唯一约束 | | INSERT 重复 | 约束冲突 | ⬜ |\n`;
+    }
+    outline += `\n## 3. 集成测试 / E2E\n\n`;
+    outline += `| 用例 | 流程 | 预期 | 状态 |\n`;
+    outline += `| :--- | :--- | :--- | :--- |\n`;
+    outline += `| 正常流程 | 从头到尾走通 | 成功 | ⬜ |\n`;
+    outline += `| 异常流程 | 中断/超时 | 优雅降级 | ⬜ |\n`;
+    outline += `| 并发 | 多用户同时操作 | 无数据错乱 | ⬜ |\n`;
+    outline += `\n## 4. 性能 / 安全\n\n`;
+    outline += `| 用例 | 指标 | 阈值 | 状态 |\n`;
+    outline += `| :--- | :--- | :--- | :--- |\n`;
+    outline += `| 响应时间 | P99 | < 500ms | ⬜ |\n`;
+    outline += `| 并发容量 | QPS | 满足预期 | ⬜ |\n`;
+    outline += `\n> ⬜ 待编写 | ✅ 通过 | ❌ 失败 | ➖ 不适用\n`;
+    return outline;
+}
+/**
+ * 根据需求内容自动生成代码审查清单
+ */
+function generateReviewChecklist(section) {
+    const name = section.name;
+    const content = section.content || '';
+    const hasApi = content.includes('/api/') || content.includes('接口');
+    const hasDb = content.includes('数据库') || content.includes('表');
+    const hasBatch = content.includes('批量') || content.includes('导出');
+    const hasAuth = content.includes('权限') || content.includes('角色') || content.includes('认证');
+    const isBackend = section.platform?.startsWith('后台') || false;
+    let checklist = `# ${name} — Code Review Checklist\n\n`;
+    checklist += `> 自动生成于 split，请在提交 PR 前逐项确认\n\n`;
+    checklist += `## 功能正确性\n\n`;
+    checklist += `- [ ] 需求覆盖完整，无遗漏\n`;
+    checklist += `- [ ] 边界条件处理（空值、极值、特殊字符）\n`;
+    checklist += `- [ ] 错误码统一\n\n`;
+    checklist += `## 代码质量\n\n`;
+    checklist += `- [ ] 零 ` + '`any`' + ` 类型\n`;
+    checklist += `- [ ] 无 console.log 残留\n`;
+    checklist += `- [ ] 命名清晰、见名知义\n`;
+    checklist += `- [ ] 无重复代码（>3 次提取为函数）\n\n`;
+    if (isBackend) {
+        checklist += `## 后端专项\n\n`;
+        checklist += `- [ ] 接口幂等性\n`;
+        checklist += `- [ ] 参数校验（@Valid / DTO）\n`;
+        checklist += `- [ ] 防 SQL 注入\n`;
+        checklist += `- [ ] 日志脱敏（密码/手机号不打日志）\n`;
+        if (hasDb) {
+            checklist += `- [ ] 数据库事务边界正确\n`;
+            checklist += `- [ ] 索引是否匹配查询条件\n`;
+        }
+        if (hasBatch) {
+            checklist += `- [ ] 批量操作有上限限制\n`;
+            checklist += `- [ ] 大数据量分页处理\n`;
+        }
+        if (hasAuth) {
+            checklist += `- [ ] 权限校验在每个接口入口（不是中间件漏掉）\n`;
+        }
+        checklist += `\n`;
+    }
+    else {
+        checklist += `## 前端专项\n\n`;
+        checklist += `- [ ] 组件拆分合理（>200 行考虑拆分）\n`;
+        checklist += `- [ ] 无 XSS 漏洞（v-html 审查）\n`;
+        checklist += `- [ ] 响应式适配\n`;
+        checklist += `- [ ] 加载态 / 空态 / 错误态 / 边界态（四态齐全）\n\n`;
+    }
+    checklist += `## 测试\n\n`;
+    checklist += `- [ ] 核心路径有单元测试\n`;
+    checklist += `- [ ] 参照 \`TEST.md\` 逐项验证\n`;
+    checklist += `- [ ] \`speccore validate --task=${name}\` 通过\n\n`;
+    checklist += `## 自查确认\n\n`;
+    checklist += `- [ ] 已在本地完整跑通\n`;
+    checklist += `- [ ] 相关的 \`REQ.md\` 已更新（如有变化）\n`;
+    checklist += `- [ ] PR 描述写清楚了「做了什么 + 怎么测」\n`;
+    return checklist;
 }
 //# sourceMappingURL=split.js.map
