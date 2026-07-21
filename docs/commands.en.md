@@ -1,6 +1,6 @@
 # SpecCore — Command Reference
 
-> 🔧 Commands: 49 | 🧠 Intent Types: 35 | See [README](../README.en.md)
+> 🔧 Commands: 54 | 🧠 Intent Types: 36 | See [README](../README.en.md)
 
 ---
 
@@ -297,7 +297,7 @@ speccore trace --full
 
 ---
 
-## Intent Mapping (35 types)
+## Intent Mapping (36 types)
 
 | Priority | Intent | Keywords | Command |
 | :---: | :--- | :--- | :--- |

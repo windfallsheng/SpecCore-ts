@@ -125,7 +125,7 @@ speccore context --task=Task-001
 
 ## Smart Entry: Natural Language
 
-**Can't remember commands? Use `speccore spec` + natural language!** 35 intent types, 200+ keywords.
+**Can't remember commands? Use `speccore spec` + natural language!** 36 intent types, 200+ keywords.
 
 ```bash
 speccore spec "Create a login feature"       # → matches goal
