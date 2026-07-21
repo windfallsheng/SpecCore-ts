@@ -166,3 +166,21 @@ perl -i -0pe 's/\n{3,}/\n\n/g' "目标文件"
 | 图片不显示 | 检查 `images/` 目录和引用路径 |
 | 表格错位 | MD 中手动调整列数 |
 | 编号列表错乱 | pandoc 自动修复，手动复核 |
+
+---
+
+## 可执行脚本
+
+提供了独立脚本，可以在终端直接运行：
+
+```bash
+# single conversion
+skills/word2spec/scripts/convert.sh api-prd.docx Q3 后台
+
+# batch conversion
+for f in *.docx; do
+  skills/word2spec/scripts/convert.sh "$f" Q3 "$(basename "$f" .docx)"
+done
+```
+
+脚本自动完成：转换 → 图片提取 → 路径修正 → 标题层级 → 空行清理 → INDEX.md 更新。
