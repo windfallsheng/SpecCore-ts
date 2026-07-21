@@ -5,7 +5,7 @@
 
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
-import { readFile, writeFile, pathExists, readdir } from 'fs-extra';
+import { readFile, pathExists } from 'fs-extra';
 import { join } from 'path';
 import { FileTransaction } from '../core/transaction';
 import { scanTasks } from '../core/state';
@@ -238,7 +238,6 @@ function normalizeDescription(desc: string): string {
 
   // 新增类
   if (/^(加|新增?|添?加|创建|做了?个?|做了?一个)/.test(lower)) {
-    const operation = lower.indexOf('新增') >= 0 ? '新增' : '新增';
     const cleaned = lower.replace(/^(加|新增?|添加|做了?个?|做了?一个|做了?)了?个?/, '').replace(/[了啦啊]$/, '');
     return `新增${cleaned ? `: ${cleaned}` : ''}`;
   }

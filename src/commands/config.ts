@@ -1,5 +1,4 @@
 import { pathExists, readFile, writeFile, ensureDir } from 'fs-extra';
-import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
 
 export interface ConfigOptions {

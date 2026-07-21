@@ -101,7 +101,7 @@ async function archiveCommand(options) {
         throw error;
     }
 }
-async function archiveTask(iterationDir, taskId, archiveDir) {
+async function _archiveTask(iterationDir, taskId, archiveDir) {
     const taskPath = (0, path_1.join)(iterationDir, taskId);
     const targetPath = (0, path_1.join)(archiveDir, taskId);
     if (!(await (0, fs_extra_1.pathExists)(taskPath))) {
