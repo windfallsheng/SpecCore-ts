@@ -87,6 +87,8 @@ async function iterationSplitCommand(options) {
         }
         // ── Generate impact graph + risk scores ──
         await generateImpactGraph(iterationDir, sections, platforms);
+        // ── Generate .env.example for the iteration ──
+        await generateEnvExample(iterationDir, sections);
         // Update PROJECT_GRAPH.md
         await updateProjectGraph(iterationDir, sections);
         spinner.stop(`Created ${sections.length} tasks from requirements`);
@@ -170,6 +172,12 @@ async function createTaskFromSection(iterationDir, taskId, section, allPlatforms
     await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', 'TEST.md'), generateTestOutline(section));
     // Write REVIEW.md — auto-generated code review checklist
     await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', 'REVIEW.md'), generateReviewChecklist(section));
+    // Write SCHEMA.md — DB schema template (only if DB content detected)
+    if (section.content.match(/数据库|数据表|表结构|DDL|ALTER|建表|索引/)) {
+        await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', 'SCHEMA.md'), generateSchemaTemplate(section));
+    }
+    // Write DEPLOY.md — deployment checklist
+    await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', 'DEPLOY.md'), generateDeployChecklist(section));
     // Write REQ.md
     await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', 'REQ.md'), `# ${section.name}
 
@@ -474,5 +482,109 @@ async function generateImpactGraph(iterationDir, sections, platforms) {
     }
     await (0, fs_extra_1.writeFile)((0, path_1.join)(iterationDir, 'IMPACT.md'), impact);
     logger_1.logger.info(`\nImpact analysis: ${iterationDir}/IMPACT.md`);
+}
+function generateSchemaTemplate(section) {
+    const name = section.name;
+    return `# ${name} — Database Schema
+
+> Auto-generated. Fill in DDL before development.
+
+## Tables
+
+| Table | Purpose | Engine | Charset |
+| :--- | :--- | :--- | :--- |
+| | | InnoDB | utf8mb4 |
+
+## DDL
+
+\`\`\`sql
+-- TODO: Write CREATE TABLE statements
+
+\`\`\`
+
+## Indexes
+
+| Table | Index | Columns | Type |
+| :--- | :--- | :--- | :--- |
+| | | | BTREE |
+
+## Migration Plan
+
+- [ ] Dev: Write DDL in local
+- [ ] Review: DBA reviews schema changes
+- [ ] Stage: Run migration on staging
+- [ ] Prod: Run migration during deployment window
+
+## Rollback
+
+\`\`\`sql
+-- TODO: Write rollback DDL
+\`\`\`
+`;
+}
+function generateDeployChecklist(section) {
+    const name = section.name;
+    const hasDb = section.content.match(/数据库|数据表|DDL|ALTER/) !== null;
+    return `# ${name} — Deployment Checklist
+
+## Pre-Deploy
+
+- [ ] All tests pass (\`speccore lifecycle --task=${name} --check\`)
+- [ ] Code review approved (REVIEW.md all checked)
+- [ ] PR merged to main
+- [ ] CI/CD pipeline green
+
+${hasDb ? '- [ ] DB migration script ready and reviewed\n- [ ] DB backup taken before migration\n' : ''}
+## Deploy Steps
+
+1. [ ] Merge to release branch
+2. [ ] Tag version: \`git tag vX.Y.Z\`
+3. [ ] Deploy to staging
+4. [ ] Smoke test on staging
+5. [ ] Deploy to production
+${hasDb ? '6. [ ] Run DB migration\n7. [ ] Verify data integrity\n' : ''}
+## Post-Deploy
+
+- [ ] Monitor error logs (first 30 min)
+- [ ] Monitor performance metrics
+- [ ] Run \`speccore archive --task=${name}\`
+
+## Rollback Plan
+
+- [ ] \`git revert\` the merge commit
+${hasDb ? '- [ ] Run rollback DDL from SCHEMA.md\n' : ''}- [ ] Notify team on rollback
+`;
+}
+async function generateEnvExample(iterationDir, sections) {
+    const envPath = (0, path_1.join)(iterationDir, '.env.example');
+    let env = '# Environment Variables — ' + iterationDir + '\n';
+    env += '# Copy to .env and fill in values\n\n';
+    const needs = new Set();
+    for (const s of sections) {
+        const c = s.content + s.name;
+        if (c.match(/Redis|缓存/))
+            needs.add('REDIS_URL=redis://localhost:6379');
+        if (c.match(/Kafka|MQ|消息队列/))
+            needs.add('KAFKA_BROKERS=localhost:9092');
+        if (c.match(/MySQL|数据库|JDBC|数据表/))
+            needs.add('DB_URL=jdbc:mysql://localhost:3306/db\nDB_USER=root\nDB_PASS=');
+        if (c.match(/OSS|对象存储|S3|文件上传/))
+            needs.add('OSS_ENDPOINT=https://oss.example.com\nOSS_KEY=\nOSS_SECRET=');
+        if (c.match(/支付|微信|支付宝|wechat|alipay/))
+            needs.add('PAYMENT_API_KEY=\nPAYMENT_SECRET=');
+        if (c.match(/短信|SMS|验证码/))
+            needs.add('SMS_API_KEY=\nSMS_SECRET=');
+        if (c.match(/邮件|email|smtp/))
+            needs.add('SMTP_HOST=smtp.example.com\nSMTP_PORT=587\nSMTP_USER=\nSMTP_PASS=');
+        if (c.match(/token|JWT|OAuth|鉴权|登录/))
+            needs.add('JWT_SECRET=\nTOKEN_EXPIRE=3600');
+    }
+    if (needs.size === 0) {
+        needs.add('# No extra environment variables detected.');
+        needs.add('# Add required variables here.');
+    }
+    env += [...needs].join('\n') + '\n';
+    await (0, fs_extra_1.writeFile)(envPath, env);
+    logger_1.logger.info(`Env example: ${iterationDir}/.env.example`);
 }
 //# sourceMappingURL=split.js.map
