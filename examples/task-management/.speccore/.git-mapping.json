@@ -8,5 +8,10 @@
     "taskId": "Task-002-用户认证",
     "taskName": "Task-002 用户认证 - 后端任务",
     "createdAt": "2026-07-21T03:09:43.250Z"
+  },
+  "feature/Task-003-数据报表-Task-003-数据报表-后端任务": {
+    "taskId": "Task-003-数据报表",
+    "taskName": "Task-003 数据报表 - 后端任务",
+    "createdAt": "2026-07-21T07:40:19.144Z"
   }
 }
