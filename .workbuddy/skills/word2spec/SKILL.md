@@ -10,18 +10,57 @@ platform: macOS
 ## 前置条件
 
 - macOS + pandoc >= 3.x (`/usr/local/bin/pandoc`)
+- `.doc` 旧格式额外需要 LibreOffice (`brew install libreoffice`)
 - 当前工作目录是已初始化的 SpecCore 项目（存在 `.speccore/`）
+
+---
 
 ## 工作流
 
-### 第 1 步 — 定位文件
+### 第 1 步 ── 定位文件
 
 询问用户：
-1. Word 文件在哪个路径？
+1. Word 文件在哪个路径？（支持 `.docx` / `.doc`）
 2. 对应哪个期次？（如 `Q3`）
 3. 有哪些端的文档？（后台 / Web / 小程序 / H5）
 
-### 第 2 步 — 转换（核心）
+### 第 2 步 ── 转换
+
+#### .docx 格式（直接转）
+
+```bash
+LANG=zh_CN.UTF-8 pandoc "源路径" \
+  -f docx \
+  -t gfm \
+  --wrap=none \
+  --extract-media="期次-${迭代名}/00-需求文档/images" \
+  -o "期次-${迭代名}/00-需求文档/${端名}需求.md"
+```
+
+#### .doc 旧格式（两步转换 + 清理）
+
+```bash
+# 1. doc → docx
+soffice --headless --convert-to docx "源路径.doc" --outdir /tmp/
+
+# 2. docx → md
+LANG=zh_CN.UTF-8 pandoc "/tmp/源路径.docx" \
+  -f docx -t gfm --wrap=none \
+  --extract-media="期次-${迭代名}/00-需求文档/images" \
+  -o "期次-${迭代名}/00-需求文档/${端名}需求.md"
+
+# 3. 清理临时文件
+rm "/tmp/源路径.docx"
+```
+
+#### ⚠️ 错误处理
+
+| 错误类型 | 处理 |
+| :--- | :--- |
+| 文件不存在 | 检查路径，提示确认 |
+| 文件已损坏 | 尝试用 LibreOffice 修复后重试 |
+| 图片提取失败 | 跳过图片，继续转换，标注缺失 |
+| 中文乱码 | 检查 `LANG=zh_CN.UTF-8`，重试 |
 
 对每个 `.docx` 文件执行：
 
