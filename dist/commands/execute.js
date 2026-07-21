@@ -43,6 +43,7 @@ const transaction_1 = require("../core/transaction");
 const spec_rules_1 = require("../core/spec-rules");
 const operation_log_1 = require("../core/operation-log");
 const next_steps_1 = require("../core/next-steps");
+const question_checklist_1 = require("../core/question-checklist");
 const execution_state_1 = require("../core/execution-state");
 const git_integration_1 = require("../core/git-integration");
 async function executeCommand(options) {
@@ -287,6 +288,10 @@ async function executeWithProgress(tasks, iteration, base) {
     // Summary
     const totalElapsed = Math.round((Date.now() - startTime) / 1000);
     logger_1.logger.success(`Execution complete! ${total} tasks in ${totalElapsed}s`);
+    // Post-execution question review
+    const postQs = await (0, question_checklist_1.extractQuestions)(`期次-${iteration}`);
+    if (postQs.length > 0)
+        (0, question_checklist_1.showQuestionChecklist)(postQs, '执行后审查');
     (0, operation_log_1.logOperation)('speccore execute done', `completed ${total} tasks in ${totalElapsed}s`);
 }
 // ============================================================

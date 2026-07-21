@@ -5,6 +5,7 @@
 import { readFile, writeFile, pathExists, readdir } from 'fs-extra';
 import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
+import { extractQuestions, showQuestionChecklist } from '../core/question-checklist';
 import { getDefaultIteration } from '../core/context';
 
 import { showNextSteps } from '../core/next-steps';

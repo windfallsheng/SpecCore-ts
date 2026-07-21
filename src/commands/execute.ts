@@ -8,6 +8,7 @@ import { loadSpecRules, generateImports, SpecRules, loadTechStack } from '../cor
 
 import { logOperation } from '../core/operation-log';
 import { showNextSteps } from '../core/next-steps';
+import { extractQuestions, showQuestionChecklist } from '../core/question-checklist';
 import {
   initExecutionState,
   loadExecutionState,
@@ -308,6 +309,10 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
   // Summary
   const totalElapsed = Math.round((Date.now() - startTime) / 1000);
   logger.success(`Execution complete! ${total} tasks in ${totalElapsed}s`);
+  // Post-execution question review
+  const postQs = await extractQuestions(`期次-${iteration}`);
+  if (postQs.length > 0) showQuestionChecklist(postQs, '执行后审查');
+  
   logOperation('speccore execute done', `completed ${total} tasks in ${totalElapsed}s`);
 }
 
