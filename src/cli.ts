@@ -40,6 +40,7 @@ import { impactCommand } from './commands/impact';
 import { baselineCommand } from './commands/baseline';
 import { dashboardCommand } from './commands/dashboard';
 import { auditCommand } from './commands/audit';
+import { analyzeCommand } from './commands/analyze';
 // rename 命令
 import { renameCommand } from './commands/rename';
 // v4.0.0 新增命令
@@ -535,6 +536,15 @@ program
   .description('Generate visual dashboard (HTML + Chart.js)')
   .option('-o, --output <path>', 'Output file path', './speccore-dashboard.html')
   .action(dashboardCommand);
+
+program
+  .command('analyze')
+  .alias('al')
+  .description('Analyze requirements: completeness + code mapping + architecture impact → ANALYSIS.md')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('-o, --output <file>', 'Output filename', 'ANALYSIS.md')
+  .option('--auto', 'Non-interactive mode: generate report directly')
+  .action(analyzeCommand);
 
 program
   .command('audit')
