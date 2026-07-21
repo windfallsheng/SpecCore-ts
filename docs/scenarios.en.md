@@ -822,3 +822,31 @@ speccore init --force               # Force rebuild .speccore/
 speccore validate --fix             # Auto-fix common format issues
 # 💬 "Validate and fix Spec format issues"
 ```
+
+
+## Scenario 29: Dependent Task Branching
+
+When tasks depend on each other, branch from the dependency to avoid entity duplication.
+
+```bash
+# 1. Check dependencies
+cat iteration-001-Q3/IMPACT.md
+# | Task-002: OrderQuery | -> | Task-001: UserMgmt | `/api/users` |
+
+# 2. Execute dependency-free task first
+speccore execute --task=Task-001 --force
+# -> 🌿 Created branch: feature/Task-001-UserMgmt
+
+# 3. Execute dependent task (auto-detect base)
+speccore execute --task=Task-002 --force
+# -> 🔗 Dependency detected -> 🎯 Branching from Task-001
+# -> 🌿 Created branch: feature/Task-002-OrderQuery (from feature/Task-001-UserMgmt)
+```
+
+**Result**: Task-002 inherits Task-001's entities. Merge produces incremental changes only.
+
+**Custom base branch** in `.speccore/SETTINGS.md`:
+```yaml
+git:
+  default_base: develop
+```
