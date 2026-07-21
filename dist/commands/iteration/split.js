@@ -6,6 +6,7 @@ const path_1 = require("path");
 const logger_1 = require("../../utils/logger");
 const context_1 = require("../../core/context");
 const risk_scorer_1 = require("../../core/risk-scorer");
+const global_counters_1 = require("../../core/global-counters");
 const next_steps_1 = require("../../core/next-steps");
 async function detectPlatforms(iterationDir, specified) {
     if (specified)
@@ -83,7 +84,7 @@ async function iterationSplitCommand(options) {
         }
         // Create tasks
         for (let i = 0; i < sections.length; i++) {
-            const taskId = `Task-${String(i + 1).padStart(3, '0')}`;
+            const { id: taskId } = await (0, global_counters_1.nextTaskId)();
             await createTaskFromSection(iterationDir, taskId, sections[i], platforms);
         }
         // ── Generate impact graph + risk scores ──
@@ -281,7 +282,7 @@ async function updateProjectGraph(iterationDir, sections) {
         content = await (0, fs_extra_1.readFile)(graphPath, 'utf-8');
     }
     for (let i = 0; i < sections.length; i++) {
-        const taskId = `Task-${String(i + 1).padStart(3, '0')}`;
+        const { id: taskId } = await (0, global_counters_1.nextTaskId)();
         const taskName = sections[i].name;
         if (!content.includes(taskId)) {
             const taskEntry = `| ${taskId} | ${taskName} | feature | 0% | 🔲 待开发 | |\n`;
