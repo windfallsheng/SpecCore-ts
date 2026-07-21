@@ -517,10 +517,19 @@ async function strictSplitPreview(
     logger.info(`   端: ${target}`);
     logger.info(`   内容: ${(s.content || '').slice(0, 60).replace(/\n/g, ' ')}...`);
     
-    const answer = (await ask(`   → 保留？[y]确认 [e]编辑名称 [N]跳过 [q]取消: `)).toLowerCase();
+    const answer = (await ask(`   → 保留？[y]确认 [e]编辑名称 [a]分配 [N]跳过 [q]取消: `)).toLowerCase();
     
     if (answer === 'q') { logger.info('  ❌ 取消全部\n'); approved.length = 0; break; }
-    if (answer === 'e') {
+    if (answer === 'a') {
+      const owner = await ask(`   → 分配给谁？（如需要多端，用逗号分隔: 张三(后台),李四(Web)）: `);
+      if (owner) {
+        // Store owner info for later use
+        (s as any)._owner = owner;
+        logger.info(`  👤 负责人: ${owner}`);
+      }
+      approved.push(s);
+      logger.info(`  ✅ 保留`);
+    } else if (answer === 'e') {
       const newName = await ask(`   → 新名称: `);
       if (newName) { s.name = newName; logger.info(`  📝 已改名: ${newName}`); }
       approved.push(s);
