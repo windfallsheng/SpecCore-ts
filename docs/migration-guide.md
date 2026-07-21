@@ -61,7 +61,7 @@ speccore init --force
 | 方面 | Shell 版 (v3.x) | CLI 版 (v5.x) |
 | :--- | :--- | :--- |
 | 安装方式 | git clone + PATH | `npm install -g speccore` |
-| CLI 命令 | 3 个脚本 | 49 个命令 |
+| CLI 命令 | 3 个脚本 | 54 个命令 |
 | 测试覆盖 | 无 | 148 个测试用例 |
 | 数据模型 | 无 | Zod Schema |
 | 文件操作 | 直接写入 | 事务保护 |
