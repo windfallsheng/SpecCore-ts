@@ -237,23 +237,23 @@ function normalizeDescription(desc: string): string {
   const lower = desc.replace(/\s+/g, '');
 
   // 新增类
-  if (/^(加|新增?|添?加|创建|做了?个?|做了?一个)/.test(lower)) {
-    const cleaned = lower.replace(/^(加|新增?|添加|做了?个?|做了?一个|做了?)了?个?/, '').replace(/[了啦啊]$/, '');
+  if (/^(加|新增?|添?加|创建|做了?)/.test(lower)) {
+    const cleaned = lower.replace(/^(加|新增?|添加|创建|做了?)了?(个|一下)?/, '').replace(/[了啦啊]$/, '');
     return `新增${cleaned ? `: ${cleaned}` : ''}`;
   }
   // 修复类
   if (/^(修|fix|修复|改bug|解决)/.test(lower)) {
-    const cleaned = lower.replace(/^(修|fix|修复|改bug|解决了?)了?/, '').replace(/[了啦啊]$/, '');
+    const cleaned = lower.replace(/^(修|fix|修复|改bug|解决)了?(个|一下)?/, '').replace(/[了啦啊]$/, '');
     return `修复${cleaned ? `: ${cleaned}` : ''}`;
   }
   // 修改类
   if (/^(改|调整|修改|换成?|更新|升级)/.test(lower)) {
-    const cleaned = lower.replace(/^(改|调整|修改|换成?|升级)了?(一下|个)?/, '').replace(/[了啦啊]$/, '');
+    const cleaned = lower.replace(/^(改|调整|修改|换成?|更新|升级)了?(个|一下)?/, '').replace(/[了啦啊]$/, '');
     return `修改${cleaned ? `: ${cleaned}` : ''}`;
   }
   // 删除/移除类
   if (/^(删|移除|去掉|干掉)/.test(lower)) {
-    const cleaned = lower.replace(/^(删|移除|去掉|干掉了?)了?/, '').replace(/[了啦啊]$/, '');
+    const cleaned = lower.replace(/^(删|移除|去掉|干掉)了?(个|一下)?/, '').replace(/[了啦啊]$/, '');
     return `删除${cleaned ? `: ${cleaned}` : ''}`;
   }
 
