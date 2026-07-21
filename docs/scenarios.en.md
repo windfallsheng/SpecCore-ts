@@ -335,7 +335,9 @@ speccore global-status
 speccore iteration-from-global --reqs=REQ-001,REQ-002 --name=2026-Q3-Sprint
 
 # 3. Preview split plan
-speccore iteration split --iteration=2026-Q3-Sprint --dry-run
+speccore iteration split
+# Strict: speccore iteration split --strict  (preview each section)
+# Outputs: IMPACT.md (risk + dependencies), .env.example --iteration=2026-Q3-Sprint --dry-run
 
 # 4. Execute split (auto-generates Task dirs + Spec stubs)
 speccore iteration split --iteration=2026-Q3-Sprint
@@ -683,7 +685,33 @@ speccore word2spec --files "backend.docx=backend-admin,web.md=web" -i Q3
 
 ---
 
-## Scenario 24: Multi-Developer Parallel Work
+## Scenario 24: Task Lifecycle
+
+```bash
+speccore lifecycle                         # Show state machine
+speccore lifecycle --all                   # Kanban board
+speccore lifecycle --task=Task-001 --status=testing
+speccore lifecycle --task=Task-001 --check # Check TEST/REVIEW progress
+```
+
+## Scenario 25: Task Output Files
+
+Each task now generates 8 files:
+
+| File | Purpose | When |
+| :--- | :--- | :--- |
+| REQ.md | Requirements | Always |
+| TECH.md | Tech plan | Always |
+| TASK.md | Task tracking | Always |
+| TEST.md | Test outline | Always |
+| REVIEW.md | Review checklist | Always |
+| SCHEMA.md | DB DDL/indexes | Only DB-related |
+| DEPLOY.md | Deploy checklist | Always |
+| .risk | Risk score | Always |
+
+Iteration outputs: IMPACT.md (risk + deps), .env.example
+
+## Scenario 26: Multi-Developer Parallel Work
 
 **Background**: Alice works on Task-001, Bob works on Task-002 — need conflict-free parallel development.
 
