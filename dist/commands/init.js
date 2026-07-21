@@ -256,16 +256,14 @@ git checkout -b 260715-订单管理-zs
 # AI 对话创建
 "开发 Task-001" → AI 自动创建分支
 \`\`\`
-`
-    // ITERATIONS/README.md
-    , 
+`);
     // ITERATIONS/README.md
     await (0, fs_extra_1.writeFile)((0, path_1.join)(speccoreDir, 'ITERATIONS', 'README.md'), `# 期次索引
 
 | 期次名称 | 时间范围 | 状态 | 负责人 | 备注 |
 | :--- | :--- | :--- | :--- | :--- |
 | | | | | |
-`));
+`);
     // SETTINGS.md
     await (0, fs_extra_1.writeFile)((0, path_1.join)(speccoreDir, 'SETTINGS.md'), `# SpecCore 框架配置
 

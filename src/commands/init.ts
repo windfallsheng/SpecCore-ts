@@ -287,6 +287,7 @@ git checkout -b 260715-订单管理-zs
 "开发 Task-001" → AI 自动创建分支
 \`\`\`
 `
+  );
 
   // ITERATIONS/README.md
   await writeFile(
