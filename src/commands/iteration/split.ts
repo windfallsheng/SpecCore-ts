@@ -101,10 +101,12 @@ interface Section {
   name: string;
   content: string;
   level: number;
+  platform?: string;  // 继承自 "## {X}端需求" 父章节
 }
 
 function extractSections(content: string, sectionFilter?: string): Section[] {
   const sections: Section[] = [];
+  let currentPlatform: string | undefined;
   const lines = content.split('\n');
   
   let currentSection: Section | null = null;
@@ -122,6 +124,18 @@ function extractSections(content: string, sectionFilter?: string): Section[] {
         content: '',
         level: headerMatch[1].length
       };
+      
+      // 检测 "## {X}端需求" 父章节，子章节继承此平台
+      const platformMatch = currentSection.name.match(/^(.+)端需求$/);
+      if (platformMatch) {
+        currentPlatform = platformMatch[1];
+        currentSection = null; // 容器章节本身不作为 Task
+        continue;
+      } else if (currentSection.level === 2) {
+        currentPlatform = undefined; // 新的 ## 章节重置平台
+      }
+      currentSection.platform = currentPlatform;
+      
       currentContent = [];
     } else if (currentSection) {
       currentContent.push(line);
@@ -144,14 +158,17 @@ function extractSections(content: string, sectionFilter?: string): Section[] {
   return sections;
 }
 
-async function createTaskFromSection(iterationDir: string, taskId: string, section: Section, platforms: string[]): Promise<void> {
+async function createTaskFromSection(iterationDir: string, taskId: string, section: Section, allPlatforms: string[]): Promise<void> {
   const taskDir = join(iterationDir, taskId);
+  
+  // 如果 section 有指定平台则只创建该平台，否则创建全部平台
+  const taskPlatforms = section.platform ? [section.platform] : allPlatforms;
   
   await ensureDir(join(taskDir, 'backend'));
   await ensureDir(join(taskDir, '_shared'));
 
   // Create per-platform frontend directories
-  for (const platform of platforms) {
+  for (const platform of taskPlatforms) {
     await ensureDir(join(taskDir, 'frontend', platform));
   }
 
@@ -219,17 +236,17 @@ ${section.content}
 
   // Copy to each frontend platform
   const reqContent = await readFile(join(taskDir, 'backend', 'REQ.md'), 'utf-8');
-  for (const platform of platforms) {
+  for (const platform of taskPlatforms) {
     await writeFile(join(taskDir, 'frontend', platform, 'REQ.md'), reqContent);
   }
   
   const techContent = await readFile(join(taskDir, 'backend', 'TECH.md'), 'utf-8');
-  for (const platform of platforms) {
+  for (const platform of taskPlatforms) {
     await writeFile(join(taskDir, 'frontend', platform, 'TECH.md'), techContent);
   }
   
   const taskContent = await readFile(join(taskDir, 'backend', 'TASK.md'), 'utf-8');
-  for (const platform of platforms) {
+  for (const platform of taskPlatforms) {
     await writeFile(join(taskDir, 'frontend', platform, 'TASK.md'), taskContent);
   }
 }
