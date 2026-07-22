@@ -49,7 +49,7 @@ export async function mergeCheck(iteration: string): Promise<void> {
   logger.info(`   冲突文件: ${conflicts.length}\n`);
 
   if (conflicts.length === 0) {
-    logger.info('  ✅ 无冲突，可以安全合并');
+    logger.info('\n  ✅ 无冲突，可以安全合并\n');
   } else {
     logger.warn('  ⚠️ 以下文件被多个分支修改:\n');
     for (const [file, owners] of conflicts) {
