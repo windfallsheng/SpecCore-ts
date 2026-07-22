@@ -303,7 +303,7 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
   }
 
   // ── Agent mode: output optimized context for external AI ──
-  if (options.agent) {
+  if (options?.agent) {
     const agentCtx = buildAgentContext(tasks, options.agent);
     logger.info(`\n🤖 Agent 模式: ${options.agent}`);
     logger.info('--- AGENT CONTEXT START ---');
