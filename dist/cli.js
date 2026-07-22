@@ -261,8 +261,10 @@ commander_1.program
     .option('--force', 'Skip preview and execute directly')
     .option('--strict', 'Pre-flight check: review req/tech/test before code gen')
     .option('--base <branch>', 'Base branch for task branching (default: current)')
-    .option('--skip <tasks>', 'Comma-separated task IDs to skip (e.g. Task-001,Task-003)')
-    .option('--skip <tasks>', 'Comma-separated task IDs to skip (e.g. Task-001,Task-003)')
+    .option('--skip <tasks>', 'Comma-separated task IDs to skip')
+    .option('--only <tasks>', 'Comma-separated task IDs to execute exclusively (whitelist)')
+    .option('--skip <tasks>', 'Comma-separated task IDs to skip')
+    .option('--only <tasks>', 'Comma-separated task IDs to execute exclusively (whitelist)')
     .option('--hotfix', 'Emergency fix: skip reverse sync (30min grace, 24h mandatory)')
     .action(execute_1.executeCommand);
 // ================================================================

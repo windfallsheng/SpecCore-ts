@@ -133,7 +133,7 @@ async function executeCommand(options) {
         }
         // === Execute with progress (existing flow) ===
         const skipList = options.skip ? options.skip.split(',').map(s => s.trim()).filter(Boolean) : [];
-        await executeWithProgress(sortedTasks, iteration, options.base, skipList);
+        await executeWithProgress(sortedTasks, iteration, options.base, skipList, { only: options.only });
         // Hotfix tracking
         if (options.hotfix && sortedTasks.length > 0) {
             await (0, context_1.startHotfix)(sortedTasks[0].id);
@@ -209,7 +209,7 @@ async function interactiveSelect(tasks, iteration, options) {
         return;
     }
     const skipList2 = options.skip ? options.skip.split(',').map(s => s.trim()).filter(Boolean) : [];
-    await executeWithProgress(selectedTasks, iteration, options.base, skipList2);
+    await executeWithProgress(selectedTasks, iteration, options.base, skipList2, { only: options.only });
 }
 async function loadInquirer() {
     try {
@@ -237,10 +237,28 @@ async function loadInquirer() {
 // ============================================================
 // Progress feedback execution
 // ============================================================
-async function executeWithProgress(tasks, iteration, base, skip) {
+async function executeWithProgress(tasks, iteration, base, skip, options) {
     const total = tasks.length;
     const startTime = Date.now();
     const completed = [];
+    // Filter whitelist (--only)
+    if (options?.only) {
+        const onlyList = options.only.split(',').map(s => s.trim()).filter(Boolean);
+        const before = tasks.length;
+        tasks = tasks.filter(t => onlyList.includes(t.id));
+        if (tasks.length < before) {
+            logger_1.logger.info(`  🎯 仅执行 ${tasks.length}/${before} 个指定任务`);
+        }
+    }
+    // Filter whitelist (--only)
+    if (options?.only) {
+        const onlyList = options.only.split(',').map(s => s.trim()).filter(Boolean);
+        const before = tasks.length;
+        tasks = tasks.filter(t => onlyList.includes(t.id));
+        if (tasks.length < before) {
+            logger_1.logger.info(`  🎯 仅执行 ${tasks.length}/${before} 个指定任务`);
+        }
+    }
     // Filter skipped tasks
     if (skip && skip.length > 0) {
         const before = tasks.length;

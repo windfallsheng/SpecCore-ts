@@ -40,8 +40,8 @@ export interface ExecuteOptions {
   hotfix?: boolean;
   strict?: boolean;
   base?: string;       // base branch for task branching
-  skip?: string;       // comma-separated task IDs to skip   // 严格模式: 编码前逐项确认
-}
+  skip?: string;       // comma-separated task IDs to skip
+  only?: string;       // comma-separated task IDs to execute exclusively
 
 export async function executeCommand(options: ExecuteOptions): Promise<void> {
   try {
@@ -131,7 +131,7 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
 
     // === Execute with progress (existing flow) ===
     const skipList = options.skip ? options.skip.split(',').map(s => s.trim()).filter(Boolean) : [];
-    await executeWithProgress(sortedTasks, iteration, options.base, skipList);
+    await executeWithProgress(sortedTasks, iteration, options.base, skipList, { only: options.only });
 
     // Hotfix tracking
     if (options.hotfix && sortedTasks.length > 0) {
@@ -220,7 +220,7 @@ async function interactiveSelect(tasks: TaskState[], iteration: string, options:
   }
 
   const skipList2 = options.skip ? options.skip.split(',').map(s => s.trim()).filter(Boolean) : [];
-  await executeWithProgress(selectedTasks, iteration, options.base, skipList2);
+  await executeWithProgress(selectedTasks, iteration, options.base, skipList2, { only: options.only });
 }
 
 async function loadInquirer(): Promise<any> {
@@ -246,10 +246,30 @@ async function loadInquirer(): Promise<any> {
 // ============================================================
 // Progress feedback execution
 // ============================================================
-async function executeWithProgress(tasks: TaskState[], iteration: string, base?: string, skip?: string[]): Promise<void> {
+async function executeWithProgress(tasks: TaskState[], iteration: string, base?: string, skip?: string[], options?: { only?: string }): Promise<void> {
   const total = tasks.length;
   const startTime = Date.now();
   const completed: string[] = [];
+
+  // Filter whitelist (--only)
+  if (options?.only) {
+    const onlyList = options.only.split(',').map(s => s.trim()).filter(Boolean);
+    const before = tasks.length;
+    tasks = tasks.filter(t => onlyList.includes(t.id));
+    if (tasks.length < before) {
+      logger.info(`  🎯 仅执行 ${tasks.length}/${before} 个指定任务`);
+    }
+  }
+
+  // Filter whitelist (--only)
+  if (options?.only) {
+    const onlyList = options.only.split(',').map(s => s.trim()).filter(Boolean);
+    const before = tasks.length;
+    tasks = tasks.filter(t => onlyList.includes(t.id));
+    if (tasks.length < before) {
+      logger.info(`  🎯 仅执行 ${tasks.length}/${before} 个指定任务`);
+    }
+  }
 
   // Filter skipped tasks
   if (skip && skip.length > 0) {
