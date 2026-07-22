@@ -163,6 +163,7 @@ function extractSections(content: string, sectionFilter?: string): Section[] {
         currentPlatform = undefined; // 新的 ## 章节重置平台
       }
       currentSection.platform = currentPlatform;
+      while (/端端/.test(currentSection.name)) currentSection.name = currentSection.name.replace('端端', '端');
       
       currentContent = [];
     } else if (currentSection) {
@@ -372,7 +373,7 @@ async function updateProjectGraph(iterationDir: string, sections: Section[]): Pr
 
   for (let i = 0; i < sections.length; i++) {
     const { id: taskId } = await nextTaskId(sections[i].name);
-    const taskName = sections[i].name.replace(/端端/g, '端');
+    let taskName = sections[i].name; while (/端端/.test(taskName)) taskName = taskName.replace('端端', '端');
     
     if (!content.includes(taskId)) {
       const taskEntry = `| ${taskId} | ${taskName} | feature | 0% | 🔲 待开发 | |\n`;
