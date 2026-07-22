@@ -43,6 +43,7 @@ import { auditCommand } from './commands/audit';
 import { analyzeCommand } from './commands/analyze';
 import { lifecycleCommand } from './commands/lifecycle';
 import { prCommand } from './commands/pr';
+import { buildConstitution } from './core/constitution-builder';
 import { doneCommand } from './commands/done';
 // rename 命令
 import { renameCommand } from './commands/rename';
@@ -421,6 +422,18 @@ program
 // ================================================================
 // ⚙️ 配置与工具
 // ================================================================
+program
+  .command('constitution')
+  .alias('cn')
+  .description('Auto-detect tech stack and generate CONSTITUTION.md rules')
+  .action(async () => { await buildConstitution(process.cwd()); });
+
+program
+  .command('constitution')
+  .alias('cn')
+  .description('Auto-detect tech stack and generate CONSTITUTION.md rules')
+  .action(async () => { await buildConstitution(process.cwd()); });
+
 program
   .command('config')
   .alias('cf')

@@ -395,6 +395,16 @@ commander_1.program
 // ⚙️ 配置与工具
 // ================================================================
 commander_1.program
+    .command('constitution')
+    .alias('cn')
+    .description('Auto-detect tech stack and generate CONSTITUTION.md rules')
+    .action(async () => { await buildConstitution(process.cwd()); });
+commander_1.program
+    .command('constitution')
+    .alias('cn')
+    .description('Auto-detect tech stack and generate CONSTITUTION.md rules')
+    .action(async () => { await buildConstitution(process.cwd()); });
+commander_1.program
     .command('config')
     .alias('cf')
     .description('Manage SpecCore configuration and code rules')
