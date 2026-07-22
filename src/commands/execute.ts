@@ -43,6 +43,7 @@ export interface ExecuteOptions {
   skip?: string;       // comma-separated task IDs to skip
   only?: string;       // comma-separated task IDs to execute exclusively
 
+}
 export async function executeCommand(options: ExecuteOptions): Promise<void> {
   try {
     const iteration = await getDefaultIteration(options.iteration);
