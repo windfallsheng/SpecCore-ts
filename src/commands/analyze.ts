@@ -63,26 +63,51 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     spinner.stop(); spinner = new Spinner('生成分析报告...'); spinner.start();
     const report = buildAnalysisReport(iteration, issues, codeMatches, archImpact);
     
+    spinner.stop(`📊 报告已生成 (${report.length} 字符)`);
+
+    // ── 4.5. 摘要预览 + 确认 ──
+    logger.info('');
+    logger.info('📊 分析摘要:');
+    const blockerCount = issues.filter(i => i.severity === 'blocker').length;
+    const warnCount = issues.filter(i => i.severity === 'warning').length;
+    if (blockerCount > 0) logger.info(`   🔴 阻断问题: ${blockerCount} 个`);
+    logger.info(`   🟡 待确认:   ${warnCount} 个`);
+    logger.info(`   📁 涉及仓库: ${codeMatches.length} 个`);
+    logger.info(`   ⚡ 影响模块: ${archImpact.modules?.length || 0} 个`);
+    logger.info(`   详细报告: ${join(iterDir, '00-需求文档', options.output || 'ANALYSIS.md')}`);
+    logger.info('');
+
+    const ask = (q: string): Promise<string> => {
+      return new Promise(resolve => {
+        const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout });
+        rl.question(q, (a: string) => { rl.close(); resolve(a); });
+      });
+    };
+    
+    const answer = (await ask('  → 保存报告？[y]保存 [N]取消: ')).toLowerCase();
+    if (answer !== 'y' && answer !== 'yes') {
+      logger.info('\n  ❌ 已取消，报告未保存\n');
+      return;
+    }
+
     const outputPath = join(iterDir, '00-需求文档', options.output || 'ANALYSIS.md');
     await writeFile(outputPath, report);
 
-    spinner.stop(`✅ 分析完成 → ${outputPath}`);
-
-    // ── 5. 摘要输出 ──
-    logger.info('');
-    logger.info('📊 分析摘要:');
-    logger.info(`   🔴 阻断问题: ${issues.filter(i => i.severity === 'blocker').length} 个`);
-    logger.info(`   🟡 待确认:   ${issues.filter(i => i.severity === 'warning').length} 个`);
-    logger.info(`   📁 涉及仓库: ${codeMatches.length} 个`);
-    logger.info(`   ⚡ 影响模块: ${archImpact.modules.length} 个`);
+    logger.info(`\n  ✅ 分析完成 → ${outputPath}\n`);
     
     if (issues.some(i => i.severity === 'blocker')) {
       logger.warn('\n⚠️  存在阻断问题，建议解决后再拆分任务。');
       logger.info(`   详细报告: ${outputPath}`);
     } else {
       logger.info('\n✅ 未发现阻断问题，可以继续拆分任务。');
-  showNextSteps('analyze');
     }
+    
+    // Show question checklist
+    const questions = await extractQuestions(iterDir);
+    if (questions.length > 0) {
+      showQuestionChecklist(questions, '需求分析待确认');
+    }
+    showNextSteps('analyze');
 
   } catch (error) {
     spinner.fail(`分析失败: ${error}`);
