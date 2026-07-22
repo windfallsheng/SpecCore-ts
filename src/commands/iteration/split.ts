@@ -603,12 +603,12 @@ async function generateImpactGraph(
   for (let i = 0; i < sections.length; i++) {
     const s = sections[i];
     const taskId = `Task-${String(i + 1).padStart(3, '0')}`;
-    const risk = scoreRisk(s.content + s.name, s.name);
+    const risk = await scoreRisk(s.content + s.name, s.name, iterationDir);
     impact += `| ${taskId}: ${s.name} | ${risk.level} | ${risk.score} | ${risk.tags.join(' ')} | ${risk.reasons.join('; ')} |\n`;
 
     const taskDir = join(iterationDir, taskId);
     if (await pathExists(taskDir)) {
-      await writeFile(join(taskDir, '.risk'), `# Risk: ${risk.level}\nscore: ${risk.score}\ntags: ${risk.tags.join(',')}\n`);
+      const riskReport2 = generateRiskReport(risk); await writeFile(join(taskDir, '.risk'), riskReport2);
     }
   }
 
