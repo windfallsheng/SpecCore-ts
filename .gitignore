@@ -37,3 +37,6 @@ coverage/
 .tmp/
 
 verify-project/
+# E2E test artifacts
+00-需求文档/
+期次-*/
