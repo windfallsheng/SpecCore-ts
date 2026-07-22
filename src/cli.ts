@@ -64,6 +64,7 @@ import { updateCommand } from './commands/update';
 // v5.3.0 新增
 import { diffCommand } from './commands/diff';
 import { traceCommand } from './commands/trace';
+import { mergeCheck, rollbackTask, updateArchitecture } from './commands/merge-check';
 import { opsCommand } from './commands/history';
 import { trackerCommand } from './commands/tracker';
 // v5.5.0 新增
@@ -741,6 +742,56 @@ program
   .alias('tr')
   .description('View global requirement change tracker')
   .action(trackerCommand);
+
+program
+  .command('merge-check')
+  .alias('mc')
+  .description('Predict merge conflicts across task branches')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .action(async (options: any) => { const it = await require('../core/context').getDefaultIteration(options.iteration); if (it) await mergeCheck(it); });
+
+program
+  .command('rollback')
+  .alias('rb')
+  .description('Rollback a task: revert branch + archive spec')
+  .option('-t, --task <task>', 'Task to rollback')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('-r, --reason <reason>', 'Rollback reason')
+  .action(async (options: any) => { const it = await require('../core/context').getDefaultIteration(options.iteration); if (it && options.task) await rollbackTask(options.task, it, options.reason); });
+
+program
+  .command('arch-update')
+  .alias('au')
+  .description('Auto-update ARCHITECTURE.md with new APIs/tables')
+  .option('-i, --iteration <iteration>', 'Source iteration')
+  .option('--apis <apis>', 'Comma-separated API paths')
+  .option('--tables <tables>', 'Comma-separated table names')
+  .action(async (options: any) => { const it = await require('../core/context').getDefaultIteration(options.iteration); if (it) await updateArchitecture(it, (options.apis || '').split(',').filter(Boolean), (options.tables || '').split(',').filter(Boolean)); });
+
+program
+  .command('merge-check')
+  .alias('mc')
+  .description('Predict merge conflicts across task branches')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .action(async (options: any) => { const it = await require('../core/context').getDefaultIteration(options.iteration); if (it) await mergeCheck(it); });
+
+program
+  .command('rollback')
+  .alias('rb')
+  .description('Rollback a task: revert branch + archive spec')
+  .option('-t, --task <task>', 'Task to rollback')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('-r, --reason <reason>', 'Rollback reason')
+  .action(async (options: any) => { const it = await require('../core/context').getDefaultIteration(options.iteration); if (it && options.task) await rollbackTask(options.task, it, options.reason); });
+
+program
+  .command('arch-update')
+  .alias('au')
+  .description('Auto-update ARCHITECTURE.md with new APIs/tables')
+  .option('-i, --iteration <iteration>', 'Source iteration')
+  .option('--apis <apis>', 'Comma-separated API paths')
+  .option('--tables <tables>', 'Comma-separated table names')
+  .action(async (options: any) => { const it = await require('../core/context').getDefaultIteration(options.iteration); if (it) await updateArchitecture(it, (options.apis || '').split(',').filter(Boolean), (options.tables || '').split(',').filter(Boolean)); });
 
 program
   .command('trace')
