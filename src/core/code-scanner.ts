@@ -10,6 +10,7 @@ import { readFile, writeFile, pathExists, ensureDir, readdir, stat } from 'fs-ex
 import { join, relative } from 'path';
 import { execSync } from 'child_process';
 import { logger } from '../utils/logger';
+import { extractAnnotations, buildModuleGroups, matchModule, discoverProjectRoots } from './spec-annotations';
 
 interface CodeFile {
   path: string;
