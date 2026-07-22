@@ -10,6 +10,7 @@ import { getDefaultIteration } from '../core/context';
 
 import { showNextSteps } from '../core/next-steps';
 import { registerRequirement, generateTrackerReport } from '../core/requirement-tracker';
+import { buildCodeIndex, findRelevantCode, readRelevantSource, isIndexStale } from '../core/code-scanner';
 export interface AnalyzeOptions {
   iteration?: string;
   output?: string;
@@ -52,9 +53,39 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     spinner.stop(); spinner = new Spinner('扫描需求完整性...'); spinner.start();
     const issues = await scanCompleteness(reqContent);
 
-    // ── 2. 源码对标 ──
-    spinner.stop(); spinner = new Spinner('对标现有源码...'); spinner.start();
-    const codeMatches = await matchCode(cwd, reqContent);
+    // ── 2. 智能源码扫描 ──
+    spinner.stop(); spinner = new Spinner('扫描源码结构...'); spinner.start();
+    
+    // Build/refresh code index if needed
+    if (await isIndexStale()) {
+      const count = await buildCodeIndex();
+      logger.info(`   📁 索引 ${count} 个源码文件`);
+    }
+    
+    spinner.stop(); spinner = new Spinner('匹配相关源码...'); spinner.start();
+    const rawMatches = await findRelevantCode(reqContent, 15);
+    const codeMatches = rawMatches.map(m => ({
+      path: m.file,
+      matchType: 'api' as const,
+      reason: m.apis.join(', ') || m.exports.join(', ') || `score: ${m.score}`,
+    }));
+    
+    if (codeMatches.length > 0) {
+      spinner.stop();
+      logger.info(`   🔗 匹配到 ${codeMatches.length} 个相关文件:`);
+      for (const m of rawMatches.slice(0, 5)) {
+        logger.info(`     ${m.file} (score: ${m.score})`);
+      }
+      
+      // Read relevant source for analysis
+      spinner = new Spinner('读取相关源码...'); spinner.start();
+      const sources = await readRelevantSource(rawMatches, 50000);
+      spinner.stop();
+      logger.info(`   📖 读取了 ${Object.keys(sources).length} 个源码文件`);
+    } else {
+      logger.info('   ⚠️ 未匹配到源码。配置扫描范围: .speccore/SETTINGS.md → code_scope');
+    }
+
 
     // ── 3. 架构分析 ──
     spinner.stop(); spinner = new Spinner('分析架构影响...'); spinner.start();
@@ -62,7 +93,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 
     // ── 4. 生成分析报告 ──
     spinner.stop(); spinner = new Spinner('生成分析报告...'); spinner.start();
-    const report = buildAnalysisReport(iteration, issues, codeMatches, archImpact);
+    const report = buildAnalysisReport(iteration, issues, codeMatches as any, archImpact);
     
     spinner.stop(`📊 报告已生成 (${report.length} 字符)`);
 
