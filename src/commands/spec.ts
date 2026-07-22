@@ -4,6 +4,7 @@
  */
 
 import { recognizeIntent, getConfidenceLevel } from '../core/intent-recognition';
+import { recognizeWithAi } from '../core/intent-ai';
 import { logger } from '../utils/logger';
 import { getDefaultIteration, getDefaultAssignee } from '../core/context';
 
@@ -34,6 +35,8 @@ export async function specCommand(input: string, _options: SpecOptions): Promise
   const assignee = await getDefaultAssignee();
 
   const results = await recognizeIntent(input);
+  
+  // AI 增强：置信度不足时自动调用
 
   if (results.length === 0) {
     // 低置信度：无法识别
@@ -48,7 +51,9 @@ export async function specCommand(input: string, _options: SpecOptions): Promise
     return;
   }
 
-  const best = results[0];
+  // AI 增强：置信度不足时自动调用
+  const { final: aiBest, usedAi } = await recognizeWithAi(input, results);
+  const best = aiBest || results[0];
   const level = getConfidenceLevel(best.confidence);
 
   // 显示上下文信息
