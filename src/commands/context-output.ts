@@ -4,8 +4,8 @@
 import { readFile, pathExists } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
-import { loadConfig } from './unified-config';
-import { getDefaultIteration } from './context';
+import { loadConfig } from '../core/unified-config';
+import { getDefaultIteration } from '../core/context';
 
 export interface ContextOptions {
   task?: string;
