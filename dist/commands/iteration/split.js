@@ -506,11 +506,31 @@ async function generateImpactGraph(iterationDir, sections, platforms) {
     for (let i = 0; i < sections.length; i++) {
         const s = sections[i];
         const taskId = `Task-${String(i + 1).padStart(3, '0')}`;
-        const risk = (0, risk_scorer_1.scoreRisk)(s.content + s.name, s.name);
+        const risk = await (0, risk_scorer_1.scoreRisk)(s.content + s.name, s.name, iterationDir);
         impact += `| ${taskId}: ${s.name} | ${risk.level} | ${risk.score} | ${risk.tags.join(' ')} | ${risk.reasons.join('; ')} |\n`;
         const taskDir = (0, path_1.join)(iterationDir, taskId);
         if (await (0, fs_extra_1.pathExists)(taskDir)) {
-            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, '.risk'), `# Risk: ${risk.level}\nscore: ${risk.score}\ntags: ${risk.tags.join(',')}\n`);
+            // 生成风险报告并嵌入 TASK.md
+            const riskReport = (0, risk_scorer_1.generateRiskReport)(risk);
+            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, '.risk'), riskReport);
+            // Inject risk section into TASK.md if it exists
+            const taskMdPath = (0, path_1.join)(taskDir, 'backend', 'TASK.md');
+            if (await (0, fs_extra_1.pathExists)(taskMdPath)) {
+                let taskMd = await (0, fs_extra_1.readFile)(taskMdPath, 'utf-8');
+                if (!taskMd.includes('## 风险评估')) {
+                    taskMd += '\n\n## 风险评估\n\n' + riskReport.replace('# 风险评估\n\n', '');
+                    await (0, fs_extra_1.writeFile)(taskMdPath, taskMd);
+                }
+            }
+            // Inject risk section into TASK.md if it exists
+            const taskMdPath = (0, path_1.join)(taskDir, 'backend', 'TASK.md');
+            if (await (0, fs_extra_1.pathExists)(taskMdPath)) {
+                let taskMd = await (0, fs_extra_1.readFile)(taskMdPath, 'utf-8');
+                if (!taskMd.includes('## 风险评估')) {
+                    taskMd += '\n\n## 风险评估\n\n' + riskReport.replace('# 风险评估\n\n', '');
+                    await (0, fs_extra_1.writeFile)(taskMdPath, taskMd);
+                }
+            }
         }
     }
     impact += '\n## Dependencies\n\n';
