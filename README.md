@@ -180,19 +180,18 @@ SpecCore 原生集成 WorkBuddy（`speccore init` 自动创建 `.workbuddy/` ski
 
 | 文档 | 内容 |
 | :--- | :--- |
-| [场景实战](docs/场景实战.md) | 25 个真实场景：从零启动→日常开发→CI/CD→变更处理等 |
+| 📊 [**总览**](docs/总览.md) | **命令地图 + 工作流全景 + 理念图解 + 8框架横评** |
+| [快速开始指南](docs/快速开始.md) | 安装 → 7 步核心流程 → 命令速查 |
+| [场景实战](docs/场景实战.md) | 32 个真实场景：从零启动→PR→回滚→选型 |
+| [命令参考手册](docs/命令参考.md) | 全部命令完整参数 |
 | [SDD 方法论](docs/SDD方法论.md) | SDD 是什么、为什么、怎么做 |
-| [速查卡](docs/速查卡.md) | 一页掌握：常用命令 + 安全口诀 + CI 模板 |
-| [快速开始指南](docs/快速开始.md) | 安装 → 初始化 → 导入 → 多端 Task → 场景速查 |
-| [命令参考手册](docs/命令参考.md) | 54 个命令完整参数 + 36 种意图映射 |
-| [工具适配说明](docs/工具适配说明.md) | WorkBuddy 集成原理 + 工作流程 + 安全检查 |
-| [使用指南](docs/使用指南.md) | 完整使用方式：💬 自然语言对话 + ⌨️ CLI 命令对照 |
+| [工具适配说明](docs/工具适配说明.md) | WorkBuddy 集成原理 + 安全检查 |
 | [工作空间组织](docs/工作空间组织.md) | 推荐目录结构 + 多工程协作 |
-| [迁移指南](docs/migration-guide.md) | Shell v3.x → CLI v5.x 迁移步骤 |
-| [CI/CD 集成](docs/CI-CD与spec注释集成指南.md) | @spec 注释 + GitHub Actions + 工作流 |
-| [Spec 加载机制](docs/Spec三层加载机制.md) | 三层 Spec 协同：全局约束 → 期次上下文 → Task 执行 |
+| [迁移指南](docs/migration-guide.md) | Shell v3.x → CLI v5.x 迁移 |
+| [CI/CD 集成](docs/CI-CD与spec注释集成指南.md) | @spec 注释 + GitHub Actions |
+| [Spec 加载机制](docs/Spec三层加载机制.md) | 三层 Spec 协同 |
 | [示例项目](examples/task-management/README.md) | 完整演示：需求→Spec→生成代码 |
-| [CHANGELOG](CHANGELOG.md) | 版本历史与更新日志（v1.0.0 → v5.11.0） |
+| [CHANGELOG](CHANGELOG.md) | 版本历史（v1.0.0 → v5.15.1） |
 | [README.en.md](README.en.md) | English project overview |
 
 ---
