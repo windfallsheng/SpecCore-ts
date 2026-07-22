@@ -816,7 +816,7 @@ async function generateSlashCommands(projectRoot) {
         const cmdDir = (0, path_1.join)(projectRoot, toolDir, 'commands');
         await (0, fs_extra_1.ensureDir)(cmdDir);
         for (const [name, desc, bodyLines] of commands) {
-            const content = "# /" + name + "\n" + desc + "\n---\n" + bodyLines.join("\n") + "\n";
+            const content = "---\nname: " + name + "\ndescription: " + desc + "\n---\n" + bodyLines.join("\n") + "\n";
             await (0, fs_extra_1.writeFile)((0, path_1.join)(cmdDir, name + ".md"), content);
         }
     }

@@ -40,3 +40,7 @@ verify-project/
 # E2E test artifacts
 00-需求文档/
 期次-*/
+
+# SpecCore local config
+.speccore/local/
+期次-*/.local/
