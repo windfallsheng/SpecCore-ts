@@ -2,6 +2,7 @@ import { ensureDir, writeFile, pathExists, readFile } from 'fs-extra';
 import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
 import { initCounters } from '../core/global-counters';
+import { initConfig } from '../core/unified-config';
 import { updateContext } from '../core/context';
 import { i18n } from '../i18n';
 import { ContextSchema } from '../core/schemas';

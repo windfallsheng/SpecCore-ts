@@ -77,8 +77,6 @@ const watch_1 = require("./commands/watch");
 const i18n_1 = require("./i18n");
 commander_1.program
     .name('speccore')
-    .addHelpCommand(false)
-    .addHelpCommand(false)
     .description('SpecCore - Code by Spec, Not by Vibe.')
     .version(package_json_1.version, '-v, --version', 'Display current version')
     .option('--lang <locale>', 'Language: zh-CN (default) or en-US', 'zh-CN')
