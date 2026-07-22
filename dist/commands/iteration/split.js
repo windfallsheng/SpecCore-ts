@@ -308,7 +308,9 @@ async function updateProjectGraph(iterationDir, sections) {
     }
     for (let i = 0; i < sections.length; i++) {
         const { id: taskId } = await (0, global_counters_1.nextTaskId)(sections[i].name);
-        const taskName = sections[i].name.replace(/端端/g, '端');
+        let taskName = sections[i].name;
+        while (/端端/.test(taskName))
+            taskName = taskName.replace('端端', '端');
         if (!content.includes(taskId)) {
             const taskEntry = `| ${taskId} | ${taskName} | feature | 0% | 🔲 待开发 | |\n`;
             content = content.replace('| 任务编号 | 任务名称 | 类型 | 进度 | 状态 | 负责人 |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n', `| 任务编号 | 任务名称 | 类型 | 进度 | 状态 | 负责人 |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n${taskEntry}`);
