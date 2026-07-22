@@ -130,6 +130,8 @@ function extractSections(content, sectionFilter) {
                 currentPlatform = undefined; // 新的 ## 章节重置平台
             }
             currentSection.platform = currentPlatform;
+            while (/端端/.test(currentSection.name))
+                currentSection.name = currentSection.name.replace('端端', '端');
             currentContent = [];
         }
         else if (currentSection) {
