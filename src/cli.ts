@@ -296,6 +296,7 @@ program
   .option('--base <branch>', 'Base branch for task branching (default: current)')
   .option('--skip <tasks>', 'Comma-separated task IDs to skip')
   .option('--only <tasks>', 'Comma-separated task IDs to execute exclusively (whitelist)')
+  .option('--agent <tool>', 'External AI: copilot/claude/cursor/trae/qoder/windsurf/codebuddy')
   .option('--hotfix', 'Emergency fix: skip reverse sync (30min grace, 24h mandatory)')
   .action(executeCommand);
 

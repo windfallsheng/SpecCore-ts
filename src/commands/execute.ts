@@ -41,6 +41,7 @@ export interface ExecuteOptions {
   strict?: boolean;
   base?: string;       // base branch for task branching
   skip?: string;       // comma-separated task IDs to skip
+  agent?: string;      // external AI tool for code generation (copilot/claude/cursor/trae/qoder/windsurf/codebuddy)
   only?: string;       // comma-separated task IDs to execute exclusively
 
 }
@@ -299,6 +300,18 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
       }
       // Switch back to a neutral branch for next task if needed
     }
+  }
+
+  // ── Agent mode: output optimized context for external AI ──
+  if (options.agent) {
+    const agentCtx = buildAgentContext(tasks, options.agent);
+    logger.info(`\n🤖 Agent 模式: ${options.agent}`);
+    logger.info('--- AGENT CONTEXT START ---');
+    logger.info(agentCtx);
+    logger.info('--- AGENT CONTEXT END ---');
+    logger.info('\n💡 复制以上内容粘贴到 ' + options.agent + ' 中即可生成代码');
+    logOperation('speccore execute --agent', options.agent);
+    return;
   }
 
   logOperation('speccore execute', `${total} tasks`);
@@ -914,4 +927,35 @@ async function detectDependencyBase(iteration: string, taskId: string): Promise<
   }
 
   return undefined;
+}
+
+
+const AGENT_FORMATS: Record<string, { prefix: string; suffix: string; model?: string }> = {
+  copilot:    { prefix: "Based on the following specification, generate production code:\n\n", suffix: "\n\nGenerate clean, well-structured code following the Constitution rules." },
+  claude:     { prefix: "根据以下 Spec 生成生产级代码，遵守宪法规则和测试要求：\n\n", suffix: "\n\n请生成结构清晰、符合宪法规则的生产级代码。" },
+  cursor:     { prefix: "// Spec-Driven Implementation\n// Follow the spec below strictly:\n\n", suffix: "\n\n// Generate code following the Constitution and API contract." },
+  trae:       { prefix: "请基于以下技术规格生成代码：\n\n", suffix: "\n\n严格遵循宪法规则和 API 契约。" },
+  qoder:      { prefix: "## Spec-Driven Code Generation\n\nPlease implement based on the specification below:\n\n", suffix: "\n\n## Requirements: Follow Constitution rules and complete all tests." },
+  windsurf:   { prefix: "### Implementation Spec\n\nImplement the following specification:\n\n", suffix: "\n\n### Rules: Follow all Constitution constraints. Complete the TEST checklist." },
+  codebuddy:  { prefix: "基于以下 Spec 和宪法规则生成代码：\n\n", suffix: "\n\n严格遵守宪法、API 契约和测试要求。" },
+};
+
+function buildAgentContext(tasks: TaskState[], agent: string): string {
+  const format = AGENT_FORMATS[agent.toLowerCase()] || { prefix: "Generate code based on:\n\n", suffix: "\n\nFollow all Constitution rules." };
+  let ctx = format.prefix;
+  
+  for (const task of tasks) {
+    ctx += `## Task: ${task.id} - ${task.name || task.id}\n`;
+    ctx += `- Status: ${task.status}\n`;
+    ctx += `- Priority: ${task.priority}\n`;
+    ctx += `\n> Files: Iteration/${task.id}/backend/REQ.md TECH.md TEST.md REVIEW.md API_CONTRACT.yaml\n\n`;
+  }
+  
+  ctx += `\n## Constitution Rules (from .speccore/PROJECT/CONSTITUTION.md)\n`;
+  ctx += `- Follow all mandatory (🔒) rules strictly\n`;
+  ctx += `- API must follow RESTful conventions\n`;
+  ctx += `- All code must include error handling and validation\n`;
+  
+  ctx += format.suffix;
+  return ctx;
 }
