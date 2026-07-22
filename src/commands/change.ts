@@ -4,6 +4,7 @@
  */
 
 import { logger, Spinner } from '../utils/logger';
+import { registerRequirement } from '../core/requirement-tracker';
 import { getDefaultIteration } from '../core/context';
 import { readFile, writeFile, pathExists } from 'fs-extra';
 import { join } from 'path';

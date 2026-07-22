@@ -9,6 +9,7 @@ import { extractQuestions, showQuestionChecklist } from '../core/question-checkl
 import { getDefaultIteration } from '../core/context';
 
 import { showNextSteps } from '../core/next-steps';
+import { registerRequirement, generateTrackerReport } from '../core/requirement-tracker';
 export interface AnalyzeOptions {
   iteration?: string;
   output?: string;
