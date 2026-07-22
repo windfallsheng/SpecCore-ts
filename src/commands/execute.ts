@@ -405,6 +405,7 @@ async function executeBatchMode(tasks: TaskState[], iteration: string, batchSize
     // Reload state (completedBatch updated it)
     const updated = loadExecutionState()!;
     if (updated.currentBatch > updated.totalBatches) break;
+    if (updated.pendingTasks.length === 0) break;    // 所有任务完成
   }
 
   logger.success('All batches completed!');

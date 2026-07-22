@@ -108,6 +108,9 @@ export function completeBatch(state: ExecutionState, batchNum: number, completed
     state.currentBatch = nextBatch;
     state.batchStatus[String(nextBatch)].status = 'in_progress';
     state.batchStatus[String(nextBatch)].startedAt = new Date().toISOString();
+  } else {
+    // 已经是最后一个批次，标记完成
+    state.currentBatch = nextBatch;
   }
 
   saveExecutionState(state);
