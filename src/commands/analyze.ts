@@ -5,13 +5,17 @@
 import { readFile, writeFile, pathExists, readdir } from 'fs-extra';
 import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
+import { extractQuestions, showQuestionChecklist } from '../core/question-checklist';
 import { getDefaultIteration } from '../core/context';
 
 import { showNextSteps } from '../core/next-steps';
+import { registerRequirement, generateTrackerReport } from '../core/requirement-tracker';
+import { buildCodeIndex, findRelevantCode, readRelevantSource, isIndexStale } from '../core/code-scanner';
 export interface AnalyzeOptions {
   iteration?: string;
   output?: string;
-  auto?: boolean;  // 自动模式：不交互，直接产出分析报告
+  auto?: boolean;
+  task?: string;   // 单任务分析模式
 }
 
 export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
@@ -26,6 +30,14 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     }
 
     const iterDir = `期次-${iteration}`;
+
+    // ── Per-task analyze mode ──
+    if (options.task) {
+      spinner.stop();
+      await perTaskAnalyze(iterDir, options.task);
+      return;
+    }
+
     const reqPath = join(iterDir, '00-需求文档', 'REQUIREMENT.md');
     
     if (!(await pathExists(reqPath))) {
@@ -41,9 +53,39 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     spinner.stop(); spinner = new Spinner('扫描需求完整性...'); spinner.start();
     const issues = await scanCompleteness(reqContent);
 
-    // ── 2. 源码对标 ──
-    spinner.stop(); spinner = new Spinner('对标现有源码...'); spinner.start();
-    const codeMatches = await matchCode(cwd, reqContent);
+    // ── 2. 智能源码扫描 ──
+    spinner.stop(); spinner = new Spinner('扫描源码结构...'); spinner.start();
+    
+    // Build/refresh code index if needed
+    if (await isIndexStale()) {
+      const count = await buildCodeIndex();
+      logger.info(`   📁 索引 ${count} 个源码文件`);
+    }
+    
+    spinner.stop(); spinner = new Spinner('匹配相关源码...'); spinner.start();
+    const rawMatches = await findRelevantCode(reqContent, 15);
+    const codeMatches = rawMatches.map(m => ({
+      path: m.file,
+      matchType: 'api' as const,
+      reason: m.apis.join(', ') || m.exports.join(', ') || `score: ${m.score}`,
+    }));
+    
+    if (codeMatches.length > 0) {
+      spinner.stop();
+      logger.info(`   🔗 匹配到 ${codeMatches.length} 个相关文件:`);
+      for (const m of rawMatches.slice(0, 5)) {
+        logger.info(`     ${m.file} (score: ${m.score})`);
+      }
+      
+      // Read relevant source for analysis
+      spinner = new Spinner('读取相关源码...'); spinner.start();
+      const sources = await readRelevantSource(rawMatches, 50000);
+      spinner.stop();
+      logger.info(`   📖 读取了 ${Object.keys(sources).length} 个源码文件`);
+    } else {
+      logger.info('   ⚠️ 未匹配到源码。配置扫描范围: .speccore/SETTINGS.md → code_scope');
+    }
+
 
     // ── 3. 架构分析 ──
     spinner.stop(); spinner = new Spinner('分析架构影响...'); spinner.start();
@@ -51,28 +93,53 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 
     // ── 4. 生成分析报告 ──
     spinner.stop(); spinner = new Spinner('生成分析报告...'); spinner.start();
-    const report = buildAnalysisReport(iteration, issues, codeMatches, archImpact);
+    const report = buildAnalysisReport(iteration, issues, codeMatches as any, archImpact);
     
+    spinner.stop(`📊 报告已生成 (${report.length} 字符)`);
+
+    // ── 4.5. 摘要预览 + 确认 ──
+    logger.info('');
+    logger.info('📊 分析摘要:');
+    const blockerCount = issues.filter(i => i.severity === 'blocker').length;
+    const warnCount = issues.filter(i => i.severity === 'warning').length;
+    if (blockerCount > 0) logger.info(`   🔴 阻断问题: ${blockerCount} 个`);
+    logger.info(`   🟡 待确认:   ${warnCount} 个`);
+    logger.info(`   📁 涉及仓库: ${codeMatches.length} 个`);
+    logger.info(`   ⚡ 影响模块: ${archImpact.modules?.length || 0} 个`);
+    logger.info(`   详细报告: ${join(iterDir, '00-需求文档', options.output || 'ANALYSIS.md')}`);
+    logger.info('');
+
+    const ask = (q: string): Promise<string> => {
+      return new Promise(resolve => {
+        const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout });
+        rl.question(q, (a: string) => { rl.close(); resolve(a); });
+      });
+    };
+    
+    const answer = (await ask('  → 保存报告？[y]保存 [N]取消: ')).toLowerCase();
+    if (answer !== 'y' && answer !== 'yes') {
+      logger.info('\n  ❌ 已取消，报告未保存\n');
+      return;
+    }
+
     const outputPath = join(iterDir, '00-需求文档', options.output || 'ANALYSIS.md');
     await writeFile(outputPath, report);
 
-    spinner.stop(`✅ 分析完成 → ${outputPath}`);
-
-    // ── 5. 摘要输出 ──
-    logger.info('');
-    logger.info('📊 分析摘要:');
-    logger.info(`   🔴 阻断问题: ${issues.filter(i => i.severity === 'blocker').length} 个`);
-    logger.info(`   🟡 待确认:   ${issues.filter(i => i.severity === 'warning').length} 个`);
-    logger.info(`   📁 涉及仓库: ${codeMatches.length} 个`);
-    logger.info(`   ⚡ 影响模块: ${archImpact.modules.length} 个`);
+    logger.info(`\n  ✅ 分析完成 → ${outputPath}\n`);
     
     if (issues.some(i => i.severity === 'blocker')) {
       logger.warn('\n⚠️  存在阻断问题，建议解决后再拆分任务。');
       logger.info(`   详细报告: ${outputPath}`);
     } else {
       logger.info('\n✅ 未发现阻断问题，可以继续拆分任务。');
-  showNextSteps('analyze');
     }
+    
+    // Show question checklist
+    const questions = await extractQuestions(iterDir);
+    if (questions.length > 0) {
+      showQuestionChecklist(questions, '需求分析待确认');
+    }
+    showNextSteps('analyze');
 
   } catch (error) {
     spinner.fail(`分析失败: ${error}`);
@@ -454,3 +521,181 @@ function buildAnalysisReport(
 
   return report;
 }
+
+/**
+ * 单任务分析 — 读取任务的 REQ.md，完善 TECH/TEST/REVIEW
+ */
+async function perTaskAnalyze(iterDir: string, taskId: string): Promise<void> {
+  const { readdirSync } = require('fs');
+  const entries = readdirSync(iterDir, { withFileTypes: true });
+  const taskEntry = entries.find((e: any) => e.isDirectory() && e.name.startsWith(taskId));
+  
+  if (!taskEntry) {
+    logger.error(`Task 未找到: ${taskId}`);
+    logger.info('可用任务:');
+    for (const e of entries) {
+      if (e.isDirectory() && e.name.startsWith('Task-')) logger.info(`  - ${e.name}`);
+    }
+    return;
+  }
+
+  const fullTaskDir = join(iterDir, taskEntry.name);
+  const backendDir = join(fullTaskDir, 'backend');
+  
+  const spinner = new Spinner(`分析 ${taskEntry.name}`);
+  spinner.start();
+
+  try {
+    const reqPath = join(backendDir, 'REQ.md');
+    let reqContent = '';
+    if (await pathExists(reqPath)) reqContent = await readFile(reqPath, 'utf-8');
+
+    // ── Compute changes (dry run) ──
+    interface Change { file: string; section: string; items: string[] }
+    const changes: Change[] = [];
+
+    // Enrich TECH.md
+    const techPath = join(backendDir, 'TECH.md');
+    let techContent = '';
+    if (await pathExists(techPath)) {
+      techContent = await readFile(techPath, 'utf-8');
+      if (!techContent.includes('## 分析建议')) {
+        const items: string[] = [];
+        const apis = (reqContent.match(/\/api\/[a-zA-Z0-9\/-]+/g) || []).map(a => a.trim());
+        if (apis.length > 0) {
+          items.push(`检测到 ${apis.length} 个 API:`);
+          for (const api of [...new Set(apis)]) items.push(`  \`${api}\``);
+        }
+        if (reqContent.match(/数据库|表|DDL/)) items.push('涉及数据库变更，请补充 DDL');
+        if (reqContent.match(/权限|RBAC|鉴权/)) items.push('涉及权限控制，注意鉴权边界');
+        if (items.length > 0) changes.push({ file: 'TECH.md', section: '分析建议', items });
+      }
+    }
+
+    // Enrich TEST.md
+    const testPath = join(backendDir, 'TEST.md');
+    if (await pathExists(testPath)) {
+      const testContent = await readFile(testPath, 'utf-8');
+      if (!testContent.includes('## 补充分析')) {
+        const items: string[] = [];
+        if (reqContent.includes('POST') || reqContent.includes('创建')) items.push('[ ] 正常参数 + 异常参数测试');
+        if (reqContent.includes('GET') || reqContent.includes('查询')) items.push('[ ] 分页 / 筛选 / 空结果测试');
+        if (reqContent.includes('DELETE') || reqContent.includes('删除')) items.push('[ ] 删除确认 + 级联处理');
+        if (reqContent.includes('权限') || reqContent.includes('RBAC')) items.push('[ ] 无权限访问 + 越权检测');
+        if (reqContent.includes('批量') || reqContent.includes('导出')) items.push('[ ] 大数据量 + 超时处理');
+        if (items.length > 0) changes.push({ file: 'TEST.md', section: '补充分析', items });
+      }
+    }
+
+    // Enrich REVIEW.md
+    const reviewPath = join(backendDir, 'REVIEW.md');
+    if (await pathExists(reviewPath)) {
+      const reviewContent = await readFile(reviewPath, 'utf-8');
+      if (!reviewContent.includes('## 本任务专项检查')) {
+        const items: string[] = [];
+        if (reqContent.includes('POST') || reqContent.includes('创建')) items.push('[ ] 参数校验 + 幂等性处理');
+        if (reqContent.includes('数据库') || reqContent.includes('表')) items.push('[ ] 索引覆盖 + 迁移脚本可回滚');
+        if (reqContent.includes('权限') || reqContent.includes('RBAC')) items.push('[ ] 鉴权注解/中间件正确配置');
+        if (items.length > 0) changes.push({ file: 'REVIEW.md', section: '本任务专项检查', items });
+      }
+    }
+
+    spinner.stop();
+
+    if (changes.length === 0) {
+      logger.info(`\n  ✅ ${taskEntry.name} 已是最新，无需更新`);
+      return;
+    }
+
+    // ── Show preview ──
+    logger.info(`\n╔══════════════════════════════════════════╗`);
+    logger.info(`║  📋 ${taskEntry.name} 分析结果预览               ║`);
+    logger.info(`╚══════════════════════════════════════════╝\n`);
+
+    for (const c of changes) {
+      logger.info(`  📄 ${c.file} → 新增「${c.section}」:`);
+      for (const item of c.items) {
+        logger.info(`      ${item}`);
+      }
+      logger.info('');
+    }
+
+    // ── Confirm ──
+    const ask = (q: string): Promise<string> => {
+      return new Promise(resolve => {
+        const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout });
+        rl.question(q, (a: string) => { rl.close(); resolve(a); });
+      });
+    };
+    const answer = (await ask(`  → 确认写入？[y] 确认覆盖 [N] 取消: `)).toLowerCase();
+    if (answer !== 'y' && answer !== 'yes') {
+      logger.info('\n  ❌ 已取消，文档未修改\n');
+      return;
+    }
+
+    // ── Apply changes ──
+    for (const c of changes) {
+      if (c.file === 'TECH.md') {
+        let notes = `\n\n---\n\n## ${c.section}\n\n> 自动生成，可反复修改\n\n`;
+        notes += c.items.map(i => `- ${i}`).join('\n') + '\n';
+        await writeFile(techPath, techContent + notes);
+      }
+      if (c.file === 'TEST.md') {
+        let notes = `\n\n---\n\n## ${c.section}\n`;
+        notes += c.items.join('\n') + '\n';
+        await writeFile(testPath, (await readFile(testPath, 'utf-8')) + notes);
+      }
+      if (c.file === 'REVIEW.md') {
+        let notes = `\n\n---\n\n## ${c.section}\n`;
+        notes += c.items.join('\n') + '\n';
+        await writeFile(reviewPath, (await readFile(reviewPath, 'utf-8')) + notes);
+      }
+    }
+
+    logger.info(`\n  ✅ ${taskEntry.name} 分析完成，已更新 ${changes.length} 个文件`);
+    logger.info('  💡 可反复运行完善:');
+    logger.info(`     speccore analyze --task=${taskId} --iteration=${iterDir.replace('期次-', '')}`);
+    logger.info('');
+
+  } catch (error) {
+    spinner.fail(`分析失败: ${error}`);
+  }
+}
+
+async function checkConstitution(iterDir: string): Promise<string[]> {
+  const constitutionPath = join(process.cwd(), ".speccore", "PROJECT", "CONSTITUTION.md");
+  if (!(await pathExists(constitutionPath))) return [];
+  
+  const constitution = await readFile(constitutionPath, "utf-8");
+  const reqPath = join(iterDir, "00-需求文档", "REQUIREMENT.md");
+  if (!(await pathExists(reqPath))) return [];
+  
+  const req = await readFile(reqPath, "utf-8");
+  const violations: string[] = [];
+  
+  // Check: RESTful requirement
+  if (constitution.includes("RESTful") && req.includes("GraphQL")) {
+    violations.push("[违反] 宪法要求 RESTful API，但需求中包含 GraphQL 引用");
+  }
+  if (constitution.includes("RESTful") && req.includes("WebSocket") && !req.includes("REST")) {
+    violations.push("[警告] 宪法要求 RESTful，建议确认 WebSocket 使用场景");
+  }
+  
+  // Check: language consistency
+  if (constitution.includes("Java") && req.includes("Python Flask")) {
+    violations.push("[违反] 宪法指定 Java，但技术方案使用 Python");
+  }
+  
+  // Check: test requirement
+  if (constitution.includes("单元测试")) {
+    violations.push("[提醒] 宪法要求单元测试，请确认 TEST.md 已完善");
+  }
+  
+  // Check: PR review requirement
+  if (constitution.includes("PR 审查")) {
+    violations.push("[提醒] 宪法要求 PR 审查，开发完成后需创建 PR");
+  }
+  
+  return violations;
+}
+

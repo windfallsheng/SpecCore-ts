@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>MeetBook — Web管理端完整原型</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f6fa; color: #333; }
+.layout { display: flex; min-height: 100vh; }
+.sidebar { width: 220px; background: #1e293b; color: #fff; padding: 20px 0; flex-shrink: 0; }
+.sidebar .logo { padding: 0 20px 24px; font-size: 18px; font-weight: bold; border-bottom: 1px solid #334155; margin-bottom: 8px; }
+.sidebar .logo span { color: #38bdf8; }
+.sidebar .nav a { display: flex; align-items: center; gap: 10px; padding: 12px 20px; color: #94a3b8; text-decoration: none; font-size: 14px; transition: .2s; }
+.sidebar .nav a:hover, .sidebar .nav a.active { background: #334155; color: #fff; }
+.sidebar .nav a .icon { font-size: 18px; width: 24px; text-align: center; }
+.main { flex: 1; padding: 24px 32px; overflow-y: auto; }
+.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+.header h1 { font-size: 22px; }
+.header .user { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.header .user .avatar { width: 36px; height: 36px; border-radius: 50%; background: #38bdf8; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: bold; }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+.stat-card { background: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+.stat-card .label { font-size: 13px; color: #64748b; margin-bottom: 8px; }
+.stat-card .value { font-size: 28px; font-weight: bold; }
+.stat-card .trend { font-size: 12px; margin-top: 6px; color: #10b981; }
+.card { background: #fff; border-radius: 10px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,.06); margin-bottom: 20px; }
+.card h2 { font-size: 16px; margin-bottom: 16px; }
+.toolbar { display: flex; gap: 12px; margin-bottom: 16px; align-items: center; }
+.btn { padding: 8px 16px; border-radius: 6px; font-size: 13px; cursor: pointer; border: none; transition: .2s; }
+.btn-primary { background: #38bdf8; color: #fff; }
+.btn-outline { background: #fff; border: 1px solid #e2e8f0; color: #334155; }
+.btn-danger { background: #fee2e2; color: #dc2626; }
+.btn-success { background: #d1fae5; color: #065f46; }
+.btn-sm { padding: 4px 10px; font-size: 12px; border-radius: 4px; }
+.btn-xs { padding: 2px 8px; font-size: 11px; border-radius: 3px; }
+input, select, textarea { padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px; background: #fff; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: #38bdf8; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 12px 8px; border-bottom: 1px solid #f1f5f9; }
+th { color: #64748b; font-weight: 600; background: #f8fafc; }
+.status { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.status.available { background: #d1fae5; color: #065f46; }
+.status.occupied { background: #fee2e2; color: #991b1b; }
+.status.maintenance { background: #fef3c7; color: #92400e; }
+.tag { display: inline-block; background: #e0e7ff; color: #3730a3; padding: 2px 6px; border-radius: 4px; margin: 0 2px; font-size: 11px; }
+/* 页面切换 */
+.page { display: none; }
+.page.active { display: block; }
+/* 弹窗 */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 100; align-items: center; justify-content: center; }
+.modal-overlay.show { display: flex; }
+.modal { background: #fff; border-radius: 12px; padding: 24px 28px; width: 520px; max-height: 80vh; overflow-y: auto; }
+.modal h3 { font-size: 18px; margin-bottom: 20px; }
+.modal .form-group { margin-bottom: 14px; }
+.modal .form-group label { display: block; font-size: 13px; color: #64748b; margin-bottom: 4px; font-weight: 600; }
+.modal .form-group input, .modal .form-group select, .modal .form-group textarea { width: 100%; }
+.modal .form-row { display: flex; gap: 12px; }
+.modal .form-row .form-group { flex: 1; }
+.modal .modal-actions { display: flex; gap: 12px; margin-top: 20px; justify-content: flex-end; }
+.modal .checkbox-group { display: flex; gap: 8px; flex-wrap: wrap; }
+.modal .checkbox-group label { display: flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer; font-weight: normal; }
+.detail-row { display: flex; margin-bottom: 12px; font-size: 14px; }
+.detail-row .dl { color: #64748b; width: 100px; flex-shrink: 0; }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<aside class="sidebar">
+  <div class="logo">Meet<span>Book</span></div>
+  <nav class="nav">
+    <a href="#" class="active" onclick="switchPage('dashboard')"><span class="icon">📊</span> 仪表盘</a>
+    <a href="#" onclick="switchPage('rooms')"><span class="icon">🏢</span> 会议室管理</a>
+    <a href="#" onclick="switchPage('bookings')"><span class="icon">📅</span> 预订管理</a>
+    <a href="#" onclick="switchPage('users')"><span class="icon">👥</span> 用户管理</a>
+  </nav>
+</aside>
+
+<main class="main">
+  <header class="header">
+    <h1 id="pageTitle">📊 仪表盘</h1>
+    <div class="user"><div class="avatar">管</div><span>超级管理员</span></div>
+  </header>
+
+  <!-- ========== 仪表盘 ========== -->
+  <div class="page active" id="page-dashboard">
+    <div class="stats">
+      <div class="stat-card"><div class="label">会议室总数</div><div class="value" style="color:#38bdf8">12</div><div class="trend">↑ 比上月 +2</div></div>
+      <div class="stat-card"><div class="label">今日预订</div><div class="value" style="color:#10b981">28</div><div class="trend">↑ 比昨日 +5</div></div>
+      <div class="stat-card"><div class="label">当前占用</div><div class="value" style="color:#f59e0b">8</div><div class="trend">使用率 67%</div></div>
+      <div class="stat-card"><div class="label">本月预订</div><div class="value" style="color:#6366f1">486</div><div class="trend">↑ 比上月 +12%</div></div>
+    </div>
+
+    <div class="card">
+      <h2>📈 近30天预订趋势</h2>
+      <div style="height:200px;display:flex;align-items:end;gap:8px;padding:20px 0">
+        <div style="flex:1;background:linear-gradient(#38bdf8,#e0f2fe);height:60%;border-radius:4px 4px 0 0;position:relative" title="6-22: 12"><span style="position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-size:10px;color:#64748b">12</span></div>
+        <div style="flex:1;background:linear-gradient(#38bdf8,#e0f2fe);height:45%;border-radius:4px 4px 0 0;position:relative" title="6-25: 8"><span style="position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-size:10px;color:#64748b">8</span></div>
+        <div style="flex:1;background:linear-gradient(#38bdf8,#e0f2fe);height:85%;border-radius:4px 4px 0 0;position:relative" title="6-28: 22"><span style="position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-size:10px;color:#64748b">22</span></div>
+        <div style="flex:1;background:linear-gradient(#38bdf8,#e0f2fe);height:55%;border-radius:4px 4px 0 0;position:relative" title="7-01: 15"><span style="position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-size:10px;color:#64748b">15</span></div>
+        <div style="flex:1;background:linear-gradient(#38bdf8,#e0f2fe);height:70%;border-radius:4px 4px 0 0;position:relative" title="7-05: 18"><span style="position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-size:10px;color:#64748b">18</span></div>
+        <div style="flex:1;background:linear-gradient(#38bdf8,#e0f2fe);height:95%;border-radius:4px 4px 0 0;position:relative" title="7-10: 26"><span style="position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-size:10px;color:#64748b">26</span></div>
+        <div style="flex:1;background:linear-gradient(#38bdf8,#e0f2fe);height:80%;border-radius:4px 4px 0 0;position:relative" title="7-15: 20"><span style="position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-size:10px;color:#64748b">20</span></div>
+        <div style="flex:1;background:linear-gradient(#38bdf8,#e0f2fe);height:100%;border-radius:4px 4px 0 0;position:relative" title="7-22: 28"><span style="position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-size:10px;color:#64748b">28</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>🏆 热门会议室 TOP5</h2>
+      <table><thead><tr><th>排名</th><th>会议室</th><th>本月预订次数</th><th>使用率</th></tr></thead>
+      <tbody>
+        <tr><td>🥇</td><td>泰山厅</td><td>86</td><td>92%</td></tr>
+        <tr><td>🥈</td><td>华山厅</td><td>72</td><td>85%</td></tr>
+        <tr><td>🥉</td><td>衡山厅</td><td>65</td><td>78%</td></tr>
+        <tr><td>4</td><td>嵩山厅</td><td>48</td><td>62%</td></tr>
+        <tr><td>5</td><td>恒山厅</td><td>42</td><td>55%</td></tr>
+      </tbody></table>
+    </div>
+  </div>
+
+  <!-- ========== 会议室管理 ========== -->
+  <div class="page" id="page-rooms">
+    <div class="card">
+      <div class="toolbar">
+        <button class="btn btn-primary" onclick="openRoomModal()">+ 新增会议室</button>
+        <input type="text" placeholder="搜索会议室名称..." style="width:200px">
+        <select><option>全部楼层</option><option>1层</option><option>2层</option><option>3层</option></select>
+        <select><option>全部状态</option><option>空闲</option><option>使用中</option><option>维护中</option></select>
+      </div>
+      <table><thead><tr><th>ID</th><th>会议室名称</th><th>容量</th><th>楼层</th><th>设备</th><th>状态</th><th>操作</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>1</td><td><strong>泰山厅</strong></td><td>50人</td><td>3层</td>
+          <td><span class="tag">投影仪</span><span class="tag">视频会议</span><span class="tag">白板</span></td>
+          <td><span class="status available">空闲</span></td>
+          <td><button class="btn btn-outline btn-sm" onclick="openRoomModal('泰山厅')">编辑</button> <button class="btn btn-danger btn-sm">删除</button></td>
+        </tr>
+        <tr>
+          <td>2</td><td><strong>华山厅</strong></td><td>20人</td><td>2层</td>
+          <td><span class="tag">投影仪</span><span class="tag">白板</span></td>
+          <td><span class="status occupied">使用中</span></td>
+          <td><button class="btn btn-outline btn-sm">编辑</button> <button class="btn btn-danger btn-sm">删除</button></td>
+        </tr>
+        <tr>
+          <td>3</td><td><strong>衡山厅</strong></td><td>6人</td><td>1层</td>
+          <td><span class="tag">白板</span></td>
+          <td><span class="status available">空闲</span></td>
+          <td><button class="btn btn-outline btn-sm">编辑</button> <button class="btn btn-danger btn-sm">删除</button></td>
+        </tr>
+        <tr>
+          <td>4</td><td><strong>嵩山厅</strong></td><td>30人</td><td>3层</td>
+          <td><span class="tag">投影仪</span><span class="tag">视频会议</span></td>
+          <td><span class="status maintenance">维护中</span></td>
+          <td><button class="btn btn-outline btn-sm">编辑</button> <button class="btn btn-danger btn-sm">删除</button></td>
+        </tr>
+      </tbody></table>
+      <div style="margin-top:12px;text-align:right;color:#64748b;font-size:12px">共 12 条 · 第 1/3 页 · <a href="#" style="color:#38bdf8">上一页</a> <a href="#" style="color:#38bdf8">下一页</a></div>
+    </div>
+  </div>
+
+  <!-- ========== 预订管理 ========== -->
+  <div class="page" id="page-bookings">
+    <div class="card">
+      <div class="toolbar">
+        <input type="date" value="2026-07-22" style="width:140px">
+        <select><option>全部状态</option><option>已确认</option><option>进行中</option><option>已取消</option></select>
+        <select><option>全部会议室</option><option>泰山厅</option><option>华山厅</option></select>
+      </div>
+      <table><thead><tr><th>ID</th><th>预订人</th><th>会议室</th><th>主题</th><th>时间</th><th>状态</th><th>签到</th><th>操作</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>1001</td><td>张三</td><td>泰山厅</td><td>Q3战略规划</td><td>09:00-11:00</td><td><span class="status available">已确认</span></td><td>✅ 09:02</td>
+          <td><button class="btn btn-outline btn-xs">详情</button> <button class="btn btn-danger btn-xs" onclick="openCancelModal()">取消</button></td>
+        </tr>
+        <tr>
+          <td>1002</td><td>李四</td><td>华山厅</td><td>技术评审</td><td>10:00-11:30</td><td><span class="status occupied">进行中</span></td><td>✅ 09:55</td>
+          <td><button class="btn btn-outline btn-xs">详情</button></td>
+        </tr>
+        <tr>
+          <td>1003</td><td>王五</td><td>衡山厅</td><td>1on1面谈</td><td>14:00-14:30</td><td><span class="status available">已确认</span></td><td>—</td>
+          <td><button class="btn btn-outline btn-xs">详情</button> <button class="btn btn-danger btn-xs">取消</button></td>
+        </tr>
+        <tr>
+          <td>1004</td><td>赵六</td><td>嵩山厅</td><td>新人培训</td><td>10:00-12:00</td><td><span class="status" style="background:#f1f5f9;color:#64748b">已取消</span></td><td>—</td>
+          <td><button class="btn btn-outline btn-xs">详情</button></td>
+        </tr>
+      </tbody></table>
+    </div>
+  </div>
+
+  <!-- ========== 用户管理 ========== -->
+  <div class="page" id="page-users">
+    <div class="card">
+      <div class="toolbar">
+        <button class="btn btn-primary" onclick="openUserModal()">+ 新增用户</button>
+        <input type="text" placeholder="搜索姓名/邮箱..." style="width:200px">
+        <select><option>全部角色</option><option>超级管理员</option><option>管理员</option><option>普通用户</option></select>
+      </div>
+      <table><thead><tr><th>ID</th><th>姓名</th><th>邮箱</th><th>角色</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>1</td><td>张管理</td><td>admin@meetbook.com</td><td><span class="tag" style="background:#fef3c7;color:#92400e">超级管理员</span></td>
+          <td><span class="status available">正常</span></td><td>2026-06-01</td>
+          <td><button class="btn btn-outline btn-xs">编辑</button> <button class="btn btn-outline btn-xs" onclick="openRoleModal()">改角色</button> <button class="btn btn-danger btn-xs">禁用</button></td>
+        </tr>
+        <tr>
+          <td>2</td><td>李运维</td><td>li@meetbook.com</td><td><span class="tag">管理员</span></td>
+          <td><span class="status available">正常</span></td><td>2026-06-05</td>
+          <td><button class="btn btn-outline btn-xs">编辑</button> <button class="btn btn-outline btn-xs">改角色</button> <button class="btn btn-danger btn-xs">禁用</button></td>
+        </tr>
+        <tr>
+          <td>3</td><td>王员工</td><td>wang@company.com</td><td><span class="tag">普通用户</span></td>
+          <td><span class="status available">正常</span></td><td>2026-06-10</td>
+          <td><button class="btn btn-outline btn-xs">编辑</button> <button class="btn btn-outline btn-xs">改角色</button> <button class="btn btn-danger btn-xs">禁用</button></td>
+        </tr>
+        <tr>
+          <td>4</td><td>赵离职</td><td>zhao@company.com</td><td><span class="tag">普通用户</span></td>
+          <td><span class="status" style="background:#fee2e2;color:#991b1b">已禁用</span></td><td>2026-06-15</td>
+          <td><button class="btn btn-outline btn-xs">编辑</button> <button class="btn btn-success btn-xs">启用</button></td>
+        </tr>
+      </tbody></table>
+    </div>
+  </div>
+</main>
+</div>
+
+<!-- 新增/编辑会议室弹窗 -->
+<div class="modal-overlay" id="roomModal">
+  <div class="modal">
+    <h3 id="roomModalTitle">🏢 新增会议室</h3>
+    <div class="form-group"><label>会议室名称 *</label><input type="text" placeholder="如：泰山厅"></div>
+    <div class="form-row">
+      <div class="form-group"><label>容纳人数 *</label><input type="number" min="1" placeholder="50"></div>
+      <div class="form-group"><label>所在楼层 *</label><select><option>1层</option><option>2层</option><option selected>3层</option></select></div>
+    </div>
+    <div class="form-group"><label>设备配置（可多选）</label>
+      <div class="checkbox-group">
+        <label><input type="checkbox" checked> 投影仪</label>
+        <label><input type="checkbox"> 白板</label>
+        <label><input type="checkbox" checked> 视频会议</label>
+        <label><input type="checkbox"> 音响</label>
+        <label><input type="checkbox"> 电话</label>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('roomModal')">取消</button>
+      <button class="btn btn-primary" onclick="closeModal('roomModal')">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 取消预订弹窗 -->
+<div class="modal-overlay" id="cancelModal">
+  <div class="modal">
+    <h3>⚠️ 取消预订</h3>
+    <div class="detail-row"><div class="dl">预订人</div><div>张三</div></div>
+    <div class="detail-row"><div class="dl">会议室</div><div>泰山厅</div></div>
+    <div class="detail-row"><div class="dl">时间</div><div>09:00-11:00</div></div>
+    <div class="form-group"><label>取消原因 *</label><textarea rows="3" placeholder="请填写取消原因..."></textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('cancelModal')">返回</button>
+      <button class="btn btn-danger" onclick="closeModal('cancelModal')">确认取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- 新增用户弹窗 -->
+<div class="modal-overlay" id="userModal"><div class="modal">
+  <h3>👤 新增用户</h3>
+  <div class="form-group"><label>姓名 *</label><input type="text" placeholder="请输入姓名"></div>
+  <div class="form-group"><label>邮箱 *</label><input type="email" placeholder="user@company.com"></div>
+  <div class="form-group"><label>角色</label><select><option>普通用户</option><option>管理员</option></select></div>
+  <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal('userModal')">取消</button><button class="btn btn-primary" onclick="closeModal('userModal')">保存</button></div>
+</div></div>
+
+<!-- 变更角色弹窗 -->
+<div class="modal-overlay" id="roleModal"><div class="modal">
+  <h3>🔐 变更角色 — 李运维</h3>
+  <div class="form-group"><label>当前角色</label><div style="padding:8px 0"><span class="tag">管理员</span></div></div>
+  <div class="form-group"><label>新角色</label><select><option>超级管理员</option><option selected>管理员</option><option>普通用户</option></select></div>
+  <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal('roleModal')">取消</button><button class="btn btn-primary" onclick="closeModal('roleModal')">确认变更</button></div>
+</div></div>
+
+<script>
+function switchPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  document.querySelectorAll('.nav a').forEach(a => a.classList.remove('active'));
+  event.target.closest('a').classList.add('active');
+  const titles = {dashboard:'📊 仪表盘',rooms:'🏢 会议室管理',bookings:'📅 预订管理',users:'👥 用户管理'};
+  document.getElementById('pageTitle').textContent = titles[name];
+}
+function openRoomModal(name) {
+  document.getElementById('roomModalTitle').textContent = name ? '✏️ 编辑会议室 — '+name : '🏢 新增会议室';
+  document.getElementById('roomModal').classList.add('show');
+}
+function openCancelModal() { document.getElementById('cancelModal').classList.add('show'); }
+function openUserModal() { document.getElementById('userModal').classList.add('show'); }
+function openRoleModal() { document.getElementById('roleModal').classList.add('show'); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+</script>
+</body>
+</html>

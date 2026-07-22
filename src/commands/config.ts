@@ -15,6 +15,21 @@ interface ConfigData {
 
 const CONFIG_PATH = '.speccore/SETTINGS.md';
 
+/**
+ * Install Git hooks (pre-commit + pre-push)
+ */
+export function installHooks(): void {
+  try {
+    const { installGitHooks } = require('../core/git-integration');
+    const result = installGitHooks();
+    logger.success('Git hooks installed:');
+    if (result.preCommit) logger.info('  .git/hooks/pre-commit  (check @spec annotations)');
+    if (result.prePush) logger.info('  .git/hooks/pre-push    (run speccore validate)');
+  } catch (error) {
+    logger.error('Failed to install Git hooks: ' + error);
+  }
+}
+
 export async function configCommand(options: ConfigOptions): Promise<void> {
   const spinner = new Spinner('Processing configuration');
   spinner.start();

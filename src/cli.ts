@@ -18,7 +18,7 @@ import { executeCommand } from './commands/execute';
 import { specCommand } from './commands/spec';
 import { goalCommand } from './commands/goal';
 import { bugfixCommand } from './commands/bugfix';
-import { researchCommand } from './commands/research';
+import { newTaskCommand } from './commands/new-task';
 import { changeCommand } from './commands/change';
 import { syncCommand } from './commands/sync';
 import { patternCommand } from './commands/pattern';
@@ -27,6 +27,8 @@ import { handoverCommand } from './commands/handover';
 import { retroCommand } from './commands/retro';
 import { templateAddCommand } from './commands/template-add';
 import { helpCommand } from './commands/help';
+import { devCommand } from './commands/dev';
+import { statusPanelCommand } from './commands/status-panel';
 import { demoCommand } from './commands/demo';
 import { welcomeCommand } from './commands/welcome';
 import { word2specCommand } from './commands/word2spec';
@@ -42,27 +44,31 @@ import { dashboardCommand } from './commands/dashboard';
 import { auditCommand } from './commands/audit';
 import { analyzeCommand } from './commands/analyze';
 import { lifecycleCommand } from './commands/lifecycle';
+import { prCommand } from './commands/pr';
+import { buildConstitution } from './core/constitution-builder';
+import { contextCommand } from './commands/context-output';
 import { doneCommand } from './commands/done';
 // rename 命令
 import { renameCommand } from './commands/rename';
 // v4.0.0 新增命令
-import { newTaskCommand } from './commands/new-task';
 import { platformAddCommand } from './commands/platform-add';
 import { indexUpdateCommand } from './commands/index-update';
-import { contextCommand } from './commands/context';
 // v4.6.0 迁移命令
 import { migrateCommand } from './commands/migrate';
 // v4.7.0 体验增强
 import { completionCommand } from './commands/completion';
 import { backupCommand } from './commands/backup';
 // v4.8.0 高级功能
-import { hooksCommand } from './commands/hooks';
+
 import { currentCommand } from './commands/current';
 // v4.9.0 完善
 import { updateCommand } from './commands/update';
 // v5.3.0 新增
 import { diffCommand } from './commands/diff';
 import { traceCommand } from './commands/trace';
+import { mergeCheck, rollbackTask, updateArchitecture } from './commands/merge-check';
+import { opsCommand } from './commands/history';
+import { trackerCommand } from './commands/tracker';
 // v5.5.0 新增
 import { deleteCommand } from './commands/delete';
 // v5.6.0 新增
@@ -99,6 +105,146 @@ program
   .description('First-time setup guide (interactive)')
   .option('--force', 'Force re-initialization')
   .action(welcomeCommand);
+
+program
+  .command('status-panel')
+  .alias('sp')
+  .description('IDE-style status panel: phase + tasks + progress + next action')
+  .action(statusPanelCommand);
+
+program
+  .command('open')
+  .alias('opn')
+  .description('Open task files in editor')
+  .option('-t, --task <task>', 'Task to open')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .action(async (options: any) => {
+    const { getDefaultIteration } = await import('./core/context');
+    const it = await getDefaultIteration(options.iteration);
+    if (!it) return;
+    const fs = require('fs');
+    const iterDir = `期次-${it}`;
+    const entries = fs.readdirSync(iterDir, { withFileTypes: true });
+    const task = entries.find((e: any) => e.isDirectory() && e.name.startsWith(options.task || ''));
+    if (task) {
+      const { logger } = require('./utils/logger');
+      logger.info(`\n📂 ${task.name}:`);
+      const files = ['REQ.md', 'TECH.md', 'TASK.md', 'TEST.md', 'API_CONTRACT.yaml'];
+      for (const f of files) {
+        const path = require('path').join(iterDir, task.name, f.startsWith('API') ? '_shared' : 'backend', f);
+        if (fs.existsSync(path)) logger.info(`  ${path}`);
+      }
+    }
+  });
+
+program
+  .command('status-panel')
+  .alias('sp')
+  .description('IDE-style status panel: phase + tasks + progress + next action')
+  .action(statusPanelCommand);
+
+program
+  .command('open')
+  .alias('opn')
+  .description('Open task files in editor')
+  .option('-t, --task <task>', 'Task to open')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .action(async (options: any) => {
+    const { getDefaultIteration } = await import('./core/context');
+    const it = await getDefaultIteration(options.iteration);
+    if (!it) return;
+    const fs = require('fs');
+    const iterDir = `期次-${it}`;
+    const entries = fs.readdirSync(iterDir, { withFileTypes: true });
+    const task = entries.find((e: any) => e.isDirectory() && e.name.startsWith(options.task || ''));
+    if (task) {
+      const { logger } = require('./utils/logger');
+      logger.info(`\n📂 ${task.name}:`);
+      const files = ['REQ.md', 'TECH.md', 'TASK.md', 'TEST.md', 'API_CONTRACT.yaml'];
+      for (const f of files) {
+        const path = require('path').join(iterDir, task.name, f.startsWith('API') ? '_shared' : 'backend', f);
+        if (fs.existsSync(path)) logger.info(`  ${path}`);
+      }
+    }
+  });
+
+program
+  .command('dev')
+  .alias('d')
+  .description('Smart dev entry: auto-detect phase and suggest next step')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('--force', 'Auto-execute the next step')
+  .action(devCommand);
+
+program
+  .command('status-panel')
+  .alias('sp')
+  .description('IDE-style status panel: phase + tasks + progress + next action')
+  .action(statusPanelCommand);
+
+program
+  .command('open')
+  .alias('opn')
+  .description('Open task files in editor')
+  .option('-t, --task <task>', 'Task to open')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .action(async (options: any) => {
+    const { getDefaultIteration } = await import('./core/context');
+    const it = await getDefaultIteration(options.iteration);
+    if (!it) return;
+    const fs = require('fs');
+    const iterDir = `期次-${it}`;
+    const entries = fs.readdirSync(iterDir, { withFileTypes: true });
+    const task = entries.find((e: any) => e.isDirectory() && e.name.startsWith(options.task || ''));
+    if (task) {
+      const { logger } = require('./utils/logger');
+      logger.info(`\n📂 ${task.name}:`);
+      const files = ['REQ.md', 'TECH.md', 'TASK.md', 'TEST.md', 'API_CONTRACT.yaml'];
+      for (const f of files) {
+        const path = require('path').join(iterDir, task.name, f.startsWith('API') ? '_shared' : 'backend', f);
+        if (fs.existsSync(path)) logger.info(`  ${path}`);
+      }
+    }
+  });
+
+program
+  .command('status-panel')
+  .alias('sp')
+  .description('IDE-style status panel: phase + tasks + progress + next action')
+  .action(statusPanelCommand);
+
+program
+  .command('open')
+  .alias('opn')
+  .description('Open task files in editor')
+  .option('-t, --task <task>', 'Task to open')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .action(async (options: any) => {
+    const { getDefaultIteration } = await import('./core/context');
+    const it = await getDefaultIteration(options.iteration);
+    if (!it) return;
+    const fs = require('fs');
+    const iterDir = `期次-${it}`;
+    const entries = fs.readdirSync(iterDir, { withFileTypes: true });
+    const task = entries.find((e: any) => e.isDirectory() && e.name.startsWith(options.task || ''));
+    if (task) {
+      const { logger } = require('./utils/logger');
+      logger.info(`\n📂 ${task.name}:`);
+      const files = ['REQ.md', 'TECH.md', 'TASK.md', 'TEST.md', 'API_CONTRACT.yaml'];
+      for (const f of files) {
+        const path = require('path').join(iterDir, task.name, f.startsWith('API') ? '_shared' : 'backend', f);
+        if (fs.existsSync(path)) logger.info(`  ${path}`);
+      }
+    }
+  });
+
+program
+  .command('dev')
+  .alias('d')
+  .description('Smart dev entry: auto-detect phase and suggest next step')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('--force', 'Auto-execute the next step')
+  .action(devCommand);
 
 program
   .command('demo')
@@ -228,16 +374,31 @@ program
   .alias('rs')
   .description('Technical research: evaluate solutions and compare options')
   .option('-n, --name <name>', 'Research topic')
-  .option('-d, --desc <desc>', 'Research description')
-  .option('-t, --topic <topic>', 'Research topic (alias for --name)')
-  .option('--options <options>', 'Comparison options (comma-separated)')
-  .option('--task-id <id>', 'Task ID')
-  .option('-i, --iteration <iteration>', 'Target iteration')
-  .action(researchCommand);
-
 // ================================================================
 // ⚡ 执行与调度
 // ================================================================
+program
+  .command('pr')
+  .alias('mr')
+  .description('Create Pull Request with task summary')
+  .option('-t, --task <task>', 'Target task (auto-detect from branch if omitted)')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('--base <branch>', 'Base branch', 'main')
+  .option('--draft', 'Create as draft PR')
+  .option('--title <title>', 'Custom PR title')
+  .action(prCommand);
+
+program
+  .command('pr')
+  .alias('mr')
+  .description('Create Pull Request with task summary')
+  .option('-t, --task <task>', 'Target task (auto-detect from branch if omitted)')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('--base <branch>', 'Base branch', 'main')
+  .option('--draft', 'Create as draft PR')
+  .option('--title <title>', 'Custom PR title')
+  .action(prCommand);
+
 program
   .command('plan')
   .alias('pl')
@@ -275,6 +436,9 @@ program
   .option('--force', 'Skip preview and execute directly')
   .option('--strict', 'Pre-flight check: review req/tech/test before code gen')
   .option('--base <branch>', 'Base branch for task branching (default: current)')
+  .option('--skip <tasks>', 'Comma-separated task IDs to skip')
+  .option('--only <tasks>', 'Comma-separated task IDs to execute exclusively (whitelist)')
+  .option('--agent <tool>', 'External AI: copilot/claude/cursor/trae/qoder/windsurf/codebuddy')
   .option('--hotfix', 'Emergency fix: skip reverse sync (30min grace, 24h mandatory)')
   .action(executeCommand);
 
@@ -394,6 +558,50 @@ program
 // ⚙️ 配置与工具
 // ================================================================
 program
+  .command('context')
+  .alias('ctx')
+  .description('Output task context for any AI tool (Copilot/Claude/GPT)')
+  .option('-t, --task <task>', 'Target task')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .action(contextCommand);
+
+program
+  .command('context')
+  .alias('ctx')
+  .description('Output task context for any AI tool (Copilot/Claude/GPT)')
+  .option('-t, --task <task>', 'Target task')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .action(contextCommand);
+
+program
+  .command('constitution')
+  .alias('cn')
+  .description('Auto-detect tech stack and generate CONSTITUTION.md rules')
+  .action(async () => { await buildConstitution(process.cwd()); });
+
+program
+  .command('context')
+  .alias('ctx')
+  .description('Output task context for any AI tool (Copilot/Claude/GPT)')
+  .option('-t, --task <task>', 'Target task')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .action(contextCommand);
+
+program
+  .command('context')
+  .alias('ctx')
+  .description('Output task context for any AI tool (Copilot/Claude/GPT)')
+  .option('-t, --task <task>', 'Target task')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .action(contextCommand);
+
+program
+  .command('constitution')
+  .alias('cn')
+  .description('Auto-detect tech stack and generate CONSTITUTION.md rules')
+  .action(async () => { await buildConstitution(process.cwd()); });
+
+program
   .command('config')
   .alias('cf')
   .description('Manage SpecCore configuration and code rules')
@@ -507,6 +715,12 @@ program
   .action(globalStatusCommand);
 
 program
+  .command('ops')
+  .alias('op')
+  .description('View operation history (command log)')
+  .action(opsCommand);
+
+program
   .command('history')
   .alias('hs')
   .description('View requirement change history')
@@ -551,6 +765,7 @@ program
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('-o, --output <file>', 'Output filename', 'ANALYSIS.md')
   .option('--auto', 'Non-interactive mode: generate report directly')
+  .option('-t, --task <task>', 'Per-task analysis: enriches TECH/TEST/REVIEW for one task')
   .action(analyzeCommand);
 
 program
@@ -669,7 +884,6 @@ program
 program
   .command('hooks')
   .description('Install Git hooks (pre-commit + pre-push)')
-  .action(hooksCommand);
 
 program
   .command('current')
@@ -701,6 +915,62 @@ program
   .requiredOption('--source <name>', 'Source iteration/baseline')
   .requiredOption('--target <name>', 'Target iteration/baseline')
   .action(diffCommand);
+
+program
+  .command('tracker')
+  .alias('tr')
+  .description('View global requirement change tracker')
+  .action(trackerCommand);
+
+program
+  .command('merge-check')
+  .alias('mc')
+  .description('Predict merge conflicts across task branches')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .action(async (options: any) => { const { getDefaultIteration } = await import('./core/context'); const it = await getDefaultIteration(options.iteration); if (it) await mergeCheck(it); });
+
+program
+  .command('rollback')
+  .alias('rb')
+  .description('Rollback a task: revert branch + archive spec')
+  .option('-t, --task <task>', 'Task to rollback')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('--reason <reason>', 'Rollback reason')
+  .action(async (options: any) => { const it = await require('../core/context').getDefaultIteration(options.iteration); if (it && options.task) await rollbackTask(options.task, it, options.reason); });
+
+program
+  .command('arch-update')
+  .alias('au')
+  .description('Auto-update ARCHITECTURE.md with new APIs/tables')
+  .option('-i, --iteration <iteration>', 'Source iteration')
+  .option('--apis <apis>', 'Comma-separated API paths')
+  .option('--tables <tables>', 'Comma-separated table names')
+  .action(async (options: any) => { const it = await require('../core/context').getDefaultIteration(options.iteration); if (it) await updateArchitecture(it, (options.apis || '').split(',').filter(Boolean), (options.tables || '').split(',').filter(Boolean)); });
+
+program
+  .command('merge-check')
+  .alias('mc')
+  .description('Predict merge conflicts across task branches')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .action(async (options: any) => { const { getDefaultIteration } = await import('./core/context'); const it = await getDefaultIteration(options.iteration); if (it) await mergeCheck(it); });
+
+program
+  .command('rollback')
+  .alias('rb')
+  .description('Rollback a task: revert branch + archive spec')
+  .option('-t, --task <task>', 'Task to rollback')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('--reason <reason>', 'Rollback reason')
+  .action(async (options: any) => { const it = await require('../core/context').getDefaultIteration(options.iteration); if (it && options.task) await rollbackTask(options.task, it, options.reason); });
+
+program
+  .command('arch-update')
+  .alias('au')
+  .description('Auto-update ARCHITECTURE.md with new APIs/tables')
+  .option('-i, --iteration <iteration>', 'Source iteration')
+  .option('--apis <apis>', 'Comma-separated API paths')
+  .option('--tables <tables>', 'Comma-separated table names')
+  .action(async (options: any) => { const it = await require('../core/context').getDefaultIteration(options.iteration); if (it) await updateArchitecture(it, (options.apis || '').split(',').filter(Boolean), (options.tables || '').split(',').filter(Boolean)); });
 
 program
   .command('trace')

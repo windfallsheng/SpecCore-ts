@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>MeetBook — H5移动端完整原型</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f6fa; color: #333; max-width: 390px; margin: 0 auto; min-height: 100vh; }
+.topbar { background: linear-gradient(135deg, #38bdf8, #6366f1); color: #fff; padding: 16px 20px 24px; }
+.topbar .title { font-size: 20px; font-weight: bold; margin-bottom: 4px; }
+.topbar .subtitle { font-size: 13px; opacity: .85; }
+.topbar .search { margin-top: 12px; background: rgba(255,255,255,.2); border-radius: 10px; padding: 10px 14px; display: flex; align-items: center; gap: 8px; font-size: 14px; color: rgba(255,255,255,.8); }
+.actions { display: grid; grid-template-columns: repeat(4, 1fr); background: #fff; margin: -12px 12px 0; border-radius: 12px; padding: 16px 0; box-shadow: 0 2px 8px rgba(0,0,0,.08); position: relative; z-index: 1; }
+.action-item { text-align: center; cursor: pointer; }
+.action-item .icon { font-size: 28px; margin-bottom: 6px; }
+.action-item .label { font-size: 11px; color: #64748b; }
+.content { padding: 20px 12px 80px; }
+.section-title { font-size: 16px; font-weight: bold; margin-bottom: 12px; display: flex; justify-content: space-between; }
+.section-title .more { font-size: 12px; color: #38bdf8; }
+.room-list { display: flex; flex-direction: column; gap: 10px; }
+.room-card { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.04); display: flex; gap: 12px; cursor: pointer; }
+.room-card .left { width: 60px; height: 60px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0; }
+.room-card .left.available { background: #d1fae5; color: #065f46; }
+.room-card .left.occupied { background: #fee2e2; color: #991b1b; }
+.room-card .right { flex: 1; }
+.room-card .right .rname { font-size: 15px; font-weight: bold; margin-bottom: 4px; }
+.room-card .right .rinfo { font-size: 12px; color: #64748b; margin-bottom: 6px; }
+.room-card .right .rtags { display: flex; gap: 4px; flex-wrap: wrap; }
+.room-card .right .rtag { font-size: 10px; background: #e0e7ff; color: #3730a3; padding: 2px 6px; border-radius: 4px; }
+.booking-item { background: #fff; border-radius: 10px; padding: 14px; margin-bottom: 8px; box-shadow: 0 1px 2px rgba(0,0,0,.04); display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+.booking-item .b-info .b-title { font-size: 14px; font-weight: bold; margin-bottom: 4px; }
+.booking-item .b-info .b-meta { font-size: 11px; color: #64748b; }
+.b-status { font-size: 11px; padding: 4px 10px; border-radius: 10px; font-weight: 600; }
+.b-status.confirmed { background: #d1fae5; color: #065f46; }
+.b-status.cancelled { background: #f1f5f9; color: #64748b; }
+.b-status.absent { background: #fee2e2; color: #991b1b; }
+.tabbar { position: fixed; bottom: 0; left: 0; right: 0; max-width: 390px; margin: 0 auto; background: #fff; border-top: 1px solid #f1f5f9; display: grid; grid-template-columns: repeat(4, 1fr); padding: 8px 0 20px; z-index: 50; }
+.tabbar .tab { text-align: center; color: #94a3b8; font-size: 10px; cursor: pointer; }
+.tabbar .tab.active { color: #38bdf8; }
+.tabbar .tab .t-icon { font-size: 22px; margin-bottom: 2px; }
+.page { display: none; }
+.page.active { display: block; }
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 100; align-items: flex-end; justify-content: center; }
+.modal-overlay.show { display: flex; }
+.modal { background: #fff; border-radius: 16px 16px 0 0; width: 100%; max-width: 390px; padding: 24px 20px 32px; max-height: 85vh; overflow-y: auto; }
+.modal h3 { font-size: 18px; margin-bottom: 16px; }
+.modal .form-group { margin-bottom: 12px; }
+.modal .form-group label { display: block; font-size: 13px; color: #64748b; margin-bottom: 4px; }
+.modal .form-group input, .modal .form-group select { width: 100%; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; background: #f8fafc; }
+.modal .form-row { display: flex; gap: 10px; }
+.modal .form-row .form-group { flex: 1; }
+.btn-block { width: 100%; padding: 14px; background: #38bdf8; color: #fff; border: none; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 8px; }
+.timeline { border-left: 2px solid #e2e8f0; margin-left: 8px; padding-left: 16px; }
+.timeline-item { margin-bottom: 12px; position: relative; }
+.timeline-item::before { content: ''; position: absolute; left: -21px; top: 4px; width: 10px; height: 10px; border-radius: 50%; }
+.timeline-item.free::before { background: #d1fae5; border: 2px solid #10b981; }
+.timeline-item.busy::before { background: #fee2e2; border: 2px solid #ef4444; }
+.notif-item { background: #fff; border-radius: 10px; padding: 14px; margin-bottom: 8px; box-shadow: 0 1px 2px rgba(0,0,0,.04); border-left: 3px solid transparent; }
+.notif-item.unread { border-left-color: #38bdf8; background: #f0f9ff; }
+.notif-item .n-title { font-size: 14px; font-weight: bold; margin-bottom: 4px; }
+.notif-item .n-content { font-size: 12px; color: #64748b; margin-bottom: 4px; }
+.notif-item .n-time { font-size: 10px; color: #94a3b8; }
+.nav-bar { display: flex; align-items: center; padding: 12px 16px; background: #fff; border-bottom: 1px solid #f1f5f9; gap: 12px; }
+.nav-bar .back { font-size: 20px; cursor: pointer; }
+.nav-bar .nav-title { font-size: 16px; font-weight: bold; }
+.checkin-card { background: #fff; border-radius: 16px; padding: 32px 24px; text-align: center; margin: 20px 12px; }
+.checkin-card .qr { width: 180px; height: 180px; background: #f1f5f9; margin: 20px auto; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 48px; }
+.checkin-card .hint { font-size: 13px; color: #64748b; margin-top: 12px; }
+.badge { display: inline-block; background: #ef4444; color: #fff; font-size: 10px; padding: 1px 6px; border-radius: 8px; margin-left: 4px; }
+</style>
+</head>
+<body>
+
+<!-- ========== 首页 ========== -->
+<div class="page active" id="page-home">
+  <div class="topbar">
+    <div class="title">会议预订</div>
+    <div class="subtitle">📍 深圳 · 科技园总部</div>
+    <div class="search">🔍 搜索会议室...</div>
+  </div>
+  <div class="actions">
+    <div class="action-item" onclick="openBookingModal()"><div class="icon">⚡</div><div class="label">快速预订</div></div>
+    <div class="action-item" onclick="switchTab('bookings')"><div class="icon">📅</div><div class="label">我的会议</div></div>
+    <div class="action-item" onclick="switchTab('checkin')"><div class="icon">📋</div><div class="label">签到</div></div>
+    <div class="action-item" onclick="switchTab('notifications')"><div class="icon">🔔</div><div class="label">通知<span class="badge">3</span></div></div>
+  </div>
+
+  <div class="content">
+    <div class="section-title">🏢 可用会议室 <span class="more">全部 ›</span></div>
+    <div class="room-list">
+      <div class="room-card" onclick="openBookingModal()">
+        <div class="left available">🏢</div>
+        <div class="right"><div class="rname">泰山厅</div><div class="rinfo">📍 3层 · 👥 50人 · 今日剩余 4 时段</div><div class="rtags"><span class="rtag">投影仪</span><span class="rtag">视频会议</span><span class="rtag">白板</span></div></div>
+      </div>
+      <div class="room-card" onclick="openBookingModal()">
+        <div class="left available">💼</div>
+        <div class="right"><div class="rname">衡山厅</div><div class="rinfo">📍 1层 · 👥 6人 · 今日剩余 6 时段</div><div class="rtags"><span class="rtag">白板</span></div></div>
+      </div>
+      <div class="room-card">
+        <div class="left occupied">🔒</div>
+        <div class="right"><div class="rname">华山厅</div><div class="rinfo">📍 2层 · 👥 20人 · 当前使用中</div><div class="rtags"><span class="rtag">投影仪</span><span class="rtag">白板</span></div><div style="font-size:12px;color:#64748b;margin-top:4px">14:30 空闲</div></div>
+      </div>
+    </div>
+
+    <div style="margin-top:20px">
+      <div class="section-title">📅 我的预订 <span class="more" onclick="switchTab('bookings')">全部 ›</span></div>
+      <div class="booking-item">
+        <div class="b-info"><div class="b-title">技术评审会</div><div class="b-meta">🕐 10:00-11:30 · 华山厅</div></div><div class="b-status confirmed">进行中</div>
+      </div>
+      <div class="booking-item">
+        <div class="b-info"><div class="b-title">1on1 周报</div><div class="b-meta">🕐 14:00-14:30 · 衡山厅</div></div><div class="b-status confirmed">已确认</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== 我的预订页 ========== -->
+<div class="page" id="page-bookings">
+  <div class="nav-bar"><span class="back" onclick="switchTab('home')">‹</span><span class="nav-title">我的预订</span></div>
+  <div class="content">
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button class="btn-block" style="padding:8px;font-size:13px;flex:1;background:#38bdf8">全部</button>
+      <button class="btn-block" style="padding:8px;font-size:13px;flex:1;background:#e2e8f0;color:#333">即将开始</button>
+      <button class="btn-block" style="padding:8px;font-size:13px;flex:1;background:#e2e8f0;color:#333">已完成</button>
+    </div>
+    <div class="booking-item">
+      <div class="b-info"><div class="b-title">Q3战略规划会</div><div class="b-meta">🕐 7/23 09:00-11:00 · 泰山厅 · 👥 12人</div></div><div class="b-status confirmed">已确认</div>
+    </div>
+    <div class="booking-item">
+      <div class="b-info"><div class="b-title">技术评审会</div><div class="b-meta">🕐 7/22 10:00-11:30 · 华山厅 · 👥 8人</div></div><div class="b-status confirmed">进行中</div>
+    </div>
+    <div class="booking-item">
+      <div class="b-info"><div class="b-title">新人入职培训</div><div class="b-meta">🕐 7/20 14:00-16:00 · 嵩山厅 · 👥 30人</div></div><div class="b-status" style="background:#f1f5f9;color:#64748b">已完成</div>
+    </div>
+    <div class="booking-item">
+      <div class="b-info"><div class="b-title">客户演示</div><div class="b-meta">🕐 7/18 15:00-16:00 · 衡山厅 · 👥 5人</div></div><div class="b-status cancelled">已取消</div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== 签到页 ========== -->
+<div class="page" id="page-checkin">
+  <div class="nav-bar"><span class="back" onclick="switchTab('home')">‹</span><span class="nav-title">会议签到</span></div>
+  <div class="content">
+    <div class="checkin-card">
+      <div style="font-size:16px;font-weight:bold">技术评审会</div>
+      <div style="font-size:13px;color:#64748b;margin-top:4px">🕐 10:00-11:30 · 华山厅</div>
+      <div class="qr">📱</div>
+      <div style="font-size:14px;color:#64748b">请扫描会议室二维码签到</div>
+      <div class="hint">⏰ 签到时间: 09:45 - 10:30</div>
+      <button class="btn-block" style="margin-top:20px;background:#10b981">✅ 手动签到</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== 通知页 ========== -->
+<div class="page" id="page-notifications">
+  <div class="nav-bar"><span class="back" onclick="switchTab('home')">‹</span><span class="nav-title">消息通知 <span class="badge">3</span></span></div>
+  <div class="content">
+    <div class="notif-item unread">
+      <div class="n-title">📅 会议提醒</div><div class="n-content">您预订的"技术评审会"将于 30 分钟后开始</div><div class="n-time">10 分钟前</div>
+    </div>
+    <div class="notif-item unread">
+      <div class="n-title">❌ 预订已取消</div><div class="n-content">管理员取消了您在 嵩山厅 的预订"周例会"，原因：外部客户占用</div><div class="n-time">1 小时前</div>
+    </div>
+    <div class="notif-item unread">
+      <div class="n-title">✅ 预订成功</div><div class="n-content">您的"Q3战略规划会"预订已确认，泰山厅 7/23 09:00-11:00</div><div class="n-time">2 小时前</div>
+    </div>
+    <div class="notif-item">
+      <div class="n-title">⏰ 签到提醒</div><div class="n-content">"客户演示"已开始，请尽快签到</div><div class="n-time">昨天</div>
+    </div>
+    <div style="text-align:center;margin-top:12px"><a href="#" style="color:#38bdf8;font-size:13px">全部标记已读</a></div>
+  </div>
+</div>
+
+<!-- 底部导航 -->
+<div class="tabbar">
+  <div class="tab active" onclick="switchTab('home')"><div class="t-icon">🏠</div>首页</div>
+  <div class="tab" onclick="switchTab('bookings')"><div class="t-icon">📅</div>预订</div>
+  <div class="tab" onclick="switchTab('checkin')"><div class="t-icon">📋</div>签到</div>
+  <div class="tab" onclick="switchTab('notifications')"><div class="t-icon">🔔</div>通知</div>
+</div>
+
+<!-- 快速预订弹窗 -->
+<div class="modal-overlay" id="bookingModal" onclick="if(event.target===this)this.classList.remove('show')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h3>⚡ 快速预订 · 泰山厅</h3>
+    <div class="form-group"><label>会议主题</label><input type="text" placeholder="输入会议主题" value="Q3 战略规划会"></div>
+    <div class="form-group"><label>日期</label><input type="date" value="2026-07-22"></div>
+    <div class="form-row">
+      <div class="form-group"><label>开始</label><select><option>09:00</option><option selected>10:00</option></select></div>
+      <div class="form-group"><label>结束</label><select><option>10:00</option><option selected>11:30</option></select></div>
+    </div>
+    <div class="form-group"><label>参会人数</label><input type="number" value="12"></div>
+    <div class="form-row">
+      <div class="form-group"><label>周期</label><select><option>不重复</option><option>每周</option><option>双周</option></select></div>
+      <div class="form-group"><label>持续</label><select><option>4周</option><option>8周</option></select></div>
+    </div>
+    <div style="background:#fef3c7;border-radius:8px;padding:10px;font-size:12px;margin:8px 0">💰 预估费用: ¥200/小时 × 1.5小时 = ¥300</div>
+    <button class="btn-block" onclick="this.closest('.modal-overlay').classList.remove('show')">✅ 确认预订</button>
+  </div>
+</div>
+
+<script>
+function switchTab(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  document.querySelectorAll('.tabbar .tab').forEach(t => t.classList.remove('active'));
+  var tabs = document.querySelectorAll('.tabbar .tab');
+  var idx = {home:0,bookings:1,checkin:2,notifications:3}[name]||0;
+  tabs[idx].classList.add('active');
+}
+function openBookingModal() { document.getElementById('bookingModal').classList.add('show'); }
+</script>
+</body>
+</html>

@@ -8,7 +8,7 @@
 
 SpecCore is a specification-driven development framework for AI-native teams. It decouples deterministic operations (file creation, directory management, format validation, status statistics) from AI, executing them directly through code to improve efficiency and reduce Token consumption.
 
-> 💡 **v5.6.3** | 49 Commands | 35 Intent Types | Multi-Platform
+> 💡 **v5.17.0** | 68 Commands | 38 Intent Types | Multi-Platform
 
 ---
 
@@ -21,7 +21,7 @@ SpecCore has two distinct parts:
 | **Where** | Terminal | AI coding tools (WorkBuddy / Cursor / Claude) |
 | **How** | `speccore init` | Type `/spec-xxx` |
 | **Mechanism** | TypeScript, direct file ops | Markdown prompts, AI reads & executes |
-| **Count** | 39 CLI commands | 39 Slash Commands |
+| **Count** | 68 CLI commands | 54 Slash Commands |
 | **When** | Init, validation, batch ops | Daily dev: iteration, execution, review, archive |
 
 > 💡 **Remember**: `speccore` prefix → Terminal; `/spec` prefix → AI tool.
@@ -64,7 +64,7 @@ speccore spec "How's the progress?"
 
 - **🚀 Quick Init**: One command initializes the full project structure, auto-integrates WorkBuddy
 - **📱 Multi-Platform**: `--platforms=web,h5,miniapp` per-platform Task management, dynamic platform types
-- **🧠 Intent Recognition**: 35 intent types, 200+ keywords, natural language → command matching
+- **🧠 Intent Recognition**: 38 intent types, 200+ keywords, natural language → command matching
 - **🌐 Global Layer**: Cross-project requirement indexing via GLOBAL/ architecture
 - **📊 Progress Tracking**: Auto-detect active iteration, per-platform/per-assignee stats
 - **✅ Auto Compliance**: Scan all Spec files, check required fields and format
@@ -105,7 +105,7 @@ User Input (Natural Language / Slash Command)
 
 ---
 
-## 🔧 CLI Commands Quick Reference (39 total)
+## 🔧 CLI Commands Quick Reference (68 total)
 
 > Run in terminal. All commands start with `speccore`.
 
@@ -141,7 +141,7 @@ User Input (Natural Language / Slash Command)
 | `speccore audit` | `/spec-ai-audit` | AI smart audit |
 | `speccore spec "query"` | `/spec query` | Natural language intent |
 
-> 📋 Full command reference: [Command Reference](docs/commands.en.md) | 🧠 Intent mapping: [Intent Map](docs/commands.en.md#natural-language-intent-mapping-35-types)
+> 📋 Full command reference: [Command Reference](docs/commands.en.md) | 🧠 Intent mapping: [Intent Map](docs/commands.en.md#natural-language-intent-mapping-38-types)
 
 ---
 
@@ -179,12 +179,12 @@ SpecCore natively integrates WorkBuddy.
 | [SDD Methodology](docs/sdd-methodology.en.md) | What is SDD, why, how |
 | [Quick Reference](docs/quick-reference.en.md) | One-page: commands + safety + CI |
 | [Quick Start](docs/quick-start.en.md) | Install → Init → Import → Multi-platform → Scenarios |
-| [Command Reference](docs/commands.en.md) | 49 commands full params + 35 intents |
+| [Command Reference](docs/commands.en.md) | 68 commands full params + 38 intents |
 | [Tool Adaptation](docs/tool-adaptation.en.md) | WorkBuddy integration + workflow + security |
 | [Usage Guide](docs/usage-guide.en.md) | File safety: manual edit vs CLI command |
 | [Workspace Layout](docs/workspace-organization.en.md) | Recommended directory structure |
 | [Migration Guide](docs/migration-guide.en.md) | Shell v3.x → CLI v5.x |
-| [CHANGELOG](CHANGELOG.en.md) | Version history (v1.0.0 → v5.6.1) |
+| [CHANGELOG](CHANGELOG.en.md) | Version history (v1.0.0 → v5.17.0) |
 | [Example](examples/task-management/README.md) | Full demo: req→Spec→generated code |
 | [README.md](README.md) | 中文项目概述 |
 
@@ -231,7 +231,7 @@ bash verify.sh          # Run tests
 
 ## Version
 
-v5.6.3 | 🔧 CLI Commands: 49 | 🧠 Intents: 35
+v5.17.0 | 🔧 CLI Commands: 68 | 🧠 Intents: 38
 
 Changelog: [CHANGELOG.en.md](CHANGELOG.en.md)
 

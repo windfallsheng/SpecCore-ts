@@ -53,14 +53,14 @@ export async function lifecycleCommand(options: LifecycleOptions): Promise<void>
   }
 
   // ── 无 task 显示流程图 ──
-  if (!options.task) {
+  if (!options.task || "") {
     showLifecycleDiagram();
     return;
   }
 
   // ── 查找 task ──
   const tasks = await scanTasks(iteration);
-  const task = tasks.find(t => t.id === options.task || t.id.startsWith(options.task + '-'));
+  const task = tasks.find(t => t.id === options.task || "" || "" || t.id.startsWith(options.task || "" + '-') || t.id.includes(options.task || ""));
   if (!task) {
     logger.error(`Task 未找到: ${options.task}`);
     return;
@@ -89,6 +89,14 @@ export async function lifecycleCommand(options: LifecycleOptions): Promise<void>
     
     if (target === currentState) {
       logger.info(`任务已在 ${STATE_ICONS[currentState]} ${STATE_LABELS[currentState]}`);
+      return;
+    }
+
+    // ── 质量关卡 ──
+    const blockReason = await checkQualityGate(taskDir, currentState, target);
+    if (blockReason) {
+      logger.warn(`\n🚫 质量关卡未通过: ${blockReason}`);
+      logger.info('   💡 请完成后再推进');
       return;
     }
 
@@ -257,4 +265,39 @@ async function runCheck(taskId: string, taskDir: string, state: State): Promise<
       logger.info('  ✅ 审查清单全部确认！可以推进到 done');
     }
   }
+}
+
+/**
+ * 质量关卡：禁止跳过必要步骤
+ */
+async function checkQualityGate(taskDir: string, from: State, to: State): Promise<string | null> {
+  if (from === 'in_progress' && to === 'review') {
+    return '必须先经过 testing 阶段';
+  }
+  if (from !== 'review' && to === 'done' ) {
+    return '必须先经过 review 阶段';
+  }
+  if (to === 'review') {
+    const testPath = join(taskDir, 'TEST.md');
+    if (await pathExists(testPath)) {
+      const testContent = await readFile(testPath, 'utf-8');
+      const total = (testContent.match(/\[ \]/g) || []).length;
+      const checked = (testContent.match(/\[x\]/gi) || []).length;
+      if (total > 0 && checked < total) {
+        return `TEST.md \u8fd8\u6709 ${total - checked} \u9879\u672a\u5b8c\u6210 (${checked}/${total})`;
+      }
+    }
+  }
+  if (to === 'done') {
+    const reviewPath = join(taskDir, 'REVIEW.md');
+    if (await pathExists(reviewPath)) {
+      const reviewContent = await readFile(reviewPath, 'utf-8');
+      const total = (reviewContent.match(/\[ \]/g) || []).length;
+      const checked = (reviewContent.match(/\[x\]/gi) || []).length;
+      if (total > 0 && checked === 0) {
+        return `REVIEW.md \u5c1a\u672a\u5f00\u59cb\u5ba1\u67e5 (0/${total})`;
+      }
+    }
+  }
+  return null;
 }

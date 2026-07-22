@@ -130,6 +130,8 @@ function extractSections(content, sectionFilter) {
                 currentPlatform = undefined; // 新的 ## 章节重置平台
             }
             currentSection.platform = currentPlatform;
+            while (/端端/.test(currentSection.name))
+                currentSection.name = currentSection.name.replace('端端', '端');
             currentContent = [];
         }
         else if (currentSection) {
@@ -151,10 +153,22 @@ function extractSections(content, sectionFilter) {
     return filterTemplateNoise(sections);
 }
 const TEMPLATE_PATTERNS = [
+    // Section types that should NOT become separate tasks
     /^\d+\.\d+\s*(背景|目标|范围)\s*$/,
     /^\d+\.\d+\s*(性能|安全|兼容性)\s*$/,
     /^\d+\.\s*(需求概述|功能需求|非功能需求|验收标准|附录)\s*$/,
     /^功能模块[一二三四五]\s*$/,
+    // Structural PRD headings (not functional requirements)
+    /^功能优先级$/,
+    /^范围边界$/,
+    /^依赖关系$/,
+    /^术语表$/,
+    /^业务规则$/,
+    /^非功能要求?$/,
+    /^原型参考$/,
+    /^版本历史$/,
+    /^项目概述$/,
+    /^BDD 验收标准$/,
 ];
 function filterTemplateNoise(sections) {
     return sections.filter(s => {
@@ -167,6 +181,7 @@ function filterTemplateNoise(sections) {
         const meaningful = (s.content || '').replace(/[\s\n>#*-|]/g, '').length;
         if (meaningful < 3)
             return false;
+        // Skip sections without API tables (structural headings)
         return true;
     });
 }
@@ -202,6 +217,18 @@ async function createTaskFromSection(iterationDir, taskId, section, allPlatforms
     }
     // Write DEPLOY.md — deployment checklist
     await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', 'DEPLOY.md'), generateDeployChecklist(section));
+    // Generate API_CONTRACT.yaml in _shared/
+    const contractYaml = generateApiContract(section);
+    if (contractYaml) {
+        await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, '_shared', 'API_CONTRACT.yaml'), contractYaml);
+    }
+    // Generate ERROR_CODES.md
+    await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', 'ERROR_CODES.md'), generateErrorCodes(section));
+    // Generate ADR.md (only if tech stack detected)
+    const adr = generateAdr(section);
+    if (adr) {
+        await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', 'ADR.md'), adr);
+    }
     // Write REQ.md
     await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', 'REQ.md'), `# ${section.name}
 
@@ -283,7 +310,9 @@ async function updateProjectGraph(iterationDir, sections) {
     }
     for (let i = 0; i < sections.length; i++) {
         const { id: taskId } = await (0, global_counters_1.nextTaskId)(sections[i].name);
-        const taskName = sections[i].name;
+        let taskName = sections[i].name;
+        while (/端端/.test(taskName))
+            taskName = taskName.replace('端端', '端');
         if (!content.includes(taskId)) {
             const taskEntry = `| ${taskId} | ${taskName} | feature | 0% | 🔲 待开发 | |\n`;
             content = content.replace('| 任务编号 | 任务名称 | 类型 | 进度 | 状态 | 负责人 |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n', `| 任务编号 | 任务名称 | 类型 | 进度 | 状态 | 负责人 |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n${taskEntry}`);
@@ -494,11 +523,30 @@ async function generateImpactGraph(iterationDir, sections, platforms) {
     for (let i = 0; i < sections.length; i++) {
         const s = sections[i];
         const taskId = `Task-${String(i + 1).padStart(3, '0')}`;
-        const risk = (0, risk_scorer_1.scoreRisk)(s.content + s.name, s.name);
+        const risk = await (0, risk_scorer_1.scoreRisk)(s.content + s.name, s.name, iterationDir);
         impact += `| ${taskId}: ${s.name} | ${risk.level} | ${risk.score} | ${risk.tags.join(' ')} | ${risk.reasons.join('; ')} |\n`;
         const taskDir = (0, path_1.join)(iterationDir, taskId);
         if (await (0, fs_extra_1.pathExists)(taskDir)) {
-            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, '.risk'), `# Risk: ${risk.level}\nscore: ${risk.score}\ntags: ${risk.tags.join(',')}\n`);
+            // 生成风险报告并嵌入 TASK.md
+            const taskMdPath = (0, path_1.join)(taskDir, 'backend', 'TASK.md');
+            const riskReport = (0, risk_scorer_1.generateRiskReport)(risk);
+            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, '.risk'), riskReport);
+            if (await (0, fs_extra_1.pathExists)(taskMdPath)) {
+                let taskMd = await (0, fs_extra_1.readFile)(taskMdPath, 'utf-8');
+                if (!taskMd.includes('## 风险评估')) {
+                    taskMd += '\n\n## 风险评估\n\n' + riskReport.replace('# 风险评估\n\n', '');
+                    await (0, fs_extra_1.writeFile)(taskMdPath, taskMd);
+                }
+            }
+            // Inject risk section into TASK.md if it exists
+            const riskTaskPath = (0, path_1.join)(taskDir, 'backend', 'TASK.md');
+            if (await (0, fs_extra_1.pathExists)(riskTaskPath)) {
+                let taskMd = await (0, fs_extra_1.readFile)(riskTaskPath, 'utf-8');
+                if (!taskMd.includes('## 风险评估')) {
+                    taskMd += '\n\n## 风险评估\n\n' + riskReport.replace('# 风险评估\n\n', '');
+                    await (0, fs_extra_1.writeFile)(riskTaskPath, taskMd);
+                }
+            }
         }
     }
     impact += '\n## Dependencies\n\n';
@@ -642,5 +690,88 @@ async function injectTechFromAnalysis(iterationDir, taskDir, sectionName) {
         tech += depSection[0].trim() + '\n';
     }
     await (0, fs_extra_1.writeFile)(techPath, tech);
+}
+function generateApiContract(section) {
+    const lines = (section.content || '').split('\n');
+    const apis = [];
+    for (const line of lines) {
+        const match = line.match(/\|\s*(GET|POST|PUT|DELETE|PATCH)\s*\|\s*(\/[^\s|]+)\s*\|\s*(.*)/i);
+        if (match) {
+            apis.push({ method: match[1].toUpperCase(), path: match[2].trim(), desc: (match[3] || '').trim() });
+        }
+    }
+    if (apis.length === 0)
+        return '';
+    let yaml = `# ${section.name} — API Contract
+# Auto-generated from REQ.md
+
+openapi: "3.0.0"
+info:
+  title: "${section.name}"
+  version: "1.0.0"
+
+paths:
+`;
+    for (const api of apis) {
+        const tag = api.path.split('/')[2] || 'default';
+        yaml += `  ${api.path}:
+    ${api.method.toLowerCase()}:
+      tags: [${tag}]
+      summary: "${api.desc}"
+      responses:
+        "200":
+          description: Success
+`;
+        if (api.method === 'POST' || api.method === 'PUT') {
+            yaml += `        "400":
+          description: Bad Request
+`;
+        }
+        if (api.method === 'DELETE') {
+            yaml += `        "404":
+          description: Not Found
+`;
+        }
+    }
+    return yaml;
+}
+function generateErrorCodes(section) {
+    let md = `# ${section.name} — Error Codes\n\n> Auto-generated\n\n`;
+    md += `| Code | HTTP | Message | Description |\n`;
+    md += `| :--- | :--- | :--- | :--- |\n`;
+    const content = section.content || '';
+    const module = section.name.replace(/[^\w]/g, '_').toUpperCase();
+    md += `| ${module}_001 | 400 | 参数校验失败 | 请求参数不符合规范 |\n`;
+    md += `| ${module}_002 | 404 | 资源不存在 | 请求的资源未找到 |\n`;
+    md += `| ${module}_003 | 500 | 服务器内部错误 | 未预期的服务异常 |\n`;
+    if (content.includes('权限') || content.includes('RBAC')) {
+        md += `| ${module}_004 | 403 | 无操作权限 | 当前用户权限不足 |\n`;
+    }
+    if (content.includes('创建') || content.includes('POST')) {
+        md += `| ${module}_005 | 409 | 资源冲突 | 重复创建或状态冲突 |\n`;
+    }
+    return md;
+}
+function generateAdr(section) {
+    const content = section.content || '';
+    // Only generate ADR if tech decisions are mentioned
+    const hasTech = content.match(/Spring|Vue|React|MySQL|Redis|Kafka|微服务|单体|REST|gRPC/);
+    if (!hasTech)
+        return '';
+    const now = new Date().toISOString().split('T')[0];
+    let adr = `# ADR: ${section.name}\n\n`;
+    adr += `- **日期**: ${now}\n`;
+    adr += `- **状态**: 提议中\n\n`;
+    adr += `## 决策\n\n`;
+    const techStack = content.match(/(Spring|Vue|React|MySQL|Redis|Kafka|微服务|单体|REST|gRPC)[^\n]*/g);
+    if (techStack) {
+        adr += `基于任务需求，技术选型如下:\n\n`;
+        for (const t of [...new Set(techStack)]) {
+            adr += `- ${t.trim()}\n`;
+        }
+    }
+    adr += `\n## 备选方案\n\n- _待补充_\n`;
+    adr += `\n## 后果\n\n- _待补充_\n`;
+    return adr;
 }
 //# sourceMappingURL=split.js.map

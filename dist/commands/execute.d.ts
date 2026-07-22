@@ -18,6 +18,9 @@ export interface ExecuteOptions {
     hotfix?: boolean;
     strict?: boolean;
     base?: string;
+    skip?: string;
+    agent?: string;
+    only?: string;
 }
 export declare function executeCommand(options: ExecuteOptions): Promise<void>;
 //# sourceMappingURL=execute.d.ts.map

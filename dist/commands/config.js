@@ -1,9 +1,27 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.installHooks = installHooks;
 exports.configCommand = configCommand;
 const fs_extra_1 = require("fs-extra");
 const logger_1 = require("../utils/logger");
 const CONFIG_PATH = '.speccore/SETTINGS.md';
+/**
+ * Install Git hooks (pre-commit + pre-push)
+ */
+function installHooks() {
+    try {
+        const { installGitHooks } = require('../core/git-integration');
+        const result = installGitHooks();
+        logger_1.logger.success('Git hooks installed:');
+        if (result.preCommit)
+            logger_1.logger.info('  .git/hooks/pre-commit  (check @spec annotations)');
+        if (result.prePush)
+            logger_1.logger.info('  .git/hooks/pre-push    (run speccore validate)');
+    }
+    catch (error) {
+        logger_1.logger.error('Failed to install Git hooks: ' + error);
+    }
+}
 async function configCommand(options) {
     const spinner = new logger_1.Spinner('Processing configuration');
     spinner.start();

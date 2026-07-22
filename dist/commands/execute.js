@@ -43,6 +43,7 @@ const transaction_1 = require("../core/transaction");
 const spec_rules_1 = require("../core/spec-rules");
 const operation_log_1 = require("../core/operation-log");
 const next_steps_1 = require("../core/next-steps");
+const question_checklist_1 = require("../core/question-checklist");
 const execution_state_1 = require("../core/execution-state");
 const git_integration_1 = require("../core/git-integration");
 async function executeCommand(options) {
@@ -131,7 +132,8 @@ async function executeCommand(options) {
             return;
         }
         // === Execute with progress (existing flow) ===
-        await executeWithProgress(sortedTasks, iteration, options.base);
+        const skipList = options.skip ? options.skip.split(',').map(s => s.trim()).filter(Boolean) : [];
+        await executeWithProgress(sortedTasks, iteration, options.base, skipList, { only: options.only });
         // Hotfix tracking
         if (options.hotfix && sortedTasks.length > 0) {
             await (0, context_1.startHotfix)(sortedTasks[0].id);
@@ -206,7 +208,8 @@ async function interactiveSelect(tasks, iteration, options) {
         logger_1.logger.info('Cancelled.');
         return;
     }
-    await executeWithProgress(selectedTasks, iteration, options.base);
+    const skipList2 = options.skip ? options.skip.split(',').map(s => s.trim()).filter(Boolean) : [];
+    await executeWithProgress(selectedTasks, iteration, options.base, skipList2, { only: options.only });
 }
 async function loadInquirer() {
     try {
@@ -234,22 +237,64 @@ async function loadInquirer() {
 // ============================================================
 // Progress feedback execution
 // ============================================================
-async function executeWithProgress(tasks, iteration, base) {
+async function executeWithProgress(tasks, iteration, base, skip, options) {
     const total = tasks.length;
     const startTime = Date.now();
     const completed = [];
-    // Auto-create git branch for single task
-    if (tasks.length === 1) {
-        const task = tasks[0];
-        // Auto-detect dependency base from IMPACT.md
-        if (!base) {
-            base = await detectDependencyBase(iteration, task.id);
+    // Filter whitelist (--only)
+    if (options?.only) {
+        const onlyList = options.only.split(',').map(s => s.trim()).filter(Boolean);
+        const before = tasks.length;
+        tasks = tasks.filter(t => onlyList.includes(t.id));
+        if (tasks.length < before) {
+            logger_1.logger.info(`  🎯 仅执行 ${tasks.length}/${before} 个指定任务`);
         }
-        const branch = (0, git_integration_1.createTaskBranch)(task.id, task.name || 'feature', base);
-        if (branch) {
-            const baseInfo = base ? ` (from ${base})` : '';
-            logger_1.logger.info(`🌿 Created branch: ${branch}${baseInfo}`);
+    }
+    // Filter whitelist (--only)
+    if (options?.only) {
+        const onlyList = options.only.split(',').map(s => s.trim()).filter(Boolean);
+        const before = tasks.length;
+        tasks = tasks.filter(t => onlyList.includes(t.id));
+        if (tasks.length < before) {
+            logger_1.logger.info(`  🎯 仅执行 ${tasks.length}/${before} 个指定任务`);
         }
+    }
+    // Filter skipped tasks
+    if (skip && skip.length > 0) {
+        const before = tasks.length;
+        tasks = tasks.filter(t => !skip.includes(t.id));
+        logger_1.logger.info(`  ⏭️  跳过 ${before - tasks.length} 个任务: ${skip.join(', ')}`);
+    }
+    if (tasks.length === 0) {
+        logger_1.logger.info('  ✅ 没有需要执行的任务');
+        return;
+    }
+    // Create branches for each task (dependency-aware)
+    if (tasks.length > 0) {
+        for (const task of tasks) {
+            let taskBase = base;
+            // Auto-detect dependency per task from IMPACT.md
+            if (!taskBase) {
+                taskBase = await detectDependencyBase(iteration, task.id);
+            }
+            const branch = (0, git_integration_1.createTaskBranch)(task.id, task.id, taskBase);
+            if (branch) {
+                const baseInfo = taskBase ? ` (from ${taskBase})` : '';
+                logger_1.logger.info(`🌿 ${task.id}: ${branch}${baseInfo}`);
+            }
+            // Switch back to a neutral branch for next task if needed
+        }
+    }
+    // ── Agent mode: output optimized context for external AI ──
+    if (options?.agent) {
+        const agentCtx = buildAgentContext(tasks, options.agent);
+        logger_1.logger.info(`\n🤖 Agent 模式: ${options.agent}`);
+        logger_1.logger.info('--- AGENT CONTEXT START ---');
+        logger_1.logger.info(agentCtx);
+        logger_1.logger.info('--- AGENT CONTEXT END ---');
+        logger_1.logger.info('\n💡 复制以上内容粘贴到 ' + options.agent + ' 中即可生成代码');
+        (0, operation_log_1.logOperation)('speccore execute --agent', options.agent);
+        return;
     }
     (0, operation_log_1.logOperation)('speccore execute', `${total} tasks`);
     logger_1.logger.info('');
@@ -287,6 +332,10 @@ async function executeWithProgress(tasks, iteration, base) {
     // Summary
     const totalElapsed = Math.round((Date.now() - startTime) / 1000);
     logger_1.logger.success(`Execution complete! ${total} tasks in ${totalElapsed}s`);
+    // Post-execution question review
+    const postQs = await (0, question_checklist_1.extractQuestions)(`期次-${iteration}`);
+    if (postQs.length > 0)
+        (0, question_checklist_1.showQuestionChecklist)(postQs, '执行后审查');
     (0, operation_log_1.logOperation)('speccore execute done', `completed ${total} tasks in ${totalElapsed}s`);
 }
 // ============================================================
@@ -334,6 +383,8 @@ async function executeBatchMode(tasks, iteration, batchSize, options) {
         const updated = (0, execution_state_1.loadExecutionState)();
         if (updated.currentBatch > updated.totalBatches)
             break;
+        if (updated.pendingTasks.length === 0)
+            break; // 所有任务完成
     }
     logger_1.logger.success('All batches completed!');
     (0, operation_log_1.logOperation)('speccore execute --batch-size', `${tasks.length} tasks in ${state.totalBatches} batches`);
@@ -803,4 +854,30 @@ async function detectDependencyBase(iteration, taskId) {
     }
     return undefined;
 }
+const AGENT_FORMATS = {
+    copilot: { prefix: "Based on the following specification, generate production code:\n\n", suffix: "\n\nGenerate clean, well-structured code following the Constitution rules." },
+    claude: { prefix: "根据以下 Spec 生成生产级代码，遵守宪法规则和测试要求：\n\n", suffix: "\n\n请生成结构清晰、符合宪法规则的生产级代码。" },
+    cursor: { prefix: "// Spec-Driven Implementation\n// Follow the spec below strictly:\n\n", suffix: "\n\n// Generate code following the Constitution and API contract." },
+    trae: { prefix: "请基于以下技术规格生成代码：\n\n", suffix: "\n\n严格遵循宪法规则和 API 契约。" },
+    qoder: { prefix: "## Spec-Driven Code Generation\n\nPlease implement based on the specification below:\n\n", suffix: "\n\n## Requirements: Follow Constitution rules and complete all tests." },
+    windsurf: { prefix: "### Implementation Spec\n\nImplement the following specification:\n\n", suffix: "\n\n### Rules: Follow all Constitution constraints. Complete the TEST checklist." },
+    codebuddy: { prefix: "基于以下 Spec 和宪法规则生成代码：\n\n", suffix: "\n\n严格遵守宪法、API 契约和测试要求。" },
+};
+function buildAgentContext(tasks, agent) {
+    const format = AGENT_FORMATS[agent.toLowerCase()] || { prefix: "Generate code based on:\n\n", suffix: "\n\nFollow all Constitution rules." };
+    let ctx = format.prefix;
+    for (const task of tasks) {
+        ctx += `## Task: ${task.id} - ${task.name || task.id}\n`;
+        ctx += `- Status: ${task.status}\n`;
+        ctx += `- Priority: ${task.priority}\n`;
+        ctx += `\n> Files: Iteration/${task.id}/backend/REQ.md TECH.md TEST.md REVIEW.md API_CONTRACT.yaml\n\n`;
+    }
+    ctx += `\n## Constitution Rules (from .speccore/PROJECT/CONSTITUTION.md)\n`;
+    ctx += `- Follow all mandatory (🔒) rules strictly\n`;
+    ctx += `- API must follow RESTful conventions\n`;
+    ctx += `- All code must include error handling and validation\n`;
+    ctx += format.suffix;
+    return ctx;
+}
+// ===== Agent Context Builder =====
 //# sourceMappingURL=execute.js.map
