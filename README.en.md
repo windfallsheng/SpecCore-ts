@@ -105,7 +105,7 @@ User Input (Natural Language / Slash Command)
 
 ---
 
-## 🔧 CLI Commands Quick Reference (39 total)
+## 🔧 CLI Commands Quick Reference (68 total)
 
 > Run in terminal. All commands start with `speccore`.
 
@@ -141,7 +141,7 @@ User Input (Natural Language / Slash Command)
 | `speccore audit` | `/spec-ai-audit` | AI smart audit |
 | `speccore spec "query"` | `/spec query` | Natural language intent |
 
-> 📋 Full command reference: [Command Reference](docs/commands.en.md) | 🧠 Intent mapping: [Intent Map](docs/commands.en.md#natural-language-intent-mapping-35-types)
+> 📋 Full command reference: [Command Reference](docs/commands.en.md) | 🧠 Intent mapping: [Intent Map](docs/commands.en.md#natural-language-intent-mapping-38-types)
 
 ---
 
@@ -231,7 +231,7 @@ bash verify.sh          # Run tests
 
 ## Version
 
-v5.17.0 | 🔧 CLI Commands: 49 | 🧠 Intents: 35
+v5.17.0 | 🔧 CLI Commands: 68 | 🧠 Intents: 38
 
 Changelog: [CHANGELOG.en.md](CHANGELOG.en.md)
 
