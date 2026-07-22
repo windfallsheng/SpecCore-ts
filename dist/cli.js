@@ -893,7 +893,7 @@ commander_1.program
     .alias('mc')
     .description('Predict merge conflicts across task branches')
     .option('-i, --iteration <iteration>', 'Target iteration')
-    .action(async (options) => { const it = await require('../core/context').getDefaultIteration(options.iteration); if (it)
+    .action(async (options) => { const { getDefaultIteration } = await Promise.resolve().then(() => __importStar(require('./core/context'))); const it = await getDefaultIteration(options.iteration); if (it)
     await (0, merge_check_1.mergeCheck)(it); });
 commander_1.program
     .command('rollback')
@@ -918,7 +918,7 @@ commander_1.program
     .alias('mc')
     .description('Predict merge conflicts across task branches')
     .option('-i, --iteration <iteration>', 'Target iteration')
-    .action(async (options) => { const it = await require('../core/context').getDefaultIteration(options.iteration); if (it)
+    .action(async (options) => { const { getDefaultIteration } = await Promise.resolve().then(() => __importStar(require('./core/context'))); const it = await getDefaultIteration(options.iteration); if (it)
     await (0, merge_check_1.mergeCheck)(it); });
 commander_1.program
     .command('rollback')
