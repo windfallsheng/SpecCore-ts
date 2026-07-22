@@ -850,3 +850,22 @@ speccore execute --task=Task-002 --force
 git:
   default_base: develop
 ```
+
+## Scenario 30: Post-Execution Question Review
+
+After `analyze`, `execute`, or `done`, SpecCore extracts pending questions from ANALYSIS.md and shows a checklist:
+
+```bash
+speccore execute --task=Task-001 --force
+# -> Execution complete!
+# -> ╔══════════════════════════════════════════╗
+# -> ║  📋 Post-Execution Review (14 items)     ║
+# -> ╚══════════════════════════════════════════╝
+# -> 🟡 Pending:
+# ->   - API table definition missing
+# ->   - Data model not described
+# ->   - Source code mapping not found
+# -> 💡 Tip: Confirm all items before speccore done
+```
+
+This is especially useful in non-strict mode where AI may have skipped uncertain parts.
