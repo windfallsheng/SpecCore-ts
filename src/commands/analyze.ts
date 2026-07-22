@@ -493,57 +493,109 @@ async function perTaskAnalyze(iterDir: string, taskId: string): Promise<void> {
     let reqContent = '';
     if (await pathExists(reqPath)) reqContent = await readFile(reqPath, 'utf-8');
 
+    // ── Compute changes (dry run) ──
+    interface Change { file: string; section: string; items: string[] }
+    const changes: Change[] = [];
+
     // Enrich TECH.md
     const techPath = join(backendDir, 'TECH.md');
+    let techContent = '';
     if (await pathExists(techPath)) {
-      let tech = await readFile(techPath, 'utf-8');
-      if (!tech.includes('## 分析建议')) {
+      techContent = await readFile(techPath, 'utf-8');
+      if (!techContent.includes('## 分析建议')) {
+        const items: string[] = [];
         const apis = (reqContent.match(/\/api\/[a-zA-Z0-9\/-]+/g) || []).map(a => a.trim());
-        let notes = '\n\n---\n\n## 分析建议\n\n> 自动生成，可反复修改\n\n';
         if (apis.length > 0) {
-          notes += `检测到 ${apis.length} 个 API:\n`;
-          for (const api of [...new Set(apis)]) notes += `- \`${api}\`\n`;
+          items.push(`检测到 ${apis.length} 个 API:`);
+          for (const api of [...new Set(apis)]) items.push(`  \`${api}\``);
         }
-        if (reqContent.match(/数据库|表|DDL/)) notes += '- 涉及数据库变更，请补充 DDL\n';
-        if (reqContent.match(/权限|RBAC|鉴权/)) notes += '- 涉及权限控制，注意鉴权边界\n';
-        tech += notes;
-        await writeFile(techPath, tech);
+        if (reqContent.match(/数据库|表|DDL/)) items.push('涉及数据库变更，请补充 DDL');
+        if (reqContent.match(/权限|RBAC|鉴权/)) items.push('涉及权限控制，注意鉴权边界');
+        if (items.length > 0) changes.push({ file: 'TECH.md', section: '分析建议', items });
       }
     }
 
     // Enrich TEST.md
     const testPath = join(backendDir, 'TEST.md');
     if (await pathExists(testPath)) {
-      let test = await readFile(testPath, 'utf-8');
-      if (!test.includes('## 补充分析')) {
-        let analysis = '\n\n---\n\n## 补充分析\n';
-        if (reqContent.includes('POST')) analysis += '- [ ] 正常 + 异常参数测试\n';
-        if (reqContent.includes('GET')) analysis += '- [ ] 分页/筛选/空结果\n';
-        if (reqContent.includes('DELETE')) analysis += '- [ ] 删除确认 + 级联处理\n';
-        if (reqContent.includes('权限')) analysis += '- [ ] 无权限访问 + 越权检测\n';
-        test += analysis;
-        await writeFile(testPath, test);
+      const testContent = await readFile(testPath, 'utf-8');
+      if (!testContent.includes('## 补充分析')) {
+        const items: string[] = [];
+        if (reqContent.includes('POST') || reqContent.includes('创建')) items.push('[ ] 正常参数 + 异常参数测试');
+        if (reqContent.includes('GET') || reqContent.includes('查询')) items.push('[ ] 分页 / 筛选 / 空结果测试');
+        if (reqContent.includes('DELETE') || reqContent.includes('删除')) items.push('[ ] 删除确认 + 级联处理');
+        if (reqContent.includes('权限') || reqContent.includes('RBAC')) items.push('[ ] 无权限访问 + 越权检测');
+        if (reqContent.includes('批量') || reqContent.includes('导出')) items.push('[ ] 大数据量 + 超时处理');
+        if (items.length > 0) changes.push({ file: 'TEST.md', section: '补充分析', items });
       }
     }
 
     // Enrich REVIEW.md
     const reviewPath = join(backendDir, 'REVIEW.md');
     if (await pathExists(reviewPath)) {
-      let review = await readFile(reviewPath, 'utf-8');
-      if (!review.includes('## 本任务专项检查')) {
-        let checks = '\n\n---\n\n## 本任务专项检查\n';
-        if (reqContent.includes('POST')) checks += '- [ ] 参数校验 + 幂等性\n';
-        if (reqContent.includes('数据库')) checks += '- [ ] 索引覆盖 + 迁移可回滚\n';
-        if (reqContent.includes('权限')) checks += '- [ ] 鉴权配置正确\n';
-        review += checks;
-        await writeFile(reviewPath, review);
+      const reviewContent = await readFile(reviewPath, 'utf-8');
+      if (!reviewContent.includes('## 本任务专项检查')) {
+        const items: string[] = [];
+        if (reqContent.includes('POST') || reqContent.includes('创建')) items.push('[ ] 参数校验 + 幂等性处理');
+        if (reqContent.includes('数据库') || reqContent.includes('表')) items.push('[ ] 索引覆盖 + 迁移脚本可回滚');
+        if (reqContent.includes('权限') || reqContent.includes('RBAC')) items.push('[ ] 鉴权注解/中间件正确配置');
+        if (items.length > 0) changes.push({ file: 'REVIEW.md', section: '本任务专项检查', items });
       }
     }
 
-    spinner.stop(`分析完成: ${taskEntry.name}`);
+    spinner.stop();
 
-    logger.info('');
-    logger.info(`  📝 已更新: TECH.md / TEST.md / REVIEW.md`);
+    if (changes.length === 0) {
+      logger.info(`\n  ✅ ${taskEntry.name} 已是最新，无需更新`);
+      return;
+    }
+
+    // ── Show preview ──
+    logger.info(`\n╔══════════════════════════════════════════╗`);
+    logger.info(`║  📋 ${taskEntry.name} 分析结果预览               ║`);
+    logger.info(`╚══════════════════════════════════════════╝\n`);
+
+    for (const c of changes) {
+      logger.info(`  📄 ${c.file} → 新增「${c.section}」:`);
+      for (const item of c.items) {
+        logger.info(`      ${item}`);
+      }
+      logger.info('');
+    }
+
+    // ── Confirm ──
+    const ask = (q: string): Promise<string> => {
+      return new Promise(resolve => {
+        const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout });
+        rl.question(q, (a: string) => { rl.close(); resolve(a); });
+      });
+    };
+    const answer = (await ask(`  → 确认写入？[y] 确认覆盖 [N] 取消: `)).toLowerCase();
+    if (answer !== 'y' && answer !== 'yes') {
+      logger.info('\n  ❌ 已取消，文档未修改\n');
+      return;
+    }
+
+    // ── Apply changes ──
+    for (const c of changes) {
+      if (c.file === 'TECH.md') {
+        let notes = `\n\n---\n\n## ${c.section}\n\n> 自动生成，可反复修改\n\n`;
+        notes += c.items.map(i => `- ${i}`).join('\n') + '\n';
+        await writeFile(techPath, techContent + notes);
+      }
+      if (c.file === 'TEST.md') {
+        let notes = `\n\n---\n\n## ${c.section}\n`;
+        notes += c.items.join('\n') + '\n';
+        await writeFile(testPath, (await readFile(testPath, 'utf-8')) + notes);
+      }
+      if (c.file === 'REVIEW.md') {
+        let notes = `\n\n---\n\n## ${c.section}\n`;
+        notes += c.items.join('\n') + '\n';
+        await writeFile(reviewPath, (await readFile(reviewPath, 'utf-8')) + notes);
+      }
+    }
+
+    logger.info(`\n  ✅ ${taskEntry.name} 分析完成，已更新 ${changes.length} 个文件`);
     logger.info('  💡 可反复运行完善:');
     logger.info(`     speccore analyze --task=${taskId} --iteration=${iterDir.replace('期次-', '')}`);
     logger.info('');
