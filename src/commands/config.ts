@@ -30,9 +30,6 @@ export function installHooks(): void {
   }
 }
 
-  }
-}
-
 export async function configCommand(options: ConfigOptions): Promise<void> {
   const spinner = new Spinner('Processing configuration');
   spinner.start();
