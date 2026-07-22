@@ -220,9 +220,6 @@ function filterTemplateNoise(sections: Section[]): Section[] {
     const hasTable = /^\| /.test(s.content || '') && s.content.includes('| ---');
     if (!hasApi && !hasTable && meaningful < 50) return false;
     // Skip sections without API tables (structural headings)
-    const hasApi = /\| (GET|POST|PUT|DELETE|PATCH) \|/.test(s.content || '');
-    const hasTable = /^\| /.test(s.content || '') && s.content.includes('| ---');
-    if (!hasApi && !hasTable && meaningful < 50) return false;
     return true;
   });
 }
