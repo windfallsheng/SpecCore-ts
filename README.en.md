@@ -8,7 +8,7 @@
 
 SpecCore is a specification-driven development framework for AI-native teams. It decouples deterministic operations (file creation, directory management, format validation, status statistics) from AI, executing them directly through code to improve efficiency and reduce Token consumption.
 
-> 💡 **v5.17.0** | 68 Commands | 38 Intent Types | Multi-Platform
+> 💡 **v5.18.0** | 68 Commands | 38 Intent Types | Multi-Platform
 
 ---
 
@@ -184,7 +184,7 @@ SpecCore natively integrates WorkBuddy.
 | [Usage Guide](docs/usage-guide.en.md) | File safety: manual edit vs CLI command |
 | [Workspace Layout](docs/workspace-organization.en.md) | Recommended directory structure |
 | [Migration Guide](docs/migration-guide.en.md) | Shell v3.x → CLI v5.x |
-| [CHANGELOG](CHANGELOG.en.md) | Version history (v1.0.0 → v5.17.0) |
+| [CHANGELOG](CHANGELOG.en.md) | Version history (v1.0.0 → v5.18.0) |
 | [Example](examples/task-management/README.md) | Full demo: req→Spec→generated code |
 | [README.md](README.md) | 中文项目概述 |
 
@@ -231,7 +231,7 @@ bash verify.sh          # Run tests
 
 ## Version
 
-v5.17.0 | 🔧 CLI Commands: 68 | 🧠 Intents: 38
+v5.18.0 | 🔧 CLI Commands: 68 | 🧠 Intents: 38
 
 Changelog: [CHANGELOG.en.md](CHANGELOG.en.md)
 

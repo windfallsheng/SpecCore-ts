@@ -191,7 +191,7 @@ SpecCore 原生集成 WorkBuddy（`speccore init` 自动创建 `.workbuddy/` ski
 | [CI/CD 集成](docs/CI-CD与spec注释集成指南.md) | @spec 注释 + GitHub Actions |
 | [Spec 加载机制](docs/Spec三层加载机制.md) | 三层 Spec 协同 |
 | [示例项目](examples/task-management/README.md) | 完整演示：需求→Spec→生成代码 |
-| [CHANGELOG](CHANGELOG.md) | 版本历史（v1.0.0 → v5.17.0） |
+| [CHANGELOG](CHANGELOG.md) | 版本历史（v1.0.0 → v5.18.0） |
 | [README.en.md](README.en.md) | English project overview |
 
 ---
@@ -274,7 +274,7 @@ bash verify.sh
 
 ## 版本
 
-v5.17.0 | 🔧 CLI 命令 68 个 | 🧠 意图识别 38 种
+v5.18.0 | 🔧 CLI 命令 68 个 | 🧠 意图识别 38 种
 
 版本历史见 [CHANGELOG.md](CHANGELOG.md)
 

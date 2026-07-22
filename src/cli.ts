@@ -138,36 +138,6 @@ program
   });
 
 program
-  .command('status-panel')
-  .alias('sp')
-  .description('IDE-style status panel: phase + tasks + progress + next action')
-  .action(statusPanelCommand);
-
-program
-  .command('open')
-  .alias('opn')
-  .description('Open task files in editor')
-  .option('-t, --task <task>', 'Task to open')
-  .option('-i, --iteration <iteration>', 'Target iteration')
-  .action(async (options: any) => {
-    const { getDefaultIteration } = await import('./core/context');
-    const it = await getDefaultIteration(options.iteration);
-    if (!it) return;
-    const fs = require('fs');
-    const iterDir = `期次-${it}`;
-    const entries = fs.readdirSync(iterDir, { withFileTypes: true });
-    const task = entries.find((e: any) => e.isDirectory() && e.name.startsWith(options.task || ''));
-    if (task) {
-      const { logger } = require('./utils/logger');
-      logger.info(`\n📂 ${task.name}:`);
-      const files = ['REQ.md', 'TECH.md', 'TASK.md', 'TEST.md', 'API_CONTRACT.yaml'];
-      for (const f of files) {
-        const path = require('path').join(iterDir, task.name, f.startsWith('API') ? '_shared' : 'backend', f);
-        if (fs.existsSync(path)) logger.info(`  ${path}`);
-      }
-    }
-  });
-
 program
   .command('dev')
   .alias('d')
@@ -177,67 +147,7 @@ program
   .action(devCommand);
 
 program
-  .command('status-panel')
-  .alias('sp')
-  .description('IDE-style status panel: phase + tasks + progress + next action')
-  .action(statusPanelCommand);
-
 program
-  .command('open')
-  .alias('opn')
-  .description('Open task files in editor')
-  .option('-t, --task <task>', 'Task to open')
-  .option('-i, --iteration <iteration>', 'Target iteration')
-  .action(async (options: any) => {
-    const { getDefaultIteration } = await import('./core/context');
-    const it = await getDefaultIteration(options.iteration);
-    if (!it) return;
-    const fs = require('fs');
-    const iterDir = `期次-${it}`;
-    const entries = fs.readdirSync(iterDir, { withFileTypes: true });
-    const task = entries.find((e: any) => e.isDirectory() && e.name.startsWith(options.task || ''));
-    if (task) {
-      const { logger } = require('./utils/logger');
-      logger.info(`\n📂 ${task.name}:`);
-      const files = ['REQ.md', 'TECH.md', 'TASK.md', 'TEST.md', 'API_CONTRACT.yaml'];
-      for (const f of files) {
-        const path = require('path').join(iterDir, task.name, f.startsWith('API') ? '_shared' : 'backend', f);
-        if (fs.existsSync(path)) logger.info(`  ${path}`);
-      }
-    }
-  });
-
-program
-  .command('status-panel')
-  .alias('sp')
-  .description('IDE-style status panel: phase + tasks + progress + next action')
-  .action(statusPanelCommand);
-
-program
-  .command('open')
-  .alias('opn')
-  .description('Open task files in editor')
-  .option('-t, --task <task>', 'Task to open')
-  .option('-i, --iteration <iteration>', 'Target iteration')
-  .action(async (options: any) => {
-    const { getDefaultIteration } = await import('./core/context');
-    const it = await getDefaultIteration(options.iteration);
-    if (!it) return;
-    const fs = require('fs');
-    const iterDir = `期次-${it}`;
-    const entries = fs.readdirSync(iterDir, { withFileTypes: true });
-    const task = entries.find((e: any) => e.isDirectory() && e.name.startsWith(options.task || ''));
-    if (task) {
-      const { logger } = require('./utils/logger');
-      logger.info(`\n📂 ${task.name}:`);
-      const files = ['REQ.md', 'TECH.md', 'TASK.md', 'TEST.md', 'API_CONTRACT.yaml'];
-      for (const f of files) {
-        const path = require('path').join(iterDir, task.name, f.startsWith('API') ? '_shared' : 'backend', f);
-        if (fs.existsSync(path)) logger.info(`  ${path}`);
-      }
-    }
-  });
-
 program
   .command('dev')
   .alias('d')
@@ -869,6 +779,8 @@ program
 
 program
   .command('completion [shell]')
+  .alias('cmp')
+  .alias('cmp')
   .description('Generate shell completion script (bash/zsh)')
   .action(completionCommand);
 
@@ -1009,4 +921,75 @@ program
   .action(watchCommand);
 
 // Parse arguments
+// ── Adaptive welcome panel (no args) ──
+if (process.argv.length <= 2) {
+  const { existsSync, readdirSync, readFileSync } = require('fs');
+  const { join } = require('path');
+  const { logger } = require('./utils/logger');
+  const pkg = require('../../package.json');
+
+  let phase = 'init', iteration = '', total = 0, done2 = 0;
+  let nextCmd = 'speccore init', nextDesc = '初始化 SpecCore 项目';
+
+  if (existsSync('.speccore')) {
+    try {
+      const items = readdirSync('.');
+      const idirs = items.filter((d: string) => d.startsWith('期次-')).sort();
+      if (idirs.length > 0) {
+        iteration = idirs[0].slice(3);
+        const base = idirs[0];
+        const req = join(base, '00-需求文档', 'REQUIREMENT.md');
+        const ana = join(base, '00-需求文档', 'ANALYSIS.md');
+        if (!existsSync(req)) {
+          phase = 'require'; nextCmd = 'speccore word2spec -i ' + iteration; nextDesc = '导入需求文档';
+        } else if (!existsSync(ana)) {
+          phase = 'analyze'; nextCmd = 'speccore analyze --iteration=' + iteration; nextDesc = '需求分析';
+        } else {
+          const tds = readdirSync(base).filter((d: string) => d.startsWith('Task-'));
+          if (tds.length === 0) {
+            phase = 'split'; nextCmd = 'speccore iteration split --iteration=' + iteration; nextDesc = '拆分任务';
+          } else {
+            total = tds.length;
+            for (const td of tds) {
+              const tm = join(base, td, 'backend', 'TASK.md');
+              if (existsSync(tm) && readFileSync(tm, 'utf-8').includes('已完成')) done2++;
+            }
+            if (done2 < total) {
+              phase = 'dev'; nextCmd = 'speccore execute --task=' + tds[done2] + ' --force'; nextDesc = '执行开发 (' + (done2 + 1) + '/' + total + ')';
+            } else {
+              phase = 'done'; nextCmd = 'speccore pr'; nextDesc = '创建 PR 提交代码';
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+
+  const icons: Record<string, string> = { init: '🚀', require: '📝', analyze: '🔍', split: '📦', dev: '💻', done: '✨' };
+  const names: Record<string, string> = { init: '未初始化', require: '待导入需求', analyze: '待分析', split: '待拆分', dev: '开发中', done: '已完成' };
+
+  logger.info('');
+  logger.info('┌──────────────────────────────────────────┐');
+  logger.info('│    SpecCore · v' + pkg.version + ' · 68 commands              │');
+  logger.info('├──────────────────────────────────────────┤');
+  if (iteration) logger.info('│  期次: ' + iteration.padEnd(33) + '│');
+  logger.info('│  状态: ' + icons[phase] + ' ' + (names[phase] || phase).padEnd(33) + '│');
+  if (total > 0) {
+    const pct = Math.round(done2 / total * 100);
+    const bar = '█'.repeat(Math.round(pct / 10)) + '░'.repeat(10 - Math.round(pct / 10));
+    const taskLine = '│  任务: ' + done2 + '/' + total + ' ' + bar + ' ' + pct + '%';
+    logger.info(taskLine.padEnd(46) + '│');
+  }
+  logger.info('│                                          │');
+  logger.info('│  👉 下一步: ' + nextCmd.padEnd(33) + '│');
+  logger.info('│     ' + nextDesc.padEnd(41) + '│');
+  logger.info('│                                          │');
+  logger.info('│  💡 speccore --help   查看全部命令        │');
+  logger.info('│  📊 speccore status-panel  状态面板       │');
+  logger.info('└──────────────────────────────────────────┘');
+  logger.info('');
+  process.exit(0);
+}
+
+
 program.parse();
