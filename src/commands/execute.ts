@@ -355,7 +355,6 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
   if (postQs.length > 0) showQuestionChecklist(postQs, '执行后审查');
   
   logOperation('speccore execute done', `completed ${total} tasks in ${totalElapsed}s`);
-}
 
 // ============================================================
 // Resume from interruption
