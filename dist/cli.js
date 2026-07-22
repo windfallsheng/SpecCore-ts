@@ -50,6 +50,7 @@ const context_output_1 = require("./commands/context-output");
 const done_1 = require("./commands/done");
 // rename 命令
 const rename_1 = require("./commands/rename");
+// v4.0.0 新增命令
 const platform_add_1 = require("./commands/platform-add");
 const index_update_1 = require("./commands/index-update");
 // v4.6.0 迁移命令
@@ -216,13 +217,7 @@ commander_1.program
     .command('research')
     .alias('rs')
     .description('Technical research: evaluate solutions and compare options')
-    .option('-n, --name <name>', 'Research topic')
-    .option('-d, --desc <desc>', 'Research description')
-    .option('-t, --topic <topic>', 'Research topic (alias for --name)')
-    .option('--options <options>', 'Comparison options (comma-separated)')
-    .option('--task-id <id>', 'Task ID')
-    .option('-i, --iteration <iteration>', 'Target iteration')
-    .action(researchCommand);
+    .option('-n, --name <name>', 'Research topic');
 // ================================================================
 // ⚡ 执行与调度
 // ================================================================
