@@ -28,6 +28,7 @@ import { retroCommand } from './commands/retro';
 import { templateAddCommand } from './commands/template-add';
 import { helpCommand } from './commands/help';
 import { devCommand } from './commands/dev';
+import { statusPanelCommand } from './commands/status-panel';
 import { demoCommand } from './commands/demo';
 import { welcomeCommand } from './commands/welcome';
 import { word2specCommand } from './commands/word2spec';
@@ -106,12 +107,136 @@ program
   .action(welcomeCommand);
 
 program
+  .command('status-panel')
+  .alias('sp')
+  .description('IDE-style status panel: phase + tasks + progress + next action')
+  .action(statusPanelCommand);
+
+program
+  .command('open')
+  .alias('opn')
+  .description('Open task files in editor')
+  .option('-t, --task <task>', 'Task to open')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .action(async (options: any) => {
+    const { getDefaultIteration } = await import('./core/context');
+    const it = await getDefaultIteration(options.iteration);
+    if (!it) return;
+    const fs = require('fs');
+    const iterDir = `期次-${it}`;
+    const entries = fs.readdirSync(iterDir, { withFileTypes: true });
+    const task = entries.find((e: any) => e.isDirectory() && e.name.startsWith(options.task || ''));
+    if (task) {
+      const { logger } = require('./utils/logger');
+      logger.info(`\n📂 ${task.name}:`);
+      const files = ['REQ.md', 'TECH.md', 'TASK.md', 'TEST.md', 'API_CONTRACT.yaml'];
+      for (const f of files) {
+        const path = require('path').join(iterDir, task.name, f.startsWith('API') ? '_shared' : 'backend', f);
+        if (fs.existsSync(path)) logger.info(`  ${path}`);
+      }
+    }
+  });
+
+program
+  .command('status-panel')
+  .alias('sp')
+  .description('IDE-style status panel: phase + tasks + progress + next action')
+  .action(statusPanelCommand);
+
+program
+  .command('open')
+  .alias('opn')
+  .description('Open task files in editor')
+  .option('-t, --task <task>', 'Task to open')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .action(async (options: any) => {
+    const { getDefaultIteration } = await import('./core/context');
+    const it = await getDefaultIteration(options.iteration);
+    if (!it) return;
+    const fs = require('fs');
+    const iterDir = `期次-${it}`;
+    const entries = fs.readdirSync(iterDir, { withFileTypes: true });
+    const task = entries.find((e: any) => e.isDirectory() && e.name.startsWith(options.task || ''));
+    if (task) {
+      const { logger } = require('./utils/logger');
+      logger.info(`\n📂 ${task.name}:`);
+      const files = ['REQ.md', 'TECH.md', 'TASK.md', 'TEST.md', 'API_CONTRACT.yaml'];
+      for (const f of files) {
+        const path = require('path').join(iterDir, task.name, f.startsWith('API') ? '_shared' : 'backend', f);
+        if (fs.existsSync(path)) logger.info(`  ${path}`);
+      }
+    }
+  });
+
+program
   .command('dev')
   .alias('d')
   .description('Smart dev entry: auto-detect phase and suggest next step')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('--force', 'Auto-execute the next step')
   .action(devCommand);
+
+program
+  .command('status-panel')
+  .alias('sp')
+  .description('IDE-style status panel: phase + tasks + progress + next action')
+  .action(statusPanelCommand);
+
+program
+  .command('open')
+  .alias('opn')
+  .description('Open task files in editor')
+  .option('-t, --task <task>', 'Task to open')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .action(async (options: any) => {
+    const { getDefaultIteration } = await import('./core/context');
+    const it = await getDefaultIteration(options.iteration);
+    if (!it) return;
+    const fs = require('fs');
+    const iterDir = `期次-${it}`;
+    const entries = fs.readdirSync(iterDir, { withFileTypes: true });
+    const task = entries.find((e: any) => e.isDirectory() && e.name.startsWith(options.task || ''));
+    if (task) {
+      const { logger } = require('./utils/logger');
+      logger.info(`\n📂 ${task.name}:`);
+      const files = ['REQ.md', 'TECH.md', 'TASK.md', 'TEST.md', 'API_CONTRACT.yaml'];
+      for (const f of files) {
+        const path = require('path').join(iterDir, task.name, f.startsWith('API') ? '_shared' : 'backend', f);
+        if (fs.existsSync(path)) logger.info(`  ${path}`);
+      }
+    }
+  });
+
+program
+  .command('status-panel')
+  .alias('sp')
+  .description('IDE-style status panel: phase + tasks + progress + next action')
+  .action(statusPanelCommand);
+
+program
+  .command('open')
+  .alias('opn')
+  .description('Open task files in editor')
+  .option('-t, --task <task>', 'Task to open')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .action(async (options: any) => {
+    const { getDefaultIteration } = await import('./core/context');
+    const it = await getDefaultIteration(options.iteration);
+    if (!it) return;
+    const fs = require('fs');
+    const iterDir = `期次-${it}`;
+    const entries = fs.readdirSync(iterDir, { withFileTypes: true });
+    const task = entries.find((e: any) => e.isDirectory() && e.name.startsWith(options.task || ''));
+    if (task) {
+      const { logger } = require('./utils/logger');
+      logger.info(`\n📂 ${task.name}:`);
+      const files = ['REQ.md', 'TECH.md', 'TASK.md', 'TEST.md', 'API_CONTRACT.yaml'];
+      for (const f of files) {
+        const path = require('path').join(iterDir, task.name, f.startsWith('API') ? '_shared' : 'backend', f);
+        if (fs.existsSync(path)) logger.info(`  ${path}`);
+      }
+    }
+  });
 
 program
   .command('dev')
