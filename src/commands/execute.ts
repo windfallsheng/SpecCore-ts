@@ -41,8 +41,6 @@ export interface ExecuteOptions {
   strict?: boolean;
   base?: string;       // base branch for task branching
   skip?: string;       // comma-separated task IDs to skip
-  agent?: string;      // external AI: copilot/claude/cursor/trae/qoder/windsurf/codebuddy
-  agent?: string;      // external AI: copilot/claude/cursor/trae/qoder/windsurf/codebuddy
   agent?: string;      // external AI tool for code generation (copilot/claude/cursor/trae/qoder/windsurf/codebuddy)
   only?: string;       // comma-separated task IDs to execute exclusively
 
