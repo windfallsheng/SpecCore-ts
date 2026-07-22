@@ -609,6 +609,7 @@ async function generateImpactGraph(
     const taskDir = join(iterationDir, taskId);
     if (await pathExists(taskDir)) {
       // 生成风险报告并嵌入 TASK.md
+      const taskMdPath = join(taskDir, 'backend', 'TASK.md');
       const riskReport = generateRiskReport(risk); await writeFile(join(taskDir, '.risk'), riskReport);
       if (await pathExists(taskMdPath)) {
         let taskMd = await readFile(taskMdPath, 'utf-8');
