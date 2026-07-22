@@ -132,7 +132,8 @@ async function executeCommand(options) {
             return;
         }
         // === Execute with progress (existing flow) ===
-        await executeWithProgress(sortedTasks, iteration, options.base);
+        const skipList = options.skip ? options.skip.split(',').map(s => s.trim()).filter(Boolean) : [];
+        await executeWithProgress(sortedTasks, iteration, options.base, skipList);
         // Hotfix tracking
         if (options.hotfix && sortedTasks.length > 0) {
             await (0, context_1.startHotfix)(sortedTasks[0].id);
@@ -207,7 +208,8 @@ async function interactiveSelect(tasks, iteration, options) {
         logger_1.logger.info('Cancelled.');
         return;
     }
-    await executeWithProgress(selectedTasks, iteration, options.base);
+    const skipList2 = options.skip ? options.skip.split(',').map(s => s.trim()).filter(Boolean) : [];
+    await executeWithProgress(selectedTasks, iteration, options.base, skipList2);
 }
 async function loadInquirer() {
     try {
@@ -235,21 +237,34 @@ async function loadInquirer() {
 // ============================================================
 // Progress feedback execution
 // ============================================================
-async function executeWithProgress(tasks, iteration, base) {
+async function executeWithProgress(tasks, iteration, base, skip) {
     const total = tasks.length;
     const startTime = Date.now();
     const completed = [];
-    // Auto-create git branch for single task
-    if (tasks.length === 1) {
-        const task = tasks[0];
-        // Auto-detect dependency base from IMPACT.md
-        if (!base) {
-            base = await detectDependencyBase(iteration, task.id);
-        }
-        const branch = (0, git_integration_1.createTaskBranch)(task.id, task.id, base);
-        if (branch) {
-            const baseInfo = base ? ` (from ${base})` : '';
-            logger_1.logger.info(`🌿 Created branch: ${branch}${baseInfo}`);
+    // Filter skipped tasks
+    if (skip && skip.length > 0) {
+        const before = tasks.length;
+        tasks = tasks.filter(t => !skip.includes(t.id));
+        logger_1.logger.info(`  ⏭️  跳过 ${before - tasks.length} 个任务: ${skip.join(', ')}`);
+    }
+    if (tasks.length === 0) {
+        logger_1.logger.info('  ✅ 没有需要执行的任务');
+        return;
+    }
+    // Create branches for each task (dependency-aware)
+    if (tasks.length > 0) {
+        for (const task of tasks) {
+            let taskBase = base;
+            // Auto-detect dependency per task from IMPACT.md
+            if (!taskBase) {
+                taskBase = await detectDependencyBase(iteration, task.id);
+            }
+            const branch = (0, git_integration_1.createTaskBranch)(task.id, task.id, taskBase);
+            if (branch) {
+                const baseInfo = taskBase ? ` (from ${taskBase})` : '';
+                logger_1.logger.info(`🌿 ${task.id}: ${branch}${baseInfo}`);
+            }
+            // Switch back to a neutral branch for next task if needed
         }
     }
     (0, operation_log_1.logOperation)('speccore execute', `${total} tasks`);
