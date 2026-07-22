@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>会议室管理系统 — Web管理端原型</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f6fa; color: #333; }
+/* ─── 侧边栏 ─── */
+.layout { display: flex; min-height: 100vh; }
+.sidebar { width: 220px; background: #1e293b; color: #fff; padding: 20px 0; }
+.sidebar .logo { padding: 0 20px 24px; font-size: 18px; font-weight: bold; border-bottom: 1px solid #334155; margin-bottom: 8px; }
+.sidebar .logo span { color: #38bdf8; }
+.sidebar .nav a { display: flex; align-items: center; gap: 10px; padding: 12px 20px; color: #94a3b8; text-decoration: none; font-size: 14px; transition: .2s; }
+.sidebar .nav a:hover, .sidebar .nav a.active { background: #334155; color: #fff; }
+.sidebar .nav a .icon { font-size: 18px; width: 24px; text-align: center; }
+/* ─── 主区域 ─── */
+.main { flex: 1; padding: 24px 32px; overflow-y: auto; }
+.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+.header h1 { font-size: 22px; }
+.header .user { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.header .user .avatar { width: 36px; height: 36px; border-radius: 50%; background: #38bdf8; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: bold; }
+/* ─── 统计卡片 ─── */
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+.stat-card { background: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+.stat-card .label { font-size: 13px; color: #64748b; margin-bottom: 8px; }
+.stat-card .value { font-size: 28px; font-weight: bold; }
+.stat-card .trend { font-size: 12px; margin-top: 6px; }
+.stat-card .trend.up { color: #10b981; }
+/* ─── 表格 ─── */
+.card { background: #fff; border-radius: 10px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,.06); margin-bottom: 20px; }
+.card h2 { font-size: 16px; margin-bottom: 16px; }
+.card .toolbar { display: flex; gap: 12px; margin-bottom: 16px; }
+.card .toolbar .btn { padding: 8px 16px; border-radius: 6px; font-size: 13px; cursor: pointer; border: none; transition: .2s; }
+.btn-primary { background: #38bdf8; color: #fff; }
+.btn-outline { background: #fff; border: 1px solid #e2e8f0; }
+.btn-danger { background: #fee2e2; color: #dc2626; }
+.btn-sm { padding: 4px 10px; font-size: 12px; border-radius: 4px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 12px 8px; border-bottom: 1px solid #f1f5f9; }
+th { color: #64748b; font-weight: 600; background: #f8fafc; }
+.status { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.status.available { background: #d1fae5; color: #065f46; }
+.status.occupied { background: #fee2e2; color: #991b1b; }
+.status.maintenance { background: #fef3c7; color: #92400e; }
+.tag { display: inline-block; background: #e0e7ff; color: #3730a3; padding: 2px 6px; border-radius: 4px; margin: 0 2px; font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- 侧边栏 -->
+<aside class="sidebar">
+  <div class="logo">Meet<span>Book</span></div>
+  <nav class="nav">
+    <a href="#" class="active"><span class="icon">📊</span> 仪表盘</a>
+    <a href="#"><span class="icon">🏢</span> 会议室管理</a>
+    <a href="#"><span class="icon">📅</span> 预订管理</a>
+    <a href="#"><span class="icon">👥</span> 用户管理</a>
+    <a href="#"><span class="icon">⚙️</span> 系统设置</a>
+  </nav>
+</aside>
+
+<!-- 主区域 -->
+<main class="main">
+  <header class="header">
+    <h1>📊 仪表盘</h1>
+    <div class="user">
+      <div class="avatar">管</div>
+      <span>管理员</span>
+    </div>
+  </header>
+
+  <!-- 统计卡片 -->
+  <div class="stats">
+    <div class="stat-card">
+      <div class="label">会议室总数</div>
+      <div class="value" style="color:#38bdf8">12</div>
+      <div class="trend up">↑ 比上月 +2</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">今日预订</div>
+      <div class="value" style="color:#10b981">28</div>
+      <div class="trend up">↑ 比昨日 +5</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">当前占用</div>
+      <div class="value" style="color:#f59e0b">8</div>
+      <div class="trend">使用率 67%</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">本月预订</div>
+      <div class="value" style="color:#6366f1">486</div>
+      <div class="trend up">↑ 比上月 +12%</div>
+    </div>
+  </div>
+
+  <!-- 会议室列表 -->
+  <div class="card">
+    <h2>🏢 会议室管理</h2>
+    <div class="toolbar">
+      <button class="btn btn-primary">+ 新增会议室</button>
+      <input type="text" placeholder="搜索会议室..." style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;width:200px;">
+      <select style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;">
+        <option>全部楼层</option><option>1层</option><option>2层</option><option>3层</option>
+      </select>
+    </div>
+    <table>
+      <thead><tr><th>会议室</th><th>容量</th><th>楼层</th><th>设备</th><th>状态</th><th>操作</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>泰山厅</strong><br><small style="color:#64748b">最大会议室 · 可容纳50人</small></td>
+          <td>50人</td><td>3层</td>
+          <td><span class="tag">投影仪</span><span class="tag">视频会议</span><span class="tag">白板</span></td>
+          <td><span class="status available">空闲</span></td>
+          <td><button class="btn btn-outline btn-sm">编辑</button> <button class="btn btn-danger btn-sm">删除</button></td>
+        </tr>
+        <tr>
+          <td><strong>华山厅</strong><br><small style="color:#64748b">中型会议室</small></td>
+          <td>20人</td><td>2层</td>
+          <td><span class="tag">投影仪</span><span class="tag">白板</span></td>
+          <td><span class="status occupied">使用中</span></td>
+          <td><button class="btn btn-outline btn-sm">编辑</button> <button class="btn btn-danger btn-sm">删除</button></td>
+        </tr>
+        <tr>
+          <td><strong>衡山厅</strong><br><small style="color:#64748b">小型洽谈室</small></td>
+          <td>6人</td><td>1层</td>
+          <td><span class="tag">白板</span></td>
+          <td><span class="status available">空闲</span></td>
+          <td><button class="btn btn-outline btn-sm">编辑</button> <button class="btn btn-danger btn-sm">删除</button></td>
+        </tr>
+        <tr>
+          <td><strong>嵩山厅</strong><br><small style="color:#64748b">培训室</small></td>
+          <td>30人</td><td>3层</td>
+          <td><span class="tag">投影仪</span><span class="tag">视频会议</span></td>
+          <td><span class="status maintenance">维护中</span></td>
+          <td><button class="btn btn-outline btn-sm">编辑</button> <button class="btn btn-danger btn-sm">删除</button></td>
+        </tr>
+      </tbody>
+    </table>
+    <div style="margin-top:12px;text-align:right;color:#64748b;font-size:12px;">共 12 条 · 第 1/3 页</div>
+  </div>
+
+  <!-- 预订列表 -->
+  <div class="card">
+    <h2>📅 今日预订</h2>
+    <table>
+      <thead><tr><th>预订人</th><th>会议室</th><th>会议主题</th><th>时间段</th><th>状态</th><th>操作</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>张三</td><td>泰山厅</td><td>Q3 战略规划会</td><td>09:00 - 11:00</td><td><span class="status available">已确认</span></td>
+          <td><button class="btn btn-outline btn-sm">详情</button> <button class="btn btn-danger btn-sm">取消</button></td>
+        </tr>
+        <tr>
+          <td>李四</td><td>华山厅</td><td>技术评审</td><td>10:00 - 11:30</td><td><span class="status available">进行中</span></td>
+          <td><button class="btn btn-outline btn-sm">详情</button></td>
+        </tr>
+        <tr>
+          <td>王五</td><td>衡山厅</td><td>1on1 面谈</td><td>14:00 - 14:30</td><td><span class="status available">已确认</span></td>
+          <td><button class="btn btn-outline btn-sm">详情</button> <button class="btn btn-danger btn-sm">取消</button></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+</div>
+</body>
+</html>

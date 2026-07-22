@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>会议预订 — H5移动端原型</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f6fa; color: #333; max-width: 390px; margin: 0 auto; min-height: 100vh; }
+/* ─── 顶部 ─── */
+.topbar { background: linear-gradient(135deg, #38bdf8, #6366f1); color: #fff; padding: 16px 20px 24px; }
+.topbar .title { font-size: 20px; font-weight: bold; margin-bottom: 4px; }
+.topbar .subtitle { font-size: 13px; opacity: .85; }
+.topbar .search { margin-top: 12px; background: rgba(255,255,255,.2); border-radius: 10px; padding: 10px 14px; display: flex; align-items: center; gap: 8px; font-size: 14px; color: rgba(255,255,255,.8); }
+/* ─── 快捷入口 ─── */
+.actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; background: #fff; margin: -12px 12px 0; border-radius: 12px; padding: 16px 0; box-shadow: 0 2px 8px rgba(0,0,0,.08); position: relative; z-index: 1; }
+.action-item { text-align: center; }
+.action-item .icon { font-size: 28px; margin-bottom: 6px; }
+.action-item .label { font-size: 11px; color: #64748b; }
+/* ─── 内容区 ─── */
+.content { padding: 20px 12px 80px; }
+.section-title { font-size: 16px; font-weight: bold; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+.section-title .more { font-size: 12px; color: #38bdf8; }
+/* ─── 会议室卡片 ─── */
+.room-list { display: flex; flex-direction: column; gap: 10px; }
+.room-card { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.04); display: flex; gap: 12px; }
+.room-card .left { width: 72px; height: 72px; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: bold; font-size: 24px; flex-shrink: 0; }
+.room-card .left.available { background: #d1fae5; color: #065f46; }
+.room-card .left.occupied { background: #fee2e2; color: #991b1b; }
+.room-card .right { flex: 1; }
+.room-card .right .rname { font-size: 15px; font-weight: bold; margin-bottom: 4px; }
+.room-card .right .rinfo { font-size: 12px; color: #64748b; margin-bottom: 8px; }
+.room-card .right .rtags { display: flex; gap: 4px; flex-wrap: wrap; }
+.room-card .right .rtag { font-size: 10px; background: #e0e7ff; color: #3730a3; padding: 2px 6px; border-radius: 4px; }
+.room-card .right .rprice { font-size: 12px; color: #64748b; margin-top: 4px; }
+/* ─── 预订列表 ─── */
+.booking-item { background: #fff; border-radius: 10px; padding: 14px; margin-bottom: 8px; box-shadow: 0 1px 2px rgba(0,0,0,.04); display: flex; justify-content: space-between; align-items: center; }
+.booking-item .b-info .b-title { font-size: 14px; font-weight: bold; margin-bottom: 4px; }
+.booking-item .b-info .b-meta { font-size: 11px; color: #64748b; }
+.booking-item .b-status { font-size: 11px; padding: 4px 10px; border-radius: 10px; font-weight: 600; }
+.booking-item .b-status.confirmed { background: #d1fae5; color: #065f46; }
+.booking-item .b-status.pending { background: #fef3c7; color: #92400e; }
+/* ─── 底部导航 ─── */
+.tabbar { position: fixed; bottom: 0; left: 0; right: 0; max-width: 390px; margin: 0 auto; background: #fff; border-top: 1px solid #f1f5f9; display: grid; grid-template-columns: repeat(4, 1fr); padding: 8px 0 20px; }
+.tabbar .tab { text-align: center; color: #94a3b8; font-size: 10px; }
+.tabbar .tab.active { color: #38bdf8; }
+.tabbar .tab .t-icon { font-size: 22px; margin-bottom: 2px; }
+/* ─── 预订弹窗模拟 ─── */
+.modal-overlay { display: none; }
+.modal-overlay.show { display: flex; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 100; align-items: flex-end; justify-content: center; }
+.modal { background: #fff; border-radius: 16px 16px 0 0; width: 100%; max-width: 390px; padding: 24px 20px 32px; }
+.modal h3 { font-size: 18px; margin-bottom: 16px; }
+.modal .form-group { margin-bottom: 14px; }
+.modal .form-group label { display: block; font-size: 13px; color: #64748b; margin-bottom: 4px; }
+.modal .form-group input, .modal .form-group select { width: 100%; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; background: #f8fafc; }
+.modal .btn-block { width: 100%; padding: 14px; background: #38bdf8; color: #fff; border: none; border-radius: 10px; font-size: 16px; font-weight: bold; margin-top: 8px; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<!-- 顶部 -->
+<div class="topbar">
+  <div class="title">会议预订</div>
+  <div class="subtitle">📍 深圳 · 科技园总部</div>
+  <div class="search">🔍 搜索会议室...</div>
+</div>
+
+<!-- 快捷操作 -->
+<div class="actions">
+  <div class="action-item"><div class="icon">⚡</div><div class="label">快速预订</div></div>
+  <div class="action-item"><div class="icon">📅</div><div class="label">我的会议</div></div>
+  <div class="action-item"><div class="icon">📋</div><div class="label">签到</div></div>
+  <div class="action-item"><div class="icon">🔔</div><div class="label">通知</div></div>
+</div>
+
+<!-- 内容 -->
+<div class="content">
+  <!-- 可用会议室 -->
+  <div class="section-title">🏢 可用会议室 <span class="more">全部 ›</span></div>
+  <div class="room-list">
+    <div class="room-card" onclick="document.getElementById('bookingModal').classList.add('show')">
+      <div class="left available">🏢</div>
+      <div class="right">
+        <div class="rname">泰山厅</div>
+        <div class="rinfo">📍 3层 · 👥 50人 · 今日剩余 4 时段</div>
+        <div class="rtags"><span class="rtag">投影仪</span><span class="rtag">视频会议</span><span class="rtag">白板</span></div>
+        <div class="rprice">💵 ¥200 / 小时</div>
+      </div>
+    </div>
+    <div class="room-card">
+      <div class="left available">💼</div>
+      <div class="right">
+        <div class="rname">衡山厅</div>
+        <div class="rinfo">📍 1层 · 👥 6人 · 今日剩余 6 时段</div>
+        <div class="rtags"><span class="rtag">白板</span></div>
+        <div class="rprice">💵 免费</div>
+      </div>
+    </div>
+    <div class="room-card">
+      <div class="left occupied">🔒</div>
+      <div class="right">
+        <div class="rname">华山厅</div>
+        <div class="rinfo">📍 2层 · 👥 20人 · 当前使用中</div>
+        <div class="rtags"><span class="rtag">投影仪</span><span class="rtag">白板</span></div>
+        <div class="rprice">💵 ¥100 / 小时 · 14:30 空闲</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 我的预订 -->
+  <div style="margin-top:20px">
+    <div class="section-title">📅 我的预订 <span class="more">全部 ›</span></div>
+    <div class="booking-item">
+      <div class="b-info"><div class="b-title">技术评审会</div><div class="b-meta">🕐 10:00-11:30 · 华山厅</div></div>
+      <div class="b-status confirmed">进行中</div>
+    </div>
+    <div class="booking-item">
+      <div class="b-info"><div class="b-title">1on1 周报</div><div class="b-meta">🕐 14:00-14:30 · 衡山厅</div></div>
+      <div class="b-status confirmed">已确认</div>
+    </div>
+  </div>
+</div>
+
+<!-- 底部导航 -->
+<div class="tabbar">
+  <div class="tab active"><div class="t-icon">🏠</div>首页</div>
+  <div class="tab"><div class="t-icon">🔍</div>会议室</div>
+  <div class="tab"><div class="t-icon">📅</div>预订</div>
+  <div class="tab"><div class="t-icon">👤</div>我的</div>
+</div>
+
+<!-- 快速预订弹窗 -->
+<div class="modal-overlay" id="bookingModal" onclick="if(event.target===this)this.classList.remove('show')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h3>⚡ 快速预订 · 泰山厅</h3>
+    <div class="form-group">
+      <label>会议主题</label>
+      <input type="text" placeholder="输入会议主题" value="Q3 战略规划会">
+    </div>
+    <div class="form-group">
+      <label>日期</label>
+      <input type="date" value="2026-07-22">
+    </div>
+    <div class="form-group" style="display:flex;gap:12px">
+      <div style="flex:1"><label>开始时间</label><select><option>09:00</option><option selected>10:00</option><option>11:00</option></select></div>
+      <div style="flex:1"><label>结束时间</label><select><option>10:00</option><option selected>11:30</option><option>12:00</option></select></div>
+    </div>
+    <div class="form-group">
+      <label>参会人数</label>
+      <input type="number" placeholder="人数" value="12">
+    </div>
+    <button class="btn-block" onclick="this.closest('.modal-overlay').classList.remove('show')">✅ 确认预订</button>
+  </div>
+</div>
+</body>
+</html>
