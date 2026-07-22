@@ -248,7 +248,7 @@ async function loadInquirer(): Promise<any> {
 // ============================================================
 // Progress feedback execution
 // ============================================================
-async function executeWithProgress(tasks: TaskState[], iteration: string, base?: string, skip?: string[], options?: { only?: string }): Promise<void> {
+async function executeWithProgress(tasks: TaskState[], iteration: string, base?: string, skip?: string[], options?: { only?: string; agent?: string }): Promise<void> {
   const total = tasks.length;
   const startTime = Date.now();
   const completed: string[] = [];
