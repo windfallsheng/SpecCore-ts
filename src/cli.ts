@@ -58,7 +58,7 @@ import { migrateCommand } from './commands/migrate';
 import { completionCommand } from './commands/completion';
 import { backupCommand } from './commands/backup';
 // v4.8.0 高级功能
-import { hooksCommand } from './commands/hooks';
+
 import { currentCommand } from './commands/current';
 // v4.9.0 完善
 import { updateCommand } from './commands/update';
