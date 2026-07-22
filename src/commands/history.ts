@@ -97,3 +97,33 @@ export async function historyCommand(options: HistoryOptions): Promise<void> {
     throw error;
   }
 }
+
+
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
+
+export async function opsCommand(): Promise<void> {
+  const logPath = join(process.cwd(), '.speccore', 'logs', 'operations.log');
+  
+  if (!existsSync(logPath)) {
+    logger.info('\n  📭 尚无操作记录');
+    logger.info('  💡 执行任意 specore 命令后自动记录');
+    return;
+  }
+
+  const lines = readFileSync(logPath, 'utf-8').trim().split('\n');
+  const recent = lines.slice(-20);  // Last 20 operations
+  
+  logger.info(`\n📋 最近 ${recent.length} 次操作:\n`);
+  for (const line of recent) {
+    try {
+      const entry = JSON.parse(line);
+      const time = new Date(entry.timestamp).toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      logger.info(`  ${time}  ${entry.command}  ${entry.detail || ''}`);
+    } catch {
+      // fallback: raw line
+      logger.info(`  ${line.slice(0, 100)}`);
+    }
+  }
+  logger.info(`\n  📄 完整日志: ${logPath}`);
+}

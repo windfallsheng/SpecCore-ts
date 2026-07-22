@@ -63,6 +63,7 @@ import { updateCommand } from './commands/update';
 // v5.3.0 新增
 import { diffCommand } from './commands/diff';
 import { traceCommand } from './commands/trace';
+import { opsCommand } from './commands/history';
 import { trackerCommand } from './commands/tracker';
 // v5.5.0 新增
 import { deleteCommand } from './commands/delete';
@@ -276,8 +277,6 @@ program
   .option('--force', 'Skip preview and execute directly')
   .option('--strict', 'Pre-flight check: review req/tech/test before code gen')
   .option('--base <branch>', 'Base branch for task branching (default: current)')
-  .option('--skip <tasks>', 'Comma-separated task IDs to skip')
-  .option('--only <tasks>', 'Comma-separated task IDs to execute exclusively (whitelist)')
   .option('--skip <tasks>', 'Comma-separated task IDs to skip')
   .option('--only <tasks>', 'Comma-separated task IDs to execute exclusively (whitelist)')
   .option('--hotfix', 'Emergency fix: skip reverse sync (30min grace, 24h mandatory)')
@@ -510,6 +509,12 @@ program
   .description('View global layer status: all projects, requirements, architecture')
   .option('--project <name>', 'Filter by project name')
   .action(globalStatusCommand);
+
+program
+  .command('ops')
+  .alias('op')
+  .description('View operation history (command log)')
+  .action(opsCommand);
 
 program
   .command('history')
