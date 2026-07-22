@@ -60,7 +60,6 @@ const migrate_1 = require("./commands/migrate");
 const completion_1 = require("./commands/completion");
 const backup_1 = require("./commands/backup");
 // v4.8.0 高级功能
-const hooks_1 = require("./commands/hooks");
 const current_1 = require("./commands/current");
 // v4.9.0 完善
 const update_1 = require("./commands/update");
@@ -689,7 +688,7 @@ commander_1.program
 commander_1.program
     .command('hooks')
     .description('Install Git hooks (pre-commit + pre-push)')
-    .action(hooks_1.hooksCommand);
+    .action(hooksCommand);
 commander_1.program
     .command('current')
     .alias('cr')
