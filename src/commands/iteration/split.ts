@@ -620,7 +620,7 @@ async function generateImpactGraph(
         }
       }
       // Inject risk section into TASK.md if it exists
-      const taskMdPath2 = join(taskDir, 'backend', 'TASK.md');
+      const taskMdPath22 = join(taskDir, 'backend', 'TASK.md');
       if (await pathExists(taskMdPath2)) {
         let taskMd = await readFile(taskMdPath2, 'utf-8');
         if (!taskMd.includes('## 风险评估')) {
