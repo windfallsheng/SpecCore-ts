@@ -52,7 +52,6 @@ async function detectStack(cwd: string): Promise<{
   database?: string; databaseSource?: string;
   language?: string; languageSource?: string;
 }> {
-  import { existsSync, readdirSync } from 'fs';
 
   // pom.xml → Java/Spring
   if (existsSync(join(cwd, 'pom.xml'))) {
