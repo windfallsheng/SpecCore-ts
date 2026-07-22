@@ -771,11 +771,16 @@ platforms:
 `);
 }
 /**
- * Generate .codebuddy/commands/ slash command files for AI tools (Qcoder/WorkBuddy/Cursor)
+ * Generate slash command files for all supported AI tools
+ * Each tool has its own commands directory convention:
+ *   .codebuddy/commands/  → WorkBuddy / Qcoder
+ *   .cursor/commands/     → Cursor
+ *   .trae/commands/       → Trae
+ *   .windsurf/commands/   → Windsurf
+ *   .claude/commands/     → Claude Code / OpenCode
  */
 async function generateSlashCommands(projectRoot) {
-    const cmdDir = (0, path_1.join)(projectRoot, '.codebuddy', 'commands');
-    await (0, fs_extra_1.ensureDir)(cmdDir);
+    const toolDirs = ['.codebuddy', '.cursor', '.trae', '.windsurf', '.claude'];
     const commands = [
         ['spec-init', 'Initialize project', ['speccore init']],
         ['spec-dev', 'Smart dev entry', ['speccore dev']],
@@ -807,10 +812,14 @@ async function generateSlashCommands(projectRoot) {
         ['spec-ops', 'Operation history', ['speccore ops']],
         ['spec-open', 'Open task files', ['speccore open --task=${1:Task-001} --iteration=${2:Q1}']],
     ];
-    for (const [name, desc, bodyLines] of commands) {
-        const content = "# /" + name + "\n" + desc + "\n---\n" + bodyLines.join("\n") + "\n";
-        await (0, fs_extra_1.writeFile)((0, path_1.join)(cmdDir, name + ".md"), content);
+    for (const toolDir of toolDirs) {
+        const cmdDir = (0, path_1.join)(projectRoot, toolDir, 'commands');
+        await (0, fs_extra_1.ensureDir)(cmdDir);
+        for (const [name, desc, bodyLines] of commands) {
+            const content = "# /" + name + "\n" + desc + "\n---\n" + bodyLines.join("\n") + "\n";
+            await (0, fs_extra_1.writeFile)((0, path_1.join)(cmdDir, name + ".md"), content);
+        }
     }
-    logger_1.logger.info("  ✅ " + commands.length + " slash commands → .codebuddy/commands/");
+    logger_1.logger.info("  ✅ " + commands.length + " slash commands × " + toolDirs.length + " tools → .codebuddy|.cursor|.trae|.windsurf|.claude/commands/");
 }
 //# sourceMappingURL=init.js.map
