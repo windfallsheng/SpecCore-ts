@@ -220,9 +220,6 @@ function filterTemplateNoise(sections: Section[]): Section[] {
     const hasTable = /^\| /.test(s.content || '') && s.content.includes('| ---');
     if (!hasApi && !hasTable && meaningful < 50) return false;
     // Skip sections without API tables (structural headings)
-    return true;
-  });
-}
 
 async function createTaskFromSection(iterationDir: string, taskId: string, section: Section, allPlatforms: string[]): Promise<void> {
   const taskDir = join(iterationDir, taskId);
