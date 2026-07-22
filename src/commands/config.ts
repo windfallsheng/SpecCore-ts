@@ -33,7 +33,6 @@ export function installHooks(): void {
 /**
  * Install Git hooks (pre-commit + pre-push)
  */
-export function installHooks(): void {
   try {
     const { installGitHooks } = require('../core/git-integration');
     const result = installGitHooks();

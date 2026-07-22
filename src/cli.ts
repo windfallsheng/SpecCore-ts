@@ -749,7 +749,6 @@ program
 program
   .command('hooks')
   .description('Install Git hooks (pre-commit + pre-push)')
-  .action(hooksCommand);
 
 program
   .command('current')
