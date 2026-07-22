@@ -1,0 +1,33 @@
+# 前端平台配置
+# 由 speccore platform-add 自动维护，也可手动编辑
+
+platforms:
+  web:
+    name: "Web端"
+    description: "PC Web 端"
+    default: true
+    tech_stack: "Vue 3 + TypeScript + Vite"
+    enabled: true
+
+  h5:
+    name: "H5端"
+    description: "移动端 H5"
+    default: true
+    tech_stack: "Vue 3 + Vant + Vite"
+    enabled: true
+
+  miniapp:
+    name: "小程序端"
+    description: "微信小程序"
+    default: true
+    tech_stack: "Taro + TypeScript"
+    enabled: true
+
+# 用户动态添加的平台会追加在此
+# 示例：
+#  tablet:
+#    name: "平板端"
+#    description: "平板端应用"
+#    default: false
+#    tech_stack: "React Native"
+#    enabled: true

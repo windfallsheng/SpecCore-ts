@@ -923,7 +923,7 @@ async function generateSlashCommands(projectRoot: string): Promise<void> {
     const cmdDir = join(projectRoot, toolDir, 'commands');
     await ensureDir(cmdDir);
     for (const [name, desc, bodyLines] of commands) {
-      const content = "# /" + name + "\n" + desc + "\n---\n" + bodyLines.join("\n") + "\n";
+      const content = "---\nname: " + name + "\ndescription: " + desc + "\n---\n" + bodyLines.join("\n") + "\n";
       await writeFile(join(cmdDir, name + ".md"), content);
     }
   }
