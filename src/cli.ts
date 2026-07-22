@@ -138,12 +138,6 @@ program
   });
 
 program
-  .command('status-panel')
-  .alias('sp')
-  .description('IDE-style status panel: phase + tasks + progress + next action')
-  .action(statusPanelCommand);
-
-program
   .command('open')
   .alias('opn')
   .description('Open task files in editor')
@@ -177,12 +171,6 @@ program
   .action(devCommand);
 
 program
-  .command('status-panel')
-  .alias('sp')
-  .description('IDE-style status panel: phase + tasks + progress + next action')
-  .action(statusPanelCommand);
-
-program
   .command('open')
   .alias('opn')
   .description('Open task files in editor')
@@ -206,12 +194,6 @@ program
       }
     }
   });
-
-program
-  .command('status-panel')
-  .alias('sp')
-  .description('IDE-style status panel: phase + tasks + progress + next action')
-  .action(statusPanelCommand);
 
 program
   .command('open')
