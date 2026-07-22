@@ -10,6 +10,8 @@ import { getDefaultIteration, updateContext } from '../core/context';
 import yaml from 'js-yaml';
 
 export interface NewTaskOptions {
+  type?: string;       // feature | bugfix | research
+  type?: string;       // feature | bugfix | research
   name: string;
   type?: string;
   desc?: string;
