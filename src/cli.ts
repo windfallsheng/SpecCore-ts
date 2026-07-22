@@ -42,6 +42,7 @@ import { dashboardCommand } from './commands/dashboard';
 import { auditCommand } from './commands/audit';
 import { analyzeCommand } from './commands/analyze';
 import { lifecycleCommand } from './commands/lifecycle';
+import { prCommand } from './commands/pr';
 import { doneCommand } from './commands/done';
 // rename 命令
 import { renameCommand } from './commands/rename';
@@ -240,6 +241,28 @@ program
 // ================================================================
 // ⚡ 执行与调度
 // ================================================================
+program
+  .command('pr')
+  .alias('mr')
+  .description('Create Pull Request with task summary')
+  .option('-t, --task <task>', 'Target task (auto-detect from branch if omitted)')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('--base <branch>', 'Base branch', 'main')
+  .option('--draft', 'Create as draft PR')
+  .option('--title <title>', 'Custom PR title')
+  .action(prCommand);
+
+program
+  .command('pr')
+  .alias('mr')
+  .description('Create Pull Request with task summary')
+  .option('-t, --task <task>', 'Target task (auto-detect from branch if omitted)')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('--base <branch>', 'Base branch', 'main')
+  .option('--draft', 'Create as draft PR')
+  .option('--title <title>', 'Custom PR title')
+  .action(prCommand);
+
 program
   .command('plan')
   .alias('pl')
