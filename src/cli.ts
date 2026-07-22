@@ -137,4 +137,34 @@ program
     }
   });
 
+// ── Custom human-readable help for `speccore` (no args) ──
 program
+  .action(() => {
+    const { logger } = require('./utils/logger');
+    if (process.argv.length <= 2) {
+      logger.info(`
+┌──────────────────────────────────────────┐
+│         SpecCore — Code by Spec          │
+│         v5.17.1 · 68 commands            │
+├──────────────────────────────────────────┤
+│                                          │
+│  🚀 新项目        speccore init           │
+│  🤖 智能引导      speccore dev            │
+│  📊 项目状态      speccore status-panel   │
+│  💬 自然语言      speccore spec "..."     │
+│                                          │
+│  🔵 7 步核心流程:                         │
+│  init → word2spec → analyze → split      │
+│  → execute → pr → done                   │
+│                                          │
+│  💡 查全部命令    speccore --help         │
+│  📖 场景指南      docs/场景实战.md        │
+│                                          │
+└──────────────────────────────────────────┘
+`);
+      return;
+    }
+    program.help();
+  });
+
+program.parse();
