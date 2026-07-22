@@ -2,9 +2,9 @@
  * constitution-builder — 自动检测项目技术栈，生成/完善 CONSTITUTION.md
  */
 import { readFile, writeFile, pathExists } from 'fs-extra';
-import { existsSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { logger } from '../utils/logger';
+import { existsSync, readdirSync } from 'fs';
 
 interface ConstitutionRule {
   category: string;
@@ -52,6 +52,8 @@ async function detectStack(cwd: string): Promise<{
   database?: string; databaseSource?: string;
   language?: string; languageSource?: string;
 }> {
+  const stack: any = {};
+  import { existsSync, readdirSync } from 'fs';
 
   // pom.xml → Java/Spring
   if (existsSync(join(cwd, 'pom.xml'))) {
@@ -120,7 +122,7 @@ async function scanSourceForFrameworks(cwd: string, stack: any): Promise<void> {
 }
 
 function findFiles(dir: string, pattern: RegExp, maxDepth: number): string[] {
-  
+  const { join } = require('path');
   const results: string[] = [];
   try {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
