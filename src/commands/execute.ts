@@ -961,25 +961,3 @@ function buildAgentContext(tasks: TaskState[], agent: string): string {
 }
 
 // ===== Agent Context Builder =====
-
-export const AGENT_FORMATS: Record<string, { prefix: string; suffix: string }> = {
-  copilot:   { prefix: "Based on the spec below, generate production code:\n\n", suffix: "\n\nGenerate clean, well-structured code following Constitution rules." },
-  claude:    { prefix: "根据以下 Spec 生成生产级代码：\n\n", suffix: "\n\n请生成结构清晰、符合宪法规则和 API 契约的代码。" },
-  cursor:    { prefix: "// Spec-Driven: implement the following:\n\n", suffix: "\n\n// Follow Constitution and API contract." },
-  trae:      { prefix: "基于以下技术规格生成代码：\n\n", suffix: "\n\n严格遵循宪法规则和 API 契约。" },
-  qoder:     { prefix: "## Spec-Driven Code Generation\n\nImplement based on:\n\n", suffix: "\n\n## Requirements: Follow Constitution rules. Complete all tests." },
-  windsurf:  { prefix: "### Specification\n\nImplement the following spec:\n\n", suffix: "\n\n### Rules: Follow all Constitution constraints." },
-  codebuddy: { prefix: "基于以下 Spec 和宪法规则生成代码：\n\n", suffix: "\n\n严格遵守宪法、API 契约和测试要求。" },
-};
-
-export function buildAgentContext(tasks: any[], agent: string): string {
-  const fmt = AGENT_FORMATS[agent.toLowerCase()] || AGENT_FORMATS.copilot;
-  let ctx = fmt.prefix;
-  for (const t of tasks) {
-    ctx += `## ${t.id} - ${t.name || ''}\n`;
-    ctx += `> Context: 期次/${t.iteration || 'current'}/${t.id}/backend/\n\n`;
-  }
-  ctx += "\n## Constitution\n- Follow all mandatory rules strictly\n- RESTful API conventions\n- Error handling + validation required\n";
-  ctx += fmt.suffix;
-  return ctx;
-}
