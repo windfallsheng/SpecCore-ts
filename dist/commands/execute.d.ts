@@ -23,9 +23,4 @@ export interface ExecuteOptions {
     only?: string;
 }
 export declare function executeCommand(options: ExecuteOptions): Promise<void>;
-export declare const AGENT_FORMATS: Record<string, {
-    prefix: string;
-    suffix: string;
-}>;
-export declare function buildAgentContext(tasks: any[], agent: string): string;
 //# sourceMappingURL=execute.d.ts.map
