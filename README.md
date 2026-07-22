@@ -274,7 +274,7 @@ bash verify.sh
 
 ## 版本
 
-v5.16.0 | 🔧 CLI 命令 54 个 | 🧠 意图识别 38 种
+v5.16.0 | 🔧 CLI 命令 65 个 | 🧠 意图识别 38 种
 
 版本历史见 [CHANGELOG.md](CHANGELOG.md)
 
