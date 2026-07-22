@@ -65,6 +65,7 @@ const update_1 = require("./commands/update");
 // v5.3.0 新增
 const diff_1 = require("./commands/diff");
 const trace_1 = require("./commands/trace");
+const history_2 = require("./commands/history");
 const tracker_1 = require("./commands/tracker");
 // v5.5.0 新增
 const delete_1 = require("./commands/delete");
@@ -261,8 +262,6 @@ commander_1.program
     .option('--force', 'Skip preview and execute directly')
     .option('--strict', 'Pre-flight check: review req/tech/test before code gen')
     .option('--base <branch>', 'Base branch for task branching (default: current)')
-    .option('--skip <tasks>', 'Comma-separated task IDs to skip')
-    .option('--only <tasks>', 'Comma-separated task IDs to execute exclusively (whitelist)')
     .option('--skip <tasks>', 'Comma-separated task IDs to skip')
     .option('--only <tasks>', 'Comma-separated task IDs to execute exclusively (whitelist)')
     .option('--hotfix', 'Emergency fix: skip reverse sync (30min grace, 24h mandatory)')
@@ -476,6 +475,11 @@ commander_1.program
     .description('View global layer status: all projects, requirements, architecture')
     .option('--project <name>', 'Filter by project name')
     .action(global_status_1.globalStatusCommand);
+commander_1.program
+    .command('ops')
+    .alias('op')
+    .description('View operation history (command log)')
+    .action(history_2.opsCommand);
 commander_1.program
     .command('history')
     .alias('hs')
