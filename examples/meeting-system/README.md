@@ -1,116 +1,68 @@
-# MeetBook — 会议预订系统 SpecCore E2E 验证项目
+# MeetBook 会议预订系统 — SpecCore E2E 验证项目
 
-## 文件清单
+## 文件结构
 
 ```
 examples/meeting-system/
-├── README.md                         本文件
-├── INDEX.md                          4 端 → 文件映射
+├── README.md                          ← 本文件
+├── INDEX.md                           4 端 → 4 文件映射
+├── prototype-admin.html               Web 管理端原型（浏览器打开）
+├── prototype-h5.html                  H5 移动端原型（浏览器打开）
 ├── docs/
-│   ├── PRD-会议室预订系统v1.0.md       专业产品需求文档 (310行)
-│   └── CR-需求变更v1.0→v1.1.md         需求变更文档 (模拟上线后变更)
-├── prototype-admin.html              Web 管理端交互原型
-└── prototype-h5.html                 H5 移动端交互原型
+│   ├── 需求-后台管理端.md               前端任务 → Vue 3 + Element Plus
+│   ├── 需求-H5移动端.md                 前端任务 → Vue 3 + Vant UI
+│   ├── 需求-会议室管理服务.md            后端任务 → Spring Boot 3 (room-service)
+│   ├── 需求-预订订单服务.md              后端任务 → Spring Boot 3 (booking-service)
+│   ├── PRD-会议室预订系统v1.0.md         完整 PRD（汇总参考）
+│   └── CR-需求变更v1.0→v1.1.md          需求变更文档（模拟上线后变更）
 ```
 
-## PRD 关键数据
+## 关键数据
 
-| 维度 | v1.0 | v1.1 (变更后) |
-| :--- | :--- | :--- |
-| 端 | 4 (管理端+H5+2服务) | 4 |
-| API | 27 | 36 (+9) |
-| 数据表 | 4 | 4 (3 表有 ALTER) |
-| 非功能需求 | 5 项 | 5 项 |
+| 文件 | API | 数据表 | 典型风险 |
+| :--- | :--- | :--- | :--- |
+| 后台管理端 | 11 | — | 🔐 RBAC 权限 |
+| H5移动端 | 8 | — | 🟢 CRUD |
+| 会议室管理服务 | 6 | 2 (rooms, users) | 🗄️ DB 变更 |
+| 预订订单服务 | 7 | 2 (bookings, notifications) | 💰 计费(变更后) |
+| **合计** | **32** | **4** | |
 
-## SpecCore 验证流程
-
-### 第一轮：v1.0 完整流程
+## 使用方式
 
 ```bash
 cd examples/meeting-system
 
-# 1. 初始化项目
+# 1. 初始化
 speccore init
 
-# 2. 导入 PRD（4端）
-speccore word2spec --files "docs/PRD-会议室预订系统v1.0.md=后台管理端" --iteration Q1
-speccore word2spec --files "docs/PRD-会议室预订系统v1.0.md=H5移动端" --iteration Q1
-speccore word2spec --files "docs/PRD-会议室预订系统v1.0.md=会议室管理服务" --iteration Q1
-speccore word2spec --files "docs/PRD-会议室预订系统v1.0.md=预订订单服务" --iteration Q1
+# 2. 导入 4 端需求（每个端独立文件）
+speccore word2spec --files "docs/需求-后台管理端.md=后台管理端" -i Q1
+speccore word2spec --files "docs/需求-H5移动端.md=H5移动端" -i Q1
+speccore word2spec --files "docs/需求-会议室管理服务.md=会议室管理服务" -i Q1
+speccore word2spec --files "docs/需求-预订订单服务.md=预订订单服务" -i Q1
 
-# 3. 智能引导
-speccore dev                          # → 检测阶段，提示 analyze
+# 3. 智能引导（自动检测阶段）
+speccore dev
 
-# 4. 需求分析（含宪法检查）
+# 4. 需求分析
 speccore analyze --iteration=001-Q1
-# → 期望: 检测到 27 个 API、4 张表、RBAC 权限
 
-# 5. 拆分任务
+# 5. 拆分任务（前后端自动区分）
 speccore iteration split --iteration=001-Q1
-# → 期望: 生成 8~12 个 Task，每个含 7+1 文件，IMPACT.md + .env
-# → 风险: 用户管理=🔴(权限) 预订=🟢(CRUD)
+# → 4 端 = 4+ Task, 前端含 frontend/ 目录, 后端含 backend/ 目录
 
-# 6. 开发执行
-speccore dev --force                  # 级联执行
-# 或逐个:
-speccore execute --task=Task-001 --force
+# 6. 批量执行
+speccore execute --all --force --iteration=001-Q1
+# → 前端生成 Vue 组件, 后端生成 Spring Controller/Service/Entity
 
-# 7. 检查产物
-speccore status-panel                 # 状态面板
-ls 期次-001-Q1/Task-001-*/backend/    # 验证 7+ 文档
-```
-
-### 第二轮：需求变更验证
-
-```bash
-# 模拟 v1.1 需求变更
-speccore word2spec --files "docs/CR-需求变更v1.0→v1.1.md=预订订单服务" --iteration Q2
-speccore word2spec --files "docs/CR-需求变更v1.0→v1.1.md=后台管理端" --iteration Q2
-
-# 分析变更影响
-speccore analyze --iteration=002-Q2
-# → 期望: 检测到 9 个新增 API、3 张表 ALTER
-
-# 查看变更追踪
-speccore tracker
-# → 期望: 显示 v1.0→v1.1 的需求变更历史
-
-# 拆分 + 执行（变更任务）
-speccore iteration split --iteration=002-Q2
-speccore execute --task=Task-001 --force
-```
-
-### 第三轮：高级功能验证
-
-```bash
-# 智能入口
-speccore spec "新增会议室审批流程"    # → 识别为 new_task
-speccore spec "修复预订冲突检测bug"   # → 识别为 bugfix
-
-# Agent 模式（输出上下文给外部 AI）
-speccore execute --task=Task-001 --agent=trae
-speccore execute --task=Task-001 --agent=copilot
-
-# 状态面板
+# 7. 查看状态
 speccore status-panel
-
-# 合并检查
-speccore merge-check --iteration=001-Q1
-
-# 风险文档
-cat 期次-001-Q1/Task-001-*/backend/TASK.md | grep -A20 "## 风险评估"
 ```
 
-## 期望验证点
+## 3 轮验证
 
-- [x] word2spec 正确解析 4 端 PRD
-- [ ] analyze 检测 27 个 API + 宪法规则
-- [ ] split 生成 8+ Task，每 Task 7+1 文件
-- [ ] IMPACT.md 含风险评分
-- [ ] .env.example 自动生成
-- [ ] CONSTITUTION 自动检测技术栈
-- [ ] dev 正确检测阶段并引导
-- [ ] execute 批量执行成功
-- [ ] merge-check 正常显示
-- [ ] rollout 回滚正常
-- [ ] tracker 变更追踪正常
+| 轮次 | 内容 | 验证命令 |
+| :--- | :--- | :--- |
+| 第一轮 | v1.0 全流程 | word2spec → analyze → split → execute |
+| 第二轮 | 需求变更 | word2spec(变更文档) → analyze → tracker |
+| 第三轮 | 高级功能 | dev / status-panel / agent / merge-check |
