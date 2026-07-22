@@ -53,7 +53,6 @@ async function detectStack(cwd: string): Promise<{
   language?: string; languageSource?: string;
 }> {
   const stack: any = {};
-
   // pom.xml → Java/Spring
   if (existsSync(join(cwd, 'pom.xml'))) {
     try {
