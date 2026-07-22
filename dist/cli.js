@@ -20,7 +20,7 @@ const execute_1 = require("./commands/execute");
 const spec_1 = require("./commands/spec");
 const goal_1 = require("./commands/goal");
 const bugfix_1 = require("./commands/bugfix");
-const research_1 = require("./commands/research");
+const new_task_1 = require("./commands/new-task");
 const change_1 = require("./commands/change");
 const sync_1 = require("./commands/sync");
 const pattern_1 = require("./commands/pattern");
@@ -50,8 +50,6 @@ const context_output_1 = require("./commands/context-output");
 const done_1 = require("./commands/done");
 // rename 命令
 const rename_1 = require("./commands/rename");
-// v4.0.0 新增命令
-const new_task_1 = require("./commands/new-task");
 const platform_add_1 = require("./commands/platform-add");
 const index_update_1 = require("./commands/index-update");
 // v4.6.0 迁移命令
@@ -224,7 +222,7 @@ commander_1.program
     .option('--options <options>', 'Comparison options (comma-separated)')
     .option('--task-id <id>', 'Task ID')
     .option('-i, --iteration <iteration>', 'Target iteration')
-    .action(research_1.researchCommand);
+    .action(researchCommand);
 // ================================================================
 // ⚡ 执行与调度
 // ================================================================
@@ -687,8 +685,7 @@ commander_1.program
 // v4.8.0 高级功能
 commander_1.program
     .command('hooks')
-    .description('Install Git hooks (pre-commit + pre-push)')
-    .action(hooksCommand);
+    .description('Install Git hooks (pre-commit + pre-push)');
 commander_1.program
     .command('current')
     .alias('cr')

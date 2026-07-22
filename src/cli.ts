@@ -18,7 +18,7 @@ import { executeCommand } from './commands/execute';
 import { specCommand } from './commands/spec';
 import { goalCommand } from './commands/goal';
 import { bugfixCommand } from './commands/bugfix';
-import { researchCommand } from './commands/research';
+import { newTaskCommand } from './commands/new-task';
 import { changeCommand } from './commands/change';
 import { syncCommand } from './commands/sync';
 import { patternCommand } from './commands/pattern';
@@ -49,7 +49,6 @@ import { doneCommand } from './commands/done';
 // rename 命令
 import { renameCommand } from './commands/rename';
 // v4.0.0 新增命令
-import { newTaskCommand } from './commands/new-task';
 import { platformAddCommand } from './commands/platform-add';
 import { indexUpdateCommand } from './commands/index-update';
 // v4.6.0 迁移命令
