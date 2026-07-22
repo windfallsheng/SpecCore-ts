@@ -661,3 +661,77 @@ async function perTaskAnalyze(iterDir: string, taskId: string): Promise<void> {
     spinner.fail(`分析失败: ${error}`);
   }
 }
+
+async function checkConstitution(iterDir: string): Promise<string[]> {
+  const constitutionPath = join(process.cwd(), ".speccore", "PROJECT", "CONSTITUTION.md");
+  if (!(await pathExists(constitutionPath))) return [];
+  
+  const constitution = await readFile(constitutionPath, "utf-8");
+  const reqPath = join(iterDir, "00-需求文档", "REQUIREMENT.md");
+  if (!(await pathExists(reqPath))) return [];
+  
+  const req = await readFile(reqPath, "utf-8");
+  const violations: string[] = [];
+  
+  // Check: RESTful requirement
+  if (constitution.includes("RESTful") && req.includes("GraphQL")) {
+    violations.push("[违反] 宪法要求 RESTful API，但需求中包含 GraphQL 引用");
+  }
+  if (constitution.includes("RESTful") && req.includes("WebSocket") && !req.includes("REST")) {
+    violations.push("[警告] 宪法要求 RESTful，建议确认 WebSocket 使用场景");
+  }
+  
+  // Check: language consistency
+  if (constitution.includes("Java") && req.includes("Python Flask")) {
+    violations.push("[违反] 宪法指定 Java，但技术方案使用 Python");
+  }
+  
+  // Check: test requirement
+  if (constitution.includes("单元测试")) {
+    violations.push("[提醒] 宪法要求单元测试，请确认 TEST.md 已完善");
+  }
+  
+  // Check: PR review requirement
+  if (constitution.includes("PR 审查")) {
+    violations.push("[提醒] 宪法要求 PR 审查，开发完成后需创建 PR");
+  }
+  
+  return violations;
+}
+
+async function checkConstitution(iterDir: string): Promise<string[]> {
+  const constitutionPath = join(process.cwd(), ".speccore", "PROJECT", "CONSTITUTION.md");
+  if (!(await pathExists(constitutionPath))) return [];
+  
+  const constitution = await readFile(constitutionPath, "utf-8");
+  const reqPath = join(iterDir, "00-需求文档", "REQUIREMENT.md");
+  if (!(await pathExists(reqPath))) return [];
+  
+  const req = await readFile(reqPath, "utf-8");
+  const violations: string[] = [];
+  
+  // Check: RESTful requirement
+  if (constitution.includes("RESTful") && req.includes("GraphQL")) {
+    violations.push("[违反] 宪法要求 RESTful API，但需求中包含 GraphQL 引用");
+  }
+  if (constitution.includes("RESTful") && req.includes("WebSocket") && !req.includes("REST")) {
+    violations.push("[警告] 宪法要求 RESTful，建议确认 WebSocket 使用场景");
+  }
+  
+  // Check: language consistency
+  if (constitution.includes("Java") && req.includes("Python Flask")) {
+    violations.push("[违反] 宪法指定 Java，但技术方案使用 Python");
+  }
+  
+  // Check: test requirement
+  if (constitution.includes("单元测试")) {
+    violations.push("[提醒] 宪法要求单元测试，请确认 TEST.md 已完善");
+  }
+  
+  // Check: PR review requirement
+  if (constitution.includes("PR 审查")) {
+    violations.push("[提醒] 宪法要求 PR 审查，开发完成后需创建 PR");
+  }
+  
+  return violations;
+}
