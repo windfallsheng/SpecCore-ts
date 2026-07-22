@@ -5,7 +5,7 @@ import { readFile, pathExists } from 'fs-extra';
 import { join } from 'path';
 import { execSync } from 'child_process';
 import { logger } from '../utils/logger';
-import { getDefaultIteration } from './context';
+import { getDefaultIteration } from '../core/context';
 
 export async function mergeCheck(iteration: string): Promise<void> {
   const iterDir = `期次-${iteration}`;
