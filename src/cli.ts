@@ -869,6 +869,7 @@ program
 
 program
   .command('completion [shell]')
+  .alias('cmp')
   .description('Generate shell completion script (bash/zsh)')
   .action(completionCommand);
 
