@@ -2,7 +2,7 @@ import { ensureDir, writeFile, pathExists, readFile } from 'fs-extra';
 import { join } from 'path';
 import { logger, Spinner } from '../../utils/logger';
 import { getDefaultIteration } from '../../core/context';
-import { scoreRisk } from '../../core/risk-scorer';
+import { scoreRisk, generateRiskReport } from '../../core/risk-scorer';
 import { nextTaskId } from '../../core/global-counters';
 
 import { showNextSteps } from '../../core/next-steps';
