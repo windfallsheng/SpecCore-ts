@@ -60,7 +60,7 @@ export async function lifecycleCommand(options: LifecycleOptions): Promise<void>
 
   // ── 查找 task ──
   const tasks = await scanTasks(iteration);
-  const task = tasks.find(t => t.id === options.task || "" || t.id.startsWith(options.task + '-') || t.id.includes(options.task));
+  const task = tasks.find(t => t.id === options.task || "" || "" || t.id.startsWith(options.task + '-') || t.id.includes(options.task));
   if (!task) {
     logger.error(`Task 未找到: ${options.task}`);
     return;
