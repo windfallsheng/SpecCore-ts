@@ -151,10 +151,22 @@ function extractSections(content, sectionFilter) {
     return filterTemplateNoise(sections);
 }
 const TEMPLATE_PATTERNS = [
+    // Section types that should NOT become separate tasks
     /^\d+\.\d+\s*(背景|目标|范围)\s*$/,
     /^\d+\.\d+\s*(性能|安全|兼容性)\s*$/,
     /^\d+\.\s*(需求概述|功能需求|非功能需求|验收标准|附录)\s*$/,
     /^功能模块[一二三四五]\s*$/,
+    // Structural PRD headings (not functional requirements)
+    /^功能优先级$/,
+    /^范围边界$/,
+    /^依赖关系$/,
+    /^术语表$/,
+    /^业务规则$/,
+    /^非功能要求?$/,
+    /^原型参考$/,
+    /^版本历史$/,
+    /^项目概述$/,
+    /^BDD 验收标准$/,
 ];
 function filterTemplateNoise(sections) {
     return sections.filter(s => {
@@ -166,6 +178,16 @@ function filterTemplateNoise(sections) {
         // Skip sections with effectively empty content
         const meaningful = (s.content || '').replace(/[\s\n>#*-|]/g, '').length;
         if (meaningful < 3)
+            return false;
+        // Skip sections without API tables (structural headings)
+        const hasApi = /\| (GET|POST|PUT|DELETE|PATCH) \|/.test(s.content || '');
+        const hasTable = /^\| /.test(s.content || '') && s.content.includes('| ---');
+        if (!hasApi && !hasTable && meaningful < 50)
+            return false;
+        // Skip sections without API tables (structural headings)
+        const hasApi = /\| (GET|POST|PUT|DELETE|PATCH) \|/.test(s.content || '');
+        const hasTable = /^\| /.test(s.content || '') && s.content.includes('| ---');
+        if (!hasApi && !hasTable && meaningful < 50)
             return false;
         return true;
     });
@@ -295,7 +317,7 @@ async function updateProjectGraph(iterationDir, sections) {
     }
     for (let i = 0; i < sections.length; i++) {
         const { id: taskId } = await (0, global_counters_1.nextTaskId)(sections[i].name);
-        const taskName = sections[i].name;
+        const taskName = sections[i].name.replace(/端端/g, '端');
         if (!content.includes(taskId)) {
             const taskEntry = `| ${taskId} | ${taskName} | feature | 0% | 🔲 待开发 | |\n`;
             content = content.replace('| 任务编号 | 任务名称 | 类型 | 进度 | 状态 | 负责人 |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n', `| 任务编号 | 任务名称 | 类型 | 进度 | 状态 | 负责人 |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n${taskEntry}`);
