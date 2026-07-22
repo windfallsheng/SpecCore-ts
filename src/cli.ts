@@ -27,6 +27,7 @@ import { handoverCommand } from './commands/handover';
 import { retroCommand } from './commands/retro';
 import { templateAddCommand } from './commands/template-add';
 import { helpCommand } from './commands/help';
+import { devCommand } from './commands/dev';
 import { demoCommand } from './commands/demo';
 import { welcomeCommand } from './commands/welcome';
 import { word2specCommand } from './commands/word2spec';
@@ -103,6 +104,22 @@ program
   .description('First-time setup guide (interactive)')
   .option('--force', 'Force re-initialization')
   .action(welcomeCommand);
+
+program
+  .command('dev')
+  .alias('d')
+  .description('Smart dev entry: auto-detect phase and suggest next step')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('--force', 'Auto-execute the next step')
+  .action(devCommand);
+
+program
+  .command('dev')
+  .alias('d')
+  .description('Smart dev entry: auto-detect phase and suggest next step')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('--force', 'Auto-execute the next step')
+  .action(devCommand);
 
 program
   .command('demo')

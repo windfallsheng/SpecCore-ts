@@ -29,6 +29,7 @@ const handover_1 = require("./commands/handover");
 const retro_1 = require("./commands/retro");
 const template_add_1 = require("./commands/template-add");
 const help_1 = require("./commands/help");
+const dev_1 = require("./commands/dev");
 const demo_1 = require("./commands/demo");
 const welcome_1 = require("./commands/welcome");
 const word2spec_1 = require("./commands/word2spec");
@@ -101,6 +102,20 @@ commander_1.program
     .description('First-time setup guide (interactive)')
     .option('--force', 'Force re-initialization')
     .action(welcome_1.welcomeCommand);
+commander_1.program
+    .command('dev')
+    .alias('d')
+    .description('Smart dev entry: auto-detect phase and suggest next step')
+    .option('-i, --iteration <iteration>', 'Target iteration')
+    .option('--force', 'Auto-execute the next step')
+    .action(dev_1.devCommand);
+commander_1.program
+    .command('dev')
+    .alias('d')
+    .description('Smart dev entry: auto-detect phase and suggest next step')
+    .option('-i, --iteration <iteration>', 'Target iteration')
+    .option('--force', 'Auto-execute the next step')
+    .action(dev_1.devCommand);
 commander_1.program
     .command('demo')
     .alias('dm')
@@ -279,6 +294,7 @@ commander_1.program
     .option('--base <branch>', 'Base branch for task branching (default: current)')
     .option('--skip <tasks>', 'Comma-separated task IDs to skip')
     .option('--only <tasks>', 'Comma-separated task IDs to execute exclusively (whitelist)')
+    .option('--agent <tool>', 'External AI: copilot/claude/cursor/trae/qoder/windsurf/codebuddy')
     .option('--hotfix', 'Emergency fix: skip reverse sync (30min grace, 24h mandatory)')
     .action(execute_1.executeCommand);
 // ================================================================

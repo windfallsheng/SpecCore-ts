@@ -511,10 +511,9 @@ async function generateImpactGraph(iterationDir, sections, platforms) {
         const taskDir = (0, path_1.join)(iterationDir, taskId);
         if (await (0, fs_extra_1.pathExists)(taskDir)) {
             // 生成风险报告并嵌入 TASK.md
+            const taskMdPath = (0, path_1.join)(taskDir, 'backend', 'TASK.md');
             const riskReport = (0, risk_scorer_1.generateRiskReport)(risk);
             await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, '.risk'), riskReport);
-            // Inject risk section into TASK.md if it exists
-            const taskMdPath = (0, path_1.join)(taskDir, 'backend', 'TASK.md');
             if (await (0, fs_extra_1.pathExists)(taskMdPath)) {
                 let taskMd = await (0, fs_extra_1.readFile)(taskMdPath, 'utf-8');
                 if (!taskMd.includes('## 风险评估')) {
@@ -523,12 +522,12 @@ async function generateImpactGraph(iterationDir, sections, platforms) {
                 }
             }
             // Inject risk section into TASK.md if it exists
-            const taskMdPath = (0, path_1.join)(taskDir, 'backend', 'TASK.md');
-            if (await (0, fs_extra_1.pathExists)(taskMdPath)) {
-                let taskMd = await (0, fs_extra_1.readFile)(taskMdPath, 'utf-8');
+            const riskTaskPath = (0, path_1.join)(taskDir, 'backend', 'TASK.md');
+            if (await (0, fs_extra_1.pathExists)(riskTaskPath)) {
+                let taskMd = await (0, fs_extra_1.readFile)(riskTaskPath, 'utf-8');
                 if (!taskMd.includes('## 风险评估')) {
                     taskMd += '\n\n## 风险评估\n\n' + riskReport.replace('# 风险评估\n\n', '');
-                    await (0, fs_extra_1.writeFile)(taskMdPath, taskMd);
+                    await (0, fs_extra_1.writeFile)(riskTaskPath, taskMd);
                 }
             }
         }
