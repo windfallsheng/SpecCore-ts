@@ -44,6 +44,7 @@ import { analyzeCommand } from './commands/analyze';
 import { lifecycleCommand } from './commands/lifecycle';
 import { prCommand } from './commands/pr';
 import { buildConstitution } from './core/constitution-builder';
+import { contextCommand } from './commands/context-output';
 import { doneCommand } from './commands/done';
 // rename 命令
 import { renameCommand } from './commands/rename';
@@ -51,7 +52,6 @@ import { renameCommand } from './commands/rename';
 import { newTaskCommand } from './commands/new-task';
 import { platformAddCommand } from './commands/platform-add';
 import { indexUpdateCommand } from './commands/index-update';
-import { contextCommand } from './commands/context';
 // v4.6.0 迁移命令
 import { migrateCommand } from './commands/migrate';
 // v4.7.0 体验增强
@@ -423,10 +423,42 @@ program
 // ⚙️ 配置与工具
 // ================================================================
 program
+  .command('context')
+  .alias('ctx')
+  .description('Output task context for any AI tool (Copilot/Claude/GPT)')
+  .option('-t, --task <task>', 'Target task')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .action(contextCommand);
+
+program
+  .command('context')
+  .alias('ctx')
+  .description('Output task context for any AI tool (Copilot/Claude/GPT)')
+  .option('-t, --task <task>', 'Target task')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .action(contextCommand);
+
+program
   .command('constitution')
   .alias('cn')
   .description('Auto-detect tech stack and generate CONSTITUTION.md rules')
   .action(async () => { await buildConstitution(process.cwd()); });
+
+program
+  .command('context')
+  .alias('ctx')
+  .description('Output task context for any AI tool (Copilot/Claude/GPT)')
+  .option('-t, --task <task>', 'Target task')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .action(contextCommand);
+
+program
+  .command('context')
+  .alias('ctx')
+  .description('Output task context for any AI tool (Copilot/Claude/GPT)')
+  .option('-t, --task <task>', 'Target task')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .action(contextCommand);
 
 program
   .command('constitution')

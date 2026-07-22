@@ -45,6 +45,8 @@ const audit_1 = require("./commands/audit");
 const analyze_1 = require("./commands/analyze");
 const lifecycle_1 = require("./commands/lifecycle");
 const pr_1 = require("./commands/pr");
+const constitution_builder_1 = require("./core/constitution-builder");
+const context_output_1 = require("./commands/context-output");
 const done_1 = require("./commands/done");
 // rename 命令
 const rename_1 = require("./commands/rename");
@@ -52,7 +54,6 @@ const rename_1 = require("./commands/rename");
 const new_task_1 = require("./commands/new-task");
 const platform_add_1 = require("./commands/platform-add");
 const index_update_1 = require("./commands/index-update");
-const context_1 = require("./commands/context");
 // v4.6.0 迁移命令
 const migrate_1 = require("./commands/migrate");
 // v4.7.0 体验增强
@@ -395,15 +396,43 @@ commander_1.program
 // ⚙️ 配置与工具
 // ================================================================
 commander_1.program
-    .command('constitution')
-    .alias('cn')
-    .description('Auto-detect tech stack and generate CONSTITUTION.md rules')
-    .action(async () => { await buildConstitution(process.cwd()); });
+    .command('context')
+    .alias('ctx')
+    .description('Output task context for any AI tool (Copilot/Claude/GPT)')
+    .option('-t, --task <task>', 'Target task')
+    .option('-i, --iteration <iteration>', 'Target iteration')
+    .action(context_output_1.contextCommand);
+commander_1.program
+    .command('context')
+    .alias('ctx')
+    .description('Output task context for any AI tool (Copilot/Claude/GPT)')
+    .option('-t, --task <task>', 'Target task')
+    .option('-i, --iteration <iteration>', 'Target iteration')
+    .action(context_output_1.contextCommand);
 commander_1.program
     .command('constitution')
     .alias('cn')
     .description('Auto-detect tech stack and generate CONSTITUTION.md rules')
-    .action(async () => { await buildConstitution(process.cwd()); });
+    .action(async () => { await (0, constitution_builder_1.buildConstitution)(process.cwd()); });
+commander_1.program
+    .command('context')
+    .alias('ctx')
+    .description('Output task context for any AI tool (Copilot/Claude/GPT)')
+    .option('-t, --task <task>', 'Target task')
+    .option('-i, --iteration <iteration>', 'Target iteration')
+    .action(context_output_1.contextCommand);
+commander_1.program
+    .command('context')
+    .alias('ctx')
+    .description('Output task context for any AI tool (Copilot/Claude/GPT)')
+    .option('-t, --task <task>', 'Target task')
+    .option('-i, --iteration <iteration>', 'Target iteration')
+    .action(context_output_1.contextCommand);
+commander_1.program
+    .command('constitution')
+    .alias('cn')
+    .description('Auto-detect tech stack and generate CONSTITUTION.md rules')
+    .action(async () => { await (0, constitution_builder_1.buildConstitution)(process.cwd()); });
 commander_1.program
     .command('config')
     .alias('cf')
@@ -610,7 +639,7 @@ commander_1.program
     .description('View task context loading status and dependency chain (v4.0)')
     .option('--req <req>')
     .option('--task <task>', 'Target task (default: current task)')
-    .action(context_1.contextCommand);
+    .action(context_output_1.contextCommand);
 // ================================================================
 // 快捷别名（顶层别名）
 // ================================================================
