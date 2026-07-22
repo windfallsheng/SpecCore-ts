@@ -372,6 +372,8 @@ async function executeBatchMode(tasks, iteration, batchSize, options) {
         const updated = (0, execution_state_1.loadExecutionState)();
         if (updated.currentBatch > updated.totalBatches)
             break;
+        if (updated.pendingTasks.length === 0)
+            break; // 所有任务完成
     }
     logger_1.logger.success('All batches completed!');
     (0, operation_log_1.logOperation)('speccore execute --batch-size', `${tasks.length} tasks in ${state.totalBatches} batches`);
