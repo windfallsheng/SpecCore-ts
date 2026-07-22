@@ -616,16 +616,16 @@ async function generateImpactGraph(
         let taskMd = await readFile(taskMdPath, 'utf-8');
         if (!taskMd.includes('## 风险评估')) {
           taskMd += '\n\n## 风险评估\n\n' + riskReport.replace('# 风险评估\n\n', '');
-          await writeFile(taskMdPath, taskMd);
+          await writeFile(riskTaskPath, taskMd);
         }
       }
       // Inject risk section into TASK.md if it exists
-      const taskMdPath22 = join(taskDir, 'backend', 'TASK.md');
-      if (await pathExists(taskMdPath2)) {
-        let taskMd = await readFile(taskMdPath2, 'utf-8');
+      const riskTaskPath = join(taskDir, 'backend', 'TASK.md');
+      if (await pathExists(riskTaskPath)) {
+        let taskMd = await readFile(riskTaskPath, 'utf-8');
         if (!taskMd.includes('## 风险评估')) {
           taskMd += '\n\n## 风险评估\n\n' + riskReport.replace('# 风险评估\n\n', '');
-          await writeFile(taskMdPath, taskMd);
+          await writeFile(riskTaskPath, taskMd);
         }
       }
     }
