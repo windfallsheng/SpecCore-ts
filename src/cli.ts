@@ -935,7 +935,7 @@ program
   .description('Rollback a task: revert branch + archive spec')
   .option('-t, --task <task>', 'Task to rollback')
   .option('-i, --iteration <iteration>', 'Target iteration')
-  .option('-r, --reason <reason>', 'Rollback reason')
+  .option('--reason <reason>', 'Rollback reason')
   .action(async (options: any) => { const it = await require('../core/context').getDefaultIteration(options.iteration); if (it && options.task) await rollbackTask(options.task, it, options.reason); });
 
 program
@@ -960,7 +960,7 @@ program
   .description('Rollback a task: revert branch + archive spec')
   .option('-t, --task <task>', 'Task to rollback')
   .option('-i, --iteration <iteration>', 'Target iteration')
-  .option('-r, --reason <reason>', 'Rollback reason')
+  .option('--reason <reason>', 'Rollback reason')
   .action(async (options: any) => { const it = await require('../core/context').getDefaultIteration(options.iteration); if (it && options.task) await rollbackTask(options.task, it, options.reason); });
 
 program

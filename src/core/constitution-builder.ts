@@ -52,8 +52,7 @@ async function detectStack(cwd: string): Promise<{
   language?: string; languageSource?: string;
 }> {
   const stack: any = {};
-  const fs = require('fs');
-  const { existsSync } = fs;
+  import { existsSync, readdirSync } from 'fs';
 
   // pom.xml → Java/Spring
   if (existsSync(join(cwd, 'pom.xml'))) {
@@ -109,11 +108,10 @@ async function detectStack(cwd: string): Promise<{
 }
 
 async function scanSourceForFrameworks(cwd: string, stack: any): Promise<void> {
-  const fs = require('fs');
   const srcDirs = ['src', 'app', 'lib'];
   for (const dir of srcDirs) {
     const full = join(cwd, dir);
-    if (!fs.existsSync(full)) continue;
+    if (!existsSync(full)) continue;
     const files = findFiles(full, /\.(java|ts|tsx|py|go|vue|jsx)$/, 2);
     for (const f of files) {
       if (f.endsWith('.vue') && !stack.frontend) { stack.frontend = 'Vue'; stack.frontendSource = f; }
@@ -123,11 +121,10 @@ async function scanSourceForFrameworks(cwd: string, stack: any): Promise<void> {
 }
 
 function findFiles(dir: string, pattern: RegExp, maxDepth: number): string[] {
-  const fs = require('fs');
   const { join } = require('path');
   const results: string[] = [];
   try {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
       if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
       const full = join(dir, entry.name);
       if (entry.isDirectory() && maxDepth > 0) {
