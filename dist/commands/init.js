@@ -77,6 +77,8 @@ async function initCommand(options) {
         await (0, fs_extra_1.writeFile)((0, path_1.join)(speccoreDir, 'local', 'context.json'), JSON.stringify(validated.success ? validated.data : contextData, null, 2));
         // Create .gitignore entry
         await updateGitignore(projectRoot);
+        // Generate .codebuddy/commands/ slash command files
+        await generateSlashCommands(projectRoot);
         // Update context
         await (0, context_1.updateContext)({ lastUpdated: new Date().toISOString() });
         spinner.stop(i18n_1.i18n.t('cmd.init.success'));
@@ -84,9 +86,8 @@ async function initCommand(options) {
         logger_1.logger.info(i18n_1.i18n.t('common.next_steps') + ':');
         logger_1.logger.info('  1. Edit .speccore/CONSTITUTION.md to define your tech stack');
         logger_1.logger.info('  2. Edit .speccore/PROJECT/TEAM.md to add team members');
-        logger_1.logger.info('  3. Run: speccore import --project=<name> --path=<path> to import projects');
-        logger_1.logger.info('  4. Run: speccore global-status to view global layer');
-        logger_1.logger.info('  5. Run: speccore iteration-from-global to generate iteration from requirements');
+        logger_1.logger.info('  3. Type /spec in your AI tool to see all commands');
+        logger_1.logger.info('  4. Run: speccore word2spec --files "file.md=端名" -i Q1 to import requirements');
     }
     catch (error) {
         spinner.fail(`Initialization failed: ${error}`);
@@ -768,5 +769,48 @@ platforms:
 #    tech_stack: "React Native"
 #    enabled: true
 `);
+}
+/**
+ * Generate .codebuddy/commands/ slash command files for AI tools (Qcoder/WorkBuddy/Cursor)
+ */
+async function generateSlashCommands(projectRoot) {
+    const cmdDir = (0, path_1.join)(projectRoot, '.codebuddy', 'commands');
+    await (0, fs_extra_1.ensureDir)(cmdDir);
+    const commands = [
+        ['spec-init', 'Initialize project', ['speccore init']],
+        ['spec-dev', 'Smart dev entry', ['speccore dev']],
+        ['spec-status-panel', 'Status panel', ['speccore status-panel']],
+        ['spec-word2spec', 'Import requirements', ['speccore word2spec --files "${1:file}=${2:platform}" -i ${3:Q1}']],
+        ['spec-analyze', 'Analyze requirements', ['speccore analyze --iteration=${1:Q1}']],
+        ['spec-split', 'Split into tasks', ['speccore iteration split --iteration=${1:Q1}']],
+        ['spec-execute', 'Execute task', ['speccore execute --task=${1:Task-001} --force --iteration=${2:Q1}']],
+        ['spec-execute-all', 'Execute all tasks', ['speccore execute --all --force --iteration=${1:Q1}']],
+        ['spec-pr', 'Create PR', ['speccore pr --task=${1:Task-001}']],
+        ['spec-done', 'Complete task', ['speccore done --task=${1:Task-001}']],
+        ['spec-lifecycle', 'Task lifecycle', ['speccore lifecycle --task=${1:Task-001}']],
+        ['spec-lifecycle-all', 'View kanban', ['speccore lifecycle --all']],
+        ['spec-merge-check', 'Merge conflict check', ['speccore merge-check --iteration=${1:Q1}']],
+        ['spec-rollback', 'Rollback task', ['speccore rollback --task=${1:Task-001}']],
+        ['spec-spec', 'NL intent recognition', ['speccore spec "${1:新增订单导出功能}"']],
+        ['spec-constitution', 'Auto-detect constitution', ['speccore constitution']],
+        ['spec-tracker', 'Requirement tracker', ['speccore tracker']],
+        ['spec-context', 'Output task context', ['speccore context --task=${1:Task-001}']],
+        ['spec-arch-update', 'Update architecture', ['speccore arch-update --iteration=${1:Q1}']],
+        ['spec-validate', 'Validate specs', ['speccore validate --iteration=${1:Q1}']],
+        ['spec-search', 'Search across specs', ['speccore search "${1:keyword}"']],
+        ['spec-dashboard', 'Project dashboard', ['speccore dashboard']],
+        ['spec-health', 'Health check', ['speccore health']],
+        ['spec-new-task', 'Create task', ['speccore new-task --name="${1:功能}" --platforms=${2:web} --iteration=${3:Q1}']],
+        ['spec-bugfix', 'Bug fix flow', ['speccore bugfix --title="${1:支付超时}"']],
+        ['spec-change', 'Change request', ['speccore change --iteration=${1:Q1}']],
+        ['spec-import', 'Import code', ['speccore import --project=${1:backend} --path=${2:./src} --type=backend']],
+        ['spec-ops', 'Operation history', ['speccore ops']],
+        ['spec-open', 'Open task files', ['speccore open --task=${1:Task-001} --iteration=${2:Q1}']],
+    ];
+    for (const [name, desc, bodyLines] of commands) {
+        const content = "# /" + name + "\n" + desc + "\n---\n" + bodyLines.join("\n") + "\n";
+        await (0, fs_extra_1.writeFile)((0, path_1.join)(cmdDir, name + ".md"), content);
+    }
+    logger_1.logger.info("  ✅ " + commands.length + " slash commands → .codebuddy/commands/");
 }
 //# sourceMappingURL=init.js.map
