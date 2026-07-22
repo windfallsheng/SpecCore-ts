@@ -63,6 +63,7 @@ import { updateCommand } from './commands/update';
 // v5.3.0 新增
 import { diffCommand } from './commands/diff';
 import { traceCommand } from './commands/trace';
+import { trackerCommand } from './commands/tracker';
 // v5.5.0 新增
 import { deleteCommand } from './commands/delete';
 // v5.6.0 新增
@@ -702,6 +703,12 @@ program
   .requiredOption('--source <name>', 'Source iteration/baseline')
   .requiredOption('--target <name>', 'Target iteration/baseline')
   .action(diffCommand);
+
+program
+  .command('tracker')
+  .alias('tr')
+  .description('View global requirement change tracker')
+  .action(trackerCommand);
 
 program
   .command('trace')

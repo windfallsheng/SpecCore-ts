@@ -65,6 +65,7 @@ const update_1 = require("./commands/update");
 // v5.3.0 新增
 const diff_1 = require("./commands/diff");
 const trace_1 = require("./commands/trace");
+const tracker_1 = require("./commands/tracker");
 // v5.5.0 新增
 const delete_1 = require("./commands/delete");
 // v5.6.0 新增
@@ -648,6 +649,11 @@ commander_1.program
     .requiredOption('--source <name>', 'Source iteration/baseline')
     .requiredOption('--target <name>', 'Target iteration/baseline')
     .action(diff_1.diffCommand);
+commander_1.program
+    .command('tracker')
+    .alias('tr')
+    .description('View global requirement change tracker')
+    .action(tracker_1.trackerCommand);
 commander_1.program
     .command('trace')
     .alias('tr')
