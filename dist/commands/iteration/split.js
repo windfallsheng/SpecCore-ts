@@ -180,57 +180,55 @@ function filterTemplateNoise(sections) {
         if (meaningful < 3)
             return false;
         // Skip sections without API tables (structural headings)
-        const hasApi = /\| (GET|POST|PUT|DELETE|PATCH) \|/.test(s.content || '');
-        const hasTable = /^\| /.test(s.content || '') && s.content.includes('| ---');
-        if (!hasApi && !hasTable && meaningful < 50)
-            return false;
-        // Skip sections without API tables (structural headings)
-        async function createTaskFromSection(iterationDir, taskId, section, allPlatforms) {
-            const taskDir = (0, path_1.join)(iterationDir, taskId);
-            // 如果 section 有指定平台则只创建该平台，否则创建全部平台
-            const taskPlatforms = section.platform ? [section.platform] : allPlatforms;
-            await (0, fs_extra_1.ensureDir)((0, path_1.join)(taskDir, '_shared'));
-            // Create per-platform directories: backend services under backend/, frontend under frontend/
-            for (const platform of taskPlatforms) {
-                if (platform.startsWith('后台') || platform === 'backend') {
-                    // Backend service: e.g., 后台管理端 → backend/管理端
-                    const service = platform.replace(/^后台/, '').trim() || 'default';
-                    await (0, fs_extra_1.ensureDir)((0, path_1.join)(taskDir, 'backend', service || platform));
-                }
-                else {
-                    await (0, fs_extra_1.ensureDir)((0, path_1.join)(taskDir, 'frontend', platform));
-                }
-            }
-            // Always create a common backend directory for shared backend specs
-            if (!taskPlatforms.some(p => p.startsWith('后台'))) {
-                await (0, fs_extra_1.ensureDir)((0, path_1.join)(taskDir, 'backend'));
-            }
-            // Write task type
-            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, '.task-type'), 'feature');
-            // Write TEST.md — auto-generated test outline
-            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', 'TEST.md'), generateTestOutline(section));
-            // Write REVIEW.md — auto-generated code review checklist
-            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', 'REVIEW.md'), generateReviewChecklist(section));
-            // Write SCHEMA.md — DB schema template (only if DB content detected)
-            if (section.content.match(/数据库|数据表|表结构|DDL|ALTER|建表|索引/)) {
-                await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', 'SCHEMA.md'), generateSchemaTemplate(section));
-            }
-            // Write DEPLOY.md — deployment checklist
-            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', 'DEPLOY.md'), generateDeployChecklist(section));
-            // Generate API_CONTRACT.yaml in _shared/
-            const contractYaml = generateApiContract(section);
-            if (contractYaml) {
-                await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, '_shared', 'API_CONTRACT.yaml'), contractYaml);
-            }
-            // Generate ERROR_CODES.md
-            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', 'ERROR_CODES.md'), generateErrorCodes(section));
-            // Generate ADR.md (only if tech stack detected)
-            const adr = generateAdr(section);
-            if (adr) {
-                await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', 'ADR.md'), adr);
-            }
-            // Write REQ.md
-            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', 'REQ.md'), `# ${section.name}
+        return true;
+    });
+}
+async function createTaskFromSection(iterationDir, taskId, section, allPlatforms) {
+    const taskDir = (0, path_1.join)(iterationDir, taskId);
+    // 如果 section 有指定平台则只创建该平台，否则创建全部平台
+    const taskPlatforms = section.platform ? [section.platform] : allPlatforms;
+    await (0, fs_extra_1.ensureDir)((0, path_1.join)(taskDir, '_shared'));
+    // Create per-platform directories: backend services under backend/, frontend under frontend/
+    for (const platform of taskPlatforms) {
+        if (platform.startsWith('后台') || platform === 'backend') {
+            // Backend service: e.g., 后台管理端 → backend/管理端
+            const service = platform.replace(/^后台/, '').trim() || 'default';
+            await (0, fs_extra_1.ensureDir)((0, path_1.join)(taskDir, 'backend', service || platform));
+        }
+        else {
+            await (0, fs_extra_1.ensureDir)((0, path_1.join)(taskDir, 'frontend', platform));
+        }
+    }
+    // Always create a common backend directory for shared backend specs
+    if (!taskPlatforms.some(p => p.startsWith('后台'))) {
+        await (0, fs_extra_1.ensureDir)((0, path_1.join)(taskDir, 'backend'));
+    }
+    // Write task type
+    await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, '.task-type'), 'feature');
+    // Write TEST.md — auto-generated test outline
+    await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', 'TEST.md'), generateTestOutline(section));
+    // Write REVIEW.md — auto-generated code review checklist
+    await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', 'REVIEW.md'), generateReviewChecklist(section));
+    // Write SCHEMA.md — DB schema template (only if DB content detected)
+    if (section.content.match(/数据库|数据表|表结构|DDL|ALTER|建表|索引/)) {
+        await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', 'SCHEMA.md'), generateSchemaTemplate(section));
+    }
+    // Write DEPLOY.md — deployment checklist
+    await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', 'DEPLOY.md'), generateDeployChecklist(section));
+    // Generate API_CONTRACT.yaml in _shared/
+    const contractYaml = generateApiContract(section);
+    if (contractYaml) {
+        await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, '_shared', 'API_CONTRACT.yaml'), contractYaml);
+    }
+    // Generate ERROR_CODES.md
+    await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', 'ERROR_CODES.md'), generateErrorCodes(section));
+    // Generate ADR.md (only if tech stack detected)
+    const adr = generateAdr(section);
+    if (adr) {
+        await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', 'ADR.md'), adr);
+    }
+    // Write REQ.md
+    await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', 'REQ.md'), `# ${section.name}
 
 ## 需求描述
 
@@ -242,8 +240,8 @@ ${section.content}
 - [ ] AC-2: 
 - [ ] AC-3: 
 `);
-            // Write TECH.md
-            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', 'TECH.md'), `# ${section.name} - 技术方案
+    // Write TECH.md
+    await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', 'TECH.md'), `# ${section.name} - 技术方案
 
 ## 1. 方案概述
 
@@ -255,8 +253,8 @@ ${section.content}
 
 ## 5. 测试策略
 `);
-            // Write TASK.md
-            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', 'TASK.md'), `# ${section.name}
+    // Write TASK.md
+    await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', 'TASK.md'), `# ${section.name}
 
 ## 任务信息
 - 类型: feature
@@ -276,293 +274,293 @@ ${section.content}
 | TECH.md | ✅ | ./TECH.md |
 | TASK.md | ✅ | ./TASK.md |
 `);
-            // Copy to each platform directory (backend services + frontend platforms)
-            const reqContent = await (0, fs_extra_1.readFile)((0, path_1.join)(taskDir, 'backend', 'REQ.md'), 'utf-8');
-            const techContent = await (0, fs_extra_1.readFile)((0, path_1.join)(taskDir, 'backend', 'TECH.md'), 'utf-8');
-            const taskContent = await (0, fs_extra_1.readFile)((0, path_1.join)(taskDir, 'backend', 'TASK.md'), 'utf-8');
-            const testContent = await (0, fs_extra_1.readFile)((0, path_1.join)(taskDir, 'backend', 'TEST.md'), 'utf-8');
-            const reviewContent = await (0, fs_extra_1.readFile)((0, path_1.join)(taskDir, 'backend', 'REVIEW.md'), 'utf-8');
-            for (const platform of taskPlatforms) {
-                if (platform.startsWith('后台') || platform === 'backend') {
-                    const service = platform.replace(/^后台/, '').trim() || platform;
-                    await (0, fs_extra_1.ensureDir)((0, path_1.join)(taskDir, 'backend', service));
-                    await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', service, 'REQ.md'), reqContent);
-                    await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', service, 'TECH.md'), techContent);
-                    await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', service, 'TASK.md'), taskContent);
-                    await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', service, 'TEST.md'), testContent);
-                    await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', service, 'REVIEW.md'), reviewContent);
-                }
-                else {
-                    await (0, fs_extra_1.ensureDir)((0, path_1.join)(taskDir, 'frontend', platform));
-                    await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'REQ.md'), reqContent);
-                    await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'TECH.md'), techContent);
-                    await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'TASK.md'), taskContent);
-                    await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'TEST.md'), testContent);
-                    await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'REVIEW.md'), reviewContent);
-                }
-            }
+    // Copy to each platform directory (backend services + frontend platforms)
+    const reqContent = await (0, fs_extra_1.readFile)((0, path_1.join)(taskDir, 'backend', 'REQ.md'), 'utf-8');
+    const techContent = await (0, fs_extra_1.readFile)((0, path_1.join)(taskDir, 'backend', 'TECH.md'), 'utf-8');
+    const taskContent = await (0, fs_extra_1.readFile)((0, path_1.join)(taskDir, 'backend', 'TASK.md'), 'utf-8');
+    const testContent = await (0, fs_extra_1.readFile)((0, path_1.join)(taskDir, 'backend', 'TEST.md'), 'utf-8');
+    const reviewContent = await (0, fs_extra_1.readFile)((0, path_1.join)(taskDir, 'backend', 'REVIEW.md'), 'utf-8');
+    for (const platform of taskPlatforms) {
+        if (platform.startsWith('后台') || platform === 'backend') {
+            const service = platform.replace(/^后台/, '').trim() || platform;
+            await (0, fs_extra_1.ensureDir)((0, path_1.join)(taskDir, 'backend', service));
+            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', service, 'REQ.md'), reqContent);
+            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', service, 'TECH.md'), techContent);
+            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', service, 'TASK.md'), taskContent);
+            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', service, 'TEST.md'), testContent);
+            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'backend', service, 'REVIEW.md'), reviewContent);
         }
-        async function updateProjectGraph(iterationDir, sections) {
-            const graphPath = (0, path_1.join)(iterationDir, '00-期次总览', 'PROJECT_GRAPH.md');
-            let content = '';
-            if (await (0, fs_extra_1.pathExists)(graphPath)) {
-                content = await (0, fs_extra_1.readFile)(graphPath, 'utf-8');
-            }
-            for (let i = 0; i < sections.length; i++) {
-                const { id: taskId } = await (0, global_counters_1.nextTaskId)(sections[i].name);
-                const taskName = sections[i].name.replace(/端端/g, '端');
-                if (!content.includes(taskId)) {
-                    const taskEntry = `| ${taskId} | ${taskName} | feature | 0% | 🔲 待开发 | |\n`;
-                    content = content.replace('| 任务编号 | 任务名称 | 类型 | 进度 | 状态 | 负责人 |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n', `| 任务编号 | 任务名称 | 类型 | 进度 | 状态 | 负责人 |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n${taskEntry}`);
-                }
-            }
-            await (0, fs_extra_1.writeFile)(graphPath, content);
+        else {
+            await (0, fs_extra_1.ensureDir)((0, path_1.join)(taskDir, 'frontend', platform));
+            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'REQ.md'), reqContent);
+            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'TECH.md'), techContent);
+            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'TASK.md'), taskContent);
+            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'TEST.md'), testContent);
+            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'REVIEW.md'), reviewContent);
         }
-        /**
-         * 根据需求内容自动生成测试用例框架
-         */
-        function generateTestOutline(section) {
-            const name = section.name;
-            const content = section.content || '';
-            const isBackend = section.platform?.startsWith('后台') || false;
-            const hasApi = content.includes('/api/') || content.includes('接口');
-            const hasDb = content.includes('数据表') || content.includes('数据库') || content.includes('表');
-            let outline = `# ${name} — 测试用例\n\n`;
-            outline += `> 自动生成于 split，请在编码后补充具体用例\n\n`;
-            outline += `## 1. 单元测试\n\n`;
-            if (isBackend && hasApi) {
-                outline += `| 用例 | 接口 | 输入 | 预期 | 状态 |\n`;
-                outline += `| :--- | :--- | :--- | :--- | :--- |\n`;
-                outline += `| 正常请求 | | | 200 | ⬜ |\n`;
-                outline += `| 参数校验 | | | 400 | ⬜ |\n`;
-                outline += `| 未授权 | | | 401 | ⬜ |\n`;
-            }
-            else {
-                outline += `| 用例 | 场景 | 输入 | 预期 | 状态 |\n`;
-                outline += `| :--- | :--- | :--- | :--- | :--- |\n`;
-                outline += `| 正常渲染 | 默认 | | | ⬜ |\n`;
-                outline += `| 空数据 | 无数据 | | | ⬜ |\n`;
-            }
-            if (hasDb) {
-                outline += `\n## 2. 数据库测试\n\n`;
-                outline += `| 用例 | 表 | 操作 | 预期 | 状态 |\n`;
-                outline += `| :--- | :--- | :--- | :--- | :--- |\n`;
-                outline += `| 事务回滚 | | INSERT/UPDATE | 异常时回滚 | ⬜ |\n`;
-                outline += `| 唯一约束 | | INSERT 重复 | 约束冲突 | ⬜ |\n`;
-            }
-            outline += `\n## 3. 集成测试 / E2E\n\n`;
-            outline += `| 用例 | 流程 | 预期 | 状态 |\n`;
-            outline += `| :--- | :--- | :--- | :--- |\n`;
-            outline += `| 正常流程 | 从头到尾走通 | 成功 | ⬜ |\n`;
-            outline += `| 异常流程 | 中断/超时 | 优雅降级 | ⬜ |\n`;
-            outline += `| 并发 | 多用户同时操作 | 无数据错乱 | ⬜ |\n`;
-            outline += `\n## 4. 性能 / 安全\n\n`;
-            outline += `| 用例 | 指标 | 阈值 | 状态 |\n`;
-            outline += `| :--- | :--- | :--- | :--- |\n`;
-            outline += `| 响应时间 | P99 | < 500ms | ⬜ |\n`;
-            outline += `| 并发容量 | QPS | 满足预期 | ⬜ |\n`;
-            outline += `\n> ⬜ 待编写 | ✅ 通过 | ❌ 失败 | ➖ 不适用\n`;
-            return outline;
+    }
+}
+async function updateProjectGraph(iterationDir, sections) {
+    const graphPath = (0, path_1.join)(iterationDir, '00-期次总览', 'PROJECT_GRAPH.md');
+    let content = '';
+    if (await (0, fs_extra_1.pathExists)(graphPath)) {
+        content = await (0, fs_extra_1.readFile)(graphPath, 'utf-8');
+    }
+    for (let i = 0; i < sections.length; i++) {
+        const { id: taskId } = await (0, global_counters_1.nextTaskId)(sections[i].name);
+        const taskName = sections[i].name.replace(/端端/g, '端');
+        if (!content.includes(taskId)) {
+            const taskEntry = `| ${taskId} | ${taskName} | feature | 0% | 🔲 待开发 | |\n`;
+            content = content.replace('| 任务编号 | 任务名称 | 类型 | 进度 | 状态 | 负责人 |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n', `| 任务编号 | 任务名称 | 类型 | 进度 | 状态 | 负责人 |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n${taskEntry}`);
         }
-        /**
-         * 根据需求内容自动生成代码审查清单
-         */
-        function generateReviewChecklist(section) {
-            const name = section.name;
-            const content = section.content || '';
-            const hasApi = content.includes('/api/') || content.includes('接口');
-            const hasDb = content.includes('数据库') || content.includes('表');
-            const hasBatch = content.includes('批量') || content.includes('导出');
-            const hasAuth = content.includes('权限') || content.includes('角色') || content.includes('认证');
-            const isBackend = section.platform?.startsWith('后台') || false;
-            let checklist = `# ${name} — Code Review Checklist\n\n`;
-            checklist += `> 自动生成于 split，请在提交 PR 前逐项确认\n\n`;
-            checklist += `## 功能正确性\n\n`;
-            checklist += `- [ ] 需求覆盖完整，无遗漏\n`;
-            checklist += `- [ ] 边界条件处理（空值、极值、特殊字符）\n`;
-            checklist += `- [ ] 错误码统一\n\n`;
-            checklist += `## 代码质量\n\n`;
-            checklist += `- [ ] 零 ` + '`any`' + ` 类型\n`;
-            checklist += `- [ ] 无 console.log 残留\n`;
-            checklist += `- [ ] 命名清晰、见名知义\n`;
-            checklist += `- [ ] 无重复代码（>3 次提取为函数）\n\n`;
-            if (isBackend) {
-                checklist += `## 后端专项\n\n`;
-                checklist += `- [ ] 接口幂等性\n`;
-                checklist += `- [ ] 参数校验（@Valid / DTO）\n`;
-                checklist += `- [ ] 防 SQL 注入\n`;
-                checklist += `- [ ] 日志脱敏（密码/手机号不打日志）\n`;
-                if (hasDb) {
-                    checklist += `- [ ] 数据库事务边界正确\n`;
-                    checklist += `- [ ] 索引是否匹配查询条件\n`;
-                }
-                if (hasBatch) {
-                    checklist += `- [ ] 批量操作有上限限制\n`;
-                    checklist += `- [ ] 大数据量分页处理\n`;
-                }
-                if (hasAuth) {
-                    checklist += `- [ ] 权限校验在每个接口入口（不是中间件漏掉）\n`;
-                }
-                checklist += `\n`;
-            }
-            else {
-                checklist += `## 前端专项\n\n`;
-                checklist += `- [ ] 组件拆分合理（>200 行考虑拆分）\n`;
-                checklist += `- [ ] 无 XSS 漏洞（v-html 审查）\n`;
-                checklist += `- [ ] 响应式适配\n`;
-                checklist += `- [ ] 加载态 / 空态 / 错误态 / 边界态（四态齐全）\n\n`;
-            }
-            checklist += `## 测试\n\n`;
-            checklist += `- [ ] 核心路径有单元测试\n`;
-            checklist += `- [ ] 参照 \`TEST.md\` 逐项验证\n`;
-            checklist += `- [ ] \`speccore validate --task=${name}\` 通过\n\n`;
-            checklist += `## 自查确认\n\n`;
-            checklist += `- [ ] 已在本地完整跑通\n`;
-            checklist += `- [ ] 相关的 \`REQ.md\` 已更新（如有变化）\n`;
-            checklist += `- [ ] PR 描述写清楚了「做了什么 + 怎么测」\n`;
-            return checklist;
+    }
+    await (0, fs_extra_1.writeFile)(graphPath, content);
+}
+/**
+ * 根据需求内容自动生成测试用例框架
+ */
+function generateTestOutline(section) {
+    const name = section.name;
+    const content = section.content || '';
+    const isBackend = section.platform?.startsWith('后台') || false;
+    const hasApi = content.includes('/api/') || content.includes('接口');
+    const hasDb = content.includes('数据表') || content.includes('数据库') || content.includes('表');
+    let outline = `# ${name} — 测试用例\n\n`;
+    outline += `> 自动生成于 split，请在编码后补充具体用例\n\n`;
+    outline += `## 1. 单元测试\n\n`;
+    if (isBackend && hasApi) {
+        outline += `| 用例 | 接口 | 输入 | 预期 | 状态 |\n`;
+        outline += `| :--- | :--- | :--- | :--- | :--- |\n`;
+        outline += `| 正常请求 | | | 200 | ⬜ |\n`;
+        outline += `| 参数校验 | | | 400 | ⬜ |\n`;
+        outline += `| 未授权 | | | 401 | ⬜ |\n`;
+    }
+    else {
+        outline += `| 用例 | 场景 | 输入 | 预期 | 状态 |\n`;
+        outline += `| :--- | :--- | :--- | :--- | :--- |\n`;
+        outline += `| 正常渲染 | 默认 | | | ⬜ |\n`;
+        outline += `| 空数据 | 无数据 | | | ⬜ |\n`;
+    }
+    if (hasDb) {
+        outline += `\n## 2. 数据库测试\n\n`;
+        outline += `| 用例 | 表 | 操作 | 预期 | 状态 |\n`;
+        outline += `| :--- | :--- | :--- | :--- | :--- |\n`;
+        outline += `| 事务回滚 | | INSERT/UPDATE | 异常时回滚 | ⬜ |\n`;
+        outline += `| 唯一约束 | | INSERT 重复 | 约束冲突 | ⬜ |\n`;
+    }
+    outline += `\n## 3. 集成测试 / E2E\n\n`;
+    outline += `| 用例 | 流程 | 预期 | 状态 |\n`;
+    outline += `| :--- | :--- | :--- | :--- |\n`;
+    outline += `| 正常流程 | 从头到尾走通 | 成功 | ⬜ |\n`;
+    outline += `| 异常流程 | 中断/超时 | 优雅降级 | ⬜ |\n`;
+    outline += `| 并发 | 多用户同时操作 | 无数据错乱 | ⬜ |\n`;
+    outline += `\n## 4. 性能 / 安全\n\n`;
+    outline += `| 用例 | 指标 | 阈值 | 状态 |\n`;
+    outline += `| :--- | :--- | :--- | :--- |\n`;
+    outline += `| 响应时间 | P99 | < 500ms | ⬜ |\n`;
+    outline += `| 并发容量 | QPS | 满足预期 | ⬜ |\n`;
+    outline += `\n> ⬜ 待编写 | ✅ 通过 | ❌ 失败 | ➖ 不适用\n`;
+    return outline;
+}
+/**
+ * 根据需求内容自动生成代码审查清单
+ */
+function generateReviewChecklist(section) {
+    const name = section.name;
+    const content = section.content || '';
+    const hasApi = content.includes('/api/') || content.includes('接口');
+    const hasDb = content.includes('数据库') || content.includes('表');
+    const hasBatch = content.includes('批量') || content.includes('导出');
+    const hasAuth = content.includes('权限') || content.includes('角色') || content.includes('认证');
+    const isBackend = section.platform?.startsWith('后台') || false;
+    let checklist = `# ${name} — Code Review Checklist\n\n`;
+    checklist += `> 自动生成于 split，请在提交 PR 前逐项确认\n\n`;
+    checklist += `## 功能正确性\n\n`;
+    checklist += `- [ ] 需求覆盖完整，无遗漏\n`;
+    checklist += `- [ ] 边界条件处理（空值、极值、特殊字符）\n`;
+    checklist += `- [ ] 错误码统一\n\n`;
+    checklist += `## 代码质量\n\n`;
+    checklist += `- [ ] 零 ` + '`any`' + ` 类型\n`;
+    checklist += `- [ ] 无 console.log 残留\n`;
+    checklist += `- [ ] 命名清晰、见名知义\n`;
+    checklist += `- [ ] 无重复代码（>3 次提取为函数）\n\n`;
+    if (isBackend) {
+        checklist += `## 后端专项\n\n`;
+        checklist += `- [ ] 接口幂等性\n`;
+        checklist += `- [ ] 参数校验（@Valid / DTO）\n`;
+        checklist += `- [ ] 防 SQL 注入\n`;
+        checklist += `- [ ] 日志脱敏（密码/手机号不打日志）\n`;
+        if (hasDb) {
+            checklist += `- [ ] 数据库事务边界正确\n`;
+            checklist += `- [ ] 索引是否匹配查询条件\n`;
         }
-        /**
-         * 严格模式：预览拆分方案，逐 section 确认
-         */
-        async function strictSplitPreview(sections, platforms, iterationDir) {
-            const ask = (q) => {
-                process.stdout.write(q);
-                return new Promise((resolve) => {
-                    process.stdin.resume();
-                    process.stdin.once('data', (data) => {
-                        process.stdin.pause();
-                        resolve(data.toString().split('\n')[0].trim());
-                    });
-                });
-            };
-            logger_1.logger.info('\n╔══════════════════════════════════════════╗');
-            logger_1.logger.info('║  🔍 Strict Split — 预览拆分方案          ║');
-            logger_1.logger.info('╚══════════════════════════════════════════╝\n');
-            logger_1.logger.info(`检测到 ${sections.length} 个章节，${platforms.length} 个端: ${platforms.join(', ')}\n`);
-            const approved = [];
-            for (let i = 0; i < sections.length; i++) {
-                const s = sections[i];
-                const taskId = `Task-${String(i + 1).padStart(3, '0')}`;
-                // Determine target directory
-                const target = s.platform
-                    ? (s.platform.startsWith('后台') ? `backend/${s.platform.replace(/^后台/, '')}` : `frontend/${s.platform}`)
-                    : platforms.join(' + ');
-                logger_1.logger.info(`── ${taskId}: ${s.name} ──`);
-                logger_1.logger.info(`   端: ${target}`);
-                logger_1.logger.info(`   内容: ${(s.content || '').slice(0, 60).replace(/\n/g, ' ')}...`);
-                const answer = (await ask(`   → 保留？[y]确认 [e]编辑名称 [a]分配 [N]跳过 [q]取消: `)).toLowerCase();
-                if (answer === 'q') {
-                    logger_1.logger.info('  ❌ 取消全部\n');
-                    approved.length = 0;
+        if (hasBatch) {
+            checklist += `- [ ] 批量操作有上限限制\n`;
+            checklist += `- [ ] 大数据量分页处理\n`;
+        }
+        if (hasAuth) {
+            checklist += `- [ ] 权限校验在每个接口入口（不是中间件漏掉）\n`;
+        }
+        checklist += `\n`;
+    }
+    else {
+        checklist += `## 前端专项\n\n`;
+        checklist += `- [ ] 组件拆分合理（>200 行考虑拆分）\n`;
+        checklist += `- [ ] 无 XSS 漏洞（v-html 审查）\n`;
+        checklist += `- [ ] 响应式适配\n`;
+        checklist += `- [ ] 加载态 / 空态 / 错误态 / 边界态（四态齐全）\n\n`;
+    }
+    checklist += `## 测试\n\n`;
+    checklist += `- [ ] 核心路径有单元测试\n`;
+    checklist += `- [ ] 参照 \`TEST.md\` 逐项验证\n`;
+    checklist += `- [ ] \`speccore validate --task=${name}\` 通过\n\n`;
+    checklist += `## 自查确认\n\n`;
+    checklist += `- [ ] 已在本地完整跑通\n`;
+    checklist += `- [ ] 相关的 \`REQ.md\` 已更新（如有变化）\n`;
+    checklist += `- [ ] PR 描述写清楚了「做了什么 + 怎么测」\n`;
+    return checklist;
+}
+/**
+ * 严格模式：预览拆分方案，逐 section 确认
+ */
+async function strictSplitPreview(sections, platforms, iterationDir) {
+    const ask = (q) => {
+        process.stdout.write(q);
+        return new Promise((resolve) => {
+            process.stdin.resume();
+            process.stdin.once('data', (data) => {
+                process.stdin.pause();
+                resolve(data.toString().split('\n')[0].trim());
+            });
+        });
+    };
+    logger_1.logger.info('\n╔══════════════════════════════════════════╗');
+    logger_1.logger.info('║  🔍 Strict Split — 预览拆分方案          ║');
+    logger_1.logger.info('╚══════════════════════════════════════════╝\n');
+    logger_1.logger.info(`检测到 ${sections.length} 个章节，${platforms.length} 个端: ${platforms.join(', ')}\n`);
+    const approved = [];
+    for (let i = 0; i < sections.length; i++) {
+        const s = sections[i];
+        const taskId = `Task-${String(i + 1).padStart(3, '0')}`;
+        // Determine target directory
+        const target = s.platform
+            ? (s.platform.startsWith('后台') ? `backend/${s.platform.replace(/^后台/, '')}` : `frontend/${s.platform}`)
+            : platforms.join(' + ');
+        logger_1.logger.info(`── ${taskId}: ${s.name} ──`);
+        logger_1.logger.info(`   端: ${target}`);
+        logger_1.logger.info(`   内容: ${(s.content || '').slice(0, 60).replace(/\n/g, ' ')}...`);
+        const answer = (await ask(`   → 保留？[y]确认 [e]编辑名称 [a]分配 [N]跳过 [q]取消: `)).toLowerCase();
+        if (answer === 'q') {
+            logger_1.logger.info('  ❌ 取消全部\n');
+            approved.length = 0;
+            break;
+        }
+        if (answer === 'a') {
+            const owner = await ask(`   → 分配给谁？（如需要多端，用逗号分隔: 张三(后台),李四(Web)）: `);
+            if (owner) {
+                // Store owner info for later use
+                s._owner = owner;
+                logger_1.logger.info(`  👤 负责人: ${owner}`);
+            }
+            approved.push(s);
+            logger_1.logger.info(`  ✅ 保留`);
+        }
+        else if (answer === 'e') {
+            const newName = await ask(`   → 新名称: `);
+            if (newName) {
+                s.name = newName;
+                logger_1.logger.info(`  📝 已改名: ${newName}`);
+            }
+            approved.push(s);
+        }
+        else if (answer === 'y' || answer === 'yes') {
+            approved.push(s);
+            logger_1.logger.info(`  ✅ 保留`);
+        }
+        else {
+            logger_1.logger.info(`  ⏭️  跳过`);
+        }
+        logger_1.logger.info('');
+    }
+    if (approved.length === 0)
+        return [];
+    logger_1.logger.info(`\n  将创建 ${approved.length}/${sections.length} 个任务`);
+    const confirm = await ask('  确认创建？[y/N] ');
+    logger_1.logger.info('\n✅ 确认创建...\n');
+    (0, next_steps_1.showNextSteps)('split');
+    return approved;
+}
+/**
+ * 生成任务间影响关系图 + 风险评分
+ */
+async function generateImpactGraph(iterationDir, sections, platforms) {
+    const deps = [];
+    const sectionApis = sections.map((s, i) => {
+        const taskId = `Task-${String(i + 1).padStart(3, '0')}`;
+        const apis = (s.content.match(/\/api\/[a-zA-Z0-9\/-]+/g) || []).map(a => a.trim());
+        return { name: taskId, apis };
+    });
+    for (let i = 0; i < sectionApis.length; i++) {
+        for (let j = 0; j < sectionApis.length; j++) {
+            if (i === j)
+                continue;
+            for (const api of sectionApis[j].apis) {
+                if (sections[i].content.includes(api)) {
+                    deps.push({ from: sectionApis[i].name, fromName: sections[i].name, to: sectionApis[j].name, toName: sections[j].name, reason: api });
                     break;
                 }
-                if (answer === 'a') {
-                    const owner = await ask(`   → 分配给谁？（如需要多端，用逗号分隔: 张三(后台),李四(Web)）: `);
-                    if (owner) {
-                        // Store owner info for later use
-                        s._owner = owner;
-                        logger_1.logger.info(`  👤 负责人: ${owner}`);
-                    }
-                    approved.push(s);
-                    logger_1.logger.info(`  ✅ 保留`);
-                }
-                else if (answer === 'e') {
-                    const newName = await ask(`   → 新名称: `);
-                    if (newName) {
-                        s.name = newName;
-                        logger_1.logger.info(`  📝 已改名: ${newName}`);
-                    }
-                    approved.push(s);
-                }
-                else if (answer === 'y' || answer === 'yes') {
-                    approved.push(s);
-                    logger_1.logger.info(`  ✅ 保留`);
-                }
-                else {
-                    logger_1.logger.info(`  ⏭️  跳过`);
-                }
-                logger_1.logger.info('');
             }
-            if (approved.length === 0)
-                return [];
-            logger_1.logger.info(`\n  将创建 ${approved.length}/${sections.length} 个任务`);
-            const confirm = await ask('  确认创建？[y/N] ');
-            logger_1.logger.info('\n✅ 确认创建...\n');
-            (0, next_steps_1.showNextSteps)('split');
-            return approved;
         }
-        /**
-         * 生成任务间影响关系图 + 风险评分
-         */
-        async function generateImpactGraph(iterationDir, sections, platforms) {
-            const deps = [];
-            const sectionApis = sections.map((s, i) => {
-                const taskId = `Task-${String(i + 1).padStart(3, '0')}`;
-                const apis = (s.content.match(/\/api\/[a-zA-Z0-9\/-]+/g) || []).map(a => a.trim());
-                return { name: taskId, apis };
-            });
-            for (let i = 0; i < sectionApis.length; i++) {
-                for (let j = 0; j < sectionApis.length; j++) {
-                    if (i === j)
-                        continue;
-                    for (const api of sectionApis[j].apis) {
-                        if (sections[i].content.includes(api)) {
-                            deps.push({ from: sectionApis[i].name, fromName: sections[i].name, to: sectionApis[j].name, toName: sections[j].name, reason: api });
-                            break;
-                        }
-                    }
+    }
+    const seen = new Set();
+    const uniqueDeps = deps.filter(d => { const k = d.from + d.to; if (seen.has(k))
+        return false; seen.add(k); return true; });
+    let impact = '# IMPACT.md\n\n> auto-generated by split\n\n## Risk Scores\n\n| Task | Risk | Score | Tags | Reasons |\n| :--- | :--- | ---: | :--- | :--- |\n';
+    for (let i = 0; i < sections.length; i++) {
+        const s = sections[i];
+        const taskId = `Task-${String(i + 1).padStart(3, '0')}`;
+        const risk = await (0, risk_scorer_1.scoreRisk)(s.content + s.name, s.name, iterationDir);
+        impact += `| ${taskId}: ${s.name} | ${risk.level} | ${risk.score} | ${risk.tags.join(' ')} | ${risk.reasons.join('; ')} |\n`;
+        const taskDir = (0, path_1.join)(iterationDir, taskId);
+        if (await (0, fs_extra_1.pathExists)(taskDir)) {
+            // 生成风险报告并嵌入 TASK.md
+            const taskMdPath = (0, path_1.join)(taskDir, 'backend', 'TASK.md');
+            const riskReport = (0, risk_scorer_1.generateRiskReport)(risk);
+            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, '.risk'), riskReport);
+            if (await (0, fs_extra_1.pathExists)(taskMdPath)) {
+                let taskMd = await (0, fs_extra_1.readFile)(taskMdPath, 'utf-8');
+                if (!taskMd.includes('## 风险评估')) {
+                    taskMd += '\n\n## 风险评估\n\n' + riskReport.replace('# 风险评估\n\n', '');
+                    await (0, fs_extra_1.writeFile)(taskMdPath, taskMd);
                 }
             }
-            const seen = new Set();
-            const uniqueDeps = deps.filter(d => { const k = d.from + d.to; if (seen.has(k))
-                return false; seen.add(k); return true; });
-            let impact = '# IMPACT.md\n\n> auto-generated by split\n\n## Risk Scores\n\n| Task | Risk | Score | Tags | Reasons |\n| :--- | :--- | ---: | :--- | :--- |\n';
-            for (let i = 0; i < sections.length; i++) {
-                const s = sections[i];
-                const taskId = `Task-${String(i + 1).padStart(3, '0')}`;
-                const risk = await (0, risk_scorer_1.scoreRisk)(s.content + s.name, s.name, iterationDir);
-                impact += `| ${taskId}: ${s.name} | ${risk.level} | ${risk.score} | ${risk.tags.join(' ')} | ${risk.reasons.join('; ')} |\n`;
-                const taskDir = (0, path_1.join)(iterationDir, taskId);
-                if (await (0, fs_extra_1.pathExists)(taskDir)) {
-                    // 生成风险报告并嵌入 TASK.md
-                    const taskMdPath = (0, path_1.join)(taskDir, 'backend', 'TASK.md');
-                    const riskReport = (0, risk_scorer_1.generateRiskReport)(risk);
-                    await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, '.risk'), riskReport);
-                    if (await (0, fs_extra_1.pathExists)(taskMdPath)) {
-                        let taskMd = await (0, fs_extra_1.readFile)(taskMdPath, 'utf-8');
-                        if (!taskMd.includes('## 风险评估')) {
-                            taskMd += '\n\n## 风险评估\n\n' + riskReport.replace('# 风险评估\n\n', '');
-                            await (0, fs_extra_1.writeFile)(taskMdPath, taskMd);
-                        }
-                    }
-                    // Inject risk section into TASK.md if it exists
-                    const riskTaskPath = (0, path_1.join)(taskDir, 'backend', 'TASK.md');
-                    if (await (0, fs_extra_1.pathExists)(riskTaskPath)) {
-                        let taskMd = await (0, fs_extra_1.readFile)(riskTaskPath, 'utf-8');
-                        if (!taskMd.includes('## 风险评估')) {
-                            taskMd += '\n\n## 风险评估\n\n' + riskReport.replace('# 风险评估\n\n', '');
-                            await (0, fs_extra_1.writeFile)(riskTaskPath, taskMd);
-                        }
-                    }
+            // Inject risk section into TASK.md if it exists
+            const riskTaskPath = (0, path_1.join)(taskDir, 'backend', 'TASK.md');
+            if (await (0, fs_extra_1.pathExists)(riskTaskPath)) {
+                let taskMd = await (0, fs_extra_1.readFile)(riskTaskPath, 'utf-8');
+                if (!taskMd.includes('## 风险评估')) {
+                    taskMd += '\n\n## 风险评估\n\n' + riskReport.replace('# 风险评估\n\n', '');
+                    await (0, fs_extra_1.writeFile)(riskTaskPath, taskMd);
                 }
             }
-            impact += '\n## Dependencies\n\n';
-            if (uniqueDeps.length > 0) {
-                impact += '| Consumer | -> | Producer | API |\n| :--- | :---: | :--- | :--- |\n';
-                for (const d of uniqueDeps)
-                    impact += `| ${d.from}: ${d.fromName} | -> | ${d.to}: ${d.toName} | \`${d.reason}\` |\n`;
-                impact += '\n> Consumer tasks must wait for Producer tasks, or pre-define API contracts.\n';
-            }
-            else {
-                impact += 'No task dependencies detected — all tasks can be developed in parallel.\n';
-            }
-            await (0, fs_extra_1.writeFile)((0, path_1.join)(iterationDir, 'IMPACT.md'), impact);
-            logger_1.logger.info(`\nImpact analysis: ${iterationDir}/IMPACT.md`);
         }
-        function generateSchemaTemplate(section) {
-            const name = section.name;
-            return `# ${name} — Database Schema
+    }
+    impact += '\n## Dependencies\n\n';
+    if (uniqueDeps.length > 0) {
+        impact += '| Consumer | -> | Producer | API |\n| :--- | :---: | :--- | :--- |\n';
+        for (const d of uniqueDeps)
+            impact += `| ${d.from}: ${d.fromName} | -> | ${d.to}: ${d.toName} | \`${d.reason}\` |\n`;
+        impact += '\n> Consumer tasks must wait for Producer tasks, or pre-define API contracts.\n';
+    }
+    else {
+        impact += 'No task dependencies detected — all tasks can be developed in parallel.\n';
+    }
+    await (0, fs_extra_1.writeFile)((0, path_1.join)(iterationDir, 'IMPACT.md'), impact);
+    logger_1.logger.info(`\nImpact analysis: ${iterationDir}/IMPACT.md`);
+}
+function generateSchemaTemplate(section) {
+    const name = section.name;
+    return `# ${name} — Database Schema
 
 > Auto-generated. Fill in DDL before development.
 
@@ -598,11 +596,11 @@ ${section.content}
 -- TODO: Write rollback DDL
 \`\`\`
 `;
-        }
-        function generateDeployChecklist(section) {
-            const name = section.name;
-            const hasDb = section.content.match(/数据库|数据表|DDL|ALTER/) !== null;
-            return `# ${name} — Deployment Checklist
+}
+function generateDeployChecklist(section) {
+    const name = section.name;
+    const hasDb = section.content.match(/数据库|数据表|DDL|ALTER/) !== null;
+    return `# ${name} — Deployment Checklist
 
 ## Pre-Deploy
 
@@ -631,76 +629,76 @@ ${hasDb ? '6. [ ] Run DB migration\n7. [ ] Verify data integrity\n' : ''}
 - [ ] \`git revert\` the merge commit
 ${hasDb ? '- [ ] Run rollback DDL from SCHEMA.md\n' : ''}- [ ] Notify team on rollback
 `;
+}
+async function generateEnvExample(iterationDir, sections) {
+    const envPath = (0, path_1.join)(iterationDir, '.env.example');
+    let env = '# Environment Variables — ' + iterationDir + '\n';
+    env += '# Copy to .env and fill in values\n\n';
+    const needs = new Set();
+    for (const s of sections) {
+        const c = s.content + s.name;
+        if (c.match(/Redis|缓存/))
+            needs.add('REDIS_URL=redis://localhost:6379');
+        if (c.match(/Kafka|MQ|消息队列/))
+            needs.add('KAFKA_BROKERS=localhost:9092');
+        if (c.match(/MySQL|数据库|JDBC|数据表/))
+            needs.add('DB_URL=jdbc:mysql://localhost:3306/db\nDB_USER=root\nDB_PASS=');
+        if (c.match(/OSS|对象存储|S3|文件上传/))
+            needs.add('OSS_ENDPOINT=https://oss.example.com\nOSS_KEY=\nOSS_SECRET=');
+        if (c.match(/支付|微信|支付宝|wechat|alipay/))
+            needs.add('PAYMENT_API_KEY=\nPAYMENT_SECRET=');
+        if (c.match(/短信|SMS|验证码/))
+            needs.add('SMS_API_KEY=\nSMS_SECRET=');
+        if (c.match(/邮件|email|smtp/))
+            needs.add('SMTP_HOST=smtp.example.com\nSMTP_PORT=587\nSMTP_USER=\nSMTP_PASS=');
+        if (c.match(/token|JWT|OAuth|鉴权|登录/))
+            needs.add('JWT_SECRET=\nTOKEN_EXPIRE=3600');
+    }
+    if (needs.size === 0) {
+        needs.add('# No extra environment variables detected.');
+        needs.add('# Add required variables here.');
+    }
+    env += [...needs].join('\n') + '\n';
+    await (0, fs_extra_1.writeFile)(envPath, env);
+    logger_1.logger.info(`Env example: ${iterationDir}/.env.example`);
+}
+async function injectTechFromAnalysis(iterationDir, taskDir, sectionName) {
+    const analysisPath = (0, path_1.join)(iterationDir, '00-需求文档', 'ANALYSIS.md');
+    if (!(await (0, fs_extra_1.pathExists)(analysisPath)))
+        return;
+    const analysis = await (0, fs_extra_1.readFile)(analysisPath, 'utf-8');
+    // Extract relevant tech stack section
+    const techSection = analysis.match(/### 技术选型[\s\S]*?(?=###|$)/);
+    const dbSection = analysis.match(/### 数据库变更[\s\S]*?(?=###|$)/);
+    const depSection = analysis.match(/### 接口依赖[\s\S]*?(?=###|$)/);
+    if (!techSection && !dbSection && !depSection)
+        return;
+    const techPath = (0, path_1.join)(taskDir, 'backend', 'TECH.md');
+    let tech = await (0, fs_extra_1.readFile)(techPath, 'utf-8');
+    const note = '\n\n> 以下内容自动从 ANALYSIS.md 注入\n\n';
+    if (techSection && !tech.includes(techSection[0].trim())) {
+        tech += note + techSection[0].trim() + '\n';
+    }
+    if (dbSection && !tech.includes(dbSection[0].trim())) {
+        tech += dbSection[0].trim() + '\n';
+    }
+    if (depSection && !tech.includes(depSection[0].trim())) {
+        tech += depSection[0].trim() + '\n';
+    }
+    await (0, fs_extra_1.writeFile)(techPath, tech);
+}
+function generateApiContract(section) {
+    const lines = (section.content || '').split('\n');
+    const apis = [];
+    for (const line of lines) {
+        const match = line.match(/\|\s*(GET|POST|PUT|DELETE|PATCH)\s*\|\s*(\/[^\s|]+)\s*\|\s*(.*)/i);
+        if (match) {
+            apis.push({ method: match[1].toUpperCase(), path: match[2].trim(), desc: (match[3] || '').trim() });
         }
-        async function generateEnvExample(iterationDir, sections) {
-            const envPath = (0, path_1.join)(iterationDir, '.env.example');
-            let env = '# Environment Variables — ' + iterationDir + '\n';
-            env += '# Copy to .env and fill in values\n\n';
-            const needs = new Set();
-            for (const s of sections) {
-                const c = s.content + s.name;
-                if (c.match(/Redis|缓存/))
-                    needs.add('REDIS_URL=redis://localhost:6379');
-                if (c.match(/Kafka|MQ|消息队列/))
-                    needs.add('KAFKA_BROKERS=localhost:9092');
-                if (c.match(/MySQL|数据库|JDBC|数据表/))
-                    needs.add('DB_URL=jdbc:mysql://localhost:3306/db\nDB_USER=root\nDB_PASS=');
-                if (c.match(/OSS|对象存储|S3|文件上传/))
-                    needs.add('OSS_ENDPOINT=https://oss.example.com\nOSS_KEY=\nOSS_SECRET=');
-                if (c.match(/支付|微信|支付宝|wechat|alipay/))
-                    needs.add('PAYMENT_API_KEY=\nPAYMENT_SECRET=');
-                if (c.match(/短信|SMS|验证码/))
-                    needs.add('SMS_API_KEY=\nSMS_SECRET=');
-                if (c.match(/邮件|email|smtp/))
-                    needs.add('SMTP_HOST=smtp.example.com\nSMTP_PORT=587\nSMTP_USER=\nSMTP_PASS=');
-                if (c.match(/token|JWT|OAuth|鉴权|登录/))
-                    needs.add('JWT_SECRET=\nTOKEN_EXPIRE=3600');
-            }
-            if (needs.size === 0) {
-                needs.add('# No extra environment variables detected.');
-                needs.add('# Add required variables here.');
-            }
-            env += [...needs].join('\n') + '\n';
-            await (0, fs_extra_1.writeFile)(envPath, env);
-            logger_1.logger.info(`Env example: ${iterationDir}/.env.example`);
-        }
-        async function injectTechFromAnalysis(iterationDir, taskDir, sectionName) {
-            const analysisPath = (0, path_1.join)(iterationDir, '00-需求文档', 'ANALYSIS.md');
-            if (!(await (0, fs_extra_1.pathExists)(analysisPath)))
-                return;
-            const analysis = await (0, fs_extra_1.readFile)(analysisPath, 'utf-8');
-            // Extract relevant tech stack section
-            const techSection = analysis.match(/### 技术选型[\s\S]*?(?=###|$)/);
-            const dbSection = analysis.match(/### 数据库变更[\s\S]*?(?=###|$)/);
-            const depSection = analysis.match(/### 接口依赖[\s\S]*?(?=###|$)/);
-            if (!techSection && !dbSection && !depSection)
-                return;
-            const techPath = (0, path_1.join)(taskDir, 'backend', 'TECH.md');
-            let tech = await (0, fs_extra_1.readFile)(techPath, 'utf-8');
-            const note = '\n\n> 以下内容自动从 ANALYSIS.md 注入\n\n';
-            if (techSection && !tech.includes(techSection[0].trim())) {
-                tech += note + techSection[0].trim() + '\n';
-            }
-            if (dbSection && !tech.includes(dbSection[0].trim())) {
-                tech += dbSection[0].trim() + '\n';
-            }
-            if (depSection && !tech.includes(depSection[0].trim())) {
-                tech += depSection[0].trim() + '\n';
-            }
-            await (0, fs_extra_1.writeFile)(techPath, tech);
-        }
-        function generateApiContract(section) {
-            const lines = (section.content || '').split('\n');
-            const apis = [];
-            for (const line of lines) {
-                const match = line.match(/\|\s*(GET|POST|PUT|DELETE|PATCH)\s*\|\s*(\/[^\s|]+)\s*\|\s*(.*)/i);
-                if (match) {
-                    apis.push({ method: match[1].toUpperCase(), path: match[2].trim(), desc: (match[3] || '').trim() });
-                }
-            }
-            if (apis.length === 0)
-                return '';
-            let yaml = `# ${section.name} — API Contract
+    }
+    if (apis.length === 0)
+        return '';
+    let yaml = `# ${section.name} — API Contract
 # Auto-generated from REQ.md
 
 openapi: "3.0.0"
@@ -710,9 +708,9 @@ info:
 
 paths:
 `;
-            for (const api of apis) {
-                const tag = api.path.split('/')[2] || 'default';
-                yaml += `  ${api.path}:
+    for (const api of apis) {
+        const tag = api.path.split('/')[2] || 'default';
+        yaml += `  ${api.path}:
     ${api.method.toLowerCase()}:
       tags: [${tag}]
       summary: "${api.desc}"
@@ -720,58 +718,56 @@ paths:
         "200":
           description: Success
 `;
-                if (api.method === 'POST' || api.method === 'PUT') {
-                    yaml += `        "400":
+        if (api.method === 'POST' || api.method === 'PUT') {
+            yaml += `        "400":
           description: Bad Request
 `;
-                }
-                if (api.method === 'DELETE') {
-                    yaml += `        "404":
+        }
+        if (api.method === 'DELETE') {
+            yaml += `        "404":
           description: Not Found
 `;
-                }
-            }
-            return yaml;
         }
-        function generateErrorCodes(section) {
-            let md = `# ${section.name} — Error Codes\n\n> Auto-generated\n\n`;
-            md += `| Code | HTTP | Message | Description |\n`;
-            md += `| :--- | :--- | :--- | :--- |\n`;
-            const content = section.content || '';
-            const module = section.name.replace(/[^\w]/g, '_').toUpperCase();
-            md += `| ${module}_001 | 400 | 参数校验失败 | 请求参数不符合规范 |\n`;
-            md += `| ${module}_002 | 404 | 资源不存在 | 请求的资源未找到 |\n`;
-            md += `| ${module}_003 | 500 | 服务器内部错误 | 未预期的服务异常 |\n`;
-            if (content.includes('权限') || content.includes('RBAC')) {
-                md += `| ${module}_004 | 403 | 无操作权限 | 当前用户权限不足 |\n`;
-            }
-            if (content.includes('创建') || content.includes('POST')) {
-                md += `| ${module}_005 | 409 | 资源冲突 | 重复创建或状态冲突 |\n`;
-            }
-            return md;
+    }
+    return yaml;
+}
+function generateErrorCodes(section) {
+    let md = `# ${section.name} — Error Codes\n\n> Auto-generated\n\n`;
+    md += `| Code | HTTP | Message | Description |\n`;
+    md += `| :--- | :--- | :--- | :--- |\n`;
+    const content = section.content || '';
+    const module = section.name.replace(/[^\w]/g, '_').toUpperCase();
+    md += `| ${module}_001 | 400 | 参数校验失败 | 请求参数不符合规范 |\n`;
+    md += `| ${module}_002 | 404 | 资源不存在 | 请求的资源未找到 |\n`;
+    md += `| ${module}_003 | 500 | 服务器内部错误 | 未预期的服务异常 |\n`;
+    if (content.includes('权限') || content.includes('RBAC')) {
+        md += `| ${module}_004 | 403 | 无操作权限 | 当前用户权限不足 |\n`;
+    }
+    if (content.includes('创建') || content.includes('POST')) {
+        md += `| ${module}_005 | 409 | 资源冲突 | 重复创建或状态冲突 |\n`;
+    }
+    return md;
+}
+function generateAdr(section) {
+    const content = section.content || '';
+    // Only generate ADR if tech decisions are mentioned
+    const hasTech = content.match(/Spring|Vue|React|MySQL|Redis|Kafka|微服务|单体|REST|gRPC/);
+    if (!hasTech)
+        return '';
+    const now = new Date().toISOString().split('T')[0];
+    let adr = `# ADR: ${section.name}\n\n`;
+    adr += `- **日期**: ${now}\n`;
+    adr += `- **状态**: 提议中\n\n`;
+    adr += `## 决策\n\n`;
+    const techStack = content.match(/(Spring|Vue|React|MySQL|Redis|Kafka|微服务|单体|REST|gRPC)[^\n]*/g);
+    if (techStack) {
+        adr += `基于任务需求，技术选型如下:\n\n`;
+        for (const t of [...new Set(techStack)]) {
+            adr += `- ${t.trim()}\n`;
         }
-        function generateAdr(section) {
-            const content = section.content || '';
-            // Only generate ADR if tech decisions are mentioned
-            const hasTech = content.match(/Spring|Vue|React|MySQL|Redis|Kafka|微服务|单体|REST|gRPC/);
-            if (!hasTech)
-                return '';
-            const now = new Date().toISOString().split('T')[0];
-            let adr = `# ADR: ${section.name}\n\n`;
-            adr += `- **日期**: ${now}\n`;
-            adr += `- **状态**: 提议中\n\n`;
-            adr += `## 决策\n\n`;
-            const techStack = content.match(/(Spring|Vue|React|MySQL|Redis|Kafka|微服务|单体|REST|gRPC)[^\n]*/g);
-            if (techStack) {
-                adr += `基于任务需求，技术选型如下:\n\n`;
-                for (const t of [...new Set(techStack)]) {
-                    adr += `- ${t.trim()}\n`;
-                }
-            }
-            adr += `\n## 备选方案\n\n- _待补充_\n`;
-            adr += `\n## 后果\n\n- _待补充_\n`;
-            return adr;
-        }
-    });
+    }
+    adr += `\n## 备选方案\n\n- _待补充_\n`;
+    adr += `\n## 后果\n\n- _待补充_\n`;
+    return adr;
 }
 //# sourceMappingURL=split.js.map
