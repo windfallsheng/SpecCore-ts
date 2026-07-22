@@ -12,7 +12,8 @@ import { showNextSteps } from '../core/next-steps';
 export interface AnalyzeOptions {
   iteration?: string;
   output?: string;
-  auto?: boolean;  // 自动模式：不交互，直接产出分析报告
+  auto?: boolean;
+  task?: string;   // 单任务分析模式
 }
 
 export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
@@ -27,6 +28,14 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     }
 
     const iterDir = `期次-${iteration}`;
+
+    // ── Per-task analyze mode ──
+    if (options.task) {
+      spinner.stop();
+      await perTaskAnalyze(iterDir, options.task);
+      return;
+    }
+
     const reqPath = join(iterDir, '00-需求文档', 'REQUIREMENT.md');
     
     if (!(await pathExists(reqPath))) {
@@ -454,4 +463,92 @@ function buildAnalysisReport(
   report += `- [ ] 可以开始拆分任务\n`;
 
   return report;
+}
+
+/**
+ * 单任务分析 — 读取任务的 REQ.md，完善 TECH/TEST/REVIEW
+ */
+async function perTaskAnalyze(iterDir: string, taskId: string): Promise<void> {
+  const { readdirSync } = require('fs');
+  const entries = readdirSync(iterDir, { withFileTypes: true });
+  const taskEntry = entries.find((e: any) => e.isDirectory() && e.name.startsWith(taskId));
+  
+  if (!taskEntry) {
+    logger.error(`Task 未找到: ${taskId}`);
+    logger.info('可用任务:');
+    for (const e of entries) {
+      if (e.isDirectory() && e.name.startsWith('Task-')) logger.info(`  - ${e.name}`);
+    }
+    return;
+  }
+
+  const fullTaskDir = join(iterDir, taskEntry.name);
+  const backendDir = join(fullTaskDir, 'backend');
+  
+  const spinner = new Spinner(`分析 ${taskEntry.name}`);
+  spinner.start();
+
+  try {
+    const reqPath = join(backendDir, 'REQ.md');
+    let reqContent = '';
+    if (await pathExists(reqPath)) reqContent = await readFile(reqPath, 'utf-8');
+
+    // Enrich TECH.md
+    const techPath = join(backendDir, 'TECH.md');
+    if (await pathExists(techPath)) {
+      let tech = await readFile(techPath, 'utf-8');
+      if (!tech.includes('## 分析建议')) {
+        const apis = (reqContent.match(/\/api\/[a-zA-Z0-9\/-]+/g) || []).map(a => a.trim());
+        let notes = '\n\n---\n\n## 分析建议\n\n> 自动生成，可反复修改\n\n';
+        if (apis.length > 0) {
+          notes += `检测到 ${apis.length} 个 API:\n`;
+          for (const api of [...new Set(apis)]) notes += `- \`${api}\`\n`;
+        }
+        if (reqContent.match(/数据库|表|DDL/)) notes += '- 涉及数据库变更，请补充 DDL\n';
+        if (reqContent.match(/权限|RBAC|鉴权/)) notes += '- 涉及权限控制，注意鉴权边界\n';
+        tech += notes;
+        await writeFile(techPath, tech);
+      }
+    }
+
+    // Enrich TEST.md
+    const testPath = join(backendDir, 'TEST.md');
+    if (await pathExists(testPath)) {
+      let test = await readFile(testPath, 'utf-8');
+      if (!test.includes('## 补充分析')) {
+        let analysis = '\n\n---\n\n## 补充分析\n';
+        if (reqContent.includes('POST')) analysis += '- [ ] 正常 + 异常参数测试\n';
+        if (reqContent.includes('GET')) analysis += '- [ ] 分页/筛选/空结果\n';
+        if (reqContent.includes('DELETE')) analysis += '- [ ] 删除确认 + 级联处理\n';
+        if (reqContent.includes('权限')) analysis += '- [ ] 无权限访问 + 越权检测\n';
+        test += analysis;
+        await writeFile(testPath, test);
+      }
+    }
+
+    // Enrich REVIEW.md
+    const reviewPath = join(backendDir, 'REVIEW.md');
+    if (await pathExists(reviewPath)) {
+      let review = await readFile(reviewPath, 'utf-8');
+      if (!review.includes('## 本任务专项检查')) {
+        let checks = '\n\n---\n\n## 本任务专项检查\n';
+        if (reqContent.includes('POST')) checks += '- [ ] 参数校验 + 幂等性\n';
+        if (reqContent.includes('数据库')) checks += '- [ ] 索引覆盖 + 迁移可回滚\n';
+        if (reqContent.includes('权限')) checks += '- [ ] 鉴权配置正确\n';
+        review += checks;
+        await writeFile(reviewPath, review);
+      }
+    }
+
+    spinner.stop(`分析完成: ${taskEntry.name}`);
+
+    logger.info('');
+    logger.info(`  📝 已更新: TECH.md / TEST.md / REVIEW.md`);
+    logger.info('  💡 可反复运行完善:');
+    logger.info(`     speccore analyze --task=${taskId} --iteration=${iterDir.replace('期次-', '')}`);
+    logger.info('');
+
+  } catch (error) {
+    spinner.fail(`分析失败: ${error}`);
+  }
 }
