@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 const commander_1 = require("commander");
 const package_json_1 = require("../package.json");
@@ -30,6 +63,7 @@ const retro_1 = require("./commands/retro");
 const template_add_1 = require("./commands/template-add");
 const help_1 = require("./commands/help");
 const dev_1 = require("./commands/dev");
+const status_panel_1 = require("./commands/status-panel");
 const demo_1 = require("./commands/demo");
 const welcome_1 = require("./commands/welcome");
 const word2spec_1 = require("./commands/word2spec");
@@ -103,12 +137,136 @@ commander_1.program
     .option('--force', 'Force re-initialization')
     .action(welcome_1.welcomeCommand);
 commander_1.program
+    .command('status-panel')
+    .alias('sp')
+    .description('IDE-style status panel: phase + tasks + progress + next action')
+    .action(status_panel_1.statusPanelCommand);
+commander_1.program
+    .command('open')
+    .alias('opn')
+    .description('Open task files in editor')
+    .option('-t, --task <task>', 'Task to open')
+    .option('-i, --iteration <iteration>', 'Target iteration')
+    .action(async (options) => {
+    const { getDefaultIteration } = await Promise.resolve().then(() => __importStar(require('./core/context')));
+    const it = await getDefaultIteration(options.iteration);
+    if (!it)
+        return;
+    const fs = require('fs');
+    const iterDir = `期次-${it}`;
+    const entries = fs.readdirSync(iterDir, { withFileTypes: true });
+    const task = entries.find((e) => e.isDirectory() && e.name.startsWith(options.task || ''));
+    if (task) {
+        const { logger } = require('./utils/logger');
+        logger.info(`\n📂 ${task.name}:`);
+        const files = ['REQ.md', 'TECH.md', 'TASK.md', 'TEST.md', 'API_CONTRACT.yaml'];
+        for (const f of files) {
+            const path = require('path').join(iterDir, task.name, f.startsWith('API') ? '_shared' : 'backend', f);
+            if (fs.existsSync(path))
+                logger.info(`  ${path}`);
+        }
+    }
+});
+commander_1.program
+    .command('status-panel')
+    .alias('sp')
+    .description('IDE-style status panel: phase + tasks + progress + next action')
+    .action(status_panel_1.statusPanelCommand);
+commander_1.program
+    .command('open')
+    .alias('opn')
+    .description('Open task files in editor')
+    .option('-t, --task <task>', 'Task to open')
+    .option('-i, --iteration <iteration>', 'Target iteration')
+    .action(async (options) => {
+    const { getDefaultIteration } = await Promise.resolve().then(() => __importStar(require('./core/context')));
+    const it = await getDefaultIteration(options.iteration);
+    if (!it)
+        return;
+    const fs = require('fs');
+    const iterDir = `期次-${it}`;
+    const entries = fs.readdirSync(iterDir, { withFileTypes: true });
+    const task = entries.find((e) => e.isDirectory() && e.name.startsWith(options.task || ''));
+    if (task) {
+        const { logger } = require('./utils/logger');
+        logger.info(`\n📂 ${task.name}:`);
+        const files = ['REQ.md', 'TECH.md', 'TASK.md', 'TEST.md', 'API_CONTRACT.yaml'];
+        for (const f of files) {
+            const path = require('path').join(iterDir, task.name, f.startsWith('API') ? '_shared' : 'backend', f);
+            if (fs.existsSync(path))
+                logger.info(`  ${path}`);
+        }
+    }
+});
+commander_1.program
     .command('dev')
     .alias('d')
     .description('Smart dev entry: auto-detect phase and suggest next step')
     .option('-i, --iteration <iteration>', 'Target iteration')
     .option('--force', 'Auto-execute the next step')
     .action(dev_1.devCommand);
+commander_1.program
+    .command('status-panel')
+    .alias('sp')
+    .description('IDE-style status panel: phase + tasks + progress + next action')
+    .action(status_panel_1.statusPanelCommand);
+commander_1.program
+    .command('open')
+    .alias('opn')
+    .description('Open task files in editor')
+    .option('-t, --task <task>', 'Task to open')
+    .option('-i, --iteration <iteration>', 'Target iteration')
+    .action(async (options) => {
+    const { getDefaultIteration } = await Promise.resolve().then(() => __importStar(require('./core/context')));
+    const it = await getDefaultIteration(options.iteration);
+    if (!it)
+        return;
+    const fs = require('fs');
+    const iterDir = `期次-${it}`;
+    const entries = fs.readdirSync(iterDir, { withFileTypes: true });
+    const task = entries.find((e) => e.isDirectory() && e.name.startsWith(options.task || ''));
+    if (task) {
+        const { logger } = require('./utils/logger');
+        logger.info(`\n📂 ${task.name}:`);
+        const files = ['REQ.md', 'TECH.md', 'TASK.md', 'TEST.md', 'API_CONTRACT.yaml'];
+        for (const f of files) {
+            const path = require('path').join(iterDir, task.name, f.startsWith('API') ? '_shared' : 'backend', f);
+            if (fs.existsSync(path))
+                logger.info(`  ${path}`);
+        }
+    }
+});
+commander_1.program
+    .command('status-panel')
+    .alias('sp')
+    .description('IDE-style status panel: phase + tasks + progress + next action')
+    .action(status_panel_1.statusPanelCommand);
+commander_1.program
+    .command('open')
+    .alias('opn')
+    .description('Open task files in editor')
+    .option('-t, --task <task>', 'Task to open')
+    .option('-i, --iteration <iteration>', 'Target iteration')
+    .action(async (options) => {
+    const { getDefaultIteration } = await Promise.resolve().then(() => __importStar(require('./core/context')));
+    const it = await getDefaultIteration(options.iteration);
+    if (!it)
+        return;
+    const fs = require('fs');
+    const iterDir = `期次-${it}`;
+    const entries = fs.readdirSync(iterDir, { withFileTypes: true });
+    const task = entries.find((e) => e.isDirectory() && e.name.startsWith(options.task || ''));
+    if (task) {
+        const { logger } = require('./utils/logger');
+        logger.info(`\n📂 ${task.name}:`);
+        const files = ['REQ.md', 'TECH.md', 'TASK.md', 'TEST.md', 'API_CONTRACT.yaml'];
+        for (const f of files) {
+            const path = require('path').join(iterDir, task.name, f.startsWith('API') ? '_shared' : 'backend', f);
+            if (fs.existsSync(path))
+                logger.info(`  ${path}`);
+        }
+    }
+});
 commander_1.program
     .command('dev')
     .alias('d')
