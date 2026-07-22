@@ -512,6 +512,7 @@ commander_1.program
     .option('-i, --iteration <iteration>', 'Target iteration')
     .option('-o, --output <file>', 'Output filename', 'ANALYSIS.md')
     .option('--auto', 'Non-interactive mode: generate report directly')
+    .option('-t, --task <task>', 'Per-task analysis: enriches TECH/TEST/REVIEW for one task')
     .action(analyze_1.analyzeCommand);
 commander_1.program
     .command('audit')

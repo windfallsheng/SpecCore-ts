@@ -551,6 +551,7 @@ program
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('-o, --output <file>', 'Output filename', 'ANALYSIS.md')
   .option('--auto', 'Non-interactive mode: generate report directly')
+  .option('-t, --task <task>', 'Per-task analysis: enriches TECH/TEST/REVIEW for one task')
   .action(analyzeCommand);
 
 program
