@@ -19,7 +19,7 @@ SpecCore 由两部分组成，**职责明确，互不混淆**：
 | **在哪里执行** | 终端 / Terminal | AI 编程工具（WorkBuddy / Cursor / Claude 等） |
 | **怎么用** | `speccore init` | 输入 `/spec-xxx` |
 | **什么原理** | TypeScript 编译，直接操作文件 | Markdown 指令，AI 读取后执行 |
-| **数量** | 54 个 CLI 命令 | 54 个 Slash Command |
+| **数量** | 65 个 CLI 命令 | 54 个 Slash Command |
 | **何时用** | 项目初始化、文件校验、批量操作 | 日常开发：需求管理、开发执行、审查归档 |
 
 > 💡 **简单记忆**：`speccore` 开头 → 终端执行；`/spec` 开头 → AI 工具中执行。
@@ -104,7 +104,7 @@ SpecCore 采用**确定性逻辑与智能逻辑解耦**的架构：
 
 ---
 
-## 🔧 终端命令速查（54 个 CLI 命令）
+## 🔧 终端命令速查（65 个 CLI 命令）
 
 > 在终端中执行，所有命令以 `speccore` 开头。
 
@@ -126,7 +126,7 @@ SpecCore 采用**确定性逻辑与智能逻辑解耦**的架构：
 
 ## 🤖 AI 命令（Slash Command）对应关系
 
-> 在 AI 工具（WorkBuddy / Cursor / Claude Code 等）中输入 `/` + 命令。AI 命令在底层调用对应的 CLI 命令执行。54 个 CLI 命令都有对应的 `/spec-*` 形式。
+> 在 AI 工具（WorkBuddy / Cursor / Claude Code 等）中输入 `/` + 命令。AI 命令在底层调用对应的 CLI 命令执行。65 个 CLI 命令都有对应的 `/spec-*` 形式。
 
 | CLI 终端命令 | AI Slash Command | 用途 |
 | :--- | :--- | :--- |
@@ -191,7 +191,7 @@ SpecCore 原生集成 WorkBuddy（`speccore init` 自动创建 `.workbuddy/` ski
 | [CI/CD 集成](docs/CI-CD与spec注释集成指南.md) | @spec 注释 + GitHub Actions |
 | [Spec 加载机制](docs/Spec三层加载机制.md) | 三层 Spec 协同 |
 | [示例项目](examples/task-management/README.md) | 完整演示：需求→Spec→生成代码 |
-| [CHANGELOG](CHANGELOG.md) | 版本历史（v1.0.0 → v5.15.1） |
+| [CHANGELOG](CHANGELOG.md) | 版本历史（v1.0.0 → v5.16.0） |
 | [README.en.md](README.en.md) | English project overview |
 
 ---
@@ -246,7 +246,7 @@ SpecCore 不禁止手动编辑文件，但不同文件的安全级别不同。
 | `GLOBAL/REQUIREMENT.md` | 改完立即 `speccore sync-global` |
 | `CHANGELOG.md` | 建议用 `speccore change` 自动追加 |
 
-> 📚 完整指南见 [使用指南](docs/使用指南.md)
+
 
 ---
 
@@ -274,7 +274,7 @@ bash verify.sh
 
 ## 版本
 
-v5.15.1 | 🔧 CLI 命令 54 个 | 🧠 意图识别 36 种
+v5.16.0 | 🔧 CLI 命令 54 个 | 🧠 意图识别 38 种
 
 版本历史见 [CHANGELOG.md](CHANGELOG.md)
 
