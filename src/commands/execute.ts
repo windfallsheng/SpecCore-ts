@@ -303,15 +303,6 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
   }
 
   // ── Agent mode: output optimized context for external AI ──
-  if (options.agent) {
-    const agentCtx = buildAgentContext(tasks, options.agent);
-    logger.info(`\n🤖 Agent 模式: ${options.agent}`);
-    logger.info('--- AGENT CONTEXT START ---');
-    logger.info(agentCtx);
-    logger.info('--- AGENT CONTEXT END ---');
-    logger.info('\n💡 复制以上内容粘贴到 ' + options.agent + ' 中即可生成代码');
-    logOperation('speccore execute --agent', options.agent);
-    return;
   }
 
   logOperation('speccore execute', `${total} tasks`);
