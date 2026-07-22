@@ -44,6 +44,7 @@ const dashboard_1 = require("./commands/dashboard");
 const audit_1 = require("./commands/audit");
 const analyze_1 = require("./commands/analyze");
 const lifecycle_1 = require("./commands/lifecycle");
+const pr_1 = require("./commands/pr");
 const done_1 = require("./commands/done");
 // rename 命令
 const rename_1 = require("./commands/rename");
@@ -226,6 +227,26 @@ commander_1.program
 // ================================================================
 // ⚡ 执行与调度
 // ================================================================
+commander_1.program
+    .command('pr')
+    .alias('mr')
+    .description('Create Pull Request with task summary')
+    .option('-t, --task <task>', 'Target task (auto-detect from branch if omitted)')
+    .option('-i, --iteration <iteration>', 'Target iteration')
+    .option('--base <branch>', 'Base branch', 'main')
+    .option('--draft', 'Create as draft PR')
+    .option('--title <title>', 'Custom PR title')
+    .action(pr_1.prCommand);
+commander_1.program
+    .command('pr')
+    .alias('mr')
+    .description('Create Pull Request with task summary')
+    .option('-t, --task <task>', 'Target task (auto-detect from branch if omitted)')
+    .option('-i, --iteration <iteration>', 'Target iteration')
+    .option('--base <branch>', 'Base branch', 'main')
+    .option('--draft', 'Create as draft PR')
+    .option('--title <title>', 'Custom PR title')
+    .action(pr_1.prCommand);
 commander_1.program
     .command('plan')
     .alias('pl')
