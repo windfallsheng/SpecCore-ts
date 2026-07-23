@@ -773,14 +773,15 @@ platforms:
 /**
  * Generate slash command files for all supported AI tools
  * Each tool has its own commands directory convention:
- *   .codebuddy/commands/  → WorkBuddy / Qcoder
+ *   .codebuddy/commands/  → WorkBuddy
+ *   .qoder/commands/      → Qcoder
  *   .cursor/commands/     → Cursor
  *   .trae/commands/       → Trae
  *   .windsurf/commands/   → Windsurf
  *   .claude/commands/     → Claude Code / OpenCode
  */
 async function generateSlashCommands(projectRoot) {
-    const toolDirs = ['.codebuddy', '.cursor', '.trae', '.windsurf', '.claude'];
+    const toolDirs = ['.codebuddy', '.qoder', '.cursor', '.trae', '.windsurf', '.claude'];
     const commands = [
         ['spec-init', 'Initialize project', ['speccore init']],
         ['spec-dev', 'Smart dev entry', ['speccore dev']],
@@ -820,6 +821,6 @@ async function generateSlashCommands(projectRoot) {
             await (0, fs_extra_1.writeFile)((0, path_1.join)(cmdDir, name + ".md"), content);
         }
     }
-    logger_1.logger.info("  ✅ " + commands.length + " slash commands × " + toolDirs.length + " tools → .codebuddy|.cursor|.trae|.windsurf|.claude/commands/");
+    logger_1.logger.info("  ✅ " + commands.length + " slash commands × " + toolDirs.length + " tools → .codebuddy|.qoder|.cursor|.trae|.windsurf|.claude/commands/");
 }
 //# sourceMappingURL=init.js.map
