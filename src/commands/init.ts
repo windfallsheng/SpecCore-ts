@@ -878,14 +878,15 @@ platforms:
 /**
  * Generate slash command files for all supported AI tools
  * Each tool has its own commands directory convention:
- *   .codebuddy/commands/  → WorkBuddy / Qcoder
+ *   .codebuddy/commands/  → WorkBuddy
+ *   .qoder/commands/      → Qcoder
  *   .cursor/commands/     → Cursor
  *   .trae/commands/       → Trae
  *   .windsurf/commands/   → Windsurf
  *   .claude/commands/     → Claude Code / OpenCode
  */
 async function generateSlashCommands(projectRoot: string): Promise<void> {
-  const toolDirs = ['.codebuddy', '.cursor', '.trae', '.windsurf', '.claude'];
+  const toolDirs = ['.codebuddy', '.qoder', '.cursor', '.trae', '.windsurf', '.claude'];
 
   const commands: [string, string, string[]][] = [
     ['spec-init', 'Initialize project', ['speccore init']],
@@ -928,5 +929,5 @@ async function generateSlashCommands(projectRoot: string): Promise<void> {
     }
   }
 
-  logger.info("  ✅ " + commands.length + " slash commands × " + toolDirs.length + " tools → .codebuddy|.cursor|.trae|.windsurf|.claude/commands/");
+  logger.info("  ✅ " + commands.length + " slash commands × " + toolDirs.length + " tools → .codebuddy|.qoder|.cursor|.trae|.windsurf|.claude/commands/");
 }
