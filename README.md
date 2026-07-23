@@ -16,13 +16,13 @@ SpecCore 由两部分组成，**职责明确，互不混淆**：
 
 | | 🔧 终端命令（CLI） | 🤖 AI 命令（Slash Command） |
 | :--- | :--- | :--- |
-| **在哪里执行** | 终端 / Terminal | AI 编程工具（WorkBuddy / Cursor / Claude 等） |
+| **在哪里执行** | 终端 / Terminal | AI 编程工具（Qcoder / Trae / Cursor / Claude 等） |
 | **怎么用** | `speccore init` | 输入 `/spec-xxx` |
 | **什么原理** | TypeScript 编译，直接操作文件 | Markdown 指令，AI 读取后执行 |
-| **数量** | 68 个 CLI 命令 | 54 个 Slash Command |
-| **何时用** | 项目初始化、文件校验、批量操作 | 日常开发：需求管理、开发执行、审查归档 |
+| **数量** | 68 个 CLI 命令 | 29 个 Slash Command（覆盖 6 个工具） |
+| **何时用** | **确定操作**：项目初始化、需求导入、分析、拆分、执行 | **需要 AI 判断**：上下文生成、仪表盘解读、自然语言理解 |
 
-> 💡 **简单记忆**：`speccore` 开头 → 终端执行；`/spec` 开头 → AI 工具中执行。
+> 💡 **核心原则**：确定操作走 CLI（快、准、省 Token）；需要 AI 判断的工作才用 Slash Command。
 
 ---
 
@@ -170,7 +170,7 @@ SpecCore 采用**确定性逻辑与智能逻辑解耦**的架构：
 | :--- | :--- |
 | WorkBuddy / Qcoder / Trae | Cursor / Claude Code / Windsurf / Gemini CLI / OpenCode |
 
-SpecCore 原生集成 WorkBuddy（`speccore init` 自动创建 `.workbuddy/` skill 和 memory）。
+SpecCore 原生集成 6 个工具（`speccore init` 自动生成 `.codebuddy/` `.qoder/` `.cursor/` `.trae/` `.windsurf/` `.claude/` 命令目录）。
 
 > 📚 完整适配说明见 [工具适配说明](docs/工具适配说明.md)
 
