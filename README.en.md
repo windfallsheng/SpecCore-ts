@@ -12,6 +12,16 @@ SpecCore is a specification-driven development framework for AI-native teams. It
 
 ---
 
+## 👤 Which role are you?
+
+| I am | Just learn | Start here |
+| :--- | :--- | :--- |
+| 🚀 **New to SpecCore** | 7 commands + `speccore dev` | [Quick Start](docs/快速开始.md) |
+| 💻 **Developer** | `init` `execute` `pr` `done` | [Dev Flow](#dev-flow) |
+| 🔧 **Maintainer** | `config` `backup` `archive` | [Management](#management) |
+
+---
+
 ## 🧩 Two Ways to Use
 
 SpecCore has two distinct parts:
