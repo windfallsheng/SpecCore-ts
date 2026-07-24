@@ -16,8 +16,6 @@ SpecCore 是一套可落地的、面向 AI 原生团队的规范驱动研发工�
 | :--- | :--- | :--- |
 | 🚀 **新人 / 全部** | 7 个命令 + `speccore dev` | [快速开始](docs/快速开始.md) |
 | 💻 **开发工程师** | `init` `execute` `pr` `done` | [开发流](#-开发流) |
-| 📝 **产品经理** | `/spec-xxx` 在 Qcoder 里用 | [产品流](docs/工具适配说明.md) |
-| 🧪 **测试工程师** | `validate` `merge-check` | [命令参考](docs/命令参考.md) |
 | 🔧 **维护者** | `config` `backup` `archive` | [管理命令](#-管理命令) |
 
 ---
