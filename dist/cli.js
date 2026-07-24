@@ -753,7 +753,6 @@ commander_1.program
 commander_1.program
     .command('completion [shell]')
     .alias('cmp')
-    .alias('cmp')
     .description('Generate shell completion script (bash/zsh)')
     .action(completion_1.completionCommand);
 commander_1.program
