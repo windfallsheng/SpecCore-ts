@@ -10,6 +10,18 @@ SpecCore 是一套可落地的、面向 AI 原生团队的规范驱动研发工�
 
 ---
 
+## 👤 我是什么角色？从这里开始
+
+| 我是 | 只需要学 | 快速入口 |
+| :--- | :--- | :--- |
+| 🚀 **新人 / 全部** | 7 个命令 + `speccore dev` | [快速开始](docs/快速开始.md) |
+| 💻 **开发工程师** | `init` `execute` `pr` `done` | [开发流](#-开发流) |
+| 📝 **产品经理** | `/spec-xxx` 在 Qcoder 里用 | [产品流](docs/工具适配说明.md) |
+| 🧪 **测试工程师** | `validate` `merge-check` | [命令参考](docs/命令参考.md) |
+| 🔧 **维护者** | `config` `backup` `archive` | [管理命令](#-管理命令) |
+
+---
+
 ## 🧩 两种使用方式
 
 SpecCore 由两部分组成，**职责明确，互不混淆**：
@@ -55,6 +67,32 @@ speccore spec "进度怎么样了"
 ```
 
 > 📚 更多场景和详细步骤见 [快速开始指南](docs/快速开始.md)
+
+---
+
+## 💻 开发流
+
+```bash
+speccore init                  # 1. 初始化
+speccore dev --force           # 2. 智能引导（自动走完分析+拆分）
+speccore execute --all         # 3. 批量执行所有 Task
+speccore pr                    # 4. 提交 PR
+speccore done                  # 5. 完成任务
+```
+
+> 💡 也可以只敲 `speccore`，自适应面板会告诉你当前该执行哪一步。
+
+---
+
+## 🔧 管理命令
+
+```bash
+speccore config                # 配置项目管理
+speccore backup                # 备份 Spec 数据
+speccore archive               # 归档已完成期次
+speccore health                # 项目健康检查
+speccore migrate               # 迁移到新版本
+```
 
 ---
 
