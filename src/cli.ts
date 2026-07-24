@@ -920,6 +920,31 @@ program
   .action(watchCommand);
 
 // Parse arguments
+// ── 帮助分层：核心命令前置 ──
+program.addHelpText('beforeAll', `
+┌──────────────────────────────────────────────┐
+│  🔵 核心 7 步（一次记住）                      │
+│  init → word2spec → analyze → split          │
+│  → execute → pr → done                       │
+├──────────────────────────────────────────────┤
+│  🚀 speccore init         初始化项目          │
+│  📝 speccore word2spec    导入需求文档        │
+│  🔍 speccore analyze      需求分析+宪法检查    │
+│  📦 speccore split        拆分为独立Task      │
+│  💻 speccore execute      执行开发            │
+│  ✅ speccore done         完成任务            │
+│  🔀 speccore pr           创建PR              │
+├──────────────────────────────────────────────┤
+│  💡 speccore（无参数）→ 自适应引导面板         │
+│  📊 speccore status-panel → 可视化看板        │
+│  🤖 speccore dev → 智能检测+级联执行          │
+└──────────────────────────────────────────────┘
+`);
+
+program.addHelpText('afterAll', `
+💡 完整文档: https://github.com/windfallsheng/SpecCore-ts
+`);
+
 // ── Adaptive welcome panel (no args) ──
 if (process.argv.length <= 2) {
   const { existsSync, readdirSync, readFileSync } = require('fs');
