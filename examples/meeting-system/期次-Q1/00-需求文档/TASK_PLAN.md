@@ -6,39 +6,39 @@
 
 ## 一、任务关联图
 
-```
-                    ┌──────────────────────────┐
-                    │   Task-001: 会议室管理       │
-                    │   后端: room-service        │
-                    │   前端: web (管理端)         │
-                    └────────────┬─────────────┘
-                                 │
-                    provides     │  provides
-                    /api/rooms   │  /api/rooms
-                                 │
-              ┌──────────────────┼──────────────────┐
-              ▼                  ▼                  ▼
-    ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
-    │ booking-service │  │ web: 预订管理    │  │ h5: 预订界面     │
-    │ (后端)           │  │ (管理员查看/取消) │  │ (员工自助预订)   │
-    └────────┬────────┘  └─────────────────┘  └─────────────────┘
-             │                  ▲                  ▲
-             │                  │                  │
-             │            calls │            calls │
-             │    /api/v1/bookings  /api/v1/bookings
-             └──────────────────┴──────────────────┘
-                             │
-                 ┌───────────┴───────────┐
-                 │   Task-002: 预订管理    │
-                 │   后端: booking-service │
-                 │   前端: web + h5        │
-                 └───────────────────────┘
+```mermaid
+graph TB
+    subgraph T1["Task-001: 会议室管理"]
+        direction TB
+        T1BE["backend<br/>room-service<br/>⏱ 6h"]
+        T1FE["frontend/web<br/>会议室管理界面<br/>⏱ 8h"]
+        T1BE -->|"提供 /api/v1/rooms"| T1FE
+    end
+
+    subgraph T2["Task-002: 预订管理"]
+        direction TB
+        T2BE["backend<br/>booking-service<br/>⏱ 8h"]
+        T2FE_WEB["frontend/web<br/>预订管理界面<br/>⏱ 4h"]
+        T2FE_H5["frontend/h5<br/>员工预订界面<br/>⏱ 8h"]
+        T2BE -->|"提供 /api/v1/bookings"| T2FE_WEB
+        T2BE -->|"提供 /api/v1/bookings"| T2FE_H5
+    end
+
+    T1BE -->|"1️⃣ 强依赖<br/>校验会议室存在性<br/>GET /api/v1/rooms/:id"| T2BE
+    T1FE -.->|"⚡ 无依赖<br/>可并行"| T2FE_WEB
+    T2FE_WEB -.->|"⚡ 无依赖<br/>可并行"| T2FE_H5
+
+    style T1BE fill:#e3f2fd,stroke:#1976d2
+    style T2BE fill:#fff3e0,stroke:#f57c00
+    style T1FE fill:#e8f5e9,stroke:#388e3c
+    style T2FE_WEB fill:#e8f5e9,stroke:#388e3c
+    style T2FE_H5 fill:#e8f5e9,stroke:#388e3c
 ```
 
 **依赖说明**:
-- Task-002 强依赖 Task-001: booking-service 需调用 room-service 校验会议室存在性
-- Task-001 的后端 `room-service` 完成后，前端 web 和后端 `booking-service` 可并行
-- Task-002 的 web 和 h5 前端可并行开发（共享同一套 API）
+- 🔴 **强依赖**: Task-002/booking-service → Task-001/room-service（预订时需校验会议室是否存在）
+- 🟢 **并行**: Task-001 后端完成后，前端 web + booking-service 可同时开工
+- 🟢 **并行**: Task-002 的 web 和 h5 共享 API，互不阻塞
 
 ---
 
