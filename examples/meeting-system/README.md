@@ -15,7 +15,7 @@ speccore init
 # 2. 编辑宪法
 vim .speccore/CONSTITUTION.md    # 填入技术栈+代码规范
 
-# 3. 导入 4 份需求（2 后端 + 2 前端）
+# 3. 导入 4 份需求（2 后端服务 + 2 前端）
 speccore word2spec \
   --files "docs/需求-会议室管理服务.md=backend,\
            docs/需求-预订订单服务.md=backend,\
@@ -27,10 +27,11 @@ speccore word2spec \
 # 4. 需求分析
 speccore analyze --iteration=Q1
 # → 产出: 期次-Q1/00-需求文档/ANALYSIS.md
+#   (完整性检查 + 源码对标 + 架构影响 + 待确认清单)
 
-# 5. 拆分为原子 Task（前后端同在一个 Task）
+# 5. 拆分为原子 Task（前后端同在一个 Task，后端按服务名分目录）
 speccore split --iteration=Q1
-# → 产出: Task-001, Task-002 (每个含 backend/ + frontend/{web,h5}/)
+# → 产出: Task-001, Task-002
 
 # 6. 补 Task 细节 + 执行
 speccore execute --task=Task-001 --force --iteration=Q1
@@ -58,23 +59,23 @@ meeting-system/
 └── 期次-Q1/                         ← speccore word2spec 生成
     ├── 00-需求文档/                  ← 结构化需求 + 分析报告
     │   ├── REQUIREMENT.md           ← Q1 需求汇总
-    │   ├── backend需求.md           ← 2 份后端需求合并（160 行）
+    │   ├── backend需求.md           ← 2 份后端需求合并
     │   ├── frontend-web需求.md      ← 后台管理端需求
     │   ├── frontend-h5需求.md       ← 移动端需求
     │   └── ANALYSIS.md              ← speccore analyze 生成
-    │       (完整性检查 + 源码对标 + 架构影响 + 待确认清单)
     │
     ├── Task-001-会议室管理/          ← 前后端一体化 Task
     │   ├── .task-type
     │   ├── TASK.md                   ← 总览: 后端 5AC + 前端 3AC
-    │   ├── backend/                  ← 后端: room-service
-    │   │   ├── TASK.md               ← 136 行 · BDD AC · 技术决策
-    │   │   ├── API_CONTRACT.yaml     ← OpenAPI 3.0 契约
-    │   │   ├── TEST.md               ← 测试大纲（14 用例）
-    │   │   ├── REVIEW.md             ← 代码审查清单
-    │   │   ├── SCHEMA.md             ← Flyway SQL + 索引说明
-    │   │   ├── DEPLOY.md             ← 部署检查清单
-    │   │   └── ERROR_CODES.md        ← 错误码定义（1001-5000）
+    │   ├── backend/
+    │   │   └── room-service/         ← 后端服务 ①: 会议室管理
+    │   │       ├── TASK.md           ← BDD AC · 技术决策 · 踩坑记录
+    │   │       ├── API_CONTRACT.yaml ← OpenAPI 3.0 契约
+    │   │       ├── TEST.md           ← 测试大纲（14 用例）
+    │   │       ├── REVIEW.md         ← 代码审查清单
+    │   │       ├── SCHEMA.md         ← Flyway SQL + 索引说明
+    │   │       ├── DEPLOY.md         ← 部署检查清单
+    │   │       └── ERROR_CODES.md    ← 错误码定义
     │   └── frontend/
     │       └── web/                  ← 前端: Web 管理端
     │           └── TASK.md           ← 页面架构 + 组件选型
@@ -82,29 +83,32 @@ meeting-system/
     └── Task-002-预订管理/            ← 前后端 + 双前端 Task
         ├── .task-type
         ├── TASK.md                   ← 总览: 后端 5AC + Web 2AC + H5 3AC
-        ├── backend/                  ← 后端: booking-service
-        │   ├── TASK.md               ← 127 行 · 冲突检测 · 并发防护
-        │   ├── API_CONTRACT.yaml     ← OpenAPI 3.0 契约
-        │   ├── TEST.md               ← 测试大纲（16 用例 + 并发）
-        │   ├── REVIEW.md             ← 代码审查清单
-        │   ├── SCHEMA.md             ← Flyway SQL + 联合唯一索引
-        │   ├── DEPLOY.md             ← 部署检查清单
-        │   └── ERROR_CODES.md        ← 错误码定义（2001-2003）
+        ├── backend/
+        │   └── booking-service/      ← 后端服务 ②: 预订订单
+        │       ├── TASK.md           ← 冲突检测 · 并发防护 · 防抖
+        │       ├── API_CONTRACT.yaml ← OpenAPI 3.0 契约
+        │       ├── TEST.md           ← 测试大纲（16 用例 + 并发）
+        │       ├── REVIEW.md         ← 代码审查清单
+        │       ├── SCHEMA.md         ← Flyway SQL + 联合唯一索引
+        │       ├── DEPLOY.md         ← 部署检查清单
+        │       └── ERROR_CODES.md    ← 错误码定义
         └── frontend/
             ├── web/                  ← 前端: Web 预订管理
             │   └── TASK.md
             └── h5/                   ← 前端: H5 移动端预订
-                └── TASK.md           ← Vant4 组件 + 实时冲突检测
+                └── TASK.md           ← Vant4 组件 · 实时冲突检测
+
+目录规则: Task/{backend/{服务名}/, frontend/{平台}/}
 ```
 
 ---
 
 ## 📋 Task 概览
 
-| Task | 功能 | 平台 | AC 数 | 后端文件 | 前端文件 |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| Task-001 | 会议室管理 | backend + frontend/web | 8 | 7 | 1 |
-| Task-002 | 预订管理 | backend + frontend/web + frontend/h5 | 10 | 7 | 2 |
+| Task | 后端服务 | 前端 | 来源需求 | AC |
+| :--- | :--- | :--- | :--- | :--- |
+| Task-001 会议室管理 | room-service | web | 会议室管理服务 + 后台管理端 | 8 |
+| Task-002 预订管理 | booking-service | web + h5 | 预订订单服务 + 后台管理端 + H5 移动端 | 10 |
 
 ---
 
@@ -112,8 +116,9 @@ meeting-system/
 
 | 亮点 | 说明 |
 | :--- | :--- |
-| **前后端一体化** | 同一功能的后端+前端在一个 Task 里，按 `backend/` `frontend/{平台}/` 分层 |
+| **前后端一体化** | 同一功能的后端+前端在一个 Task，按 `backend/{服务名}/` `frontend/{平台}/` 分层 |
+| **后端按服务细分** | 多个后端服务各自独立目录（当前各 Task 一个服务，可扩展为多个） |
+| **前端按平台细分** | web / h5 / miniapp 各自独立，可共用 API 封装 |
 | **真实框架流程** | `init → word2spec → analyze → split → execute` 完整走通 |
 | **7 类 Spec 文件** | TASK + API + TEST + REVIEW + SCHEMA + DEPLOY + ERROR_CODES |
-| **模式沉淀** | 冲突检测 SQL、并发唯一索引、debounce 等可复用模式 |
 | **踩坑记录** | 每个 Task 记录实际开发经验，AI 下次读取自动避开 |
