@@ -1,81 +1,145 @@
 # 会议预订系统 — SpecCore 完整示例
 
-> 🔗 [原始 PRD 文档](PRD/PRD.md) | 📐 [HTML 原型预览](PRD/prototype-admin.html)
+> 🔗 [原始 PRD](docs/PRD-会议室预订系统v1.0.md) | 📐 [后台原型](prototype-admin.html) | 📱 [H5 原型](prototype-h5.html)
 
-这是一个基于 **SpecCore 框架** 构建的企业级会议预订系统的完整示例项目。展示了从需求文档到 Spec 文件、再到 AI 可执行的原子任务的完整流程。
-
----
-
-## 项目结构
-
-```
-meeting-system/
-├── PRD/                              ← 原始需求文档 + 原型
-├── .speccore/                        ← SpecCore 框架配置
-│   ├── CONSTITUTION.md               ← 全局技术宪法
-│   ├── GLOBAL/                       ← 全量需求索引 & 架构
-│   ├── PATTERNS/                     ← 可复用模式库
-│   └── PROJECT/TEAM.md               ← 团队成员
-└── 期次-Q1/                          ← 迭代周期
-    ├── 00-需求文档/REQUIREMENT.md     ← 迭代需求汇总
-    ├── Task-001-会议室管理服务/       ← 后端 Task
-    │   └── backend/
-    │       ├── TASK.md                ← 任务清单 + 踩坑记录
-    │       └── API_CONTRACT.yaml      ← OpenAPI 3.0 接口契约
-    ├── Task-002-预订订单服务/         ← 后端 Task
-    ├── Task-003-后台管理端/           ← Web 前端 Task
-    └── Task-004-H5移动端/            ← H5 前端 Task
-```
+这是一个基于 **SpecCore 框架** 的完整示例——从 4 份需求文档开始，经过 `word2spec` → `analyze` → `split`，最终产出 4 个 AI 可执行的原子 Task。
 
 ---
 
-## 从零开始的 5 分钟体验
+## 🚀 真实流程（照着做一遍）
+
+### 第一步：项目初始化
 
 ```bash
-# 1. 初始化
 cd meeting-system
 speccore init
+```
 
-# 2. 导入需求（从 PRD 文档）
-speccore word2spec --files "PRD/docs/需求-会议室管理服务.md=backend" -i Q1
+产出 `.speccore/`（宪法 + 全局层 + 团队配置 + Slash Commands）
 
-# 3. 分析需求 + 检查宪法合规
+### 第二步：编辑宪法，设定项目规范
+
+编辑 `.speccore/CONSTITUTION.md`，填入：
+
+- 技术栈（Java 17 + Spring Boot 3.2 + Vue 3）
+- 命名规范（Controller/Service/Repository/DTO）
+- 代码规则（7 条 `spec-rule`）
+- 错误码体系（10xx 会议室 / 20xx 预订）
+
+> 📖 参见 [.speccore/CONSTITUTION.md](.speccore/CONSTITUTION.md)
+
+### 第三步：导入 4 份需求文档（2 后端 + 2 前端）
+
+```bash
+speccore word2spec \
+  --files "docs/需求-会议室管理服务.md=backend, \
+           docs/需求-预订订单服务.md=backend, \
+           docs/需求-后台管理端.md=frontend-web, \
+           docs/需求-H5移动端.md=frontend-h5" \
+  -i Q1
+```
+
+框架自动将 4 份原始需求结构化为 Spec 格式：
+- `期次-Q1/00-需求文档/backend需求.md`
+- `期次-Q1/00-需求文档/frontend-web需求.md`
+- `期次-Q1/00-需求文档/frontend-h5需求.md`
+
+### 第四步：需求分析
+
+```bash
 speccore analyze --iteration=Q1
+```
 
-# 4. 拆分为独立 Task
+检查：宪法合规性、需求完整性、接口定义覆盖率。
+
+### 第五步：拆分为原子 Task
+
+```bash
 speccore split --iteration=Q1
+```
 
-# 5. 执行开发（AI 读取 Spec 后生成代码）
+框架根据需求结构自动拆分为 4 个 Task：
+- `Task-001-会议室管理` (backend)
+- `Task-002-预订订单` (backend)
+- `Task-003-后台管理端` (frontend-web)
+- `Task-004-H5移动端` (frontend-h5)
+
+### 第六步：补充 Task 细节
+
+`split` 生成了任务骨架，接下来手动补全：
+
+- 每个 Task 的 `TASK.md` — 验收标准（AC）+ 踩坑记录
+- 每个后端 Task 的 `API_CONTRACT.yaml` — OpenAPI 3.0 接口契约
+
+> 📖 这些文件已在本示例中补全，参见各 Task 目录。
+
+### 第七步：执行开发
+
+```bash
 speccore execute --task=Task-001 --force --iteration=Q1
-
-# 6. 提交 PR
 speccore pr --task=Task-001
-
-# 7. 完成任务
 speccore done --task=Task-001
 ```
 
-> 💡 也可以只敲 `speccore`，自适应面板会逐步引导。
+---
+
+## 📂 产出结构
+
+```
+meeting-system/
+├── docs/                           ← 原始需求（4 份）
+│   ├── 需求-会议室管理服务.md
+│   ├── 需求-预订订单服务.md
+│   ├── 需求-后台管理端.md
+│   └── 需求-H5移动端.md
+├── prototype-admin.html            ← 后台原型
+├── prototype-h5.html               ← H5 原型
+│
+├── .speccore/                      ← speccore init 生成
+│   ├── CONSTITUTION.md             ← 全局技术宪法
+│   ├── GLOBAL/INDEX.md             ← 全量需求索引
+│   ├── GLOBAL/CODE_INDEX.md        ← 工程 → 代码路径映射
+│   ├── PROJECT/TEAM.md             ← 团队成员
+│   └── config/platforms.yaml       ← 平台配置
+│
+└── 期次-Q1/                        ← speccore word2spec 生成
+    ├── 00-需求文档/                 ← 结构化需求
+    │   ├── REQUIREMENT.md          ← 迭代需求汇总
+    │   ├── backend需求.md          ← 2 份后端需求合并
+    │   ├── frontend-web需求.md
+    │   └── frontend-h5需求.md
+    │
+    ├── Task-001-会议室管理服务/     ← speccore split 生成
+    │   └── backend/
+    │       ├── TASK.md             ← 任务清单 + AC + 踩坑记录
+    │       └── API_CONTRACT.yaml   ← OpenAPI 3.0 接口契约
+    ├── Task-002-预订订单服务/
+    │   └── backend/
+    ├── Task-003-后台管理端/
+    │   └── frontend-web/
+    └── Task-004-H5移动端/
+        └── frontend-h5/
+```
 
 ---
 
-## 设计亮点
+## 📋 4 个 Task 概览
 
-| 亮点 | 实现 |
+| Task | 平台 | 核心功能 | 来源需求 | AC 数 | 文件 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| Task-001 | backend | 会议室 CRUD | 会议室管理服务 | 7 | [TASK](期次-Q1/Task-001-会议室管理服务/backend/TASK.md) · [API](期次-Q1/Task-001-会议室管理服务/backend/API_CONTRACT.yaml) |
+| Task-002 | backend | 预订 + 冲突检测 | 预订订单服务 | 6 | [TASK](期次-Q1/Task-002-预订订单服务/backend/TASK.md) · [API](期次-Q1/Task-002-预订订单服务/backend/API_CONTRACT.yaml) |
+| Task-003 | frontend-web | 管理界面 | 后台管理端 | 5 | [TASK](期次-Q1/Task-003-后台管理端/frontend-web/TASK.md) |
+| Task-004 | frontend-h5 | 移动端预订 | H5 移动端 | 5 | [TASK](期次-Q1/Task-004-H5移动端/frontend-h5/TASK.md) |
+
+---
+
+## ✨ 设计亮点
+
+| 亮点 | 说明 |
 | :--- | :--- |
-| **前后端分离** | 4 个 Task，2 后端 + 2 前端，通过 API_CONTRACT.yaml 锚定契约 |
-| **原子任务自包含** | 每个 Task 目录包含 TASK.md + API_CONTRACT.yaml，AI 一次加载 |
-| **模式沉淀** | PATTERNS/ 记录了时间冲突检测、缓存一致性等 3 个可复用模式 |
-| **踩坑记录** | 每个 TASK.md 末尾记录实际开发中的坑，后续 AI 自动避开 |
-| **多平台** | backend + frontend-web + frontend-h5，配置文件在 `config/platforms.yaml` |
-
----
-
-## 四个 Task 概览
-
-| Task | 平台 | 核心功能 | AC 数 |
-| :--- | :--- | :--- | :--- |
-| Task-001 | backend | 会议室 CRUD + 分页筛选 | 7 |
-| Task-002 | backend | 预订创建/取消 + 冲突检测 | 6 |
-| Task-003 | frontend-web | Element Plus 管理界面 | 5 |
-| Task-004 | frontend-h5 | Vant4 移动端预订 | 5 |
+| **真实框架流程** | 从 `init` → `word2spec` → `analyze` → `split` 完整走一遍，不是手写 |
+| **2 后端 + 2 前端** | 后端需求自动合并，前端/后端各有来源文档 |
+| **OpenAPI 契约** | 前后端通过 API_CONTRACT.yaml 锚定接口，并行开发不打架 |
+| **踩坑记录** | 每个 TASK.md 有实际开发经验，AI 下次读取可自动避开 |
+| **多平台** | backend + frontend-web + frontend-h5，平台定义在 `platforms.yaml` |
