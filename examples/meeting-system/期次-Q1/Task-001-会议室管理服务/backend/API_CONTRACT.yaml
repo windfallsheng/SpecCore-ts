@@ -1,0 +1,89 @@
+openapi: 3.0.3
+info:
+  title: 会议室管理服务
+  version: 1.0.0
+paths:
+  /api/v1/rooms:
+    post:
+      summary: 新增会议室
+      tags: [会议室]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, capacity, floor]
+              properties:
+                name: { type: string, maxLength: 100 }
+                capacity: { type: integer, minimum: 1, maximum: 200 }
+                floor: { type: integer, minimum: 1 }
+                equipment: { type: string, description: 设备(逗号分隔) }
+      responses:
+        '200': { description: 成功 }
+        '400': { description: 参数校验失败 }
+        '409': { description: 名称重复(code=1002) }
+    get:
+      summary: 会议室列表(分页)
+      tags: [会议室]
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: size
+          in: query
+          schema: { type: integer, default: 10 }
+        - name: floor
+          in: query
+          schema: { type: integer }
+        - name: status
+          in: query
+          schema: { type: integer }
+      responses:
+        '200': { description: 分页列表 }
+
+  /api/v1/rooms/{id}:
+    get:
+      summary: 会议室详情
+      tags: [会议室]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: 成功 }
+        '404': { description: 不存在(code=1001) }
+    put:
+      summary: 编辑会议室
+      tags: [会议室]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                capacity: { type: integer }
+                floor: { type: integer }
+                equipment: { type: string }
+                status: { type: integer, enum: [0, 1] }
+      responses:
+        '200': { description: 成功 }
+        '404': { description: 不存在(code=1001) }
+    delete:
+      summary: 删除会议室(软删除)
+      tags: [会议室]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: 成功 }
+        '404': { description: 不存在(code=1001) }
