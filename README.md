@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
 
-SpecCore 是一套可落地的、面向 AI 原生团队的规范驱动研发工程框架。它将确定性操作（文件创建、目录管理、格式校验、状态统计）从 AI 中剥离，由代码直接执行，提升效率并降低 Token 消耗。
+SpecCore 是一套可落地的、面向 AI 原生团队的规范驱动研发工具链。它将确定性操作（文件创建、目录管理、格式校验、状态统计）从 AI 中剥离，由代码直接执行，提升效率并降低 Token 消耗。
 
 ---
 
@@ -216,7 +216,7 @@ SpecCore 原生集成 6 个工具（`speccore init` 自动生成 `.codebuddy/` `
 
 | 文档 | 内容 |
 | :--- | :--- |
-| 📊 [**总览**](docs/总览.md) | **命令地图 + 工作流全景 + 理念图解 + 8框架横评** |
+| 📊 [**总览**](docs/总览.md) | **命令地图 + 工作流全景 + 理念图解 + 8 大工具横评** |
 | [快速开始指南](docs/快速开始.md) | 安装 → 7 步核心流程 → 命令速查 |
 | [场景实战](docs/场景实战.md) | 37 个真实场景：从零启动→PR→回滚→选型 |
 | [命令参考手册](docs/命令参考.md) | 全部命令完整参数 |

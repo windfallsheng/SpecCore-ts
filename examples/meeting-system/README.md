@@ -1,46 +1,3 @@
-# 会议预订系统 — SpecCore 完整示例
-
-> 🔗 [原始 PRD](docs/PRD-会议室预订系统v1.0.md) | 📐 [后台原型](prototype-admin.html) | 📱 [H5 原型](prototype-h5.html)
-
-基于 **SpecCore 框架** 的完整示例——从 4 份需求文档开始，经过 `word2spec` → `analyze` → `split`，产出 2 个前后端一体化的原子 Task。
-
----
-
-## 🚀 真实流程
-
-```bash
-# 1. 项目初始化
-speccore init
-
-# 2. 编辑宪法
-vim .speccore/CONSTITUTION.md    # 填入技术栈+代码规范
-
-# 3. 导入 4 份需求（2 后端服务 + 2 前端）
-speccore word2spec \
-  --files "docs/需求-会议室管理服务.md=backend,\
-           docs/需求-预订订单服务.md=backend,\
-           docs/需求-后台管理端.md=frontend-web,\
-           docs/需求-H5移动端.md=frontend-h5" \
-  -i Q1
-# → 产出: 期次-Q1/00-需求文档/{backend,frontend-web,frontend-h5}需求.md
-
-# 4. 需求分析
-speccore analyze --iteration=Q1
-# → 产出: 期次-Q1/00-需求文档/ANALYSIS.md
-#   (完整性检查 + 源码对标 + 架构影响 + 待确认清单)
-
-# 5. 拆分为原子 Task（前后端同在一个 Task，后端按服务名分目录）
-speccore split --iteration=Q1
-# → 产出: Task-001, Task-002
-
-# 6. 补 Task 细节 + 执行
-speccore execute --task=Task-001 --force --iteration=Q1
-speccore pr --task=Task-001
-speccore done --task=Task-001
-```
-
----
-
 ## 📂 项目结构
 
 ```
@@ -119,6 +76,6 @@ meeting-system/
 | **前后端一体化** | 同一功能的后端+前端在一个 Task，按 `backend/{服务名}/` `frontend/{平台}/` 分层 |
 | **后端按服务细分** | 多个后端服务各自独立目录（当前各 Task 一个服务，可扩展为多个） |
 | **前端按平台细分** | web / h5 / miniapp 各自独立，可共用 API 封装 |
-| **真实框架流程** | `init → word2spec → analyze → split → execute` 完整走通 |
+| **真实工具链流程** | `init → word2spec → analyze → split → execute` 完整走通 |
 | **7 类 Spec 文件** | TASK + API + TEST + REVIEW + SCHEMA + DEPLOY + ERROR_CODES |
 | **踩坑记录** | 每个 Task 记录实际开发经验，AI 下次读取自动避开 |
