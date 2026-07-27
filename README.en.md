@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
 
-SpecCore is a specification-driven development framework for AI-native teams. It decouples deterministic operations (file creation, directory management, format validation, status statistics) from AI, executing them directly through code to improve efficiency and reduce Token consumption.
+SpecCore is a specification-driven development toolkit for AI-native teams. It decouples deterministic operations (file creation, directory management, format validation, status statistics) from AI, executing them directly through code to improve efficiency and reduce Token consumption.
 
 > 💡 **v5.19.3** | 68 Commands | 38 Intent Types | Multi-Platform
 
