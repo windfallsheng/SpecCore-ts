@@ -35,6 +35,8 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 const commander_1 = require("commander");
 const package_json_1 = require("../package.json");
+const fs_1 = require("fs");
+const path_1 = require("path");
 const init_1 = require("./commands/init");
 const import_1 = require("./commands/import");
 const validate_1 = require("./commands/validate");
@@ -120,9 +122,33 @@ commander_1.program
         i18n_1.i18n.setLocale(opts.lang);
     }
 });
-// ================================================================
-// 🔍 智能入口
-// ================================================================
+// ── 模式检测：简洁版(默认) vs 全量版 ──
+function readMode() {
+    try {
+        const p = (0, path_1.join)(process.cwd(), '.speccore', 'config', 'mode.json');
+        if ((0, fs_1.existsSync)(p)) {
+            const data = JSON.parse((0, fs_1.readFileSync)(p, 'utf-8'));
+            return data.mode === 'full' ? 'full' : 'simple';
+        }
+    }
+    catch { /* ignore */ }
+    return 'simple';
+}
+const MODE = readMode();
+/** 简洁模式下在 help 中显示的命令 */
+const SIMPLE_COMMANDS = new Set([
+    'spec', 'init', 'doc2spec', 'analyze', 'split', 'execute',
+    'pr', 'done', 'status-panel', 'dev',
+]);
+/** 简洁模式下过滤 help 命令列表 */
+function filterCommands(commands) {
+    if (MODE === 'full')
+        return [...commands];
+    return [...commands].filter(c => SIMPLE_COMMANDS.has(c.name()));
+}
+commander_1.program.configureHelp({
+    visibleCommands: (cmd) => filterCommands(cmd.commands),
+});
 commander_1.program
     .command('spec [input...]')
     .description('Smart entry: natural language intent recognition')
@@ -197,8 +223,9 @@ commander_1.program
 commander_1.program
     .command('init')
     .alias('in')
-    .description('Initialize SpecCore in current project')
+    .description('初始化 SpecCore（默认简洁模式，--full 开启全量）')
     .option('--mode <mode>', 'Initialization mode: fresh or migration', 'fresh')
+    .option('--full', 'Full mode: all 68+ commands (default: simple)')
     .option('--force', 'Force overwrite existing configuration')
     .action(init_1.initCommand);
 commander_1.program

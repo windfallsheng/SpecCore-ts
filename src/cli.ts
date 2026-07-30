@@ -1,5 +1,7 @@
 import { program } from 'commander';
 import { version } from '../package.json';
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
 import { initCommand } from './commands/init';
 import { importCommand } from './commands/import';
 import { validateCommand } from './commands/validate';
@@ -88,9 +90,35 @@ program
     }
   });
 
-// ================================================================
-// 🔍 智能入口
-// ================================================================
+// ── 模式检测：简洁版(默认) vs 全量版 ──
+function readMode(): 'simple' | 'full' {
+  try {
+    const p = join(process.cwd(), '.speccore', 'config', 'mode.json');
+    if (existsSync(p)) {
+      const data = JSON.parse(readFileSync(p, 'utf-8'));
+      return data.mode === 'full' ? 'full' : 'simple';
+    }
+  } catch { /* ignore */ }
+  return 'simple';
+}
+
+const MODE = readMode();
+
+/** 简洁模式下在 help 中显示的命令 */
+const SIMPLE_COMMANDS = new Set([
+  'spec', 'init', 'doc2spec', 'analyze', 'split', 'execute',
+  'pr', 'done', 'status-panel', 'dev',
+]);
+
+/** 简洁模式下过滤 help 命令列表 */
+function filterCommands(commands: readonly import('commander').Command[]): import('commander').Command[] {
+  if (MODE === 'full') return [...commands];
+  return [...commands].filter(c => SIMPLE_COMMANDS.has(c.name()));
+}
+
+program.configureHelp({
+  visibleCommands: (cmd) => filterCommands(cmd.commands),
+});
 program
   .command('spec [input...]')
   .description('Smart entry: natural language intent recognition')
@@ -170,8 +198,9 @@ program
 program
   .command('init')
   .alias('in')
-  .description('Initialize SpecCore in current project')
+  .description('初始化 SpecCore（默认简洁模式，--full 开启全量）')
   .option('--mode <mode>', 'Initialization mode: fresh or migration', 'fresh')
+  .option('--full', 'Full mode: all 68+ commands (default: simple)')
   .option('--force', 'Force overwrite existing configuration')
   .action(initCommand);
 
