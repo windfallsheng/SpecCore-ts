@@ -1,8 +1,11 @@
 /**
- * word2spec — Word 需求文档 → SpecCore Markdown
+ * word2spec — 文档导入 → SpecCore Markdown
  *
- * 将 .docx/.doc 格式的 PRD 需求文档转换为 SpecCore 兼容的 Markdown，
+ * 将多种格式的 PRD 需求文档转换为 SpecCore 兼容的 Markdown，
  * 自动放入对应期次的 00-需求文档/ 目录。
+ *
+ * 支持格式: .docx / .doc / .md / .pdf / .html / .pptx / .odt / .ipynb
+ * 依赖: pandoc (macOS: brew install pandoc)
  *
  * 图片路径设计:
  *   提取到 → 期次-xxx/00-需求文档/images/
@@ -73,7 +76,31 @@ async function promptUser(question: string, defaultYes = false): Promise<boolean
   }
 }
 
-export interface Word2SpecOptions {
+export /**
+ * 文件扩展名 → pandoc 输入格式映射
+ */
+const PANDOC_FORMAT_MAP: Record<string, string> = {
+  docx: 'docx',
+  doc: 'docx',      // .doc 先转 .docx
+  md: 'markdown',   // 直接复用
+  pdf: 'pdf',       // ← 新增
+  html: 'html',
+  pptx: 'pptx',
+  odt: 'odt',
+  ipynb: 'ipynb',
+};
+
+/** 需要 pandoc 转换的格式（非 md 也非 doc 特殊处理） */
+function needsPandoc(ext: string | undefined): boolean {
+  return ext !== undefined && ext !== 'md' && ext !== 'doc' && !!PANDOC_FORMAT_MAP[ext];
+}
+
+/** 获取 pandoc 输入格式 */
+function getPandocInputFormat(ext: string): string {
+  return PANDOC_FORMAT_MAP[ext] || ext;
+}
+
+interface Word2SpecOptions {
   file: string;
   iteration: string;
   platform?: string;
@@ -165,12 +192,13 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     let cleanupFile: string | null = null;
     const ext = sourceFile.split('.').pop()?.toLowerCase();
 
-    // .md 文件直接导入，不需要 pandoc
+    // .md 文件直接复制导入，不需要 pandoc
     if (ext === 'md') {
       const converted = await readFile(sourceFile, 'utf-8');
       await writeFile(outputPath, converted);
-      logger.info('   📝 .md 直接导入（跳过 pandoc）');
+      spinner.stop('📝 .md 直接导入');
     } else if (ext === 'doc') {
+      // .doc 旧格式 → LibreOffice 转 .docx
       try {
         execSync(`soffice --headless --convert-to docx "${sourceFile}" --outdir /tmp/`, { stdio: 'pipe' });
         const name = basename(sourceFile, '.doc');
@@ -179,23 +207,33 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
           throw new Error('LibreOffice conversion failed');
         }
         cleanupFile = sourceFile;
-        logger.info('   📄 .doc → .docx (via LibreOffice)');
+        spinner.stop('📄 .doc → .docx');
       } catch {
-        spinner.fail('需要 LibreOffice 来处理 .doc 格式。请安装: brew install libreoffice');
+        spinner.fail('需要 LibreOffice 来处理 .doc 旧格式。请安装: brew install libreoffice');
         return;
       }
+    } else if (ext === 'pdf') {
+      spinner.stop('📄 PDF 检测到，开始提取...');
+    } else if (ext === 'html') {
+      spinner.stop('🌐 HTML 检测到，开始转换...');
+    } else if (needsPandoc(ext)) {
+      spinner.stop(`📄 .${ext} 检测到，开始转换...`);
     }
 
-    if (ext !== 'md') {
-      // pandoc conversion for .docx/.doc
+    // pandoc 转换（除了 .md 之外的所有格式）
+    if (ext && ext !== 'md') {
+      const inputFormat = getPandocInputFormat(ext);
       try {
         execSync(
-          `LANG=zh_CN.UTF-8 pandoc "${sourceFile}" -f docx -t gfm --wrap=none --extract-media="${imageDir}" -o "${outputPath}"`,
+          `LANG=zh_CN.UTF-8 pandoc "${sourceFile}" -f ${inputFormat} -t gfm --wrap=none --extract-media="${imageDir}" -o "${outputPath}"`,
           { stdio: 'pipe', encoding: 'utf-8' }
         );
+        spinner.stop(`✅ 转换完成 → ${outputPath}`);
       } catch (e: any) {
-        spinner.fail(`pandoc 转换失败: ${e.message}`);
-        logger.info('请确保已安装 pandoc: brew install pandoc');
+        spinner.fail(`pandoc 转换失败 (${inputFormat}): ${e.message}`);
+        if (ext === 'pdf') {
+          logger.info('💡 PDF 文本提取有局限——图片/表格/排版会丢失，复杂 PDF 建议先 OCR。');
+        }
         return;
       }
     }
