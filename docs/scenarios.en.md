@@ -649,7 +649,7 @@ speccore validate
 
 ```bash
 # Batch: one command, all files
-speccore word2spec --files \
+speccore doc2spec --files \
   "backend-prd.docx=backend-admin,backend-api.docx=backend-h5,web.docx=web,mobile.docx=mobile" \
   -i Q3
 ```
@@ -658,12 +658,12 @@ speccore word2spec --files \
 
 ```bash
 # .md files — no pandoc needed
-speccore word2spec --files \
+speccore doc2spec --files \
   "api-docs.md=backend-admin,web-pages.md=web,mobile-screens.md=mobile" \
   -i Q3
 
 # Mix Word + Markdown
-speccore word2spec --files "backend.docx=backend-admin,web.md=web" -i Q3
+speccore doc2spec --files "backend.docx=backend-admin,web.md=web" -i Q3
 ```
 
 ### Generated File Structure
@@ -678,12 +678,12 @@ speccore word2spec --files "backend.docx=backend-admin,web.md=web" -i Q3
 
 | Source | Action |
 | :--- | :--- |
-| New Word doc from PM | Re-run `word2spec --files` (overwrites per-platform + refreshes REQUIREMENT.md) |
+| New Word doc from PM | Re-run `doc2spec --files` (overwrites per-platform + refreshes REQUIREMENT.md) |
 | Minor dev tweak | Use `speccore change --task=Task-001 --desc="xxx"` |
-| Adjust platform split | Edit `{platform}-requirements.md`, then re-`word2spec` |
+| Adjust platform split | Edit `{platform}-requirements.md`, then re-`doc2spec` |
 | Sync to global | `speccore sync-global --direction=to_global` |
 
-> ⚠️ `REQUIREMENT.md` and `INDEX.md` are derived files — next `word2spec` will overwrite them. **Do not manually edit.**
+> ⚠️ `REQUIREMENT.md` and `INDEX.md` are derived files — next `doc2spec` will overwrite them. **Do not manually edit.**
 
 ---
 

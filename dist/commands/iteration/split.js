@@ -11,7 +11,7 @@ const next_steps_1 = require("../../core/next-steps");
 async function detectPlatforms(iterationDir, specified) {
     if (specified)
         return specified.split(',').map(p => p.trim()).filter(Boolean);
-    // Auto-detect from INDEX.md (populated by word2spec)
+    // Auto-detect from INDEX.md (populated by doc2spec)
     const indexPath = (0, path_1.join)(iterationDir, '00-需求文档', 'INDEX.md');
     if (await (0, fs_extra_1.pathExists)(indexPath)) {
         const content = await (0, fs_extra_1.readFile)(indexPath, 'utf-8');

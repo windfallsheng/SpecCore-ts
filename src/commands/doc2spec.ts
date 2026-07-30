@@ -1,5 +1,5 @@
 /**
- * word2spec — 文档导入 → SpecCore Markdown
+ * doc2spec — 文档导入 → SpecCore Markdown
  *
  * 将多种格式的 PRD 需求文档转换为 SpecCore 兼容的 Markdown，
  * 自动放入对应期次的 00-需求文档/ 目录。
@@ -107,7 +107,7 @@ interface Word2SpecOptions {
   files?: string;  // batch: "path1.docx=平台1,path2.docx=平台2"
 }
 
-export async function word2specCommand(options: Word2SpecOptions): Promise<void> {
+export async function doc2specCommand(options: Word2SpecOptions): Promise<void> {
   // ── 批量模式 ──
   if (options.files) {
     const pairs = parseBatchFiles(options.files);
@@ -128,7 +128,7 @@ export async function word2specCommand(options: Word2SpecOptions): Promise<void>
 
   // ── 单文件模式 ──
   if (!options.file) {
-    logger.error('请指定 Word 文件: speccore word2spec --file=<路径> 或 --files');
+    logger.error('请指定 Word 文件: speccore doc2spec --file=<路径> 或 --files');
     return;
   }
   await processSingle(options);
@@ -136,7 +136,7 @@ export async function word2specCommand(options: Word2SpecOptions): Promise<void>
 
 async function processSingle(options: Word2SpecOptions): Promise<void> {
   if (!options.iteration) {
-    logger.error('请指定期次: speccore word2spec --iteration=<期次>');
+    logger.error('请指定期次: speccore doc2spec --iteration=<期次>');
     return;
   }
 
@@ -148,7 +148,7 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
   // pandoc 前置检测
   if (!findCommand('pandoc')) {
     const installCmd = getInstallCmd('pandoc');
-    logger.warn('⚠️  未检测到 pandoc。word2spec 依赖 pandoc 进行 Word → Markdown 转换。');
+    logger.warn('⚠️  未检测到 pandoc。doc2spec 依赖 pandoc 进行 Word → Markdown 转换。');
     logger.info('');
     logger.info(`   📦 安装命令: ${installCmd}`);
     logger.info('   💡 替代方案: AI 对话中可用 word2md 技能（无需 pandoc）');
@@ -277,7 +277,7 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     if (await pathExists(indexPath)) {
       indexContent = await readFile(indexPath, 'utf-8');
     } else {
-      indexContent = '# 本期需求文档索引\n\n> word2spec 自动生成\n\n| 端 | 文件 | 转换时间 | 来源 |\n| :--- | :--- | :--- | :--- |\n';
+      indexContent = '# 本期需求文档索引\n\n> doc2spec 自动生成\n\n| 端 | 文件 | 转换时间 | 来源 |\n| :--- | :--- | :--- | :--- |\n';
     }
     if (!indexContent.includes(`| ${platform} |`)) {
       const entry = `| ${platform} | ${platform}需求.md | ${new Date().toISOString().split('T')[0]} | ${basename(options.file)} |`;
@@ -341,7 +341,7 @@ async function mergeToRequirement(iterDir: string, targetDir: string, platform: 
   if (await pathExists(globalReqPath)) {
     globalContent = await readFile(globalReqPath, 'utf-8');
   } else {
-    globalContent = `# 本期需求文档\n\n> 由 word2spec 自动合并各端需求\n\n`;
+    globalContent = `# 本期需求文档\n\n> 由 doc2spec 自动合并各端需求\n\n`;
   }
 
   const sectionLabel = platform.endsWith('端') ? platform + '需求' : platform + '端需求';

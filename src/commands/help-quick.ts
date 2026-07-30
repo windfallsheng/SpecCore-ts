@@ -12,7 +12,7 @@ export function showQuickHelp(): void {
   logger.info('  快速开始 (7 步):');
   logger.info('');
   logger.info('  1️⃣  speccore init');
-  logger.info('  2️⃣  speccore word2spec --files "a.docx=端1"');
+  logger.info('  2️⃣  speccore doc2spec --files "a.docx=端1"');
   logger.info('  3️⃣  speccore analyze');
   logger.info('  4️⃣  speccore iteration split');
   logger.info('  5️⃣  speccore execute --task=Task-001 --force');
@@ -36,7 +36,7 @@ export function showPhaseHelp(phase: string): void {
     },
     require: {
       title: '需求管理',
-      cmds: ['word2spec', 'analyze [--task]', 'spec', 'change', 'tracker'],
+      cmds: ['doc2spec', 'analyze [--task]', 'spec', 'change', 'tracker'],
     },
     develop: {
       title: '任务开发',

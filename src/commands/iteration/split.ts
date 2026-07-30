@@ -19,7 +19,7 @@ export interface IterationSplitOptions {
 async function detectPlatforms(iterationDir: string, specified?: string): Promise<string[]> {
   if (specified) return specified.split(',').map(p => p.trim()).filter(Boolean);
   
-  // Auto-detect from INDEX.md (populated by word2spec)
+  // Auto-detect from INDEX.md (populated by doc2spec)
   const indexPath = join(iterationDir, '00-需求文档', 'INDEX.md');
   if (await pathExists(indexPath)) {
     const content = await readFile(indexPath, 'utf-8');

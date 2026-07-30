@@ -87,7 +87,7 @@ async function initCommand(options) {
         logger_1.logger.info('  1. Edit .speccore/CONSTITUTION.md to define your tech stack');
         logger_1.logger.info('  2. Edit .speccore/PROJECT/TEAM.md to add team members');
         logger_1.logger.info('  3. Type /spec in your AI tool to see all commands');
-        logger_1.logger.info('  4. Run: speccore word2spec --files "file.md=端名" -i Q1 to import requirements');
+        logger_1.logger.info('  4. Run: speccore doc2spec --files "file.md=端名" -i Q1 to import requirements');
     }
     catch (error) {
         spinner.fail(`Initialization failed: ${error}`);
@@ -786,7 +786,7 @@ async function generateSlashCommands(projectRoot) {
         ['spec-init', 'Initialize project', ['speccore init']],
         ['spec-dev', 'Smart dev entry', ['speccore dev']],
         ['spec-status-panel', 'Status panel', ['speccore status-panel']],
-        ['spec-word2spec', 'Import requirements', ['speccore word2spec --files "${1:file}=${2:platform}" -i ${3:Q1}']],
+        ['spec-doc2spec', 'Import requirements', ['speccore doc2spec --files "${1:file}=${2:platform}" -i ${3:Q1}']],
         ['spec-analyze', 'Analyze requirements', ['speccore analyze --iteration=${1:Q1}']],
         ['spec-split', 'Split into tasks', ['speccore iteration split --iteration=${1:Q1}']],
         ['spec-execute', 'Execute task', ['speccore execute --task=${1:Task-001} --force --iteration=${2:Q1}']],

@@ -31,7 +31,7 @@ import { devCommand } from './commands/dev';
 import { statusPanelCommand } from './commands/status-panel';
 import { demoCommand } from './commands/demo';
 import { welcomeCommand } from './commands/welcome';
-import { word2specCommand } from './commands/word2spec';
+import { doc2specCommand } from './commands/doc2spec';
 // 全量层命令
 import { iterationFromGlobalCommand } from './commands/iteration-from-global';
 import { syncGlobalCommand } from './commands/sync-global';
@@ -568,14 +568,14 @@ program
   .action(iterationFromGlobalCommand);
 
 program
-  .command('word2spec')
-  .alias('w2s')
+  .command('doc2spec')
+  .alias('d2s')
   .description('导入 PRD 文档 → SpecCore Markdown（支持 Word/PDF/MD/HTML/PPTX）')
   .option('-f, --file <path>', '源文件路径')
   .option('-i, --iteration <name>', '目标期次（必填）')
   .option('-p, --platform <name>', '平台标识（backend / frontend-web / frontend-h5）')
   .option('--files <files>', '批量: "a.docx=平台1,b.pdf=平台2"')
-  .action(word2specCommand);
+  .action(doc2specCommand);
 
 program
   .command('sync-global')
@@ -924,11 +924,11 @@ program
 program.addHelpText('beforeAll', `
 ┌──────────────────────────────────────────────┐
 │  🔵 核心 7 步（一次记住）                      │
-│  init → word2spec → analyze → split          │
+│  init → doc2spec → analyze → split          │
 │  → execute → pr → done                       │
 ├──────────────────────────────────────────────┤
 │  🚀 speccore init         初始化项目          │
-│  📝 speccore word2spec    导入需求文档        │
+│  📝 speccore doc2spec    导入需求文档        │
 │  🔍 speccore analyze      需求分析+宪法检查    │
 │  📦 speccore split        拆分为独立Task      │
 │  💻 speccore execute      执行开发            │
@@ -965,7 +965,7 @@ if (process.argv.length <= 2) {
         const req = join(base, '00-需求文档', 'REQUIREMENT.md');
         const ana = join(base, '00-需求文档', 'ANALYSIS.md');
         if (!existsSync(req)) {
-          phase = 'require'; nextCmd = 'speccore word2spec -i ' + iteration; nextDesc = '导入需求文档';
+          phase = 'require'; nextCmd = 'speccore doc2spec -i ' + iteration; nextDesc = '导入需求文档';
         } else if (!existsSync(ana)) {
           phase = 'analyze'; nextCmd = 'speccore analyze --iteration=' + iteration; nextDesc = '需求分析';
         } else {

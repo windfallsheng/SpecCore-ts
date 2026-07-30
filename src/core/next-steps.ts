@@ -32,7 +32,7 @@ function getHints(stage: string, ctx: Record<string, string>): StepHint[] {
         { action: 'speccore import --project=backend --path=./src', desc: '导入现有代码到全量层', args: '--type backend|frontend|shell' },
       ];
 
-    case 'word2spec':
+    case 'doc2spec':
       return [
         { action: `speccore analyze${iter ? ` --iteration=${iter}` : ''}`, desc: '分析需求：完整性 + 源码对标 + 架构影响 → ANALYSIS.md', args: '--auto 跳过交互直接生成报告' },
         { action: 'cat 期次-' + (iter || 'X') + '/00-需求文档/ANALYSIS.md', desc: '查看分析报告，填写技术方案部分' },

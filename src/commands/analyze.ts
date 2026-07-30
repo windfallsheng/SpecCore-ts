@@ -42,7 +42,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     
     if (!(await pathExists(reqPath))) {
       spinner.fail(`未找到需求文档: ${reqPath}`);
-      logger.info('请先运行: speccore word2spec --files "..." -i ' + iteration);
+      logger.info('请先运行: speccore doc2spec --files "..." -i ' + iteration);
       return;
     }
 
