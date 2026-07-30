@@ -25,16 +25,16 @@ SpecCore 是一套可落地的、面向 AI 原生团队的规范驱动研发工�
 
 | | 简洁模式（默认） | 全量模式 |
 | :--- | :--- | :--- |
-| **命令数** | 15 个核心命令 | 79+ 个全部命令 |
+| **命令数** | 17 个核心命令 | 79+ 个全部命令 |
 | **适用** | 新用户，核心流程够用 | 高级用户，精细控制 |
 | **开启** | `speccore init` | `speccore init --full` |
 | **切换** | 任何时候重新 `init` 即可 |
 
-**简洁模式 15 个命令：**
+**简洁模式 17 个命令：**
 ```
-① init → ② doc2spec → ③ analyze → ④ split → ⑤ execute → ⑥ pr → ⑦ done
-⑧ speccore(无参数) ⑨ status-panel ⑩ dev ⑪ spec
-⑫ new-task ⑬ change ⑭ validate ⑮ rename
+① init → ② iteration create → ③ doc2spec → ④ analyze → ⑤ split → ⑥ execute → ⑦ pr → ⑧ done
+⑨ speccore(无参数) ⑩ status-panel ⑪ dev ⑫ spec
+⑬ new-task ⑭ change ⑮ validate ⑯ rename ⑰ task
 ```
 
 ---
