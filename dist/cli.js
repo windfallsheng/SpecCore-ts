@@ -563,11 +563,11 @@ commander_1.program
 commander_1.program
     .command('word2spec')
     .alias('w2s')
-    .description('Convert Word (.docx/.doc) requirement docs to SpecCore Markdown')
-    .option('-f, --file <path>', 'Source Word file path')
-    .option('-i, --iteration <name>', 'Target iteration name (required)')
-    .option('-p, --platform <name>', 'Platform identifier (e.g. 后台/Web/小程序)')
-    .option('--files <files>', 'Batch: "path1.docx=平台1,path2.docx=平台2"')
+    .description('导入 PRD 文档 → SpecCore Markdown（支持 Word/PDF/MD/HTML/PPTX）')
+    .option('-f, --file <path>', '源文件路径')
+    .option('-i, --iteration <name>', '目标期次（必填）')
+    .option('-p, --platform <name>', '平台标识（backend / frontend-web / frontend-h5）')
+    .option('--files <files>', '批量: "a.docx=平台1,b.pdf=平台2"')
     .action(word2spec_1.word2specCommand);
 commander_1.program
     .command('sync-global')
