@@ -47,7 +47,7 @@ export type IntentType =
   | 'platform_add'        // 添加平台
   | 'index_update'        // 更新索引
   | 'context'            // 查看上下文
-  | 'word2spec';          // Word 需求文档导入
+  | 'doc2spec';          // Word 需求文档导入
 
 /** 意图匹配结果 */
 export interface IntentResult {
@@ -411,10 +411,10 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
   },
   // Word 文档导入
   {
-    id: 'word2spec',
-    intent: 'word2spec',
+    id: 'doc2spec',
+    intent: 'doc2spec',
     priority: 45,
-    triggers: ['导入文档', 'word转', '需求文档', 'word2spec', 'Word需求', 'PRD导入', '转换文档', 'docx'],
+    triggers: ['导入文档', 'word转', '需求文档', 'doc2spec', 'Word需求', 'PRD导入', '转换文档', 'docx'],
     patterns: ['导入.*文档', '.*word.*转', '需求.*word', 'PRD.*导入', '文档.*转换'],
     description: 'Word 需求文档导入 — 将 .docx/.doc 格式的 PRD 转换为 SpecCore Markdown',
   },

@@ -43,7 +43,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
   const reqDoc = join(iterDir, '00-需求文档', 'REQUIREMENT.md');
   if (!(await pathExists(reqDoc))) {
     showPhase('导入需求', [
-      'speccore word2spec --files "doc.docx=端名" -i ' + iteration,
+      'speccore doc2spec --files "doc.docx=端名" -i ' + iteration,
       '将 Word/MD 需求文档导入为 Spec 格式',
     ]);
     return;

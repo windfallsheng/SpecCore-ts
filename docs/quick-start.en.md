@@ -9,7 +9,7 @@
 
 - **Node.js**: >= 18.0.0
 - **OS**: macOS / Linux / Windows
-- **Optional**: pandoc (for `speccore word2spec` Word import; command prompts for auto-install if missing)
+- **Optional**: pandoc (for `speccore doc2spec` Word import; command prompts for auto-install if missing)
 
 ## Install
 

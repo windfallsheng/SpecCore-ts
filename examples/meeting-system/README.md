@@ -13,7 +13,7 @@ meeting-system/
 │   ├── PROJECT/TEAM.md              ← 团队成员
 │   └── config/platforms.yaml        ← 平台配置（backend, web, h5）
 │
-└── 期次-Q1/                         ← speccore word2spec 生成
+└── 期次-Q1/                         ← speccore doc2spec 生成
     ├── 00-需求文档/                  ← 结构化需求 + 分析报告
     │   ├── REQUIREMENT.md           ← Q1 需求汇总
     │   ├── backend需求.md           ← 2 份后端需求合并
@@ -76,6 +76,6 @@ meeting-system/
 | **前后端一体化** | 同一功能的后端+前端在一个 Task，按 `backend/{服务名}/` `frontend/{平台}/` 分层 |
 | **后端按服务细分** | 多个后端服务各自独立目录（当前各 Task 一个服务，可扩展为多个） |
 | **前端按平台细分** | web / h5 / miniapp 各自独立，可共用 API 封装 |
-| **真实工具链流程** | `init → word2spec → analyze → split → execute` 完整走通 |
+| **真实工具链流程** | `init → doc2spec → analyze → split → execute` 完整走通 |
 | **7 类 Spec 文件** | TASK + API + TEST + REVIEW + SCHEMA + DEPLOY + ERROR_CODES |
 | **踩坑记录** | 每个 Task 记录实际开发经验，AI 下次读取自动避开 |
