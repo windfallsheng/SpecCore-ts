@@ -75,6 +75,9 @@ async function initCommand(options) {
             }
         }
         await (0, fs_extra_1.writeFile)((0, path_1.join)(speccoreDir, 'local', 'context.json'), JSON.stringify(validated.success ? validated.data : contextData, null, 2));
+        // ── 保存模式偏好 (simple/full) ──
+        const mode = options.full ? 'full' : 'simple';
+        await (0, fs_extra_1.writeFile)((0, path_1.join)(speccoreDir, 'config', 'mode.json'), JSON.stringify({ mode }, null, 2));
         // Create .gitignore entry
         await updateGitignore(projectRoot);
         // Generate .codebuddy/commands/ slash command files

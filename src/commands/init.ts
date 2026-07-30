@@ -14,6 +14,7 @@ export interface InitOptions {
   mode?: string;
   force?: boolean;
   lang?: string;
+  full?: boolean;
 }
 
 export async function initCommand(options: InitOptions): Promise<void> {
@@ -95,6 +96,13 @@ export async function initCommand(options: InitOptions): Promise<void> {
     await writeFile(
       join(speccoreDir, 'local', 'context.json'),
       JSON.stringify(validated.success ? validated.data : contextData, null, 2)
+    );
+
+    // ── 保存模式偏好 (simple/full) ──
+    const mode = options.full ? 'full' : 'simple';
+    await writeFile(
+      join(speccoreDir, 'config', 'mode.json'),
+      JSON.stringify({ mode }, null, 2)
     );
 
     // Create .gitignore entry
