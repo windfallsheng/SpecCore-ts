@@ -108,6 +108,7 @@ const SIMPLE_COMMANDS = new Set([
   'ask', 'init', 'doc2spec', 'analyze', 'split', 'execute',
   'pr', 'done', 'status-panel', 'dev',
   'iteration', 'task', 'plan', 'ops', 'import',
+  'new',
 ]);
 
 /** 简洁模式下过滤 help 命令列表 */
@@ -297,6 +298,19 @@ program
   .option('--backend-only', 'Backend only')
   .option('--frontend-only', 'Frontend only')
   .action(goalCommand);
+
+// 快捷入口：speccore new ≡ speccore task new
+program
+  .command('new')
+  .alias('nw')
+  .description('快捷创建 Task（同 task new）')
+  .option('-n, --name <name>', 'Task name (required)')
+  .option('-t, --type <type>', 'Task type', 'feature')
+  .option('-d, --desc <desc>', 'Task description')
+  .option('--platforms <platforms>', 'Frontend platforms')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .action(taskNewCommand);
+
 
 // Bug 修复
 program
