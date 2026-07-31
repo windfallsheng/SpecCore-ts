@@ -38,6 +38,7 @@
     "fs-extra": "^11.2.0",
     "inquirer": "^14.0.2",
     "js-yaml": "^4.1.0",
+    "xlsx": "^0.18.5",
     "zod": "^4.4.3"
   },
   "devDependencies": {

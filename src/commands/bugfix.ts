@@ -31,11 +31,31 @@ export interface BugfixOptions {
 export async function bugfixCommand(options: BugfixOptions): Promise<void> {
   // 批量模式
   if (options.batch || options.batchFile) {
-    // 支持文件导入
+    // 支持文件导入（自动识别 .xlsx/.csv/.txt）
     if (options.batchFile) {
       if (!await pathExists(options.batchFile)) { logger.error('文件不存在: ' + options.batchFile); return; }
-      options.batch = await readFile(options.batchFile, 'utf-8');
-      logger.info('📄 从文件导入: ' + options.batchFile);
+      
+      const ext = options.batchFile.split('.').pop()?.toLowerCase();
+      if (ext === 'xlsx') {
+        try {
+          const XLSX = require('xlsx');
+          const wb = XLSX.readFile(options.batchFile);
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const data: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
+          // 跳过表头，每行取第一列（或拼所有列）
+          options.batch = data.slice(1)
+            .filter((row: any[]) => row.some((c: any) => c))
+            .map((row: any[]) => row.filter((c: any) => c).join(' — '))
+            .join('\n');
+          logger.info('📊 从 Excel 导入: ' + options.batchFile);
+        } catch (e: any) {
+          logger.error('Excel 解析失败: ' + e.message);
+          return;
+        }
+      } else {
+        options.batch = await readFile(options.batchFile, 'utf-8');
+        logger.info('📄 从文件导入: ' + options.batchFile);
+      }
     }
     const bugs = (options.batch || '').split('\n').filter(b => b.trim());
     if (bugs.length === 0) {
