@@ -139,6 +139,35 @@ async function importToGlobalLayer(
   const scanResult = await scanProject(projectPath, projectType, options);
   logger.info(`   Found ${scanResult.apis.length} API endpoints, ${scanResult.models.length} data models`);
 
+  // ── Interactive preview: 预览扫描结果 → 用户确认/调整 ──
+  if (options.interactive && scanResult.apis.length > 0) {
+    logger.info('');
+    logger.info('📋 扫描结果预览:');
+    logger.info(`   项目: ${projectName} | 类型: ${projectType}`);
+    logger.info(`   技术栈: ${scanResult.techStack || '未检测到'}`);
+    logger.info(`   API 端点: ${scanResult.apis.length} 个`);
+    logger.info('');
+    for (const api of scanResult.apis) {
+      logger.info(`   ${api.method.padEnd(8)} ${api.path.padEnd(30)} → ${api.sourceFile}`);
+    }
+    logger.info('');
+    logger.info('💡 [y] 确认导入  [a] 新增遗漏  [s] 跳过某个  [q] 取消');
+
+    const answer = await promptUser('确认导入？');
+    if (answer?.toLowerCase() === 'q') { logger.info('已取消'); return; }
+    if (answer?.toLowerCase() === 'a') {
+      logger.info('请在 REQUIREMENT.md 生成后手动补充遗漏的 API 端点');
+    }
+    if (answer?.toLowerCase() === 's') {
+      const resp = await promptUser('请输入要跳过的 API 路径（逗号分隔，留空则全部保留）：');
+      if (resp) {
+        const skipPaths = resp.split(',').map(s => s.trim());
+        scanResult.apis = scanResult.apis.filter(a => !skipPaths.includes(a.path));
+        logger.info(`已跳过 ${skipPaths.length} 个 API，保留 ${scanResult.apis.length} 个`);
+      }
+    }
+  }
+
   // 5. 生成需求条目
   const requirements: { name: string; description: string; id: string }[] = [];
   let nextId = parseInt(getNextReqId(index).replace('REQ-', ''), 10);
