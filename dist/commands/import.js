@@ -147,6 +147,8 @@ async function importToGlobalLayer(projectName, projectPath, projectType, option
     // 9. 更新 OVERVIEW.md 和 CHANGELOG.md
     await updateGlobalOverview(projectName, projectType);
     await updateGlobalChangelog(`导入项目 ${projectName}`, newVersion);
+    // 10. 检测并建议更新宪法（CONSTITUTION.md）
+    await suggestConstitutionUpdate(projectName, projectType, scanResult.techStack);
     // 10. 输出报告
     logger_1.logger.info('');
     logger_1.logger.info('✅ 项目导入完成！');
@@ -405,5 +407,42 @@ async function autoDetectImport(sourcePath) {
         }
     }
     return results.join('\n');
+}
+// ============================================================
+// 宪法建议更新
+// ============================================================
+async function suggestConstitutionUpdate(projectName, projectType, techStack) {
+    const constPath = (0, path_1.join)(process.cwd(), '.speccore', 'CONSTITUTION.md');
+    if (!(await (0, fs_extra_1.pathExists)(constPath)))
+        return;
+    let content = await (0, fs_extra_1.readFile)(constPath, 'utf-8');
+    // 构建建议内容
+    const suggestions = [];
+    // 检测已存在的技术栈，避免重复
+    if (!content.includes(projectName)) {
+        suggestions.push(`### ${projectName} (${projectType})`);
+        suggestions.push(`- 来源: 自动检测自项目导入`);
+        suggestions.push(`- 技术栈: ${techStack}`);
+    }
+    // 框架检测 → 规则建议
+    if (techStack.includes('NestJS') && !content.includes('NestJS')) {
+        suggestions.push('- 框架: NestJS → 推荐 JWT + Passport 认证，DTO 校验用 class-validator');
+    }
+    else if (techStack.includes('Spring') && !content.includes('Spring Boot')) {
+        suggestions.push('- 框架: Spring Boot → 推荐统一异常 @ControllerAdvice');
+    }
+    else if (techStack.includes('Vue') && !content.includes('Vue')) {
+        suggestions.push('- 框架: Vue → 推荐 Composition API + Pinia 状态管理');
+    }
+    else if (techStack.includes('React') && !content.includes('React')) {
+        suggestions.push('- 框架: React → 推荐 Hooks + zustand 状态管理');
+    }
+    if (suggestions.length === 0)
+        return;
+    // 追加到宪法末尾
+    content += `\n\n<!-- 自动检测自 import ${projectName} (${new Date().toISOString().split('T')[0]}) -->\n`;
+    content += suggestions.join('\n') + '\n';
+    await (0, fs_extra_1.writeFile)(constPath, content);
+    logger_1.logger.info('   📋 建议已追加到 CONSTITUTION.md（框架自动检测）');
 }
 //# sourceMappingURL=import.js.map
