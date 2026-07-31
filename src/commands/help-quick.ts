@@ -36,7 +36,7 @@ export function showPhaseHelp(phase: string): void {
     },
     require: {
       title: '需求管理',
-      cmds: ['doc2spec', 'analyze [--task]', 'spec', 'change', 'tracker'],
+      cmds: ['doc2spec', 'analyze [--task]', 'ask', 'change', 'tracker'],
     },
     develop: {
       title: '任务开发',

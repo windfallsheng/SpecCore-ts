@@ -82,7 +82,7 @@ speccore iteration create --name 2026-07-UserSystem
 speccore new-task --name UserLogin --platforms=web,h5
 
 # 5. Smart entry
-speccore spec "How's the progress?"
+speccore ask "How's the progress?"
 ```
 
 > 📚 See [Quick Start Guide](docs/quick-start.en.md) for detailed steps.
@@ -140,7 +140,7 @@ User Input (Natural Language / Slash Command)
 
 | Category | Key Commands |
 | :--- | :--- |
-| 🧠 Smart Entry | `speccore spec "<query>"` |
+| 🧠 Smart Entry | `speccore ask "<query>"` |
 | 🌐 Global Layer | `import` / `iteration-from-global` / `sync-global` / `global-status` / `history` / `index-update` |
 | 📋 Scenario | `goal` / `bugfix` / `research` / `retro` / `handover` |
 | 📐 Planning | `init` / `iteration create` / `iteration split` / `new-task` / `plan` |
@@ -168,7 +168,7 @@ User Input (Natural Language / Slash Command)
 | `speccore validate` | `/spec-validate` | Compliance check |
 | `speccore impact` | `/spec-impact` | Impact analysis |
 | `speccore audit` | `/spec-ai-audit` | AI smart audit |
-| `speccore spec "query"` | `/spec query` | Natural language intent |
+| `speccore ask "query"` | `/spec query` | Natural language intent |
 
 > 📋 Full command reference: [Command Reference](docs/commands.en.md) | 🧠 Intent mapping: [Intent Map](docs/commands.en.md#natural-language-intent-mapping-38-types)
 

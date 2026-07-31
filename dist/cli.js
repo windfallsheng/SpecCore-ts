@@ -52,7 +52,7 @@ const new_1 = require("./commands/task/new");
 const plan_1 = require("./commands/plan");
 const execute_1 = require("./commands/execute");
 // 新增命令
-const spec_1 = require("./commands/spec");
+const ask_1 = require("./commands/ask");
 const goal_1 = require("./commands/goal");
 const bugfix_1 = require("./commands/bugfix");
 const new_task_1 = require("./commands/new-task");
@@ -137,7 +137,7 @@ function readMode() {
 const MODE = readMode();
 /** 简洁模式下在 help 中显示的命令 */
 const SIMPLE_COMMANDS = new Set([
-    'spec', 'init', 'doc2spec', 'analyze', 'split', 'execute',
+    'ask', 'init', 'doc2spec', 'analyze', 'split', 'execute',
     'pr', 'done', 'status-panel', 'dev',
     'new-task', 'change', 'validate', 'rename',
     'iteration', 'task', 'plan', 'ops',
@@ -152,9 +152,9 @@ commander_1.program.configureHelp({
     visibleCommands: (cmd) => filterCommands(cmd.commands),
 });
 commander_1.program
-    .command('spec [input...]')
-    .description('Smart entry: natural language intent recognition')
-    .action((input) => (0, spec_1.specCommand)(input.join(' '), {}));
+    .command('ask [input...]')
+    .description('Natural language intent recognition (previously "spec")')
+    .action((input) => (0, ask_1.askCommand)(input.join(' '), {}));
 // ================================================================
 // 👋 引导与体验
 // ================================================================
