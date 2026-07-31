@@ -148,7 +148,7 @@ async function importToGlobalLayer(
     requirements.push({
       id: reqId,
       name: api.name,
-      description: `API: ${api.method} ${api.path}\n${api.description || '从代码分析提取的功能描述'}`,
+      description: `API: ${api.method} ${api.path}\n<!-- AI-ANALYZE: 分析 ${api.path} 的功能职责、输入输出、业务规则 -->\n${api.description || '从代码扫描提取的 API 端点，待 AI 分析补充'}`,
     });
   }
 
@@ -192,6 +192,9 @@ async function importToGlobalLayer(
 
   // 10. 检测并建议更新宪法（CONSTITUTION.md）
   await suggestConstitutionUpdate(projectName, projectType, scanResult.techStack);
+
+  // 11. 生成 AI 分析指引（供 Slash Command 使用）
+  await generateAnalysisPrompt(projectName, projectType, scanResult, projectPath);
 
   // 10. 输出报告
   logger.info('');
@@ -543,4 +546,73 @@ async function suggestConstitutionUpdate(projectName: string, projectType: strin
 
   await writeFile(constPath, content);
   logger.info('   📋 建议已追加到 CONSTITUTION.md（框架自动检测）');
+}
+
+// ============================================================
+// AI 分析指引（供 Slash Command 使用）
+// ============================================================
+
+async function generateAnalysisPrompt(
+  projectName: string,
+  projectType: string,
+  scanResult: ScanResult,
+  projectPath: string
+): Promise<void> {
+  const projectDir = join(process.cwd(), '.speccore', 'GLOBAL', 'PROJECTS', projectName);
+  if (!(await pathExists(projectDir))) return;
+
+  const apis = scanResult.apis;
+  const promptPath = join(projectDir, 'ANALYSIS_PROMPT.md');
+
+  const content = `# AI 分析任务: ${projectName}
+
+> 本文档由 \`speccore import\` 自动生成，供 AI IDE（Qcoder/WorkBuddy/Cursor 等）读取。
+> 用户只需在 IDE 中触发 \`/spec-import-analyze\` Slash Command，AI 将按此指引完成任务。
+
+## 项目信息
+- 名称: ${projectName}
+- 类型: ${projectType}
+- 技术栈: ${scanResult.techStack || '未检测到（请检查 package.json/pom.xml）'}
+- 源代码路径: ${projectPath}
+
+## 任务清单
+
+### 1. 功能需求分析（REQUIREMENT.md）
+应编辑文件: \`.speccore/GLOBAL/PROJECTS/${projectName}/REQUIREMENT.md\`
+
+搜索所有 \`<!-- AI-ANALYZE: ... -->\` 标记，为每个 API 补充：
+- **功能职责**: 这个 API 实际做什么
+- **输入参数**: 必填/选填字段、类型、校验规则
+- **输出内容**: 返回数据结构、错误码
+- **业务规则**: 权限检查、数据校验、并发处理
+
+${apis.map((api, i) => `\`${api.method} ${api.path}\` → 代码文件: 未关联`).join('\n')}
+
+### 2. 编码规则提取（RULES/）
+应在 \`.speccore/RULES/\` 下创建以下文件（扫描源码后）：
+
+- **API_CONVENTIONS.md**: API 命名规范（前缀、版本、RESTful 风格）
+- **EXCEPTION_HANDLING.md**: 异常处理模式（是否有 BusinessException/@ControllerAdvice）
+- **NAMING.md**: 类/方法/变量命名规范
+- **AUTH.md**: 认证/鉴权机制检测
+
+### 3. 宪法更新（CONSTITUTION.md）
+应编辑文件: \`.speccore/CONSTITUTION.md\`
+
+已自动追加框架建议，AI 应补充：
+- 数据库选型（ORM/原生 SQL）
+- 缓存策略
+- 日志规范
+
+## 操作方式
+1. 读取本文件 + 扫描源码目录 \`${projectPath}\`
+2. 逐项完成上述任务，编辑对应文件
+3. 最终确认: 在 REQUIREMENT.md 末尾追加 \`✅ AI 分析完成 ${new Date().toISOString().split('T')[0]}\`
+
+> 提示: 可运行 \`speccore validate\` 检查生成内容的完整性
+`;
+
+  await writeFile(promptPath, content);
+  logger.info('   📋 生成 AI 分析指引: ANALYSIS_PROMPT.md');
+  logger.info('   💡 在 AI IDE 中输入 /spec-import-analyze 即可开始 AI 分析');
 }
