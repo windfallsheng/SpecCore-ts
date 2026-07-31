@@ -112,7 +112,7 @@ async function importToGlobalLayer(projectName, projectPath, projectType, option
         requirements.push({
             id: reqId,
             name: api.name,
-            description: `API: ${api.method} ${api.path}\n<!-- AI-ANALYZE: 分析 ${api.path} 的功能职责、输入输出、业务规则 -->\n${api.description || '从代码扫描提取的 API 端点，待 AI 分析补充'}`,
+            description: `API: ${api.method} ${api.path}${api.sourceFile ? ` (${api.sourceFile})` : ''}\n<!-- AI-ANALYZE: 分析 ${api.path} 的功能职责、输入输出、业务规则 -->\n${api.description || '从代码扫描提取的 API 端点，待 AI 分析补充'}`,
         });
     }
     // 如果没有扫描到 API，生成一个占位需求
@@ -237,6 +237,7 @@ async function scanProject(projectPath, projectType, options) {
                         path: `/${page.name}`,
                         name: `${page.name} 页面`,
                         description: `${projectType} 页面`,
+                        sourceFile: `src/pages/${page.name}`,
                     });
                 }
             }
@@ -270,19 +271,26 @@ async function scanApiEndpoints(srcDir, ignores = [], scope = 'all') {
                 if (scope === 'api' && !fullPath.includes('controller') && !fullPath.includes('route'))
                     continue;
                 const content = await (0, fs_extra_1.readFile)(fullPath, 'utf-8');
+                const relativePath = fullPath.replace(process.cwd() + '/', '');
+                // 类级路径前缀 (Spring @RequestMapping, NestJS @Controller)
+                let classPrefix = '';
+                const classMapping = content.match(/@(?:RequestMapping|Controller)\s*\(\s*(?:value\s*=\s*)?["']([^"']+)["']/);
+                if (classMapping)
+                    classPrefix = classMapping[1];
                 // Java Spring
                 const javaMatches = content.matchAll(/@(GetMapping|PostMapping|PutMapping|DeleteMapping|PatchMapping|RequestMapping)\s*(?:\([^)]*\))?\s*(?:@[^(\n]*\s*)*(?:public\s+\S+\s+)?(\w+)\s*\(/g);
                 for (const match of javaMatches) {
                     const annMethod = match[1];
                     const funcName = match[2];
-                    // Try to extract path
                     const pathMatch = content.substring(match.index || 0, (match.index || 0) + 200).match(/@\w+Mapping\s*\(\s*(?:value\s*=\s*)?["']([^"']+)["']/);
-                    const apiPath = pathMatch ? pathMatch[1] : '/';
+                    let apiPath = pathMatch ? pathMatch[1] : '/';
+                    apiPath = classPrefix + apiPath; // 合并类级路径
                     apis.push({
                         method: annMethod.replace('Mapping', '').toUpperCase(),
                         path: apiPath,
                         name: funcName ? funcName.replace(/([A-Z])/g, ' $1').trim() : apiPath,
                         description: `从 ${entry.name} 扫描到的 API 端点`,
+                        sourceFile: relativePath,
                     });
                 }
                 // TypeScript NestJS
@@ -290,9 +298,10 @@ async function scanApiEndpoints(srcDir, ignores = [], scope = 'all') {
                 for (const match of tsMatches) {
                     apis.push({
                         method: match[1],
-                        path: match[2] || '/',
+                        path: classPrefix + (match[2] || '/'),
                         name: match[2] ? match[2].replace(/^\//, '').replace(/\//g, ' ') : 'API',
                         description: `从 ${entry.name} 扫描到的 NestJS 端点`,
+                        sourceFile: relativePath,
                     });
                 }
                 // Express routes
@@ -300,9 +309,10 @@ async function scanApiEndpoints(srcDir, ignores = [], scope = 'all') {
                 for (const match of expressMatches) {
                     apis.push({
                         method: match[1].toUpperCase(),
-                        path: match[2],
+                        path: classPrefix + match[2],
                         name: match[2].replace(/^\//, '').replace(/\//g, ' '),
                         description: `从 ${entry.name} 扫描到的 Express 路由`,
+                        sourceFile: relativePath,
                     });
                 }
             }
@@ -478,7 +488,7 @@ async function generateAnalysisPrompt(projectName, projectType, scanResult, proj
 - **输出内容**: 返回数据结构、错误码
 - **业务规则**: 权限检查、数据校验、并发处理
 
-${apis.map((api, i) => `\`${api.method} ${api.path}\` → 代码文件: 未关联`).join('\n')}
+${apis.map((api, i) => `\`${api.method} ${api.path}\` → ${api.sourceFile || '源码文件未关联'}`).join('\n')}
 
 ### 2. 编码规则提取（RULES/）
 应在 \`.speccore/RULES/\` 下创建以下文件（扫描源码后）：
