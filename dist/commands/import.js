@@ -100,40 +100,85 @@ async function importToGlobalLayer(projectName, projectPath, projectType, option
     }
     // 3. 读取当前全量索引
     const index = await (0, global_layer_1.readGlobalIndex)();
-    // 4. 扫描项目代码
-    logger_1.logger.info(`🔍 Scanning project: ${projectName} (${projectType})`);
-    const scanResult = await scanProject(projectPath, projectType, options);
-    logger_1.logger.info(`   Found ${scanResult.apis.length} API endpoints, ${scanResult.models.length} data models`);
-    // ── Interactive preview: 预览扫描结果 → 用户确认/调整 ──
-    if (options.interactive && scanResult.apis.length > 0) {
-        logger_1.logger.info('');
-        logger_1.logger.info('📋 扫描结果预览:');
-        logger_1.logger.info(`   项目: ${projectName} | 类型: ${projectType}`);
-        logger_1.logger.info(`   技术栈: ${scanResult.techStack || '未检测到'}`);
-        logger_1.logger.info(`   API 端点: ${scanResult.apis.length} 个`);
-        logger_1.logger.info('');
-        for (const api of scanResult.apis) {
-            logger_1.logger.info(`   ${api.method.padEnd(8)} ${api.path.padEnd(30)} → ${api.sourceFile}`);
-        }
-        logger_1.logger.info('');
-        logger_1.logger.info('💡 [y] 确认导入  [a] 新增遗漏  [s] 跳过某个  [q] 取消');
-        const answer = await promptUser('确认导入？');
-        if (answer?.toLowerCase() === 'q') {
-            logger_1.logger.info('已取消');
-            return;
-        }
-        if (answer?.toLowerCase() === 'a') {
-            logger_1.logger.info('请在 REQUIREMENT.md 生成后手动补充遗漏的 API 端点');
-        }
-        if (answer?.toLowerCase() === 's') {
-            const resp = await promptUser('请输入要跳过的 API 路径（逗号分隔，留空则全部保留）：');
-            if (resp) {
-                const skipPaths = resp.split(',').map(s => s.trim());
-                scanResult.apis = scanResult.apis.filter(a => !skipPaths.includes(a.path));
-                logger_1.logger.info(`已跳过 ${skipPaths.length} 个 API，保留 ${scanResult.apis.length} 个`);
+    // 3.5 检测 Excel/CSV 文件 → 直接解析为需求
+    let scanResult = { apis: [], models: [], techStack: '', repoUrl: '' };
+    let fromFile = false;
+    const ext = projectPath.split('.').pop()?.toLowerCase();
+    if (ext === 'xlsx' || ext === 'csv') {
+        logger_1.logger.info(`📊 从 ${ext.toUpperCase()} 文件导入需求...`);
+        try {
+            if (ext === 'xlsx') {
+                const XLSX = require('xlsx');
+                const wb = XLSX.readFile((0, path_1.join)(process.cwd(), projectPath));
+                const ws = wb.Sheets[wb.SheetNames[0]];
+                const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+                scanResult.apis = rows.slice(1)
+                    .filter((r) => r.some((c) => c))
+                    .map((r) => ({
+                    method: 'REQ',
+                    path: String(r[0] || ''),
+                    name: String(r[1] || r[0] || ''),
+                    description: r.slice(1).filter((c) => c).join(' — '),
+                    sourceFile: projectPath,
+                }));
             }
+            else {
+                const content = await (0, fs_extra_1.readFile)((0, path_1.join)(process.cwd(), projectPath), 'utf-8');
+                const lines = content.split('\n').filter(l => l.trim());
+                scanResult.apis = lines.map(l => {
+                    const parts = l.split(',').map(p => p.trim());
+                    return {
+                        method: 'REQ',
+                        path: parts[0] || '',
+                        name: parts[1] || parts[0] || '',
+                        description: parts.join(' — '),
+                        sourceFile: projectPath,
+                    };
+                });
+            }
+            fromFile = true;
+            logger_1.logger.info(`   解析到 ${scanResult.apis.length} 条需求`);
+        }
+        catch (e) {
+            throw new Error(`文件解析失败: ${e.message}`);
         }
     }
+    // 4. 扫描项目代码（非文件模式）
+    if (!fromFile) {
+        logger_1.logger.info(`🔍 Scanning project: ${projectName} (${projectType})`);
+        scanResult = await scanProject(projectPath, projectType, options);
+        logger_1.logger.info(`   Found ${scanResult.apis.length} API endpoints, ${scanResult.models.length} data models`);
+        // ── Interactive preview: 预览扫描结果 → 用户确认/调整 ──
+        if (options.interactive && scanResult.apis.length > 0) {
+            logger_1.logger.info('');
+            logger_1.logger.info('📋 扫描结果预览:');
+            logger_1.logger.info(`   项目: ${projectName} | 类型: ${projectType}`);
+            logger_1.logger.info(`   技术栈: ${scanResult.techStack || '未检测到'}`);
+            logger_1.logger.info(`   API 端点: ${scanResult.apis.length} 个`);
+            logger_1.logger.info('');
+            for (const api of scanResult.apis) {
+                logger_1.logger.info(`   ${api.method.padEnd(8)} ${api.path.padEnd(30)} → ${api.sourceFile}`);
+            }
+            logger_1.logger.info('');
+            logger_1.logger.info('💡 [y] 确认导入  [a] 新增遗漏  [s] 跳过某个  [q] 取消');
+            const answer = await promptUser('确认导入？');
+            if (answer?.toLowerCase() === 'q') {
+                logger_1.logger.info('已取消');
+                return;
+            }
+            if (answer?.toLowerCase() === 'a') {
+                logger_1.logger.info('请在 REQUIREMENT.md 生成后手动补充遗漏的 API 端点');
+            }
+            if (answer?.toLowerCase() === 's') {
+                const resp = await promptUser('请输入要跳过的 API 路径（逗号分隔，留空则全部保留）：');
+                if (resp) {
+                    const skipPaths = resp.split(',').map(s => s.trim());
+                    scanResult.apis = scanResult.apis.filter(a => !skipPaths.includes(a.path));
+                    logger_1.logger.info(`已跳过 ${skipPaths.length} 个 API，保留 ${scanResult.apis.length} 个`);
+                }
+            }
+        }
+    } // close if (!fromFile)
     // 5. 生成需求条目
     const requirements = [];
     let nextId = parseInt((0, global_layer_1.getNextReqId)(index).replace('REQ-', ''), 10);

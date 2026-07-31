@@ -134,10 +134,53 @@ async function importToGlobalLayer(
   // 3. 读取当前全量索引
   const index = await readGlobalIndex();
 
-  // 4. 扫描项目代码
-  logger.info(`🔍 Scanning project: ${projectName} (${projectType})`);
-  const scanResult = await scanProject(projectPath, projectType, options);
-  logger.info(`   Found ${scanResult.apis.length} API endpoints, ${scanResult.models.length} data models`);
+  // 3.5 检测 Excel/CSV 文件 → 直接解析为需求
+  let scanResult: ScanResult = { apis: [], models: [], techStack: '', repoUrl: '' };
+  let fromFile = false;
+  const ext = projectPath.split('.').pop()?.toLowerCase();
+  if (ext === 'xlsx' || ext === 'csv') {
+    logger.info(`📊 从 ${ext.toUpperCase()} 文件导入需求...`);
+    try {
+      if (ext === 'xlsx') {
+        const XLSX = require('xlsx');
+        const wb = XLSX.readFile(join(process.cwd(), projectPath));
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
+        scanResult.apis = rows.slice(1)
+          .filter((r: any[]) => r.some((c: any) => c))
+          .map((r: any[]) => ({
+            method: 'REQ',
+            path: String(r[0] || ''),
+            name: String(r[1] || r[0] || ''),
+            description: r.slice(1).filter((c: any) => c).join(' — '),
+            sourceFile: projectPath,
+          }));
+      } else {
+        const content = await readFile(join(process.cwd(), projectPath), 'utf-8');
+        const lines = content.split('\n').filter(l => l.trim());
+        scanResult.apis = lines.map(l => {
+          const parts = l.split(',').map(p => p.trim());
+          return {
+            method: 'REQ',
+            path: parts[0] || '',
+            name: parts[1] || parts[0] || '',
+            description: parts.join(' — '),
+            sourceFile: projectPath,
+          };
+        });
+      }
+      fromFile = true;
+      logger.info(`   解析到 ${scanResult.apis.length} 条需求`);
+    } catch (e: any) {
+      throw new Error(`文件解析失败: ${e.message}`);
+    }
+  }
+
+  // 4. 扫描项目代码（非文件模式）
+  if (!fromFile) {
+    logger.info(`🔍 Scanning project: ${projectName} (${projectType})`);
+    scanResult = await scanProject(projectPath, projectType, options);
+    logger.info(`   Found ${scanResult.apis.length} API endpoints, ${scanResult.models.length} data models`);
 
   // ── Interactive preview: 预览扫描结果 → 用户确认/调整 ──
   if (options.interactive && scanResult.apis.length > 0) {
@@ -167,6 +210,7 @@ async function importToGlobalLayer(
       }
     }
   }
+  }  // close if (!fromFile)
 
   // 5. 生成需求条目
   const requirements: { name: string; description: string; id: string }[] = [];
