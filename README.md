@@ -80,7 +80,7 @@ speccore iteration create --name 2026-07-用户系统
 speccore new-task --name 用户登录 --platforms=web,h5
 
 # 5. 自然语言入口
-speccore spec "进度怎么样了"
+speccore ask "进度怎么样了"
 ```
 
 > 📚 更多场景和详细步骤见 [快速开始指南](docs/快速开始.md)
@@ -165,7 +165,7 @@ SpecCore 采用**确定性逻辑与智能逻辑解耦**的架构：
 
 | 分类 | 命令 | 说明 |
 | :--- | :--- | :--- |
-| 🧠 智能入口 | `speccore spec "<query>"` | 自然语言意图识别 |
+| 🧠 智能入口 | `speccore ask "<query>"` | 自然语言意图识别 |
 | 🌐 初始化/导入 | `speccore init` / `import` / `doc2spec` | 项目初始化 + 多项目导入 + Word 需求导入 |
 | 📐 计划 | `speccore iteration create/split` / `new-task` / `plan` | 期次管理 + Task 创建 |
 | | `speccore iteration-from-global` | 从全量层生成期次 |
@@ -199,7 +199,7 @@ SpecCore 采用**确定性逻辑与智能逻辑解耦**的架构：
 | `speccore rollback` | `/spec-rollback` | 从备份恢复 |
 | `speccore dashboard` | `/spec-dashboard` | 仪表盘总览 |
 | `speccore audit` | `/spec-ai-audit` | AI 智能审计 |
-| `speccore spec "查询"` | `/spec 查询` | 自然语言智能入口 |
+| `speccore ask "查询"` | `/spec 查询` | 自然语言智能入口 |
 
 > 📋 完整命令参数见 [命令参考手册](docs/命令参考.md) | 🧠 38 种意图映射见 [意图映射表](docs/命令参考.md#自然语言意图映射36-种)
 

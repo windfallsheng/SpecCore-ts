@@ -17,7 +17,7 @@ import { taskNewCommand } from './commands/task/new';
 import { planCommand } from './commands/plan';
 import { executeCommand } from './commands/execute';
 // 新增命令
-import { specCommand } from './commands/spec';
+import { askCommand } from './commands/ask';
 import { goalCommand } from './commands/goal';
 import { bugfixCommand } from './commands/bugfix';
 import { newTaskCommand } from './commands/new-task';
@@ -106,7 +106,7 @@ const MODE = readMode();
 
 /** 简洁模式下在 help 中显示的命令 */
 const SIMPLE_COMMANDS = new Set([
-  'spec', 'init', 'doc2spec', 'analyze', 'split', 'execute',
+  'ask', 'init', 'doc2spec', 'analyze', 'split', 'execute',
   'pr', 'done', 'status-panel', 'dev',
   'new-task', 'change', 'validate', 'rename',
   'iteration', 'task', 'plan', 'ops',
@@ -122,9 +122,9 @@ program.configureHelp({
   visibleCommands: (cmd) => filterCommands(cmd.commands),
 });
 program
-  .command('spec [input...]')
-  .description('Smart entry: natural language intent recognition')
-  .action((input: string[]) => specCommand(input.join(' '), {}));
+  .command('ask [input...]')
+  .description('Natural language intent recognition (previously "spec")')
+  .action((input: string[]) => askCommand(input.join(' '), {}));
 
 // ================================================================
 // 👋 引导与体验

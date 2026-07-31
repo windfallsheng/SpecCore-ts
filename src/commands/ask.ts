@@ -1,5 +1,5 @@
 /**
- * /spec - 智能入口命令
+ * /ask - 智能入口命令
  * 自然语言意图识别引擎，自动匹配最合适的 SpecCore 命令
  */
 
@@ -12,19 +12,19 @@ export interface SpecOptions {
   /** 使用模式：识别后的命令执行由 AI 协同完成 */
 }
 
-export async function specCommand(input: string, _options: SpecOptions): Promise<void> {
+export async function askCommand(input: string, _options: SpecOptions): Promise<void> {
   if (!input || !input.trim()) {
     logger.info('🔍 SpecCore 智能入口');
     logger.info('');
-    logger.info('用法: speccore spec "<自然语言描述>"');
+    logger.info('用法: speccore ask "<自然语言描述>"');
     logger.info('');
     logger.info('示例:');
-    logger.info('  speccore spec "做一个用户登录功能，支持手机号+密码"');
-    logger.info('  speccore spec "修复登录超时问题"');
-    logger.info('  speccore spec "查看进度"');
-    logger.info('  speccore spec "开始干活"');
-    logger.info('  speccore spec "把登录改成验证码登录"');
-    logger.info('  speccore spec "审查一下"');
+    logger.info('  speccore ask "做一个用户登录功能，支持手机号+密码"');
+    logger.info('  speccore ask "修复登录超时问题"');
+    logger.info('  speccore ask "查看进度"');
+    logger.info('  speccore ask "开始干活"');
+    logger.info('  speccore ask "把登录改成验证码登录"');
+    logger.info('  speccore ask "审查一下"');
     return;
   }
 

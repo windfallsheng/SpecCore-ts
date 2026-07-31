@@ -8,7 +8,7 @@ import { logger } from '../utils/logger';
 
 const COMMANDS = [
   'init', 'import', 'validate', 'archive', 'progress', 'status', 'health',
-  'report', 'config', 'iteration', 'task', 'plan', 'execute', 'spec',
+  'report', 'config', 'iteration', 'task', 'plan', 'execute', 'ask',
   'goal', 'bugfix', 'research', 'change', 'sync', 'handover', 'retro',
   'template-add', 'help', 'demo', 'welcome', 'iteration-from-global',
   'sync-global', 'global-status', 'history', 'impact', 'baseline',
