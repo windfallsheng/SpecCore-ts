@@ -279,6 +279,7 @@ taskCmd
   .option('-d, --desc <desc>', 'Task description')
   .option('--file <file>', 'Requirement file path')
   .option('--sections <sections>', 'Sections to extract from file')
+  .option('--platforms <platforms>', 'Frontend platforms: web,h5,miniapp (comma-separated)')
   .option('--backend-only', 'Create backend only')
   .option('--frontend-only', 'Create frontend only')
   .option('-i, --iteration <iteration>', 'Target iteration')
@@ -738,15 +739,15 @@ program
 program
   .command('new-task')
   .alias('nt')
-  .description('Create multi-platform task with --platforms support (v4.0)')
-  .option('--name <name>', 'Task name (required)')
-  .option('--type <type>', 'Task type: feature, bugfix, research, optimization, migration, document')
-  .option('--desc <desc>', 'Task description')
-  .option('--platforms <platforms>', 'Frontend platforms: web,h5,miniapp or "all"')
-  .option('--backend-only', 'Create backend specs only')
-  .option('--frontend-only', 'Create frontend specs only')
+  .description('快捷创建 Task（同 task new）')
+  .option('-n, --name <name>', 'Task name (required)')
+  .option('-t, --type <type>', 'Task type', 'feature')
+  .option('-d, --desc <desc>', 'Task description')
+  .option('--platforms <platforms>', 'Frontend platforms: web,h5,miniapp')
+  .option('--backend-only', 'Create backend only')
+  .option('--frontend-only', 'Create frontend only')
   .option('-i, --iteration <iteration>', 'Target iteration')
-  .action(newTaskCommand);
+  .action(taskNewCommand);
 
 program
   .command('platform-add')
