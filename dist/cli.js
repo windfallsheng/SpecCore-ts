@@ -140,7 +140,7 @@ const SIMPLE_COMMANDS = new Set([
     'spec', 'init', 'doc2spec', 'analyze', 'split', 'execute',
     'pr', 'done', 'status-panel', 'dev',
     'new-task', 'change', 'validate', 'rename',
-    'iteration', 'task',
+    'iteration', 'task', 'plan', 'ops',
 ]);
 /** 简洁模式下过滤 help 命令列表 */
 function filterCommands(commands) {
@@ -277,6 +277,7 @@ iterationCmd
     .option('--target <target>', 'Merge into existing task')
     .option('-p, --platforms <platforms>', 'Comma-separated platforms (auto-detected if omitted)')
     .option('--dry-run', 'Preview without creating')
+    .option('--interactive', 'Preview → adjust → confirm before creating')
     .option('--strict', 'Review each section before creating tasks')
     .action(split_1.iterationSplitCommand);
 // ================================================================
@@ -366,6 +367,7 @@ commander_1.program
     .option('--priority <priority>', 'Filter by priority')
     .option('--mode <mode>', 'Plan mode: auto, claim, parallel', 'auto')
     .option('--dry-run', 'Preview without saving')
+    .option('--interactive', 'Preview → adjust → confirm before saving')
     .action(plan_1.planCommand);
 commander_1.program
     .command('execute')

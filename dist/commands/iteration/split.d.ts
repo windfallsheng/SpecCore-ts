@@ -4,6 +4,7 @@ export interface IterationSplitOptions {
     sections?: string;
     target?: string;
     dryRun?: boolean;
+    interactive?: boolean;
     platforms?: string;
     strict?: boolean;
 }

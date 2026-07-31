@@ -27,16 +27,16 @@ SpecCore is a specification-driven development toolkit for AI-native teams. It d
 
 | | Simple (default) | Full |
 | :--- | :--- | :--- |
-| **Commands** | 17 core commands | 79+ all commands |
+| **Commands** | 19 core commands | 79+ all commands |
 | **For** | New users, core workflow | Power users, fine-grained control |
 | **Enable** | `speccore init` | `speccore init --full` |
 | **Switch** | Re-run `init` anytime |
 
-**Simple mode 17 commands:**
+**Simple mode 19 commands:**
 ```
-① init → ② iteration create → ③ doc2spec → ④ analyze → ⑤ split → ⑥ execute → ⑦ pr → ⑧ done
-⑨ speccore (no args) ⑩ status-panel ⑪ dev ⑫ spec
-⑬ new-task ⑭ change ⑮ validate ⑯ rename ⑰ task
+① init → ② iteration create → ③ doc2spec → ④ analyze → ⑤ split → ⑥ plan → ⑦ execute → ⑧ pr → ⑨ done
+⑩ speccore (no args) ⑪ status-panel ⑫ dev ⑬ spec
+⑭ new-task ⑮ change ⑯ validate ⑰ rename ⑱ task ⑲ ops
 ```
 
 ---

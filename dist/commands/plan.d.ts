@@ -7,6 +7,7 @@ export interface PlanOptions {
     priority?: string;
     mode?: string;
     dryRun?: boolean;
+    interactive?: boolean;
 }
 export declare function planCommand(options: PlanOptions): Promise<void>;
 //# sourceMappingURL=plan.d.ts.map
