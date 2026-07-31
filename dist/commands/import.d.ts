@@ -13,6 +13,7 @@ export interface ImportOptions {
     scope?: string;
     ignore?: string;
     update?: boolean;
+    interactive?: boolean;
 }
 export declare function importCommand(options: ImportOptions): Promise<void>;
 //# sourceMappingURL=import.d.ts.map

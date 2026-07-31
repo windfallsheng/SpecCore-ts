@@ -139,7 +139,7 @@ const SIMPLE_COMMANDS = new Set([
     'ask', 'init', 'doc2spec', 'analyze', 'split', 'execute',
     'pr', 'done', 'status-panel', 'dev',
     'new-task', 'change', 'validate', 'rename',
-    'iteration', 'task', 'plan', 'ops',
+    'iteration', 'task', 'plan', 'ops', 'import',
 ]);
 /** 简洁模式下过滤 help 命令列表 */
 function filterCommands(commands) {
@@ -232,7 +232,7 @@ commander_1.program
 commander_1.program
     .command('import')
     .alias('imp')
-    .description('Import project into global layer (multi-project support)')
+    .description('导入存量项目到全局层（自动检测覆盖/增量）')
     .option('--source <source>', 'Source type: code, prd, prototype, all', 'all')
     .option('--path <path>', 'Project source path', './')
     .option('--url <url>', 'Prototype URL')
@@ -241,8 +241,9 @@ commander_1.program
     .option('--type <type>', 'Project type: backend, web, h5, miniapp', 'backend')
     .option('--scope <scope>', 'Selective import: all, core, api', 'all')
     .option('--ignore <packages>', 'Ignore specific packages (comma-separated)')
-    .option('--update', 'Incremental sync mode')
-    .option('--force', 'Force overwrite')
+    .option('--update', '增量更新：追加新 API，保留已有')
+    .option('--force', '强制覆盖：重新扫描并替换全部')
+    .option('--interactive', '交互式：预览变更 → 确认覆盖/增量')
     .action(import_1.importCommand);
 commander_1.program
     .command('migrate')
