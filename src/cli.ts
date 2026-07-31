@@ -306,6 +306,8 @@ program
   .option('-n, --name <name>', 'Bug name')
   .option('-d, --desc <desc>', 'Bug description')
   .option('--batch <bugs>', '批量：换行分隔的多个 Bug 描述')
+  .option('--batch-file <path>', '从 Excel/CSV 文件导入')
+  .option('--interactive', '预览 → 编辑 → 确认 → 创建')
   .option('--schedule <mode>', '调度模式：night / now', 'now')
   .option('--task-id <id>', 'Task ID')
   .option('-i, --iteration <iteration>', 'Target iteration')

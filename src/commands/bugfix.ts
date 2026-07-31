@@ -5,13 +5,23 @@
 
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
-import { ensureDir, writeFile, pathExists } from 'fs-extra';
+import { ensureDir, writeFile, pathExists, readFile } from 'fs-extra';
 import { join } from 'path';
+import { createInterface } from 'readline';
+
+function promptUser(question: string): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise(resolve => {
+    rl.question(`${question} `, answer => { rl.close(); resolve(answer.trim()); });
+  });
+}
 
 export interface BugfixOptions {
   name?: string;
   desc?: string;
-  batch?: string;  // 批量 bug 描述（换行分隔）
+  batch?: string;
+  batchFile?: string;  // Excel/CSV 文件路径
+  interactive?: boolean;
   taskId?: string;
   iteration?: string;
   affectedTask?: string;
@@ -20,12 +30,47 @@ export interface BugfixOptions {
 
 export async function bugfixCommand(options: BugfixOptions): Promise<void> {
   // 批量模式
-  if (options.batch) {
-    const bugs = options.batch.split('\n').filter(b => b.trim());
+  if (options.batch || options.batchFile) {
+    // 支持文件导入
+    if (options.batchFile) {
+      if (!await pathExists(options.batchFile)) { logger.error('文件不存在: ' + options.batchFile); return; }
+      options.batch = await readFile(options.batchFile, 'utf-8');
+      logger.info('📄 从文件导入: ' + options.batchFile);
+    }
+    const bugs = (options.batch || '').split('\n').filter(b => b.trim());
     if (bugs.length === 0) {
       logger.error('批量输入为空');
       return;
     }
+
+    // ── Interactive preview ──
+    if (options.interactive) {
+      logger.info(`📋 解析到 ${bugs.length} 个 Bug:\n`);
+      for (let i = 0; i < bugs.length; i++) {
+        const title = bugs[i].split('\n')[0].slice(0, 50);
+        logger.info(`  ${i + 1}. ${title}`);
+      }
+      logger.info('');
+      logger.info('💡 [y] 全部创建  [e] 编辑某个  [s] 跳过某个  [q] 取消');
+      const answer = await promptUser('确认创建？');
+      if (answer?.toLowerCase() === 'q') { logger.info('已取消'); return; }
+      if (answer?.toLowerCase() === 'e') {
+        const idx = await promptUser('编辑第几个？');
+        const i = parseInt(idx) - 1;
+        if (i >= 0 && i < bugs.length) {
+          logger.info(`当前: ${bugs[i].slice(0, 100)}`);
+          const edit = await promptUser('修改后内容（留空保留原样）: ');
+          if (edit) bugs[i] = edit;
+        }
+      }
+      if (answer?.toLowerCase() === 's') {
+        const skip = await promptUser('跳过第几个（逗号分隔）？');
+        const skipIdx = skip.split(',').map(s => parseInt(s.trim()) - 1).filter(i => i >= 0 && i < bugs.length);
+        skipIdx.sort((a, b) => b - a).forEach(i => bugs.splice(i, 1));
+        logger.info(`保留 ${bugs.length} 个 Bug`);
+      }
+    }
+
     await batchBugfixCreate(bugs, options);
     return;
   }
