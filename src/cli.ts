@@ -20,7 +20,6 @@ import { executeCommand } from './commands/execute';
 import { askCommand } from './commands/ask';
 import { goalCommand } from './commands/goal';
 import { bugfixCommand } from './commands/bugfix';
-import { newTaskCommand } from './commands/new-task';
 import { changeCommand } from './commands/change';
 import { syncCommand } from './commands/sync';
 import { patternCommand } from './commands/pattern';
@@ -108,7 +107,6 @@ const MODE = readMode();
 const SIMPLE_COMMANDS = new Set([
   'ask', 'init', 'doc2spec', 'analyze', 'split', 'execute',
   'pr', 'done', 'status-panel', 'dev',
-  'new-task', 'change', 'validate', 'rename',
   'iteration', 'task', 'plan', 'ops', 'import',
 ]);
 
@@ -743,7 +741,6 @@ program
 // 🆕 v4.0.0 新增命令
 // ================================================================
 program
-  .command('new-task')
   .alias('nt')
   .description('快捷创建 Task（同 task new）')
   .option('-n, --name <name>', 'Task name (required)')
