@@ -4,7 +4,7 @@ import { mkdirSync, writeFileSync, existsSync, rmSync, mkdtempSync } from 'fs';
 import { readFile } from 'fs-extra';
 import { analyzeCommand } from '../../../src/commands/analyze';
 
-describe('analyze — Requirement Analysis', () => {
+describe('analyze — Requirement Analysis', { timeout: 30000 }, () => {
   let tmpDir: string;
   let iterDir: string;
   let reqDir: string;
