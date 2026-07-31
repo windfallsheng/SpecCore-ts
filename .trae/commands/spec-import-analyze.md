@@ -1,32 +1,41 @@
-# /spec-import-analyze — AI 分析导入项目
+# /spec-import-analyze — AI 反工程分析存量项目
 
-读取 `speccore import` 生成的骨架文件，用 AI 分析源码，填充需求描述、提取编码规则、完善全局配置。
+读取 `speccore import` 生成的 ANALYSIS_PROMPT.md，深入源码倒推出完整需求、技术方案、编码规范。
 
 ## 执行步骤
 
 ### 1. 读取分析指引
 ```bash
-# 读取 ANALYSIS_PROMPT.md 了解任务
 cat .speccore/GLOBAL/PROJECTS/*/ANALYSIS_PROMPT.md
 ```
 
-### 2. 按任务清单逐项执行
+### 2. 逐 API 反推需求（REQUIREMENT.md + SCHEMA.md + TECH.md）
 
-**2.1 功能需求分析** — 编辑 REQUIREMENT.md
-- 找到所有 `<!-- AI-ANALYZE: ... -->` 标记
-- 浏览源代码目录，理解每个 API 的功能
-- 补充功能职责、输入输出、业务规则
+对每个 API 端点，**追溯完整调用链**：
+1. 读 Controller → 理解入参和响应
+2. 跳转 Service → 理解业务逻辑
+3. 跳转 Repository/DAO → 理解数据模型
+4. 读 Entity/Model → 提取字段、关系、约束
+5. 填充 REQUIREMENT.md 的 `<!-- AI-ANALYZE -->` 标记
+6. 生成 SCHEMA.md（数据模型文档）
+7. 生成 TECH.md（技术方案骨架）
 
-**2.2 编码规则提取** — 创建 RULES/ 文件
-- 扫描源码中的异常处理模式 → EXCEPTION_HANDLING.md
-- 提取 API 命名规范 → API_CONVENTIONS.md
-- 提取类/方法命名模式 → NAMING.md
-- 检测认证机制 → AUTH.md
+### 3. 提取编码规则（RULES/）
 
-**2.3 宪法更新** — 编辑 CONSTITUTION.md
-- 检查已自动追加的框架建议
-- 补充数据库、缓存、日志等全局规则
+| 文件 | 扫描重点 |
+| :--- | :--- |
+| API_CONVENTIONS.md | URL 前缀/版本、响应格式、HTTP 方法使用 |
+| EXCEPTION_HANDLING.md | 异常基类、@ControllerAdvice、错误码 |
+| NAMING.md | 包结构、类名/方法名模式 |
+| AUTH.md | JWT/Session/OAuth + 权限注解 |
 
-### 3. 完成标记
-- 在各文件末尾追加 `✅ AI 分析完成`
-- 汇报分析结果摘要
+### 4. 完善全局宪法（CONSTITUTION.md）
+
+- 数据库选型 + ORM 框架
+- 缓存策略（Redis/Caffeine）
+- 日志规范（SLF4J/Logback）
+- 消息队列（Kafka/RabbitMQ 如有）
+
+### 5. 验证完成
+
+在 REQUIREMENT.md 末尾追加完成标记并汇报摘要。
