@@ -1049,5 +1049,15 @@ if (process.argv.length <= 2) {
   process.exit(0);
 }
 
-
-program.parse();
+// ── Natural language intent (e.g. speccore "帮我分析需求") ──
+program.exitOverride().configureOutput({ outputError: () => {} });
+try {
+  program.parse();
+} catch (err: any) {
+  const input = (process.argv.slice(2)).filter((a: string) => !a.startsWith('-')).join(' ');
+  if (input) {
+    askCommand(input, {}).then(() => process.exit(0));
+  } else {
+    process.exit(1);
+  }
+}

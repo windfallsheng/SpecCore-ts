@@ -1018,5 +1018,18 @@ if (process.argv.length <= 2) {
     logger.info('');
     process.exit(0);
 }
-commander_1.program.parse();
+// ── Natural language intent (e.g. speccore "帮我分析需求") ──
+commander_1.program.exitOverride().configureOutput({ outputError: () => { } });
+try {
+    commander_1.program.parse();
+}
+catch (err) {
+    const input = (process.argv.slice(2)).filter((a) => !a.startsWith('-')).join(' ');
+    if (input) {
+        (0, ask_1.askCommand)(input, {}).then(() => process.exit(0));
+    }
+    else {
+        process.exit(1);
+    }
+}
 //# sourceMappingURL=cli.js.map
