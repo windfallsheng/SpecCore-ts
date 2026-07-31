@@ -362,3 +362,38 @@
 | 修订版本号 | Bug 修复或文档增强 |
 
 当前版本：**v5.11.0**
+
+## v5.20.0 (2026-07-31)
+
+### 🎯 双模式初始化
+- `speccore init` 默认简洁模式（19 命令）
+- `speccore init --full` 全量模式（79+ 命令）
+- `.speccore/config/mode.json` 持久化用户选择
+
+### 🔄 交互式协作
+- `--interactive` 支持：import / split / plan / analyze / change / done
+- 自动模式（默认）+ 交互模式（--interactive）共存
+
+### 📥 存量项目导入
+- `import` 支持 .xlsx / .csv 文件导入需求
+- 覆盖检测：--update 增量 / --force 覆盖 / --interactive 选择
+- `ANALYSIS_PROMPT.md` + `/spec-import-analyze` AI 反工程分析
+
+### 🐛 Bug 批量处理
+- `bugfix --batch` 批量导入 + 交互确认
+- `bugfix --batch-file` 支持 .xlsx 文件
+- `bugfix --schedule night` 夜间执行标记
+
+### 🔧 命令优化
+- `spec → ask` 自然语言入口
+- `word2spec → doc2spec` 多格式导入
+- `task new` 别名 `add → tn`
+- 移除重复 `new-task` 命令
+
+### 🚀 智能入口
+- `speccore` 直输自然语言触发意图识别
+- 帮助横幅升级为 9 步完整闭环
+
+### 📖 文档
+- README 重写：简洁模式为主
+- 竞品对比章节移除
