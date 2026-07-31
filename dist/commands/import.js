@@ -496,55 +496,106 @@ async function generateAnalysisPrompt(projectName, projectType, scanResult, proj
         return;
     const apis = scanResult.apis;
     const promptPath = (0, path_1.join)(projectDir, 'ANALYSIS_PROMPT.md');
-    const content = `# AI 分析任务: ${projectName}
+    // 扫描工程文件树（前 3 层）
+    const absSrcPath = (0, path_1.join)(process.cwd(), projectPath, 'src');
+    const fileTree = await buildFileTree(absSrcPath);
+    const content = `# AI 反工程分析任务: ${projectName}
 
-> 本文档由 \`speccore import\` 自动生成，供 AI IDE（Qcoder/WorkBuddy/Cursor 等）读取。
-> 用户只需在 IDE 中触发 \`/spec-import-analyze\` Slash Command，AI 将按此指引完成任务。
+> 本文档由 \`speccore import\` 自动生成。
+> **目标：从源码倒推出完整的需求文档、技术方案、编码规范。**
+> 用户触发 \`/spec-import-analyze\`，AI 按此指引完成。
 
 ## 项目信息
 - 名称: ${projectName}
 - 类型: ${projectType}
 - 技术栈: ${scanResult.techStack || '未检测到（请检查 package.json/pom.xml）'}
-- 源代码路径: ${projectPath}
+- 源码路径: \`${projectPath}\`
 
-## 任务清单
+## 工程文件树（src/ 前 3 层）
+\`\`\`
+${fileTree}
+\`\`\`
 
-### 1. 功能需求分析（REQUIREMENT.md）
-应编辑文件: \`.speccore/GLOBAL/PROJECTS/${projectName}/REQUIREMENT.md\`
+---
+## 第一步：深入源码反推需求
 
-搜索所有 \`<!-- AI-ANALYZE: ... -->\` 标记，为每个 API 补充：
-- **功能职责**: 这个 API 实际做什么
-- **输入参数**: 必填/选填字段、类型、校验规则
-- **输出内容**: 返回数据结构、错误码
-- **业务规则**: 权限检查、数据校验、并发处理
+对每个扫描到的 API，**不仅要看 Controller，还要追溯 Service / Repository / Entity**：
 
-${apis.map((api, i) => `\`${api.method} ${api.path}\` → ${api.sourceFile || '源码文件未关联'}`).join('\n')}
+${apis.map((api, i) => `\n### API ${i + 1}: ${api.method} ${api.path}
+- **入口文件**: \`${api.sourceFile}\`
+- **分析方式**:
+  1. 读取入口文件的完整代码
+  2. 如果 Controller 调用了 Service → 跳转到 Service 实现
+  3. 如果 Service 操作了数据库 → 读取 Repository/DAO 和 Entity/Model
+  4. 完整还原数据流转: 请求 → 校验 → 业务逻辑 → 持久化 → 响应`).join('\n')}
 
-### 2. 编码规则提取（RULES/）
-应在 \`.speccore/RULES/\` 下创建以下文件（扫描源码后）：
+---
+## 第二步：输出目标文件
 
-- **API_CONVENTIONS.md**: API 命名规范（前缀、版本、RESTful 风格）
-- **EXCEPTION_HANDLING.md**: 异常处理模式（是否有 BusinessException/@ControllerAdvice）
-- **NAMING.md**: 类/方法/变量命名规范
-- **AUTH.md**: 认证/鉴权机制检测
+### 2.1 需求文档 → \`PROJECTS/${projectName}/REQUIREMENT.md\`
+${apis.map(api => `- **${api.method} ${api.path}**: 补充功能职责、参数校验、响应结构、业务规则`).join('\n')}
 
-### 3. 宪法更新（CONSTITUTION.md）
-应编辑文件: \`.speccore/CONSTITUTION.md\`
+### 2.2 数据模型 → \`PROJECTS/${projectName}/SCHEMA.md\`
+- 从 Entity/Model 文件提取所有数据表和字段
+- 标注主键、索引、外键关系
+- 绘制实体关系图（文字版）
 
-已自动追加框架建议，AI 应补充：
-- 数据库选型（ORM/原生 SQL）
-- 缓存策略
-- 日志规范
+### 2.3 技术方案 → \`PROJECTS/${projectName}/TECH.md\`
+- 架构分层（Controller → Service → Repository）
+- 关键设计决策（为什么要这么分层）
+- 外部依赖（Redis/消息队列/第三方服务）
+- 🚀 仅生成骨架，建议后续增强或选择性覆盖
 
-## 操作方式
-1. 读取本文件 + 扫描源码目录 \`${projectPath}\`
-2. 逐项完成上述任务，编辑对应文件
-3. 最终确认: 在 REQUIREMENT.md 末尾追加 \`✅ AI 分析完成 ${new Date().toISOString().split('T')[0]}\`
+### 2.4 编码规则 → \`RULES/\`
+| 文件 | 检测重点 |
+| :--- | :--- |
+| API_CONVENTIONS.md | URL 前缀、版本号、RESTful 风格、统一响应格式 |
+| EXCEPTION_HANDLING.md | 异常基类、@ControllerAdvice、错误码枚举 |
+| NAMING.md | 包名规则、类名/方法名模式 |
+| AUTH.md | 认证方式（JWT/Session/OAuth）、权限模型 |
 
-> 提示: 可运行 \`speccore validate\` 检查生成内容的完整性
+### 2.5 宪法更新 → \`CONSTITUTION.md\`
+补充全局约束：数据库版本、ORM 框架、缓存策略、日志框架
+
+---
+## 第三步：结果验证
+
+分析完成后，在 REQUIREMENT.md 末尾追加：
+\`\`\`
+✅ AI 反工程分析完成 (${new Date().toISOString().split('T')[0]})
+- 分析 API: ${apis.length} 个
+- 生成规则: RULES/ 目录下 4 个文件
+- 分析模式: 从源码倒推（无原始需求文档）
+\`\`\`
 `;
     await (0, fs_extra_1.writeFile)(promptPath, content);
     logger_1.logger.info('   📋 生成 AI 分析指引: ANALYSIS_PROMPT.md');
     logger_1.logger.info('   💡 在 AI IDE 中输入 /spec-import-analyze 即可开始 AI 分析');
+}
+/**
+ * 构建工程文件树（前 3 层）
+ */
+async function buildFileTree(srcDir, depth = 0, maxDepth = 3) {
+    if (depth > maxDepth || !(await (0, fs_extra_1.pathExists)(srcDir)))
+        return '';
+    const lines = [];
+    const entries = await (0, fs_extra_1.readdir)(srcDir, { withFileTypes: true });
+    for (const entry of entries.slice(0, 20)) { // 限制每层 20 个
+        const indent = '  '.repeat(depth);
+        if (entry.isDirectory()) {
+            lines.push(`${indent}📁 ${entry.name}/`);
+            const subtree = await buildFileTree((0, path_1.join)(srcDir, entry.name), depth + 1, maxDepth);
+            if (subtree)
+                lines.push(subtree);
+        }
+        else {
+            const ext = (0, path_1.extname)(entry.name);
+            const emoji = ['.java', '.ts', '.js', '.go', '.py'].includes(ext) ? '📄' : '📎';
+            lines.push(`${indent}${emoji} ${entry.name}`);
+        }
+    }
+    if (depth > 0 && lines.length === 0)
+        return '';
+    return lines.join('\n');
 }
 //# sourceMappingURL=import.js.map
