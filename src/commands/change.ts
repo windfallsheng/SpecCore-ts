@@ -11,25 +11,40 @@ import { join } from 'path';
 import { FileTransaction } from '../core/transaction';
 import { scanTasks } from '../core/state';
 
+import { createInterface } from 'readline';
+function promptUser(question: string): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise(resolve => {
+    rl.question(`${question} `, answer => { rl.close(); resolve(answer.trim()); });
+  });
+}
+
 export interface ChangeOptions {
   task?: string;
   desc?: string;
+  input?: string;  // natural language input
   global?: boolean;
   iteration?: string;
   dryRun?: boolean;
-  requirement?: boolean;  // 同步更新 REQUIREMENT.md
-  analysis?: boolean;     // 同步更新 ANALYSIS.md
+  requirement?: boolean;
+  analysis?: boolean;
   force?: boolean;
+  interactive?: boolean;
 }
 
 export async function changeCommand(options: ChangeOptions): Promise<void> {
+  // 自然语言输入 → 当作 desc 处理
+  if (options.input && !options.desc) {
+    options.desc = options.input;
+  }
+
   if (!options.task && !options.global) {
-    logger.error('请指定要变更的 Task 或使用 --global。用法: speccore change --task=<Task编号> --desc="<变更描述>"');
+    logger.error('请指定 Task 或使用 --global。用法: speccore change "变更描述" --task=<Task>');
     return;
   }
 
   if (!options.desc) {
-    logger.error('请提供变更描述。用法: speccore change --desc="<变更描述>"');
+    logger.error('请提供变更描述。用法: speccore change "把手机号改成支持国际号码"');
     return;
   }
 
@@ -67,6 +82,25 @@ export async function changeCommand(options: ChangeOptions): Promise<void> {
       await dryRunChange(options, iteration);
       spinner.stop('变更预览完成（--dry-run 模式，未实际修改）');
       return;
+    }
+
+    // ── Interactive: 预览影响范围 → 确认 ──
+    if (options.interactive) {
+      spinner.stop('变更影响分析');
+      logger.info('');
+      logger.info(`📋 变更内容: ${options.desc}`);
+      if (options.task) logger.info(`📌 影响任务: ${options.task}`);
+      if (options.global) logger.info('🌍 变更范围: 全局层');
+      logger.info('');
+      
+      // Show files that would be affected
+      await dryRunChange(options, iteration);
+      logger.info('');
+      
+      const answer = await promptUser('确认执行变更？ [y/n/q]: ');
+      if (answer?.toLowerCase() === 'q') { logger.info('已取消'); return; }
+      if (answer?.toLowerCase() !== 'y') { logger.info('已取消，可修改后重试'); return; }
+      spinner.start();
     }
 
     if (options.global) {

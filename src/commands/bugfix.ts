@@ -11,14 +11,27 @@ import { join } from 'path';
 export interface BugfixOptions {
   name?: string;
   desc?: string;
+  batch?: string;  // 批量 bug 描述（换行分隔）
   taskId?: string;
   iteration?: string;
   affectedTask?: string;
+  schedule?: string;  // night/now
 }
 
 export async function bugfixCommand(options: BugfixOptions): Promise<void> {
+  // 批量模式
+  if (options.batch) {
+    const bugs = options.batch.split('\n').filter(b => b.trim());
+    if (bugs.length === 0) {
+      logger.error('批量输入为空');
+      return;
+    }
+    await batchBugfixCreate(bugs, options);
+    return;
+  }
+
   if (!options.name && !options.desc) {
-    logger.error('请提供 Bug 描述。用法: speccore bugfix --name "<Bug名称>" [--desc "<详细描述>"]');
+    logger.error('请提供 Bug 描述。用法: speccore bugfix --name "<标题>" [--batch="多行"]');
     return;
   }
 
@@ -163,6 +176,55 @@ function generateBugfixTask(name: string, desc: string, affectedTask?: string): 
 
 | 日期 | 问题描述 | 根因 | 修复方案 | 状态 |
 | :--- | :--- | :--- | :--- | :--- |
-| ${now} | ${desc} | 待分析 | 待制定 | 🔲 |
+  | ${now} | ${desc} | 待分析 | 待制定 | 🔲 |
 `;
+}
+
+// ============================================================
+// 批量 Bug 导入
+// ============================================================
+
+async function batchBugfixCreate(bugs: string[], options: BugfixOptions): Promise<void> {
+  logger.info(`🐛 批量创建 ${bugs.length} 个 Bug 修复任务...`);
+  logger.info('');
+  
+  const iteration = await getDefaultIteration(options.iteration);
+  if (!iteration) {
+    logger.error('未找到活跃期次。请先运行: speccore iteration create --name <名称>');
+    return;
+  }
+
+  let created = 0;
+  for (const bug of bugs) {
+    // 取第一行作标题
+    const lines = bug.trim().split('\n');
+    const name = lines[0].slice(0, 50);
+    const desc = lines.join('\n');
+    const taskId = await generateTaskId(iteration);
+    const taskDir = join(iteration, taskId);
+    
+    await ensureDir(join(taskDir, 'backend'));
+    await writeFile(join(taskDir, '.task-type'), 'bugfix');
+    await writeFile(join(taskDir, 'backend', 'REQ.md'), generateBugfixReq(name, desc));
+    await writeFile(join(taskDir, 'backend', 'TASK.md'), generateBugfixTask(name, desc));
+    created++;
+    
+    const scheduleTag = options.schedule === 'night' ? ' 🌙' : '';
+    logger.info(`   ${taskId} ${name}${scheduleTag}`);
+  }
+
+  logger.info('');
+  logger.info(`✅ 创建了 ${created}/${bugs.length} 个 Bug 修复任务`);
+  
+  if (options.schedule === 'night') {
+    logger.info('');
+    logger.info('🌙 已标记为夜间批量执行');
+    logger.info('   speccore execute --all --scheduled  手动触发');
+    logger.info('   或等待 automation 定时执行（如果已设置）');
+  } else {
+    logger.info('');
+    logger.info('📋 下一步:');
+    logger.info('   speccore plan --iteration=' + iteration + '  生成执行计划');
+    logger.info('   speccore execute --all --scheduled       批量修复');
+  }
 }
