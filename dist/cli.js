@@ -138,7 +138,6 @@ const MODE = readMode();
 const SIMPLE_COMMANDS = new Set([
     'ask', 'init', 'doc2spec', 'analyze', 'split', 'execute',
     'pr', 'done', 'status-panel', 'dev',
-    'new-task', 'change', 'validate', 'rename',
     'iteration', 'task', 'plan', 'ops', 'import',
 ]);
 /** 简洁模式下过滤 help 命令列表 */
@@ -720,7 +719,6 @@ commander_1.program
 // 🆕 v4.0.0 新增命令
 // ================================================================
 commander_1.program
-    .command('new-task')
     .alias('nt')
     .description('快捷创建 Task（同 task new）')
     .option('-n, --name <name>', 'Task name (required)')

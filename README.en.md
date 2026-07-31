@@ -143,7 +143,7 @@ User Input (Natural Language / Slash Command)
 | 🧠 Smart Entry | `speccore ask "<query>"` |
 | 🌐 Global Layer | `import` / `iteration-from-global` / `sync-global` / `global-status` / `history` / `index-update` |
 | 📋 Scenario | `goal` / `bugfix` / `research` / `retro` / `handover` |
-| 📐 Planning | `init` / `iteration create` / `iteration split` / `new-task` / `plan` |
+| 📐 Planning | `init` / `iteration create` / `iteration split` / `task new` / `plan` |
 | ⚡ Execution | `execute` (--platform / --priority / --status) |
 | 🔄 Change | `change` / `sync` / `sync-global` |
 | ✅ Review | `validate` (--fix) |
