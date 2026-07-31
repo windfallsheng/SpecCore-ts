@@ -6,6 +6,13 @@ const logger_1 = require("../utils/logger");
 const context_1 = require("../core/context");
 const state_1 = require("../core/state");
 const transaction_1 = require("../core/transaction");
+const readline_1 = require("readline");
+function promptUser(question) {
+    const rl = (0, readline_1.createInterface)({ input: process.stdin, output: process.stdout });
+    return new Promise(resolve => {
+        rl.question(`${question} `, answer => { rl.close(); resolve(answer.trim()); });
+    });
+}
 async function planCommand(options) {
     const spinner = new logger_1.Spinner('Generating execution plan');
     spinner.start();
@@ -52,6 +59,23 @@ async function planCommand(options) {
             spinner.stop('Dry run complete');
             printPlan(plan, iteration);
             return;
+        }
+        // ── Interactive mode: preview → confirm → save ──
+        if (options.interactive) {
+            spinner.stop('执行计划预览');
+            logger_1.logger.info('');
+            printPlan(plan, iteration);
+            logger_1.logger.info('');
+            logger_1.logger.info('💡 [y] 确认保存  [n] 调整后再确认  [q] 取消');
+            const answer = await promptUser('确认保存？');
+            if (answer?.toLowerCase() === 'q') {
+                logger_1.logger.info('已取消');
+                return;
+            }
+            if (answer?.toLowerCase() === 'n') {
+                logger_1.logger.info('请手动调整 PROJECT_GRAPH.md 后重新运行 speccore plan --interactive');
+                return;
+            }
         }
         // Save plan to file with transaction
         const planPath = (0, path_1.join)(`期次-${iteration}`, '00-期次总览', 'PLAN.md');

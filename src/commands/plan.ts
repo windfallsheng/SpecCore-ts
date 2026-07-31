@@ -3,6 +3,14 @@ import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration, detectCurrentAssignee } from '../core/context';
 import { readProjectGraph, topologicalSort, scanTasks, TaskState } from '../core/state';
 import { FileTransaction } from '../core/transaction';
+import { createInterface } from 'readline';
+
+function promptUser(question: string): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise(resolve => {
+    rl.question(`${question} `, answer => { rl.close(); resolve(answer.trim()); });
+  });
+}
 
 export interface PlanOptions {
   iteration?: string;
@@ -13,6 +21,7 @@ export interface PlanOptions {
   priority?: string;
   mode?: string;
   dryRun?: boolean;
+  interactive?: boolean;
 }
 
 export async function planCommand(options: PlanOptions): Promise<void> {
@@ -70,6 +79,24 @@ export async function planCommand(options: PlanOptions): Promise<void> {
       spinner.stop('Dry run complete');
       printPlan(plan, iteration);
       return;
+    }
+
+    // ── Interactive mode: preview → confirm → save ──
+    if (options.interactive) {
+      spinner.stop('执行计划预览');
+      logger.info('');
+      printPlan(plan, iteration);
+      logger.info('');
+      logger.info('💡 [y] 确认保存  [n] 调整后再确认  [q] 取消');
+      const answer = await promptUser('确认保存？');
+      if (answer?.toLowerCase() === 'q') {
+        logger.info('已取消');
+        return;
+      }
+      if (answer?.toLowerCase() === 'n') {
+        logger.info('请手动调整 PROJECT_GRAPH.md 后重新运行 speccore plan --interactive');
+        return;
+      }
     }
 
     // Save plan to file with transaction

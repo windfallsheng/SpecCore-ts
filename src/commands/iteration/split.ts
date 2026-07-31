@@ -6,12 +6,21 @@ import { scoreRisk, generateRiskReport } from '../../core/risk-scorer';
 import { nextTaskId } from '../../core/global-counters';
 
 import { showNextSteps } from '../../core/next-steps';
+import { createInterface } from 'readline';
+
+function promptUser(question: string): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise(resolve => {
+    rl.question(`${question} `, answer => { rl.close(); resolve(answer.trim()); });
+  });
+}
 export interface IterationSplitOptions {
   file?: string;
   iteration?: string;
   sections?: string;
   target?: string;
   dryRun?: boolean;
+  interactive?: boolean;
   platforms?: string;
   strict?: boolean;
 }
@@ -98,6 +107,69 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       for (const section of sections) {
         logger.info(`  Would create: ${section.name}`);
       }
+      return;
+    }
+
+    // ── Interactive mode: preview → adjust → confirm → create ──
+    if (options.interactive) {
+      spinner.stop('任务预览');
+      logger.info('');
+      logger.info(`📋 共 ${sections.length} 个任务将被创建:\n`);
+
+      for (let i = 0; i < sections.length; i++) {
+        const taskId = `Task-${String(i + 1).padStart(3, '0')}`;
+        const contentPreview = sections[i].content?.split('\n')[0]?.slice(0, 60) || '';
+        logger.info(`  ${taskId} → ${sections[i].name}`);
+        if (contentPreview) logger.info(`       ${contentPreview}`);
+        logger.info(`       平台: ${platforms.join(', ')}`);
+        logger.info('');
+      }
+
+      logger.info('💡 你可以：');
+      logger.info('  [y] 确认创建全部  [n] 逐一确认  [q] 取消');
+      logger.info('');
+
+      const answer = await promptUser('确认创建？');
+      if (answer?.toLowerCase() === 'q') {
+        logger.info('已取消');
+        return;
+      }
+      if (answer?.toLowerCase() === 'n') {
+        logger.info('进入逐一确认模式...');
+        let created = 0;
+        for (let i = 0; i < sections.length; i++) {
+          const taskId = `Task-${String(i + 1).padStart(3, '0')}`;
+          const resp = await promptUser(`  创建 ${taskId} - ${sections[i].name}? [y/n/q]`);
+          if (resp?.toLowerCase() === 'q') {
+            logger.info(`已取消，剩余 ${sections.length - i} 个任务未创建`);
+            break;
+          }
+          if (resp?.toLowerCase() === 'y' || resp === '') {
+            await createTaskFromSection(iterationDir, taskId, sections[i], platforms);
+            created++;
+            logger.info(`    ✅ ${taskId}`);
+          } else {
+            logger.info(`    ⏭️  跳过 ${sections[i].name}`);
+          }
+        }
+        spinner.stop(`创建了 ${created}/${sections.length} 个任务`);
+        if (created > 0) {
+          await generateImpactGraph(iterationDir, sections.slice(0, created), platforms);
+          await updateProjectGraph(iterationDir, sections.slice(0, created));
+        }
+        return;
+      }
+
+      // Default: create all
+      for (let i = 0; i < sections.length; i++) {
+        const taskId = `Task-${String(i + 1).padStart(3, '0')}`;
+        await createTaskFromSection(iterationDir, taskId, sections[i], platforms);
+      }
+      await generateImpactGraph(iterationDir, sections, platforms);
+      await generateEnvExample(iterationDir, sections);
+      await updateProjectGraph(iterationDir, sections);
+      spinner.stop(`✅ 创建了 ${sections.length} 个任务`);
+      showNextSteps('split');
       return;
     }
 
