@@ -402,6 +402,7 @@ program
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('--dry-run', 'Preview impact without modifying')
   .option('--force', 'Skip preview and apply directly')
+  .option('--interactive', 'Interactive: preview → adjust → confirm → apply')
   .action(changeCommand);
 
 program
@@ -708,7 +709,8 @@ program
   .description('Analyze requirements: completeness + code mapping + architecture impact → ANALYSIS.md')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('-o, --output <file>', 'Output filename', 'ANALYSIS.md')
-  .option('--auto', 'Non-interactive mode: generate report directly')
+  .option('--auto', 'Non-interactive: generate report directly (default)')
+  .option('--interactive', 'Interactive: AI asks questions → you answer → refine')
   .option('-t, --task <task>', 'Per-task analysis: enriches TECH/TEST/REVIEW for one task')
   .action(analyzeCommand);
 
@@ -809,6 +811,7 @@ program
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('--skip-validate', 'Skip validation step')
   .option('--skip-sync', 'Skip global sync step')
+  .option('--interactive', 'Interactive: preview archive → confirm → complete')
   .action(doneCommand);
 
 program
