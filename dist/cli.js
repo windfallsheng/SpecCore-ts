@@ -198,18 +198,18 @@ commander_1.program;
 commander_1.program
     .command('dev')
     .alias('d')
-    .description('Smart dev entry: auto-detect phase and suggest next step')
+    .description('智能级联：自动检测阶段 → 引导/自动执行下一步')
     .option('-i, --iteration <iteration>', 'Target iteration')
-    .option('--force', 'Auto-execute the next step')
+    .option('--force', 'Auto-execute the next step without confirmation')
     .action(dev_1.devCommand);
 commander_1.program;
 commander_1.program;
 commander_1.program
     .command('dev')
     .alias('d')
-    .description('Smart dev entry: auto-detect phase and suggest next step')
+    .description('智能级联：自动检测阶段 → 引导/自动执行下一步')
     .option('-i, --iteration <iteration>', 'Target iteration')
-    .option('--force', 'Auto-execute the next step')
+    .option('--force', 'Auto-execute the next step without confirmation')
     .action(dev_1.devCommand);
 commander_1.program
     .command('demo')
@@ -919,23 +919,29 @@ commander_1.program
 // Parse arguments
 // ── 帮助分层：核心命令前置 ──
 commander_1.program.addHelpText('beforeAll', `
-┌──────────────────────────────────────────────┐
-│  🔵 核心 7 步（一次记住）                      │
-│  init → doc2spec → analyze → split          │
-│  → execute → pr → done                       │
-├──────────────────────────────────────────────┤
-│  🚀 speccore init         初始化项目          │
-│  📝 speccore doc2spec    导入需求文档        │
-│  🔍 speccore analyze      需求分析+宪法检查    │
-│  📦 speccore split        拆分为独立Task      │
-│  💻 speccore execute      执行开发            │
-│  ✅ speccore done         完成任务            │
-│  🔀 speccore pr           创建PR              │
-├──────────────────────────────────────────────┤
-│  💡 speccore（无参数）→ 自适应引导面板         │
-│  📊 speccore status-panel → 可视化看板        │
-│  🤖 speccore dev → 智能检测+级联执行          │
-└──────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────┐
+│  🔵 核心 9 步（完整闭环）                            │
+│  init → iteration create → doc2spec → import     │
+│  → analyze → split → plan → execute → pr → done  │
+├───────────────────────────────────────────────────┤
+│  🚀 speccore init             初始化项目            │
+│  📅 speccore iteration create  新建期次             │
+│  📝 speccore doc2spec         导入需求文档           │
+│  📥 speccore import           存量项目→全局层          │
+│  🔍 speccore analyze          需求分析+宪法检查        │
+│  📦 speccore split            拆分为独立Task          │
+│  📋 speccore plan             生成执行计划            │
+│  💻 speccore execute          执行开发               │
+│  🔀 speccore pr               创建PR                │
+│  ✅ speccore done             完成任务               │
+├───────────────────────────────────────────────────┤
+│  💡 speccore（无参数）  → 自适应引导面板               │
+│  💬 speccore ask \"...\" → 自然语言入口              │
+│  📊 speccore status-panel → 可视化看板              │
+│  🤖 speccore dev → 智能检测+级联执行                  │
+│  📥 speccore import → 存量项目导入 + 覆盖/增量       │
+│  🔍 speccore analyze --interactive → AI 对话式分析  │
+└───────────────────────────────────────────────────┘
 `);
 commander_1.program.addHelpText('afterAll', `
 💡 完整文档: https://github.com/windfallsheng/SpecCore-ts
