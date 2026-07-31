@@ -31,6 +31,15 @@ export interface ImportOptions {
   scope?: string;
   ignore?: string;
   update?: boolean;
+  interactive?: boolean;
+}
+
+import { createInterface } from 'readline';
+function promptUser(question: string): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise(resolve => {
+    rl.question(`${question} `, answer => { rl.close(); resolve(answer.trim()); });
+  });
 }
 
 export async function importCommand(options: ImportOptions): Promise<void> {
@@ -102,11 +111,23 @@ async function importToGlobalLayer(
       throw new Error('Global layer not initialized. Run: speccore init');
     }
 
-    // 增量同步模式：检查项目是否已存在
-    if (options.update) {
-      const existingDir = join(globalDir, 'PROJECTS', projectName);
-      if (await pathExists(existingDir)) {
-        logger.info(`🔄 Incremental update mode: ${projectName} already exists, syncing changes...`);
+    // 检测是否已导入（覆盖/增量判断）
+    const existingDir = join(globalDir, 'PROJECTS', projectName);
+    if (await pathExists(existingDir)) {
+      if (options.force) {
+        logger.info('🔁 强制覆盖模式：已存在项目将被重新扫描替换');
+      } else if (options.update) {
+        logger.info('🔄 增量更新模式：追加新 API，保留已有');
+      } else if (options.interactive) {
+        logger.info(`⚠️ 项目 ${projectName} 已存在！`);
+        const answer = await promptUser('选择 [o]覆盖/[u]增量/[c]取消：');
+        if (answer === 'c') { logger.info('已取消'); return; }
+        options.force = answer === 'o';
+        options.update = answer === 'u';
+      } else {
+        logger.warn(`⚠️ 项目 ${projectName} 已存在，使用 --update 增量或 --force 覆盖`);
+        logger.info('将跳过已有项目，使用 --update 追加新 API');
+        options.update = true;
       }
     }
 

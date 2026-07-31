@@ -9,6 +9,13 @@ const fs_extra_1 = require("fs-extra");
 const path_1 = require("path");
 const logger_1 = require("../utils/logger");
 const global_layer_1 = require("../core/global-layer");
+const readline_1 = require("readline");
+function promptUser(question) {
+    const rl = (0, readline_1.createInterface)({ input: process.stdin, output: process.stdout });
+    return new Promise(resolve => {
+        rl.question(`${question} `, answer => { rl.close(); resolve(answer.trim()); });
+    });
+}
 async function importCommand(options) {
     const spinner = new logger_1.Spinner('Importing project to global layer');
     spinner.start();
@@ -66,11 +73,29 @@ async function importToGlobalLayer(projectName, projectPath, projectType, option
     if (!(await (0, fs_extra_1.pathExists)(globalDir))) {
         throw new Error('Global layer not initialized. Run: speccore init');
     }
-    // 增量同步模式：检查项目是否已存在
-    if (options.update) {
-        const existingDir = (0, path_1.join)(globalDir, 'PROJECTS', projectName);
-        if (await (0, fs_extra_1.pathExists)(existingDir)) {
-            logger_1.logger.info(`🔄 Incremental update mode: ${projectName} already exists, syncing changes...`);
+    // 检测是否已导入（覆盖/增量判断）
+    const existingDir = (0, path_1.join)(globalDir, 'PROJECTS', projectName);
+    if (await (0, fs_extra_1.pathExists)(existingDir)) {
+        if (options.force) {
+            logger_1.logger.info('🔁 强制覆盖模式：已存在项目将被重新扫描替换');
+        }
+        else if (options.update) {
+            logger_1.logger.info('🔄 增量更新模式：追加新 API，保留已有');
+        }
+        else if (options.interactive) {
+            logger_1.logger.info(`⚠️ 项目 ${projectName} 已存在！`);
+            const answer = await promptUser('选择 [o]覆盖/[u]增量/[c]取消：');
+            if (answer === 'c') {
+                logger_1.logger.info('已取消');
+                return;
+            }
+            options.force = answer === 'o';
+            options.update = answer === 'u';
+        }
+        else {
+            logger_1.logger.warn(`⚠️ 项目 ${projectName} 已存在，使用 --update 增量或 --force 覆盖`);
+            logger_1.logger.info('将跳过已有项目，使用 --update 追加新 API');
+            options.update = true;
         }
     }
     // 3. 读取当前全量索引
