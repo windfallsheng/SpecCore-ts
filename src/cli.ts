@@ -270,7 +270,7 @@ const taskCmd = program
 
 taskCmd
   .command('new')
-  .alias('add')
+  .alias('tn')
   .description('Create a new atomic task')
   .option('-n, --name <name>', 'Task name (required)')
   .option('-t, --type <type>', 'Task type: feature, bugfix, research, optimization, migration, document', 'feature')
@@ -745,7 +745,6 @@ program
 // 🆕 v4.0.0 新增命令
 // ================================================================
 program
-  .alias('nt')
   .description('快捷创建 Task（同 task new）')
   .option('-n, --name <name>', 'Task name (required)')
   .option('-t, --type <type>', 'Task type', 'feature')
