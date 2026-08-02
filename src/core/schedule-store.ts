@@ -31,6 +31,18 @@ export interface ScheduleTask {
   executedAt: string | null;
   /** 执行结果摘要 */
   result: string | null;
+  /** 执行参数 (传递给 execute 命令的额外选项) */
+  execOptions: {
+    batchSize?: number;
+    parallel?: number;
+    assignee?: string;
+    type?: string;
+    priority?: string;
+    status?: string;
+    platform?: string;
+    backend?: boolean;
+    frontend?: boolean;
+  };
 }
 
 /**
@@ -128,6 +140,7 @@ export async function createScheduleTask(params: {
   taskId: string | null;
   all: boolean;
   scheduledAt: string;
+  execOptions?: ScheduleTask['execOptions'];
 }): Promise<ScheduleTask> {
   const { date, iso } = parseScheduleTime(params.scheduledAt);
   const now = new Date();
@@ -149,6 +162,7 @@ export async function createScheduleTask(params: {
     createdAt: now.toISOString(),
     executedAt: null,
     result: null,
+    execOptions: params.execOptions || {},
   };
 
   store.tasks.push(task);
