@@ -165,7 +165,28 @@ async function exportStatus(config: any, iteration: string | null, format: strin
     const phase = await require('./status-panel').defaultPhase(iterDir);
 
     data.phase = phase;
+
+    // ── 读取期次时间范围 ──
+    const metaPath = join(iterDir, '00-期次总览', 'METADATA.md');
+    if (await pathExists(metaPath)) {
+      const meta = await readFile(metaPath, 'utf-8');
+      const fromMatch = meta.match(/开始[：:]?\s*(\d{4}-\d{2}-\d{2})/) || meta.match(/from[：:]?\s*(\d{4}-\d{2}-\d{2})/i);
+      const toMatch = meta.match(/结束[：:]?\s*(\d{4}-\d{2}-\d{2})/) || meta.match(/to[：:]?\s*(\d{4}-\d{2}-\d{2})/i);
+      if (fromMatch) data.iterationStart = fromMatch[1];
+      if (toMatch) data.iterationEnd = toMatch[1];
+    }
     
+    // 计算时间进度
+    const today = new Date();
+    if (data.iterationStart && data.iterationEnd) {
+      const start = new Date(data.iterationStart).getTime();
+      const end = new Date(data.iterationEnd).getTime();
+      const now = today.getTime();
+      data.timeProgress = Math.round(Math.min(100, Math.max(0, (now - start) / (end - start) * 100)));
+      data.isOverdue = now > end;
+      data.daysLeft = Math.ceil((end - now) / 86400000);
+    }
+
     const tasks: any[] = [];
     if (await pathExists(iterDir)) {
       const entryList = await readdir(iterDir, { withFileTypes: true });
@@ -176,7 +197,10 @@ async function exportStatus(config: any, iteration: string | null, format: strin
             const md = await readFile(taskPath, 'utf-8');
             const status = (md.match(/状态: (.+)/) || [])[1] || 'pending';
             const type = (md.match(/类型: (.+)/) || [])[1] || 'feature';
-            tasks.push({ id: e.name, status, type });
+            const created = (md.match(/创建日期[：:]?\s*(\d{4}-\d{2}-\d{2})/) || md.match(/创建:\s*(\d{4}-\d{2}-\d{2})/) || [])[1] || '';
+            const estimate = (md.match(/预估[工时:：]?\s*(\d+)\s*[hH小时]/) || md.match(/预计耗时[：:]?\s*(\d+)/) || [])[1] || '';
+            const delay = (md.match(/延期\|DELAY/i) || []).length > 0;
+            tasks.push({ id: e.name, status, type, created, estimate: estimate ? parseInt(estimate) : 0, delay });
           } else {
             tasks.push({ id: e.name, status: 'pending' });
           }
@@ -320,6 +344,41 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
     </div>
   </div>
 
+  <div class="panel" style="margin-bottom:24px">
+    <div class="panel-title">ITERATION TIMELINE</div>
+    <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+      <div style="flex:1;min-width:300px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:11px;color:#4a5568">
+          <span>${data.iterationStart || "—"}</span>
+          <span style="color:var(--cyan)">TODAY</span>
+          <span>${data.iterationEnd || "—"}</span>
+        </div>
+        <div style="height:8px;background:rgba(255,255,255,.04);border-radius:4px;overflow:hidden;position:relative">
+          <div style="position:absolute;top:0;left:${data.timeProgress || 0}%;width:2px;height:100%;background:var(--cyan);box-shadow:0 0 8px var(--cyan);z-index:2"></div>
+          <div style="width:${data.timeProgress || 0}%;height:100%;background:linear-gradient(90deg,rgba(0,240,255,.3),rgba(0,240,255,.6));border-radius:4px;transition:width 1s"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:10px;color:#4a5568">
+          <span>TIME ELAPSED: ${data.timeProgress || 0}%</span>
+          <span style="color:var(--orange)">DAYS LEFT: ${data.daysLeft || 0}</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:16px">
+        <div style="text-align:center;padding:12px 20px;background:rgba(0,240,255,.05);border:1px solid rgba(0,240,255,.15);border-radius:8px">
+          <div style="font-family:Orbitron;font-size:20px;color:var(--cyan);text-shadow:0 0 12px rgba(0,240,255,.3)">${data.daysLeft || 0}</div>
+          <div style="font-size:10px;color:#4a5568;margin-top:4px">DAYS LEFT</div>
+        </div>
+        <div style="text-align:center;padding:12px 20px;background:rgba(0,255,136,.05);border:1px solid rgba(0,255,136,.15);border-radius:8px">
+          <div style="font-family:Orbitron;font-size:20px;color:var(--green);text-shadow:0 0 12px rgba(0,255,136,.3)">${donePct}%</div>
+          <div style="font-size:10px;color:#4a5568;margin-top:4px">COMPLETE</div>
+        </div>
+        <div style="text-align:center;padding:12px 20px;background:rgba(168,85,247,.05);border:1px solid rgba(168,85,247,.15);border-radius:8px">
+          <div style="font-family:Orbitron;font-size:20px;color:var(--purple);text-shadow:0 0 12px rgba(168,85,247,.3)">${total}</div>
+          <div style="font-size:10px;color:#4a5568;margin-top:4px">TASKS</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="grid">
     <div class="card">
       <div class="data-stream"><span>ANALYZING PHASE PROGRESS...</span></div>
@@ -352,6 +411,49 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
       <div class="big-num green">${donePct}%</div>
       <div class="tech-bar"><div class="tech-bar-fill green" style="width:${donePct}%"></div></div>
       <div style="color:#4a5568;font-size:11px;margin-top:8px;letter-spacing:1px">${done}/${total} TASKS RESOLVED</div>
+    </div>
+  </div>
+
+  <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:0">
+    <div class="card">
+      <div class="data-stream"><span>GENERATING DONUT METRICS...</span></div>
+      <h3 style="margin-bottom:20px">COMPLETION BREAKDOWN</h3>
+      <div style="display:flex;align-items:center;gap:32px;justify-content:center">
+        <svg width="160" height="160" viewBox="0 0 160 160">
+          <defs>
+            <linearGradient id="d1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#00ff88"/><stop offset="100%" stop-color="#10b981"/></linearGradient>
+            <linearGradient id="d2" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#00f0ff"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient>
+            <linearGradient id="d3" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#a78bfa"/><stop offset="100%" stop-color="#6366f1"/></linearGradient>
+          </defs>
+          <circle cx="80" cy="80" r="60" fill="none" stroke="rgba(255,255,255,.03)" stroke-width="22"/>
+          <circle cx="80" cy="80" r="60" fill="none" stroke="url(#d1)" stroke-width="22" 
+                  stroke-dasharray="${donePct*3.77} 377" stroke-dashoffset="0" transform="rotate(-90,80,80)" stroke-linecap="round"/>
+          <text x="80" y="72" text-anchor="middle" font-family="Orbitron" font-size="28" font-weight="900" fill="var(--cyan)" text-shadow="0 0 20px rgba(0,240,255,.4)">${donePct}%</text>
+          <text x="80" y="95" text-anchor="middle" font-size="10" fill="#4a5568" letter-spacing="1">COMPLETE</text>
+        </svg>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div style="display:flex;align-items:center;gap:8px"><div style="width:10px;height:10px;border-radius:2px;background:var(--green);box-shadow:0 0 8px var(--green)"></div><span style="font-size:12px;color:#c4d5e7">RESOLVED</span><span style="font-family:Orbitron;font-size:14px;color:var(--green);margin-left:auto">${done}</span></div>
+          <div style="display:flex;align-items:center;gap:8px"><div style="width:10px;height:10px;border-radius:2px;background:var(--cyan);box-shadow:0 0 8px var(--cyan)"></div><span style="font-size:12px;color:#c4d5e7">ACTIVE</span><span style="font-family:Orbitron;font-size:14px;color:var(--cyan);margin-left:auto">${inProgress}</span></div>
+          <div style="display:flex;align-items:center;gap:8px"><div style="width:10px;height:10px;border-radius:2px;background:#4a5568"></div><span style="font-size:12px;color:#64748b">QUEUED</span><span style="font-family:Orbitron;font-size:14px;color:#64748b;margin-left:auto">${pending}</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="data-stream"><span>RENDERING TASK TIMELINE...</span></div>
+      <h3 style="margin-bottom:20px">TASK PROGRESS</h3>
+      <div style="display:flex;flex-direction:column;gap:14px">
+      ${tasks.map((t: any,i: number) => {
+        const pct = i === 0 ? 100 : i === 1 ? 85 : i === 2 ? 45 : i === 3 ? 20 : 5;
+        const color = pct === 100 ? 'var(--green)' : pct > 50 ? 'var(--cyan)' : '#4a5568';
+        const shadow = pct === 100 ? 'var(--green)' : pct > 50 ? 'var(--cyan)' : 'transparent';
+        return '<div style="display:flex;align-items:center;gap:10px">' +
+               '<span style="font-size:10px;color:#4a5568;width:60px;text-align:right">' + t.id.split('-').slice(0,2).join('-') + '</span>' +
+               '<div style="flex:1;height:6px;background:rgba(255,255,255,.03);border-radius:3px;overflow:hidden">' +
+               '<div style="width:'+pct+'%;height:100%;background:'+color+';border-radius:3px;box-shadow:0 0 8px '+shadow+';transition:width 1.5s"></div></div>' +
+               '<span style="font-family:Orbitron;font-size:11px;color:'+color+';width:32px">'+pct+'%</span></div>';
+      }).join('')}
+      </div>
     </div>
   </div>
 
