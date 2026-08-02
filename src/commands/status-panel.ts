@@ -1026,7 +1026,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
           '<div style="width:' + pct + '%;height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:2px"></div></div>' +
           '</div>';
       }
-      return html + '</div>' + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">' + personDetailCards + '</div>';
+      return html + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">' + personDetailCards + '</div>';
     })() +
     (Object.entries(pt) as [string, any[]][]).map(([name, taskList]) => '<div style="margin-top:20px"><div class="panel-title" style="font-size:13px">' + name + ' — TASK LIST (' + taskList.length + ')</div><table style="margin-top:8px"><thead><tr><th>ID</th><th>STATUS</th><th>TYPE</th></tr></thead><tbody>' +
       taskList.map((t: any) => {
