@@ -115,18 +115,18 @@ speccore sync-global --iteration=2026-07-Meeting
 | Command | Alias | Description | Options |
 | :--- | :--- | :--- | :--- |
 | `speccore validate` | `rv` | Compliance check | `--task <id>` `--iteration <name>` `--fix` `--format <json>` |
-| `speccore progress` | `pg` | Progress overview | `--iteration <name>` `--platform <name>` `--detail` `--format <json>` |
+| `speccore status-panel` | `pg` | Progress overview | `--iteration <name>` `--platform <name>` `--detail` `--format <json>` |
 | `speccore status` | `st` | Status dashboard | `--iteration <name>` |
 | `speccore health` | `hl` | Project health | `--iteration <name>` |
-| `speccore report` | `rp` | Generate report | `--iteration <name>` `--format <md\|html\|json>` `--output <path>` `--team` `--risk` |
+| `speccore status-panel --export` | `rp` | Generate report | `--iteration <name>` `--format <md\|html\|json>` `--output <path>` `--team` `--risk` |
 
 ```bash
 speccore validate --task=Task-001
 speccore validate --fix --format=json
-speccore progress --platform=web --detail
+speccore status-panel --platform=web --detail
 speccore status --iteration=2026-07-Meeting
 speccore health
-speccore report --format=html --output=report.html --team --risk
+speccore status-panel --export --format=html --output=report.html --team --risk
 ```
 
 ---
@@ -137,14 +137,14 @@ speccore report --format=html --output=report.html --team --risk
 | :--- | :--- | :--- | :--- |
 | `speccore impact` | `if` | Change impact analysis | `--req <id>` `--task <id>` |
 | `speccore baseline` | `bl` | Version baseline management | `--name <name>` `--compare <name>` `--restore <name>` `--req <id>` |
-| `speccore dashboard` | `db` | Visual dashboard (Chart.js) | `--output <path>` |
+| `speccore status-panel` | `db` | Visual dashboard (Chart.js) | `--output <path>` |
 | `speccore audit` | `ad` | AI smart audit | `--fix` |
 
 ```bash
 speccore impact --req=REQ-001
 speccore baseline --name=v1.0
 speccore baseline --compare=v1.0 --name=v1.1
-speccore dashboard --output=dashboard.html
+speccore status-panel --output=dashboard.html
 speccore audit --fix
 ```
 
@@ -155,12 +155,12 @@ speccore audit --fix
 | Command | Alias | Description | Options |
 | :--- | :--- | :--- | :--- |
 | `speccore global-status` | `gs` | Global layer status overview | — |
-| `speccore history` | `hs` | Requirement change history | `--req <id>` `--iteration <name>` |
+| `speccore ops` | `hs` | Requirement change history | `--req <id>` `--iteration <name>` |
 | `speccore index-update` | `iu` | Rebuild GLOBAL/INDEX | `--dry-run` |
 
 ```bash
 speccore global-status
-speccore history --req=REQ-001
+speccore ops --req=REQ-001
 speccore index-update --dry-run
 ```
 
@@ -170,7 +170,7 @@ speccore index-update --dry-run
 
 | Command | Alias | Description | Options |
 | :--- | :--- | :--- | :--- |
-| `speccore goal` | — | Full requirement delivery | `--name <name>` `--desc <text>` `--iteration <name>` |
+| `speccore task new` | — | Full requirement delivery | `--name <name>` `--desc <text>` `--iteration <name>` |
 | `speccore bugfix` | `bf` | Quick bug fix | `--name <text>` `--desc <text>` `--iteration <name>` |
 | `speccore research` | `rs` | Technology research | `--topic <text>` `--options <list>` |
 | `speccore handover` | `ho` | Generate handover doc | `--iteration <name>` |
@@ -180,7 +180,7 @@ speccore index-update --dry-run
 | `speccore context` | `ctx` | View task context | `--task <id>` |
 
 ```bash
-speccore goal --name="Payment Module" --desc="WeChat Pay integration"
+speccore task new --name="Payment Module" --desc="WeChat Pay integration"
 speccore bugfix --name="Login timeout" --desc="Fix token expiry"
 speccore research --topic="Message queue comparison" --options="Kafka,RabbitMQ"
 speccore handover --iteration=2026-07-Meeting
@@ -197,7 +197,7 @@ speccore context --task=Task-001
 | Command | Alias | Description | Options |
 | :--- | :--- | :--- | :--- |
 | `speccore template-add` | `ta` | Add code template | `--name <name>` `--type <type>` `--files <files>` |
-| `speccore archive` | `ar` | Archive completed tasks | `--all` `--task <id>` `--iteration <name>` |
+| `speccore done` | `ar` | Archive completed tasks | `--all` `--task <id>` `--iteration <name>` |
 | `speccore config` | `cf` | Config management | `--set <key=value>` `--get <key>` |
 | `speccore help` | `hp` | Categorized command help | `--category <name>` |
 | `speccore demo` | `dm` | 5-minute quick demo | — |
@@ -209,8 +209,8 @@ speccore context --task=Task-001
 
 ```bash
 speccore template-add --name="crud" --type=backend --files="./templates/*"
-speccore archive --task=Task-001
-speccore archive --all --iteration=2026-07-Meeting
+speccore done --task=Task-001
+speccore done --all --iteration=2026-07-Meeting
 speccore config --set platforms=web,h5
 speccore config --get platforms
 speccore help --category=execute
@@ -223,14 +223,14 @@ speccore delete --iteration=2026-07-Sprint --force  # Delete iteration
 
 ---
 
-## 🆕 v5.18 New Commands
+## 🆕 v5.20.0 New Commands
 
 | Command | Alias | Description | Options |
 | :--- | :--- | :--- | :--- |
 | `speccore update` | `up` | Update task attributes | `--task=<id>` `--status=<s>` `--priority=<p>` `--assignee=<n>` |
 | `speccore backup` | `bk` | Backup current state | `--list` `--restore=<name>` |
 | `speccore completion` | `cm` | Generate shell completion | `[bash\|zsh]` |
-| `speccore hooks` | `hk` | Install Git hooks | — |
+| `speccore config` | `hk` | Install Git hooks | — |
 | `speccore current` | `cr` | Show branch-task mapping | `--commit` `--pr` |
 | `speccore diff` | `df` | Compare iterations/baselines | `--source=<name>` `--target=<name>` |
 | `speccore trace` | `tr` | REQ→Task→Code trace chain | `--req=<id>` `--task=<id>` `--full` |
@@ -249,7 +249,7 @@ speccore backup --restore=2026-07-11T10:00:00
 speccore completion bash > /usr/local/etc/bash_completion.d/speccore
 
 # hooks
-speccore hooks install
+speccore config install
 
 # current
 speccore current
@@ -305,7 +305,7 @@ speccore trace --full
 | 100 | change | modify, adjust, change | `speccore change` |
 | 90 | execute | start, run, execute | `speccore execute` |
 | 88 | bugfix | bug, fix, error | `speccore bugfix` |
-| 85 | create | create, build, implement | `speccore goal` |
+| 85 | create | create, build, implement | `speccore task new` |
 | 85 | init | initialize, setup, create | `speccore init` |
 | 84 | new_task | new task, create task | `speccore task new` |
 | 83 | import_to_global | import project | `speccore import` |
@@ -316,9 +316,9 @@ speccore trace --full
 | 80 | impact | impact, dependency | `speccore impact` |
 | 78 | plan | plan, schedule | `speccore plan` |
 | 78 | rename | rename | `speccore rename` |
-| 75 | archive | archive | `speccore archive` |
+| 75 | archive | archive | `speccore done` |
 | 75 | reference | example, reference | `speccore demo` |
-| 70 | progress | progress | `speccore progress` |
+| 70 | progress | progress | `speccore status-panel` |
 | 70 | sync | sync, align | `speccore sync` |
 | 70 | sync_global | sync global | `speccore sync-global` |
 | 68 | status | status | `speccore status` |
@@ -330,8 +330,8 @@ speccore trace --full
 | 60 | config | config, settings | `speccore config` |
 | 60 | context | context | `speccore context` |
 | 58 | index_update | update index | `speccore index-update` |
-| 55 | history | history, change log | `speccore history` |
-| 55 | dashboard | dashboard, board | `speccore dashboard` |
+| 55 | history | history, change log | `speccore ops` |
+| 55 | dashboard | dashboard, board | `speccore status-panel` |
 | 50 | baseline | baseline, snapshot | `speccore baseline` |
 | 50 | audit | audit, scan | `speccore audit` |
 | 50 | help | help, how to | `speccore help` |

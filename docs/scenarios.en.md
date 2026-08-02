@@ -24,7 +24,7 @@ speccore task new --name="User Register" --platforms=web,h5 --type=feature
 speccore task new --name="Password Reset" --platforms=web --type=feature
 
 # 5. Check progress
-speccore progress --detail
+speccore status-panel --detail
 ```
 
 ---
@@ -59,7 +59,7 @@ speccore trace --task=Task-001
 speccore update --task=Task-001 --status=completed
 
 # 8. Archive
-speccore archive --task=Task-001
+speccore done --task=Task-001
 ```
 
 ---
@@ -108,7 +108,7 @@ speccore update --task=Task-002 --assignee=Li
 speccore execute --task=Task-002 --force
 
 # 4. Team progress
-speccore progress --detail
+speccore status-panel --detail
 speccore health
 
 # 5. Impact analysis
@@ -183,12 +183,12 @@ jobs:
       - name: Check Health
         run: speccore health
       - name: Progress Report
-        run: speccore progress --format=json > progress.json
+        run: speccore status-panel --format=json > progress.json
 ```
 
 ```bash
 # Install Git hooks locally
-speccore hooks install
+speccore config install
 # → pre-commit: check @spec annotations
 # → pre-push: run speccore validate
 ```
@@ -208,7 +208,7 @@ speccore iteration-from-global --reqs=REQ-001,REQ-002,REQ-003 --name=2026-Q3-Spr
 speccore sync-global --iteration=2026-Q3-Sprint
 
 # 4. Track requirement change history
-speccore history --req=REQ-001
+speccore ops --req=REQ-001
 
 # 5. Periodically rebuild index
 speccore index-update
@@ -246,7 +246,7 @@ speccore research --topic="Message queue comparison" --options="Kafka,RabbitMQ,P
 
 # 3. Complete and archive
 speccore update --task=Task-005 --status=completed
-speccore archive --task=Task-005
+speccore done --task=Task-005
 ```
 
 ---
@@ -258,14 +258,14 @@ speccore archive --task=Task-005
 speccore health
 
 # 2. Platform-specific progress
-speccore progress --platform=web --detail
-speccore progress --platform=h5 --detail
+speccore status-panel --platform=web --detail
+speccore status-panel --platform=h5 --detail
 
 # 3. Generate report
-speccore report --format=html --output=report.html --team --risk
+speccore status-panel --export --format=html --output=report.html --team --risk
 
 # 4. Visual dashboard
-speccore dashboard
+speccore status-panel
 # Or one command:
 speccore done --task=Task-001 --output=dashboard.html
 ```
@@ -300,9 +300,9 @@ speccore baseline --list
 | Daily Dev | `speccore execute --task=T-001` | `execute → sync → trace → update` |
 | Bug Fix | `speccore bugfix --name="xxx"` | `bugfix → execute → sync → change` |
 | Change Mgmt | `speccore impact --req=REQ-001` | `impact → baseline → change → validate` |
-| Team Collab | `speccore progress --detail` | `update --assignee → execute → handover` |
+| Team Collab | `speccore status-panel --detail` | `update --assignee → execute → handover` |
 | Long Chain | `speccore execute --all --batch-size=3` | `execute --resume` |
-| CI/CD | `speccore hooks install` | hooks + GitHub Actions |
+| CI/CD | `speccore config install` | hooks + GitHub Actions |
 | Global Layer | `speccore global-status` | `iteration-from-global → sync-global` |
 | Migration | `speccore migrate --dry-run` | migrate → validate |
 | Health Check | `speccore health` | `progress → report → dashboard` |
@@ -345,7 +345,7 @@ speccore iteration split
 speccore iteration split --iteration=2026-Q3-Sprint
 
 # 5. Check progress
-speccore progress --iteration=2026-Q3-Sprint --detail
+speccore status-panel --iteration=2026-Q3-Sprint --detail
 ```
 
 ### Simplified Flow (no global layer)
@@ -366,16 +366,16 @@ speccore sync-global --iteration=2026-07-Sprint
 
 ```bash
 # 1. Archive a single task
-speccore archive --task=Task-001
+speccore done --task=Task-001
 
 # 2. Archive all completed tasks in an iteration
-speccore archive --all --iteration=2026-07-Sprint
+speccore done --all --iteration=2026-07-Sprint
 
 # 3. List archived tasks
-speccore archive --list
+speccore done --list
 
 # 4. Restore an archived task
-speccore archive --restore=Task-001 --iteration=2026-07-Sprint
+speccore done --restore=Task-001 --iteration=2026-07-Sprint
 ```
 
 **When to use:** End of iteration cleanup, keeping completed tasks out of progress/execute.
@@ -447,7 +447,7 @@ speccore validate --task=Task-001 --fix
 speccore validate --format=json
 
 # 5. Install Git hooks (validate before push)
-speccore hooks install
+speccore config install
 ```
 
 **Common errors:**
@@ -478,7 +478,7 @@ speccore task new --name="Admin Panel" --platforms=web,h5,miniapp --type=feature
 
 # Just run/filter by web — other platforms are skipped, no errors
 speccore execute --platform=web
-speccore progress --platform=web
+speccore status-panel --platform=web
 ```
 
 ### Add new platform to project
@@ -539,14 +539,14 @@ speccore delete --task=Task-005   # Safe delete
 speccore context --task=Task-001
 
 # 2. Overall progress
-speccore progress --iteration=2026-07-Sprint --detail
+speccore status-panel --iteration=2026-07-Sprint --detail
 
 # 3. Health check
 speccore health
 
 # 4. Generate handover report
 speccore handover --iteration=2026-07-Sprint
-speccore report --format=html --output=status.html --team
+speccore status-panel --export --format=html --output=status.html --team
 ```
 
 ### Git branch confusion
@@ -743,7 +743,7 @@ speccore sync --task=Task-002 --detect
 
 **Verify**:
 ```bash
-speccore progress              # Overall progress
+speccore status-panel              # Overall progress
 speccore health --task=Task-001  # Health check
 ```
 
@@ -763,7 +763,7 @@ speccore validate
 speccore audit 2>&1 > iteration-Q3/review/Task-001-audit.md
 
 # 3. Archive (close task, clean hotfix flags)
-speccore archive --task=Task-001
+speccore done --task=Task-001
 
 # 4. Sync iteration requirements to global
 speccore sync-global --iteration=Q3 --direction=to_global
@@ -772,7 +772,7 @@ speccore sync-global --iteration=Q3 --direction=to_global
 speccore current --task=Task-001 --status=done
 
 # 6. View final dashboard
-speccore dashboard
+speccore status-panel
 # Or one command:
 speccore done --task=Task-001
 ```
