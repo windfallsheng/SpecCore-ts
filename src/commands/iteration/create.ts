@@ -7,6 +7,7 @@ export interface IterationCreateOptions {
   name?: string;
   from?: string;
   to?: string;
+  owner?: string;
 }
 
 export async function iterationCreateCommand(options: IterationCreateOptions): Promise<void> {
@@ -130,6 +131,7 @@ async function createIterationFiles(iterationDir: string, options: IterationCrea
 > 期次：${options.name}
 > 时间范围：${options.from || '未指定'} ~ ${options.to || '未指定'}
 > 期次状态：🔄 进行中
+> 负责人：${options.owner || '未指定'}
 
 ## 任务列表
 
