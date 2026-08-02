@@ -230,6 +230,32 @@ async function exportStatus(config: any, iteration: string | null, format: strin
     const am: any = {};
     for (const t of tasks) { if (t.assignee) { if (!am[t.assignee]) am[t.assignee] = {total:0,done:0}; am[t.assignee].total++; if (t.status.includes("completed")||t.status.includes("完成")) am[t.assignee].done++; } }
     data.assigneeStats = am;
+    // 人员多维统计
+    const personDetail: any = {};
+    for (const t of tasks) {
+      if (!t.assignee) continue;
+      if (!personDetail[t.assignee]) personDetail[t.assignee] = {total:0,done:0,bugs:0,features:0,estHours:0};
+      personDetail[t.assignee].total++;
+      if (t.status.includes('completed')||t.status.includes('完成')) personDetail[t.assignee].done++;
+      if ((t.type||'').toLowerCase().includes('bug')) personDetail[t.assignee].bugs++;
+      else if (!(t.type||'').toLowerCase().includes('research')) personDetail[t.assignee].features++;
+      personDetail[t.assignee].estHours += t.estimate || 0;
+    }
+    data.personDetail = personDetail;
+    // 每人任务清单
+    const personTasks: Record<string, any[]> = {};
+    for (const t of tasks) {
+      if (!t.assignee) continue;
+      if (!personTasks[t.assignee]) personTasks[t.assignee] = [];
+      personTasks[t.assignee].push(t);
+    }
+    data.personTasks = personTasks;
+    let totalAi = 0, totalHuman = 0, totalReview = 0;
+    for (const t of tasks) { totalAi += t.aiTime || 0; totalHuman += t.humanTime || 0; totalReview += t.reviewTime || 0; }
+    data.totalAiTime = totalAi;
+    data.totalHumanTime = totalHuman;
+    data.totalReviewTime = totalReview;
+    data.totalEstTime = totalAi + totalHuman + totalReview;
   }
 
   if (format === 'json') {
@@ -294,6 +320,28 @@ function buildHtmlDashboard(data: any): string {
       '</div>';
   }).join('');
   const hasAssignees = assigneeCards.length > 0;
+  const totalAi = data.totalAiTime || 0;
+  const totalHuman = data.totalHumanTime || 0;
+  const totalReview = data.totalReviewTime || 0;
+  const totalEstTime = data.totalEstTime || 0;
+  const pt = data.personTasks || {};
+  const pd = data.personDetail || {};
+  const personDetailCards = Object.entries(pd as Record<string,{total:number,done:number,bugs:number,features:number,estHours:number}>).map(([name, d]) => {
+    const pct = d.total > 0 ? Math.round(d.done/d.total*100) : 0;
+    const bugPct = d.total > 0 ? Math.round(d.bugs/d.total*100) : 0;
+    return '<div style="background:rgba(0,240,255,.03);border:1px solid rgba(0,240,255,.08);border-radius:10px;padding:18px">' +
+      '<div style="font-size:15px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px">' + name +
+      '<span style="margin-left:auto;font-family:Orbitron;font-size:13px;color:var(--cyan)">' + pct + '%</span></div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px">' +
+      '<div><span style="color:var(--muted)">任务</span><div style="font-weight:600;margin-top:2px">' + d.done + '/' + d.total + '</div></div>' +
+      '<div><span style="color:var(--muted)">功能</span><div style="font-weight:600;margin-top:2px">' + d.features + '</div></div>' +
+      '<div><span style="color:var(--muted)">Bug</span><div style="font-weight:600;margin-top:2px;color:' + (bugPct > 30 ? 'var(--orange)' : 'var(--text)') + '">' + d.bugs + '</div></div>' +
+      '<div><span style="color:var(--muted)">工时</span><div style="font-weight:600;margin-top:2px">' + d.estHours + 'h</div></div>' +
+      '</div>' +
+      '<div style="height:4px;background:rgba(255,255,255,.04);border-radius:2px;margin-top:12px;overflow:hidden">' +
+      '<div style="width:' + pct + '%;height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:2px"></div></div>' +
+      '</div>';
+  }).join('');
   const bugTotal = data.bugCount || 0;
   const phasePct = ({init:10, require:25, analyze:40, dev:60, review:80, done:100} as any)[phase] || 0;
 
@@ -306,6 +354,12 @@ function buildHtmlDashboard(data: any): string {
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;600;700&display=swap');
 [data-theme="cyber"]{--cyan:#00f0ff;--blue:#3b82f6;--green:#00ff88;--purple:#a78bfa;--orange:#f59e0b;--bg:#060b14;--card:rgba(8,16,32,.85);--border:rgba(0,240,255,.12);--text:#c4d5e7;--muted:#4a5568;--surface:rgba(17,25,40,.7);--hover:rgba(0,240,255,.02)}
 [data-theme="light"]{--cyan:#2563eb;--blue:#3b82f6;--green:#059669;--purple:#7c3aed;--orange:#d97706;--bg:#f8fafc;--card:rgba(255,255,255,.95);--border:rgba(0,0,0,.08);--text:#1e293b;--muted:#94a3b8;--surface:rgba(255,255,255,.95);--hover:rgba(37,99,235,.02)}
+[data-theme="github"]{--cyan:#2da44e;--blue:#0969da;--green:#1a7f37;--purple:#8250df;--orange:#cf222e;--bg:#0d1117;--card:#161b22;--border:#30363d;--text:#c9d1d9;--muted:#8b949e;--surface:#161b22;--hover:rgba(45,164,78,.05)}
+[data-theme="synth"]{--cyan:#f92aad;--blue:#ff7edb;--green:#36f9f6;--purple:#b381f9;--orange:#ffb86c;--bg:#1a0024;--card:rgba(30,0,50,.9);--border:rgba(249,42,173,.2);--text:#f8f8f2;--muted:#6b3e7a;--surface:rgba(30,0,50,.9);--hover:rgba(249,42,173,.05)}
+[data-theme="ocean"]{--cyan:#0ea5e9;--blue:#0284c7;--green:#14b8a6;--purple:#6366f1;--orange:#f97316;--bg:#0b1929;--card:rgba(13,31,56,.9);--border:rgba(14,165,233,.15);--text:#bae6fd;--muted:#5b7fa5;--surface:rgba(13,31,56,.9);--hover:rgba(14,165,233,.05)}
+[data-theme="sakura"]{--cyan:#f472b6;--blue:#c084fc;--green:#a3e635;--purple:#e879f9;--orange:#fb923c;--bg:#1a0a14;--card:rgba(30,10,20,.9);--border:rgba(244,114,182,.2);--text:#fce7f3;--muted:#9d4a6d;--surface:rgba(30,10,20,.9);--hover:rgba(244,114,182,.05)}
+[data-theme="forest"]{--cyan:#059669;--blue:#0284c7;--green:#22c55e;--purple:#6366f1;--orange:#ca8a04;--bg:#0a140a;--card:rgba(12,24,12,.9);--border:rgba(5,150,105,.15);--text:#d1fae5;--muted:#3b6b4e;--surface:rgba(12,24,12,.9);--hover:rgba(5,150,105,.05)}
+[data-theme="amber"]{--cyan:#ffb000;--blue:#ff8c00;--green:#32cd32;--purple:#da70d6;--orange:#ff6347;--bg:#0c0c0c;--card:#1a1a1a;--border:#333;--text:#ffb000;--muted:#666;--surface:#1a1a1a;--hover:rgba(255,176,0,.05)}
 [data-theme="mono"]{--cyan:#64748b;--blue:#475569;--green:#334155;--purple:#1e293b;--orange:#94a3b8;--bg:#0f172a;--card:#1e293b;--border:#334155;--text:#e2e8f0;--muted:#64748b;--surface:#1e293b;--hover:rgba(100,116,139,.05)}
 *,*::after,*::before{box-sizing:border-box;margin:0;padding:0}
 .theme-sw{position:fixed;top:16px;right:16px;z-index:100;display:flex;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px;backdrop-filter:blur(10px)}.theme-sw button{width:32px;height:32px;border-radius:16px;border:none;cursor:pointer;transition:all .2s;font-size:14px;display:flex;align-items:center;justify-content:center;background:transparent}.theme-sw button:hover{transform:scale(1.1)}.theme-sw button.active{box-shadow:0 0 0 2px var(--cyan)}body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
@@ -379,7 +433,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
 </style>
 </head>
 <body>
-<div class="theme-sw"><button onclick="setTheme('cyber')" title="Cyber Dark">🌙</button><button onclick="setTheme('light')" title="Light Studio">☀️</button><button onclick="setTheme('mono')" title="Mono Tech">⬛</button></div>
+<div class="theme-sw"><button onclick="setTheme('ocean')" title="Ocean Blue">🌊</button><button onclick="setTheme('cyber')" title="Cyber Dark">🌙</button><button onclick="setTheme('light')" title="Light Studio">☀️</button><button onclick="setTheme('mono')" title="Mono Tech">⬛</button><button onclick="setTheme('github')" title="GitHub Dark">🐙</button><button onclick="setTheme('synth')" title="SynthWave">💜</button><button onclick="setTheme('amber')" title="Amber Terminal">🟡</button><button onclick="setTheme('sakura')" title="Cherry Sakura">🌸</button><button onclick="setTheme('forest')" title="Midnight Forest">🌲</button></div>
 <div class="grid-pattern"></div><div class="stars"></div><div class="scanlines"></div>
 <main>
   <div class="header">
@@ -595,28 +649,56 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
 
   <div class="grid" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:20px">
     <div class="card">
-      <h3 style="margin-bottom:14px">TYPE BREAKDOWN</h3>
-      <div style="display:flex;flex-direction:column;gap:14px">
-        <div style="display:flex;align-items:center;gap:8px">
-          <div style="width:40px;text-align:center;font-family:Orbitron;font-size:18px;color:var(--cyan)">${featCount}</div>
-          <div style="flex:1;height:6px;background:rgba(255,255,255,.03);border-radius:3px;overflow:hidden">
-            <div style="width:100%;height:100%;background:linear-gradient(90deg,#3b82f6,var(--cyan));border-radius:3px;box-shadow:0 0 8px rgba(0,240,255,.3)"></div>
-          </div>
-          <span style="font-size:11px;color:#60a5fa;width:60px">FEATURE</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <div style="width:40px;text-align:center;font-family:Orbitron;font-size:18px;color:var(--orange)">${bugCount}</div>
-          <div style="flex:1;height:6px;background:rgba(255,255,255,.03);border-radius:3px;overflow:hidden">
-            <div style="width:100%;height:100%;background:linear-gradient(90deg,#f59e0b,#fbbf24);border-radius:3px;box-shadow:0 0 8px rgba(245,158,11,.3)"></div>
-          </div>
-          <span style="font-size:11px;color:#fbbf24;width:60px">BUGFIX</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <div style="width:40px;text-align:center;font-family:Orbitron;font-size:18px;color:var(--purple)">${researchCount}</div>
-          <div style="flex:1;height:6px;background:rgba(255,255,255,.03);border-radius:3px;overflow:hidden">
-            <div style="width:100%;height:100%;background:linear-gradient(90deg,#7c3aed,var(--purple));border-radius:3px;box-shadow:0 0 8px rgba(168,85,247,.3)"></div>
-          </div>
-          <span style="font-size:11px;color:#c084fc;width:60px">RESEARCH</span>
+      <h3 style="margin-bottom:14px">TYPE PIE</h3>
+      <div style="display:flex;align-items:center;gap:16px;justify-content:center">
+        <svg width="140" height="140" viewBox="0 0 140 140">
+          <circle cx="70" cy="70" r="60" fill="none" stroke="rgba(255,255,255,.04)" stroke-width="20"/>
+          ${(() => {
+            const total = featCount + bugCount + researchCount;
+            if (total === 0) return '<text x="70" y="75" text-anchor="middle" font-size="12" fill="var(--muted)">NO DATA</text>';
+            // Calculate arcs
+            let offset = 0;
+            const featAngle = featCount/total*360;
+            const bugAngle = bugCount/total*360;
+            const resAngle = researchCount/total*360;
+            const arcs = [];
+            // Feature arc
+            if (featAngle > 0) {
+              const startX = 70 + 60*Math.cos((offset-90)*Math.PI/180);
+              const startY = 70 + 60*Math.sin((offset-90)*Math.PI/180);
+              const endX = 70 + 60*Math.cos((offset+featAngle-90)*Math.PI/180);
+              const endY = 70 + 60*Math.sin((offset+featAngle-90)*Math.PI/180);
+              const largeArc = featAngle > 180 ? 1 : 0;
+              arcs.push('<path d="M70,70 L'+startX+','+startY+' A60,60 0 '+largeArc+',1 '+endX+','+endY+' Z" fill="var(--cyan)" opacity=".85"/>');
+              offset += featAngle;
+            }
+            if (bugAngle > 0) {
+              const startX = 70 + 60*Math.cos((offset-90)*Math.PI/180);
+              const startY = 70 + 60*Math.sin((offset-90)*Math.PI/180);
+              const endX = 70 + 60*Math.cos((offset+bugAngle-90)*Math.PI/180);
+              const endY = 70 + 60*Math.sin((offset+bugAngle-90)*Math.PI/180);
+              const largeArc = bugAngle > 180 ? 1 : 0;
+              arcs.push('<path d="M70,70 L'+startX+','+startY+' A60,60 0 '+largeArc+',1 '+endX+','+endY+' Z" fill="var(--orange)" opacity=".85"/>');
+              offset += bugAngle;
+            }
+            if (resAngle > 0) {
+              const startX = 70 + 60*Math.cos((offset-90)*Math.PI/180);
+              const startY = 70 + 60*Math.sin((offset-90)*Math.PI/180);
+              const endX = 70 + 60*Math.cos((offset+resAngle-90)*Math.PI/180);
+              const endY = 70 + 60*Math.sin((offset+resAngle-90)*Math.PI/180);
+              const largeArc = resAngle > 180 ? 1 : 0;
+              arcs.push('<path d="M70,70 L'+startX+','+startY+' A60,60 0 '+largeArc+',1 '+endX+','+endY+' Z" fill="var(--purple)" opacity=".85"/>');
+            }
+            arcs.push('<circle cx="70" cy="70" r="35" fill="var(--bg)"/>');
+            arcs.push('<text x="70" y="72" text-anchor="middle" font-family="Orbitron" font-size="18" font-weight="900" fill="var(--text)">'+total+'</text>');
+            arcs.push('<text x="70" y="86" text-anchor="middle" font-size="9" fill="var(--muted)">TASKS</text>');
+            return arcs.join('');
+          })()}
+        </svg>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:center;gap:6px"><div style="width:8px;height:8px;border-radius:2px;background:var(--cyan)"></div><span style="font-size:11px">FEAT ${featCount}</span></div>
+          <div style="display:flex;align-items:center;gap:6px"><div style="width:8px;height:8px;border-radius:2px;background:var(--orange)"></div><span style="font-size:11px">BUG ${bugCount}</span></div>
+          <div style="display:flex;align-items:center;gap:6px"><div style="width:8px;height:8px;border-radius:2px;background:var(--purple)"></div><span style="font-size:11px">RES ${researchCount}</span></div>
         </div>
       </div>
     </div>
@@ -658,7 +740,14 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
     </div>
   </div>
 
-  ${hasAssignees ? '<div class="panel" style="margin-bottom:20px"><div class="panel-title">TEAM WORKLOAD</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">' + assigneeCards + '</div></div>' : ''}
+  ${hasAssignees ? '<div class="panel" style="margin-bottom:20px"><div class="panel-title">TEAM DETAILS</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">' + personDetailCards + '</div>' +
+    Object.entries(pt).map(([name, taskList]: [string, any[]]) => '<div style="margin-top:20px"><div class="panel-title" style="font-size:13px">' + name + ' — TASK LIST (' + taskList.length + ')</div><table style="margin-top:8px"><thead><tr><th>ID</th><th>STATUS</th><th>TYPE</th></tr></thead><tbody>' +
+      taskList.map((t: any) => {
+        const cls = t.status.includes('completed')||t.status.includes('完成')?'tx-done':t.status.includes('in_progress')||t.status.includes('开发')?'tx-active':'tx-wait';
+        const st = t.status.includes('completed')||t.status.includes('完成')?'RESOLVED':t.status.includes('in_progress')||t.status.includes('开发')?'ACTIVE':'QUEUED';
+        return '<tr><td class="code">'+t.id+'</td><td><span class="tx-badge '+cls+'">'+st+'</span></td><td><span class="type-t type-feat">'+(t.type||'FEAT')+'</span></td></tr>';
+      }).join('') +
+    '</tbody></table></div>').join('') + '</div>' : ''}
 
   <div class="panel">
     <div class="panel-title">TASK REGISTRY</div>
@@ -719,9 +808,9 @@ document.querySelectorAll('.card,.panel').forEach(el=>{
 
 
 <script>
-(function(){var t=localStorage.getItem('speccore-theme')||'cyber';document.documentElement.setAttribute('data-theme',t)})();
-function setTheme(t){document.documentElement.setAttribute('data-theme',t);localStorage.setItem('speccore-theme',t);document.querySelectorAll('.theme-sw button').forEach((b,i)=>{b.classList.toggle('active',['cyber','light','mono'][i]===t)});}
-document.querySelectorAll('.theme-sw button').forEach((b,i)=>{b.classList.toggle('active',['cyber','light','mono'][i]===(localStorage.getItem('speccore-theme')||'cyber'))});
+(function(){var t=localStorage.getItem('speccore-theme')||'ocean';document.documentElement.setAttribute('data-theme',t)})();
+function setTheme(t){document.documentElement.setAttribute('data-theme',t);localStorage.setItem('speccore-theme',t);document.querySelectorAll('.theme-sw button').forEach((b,i)=>{b.classList.toggle('active',['ocean','cyber','light','mono','github','synth','amber','sakura','forest'][i]===t)});}
+document.querySelectorAll('.theme-sw button').forEach((b,i)=>{b.classList.toggle('active',['ocean','cyber','light','mono','github','synth','amber','sakura','forest'][i]===(localStorage.getItem('speccore-theme')||'ocean'))});
 </script>
 
 </body></html>`;}

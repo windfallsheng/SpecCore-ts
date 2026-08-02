@@ -86,7 +86,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
 </style>
 </head>
 <body>
-<div class="theme-sw"><button onclick="setTheme('cyber')" title="Cyber Dark">🌙</button><button onclick="setTheme('light')" title="Light Studio">☀️</button><button onclick="setTheme('mono')" title="Mono Tech">⬛</button><button onclick="setTheme('github')" title="GitHub Dark">🐙</button><button onclick="setTheme('synth')" title="SynthWave">💜</button><button onclick="setTheme('ocean')" title="Ocean Blue">🌊</button><button onclick="setTheme('amber')" title="Amber Terminal">🟡</button><button onclick="setTheme('sakura')" title="Cherry Sakura">🌸</button><button onclick="setTheme('forest')" title="Midnight Forest">🌲</button></div>
+<div class="theme-sw"><button onclick="setTheme('ocean')" title="Ocean Blue">🌊</button><button onclick="setTheme('cyber')" title="Cyber Dark">🌙</button><button onclick="setTheme('light')" title="Light Studio">☀️</button><button onclick="setTheme('mono')" title="Mono Tech">⬛</button><button onclick="setTheme('github')" title="GitHub Dark">🐙</button><button onclick="setTheme('synth')" title="SynthWave">💜</button><button onclick="setTheme('amber')" title="Amber Terminal">🟡</button><button onclick="setTheme('sakura')" title="Cherry Sakura">🌸</button><button onclick="setTheme('forest')" title="Midnight Forest">🌲</button></div>
 <div class="grid-pattern"></div><div class="stars"></div><div class="scanlines"></div>
 <main>
   <div class="header">
@@ -283,28 +283,16 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
 
   <div class="grid" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:20px">
     <div class="card">
-      <h3 style="margin-bottom:14px">TYPE BREAKDOWN</h3>
-      <div style="display:flex;flex-direction:column;gap:14px">
-        <div style="display:flex;align-items:center;gap:8px">
-          <div style="width:40px;text-align:center;font-family:Orbitron;font-size:18px;color:var(--cyan)">5</div>
-          <div style="flex:1;height:6px;background:rgba(255,255,255,.03);border-radius:3px;overflow:hidden">
-            <div style="width:100%;height:100%;background:linear-gradient(90deg,#3b82f6,var(--cyan));border-radius:3px;box-shadow:0 0 8px rgba(0,240,255,.3)"></div>
-          </div>
-          <span style="font-size:11px;color:#60a5fa;width:60px">FEATURE</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <div style="width:40px;text-align:center;font-family:Orbitron;font-size:18px;color:var(--orange)">0</div>
-          <div style="flex:1;height:6px;background:rgba(255,255,255,.03);border-radius:3px;overflow:hidden">
-            <div style="width:100%;height:100%;background:linear-gradient(90deg,#f59e0b,#fbbf24);border-radius:3px;box-shadow:0 0 8px rgba(245,158,11,.3)"></div>
-          </div>
-          <span style="font-size:11px;color:#fbbf24;width:60px">BUGFIX</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <div style="width:40px;text-align:center;font-family:Orbitron;font-size:18px;color:var(--purple)">0</div>
-          <div style="flex:1;height:6px;background:rgba(255,255,255,.03);border-radius:3px;overflow:hidden">
-            <div style="width:100%;height:100%;background:linear-gradient(90deg,#7c3aed,var(--purple));border-radius:3px;box-shadow:0 0 8px rgba(168,85,247,.3)"></div>
-          </div>
-          <span style="font-size:11px;color:#c084fc;width:60px">RESEARCH</span>
+      <h3 style="margin-bottom:14px">TYPE PIE</h3>
+      <div style="display:flex;align-items:center;gap:16px;justify-content:center">
+        <svg width="140" height="140" viewBox="0 0 140 140">
+          <circle cx="70" cy="70" r="60" fill="none" stroke="rgba(255,255,255,.04)" stroke-width="20"/>
+          <path d="M70,70 L70,10 A60,60 0 1,1 69.99999999999999,10 Z" fill="var(--cyan)" opacity=".85"/><circle cx="70" cy="70" r="35" fill="var(--bg)"/><text x="70" y="72" text-anchor="middle" font-family="Orbitron" font-size="18" font-weight="900" fill="var(--text)">5</text><text x="70" y="86" text-anchor="middle" font-size="9" fill="var(--muted)">TASKS</text>
+        </svg>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:center;gap:6px"><div style="width:8px;height:8px;border-radius:2px;background:var(--cyan)"></div><span style="font-size:11px">FEAT 5</span></div>
+          <div style="display:flex;align-items:center;gap:6px"><div style="width:8px;height:8px;border-radius:2px;background:var(--orange)"></div><span style="font-size:11px">BUG 0</span></div>
+          <div style="display:flex;align-items:center;gap:6px"><div style="width:8px;height:8px;border-radius:2px;background:var(--purple)"></div><span style="font-size:11px">RES 0</span></div>
         </div>
       </div>
     </div>
@@ -346,7 +334,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
     </div>
   </div>
 
-  <div class="panel" style="margin-bottom:20px"><div class="panel-title">TEAM WORKLOAD</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px"><div style="background:rgba(0,240,255,.03);border:1px solid rgba(0,240,255,.08);border-radius:8px;padding:16px"><div style="font-size:14px;font-weight:600;margin-bottom:8px">张三</div><div style="display:flex;gap:12px;margin-bottom:8px"><div><span class="num-font">2</span><span style="font-size:10px;color:var(--muted)">/2</span></div><div class="num-font" style="margin-left:auto">100%</div></div><div style="height:4px;background:rgba(255,255,255,.03);border-radius:2px;overflow:hidden"><div style="width:100%;height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:2px"></div></div></div><div style="background:rgba(0,240,255,.03);border:1px solid rgba(0,240,255,.08);border-radius:8px;padding:16px"><div style="font-size:14px;font-weight:600;margin-bottom:8px">李四</div><div style="display:flex;gap:12px;margin-bottom:8px"><div><span class="num-font">0</span><span style="font-size:10px;color:var(--muted)">/2</span></div><div class="num-font" style="margin-left:auto">0%</div></div><div style="height:4px;background:rgba(255,255,255,.03);border-radius:2px;overflow:hidden"><div style="width:0%;height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:2px"></div></div></div><div style="background:rgba(0,240,255,.03);border:1px solid rgba(0,240,255,.08);border-radius:8px;padding:16px"><div style="font-size:14px;font-weight:600;margin-bottom:8px">王五</div><div style="display:flex;gap:12px;margin-bottom:8px"><div><span class="num-font">0</span><span style="font-size:10px;color:var(--muted)">/1</span></div><div class="num-font" style="margin-left:auto">0%</div></div><div style="height:4px;background:rgba(255,255,255,.03);border-radius:2px;overflow:hidden"><div style="width:0%;height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:2px"></div></div></div></div></div>
+  <div class="panel" style="margin-bottom:20px"><div class="panel-title">TEAM DETAILS</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px"><div style="background:rgba(0,240,255,.03);border:1px solid rgba(0,240,255,.08);border-radius:10px;padding:18px"><div style="font-size:15px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px">张三<span style="margin-left:auto;font-family:Orbitron;font-size:13px;color:var(--cyan)">100%</span></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px"><div><span style="color:var(--muted)">任务</span><div style="font-weight:600;margin-top:2px">2/2</div></div><div><span style="color:var(--muted)">功能</span><div style="font-weight:600;margin-top:2px">2</div></div><div><span style="color:var(--muted)">Bug</span><div style="font-weight:600;margin-top:2px;color:var(--text)">0</div></div><div><span style="color:var(--muted)">工时</span><div style="font-weight:600;margin-top:2px">0h</div></div></div><div style="height:4px;background:rgba(255,255,255,.04);border-radius:2px;margin-top:12px;overflow:hidden"><div style="width:100%;height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:2px"></div></div></div><div style="background:rgba(0,240,255,.03);border:1px solid rgba(0,240,255,.08);border-radius:10px;padding:18px"><div style="font-size:15px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px">李四<span style="margin-left:auto;font-family:Orbitron;font-size:13px;color:var(--cyan)">0%</span></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px"><div><span style="color:var(--muted)">任务</span><div style="font-weight:600;margin-top:2px">0/2</div></div><div><span style="color:var(--muted)">功能</span><div style="font-weight:600;margin-top:2px">2</div></div><div><span style="color:var(--muted)">Bug</span><div style="font-weight:600;margin-top:2px;color:var(--text)">0</div></div><div><span style="color:var(--muted)">工时</span><div style="font-weight:600;margin-top:2px">0h</div></div></div><div style="height:4px;background:rgba(255,255,255,.04);border-radius:2px;margin-top:12px;overflow:hidden"><div style="width:0%;height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:2px"></div></div></div><div style="background:rgba(0,240,255,.03);border:1px solid rgba(0,240,255,.08);border-radius:10px;padding:18px"><div style="font-size:15px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px">王五<span style="margin-left:auto;font-family:Orbitron;font-size:13px;color:var(--cyan)">0%</span></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px"><div><span style="color:var(--muted)">任务</span><div style="font-weight:600;margin-top:2px">0/1</div></div><div><span style="color:var(--muted)">功能</span><div style="font-weight:600;margin-top:2px">1</div></div><div><span style="color:var(--muted)">Bug</span><div style="font-weight:600;margin-top:2px;color:var(--text)">0</div></div><div><span style="color:var(--muted)">工时</span><div style="font-weight:600;margin-top:2px">0h</div></div></div><div style="height:4px;background:rgba(255,255,255,.04);border-radius:2px;margin-top:12px;overflow:hidden"><div style="width:0%;height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:2px"></div></div></div></div><div style="margin-top:20px"><div class="panel-title" style="font-size:13px">张三 — TASK LIST (2)</div><table style="margin-top:8px"><thead><tr><th>ID</th><th>STATUS</th><th>TYPE</th></tr></thead><tbody><tr><td class="code">Task-001-任务</td><td><span class="tx-badge tx-done">RESOLVED</span></td><td><span class="type-t type-feat">feature</span></td></tr><tr><td class="code">Task-002-任务</td><td><span class="tx-badge tx-done">RESOLVED</span></td><td><span class="type-t type-feat">feature</span></td></tr></tbody></table></div><div style="margin-top:20px"><div class="panel-title" style="font-size:13px">李四 — TASK LIST (2)</div><table style="margin-top:8px"><thead><tr><th>ID</th><th>STATUS</th><th>TYPE</th></tr></thead><tbody><tr><td class="code">Task-003-任务</td><td><span class="tx-badge tx-active">ACTIVE</span></td><td><span class="type-t type-feat">feature</span></td></tr><tr><td class="code">Task-004-任务</td><td><span class="tx-badge tx-active">ACTIVE</span></td><td><span class="type-t type-feat">feature</span></td></tr></tbody></table></div><div style="margin-top:20px"><div class="panel-title" style="font-size:13px">王五 — TASK LIST (1)</div><table style="margin-top:8px"><thead><tr><th>ID</th><th>STATUS</th><th>TYPE</th></tr></thead><tbody><tr><td class="code">Task-005-任务</td><td><span class="tx-badge tx-active">ACTIVE</span></td><td><span class="type-t type-feat">feature</span></td></tr></tbody></table></div></div>
 
   <div class="panel">
     <div class="panel-title">TASK REGISTRY</div>
@@ -361,7 +349,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
 
   <div class="footer">
     <span>SPECCORE v5.20.0 · SPEC-DRIVEN DEVELOPMENT</span>
-    <span>EXPORTED: 2026-08-02T12:54:11.155Z</span>
+    <span>EXPORTED: 2026-08-02T13:03:29.631Z</span>
   </div>
 </main>
 
@@ -400,8 +388,8 @@ document.querySelectorAll('.card,.panel').forEach(el=>{
 
 <script>
 (function(){var t=localStorage.getItem('speccore-theme')||'ocean';document.documentElement.setAttribute('data-theme',t)})();
-function setTheme(t){document.documentElement.setAttribute('data-theme',t);localStorage.setItem('speccore-theme',t);document.querySelectorAll('.theme-sw button').forEach((b,i)=>{b.classList.toggle('active',['cyber','light','mono','github','synth','ocean','amber','sakura','forest'][i]===t)});}
-document.querySelectorAll('.theme-sw button').forEach((b,i)=>{b.classList.toggle('active',['cyber','light','mono','github','synth','ocean','amber','sakura','forest'][i]===(localStorage.getItem('speccore-theme')||'ocean'))});
+function setTheme(t){document.documentElement.setAttribute('data-theme',t);localStorage.setItem('speccore-theme',t);document.querySelectorAll('.theme-sw button').forEach((b,i)=>{b.classList.toggle('active',['ocean','cyber','light','mono','github','synth','amber','sakura','forest'][i]===t)});}
+document.querySelectorAll('.theme-sw button').forEach((b,i)=>{b.classList.toggle('active',['ocean','cyber','light','mono','github','synth','amber','sakura','forest'][i]===(localStorage.getItem('speccore-theme')||'ocean'))});
 </script>
 
 </body></html>
