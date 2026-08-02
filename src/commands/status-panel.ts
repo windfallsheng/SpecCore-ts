@@ -820,14 +820,6 @@ setTimeout(()=>{
     }
   });
 });
-    if(el.tagName==='DIV'&&el.className.includes('panel-title')&&el.textContent.includes('TASK LIST')){
-      el.classList.add('collapsible-header');
-      let body=el.nextElementSibling;
-      while(body&&body.tagName!=='TABLE')body=body.nextElementSibling;
-      if(body){body.classList.add('collapsible-body');el.onclick=()=>{el.classList.toggle('open');body.classList.toggle('open')}}
-    }
-  });
-},100);
 document.querySelectorAll('.card,.panel').forEach(el=>{
   const btn=document.createElement('button');
   btn.className='fs-btn';btn.title='Fullscreen (F)';btn.innerHTML='⛶';btn.onclick=e=>{e.stopPropagation();toggleFS(el)};
