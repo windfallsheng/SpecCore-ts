@@ -1098,7 +1098,9 @@ setTimeout(function(){
         if(arrow) arrow.innerHTML = '&#9660;';
         header.classList.add('collapsed');
       } else {
-        body.style.maxHeight = body.scrollHeight + 'px';
+        body.style.maxHeight = 'none';
+        var h = body.scrollHeight;
+        body.style.maxHeight = h + 'px';
         if(arrow) arrow.innerHTML = '&#9650;';
         header.classList.remove('collapsed');
       }
