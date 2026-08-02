@@ -1,6 +1,6 @@
 # SpecCore — Command Reference
 
-> 🔧 Commands: 54 | 🧠 Intent Types: 36 | See [README](../README.en.md)
+> 🔧 Commands: 51 | 🧠 Intent Types: 34 | See [README](../README.en.md)
 
 ---
 
@@ -20,8 +20,8 @@ Same command, different syntax depending on context. Full classification by cate
 | Done | `speccore done -t Task-001` | `/spec-done Task-001` | — |
 | Status | `speccore status-panel` | `/spec-status-panel` | — |
 | Change | `speccore change "desc" -t Task-001` | `/spec-change` or natural language | — |
-| Bugfix | `speccore bugfix -n "name" -d "desc"` | `/spec-bugfix` or natural language | — |
-| Analyze | `speccore analyze -i Q1` | `/spec-analyze Q1` | — |
+| Bugfix | `speccore task new -n "name" -d "desc" --type=bugfix` | `/spec-bugfix` or natural language | — |
+| Analyze | `speccore analyze -I Q1` | `/spec-analyze Q1` | CLI also supports code analysis, multi-directory, scope |
 | Plan | `speccore plan -i Q1` | `/spec-plan Q1` | — |
 | Task new | `speccore task new -n name` | `/spec-task-new` | — |
 | Validate | `speccore validate -i Q1` | `/spec-validate Q1` | — |
@@ -34,11 +34,10 @@ Same command, different syntax depending on context. Full classification by cate
 
 | Command | Why |
 |:---|:---|
-| `import --project --path --type --force` | Many params, CLI precision |
 | `execute --verify` | Combined flags |
 | `status-panel --export --assignee` | Export/filter params |
 | `dev --auto --from=split` | Automation pipeline |
-| `bugfix --batch-file --schedule` | Bulk + scheduling |
+| `task new --batch-file --type=bugfix --schedule` | Bulk + scheduling |
 
 ### 💬 AI Chat Only (needs AI context)
 
@@ -70,13 +69,10 @@ speccore ask "create user login feature"
 | :--- | :--- | :--- | :--- |
 | `speccore init` | `in` | Initialize SpecCore project | `--force` |
 | `speccore doc2spec` | `d2s` | Convert Word (.docx/.doc) → SpecCore Markdown | `--file <path>` `--iteration <name>` `--platform <name>` |
-| `speccore import` | `imp` | Import project to global layer | `--project <name>` `--path <path>` `--type <type>` `--scope <scope>` `--ignore <pkgs>` `--update` |
 
 ```bash
 speccore init
 speccore init --force
-speccore import --project=user-service --path=../backend --type=backend
-speccore import --project=web --path=../frontend --type=web --update
 ```
 
 ---
@@ -130,6 +126,39 @@ speccore execute --all --interactive                # Interactive selection
 
 ---
 
+---
+
+## ⏰ Scheduled Execution
+
+| Command | Alias | Description | Options |
+| :--- | :--- | :--- | :--- |
+| `speccore schedule create` | — | Create scheduled execution | `--at <datetime>` `--task <id>` `--all` `--iteration <name>` |
+| `speccore schedule list` | — | View schedule queue | — |
+| `speccore schedule cancel` | — | Cancel a schedule | `--id <sch-id>` |
+| `speccore schedule daemon start` | — | Start daemon process | — |
+| `speccore schedule daemon status` | — | Check daemon status | — |
+
+```bash
+# Method 1: Mark tasks for nightly queue, trigger manually
+speccore task new -n "Fix login timeout" --type=bugfix --schedule=night   # Mark as queue
+speccore execute --all --scheduled                                          # Run all queued tasks
+
+# Method 2: Precise time scheduling
+speccore schedule create --at "2026-08-10 21:00:00" -t Task-001           # Schedule single task
+speccore schedule create --at "2026-08-10 02:00:00" --all -i Q1           # Schedule all tasks
+speccore schedule list                                                      # View schedule queue
+speccore schedule cancel --id=sch-xxx                                       # Cancel
+speccore schedule daemon start                                              # Start daemon (auto-execute)
+speccore schedule daemon status                                             # Check daemon status
+```
+
+| Method | Use Case | Granularity |
+|:---|:---|:---|
+| `--schedule=night` | Queue during day, batch at night | Manual trigger |
+| `schedule create --at` | Precise auto-execution | Second-level (requires daemon) |
+
+---
+
 ## 🔄 Change & Sync
 
 | Command | Alias | Description | Options |
@@ -172,16 +201,24 @@ speccore status-panel --export --format=html --output=report.html --team --risk
 
 | Command | Alias | Description | Options |
 | :--- | :--- | :--- | :--- |
+| `speccore analyze` | `al` | Unified analysis: reqs + code, 3 scopes | `-I, --iteration <name>` `-t, --task <id>` `--scope <global\|iteration\|task>` `--src <dirs>` `--req <files>` `-o, --output <file>` `--depth <quick\|normal\|deep>` `--auto` `--ask` |
 | `speccore impact` | `if` | Change impact analysis | `--req <id>` `--task <id>` |
 | `speccore baseline` | `bl` | Version baseline management | `--name <name>` `--compare <name>` `--restore <name>` `--req <id>` |
-| `speccore status-panel` | `db` | Visual dashboard (Chart.js) | `--output <path>` |
 | `speccore audit` | `ad` | AI smart audit | `--fix` |
 
 ```bash
+# Unified analysis engine — three scopes
+speccore analyze --scope global --depth deep              # Global code health
+speccore analyze --scope global --src backend,frontend    # Multi-dir code analysis
+speccore analyze --scope global --req docs/req.md         # Cross-iteration req consistency
+speccore analyze -I Q1                                    # Iteration req analysis (default)
+speccore analyze -I Q1 --src backend/src                  # Combined req+code
+speccore analyze --scope task -t Task-01 -I Q1            # Task analysis + doc enrichment
+speccore analyze --ask -I Q1                              # Interactive Q&A mode
+speccore analyze --src backend,frontend --req docs/a.md,docs/b.md --scope global
+
 speccore impact --req=REQ-001
 speccore baseline --name=v1.0
-speccore baseline --compare=v1.0 --name=v1.1
-speccore status-panel --output=dashboard.html
 speccore audit --fix
 ```
 
@@ -208,7 +245,7 @@ speccore index-update --dry-run
 | Command | Alias | Description | Options |
 | :--- | :--- | :--- | :--- |
 | `speccore task new` | — | Full requirement delivery | `--name <name>` `--desc <text>` `--iteration <name>` |
-| `speccore bugfix` | `bf` | Quick bug fix | `--name <text>` `--desc <text>` `--iteration <name>` |
+| `speccore task new` | — | Quick bug fix | `--name <text>` `--desc <text>` `--iteration <name>` `--type=bugfix` |
 | `speccore research` | `rs` | Technology research | `--topic <text>` `--options <list>` |
 | `speccore handover` | `ho` | Generate handover doc | `--iteration <name>` |
 | `speccore retro` | `rt` | Iteration retrospective | `--iteration <name>` |
@@ -218,7 +255,7 @@ speccore index-update --dry-run
 
 ```bash
 speccore task new --name="Payment Module" --desc="WeChat Pay integration"
-speccore bugfix --name="Login timeout" --desc="Fix token expiry"
+speccore task new --name="Login timeout" --desc="Fix token expiry" --type=bugfix
 speccore research --topic="Message queue comparison" --options="Kafka,RabbitMQ"
 speccore handover --iteration=2026-07-Meeting
 speccore retro --iteration=2026-07-Meeting
@@ -234,7 +271,7 @@ speccore context --task=Task-001
 | Command | Alias | Description | Options |
 | :--- | :--- | :--- | :--- |
 | `speccore template-add` | `ta` | Add code template | `--name <name>` `--type <type>` `--files <files>` |
-| `speccore done` | `ar` | Archive completed tasks | `--all` `--task <id>` `--iteration <name>` |
+| `speccore done` | `ar` | Complete/archive tasks | `--all` `--task <id>` `--iteration <name>` |
 | `speccore config` | `cf` | Config management | `--set <key=value>` `--get <key>` |
 | `speccore help` | `hp` | Categorized command help | `--category <name>` |
 | `speccore demo` | `dm` | 5-minute quick demo | — |
@@ -309,29 +346,28 @@ speccore trace --full
 | Alias | Command | Alias | Command |
 | :--- | :--- | :--- | :--- |
 | `in` | init | `ex` | execute |
-| `imp` | import | `pl` | plan |
+| `al` | analyze | `pl` | plan |
 | `tn` | task new | `cg` | change |
 | `padd` | platform-add | `sy` | sync |
 | `ctx` | context | `sg` | sync-global |
 | `iu` | index-update | `if` | impact |
 | `it cr` | iteration create | `bl` | baseline |
-| `it sp` | iteration split | `db` | dashboard |
+| `it sp` | iteration split | `db` | status-panel |
 | `ifg` | iteration-from-global | `ad` | audit |
-| `gs` | global-status | `hs` | history |
-| `pg` | progress | `st` | status |
-| `hl` | health | `rp` | report |
-| `rv` | validate | `ar` | archive |
-| `bf` | bugfix | `rs` | research |
-| `ho` | handover | `rt` | retro |
-| `rn` | rename | `ta` | template-add |
-| `cf` | config | `hp` | help |
-| `dm` | demo | `wc` | welcome |
+| `gs` | global-status | `hs` | ops |
+| `pg` | status-panel | `st` | status |
+| `hl` | health | `rp` | status-panel --export |
+| `rv` | validate | `ar` | done |
+| `rs` | research | `ho` | handover |
+| `rt` | retro | `rn` | rename |
+| `ta` | template-add | `cf` | config |
+| `hp` | help | `dm` | demo |
 | `mg` | migrate | `bk` | backup |
 | `cm` | completion | `hk` | hooks |
 | `cr` | current | `df` | diff |
 | `tr` | trace | `up` | update |
 | `dl` | delete | `sh` | search |
-| `wch` | watch | | |
+| `wc` | welcome | `wch` | watch |
 
 ---
 
@@ -341,12 +377,10 @@ speccore trace --full
 | :---: | :--- | :--- | :--- |
 | 100 | change | modify, adjust, change | `speccore change` |
 | 90 | execute | start, run, execute | `speccore execute` |
-| 88 | bugfix | bug, fix, error | `speccore bugfix` |
+| 88 | bugfix | bug, fix, error | `speccore task new --type=bugfix` |
 | 85 | create | create, build, implement | `speccore task new` |
 | 85 | init | initialize, setup, create | `speccore init` |
 | 84 | new_task | new task, create task | `speccore task new` |
-| 83 | import_to_global | import project | `speccore import` |
-| 82 | import | import, migrate | `speccore import` |
 | 80 | review | review, check, inspect | `speccore validate` |
 | 80 | research | research, evaluate | `speccore research` |
 | 80 | iter_from_global | generate from global | `speccore iteration-from-global` |

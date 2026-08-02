@@ -11,19 +11,15 @@
 cd my-project
 speccore init
 
-# 2. Import existing code to global layer
-speccore import --project=backend --path=./src --type=backend
-speccore import --project=frontend --path=./web --type=web
-
-# 3. Create first iteration
+# 2. Create first iteration
 speccore iteration create --name="2026-07-Auth" --goal="User auth system"
 
-# 4. Create tasks
+# 3. Create tasks
 speccore task new --name="User Login" --platforms=web,h5 --type=feature
 speccore task new --name="User Register" --platforms=web,h5 --type=feature
 speccore task new --name="Password Reset" --platforms=web --type=feature
 
-# 5. Check progress
+# 4. Check progress
 speccore status-panel --detail
 ```
 
@@ -68,7 +64,7 @@ speccore done --task=Task-001
 
 ```bash
 # 1. Create bug fix task
-speccore bugfix --name="Login timeout" --desc="Token expiry causes 401"
+speccore task new --name="Login timeout" --desc="Token expiry causes 401" --type=bugfix
 
 # 2. Start fixing
 speccore execute --task=Task-004 --force
@@ -296,16 +292,16 @@ speccore baseline --list
 
 | Scenario | First Command | Core Flow |
 | :--- | :--- | :--- |
-| New Project | `speccore init` | `init → import → iteration create → task new` |
+| New Project | `speccore init` | `init → iteration create → task new` |
 | Daily Dev | `speccore execute --task=T-001` | `execute → sync → trace → update` |
-| Bug Fix | `speccore bugfix --name="xxx"` | `bugfix → execute → sync → change` |
+| Bug Fix | `speccore task new --name="xxx" --type=bugfix` | `bugfix → execute → sync → change` |
 | Change Mgmt | `speccore impact --req=REQ-001` | `impact → baseline → change → validate` |
 | Team Collab | `speccore status-panel --detail` | `update --assignee → execute → handover` |
 | Long Chain | `speccore execute --all --batch-size=3` | `execute --resume` |
 | CI/CD | `speccore config install` | hooks + GitHub Actions |
 | Global Layer | `speccore global-status` | `iteration-from-global → sync-global` |
 | Migration | `speccore migrate --dry-run` | migrate → validate |
-| Health Check | `speccore health` | `progress → report → dashboard` |
+| Health Check | `speccore health` | `status-panel` |
 
 ---
 

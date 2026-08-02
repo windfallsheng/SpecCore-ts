@@ -1,5 +1,5 @@
 ---
 name: spec-analyze
-description: Analyze requirements
+description: Run unified analysis — requirements, source code, or both
 ---
-speccore analyze --iteration=${1:Q1}
+speccore analyze -I ${1:Q1}

@@ -8,11 +8,11 @@ SpecCore is a specification-driven development toolkit for AI-native teams. It o
 
 | | Simple (default) | Full |
 | :--- | :--- | :--- |
-| Commands | 19 core | 52 all |
+| Commands | 17 core | 51 all |
 | For | Daily development | Fine-grained control |
 | Enable | `speccore init` | `speccore init --full` |
 
-**Simple mode commands:** `ask init import iteration task doc2spec analyze split plan execute pr done change validate rename dev status-panel ops bugfix`
+**Simple mode commands:** `ask init iteration task doc2spec analyze split plan execute pr done change validate rename dev status-panel ops`
 
 ---
 
@@ -25,7 +25,7 @@ npm install -g speccore
 speccore init                          # Initialize
 speccore iteration create --name=Q1    # Create iteration
 speccore doc2spec -f PRD.md -p backend -i Q1  # Import requirements
-speccore analyze --iteration=Q1        # Analyze
+speccore analyze -I Q1                 # Analyze (req+code, 3 scopes)
 speccore iteration split -i Q1         # Split into tasks
 speccore plan --iteration=Q1           # Generate plan
 speccore execute --task=Task-001       # AI development
@@ -44,12 +44,12 @@ Same command, different syntax depending on context:
 | 💬 AI Chat | Natural language | "Create a login feature" |
 | 💬 AI Chat | `/spec-<command>` | `/spec-init` `/spec-execute Task-001` |
 
-> Full reference (all 19 commands classified) → [Commands Reference — Two Ways to Use](docs/commands.en.md#-two-ways-to-use)
+> Full reference (all 17 commands classified) → [Commands Reference — Two Ways to Use](docs/commands.en.md#-two-ways-to-use)
 
 ## Interactive Mode
 
 Key steps support `--interactive` for human-AI collaboration:
-`import --interactive` `analyze --interactive` `split --interactive` `plan --interactive` `change --interactive`
+`analyze --ask` `split --interactive` `plan --interactive` `change --interactive`
 
 ## Smart Entry
 
@@ -63,18 +63,28 @@ speccore dev               # Auto-detect phase + cascade execute
 
 All steps support parallel multi-project: backend services (`backend/room-service/`) and frontend platforms (`frontend/web/`, `frontend/h5/`).
 
-## Legacy Import
+## Bug Fix
 
 ```bash
-speccore import --project=backend --type=backend  # From source code
-speccore import --project=meeting --path=reqs.xlsx  (also .csv)  # From Excel
-# Then run /spec-import-analyze in your AI IDE for deep analysis
+speccore task new --name="Login timeout" --desc="Token expiry" --type=bugfix              # Single
+speccore task new --batch-file=bugs.xlsx --type=bugfix                                    # Batch import
+speccore task new --batch-file=bugs.xlsx --type=bugfix --interactive                      # Confirm each
 ```
 
-## Bug Batch
+## Scheduled Execution
 
 ```bash
-speccore bugfix --batch-file=bugs.xlsx --schedule=night --interactive
+# Method 1: Mark tasks for queue, trigger manually
+speccore task new -n "Fix login timeout" --type=bugfix --schedule=night   # Mark as queue
+speccore execute --all --scheduled                                        # Run all queued tasks
+
+# Method 2: Precise time scheduling
+speccore schedule create --at "2026-08-10 21:00:00" -t Task-001          # Schedule single task
+speccore schedule create --at "2026-08-10 02:00:00" --all -i Q1          # Schedule all tasks
+speccore schedule list                                                     # View schedule queue
+speccore schedule cancel --id=sch-xxx                                      # Cancel
+speccore schedule daemon start                                             # Start daemon (auto-execute)
+speccore schedule daemon status                                            # Check daemon status
 ```
 
 ## Documentation
@@ -82,7 +92,7 @@ speccore bugfix --batch-file=bugs.xlsx --schedule=night --interactive
 | Doc | Content |
 | :--- | :--- |
 | 🚀 [Quick Start](docs/快速开始.md) | Full tutorial |
-| 🔧 [Full Command Reference](docs/命令参考.md) | 52 commands |
+| 🔧 [Full Command Reference](docs/命令参考.md) | 51 commands |
 | [Scenarios](docs/场景实战.md) | Typical use cases |
 | [Overview](docs/总览.md) | Architecture + concepts |
 | [SDD Methodology](docs/SDD方法论.md) | Why Spec-Driven Development |

@@ -3,6 +3,32 @@
 ---
 
 
+## v5.22.0 (2026-08-03) — Latest
+
+### 🚀 Analyze Engine Expansion
+- **Unified analysis engine**: requirements + code, 3 scopes (`global`/`iteration`/`task`)
+- **New flags**: `--scope`, `--src <dirs>`, `--req <files>`, `--depth <quick|normal|deep>`
+- **`-I` flag**: iteration selection (capital i), alias `al`
+- **`--ask`**: interactive Q&A mode (replaces `--interactive` on analyze only)
+- **`speccore status-panel`** replaces dashboard/progress/report
+- **`speccore done`** replaces archive
+- **`speccore ops`** replaces history
+- **Commands**: 52 total (19 in simple mode)
+
+## v5.21.1 (2026-07-28)
+
+### 🔴 Bug Fixes
+- Alias table corrected: dashboard→status-panel, history→ops, archive→done
+- Intent mapping realigned with consolidated commands
+- Doc counts synced across CN + EN
+
+## v5.21.0 (2026-07-25)
+
+### 🔄 Command Consolidation
+- `status-panel` now covers dashboard, progress, and report use cases
+- `done` replaces archive as the standard completion command
+- `ops` replaces history for requirement change tracking
+
 ## v5.6.0 (2026-07-14)
 
 ## v5.6.1 (2026-07-14)
@@ -284,4 +310,4 @@
 | Minor | New commands or modules |
 | Patch | Bug fixes or doc updates |
 
-Current: **v5.20.0**
+Current: **v5.22.0**

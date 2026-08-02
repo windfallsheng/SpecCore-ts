@@ -8,6 +8,10 @@ export interface TaskNewOptions {
     backendOnly?: boolean;
     frontendOnly?: boolean;
     iteration?: string;
+    batch?: string;
+    batchFile?: string;
+    interactive?: boolean;
+    schedule?: string;
 }
 export declare function taskNewCommand(options: TaskNewOptions): Promise<void>;
 //# sourceMappingURL=new.d.ts.map

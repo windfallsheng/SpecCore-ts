@@ -68,7 +68,7 @@ Metadata, state, and relationships — system dependencies.
 
 ```bash
 speccore change --req=REQ-001 --desc="Modify description"
-speccore update --task=T-001 --status=completed
+speccore update -t T-001 --status=completed
 ```
 
 ---
@@ -88,12 +88,12 @@ speccore update --task=T-001 --status=completed
 | What You Want | ✅ Right Way | ❌ Wrong Way |
 | :--- | :--- | :--- |
 | Edit requirements | Edit `REQ.md` → `speccore sync` | Edit .json directly |
-| Mark task complete | `speccore update --task=T-001 --status=completed` | Edit PROJECT_GRAPH.md |
+| Mark task complete | `speccore update -t T-001 --status=completed` | Edit PROJECT_GRAPH.md |
 | Add API endpoint | Edit `API_CONTRACT.yaml` → `speccore validate` | Commit without validation |
-| Change assignee | `speccore update --task=T-001 --assignee=Zhang` | Edit PROJECT_GRAPH.md |
+| Change assignee | `speccore update -t T-001 --assignee=Zhang` | Edit PROJECT_GRAPH.md |
 | Add global req | Edit `GLOBAL/REQUIREMENT.md` → `speccore sync-global` | Edit without syncing |
 | Rebuild index | `speccore index-update` | Manually edit INDEX.md |
-| Delete task | `speccore delete --task=T-001` | rm -rf |
+| Delete task | `speccore delete -t T-001` | rm -rf |
 | Rename | `speccore rename --target=old --new-name=new` | mv + edit all refs |
 
 ---

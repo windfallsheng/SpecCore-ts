@@ -38,7 +38,6 @@ const package_json_1 = require("../package.json");
 const fs_1 = require("fs");
 const path_1 = require("path");
 const init_1 = require("./commands/init");
-const import_1 = require("./commands/import");
 const validate_1 = require("./commands/validate");
 const status_1 = require("./commands/status");
 const health_1 = require("./commands/health");
@@ -49,7 +48,6 @@ const plan_1 = require("./commands/plan");
 const execute_1 = require("./commands/execute");
 // 新增命令
 const ask_1 = require("./commands/ask");
-const bugfix_1 = require("./commands/bugfix");
 const change_1 = require("./commands/change");
 const sync_1 = require("./commands/sync");
 const pattern_1 = require("./commands/pattern");
@@ -98,6 +96,8 @@ const delete_1 = require("./commands/delete");
 // v5.6.0 新增
 const search_1 = require("./commands/search");
 const watch_1 = require("./commands/watch");
+// v5.21.0 任务调度
+const schedule_1 = require("./commands/schedule");
 const i18n_1 = require("./i18n");
 commander_1.program
     .name('speccore')
@@ -127,7 +127,7 @@ const MODE = readMode();
 const SIMPLE_COMMANDS = new Set([
     'ask', 'init', 'doc2spec', 'analyze', 'split', 'execute',
     'pr', 'done', 'status-panel', 'dev',
-    'iteration', 'task', 'plan', 'ops', 'import', 'change', 'bugfix', 'validate', 'rename',
+    'iteration', 'task', 'plan', 'ops', 'change', 'validate', 'rename',
 ]);
 /** 简洁模式下过滤 help 命令列表 */
 function filterCommands(commands) {
@@ -151,7 +151,7 @@ commander_1.program
     .description('First-time setup guide (interactive)')
     .option('--force', 'Force re-initialization')
     .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
-    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
+    .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
     .action(welcome_1.welcomeCommand);
 commander_1.program
     .command('status-panel')
@@ -196,7 +196,7 @@ commander_1.program
     .option('-i, --iteration <iteration>', 'Target iteration')
     .option('--force', 'Auto-execute the next step without confirmation')
     .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
-    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
+    .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
     .action(dev_1.devCommand);
 commander_1.program;
 // ================================================================
@@ -210,26 +210,8 @@ commander_1.program
     .option('--full', 'Full mode: all 68+ commands (default: simple)')
     .option('--force', 'Force overwrite existing configuration')
     .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
-    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
+    .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
     .action(init_1.initCommand);
-commander_1.program
-    .command('import')
-    .alias('imp')
-    .description('导入存量项目到全局层（自动检测覆盖/增量）')
-    .option('--source <source>', 'Source type: code, prd, prototype, all', 'all')
-    .option('--path <path>', 'Project source path', './')
-    .option('--url <url>', 'Prototype URL')
-    .option('-i, --iteration <iteration>', 'Target iteration name')
-    .option('--project <name>', 'Project name for global layer import')
-    .option('--type <type>', 'Project type: backend, web, h5, miniapp', 'backend')
-    .option('--scope <scope>', 'Selective import: all, core, api', 'all')
-    .option('--ignore <packages>', 'Ignore specific packages (comma-separated)')
-    .option('--update', '增量更新：追加新 API，保留已有')
-    .option('--force', '强制覆盖：重新扫描并替换全部')
-    .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
-    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
-    .option('--interactive', '交互式：预览变更 → 确认覆盖/增量')
-    .action(import_1.importCommand);
 commander_1.program
     .command('migrate')
     .alias('mg')
@@ -237,7 +219,7 @@ commander_1.program
     .option('--dry-run', 'Preview migration, no changes')
     .option('--force', 'Skip confirmation')
     .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
-    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
+    .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
     .action(migrate_1.migrateCommand);
 // ================================================================
 // 📋 期次管理
@@ -273,20 +255,6 @@ taskCmd;
 // 完整需求交付
 commander_1.program;
 // Bug 修复
-commander_1.program
-    .command('bugfix')
-    .alias('bf')
-    .description('Bug修复：单条 / 批量导入 + 夜间调度')
-    .option('-n, --name <name>', 'Bug name')
-    .option('-d, --desc <desc>', 'Bug description')
-    .option('--batch <bugs>', '批量：换行分隔的多个 Bug 描述')
-    .option('--batch-file <path>', '从 Excel/CSV 文件导入')
-    .option('--interactive', '预览 → 编辑 → 确认 → 创建')
-    .option('--schedule <mode>', '调度模式：night / now', 'now')
-    .option('--task-id <id>', 'Task ID')
-    .option('-i, --iteration <iteration>', 'Target iteration')
-    .option('--affected-task <task>', 'Affected task for regression')
-    .action(bugfix_1.bugfixCommand);
 // 技术调研
 commander_1.program;
 commander_1.program
@@ -336,7 +304,7 @@ commander_1.program
     .option('-i, --iteration <iteration>', 'Target iteration')
     .option('--force', 'Skip preview and execute directly')
     .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
-    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
+    .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
     .option('--strict', 'Pre-flight check: review req/tech/test before code gen')
     .option('--scheduled', '夜间调度：只执行标记为 queue 的任务')
     .option('--verify', '生成代码后自动检查 TEST/REVIEW/DEPLOY → 最多3轮自动修复')
@@ -367,7 +335,7 @@ commander_1.program
     .option('--dry-run', 'Preview impact without modifying')
     .option('--force', 'Skip preview and apply directly')
     .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
-    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
+    .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
     .option('--interactive', 'Interactive: preview → adjust → confirm → apply')
     .action(change_1.changeCommand);
 commander_1.program
@@ -380,7 +348,7 @@ commander_1.program
     .option('--dry-run', 'Preview differences without modifying')
     .option('--force', 'Skip preview')
     .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
-    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
+    .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
     .option('--detect', 'Detect code-spec discrepancies (read-only, no changes)')
     .action(sync_1.syncCommand);
 // ================================================================
@@ -485,7 +453,7 @@ commander_1.program
     .option('--name <name>', 'Iteration name (required)')
     .option('--force', 'Force overwrite existing iteration')
     .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
-    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
+    .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
     .action(iteration_from_global_1.iterationFromGlobalCommand);
 commander_1.program
     .command('doc2spec')
@@ -506,7 +474,7 @@ commander_1.program
     .option('--dry-run', 'Preview changes without applying')
     .option('--force', 'Skip preview and execute')
     .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
-    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
+    .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
     .action(sync_global_1.syncGlobalCommand);
 // ================================================================
 // 📦 模式保存
@@ -523,7 +491,7 @@ commander_1.program
     .option('-i, --iteration <iteration>', 'Target iteration')
     .option('--force', 'Overwrite existing pattern')
     .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
-    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
+    .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
     .action(pattern_1.patternCommand);
 // ================================================================
 // 🔙 回滚
@@ -571,16 +539,19 @@ commander_1.program
     .option('--restore <name>', 'Restore to baseline')
     .option('--req <id>', 'Requirement ID for rollback')
     .action(baseline_1.baselineCommand);
-commander_1.program;
 commander_1.program
     .command('analyze')
     .alias('al')
-    .description('Analyze requirements: completeness + code mapping + architecture impact → ANALYSIS.md')
-    .option('-i, --iteration <iteration>', 'Target iteration')
-    .option('-o, --output <file>', 'Output filename', 'ANALYSIS.md')
-    .option('--auto', 'Non-interactive: generate report directly (default)')
-    .option('--interactive', 'Interactive: AI asks questions → you answer → refine')
-    .option('-t, --task <task>', 'Per-task analysis: enriches TECH/TEST/REVIEW for one task')
+    .description('统一分析: 需求文档 + 源码目录 → 按范围(全局/期次/任务)生成分析报告')
+    .option('-I, --iteration <iteration>', '目标期次 (scope=iteration|task 时必填)')
+    .option('-t, --task <task-id>', '任务 ID (--scope task 快捷方式)')
+    .option('--scope <scope>', '输出范围: global(全局文档) | iteration(期次, 默认) | task(任务)')
+    .option('--src, --source <dirs>', '源码目录 (逗号分隔: --src backend/src,frontend/src)')
+    .option('--req, --requirements <files>', '需求文档 (逗号分隔: --req docs/a.md,docs/b.md)')
+    .option('-o, --output <file>', '输出文件名 (覆盖默认)')
+    .option('--depth <depth>', '分析深度: quick | normal(默认) | deep')
+    .option('--auto', '非交互: 直接生成报告 (默认)')
+    .option('--ask', '交互: AI 提问 → 回答 → 优化')
     .action(analyze_1.analyzeCommand);
 commander_1.program
     .command('audit')
@@ -601,7 +572,7 @@ commander_1.program
     .option('--replacement <replacement>', 'Batch replacement string')
     .option('--force', 'Skip preview and execute')
     .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
-    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
+    .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
     .action(rename_1.renameCommand);
 // ================================================================
 // 🆕 v4.0.0 新增命令
@@ -615,6 +586,10 @@ commander_1.program
     .option('--backend-only', 'Create backend only')
     .option('--frontend-only', 'Create frontend only')
     .option('-i, --iteration <iteration>', 'Target iteration')
+    .option('--batch <tasks>', '批量：换行分隔的多个任务描述')
+    .option('--batch-file <path>', '从 Excel/CSV 文件批量导入')
+    .option('--interactive', 'Preview → edit → confirm → create')
+    .option('--schedule <mode>', '调度模式：night / now', 'now')
     .action(new_1.taskNewCommand);
 commander_1.program;
 commander_1.program
@@ -685,7 +660,7 @@ commander_1.program
     .option('-i, --iteration <name>', 'Target iteration')
     .option('--force', 'Skip confirmation')
     .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
-    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
+    .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
     .action(update_1.updateCommand);
 // v5.3.0 新增命令
 commander_1.program
@@ -737,7 +712,7 @@ commander_1.program
     .option('--iteration <name>', 'Iteration name to delete')
     .option('--force', 'Skip confirmation prompt')
     .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
-    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
+    .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
     .action(delete_1.deleteCommand);
 // v5.6.0 新增命令
 commander_1.program
@@ -754,19 +729,55 @@ commander_1.program
     .option('--task <id>', 'Watch a specific task')
     .option('--iteration <name>', 'Watch a specific iteration')
     .action(watch_1.watchCommand);
+// ── 调度任务管理 ──
+const scheduleCmd = commander_1.program
+    .command('schedule')
+    .alias('sc')
+    .description('定时调度任务管理');
+scheduleCmd
+    .command('create')
+    .description('创建定时调度任务')
+    .option('-t, --task <task>', '指定 Task ID')
+    .option('--all', '批量执行所有任务')
+    .option('-i, --iteration <iteration>', '目标期次')
+    .option('--at <datetime>', '执行时间: "YYYY-MM-DD HH:mm:ss"')
+    .option('-n, --name <name>', '任务名称')
+    .action(schedule_1.scheduleCreateCommand);
+scheduleCmd
+    .command('list')
+    .description('查看调度任务列表')
+    .option('--status <status>', '按状态筛选: pending|running|completed|failed|cancelled')
+    .action(schedule_1.scheduleListCommand);
+scheduleCmd
+    .command('cancel')
+    .description('取消调度任务')
+    .option('--id <id>', '调度任务 ID')
+    .action(schedule_1.scheduleCancelCommand);
+scheduleCmd
+    .command('delete')
+    .description('删除调度记录')
+    .option('--id <id>', '调度任务 ID')
+    .action(schedule_1.scheduleDeleteCommand);
+scheduleCmd
+    .command('daemon')
+    .description('守护进程管理 [start|stop|restart|status]')
+    .argument('[action]', 'start | stop | restart | status', 'status')
+    .option('--foreground', '前台运行守护进程')
+    .action((action, options) => {
+    return (0, schedule_1.scheduleDaemonCommand)({ action, foreground: options.foreground });
+});
 // Parse arguments
 // ── 帮助分层：核心命令前置 ──
 commander_1.program.addHelpText('beforeAll', `
 ┌───────────────────────────────────────────────────┐
 │  🔵 核心 9 步（完整闭环）                            │
-│  init → iteration create → doc2spec → import     │
+│  init → iteration create → doc2spec               │
 │  → analyze → split → plan → execute → pr → done  │
 ├───────────────────────────────────────────────────┤
 │  🚀 speccore init             初始化项目            │
 │  📅 speccore iteration create  新建期次             │
 │  📝 speccore doc2spec         导入需求文档           │
-│  📥 speccore import           存量项目→全局层          │
-│  🔍 speccore analyze          需求分析+宪法检查        │
+│  🔍 speccore analyze          需求分析+代码审查        │
 │  📦 speccore split            拆分为独立Task          │
 │  📋 speccore plan             生成执行计划            │
 │  💻 speccore execute          执行开发               │
@@ -777,8 +788,7 @@ commander_1.program.addHelpText('beforeAll', `
 │  💬 speccore ask \"...\" → 自然语言入口              │
 │  📊 speccore status-panel → 可视化看板              │
 │  🤖 speccore dev → 智能检测+级联执行                  │
-│  📥 speccore import → 存量项目导入 + 覆盖/增量       │
-│  🔍 speccore analyze --interactive → AI 对话式分析  │
+│  🔍 speccore analyze --depth deep --scope global → 全局代码健康  │
 └───────────────────────────────────────────────────┘
 `);
 commander_1.program.addHelpText('afterAll', `
