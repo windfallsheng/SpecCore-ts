@@ -942,20 +942,40 @@ const AGENT_FORMATS: Record<string, { prefix: string; suffix: string; model?: st
 };
 
 function buildAgentContext(tasks: TaskState[], agent: string): string {
-  const format = AGENT_FORMATS[agent.toLowerCase()] || { prefix: "Generate code based on:\n\n", suffix: "\n\nFollow all Constitution rules." };
+  const format = AGENT_FORMATS[agent.toLowerCase()] || { prefix: "## Spec-Driven Development Task\n\n", suffix: "\n\n---\nFollow progressive disclosure: CAPABILITIES → INDEX → Task Specs → Rules" };
   let ctx = format.prefix;
-  
+
+  // 1. Progressive disclosure: capabilities first
+  ctx += `\n### Step 0: Read capabilities (always first)\n`;
+  ctx += `File: .speccore/CAPABILITIES.md\n`;
+  ctx += `→ Know what rules, APIs, services exist\n\n`;
+
+  // 2. Per-task context
   for (const task of tasks) {
-    ctx += `## Task: ${task.id} - ${task.name || task.id}\n`;
-    ctx += `- Status: ${task.status}\n`;
-    ctx += `- Priority: ${task.priority}\n`;
-    ctx += `\n> Files: Iteration/${task.id}/backend/REQ.md TECH.md TEST.md REVIEW.md API_CONTRACT.yaml\n\n`;
+    ctx += `### Task: ${task.id} — ${task.name || task.id}\n`;
+    ctx += `Status: ${task.status} | Priority: ${task.priority} | Type: ${task.type}\n\n`;
+    
+    // Progressive loading order
+    ctx += `**Read in this order (progressive disclosure):**\n`;
+    ctx += `1. \`期次-*/${task.id}/backend/TASK.md\` — task overview + deliverables checklist\n`;
+    ctx += `2. \`期次-*/${task.id}/backend/REQ.md\` — requirements + acceptance criteria\n`;
+    ctx += `3. \`期次-*/${task.id}/backend/TECH.md\` — tech design + architecture\n`;
+    ctx += `4. \`期次-*/${task.id}/_shared/API_CONTRACT.yaml\` — API contract (if exists)\n\n`;
+
+    ctx += `**Supplementary (read only if needed):**\n`;
+    ctx += `- TEST.md (test cases) | REVIEW.md (review checklist)\n`;
+    ctx += `- SCHEMA.md (DB schema) | ADR.md (arch decisions)\n`;
+    ctx += `- RISK.md (risks+rollback) | DEPS.md (dependencies) | MONITOR.md (monitoring)\n`;
+    ctx += `- ERROR_CODES.md (error codes) | DEPLOY.md (deployment)\n\n`;
+
+    ctx += `**Frontend (if exists):**\n`;
+    ctx += `- frontend/{platform}/COMPONENT_TREE.md | ROUTES.md | STATE.md | STYLE_GUIDE.md\n\n`;
   }
-  
-  ctx += `\n## Constitution Rules (from .speccore/PROJECT/CONSTITUTION.md)\n`;
-  ctx += `- Follow all mandatory (🔒) rules strictly\n`;
-  ctx += `- API must follow RESTful conventions\n`;
-  ctx += `- All code must include error handling and validation\n`;
+
+  // 3. Global rules (load last, only if needed)
+  ctx += `### Step N: Global rules (load last)\n`;
+  ctx += `File: .speccore/CONSTITUTION.md\n`;
+  ctx += `File: .speccore/RULES/CODE_REVIEW.md\n`;
   
   ctx += format.suffix;
   return ctx;
