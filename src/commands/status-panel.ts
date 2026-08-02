@@ -284,9 +284,11 @@ function buildHtmlDashboard(data: any): string {
 <title>SpecCore — ${data.project}</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;600;700&display=swap');
-:root{--cyan:#00f0ff;--blue:#3b82f6;--green:#00ff88;--purple:#a78bfa;--orange:#f59e0b;--bg:#060b14;--card:rgba(8,16,32,.85);--border:rgba(0,240,255,.12)}
+[data-theme="cyber"]{--cyan:#00f0ff;--blue:#3b82f6;--green:#00ff88;--purple:#a78bfa;--orange:#f59e0b;--bg:#060b14;--card:rgba(8,16,32,.85);--border:rgba(0,240,255,.12);--text:#c4d5e7;--muted:#4a5568;--surface:rgba(17,25,40,.7);--hover:rgba(0,240,255,.02)}
+[data-theme="light"]{--cyan:#2563eb;--blue:#3b82f6;--green:#059669;--purple:#7c3aed;--orange:#d97706;--bg:#f8fafc;--card:rgba(255,255,255,.95);--border:rgba(0,0,0,.08);--text:#1e293b;--muted:#94a3b8;--surface:rgba(255,255,255,.95);--hover:rgba(37,99,235,.02)}
+[data-theme="mono"]{--cyan:#64748b;--blue:#475569;--green:#334155;--purple:#1e293b;--orange:#94a3b8;--bg:#0f172a;--card:#1e293b;--border:#334155;--text:#e2e8f0;--muted:#64748b;--surface:#1e293b;--hover:rgba(100,116,139,.05)}
 *,*::after,*::before{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:#c4d5e7;min-height:100vh;overflow-x:hidden}
+.theme-sw{position:fixed;top:16px;right:16px;z-index:100;display:flex;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px;backdrop-filter:blur(10px)}.theme-sw button{width:32px;height:32px;border-radius:16px;border:none;cursor:pointer;transition:all .2s;font-size:14px;display:flex;align-items:center;justify-content:center;background:transparent}.theme-sw button:hover{transform:scale(1.1)}.theme-sw button.active{box-shadow:0 0 0 2px var(--cyan)}body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
 .scanlines{position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,240,255,.015) 2px,rgba(0,240,255,.015) 4px);pointer-events:none;z-index:999}
 .stars{position:fixed;inset:0;background:radial-gradient(1px 1px at 10% 20%,rgba(255,255,255,.4),transparent),radial-gradient(1px 1px at 25% 65%,rgba(255,255,255,.3),transparent),radial-gradient(1.5px 1.5px at 50% 30%,rgba(0,240,255,.5),transparent),radial-gradient(1px 1px at 70% 55%,rgba(255,255,255,.35),transparent),radial-gradient(1px 1px at 85% 15%,rgba(168,85,247,.4),transparent),radial-gradient(1.5px 1.5px at 15% 80%,rgba(0,240,255,.45),transparent),radial-gradient(1px 1px at 60% 85%,rgba(255,255,255,.3),transparent),radial-gradient(1px 1px at 90% 75%,rgba(0,255,136,.4),transparent);pointer-events:none;z-index:0}
 .grid-pattern{position:fixed;inset:0;background-image:linear-gradient(rgba(0,240,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,240,255,.03) 1px,transparent 1px);background-size:60px 60px;pointer-events:none;z-index:0}
@@ -295,11 +297,11 @@ main{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:40px 32p
 .header::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scan 3s linear infinite}
 @keyframes scan{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
 .header-left h1{font-family:'Orbitron',sans-serif;font-size:26px;font-weight:900;background:linear-gradient(135deg,var(--cyan),#818cf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:2px;text-shadow:0 0 40px rgba(0,240,255,.3)}
-.header-left .subtitle{color:#4a5568;font-size:12px;margin-top:4px;letter-spacing:1px}
+.header-left .subtitle{color:var(--muted);font-size:12px;margin-top:4px;letter-spacing:1px}
 .header-right{display:flex;gap:16px;align-items:center}
 .header-stat{text-align:center;padding:0 20px;border-left:1px solid rgba(0,240,255,.1)}
 .header-stat .num{font-family:'Orbitron',sans-serif;font-size:22px;font-weight:700;color:var(--cyan);text-shadow:0 0 20px rgba(0,240,255,.4)}
-.header-stat .label{font-size:10px;color:#4a5568;text-transform:uppercase;letter-spacing:1px}
+.header-stat .label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
 .phase-indicator{display:flex;align-items:center;gap:8px;padding:8px 20px;border:1px solid rgba(0,240,255,.2);border-radius:20px;background:rgba(0,240,255,.05)}
 .phase-indicator .dot{width:8px;height:8px;border-radius:50%;background:var(--cyan);box-shadow:0 0 12px var(--cyan);animation:pulse 2s ease-in-out infinite}
 @keyframes pulse{0%,100%{box-shadow:0 0 12px var(--cyan)}50%{box-shadow:0 0 24px var(--cyan),0 0 48px rgba(0,240,255,.3)}}
@@ -309,7 +311,7 @@ main{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:40px 32p
 .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:28px;backdrop-filter:blur(20px);position:relative;overflow:hidden;transition:all .3s}
 .card:hover{border-color:rgba(0,240,255,.25);box-shadow:0 0 30px rgba(0,240,255,.08),inset 0 0 30px rgba(0,240,255,.02)}
 .card-icon{font-size:28px;margin-bottom:16px;display:block}
-.card h3{font-size:11px;font-weight:600;color:#4a5568;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px}
+.card h3{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:8px}
 .card .big-num{font-family:'Orbitron',sans-serif;font-size:42px;font-weight:900;line-height:1}
 .card .big-num.cyan{color:var(--cyan);text-shadow:0 0 30px rgba(0,240,255,.3)}
 .card .big-num.green{color:var(--green);text-shadow:0 0 30px rgba(0,255,136,.3)}
@@ -326,28 +328,28 @@ main{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:40px 32p
 .panel-title{font-family:'Orbitron',sans-serif;font-size:14px;font-weight:700;color:var(--cyan);letter-spacing:2px;margin-bottom:20px;display:flex;align-items:center;gap:10px}
 .panel-title::before{content:'◆';font-size:10px;color:var(--cyan);text-shadow:0 0 8px var(--cyan)}
 table{width:100%;border-collapse:collapse}
-th{padding:14px 16px;font-size:10px;font-weight:600;color:#4a5568;text-transform:uppercase;letter-spacing:1.5px;border-bottom:1px solid rgba(0,240,255,.08);text-align:left}
+th{padding:14px 16px;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;border-bottom:1px solid rgba(0,240,255,.08);text-align:left}
 td{padding:14px 16px;border-bottom:1px solid rgba(0,240,255,.03);font-size:13px;transition:all .2s}
 tr:hover td{background:rgba(0,240,255,.02)}
-td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
+td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600}
 .tx-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:4px;font-size:11px;font-weight:600;letter-spacing:.5px}
 .tx-badge::before{content:'';width:6px;height:6px;border-radius:50%}
 .tx-done{background:rgba(0,255,136,.08);color:var(--green);border:1px solid rgba(0,255,136,.2)}
 .tx-done::before{background:var(--green);box-shadow:0 0 8px var(--green)}
 .tx-active{background:rgba(0,240,255,.08);color:var(--cyan);border:1px solid rgba(0,240,255,.2)}
 .tx-active::before{background:var(--cyan);box-shadow:0 0 8px var(--cyan);animation:pulse 2s infinite}
-.tx-wait{background:rgba(100,116,139,.08);color:#64748b;border:1px solid rgba(100,116,139,.2)}
+.tx-wait{background:rgba(100,116,139,.08);color:var(--muted);border:1px solid rgba(100,116,139,.2)}
 .tx-wait::before{background:#64748b}
 .type-t{display:inline-block;padding:3px 10px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase}
 .type-feat{background:rgba(59,130,246,.12);color:#60a5fa}
 .type-bug{background:rgba(245,158,11,.12);color:#fbbf24}
 .type-res{background:rgba(168,85,247,.12);color:#c084fc}
-.footer{display:flex;justify-content:space-between;align-items:center;margin-top:28px;padding:16px 0;border-top:1px solid rgba(0,240,255,.06);color:#4a5568;font-size:11px;letter-spacing:1px}
+.footer{display:flex;justify-content:space-between;align-items:center;margin-top:28px;padding:16px 0;border-top:1px solid rgba(0,240,255,.06);color:var(--muted);font-size:11px;letter-spacing:1px}
 .data-stream{position:absolute;bottom:0;left:0;right:0;height:30px;background:linear-gradient(transparent,rgba(0,240,255,.02));overflow:hidden}
 .data-stream span{position:absolute;color:rgba(0,240,255,.15);font-family:'JetBrains Mono',monospace;font-size:10px;white-space:nowrap;animation:stream 20s linear infinite}
 @keyframes stream{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}
 
-.fs-btn{position:absolute;top:10px;right:10px;width:28px;height:28px;border-radius:6px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);color:#4a5568;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .2s;z-index:10;opacity:0}
+.fs-btn{position:absolute;top:10px;right:10px;width:28px;height:28px;border-radius:6px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);color:var(--muted);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .2s;z-index:10;opacity:0}
 .card:hover .fs-btn,.panel:hover .fs-btn{opacity:1}
 .fs-btn:hover{background:rgba(0,240,255,.1);border-color:rgba(0,240,255,.3);color:var(--cyan)}
 .fs-fullscreen{position:fixed!important;inset:0!important;z-index:1000!important;border-radius:0!important;overflow:auto!important;background:#080e1a!important;backdrop-filter:none!important;opacity:1!important;padding:32px!important}
@@ -357,6 +359,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
 </style>
 </head>
 <body>
+<div class="theme-sw"><button onclick="setTheme('cyber')" title="Cyber Dark">🌙</button><button onclick="setTheme('light')" title="Light Studio">☀️</button><button onclick="setTheme('mono')" title="Mono Tech">⬛</button></div>
 <div class="grid-pattern"></div><div class="stars"></div><div class="scanlines"></div>
 <main>
   <div class="header">
@@ -376,7 +379,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
     <div class="panel-title">ITERATION TIMELINE</div>
     <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
       <div style="flex:1;min-width:300px">
-        <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:11px;color:#4a5568">
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:11px;color:var(--muted)">
           <span>${data.iterationStart || "—"}</span>
           <span style="color:var(--cyan)">TODAY</span>
           <span>${data.iterationEnd || "—"}</span>
@@ -385,7 +388,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
           <div style="position:absolute;top:0;left:${data.timeProgress || 0}%;width:2px;height:100%;background:var(--cyan);box-shadow:0 0 8px var(--cyan);z-index:2"></div>
           <div style="width:${data.timeProgress || 0}%;height:100%;background:linear-gradient(90deg,rgba(0,240,255,.3),rgba(0,240,255,.6));border-radius:4px;transition:width 1s"></div>
         </div>
-        <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:10px;color:#4a5568">
+        <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:10px;color:var(--muted)">
           <span>TIME ELAPSED: ${data.timeProgress || 0}%</span>
           <span style="color:var(--orange)">DAYS LEFT: ${data.daysLeft || 0}</span>
         </div>
@@ -393,15 +396,15 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
       <div style="display:flex;gap:16px">
         <div style="text-align:center;padding:12px 20px;background:rgba(0,240,255,.05);border:1px solid rgba(0,240,255,.15);border-radius:8px">
           <div style="font-family:Orbitron;font-size:20px;color:var(--cyan);text-shadow:0 0 12px rgba(0,240,255,.3)">${data.daysLeft || 0}</div>
-          <div style="font-size:10px;color:#4a5568;margin-top:4px">DAYS LEFT</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:4px">DAYS LEFT</div>
         </div>
         <div style="text-align:center;padding:12px 20px;background:rgba(0,255,136,.05);border:1px solid rgba(0,255,136,.15);border-radius:8px">
           <div style="font-family:Orbitron;font-size:20px;color:var(--green);text-shadow:0 0 12px rgba(0,255,136,.3)">${donePct}%</div>
-          <div style="font-size:10px;color:#4a5568;margin-top:4px">COMPLETE</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:4px">COMPLETE</div>
         </div>
         <div style="text-align:center;padding:12px 20px;background:rgba(168,85,247,.05);border:1px solid rgba(168,85,247,.15);border-radius:8px">
           <div style="font-family:Orbitron;font-size:20px;color:var(--purple);text-shadow:0 0 12px rgba(168,85,247,.3)">${total}</div>
-          <div style="font-size:10px;color:#4a5568;margin-top:4px">TASKS</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:4px">TASKS</div>
         </div>
       </div>
     </div>
@@ -415,7 +418,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
       <h3>Phase Progress</h3>
       <div class="big-num cyan">${phaseLabel}</div>
       <div class="tech-bar"><div class="tech-bar-fill cyan" style="width:${phasePct}%"></div></div>
-      <div style="color:#4a5568;font-size:11px;margin-top:8px;letter-spacing:1px">${phasePct}% COMPLETE</div>
+      <div style="color:var(--muted);font-size:11px;margin-top:8px;letter-spacing:1px">${phasePct}% COMPLETE</div>
     </div>
 
     <div class="card">
@@ -429,7 +432,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
         <div class="stacked-seg" style="width:${inProgressPct}%;background:linear-gradient(180deg,#0c4a6e,var(--cyan))">${inProgressPct>10?inProgress:''}</div>
         <div class="stacked-seg" style="width:${pendingPct}%;background:rgba(255,255,255,.03)">${pendingPct>10?pending:''}</div>
       </div>
-      <div style="display:flex;gap:20px;margin-top:12px;font-size:11px;color:#4a5568">
+      <div style="display:flex;gap:20px;margin-top:12px;font-size:11px;color:var(--muted)">
         <span>■ ${done} DONE</span><span>■ ${inProgress} ACTIVE</span><span>■ ${pending} QUEUED</span>
       </div>
     </div>
@@ -441,7 +444,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
       <h3>Completion Rate</h3>
       <div class="big-num green">${donePct}%</div>
       <div class="tech-bar"><div class="tech-bar-fill green" style="width:${donePct}%"></div></div>
-      <div style="color:#4a5568;font-size:11px;margin-top:8px;letter-spacing:1px">${done}/${total} TASKS RESOLVED</div>
+      <div style="color:var(--muted);font-size:11px;margin-top:8px;letter-spacing:1px">${done}/${total} TASKS RESOLVED</div>
     </div>
   </div>
 
@@ -464,9 +467,9 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
           <text x="80" y="95" text-anchor="middle" font-size="10" fill="#4a5568" letter-spacing="1">COMPLETE</text>
         </svg>
         <div style="display:flex;flex-direction:column;gap:12px">
-          <div style="display:flex;align-items:center;gap:8px"><div style="width:10px;height:10px;border-radius:2px;background:var(--green);box-shadow:0 0 8px var(--green)"></div><span style="font-size:12px;color:#c4d5e7">RESOLVED</span><span style="font-family:Orbitron;font-size:14px;color:var(--green);margin-left:auto">${done}</span></div>
-          <div style="display:flex;align-items:center;gap:8px"><div style="width:10px;height:10px;border-radius:2px;background:var(--cyan);box-shadow:0 0 8px var(--cyan)"></div><span style="font-size:12px;color:#c4d5e7">ACTIVE</span><span style="font-family:Orbitron;font-size:14px;color:var(--cyan);margin-left:auto">${inProgress}</span></div>
-          <div style="display:flex;align-items:center;gap:8px"><div style="width:10px;height:10px;border-radius:2px;background:#4a5568"></div><span style="font-size:12px;color:#64748b">QUEUED</span><span style="font-family:Orbitron;font-size:14px;color:#64748b;margin-left:auto">${pending}</span></div>
+          <div style="display:flex;align-items:center;gap:8px"><div style="width:10px;height:10px;border-radius:2px;background:var(--green);box-shadow:0 0 8px var(--green)"></div><span style="font-size:12px;color:var(--text)">RESOLVED</span><span style="font-family:Orbitron;font-size:14px;color:var(--green);margin-left:auto">${done}</span></div>
+          <div style="display:flex;align-items:center;gap:8px"><div style="width:10px;height:10px;border-radius:2px;background:var(--cyan);box-shadow:0 0 8px var(--cyan)"></div><span style="font-size:12px;color:var(--text)">ACTIVE</span><span style="font-family:Orbitron;font-size:14px;color:var(--cyan);margin-left:auto">${inProgress}</span></div>
+          <div style="display:flex;align-items:center;gap:8px"><div style="width:10px;height:10px;border-radius:2px;background:#4a5568"></div><span style="font-size:12px;color:var(--muted)">QUEUED</span><span style="font-family:Orbitron;font-size:14px;color:var(--muted);margin-left:auto">${pending}</span></div>
         </div>
       </div>
     </div>
@@ -481,7 +484,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
         const color = pct === 100 ? 'var(--green)' : pct > 50 ? 'var(--cyan)' : '#4a5568';
         const shadow = pct === 100 ? 'var(--green)' : pct > 50 ? 'var(--cyan)' : 'transparent';
         return '<div style="display:flex;align-items:center;gap:10px">' +
-               '<span style="font-size:10px;color:#4a5568;width:60px;text-align:right">' + t.id.split('-').slice(0,2).join('-') + '</span>' +
+               '<span style="font-size:10px;color:var(--muted);width:60px;text-align:right">' + t.id.split('-').slice(0,2).join('-') + '</span>' +
                '<div style="flex:1;height:6px;background:rgba(255,255,255,.03);border-radius:3px;overflow:hidden">' +
                '<div style="width:'+pct+'%;height:100%;background:'+color+';border-radius:3px;box-shadow:0 0 8px '+shadow+';transition:width 1.5s"></div></div>' +
                '<span style="font-family:Orbitron;font-size:11px;color:'+color+';width:32px">'+pct+'%</span></div>';
@@ -602,12 +605,12 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
       <h3 style="margin-bottom:14px">PACE ANALYSIS</h3>
       <div style="text-align:center;padding:12px 0">
         <div style="font-family:Orbitron;font-size:36px;font-weight:900;color:var(--green);text-shadow:0 0 20px rgba(0,255,136,.3)">${{featCount}}</div>
-        <div style="font-size:11px;color:#4a5568;margin-top:4px">FEATURES</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">FEATURES</div>
         <div style="margin-top:12px;font-size:28px;font-weight:900;color:var(--orange);text-shadow:0 0 16px rgba(245,158,11,.3)">${{bugCount}}</div>
-        <div style="font-size:11px;color:#4a5568;margin-top:4px">BUGS</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">BUGS</div>
       </div>
       <div style="margin-top:12px;padding:12px;background:rgba(0,240,255,.04);border-radius:8px;text-align:center">
-        <div style="font-size:11px;color:#4a5568">BUG RATIO</div>
+        <div style="font-size:11px;color:var(--muted)">BUG RATIO</div>
         <div style="font-family:Orbitron;font-size:18px;color:var(--orange);margin-top:2px">{{total > 0 ? Math.round((bugCount)/total*100) : 0}}%</div>
       </div>
     </div>
@@ -616,20 +619,20 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
       <h3 style="margin-bottom:14px">SPRINT ACTIVITY</h3>
       <div style="text-align:center;padding:8px 0">
         <div style="font-size:40px;font-weight:900;background:linear-gradient(135deg,var(--green),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent">+${{addedThisWeek}}</div>
-        <div style="font-size:10px;color:#4a5568;margin-top:4px;letter-spacing:1px">TASKS THIS WEEK</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px;letter-spacing:1px">TASKS THIS WEEK</div>
       </div>
       <div style="margin-top:16px;display:flex;gap:8px">
         <div style="flex:1;text-align:center;padding:8px;background:rgba(0,255,136,.05);border-radius:6px">
           <div style="font-family:Orbitron;font-size:14px;color:var(--green)">${done}</div>
-          <div style="font-size:9px;color:#4a5568">DONE</div>
+          <div style="font-size:9px;color:var(--muted)">DONE</div>
         </div>
         <div style="flex:1;text-align:center;padding:8px;background:rgba(0,240,255,.05);border-radius:6px">
           <div style="font-family:Orbitron;font-size:14px;color:var(--cyan)">${inProgress}</div>
-          <div style="font-size:9px;color:#4a5568">ACTIVE</div>
+          <div style="font-size:9px;color:var(--muted)">ACTIVE</div>
         </div>
         <div style="flex:1;text-align:center;padding:8px;background:rgba(100,116,139,.05);border-radius:6px">
-          <div style="font-family:Orbitron;font-size:14px;color:#64748b">${pending}</div>
-          <div style="font-size:9px;color:#4a5568">QUEUE</div>
+          <div style="font-family:Orbitron;font-size:14px;color:var(--muted)">${pending}</div>
+          <div style="font-size:9px;color:var(--muted)">QUEUE</div>
         </div>
       </div>
     </div>
@@ -647,9 +650,9 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
                    t.status.includes('开发')||t.status==='in_progress'?'ACTIVE':'QUEUED';
         const typeCls = (t.type||'').includes('bug')?'type-bug':(t.type||'').includes('research')?'type-res':'type-feat';
         const dur = ['2.5h','3.2h','—','1.8h','—'][i]||'—';
-        return '<tr><td class="code">'+t.id+'</td><td><span class="tx-badge '+cls+'">'+st+'</span></td><td><span class="type-t '+typeCls+'">'+(t.type||'FEAT')+'</span></td><td style="font-family:JetBrains Mono,monospace;color:#4a5568">'+dur+'</td></tr>';
+        return '<tr><td class="code">'+t.id+'</td><td><span class="tx-badge '+cls+'">'+st+'</span></td><td><span class="type-t '+typeCls+'">'+(t.type||'FEAT')+'</span></td><td style="font-family:JetBrains Mono,monospace;color:var(--muted)">'+dur+'</td></tr>';
       }).join('')}
-      ${!tasks.length? '<tr><td colspan="4" style="text-align:center;padding:40px;color:#4a5568">NO TASK DATA</td></tr>' : ''}
+      ${!tasks.length? '<tr><td colspan="4" style="text-align:center;padding:40px;color:var(--muted)">NO TASK DATA</td></tr>' : ''}
       </tbody>
     </table>
   </div>
@@ -690,6 +693,13 @@ document.querySelectorAll('.card,.panel').forEach(el=>{
   el.style.position=el.style.position||'relative';
   el.appendChild(btn);
 });
+</script>
+
+
+<script>
+(function(){var t=localStorage.getItem('speccore-theme')||'cyber';document.documentElement.setAttribute('data-theme',t)})();
+function setTheme(t){document.documentElement.setAttribute('data-theme',t);localStorage.setItem('speccore-theme',t);document.querySelectorAll('.theme-sw button').forEach((b,i)=>{b.classList.toggle('active',['cyber','light','mono'][i]===t)});}
+document.querySelectorAll('.theme-sw button').forEach((b,i)=>{b.classList.toggle('active',['cyber','light','mono'][i]===(localStorage.getItem('speccore-theme')||'cyber'))});
 </script>
 
 </body></html>`;}
