@@ -9,7 +9,7 @@
 ### 1. 安装 Git Hooks（本地）
 
 ```bash
-speccore hooks install
+speccore config hooks
 ```
 
 生成 `.git/hooks/pre-commit` 和 `.git/hooks/pre-push`，提交前自动 validate。
@@ -179,7 +179,7 @@ speccore status-panel                   # 确认状态更新
 | :--- | :--- |
 | CI 报 `No active iteration` | 确保 `.speccore/` 目录提交了，CI 不需要 `init` |
 | sync 找不到代码引用 | 检查 @spec 注释格式：`@spec 任务名 /路径(可选)` |
-| hooks 安装失败 | `speccore hooks install` 需要 `.git/` 目录存在 |
+| hooks 安装失败 | `speccore config hooks` 需要 `.git/` 目录存在 |
 | 多人协作 Spec 冲突 | 把 `.speccore/` 加入 `.gitattributes` 用 merge=union |
 
 ---
