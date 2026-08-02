@@ -92,7 +92,7 @@ Teaches WorkBuddy Speccore commands and best practices:
 | `speccore task new` | `/spec-task-new` | Create multi-platform task |
 | `speccore iteration create` | `/spec-iteration-create` | Create iteration |
 | `speccore execute` | `/spec-execute` | Execute development |
-| `speccore progress` | `/spec-progress` | View progress |
+| `speccore status-panel` | `/spec-progress` | View progress |
 | `speccore validate` | `/spec-validate` | Compliance check |
 | `speccore impact` | `/spec-impact` | Impact analysis |
 | `speccore audit` | `/spec-ai-audit` | AI audit |

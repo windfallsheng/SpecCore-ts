@@ -13,7 +13,7 @@ speccore iteration create --name=<n>  # Create iteration
 speccore task new --platforms=web,h5  # Create multi-platform task
 speccore execute --all --batch-size=3 # Batch execution
 speccore validate                     # Compliance check
-speccore progress --platform=web      # View progress
+speccore status-panel --platform=web      # View progress
 speccore update --task=T-001 --status=completed  # Update status
 speccore sync                         # Reverse sync @spec → TASK.md
 speccore diff --source=A --target=B   # Compare iterations
