@@ -71,8 +71,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
 .fs-btn{position:absolute;top:10px;right:10px;width:28px;height:28px;border-radius:6px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);color:#4a5568;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .2s;z-index:10;opacity:0}
 .card:hover .fs-btn,.panel:hover .fs-btn{opacity:1}
 .fs-btn:hover{background:rgba(0,240,255,.1);border-color:rgba(0,240,255,.3);color:var(--cyan)}
-.fs-fullscreen{position:fixed!important;inset:20px!important;z-index:1000!important;border-radius:16px!important;overflow:auto!important}
-.fs-overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:999}
+.fs-fullscreen{position:fixed!important;inset:0!important;z-index:1000!important;border-radius:0!important;overflow:auto!important;background:#080e1a!important;backdrop-filter:none!important;opacity:1!important;padding:32px!important}
 .fs-tip{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(0,240,255,.1);border:1px solid rgba(0,240,255,.2);padding:8px 20px;border-radius:20px;font-size:11px;color:var(--cyan);z-index:1001;letter-spacing:1px;animation:fadeIn .3s ease;pointer-events:none}
 @keyframes fadeIn{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 
@@ -351,7 +350,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
 
   <div class="footer">
     <span>SPECCORE v5.20.0 · SPEC-DRIVEN DEVELOPMENT</span>
-    <span>EXPORTED: 2026-08-02T12:33:41.172Z</span>
+    <span>EXPORTED: 2026-08-02T12:39:15.334Z</span>
   </div>
 </main>
 
@@ -360,8 +359,7 @@ let fsEl=null;
 function toggleFS(el){
   if(fsEl){closeFS();return}
   fsEl=el;el.classList.add('fs-fullscreen');
-  const ov=document.createElement('div');ov.className='fs-overlay';ov.id='fs-overlay';ov.onclick=closeFS;
-  document.body.appendChild(ov);
+  
   const tip=document.createElement('div');tip.className='fs-tip';tip.id='fs-tip';tip.textContent='ESC or click outside to exit';
   document.body.appendChild(tip);
   setTimeout(()=>{const t=document.getElementById('fs-tip');if(t)t.remove()},3000);
@@ -369,7 +367,6 @@ function toggleFS(el){
 function closeFS(){
   if(!fsEl)return;
   fsEl.classList.remove('fs-fullscreen');
-  const ov=document.getElementById('fs-overlay');if(ov)ov.remove();
   const tip=document.getElementById('fs-tip');if(tip)tip.remove();
   fsEl=null;
 }
