@@ -349,7 +349,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
 
   <div class="footer">
     <span>SPECCORE v5.20.0 · SPEC-DRIVEN DEVELOPMENT</span>
-    <span>EXPORTED: 2026-08-02T13:13:57.598Z</span>
+    <span>EXPORTED: 2026-08-02T13:17:03.214Z</span>
   </div>
 </main>
 
@@ -377,9 +377,28 @@ document.addEventListener('keydown',e=>{
     if(hovered) toggleFS(hovered);
   }
 });
-// Collapsible task lists
+// Collapsible: wrap entire TEAM DETAILS person task lists
 setTimeout(()=>{
-  document.querySelectorAll('*').forEach(el=>{
+  const titles=document.querySelectorAll('.panel-title');
+  titles.forEach(el=>{
+    if(el.textContent.trim()==='TEAM DETAILS'){
+      let next=el.parentElement.nextElementSibling;
+      const items=[];
+      while(next&&next.tagName==='DIV'&&!next.querySelector('.panel-title')){
+        items.push(next);
+        next=next.nextElementSibling;
+      }
+      if(items.length>0){
+        const wrapper=document.createElement('div');
+        wrapper.className='collapsible-body collapsed';
+        items.forEach(it=>wrapper.appendChild(it));
+        el.parentElement.after(wrapper);
+        el.classList.add('collapsible-header','collapsed');
+        el.onclick=()=>{el.classList.toggle('collapsed');wrapper.classList.toggle('collapsed')};
+      }
+    }
+  });
+});
     if(el.tagName==='DIV'&&el.className.includes('panel-title')&&el.textContent.includes('TASK LIST')){
       el.classList.add('collapsible-header');
       let body=el.nextElementSibling;
