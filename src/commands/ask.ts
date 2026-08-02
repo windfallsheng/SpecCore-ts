@@ -34,7 +34,14 @@ export async function askCommand(input: string, _options: SpecOptions): Promise<
   const iteration = await getDefaultIteration();
   const assignee = await getDefaultAssignee();
 
-  const results = await recognizeIntent(input);
+  let results: Awaited<ReturnType<typeof recognizeIntent>> = [];
+  try {
+    results = await recognizeIntent(input);
+  } catch (e: any) {
+    logger.error(`意图识别失败: ${e.message || e}`);
+    logger.info('💡 请使用 speccore help 查看可用命令');
+    return;
+  }
   
   // AI 增强：置信度不足时自动调用
 
@@ -51,8 +58,11 @@ export async function askCommand(input: string, _options: SpecOptions): Promise<
     return;
   }
 
-  // AI 增强：置信度不足时自动调用
-  const { final: aiBest, usedAi } = await recognizeWithAi(input, results);
+  let aiBest: any = null;
+  try {
+    const aiResult = await recognizeWithAi(input, results);
+    aiBest = aiResult.final;
+  } catch { /* AI 增强失败，使用规则匹配 */ }
   const best = aiBest || results[0];
   const level = getConfidenceLevel(best.confidence);
 

@@ -129,15 +129,17 @@ async function collectTasks(iterDir: string): Promise<any[]> {
   for (const e of entryList) {
     if (e.isDirectory() && e.name.startsWith('Task-')) {
       const taskPath = join(iterDir, e.name, 'backend', 'TASK.md');
-      if (await pathExists(taskPath)) {
-        const md = await readFile(taskPath, 'utf-8');
-        const status = (md.match(/状态: (.+)/) || [])[1] || 'pending';
-        const type = (md.match(/类型: (.+)/) || [])[1] || 'feature';
-        const assignee = (md.match(/负责人[：:]\s*(\S+)/) || [])[1] || '';
-        tasks.push({ id: e.name, status, type, assignee });
-      } else {
-        tasks.push({ id: e.name, status: 'pending', type: 'feature', assignee: '' });
-      }
+      try {
+        if (await pathExists(taskPath)) {
+          const md = await readFile(taskPath, 'utf-8');
+          const status = (md.match(/状态: (.+)/) || [])[1] || 'pending';
+          const type = (md.match(/类型: (.+)/) || [])[1] || 'feature';
+          const assignee = (md.match(/负责人[：:]\s*(\S+)/) || [])[1] || '';
+          tasks.push({ id: e.name, status, type, assignee });
+        } else {
+          tasks.push({ id: e.name, status: 'pending', type: 'feature', assignee: '' });
+        }
+      } catch { tasks.push({ id: e.name, status: 'pending', type: 'feature', assignee: '' }); }
     }
   }
   return tasks;

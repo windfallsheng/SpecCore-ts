@@ -664,9 +664,7 @@ commander_1.program
     .option('--restore <name>', 'Restore from backup')
     .action(backup_1.backupCommand);
 // v4.8.0 高级功能
-commander_1.program
-    .command('hooks')
-    .description('Install Git hooks (pre-commit + pre-push)');
+commander_1.program;
 commander_1.program
     .command('current')
     .alias('cr')
