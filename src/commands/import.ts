@@ -5,6 +5,7 @@
 
 import { pathExists, readdir, readFile, stat, writeFile } from 'fs-extra';
 import { FileTransaction } from '../core/transaction';
+import { syncCapabilities } from '../core/capabilities';
 import { join, extname } from 'path';
 import { logger, Spinner } from '../utils/logger';
 import {
@@ -268,6 +269,13 @@ async function importToGlobalLayer(
 
   // 11. 生成 AI 分析指引（供 Slash Command 使用）
   await generateAnalysisPrompt(projectName, projectType, scanResult, projectPath);
+
+  // 12. 同步能力注册表
+  await syncCapabilities({
+    importProject: projectName,
+    importType: projectType,
+    importApis: scanResult.apis.length,
+  });
 
   // 10. 输出报告
   logger.info('');

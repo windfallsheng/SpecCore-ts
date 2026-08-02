@@ -6,6 +6,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.importCommand = importCommand;
 const fs_extra_1 = require("fs-extra");
+const capabilities_1 = require("../core/capabilities");
 const path_1 = require("path");
 const logger_1 = require("../utils/logger");
 const global_layer_1 = require("../core/global-layer");
@@ -226,6 +227,12 @@ async function importToGlobalLayer(projectName, projectPath, projectType, option
     await suggestConstitutionUpdate(projectName, projectType, scanResult.techStack);
     // 11. 生成 AI 分析指引（供 Slash Command 使用）
     await generateAnalysisPrompt(projectName, projectType, scanResult, projectPath);
+    // 12. 同步能力注册表
+    await (0, capabilities_1.syncCapabilities)({
+        importProject: projectName,
+        importType: projectType,
+        importApis: scanResult.apis.length,
+    });
     // 10. 输出报告
     logger_1.logger.info('');
     logger_1.logger.info('✅ 项目导入完成！');
