@@ -296,7 +296,7 @@ speccore baseline --list
 
 | Scenario | First Command | Core Flow |
 | :--- | :--- | :--- |
-| New Project | `speccore init` | `init → import → iteration create → new-task` |
+| New Project | `speccore init` | `init → import → iteration create → task new` |
 | Daily Dev | `speccore execute --task=T-001` | `execute → sync → trace → update` |
 | Bug Fix | `speccore bugfix --name="xxx"` | `bugfix → execute → sync → change` |
 | Change Mgmt | `speccore impact --req=REQ-001` | `impact → baseline → change → validate` |
@@ -485,7 +485,7 @@ speccore progress --platform=web
 
 ```bash
 speccore platform-add --name=tablet --description="Tablet UI" --tech="React Native"
-# Now new-task can use tablet
+# Now task new can use tablet
 speccore task new --name="xxx" --platforms=web,tablet
 ```
 

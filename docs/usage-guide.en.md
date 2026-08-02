@@ -13,7 +13,7 @@
 | `CONSTITUTION.md` | init auto-gen | ✅ Yes | Read by next execute |
 | `SETTINGS.md` | init auto-gen | ✅ Yes | Read by next execute |
 | `POST_COMPLETION.md` | init auto-gen | ✅ Yes | Read by next execute |
-| `config/platforms.yaml` | init + platform-add | ⚠️ Use `config --set` | Used by new-task |
+| `config/platforms.yaml` | init + platform-add | ⚠️ Use `config --set` | Used by task new |
 | `local/context.json` | Command-maintained | ❌ No | Commands overwrite it |
 | `local/execution-state.json` | execute generates | ❌ No | Batch resume depends on it |
 | `.git-mapping.json` | execute/current writes | ❌ No | Branch mapping depends on it |
@@ -32,10 +32,10 @@
 
 | File | Source | Editable? | After Editing |
 | :--- | :--- | :--- | :--- |
-| `backend/REQ.md` | new-task skeleton | ✅ Write freely | Run `speccore sync` |
-| `backend/TECH.md` | new-task skeleton | ✅ Write freely | No action needed |
-| `backend/TASK.md` | new-task + sync fills | ✅ Add details | Run `speccore sync` |
-| `_shared/API_CONTRACT.yaml` | new-task skeleton | ⚠️ YAML-sensitive | Run `speccore validate` |
+| `backend/REQ.md` | task new skeleton | ✅ Write freely | Run `speccore sync` |
+| `backend/TECH.md` | task new skeleton | ✅ Write freely | No action needed |
+| `backend/TASK.md` | task new + sync fills | ✅ Add details | Run `speccore sync` |
+| `_shared/API_CONTRACT.yaml` | task new skeleton | ⚠️ YAML-sensitive | Run `speccore validate` |
 | `_shared/TRACE.md` | sync auto-generates | ❌ No | sync overwrites |
 
 ---

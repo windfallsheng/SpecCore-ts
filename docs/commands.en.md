@@ -273,7 +273,7 @@ speccore trace --full
 | :--- | :--- | :--- | :--- |
 | `in` | init | `ex` | execute |
 | `imp` | import | `pl` | plan |
-| `nt` | new-task | `cg` | change |
+| `tn` | task new | `cg` | change |
 | `padd` | platform-add | `sy` | sync |
 | `ctx` | context | `sg` | sync-global |
 | `iu` | index-update | `if` | impact |
