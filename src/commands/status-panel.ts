@@ -1106,6 +1106,7 @@ setTimeout(function(){
       }
     };
   }
+}, 200);
 document.querySelectorAll('.card,.panel').forEach(el=>{
   const btn=document.createElement('button');
   btn.className='fs-btn';btn.title='Fullscreen (F)';btn.innerHTML='⛶';btn.onclick=e=>{e.stopPropagation();toggleFS(el)};
