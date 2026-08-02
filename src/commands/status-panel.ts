@@ -399,4 +399,3 @@ document.querySelectorAll('.progress-fill,.ring-fg').forEach(el=>{el.style.anima
 </script>
 </body></html>`;
 }
-}
