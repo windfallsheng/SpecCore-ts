@@ -174,6 +174,8 @@ async function exportStatus(config: any, iteration: string | null, format: strin
       const toMatch = meta.match(/结束[：:]?\s*(\d{4}-\d{2}-\d{2})/) || meta.match(/to[：:]?\s*(\d{4}-\d{2}-\d{2})/i);
       if (fromMatch) data.iterationStart = fromMatch[1];
       if (toMatch) data.iterationEnd = toMatch[1];
+      const ownerMatch = meta.match(/负责人[：:]?\s*(\S+)/);
+      if (ownerMatch) data.iterationOwner = ownerMatch[1];
     }
     
     // 计算时间进度
@@ -365,7 +367,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
   <div class="header">
     <div class="header-left">
       <h1>${data.project.toUpperCase()}</h1>
-      <div class="subtitle">SPECCORE · SPEC-DRIVEN DEVELOPMENT</div>
+      <div class="subtitle">SPECCORE · SPEC-DRIVEN DEVELOPMENT${data.iterationOwner ? " · OWNER: "+data.iterationOwner.toUpperCase() : ""}</div>
     </div>
     <div class="header-right">
       <div class="header-stat"><div class="num">Q2</div><div class="label">期次</div></div>
