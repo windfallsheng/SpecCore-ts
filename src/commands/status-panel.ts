@@ -426,7 +426,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
 .fs-btn{position:absolute;top:10px;right:10px;width:28px;height:28px;border-radius:6px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);color:var(--muted);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .2s;z-index:10;opacity:0}
 .card:hover .fs-btn,.panel:hover .fs-btn{opacity:1}
 .fs-btn:hover{background:rgba(0,240,255,.1);border-color:rgba(0,240,255,.3);color:var(--cyan)}
-.fs-fullscreen{position:fixed!important;inset:0!important;z-index:1000!important;border-radius:0!important;overflow:auto!important;background:#080e1a!important;backdrop-filter:none!important;opacity:1!important;padding:32px!important}
+.fs-fullscreen{position:fixed!important;inset:0!important;z-index:1000!important;border-radius:0!important;overflow:auto!important;background:#080e1a!important;backdrop-filter:none!important;opacity:1!important;padding:40px!important;width:100vw!important;height:100vh!important;max-width:none!important}.fs-fullscreen svg{max-width:100%;height:auto}.fs-fullscreen table{font-size:16px}.fs-fullscreen .stat-value{font-size:52px}.fs-fullscreen .big-num{font-size:64px}.fs-fullscreen .card{padding:36px}
 .fs-tip{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(0,240,255,.1);border:1px solid rgba(0,240,255,.2);padding:8px 20px;border-radius:20px;font-size:11px;color:var(--cyan);z-index:1001;letter-spacing:1px;animation:fadeIn .3s ease;pointer-events:none}
 @keyframes fadeIn{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 
@@ -798,6 +798,36 @@ document.addEventListener('keydown',e=>{
     if(hovered) toggleFS(hovered);
   }
 });
+// Collapsible: wrap entire TEAM DETAILS person task lists
+setTimeout(()=>{
+  const titles=document.querySelectorAll('.panel-title');
+  titles.forEach(el=>{
+    if(el.textContent.trim()==='TEAM DETAILS'){
+      let next=el.parentElement.nextElementSibling;
+      const items=[];
+      while(next&&next.tagName==='DIV'&&!next.querySelector('.panel-title')){
+        items.push(next);
+        next=next.nextElementSibling;
+      }
+      if(items.length>0){
+        const wrapper=document.createElement('div');
+        wrapper.className='collapsible-body collapsed';
+        items.forEach(it=>wrapper.appendChild(it));
+        el.parentElement.after(wrapper);
+        el.classList.add('collapsible-header','collapsed');
+        el.onclick=()=>{el.classList.toggle('collapsed');wrapper.classList.toggle('collapsed')};
+      }
+    }
+  });
+});
+    if(el.tagName==='DIV'&&el.className.includes('panel-title')&&el.textContent.includes('TASK LIST')){
+      el.classList.add('collapsible-header');
+      let body=el.nextElementSibling;
+      while(body&&body.tagName!=='TABLE')body=body.nextElementSibling;
+      if(body){body.classList.add('collapsible-body');el.onclick=()=>{el.classList.toggle('open');body.classList.toggle('open')}}
+    }
+  });
+},100);
 document.querySelectorAll('.card,.panel').forEach(el=>{
   const btn=document.createElement('button');
   btn.className='fs-btn';btn.title='Fullscreen (F)';btn.innerHTML='⛶';btn.onclick=e=>{e.stopPropagation();toggleFS(el)};
