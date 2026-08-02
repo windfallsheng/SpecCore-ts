@@ -457,6 +457,84 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
     </div>
   </div>
 
+
+  <div class="grid" style="grid-template-columns:1fr 1fr;margin-bottom:20px">
+    <div class="card" style="min-height:280px">
+      <div class="data-stream"><span>RENDERING GANTT CHART...</span></div>
+      <h3 style="margin-bottom:16px">GANTT TIMELINE</h3>
+      <div style="overflow-x:auto">
+        <svg width="100%" height="180" viewBox="0 0 500 180" style="min-width:400px">
+          <defs>
+            <linearGradient id="gGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="var(--cyan)"/><stop offset="100%" stop-color="var(--green)"/></linearGradient>
+          </defs>
+          <!-- Date axis marks -->
+          <line x1="60" y1="30" x2="480" y2="30" stroke="rgba(0,240,255,.1)" stroke-width="1"/>
+          <text x="60" y="25" fill="#4a5568" font-size="10">APR</text>
+          <text x="170" y="25" fill="#4a5568" font-size="10">MAY</text>
+          <text x="280" y="25" fill="#4a5568" font-size="10">JUN</text>
+          <text x="390" y="25" fill="#4a5568" font-size="10">JUL</text>
+          <!-- Today line -->
+          <line x1="310" y1="35" x2="310" y2="160" stroke="var(--cyan)" stroke-width="1" stroke-dasharray="4,4" opacity=".5"/>
+          <text x="310" y="172" fill="var(--cyan)" font-size="9" text-anchor="middle" opacity=".8">TODAY</text>
+          <!-- Task bars -->
+          ${tasks.slice(0,5).map((t: any,i: number) => {
+            const x = 60 + i * 20;   // staggered start
+            const w = Math.max(40, 100 - i * 15);  // varying widths
+            const y = 55 + i * 24;
+            const done = t.status.includes('完成')||t.status==='completed';
+            const active = t.status.includes('开发')||t.status==='in_progress';
+            const color = done ? 'var(--green)' : active ? 'var(--cyan)' : '#334155';
+            const label = t.id.split('-').slice(0,2).join('-');
+            return '<rect x="'+x+'" y="'+y+'" width="'+w+'" height="16" rx="4" fill="'+color+'" opacity=".85"/>' +
+                   '<text x="'+(x+4)+'" y="'+ (y+12) +'" fill="#060b14" font-size="9" font-weight="600">'+label+'</text>';
+          }).join('')}
+        </svg>
+      </div>
+    </div>
+
+    <div class="card" style="min-height:280px">
+      <div class="data-stream"><span>CALCULATING BURNDOWN...</span></div>
+      <h3 style="margin-bottom:16px">BURNDOWN CHART</h3>
+      <svg width="100%" height="180" viewBox="0 0 500 180" style="min-width:400px">
+        <defs>
+          <linearGradient id="idealGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="var(--cyan)"/><stop offset="100%" stop-color="#818cf8"/></linearGradient>
+          <linearGradient id="actualGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="var(--green)"/><stop offset="100%" stop-color="#34d399"/></linearGradient>
+        </defs>
+        <!-- Grid -->
+        ${[0,1,2,3,4,5].map((i: number) => '<line x1="60" y1="'+(30+i*26)+'" x2="480" y2="'+(30+i*26)+'" stroke="rgba(255,255,255,.03)" stroke-width="1"/>').join('')}
+        <text x="55" y="35" fill="#4a5568" font-size="10" text-anchor="end">5</text>
+        <text x="55" y="61" fill="#4a5568" font-size="10" text-anchor="end">4</text>
+        <text x="55" y="87" fill="#4a5568" font-size="10" text-anchor="end">3</text>
+        <text x="55" y="113" fill="#4a5568" font-size="10" text-anchor="end">2</text>
+        <text x="55" y="139" fill="#4a5568" font-size="10" text-anchor="end">1</text>
+        <text x="55" y="165" fill="#4a5568" font-size="10" text-anchor="end">0</text>
+        <!-- Ideal line (diagonal: 5 -> 0) -->
+        <polyline points="70,35 460,160" fill="none" stroke="url(#idealGrad)" stroke-width="2" stroke-dasharray="6,4" opacity=".6"/>
+        <!-- Actual line (step: 5,5,4,2,2,...) -->
+        <polyline points="70,35 150,35 230,61 310,113 420,113 460,139" fill="none" stroke="url(#actualGrad)" stroke-width="2.5" stroke-linecap="round"/>
+        <!-- Dots -->
+        <circle cx="70" cy="35" r="3" fill="var(--green)"/>
+        <circle cx="150" cy="35" r="3" fill="var(--green)"/>
+        <circle cx="230" cy="61" r="3" fill="var(--green)"/>
+        <circle cx="310" cy="113" r="4" fill="var(--cyan)" stroke="var(--cyan)" stroke-width="2"/>
+        <circle cx="420" cy="113" r="3" fill="#4a5568"/>
+        <circle cx="460" cy="139" r="3" fill="#4a5568"/>
+        <!-- Labels -->
+        <text x="70" y="25" fill="#4a5568" font-size="9" text-anchor="middle">W1</text>
+        <text x="150" y="25" fill="#4a5568" font-size="9" text-anchor="middle">W2</text>
+        <text x="230" y="25" fill="#4a5568" font-size="9" text-anchor="middle">W3</text>
+        <text x="310" y="25" fill="#4a5568" font-size="9" text-anchor="middle">W4</text>
+        <text x="420" y="25" fill="#4a5568" font-size="9" text-anchor="middle">W5</text>
+        <text x="460" y="25" fill="#4a5568" font-size="9" text-anchor="middle">W6</text>
+        <!-- Legend -->
+        <line x1="60" y1="155" x2="90" y2="155" stroke="url(#idealGrad)" stroke-width="2" stroke-dasharray="4,3" opacity=".6"/>
+        <text x="95" y="158" fill="#4a5568" font-size="9">IDEAL</text>
+        <line x1="130" y1="155" x2="160" y2="155" stroke="url(#actualGrad)" stroke-width="2.5"/>
+        <text x="165" y="158" fill="#4a5568" font-size="9">ACTUAL</text>
+      </svg>
+    </div>
+  </div>
+
   <div class="panel">
     <div class="panel-title">TASK REGISTRY</div>
     <table>
