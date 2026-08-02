@@ -402,6 +402,8 @@ async function exportStatus(
         else if (!(t.type||'').toLowerCase().includes('research')) pd2[t.assignee].features++;
         pd2[t.assignee].estHours += t.estimate || 0;
       }
+      // 人员→平台映射
+      data.personPlatforms = await buildPersonPlatforms(iterDir, filtered);
       data.personDetail = pd2;
     } else {
     // 类型分布 / 增量统计
@@ -428,6 +430,8 @@ async function exportStatus(
       personDetail[t.assignee].estHours += t.estimate || 0;
     }
     data.personDetail = personDetail;
+    // 人员→平台映射
+    data.personPlatforms = await buildPersonPlatforms(iterDir, tasks);
     // 每人任务清单
     const personTasks: Record<string, any[]> = {};
     for (const t of tasks) {
@@ -462,6 +466,31 @@ async function exportStatus(
     await writeFile(outPath, buildHtmlDashboard(data));
     logger.info(`✅ 导出到 ${outPath}`);
   }
+}
+
+// ── 人员→平台映射 ──
+async function buildPersonPlatforms(iterDir: string, tasks: any[]): Promise<Record<string,string>> {
+  const { readdir } = require('fs-extra');
+  const { join } = require('path');
+  const map: Record<string,string> = {};
+  for (const t of tasks) {
+    if (!t.assignee || map[t.assignee]) continue;
+    try {
+      const entries = await readdir(join(iterDir, t.id), { withFileTypes: true });
+      const platforms: string[] = [];
+      if (entries.some((e: any) => e.name === 'backend')) platforms.push('backend');
+      const fe = entries.find((e: any) => e.name === 'frontend');
+      if (fe && fe.isDirectory()) {
+        const subs = await readdir(join(iterDir, t.id, 'frontend'), { withFileTypes: true });
+        for (const s of subs) {
+          if (s.isDirectory()) platforms.push('frontend/' + s.name);
+        }
+        if (subs.length === 0) platforms.push('frontend');
+      }
+      map[t.assignee] = platforms.join(', ') || '';
+    } catch { map[t.assignee] = ''; }
+  }
+  return map;
 }
 
 export async function defaultPhase(iterDir: string): Promise<string> {
@@ -511,9 +540,31 @@ function buildHtmlDashboard(data: any): string {
   const totalHuman = data.totalHumanTime || 0;
   const totalReview = data.totalReviewTime || 0;
   const totalEstTime = data.totalEstTime || 0;
+  const personPlatforms: Record<string,string> = data.personPlatforms || {};
   const pt = data.personTasks || {};
   const pd = data.personDetail || {};
-  const personDetailCards = Object.entries(pd as Record<string,{total:number,done:number,bugs:number,features:number,estHours:number}>).map(([name, d]) => {
+  // ── 排序：后端在前 → 前端在后，每组按姓氏首字母 ──
+  const surnameOrder = (n: string) => {
+    const c = n.charCodeAt(0);
+    // 中文字符范围: >= 0x4E00 
+    if (c >= 0x4E00) return n;  // 中文按原序（Unicode 本身就是拼音序的近似）
+    return n.toLowerCase();      // 英文按字母序
+  };
+  const getPlatformGroup = (name: string) => {
+    const p = personPlatforms[name] || '';
+    if (p.includes('backend')) return '0_backend';
+    if (p.includes('frontend')) return '1_frontend';
+    return '2_other';
+  };
+  const sortedPersonEntries = Object.entries(pd as Record<string,{total:number,done:number,bugs:number,features:number,estHours:number}>)
+    .sort(([a], [b]) => {
+      const ga = getPlatformGroup(a);
+      const gb = getPlatformGroup(b);
+      if (ga !== gb) return ga.localeCompare(gb);
+      return surnameOrder(a).localeCompare(surnameOrder(b));
+    });
+
+  const personDetailCards = sortedPersonEntries.map(([name, d]) => {
     const pct = d.total > 0 ? Math.round(d.done/d.total*100) : 0;
     const bugPct = d.total > 0 ? Math.round(d.bugs/d.total*100) : 0;
     return '<div style="background:rgba(0,240,255,.03);border:1px solid rgba(0,240,255,.08);border-radius:10px;padding:18px">' +
@@ -940,14 +991,39 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
 
   ${hasAssignees ? '<div class="panel" style="margin-bottom:20px"><div class="panel-title">TEAM DETAILS</div>' +
     '<div style="margin-bottom:20px"><table style="margin-bottom:0"><thead><tr><th>人员</th><th>总任务</th><th>完成</th><th>完成率</th><th>功能</th><th>Bug</th><th>研究</th><th>工时</th></tr></thead><tbody>' +
-    Object.entries(pd as Record<string,{total:number,done:number,bugs:number,features:number,estHours:number}>).map(([name, d]) => {
+    sortedPersonEntries.map(([name, d]) => {
       const pct = d.total > 0 ? Math.round(d.done/d.total*100) : 0;
       return '<tr><td style="font-weight:600">'+name+'</td><td>'+d.total+'</td><td>'+d.done+'</td><td><span style="color:'+(pct===100?'var(--green)':'var(--cyan)' )+'">'+pct+'%</span></td>'+
              '<td><span style="color:var(--cyan)">'+d.features+'</span></td><td><span style="color:var(--orange)">'+d.bugs+'</span></td>'+
              '<td><span style="color:var(--purple)">'+(d.total-d.features-d.bugs)+'</span></td><td>'+d.estHours+'h</td></tr>';
     }).join('') +
     '</tbody></table></div>' +
-    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">' + personDetailCards + '</div>' +
+    (() => {
+      let lastGroup = '';
+      let html = '';
+      for (const [name, d] of sortedPersonEntries) {
+        const group = getPlatformGroup(name);
+        if (group !== lastGroup) {
+          const label = group === '0_backend' ? '🔧 BACKEND' : group === '1_frontend' ? '🎨 FRONTEND' : '📦 OTHER';
+          html += '<div style="grid-column:1/-1;margin:12px 0 4px;padding:4px 12px;font-family:Orbitron;font-size:11px;color:var(--cyan);letter-spacing:1px;border-bottom:1px solid rgba(0,240,255,.1)">'+label+'</div>';
+          lastGroup = group;
+        }
+        const pct = d.total > 0 ? Math.round(d.done/d.total*100) : 0;
+        html += '<div style="background:rgba(0,240,255,.03);border:1px solid rgba(0,240,255,.08);border-radius:10px;padding:18px">' +
+          '<div style="font-size:15px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px">' + name +
+          '<span style="margin-left:auto;font-family:Orbitron;font-size:13px;color:var(--cyan)">' + pct + '%</span></div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px">' +
+          '<div><span style="color:var(--muted)">任务</span><div style="font-weight:600;margin-top:2px">' + d.done + '/' + d.total + '</div></div>' +
+          '<div><span style="color:var(--muted)">功能</span><div style="font-weight:600;margin-top:2px">' + d.features + '</div></div>' +
+          '<div><span style="color:var(--muted)">Bug</span><div style="font-weight:600;margin-top:2px;color:' + (d.bugs/d.total > 0.3 ? 'var(--orange)' : 'var(--text)') + '">' + d.bugs + '</div></div>' +
+          '<div><span style="color:var(--muted)">工时</span><div style="font-weight:600;margin-top:2px">' + d.estHours + 'h</div></div>' +
+          '</div>' +
+          '<div style="height:4px;background:rgba(255,255,255,.04);border-radius:2px;margin-top:12px;overflow:hidden">' +
+          '<div style="width:' + pct + '%;height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:2px"></div></div>' +
+          '</div>';
+      }
+      return html + '</div>' + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">' + personDetailCards + '</div>';
+    })() +
     (Object.entries(pt) as [string, any[]][]).map(([name, taskList]) => '<div style="margin-top:20px"><div class="panel-title" style="font-size:13px">' + name + ' — TASK LIST (' + taskList.length + ')</div><table style="margin-top:8px"><thead><tr><th>ID</th><th>STATUS</th><th>TYPE</th></tr></thead><tbody>' +
       taskList.map((t: any) => {
         const cls = t.status.includes('completed')||t.status.includes('完成')?'tx-done':t.status.includes('in_progress')||t.status.includes('开发')?'tx-active':'tx-wait';
