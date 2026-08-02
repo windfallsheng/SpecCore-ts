@@ -59,7 +59,7 @@ workspace/
 ```yaml
 # .github/workflows/speccore-ci.yml
 - run: npm install -g speccore
-- run: speccore validate --full
+- run: speccore validate --all
 - run: speccore health
 ```
 

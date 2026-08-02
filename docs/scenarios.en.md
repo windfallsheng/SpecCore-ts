@@ -179,7 +179,7 @@ jobs:
       - name: Install SpecCore
         run: npm install -g speccore
       - name: Validate Specs
-        run: speccore validate --full
+        run: speccore validate --all
       - name: Check Health
         run: speccore health
       - name: Progress Report

@@ -75,7 +75,7 @@ speccore dev                      # 一键级联：自动检测并执行下一�
 speccore import --project=backend --path=./src --type=backend
 
 # Excel 需求表 → 一行一个需求
-speccore import --project=meeting --path=reqs.xlsx
+speccore import --project=meeting --path=reqs.xlsx  （也支持 .csv）
 
 # 导入后触发 AI 分析
 # 在 IDE 中运行 /spec-import-analyze 即可
