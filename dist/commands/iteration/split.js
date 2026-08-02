@@ -405,10 +405,14 @@ ${apiDesc}
         else {
             await (0, fs_extra_1.ensureDir)((0, path_1.join)(taskDir, 'frontend', platform));
             await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'REQ.md'), reqContent);
-            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'TECH.md'), techContent);
             await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'TASK.md'), taskContent);
             await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'TEST.md'), testContent);
             await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'REVIEW.md'), reviewContent);
+            // 前端专属文件
+            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'COMPONENT_TREE.md'), generateComponentTree(section, platform));
+            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'ROUTES.md'), generateRoutesDoc(section, platform));
+            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'STATE.md'), generateStateDoc(section, platform));
+            await (0, fs_extra_1.writeFile)((0, path_1.join)(taskDir, 'frontend', platform, 'STYLE_GUIDE.md'), generateStyleGuide(section, platform));
         }
     }
 }
@@ -921,5 +925,86 @@ function generateDepsTemplate(section) {
 // 监控指标
 function generateMonitorTemplate(section) {
     return `# ${section.name} — 监控\n\n## 关键指标\n\n| 指标 | 阈值 | 级别 |\n| :--- | :--- | :--- |\n| 成功率 | <99.9% | P1 |\n| P99延迟 | >1000ms | P2 |\n| 错误率 | >0.1% | P0 |\n\n## 关键日志\n\n- 请求入口 (traceId)\n- 业务异常 (上下文)\n- 外部调用 (耗时)\n`;
+}
+// 前端专属：组件树
+function generateComponentTree(section, platform) {
+    return `# ${section.name} — 组件树 (${platform})
+
+> split | ${new Date().toISOString().split('T')[0]}
+
+## 页面结构
+<!-- AI-FILL: 根据需求描述页面的组件层级 -->
+
+## 组件清单
+| 组件 | 路径 | 类型 | 状态 |
+| :--- | :--- | :--- | :--- |
+| _待AI分析_ | — | — | — |
+
+## 共享组件
+| 组件 | 来源 | 用途 |
+| :--- | :--- | :--- |
+| _待补充_ | — | — |
+`;
+}
+// 前端专属：路由
+function generateRoutesDoc(section, platform) {
+    return `# ${section.name} — 路由设计 (${platform})
+
+> split | ${new Date().toISOString().split('T')[0]}
+
+## 路由表
+| 路径 | 组件 | 权限 | 参数 |
+| :--- | :--- | :--- | :--- |
+| _待AI分析_ | — | — | — |
+
+## 导航结构
+<!-- AI-FILL: 面包屑 / 侧栏 / Tab -->
+`;
+}
+// 前端专属：状态管理
+function generateStateDoc(section, platform) {
+    return `# ${section.name} — 状态管理 (${platform})
+
+> split | ${new Date().toISOString().split('T')[0]}
+
+## 全局状态
+| Store | 字段 | 类型 | 持久化 |
+| :--- | :--- | :--- | :--- |
+| _待AI分析_ | — | — | — |
+
+## 组件状态
+| 组件 | 状态 | 来源 |
+| :--- | :--- | :--- |
+| _待补充_ | — | — |
+
+## 数据流
+<!-- AI-FILL: 父→子 props / 子→父 emit / store -->
+`;
+}
+// 前端专属：样式规范
+function generateStyleGuide(section, platform) {
+    const isH5 = platform.includes('h5') || platform.includes('mobile');
+    const isMiniapp = platform.includes('miniapp') || platform.includes('小程序');
+    const styleCtx = isH5 ? '移动端 H5，注意触控交互和移动适配' :
+        isMiniapp ? '小程序，遵守平台组件规范' : '桌面 Web';
+    return `# ${section.name} — 样式规范 (${platform})
+
+> ${styleCtx}
+
+## 设计 Token
+| Token | 值 | 用途 |
+| :--- | :--- | :--- |
+| --color-primary | #1677FF | 主色 |
+| --spacing-unit | 8px | 间距单位 |
+| --radius | ${isH5 ? '12' : '8'}px | 圆角 |
+
+## 响应式断点
+${isH5 ? '移动端优先，适配 375/414/768' :
+        isMiniapp ? '小程序 rpx 自适应' : '>=1920 / 1440 / 1024 / 768'}
+
+## 动画
+- 页面切换: 300ms ease-in-out
+- 加载态: 骨架屏优先
+`;
 }
 //# sourceMappingURL=split.js.map
