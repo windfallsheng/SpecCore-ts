@@ -81,44 +81,47 @@ async function showHighConfidenceResult(
   result: Awaited<ReturnType<typeof recognizeIntent>>[0],
   iteration: string
 ): Promise<void> {
-  logger.info(`🔍 我理解你想：**${getIntentLabel(result.intent)}**`);
-  logger.info(`   置信度: ${result.confidence}% | 匹配命令: speccore ${result.command}`);
+  // ── 1. 明确告知用户理解了什么 ──
+  logger.info('━'.repeat(55));
+  logger.info(`✅ 我理解了：你想 **${getIntentLabel(result.intent)}**`);
+  logger.info(`   匹配: speccore ${result.command} （置信度 ${result.confidence}%）`);
+  logger.info('━'.repeat(55));
   logger.info('');
 
-  // 显示匹配详情
-  if (result.matchedTriggers.length > 0) {
-    logger.debug(`   命中规则: ${result.matchedTriggers.join(', ')}`);
+  const params = result.extractedParams;
+
+  // ── 2. 用自然语言重述用户意图 ──
+  const paraphrase = buildParaphrase(result.intent, result.command, params, iteration);
+  if (paraphrase) {
+    logger.info(`💬 你是说：${paraphrase}`);
+    logger.info('');
   }
 
-  // 显示提取的参数
-  const params = result.extractedParams;
-  if (Object.keys(params).length > 0) {
-    logger.info('📝 已提取参数:');
-    for (const [key, value] of Object.entries(params)) {
-      logger.info(`   ${key}: ${value}`);
+  // ── 3. 展示将要执行的命令 + 参数说明 ──
+  logger.info('📋 将要执行的命令:');
+  let cmdPreview = `speccore ${result.command}`;
+  if (params.name) cmdPreview += ` -n "${params.name}"`;
+  if (params.desc) cmdPreview += ` -d "${params.desc}"`;
+  if (params.task) cmdPreview += ` -t "${params.task}"`;
+  if (iteration && !params.iteration) cmdPreview += ` -i "${iteration}"`;
+  if (params.iteration) cmdPreview += ` -i "${params.iteration}"`;
+  logger.info(`   $ ${cmdPreview}`);
+  logger.info('');
+
+  // ── 4. 展示后续步骤（如果有关联流程）─
+  const nextSteps = getNextStepsForIntent(result.intent, result.command, params, iteration);
+  if (nextSteps.length > 0) {
+    logger.info('📌 建议的完整流程:');
+    let stepNum = 1;
+    for (const step of nextSteps) {
+      logger.info(`   ${stepNum}. ${step}`);
+      stepNum++;
     }
     logger.info('');
   }
 
-  // 构建执行命令预览
-  let cmdPreview = `speccore ${result.command}`;
-  if (params.name) {
-    cmdPreview += ` --name "${params.name}"`;
-  }
-  if (params.desc) {
-    cmdPreview += ` --desc "${params.desc}"`;
-  }
-  if (iteration && !params.iteration) {
-    cmdPreview += ` --iteration "${iteration}"`;
-  }
-  if (params.iteration) {
-    cmdPreview += ` --iteration "${params.iteration}"`;
-  }
-
-  logger.info('📍 建议执行:');
-  logger.info(`   $ ${cmdPreview}`);
-  logger.info('');
-  logger.info('💡 提示: 直接运行上述命令即可执行。或使用 --force 跳过确认。');
+  // ── 5. 提示可以马上执行 ──
+  logger.info('💡 直接运行上述命令即可开始，或输入更多细节调整参数。');
 }
 
 function showMediumConfidenceResults(
@@ -243,4 +246,69 @@ function getIntentLabel(intent: string): string {
     template_add: '📄 添加模板',
   };
   return labels[intent] || intent;
+}
+
+// ── 自然语言重述 ──
+function buildParaphrase(intent: string, cmd: string, params: Record<string, string>, iteration: string): string {
+  const name = params.name || '';
+  const desc = params.desc || '';
+  const task = params.task || '';
+
+  const templates: Record<string, (p: Record<string,string>, i: string) => string> = {
+    'task new': (p) => `创建一个新任务"${p.name || ''}"${p.desc ? '，描述：' + p.desc : ''}`,
+    'iteration create': (p) => `创建一个新期次"${p.name || ''}"`,
+    execute: (p) => p.task ? `执行任务 "${p.task}"` : '执行开发任务',
+    bugfix: (p) => p.name ? `修复 Bug："${p.name}"` : p.desc ? `修复问题：${p.desc}` : '修复一个 Bug',
+    change: (p) => p.desc ? `把需求改为：${p.desc}` : '',
+    import: () => '导入一个存量项目',
+    'iteration split': () => '把当前需求拆分成开发任务',
+    'status-panel': () => '查看项目进度和状态',
+    pr: (p) => p.task ? `为任务 ${p.task} 创建 Pull Request` : '',
+    done: (p) => p.task ? `完成任务 ${p.task}` : '',
+    analyze: () => '分析需求文档',
+    dev: () => '检测项目当前阶段并继续推进',
+    validate: () => '检查项目规范性',
+  };
+
+  const fn = templates[cmd];
+  return fn ? fn(params, iteration) : '';
+}
+
+// ── 关联后续步骤 ──
+function getNextStepsForIntent(intent: string, cmd: string, params: Record<string, string>, iteration: string): string[] {
+  const iter = iteration || 'Q1';
+  const task = params.task || 'Task-001';
+
+  const flows: Record<string, string[]> = {
+    'iteration create': [
+      `speccore doc2spec -f PRD.docx -p backend -i ${iter}   # 导入需求文档`,
+      `speccore analyze -i ${iter}                            # AI 分析需求`,
+      `speccore iteration split -i ${iter}                    # 拆分为 Task`,
+    ],
+    'task new': [
+      `speccore analyze -t ${task} -i ${iter} --auto          # AI 分析`,
+      `speccore execute -t ${task} --force --verify           # 开发 + 验证`,
+      `speccore pr -t ${task}                                 # 提 PR`,
+      `speccore done -t ${task}                               # 完成归档`,
+    ],
+    execute: [
+      `speccore pr -t ${task}                                 # 代码提 PR`,
+      `speccore done -t ${task}                               # 标记完成`,
+    ],
+    bugfix: [
+      `speccore execute -t ${task} --force --verify           # 修复 + 验证`,
+      `speccore pr -t ${task}                                 # 提 PR`,
+    ],
+    'iteration split': [
+      `speccore plan -i ${iter}                               # 生成执行计划`,
+      `speccore execute --all --force --verify -i ${iter}     # 批量执行`,
+    ],
+    import: [
+      `在 AI IDE 中触发 /spec-import-analyze                   # AI 反工程分析`,
+      `speccore analyze -i ${iter}                            # 完善需求`,
+      `speccore iteration split -i ${iter}                    # 拆分为 Task`,
+    ],
+  };
+
+  return flows[cmd] || [];
 }

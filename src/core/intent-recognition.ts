@@ -105,12 +105,12 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
   },
   // 创建层
   {
-    id: 'goal',
+    id: 'task new',
     intent: 'create',
     priority: 85,
     triggers: ['创建一个', '新增一个', '做一个', '实现', '添加一个', '新建', '创建', '新增'],
     patterns: ['创建(.+)', '新增(.+)', '做一个(.+)', '开发(.+)功能', '实现(.+)功能'],
-    description: '完整需求交付 — 从需求到代码的全流程自动化',
+    description: '创建新 Task — 从需求到代码的全流程',
     args: '"<name>" --desc="<description>"',
   },
   // 初始化
