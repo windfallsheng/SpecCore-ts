@@ -544,11 +544,35 @@ function buildHtmlDashboard(data: any): string {
   const pt = data.personTasks || {};
   const pd = data.personDetail || {};
   // ── 排序：后端在前 → 前端在后，每组按姓氏首字母 ──
+  // ── 中文姓氏拼音映射 ──
+  const pinyinMap: Record<string,string> = {
+    '安':'an','白':'bai','包':'bao','鲍':'bao','毕':'bi','边':'bian','蔡':'cai','曹':'cao',
+    '常':'chang','陈':'chen','程':'cheng','崔':'cui','戴':'dai','邓':'deng','丁':'ding',
+    '董':'dong','杜':'du','段':'duan','范':'fan','方':'fang','冯':'feng','傅':'fu',
+    '高':'gao','葛':'ge','龚':'gong','顾':'gu','关':'guan','郭':'guo','韩':'han',
+    '何':'he','贺':'he','洪':'hong','侯':'hou','胡':'hu','华':'hua','黄':'huang',
+    '霍':'huo','纪':'ji','贾':'jia','江':'jiang','姜':'jiang','蒋':'jiang','金':'jin',
+    '康':'kang','孔':'kong','赖':'lai','雷':'lei','黎':'li','李':'li','梁':'liang',
+    '廖':'liao','林':'lin','刘':'liu','柳':'liu','龙':'long','卢':'lu','鲁':'lu',
+    '陆':'lu','吕':'lv','罗':'luo','马':'ma','毛':'mao','孟':'meng','莫':'mo',
+    '倪':'ni','牛':'niu','潘':'pan','彭':'peng','齐':'qi','钱':'qian','乔':'qiao',
+    '秦':'qin','邱':'qiu','任':'ren','阮':'ruan','邵':'shao','沈':'shen','盛':'sheng',
+    '石':'shi','史':'shi','宋':'song','苏':'su','孙':'sun','谭':'tan','汤':'tang',
+    '唐':'tang','陶':'tao','田':'tian','童':'tong','万':'wan','汪':'wang','王':'wang',
+    '韦':'wei','魏':'wei','温':'wen','文':'wen','吴':'wu','武':'wu','夏':'xia',
+    '向':'xiang','萧':'xiao','谢':'xie','熊':'xiong','徐':'xu','许':'xu','薛':'xue',
+    '严':'yan','阎':'yan','杨':'yang','姚':'yao','叶':'ye','易':'yi','殷':'yin',
+    '尹':'yin','应':'ying','尤':'you','于':'yu','余':'yu','俞':'yu','袁':'yuan',
+    '岳':'yue','曾':'zeng','张':'zhang','章':'zhang','赵':'zhao','郑':'zheng',
+    '钟':'zhong','周':'zhou','朱':'zhu','祝':'zhu','庄':'zhuang','邹':'zou',
+  };
   const surnameOrder = (n: string) => {
+    const first = n.charAt(0);
+    const py = pinyinMap[first];
+    if (py) return py;
     const c = n.charCodeAt(0);
-    // 中文字符范围: >= 0x4E00 
-    if (c >= 0x4E00) return n;  // 中文按原序（Unicode 本身就是拼音序的近似）
-    return n.toLowerCase();      // 英文按字母序
+    if (c >= 0x4E00) return n;   // 中文未收录的，fallback 到原文
+    return n.toLowerCase();       // 英��按字母序
   };
   const getPlatformGroup = (name: string) => {
     const p = personPlatforms[name] || '';
