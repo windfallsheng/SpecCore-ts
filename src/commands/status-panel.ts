@@ -741,7 +741,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
   </div>
 
   ${hasAssignees ? '<div class="panel" style="margin-bottom:20px"><div class="panel-title">TEAM DETAILS</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">' + personDetailCards + '</div>' +
-    Object.entries(pt).map(([name, taskList]: [string, any[]]) => '<div style="margin-top:20px"><div class="panel-title" style="font-size:13px">' + name + ' — TASK LIST (' + taskList.length + ')</div><table style="margin-top:8px"><thead><tr><th>ID</th><th>STATUS</th><th>TYPE</th></tr></thead><tbody>' +
+    (Object.entries(pt) as [string, any[]][]).map(([name, taskList]) => '<div style="margin-top:20px"><div class="panel-title" style="font-size:13px">' + name + ' — TASK LIST (' + taskList.length + ')</div><table style="margin-top:8px"><thead><tr><th>ID</th><th>STATUS</th><th>TYPE</th></tr></thead><tbody>' +
       taskList.map((t: any) => {
         const cls = t.status.includes('completed')||t.status.includes('完成')?'tx-done':t.status.includes('in_progress')||t.status.includes('开发')?'tx-active':'tx-wait';
         const st = t.status.includes('completed')||t.status.includes('完成')?'RESOLVED':t.status.includes('in_progress')||t.status.includes('开发')?'ACTIVE':'QUEUED';
