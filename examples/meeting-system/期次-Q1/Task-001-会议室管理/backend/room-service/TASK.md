@@ -134,3 +134,11 @@ Then  返回结果不包含 deleted=1 的记录
 | @TableLogic + UNIQUE(name) 导致软删除行也查重 | 联合索引 (name, deleted) 或 Service 手动查重 | 逻辑删除+唯一约束要双重思考 |
 | Redis 缓存后修改不及时 | 写操作后 `redis.delete("rooms:*") ` | 缓存策略: 先写DB,再失效缓存 |
 | JSON 字段在 MyBatis-Plus 中需要 TypeHandler | `@TableField(typeHandler = JacksonTypeHandler.class) ` | JSON 字段统一加 TypeHandler |
+
+
+## 时间追踪
+- 创建日期: 2026-07-22
+- 预估AI时间: 4h
+- 预估人工时间: 1.5h
+- 预估Review时间: 0.5h
+- 负责人: 张三

@@ -125,3 +125,11 @@ Then  返回 { hasConflict: true/false, conflictDetail: "..." }
 | 时间段比较: TIME 类型在 MyBatis `gt()`/`lt()` 中序列化为字符串导致比较失败 | `@JsonFormat(pattern = "HH:mm")` + SQL `CAST(? AS TIME)` | 时间字段统一用 java.time.LocalTime,MyBatis-Plus 3.5 原生支持 |
 | 并发预订: 两个请求同时检测无冲突,同时写入 | 数据库层面 `(room_id, date, start_time, end_time)` 联合唯一索引防止脏写 | 靠应用层检测不够,必须有数据库兜底 |
 | 时区: 服务器 UTC,前端北京时间 | 接口中日期用 `yyyy-MM-dd` 字符串,不传 timestamp | 日期时间用字符串传,避免时区转换 |
+
+
+## 时间追踪
+- 创建日期: 2026-07-22
+- 预估AI时间: 4h
+- 预估人工时间: 1.5h
+- 预估Review时间: 0.5h
+- 负责人: 张三

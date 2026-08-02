@@ -1,81 +1,119 @@
-## 📂 项目结构
+# 会议预订系统 — SpecCore 示例项目
+
+> 基于 SpecCore v5.20.0 | 52 命令 | 简洁模式 19 命令
+
+完整演示：原始需求文档 → speccore init → doc2spec → analyze → split → 前后端一体化 Task
+
+---
+
+## 项目结构
 
 ```
 meeting-system/
-├── docs/                            ← 原始需求文档（4 份）
-├── prototype-admin.html             ← Web 后台原型
-├── prototype-h5.html                ← H5 移动端原型
-│
-├── .speccore/                       ← speccore init 生成
-│   ├── CONSTITUTION.md              ← 全局技术宪法（7 条规则）
-│   ├── GLOBAL/INDEX.md              ← 全量需求索引
-│   ├── GLOBAL/CODE_INDEX.md         ← 工程 → 代码路径映射
-│   ├── PROJECT/TEAM.md              ← 团队成员
-│   └── config/platforms.yaml        ← 平台配置（backend, web, h5）
-│
-└── 期次-Q1/                         ← speccore doc2spec 生成
-    ├── 00-需求文档/                  ← 结构化需求 + 分析报告
-    │   ├── REQUIREMENT.md           ← Q1 需求汇总
-    │   ├── backend需求.md           ← 2 份后端需求合并
-    │   ├── frontend-web需求.md      ← 后台管理端需求
-    │   ├── frontend-h5需求.md       ← 移动端需求
-    │   └── ANALYSIS.md              ← speccore analyze 生成
-    │
-    ├── Task-001-会议室管理/          ← 前后端一体化 Task
-    │   ├── .task-type
-    │   ├── TASK.md                   ← 总览: 后端 5AC + 前端 3AC
-    │   ├── backend/
-    │   │   └── room-service/         ← 后端服务 ①: 会议室管理
-    │   │       ├── TASK.md           ← BDD AC · 技术决策 · 踩坑记录
-    │   │       ├── API_CONTRACT.yaml ← OpenAPI 3.0 契约
-    │   │       ├── TEST.md           ← 测试大纲（14 用例）
-    │   │       ├── REVIEW.md         ← 代码审查清单
-    │   │       ├── SCHEMA.md         ← Flyway SQL + 索引说明
-    │   │       ├── DEPLOY.md         ← 部署检查清单
-    │   │       └── ERROR_CODES.md    ← 错误码定义
-    │   └── frontend/
-    │       └── web/                  ← 前端: Web 管理端
-    │           └── TASK.md           ← 页面架构 + 组件选型
-    │
-    └── Task-002-预订管理/            ← 前后端 + 双前端 Task
-        ├── .task-type
-        ├── TASK.md                   ← 总览: 后端 5AC + Web 2AC + H5 3AC
-        ├── backend/
-        │   └── booking-service/      ← 后端服务 ②: 预订订单
-        │       ├── TASK.md           ← 冲突检测 · 并发防护 · 防抖
-        │       ├── API_CONTRACT.yaml ← OpenAPI 3.0 契约
-        │       ├── TEST.md           ← 测试大纲（16 用例 + 并发）
-        │       ├── REVIEW.md         ← 代码审查清单
-        │       ├── SCHEMA.md         ← Flyway SQL + 联合唯一索引
-        │       ├── DEPLOY.md         ← 部署检查清单
-        │       └── ERROR_CODES.md    ← 错误码定义
-        └── frontend/
-            ├── web/                  ← 前端: Web 预订管理
-            │   └── TASK.md
-            └── h5/                   ← 前端: H5 移动端预订
-                └── TASK.md           ← Vant4 组件 · 实时冲突检测
+├── docs/                                 ← 原始需求文档 (4 份)
+│   ├── PRD-会议室预订系统v1.0.md
+│   ├── 需求-会议室管理服务.md
+│   ├── 需求-预订订单服务.md
+│   ├── 需求-后台管理端.md
+│   ├── 需求-H5移动端.md
+│   └── CR-需求变更v1.0→v1.1.md
+├── prototype-admin.html / prototype-h5.html  ← 原型
 
-目录规则: Task/{backend/{服务名}/, frontend/{平台}/}
+├── .speccore/                            ← speccore init 生成
+│   ├── CAPABILITIES.md                   ← 项目能力注册表
+│   ├── CONSTITUTION.md                   ← 全局技术宪法
+│   ├── GLOBAL/INDEX.md                   ← 全量需求索引
+│   └── config/mode.json                  ← 简洁/全量模式选择
+
+└── 期次-Q1/                              ← speccore doc2spec + split 生成
+    ├── 00-期次总览/
+    │   ├── METADATA.md                   ← 期次元数据(时间+负责人+里程碑)
+    │   └── PROJECT_GRAPH.md              ← 任务总览
+    ├── 00-需求文档/                       ← 结构化需求 + 分析
+    │   ├── REQUIREMENT.md
+    │   ├── ANALYSIS.md
+    │   ├── backend需求.md
+    │   ├── frontend-web需求.md
+    │   └── frontend-h5需求.md
+    │
+    ├── Task-001-会议室管理/               ← 前后端一体化 Task
+    │   ├── TASK.md
+    │   ├── backend/
+    │   │   └── room-service/             ← 后端服务
+    │   │       ├── TASK.md REQ.md TECH.md
+    │   │       ├── TEST.md REVIEW.md DEPLOY.md
+    │   │       ├── API_CONTRACT.yaml SCHEMA.md ERROR_CODES.md
+    │   │       ├── RISK.md DEPS.md MONITOR.md ADR.md
+    │   └── frontend/
+    │       └── web/                      ← Web 管理端
+    │           ├── TASK.md REQ.md TEST.md REVIEW.md
+    │           ├── COMPONENT_TREE.md ROUTES.md
+    │           ├── STATE.md STYLE_GUIDE.md
+    │
+    └── Task-002-预订管理/                 ← 双前端 Task
+        ├── TASK.md
+        ├── backend/booking-service/      ← 后端
+        └── frontend/
+            ├── web/                      ← Web
+            └── h5/                       ← H5 移动端
 ```
 
 ---
 
-## 📋 Task 概览
+## Task 概览
 
-| Task | 后端服务 | 前端 | 来源需求 | AC |
-| :--- | :--- | :--- | :--- | :--- |
-| Task-001 会议室管理 | room-service | web | 会议室管理服务 + 后台管理端 | 8 |
-| Task-002 预订管理 | booking-service | web + h5 | 预订订单服务 + 后台管理端 + H5 移动端 | 10 |
+| Task | 后端服务 | 前端 | 负责人 | 状态 |
+|:---|:---|:---|:---|:---|
+| Task-001 会议室管理 | room-service | web | 张三 | 已完成 |
+| Task-002 预订管理 | booking-service | web + h5 | 李四 | 已完成 |
 
 ---
 
-## ✨ 设计亮点
+## Q1 时间线
 
-| 亮点 | 说明 |
-| :--- | :--- |
-| **前后端一体化** | 同一功能的后端+前端在一个 Task，按 `backend/{服务名}/` `frontend/{平台}/` 分层 |
-| **后端按服务细分** | 多个后端服务各自独立目录（当前各 Task 一个服务，可扩展为多个） |
-| **前端按平台细分** | web / h5 / miniapp 各自独立，可共用 API 封装 |
-| **真实工具链流程** | `init → doc2spec → analyze → split → execute` 完整走通 |
-| **7 类 Spec 文件** | TASK + API + TEST + REVIEW + SCHEMA + DEPLOY + ERROR_CODES |
-| **踩坑记录** | 每个 Task 记录实际开发经验，AI 下次读取自动避开 |
+| 里程碑 | 日期 | 状态 |
+|:---|:---|:---|
+| 开发开始 | 2026-07-22 | |
+| 提测 | 2026-07-28 | |
+| SIT | 2026-07-30 | |
+| UAT | 2026-08-01 | |
+| 上线 | 2026-08-02 | |
+
+延期: 2026-07-29 会议室管理API联调延期1天
+
+---
+
+## 每个 Task 的标准文件 (13 个后端 + 9 个前端)
+
+**后端**: TASK.md + REQ.md + TECH.md + TEST.md + REVIEW.md + DEPLOY.md + API_CONTRACT.yaml + SCHEMA.md + ERROR_CODES.md + RISK.md + DEPS.md + MONITOR.md + ADR.md
+
+**前端**: TASK.md + REQ.md + TEST.md + REVIEW.md + COMPONENT_TREE.md + ROUTES.md + STATE.md + STYLE_GUIDE.md + API_CONTRACT.yaml(共享)
+
+---
+
+## SpecCore 命令流程
+
+```bash
+speccore init                                    # 初始化项目
+speccore doc2spec -f docs/PRD.md -p backend -i Q1  # 导入需求文档
+speccore analyze -i Q1                           # AI 分析需求
+speccore iteration split -i Q1                   # 拆分为 Task
+speccore plan -i Q1                              # 生成执行计划
+speccore execute -t Task-001 --force --verify    # AI 开发 + 自动验证
+speccore pr -t Task-001                          # 推送 + 创建 PR
+speccore done -t Task-001                        # 完成归档
+speccore status-panel --export=html              # 导出仪表盘
+```
+
+---
+
+## 设计亮点
+
+| 特性 | 说明 |
+|:---|:---|
+| 前后端一体化 | 后端+前端同在一个 Task，按 backend/frontend 分层 |
+| 完整 Spec 体系 | 后端 13 文件 + 前端 9 文件，覆盖需求到部署全链路 |
+| 时间追踪 | AI时间 + 人工时间 + Review时间 + 延期记录 |
+| 里程碑管理 | 提测/SIT/UAT/上线 四阶段 + Delay 追踪 |
+| 人员分配 | 按人员分组统计，前端/后端分开排序 |
+| 拼音排序 | 100+ 常见姓氏拼音映射 |
