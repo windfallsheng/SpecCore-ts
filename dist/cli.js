@@ -46,7 +46,6 @@ const status_1 = require("./commands/status");
 const health_1 = require("./commands/health");
 const report_1 = require("./commands/report");
 const config_1 = require("./commands/config");
-const create_1 = require("./commands/iteration/create");
 const split_1 = require("./commands/iteration/split");
 const new_1 = require("./commands/task/new");
 const plan_1 = require("./commands/plan");
@@ -263,14 +262,7 @@ const iterationCmd = commander_1.program
     .command('iteration')
     .alias('it')
     .description('Iteration management commands');
-iterationCmd
-    .command('create')
-    .alias('cr')
-    .description('Create a new iteration')
-    .option('-n, --name <name>', 'Iteration name (required)')
-    .option('--from <date>', 'Start date', new Date().toISOString().split('T')[0])
-    .option('--to <date>', 'End date')
-    .action(create_1.iterationCreateCommand);
+iterationCmd;
 iterationCmd
     .command('split')
     .alias('sp')
@@ -293,21 +285,7 @@ const taskCmd = commander_1.program
     .command('task')
     .alias('tk')
     .description('Task management commands');
-taskCmd
-    .command('new')
-    .alias('tn')
-    .description('Create a new atomic task')
-    .option('-n, --name <name>', 'Task name (required)')
-    .option('-t, --type <type>', 'Task type: feature, bugfix, research, optimization, migration, document', 'feature')
-    .option('--task-id <id>', 'Task ID (auto-generated if omitted)')
-    .option('-d, --desc <desc>', 'Task description')
-    .option('--file <file>', 'Requirement file path')
-    .option('--sections <sections>', 'Sections to extract from file')
-    .option('--platforms <platforms>', 'Frontend platforms: web,h5,miniapp (comma-separated)')
-    .option('--backend-only', 'Create backend only')
-    .option('--frontend-only', 'Create frontend only')
-    .option('-i, --iteration <iteration>', 'Target iteration')
-    .action(new_1.taskNewCommand);
+taskCmd;
 // 完整需求交付
 commander_1.program;
 // Bug 修复
