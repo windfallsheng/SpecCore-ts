@@ -293,6 +293,25 @@ async function exportStatus(
       const toMatch = meta.match(/结束[：:]?\s*(\d{4}-\d{2}-\d{2})/) || meta.match(/to[：:]?\s*(\d{4}-\d{2}-\d{2})/i);
       if (fromMatch) data.iterationStart = fromMatch[1];
       if (toMatch) data.iterationEnd = toMatch[1];
+      // ── 里程碑时间线 ──
+      const devEnd = meta.match(/提测[：:]?\s*(\d{4}-\d{2}-\d{2})/) || meta.match(/开发结束[：:]?\s*(\d{4}-\d{2}-\d{2})/i);
+      const sit = meta.match(/SIT[：:]?\s*(\d{4}-\d{2}-\d{2})/i) || meta.match(/集成测试[：:]?\s*(\d{4}-\d{2}-\d{2})/);
+      const uat = meta.match(/UAT[：:]?\s*(\d{4}-\d{2}-\d{2})/i) || meta.match(/验收测试[：:]?\s*(\d{4}-\d{2}-\d{2})/);
+      const release = meta.match(/上线[：:]?\s*(\d{4}-\d{2}-\d{2})/) || meta.match(/发布[：:]?\s*(\d{4}-\d{2}-\d{2})/);
+      data.milestones = {
+        devEnd: devEnd ? devEnd[1] : null,
+        sit: sit ? sit[1] : null,
+        uat: uat ? uat[1] : null,
+        release: release ? release[1] : null,
+      };
+      // ── Delay 记录 ──
+      const delays: any[] = [];
+      const delayRe = /DELAY[：:]?\s*(\d{4}-\d{2}-\d{2})[：:]?\s*(.+)/gi;
+      let dm;
+      while ((dm = delayRe.exec(meta)) !== null) {
+        delays.push({ date: dm[1], reason: (dm[2] || '').trim() });
+      }
+      data.delays = delays;
     }
     
     // 计算时间进度
@@ -632,24 +651,35 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
         </div>
         <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:10px;color:var(--muted)">
           <span>TIME ELAPSED: ${data.timeProgress || 0}%</span>
-          <span style="color:var(--orange)">DAYS LEFT: ${data.daysLeft || 0}</span>
+          <span style="color:${data.isOverdue ? 'var(--orange)' : 'var(--green)'}">${data.isOverdue ? 'OVERDUE' : 'DAYS LEFT'}: ${data.daysLeft || 0}</span>
         </div>
       </div>
       <div style="display:flex;gap:16px">
         <div style="text-align:center;padding:12px 20px;background:rgba(0,240,255,.05);border:1px solid rgba(0,240,255,.15);border-radius:8px">
           <div style="font-family:Orbitron;font-size:20px;color:var(--cyan);text-shadow:0 0 12px rgba(0,240,255,.3)">${data.daysLeft || 0}</div>
-          <div style="font-size:10px;color:var(--muted);margin-top:4px">DAYS LEFT</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:4px">DAYS</div>
         </div>
         <div style="text-align:center;padding:12px 20px;background:rgba(0,255,136,.05);border:1px solid rgba(0,255,136,.15);border-radius:8px">
           <div style="font-family:Orbitron;font-size:20px;color:var(--green);text-shadow:0 0 12px rgba(0,255,136,.3)">${donePct}%</div>
-          <div style="font-size:10px;color:var(--muted);margin-top:4px">COMPLETE</div>
-        </div>
-        <div style="text-align:center;padding:12px 20px;background:rgba(168,85,247,.05);border:1px solid rgba(168,85,247,.15);border-radius:8px">
-          <div style="font-family:Orbitron;font-size:20px;color:var(--purple);text-shadow:0 0 12px rgba(168,85,247,.3)">${total}</div>
-          <div style="font-size:10px;color:var(--muted);margin-top:4px">TASKS</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:4px">DONE</div>
         </div>
       </div>
     </div>
+    ${data.milestones ? '<div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap">' +
+      ['devEnd','sit','uat','release'].map((k: string) => {
+        const labels: Record<string, string> = {devEnd:'提测',sit:'SIT',uat:'UAT',release:'上线'};
+        const icons: Record<string, string> = {devEnd:'🧪',sit:'🔬',uat:'✅',release:'🚀'};
+        const val = data.milestones[k];
+        const today = new Date(); const target = val ? new Date(val) : null;
+        const isPast = target && target <= today;
+        const isSet = !!val;
+        return '<div style="flex:1;min-width:120px;padding:12px 16px;background:'+(isSet?(isPast?'rgba(0,255,136,.05)':'rgba(0,240,255,.05)'):'rgba(255,255,255,.02)')+';border:1px solid '+(isSet?(isPast?'rgba(0,255,136,.15)':'rgba(0,240,255,.15)'):'rgba(255,255,255,.04)')+';border-radius:8px;text-align:center">' +
+               '<div style="font-size:20px;margin-bottom:4px">'+icons[k]+'</div>'+
+               '<div style="font-family:Orbitron;font-size:16px;color:'+(isPast?'var(--green)':isSet?'var(--cyan)':'var(--muted)')+'">'+(val||'—')+'</div>'+
+               '<div style="font-size:10px;color:var(--muted);margin-top:4px;letter-spacing:1px">'+labels[k]+'</div></div>';
+      }).join('') + '</div>' : ''}
+    ${(data.delays||[]).length > 0 ? '<div style="margin-top:16px;padding:12px 16px;background:rgba(245,158,11,.05);border:1px solid rgba(245,158,11,.15);border-radius:8px"><div style="font-size:10px;color:var(--orange);letter-spacing:1px;margin-bottom:8px">⚠ DELAY HISTORY ('+(data.delays||[]).length+')</div>' + 
+      (data.delays||[]).map((d: any) => '<div style="font-size:11px;color:var(--text);margin-bottom:4px;display:flex;gap:12px"><span style="color:var(--orange);font-family:Orbitron;font-size:10px">'+d.date+'</span><span>'+d.reason+'</span></div>').join('') + '</div>' : ''}
   </div>
 
   <div class="grid">
