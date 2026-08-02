@@ -307,7 +307,7 @@ function buildHtmlDashboard(data: any): string {
   const researchCount = (data.typeDistribution && data.typeDistribution['research']) || 0;
   const addedThisWeek = data.addedThisWeek || 0;
   const am = data.assigneeStats || {};
-  const assigneeCards = Object.entries(am).map(([name, s]) => {
+  const assigneeCards = (Object.entries(am) as [string, any][]).map(([name, s]) => {
     const pct = s.total > 0 ? Math.round(s.done/s.total*100) : 0;
     return '<div style="background:rgba(0,240,255,.03);border:1px solid rgba(0,240,255,.08);border-radius:8px;padding:16px">' +
       '<div style="font-size:14px;font-weight:600;margin-bottom:8px">' + name + '</div>' +
@@ -426,7 +426,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
 .fs-btn{position:absolute;top:10px;right:10px;width:28px;height:28px;border-radius:6px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);color:var(--muted);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .2s;z-index:10;opacity:0}
 .card:hover .fs-btn,.panel:hover .fs-btn{opacity:1}
 .fs-btn:hover{background:rgba(0,240,255,.1);border-color:rgba(0,240,255,.3);color:var(--cyan)}
-.fs-fullscreen{position:fixed!important;inset:0!important;z-index:1000!important;border-radius:0!important;overflow:hidden!important;overscroll-behavior:contain!important;-ms-overflow-style:none!important;scrollbar-width:none!important;}.fs-fullscreen::-webkit-scrollbar{display:none!importantbackground:#080e1a!important;backdrop-filter:none!important;opacity:1!important;padding:40px!important;width:100vw!important;height:100vh!important;max-width:none!important}.fs-fullscreen svg{max-width:100%;height:auto}.fs-fullscreen table{font-size:16px}.fs-fullscreen .stat-value{font-size:52px}.fs-fullscreen .big-num{font-size:64px}.fs-fullscreen .card{padding:36px}
+.fs-fullscreen{position:fixed!important;inset:0!important;z-index:1000!important;border-radius:0!important;overflow:hidden!important;overscroll-behavior:contain!important;-ms-overflow-style:none!important;scrollbar-width:none!important;}.fs-fullscreen::-webkit-scrollbar{display:none!important;}.fs-fullscreen{background:var(--bg)!important;backdrop-filter:none!important;opacity:1!important;padding:40px!important;width:100vw!important;height:100vh!important;max-width:none!important}.fs-fullscreen svg{width:100%!important;height:auto!important;max-height:65vh!important}.fs-fullscreen table{font-size:16px}.fs-fullscreen .stat-value{font-size:52px}.fs-fullscreen .big-num{font-size:64px}.fs-fullscreen .card{padding:36px}
 .fs-tip{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(0,240,255,.1);border:1px solid rgba(0,240,255,.2);padding:8px 20px;border-radius:20px;font-size:11px;color:var(--cyan);z-index:1001;letter-spacing:1px;animation:fadeIn .3s ease;pointer-events:none}
 @keyframes fadeIn{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 
@@ -528,7 +528,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
       <div class="data-stream"><span>GENERATING DONUT METRICS...</span></div>
       <h3 style="margin-bottom:20px">COMPLETION BREAKDOWN</h3>
       <div style="display:flex;align-items:center;gap:32px;justify-content:center">
-        <svg width="160" height="160" viewBox="0 0 160 160">
+        <svg viewBox="0 0 160 160" style="width:160px;height:160px">
           <defs>
             <linearGradient id="d1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#00ff88"/><stop offset="100%" stop-color="#10b981"/></linearGradient>
             <linearGradient id="d2" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#00f0ff"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient>
@@ -574,7 +574,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
       <div class="data-stream"><span>RENDERING GANTT CHART...</span></div>
       <h3 style="margin-bottom:16px">GANTT TIMELINE</h3>
       <div style="overflow-x:auto">
-        <svg width="100%" height="180" viewBox="0 0 500 180" style="min-width:400px">
+        <svg viewBox="0 0 500 180" style="width:100%;height:180px;min-width:400px">
           <defs>
             <linearGradient id="gGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="var(--cyan)"/><stop offset="100%" stop-color="var(--green)"/></linearGradient>
           </defs>
@@ -607,7 +607,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
       <button class="fs-btn" title="Fullscreen (F)" onclick="toggleFS(this.parentElement)">⛶</button>
       <div class="data-stream"><span>CALCULATING BURNDOWN...</span></div>
       <h3 style="margin-bottom:16px">BURNDOWN CHART</h3>
-      <svg width="100%" height="180" viewBox="0 0 500 180" style="min-width:400px">
+      <svg viewBox="0 0 500 180" style="width:100%;height:180px;min-width:400px">
         <defs>
           <linearGradient id="idealGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="var(--cyan)"/><stop offset="100%" stop-color="#818cf8"/></linearGradient>
           <linearGradient id="actualGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="var(--green)"/><stop offset="100%" stop-color="#34d399"/></linearGradient>
@@ -651,7 +651,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
     <div class="card">
       <h3 style="margin-bottom:14px">TYPE PIE</h3>
       <div style="display:flex;align-items:center;gap:16px;justify-content:center">
-        <svg width="140" height="140" viewBox="0 0 140 140">
+        <svg viewBox="0 0 140 140" style="width:140px;height:140px">
           <circle cx="70" cy="70" r="60" fill="none" stroke="rgba(255,255,255,.04)" stroke-width="20"/>
           ${(() => {
             const total = featCount + bugCount + researchCount;
@@ -798,28 +798,67 @@ document.addEventListener('keydown',e=>{
     if(hovered) toggleFS(hovered);
   }
 });
-// Collapsible: wrap entire TEAM DETAILS person task lists
-setTimeout(()=>{
-  const titles=document.querySelectorAll('.panel-title');
-  titles.forEach(el=>{
-    if(el.textContent.trim()==='TEAM DETAILS'){
-      let next=el.parentElement.nextElementSibling;
-      const items=[];
-      while(next&&next.tagName==='DIV'&&!next.querySelector('.panel-title')){
+// Collapsible TEAM DETAILS — wrap ALL person content
+setTimeout(function(){
+  var allTitles = document.querySelectorAll('.panel-title');
+  for(var i=0;i<allTitles.length;i++){
+    var titleEl = allTitles[i];
+    if(titleEl.textContent.indexOf('TEAM DETAILS') !== -1){
+      // Mark the header
+      titleEl.style.cursor = 'pointer';
+      titleEl.classList.add('collapsible-header');
+      titleEl.innerHTML = titleEl.innerHTML + ' <span style="font-size:10px;color:var(--muted)">&#9660;</span>';
+      
+      // Find the panel containing this title
+      var panel = titleEl.closest('.panel');
+      if(!panel) continue;
+      
+      // Collect ALL following siblings until next .panel or end
+      var wrapper = document.createElement('div');
+      wrapper.style.cssText = 'max-height:0;overflow:hidden;transition:max-height .5s ease';
+      wrapper.className = 'collapsible-body';
+      
+      var next = panel.nextElementSibling;
+      var items = [];
+      while(next && !next.classList.contains('panel')){
         items.push(next);
-        next=next.nextElementSibling;
+        next = next.nextElementSibling;
       }
-      if(items.length>0){
-        const wrapper=document.createElement('div');
-        wrapper.className='collapsible-body collapsed';
-        items.forEach(it=>wrapper.appendChild(it));
-        el.parentElement.after(wrapper);
-        el.classList.add('collapsible-header','collapsed');
-        el.onclick=()=>{el.classList.toggle('collapsed');wrapper.classList.toggle('collapsed')};
+      // Also collect siblings inside same parent after panel
+      if(items.length === 0){
+        var parent = panel.parentElement;
+        var all = parent.children;
+        var found = false;
+        for(var j=0;j<all.length;j++){
+          if(all[j] === panel) { found = true; continue; }
+          if(found && all[j].classList.contains('panel')) break;
+          if(found) items.push(all[j]);
+        }
+      }
+      
+      if(items.length > 0){
+        for(var k=0;k<items.length;k++){ wrapper.appendChild(items[k]); }
+        panel.parentElement.insertBefore(wrapper, panel.nextElementSibling);
+        
+        titleEl.onclick = function(){
+          var panelEl = this.closest('.panel');
+          var wrapEl = panelEl.nextElementSibling;
+          if(wrapEl && wrapEl.classList.contains('collapsible-body')){
+            var arrow = this.querySelector('span');
+            var isOpen = wrapEl.style.maxHeight !== '0px';
+            if(isOpen){
+              wrapEl.style.maxHeight = '0';
+              if(arrow) arrow.innerHTML = '&#9660;';
+            } else {
+              wrapEl.style.maxHeight = wrapEl.scrollHeight + 'px';
+              if(arrow) arrow.innerHTML = '&#9650;';
+            }
+          }
+        };
       }
     }
-  });
-});
+  }
+},300);
 document.querySelectorAll('.card,.panel').forEach(el=>{
   const btn=document.createElement('button');
   btn.className='fs-btn';btn.title='Fullscreen (F)';btn.innerHTML='⛶';btn.onclick=e=>{e.stopPropagation();toggleFS(el)};
