@@ -267,6 +267,9 @@ function buildHtmlDashboard(data: any): string {
   const phaseMap: Record<string, string> = { init: '初始化', require: '需求分析', analyze: '分析中', dev: '开发中', review: '审查中', done: '已完成' };
   const phase = data.phase || 'N/A';
   const phaseLabel = phaseMap[phase] || phase;
+  const featCount = data.typeDistribution?.feature || featCount || 0;
+  const bugCount = data.typeDistribution?.bugfix || bugCount || 0;
+  const researchCount = data.typeDistribution?.research || researchCount || 0;
   const phasePct = ({init:10, require:25, analyze:40, dev:60, review:80, done:100} as any)[phase] || 0;
 
   return `<!DOCTYPE html>
@@ -552,21 +555,21 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
       <h3 style="margin-bottom:14px">TYPE BREAKDOWN</h3>
       <div style="display:flex;flex-direction:column;gap:14px">
         <div style="display:flex;align-items:center;gap:8px">
-          <div style="width:40px;text-align:center;font-family:Orbitron;font-size:18px;color:var(--cyan)">${data.typeDistribution?.feature || data.typeDistribution?.['feature'] || 0}</div>
+          <div style="width:40px;text-align:center;font-family:Orbitron;font-size:18px;color:var(--cyan)">${data.typeDistribution?.feature || featCount || 0}</div>
           <div style="flex:1;height:6px;background:rgba(255,255,255,.03);border-radius:3px;overflow:hidden">
             <div style="width:100%;height:100%;background:linear-gradient(90deg,#3b82f6,var(--cyan));border-radius:3px;box-shadow:0 0 8px rgba(0,240,255,.3)"></div>
           </div>
           <span style="font-size:11px;color:#60a5fa;width:60px">FEATURE</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
-          <div style="width:40px;text-align:center;font-family:Orbitron;font-size:18px;color:var(--orange)">${data.typeDistribution?.bugfix || data.typeDistribution?.['bugfix'] || 0}</div>
+          <div style="width:40px;text-align:center;font-family:Orbitron;font-size:18px;color:var(--orange)">${data.typeDistribution?.bugfix || bugCount || 0}</div>
           <div style="flex:1;height:6px;background:rgba(255,255,255,.03);border-radius:3px;overflow:hidden">
             <div style="width:100%;height:100%;background:linear-gradient(90deg,#f59e0b,#fbbf24);border-radius:3px;box-shadow:0 0 8px rgba(245,158,11,.3)"></div>
           </div>
           <span style="font-size:11px;color:#fbbf24;width:60px">BUGFIX</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
-          <div style="width:40px;text-align:center;font-family:Orbitron;font-size:18px;color:var(--purple)">${data.typeDistribution?.research || data.typeDistribution?.['research'] || 0}</div>
+          <div style="width:40px;text-align:center;font-family:Orbitron;font-size:18px;color:var(--purple)">${data.typeDistribution?.research || researchCount || 0}</div>
           <div style="flex:1;height:6px;background:rgba(255,255,255,.03);border-radius:3px;overflow:hidden">
             <div style="width:100%;height:100%;background:linear-gradient(90deg,#7c3aed,var(--purple));border-radius:3px;box-shadow:0 0 8px rgba(168,85,247,.3)"></div>
           </div>
