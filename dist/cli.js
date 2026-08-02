@@ -163,6 +163,7 @@ commander_1.program
     .command('status-panel')
     .alias('sp')
     .description('IDE-style status panel: phase + tasks + progress + next action')
+    .option('--export <format>', 'Export status (json/md)')
     .action(status_panel_1.statusPanelCommand);
 commander_1.program
     .command('open')
