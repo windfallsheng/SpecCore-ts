@@ -207,23 +207,28 @@ async function autoPipeline(options: DevOptions): Promise<void> {
     }
   });
 
-  // Step 1: Import / doc2spec
+  // Step 1: Import — 智能检测已有项目
   steps.push({
     name: 'import',
     check: async () => {
+      // 检查全量层是否已有项目
+      const globalProjects = join(process.cwd(), '.speccore', 'GLOBAL', 'PROJECTS');
+      if (await pathExists(globalProjects)) {
+        const entries = await require('fs-extra').readdir(globalProjects);
+        const hasProjects = entries.some((e: string) => e !== '_template');
+        if (hasProjects) return true;  // 已导入过
+      }
+      // 检查是否有需求文档（doc2spec 方式）
       const iter = await getDefaultIteration(options.iteration);
-      if (!iter) return false;
-      return await pathExists(join(process.cwd(), '期次-'+iter, '00-需求文档', 'REQUIREMENT.md'));
+      return iter ? await pathExists(join(process.cwd(), '期次-'+iter, '00-需求文档', 'REQUIREMENT.md')) : false;
     },
     run: () => {
-      logger.info('\\n🤖 Step 2/9: speccore import (从源码导入)');
-      logger.info('   💡 如无需导入，跳过此步骤');
-      // 自动检测 src/ 目录
-      try {
-        const srcExists = require('fs').existsSync(join(process.cwd(), 'src'));
-        if (srcExists) execSync('speccore import --project=auto --path=. --type=backend --force', { stdio: 'inherit' });
-        else logger.info('   ⏭️ 无 src 目录，跳过 import');
-      } catch { logger.info('   ⏭️ 导入跳过'); }
+      logger.info('\\n🤖 Step 2/9: speccore import (智能检测源码)');
+      // 读取用户配置的 import 策略
+      const configPath = join(process.cwd(), '.speccore', 'SETTINGS.md');
+      logger.info('   💡 自动导入需手动配置项目路径，当前跳过');
+      logger.info('   📋 手动运行: speccore import --project=<name> --path=<src> --type=<backend|frontend>');
+      logger.info('   📋 或用文档方式: speccore doc2spec --file=PRD.md --platform=backend -i <迭代>');
     }
   });
 
