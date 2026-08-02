@@ -67,7 +67,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
 .type-res{background:rgba(168,85,247,.12);color:#c084fc}
 .footer{display:flex;justify-content:space-between;align-items:center;margin-top:28px;padding:16px 0;border-top:1px solid rgba(0,240,255,.06);color:var(--muted);font-size:11px;letter-spacing:1px}
 .data-stream{position:absolute;bottom:0;left:0;right:0;height:30px;background:linear-gradient(transparent,rgba(0,240,255,.02));overflow:hidden}
-.data-stream span{position:absolute;color:rgba(0,240,255,.15);font-family:'JetBrains Mono',monospace;font-size:10px;white-space:nowrap;animation:stream 20s linear infinite}
+.num-font{font-family:'Orbitron',sans-serif;font-size:18px;color:var(--cyan)}.data-stream span{position:absolute;color:rgba(0,240,255,.15);font-family:'JetBrains Mono',monospace;font-size:10px;white-space:nowrap;animation:stream 20s linear infinite}
 @keyframes stream{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}
 
 .fs-btn{position:absolute;top:10px;right:10px;width:28px;height:28px;border-radius:6px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);color:var(--muted);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .2s;z-index:10;opacity:0}
@@ -340,6 +340,8 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
     </div>
   </div>
 
+  <div class="panel" style="margin-bottom:20px"><div class="panel-title">TEAM WORKLOAD</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px"><div style="background:rgba(0,240,255,.03);border:1px solid rgba(0,240,255,.08);border-radius:8px;padding:16px"><div style="font-size:14px;font-weight:600;margin-bottom:8px">张三</div><div style="display:flex;gap:12px;margin-bottom:8px"><div><span class="num-font">2</span><span style="font-size:10px;color:var(--muted)">/2</span></div><div class="num-font" style="margin-left:auto">100%</div></div><div style="height:4px;background:rgba(255,255,255,.03);border-radius:2px;overflow:hidden"><div style="width:100%;height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:2px"></div></div></div><div style="background:rgba(0,240,255,.03);border:1px solid rgba(0,240,255,.08);border-radius:8px;padding:16px"><div style="font-size:14px;font-weight:600;margin-bottom:8px">李四</div><div style="display:flex;gap:12px;margin-bottom:8px"><div><span class="num-font">0</span><span style="font-size:10px;color:var(--muted)">/2</span></div><div class="num-font" style="margin-left:auto">0%</div></div><div style="height:4px;background:rgba(255,255,255,.03);border-radius:2px;overflow:hidden"><div style="width:0%;height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:2px"></div></div></div><div style="background:rgba(0,240,255,.03);border:1px solid rgba(0,240,255,.08);border-radius:8px;padding:16px"><div style="font-size:14px;font-weight:600;margin-bottom:8px">王五</div><div style="display:flex;gap:12px;margin-bottom:8px"><div><span class="num-font">0</span><span style="font-size:10px;color:var(--muted)">/1</span></div><div class="num-font" style="margin-left:auto">0%</div></div><div style="height:4px;background:rgba(255,255,255,.03);border-radius:2px;overflow:hidden"><div style="width:0%;height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:2px"></div></div></div></div></div>
+
   <div class="panel">
     <div class="panel-title">TASK REGISTRY</div>
     <table>
@@ -353,7 +355,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
 
   <div class="footer">
     <span>SPECCORE v5.20.0 · SPEC-DRIVEN DEVELOPMENT</span>
-    <span>EXPORTED: 2026-08-02T12:50:10.588Z</span>
+    <span>EXPORTED: 2026-08-02T12:51:20.785Z</span>
   </div>
 </main>
 
