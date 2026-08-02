@@ -16,6 +16,24 @@ SpecCore is a specification-driven development toolkit for AI-native teams. It o
 
 ---
 
+---
+
+## Quick Start
+
+```bash
+npm install -g speccore
+speccore init                          # Initialize
+speccore iteration create --name=Q1    # Create iteration
+speccore doc2spec -f PRD.md -p backend -i Q1  # Import requirements
+speccore analyze --iteration=Q1        # Analyze
+speccore iteration split -i Q1         # Split into tasks
+speccore plan --iteration=Q1           # Generate plan
+speccore execute --task=Task-001       # AI development
+speccore pr --task=Task-001            # Create PR
+speccore done --task=Task-001          # Complete
+```
+
+
 ## Two Ways to Use
 
 The same feature has different syntax in terminal CLI vs AI chat, depending on context:
@@ -51,23 +69,6 @@ The same feature has different syntax in terminal CLI vs AI chat, depending on c
 | Reverse engineering | `/spec-import-analyze` → AI infers requirements from code | Pure AI behavior |
 
 > **Why the difference?** CLI excels at precision and scripting with explicit flags. AI chat excels at understanding natural language and project context. Complex parameters work best in CLI; deep project analysis works best in chat.
-
----
-
-## Quick Start
-
-```bash
-npm install -g speccore
-speccore init                          # Initialize
-speccore iteration create --name=Q1    # Create iteration
-speccore doc2spec -f PRD.md -p backend -i Q1  # Import requirements
-speccore analyze --iteration=Q1        # Analyze
-speccore iteration split -i Q1         # Split into tasks
-speccore plan --iteration=Q1           # Generate plan
-speccore execute --task=Task-001       # AI development
-speccore pr --task=Task-001            # Create PR
-speccore done --task=Task-001          # Complete
-```
 
 ## Interactive Mode
 
