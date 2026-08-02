@@ -288,7 +288,7 @@ speccore current --commit    # Generate commit message
 | Execute in | Prefix | Example |
 | :--- | :--- | :--- |
 | 🔧 Terminal | `speccore` | `speccore init`、`speccore task new --platforms=web,h5` |
-| 🤖 AI Tool | `/spec-` | `/spec-init`、`/spec-new-task --platforms=web,h5` |
+| 🤖 AI Tool | `/spec-` | `/spec-init`、`/spec-task-new --platforms=web,h5` |
 
 Both share the same logic. AI commands call CLI commands internally when used in WorkBuddy / Cursor / Claude Code.
 

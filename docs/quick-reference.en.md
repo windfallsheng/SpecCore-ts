@@ -28,7 +28,7 @@ speccore current --commit             # Generate commit message
 ## 🤖 AI Commands (/spec prefix, in AI tools)
 
 ```
-/spec-init  /spec-new-task  /spec-execute  /spec-validate
+/spec-init  /spec-task-new  /spec-execute  /spec-validate
 /spec-progress  /spec-update  /spec-trace  /spec-diff
 ```
 
