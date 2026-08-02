@@ -88,6 +88,25 @@ speccore import --project=meeting --path=reqs.xlsx  （也支持 .csv）
 speccore bugfix --batch-file=bugs.xlsx --schedule=night --interactive
 ```
 
+
+## 夜间调度执行
+
+白日创建任务队列 → 夜间自动执行 → 晨间验证结果。
+
+```bash
+# 白天：标记任务进入夜间队列
+speccore bugfix --batch-file=bugs.xlsx --schedule=night --interactive
+speccore task new --name=数据迁移 --type=feature
+
+# 夜间：自动化定时执行（需在 WorkBuddy 中设置自动化）
+# 或手动触发：
+speccore execute --all --scheduled
+```
+
+自动化设置：在 WorkBuddy 中创建定时任务，每天凌晨 2:00 执行。
+配置：`/.speccore/config/automation.json`
+
+
 ## 目录结构
 
 ```
