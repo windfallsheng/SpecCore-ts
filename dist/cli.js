@@ -53,19 +53,15 @@ const plan_1 = require("./commands/plan");
 const execute_1 = require("./commands/execute");
 // 新增命令
 const ask_1 = require("./commands/ask");
-const goal_1 = require("./commands/goal");
 const bugfix_1 = require("./commands/bugfix");
 const change_1 = require("./commands/change");
 const sync_1 = require("./commands/sync");
 const pattern_1 = require("./commands/pattern");
 const rollback_1 = require("./commands/rollback");
 const handover_1 = require("./commands/handover");
-const retro_1 = require("./commands/retro");
-const template_add_1 = require("./commands/template-add");
 const help_1 = require("./commands/help");
 const dev_1 = require("./commands/dev");
 const status_panel_1 = require("./commands/status-panel");
-const demo_1 = require("./commands/demo");
 const welcome_1 = require("./commands/welcome");
 const doc2spec_1 = require("./commands/doc2spec");
 // 全量层命令
@@ -87,7 +83,6 @@ const done_1 = require("./commands/done");
 // rename 命令
 const rename_1 = require("./commands/rename");
 // v4.0.0 新增命令
-const platform_add_1 = require("./commands/platform-add");
 const index_update_1 = require("./commands/index-update");
 // v4.6.0 迁移命令
 const migrate_1 = require("./commands/migrate");
@@ -109,8 +104,6 @@ const delete_1 = require("./commands/delete");
 // v5.6.0 新增
 const search_1 = require("./commands/search");
 const watch_1 = require("./commands/watch");
-// v5.21.0 任务调度
-const schedule_1 = require("./commands/schedule");
 const i18n_1 = require("./i18n");
 commander_1.program
     .name('speccore')
@@ -218,13 +211,7 @@ commander_1.program
     .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
     .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
     .action(dev_1.devCommand);
-commander_1.program
-    .command('demo')
-    .alias('dm')
-    .description('Quick experience demo (5 min)')
-    .option('--project <key>', 'Demo project type: book, todo, blog', 'book')
-    .option('--list', 'List available demo projects')
-    .action(demo_1.demoCommand);
+commander_1.program;
 // ================================================================
 // 🏗️ 初始化与导入
 // ================================================================
@@ -318,18 +305,7 @@ taskCmd
     .option('-i, --iteration <iteration>', 'Target iteration')
     .action(new_1.taskNewCommand);
 // 完整需求交付
-commander_1.program
-    .command('goal')
-    .alias('gl')
-    .description('Complete requirement delivery (from requirement to code)')
-    .option('-n, --name <name>', 'Feature name')
-    .option('-d, --desc <desc>', 'Feature description')
-    .option('-t, --type <type>', 'Task type', 'feature')
-    .option('--task-id <id>', 'Task ID')
-    .option('-i, --iteration <iteration>', 'Target iteration')
-    .option('--backend-only', 'Backend only')
-    .option('--frontend-only', 'Frontend only')
-    .action(goal_1.goalCommand);
+commander_1.program;
 // Bug 修复
 commander_1.program
     .command('bugfix')
@@ -346,25 +322,7 @@ commander_1.program
     .option('--affected-task <task>', 'Affected task for regression')
     .action(bugfix_1.bugfixCommand);
 // 技术调研
-commander_1.program
-    .command('research')
-    .alias('rs')
-    .description('Technical research: evaluate solutions and compare options')
-    .option('-n, --name <name>', 'Research topic');
-// ================================================================
-// ⚡ 执行与调度
-// ================================================================
-commander_1.program
-    .command('pr')
-    .alias('mr')
-    .description('Create Pull Request with task summary')
-    .option('-t, --task <task>', 'Target task (auto-detect from branch if omitted)')
-    .option('-i, --iteration <iteration>', 'Target iteration')
-    .option('--base <branch>', 'Base branch', 'main')
-    .option('--draft', 'Create as draft PR')
-    .option('--interactive', '分步：预览变更 → 选文件 → commit → 推送 → 创建PR')
-    .option('--title <title>', 'Custom PR title')
-    .action(pr_1.prCommand);
+commander_1.program;
 commander_1.program
     .command('pr')
     .alias('mr')
@@ -423,49 +381,8 @@ commander_1.program
     .option('--hotfix', 'Emergency fix: skip reverse sync (30min grace, 24h mandatory)')
     .action(execute_1.executeCommand);
 // ================================================================
-// ⏰ 任务调度
+// 任务调度（已通过 WorkBuddy Automation 实现）
 // ================================================================
-const scheduleCmd = commander_1.program
-    .command('schedule')
-    .alias('sc')
-    .description('Task scheduling: delayed execution at specified time');
-scheduleCmd
-    .command('create')
-    .alias('cr')
-    .description('Create a scheduled task — runs at specified time')
-    .option('-t, --task <task>', 'Target task ID')
-    .option('--all', 'Execute all pending tasks')
-    .option('-i, --iteration <iteration>', 'Target iteration')
-    .requiredOption('--at <time>', 'Scheduled time, format: "YYYY-MM-DD HH:mm:ss" (e.g., 2026-08-10 21:00:00)')
-    .option('-n, --name <name>', 'Custom task name')
-    .action(schedule_1.scheduleCreateCommand);
-scheduleCmd
-    .command('list')
-    .alias('ls')
-    .description('List all scheduled tasks')
-    .option('--status <status>', 'Filter by status: pending|running|completed|failed|cancelled')
-    .action(schedule_1.scheduleListCommand);
-scheduleCmd
-    .command('cancel')
-    .alias('cx')
-    .description('Cancel a pending scheduled task')
-    .requiredOption('--id <id>', 'Scheduled task ID')
-    .action(schedule_1.scheduleCancelCommand);
-scheduleCmd
-    .command('delete')
-    .alias('rm')
-    .description('Delete a scheduled task record')
-    .requiredOption('--id <id>', 'Scheduled task ID')
-    .action(schedule_1.scheduleDeleteCommand);
-scheduleCmd
-    .command('daemon')
-    .alias('dm')
-    .description('Manage the schedule daemon process')
-    .argument('[action]', 'Action: start|stop|restart|status (default: status)')
-    .option('--foreground', 'Run daemon in foreground (internal use)')
-    .action((action, options) => {
-    (0, schedule_1.scheduleDaemonCommand)({ action, foreground: options.foreground });
-});
 // ================================================================
 // 🔄 变更管理
 // ================================================================
@@ -572,13 +489,7 @@ commander_1.program
     .option('-o, --output <path>', 'Output file path')
     .option('--format <format>', 'Output format: md', 'md')
     .action(handover_1.handoverCommand);
-commander_1.program
-    .command('retro')
-    .alias('rt')
-    .description('Iteration retrospective: summarize experience and improvements')
-    .option('-i, --iteration <iteration>', 'Target iteration')
-    .option('-o, --output <path>', 'Output file path')
-    .action(retro_1.retroCommand);
+commander_1.program;
 // ================================================================
 // ⚙️ 配置与工具
 // ================================================================
@@ -641,15 +552,7 @@ commander_1.program
     .option('--risk', 'Include risk analysis')
     .option('--trend', 'Include trend comparison')
     .action(report_1.reportCommand);
-commander_1.program
-    .command('template-add')
-    .alias('ta')
-    .description('Add code generation template from existing code')
-    .option('-n, --name <name>', 'Template name (required)')
-    .option('-t, --type <type>', 'Template type: crud, auth, export, report', 'crud')
-    .option('-f, --files <files>', 'Code file paths (comma-separated, required)')
-    .option('-d, --desc <desc>', 'Template description')
-    .action(template_add_1.templateAddCommand);
+commander_1.program;
 // ================================================================
 // 📖 帮助
 // ================================================================
@@ -812,15 +715,7 @@ commander_1.program
     .option('--frontend-only', 'Create frontend only')
     .option('-i, --iteration <iteration>', 'Target iteration')
     .action(new_1.taskNewCommand);
-commander_1.program
-    .command('platform-add')
-    .alias('padd')
-    .description('Dynamically add a frontend platform type (v4.0)')
-    .option('--name <name>', 'Platform identifier (required, e.g. tablet)')
-    .option('--description <desc>', 'Platform display name')
-    .option('--tech <tech>', 'Tech stack description')
-    .option('--no-sync', 'Skip syncing to existing tasks')
-    .action(platform_add_1.platformAddCommand);
+commander_1.program;
 commander_1.program
     .command('index-update')
     .alias('iu')
@@ -838,17 +733,7 @@ commander_1.program
 // 快捷别名（顶层别名）
 // ================================================================
 // 为常用命令提供顶层快捷访问
-commander_1.program
-    .command('rv')
-    .description('[Alias] speccore validate')
-    .option('-i, --iteration <iteration>', 'Target iteration')
-    .option('-t, --task <task>', 'Validate specific task')
-    .option('--strict', 'Strict mode')
-    .option('--scheduled', '夜间调度：只执行标记为 queue 的任务')
-    .option('--verify', '生成代码后自动检查 TEST/REVIEW/DEPLOY → 最多3轮自动修复')
-    .option('--fix', 'Auto-fix')
-    .option('--format <format>', 'Output format: text or json', 'text')
-    .action(validate_1.validateCommand);
+commander_1.program;
 // v4.7.0 体验增强命令
 commander_1.program;
 commander_1.program
