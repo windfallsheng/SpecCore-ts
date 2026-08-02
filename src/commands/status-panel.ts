@@ -167,14 +167,20 @@ async function exportStatus(config: any, iteration: string | null, format: strin
     data.phase = phase;
 
     // ── 读取期次时间范围 ──
-    const metaPath = join(iterDir, '00-期次总览', 'METADATA.md');
+    const metaPath = join(iterDir, "00-期次总览", "METADATA.md");
+    const graphPath = join(iterDir, '00-期次总览', 'PROJECT_GRAPH.md');
+    if (await pathExists(graphPath)) {
+      const graph = await readFile(graphPath, 'utf-8');
+      const ownerMatch = graph.match(/负责人[：:]?\s*(\S+)/);
+      if (ownerMatch) data.iterationOwner = ownerMatch[1];
+    }
     if (await pathExists(metaPath)) {
       const meta = await readFile(metaPath, 'utf-8');
       const fromMatch = meta.match(/开始[：:]?\s*(\d{4}-\d{2}-\d{2})/) || meta.match(/from[：:]?\s*(\d{4}-\d{2}-\d{2})/i);
       const toMatch = meta.match(/结束[：:]?\s*(\d{4}-\d{2}-\d{2})/) || meta.match(/to[：:]?\s*(\d{4}-\d{2}-\d{2})/i);
       if (fromMatch) data.iterationStart = fromMatch[1];
       if (toMatch) data.iterationEnd = toMatch[1];
-      const ownerMatch = meta.match(/负责人[：:]?\s*(\S+)/);
+      const ownerMatch = (await readFile(graphPath, "utf-8")).match(/负责人[：:]?\s*(\S+)/);
       if (ownerMatch) data.iterationOwner = ownerMatch[1];
     }
     
