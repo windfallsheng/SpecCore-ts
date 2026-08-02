@@ -99,7 +99,7 @@ speccore iteration create --name 2026-07-UserSystem
 
 ```bash
 # Multi-platform task
-speccore new-task --name UserLogin --platforms=web,h5
+speccore task new --name UserLogin --platforms=web,h5
 
 # Traditional single task
 speccore task new --name AuditLog --type feature
@@ -128,15 +128,15 @@ speccore context --task=Task-001
 
 ## Smart Entry: Natural Language
 
-**Can't remember commands? Use `speccore spec` + natural language!** 38 intent types, 200+ keywords.
+**Can't remember commands? Use `speccore ask` + natural language!** 38 intent types, 200+ keywords.
 
 ```bash
-speccore spec "Create a login feature"       # → matches goal
-speccore spec "Start working"                # → matches execute
-speccore spec "How's the progress?"          # → matches progress
-speccore spec "Change login to use OTP"      # → matches change
-speccore spec "Global status"                # → matches global-status
-speccore spec "Analyze REQ-001 impact"       # → matches impact
+speccore ask "Create a login feature"       # → matches goal
+speccore ask "Start working"                # → matches execute
+speccore ask "How's the progress?"          # → matches progress
+speccore ask "Change login to use OTP"      # → matches change
+speccore ask "Global status"                # → matches global-status
+speccore ask "Analyze REQ-001 impact"       # → matches impact
 ```
 
 ---
@@ -157,7 +157,7 @@ speccore index-update                  # Execute
 
 ```bash
 # Create multi-platform task
-speccore new-task --name UserLogin --platforms=web,h5,miniapp
+speccore task new --name UserLogin --platforms=web,h5,miniapp
 
 # Add new platform
 speccore platform-add --name=tablet --description="Tablet" --tech="React Native"
@@ -287,7 +287,7 @@ speccore current --commit    # Generate commit message
 
 | Execute in | Prefix | Example |
 | :--- | :--- | :--- |
-| 🔧 Terminal | `speccore` | `speccore init`、`speccore new-task --platforms=web,h5` |
+| 🔧 Terminal | `speccore` | `speccore init`、`speccore task new --platforms=web,h5` |
 | 🤖 AI Tool | `/spec-` | `/spec-init`、`/spec-new-task --platforms=web,h5` |
 
 Both share the same logic. AI commands call CLI commands internally when used in WorkBuddy / Cursor / Claude Code.

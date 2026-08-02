@@ -138,7 +138,7 @@ Task-001-订单管理/
    → AI 调用 speccore iteration create --name=Q3
 
 3. "创建一个订单管理的 Feature 任务"
-   → AI 调用 speccore new-task --name="订单管理"
+   → AI 调用 speccore task new --name="订单管理"
 
 4. "订单管理 Task-001 需要 CRUD，加上分页和软删除"
    → AI 填充 REQ.md 接口表格
@@ -159,7 +159,7 @@ vim .speccore/GLOBAL/TECH_STACK.md # 加 tech-stack 标记
 
 # 2. 创建期次和任务
 speccore iteration create --name=Q3
-speccore new-task --name="订单管理" --platforms=web,backend
+speccore task new --name="订单管理" --platforms=web,backend
 
 # 3. 写需求文档
 vim 期次-Q3/Task-001-订单管理/backend/REQ.md

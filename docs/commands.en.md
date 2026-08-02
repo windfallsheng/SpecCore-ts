@@ -19,10 +19,10 @@
 
 | Command | Alias | Description | Options |
 | :--- | :--- | :--- | :--- |
-| `speccore spec "<query>"` | — | Natural language intent routing | `"<query>"` |
+| `speccore ask "<query>"` | — | Natural language intent routing | `"<query>"` |
 
 ```bash
-speccore spec "create user login feature"
+speccore ask "create user login feature"
 ```
 
 ---
@@ -64,12 +64,12 @@ speccore iteration-from-global --reqs=REQ-001,REQ-002 --name=2026-07-Meeting
 
 | Command | Alias | Description | Options |
 | :--- | :--- | :--- | :--- |
-| `speccore new-task` | `nt` | Create multi-platform task | `--name <name>` `--type <type>` `--platforms <list>` `--backend-only` `--iteration <name>` |
+| `speccore task new` | `nt` | Create multi-platform task | `--name <name>` `--type <type>` `--platforms <list>` `--backend-only` `--iteration <name>` |
 | `speccore task new` | — | Create traditional single task | `--name <name>` `--type <type>` `--desc <desc>` `--iteration <name>` |
 
 ```bash
-speccore new-task --name="User Login" --platforms=web,h5 --type=feature
-speccore new-task --name="API Endpoint" --backend-only --iteration=2026-07-Meeting
+speccore task new --name="User Login" --platforms=web,h5 --type=feature
+speccore task new --name="API Endpoint" --backend-only --iteration=2026-07-Meeting
 speccore task new --name="Data Export" --type=feature --desc="Excel export"
 ```
 
@@ -307,7 +307,7 @@ speccore trace --full
 | 88 | bugfix | bug, fix, error | `speccore bugfix` |
 | 85 | create | create, build, implement | `speccore goal` |
 | 85 | init | initialize, setup, create | `speccore init` |
-| 84 | new_task | new task, create task | `speccore new-task` |
+| 84 | new_task | new task, create task | `speccore task new` |
 | 83 | import_to_global | import project | `speccore import` |
 | 82 | import | import, migrate | `speccore import` |
 | 80 | review | review, check, inspect | `speccore validate` |

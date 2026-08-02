@@ -19,9 +19,9 @@ speccore import --project=frontend --path=./web --type=web
 speccore iteration create --name="2026-07-Auth" --goal="User auth system"
 
 # 4. Create tasks
-speccore new-task --name="User Login" --platforms=web,h5 --type=feature
-speccore new-task --name="User Register" --platforms=web,h5 --type=feature
-speccore new-task --name="Password Reset" --platforms=web --type=feature
+speccore task new --name="User Login" --platforms=web,h5 --type=feature
+speccore task new --name="User Register" --platforms=web,h5 --type=feature
+speccore task new --name="Password Reset" --platforms=web --type=feature
 
 # 5. Check progress
 speccore progress --detail
@@ -94,8 +94,8 @@ speccore update --task=Task-004 --status=completed
 ```bash
 # 1. Architect creates iteration and tasks
 speccore iteration create --name="2026-07-Sprint"
-speccore new-task --name="User Login" --platforms=web,h5
-speccore new-task --name="User Register" --platforms=web,h5
+speccore task new --name="User Login" --platforms=web,h5
+speccore task new --name="User Register" --platforms=web,h5
 
 # 2. Backend dev claims task
 git checkout -b feature/Task-001   # or: speccore execute --task=Task-001 --force
@@ -353,8 +353,8 @@ speccore progress --iteration=2026-Q3-Sprint --detail
 ```bash
 # Create iteration → manually add tasks
 speccore iteration create --name=2026-07-Sprint --goal="User System"
-speccore new-task --name="User Login" --platforms=web,h5 --type=feature
-speccore new-task --name="User Register" --platforms=web --type=feature
+speccore task new --name="User Login" --platforms=web,h5 --type=feature
+speccore task new --name="User Register" --platforms=web --type=feature
 
 # After filling REQ.md content, sync to global layer
 speccore sync-global --iteration=2026-07-Sprint
@@ -463,7 +463,7 @@ speccore hooks install
 
 ```bash
 # Created with web only, later need h5
-speccore new-task --name="User Login" --platforms=web --type=feature
+speccore task new --name="User Login" --platforms=web --type=feature
 
 # ❌ Don't delete and recreate — just add the platform
 speccore platform-add --name=h5 --tech="H5 Mobile"
@@ -474,7 +474,7 @@ speccore platform-add --name=h5 --tech="H5 Mobile"
 
 ```bash
 # Created with web,h5,miniapp but only doing web
-speccore new-task --name="Admin Panel" --platforms=web,h5,miniapp --type=feature
+speccore task new --name="Admin Panel" --platforms=web,h5,miniapp --type=feature
 
 # Just run/filter by web — other platforms are skipped, no errors
 speccore execute --platform=web
@@ -486,7 +486,7 @@ speccore progress --platform=web
 ```bash
 speccore platform-add --name=tablet --description="Tablet UI" --tech="React Native"
 # Now new-task can use tablet
-speccore new-task --name="xxx" --platforms=web,tablet
+speccore task new --name="xxx" --platforms=web,tablet
 ```
 
 ---

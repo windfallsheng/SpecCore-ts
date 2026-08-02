@@ -79,7 +79,7 @@ SDD 不是替代 TDD，而是**前置 TDD**：在写测试之前，先确保 AI 
 
 ```bash
 speccore init                           # 项目初始化（一键创建完整结构）
-speccore new-task --platforms=web,h5   # 创建多平台任务（自动生成 Spec 骨架）
+speccore task new --platforms=web,h5   # 创建多平台任务（自动生成 Spec 骨架）
 speccore execute --all --batch-size=3  # 分批执行（上下文隔离）
 speccore validate                      # 合规校验（自动检测 Spec 完整性）
 ```
@@ -111,7 +111,7 @@ Spec 作为独立仓库管理，代码工程平级部署。权限清晰、版本
    └→ 编写 REQ.md（需求描述）
 
 2. 任务拆分
-   └→ 创建 Task: speccore new-task --platforms=web,h5
+   └→ 创建 Task: speccore task new --platforms=web,h5
    └→ 完善 TECH.md / TASK.md / API_CONTRACT.yaml
 
 3. 执行开发
