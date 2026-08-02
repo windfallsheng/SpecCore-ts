@@ -48,7 +48,7 @@ jobs:
         run: speccore health
 
       - name: Progress Report
-        run: speccore progress --format=json
+        run: speccore status-panel --format=json
 ```
 
 ### 3. 各阶段检查项
@@ -59,7 +59,7 @@ jobs:
 | Pre-push | `speccore sync --all --detect` | Spec 与代码不一致 |
 | PR 检查 | `speccore audit` | 全局合规性 |
 | 合并后 | `speccore sync-global --direction=to_global` | 更新视角索引 |
-| 发版前 | `speccore dashboard` | 整体进度、健康度一张图 |
+| 发版前 | `speccore status-panel` | 整体进度、健康度一张图 |
 
 ### 4. 完整 CI 结构
 
@@ -155,7 +155,7 @@ speccore sync --reverse
 ```bash
 # 早上一上班
 speccore current                    # 看当前关联的任务
-speccore progress                   # 看整体进度
+speccore status-panel                   # 看整体进度
 
 # 开始编码
 # 在代码中添加 @spec Task-XXX 注释...
@@ -168,7 +168,7 @@ git commit -m "feat: 实现任务 CRUD"
 # 提交成功后
 speccore sync --reverse             # 反向同步 Spec
 speccore update --task=Task-001 --status=completed
-speccore progress                   # 确认状态更新
+speccore status-panel                   # 确认状态更新
 ```
 
 ---
