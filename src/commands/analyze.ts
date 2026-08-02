@@ -610,6 +610,13 @@ async function perTaskAnalyze(iterDir: string, taskId: string): Promise<void> {
       ['MONITOR.md', `# 监控\n\n## 关键指标\n| 指标 | 阈值 | 级别 |\n| :--- | :--- | :--- |\n| 成功率 | <99.9% | P1 |\n| P99延迟 | >1000ms | P2 |\n`],
     ];
     
+    const platformDirs = [backendDir];
+    const fDir = join(fullTaskDir, 'frontend');
+    if (await require('fs-extra').pathExists(fDir)) {
+      const subdirs = require('fs').readdirSync(fDir, { withFileTypes: true }).filter((e: any) => e.isDirectory()).map((e: any) => join(fDir, e.name));
+      platformDirs.push(...subdirs);
+    }
+    for (const targetDir of platformDirs) {
     for (const [filename, content] of templates) {
       const fp = join(backendDir, filename);
       if (!(await pathExists(fp))) {
@@ -617,6 +624,7 @@ async function perTaskAnalyze(iterDir: string, taskId: string): Promise<void> {
         missingFiles.push(filename);
       }
     }
+        }
     if (missingFiles.length > 0) logger.info(`   📄 创建缺失文件: ${missingFiles.join(', ')}`);
 
     spinner.stop();
