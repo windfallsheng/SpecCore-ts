@@ -356,7 +356,11 @@ async function executeResume(iteration) {
         const batchTasks = (0, execution_state_1.getCurrentBatchTasks)(state);
         if (batchTasks.length === 0)
             break;
-        const taskObjs = batchTasks.map(id => ({ id, name: id, type: 'unknown', status: 'pending', assignee: '', dependencies: [], priority: 'medium', progress: 0 }));
+        const taskObjs = batchTasks.map(id => ({
+            id, name: id,
+            type: 'pending', status: 'pending',
+            assignee: '', dependencies: [], priority: 'medium', progress: 0
+        }));
         await processBatch(taskObjs, state, iteration);
         state = (0, execution_state_1.loadExecutionState)();
     }

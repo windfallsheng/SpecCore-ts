@@ -60,7 +60,7 @@ export async function planCommand(options: PlanOptions): Promise<void> {
     const sortedTasks = topologicalSort(filteredTasks);
 
     // Calculate team assignments
-    const teamSize = parseInt(options.team || '3', 10);
+    const teamSize = parseInt(options.team || '1', 10);
     const assignees = options.assign ? options.assign.split(',') : [];
     
     if (assignees.length > 0) {

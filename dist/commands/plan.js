@@ -43,7 +43,7 @@ async function planCommand(options) {
         // Sort by dependencies
         const sortedTasks = (0, state_1.topologicalSort)(filteredTasks);
         // Calculate team assignments
-        const teamSize = parseInt(options.team || '3', 10);
+        const teamSize = parseInt(options.team || '1', 10);
         const assignees = options.assign ? options.assign.split(',') : [];
         if (assignees.length > 0) {
             // Assign tasks to specified members
