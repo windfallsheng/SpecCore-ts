@@ -109,6 +109,8 @@ const delete_1 = require("./commands/delete");
 // v5.6.0 新增
 const search_1 = require("./commands/search");
 const watch_1 = require("./commands/watch");
+// v5.21.0 任务调度
+const schedule_1 = require("./commands/schedule");
 const i18n_1 = require("./i18n");
 commander_1.program
     .name('speccore')
@@ -138,7 +140,7 @@ const MODE = readMode();
 const SIMPLE_COMMANDS = new Set([
     'ask', 'init', 'doc2spec', 'analyze', 'split', 'execute',
     'pr', 'done', 'status-panel', 'dev',
-    'iteration', 'task', 'plan', 'ops', 'import',
+    'iteration', 'task', 'plan', 'ops', 'import', 'schedule',
 ]);
 /** 简洁模式下过滤 help 命令列表 */
 function filterCommands(commands) {
@@ -278,6 +280,7 @@ iterationCmd
     .option('--dry-run', 'Preview without creating')
     .option('--interactive', 'Preview → adjust → confirm before creating')
     .option('--strict', 'Review each section before creating tasks')
+    .option('--scheduled', '夜间调度：只执行标记为 queue 的任务')
     .action(split_1.iterationSplitCommand);
 // ================================================================
 // 📝 任务管理
@@ -396,12 +399,57 @@ commander_1.program
     .option('-i, --iteration <iteration>', 'Target iteration')
     .option('--force', 'Skip preview and execute directly')
     .option('--strict', 'Pre-flight check: review req/tech/test before code gen')
+    .option('--scheduled', '夜间调度：只执行标记为 queue 的任务')
     .option('--base <branch>', 'Base branch for task branching (default: current)')
     .option('--skip <tasks>', 'Comma-separated task IDs to skip')
     .option('--only <tasks>', 'Comma-separated task IDs to execute exclusively (whitelist)')
     .option('--agent <tool>', 'External AI: copilot/claude/cursor/trae/qoder/windsurf/codebuddy')
     .option('--hotfix', 'Emergency fix: skip reverse sync (30min grace, 24h mandatory)')
     .action(execute_1.executeCommand);
+// ================================================================
+// ⏰ 任务调度
+// ================================================================
+const scheduleCmd = commander_1.program
+    .command('schedule')
+    .alias('sc')
+    .description('Task scheduling: delayed execution at specified time');
+scheduleCmd
+    .command('create')
+    .alias('cr')
+    .description('Create a scheduled task — runs at specified time')
+    .option('-t, --task <task>', 'Target task ID')
+    .option('--all', 'Execute all pending tasks')
+    .option('-i, --iteration <iteration>', 'Target iteration')
+    .requiredOption('--at <time>', 'Scheduled time, format: "YYYY-MM-DD HH:mm:ss" (e.g., 2026-08-10 21:00:00)')
+    .option('-n, --name <name>', 'Custom task name')
+    .action(schedule_1.scheduleCreateCommand);
+scheduleCmd
+    .command('list')
+    .alias('ls')
+    .description('List all scheduled tasks')
+    .option('--status <status>', 'Filter by status: pending|running|completed|failed|cancelled')
+    .action(schedule_1.scheduleListCommand);
+scheduleCmd
+    .command('cancel')
+    .alias('cx')
+    .description('Cancel a pending scheduled task')
+    .requiredOption('--id <id>', 'Scheduled task ID')
+    .action(schedule_1.scheduleCancelCommand);
+scheduleCmd
+    .command('delete')
+    .alias('rm')
+    .description('Delete a scheduled task record')
+    .requiredOption('--id <id>', 'Scheduled task ID')
+    .action(schedule_1.scheduleDeleteCommand);
+scheduleCmd
+    .command('daemon')
+    .alias('dm')
+    .description('Manage the schedule daemon process')
+    .argument('[action]', 'Action: start|stop|restart|status (default: status)')
+    .option('--foreground', 'Run daemon in foreground (internal use)')
+    .action((action, options) => {
+    (0, schedule_1.scheduleDaemonCommand)({ action, foreground: options.foreground });
+});
 // ================================================================
 // 🔄 变更管理
 // ================================================================
@@ -444,6 +492,7 @@ commander_1.program
     .option('--type <type>', 'Filter by task type')
     .option('--fix', 'Auto-fix issues where possible')
     .option('--strict', 'Strict validation mode')
+    .option('--scheduled', '夜间调度：只执行标记为 queue 的任务')
     .option('--format <format>', 'Output format: text, json', 'text')
     .action(validate_1.validateCommand);
 // ================================================================
@@ -764,6 +813,7 @@ commander_1.program
     .option('-i, --iteration <iteration>', 'Target iteration')
     .option('-t, --task <task>', 'Validate specific task')
     .option('--strict', 'Strict mode')
+    .option('--scheduled', '夜间调度：只执行标记为 queue 的任务')
     .option('--fix', 'Auto-fix')
     .option('--format <format>', 'Output format: text or json', 'text')
     .action(validate_1.validateCommand);
