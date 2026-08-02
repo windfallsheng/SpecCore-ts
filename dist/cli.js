@@ -281,6 +281,7 @@ iterationCmd
     .option('--interactive', 'Preview → adjust → confirm before creating')
     .option('--strict', 'Review each section before creating tasks')
     .option('--scheduled', '夜间调度：只执行标记为 queue 的任务')
+    .option('--verify', '生成代码后自动检查 TEST/REVIEW/DEPLOY → 最多3轮自动修复')
     .action(split_1.iterationSplitCommand);
 // ================================================================
 // 📝 任务管理
@@ -400,6 +401,7 @@ commander_1.program
     .option('--force', 'Skip preview and execute directly')
     .option('--strict', 'Pre-flight check: review req/tech/test before code gen')
     .option('--scheduled', '夜间调度：只执行标记为 queue 的任务')
+    .option('--verify', '生成代码后自动检查 TEST/REVIEW/DEPLOY → 最多3轮自动修复')
     .option('--base <branch>', 'Base branch for task branching (default: current)')
     .option('--skip <tasks>', 'Comma-separated task IDs to skip')
     .option('--only <tasks>', 'Comma-separated task IDs to execute exclusively (whitelist)')
@@ -493,6 +495,7 @@ commander_1.program
     .option('--fix', 'Auto-fix issues where possible')
     .option('--strict', 'Strict validation mode')
     .option('--scheduled', '夜间调度：只执行标记为 queue 的任务')
+    .option('--verify', '生成代码后自动检查 TEST/REVIEW/DEPLOY → 最多3轮自动修复')
     .option('--format <format>', 'Output format: text, json', 'text')
     .action(validate_1.validateCommand);
 // ================================================================
@@ -814,6 +817,7 @@ commander_1.program
     .option('-t, --task <task>', 'Validate specific task')
     .option('--strict', 'Strict mode')
     .option('--scheduled', '夜间调度：只执行标记为 queue 的任务')
+    .option('--verify', '生成代码后自动检查 TEST/REVIEW/DEPLOY → 最多3轮自动修复')
     .option('--fix', 'Auto-fix')
     .option('--format <format>', 'Output format: text or json', 'text')
     .action(validate_1.validateCommand);
