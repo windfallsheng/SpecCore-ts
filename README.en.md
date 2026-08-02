@@ -18,15 +18,39 @@ SpecCore is a specification-driven development toolkit for AI-native teams. It o
 
 ## Two Ways to Use
 
-The same command works in two scenarios: terminal CLI and AI IDE dialog.
+The same feature has different syntax in terminal CLI vs AI chat, depending on context:
 
-| Scenario | Method | Example |
+### Common Commands (work in both)
+
+| Feature | 🖥 Terminal CLI | 💬 AI Chat | Notes |
+|:---|:---|:---|:---|
+| Init | `speccore init` | `/spec-init` | — |
+| Import | `speccore doc2spec -f PRD.docx -p backend` | `/spec-doc2spec PRD.docx` | CLI uses `-f` for file path |
+| Split | `speccore iteration split -i Q1` | `/spec-split Q1` | CLI uses `-i` for iteration |
+| Execute | `speccore execute -t Task-001 --force` | `/spec-execute Task-001` | CLI uses `-t` for task |
+| PR | `speccore pr -t Task-001` | `/spec-pr Task-001` | — |
+| Status | `speccore status-panel` | `/spec-status-panel` | — |
+| Change | `speccore change "desc" -t Task-001` | `/spec-change Task-001` or natural language | — |
+| Bugfix | `speccore bugfix -n "name" -d "desc"` | `/spec-bugfix` or natural language | — |
+
+### CLI Only (complex parameters, not suited for chat)
+
+| Command | Usage | Why CLI only |
 |:---|:---|:---|
-| 🖥 **Terminal CLI** | `speccore <command>` | `speccore init` `speccore execute -t Task-001 --force` |
-| 💬 **AI Chat** | Natural language | "Create a login feature" "Show project progress" |
-| 💬 **AI Chat** | `/spec-<command>` | `/spec-init` `/spec-execute Task-001` `/spec-status-panel` |
+| `import` | `speccore import --project=xx --path=./src --type=backend --force` | Many params, CLI for precision |
+| `execute --verify` | `speccore execute -t Task-001 --force --verify` | Needs combined flags |
+| `status-panel --export` | `speccore status-panel --export=html --assignee=John` | Export/filter params |
+| `dev --auto` | `speccore dev --auto --from=split` | Full automation pipeline |
 
-**Mapping:** `/spec-init` ≡ `speccore init`. Every CLI command has a matching Slash Command. The most natural way: just speak in the AI dialog — AI auto-matches the command.
+### AI Chat Only (natural language, not suited for CLI)
+
+| Method | Example | Why chat only |
+|:---|:---|:---|
+| Natural language | "Create a login feature" "Show progress" | AI auto-matches the right command |
+| Deep analysis | `/spec-analyze Q1` → AI reads code and fills Specs | Needs AI context understanding |
+| Reverse engineering | `/spec-import-analyze` → AI infers requirements from code | Pure AI behavior |
+
+> **Why the difference?** CLI excels at precision and scripting with explicit flags. AI chat excels at understanding natural language and project context. Complex parameters work best in CLI; deep project analysis works best in chat.
 
 ---
 
