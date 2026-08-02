@@ -349,7 +349,17 @@ async function createTaskFromSection(iterationDir: string, taskId: string, secti
     await writeFile(join(taskDir, 'backend', 'ADR.md'), adr);
   }
 
-  // Write REQ.md
+  // Generate RISK.md — risk assessment + rollback
+  await writeFile(join(taskDir, 'backend', 'RISK.md'), generateRiskTemplate(section));
+
+  // Generate DEPS.md — dependency manifest
+  await writeFile(join(taskDir, 'backend', 'DEPS.md'), generateDepsTemplate(section));
+
+  // Generate MONITOR.md — monitoring points
+  await writeFile(join(taskDir, 'backend', 'MONITOR.md'), generateMonitorTemplate(section));
+
+  // Write REQ.md（含自动生成的 AC）
+  const acItems = generateAcceptanceCriteria(section);
   await writeFile(
     join(taskDir, 'backend', 'REQ.md'),
     `# ${section.name}
@@ -360,9 +370,7 @@ ${section.content}
 
 ## 验收标准
 
-- [ ] AC-1: 
-- [ ] AC-2: 
-- [ ] AC-3: 
+${acItems}
 `
   );
 
@@ -438,6 +446,16 @@ ${apiDesc}
 | REQ.md | ✅ | ./REQ.md |
 | TECH.md | ✅ | ./TECH.md |
 | TASK.md | ✅ | ./TASK.md |
+| TEST.md | ✅ | ./TEST.md |
+| REVIEW.md | ✅ | ./REVIEW.md |
+| API_CONTRACT.yaml | ✅ | ./_shared/API_CONTRACT.yaml |
+| DEPLOY.md | ✅ | ./DEPLOY.md |
+| SCHEMA.md | ✅ | ./SCHEMA.md |
+| ERROR_CODES.md | ✅ | ./ERROR_CODES.md |
+| ADR.md | ✅ | ./ADR.md |
+| RISK.md | ✅ | ./RISK.md |
+| DEPS.md | ✅ | ./DEPS.md |
+| MONITOR.md | ✅ | ./MONITOR.md |
 `
   );
 
@@ -993,4 +1011,50 @@ function generateAdr(section: Section): string {
   adr += `\n## 后果\n\n- _待补充_\n`;
   
   return adr;
+}
+
+// ── AC 自动生成 ──
+function generateAcceptanceCriteria(section: Section): string {
+  const lines = section.content.split('\n');
+  let acs = '';
+  let acNum = 1;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('|') && (trimmed.includes('GET') || trimmed.includes('POST') || trimmed.includes('PUT') || trimmed.includes('DELETE') || trimmed.includes('PATCH'))) {
+      const parts = trimmed.split('|').map(p => p.trim()).filter(Boolean);
+      const method = parts[0] || '';
+      const path = parts[1] || '';
+      const desc = parts[2] || path;
+      acs += `- [ ] AC-${acNum++}: \`${method} ${path}\` — ${desc}\n`;
+    }
+    if (trimmed.startsWith('-') && (trimmed.includes('规则') || trimmed.includes('校验') || trimmed.includes('必须'))) {
+      acs += `- [ ] AC-${acNum++}: ${trimmed.replace(/^- /, '')}\n`;
+    }
+  }
+
+  if (acNum === 1) {
+    acs = `- [ ] AC-1: 功能实现与需求描述一致\n- [ ] AC-2: 异常输入有合理的错误处理\n- [ ] AC-3: 核心逻辑有单元测试覆盖\n`;
+    acNum = 4;
+  }
+
+  acs += `- [ ] AC-${acNum++}: 代码审查通过（REVIEW.md 全部已确认）\n`;
+  acs += `- [ ] AC-${acNum++}: 部署清单完成（DEPLOY.md 全部已确认）\n`;
+
+  return acs;
+}
+
+// 风险评估
+function generateRiskTemplate(section: Section): string {
+  return `# ${section.name} — 风险评估\n\n> split | ${new Date().toISOString().split('T')[0]}\n\n## 风险矩阵\n\n| 风险 | 可能 | 影响 | 缓解 |\n| :--- | :--- | :--- | :--- |\n| 兼容性 | 中 | 高 | 版本号+测试 |\n| 性能 | 低 | 中 | 压测+索引 |\n| 依赖故障 | 低 | 高 | 降级方案 |\n\n## 回滚\n\n1. 触发: 线上错误率 > 1%\n2. 步骤: git revert → 重部署\n3. 验证: 冒烟测试 + 监控\n`;
+}
+
+// 依赖清单
+function generateDepsTemplate(section: Section): string {
+  return `# ${section.name} — 依赖清单\n\n## 上游依赖\n\n| 服务 | 版本 | 用途 | SLA |\n| :--- | :--- | :--- | :--- |\n| _待补充_ | — | — | — |\n\n## 下游影响\n\n| 服务 | 影响 | 通知 |\n| :--- | :--- | :--- |\n| _待补充_ | — | — |\n`;
+}
+
+// 监控指标
+function generateMonitorTemplate(section: Section): string {
+  return `# ${section.name} — 监控\n\n## 关键指标\n\n| 指标 | 阈值 | 级别 |\n| :--- | :--- | :--- |\n| 成功率 | <99.9% | P1 |\n| P99延迟 | >1000ms | P2 |\n| 错误率 | >0.1% | P0 |\n\n## 关键日志\n\n- 请求入口 (traceId)\n- 业务异常 (上下文)\n- 外部调用 (耗时)\n`;
 }
