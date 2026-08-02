@@ -25,6 +25,15 @@ export interface ScheduleCreateOptions {
   iteration?: string;
   at: string;
   name?: string;
+  batchSize?: string;
+  parallel?: string;
+  assignee?: string;
+  type?: string;
+  priority?: string;
+  status?: string;
+  platform?: string;
+  backend?: boolean;
+  frontend?: boolean;
 }
 
 export async function scheduleCreateCommand(options: ScheduleCreateOptions): Promise<void> {
@@ -60,6 +69,17 @@ export async function scheduleCreateCommand(options: ScheduleCreateOptions): Pro
       taskId: options.task || null,
       all: !!options.all,
       scheduledAt: options.at,
+      execOptions: {
+        batchSize: options.batchSize ? parseInt(options.batchSize, 10) : undefined,
+        parallel: options.parallel ? parseInt(options.parallel, 10) : undefined,
+        assignee: options.assignee,
+        type: options.type,
+        priority: options.priority,
+        status: options.status,
+        platform: options.platform,
+        backend: options.backend,
+        frontend: options.frontend,
+      },
     });
 
     logger.success(`调度任务已创建`);

@@ -800,6 +800,15 @@ scheduleCmd
   .option('-i, --iteration <iteration>', '目标期次')
   .option('--at <datetime>', '执行时间: "YYYY-MM-DD HH:mm:ss"')
   .option('-n, --name <name>', '任务名称')
+  .option('--batch-size <n>', '分批数量 (默认 3)')
+  .option('--parallel <n>', '并行数量 (默认 1)')
+  .option('-a, --assignee <name>', '指定人员')
+  .option('--type <type>', '任务类型: feature|bugfix')
+  .option('--priority <level>', '优先级: low|medium|high|critical')
+  .option('--status <status>', '按状态筛选')
+  .option('--platform <platform>', '平台: web|h5|miniapp')
+  .option('--backend', '仅后端')
+  .option('--frontend', '仅前端')
   .action(scheduleCreateCommand);
 
 scheduleCmd

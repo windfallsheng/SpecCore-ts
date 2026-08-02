@@ -102,13 +102,13 @@ speccore task new --batch-file=bugs.xlsx --type=bugfix --interactive          # 
 speccore task new -n "修复登录超时" --type=bugfix --schedule=night   # 标记为 queue
 speccore execute --all --scheduled                                      # 手动触发所有 queue 任务
 
-# ── 方式 2: 精确时间调度 ──
-speccore schedule create --at "2026-08-10 21:00:00" -t Task-001       # 指定时间执行单个 Task
-speccore schedule create --at "2026-08-10 02:00:00" --all -i Q1       # 指定时间执行全部
-speccore schedule list                                                  # 查看调度队列
-speccore schedule cancel --id=sch-xxx                                   # 取消
-speccore schedule daemon start                                          # 启动守护进程（自动按时执行）
-speccore schedule daemon status                                         # 查看守护进程状态
+# ── 方式 2: 精确时间调度（支持人员、分批、类型等所有 execute 筛选参数）──
+speccore schedule create --at "2026-08-10 21:00:00" -t Task-001              # 单个任务定时
+speccore schedule create --at "2026-08-10 02:00:00" --all -i Q1 \
+  -a 张三 --batch-size=3 --type=bugfix                                         # 指定人员+分批+类型
+speccore schedule daemon start                                                 # 启动守护进程
+speccore schedule list                                                         # 查看队列
+speccore schedule cancel --id=sch-xxx                                          # 取消
 ```
 
 `execute` 自动能力：
