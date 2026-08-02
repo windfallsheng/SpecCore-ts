@@ -1015,8 +1015,8 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
       return tables;
     })() +
     // ── 人员详细（可折叠）──
-    '<div class="panel-title collapsible-header collapsed" style="font-size:13px;cursor:pointer;margin-bottom:16px" id="person-detail-header">◆ 详细任务 <span style="font-size:10px;color:var(--muted);margin-left:8px">&#9660;</span></div>' +
-    '<div class="collapsible-body" id="person-detail-body" style="max-height:0;overflow:hidden;transition:max-height .5s ease">' +
+    '<div class="panel-title collapsible-header" style="font-size:13px;cursor:pointer;margin-bottom:16px" id="person-detail-header">◆ 详细任务 <span style="font-size:10px;color:var(--muted);margin-left:8px">展开更多 ▼</span></div>' +
+    '<div class="collapsible-body" id="person-detail-body" style="max-height:520px;overflow:hidden;transition:max-height .5s ease">' +
     (() => {
       let lastGroup = '';
       let html = '';
@@ -1107,19 +1107,22 @@ setTimeout(function(){
   var header = document.getElementById('person-detail-header');
   var body = document.getElementById('person-detail-body');
   if(header && body){
+    var previewH = 520;
     header.onclick = function(){
       var arrow = header.querySelector('span');
-      var isOpen = body.style.maxHeight !== '0px';
-      if(isOpen){
-        body.style.maxHeight = '0';
-        if(arrow) arrow.innerHTML = '&#9660;';
-        header.classList.add('collapsed');
-      } else {
+      var curH = parseInt(body.style.maxHeight) || 0;
+      if(curH <= previewH + 1){
+        // Expand to full
         body.style.maxHeight = 'none';
-        var h = body.scrollHeight;
-        body.style.maxHeight = h + 'px';
-        if(arrow) arrow.innerHTML = '&#9650;';
+        var fullH = body.scrollHeight;
+        body.style.maxHeight = fullH + 'px';
+        if(arrow) arrow.innerHTML = '收起 ▲';
         header.classList.remove('collapsed');
+      } else {
+        // Collapse to preview
+        body.style.maxHeight = previewH + 'px';
+        if(arrow) arrow.innerHTML = '展开更多 ▼';
+        header.classList.add('collapsed');
       }
     };
   }
