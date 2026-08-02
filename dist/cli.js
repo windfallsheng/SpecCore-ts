@@ -163,6 +163,8 @@ commander_1.program
     .alias('wc')
     .description('First-time setup guide (interactive)')
     .option('--force', 'Force re-initialization')
+    .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
+    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
     .action(welcome_1.welcomeCommand);
 commander_1.program
     .command('status-panel')
@@ -202,6 +204,8 @@ commander_1.program
     .description('智能级联：自动检测阶段 → 引导/自动执行下一步')
     .option('-i, --iteration <iteration>', 'Target iteration')
     .option('--force', 'Auto-execute the next step without confirmation')
+    .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
+    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
     .action(dev_1.devCommand);
 commander_1.program;
 commander_1.program;
@@ -211,6 +215,8 @@ commander_1.program
     .description('智能级联：自动检测阶段 → 引导/自动执行下一步')
     .option('-i, --iteration <iteration>', 'Target iteration')
     .option('--force', 'Auto-execute the next step without confirmation')
+    .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
+    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
     .action(dev_1.devCommand);
 commander_1.program
     .command('demo')
@@ -229,6 +235,8 @@ commander_1.program
     .option('--mode <mode>', 'Initialization mode: fresh or migration', 'fresh')
     .option('--full', 'Full mode: all 68+ commands (default: simple)')
     .option('--force', 'Force overwrite existing configuration')
+    .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
+    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
     .action(init_1.initCommand);
 commander_1.program
     .command('import')
@@ -244,6 +252,8 @@ commander_1.program
     .option('--ignore <packages>', 'Ignore specific packages (comma-separated)')
     .option('--update', '增量更新：追加新 API，保留已有')
     .option('--force', '强制覆盖：重新扫描并替换全部')
+    .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
+    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
     .option('--interactive', '交互式：预览变更 → 确认覆盖/增量')
     .action(import_1.importCommand);
 commander_1.program
@@ -252,6 +262,8 @@ commander_1.program
     .description('Migrate Shell v3.x config to CLI v4.x (v4.6)')
     .option('--dry-run', 'Preview migration, no changes')
     .option('--force', 'Skip confirmation')
+    .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
+    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
     .action(migrate_1.migrateCommand);
 // ================================================================
 // 📋 期次管理
@@ -399,6 +411,8 @@ commander_1.program
     .option('--parallel <count>', 'Parallel execution count', '1')
     .option('-i, --iteration <iteration>', 'Target iteration')
     .option('--force', 'Skip preview and execute directly')
+    .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
+    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
     .option('--strict', 'Pre-flight check: review req/tech/test before code gen')
     .option('--scheduled', '夜间调度：只执行标记为 queue 的任务')
     .option('--verify', '生成代码后自动检查 TEST/REVIEW/DEPLOY → 最多3轮自动修复')
@@ -469,6 +483,8 @@ commander_1.program
     .option('-i, --iteration <iteration>', 'Target iteration')
     .option('--dry-run', 'Preview impact without modifying')
     .option('--force', 'Skip preview and apply directly')
+    .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
+    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
     .option('--interactive', 'Interactive: preview → adjust → confirm → apply')
     .action(change_1.changeCommand);
 commander_1.program
@@ -480,6 +496,8 @@ commander_1.program
     .option('--auto', 'Auto-apply sync without confirmation')
     .option('--dry-run', 'Preview differences without modifying')
     .option('--force', 'Skip preview')
+    .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
+    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
     .option('--detect', 'Detect code-spec discrepancies (read-only, no changes)')
     .action(sync_1.syncCommand);
 // ================================================================
@@ -543,6 +561,8 @@ commander_1.program
     .option('--list', 'List archived tasks')
     .option('--restore <task>', 'Restore archived task')
     .option('--force', 'Skip preview and archive directly')
+    .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
+    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
     .action(archive_1.archiveCommand);
 commander_1.program
     .command('handover')
@@ -650,6 +670,8 @@ commander_1.program
     .option('--reqs <reqs>', 'Requirement IDs (comma-separated, required)')
     .option('--name <name>', 'Iteration name (required)')
     .option('--force', 'Force overwrite existing iteration')
+    .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
+    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
     .action(iteration_from_global_1.iterationFromGlobalCommand);
 commander_1.program
     .command('doc2spec')
@@ -669,6 +691,8 @@ commander_1.program
     .option('--auto', 'Auto-apply without confirmation')
     .option('--dry-run', 'Preview changes without applying')
     .option('--force', 'Skip preview and execute')
+    .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
+    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
     .action(sync_global_1.syncGlobalCommand);
 // ================================================================
 // 📦 模式保存
@@ -684,6 +708,8 @@ commander_1.program
     .option('-d, --desc <desc>', 'Pattern description')
     .option('-i, --iteration <iteration>', 'Target iteration')
     .option('--force', 'Overwrite existing pattern')
+    .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
+    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
     .action(pattern_1.patternCommand);
 // ================================================================
 // 🔙 回滚
@@ -770,6 +796,8 @@ commander_1.program
     .option('--pattern <pattern>', 'Batch pattern to match')
     .option('--replacement <replacement>', 'Batch replacement string')
     .option('--force', 'Skip preview and execute')
+    .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
+    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
     .action(rename_1.renameCommand);
 // ================================================================
 // 🆕 v4.0.0 新增命令
@@ -878,6 +906,8 @@ commander_1.program
     .option('--type <type>', 'Task type')
     .option('-i, --iteration <name>', 'Target iteration')
     .option('--force', 'Skip confirmation')
+    .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
+    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
     .action(update_1.updateCommand);
 // v5.3.0 新增命令
 commander_1.program
@@ -958,6 +988,8 @@ commander_1.program
     .option('--task <id>', 'Task ID to delete')
     .option('--iteration <name>', 'Iteration name to delete')
     .option('--force', 'Skip confirmation prompt')
+    .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
+    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
     .action(delete_1.deleteCommand);
 // v5.6.0 新增命令
 commander_1.program
