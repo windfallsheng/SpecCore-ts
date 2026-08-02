@@ -6,10 +6,21 @@ import { join } from 'path';
 import { logger } from '../utils/logger';
 import { loadConfig } from '../core/unified-config';
 import { getDefaultIteration } from '../core/context';
+import { writeFile } from 'fs-extra';
 
-export async function statusPanelCommand(): Promise<void> {
+export interface StatusPanelOptions {
+  export?: string;  // json | markdown
+}
+
+export async function statusPanelCommand(options: StatusPanelOptions = {}): Promise<void> {
   const iteration = await getDefaultIteration();
   const config = await loadConfig();
+
+  // ── Export mode ──
+  if (options.export) {
+    await exportStatus(config, iteration, options.export);
+    return;
+  }
 
   // Header
   logger.info('');
@@ -136,4 +147,70 @@ async function getNextAction(phase: string, iterDir: string): Promise<string> {
     done: 'speccore dashboard 查看全景',
   };
   return actions[phase] || 'speccore dev';
+}
+
+// 导出功能
+async function exportStatus(config: any, iteration: string | null, format: string): Promise<void> {
+  const { join } = require('path');
+  const { pathExists, readdir, readFile } = require('fs-extra');
+  
+  const data: any = {
+    project: config.project.name,
+    iteration: iteration || '未设置',
+    exportedAt: new Date().toISOString(),
+    phases: {} as any,
+  };
+
+  if (iteration) {
+    const iterDir = join(process.cwd(), '期次-' + iteration);
+    const phase = await require('./status-panel').defaultPhase(iterDir);
+
+    data.phase = phase;
+    
+    const tasks: any[] = [];
+    if (await pathExists(iterDir)) {
+      const entryList = await readdir(iterDir, { withFileTypes: true });
+      for (const e of entryList) {
+        if (e.isDirectory() && e.name.startsWith('Task-')) {
+          const taskPath = join(iterDir, e.name, 'backend', 'TASK.md');
+          if (await pathExists(taskPath)) {
+            const md = await readFile(taskPath, 'utf-8');
+            const status = (md.match(/状态: (.+)/) || [])[1] || 'pending';
+            const type = (md.match(/类型: (.+)/) || [])[1] || 'feature';
+            tasks.push({ id: e.name, status, type });
+          } else {
+            tasks.push({ id: e.name, status: 'pending' });
+          }
+        }
+      }
+    }
+    data.tasks = tasks;
+    data.taskCount = tasks.length;
+  }
+
+  if (format === 'json') {
+    const outPath = 'speccore-status.json';
+    await writeFile(outPath, JSON.stringify(data, null, 2));
+    logger.info(`✅ 导出到 ${outPath}`);
+  } else if (format === 'md') {
+    let md = `# SpecCore Status — ${config.project.name}\n\n`;
+    md += `- 期次: ${iteration || '无'}\n- 阶段: ${data.phase || 'N/A'}\n\n`;
+    md += '## Tasks\n\n| ID | Status | Type |\n| :--- | :--- | :--- |\n';
+    for (const t of data.tasks || []) md += `| ${t.id} | ${t.status} | ${t.type} |\n`;
+    const outPath = 'speccore-status.md';
+    await writeFile(outPath, md);
+    logger.info(`✅ 导出到 ${outPath}`);
+  }
+}
+
+export async function defaultPhase(iterDir: string): Promise<string> {
+  const { pathExists } = require('fs-extra');
+  const { join } = require('path');
+  const reqDoc = join(iterDir, '00-需求文档', 'REQUIREMENT.md');
+  const analysis = join(iterDir, '00-需求文档', 'ANALYSIS.md');
+  if (!(await pathExists(reqDoc))) return 'init';
+  if (!(await pathExists(analysis))) return 'require';
+  const tasks = await require('fs-extra').readdir(iterDir, { withFileTypes: true });
+  if (!tasks.some((e: any) => e.isDirectory() && e.name.startsWith('Task-'))) return 'analyze';
+  return 'dev';
 }
