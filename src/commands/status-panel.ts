@@ -990,6 +990,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
   </div>
 
   ${hasAssignees ? '<div class="panel" style="margin-bottom:20px"><div class="panel-title">TEAM DETAILS</div>' +
+    // ── 汇总表（始终可见）──
     '<div style="margin-bottom:20px"><table style="margin-bottom:0"><thead><tr><th>人员</th><th>总任务</th><th>完成</th><th>完成率</th><th>功能</th><th>Bug</th><th>研究</th><th>工时</th></tr></thead><tbody>' +
     sortedPersonEntries.map(([name, d]) => {
       const pct = d.total > 0 ? Math.round(d.done/d.total*100) : 0;
@@ -998,6 +999,9 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
              '<td><span style="color:var(--purple)">'+(d.total-d.features-d.bugs)+'</span></td><td>'+d.estHours+'h</td></tr>';
     }).join('') +
     '</tbody></table></div>' +
+    // ── 人员列表（可折叠）──
+    '<div class="panel-title collapsible-header collapsed" style="font-size:13px;cursor:pointer;margin-bottom:16px" id="person-detail-header">◆ 人员列表 <span style="font-size:10px;color:var(--muted);margin-left:8px">&#9660;</span></div>' +
+    '<div class="collapsible-body" id="person-detail-body" style="max-height:0;overflow:hidden;transition:max-height .5s ease">' +
     (() => {
       let lastGroup = '';
       let html = '';
@@ -1030,7 +1034,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
         const st = t.status.includes('completed')||t.status.includes('完成')?'RESOLVED':t.status.includes('in_progress')||t.status.includes('开发')?'ACTIVE':'QUEUED';
         return '<tr><td class="code">'+t.id+'</td><td><span class="tx-badge '+cls+'">'+st+'</span></td><td><span class="type-t type-feat">'+(t.type||'FEAT')+'</span></td></tr>';
       }).join('') +
-    '</tbody></table></div>').join('') + '</div>' : ''}
+    '</tbody></table></div>').join('') + '</div></div>' : ''}
 
   <div class="panel">
     <div class="panel-title">TASK REGISTRY</div>
@@ -1082,65 +1086,24 @@ document.addEventListener('keydown',e=>{
 });
 // Collapsible TEAM DETAILS — wrap ALL person content
 setTimeout(function(){
-  var allTitles = document.querySelectorAll('.panel-title');
-  for(var i=0;i<allTitles.length;i++){
-    var titleEl = allTitles[i];
-    if(titleEl.textContent.indexOf('TEAM DETAILS') !== -1){
-      // Mark the header
-      titleEl.style.cursor = 'pointer';
-      titleEl.classList.add('collapsible-header');
-      titleEl.innerHTML = titleEl.innerHTML + ' <span style="font-size:10px;color:var(--muted)">&#9660;</span>';
-      
-      // Find the panel containing this title
-      var panel = titleEl.closest('.panel');
-      if(!panel) continue;
-      
-      // Collect ALL following siblings until next .panel or end
-      var wrapper = document.createElement('div');
-      wrapper.style.cssText = 'max-height:0;overflow:hidden;transition:max-height .5s ease';
-      wrapper.className = 'collapsible-body';
-      
-      var next = panel.nextElementSibling;
-      var items = [];
-      while(next && !next.classList.contains('panel')){
-        items.push(next);
-        next = next.nextElementSibling;
+  // ── 人员列表折叠（通过 ID 定位）──
+  var header = document.getElementById('person-detail-header');
+  var body = document.getElementById('person-detail-body');
+  if(header && body){
+    header.onclick = function(){
+      var arrow = header.querySelector('span');
+      var isOpen = body.style.maxHeight !== '0px';
+      if(isOpen){
+        body.style.maxHeight = '0';
+        if(arrow) arrow.innerHTML = '&#9660;';
+        header.classList.add('collapsed');
+      } else {
+        body.style.maxHeight = body.scrollHeight + 'px';
+        if(arrow) arrow.innerHTML = '&#9650;';
+        header.classList.remove('collapsed');
       }
-      // Also collect siblings inside same parent after panel
-      if(items.length === 0){
-        var parent = panel.parentElement;
-        var all = parent.children;
-        var found = false;
-        for(var j=0;j<all.length;j++){
-          if(all[j] === panel) { found = true; continue; }
-          if(found && all[j].classList.contains('panel')) break;
-          if(found) items.push(all[j]);
-        }
-      }
-      
-      if(items.length > 0){
-        for(var k=0;k<items.length;k++){ wrapper.appendChild(items[k]); }
-        panel.parentElement.insertBefore(wrapper, panel.nextElementSibling);
-        
-        titleEl.onclick = function(){
-          var panelEl = this.closest('.panel');
-          var wrapEl = panelEl.nextElementSibling;
-          if(wrapEl && wrapEl.classList.contains('collapsible-body')){
-            var arrow = this.querySelector('span');
-            var isOpen = wrapEl.style.maxHeight !== '0px';
-            if(isOpen){
-              wrapEl.style.maxHeight = '0';
-              if(arrow) arrow.innerHTML = '&#9660;';
-            } else {
-              wrapEl.style.maxHeight = wrapEl.scrollHeight + 'px';
-              if(arrow) arrow.innerHTML = '&#9650;';
-            }
-          }
-        };
-      }
-    }
+    };
   }
-},300);
 document.querySelectorAll('.card,.panel').forEach(el=>{
   const btn=document.createElement('button');
   btn.className='fs-btn';btn.title='Fullscreen (F)';btn.innerHTML='⛶';btn.onclick=e=>{e.stopPropagation();toggleFS(el)};
