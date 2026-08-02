@@ -715,9 +715,6 @@ program
 
 // v4.8.0 高级功能
 program
-  .command('hooks')
-  .description('Install Git hooks (pre-commit + pre-push)')
-
 program
   .command('current')
   .alias('cr')
