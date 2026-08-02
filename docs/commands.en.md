@@ -4,14 +4,51 @@
 
 ---
 
-## 💡 Two Usage Modes
+## 💡 Two Ways to Use
 
-| | 🔧 CLI Command | 🤖 AI Slash Command |
-| :--- | :--- | :--- |
-| **Prefix** | `speccore` | `/spec-` |
-| **Example** | `speccore init` | `/spec-init` |
-| **Where** | Terminal | AI Tools (WorkBuddy / Cursor etc.) |
-| **Mapping** | — | `speccore xxx` ↔ `/spec-xxx` |
+Same command, different syntax depending on context. Full classification by category:
+
+### 📋 Common Commands (CLI + AI Chat)
+
+| Feature | 🖥 Terminal CLI | 💬 AI Chat | Notes |
+|:---|:---|:---|:---|
+| Init | `speccore init` | `/spec-init` | — |
+| Import | `speccore doc2spec -f PRD.docx -p backend` | `/spec-doc2spec` | CLI uses `-f` for file path |
+| Split | `speccore iteration split -i Q1` | `/spec-split Q1` | CLI uses `-i` for iteration |
+| Execute | `speccore execute -t Task-001 --force` | `/spec-execute Task-001` | CLI uses `-t` for task |
+| PR | `speccore pr -t Task-001` | `/spec-pr Task-001` | — |
+| Done | `speccore done -t Task-001` | `/spec-done Task-001` | — |
+| Status | `speccore status-panel` | `/spec-status-panel` | — |
+| Change | `speccore change "desc" -t Task-001` | `/spec-change` or natural language | — |
+| Bugfix | `speccore bugfix -n "name" -d "desc"` | `/spec-bugfix` or natural language | — |
+| Analyze | `speccore analyze -i Q1` | `/spec-analyze Q1` | — |
+| Plan | `speccore plan -i Q1` | `/spec-plan Q1` | — |
+| Task new | `speccore task new -n name` | `/spec-task-new` | — |
+| Validate | `speccore validate -i Q1` | `/spec-validate Q1` | — |
+| Smart entry | `speccore ask "query"` | Natural language directly | Or `speccore "query"` without `ask` |
+| Dev | `speccore dev` | `/spec-dev` | — |
+| Ops | `speccore ops` | `/spec-ops` | — |
+| Rename | `speccore rename --task=ID --name=new` | `/spec-rename` | — |
+
+### 🖥 CLI Only (complex parameters)
+
+| Command | Why |
+|:---|:---|
+| `import --project --path --type --force` | Many params, CLI precision |
+| `execute --verify` | Combined flags |
+| `status-panel --export --assignee` | Export/filter params |
+| `dev --auto --from=split` | Automation pipeline |
+| `bugfix --batch-file --schedule` | Bulk + scheduling |
+
+### 💬 AI Chat Only (needs AI context)
+
+| Method | Why |
+|:---|:---|
+| Natural language: "Create a login feature" | AI auto-matches |
+| `/spec-analyze` → deep code analysis | Needs AI understanding |
+| `/spec-import-analyze` → reverse engineering | Pure AI behavior |
+
+> **Why?** CLI = precision + scripting. AI Chat = natural language + context.
 
 ---
 
