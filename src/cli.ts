@@ -185,17 +185,6 @@ program
   .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
   .action(devCommand);
 
-program
-program
-program
-  .command('dev')
-  .alias('d')
-  .description('智能级联：自动检测阶段 → 引导/自动执行下一步')
-  .option('-i, --iteration <iteration>', 'Target iteration')
-  .option('--force', 'Auto-execute the next step without confirmation')
-  .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
-  .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
-  .action(devCommand);
 
 program
 
@@ -425,18 +414,6 @@ program
 // 📊 进度与状态
 // ================================================================
 program
-  .command('progress')
-  .alias('pg')
-  .description('Display project progress overview')
-  .option('-i, --iteration <iteration>', 'Target iteration')
-  .option('-a, --assignee <assignee>', 'Filter by assignee')
-  .option('--type <type>', 'Filter by task type')
-  .option('--req <req>')
-    .option('--task <task>', 'Show specific task progress')
-  .option('--detail', 'Show detailed progress')
-  .option('--platform <platform>', 'Filter by frontend platform (web/h5/miniapp)')
-  .option('--format <format>', 'Output format: text, json, csv', 'text')
-  .action(progressCommand);
 
 program
   .command('status')
@@ -460,18 +437,6 @@ program
 // 📦 归档与交接
 // ================================================================
 program
-  .command('archive')
-  .alias('ar')
-  .description('Archive completed tasks')
-  .option('-t, --task <task>', 'Archive specific task')
-  .option('--all', 'Archive all completed tasks')
-  .option('-i, --iteration <iteration>', 'Archive entire iteration')
-  .option('--list', 'List archived tasks')
-  .option('--restore <task>', 'Restore archived task')
-  .option('--force', 'Skip preview and archive directly')
-  .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
-  .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
-  .action(archiveCommand);
 
 program
   .command('handover')
@@ -496,12 +461,6 @@ program
   .action(contextCommand);
 
 program
-  .command('context')
-  .alias('ctx')
-  .description('Output task context for any AI tool (Copilot/Claude/GPT)')
-  .option('-t, --task <task>', 'Target task')
-  .option('-i, --iteration <iteration>', 'Target iteration')
-  .action(contextCommand);
 
 program
   .command('constitution')
@@ -510,26 +469,10 @@ program
   .action(async () => { await buildConstitution(process.cwd()); });
 
 program
-  .command('context')
-  .alias('ctx')
-  .description('Output task context for any AI tool (Copilot/Claude/GPT)')
-  .option('-t, --task <task>', 'Target task')
-  .option('-i, --iteration <iteration>', 'Target iteration')
-  .action(contextCommand);
 
 program
-  .command('context')
-  .alias('ctx')
-  .description('Output task context for any AI tool (Copilot/Claude/GPT)')
-  .option('-t, --task <task>', 'Target task')
-  .option('-i, --iteration <iteration>', 'Target iteration')
-  .action(contextCommand);
 
 program
-  .command('constitution')
-  .alias('cn')
-  .description('Auto-detect tech stack and generate CONSTITUTION.md rules')
-  .action(async () => { await buildConstitution(process.cwd()); });
 
 program
   .command('config')
@@ -543,16 +486,6 @@ program
   .action(configCommand);
 
 program
-  .command('report')
-  .alias('rp')
-  .description('Generate project report')
-  .option('-i, --iteration <iteration>', 'Target iteration')
-  .option('--format <format>', 'Output format: markdown, html, json', 'markdown')
-  .option('-o, --output <path>', 'Output file path')
-  .option('--team', 'Include team analysis')
-  .option('--risk', 'Include risk analysis')
-  .option('--trend', 'Include trend comparison')
-  .action(reportCommand);
 
 program
 
@@ -650,11 +583,6 @@ program
   .action(opsCommand);
 
 program
-  .command('history')
-  .alias('hs')
-  .description('View requirement change history')
-  .option('--req <id>', 'Requirement ID (e.g., REQ-001)')
-  .action(historyCommand);
 
 // ================================================================
 // 🔗 P0/P1/P2 新增命令
@@ -681,11 +609,6 @@ program
   .action(baselineCommand);
 
 program
-  .command('dashboard')
-  .alias('db')
-  .description('Generate visual dashboard (HTML + Chart.js)')
-  .option('-o, --output <path>', 'Output file path', './speccore-dashboard.html')
-  .action(dashboardCommand);
 
 program
   .command('analyze')
@@ -745,12 +668,6 @@ program
   .action(indexUpdateCommand);
 
 program
-  .command('context')
-  .alias('ctx')
-  .description('View task context loading status and dependency chain (v4.0)')
-  .option('--req <req>')
-    .option('--task <task>', 'Target task (default: current task)')
-  .action(contextCommand);
 
 // ================================================================
 // 快捷别名（顶层别名）
@@ -848,13 +765,6 @@ program
   .action(async (options: any) => { const { getDefaultIteration } = await import('./core/context'); const it = await getDefaultIteration(options.iteration); if (it) await mergeCheck(it); });
 
 program
-  .command('rollback')
-  .alias('rb')
-  .description('Rollback a task: revert branch + archive spec')
-  .option('-t, --task <task>', 'Task to rollback')
-  .option('-i, --iteration <iteration>', 'Target iteration')
-  .option('--reason <reason>', 'Rollback reason')
-  .action(async (options: any) => { const it = await require('../core/context').getDefaultIteration(options.iteration); if (it && options.task) await rollbackTask(options.task, it, options.reason); });
 
 program
   .command('arch-update')
@@ -866,29 +776,10 @@ program
   .action(async (options: any) => { const it = await require('../core/context').getDefaultIteration(options.iteration); if (it) await updateArchitecture(it, (options.apis || '').split(',').filter(Boolean), (options.tables || '').split(',').filter(Boolean)); });
 
 program
-  .command('merge-check')
-  .alias('mc')
-  .description('Predict merge conflicts across task branches')
-  .option('-i, --iteration <iteration>', 'Target iteration')
-  .action(async (options: any) => { const { getDefaultIteration } = await import('./core/context'); const it = await getDefaultIteration(options.iteration); if (it) await mergeCheck(it); });
 
 program
-  .command('rollback')
-  .alias('rb')
-  .description('Rollback a task: revert branch + archive spec')
-  .option('-t, --task <task>', 'Task to rollback')
-  .option('-i, --iteration <iteration>', 'Target iteration')
-  .option('--reason <reason>', 'Rollback reason')
-  .action(async (options: any) => { const it = await require('../core/context').getDefaultIteration(options.iteration); if (it && options.task) await rollbackTask(options.task, it, options.reason); });
 
 program
-  .command('arch-update')
-  .alias('au')
-  .description('Auto-update ARCHITECTURE.md with new APIs/tables')
-  .option('-i, --iteration <iteration>', 'Source iteration')
-  .option('--apis <apis>', 'Comma-separated API paths')
-  .option('--tables <tables>', 'Comma-separated table names')
-  .action(async (options: any) => { const it = await require('../core/context').getDefaultIteration(options.iteration); if (it) await updateArchitecture(it, (options.apis || '').split(',').filter(Boolean), (options.tables || '').split(',').filter(Boolean)); });
 
 program
   .command('trace')
