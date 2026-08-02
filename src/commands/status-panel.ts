@@ -1016,7 +1016,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
     })() +
     // ── 人员详细（可折叠）──
     '<div class="panel-title collapsible-header" style="font-size:13px;cursor:pointer;margin-bottom:16px" id="person-detail-header">◆ 详细任务 <span style="font-size:10px;color:var(--muted);margin-left:8px">展开更多 ▼</span></div>' +
-    '<div class="collapsible-body" id="person-detail-body" style="max-height:520px;overflow:hidden;transition:max-height .5s ease">' +
+    '<div class="collapsible-body" id="person-detail-body" style="max-height:400px;overflow:hidden;transition:max-height .5s ease">' +
     (() => {
       let lastGroup = '';
       let html = '';
@@ -1107,7 +1107,11 @@ setTimeout(function(){
   var header = document.getElementById('person-detail-header');
   var body = document.getElementById('person-detail-body');
   if(header && body){
-    var previewH = 520;
+    // 动态计算预览高度：取内容的40%，最少200px，最多650px
+    body.style.maxHeight = 'none';
+    var fullH = body.scrollHeight;
+    var previewH = Math.max(200, Math.min(Math.round(fullH * 0.4), 650));
+    body.style.maxHeight = previewH + 'px';
     header.onclick = function(){
       var arrow = header.querySelector('span');
       var curH = parseInt(body.style.maxHeight) || 0;
