@@ -428,3 +428,17 @@
 - setTimeout 缺闭合
 - 意图识别 goal→task new
 - ask 增强: 猜不准时带详细步骤推荐
+
+## v5.21.1 (2026-08-02)
+
+### 📖 文档结构化
+- 两种用法主表移至命令参考 (17通用+5CLI+3AI)
+- README/快速开始引用链接, 单向维护
+- 快速开始新增命令速查表 (19命令全覆盖)
+- Slash Command 清理: spec→ask, 移除 dashboard/health
+
+### 🐛 修复
+- collapsible-body 多余</div>导致折叠无效
+- setTimeout 缺闭合 JS 括号失衡
+- 全屏 content 可滚动 + 主题切换隐藏
+- 中文姓氏拼音排序 (100+映射)
