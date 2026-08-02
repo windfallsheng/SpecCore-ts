@@ -85,6 +85,41 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
     </div>
   </div>
 
+  <div class="panel" style="margin-bottom:24px">
+    <div class="panel-title">ITERATION TIMELINE</div>
+    <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+      <div style="flex:1;min-width:300px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:11px;color:#4a5568">
+          <span>2026-04-01</span>
+          <span style="color:var(--cyan)">TODAY</span>
+          <span>2026-06-30</span>
+        </div>
+        <div style="height:8px;background:rgba(255,255,255,.04);border-radius:4px;overflow:hidden;position:relative">
+          <div style="position:absolute;top:0;left:100%;width:2px;height:100%;background:var(--cyan);box-shadow:0 0 8px var(--cyan);z-index:2"></div>
+          <div style="width:100%;height:100%;background:linear-gradient(90deg,rgba(0,240,255,.3),rgba(0,240,255,.6));border-radius:4px;transition:width 1s"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:10px;color:#4a5568">
+          <span>TIME ELAPSED: 100%</span>
+          <span style="color:var(--orange)">DAYS LEFT: -33</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:16px">
+        <div style="text-align:center;padding:12px 20px;background:rgba(0,240,255,.05);border:1px solid rgba(0,240,255,.15);border-radius:8px">
+          <div style="font-family:Orbitron;font-size:20px;color:var(--cyan);text-shadow:0 0 12px rgba(0,240,255,.3)">-33</div>
+          <div style="font-size:10px;color:#4a5568;margin-top:4px">DAYS LEFT</div>
+        </div>
+        <div style="text-align:center;padding:12px 20px;background:rgba(0,255,136,.05);border:1px solid rgba(0,255,136,.15);border-radius:8px">
+          <div style="font-family:Orbitron;font-size:20px;color:var(--green);text-shadow:0 0 12px rgba(0,255,136,.3)">0%</div>
+          <div style="font-size:10px;color:#4a5568;margin-top:4px">COMPLETE</div>
+        </div>
+        <div style="text-align:center;padding:12px 20px;background:rgba(168,85,247,.05);border:1px solid rgba(168,85,247,.15);border-radius:8px">
+          <div style="font-family:Orbitron;font-size:20px;color:var(--purple);text-shadow:0 0 12px rgba(168,85,247,.3)">5</div>
+          <div style="font-size:10px;color:#4a5568;margin-top:4px">TASKS</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="grid">
     <div class="card">
       <div class="data-stream"><span>ANALYZING PHASE PROGRESS...</span></div>
@@ -120,6 +155,40 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
     </div>
   </div>
 
+  <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:0">
+    <div class="card">
+      <div class="data-stream"><span>GENERATING DONUT METRICS...</span></div>
+      <h3 style="margin-bottom:20px">COMPLETION BREAKDOWN</h3>
+      <div style="display:flex;align-items:center;gap:32px;justify-content:center">
+        <svg width="160" height="160" viewBox="0 0 160 160">
+          <defs>
+            <linearGradient id="d1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#00ff88"/><stop offset="100%" stop-color="#10b981"/></linearGradient>
+            <linearGradient id="d2" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#00f0ff"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient>
+            <linearGradient id="d3" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#a78bfa"/><stop offset="100%" stop-color="#6366f1"/></linearGradient>
+          </defs>
+          <circle cx="80" cy="80" r="60" fill="none" stroke="rgba(255,255,255,.03)" stroke-width="22"/>
+          <circle cx="80" cy="80" r="60" fill="none" stroke="url(#d1)" stroke-width="22" 
+                  stroke-dasharray="0 377" stroke-dashoffset="0" transform="rotate(-90,80,80)" stroke-linecap="round"/>
+          <text x="80" y="72" text-anchor="middle" font-family="Orbitron" font-size="28" font-weight="900" fill="var(--cyan)" text-shadow="0 0 20px rgba(0,240,255,.4)">0%</text>
+          <text x="80" y="95" text-anchor="middle" font-size="10" fill="#4a5568" letter-spacing="1">COMPLETE</text>
+        </svg>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div style="display:flex;align-items:center;gap:8px"><div style="width:10px;height:10px;border-radius:2px;background:var(--green);box-shadow:0 0 8px var(--green)"></div><span style="font-size:12px;color:#c4d5e7">RESOLVED</span><span style="font-family:Orbitron;font-size:14px;color:var(--green);margin-left:auto">0</span></div>
+          <div style="display:flex;align-items:center;gap:8px"><div style="width:10px;height:10px;border-radius:2px;background:var(--cyan);box-shadow:0 0 8px var(--cyan)"></div><span style="font-size:12px;color:#c4d5e7">ACTIVE</span><span style="font-family:Orbitron;font-size:14px;color:var(--cyan);margin-left:auto">2</span></div>
+          <div style="display:flex;align-items:center;gap:8px"><div style="width:10px;height:10px;border-radius:2px;background:#4a5568"></div><span style="font-size:12px;color:#64748b">QUEUED</span><span style="font-family:Orbitron;font-size:14px;color:#64748b;margin-left:auto">3</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="data-stream"><span>RENDERING TASK TIMELINE...</span></div>
+      <h3 style="margin-bottom:20px">TASK PROGRESS</h3>
+      <div style="display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font-size:10px;color:#4a5568;width:60px;text-align:right">Task-001</span><div style="flex:1;height:6px;background:rgba(255,255,255,.03);border-radius:3px;overflow:hidden"><div style="width:100%;height:100%;background:var(--green);border-radius:3px;box-shadow:0 0 8px var(--green);transition:width 1.5s"></div></div><span style="font-family:Orbitron;font-size:11px;color:var(--green);width:32px">100%</span></div><div style="display:flex;align-items:center;gap:10px"><span style="font-size:10px;color:#4a5568;width:60px;text-align:right">Task-002</span><div style="flex:1;height:6px;background:rgba(255,255,255,.03);border-radius:3px;overflow:hidden"><div style="width:85%;height:100%;background:var(--cyan);border-radius:3px;box-shadow:0 0 8px var(--cyan);transition:width 1.5s"></div></div><span style="font-family:Orbitron;font-size:11px;color:var(--cyan);width:32px">85%</span></div><div style="display:flex;align-items:center;gap:10px"><span style="font-size:10px;color:#4a5568;width:60px;text-align:right">Task-003</span><div style="flex:1;height:6px;background:rgba(255,255,255,.03);border-radius:3px;overflow:hidden"><div style="width:45%;height:100%;background:#4a5568;border-radius:3px;box-shadow:0 0 8px transparent;transition:width 1.5s"></div></div><span style="font-family:Orbitron;font-size:11px;color:#4a5568;width:32px">45%</span></div><div style="display:flex;align-items:center;gap:10px"><span style="font-size:10px;color:#4a5568;width:60px;text-align:right">Task-004</span><div style="flex:1;height:6px;background:rgba(255,255,255,.03);border-radius:3px;overflow:hidden"><div style="width:20%;height:100%;background:#4a5568;border-radius:3px;box-shadow:0 0 8px transparent;transition:width 1.5s"></div></div><span style="font-family:Orbitron;font-size:11px;color:#4a5568;width:32px">20%</span></div><div style="display:flex;align-items:center;gap:10px"><span style="font-size:10px;color:#4a5568;width:60px;text-align:right">Task-005</span><div style="flex:1;height:6px;background:rgba(255,255,255,.03);border-radius:3px;overflow:hidden"><div style="width:5%;height:100%;background:#4a5568;border-radius:3px;box-shadow:0 0 8px transparent;transition:width 1.5s"></div></div><span style="font-family:Orbitron;font-size:11px;color:#4a5568;width:32px">5%</span></div>
+      </div>
+    </div>
+  </div>
+
   <div class="panel">
     <div class="panel-title">TASK REGISTRY</div>
     <table>
@@ -133,7 +202,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
 
   <div class="footer">
     <span>SPECCORE v5.20.0 · SPEC-DRIVEN DEVELOPMENT</span>
-    <span>EXPORTED: 2026-08-02T12:16:06.165Z</span>
+    <span>EXPORTED: 2026-08-02T12:22:33.607Z</span>
   </div>
 </main>
 </body></html>
