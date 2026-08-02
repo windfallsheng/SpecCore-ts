@@ -24,6 +24,13 @@ export async function statusPanelCommand(options: StatusPanelOptions = {}): Prom
     return;
   }
 
+  // ── Filter labels for header ──
+  const filterLabels: string[] = [];
+  if (options.assignee) filterLabels.push(`人员: ${options.assignee}`);
+  if (options.platform) filterLabels.push(`平台: ${options.platform}`);
+  if (options.type) filterLabels.push(`类型: ${options.type}`);
+  const filterTag = filterLabels.length > 0 ? ` [${filterLabels.join(', ')}]` : '';
+
   // Header
   logger.info('');
   logger.info('┌────────────────── SpecCore ──────────────────┐');
@@ -38,12 +45,60 @@ export async function statusPanelCommand(options: StatusPanelOptions = {}): Prom
     const phaseIcon = { init:'🔧', require:'📝', analyze:'🔍', split:'📦', dev:'💻', review:'✅', done:'✨' }[phase] || '📌';
     logger.info(`│ 阶段: ${phaseIcon} ${phase.padEnd(35)}│`);
     
+    // ── Collect & filter tasks ──
+    const allTasks = await collectTasks(iterDir);
+    let filteredTasks = allTasks;
+    let totalBeforeFilter = allTasks.length;
+
+    if (options.assignee) {
+      filteredTasks = filteredTasks.filter(t => t.assignee === options.assignee);
+    }
+    if (options.type) {
+      filteredTasks = filteredTasks.filter(t => (t.type || '').toLowerCase() === options.type!.toLowerCase());
+    }
+    if (options.platform) {
+      filteredTasks = await filterByPlatform(iterDir, filteredTasks, options.platform);
+    }
+
+    const tasks = filteredTasks;
+    const done = tasks.filter(t => t.status.includes('完成') || t.status.includes('completed')).length;
+    const inProgress = tasks.filter(t => t.status.includes('开发') || t.status.includes('in_progress')).length;
+    const pending = tasks.length - done - inProgress;
+
     // Task counts
-    const stats = await getTaskStats(iterDir);
-    if (stats.total > 0) {
-      logger.info(`│ 任务: ${stats.done}/${stats.total} 完成`.padEnd(47) + '│');
-      const bar = buildProgressBar(stats.done, stats.total);
+    if (tasks.length > 0) {
+      const shown = tasks.length !== totalBeforeFilter ? ` ${tasks.length}/${totalBeforeFilter}` : '';
+      logger.info(`│ 任务: ${done}/${tasks.length} 完成${shown}${filterTag}`.padEnd(47) + '│');
+      const bar = buildProgressBar(done, tasks.length);
       logger.info(`│ ${bar.padEnd(46)}│`);
+      
+      // People breakdown
+      const personMap: Record<string, {total:number,done:number}> = {};
+      for (const t of tasks) {
+        const who = t.assignee || '未分配';
+        if (!personMap[who]) personMap[who] = {total:0,done:0};
+        personMap[who].total++;
+        if (t.status.includes('完成') || t.status.includes('completed')) personMap[who].done++;
+      }
+      if (Object.keys(personMap).length > 0) {
+        logger.info('├──────────────────────────────────────────────┤');
+        for (const [name, s] of Object.entries(personMap)) {
+          const pBar = buildProgressBar(s.done, s.total);
+          logger.info(`│ ${name}: ${pBar} ${s.done}/${s.total}`.padEnd(47) + '│');
+        }
+      }
+      
+      // Platform breakdown
+      const platformCount = await countPlatforms(iterDir, tasks);
+      if (platformCount.backend + platformCount.frontend > 0) {
+        logger.info('├──────────────────────────────────────────────┤');
+        const parts: string[] = [];
+        if (platformCount.backend > 0) parts.push(`Backend: ${platformCount.backend}`);
+        if (platformCount.frontend > 0) parts.push(`Frontend: ${platformCount.frontend}`);
+        logger.info(`│ 平台: ${parts.join('  ')}${' '.repeat(Math.max(0,37 - parts.join('  ').length))}│`);
+      }
+    } else {
+      logger.info(`│ 任务: 无${filterTag}`.padEnd(47) + '│');
     }
     
     // Branch info
@@ -64,6 +119,41 @@ export async function statusPanelCommand(options: StatusPanelOptions = {}): Prom
   
   logger.info('└──────────────────────────────────────────────┘');
   logger.info('');
+}
+
+// ── 共享：收集所有任务数据 ──
+async function collectTasks(iterDir: string): Promise<any[]> {
+  const tasks: any[] = [];
+  if (!(await pathExists(iterDir))) return tasks;
+  const entryList = await readdir(iterDir, { withFileTypes: true });
+  for (const e of entryList) {
+    if (e.isDirectory() && e.name.startsWith('Task-')) {
+      const taskPath = join(iterDir, e.name, 'backend', 'TASK.md');
+      if (await pathExists(taskPath)) {
+        const md = await readFile(taskPath, 'utf-8');
+        const status = (md.match(/状态: (.+)/) || [])[1] || 'pending';
+        const type = (md.match(/类型: (.+)/) || [])[1] || 'feature';
+        const assignee = (md.match(/负责人[：:]\s*(\S+)/) || [])[1] || '';
+        tasks.push({ id: e.name, status, type, assignee });
+      } else {
+        tasks.push({ id: e.name, status: 'pending', type: 'feature', assignee: '' });
+      }
+    }
+  }
+  return tasks;
+}
+
+// ── 共享：按平台统计 ──
+async function countPlatforms(iterDir: string, tasks: any[]): Promise<{backend:number,frontend:number}> {
+  let backend = 0, frontend = 0;
+  for (const t of tasks) {
+    try {
+      const entries = await readdir(join(iterDir, t.id), { withFileTypes: true });
+      if (entries.some((e: any) => e.name === 'backend')) backend++;
+      if (entries.some((e: any) => e.name === 'frontend')) frontend++;
+    } catch {}
+  }
+  return { backend, frontend };
 }
 
 async function detectPhase(iterDir: string): Promise<string> {
