@@ -111,14 +111,16 @@ speccore schedule daemon start                                          # 启动
 speccore schedule daemon status                                         # 查看守护进程状态
 ```
 
-| 方式 | 适用场景 | 时间粒度 |
-|:---|:---|:---|
-| `--schedule=night` | 白天积攒，晚上批量跑 | 无固定时间，手动触发 |
-| `schedule create --at` | 指定精确时间自动执行 | 秒级精度（需开启 daemon） |
+`execute` 自动能力：
 
-> `schedule daemon start` 后，到时间自动执行，无需人工干预。
+| 能力 | 说明 |
+|:---|:---|
+| 依赖排序 | 自动分析 Task 间依赖关系，按拓扑顺序执行 |
+| 分批执行 | `--batch-size=3`（默认），每批做完再继续 |
+| 断点续传 | `--resume` 从上次中断位置继续 |
+| 多条件筛选 | `--priority high` `--type feature` `--platform web` 只跑指定条件 |
 
-> `execute --all` 和 `execute --scheduled` 互不影响：前者执行 todo 任务，后者只执行 queue 任务。配合 IDE 自动化（如 WorkBuddy 定时任务），设置每天凌晨自动运行即可。
+> `execute --all` 跑 todo 任务，`execute --all --scheduled` 跑 queue 任务，互不干扰。
 
 
 ## 目录结构
