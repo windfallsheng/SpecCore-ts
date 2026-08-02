@@ -125,39 +125,97 @@ function showMediumConfidenceResults(
   results: Awaited<ReturnType<typeof recognizeIntent>>,
   iteration: string
 ): void {
-  logger.info('🔍 我注意到你的输入可能有多种含义：');
+  logger.info('🔍 你的输入可能有以下含义，请选择：');
   logger.info('');
+
+  // ── 命令→详细步骤映射 ──
+  const stepMap: Record<string, string[]> = {
+    init: ['1. speccore init           # 初始化项目，生成 .speccore/'],
+    'task new': [
+      '1. speccore task new -n "功能名"   # 创建开发任务',
+      '2. speccore analyze -t Task-001   # AI 分析需求',
+      '3. speccore execute -t Task-001 --force  # 执行开发',
+    ],
+    execute: [
+      '1. speccore execute -t Task-001 --force        # 直接执行',
+      '2. speccore execute -t Task-001 --force --verify  # 执行+自动验证',
+    ],
+    bugfix: [
+      '1. speccore bugfix -n "bug描述"              # 单个 Bug',
+      '2. speccore bugfix --batch-file=bugs.xlsx --interactive  # 批量导入',
+    ],
+    change: [
+      '1. speccore change "变更描述" -t Task-001        # 口语化变更',
+      '2. speccore change -t Task-001 --interactive     # 交互确认',
+    ],
+    'status-panel': [
+      '1. speccore status-panel              # 终端查看',
+      '2. speccore status-panel --export=html  # 导出仪表盘',
+    ],
+    import: [
+      '1. speccore import --project=xxx --path=./src --type=backend   # 源码导入',
+      '2. speccore import --project=xxx --path=req.xlsx               # Excel导入',
+    ],
+    'iteration split': [
+      '1. speccore analyze -i Q1              # 先分析需求',
+      '2. speccore iteration split -i Q1       # 拆分为 Task',
+    ],
+    pr: [
+      '1. speccore pr -t Task-001              # 自动推送+创建PR',
+      '2. speccore pr -t Task-001 --interactive  # 分步确认',
+    ],
+    done: [
+      '1. speccore done -t Task-001            # 单个归档',
+      '2. speccore done --all -i Q1             # 批量归档',
+    ],
+    dev: [
+      '1. speccore dev                         # 检测下一步',
+      '2. speccore dev --auto                  # 全自动流水线',
+    ],
+  };
 
   for (let i = 0; i < results.length; i++) {
     const r = results[i];
-    const cmdPreview = `speccore ${r.command}${iteration ? ` --iteration "${iteration}"` : ''}`;
-    logger.info(`  ${i + 1}. **${getIntentLabel(r.intent)}** (置信度: ${r.confidence}%) → ${cmdPreview}`);
+    logger.info(`  ${i + 1}. ${getIntentLabel(r.intent)} (${r.confidence}%) → speccore ${r.command}`);
+    
+    // 显示详细步骤
+    const steps = stepMap[r.command];
+    if (steps) {
+      for (const step of steps) {
+        logger.info(`     ${step}`);
+      }
+    }
+    logger.info('');
   }
 
+  logger.info('💡 输入序号选择（默认 1），输入更多信息重试，或 q 取消');
   logger.info('');
-  logger.info('💡 请输入序号选择（默认 1），或补充更多信息后重试。');
 }
 
 function showLowConfidenceGuidance(
   results: Awaited<ReturnType<typeof recognizeIntent>>,
   input: string
 ): void {
-  logger.warn(`🤔 对"${input}"的识别置信度较低。`);
+  logger.warn(`🤔 对"${input}"不太确定，以下是可能的匹配：`);
+  logger.info('');
 
   if (results.length > 0) {
-    logger.info('');
-    logger.info('你可能想说的是：');
-    for (const r of results.slice(0, 2)) {
-      logger.info(`  - ${getIntentLabel(r.intent)} (speccore ${r.command})`);
+    for (let i = 0; i < results.length; i++) {
+      const r = results[i];
+      logger.info(`  ${i + 1}. ${getIntentLabel(r.intent)} → speccore ${r.command}`);
     }
+    logger.info('');
   }
 
+  // 引导性提问
+  logger.info('你可以换个方式说，比如：');
+  logger.info('  "我要开始开发了"          → 自动匹配 execute');
+  logger.info('  "帮我看看项目进度"         → 自动匹配 status-panel');
+  logger.info('  "创建一个用户登录功能"     → 自动匹配 task new');
+  logger.info('  "批量导入这些bug"         → 自动匹配 bugfix');
+  logger.info('  "把刚才的需求拆成任务"     → 自动匹配 iteration split');
   logger.info('');
-  logger.info('你可以补充更多信息，例如：');
-  logger.info('  - "查看项目进度"');
-  logger.info('  - "帮我创建一个登录功能"');
-  logger.info('  - "审查一下当前任务"');
-  logger.info('  - "开始开发"');
+  logger.info('或者直接输入: speccore help  查看所有命令');
 }
 
 function getIntentLabel(intent: string): string {
