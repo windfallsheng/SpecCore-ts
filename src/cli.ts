@@ -333,6 +333,7 @@ program
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('--base <branch>', 'Base branch', 'main')
   .option('--draft', 'Create as draft PR')
+  .option('--interactive', '分步：预览变更 → 选文件 → commit → 推送 → 创建PR')
   .option('--title <title>', 'Custom PR title')
   .action(prCommand);
 
@@ -344,6 +345,7 @@ program
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('--base <branch>', 'Base branch', 'main')
   .option('--draft', 'Create as draft PR')
+  .option('--interactive', '分步：预览变更 → 选文件 → commit → 推送 → 创建PR')
   .option('--title <title>', 'Custom PR title')
   .action(prCommand);
 
