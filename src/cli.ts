@@ -115,7 +115,7 @@ const MODE = readMode();
 const SIMPLE_COMMANDS = new Set([
   'ask', 'init', 'doc2spec', 'analyze', 'split', 'execute',
   'pr', 'done', 'status-panel', 'dev',
-  'iteration', 'task', 'plan', 'ops', 'import', 'schedule',
+  'iteration', 'task', 'plan', 'ops', 'import', 'change', 'bugfix', 'validate', 'rename',
   ]);
 
 /** 简洁模式下过滤 help 命令列表 */
