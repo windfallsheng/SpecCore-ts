@@ -44,3 +44,5 @@ verify-project/
 # SpecCore local config
 .speccore/local/
 期次-*/.local/
+.speccore/cache/
+.speccore/GLOBAL/*.md

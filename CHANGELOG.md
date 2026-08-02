@@ -2,6 +2,39 @@
 
 ---
 
+## v5.22.0 (2026-08-02)
+
+### 🚀 analyze 命令全面升级 — 统一分析引擎
+
+`analyze` 从单纯的「需求分析」扩展为「需求+代码」统一分析引擎。
+
+**三种输入模式:**
+- 纯需求: `--req docs/a.md` — 完整性扫描 + 架构影响
+- 纯代码: `--src backend,frontend` — 代码健康 + 复杂度 + 依赖分析
+- 联合分析: `--src backend --req docs/req.md` — 需求-代码对标
+
+**三种输出范围:**
+| `--scope global` | `.speccore/GLOBAL/` | 全局代码健康 + 架构审查 |
+| `--scope iteration` (默认) | `期次-XX/00-需求文档/` | 期次需求分析 + 代码对标 |
+| `--scope task` | `期次-XX/Task-NN/` | 任务分析 + 文档补全 |
+
+**代码分析能力:**
+- 语言/目录/文件统计、API 接口清单(自动提取)、复杂度热点(>800行/ TODO/FIXME)
+- 依赖分析(循环依赖检测+核心模块识别)、最大文件 TOP 10
+
+**新增/修改文件:**
+- `src/core/analyze-engine.ts` — 统一分析引擎 (~1100行)
+- `src/commands/analyze.ts` — 重构为瘦编排层
+- `src/cli.ts` — 新增 `--src`/`--req`/`--scope`/`--depth` 参数
+
+**CLI 示例:**
+```bash
+speccore analyze --scope global --depth deep              # 全局代码健康
+speccore analyze --src backend,frontend -I Q1             # 多目录联合分析
+speccore analyze --scope task -t Task-01 -I Q1            # 任务级分析+补全
+speccore analyze --src backend --req docs/login.md --scope global  # 全模式
+```
+
 ## v5.11.0 (2026-07-21)
 
 ### 🆕 word2spec — Word 需求文档一键导入

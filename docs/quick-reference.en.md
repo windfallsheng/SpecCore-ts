@@ -8,18 +8,17 @@
 
 ```bash
 speccore init                         # Initialize project
-speccore import --project=<n> --path=<p>  # Import to global layer
 speccore iteration create --name=<n>  # Create iteration
 speccore task new --platforms=web,h5  # Create multi-platform task
 speccore execute --all --batch-size=3 # Batch execution
 speccore validate                     # Compliance check
 speccore status-panel --platform=web      # View progress
-speccore update --task=T-001 --status=completed  # Update status
+speccore update -t T-001 --status=completed  # Update status
 speccore sync                         # Reverse sync @spec → TASK.md
 speccore diff --source=A --target=B   # Compare iterations
 speccore trace --req=REQ-001          # Trace chain
 speccore backup                       # Backup state
-speccore delete --task=Task-005           # Safe delete (trash + clean refs)
+speccore delete -t Task-005           # Safe delete (trash + clean refs)
 speccore search "payment"                 # Cross-spec search
 speccore watch                            # Auto-validate on save
 speccore current --commit             # Generate commit message

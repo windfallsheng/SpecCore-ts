@@ -76,26 +76,13 @@ Edit `.speccore/CONSTITUTION.md` with your project's tech stack and naming conve
 - UI Library: Element Plus / Ant Design
 ```
 
-### Step 3: Import Projects to Global Layer
-
-```bash
-# Import backend
-speccore import --project=user-service --path=./backend --type=backend
-
-# Import frontend
-speccore import --project=frontend-web --path=./web --type=web
-
-# Incremental sync
-speccore import --project=user-service --path=./backend --update
-```
-
-### Step 4: Create Iteration
+### Step 3: Create Iteration
 
 ```bash
 speccore iteration create --name 2026-07-UserSystem
 ```
 
-### Step 5: Create Multi-Platform Tasks
+### Step 4: Create Multi-Platform Tasks
 
 ```bash
 # Multi-platform task
@@ -105,7 +92,7 @@ speccore task new --name UserLogin --platforms=web,h5
 speccore task new --name AuditLog --type feature
 ```
 
-### Step 6: Check Progress
+### Step 5: Check Progress
 
 ```bash
 # Overall
@@ -118,7 +105,7 @@ speccore status-panel --platform=web
 speccore status-panel --format json
 ```
 
-### Step 7: View Task Context
+### Step 6: View Task Context
 
 ```bash
 speccore context --task=Task-001
@@ -128,7 +115,7 @@ speccore context --task=Task-001
 
 ## Smart Entry: Natural Language
 
-**Can't remember commands? Use `speccore ask` + natural language!** 38 intent types, 200+ keywords.
+**Can't remember commands? Use `speccore ask` + natural language!** 36 intent types, 200+ keywords.
 
 ```bash
 speccore ask "Create a login feature"       # → matches goal

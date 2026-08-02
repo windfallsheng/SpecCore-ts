@@ -46,11 +46,11 @@ Tells WorkBuddy this is a Speccore project:
 ### SKILL.md (Speccore Skill)
 
 Teaches WorkBuddy Speccore commands and best practices:
-- **Command cheat sheet**: 52 commands organized by category
+- **Command cheat sheet**: 51 commands organized by category
 - **Global layer**: GLOBAL/ directory architecture
 - **Intent recognition**: Natural language matching rules
 - **Directory structure**: Iteration → Task → multi-platform frontend specs
-- **Development workflow**: From import to execution
+- **Development workflow**: From analysis to execution
 - **Alias reference**: All command shortcuts
 
 ---
@@ -88,7 +88,6 @@ Teaches WorkBuddy Speccore commands and best practices:
 | CLI Command | AI Slash Command | Purpose |
 | :--- | :--- | :--- |
 | `speccore init` | `/spec-init` | Initialize project |
-| `speccore import` | `/spec-import` | Import project |
 | `speccore task new` | `/spec-task-new` | Create multi-platform task |
 | `speccore iteration create` | `/spec-iteration-create` | Create iteration |
 | `speccore execute` | `/spec-execute` | Execute development |

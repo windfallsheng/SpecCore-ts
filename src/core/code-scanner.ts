@@ -201,7 +201,10 @@ export async function readRelevantSource(
       const content = await readFile(m.file, 'utf-8');
       const bytes = Buffer.byteLength(content);
       if (totalBytes + bytes > maxBytes) {
-        result[m.file] = content.slice(0, maxBytes - totalBytes) + '\n// ... truncated';
+        // 字节安全截断: 使用 Buffer 避免 UTF-8 字符中间切断
+        const remaining = maxBytes - totalBytes;
+        const buf = Buffer.from(content, 'utf-8');
+        result[m.file] = buf.slice(0, remaining).toString('utf-8') + '\n// ... truncated';
         break;
       }
       result[m.file] = content;

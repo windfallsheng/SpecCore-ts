@@ -52,15 +52,10 @@ mkdir spec-project && cd spec-project
 git init
 speccore init
 
-# 2. Import existing projects to global layer
-speccore import --project=user-service --path=../my-backend --type=backend
-speccore import --project=frontend-web --path=../my-frontend --type=web
-speccore import --project=miniapp --path=../my-miniapp --type=miniapp
-
-# 3. Create iteration from global layer
+# 2. Create iteration from global layer
 speccore iteration-from-global --reqs=REQ-001,REQ-002 --name=2026-07-Meeting
 
-# 4. Push
+# 3. Push
 git add . && git commit -m "chore: init spec project" && git push
 ```
 

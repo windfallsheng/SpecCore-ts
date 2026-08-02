@@ -1,6 +1,6 @@
 # /spec-import-analyze — AI 反工程分析存量项目
 
-读取 `speccore import` 生成的 ANALYSIS_PROMPT.md，深入源码倒推出完整需求、技术方案、编码规范。
+读取 `speccore analyze --scope global --src` 生成的 ANALYSIS_PROMPT.md，深入源码倒推出完整需求、技术方案、编码规范。
 
 ## 执行步骤
 

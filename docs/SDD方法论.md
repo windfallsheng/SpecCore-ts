@@ -94,7 +94,7 @@ speccore validate                      # 合规校验（自动检测 Spec 完整
 
 ```bash
 speccore impact --req=REQ-001    # 查看需求影响范围
-speccore context --task=Task-001 # 查看任务上下文和依赖
+speccore context -t Task-001 # 查看任务上下文和依赖
 ```
 
 ### 4.5 规范与代码分离

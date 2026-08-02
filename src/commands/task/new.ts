@@ -1,4 +1,4 @@
-import { ensureDir, writeFile, pathExists } from 'fs-extra';
+import { ensureDir, writeFile, pathExists, readFile } from 'fs-extra';
 import { join } from 'path';
 import { logger, Spinner } from '../../utils/logger';
 import { getDefaultIteration, updateContext } from '../../core/context';
@@ -13,13 +13,108 @@ export interface TaskNewOptions {
   backendOnly?: boolean;
   frontendOnly?: boolean;
   iteration?: string;
+  // 批量/调度
+  batch?: string;
+  batchFile?: string;
+  interactive?: boolean;
+  schedule?: string;
 }
 
 export async function taskNewCommand(options: TaskNewOptions): Promise<void> {
+  // ── 批量模式 ──
+  if (options.batch || options.batchFile) {
+    await batchCreateTasks(options);
+    return;
+  }
+
   if (!options.name) {
     logger.error('Task name is required. Use --name <name>');
     return;
   }
+
+  await createSingleTask(options);
+}
+
+/** 批量创建 Task */
+async function batchCreateTasks(options: TaskNewOptions): Promise<void> {
+  let batchText = options.batch || '';
+
+  // 从文件读取
+  if (options.batchFile) {
+    if (!await pathExists(options.batchFile)) {
+      logger.error('文件不存在: ' + options.batchFile);
+      return;
+    }
+    const ext = options.batchFile.split('.').pop()?.toLowerCase();
+    if (ext === 'xlsx') {
+      try {
+        const XLSX = require('xlsx');
+        const wb = XLSX.readFile(options.batchFile);
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const data: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
+        batchText = data.slice(1)
+          .filter((row: any[]) => row.some((c: any) => c))
+          .map((row: any[]) => row.filter((c: any) => c).join(' — '))
+          .join('\n');
+        logger.info('📊 从 Excel 导入: ' + options.batchFile);
+      } catch (e: any) {
+        logger.error('Excel 解析失败: ' + e.message);
+        return;
+      }
+    } else {
+      batchText = await readFile(options.batchFile, 'utf-8');
+      logger.info('📄 从文件导入: ' + options.batchFile);
+    }
+  }
+
+  const items = batchText.split('\n').filter(b => b.trim());
+  if (items.length === 0) {
+    logger.error('未找到有效的任务描述');
+    return;
+  }
+
+  // 交互确认
+  if (options.interactive) {
+    logger.info(`\n📋 共 ${items.length} 个任务:\n`);
+    for (let i = 0; i < items.length; i++) {
+      logger.info(`  ${i + 1}. ${items[i].trim()}`);
+    }
+    const readline = require('readline');
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const answer: string = await new Promise(resolve => rl.question('\n确认创建？[y/N] ', resolve));
+    rl.close();
+    if (answer.toLowerCase() !== 'y') {
+      logger.info('已取消');
+      return;
+    }
+  }
+
+  const type = options.type || 'bugfix';
+  const schedule = options.schedule || 'now';
+  let created = 0;
+
+  for (const item of items) {
+    const trimmed = item.trim();
+    if (!trimmed) continue;
+    try {
+      await createSingleTask({
+        ...options,
+        name: trimmed.slice(0, 60),
+        desc: trimmed,
+        type,
+        schedule,
+      });
+      created++;
+    } catch (e: any) {
+      logger.error(`创建失败 "${trimmed.slice(0, 30)}": ${e.message}`);
+    }
+  }
+
+  logger.info(`\n✅ 创建完成: ${created}/${items.length} 个任务`);
+}
+
+/** 创建单个 Task */
+async function createSingleTask(options: TaskNewOptions): Promise<void> {
 
   const spinner = new Spinner(`Creating task: ${options.name}`);
   spinner.start();
@@ -52,8 +147,12 @@ export async function taskNewCommand(options: TaskNewOptions): Promise<void> {
     }
     await ensureDir(join(taskDir, '_shared'));
 
-    // Write task type
-    await writeFile(join(taskDir, '.task-type'), options.type || 'feature');
+  // Write task type
+  await writeFile(join(taskDir, '.task-type'), options.type || 'feature');
+  
+  // Write task status (schedule=night → queue, else → todo)
+  const status = options.schedule === 'night' ? 'queue' : 'todo';
+  await writeFile(join(taskDir, '.task-status'), status);
 
     // Generate task content
     const taskContent = await generateTaskContent(options);
