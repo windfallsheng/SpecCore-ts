@@ -251,13 +251,6 @@ const iterationCmd = program
   .description('Iteration management commands');
 
 iterationCmd
-  .command('create')
-  .alias('cr')
-  .description('Create a new iteration')
-  .option('-n, --name <name>', 'Iteration name (required)')
-  .option('--from <date>', 'Start date', new Date().toISOString().split('T')[0])
-  .option('--to <date>', 'End date')
-  .action(iterationCreateCommand);
 
 iterationCmd
   .command('split')
@@ -284,20 +277,6 @@ const taskCmd = program
   .description('Task management commands');
 
 taskCmd
-  .command('new')
-  .alias('tn')
-  .description('Create a new atomic task')
-  .option('-n, --name <name>', 'Task name (required)')
-  .option('-t, --type <type>', 'Task type: feature, bugfix, research, optimization, migration, document', 'feature')
-  .option('--task-id <id>', 'Task ID (auto-generated if omitted)')
-  .option('-d, --desc <desc>', 'Task description')
-  .option('--file <file>', 'Requirement file path')
-  .option('--sections <sections>', 'Sections to extract from file')
-  .option('--platforms <platforms>', 'Frontend platforms: web,h5,miniapp (comma-separated)')
-  .option('--backend-only', 'Create backend only')
-  .option('--frontend-only', 'Create frontend only')
-  .option('-i, --iteration <iteration>', 'Target iteration')
-  .action(taskNewCommand);
 
 // 完整需求交付
 program
