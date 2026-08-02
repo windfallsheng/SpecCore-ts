@@ -341,6 +341,15 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
 .data-stream{position:absolute;bottom:0;left:0;right:0;height:30px;background:linear-gradient(transparent,rgba(0,240,255,.02));overflow:hidden}
 .data-stream span{position:absolute;color:rgba(0,240,255,.15);font-family:'JetBrains Mono',monospace;font-size:10px;white-space:nowrap;animation:stream 20s linear infinite}
 @keyframes stream{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}
+
+.fs-btn{position:absolute;top:10px;right:10px;width:28px;height:28px;border-radius:6px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);color:#4a5568;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .2s;z-index:10;opacity:0}
+.card:hover .fs-btn,.panel:hover .fs-btn{opacity:1}
+.fs-btn:hover{background:rgba(0,240,255,.1);border-color:rgba(0,240,255,.3);color:var(--cyan)}
+.fs-fullscreen{position:fixed!important;inset:20px!important;z-index:1000!important;border-radius:16px!important;overflow:auto!important}
+.fs-overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:999}
+.fs-tip{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(0,240,255,.1);border:1px solid rgba(0,240,255,.2);padding:8px 20px;border-radius:20px;font-size:11px;color:var(--cyan);z-index:1001;letter-spacing:1px;animation:fadeIn .3s ease;pointer-events:none}
+@keyframes fadeIn{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+
 </style>
 </head>
 <body>
@@ -396,6 +405,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
 
   <div class="grid">
     <div class="card">
+      <button class="fs-btn" title="Fullscreen (F)" onclick="toggleFS(this.parentElement)">⛶</button>
       <div class="data-stream"><span>ANALYZING PHASE PROGRESS...</span></div>
       <span class="card-icon">⏳</span>
       <h3>Phase Progress</h3>
@@ -405,6 +415,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
     </div>
 
     <div class="card">
+      <button class="fs-btn" title="Fullscreen (F)" onclick="toggleFS(this.parentElement)">⛶</button>
       <div class="data-stream"><span>PARSING TASK DISTRIBUTION...</span></div>
       <span class="card-icon">📊</span>
       <h3>Task Distribution</h3>
@@ -420,6 +431,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
     </div>
 
     <div class="card">
+      <button class="fs-btn" title="Fullscreen (F)" onclick="toggleFS(this.parentElement)">⛶</button>
       <div class="data-stream"><span>CALCULATING COMPLETION RATE...</span></div>
       <span class="card-icon">🎯</span>
       <h3>Completion Rate</h3>
@@ -431,6 +443,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
 
   <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:0">
     <div class="card">
+      <button class="fs-btn" title="Fullscreen (F)" onclick="toggleFS(this.parentElement)">⛶</button>
       <div class="data-stream"><span>GENERATING DONUT METRICS...</span></div>
       <h3 style="margin-bottom:20px">COMPLETION BREAKDOWN</h3>
       <div style="display:flex;align-items:center;gap:32px;justify-content:center">
@@ -455,6 +468,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
     </div>
 
     <div class="card">
+      <button class="fs-btn" title="Fullscreen (F)" onclick="toggleFS(this.parentElement)">⛶</button>
       <div class="data-stream"><span>RENDERING TASK TIMELINE...</span></div>
       <h3 style="margin-bottom:20px">TASK PROGRESS</h3>
       <div style="display:flex;flex-direction:column;gap:14px">
@@ -475,6 +489,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
 
   <div class="grid" style="grid-template-columns:1fr 1fr;margin-bottom:20px">
     <div class="card" style="min-height:280px">
+      <button class="fs-btn" title="Fullscreen (F)" onclick="toggleFS(this.parentElement)">⛶</button>
       <div class="data-stream"><span>RENDERING GANTT CHART...</span></div>
       <h3 style="margin-bottom:16px">GANTT TIMELINE</h3>
       <div style="overflow-x:auto">
@@ -508,6 +523,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
     </div>
 
     <div class="card" style="min-height:280px">
+      <button class="fs-btn" title="Fullscreen (F)" onclick="toggleFS(this.parentElement)">⛶</button>
       <div class="data-stream"><span>CALCULATING BURNDOWN...</span></div>
       <h3 style="margin-bottom:16px">BURNDOWN CHART</h3>
       <svg width="100%" height="180" viewBox="0 0 500 180" style="min-width:400px">
@@ -639,4 +655,39 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
     <span>EXPORTED: ${data.exportedAt}</span>
   </div>
 </main>
+
+<script>
+let fsEl=null;
+function toggleFS(el){
+  if(fsEl){closeFS();return}
+  fsEl=el;el.classList.add('fs-fullscreen');
+  const ov=document.createElement('div');ov.className='fs-overlay';ov.id='fs-overlay';ov.onclick=closeFS;
+  document.body.appendChild(ov);
+  const tip=document.createElement('div');tip.className='fs-tip';tip.id='fs-tip';tip.textContent='ESC or click outside to exit';
+  document.body.appendChild(tip);
+  setTimeout(()=>{const t=document.getElementById('fs-tip');if(t)t.remove()},3000);
+}
+function closeFS(){
+  if(!fsEl)return;
+  fsEl.classList.remove('fs-fullscreen');
+  const ov=document.getElementById('fs-overlay');if(ov)ov.remove();
+  const tip=document.getElementById('fs-tip');if(tip)tip.remove();
+  fsEl=null;
+}
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape')closeFS();
+  if(e.key==='f'||e.key==='F'){
+    if(document.activeElement&&document.activeElement.tagName==='INPUT')return;
+    const hovered=document.querySelector('.card:hover,.panel:hover');
+    if(hovered) toggleFS(hovered);
+  }
+});
+document.querySelectorAll('.card,.panel').forEach(el=>{
+  const btn=document.createElement('button');
+  btn.className='fs-btn';btn.title='Fullscreen (F)';btn.innerHTML='⛶';btn.onclick=e=>{e.stopPropagation();toggleFS(el)};
+  el.style.position=el.style.position||'relative';
+  el.appendChild(btn);
+});
+</script>
+
 </body></html>`;}
