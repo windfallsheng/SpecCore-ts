@@ -10,7 +10,7 @@
 speccore init                         # Initialize project
 speccore import --project=<n> --path=<p>  # Import to global layer
 speccore iteration create --name=<n>  # Create iteration
-speccore new-task --platforms=web,h5  # Create multi-platform task
+speccore task new --platforms=web,h5  # Create multi-platform task
 speccore execute --all --batch-size=3 # Batch execution
 speccore validate                     # Compliance check
 speccore progress --platform=web      # View progress

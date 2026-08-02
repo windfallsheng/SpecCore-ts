@@ -46,7 +46,7 @@ Tells WorkBuddy this is a Speccore project:
 ### SKILL.md (Speccore Skill)
 
 Teaches WorkBuddy Speccore commands and best practices:
-- **Command cheat sheet**: 54 commands organized by category
+- **Command cheat sheet**: 52 commands organized by category
 - **Global layer**: GLOBAL/ directory architecture
 - **Intent recognition**: Natural language matching rules
 - **Directory structure**: Iteration → Task → multi-platform frontend specs
@@ -72,7 +72,7 @@ Teaches WorkBuddy Speccore commands and best practices:
    "Create a user login feature"
         │
         ├→ Speccore Skill activates
-        └→ AI calls: speccore new-task --name="UserLogin"
+        └→ AI calls: speccore task new --name="UserLogin"
 
 4. CLI executes deterministic operations
         │
@@ -89,7 +89,7 @@ Teaches WorkBuddy Speccore commands and best practices:
 | :--- | :--- | :--- |
 | `speccore init` | `/spec-init` | Initialize project |
 | `speccore import` | `/spec-import` | Import project |
-| `speccore new-task` | `/spec-new-task` | Create multi-platform task |
+| `speccore task new` | `/spec-new-task` | Create multi-platform task |
 | `speccore iteration create` | `/spec-iteration-create` | Create iteration |
 | `speccore execute` | `/spec-execute` | Execute development |
 | `speccore progress` | `/spec-progress` | View progress |

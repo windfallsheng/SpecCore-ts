@@ -8,7 +8,7 @@ SpecCore is a specification-driven development toolkit for AI-native teams. It o
 
 | | Simple (default) | Full |
 | :--- | :--- | :--- |
-| Commands | 19 core | 79+ all |
+| Commands | 19 core | 52 all |
 | For | Daily development | Fine-grained control |
 | Enable | `speccore init` | `speccore init --full` |
 
@@ -67,7 +67,7 @@ speccore bugfix --batch-file=bugs.xlsx --schedule=night --interactive
 | Doc | Content |
 | :--- | :--- |
 | 🚀 [Quick Start](docs/快速开始.md) | Full tutorial |
-| 🔧 [Full Command Reference](docs/命令参考.md) | 79+ commands |
+| 🔧 [Full Command Reference](docs/命令参考.md) | 52 commands |
 | [Scenarios](docs/场景实战.md) | Typical use cases |
 | [Overview](docs/总览.md) | Architecture + concepts |
 | [SDD Methodology](docs/SDD方法论.md) | Why Spec-Driven Development |

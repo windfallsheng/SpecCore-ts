@@ -75,7 +75,7 @@ Before any code, create Spec docs (REQ.md + TECH.md + TASK.md + API_CONTRACT.yam
 ### 4.2 Command-Driven
 ```bash
 speccore init                           # One-command project setup
-speccore new-task --platforms=web,h5   # Multi-platform task creation
+speccore task new --platforms=web,h5   # Multi-platform task creation
 speccore execute --all --batch-size=3  # Batch execution with isolation
 speccore validate                      # Spec compliance check
 ```
@@ -104,7 +104,7 @@ Specs in independent repo, code repos as siblings. Clean permissions, independen
    └→ Write REQ.md
 
 2. Task Breakdown
-   └→ Create tasks: speccore new-task
+   └→ Create tasks: speccore task new
    └→ Complete TECH.md / TASK.md / API_CONTRACT.yaml
 
 3. Execute Development
