@@ -52,7 +52,12 @@ export async function importCommand(options: ImportOptions): Promise<void> {
     if (options.project) {
       const projectName = options.project;
       const projectPath = options.path || `./${projectName}`;
-      const projectType = (options.type || 'backend') as ProjectType;
+      if (!options.type) {
+        logger.error('请通过 --type 指定项目类型（backend/frontend/web/h5/miniapp）');
+        logger.error('示例: speccore import --project=xxx --type=backend --path=.');
+        return;
+      }
+      const projectType = options.type as ProjectType;
 
       await importToGlobalLayer(projectName, projectPath, projectType, options);
       spinner.stop('Project imported to global layer');
