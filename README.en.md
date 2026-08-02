@@ -16,6 +16,20 @@ SpecCore is a specification-driven development toolkit for AI-native teams. It o
 
 ---
 
+## Two Ways to Use
+
+The same command works in two scenarios: terminal CLI and AI IDE dialog.
+
+| Scenario | Method | Example |
+|:---|:---|:---|
+| 🖥 **Terminal CLI** | `speccore <command>` | `speccore init` `speccore execute -t Task-001 --force` |
+| 💬 **AI Chat** | Natural language | "Create a login feature" "Show project progress" |
+| 💬 **AI Chat** | `/spec-<command>` | `/spec-init` `/spec-execute Task-001` `/spec-status-panel` |
+
+**Mapping:** `/spec-init` ≡ `speccore init`. Every CLI command has a matching Slash Command. The most natural way: just speak in the AI dialog — AI auto-matches the command.
+
+---
+
 ## Quick Start
 
 ```bash

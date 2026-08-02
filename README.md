@@ -4,6 +4,20 @@ SpecCore 是一套面向 AI 原生团队的规范驱动研发工具链。将需�
 
 ---
 
+## 两种用法
+
+同一个命令有两种使用场景：终端 CLI 和 AI IDE 对话。
+
+| 场景 | 方式 | 示例 |
+|:---|:---|:---|
+| 🖥 **终端 CLI** | `speccore <命令>` | `speccore init` `speccore execute -t Task-001 --force` |
+| 💬 **AI 对话** | 直接说人话 | "帮我创建登录功能" "看一下项目进度" |
+| 💬 **AI 对话** | `/spec-<命令>` | `/spec-init` `/spec-execute Task-001` `/spec-status-panel` |
+
+**对应关系：** `/spec-init` ≡ `speccore init`，每个 CLI 命令都有对应 Slash Command。最自然的方式是在 AI 对话框里直接说人话，AI 自动匹配命令。
+
+---
+
 ## 两种模式
 
 | | 简洁模式（默认） | 全量模式 |
