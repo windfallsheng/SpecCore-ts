@@ -228,7 +228,7 @@ async function exportStatus(config: any, iteration: string | null, format: strin
     data.addedThisWeek = tasks.filter((t: any) => t.created && new Date(t.created) >= weekAgo).length;
     data.bugCount = tasks.filter((t: any) => (t.type || '').toLowerCase().includes('bug')).length;
     const am: any = {};
-    for (const t of tasks) { if (t.assignee) { if (!am[t.assignee]) am[t.assignee] = {total:0,done:0}; am[t.assignee].total++; if (t.status.includes('done')||t.status==='completed') am[t.assignee].done++; } }
+    for (const t of tasks) { if (t.assignee) { if (!am[t.assignee]) am[t.assignee] = {total:0,done:0}; am[t.assignee].total++; if (t.status.includes("completed")||t.status.includes("完成")) am[t.assignee].done++; } }
     data.assigneeStats = am;
   }
 
@@ -280,6 +280,20 @@ function buildHtmlDashboard(data: any): string {
   const bugCount = (data.typeDistribution && data.typeDistribution['bugfix']) || 0;
   const researchCount = (data.typeDistribution && data.typeDistribution['research']) || 0;
   const addedThisWeek = data.addedThisWeek || 0;
+  const am = data.assigneeStats || {};
+  const assigneeCards = Object.entries(am).map(([name, s]) => {
+    const pct = s.total > 0 ? Math.round(s.done/s.total*100) : 0;
+    return '<div style="background:rgba(0,240,255,.03);border:1px solid rgba(0,240,255,.08);border-radius:8px;padding:16px">' +
+      '<div style="font-size:14px;font-weight:600;margin-bottom:8px">' + name + '</div>' +
+      '<div style="display:flex;gap:12px;margin-bottom:8px">' +
+      '<div><span class="num-font">' + s.done + '</span><span style="font-size:10px;color:var(--muted)">/' + s.total + '</span></div>' +
+      '<div class="num-font" style="margin-left:auto">' + pct + '%</div>' +
+      '</div>' +
+      '<div style="height:4px;background:rgba(255,255,255,.03);border-radius:2px;overflow:hidden">' +
+      '<div style="width:' + pct + '%;height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:2px"></div></div>' +
+      '</div>';
+  }).join('');
+  const hasAssignees = assigneeCards.length > 0;
   const bugTotal = data.bugCount || 0;
   const phasePct = ({init:10, require:25, analyze:40, dev:60, review:80, done:100} as any)[phase] || 0;
 
@@ -352,7 +366,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
 .type-res{background:rgba(168,85,247,.12);color:#c084fc}
 .footer{display:flex;justify-content:space-between;align-items:center;margin-top:28px;padding:16px 0;border-top:1px solid rgba(0,240,255,.06);color:var(--muted);font-size:11px;letter-spacing:1px}
 .data-stream{position:absolute;bottom:0;left:0;right:0;height:30px;background:linear-gradient(transparent,rgba(0,240,255,.02));overflow:hidden}
-.data-stream span{position:absolute;color:rgba(0,240,255,.15);font-family:'JetBrains Mono',monospace;font-size:10px;white-space:nowrap;animation:stream 20s linear infinite}
+.num-font{font-family:'Orbitron',sans-serif;font-size:18px;color:var(--cyan)}.data-stream span{position:absolute;color:rgba(0,240,255,.15);font-family:'JetBrains Mono',monospace;font-size:10px;white-space:nowrap;animation:stream 20s linear infinite}
 @keyframes stream{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}
 
 .fs-btn{position:absolute;top:10px;right:10px;width:28px;height:28px;border-radius:6px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);color:var(--muted);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .2s;z-index:10;opacity:0}
@@ -643,6 +657,8 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
       </div>
     </div>
   </div>
+
+  ${hasAssignees ? '<div class="panel" style="margin-bottom:20px"><div class="panel-title">TEAM WORKLOAD</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">' + assigneeCards + '</div></div>' : ''}
 
   <div class="panel">
     <div class="panel-title">TASK REGISTRY</div>
