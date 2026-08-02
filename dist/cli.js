@@ -566,6 +566,7 @@ commander_1.program
     .description('Display command help and search')
     .option('--command <command>', 'Show detailed help for specific command')
     .option('--search <keyword>', 'Search commands by keyword')
+    .option('--examples', 'Show complete scenario examples')
     .action(help_1.helpCommand);
 // ================================================================
 // 🌐 全量层命令
