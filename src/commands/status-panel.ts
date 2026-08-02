@@ -200,7 +200,7 @@ async function exportStatus(config: any, iteration: string | null, format: strin
             const created = (md.match(/创建日期[：:]?\s*(\d{4}-\d{2}-\d{2})/) || md.match(/创建:\s*(\d{4}-\d{2}-\d{2})/) || [])[1] || '';
             const estimate = (md.match(/预估[工时:：]?\s*(\d+)\s*[hH小时]/) || md.match(/预计耗时[：:]?\s*(\d+)/) || [])[1] || '';
             const delay = (md.match(/延期\|DELAY/i) || []).length > 0;
-            tasks.push({ id: e.name, status, type, created, estimate: estimate ? parseInt(estimate) : 0, delay });
+            tasks.push({ id: e.name, status, type, created, estimate: estimate ? parseInt(estimate) : 0, delay, assignee: (md.match(/负责人[：:]\s*(\S+)/) || [])[1] || '' });
           } else {
             tasks.push({ id: e.name, status: 'pending' });
           }
@@ -221,6 +221,9 @@ async function exportStatus(config: any, iteration: string | null, format: strin
     const weekAgo = new Date(nowTs - 7 * 86400000);
     data.addedThisWeek = tasks.filter((t: any) => t.created && new Date(t.created) >= weekAgo).length;
     data.bugCount = tasks.filter((t: any) => (t.type || '').toLowerCase().includes('bug')).length;
+    const am: any = {};
+    for (const t of tasks) { if (t.assignee) { if (!am[t.assignee]) am[t.assignee] = {total:0,done:0}; am[t.assignee].total++; if (t.status.includes('done')||t.status==='completed') am[t.assignee].done++; } }
+    data.assigneeStats = am;
   }
 
   if (format === 'json') {

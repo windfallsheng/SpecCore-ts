@@ -1,29 +1,15 @@
 import { ensureDir, writeFile, pathExists, readFile } from 'fs-extra';
 import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
-import { initCounters } from '../core/global-counters';
-import { initConfig } from '../core/unified-config';
-import { buildConstitution } from '../core/constitution-builder';
 import { updateContext } from '../core/context';
-import { i18n } from '../i18n';
-import { ContextSchema } from '../core/schemas';
-import { safeValidate } from '../core/error-feedback';
 
-import { showNextSteps } from '../core/next-steps';
 export interface InitOptions {
   mode?: string;
   force?: boolean;
-  lang?: string;
-  full?: boolean;
 }
 
 export async function initCommand(options: InitOptions): Promise<void> {
-  // 支持 --lang 参数动态切换
-  if (options.lang === 'en' || options.lang === 'en-US') {
-    i18n.setLocale('en-US');
-  }
-
-  const spinner = new Spinner(i18n.t('cmd.init.start'));
+  const spinner = new Spinner('Initializing SpecCore');
   spinner.start();
 
   try {
@@ -48,15 +34,11 @@ export async function initCommand(options: InitOptions): Promise<void> {
     await ensureDir(join(speccoreDir, 'GLOBAL'));
     await ensureDir(join(speccoreDir, 'GLOBAL', 'PROJECTS'));
     await ensureDir(join(speccoreDir, 'GLOBAL', 'PROJECTS', '_template'));
-
-    // Initialize global counters
-    await initCounters();
     await ensureDir(join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'crud'));
     await ensureDir(join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'auth'));
     await ensureDir(join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'export'));
     await ensureDir(join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'report'));
     await ensureDir(join(speccoreDir, 'GLOBAL', 'BASELINES'));
-    await ensureDir(join(speccoreDir, 'config'));
 
     // Create default files
     await createDefaultFiles(speccoreDir);
@@ -64,63 +46,47 @@ export async function initCommand(options: InitOptions): Promise<void> {
     // Create GLOBAL layer files
     await createGlobalFiles(speccoreDir);
 
-    // Create config files
-    await createConfigFiles(speccoreDir);
+    // Create .workbuddy integration files for WorkBuddy IDE
+    await createWorkBuddyFiles(projectRoot);
 
-    // Create context.json (with Zod validation)
-    const contextData = {
-      currentIteration: '',
-      currentTask: '',
-      currentAssignee: '',
-      lastUpdated: new Date().toISOString(),
-      lastAction: '',
-      lastIntent: '',
-      interruptedAt: '',
-      iterationStatus: '',
-      pendingTasks: 0,
-      inProgressTasks: 0,
-      completedTasks: 0,
-      blockedTasks: 0,
-      customAliases: {},
-      history: [],
-    };
-
-    const validated = safeValidate(ContextSchema, contextData, 'context');
-    if (!validated.success) {
-      logger.warn('Context validation warning:');
-      for (const e of validated.errors) {
-        logger.warn(`  ${e.message}`);
-      }
-    }
-
+    // Create context.json
     await writeFile(
       join(speccoreDir, 'local', 'context.json'),
-      JSON.stringify(validated.success ? validated.data : contextData, null, 2)
-    );
-
-    // ── 保存模式偏好 (simple/full) ──
-    const mode = options.full ? 'full' : 'simple';
-    await writeFile(
-      join(speccoreDir, 'config', 'mode.json'),
-      JSON.stringify({ mode }, null, 2)
+      JSON.stringify({
+        currentIteration: '',
+        currentTask: '',
+        currentAssignee: '',
+        lastUpdated: new Date().toISOString(),
+        lastAction: '',
+        lastIntent: '',
+        interruptedAt: '',
+        iterationStatus: '',
+        pendingTasks: 0,
+        inProgressTasks: 0,
+        completedTasks: 0,
+        blockedTasks: 0,
+        customAliases: {},
+        history: []
+      }, null, 2)
     );
 
     // Create .gitignore entry
     await updateGitignore(projectRoot);
 
-    // Generate .codebuddy/commands/ slash command files
-    await generateSlashCommands(projectRoot);
-
     // Update context
     await updateContext({ lastUpdated: new Date().toISOString() });
 
-    spinner.stop(i18n.t('cmd.init.success'));
+    spinner.stop('SpecCore initialized successfully!');
     logger.info('');
-    logger.info(i18n.t('common.next_steps') + ':');
+    logger.info('Next steps:');
     logger.info('  1. Edit .speccore/CONSTITUTION.md to define your tech stack');
     logger.info('  2. Edit .speccore/PROJECT/TEAM.md to add team members');
-    logger.info('  3. Type /spec in your AI tool to see all commands');
-    logger.info('  4. Run: speccore doc2spec --files "file.md=端名" -i Q1 to import requirements');
+    logger.info('  3. Run: speccore import --project=<name> --path=<path> to import projects');
+    logger.info('  4. Run: speccore global-status to view global layer');
+    logger.info('  5. Run: speccore iteration-from-global to generate iteration from requirements');
+    logger.info('');
+    logger.info('💡 WorkBuddy Integration: .workbuddy/ files created.');
+    logger.info('   Reopen this project in WorkBuddy to enable Speccore commands.');
   } catch (error) {
     spinner.fail(`Initialization failed: ${error}`);
     throw error;
@@ -154,107 +120,12 @@ async function createDefaultFiles(speccoreDir: string): Promise<void> {
 - 数据库：snake_case
 - 代码：camelCase / PascalCase
 
-## 代码规范（会被 execute 自动注入）
-
-<!-- spec-rule: exception-handler -->
-- 统一异常：所有 Controller 方法抛出 BusinessException
-- 全局捕获：@ControllerAdvice 统一处理，返回 { code, message, data }
-- 禁止：直接返回 null 或不处理异常
-<!-- /spec-rule -->
-
-<!-- spec-rule: response-format -->
-- 统一返回类型：Result<T> = { code: Integer, message: String, data: T }
-- Controller 方法签名：public Result<XxxDTO> methodName(...)
-<!-- /spec-rule -->
-
-<!-- spec-rule: orm -->
-- ORM 框架：MyBatis-Plus 3.5
-- 数据访问：XxxRepository extends BaseMapper<Xxx>，禁止手写 SQL
-- 软删除：@TableLogic 注解，查询自动过滤已删除记录
-<!-- /spec-rule -->
-
-<!-- spec-rule: naming -->
-- Controller：XxxController
-- Service：XxxService（接口）+ XxxServiceImpl（实现）
-- Repository：XxxRepository extends BaseMapper<Xxx>
-- DTO：CreateXxxDTO / UpdateXxxDTO / XxxPageDTO
-<!-- /spec-rule -->
-
-<!-- spec-rule: validation -->
-- 参数校验：Controller 层 @Valid + JSR-303 注解
-- DTO：@NotBlank / @NotNull / @Pattern
-- 失败返回：MethodArgumentNotValidException → 400 + 错误详情
-<!-- /spec-rule -->
-
-<!-- spec-rule: git-branch -->
-- 分支命名格式: {YYYYMMDD}-{任务名}-{姓名缩写}
-- 示例: 260715-订单管理-zs
-- 开发前自动创建分支: git checkout -b {日期}-{任务名}-{缩写}
-- 姓名缩写参见 PROJECT/TEAM.md
-<!-- /spec-rule -->
-
 ## 异常码体系
 | 错误码 | 含义 | 场景 |
 | :--- | :--- | :--- |
 | 1001 | 用户不存在 | 登录时手机号未注册 |
 | 1002 | 密码错误 | 登录密码不匹配 |
 | ... | ... | ... |
-
-## AI 操作规则（对话中自动遵守）
-
-当用户在对话中请求修改 Spec 文件时，AI 必须执行**两阶段确认**流程：
-
-### 第一阶段：变更分析（用户确认后再进入第二阶段）
-AI 输出结构化的分析报告：
-
-- **变更内容**: 将要修改哪些文件，具体改什么（新增/修改/删除）
-- **影响范围**: 检查 PROJECT_GRAPH.md，列出受影响的依赖任务
-- **风险评级**: 🟢低 / 🟡中 / 🔴高，附评级理由
-- **确认**: "确认继续？" 等待用户回复
-
-### 第二阶段：执行计划（用户确认后才写入文件）
-AI 列出具体执行步骤：
-
-- **修改清单**: 每个文件的具体改动（含 diff 摘要）
-- **关联更新**: 是否需要同步更新 API_CONTRACT.yaml / TECH.md / 期次总览
-- **变更履历**: 将在每个被修改文件末尾追加的条目预览
-- **确认**: "开始执行？" 等待用户回复
-
-用户确认后，AI 一次性完成所有写入，并输出结果摘要。
-
-### 写入前自动备份
-AI 修改任何 Spec 文件前，必须先复制原文件为同目录下的 .bak 副本（如 REQ.md → REQ.md.bak）。
-用户说「回滚」时，AI 从 .bak 恢复原文件。备份保留 24 小时后清理。
-
-### 自动追加变更履历
-修改 Spec 文件后，在文件末尾追加表格：
-
-| 时间 | 变更内容 | 类型 | 版本 |
-| :--- | :--- | :--- | :--- |
-| 2026-07-21 | + POST /api/v1/orders/batch 批量创建 | 新增接口 | v1.1 |
-
-### 完成后提示
-- 需要重新执行的命令（execute / sync --detect / validate）
-- 受影响的下游任务清单
-
-### 禁止行为
-- ❌ 跳过第一阶段直接展示修改内容
-- ❌ 用户在第一阶段未确认就继续
-- ❌ 修改 Spec 后不追加变更履历
-- ❌ 修改 Spec 后不告知影响的下游任务
-
-## 核心宪法与冲突裁决
-
-### 核心原则
-- **反向同步铁律**：代码与 Spec 冲突时，必须先更新 Spec，再修改代码
-- **Spec 是唯一事实源**：文档和代码冲突时，错的一定是代码
-
-### 冲突裁决规则
-| 等级 | 场景 | 处理方式 |
-| :--- | :--- | :--- |
-| L1 | 明确冲突 | 立即修正代码 |
-| L2 | Spec 缺陷 | 暂停，提交裁决 |
-| L3 | 环境不可行 | 升级至架构评审 |
 `
   );
 
@@ -279,30 +150,11 @@ AI 修改任何 Spec 文件前，必须先复制原文件为同目录下的 .bak
 
   await writeFile(
     join(speccoreDir, 'PROJECT', 'TEAM.md'),
-    `# 团队信息
+    `# 团队与 Git 映射
 
-## 分支命名规则
-
-格式: {YYYYMMDD}-{任务名}-{姓名缩写}
-示例: 260715-订单管理-zs
-
-> AI 创建 Task 分支时自动遵守此格式。
-
-## 成员列表
-
-| 姓名 | 缩写 | 邮箱 | 角色 |
-| :--- | :--- | :--- | :--- |
-| _待填写_ | - | - | - |
-
-## 分支操作
-
-\`\`\`bash
-# 手动创建
-git checkout -b 260715-订单管理-zs
-
-# AI 对话创建
-"开发 Task-001" → AI 自动创建分支
-\`\`\`
+| 成员 | Git 用户名 | 角色 | 技术栈 | 负责模块 |
+| :--- | :--- | :--- | :--- | :--- |
+| | | | | |
 `
   );
 
@@ -361,46 +213,6 @@ git checkout -b 260715-订单管理-zs
 
 | 日期 | 变更项 | 旧值 | 新值 | 变更人 |
 | :--- | :--- | :--- | :--- | :--- |
-`
-  );
-
-  // CAPABILITIES.md — AI 能力注册表
-  await writeFile(
-    join(speccoreDir, 'CAPABILITIES.md'),
-    `# 项目能力注册表
-
-> 供 AI IDE 快速了解项目有什么能力。类比 WorkBuddy Skill 元数据。
-> 导入项目或添加规则后自动更新。
-
-## 工程能力
-| 项目 | 类型 | API 端点 | 状态 |
-| :--- | :--- | :--- | :--- |
-| _待导入_ | - | - | - |
-
-## 可用规则
-| 规则文件 | 用途 | 描述 |
-| :--- | :--- | :--- |
-| RULES/CODE_REVIEW.md | 代码审查 | 审查维度和评分标准 |
-| RULES/POST_COMPLETION.md | 上线维护 | Feature 上线后维护流程 |
-
-## 可用命令
-| 命令 | 别名 | 功能 |
-| :--- | :--- | :--- |
-| init | in | 初始化项目 |
-| import | imp | 存量项目导入全局层 |
-| iteration | it | 期次管理 |
-| task new | tn | 创建原子 Task |
-| doc2spec | d2s | 需求文档导入 |
-| analyze | al | 需求分析 + 宪法检查 |
-| split | — | 拆分为独立 Task |
-| plan | pl | 生成执行计划 |
-| execute | ex | 执行开发 |
-| pr | — | 创建 PR |
-| done | dn | 完成任务 |
-| change | ch | 需求变更联动 |
-| bugfix | bf | Bug 修复 |
-| validate | vl | Spec 合规检查 |
-| ask | — | 自然语言意图识别 |
 `
   );
 
@@ -644,31 +456,19 @@ flowchart TB
     join(globalDir, 'TECH_STACK.md'),
     `# 全量技术栈
 
-> 本文档汇总所有项目的技术栈信息。
-
-<!-- tech-stack: backend -->
-- 语言: Java 17
-- 框架: Spring Boot 3.2
-- ORM: MyBatis-Plus 3.5
-<!-- /tech-stack -->
-
-<!-- tech-stack: frontend -->
-- 框架: Vue 3
-- UI: Element Plus
-- 构建: Vite
-<!-- /tech-stack -->
+> 本文档汇总所有项目的技术栈信息，跨项目统一管理版本和依赖。
 
 ## 后端技术栈
 
-| 项目名称 | 语言/框架 | ORM | 数据库 | 缓存 |
-| :--- | :--- | :--- | :--- | :--- |
-| _待导入_ | - | - | - | - |
+| 项目名称 | 语言/框架 | ORM | 数据库 | 缓存 | 消息队列 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| _待导入_ | - | - | - | - | - |
 
 ## 前端技术栈
 
-| 项目名称 | 平台类型 | 框架 | UI 库 | 构建工具 |
-| :--- | :--- | :--- | :--- | :--- |
-| _待导入_ | - | - | - | - |
+| 项目名称 | 平台类型 | 框架 | 状态管理 | UI 库 | 构建工具 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| _待导入_ | - | - | - | - | - |
 
 ## 中间件与基础设施
 
@@ -689,33 +489,13 @@ flowchart TB
     join(globalDir, 'CODE_INDEX.md'),
     `# 全量代码索引
 
-> 本文档是工程 → 代码路径 + Git 仓库映射。Task 创建时，AI 根据此表确定代码生成目录和 Git 分支。
+> 本文档是多工程代码路径映射，将所有项目的代码路径统一索引。
 
-## 工程 → 路径 + Git 映射
+## 工程映射
 
-| 工程 | 代码路径 | Git 仓库 | 默认分支 | 技术栈 |
+| 工程名称 | 类型 | 本地路径 | Git 仓库 | 分支 |
 | :--- | :--- | :--- | :--- | :--- |
-| backend | src/main/java/com/example | git@xxx:team/backend.git | main | Spring Boot |
-| frontend-web | src/frontend/web | git@xxx:team/frontend-web.git | main | Vue 3 |
-| frontend-mini | src/frontend/mini | git@xxx:team/frontend-mini.git | main | uni-app |
-
-## 分支命名规则
-
-格式: {YYYYMMDD}-{任务名}-{姓名缩写}，从 {默认分支} 拉出。
-示例: 260715-订单管理-zs（从 main 拉出）
-
-> 姓名缩写参见 PROJECT/TEAM.md。AI 在 Task 关联多个工程时，为每个工程创建同名分支。
-
-## Task → 工程 映射
-
-| Task | 涉及工程 | 说明 |
-| :--- | :--- | :--- |
-| _待添加_ | — | — |
-
-> 📌 新增 Task/工程时，在此追加对应行。
-
-> 📌 新增 Task 时，在此追加一行对应关系。
-| _待导入_ | - | - | - |
+| _待导入_ | - | - | - | - |
 
 ## 关键目录说明
 
@@ -862,7 +642,7 @@ _暂无需求，等待 \`speccore import\` 导入_
 `
   );
 
-  // GLOBAL/BASELINES/README.md - 基线索引
+    // GLOBAL/BASELINES/README.md - 基线索引
   await writeFile(
     join(globalDir, 'BASELINES', 'README.md'),
     `# 基线索引
@@ -877,105 +657,161 @@ _暂无需求，等待 \`speccore import\` 导入_
 }
 
 /**
- * 创建配置文件（platforms.yaml 等）
+ * 创建 .workbuddy/ 集成文件，让 WorkBuddy IDE 自动识别 Speccore 项目
+ * 包括项目记忆文件和 Speccore skill
  */
-async function createConfigFiles(speccoreDir: string): Promise<void> {
-  const configDir = join(speccoreDir, 'config');
+async function createWorkBuddyFiles(projectRoot: string): Promise<void> {
+  const workbuddyDir = join(projectRoot, '.workbuddy');
 
-  // platforms.yaml — 前端平台配置
+  // .workbuddy/memory/MEMORY.md — 项目记忆（告诉 WorkBuddy 这是 Speccore 项目）
+  await ensureDir(join(workbuddyDir, 'memory'));
   await writeFile(
-    join(configDir, 'platforms.yaml'),
-    `# 前端平台配置
-# 由 speccore platform-add 自动维护，也可手动编辑
+    join(workbuddyDir, 'memory', 'MEMORY.md'),
+    `# Project Memory — Speccore Managed
 
-platforms:
-  web:
-    name: "Web端"
-    description: "PC Web 端"
-    default: true
-    tech_stack: "Vue 3 + TypeScript + Vite"
-    enabled: true
+This project uses **SpecCore** (\`speccore\` CLI) for spec-driven development.
 
-  h5:
-    name: "H5端"
-    description: "移动端 H5"
-    default: true
-    tech_stack: "Vue 3 + Vant + Vite"
-    enabled: true
+## Key Paths
 
-  miniapp:
-    name: "小程序端"
-    description: "微信小程序"
-    default: true
-    tech_stack: "Taro + TypeScript"
-    enabled: true
+| Path | Purpose |
+|------|---------|
+| \`.speccore/\` | All SpecCore data — **source of truth for requirements** |
+| \`.speccore/GLOBAL/INDEX.md\` | Multi-project requirement catalog |
+| \`.speccore/CONSTITUTION.md\` | Tech stack and naming conventions |
+| \`.speccore/SETTINGS.md\` | Framework configuration |
+| \`.speccore/local/context.json\` | Runtime context (current iteration, task) |
+| \`.speccore/PATTERNS/TEMPLATES/\` | Code pattern templates |
 
-# 用户动态添加的平台会追加在此
-# 示例：
-#  tablet:
-#    name: "平板端"
-#    description: "平板端应用"
-#    default: false
-#    tech_stack: "React Native"
-#    enabled: true
+## Workflow
+
+1. \`speccore init\` — first-time setup (already done)
+2. \`speccore import --project=<name>\` — import source code
+3. \`speccore goal\` — create requirements
+4. \`speccore iteration create\` — start iteration
+5. \`speccore spec "<query>"\` — smart entry via intent recognition
+
+## Important Conventions
+
+- All requirements live in \`.speccore/\`, not in \`.workbuddy/\`
+- \`speccore\` CLI is the authoritative tool for spec management
+- Use \`speccore spec "..."\` for natural language command matching
+- The GLOBAL layer enables cross-project requirement tracking
 `
   );
-}
 
+  // .workbuddy/skills/speccore/SKILL.md — Speccore skill（让 WorkBuddy 掌握 speccore 命令）
+  await ensureDir(join(workbuddyDir, 'skills', 'speccore'));
+  await writeFile(
+    join(workbuddyDir, 'skills', 'speccore', 'SKILL.md'),
+    `---
+name: speccore
+description: SpecCore spec-driven development CLI integration. Detects .speccore/ projects and enables AI-powered requirements, iteration management, global architecture layer, and intent recognition.
+version: 1.0.0
+triggers:
+  - speccore
+  - spec
+  - 需求
+  - 迭代
+  - 规格
+  - 全量层
+  - 意图识别
+  - requirement
+  - iteration
+  - global layer
+  - 变更影响
+  - 基线
+  - 审计
+---
 
-/**
- * Generate slash command files for all supported AI tools
- * Each tool has its own commands directory convention:
- *   .codebuddy/commands/  → WorkBuddy
- *   .qoder/commands/      → Qcoder
- *   .cursor/commands/     → Cursor
- *   .trae/commands/       → Trae
- *   .windsurf/commands/   → Windsurf
- *   .claude/commands/     → Claude Code / OpenCode
- */
-async function generateSlashCommands(projectRoot: string): Promise<void> {
-  const toolDirs = ['.codebuddy', '.qoder', '.cursor', '.trae', '.windsurf', '.claude'];
+# SpecCore — Spec-Driven Development CLI
 
-  const commands: [string, string, string[]][] = [
-    ['spec-init', 'Initialize project', ['speccore init']],
-    ['spec-dev', 'Smart dev entry', ['speccore dev']],
-    ['spec-status-panel', 'Status panel', ['speccore status-panel']],
-    ['spec-doc2spec', 'Import requirements', ['speccore doc2spec --files "${1:file}=${2:platform}" -i ${3:Q1}']],
-    ['spec-analyze', 'Analyze requirements', ['speccore analyze --iteration=${1:Q1}']],
-    ['spec-split', 'Split into tasks', ['speccore iteration split --iteration=${1:Q1}']],
-    ['spec-execute', 'Execute task', ['speccore execute --task=${1:Task-001} --force --iteration=${2:Q1}']],
-    ['spec-execute-all', 'Execute all tasks', ['speccore execute --all --force --iteration=${1:Q1}']],
-    ['spec-pr', 'Create PR', ['speccore pr --task=${1:Task-001}']],
-    ['spec-done', 'Complete task', ['speccore done --task=${1:Task-001}']],
-    ['spec-lifecycle', 'Task lifecycle', ['speccore lifecycle --task=${1:Task-001}']],
-    ['spec-lifecycle-all', 'View kanban', ['speccore lifecycle --all']],
-    ['spec-merge-check', 'Merge conflict check', ['speccore merge-check --iteration=${1:Q1}']],
-    ['spec-rollback', 'Rollback task', ['speccore rollback --task=${1:Task-001}']],
-    ['spec-spec', 'NL intent recognition', ['speccore spec "${1:新增订单导出功能}"']],
-    ['spec-constitution', 'Auto-detect constitution', ['speccore constitution']],
-    ['spec-tracker', 'Requirement tracker', ['speccore tracker']],
-    ['spec-context', 'Output task context', ['speccore context --task=${1:Task-001}']],
-    ['spec-arch-update', 'Update architecture', ['speccore arch-update --iteration=${1:Q1}']],
-    ['spec-validate', 'Validate specs', ['speccore validate --iteration=${1:Q1}']],
-    ['spec-search', 'Search across specs', ['speccore search "${1:keyword}"']],
-    ['spec-dashboard', 'Project dashboard', ['speccore dashboard']],
-    ['spec-health', 'Health check', ['speccore health']],
-    ['spec-new-task', 'Create task', ['speccore new-task --name="${1:功能}" --platforms=${2:web} --iteration=${3:Q1}']],
-    ['spec-bugfix', 'Bug fix flow', ['speccore bugfix --title="${1:支付超时}"']],
-    ['spec-change', 'Change request', ['speccore change --iteration=${1:Q1}']],
-    ['spec-import', 'Import code', ['speccore import --project=${1:backend} --path=${2:./src} --type=backend']],
-    ['spec-ops', 'Operation history', ['speccore ops']],
-    ['spec-open', 'Open task files', ['speccore open --task=${1:Task-001} --iteration=${2:Q1}']],
-  ];
+This skill activates when the user opens a project containing a \`.speccore/\` directory, or when they mention spec-driven development, requirement management, or any Speccore command.
 
-  for (const toolDir of toolDirs) {
-    const cmdDir = join(projectRoot, toolDir, 'commands');
-    await ensureDir(cmdDir);
-    for (const [name, desc, bodyLines] of commands) {
-      const content = "---\nname: " + name + "\ndescription: " + desc + "\n---\n" + bodyLines.join("\n") + "\n";
-      await writeFile(join(cmdDir, name + ".md"), content);
-    }
-  }
+## Project Detection
 
-  logger.info("  ✅ " + commands.length + " slash commands × " + toolDirs.length + " tools → .codebuddy|.qoder|.cursor|.trae|.windsurf|.claude/commands/");
+A project is a Speccore project if \`.speccore/\` exists in the project root. Key files:
+- \`.speccore/CONSTITUTION.md\` — tech stack constitution
+- \`.speccore/SETTINGS.md\` — framework configuration
+- \`.speccore/GLOBAL/INDEX.md\` — multi-project global requirement index
+- \`.speccore/PROJECT/INDEX.md\` — local project index
+- \`.speccore/PROJECT/TEAM.md\` — team members & git mapping
+- \`.speccore/ITERATIONS/README.md\` — iteration index
+- \`.speccore/RULES/POST_COMPLETION.md\` — post-completion maintenance rules
+- \`.speccore/local/context.json\` — runtime context (current iteration, task, assignee)
+
+## Multi-Project Global Layer
+
+\`\`\`
+.speccore/GLOBAL/
+├── INDEX.md          # Universal requirement catalog
+├── OVERVIEW.md       # Cross-project panorama
+├── ARCHITECTURE.md   # System architecture (mermaid)
+├── TECH_STACK.md     # Unified tech stack registry
+├── CODE_INDEX.md     # Code path mappings
+├── GLOSSARY.md       # Cross-project glossary
+├── PROTOTYPE_INDEX.md
+├── CHANGELOG.md      # Global change log
+├── BASELINES/        # Version baselines
+└── PROJECTS/{proj}/  # Per-project requirements
+\`\`\`
+
+## Speccore Commands Quick Reference
+
+### Setup & Import
+- \`speccore init\` — Initialize (already done)
+- \`speccore import --project=<name> [--type=backend|web|...] --path=<path>\` — Import source code
+- \`speccore global-status\` — View multi-project overview
+
+### Spec-Driven Development
+- \`speccore spec "<natural language>"\` — Smart entry via intent recognition
+- \`speccore goal --name="<name>" [--iteration=<it>]\` — Create new requirement
+
+### Iteration Management
+- \`speccore iteration create --name="<name>" [--goal=<goal>]\` — Start iteration
+- \`speccore iteration-from-global [--project=<name>]\` — Generate from global layer
+- \`speccore sync-global [--iteration=<name>]\` — Sync back to global
+
+### Analysis & Quality
+- \`speccore impact --req=<id>\` — Change impact analysis
+- \`speccore audit [--strict]\` — Quality audit (duplicates, conflicts)
+- \`speccore dashboard\` — HTML dashboard
+- \`speccore history [--req=<id>]\` — Change history
+
+### Maintenance
+- \`speccore bugfix --title="<desc>"\` — Quick bug fix
+- \`speccore change --req=<id> --desc="<desc>"\` — Requirement change
+- \`speccore handover [--iteration=<name>]\` — Handover document
+- \`speccore retro [--iteration=<name>]\` — Retrospective
+- \`speccore rename --target=<old> --new-name=<new>\` — Rename
+- \`speccore baseline create --name=<name>\` — Version snapshot
+
+## Working with Speccore Projects
+
+1. **Always read \`.speccore/local/context.json\` first** to understand current state
+2. **Before creating specs**, read \`.speccore/CONSTITUTION.md\` for conventions
+3. **For multi-project work**, check \`.speccore/GLOBAL/INDEX.md\`
+4. **Run commands directly** using \`speccore\` CLI
+5. **After changes**, suggest running sync or audit
+
+## Quick Aliases
+
+| Alias | Command |
+|-------|---------|
+| in | init |
+| imp | import |
+| it | iteration |
+| ex | expand |
+| pl | plan |
+| pg | program |
+| ch | create |
+| if | impact |
+| bl | baseline |
+| db | dashboard |
+| ad | audit |
+| sg | sync-global |
+| gs | global-status |
+| hs | history |
+| ifg | iteration-from-global |
+`
+  );
 }
