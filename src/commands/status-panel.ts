@@ -267,9 +267,11 @@ function buildHtmlDashboard(data: any): string {
   const phaseMap: Record<string, string> = { init: '初始化', require: '需求分析', analyze: '分析中', dev: '开发中', review: '审查中', done: '已完成' };
   const phase = data.phase || 'N/A';
   const phaseLabel = phaseMap[phase] || phase;
-  const featCount = data.typeDistribution?.feature || featCount || 0;
-  const bugCount = data.typeDistribution?.bugfix || bugCount || 0;
-  const researchCount = data.typeDistribution?.research || researchCount || 0;
+  const featCount = (data.typeDistribution && data.typeDistribution['feature']) || 0;
+  const bugCount = (data.typeDistribution && data.typeDistribution['bugfix']) || 0;
+  const researchCount = (data.typeDistribution && data.typeDistribution['research']) || 0;
+  const addedThisWeek = data.addedThisWeek || 0;
+  const bugTotal = data.bugCount || 0;
   const phasePct = ({init:10, require:25, analyze:40, dev:60, review:80, done:100} as any)[phase] || 0;
 
   return `<!DOCTYPE html>
@@ -571,21 +573,21 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
       <h3 style="margin-bottom:14px">TYPE BREAKDOWN</h3>
       <div style="display:flex;flex-direction:column;gap:14px">
         <div style="display:flex;align-items:center;gap:8px">
-          <div style="width:40px;text-align:center;font-family:Orbitron;font-size:18px;color:var(--cyan)">${data.typeDistribution?.feature || featCount || 0}</div>
+          <div style="width:40px;text-align:center;font-family:Orbitron;font-size:18px;color:var(--cyan)">${featCount}</div>
           <div style="flex:1;height:6px;background:rgba(255,255,255,.03);border-radius:3px;overflow:hidden">
             <div style="width:100%;height:100%;background:linear-gradient(90deg,#3b82f6,var(--cyan));border-radius:3px;box-shadow:0 0 8px rgba(0,240,255,.3)"></div>
           </div>
           <span style="font-size:11px;color:#60a5fa;width:60px">FEATURE</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
-          <div style="width:40px;text-align:center;font-family:Orbitron;font-size:18px;color:var(--orange)">${data.typeDistribution?.bugfix || bugCount || 0}</div>
+          <div style="width:40px;text-align:center;font-family:Orbitron;font-size:18px;color:var(--orange)">${bugCount}</div>
           <div style="flex:1;height:6px;background:rgba(255,255,255,.03);border-radius:3px;overflow:hidden">
             <div style="width:100%;height:100%;background:linear-gradient(90deg,#f59e0b,#fbbf24);border-radius:3px;box-shadow:0 0 8px rgba(245,158,11,.3)"></div>
           </div>
           <span style="font-size:11px;color:#fbbf24;width:60px">BUGFIX</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
-          <div style="width:40px;text-align:center;font-family:Orbitron;font-size:18px;color:var(--purple)">${data.typeDistribution?.research || researchCount || 0}</div>
+          <div style="width:40px;text-align:center;font-family:Orbitron;font-size:18px;color:var(--purple)">${researchCount}</div>
           <div style="flex:1;height:6px;background:rgba(255,255,255,.03);border-radius:3px;overflow:hidden">
             <div style="width:100%;height:100%;background:linear-gradient(90deg,#7c3aed,var(--purple));border-radius:3px;box-shadow:0 0 8px rgba(168,85,247,.3)"></div>
           </div>
@@ -597,21 +599,21 @@ td.code{font-family:'JetBrains Mono',monospace;color:#c4d5e7;font-weight:600}
     <div class="card">
       <h3 style="margin-bottom:14px">PACE ANALYSIS</h3>
       <div style="text-align:center;padding:12px 0">
-        <div style="font-family:Orbitron;font-size:36px;font-weight:900;color:var(--green);text-shadow:0 0 20px rgba(0,255,136,.3)">${{data.typeDistribution?.feature || 0}}</div>
+        <div style="font-family:Orbitron;font-size:36px;font-weight:900;color:var(--green);text-shadow:0 0 20px rgba(0,255,136,.3)">${{featCount}}</div>
         <div style="font-size:11px;color:#4a5568;margin-top:4px">FEATURES</div>
-        <div style="margin-top:12px;font-size:28px;font-weight:900;color:var(--orange);text-shadow:0 0 16px rgba(245,158,11,.3)">${{data.typeDistribution?.bugfix || 0}}</div>
+        <div style="margin-top:12px;font-size:28px;font-weight:900;color:var(--orange);text-shadow:0 0 16px rgba(245,158,11,.3)">${{bugCount}}</div>
         <div style="font-size:11px;color:#4a5568;margin-top:4px">BUGS</div>
       </div>
       <div style="margin-top:12px;padding:12px;background:rgba(0,240,255,.04);border-radius:8px;text-align:center">
         <div style="font-size:11px;color:#4a5568">BUG RATIO</div>
-        <div style="font-family:Orbitron;font-size:18px;color:var(--orange);margin-top:2px">{{total > 0 ? Math.round((data.typeDistribution?.bugfix||0)/total*100) : 0}}%</div>
+        <div style="font-family:Orbitron;font-size:18px;color:var(--orange);margin-top:2px">{{total > 0 ? Math.round((bugCount)/total*100) : 0}}%</div>
       </div>
     </div>
 
     <div class="card">
       <h3 style="margin-bottom:14px">SPRINT ACTIVITY</h3>
       <div style="text-align:center;padding:8px 0">
-        <div style="font-size:40px;font-weight:900;background:linear-gradient(135deg,var(--green),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent">+${{data.addedThisWeek || 0}}</div>
+        <div style="font-size:40px;font-weight:900;background:linear-gradient(135deg,var(--green),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent">+${{addedThisWeek}}</div>
         <div style="font-size:10px;color:#4a5568;margin-top:4px;letter-spacing:1px">TASKS THIS WEEK</div>
       </div>
       <div style="margin-top:16px;display:flex;gap:8px">
