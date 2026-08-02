@@ -784,21 +784,21 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
     <div class="card">
       <h3 style="margin-bottom:14px">PACE ANALYSIS</h3>
       <div style="text-align:center;padding:12px 0">
-        <div style="font-family:Orbitron;font-size:36px;font-weight:900;color:var(--green);text-shadow:0 0 20px rgba(0,255,136,.3)">${{featCount}}</div>
+        <div style="font-family:Orbitron;font-size:36px;font-weight:900;color:var(--green);text-shadow:0 0 20px rgba(0,255,136,.3)">${featCount}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:4px">FEATURES</div>
-        <div style="margin-top:12px;font-size:28px;font-weight:900;color:var(--orange);text-shadow:0 0 16px rgba(245,158,11,.3)">${{bugCount}}</div>
+        <div style="margin-top:12px;font-size:28px;font-weight:900;color:var(--orange);text-shadow:0 0 16px rgba(245,158,11,.3)">${bugCount}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:4px">BUGS</div>
       </div>
       <div style="margin-top:12px;padding:12px;background:rgba(0,240,255,.04);border-radius:8px;text-align:center">
         <div style="font-size:11px;color:var(--muted)">BUG RATIO</div>
-        <div style="font-family:Orbitron;font-size:18px;color:var(--orange);margin-top:2px">{{total > 0 ? Math.round((bugCount)/total*100) : 0}}%</div>
+        <div style="font-family:Orbitron;font-size:18px;color:var(--orange);margin-top:2px">${total > 0 ? Math.round((bugCount)/total*100) : 0}%</div>
       </div>
     </div>
 
     <div class="card">
       <h3 style="margin-bottom:14px">SPRINT ACTIVITY</h3>
       <div style="text-align:center;padding:8px 0">
-        <div style="font-size:40px;font-weight:900;background:linear-gradient(135deg,var(--green),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent">+${{addedThisWeek}}</div>
+        <div style="font-size:40px;font-weight:900;background:linear-gradient(135deg,var(--green),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent">+${addedThisWeek}</div>
         <div style="font-size:10px;color:var(--muted);margin-top:4px;letter-spacing:1px">TASKS THIS WEEK</div>
       </div>
       <div style="margin-top:16px;display:flex;gap:8px">
@@ -818,7 +818,16 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
     </div>
   </div>
 
-  ${hasAssignees ? '<div class="panel" style="margin-bottom:20px"><div class="panel-title">TEAM DETAILS</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">' + personDetailCards + '</div>' +
+  ${hasAssignees ? '<div class="panel" style="margin-bottom:20px"><div class="panel-title">TEAM DETAILS</div>' +
+    '<div style="margin-bottom:20px"><table style="margin-bottom:0"><thead><tr><th>人员</th><th>总任务</th><th>完成</th><th>完成率</th><th>功能</th><th>Bug</th><th>研究</th><th>工时</th></tr></thead><tbody>' +
+    Object.entries(pd as Record<string,{total:number,done:number,bugs:number,features:number,estHours:number}>).map(([name, d]) => {
+      const pct = d.total > 0 ? Math.round(d.done/d.total*100) : 0;
+      return '<tr><td style="font-weight:600">'+name+'</td><td>'+d.total+'</td><td>'+d.done+'</td><td><span style="color:'+(pct===100?'var(--green)':'var(--cyan)' )+'">'+pct+'%</span></td>'+
+             '<td><span style="color:var(--cyan)">'+d.features+'</span></td><td><span style="color:var(--orange)">'+d.bugs+'</span></td>'+
+             '<td><span style="color:var(--purple)">'+(d.total-d.features-d.bugs)+'</span></td><td>'+d.estHours+'h</td></tr>';
+    }).join('') +
+    '</tbody></table></div>' +
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">' + personDetailCards + '</div>' +
     (Object.entries(pt) as [string, any[]][]).map(([name, taskList]) => '<div style="margin-top:20px"><div class="panel-title" style="font-size:13px">' + name + ' — TASK LIST (' + taskList.length + ')</div><table style="margin-top:8px"><thead><tr><th>ID</th><th>STATUS</th><th>TYPE</th></tr></thead><tbody>' +
       taskList.map((t: any) => {
         const cls = t.status.includes('completed')||t.status.includes('完成')?'tx-done':t.status.includes('in_progress')||t.status.includes('开发')?'tx-active':'tx-wait';
@@ -857,15 +866,14 @@ let fsEl=null;
 function toggleFS(el){
   if(fsEl){closeFS();return}
   fsEl=el;el.classList.add('fs-fullscreen');
-  
-  const tip=document.createElement('div');tip.className='fs-tip';tip.id='fs-tip';tip.textContent='ESC or click outside to exit';
-  document.body.appendChild(tip);
-  setTimeout(()=>{const t=document.getElementById('fs-tip');if(t)t.remove()},3000);
+  document.documentElement.style.overflow='hidden';document.body.style.overflow='hidden';
+  var ts=document.querySelector('.theme-sw');if(ts){ts.style.opacity='0';ts.style.pointerEvents='none';}
 }
 function closeFS(){
   if(!fsEl)return;
   fsEl.classList.remove('fs-fullscreen');
-  const tip=document.getElementById('fs-tip');if(tip)tip.remove();
+  document.documentElement.style.overflow='';document.body.style.overflow='';
+  var ts=document.querySelector('.theme-sw');if(ts){ts.style.opacity='';ts.style.pointerEvents='';}
   fsEl=null;
 }
 document.addEventListener('keydown',e=>{
