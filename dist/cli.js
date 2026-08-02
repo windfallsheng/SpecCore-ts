@@ -40,11 +40,8 @@ const path_1 = require("path");
 const init_1 = require("./commands/init");
 const import_1 = require("./commands/import");
 const validate_1 = require("./commands/validate");
-const archive_1 = require("./commands/archive");
-const progress_1 = require("./commands/progress");
 const status_1 = require("./commands/status");
 const health_1 = require("./commands/health");
-const report_1 = require("./commands/report");
 const config_1 = require("./commands/config");
 const split_1 = require("./commands/iteration/split");
 const new_1 = require("./commands/task/new");
@@ -67,11 +64,9 @@ const doc2spec_1 = require("./commands/doc2spec");
 const iteration_from_global_1 = require("./commands/iteration-from-global");
 const sync_global_1 = require("./commands/sync-global");
 const global_status_1 = require("./commands/global-status");
-const history_1 = require("./commands/history");
 // P0/P1/P2 新增命令
 const impact_1 = require("./commands/impact");
 const baseline_1 = require("./commands/baseline");
-const dashboard_1 = require("./commands/dashboard");
 const audit_1 = require("./commands/audit");
 const analyze_1 = require("./commands/analyze");
 const lifecycle_1 = require("./commands/lifecycle");
@@ -96,7 +91,7 @@ const update_1 = require("./commands/update");
 const diff_1 = require("./commands/diff");
 const trace_1 = require("./commands/trace");
 const merge_check_1 = require("./commands/merge-check");
-const history_2 = require("./commands/history");
+const history_1 = require("./commands/history");
 const tracker_1 = require("./commands/tracker");
 // v5.5.0 新增
 const delete_1 = require("./commands/delete");
@@ -193,17 +188,6 @@ commander_1.program
         }
     }
 });
-commander_1.program;
-commander_1.program
-    .command('dev')
-    .alias('d')
-    .description('智能级联：自动检测阶段 → 引导/自动执行下一步')
-    .option('-i, --iteration <iteration>', 'Target iteration')
-    .option('--force', 'Auto-execute the next step without confirmation')
-    .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
-    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
-    .action(dev_1.devCommand);
-commander_1.program;
 commander_1.program;
 commander_1.program
     .command('dev')
@@ -418,19 +402,7 @@ commander_1.program
 // ================================================================
 // 📊 进度与状态
 // ================================================================
-commander_1.program
-    .command('progress')
-    .alias('pg')
-    .description('Display project progress overview')
-    .option('-i, --iteration <iteration>', 'Target iteration')
-    .option('-a, --assignee <assignee>', 'Filter by assignee')
-    .option('--type <type>', 'Filter by task type')
-    .option('--req <req>')
-    .option('--task <task>', 'Show specific task progress')
-    .option('--detail', 'Show detailed progress')
-    .option('--platform <platform>', 'Filter by frontend platform (web/h5/miniapp)')
-    .option('--format <format>', 'Output format: text, json, csv', 'text')
-    .action(progress_1.progressCommand);
+commander_1.program;
 commander_1.program
     .command('status')
     .alias('st')
@@ -450,19 +422,7 @@ commander_1.program
 // ================================================================
 // 📦 归档与交接
 // ================================================================
-commander_1.program
-    .command('archive')
-    .alias('ar')
-    .description('Archive completed tasks')
-    .option('-t, --task <task>', 'Archive specific task')
-    .option('--all', 'Archive all completed tasks')
-    .option('-i, --iteration <iteration>', 'Archive entire iteration')
-    .option('--list', 'List archived tasks')
-    .option('--restore <task>', 'Restore archived task')
-    .option('--force', 'Skip preview and archive directly')
-    .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
-    .option('--from <phase>', '从指定阶段开始（init/import/analyze/split/plan/execute/pr/done）')
-    .action(archive_1.archiveCommand);
+commander_1.program;
 commander_1.program
     .command('handover')
     .alias('ho')
@@ -482,37 +442,15 @@ commander_1.program
     .option('-t, --task <task>', 'Target task')
     .option('-i, --iteration <iteration>', 'Target iteration')
     .action(context_output_1.contextCommand);
-commander_1.program
-    .command('context')
-    .alias('ctx')
-    .description('Output task context for any AI tool (Copilot/Claude/GPT)')
-    .option('-t, --task <task>', 'Target task')
-    .option('-i, --iteration <iteration>', 'Target iteration')
-    .action(context_output_1.contextCommand);
+commander_1.program;
 commander_1.program
     .command('constitution')
     .alias('cn')
     .description('Auto-detect tech stack and generate CONSTITUTION.md rules')
     .action(async () => { await (0, constitution_builder_1.buildConstitution)(process.cwd()); });
-commander_1.program
-    .command('context')
-    .alias('ctx')
-    .description('Output task context for any AI tool (Copilot/Claude/GPT)')
-    .option('-t, --task <task>', 'Target task')
-    .option('-i, --iteration <iteration>', 'Target iteration')
-    .action(context_output_1.contextCommand);
-commander_1.program
-    .command('context')
-    .alias('ctx')
-    .description('Output task context for any AI tool (Copilot/Claude/GPT)')
-    .option('-t, --task <task>', 'Target task')
-    .option('-i, --iteration <iteration>', 'Target iteration')
-    .action(context_output_1.contextCommand);
-commander_1.program
-    .command('constitution')
-    .alias('cn')
-    .description('Auto-detect tech stack and generate CONSTITUTION.md rules')
-    .action(async () => { await (0, constitution_builder_1.buildConstitution)(process.cwd()); });
+commander_1.program;
+commander_1.program;
+commander_1.program;
 commander_1.program
     .command('config')
     .alias('cf')
@@ -523,17 +461,7 @@ commander_1.program
     .option('-t, --tech <target>', 'Target tech-stack (TECH_STACK.md): backend | frontend')
     .option('--reset', 'Reset to default configuration')
     .action(config_1.configCommand);
-commander_1.program
-    .command('report')
-    .alias('rp')
-    .description('Generate project report')
-    .option('-i, --iteration <iteration>', 'Target iteration')
-    .option('--format <format>', 'Output format: markdown, html, json', 'markdown')
-    .option('-o, --output <path>', 'Output file path')
-    .option('--team', 'Include team analysis')
-    .option('--risk', 'Include risk analysis')
-    .option('--trend', 'Include trend comparison')
-    .action(report_1.reportCommand);
+commander_1.program;
 commander_1.program;
 // ================================================================
 // 📖 帮助
@@ -619,13 +547,8 @@ commander_1.program
     .command('ops')
     .alias('op')
     .description('View operation history (command log)')
-    .action(history_2.opsCommand);
-commander_1.program
-    .command('history')
-    .alias('hs')
-    .description('View requirement change history')
-    .option('--req <id>', 'Requirement ID (e.g., REQ-001)')
-    .action(history_1.historyCommand);
+    .action(history_1.opsCommand);
+commander_1.program;
 // ================================================================
 // 🔗 P0/P1/P2 新增命令
 // ================================================================
@@ -648,12 +571,7 @@ commander_1.program
     .option('--restore <name>', 'Restore to baseline')
     .option('--req <id>', 'Requirement ID for rollback')
     .action(baseline_1.baselineCommand);
-commander_1.program
-    .command('dashboard')
-    .alias('db')
-    .description('Generate visual dashboard (HTML + Chart.js)')
-    .option('-o, --output <path>', 'Output file path', './speccore-dashboard.html')
-    .action(dashboard_1.dashboardCommand);
+commander_1.program;
 commander_1.program
     .command('analyze')
     .alias('al')
@@ -705,13 +623,7 @@ commander_1.program
     .description('Scan requirements and rebuild GLOBAL/INDEX.md (v4.0)')
     .option('--dry-run', 'Preview mode, no actual changes')
     .action(index_update_1.indexUpdateCommand);
-commander_1.program
-    .command('context')
-    .alias('ctx')
-    .description('View task context loading status and dependency chain (v4.0)')
-    .option('--req <req>')
-    .option('--task <task>', 'Target task (default: current task)')
-    .action(context_output_1.contextCommand);
+commander_1.program;
 // ================================================================
 // 快捷别名（顶层别名）
 // ================================================================
@@ -797,15 +709,7 @@ commander_1.program
     .option('-i, --iteration <iteration>', 'Target iteration')
     .action(async (options) => { const { getDefaultIteration } = await Promise.resolve().then(() => __importStar(require('./core/context'))); const it = await getDefaultIteration(options.iteration); if (it)
     await (0, merge_check_1.mergeCheck)(it); });
-commander_1.program
-    .command('rollback')
-    .alias('rb')
-    .description('Rollback a task: revert branch + archive spec')
-    .option('-t, --task <task>', 'Task to rollback')
-    .option('-i, --iteration <iteration>', 'Target iteration')
-    .option('--reason <reason>', 'Rollback reason')
-    .action(async (options) => { const it = await require('../core/context').getDefaultIteration(options.iteration); if (it && options.task)
-    await (0, merge_check_1.rollbackTask)(options.task, it, options.reason); });
+commander_1.program;
 commander_1.program
     .command('arch-update')
     .alias('au')
@@ -815,31 +719,9 @@ commander_1.program
     .option('--tables <tables>', 'Comma-separated table names')
     .action(async (options) => { const it = await require('../core/context').getDefaultIteration(options.iteration); if (it)
     await (0, merge_check_1.updateArchitecture)(it, (options.apis || '').split(',').filter(Boolean), (options.tables || '').split(',').filter(Boolean)); });
-commander_1.program
-    .command('merge-check')
-    .alias('mc')
-    .description('Predict merge conflicts across task branches')
-    .option('-i, --iteration <iteration>', 'Target iteration')
-    .action(async (options) => { const { getDefaultIteration } = await Promise.resolve().then(() => __importStar(require('./core/context'))); const it = await getDefaultIteration(options.iteration); if (it)
-    await (0, merge_check_1.mergeCheck)(it); });
-commander_1.program
-    .command('rollback')
-    .alias('rb')
-    .description('Rollback a task: revert branch + archive spec')
-    .option('-t, --task <task>', 'Task to rollback')
-    .option('-i, --iteration <iteration>', 'Target iteration')
-    .option('--reason <reason>', 'Rollback reason')
-    .action(async (options) => { const it = await require('../core/context').getDefaultIteration(options.iteration); if (it && options.task)
-    await (0, merge_check_1.rollbackTask)(options.task, it, options.reason); });
-commander_1.program
-    .command('arch-update')
-    .alias('au')
-    .description('Auto-update ARCHITECTURE.md with new APIs/tables')
-    .option('-i, --iteration <iteration>', 'Source iteration')
-    .option('--apis <apis>', 'Comma-separated API paths')
-    .option('--tables <tables>', 'Comma-separated table names')
-    .action(async (options) => { const it = await require('../core/context').getDefaultIteration(options.iteration); if (it)
-    await (0, merge_check_1.updateArchitecture)(it, (options.apis || '').split(',').filter(Boolean), (options.tables || '').split(',').filter(Boolean)); });
+commander_1.program;
+commander_1.program;
+commander_1.program;
 commander_1.program
     .command('trace')
     .alias('tr')
