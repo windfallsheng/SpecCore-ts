@@ -89,7 +89,7 @@ Teaches WorkBuddy Speccore commands and best practices:
 | :--- | :--- | :--- |
 | `speccore init` | `/spec-init` | Initialize project |
 | `speccore import` | `/spec-import` | Import project |
-| `speccore task new` | `/spec-new-task` | Create multi-platform task |
+| `speccore task new` | `/spec-task-new` | Create multi-platform task |
 | `speccore iteration create` | `/spec-iteration-create` | Create iteration |
 | `speccore execute` | `/spec-execute` | Execute development |
 | `speccore progress` | `/spec-progress` | View progress |
