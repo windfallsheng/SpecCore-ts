@@ -8,7 +8,10 @@ import { loadConfig } from '../core/unified-config';
 import { getDefaultIteration } from '../core/context';
 
 export interface StatusPanelOptions {
-  export?: string;  // json | markdown
+  export?: string;      // json | markdown | html
+  assignee?: string;    // 按人员过滤
+  platform?: string;    // 按平台过滤: backend | frontend | web | h5 | miniapp
+  type?: string;        // 按类型过滤: feature | bugfix | research
 }
 
 export async function statusPanelCommand(options: StatusPanelOptions = {}): Promise<void> {
@@ -17,7 +20,7 @@ export async function statusPanelCommand(options: StatusPanelOptions = {}): Prom
 
   // ── Export mode ──
   if (options.export) {
-    await exportStatus(config, iteration, options.export);
+    await exportStatus(config, iteration, options.export, options);
     return;
   }
 
@@ -149,7 +152,27 @@ async function getNextAction(phase: string, iterDir: string): Promise<string> {
 }
 
 // 导出功能
-async function exportStatus(config: any, iteration: string | null, format: string): Promise<void> {
+
+// ── 平台过滤: 检测 Task 目录下是否有指定平台 ──
+async function filterByPlatform(iterDir: string, tasks: any[], platform: string): Promise<any[]> {
+  const { readdir } = require('fs-extra');
+  const { join } = require('path');
+  const result: any[] = [];
+  for (const t of tasks) {
+    const taskDir = join(iterDir, t.id);
+    try {
+      const entries = await readdir(taskDir, { withFileTypes: true });
+      if (platform === 'backend' && entries.some((e: any) => e.name === 'backend')) result.push(t);
+      else if (platform === 'frontend' && entries.some((e: any) => e.name === 'frontend')) result.push(t);
+      else if (entries.some((e: any) => e.name === platform)) result.push(t);
+    } catch { /* task dir not found */ }
+  }
+  return result;
+}
+
+async function exportStatus(
+  config: any, iteration: string | null, format: string, options: StatusPanelOptions = {}
+): Promise<void> {
 
 
   
@@ -215,7 +238,63 @@ async function exportStatus(config: any, iteration: string | null, format: strin
     }
     data.tasks = tasks;
     data.taskCount = tasks.length;
+    const nowTs = new Date().getTime();
+    const weekAgo = new Date(nowTs - 7 * 86400000);
 
+    // ── 过滤: 人员 / 类型 / 平台 ──
+    let filtered = tasks;
+    const filterLabels: string[] = [];
+    
+    if (options.assignee) {
+      filtered = filtered.filter((t: any) => t.assignee === options.assignee);
+      filterLabels.push(`人员: ${options.assignee}`);
+    }
+    if (options.type) {
+      filtered = filtered.filter((t: any) => (t.type || '').toLowerCase() === options.type!.toLowerCase());
+      filterLabels.push(`类型: ${options.type}`);
+    }
+    if (options.platform) {
+      // 平台过滤: 检查 Task 目录结构 (backend/ frontend/web/ frontend/h5/ etc)
+      const platformTasks = await filterByPlatform(iterDir, filtered, options.platform);
+      filtered = platformTasks;
+      filterLabels.push(`平台: ${options.platform}`);
+    }
+    
+    if (filtered.length < tasks.length) {
+      data.filteredFrom = tasks.length;
+      data.filterLabels = filterLabels;
+      data.tasks = filtered;  // 更新为过滤后的任务列表
+      // 重新计算所有统计
+      data.taskCount = filtered.length;
+      const td2: Record<string, number> = {};
+      for (const t of filtered) { const tt = (t.type || 'feature').toLowerCase(); td2[tt] = (td2[tt] || 0) + 1; }
+      data.typeDistribution = td2;
+      data.addedThisWeek = filtered.filter((t: any) => t.created && new Date(t.created) >= weekAgo).length;
+      data.bugCount = filtered.filter((t: any) => (t.type || '').toLowerCase().includes('bug')).length;
+      const am2: any = {};
+      for (const t of filtered) { if (t.assignee) { if (!am2[t.assignee]) am2[t.assignee] = {total:0,done:0}; am2[t.assignee].total++; if (t.status.includes("completed")||t.status.includes("完成")) am2[t.assignee].done++; } }
+      data.assigneeStats = am2;
+      // 重新计算时间维度
+      let totalAi = 0, totalHuman = 0, totalReview = 0;
+      for (const t of filtered) { totalAi += t.aiTime || 0; totalHuman += t.humanTime || 0; totalReview += t.reviewTime || 0; }
+      data.totalAiTime = totalAi; data.totalHumanTime = totalHuman; data.totalReviewTime = totalReview;
+      data.totalEstTime = totalAi + totalHuman + totalReview;
+      // 人员清单
+      const pt2: Record<string, any[]> = {};
+      for (const t of filtered) { if (t.assignee) { if (!pt2[t.assignee]) pt2[t.assignee] = []; pt2[t.assignee].push(t); } }
+      data.personTasks = pt2;
+      const pd2: any = {};
+      for (const t of filtered) {
+        if (!t.assignee) continue;
+        if (!pd2[t.assignee]) pd2[t.assignee] = {total:0,done:0,bugs:0,features:0,estHours:0};
+        pd2[t.assignee].total++;
+        if (t.status.includes('completed')||t.status.includes('完成')) pd2[t.assignee].done++;
+        if ((t.type||'').toLowerCase().includes('bug')) pd2[t.assignee].bugs++;
+        else if (!(t.type||'').toLowerCase().includes('research')) pd2[t.assignee].features++;
+        pd2[t.assignee].estHours += t.estimate || 0;
+      }
+      data.personDetail = pd2;
+    } else {
     // 类型分布 / 增量统计
     const td: Record<string, number> = {};
     for (const t of tasks) {
@@ -223,8 +302,6 @@ async function exportStatus(config: any, iteration: string | null, format: strin
       td[tt] = (td[tt] || 0) + 1;
     }
     data.typeDistribution = td;
-    const nowTs = new Date().getTime();
-    const weekAgo = new Date(nowTs - 7 * 86400000);
     data.addedThisWeek = tasks.filter((t: any) => t.created && new Date(t.created) >= weekAgo).length;
     data.bugCount = tasks.filter((t: any) => (t.type || '').toLowerCase().includes('bug')).length;
     const am: any = {};
@@ -257,6 +334,7 @@ async function exportStatus(config: any, iteration: string | null, format: strin
     data.totalReviewTime = totalReview;
     data.totalEstTime = totalAi + totalHuman + totalReview;
   }
+  } // end if(iteration)
 
   if (format === 'json') {
     const outPath = 'speccore-status.json';
@@ -439,7 +517,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
   <div class="header">
     <div class="header-left">
       <h1>${data.project.toUpperCase()}</h1>
-      <div class="subtitle">SPECCORE · SPEC-DRIVEN DEVELOPMENT${data.iterationOwner ? " · OWNER: "+data.iterationOwner.toUpperCase() : ""}</div>
+      <div class="subtitle">SPECCORE · SPEC-DRIVEN DEVELOPMENT${data.iterationOwner ? " · OWNER: "+data.iterationOwner.toUpperCase() : ""}${data.filterLabels ? " · "+data.filterLabels.join(" · ") : ""}${data.filteredFrom ? " (过滤自 "+data.filteredFrom+" 个任务)" : ""}</div>
     </div>
     <div class="header-right">
       <div class="header-stat"><div class="num">Q2</div><div class="label">期次</div></div>
