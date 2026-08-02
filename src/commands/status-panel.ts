@@ -990,51 +990,68 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
   </div>
 
   ${hasAssignees ? '<div class="panel" style="margin-bottom:20px"><div class="panel-title">TEAM DETAILS</div>' +
-    // ── 汇总表（始终可见）──
-    '<div style="margin-bottom:20px"><table style="margin-bottom:0"><thead><tr><th>人员</th><th>总任务</th><th>完成</th><th>完成率</th><th>功能</th><th>Bug</th><th>研究</th><th>工时</th></tr></thead><tbody>' +
-    sortedPersonEntries.map(([name, d]) => {
-      const pct = d.total > 0 ? Math.round(d.done/d.total*100) : 0;
-      return '<tr><td style="font-weight:600">'+name+'</td><td>'+d.total+'</td><td>'+d.done+'</td><td><span style="color:'+(pct===100?'var(--green)':'var(--cyan)' )+'">'+pct+'%</span></td>'+
-             '<td><span style="color:var(--cyan)">'+d.features+'</span></td><td><span style="color:var(--orange)">'+d.bugs+'</span></td>'+
-             '<td><span style="color:var(--purple)">'+(d.total-d.features-d.bugs)+'</span></td><td>'+d.estHours+'h</td></tr>';
-    }).join('') +
-    '</tbody></table></div>' +
-    // ── 人员列表（可折叠）──
-    '<div class="panel-title collapsible-header collapsed" style="font-size:13px;cursor:pointer;margin-bottom:16px" id="person-detail-header">◆ 人员列表 <span style="font-size:10px;color:var(--muted);margin-left:8px">&#9660;</span></div>' +
+    // ── 按平台分组的汇总表 ──
+    (() => {
+      let lastGroup = '';
+      let tables = '';
+      const row = (name: string, d: any) => {
+        const pct = d.total > 0 ? Math.round(d.done/d.total*100) : 0;
+        return '<tr><td style="font-weight:600">'+name+'</td><td>'+d.total+'</td><td>'+d.done+'</td><td><span style="color:'+(pct===100?'var(--green)':'var(--cyan)')+'">'+pct+'%</span></td>'+
+               '<td><span style="color:var(--cyan)">'+d.features+'</span></td><td><span style="color:var(--orange)">'+d.bugs+'</span></td>'+
+               '<td><span style="color:var(--purple)">'+(d.total-d.features-d.bugs)+'</span></td><td>'+d.estHours+'h</td></tr>';
+      };
+      for (const [name, d] of sortedPersonEntries) {
+        const g = getPlatformGroup(name);
+        if (g !== lastGroup) {
+          if (lastGroup !== '') tables += '</tbody></table></div>';
+          const label = g === '0_backend' ? '🔧 BACKEND' : g === '1_frontend' ? '🎨 FRONTEND' : '📦 OTHER';
+          tables += '<div style="margin-bottom:16px"><div style="font-size:11px;color:var(--cyan);letter-spacing:1px;margin-bottom:8px;font-family:Orbitron">'+label+'</div>' +
+                    '<table style="margin-bottom:0"><thead><tr><th>人员</th><th>总任务</th><th>完成</th><th>完成率</th><th>功能</th><th>Bug</th><th>研究</th><th>工时</th></tr></thead><tbody>';
+          lastGroup = g;
+        }
+        tables += row(name, d);
+      }
+      tables += '</tbody></table></div>';
+      return tables;
+    })() +
+    // ── 人员详细（可折叠）──
+    '<div class="panel-title collapsible-header collapsed" style="font-size:13px;cursor:pointer;margin-bottom:16px" id="person-detail-header">◆ 详细任务 <span style="font-size:10px;color:var(--muted);margin-left:8px">&#9660;</span></div>' +
     '<div class="collapsible-body" id="person-detail-body" style="max-height:0;overflow:hidden;transition:max-height .5s ease">' +
     (() => {
       let lastGroup = '';
       let html = '';
       for (const [name, d] of sortedPersonEntries) {
-        const group = getPlatformGroup(name);
-        if (group !== lastGroup) {
-          const label = group === '0_backend' ? '🔧 BACKEND' : group === '1_frontend' ? '🎨 FRONTEND' : '📦 OTHER';
-          html += '<div style="grid-column:1/-1;margin:12px 0 4px;padding:4px 12px;font-family:Orbitron;font-size:11px;color:var(--cyan);letter-spacing:1px;border-bottom:1px solid rgba(0,240,255,.1)">'+label+'</div>';
-          lastGroup = group;
+        const g = getPlatformGroup(name);
+        if (g !== lastGroup) {
+          const label = g === '0_backend' ? '🔧 BACKEND' : g === '1_frontend' ? '🎨 FRONTEND' : '📦 OTHER';
+          html += '<div style="margin:16px 0 8px;font-family:Orbitron;font-size:12px;color:var(--cyan);letter-spacing:1px;border-bottom:1px solid rgba(0,240,255,.1);padding-bottom:4px">'+label+'</div>';
+          lastGroup = g;
         }
         const pct = d.total > 0 ? Math.round(d.done/d.total*100) : 0;
-        html += '<div style="background:rgba(0,240,255,.03);border:1px solid rgba(0,240,255,.08);border-radius:10px;padding:18px">' +
-          '<div style="font-size:15px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px">' + name +
-          '<span style="margin-left:auto;font-family:Orbitron;font-size:13px;color:var(--cyan)">' + pct + '%</span></div>' +
-          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px">' +
-          '<div><span style="color:var(--muted)">任务</span><div style="font-weight:600;margin-top:2px">' + d.done + '/' + d.total + '</div></div>' +
-          '<div><span style="color:var(--muted)">功能</span><div style="font-weight:600;margin-top:2px">' + d.features + '</div></div>' +
-          '<div><span style="color:var(--muted)">Bug</span><div style="font-weight:600;margin-top:2px;color:' + (d.bugs/d.total > 0.3 ? 'var(--orange)' : 'var(--text)') + '">' + d.bugs + '</div></div>' +
-          '<div><span style="color:var(--muted)">工时</span><div style="font-weight:600;margin-top:2px">' + d.estHours + 'h</div></div>' +
+        html += '<div style="background:rgba(0,240,255,.03);border:1px solid rgba(0,240,255,.08);border-radius:10px;padding:18px;margin-bottom:12px">' +
+          '<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">' +
+          '<span style="font-size:14px;font-weight:700">'+name+'</span>' +
+          '<span style="font-family:Orbitron;font-size:12px;color:var(--cyan)">'+pct+'%</span>' +
+          '<span style="font-size:10px;color:var(--muted)">'+d.done+'/'+d.total+' 任务</span>' +
+          '<span style="font-size:10px;margin-left:auto;color:var(--muted)">'+d.features+'功能 '+d.bugs+'Bug '+d.estHours+'h</span>' +
           '</div>' +
-          '<div style="height:4px;background:rgba(255,255,255,.04);border-radius:2px;margin-top:12px;overflow:hidden">' +
-          '<div style="width:' + pct + '%;height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:2px"></div></div>' +
+          '<div style="height:3px;background:rgba(255,255,255,.04);border-radius:2px;overflow:hidden">' +
+          '<div style="width:'+pct+'%;height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:2px"></div></div>' +
           '</div>';
+        // 该人员的任务清单
+        const personTasks = (pt as any)[name] || [];
+        if (personTasks.length > 0) {
+          html += '<table style="margin-bottom:16px;margin-left:8px;width:calc(100% - 8px)"><thead><tr><th>ID</th><th>STATUS</th><th>TYPE</th></tr></thead><tbody>';
+          for (const t of personTasks) {
+            const cls = t.status.includes('completed')||t.status.includes('完成')?'tx-done':t.status.includes('in_progress')||t.status.includes('开发')?'tx-active':'tx-wait';
+            const st = t.status.includes('completed')||t.status.includes('完成')?'RESOLVED':t.status.includes('in_progress')||t.status.includes('开发')?'ACTIVE':'QUEUED';
+            html += '<tr><td class="code">'+t.id+'</td><td><span class="tx-badge '+cls+'">'+st+'</span></td><td><span class="type-t type-feat">'+(t.type||'FEAT')+'</span></td></tr>';
+          }
+          html += '</tbody></table>';
+        }
       }
-      return html + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">' + personDetailCards + '</div>';
-    })() +
-    (Object.entries(pt) as [string, any[]][]).map(([name, taskList]) => '<div style="margin-top:20px"><div class="panel-title" style="font-size:13px">' + name + ' — TASK LIST (' + taskList.length + ')</div><table style="margin-top:8px"><thead><tr><th>ID</th><th>STATUS</th><th>TYPE</th></tr></thead><tbody>' +
-      taskList.map((t: any) => {
-        const cls = t.status.includes('completed')||t.status.includes('完成')?'tx-done':t.status.includes('in_progress')||t.status.includes('开发')?'tx-active':'tx-wait';
-        const st = t.status.includes('completed')||t.status.includes('完成')?'RESOLVED':t.status.includes('in_progress')||t.status.includes('开发')?'ACTIVE':'QUEUED';
-        return '<tr><td class="code">'+t.id+'</td><td><span class="tx-badge '+cls+'">'+st+'</span></td><td><span class="type-t type-feat">'+(t.type||'FEAT')+'</span></td></tr>';
-      }).join('') +
-    '</tbody></table></div>').join('') + '</div></div>' : ''}
+      return html;
+    })() + '</div></div>' : ''}
 
   <div class="panel">
     <div class="panel-title">TASK REGISTRY</div>
