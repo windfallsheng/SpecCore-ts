@@ -364,6 +364,46 @@ git checkout -b 260715-订单管理-zs
 `
   );
 
+  // CAPABILITIES.md — AI 能力注册表
+  await writeFile(
+    join(speccoreDir, 'CAPABILITIES.md'),
+    `# 项目能力注册表
+
+> 供 AI IDE 快速了解项目有什么能力。类比 WorkBuddy Skill 元数据。
+> 导入项目或添加规则后自动更新。
+
+## 工程能力
+| 项目 | 类型 | API 端点 | 状态 |
+| :--- | :--- | :--- | :--- |
+| _待导入_ | - | - | - |
+
+## 可用规则
+| 规则文件 | 用途 | 描述 |
+| :--- | :--- | :--- |
+| RULES/CODE_REVIEW.md | 代码审查 | 审查维度和评分标准 |
+| RULES/POST_COMPLETION.md | 上线维护 | Feature 上线后维护流程 |
+
+## 可用命令
+| 命令 | 别名 | 功能 |
+| :--- | :--- | :--- |
+| init | in | 初始化项目 |
+| import | imp | 存量项目导入全局层 |
+| iteration | it | 期次管理 |
+| task new | tn | 创建原子 Task |
+| doc2spec | d2s | 需求文档导入 |
+| analyze | al | 需求分析 + 宪法检查 |
+| split | — | 拆分为独立 Task |
+| plan | pl | 生成执行计划 |
+| execute | ex | 执行开发 |
+| pr | — | 创建 PR |
+| done | dn | 完成任务 |
+| change | ch | 需求变更联动 |
+| bugfix | bf | Bug 修复 |
+| validate | vl | Spec 合规检查 |
+| ask | — | 自然语言意图识别 |
+`
+  );
+
   // CODE_REVIEW.md
   await writeFile(
     join(speccoreDir, 'RULES', 'CODE_REVIEW.md'),
