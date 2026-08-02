@@ -164,6 +164,9 @@ commander_1.program
     .alias('sp')
     .description('IDE-style status panel: phase + tasks + progress + next action')
     .option('--export <format>', 'Export: json | md | html')
+    .option("--assignee <name>", "导出指定人员的统计")
+    .option("--platform <platform>", "导出指定平台: backend | frontend | web | h5 | miniapp")
+    .option("--type <type>", "导出指定类型: feature | bugfix | research")
     .action(status_panel_1.statusPanelCommand);
 commander_1.program
     .command('open')
