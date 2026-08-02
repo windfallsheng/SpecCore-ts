@@ -600,6 +600,25 @@ async function perTaskAnalyze(iterDir: string, taskId: string): Promise<void> {
       }
     }
 
+    // ── 补齐缺失文件 ──
+    const { writeFile } = require('fs-extra');
+    const missingFiles: string[] = [];
+    
+    const templates: [string, string][] = [
+      ['RISK.md', `# 风险评估\n\n> analyze | ${new Date().toISOString().split('T')[0]}\n\n## 风险矩阵\n| 风险 | 可能 | 影响 | 缓解 |\n| :--- | :--- | :--- | :--- |\n| 兼容性 | 中 | 高 | 版本号+测试 |\n\n## 回滚\n1. 触发: 线上错误率 > 1%\n2. 步骤: git revert → 重部署\n`],
+      ['DEPS.md', `# 依赖清单\n\n## 上游依赖\n| 服务 | 版本 | 用途 |\n| :--- | :--- | :--- |\n| _待补充_ | — | — |\n`],
+      ['MONITOR.md', `# 监控\n\n## 关键指标\n| 指标 | 阈值 | 级别 |\n| :--- | :--- | :--- |\n| 成功率 | <99.9% | P1 |\n| P99延迟 | >1000ms | P2 |\n`],
+    ];
+    
+    for (const [filename, content] of templates) {
+      const fp = join(backendDir, filename);
+      if (!(await pathExists(fp))) {
+        await writeFile(fp, content);
+        missingFiles.push(filename);
+      }
+    }
+    if (missingFiles.length > 0) logger.info(`   📄 创建缺失文件: ${missingFiles.join(', ')}`);
+
     spinner.stop();
 
     if (changes.length === 0) {
