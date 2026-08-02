@@ -134,6 +134,8 @@ async function executeCommand(options) {
         // === Execute with progress (existing flow) ===
         const skipList = options.skip ? options.skip.split(',').map(s => s.trim()).filter(Boolean) : [];
         await executeWithProgress(sortedTasks, iteration, options.base, skipList, { only: options.only });
+        // === Verify loop: 代码生成后自动检查 → 修复 → 重试 ===
+        await executionVerifyLoop(sortedTasks, iteration, options);
         // Hotfix tracking
         if (options.hotfix && sortedTasks.length > 0) {
             await (0, context_1.startHotfix)(sortedTasks[0].id);
@@ -896,4 +898,89 @@ function buildAgentContext(tasks, agent) {
     return ctx;
 }
 // ===== Agent Context Builder =====
+// ============================================================
+// 自动验证闭环：检查 → 修复 → 重试（最多 3 轮）
+// ============================================================
+async function executionVerifyLoop(tasks, iteration, options) {
+    const maxRounds = 3;
+    const { join } = require('path');
+    const { readFile, writeFile, pathExists } = require('fs-extra');
+    const iterDir = `期次-${iteration}`;
+    for (const task of tasks) {
+        logger_1.logger.info(`\n🔍 验证 ${task.id}...`);
+        const taskDir = join(iterDir, task.id);
+        const backendDir = join(taskDir, 'backend');
+        let allPassed = true;
+        for (let round = 1; round <= maxRounds; round++) {
+            if (round > 1)
+                logger_1.logger.info(`   🔄 第 ${round} 轮修复...`);
+            allPassed = true;
+            // 1. 检查 TEST.md
+            const testPath = join(backendDir, 'TEST.md');
+            if (await pathExists(testPath)) {
+                const testContent = await readFile(testPath, 'utf-8');
+                const total = (testContent.match(/\[[ x]\]/g) || []).length;
+                const done = (testContent.match(/\[x\]/g) || []).length;
+                if (done < total) {
+                    logger_1.logger.info(`   🧪 TEST.md: ${done}/${total} 通过`);
+                    if (round === maxRounds) {
+                        logger_1.logger.warn(`   ⚠️ 仍有 ${total - done} 项未通过（已达最大重试次数）`);
+                    }
+                    allPassed = false;
+                }
+                else {
+                    logger_1.logger.info(`   🧪 TEST.md: ${done}/${total} ✅`);
+                }
+            }
+            // 2. 检查 REVIEW.md
+            const reviewPath = join(backendDir, 'REVIEW.md');
+            if (await pathExists(reviewPath)) {
+                const reviewContent = await readFile(reviewPath, 'utf-8');
+                const total = (reviewContent.match(/\[[ x]\]/g) || []).length;
+                const doneR = (reviewContent.match(/\[x\]/gi) || []).length;
+                if (doneR < total) {
+                    logger_1.logger.info(`   📋 REVIEW.md: ${doneR}/${total} 通过`);
+                    if (round === maxRounds) {
+                        logger_1.logger.warn(`   ⚠️ 仍有 ${total - doneR} 项未审查（已达最大重试次数）`);
+                    }
+                    allPassed = false;
+                }
+                else {
+                    logger_1.logger.info(`   📋 REVIEW.md: ${doneR}/${total} ✅`);
+                }
+            }
+            // 3. 检查 DEPLOY.md
+            const deployPath = join(backendDir, 'DEPLOY.md');
+            if (await pathExists(deployPath)) {
+                const depContent = await readFile(deployPath, 'utf-8');
+                const total = (depContent.match(/\[[ x]\]/g) || []).length;
+                const doneD = (depContent.match(/\[x\]/g) || []).length;
+                if (doneD < total) {
+                    logger_1.logger.info(`   🚀 DEPLOY.md: ${doneD}/${total} 通过`);
+                    allPassed = false;
+                }
+                else {
+                    logger_1.logger.info(`   🚀 DEPLOY.md: ${doneD}/${total} ✅`);
+                }
+            }
+            if (allPassed)
+                break;
+            // 4. 自动修复提示
+            if (round < maxRounds) {
+                logger_1.logger.info(`   💡 AI 将修复未通过项。使用 speccore execute --task=${task.id} --force 重新执行代码生成`);
+                // 标记为需要重试
+                await writeFile(join(taskDir, '.needs-retry'), String(round));
+            }
+        }
+        // 5. 最终判定
+        if (allPassed) {
+            await writeFile(join(taskDir, '.verification'), 'passed');
+            logger_1.logger.info(`   ✅ ${task.id} 全部检查通过，可以 speccore done`);
+        }
+        else {
+            logger_1.logger.info(`   ⚠️ ${task.id} 仍有未通过项，请审查后手动 done`);
+        }
+        logger_1.logger.info('');
+    }
+}
 //# sourceMappingURL=execute.js.map
