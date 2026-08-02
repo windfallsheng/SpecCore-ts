@@ -1,13 +1,11 @@
 /**
  * status-panel — IDE 风格侧栏状态（实时项目状态一览）
  */
-import { readFile, pathExists, readdir } from 'fs-extra';
+import { readFile, pathExists, readdir, writeFile } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
 import { loadConfig } from '../core/unified-config';
 import { getDefaultIteration } from '../core/context';
-import { writeFile, pathExists, readdir, readFile } from 'fs-extra';
-import { join } from 'path';
 
 export interface StatusPanelOptions {
   export?: string;  // json | markdown
@@ -152,8 +150,8 @@ async function getNextAction(phase: string, iterDir: string): Promise<string> {
 
 // 导出功能
 async function exportStatus(config: any, iteration: string | null, format: string): Promise<void> {
-  const { join } = require('path');
-  const { pathExists, readdir, readFile } = require('fs-extra');
+
+
   
   const data: any = {
     project: config.project.name,
@@ -209,13 +207,13 @@ async function exportStatus(config: any, iteration: string | null, format: strin
 }
 
 export async function defaultPhase(iterDir: string): Promise<string> {
-  const { pathExists } = require('fs-extra');
-  const { join } = require('path');
+
+
   const reqDoc = join(iterDir, '00-需求文档', 'REQUIREMENT.md');
   const analysis = join(iterDir, '00-需求文档', 'ANALYSIS.md');
   if (!(await pathExists(reqDoc))) return 'init';
   if (!(await pathExists(analysis))) return 'require';
-  const tasks = await require('fs-extra').readdir(iterDir, { withFileTypes: true });
+  const tasks = await readdir(iterDir, { withFileTypes: true });
   if (!tasks.some((e: any) => e.isDirectory() && e.name.startsWith('Task-'))) return 'analyze';
   return 'dev';
 }
