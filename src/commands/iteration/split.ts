@@ -366,22 +366,55 @@ ${section.content}
 `
   );
 
-  // Write TECH.md
+  // Write TECH.md（根据 section 内容注入框架）
+  const apiLines = section.content.split('\n').filter(l => l.includes('| GET') || l.includes('| POST') || l.includes('| PUT') || l.includes('| DELETE') || l.includes('| PATCH'));
+  const apiDesc = apiLines.length > 0 ? apiLines.map(l => `- ${l.trim()}`).join('\n') : '- 待补充（从 REQ.md 提取接口列表）';
+  
   await writeFile(
     join(taskDir, 'backend', 'TECH.md'),
     `# ${section.name} - 技术方案
 
+> ⚠️ 本文档由 split 自动生成框架，AI 执行时会自动填充。
+
 ## 1. 方案概述
+<!-- AI-FILL: 简述本任务的业务背景和技术目标 -->
 
 ## 2. 接口设计
+<!-- AI-FILL: 根据以下接口列表设计 Controller / Service 分层 -->
+${apiDesc}
+
+### 统一响应格式
+\`\`\`json
+{ "code": 0, "message": "success", "data": {} }
+\`\`\`
 
 ## 3. 数据模型
+<!-- AI-FILL: 分析接口参数，设计 Entity/DTO/VO -->
 
 ## 4. 核心逻辑
+<!-- AI-FILL: 描述关键业务流程和边界条件 -->
 
 ## 5. 测试策略
+- 单元测试覆盖核心 Service 逻辑
+- 接口测试覆盖正常/异常/边界
+- 自动化测试通过后方可提 PR
 `
   );
+
+  // Write API_CONTRACT.yaml if APIs detected
+  if (apiLines.length > 0) {
+    const contracts = apiLines.map(l => {
+      const parts = l.split('|').map(p => p.trim()).filter(Boolean);
+      const method = (parts[0] || 'GET').toUpperCase();
+      const path = parts[1] || '/api/unknown';
+      const desc = parts[2] || path;
+      return `  ${path}:\n    ${method}:\n      summary: "${desc}"\n      description: "<!-- AI-FILL -->"`;
+    }).join('\n');
+    
+    await writeFile(join(taskDir, 'backend', 'API_CONTRACT.yaml'),
+      `# ${section.name} - API Contract\n# Auto-generated from split\n\npaths:\n${contracts}\n`
+    );
+  }
 
   // Write TASK.md
   await writeFile(

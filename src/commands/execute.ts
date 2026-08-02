@@ -38,6 +38,7 @@ export interface ExecuteOptions {
   force?: boolean;
   batchSize?: string;
   hotfix?: boolean;
+  scheduled?: boolean;  // 夜间调度模式
   strict?: boolean;
   base?: string;       // base branch for task branching
   skip?: string;       // comma-separated task IDs to skip

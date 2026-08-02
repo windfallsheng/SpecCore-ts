@@ -16,6 +16,7 @@ export interface ExecuteOptions {
     force?: boolean;
     batchSize?: string;
     hotfix?: boolean;
+    scheduled?: boolean;
     strict?: boolean;
     base?: string;
     skip?: string;
