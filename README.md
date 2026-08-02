@@ -48,39 +48,15 @@ speccore done --task=Task-001          # ⑩ 完成任务
 
 ## 两种用法
 
-同一个功能在终端 CLI 和 AI 对话框中有不同写法，取决于场景：
+同一个命令有两种使用场景，写法不同：
 
-### 通用命令（两种场景都能用）
-
-| 功能 | 🖥 终端 CLI | 💬 AI 对话 | 说明 |
-|:---|:---|:---|:---|
-| 初始化 | `speccore init` | `/spec-init` | — |
-| 导入需求 | `speccore doc2spec -f PRD.docx -p backend` | `/spec-doc2spec PRD.docx` | CLI 用 `-f` 传文件路径 |
-| 拆分任务 | `speccore iteration split -i Q1` | `/spec-split Q1` | CLI 用 `-i` 指定期次 |
-| 执行开发 | `speccore execute -t Task-001 --force` | `/spec-execute Task-001` | CLI 用 `-t` 指定 Task |
-| 提交 PR | `speccore pr -t Task-001` | `/spec-pr Task-001` | — |
-| 查看状态 | `speccore status-panel` | `/spec-status-panel` | — |
-| 需求变更 | `speccore change "描述" -t Task-001` | `/spec-change Task-001` | AI 对话中也可以直接说人话 |
-| Bug 修复 | `speccore bugfix -n "名称" -d "描述"` | `/spec-bugfix` 或直接说人话 | — |
-
-### CLI 专有命令（复杂参数，不适合 AI 对话）
-
-| 命令 | 用法 | 原因 |
+| 场景 | 写法 | 示例 |
 |:---|:---|:---|
-| `import` | `speccore import --project=xx --path=./src --type=backend --force` | 参数多，适合命令行精确控制 |
-| `execute --verify` | `speccore execute -t Task-001 --force --verify` | 需要 `--verify` 等组合参数 |
-| `status-panel --export` | `speccore status-panel --export=html --assignee=张三` | 导出/筛选等高级参数 |
-| `dev --auto` | `speccore dev --auto --from=split` | 全自动流水线 |
+| 🖥 终端 CLI | `speccore <命令>` | `speccore init` `speccore execute -t Task-001 --force` |
+| 💬 AI 对话 | 直接说人话 | "帮我创建登录功能" |
+| 💬 AI 对话 | `/spec-<命令>` | `/spec-init` `/spec-execute Task-001` |
 
-### AI 对话专有（自然语言，不适合 CLI）
-
-| 方式 | 示例 | 原因 |
-|:---|:---|:---|
-| 直接说人话 | "帮我创建用户登录功能" "看一下项目进度" | 自然语言，AI 自动匹配命令 |
-| AI 分析 | `/spec-analyze Q1` → AI 通读代码填充 Spec | 需要 AI 上下文理解，CLI 只能做骨架 |
-| AI 反工程 | `/spec-import-analyze` → AI 从源码倒推需求 | 纯 AI 行为，无 CLI 等价物 |
-
-> **为什么有这些区别？** CLI 擅长精确控制和脚本化，需要明确的参数名。AI 对话擅长理解自然语言和上下文，可以直接说人话。复杂参数（如文件路径、筛选条件）在 CLI 中更方便；需要 AI 理解的项目分析在对话中更自然。
+> 完整对照表（所有 19 个命令的分类说明）→ [命令参考 — 两种使用方式](docs/命令参考.md#-两种使用方式)
 
 ## 交互模式
 
