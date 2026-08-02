@@ -18,19 +18,15 @@ import { planCommand } from './commands/plan';
 import { executeCommand } from './commands/execute';
 // 新增命令
 import { askCommand } from './commands/ask';
-import { goalCommand } from './commands/goal';
 import { bugfixCommand } from './commands/bugfix';
 import { changeCommand } from './commands/change';
 import { syncCommand } from './commands/sync';
 import { patternCommand } from './commands/pattern';
 import { rollbackCommand } from './commands/rollback';
 import { handoverCommand } from './commands/handover';
-import { retroCommand } from './commands/retro';
-import { templateAddCommand } from './commands/template-add';
 import { helpCommand } from './commands/help';
 import { devCommand } from './commands/dev';
 import { statusPanelCommand } from './commands/status-panel';
-import { demoCommand } from './commands/demo';
 import { welcomeCommand } from './commands/welcome';
 import { doc2specCommand } from './commands/doc2spec';
 // 全量层命令
@@ -52,7 +48,6 @@ import { doneCommand } from './commands/done';
 // rename 命令
 import { renameCommand } from './commands/rename';
 // v4.0.0 新增命令
-import { platformAddCommand } from './commands/platform-add';
 import { indexUpdateCommand } from './commands/index-update';
 // v4.6.0 迁移命令
 import { migrateCommand } from './commands/migrate';
@@ -199,12 +194,6 @@ program
   .action(devCommand);
 
 program
-  .command('demo')
-  .alias('dm')
-  .description('Quick experience demo (5 min)')
-  .option('--project <key>', 'Demo project type: book, todo, blog', 'book')
-  .option('--list', 'List available demo projects')
-  .action(demoCommand);
 
 // ================================================================
 // 🏗️ 初始化与导入
@@ -308,17 +297,6 @@ taskCmd
 
 // 完整需求交付
 program
-  .command('goal')
-  .alias('gl')
-  .description('Complete requirement delivery (from requirement to code)')
-  .option('-n, --name <name>', 'Feature name')
-  .option('-d, --desc <desc>', 'Feature description')
-  .option('-t, --type <type>', 'Task type', 'feature')
-  .option('--task-id <id>', 'Task ID')
-  .option('-i, --iteration <iteration>', 'Target iteration')
-  .option('--backend-only', 'Backend only')
-  .option('--frontend-only', 'Frontend only')
-  .action(goalCommand);
 
 
 
@@ -340,24 +318,6 @@ program
 
 // 技术调研
 program
-  .command('research')
-  .alias('rs')
-  .description('Technical research: evaluate solutions and compare options')
-  .option('-n, --name <name>', 'Research topic')
-// ================================================================
-// ⚡ 执行与调度
-// ================================================================
-program
-  .command('pr')
-  .alias('mr')
-  .description('Create Pull Request with task summary')
-  .option('-t, --task <task>', 'Target task (auto-detect from branch if omitted)')
-  .option('-i, --iteration <iteration>', 'Target iteration')
-  .option('--base <branch>', 'Base branch', 'main')
-  .option('--draft', 'Create as draft PR')
-  .option('--interactive', '分步：预览变更 → 选文件 → commit → 推送 → 创建PR')
-  .option('--title <title>', 'Custom PR title')
-  .action(prCommand);
 
 program
   .command('pr')
@@ -420,54 +380,10 @@ program
   .action(executeCommand);
 
 // ================================================================
-// ⏰ 任务调度
+// 任务调度（已通过 WorkBuddy Automation 实现）
 // ================================================================
-const scheduleCmd = program
-  .command('schedule')
-  .alias('sc')
-  .description('Task scheduling: delayed execution at specified time');
 
-scheduleCmd
-  .command('create')
-  .alias('cr')
-  .description('Create a scheduled task — runs at specified time')
-  .option('-t, --task <task>', 'Target task ID')
-  .option('--all', 'Execute all pending tasks')
-  .option('-i, --iteration <iteration>', 'Target iteration')
-  .requiredOption('--at <time>', 'Scheduled time, format: "YYYY-MM-DD HH:mm:ss" (e.g., 2026-08-10 21:00:00)')
-  .option('-n, --name <name>', 'Custom task name')
-  .action(scheduleCreateCommand);
 
-scheduleCmd
-  .command('list')
-  .alias('ls')
-  .description('List all scheduled tasks')
-  .option('--status <status>', 'Filter by status: pending|running|completed|failed|cancelled')
-  .action(scheduleListCommand);
-
-scheduleCmd
-  .command('cancel')
-  .alias('cx')
-  .description('Cancel a pending scheduled task')
-  .requiredOption('--id <id>', 'Scheduled task ID')
-  .action(scheduleCancelCommand);
-
-scheduleCmd
-  .command('delete')
-  .alias('rm')
-  .description('Delete a scheduled task record')
-  .requiredOption('--id <id>', 'Scheduled task ID')
-  .action(scheduleDeleteCommand);
-
-scheduleCmd
-  .command('daemon')
-  .alias('dm')
-  .description('Manage the schedule daemon process')
-  .argument('[action]', 'Action: start|stop|restart|status (default: status)')
-  .option('--foreground', 'Run daemon in foreground (internal use)')
-  .action((action: string, options: any) => {
-    scheduleDaemonCommand({ action, foreground: options.foreground });
-  });
 
 // ================================================================
 // 🔄 变更管理
@@ -584,12 +500,6 @@ program
   .action(handoverCommand);
 
 program
-  .command('retro')
-  .alias('rt')
-  .description('Iteration retrospective: summarize experience and improvements')
-  .option('-i, --iteration <iteration>', 'Target iteration')
-  .option('-o, --output <path>', 'Output file path')
-  .action(retroCommand);
 
 // ================================================================
 // ⚙️ 配置与工具
@@ -662,14 +572,6 @@ program
   .action(reportCommand);
 
 program
-  .command('template-add')
-  .alias('ta')
-  .description('Add code generation template from existing code')
-  .option('-n, --name <name>', 'Template name (required)')
-  .option('-t, --type <type>', 'Template type: crud, auth, export, report', 'crud')
-  .option('-f, --files <files>', 'Code file paths (comma-separated, required)')
-  .option('-d, --desc <desc>', 'Template description')
-  .action(templateAddCommand);
 
 // ================================================================
 // 📖 帮助
@@ -850,14 +752,6 @@ program
   .action(taskNewCommand);
 
 program
-  .command('platform-add')
-  .alias('padd')
-  .description('Dynamically add a frontend platform type (v4.0)')
-  .option('--name <name>', 'Platform identifier (required, e.g. tablet)')
-  .option('--description <desc>', 'Platform display name')
-  .option('--tech <tech>', 'Tech stack description')
-  .option('--no-sync', 'Skip syncing to existing tasks')
-  .action(platformAddCommand);
 
 program
   .command('index-update')
@@ -879,16 +773,6 @@ program
 // ================================================================
 // 为常用命令提供顶层快捷访问
 program
-  .command('rv')
-  .description('[Alias] speccore validate')
-  .option('-i, --iteration <iteration>', 'Target iteration')
-  .option('-t, --task <task>', 'Validate specific task')
-  .option('--strict', 'Strict mode')
-  .option('--scheduled', '夜间调度：只执行标记为 queue 的任务')
-  .option('--verify', '生成代码后自动检查 TEST/REVIEW/DEPLOY → 最多3轮自动修复')
-  .option('--fix', 'Auto-fix')
-  .option('--format <format>', 'Output format: text or json', 'text')
-  .action(validateCommand);
 
 // v4.7.0 体验增强命令
 program
