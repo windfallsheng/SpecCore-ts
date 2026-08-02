@@ -52,7 +52,7 @@ All steps support parallel multi-project: backend services (`backend/room-servic
 
 ```bash
 speccore import --project=backend --type=backend  # From source code
-speccore import --project=meeting --path=reqs.xlsx  # From Excel
+speccore import --project=meeting --path=reqs.xlsx  (also .csv)  # From Excel
 # Then run /spec-import-analyze in your AI IDE for deep analysis
 ```
 
