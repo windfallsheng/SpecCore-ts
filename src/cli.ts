@@ -182,7 +182,7 @@ program
   .alias('in')
   .description('初始化 SpecCore（17命令/51全量，--interactive 引导式）')
   .option('--mode <mode>', 'Initialization mode: fresh or migration', 'fresh')
-  .option('--full', 'Full mode: all 51 commands (default: simple)')
+  .option('--full', 'Full mode: all 45 commands (default: simple)')
   .option('--force', 'Force overwrite existing configuration')
   .option('--interactive', 'Interactive guided setup: mode → confirm → init')
   .option('--auto', '全自动流水线：无人干预级联执行全部阶段')

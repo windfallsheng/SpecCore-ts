@@ -446,7 +446,7 @@ speccore analyze --src backend --req docs/login.md --scope global  # 全模式
 - 期次里程碑 (提测/SIT/UAT/上线) + 延期记录
 
 ### 🔧 命令精简
-- 70 → 52 命令 (去重 + 合并冗余)
+- 70 → 45 命令 (去重 + 合并冗余)
 - 简洁模式保持 19 个
 - 移除: new/create/dashboard/progress/report/archive/history/goal/hooks
 

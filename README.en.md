@@ -63,7 +63,7 @@ speccore schedule daemon start                                   # Auto-execute 
 | Doc | Content |
 |:---|:---|
 | 🚀 [Quick Start](docs/quick-start.en.md) | Full tutorial |
-| 🔧 [Command Reference](docs/commands.en.md) | All 51 commands |
+| 🔧 [Command Reference](docs/commands.en.md) | All 45 commands |
 | 🎬 [Scenarios](docs/scenarios.en.md) | Real-world examples |
 | 🗺 [Overview](docs/总览.md) | Architecture & philosophy |
 | 📝 [SDD Methodology](docs/sdd-methodology.en.md) | Spec-driven development |
