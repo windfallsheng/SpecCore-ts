@@ -8,6 +8,7 @@ import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
 import { showNextSteps } from '../core/next-steps';
 import { extractQuestions, showQuestionChecklist } from '../core/question-checklist';
+import { saveSession, clearSession, tryResume } from '../core/session-state';
 
 export interface DoneOptions {
   task?: string;
@@ -38,7 +39,6 @@ export async function doneCommand(options: DoneOptions): Promise<void> {
 
   const taskId = tasks[0];
 
-  // ── Interactive mode ──
   if (options.interactive) {
     await interactiveDoneFlow(iterDir, taskId, iteration, options);
     return;
@@ -47,35 +47,39 @@ export async function doneCommand(options: DoneOptions): Promise<void> {
   await doDone(iterDir, taskId, iteration, options);
 }
 
-// ── 交互式收尾 ──
 async function interactiveDoneFlow(
   iterDir: string, taskId: string, iteration: string, options: DoneOptions
 ): Promise<void> {
+  const resume = await tryResume('done', iteration);
+  let skipValidate = options.skipValidate;
+  let skipSync = options.skipSync;
+
   const { createInterface } = await import('readline');
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const ask = (q: string): Promise<string> => new Promise(r => rl.question(`${q} `, a => r(a.trim())));
 
-  logger.info(`\n📋 即将收尾: ${taskId} (期次: ${iteration})\n`);
-  logger.info('   1. validate — 规范合规校验');
-  logger.info('   2. archive  — 任务归档');
-  logger.info('   3. sync     — 同步到全局层');
-  logger.info('   4. audit    — 生成审计摘要');
+  if (!resume.resumed) {
+    logger.info(`\n📋 即将收尾: ${taskId} (期次: ${iteration})\n`);
+    logger.info('   1. validate  — 规范合规校验');
+    logger.info('   2. archive   — 任务归档');
+    logger.info('   3. sync      — 同步到全局层');
+    logger.info('   4. audit     — 生成审计摘要');
 
-  let { skipValidate, skipSync } = options;
-  const ans = await ask('\n跳过哪些步骤？ [0]全部 [1]校验 [2]同步 [3]都跳过: ');
-  if (ans === '1') skipValidate = true;
-  else if (ans === '2') skipSync = true;
-  else if (ans === '3') { skipValidate = true; skipSync = true; }
+    const ans = await ask('\n跳过？ [0]全部 [1]跳过校验 [2]跳过同步 [3]都跳过: ');
+    if (ans === '1') skipValidate = true;
+    else if (ans === '2') skipSync = true;
+    else if (ans === '3') { skipValidate = true; skipSync = true; }
+    await saveSession({ command: 'done', sessionId: taskId, iteration, phase: 'options', answers: { skip: ans } });
+  }
 
-  const confirm = await ask('确认执行？ [y/n]: ');
+  const confirm = await ask(resume.resumed ? '\n继续执行？ [y/n]: ' : '\n确认执行？ [y/n]: ');
   rl.close();
-  if (confirm !== 'y') { logger.info('已取消'); return; }
+  if (confirm !== 'y') { logger.info('已取消（会话已保留，下次可恢复）'); return; }
 
-  logger.info('');
+  await clearSession('done', iteration);
   await doDone(iterDir, taskId, iteration, { ...options, skipValidate, skipSync, interactive: false });
 }
 
-// ── 执行收尾 ──
 async function doDone(
   iterDir: string, taskId: string, iteration: string, options: DoneOptions
 ): Promise<void> {
@@ -182,7 +186,6 @@ async function evolveRules(iterDir: string, taskId: string, iteration: string): 
   }
 
   if (patterns.length === 0) return;
-
   const capPath = join(process.cwd(), '.speccore', 'CAPABILITIES.md');
   if (!(await pathExists(capPath))) return;
 
