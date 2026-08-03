@@ -39,8 +39,6 @@ const fs_1 = require("fs");
 const path_1 = require("path");
 const init_1 = require("./commands/init");
 const validate_1 = require("./commands/validate");
-const status_1 = require("./commands/status");
-const health_1 = require("./commands/health");
 const config_1 = require("./commands/config");
 const split_1 = require("./commands/iteration/split");
 const new_1 = require("./commands/task/new");
@@ -67,7 +65,6 @@ const impact_1 = require("./commands/impact");
 const baseline_1 = require("./commands/baseline");
 const audit_1 = require("./commands/audit");
 const analyze_1 = require("./commands/analyze");
-const lifecycle_1 = require("./commands/lifecycle");
 const pr_1 = require("./commands/pr");
 const constitution_builder_1 = require("./core/constitution-builder");
 const context_output_1 = require("./commands/context-output");
@@ -143,11 +140,13 @@ commander_1.program
 commander_1.program
     .command('status-panel')
     .alias('sp')
-    .description('IDE-style status panel: phase + tasks + progress + next action')
+    .description('项目状态总览：进度+健康度+生命周期（合并 status/health/lifecycle）')
     .option('--export <format>', 'Export: json | md | html')
     .option("--assignee <name>", "导出指定人员的统计")
     .option("--platform <platform>", "导出指定平台: backend | frontend | web | h5 | miniapp")
     .option("--type <type>", "导出指定类型: feature | bugfix | research")
+    .option('--health', '项目健康度报告')
+    .option('--lifecycle', '任务生命周期看板（等效 lifecycle --all）')
     .action(status_panel_1.statusPanelCommand);
 commander_1.program
     .command('dev')
@@ -330,19 +329,16 @@ commander_1.program;
 commander_1.program
     .command('status')
     .alias('st')
-    .description('Display current project status')
+    .description('项目状态 → status-panel（同一入口）')
     .option('-i, --iteration <iteration>', 'Target iteration')
     .option('-a, --assignee <assignee>', 'Filter by assignee')
-    .option('--type <type>', 'Filter by task type')
-    .action(status_1.statusCommand);
+    .action(status_panel_1.statusPanelCommand);
 commander_1.program
     .command('health')
     .alias('hl')
-    .description('Generate project health report')
+    .description('项目健康度 → status-panel --health')
     .option('-i, --iteration <iteration>', 'Target iteration')
-    .option('--format <format>', 'Output format: text, json', 'text')
-    .option('--trend', 'Include trend comparison')
-    .action(health_1.healthCommand);
+    .action((opts) => (0, status_panel_1.statusPanelCommand)({ ...opts, health: true }));
 // ================================================================
 // 📦 归档与交接
 // ================================================================
@@ -547,13 +543,12 @@ commander_1.program;
 commander_1.program
     .command('lifecycle')
     .alias('lc')
-    .description('Task lifecycle: pending → dev → test → review → done')
+    .description('任务生命周期 → status-panel --lifecycle')
     .option('-t, --task <task>', 'Target task')
     .option('-s, --status <status>', 'Set status: pending/testing/review/done')
     .option('-i, --iteration <iteration>', 'Target iteration')
     .option('--check', 'Check TEST.md/REVIEW.md progress')
-    .option('--all', 'Show all tasks kanban board')
-    .action(lifecycle_1.lifecycleCommand);
+    .action((opts) => (0, status_panel_1.statusPanelCommand)({ ...opts, lifecycle: true }));
 commander_1.program
     .command('done')
     .alias('dn')

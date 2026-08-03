@@ -6,8 +6,6 @@ import { initCommand } from './commands/init';
 import { validateCommand } from './commands/validate';
 import { archiveCommand } from './commands/archive';
 import { progressCommand } from './commands/progress';
-import { statusCommand } from './commands/status';
-import { healthCommand } from './commands/health';
 import { reportCommand } from './commands/report';
 import { configCommand } from './commands/config';
 import { iterationCreateCommand } from './commands/iteration/create';
@@ -38,7 +36,6 @@ import { baselineCommand } from './commands/baseline';
 import { dashboardCommand } from './commands/dashboard';
 import { auditCommand } from './commands/audit';
 import { analyzeCommand } from './commands/analyze';
-import { lifecycleCommand } from './commands/lifecycle';
 import { prCommand } from './commands/pr';
 import { buildConstitution } from './core/constitution-builder';
 import { contextCommand } from './commands/context-output';
@@ -128,11 +125,13 @@ program
 program
   .command('status-panel')
   .alias('sp')
-  .description('IDE-style status panel: phase + tasks + progress + next action')
+  .description('项目状态总览：进度+健康度+生命周期（合并 status/health/lifecycle）')
   .option('--export <format>', 'Export: json | md | html')
   .option("--assignee <name>", "导出指定人员的统计")
   .option("--platform <platform>", "导出指定平台: backend | frontend | web | h5 | miniapp")
   .option("--type <type>", "导出指定类型: feature | bugfix | research")
+  .option('--health', '项目健康度报告')
+  .option('--lifecycle', '任务生命周期看板（等效 lifecycle --all）')
   .action(statusPanelCommand);
 
 program
@@ -334,20 +333,17 @@ program
 program
   .command('status')
   .alias('st')
-  .description('Display current project status')
+  .description('项目状态 → status-panel（同一入口）')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('-a, --assignee <assignee>', 'Filter by assignee')
-  .option('--type <type>', 'Filter by task type')
-  .action(statusCommand);
+  .action(statusPanelCommand);
 
 program
   .command('health')
   .alias('hl')
-  .description('Generate project health report')
+  .description('项目健康度 → status-panel --health')
   .option('-i, --iteration <iteration>', 'Target iteration')
-  .option('--format <format>', 'Output format: text, json', 'text')
-  .option('--trend', 'Include trend comparison')
-  .action(healthCommand);
+  .action((opts: any) => statusPanelCommand({ ...opts, health: true }));
 
 // ================================================================
 // 📦 归档与交接
@@ -582,13 +578,12 @@ program
 program
   .command('lifecycle')
   .alias('lc')
-  .description('Task lifecycle: pending → dev → test → review → done')
+  .description('任务生命周期 → status-panel --lifecycle')
   .option('-t, --task <task>', 'Target task')
   .option('-s, --status <status>', 'Set status: pending/testing/review/done')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('--check', 'Check TEST.md/REVIEW.md progress')
-  .option('--all', 'Show all tasks kanban board')
-  .action(lifecycleCommand);
+  .action((opts: any) => statusPanelCommand({ ...opts, lifecycle: true }));
 
 program
   .command('done')
