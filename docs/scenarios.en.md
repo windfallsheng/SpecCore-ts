@@ -199,7 +199,7 @@ speccore global-status
 speccore iteration-from-global --reqs=REQ-001,REQ-002,REQ-003 --name=2026-Q3-Sprint
 
 # 3. Sync back after development
-speccore sync-global --iteration=2026-Q3-Sprint
+speccore sync --global --iteration=2026-Q3-Sprint
 
 # 4. Track requirement change history
 speccore ops --req=REQ-001
@@ -294,7 +294,7 @@ speccore baseline --list
 | Team Collab | `speccore status-panel --detail` | `update --assignee → execute → handover` |
 | Long Chain | `speccore execute --all --batch-size=3` | `execute --resume` |
 | CI/CD | `speccore config install` | hooks + GitHub Actions |
-| Global Layer | `speccore global-status` | `iteration-from-global → sync-global` |
+| Global Layer | `speccore global-status` | `iteration-from-global → sync --global` |
 | Health Check | `speccore health` | `status-panel` |
 
 ---
@@ -346,7 +346,7 @@ speccore task new --name="User Login" --platforms=web,h5 --type=feature
 speccore task new --name="User Register" --platforms=web --type=feature
 
 # After filling REQ.md content, sync to global layer
-speccore sync-global --iteration=2026-07-Sprint
+speccore sync --global --iteration=2026-07-Sprint
 ```
 
 ---
@@ -392,7 +392,7 @@ speccore change --req=REQ-001 --desc="Add SMS verification to login" --task=Task
 speccore update --task=Task-001 --status=in_progress
 
 # 6. Re-sync to global layer
-speccore sync-global --iteration=2026-07-Sprint
+speccore sync --global --iteration=2026-07-Sprint
 
 # 7. Compare before/after
 speccore diff --source=before-login-change --target=2026-07-Sprint
@@ -667,7 +667,7 @@ speccore doc2spec --files "backend.docx=backend-admin,web.md=web" --iter=Q3
 | New Word doc from PM | Re-run `doc2spec --files` (overwrites per-platform + refreshes REQUIREMENT.md) |
 | Minor dev tweak | Use `speccore change --task=Task-001 --desc="xxx"` |
 | Adjust platform split | Edit `{platform}-requirements.md`, then re-`doc2spec` |
-| Sync to global | `speccore sync-global --direction=to_global` |
+| Sync to global | `speccore sync --global` |
 
 > ⚠️ `REQUIREMENT.md` and `INDEX.md` are derived files — next `doc2spec` will overwrite them. **Do not manually edit.**
 
@@ -752,7 +752,7 @@ speccore audit 2>&1 > iteration-Q3/review/Task-001-audit.md
 speccore done --task=Task-001
 
 # 4. Sync iteration requirements to global
-speccore sync-global --iteration=Q3 --direction=to_global
+speccore sync --global --iteration=Q3 --direction=to_global
 
 # 5. Update context (mark as done)
 
