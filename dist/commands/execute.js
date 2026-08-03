@@ -128,34 +128,21 @@ async function executeCommand(options) {
             await interactiveSelect(sortedTasks, iteration, options);
             return;
         }
-        // === Dry run ===
-        if (options.dryRun) {
-            printExecutionPreview(sortedTasks, iteration);
-            (0, operation_log_1.logOperation)(`speccore execute --dry-run`, `${sortedTasks.length} tasks`);
-            return;
-        }
-        // === Strict mode: pre-flight check before executing ===
-        if (options.strict) {
-            const approved = await preFlightCheck(sortedTasks, iteration, options);
-            if (approved.length === 0)
-                return;
-            sortedTasks.length = 0;
-            sortedTasks.push(...approved);
-        }
+        // === 显示执行计划 ===
+        const batchSize = parseInt(options.batchSize || '3', 10);
+        printExecutionPreview(sortedTasks, iteration, batchSize);
         // === Preview (default, unless --force) ===
         if (!options.force) {
-            printExecutionPreview(sortedTasks, iteration);
-            logger_1.logger.info('');
-            logger_1.logger.info('💡 Use --force to execute directly, or --interactive to select');
+            logger_1.logger.info('💡 使用 --force 直接执行，或 --interactive 选择执行');
             return;
         }
+        logger_1.logger.info('🚀 开始执行...\n');
         // === Resume mode ===
         if (options.resume) {
             await executeResume(iteration);
             return;
         }
         // === Batch mode ===
-        const batchSize = parseInt(options.batchSize || '0', 10);
         if (batchSize > 0 && sortedTasks.length > batchSize) {
             await executeBatchMode(sortedTasks, iteration, batchSize, options);
             return;
@@ -434,11 +421,28 @@ async function processBatch(tasks, state, iteration) {
     logger_1.logger.info(``);
     logger_1.logger.info(`━━━ Batch ${batchNum}/${state.totalBatches} ━━━`);
     logger_1.logger.info(``);
-    // Context isolation: simulate context loading
-    logger_1.logger.info(`📖 Loading context for batch ${batchNum}...`);
-    logger_1.logger.info(`   CONSTITUTION.md → architecture constraints`);
-    logger_1.logger.info(`   PROJECT_GRAPH.md → dependency status`);
-    logger_1.logger.info(`   Tasks: ${tasks.map(t => t.id).join(', ')}`);
+    // Context isolation: load task-specific files
+    logger_1.logger.info(`📖 加载上下文 (Batch ${batchNum})...`);
+    // 显示项目级文件
+    for (const f of ['CONSTITUTION.md', 'PROJECT_GRAPH.md']) {
+        if (await (0, fs_extra_1.pathExists)((0, path_1.join)('.speccore', f))) {
+            logger_1.logger.info(`   .speccore/${f} → 已加载`);
+        }
+    }
+    // 显示每个任务的 Spec 文件
+    const iterDir = `期次-${iteration}`;
+    for (const task of tasks) {
+        logger_1.logger.info(`   ${task.id}:`);
+        for (const f of ['REQ.md', 'TECH.md', 'TASK.md']) {
+            const p = (0, path_1.join)(iterDir, task.id, 'backend', f);
+            if (await (0, fs_extra_1.pathExists)(p)) {
+                const content = await (0, fs_extra_1.readFile)(p, 'utf-8');
+                const summary = content.slice(0, 80).replace(/\n/g, ' ');
+                logger_1.logger.info(`     📄 ${f} → ${summary}...`);
+            }
+        }
+    }
+    logger_1.logger.info('');
     // Execute tasks in batch
     const completed = [];
     const total = tasks.length;
@@ -447,8 +451,12 @@ async function processBatch(tasks, state, iteration) {
         const progress = Math.round(((i + 1) / total) * 100);
         const bar = createBar(progress, 20);
         logger_1.logger.info(``);
-        logger_1.logger.info(`  ${bar} ${(i + 1)}/${total} — ${task.id} ${task.name}`);
-        logger_1.logger.info(`  🔄 Executing...`);
+        logger_1.logger.info(`  ${bar} ${(i + 1)}/${total} — ${task.id}  ${task.name || ''}`);
+        logger_1.logger.info(`  📊 优先级: ${task.priority}  |  类型: ${task.type || 'feature'}`);
+        if (task.dependencies?.length) {
+            logger_1.logger.info(`  🔗 依赖: ${task.dependencies.join(', ')}`);
+        }
+        logger_1.logger.info(`  🔄 执行中...`);
         await simulateTaskExecution(task, iteration);
         completed.push(task.id);
         logger_1.logger.info(`  ✅ ${task.id || task} completed`);
