@@ -16,35 +16,53 @@ export interface DoneOptions {
   skipValidate?: boolean;
   skipSync?: boolean;
   interactive?: boolean;
+  all?: boolean;
 }
 
 export async function doneCommand(options: DoneOptions): Promise<void> {
-  if (!options.task) {
-    logger.error('请指定任务: speccore done --task=Task-001');
-    return;
-  }
-
   const iteration = await getDefaultIteration(options.iteration);
-  if (!iteration) {
-    logger.error('未找到活跃期次');
-    return;
-  }
+  if (!iteration) { logger.error('未找到活跃期次'); return; }
 
   const iterDir = `期次-${iteration}`;
-  const tasks = await scanForTask(iterDir, options.task);
-  if (tasks.length === 0) {
-    logger.error(`Task 未找到: ${options.task}`);
+
+  // ── --all: 自动扫描已完成任务 ──
+  if (options.all) {
+    const completed = await findCompletedTasks(iterDir);
+    if (completed.length === 0) { logger.info('没有可归档的任务'); return; }
+
+    // Interactive preview
+    if (options.interactive) {
+      await batchDoneFlow(completed, iterDir, iteration, options);
+      return;
+    }
+
+    // Batch done all
+    for (const taskId of completed) {
+      await doDone(iterDir, taskId, iteration, options);
+    }
+    logger.info(`Done: ${completed.length} tasks archived`);
     return;
   }
 
-  const taskId = tasks[0];
-
-  if (options.interactive) {
-    await interactiveDoneFlow(iterDir, taskId, iteration, options);
+  if (!options.task) {
+    logger.error('请指定任务: speccore done -t Task-001 或 done --all -I Q1');
     return;
   }
 
-  await doDone(iterDir, taskId, iteration, options);
+  // ── 批量指定 ──
+  const taskIds = options.task.split(',').map(s => s.trim()).filter(Boolean);
+  for (const tid of taskIds) {
+    const tasks = await scanForTask(iterDir, tid);
+    if (tasks.length === 0) { logger.error('Task 未找到: ' + tid); continue; }
+    const taskId = tasks[0];
+
+    if (options.interactive) {
+      await interactiveDoneFlow(iterDir, taskId, iteration, options);
+    } else {
+      await doDone(iterDir, taskId, iteration, options);
+    }
+  }
+  logger.info(`Done: ${taskIds.length} tasks`);
 }
 
 async function interactiveDoneFlow(
@@ -149,6 +167,36 @@ async function doDone(
 
   logger.info('');
   showNextSteps('archive');
+}
+
+/** 扫描期次下所有已完成但未归档的任务 */
+async function findCompletedTasks(iterDir: string): Promise<string[]> {
+  const fs = require('fs');
+  const entries = fs.readdirSync(iterDir, { withFileTypes: true });
+  return entries
+    .filter((e: any) => e.isDirectory() && e.name.startsWith('Task-'))
+    .map((e: any) => e.name);
+}
+
+/** 批量归档交互预览 */
+async function batchDoneFlow(
+  taskIds: string[], iterDir: string, iteration: string, options: DoneOptions
+): Promise<void> {
+  const { createInterface } = await import('readline');
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const ask = (q: string): Promise<string> => new Promise(r => rl.question(q + ' ', a => r(a.trim())));
+
+  logger.info(`\n📋 即将归档 ${taskIds.length} 个任务:\n`);
+  for (const tid of taskIds) logger.info(`   ${tid}`);
+  
+  const confirm = await ask('\n确认执行？ [y/n]: ');
+  rl.close();
+  if (confirm !== 'y') { logger.info('已取消'); return; }
+
+  for (const tid of taskIds) {
+    await doDone(iterDir, tid, iteration, { ...options, interactive: false });
+  }
+  logger.info(`Done: ${taskIds.length} tasks`);
 }
 
 async function scanForTask(iterDir: string, taskId: string): Promise<string[]> {
