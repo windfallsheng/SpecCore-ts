@@ -22,6 +22,7 @@ export interface ExecuteOptions {
     skip?: string;
     agent?: string;
     only?: string;
+    plan?: string;
 }
 export declare function executeCommand(options: ExecuteOptions): Promise<void>;
 //# sourceMappingURL=execute.d.ts.map

@@ -10,7 +10,7 @@ import { loadSpecRules, generateImports, SpecRules, loadTechStack } from '../cor
 import { logOperation } from '../core/operation-log';
 import { showNextSteps } from '../core/next-steps';
 import { extractQuestions, showQuestionChecklist } from '../core/question-checklist';
-import { savePlan, markPlanExecuted, ExecutionPlan } from '../core/plan-store';
+import { savePlan, markPlanExecuted, getPlan, ExecutionPlan } from '../core/plan-store';
 import {
   initExecutionState,
   loadExecutionState,
@@ -45,14 +45,22 @@ export interface ExecuteOptions {
   base?: string;       // base branch for task branching
   skip?: string;       // comma-separated task IDs to skip
   agent?: string;      // external AI tool for code generation (copilot/claude/cursor/trae/qoder/windsurf/codebuddy)
-  only?: string;       // comma-separated task IDs to execute exclusively
+  only?: string;
+  plan?: string;
+
 
 }
 export async function executeCommand(options: ExecuteOptions): Promise<void> {
   try {
     const iteration = await getDefaultIteration(options.iteration);
     if (!iteration) {
-      logger.error('No active iteration found. Please specify --iteration or create one first.');
+      logger.error('No active iteration found.');
+      return;
+    }
+
+    // ── 按计划执行 ──
+    if (options.plan) {
+      await executeByPlan(options.plan as string, iteration, options);
       return;
     }
 
@@ -1108,4 +1116,25 @@ function detectCycles(tasks: TaskState[]): string[] {
     }
   }
   return cycles;
+}
+
+/** 按已保存的计划执行 */
+async function executeByPlan(planId: string, iteration: string, options: ExecuteOptions): Promise<void> {
+  const plan = await getPlan(planId);
+  if (!plan) { logger.error('Plan not found: ' + planId); return; }
+  if (plan.iteration !== iteration) { logger.warn('Plan iteration differs from current'); }
+
+  logger.info('\nExecuting plan: ' + plan.name);
+  logger.info('  Tasks: ' + plan.tasks.length + ' | Batch: ' + plan.batchSize);
+
+  const allTasks = await scanTasks(iteration);
+  const planTasks = plan.tasks.map(id => allTasks.find(t => t.id === id)).filter(Boolean) as TaskState[];
+  if (planTasks.length === 0) { logger.error('No matching tasks'); return; }
+
+  if (plan.batchSize > 0 && planTasks.length > plan.batchSize) {
+    await executeBatchMode(planTasks, iteration, plan.batchSize, options);
+  } else {
+    await executeWithProgress(planTasks, iteration, options.base, [], {});
+  }
+  await markPlanExecuted(plan.id, 'Completed ' + planTasks.length + ' tasks');
 }
