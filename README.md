@@ -37,7 +37,7 @@ speccore done -t Task-001               # 收尾归档
 | **定时自动执行** | `speccore schedule create --at "02:00" --all -I Q1` |
 | **AI 自动开发** | `speccore execute -t Task-001` / `--plan=plan-xxx` |
 | **创建 Pull Request** | `speccore pr -t Task-001 --interactive` |
-| **收尾归档** | `speccore done -t Task-001 --interactive` |
+| **收尾归档** | `speccore done -t Task-001` / `done --all -I Q1 --interactive` |
 | **查看到哪了** | `speccore status-panel` 或直接 `speccore` |
 | **自然语言说需求** | `speccore ask "帮我分析当前需求"` |
 
