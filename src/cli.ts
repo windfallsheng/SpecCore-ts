@@ -194,8 +194,9 @@ program
   .alias('in')
   .description('初始化 SpecCore（默认简洁模式，--full 开启全量）')
   .option('--mode <mode>', 'Initialization mode: fresh or migration', 'fresh')
-  .option('--full', 'Full mode: all 68+ commands (default: simple)')
+  .option('--full', 'Full mode: all 51 commands (default: simple)')
   .option('--force', 'Force overwrite existing configuration')
+  .option('--interactive', 'Interactive guided setup: mode → confirm → init')
   .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
   .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
   .action(initCommand);
