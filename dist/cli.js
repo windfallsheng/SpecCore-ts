@@ -284,6 +284,7 @@ commander_1.program
     .option('--list', 'Show plan history')
     .option('--show <id>', 'Show plan detail')
     .option('--delete <id>', 'Delete a plan')
+    .option('--cancel <id>', 'Cancel a plan (keep record)')
     .action(plan_1.planCommand);
 commander_1.program
     .command('execute')
