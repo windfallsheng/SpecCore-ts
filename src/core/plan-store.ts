@@ -36,6 +36,8 @@ export interface ExecutionPlan {
   executedAt: string | null;
   /** 执行结果摘要 */
   result: string | null;
+  /** 计划状态 */
+  status: 'active' | 'completed' | 'cancelled';
 }
 
 interface PlanStore {
@@ -57,7 +59,7 @@ async function save(store: PlanStore): Promise<void> {
 }
 
 /** 保存新计划 */
-export async function savePlan(plan: Omit<ExecutionPlan, 'id' | 'createdAt' | 'executedAt' | 'result'>): Promise<ExecutionPlan> {
+export async function savePlan(plan: Omit<ExecutionPlan, 'id' | 'createdAt' | 'executedAt' | 'result' | 'status'>): Promise<ExecutionPlan> {
   const store = await load();
   const entry: ExecutionPlan = {
     ...plan,
@@ -65,6 +67,7 @@ export async function savePlan(plan: Omit<ExecutionPlan, 'id' | 'createdAt' | 'e
     createdAt: new Date().toISOString(),
     executedAt: null,
     result: null,
+    status: 'active',
   };
   store.plans.push(entry);
   await save(store);
@@ -78,8 +81,19 @@ export async function markPlanExecuted(id: string, result: string): Promise<void
   if (plan) {
     plan.executedAt = new Date().toISOString();
     plan.result = result;
+    plan.status = 'completed';
   }
   await save(store);
+}
+
+/** 取消计划 */
+export async function cancelPlan(id: string): Promise<boolean> {
+  const store = await load();
+  const plan = store.plans.find(p => p.id.startsWith(id));
+  if (!plan) return false;
+  plan.status = 'cancelled';
+  await save(store);
+  return true;
 }
 
 /** 查询计划列表 */

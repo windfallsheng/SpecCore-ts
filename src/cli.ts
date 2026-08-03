@@ -284,6 +284,7 @@ program
   .option('--list', 'Show plan history')
   .option('--show <id>', 'Show plan detail')
   .option('--delete <id>', 'Delete a plan')
+  .option('--cancel <id>', 'Cancel a plan (keep record)')
   .action(planCommand);
 
 program
