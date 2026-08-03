@@ -36,6 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.executeCommand = executeCommand;
 const fs_extra_1 = require("fs-extra");
 const path_1 = require("path");
+const readline_1 = require("readline");
 const logger_1 = require("../utils/logger");
 const context_1 = require("../core/context");
 const state_1 = require("../core/state");
@@ -164,92 +165,88 @@ async function executeCommand(options) {
     }
 }
 // ============================================================
-// Interactive selection (real prompt via inquirer)
+// ============================================================
+// Interactive: show plan, let user adjust, then confirm
 // ============================================================
 async function interactiveSelect(tasks, iteration, options) {
-    const inquirer = await loadInquirer();
-    logger_1.logger.info('');
-    logger_1.logger.info(`📋 Preparing ${tasks.length} tasks:`);
-    logger_1.logger.info('');
-    for (let i = 0; i < tasks.length; i++) {
-        const t = tasks[i];
-        const pri = t.priority === 'high' ? '🔴' : t.priority === 'medium' ? '🟡' : '🟢';
-        logger_1.logger.info(`  ${i + 1}. ${t.id} ${t.name || ''} ${pri}`);
-    }
-    const { mode } = await inquirer.prompt([
-        {
-            type: 'list',
-            name: 'mode',
-            message: 'Please select execution mode:',
-            choices: [
-                { name: '[1] Execute all (serial)', value: 'all' },
-                { name: '[2] Execute all (parallel, max 2)', value: 'parallel2' },
-                { name: '[3] Select specific tasks', value: 'select' },
-                { name: '[4] Cancel', value: 'cancel' },
-            ],
-        },
-    ]);
-    if (mode === 'cancel') {
-        logger_1.logger.info('Cancelled.');
-        return;
-    }
-    let selectedTasks = tasks;
-    if (mode === 'select') {
-        const choices = tasks.map((t) => ({
-            name: `${t.id} ${t.name || ''} (${t.priority || 'medium'})`,
-            value: t.id,
-            checked: t.priority === 'high',
-        }));
-        const { picked } = await inquirer.prompt([
-            {
-                type: 'checkbox',
-                name: 'picked',
-                message: 'Select tasks to execute (space to toggle, enter to confirm):',
-                choices,
-            },
-        ]);
-        if (picked.length === 0) {
-            logger_1.logger.info('No tasks selected. Cancelled.');
+    const rl = (0, readline_1.createInterface)({ input: process.stdin, output: process.stdout });
+    const ask = (q) => new Promise(r => rl.question(q + " ", a => r(a.trim())));
+    let batchSize = parseInt(options.batchSize || "3", 10);
+    let selectedTasks = [...tasks];
+    let assignee = options.assignee || "";
+    logger_1.logger.info("\n🧭 交互式执行引导\n");
+    printPlan(selectedTasks, iteration, batchSize);
+    logger_1.logger.info("💡 你可以反复调整参数，直到满意后确认执行\n");
+    while (true) {
+        const label = `[y] 执行  [b] 批次(${batchSize})  [f] 筛选  [a] 人员(${assignee || "全部"})  [q] 退出`;
+        logger_1.logger.info(label);
+        const ans = await ask("选择:");
+        if (ans === "q") {
+            logger_1.logger.info("已取消");
+            rl.close();
             return;
         }
-        selectedTasks = tasks.filter((t) => picked.includes(t.id));
+        if (ans === "y")
+            break;
+        if (ans === "b") {
+            const n = await ask("每批数量:");
+            if (n && !isNaN(+n) && +n > 0) {
+                batchSize = +n;
+                printPlan(selectedTasks, iteration, batchSize);
+            }
+        }
+        if (ans === "f") {
+            logger_1.logger.info("   可用: type=bugfix|feature, priority=high|medium|low, status=todo|queue");
+            const f = await ask("   筛选 (空格分隔, 留空=全部):");
+            const parts = f ? f.split(/\s+/) : [];
+            selectedTasks = tasks.filter((t) => {
+                for (const p of parts) {
+                    if (p.startsWith("type=") && t.type !== p.slice(5))
+                        return false;
+                    if (p.startsWith("priority=") && t.priority !== p.slice(9))
+                        return false;
+                    if (p.startsWith("status=") && t.status !== p.slice(7))
+                        return false;
+                }
+                return true;
+            });
+            if (selectedTasks.length === 0) {
+                logger_1.logger.info("   无匹配, 恢复全部");
+                selectedTasks = [...tasks];
+            }
+            printPlan(selectedTasks, iteration, batchSize);
+        }
+        if (ans === "a") {
+            assignee = await ask("   人员 (留空=全部):");
+        }
     }
-    const { confirm } = await inquirer.prompt([
-        {
-            type: 'confirm',
-            name: 'confirm',
-            message: `Execute ${selectedTasks.length} task(s)?`,
-            default: true,
-        },
-    ]);
-    if (!confirm) {
-        logger_1.logger.info('Cancelled.');
-        return;
+    rl.close();
+    logger_1.logger.info("\n🚀 开始执行...\n");
+    if (batchSize > 0 && selectedTasks.length > batchSize) {
+        await executeBatchMode(selectedTasks, iteration, batchSize, options);
     }
-    const skipList2 = options.skip ? options.skip.split(',').map(s => s.trim()).filter(Boolean) : [];
-    await executeWithProgress(selectedTasks, iteration, options.base, skipList2, { only: options.only });
+    else {
+        await executeWithProgress(selectedTasks, iteration, options.base, [], {});
+    }
+}
+function printPlan(tasks, iteration, batchSize) {
+    logger_1.logger.info(`\n📋 执行计划 — ${iteration}  (${tasks.length} 任务, ${batchSize}/批)\n`);
+    for (let i = 0; i < tasks.length; i += batchSize) {
+        const batch = tasks.slice(i, i + batchSize);
+        logger_1.logger.info(`  第${Math.floor(i / batchSize) + 1}批:`);
+        for (const t of batch) {
+            const deps = t.dependencies?.length ? ` ← ${t.dependencies.join(", ")}` : "";
+            logger_1.logger.info(`    ${t.id}  ${t.name || ""}${deps}`);
+        }
+        logger_1.logger.info("");
+    }
 }
 async function loadInquirer() {
     try {
-        return await Promise.resolve().then(() => __importStar(require('inquirer')));
+        return await Promise.resolve().then(() => __importStar(require("inquirer")));
     }
     catch {
-        // Fallback for environments without inquirer
-        return {
-            prompt: async (questions) => {
-                logger_1.logger.info('⚠️ Inquirer not available, auto-selecting defaults.');
-                const result = {};
-                for (const q of questions) {
-                    if (q.name === 'mode')
-                        result[q.name] = 'all';
-                    if (q.name === 'picked')
-                        result[q.name] = [];
-                    if (q.name === 'confirm')
-                        result[q.name] = true;
-                }
-                return result;
-            },
-        };
+        return { prompt() { return {}; } };
     }
 }
 // ============================================================
