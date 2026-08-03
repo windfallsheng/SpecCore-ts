@@ -23,16 +23,16 @@ export async function statusPanelCommand(options: StatusPanelOptions = {}): Prom
   const iteration = await getDefaultIteration();
   const config = await loadConfig();
 
-  // ── Health mode ──
-  if (options.health) {
-    await showHealthReport(config, iteration);
-    return;
-  }
-
-  // ── Lifecycle mode ──
-  if (options.lifecycle) {
-    await showLifecycleBoard(config, iteration, options);
-    return;
+  // ── Health/Lifecycle modes (skip if exporting) ──
+  if (!options.export) {
+    if (options.health) {
+      await showHealthReport(config, iteration);
+      return;
+    }
+    if (options.lifecycle) {
+      await showLifecycleBoard(config, iteration, options);
+      return;
+    }
   }
 
   // ── Export mode ──
@@ -468,6 +468,17 @@ async function exportStatus(
   }
   } // end if(iteration)
 
+  // ── 健康度数据 ──
+  if (options.health && iteration) {
+    const healthData = await collectHealthData(iteration);
+    data.health = healthData;
+  }
+  // ── 生命周期数据 ──
+  if (options.lifecycle && iteration) {
+    const lifecycleData = await collectLifecycleData(iteration);
+    data.lifecycle = lifecycleData;
+  }
+
   if (format === 'json') {
     const outPath = 'speccore-status.json';
     await writeFile(outPath, JSON.stringify(data, null, 2));
@@ -477,6 +488,19 @@ async function exportStatus(
     md += `- 期次: ${iteration || '无'}\n- 阶段: ${data.phase || 'N/A'}\n\n`;
     md += '## Tasks\n\n| ID | Status | Type |\n| :--- | :--- | :--- |\n';
     for (const t of data.tasks || []) md += `| ${t.id} | ${t.status} | ${t.type} |\n`;
+    if (data.health) {
+      md += '\n## 健康度\n\n';
+      md += `| 指标 | 值 |\n| :--- | :--- |\n`;
+      const h = data.health;
+      md += `| 任务完成率 | ${h.donePct}% (${h.completed}/${h.total}) |\n`;
+      md += `| 测试覆盖率 | ${h.testPct}% |\n`;
+      md += `| 审查覆盖率 | ${h.reviewPct}% |\n`;
+      md += `| 综合评分 | ${h.grade} (${h.score}/100) |\n`;
+    }
+    if (data.lifecycle) {
+      md += '\n## 生命周期\n\n| Task | 状态 |\n| :--- | :--- |\n';
+      for (const t of data.lifecycle.tasks || []) md += `| ${t.id} | ${t.status} |\n`;
+    }
     const outPath = 'speccore-status.md';
     await writeFile(outPath, md);
     logger.info(`✅ 导出到 ${outPath}`);
@@ -1255,4 +1279,35 @@ async function getTaskStatus(iterDir: string, task: string): Promise<string> {
     if (await pathExists(tf)) return (await readFile(tf, 'utf-8')).trim();
   } catch {}
   return 'pending';
+}
+
+
+// ── Collect Health Data for export ──
+async function collectHealthData(iteration: string): Promise<any> {
+  const iterDir = join(process.cwd(), "期次-" + iteration);
+  const tasks = await scanTaskDirs(iterDir);
+  let total = tasks.length, completed = 0, hasTest = 0, hasReview = 0;
+  for (const t of tasks) {
+    if (await isTaskDone(iterDir, t)) completed++;
+    if (await pathExists(join(iterDir, t, "backend", "TEST.md"))) hasTest++;
+    if (await pathExists(join(iterDir, t, "backend", "REVIEW.md"))) hasReview++;
+  }
+  const donePct = total > 0 ? Math.round(completed / total * 100) : 0;
+  const testPct = total > 0 ? Math.round(hasTest / total * 100) : 0;
+  const reviewPct = total > 0 ? Math.round(hasReview / total * 100) : 0;
+  const score = Math.round(donePct * 0.4 + testPct * 0.3 + reviewPct * 0.3);
+  const grade = score >= 90 ? 'A' : score >= 70 ? 'B' : score >= 50 ? 'C' : 'D';
+  return { total, completed, hasTest, hasReview, donePct, testPct, reviewPct, score, grade };
+}
+
+// ── Collect Lifecycle Data for export ──
+async function collectLifecycleData(iteration: string): Promise<any> {
+  const iterDir = join(process.cwd(), "期次-" + iteration);
+  const taskDirs = await scanTaskDirs(iterDir);
+  const tasks: any[] = [];
+  for (const t of taskDirs) {
+    const status = await getTaskStatus(iterDir, t);
+    tasks.push({ id: t, status });
+  }
+  return { tasks, iteration };
 }
