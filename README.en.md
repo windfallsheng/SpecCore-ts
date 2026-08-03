@@ -14,12 +14,12 @@
 ```bash
 npm install -g speccore
 speccore init
-speccore doc2spec -f requirements.docx -i Q1   # Import PRD
+speccore doc2spec -f requirements.docx --iter=Q1   # Import PRD
 speccore analyze -I Q1                          # AI analysis + code health
 speccore iteration split -I Q1                  # Split into tasks
 speccore plan -I Q1                             # Generate plan
 speccore execute -t Task-001                    # AI-powered development
-speccore done -t Task-001                       # Validate → archive
+speccore done --task=Task-001                       # Validate → archive
 ```
 
 ## 🎯 What do you want to do?
@@ -34,8 +34,8 @@ speccore done -t Task-001                       # Validate → archive
 | **Batch fix bugs** | `speccore task new --batch-file=bugs.xlsx --type=bugfix` |
 | **Schedule overnight execution** | `speccore schedule create --at "02:00" --all -I Q1` |
 | **AI auto-development** | `speccore execute -t Task-001` |
-| **Create a Pull Request** | `speccore pr -t Task-001 --interactive` |
-| **Archive a completed task** | `speccore done -t Task-001 --interactive` |
+| **Create a Pull Request** | `speccore pr --task=Task-001 --interactive` |
+| **Archive a completed task** | `speccore done --task=Task-001 --interactive` |
 | **Check project status** | `speccore` or `speccore status-panel` |
 | **Natural language queries** | `speccore ask "analyze current requirements"` |
 

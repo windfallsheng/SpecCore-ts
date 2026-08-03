@@ -14,7 +14,7 @@
 ```bash
 npm install -g speccore                 # 安装
 speccore init                           # 初始化项目
-speccore doc2spec -f PRD.docx -i Q1     # 导入需求文档
+speccore doc2spec -f PRD.docx --iter=Q1     # 导入需求文档
 speccore analyze -I Q1                  # AI 分析需求 + 代码检查
 speccore iteration split -I Q1          # 拆分为独立 Task
 speccore plan -I Q1                     # 生成执行计划
