@@ -28,10 +28,12 @@ speccore done -t Task-001               # 收尾归档
 | **导入 PRD 文档** | `speccore doc2spec -f PRD.docx -I Q1` |
 | **分析需求 + 代码健康** | `speccore analyze -I Q1` / `--scope global` |
 | **拆分需求为 Task** | `speccore iteration split -I Q1 --interactive` |
+| **生成执行计划** | `speccore plan -I Q1 --interactive` |
+| **查看计划历史** | `speccore plan --list` / `plan --show plan-xxx` |
 | **修复一个 Bug** | `speccore task new -n "登录超时" --type=bugfix` |
 | **批量修复 Bug** | `speccore task new --batch-file=bugs.xlsx --type=bugfix` |
-| **定时执行所有任务** | `speccore schedule create --at "02:00" --all -I Q1` |
-| **AI 自动开发** | `speccore execute -t Task-001` |
+| **定时自动执行** | `speccore schedule create --at "02:00" --all -I Q1` |
+| **AI 自动开发** | `speccore execute -t Task-001` / `--plan=plan-xxx` |
 | **创建 Pull Request** | `speccore pr -t Task-001 --interactive` |
 | **收尾归档** | `speccore done -t Task-001 --interactive` |
 | **查看到哪了** | `speccore status-panel` 或直接 `speccore` |
