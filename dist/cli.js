@@ -56,6 +56,7 @@ const rollback_1 = require("./commands/rollback");
 const handover_1 = require("./commands/handover");
 const help_1 = require("./commands/help");
 const dev_1 = require("./commands/dev");
+const welcome_1 = require("./commands/welcome");
 const status_panel_1 = require("./commands/status-panel");
 const doc2spec_1 = require("./commands/doc2spec");
 // 全量层命令
@@ -732,6 +733,11 @@ scheduleCmd
     .action((action, options) => {
     return (0, schedule_1.scheduleDaemonCommand)({ action, foreground: options.foreground });
 });
+commander_1.program
+    .command('welcome')
+    .alias('wc')
+    .description('显示欢迎面板（同 speccore 无参数）')
+    .action(welcome_1.welcomeCommand);
 // Parse arguments
 // ── 帮助分层：核心命令前置 ──
 commander_1.program.addHelpText('beforeAll', `

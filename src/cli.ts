@@ -25,6 +25,7 @@ import { rollbackCommand } from './commands/rollback';
 import { handoverCommand } from './commands/handover';
 import { helpCommand } from './commands/help';
 import { devCommand } from './commands/dev';
+import { welcomeCommand } from './commands/welcome';
 import { statusPanelCommand } from './commands/status-panel';
 import { doc2specCommand } from './commands/doc2spec';
 // 全量层命令
@@ -171,7 +172,6 @@ program
   .option('--to <phase>', '到指定阶段结束（init/doc2spec/analyze/split/plan/execute/pr/done）')
   .action(devCommand);
 
-
 program
 
 // ================================================================
@@ -188,7 +188,6 @@ program
   .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
   .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
   .action(initCommand);
-
 
 // ================================================================
 // 📋 期次管理
@@ -228,8 +227,6 @@ taskCmd
 
 // 完整需求交付
 program
-
-
 
 // Bug 修复
 // 技术调研
@@ -301,8 +298,6 @@ program
 // ================================================================
 // 任务调度（已通过 WorkBuddy Automation 实现）
 // ================================================================
-
-
 
 // ================================================================
 // 🔄 变更管理
@@ -472,7 +467,6 @@ program
   .option('--files <files>', '批量: "a.docx=平台1,b.pdf=平台2"')
   .action(doc2specCommand);
 
-
 // ================================================================
 // 📦 模式保存
 // ================================================================
@@ -601,7 +595,6 @@ program
 
 program
 
-
 program
 
 // ================================================================
@@ -640,7 +633,6 @@ program
   .alias('cmp')
   .description('Generate shell completion script (bash/zsh)')
   .action(completionCommand);
-
 
 // v4.8.0 高级功能
 program
@@ -796,6 +788,12 @@ scheduleCmd
   .action((action: string, options: any) => {
     return scheduleDaemonCommand({ action, foreground: options.foreground });
   });
+
+program
+  .command('welcome')
+  .alias('wc')
+  .description('显示欢迎面板（同 speccore 无参数）')
+  .action(welcomeCommand);
 
 // Parse arguments
 // ── 帮助分层：核心命令前置 ──
