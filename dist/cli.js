@@ -624,9 +624,10 @@ commander_1.program
 commander_1.program
     .command('done')
     .alias('dn')
-    .description('收尾归档：校验→同步→审计，--interactive 预览后可跳过步骤')
-    .option('-t, --task <task>', 'Target task')
+    .description('收尾归档：校验→同步→审计，--all 批量归档，--interactive 预览确认')
+    .option('-t, --task <task>', 'Target task (comma-separated for batch)')
     .option('-i, --iteration <iteration>', 'Target iteration')
+    .option('--all', 'Auto-archive all completed tasks in iteration')
     .option('--skip-validate', 'Skip validation step')
     .option('--skip-sync', 'Skip global sync step')
     .option('--interactive', 'Interactive: preview archive → confirm → complete')
