@@ -127,28 +127,17 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
       return;
     }
 
-    // === Dry run ===
-    if (options.dryRun) {
-      printExecutionPreview(sortedTasks, iteration);
-      logOperation(`speccore execute --dry-run`, `${sortedTasks.length} tasks`);
-      return;
-    }
-
-    // === Strict mode: pre-flight check before executing ===
-    if (options.strict) {
-      const approved = await preFlightCheck(sortedTasks, iteration, options);
-      if (approved.length === 0) return;
-      sortedTasks.length = 0;
-      sortedTasks.push(...approved);
-    }
+    // === 显示执行计划 ===
+    const batchSize = parseInt(options.batchSize || '3', 10);
+    printExecutionPreview(sortedTasks, iteration, batchSize);
 
     // === Preview (default, unless --force) ===
     if (!options.force) {
-      printExecutionPreview(sortedTasks, iteration);
-      logger.info('');
-      logger.info('💡 Use --force to execute directly, or --interactive to select');
+      logger.info('💡 使用 --force 直接执行，或 --interactive 选择执行');
       return;
     }
+
+    logger.info('🚀 开始执行...\n');
 
     // === Resume mode ===
     if (options.resume) {
@@ -157,7 +146,6 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
     }
 
     // === Batch mode ===
-    const batchSize = parseInt(options.batchSize || '0', 10);
     if (batchSize > 0 && sortedTasks.length > batchSize) {
       await executeBatchMode(sortedTasks, iteration, batchSize, options);
       return;
@@ -476,11 +464,30 @@ async function processBatch(tasks: TaskState[], state: ExecutionState, iteration
   logger.info(`━━━ Batch ${batchNum}/${state.totalBatches} ━━━`);
   logger.info(``);
 
-  // Context isolation: simulate context loading
-  logger.info(`📖 Loading context for batch ${batchNum}...`);
-  logger.info(`   CONSTITUTION.md → architecture constraints`);
-  logger.info(`   PROJECT_GRAPH.md → dependency status`);
-  logger.info(`   Tasks: ${tasks.map(t => t.id).join(', ')}`);
+  // Context isolation: load task-specific files
+  logger.info(`📖 加载上下文 (Batch ${batchNum})...`);
+  
+  // 显示项目级文件
+  for (const f of ['CONSTITUTION.md', 'PROJECT_GRAPH.md']) {
+    if (await pathExists(join('.speccore', f))) {
+      logger.info(`   .speccore/${f} → 已加载`);
+    }
+  }
+  
+  // 显示每个任务的 Spec 文件
+  const iterDir = `期次-${iteration}`;
+  for (const task of tasks) {
+    logger.info(`   ${task.id}:`);
+    for (const f of ['REQ.md', 'TECH.md', 'TASK.md']) {
+      const p = join(iterDir, task.id, 'backend', f);
+      if (await pathExists(p)) {
+        const content = await readFile(p, 'utf-8');
+        const summary = content.slice(0, 80).replace(/\n/g, ' ');
+        logger.info(`     📄 ${f} → ${summary}...`);
+      }
+    }
+  }
+  logger.info('');
 
   // Execute tasks in batch
   const completed: string[] = [];
@@ -492,8 +499,12 @@ async function processBatch(tasks: TaskState[], state: ExecutionState, iteration
     const bar = createBar(progress, 20);
 
     logger.info(``);
-    logger.info(`  ${bar} ${(i + 1)}/${total} — ${task.id} ${task.name}`);
-    logger.info(`  🔄 Executing...`);
+    logger.info(`  ${bar} ${(i + 1)}/${total} — ${task.id}  ${task.name || ''}`);
+    logger.info(`  📊 优先级: ${task.priority}  |  类型: ${task.type || 'feature'}`);
+    if (task.dependencies?.length) {
+      logger.info(`  🔗 依赖: ${task.dependencies.join(', ')}`);
+    }
+    logger.info(`  🔄 执行中...`);
 
     await simulateTaskExecution(task, iteration);
     completed.push(task.id);
