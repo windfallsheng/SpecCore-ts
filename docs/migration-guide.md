@@ -9,19 +9,10 @@
 ```bash
 # 在现有 Speccore 项目目录中执行
 cd my-speccore-project
-speccore migrate
 
-# 预览模式（不实际修改）
-speccore migrate --dry-run
+# 新项目的 .speccore/ 结构由 `speccore init` 自动生成。
+# 如有旧项目需要迁移，请参考下方手动迁移步骤。
 ```
-
-`speccore migrate` 自动完成以下操作：
-1. 检测 Shell 版本号
-2. 统计现有期次和任务数量
-3. 补充缺失的 GLOBAL/ 全量层目录
-4. 创建 `.speccore/config/platforms.yaml` 多平台配置
-5. 更新 `context.json` 到 v5 格式（保留已有数据）
-6. 创建/更新 `.gitignore`
 
 ---
 
@@ -38,7 +29,6 @@ speccore --version   # 应显示 v4.x
 
 ```bash
 cd your-speccore-project
-speccore migrate
 ```
 
 ### 3. 验证迁移

@@ -230,12 +230,10 @@ speccore audit --fix
 | :--- | :--- | :--- | :--- |
 | `speccore global-status` | `gs` | Global layer status overview | — |
 | `speccore ops` | `hs` | Requirement change history | `--req <id>` `--iteration <name>` |
-| `speccore index-update` | `iu` | Rebuild GLOBAL/INDEX | `--dry-run` |
 
 ```bash
 speccore global-status
 speccore ops --req=REQ-001
-speccore index-update --dry-run
 ```
 
 ---
@@ -274,9 +272,7 @@ speccore context --task=Task-001
 | `speccore done` | `ar` | Complete/archive tasks | `--all` `--task <id>` `--iteration <name>` |
 | `speccore config` | `cf` | Config management | `--set <key=value>` `--get <key>` |
 | `speccore help` | `hp` | Categorized command help | `--category <name>` |
-| `speccore demo` | `dm` | 5-minute quick demo | — |
 | `speccore welcome` | `wc` | First-use interactive guide | — |
-| `speccore migrate` | `mg` | Shell v3→CLI v5 migration | `--dry-run` |
 | `speccore search` | `sh` | Search across all Spec files | `<query>` `--task=<id>` `--iteration=<name>` |
 | `speccore watch` | `wch` | Watch files + auto-validate on save | `--task=<id>` `--iteration=<name>` |
 | `speccore delete` | `dl` | Delete task/iteration (trash + auto-clean) | `--task=<id>` `--iteration=<name>` `--force` |
@@ -288,9 +284,7 @@ speccore done --all --iteration=2026-07-Meeting
 speccore config --set platforms=web,h5
 speccore config --get platforms
 speccore help --category=execute
-speccore demo
 speccore welcome
-speccore migrate --dry-run
 speccore delete --task=Task-005           # Delete task
 speccore delete --iteration=2026-07-Sprint --force  # Delete iteration
 ```
@@ -302,10 +296,8 @@ speccore delete --iteration=2026-07-Sprint --force  # Delete iteration
 | Command | Alias | Description | Options |
 | :--- | :--- | :--- | :--- |
 | `speccore update` | `up` | Update task attributes | `--task=<id>` `--status=<s>` `--priority=<p>` `--assignee=<n>` |
-| `speccore backup` | `bk` | Backup current state | `--list` `--restore=<name>` |
 | `speccore completion` | `cm` | Generate shell completion | `[bash\|zsh]` |
 | `speccore config` | `hk` | Install Git hooks | — |
-| `speccore current` | `cr` | Show branch-task mapping | `--commit` `--pr` |
 | `speccore diff` | `df` | Compare iterations/baselines | `--source=<name>` `--target=<name>` |
 | `speccore trace` | `tr` | REQ→Task→Code trace chain | `--req=<id>` `--task=<id>` `--full` |
 
@@ -315,9 +307,6 @@ speccore update --task=Task-001 --status=completed
 speccore update --task=Task-001 --priority=high --assignee=Zhang San
 
 # backup
-speccore backup
-speccore backup --list
-speccore backup --restore=2026-07-11T10:00:00
 
 # completion
 speccore completion bash > /usr/local/etc/bash_completion.d/speccore
@@ -326,9 +315,6 @@ speccore completion bash > /usr/local/etc/bash_completion.d/speccore
 speccore config install
 
 # current
-speccore current
-speccore current --commit
-speccore current --pr
 
 # diff
 speccore diff --source=2026-07-Meeting --target=2026-08-Meeting
@@ -388,7 +374,6 @@ speccore trace --full
 | 78 | plan | plan, schedule | `speccore plan` |
 | 78 | rename | rename | `speccore rename` |
 | 75 | archive | archive | `speccore done` |
-| 75 | reference | example, reference | `speccore demo` |
 | 70 | progress | progress | `speccore status-panel` |
 | 70 | sync | sync, align | `speccore sync` |
 | 70 | sync_global | sync global | `speccore sync-global` |
@@ -400,11 +385,9 @@ speccore trace --full
 | 60 | retro | retro, review | `speccore retro` |
 | 60 | config | config, settings | `speccore config` |
 | 60 | context | context | `speccore context` |
-| 58 | index_update | update index | `speccore index-update` |
 | 55 | history | history, change log | `speccore ops` |
 | 55 | dashboard | dashboard, board | `speccore status-panel` |
 | 50 | baseline | baseline, snapshot | `speccore baseline` |
 | 50 | audit | audit, scan | `speccore audit` |
 | 50 | help | help, how to | `speccore help` |
-| 45 | demo | demo, example | `speccore demo` |
 | 40 | welcome | guide, intro | `speccore welcome` |

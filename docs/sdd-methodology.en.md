@@ -117,7 +117,6 @@ Specs in independent repo, code repos as siblings. Clean permissions, independen
 
 5. Archive
    └→ speccore done --all
-   └→ speccore backup
 ```
 
 ---

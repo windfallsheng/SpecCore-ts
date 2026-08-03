@@ -17,7 +17,6 @@
 npm install -g speccore
 
 # Zero-install (npx)
-npx speccore demo     # Run demo project
 npx speccore --help   # Show help
 
 # Verify
@@ -32,7 +31,6 @@ Try SpecCore without installing:
 
 ```bash
 # Run demo (5 min)
-npx speccore demo
 
 # Init current directory
 npx speccore init
@@ -135,9 +133,7 @@ speccore ask "Analyze REQ-001 impact"       # → matches impact
 ```bash
 speccore global-status
 speccore iteration-from-global --reqs=REQ-001,REQ-002 --name=2026-07-UserSystem
-speccore sync-global --iteration=2026-07-UserSystem
-speccore index-update --dry-run        # Preview
-speccore index-update                  # Execute
+speccore sync --global --iteration=2026-07-UserSystem
 ```
 
 ### Multi-Platform Tasks
@@ -185,7 +181,7 @@ speccore audit --strict
 
 ```bash
 speccore validate --fix
-speccore status-panel --export --format html --output report.html
+speccore status-panel
 ```
 
 ### Maintenance
@@ -265,7 +261,6 @@ speccore sync               # Write
 # View trace chain
 speccore trace --req=REQ-001
 speccore trace --full
-speccore current --commit    # Generate commit message
 ```
 
 ---

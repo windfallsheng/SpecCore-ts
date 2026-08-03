@@ -36,8 +36,6 @@ speccore execute --task=Task-001 --force
 # → 🌿 Created branch: feature/Task-001-user-login
 
 # 3. Check branch mapping
-speccore current
-speccore current --commit    # Generate commit message
 
 # 4. Add @spec annotations in code
 # // @spec Task-001-user-login
@@ -207,7 +205,6 @@ speccore sync-global --iteration=2026-Q3-Sprint
 speccore ops --req=REQ-001
 
 # 5. Periodically rebuild index
-speccore index-update
 ```
 
 ---
@@ -220,10 +217,8 @@ npm install -g speccore
 
 # 2. Preview migration
 cd old-speccore-project
-speccore migrate --dry-run
 
 # 3. Execute migration
-speccore migrate
 
 # 4. Verify
 speccore validate
@@ -300,7 +295,6 @@ speccore baseline --list
 | Long Chain | `speccore execute --all --batch-size=3` | `execute --resume` |
 | CI/CD | `speccore config install` | hooks + GitHub Actions |
 | Global Layer | `speccore global-status` | `iteration-from-global → sync-global` |
-| Migration | `speccore migrate --dry-run` | migrate → validate |
 | Health Check | `speccore health` | `status-panel` |
 
 ---
@@ -316,7 +310,6 @@ speccore delete --iteration=2026-07-Test --force
 
 # 3. Recover accidental delete (manual restore)
 mv .speccore/trash/2026-07-Test-TIMESTAMP 2026-07-Test
-speccore index-update
 ```
 
 ---
@@ -517,7 +510,6 @@ speccore execute --task=Task-003  # Auto-updates currentTask
 # Result: orphan references in INDEX.md, wrong context counts
 
 # ✅ Fix
-speccore index-update             # Clean index
 speccore validate                 # Check consistency
 
 # ✅ Proper way
@@ -549,14 +541,12 @@ speccore status-panel --export --format=html --output=status.html --team
 
 ```bash
 # Check which task the current branch maps to
-speccore current
 
 # Re-associate
 git checkout feature/Task-001-user-login
 speccore execute --task=Task-001 --force
 
 # Generate correct commit message
-speccore current --commit
 ```
 
 ### Suspect Spec vs code mismatch
@@ -765,7 +755,6 @@ speccore done --task=Task-001
 speccore sync-global --iteration=Q3 --direction=to_global
 
 # 5. Update context (mark as done)
-speccore current --task=Task-001 --status=done
 
 # 6. View final dashboard
 speccore status-panel
@@ -788,7 +777,6 @@ speccore done --task=Task-001
 ```bash
 # Symptom: every command reports "cannot find current iteration"
 # Fix
-speccore current                     # Re-select current iteration
 # 💬 "Relocate current iteration"
 ```
 
@@ -818,7 +806,6 @@ speccore init --force               # Force rebuild .speccore/
 speccore validate --fix             # Auto-fix common format issues
 # 💬 "Validate and fix Spec format issues"
 ```
-
 
 ## Scenario 29: Dependent Task Branching
 

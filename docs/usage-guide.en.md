@@ -92,7 +92,6 @@ speccore update -t T-001 --status=completed
 | Add API endpoint | Edit `API_CONTRACT.yaml` → `speccore validate` | Commit without validation |
 | Change assignee | `speccore update -t T-001 --assignee=Zhang` | Edit PROJECT_GRAPH.md |
 | Add global req | Edit `GLOBAL/REQUIREMENT.md` → `speccore sync-global` | Edit without syncing |
-| Rebuild index | `speccore index-update` | Manually edit INDEX.md |
 | Delete task | `speccore delete -t T-001` | rm -rf |
 | Rename | `speccore rename --target=old --new-name=new` | mv + edit all refs |
 
