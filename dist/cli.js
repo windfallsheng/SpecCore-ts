@@ -50,17 +50,16 @@ const execute_1 = require("./commands/execute");
 const ask_1 = require("./commands/ask");
 const change_1 = require("./commands/change");
 const sync_1 = require("./commands/sync");
+const history_1 = require("./commands/history");
 const pattern_1 = require("./commands/pattern");
 const rollback_1 = require("./commands/rollback");
 const handover_1 = require("./commands/handover");
 const help_1 = require("./commands/help");
 const dev_1 = require("./commands/dev");
 const status_panel_1 = require("./commands/status-panel");
-const welcome_1 = require("./commands/welcome");
 const doc2spec_1 = require("./commands/doc2spec");
 // 全量层命令
 const iteration_from_global_1 = require("./commands/iteration-from-global");
-const sync_global_1 = require("./commands/sync-global");
 const global_status_1 = require("./commands/global-status");
 // P0/P1/P2 新增命令
 const impact_1 = require("./commands/impact");
@@ -75,21 +74,16 @@ const done_1 = require("./commands/done");
 // rename 命令
 const rename_1 = require("./commands/rename");
 // v4.0.0 新增命令
-const index_update_1 = require("./commands/index-update");
 // v4.6.0 迁移命令
-const migrate_1 = require("./commands/migrate");
 // v4.7.0 体验增强
 const completion_1 = require("./commands/completion");
-const backup_1 = require("./commands/backup");
 // v4.8.0 高级功能
-const current_1 = require("./commands/current");
 // v4.9.0 完善
 const update_1 = require("./commands/update");
 // v5.3.0 新增
 const diff_1 = require("./commands/diff");
 const trace_1 = require("./commands/trace");
 const merge_check_1 = require("./commands/merge-check");
-const history_1 = require("./commands/history");
 const tracker_1 = require("./commands/tracker");
 // v5.5.0 新增
 const delete_1 = require("./commands/delete");
@@ -145,14 +139,6 @@ commander_1.program
 // ================================================================
 // 👋 引导与体验
 // ================================================================
-commander_1.program
-    .command('welcome')
-    .alias('wc')
-    .description('First-time setup guide (interactive)')
-    .option('--force', 'Force re-initialization')
-    .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
-    .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
-    .action(welcome_1.welcomeCommand);
 commander_1.program
     .command('status-panel')
     .alias('sp')
@@ -214,15 +200,6 @@ commander_1.program
     .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
     .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
     .action(init_1.initCommand);
-commander_1.program
-    .command('migrate')
-    .alias('mg')
-    .description('Migrate Shell v3.x config to CLI v4.x (v4.6)')
-    .option('--dry-run', 'Preview migration, no changes')
-    .option('--force', 'Skip confirmation')
-    .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
-    .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
-    .action(migrate_1.migrateCommand);
 // ================================================================
 // 📋 期次管理
 // ================================================================
@@ -346,7 +323,7 @@ commander_1.program
 commander_1.program
     .command('sync')
     .alias('sy')
-    .description('Reverse sync: detect code-spec differences and update')
+    .description('双向同步：代码↔Spec，--global 同步到全局层')
     .option('-t, --task <task>', 'Target task')
     .option('-i, --iteration <iteration>', 'Target iteration')
     .option('--auto', 'Auto-apply sync without confirmation')
@@ -469,18 +446,6 @@ commander_1.program
     .option('-p, --platform <name>', '平台标识（backend / frontend-web / frontend-h5）')
     .option('--files <files>', '批量: "a.docx=平台1,b.pdf=平台2"')
     .action(doc2spec_1.doc2specCommand);
-commander_1.program
-    .command('sync-global')
-    .alias('sg')
-    .description('Bidirectional sync between iteration and global layer')
-    .option('-i, --iteration <iteration>', 'Target iteration')
-    .option('--direction <direction>', 'Sync direction: to_global, from_global', 'to_global')
-    .option('--auto', 'Auto-apply without confirmation')
-    .option('--dry-run', 'Preview changes without applying')
-    .option('--force', 'Skip preview and execute')
-    .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
-    .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
-    .action(sync_global_1.syncGlobalCommand);
 // ================================================================
 // 📦 模式保存
 // ================================================================
@@ -547,7 +512,7 @@ commander_1.program
 commander_1.program
     .command('analyze')
     .alias('al')
-    .description('统一分析: 需求文档 + 源码目录 → 按范围(全局/期次/任务)生成分析报告')
+    .description('统一分析: 需求文档 + 源码目录 → 按范围(全局/期次/任务)生成分析报告，--audit 审计模式')
     .option('-I, --iteration <iteration>', '目标期次 (scope=iteration|task 时必填)')
     .option('-t, --task <task-id>', '任务 ID (--scope task 快捷方式)')
     .option('--scope <scope>', '输出范围: global(全局文档) | iteration(期次, 默认) | task(任务)')
@@ -597,12 +562,6 @@ commander_1.program
     .option('--schedule <mode>', '调度模式：night / now', 'now')
     .action(new_1.taskNewCommand);
 commander_1.program;
-commander_1.program
-    .command('index-update')
-    .alias('iu')
-    .description('Scan requirements and rebuild GLOBAL/INDEX.md (v4.0)')
-    .option('--dry-run', 'Preview mode, no actual changes')
-    .action(index_update_1.indexUpdateCommand);
 commander_1.program;
 // ================================================================
 // 快捷别名（顶层别名）
@@ -637,22 +596,8 @@ commander_1.program
     .alias('cmp')
     .description('Generate shell completion script (bash/zsh)')
     .action(completion_1.completionCommand);
-commander_1.program
-    .command('backup')
-    .alias('bk')
-    .description('Create backup of current state (v4.7)')
-    .option('--list', 'List existing backups')
-    .option('--restore <name>', 'Restore from backup')
-    .action(backup_1.backupCommand);
 // v4.8.0 高级功能
 commander_1.program;
-commander_1.program
-    .command('current')
-    .alias('cr')
-    .description('Show current branch task mapping (v4.8)')
-    .option('--commit', 'Generate commit message')
-    .option('--pr', 'Generate PR description')
-    .action(current_1.currentCommand);
 // v4.9.0 完善
 commander_1.program
     .command('update')
