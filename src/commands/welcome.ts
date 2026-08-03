@@ -30,7 +30,7 @@ export async function welcomeCommand(_options: WelcomeOptions): Promise<void> {
   }
 
   const iteration = await getDefaultIteration('');
-  if (!iteration) {
+  if (!iteration || iteration.includes('---') || iteration.length < 2) {
     logger.info(`  v${version}  ·  📦 已初始化  →  speccore iteration create --name=Q1\n`);
     return;
   }
