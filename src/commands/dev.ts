@@ -20,8 +20,9 @@ import { getDefaultIteration } from '../core/context';
 interface DevOptions {
   iteration?: string;
   force?: boolean;
-  auto?: boolean;  // 全自动级联，无人工干预
-  from?: string;   // 从指定阶段开始
+  auto?: boolean;
+  from?: string;
+  to?: string;      // 结束阶段
 }
 
 export async function devCommand(options: DevOptions): Promise<void> {
@@ -191,176 +192,111 @@ async function getTasksInState(iterDir: string, states: string): Promise<string[
 // ============================================================
 async function autoPipeline(options: DevOptions): Promise<void> {
   const { join } = require('path');
-  const { pathExists, readFile } = require('fs-extra');
+  const { pathExists } = require('fs-extra');
   const { execSync } = require('child_process');
   const { getDefaultIteration } = require('../core/context');
 
-  const steps: { name: string; check: () => Promise<boolean>; run: () => void }[] = [];
+  type Step = { name: string; check: () => Promise<boolean>; run: (it: string) => void };
+  const steps: Step[] = [];
 
   // Step 0: Init
   steps.push({
     name: 'init',
-    check: async () => (await pathExists(join(process.cwd(), '.speccore', 'config', 'mode.json'))),
-    run: () => {
-      logger.info('\\n🤖 Step 1/9: speccore init');
-      execSync('speccore init', { stdio: 'inherit' });
-    }
+    check: async () => pathExists(join(process.cwd(), '.speccore')),
+    run: () => execSync('speccore init', { stdio: 'inherit' })
   });
 
-  // Step 1: Import — 智能检测已有项目
+  // Step 1: doc2spec
   steps.push({
-    name: 'import',
+    name: 'doc2spec',
     check: async () => {
-      // 检查全量层是否已有项目
-      const globalProjects = join(process.cwd(), '.speccore', 'GLOBAL', 'PROJECTS');
-      if (await pathExists(globalProjects)) {
-        const entries = await require('fs-extra').readdir(globalProjects);
-        const hasProjects = entries.some((e: string) => e !== '_template');
-        if (hasProjects) return true;  // 已导入过
-      }
-      // 检查是否有需求文档（doc2spec 方式）
-      const iter = await getDefaultIteration(options.iteration);
-      return iter ? await pathExists(join(process.cwd(), '期次-'+iter, '00-需求文档', 'REQUIREMENT.md')) : false;
+      const it = await getDefaultIteration(options.iteration);
+      return it ? pathExists(join(process.cwd(), '期次-' + it, '00-需求文档', 'REQUIREMENT.md')) : false;
     },
-    run: () => {
-      logger.info('\\n🤖 Step 2/9: speccore import (智能检测源码)');
-      // 读取用户配置的 import 策略
-      const configPath = join(process.cwd(), '.speccore', 'SETTINGS.md');
-      logger.info('   💡 自动导入需手动配置项目路径，当前跳过');
-      logger.info('   📋 手动运行: speccore import --project=<name> --path=<src> --type=<backend|frontend>');
-      logger.info('   📋 或用文档方式: speccore doc2spec --file=PRD.md --platform=backend -i <迭代>');
-    }
+    run: (it) => logger.info('   💡 手动: speccore doc2spec -f PRD.docx -i ' + it)
   });
 
-  // Step 2: Analyze
+  // Step 2: analyze
   steps.push({
     name: 'analyze',
     check: async () => {
-      const iter = await getDefaultIteration(options.iteration);
-      if (!iter) return false;
-      return await pathExists(join(process.cwd(), '期次-'+iter, '00-需求文档', 'ANALYSIS.md'));
+      const it = await getDefaultIteration(options.iteration);
+      return it ? pathExists(join(process.cwd(), '期次-' + it, '00-需求文档', 'ANALYSIS.md')) : false;
     },
-    run: () => {
-      const iteration = require('../core/context').getDefaultIteration().then((it: string) => {
-        logger.info('\\n🤖 Step 3/9: speccore analyze');
-        execSync(`speccore analyze --iteration=${it}`, { stdio: 'inherit' });
-      });
-    }
+    run: (it) => execSync('speccore analyze -I ' + it + ' --depth quick', { stdio: 'inherit' })
   });
 
-  // Step 3: Split
+  // Step 3: split
   steps.push({
     name: 'split',
     check: async () => {
-      const iter = await getDefaultIteration(options.iteration);
-      if (!iter) return false;
-      const fs = require('fs');
-      const entries = fs.readdirSync(join(process.cwd(), '期次-'+iter), { withFileTypes: true });
-      return entries.some((e: any) => e.isDirectory() && e.name.startsWith('Task-'));
+      const it = await getDefaultIteration(options.iteration);
+      if (!it) return false;
+      try {
+        const dirs = require('fs').readdirSync(join(process.cwd(), '期次-' + it));
+        return dirs.some((d: string) => d.startsWith('Task-'));
+      } catch { return false; }
     },
-    run: () => {
-      const iteration = require('../core/context').getDefaultIteration().then((it: string) => {
-        logger.info('\\n🤖 Step 4/9: speccore iteration split');
-        execSync(`speccore iteration split --iteration=${it}`, { stdio: 'inherit' });
-      });
-    }
+    run: (it) => execSync('speccore iteration split -i ' + it, { stdio: 'inherit' })
   });
 
-  // Step 4: Plan
+  // Step 4: plan
   steps.push({
     name: 'plan',
-    check: async () => {
-      const iter = await getDefaultIteration(options.iteration);
-      if (!iter) return false;
-      return await pathExists(join(process.cwd(), '期次-'+iter, 'PLAN.md'));
-    },
-    run: () => {
-      const iteration = require('../core/context').getDefaultIteration().then((it: string) => {
-        logger.info('\\n🤖 Step 5/9: speccore plan');
-        execSync(`speccore plan --iteration=${it}`, { stdio: 'inherit' });
-      });
-    }
+    check: async () => pathExists(join(process.cwd(), '.speccore', 'local', 'plans.json')),
+    run: (it) => execSync('speccore plan -I ' + it, { stdio: 'inherit' })
   });
 
-  // Step 5: Execute (all tasks)
+  // Step 5: execute
   steps.push({
     name: 'execute',
-    check: async () => {
-      const iter = await getDefaultIteration(options.iteration);
-      if (!iter) return false;
-      return false;  // Always try execute
-    },
-    run: () => {
-      const iteration = require('../core/context').getDefaultIteration().then((it: string) => {
-        logger.info('\\n🤖 Step 6/9: speccore execute --all --force --verify');
-        execSync(`speccore execute --all --force --verify --iteration=${it}`, { stdio: 'inherit' });
-      });
-    }
+    check: async () => false,
+    run: (it) => execSync('speccore execute --all --force --iteration=' + it, { stdio: 'inherit' })
   });
 
-  // Step 6: Pr
+  // Step 6: pr
   steps.push({
     name: 'pr',
     check: async () => false,
-    run: () => {
-      const iteration = require('../core/context').getDefaultIteration().then((it: string) => {
-        logger.info('\\n🤖 Step 7/9: speccore pr');
-        execSync(`speccore pr --iteration=${it}`, { stdio: 'inherit' });
-      });
-    }
+    run: (it) => execSync('speccore pr --iteration=' + it, { stdio: 'inherit' })
   });
 
-  // Step 7: Done
+  // Step 7: done
   steps.push({
     name: 'done',
     check: async () => false,
-    run: () => {
-      const iteration = require('../core/context').getDefaultIteration().then((it: string) => {
-        logger.info('\\n🤖 Step 8/9: speccore done --all');
-        execSync(`speccore done --all --iteration=${it} --skipValidate 2>/dev/null || true`, { stdio: 'inherit' });
-      });
-    }
+    run: (it) => execSync('speccore done --iteration=' + it + ' 2>/dev/null || true', { stdio: 'pipe' })
   });
 
   // ── Execute pipeline ──
-  logger.info('🚀 全自动流水线启动（无人干预模式）');
-  logger.info('���━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  const iteration = await getDefaultIteration(options.iteration) || '';
+  logger.info('\n🚀 Auto pipeline: ' + (options.from || 'init') + ' → ' + (options.to || 'done'));
 
   let fromIdx = 0;
+  let toIdx = steps.length - 1;
   if (options.from) {
     const idx = steps.findIndex(s => s.name === options.from);
-    if (idx >= 0) {
-      fromIdx = idx;
-      logger.info(`   ⏩ 从 "${options.from}" 阶段开始`);
-    }
+    if (idx >= 0) { fromIdx = idx; logger.info('   ⏩ from: ' + options.from); }
+  }
+  if (options.to) {
+    const idx = steps.findIndex(s => s.name === options.to);
+    if (idx >= 0) toIdx = idx;
   }
 
   let completed = 0;
-  let skipped = 0;
-  
-  for (let i = fromIdx; i < steps.length; i++) {
+  for (let i = fromIdx; i <= toIdx && i < steps.length; i++) {
     const step = steps[i];
-    
     try {
-      const alreadyDone = await step.check();
-      if (alreadyDone) {
-        logger.info(`   ⏭️ ${step.name}: 已完成，跳过`);
-        skipped++;
-        continue;
-      }
-
-      step.run();
+      const done = await step.check();
+      if (done) { logger.info('   ⏭️ ' + step.name + ': already done'); continue; }
+      logger.info('   ▶ ' + step.name);
+      step.run(iteration);
       completed++;
-      logger.info(`   ✅ ${step.name} 完成`);
     } catch (e: any) {
-      logger.error(`   ❌ ${step.name} 失败: ${e.message || e}`);
-      logger.info('');
-      logger.info('流水线中断。修复后运行: speccore dev --auto --from=' + step.name);
+      logger.error('   ❌ ' + step.name + ': ' + (e.message || e));
+      logger.info('\n   修复后继续: speccore dev --auto --from=' + step.name);
       break;
     }
   }
-
-  logger.info('');
-  logger.info(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-  logger.info(`✅ 执行 ${completed} 个阶段 | ⏭️ 跳过 ${skipped} 个 | 总数 ${steps.length}`);
+  logger.info('\n✅ Done: ' + completed + ' steps\n');
 }
