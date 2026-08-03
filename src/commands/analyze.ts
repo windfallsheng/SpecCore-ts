@@ -23,7 +23,7 @@ export interface AnalyzeOptions {
   iteration?: string;
   output?: string;
   auto?: boolean;
-  ask?: boolean;
+  interactive?: boolean;
   task?: string;
   // NEW options (CLI passes comma-separated strings)
   source?: string;

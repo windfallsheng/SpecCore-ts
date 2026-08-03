@@ -201,7 +201,7 @@ speccore status-panel --export --format=html --output=report.html --team --risk
 
 | Command | Alias | Description | Options |
 | :--- | :--- | :--- | :--- |
-| `speccore analyze` | `al` | Unified analysis: reqs + code, 3 scopes | `-I, --iteration <name>` `-t, --task <id>` `--scope <global\|iteration\|task>` `--src <dirs>` `--req <files>` `-o, --output <file>` `--depth <quick\|normal\|deep>` `--auto` `--ask` |
+| `speccore analyze` | `al` | Unified analysis: reqs + code, 3 scopes | `-I, --iteration <name>` `-t, --task <id>` `--scope <global\|iteration\|task>` `--src <dirs>` `--req <files>` `-o, --output <file>` `--depth <quick\|normal\|deep>` `--auto` `--interactive` |
 | `speccore impact` | `if` | Change impact analysis | `--req <id>` `--task <id>` |
 | `speccore baseline` | `bl` | Version baseline management | `--name <name>` `--compare <name>` `--restore <name>` `--req <id>` |
 | `speccore audit` | `ad` | AI smart audit | `--fix` |
