@@ -52,7 +52,12 @@ async function executeCommand(options) {
     try {
         const iteration = await (0, context_1.getDefaultIteration)(options.iteration);
         if (!iteration) {
-            logger_1.logger.error('No active iteration found. Please specify --iteration or create one first.');
+            logger_1.logger.error('No active iteration found.');
+            return;
+        }
+        // ── 按计划执行 ──
+        if (options.plan) {
+            await executeByPlan(options.plan, iteration, options);
             return;
         }
         let tasks = await (0, state_1.scanTasks)(iteration);
@@ -1040,5 +1045,31 @@ function detectCycles(tasks) {
         }
     }
     return cycles;
+}
+/** 按已保存的计划执行 */
+async function executeByPlan(planId, iteration, options) {
+    const plan = await (0, plan_store_1.getPlan)(planId);
+    if (!plan) {
+        logger_1.logger.error('Plan not found: ' + planId);
+        return;
+    }
+    if (plan.iteration !== iteration) {
+        logger_1.logger.warn('Plan iteration differs from current');
+    }
+    logger_1.logger.info('\nExecuting plan: ' + plan.name);
+    logger_1.logger.info('  Tasks: ' + plan.tasks.length + ' | Batch: ' + plan.batchSize);
+    const allTasks = await (0, state_1.scanTasks)(iteration);
+    const planTasks = plan.tasks.map(id => allTasks.find(t => t.id === id)).filter(Boolean);
+    if (planTasks.length === 0) {
+        logger_1.logger.error('No matching tasks');
+        return;
+    }
+    if (plan.batchSize > 0 && planTasks.length > plan.batchSize) {
+        await executeBatchMode(planTasks, iteration, plan.batchSize, options);
+    }
+    else {
+        await executeWithProgress(planTasks, iteration, options.base, [], {});
+    }
+    await (0, plan_store_1.markPlanExecuted)(plan.id, 'Completed ' + planTasks.length + ' tasks');
 }
 //# sourceMappingURL=execute.js.map

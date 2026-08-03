@@ -142,6 +142,16 @@ async function executeScheduledTask(task: ScheduleTask): Promise<void> {
     args.push('--force');
     args.push('--iteration', task.iteration);
 
+    // 传递 execOptions
+    const eo = task.execOptions;
+    if (eo?.batchSize) args.push('--batch-size', String(eo.batchSize));
+    if (eo?.assignee) args.push('--assignee', eo.assignee);
+    if (eo?.type) args.push('--type', eo.type);
+    if (eo?.priority) args.push('--priority', eo.priority);
+    if (eo?.platform) args.push('--platform', eo.platform);
+    if (eo?.backend) args.push('--backend');
+    if (eo?.frontend) args.push('--frontend');
+
     logger.info(`Running: speccore ${args.join(' ')}`);
 
     // 同步执行，确保顺序
