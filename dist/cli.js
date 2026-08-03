@@ -764,6 +764,11 @@ scheduleCmd
     .option('--id <id>', '调度任务 ID')
     .action(schedule_1.scheduleCancelCommand);
 scheduleCmd
+    .command('detail')
+    .description('查看调度详情（含执行参数）')
+    .option('--id <id>', '调度任务 ID')
+    .action(schedule_1.scheduleDetailCommand);
+scheduleCmd
     .command('delete')
     .description('删除调度记录')
     .option('--id <id>', '调度任务 ID')

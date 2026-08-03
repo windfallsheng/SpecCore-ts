@@ -7,6 +7,7 @@ import {
   deleteScheduleTask,
   deleteScheduleTask as removeScheduleTask,
   formatScheduleTime,
+  getScheduleTask,
   ScheduleTaskStatus,
 } from '../core/schedule-store';
 import {
@@ -140,8 +141,9 @@ export async function scheduleListCommand(options: ScheduleListOptions): Promise
     }
 
     logger.info('');
-    logger.info('💡 speccore schedule cancel --id=<id>  取消任务');
-    logger.info('   speccore schedule daemon start        启动守护进程');
+    logger.info('💡 speccore schedule detail --id=<id>  查看详情');
+    logger.info('   speccore schedule cancel --id=<id>  取消任务');
+    logger.info('   speccore schedule daemon start       启动守护进程');
 
   } catch (error: any) {
     logger.error(`查看调度任务失败: ${error.message}`);
@@ -286,4 +288,47 @@ function statusLabel(status: ScheduleTaskStatus): string {
     cancelled: '🚫 已取消',
   };
   return map[status] || status;
+}
+
+// ============================================================
+// schedule detail — 查看调度任务详情
+// ============================================================
+export interface ScheduleDetailOptions {
+  id: string;
+}
+
+export async function scheduleDetailCommand(options: ScheduleDetailOptions): Promise<void> {
+  try {
+    if (!options.id) { logger.error('请指定 --id=<id>'); return; }
+    const task = await getScheduleTask(options.id);
+    if (!task) { logger.error(`未找到: ${options.id}`); return; }
+
+    logger.info('');
+    logger.info(`📋 ${task.name}`);
+    logger.info(`   ID:          ${task.id}`);
+    logger.info(`   状态:        ${statusLabel(task.status)}`);
+    logger.info(`   期次:        ${task.iteration}`);
+    logger.info(`   执行时间:    ${task.scheduledAt}`);
+    logger.info(`   创建时间:    ${new Date(task.createdAt).toLocaleString()}`);
+    
+    const eo = task.execOptions;
+    if (task.all) {
+      logger.info(`   目标:        全部 Task`);
+    } else if (task.taskId) {
+      logger.info(`   目标:        ${task.taskId}`);
+    }
+
+    if (eo.assignee)  logger.info(`   人员:        ${eo.assignee}`);
+    if (eo.batchSize) logger.info(`   分批:        ${eo.batchSize} 个/批`);
+    if (eo.parallel)  logger.info(`   并行:        ${eo.parallel}`);
+    if (eo.type)      logger.info(`   类型:        ${eo.type}`);
+    if (eo.priority)  logger.info(`   优先级:      ${eo.priority}`);
+    if (eo.platform)  logger.info(`   平台:        ${eo.platform}`);
+    if (eo.backend)   logger.info(`   范围:        仅后端`);
+    if (eo.frontend)  logger.info(`   范围:        仅前端`);
+    logger.info('');
+
+  } catch (error: any) {
+    logger.error(`查看失败: ${error.message}`);
+  }
 }

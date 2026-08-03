@@ -53,7 +53,9 @@ speccore done -t Task-001               # 收尾归档
 speccore task new -n "数据迁移" --schedule=night         # 标记夜间执行
 speccore execute --all --scheduled                        # 手动触发所有排队任务
 speccore schedule create --at "2026-08-10 02:00" --all -I Q1  # 精确时间
-speccore schedule daemon start                             # 守护进程自动执行
+speccore schedule list                                           # 查看队列
+speccore schedule detail --id=sch-xxx                            # 查看详情(含执行参数)
+speccore schedule daemon start                                   # 守护进程自动执行
 ```
 
 ## 📚 了解更多

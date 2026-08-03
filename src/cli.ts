@@ -72,6 +72,7 @@ import { watchCommand } from './commands/watch';
 import {
   scheduleCreateCommand,
   scheduleListCommand,
+  scheduleDetailCommand,
   scheduleCancelCommand,
   scheduleDeleteCommand,
   scheduleDaemonCommand,
@@ -823,6 +824,12 @@ scheduleCmd
   .description('取消调度任务')
   .option('--id <id>', '调度任务 ID')
   .action(scheduleCancelCommand);
+
+scheduleCmd
+  .command('detail')
+  .description('查看调度详情（含执行参数）')
+  .option('--id <id>', '调度任务 ID')
+  .action(scheduleDetailCommand);
 
 scheduleCmd
   .command('delete')
