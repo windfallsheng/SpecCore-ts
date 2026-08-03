@@ -150,33 +150,6 @@ commander_1.program
     .option("--type <type>", "导出指定类型: feature | bugfix | research")
     .action(status_panel_1.statusPanelCommand);
 commander_1.program
-    .command('open')
-    .alias('opn')
-    .description('Open task files in editor')
-    .option('-t, --task <task>', 'Task to open')
-    .option('-i, --iteration <iteration>', 'Target iteration')
-    .action(async (options) => {
-    const { getDefaultIteration } = await Promise.resolve().then(() => __importStar(require('./core/context')));
-    const it = await getDefaultIteration(options.iteration);
-    if (!it)
-        return;
-    const fs = require('fs');
-    const iterDir = `期次-${it}`;
-    const entries = fs.readdirSync(iterDir, { withFileTypes: true });
-    const task = entries.find((e) => e.isDirectory() && e.name.startsWith(options.task || ''));
-    if (task) {
-        const { logger } = require('./utils/logger');
-        logger.info(`\n📂 ${task.name}:`);
-        const files = ['REQ.md', 'TECH.md', 'TASK.md', 'TEST.md', 'API_CONTRACT.yaml'];
-        for (const f of files) {
-            const path = require('path').join(iterDir, task.name, f.startsWith('API') ? '_shared' : 'backend', f);
-            if (fs.existsSync(path))
-                logger.info(`  ${path}`);
-        }
-    }
-});
-commander_1.program;
-commander_1.program
     .command('dev')
     .alias('d')
     .description('智能级联：--auto 全自动流水线，--from/--to 指定起止阶段')
