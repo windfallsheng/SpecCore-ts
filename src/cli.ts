@@ -19,19 +19,18 @@ import { executeCommand } from './commands/execute';
 import { askCommand } from './commands/ask';
 import { changeCommand } from './commands/change';
 import { syncCommand } from './commands/sync';
+import { opsCommand } from './commands/history';
 import { patternCommand } from './commands/pattern';
 import { rollbackCommand } from './commands/rollback';
 import { handoverCommand } from './commands/handover';
 import { helpCommand } from './commands/help';
 import { devCommand } from './commands/dev';
 import { statusPanelCommand } from './commands/status-panel';
-import { welcomeCommand } from './commands/welcome';
 import { doc2specCommand } from './commands/doc2spec';
 // 全量层命令
 import { iterationFromGlobalCommand } from './commands/iteration-from-global';
 import { syncGlobalCommand } from './commands/sync-global';
 import { globalStatusCommand } from './commands/global-status';
-import { historyCommand } from './commands/history';
 // P0/P1/P2 新增命令
 import { impactCommand } from './commands/impact';
 import { baselineCommand } from './commands/baseline';
@@ -46,22 +45,17 @@ import { doneCommand } from './commands/done';
 // rename 命令
 import { renameCommand } from './commands/rename';
 // v4.0.0 新增命令
-import { indexUpdateCommand } from './commands/index-update';
 // v4.6.0 迁移命令
-import { migrateCommand } from './commands/migrate';
 // v4.7.0 体验增强
 import { completionCommand } from './commands/completion';
-import { backupCommand } from './commands/backup';
 // v4.8.0 高级功能
 
-import { currentCommand } from './commands/current';
 // v4.9.0 完善
 import { updateCommand } from './commands/update';
 // v5.3.0 新增
 import { diffCommand } from './commands/diff';
 import { traceCommand } from './commands/trace';
 import { mergeCheck, rollbackTask, updateArchitecture } from './commands/merge-check';
-import { opsCommand } from './commands/history';
 import { trackerCommand } from './commands/tracker';
 // v5.5.0 新增
 import { deleteCommand } from './commands/delete';
@@ -129,14 +123,6 @@ program
 // ================================================================
 // 👋 引导与体验
 // ================================================================
-program
-  .command('welcome')
-  .alias('wc')
-  .description('First-time setup guide (interactive)')
-  .option('--force', 'Force re-initialization')
-  .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
-  .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
-  .action(welcomeCommand);
 
 program
   .command('status-panel')
@@ -203,15 +189,6 @@ program
   .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
   .action(initCommand);
 
-program
-  .command('migrate')
-  .alias('mg')
-  .description('Migrate Shell v3.x config to CLI v4.x (v4.6)')
-  .option('--dry-run', 'Preview migration, no changes')
-  .option('--force', 'Skip confirmation')
-  .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
-  .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
-  .action(migrateCommand);
 
 // ================================================================
 // 📋 期次管理
@@ -352,7 +329,7 @@ program
 program
   .command('sync')
   .alias('sy')
-  .description('Reverse sync: detect code-spec differences and update')
+  .description('双向同步：代码↔Spec，--global 同步到全局层')
   .option('-t, --task <task>', 'Target task')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('--auto', 'Auto-apply sync without confirmation')
@@ -495,18 +472,6 @@ program
   .option('--files <files>', '批量: "a.docx=平台1,b.pdf=平台2"')
   .action(doc2specCommand);
 
-program
-  .command('sync-global')
-  .alias('sg')
-  .description('Bidirectional sync between iteration and global layer')
-  .option('-i, --iteration <iteration>', 'Target iteration')
-  .option('--direction <direction>', 'Sync direction: to_global, from_global', 'to_global')
-  .option('--auto', 'Auto-apply without confirmation')
-  .option('--dry-run', 'Preview changes without applying')
-  .option('--force', 'Skip preview and execute')
-  .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
-  .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
-  .action(syncGlobalCommand);
 
 // ================================================================
 // 📦 模式保存
@@ -581,7 +546,7 @@ program
 program
   .command('analyze')
   .alias('al')
-  .description('统一分析: 需求文档 + 源码目录 → 按范围(全局/期次/任务)生成分析报告')
+  .description('统一分析: 需求文档 + 源码目录 → 按范围(全局/期次/任务)生成分析报告，--audit 审计模式')
   .option('-I, --iteration <iteration>', '目标期次 (scope=iteration|task 时必填)')
   .option('-t, --task <task-id>', '任务 ID (--scope task 快捷方式)')
   .option('--scope <scope>', '输出范围: global(全局文档) | iteration(期次, 默认) | task(任务)')
@@ -636,12 +601,6 @@ program
 
 program
 
-program
-  .command('index-update')
-  .alias('iu')
-  .description('Scan requirements and rebuild GLOBAL/INDEX.md (v4.0)')
-  .option('--dry-run', 'Preview mode, no actual changes')
-  .action(indexUpdateCommand);
 
 program
 
@@ -682,23 +641,9 @@ program
   .description('Generate shell completion script (bash/zsh)')
   .action(completionCommand);
 
-program
-  .command('backup')
-  .alias('bk')
-  .description('Create backup of current state (v4.7)')
-  .option('--list', 'List existing backups')
-  .option('--restore <name>', 'Restore from backup')
-  .action(backupCommand);
 
 // v4.8.0 高级功能
 program
-program
-  .command('current')
-  .alias('cr')
-  .description('Show current branch task mapping (v4.8)')
-  .option('--commit', 'Generate commit message')
-  .option('--pr', 'Generate PR description')
-  .action(currentCommand);
 
 // v4.9.0 完善
 program
