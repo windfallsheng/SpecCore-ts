@@ -19,7 +19,7 @@ speccore analyze -I Q1                  # AI 分析需求 + 代码检查
 speccore iteration split -I Q1          # 拆分为独立 Task
 speccore plan -I Q1                     # 生成执行计划
 speccore execute -t Task-001            # AI 自动开发
-speccore done -t Task-001               # 收尾归档
+speccore done --task=Task-001               # 收尾归档
 ```
 
 ## 🎯 我想...
@@ -36,8 +36,8 @@ speccore done -t Task-001               # 收尾归档
 | **批量修复 Bug** | `speccore task new --batch-file=bugs.xlsx --type=bugfix` |
 | **定时自动执行** | `speccore schedule create --at "02:00" --all -I Q1` |
 | **AI 自动开发** | `speccore execute -t Task-001` / `--plan=plan-xxx` |
-| **创建 Pull Request** | `speccore pr -t Task-001 --interactive` |
-| **收尾归档** | `speccore done -t Task-001` / `done --all -I Q1 --interactive` |
+| **创建 Pull Request** | `speccore pr --task=Task-001 --interactive` |
+| **收尾归档** | `speccore done --task=Task-001` / `done --all -I Q1 --interactive` |
 | **查看到哪了** | `speccore status-panel` 或直接 `speccore` |
 | **自然语言说需求** | `speccore ask "帮我分析当前需求"` |
 

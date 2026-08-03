@@ -620,7 +620,7 @@ program
   .command('done')
   .alias('dn')
   .description('收尾归档：校验→同步→审计，--all 批量归档，--interactive 预览确认')
-  .option('-t, --task <task>', 'Target task (comma-separated for batch)')
+  .option('--task <task>', 'Target task (comma-separated for batch)')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('--all', 'Auto-archive all completed tasks in iteration')
   .option('--skip-validate', 'Skip validation step')
@@ -739,7 +739,7 @@ const scheduleCmd = program
 scheduleCmd
   .command('create')
   .description('创建定时调度任务')
-  .option('-t, --task <task>', '指定 Task ID')
+  .option('--task <task>', '指定 Task ID')
   .option('--all', '批量执行所有任务')
   .option('-i, --iteration <iteration>', '目标期次')
   .option('--at <datetime>', '执行时间: "YYYY-MM-DD HH:mm:ss"')

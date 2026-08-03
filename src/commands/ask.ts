@@ -174,11 +174,11 @@ function showMediumConfidenceResults(
       '2. speccore iteration split -i Q1       # 拆分为 Task',
     ],
     pr: [
-      '1. speccore pr -t Task-001              # 自动推送+创建PR',
-      '2. speccore pr -t Task-001 --interactive  # 分步确认',
+      '1. speccore pr --task=Task-001              # 自动推送+创建PR',
+      '2. speccore pr --task=Task-001 --interactive  # 分步确认',
     ],
     done: [
-      '1. speccore done -t Task-001            # 单个归档',
+      '1. speccore done --task=Task-001            # 单个归档',
       '2. speccore done --all -i Q1             # 批量归档',
     ],
     dev: [
@@ -298,8 +298,8 @@ function getNextStepsForIntent(intent: string, cmd: string, params: Record<strin
     'task new': [
       `speccore analyze -t ${task} -i ${iter} --auto          # AI 分析`,
       `speccore execute -t ${task} --force --verify           # 开发 + 验证`,
-      `speccore pr -t ${task}                                 # 提 PR`,
-      `speccore done -t ${task}                               # 完成归档`,
+      `speccore pr --task=${task}                                 # 提 PR`,
+      `speccore done --task=${task}                               # 完成归档`,
     ],
     execute: [
       `speccore pr -t ${task}                                 # 代码提 PR`,
