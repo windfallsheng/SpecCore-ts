@@ -1,75 +1,54 @@
 /**
- * welcome — SpecCore 身份卡片
- * 任何时候输入 speccore welcome，看到的是一张干净的项目名片
+ * welcome — SpecCore 名片
+ * 干净、漂亮、有内涵。任何时候看一眼就知道你是谁。
  */
 import { logger } from '../utils/logger';
 import { join } from 'path';
 import { pathExists, readdir } from 'fs-extra';
 import { getDefaultIteration } from '../core/context';
 
-export interface WelcomeOptions {
-  force?: boolean;
-}
+export interface WelcomeOptions { force?: boolean; }
 
 export async function welcomeCommand(_options: WelcomeOptions): Promise<void> {
   const version = require('../../package.json').version;
-  const isInit = await pathExists(join(process.cwd(), '.speccore'));
 
-  // ── 身份卡片 ──
+  // ── 名片 ──
   logger.info(`
-  ███████╗██████╗ ███████╗ ██████╗ ██████╗ ██████╗ ██████╗ ███████╗
-  ██╔════╝██╔══██╗██╔════╝██╔════╝██╔════╝██╔═══██╗██╔══██╗██╔════╝
-  ███████╗██████╔╝█████╗  ██║     ██║     ██║   ██║██████╔╝█████╗  
-  ╚════██║██╔═══╝ ██╔══╝  ██║     ██║     ██║   ██║██╔══██╗██╔══╝  
-  ███████║██║     ███████╗╚██████╗╚██████╗╚██████╔╝██║  ██║███████╗
-  ╚══════╝╚═╝     ╚══════╝ ╚═════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝
+  ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+  █▌   SpecCore  ·  Code by Spec, Not by Vibe   ▐▌
+  █▌                                             ▐▌
+  █▌   需求 ─→ 拆分 ─→ 计划 ─→ 执行 ─→ 交付      ▐▌
+  █▌   规范驱动  ·  人机协同  ·  可追溯闭环        ▐▌
+  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
 `);
-  logger.info(`  Code by Spec, Not by Vibe.   v${version}`);
-  logger.info('');
-  logger.info('  SpecCore 是一套面向 AI 原生团队的规范驱动工具链。');
-  logger.info('  它把需求 → 拆分 → 计划 → 执行 → 交付串成一个闭环。');
-  logger.info('');
 
-  // ── 项目状态 ──
+  // ── 状态行 ──
+  const isInit = await pathExists(join(process.cwd(), '.speccore'));
   if (!isInit) {
-    logger.info('  📦 当前项目: 未初始化');
-    logger.info('  👉 speccore init');
-    logger.info('');
+    logger.info(`  v${version}  ·  📦 未初始化  →  speccore init\n`);
     return;
   }
 
   const iteration = await getDefaultIteration('');
   if (!iteration) {
-    logger.info('  📦 项目已初始化  |  无活跃期次');
-    logger.info('  👉 speccore iteration create --name=Q1');
-    logger.info('');
+    logger.info(`  v${version}  ·  📦 已初始化  →  speccore iteration create --name=Q1\n`);
     return;
   }
 
-  const iterDir = `期次-${iteration}`;
   let taskCount = 0;
   try {
-    const entries = await readdir(iterDir, { withFileTypes: true });
+    const entries = await readdir(`期次-${iteration}`, { withFileTypes: true });
     taskCount = entries.filter(e => e.isDirectory() && e.name.startsWith('Task-')).length;
   } catch {}
 
-  logger.info(`  📦 项目已初始化  |  期次: ${iteration}  |  任务: ${taskCount} 个`);
-  logger.info('');
+  const reqDoc = join(`期次-${iteration}`, '00-需求文档', 'REQUIREMENT.md');
+  const analysis = join(`期次-${iteration}`, '00-需求文档', 'ANALYSIS.md');
+  let hint = `speccore plan -I ${iteration}`;
 
-  // ── 一步引导 ──
-  const reqDoc = join(iterDir, '00-需求文档', 'REQUIREMENT.md');
-  const analysis = join(iterDir, '00-需求文档', 'ANALYSIS.md');
+  if (!(await pathExists(reqDoc))) hint = `speccore doc2spec -f PRD.docx --iteration=${iteration}`;
+  else if (!(await pathExists(analysis))) hint = `speccore analyze -I ${iteration}`;
+  else if (taskCount === 0) hint = `speccore iteration split -I ${iteration}`;
 
-  if (!(await pathExists(reqDoc))) {
-    logger.info('  👉 speccore doc2spec -f PRD.docx --iteration=' + iteration);
-  } else if (!(await pathExists(analysis))) {
-    logger.info('  👉 speccore analyze -I ' + iteration);
-  } else if (taskCount === 0) {
-    logger.info('  👉 speccore iteration split -I ' + iteration);
-  } else {
-    logger.info('  📋 speccore plan -I ' + iteration + '        生成执行计划');
-    logger.info('  💻 speccore execute --all -I ' + iteration + '  开始开发');
-    logger.info('  📊 speccore status-panel              查看看板');
-  }
-  logger.info('');
+  logger.info(`  v${version}  ·  ${iteration}  ·  ${taskCount} 个 Task`);
+  logger.info(`  →  ${hint}\n`);
 }
