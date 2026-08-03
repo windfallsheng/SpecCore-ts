@@ -1,6 +1,6 @@
 # 会议预订系统 — SpecCore 示例项目
 
-> 基于 SpecCore v5.22.x | 51 命令 | 简洁模式 17 命令
+> 基于 SpecCore v5.22.x | 45 命令 | 简洁模式 17 命令
 
 完整演示：原始需求文档 → speccore init → doc2spec → analyze → split → 前后端一体化 Task
 
