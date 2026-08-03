@@ -1,15 +1,25 @@
 import { ensureDir, writeFile, pathExists, readFile } from 'fs-extra';
 import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
+import { createInterface } from 'readline';
 import { updateContext } from '../core/context';
 
 export interface InitOptions {
   mode?: string;
   force?: boolean;
+  interactive?: boolean;
 }
 
 export async function initCommand(options: InitOptions): Promise<void> {
-  const spinner = new Spinner('Initializing SpecCore');
+  // ── Interactive mode ──
+  if (options.interactive) {
+    await interactiveInitFlow(options);
+    return;
+  }
+  await doInit(process.cwd(), options, new Spinner('Initializing SpecCore'));
+}
+
+async function doInit(projectRoot: string, options: InitOptions, spinner: Spinner): Promise<void> {
   spinner.start();
 
   try {
@@ -81,9 +91,9 @@ export async function initCommand(options: InitOptions): Promise<void> {
     logger.info('Next steps:');
     logger.info('  1. Edit .speccore/CONSTITUTION.md to define your tech stack');
     logger.info('  2. Edit .speccore/PROJECT/TEAM.md to add team members');
-    logger.info('  3. Run: speccore import --project=<name> --path=<path> to import projects');
-    logger.info('  4. Run: speccore global-status to view global layer');
-    logger.info('  5. Run: speccore iteration-from-global to generate iteration from requirements');
+    logger.info('  3. Run: speccore analyze --scope global to analyze your codebase');
+    logger.info('  4. Run: speccore iteration create --name=Q1 to start an iteration');
+    logger.info('  5. Run: speccore doc2spec -f requirements.docx to import docs');
     logger.info('');
     logger.info('💡 WorkBuddy Integration: .workbuddy/ files created.');
     logger.info('   Reopen this project in WorkBuddy to enable Speccore commands.');
@@ -814,4 +824,23 @@ A project is a Speccore project if \`.speccore/\` exists in the project root. Ke
 | ifg | iteration-from-global |
 `
   );
+}
+
+// ── 交互式初始化 ──
+async function interactiveInitFlow(options: InitOptions): Promise<void> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const ask = (q: string): Promise<string> => new Promise(r => rl.question(`${q} `, a => r(a.trim())));
+
+  logger.info('\n🧭 SpecCore 初始化向导\n');
+  const modeAns = await ask('选择模式 [1]简洁(17个核心命令) [2]全量(51个命令) (默认:1): ');
+  if (modeAns === '2') options.mode = 'full';
+
+  logger.info(`\n📁 .speccore/ + .workbuddy/ 集成文件`);
+  logger.info(`   模式: ${options.mode === 'full' ? '全量 (51命令)' : '简洁 (17命令)'}`);
+
+  const confirm = await ask('\n确认初始化？ [y/n]: ');
+  rl.close();
+  if (confirm !== 'y') { logger.info('已取消'); return; }
+
+  await doInit(process.cwd(), options, new Spinner('Initializing SpecCore'));
 }

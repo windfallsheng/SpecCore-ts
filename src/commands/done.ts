@@ -14,6 +14,7 @@ export interface DoneOptions {
   iteration?: string;
   skipValidate?: boolean;
   skipSync?: boolean;
+  interactive?: boolean;
 }
 
 export async function doneCommand(options: DoneOptions): Promise<void> {
@@ -36,12 +37,52 @@ export async function doneCommand(options: DoneOptions): Promise<void> {
   }
 
   const taskId = tasks[0];
+
+  // ── Interactive mode ──
+  if (options.interactive) {
+    await interactiveDoneFlow(iterDir, taskId, iteration, options);
+    return;
+  }
+
+  await doDone(iterDir, taskId, iteration, options);
+}
+
+// ── 交互式收尾 ──
+async function interactiveDoneFlow(
+  iterDir: string, taskId: string, iteration: string, options: DoneOptions
+): Promise<void> {
+  const { createInterface } = await import('readline');
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const ask = (q: string): Promise<string> => new Promise(r => rl.question(`${q} `, a => r(a.trim())));
+
+  logger.info(`\n📋 即将收尾: ${taskId} (期次: ${iteration})\n`);
+  logger.info('   1. validate — 规范合规校验');
+  logger.info('   2. archive  — 任务归档');
+  logger.info('   3. sync     — 同步到全局层');
+  logger.info('   4. audit    — 生成审计摘要');
+
+  let { skipValidate, skipSync } = options;
+  const ans = await ask('\n跳过哪些步骤？ [0]全部 [1]校验 [2]同步 [3]都跳过: ');
+  if (ans === '1') skipValidate = true;
+  else if (ans === '2') skipSync = true;
+  else if (ans === '3') { skipValidate = true; skipSync = true; }
+
+  const confirm = await ask('确认执行？ [y/n]: ');
+  rl.close();
+  if (confirm !== 'y') { logger.info('已取消'); return; }
+
+  logger.info('');
+  await doDone(iterDir, taskId, iteration, { ...options, skipValidate, skipSync, interactive: false });
+}
+
+// ── 执行收尾 ──
+async function doDone(
+  iterDir: string, taskId: string, iteration: string, options: DoneOptions
+): Promise<void> {
   let spinner = new Spinner(`正在收尾 ${taskId}`);
   spinner.start();
-
   const steps: { ok: boolean; step: string }[] = [];
 
-  // ── Step 1: Validate ──
   if (!options.skipValidate) {
     spinner.stop(); 
     logger.info('   1/4 校验...');
@@ -57,7 +98,6 @@ export async function doneCommand(options: DoneOptions): Promise<void> {
     spinner.start();
   }
 
-  // ── Step 2: Archive ──
   spinner.stop();
   logger.info('   2/4 归档...');
   try {
@@ -71,7 +111,6 @@ export async function doneCommand(options: DoneOptions): Promise<void> {
   spinner = new Spinner(`正在收尾 ${taskId}`);
   spinner.start();
 
-  // ── Step 3: Sync to global ──
   if (!options.skipSync) {
     spinner.stop();
     logger.info('   3/4 同步到全局...');
@@ -87,31 +126,22 @@ export async function doneCommand(options: DoneOptions): Promise<void> {
     spinner.start();
   }
 
-  // ── Step 4: Audit summary ──
   spinner.stop();
   logger.info('   4/4 生成摘要...');
   try {
-    const auditOutput = execSync(`speccore audit --detail --iteration=${iteration}`, { stdio: 'pipe', encoding: 'utf-8' });
+    execSync(`speccore audit --detail --iteration=${iteration}`, { stdio: 'pipe', encoding: 'utf-8' });
     logger.info('     ✅ 审计完成');
-  } catch {
-    // audit might fail, that's OK
-  }
+  } catch { /* ok */ }
 
-  // ── Summary ──
   const okCount = steps.filter(s => s.ok).length;
   spinner.stop(`✅ ${taskId} 收尾完成 (${okCount}/${steps.length})`);
 
-  // ── 自进化：检测模式并沉淀规则 ──
   if (okCount === steps.length) {
     try { await evolveRules(iterDir, taskId, iteration); } catch {}
   }
 
-  
-  // Final question review
   const qs = await extractQuestions(iterDir);
-  if (qs.length > 0) {
-    showQuestionChecklist(qs, '收尾前最终审查');
-  }
+  if (qs.length > 0) showQuestionChecklist(qs, '收尾前最终审查');
 
   logger.info('');
   showNextSteps('archive');
@@ -125,19 +155,15 @@ async function scanForTask(iterDir: string, taskId: string): Promise<string[]> {
     .map((e: any) => e.name);
 }
 
-// ── 自进化规则检测 ──
 async function evolveRules(iterDir: string, taskId: string, iteration: string): Promise<void> {
   const { join } = require('path');
   const { readFile, writeFile, pathExists } = require('fs-extra');
-  
   const taskDir = join(iterDir, taskId);
   const patterns: string[] = [];
 
-  // 1. 扫描 TASK.md 中的 Tech stack 标记
   const taskPath = join(taskDir, 'backend', 'TASK.md');
   if (await pathExists(taskPath)) {
     const content = await readFile(taskPath, 'utf-8');
-    
     if (content.includes('ExceptionHandler') || content.includes('@ControllerAdvice'))
       patterns.push('| RULES/EXCEPTION_HANDLING.md | 异常处理 | 统一异常处理模式 |');
     if (content.includes('JWT') || content.includes('AuthGuard') || content.includes('Passport'))
@@ -148,7 +174,6 @@ async function evolveRules(iterDir: string, taskId: string, iteration: string): 
       patterns.push('| RULES/CACHE.md | 缓存策略 | Redis/本地缓存规范 |');
   }
 
-  // 2. 扫描 SPEC.md / REQ.md 中的 API 模式
   const reqPath = join(taskDir, 'backend', 'REQ.md');
   if (await pathExists(reqPath)) {
     const content = await readFile(reqPath, 'utf-8');
@@ -158,7 +183,6 @@ async function evolveRules(iterDir: string, taskId: string, iteration: string): 
 
   if (patterns.length === 0) return;
 
-  // 3. 追加到 CAPABILITIES.md
   const capPath = join(process.cwd(), '.speccore', 'CAPABILITIES.md');
   if (!(await pathExists(capPath))) return;
 

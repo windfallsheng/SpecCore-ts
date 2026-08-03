@@ -68,7 +68,9 @@ speccore done -t Task-001              # ⑨ 完成任务
 | `split --interactive` | 预览 Task 列表 → 逐一确认/取消 |
 | `plan --interactive` | 预览调��方案 → 确认/取消 |
 | `change --interactive` | 预览影响范围 → 确认 → 应用 |
-| `execute --interactive` | 分步预览变更 → 选择文件 → 确认提交 |
+| `pr --interactive` | 选文件 → commit → push → 创建 PR |
+| `done --interactive` | 预览步骤 → 跳过选项 → 确认执行 |
+| `init --interactive` | 选模式 → 确认 → 初始化 |
 
 ## 智能入口
 
