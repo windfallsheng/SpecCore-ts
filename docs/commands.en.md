@@ -16,8 +16,8 @@ Same command, different syntax depending on context. Full classification by cate
 | Import | `speccore doc2spec -f PRD.docx -p backend` | `/spec-doc2spec` | CLI uses `-f` for file path |
 | Split | `speccore iteration split -i Q1` | `/spec-split Q1` | CLI uses `-i` for iteration |
 | Execute | `speccore execute -t Task-001 --force` | `/spec-execute Task-001` | CLI uses `-t` for task |
-| PR | `speccore pr -t Task-001` | `/spec-pr Task-001` | — |
-| Done | `speccore done -t Task-001` | `/spec-done Task-001` | — |
+| PR | `speccore pr --task=Task-001` | `/spec-pr Task-001` | — |
+| Done | `speccore done --task=Task-001` | `/spec-done Task-001` | — |
 | Status | `speccore status-panel` | `/spec-status-panel` | — |
 | Change | `speccore change "desc" -t Task-001` | `/spec-change` or natural language | — |
 | Bugfix | `speccore task new -n "name" -d "desc" --type=bugfix` | `/spec-bugfix` or natural language | — |
@@ -297,7 +297,7 @@ speccore delete --iteration=2026-07-Sprint --force  # Delete iteration
 
 ---
 
-## 🆕 v5.20.0 New Commands
+## 🆕 v5.22.x
 
 | Command | Alias | Description | Options |
 | :--- | :--- | :--- | :--- |

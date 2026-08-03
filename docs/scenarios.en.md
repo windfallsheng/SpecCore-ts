@@ -659,7 +659,7 @@ speccore doc2spec --files \
   -i Q3
 
 # Mix Word + Markdown
-speccore doc2spec --files "backend.docx=backend-admin,web.md=web" -i Q3
+speccore doc2spec --files "backend.docx=backend-admin,web.md=web" --iter=Q3
 ```
 
 ### Generated File Structure
