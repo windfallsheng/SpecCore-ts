@@ -1213,6 +1213,40 @@ function setTheme(t){document.documentElement.setAttribute('data-theme',t);local
 document.querySelectorAll('.theme-sw button').forEach((b,i)=>{b.classList.toggle('active',['ocean','cyber','light','mono','github','synth','amber','sakura','forest'][i]===(localStorage.getItem('speccore-theme')||'ocean'))});
 </script>
 
+  \${data.health ? \`
+  <div class="card" style="margin-top:24px">
+    <div class="card-title">🏥 健康度评分</div>
+    <div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:12px">
+      <div style="flex:1;min-width:100px;text-align:center;padding:16px;background:var(--surface);border-radius:8px">
+        <div style="font-size:28px;font-weight:700;color:var(--primary)">\${data.health.donePct}%</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">完成率</div>
+      </div>
+      <div style="flex:1;min-width:100px;text-align:center;padding:16px;background:var(--surface);border-radius:8px">
+        <div style="font-size:28px;font-weight:700;color:#4caf50">\${data.health.testPct}%</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">测试覆盖</div>
+      </div>
+      <div style="flex:1;min-width:100px;text-align:center;padding:16px;background:var(--surface);border-radius:8px">
+        <div style="font-size:28px;font-weight:700;color:#ff9800">\${data.health.reviewPct}%</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">审查覆盖</div>
+      </div>
+      <div style="flex:1;min-width:100px;text-align:center;padding:16px;background:var(--surface);border-radius:8px;border:2px solid var(--primary)">
+        <div style="font-size:32px;font-weight:900">\${data.health.grade}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">\${data.health.score}/100</div>
+      </div>
+    </div>
+  </div>
+  \` : \'\'}
+
+  \${data.lifecycle ? \`
+  <div class="card" style="margin-top:24px">
+    <div class="card-title">📋 任务生命周期</div>
+    <table style="margin-top:12px;width:100%">
+      <thead><tr><th>Task</th><th style="width:100px">状态</th></tr></thead>
+      <tbody>\${data.lifecycle.tasks.map((t:any) => \\\`<tr><td class="code">\${t.id}</td><td><span class="badge badge-\${t.status}">\${t.status}</span></td></tr>\\\`).join('')}</tbody>
+    </table>
+  </div>
+  \` : \'\'}
+
 </body></html>`;}
 
 
