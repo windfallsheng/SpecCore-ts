@@ -38,7 +38,7 @@ TECH.md design             .task-type        type
 *.md    comments           API_CONTRACT.yaml API
                            .json  data files
 ⚠️ Caution (sync after)
-GLOBAL/REQUIREMENT.md → speccore sync-global
+GLOBAL/REQUIREMENT.md → speccore sync --global
 ```
 
 ## 🏗️ Workspace

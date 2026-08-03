@@ -165,13 +165,13 @@ speccore schedule daemon status                                             # Ch
 | :--- | :--- | :--- | :--- |
 | `speccore change` | `cg` | Requirement change propagation | `--req <id>` `--desc <text>` `--task <id>` |
 | `speccore sync` | `sy` | Code ↔ Spec bidirectional sync | `--task <id>` `--iteration <name>` `--dry-run` `--auto` |
-| `speccore sync-global` | `sg` | Iteration ↔ Global layer sync | `--iteration <name>` |
+| `speccore sync --global` | `sg` | Iteration ↔ Global layer sync | `--iteration <name>` |
 
 ```bash
 speccore change --req=REQ-001 --desc="Add multi-device login"
 speccore sync --dry-run                              # Preview @spec references
 speccore sync                                         # Scan code → update TASK.md
-speccore sync-global --iteration=2026-07-Meeting
+speccore sync --global --iteration=2026-07-Meeting
 ```
 
 ---
@@ -335,7 +335,7 @@ speccore trace --full
 | `al` | analyze | `pl` | plan |
 | `tn` | task new | `cg` | change |
 | `padd` | platform-add | `sy` | sync |
-| `ctx` | context | `sg` | sync-global |
+| `ctx` | context | `sg` | sync --global |
 | `iu` | index-update | `if` | impact |
 | `it cr` | iteration create | `bl` | baseline |
 | `it sp` | iteration split | `db` | status-panel |
@@ -376,7 +376,7 @@ speccore trace --full
 | 75 | archive | archive | `speccore done` |
 | 70 | progress | progress | `speccore status-panel` |
 | 70 | sync | sync, align | `speccore sync` |
-| 70 | sync_global | sync global | `speccore sync-global` |
+| 70 | sync_global | sync to global layer | `speccore sync --global` |
 | 68 | status | status | `speccore status` |
 | 65 | health | health, quality | `speccore health` |
 | 65 | handover | handover, delivery | `speccore handover` |

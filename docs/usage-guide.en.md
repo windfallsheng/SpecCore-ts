@@ -18,8 +18,8 @@
 | `local/execution-state.json` | execute generates | ❌ No | Batch resume depends on it |
 | `.git-mapping.json` | execute/current writes | ❌ No | Branch mapping depends on it |
 | `GLOBAL/INDEX.md` | index-update builds | ❌ Use `index-update` | Manual edits overwritten |
-| `GLOBAL/REQUIREMENT.md` | Manual + sync-global | ✅ Yes | Run `sync-global` after |
-| `GLOBAL/PROJECTS/<name>/` | import fills | ✅ Edit requirements | Run `sync-global` after |
+| `GLOBAL/REQUIREMENT.md` | Manual + sync | ✅ Yes | Run `sync --global` after |
+| `GLOBAL/PROJECTS/<name>/` | import fills | ✅ Edit requirements | Run `sync --global` after |
 | `GLOBAL/BASELINES/` | baseline creates | ❌ No | Use baseline commands |
 
 ### Iteration Layer (`Sprint-xxx/`, created by iteration commands)
@@ -77,7 +77,7 @@ speccore update -t T-001 --status=completed
 
 | File | Correct Workflow |
 | :--- | :--- |
-| `GLOBAL/REQUIREMENT.md` | Edit → `speccore sync-global` |
+| `GLOBAL/REQUIREMENT.md` | Edit → `speccore sync --global` |
 | `API_CONTRACT.yaml` | Edit → `speccore validate` |
 | `config/platforms.yaml` | Use `speccore config --set` or `platform-add` |
 
@@ -91,7 +91,7 @@ speccore update -t T-001 --status=completed
 | Mark task complete | `speccore update -t T-001 --status=completed` | Edit PROJECT_GRAPH.md |
 | Add API endpoint | Edit `API_CONTRACT.yaml` → `speccore validate` | Commit without validation |
 | Change assignee | `speccore update -t T-001 --assignee=Zhang` | Edit PROJECT_GRAPH.md |
-| Add global req | Edit `GLOBAL/REQUIREMENT.md` → `speccore sync-global` | Edit without syncing |
+| Add global req | Edit `GLOBAL/REQUIREMENT.md` → `speccore sync --global` | Edit without syncing |
 | Delete task | `speccore delete -t T-001` | rm -rf |
 | Rename | `speccore rename --target=old --new-name=new` | mv + edit all refs |
 

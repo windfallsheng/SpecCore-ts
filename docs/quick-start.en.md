@@ -30,8 +30,6 @@ speccore --version
 Try SpecCore without installing:
 
 ```bash
-# Run demo (5 min)
-
 # Init current directory
 npx speccore init
 
