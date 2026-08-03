@@ -49,20 +49,15 @@ speccore done -t Task-001               # 收尾归档
 
 ## ⏰ 调度执行
 
-**夜间队列** — 标记后手动触发，不指定时间：
+指定时间自动执行：
 
 ```bash
-speccore task new -n "数据迁移" --schedule=night          # 标记为 queue
-speccore task new --batch-file=bugs.xlsx --type=bugfix --schedule=night
-speccore execute --all --scheduled                         # 手动触发（无需守护进程）
+speccore schedule create --at "2026-08-10 02:00:00" --all -I Q1       # 指定时间执行全部
+speccore schedule create --at "2026-08-10 21:00:00" -t Task-001         # 指定时间执行单个
+speccore schedule daemon start                                           # 启动守护进程
 ```
 
-**精确时间** — 指定时间，守护进程自动执行：
-
-```bash
-speccore schedule create --at "2026-08-10 02:00:00" --all -I Q1
-speccore schedule daemon start                             # 启动守护进程
-```
+> `--schedule=night` 是另一种轻量方式：标记任务为 queue，之后 `execute --all --scheduled` 手动批量触发，不设具体时间。
 
 ## 📚 了解更多
 
