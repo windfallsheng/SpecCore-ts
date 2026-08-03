@@ -154,7 +154,7 @@ program
 program
   .command('init')
   .alias('in')
-  .description('初始化 SpecCore（17命令/51全量，--interactive 引导式）')
+  .description('初始化 SpecCore（17命令/44全量，--interactive 引导式）')
   .option('--mode <mode>', 'Initialization mode: fresh or migration', 'fresh')
   .option('--full', 'Full mode: all 45 commands (default: simple)')
   .option('--force', 'Force overwrite existing configuration')
@@ -523,7 +523,7 @@ program
   .option('-o, --output <file>', '输出文件名 (覆盖默认)')
   .option('--depth <depth>', '分析深度: quick | normal(默认) | deep')
   .option('--auto', '非交互: 直接生成报告 (默认)')
-  .option('--ask', '交互: AI 提问 → 回答 → 优化')
+  .option('--interactive', '交互: AI 提问 → 回答 → 优化')
   .action(analyzeCommand);
 
 program
@@ -784,7 +784,7 @@ program.addHelpText('beforeAll', `
 │  📦 task new      ⚡ 创建任务（支持批量/调度）                    │
 ├──────────────────────────────────────────────────────────────┤
 │  🤝 协作决策                                                  │
-│  🔍 analyze       🧠 需求分析+代码审查（--ask）                  │
+│  🔍 analyze       🧠 需求分析+代码审查（--interactive）             │
 │  📊 split         🧠 拆分为Task（--interactive）               │
 │  📋 plan          🧠 执行计划（--interactive）                  │
 ├──────────────────────────────────────────────────────────────┤

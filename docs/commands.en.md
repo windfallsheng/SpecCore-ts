@@ -214,7 +214,7 @@ speccore analyze --scope global --req docs/req.md         # Cross-iteration req 
 speccore analyze -I Q1                                    # Iteration req analysis (default)
 speccore analyze -I Q1 --src backend/src                  # Combined req+code
 speccore analyze --scope task -t Task-01 -I Q1            # Task analysis + doc enrichment
-speccore analyze --ask -I Q1                              # Interactive Q&A mode
+speccore analyze --interactive -I Q1                              # Interactive Q&A mode
 speccore analyze --src backend,frontend --req docs/a.md,docs/b.md --scope global
 
 speccore impact --req=REQ-001

@@ -47,7 +47,7 @@ speccore done --task=Task-001               # 收尾归档
 
 6 个命令支持 `--interactive` 人机协作，预览变更后才确认执行：
 
-| `🧠 analyze --ask` | `🧠 split --interactive` | `🧠 plan --interactive` |
+| `🧠 analyze --interactive` | `🧠 split --interactive` | `🧠 plan --interactive` |
 |:---|:---|:---|
 | `🧠 pr --interactive` | `🧠 change --interactive` | `🧠 done --interactive` |
 
