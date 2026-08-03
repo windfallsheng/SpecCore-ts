@@ -842,27 +842,39 @@ scheduleCmd
 // Parse arguments
 // ── 帮助分层：核心命令前置 ──
 program.addHelpText('beforeAll', `
-┌───────────────────────────────────────────────────┐
-│  🔵 核心 9 步（完整闭环）                            │
-│  init → iteration create → doc2spec               │
-│  → analyze → split → plan → execute → pr → done  │
-├───────────────────────────────────────────────────┤
-│  🚀 speccore init             初始化项目            │
-│  📅 speccore iteration create  新建期次             │
-│  📝 speccore doc2spec         导入需求文档           │
-│  🔍 speccore analyze          需求分析+代码审查        │
-│  📦 speccore split            拆分为独立Task          │
-│  📋 speccore plan             生成执行计划            │
-│  💻 speccore execute          执行开发               │
-│  🔀 speccore pr               创建PR                │
-│  ✅ speccore done             完成任务               │
-├───────────────────────────────────────────────────┤
-│  💡 speccore（无参数）  → 自适应引导面板               │
-│  💬 speccore ask \"...\" → 自然语言入口              │
-│  📊 speccore status-panel → 可视化看板              │
-│  🤖 speccore dev → 智能检测+级联执行                  │
-│  🔍 speccore analyze --depth deep --scope global → 全局代码健康  │
-└───────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│  🧠 = 协作式（支持 --interactive）  ⚡ = 单次执行              │
+│  init → iteration create → doc2spec → analyze → split       │
+│  → plan → execute → pr → done                               │
+├──────────────────────────────────────────────────────────────┤
+│  📥 资产接入                                                  │
+│  🚀 init          ⚡ 初始化项目                                │
+│  📅 iteration     ⚡ 期次管理                                  │
+│  📝 doc2spec      ⚡ 导入需求文档                               │
+│  📦 task new      ⚡ 创建任务（支持批量/调度）                    │
+├──────────────────────────────────────────────────────────────┤
+│  🤝 协作决策                                                  │
+│  🔍 analyze       🧠 需求分析+代码审查（--ask）                  │
+│  📊 split         🧠 拆分为Task（--interactive）               │
+│  📋 plan          🧠 执行计划（--interactive）                  │
+├──────────────────────────────────────────────────────────────┤
+│  🚀 执行交付                                                  │
+│  💻 execute       ⚡ 自动排序+分批执行                          │
+│  🔀 pr            🧠 创建PR（--interactive）                   │
+│  ✅ done          🧠 收尾归档（--interactive）                  │
+│  🔄 change        🧠 需求变更（--interactive）                  │
+├──────────────────────────────────────────────────────────────┤
+│  📊 治理 + 调度                                               │
+│  ✅ validate      ⚡ 合规校验                                  │
+│  ⏰ schedule      ⚡ 定时调度（create/list/daemon）              │
+│  🗑  rename       ⚡ 重命名 Task/期次                           │
+├──────────────────────────────────────────────────────────────┤
+│  💡 智能入口                                                  │
+│  speccore             自适应面板（检测阶段 → 提示下一步）          │
+│  speccore ask "..."   自然语言意图识别                          │
+|  speccore dev         智能级联：自动检测并执行下一步               │
+│  speccore status-panel  可视化看板                              │
+└──────────────────────────────────────────────────────────────┘
 `);
 
 program.addHelpText('afterAll', `
