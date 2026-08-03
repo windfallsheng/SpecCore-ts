@@ -9,6 +9,7 @@ import { loadSpecRules, generateImports, SpecRules, loadTechStack } from '../cor
 import { logOperation } from '../core/operation-log';
 import { showNextSteps } from '../core/next-steps';
 import { extractQuestions, showQuestionChecklist } from '../core/question-checklist';
+import { savePlan, markPlanExecuted, ExecutionPlan } from '../core/plan-store';
 import {
   initExecutionState,
   loadExecutionState,
@@ -89,6 +90,36 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
     }
 
     const sortedTasks = topologicalSort(tasks);
+
+    // 检测并警告循环依赖
+    const cycles = detectCycles(sortedTasks);
+    if (cycles.length > 0) {
+      logger.warn(`⚠️ 检测到 ${cycles.length} 处循环依赖: ${cycles.join(', ')}`);
+      logger.warn('   循环中的任务将按任意顺序执行，请手动检查依赖关系。');
+    }
+
+    // 生成并保存执行计划
+    const planName = options.task 
+      ? `Execute-${options.task}`
+      : `Execute-${iteration}-${new Date().toISOString().slice(0, 16).replace('T', ' ')}`;
+    const planTasks = sortedTasks.map(t => t.id);
+    if (planTasks.length > 0) {
+      await savePlan({
+        name: planName,
+        iteration,
+        tasks: planTasks,
+        batchSize: parseInt(options.batchSize || '3', 10),
+        source: 'auto',
+        filters: {
+          assignee: options.assignee,
+          type: options.type,
+          priority: options.priority,
+          platform: options.platform,
+          backend: options.backend,
+          frontend: options.frontend,
+        },
+      });
+    }
 
     // === Interactive mode ===
     if (options.interactive) {
@@ -492,21 +523,26 @@ function createBar(pct: number, width: number): string {
 // ============================================================
 // Execution preview
 // ============================================================
-function printExecutionPreview(tasks: TaskState[], iteration: string): void {
+function printExecutionPreview(tasks: TaskState[], iteration: string, batchSize = 3): void {
   logger.info('');
-  logger.info('📋 Execution Preview');
+  logger.info('📋 执行计划');
   logger.info('');
-  logger.info(`Iteration: ${iteration}`);
-  logger.info(`Tasks: ${tasks.length}`);
+  logger.info(`期次: ${iteration} | 任务: ${tasks.length} | 分批: ${batchSize}/批`);
   logger.info('');
 
-  for (let i = 0; i < tasks.length; i++) {
-    const t = tasks[i];
-    const icon = i === 0 ? '🔄' : '⏳';
-    const pri = t.priority === 'high' ? '[HIGH]' : t.priority === 'medium' ? '[MED]' : '[LOW]';
-    logger.info(`  ${icon} ${t.id} ${pri} - ${t.name || 'unnamed'}`);
+  for (let i = 0; i < tasks.length; i += batchSize) {
+    const batch = tasks.slice(i, i + batchSize);
+    const batchNum = Math.floor(i / batchSize) + 1;
+    logger.info(`第${batchNum}批:`);
+    for (const t of batch) {
+      const deps = t.dependencies?.length 
+        ? ` ← 依赖: ${t.dependencies.join(', ')}` 
+        : '';
+      const pri = t.priority === 'high' ? '🔴' : t.priority === 'medium' ? '🟡' : '🟢';
+      logger.info(`  ${pri} ${t.id}  ${t.name || ''}${deps}`);
+    }
+    logger.info('');
   }
-  logger.info('');
 }
 
 // ============================================================
@@ -1079,4 +1115,21 @@ async function executionVerifyLoop(
     }
     logger.info('');
   }
+}
+
+/** 检测依赖循环 */
+function detectCycles(tasks: TaskState[]): string[] {
+  const cycles: string[] = [];
+  const visited = new Set<string>();
+  
+  for (const task of tasks) {
+    for (const dep of task.dependencies || []) {
+      const depTask = tasks.find(t => t.id === dep);
+      if (depTask?.dependencies?.includes(task.id)) {
+        cycles.push(`${task.id}↔${dep}`);
+        visited.add(task.id);
+      }
+    }
+  }
+  return cycles;
 }
