@@ -26,6 +26,7 @@ export interface ScheduleCreateOptions {
   iteration?: string;
   at: string;
   name?: string;
+  plan?: string;
   batchSize?: string;
   parallel?: string;
   assignee?: string;
