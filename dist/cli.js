@@ -192,10 +192,10 @@ commander_1.program;
 commander_1.program
     .command('dev')
     .alias('d')
-    .description('智能级联：自动检测阶段 → 引导/自动执行下一步')
+    .description('智能级联：--auto 全自动流水线，--from/--to 指定起止阶段')
     .option('-i, --iteration <iteration>', 'Target iteration')
-    .option('--force', 'Auto-execute the next step without confirmation')
-    .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
+    .option('--force', 'Auto-execute without confirmation')
+    .option('--auto', '全自动流水线：init→doc2spec→analyze→split→plan→execute→pr→done')
     .option('--from <phase>', '从指定阶段开始（init/doc2spec/analyze/split/plan/execute/pr/done）')
     .option('--to <phase>', '到指定阶段结束（init/doc2spec/analyze/split/plan/execute/pr/done）')
     .action(dev_1.devCommand);
@@ -206,7 +206,7 @@ commander_1.program;
 commander_1.program
     .command('init')
     .alias('in')
-    .description('初始化 SpecCore（默认简洁模式，--full 开启全量）')
+    .description('初始化 SpecCore（17命令/51全量，--interactive 引导式）')
     .option('--mode <mode>', 'Initialization mode: fresh or migration', 'fresh')
     .option('--full', 'Full mode: all 51 commands (default: simple)')
     .option('--force', 'Force overwrite existing configuration')
@@ -234,7 +234,7 @@ iterationCmd;
 iterationCmd
     .command('split')
     .alias('sp')
-    .description('Split requirements into tasks')
+    .description('拆分需求为独立Task：预览→逐一确认/一键创建')
     .option('-f, --file <file>', 'Requirement file path', 'REQUIREMENT.md')
     .option('-i, --iteration <iteration>', 'Target iteration')
     .option('--sections <sections>', 'Specific sections to split')
@@ -262,7 +262,7 @@ commander_1.program;
 commander_1.program
     .command('pr')
     .alias('mr')
-    .description('Create Pull Request with task summary')
+    .description('创建 Pull Request：提交预览+文件选择+交互确认')
     .option('-t, --task <task>', 'Target task (auto-detect from branch if omitted)')
     .option('-i, --iteration <iteration>', 'Target iteration')
     .option('--base <branch>', 'Base branch', 'main')
@@ -273,7 +273,7 @@ commander_1.program
 commander_1.program
     .command('plan')
     .alias('pl')
-    .description('Generate execution plan based on task dependencies')
+    .description('生成执行计划+管理历史：创建/交互/列表/详情/取消/删除')
     .option('-i, --iteration <iteration>', 'Target iteration')
     .option('-t, --team <count>', 'Team member count', '3')
     .option('-a, --assign <members>', 'Assign to specific members (comma-separated)')
@@ -290,7 +290,7 @@ commander_1.program
 commander_1.program
     .command('execute')
     .alias('ex')
-    .description('Execute tasks based on filters')
+    .description('执行开发任务：依赖排序+分批+交互引导+计划联动')
     .option('--all', 'Execute all pending tasks')
     .option('-a, --assignee <assignee>', 'Filter by assignee')
     .option('-t, --task <task>', 'Execute specific task')
@@ -624,7 +624,7 @@ commander_1.program
 commander_1.program
     .command('done')
     .alias('dn')
-    .description('Complete a task: validate → archive → sync-global')
+    .description('收尾归档：校验→同步→审计，--interactive 预览后可跳过步骤')
     .option('-t, --task <task>', 'Target task')
     .option('-i, --iteration <iteration>', 'Target iteration')
     .option('--skip-validate', 'Skip validation step')
@@ -738,7 +738,7 @@ commander_1.program
 const scheduleCmd = commander_1.program
     .command('schedule')
     .alias('sc')
-    .description('定时调度任务管理');
+    .description('定时调度：指定时间自动执行+筛选条件+守护进程');
 scheduleCmd
     .command('create')
     .description('创建定时调度任务')
@@ -760,7 +760,7 @@ scheduleCmd
     .action(schedule_1.scheduleCreateCommand);
 scheduleCmd
     .command('list')
-    .description('查看调度任务列表')
+    .description('查看调度队列（含守护进程状态）')
     .option('--status <status>', '按状态筛选: pending|running|completed|failed|cancelled')
     .action(schedule_1.scheduleListCommand);
 scheduleCmd
