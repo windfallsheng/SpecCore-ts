@@ -89,6 +89,7 @@ const delete_1 = require("./commands/delete");
 const search_1 = require("./commands/search");
 const watch_1 = require("./commands/watch");
 // v5.21.0 任务调度
+const help_panel_1 = require("./core/help-panel");
 const schedule_1 = require("./commands/schedule");
 const i18n_1 = require("./i18n");
 commander_1.program
@@ -808,5 +809,4 @@ catch (err) {
         process.exit(1);
     }
 }
-const help_panel_1 = require("./core/help-panel");
 //# sourceMappingURL=cli.js.map
