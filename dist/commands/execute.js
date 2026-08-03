@@ -44,6 +44,7 @@ const spec_rules_1 = require("../core/spec-rules");
 const operation_log_1 = require("../core/operation-log");
 const next_steps_1 = require("../core/next-steps");
 const question_checklist_1 = require("../core/question-checklist");
+const plan_store_1 = require("../core/plan-store");
 const execution_state_1 = require("../core/execution-state");
 const git_integration_1 = require("../core/git-integration");
 async function executeCommand(options) {
@@ -94,6 +95,34 @@ async function executeCommand(options) {
             return;
         }
         const sortedTasks = (0, state_1.topologicalSort)(tasks);
+        // 检测并警告循环依赖
+        const cycles = detectCycles(sortedTasks);
+        if (cycles.length > 0) {
+            logger_1.logger.warn(`⚠️ 检测到 ${cycles.length} 处循环依赖: ${cycles.join(', ')}`);
+            logger_1.logger.warn('   循环中的任务将按任意顺序执行，请手动检查依赖关系。');
+        }
+        // 生成并保存执行计划
+        const planName = options.task
+            ? `Execute-${options.task}`
+            : `Execute-${iteration}-${new Date().toISOString().slice(0, 16).replace('T', ' ')}`;
+        const planTasks = sortedTasks.map(t => t.id);
+        if (planTasks.length > 0) {
+            await (0, plan_store_1.savePlan)({
+                name: planName,
+                iteration,
+                tasks: planTasks,
+                batchSize: parseInt(options.batchSize || '3', 10),
+                source: 'auto',
+                filters: {
+                    assignee: options.assignee,
+                    type: options.type,
+                    priority: options.priority,
+                    platform: options.platform,
+                    backend: options.backend,
+                    frontend: options.frontend,
+                },
+            });
+        }
         // === Interactive mode ===
         if (options.interactive) {
             await interactiveSelect(sortedTasks, iteration, options);
@@ -442,20 +471,25 @@ function createBar(pct, width) {
 // ============================================================
 // Execution preview
 // ============================================================
-function printExecutionPreview(tasks, iteration) {
+function printExecutionPreview(tasks, iteration, batchSize = 3) {
     logger_1.logger.info('');
-    logger_1.logger.info('📋 Execution Preview');
+    logger_1.logger.info('📋 执行计划');
     logger_1.logger.info('');
-    logger_1.logger.info(`Iteration: ${iteration}`);
-    logger_1.logger.info(`Tasks: ${tasks.length}`);
+    logger_1.logger.info(`期次: ${iteration} | 任务: ${tasks.length} | 分批: ${batchSize}/批`);
     logger_1.logger.info('');
-    for (let i = 0; i < tasks.length; i++) {
-        const t = tasks[i];
-        const icon = i === 0 ? '🔄' : '⏳';
-        const pri = t.priority === 'high' ? '[HIGH]' : t.priority === 'medium' ? '[MED]' : '[LOW]';
-        logger_1.logger.info(`  ${icon} ${t.id} ${pri} - ${t.name || 'unnamed'}`);
+    for (let i = 0; i < tasks.length; i += batchSize) {
+        const batch = tasks.slice(i, i + batchSize);
+        const batchNum = Math.floor(i / batchSize) + 1;
+        logger_1.logger.info(`第${batchNum}批:`);
+        for (const t of batch) {
+            const deps = t.dependencies?.length
+                ? ` ← 依赖: ${t.dependencies.join(', ')}`
+                : '';
+            const pri = t.priority === 'high' ? '🔴' : t.priority === 'medium' ? '🟡' : '🟢';
+            logger_1.logger.info(`  ${pri} ${t.id}  ${t.name || ''}${deps}`);
+        }
+        logger_1.logger.info('');
     }
-    logger_1.logger.info('');
 }
 // ============================================================
 // Task execution (transaction protected)
@@ -986,5 +1020,20 @@ async function executionVerifyLoop(tasks, iteration, options) {
         }
         logger_1.logger.info('');
     }
+}
+/** 检测依赖循环 */
+function detectCycles(tasks) {
+    const cycles = [];
+    const visited = new Set();
+    for (const task of tasks) {
+        for (const dep of task.dependencies || []) {
+            const depTask = tasks.find(t => t.id === dep);
+            if (depTask?.dependencies?.includes(task.id)) {
+                cycles.push(`${task.id}↔${dep}`);
+                visited.add(task.id);
+            }
+        }
+    }
+    return cycles;
 }
 //# sourceMappingURL=execute.js.map
