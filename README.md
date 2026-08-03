@@ -49,15 +49,16 @@ speccore done -t Task-001               # 收尾归档
 
 ## ⏰ 调度执行
 
-指定时间自动执行：
+指定时间自动执行。`--all` 会按依赖排序、分批执行当期次所有任务：
 
 ```bash
-speccore schedule create --at "2026-08-10 02:00:00" --all -I Q1       # 指定时间执行全部
-speccore schedule create --at "2026-08-10 21:00:00" -t Task-001         # 指定时间执行单个
+speccore schedule create --at "2026-08-10 02:00:00" --all -I Q1       # 全部任务，自动排序
+speccore schedule create --at "2026-08-10 21:00:00" -t Task-001         # 单个任务
+speccore schedule create --at "02:00" --all -I Q1 -a 张三 --type=bugfix  # 筛选后执行
 speccore schedule daemon start                                           # 启动守护进程
 ```
 
-> `--schedule=night` 是另一种轻量方式：标记任务为 queue，之后 `execute --all --scheduled` 手动批量触发，不设具体时间。
+> 不需要手动 `plan`——`execute` 自动分析 Task 依赖，按拓扑顺序分批执行。`--batch-size=3` 控制每批数量。
 
 ## 📚 了解更多
 
