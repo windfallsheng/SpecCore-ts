@@ -124,7 +124,6 @@ Spec 作为独立仓库管理，代码工程平级部署。权限清晰、版本
 
 5. 归档沉淀
    └→ speccore done --all
-   └→ speccore backup（状态备份）
 ```
 
 ---

@@ -154,7 +154,6 @@ speccore sync --reverse
 
 ```bash
 # 早上一上班
-speccore current                    # 看当前关联的任务
 speccore status-panel                   # 看整体进度
 
 # 开始编码

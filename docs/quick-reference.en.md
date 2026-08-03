@@ -17,11 +17,9 @@ speccore update -t T-001 --status=completed  # Update status
 speccore sync                         # Reverse sync @spec → TASK.md
 speccore diff --source=A --target=B   # Compare iterations
 speccore trace --req=REQ-001          # Trace chain
-speccore backup                       # Backup state
 speccore delete -t Task-005           # Safe delete (trash + clean refs)
 speccore search "payment"                 # Cross-spec search
 speccore watch                            # Auto-validate on save
-speccore current --commit             # Generate commit message
 ```
 
 ## 🤖 AI Commands (/spec prefix, in AI tools)
