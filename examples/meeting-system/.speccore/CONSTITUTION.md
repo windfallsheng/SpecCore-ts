@@ -1,6 +1,6 @@
 # 技术宪法 — 会议预订系统
 
-> v5.20.0 | speccore init 生成 | AI 全局约束
+> v5.22.x | speccore init 生成 | AI 全局约束
 
 ---
 

@@ -1,6 +1,6 @@
 # 会议预订系统 — SpecCore 示例项目
 
-> 基于 SpecCore v5.20.0 | 52 命令 | 简洁模式 19 命令
+> 基于 SpecCore v5.22.x | 51 命令 | 简洁模式 17 命令
 
 完整演示：原始需求文档 → speccore init → doc2spec → analyze → split → 前后端一体化 Task
 
@@ -94,15 +94,15 @@ meeting-system/
 ## SpecCore 命令流程
 
 ```bash
-speccore init                                    # 初始化项目
-speccore doc2spec -f docs/PRD.md -p backend -i Q1  # 导入需求文档
-speccore analyze -i Q1                           # AI 分析需求
-speccore iteration split -i Q1                   # 拆分为 Task
-speccore plan -i Q1                              # 生成执行计划
-speccore execute -t Task-001 --force --verify    # AI 开发 + 自动验证
-speccore pr -t Task-001                          # 推送 + 创建 PR
-speccore done -t Task-001                        # 完成归档
-speccore status-panel --export=html              # 导出仪表盘
+speccore init                                              # 初始化项目
+speccore doc2spec -f docs/PRD.md -p backend --iter=Q1      # 导入需求文档
+speccore analyze -I Q1                                     # AI 分析需求
+speccore iteration split -i Q1                             # 拆分为 Task
+speccore plan -I Q1                                        # 生成执行计划
+speccore execute -t Task-001 --force                       # AI 开发
+speccore pr --task=Task-001                                # 推送 + 创建 PR
+speccore done --task=Task-001                              # 完成归档
+speccore status-panel                                      # 查看状��看板
 ```
 
 ---
