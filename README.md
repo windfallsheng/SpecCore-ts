@@ -49,13 +49,20 @@ speccore done -t Task-001               # 收尾归档
 
 ## ⏰ 调度执行
 
+白天标记任务，晚上自动/手动执行：
+
 ```bash
-speccore task new -n "数据迁移" --schedule=night         # 标记夜间执行
-speccore execute --all --scheduled                        # 手动触发所有排队任务
-speccore schedule create --at "2026-08-10 02:00" --all -I Q1  # 精确时间
-speccore schedule list                                           # 查看队列
-speccore schedule detail --id=sch-xxx                            # 查看详情(含执行参数)
-speccore schedule daemon start                                   # 守护进程自动执行
+# 白天：创建任务时标记
+speccore task new -n "数据迁移" --schedule=night
+speccore task new --batch-file=bugs.xlsx --type=bugfix --schedule=night
+
+# 晚上 A: 手动触发
+speccore execute --all --scheduled
+
+# 晚上 B: 完全自动（守护进程到点执行）
+speccore schedule create --at "2026-08-10 02:00:00" --all -I Q1 -a 张三 --batch-size=3
+speccore schedule list && speccore schedule detail --id=sch-xxx    # 查看详情
+speccore schedule daemon start                                      # 启动守护进程
 ```
 
 ## 📚 了解更多
