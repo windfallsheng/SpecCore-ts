@@ -102,7 +102,7 @@ function getPandocInputFormat(ext: string): string {
 
 interface Word2SpecOptions {
   file: string;
-  iteration: string;
+  iter: string;
   platform?: string;
   files?: string;  // batch: "path1.docx=平台1,path2.docx=平台2"
 }
@@ -135,8 +135,8 @@ export async function doc2specCommand(options: Word2SpecOptions): Promise<void> 
 }
 
 async function processSingle(options: Word2SpecOptions): Promise<void> {
-  if (!options.iteration) {
-    logger.error('请指定期次: speccore doc2spec --iteration=<期次>');
+  if (!options.iter) {
+    logger.error('请指定期次: speccore doc2spec --iter=<期次>');
     return;
   }
 
@@ -178,7 +178,7 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
   spinner.start();
 
   try {
-    const iterName = options.iteration.replace(/^期次-/, '');
+    const iterName = options.iter.replace(/^期次-/, '');
     const iterDir = `期次-${iterName}`;
     const targetDir = join(iterDir, '00-需求文档');
     const imageDir = join(targetDir, 'images');

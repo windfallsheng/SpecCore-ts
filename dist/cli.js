@@ -443,7 +443,7 @@ commander_1.program
     .alias('d2s')
     .description('导入 PRD 文档 → SpecCore Markdown（支持 Word/PDF/MD/HTML/PPTX）')
     .option('-f, --file <path>', '源文件路径')
-    .option('-i, --iteration <name>', '目标期次（必填）')
+    .option('--iter <name>', '目标期次（必填）')
     .option('-p, --platform <name>', '平台标识（backend / frontend-web / frontend-h5）')
     .option('--files <files>', '批量: "a.docx=平台1,b.pdf=平台2"')
     .action(doc2spec_1.doc2specCommand);
@@ -797,7 +797,7 @@ if (process.argv.length <= 2) {
                 const ana = join(base, '00-需求文档', 'ANALYSIS.md');
                 if (!existsSync(req)) {
                     phase = 'require';
-                    nextCmd = 'speccore doc2spec -i ' + iteration;
+                    nextCmd = 'speccore doc2spec --iteration ' + iteration;
                     nextDesc = '导入需求文档';
                 }
                 else if (!existsSync(ana)) {
