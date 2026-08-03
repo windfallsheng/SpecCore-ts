@@ -713,41 +713,7 @@ commander_1.program
     .action(welcome_1.welcomeCommand);
 // Parse arguments
 // ── 帮助分层：核心命令前置 ──
-commander_1.program.addHelpText('beforeAll', `
-┌──────────────────────────────────────────────────────────────┐
-│  🧠 = 协作式（支持 --interactive）  ⚡ = 单次执行              │
-│  init → iteration create → doc2spec → analyze → split       │
-│  → plan → execute → pr → done                               │
-├──────────────────────────────────────────────────────────────┤
-│  📥 资产接入                                                  │
-│  🚀 init          ⚡ 初始化项目                                │
-│  📅 iteration     ⚡ 期次管理                                  │
-│  📝 doc2spec      ⚡ 导入需求文档                               │
-│  📦 task new      ⚡ 创建任务（支持批量/调度）                    │
-├──────────────────────────────────────────────────────────────┤
-│  🤝 协作决策                                                  │
-│  🔍 analyze       🧠 需求分析+代码审查（--interactive）             │
-│  📊 split         🧠 拆分为Task（--interactive）               │
-│  📋 plan          🧠 执行计划（--interactive）                  │
-├──────────────────────────────────────────────────────────────┤
-│  🚀 执行交付                                                  │
-│  💻 execute       ⚡ 自动排序+分批执行                          │
-│  🔀 pr            🧠 创建PR（--interactive）                   │
-│  ✅ done          🧠 收尾归档（--interactive）                  │
-│  🔄 change        🧠 需求变更（--interactive）                  │
-├──────────────────────────────────────────────────────────────┤
-│  📊 治理 + 调度                                               │
-│  ✅ validate      ⚡ 合规校验                                  │
-│  ⏰ schedule      ⚡ 定时调度（create/list/daemon）              │
-│  🗑  rename       ⚡ 重命名 Task/期次                           │
-├──────────────────────────────────────────────────────────────┤
-│  💡 智能入口                                                  │
-│  speccore             自适应面板（检测阶段 → 提示下一步）          │
-│  speccore ask "..."   自然语言意图识别                          │
-|  speccore dev         智能级联：自动检测并执行下一步               │
-│  speccore status-panel  可视化看板                              │
-└──────────────────────────────────────────────────────────────┘
-`);
+commander_1.program.addHelpText('beforeAll', help_panel_1.HELP_PANEL);
 commander_1.program.addHelpText('afterAll', `
 💡 完整文档: https://github.com/windfallsheng/SpecCore-ts
 `);
@@ -847,4 +813,5 @@ catch (err) {
         process.exit(1);
     }
 }
+const help_panel_1 = require("./core/help-panel");
 //# sourceMappingURL=cli.js.map
