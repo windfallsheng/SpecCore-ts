@@ -119,7 +119,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       await ensureDir(dirname(result.outputPath));
       await writeFile(result.outputPath, result.report);
       logger.info(`  ✅ 报告已保存 → ${result.outputPath}`);
-    } else if (options.ask) {
+    } else if (options.interactive) {
       // 交互确认
       const ask = (q: string): Promise<string> => {
         return new Promise(resolve => {

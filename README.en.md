@@ -45,7 +45,7 @@ speccore done --task=Task-001                       # Validate → archive
 
 6 commands support `--interactive` — preview changes before confirming:
 
-| `🧠 analyze --ask` | `🧠 split --interactive` | `🧠 plan --interactive` |
+| `🧠 analyze --interactive` | `🧠 split --interactive` | `🧠 plan --interactive` |
 |:---|:---|:---|
 | `🧠 pr --interactive` | `🧠 change --interactive` | `🧠 done --interactive` |
 
