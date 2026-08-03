@@ -193,6 +193,12 @@ export async function listScheduleTasks(status?: ScheduleTaskStatus): Promise<Sc
   );
 }
 
+/** 获取单个调度任务详情 */
+export async function getScheduleTask(id: string): Promise<ScheduleTask | null> {
+  const store = await loadScheduleStore();
+  return store.tasks.find(t => t.id.startsWith(id)) || null;
+}
+
 /**
  * 更新任务状态
  */
