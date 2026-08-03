@@ -61,6 +61,7 @@ import { deleteCommand } from './commands/delete';
 import { searchCommand } from './commands/search';
 import { watchCommand } from './commands/watch';
 // v5.21.0 任务调度
+import { HELP_PANEL } from './core/help-panel';
 import {
   scheduleCreateCommand,
   scheduleListCommand,
@@ -854,4 +855,3 @@ try {
     process.exit(1);
   }
 }
-import { HELP_PANEL } from './core/help-panel';
