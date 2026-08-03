@@ -45,7 +45,7 @@ export async function doneCommand(options: DoneOptions): Promise<void> {
   }
 
   if (!options.task) {
-    logger.error('请指定任务: speccore done -t Task-001 或 done --all -I Q1');
+    logger.error('请指定任务: speccore done --task=Task-001 或 done --all -I Q1');
     return;
   }
 

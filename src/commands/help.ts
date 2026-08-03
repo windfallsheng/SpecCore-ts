@@ -192,7 +192,7 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
       { flag: '--skip-validate', meaning: '跳过合规验证' },
       { flag: '-i, --iteration <id>', meaning: '目标期次' },
     ],
-    examples: ['speccore done -t Task-001', 'speccore done --all'],
+    examples: ['speccore done --task=Task-001', 'speccore done --all'],
   },
   bugfix: {
     desc: 'Bug 修复（单条 / 批量 / 文件导入）',
@@ -335,8 +335,8 @@ speccore plan -i Q1                         # 生成执行计划`,
     {
       title: '四、开发 + 提 PR',
       code: `speccore execute -t Task-001 --force --verify   # AI 开发 + 自动验证
-speccore pr -t Task-001                                # 推送 + 创建 PR
-speccore done -t Task-001                              # 完成归档`,
+speccore pr --task=Task-001                                # 推送 + 创建 PR
+speccore done --task=Task-001                              # 完成归档`,
     },
     {
       title: '五、变更 + Bug',
