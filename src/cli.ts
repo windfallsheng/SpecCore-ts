@@ -181,7 +181,8 @@ program
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('--force', 'Auto-execute the next step without confirmation')
   .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
-  .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
+  .option('--from <phase>', '从指定阶段开始（init/doc2spec/analyze/split/plan/execute/pr/done）')
+  .option('--to <phase>', '到指定阶段结束（init/doc2spec/analyze/split/plan/execute/pr/done）')
   .action(devCommand);
 
 
