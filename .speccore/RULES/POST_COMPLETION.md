@@ -1,10 +1,3 @@
-speccore init           # 1. 初始化项目
-speccore dev            # 2. 智能引导（自动分析+拆分）
-speccore execute --all  # 3. 批量执行所有 Task
-speccore pr             # 4. 提交 PR
-speccore done           # 5. 完成任务
-
-
 # Feature 完成后的维护流程
 
 > 当 Feature 已签署 ✅ 已完成 后，本文件定义其线上运行与维护期的标准流程。
