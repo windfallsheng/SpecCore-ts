@@ -12,11 +12,28 @@ export interface StatusPanelOptions {
   assignee?: string;    // 按人员过滤
   platform?: string;    // 按平台过滤: backend | frontend | web | h5 | miniapp
   type?: string;        // 按类型过滤: feature | bugfix | research
+  health?: boolean;     // 健康度报告（合并自 health 命令）
+  lifecycle?: boolean;  // 任务生命周期看板（合并自 lifecycle 命令）
+  task?: string;        // 指定任务（lifecycle 模式）
+  status?: string;      // 设置状态（lifecycle 模式）
+  iteration?: string;   // 指定期次
 }
 
 export async function statusPanelCommand(options: StatusPanelOptions = {}): Promise<void> {
   const iteration = await getDefaultIteration();
   const config = await loadConfig();
+
+  // ── Health mode ──
+  if (options.health) {
+    await showHealthReport(config, iteration);
+    return;
+  }
+
+  // ── Lifecycle mode ──
+  if (options.lifecycle) {
+    await showLifecycleBoard(config, iteration, options);
+    return;
+  }
 
   // ── Export mode ──
   if (options.export) {
@@ -1173,3 +1190,69 @@ document.querySelectorAll('.theme-sw button').forEach((b,i)=>{b.classList.toggle
 </script>
 
 </body></html>`;}
+
+
+// ── Health Report (merged from health command) ──
+async function showHealthReport(config: any, iteration: string | null): Promise<void> {
+  if (!iteration) { logger.info("无活跃期次"); return; }
+  const iterDir = `期次-${iteration}`;
+  const tasks = await scanTaskDirs(iterDir);
+  
+  let totalTasks = tasks.length, completed = 0, hasTest = 0, hasReview = 0;
+  for (const t of tasks) {
+    if (await isTaskDone(iterDir, t)) completed++;
+    if (await pathExists(join(iterDir, t, "backend", "TEST.md"))) hasTest++;
+    if (await pathExists(join(iterDir, t, "backend", "REVIEW.md"))) hasReview++;
+  }
+  
+  const donePct = totalTasks > 0 ? Math.round(completed / totalTasks * 100) : 0;
+  const testPct = totalTasks > 0 ? Math.round(hasTest / totalTasks * 100) : 0;
+  const reviewPct = totalTasks > 0 ? Math.round(hasReview / totalTasks * 100) : 0;
+  
+  logger.info('\\n📊 项目健康度报告 — ' + iteration);
+  logger.info('');
+  logger.info('  任务完成率:    ' + donePct + '% (' + completed + '/' + totalTasks + ')');
+  logger.info('  测试覆盖率:    ' + testPct + '% (' + hasTest + '/' + totalTasks + ' 有 TEST.md)');
+  logger.info('  审查覆盖率:    ' + reviewPct + '% (' + hasReview + '/' + totalTasks + ' 有 REVIEW.md)');
+  
+  const score = Math.round(donePct * 0.4 + testPct * 0.3 + reviewPct * 0.3);
+  const grade = score >= 90 ? '🟢 A' : score >= 70 ? '🟡 B' : score >= 50 ? '🟠 C' : '🔴 D';
+  logger.info('  综合健康度:    ' + grade + ' (' + score + '/100)');
+  logger.info('');
+}
+
+// ── Lifecycle Board (merged from lifecycle command) ──
+async function showLifecycleBoard(config: any, iteration: string | null, opts: any): Promise<void> {
+  if (!iteration) { logger.info("无活跃期次"); return; }
+  const iterDir = `期次-${iteration}`;
+  const tasks = await scanTaskDirs(iterDir);
+  
+  logger.info('\\n📋 任务生命周期 — ' + iteration);
+  const states = { pending: '🔲', in_progress: '🔵', testing: '🟡', review: '🟣', done: '🟢' };
+  
+  for (const t of tasks) {
+    const status = await getTaskStatus(iterDir, t);
+    const icon = (states as any)[status] || '⚪';
+    logger.info('  ' + icon + ' ' + t + '  [' + status + ']');
+  }
+  logger.info('');
+  logger.info('  🔲待开始 → 🔵开发中 → 🟡测试中 → 🟣审查中 → 🟢已完成');
+}
+
+async function scanTaskDirs(iterDir: string): Promise<string[]> {
+  if (!await pathExists(iterDir)) return [];
+  const entries = await readdir(iterDir, { withFileTypes: true });
+  return entries.filter(e => e.isDirectory() && e.name.startsWith('Task-')).map(e => e.name);
+}
+
+async function isTaskDone(iterDir: string, task: string): Promise<boolean> {
+  return await pathExists(join(iterDir, task, '.task-type')) || false;
+}
+
+async function getTaskStatus(iterDir: string, task: string): Promise<string> {
+  try {
+    const tf = join(iterDir, task, '.task-status');
+    if (await pathExists(tf)) return (await readFile(tf, 'utf-8')).trim();
+  } catch {}
+  return 'pending';
+}
