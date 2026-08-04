@@ -2,7 +2,7 @@
 
 **SpecCore 是一套面向 AI 原生团队的规范驱动工具链。** 它用「Spec 先行」的方式把需求、拆分、计划、执行、交付串成一个闭环——人和 AI 在每个关键节点预览、调整、确认，生成的代码自然对齐需求。
 
-> v5.25.1 | [更新日志](CHANGELOG.md) | [English](README.en.md)
+> v5.25.2 | [更新日志](CHANGELOG.md) | [English](README.en.md)
 
 ```
   init → iteration create → doc2spec → analyze → split → plan → execute → pr → done
