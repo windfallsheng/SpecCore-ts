@@ -136,6 +136,11 @@ async function createDefaultFiles(speccoreDir: string): Promise<void> {
 | 1001 | 用户不存在 | 登录时手机号未注册 |
 | 1002 | 密码错误 | 登录密码不匹配 |
 | ... | ... | ... |
+
+## Git 分支策略
+- 默认分支: main  (可选: master / develop / trunk / release)
+- 任务分支: feature/{Task-ID}
+- 发布分支: release/{version}
 `
   );
 
