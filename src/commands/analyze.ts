@@ -139,13 +139,16 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       logger.info(`\n  ✅ 分析完成 → ${result.outputPath}\n`);
     }
 
-    // ── 下一步提示 (仅 iteration 范围) ──
+    // ── 下一步提示 + Spec 文档生成 (仅 iteration 范围) ──
     if (scope === 'iteration') {
       if (result.summary.blockers > 0) {
         logger.warn('\n⚠️  存在阻断问题，建议解决后再拆分任务。');
       } else {
         logger.info('\n✅ 未发现阻断问题，可以继续拆分任务。');
       }
+
+      // 生成全套 Spec 规范文档
+      await generateIterationSpecDocs(iteration!);
 
       // 显示待确认清单
       try {
@@ -167,6 +170,65 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     spinner.fail(`分析失败: ${error.message || error}`);
     throw error;
   }
+}
+
+/**
+ * 期次级 Spec 文档生成: 为 00-需求文档/ 创建全套规范文件
+ */
+async function generateIterationSpecDocs(iteration: string): Promise<void> {
+  const specDir = join(`期次-${iteration}`, '00-需求文档');
+  await ensureDir(specDir);
+
+  const now = new Date().toISOString().split('T')[0];
+  const templates: [string, string][] = [
+    ['ANALYSIS.md',
+      `# 需求分析报告\n\n> 期次: ${iteration} | 生成: ${now} | 状态: 待 AI 分析\n\n`
+      + `## 1. 需求概述\n\n_由 AI 上下文分析生成_\n\n`
+      + `## 2. 核心功能点\n\n| 功能 | 优先级 | 估算 | 依赖 |\n| :--- | :--- | :--- | :--- |\n| | | | |\n\n`
+      + `## 3. 非功能需求\n\n- 性能: _补充_\n- 安全: _补充_\n- 兼容: _补充_\n\n`
+      + `## 4. 任务拆分建议\n\n_分析完成后由 AI 填充_\n`],
+    ['TECH.md',
+      `# 技术方案\n\n> 期次: ${iteration} | 生成: ${now}\n\n`
+      + `## 架构\n\n_待填充_\n\n`
+      + `## 数据库设计\n\n| 表名 | 字段 | 索引 | 说明 |\n| :--- | :--- | :--- | :--- |\n| | | | |\n\n`
+      + `## API 设计\n\n| 方法 | 路径 | 说明 |\n| :--- | :--- | :--- |\n| | | |\n\n`
+      + `## 缓存策略\n\n_待填充_\n`],
+    ['TEST.md',
+      `# 测试计划\n\n> 期次: ${iteration} | 生成: ${now}\n\n`
+      + `## 单元测试\n\n- [ ] 核心模块覆盖\n\n`
+      + `## 集成测试\n\n- [ ] API 端到端\n\n`
+      + `## 边界测试\n\n- [ ] 异常参数\n- [ ] 超时重试\n- [ ] 并发冲突\n\n`
+      + `## 性能测试\n\n- [ ] 压测方案\n`],
+    ['REVIEW.md',
+      `# Code Review 清单\n\n> 期次: ${iteration}\n\n`
+      + `## 检查项\n\n- [ ] 参数校验完整性\n- [ ] 幂等性处理\n- [ ] 索引覆盖\n- [ ] 迁移脚本可回滚\n- [ ] 鉴权配置\n- [ ] 日志规范\n`],
+    ['RISK.md',
+      `# 风险评估\n\n> 期次: ${iteration} | 生成: ${now}\n\n`
+      + `## 风险矩阵\n\n| 风险 | 可能性 | 影响 | 缓解措施 |\n| :--- | :--- | :--- | :--- |\n| | | | |\n\n`
+      + `## 回滚方案\n\n1. 触发条件: _待定_\n2. 回滚步骤: _待定_\n`],
+    ['DEPS.md',
+      `# 依赖清单\n\n> 期次: ${iteration}\n\n`
+      + `## 上游依赖\n\n| 服务 | 版本 | 用途 | SLA |\n| :--- | :--- | :--- | :--- |\n| | | | |\n\n`
+      + `## 下游影响\n\n| 消费方 | 接口 | 影响 |\n| :--- | :--- | :--- |\n| | | |\n`],
+    ['MONITOR.md',
+      `# 监控指标\n\n> 期次: ${iteration}\n\n`
+      + `## 业务指标\n\n| 指标 | 阈值 | 级别 |\n| :--- | :--- | :--- |\n| 成功率 | <99.9% | P1 |\n| P99延迟 | >1000ms | P2 |\n\n`
+      + `## 告警规则\n\n| 规则 | 条件 | 通知 |\n| :--- | :--- | :--- |\n| | | |\n`],
+  ];
+
+  let created = 0;
+  let skipped = 0;
+  for (const [filename, content] of templates) {
+    const filePath = join(specDir, filename);
+    if (!(await pathExists(filePath))) {
+      await writeFile(filePath, content);
+      created++;
+    } else {
+      skipped++;
+    }
+  }
+
+  logger.info(`\n📄 Spec 文档: 新建 ${created} 个, 跳过 ${skipped} 个 (已存在) → ${specDir}/`);
 }
 
 /**

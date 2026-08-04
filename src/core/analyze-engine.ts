@@ -13,7 +13,7 @@
  *   - iteration → 期次-XX/00-需求文档/  (默认)
  *   - task      → 期次-XX/Task-NN/  单任务深化
  */
-import { readFile, writeFile, pathExists, readdir, stat } from 'fs-extra';
+import { readFile, writeFile, pathExists, readdir, stat, ensureDir } from 'fs-extra';
 import { join, relative, basename } from 'path';
 import { logger } from '../utils/logger';
 import { buildCodeIndex, findRelevantCode, readRelevantSource, isIndexStale } from './code-scanner';
@@ -69,12 +69,24 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalysisResult> 
     throw new Error('--scope task 必须同时指定 --task <id> 和 -I <iteration>');
   }
 
-  // 自动检测: 都没指定 → 只检测需求文档, 不自动扫描源码
+  // 自动检测: 都没指定 → 从 00-产品需求/ 目录读取产品原始需求
   if (requirements.length === 0 && sources.length === 0) {
     if (input.scope === 'iteration' && input.iteration) {
-      const defaultReq = join(`期次-${input.iteration}`, '00-需求文档', 'REQUIREMENT.md');
-      if (await pathExists(defaultReq)) {
-        requirements = [defaultReq];
+      const productReqDir = join(`期次-${input.iteration}`, '00-产品需求');
+      if (await pathExists(productReqDir)) {
+        const entries = await readdir(productReqDir, { withFileTypes: true });
+        for (const e of entries) {
+          if (e.isFile() && e.name.endsWith('.md') && !e.name.startsWith('README')) {
+            requirements.push(join(productReqDir, e.name));
+          }
+        }
+      }
+      // 兼容旧路径: 如果没有 00-产品需求/, 回退到 00-需求文档/REQUIREMENT.md
+      if (requirements.length === 0) {
+        const legacyReq = join(`期次-${input.iteration}`, '00-需求文档', 'REQUIREMENT.md');
+        if (await pathExists(legacyReq)) {
+          requirements = [legacyReq];
+        }
       }
     }
   }
