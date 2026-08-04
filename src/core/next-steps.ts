@@ -40,9 +40,9 @@ function getHints(stage: string, ctx: Record<string, string>): StepHint[] {
 
     case 'analyze':
       return [
-        { action: `├─ 阻断问题 → 修复后再继续`, desc: '' },
-        { action: `└─ 无阻断 → speccore iteration split${iter ? ` --iteration=${iter}` : ''}`, desc: '拆分需求为 Task', args: '--strict 逐 Task 预览确认' },
-        { action: `补全技术方案:`, desc: '编辑 ANALYSIS.md 中的「技术方案」部分（选型/DB变更/接口依赖）' },
+        { action: `speccore iteration split${iter ? ` --iteration=${iter}` : ''}`, desc: '拆分需求为 Task (--interactive 预览依赖)', args: '--strict 逐项确认' },
+        { action: `如果 ANALYSIS.md 有阻断问题请先修复`, desc: '' },
+        { action: `补全技术方案:`, desc: '编辑 ANALYSIS.md 中的技术方案部分（选型/DB变更/接口依赖）' },
       ];
 
     case 'split':

@@ -136,7 +136,6 @@ function showPhase(title: string, steps: string[]): void {
     }
   }
   logger.info('');
-  logger.info('💡 输入 speccore dev --force 自动执行下一步');
 }
 
 async function hasTaskDirs(iterDir: string): Promise<boolean> {

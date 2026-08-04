@@ -62,6 +62,9 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
     // Create tool integration files (Claude, CodeBuddy, Cursor, Trae, WindSurf, QCoder)
     await createToolIntegrations(projectRoot);
 
+    // Create sample iteration
+    await createSampleIteration(projectRoot);
+
     // Create context.json
     await writeFile(
       join(speccoreDir, 'local', 'context.json'),
@@ -887,4 +890,94 @@ async function createToolIntegrations(projectRoot: string): Promise<void> {
   }
   
   logger.info('   🤖 已适配: Claude / CodeBuddy / Cursor / Trae / WindSurf / QCoder');
+}
+
+/**
+ * 创建示例期次，展示标准目录结构
+ */
+async function createSampleIteration(projectRoot: string): Promise<void> {
+  const iterDir = join(projectRoot, '期次-示例');
+  await ensureDir(iterDir);
+  
+  // STAFFING.md
+  await writeFile(join(iterDir, 'STAFFING.md'), [
+    '# 示例 人员排期配置',
+    '',
+    '| 成员 | 平台方向 | 投入比例 |',
+    '| :--- | :--- | :--- |',
+    '| 张三 | 后台 | 80% |',
+    '| 李四 | Web, 小程序 | 70% |',
+    '',
+    '> 编辑此文件后重新运行 split 即可更新默认分配',
+  ].join('\n'));
+
+  // 00-产品需求/
+  const prdDir = join(iterDir, '00-产品需求');
+  await ensureDir(join(prdDir, 'backend'));
+  await ensureDir(join(prdDir, 'frontend/Web'));
+  await ensureDir(join(prdDir, '_shared'));
+  
+  await writeFile(join(prdDir, 'backend/功能需求.md'), [
+    '# 后台端功能需求',
+    '',
+    '## 功能A',
+    '- 功能描述',
+    '- 涉及API: /api/v1/xxx',
+    '- 数据库: xxx表',
+    '',
+    '## 功能B',
+    '- 功能描述',
+  ].join('\n'));
+
+  await writeFile(join(prdDir, 'frontend/Web/Web端需求.md'), [
+    '# Web端需求',
+    '',
+    '## 页面列表',
+    '- 功能页面1',
+    '- 功能页面2',
+  ].join('\n'));
+
+  await writeFile(join(prdDir, '_shared/业务规则.md'), [
+    '# 通用业务规则',
+    '',
+    '- 规则1',
+    '- 规则2',
+  ].join('\n'));
+
+  // 00-需求文档/
+  const specDir = join(iterDir, '00-需求文档');
+  await ensureDir(specDir);
+  await writeFile(join(specDir, 'REQUIREMENT.md'), [
+    '## 后台端需求',
+    '',
+    '### 功能A',
+    '功能描述与验收标准',
+    '',
+    '### 功能B',
+    '功能描述与验收标准',
+    '',
+    '## Web端需求',
+    '',
+    '### 功能页面1',
+    '页面描述',
+  ].join('\n'));
+
+  // 00-期次总览/
+  const overviewDir = join(iterDir, '00-期次总览');
+  await ensureDir(overviewDir);
+  await writeFile(join(overviewDir, 'PROJECT_GRAPH.md'), [
+    '# 示例任务总览',
+    '',
+    '> 期次：示例',
+    '> 默认分支: main',
+    '',
+    '## 任务列表',
+    '| 任务编号 | 任务名称 | 类型 | 进度 | 状态 | 负责人 |',
+    '| :--- | :--- | :--- | :--- | :--- | :--- |',
+    '| Task-001 | 功能A | feature | 0% | 待开发 | 张三 |',
+    '| Task-002 | 功能B | feature | 0% | 待开发 | 张三 |',
+    '| Task-003 | 功能页面1 | feature | 0% | 待开发 | 李四 |',
+  ].join('\n'));
+
+  logger.info('   📂 示例期次: 期次-示例/ (产品需求+需求文档+期次总览)');
 }
