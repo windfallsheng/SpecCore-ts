@@ -69,17 +69,24 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalysisResult> 
     throw new Error('--scope task 必须同时指定 --task <id> 和 -I <iteration>');
   }
 
-  // 自动检测: 都没指定 → 从 00-产品需求/ 目录读取产品原始需求
+  // 自动检测: 都没指定 → 从 00-产品需求/ 递归读取产品原始需求
   if (requirements.length === 0 && sources.length === 0) {
     if (input.scope === 'iteration' && input.iteration) {
       const productReqDir = join(`期次-${input.iteration}`, '00-产品需求');
       if (await pathExists(productReqDir)) {
-        const entries = await readdir(productReqDir, { withFileTypes: true });
-        for (const e of entries) {
-          if (e.isFile() && e.name.endsWith('.md') && !e.name.startsWith('README')) {
-            requirements.push(join(productReqDir, e.name));
+        // 递归扫描子目录 (backend/ frontend/Web/ 等)
+        const scanDir = async (dir: string) => {
+          const entries = await readdir(dir, { withFileTypes: true });
+          for (const e of entries) {
+            const full = join(dir, e.name);
+            if (e.isDirectory() && !e.name.startsWith('_') && !e.name.startsWith('.')) {
+              await scanDir(full);
+            } else if (e.isFile() && e.name.endsWith('.md') && !e.name.startsWith('README')) {
+              requirements.push(full);
+            }
           }
-        }
+        };
+        await scanDir(productReqDir);
       }
       // 兼容旧路径: 如果没有 00-产品需求/, 回退到 00-需求文档/REQUIREMENT.md
       if (requirements.length === 0) {
