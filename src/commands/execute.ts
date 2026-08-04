@@ -283,6 +283,7 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
 
   // Create branches for each task (dependency-aware)
   if (tasks.length > 0) {
+    let defaultBase = base || detectDefaultGitBranch();
     for (const task of tasks) {
       let taskBase = base;
       // Auto-detect dependency per task from IMPACT.md
@@ -291,10 +292,13 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
       }
       const branch = createTaskBranch(task.id, task.id, taskBase);
       if (branch) {
-        const baseInfo = taskBase ? ` (from ${taskBase})` : '';
+        const baseInfo = taskBase ? ` (from ${taskBase})` : ` (from ${defaultBase || 'HEAD'})`;
         logger.info(`🌿 ${task.id}: ${branch}${baseInfo}`);
       }
-      // Switch back to a neutral branch for next task if needed
+      // 切回基础分支，避免下个任务从上个任务分支上拉代码
+      if (defaultBase) {
+        try { require('child_process').execSync(`git checkout "${defaultBase}"`, { stdio: 'pipe' }); } catch {}
+      }
     }
   }
 
@@ -1137,4 +1141,14 @@ async function executeByPlan(planId: string, iteration: string, options: Execute
     await executeWithProgress(planTasks, iteration, options.base, [], {});
   }
   await markPlanExecuted(plan.id, 'Completed ' + planTasks.length + ' tasks');
+}
+
+/** 检测 git 默认分支 */
+function detectDefaultGitBranch(): string | undefined {
+  try {
+    const branches = require('child_process').execSync('git branch', { encoding: 'utf-8' });
+    if (branches.includes('main') || branches.includes(' main')) return 'main';
+    if (branches.includes('master') || branches.includes(' master')) return 'master';
+  } catch {}
+  return undefined;
 }

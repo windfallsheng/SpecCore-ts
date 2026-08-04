@@ -153,6 +153,26 @@ graph TD
 | | | | |
 `
   );
+
+  // STAFFING.md — 人员排期配置
+  await writeFile(
+    join(iterationDir, 'STAFFING.md'),
+    `# ${options.name} 人员排期配置
+
+> 期次: ${options.name}${options.owner ? ` | 负责人: ${options.owner}` : ''}
+
+## 人员列表
+
+| 成员 | 平台方向 | 投入比例 |
+| :--- | :--- | :--- |
+| | | |
+
+> 说明:
+> - **平台方向**: 后台 / 小程序 / Web / APP，多个用逗号分隔
+> - **投入比例**: 0-100%，用于 split 时自动分配和负荷均衡
+> - 编辑此文件后重新运行 split 即可更新默认分配
+`
+  );
 }
 
 async function updateIterationsIndex(name: string, options: IterationCreateOptions): Promise<void> {
