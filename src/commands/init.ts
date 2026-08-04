@@ -120,9 +120,12 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 > 本项目遵循 SpecCore 框架规范
 
 ## 项目信息
-- 项目名称: ${projectName}
-- 项目路径: ${projectRoot}
-- Git 仓库: ${gitUrl || '待配置'}
+
+> 多工程时填写各子工程的路径和仓库，单工程只保留一行
+
+| 工程 | 路径 | Git 仓库 | 默认分支 |
+| :--- | :--- | :--- | :--- |
+| ${projectName} | ${projectRoot} | ${gitUrl || '待配置'} | main |
 
 ## 技术栈
 

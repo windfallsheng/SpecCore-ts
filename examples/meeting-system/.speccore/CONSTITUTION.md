@@ -3,9 +3,12 @@
 > 本项目遵循 SpecCore 框架规范
 
 ## 项目信息
-- 项目名称: 会议室预订系统
-- 项目路径: /workspace/meeting-system
-- Git 仓库: git@github.com:example/meeting-system.git
+
+> 多工程时填写各子工程的路径和仓库
+
+| 工程 | 路径 | Git 仓库 | 默认分支 |
+| :--- | :--- | :--- | :--- |
+| 会议室预订系统 | /workspace/meeting-system | git@github.com:example/meeting-system.git | main |
 
 ## 技术栈
 ### 后端
