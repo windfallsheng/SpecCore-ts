@@ -1,5 +1,5 @@
 ---
 name: spec-dev
-description: Smart dev entry
+description: 全自动流水线
 ---
-speccore dev
+speccore dev --auto
