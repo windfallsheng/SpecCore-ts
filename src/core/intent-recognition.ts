@@ -16,6 +16,10 @@ export type IntentType =
   | 'execute'             // 执行开发
   | 'create'              // 创建功能/任务
   | 'iteration_create'    // 创建期次
+  | 'analyze'             // 分析需求
+  | 'split'               // 任务拆分
+  | 'pr'                  // Pull Request
+  | 'done'                // 完成任务
   | 'review'              // 审查
   | 'plan'                // 方案/计划
   | 'reference'           // 参考查找
@@ -114,6 +118,46 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     patterns: ['创建(.+)期次', '新建(.+)期次', '开始(.+)迭代', '创建(.+)迭代'],
     description: '创建新期次 — 生成 STAFFING + 产品需求 + 需求文档目录',
     args: '--name=<name> --owner=<owner>',
+  },
+  // 需求分析
+  {
+    id: 'analyze',
+    intent: 'analyze',
+    priority: 90,
+    triggers: ['分析需求', '需求分析', 'AI分析', '代码分析', '分析代码', '全局分析'],
+    patterns: ['分析(.+)需求', '分析(.+)代码', '全局(.+)分析'],
+    description: 'AI 分析 — 需求完整性 + 改动范围 + 风险矩阵',
+    args: '-I <iteration> 或 --scope global --src <dirs>',
+  },
+  // 任务拆分
+  {
+    id: 'iteration split',
+    intent: 'split',
+    priority: 88,
+    triggers: ['拆分任务', '拆分需求', '任务拆分', '智能拆分'],
+    patterns: ['拆分(.+)任务', '拆分(.+)需求', '把(.+)拆'],
+    description: '智能拆分 — 复杂度估算 + 人员分配 + 语义依赖',
+    args: '-i <iteration> --interactive',
+  },
+  // PR 提交
+  {
+    id: 'pr',
+    intent: 'pr',
+    priority: 84,
+    triggers: ['提交PR', '创建PR', '提PR', '发PR', 'pull request'],
+    patterns: ['提交(.+)PR', '创建(.+)PR', '为(.+)提PR'],
+    description: '创建 Pull Request — 自动推送 + 创建',
+    args: '--task=<Task-ID>',
+  },
+  // 任务完成
+  {
+    id: 'done',
+    intent: 'done',
+    priority: 83,
+    triggers: ['完成任务', '归档任务', '关闭任务', '任务完成'],
+    patterns: ['完成(.+)任务', '归档(.+)任务'],
+    description: '完成任务归档 — 校验 + 全局同步',
+    args: '--task=<Task-ID> 或 --all',
   },
   // 创建任务（通用创建）
   {
