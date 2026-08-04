@@ -2,24 +2,42 @@
 
 **SpecCore 是一套面向 AI 原生团队的规范驱动工具链。** 它用「Spec 先行」的方式把需求、拆分、计划、执行、交付串成一个闭环——人和 AI 在每个关键节点预览、调整、确认，生成的代码自然对齐需求。
 
-> 同时维护 5 个微服务和 3 个前端平台？SpecCore 把「需求 → 拆分 → 计划 → 执行 → 交付」串成一条可追溯的自动化流水线。
+> v5.24.0 | [更新日志](CHANGELOG.md) | [English](README.en.md)
 
 ```
-  init → doc2spec → analyze → split → plan → execute → pr → done
-  🚀初始化   📝导入需求   🧠分析   📦拆分   📋计划   💻执行   🔀提交   ✅收尾
+  init → iteration create → doc2spec → analyze → split → plan → execute → pr → done
+  🚀初始化  📅创建期次  📝导入需求  🧠AI分析  📦智能拆分  📋计划  💻执行  🔀提交  ✅收尾
 ```
 
 ## 🚀 5 分钟体验
 
 ```bash
-npm install -g speccore                 # 安装
-speccore init                           # 初始化项目
-speccore doc2spec -f PRD.docx --iter=Q1     # 导入需求文档
-speccore analyze -I Q1                  # AI 分析需求 + 代码检查
-speccore iteration split -I Q1          # 拆分为独立 Task
-speccore plan -I Q1                     # 生成执行计划
-speccore execute -t Task-001            # AI 自动开发
-speccore done --task=Task-001               # 收尾归档
+npm install -g speccore                       # 安装
+speccore init                                 # 初始化（CONSTITUTION+Git配置）
+speccore iteration create -n Q1 --owner=张三   # 创建期次（自动生成STAFFING.md）
+speccore doc2spec -f PRD.docx -I Q1            # 导入需求到 00-产品需求/
+speccore analyze -I Q1                         # AI分析（改动范围+风险+变更预测）
+speccore iteration split -i Q1 --interactive   # 智能拆分（复杂度+优先级+人员分配）
+speccore plan -I Q1                            # 生成执行计划
+speccore execute -t Task-001                   # 执行（自动建分支+依赖感知）
+speccore done --task=Task-001                  # 收尾归档
+```
+
+## 📂 目录结构 (v5.24)
+
+```
+项目根/
+├── .speccore/CONSTITUTION.md           ← 项目信息 + 技术栈 + Git分支策略
+└── 期次-Q1/
+    ├── STAFFING.md                     ← 人员排期（每期可不同）
+    ├── 00-产品需求/                     ← 产品原始需求（按端分目录，只读）
+    │   ├── backend/                    ←   后台端
+    │   ├── frontend/Web/               ←   Web端
+    │   ├── frontend/小程序/            ←   小程序端
+    │   └── _shared/                    ←   跨端共用
+    ├── 00-需求文档/                     ← Analyzer 生成（ANALYSIS+TECH+TEST+...）
+    ├── 00-期次总览/PROJECT_GRAPH.md    ← 任务总览 + 默认分支
+    └── Task-001~004/                   ← 拆分后任务
 ```
 
 ## 🎯 我想...
