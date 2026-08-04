@@ -180,13 +180,30 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     if (options.interactive) {
       spinner.stop('任务预览');
       logger.info('');
+      
+      // 依赖关系预览
+      const semanticDeps = detectSemanticDependencies(sections);
+      if (semanticDeps.size > 0) {
+        logger.info('🔗 任务间依赖关系:\n');
+        for (const [from, targets] of semanticDeps) {
+          logger.info(`   ${from} 依赖 → ${targets.join(', ')}`);
+        }
+        logger.info('');
+      }
+      
       logger.info(`📋 共 ${sections.length} 个任务将被创建:\n`);
 
       for (let i = 0; i < sections.length; i++) {
         const taskId = `Task-${String(i + 1).padStart(3, '0')}`;
         const contentPreview = sections[i].content?.split('\n')[0]?.slice(0, 60) || '';
+        const c = complexities[i];
+        const owner = (sections[i] as any)._owner || '未分配';
+        const deps = semanticDeps.get(taskId);
+        
         logger.info(`  ${taskId} → ${sections[i].name}`);
         if (contentPreview) logger.info(`       ${contentPreview}`);
+        logger.info(`       优先级: ${c.priority} | 工时: ${c.estimatedHours}h | 复杂度: ${c.complexity} | 👤 ${owner}`);
+        if (deps) logger.info(`       🔗 依赖: ${deps.join(', ')}`);
         logger.info(`       平台: ${platforms.join(', ')}`);
         logger.info('');
       }

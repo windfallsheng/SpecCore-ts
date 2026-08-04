@@ -29,9 +29,14 @@ export function createTaskBranch(taskId: string, taskName: string, baseBranch?: 
   try {
     const branchName = `feature/${taskId}`.substring(0, 100);
 
-    // If base branch specified, branch from it
-    if (baseBranch) {
-      execSync(`git checkout "${baseBranch}"`, { stdio: 'pipe' });
+    // 确定 base 分支: 显式指定 > 依赖分支 > main/master > 当前 HEAD
+    let effectiveBase = baseBranch;
+    if (!effectiveBase) {
+      effectiveBase = detectDefaultBranch();
+    }
+
+    if (effectiveBase) {
+      execSync(`git checkout "${effectiveBase}"`, { stdio: 'pipe' });
     }
 
     execSync(`git checkout -b "${branchName}"`, { stdio: 'pipe' });
@@ -42,9 +47,21 @@ export function createTaskBranch(taskId: string, taskName: string, baseBranch?: 
     saveMapping(mapping);
 
     return branchName;
-  } catch {
+  } catch (e: any) {
+    // 分支已存在等非致命错误
+    if (e.message?.includes('already exists')) return `feature/${taskId}`;
     return null;
   }
+}
+
+/** 检测仓库默认分支: main → master → 当前 HEAD */
+function detectDefaultBranch(): string | undefined {
+  try {
+    const branches = execSync('git branch', { encoding: 'utf-8' });
+    if (branches.includes('main') || branches.includes(' main')) return 'main';
+    if (branches.includes('master') || branches.includes(' master')) return 'master';
+  } catch {}
+  return undefined;
 }
 
 /**
