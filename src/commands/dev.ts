@@ -49,12 +49,28 @@ export async function devCommand(options: DevOptions): Promise<void> {
   logger.info(`\n📍 期次: ${iteration}`);
   logger.info('');
 
-  // Phase 1: Check for requirement docs
-  const reqDoc = join(iterDir, '00-需求文档', 'REQUIREMENT.md');
-  if (!(await pathExists(reqDoc))) {
+  // Phase 0: 检查全局分析
+  const globalAnalysis = join('.speccore', 'GLOBAL', 'TECH_STACK.md');
+  if (!(await pathExists(globalAnalysis))) {
+    const hasSrc = await pathExists('src') || await pathExists('app');
+    if (hasSrc) {
+      showPhase('全局分析（建议）', [
+        'speccore analyze --scope global --src src --depth deep',
+        '从源码反推技术栈、代码索引、需求框架',
+      ]);
+    }
+  }
+
+  // Phase 1: Check for product requirements in 00-产品需求/
+  const prdDir = join(iterDir, '00-产品需求');
+  const legacyReq = join(iterDir, '00-需求文档', 'REQUIREMENT.md');
+  const hasPrd = await pathExists(prdDir);
+  const hasLegacy = await pathExists(legacyReq);
+  
+  if (!hasPrd && !hasLegacy) {
     showPhase('导入需求', [
-      'speccore doc2spec --files "doc.docx=端名" -i ' + iteration,
-      '将 Word/MD 需求文档导入为 Spec 格式',
+      'speccore doc2spec -f PRD.docx -i ' + iteration,
+      '将 Word/MD 需求文档导入到 00-产品需求/',
     ]);
     return;
   }
