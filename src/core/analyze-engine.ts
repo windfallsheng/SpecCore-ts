@@ -18,6 +18,7 @@ import { join, relative, basename } from 'path';
 import { logger } from '../utils/logger';
 import { buildCodeIndex, findRelevantCode, readRelevantSource, isIndexStale } from './code-scanner';
 import { generateAIContext, AIContextInput, AIContextResult } from './ai-context-generator';
+import { cleanStaleCache } from './git-integration';
 
 // ================================================================
 // 类型定义
@@ -60,6 +61,9 @@ export interface AnalysisResult {
 // ================================================================
 
 export async function runAnalysis(input: AnalyzeInput): Promise<AnalysisResult> {
+  // 清理过期缓存
+  cleanStaleCache();
+  
   // 深拷贝输入，避免静默修改调用者的对象
   let requirements = [...input.requirements];
   let sources = [...input.sources];
@@ -110,12 +114,29 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalysisResult> 
   const hasSrc = effectiveInput.sources.length > 0;
   const type = hasReqs && hasSrc ? 'combined' : hasReqs ? 'req' : 'code';
 
+  let result: AnalysisResult;
   switch (type) {
-    case 'req':  return analyzeRequirements(effectiveInput);
-    case 'code': return analyzeCodebase(effectiveInput);
-    case 'combined': return analyzeCombined(effectiveInput);
+    case 'req':  result = await analyzeRequirements(effectiveInput); break;
+    case 'code': result = await analyzeCodebase(effectiveInput); break;
+    case 'combined': result = await analyzeCombined(effectiveInput); break;
     default: throw new Error(`Unknown analysis type: ${type}`);
   }
+
+  // ── 所有模式生成 AI 上下文（如果还没生成） ──
+  if (type !== 'combined') {
+    try {
+      await generateAIContext({
+        requirements: effectiveInput.requirements,
+        sources: effectiveInput.sources,
+        scope: effectiveInput.scope,
+        iteration: effectiveInput.iteration,
+        taskId: effectiveInput.taskId,
+        depth: effectiveInput.depth,
+      });
+    } catch {} // 非关键，静默失败
+  }
+
+  return result;
 }
 
 // ================================================================
