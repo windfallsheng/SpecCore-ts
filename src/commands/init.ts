@@ -59,6 +59,9 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
     // Create .workbuddy integration files for WorkBuddy IDE
     await createWorkBuddyFiles(projectRoot);
 
+    // Create tool integration files (Claude, CodeBuddy, Cursor, Trae, WindSurf, QCoder)
+    await createToolIntegrations(projectRoot);
+
     // Create context.json
     await writeFile(
       join(speccoreDir, 'local', 'context.json'),
@@ -853,4 +856,35 @@ async function interactiveInitFlow(options: InitOptions): Promise<void> {
   if (confirm !== 'y') { logger.info('已取消'); return; }
 
   await doInit(process.cwd(), options, new Spinner('Initializing SpecCore'));
+}
+
+/**
+ * 为各 AI 工具创建适配文件 (Claude, CodeBuddy, Cursor, Trae, WindSurf, QCoder)
+ */
+async function createToolIntegrations(projectRoot: string): Promise<void> {
+  const commands: [string, string, string][] = [
+    ['spec-analyze', 'AI需求分析', 'speccore analyze -I ${1:Q1}'],
+    ['spec-split', '智能拆分任务', 'speccore iteration split -i ${1:Q1} --interactive'],
+    ['spec-execute', '执行开发任务', 'speccore execute -t ${1:Task-001} --force'],
+    ['spec-status', '查看项目状态', 'speccore status-panel'],
+    ['spec-plan', '生成执行计划', 'speccore plan -I ${1:Q1}'],
+    ['spec-done', '完成任务归档', 'speccore done --task=${1:Task-001}'],
+    ['spec-init', '初始化项目', 'speccore init'],
+    ['spec-create-iteration', '创建新期次', 'speccore iteration create -n ${1:Q2} --owner=${2:张三}'],
+    ['spec-pr', '创建PR', 'speccore pr --task=${1:Task-001}'],
+    ['spec-dev', '智能开发', 'speccore dev --auto'],
+  ];
+
+  const tools = ['claude', 'codebuddy', 'cursor', 'trae', 'windsurf', 'qcoder'];
+  
+  for (const tool of tools) {
+    const toolDir = join(projectRoot, '.' + tool, 'commands');
+    await ensureDir(toolDir);
+    for (const [name, desc, cmd] of commands) {
+      const content = '---\nname: ' + name + '\ndescription: ' + desc + '\n---\n' + cmd;
+      await writeFile(join(toolDir, name + '.md'), content);
+    }
+  }
+  
+  logger.info('   🤖 已适配: Claude / CodeBuddy / Cursor / Trae / WindSurf / QCoder');
 }
