@@ -20,7 +20,7 @@ import {
   canResume,
   ExecutionState,
 } from '../core/execution-state';
-import { createTaskBranch } from '../core/git-integration';
+import { createTaskBranch, detectDefaultBranch } from '../core/git-integration';
 
 export interface ExecuteOptions {
   all?: boolean;
@@ -283,7 +283,7 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
 
   // Create branches for each task (dependency-aware)
   if (tasks.length > 0) {
-    let defaultBase = base || detectDefaultGitBranch();
+    let defaultBase = base || detectDefaultBranch();
     for (const task of tasks) {
       let taskBase = base;
       // Auto-detect dependency per task from IMPACT.md
@@ -1141,14 +1141,4 @@ async function executeByPlan(planId: string, iteration: string, options: Execute
     await executeWithProgress(planTasks, iteration, options.base, [], {});
   }
   await markPlanExecuted(plan.id, 'Completed ' + planTasks.length + ' tasks');
-}
-
-/** 检测 git 默认分支 */
-function detectDefaultGitBranch(): string | undefined {
-  try {
-    const branches = require('child_process').execSync('git branch', { encoding: 'utf-8' });
-    if (branches.includes('main') || branches.includes(' main')) return 'main';
-    if (branches.includes('master') || branches.includes(' master')) return 'master';
-  } catch {}
-  return undefined;
 }

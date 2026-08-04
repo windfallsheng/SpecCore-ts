@@ -54,13 +54,32 @@ export function createTaskBranch(taskId: string, taskName: string, baseBranch?: 
   }
 }
 
-/** 检测仓库默认分支: main → master → 当前 HEAD */
-function detectDefaultBranch(): string | undefined {
+/** 检测仓库默认分支: CONSTITUTION.md > main > master > HEAD */
+export function detectDefaultBranch(): string | undefined {
+  // 1. 从项目配置读取
+  try {
+    const constitutionPath = join('.speccore', 'CONSTITUTION.md');
+    if (require('fs').existsSync(constitutionPath)) {
+      const content = require('fs').readFileSync(constitutionPath, 'utf-8');
+      const match = content.match(/默认分支[：:]\s*(\S+)/);
+      if (match) return match[1];
+    }
+  } catch {}
+
+  // 2. 自动检测远程仓库默认分支
+  try {
+    const remote = execSync('git remote show origin 2>/dev/null', { encoding: 'utf-8' });
+    const headMatch = remote.match(/HEAD branch:\s*(\S+)/);
+    if (headMatch) return headMatch[1];
+  } catch {}
+
+  // 3. 本地分支检查
   try {
     const branches = execSync('git branch', { encoding: 'utf-8' });
     if (branches.includes('main') || branches.includes(' main')) return 'main';
     if (branches.includes('master') || branches.includes(' master')) return 'master';
   } catch {}
+
   return undefined;
 }
 
