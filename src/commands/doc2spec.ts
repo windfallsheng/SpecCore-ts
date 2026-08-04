@@ -180,7 +180,7 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
   try {
     const iterName = options.iter.replace(/^期次-/, '');
     const iterDir = `期次-${iterName}`;
-    const targetDir = join(iterDir, '00-需求文档');
+    const targetDir = join(iterDir, '00-产品需求');
     const imageDir = join(targetDir, 'images');
     const platform = options.platform || '需求';
     const outputPath = join(targetDir, `${platform}需求.md`);
