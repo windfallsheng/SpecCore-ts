@@ -68,19 +68,13 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalysisResult> 
     throw new Error('--scope task 必须同时指定 --task <id> 和 -I <iteration>');
   }
 
-  // 自动检测: 都没指定 → 用默认值
+  // 自动检测: 都没指定 → 只检测需求文档, 不自动扫描源码
   if (requirements.length === 0 && sources.length === 0) {
     if (input.scope === 'iteration' && input.iteration) {
       const defaultReq = join(`期次-${input.iteration}`, '00-需求文档', 'REQUIREMENT.md');
       if (await pathExists(defaultReq)) {
         requirements = [defaultReq];
       }
-    }
-    // 默认源码: 扫描项目常见目录
-    const defaultSrcDirs = ['src', 'app', 'lib', 'services', 'controllers', 'models'];
-    sources = [];
-    for (const d of defaultSrcDirs) {
-      if (await pathExists(d)) sources.push(d);
     }
   }
 
