@@ -51,7 +51,7 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
     await ensureDir(join(speccoreDir, 'GLOBAL', 'BASELINES'));
 
     // Create default files
-    await createDefaultFiles(speccoreDir);
+    await createDefaultFiles(projectRoot, speccoreDir);
 
     // Create GLOBAL layer files
     await createGlobalFiles(speccoreDir);
@@ -109,8 +109,10 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
   }
 }
 
-async function createDefaultFiles(speccoreDir: string): Promise<void> {
-  // CONSTITUTION.md
+async function createDefaultFiles(projectRoot: string, speccoreDir: string): Promise<void> {
+  // CONSTITUTION.md — 自动检测项目信息
+  const projectName = require('path').basename(projectRoot);
+  const gitUrl = detectGitUrl(projectRoot);
   await writeFile(
     join(speccoreDir, 'CONSTITUTION.md'),
     `# 技术宪法
@@ -118,9 +120,9 @@ async function createDefaultFiles(speccoreDir: string): Promise<void> {
 > 本项目遵循 SpecCore 框架规范
 
 ## 项目信息
-- 项目名称:
-- 项目路径:
-- Git 仓库:
+- 项目名称: ${projectName}
+- 项目路径: ${projectRoot}
+- Git 仓库: ${gitUrl || '待配置'}
 
 ## 技术栈
 
@@ -967,4 +969,11 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
   ].join('\n'));
 
   logger.info('   📂 示例期次: 期次-示例/ (按端区分: APP/H5/小程序/管理后台)');
+}
+
+function detectGitUrl(root: string): string | undefined {
+  try {
+    const url = require('child_process').execSync('git remote get-url origin 2>/dev/null', { encoding: 'utf-8', cwd: root }).trim();
+    return url || undefined;
+  } catch { return undefined; }
 }

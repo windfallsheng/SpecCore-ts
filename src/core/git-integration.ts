@@ -205,3 +205,19 @@ function getChangedFiles(): string[] {
     return [];
   }
 }
+
+/** 清理过期代码索引缓存（超过24小时自动清理） */
+export function cleanStaleCache(): boolean {
+  try {
+    const cacheFile = '.speccore/cache/code-structure.json';
+    const fs = require('fs');
+    if (!fs.existsSync(cacheFile)) return false;
+    const stat = fs.statSync(cacheFile);
+    const hoursAgo = (Date.now() - stat.mtimeMs) / 3600000;
+    if (hoursAgo > 24) {
+      fs.unlinkSync(cacheFile);
+      return true;
+    }
+  } catch {}
+  return false;
+}

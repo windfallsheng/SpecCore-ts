@@ -299,3 +299,31 @@ async function autoPipeline(options: DevOptions): Promise<void> {
   }
   logger.info('\n✅ Done: ' + completed + ' steps\n');
 }
+
+async function checkRetro(iteration: string): Promise<void> {
+  const iterDir = '期次-' + iteration;
+  const fs = require('fs');
+  if (!fs.existsSync(iterDir)) return;
+  
+  const entries = fs.readdirSync(iterDir, { withFileTypes: true });
+  const tasks = entries.filter((e: any) => e.isDirectory() && e.name.startsWith('Task-'));
+  if (tasks.length === 0) return;
+  
+  // Check if all tasks are done
+  let allDone = true;
+  for (const t of tasks) {
+    const taskMd = iterDir + '/' + t.name + '/backend/TASK.md';
+    const feTaskMd = iterDir + '/' + t.name + '/frontend/Web/TASK.md';
+    if (fs.existsSync(taskMd)) {
+      const content = fs.readFileSync(taskMd, 'utf-8');
+      if (!content.includes('已完成') && !content.includes('completed')) { allDone = false; break; }
+    }
+  }
+  
+  if (allDone) {
+    logger.info('\\n🎉 所有任务已完成！建议运行回顾:');
+    logger.info('   1. 检查 00-需求文档/ 中各 Spec 是否需补充');
+    logger.info('   2. 更新 .speccore/GLOBAL/ 全局配置');
+    logger.info('   3. speccore archive --all 归档完成的任务');
+  }
+}
