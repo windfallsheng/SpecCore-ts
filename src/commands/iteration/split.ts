@@ -66,6 +66,53 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     }
 
     const iterationDir = `期次-${iteration}`;
+
+    // ── 1. 检查 ANALYSIS.md + AI 智能拆分建议 ──
+    const analysisPath = join(iterationDir, '00-需求文档', 'ANALYSIS.md');
+    if (await pathExists(analysisPath)) {
+      const analysis = await readFile(analysisPath, 'utf-8');
+      const blockerLines = analysis.split('\n').filter(l => 
+        l.includes('🔴') || l.includes('🚫') || l.toLowerCase().includes('blocker')
+      );
+      
+      if (blockerLines.length > 0) {
+        spinner.stop();
+        logger.warn(`\n⚠️  ANALYSIS.md 检测到 ${blockerLines.length} 个阻断项:`);
+        for (const line of blockerLines.slice(0, 5)) {
+          logger.warn(`   ${line.trim().slice(0, 80)}`);
+        }
+        const proceed = await promptUser('\n仍要继续拆分？[y/N] ');
+        if (!proceed || proceed.toLowerCase() !== 'y') {
+          logger.info('已取消拆分');
+          return;
+        }
+        spinner.start();
+      }
+      
+      // 生成 AI 拆分建议上下文
+      const promptsDir = join('.speccore', 'prompts');
+      await ensureDir(promptsDir);
+      
+      const reqPath2 = join(iterationDir, '00-需求文档', 'REQUIREMENT.md');
+      let reqContent2 = '';
+      if (await pathExists(reqPath2)) {
+        reqContent2 = await readFile(reqPath2, 'utf-8');
+      }
+      
+      const specDir2 = join(iterationDir, '00-需求文档');
+      const specs: string[] = [];
+      for (const f of ['TECH.md', 'TEST.md', 'REVIEW.md', 'RISK.md', 'DEPS.md']) {
+        if (await pathExists(join(specDir2, f))) specs.push(f);
+      }
+      
+      const splitPrompt = `# SpecCore AI 智能拆分建议\n\n> 期次: ${iteration} | 生成: ${new Date().toISOString().split('T')[0]}\n\n---\n\n## 📋 需求原文\n\n${reqContent2.slice(0, 5000) || '_未找到_'}\n\n---\n\n## 📊 分析结果\n\n${analysis.slice(0, 3000)}\n\n${specs.length > 0 ? '## 📄 已有 Spec 文档\n' + specs.map(f => '- ' + f).join('\n') + '\n\n---\n\n' : ''}## 🤖 任务\n\n根据以上需求和 AI 分析，请建议：任务粒度（复杂拆分/简单合并）、优先级分配、任务间依赖关系、风险标记。直接回复给用户决策。`;
+      
+      await writeFile(join(promptsDir, `split-suggestion-${iteration}.md`), splitPrompt);
+      logger.info(`   🤖 AI 拆分建议 → .speccore/prompts/split-suggestion-${iteration}.md`);
+    } else {
+      logger.info('   ℹ️ 未找到 ANALYSIS.md，建议先运行 speccore analyze');
+    }
+
     const reqFile = join(iterationDir, '00-需求文档', options.file || 'REQUIREMENT.md');
 
     if (!(await pathExists(reqFile))) {
