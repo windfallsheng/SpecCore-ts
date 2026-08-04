@@ -52,16 +52,16 @@ export class Logger {
   }
 
   private colorize(level: LogLevel, message: string): string {
+    // 跳过 ANSI 颜色避免中文终端渲染异常
+    if (!process.stdout.isTTY) return message;
     const colors: Record<LogLevel, string> = {
-      debug: '\x1b[90m',    // Gray
-      info: '\x1b[36m',     // Cyan
-      warn: '\x1b[33m',     // Yellow
-      error: '\x1b[31m',    // Red
-      success: '\x1b[32m'   // Green
+      debug: '\x1b[90m',
+      info: '\x1b[36m',
+      warn: '\x1b[33m',
+      error: '\x1b[31m',
+      success: '\x1b[32m'
     };
-    
-    const reset = '\x1b[0m';
-    return `${colors[level]}${message}${reset}`;
+    return `${colors[level]}${message}\x1b[0m`;
   }
 
   close(): void {
