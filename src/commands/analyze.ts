@@ -181,12 +181,7 @@ async function generateIterationSpecDocs(iteration: string): Promise<void> {
 
   const now = new Date().toISOString().split('T')[0];
   const templates: [string, string][] = [
-    ['ANALYSIS.md',
-      `# 需求分析报告\n\n> 期次: ${iteration} | 生成: ${now} | 状态: 待 AI 分析\n\n`
-      + `## 1. 需求概述\n\n_由 AI 上下文分析生成_\n\n`
-      + `## 2. 核心功能点\n\n| 功能 | 优先级 | 估算 | 依赖 |\n| :--- | :--- | :--- | :--- |\n| | | | |\n\n`
-      + `## 3. 非功能需求\n\n- 性能: _补充_\n- 安全: _补充_\n- 兼容: _补充_\n\n`
-      + `## 4. 任务拆分建议\n\n_分析完成后由 AI 填充_\n`],
+    // ANALYSIS.md 由分析引擎自动生成，此处不覆盖
     ['TECH.md',
       `# 技术方案\n\n> 期次: ${iteration} | 生成: ${now}\n\n`
       + `## 架构\n\n_待填充_\n\n`

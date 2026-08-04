@@ -1031,30 +1031,71 @@ function buildAIEnhancedReport(
     r += `### ⚠️ 风险\n${archImpact.risks.map(rk => `- ${rk}`).join('\n')}\n\n`;
   }
 
-  // 4. AI 深度分析指引
-  r += `## 🤖 AI 深度分析\n\n`;
-  r += `> 以下分析项请由 AI 助手（WorkBuddy 等）读取 AI 上下文文件完成：\n\n`;
-  r += `**AI 上下文文件**: \`${aiContext.promptPath}\`\n\n`;
-  r += `请 AI 执行以下分析任务：\n\n`;
-  r += `- [ ] **需求完整性分析**: 检查需求覆盖的功能点、边界条件、异常处理\n`;
-  r += `- [ ] **需求-代码对标**: 将需求功能点映射到具体源码文件\n`;
-  r += `- [ ] **架构影响评估**: 评估变更对现有架构的影响范围\n`;
-  r += `- [ ] **风险识别**: 技术风险、业务风险、依赖风险\n`;
-  r += `- [ ] **任务拆分建议**: 推荐的任务粒度和依赖关系\n`;
+  // 4. 改动范围分析 (引擎可自动检测的部分)
+  r += `## 📂 改动范围\n\n`;
+  r += `| 维度 | 详情 |\n| :--- | :--- |\n`;
+  r += `| 源码目录 | ${input.sources.join(', ') || '未指定'} |\n`;
+  r += `| 扫描文件 | ${fileStats.totalFiles} 个 |\n`;
+  r += `| API 接口 | ${apiInventory.length} 个 |\n`;
+  if (archImpact.newDependencies && archImpact.newDependencies.length > 0) {
+    r += `| 新增依赖 | ${archImpact.newDependencies.join(', ')} |\n`;
+  }
+  r += `\n`;
+
+  // 5. 风险评估 (引擎可自动检测的部分)
+  r += `## ⚠️ 风险评估\n\n`;
+  if (archImpact.risks.length > 0) {
+    r += `### 架构风险\n${archImpact.risks.map((rk, i) => `${i + 1}. ${rk}`).join('\n')}\n\n`;
+  }
+  if (issues.filter(i => i.severity === 'blocker').length > 0) {
+    r += `### 🚫 阻断问题\n${issues.filter(i => i.severity === 'blocker').map(i => `- ${i.message.replace(/\\n/g, ' ')}`).join('\n')}\n\n`;
+  }
+  r += `> ⚠️ 以下风险项请 AI 深度分析后补充\n\n`;
+  r += `| 风险类型 | 风险描述 | 可能性 | 影响 | 缓解措施 |\n| :--- | :--- | :--- | :--- | :--- |\n`;
+  r += `| 技术风险 | _AI 分析_ | — | — | — |\n`;
+  r += `| 业务风险 | _AI 分析_ | — | — | — |\n`;
+  r += `| 依赖风险 | _AI 分析_ | — | — | — |\n`;
+  r += `| 安全风险 | _AI 分析_ | — | — | — |\n`;
+  r += `| 性能风险 | _AI 分析_ | — | — | — |\n`;
+  r += `\n`;
+
+  // 6. 文件级变更预测
+  r += `## 📄 预计变更文件\n\n`;
+  r += `| 文件 | 变更类型 | 影响评估 | 风险等级 |\n| :--- | :--- | :--- | :--- |\n`;
+  if (Object.keys(sourceContents).length > 0) {
+    for (const [file] of Object.entries(sourceContents).slice(0, 8)) {
+      r += `| \`${file}\` | _AI 分析_ | _AI 分析_ | — |\n`;
+    }
+  }
+  r += `| _其他_ | _待 AI 分析_ | — | — |\n\n`;
+  r += `> 📌 请 AI 读取上下文文件完成文件级对标\n\n`;
+
+  // 7. AI 深度分析指引
+  r += `## 🤖 AI 深度分析清单\n\n`;
+  r += `> **上下文文件**: \`${aiContext.promptPath}\`  \n`;
+  r += `> 请 AI 助手（WorkBuddy）读取上下文并完成以下分析：\n\n`;
+  r += `### 必须完成\n`;
+  r += `- [ ] **需求完整性分析**: 功能点覆盖、边界条件、异常处理、非功能需求\n`;
+  r += `- [ ] **需求-代码对标**: 将每个功能点映射到具体源码文件和方法\n`;
+  r += `- [ ] **变更影响范围**: 评估每个变更的波及面和级联影响\n`;
+  r += `- [ ] **风险矩阵填充**: 补充技术/业务/依赖/安全/性能风险详情\n`;
+  r += `- [ ] **文件级变更清单**: 列出所有需要修改的文件及修改类型\n`;
+  r += `### 可选\n`;
+  r += `- [ ] **任务拆分建议**: 推荐任务粒度和依赖关系\n`;
+  r += `- [ ] **技术方案推荐**: 架构方案、DB 设计、API 设计建议\n`;
+  r += `- [ ] **工时评估**: 基于改动范围的工时估算\n`;
 
   if (Object.keys(sourceContents).length > 0) {
-    r += `\n### 相关源码摘要\n\n`;
-    for (const [file, content] of Object.entries(sourceContents).slice(0, 3)) {
-      const lines = content.split('\n').slice(0, 15).join('\n');
-      r += `**${file}**:\n\`\`\`\n${lines}\n\`\`\`\n\n`;
+    r += `\n### 相关源码摘要 (${Object.keys(sourceContents).length} 个文件)\n\n`;
+    for (const [file, content] of Object.entries(sourceContents).slice(0, 5)) {
+      const lines = content.split('\n').slice(0, 12).join('\n');
+      r += `<details><summary><code>${file}</code></summary>\n\n\`\`\`\n${lines}\n\`\`\`\n\n</details>\n\n`;
     }
   }
 
-  // 5. 技术方案模板
-  r += `\n---\n\n## 📝 技术方案（待填写）\n\n`;
-  r += `| 模块 | 技术方案 | 负责人 | 预计工时 |\n| :--- | :--- | :--- | :--- |\n| | | | |\n\n`;
-  r += `### 待确认\n`;
-  r += `- [ ] AI 分析完成\n- [ ] 需求确认无遗漏\n- [ ] 技术方案评审通过\n- [ ] 可以开始拆分任务\n`;
+  // 8. 确认清单
+  r += `\n---\n\n## ✅ 确认清单\n\n`;
+  r += `- [ ] AI 分析完成\n- [ ] 需求确认无遗漏\n- [ ] 改动范围达成共识\n- [ ] 风险评估无遗漏\n- [ ] 技术方案评审通过\n- [ ] 可以开始拆分任务\n`;
 
   return r;
 }
