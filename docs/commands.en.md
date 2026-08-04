@@ -201,21 +201,24 @@ speccore status-panel --export --format=html --output=report.html --team --risk
 
 | Command | Alias | Description | Options |
 | :--- | :--- | :--- | :--- |
-| `speccore analyze` | `al` | Unified analysis: reqs + code, 3 scopes | `-I, --iteration <name>` `-t, --task <id>` `--scope <global\|iteration\|task>` `--src <dirs>` `--req <files>` `-o, --output <file>` `--depth <quick\|normal\|deep>` `--auto` `--interactive` |
+| `speccore analyze` | `al` | AI-enhanced analysis: reqs + code + AI context | `-I, --iteration <name>` `-t, --task <id>` `--scope <global\|iteration\|task>` `--src <dirs>` `--req <files>` `-o, --output <file>` `--depth <quick\|normal\|deep>` `--auto` `--interactive` |
 | `speccore impact` | `if` | Change impact analysis | `--req <id>` `--task <id>` |
 | `speccore baseline` | `bl` | Version baseline management | `--name <name>` `--compare <name>` `--restore <name>` `--req <id>` |
 | `speccore audit` | `ad` | AI smart audit | `--fix` |
 
 ```bash
-# Unified analysis engine — three scopes
+# AI-enhanced analysis engine — three scopes
 speccore analyze --scope global --depth deep              # Global code health
-speccore analyze --scope global --src backend,frontend    # Multi-dir code analysis
-speccore analyze --scope global --req docs/req.md         # Cross-iteration req consistency
-speccore analyze -I Q1                                    # Iteration req analysis (default)
-speccore analyze -I Q1 --src backend/src                  # Combined req+code
+speccore analyze --scope global --src backend,frontend    # Multi-dir code analysis (explicit --src)
+speccore analyze --scope global --req docs/req.md         # Pure req analysis (no source scan)
+speccore analyze -I Q1                                    # Iteration req analysis (no auto source scan)
+speccore analyze -I Q1 --src backend/src                  # Combined req+code (explicit --src)
 speccore analyze --scope task -t Task-01 -I Q1            # Task analysis + doc enrichment
-speccore analyze --interactive -I Q1                              # Interactive Q&A mode
+speccore analyze --interactive -I Q1                      # Interactive Q&A mode
 speccore analyze --src backend,frontend --req docs/a.md,docs/b.md --scope global
+
+# 🤖 AI context: generates .speccore/prompts/analyze-*.md
+#    AI assistants (WorkBuddy) read these for intelligent, iterative analysis
 
 speccore impact --req=REQ-001
 speccore baseline --name=v1.0
