@@ -70,6 +70,15 @@ export async function generateAIContext(input: AIContextInput): Promise<AIContex
     }
   }
 
+  // 1.5 读取 CONSTITUTION.md 获取工程配置映射
+  let constitutionInfo = '';
+  if (await pathExists(join('.speccore', 'CONSTITUTION.md'))) {
+    constitutionInfo = await readFile(join('.speccore', 'CONSTITUTION.md'), 'utf-8');
+  }
+
+  // 1.6 构建"端目录 ← → 工程源码"对应关系
+  const platformSourceMap = buildPlatformSourceMap(input);
+
   // 2. 读取代码索引
   let codeIndex: CodeIndex | null = null;
   if (await pathExists(INDEX_PATH)) {
@@ -95,6 +104,8 @@ export async function generateAIContext(input: AIContextInput): Promise<AIContex
     apiInventory,
     modules,
     codeIndex,
+    constitutionInfo,
+    platformSourceMap,
   });
 
   // 7. 写入文件
@@ -127,8 +138,10 @@ function buildPrompt(params: {
   apiInventory: string[];
   modules: Record<string, CodeFile[]>;
   codeIndex: CodeIndex | null;
+  constitutionInfo?: string;
+  platformSourceMap?: string;
 }): string {
-  const { scope, iteration, taskId, depth, reqContents, fileTree, apiInventory, modules } = params;
+  const { scope, iteration, taskId, depth, reqContents, fileTree, apiInventory, modules, constitutionInfo, platformSourceMap } = params;
 
   const scopeLabel = scope === 'global' ? '全局' : scope === 'task' ? `任务 ${taskId}` : `期次 ${iteration || '当前'}`;
 
@@ -138,6 +151,24 @@ function buildPrompt(params: {
 
 ---
 
+${constitutionInfo ? `## 🏗 项目工程配置 (CONSTITUTION.md)
+
+${constitutionInfo.split('\n').filter(l => l.trim() && !l.startsWith('# ') && !l.startsWith('> ')).join('\n').slice(0, 2000)}
+
+> 以上为项目配置信息。AI 应据此处配置判断各需求端（APP/H5/小程序/管理后台）对应哪个工程源码。
+
+---
+
+` : ''}
+${platformSourceMap ? `## 🔗 端 ↔ 工程对应关系
+
+${platformSourceMap}
+
+> 以上为"产品需求端目录"与"工程源码路径"的对应关系。分析时请按此映射对标。
+
+---
+
+` : ''}
 ## 📋 需求文档
 
 ${reqContents.join('\n\n---\n\n') || '_无需求文档_'}
@@ -268,4 +299,62 @@ function groupByModule(files: CodeFile[]): Record<string, CodeFile[]> {
   }
 
   return groups;
+}
+
+// ── 端 ↔ 工程对应关系 ──
+
+/**
+ * 构建产品需求端目录与工程源码路径的对应关系。
+ *
+ * 从两个来源推断:
+ * 1. 00-产品需求/ 下的子目录名 (APP端/H5端/小程序端/管理后台 等)
+ * 2. CONSTITUTION.md 中「项目信息」表格 (工程名+路径+Git仓库)
+ *
+ * AI 可据此判断: "APP端需求 → 对应哪个工程源码"
+ */
+function buildPlatformSourceMap(input: AIContextInput): string {
+  const lines: string[] = [];
+  
+  // 从需求路径中提取端目录
+  const platformDirs = new Set<string>();
+  for (const req of input.requirements) {
+    // 期次-Q1/00-产品需求/APP端/xxx.md → APP端
+    const parts = req.split('/');
+    const prdIdx = parts.indexOf('00-产品需求');
+    if (prdIdx >= 0 && prdIdx + 1 < parts.length) {
+      const platformDir = parts[prdIdx + 1];
+      if (platformDir && !platformDir.startsWith('_')) {
+        platformDirs.add(platformDir);
+      }
+    }
+  }
+
+  // 从源码路径中也提取关键目录名
+  const sourceNames = input.sources.map(s => {
+    const parts = s.split('/');
+    return parts[parts.length - 1] || s;
+  });
+
+  if (platformDirs.size === 0 && sourceNames.length === 0) return '';
+
+  lines.push('| 产品需求端 | 工程源码 | 说明 |');
+  lines.push('| :--- | :--- | :--- |');
+
+  const platforms = [...platformDirs];
+  for (let i = 0; i < Math.max(platforms.length, sourceNames.length); i++) {
+    const p = platforms[i] || '—';
+    const s = sourceNames[i] || '—';
+    const note = p !== '—' && s !== '—' 
+      ? `${p}需求 → 对应 \`${s}\` 工程` 
+      : p !== '—' 
+        ? `${p}需求（待指定工程）`
+        : `\`${s}\` 工程（待指定需求端）`;
+    lines.push(`| ${p} | \`${s}\` | ${note} |`);
+  }
+
+  // 通用需求
+  lines.push('');
+  lines.push('> **注意**: `_shared/` 目录下的需求为跨端共用，分析时应覆盖到所有相关工程。');
+
+  return lines.join('\n');
 }
