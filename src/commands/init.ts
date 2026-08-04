@@ -111,6 +111,11 @@ async function createDefaultFiles(speccoreDir: string): Promise<void> {
 
 > 本项目遵循 SpecCore 框架规范
 
+## 项目信息
+- 项目名称:
+- 项目路径:
+- Git 仓库:
+
 ## 技术栈
 
 ### 后端
