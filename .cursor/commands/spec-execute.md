@@ -1,5 +1,5 @@
 ---
 name: spec-execute
-description: Execute task
+description: 执行开发任务：自动建分支+依赖感知
 ---
-speccore execute --task=${1:Task-001} --force --iteration=${2:Q1}
+speccore execute -t ${1:Task-001} --force
