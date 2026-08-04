@@ -18,6 +18,7 @@ import { getDefaultIteration } from '../core/context';
 import { extractQuestions, showQuestionChecklist } from '../core/question-checklist';
 import { showNextSteps } from '../core/next-steps';
 import { runAnalysis, AnalyzeInput } from '../core/analyze-engine';
+import { generateGlobalArtifacts } from '../core/global-artifacts';
 
 export interface AnalyzeOptions {
   iteration?: string;
@@ -137,6 +138,11 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       await ensureDir(dirname(result.outputPath));
       await writeFile(result.outputPath, result.report);
       logger.info(`\n  ✅ 分析完成 → ${result.outputPath}\n`);
+    }
+
+    // ── 全局范围: 生成 TECH_STACK + CODE_INDEX + REQUIREMENT ──
+    if (scope === 'global' && sources.length > 0) {
+      await generateGlobalArtifacts(sources, input.depth);
     }
 
     // ── 下一步提示 + Spec 文档生成 (仅 iteration 范围) ──

@@ -878,8 +878,7 @@ async function createToolIntegrations(projectRoot: string): Promise<void> {
     ['spec-dev', '智能开发', 'speccore dev --auto'],
   ];
 
-  const tools = ['claude', 'codebuddy', 'cursor', 'trae', 'windsurf', 'qcoder'];
-  
+  const tools = ['claude', 'codebuddy', 'cursor', 'trae', 'windsurf'];
   for (const tool of tools) {
     const toolDir = join(projectRoot, '.' + tool, 'commands');
     await ensureDir(toolDir);
@@ -887,6 +886,13 @@ async function createToolIntegrations(projectRoot: string): Promise<void> {
       const content = '---\nname: ' + name + '\ndescription: ' + desc + '\n---\n' + cmd;
       await writeFile(join(toolDir, name + '.md'), content);
     }
+  }
+  // QCoder uses root-level dir (not commands/ subdir)
+  const qcoderDir = join(projectRoot, '.qcoder');
+  await ensureDir(qcoderDir);
+  for (const [name, desc, cmd] of commands) {
+    const content = '---\nname: ' + name + '\ndescription: ' + desc + '\n---\n' + cmd;
+    await writeFile(join(qcoderDir, name + '.md'), content);
   }
   
   logger.info('   🤖 已适配: Claude / CodeBuddy / Cursor / Trae / WindSurf / QCoder');
@@ -905,61 +911,45 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
     '',
     '| 成员 | 平台方向 | 投入比例 |',
     '| :--- | :--- | :--- |',
-    '| 张三 | 后台 | 80% |',
-    '| 李四 | Web, 小程序 | 70% |',
+    '| 张三 | APP, H5 | 80% |',
+    '| 李四 | 管理后台, 小程序 | 70% |',
     '',
     '> 编辑此文件后重新运行 split 即可更新默认分配',
   ].join('\n'));
 
-  // 00-产品需求/
+  // 00-产品需求/ — 按产品端区分（非技术分层）
   const prdDir = join(iterDir, '00-产品需求');
-  await ensureDir(join(prdDir, 'backend'));
-  await ensureDir(join(prdDir, 'frontend/Web'));
+  await ensureDir(join(prdDir, 'APP端'));
+  await ensureDir(join(prdDir, 'H5端'));
+  await ensureDir(join(prdDir, '小程序端'));
+  await ensureDir(join(prdDir, '管理后台'));
   await ensureDir(join(prdDir, '_shared'));
   
-  await writeFile(join(prdDir, 'backend/功能需求.md'), [
-    '# 后台端功能需求',
-    '',
-    '## 功能A',
-    '- 功能描述',
-    '- 涉及API: /api/v1/xxx',
-    '- 数据库: xxx表',
-    '',
-    '## 功能B',
-    '- 功能描述',
-  ].join('\n'));
-
-  await writeFile(join(prdDir, 'frontend/Web/Web端需求.md'), [
-    '# Web端需求',
-    '',
-    '## 页面列表',
-    '- 功能页面1',
-    '- 功能页面2',
-  ].join('\n'));
-
-  await writeFile(join(prdDir, '_shared/业务规则.md'), [
-    '# 通用业务规则',
-    '',
-    '- 规则1',
-    '- 规则2',
-  ].join('\n'));
+  await writeFile(join(prdDir, 'APP端/功能需求.md'), '# APP端需求\n\n## 核心功能\n- 功能描述\n- 涉及的API和数据');
+  await writeFile(join(prdDir, 'H5端/功能需求.md'), '# H5端需求\n\n## 核心功能\n- 功能描述');
+  await writeFile(join(prdDir, '小程序端/功能需求.md'), '# 小程序端需求\n\n## 核心功能\n- 功能描述');
+  await writeFile(join(prdDir, '管理后台/功能需求.md'), '# 管理后台需求\n\n## 核心功能\n- 功能描述');
+  await writeFile(join(prdDir, '_shared/业务规则.md'), '# 通用业务规则\n\n- 规则1\n- 规则2');
 
   // 00-需求文档/
   const specDir = join(iterDir, '00-需求文档');
   await ensureDir(specDir);
   await writeFile(join(specDir, 'REQUIREMENT.md'), [
-    '## 后台端需求',
-    '',
-    '### 功能A',
+    '## APP端需求',
+    '### 核心功能',
     '功能描述与验收标准',
     '',
-    '### 功能B',
+    '## H5端需求',
+    '### 核心功能',
     '功能描述与验收标准',
     '',
-    '## Web端需求',
+    '## 小程序端需求',
+    '### 核心功能',
+    '功能描述与验收标准',
     '',
-    '### 功能页面1',
-    '页面描述',
+    '## 管理后台需求',
+    '### 核心功能',
+    '功能描述与验收标准',
   ].join('\n'));
 
   // 00-期次总览/
@@ -967,17 +957,14 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
   await ensureDir(overviewDir);
   await writeFile(join(overviewDir, 'PROJECT_GRAPH.md'), [
     '# 示例任务总览',
-    '',
-    '> 期次：示例',
-    '> 默认分支: main',
-    '',
-    '## 任务列表',
-    '| 任务编号 | 任务名称 | 类型 | 进度 | 状态 | 负责人 |',
-    '| :--- | :--- | :--- | :--- | :--- | :--- |',
-    '| Task-001 | 功能A | feature | 0% | 待开发 | 张三 |',
-    '| Task-002 | 功能B | feature | 0% | 待开发 | 张三 |',
-    '| Task-003 | 功能页面1 | feature | 0% | 待开发 | 李四 |',
+    '> 期次：示例 | 默认分支: main',
+    '| 任务编号 | 任务名称 | 类型 | 状态 | 负责人 |',
+    '| :--- | :--- | :--- | :--- | :--- |',
+    '| Task-001 | APP核心功能 | feature | 待开发 | 张三 |',
+    '| Task-002 | H5核心功能 | feature | 待开发 | 张三 |',
+    '| Task-003 | 小程序核心功能 | feature | 待开发 | 李四 |',
+    '| Task-004 | 管理后台功能 | feature | 待开发 | 李四 |',
   ].join('\n'));
 
-  logger.info('   📂 示例期次: 期次-示例/ (产品需求+需求文档+期次总览)');
+  logger.info('   📂 示例期次: 期次-示例/ (按端区分: APP/H5/小程序/管理后台)');
 }
