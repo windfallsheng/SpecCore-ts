@@ -15,6 +15,7 @@ export type IntentType =
   | 'change'              // 需求变更
   | 'execute'             // 执行开发
   | 'create'              // 创建功能/任务
+  | 'iteration_create'    // 创建期次
   | 'review'              // 审查
   | 'plan'                // 方案/计划
   | 'reference'           // 参考查找
