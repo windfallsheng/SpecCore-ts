@@ -201,12 +201,19 @@ function showMediumConfidenceResults(
     if (answer === 'q' || answer === 'Q') { logger.info('已取消'); return; }
     const idx = parseInt(answer) - 1;
     const selected = (idx >= 0 && idx < results.length) ? results[idx] : results[0];
-    logger.info(`\n✅ 执行: speccore ${selected.command}`);
     const params = selected.extractedParams;
     let cmd = `speccore ${selected.command}`;
     if (params.name) cmd += ` -n "${params.name}"`;
     if (iteration && !params.iteration) cmd += ` -i "${iteration}"`;
-    logger.info(`   $ ${cmd}\n`);
+    if (params.iteration) cmd += ` -i "${params.iteration}"`;
+    logger.info(`\n⚡ 执行: ${cmd}\n`);
+    // 实际执行命令
+    const { execSync } = require('child_process');
+    try {
+      execSync(cmd, { stdio: 'inherit' });
+    } catch (e: any) {
+      logger.warn(`   ⚠️ 命令执行失败: ${e.message}`);
+    }
   });
 }
 

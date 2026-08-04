@@ -23,6 +23,7 @@ export interface IterationSplitOptions {
   interactive?: boolean;
   platforms?: string;
   strict?: boolean;
+  force?: boolean;
 }
 
 async function detectPlatforms(iterationDir: string, specified?: string): Promise<string[]> {
@@ -129,6 +130,16 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     }
 
     const platforms = await detectPlatforms(iterationDir, options.platforms);
+
+    // ── 冲突检测: 检查是否已有 Task 目录 ──
+    const existingTasks = await detectExistingTasks(iterationDir);
+    if (existingTasks.length > 0 && !options.force) {
+      spinner.stop();
+      logger.warn(`\n⚠️  检测到已有 ${existingTasks.length} 个任务: ${existingTasks.slice(0,5).join(', ')}${existingTasks.length > 5 ? '...' : ''}`);
+      logger.info('   重新 split 会覆盖 TASK.md 中的进度和状态。');
+      logger.info('   使用 --force 强制覆盖，或手动删除不需要的任务。\n');
+      return;
+    }
 
     // ── 智能分析: 复杂度 + 优先级 + 工时 ──
     const complexities = sections.map(s => estimateSectionComplexity(s));
@@ -1399,4 +1410,17 @@ function detectSemanticDependencies(sections: Section[]): Map<string, string[]> 
   }
   
   return deps;
+}
+
+async function detectExistingTasks(iterDir: string): Promise<string[]> {
+  const tasks: string[] = [];
+  try {
+    const entries = require('fs').readdirSync(iterDir, { withFileTypes: true });
+    for (const e of entries) {
+      if (e.isDirectory() && e.name.startsWith('Task-')) {
+        tasks.push(e.name);
+      }
+    }
+  } catch {}
+  return tasks;
 }
