@@ -121,11 +121,11 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 
 ## 项目信息
 
-> 多工程时填写各子工程的路径和仓库，单工程只保留一行
+> 多工程时填写各子工程。**对应需求端**用于 AI 分析时自动对标（一个工程可对应多个需求端）
 
-| 工程 | 路径 | Git 仓库 | 默认分支 |
-| :--- | :--- | :--- | :--- |
-| ${projectName} | ${projectRoot} | ${gitUrl || '待配置'} | main |
+| 工程 | 路径 | Git 仓库 | 默认分支 | 对应需求端 |
+| :--- | :--- | :--- | :--- | :--- |
+| ${projectName} | ${projectRoot} | ${gitUrl || '待配置'} | main | — |
 
 ## 技术栈
 

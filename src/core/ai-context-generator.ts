@@ -306,19 +306,22 @@ function groupByModule(files: CodeFile[]): Record<string, CodeFile[]> {
 /**
  * 构建产品需求端目录与工程源码路径的对应关系。
  *
- * 从两个来源推断:
- * 1. 00-产品需求/ 下的子目录名 (APP端/H5端/小程序端/管理后台 等)
- * 2. CONSTITUTION.md 中「项目信息」表格 (工程名+路径+Git仓库)
+ * 从两个来源推断（优先级从高到低）：
+ * 1. CONSTITUTION.md 中「项目信息」表格的「对应需求端」列 → N:M 映射
+ * 2. 00-产品需求/ 下的子目录名 + 源码目录名 → 1:1 简单推断
  *
- * AI 可据此判断: "APP端需求 → 对应哪个工程源码"
+ * 用户可随时编辑 CONSTITUTION.md 中的「对应需求端」列来调整映射。
+ * 格式: "APP端, 管理后台" 表示该工程同时对应 APP端 和 管理后台 的需求。
  */
 function buildPlatformSourceMap(input: AIContextInput): string {
   const lines: string[] = [];
   
-  // 从需求路径中提取端目录
+  // 1. 从 CONSTITUTION 读 N:M 映射
+  const constitutionMapping = readConstitutionPlatformMapping();
+  
+  // 2. 提取产品需求端目录
   const platformDirs = new Set<string>();
   for (const req of input.requirements) {
-    // 期次-Q1/00-产品需求/APP端/xxx.md → APP端
     const parts = req.split('/');
     const prdIdx = parts.indexOf('00-产品需求');
     if (prdIdx >= 0 && prdIdx + 1 < parts.length) {
@@ -329,32 +332,119 @@ function buildPlatformSourceMap(input: AIContextInput): string {
     }
   }
 
-  // 从源码路径中也提取关键目录名
+  // 3. 从源码路径提取工程名
   const sourceNames = input.sources.map(s => {
     const parts = s.split('/');
     return parts[parts.length - 1] || s;
   });
 
-  if (platformDirs.size === 0 && sourceNames.length === 0) return '';
+  const hasConstitution = Object.keys(constitutionMapping).length > 0;
 
-  lines.push('| 产品需求端 | 工程源码 | 说明 |');
-  lines.push('| :--- | :--- | :--- |');
+  if (hasConstitution) {
+    // — 使用 CONSTITUTION 中的 N:M 映射 —
+    lines.push('> 以下映射来自 CONSTITUTION.md「项目信息」表格的「对应需求端」列');
+    lines.push('');
+    lines.push('| 工程源码 | 默认分支 | 对应需求端 |');
+    lines.push('| :--- | :--- | :--- |');
 
-  const platforms = [...platformDirs];
-  for (let i = 0; i < Math.max(platforms.length, sourceNames.length); i++) {
-    const p = platforms[i] || '—';
-    const s = sourceNames[i] || '—';
-    const note = p !== '—' && s !== '—' 
-      ? `${p}需求 → 对应 \`${s}\` 工程` 
-      : p !== '—' 
-        ? `${p}需求（待指定工程）`
-        : `\`${s}\` 工程（待指定需求端）`;
-    lines.push(`| ${p} | \`${s}\` | ${note} |`);
+    // 先写出 CONSTITUTION 中明确配置的
+    for (const [src, info] of Object.entries(constitutionMapping)) {
+      const branches = info.branches.join(', ');
+      const platforms = info.platforms.length > 0 ? info.platforms.join(', ') : '—';
+      lines.push(`| \`${src}\` | ${branches} | ${platforms} |`);
+    }
+
+    // 再标注未在 CONSTITUTION 中配置的源码目录
+    const configured = new Set(Object.keys(constitutionMapping));
+    for (const src of sourceNames) {
+      if (!configured.has(src) && !configured.has(input.sources[sourceNames.indexOf(src)])) {
+        lines.push(`| \`${src}\` | — | ⚠️ 未配置，请补充 CONSTITUTION.md |`);
+      }
+    }
+  } else {
+    // — 无 CONSTITUTION 时用简单推断 —
+    lines.push('> ⚠️ CONSTITUTION.md 未配置「对应需求端」，以下为自动推断。请编辑 CONSTITUTION 完善映射。');
+    lines.push('');
+    lines.push('| 产品需求端 | 工程源码 | 说明 |');
+    lines.push('| :--- | :--- | :--- |');
+
+    const platforms = [...platformDirs];
+    for (let i = 0; i < Math.max(platforms.length, sourceNames.length); i++) {
+      const p = platforms[i] || '—';
+      const s = sourceNames[i] || '—';
+      const note = p !== '—' && s !== '—' 
+        ? `${p}需求 → 对应 \`${s}\` 工程` 
+        : p !== '—' 
+          ? `⚠️ ${p}需求（待指定工程）`
+          : `\`${s}\` 工程（待指定需求端）`;
+      lines.push(`| ${p} | \`${s}\` | ${note} |`);
+    }
   }
 
-  // 通用需求
+  // 标注跨端共用
   lines.push('');
-  lines.push('> **注意**: `_shared/` 目录下的需求为跨端共用，分析时应覆盖到所有相关工程。');
+  lines.push('> **跨端需求**: `_shared/` 或标记为多端共用的需求，AI 分析时应覆盖所有相关工程。');
+  lines.push('> **调整方式**: 编辑 CONSTITUTION.md → 「项目信息」表格的「对应需求端」列，用逗号分隔多个端。');
 
   return lines.join('\n');
+}
+
+/** 
+ * 解析 CONSTITUTION.md 中的项目信息表格，提取 N:M 工程↔需求端映射。
+ * 返回: { 工程源码路径: { platforms: ['APP端','H5端'], branches: ['main'] } }
+ */
+function readConstitutionPlatformMapping(): Record<string, { platforms: string[]; branches: string[] }> {
+  const result: Record<string, { platforms: string[]; branches: string[] }> = {};
+  try {
+    const fs = require('fs');
+    const path = join('.speccore', 'CONSTITUTION.md');
+    if (!fs.existsSync(path)) return result;
+    const content = fs.readFileSync(path, 'utf-8');
+    
+    // 找到「项目信息」下的表格
+    const tableStart = content.indexOf('| 工程 |');
+    if (tableStart < 0) return result;
+    
+    const lines = content.slice(tableStart).split('\n');
+    let headerParsed = false;
+    let platformColIdx = -1;
+    let pathColIdx = -1;
+    let branchColIdx = -1;
+    
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('|')) continue;
+      
+      const cols: string[] = trimmed.split('|').map((c: string) => c.trim()).filter(Boolean);
+      
+      if (!headerParsed) {
+        // 解析表头: 找到「对应需求端」「路径」「默认分支」的列索引
+        platformColIdx = cols.findIndex((c: string) => c.includes('需求端'));
+        pathColIdx = cols.findIndex((c: string) => c.includes('路径'));
+        branchColIdx = cols.findIndex((c: string) => c.includes('分支'));
+        headerParsed = true;
+        continue;
+      }
+      
+      // 跳过分隔行
+      if (cols[0].startsWith(':')) continue;
+      
+      if (cols.length >= 2 && platformColIdx >= 0) {
+        const srcPath = pathColIdx >= 0 && cols[pathColIdx] ? cols[pathColIdx].replace(/`/g, '') : '';
+        const platforms = platformColIdx < cols.length && cols[platformColIdx] 
+          ? cols[platformColIdx].split(/[,，]/).map((p: string) => p.trim()).filter(Boolean)
+          : [];
+        const branches = branchColIdx >= 0 && branchColIdx < cols.length && cols[branchColIdx]
+          ? [cols[branchColIdx].trim()]
+          : ['main'];
+        
+        // 用工程名或路径作为 key
+        const key = srcPath || cols[0].replace(/`/g, '');
+        if (key && key !== '—') {
+          result[key] = { platforms, branches };
+        }
+      }
+    }
+  } catch {}
+  return result;
 }
