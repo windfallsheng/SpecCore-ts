@@ -25,14 +25,14 @@ interface GitMapping {
 /**
  * 为任务创建 Git 分支
  */
-export function createTaskBranch(taskId: string, taskName: string, baseBranch?: string): string | null {
+export function createTaskBranch(taskId: string, taskName: string, baseBranch?: string, iteration?: string): string | null {
   try {
     const branchName = `feature/${taskId}`.substring(0, 100);
 
-    // 确定 base 分支: 显式指定 > 依赖分支 > main/master > 当前 HEAD
+    // 确定 base 分支: 显式指定 > 依赖分支 > 期次配置 > CONSTITUTION > git检测
     let effectiveBase = baseBranch;
     if (!effectiveBase) {
-      effectiveBase = detectDefaultBranch();
+      effectiveBase = detectDefaultBranch(iteration);
     }
 
     if (effectiveBase) {
@@ -54,9 +54,21 @@ export function createTaskBranch(taskId: string, taskName: string, baseBranch?: 
   }
 }
 
-/** 检测仓库默认分支: CONSTITUTION.md > main > master > HEAD */
-export function detectDefaultBranch(): string | undefined {
-  // 1. 从项目配置读取
+/** 检测默认分支: 期次配置 > CONSTITUTION > git remote > 本地 */
+export function detectDefaultBranch(iteration?: string): string | undefined {
+  // 1. 期次级配置 (PROJECT_GRAPH.md 中 默认分支 字段)
+  if (iteration) {
+    try {
+      const iterGraphPath = join(`期次-${iteration}`, '00-期次总览', 'PROJECT_GRAPH.md');
+      if (require('fs').existsSync(iterGraphPath)) {
+        const content = require('fs').readFileSync(iterGraphPath, 'utf-8');
+        const match = content.match(/默认分支[：:]\s*(\S+)/);
+        if (match) return match[1];
+      }
+    } catch {}
+  }
+
+  // 2. 全局 CONSTITUTION.md
   try {
     const constitutionPath = join('.speccore', 'CONSTITUTION.md');
     if (require('fs').existsSync(constitutionPath)) {
@@ -66,14 +78,14 @@ export function detectDefaultBranch(): string | undefined {
     }
   } catch {}
 
-  // 2. 自动检测远程仓库默认分支
+  // 3. git remote HEAD
   try {
     const remote = execSync('git remote show origin 2>/dev/null', { encoding: 'utf-8' });
     const headMatch = remote.match(/HEAD branch:\s*(\S+)/);
     if (headMatch) return headMatch[1];
   } catch {}
 
-  // 3. 本地分支检查
+  // 4. 本地分支
   try {
     const branches = execSync('git branch', { encoding: 'utf-8' });
     if (branches.includes('main') || branches.includes(' main')) return 'main';

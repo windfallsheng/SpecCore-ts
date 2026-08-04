@@ -283,14 +283,14 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
 
   // Create branches for each task (dependency-aware)
   if (tasks.length > 0) {
-    let defaultBase = base || detectDefaultBranch();
+    let defaultBase = base || detectDefaultBranch(iteration);
     for (const task of tasks) {
       let taskBase = base;
       // Auto-detect dependency per task from IMPACT.md
       if (!taskBase) {
         taskBase = await detectDependencyBase(iteration, task.id);
       }
-      const branch = createTaskBranch(task.id, task.id, taskBase);
+      const branch = createTaskBranch(task.id, task.id, taskBase, iteration);
       if (branch) {
         const baseInfo = taskBase ? ` (from ${taskBase})` : ` (from ${defaultBase || 'HEAD'})`;
         logger.info(`🌿 ${task.id}: ${branch}${baseInfo}`);
