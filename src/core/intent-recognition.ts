@@ -104,6 +104,17 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     description: '快速 Bug 修复 — 创建修复任务并关联变更联动',
   },
   // 创建层
+  // 创建期次（必须在通用创建之前，优先级更高）
+  {
+    id: 'iteration create',
+    intent: 'iteration_create',
+    priority: 92,
+    triggers: ['创建期次', '新建期次', '开始迭代', '新建迭代', '创建迭代', '开启期次', '创建sprint'],
+    patterns: ['创建(.+)期次', '新建(.+)期次', '开始(.+)迭代', '创建(.+)迭代'],
+    description: '创建新期次 — 生成 STAFFING + 产品需求 + 需求文档目录',
+    args: '--name=<name> --owner=<owner>',
+  },
+  // 创建任务（通用创建）
   {
     id: 'task new',
     intent: 'create',
