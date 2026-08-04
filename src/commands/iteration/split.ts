@@ -480,6 +480,7 @@ ${apiDesc}
 - 类型: feature
 - 状态: 🔲 待开发
 - 优先级: medium
+- 负责人: ${(section as any)._owner || '未分配'}
 - 预计耗时: 2h
 
 ## 变更履历
