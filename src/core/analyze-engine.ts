@@ -17,6 +17,7 @@ import { readFile, writeFile, pathExists, readdir, stat } from 'fs-extra';
 import { join, relative, basename } from 'path';
 import { logger } from '../utils/logger';
 import { buildCodeIndex, findRelevantCode, readRelevantSource, isIndexStale } from './code-scanner';
+import { generateAIContext, AIContextInput, AIContextResult } from './ai-context-generator';
 
 // ================================================================
 // 类型定义
@@ -205,30 +206,30 @@ async function analyzeCombined(input: AnalyzeInput): Promise<AnalysisResult> {
   const issues = scanCompleteness(fullReqContent);
   const archImpact = await analyzeArchitectureImpact(fullReqContent);
 
-  // 代码分析
+  // 代码结构分析
   const fileStats = await scanSourceDirs(input.sources, input.depth);
   const apiInventory = await buildApiInventory(input.sources);
 
-  // 需求-代码对标
+  // 确保代码索引是最新的
   if (await isIndexStale()) {
     await buildCodeIndex();
   }
 
-  // 分别对每个源码目录和每个需求做对标
-  const codeMapEntries: CodeMapEntry[] = [];
-  for (const content of allContent) {
-    const rawMatches = await findRelevantCode(content, 20);
-    for (const m of rawMatches) {
-      codeMapEntries.push({
-        sourceFile: m.file,
-        apis: m.apis,
-        exports: m.exports.slice(0, 5),
-        relevanceScore: m.score,
-      });
-    }
-  }
+  // ── AI 上下文生成: 替代关键词匹配 ──
+  const aiContext = await generateAIContext({
+    requirements: input.requirements,
+    sources: input.sources,
+    scope: input.scope,
+    iteration: input.iteration,
+    taskId: input.taskId,
+    depth: input.depth,
+  });
 
-  // 读取相关源码(deep 模式)
+  logger.info(`   🤖 AI 上下文已生成 → ${aiContext.promptPath}`);
+  logger.info(`   📁 源码文件: ${aiContext.totalFiles} 个`);
+  logger.info(`   🔗 API: ${aiContext.totalApis} 个`);
+
+  // deep 模式: 仍然读取相关源码内容注入分析
   let sourceContents: Record<string, string> = {};
   if (input.depth === 'deep') {
     const rawMatches = await findRelevantCode(fullReqContent, 15);
@@ -240,16 +241,14 @@ async function analyzeCombined(input: AnalyzeInput): Promise<AnalysisResult> {
 
   if (input.scope === 'global') {
     outputPath = join('.speccore', 'GLOBAL', input.output || 'ARCH_IMPACT.md');
-    report = buildGlobalArchImpactReport(input, issues, archImpact, codeMapEntries, fileStats);
+    report = buildAIEnhancedReport(input, 'global', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents });
   } else if (input.scope === 'task') {
-    // task scope — 已在入口校验 taskId + iteration 必填
     outputPath = join(`期次-${input.iteration}`, input.taskId!, 'backend', input.output || 'ANALYSIS.md');
-    report = buildTaskCombinedReport(input, issues, archImpact, codeMapEntries, sourceContents);
+    report = buildAIEnhancedReport(input, 'task', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents });
   } else {
-    // iteration (default)
     const iterDir = `期次-${input.iteration || 'current'}`;
     outputPath = join(iterDir, '00-需求文档', input.output || 'ANALYSIS.md');
-    report = buildIterationCombinedReport(input, issues, archImpact, codeMapEntries, fileStats, apiInventory);
+    report = buildAIEnhancedReport(input, 'iteration', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents });
   }
 
   return {
@@ -960,156 +959,90 @@ function buildTaskCodeReport(
 }
 
 // ================================================================
-// 报告生成: 需求+代码联合
+// 报告生成: AI 增强 (替代旧的关键词匹配方案)
 // ================================================================
 
-function buildGlobalArchImpactReport(
-  input: AnalyzeInput,
-  issues: Issue[],
-  archImpact: ArchImpact,
-  codeMap: CodeMapEntry[],
-  stats: SourceStats
-): string {
-  const now = new Date().toISOString().split('T')[0];
-  let r = `# 全局架构影响分析\n\n`;
-  r += `> 分析时间: ${now} | 需求: ${input.requirements.length} 个 | 源码目录: ${input.sources.join(', ')}\n\n`;
-  r += `---\n\n`;
-
-  r += `## 1. 概览\n\n`;
-  r += `| 指标 | 值 |\n| :--- | :--- |\n`;
-  r += `| 需求文档 | ${input.requirements.length} |\n`;
-  r += `| 扫描文件 | ${stats.totalFiles} |\n`;
-  r += `| 匹配代码 | ${codeMap.length} |\n`;
-  r += `| 问题 | ${issues.length} |\n`;
-  r += `| 风险 | ${archImpact.risks.length} |\n`;
-  r += `\n`;
-
-  r += `## 2. 需求完整性\n\n`;
-  for (const i of issues) r += `- ${icon(i.severity)} ${i.message.replace(/\n/g, ' ')}\n`;
-  r += `\n`;
-
-  r += `## 3. 代码对标 (${codeMap.length} 个匹配)\n\n`;
-  if (codeMap.length > 0) {
-    r += `| 源码文件 | 关联分 | 匹配API |\n| :--- | :--- | :--- |\n`;
-    for (const m of codeMap.slice(0, 20)) {
-      r += `| ${m.sourceFile} | ${m.relevanceScore} | ${m.apis.slice(0, 3).join(', ')} |\n`;
-    }
-  }
-  r += `\n`;
-
-  r += `## 4. 架构影响\n\n`;
-  for (const d of archImpact.newDependencies) r += `- [ ] ${d}\n`;
-  for (const rk of archImpact.risks) r += `- ⚠️ ${rk}\n`;
-
-  return r;
+interface AIEnhancedReportParams {
+  issues: Issue[];
+  archImpact: ArchImpact;
+  fileStats: SourceStats;
+  apiInventory: ApiEntry[];
+  aiContext: AIContextResult;
+  sourceContents: Record<string, string>;
 }
 
-function buildIterationCombinedReport(
+function buildAIEnhancedReport(
   input: AnalyzeInput,
-  issues: Issue[],
-  archImpact: ArchImpact,
-  codeMap: CodeMapEntry[],
-  stats: SourceStats,
-  apis: ApiEntry[]
+  scope: 'global' | 'iteration' | 'task',
+  params: AIEnhancedReportParams
 ): string {
+  const { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents } = params;
   const now = new Date().toISOString().split('T')[0];
   const iter = input.iteration || 'current';
   const blockerCount = issues.filter(i => i.severity === 'blocker').length;
 
-  let r = `# 需求分析报告\n\n`;
-  r += `> 期次: ${iter} | 分析时间: ${now} | 状态: ${blockerCount > 0 ? '🔴 有阻断' : '🟢 可拆分'}\n`;
-  r += `> 需求文档: ${input.requirements.length} 个 | 源码目录: ${input.sources.join(', ')}\n\n`;
+  let r = `# ${scope === 'global' ? '全局架构影响分析' : scope === 'task' ? '任务综合分析' : '需求分析报告'}\n\n`;
+  r += `> 期次: ${iter} | 时间: ${now} | 状态: ${blockerCount > 0 ? '🔴 有阻断' : '🟢 可拆分'}\n`;
+  r += `> 需求: ${input.requirements.length} 个 | 源码文件: ${fileStats.totalFiles} 个 | API: ${apiInventory.length} 个\n`;
+  r += `> **AI 上下文**: [${aiContext.promptPath}](${aiContext.promptPath})\n\n`;
   r += `---\n\n`;
 
-  if (codeMap.length > 0) {
-    r += `## 0. 分析概览\n\n`;
-    r += `| 需求文档 | 扫描文件 | 匹配代码 | API 接口 | 问题 |\n`;
-    r += `| :--- | :--- | :--- | :--- | :--- |\n`;
-    r += `| ${input.requirements.length} | ${stats.totalFiles} | ${codeMap.length} | ${apis.length} | ${issues.length} |\n\n`;
-  }
-
-  // 1. 完整性检查
-  r += `## 1. 需求完整性检查\n\n`;
-  r += `| 严重度 | 分类 | 问题 |\n| :--- | :--- | :--- |\n`;
-  for (const issue of issues) {
-    r += `| ${icon(issue.severity)} ${issue.severity} | ${issue.category} | ${issue.message.replace(/\n/g, '<br>')} |\n`;
-  }
-  if (issues.length === 0) r += `| ✅ | - | 未发现明显问题 |\n`;
+  // 1. 分析概览
+  r += `## 📊 分析概览\n\n`;
+  r += `| 指标 | 值 |\n| :--- | :--- |\n`;
+  r += `| 需求文档 | ${input.requirements.length} |\n`;
+  r += `| 扫描文件 | ${fileStats.totalFiles} |\n`;
+  r += `| 发现问题 | ${issues.length} |\n`;
+  r += `| 阻断问题 | ${blockerCount} |\n`;
+  r += `| API 接口 | ${apiInventory.length} |\n`;
+  r += `| 架构风险 | ${archImpact.risks.length} |\n`;
   r += `\n`;
 
-  // 2. 源码对标
-  r += `## 2. 源码对标\n\n`;
-  if (codeMap.length > 0) {
-    r += `| 源码文件 | 关联度 | API 匹配 |\n| :--- | :--- | :--- |\n`;
-    for (const m of codeMap.slice(0, 15)) {
-      const relevance = m.relevanceScore >= 30 ? 'high' : m.relevanceScore >= 15 ? 'medium' : 'low';
-      r += `| ${m.sourceFile} | ${relevance} (${m.relevanceScore}) | ${m.apis.slice(0, 3).join(', ') || '—'} |\n`;
+  // 2. 问题清单 (基础规则检查)
+  r += `## 🔍 自动检查结果\n\n`;
+  if (issues.length > 0) {
+    r += `| 严重度 | 分类 | 问题 |\n| :--- | :--- | :--- |\n`;
+    for (const issue of issues) {
+      r += `| ${icon(issue.severity)} ${issue.severity} | ${issue.category} | ${issue.message.replace(/\n/g, '<br>')} |\n`;
     }
   } else {
-    r += `> ⚠️ 未匹配到相关源码。请确认源码目录是否正确。\n`;
+    r += `> ✅ 基础规则检查未发现明显问题。\n`;
   }
   r += `\n`;
 
   // 3. 架构影响
-  r += `## 3. 架构影响\n\n`;
+  r += `## 🏗 架构影响\n\n`;
   if (archImpact.apis.length > 0) {
-    r += `### 涉及接口\n`;
-    for (const a of archImpact.apis.slice(0, 20)) r += `- \`${a}\`\n`;
-    r += `\n`;
-  }
-  if (archImpact.newDependencies.length > 0) {
-    r += `### 新增依赖\n`;
-    for (const d of archImpact.newDependencies) r += `- [ ] ${d}\n`;
-    r += `\n`;
+    r += `### 涉及接口\n${archImpact.apis.slice(0, 20).map(a => `- \`${a}\``).join('\n')}\n\n`;
   }
   if (archImpact.risks.length > 0) {
-    r += `### ⚠️ 风险提示\n`;
-    for (const rk of archImpact.risks) r += `- ${rk}\n`;
-    r += `\n`;
+    r += `### ⚠️ 风险\n${archImpact.risks.map(rk => `- ${rk}`).join('\n')}\n\n`;
   }
 
-  // 4. 待确认清单
-  r += `## 4. 待确认清单\n\n`;
-  for (const issue of issues.filter(i => i.severity !== 'info')) {
-    r += `- [ ] ${issue.message.replace(/\n/g, ' ').slice(0, 100)}\n`;
-  }
-  for (const rk of archImpact.risks) r += `- [ ] ${rk}\n`;
+  // 4. AI 深度分析指引
+  r += `## 🤖 AI 深度分析\n\n`;
+  r += `> 以下分析项请由 AI 助手（WorkBuddy 等）读取 AI 上下文文件完成：\n\n`;
+  r += `**AI 上下文文件**: \`${aiContext.promptPath}\`\n\n`;
+  r += `请 AI 执行以下分析任务：\n\n`;
+  r += `- [ ] **需求完整性分析**: 检查需求覆盖的功能点、边界条件、异常处理\n`;
+  r += `- [ ] **需求-代码对标**: 将需求功能点映射到具体源码文件\n`;
+  r += `- [ ] **架构影响评估**: 评估变更对现有架构的影响范围\n`;
+  r += `- [ ] **风险识别**: 技术风险、业务风险、依赖风险\n`;
+  r += `- [ ] **任务拆分建议**: 推荐的任务粒度和依赖关系\n`;
 
-  r += `\n---\n\n## 5. 技术方案（待填写）\n\n`;
+  if (Object.keys(sourceContents).length > 0) {
+    r += `\n### 相关源码摘要\n\n`;
+    for (const [file, content] of Object.entries(sourceContents).slice(0, 3)) {
+      const lines = content.split('\n').slice(0, 15).join('\n');
+      r += `**${file}**:\n\`\`\`\n${lines}\n\`\`\`\n\n`;
+    }
+  }
+
+  // 5. 技术方案模板
+  r += `\n---\n\n## 📝 技术方案（待填写）\n\n`;
   r += `| 模块 | 技术方案 | 负责人 | 预计工时 |\n| :--- | :--- | :--- | :--- |\n| | | | |\n\n`;
-  r += `### 数据库变更\n| 表名 | 变更类型 | 说明 |\n| :--- | :--- | :--- |\n| | | |\n\n`;
-  r += `### 接口依赖\n| 调用方 | 被调用方 | 接口 | 说明 |\n| :--- | :--- | :--- | :--- |\n| | | | |\n\n`;
-  r += `### 确认签字\n`;
-  r += `- [ ] 需求确认无遗漏\n- [ ] 技术方案评审通过\n- [ ] 工时评估合理\n- [ ] 可以开始拆分任务\n`;
-  return r;
-}
-
-function buildTaskCombinedReport(
-  input: AnalyzeInput,
-  issues: Issue[],
-  archImpact: ArchImpact,
-  codeMap: CodeMapEntry[],
-  sourceContents: Record<string, string>
-): string {
-  const now = new Date().toISOString().split('T')[0];
-  let r = `# 任务综合分析\n\n`;
-  r += `> 期次: ${input.iteration} | 任务: ${input.taskId} | ${now}\n\n---\n\n`;
-
-  r += `## 问题清单\n`;
-  for (const i of issues) r += `- ${icon(i.severity)} ${i.message.replace(/\n/g, ' ')}\n`;
-  r += `\n`;
-
-  if (codeMap.length > 0) {
-    r += `## 代码对标\n`;
-    r += `| 文件 | 关联分 |\n| :--- | :--- |\n`;
-    for (const m of codeMap.slice(0, 10)) r += `| ${m.sourceFile} | ${m.relevanceScore} |\n`;
-    r += `\n`;
-  }
-
-  if (archImpact.risks.length > 0) {
-    r += `## 风险\n`;
-    for (const rk of archImpact.risks) r += `- ${rk}\n`;
-  }
+  r += `### 待确认\n`;
+  r += `- [ ] AI 分析完成\n- [ ] 需求确认无遗漏\n- [ ] 技术方案评审通过\n- [ ] 可以开始拆分任务\n`;
 
   return r;
 }
