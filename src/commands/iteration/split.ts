@@ -38,7 +38,7 @@ async function detectPlatforms(iterationDir: string, specified?: string): Promis
     let inTable = false;
     for (const line of lines) {
       if (line.startsWith('|') && !line.includes(':---')) {
-        const cols = line.split('|').map(c => c.trim()).filter(Boolean);
+        const cols = line.split('|').map((c: string) => c.trim()).filter(Boolean);
         // First column is platform name, skip header row
         if (cols[0] && cols[0] !== '端' && !String(cols[0]).includes('文件')) {
           platforms.add(cols[0]);
@@ -128,9 +128,28 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       return;
     }
 
-    logger.info(`Found ${sections.length} sections to split`);
-    
     const platforms = await detectPlatforms(iterationDir, options.platforms);
+
+    // ── 智能分析: 复杂度 + 优先级 + 工时 ──
+    const complexities = sections.map(s => estimateSectionComplexity(s));
+    for (let i = 0; i < sections.length; i++) {
+      (sections[i] as any)._complexity = complexities[i];
+    }
+
+    // ── STAFFING 人员排期 ──
+    const staffing = readStaffing(iterationDir);
+    if (staffing) {
+      logger.info(`   👥 STAFFING: ${staffing.map(m => `${m.name}(${m.platforms.join(',')})`).join(', ')}`);
+      for (const section of sections) {
+        if (!(section as any)._owner) {
+          (section as any)._owner = autoAssign(section, platforms, staffing);
+        }
+      }
+    } else {
+      logger.info('   ℹ️ 未找到 STAFFING.md，人员分配默认为"未分配"');
+    }
+
+    logger.info(`Found ${sections.length} sections to split`);
     logger.info(`Platforms: ${platforms.join(', ')}`);
 
     // ── Strict mode: preview + confirm each task's split plan ──
@@ -472,6 +491,8 @@ ${apiDesc}
   }
 
   // Write TASK.md
+  const complexity = (section as any)._complexity as SectionComplexity || { estimatedHours: 2, priority: 'medium' as const, complexity: 'medium' as const, apiCount: 0, dbCount: 0, pageCount: 0, wordCount: 0 };
+  const owner = (section as any)._owner || '未分配';
   await writeFile(
     join(taskDir, 'backend', 'TASK.md'),
     `# ${section.name}
@@ -479,9 +500,10 @@ ${apiDesc}
 ## 任务信息
 - 类型: feature
 - 状态: 🔲 待开发
-- 优先级: medium
-- 负责人: ${(section as any)._owner || '未分配'}
-- 预计耗时: 2h
+- 优先级: ${complexity.priority}
+- 负责人: ${owner}
+- 预计耗时: ${complexity.estimatedHours}h${complexity.complexity !== 'medium' ? ` (${complexity.complexity === 'high' ? '高复杂度' : '低复杂度'})` : ''}
+- 复杂度: API ${complexity.apiCount} | DB ${complexity.dbCount} | 页面 ${complexity.pageCount}
 
 ## 变更履历
 | 时间 | 变更内容 | 变更人 |
@@ -819,10 +841,20 @@ async function generateImpactGraph(
     }
   }
 
+  // 语义依赖检测
+  const semanticDeps = detectSemanticDependencies(sections);
+
   impact += '\n## Dependencies\n\n';
-  if (uniqueDeps.length > 0) {
-    impact += '| Consumer | -> | Producer | API |\n| :--- | :---: | :--- | :--- |\n';
-    for (const d of uniqueDeps) impact += `| ${d.from}: ${d.fromName} | -> | ${d.to}: ${d.toName} | \`${d.reason}\` |\n`;
+  if (uniqueDeps.length > 0 || semanticDeps.size > 0) {
+    impact += '| Consumer | -> | Producer | 类型 |\n| :--- | :---: | :--- | :--- |\n';
+    // API 依赖
+    for (const d of uniqueDeps) impact += `| ${d.from}: ${d.fromName.slice(0,20)} | → | ${d.to}: ${d.toName.slice(0,20)} | API: \`${d.reason}\` |\n`;
+    // 语义依赖
+    for (const [from, targets] of semanticDeps) {
+      for (const target of targets) {
+        impact += `| ${from} | → | ${target} | 语义推断 |\n`;
+      }
+    }
     impact += '\n> Consumer tasks must wait for Producer tasks, or pre-define API contracts.\n';
   } else {
     impact += 'No task dependencies detected — all tasks can be developed in parallel.\n';
@@ -1195,4 +1227,159 @@ ${isH5 ? '移动端优先，适配 375/414/768' :
 - 页面切换: 300ms ease-in-out
 - 加载态: 骨架屏优先
 `;
+}
+
+// ================================================================
+// STAFFING 人员排期 + 智能分配 + 工时/优先级估算
+// ================================================================
+
+interface StaffMember {
+  name: string;
+  platforms: string[];
+  capacity: number; // 0-100
+}
+
+interface SectionComplexity {
+  apiCount: number;
+  dbCount: number;
+  pageCount: number;
+  wordCount: number;
+  complexity: 'low' | 'medium' | 'high';
+  estimatedHours: number;
+  priority: 'high' | 'medium' | 'low';
+}
+
+/**
+ * 读取期次的 STAFFING.md 人员排期配置
+ */
+function readStaffing(iterationDir: string): StaffMember[] | null {
+  try {
+    const staffingPath = join(iterationDir, 'STAFFING.md');
+    if (!require('fs').existsSync(staffingPath)) return null;
+    
+    const content = require('fs').readFileSync(staffingPath, 'utf-8');
+    const members: StaffMember[] = [];
+    
+    // 解析表格: | 张三 | 后台 | 70% |
+    const lines = content.split('\n');
+    for (const line of lines) {
+      if (!line.startsWith('|') || line.includes(':---')) continue;
+      const cols = line.split('|').map((c: string) => c.trim()).filter(Boolean);
+      if (cols.length >= 3 && cols[0] !== '人员' && cols[0] !== '成员') {
+        const capacity = parseInt(cols[2] || '100') || 100;
+        members.push({
+          name: cols[0],
+          platforms: (cols[1] || '').split(/[,，]/).map((p: string) => p.trim()),
+          capacity,
+        });
+      }
+    }
+    return members.length > 0 ? members : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 根据平台和负荷自动推荐负责人
+ */
+function autoAssign(section: Section, platforms: string[], staffing: StaffMember[]): string {
+  const targetPlatform = section.platform || '';
+  if (!targetPlatform || !staffing.length) return '未分配';
+  
+  // 找到匹配平台的、负荷最低的人
+  let best: StaffMember | null = null;
+  let bestLoad = Infinity;
+  
+  for (const m of staffing) {
+    const platformMatch = m.platforms.some(p => 
+      targetPlatform.includes(p) || p.includes(targetPlatform)
+    );
+    if (platformMatch && m.capacity < bestLoad) {
+      best = m;
+      bestLoad = m.capacity;
+    }
+  }
+  
+  return best ? best.name : '未分配';
+}
+
+/**
+ * 分析章节复杂度，决定优先级和工时
+ */
+function estimateSectionComplexity(section: Section): SectionComplexity {
+  const content = section.content || '';
+  const name = section.name || '';
+  const full = `${name}\n${content}`;
+  
+  // 统计复杂度指标
+  const apiCount = (full.match(/\/api\/|API|接口|endpoint|POST|GET|PUT|DELETE/gi) || []).length;
+  const dbCount = (full.match(/数据库|表|DDL|schema|model|entity|索引|字段/gi) || []).length;
+  const pageCount = (full.match(/页面|表单|列表|详情|弹窗|modal|dialog/gi) || []).length;
+  const wordCount = full.length;
+  
+  // 判断复杂度
+  let complexity: 'low' | 'medium' | 'high' = 'medium';
+  let score = apiCount * 3 + dbCount * 2 + pageCount;
+  if (score <= 3 && wordCount < 200) complexity = 'low';
+  else if (score >= 10 || wordCount > 800) complexity = 'high';
+  
+  // 工时预估
+  const estimatedHours = complexity === 'high' ? 16 : complexity === 'medium' ? 8 : 4;
+  
+  // 优先级
+  let priority: 'high' | 'medium' | 'low' = 'medium';
+  if (dbCount >= 3 || apiCount >= 5 || full.includes('核心') || full.includes('基础')) {
+    priority = 'high';
+  } else if (apiCount === 0 && dbCount === 0 && pageCount <= 1) {
+    priority = 'low';
+  }
+  
+  return { apiCount, dbCount, pageCount, wordCount, complexity, estimatedHours, priority };
+}
+
+/**
+ * 语义依赖检测: 比字符串匹配更准确的任务间关系
+ */
+function detectSemanticDependencies(sections: Section[]): Map<string, string[]> {
+  const deps = new Map<string, string[]>();
+  
+  // 关键词对: [from, to]
+  const semanticPairs: [RegExp, RegExp, string][] = [
+    [/订单|支付|交易/, /用户|登录|认证|鉴权/, '需要用户模块'],
+    [/管理|后台|admin/, /用户|登录|认证/, '需要登录鉴权'],
+    [/列表|查询|搜索/, /数据库|表|DDL|schema/, '依赖数据表'],
+    [/页面|界面|UI|表单/, /API|接口|后端/, '依赖后端接口'],
+    [/统计|报表|dashboard/, /列表|查询|数据/, '依赖数据查询'],
+    [/通知|消息|推送|email/, /用户|人员|member/, '依赖用户数据'],
+    [/文件|上传|下载|附件/, /存储|oss|s3|bucket/, '依赖存储服务'],
+    [/审批|审核|workflow/, /用户|角色|权限/, '依赖用户角色'],
+  ];
+  
+  for (let i = 0; i < sections.length; i++) {
+    const si = sections[i];
+    const siContent = `${si.name}\n${si.content || ''}`;
+    const taskDeps: string[] = [];
+    
+    for (let j = 0; j < sections.length; j++) {
+      if (i === j) continue;
+      const sj = sections[j];
+      const sjContent = `${sj.name}\n${sj.content || ''}`;
+      
+      // 语义匹配
+      for (const [fromPat, toPat, reason] of semanticPairs) {
+        if (fromPat.test(siContent) && toPat.test(sjContent)) {
+          const depLabel = `Task-${String(j + 1).padStart(3, '0')}(${sj.name.slice(0, 10)})`;
+          if (!taskDeps.includes(depLabel)) taskDeps.push(depLabel);
+          break; // 每对只匹配一次
+        }
+      }
+    }
+    
+    if (taskDeps.length > 0) {
+      deps.set(`Task-${String(i + 1).padStart(3, '0')}`, taskDeps);
+    }
+  }
+  
+  return deps;
 }
