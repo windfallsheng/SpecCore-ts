@@ -144,65 +144,70 @@ function showMediumConfidenceResults(
   // ── 命令→详细步骤映射 ──
   const stepMap: Record<string, string[]> = {
     init: ['1. speccore init           # 初始化项目，生成 .speccore/'],
+    'iteration create': [
+      '1. speccore iteration create -n Q1 --owner=张三   # 创建期次',
+      '2. speccore analyze -I Q1                         # AI 分析需求',
+      '3. speccore iteration split -i Q1 --interactive    # 智能拆分',
+    ],
     'task new': [
       '1. speccore task new -n "功能名"   # 创建开发任务',
-      '2. speccore analyze -t Task-001   # AI 分析需求',
+      '2. speccore analyze -t Task-001    # AI 分析需求',
       '3. speccore execute -t Task-001 --force  # 执行开发',
+    ],
+    analyze: [
+      '1. speccore analyze -I Q1                         # 期次分析',
+      '2. speccore analyze --scope global --src xxx,xxx   # 全局分析',
+      '3. speccore analyze --scope global --src xxx --depth deep  # 深度分析',
     ],
     execute: [
       '1. speccore execute -t Task-001 --force        # 直接执行',
-      '2. speccore execute -t Task-001 --force --verify  # 执行+自动验证',
-    ],
-    bugfix: [
-      '1. speccore bugfix -n "bug描述"              # 单个 Bug',
-      '2. speccore bugfix --batch-file=bugs.xlsx --interactive  # 批量导入',
-    ],
-    change: [
-      '1. speccore change "变更描述" -t Task-001        # 口语化变更',
-      '2. speccore change -t Task-001 --interactive     # 交互确认',
-    ],
-    'status-panel': [
-      '1. speccore status-panel              # 终端查看',
-      '2. speccore status-panel --export=html  # 导出仪表盘',
-    ],
-    import: [
-      '1. speccore import --project=xxx --path=./src --type=backend   # 源码导入',
-      '2. speccore import --project=xxx --path=req.xlsx               # Excel导入',
+      '2. speccore execute -i Q1 --all                # 执行全部任务',
     ],
     'iteration split': [
-      '1. speccore analyze -i Q1              # 先分析需求',
-      '2. speccore iteration split -i Q1       # 拆分为 Task',
+      '1. speccore iteration split -i Q1 --interactive  # 交互拆分',
+      '2. speccore iteration split -i Q1 --strict       # 逐项确认',
+    ],
+    'status-panel': [
+      '1. speccore status-panel                # 终端查看',
+      '2. speccore status-panel --export=html   # 导出仪表盘',
     ],
     pr: [
-      '1. speccore pr --task=Task-001              # 自动推送+创建PR',
-      '2. speccore pr --task=Task-001 --interactive  # 分步确认',
+      '1. speccore pr --task=Task-001           # 创建PR',
     ],
     done: [
-      '1. speccore done --task=Task-001            # 单个归档',
+      '1. speccore done --task=Task-001         # 单任务归档',
       '2. speccore done --all -i Q1             # 批量归档',
     ],
     dev: [
-      '1. speccore dev                         # 检测下一步',
-      '2. speccore dev --auto                  # 全自动流水线',
+      '1. speccore dev                          # 检测下一步',
+      '2. speccore dev --auto                   # 全自动流水线',
     ],
   };
 
   for (let i = 0; i < results.length; i++) {
     const r = results[i];
     logger.info(`  ${i + 1}. ${getIntentLabel(r.intent)} (${r.confidence}%) → speccore ${r.command}`);
-    
-    // 显示详细步骤
     const steps = stepMap[r.command];
-    if (steps) {
-      for (const step of steps) {
-        logger.info(`     ${step}`);
-      }
-    }
+    if (steps) for (const step of steps) logger.info(`     ${step}`);
     logger.info('');
   }
 
-  logger.info('💡 输入序号选择（默认 1），输入更多信息重试，或 q 取消');
-  logger.info('');
+  logger.info('💡 输入序号选择（默认 1），或 q 取消');
+  
+  // 读取用户选择
+  const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout });
+  rl.question('> ', async (answer: string) => {
+    rl.close();
+    if (answer === 'q' || answer === 'Q') { logger.info('已取消'); return; }
+    const idx = parseInt(answer) - 1;
+    const selected = (idx >= 0 && idx < results.length) ? results[idx] : results[0];
+    logger.info(`\n✅ 执行: speccore ${selected.command}`);
+    const params = selected.extractedParams;
+    let cmd = `speccore ${selected.command}`;
+    if (params.name) cmd += ` -n "${params.name}"`;
+    if (iteration && !params.iteration) cmd += ` -i "${iteration}"`;
+    logger.info(`   $ ${cmd}\n`);
+  });
 }
 
 function showLowConfidenceGuidance(
