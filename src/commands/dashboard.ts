@@ -202,8 +202,8 @@ main{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:40px 32p
 .stat-card .value.c-orange{color:var(--orange);text-shadow:0 0 20px rgba(245,158,11,.3)}
 .stat-card .value.c-muted{color:var(--muted)}
 .stat-card .sub{font-size:11px;color:var(--muted);margin-top:6px}
-.data-stream{position:absolute;bottom:0;left:0;right:0;height:24px;background:linear-gradient(transparent,rgba(0,240,255,.02));overflow:hidden;border-radius:0 0 12px 12px}
-.data-stream span{position:absolute;color:rgba(0,240,255,.12);font-family:'JetBrains Mono',monospace;font-size:10px;white-space:nowrap;animation:stream 25s linear infinite}
+.data-stream{position:absolute;bottom:0;left:0;right:0;height:20px;background:linear-gradient(transparent,rgba(0,240,255,.015));overflow:hidden;border-radius:0 0 12px 12px}
+.data-stream span{position:absolute;top:4px;color:rgba(0,240,255,.08);font-family:'JetBrains Mono',monospace;font-size:9px;white-space:nowrap;animation:stream 25s linear infinite}
 @keyframes stream{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}
 .charts{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:28px}
 @media(max-width:768px){.charts{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}}
