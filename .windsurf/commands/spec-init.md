@@ -1,5 +1,5 @@
 ---
 name: spec-init
-description: Initialize project
+description: 初始化项目
 ---
 speccore init

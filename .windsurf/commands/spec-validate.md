@@ -1,5 +1,5 @@
 ---
 name: spec-validate
-description: Validate specs
+description: 合规验证
 ---
 speccore validate --iteration=${1:Q1}

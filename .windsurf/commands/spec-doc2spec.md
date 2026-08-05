@@ -1,5 +1,5 @@
 ---
 name: spec-doc2spec
-description: Import requirements
+description: 导入需求文档
 ---
-speccore doc2spec --files "${1:file}=${2:platform}" -i ${3:Q1}
+speccore doc2spec -f ${1:PRD.docx} --iter ${2:Q1}

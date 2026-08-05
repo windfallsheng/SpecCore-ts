@@ -1,5 +1,5 @@
 ---
 name: spec-search
-description: Search across specs
+description: 全文搜索
 ---
-speccore search "${1:keyword}"
+speccore search ${1:关键词}
