@@ -10,6 +10,25 @@
 - 🆕 `help` 命令支持 TTY 自动检测，AI 模式输出 HTML 分类卡片
 - 📄 保存 help HTML 模板到 templates/html/
 
+### v5.26.2 (2026-08-05) — "三层 AI 架构 + Dev 流水线"
+
+#### 🤖 三层 AI 架构
+- **自有 LLM** (OpenAI/Ollama) — 环境变量配置，零代码
+- **宿主 AI** (WorkBuddy/TRAE/Qoder) — 自动检测，文件协议通信
+- **规则引擎** — 18 条命令 KB，永远可用兜底
+
+#### 🔄 Dev Pipeline AI 引导
+- `dev` 命令 AI 模式输出交互 HTML 页面
+- 前端 `devAI()` 引擎：8 命令 KB + 6 意图模式 + 300ms AI 思考动画
+- 5 个快捷按钮 + 7 阶段跳转 + 自然语言输入
+- 服务端 `devAiGuide()` + `dev-llm.ts` 三层 AI 调用
+
+#### 🎨 页面统一
+- 所有页面四边脉冲扫描线 + Ocean 商务主题
+- Footer 版本号统一 (`package.json` 自动读取)
+- Light 模式边框适配
+- Header 飘动文字 + 全屏按钮
+
 ### 🧠 ask — 万能 AI 入口重构
 - **4 模式引擎**: 📖命令解释 / 🗺️任务指引 / 🎯意图匹配 / ⚡复杂编排
 - **18 条命令知识库**: 完整用法、示例、关联命令
