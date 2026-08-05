@@ -30,7 +30,6 @@ import { spec2docCommand } from './commands/spec2doc';
 // 全量层命令
 import { iterationFromGlobalCommand } from './commands/iteration-from-global';
 import { syncGlobalCommand } from './commands/sync-global';
-import { globalStatusCommand } from './commands/global-status';
 // P0/P1/P2 新增命令
 import { impactCommand } from './commands/impact';
 import { baselineCommand } from './commands/baseline';
@@ -101,7 +100,7 @@ const MODE = readMode();
 /** 简洁模式下在 help 中显示的命令 */
 const SIMPLE_COMMANDS = new Set([
   'ask', 'init', 'doc2spec', 'spec2doc', 'dashboard', 'analyze', 'split', 'execute',
-  'pr', 'done', 'status-panel', 'dev',
+  'pr', 'done', 'dev', 'sync', 'search', 'track',
   'iteration', 'task', 'plan', 'ops', 'change', 'validate', 'rename',
   ]);
 
@@ -554,9 +553,8 @@ program
 program
   .command('global-status')
   .alias('gs')
-  .description('View global layer status: all projects, requirements, architecture')
-  .option('--project <name>', 'Filter by project name')
-  .action(globalStatusCommand);
+  .description('→ dashboard --scope global')
+  .action(() => statusPanelCommand({ scope: 'global' }));
 
 program
   .command('sync-global')
@@ -737,6 +735,16 @@ program
   .command('trace')
   .alias('tr')
   .description('Show REQ → Task → Code trace chain (v5.3)')
+  .option('--req <id>', 'Trace from requirement ID')
+  .option('--task <id>', 'Trace from task ID')
+  .option('--full', 'Full project trace')
+  .action(traceCommand);
+
+// v5.25 — 统一追踪入口
+program
+  .command('track')
+  .alias('trk')
+  .description('合并 trace + tracker: REQ→Task→Code 全链路追踪')
   .option('--req <id>', 'Trace from requirement ID')
   .option('--task <id>', 'Trace from task ID')
   .option('--full', 'Full project trace')
