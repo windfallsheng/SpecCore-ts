@@ -165,12 +165,12 @@ export async function spec2docCommand(options: Spec2DocOptions): Promise<void> {
 
     // ── AI 精炼模式提示 ──
     if (options.ai !== false) {
-      logger.info('  🔬 双路验证模式：');
-      logger.info(`     pandoc 已完成基础导出 → ${outputPath}`);
-      logger.info(`     📌 如需 AI 优化排版/样式/图表：`);
-      logger.info(`        在 WorkBuddy 中说: 优化排版 ${outputPath}`);
+      logger.info('  ⚡ pandoc 快速导出完成（CLI 模式）');
+      logger.info(`  🧠 推荐 AI 精炼模式：在 WorkBuddy 中说`);
+      logger.info(`     "AI 优化排版 ${outputPath}"`);
+      logger.info(`     → AI 将: 封面/目录/Mermaid渲染/中文排版/页眉页脚`);
       logger.info('');
-      logger.info('  💡 纯 pandoc 导出: speccore spec2doc --no-ai');
+      logger.info('  💡 纯 CLI 导出: speccore spec2doc --no-ai');
     }
   } catch (error: any) {
     spinner.fail(`导出失败: ${error.message || error}`);

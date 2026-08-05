@@ -309,13 +309,13 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     logger.info('');
     logger.info('📋 下一步:');
     if (options.ai !== false) {
-      // ── 双路验证模式（默认）──
-      logger.info('  🔬 双路验证模式：pandoc 已完成第 1 路提取');
-      logger.info(`  📌 第 2 路 AI 语义分析 + 交叉验证：`);
-      logger.info(`     在 WorkBuddy 中说: 双路验证 ${sourceFile} → ${iterDir}`);
-      logger.info(`     AI 将: ① 直接读原文(第2路) ② 交叉对比 pandoc 结果 ③ 冲突标记 ④ 输出质量报告`);
+      // ── AI 精炼提示（默认）──
+      logger.info('  ⚡ pandoc 快速转换完成（CLI 模式）');
+      logger.info(`  🧠 推荐 AI 精炼模式：在 WorkBuddy 中说`);
+      logger.info(`     "AI 双路验证 ${sourceFile} → ${iterDir}"`);
+      logger.info(`     → AI 直接读原文 + pandoc 交叉对比 = 零数据丢失`);
       logger.info('');
-      logger.info('  💡 纯 pandoc 快转: speccore doc2spec --no-ai');
+      logger.info('  💡 纯 CLI 快转: speccore doc2spec --no-ai');
     } else {
       // ── 纯 pandoc 模式 ──
       logger.info('  ⚠️ 纯 pandoc 模式（无 AI 精炼）');
