@@ -175,7 +175,7 @@ program
 const iterationCmd = program
   .command('iteration')
   .alias('it')
-  .description('Iteration management commands');
+  .description('期次管理：创建/拆分/列表');
 
 iterationCmd
   .command('create')
@@ -209,7 +209,7 @@ iterationCmd
 const taskCmd = program
   .command('task')
   .alias('tk')
-  .description('Task management commands');
+  .description('任务管理：创建/列表/状态');
 
 taskCmd
   .command('new')
@@ -344,7 +344,7 @@ program
 program
   .command('validate')
   .alias('vl')
-  .description('Validate Spec compliance and integrity')
+  .description('合规验证：检查 Spec 完整性与一致性')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('-t, --task <task>', 'Validate specific task')
   .option('--type <type>', 'Filter by task type')
@@ -493,9 +493,7 @@ program
 program
   .command('doc2spec')
   .alias('d2s')
-  .description('导入 PRD → SpecCore MD\n'
-    + '   CLI 快速: speccore doc2spec -f PRD.docx --iter Q3 --no-ai\n'
-    + '   AI 精炼: 在 WorkBuddy 中说 "AI 转换 PRD.docx 到 Q3"（推荐）')
+  .description('导入 PRD/文档 → SpecCore MD（双路验证：AI + Pandoc）')
   .option('-f, --file <path>', '源文件路径')
   .option('--iter <name>', '目标期次（必填）')
   .option('-p, --platform <name>', '平台标识（backend / frontend-web / frontend-h5）')
@@ -507,9 +505,7 @@ program
 program
   .command('spec2doc')
   .alias('s2d')
-  .description('SpecCore MD → Word/PDF/HTML/PPTX\n'
-    + '   CLI 快速: speccore spec2doc -i Q3 -o 需求.docx --no-ai\n'
-    + '   AI 精炼: 在 WorkBuddy 中说 "导出 Q3 需求为 Word"（推荐）')
+  .description('SpecCore MD → Word/PDF/HTML/PPTX 导出')
   .option('-i, --iteration <name>', '目标期次')
   .option('-t, --task <task>', '导出指定任务文档')
   .option('-f, --file <path>', '直接导出指定 .md 文件（相对/绝对路径）')
@@ -570,7 +566,7 @@ program
 program
   .command('ops')
   .alias('op')
-  .description('View operation history (command log)')
+  .description('操作历史：查看命令执行日志')
   .action(opsCommand);
 
 program
