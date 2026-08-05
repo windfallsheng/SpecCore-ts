@@ -190,9 +190,12 @@ function handleCustom() {
   const box = document.getElementById('resultBox');
   box.classList.add('show');
   
-  // Try LLM first (via devRules for now, but structured for future LLM call)
-  const result = devRules('custom', '', STATE, input);
-  showResult(result);
+  // AI 模拟分析（300ms 延迟模拟 LLM 思考）
+  document.getElementById('resultSummary').innerHTML = '<span style="animation:pulse 1s infinite">🤔 AI 分析中...</span>';
+  setTimeout(() => {
+    const result = devAI(STATE, input);
+    showResult(result);
+  }, 300);
 }
 
 function showResult(result) {
@@ -208,62 +211,124 @@ function showResult(result) {
   document.getElementById('resultCmds').innerHTML = cmdsHtml;
 }
 
-// Rule-based dev guidance (LLM fallback)
-function devRules(action, target, state, customInput) {
+// ── Dev AI 引擎（前端规则层，模拟 LLM 行为）──
+function devAI(state, input) {
   const iterArg = state.iteration ? ' --iteration=' + state.iteration : '';
-  const cur = state.currentPhase;
+  const lower = (input || '').toLowerCase();
   const phases = state.phases;
-  
-  // Handle custom input
-  if (action === 'custom' && customInput) {
-    const lower = customInput.toLowerCase();
-    
-    // Check for specific phase targeting
-    for (const p of phases) {
-      if (lower.includes(p.key) || lower.includes(p.name)) {
-        if (p.done) return { action:'restart', targetPhase:p.key, summary:'从「'+p.name+'」重新开始', commands:phases.slice(phases.indexOf(p)).filter(x=>!x.done).map((ph,i)=>({order:i+1,command:ph.cmd,args:ph.args||iterArg,explanation:ph.description}))};
-        return { action:'jump-to', targetPhase:p.key, summary:'跳转到「'+p.name+'」', commands:[{order:1,command:p.cmd,args:p.args||iterArg,explanation:p.description}] };
-      }
-    }
-    
-    if (/一键|全部|自动|all/i.test(lower)) {
-      const pending = phases.filter(p=>!p.done);
-      return { action:'auto-all', targetPhase:'all', summary:'一键执行全部'+pending.length+'个阶段', commands:pending.map((p,i)=>({order:i+1,command:p.cmd,args:p.args||iterArg,explanation:p.description})) };
-    }
-    
-    if (/跳过|skip/i.test(lower)) {
-      const nextIdx = state.currentIdx + 1;
-      if (nextIdx < phases.length) {
-        const next = phases[nextIdx];
-        return { action:'skip-to', targetPhase:next.key, summary:'跳过当前→'+next.name, commands:[{order:1,command:next.cmd,args:next.args||iterArg,explanation:next.description}] };
-      }
+  const cur = state.currentPhase;
+
+  const CMD_KB = {
+    init:     { args:'',        desc:'初始化 SpecCore 项目结构',           trigger:['初始化','init','新建项目','创建项目'] },
+    doc2spec: { args:'-f PRD.docx'+(iterArg), desc:'导入 PRD 文档，AI 转换需求规格', trigger:['导入','doc2spec','文档','PRD','需求文档','word'] },
+    analyze:  { args:iterArg.replace('--iteration=','--iteration='),       desc:'AI 分析需求，生成审计报告',       trigger:['分析','analyze','审计','audit'] },
+    split:    { args:'-f REQUIREMENT.md',                                  desc:'拆分需求为独立开发任务',          trigger:['拆分','split','分解','任务'] },
+    plan:     { args:'--all',                                              desc:'生成最优执行计划',                trigger:['计划','plan','调度','安排'] },
+    execute:  { args:'--auto --batch-size 3',                              desc:'按计划分批自动执行',              trigger:['执行','execute','开发','做','开始','run'] },
+    pr:       { args:'--auto',                                             desc:'创建 Pull Request',               trigger:['pr','pull','提交','合并','MR'] },
+    done:     { args:'--all',                                              desc:'校验、同步、归档收尾',           trigger:['完成','done','归档','结束'] },
+  };
+
+  // 1. 全部自动
+  if (/一键|全部|自动|all|auto|搞定|剩下|remaining/i.test(lower)) {
+    const pending = phases.filter(p => !p.done);
+    if (pending.length === 0) return { summary:'所有阶段已完成！', commands:[{order:1,command:'dashboard',args:'--scope global',explanation:'查看全局仪表盘'}] };
+    return { summary:'一键执行剩余 ' + pending.length + ' 个阶段', commands:pending.map((p,i) => {
+      const kb = CMD_KB[p.key] || { args:'', desc:p.name };
+      return { order:i+1, command:p.cmd, args:kb.args, explanation:kb.desc };
+    })};
+  }
+
+  // 2. 跳过
+  if (/跳过|skip|下一个|next/i.test(lower)) {
+    const nextIdx = state.currentIdx + 1;
+    if (nextIdx >= phases.length) return { summary:'已是最后阶段', commands:[{order:1,command:'done',args:'--all',explanation:'归档收尾'}] };
+    const next = phases[nextIdx];
+    const kb = CMD_KB[next.key] || { args:'', desc:next.name };
+    return { summary:'跳过 ' + cur.name + ' → ' + next.name, commands:[{order:1,command:next.cmd,args:kb.args,explanation:kb.desc}] };
+  }
+
+  // 3. 阶段跳转
+  for (const p of phases) {
+    if (lower.includes(p.key) || lower.includes(p.name)) {
+      const kb = CMD_KB[p.key] || { args:'', desc:p.name };
+      if (p.done) return { summary:p.name + ' 已完成', commands:[{order:1,command:cur.cmd,args:CMD_KB[cur.key]?.args||iterArg,explanation:cur.name}] };
+      return { summary:'跳转到「' + p.name + '」', commands:[{order:1,command:p.cmd,args:kb.args,explanation:kb.desc}] };
     }
   }
+
+  // 4. 多阶段组合
+  if (/先|再|然后|接着|最后|同时|也|之后|顺便|还有/.test(lower)) {
+    const matched = [];
+    for (const p of phases) {
+      if (lower.includes(p.key) || lower.includes(p.name)) {
+        const kb = CMD_KB[p.key] || { args:'', desc:p.name };
+        matched.push({ cmd:p.cmd, args:kb.args, desc:kb.desc });
+      }
+    }
+    if (matched.length >= 2) {
+      return { summary:matched.length + ' 步组合执行', commands:matched.map((m,i) => ({ order:i+1, command:m.cmd, args:m.args, explanation:m.desc })) };
+    }
+  }
+
+  // 5. 模糊匹配
+  let bestCmd = null, bestScore = 0;
+  for (const [key, kb] of Object.entries(CMD_KB)) {
+    const score = kb.trigger.filter(t => lower.includes(t)).length;
+    if (score > bestScore) { bestScore = score; bestCmd = key; }
+  }
+  if (bestCmd && bestScore > 0) {
+    const p = phases.find(ph => ph.key === bestCmd);
+    if (p && !p.done) {
+      const kb = CMD_KB[bestCmd];
+      return { summary:'建议: ' + p.name, commands:[{order:1,command:p.cmd,args:kb.args,explanation:kb.desc}] };
+    }
+  }
+
+  // 6. 不明意图 → 列出选项
+  return { summary:'你想怎么做？', commands:[
+    {order:1,command:cur.cmd,args:CMD_KB[cur.key]?.args||iterArg,explanation:'继续当前: ' + cur.name},
+    {order:2,command:'dashboard',args:'--scope global',explanation:'查看全局仪表盘'},
+    {order:3,command:'ask',args:'"'+input+'"',explanation:'用 ask 万能入口重新分析'},
+  ]};
+}
+
+// ── 按钮操作 ──
+function handleAction(action, target) {
+  const iterArg = STATE.iteration ? ' --iteration=' + STATE.iteration : '';
+  const phases = STATE.phases;
+  const cur = STATE.currentPhase;
   
-  // Standard actions
   switch(action) {
     case 'auto-all': {
       const pending = phases.filter(p=>!p.done);
-      return { action:'auto-all', targetPhase:'all', summary:'一键执行全部'+pending.length+'个阶段', commands:pending.map((p,i)=>({order:i+1,command:p.cmd,args:p.args||iterArg,explanation:p.description})) };
+      showResult({ summary:'一键执行全部 '+pending.length+' 个阶段', commands:pending.map((p,i)=>({order:i+1,command:p.cmd,args:p.args||iterArg,explanation:p.description})) });
+      return;
     }
-    case 'next': return { action:'next', targetPhase:cur.key, summary:'执行下一步: '+cur.name, commands:[{order:1,command:cur.cmd,args:cur.args||iterArg,explanation:cur.description}] };
+    case 'next':
+      showResult({ summary:'执行下一步: '+cur.name, commands:[{order:1,command:cur.cmd,args:cur.args||iterArg,explanation:cur.description}] });
+      return;
     case 'skip-to': {
-      const next = phases.find(p=>p.key===target) || phases[state.currentIdx+1];
-      if (!next) return { action:'next', targetPhase:cur.key, summary:'已是最后阶段', commands:[{order:1,command:'dashboard',args:'--scope global',explanation:'查看全局仪表盘'}] };
-      return { action:'skip-to', targetPhase:next.key, summary:'跳过→'+next.name, commands:[{order:1,command:next.cmd,args:next.args||iterArg,explanation:next.description}] };
+      const nextIdx = STATE.currentIdx + 1;
+      if (nextIdx >= phases.length) { showResult({ summary:'已是最后阶段', commands:[{order:1,command:'dashboard',args:'--scope global',explanation:'查看全局仪表盘'}] }); return; }
+      const next = phases[nextIdx];
+      showResult({ summary:'跳过→'+next.name, commands:[{order:1,command:next.cmd,args:next.args||iterArg,explanation:next.description}] });
+      return;
     }
     case 'jump-to': {
-      const targetPhase = phases.find(p=>p.key===target);
-      if (!targetPhase) return { action:'next', targetPhase:cur.key, summary:'未找到目标阶段', commands:[{order:1,command:cur.cmd,args:cur.args||iterArg,explanation:cur.description}] };
-      if (targetPhase.done) return { action:'next', targetPhase:cur.key, summary:targetPhase.name+'已完成', commands:[{order:1,command:cur.cmd,args:cur.args||iterArg,explanation:cur.description}] };
-      return { action:'jump-to', targetPhase:target, summary:'跳转到「'+targetPhase.name+'」', commands:[{order:1,command:targetPhase.cmd,args:targetPhase.args||iterArg,explanation:targetPhase.description}] };
+      const tp = phases.find(p=>p.key===target);
+      if (!tp || tp.done) { showResult({ summary:tp?tp.name+' 已完成':'未找到', commands:[{order:1,command:cur.cmd,args:cur.args||iterArg,explanation:cur.name}] }); return; }
+      showResult({ summary:'跳转→'+tp.name, commands:[{order:1,command:tp.cmd,args:tp.args||iterArg,explanation:tp.description}] });
+      return;
     }
     case 'restart': {
       const fromIdx = phases.findIndex(p=>p.key===target);
-      const fromList = phases.slice(Math.max(0, fromIdx)).filter(p=>!p.done || phases.indexOf(p)>=fromIdx);
-      return { action:'restart', targetPhase:target, summary:'从「'+(phases[fromIdx]?phases[fromIdx].name:'头')+'」重新开始', commands:fromList.map((p,i)=>({order:i+1,command:p.cmd,args:p.args||iterArg,explanation:p.description})) };
+      const fromList = phases.slice(Math.max(0,fromIdx));
+      showResult({ summary:'从「'+(phases[fromIdx]?.name||'头')+'」重新开始', commands:fromList.map((p,i)=>({order:i+1,command:p.cmd,args:p.args||iterArg,explanation:p.description})) });
+      return;
     }
-    default: return { action:'next', targetPhase:cur.key, summary:'执行: '+cur.name, commands:[{order:1,command:cur.cmd,args:cur.args||iterArg,explanation:cur.description}] };
+    default:
+      showResult({ summary:'执行: '+cur.name, commands:[{order:1,command:cur.cmd,args:cur.args||iterArg,explanation:cur.description}] });
   }
 }
 </script></body></html>`;
