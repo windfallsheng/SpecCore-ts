@@ -20,7 +20,7 @@ export async function logIssue(taskDir: string, entry: Omit<IssueEntry, 'time' |
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
 
   const line = [
-    `- [${entry.resolved ? 'x' : ' '}] **${now}** | ${entry.type} | ${entry.severity}`,
+    `- [ ] **${now}** | ${entry.type} | ${entry.severity}`,
     `  - ${entry.summary}`,
     entry.detail ? `  - ${entry.detail}` : '',
   ].filter(Boolean).join('\n') + '\n';
