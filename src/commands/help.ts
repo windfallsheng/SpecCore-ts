@@ -13,6 +13,12 @@ export interface HelpOptions {
 }
 
 export async function helpCommand(options: HelpOptions): Promise<void> {
+  // 非 TTY → HTML 页面
+  if (!process.stdout.isTTY) {
+    await helpHtml(options);
+    return;
+  }
+
   if (options.command) {
     await showCommandDetail(options.command);
     return;
@@ -433,4 +439,43 @@ async function searchCommands(keyword: string): Promise<void> {
   }
   logger.info('');
   logger.info('💡 speccore help --command=<命令> 查看详细参数');
+}
+
+// ============================================================
+// AI 模式 HTML 输出
+// ============================================================
+async function helpHtml(options: HelpOptions): Promise<void> {
+  const version = require('../../package.json').version;
+  const now = new Date().toISOString().split('T')[0];
+  let title = 'SpecCore 命令参考';
+  let body = '';
+
+  if (options.command) {
+    const info = COMMAND_PARAMS[options.command];
+    title = `${options.command} 命令详解`;
+    body = info ? `<div class="cmd-detail"><div class="cmd-desc">${info.desc}</div>${info.params.length ? `<div class="param-list">${info.params.map(p=>`<div class="param"><span class="param-flag">${p.flag}</span><span class="param-meaning">${p.meaning}</span></div>`).join('')}</div>` : ''}${info.examples.length ? `<div class="example-list"><div class="section-label">示例</div>${info.examples.map(e=>`<code>$ ${e}</code>`).join('')}</div>` : ''}</div>` : `<p>未找到命令 "${options.command}"</p>`;
+  } else {
+    const categories: Record<string, string[]> = {
+      '🧠 AI 入口': ['ask', 'welcome'],
+      '🏗️ 初始化': ['init'],
+      '📋 期次与任务': ['iteration', 'task', 'rename'],
+      '📝 文档转换': ['doc2spec', 'spec2doc'],
+      '🔍 分析与计划': ['analyze', 'plan', 'split'],
+      '⚡ 执行与交付': ['execute', 'pr', 'done'],
+      '🔄 同步与变更': ['change', 'sync', 'ops'],
+      '📊 查看与验证': ['dashboard', 'validate', 'track', 'search'],
+      '🤖 智能操作': ['dev'],
+    };
+    body = Object.entries(categories).map(([cat, cmds]) => 
+      `<div class="cat"><div class="cat-title">${cat}</div><div class="cat-cmds">${cmds.map(c => `<span class="cmd-pill">speccore ${c}</span>`).join('')}</div></div>`
+    ).join('');
+  }
+
+  const html = `<!DOCTYPE html><html lang="zh-CN" data-theme="ocean"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>SpecCore Help</title><style>@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;600;700&display=swap');[data-theme="ocean"]{--cyan:#0ea5e9;--bg:#0b1929;--card:rgba(13,31,56,.95);--border:rgba(14,165,233,.15);--text:#bae6fd;--muted:#5b7fa5;--green:#14b8a6;--orange:#f97316;--purple:#6366f1}*{margin:0;padding:0;box-sizing:border-box}body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--text);min-height:100vh;padding:40px 20px}.scanlines{position:fixed;inset:0;pointer-events:none;z-index:99;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,240,255,.01) 2px,rgba(0,240,255,.01) 4px)}.card{max-width:720px;margin:0 auto;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:36px;position:relative;overflow:hidden}.card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanX 3s linear infinite}.card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanX-rev 3s linear infinite}@keyframes scanX{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}@keyframes scanX-rev{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}@keyframes scanY{0%{transform:translateY(-100%)}100%{transform:translateY(100%)}}@keyframes scanY-rev{0%{transform:translateY(100%)}100%{transform:translateY(-100%)}}.vline{position:absolute;top:0;width:1px;bottom:0;pointer-events:none}.vline.l{left:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY-rev 3s linear infinite}.vline.r{right:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY 3s linear infinite}h1{font-family:'Orbitron',sans-serif;font-size:24px;font-weight:900;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:2px;margin-bottom:4px}.sub{color:var(--muted);font-size:11px;margin-bottom:20px}.cat{margin:12px 0;padding:12px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.04);border-radius:10px}.cat-title{font-size:10px;font-weight:700;color:var(--cyan);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}.cat-cmds{display:flex;flex-wrap:wrap;gap:6px}.cmd-pill{padding:3px 10px;border-radius:4px;font-size:10px;background:rgba(14,165,233,.1);color:var(--cyan);border:1px solid rgba(14,165,233,.15)}.cmd-detail{padding:8px 0}.cmd-desc{font-size:13px;margin-bottom:16px}.param-list{margin:12px 0}.param{display:flex;gap:12px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.03)}.param-flag{color:var(--green);font-size:11px;min-width:160px}.param-meaning{color:var(--muted);font-size:11px}.example-list{margin:12px 0}.section-label{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}code{display:block;background:rgba(14,165,233,.1);padding:4px 10px;border-radius:4px;color:var(--cyan);font-size:11px;margin:4px 0}.footer{text-align:center;color:var(--muted);font-size:10px;margin-top:24px;padding-top:16px;border-top:1px solid rgba(255,255,255,.04)}</style></head><body><div class="scanlines"></div><div class="card"><div class="vline l"></div><div class="vline r"></div><h1>SPECCORE HELP</h1><div class="sub">${title} · v${version}</div>${body}<div class="footer">由 SpecCore 驱动 v${version} · ${now}</div></div></body></html>`;
+
+  const { writeFile } = require('fs-extra');
+  const { join } = require('path');
+  const outPath = join(process.cwd(), 'speccore-help.html');
+  await writeFile(outPath, html);
+  logger.info(`✅ 已生成: ${outPath}`);
 }
