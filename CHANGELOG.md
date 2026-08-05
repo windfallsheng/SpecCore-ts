@@ -16,7 +16,15 @@
 - **输入校验**: 用户输入 `3.1` 等无效序号时给出友好提示（而非静默执行错误命令）
 - **显示优化**: 子步骤编号改用 `▸` 前缀，避免和选项序号混淆
 - **错误提示增强**: 命令执行失败时显示具体错误信息和直接运行的提示
-- **命令总数更新**: 51 → 53（+ `iteration create` + `task new`）
+- **命令总数更新**: 51 → 58（+ `iteration create` + `task new` + `progress` + `report` + `archive` + `dashboard` + `sync-global`）
+
+### 🐛 补注册 5 个漏掉的命令
+全面排查发现 5 个命令有完整实现但从未在 CLI 注册：
+- `progress` — 查看期次进度（任务完成率 + 各阶段统计）
+- `report` — 生成项目报告（团队/风险/趋势分析）
+- `archive` — 归档任务（移至 archive/ 或从归档恢复）
+- `dashboard` — 全量层可视化仪表盘（Chart.js HTML）
+- `sync-global` — 期次 ↔ 全量层双向同步
 
 ---
 
