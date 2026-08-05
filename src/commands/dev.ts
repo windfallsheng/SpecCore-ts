@@ -31,8 +31,15 @@ export async function devCommand(options: DevOptions): Promise<void> {
   // ── Single-step detect mode ──
   const iteration = await getDefaultIteration(options.iteration);
   if (!iteration) {
-    logger.info('\n🔍 检测到项目尚未初始化');
-    logger.info('下一步: speccore init');
+    const isInit = await pathExists('.speccore');
+    if (!isInit) {
+      logger.info('\n🔍 项目尚未初始化');
+      logger.info('运行: speccore init');
+    } else {
+      logger.info('\n📭 当前期次未设置');
+      logger.info('创建期次: speccore iteration create -n Q1');
+      logger.info('或导入需求: speccore doc2spec -f PRD.docx --iter Q1');
+    }
     return;
   }
 
