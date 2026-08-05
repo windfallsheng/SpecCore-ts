@@ -1,9 +1,8 @@
 # SpecCore — Code by Spec, Not by Vibe
 
-🖥️ 规范驱动开发 CLI · 19 命令（55 全量）· 人机协同闭环
+🖥️ 规范驱动开发 CLI · 20 命令（55 全量）· 人机协同闭环 · 三层 AI 架构
 
 ```bash
-# 一句话搞定所有操作
 speccore ask "我想做一个登录功能，计划晚8点分批执行"
 ```
 
@@ -70,7 +69,7 @@ speccore dev --auto        # 智能级联一键推进
 
 ```bash
 npm install -g speccore
-speccore --version   # v5.26.0
+speccore --version   # v5.26.2
 ```
 
 ## 命令列表
@@ -100,9 +99,29 @@ speccore --version   # v5.26.0
 
 ## TTY 智能适配
 
-所有 AI 命令 (`ask`, `welcome`, `dev`, `dashboard`) 自动检测环境：
+所有 AI 命令 (`ask`, `welcome`, `dev`, `dashboard`, `help`) 自动检测环境：
 - **终端**：Unicode 框线美化输出
-- **AI 调用**：自动生成 Ocean 主题 HTML 页面
+- **AI 调用**：自动生成 Ocean 主题 HTML 页面（四边脉冲扫描线）
+
+## 🤖 三层 AI 架构
+
+```
+speccore ask "..." / speccore dev
+  ├─ 🧠 自有 LLM   → OpenAI / Ollama（SPECCORE_LLM_KEY 环境变量）
+  ├─ 🤖 宿主 AI    → WorkBuddy / TRAE / Qoder（自动检测）
+  └─ 📐 规则引擎   → 18 条命令 KB + 4 预定义工作流（永远可用）
+```
+
+零配置：没配 Key 自动降级，功能不受影响。
+
+## 📖 文档
+
+| 文档 | 说明 |
+|------|------|
+| [命令参考](docs/命令参考.md) | 全部 20 命令 + 子命令 + 示例 |
+| [总览](docs/总览.md) | 核心概念 + 工作流 + 三种使用方式 |
+| [快速开始](docs/快速开始.md) | 5 分钟上手 |
+| [CHANGELOG](CHANGELOG.md) | 版本历史 |
 
 ## 许可
 
