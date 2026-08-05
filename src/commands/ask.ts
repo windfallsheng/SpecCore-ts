@@ -123,21 +123,19 @@ function renderPipeline(result: AskResult, plan: PipelinePlan): string {
     return `${COLORS.gray}${(s.args || '').padEnd(18).slice(0, 18)}${COLORS.reset}`;
   }).join(' '.repeat(4));
 
-  lines.push(`${COLORS.cyan}  ${BOX.tl}${'─'.repeat(20)}${BOX.tr}  ${COLORS.reset}${COLORS.gray} ${BOX.tl}${'─'.repeat(20)}${BOX.tr}  ${COLORS.reset}${COLORS.gray} ${BOX.tl}${'─'.repeat(20)}${BOX.tr}${COLORS.reset}`);
-  steps.forEach((s, i) => {
-    const cardLines = [
-      `${COLORS.cyan}  ${BOX.v}${COLORS.reset} ${COLORS.bold}#${s.order} ${s.command.padEnd(12).slice(0, 12)}${COLORS.cyan}  ${BOX.v}${COLORS.reset}`,
-      `${COLORS.cyan}  ${BOX.v}${COLORS.reset} ${COLORS.gray}${(s.args || '').padEnd(14).slice(0, 14)}${COLORS.cyan}  ${BOX.v}${COLORS.reset}`,
-    ];
-    if (i < steps.length - 1) {
-      cardLines.push(`${COLORS.cyan}  ${BOX.bl}${'─'.repeat(20)}${BOX.br}  ${COLORS.reset}${COLORS.magenta}   ━━━━━▶   ${COLORS.reset}`);
-    } else {
-      cardLines.push(`${COLORS.cyan}  ${BOX.bl}${'─'.repeat(20)}${BOX.br}  ${COLORS.reset}`);
-    }
-    lines.push(cardLines[0]);
-    lines.push(cardLines[1]);
-    if (i < steps.length - 1) lines.push(cardLines[2]);
-  });
+  // 流程卡片：先输出所有顶部，再 body，再箭头
+  const topBorder = steps.map(() => `${COLORS.cyan}  ${BOX.tl}${'─'.repeat(20)}${BOX.tr}${COLORS.reset}`).join(`  ${COLORS.gray}───────${COLORS.reset}  `);
+  lines.push(topBorder);
+  const line1 = steps.map(s => `${COLORS.cyan}  ${BOX.v}${COLORS.reset} ${COLORS.bold}#${s.order} ${(s.command + '              ').slice(0, 12)}${COLORS.reset}${COLORS.cyan}  ${BOX.v}${COLORS.reset}`).join(`  ${COLORS.gray}───────${COLORS.reset}  `);
+  const line2 = steps.map(s => `${COLORS.cyan}  ${BOX.v}${COLORS.reset} ${COLORS.gray}${(s.args || '').padEnd(14).slice(0, 14)}${COLORS.reset}${COLORS.cyan}  ${BOX.v}${COLORS.reset}`).join(`  ${COLORS.gray}───────${COLORS.reset}  `);
+  const bottomBorder = steps.map(() => `${COLORS.cyan}  ${BOX.bl}${'─'.repeat(20)}${BOX.br}${COLORS.reset}`).join(`  ${COLORS.gray}───────${COLORS.reset}  `);
+  lines.push(line1);
+  lines.push(line2);
+  lines.push(bottomBorder);
+  // 箭头
+  const arrows = steps.map((_, i) => i < steps.length - 1 ? `  ${COLORS.magenta}▼${COLORS.reset}` : '   ').join(`       `);
+  lines.push(arrows);
+  lines.push('');
   lines.push('');
 
   // 详细步骤
