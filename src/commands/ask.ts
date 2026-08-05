@@ -161,6 +161,22 @@ function renderPipeline(result: AskResult, plan: PipelinePlan): string {
 export async function askCommand(input: string, _options: any): Promise<void> {
   // 如果不是 TTY（AI 调用），输出 HTML 页面
   if (!process.stdout.isTTY) {
+    // ── 首次使用：展示 ask 引导页 ──
+    const { pathExists, writeFile, ensureDir } = await import('fs-extra');
+    const { join } = await import('path');
+    const markerDir = join(process.cwd(), '.speccore', 'local');
+    const markerFile = join(markerDir, '.ask-onboarded');
+    await ensureDir(markerDir);
+    const onboarded = await pathExists(markerFile);
+    if (!onboarded) {
+      const html = renderOnboardingHtml();
+      const outPath = join(process.cwd(), 'speccore-ask-onboarding.html');
+      await writeFile(outPath, html);
+      await writeFile(markerFile, Date.now().toString());
+      logger.info(`👋 首次使用 ask — 已生成引导页: ${outPath}`);
+      return;
+    }
+
     await askHtml(input);
     return;
   }
@@ -266,4 +282,9 @@ function buildPage(title: string, body: string, input: string, accent: string): 
 /* Pipeline */
 .pipeline-title{font-weight:600;margin-bottom:16px}.pipeline-steps{display:flex;flex-direction:column;gap:10px}.pipe-step{display:flex;gap:14px;padding:12px 14px;background:rgba(99,102,241,.04);border-left:2px solid var(--purple);border-radius:0 8px 8px 0}.pipe-step .pipe-num{font-family:Orbitron;font-size:20px;font-weight:900;color:var(--purple);min-width:36px}.pipe-step .pipe-cmd{font-weight:600;color:var(--green)}.pipe-step .pipe-args{color:var(--muted);font-size:11px}.pipe-step .pipe-desc{color:var(--muted);font-size:10px;margin-top:4px}.pipe-step .pipe-dep{font-size:9px;color:var(--orange);margin-top:4px}.confirm-bar{text-align:center;padding:14px;margin-top:16px;background:rgba(99,102,241,.08);border:1px dashed rgba(99,102,241,.2);border-radius:8px;color:var(--purple);font-size:12px}
 .footer{text-align:center;color:var(--muted);font-size:10px;margin-top:24px;padding-top:16px;border-top:1px solid rgba(255,255,255,.04)}</style></head><body><div class="scanlines"></div><div class="card"><div class="vline l"></div><div class="vline r"></div><h1>SPECCORE ASK</h1><div class="query">"${input}"</div><div class="badge">${title}</div>${body}<div class="footer">由 SpecCore 驱动 v${ver} · ${new Date().toISOString().split('T')[0]}</div></div></body></html>`;
+}
+
+function renderOnboardingHtml(): string {
+  const ver = require('../../package.json').version;
+  return `<!DOCTYPE html><html lang="zh-CN" data-theme="ocean"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>SpecCore Ask · 首次使用引导</title><style>@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;600;700&display=swap');[data-theme="ocean"]{--cyan:#0ea5e9;--bg:#0b1929;--card:rgba(13,31,56,.95);--border:rgba(14,165,233,.15);--text:#bae6fd;--muted:#5b7fa5;--green:#14b8a6;--orange:#f97316;--purple:#6366f1}*{margin:0;padding:0;box-sizing:border-box}body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;gap:24px}.scanlines{position:fixed;inset:0;pointer-events:none;z-index:99;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,240,255,.01) 2px,rgba(0,240,255,.01) 4px)}.hero{text-align:center}.hero h1{font-family:'Orbitron',sans-serif;font-size:28px;font-weight:900;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:2px}.hero sub{display:block;color:var(--muted);font-size:11px;margin-top:6px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:680px;width:100%}.mode-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;position:relative;overflow:hidden;transition:all .3s}.mode-card:hover{transform:translateY(-2px)}.mode-card.m1{border-left:3px solid var(--green)}.mode-card.m2{border-left:3px solid var(--orange)}.mode-card.m3{border-left:3px solid var(--cyan)}.mode-card.m4{border-left:3px solid var(--purple)}.mode-card h3{font-size:14px;font-weight:600;margin-bottom:8px}.mode-card .badge{display:inline-block;padding:2px 10px;border-radius:10px;font-size:10px;margin-bottom:10px}.m1 .badge{background:rgba(20,184,166,.15);color:var(--green)}.m2 .badge{background:rgba(249,115,22,.15);color:var(--orange)}.m3 .badge{background:rgba(14,165,233,.15);color:var(--cyan)}.m4 .badge{background:rgba(99,102,241,.15);color:var(--purple)}.mode-card .eg{font-size:10px;color:var(--muted)}.example{border-left:2px solid rgba(255,255,255,.08)}.cta{text-align:center;padding:16px 32px;background:rgba(14,165,233,.1);border:1px solid rgba(14,165,233,.2);border-radius:12px;max-width:680px;width:100%}.cta code{background:rgba(14,165,233,.15);padding:2px 8px;border-radius:4px;color:var(--cyan);font-size:13px}.footer{color:var(--muted);font-size:10px}</style></head><body><div class="scanlines"></div><div class="hero"><h1>SPECCORE ASK</h1><sub>万能 AI 入口 — 一个命令解决所有问题</sub></div><div class="grid"><div class="mode-card m1"><h3 style="color:var(--green)">📖 命令解释</h3><div class="badge">知识库匹配</div><div class="eg">"explain dashboard 怎么用"</div><div class="eg">"init 有哪些参数？"</div></div><div class="mode-card m2"><h3 style="color:var(--orange)">🗺️ 任务指引</h3><div class="badge">工作流生成</div><div class="eg">"我想做一个登录功能"</div><div class="eg">"怎么开始新项目？"</div></div><div class="mode-card m3"><h3 style="color:var(--cyan)">🎯 意图匹配</h3><div class="badge">38意图+AI</div><div class="eg">"查看项目进度" → dashboard</div><div class="eg">"帮我审查" → validate</div></div><div class="mode-card m4"><h3 style="color:var(--purple)">⚡ 复杂编排</h3><div class="badge">Pipeline引擎</div><div class="eg">"计划任务晚8点分批执行"</div><div class="eg">"分析→拆分→执行→PR"</div></div></div><div class="cta"><span style="color:var(--muted);font-size:11px">试试看：</span><br><code>speccore ask "查看进度"</code></div><div class="footer">由 SpecCore 驱动 v${ver} · ${new Date().toISOString().split('T')[0]}</div></body></html>`;
 }
