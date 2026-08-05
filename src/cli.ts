@@ -488,28 +488,30 @@ program
 program
   .command('doc2spec')
   .alias('d2s')
-  .description('导入 PRD 文档 → SpecCore Markdown（Word/PDF/MD/HTML/PPTX）')
+  .description('导入 PRD → SpecCore MD\n'
+    + '   CLI 快速: speccore doc2spec -f PRD.docx --iter Q3 --no-ai\n'
+    + '   AI 精炼: 在 WorkBuddy 中说 "AI 转换 PRD.docx 到 Q3"（推荐）')
   .option('-f, --file <path>', '源文件路径')
   .option('--iter <name>', '目标期次（必填）')
   .option('-p, --platform <name>', '平台标识（backend / frontend-web / frontend-h5）')
   .option('--task <task>', '导入到指定 Task 目录')
   .option('--files <files>', '批量: "a.docx=平台1,b.pdf=平台2"')
-  .option('--ai', '双路验证模式（默认）：pandoc 快提 + 提示 AI skill 交叉验证')
-  .option('--no-ai', '纯 pandoc 机械转换（快，简单文档可用）')
+  .option('--no-ai', '纯 pandoc 机械转换（终端快速模式）')
   .action(doc2specCommand);
 
 program
   .command('spec2doc')
   .alias('s2d')
-  .description('SpecCore Markdown → 文档导出（Word/PDF/HTML/PPTX）')
+  .description('SpecCore MD → Word/PDF/HTML/PPTX\n'
+    + '   CLI 快速: speccore spec2doc -i Q3 -o 需求.docx --no-ai\n'
+    + '   AI 精炼: 在 WorkBuddy 中说 "导出 Q3 需求为 Word"（推荐）')
   .option('-i, --iteration <name>', '目标期次')
   .option('-t, --task <task>', '导出指定任务文档')
   .option('-f, --file <path>', '直接导出指定 .md 文件（相对/绝对路径）')
   .option('--format <format>', '输出格式: docx|pdf|html|pptx', 'docx')
   .option('-o, --output <path>', '输出文件路径')
   .option('--all', '导出期次全部文档（合并）')
-  .option('--ai', '双路验证模式（默认）：pandoc 导出 + 提示 AI 优化排版')
-  .option('--no-ai', '纯 pandoc 导出（快，简单文档可用）')
+  .option('--no-ai', '纯 pandoc 导出（终端快速模式）')
   .action(spec2docCommand);
 
 // ================================================================
