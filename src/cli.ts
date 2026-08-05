@@ -431,9 +431,10 @@ program
 program
   .command('context')
   .alias('ctx')
-  .description('Output task context for any AI tool (Copilot/Claude/GPT)')
+  .description('查看上下文 / 快速切换期次 (--set)')
   .option('-t, --task <task>', 'Target task')
   .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('--set', 'Set current iteration (e.g. --set --iteration Q3)')
   .action(contextCommand);
 
 program
