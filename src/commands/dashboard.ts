@@ -287,7 +287,7 @@ tr:hover td{background:var(--hover)}
 <div class="header">
   <div class="header-left">
     <h1>📊 SPECCORE</h1>
-    <div class="subtitle"><span data-i18n="globalDash">GLOBAL DASHBOARD</span> · ${projectCount} <span data-i18n="projects">PROJECTS</span> · ${totalReqs} <span data-i18n="reqs">REQUIREMENTS</span></div>
+    <div class="subtitle"><span data-i18n="globalDash">全局仪表盘</span> · ${projectCount} <span data-i18n="projects">项目</span> · ${totalReqs} <span data-i18n="reqs">需求</span></div>
   </div>
   <div class="header-right">
     <div class="header-stat"><div class="num">${projectCount}</div><div class="label" data-i18n="projects">项目</div></div>
@@ -344,7 +344,7 @@ tr:hover td{background:var(--hover)}
 </div>
 
 <div class="panel">
-  <div class="panel-title"><span data-i18n="projHealth">PROJECT HEALTH</span></div>
+  <div class="panel-title"><span data-i18n="projHealth">项目健康度</span></div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px">
     ${projectHealth.map(p => `
     <div style="background:var(--surface);border-radius:8px;padding:14px 16px;display:flex;align-items:center;gap:14px">
@@ -364,7 +364,7 @@ tr:hover td{background:var(--hover)}
 <div class="charts">
   <div class="chart-card">
     <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
-    <h3>⚡ <span data-i18n="createdVsResolved">Created vs Resolved</span></h3>
+    <h3>⚡ <span data-i18n="createdVsResolved">需求创建 vs 完成</span></h3>
     <canvas id="resolvedChart"></canvas>
   </div>
   <div class="chart-card">
