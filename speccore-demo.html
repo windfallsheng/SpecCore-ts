@@ -63,7 +63,9 @@ main{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:40px 32p
 @keyframes stream{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}
 .charts{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:28px}
 @media(max-width:768px){.charts{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}}
-.chart-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;backdrop-filter:blur(20px);position:relative}
+.chart-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;backdrop-filter:blur(20px);position:relative;transition:all .3s}
+.chart-card:hover{border-color:rgba(0,240,255,.25);box-shadow:0 0 30px rgba(0,240,255,.08)}
+.chart-card:hover .fs-btn{opacity:1}
 .chart-card h3{font-size:14px;font-weight:600;margin-bottom:16px;color:var(--text);letter-spacing:.5px;text-transform:uppercase}
 .chart-card canvas{max-height:300px}
 .panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:28px;backdrop-filter:blur(20px);margin-bottom:28px;position:relative;transition:all .3s}
@@ -268,11 +270,12 @@ function toggleFS(el) {
   document.body.appendChild(tip);
   setTimeout(() => tip.remove(), 2500);
 }
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && fsEl) { fsEl.classList.remove('fs-fullscreen'); document.body.style.overflow = ''; fsEl = null; }
-  if ((e.key === 'f' || e.key === 'F') && !e.target.closest('input,textarea,[contenteditable]')) {
-    const el = document.querySelector('.stat-card:hover, .chart-card:hover, .panel:hover');
-    if (el) toggleFS(el);
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&fsEl){fsEl.classList.remove('fs-fullscreen');document.body.style.overflow='';fsEl=null}
+  if(e.key==='f'||e.key==='F'){
+    if(document.activeElement&&document.activeElement.tagName==='INPUT')return;
+    const hovered=document.querySelector('.stat-card:hover,.chart-card:hover,.panel:hover');
+    if(hovered)toggleFS(hovered);
   }
 });
 
