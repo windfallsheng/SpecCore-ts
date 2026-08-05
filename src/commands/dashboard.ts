@@ -117,7 +117,7 @@ export function generateDashboardHtml(
   }
 
   return `<!DOCTYPE html>
-<html lang="zh-CN" data-theme="cyber">
+<html lang="zh-CN" data-theme="cyber" data-fs="md">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SpecCore — 全量仪表盘</title>
@@ -133,8 +133,11 @@ export function generateDashboardHtml(
 [data-theme="forest"]{--cyan:#059669;--blue:#0284c7;--green:#22c55e;--purple:#6366f1;--orange:#ca8a04;--bg:#0a140a;--card:rgba(12,24,12,.9);--border:rgba(5,150,105,.15);--text:#d1fae5;--muted:#3b6b4e;--surface:rgba(12,24,12,.9);--hover:rgba(5,150,105,.05)}
 [data-theme="amber"]{--cyan:#ffb000;--blue:#ff8c00;--green:#32cd32;--purple:#da70d6;--orange:#ff6347;--bg:#0c0c0c;--card:#1a1a1a;--border:#333;--text:#ffb000;--muted:#666;--surface:#1a1a1a;--hover:rgba(255,176,0,.05)}
 [data-theme="mono"]{--cyan:#64748b;--blue:#475569;--green:#334155;--purple:#1e293b;--orange:#94a3b8;--bg:#0f172a;--card:#1e293b;--border:#334155;--text:#e2e8f0;--muted:#64748b;--surface:#1e293b;--hover:rgba(100,116,139,.05)}
+[data-fs="sm"]{font-size:13px}[data-fs="md"]{font-size:15px}[data-fs="lg"]{font-size:17px}[data-fs="xl"]{font-size:20px}
 *,*::after,*::before{box-sizing:border-box;margin:0;padding:0}
 .theme-sw{position:fixed;top:16px;right:16px;z-index:100;display:flex;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px;backdrop-filter:blur(10px)}.theme-sw button{width:32px;height:32px;border-radius:16px;border:none;cursor:pointer;transition:all .2s;font-size:14px;display:flex;align-items:center;justify-content:center;background:transparent}.theme-sw button:hover{transform:scale(1.1)}.theme-sw button.active{box-shadow:0 0 0 2px var(--cyan)}
+.lang-sw{position:fixed;top:16px;right:200px;z-index:100;display:flex;gap:4px}.lang-sw button{padding:4px 10px;border-radius:12px;border:1px solid var(--border);cursor:pointer;font-size:11px;font-family:'JetBrains Mono',monospace;background:var(--surface);color:var(--muted)}.lang-sw button.active{color:var(--cyan);border-color:var(--cyan)}
+.fs-sw{position:fixed;top:60px;right:16px;z-index:100;display:flex;flex-direction:column;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:4px;backdrop-filter:blur(10px)}.fs-sw button{width:28px;height:28px;border-radius:6px;border:1px solid transparent;cursor:pointer;font-size:11px;font-family:'JetBrains Mono',monospace;background:transparent;color:var(--muted);transition:all .2s}.fs-sw button:hover{color:var(--cyan)}.fs-sw button.active{color:var(--cyan);border-color:var(--cyan);background:rgba(0,240,255,.05)}
 body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
 .scanlines{position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,240,255,.015) 2px,rgba(0,240,255,.015) 4px);pointer-events:none;z-index:999}
 .stars{position:fixed;inset:0;background:radial-gradient(1px 1px at 10% 20%,rgba(255,255,255,.4),transparent),radial-gradient(1px 1px at 25% 65%,rgba(255,255,255,.3),transparent),radial-gradient(1.5px 1.5px at 50% 30%,rgba(0,240,255,.5),transparent),radial-gradient(1px 1px at 70% 55%,rgba(255,255,255,.35),transparent),radial-gradient(1px 1px at 85% 15%,rgba(168,85,247,.4),transparent),radial-gradient(1.5px 1.5px at 15% 80%,rgba(0,240,255,.45),transparent),radial-gradient(1px 1px at 60% 85%,rgba(255,255,255,.3),transparent),radial-gradient(1px 1px at 90% 75%,rgba(0,255,136,.4),transparent);pointer-events:none;z-index:0}
@@ -143,33 +146,42 @@ main{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:40px 32p
 .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:36px;padding:24px 32px;background:var(--card);border:1px solid var(--border);border-radius:12px;backdrop-filter:blur(20px);position:relative;overflow:hidden}
 .header::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scan 3s linear infinite}
 @keyframes scan{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
-.header h1{font-family:'Orbitron',sans-serif;font-size:26px;font-weight:900;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:2px;text-shadow:0 0 40px rgba(0,240,255,.3)}
-.header-meta{color:var(--muted);font-size:11px;margin-top:6px;letter-spacing:1px}
+.header-left h1{font-family:'Orbitron',sans-serif;font-size:26px;font-weight:900;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:2px;text-shadow:0 0 40px rgba(0,240,255,.3)}
+.header-left .subtitle{color:var(--muted);font-size:12px;margin-top:4px;letter-spacing:1px}
+.header-right{display:flex;gap:16px;align-items:center}
+.header-stat{text-align:center;padding:0 20px;border-left:1px solid rgba(0,240,255,.1)}
+.header-stat .num{font-family:'Orbitron',sans-serif;font-size:22px;font-weight:700;color:var(--cyan);text-shadow:0 0 20px rgba(0,240,255,.4)}
+.header-stat .label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+.phase-indicator{display:flex;align-items:center;gap:8px;padding:8px 20px;border:1px solid rgba(0,240,255,.2);border-radius:20px;background:rgba(0,240,255,.05)}
+.phase-indicator .dot{width:8px;height:8px;border-radius:50%;background:var(--cyan);box-shadow:0 0 12px var(--cyan);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 12px var(--cyan)}50%{box-shadow:0 0 24px var(--cyan),0 0 48px rgba(0,240,255,.3)}}
+.phase-indicator span{font-size:12px;color:var(--cyan);letter-spacing:1px}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:28px}
 .stat-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;backdrop-filter:blur(20px);text-align:center;transition:all .3s;position:relative;overflow:hidden}
-.stat-card:hover{border-color:var(--cyan);box-shadow:0 0 30px rgba(0,240,255,.05)}
-.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);opacity:0;transition:opacity .3s}
-.stat-card:hover::before{opacity:1}
+.stat-card:hover{border-color:rgba(0,240,255,.25);box-shadow:0 0 30px rgba(0,240,255,.08)}
 .stat-card .label{font-size:12px;color:var(--muted);margin-bottom:12px;font-weight:500;text-transform:uppercase;letter-spacing:1px}
-.stat-card .value{font-family:'Orbitron',sans-serif;font-size:38px;font-weight:900;letter-spacing:-1px;text-shadow:0 0 20px rgba(0,240,255,.3)}
-.stat-card .value.c-cyan{color:var(--cyan)}
-.stat-card .value.c-green{color:var(--green)}
-.stat-card .value.c-orange{color:var(--orange)}
+.stat-card .value{font-family:'Orbitron',sans-serif;font-size:38px;font-weight:900;letter-spacing:-1px}
+.stat-card .value.c-cyan{color:var(--cyan);text-shadow:0 0 30px rgba(0,240,255,.3)}
+.stat-card .value.c-green{color:var(--green);text-shadow:0 0 30px rgba(0,255,136,.3)}
+.stat-card .value.c-orange{color:var(--orange);text-shadow:0 0 20px rgba(245,158,11,.3)}
 .stat-card .value.c-muted{color:var(--muted)}
 .stat-card .sub{font-size:11px;color:var(--muted);margin-top:6px}
+.data-stream{position:absolute;bottom:0;left:0;right:0;height:24px;background:linear-gradient(transparent,rgba(0,240,255,.02));overflow:hidden;border-radius:0 0 12px 12px}
+.data-stream span{position:absolute;color:rgba(0,240,255,.12);font-family:'JetBrains Mono',monospace;font-size:10px;white-space:nowrap;animation:stream 25s linear infinite}
+@keyframes stream{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}
 .charts{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:28px}
 @media(max-width:768px){.charts{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}}
-.chart-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;backdrop-filter:blur(20px)}
+.chart-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;backdrop-filter:blur(20px);position:relative}
 .chart-card h3{font-size:14px;font-weight:600;margin-bottom:16px;color:var(--text);letter-spacing:.5px;text-transform:uppercase}
 .chart-card canvas{max-height:300px}
-.table-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;backdrop-filter:blur(20px);overflow-x:auto;margin-bottom:28px}
-.table-card h3{font-size:14px;font-weight:600;margin-bottom:16px;color:var(--text);letter-spacing:.5px;text-transform:uppercase}
+.panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:28px;backdrop-filter:blur(20px);margin-bottom:28px;position:relative}
+.panel-title{font-family:'Orbitron',sans-serif;font-size:14px;font-weight:700;color:var(--cyan);letter-spacing:2px;margin-bottom:20px;display:flex;align-items:center;gap:10px}
+.panel-title::before{content:'◆';font-size:10px;color:var(--cyan);text-shadow:0 0 8px var(--cyan)}
 table{width:100%;border-collapse:collapse;font-size:13px}
-thead tr{border-bottom:1px solid var(--border)}
-th{text-align:left;padding:12px 10px;color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
-td{padding:12px 10px;border-bottom:1px solid rgba(255,255,255,.03);color:var(--text);transition:all .2s}
+th{padding:14px 16px;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;border-bottom:1px solid rgba(0,240,255,.08);text-align:left}
+td{padding:14px 16px;border-bottom:1px solid rgba(0,240,255,.03);color:var(--text);transition:all .2s}
 tr:hover td{background:var(--hover)}
-.badge{display:inline-block;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:500;letter-spacing:.5px}
+.badge{display:inline-block;padding:3px 12px;border-radius:12px;font-size:11px;font-weight:500;letter-spacing:.5px}
 .badge-backend{background:rgba(59,130,246,.15);color:var(--blue)}
 .badge-web{background:rgba(0,255,136,.1);color:var(--green)}
 .badge-h5{background:rgba(245,158,11,.1);color:var(--orange)}
@@ -177,48 +189,46 @@ tr:hover td{background:var(--hover)}
 .badge-done{background:rgba(0,255,136,.1);color:var(--green)}
 .badge-progress{background:rgba(59,130,246,.1);color:var(--blue)}
 .badge-pending{background:rgba(255,255,255,.03);color:var(--muted)}
-.footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;padding:16px;letter-spacing:1px}
+.footer{display:flex;justify-content:space-between;align-items:center;margin-top:28px;padding:16px 0;border-top:1px solid rgba(0,240,255,.06);color:var(--muted);font-size:11px;letter-spacing:1px}
 .fs-btn{position:absolute;top:10px;right:10px;width:28px;height:28px;border-radius:6px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);color:var(--muted);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .2s;z-index:10;opacity:0}
-.stat-card:hover .fs-btn,.chart-card:hover .fs-btn,.table-card:hover .fs-btn{opacity:1}
+.stat-card:hover .fs-btn,.chart-card:hover .fs-btn,.panel:hover .fs-btn{opacity:1}
 .fs-btn:hover{background:rgba(0,240,255,.1);border-color:rgba(0,240,255,.3);color:var(--cyan)}
 .fs-fullscreen{position:fixed!important;inset:0!important;z-index:1000!important;border-radius:0!important;overflow-y:auto!important;background:var(--bg)!important;backdrop-filter:none!important;padding:40px!important;width:100vw!important;height:100vh!important;max-width:none!important}
 .fs-fullscreen canvas{max-height:60vh!important}
 .fs-tip{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(0,240,255,.1);border:1px solid rgba(0,240,255,.2);padding:8px 20px;border-radius:20px;font-size:11px;color:var(--cyan);z-index:1001;letter-spacing:1px;animation:fadeIn .3s ease;pointer-events:none}
 @keyframes fadeIn{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
-.data-stream{position:absolute;bottom:0;left:0;right:0;height:24px;background:linear-gradient(transparent,rgba(0,240,255,.02));overflow:hidden;border-radius:0 0 12px 12px}
-.data-stream span{position:absolute;color:rgba(0,240,255,.12);font-family:'JetBrains Mono',monospace;font-size:10px;white-space:nowrap;animation:stream 25s linear infinite}
-@keyframes stream{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}
-.settings-bar{display:flex;justify-content:flex-end;gap:8px;margin-bottom:24px}
-.settings-bar button{padding:6px 14px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;font-size:11px;font-family:'JetBrains Mono',monospace;transition:all .2s}
-.settings-bar button:hover{color:var(--cyan);border-color:var(--cyan)}
-.settings-bar button.active{color:var(--cyan);border-color:var(--cyan);background:rgba(0,240,255,.05)}
 </style>
 </head>
 <body>
-<div class="scanlines"></div>
-<div class="stars"></div>
-<div class="grid-pattern"></div>
-<div class="theme-sw" id="themeSw">
-  <button title="Cyber" data-theme="cyber" class="active">⚡</button>
-  <button title="Light" data-theme="light">💡</button>
-  <button title="GitHub" data-theme="github">🐙</button>
-  <button title="Synth" data-theme="synth">🎹</button>
-  <button title="Ocean" data-theme="ocean">🌊</button>
-  <button title="Sakura" data-theme="sakura">🌸</button>
-  <button title="Forest" data-theme="forest">🌿</button>
-  <button title="Amber" data-theme="amber">🔥</button>
-  <button title="Mono" data-theme="mono">⬛</button>
+<div class="theme-sw">
+  <button onclick="setTheme('ocean')" title="Ocean Blue">🌊</button><button onclick="setTheme('cyber')" title="Cyber Dark">🌙</button>
+  <button onclick="setTheme('light')" title="Light Studio">☀️</button><button onclick="setTheme('mono')" title="Mono Tech">⬛</button>
+  <button onclick="setTheme('github')" title="GitHub Dark">🐙</button><button onclick="setTheme('synth')" title="SynthWave">💜</button>
+  <button onclick="setTheme('amber')" title="Amber Terminal">🟡</button><button onclick="setTheme('sakura')" title="Cherry Sakura">🌸</button>
+  <button onclick="setTheme('forest')" title="Midnight Forest">🌲</button>
 </div>
+<div class="lang-sw">
+  <button data-lang="zh" class="active" onclick="setLang('zh')">中文</button>
+  <button data-lang="en" onclick="setLang('en')">EN</button>
+</div>
+<div class="fs-sw">
+  <button data-fs="sm" onclick="setFs('sm')">A-</button>
+  <button data-fs="md" class="active" onclick="setFs('md')">A</button>
+  <button data-fs="lg" onclick="setFs('lg')">A+</button>
+  <button data-fs="xl" onclick="setFs('xl')">A++</button>
+</div>
+<div class="scanlines"></div><div class="stars"></div><div class="grid-pattern"></div>
 <main>
-<div class="settings-bar">
-  <button onclick="exportJSON()" title="导出 JSON">📋 JSON</button>
-  <button onclick="exportCSV()" title="导出 CSV">📊 CSV</button>
-  <button onclick="location.reload()" title="刷新数据">🔄 刷新</button>
-</div>
 <div class="header">
-  <div>
-    <h1>📊 SpecCore 全量仪表盘</h1>
-    <div class="header-meta">生成: ${now} | 项目数: ${projectCount} | 需求总数: ${totalReqs}</div>
+  <div class="header-left">
+    <h1>📊 SPECCORE</h1>
+    <div class="subtitle">GLOBAL DASHBOARD · ${projectCount} PROJECTS · ${totalReqs} REQUIREMENTS</div>
+  </div>
+  <div class="header-right">
+    <div class="header-stat"><div class="num">${projectCount}</div><div class="label">项目</div></div>
+    <div class="header-stat"><div class="num">${totalReqs}</div><div class="label">需求</div></div>
+    <div class="header-stat"><div class="num">${completionRate}%</div><div class="label">完成</div></div>
+    <div class="phase-indicator"><div class="dot"></div><span>LIVE</span></div>
   </div>
 </div>
 
