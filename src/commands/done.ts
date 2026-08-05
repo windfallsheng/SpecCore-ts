@@ -9,6 +9,7 @@ import { getDefaultIteration } from '../core/context';
 import { showNextSteps } from '../core/next-steps';
 import { extractQuestions, showQuestionChecklist } from '../core/question-checklist';
 import { saveSession, clearSession, tryResume } from '../core/session-state';
+import { retroCommand } from './retro';
 
 export interface DoneOptions {
   task?: string;
@@ -247,4 +248,11 @@ async function evolveRules(iterDir: string, taskId: string, iteration: string): 
     }
   }
   await writeFile(capPath, caps);
+  
+  // ── 自动生成任务回顾 ──
+  if (options.task) {
+    try {
+      await retroCommand({ task: options.task, iteration: options.iteration });
+    } catch {}
+  }
 }
