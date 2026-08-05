@@ -155,6 +155,19 @@ export function generateDashboardHtml(
 [data-theme="forest"]{--cyan:#059669;--blue:#0284c7;--green:#22c55e;--purple:#6366f1;--orange:#ca8a04;--bg:#0a140a;--card:rgba(12,24,12,.9);--border:rgba(5,150,105,.15);--text:#d1fae5;--muted:#3b6b4e;--surface:rgba(12,24,12,.9);--hover:rgba(5,150,105,.05)}
 [data-theme="amber"]{--cyan:#ffb000;--blue:#ff8c00;--green:#32cd32;--purple:#da70d6;--orange:#ff6347;--bg:#0c0c0c;--card:#1a1a1a;--border:#333;--text:#ffb000;--muted:#666;--surface:#1a1a1a;--hover:rgba(255,176,0,.05)}
 [data-theme="mono"]{--cyan:#64748b;--blue:#475569;--green:#334155;--purple:#1e293b;--orange:#94a3b8;--bg:#0f172a;--card:#1e293b;--border:#334155;--text:#e2e8f0;--muted:#64748b;--surface:#1e293b;--hover:rgba(100,116,139,.05)}
+[data-theme="light"] table th{border-bottom-color:rgba(0,0,0,.15)!important}
+[data-theme="light"] table td{border-bottom-color:rgba(0,0,0,.08)!important}
+[data-theme="light"] .card,[data-theme="light"] .panel,[data-theme="light"] .header,[data-theme="light"] .stat-card,[data-theme="light"] .chart-card{border-color:rgba(0,0,0,.1)!important}
+[data-theme="light"] .card:hover,[data-theme="light"] .panel:hover,[data-theme="light"] .stat-card:hover,[data-theme="light"] .chart-card:hover{border-color:rgba(37,99,235,.25)!important;box-shadow:0 0 24px rgba(37,99,235,.06),inset 0 0 24px rgba(37,99,235,.02)!important}
+[data-theme="light"] .footer{border-top-color:rgba(0,0,0,.08)!important}
+[data-theme="light"] .scanlines{opacity:.03!important}.stars{opacity:.02!important}
+[data-theme="light"] .fs-btn{background:rgba(0,0,0,.03)!important;border-color:rgba(0,0,0,.08)!important}
+[data-theme="light"] .data-stream span{color:rgba(0,0,0,.04)!important}
+[data-theme="light"] .theme-sw,.lang-sw{border-color:rgba(0,0,0,.1)!important}
+[data-theme="light"] tr:hover td{background:rgba(0,0,0,.02)!important}
+[data-theme="light"] .header-stat{border-left-color:rgba(0,0,0,.1)!important}
+[data-theme="light"] .panel-title::before{text-shadow:none!important}
+[data-theme="light"] .grid-pattern{opacity:.3!important}
 [data-fs="sm"]{font-size:13px}[data-fs="md"]{font-size:15px}[data-fs="lg"]{font-size:17px}[data-fs="xl"]{font-size:20px}
 *,*::after,*::before{box-sizing:border-box;margin:0;padding:0}
 .ctrl-panel{position:fixed;top:72px;right:16px;z-index:100;display:flex;flex-direction:column;align-items:flex-end;gap:6px}
