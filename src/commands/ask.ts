@@ -216,21 +216,53 @@ async function askHtml(input: string): Promise<void> {
 }
 
 function renderAskHtml(result: any, input: string): string {
-  const modeColors: Record<string, string> = { explain: '#14b8a6', guide: '#f97316', match: '#0ea5e9', pipeline: '#6366f1' };
-  const modeIcons: Record<string, string> = { explain: '📖', guide: '🗺️', match: '🎯', pipeline: '⚡' };
-  const modeLabels: Record<string, string> = { explain: '命令解释', guide: '任务指引', match: '意图匹配', pipeline: '复杂编排' };
-  const mc = modeColors[result.mode] || '#0ea5e9';
-  const mi = modeIcons[result.mode] || '🔍';
-  const ml = modeLabels[result.mode] || result.mode;
-
-  let bodyHtml = '';
-  if (result.pipeline) {
-    bodyHtml = `<div class="pipeline">${result.pipeline.steps.map((s: any) =>
-      `<div class="step"><span class="step-num">#${s.order}</span><span class="step-cmd">speccore ${s.command}</span><span class="step-args">${s.args||''}</span><span class="step-desc">${s.explanation}</span>${s.dependsOn?`<span class="step-dep">依赖 #${s.dependsOn}</span>`:''}</div>`
-    ).join('')}</div>`;
-  } else {
-    bodyHtml = result.detail.replace(/\n/g, '<br>').replace(/speccore\s+(\S+)/g, '<code>$&</code>');
+  switch (result.mode) {
+    case 'explain':  return renderExplainHtml(result, input);
+    case 'guide':    return renderGuideHtml(result, input);
+    case 'pipeline': return renderPipelineHtml(result, input);
+    default:         return renderMatchHtml(result, input);
   }
+}
 
-  return `<!DOCTYPE html><html lang="zh-CN" data-theme="ocean"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>SpecCore Ask · ${input.slice(0,20)}</title><style>@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;600;700&display=swap');[data-theme="ocean"]{--cyan:#0ea5e9;--bg:#0b1929;--card:rgba(13,31,56,.95);--border:rgba(14,165,233,.15);--text:#bae6fd;--muted:#5b7fa5;--green:#14b8a6;--orange:#f97316;--purple:#6366f1}*{margin:0;padding:0;box-sizing:border-box}body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--text);min-height:100vh;padding:40px 20px}.scanlines{position:fixed;inset:0;pointer-events:none;z-index:99;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,240,255,.01) 2px,rgba(0,240,255,.01) 4px)}.card{max-width:680px;margin:0 auto;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:36px;position:relative;overflow:hidden}.card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanX 3s linear infinite}.card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanX-rev 3s linear infinite}@keyframes scanX{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}@keyframes scanX-rev{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}@keyframes scanY{0%{transform:translateY(-100%)}100%{transform:translateY(100%)}}@keyframes scanY-rev{0%{transform:translateY(100%)}100%{transform:translateY(-100%)}}.vline{position:absolute;top:0;width:1px;bottom:0;pointer-events:none}.vline.l{left:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY-rev 3s linear infinite}.vline.r{right:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY 3s linear infinite}h1{font-family:'Orbitron',sans-serif;font-size:24px;font-weight:900;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:2px}.query{color:var(--muted);font-size:12px;margin:8px 0 20px}.badge{display:inline-block;padding:4px 14px;border-radius:20px;font-size:11px;font-weight:600;letter-spacing:1px;background:${mc}22;color:${mc};border:1px solid ${mc}44;margin-bottom:16px}.section{margin:16px 0;padding:14px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.04);border-radius:10px}.pipeline{display:flex;flex-direction:column;gap:12px}.step{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:10px 14px;background:rgba(14,165,233,.04);border-left:2px solid ${mc};border-radius:0 8px 8px 0}.step-num{font-family:Orbitron;font-size:18px;font-weight:900;color:var(--cyan);min-width:36px}.step-cmd{font-weight:600;color:var(--green)}.step-args{color:var(--muted);font-size:11px}.step-desc{color:var(--muted);font-size:10px;flex-basis:100%}.step-dep{font-size:9px;color:var(--orange);margin-left:auto}code{background:rgba(14,165,233,.1);padding:1px 6px;border-radius:4px;color:var(--cyan);font-size:11px}.footer{text-align:center;color:var(--muted);font-size:10px;margin-top:24px;padding-top:16px;border-top:1px solid rgba(255,255,255,.04)}</style></head><body><div class="scanlines"></div><div class="card"><div class="vline l"></div><div class="vline r"></div><h1>SPECCORE ASK</h1><div class="query">"${input}"</div><div class="badge">${mi} ${ml}</div><div class="section">${bodyHtml}</div><div class="footer">由 SpecCore 驱动 · ${new Date().toISOString().split('T')[0]}</div></div></body></html>`;
+function renderExplainHtml(result: any, input: string): string {
+  const lines = result.detail.split('\n').filter((l: string) => l.trim());
+  let desc = '', usage = '', examples: string[] = [], related = '';
+  for (const l of lines) {
+    if (l.includes('描述:')) desc = l.replace(/.*描述:\s*/, '');
+    else if (l.includes('用法:')) usage = l.replace(/.*用法:\s*/, '');
+    else if (l.startsWith('$')) examples.push(l.replace('$ ', ''));
+    else if (l.includes('关联命令:')) related = l.replace(/.*关联命令:\s*/, '');
+  }
+  const body = `<div class="explain-box"><div class="explain-desc">${desc}</div><div class="explain-usage"><span class="label">用法</span><code>${usage}</code></div>${examples.length > 0 ? `<div class="explain-examples"><span class="label">示例</span>${examples.map(e=>`<code>${e}</code>`).join('')}</div>` : ''}${related ? `<div class="explain-related"><span class="label">关联</span>${related.split(',').map((r: string)=>`<span class="tag">${r.trim()}</span>`).join(' ')}</div>` : ''}</div>`;
+  return buildPage('📖 命令解释', body, input, '#14b8a6');
+}
+
+function renderGuideHtml(result: any, input: string): string {
+  const steps = result.pipeline?.steps || [];
+  const body = `<div class="guide-title">${result.summary}</div><div class="guide-steps">${steps.map((s: any) => `<div class="guide-step"><div class="step-num">${s.order}</div><div class="step-body"><div class="step-cmd">speccore ${s.command}${s.args ? ' ' + s.args : ''}</div><div class="step-desc">${s.explanation}</div></div></div>`).join('')}</div>`;
+  return buildPage('🗺️ 任务指引', body, input, '#f97316');
+}
+
+function renderMatchHtml(result: any, input: string): string {
+  const body = `<div class="match-result"><div class="match-summary">${result.summary}</div><div class="match-detail">${result.detail.replace(/\n/g, '<br>').replace(/speccore\s+(\S+)/g, '<code>$&</code>')}</div></div>`;
+  return buildPage('🎯 意图匹配', body, input, '#0ea5e9');
+}
+
+function renderPipelineHtml(result: any, input: string): string {
+  const steps = result.pipeline?.steps || [];
+  const body = `<div class="pipeline-title">📋 ${steps.length} 步执行计划</div><div class="pipeline-steps">${steps.map((s: any) => `<div class="pipe-step"><div class="pipe-num">#${s.order}</div><div class="pipe-body"><div class="pipe-cmd">speccore ${s.command} <span class="pipe-args">${s.args || ''}</span></div><div class="pipe-desc">${s.explanation}</div>${s.dependsOn ? `<div class="pipe-dep">🔗 依赖 #${s.dependsOn}</div>` : ''}</div></div>`).join('')}</div><div class="confirm-bar">⚠️ 确认后执行 · 输入 y / n</div>`;
+  return buildPage('⚡ 复杂编排', body, input, '#6366f1');
+}
+
+function buildPage(title: string, body: string, input: string, accent: string): string {
+  return `<!DOCTYPE html><html lang="zh-CN" data-theme="ocean"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>SpecCore · ${input.slice(0,20)}</title><style>@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;600;700&display=swap');[data-theme="ocean"]{--cyan:#0ea5e9;--bg:#0b1929;--card:rgba(13,31,56,.95);--border:rgba(14,165,233,.15);--text:#bae6fd;--muted:#5b7fa5;--green:#14b8a6;--orange:#f97316;--purple:#6366f1}*{margin:0;padding:0;box-sizing:border-box}body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--text);min-height:100vh;padding:40px 20px}.scanlines{position:fixed;inset:0;pointer-events:none;z-index:99;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,240,255,.01) 2px,rgba(0,240,255,.01) 4px)}.card{max-width:680px;margin:0 auto;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:36px;position:relative;overflow:hidden}.card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanX 3s linear infinite}.card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanX-rev 3s linear infinite}@keyframes scanX{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}@keyframes scanX-rev{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}@keyframes scanY{0%{transform:translateY(-100%)}100%{transform:translateY(100%)}}@keyframes scanY-rev{0%{transform:translateY(100%)}100%{transform:translateY(-100%)}}.vline{position:absolute;top:0;width:1px;bottom:0;pointer-events:none}.vline.l{left:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY-rev 3s linear infinite}.vline.r{right:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY 3s linear infinite}h1{font-family:'Orbitron',sans-serif;font-size:24px;font-weight:900;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:2px}.query{color:var(--muted);font-size:12px;margin:8px 0 16px}.badge{display:inline-block;padding:4px 14px;border-radius:20px;font-size:11px;font-weight:600;background:${accent}22;color:${accent};border:1px solid ${accent}44;margin-bottom:20px}code{background:rgba(14,165,233,.1);padding:2px 8px;border-radius:4px;color:var(--cyan);font-size:12px;display:inline-block;margin:4px 4px 4px 0}.tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;background:rgba(20,184,166,.1);color:var(--green);margin:2px}
+/* Explain */
+.explain-box{padding:10px 0}.explain-desc{font-size:13px;margin-bottom:16px}.explain-usage,.explain-examples,.explain-related{margin:10px 0}.label{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-right:8px}
+/* Guide */
+.guide-title{font-weight:600;margin-bottom:16px}.guide-steps{display:flex;flex-direction:column;gap:8px}.guide-step{display:flex;gap:14px;padding:12px 14px;background:rgba(249,115,22,.04);border-left:2px solid var(--orange);border-radius:0 8px 8px 0}.guide-step .step-num{font-family:Orbitron;font-size:20px;font-weight:900;color:var(--orange);min-width:30px}.guide-step .step-cmd{font-weight:600;color:var(--text)}.guide-step .step-desc{color:var(--muted);font-size:10px;margin-top:4px}
+/* Match */
+.match-result{padding:10px 0}.match-summary{font-weight:600;font-size:14px;margin-bottom:12px}.match-detail{color:var(--muted);font-size:12px;line-height:1.6}
+/* Pipeline */
+.pipeline-title{font-weight:600;margin-bottom:16px}.pipeline-steps{display:flex;flex-direction:column;gap:10px}.pipe-step{display:flex;gap:14px;padding:12px 14px;background:rgba(99,102,241,.04);border-left:2px solid var(--purple);border-radius:0 8px 8px 0}.pipe-step .pipe-num{font-family:Orbitron;font-size:20px;font-weight:900;color:var(--purple);min-width:36px}.pipe-step .pipe-cmd{font-weight:600;color:var(--green)}.pipe-step .pipe-args{color:var(--muted);font-size:11px}.pipe-step .pipe-desc{color:var(--muted);font-size:10px;margin-top:4px}.pipe-step .pipe-dep{font-size:9px;color:var(--orange);margin-top:4px}.confirm-bar{text-align:center;padding:14px;margin-top:16px;background:rgba(99,102,241,.08);border:1px dashed rgba(99,102,241,.2);border-radius:8px;color:var(--purple);font-size:12px}
+.footer{text-align:center;color:var(--muted);font-size:10px;margin-top:24px;padding-top:16px;border-top:1px solid rgba(255,255,255,.04)}</style></head><body><div class="scanlines"></div><div class="card"><div class="vline l"></div><div class="vline r"></div><h1>SPECCORE ASK</h1><div class="query">"${input}"</div><div class="badge">${title}</div>${body}<div class="footer">由 SpecCore 驱动 · ${new Date().toISOString().split('T')[0]}</div></div></body></html>`;
 }
