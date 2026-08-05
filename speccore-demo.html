@@ -367,7 +367,7 @@ function setSize(s) {
 // Init saved settings
 (function(){
   setTheme(localStorage.getItem('speccore-theme') || 'ocean');
-  setLang(localStorage.getItem('speccore-lang') || (navigator.language.startsWith('zh')?'zh':'en'));
+  setLang(localStorage.getItem('speccore-lang') || 'zh');
   setFont(localStorage.getItem('speccore-font') || 'hybrid');
   setSize(localStorage.getItem('speccore-size') || 'lg');
 })();
