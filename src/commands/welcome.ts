@@ -5,7 +5,7 @@
 
 import { logger } from '../utils/logger';
 import { join } from 'path';
-import { pathExists, readdir } from 'fs-extra';
+import { pathExists, readdir, writeFile } from 'fs-extra';
 import { getDefaultIteration } from '../core/context';
 
 const C = { r: '\x1b[0m', b: '\x1b[1m', d: '\x1b[2m', cyan: '\x1b[36m', green: '\x1b[32m', yellow: '\x1b[33m', magenta: '\x1b[35m', gray: '\x1b[90m', blue: '\x1b[34m' };
@@ -22,6 +22,17 @@ export interface WelcomeOptions { force?: boolean; web?: boolean; output?: strin
 
 export async function welcomeCommand(_options: WelcomeOptions): Promise<void> {
   const version = require('../../package.json').version;
+
+  // 非 TTY（AI 调用）→ 直接输出 HTML
+  if (!process.stdout.isTTY) {
+    const iteration = await getDefaultIteration('');
+    const iterName = (!iteration || iteration.includes('---') || iteration.length < 2) ? '' : iteration;
+    const html = renderWelcomeHtml(version, true, iterName, 'doc', 0);
+    const outPath = _options.output || join(process.cwd(), 'speccore-welcome.html');
+    await writeFile(outPath, html);
+    logger.info(`✅ 已生成: ${outPath}`);
+    return;
+  }
 
   // ══════════ 名片头部 ══════════
   logger.info('');
