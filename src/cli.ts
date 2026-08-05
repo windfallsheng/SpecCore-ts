@@ -622,7 +622,7 @@ program
 program
   .command('rename')
   .alias('rn')
-  .description('Rename iteration or task, auto-update all references')
+  .description('重命名期次/任务，自动更新所有关联引用')
   .option('--target <name>', 'Current name (required for single rename)')
   .option('--new-name <name>', 'New name (required for single rename)')
   .option('--batch', 'Batch rename mode')
@@ -762,7 +762,7 @@ program
 program
   .command('search <query>')
   .alias('sh')
-  .description('Search across all Spec files for a keyword (v5.6)')
+  .description('全文搜索：跨所有 Spec 文件关键词检索')
   .option('--task <id>', 'Limit search to a task')
   .option('--iteration <name>', 'Limit search to an iteration')
   .action((query: string, opts: any) => searchCommand({ ...opts, query }));
