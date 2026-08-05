@@ -42,7 +42,7 @@ import { doneCommand } from './commands/done';
 // rename 命令
 import { renameCommand } from './commands/rename';
 import { retroCommand } from './commands/retro';
-// v4.0.0 新增命令
+import { updateCommand } from './commands/update';
 // v4.6.0 迁移命令
 // v4.7.0 体验增强
 import { completionCommand } from './commands/completion';
@@ -102,7 +102,7 @@ const MODE = readMode();
 const SIMPLE_COMMANDS = new Set([
   'ask', 'welcome', 'init', 'doc2spec', 'spec2doc', 'dashboard', 'analyze', 'split', 'execute',
   'pr', 'done', 'dev', 'sync', 'search', 'track',
-  'iteration', 'task', 'plan', 'ops', 'change', 'validate', 'rename',
+  'iteration', 'task', 'plan', 'ops', 'change', 'validate', 'rename', 'update',
   ]);
 
 /** 简洁模式下过滤 help 命令列表 */
@@ -437,6 +437,13 @@ program
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('--set', 'Set current iteration (e.g. --set --iteration Q3)')
   .action(contextCommand);
+
+program
+  .command('update')
+  .alias('up')
+  .description('升级项目文件和命令（增量更新，不破坏数据）')
+  .option('-f, --force', '强制刷新所有命令文件')
+  .action(updateCommand);
 
 program
 
