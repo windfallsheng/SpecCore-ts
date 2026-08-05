@@ -1386,11 +1386,26 @@ async function showGlobalDashboard(options: StatusPanelOptions): Promise<void> {
     const projectLabels = index.projects.map((p) => p.name);
     const projectReqs = index.projects.map((p) => p.reqCount);
 
+    // 迭代/健康度数据
+    const activeIterations = index.iterations.filter(i => i.status === 'active' || i.status === '进行中');
+    const iterationLabels = index.iterations.map(i => i.name).slice(0, 8);
+    const iterationReqCounts = index.iterations.map(i => i.reqs.length).slice(0, 8);
+    const iterStats = index.iterations.map(it => {
+      const iterReqs = index.reqs.filter(r => it.reqs.includes(r.id));
+      const done = iterReqs.filter(r => r.status.includes('✅') || r.status.includes('已实现')).length;
+      return { name: it.name, total: it.reqs.length, done, pct: it.reqs.length > 0 ? Math.round(done / it.reqs.length * 100) : 0 };
+    });
+    const projectHealth = index.projects.map(p => ({
+      name: p.name, reqCount: p.reqCount,
+      doneCount: index.reqs.filter(r => r.project === p.name && (r.status.includes('✅') || r.status.includes('已实现'))).length,
+    })).map(p => ({ ...p, pct: p.reqCount > 0 ? Math.round(p.doneCount / p.reqCount * 100) : 0 })).sort((a, b) => b.pct - a.pct);
+
     spinner.stop('数据采集完成');
 
     const html = generateDashboardHtml(
       index.projects.length, totalReqs, implemented, inProgress, pending,
-      completionRate, projectLabels, projectReqs, index
+      completionRate, projectLabels, projectReqs,
+      iterationLabels, iterationReqCounts, iterStats, projectHealth, activeIterations.length, index
     );
 
     const outPath = options.export

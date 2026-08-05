@@ -184,7 +184,54 @@ tr:hover td{background:var(--hover)}
   </div>
 </div>
 
-<div class="table-card">
+<div class="panel">
+  <div class="panel-title">PROJECT HEALTH</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px">
+    
+  </div>
+</div>
+
+<div class="charts">
+  <div class="chart-card">
+    <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
+    <h3>⚡ Created vs Resolved</h3>
+    <canvas id="resolvedChart"></canvas>
+  </div>
+  <div class="chart-card">
+    <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
+    <h3>📅 期次进度</h3>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px;max-height:280px;overflow-y:auto">
+      
+      <div style="color:var(--muted);text-align:center;padding:20px">暂无期次数据</div>
+    </div>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat-card">
+    <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
+    <div class="label">🏥 项目健康度</div>
+    <div class="value c-cyan">0/0</div>
+    <div class="sub">健康项目 / 全部</div>
+    <div class="data-stream"><span>HEALTH · 0 GREEN · 0 AT RISK</span></div>
+  </div>
+  <div class="stat-card">
+    <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
+    <div class="label">📅 活跃期次</div>
+    <div class="value c-green">0</div>
+    <div class="sub">共 0 个期次</div>
+    <div class="data-stream"><span>ITERATIONS · 0 ACTIVE · 0 TOTAL</span></div>
+  </div>
+  <div class="stat-card">
+    <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
+    <div class="label">📈 交付速率</div>
+    <div class="value c-orange">33%</div>
+    <div class="sub">已完成 / 总需求</div>
+    <div class="data-stream"><span>VELOCITY · 5 DONE · 15 TOTAL · 33%</span></div>
+  </div>
+</div>
+
+<div class="panel">
   <h3>📋 项目列表</h3>
   <table>
     <thead><tr><th>项目名称</th><th>类型</th><th>需求数</th><th>最后导入</th></tr></thead>
@@ -337,6 +384,26 @@ const projectChart = new Chart(document.getElementById('projectChart'), {
     scales: {
       x: { ticks: { color: textColor, font: { size: 10 } }, grid: { color: gridColor } },
       y: { beginAtZero: true, ticks: { stepSize: 1, color: textColor, font: { size: 10 } }, grid: { color: gridColor } }
+    }
+  }
+});
+
+const resolvedChart = new Chart(document.getElementById('resolvedChart'), {
+  type: 'bar',
+  data: {
+    labels: ['已实现', '进行中', '待开发'],
+    datasets: [{
+      data: [5, 5, 5],
+      backgroundColor: ['rgba(0,255,136,.6)', 'rgba(0,240,255,.6)', 'rgba(255,255,255,.06)'],
+      borderRadius: 4
+    }]
+  },
+  options: {
+    responsive: true, indexAxis: 'y',
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { color: textColor, font: { size: 10 } }, grid: { color: gridColor } },
+      y: { ticks: { color: textColor, font: { size: 10 } }, grid: { display: false } }
     }
   }
 });
