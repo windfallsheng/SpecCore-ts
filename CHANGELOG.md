@@ -2,6 +2,39 @@
 
 ---
 
+## v5.26.0 (2026-08-05) — "AI 万能入口 + 视觉化看板"
+
+### 🧠 ask — 万能 AI 入口重构
+- **4 模式引擎**: 📖命令解释 / 🗺️任务指引 / 🎯意图匹配 / ⚡复杂编排
+- **18 条命令知识库**: 完整用法、示例、关联命令
+- **4 种预定义工作流**: 新功能全流程、Bug修复、批量执行、代码审查
+- **Unicode 框线美化终端输出**: 四模式色彩高亮
+- **TTY 智能适配**: 终端→框线，AI调用→HTML页面
+
+### 📊 dashboard — 全局仪表盘
+- `--scope global` 全量视图，7 大 Jira 标准维度
+- 项目健康度评分 + Created vs Resolved + 迭代进度
+- 9 套主题 + 中英文 i18n + Hybrid/Orbit/Mono 字体
+- S/M/L/XL 字号调节 + F 键全屏 + 四边脉冲扫描线
+- Light 模式完整边框适配 + 需求详情表内滚动
+
+### 🏷️ welcome — 项目名片
+- 彩色架构卡片 + 4 模式 Ask 引导
+- 确认 CTA 按钮 + 流水线可视化
+- TTY/HTML 双模式
+
+### 🔄 dev — Pipeline HTML
+- 7 阶段流水线可视化 + 当前阶段高亮
+- TTY 终端 + HTML 页面双模式
+
+### ⚙️ 命令重构
+- 所有 19 条命令描述统一中文
+- `global-status` → 重定向到 `dashboard --scope global`
+- `track` 合并 `trace` + `tracker`
+- 简洁模式 +sync/search/track
+
+---
+
 ## v5.25.3 (2026-08-05)
 
 ### 🐛 Qcoder 集成修复
