@@ -280,11 +280,9 @@ tr:hover td{background:var(--hover)}
     <div class="header-stat"><div class="num">${projectCount}</div><div class="label" data-i18n="projects">项目</div></div>
     <div class="header-stat"><div class="num">${totalReqs}</div><div class="label" data-i18n="reqs">需求</div></div>
     <div class="header-stat"><div class="num">${completionRate}%</div><div class="label" data-i18n="done2">完成</div></div>
-  </div>
-  <div class="data-stream" style="position:absolute"><span>SPECCORE · DASHBOARD · ${projectCount} PROJECTS · ${totalReqs} REQUIREMENTS · ${completionRate}% COMPLETE · POWERED BY SPECCORE</span></div>
-</div>
     <div class="phase-indicator"><div class="dot"></div><span>LIVE</span></div>
   </div>
+  <div class="data-stream" style="position:absolute"><span>SPECCORE · DASHBOARD · ${projectCount} PROJECTS · ${totalReqs} REQUIREMENTS · ${completionRate}% COMPLETE · POWERED BY SPECCORE</span></div>
 </div>
 
 <div class="stats">
