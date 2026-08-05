@@ -48,8 +48,6 @@ import { updateCommand } from './commands/update';
 import { completionCommand } from './commands/completion';
 // v4.8.0 高级功能
 
-// v4.9.0 完善
-import { updateCommand } from './commands/update';
 // v5.3.0 新增
 import { diffCommand } from './commands/diff';
 import { traceCommand } from './commands/trace';
@@ -690,23 +688,7 @@ program
 // v4.8.0 高级功能
 program
 
-// v4.9.0 完善
-program
-  .command('update')
-  .alias('up')
-  .description('Update task attributes (v4.9)')
-  .option('-t, --task <id>', 'Task ID (e.g. Task-001)')
-  .option('--status <status>', 'Status: pending/in_progress/completed/blocked')
-  .option('--priority <priority>', 'Priority: high/medium/low')
-  .option('--assignee <name>', 'Assignee name')
-  .option('--type <type>', 'Task type')
-  .option('-i, --iteration <name>', 'Target iteration')
-  .option('--force', 'Skip confirmation')
-  .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
-  .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
-  .action(updateCommand);
-
-// v5.3.0 新增命令
+// v5.27 新增命令: speccore update (项目升级)
 program
   .command('diff')
   .alias('df')
