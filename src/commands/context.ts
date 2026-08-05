@@ -9,11 +9,22 @@ import { loadContext } from '../core/context';
 
 export interface ContextOptions {
   task?: string;
+  set?: boolean;
+  iteration?: string;
 }
 
 export async function contextCommand(options: ContextOptions): Promise<void> {
   try {
     const ctx = await loadContext();
+
+    // ── 设置模式 ──
+    if (options.iteration && options.set) {
+      ctx.currentIteration = options.iteration;
+      await saveContext(ctx);
+      logger.info(`✅ 已切换到期次: ${options.iteration}`);
+      return;
+    }
+
     const taskName = options.task || ctx.currentTask;
 
     if (!taskName) {

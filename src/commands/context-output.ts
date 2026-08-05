@@ -5,15 +5,25 @@ import { readFile, pathExists } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
 import { loadConfig } from '../core/unified-config';
-import { getDefaultIteration } from '../core/context';
+import { loadContext, saveContext, getDefaultIteration } from '../core/context';
 
 export interface ContextOptions {
   task?: string;
   iteration?: string;
   format?: 'text' | 'markdown';
+  set?: boolean;
 }
 
 export async function contextCommand(options: ContextOptions): Promise<void> {
+  // ── 切换期次模式 ──
+  if (options.set && options.iteration) {
+    const ctx = await loadContext();
+    ctx.currentIteration = options.iteration;
+    await saveContext(ctx);
+    logger.info(`✅ 已切换到期次: ${options.iteration}`);
+    return;
+  }
+
   const iteration = await getDefaultIteration(options.iteration);
   if (!iteration) { logger.error('No active iteration'); return; }
 
