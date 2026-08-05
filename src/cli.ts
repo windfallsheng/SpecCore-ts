@@ -41,6 +41,7 @@ import { contextCommand } from './commands/context-output';
 import { doneCommand } from './commands/done';
 // rename 命令
 import { renameCommand } from './commands/rename';
+import { retroCommand } from './commands/retro';
 // v4.0.0 新增命令
 // v4.6.0 迁移命令
 // v4.7.0 体验增强
@@ -632,6 +633,14 @@ program
   .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
   .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
   .action(renameCommand);
+
+program
+  .command('retro')
+  .alias('rt')
+  .description('任务回顾：生成复盘报告（RETRO.md + HTML）')
+  .option('--task <id>', '任务 ID')
+  .option('--iteration <name>', '期次名称')
+  .action(retroCommand);
 
 // ================================================================
 // 快捷别名（顶层别名）
