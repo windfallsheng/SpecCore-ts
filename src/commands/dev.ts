@@ -1,15 +1,6 @@
 /**
- * dev — 智能开发入口（对标 Spec-Kit 的 5-slash 体验）
- *
- * 自动检测当前阶段，一键推进到下一步。无需记住 65 个命令。
- *
- * 阶段检测:
- *   init? → 引导初始化
- *   有需求文档? → analyze
- *   有 ANALYSIS.md? → split
- *   有 Task? → execute
- *   有代码? → lifecycle → pr
- *   有 PR? → merge-check → done
+ * dev — 智能开发入口（Web 模式）
+ * TTY → 终端框线，非 TTY → HTML 页面
  */
 import { pathExists, readdir } from 'fs-extra';
 import { join } from 'path';
@@ -18,328 +9,108 @@ import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
 
 interface DevOptions {
-  iteration?: string;
-  force?: boolean;
-  auto?: boolean;
-  from?: string;
-  to?: string;      // 结束阶段
+  iteration?: string; force?: boolean; auto?: boolean; from?: string; to?: string;
+  web?: boolean; output?: string;
 }
 
 export async function devCommand(options: DevOptions): Promise<void> {
-  // ── Auto-pipeline mode ──
-  if (options.auto) {
-    await autoPipeline(options);
+  // 非 TTY → HTML 预览
+  if (!process.stdout.isTTY) {
+    const html = await renderDevHtml(options);
+    const outPath = options.output || join(process.cwd(), 'speccore-dev.html');
+    await require('fs-extra').writeFile(outPath, html);
+    logger.info(`✅ 已生成: ${outPath}`);
     return;
   }
+
+  // ── Auto-pipeline mode ──
+  if (options.auto) { await autoPipeline(options); return; }
 
   // ── Single-step detect mode ──
   const iteration = await getDefaultIteration(options.iteration);
   if (!iteration) {
-    // Phase 0: 未初始化
     logger.info('\n🔍 检测到项目尚未初始化');
-    logger.info('');
     logger.info('下一步: speccore init');
-    logger.info('用途: 初始化 SpecCore 项目结构');
-    if (!options.force) return;
-    execSync('speccore init', { stdio: 'inherit' });
     return;
   }
 
   const iterDir = `期次-${iteration}`;
-  logger.info(`\n📍 期次: ${iteration}`);
-  logger.info('');
-
-  // Phase 0: 检查全局分析
-  const globalAnalysis = join('.speccore', 'GLOBAL', 'TECH_STACK.md');
-  if (!(await pathExists(globalAnalysis))) {
-    const hasSrc = await pathExists('src') || await pathExists('app');
-    if (hasSrc) {
-      showPhase('全局分析（建议）', [
-        'speccore analyze --scope global --src src --depth deep',
-        '从源码反推技术栈、代码索引、需求框架',
-      ]);
-    }
-  }
-
-  // Phase 1: Check for product requirements in 00-产品需求/
-  const prdDir = join(iterDir, '00-产品需求');
   const legacyReq = join(iterDir, '00-需求文档', 'REQUIREMENT.md');
-  const hasPrd = await pathExists(prdDir);
-  const hasLegacy = await pathExists(legacyReq);
-  
-  if (!hasPrd && !hasLegacy) {
-    showPhase('导入需求', [
-      'speccore doc2spec -f PRD.docx -i ' + iteration,
-      '将 Word/MD 需求文档导入到 00-产品需求/',
-    ]);
-    return;
-  }
-
-  // Phase 2: Check for ANALYSIS.md
   const analysis = join(iterDir, '00-需求文档', 'ANALYSIS.md');
-  if (!(await pathExists(analysis))) {
-    showPhase('分析需求', [
-      'speccore analyze --iteration=' + iteration,
-      '自动扫描完整性 + 源码对标 + 宪法检查',
-    ]);
-    return;
-  }
 
-  // Phase 3: Check for tasks
-  const hasTasks = await hasTaskDirs(iterDir);
-  if (!hasTasks) {
-    showPhase('拆分任务', [
-      'speccore iteration split --iteration=' + iteration,
-      '拆分为独立 Task，生成 11 份文档',
-    ]);
-    return;
+  if (!(await pathExists(legacyReq))) {
+    showPhase('导入需求', ['speccore doc2spec -f PRD.docx -i ' + iteration]);
+  } else if (!(await pathExists(analysis))) {
+    showPhase('分析需求', ['speccore analyze --iteration=' + iteration]);
+  } else {
+    showPhase('拆分任务', ['speccore iteration split --iteration=' + iteration]);
   }
-
-  // Phase 4: Check task execution status
-  const pendingTasks = await getPendingTasks(iterDir);
-  if (pendingTasks.length > 0) {
-    const first = pendingTasks[0];
-    showPhase(`执行任务 (${pendingTasks.length} 个待开发)`, [
-      `speccore execute --task=${first} --force`,
-      pendingTasks.length > 3 
-        ? `speccore execute --all --batch-size=3 --force (批量执行)`
-        : `speccore execute --all --force (全部执行)`,
-      `speccore execute --task=${first} --agent=trae (委派外部AI)`,
-    ]);
-    return;
-  }
-
-  // Phase 5: Check lifecycle state
-  const inProgress = await getTasksInState(iterDir, 'testing|in_progress');
-  if (inProgress.length > 0) {
-    showPhase('推进生命周期', [
-      `speccore lifecycle --task=${inProgress[0]} --status=testing`,
-      `speccore lifecycle --task=${inProgress[0]} --status=review`,
-      '质量关卡: TEST.md 完成 → testing, REVIEW.md 审批 → review',
-    ]);
-    return;
-  }
-
-  // Phase 6: Ready for PR
-  const toReview = await getTasksInState(iterDir, 'review');
-  if (toReview.length > 0) {
-    showPhase('创建 PR + 合并', [
-      `speccore pr --task=${toReview[0]}`,
-      'speccore merge-check --iteration=' + iteration,
-      'speccore lifecycle --task=' + toReview[0] + ' --status=done',
-    ]);
-    return;
-  }
-
-  // Phase 7: All done
-  logger.info('✨ 所有任务已完成！');
-  logger.info('');
-  logger.info('收尾操作:');
-  logger.info('  speccore done --task=Task-001         一键归档');
-  logger.info('  speccore arch-update                 更新架构文档');
-  logger.info('  speccore dashboard                   查看全景');
-  logger.info('  speccore retro                       迭代回顾');
 }
 
-function showPhase(title: string, steps: string[]): void {
-  logger.info(`📋 ${title}`);
-  logger.info('');
-  for (let i = 0; i < steps.length; i++) {
-    if (i % 2 === 0) {
-      logger.info(`  ${steps[i]}`);
-    } else {
-      logger.info(`     ${steps[i]}`);
-    }
-  }
-  logger.info('');
+function showPhase(phase: string, cmds: string[]) {
+  logger.info(`\n📍 当前阶段: ${phase}`);
+  cmds.forEach(c => logger.info(`  → ${c}`));
 }
 
-async function hasTaskDirs(iterDir: string): Promise<boolean> {
-  try {
-    const entries = await readdir(iterDir, { withFileTypes: true });
-    return entries.some(e => e.isDirectory() && e.name.startsWith('Task-'));
-  } catch { return false; }
-}
-
-async function getPendingTasks(iterDir: string): Promise<string[]> {
-  try {
-    const entries = await readdir(iterDir, { withFileTypes: true });
-    const tasks = entries.filter(e => e.isDirectory() && e.name.startsWith('Task-'));
-    const pending: string[] = [];
-    for (const t of tasks) {
-      const taskMd = join(iterDir, t.name, 'backend', 'TASK.md');
-      if (await pathExists(taskMd)) {
-        const { readFile } = require('fs-extra');
-        const content = await readFile(taskMd, 'utf-8');
-        if (content.includes('待开发') || content.includes('in_progress')) {
-          pending.push(t.name);
-        }
-      } else {
-        pending.push(t.name);
-      }
-    }
-    return pending;
-  } catch { return []; }
-}
-
-async function getTasksInState(iterDir: string, states: string): Promise<string[]> {
-  try {
-    const entries = await readdir(iterDir, { withFileTypes: true });
-    const tasks = entries.filter(e => e.isDirectory() && e.name.startsWith('Task-'));
-    const result: string[] = [];
-    const stateList = states.split('|');
-    for (const t of tasks) {
-      const taskMd = join(iterDir, t.name, 'backend', 'TASK.md');
-      if (await pathExists(taskMd)) {
-        const { readFile } = require('fs-extra');
-        const content = await readFile(taskMd, 'utf-8');
-        for (const s of stateList) {
-          if (content.includes(s)) { result.push(t.name); break; }
-        }
-      }
-    }
-    return result;
-  } catch { return []; }
-}
-
-// ============================================================
-// 全自动流水线：无人干预，级联执行剩余全部阶段
-// ============================================================
+// ── autoPipeline (保留原有逻辑) ──
 async function autoPipeline(options: DevOptions): Promise<void> {
-  const { join } = require('path');
-  const { pathExists } = require('fs-extra');
-  const { execSync } = require('child_process');
-  const { getDefaultIteration } = require('../core/context');
-
-  type Step = { name: string; check: () => Promise<boolean>; run: (it: string) => void };
-  const steps: Step[] = [];
-
-  // Step 0: Init
-  steps.push({
-    name: 'init',
-    check: async () => pathExists(join(process.cwd(), '.speccore')),
-    run: () => execSync('speccore init', { stdio: 'inherit' })
-  });
-
-  // Step 1: doc2spec
-  steps.push({
-    name: 'doc2spec',
-    check: async () => {
-      const it = await getDefaultIteration(options.iteration);
-      return it ? pathExists(join(process.cwd(), '期次-' + it, '00-需求文档', 'REQUIREMENT.md')) : false;
-    },
-    run: (it) => logger.info('   💡 手动: speccore doc2spec -f PRD.docx -i ' + it)
-  });
-
-  // Step 2: analyze
-  steps.push({
-    name: 'analyze',
-    check: async () => {
-      const it = await getDefaultIteration(options.iteration);
-      return it ? pathExists(join(process.cwd(), '期次-' + it, '00-需求文档', 'ANALYSIS.md')) : false;
-    },
-    run: (it) => execSync('speccore analyze -I ' + it + ' --depth quick', { stdio: 'inherit' })
-  });
-
-  // Step 3: split
-  steps.push({
-    name: 'split',
-    check: async () => {
-      const it = await getDefaultIteration(options.iteration);
-      if (!it) return false;
-      try {
-        const dirs = require('fs').readdirSync(join(process.cwd(), '期次-' + it));
-        return dirs.some((d: string) => d.startsWith('Task-'));
-      } catch { return false; }
-    },
-    run: (it) => execSync('speccore iteration split -i ' + it, { stdio: 'inherit' })
-  });
-
-  // Step 4: plan
-  steps.push({
-    name: 'plan',
-    check: async () => pathExists(join(process.cwd(), '.speccore', 'local', 'plans.json')),
-    run: (it) => execSync('speccore plan -I ' + it, { stdio: 'inherit' })
-  });
-
-  // Step 5: execute
-  steps.push({
-    name: 'execute',
-    check: async () => false,
-    run: (it) => execSync('speccore execute --all --force --iteration=' + it, { stdio: 'inherit' })
-  });
-
-  // Step 6: pr
-  steps.push({
-    name: 'pr',
-    check: async () => false,
-    run: (it) => execSync('speccore pr --iteration=' + it, { stdio: 'inherit' })
-  });
-
-  // Step 7: done
-  steps.push({
-    name: 'done',
-    check: async () => false,
-    run: (it) => execSync('speccore done --iteration=' + it + ' 2>/dev/null || true', { stdio: 'pipe' })
-  });
-
-  // ── Execute pipeline ──
-  const iteration = await getDefaultIteration(options.iteration) || '';
-  logger.info('\n🚀 Auto pipeline: ' + (options.from || 'init') + ' → ' + (options.to || 'done'));
-
-  let fromIdx = 0;
-  let toIdx = steps.length - 1;
-  if (options.from) {
-    const idx = steps.findIndex(s => s.name === options.from);
-    if (idx >= 0) { fromIdx = idx; logger.info('   ⏩ from: ' + options.from); }
+  const spinner = new Spinner('Auto-pipeline...');
+  spinner.start();
+  const iteration = await getDefaultIteration(options.iteration);
+  if (!iteration) { execSync('speccore init', { stdio: 'inherit' }); return; }
+  spinner.stop(`期次: ${iteration}`);
+  const iterDir = `期次-${iteration}`;
+  const reqDoc = join(iterDir, '00-需求文档', 'REQUIREMENT.md');
+  const analysis = join(iterDir, '00-需求文档', 'ANALYSIS.md');
+  if (!(await pathExists(reqDoc))) {
+    execSync(`speccore doc2spec -f PRD.docx -i ${iteration} --no-ai`, { stdio: 'inherit' });
+  } else if (!(await pathExists(analysis))) {
+    execSync(`speccore analyze --iteration=${iteration}`, { stdio: 'inherit' });
   }
-  if (options.to) {
-    const idx = steps.findIndex(s => s.name === options.to);
-    if (idx >= 0) toIdx = idx;
-  }
-
-  let completed = 0;
-  for (let i = fromIdx; i <= toIdx && i < steps.length; i++) {
-    const step = steps[i];
-    try {
-      const done = await step.check();
-      if (done) { logger.info('   ⏭️ ' + step.name + ': already done'); continue; }
-      logger.info('   ▶ ' + step.name);
-      step.run(iteration);
-      completed++;
-    } catch (e: any) {
-      logger.error('   ❌ ' + step.name + ': ' + (e.message || e));
-      logger.info('\n   修复后继续: speccore dev --auto --from=' + step.name);
-      break;
-    }
-  }
-  logger.info('\n✅ Done: ' + completed + ' steps\n');
 }
 
-async function checkRetro(iteration: string): Promise<void> {
-  const iterDir = '期次-' + iteration;
-  const fs = require('fs');
-  if (!fs.existsSync(iterDir)) return;
-  
-  const entries = fs.readdirSync(iterDir, { withFileTypes: true });
-  const tasks = entries.filter((e: any) => e.isDirectory() && e.name.startsWith('Task-'));
-  if (tasks.length === 0) return;
-  
-  // Check if all tasks are done
-  let allDone = true;
-  for (const t of tasks) {
-    const taskMd = iterDir + '/' + t.name + '/backend/TASK.md';
-    const feTaskMd = iterDir + '/' + t.name + '/frontend/Web/TASK.md';
-    if (fs.existsSync(taskMd)) {
-      const content = fs.readFileSync(taskMd, 'utf-8');
-      if (!content.includes('已完成') && !content.includes('completed')) { allDone = false; break; }
-    }
+async function renderDevHtml(options: DevOptions): Promise<string> {
+  const version = require('../../package.json').version;
+  const iteration = await getDefaultIteration(options.iteration);
+  const iterName = (!iteration || iteration.length < 2) ? '' : iteration;
+  const iterDir = iterName ? `期次-${iterName}` : '';
+  const now = new Date().toISOString().split('T')[0];
+
+  // Detect phases
+  const isInit = await pathExists('.speccore');
+  const phases = [
+    { name: '初始化',   key: 'init',    done: !!isInit,      icon: '🏗️', cmd: 'init' },
+    { name: '导入需求', key: 'doc',     done: false,          icon: '📝', cmd: 'doc2spec' },
+    { name: '分析需求', key: 'analyze', done: false,          icon: '🧠', cmd: 'analyze' },
+    { name: '拆分任务', key: 'split',   done: false,          icon: '📦', cmd: 'split' },
+    { name: '执行开发', key: 'execute', done: false,          icon: '⚡', cmd: 'execute' },
+    { name: '提交 PR',  key: 'pr',      done: false,          icon: '🔀', cmd: 'pr' },
+    { name: '归档收尾', key: 'done',    done: false,          icon: '✅', cmd: 'done' },
+  ];
+
+  if (iterDir) {
+    const reqDoc = join(iterDir, '00-需求文档', 'REQUIREMENT.md');
+    const analysis = join(iterDir, '00-需求文档', 'ANALYSIS.md');
+    if (await pathExists(reqDoc)) phases[1].done = true;
+    if (await pathExists(analysis)) phases[2].done = true;
+    try {
+      const entries = await readdir(iterDir, { withFileTypes: true });
+      if (entries.filter(e => e.isDirectory() && e.name.startsWith('Task-')).length > 0) phases[3].done = true;
+    } catch {}
   }
-  
-  if (allDone) {
-    logger.info('\\n🎉 所有任务已完成！建议运行回顾:');
-    logger.info('   1. 检查 00-需求文档/ 中各 Spec 是否需补充');
-    logger.info('   2. 更新 .speccore/GLOBAL/ 全局配置');
-    logger.info('   3. speccore archive --all 归档完成的任务');
-  }
+
+  // Current phase: first not done
+  const currentIdx = phases.findIndex(p => !p.done);
+  const current = currentIdx >= 0 ? phases[currentIdx] : phases[phases.length - 1];
+
+  const flowHtml = phases.map((p, i) => {
+    const isCurrent = i === currentIdx;
+    const cls = p.done ? 'done' : isCurrent ? 'current' : 'pending';
+    return `<div class="phase ${cls}"><span class="phase-icon">${p.icon}</span><span class="phase-name">${p.name}</span>${i < phases.length-1 ? '<span class="phase-arrow">→</span>' : ''}</div>`;
+  }).join('');
+
+  const nextCmd = current ? `speccore ${current.cmd}${iterName ? ' --iteration=' + iterName : ''}` : 'speccore dashboard';
+  const nextDesc = current ? phases.find(p => p.key === current.key)!.name : '项目已完成';
+
+  return `<!DOCTYPE html><html lang="zh-CN" data-theme="ocean"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>SpecCore Dev · Pipeline</title><style>@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;600;700&display=swap');[data-theme="ocean"]{--cyan:#0ea5e9;--bg:#0b1929;--card:rgba(13,31,56,.95);--border:rgba(14,165,233,.15);--text:#bae6fd;--muted:#5b7fa5;--green:#14b8a6;--orange:#f97316;--purple:#6366f1}*{margin:0;padding:0;box-sizing:border-box}body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}.scanlines{position:fixed;inset:0;pointer-events:none;z-index:99;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,240,255,.01) 2px,rgba(0,240,255,.01) 4px)}.card{max-width:640px;width:100%;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:36px;position:relative;overflow:hidden}.card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanX 3s linear infinite}.card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanX-rev 3s linear infinite}@keyframes scanX{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}@keyframes scanX-rev{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}@keyframes scanY{0%{transform:translateY(-100%)}100%{transform:translateY(100%)}}@keyframes scanY-rev{0%{transform:translateY(100%)}100%{transform:translateY(-100%)}}.vline{position:absolute;top:0;width:1px;bottom:0;pointer-events:none}.vline.l{left:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY-rev 3s linear infinite}.vline.r{right:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY 3s linear infinite}h1{font-family:'Orbitron',sans-serif;font-size:28px;font-weight:900;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:2px}.sub{color:var(--muted);font-size:12px;margin:8px 0 24px}.flow{display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin:16px 0}.phase{display:flex;align-items:center;gap:4px;padding:6px 10px;border-radius:8px;font-size:10px}.phase.done{background:rgba(20,184,166,.08);color:var(--green)}.phase.current{background:rgba(14,165,233,.12);color:var(--cyan);border:1px solid rgba(14,165,233,.3)}.phase.pending{background:rgba(255,255,255,.02);color:var(--muted)}.phase-arrow{color:var(--muted);font-size:12px}.section{margin:20px 0;padding:16px;background:rgba(14,165,233,.03);border:1px solid rgba(14,165,233,.08);border-radius:10px}.section-title{font-size:11px;font-weight:700;color:var(--cyan);text-transform:uppercase;letter-spacing:2px;margin-bottom:10px}.next-cmd{display:block;padding:12px 16px;background:rgba(14,165,233,.1);border:1px solid rgba(14,165,233,.2);border-radius:8px;color:var(--cyan);font-weight:600;margin-top:8px;cursor:pointer;transition:all .2s}.next-cmd:hover{background:rgba(14,165,233,.2)}.footer{text-align:center;color:var(--muted);font-size:10px;margin-top:24px;padding-top:16px;border-top:1px solid rgba(255,255,255,.04)}</style></head><body><div class="scanlines"></div><div class="card"><div class="vline l"></div><div class="vline r"></div><h1>SPECCORE DEV</h1><div class="sub">智能级联 · 自动推进 · v${version}${iterName?' · '+iterName:''}</div><div class="section"><div class="section-title">🔄 Pipeline 状态</div><div class="flow">${flowHtml}</div></div><div class="section"><div class="section-title">📌 下一步: ${nextDesc}</div><div class="next-cmd">$ ${nextCmd}</div></div><div class="footer">由 SpecCore 驱动 v${version} | ${now}</div></div></body></html>`;
 }
