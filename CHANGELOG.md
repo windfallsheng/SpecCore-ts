@@ -10,6 +10,14 @@
 - 🆕 `help` 命令支持 TTY 自动检测，AI 模式输出 HTML 分类卡片
 - 📄 保存 help HTML 模板到 templates/html/
 
+### v5.26.3 (2026-08-05) — "Qoder 全命令注册 + 文档清理"
+
+- 🐛 init 注册 20 个 Qoder/TRAE/Claude 命令（之前仅 10 个），含 welcome/ask/dashboard 等
+- 🐛 修复 dev 无期次时的友好提示，区分未初始化 vs 无期次
+- 🧹 统一 5 个工具目录各 20 个命令文件，清理残留旧文件
+- 🧹 修复 help.ts/场景实战/迁移指南中过时引用（status-panel→dashboard, 17→20, 45→55）
+- 📖 README 新增 11 个文档链接 + 三层 AI 架构图
+
 ### v5.26.2 (2026-08-05) — "三层 AI 架构 + Dev 流水线"
 
 #### 🤖 三层 AI 架构
