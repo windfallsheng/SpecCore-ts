@@ -236,6 +236,7 @@ tr:hover td{background:var(--hover)}
 .fs-btn:hover{background:rgba(0,240,255,.1);border-color:rgba(0,240,255,.3);color:var(--cyan)}
 .fs-fullscreen{position:fixed!important;inset:0!important;z-index:1000!important;border-radius:0!important;overflow-y:auto!important;background:var(--bg)!important;backdrop-filter:none!important;padding:40px!important;width:100vw!important;height:100vh!important;max-width:none!important}
 .fs-fullscreen canvas{max-height:60vh!important}
+.fs-fullscreen .scroll-table{max-height:none!important}
 .fs-tip{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(0,240,255,.1);border:1px solid rgba(0,240,255,.2);padding:8px 20px;border-radius:20px;font-size:11px;color:var(--cyan);z-index:1001;letter-spacing:1px;animation:fadeIn .3s ease;pointer-events:none}
 @keyframes fadeIn{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 </style>
