@@ -1,4 +1,4 @@
-import { ensureDir, writeFile, pathExists, readFile, readdir } from 'fs-extra';
+import { ensureDir, writeFile, pathExists, readFile, readdir, copy } from 'fs-extra';
 import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
 import { createInterface } from 'readline';
@@ -30,9 +30,28 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
     if (await pathExists(speccoreDir)) {
       if (!options.force) {
         spinner.fail('SpecCore already initialized. Use --force to overwrite.');
+        logger.info('💡 升级命令文件（不覆盖配置）: speccore update');
         return;
       }
-      spinner.stop('Overwriting existing configuration...');
+      
+      // ── 二次确认 ──
+      logger.warn('⚠️  --force 将重置所有配置文件！');
+      logger.info('');
+      const answer = await askUser('确认重置？现有的 INDEX.md/需求数据将丢失 (y/N): ');
+      if (!answer.toLowerCase().startsWith('y')) {
+        spinner.stop('已取消');
+        logger.info('💡 建议使用 speccore update 安全升级');
+        return;
+      }
+
+      // ── 备份现有配置 ──
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const backupDir = join(projectRoot, `.speccore-backup-${ts}`);
+      await copy(speccoreDir, backupDir);
+      spinner.stop(`已备份到 ${backupDir}`);
+      logger.info('  (不需要时可手动删除)');
+      logger.info('');
+      spinner.stop('重置配置...');
     }
 
     // Create directory structure
@@ -876,6 +895,11 @@ async function interactiveInitFlow(options: InitOptions): Promise<void> {
 /**
  * 为各 AI 工具创建适配文件 (Claude, CodeBuddy, Cursor, Trae, WindSurf, QCoder)
  */
+async function askUser(prompt: string): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise(resolve => rl.question(prompt, (ans: string) => { rl.close(); resolve(ans); }));
+}
+
 async function createToolIntegrations(projectRoot: string): Promise<void> {
   const commands: [string, string, string][] = [
     ['spec-ask', 'AI万能入口', 'speccore ask --web "${1:查看进度}"'],
