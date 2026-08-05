@@ -124,17 +124,23 @@ program
 // ================================================================
 
 program
-  .command('status-panel')
-  .alias('sp')
-  .description('项目状态总览：进度+健康度+生命周期（--scope global 切换全量仪表盘）')
+  .command('dashboard')
+  .alias('db')
+  .description('项目仪表盘：期次状态+进度+健康度（--scope global 全量视图）')
   .option('--export <format>', 'Export: json | md | html')
   .option("--assignee <name>", "导出指定人员的统计")
   .option("--platform <platform>", "导出指定平台: backend | frontend | web | h5 | miniapp")
   .option("--type <type>", "导出指定类型: feature | bugfix | research")
   .option('--health', '项目健康度报告')
   .option('--lifecycle', '任务生命周期看板（等效 lifecycle --all）')
-  .option('--scope <scope>', '作用域: iteration(默认/当前期次) | global(全量仪表盘)', 'iteration')
+  .option('--scope <scope>', '视图: iteration(默认/当前期次) | global(全量)', 'iteration')
   .action(statusPanelCommand);
+
+program
+  .command('status-panel')
+  .alias('sp')
+  .description('→ dashboard（同一命令）')
+  .action((opts: any) => statusPanelCommand(opts));
 
 program
   .command('dev')
@@ -546,13 +552,6 @@ program
   .action(rollbackCommand);
 
 program
-  .command('dashboard')
-  .alias('db')
-  .description('全量仪表盘 → status-panel --scope global（Chart.js + 9 主题）')
-  .option('-o, --output <path>', 'Output file path')
-  .action((opts: any) => statusPanelCommand({ ...opts, scope: 'global', export: opts.output }));
-
-program
   .command('global-status')
   .alias('gs')
   .description('View global layer status: all projects, requirements, architecture')
@@ -909,7 +908,7 @@ if (process.argv.length <= 2) {
   logger.info('│     ' + nextDesc.padEnd(41) + '│');
   logger.info('│                                          │');
   logger.info('│  💡 speccore --help   查看全部命令        │');
-  logger.info('│  📊 speccore status-panel  状态面板       │');
+  logger.info('│  📊 speccore dashboard  仪表盘（期次/全局）       │');
   logger.info('└──────────────────────────────────────────┘');
   logger.info('');
   process.exit(0);
