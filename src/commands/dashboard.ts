@@ -210,7 +210,7 @@ main{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:40px 32p
 .chart-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;backdrop-filter:blur(20px);position:relative;transition:all .3s}
 .chart-card:hover{border-color:rgba(0,240,255,.25);box-shadow:0 0 30px rgba(0,240,255,.08)}
 .chart-card:hover .fs-btn{opacity:1}
-.chart-card h3{font-size:14px;font-weight:600;margin-bottom:16px;color:var(--text);letter-spacing:.5px;text-transform:uppercase}
+.chart-card h3{font-size:14px;font-weight:600;margin-bottom:16px;color:var(--muted);letter-spacing:.5px;text-transform:uppercase}
 .chart-card canvas{max-height:300px}
 .panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:28px;backdrop-filter:blur(20px);margin-bottom:28px;position:relative;transition:all .3s}
 .panel:hover{border-color:rgba(0,240,255,.25);box-shadow:0 0 30px rgba(0,240,255,.08)}
