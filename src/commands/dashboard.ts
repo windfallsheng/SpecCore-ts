@@ -74,7 +74,7 @@ export async function dashboardCommand(options: DashboardOptions): Promise<void>
   }
 }
 
-function generateDashboardHtml(
+export function generateDashboardHtml(
   projectCount: number,
   totalReqs: number,
   implemented: number,

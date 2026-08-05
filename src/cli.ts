@@ -34,7 +34,6 @@ import { globalStatusCommand } from './commands/global-status';
 // P0/P1/P2 新增命令
 import { impactCommand } from './commands/impact';
 import { baselineCommand } from './commands/baseline';
-import { dashboardCommand } from './commands/dashboard';
 import { auditCommand } from './commands/audit';
 import { analyzeCommand } from './commands/analyze';
 import { prCommand } from './commands/pr';
@@ -127,13 +126,14 @@ program
 program
   .command('status-panel')
   .alias('sp')
-  .description('项目状态总览：进度+健康度+生命周期（合并 status/health/lifecycle）')
+  .description('项目状态总览：进度+健康度+生命周期（--scope global 切换全量仪表盘）')
   .option('--export <format>', 'Export: json | md | html')
   .option("--assignee <name>", "导出指定人员的统计")
   .option("--platform <platform>", "导出指定平台: backend | frontend | web | h5 | miniapp")
   .option("--type <type>", "导出指定类型: feature | bugfix | research")
   .option('--health', '项目健康度报告')
   .option('--lifecycle', '任务生命周期看板（等效 lifecycle --all）')
+  .option('--scope <scope>', '作用域: iteration(默认/当前期次) | global(全量仪表盘)', 'iteration')
   .action(statusPanelCommand);
 
 program
@@ -548,9 +548,9 @@ program
 program
   .command('dashboard')
   .alias('db')
-  .description('生成全量层可视化仪表盘（Chart.js HTML）')
+  .description('全量仪表盘 → status-panel --scope global（Chart.js + 9 主题）')
   .option('-o, --output <path>', 'Output file path')
-  .action(dashboardCommand);
+  .action((opts: any) => statusPanelCommand({ ...opts, scope: 'global', export: opts.output }));
 
 program
   .command('global-status')

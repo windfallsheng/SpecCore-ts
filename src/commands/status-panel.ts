@@ -6,22 +6,29 @@ import { join } from 'path';
 import { logger } from '../utils/logger';
 import { loadConfig } from '../core/unified-config';
 import { getDefaultIteration } from '../core/context';
+import { readGlobalIndex } from '../core/global-layer';
 
 export interface StatusPanelOptions {
-  export?: string;      // json | markdown | html
-  assignee?: string;    // 按人员过滤
-  platform?: string;    // 按平台过滤: backend | frontend | web | h5 | miniapp
-  type?: string;        // 按类型过滤: feature | bugfix | research
-  health?: boolean;     // 健康度报告（合并自 health 命令）
-  lifecycle?: boolean;  // 任务生命周期看板（合并自 lifecycle 命令）
-  task?: string;        // 指定任务（lifecycle 模式）
-  status?: string;      // 设置状态（lifecycle 模式）
-  iteration?: string;   // 指定期次
+  export?: string;
+  assignee?: string;
+  platform?: string;
+  type?: string;
+  health?: boolean;
+  lifecycle?: boolean;
+  task?: string;
+  status?: string;
+  iteration?: string;
+  scope?: 'iteration' | 'global';  // 作用域：期次（默认）或全量层
 }
 
 export async function statusPanelCommand(options: StatusPanelOptions = {}): Promise<void> {
-  const iteration = await getDefaultIteration();
-  const config = await loadConfig();
+  // ── 全局仪表盘模式 ──
+  if (options.scope === 'global') {
+    await showGlobalDashboard(options);
+    return;
+  }
+
+  const iteration = options.iteration || await getDefaultIteration();
 
   // ── Health/Lifecycle modes (skip if exporting) ──
   if (!options.export) {
@@ -1351,4 +1358,50 @@ async function collectLifecycleData(iteration: string): Promise<any> {
     tasks.push({ id: t, status });
   }
   return { tasks, iteration };
+}
+
+// ── 全局仪表盘（通过 --scope global 触发）──
+async function showGlobalDashboard(options: StatusPanelOptions): Promise<void> {
+  const { generateDashboardHtml } = await import('./dashboard');
+  const { writeFile } = await import('fs-extra');
+  const { join } = await import('path');
+  const { logger, Spinner } = await import('../utils/logger');
+
+  const spinner = new Spinner('采集全量层数据...');
+  spinner.start();
+
+  try {
+    const index = await readGlobalIndex();
+    if (index.projects.length === 0 && index.reqs.length === 0) {
+      spinner.fail('全量层为空，无法生成仪表盘。请先导入项目。');
+      return;
+    }
+
+    const totalReqs = index.reqs.length;
+    const implemented = index.reqs.filter((r) => r.status === '✅ 已实现' || r.status === '📦 已有实现').length;
+    const inProgress = index.reqs.filter((r) => r.status === '🔄 进行中').length;
+    const pending = totalReqs - implemented - inProgress;
+    const completionRate = totalReqs > 0 ? Math.round((implemented / totalReqs) * 100) : 0;
+    const projectLabels = index.projects.map((p) => p.name);
+    const projectReqs = index.projects.map((p) => p.reqCount);
+
+    spinner.stop('数据采集完成');
+
+    const html = generateDashboardHtml(
+      index.projects.length, totalReqs, implemented, inProgress, pending,
+      completionRate, projectLabels, projectReqs, index
+    );
+
+    const outPath = options.export
+      ? (options.export.endsWith('.html') ? options.export : options.export + '.html')
+      : join(process.cwd(), 'speccore-dashboard.html');
+    await writeFile(outPath, html);
+
+    logger.success(`全局仪表盘已生成: ${outPath}`);
+    if (!options.export) {
+      logger.info('💡 在浏览器中打开查看（9 套主题可选，Chart.js 图表）');
+    }
+  } catch (error) {
+    spinner.fail(`生成仪表盘失败: ${error}`);
+  }
 }
