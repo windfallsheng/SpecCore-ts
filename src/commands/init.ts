@@ -891,6 +891,9 @@ async function createToolIntegrations(projectRoot: string): Promise<void> {
     ['spec-sync', '双向同步', 'speccore sync --global'],
     ['spec-rename', '重命名', 'speccore rename --iteration ${1:Q1} ${2:Q2}'],
     ['spec-create-iteration', '创建期次', 'speccore iteration create -n ${1:Q2} --owner=${2:张三}'],
+    ['spec-retro', '任务回顾报告', 'speccore retro --task ${1:Task-001}'],
+    ['spec-context', '查看/切换上下文', 'speccore context --set --iteration ${1:Q1}'],
+    ['spec-ops', '操作历史', 'speccore ops'],
   ];
 
   const tools = ['claude', 'codebuddy', 'cursor', 'trae', 'windsurf'];

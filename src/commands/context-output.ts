@@ -1,7 +1,7 @@
 /**
  * context — 输出任务完整上下文，供任何 AI 使用
  */
-import { readFile, pathExists } from 'fs-extra';
+import { readFile, pathExists, readdir } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
 import { loadConfig } from '../core/unified-config';
@@ -25,9 +25,19 @@ export async function contextCommand(options: ContextOptions): Promise<void> {
   }
 
   const iteration = await getDefaultIteration(options.iteration);
-  if (!iteration) { logger.error('No active iteration'); return; }
+  if (!iteration) { 
+    logger.info('📍 当前无活跃期次');
+    logger.info('  设置: speccore context --set --iteration Q1');
+    return; 
+  }
 
   const iterDir = `期次-${iteration}`;
+  if (!(await pathExists(iterDir))) {
+    logger.info(`📍 当前期次: ${iteration}`);
+    logger.info(`  ⚠️ 期次目录「${iterDir}」不存在，请先创建期次或切换`);
+    logger.info('  创建: speccore iteration create -n ' + iteration.replace(/^期次-/, ''));
+    return;
+  }
   const fs = require('fs');
   
   // Find task
