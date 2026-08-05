@@ -168,6 +168,11 @@ async function doDone(
 
   logger.info('');
   showNextSteps('archive');
+
+  // ── 自动生成任务回顾 ──
+  if (taskId) {
+    try { await retroCommand({ task: taskId, iteration }); } catch {}
+  }
 }
 
 /** 扫描期次下所有已完成但未归档的任务 */
@@ -248,11 +253,4 @@ async function evolveRules(iterDir: string, taskId: string, iteration: string): 
     }
   }
   await writeFile(capPath, caps);
-  
-  // ── 自动生成任务回顾 ──
-  if (options.task) {
-    try {
-      await retroCommand({ task: options.task, iteration: options.iteration });
-    } catch {}
-  }
 }
