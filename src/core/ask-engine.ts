@@ -240,10 +240,12 @@ function handleGuide(input: string): AskResult {
   } else if (/批量|分批|batch|队列/i.test(input)) {
     matchedWorkflow = WORKFLOWS['batch execute'];
     workflowName = '批量执行流程';
+  } else if (/创建.*期次|新建.*期次|iteration.*create|创建.*迭代/i.test(input)) {
+    // 不应该进 guide 模式——让调用方降级到 match
+    throw new Error('FALLBACK_TO_MATCH');
   } else {
-    // 默认：新功能全流程
-    matchedWorkflow = WORKFLOWS['new feature'];
-    workflowName = '推荐标准开发流程';
+    // 无匹配工作流 → 抛出，由 askEngine 降级到 handleMatch
+    throw new Error('FALLBACK_TO_MATCH');
   }
 
   const steps = matchedWorkflow.map(s =>
@@ -384,7 +386,9 @@ export async function askEngine(input: string): Promise<AskResult> {
 
   switch (mode) {
     case 'explain': return handleExplain(input);
-    case 'guide': return handleGuide(input);
+    case 'guide':
+      try { return handleGuide(input); }
+      catch { return handleMatch(input); }
     case 'pipeline': return handlePipeline(input);
     case 'match':
     default: return handleMatch(input);
