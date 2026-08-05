@@ -487,11 +487,13 @@ program
 program
   .command('doc2spec')
   .alias('d2s')
-  .description('导入 PRD 文档 → SpecCore Markdown（Word/PDF/MD/HTML/PPTX）\n   💡 AI 智能转换: 用 /doc2spec-ai 语义理解模式（复杂表格/图表优先）')
+  .description('导入 PRD 文档 → SpecCore Markdown（Word/PDF/MD/HTML/PPTX）')
   .option('-f, --file <path>', '源文件路径')
   .option('--iter <name>', '目标期次（必填）')
   .option('-p, --platform <name>', '平台标识（backend / frontend-web / frontend-h5）')
   .option('--files <files>', '批量: "a.docx=平台1,b.pdf=平台2"')
+  .option('--ai', 'AI 语义理解模式（默认）：pandoc 快速提取后输出 AI 精炼指引')
+  .option('--no-ai', '纯 pandoc 机械转换（快但不处理复杂表格/图表）')
   .action(doc2specCommand);
 
 // ================================================================

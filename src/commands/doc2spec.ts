@@ -105,6 +105,7 @@ interface Word2SpecOptions {
   iter: string;
   platform?: string;
   files?: string;  // batch: "path1.docx=平台1,path2.docx=平台2"
+  ai?: boolean;     // --ai (default true): pandoc 提取 + AI 精炼引导
 }
 
 export async function doc2specCommand(options: Word2SpecOptions): Promise<void> {
@@ -303,10 +304,28 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     logger.info(`接口表: ${hasInterfaceTable ? '✅' : '⚠️ 缺失（已追加提示）'}`);
     logger.info('');
     logger.info('📋 下一步:');
-    logger.info(`  1. 检查自动转换的标题层级`);
-    logger.info(`  2. 补充接口定义表格`);
-    logger.info(`  3. speccore iteration split`);
-    logger.info(`  4. speccore execute --task=Task-001 --force`);
+    if (options.ai !== false) {
+      // ── AI 精炼模式（默认）──
+      logger.info('  🤖 AI 精炼模式已启用');
+      logger.info(`  在 WorkBuddy 中说: AI 精炼 ${outputPath} → ${iterDir} 的 REQUIREMENT.md`);
+      logger.info(`   (或直接说 "doc2spec-ai 精炼 ${outputPath}" 即可）`);
+      logger.info('');
+      logger.info('  📌 AI 将自动完成:');
+      logger.info('     1. 修复合并单元格/嵌套表格');
+      logger.info('     2. 提取接口定义并补全为标准表格');
+      logger.info('     3. 识别数据模型、业务规则、非功能需求');
+      logger.info('     4. 流程图/架构图 → Mermaid');
+      logger.info('     5. 输出质量校验报告');
+      logger.info('');
+      logger.info('  💡 如只需纯 pandoc 转换，下次加 --no-ai');
+    } else {
+      // ── 纯 pandoc 模式 ──
+      logger.info('  ⚠️ 纯 pandoc 模式（无 AI 精炼）');
+      logger.info(`  1. 检查自动转换的标题层级`);
+      logger.info(`  2. 补充接口定义表格`);
+      logger.info(`  3. speccore iteration split`);
+      logger.info(`  4. speccore execute --task=Task-001 --force`);
+    }
   } catch (error) {
     spinner.fail(`转换失败: ${error}`);
     throw error;
