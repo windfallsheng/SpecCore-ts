@@ -286,7 +286,7 @@ tr:hover td{background:var(--hover)}
 <main>
 <div class="header">
   <div class="header-left">
-    <h1>📊 SPECCORE</h1>
+    <h1>SPECCORE</h1>
     <div class="subtitle"><span data-i18n="globalDash">全局仪表盘</span> · ${projectCount} <span data-i18n="projects">项目</span> · ${totalReqs} <span data-i18n="reqs">需求</span></div>
   </div>
   <div class="header-right">
