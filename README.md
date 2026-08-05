@@ -1,6 +1,6 @@
 # SpecCore — Code by Spec, Not by Vibe
 
-🖥️ 规范驱动开发 CLI · 20 命令（55 全量）· 人机协同闭环 · 三层 AI 架构
+🖥️ 规范驱动开发 CLI · 21 命令（55 全量）· 人机协同闭环 · 三层 AI 架构
 
 ```bash
 speccore ask "我想做一个登录功能，计划晚8点分批执行"
@@ -69,7 +69,7 @@ speccore dev --auto        # 智能级联一键推进
 
 ```bash
 npm install -g speccore
-speccore --version   # v5.26.2
+speccore --version   # v5.27.0
 ```
 
 ## 命令列表
@@ -94,6 +94,7 @@ speccore --version   # v5.26.2
 | `validate` | `vl` | ✅ 合规验证 |
 | `track` | `trk` | 🔗 REQ→Task→Code 全链路 |
 | `search` | `sh` | 🔍 跨 Spec 全文搜索 |
+| `retro` | `rt` | 📝 任务回顾复盘 + 评分 |
 | `rename` | `rn` | ✏️ 重命名 |
 | `ops` | `op` | 📜 操作历史 |
 
