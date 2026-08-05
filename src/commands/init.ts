@@ -871,9 +871,9 @@ async function interactiveInitFlow(options: InitOptions): Promise<void> {
  */
 async function createToolIntegrations(projectRoot: string): Promise<void> {
   const commands: [string, string, string][] = [
-    ['spec-ask', 'AI万能入口', 'speccore ask "${1:查看进度}"'],
-    ['spec-welcome', '项目名片', 'speccore welcome'],
-    ['spec-dashboard', '全局仪表盘', 'speccore dashboard --scope global'],
+    ['spec-ask', 'AI万能入口', 'speccore ask --web "${1:查看进度}"'],
+    ['spec-welcome', '项目名片', 'speccore welcome --web'],
+    ['spec-dashboard', '全局仪表盘', 'speccore dashboard --scope global --web --web'],
     ['spec-init', '初始化项目', 'speccore init'],
     ['spec-doc2spec', '导入需求文档', 'speccore doc2spec -f ${1:PRD.docx} --iter ${2:Q1}'],
     ['spec-analyze', 'AI需求分析', 'speccore analyze -I ${1:Q1}'],
@@ -883,7 +883,7 @@ async function createToolIntegrations(projectRoot: string): Promise<void> {
     ['spec-pr', '创建PR', 'speccore pr --task=${1:Task-001}'],
     ['spec-done', '完成任务归档', 'speccore done --task=${1:Task-001}'],
     ['spec-spec2doc', '导出文档', 'speccore spec2doc -i ${1:Q1} -o ${2:需求.docx}'],
-    ['spec-dev', '智能级联', 'speccore dev --auto'],
+    ['spec-dev', '智能级联', 'speccore dev --auto --web --web'],
     ['spec-change', '需求变更', 'speccore change "${1:变更描述}" --task=${2:Task-001}'],
     ['spec-validate', '合规验证', 'speccore validate --iteration=${1:Q1}'],
     ['spec-search', '全文搜索', 'speccore search ${1:关键词}'],
