@@ -151,6 +151,7 @@ program
   .option('--auto', '全自动流水线：init→doc2spec→analyze→split→plan→execute→pr→done→spec2doc')
   .option('--from <phase>', '从指定阶段开始（init/doc2spec/analyze/split/plan/execute/pr/done/spec2doc）')
   .option('--to <phase>', '到指定阶段结束（init/doc2spec/analyze/split/plan/execute/pr/done/spec2doc）')
+  .option('--web', '强制输出 HTML 页面')
   .action(devCommand);
 
 program
@@ -848,6 +849,7 @@ program
   .command('welcome')
   .alias('wc')
   .description('显示欢迎面板（同 speccore 无参数）')
+  .option('--web', '强制输出 HTML 页面')
   .action(welcomeCommand);
 
 // Parse arguments

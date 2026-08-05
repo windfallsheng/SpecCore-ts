@@ -16,8 +16,8 @@ interface DevOptions {
 }
 
 export async function devCommand(options: DevOptions): Promise<void> {
-  // 非 TTY → HTML 预览
-  if (!process.stdout.isTTY) {
+  // 非 TTY 或 --web → HTML 预览
+  if (!process.stdout.isTTY || options.web) {
     const html = await renderDevHtml(options);
     const outPath = options.output || join(process.cwd(), 'speccore-dev.html');
     await writeFile(outPath, html);
