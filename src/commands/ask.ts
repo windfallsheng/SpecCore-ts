@@ -297,6 +297,15 @@ function getIntentLabel(intent: string): string {
     sync: '🔄 反向同步',
     retro: '📝 期次回顾',
     template_add: '📄 添加模板',
+    dashboard: '📊 项目仪表盘',
+    global_status: '📊 全量仪表盘',
+    search: '🔍 全文搜索',
+    track: '🔗 全链路追踪',
+    validate: '✅ 合规验证',
+    ops: '📜 操作历史',
+    rename: '✏️ 重命名',
+    impact: '💥 影响分析',
+    audit: '🔎 智能审计',
   };
   return labels[intent] || intent;
 }
