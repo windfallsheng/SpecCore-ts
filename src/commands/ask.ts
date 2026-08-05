@@ -1,376 +1,41 @@
 /**
- * /ask - 智能入口命令
- * 自然语言意图识别引擎，自动匹配最合适的 SpecCore 命令
+ * /ask - 万能智能入口
+ * 四种模式：命令解释 / 任务指引 / 意图匹配 / 复杂编排
  */
 
-import { recognizeIntent, getConfidenceLevel } from '../core/intent-recognition';
-import { recognizeWithAi } from '../core/intent-ai';
 import { logger } from '../utils/logger';
-import { getDefaultIteration, getDefaultAssignee } from '../core/context';
+import { askEngine } from '../core/ask-engine';
 
-export interface SpecOptions {
-  /** 使用模式：识别后的命令执行由 AI 协同完成 */
-}
-
-export async function askCommand(input: string, _options: SpecOptions): Promise<void> {
+export async function askCommand(input: string, _options: any): Promise<void> {
   if (!input || !input.trim()) {
-    logger.info('🔍 SpecCore 智能入口');
+    logger.info('🔍 SpecCore 万能 AI 入口');
     logger.info('');
-    logger.info('用法: speccore ask "<自然语言描述>"');
+    logger.info('用法: speccore ask "<自然语言>"');
     logger.info('');
-    logger.info('示例:');
-    logger.info('  speccore ask "做一个用户登录功能，支持手机号+密码"');
-    logger.info('  speccore ask "修复登录超时问题"');
-    logger.info('  speccore ask "查看进度"');
-    logger.info('  speccore ask "开始干活"');
-    logger.info('  speccore ask "把登录改成验证码登录"');
-    logger.info('  speccore ask "审查一下"');
+    logger.info('四种模式自动识别:');
+    logger.info('  📖 命令解释: speccore ask "dashboard 怎么用"');
+    logger.info('  🗺️ 任务指引: speccore ask "我想做一个登录功能"');
+    logger.info('  🎯 意图匹配: speccore ask "查看项目进度"');
+    logger.info('  ⚡ 复杂编排: speccore ask "计划所有任务，晚8点分批执行"');
     return;
   }
 
-  logger.info(`🔍 正在理解你的意图...`);
+  logger.info(`🔍 正在分析: "${input}"`);
   logger.info('');
 
-  const iteration = await getDefaultIteration();
-  const assignee = await getDefaultAssignee();
-
-  let results: Awaited<ReturnType<typeof recognizeIntent>> = [];
   try {
-    results = await recognizeIntent(input);
+    const result = await askEngine(input);
+    logger.info('');
+    logger.info('━'.repeat(55));
+    logger.info(result.detail);
+    logger.info('━'.repeat(55));
+
+    if (result.pipeline) {
+      logger.info('');
+      logger.info('💡 输入 y 确认执行，或输入新描述修改计划');
+    }
   } catch (e: any) {
-    logger.error(`意图识别失败: ${e.message || e}`);
+    logger.error(`分析失败: ${e.message || e}`);
     logger.info('💡 请使用 speccore help 查看可用命令');
-    return;
   }
-  
-  // AI 增强：置信度不足时自动调用
-
-  if (results.length === 0) {
-    // 低置信度：无法识别
-    logger.warn('🤔 我没有完全理解你的意图，请补充说明。');
-    logger.info('');
-    logger.info('你可以这样说：');
-    logger.info('  - "查看项目进度"');
-    logger.info('  - "帮我创建一个登录功能"');
-    logger.info('  - "审查一下当前任务"');
-    logger.info('  - "开始开发"');
-    logger.info('  - "把登录改成验证码登录"');
-    return;
-  }
-
-  let aiBest: any = null;
-  try {
-    const aiResult = await recognizeWithAi(input, results);
-    aiBest = aiResult.final;
-  } catch { /* AI 增强失败，使用规则匹配 */ }
-  const best = aiBest || results[0];
-  const level = getConfidenceLevel(best.confidence);
-
-  // 显示上下文信息
-  if (iteration) {
-    logger.info(`📍 当前期次: ${iteration}`);
-  }
-  if (assignee && assignee !== 'unknown') {
-    logger.info(`👤 当前用户: ${assignee}`);
-  }
-  logger.info('');
-
-  if (level === 'high') {
-    // 高置信度 (>=80%)：展示预览
-    await showHighConfidenceResult(best, iteration);
-  } else if (level === 'medium') {
-    // 中置信度 (50-80%)：展示候选列表
-    showMediumConfidenceResults(results.slice(0, 3), iteration);
-  } else {
-    // 低置信度 (<50%)：引导澄清
-    showLowConfidenceGuidance(results.slice(0, 2), input);
-  }
-}
-
-async function showHighConfidenceResult(
-  result: Awaited<ReturnType<typeof recognizeIntent>>[0],
-  iteration: string
-): Promise<void> {
-  // ── 1. 明确告知用户理解了什么 ──
-  logger.info('━'.repeat(55));
-  logger.info(`✅ 我理解了：你想 **${getIntentLabel(result.intent)}**`);
-  logger.info(`   匹配: speccore ${result.command} （置信度 ${result.confidence}%）`);
-  logger.info('━'.repeat(55));
-  logger.info('');
-
-  const params = result.extractedParams;
-
-  // ── 2. 用自然语言重述用户意图 ──
-  const paraphrase = buildParaphrase(result.intent, result.command, params, iteration);
-  if (paraphrase) {
-    logger.info(`💬 你是说：${paraphrase}`);
-    logger.info('');
-  }
-
-  // ── 3. 展示将要执行的命令 + 参数说明 ──
-  logger.info('📋 将要执行的命令:');
-  let cmdPreview = `speccore ${result.command}`;
-  if (params.name) cmdPreview += ` -n "${params.name}"`;
-  if (params.desc) cmdPreview += ` -d "${params.desc}"`;
-  if (params.task) cmdPreview += ` -t "${params.task}"`;
-  if (iteration && !params.iteration) cmdPreview += ` -i "${iteration}"`;
-  if (params.iteration) cmdPreview += ` -i "${params.iteration}"`;
-  logger.info(`   $ ${cmdPreview}`);
-  logger.info('');
-
-  // ── 4. 展示后续步骤（如果有关联流程）─
-  const nextSteps = getNextStepsForIntent(result.intent, result.command, params, iteration);
-  if (nextSteps.length > 0) {
-    logger.info('📌 建议的完整流程:');
-    let stepNum = 1;
-    for (const step of nextSteps) {
-      logger.info(`   ${stepNum}. ${step}`);
-      stepNum++;
-    }
-    logger.info('');
-  }
-
-  // ── 5. 提示可以马上执行 ──
-  logger.info('💡 直接运行上述命令即可开始，或输入更多细节调整参数。');
-}
-
-function showMediumConfidenceResults(
-  results: Awaited<ReturnType<typeof recognizeIntent>>,
-  iteration: string
-): void {
-  logger.info('🔍 你的输入可能有以下含义，请选择：');
-  logger.info('');
-
-  // ── 命令→详细步骤映射 ──
-  const stepMap: Record<string, string[]> = {
-    init: ['▸ speccore init           # 初始化项目，生成 .speccore/'],
-    'iteration create': [
-      '▸ speccore iteration create -n Q1 --owner=张三   # 创建期次',
-      '▸ speccore analyze -I Q1                         # AI 分析需求',
-      '▸ speccore iteration split -i Q1 --interactive    # 智能拆分',
-    ],
-    'task new': [
-      '▸ speccore task new -n "功能名"   # 创建开发任务',
-      '▸ speccore analyze -t Task-001    # AI 分析需求',
-      '▸ speccore execute -t Task-001 --force  # 执行开发',
-    ],
-    analyze: [
-      '▸ speccore analyze -I Q1                         # 期次分析',
-      '▸ speccore analyze --scope global --src xxx,xxx   # 全局分析',
-      '▸ speccore analyze --scope global --src xxx --depth deep  # 深度分析',
-    ],
-    execute: [
-      '▸ speccore execute -t Task-001 --force        # 直接执行',
-      '▸ speccore execute -i Q1 --all                # 执行全部任务',
-    ],
-    'iteration split': [
-      '▸ speccore iteration split -i Q1 --interactive  # 交互拆分',
-      '▸ speccore iteration split -i Q1 --strict       # 逐项确认',
-    ],
-    'status-panel': [
-      '▸ speccore status-panel                # 终端查看',
-      '▸ speccore status-panel --export=html   # 导出仪表盘',
-    ],
-    pr: [
-      '▸ speccore pr --task=Task-001           # 创建PR',
-    ],
-    done: [
-      '▸ speccore done --task=Task-001         # 单任务归档',
-      '▸ speccore done --all -i Q1             # 批量归档',
-    ],
-    dev: [
-      '▸ speccore dev                          # 检测下一步',
-      '▸ speccore dev --auto                   # 全自动流水线',
-    ],
-    spec2doc: [
-      '▸ speccore spec2doc -i Q1 -o 需求.docx  # CLI 快速导出',
-      '▸ 在 WorkBuddy 中说 "导出 Q1 需求为 Word" # AI 精炼排版',
-    ],
-    doc2spec: [
-      '▸ speccore doc2spec -f PRD.docx --iter Q1        # CLI 快速导入',
-      '▸ 在 WorkBuddy 中说 "AI 转换 PRD.docx 到 Q1"      # AI 双路验证',
-    ],
-  };
-
-  for (let i = 0; i < results.length; i++) {
-    const r = results[i];
-    logger.info(`  ${i + 1}. ${getIntentLabel(r.intent)} (${r.confidence}%) → speccore ${r.command}`);
-    const steps = stepMap[r.command];
-    if (steps) for (const step of steps) logger.info(`     ${step}`);
-    logger.info('');
-  }
-
-  logger.info('💡 输入序号选择（如 1、2、3），或 q 取消');
-  
-  // 读取用户选择
-  const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout });
-  rl.question('> ', async (answer: string) => {
-    rl.close();
-    const trimmed = answer.trim();
-    if (trimmed === 'q' || trimmed === 'Q') { logger.info('已取消'); return; }
-    
-    // 校验输入：只接受纯数字序号
-    const idx = parseInt(trimmed);
-    if (isNaN(idx) || String(idx) !== trimmed) {
-      logger.warn(`   ⚠️ 无效输入"${trimmed}"，请输入纯数字序号（如 1、2、3）`);
-      logger.info(`   💡 提示：子步骤编号（如"1. speccore xxx"）不是选项序号`);
-      return;
-    }
-    
-    const selected = (idx >= 1 && idx <= results.length) ? results[idx - 1] : null;
-    if (!selected) {
-      logger.warn(`   ⚠️ 序号 ${idx} 无效，可选范围 1~${results.length}`);
-      return;
-    }
-    const params = selected.extractedParams;
-    let cmd = `speccore ${selected.command}`;
-    if (params.name) cmd += ` -n "${params.name}"`;
-    if (iteration && !params.iteration) cmd += ` -i "${iteration}"`;
-    if (params.iteration) cmd += ` -i "${params.iteration}"`;
-    logger.info(`\n⚡ 执行: ${cmd}\n`);
-    // 实际执行命令
-    const { execSync } = require('child_process');
-    try {
-      execSync(cmd, { stdio: 'inherit' });
-    } catch (e: any) {
-      const stderr = e.stderr ? e.stderr.toString().trim() : '';
-      logger.warn(`   ⚠️ 命令执行失败: ${cmd}`);
-      if (stderr) logger.warn(`   ${stderr}`);
-      logger.info(`   💡 可直接在终端运行上述命令，或 speccore help 查看用法`);
-    }
-  });
-}
-
-function showLowConfidenceGuidance(
-  results: Awaited<ReturnType<typeof recognizeIntent>>,
-  input: string
-): void {
-  logger.warn(`🤔 对"${input}"不太确定，以下是可能的匹配：`);
-  logger.info('');
-
-  if (results.length > 0) {
-    for (let i = 0; i < results.length; i++) {
-      const r = results[i];
-      logger.info(`  ${i + 1}. ${getIntentLabel(r.intent)} → speccore ${r.command}`);
-    }
-    logger.info('');
-  }
-
-  // 引导性提问
-  logger.info('你可以换个方式说，比如：');
-  logger.info('  "我要开始开发了"          → 自动匹配 execute');
-  logger.info('  "帮我看看项目进度"         → 自动匹配 status-panel');
-  logger.info('  "创建一个用户登录功能"     → 自动匹配 task new');
-  logger.info('  "批量导入这些bug"         → 自动匹配 bugfix');
-  logger.info('  "把刚才的需求拆成任务"     → 自动匹配 iteration split');
-  logger.info('');
-  logger.info('或者直接输入: speccore help  查看所有命令');
-}
-
-function getIntentLabel(intent: string): string {
-  const labels: Record<string, string> = {
-    change: '🔄 需求变更',
-    execute: '⚡ 执行开发',
-    create: '✨ 创建功能/任务',
-    iteration_create: '📅 创建期次',
-    analyze: '🧠 AI 需求分析',
-    split: '📦 智能拆分',
-    pr: '🔀 提交PR',
-    done: '✅ 完成任务',
-    bugfix: '🐛 Bug 修复',
-    review: '✅ 审查产出',
-    plan: '📐 智能调度',
-    reference: '📚 查找参考',
-    archive: '📦 归档任务',
-    query_progress: '📊 查看进度',
-    handover: '📤 生成交接文档',
-    health: '🏥 查看健康度',
-    config: '⚙️ 配置管理',
-    help: '📖 查看帮助',
-    demo: '🎮 快速体验',
-    welcome: '👋 新手引导',
-    init: '🏗️ 项目初始化',
-    import: '📥 导入项目',
-    research: '🔬 技术调研',
-    doc2spec: '📝 导入文档',
-    spec2doc: '📤 导出文档',
-    sync: '🔄 反向同步',
-    retro: '📝 期次回顾',
-    template_add: '📄 添加模板',
-    dashboard: '📊 项目仪表盘',
-    global_status: '📊 全量仪表盘',
-    search: '🔍 全文搜索',
-    track: '🔗 全链路追踪',
-    validate: '✅ 合规验证',
-    ops: '📜 操作历史',
-    rename: '✏️ 重命名',
-    impact: '💥 影响分析',
-    audit: '🔎 智能审计',
-  };
-  return labels[intent] || intent;
-}
-
-// ── 自然语言重述 ──
-function buildParaphrase(intent: string, cmd: string, params: Record<string, string>, iteration: string): string {
-  const name = params.name || '';
-  const desc = params.desc || '';
-  const task = params.task || '';
-
-  const templates: Record<string, (p: Record<string,string>, i: string) => string> = {
-    'task new': (p) => `创建一个新任务"${p.name || ''}"${p.desc ? '，描述：' + p.desc : ''}`,
-    'iteration create': (p) => `创建一个新期次"${p.name || ''}"`,
-    execute: (p) => p.task ? `执行任务 "${p.task}"` : '执行开发任务',
-    bugfix: (p) => p.name ? `修复 Bug："${p.name}"` : p.desc ? `修复问题：${p.desc}` : '修复一个 Bug',
-    change: (p) => p.desc ? `把需求改为：${p.desc}` : '',
-    import: () => '导入一个存量项目',
-    'iteration split': () => '把当前需求拆分成开发任务',
-    'status-panel': () => '查看项目进度和状态',
-    pr: (p) => p.task ? `为任务 ${p.task} 创建 Pull Request` : '',
-    done: (p) => p.task ? `完成任务 ${p.task}` : '',
-    analyze: () => '分析需求文档',
-    dev: () => '检测项目当前阶段并继续推进',
-    validate: () => '检查项目规范性',
-  };
-
-  const fn = templates[cmd];
-  return fn ? fn(params, iteration) : '';
-}
-
-// ── 关联后续步骤 ──
-function getNextStepsForIntent(intent: string, cmd: string, params: Record<string, string>, iteration: string): string[] {
-  const iter = iteration || 'Q1';
-  const task = params.task || 'Task-001';
-
-  const flows: Record<string, string[]> = {
-    'iteration create': [
-      `speccore doc2spec -f PRD.docx -p backend -i ${iter}   # 导入需求文档`,
-      `speccore analyze -i ${iter}                            # AI 分析需求`,
-      `speccore iteration split -i ${iter}                    # 拆分为 Task`,
-    ],
-    'task new': [
-      `speccore analyze -t ${task} -i ${iter} --auto          # AI 分析`,
-      `speccore execute -t ${task} --force --verify           # 开发 + 验证`,
-      `speccore pr --task=${task}                                 # 提 PR`,
-      `speccore done --task=${task}                               # 完成归档`,
-    ],
-    execute: [
-      `speccore pr -t ${task}                                 # 代码提 PR`,
-      `speccore done -t ${task}                               # 标记完成`,
-    ],
-    bugfix: [
-      `speccore execute -t ${task} --force --verify           # 修复 + 验证`,
-      `speccore pr -t ${task}                                 # 提 PR`,
-    ],
-    'iteration split': [
-      `speccore plan -i ${iter}                               # 生成执行计划`,
-      `speccore execute --all --force --verify -i ${iter}     # 批量执行`,
-    ],
-    import: [
-      `在 AI IDE 中触发 /spec-import-analyze                   # AI 反工程分析`,
-      `speccore analyze -i ${iter}                            # 完善需求`,
-      `speccore iteration split -i ${iter}                    # 拆分为 Task`,
-    ],
-  };
-
-  return flows[cmd] || [];
 }
