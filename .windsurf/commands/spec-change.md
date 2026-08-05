@@ -1,5 +1,5 @@
 ---
 name: spec-change
-description: Change request
+description: 需求变更
 ---
-speccore change --iteration=${1:Q1}
+speccore change "${1:变更描述}" --task=${2:Task-001}

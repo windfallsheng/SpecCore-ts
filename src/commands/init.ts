@@ -1,4 +1,4 @@
-import { ensureDir, writeFile, pathExists, readFile } from 'fs-extra';
+import { ensureDir, writeFile, pathExists, readFile, readdir } from 'fs-extra';
 import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
 import { createInterface } from 'readline';
@@ -911,6 +911,17 @@ async function createToolIntegrations(projectRoot: string): Promise<void> {
     const content = desc + '\n\n执行命令: `' + cmd + '`';
     await writeFile(join(qoderCommandsDir, shortName + '.md'), content);
   }
+  // 清理旧版本残留的 orphan 文件
+  const validNames = new Set(commands.map(([name]) => name.replace(/^spec-/, '') + '.md'));
+  try {
+    const existing = await readdir(qoderCommandsDir);
+    for (const f of existing) {
+      if (!validNames.has(f)) {
+        await require('fs-extra').unlink(join(qoderCommandsDir, f));
+        logger.info(`  清理旧文件: ${f}`);
+      }
+    }
+  } catch {}
   
   // 清理旧的不规范目录 (.qcoder/)
   const legacyQcoderDir = join(projectRoot, '.qcoder');

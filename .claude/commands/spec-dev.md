@@ -1,5 +1,5 @@
 ---
 name: spec-dev
-description: 全自动流水线
+description: 智能级联
 ---
 speccore dev --auto
