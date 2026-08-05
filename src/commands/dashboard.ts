@@ -484,6 +484,7 @@ function setTheme(t) {
   updateChartColors(t);
 }
 function updateChartColors(t) {
+  if(typeof statusChart === 'undefined') return;
   const light = t === 'light';
   const tc = light ? '#64748b' : '#4a5568';
   const gc = light ? 'rgba(0,0,0,.06)' : 'rgba(255,255,255,.06)';
@@ -595,6 +596,7 @@ const resolvedChart = new Chart(document.getElementById('resolvedChart'), {
     }
   }
 });
+updateChartColors(document.documentElement.getAttribute('data-theme'));
 </script>
 </body>
 </html>`;
