@@ -355,15 +355,17 @@ function download(content, name, type) {
 (function(){
   const saved = localStorage.getItem('speccore-theme') || 'cyber';
   document.documentElement.setAttribute('data-theme', saved);
-  document.querySelectorAll('.theme-sw button[onclick*="setTheme"]').forEach(b => {
-    if(b.getAttribute('onclick')?.includes(`'${saved}'`)) b.classList.add('active');
+  document.querySelectorAll('.theme-sw button').forEach(b => {
+    const onclick = b.getAttribute('onclick') || '';
+    if(onclick.includes('setTheme') && onclick.includes(saved)) b.classList.add('active');
   });
 })();
 function setTheme(t) {
   document.documentElement.setAttribute('data-theme', t);
   localStorage.setItem('speccore-theme', t);
-  document.querySelectorAll('.theme-sw button[onclick*="setTheme"]').forEach(b => {
-    b.classList.toggle('active', b.getAttribute('onclick')?.includes(`'${t}'`));
+  document.querySelectorAll('.theme-sw button').forEach(b => {
+    const onclick = b.getAttribute('onclick') || '';
+    b.classList.toggle('active', onclick.includes('setTheme') && onclick.includes(t));
   });
   const light = t === 'light';
   const tc = light ? '#64748b' : '#4a5568';
