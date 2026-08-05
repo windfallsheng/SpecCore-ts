@@ -104,8 +104,9 @@ interface Word2SpecOptions {
   file: string;
   iter: string;
   platform?: string;
-  files?: string;  // batch: "path1.docx=平台1,path2.docx=平台2"
-  ai?: boolean;     // --ai (default true): pandoc 提取 + AI 精炼引导
+  task?: string;     // --task: 导入到指定 Task 目录
+  files?: string;    // batch: "path1.docx=平台1,path2.docx=平台2"
+  ai?: boolean;
 }
 
 export async function doc2specCommand(options: Word2SpecOptions): Promise<void> {
@@ -181,8 +182,11 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
   try {
     const iterName = options.iter.replace(/^期次-/, '');
     const iterDir = `期次-${iterName}`;
-    const targetDir = join(iterDir, '00-产品需求');
-    const imageDir = join(targetDir, 'images');
+    // 目标目录：指定 --task 则放入 Task 目录，否则放入 00-产品需求
+    const taskId = options.task ? (options.task.startsWith('Task-') ? options.task : `Task-${options.task}`) : null;
+    const baseDir = taskId ? join(iterDir, taskId) : join(iterDir, '00-产品需求');
+    const targetDir = baseDir;
+    const imageDir = join(iterDir, '00-产品需求', 'images'); // 图片始终共享
     const platform = options.platform || '需求';
     const outputPath = join(targetDir, `${platform}需求.md`);
 

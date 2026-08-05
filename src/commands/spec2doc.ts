@@ -29,10 +29,11 @@ function getInstallCmd(tool: string): string {
 export interface Spec2DocOptions {
   iteration?: string;
   task?: string;
-  format?: string;      // docx | pdf | html | pptx
+  file?: string;         // -f: 直接导出指定 .md 文件
+  format?: string;
   output?: string;
-  all?: boolean;         // 导出期次全部文档（合并）
-  ai?: boolean;          // --ai (default true): 提示 AI 精炼
+  all?: boolean;
+  ai?: boolean;
 }
 
 /** 支持的输出格式 → pandoc writer */
@@ -66,7 +67,14 @@ export async function spec2docCommand(options: Spec2DocOptions): Promise<void> {
   const sourceFiles: { path: string; label: string }[] = [];
   const iterName = options.iteration;
 
-  if (options.all && iterName) {
+  // --file: 直接导出指定文件
+  if (options.file) {
+    if (!await pathExists(options.file)) {
+      logger.error(`文件不存在: ${options.file}`);
+      return;
+    }
+    sourceFiles.push({ path: options.file, label: basename(options.file, extname(options.file)) });
+  } else if (options.all && iterName) {
     // 全量导出：期次下所有 .md 文件
     const iterDir = iterName.startsWith('期次-') ? iterName : `期次-${iterName}`;
     if (!await pathExists(iterDir)) {
