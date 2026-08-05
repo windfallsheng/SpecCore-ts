@@ -137,7 +137,6 @@ tr:hover td{background:var(--hover)}
     <div class="header-stat"><div class="num">0</div><div class="label" data-i18n="projects">项目</div></div>
     <div class="header-stat"><div class="num">15</div><div class="label" data-i18n="reqs">需求</div></div>
     <div class="header-stat"><div class="num">33%</div><div class="label" data-i18n="done2">完成</div></div>
-    <div class="phase-indicator"><div class="dot"></div><span>Q1</span></div>
   </div>
   <div class="data-stream" style="position:absolute"><span>SPECCORE · DASHBOARD · 0 PROJECTS · 15 REQUIREMENTS · 33% COMPLETE · POWERED BY SPECCORE</span></div>
 </div>
@@ -257,7 +256,7 @@ tr:hover td{background:var(--hover)}
   </div>
 </div>
 
-<div class="footer"><span data-i18n="powered">由 SpecCore 驱动</span> v1.2 &nbsp;|&nbsp; Generated 2026-08-05</div>
+<div class="footer"><span data-i18n="powered">由 SpecCore 驱动</span> v1.2 &nbsp;&nbsp;|&nbsp;&nbsp; Generated 2026-08-05</div>
 </main>
 
 <script>
@@ -341,12 +340,12 @@ function setSize(s) {
 }
 
 // Init saved settings
-(function(){
+document.addEventListener('DOMContentLoaded', function(){
   setTheme(localStorage.getItem('speccore-theme') || 'ocean');
   setLang(localStorage.getItem('speccore-lang') || (navigator.language.startsWith('zh')?'zh':'en'));
   setFont(localStorage.getItem('speccore-font') || 'hybrid');
   setSize(localStorage.getItem('speccore-size') || 'lg');
-})();
+});
 
 // Charts
 const isLight = document.documentElement.getAttribute('data-theme') === 'light';

@@ -499,12 +499,12 @@ function setSize(s) {
 }
 
 // Init saved settings
-(function(){
+document.addEventListener('DOMContentLoaded', function(){
   setTheme(localStorage.getItem('speccore-theme') || 'ocean');
   setLang(localStorage.getItem('speccore-lang') || (navigator.language.startsWith('zh')?'zh':'en'));
   setFont(localStorage.getItem('speccore-font') || 'hybrid');
   setSize(localStorage.getItem('speccore-size') || 'lg');
-})();
+});
 
 // Charts
 const isLight = document.documentElement.getAttribute('data-theme') === 'light';
