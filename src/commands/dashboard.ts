@@ -136,8 +136,17 @@ export function generateDashboardHtml(
 [data-fs="sm"]{font-size:13px}[data-fs="md"]{font-size:15px}[data-fs="lg"]{font-size:17px}[data-fs="xl"]{font-size:20px}
 *,*::after,*::before{box-sizing:border-box;margin:0;padding:0}
 .theme-sw{position:fixed;top:16px;right:16px;z-index:100;display:flex;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px;backdrop-filter:blur(10px)}.theme-sw button{width:32px;height:32px;border-radius:16px;border:none;cursor:pointer;transition:all .2s;font-size:14px;display:flex;align-items:center;justify-content:center;background:transparent}.theme-sw button:hover{transform:scale(1.1)}.theme-sw button.active{box-shadow:0 0 0 2px var(--cyan)}
-.lang-sw{position:fixed;top:16px;right:200px;z-index:100;display:flex;gap:4px}.lang-sw button{padding:4px 10px;border-radius:12px;border:1px solid var(--border);cursor:pointer;font-size:11px;font-family:'JetBrains Mono',monospace;background:var(--surface);color:var(--muted)}.lang-sw button.active{color:var(--cyan);border-color:var(--cyan)}
-.fs-sw{position:fixed;top:60px;right:16px;z-index:100;display:flex;flex-direction:column;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:4px;backdrop-filter:blur(10px)}.fs-sw button{width:28px;height:28px;border-radius:6px;border:1px solid transparent;cursor:pointer;font-size:11px;font-family:'JetBrains Mono',monospace;background:transparent;color:var(--muted);transition:all .2s}.fs-sw button:hover{color:var(--cyan)}.fs-sw button.active{color:var(--cyan);border-color:var(--cyan);background:rgba(0,240,255,.05)}
+.settings-toggle{position:fixed;top:16px;right:60px;z-index:100;width:36px;height:36px;border-radius:18px;background:var(--surface);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;transition:all .2s;backdrop-filter:blur(10px)}
+.settings-toggle:hover{color:var(--cyan);border-color:var(--cyan);transform:rotate(30deg)}
+.settings-toggle.active{color:var(--cyan);border-color:var(--cyan);background:rgba(0,240,255,.05)}
+.settings-panel{position:fixed;top:60px;right:60px;z-index:99;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;backdrop-filter:blur(20px);display:none;min-width:220px;box-shadow:0 8px 32px rgba(0,0,0,.4)}
+.settings-panel.open{display:block;animation:fadeIn .2s ease}
+.settings-section{margin-bottom:16px}.settings-section:last-child{margin-bottom:0}
+.settings-label{font-size:9px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:8px}
+.settings-row{display:flex;gap:6px;flex-wrap:wrap}
+.settings-row button{padding:4px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:11px;font-family:'JetBrains Mono',monospace;transition:all .2s}
+.settings-row button:hover{color:var(--cyan);border-color:var(--cyan)}
+.settings-row button.active{color:var(--cyan);border-color:var(--cyan);background:rgba(0,240,255,.05)}
 body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
 .scanlines{position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,240,255,.015) 2px,rgba(0,240,255,.015) 4px);pointer-events:none;z-index:999}
 .stars{position:fixed;inset:0;background:radial-gradient(1px 1px at 10% 20%,rgba(255,255,255,.4),transparent),radial-gradient(1px 1px at 25% 65%,rgba(255,255,255,.3),transparent),radial-gradient(1.5px 1.5px at 50% 30%,rgba(0,240,255,.5),transparent),radial-gradient(1px 1px at 70% 55%,rgba(255,255,255,.35),transparent),radial-gradient(1px 1px at 85% 15%,rgba(168,85,247,.4),transparent),radial-gradient(1.5px 1.5px at 15% 80%,rgba(0,240,255,.45),transparent),radial-gradient(1px 1px at 60% 85%,rgba(255,255,255,.3),transparent),radial-gradient(1px 1px at 90% 75%,rgba(0,255,136,.4),transparent);pointer-events:none;z-index:0}
@@ -207,15 +216,32 @@ tr:hover td{background:var(--hover)}
   <button onclick="setTheme('amber')" title="Amber Terminal">🟡</button><button onclick="setTheme('sakura')" title="Cherry Sakura">🌸</button>
   <button onclick="setTheme('forest')" title="Midnight Forest">🌲</button>
 </div>
-<div class="lang-sw">
-  <button data-lang="zh" class="active" onclick="setLang('zh')">中文</button>
-  <button data-lang="en" onclick="setLang('en')">EN</button>
-</div>
-<div class="fs-sw">
-  <button data-fs="sm" onclick="setFs('sm')">A-</button>
-  <button data-fs="md" class="active" onclick="setFs('md')">A</button>
-  <button data-fs="lg" onclick="setFs('lg')">A+</button>
-  <button data-fs="xl" onclick="setFs('xl')">A++</button>
+<div class="settings-toggle" onclick="toggleSettings()" title="设置">⚙️</div>
+<div class="settings-panel" id="settingsPanel">
+  <div class="settings-section">
+    <div class="settings-label">LANGUAGE</div>
+    <div class="settings-row">
+      <button data-lang="zh" class="active" onclick="setLang('zh')">中文</button>
+      <button data-lang="en" onclick="setLang('en')">EN</button>
+    </div>
+  </div>
+  <div class="settings-section">
+    <div class="settings-label">FONT SIZE</div>
+    <div class="settings-row">
+      <button data-fs="sm" onclick="setFs('sm')">A-</button>
+      <button data-fs="md" class="active" onclick="setFs('md')">A</button>
+      <button data-fs="lg" onclick="setFs('lg')">A+</button>
+      <button data-fs="xl" onclick="setFs('xl')">A++</button>
+    </div>
+  </div>
+  <div class="settings-section">
+    <div class="settings-label">EXPORT</div>
+    <div class="settings-row">
+      <button onclick="exportJSON()">📋 JSON</button>
+      <button onclick="exportCSV()">📊 CSV</button>
+      <button onclick="location.reload()">🔄 刷新</button>
+    </div>
+  </div>
 </div>
 <div class="scanlines"></div><div class="stars"></div><div class="grid-pattern"></div>
 <main>
@@ -327,20 +353,62 @@ function download(content, name, type) {
 
 // Theme switcher
 (function(){
-  const sw = document.getElementById('themeSw');
   const saved = localStorage.getItem('speccore-theme') || 'cyber';
   document.documentElement.setAttribute('data-theme', saved);
-  sw.querySelectorAll('button').forEach(b => {
-    if(b.dataset.theme === saved) b.classList.add('active');
-    b.addEventListener('click', () => {
-      document.documentElement.setAttribute('data-theme', b.dataset.theme);
-      localStorage.setItem('speccore-theme', b.dataset.theme);
-      sw.querySelectorAll('button').forEach(x => x.classList.remove('active'));
-      b.classList.add('active');
-      // Update chart colors
-      updateChartColors(b.dataset.theme);
-    });
+  document.querySelectorAll('.theme-sw button[onclick*="setTheme"]').forEach(b => {
+    if(b.getAttribute('onclick')?.includes(`'${saved}'`)) b.classList.add('active');
   });
+})();
+function setTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  localStorage.setItem('speccore-theme', t);
+  document.querySelectorAll('.theme-sw button[onclick*="setTheme"]').forEach(b => {
+    b.classList.toggle('active', b.getAttribute('onclick')?.includes(`'${t}'`));
+  });
+  const light = t === 'light';
+  const tc = light ? '#64748b' : '#4a5568';
+  const gc = light ? 'rgba(0,0,0,.06)' : 'rgba(255,255,255,.06)';
+  if(typeof statusChart !== 'undefined') {
+    statusChart.options.plugins.legend.labels.color = tc;
+    projectChart.options.scales.x.ticks.color = tc; projectChart.options.scales.y.ticks.color = tc;
+    projectChart.options.scales.x.grid.color = gc; projectChart.options.scales.y.grid.color = gc;
+    statusChart.update(); projectChart.update();
+  }
+}
+
+// Settings toggle
+function toggleSettings() {
+  const p = document.getElementById('settingsPanel');
+  const t = document.querySelector('.settings-toggle');
+  p.classList.toggle('open');
+  t.classList.toggle('active');
+}
+document.addEventListener('click', e => {
+  const p = document.getElementById('settingsPanel');
+  if(p.classList.contains('open') && !e.target.closest('.settings-panel') && !e.target.closest('.settings-toggle')) {
+    p.classList.remove('open'); document.querySelector('.settings-toggle').classList.remove('active');
+  }
+});
+
+// Lang switch
+function setLang(l) {
+  document.querySelectorAll('.settings-row button[data-lang]').forEach(b => b.classList.toggle('active', b.dataset.lang === l));
+  localStorage.setItem('speccore-lang', l);
+}
+(function() {
+  const l = localStorage.getItem('speccore-lang') || (navigator.language.startsWith('zh') ? 'zh' : 'en');
+  setLang(l);
+})();
+
+// Font size
+function setFs(s) {
+  document.documentElement.setAttribute('data-fs', s);
+  document.querySelectorAll('.settings-row button[data-fs]').forEach(b => b.classList.toggle('active', b.dataset.fs === s));
+  localStorage.setItem('speccore-fs', s);
+}
+(function() {
+  const s = localStorage.getItem('speccore-fs') || 'md';
+  setFs(s);
 })();
 
 // Charts
@@ -388,19 +456,6 @@ const projectChart = new Chart(document.getElementById('projectChart'), {
     }
   }
 });
-
-function updateChartColors(theme) {
-  const light = theme === 'light';
-  const tc = light ? '#64748b' : '#4a5568';
-  const gc = light ? 'rgba(0,0,0,.06)' : 'rgba(255,255,255,.06)';
-  statusChart.options.plugins.legend.labels.color = tc;
-  projectChart.options.scales.x.ticks.color = tc;
-  projectChart.options.scales.y.ticks.color = tc;
-  projectChart.options.scales.x.grid.color = gc;
-  projectChart.options.scales.y.grid.color = gc;
-  statusChart.update();
-  projectChart.update();
-}
 </script>
 </body>
 </html>`;
