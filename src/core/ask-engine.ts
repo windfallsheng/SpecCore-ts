@@ -5,6 +5,7 @@
 
 import { logger } from '../utils/logger';
 import { recognizeIntent } from './intent-recognition';
+import { askWithLlm } from './ask-llm';
 
 // ============================================================
 // 类型定义
@@ -351,8 +352,26 @@ function buildPipelineDetail(steps: PipelineStep[], input: string): string {
 // ============================================================
 
 export async function askEngine(input: string): Promise<AskResult> {
+  // ── 第一层: LLM 智能解析 ──
+  try {
+    const llmResult = await askWithLlm(input);
+    if (llmResult && llmResult.commands.length > 0) {
+      logger.info(`🧠 AI 识别: ${modeLabel(llmResult.mode as AskMode)}`);
+      
+      // LLM 结果补充 detail（如果 LLM 没有返回详细内容，用规则引擎补充）
+      if (!llmResult.detail || llmResult.detail.length < 20) {
+        const enriched = enrichWithRules(llmResult, input);
+        return enriched;
+      }
+      return llmResult;
+    }
+  } catch (e: any) {
+    logger.warn(`LLM 增强失败: ${e.message}，降级到规则引擎`);
+  }
+
+  // ── 第二层: 规则引擎兜底 ──
   const mode = classifyMode(input);
-  logger.info(`🧠 识别模式: ${modeLabel(mode)}`);
+  logger.info(`📐 规则识别: ${modeLabel(mode)}`);
 
   switch (mode) {
     case 'explain': return handleExplain(input);
@@ -361,6 +380,79 @@ export async function askEngine(input: string): Promise<AskResult> {
     case 'match':
     default: return handleMatch(input);
   }
+}
+
+/** 用规则引擎补充 LLM 结果的内容 */
+function enrichWithRules(llmResult: AskResult, input: string): AskResult {
+  const mode = llmResult.mode as AskMode || 'match';
+
+  switch (mode) {
+    case 'explain': {
+      const cmd = matchCommandInKB(input);
+      if (cmd) {
+        return { ...llmResult, detail: buildExplainDetail(cmd) };
+      }
+      return llmResult;
+    }
+    case 'guide': {
+      const wf = matchWorkflow(input);
+      if (wf) {
+        return { ...llmResult, detail: buildGuideDetail(wf.name, wf.steps), pipeline: wf.steps.length > 0 ? { steps: wf.steps, input, confirm: false } : undefined };
+      }
+      return llmResult;
+    }
+    case 'pipeline': {
+      const wf = matchWorkflow(input);
+      if (wf) {
+        return { ...llmResult, detail: buildPipelineDetail(wf.steps, input), pipeline: { steps: wf.steps, input, confirm: true } };
+      }
+      return llmResult;
+    }
+    default:
+      return llmResult;
+  }
+}
+
+function buildExplainDetail(cmd: CommandKnowledge): string {
+  return [
+    `📖 ${cmd.name} ${cmd.aliases.length ? '(' + cmd.aliases.join('/') + ')' : ''}`,
+    `   描述: ${cmd.description}`,
+    `   用法: ${cmd.usage}`,
+    ``,
+    `   示例:`,
+    ...cmd.examples.map(e => `     $ ${e}`),
+    ``,
+    `   关联命令: ${cmd.related.join(', ')}`,
+    ``,
+    `💡 更多参数: speccore ${cmd.name} --help`,
+  ].join('\n');
+}
+
+function buildGuideDetail(name: string, steps: PipelineStep[]): string {
+  const s = steps.map(s =>
+    `  ${s.order}. speccore ${s.command}${s.args ? ' ' + s.args : ''}` +
+    `\n     → ${s.explanation}`
+  ).join('\n\n');
+  return [
+    `🗺️ ${name}`,
+    ``,
+    s,
+    ``,
+    `---`,
+    `执行方式:`,
+    `  逐步执行: 按顺序手动执行每一步`,
+    `  一键执行: speccore dev --auto（自动检测并推进）`,
+    `  编排执行: speccore ask "完整描述你的需求" --pipeline`,
+  ].join('\n');
+}
+
+function matchWorkflow(input: string): { name: string; steps: PipelineStep[] } | null {
+  const lower = input.toLowerCase();
+  if (/bug|修复|fix|defect/i.test(lower)) return { name: 'Bug 修复流程', steps: WORKFLOWS['bugfix'] };
+  if (/审查|review|检查代码|code review/i.test(lower)) return { name: '代码审查流程', steps: WORKFLOWS['code review'] };
+  if (/新功能|feature|登录|注册|支付|创建.*功能|做.*功能/i.test(lower)) return { name: '新功能开发全流程', steps: WORKFLOWS['new feature'] };
+  if (/批量|分批|batch|队列|计划.*执行|定时/i.test(lower)) return { name: '批量执行流程', steps: WORKFLOWS['batch execute'] };
+  return { name: '推荐标准开发流程', steps: WORKFLOWS['new feature'] };
 }
 
 function modeLabel(mode: AskMode): string {
