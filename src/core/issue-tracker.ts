@@ -12,15 +12,20 @@ export interface IssueEntry {
   summary: string;
   detail: string;
   resolved: boolean;
+  planId?: string;
 }
 
-export async function logIssue(taskDir: string, entry: Omit<IssueEntry, 'time' | 'resolved'>): Promise<void> {
+export async function logIssue(
+  taskDir: string,
+  entry: Omit<IssueEntry, 'time' | 'resolved'> & { planId?: string }
+): Promise<void> {
   await ensureDir(taskDir);
   const issuesFile = join(taskDir, 'ISSUES.md');
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
 
+  const planTag = entry.planId ? ` [plan:${entry.planId}]` : '';
   const line = [
-    `- [ ] **${now}** | ${entry.type} | ${entry.severity}`,
+    `- [ ] **${now}** | ${entry.type} | ${entry.severity}${planTag}`,
     `  - ${entry.summary}`,
     entry.detail ? `  - ${entry.detail}` : '',
   ].filter(Boolean).join('\n') + '\n';
@@ -35,9 +40,9 @@ export async function logIssue(taskDir: string, entry: Omit<IssueEntry, 'time' |
   await writeFile(issuesFile, content + line);
 }
 
-export async function getIssues(taskDir: string): Promise<{ total: number; unresolved: IssueEntry[] }> {
+export async function getIssues(taskDir: string): Promise<{ total: number; unresolved: IssueEntry[]; byPlan: Record<string, IssueEntry[]> }> {
   const issuesFile = join(taskDir, 'ISSUES.md');
-  if (!(await pathExists(issuesFile))) return { total: 0, unresolved: [] };
+  if (!(await pathExists(issuesFile))) return { total: 0, unresolved: [], byPlan: {} };
 
   const content = await readFile(issuesFile, 'utf-8');
   const lines = content.split('\n');
@@ -45,10 +50,14 @@ export async function getIssues(taskDir: string): Promise<{ total: number; unres
   let current: Partial<IssueEntry> | null = null;
 
   for (const line of lines) {
-    const m = line.match(/- \[(.)\] \*\*(.+?)\*\* \| (.+?) \| (.+)/);
+    const m = line.match(/- \[(.)\] \*\*(.+?)\*\* \| (.+?) \| (.+?)(\s+\[plan:(.+?)\])?$/);
     if (m) {
       if (current) entries.push(current as IssueEntry);
-      current = { time: m[2], type: m[3] as any, severity: m[4] as any, summary: '', detail: '', resolved: m[1] === 'x' };
+      current = {
+        time: m[2], type: m[3] as any, severity: m[4] as any,
+        summary: '', detail: '', resolved: m[1] === 'x',
+        planId: m[6] || undefined,
+      };
     } else if (current && line.includes('-')) {
       const text = line.replace(/^\s+-\s*/, '');
       if (!current.summary) current.summary = text;
@@ -57,8 +66,13 @@ export async function getIssues(taskDir: string): Promise<{ total: number; unres
   }
   if (current) entries.push(current as IssueEntry);
 
-  return {
-    total: entries.length,
-    unresolved: entries.filter(e => !e.resolved),
-  };
+  const unresolved = entries.filter(e => !e.resolved);
+  const byPlan: Record<string, IssueEntry[]> = {};
+  for (const e of entries) {
+    const key = e.planId || '__standalone__';
+    if (!byPlan[key]) byPlan[key] = [];
+    byPlan[key].push(e);
+  }
+
+  return { total: entries.length, unresolved, byPlan };
 }
