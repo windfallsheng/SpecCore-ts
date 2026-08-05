@@ -268,7 +268,7 @@ tr:hover td{background:var(--hover)}
 <div class="header">
   <div class="header-left">
     <h1>📊 SPECCORE</h1>
-    <div class="subtitle">GLOBAL DASHBOARD · ${projectCount} PROJECTS · ${totalReqs} REQUIREMENTS</div>
+    <div class="subtitle"><span data-i18n="globalDash">GLOBAL DASHBOARD</span> · ${projectCount} <span data-i18n="projects">PROJECTS</span> · ${totalReqs} <span data-i18n="reqs">REQUIREMENTS</span></div>
   </div>
   <div class="header-right">
     <div class="header-stat"><div class="num">${projectCount}</div><div class="label">项目</div></div>
@@ -281,28 +281,28 @@ tr:hover td{background:var(--hover)}
 <div class="stats">
   <div class="stat-card">
     <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
-    <div class="label">📋 总需求数</div>
+    <div class="label">📋 <span data-i18n="total">总需求数</span></div>
     <div class="value c-cyan">${totalReqs}</div>
     <div class="sub">${projectCount} 个项目</div>
     <div class="data-stream"><span>SPECCORE · TOTAL REQUIREMENTS · ${now} · V${index.version || '1.0'}</span></div>
   </div>
   <div class="stat-card">
     <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
-    <div class="label">✅ 已完成</div>
+    <div class="label">✅ <span data-i18n="done">已完成</span></div>
     <div class="value c-green">${implemented}</div>
-    <div class="sub">完成率 ${completionRate}%</div>
+    <div class="sub"><span data-i18n="done2">完成</span>率 ${completionRate}%</div>
     <div class="data-stream"><span>DONE · ${completionRate}% COMPLETION · ${implemented} IMPLEMENTED</span></div>
   </div>
   <div class="stat-card">
     <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
-    <div class="label">🔄 进行中</div>
+    <div class="label">🔄 <span data-i18n="progress">进行中</span></div>
     <div class="value c-orange">${inProgress}</div>
     <div class="sub">${Math.round((inProgress/(totalReqs||1))*100)}%</div>
     <div class="data-stream"><span>IN PROGRESS · ${inProgress} ACTIVE · ITERATIONS ACTIVE</span></div>
   </div>
   <div class="stat-card">
     <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
-    <div class="label">🔲 待开发</div>
+    <div class="label">🔲 <span data-i18n="pending">待开发</span></div>
     <div class="value c-muted">${pending}</div>
     <div class="sub">${Math.round((pending/(totalReqs||1))*100)}%</div>
     <div class="data-stream"><span>PENDING · ${pending} BACKLOG · AWAITING SPRINT</span></div>
@@ -312,18 +312,18 @@ tr:hover td{background:var(--hover)}
 <div class="charts">
   <div class="chart-card">
     <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
-    <h3>📊 需求状态分布</h3>
+    <h3>📊 <span data-i18n="statusDist">需求状态分布</span></h3>
     <canvas id="statusChart"></canvas>
   </div>
   <div class="chart-card">
     <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
-    <h3>📈 项目需求分布</h3>
+    <h3>📈 <span data-i18n="projDist">项目需求分布</span></h3>
     <canvas id="projectChart"></canvas>
   </div>
 </div>
 
 <div class="panel">
-  <div class="panel-title">PROJECT HEALTH</div>
+  <div class="panel-title"><span data-i18n="projHealth">PROJECT HEALTH</span></div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px">
     ${projectHealth.map(p => `
     <div style="background:var(--surface);border-radius:8px;padding:14px 16px;display:flex;align-items:center;gap:14px">
@@ -343,12 +343,12 @@ tr:hover td{background:var(--hover)}
 <div class="charts">
   <div class="chart-card">
     <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
-    <h3>⚡ Created vs Resolved</h3>
+    <h3>⚡ <span data-i18n="createdVsResolved">Created vs Resolved</span></h3>
     <canvas id="resolvedChart"></canvas>
   </div>
   <div class="chart-card">
     <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
-    <h3>📅 期次进度</h3>
+    <h3>📅 <span data-i18n="iterProgress">期次进度</span></h3>
     <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px;max-height:280px;overflow-y:auto">
       ${iterStats.map(it => `
       <div style="display:flex;align-items:center;gap:10px">
@@ -367,21 +367,21 @@ tr:hover td{background:var(--hover)}
 <div class="stats">
   <div class="stat-card">
     <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
-    <div class="label">🏥 项目健康度</div>
+    <div class="label">🏥 <span data-i18n="health">项目健康度</span></div>
     <div class="value c-cyan">${projectHealth.filter(p => p.pct >= 80).length}/${projectHealth.length}</div>
     <div class="sub">健康项目 / 全部</div>
     <div class="data-stream"><span>HEALTH · ${projectHealth.filter(p=>p.pct>=80).length} GREEN · ${projectHealth.filter(p=>p.pct<40).length} AT RISK</span></div>
   </div>
   <div class="stat-card">
     <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
-    <div class="label">📅 活跃期次</div>
+    <div class="label">📅 <span data-i18n="activeIter">活跃期次</span></div>
     <div class="value c-green">${activeIterCount}</div>
     <div class="sub">共 ${index.iterations.length} 个期次</div>
     <div class="data-stream"><span>ITERATIONS · ${activeIterCount} ACTIVE · ${index.iterations.length} TOTAL</span></div>
   </div>
   <div class="stat-card">
     <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
-    <div class="label">📈 交付速率</div>
+    <div class="label">📈 <span data-i18n="velocity">交付速率</span></div>
     <div class="value c-orange">${completionRate}%</div>
     <div class="sub">已完成 / 总需求</div>
     <div class="data-stream"><span>VELOCITY · ${implemented} DONE · ${totalReqs} TOTAL · ${completionRate}%</span></div>
@@ -391,15 +391,15 @@ tr:hover td{background:var(--hover)}
 <div class="panel">
   <h3>📋 项目列表</h3>
   <table>
-    <thead><tr><th>项目名称</th><th>类型</th><th>需求数</th><th>最后导入</th></tr></thead>
+    <thead><tr><th><span data-i18n="projName">项目名称</span></th><th><span data-i18n="type">类型</span></th><th><span data-i18n="reqCount">需求数</span></th><th><span data-i18n="lastImport">最后导入</span></th></tr></thead>
     <tbody>${projectRows || '<tr><td colspan="4">暂无项目</td></tr>'}</tbody>
   </table>
 </div>
 
-<div class="table-card">
-  <h3>📝 需求详情</h3>
+<div class="panel">
+  <div class="panel-title"><span data-i18n="reqDetail">需求详情</span></div>
   <table>
-    <thead><tr><th>需求 ID</th><th>名称</th><th>项目</th><th>状态</th><th>关联期次</th></tr></thead>
+    <thead><tr><th><span data-i18n="reqId">需求 ID</span></th><th><span data-i18n="name">名称</span></th><th><span data-i18n="project">项目</span></th><th><span data-i18n="status">状态</span></th><th><span data-i18n="iteration">关联期次</span></th></tr></thead>
     <tbody>${reqRows || '<tr><td colspan="5">暂无需求</td></tr>'}</tbody>
   </table>
 </div>
@@ -464,8 +464,10 @@ function setTheme(t) {
 }
 
 // Lang
+var I18N={zh:{total:'总需求数',done:'已完成',progress:'进行中',pending:'待开发',health:'项目健康度',activeIter:'活跃期次',velocity:'交付速率',statusDist:'需求状态分布',projDist:'项目需求分布',createdVsResolved:'Created vs Resolved',iterProgress:'期次进度',projHealth:'PROJECT HEALTH',projList:'项目列表',reqDetail:'需求详情',projName:'项目名称',type:'类型',reqCount:'需求数',lastImport:'最后导入',reqId:'需求 ID',name:'名称',project:'项目',status:'状态',iteration:'关联期次',projects:'项目',reqs:'需求',done2:'完成',live:'LIVE',globalDash:'GLOBAL DASHBOARD',powered:'由 SpecCore 驱动'},en:{total:'Total Reqs',done:'Done',progress:'In Progress',pending:'Backlog',health:'Project Health',activeIter:'Active Iterations',velocity:'Velocity',statusDist:'Status Distribution',projDist:'Project Distribution',createdVsResolved:'Created vs Resolved',iterProgress:'Iteration Progress',projHealth:'PROJECT HEALTH',projList:'Project List',reqDetail:'Requirement Details',projName:'Project Name',type:'Type',reqCount:'Reqs',lastImport:'Last Import',reqId:'Req ID',name:'Name',project:'Project',status:'Status',iteration:'Iteration',projects:'Projects',reqs:'Reqs',done2:'Done',live:'LIVE',globalDash:'GLOBAL DASHBOARD',powered:'Powered by SpecCore'}};
 function setLang(l) {
   document.querySelectorAll('.lang-sw button[data-lang]').forEach(b => b.classList.toggle('active', b.dataset.lang===l));
+  document.querySelectorAll('[data-i18n]').forEach(el => { var k=el.getAttribute('data-i18n'); if(I18N[l]&&I18N[l][k]) el.textContent=I18N[l][k] });
   localStorage.setItem('speccore-lang', l);
 }
 
