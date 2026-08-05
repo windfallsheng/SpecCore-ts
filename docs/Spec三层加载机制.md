@@ -34,7 +34,7 @@ Layer 3 — Task 执行（execute 核心输入）
 <!-- spec-rule: exception-handler -->
 - 统一异常：所有 Controller 抛出 BusinessException
 - 全局捕获：@ControllerAdvice 处理
-<!-- /spec-rule -->
+<!-- speccore rule -->
 ```
 
 **支持的五类规则及效果：**
