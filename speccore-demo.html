@@ -85,7 +85,8 @@ tr:hover td{background:var(--hover)}
 .badge-done{background:rgba(0,255,136,.1);color:var(--green)}
 .badge-progress{background:rgba(59,130,246,.1);color:var(--blue)}
 .badge-pending{background:rgba(255,255,255,.03);color:var(--muted)}
-.footer{display:flex;justify-content:space-between;align-items:center;margin-top:28px;padding:16px 0;border-top:1px solid rgba(0,240,255,.06);color:var(--muted);font-size:11px;letter-spacing:1px}
+.footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;padding:16px 0;border-top:1px solid rgba(0,240,255,.06);letter-spacing:1px}
+.scroll-table{max-height:70vh;overflow-y:auto}.scroll-table thead{position:sticky;top:0;z-index:2;background:var(--card)}
 .fs-btn{position:absolute;top:10px;right:10px;width:28px;height:28px;border-radius:6px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);color:var(--muted);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .2s;z-index:10;opacity:0}
 .stat-card:hover .fs-btn,.chart-card:hover .fs-btn,.panel:hover .fs-btn{opacity:1}
 .fs-btn:hover{background:rgba(0,240,255,.1);border-color:rgba(0,240,255,.3);color:var(--cyan)}
@@ -131,9 +132,13 @@ tr:hover td{background:var(--hover)}
     <div class="subtitle"><span data-i18n="globalDash">GLOBAL DASHBOARD</span> · 0 <span data-i18n="projects">PROJECTS</span> · 15 <span data-i18n="reqs">REQUIREMENTS</span></div>
   </div>
   <div class="header-right">
-    <div class="header-stat"><div class="num">0</div><div class="label">项目</div></div>
-    <div class="header-stat"><div class="num">15</div><div class="label">需求</div></div>
-    <div class="header-stat"><div class="num">33%</div><div class="label">完成</div></div>
+    <div class="header-stat"><div class="num">0</div><div class="label" data-i18n="projects">项目</div></div>
+    <div class="header-stat"><div class="num">15</div><div class="label" data-i18n="reqs">需求</div></div>
+    <div class="header-stat"><div class="num">33%</div><div class="label" data-i18n="done2">完成</div></div>
+    <div class="phase-indicator"><div class="dot"></div><span data-i18n="live">LIVE</span></div>
+  </div>
+  <div class="data-stream" style="position:absolute"><span>SPECCORE · DASHBOARD · 0 PROJECTS · 15 REQUIREMENTS · 33% COMPLETE · POWERED BY SPECCORE</span></div>
+</div>
     <div class="phase-indicator"><div class="dot"></div><span>LIVE</span></div>
   </div>
 </div>
@@ -174,6 +179,7 @@ tr:hover td{background:var(--hover)}
     <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
     <h3>📊 <span data-i18n="statusDist">需求状态分布</span></h3>
     <canvas id="statusChart"></canvas>
+    <div class="data-stream"><span>STATUS · 5 DONE · 5 ACTIVE · 5 BACKLOG</span></div>
   </div>
   <div class="chart-card">
     <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
@@ -230,7 +236,7 @@ tr:hover td{background:var(--hover)}
 </div>
 
 <div class="panel">
-  <h3>📋 项目列表</h3>
+  <div class="panel-title"><span data-i18n="projList">项目列表</span></div>
   <table>
     <thead><tr><th><span data-i18n="projName">项目名称</span></th><th><span data-i18n="type">类型</span></th><th><span data-i18n="reqCount">需求数</span></th><th><span data-i18n="lastImport">最后导入</span></th></tr></thead>
     <tbody><tr><td colspan="4">暂无项目</td></tr></tbody>
@@ -239,13 +245,15 @@ tr:hover td{background:var(--hover)}
 
 <div class="panel">
   <div class="panel-title"><span data-i18n="reqDetail">需求详情</span></div>
+  <div class="scroll-table">
   <table>
     <thead><tr><th><span data-i18n="reqId">需求 ID</span></th><th><span data-i18n="name">名称</span></th><th><span data-i18n="project">项目</span></th><th><span data-i18n="status">状态</span></th><th><span data-i18n="iteration">关联期次</span></th></tr></thead>
     <tbody><tr><td>REQ-006</td><td>营销活动</td><td>电商平台</td><td><span class="badge badge-pending">🔲 待开发</span></td><td>Q3</td></tr><tr><td>REQ-007</td><td>数据看板</td><td>电商平台</td><td><span class="badge badge-pending">🔲 待开发</span></td><td>Q3</td></tr><tr><td>REQ-008</td><td>客服系统</td><td>电商平台</td><td><span class="badge badge-pending">🔲 待开发</span></td><td>Q3</td></tr><tr><td>REQ-012</td><td>处方管理</td><td>医疗 SaaS</td><td><span class="badge badge-pending">🔲 待开发</span></td><td>Q3</td></tr><tr><td>REQ-003</td><td>订单系统</td><td>电商平台</td><td><span class="badge badge-progress">🔄 进行中</span></td><td>Q2</td></tr><tr><td>REQ-004</td><td>支付集成</td><td>电商平台</td><td><span class="badge badge-progress">🔄 进行中</span></td><td>Q2</td></tr><tr><td>REQ-005</td><td>物流追踪</td><td>电商平台</td><td><span class="badge badge-progress">🔄 进行中</span></td><td>Q2</td></tr><tr><td>REQ-011</td><td>电子病历</td><td>医疗 SaaS</td><td><span class="badge badge-progress">🔄 进行中</span></td><td>Q2</td></tr><tr><td>REQ-014</td><td>文档协作</td><td>办公 OA</td><td><span class="badge badge-progress">🔄 进行中</span></td><td>Q2</td></tr><tr><td>REQ-015</td><td>日程管理</td><td>办公 OA</td><td><span class="badge badge-pending">🔲 待开发</span></td><td>Q2</td></tr><tr><td>REQ-001</td><td>用户登录注册</td><td>电商平台</td><td><span class="badge badge-done">✅ 已实现</span></td><td>Q1</td></tr><tr><td>REQ-002</td><td>商品管理</td><td>电商平台</td><td><span class="badge badge-done">✅ 已实现</span></td><td>Q1</td></tr><tr><td>REQ-009</td><td>患者管理</td><td>医疗 SaaS</td><td><span class="badge badge-done">✅ 已实现</span></td><td>Q1</td></tr><tr><td>REQ-010</td><td>预约挂号</td><td>医疗 SaaS</td><td><span class="badge badge-done">✅ 已实现</span></td><td>Q1</td></tr><tr><td>REQ-013</td><td>审批流引擎</td><td>办公 OA</td><td><span class="badge badge-done">✅ 已实现</span></td><td>Q1</td></tr></tbody>
   </table>
+  </div>
 </div>
 
-<div class="footer">Powered by SpecCore | Generated 2026-08-05</div>
+<div class="footer"><span data-i18n="powered">由 SpecCore 驱动</span> | Generated 2026-08-05</div>
 </main>
 
 <script>

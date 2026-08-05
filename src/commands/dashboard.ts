@@ -225,7 +225,8 @@ tr:hover td{background:var(--hover)}
 .badge-done{background:rgba(0,255,136,.1);color:var(--green)}
 .badge-progress{background:rgba(59,130,246,.1);color:var(--blue)}
 .badge-pending{background:rgba(255,255,255,.03);color:var(--muted)}
-.footer{display:flex;justify-content:space-between;align-items:center;margin-top:28px;padding:16px 0;border-top:1px solid rgba(0,240,255,.06);color:var(--muted);font-size:11px;letter-spacing:1px}
+.footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;padding:16px 0;border-top:1px solid rgba(0,240,255,.06);letter-spacing:1px}
+.scroll-table{max-height:70vh;overflow-y:auto}.scroll-table thead{position:sticky;top:0;z-index:2;background:var(--card)}
 .fs-btn{position:absolute;top:10px;right:10px;width:28px;height:28px;border-radius:6px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);color:var(--muted);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .2s;z-index:10;opacity:0}
 .stat-card:hover .fs-btn,.chart-card:hover .fs-btn,.panel:hover .fs-btn{opacity:1}
 .fs-btn:hover{background:rgba(0,240,255,.1);border-color:rgba(0,240,255,.3);color:var(--cyan)}
@@ -271,9 +272,13 @@ tr:hover td{background:var(--hover)}
     <div class="subtitle"><span data-i18n="globalDash">GLOBAL DASHBOARD</span> · ${projectCount} <span data-i18n="projects">PROJECTS</span> · ${totalReqs} <span data-i18n="reqs">REQUIREMENTS</span></div>
   </div>
   <div class="header-right">
-    <div class="header-stat"><div class="num">${projectCount}</div><div class="label">项目</div></div>
-    <div class="header-stat"><div class="num">${totalReqs}</div><div class="label">需求</div></div>
-    <div class="header-stat"><div class="num">${completionRate}%</div><div class="label">完成</div></div>
+    <div class="header-stat"><div class="num">${projectCount}</div><div class="label" data-i18n="projects">项目</div></div>
+    <div class="header-stat"><div class="num">${totalReqs}</div><div class="label" data-i18n="reqs">需求</div></div>
+    <div class="header-stat"><div class="num">${completionRate}%</div><div class="label" data-i18n="done2">完成</div></div>
+    <div class="phase-indicator"><div class="dot"></div><span data-i18n="live">LIVE</span></div>
+  </div>
+  <div class="data-stream" style="position:absolute"><span>SPECCORE · DASHBOARD · ${projectCount} PROJECTS · ${totalReqs} REQUIREMENTS · ${completionRate}% COMPLETE · POWERED BY SPECCORE</span></div>
+</div>
     <div class="phase-indicator"><div class="dot"></div><span>LIVE</span></div>
   </div>
 </div>
@@ -314,6 +319,7 @@ tr:hover td{background:var(--hover)}
     <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
     <h3>📊 <span data-i18n="statusDist">需求状态分布</span></h3>
     <canvas id="statusChart"></canvas>
+    <div class="data-stream"><span>STATUS · ${implemented} DONE · ${inProgress} ACTIVE · ${pending} BACKLOG</span></div>
   </div>
   <div class="chart-card">
     <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
@@ -389,7 +395,7 @@ tr:hover td{background:var(--hover)}
 </div>
 
 <div class="panel">
-  <h3>📋 项目列表</h3>
+  <div class="panel-title"><span data-i18n="projList">项目列表</span></div>
   <table>
     <thead><tr><th><span data-i18n="projName">项目名称</span></th><th><span data-i18n="type">类型</span></th><th><span data-i18n="reqCount">需求数</span></th><th><span data-i18n="lastImport">最后导入</span></th></tr></thead>
     <tbody>${projectRows || '<tr><td colspan="4">暂无项目</td></tr>'}</tbody>
@@ -398,13 +404,15 @@ tr:hover td{background:var(--hover)}
 
 <div class="panel">
   <div class="panel-title"><span data-i18n="reqDetail">需求详情</span></div>
+  <div class="scroll-table">
   <table>
     <thead><tr><th><span data-i18n="reqId">需求 ID</span></th><th><span data-i18n="name">名称</span></th><th><span data-i18n="project">项目</span></th><th><span data-i18n="status">状态</span></th><th><span data-i18n="iteration">关联期次</span></th></tr></thead>
     <tbody>${reqRows || '<tr><td colspan="5">暂无需求</td></tr>'}</tbody>
   </table>
+  </div>
 </div>
 
-<div class="footer">Powered by SpecCore | Generated ${now}</div>
+<div class="footer"><span data-i18n="powered">由 SpecCore 驱动</span> | Generated ${now}</div>
 </main>
 
 <script>
