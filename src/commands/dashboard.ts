@@ -429,11 +429,12 @@ function toggleFS(el) {
   document.body.appendChild(tip);
   setTimeout(() => tip.remove(), 2500);
 }
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && fsEl) { fsEl.classList.remove('fs-fullscreen'); document.body.style.overflow = ''; fsEl = null; }
-  if ((e.key === 'f' || e.key === 'F') && !e.target.closest('input,textarea,[contenteditable]')) {
-    const el = document.querySelector('.stat-card:hover, .chart-card:hover, .panel:hover');
-    if (el) toggleFS(el);
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&fsEl){fsEl.classList.remove('fs-fullscreen');document.body.style.overflow='';fsEl=null}
+  if(e.key==='f'||e.key==='F'){
+    if(document.activeElement&&document.activeElement.tagName==='INPUT')return;
+    const hovered=document.querySelector('.stat-card:hover,.chart-card:hover,.panel:hover');
+    if(hovered)toggleFS(hovered);
   }
 });
 
