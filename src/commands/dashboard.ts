@@ -139,7 +139,7 @@ export function generateDashboardHtml(
   }
 
   return `<!DOCTYPE html>
-<html lang="zh-CN" data-theme="cyber" data-fs="md">
+<html lang="zh-CN" data-theme="ocean">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SpecCore — 全量仪表盘</title>
