@@ -1,121 +1,137 @@
 /**
- * update — 更新 Task/期次 属性
- *
- * 用法: speccore update --task=Task-001 --status=completed
- *      speccore update --iteration=xxx --assignee=张三
+ * update — 项目升级命令
+ * 只增量更新工具命令文件 + 配置模板，不覆盖用户数据
  */
-
-import { pathExists, readFile } from 'fs-extra';
+import { writeFile, pathExists, readFile, readdir, ensureDir } from 'fs-extra';
 import { join } from 'path';
-import { logger } from '../utils/logger';
-import { getDefaultIteration } from '../core/context';
-import { FileTransaction } from '../core/transaction';
-import { logOperation } from '../core/operation-log';
+import { logger, Spinner } from '../utils/logger';
 
-export interface UpdateOptions {
-  task?: string;
-  iteration?: string;
-  status?: string;
-  priority?: string;
-  assignee?: string;
-  type?: string;
-  force?: boolean;
-}
+const CURRENT_VERSION = require('../../package.json').version;
 
-export async function updateCommand(options: UpdateOptions): Promise<void> {
-  const iter = await getDefaultIteration(options.iteration);
+// ── 当前版本的命令列表 ──
+const ALL_COMMANDS: [string, string, string][] = [
+  ['spec-ask', 'AI万能入口', 'speccore ask --web "${1:查看进度}"'],
+  ['spec-welcome', '项目名片', 'speccore welcome --web'],
+  ['spec-dashboard', '全局仪表盘', 'speccore dashboard --scope global --web'],
+  ['spec-init', '初始化项目', 'speccore init'],
+  ['spec-doc2spec', '导入需求文档', 'speccore doc2spec -f ${1:PRD.docx} --iter ${2:Q1}'],
+  ['spec-analyze', 'AI需求分析', 'speccore analyze -I ${1:Q1}'],
+  ['spec-split', '智能拆分任务', 'speccore iteration split -i ${1:Q1} --interactive'],
+  ['spec-execute', '执行开发任务', 'speccore execute -t ${1:Task-001} --force'],
+  ['spec-plan', '生成执行计划', 'speccore plan -I ${1:Q1}'],
+  ['spec-pr', '创建PR', 'speccore pr --task=${1:Task-001}'],
+  ['spec-done', '完成任务归档', 'speccore done --task=${1:Task-001}'],
+  ['spec-spec2doc', '导出文档', 'speccore spec2doc -i ${1:Q1} -o ${2:需求.docx}'],
+  ['spec-dev', '智能级联', 'speccore dev --auto --web'],
+  ['spec-change', '需求变更', 'speccore change "${1:变更描述}" --task=${2:Task-001}'],
+  ['spec-validate', '合规验证', 'speccore validate --iteration=${1:Q1}'],
+  ['spec-search', '全文搜索', 'speccore search "${1:关键词}"'],
+  ['spec-track', '全链路追踪', 'speccore track --req=${1:REQ-001}'],
+  ['spec-sync', '双向同步', 'speccore sync --global'],
+  ['spec-rename', '重命名', 'speccore rename --iteration ${1:Q1} ${2:Q2}'],
+  ['spec-create-iteration', '创建期次', 'speccore iteration create -n ${1:Q2} --owner=${2:张三}'],
+  ['spec-retro', '任务回顾报告', 'speccore retro --task ${1:Task-001}'],
+  ['spec-context', '查看/切换上下文', 'speccore context --set --iteration ${1:Q1}'],
+  ['spec-ops', '操作历史', 'speccore ops'],
+];
 
-  if (!iter) {
-    logger.error('No active iteration found. Use --iteration=<name> to specify.');
+// ── 旧命令文件名（需要清理的）──
+const LEGACY_NAMES = new Set(['spec-status', 'spec-status-panel', 'spec-global-status']);
+
+export async function updateCommand(options: { force?: boolean }): Promise<void> {
+  const projectRoot = process.cwd();
+  const spinner = new Spinner('检测项目状态...');
+  spinner.start();
+
+  // 检查是否已初始化
+  const speccoreDir = join(projectRoot, '.speccore');
+  if (!(await pathExists(speccoreDir))) {
+    spinner.fail('项目未初始化，请先运行 speccore init');
     return;
   }
 
-  if (options.task) {
-    await updateTask(iter, options.task, options);
-    logOperation('speccore update', `task=${options.task}`);
-  } else {
-    logger.warn('Please specify --task=<id>');
-    logger.info('Usage: speccore update --task=Task-001 --status=completed');
+  // 读取当前版本
+  const verFile = join(speccoreDir, 'local', 'version.json');
+  let oldVersion = 'unknown';
+  if (await pathExists(verFile)) {
+    try { oldVersion = JSON.parse(await readFile(verFile, 'utf-8')).version; } catch {}
   }
-}
 
-async function updateTask(iteration: string, taskId: string, options: UpdateOptions): Promise<void> {
-  const taskDir = join(process.cwd(), iteration, taskId);
-  if (!(await pathExists(taskDir))) {
-    logger.error(`Task not found: ${taskId}`);
+  if (oldVersion === CURRENT_VERSION && !options.force) {
+    spinner.stop(`已是最新版本 v${CURRENT_VERSION}`);
     return;
   }
 
-  const tx = new FileTransaction();
-  const now = new Date().toISOString().split('T')[0];
+  spinner.text = `从 v${oldVersion} 升级到 v${CURRENT_VERSION}...`;
 
-  // Update backend TASK.md
-  const taskMdPath = join(taskDir, 'backend', 'TASK.md');
-  if (await pathExists(taskMdPath)) {
-    let content = await readFile(taskMdPath, 'utf-8');
+  let added = 0, updated = 0, cleaned = 0;
 
-    if (options.status) {
-      const statusMap: Record<string, string> = {
-        pending: '🔲 待开发',
-        in_progress: '🔄 开发中',
-        completed: '✅ 已完成',
-        blocked: '🚫 阻塞',
-        archived: '📦 已归档',
-      };
-      const statusIcon = statusMap[options.status] || options.status;
-      content = content.replace(/状态:\s.*/, `状态: ${statusIcon}`);
-      content = content.replace(/status:\s.*/i, `status: ${options.status}`);
-      logger.info(`  Status → ${options.status}`);
+  // ── 1. 更新工具目录命令文件 ──
+  const tools = ['.claude', '.codebuddy', '.cursor', '.trae', '.windsurf'];
+  const qoderDir = join(projectRoot, '.qoder', 'commands', 'spec');
+
+  for (const tool of tools) {
+    const toolCommandsDir = join(projectRoot, tool, 'commands');
+    for (const [name, desc, cmd] of ALL_COMMANDS) {
+      const p = join(toolCommandsDir, name + '.md');
+      const content = `---\nname: ${name}\ndescription: ${desc}\n---\n${cmd}`;
+      if (await pathExists(p)) {
+        const existing = await readFile(p, 'utf-8');
+        if (existing.trim() !== content.trim()) {
+          await writeFile(p, content);
+          updated++;
+        }
+      } else {
+        await ensureDir(toolCommandsDir);
+        await writeFile(p, content);
+        added++;
+      }
     }
-
-    if (options.priority) {
-      content = content.replace(/优先级:\s.*/, `优先级: ${options.priority}`);
-      logger.info(`  Priority → ${options.priority}`);
+    // 清理旧文件
+    for (const legacy of LEGACY_NAMES) {
+      const lp = join(toolCommandsDir, legacy + '.md');
+      if (await pathExists(lp)) { await require('fs-extra').remove(lp); cleaned++; }
     }
-
-    if (options.assignee) {
-      content = content.replace(/负责人:\s.*/, `负责人: ${options.assignee}`);
-      logger.info(`  Assignee → ${options.assignee}`);
-    }
-
-    tx.write(taskMdPath, content);
   }
 
-  // Also update frontend TASK.md files
-  const frontendDir = join(taskDir, 'frontend');
-  if (await pathExists(frontendDir)) {
-    const { readdir } = await import('fs-extra');
-    const entries = await readdir(frontendDir, { withFileTypes: true });
-    for (const e of entries) {
-      if (e.isDirectory()) {
-        const ftaskPath = join(frontendDir, e.name, 'TASK.md');
-        if (await pathExists(ftaskPath)) {
-          let content = await readFile(ftaskPath, 'utf-8');
-
-          if (options.status) {
-            const statusMap: Record<string, string> = {
-              pending: '🔲 待开发',
-              in_progress: '🔄 开发中',
-              completed: '✅ 已完成',
-            };
-            const icon = statusMap[options.status] || options.status;
-            content = content.replace(/状态:\s.*/, `状态: ${icon}`);
-          }
-
-          if (options.priority) {
-            content = content.replace(/优先级:\s.*/, `优先级: ${options.priority}`);
-          }
-
-          tx.write(ftaskPath, content);
+  // Qoder 特殊处理
+  if (await pathExists(join(projectRoot, '.qoder'))) {
+    for (const [name, desc, cmd] of ALL_COMMANDS) {
+      const shortName = name.replace('spec-', '');
+      const p = join(qoderDir, shortName + '.md');
+      const content = `${cmd}`;
+      if (await pathExists(p)) {
+        const existing = await readFile(p, 'utf-8');
+        if (existing.trim() !== content.trim()) {
+          await writeFile(p, content);
+          updated++;
+        }
+      } else {
+        await ensureDir(qoderDir);
+        await writeFile(p, content);
+        added++;
+      }
+    }
+    // 清理旧 Qoder 文件
+    if (await pathExists(qoderDir)) {
+      for (const f of await readdir(qoderDir)) {
+        if (LEGACY_NAMES.has(f.replace('.md', ''))) {
+          await require('fs-extra').remove(join(qoderDir, f));
+          cleaned++;
         }
       }
     }
   }
 
-  if (tx.length > 0) {
-    await tx.commit();
-    logger.success(`Updated ${taskId} (${tx.length} files, transaction protected)`);
-  } else {
-    logger.warn('No files found to update');
-  }
+  // ── 2. 更新版本号 ──
+  await ensureDir(join(speccoreDir, 'local'));
+  await writeFile(verFile, JSON.stringify({ version: CURRENT_VERSION, updatedAt: new Date().toISOString() }, null, 2));
+
+  spinner.stop(`升级完成: v${oldVersion} → v${CURRENT_VERSION}`);
+  logger.info('');
+  if (added > 0) logger.info(`  新增: ${added} 个命令文件`);
+  if (updated > 0) logger.info(`  更新: ${updated} 个命令文件`);
+  if (cleaned > 0) logger.info(`  清理: ${cleaned} 个旧文件`);
+  logger.info('');
+  logger.info('配置文件和 INDEX.md 等用户数据保持不变 ✅');
 }
