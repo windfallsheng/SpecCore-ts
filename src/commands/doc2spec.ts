@@ -306,16 +306,10 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     logger.info('📋 下一步:');
     if (options.ai !== false) {
       // ── AI 精炼模式（默认）──
-      logger.info('  🤖 AI 精炼模式已启用');
-      logger.info(`  在 WorkBuddy 中说: AI 精炼 ${outputPath} → ${iterDir} 的 REQUIREMENT.md`);
-      logger.info(`   (或直接说 "doc2spec-ai 精炼 ${outputPath}" 即可）`);
-      logger.info('');
-      logger.info('  📌 AI 将自动完成:');
-      logger.info('     1. 修复合并单元格/嵌套表格');
-      logger.info('     2. 提取接口定义并补全为标准表格');
-      logger.info('     3. 识别数据模型、业务规则、非功能需求');
-      logger.info('     4. 流程图/架构图 → Mermaid');
-      logger.info('     5. 输出质量校验报告');
+      logger.info('  🤖 AI 精炼模式：pandoc 已完成基础转换');
+      logger.info(`  📌 如需 AI 语义深度精炼（修复表格/提取接口/识别规则），`);
+      logger.info(`     在 WorkBuddy 中说: AI 精炼 ${sourceFile} → ${iterDir}/00-需求文档/REQUIREMENT.md`);
+      logger.info(`     （AI 将直接读取原文，不经过 pandoc，保证数据完整）`);
       logger.info('');
       logger.info('  💡 如只需纯 pandoc 转换，下次加 --no-ai');
     } else {
