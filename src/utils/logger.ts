@@ -134,7 +134,9 @@ export class Spinner {
       clearInterval(this.interval);
       this.interval = undefined;
     }
-    process.stdout.write(`\r✅ ${message || this.message}\n`);
+    // 先清空整行再写最终消息，避免中文终端 \r 残留字符
+    process.stdout.write(`\r${' '.repeat(80)}\r`);
+    process.stdout.write(`✅ ${message || this.message}\n`);
   }
 
   fail(message?: string): void {
@@ -142,7 +144,8 @@ export class Spinner {
       clearInterval(this.interval);
       this.interval = undefined;
     }
-    process.stdout.write(`\r❌ ${message || this.message}\n`);
+    process.stdout.write(`\r${' '.repeat(80)}\r`);
+    process.stdout.write(`❌ ${message || this.message}\n`);
   }
 }
 
