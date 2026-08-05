@@ -188,10 +188,6 @@ main{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:40px 32p
 .header-stat{text-align:center;padding:0 20px;border-left:1px solid rgba(0,240,255,.1)}
 .header-stat .num{font-family:'Orbitron',sans-serif;font-size:22px;font-weight:700;color:var(--cyan);text-shadow:0 0 20px rgba(0,240,255,.4)}
 .header-stat .label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
-.phase-indicator{display:flex;align-items:center;gap:8px;padding:8px 20px;border:1px solid rgba(0,240,255,.2);border-radius:20px;background:rgba(0,240,255,.05)}
-.phase-indicator .dot{width:8px;height:8px;border-radius:50%;background:var(--cyan);box-shadow:0 0 12px var(--cyan);animation:pulse 2s ease-in-out infinite}
-@keyframes pulse{0%,100%{box-shadow:0 0 12px var(--cyan)}50%{box-shadow:0 0 24px var(--cyan),0 0 48px rgba(0,240,255,.3)}}
-.phase-indicator span{font-size:12px;color:var(--cyan);letter-spacing:1px}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:28px}
 .stat-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;backdrop-filter:blur(20px);text-align:center;transition:all .3s;position:relative;overflow:hidden}
 .stat-card:hover{border-color:rgba(0,240,255,.25);box-shadow:0 0 30px rgba(0,240,255,.08)}
@@ -431,7 +427,13 @@ function toggleFS(el) {
   document.body.appendChild(tip);
   setTimeout(() => tip.remove(), 2500);
 }
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && fsEl) { fsEl.classList.remove('fs-fullscreen'); document.body.style.overflow = ''; fsEl = null; } });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && fsEl) { fsEl.classList.remove('fs-fullscreen'); document.body.style.overflow = ''; fsEl = null; }
+  if ((e.key === 'f' || e.key === 'F') && !e.target.closest('input,textarea,[contenteditable]')) {
+    const el = document.querySelector('.stat-card:hover, .chart-card:hover, .panel:hover');
+    if (el) toggleFS(el);
+  }
+});
 
 // Export functions
 function exportJSON() {
