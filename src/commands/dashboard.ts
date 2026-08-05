@@ -68,15 +68,6 @@ export async function dashboardCommand(options: DashboardOptions): Promise<void>
       iterStats, projectHealth, activeIterations.length,
       index
     );
-      totalReqs,
-      implemented,
-      inProgress,
-      pending,
-      completionRate,
-      projectLabels,
-      projectReqs,
-      index
-    );
 
     const outputPath = options.output || join(process.cwd(), 'speccore-dashboard.html');
     await writeFile(outputPath, html);
