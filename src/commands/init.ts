@@ -86,6 +86,13 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
       }, null, 2)
     );
 
+    // 写入版本号追踪
+    const { version } = require('../../package.json');
+    await writeFile(
+      join(speccoreDir, 'local', 'version.json'),
+      JSON.stringify({ version, createdAt: new Date().toISOString() }, null, 2)
+    );
+
     // Create .gitignore entry
     await updateGitignore(projectRoot);
 
