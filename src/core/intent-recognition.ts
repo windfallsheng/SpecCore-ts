@@ -365,9 +365,9 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     id: 'global-status',
     intent: 'global_status',
     priority: 65,
-    triggers: ['全量状态', '全局状态', '全量层', '查看全量'],
-    patterns: ['全量状态', '全局状态', '查看全量层'],
-    description: '查看全量层状态 — 所有项目、需求、架构总览',
+    triggers: ['全量状态', '全局状态', '全量层', '查看全量', '全局看板'],
+    patterns: ['全量状态', '全局状态', '查看全量层', '全局看板'],
+    description: '查看全量仪表盘 — 所有项目、需求、架构总览（dashboard --scope global）',
   },
   // 历史
   {
