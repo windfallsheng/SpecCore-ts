@@ -10,6 +10,14 @@
 - **层级化结构**: 命令文件移至 `.qoder/commands/spec/`，输入 `/spec` 即可浏览 10 条子命令
 - **格式适配**: 使用 Qoder 原生 Markdown 格式（无需 YAML frontmatter），旧 `.qcoder/` 自动清理
 
+### 🐛 ask 命令修复
+- **注册 `iteration create` 子命令**: 之前只有 import 没有 `.command()` 注册，导致 `speccore ask "创建期次"` 选择后执行失败
+- **注册 `task new` 子命令**: 同上，补全 `taskCmd.command('new')` 注册
+- **输入校验**: 用户输入 `3.1` 等无效序号时给出友好提示（而非静默执行错误命令）
+- **显示优化**: 子步骤编号改用 `▸` 前缀，避免和选项序号混淆
+- **错误提示增强**: 命令执行失败时显示具体错误信息和直接运行的提示
+- **命令总数更新**: 51 → 53（+ `iteration create` + `task new`）
+
 ---
 
 ## v5.25.2 (2026-08-04)

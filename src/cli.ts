@@ -154,7 +154,7 @@ program
 program
   .command('init')
   .alias('in')
-  .description('初始化 SpecCore（17命令/44全量，--interactive 引导式）')
+  .description('初始化 SpecCore（17命令/53全量，--interactive 引导式）')
   .option('--mode <mode>', 'Initialization mode: fresh or migration', 'fresh')
   .option('--full', 'Full mode: all 45 commands (default: simple)')
   .option('--force', 'Force overwrite existing configuration')
@@ -172,6 +172,14 @@ const iterationCmd = program
   .description('Iteration management commands');
 
 iterationCmd
+  .command('create')
+  .alias('c')
+  .description('创建新期次')
+  .option('-n, --name <name>', '期次名称（必填）')
+  .option('--from <phase>', '从指定阶段开始')
+  .option('--to <phase>', '到指定阶段结束')
+  .option('--owner <name>', '负责人')
+  .action(iterationCreateCommand);
 
 iterationCmd
   .command('split')
@@ -198,6 +206,21 @@ const taskCmd = program
   .description('Task management commands');
 
 taskCmd
+  .command('new')
+  .alias('n')
+  .description('创建新任务')
+  .option('-n, --name <name>', '任务名称（必填）')
+  .option('-t, --type <type>', '任务类型: feature|bugfix|research', 'feature')
+  .option('-d, --desc <desc>', '任务描述')
+  .option('--platforms <platforms>', '前端平台: web,h5,miniapp')
+  .option('--backend-only', '仅后端')
+  .option('--frontend-only', '仅前端')
+  .option('-i, --iteration <iteration>', '目标期次')
+  .option('--batch <tasks>', '批量创建')
+  .option('--batch-file <path>', '从文件批量导入')
+  .option('--interactive', '交互式创建')
+  .option('--schedule <mode>', '调度模式: night|now', 'now')
+  .action(taskNewCommand);
 
 // 完整需求交付
 program
@@ -547,28 +570,6 @@ program
   .action(renameCommand);
 
 // ================================================================
-// 🆕 v4.0.0 新增命令
-// ================================================================
-program
-  .description('快捷创建 Task（同 task new）')
-  .option('-n, --name <name>', 'Task name (required)')
-  .option('-t, --type <type>', 'Task type', 'feature')
-  .option('-d, --desc <desc>', 'Task description')
-  .option('--platforms <platforms>', 'Frontend platforms: web,h5,miniapp')
-  .option('--backend-only', 'Create backend only')
-  .option('--frontend-only', 'Create frontend only')
-  .option('-i, --iteration <iteration>', 'Target iteration')
-  .option('--batch <tasks>', '批量：换行分隔的多个任务描述')
-  .option('--batch-file <path>', '从 Excel/CSV 文件批量导入')
-  .option('--interactive', 'Preview → edit → confirm → create')
-  .option('--schedule <mode>', '调度模式：night / now', 'now')
-  .action(taskNewCommand);
-
-program
-
-program
-
-// ================================================================
 // 快捷别名（顶层别名）
 // ================================================================
 // 为常用命令提供顶层快捷访问
@@ -822,7 +823,7 @@ if (process.argv.length <= 2) {
 
   logger.info('');
   logger.info('┌──────────────────────────────────────────┐');
-  logger.info('│    SpecCore · v' + pkg.version + ' · 68 commands              │');
+  logger.info('│    SpecCore · v' + pkg.version + ' · 53 commands              │');
   logger.info('├──────────────────────────────────────────┤');
   if (iteration) logger.info('│  期次: ' + iteration.padEnd(33) + '│');
   logger.info('│  状态: ' + icons[phase] + ' ' + (names[phase] || phase).padEnd(33) + '│');
