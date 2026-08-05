@@ -1,6 +1,6 @@
 # SpecCore — Code by Spec, Not by Vibe
 
-🖥️ 规范驱动开发 CLI · 22 命令（55 全量）· 人机协同闭环 · 三层 AI 架构
+🖥️ 规范驱动开发 CLI · 23 命令（55 全量）· 人机协同闭环 · 三层 AI 架构
 
 ```bash
 speccore ask "我想做一个登录功能，计划晚8点分批执行"
