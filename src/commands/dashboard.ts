@@ -101,77 +101,111 @@ function generateDashboardHtml(
   }
 
   return `<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="cyber">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SpecCore 项目仪表盘</title>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SpecCore — 全量仪表盘</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', sans-serif; background: #f0f2f5; padding: 24px; color: #1a1a2e; }
-.container { max-width: 1400px; margin: 0 auto; }
-.header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: white; padding: 28px 32px; border-radius: 16px; margin-bottom: 24px; }
-.header h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
-.header .meta { opacity: 0.6; margin-top: 6px; font-size: 14px; }
-.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
-.stat-card { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); text-align: center; }
-.stat-card .label { font-size: 13px; color: #64748b; margin-bottom: 8px; font-weight: 500; }
-.stat-card .value { font-size: 36px; font-weight: 800; letter-spacing: -1px; }
-.stat-card .sub { font-size: 13px; color: #94a3b8; margin-top: 4px; }
-.stat-card .value.green { color: #22c55e; }
-.stat-card .value.blue { color: #3b82f6; }
-.stat-card .value.amber { color: #f59e0b; }
-.stat-card .value.gray { color: #64748b; }
-.charts { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
-@media (max-width: 768px) { .charts { grid-template-columns: 1fr; } .stats { grid-template-columns: 1fr 1fr; } }
-.chart-card { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
-.chart-card h3 { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: #334155; }
-.chart-card canvas { max-height: 300px; }
-.full { grid-column: 1 / -1; }
-.table-card { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); margin-bottom: 24px; overflow-x: auto; }
-.table-card h3 { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: #334155; }
-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-thead tr { border-bottom: 2px solid #e2e8f0; }
-th { text-align: left; padding: 10px 8px; color: #64748b; font-weight: 600; font-size: 13px; }
-td { padding: 10px 8px; border-bottom: 1px solid #f1f5f9; }
-.badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 500; }
-.badge-backend { background: #dbeafe; color: #1e40af; }
-.badge-web { background: #dcfce7; color: #166534; }
-.badge-h5 { background: #fef3c7; color: #92400e; }
-.badge-miniapp { background: #f3e8ff; color: #6b21a8; }
-.badge-done { background: #dcfce7; color: #166534; }
-.badge-progress { background: #dbeafe; color: #1e40af; }
-.badge-pending { background: #f1f5f9; color: #64748b; }
-.footer { text-align: center; color: #94a3b8; font-size: 12px; margin-top: 32px; padding: 16px; }
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;600;700&display=swap');
+[data-theme="cyber"]{--cyan:#00f0ff;--blue:#3b82f6;--green:#00ff88;--purple:#a78bfa;--orange:#f59e0b;--bg:#060b14;--card:rgba(8,16,32,.85);--border:rgba(0,240,255,.12);--text:#c4d5e7;--muted:#4a5568;--surface:rgba(17,25,40,.7);--hover:rgba(0,240,255,.02)}
+[data-theme="light"]{--cyan:#2563eb;--blue:#3b82f6;--green:#059669;--purple:#7c3aed;--orange:#d97706;--bg:#f8fafc;--card:rgba(255,255,255,.95);--border:rgba(0,0,0,.08);--text:#1e293b;--muted:#94a3b8;--surface:rgba(255,255,255,.95);--hover:rgba(37,99,235,.02)}
+[data-theme="github"]{--cyan:#2da44e;--blue:#0969da;--green:#1a7f37;--purple:#8250df;--orange:#cf222e;--bg:#0d1117;--card:#161b22;--border:#30363d;--text:#c9d1d9;--muted:#8b949e;--surface:#161b22;--hover:rgba(45,164,78,.05)}
+[data-theme="synth"]{--cyan:#f92aad;--blue:#ff7edb;--green:#36f9f6;--purple:#b381f9;--orange:#ffb86c;--bg:#1a0024;--card:rgba(30,0,50,.9);--border:rgba(249,42,173,.2);--text:#f8f8f2;--muted:#6b3e7a;--surface:rgba(30,0,50,.9);--hover:rgba(249,42,173,.05)}
+[data-theme="ocean"]{--cyan:#0ea5e9;--blue:#0284c7;--green:#14b8a6;--purple:#6366f1;--orange:#f97316;--bg:#0b1929;--card:rgba(13,31,56,.9);--border:rgba(14,165,233,.15);--text:#bae6fd;--muted:#5b7fa5;--surface:rgba(13,31,56,.9);--hover:rgba(14,165,233,.05)}
+[data-theme="sakura"]{--cyan:#f472b6;--blue:#c084fc;--green:#a3e635;--purple:#e879f9;--orange:#fb923c;--bg:#1a0a14;--card:rgba(30,10,20,.9);--border:rgba(244,114,182,.2);--text:#fce7f3;--muted:#9d4a6d;--surface:rgba(30,10,20,.9);--hover:rgba(244,114,182,.05)}
+[data-theme="forest"]{--cyan:#059669;--blue:#0284c7;--green:#22c55e;--purple:#6366f1;--orange:#ca8a04;--bg:#0a140a;--card:rgba(12,24,12,.9);--border:rgba(5,150,105,.15);--text:#d1fae5;--muted:#3b6b4e;--surface:rgba(12,24,12,.9);--hover:rgba(5,150,105,.05)}
+[data-theme="amber"]{--cyan:#ffb000;--blue:#ff8c00;--green:#32cd32;--purple:#da70d6;--orange:#ff6347;--bg:#0c0c0c;--card:#1a1a1a;--border:#333;--text:#ffb000;--muted:#666;--surface:#1a1a1a;--hover:rgba(255,176,0,.05)}
+[data-theme="mono"]{--cyan:#64748b;--blue:#475569;--green:#334155;--purple:#1e293b;--orange:#94a3b8;--bg:#0f172a;--card:#1e293b;--border:#334155;--text:#e2e8f0;--muted:#64748b;--surface:#1e293b;--hover:rgba(100,116,139,.05)}
+*,*::after,*::before{box-sizing:border-box;margin:0;padding:0}
+.theme-sw{position:fixed;top:16px;right:16px;z-index:100;display:flex;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px;backdrop-filter:blur(10px)}.theme-sw button{width:32px;height:32px;border-radius:16px;border:none;cursor:pointer;transition:all .2s;font-size:14px;display:flex;align-items:center;justify-content:center;background:transparent}.theme-sw button:hover{transform:scale(1.1)}.theme-sw button.active{box-shadow:0 0 0 2px var(--cyan)}
+body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+.scanlines{position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,240,255,.015) 2px,rgba(0,240,255,.015) 4px);pointer-events:none;z-index:999}
+.stars{position:fixed;inset:0;background:radial-gradient(1px 1px at 10% 20%,rgba(255,255,255,.4),transparent),radial-gradient(1px 1px at 25% 65%,rgba(255,255,255,.3),transparent),radial-gradient(1.5px 1.5px at 50% 30%,rgba(0,240,255,.5),transparent),radial-gradient(1px 1px at 70% 55%,rgba(255,255,255,.35),transparent),radial-gradient(1px 1px at 85% 15%,rgba(168,85,247,.4),transparent),radial-gradient(1.5px 1.5px at 15% 80%,rgba(0,240,255,.45),transparent),radial-gradient(1px 1px at 60% 85%,rgba(255,255,255,.3),transparent),radial-gradient(1px 1px at 90% 75%,rgba(0,255,136,.4),transparent);pointer-events:none;z-index:0}
+.grid-pattern{position:fixed;inset:0;background-image:linear-gradient(rgba(0,240,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,240,255,.03) 1px,transparent 1px);background-size:60px 60px;pointer-events:none;z-index:0}
+main{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:40px 32px}
+.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:36px;padding:24px 32px;background:var(--card);border:1px solid var(--border);border-radius:12px;backdrop-filter:blur(20px);position:relative;overflow:hidden}
+.header::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scan 3s linear infinite}
+@keyframes scan{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+.header h1{font-family:'Orbitron',sans-serif;font-size:26px;font-weight:900;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:2px;text-shadow:0 0 40px rgba(0,240,255,.3)}
+.header-meta{color:var(--muted);font-size:11px;margin-top:6px;letter-spacing:1px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:28px}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;backdrop-filter:blur(20px);text-align:center;transition:all .3s;position:relative;overflow:hidden}
+.stat-card:hover{border-color:var(--cyan);box-shadow:0 0 30px rgba(0,240,255,.05)}
+.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);opacity:0;transition:opacity .3s}
+.stat-card:hover::before{opacity:1}
+.stat-card .label{font-size:12px;color:var(--muted);margin-bottom:12px;font-weight:500;text-transform:uppercase;letter-spacing:1px}
+.stat-card .value{font-family:'Orbitron',sans-serif;font-size:38px;font-weight:900;letter-spacing:-1px;text-shadow:0 0 20px rgba(0,240,255,.3)}
+.stat-card .value.c-cyan{color:var(--cyan)}
+.stat-card .value.c-green{color:var(--green)}
+.stat-card .value.c-orange{color:var(--orange)}
+.stat-card .value.c-muted{color:var(--muted)}
+.stat-card .sub{font-size:11px;color:var(--muted);margin-top:6px}
+.charts{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:28px}
+@media(max-width:768px){.charts{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}}
+.chart-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;backdrop-filter:blur(20px)}
+.chart-card h3{font-size:14px;font-weight:600;margin-bottom:16px;color:var(--text);letter-spacing:.5px;text-transform:uppercase}
+.chart-card canvas{max-height:300px}
+.table-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;backdrop-filter:blur(20px);overflow-x:auto;margin-bottom:28px}
+.table-card h3{font-size:14px;font-weight:600;margin-bottom:16px;color:var(--text);letter-spacing:.5px;text-transform:uppercase}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead tr{border-bottom:1px solid var(--border)}
+th{text-align:left;padding:12px 10px;color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+td{padding:12px 10px;border-bottom:1px solid rgba(255,255,255,.03);color:var(--text);transition:all .2s}
+tr:hover td{background:var(--hover)}
+.badge{display:inline-block;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:500;letter-spacing:.5px}
+.badge-backend{background:rgba(59,130,246,.15);color:var(--blue)}
+.badge-web{background:rgba(0,255,136,.1);color:var(--green)}
+.badge-h5{background:rgba(245,158,11,.1);color:var(--orange)}
+.badge-miniapp{background:rgba(168,85,247,.15);color:var(--purple)}
+.badge-done{background:rgba(0,255,136,.1);color:var(--green)}
+.badge-progress{background:rgba(59,130,246,.1);color:var(--blue)}
+.badge-pending{background:rgba(255,255,255,.03);color:var(--muted)}
+.footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;padding:16px;letter-spacing:1px}
 </style>
 </head>
 <body>
-<div class="container">
+<div class="scanlines"></div>
+<div class="stars"></div>
+<div class="grid-pattern"></div>
+<div class="theme-sw" id="themeSw">
+  <button title="Cyber" data-theme="cyber" class="active">⚡</button>
+  <button title="Light" data-theme="light">💡</button>
+  <button title="GitHub" data-theme="github">🐙</button>
+  <button title="Synth" data-theme="synth">🎹</button>
+  <button title="Ocean" data-theme="ocean">🌊</button>
+  <button title="Sakura" data-theme="sakura">🌸</button>
+  <button title="Forest" data-theme="forest">🌿</button>
+  <button title="Amber" data-theme="amber">🔥</button>
+  <button title="Mono" data-theme="mono">⬛</button>
+</div>
+<main>
 <div class="header">
-  <h1>📊 SpecCore 项目仪表盘</h1>
-  <div class="meta">生成时间: ${now} | 全量层版本: ${index.version} | 项目数: ${projectCount}</div>
+  <div>
+    <h1>📊 SpecCore 全量仪表盘</h1>
+    <div class="header-meta">生成: ${now} | 项目数: ${projectCount} | 需求总数: ${totalReqs}</div>
+  </div>
 </div>
 
 <div class="stats">
   <div class="stat-card">
     <div class="label">📋 总需求数</div>
-    <div class="value blue">${totalReqs}</div>
+    <div class="value c-cyan">${totalReqs}</div>
     <div class="sub">${projectCount} 个项目</div>
   </div>
   <div class="stat-card">
     <div class="label">✅ 已完成</div>
-    <div class="value green">${implemented}</div>
+    <div class="value c-green">${implemented}</div>
     <div class="sub">完成率 ${completionRate}%</div>
   </div>
   <div class="stat-card">
     <div class="label">🔄 进行中</div>
-    <div class="value amber">${inProgress}</div>
+    <div class="value c-orange">${inProgress}</div>
     <div class="sub">${Math.round((inProgress/(totalReqs||1))*100)}%</div>
   </div>
   <div class="stat-card">
     <div class="label">🔲 待开发</div>
-    <div class="value gray">${pending}</div>
+    <div class="value c-muted">${pending}</div>
     <div class="sub">${Math.round((pending/(totalReqs||1))*100)}%</div>
   </div>
 </div>
@@ -204,40 +238,85 @@ td { padding: 10px 8px; border-bottom: 1px solid #f1f5f9; }
 </div>
 
 <div class="footer">Powered by SpecCore | Generated ${now}</div>
-</div>
+</main>
 
 <script>
-new Chart(document.getElementById('statusChart'), {
+// Theme switcher
+(function(){
+  const sw = document.getElementById('themeSw');
+  const saved = localStorage.getItem('speccore-theme') || 'cyber';
+  document.documentElement.setAttribute('data-theme', saved);
+  sw.querySelectorAll('button').forEach(b => {
+    if(b.dataset.theme === saved) b.classList.add('active');
+    b.addEventListener('click', () => {
+      document.documentElement.setAttribute('data-theme', b.dataset.theme);
+      localStorage.setItem('speccore-theme', b.dataset.theme);
+      sw.querySelectorAll('button').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      // Update chart colors
+      updateChartColors(b.dataset.theme);
+    });
+  });
+})();
+
+// Charts
+const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+const gridColor = isLight ? 'rgba(0,0,0,.06)' : 'rgba(255,255,255,.06)';
+const textColor = isLight ? '#64748b' : '#4a5568';
+
+const statusChart = new Chart(document.getElementById('statusChart'), {
   type: 'doughnut',
   data: {
-    labels: ['已实现', '进行中', '待开发'],
+    labels: ['已完成', '进行中', '待开发'],
     datasets: [{
       data: [${implemented}, ${inProgress}, ${pending}],
-      backgroundColor: ['#22c55e', '#3b82f6', '#e2e8f0'],
+      backgroundColor: ['#00ff88', '#00f0ff', 'rgba(255,255,255,.05)'],
       borderWidth: 2,
-      borderColor: '#fff'
+      borderColor: 'var(--bg)'
     }]
   },
-  options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+  options: {
+    responsive: true,
+    cutout: '60%',
+    plugins: {
+      legend: { position: 'bottom', labels: { color: textColor, font: { family: 'JetBrains Mono', size: 11 }, padding: 16 } }
+    }
+  }
 });
 
-new Chart(document.getElementById('projectChart'), {
+const projectChart = new Chart(document.getElementById('projectChart'), {
   type: 'bar',
   data: {
     labels: ${JSON.stringify(projectLabels)},
     datasets: [{
       label: '需求数',
       data: ${JSON.stringify(projectReqs)},
-      backgroundColor: '#3b82f6',
-      borderRadius: 8
+      backgroundColor: '#00f0ff',
+      borderRadius: 6
     }]
   },
   options: {
     responsive: true,
     plugins: { legend: { display: false } },
-    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+    scales: {
+      x: { ticks: { color: textColor, font: { size: 10 } }, grid: { color: gridColor } },
+      y: { beginAtZero: true, ticks: { stepSize: 1, color: textColor, font: { size: 10 } }, grid: { color: gridColor } }
+    }
   }
 });
+
+function updateChartColors(theme) {
+  const light = theme === 'light';
+  const tc = light ? '#64748b' : '#4a5568';
+  const gc = light ? 'rgba(0,0,0,.06)' : 'rgba(255,255,255,.06)';
+  statusChart.options.plugins.legend.labels.color = tc;
+  projectChart.options.scales.x.ticks.color = tc;
+  projectChart.options.scales.y.ticks.color = tc;
+  projectChart.options.scales.x.grid.color = gc;
+  projectChart.options.scales.y.grid.color = gc;
+  statusChart.update();
+  projectChart.update();
+}
 </script>
 </body>
 </html>`;
