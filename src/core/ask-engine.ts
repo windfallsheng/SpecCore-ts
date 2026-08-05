@@ -353,7 +353,23 @@ function buildPipelineDetail(steps: PipelineStep[], input: string): string {
 // ============================================================
 
 export async function askEngine(input: string): Promise<AskResult> {
-  // ── 第〇层: 宿主 AI (WorkBuddy/TRAE/Qoder) ──
+  // ── 第一层: 自有 LLM (OpenAI/Ollama) ──
+  try {
+    const llmResult = await askWithLlm(input);
+    if (llmResult && llmResult.commands.length > 0) {
+      logger.info(`🧠 自有 LLM: ${modeLabel(llmResult.mode as AskMode)}`);
+      
+      if (!llmResult.detail || llmResult.detail.length < 20) {
+        const enriched = enrichWithRules(llmResult, input);
+        return enriched;
+      }
+      return llmResult;
+    }
+  } catch (e: any) {
+    logger.warn(`自有 LLM 不可用: ${e.message}`);
+  }
+
+  // ── 第二层: 宿主 AI (WorkBuddy/TRAE/Qoder) ──
   try {
     const hostResult = await tryHostAi('ask', input);
     if (hostResult) {
@@ -362,24 +378,7 @@ export async function askEngine(input: string): Promise<AskResult> {
     }
   } catch (e: any) { /* 宿主 AI 不可用，继续 */ }
 
-  // ── 第一层: LLM 智能解析 ──
-  try {
-    const llmResult = await askWithLlm(input);
-    if (llmResult && llmResult.commands.length > 0) {
-      logger.info(`🧠 AI 识别: ${modeLabel(llmResult.mode as AskMode)}`);
-      
-      // LLM 结果补充 detail（如果 LLM 没有返回详细内容，用规则引擎补充）
-      if (!llmResult.detail || llmResult.detail.length < 20) {
-        const enriched = enrichWithRules(llmResult, input);
-        return enriched;
-      }
-      return llmResult;
-    }
-  } catch (e: any) {
-    logger.warn(`LLM 增强失败: ${e.message}，降级到规则引擎`);
-  }
-
-  // ── 第二层: 规则引擎兜底 ──
+  // ── 第三层: 规则引擎兜底 ──
   const mode = classifyMode(input);
   logger.info(`📐 规则识别: ${modeLabel(mode)}`);
 
