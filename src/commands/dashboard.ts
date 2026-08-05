@@ -39,9 +39,35 @@ export async function dashboardCommand(options: DashboardOptions): Promise<void>
     const projectLabels = index.projects.map((p) => p.name);
     const projectReqs = index.projects.map((p) => p.reqCount);
 
+    // ── 新增：迭代活跃度 ──
+    const activeIterations = index.iterations.filter(i => i.status === 'active' || i.status === '进行中');
+    const iterationLabels = index.iterations.map(i => i.name).slice(0, 8);
+    const iterationReqCounts = index.iterations.map(i => i.reqs.length).slice(0, 8);
+
+    // ── 新增：期次完成统计 ──
+    const iterStats = index.iterations.map(it => {
+      const iterReqs = index.reqs.filter(r => it.reqs.includes(r.id));
+      const done = iterReqs.filter(r => r.status.includes('✅') || r.status.includes('已实现')).length;
+      return { name: it.name, total: it.reqs.length, done, pct: it.reqs.length > 0 ? Math.round(done / it.reqs.length * 100) : 0 };
+    });
+
+    // ── 新增：健康度评分 ──
+    const projectHealth = index.projects.map(p => ({
+      name: p.name,
+      reqCount: p.reqCount,
+      doneCount: index.reqs.filter(r => r.project === p.name && (r.status.includes('✅') || r.status.includes('已实现'))).length,
+    })).map(p => ({ ...p, pct: p.reqCount > 0 ? Math.round(p.doneCount / p.reqCount * 100) : 0 }))
+      .sort((a, b) => b.pct - a.pct);
+
     // 生成 HTML
     const html = generateDashboardHtml(
       index.projects.length,
+      totalReqs, implemented, inProgress, pending, completionRate,
+      projectLabels, projectReqs,
+      iterationLabels, iterationReqCounts,
+      iterStats, projectHealth, activeIterations.length,
+      index
+    );
       totalReqs,
       implemented,
       inProgress,
@@ -83,6 +109,11 @@ export function generateDashboardHtml(
   completionRate: number,
   projectLabels: string[],
   projectReqs: number[],
+  iterationLabels: string[],
+  iterationReqCounts: number[],
+  iterStats: { name: string; total: number; done: number; pct: number }[],
+  projectHealth: { name: string; reqCount: number; doneCount: number; pct: number }[],
+  activeIterCount: number,
   index: Awaited<ReturnType<typeof readGlobalIndex>>
 ): string {
   const now = new Date().toISOString().split('T')[0];
@@ -302,7 +333,73 @@ tr:hover td{background:var(--hover)}
   </div>
 </div>
 
-<div class="table-card">
+<div class="panel">
+  <div class="panel-title">PROJECT HEALTH</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px">
+    ${projectHealth.map(p => `
+    <div style="background:var(--surface);border-radius:8px;padding:14px 16px;display:flex;align-items:center;gap:14px">
+      <div style="font-family:Orbitron;font-size:24px;font-weight:900;color:${p.pct >= 80 ? 'var(--green)' : p.pct >= 40 ? 'var(--orange)' : 'var(--muted)'};min-width:50px">${p.pct}%</div>
+      <div style="flex:1">
+        <div style="font-weight:600;margin-bottom:4px">${p.name}</div>
+        <div style="height:4px;background:rgba(255,255,255,.04);border-radius:2px;overflow:hidden">
+          <div style="width:${p.pct}%;height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:2px"></div>
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px">${p.doneCount}/${p.reqCount} 完成</div>
+      </div>
+    </div>
+    `).join('')}
+  </div>
+</div>
+
+<div class="charts">
+  <div class="chart-card">
+    <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
+    <h3>⚡ Created vs Resolved</h3>
+    <canvas id="resolvedChart"></canvas>
+  </div>
+  <div class="chart-card">
+    <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
+    <h3>📅 期次进度</h3>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px;max-height:280px;overflow-y:auto">
+      ${iterStats.map(it => `
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-family:Orbitron;font-size:11px;color:var(--cyan);min-width:50px">${it.name}</span>
+        <div style="flex:1;height:6px;background:rgba(255,255,255,.04);border-radius:3px;overflow:hidden">
+          <div style="width:${it.pct}%;height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:3px;transition:width 1s"></div>
+        </div>
+        <span style="font-size:10px;color:var(--muted);min-width:55px;text-align:right">${it.done}/${it.total}</span>
+      </div>
+      `).join('')}
+      ${iterStats.length === 0 ? '<div style="color:var(--muted);text-align:center;padding:20px">暂无期次数据</div>' : ''}
+    </div>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat-card">
+    <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
+    <div class="label">🏥 项目健康度</div>
+    <div class="value c-cyan">${projectHealth.filter(p => p.pct >= 80).length}/${projectHealth.length}</div>
+    <div class="sub">健康项目 / 全部</div>
+    <div class="data-stream"><span>HEALTH · ${projectHealth.filter(p=>p.pct>=80).length} GREEN · ${projectHealth.filter(p=>p.pct<40).length} AT RISK</span></div>
+  </div>
+  <div class="stat-card">
+    <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
+    <div class="label">📅 活跃期次</div>
+    <div class="value c-green">${activeIterCount}</div>
+    <div class="sub">共 ${index.iterations.length} 个期次</div>
+    <div class="data-stream"><span>ITERATIONS · ${activeIterCount} ACTIVE · ${index.iterations.length} TOTAL</span></div>
+  </div>
+  <div class="stat-card">
+    <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
+    <div class="label">📈 交付速率</div>
+    <div class="value c-orange">${completionRate}%</div>
+    <div class="sub">已完成 / 总需求</div>
+    <div class="data-stream"><span>VELOCITY · ${implemented} DONE · ${totalReqs} TOTAL · ${completionRate}%</span></div>
+  </div>
+</div>
+
+<div class="panel">
   <h3>📋 项目列表</h3>
   <table>
     <thead><tr><th>项目名称</th><th>类型</th><th>需求数</th><th>最后导入</th></tr></thead>
@@ -455,6 +552,26 @@ const projectChart = new Chart(document.getElementById('projectChart'), {
     scales: {
       x: { ticks: { color: textColor, font: { size: 10 } }, grid: { color: gridColor } },
       y: { beginAtZero: true, ticks: { stepSize: 1, color: textColor, font: { size: 10 } }, grid: { color: gridColor } }
+    }
+  }
+});
+
+const resolvedChart = new Chart(document.getElementById('resolvedChart'), {
+  type: 'bar',
+  data: {
+    labels: ['已实现', '进行中', '待开发'],
+    datasets: [{
+      data: [${implemented}, ${inProgress}, ${pending}],
+      backgroundColor: ['rgba(0,255,136,.6)', 'rgba(0,240,255,.6)', 'rgba(255,255,255,.06)'],
+      borderRadius: 4
+    }]
+  },
+  options: {
+    responsive: true, indexAxis: 'y',
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { color: textColor, font: { size: 10 } }, grid: { color: gridColor } },
+      y: { ticks: { color: textColor, font: { size: 10 } }, grid: { display: false } }
     }
   }
 });
