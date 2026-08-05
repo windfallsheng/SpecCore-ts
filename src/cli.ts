@@ -26,6 +26,7 @@ import { devCommand } from './commands/dev';
 import { welcomeCommand } from './commands/welcome';
 import { statusPanelCommand } from './commands/status-panel';
 import { doc2specCommand } from './commands/doc2spec';
+import { spec2docCommand } from './commands/spec2doc';
 // 全量层命令
 import { iterationFromGlobalCommand } from './commands/iteration-from-global';
 import { syncGlobalCommand } from './commands/sync-global';
@@ -100,7 +101,7 @@ const MODE = readMode();
 
 /** 简洁模式下在 help 中显示的命令 */
 const SIMPLE_COMMANDS = new Set([
-  'ask', 'init', 'doc2spec', 'analyze', 'split', 'execute',
+  'ask', 'init', 'doc2spec', 'spec2doc', 'analyze', 'split', 'execute',
   'pr', 'done', 'status-panel', 'dev',
   'iteration', 'task', 'plan', 'ops', 'change', 'validate', 'rename',
   ]);
@@ -495,6 +496,19 @@ program
   .option('--ai', '双路验证模式（默认）：pandoc 快提 + 提示 AI skill 交叉验证')
   .option('--no-ai', '纯 pandoc 机械转换（快，简单文档可用）')
   .action(doc2specCommand);
+
+program
+  .command('spec2doc')
+  .alias('s2d')
+  .description('SpecCore Markdown → 文档导出（Word/PDF/HTML/PPTX）')
+  .option('-i, --iteration <name>', '目标期次（必填）')
+  .option('-t, --task <task>', '导出指定任务文档')
+  .option('--format <format>', '输出格式: docx|pdf|html|pptx', 'docx')
+  .option('-o, --output <path>', '输出文件路径')
+  .option('--all', '导出期次全部文档（合并）')
+  .option('--ai', '双路验证模式（默认）：pandoc 导出 + 提示 AI 优化排版')
+  .option('--no-ai', '纯 pandoc 导出（快，简单文档可用）')
+  .action(spec2docCommand);
 
 // ================================================================
 // 📦 模式保存
