@@ -2,6 +2,16 @@
 
 ---
 
+## v5.25.3 (2026-08-05)
+
+### 🐛 Qcoder 集成修复
+- **目录名修正**: `.qcoder/` → `.qoder/`（匹配 Qoder 官方规范）
+- **补齐 `commands/` 子目录**: Qoder 项目级指令路径应为 `.qoder/commands/`
+- **层级化结构**: 命令文件移至 `.qoder/commands/spec/`，输入 `/spec` 即可浏览 10 条子命令
+- **格式适配**: 使用 Qoder 原生 Markdown 格式（无需 YAML frontmatter），旧 `.qcoder/` 自动清理
+
+---
+
 ## v5.25.2 (2026-08-04)
 
 ### 🚀 AI 上下文增强

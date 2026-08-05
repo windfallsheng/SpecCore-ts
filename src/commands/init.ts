@@ -892,13 +892,23 @@ async function createToolIntegrations(projectRoot: string): Promise<void> {
       await writeFile(join(toolDir, name + '.md'), content);
     }
   }
-  // QCoder uses root-level dir (not commands/ subdir)
-  const qcoderDir = join(projectRoot, '.qcoder');
-  await ensureDir(qcoderDir);
+  // QCoder: 项目级指令路径 = .qoder/commands/，支持子目录分类
+  const qoderCommandsDir = join(projectRoot, '.qoder', 'commands', 'spec');
+  await ensureDir(qoderCommandsDir);
   for (const [name, desc, cmd] of commands) {
-    const content = '---\nname: ' + name + '\ndescription: ' + desc + '\n---\n' + cmd;
-    await writeFile(join(qcoderDir, name + '.md'), content);
+    // 去掉 spec- 前缀作为文件名，放在 spec/ 子目录下 → 用户输入 /spec 可浏览子命令
+    const shortName = name.replace(/^spec-/, '');
+    const content = desc + '\n\n执行命令: `' + cmd + '`';
+    await writeFile(join(qoderCommandsDir, shortName + '.md'), content);
   }
+  
+  // 清理旧的不规范目录 (.qcoder/)
+  const legacyQcoderDir = join(projectRoot, '.qcoder');
+  try {
+    if (await pathExists(legacyQcoderDir)) {
+      await require('fs-extra').remove(legacyQcoderDir);
+    }
+  } catch { /* ignore */ }
   
   logger.info('   🤖 已适配: Claude / CodeBuddy / Cursor / Trae / WindSurf / QCoder');
 }
