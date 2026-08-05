@@ -49,18 +49,17 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     examples: ['speccore init', 'speccore init --full'],
   },
   'status-panel': {
-    desc: '项目状态看板：仪表盘 + 导出',
+    desc: '项目状态看板 → 已合并到 dashboard',
     params: [
-      { flag: '--export <format>', meaning: '导出格式：json | md | html' },
-      { flag: '--assignee <name>', meaning: '只看指定人员的统计' },
-      { flag: '--platform <p>', meaning: '只看指定平台：backend | frontend | web | h5 | miniapp' },
-      { flag: '--type <type>', meaning: '只看指定类型：feature | bugfix | research' },
+      { flag: '--scope global', meaning: '全量视图（所有项目+期次）' },
+      { flag: '--scope iteration', meaning: '当前期次视图' },
+      { flag: '--export <path>', meaning: '导出 HTML 文件' },
     ],
     examples: [
-      'speccore status-panel',
-      'speccore status-panel --export=html',
-      'speccore status-panel --assignee=张三 --export=html',
-      'speccore status-panel --platform=backend',
+      'speccore dashboard',
+      'speccore dashboard --scope global',
+      'speccore dashboard --scope global --export=html',
+      'speccore dashboard --export=demo.html',
     ],
   },
   'iteration create': {
