@@ -62,7 +62,7 @@ export async function updateCommand(options: { force?: boolean }): Promise<void>
     return;
   }
 
-  spinner.text = `从 v${oldVersion} 升级到 v${CURRENT_VERSION}...`;
+  logger.info(`  从 v${oldVersion} 升级到 v${CURRENT_VERSION}...`);
 
   let added = 0, updated = 0, cleaned = 0;
 
