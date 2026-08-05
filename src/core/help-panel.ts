@@ -33,6 +33,7 @@ export const HELP_PANEL = `
 │  speccore             自适应面板（检测阶段 → 提示下一步）          │
 │  speccore ask "..."   自然语言意图识别                          │
 │  speccore dev         智能级联：自动检测并执行下一步               │
-│  speccore status-panel  可视化看板                              │
+│  speccore status-panel  可视化看板（单项目）                     │
+│  speccore dashboard   全量仪表盘（跨项目，Chart.js）              │
 └──────────────────────────────────────────────────────────────┘
 `;
