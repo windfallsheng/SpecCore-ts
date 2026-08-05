@@ -492,7 +492,7 @@ program
   .option('--iter <name>', '目标期次（必填）')
   .option('-p, --platform <name>', '平台标识（backend / frontend-web / frontend-h5）')
   .option('--files <files>', '批量: "a.docx=平台1,b.pdf=平台2"')
-  .option('--ai', 'AI 语义理解模式（默认）：pandoc 快转后，提示用 AI skill 深度精炼')
+  .option('--ai', '双路验证模式（默认）：pandoc 快提 + 提示 AI skill 交叉验证')
   .option('--no-ai', '纯 pandoc 机械转换（快，简单文档可用）')
   .action(doc2specCommand);
 

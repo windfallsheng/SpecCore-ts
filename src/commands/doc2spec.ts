@@ -305,13 +305,13 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     logger.info('');
     logger.info('📋 下一步:');
     if (options.ai !== false) {
-      // ── AI 精炼模式（默认）──
-      logger.info('  🤖 AI 精炼模式：pandoc 已完成基础转换');
-      logger.info(`  📌 如需 AI 语义深度精炼（修复表格/提取接口/识别规则），`);
-      logger.info(`     在 WorkBuddy 中说: AI 精炼 ${sourceFile} → ${iterDir}/00-需求文档/REQUIREMENT.md`);
-      logger.info(`     （AI 将直接读取原文，不经过 pandoc，保证数据完整）`);
+      // ── 双路验证模式（默认）──
+      logger.info('  🔬 双路验证模式：pandoc 已完成第 1 路提取');
+      logger.info(`  📌 第 2 路 AI 语义分析 + 交叉验证：`);
+      logger.info(`     在 WorkBuddy 中说: 双路验证 ${sourceFile} → ${iterDir}`);
+      logger.info(`     AI 将: ① 直接读原文(第2路) ② 交叉对比 pandoc 结果 ③ 冲突标记 ④ 输出质量报告`);
       logger.info('');
-      logger.info('  💡 如只需纯 pandoc 转换，下次加 --no-ai');
+      logger.info('  💡 纯 pandoc 快转: speccore doc2spec --no-ai');
     } else {
       // ── 纯 pandoc 模式 ──
       logger.info('  ⚠️ 纯 pandoc 模式（无 AI 精炼）');
