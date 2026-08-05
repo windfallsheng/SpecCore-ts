@@ -681,8 +681,14 @@ function buildHtmlDashboard(data: any): string {
 .grid-pattern{position:fixed;inset:0;background-image:linear-gradient(rgba(0,240,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,240,255,.03) 1px,transparent 1px);background-size:60px 60px;pointer-events:none;z-index:0}
 main{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:40px 32px}
 .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:36px;padding:24px 32px;background:var(--card);border:1px solid var(--border);border-radius:12px;backdrop-filter:blur(20px);position:relative;overflow:hidden}
-.header::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scan 3s linear infinite}
-@keyframes scan{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+.header::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanX 3s linear infinite}
+.header::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanX-rev 3s linear infinite}
+@keyframes scanX{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+@keyframes scanX-rev{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}
+@keyframes scanY{0%{transform:translateY(-100%)}100%{transform:translateY(100%)}}
+@keyframes scanY-rev{0%{transform:translateY(100%)}100%{transform:translateY(-100%)}}
+.header-left::before{content:'';position:absolute;top:0;left:0;width:1px;bottom:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY 3s linear infinite;pointer-events:none}
+.header-right::after{content:'';position:absolute;top:0;right:0;width:1px;bottom:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY-rev 3s linear infinite;pointer-events:none}
 .header-left h1{font-family:'Orbitron',sans-serif;font-size:26px;font-weight:900;background:linear-gradient(135deg,var(--cyan),#818cf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:2px;text-shadow:0 0 40px rgba(0,240,255,.3)}
 .header-left .subtitle{color:var(--muted);font-size:12px;margin-top:4px;letter-spacing:1px}
 .header-right{display:flex;gap:16px;align-items:center}
