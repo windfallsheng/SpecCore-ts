@@ -51,7 +51,14 @@ const REF_MAP: Record<string, string> = {
 };
 
 export async function spec2docCommand(options: Spec2DocOptions): Promise<void> {
-  const format = options.format || 'docx';
+  // 格式自动识别：优先 --format，其次 -o 后缀
+  let format = options.format;
+  if (!format && options.output) {
+    const ext = options.output.split('.').pop()?.toLowerCase();
+    if (ext && WRITER_MAP[ext]) format = ext;
+  }
+  format = format || 'docx';
+  
   if (!WRITER_MAP[format]) {
     logger.error(`不支持的格式: ${format}。支持: docx, pdf, html, pptx`);
     return;
