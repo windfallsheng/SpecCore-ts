@@ -182,6 +182,14 @@ function showMediumConfidenceResults(
       '▸ speccore dev                          # 检测下一步',
       '▸ speccore dev --auto                   # 全自动流水线',
     ],
+    spec2doc: [
+      '▸ speccore spec2doc -i Q1 -o 需求.docx  # CLI 快速导出',
+      '▸ 在 WorkBuddy 中说 "导出 Q1 需求为 Word" # AI 精炼排版',
+    ],
+    doc2spec: [
+      '▸ speccore doc2spec -f PRD.docx --iter Q1        # CLI 快速导入',
+      '▸ 在 WorkBuddy 中说 "AI 转换 PRD.docx 到 Q1"      # AI 双路验证',
+    ],
   };
 
   for (let i = 0; i < results.length; i++) {
@@ -284,6 +292,8 @@ function getIntentLabel(intent: string): string {
     init: '🏗️ 项目初始化',
     import: '📥 导入项目',
     research: '🔬 技术调研',
+    doc2spec: '📝 导入文档',
+    spec2doc: '📤 导出文档',
     sync: '🔄 反向同步',
     retro: '📝 期次回顾',
     template_add: '📄 添加模板',

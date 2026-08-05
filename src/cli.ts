@@ -142,9 +142,9 @@ program
   .description('智能级联：--auto 全自动流水线，--from/--to 指定起止阶段')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('--force', 'Auto-execute without confirmation')
-  .option('--auto', '全自动流水线：init→doc2spec→analyze→split→plan→execute→pr→done')
-  .option('--from <phase>', '从指定阶段开始（init/doc2spec/analyze/split/plan/execute/pr/done）')
-  .option('--to <phase>', '到指定阶段结束（init/doc2spec/analyze/split/plan/execute/pr/done）')
+  .option('--auto', '全自动流水线：init→doc2spec→analyze→split→plan→execute→pr→done→spec2doc')
+  .option('--from <phase>', '从指定阶段开始（init/doc2spec/analyze/split/plan/execute/pr/done/spec2doc）')
+  .option('--to <phase>', '到指定阶段结束（init/doc2spec/analyze/split/plan/execute/pr/done/spec2doc）')
   .action(devCommand);
 
 program

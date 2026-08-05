@@ -3,13 +3,14 @@
 export const HELP_PANEL = `
 ┌──────────────────────────────────────────────────────────────┐
 │  🧠 = 协作式（支持 --interactive）  ⚡ = 单次执行              │
-│  init → iteration create → doc2spec → analyze → split       │
-│  → plan → execute → pr → done                               │
+│  核心流水线: init → doc2spec → analyze → split                 │
+│            → plan → execute → pr → done → spec2doc           │
 ├──────────────────────────────────────────────────────────────┤
 │  📥 资产接入                                                  │
 │  🚀 init          ⚡ 初始化项目                                │
 │  📅 iteration     ⚡ 期次管理                                  │
-│  📝 doc2spec      ⚡ 导入需求文档                               │
+│  📝 doc2spec      ⚡ 导入 PRD → Spec MD（AI 精炼推荐）          │
+│  📤 spec2doc      ⚡ Spec MD → Word/PDF（AI 排版推荐）          │
 │  📦 task new      ⚡ 创建任务（支持批量/调度）                    │
 ├──────────────────────────────────────────────────────────────┤
 │  🤝 协作决策                                                  │
@@ -31,7 +32,7 @@ export const HELP_PANEL = `
 │  💡 智能入口                                                  │
 │  speccore             自适应面板（检测阶段 → 提示下一步）          │
 │  speccore ask "..."   自然语言意图识别                          │
-|  speccore dev         智能级联：自动检测并执行下一步               │
+│  speccore dev         智能级联：自动检测并执行下一步               │
 │  speccore status-panel  可视化看板                              │
 └──────────────────────────────────────────────────────────────┘
 `;
