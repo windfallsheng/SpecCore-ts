@@ -412,7 +412,7 @@ tr:hover td{background:var(--hover)}
   </div>
 </div>
 
-<div class="footer"><span data-i18n="powered">由 SpecCore 驱动</span> | Generated ${now}</div>
+<div class="footer"><span data-i18n="powered">由 SpecCore 驱动</span> v${index.version || '1.0'} | Generated ${now}</div>
 </main>
 
 <script>
