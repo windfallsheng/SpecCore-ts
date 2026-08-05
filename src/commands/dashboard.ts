@@ -416,7 +416,7 @@ tr:hover td{background:var(--hover)}
   </div>
 </div>
 
-<div class="footer"><span data-i18n="powered">由 SpecCore 驱动</span> ${index.version || 'v1.0'} &nbsp;|&nbsp; Generated ${now}</div>
+<div class="footer"><span data-i18n="powered">由 SpecCore 驱动</span> ${index.version || 'v1.0'} &nbsp;&nbsp;|&nbsp;&nbsp; Generated ${now}</div>
 </main>
 
 <script>
