@@ -154,9 +154,9 @@ program
 program
   .command('init')
   .alias('in')
-  .description('初始化 SpecCore（17命令/53全量，--interactive 引导式）')
+  .description('初始化 SpecCore（17命令/58全量，--interactive 引导式）')
   .option('--mode <mode>', 'Initialization mode: fresh or migration', 'fresh')
-  .option('--full', 'Full mode: all 45 commands (default: simple)')
+  .option('--full', 'Full mode: all 58 commands (default: simple)')
   .option('--force', 'Force overwrite existing configuration')
   .option('--interactive', 'Interactive guided setup: mode → confirm → init')
   .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
@@ -369,6 +369,29 @@ program
   .option('-i, --iteration <iteration>', 'Target iteration')
   .action((opts: any) => statusPanelCommand({ ...opts, health: true }));
 
+program
+  .command('progress')
+  .alias('pg')
+  .description('查看期次进度：任务完成率 + 各阶段统计')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('-a, --assignee <assignee>', 'Filter by assignee')
+  .option('-t, --type <type>', 'Filter by task type')
+  .option('--detail', 'Show per-task detail')
+  .option('--format <format>', 'Output format: text, json', 'text')
+  .action(progressCommand);
+
+program
+  .command('report')
+  .alias('rp')
+  .description('生成项目报告：团队/风险/趋势分析')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('--format <format>', 'Output format: md, html, pdf', 'md')
+  .option('-o, --output <path>', 'Output file path')
+  .option('--team', 'Include team performance report')
+  .option('--risk', 'Include risk analysis')
+  .option('--trend', 'Include trend analysis')
+  .action(reportCommand);
+
 // ================================================================
 // 📦 归档与交接
 // ================================================================
@@ -384,6 +407,16 @@ program
   .action(handoverCommand);
 
 program
+  .command('archive')
+  .alias('ar')
+  .description('归档任务：移至 archive/ 或从归档恢复')
+  .option('-t, --task <task>', 'Target task')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('--all', 'Archive all completed tasks')
+  .option('--list', 'List archived tasks')
+  .option('--restore <task>', 'Restore from archive')
+  .option('--force', 'Skip confirmation')
+  .action(archiveCommand);
 
 // ================================================================
 // ⚙️ 配置与工具
@@ -493,11 +526,29 @@ program
   .action(rollbackCommand);
 
 program
+  .command('dashboard')
+  .alias('db')
+  .description('生成全量层可视化仪表盘（Chart.js HTML）')
+  .option('-o, --output <path>', 'Output file path')
+  .action(dashboardCommand);
+
+program
   .command('global-status')
   .alias('gs')
   .description('View global layer status: all projects, requirements, architecture')
   .option('--project <name>', 'Filter by project name')
   .action(globalStatusCommand);
+
+program
+  .command('sync-global')
+  .alias('syg')
+  .description('期次 ↔ 全量层双向同步')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('-d, --direction <dir>', 'Sync direction: to_global | from_global', 'to_global')
+  .option('--auto', 'Auto-apply without confirmation')
+  .option('--dry-run', 'Preview without modifying')
+  .option('--force', 'Skip confirmation')
+  .action(syncGlobalCommand);
 
 program
   .command('ops')
@@ -823,7 +874,7 @@ if (process.argv.length <= 2) {
 
   logger.info('');
   logger.info('┌──────────────────────────────────────────┐');
-  logger.info('│    SpecCore · v' + pkg.version + ' · 53 commands              │');
+  logger.info('│    SpecCore · v' + pkg.version + ' · 58 commands              │');
   logger.info('├──────────────────────────────────────────┤');
   if (iteration) logger.info('│  期次: ' + iteration.padEnd(33) + '│');
   logger.info('│  状态: ' + icons[phase] + ' ' + (names[phase] || phase).padEnd(33) + '│');
