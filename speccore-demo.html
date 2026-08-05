@@ -322,6 +322,9 @@ function setTheme(t) {
   document.documentElement.setAttribute('data-theme', t);
   localStorage.setItem('speccore-theme', t);
   document.querySelectorAll('.theme-sw button').forEach((b,i) => b.classList.toggle('active', THEMES[i]===t));
+  updateChartColors(t);
+}
+function updateChartColors(t) {
   const light = t === 'light';
   const tc = light ? '#64748b' : '#4a5568';
   const gc = light ? 'rgba(0,0,0,.06)' : 'rgba(255,255,255,.06)';
@@ -331,7 +334,7 @@ function setTheme(t) {
       ch.options.scales.x.ticks.color = tc; ch.options.scales.y.ticks.color = tc;
       ch.options.scales.x.grid.color = gc; ch.options.scales.y.grid.color = gc;
     }
-    ch.options.plugins.legend && (ch.options.plugins.legend.labels.color = tc);
+    if(ch.options.plugins.legend) ch.options.plugins.legend.labels.color = tc;
     ch.update();
   });
 }
