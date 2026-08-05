@@ -487,7 +487,7 @@ program
 program
   .command('doc2spec')
   .alias('d2s')
-  .description('导入 PRD 文档 → SpecCore Markdown（支持 Word/PDF/MD/HTML/PPTX）')
+  .description('导入 PRD 文档 → SpecCore Markdown（Word/PDF/MD/HTML/PPTX）\n   💡 AI 智能转换: 用 /doc2spec-ai 语义理解模式（复杂表格/图表优先）')
   .option('-f, --file <path>', '源文件路径')
   .option('--iter <name>', '目标期次（必填）')
   .option('-p, --platform <name>', '平台标识（backend / frontend-web / frontend-h5）')
