@@ -162,6 +162,20 @@ tr:hover td{background:var(--hover)}
 .badge-progress{background:rgba(59,130,246,.1);color:var(--blue)}
 .badge-pending{background:rgba(255,255,255,.03);color:var(--muted)}
 .footer{text-align:center;color:var(--muted);font-size:11px;margin-top:40px;padding:16px;letter-spacing:1px}
+.fs-btn{position:absolute;top:10px;right:10px;width:28px;height:28px;border-radius:6px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);color:var(--muted);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .2s;z-index:10;opacity:0}
+.stat-card:hover .fs-btn,.chart-card:hover .fs-btn,.table-card:hover .fs-btn{opacity:1}
+.fs-btn:hover{background:rgba(0,240,255,.1);border-color:rgba(0,240,255,.3);color:var(--cyan)}
+.fs-fullscreen{position:fixed!important;inset:0!important;z-index:1000!important;border-radius:0!important;overflow-y:auto!important;background:var(--bg)!important;backdrop-filter:none!important;padding:40px!important;width:100vw!important;height:100vh!important;max-width:none!important}
+.fs-fullscreen canvas{max-height:60vh!important}
+.fs-tip{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(0,240,255,.1);border:1px solid rgba(0,240,255,.2);padding:8px 20px;border-radius:20px;font-size:11px;color:var(--cyan);z-index:1001;letter-spacing:1px;animation:fadeIn .3s ease;pointer-events:none}
+@keyframes fadeIn{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+.data-stream{position:absolute;bottom:0;left:0;right:0;height:24px;background:linear-gradient(transparent,rgba(0,240,255,.02));overflow:hidden;border-radius:0 0 12px 12px}
+.data-stream span{position:absolute;color:rgba(0,240,255,.12);font-family:'JetBrains Mono',monospace;font-size:10px;white-space:nowrap;animation:stream 25s linear infinite}
+@keyframes stream{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}
+.settings-bar{display:flex;justify-content:flex-end;gap:8px;margin-bottom:24px}
+.settings-bar button{padding:6px 14px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;font-size:11px;font-family:'JetBrains Mono',monospace;transition:all .2s}
+.settings-bar button:hover{color:var(--cyan);border-color:var(--cyan)}
+.settings-bar button.active{color:var(--cyan);border-color:var(--cyan);background:rgba(0,240,255,.05)}
 </style>
 </head>
 <body>
@@ -180,6 +194,11 @@ tr:hover td{background:var(--hover)}
   <button title="Mono" data-theme="mono">⬛</button>
 </div>
 <main>
+<div class="settings-bar">
+  <button onclick="exportJSON()" title="导出 JSON">📋 JSON</button>
+  <button onclick="exportCSV()" title="导出 CSV">📊 CSV</button>
+  <button onclick="location.reload()" title="刷新数据">🔄 刷新</button>
+</div>
 <div class="header">
   <div>
     <h1>📊 SpecCore 全量仪表盘</h1>
@@ -189,33 +208,43 @@ tr:hover td{background:var(--hover)}
 
 <div class="stats">
   <div class="stat-card">
+    <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
     <div class="label">📋 总需求数</div>
     <div class="value c-cyan">${totalReqs}</div>
     <div class="sub">${projectCount} 个项目</div>
+    <div class="data-stream"><span>SPECCORE · TOTAL REQUIREMENTS · ${now} · V${index.version || '1.0'}</span></div>
   </div>
   <div class="stat-card">
+    <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
     <div class="label">✅ 已完成</div>
     <div class="value c-green">${implemented}</div>
     <div class="sub">完成率 ${completionRate}%</div>
+    <div class="data-stream"><span>DONE · ${completionRate}% COMPLETION · ${implemented} IMPLEMENTED</span></div>
   </div>
   <div class="stat-card">
+    <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
     <div class="label">🔄 进行中</div>
     <div class="value c-orange">${inProgress}</div>
     <div class="sub">${Math.round((inProgress/(totalReqs||1))*100)}%</div>
+    <div class="data-stream"><span>IN PROGRESS · ${inProgress} ACTIVE · ITERATIONS ACTIVE</span></div>
   </div>
   <div class="stat-card">
+    <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
     <div class="label">🔲 待开发</div>
     <div class="value c-muted">${pending}</div>
     <div class="sub">${Math.round((pending/(totalReqs||1))*100)}%</div>
+    <div class="data-stream"><span>PENDING · ${pending} BACKLOG · AWAITING SPRINT</span></div>
   </div>
 </div>
 
 <div class="charts">
   <div class="chart-card">
+    <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
     <h3>📊 需求状态分布</h3>
     <canvas id="statusChart"></canvas>
   </div>
   <div class="chart-card">
+    <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
     <h3>📈 项目需求分布</h3>
     <canvas id="projectChart"></canvas>
   </div>
@@ -241,6 +270,35 @@ tr:hover td{background:var(--hover)}
 </main>
 
 <script>
+let fsEl = null;
+
+// Fullscreen toggle
+function toggleFS(el) {
+  if (fsEl === el) { el.classList.remove('fs-fullscreen'); fsEl = null; document.body.style.overflow = ''; return; }
+  if (fsEl) { fsEl.classList.remove('fs-fullscreen'); }
+  fsEl = el; el.classList.add('fs-fullscreen');
+  document.body.style.overflow = 'hidden';
+  const tip = document.createElement('div'); tip.className = 'fs-tip'; tip.textContent = '按 ESC 退出全屏 · 滚动查看详情';
+  document.body.appendChild(tip);
+  setTimeout(() => tip.remove(), 2500);
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && fsEl) { fsEl.classList.remove('fs-fullscreen'); document.body.style.overflow = ''; fsEl = null; } });
+
+// Export functions
+function exportJSON() {
+  const data = { projects: ${JSON.stringify(index.projects.map(p=>({name:p.name,type:p.type,reqCount:p.reqCount,lastImport:p.lastImport})))} };
+  download(JSON.stringify(data, null, 2), 'dashboard-data.json', 'application/json');
+}
+function exportCSV() {
+  const rows = [['需求ID','项目','名称','状态','版本','期次'].join(',')];
+  ${JSON.stringify(index.reqs)}.forEach(r => rows.push([r.id,r.project,r.name,r.status,r.version,r.iteration||'-'].join(',')));
+  download(rows.join('\\n'), 'dashboard-data.csv', 'text/csv');
+}
+function download(content, name, type) {
+  const b = new Blob([content], { type });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name; a.click();
+}
+
 // Theme switcher
 (function(){
   const sw = document.getElementById('themeSw');
