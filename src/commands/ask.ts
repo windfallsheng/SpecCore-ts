@@ -159,6 +159,12 @@ function renderPipeline(result: AskResult, plan: PipelinePlan): string {
 }
 
 export async function askCommand(input: string, _options: any): Promise<void> {
+  // 如果不是 TTY（AI 调用），输出 HTML 页面
+  if (!process.stdout.isTTY) {
+    await askHtml(input);
+    return;
+  }
+
   if (!input || !input.trim()) {
     logger.info('🔍 SpecCore 万能 AI 入口');
     logger.info('');
@@ -193,4 +199,38 @@ export async function askCommand(input: string, _options: any): Promise<void> {
     logger.error(`分析失败: ${e.message || e}`);
     logger.info('💡 请使用 speccore help 查看可用命令');
   }
+}
+
+/**
+ * AI 模式：生成 HTML 页面（非 TTY 环境自动使用）
+ */
+async function askHtml(input: string): Promise<void> {
+  const { askEngine } = await import('../core/ask-engine');
+  const result = await askEngine(input || '');
+  const html = renderAskHtml(result, input);
+  const path = require('path');
+  const fs = require('fs');
+  const file = path.join(process.cwd(), 'speccore-ask-result.html');
+  fs.writeFileSync(file, html);
+  logger.info(`✅ 已生成: ${file}`);
+}
+
+function renderAskHtml(result: any, input: string): string {
+  const modeColors: Record<string, string> = { explain: '#14b8a6', guide: '#f97316', match: '#0ea5e9', pipeline: '#6366f1' };
+  const modeIcons: Record<string, string> = { explain: '📖', guide: '🗺️', match: '🎯', pipeline: '⚡' };
+  const modeLabels: Record<string, string> = { explain: '命令解释', guide: '任务指引', match: '意图匹配', pipeline: '复杂编排' };
+  const mc = modeColors[result.mode] || '#0ea5e9';
+  const mi = modeIcons[result.mode] || '🔍';
+  const ml = modeLabels[result.mode] || result.mode;
+
+  let bodyHtml = '';
+  if (result.pipeline) {
+    bodyHtml = `<div class="pipeline">${result.pipeline.steps.map((s: any) =>
+      `<div class="step"><span class="step-num">#${s.order}</span><span class="step-cmd">speccore ${s.command}</span><span class="step-args">${s.args||''}</span><span class="step-desc">${s.explanation}</span>${s.dependsOn?`<span class="step-dep">依赖 #${s.dependsOn}</span>`:''}</div>`
+    ).join('')}</div>`;
+  } else {
+    bodyHtml = result.detail.replace(/\n/g, '<br>').replace(/speccore\s+(\S+)/g, '<code>$&</code>');
+  }
+
+  return `<!DOCTYPE html><html lang="zh-CN" data-theme="ocean"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>SpecCore Ask · ${input.slice(0,20)}</title><style>@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;600;700&display=swap');[data-theme="ocean"]{--cyan:#0ea5e9;--bg:#0b1929;--card:rgba(13,31,56,.95);--border:rgba(14,165,233,.15);--text:#bae6fd;--muted:#5b7fa5;--green:#14b8a6;--orange:#f97316;--purple:#6366f1}*{margin:0;padding:0;box-sizing:border-box}body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--text);min-height:100vh;padding:40px 20px}.scanlines{position:fixed;inset:0;pointer-events:none;z-index:99;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,240,255,.01) 2px,rgba(0,240,255,.01) 4px)}.card{max-width:680px;margin:0 auto;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:36px;position:relative;overflow:hidden}.card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanX 3s linear infinite}.card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanX-rev 3s linear infinite}@keyframes scanX{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}@keyframes scanX-rev{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}h1{font-family:'Orbitron',sans-serif;font-size:24px;font-weight:900;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:2px}.query{color:var(--muted);font-size:12px;margin:8px 0 20px}.badge{display:inline-block;padding:4px 14px;border-radius:20px;font-size:11px;font-weight:600;letter-spacing:1px;background:${mc}22;color:${mc};border:1px solid ${mc}44;margin-bottom:16px}.section{margin:16px 0;padding:14px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.04);border-radius:10px}.pipeline{display:flex;flex-direction:column;gap:12px}.step{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:10px 14px;background:rgba(14,165,233,.04);border-left:2px solid ${mc};border-radius:0 8px 8px 0}.step-num{font-family:Orbitron;font-size:18px;font-weight:900;color:var(--cyan);min-width:36px}.step-cmd{font-weight:600;color:var(--green)}.step-args{color:var(--muted);font-size:11px}.step-desc{color:var(--muted);font-size:10px;flex-basis:100%}.step-dep{font-size:9px;color:var(--orange);margin-left:auto}code{background:rgba(14,165,233,.1);padding:1px 6px;border-radius:4px;color:var(--cyan);font-size:11px}.footer{text-align:center;color:var(--muted);font-size:10px;margin-top:24px;padding-top:16px;border-top:1px solid rgba(255,255,255,.04)}</style></head><body><div class="scanlines"></div><div class="card"><h1>SPECCORE ASK</h1><div class="query">"${input}"</div><div class="badge">${mi} ${ml}</div><div class="section">${bodyHtml}</div><div class="footer">由 SpecCore 驱动 · ${new Date().toISOString().split('T')[0]}</div></div></body></html>`;
 }
