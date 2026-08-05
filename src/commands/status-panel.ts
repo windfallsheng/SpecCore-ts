@@ -29,6 +29,7 @@ export async function statusPanelCommand(options: StatusPanelOptions = {}): Prom
   }
 
   const iteration = options.iteration || await getDefaultIteration();
+  const config = await loadConfig();
 
   // ── Health/Lifecycle modes (skip if exporting) ──
   if (!options.export) {
