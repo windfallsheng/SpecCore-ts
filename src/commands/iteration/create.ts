@@ -37,13 +37,13 @@ export async function iterationCreateCommand(options: IterationCreateOptions): P
     await ensureDir(join(iterationDir, '00-期次总览'));
 
     // Create default files
-    await createIterationFiles(iterationDir, options);
+    await createIterationFiles(iterationDir, fullName, options);
 
     // Update ITERATIONS index
-    await updateIterationsIndex(options.name, options);
+    await updateIterationsIndex(fullName, options);
 
     // Update GLOBAL index
-    await updateGlobalIndex(options.name, options);
+    await updateGlobalIndex(fullName, options);
 
     // Update context (store without 期次- prefix for consistency)
     await updateContext({
@@ -51,7 +51,7 @@ export async function iterationCreateCommand(options: IterationCreateOptions): P
       lastUpdated: new Date().toISOString()
     });
 
-    spinner.stop(`Iteration created: ${options.name}`);
+    spinner.stop(`期次创建: ${fullName}`);
     logger.info('');
     logger.info('Next steps:');
     logger.info(`  1. Edit ${iterationDir}/00-需求文档/REQUIREMENT.md`);
@@ -63,13 +63,13 @@ export async function iterationCreateCommand(options: IterationCreateOptions): P
   }
 }
 
-async function createIterationFiles(iterationDir: string, options: IterationCreateOptions): Promise<void> {
+async function createIterationFiles(iterationDir: string, fullName: string, options: IterationCreateOptions): Promise<void> {
   // REQUIREMENT.md
   await writeFile(
     join(iterationDir, '00-需求文档', 'REQUIREMENT.md'),
     `# 本期需求文档
 
-> 期次：${options.name}
+> 期次：${fullName}
 > 时间范围：${options.from || '未指定'} ~ ${options.to || '未指定'}
 
 ## 1. 需求概述
@@ -105,7 +105,7 @@ async function createIterationFiles(iterationDir: string, options: IterationCrea
     join(iterationDir, '00-技术文档', 'ARCHITECTURE.md'),
     `# 本期技术文档
 
-> 期次：${options.name}
+> 期次：${fullName}
 
 ## 1. 技术架构
 
@@ -128,7 +128,7 @@ async function createIterationFiles(iterationDir: string, options: IterationCrea
     join(iterationDir, '00-期次总览', 'PROJECT_GRAPH.md'),
     `# 本期任务总览
 
-> 期次：${options.name}
+> 期次：${fullName}
 > 时间范围：${options.from || '未指定'} ~ ${options.to || '未指定'}
 > 期次状态：🔄 进行中
 > 负责人：${options.owner || '未指定'}
