@@ -143,44 +143,44 @@ function showMediumConfidenceResults(
 
   // ── 命令→详细步骤映射 ──
   const stepMap: Record<string, string[]> = {
-    init: ['1. speccore init           # 初始化项目，生成 .speccore/'],
+    init: ['▸ speccore init           # 初始化项目，生成 .speccore/'],
     'iteration create': [
-      '1. speccore iteration create -n Q1 --owner=张三   # 创建期次',
-      '2. speccore analyze -I Q1                         # AI 分析需求',
-      '3. speccore iteration split -i Q1 --interactive    # 智能拆分',
+      '▸ speccore iteration create -n Q1 --owner=张三   # 创建期次',
+      '▸ speccore analyze -I Q1                         # AI 分析需求',
+      '▸ speccore iteration split -i Q1 --interactive    # 智能拆分',
     ],
     'task new': [
-      '1. speccore task new -n "功能名"   # 创建开发任务',
-      '2. speccore analyze -t Task-001    # AI 分析需求',
-      '3. speccore execute -t Task-001 --force  # 执行开发',
+      '▸ speccore task new -n "功能名"   # 创建开发任务',
+      '▸ speccore analyze -t Task-001    # AI 分析需求',
+      '▸ speccore execute -t Task-001 --force  # 执行开发',
     ],
     analyze: [
-      '1. speccore analyze -I Q1                         # 期次分析',
-      '2. speccore analyze --scope global --src xxx,xxx   # 全局分析',
-      '3. speccore analyze --scope global --src xxx --depth deep  # 深度分析',
+      '▸ speccore analyze -I Q1                         # 期次分析',
+      '▸ speccore analyze --scope global --src xxx,xxx   # 全局分析',
+      '▸ speccore analyze --scope global --src xxx --depth deep  # 深度分析',
     ],
     execute: [
-      '1. speccore execute -t Task-001 --force        # 直接执行',
-      '2. speccore execute -i Q1 --all                # 执行全部任务',
+      '▸ speccore execute -t Task-001 --force        # 直接执行',
+      '▸ speccore execute -i Q1 --all                # 执行全部任务',
     ],
     'iteration split': [
-      '1. speccore iteration split -i Q1 --interactive  # 交互拆分',
-      '2. speccore iteration split -i Q1 --strict       # 逐项确认',
+      '▸ speccore iteration split -i Q1 --interactive  # 交互拆分',
+      '▸ speccore iteration split -i Q1 --strict       # 逐项确认',
     ],
     'status-panel': [
-      '1. speccore status-panel                # 终端查看',
-      '2. speccore status-panel --export=html   # 导出仪表盘',
+      '▸ speccore status-panel                # 终端查看',
+      '▸ speccore status-panel --export=html   # 导出仪表盘',
     ],
     pr: [
-      '1. speccore pr --task=Task-001           # 创建PR',
+      '▸ speccore pr --task=Task-001           # 创建PR',
     ],
     done: [
-      '1. speccore done --task=Task-001         # 单任务归档',
-      '2. speccore done --all -i Q1             # 批量归档',
+      '▸ speccore done --task=Task-001         # 单任务归档',
+      '▸ speccore done --all -i Q1             # 批量归档',
     ],
     dev: [
-      '1. speccore dev                          # 检测下一步',
-      '2. speccore dev --auto                   # 全自动流水线',
+      '▸ speccore dev                          # 检测下一步',
+      '▸ speccore dev --auto                   # 全自动流水线',
     ],
   };
 
@@ -192,15 +192,28 @@ function showMediumConfidenceResults(
     logger.info('');
   }
 
-  logger.info('💡 输入序号选择（默认 1），或 q 取消');
+  logger.info('💡 输入序号选择（如 1、2、3），或 q 取消');
   
   // 读取用户选择
   const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout });
   rl.question('> ', async (answer: string) => {
     rl.close();
-    if (answer === 'q' || answer === 'Q') { logger.info('已取消'); return; }
-    const idx = parseInt(answer) - 1;
-    const selected = (idx >= 0 && idx < results.length) ? results[idx] : results[0];
+    const trimmed = answer.trim();
+    if (trimmed === 'q' || trimmed === 'Q') { logger.info('已取消'); return; }
+    
+    // 校验输入：只接受纯数字序号
+    const idx = parseInt(trimmed);
+    if (isNaN(idx) || String(idx) !== trimmed) {
+      logger.warn(`   ⚠️ 无效输入"${trimmed}"，请输入纯数字序号（如 1、2、3）`);
+      logger.info(`   💡 提示：子步骤编号（如"1. speccore xxx"）不是选项序号`);
+      return;
+    }
+    
+    const selected = (idx >= 1 && idx <= results.length) ? results[idx - 1] : null;
+    if (!selected) {
+      logger.warn(`   ⚠️ 序号 ${idx} 无效，可选范围 1~${results.length}`);
+      return;
+    }
     const params = selected.extractedParams;
     let cmd = `speccore ${selected.command}`;
     if (params.name) cmd += ` -n "${params.name}"`;
@@ -212,7 +225,10 @@ function showMediumConfidenceResults(
     try {
       execSync(cmd, { stdio: 'inherit' });
     } catch (e: any) {
-      logger.warn(`   ⚠️ 命令执行失败: ${e.message}`);
+      const stderr = e.stderr ? e.stderr.toString().trim() : '';
+      logger.warn(`   ⚠️ 命令执行失败: ${cmd}`);
+      if (stderr) logger.warn(`   ${stderr}`);
+      logger.info(`   💡 可直接在终端运行上述命令，或 speccore help 查看用法`);
     }
   });
 }
