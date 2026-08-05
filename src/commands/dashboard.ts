@@ -87,15 +87,31 @@ export function generateDashboardHtml(
 ): string {
   const now = new Date().toISOString().split('T')[0];
 
-  // 生成项目表格行
+  // 生成项目表格行（按需求数降序）
   let projectRows = '';
-  for (const proj of index.projects) {
+  const sortedProjects = [...index.projects].sort((a, b) => b.reqCount - a.reqCount);
+  for (const proj of sortedProjects) {
     projectRows += `<tr><td>${proj.name}</td><td><span class="badge badge-${proj.type}">${proj.type}</span></td><td>${proj.reqCount}</td><td>${proj.lastImport}</td></tr>`;
   }
 
-  // 生成需求表格行
+  // 生成需求表格行（按期次倒序：Q3→Q2→Q1，无期次排最后）
   let reqRows = '';
-  for (const req of index.reqs.slice(0, 20)) {
+  const sortIter = (a: string, b: string) => {
+    const na = parseInt(a.replace(/[^0-9]/g, '')) || 0;
+    const nb = parseInt(b.replace(/[^0-9]/g, '')) || 0;
+    if (!na && !nb) return 0;
+    if (!na) return 1;
+    if (!nb) return -1;
+    return nb - na;
+  };
+  const sortedReqs = [...index.reqs].sort((a, b) => {
+    const ia = sortIter(a.iteration || '', b.iteration || '');
+    if (ia !== 0) return ia;
+    // 同期次内按状态排：已实现 > 进行中 > 待开发
+    const order: Record<string, number> = { '✅': 1, '🔄': 2, '🔲': 3 };
+    return (order[a.status.charAt(0)] || 99) - (order[b.status.charAt(0)] || 99);
+  });
+  for (const req of sortedReqs.slice(0, 30)) {
     const statusClass = req.status.includes('✅') ? 'done' : req.status.includes('🔄') ? 'progress' : 'pending';
     reqRows += `<tr><td>${req.id}</td><td>${req.name}</td><td>${req.project}</td><td><span class="badge badge-${statusClass}">${req.status}</span></td><td>${req.iteration || '-'}</td></tr>`;
   }
