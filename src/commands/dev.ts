@@ -8,6 +8,7 @@ import { execSync } from 'child_process';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
 import { devAiGuide, DevPhase, DevPipelineState } from '../core/dev-llm';
+import { tryHostAi } from '../core/ask-host-ai';
 
 interface DevOptions {
   iteration?: string; force?: boolean; auto?: boolean; from?: string; to?: string;
@@ -104,6 +105,21 @@ async function renderDevHtml(options: DevOptions): Promise<string> {
   // Build pipeline state for LLM
   const state: DevPipelineState = { iteration: iterName, phases, currentIdx, currentPhase: current };
 
+  // ── 尝试宿主 AI 获取智能建议 ──
+  let aiSuggestion = '';
+  try {
+    const hostResult = await tryHostAi('dev', 'pipeline-status', {
+      iteration: iterName,
+      currentPhase: current.name,
+      currentPhaseKey: current.key,
+      completedPhases: phases.filter(p => p.done).map(p => p.key),
+      pendingPhases: phases.filter(p => !p.done).map(p => p.key),
+    });
+    if (hostResult?.summary) {
+      aiSuggestion = hostResult.summary;
+    }
+  } catch {}
+
   // Phase flow HTML
   const flowHtml = phases.map((p, i) => {
     const isCurrent = i === currentIdx;
@@ -124,7 +140,7 @@ async function renderDevHtml(options: DevOptions): Promise<string> {
 
 <div class="card"><div class="vline l"></div><div class="vline r"></div>
 <h1>SPECCORE DEV</h1>
-<div class="subtitle">${iterName ? '期次: ' + iterName + ' · ' : ''}${phases.filter(p=>p.done).length}/${phases.length} 阶段完成 · Pipeline 引导</div>
+<div class="subtitle">${iterName ? '期次: ' + iterName + ' · ' : ''}${phases.filter(p=>p.done).length}/${phases.length} 阶段完成 · Pipeline 引导${aiSuggestion ? '<br><span style="color:var(--cyan);font-size:10px">💡 ' + aiSuggestion + '</span>' : ''}</div>
 
 <div class="flow">${flowHtml}</div>
 

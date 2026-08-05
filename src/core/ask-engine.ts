@@ -6,6 +6,7 @@
 import { logger } from '../utils/logger';
 import { recognizeIntent } from './intent-recognition';
 import { askWithLlm } from './ask-llm';
+import { tryHostAi } from './ask-host-ai';
 
 // ============================================================
 // 类型定义
@@ -352,6 +353,15 @@ function buildPipelineDetail(steps: PipelineStep[], input: string): string {
 // ============================================================
 
 export async function askEngine(input: string): Promise<AskResult> {
+  // ── 第〇层: 宿主 AI (WorkBuddy/TRAE/Qoder) ──
+  try {
+    const hostResult = await tryHostAi('ask', input);
+    if (hostResult) {
+      logger.info(`🤖 宿主 AI: ${modeLabel((hostResult.mode || 'match') as AskMode)}`);
+      return hostResult as AskResult;
+    }
+  } catch (e: any) { /* 宿主 AI 不可用，继续 */ }
+
   // ── 第一层: LLM 智能解析 ──
   try {
     const llmResult = await askWithLlm(input);
