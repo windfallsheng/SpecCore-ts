@@ -4,6 +4,7 @@
  */
 
 import { logger } from '../utils/logger';
+import { isAiContext } from '../core/ask-host-ai';
 import { getAllCommandMappings, getCommandMapping } from '../core/intent-recognition';
 
 export interface HelpOptions {
@@ -14,7 +15,7 @@ export interface HelpOptions {
 
 export async function helpCommand(options: HelpOptions): Promise<void> {
   // 非 TTY → HTML 页面
-  if (!process.stdout.isTTY) {
+  if (isAiContext() || !process.stdout.isTTY) {
     await helpHtml(options);
     return;
   }
