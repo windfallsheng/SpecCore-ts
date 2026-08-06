@@ -1,4 +1,4 @@
-import { pathExists, readFile } from 'fs-extra';
+import { pathExists, readFile, writeFile } from 'fs-extra';
 import { join } from 'path';
 import { createInterface } from 'readline';
 import { logger } from '../utils/logger';
