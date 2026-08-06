@@ -92,13 +92,13 @@ speccore task new --name AuditLog --type feature
 
 ```bash
 # Overall
-speccore status-panel
+speccore dashboard
 
 # By platform
-speccore status-panel --platform=web
+speccore dashboard --platform=web
 
 # JSON format
-speccore status-panel --format json
+speccore dashboard --format json
 ```
 
 ### Step 6: View Task Context
@@ -145,7 +145,7 @@ speccore platform-add --name=tablet --description="Tablet" --tech="React Native"
 
 # Execute/stat by platform
 speccore execute --platform=web
-speccore status-panel --platform=h5
+speccore dashboard --platform=h5
 ```
 
 ### Development Execution
@@ -171,7 +171,7 @@ speccore sync --task=Task-001
 ```bash
 speccore impact --req=REQ-001
 speccore baseline create --name=2026-Q3-Release
-speccore status-panel
+speccore dashboard
 speccore audit --strict
 ```
 
@@ -179,7 +179,7 @@ speccore audit --strict
 
 ```bash
 speccore validate --fix
-speccore status-panel
+speccore dashboard
 ```
 
 ### Maintenance
