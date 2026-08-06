@@ -43,14 +43,16 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
       }
       
       // ── 二次确认 ──
+      spinner.stop();
       logger.warn('⚠️  --force 将重置所有配置文件！');
       logger.info('');
       const answer = await askUser('确认重置？现有的 INDEX.md/需求数据将丢失 (y/N): ');
       if (!answer.toLowerCase().startsWith('y')) {
-        spinner.stop('已取消');
+        logger.info('已取消');
         logger.info('💡 建议使用 speccore update 安全升级');
         return;
       }
+      spinner.start();
 
       // ── 备份现有配置 ──
       const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
