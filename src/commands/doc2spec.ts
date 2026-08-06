@@ -203,9 +203,11 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     let cleanupFile: string | null = null;
     const ext = sourceFile.split('.').pop()?.toLowerCase();
 
-    // .md 文件直接复制导入，不需要 pandoc
+    // .md 文件直接复制导入，也需要后处理图片路径
     if (ext === 'md') {
-      const converted = await readFile(sourceFile, 'utf-8');
+      let converted = await readFile(sourceFile, 'utf-8');
+      // 修正 pandoc 风格的图片路径（如果有 media/ 引用）
+      converted = converted.replace(/\]\(media\//g, '](../../assets/prd/');
       await writeFile(outputPath, converted);
       spinner.stop('📝 .md 直接导入');
     } else if (ext === 'doc') {
