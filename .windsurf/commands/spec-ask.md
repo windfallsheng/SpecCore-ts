@@ -1,5 +1,5 @@
 ---
 name: spec-ask
-description: AI万能入口
+description: AI万能入口（自然语言路由）
 ---
-speccore ask "${1:查看进度}"
+speccore ask "${1:描述你的需求}"

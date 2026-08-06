@@ -184,8 +184,8 @@ async function countPlatforms(iterDir: string, tasks: any[]): Promise<{backend:n
 }
 
 async function detectPhase(iterDir: string): Promise<string> {
-  const reqDoc = join(iterDir, '00-需求文档', 'REQUIREMENT.md');
-  const analysis = join(iterDir, '00-需求文档', 'ANALYSIS.md');
+  const reqDoc = join(iterDir, '02-需求文档', 'REQUIREMENT.md');
+  const analysis = join(iterDir, '02-需求文档', 'ANALYSIS.md');
   
   if (!(await pathExists(reqDoc))) return 'init';
   if (!(await pathExists(analysis))) return 'require';
@@ -547,8 +547,8 @@ async function buildPersonPlatforms(iterDir: string, tasks: any[]): Promise<Reco
 export async function defaultPhase(iterDir: string): Promise<string> {
 
 
-  const reqDoc = join(iterDir, '00-需求文档', 'REQUIREMENT.md');
-  const analysis = join(iterDir, '00-需求文档', 'ANALYSIS.md');
+  const reqDoc = join(iterDir, '02-需求文档', 'REQUIREMENT.md');
+  const analysis = join(iterDir, '02-需求文档', 'ANALYSIS.md');
   if (!(await pathExists(reqDoc))) return 'init';
   if (!(await pathExists(analysis))) return 'require';
   const tasks = await readdir(iterDir, { withFileTypes: true });

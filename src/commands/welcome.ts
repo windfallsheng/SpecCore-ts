@@ -32,9 +32,9 @@ export async function welcomeCommand(_options: WelcomeOptions): Promise<void> {
     if (iterName) { try { const entries = await readdir(`Iteration-${iterName}`, { withFileTypes: true }); taskCount = entries.filter(e => e.isDirectory() && e.name.startsWith('Task-')).length; } catch {} }
     let phase = 'doc';
     if (iterName) {
-      const reqDoc = join(`Iteration-${iterName}`, '00-需求文档', 'REQUIREMENT.md');
+      const reqDoc = join(`Iteration-${iterName}`, '02-需求文档', 'REQUIREMENT.md');
       if (!(await pathExists(reqDoc))) phase = 'doc';
-      else if (!(await pathExists(join(`Iteration-${iterName}`, '00-需求文档', 'ANALYSIS.md')))) phase = 'analyze';
+      else if (!(await pathExists(join(`Iteration-${iterName}`, '02-需求文档', 'ANALYSIS.md')))) phase = 'analyze';
       else if (taskCount === 0) phase = 'split';
       else phase = 'execute';
     }

@@ -76,7 +76,7 @@ async function syncToGlobal(options: SyncGlobalOptions): Promise<void> {
   }
 
   // 2. 读取期次需求文档
-  const iterReqPath = join(iterDir, '00-需求文档', 'REQUIREMENT.md');
+  const iterReqPath = join(iterDir, '02-需求文档', 'REQUIREMENT.md');
   if (!(await pathExists(iterReqPath))) {
     logger.error(`期次需求文档不存在: ${iterReqPath}`);
     return;
@@ -192,7 +192,7 @@ async function syncFromGlobal(options: SyncGlobalOptions): Promise<void> {
   }
 
   const iterDirName = iterationName.startsWith('Iteration-') ? iterationName : `Iteration-${iterationName}`;
-  const iterReqPath = join(process.cwd(), iterDirName, '00-需求文档', 'REQUIREMENT.md');
+  const iterReqPath = join(process.cwd(), iterDirName, '02-需求文档', 'REQUIREMENT.md');
 
   if (!(await pathExists(iterReqPath))) {
     logger.error(`期次需求文档不存在: ${iterReqPath}`);

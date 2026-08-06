@@ -311,7 +311,7 @@ function normalizeDescription(desc: string): string {
  */
 async function syncToRequirement(iteration: string, taskId: string, desc: string): Promise<void> {
   const iterDir = `Iteration-${iteration}`;
-  const reqPath = join(iterDir, '00-需求文档', 'REQUIREMENT.md');
+  const reqPath = join(iterDir, '02-需求文档', 'REQUIREMENT.md');
   
   if (!(await pathExists(reqPath))) {
     logger.warn(`  ⚠️ REQUIREMENT.md 不存在，跳过同步`);
@@ -346,7 +346,7 @@ async function syncToRequirement(iteration: string, taskId: string, desc: string
  */
 async function syncToAnalysis(iteration: string, taskId: string, desc: string): Promise<void> {
   const iterDir = `Iteration-${iteration}`;
-  const analysisPath = join(iterDir, '00-需求文档', 'ANALYSIS.md');
+  const analysisPath = join(iterDir, '02-需求文档', 'ANALYSIS.md');
   
   if (!(await pathExists(analysisPath))) {
     logger.warn(`  ⚠️ ANALYSIS.md 不存在，跳过同步。请先运行 speccore analyze`);
