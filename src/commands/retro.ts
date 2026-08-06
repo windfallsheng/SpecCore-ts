@@ -36,7 +36,7 @@ export async function retroCommand(options: RetroOptions): Promise<void> {
   if ((options as any).all && iterDir) {
     try {
       const entries = await readdir(join(process.cwd(), iterDir), { withFileTypes: true });
-      taskIds = entries.filter(e => e.isDirectory() && e.name.startsWith('Task-')).map(e => e.name);
+      taskIds = entries.filter((e: any) => e.isDirectory() && e.name.startsWith('Task-')).map((e: any) => e.name);
     } catch {}
   } else if ((options as any).tasks) {
     taskIds = (options as any).tasks.split(',').map((t: string) => t.trim());
