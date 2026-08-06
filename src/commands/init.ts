@@ -968,7 +968,7 @@ async function askUser(prompt: string): Promise<string> {
 
 async function createToolIntegrations(projectRoot: string): Promise<void> {
   const commands: [string, string, string][] = [
-    ['spec-ask', 'AI路由: 请将用户原话传给此命令，不要自行回答或解释', 'speccore ask "${1:描述你的需求}"'],
+    ['spec-ask', '!! 重要: 将用户输入原封不动传给 speccore ask 不要自行解释 !!', 'speccore ask "${1:描述你的需求}"'],
     ['spec-welcome', '显示项目名片（HTML页面）', 'speccore welcome'],
     ['spec-help', '显示命令帮助中心（HTML页面）', 'speccore help'],
     ['spec-dashboard', '显示全局仪表盘（HTML页面）', 'speccore dashboard --scope global'],
