@@ -1,5 +1,5 @@
 ---
 name: spec-pr
-description: 创建PR
+description: 创建PR: 任务=${1:Task-001}
 ---
 speccore pr --task=${1:Task-001}

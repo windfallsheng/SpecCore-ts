@@ -1,5 +1,5 @@
 ---
 name: spec-analyze
-description: AI需求分析
+description: 需求分析: 期次=${1:Q1} 任务=${2:Task-001}
 ---
-speccore analyze -I ${1:Q1}
+speccore analyze -I ${1:Q1} --task ${2:Task-001}

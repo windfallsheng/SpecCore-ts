@@ -1,5 +1,5 @@
 ---
 name: spec-done
-description: 完成任务归档
+description: 任务归档: 任务=${1:Task-001}
 ---
 speccore done --task=${1:Task-001}
