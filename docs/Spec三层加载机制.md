@@ -162,7 +162,7 @@ speccore iteration create --name=Q3
 speccore task new --name="订单管理" --platforms=web,backend
 
 # 3. 写需求文档
-vim 期次-Q3/Task-001-订单管理/backend/REQ.md
+vim Iteration-Q3/Task-001-订单管理/backend/REQ.md
 # | POST | /api/v1/orders | 创建订单 |
 # | GET  | /api/v1/orders | 查询列表 |
 
