@@ -1,6 +1,6 @@
 # SpecCore — Code by Spec, Not by Vibe
 
-🖥️ 规范驱动开发 CLI · 21 命令（55 全量）· 人机协同闭环 · 三层 AI 架构
+🖥️ 规范驱动开发 CLI · 21 简洁命令（55 全量）· 人机协同闭环 · 多层 AI 架构
 
 ```bash
 speccore ask "我想做一个登录功能，计划晚8点分批执行"
@@ -11,7 +11,7 @@ speccore ask "我想做一个登录功能，计划晚8点分批执行"
 ## 架构概览
 
 ```
-speccore ask ←── 万能 AI 入口 ──→ speccore dev (智能级联)
+speccore ask ←── AI 万能入口 ──→ speccore dev (智能级联)
     │                                     │
     ├─ 📖 命令解释 "dashboard 怎么用"      ├─ 🏗️ 初始化
     ├─ 🗺️ 任务指引 "我想做登录"           ├─ 📝 导入需求
@@ -19,8 +19,8 @@ speccore ask ←── 万能 AI 入口 ──→ speccore dev (智能级联)
     └─ ⚡ 复杂编排 "计划→定时→分批"        ├─ 📦 拆分任务
                                           ├─ ⚡ 执行开发
     ┌─────────────────────────────┐        ├─ 🔀 提交 PR
-    │  speccore dashboard         │        └─ ✅ 归档收尾
-    │  ─ 全局仪表盘 (7 大维度)     │
+    │  speccore dashboard         │        ├─ ✅ 归档收尾
+    │  ─ 全局仪表盘 (7 大维度)     │        └─ 📊 生成回顾
     │  ─ 9 主题 / 中英文 / 字号   │
     │  ─ F 键全屏 / 四边扫描线    │
     └─────────────────────────────┘
@@ -30,13 +30,64 @@ speccore ask ←── 万能 AI 入口 ──→ speccore dev (智能级联)
 
 ```bash
 npm install -g speccore
-speccore init              # 初始化项目
-speccore welcome           # 查看项目名片
-speccore ask "查看进度"    # AI 万能入口
-speccore dev --auto        # 智能级联一键推进
+speccore init                    # 初始化项目
+speccore welcome                 # 查看项目名片
+speccore ask "查看进度"          # AI 万能入口
+speccore dev --auto              # 智能级联一键推进
 ```
 
-## 核心能力
+## 核心流水线
+
+```
+init → doc2spec → analyze → split → plan → execute → pr → done → spec2doc
+                   └─ .issues.md ← 问题发现 ── → AI 辅助修复
+                   └─ .needs-retry ← 失败标记 ── → execute --resume
+```
+
+## 21 简洁命令
+
+| 分类 | 命令 |
+|------|------|
+| 入口 | `ask` `welcome` `init` `help` |
+| 流水线 | `doc2spec` `analyze` `split` `plan` `execute` `pr` `done` `spec2doc` |
+| 智能 | `dev` |
+| 管理 | `iteration` `task` `change` |
+| 查看 | `dashboard` `search` `validate` `retro` `ops` |
+
+## 目录结构
+
+```
+Iteration-001-电商平台/
+├── 00-产品需求/           ← doc2spec 导入
+│   ├── 源文件/            ← 原始 PRD/Word
+│   ├── 素材/              ← 共享图片/原型
+│   ├── APP端/需求.md
+│   └── 管理后台/需求.md
+├── 00-需求文档/           ← analyze 输出（按端）
+│   ├── APP端/ANALYSIS.md
+│   └── 管理后台/ANALYSIS.md
+├── 00-迭代总览/           ← 进度总览
+└── Task-001-xxx/          ← split 拆分
+    ├── REQ.md / TECH.md
+    ├── .issues.md          ← 问题清单 + 决策记录
+    └── .needs-retry        ← 失败标记 → --resume
+```
+
+## 断点重试
+
+```bash
+speccore execute --all          # 全量执行
+# 部分任务失败 → 写入 .issues.md + .needs-retry
+speccore execute --resume       # 扫描 .needs-retry 续跑
+```
+
+## 批量回顾
+
+```bash
+speccore retro --all                     # 所有任务
+speccore retro --all --owner 张三         # 按人
+speccore retro --all --type bugfix        # 按类型
+```
 
 ### 🧠 ask — AI 万能入口
 4 种模式自动识别，无需记忆命令：
