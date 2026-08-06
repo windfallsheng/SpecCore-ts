@@ -912,7 +912,7 @@ async function askUser(prompt: string): Promise<string> {
 
 async function createToolIntegrations(projectRoot: string): Promise<void> {
   const commands: [string, string, string][] = [
-    ['spec-ask', 'AI万能入口', 'speccore ask "${1:查看进度}"'],
+    ['spec-ask', 'AI万能入口（自然语言路由）', 'speccore ask "${1:描述你的需求}"'],
     ['spec-welcome', '项目名片', 'speccore welcome'],
     ['spec-help', '命令帮助中心', 'speccore help'],
     ['spec-dashboard', '全局仪表盘', 'speccore dashboard --scope global'],
