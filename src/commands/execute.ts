@@ -906,6 +906,22 @@ async function preFlightCheck(tasks: TaskState[], iteration: string, options: Ex
     // 7. Constitution
     logger.info(`  7. 合规: 待 validate ${issues.length > 0 ? '⚠️  ' + issues.join(', ') : ''}`);
 
+    // 写入问题文件，供 AI 辅助修复
+    if (issues.length > 0) {
+      const issuesMd = ['# 执行问题清单', '', `## ${task.id}`, ''];
+      for (const issue of issues) {
+        issuesMd.push(`- [ ] ${issue}`);
+      }
+      issuesMd.push('', '---', '');
+      issuesMd.push('## AI 辅助修复', '');
+      issuesMd.push('在 AI 对话中粘贴以下内容让 AI 帮你修复：', '');
+      issuesMd.push('> 请根据以上问题清单，帮我修复 Task-' + task.id + ' 的执行问题。');
+      issuesMd.push('> 期次: ' + (iteration || '') + '，任务目录: Iteration-' + (iteration || '') + '/' + task.id);
+      await writeFile(join(taskDir, '.issues.md'), issuesMd.join('\n'));
+      logger.info(`  💡 问题已记录到 ${task.id}/.issues.md`);
+      logger.info(`  💡 AI 对话: "帮我修复期次 ${iteration || ''} 的 ${task.id} 问题"`);
+    }
+
     // ── Per-task decision ──
     const answer = (await ask(`  → 开发？[y]确认 [N]跳过 [q]全部取消: `)).toLowerCase();
     if (answer === 'q') { logger.info('❌ 取消'); approved.length = 0; break; }
