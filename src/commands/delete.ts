@@ -26,7 +26,7 @@ export async function deleteCommand(options: DeleteOptions): Promise<void> {
   if (!options.task && !options.iteration) {
     logger.error('Usage:');
     logger.info('  speccore delete --task=Task-001');
-    logger.info('  speccore delete --iteration=期次-2026-07');
+    logger.info('  speccore delete --iteration=Iteration-2026-07');
     logger.info('  speccore delete --task=Task-001 --force  (skip confirmation)');
     return;
   }

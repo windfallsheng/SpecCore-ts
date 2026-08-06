@@ -8,8 +8,8 @@
  * 
  * 输出范围:
  *   - global    → .speccore/GLOBAL/    全局架构/代码健康
- *   - iteration → 期次-XX/00-需求文档/  (默认)
- *   - task      → 期次-XX/Task-NN/     单任务深化
+ *   - iteration → Iteration-XX/00-需求文档/  (默认)
+ *   - task      → Iteration-XX/Task-NN/     单任务深化
  */
 import { writeFile, pathExists, ensureDir } from 'fs-extra';
 import { join, dirname } from 'path';

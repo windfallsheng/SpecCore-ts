@@ -62,7 +62,7 @@ async function singleRename(options: RenameOptions): Promise<void> {
   } else if (isTask) {
     targetType = 'task';
   } else {
-    logger.error(`无法识别目标类型: "${oldName}"。名称需包含"期次-"或"Task-NNN"。`);
+    logger.error(`无法识别目标类型: "${oldName}"。名称需包含"Iteration-"或"Task-NNN"。`);
     return;
   }
 

@@ -8,7 +8,7 @@
  * 依赖: pandoc (macOS: brew install pandoc)
  *
  * 图片路径设计:
- *   提取到 → 期次-xxx/00-需求文档/images/
+ *   提取到 → Iteration-xxx/00-需求文档/images/
  *   Task 引用 → ../../00-需求文档/images/xxx.png
  *   这样所有 Task 共享同一份原型图，不需要重复存放。
  *
@@ -180,7 +180,7 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
   spinner.start();
 
   try {
-    const iterName = options.iter.replace(/^期次-/, '');
+    const iterName = options.iter.replace(/^Iteration-/, '');
     const iterDir = `Iteration-${iterName}`;
     // 目标目录：指定 --task 则放入 Task 目录，否则放入 00-产品需求
     const taskId = options.task ? (options.task.startsWith('Task-') ? options.task : `Task-${options.task}`) : null;
@@ -258,9 +258,9 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     // 2. 空行清理
     content = content.replace(/\n{3,}/g, '\n\n');
 
-    // 3. 图片路径修正（pandoc extra media/ subfolder）
-    const escapedImageDir = imageDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    content = content.replace(new RegExp(`\\]\\(${escapedImageDir}/media/`, 'g'), '](images/');
+    // 3. 图片路径修正（pandoc 提取到 <imageDir>/media/，markdown 中引用为 media/xxx.png）
+    //    修正为 images/xxx.png（与图片实际存放目录对齐）
+    content = content.replace(/\]\(media\//g, '](images/');
 
     // 4. 接口表格检测 + 提示
     const hasInterfaceTable = /\|\s*方法\s*\|/i.test(content) || /\|\s*METHOD\s*\|/i.test(content);
