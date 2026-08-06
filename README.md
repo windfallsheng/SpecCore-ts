@@ -54,23 +54,29 @@ init → doc2spec → analyze → split → plan → execute → pr → done →
 | 管理 | `iteration` `task` `change` |
 | 查看 | `dashboard` `search` `validate` `retro` `ops` |
 
-## 目录结构
+## 目录结构（全英文）
 
 ```
-Iteration-001-电商平台/
-├── 00-产品需求/           ← doc2spec 导入
-│   ├── 源文件/            ← 原始 PRD/Word
-│   ├── 素材/              ← 共享图片/原型
-│   ├── APP端/需求.md
-│   └── 管理后台/需求.md
-├── 00-需求文档/           ← analyze 输出（按端）
-│   ├── APP端/ANALYSIS.md
-│   └── 管理后台/ANALYSIS.md
-├── 00-迭代总览/           ← 进度总览
-└── Task-001-xxx/          ← split 拆分
-    ├── REQ.md / TECH.md
-    ├── .issues.md          ← 问题清单 + 决策记录
-    └── .needs-retry        ← 失败标记 → --resume
+Iteration-001-meeting/          ← 会议系统（中文→slug: meeting）
+├── 000-overview/               ← 进度跟踪
+├── 010-requirements/           ← doc2spec 导入
+│   ├── sources/                ← 原始 PRD/Word
+│   ├── assets/                 ← 素材
+│   │   ├── prd/                ← PRD 提取图片
+│   │   ├── prototypes/         ← 产品原型
+│   │   └── designs/            ← UI 设计稿
+│   ├── app/                    ← APP 端需求
+│   ├── h5/                     ← H5 端需求
+│   ├── miniapp/                ← 小程序端需求
+│   ├── admin/                  ← 管理后台需求
+│   └── _shared/                ← 跨端通用规则
+├── 020-specs/                  ← analyze 输出
+│   ├── app/ANALYSIS.md
+│   ├── h5/ANALYSIS.md
+│   ├── miniapp/ANALYSIS.md
+│   └── admin/ANALYSIS.md
+├── STAFFING.md                 ← 人员排期
+└── Task-001-*/                 ← split 拆分任务
 ```
 
 ## 断点重试
