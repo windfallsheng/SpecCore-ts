@@ -475,6 +475,7 @@ async function helpHtml(options: HelpOptions): Promise<void> {
 
   const { writeFile } = require('fs-extra');
   const { join } = require('path');
+  if (isAiContext()) { process.stdout.write(html); return; }
   const outPath = join(process.cwd(), 'speccore-help.html');
   await writeFile(outPath, html);
   logger.info(`✅ 已生成: ${outPath}`);
