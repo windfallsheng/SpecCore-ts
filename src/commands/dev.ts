@@ -49,8 +49,8 @@ export async function devCommand(options: DevOptions): Promise<void> {
   }
 
   const iterDir = `Iteration-${iteration}`;
-  const legacyReq = join(iterDir, '00-需求文档', 'REQUIREMENT.md');
-  const analysis = join(iterDir, '00-需求文档', 'ANALYSIS.md');
+  const legacyReq = join(iterDir, '00-产品需求', 'REQUIREMENT.md');
+  const analysis = join(iterDir, '00-产品需求', 'ANALYSIS.md');
 
   if (!(await pathExists(legacyReq))) {
     showPhase('导入需求', ['speccore doc2spec -f PRD.docx -i ' + iteration]);
@@ -73,8 +73,8 @@ async function autoPipeline(options: DevOptions): Promise<void> {
   if (!iteration) { execSync('speccore init', { stdio: 'inherit' }); return; }
   spinner.stop(`期次: ${iteration}`);
   const iterDir = `Iteration-${iteration}`;
-  const reqDoc = join(iterDir, '00-需求文档', 'REQUIREMENT.md');
-  const analysis = join(iterDir, '00-需求文档', 'ANALYSIS.md');
+  const reqDoc = join(iterDir, '00-产品需求', 'REQUIREMENT.md');
+  const analysis = join(iterDir, '00-产品需求', 'ANALYSIS.md');
   if (!(await pathExists(reqDoc))) {
     execSync(`speccore doc2spec -f PRD.docx -i ${iteration} --no-ai`, { stdio: 'inherit' });
   } else if (!(await pathExists(analysis))) {
@@ -101,8 +101,8 @@ async function renderDevHtml(options: DevOptions): Promise<string> {
   ];
 
   if (iterDir) {
-    const reqDoc = join(iterDir, '00-需求文档', 'REQUIREMENT.md');
-    const analysis = join(iterDir, '00-需求文档', 'ANALYSIS.md');
+    const reqDoc = join(iterDir, '00-产品需求', 'REQUIREMENT.md');
+    const analysis = join(iterDir, '00-产品需求', 'ANALYSIS.md');
     if (await pathExists(reqDoc)) phases[1].done = true;
     if (await pathExists(analysis)) phases[2].done = true;
     try {
