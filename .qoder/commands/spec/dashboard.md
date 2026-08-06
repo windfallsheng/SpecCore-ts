@@ -1,1 +1,1 @@
-speccore dashboard --scope global
+speccore dashboard --scope global --web
