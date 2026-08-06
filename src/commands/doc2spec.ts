@@ -164,7 +164,7 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     }
 
     const answer = await promptUser('是否要自动安装 pandoc？(y/N): ');
-    if (answer.toLowerCase().startsWith('y')) {
+    if (answer) {
       logger.info(`正在安装 pandoc: ${installCmd}`);
       try {
         execSync(installCmd, { stdio: 'inherit' });
