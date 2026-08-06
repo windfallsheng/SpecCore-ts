@@ -216,7 +216,7 @@ async function scanForTask(iterDir: string, taskId: string): Promise<string[]> {
 async function evolveRules(iterDir: string, taskId: string, iteration: string): Promise<void> {
   const { join } = require('path');
   const { readFile, writeFile, pathExists } = require('fs-extra');
-  const taskDir = join(iterDir, taskId);
+  const taskDir = join(iterDir, '030-tasks', taskId);
   const patterns: string[] = [];
 
   const taskPath = join(taskDir, 'backend', 'TASK.md');

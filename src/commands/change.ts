@@ -168,7 +168,7 @@ async function applyTaskChange(options: ChangeOptions, iteration: string): Promi
     return;
   }
 
-  const taskDir = join(process.cwd(), iteration, options.task);
+  const taskDir = join(process.cwd(), iteration, '030-tasks', options.task);
   if (!await pathExists(taskDir)) {
     logger.error(`任务目录不存在: ${taskDir}`);
     return;

@@ -1,14 +1,27 @@
 # 技术宪法
 
-> 本项目遵循 SpecCore 框架规范
+> 本文档是 SpecCore 与 AI 的**最高优先级契约**。analyze/split/execute 均据此执行。
+> AI 读取顺序：CONSTITUTION → context.json → 迭代目录
 
 ## 项目信息
 
-> 多工程时填写各子工程。**对应需求端**用于 AI 分析时自动对标（一个工程可对应多个需求端）
+> ⚠️ **所有需求端名称（app/h5/miniapp/admin）必须与 010-requirements/ 子目录名严格一致**
 
-| 工程 | 路径 | Git 仓库 | 默认分支 | 对应需求端 |
+| 工程 | 源码路径 | Git 仓库 | 默认分支 | 对应需求端 |
 | :--- | :--- | :--- | :--- | :--- |
-| ts-cli | /Users/luzhaosheng/SmartDeveloper/DevWorkspace/AI/SpecCore-CLI/ts-cli | git@gitee.com:windfullsheng/spec-core-ts.git | main | — |
+| ts-cli | ./ | git@gitee.com:windfullsheng/spec-core-ts.git | main | app, h5, miniapp, admin |
+
+> 多工程示例（monorepo）:
+>
+> | 工程 | 源码路径 | Git 仓库 | 默认分支 | 对应需求端 |
+> | :--- | :--- | :--- | :--- | :--- |
+> | order-service | ./packages/order | git@xxx/order.git | master | app, admin |
+> | payment-service | ./packages/payment | git@xxx/pay.git | main | h5, miniapp |
+>
+> **关键规则**：「对应需求端」列的值决定了：
+> 1. 读取哪个 010-requirements/{端}/ 的需求文档
+> 2. 分析结果写入 020-specs/{端}/
+> 3. split 时按端创建 Task 并过滤对应的 API
 
 ## 技术栈
 
