@@ -61,10 +61,16 @@ export function detectHostAi(): HostAiTool {
   if (process.env.TRAE_SESSION || process.env.TENCENT_AI_CODING) {
     return 'trae';
   }
-  // Qoder: 检查 .qoder 目录
+  // TRAE/Qoder: 检查工具目录（兜底，回溯到项目根目录）
   const { pathExistsSync } = require('fs-extra');
-  if (pathExistsSync(join(process.cwd(), '.qoder'))) {
-    return 'qoder';
+  let searchDir = process.cwd();
+  for (let i = 0; i < 5; i++) {
+    for (const dir of ['.trae', '.qoder', '.codebuddy', '.cursor', '.claude', '.windsurf']) {
+      if (pathExistsSync(join(searchDir, dir))) return 'trae';
+    }
+    const parent = join(searchDir, '..');
+    if (parent === searchDir) break;
+    searchDir = parent;
   }
   return 'none';
 }
