@@ -65,6 +65,9 @@ export async function updateCommand(options: { force?: boolean }): Promise<void>
   logger.info(`  从 v${oldVersion} 升级到 v${CURRENT_VERSION}...`);
 
   let added = 0, updated = 0, cleaned = 0;
+  const addedFiles: string[] = [];
+  const updatedFiles: string[] = [];
+  const cleanedFiles: string[] = [];
 
   // ── 1. 更新工具目录命令文件 ──
   const tools = ['.claude', '.codebuddy', '.cursor', '.trae', '.windsurf'];
@@ -80,17 +83,19 @@ export async function updateCommand(options: { force?: boolean }): Promise<void>
         if (existing.trim() !== content.trim()) {
           await writeFile(p, content);
           updated++;
+          updatedFiles.push(`${tool}/commands/${name}.md`);
         }
       } else {
         await ensureDir(toolCommandsDir);
         await writeFile(p, content);
         added++;
+        addedFiles.push(`${tool}/commands/${name}.md`);
       }
     }
     // 清理旧文件
     for (const legacy of LEGACY_NAMES) {
       const lp = join(toolCommandsDir, legacy + '.md');
-      if (await pathExists(lp)) { await require('fs-extra').remove(lp); cleaned++; }
+      if (await pathExists(lp)) { await require('fs-extra').remove(lp); cleaned++; cleanedFiles.push(`${tool}/commands/${legacy}.md`); }
     }
   }
 
@@ -105,11 +110,13 @@ export async function updateCommand(options: { force?: boolean }): Promise<void>
         if (existing.trim() !== content.trim()) {
           await writeFile(p, content);
           updated++;
+          updatedFiles.push(`qoder/spec/${shortName}.md`);
         }
       } else {
         await ensureDir(qoderDir);
         await writeFile(p, content);
         added++;
+        addedFiles.push(`qoder/spec/${shortName}.md`);
       }
     }
     // 清理旧 Qoder 文件
@@ -118,6 +125,7 @@ export async function updateCommand(options: { force?: boolean }): Promise<void>
         if (LEGACY_NAMES.has(f.replace('.md', ''))) {
           await require('fs-extra').remove(join(qoderDir, f));
           cleaned++;
+          cleanedFiles.push(`qoder/spec/${f}`);
         }
       }
     }
@@ -129,9 +137,22 @@ export async function updateCommand(options: { force?: boolean }): Promise<void>
 
   spinner.stop(`升级完成: v${oldVersion} → v${CURRENT_VERSION}`);
   logger.info('');
-  if (added > 0) logger.info(`  新增: ${added} 个命令文件`);
-  if (updated > 0) logger.info(`  更新: ${updated} 个命令文件`);
-  if (cleaned > 0) logger.info(`  清理: ${cleaned} 个旧文件`);
+  if (addedFiles.length > 0) {
+    logger.info(`  ✨ 新增 ${added} 个命令:`);
+    for (const f of addedFiles) logger.info(`     + ${f}`);
+  }
+  if (updatedFiles.length > 0) {
+    logger.info(`  🔄 更新 ${updated} 个命令:`);
+    for (const f of updatedFiles.slice(0, 5)) logger.info(`     ~ ${f}`);
+    if (updatedFiles.length > 5) logger.info(`     ... 等 ${updatedFiles.length} 个文件`);
+  }
+  if (cleanedFiles.length > 0) {
+    logger.info(`  🗑  清理 ${cleaned} 个旧文件:`);
+    for (const f of cleanedFiles) logger.info(`     - ${f}`);
+  }
+  if (added === 0 && updated === 0 && cleaned === 0) {
+    logger.info('  所有命令文件已是最新，无需更新');
+  }
   logger.info('');
   logger.info('配置文件和 INDEX.md 等用户数据保持不变 ✅');
 }
