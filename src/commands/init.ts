@@ -1059,7 +1059,9 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
   const prdDir = join(iterDir, '010-产品需求');
   // 源文件/ 存放原始文档  素材/ 存放共享图片、原型（跨端引用）
   await ensureDir(join(prdDir, '源文件'));
-  await ensureDir(join(prdDir, '素材'));
+  await ensureDir(join(prdDir, '素材', 'prd'));     // PRD 提取的图片
+  await ensureDir(join(prdDir, '素材', '原型'));    // 产品原型
+  await ensureDir(join(prdDir, '素材', '设计稿'));  // UI 设计稿
   await ensureDir(join(prdDir, 'APP端'));
   await ensureDir(join(prdDir, 'H5端'));
   await ensureDir(join(prdDir, '小程序端'));
