@@ -1039,7 +1039,7 @@ async function createToolIntegrations(projectRoot: string): Promise<void> {
  * 创建示例期次，展示标准目录结构
  */
 async function createSampleIteration(projectRoot: string): Promise<void> {
-  const iterDir = join(projectRoot, 'Iteration-示例');
+  const iterDir = join(projectRoot, 'Iteration-sample');
   await ensureDir(iterDir);
   
   // STAFFING.md
@@ -1073,7 +1073,7 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
   await writeFile(join(prdDir, 'h5/requirements.md'), '# h5需求\n\n## 核心功能\n- 功能描述');
   await writeFile(join(prdDir, 'miniapp/requirements.md'), '# miniapp需求\n\n## 核心功能\n- 功能描述');
   await writeFile(join(prdDir, 'admin/requirements.md'), '# admin需求\n\n## 核心功能\n- 功能描述');
-  await writeFile(join(prdDir, '_shared/业务规则.md'), '# 通用业务规则\n\n- 规则1\n- 规则2');
+  await writeFile(join(prdDir, '_shared/业务规则.md'), '# Shared Business Rules\n\n- 规则1\n- 规则2');
 
   // 02-需求文档/ — analyze 输出，按端生成
   const specDir = join(iterDir, '020-specs');
@@ -1108,7 +1108,7 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
     '| Task-004 | admin功能 | feature | 待开发 | 李四 |',
   ].join('\n'));
 
-  logger.info('   📂 示例期次: Iteration-示例/ (按端区分: APP/H5/小程序/admin)');
+  logger.info('   📂 示例期次: Iteration-sample/ (按端区分: APP/H5/小程序/admin)');
 }
 
 function detectGitUrl(root: string): string | undefined {
