@@ -4,6 +4,10 @@ dist/
 build/
 *.log
 
+# Generated HTML outputs
+speccore-*.html
+demo-test.html
+
 .DS_Store
 Thumbs.db
 
