@@ -228,7 +228,7 @@ async function askHtml(input: string): Promise<void> {
   const path = require('path');
   const fs = require('fs');
   const file = path.join(process.cwd(), 'speccore-ask-result.html');
-  fs.writeFileSync(file, html);
+  if (isAiContext()) { process.stdout.write(html); } else fs.writeFileSync(file, html);
   logger.info(`✅ 已生成: ${file}`);
 }
 

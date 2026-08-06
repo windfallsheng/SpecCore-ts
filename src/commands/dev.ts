@@ -17,12 +17,16 @@ interface DevOptions {
 }
 
 export async function devCommand(options: DevOptions): Promise<void> {
-  // 非 TTY 或 --web → HTML 预览
+  // 非 TTY 或 AI 上下文 → HTML 页面
   if (isAiContext() || !process.stdout.isTTY || options.web) {
     const html = await renderDevHtml(options);
-    const outPath = options.output || join(process.cwd(), 'speccore-dev.html');
-    await writeFile(outPath, html);
-    logger.info(`✅ 已生成: ${outPath}`);
+    if (isAiContext()) {
+      process.stdout.write(html);
+    } else {
+      const outPath = options.output || join(process.cwd(), 'speccore-dev.html');
+      await writeFile(outPath, html);
+      logger.info(`✅ 已生成: ${outPath}`);
+    }
     return;
   }
 

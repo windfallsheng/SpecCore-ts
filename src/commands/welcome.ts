@@ -39,9 +39,12 @@ export async function welcomeCommand(_options: WelcomeOptions): Promise<void> {
       else phase = 'execute';
     }
     const html = renderWelcomeHtml(version, isInit, iterName, phase, taskCount);
-    const outPath = _options.output || join(process.cwd(), 'speccore-welcome.html');
-    await writeFile(outPath, html);
-    logger.info(`✅ 已生成: ${outPath}`);
+    if (isAiContext()) { process.stdout.write(html); }
+    else {
+      const outPath = _options.output || join(process.cwd(), 'speccore-welcome.html');
+      await writeFile(outPath, html);
+      logger.info(`✅ 已生成: ${outPath}`);
+    }
     return;
   }
 
