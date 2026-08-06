@@ -8,9 +8,17 @@ export interface InitOptions {
   mode?: string;
   force?: boolean;
   interactive?: boolean;
+  update?: boolean;
 }
 
 export async function initCommand(options: InitOptions): Promise<void> {
+  // ── 增量升级模式 ──
+  if (options.update) {
+    const { updateCommand } = await import('./update');
+    await updateCommand({ force: options.force });
+    return;
+  }
+
   // ── Interactive mode ──
   if (options.interactive) {
     await interactiveInitFlow(options);
