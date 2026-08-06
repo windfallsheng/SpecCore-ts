@@ -995,40 +995,41 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
     '> 编辑此文件后重新运行 split 即可更新默认分配',
   ].join('\n'));
 
-  // 00-产品需求/ — 按产品端区分（非技术分层）
+  // 00-产品需求/ — 按产品端区分
+  // 源文件/ 存放原始文档与素材  各端/ 存放转换后的 MD
   const prdDir = join(iterDir, '00-产品需求');
+  await ensureDir(join(prdDir, '源文件'));
   await ensureDir(join(prdDir, 'APP端'));
   await ensureDir(join(prdDir, 'H5端'));
   await ensureDir(join(prdDir, '小程序端'));
   await ensureDir(join(prdDir, '管理后台'));
   await ensureDir(join(prdDir, '_shared'));
   
-  await writeFile(join(prdDir, 'APP端/功能需求.md'), '# APP端需求\n\n## 核心功能\n- 功能描述\n- 涉及的API和数据');
-  await writeFile(join(prdDir, 'H5端/功能需求.md'), '# H5端需求\n\n## 核心功能\n- 功能描述');
-  await writeFile(join(prdDir, '小程序端/功能需求.md'), '# 小程序端需求\n\n## 核心功能\n- 功能描述');
-  await writeFile(join(prdDir, '管理后台/功能需求.md'), '# 管理后台需求\n\n## 核心功能\n- 功能描述');
+  await writeFile(join(prdDir, '源文件', 'README.md'), '# 原始文档与素材\n\n请将产品提供的 Word/PDF/原型图 放在此处。\n\n- PRD 文档\n- 产品原型\n- 业务素材');
+  await writeFile(join(prdDir, 'APP端/需求.md'), '# APP端需求\n\n## 核心功能\n- 功能描述\n- 涉及的API和数据');
+  await writeFile(join(prdDir, 'H5端/需求.md'), '# H5端需求\n\n## 核心功能\n- 功能描述');
+  await writeFile(join(prdDir, '小程序端/需求.md'), '# 小程序端需求\n\n## 核心功能\n- 功能描述');
+  await writeFile(join(prdDir, '管理后台/需求.md'), '# 管理后台需求\n\n## 核心功能\n- 功能描述');
   await writeFile(join(prdDir, '_shared/业务规则.md'), '# 通用业务规则\n\n- 规则1\n- 规则2');
 
-  // 00-需求文档/
+  // 00-需求文档/ — analyze 输出，按端生成
   const specDir = join(iterDir, '00-需求文档');
-  await ensureDir(specDir);
-  await writeFile(join(specDir, 'REQUIREMENT.md'), [
-    '## APP端需求',
-    '### 核心功能',
-    '功能描述与验收标准',
-    '',
-    '## H5端需求',
-    '### 核心功能',
-    '功能描述与验收标准',
-    '',
-    '## 小程序端需求',
-    '### 核心功能',
-    '功能描述与验收标准',
-    '',
-    '## 管理后台需求',
-    '### 核心功能',
-    '功能描述与验收标准',
-  ].join('\n'));
+  for (const platform of ['APP端', 'H5端', '小程序端', '管理后台']) {
+    await ensureDir(join(specDir, platform));
+    await writeFile(join(specDir, platform, 'ANALYSIS.md'), [
+      `# ${platform} 需求分析`,
+      '',
+      '> 运行 `speccore analyze -I 示例` 生成',
+      '',
+      '## 1. 功能分析',
+      '',
+      '## 2. 接口需求',
+      '',
+      '## 3. 数据模型',
+      '',
+      '## 4. 验收标准',
+    ].join('\n'));
+  }
 
   // 00-迭代总览/
   const overviewDir = join(iterDir, '00-迭代总览');

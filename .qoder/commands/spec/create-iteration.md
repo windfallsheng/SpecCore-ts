@@ -1,1 +1,3 @@
-speccore iteration create -n ${1:Q2} --owner=${2:张三}
+创建期次
+
+执行命令: `speccore iteration create -n ${1:Q2} --owner=${2:张三}`
