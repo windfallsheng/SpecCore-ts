@@ -157,8 +157,14 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     logger.info('   📄 备选方案: 在 Word 中用"另存为" → 选择 .md 格式');
     logger.info('');
 
-    const answer = await promptUser('是否要自动安装 pandoc？');
-    if (answer) {
+    // 非 TTY（AI 调用）→ 不交互，直接报错引导
+    if (!process.stdout.isTTY) {
+      logger.error('请先安装 pandoc 后再执行，或在 WorkBuddy 中使用 word2md 技能。');
+      return;
+    }
+
+    const answer = await promptUser('是否要自动安装 pandoc？(y/N): ');
+    if (answer.toLowerCase().startsWith('y')) {
       logger.info(`正在安装 pandoc: ${installCmd}`);
       try {
         execSync(installCmd, { stdio: 'inherit' });
