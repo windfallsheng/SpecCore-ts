@@ -100,7 +100,7 @@ const MODE = readMode();
 const SIMPLE_COMMANDS = new Set([
   'ask', 'welcome', 'init', 'doc2spec', 'spec2doc', 'dashboard', 'analyze', 'split', 'execute',
   'pr', 'done', 'dev', 'search', 'track', 'help',
-  'iteration', 'task', 'plan', 'ops', 'change', 'validate',
+  'iteration', 'task', 'plan', 'ops', 'change', 'validate', 'retro',
   ]);
 
 /** 简洁模式下过滤 help 命令列表 */
@@ -647,6 +647,8 @@ program
   .alias('rt')
   .description('任务回顾：生成复盘报告（RETRO.md + HTML）')
   .option('--task <id>', '任务 ID')
+  .option('--tasks <ids>', '批量任务（逗号分隔）')
+  .option('--all', '当前期次所有任务')
   .option('--iteration <name>', '期次名称')
   .action(retroCommand);
 
