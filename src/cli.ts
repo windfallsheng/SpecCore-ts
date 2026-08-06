@@ -99,7 +99,7 @@ const MODE = readMode();
 /** 简洁模式下在 help 中显示的命令 */
 const SIMPLE_COMMANDS = new Set([
   'ask', 'welcome', 'init', 'doc2spec', 'spec2doc', 'dashboard', 'analyze', 'split', 'execute',
-  'pr', 'done', 'dev', 'search', 'track', 'help',
+  'pr', 'done', 'dev', 'search', 'help',
   'iteration', 'task', 'plan', 'ops', 'change', 'validate', 'retro',
   ]);
 
