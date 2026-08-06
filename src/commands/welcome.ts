@@ -4,7 +4,7 @@
  */
 
 import { logger } from '../utils/logger';
-import { isAiContext } from '../core/ask-host-ai';
+import { isAiContext, detectHostAi } from '../core/ask-host-ai';
 import { join } from 'path';
 import { pathExists, readdir, writeFile } from 'fs-extra';
 import { getDefaultIteration } from '../core/context';
@@ -39,12 +39,9 @@ export async function welcomeCommand(_options: WelcomeOptions): Promise<void> {
       else phase = 'execute';
     }
     const html = renderWelcomeHtml(version, isInit, iterName, phase, taskCount);
-    if (isAiContext()) { process.stdout.write(html); }
-    else {
-      const outPath = _options.output || join(process.cwd(), 'speccore-welcome.html');
-      await writeFile(outPath, html);
-      logger.info(`✅ 已生成: ${outPath}`);
-    }
+    const outPath = _options.output || join(process.cwd(), 'speccore-welcome.html');
+    if (!!process.env.WORKBUDDY_SESSION) { process.stdout.write(html); }
+    else { await writeFile(outPath, html); process.stdout.write('file://' + outPath + '\n'); }
     return;
   }
 

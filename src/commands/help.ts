@@ -4,7 +4,7 @@
  */
 
 import { logger } from '../utils/logger';
-import { isAiContext } from '../core/ask-host-ai';
+import { isAiContext, detectHostAi } from '../core/ask-host-ai';
 import { getAllCommandMappings, getCommandMapping } from '../core/intent-recognition';
 
 export interface HelpOptions {
