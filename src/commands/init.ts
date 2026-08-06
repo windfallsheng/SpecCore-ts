@@ -912,6 +912,7 @@ async function createToolIntegrations(projectRoot: string): Promise<void> {
   const commands: [string, string, string][] = [
     ['spec-ask', 'AI万能入口', 'speccore ask "${1:查看进度}"'],
     ['spec-welcome', '项目名片', 'speccore welcome'],
+    ['spec-help', '命令帮助中心', 'speccore help'],
     ['spec-dashboard', '全局仪表盘', 'speccore dashboard --scope global'],
     ['spec-init', '初始化项目', 'speccore init'],
     ['spec-doc2spec', '导入需求文档', 'speccore doc2spec -f ${1:PRD.docx} --iter ${2:Q1}'],
