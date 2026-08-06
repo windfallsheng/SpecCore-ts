@@ -1052,12 +1052,21 @@ async function createToolIntegrations(projectRoot: string, toolFilter?: string):
   } catch { /* ignore */ }
   } // if hasQoder
 
-  // TRAE auto-load skills
+  // TRAE auto-load skills — 写入完整指令，确保 TRAE 正确注册
+  const skillContents: Record<string, string> = {
+    'spec-ask': '# SpecCore AI Router\n\nWhen user makes ANY request, read `.speccore/CONSTITUTION.md` for project context and `.speccore/local/context.json` for current state.\n\n**ALWAYS execute**: `speccore ask "<user original request>"`\n\n**NEVER**: answer SpecCore questions yourself, create directories, run mkdir, or skip calling `speccore ask`.',
+    'spec-dev': '# SpecCore Smart Pipeline\n\nRead `.speccore/local/context.json` for current phase, then `000-overview/PROJECT_GRAPH.md` for progress.\n\nShow current phase and recommend next step. Execute: `speccore dev -i <iteration> [--auto]`',
+    'spec-analyze': '# SpecCore Analysis\n\nRead `010-requirements/` for all platform docs. Ask for iteration name if not provided.\n\nExecute: `speccore analyze -I <iteration>`. Present report and ask for confirmation.',
+    'spec-split': '# SpecCore Task Split\n\nRead `020-specs/` for analysis docs and `STAFFING.md` for team allocation.\n\nShow preview before creating tasks. Execute: `speccore iteration split -i <iteration>`',
+    'spec-execute': '# SpecCore Execute\n\nRead Task `REQ.md` and `TECH.md` for completeness. Check `.needs-retry` for previous failures.\n\nExecute: `speccore execute -i <iteration> -t <task> --force`. If failed, suggest `--resume`.',
+    'spec-plan': '# SpecCore Plan\n\nRead task list from `000-overview/PROJECT_GRAPH.md` and `STAFFING.md` for allocation.\n\nExecute: `speccore plan -I <iteration>`. Show plan and ask for confirmation.',
+    'spec-change': '# SpecCore Change Management\n\nRecord change reason, analyze impact, then execute: `speccore change "<description>" --task <task>`. Update status afterwards.',
+  };
   for (const [name] of commands) {
-    if (["spec-ask", "spec-dev", "spec-execute", "spec-analyze", "spec-split", "spec-plan", "spec-change"].includes(name)) {
-      const sd = join(projectRoot, ".agents", "skills", name);
+    if (skillContents[name]) {
+      const sd = join(projectRoot, '.agents', 'skills', name);
       await ensureDir(sd);
-      await writeFile(join(sd, "SKILL.md"), "# SpecCore " + name + "\nAuto-loaded by TRAE. See .trae/commands/" + name + ".md");
+      await writeFile(join(sd, 'SKILL.md'), skillContents[name]);
     }
   }
   

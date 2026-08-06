@@ -75,8 +75,13 @@ Iteration-001-meeting/          ← 会议系统（中文→slug: meeting）
 │   ├── h5/ANALYSIS.md
 │   ├── miniapp/ANALYSIS.md
 │   └── admin/ANALYSIS.md
-├── STAFFING.md                 ← 人员排期
-└── Task-001-*/                 ← split 拆分任务
+├── 020-specs/            ← analyze 分端输出
+│   ├── app/ANALYSIS.md
+│   ├── h5/ANALYSIS.md
+│   ├── miniapp/ANALYSIS.md
+│   └── admin/ANALYSIS.md
+├── 030-tasks/            ← 所有开发任务
+│   └── Task-001-*/       ← split 拆分（含 .issues.md .needs-retry）
 ```
 
 ## 断点重试
