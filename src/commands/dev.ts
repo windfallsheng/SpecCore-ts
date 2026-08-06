@@ -6,7 +6,7 @@ import { pathExists, readdir, writeFile } from 'fs-extra';
 import { join } from 'path';
 import { execSync } from 'child_process';
 import { logger, Spinner } from '../utils/logger';
-import { isAiContext } from '../core/ask-host-ai';
+import { isAiContext, detectHostAi } from '../core/ask-host-ai';
 import { getDefaultIteration } from '../core/context';
 import { devAiGuide, DevPhase, DevPipelineState } from '../core/dev-llm';
 import { tryHostAi } from '../core/ask-host-ai';
@@ -20,13 +20,9 @@ export async function devCommand(options: DevOptions): Promise<void> {
   // 非 TTY 或 AI 上下文 → HTML 页面
   if (isAiContext() || !process.stdout.isTTY || options.web) {
     const html = await renderDevHtml(options);
-    if (isAiContext()) {
-      process.stdout.write(html);
-    } else {
-      const outPath = options.output || join(process.cwd(), 'speccore-dev.html');
-      await writeFile(outPath, html);
-      logger.info(`✅ 已生成: ${outPath}`);
-    }
+    const outPath = options.output || join(process.cwd(), 'speccore-dev.html');
+    if (!!process.env.WORKBUDDY_SESSION) { process.stdout.write(html); }
+    else { await writeFile(outPath, html); process.stdout.write('file://' + outPath + '\n'); }
     return;
   }
 

@@ -5,7 +5,7 @@
  */
 
 import { logger } from '../utils/logger';
-import { isAiContext } from '../core/ask-host-ai';
+import { isAiContext, detectHostAi } from '../core/ask-host-ai';
 import { askEngine, AskResult, PipelinePlan } from '../core/ask-engine';
 
 const COLORS = {
@@ -228,7 +228,7 @@ async function askHtml(input: string): Promise<void> {
   const path = require('path');
   const fs = require('fs');
   const file = path.join(process.cwd(), 'speccore-ask-result.html');
-  if (isAiContext()) { process.stdout.write(html); } else fs.writeFileSync(file, html);
+  if (!!process.env.WORKBUDDY_SESSION) { process.stdout.write(html); } else { fs.writeFileSync(file, html); process.stdout.write('file://' + file + '\n'); }
   logger.info(`✅ 已生成: ${file}`);
 }
 
