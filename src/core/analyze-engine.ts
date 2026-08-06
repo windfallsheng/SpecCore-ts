@@ -168,13 +168,16 @@ async function analyzeRequirements(input: AnalyzeInput): Promise<AnalysisResult>
     report = buildReqConsistencyReport(input, issues, archImpact);
   } else if (input.scope === 'task') {
     // task scope — 已在入口校验
-    outputPath = join(`Iteration-${input.iteration}`, input.taskId!, 'backend', input.output || 'ANALYSIS.md');
+    outputPath = join(`Iteration-${input.iteration}`, '030-tasks', input.taskId!, 'backend', input.output || 'ANALYSIS.md');
     report = buildTaskReqReport(input, issues, archImpact);
   } else {
     // iteration (default)
     const iterDir = `Iteration-${input.iteration || 'current'}`;
     outputPath = join(iterDir, '020-specs', input.output || 'ANALYSIS.md');
     report = buildIterationReqReport(input, issues, archImpact);
+
+    // 按端分目录输出
+    await writePerPlatform(iterDir, report, input.output || 'ANALYSIS.md');
   }
 
   return {
@@ -209,13 +212,14 @@ async function analyzeCodebase(input: AnalyzeInput): Promise<AnalysisResult> {
     report = buildCodeHealthReport(input, fileStats, apiInventory, hotspots, deps);
   } else if (input.scope === 'task') {
     // task scope — 已在入口校验
-    outputPath = join(`Iteration-${input.iteration}`, input.taskId!, 'backend', input.output || 'CODE_REVIEW.md');
+    outputPath = join(`Iteration-${input.iteration}`, '030-tasks', input.taskId!, 'backend', input.output || 'CODE_REVIEW.md');
     report = buildTaskCodeReport(input, fileStats, apiInventory, hotspots);
   } else {
     // iteration (default)
     const iterDir = `Iteration-${input.iteration || 'current'}`;
     outputPath = join(iterDir, '020-specs', input.output || 'CODE_ANALYSIS.md');
     report = buildIterationCodeReport(input, fileStats, apiInventory, hotspots, deps);
+    await writePerPlatform(iterDir, report, input.output || 'CODE_ANALYSIS.md');
   }
 
   return {
@@ -283,12 +287,13 @@ async function analyzeCombined(input: AnalyzeInput): Promise<AnalysisResult> {
     outputPath = join('.speccore', 'GLOBAL', input.output || 'ARCH_IMPACT.md');
     report = buildAIEnhancedReport(input, 'global', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents });
   } else if (input.scope === 'task') {
-    outputPath = join(`Iteration-${input.iteration}`, input.taskId!, 'backend', input.output || 'ANALYSIS.md');
+    outputPath = join(`Iteration-${input.iteration}`, '030-tasks', input.taskId!, 'backend', input.output || 'ANALYSIS.md');
     report = buildAIEnhancedReport(input, 'task', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents });
   } else {
     const iterDir = `Iteration-${input.iteration || 'current'}`;
     outputPath = join(iterDir, '020-specs', input.output || 'ANALYSIS.md');
     report = buildAIEnhancedReport(input, 'iteration', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents });
+    await writePerPlatform(iterDir, report, input.output || 'ANALYSIS.md');
   }
 
   return {
@@ -1138,5 +1143,27 @@ function icon(severity: string): string {
     case 'warning': return '🟡';
     case 'info': return 'ℹ️';
     default: return '⚪';
+  }
+}
+
+/** 按需求端分目录写入分析报告 */
+async function writePerPlatform(iterDir: string, report: string, filename: string): Promise<void> {
+  const reqDir = join(iterDir, '010-requirements');
+  const specsBase = join(iterDir, '020-specs');
+  try {
+    const entries = await readdir(reqDir, { withFileTypes: true });
+    const platforms = entries
+      .filter(e => e.isDirectory() && !e.name.startsWith('_') && !e.name.startsWith('.') && e.name !== 'sources' && e.name !== 'assets')
+      .map(e => e.name);
+
+    if (platforms.length === 0) return; // 无分端，保持平面文件即可
+
+    for (const platform of platforms) {
+      const platformDir = join(specsBase, platform);
+      await ensureDir(platformDir);
+      await writeFile(join(platformDir, filename), report);
+    }
+  } catch {
+    // 目录不存在或无分端，静默跳过
   }
 }

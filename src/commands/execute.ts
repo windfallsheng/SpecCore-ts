@@ -855,7 +855,7 @@ async function preFlightCheck(tasks: TaskState[], iteration: string, options: Ex
   const approved: TaskState[] = [];
 
   for (const task of tasks) {
-    const taskDir = join(iterDir, task.id);
+    const taskDir = join(iterDir, '030-tasks', task.id);
     logger.info(`\n── ${task.id} ──`);
     
     let issues: string[] = [];
@@ -1048,7 +1048,7 @@ async function executionVerifyLoop(
   for (const task of tasks) {
     logger.info(`\n🔍 验证 ${task.id}...`);
 
-    const taskDir = join(iterDir, task.id);
+    const taskDir = join(iterDir, '030-tasks', task.id);
     const backendDir = join(taskDir, 'backend');
     let allPassed = true;
 

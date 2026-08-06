@@ -32,9 +32,10 @@ export async function iterationCreateCommand(options: IterationCreateOptions): P
     }
 
     // Create directory structure
-    await ensureDir(join(iterationDir, '020-specs'));
-    await ensureDir(join(iterationDir, '00-技术文档'));
     await ensureDir(join(iterationDir, '000-overview'));
+    await ensureDir(join(iterationDir, '010-requirements'));
+    await ensureDir(join(iterationDir, '020-specs'));
+    await ensureDir(join(iterationDir, '030-tasks'));
 
     // Create default files
     await createIterationFiles(iterationDir, fullName, options);
@@ -54,8 +55,8 @@ export async function iterationCreateCommand(options: IterationCreateOptions): P
     spinner.stop(`期次创建: ${fullName}`);
     logger.info('');
     logger.info('Next steps:');
-    logger.info(`  1. Edit ${iterationDir}/02-需求文档/REQUIREMENT.md`);
-    logger.info(`  2. Edit ${iterationDir}/00-技术文档/ARCHITECTURE.md`);
+    logger.info(`  1. Edit ${iterationDir}/010-requirements/ ← 放需求文档`);
+    logger.info(`  2. Run speccore analyze to generate specs`);
     logger.info(`  3. Run: speccore iteration split`);
   } catch (error) {
     spinner.fail(`Failed to create iteration: ${error}`);
@@ -100,9 +101,9 @@ async function createIterationFiles(iterationDir: string, fullName: string, opti
 `
   );
 
-  // ARCHITECTURE.md
+  // ARCHITECTURE.md → write to 000-overview
   await writeFile(
-    join(iterationDir, '00-技术文档', 'ARCHITECTURE.md'),
+    join(iterationDir, '000-overview', 'ARCHITECTURE.md'),
     `# 本期技术文档
 
 > 期次：${fullName}

@@ -39,8 +39,9 @@ Iteration-xxx/
 ├── 000-overview/     ← 进度跟踪
 ├── 010-requirements/     ← doc2spec 写入
 ├── 020-specs/     ← analyze 输出
+├── 030-tasks/     ← 开发任务
+│   └── Task-*/    ← split 拆分（含 .issues.md .needs-retry）
 ├── STAFFING.md      ← 人员排期
-└── Task-*/          ← split 拆分任务（含 .issues.md .needs-retry）
 ```
 
 ## AI 行为约束

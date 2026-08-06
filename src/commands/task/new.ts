@@ -131,7 +131,7 @@ async function createSingleTask(options: TaskNewOptions): Promise<void> {
     // Determine task ID
     const rawId = options.id || await findNextTaskId(iterationDir);
     const taskId = rawId.replace(/^Task-/, '');
-    const taskDir = join(iterationDir, `Task-${taskId}`);
+    const taskDir = join(iterationDir, '030-tasks', `Task-${taskId}`);
 
     if (await pathExists(taskDir)) {
       spinner.fail(`Task already exists: Task-${taskId}`);
