@@ -6,6 +6,7 @@ import { pathExists, readdir, writeFile } from 'fs-extra';
 import { join } from 'path';
 import { execSync } from 'child_process';
 import { logger, Spinner } from '../utils/logger';
+import { isAiContext } from '../core/ask-host-ai';
 import { getDefaultIteration } from '../core/context';
 import { devAiGuide, DevPhase, DevPipelineState } from '../core/dev-llm';
 import { tryHostAi } from '../core/ask-host-ai';
@@ -17,7 +18,7 @@ interface DevOptions {
 
 export async function devCommand(options: DevOptions): Promise<void> {
   // 非 TTY 或 --web → HTML 预览
-  if (!process.stdout.isTTY || options.web) {
+  if (isAiContext() || !process.stdout.isTTY || options.web) {
     const html = await renderDevHtml(options);
     const outPath = options.output || join(process.cwd(), 'speccore-dev.html');
     await writeFile(outPath, html);

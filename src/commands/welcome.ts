@@ -4,6 +4,7 @@
  */
 
 import { logger } from '../utils/logger';
+import { isAiContext } from '../core/ask-host-ai';
 import { join } from 'path';
 import { pathExists, readdir, writeFile } from 'fs-extra';
 import { getDefaultIteration } from '../core/context';
@@ -26,7 +27,7 @@ export async function welcomeCommand(_options: WelcomeOptions): Promise<void> {
   const iteration = await getDefaultIteration('');
   const iterName = (!iteration || iteration.includes('---') || iteration.length < 2) ? '' : iteration;
 
-  if (!process.stdout.isTTY || _options.web) {
+  if (isAiContext() || !process.stdout.isTTY || _options.web) {
     let taskCount = 0;
     if (iterName) { try { const entries = await readdir(`Iteration-${iterName}`, { withFileTypes: true }); taskCount = entries.filter(e => e.isDirectory() && e.name.startsWith('Task-')).length; } catch {} }
     let phase = 'doc';

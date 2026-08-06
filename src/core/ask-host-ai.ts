@@ -47,6 +47,11 @@ const MAX_WAIT = 15000;      // 15s timeout
  */
 export type HostAiTool = 'workbuddy' | 'trae' | 'qoder' | 'none';
 
+/** 判断当前是否在 AI 工具上下文（WorkBuddy/TRAE/Qoder 调用，非纯终端） */
+export function isAiContext(): boolean {
+  return detectHostAi() !== 'none' || !process.stdout.isTTY;
+}
+
 export function detectHostAi(): HostAiTool {
   // WorkBuddy: 检查会话文件
   if (process.env.WORKBUDDY_SESSION || process.env.CLAUDE_CODE_SESSION) {

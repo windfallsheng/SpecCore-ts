@@ -5,6 +5,7 @@
  */
 
 import { logger } from '../utils/logger';
+import { isAiContext } from '../core/ask-host-ai';
 import { askEngine, AskResult, PipelinePlan } from '../core/ask-engine';
 
 const COLORS = {
@@ -160,7 +161,7 @@ function renderPipeline(result: AskResult, plan: PipelinePlan): string {
 
 export async function askCommand(input: string, _options: any): Promise<void> {
   // 如果不是 TTY（AI 调用），输出 HTML 页面
-  if (!process.stdout.isTTY) {
+  if (isAiContext() || !process.stdout.isTTY) {
     // ── 首次使用：展示 ask 引导页 ──
     const { pathExists, writeFile, ensureDir } = await import('fs-extra');
     const { join } = await import('path');
