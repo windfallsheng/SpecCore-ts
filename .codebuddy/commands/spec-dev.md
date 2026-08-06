@@ -1,5 +1,5 @@
 ---
 name: spec-dev
-description: 智能级联: --auto全自动 --from/--to指定阶段
+description: 智能级联: 期次=${1:Q1} 模式=${2|引导页,--auto全自动|}
 ---
-speccore dev
+speccore dev -i ${1:Q1} ${2|,--auto|}
