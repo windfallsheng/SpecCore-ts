@@ -9,6 +9,7 @@ export interface InitOptions {
   force?: boolean;
   interactive?: boolean;
   update?: boolean;
+  tool?: string;
 }
 
 export async function initCommand(options: InitOptions): Promise<void> {
@@ -89,7 +90,7 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
     await createWorkBuddyFiles(projectRoot);
 
     // Create tool integration files (Claude, CodeBuddy, Cursor, Trae, WindSurf, QCoder)
-    await createToolIntegrations(projectRoot);
+    await createToolIntegrations(projectRoot, options.tool);
 
     // Create sample iteration
     await createSampleIteration(projectRoot);
@@ -966,7 +967,7 @@ async function askUser(prompt: string): Promise<string> {
   return new Promise(resolve => rl.question(prompt, (ans: string) => { rl.close(); resolve(ans); }));
 }
 
-async function createToolIntegrations(projectRoot: string): Promise<void> {
+async function createToolIntegrations(projectRoot: string, toolFilter?: string): Promise<void> {
   const commands: [string, string, string][] = [
     ['spec-ask', '!! 重要: 将用户输入原封不动传给 speccore ask 不要自行解释 !!', 'speccore ask "${1:描述你的需求}"'],
     ['spec-welcome', '显示项目名片（HTML页面）', 'speccore welcome'],
@@ -994,7 +995,9 @@ async function createToolIntegrations(projectRoot: string): Promise<void> {
     ['spec-ops', '操作历史', 'speccore ops'],
   ];
 
-  const tools = ['claude', 'codebuddy', 'cursor', 'trae', 'trae-cn', 'windsurf'];
+  const allTools = ['claude', 'codebuddy', 'cursor', 'trae', 'trae-cn', 'windsurf'];
+  const filter = toolFilter ? toolFilter.split(',').map(t => t.trim()) : null;
+  const tools = filter ? allTools.filter(t => filter.includes(t) || filter.includes(t.replace('-cn', ''))) : allTools;
   for (const tool of tools) {
     const toolDir = join(projectRoot, '.' + tool, 'commands');
     await ensureDir(toolDir);
@@ -1003,6 +1006,8 @@ async function createToolIntegrations(projectRoot: string): Promise<void> {
       await writeFile(join(toolDir, name + '.md'), content);
     }
   }
+  const hasQoder = !filter || filter.includes("qoder");
+  if (hasQoder) {
   // QCoder: 项目级指令路径 = .qoder/commands/，支持子目录分类
   const qoderCommandsDir = join(projectRoot, '.qoder', 'commands', 'spec');
   await ensureDir(qoderCommandsDir);
@@ -1031,6 +1036,7 @@ async function createToolIntegrations(projectRoot: string): Promise<void> {
       await require('fs-extra').remove(legacyQcoderDir);
     }
   } catch { /* ignore */ }
+  } // if hasQoder
   
   logger.info('   🤖 已适配: Claude / CodeBuddy / Cursor / Trae / WindSurf / QCoder');
 }
