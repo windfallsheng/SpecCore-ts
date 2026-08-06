@@ -50,3 +50,4 @@ verify-project/
 期次-*/.local/
 .speccore/cache/
 .speccore/GLOBAL/*.md
+.speccore-backup-*
