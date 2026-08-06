@@ -182,7 +182,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
  * 期次级 Spec 文档生成: 为 00-需求文档/ 创建全套规范文件
  */
 async function generateIterationSpecDocs(iteration: string): Promise<void> {
-  const specDir = join(`Iteration-${iteration}`, '00-产品需求');
+  const specDir = join(`Iteration-${iteration}`, '00-需求文档');
   await ensureDir(specDir);
 
   const now = new Date().toISOString().split('T')[0];
