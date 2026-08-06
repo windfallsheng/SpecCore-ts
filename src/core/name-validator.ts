@@ -6,7 +6,7 @@ import { readdir, pathExists, readFile } from 'fs-extra';
 import { join } from 'path';
 
 /**
- * 扫描所有期次名称（去期次-NNN-前缀，返回原始 name 部分）
+ * 扫描所有期次名称（去Iteration-NNN-前缀，返回原始 name 部分）
  */
 export async function getAllIterationNames(): Promise<string[]> {
   const cwd = process.cwd();
@@ -14,7 +14,7 @@ export async function getAllIterationNames(): Promise<string[]> {
   return entries
     .filter(e => e.isDirectory() && e.name.startsWith('Iteration-'))
     .map(e => {
-      // 期次-001-MyName → MyName
+      // Iteration-001-MyName → MyName
       const parts = e.name.split('-');
       return parts.slice(2).join('-');
     })

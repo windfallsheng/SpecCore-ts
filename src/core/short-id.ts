@@ -29,10 +29,10 @@ export function shortId(): string {
 }
 
 /**
- * 生成期次ID: 期次-{shortId}-{name}
+ * 生成迭代ID: Iteration-{shortId}-{name}
  */
 export function iterationId(name: string): string {
-  const cleanName = name.replace(/^期次-/, '').replace(/[\/\\]/g, '-');
+  const cleanName = name.replace(/^Iteration-/, '').replace(/[\/\\]/g, '-');
   return `Iteration-${shortId()}-${cleanName}`;
 }
 

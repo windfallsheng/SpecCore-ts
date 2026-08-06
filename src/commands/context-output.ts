@@ -35,7 +35,7 @@ export async function contextCommand(options: ContextOptions): Promise<void> {
   if (!(await pathExists(iterDir))) {
     logger.info(`📍 当前期次: ${iteration}`);
     logger.info(`  ⚠️ 期次目录「${iterDir}」不存在，请先创建期次或切换`);
-    logger.info('  创建: speccore iteration create -n ' + iteration.replace(/^期次-/, ''));
+    logger.info('  创建: speccore iteration create -n ' + iteration.replace(/^Iteration-/, ''));
     return;
   }
   const fs = require('fs');
