@@ -173,7 +173,7 @@ async function analyzeRequirements(input: AnalyzeInput): Promise<AnalysisResult>
   } else {
     // iteration (default)
     const iterDir = `Iteration-${input.iteration || 'current'}`;
-    outputPath = join(iterDir, '00-产品需求', input.output || 'ANALYSIS.md');
+    outputPath = join(iterDir, '00-需求文档', input.output || 'ANALYSIS.md');
     report = buildIterationReqReport(input, issues, archImpact);
   }
 
@@ -214,7 +214,7 @@ async function analyzeCodebase(input: AnalyzeInput): Promise<AnalysisResult> {
   } else {
     // iteration (default)
     const iterDir = `Iteration-${input.iteration || 'current'}`;
-    outputPath = join(iterDir, '00-产品需求', input.output || 'CODE_ANALYSIS.md');
+    outputPath = join(iterDir, '00-需求文档', input.output || 'CODE_ANALYSIS.md');
     report = buildIterationCodeReport(input, fileStats, apiInventory, hotspots, deps);
   }
 
@@ -287,7 +287,7 @@ async function analyzeCombined(input: AnalyzeInput): Promise<AnalysisResult> {
     report = buildAIEnhancedReport(input, 'task', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents });
   } else {
     const iterDir = `Iteration-${input.iteration || 'current'}`;
-    outputPath = join(iterDir, '00-产品需求', input.output || 'ANALYSIS.md');
+    outputPath = join(iterDir, '00-需求文档', input.output || 'ANALYSIS.md');
     report = buildAIEnhancedReport(input, 'iteration', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents });
   }
 
