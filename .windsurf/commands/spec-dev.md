@@ -1,5 +1,8 @@
 ---
 name: spec-dev
-description: 智能级联: 期次=${1:Q1} ${2|,--auto|}
+description: SpecCore Smart Pipeline
 ---
-speccore dev -i ${1:Q1} ${2|,--auto|}
+1. Read .speccore/local/context.json for current state
+2. Read 000-overview/PROJECT_GRAPH.md for progress
+3. Present current phase and recommend next step
+4. Execute: speccore dev -i ${1:Q1} ${2|,--auto|}

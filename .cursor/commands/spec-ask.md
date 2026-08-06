@@ -1,5 +1,7 @@
 ---
 name: spec-ask
-description: !! 重要: 将用户输入原封不动传给 speccore ask 不要自行解释 !!
+description: SpecCore AI Router
 ---
-speccore ask "${1:描述你的需求}"
+1. Read .speccore/CONSTITUTION.md for project context
+2. Read .speccore/local/context.json for current iteration
+3. Execute: speccore ask "${1:描述你的需求}"
