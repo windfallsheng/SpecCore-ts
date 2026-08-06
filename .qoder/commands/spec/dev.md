@@ -1,1 +1,1 @@
-speccore dev --auto
+speccore dev --auto --web
