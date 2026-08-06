@@ -99,8 +99,8 @@ const MODE = readMode();
 /** 简洁模式下在 help 中显示的命令 */
 const SIMPLE_COMMANDS = new Set([
   'ask', 'welcome', 'init', 'doc2spec', 'spec2doc', 'dashboard', 'analyze', 'split', 'execute',
-  'pr', 'done', 'dev', 'sync', 'search', 'track',
-  'iteration', 'task', 'plan', 'ops', 'change', 'validate', 'rename', 'update',
+  'pr', 'done', 'dev', 'search', 'track',
+  'iteration', 'task', 'plan', 'ops', 'change', 'validate',
   ]);
 
 /** 简洁模式下过滤 help 命令列表 */
@@ -167,6 +167,7 @@ program
   .option('--interactive', 'Interactive guided setup: mode → confirm → init')
   .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
   .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
+  .option('--update', '增量升级项目命令文件（不重置配置）')
   .action(initCommand);
 
 // ================================================================
