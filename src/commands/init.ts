@@ -1040,7 +1040,7 @@ async function createToolIntegrations(projectRoot: string, toolFilter?: string):
 
   // TRAE auto-load skills
   for (const [name] of commands) {
-    if (["spec-ask", "spec-dev", "spec-execute", "spec-analyze", "spec-split"].includes(name)) {
+    if (["spec-ask", "spec-dev", "spec-execute", "spec-analyze", "spec-split", "spec-plan", "spec-change"].includes(name)) {
       const sd = join(projectRoot, ".agents", "skills", name);
       await ensureDir(sd);
       await writeFile(join(sd, "SKILL.md"), "# SpecCore " + name + "\nAuto-loaded by TRAE. See .trae/commands/" + name + ".md");
