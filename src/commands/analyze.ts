@@ -8,7 +8,7 @@
  * 
  * 输出范围:
  *   - global    → .speccore/GLOBAL/    全局架构/代码健康
- *   - iteration → Iteration-XX/00-需求文档/  (默认)
+ *   - iteration → Iteration-XX/02-需求文档/  (默认)
  *   - task      → Iteration-XX/Task-NN/     单任务深化
  */
 import { writeFile, pathExists, ensureDir } from 'fs-extra';
@@ -179,10 +179,10 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 }
 
 /**
- * 期次级 Spec 文档生成: 为 00-需求文档/ 创建全套规范文件
+ * 期次级 Spec 文档生成: 为 02-需求文档/ 创建全套规范文件
  */
 async function generateIterationSpecDocs(iteration: string): Promise<void> {
-  const specDir = join(`Iteration-${iteration}`, '00-需求文档');
+  const specDir = join(`Iteration-${iteration}`, '02-需求文档');
   await ensureDir(specDir);
 
   const now = new Date().toISOString().split('T')[0];

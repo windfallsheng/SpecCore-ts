@@ -242,7 +242,7 @@ ${Object.entries(modules).map(([name, files]) =>
       ? '.speccore/GLOBAL/ANALYSIS.md'
       : scope === 'task'
         ? `Iteration-${iteration}/${taskId}/backend/ANALYSIS.md`
-        : `Iteration-${iteration || 'current'}/00-需求文档/ANALYSIS.md`}**
+        : `Iteration-${iteration || 'current'}/02-需求文档/ANALYSIS.md`}**
 
 同时参考填充同目录下的 TECH.md、TEST.md、REVIEW.md、RISK.md、DEPS.md、MONITOR.md 模板文件。
 `;
@@ -308,7 +308,7 @@ function groupByModule(files: CodeFile[]): Record<string, CodeFile[]> {
  *
  * 从两个来源推断（优先级从高到低）：
  * 1. CONSTITUTION.md 中「项目信息」表格的「对应需求端」列 → N:M 映射
- * 2. 00-产品需求/ 下的子目录名 + 源码目录名 → 1:1 简单推断
+ * 2. 01-产品需求/ 下的子目录名 + 源码目录名 → 1:1 简单推断
  *
  * 用户可随时编辑 CONSTITUTION.md 中的「对应需求端」列来调整映射。
  * 格式: "APP端, 管理后台" 表示该工程同时对应 APP端 和 管理后台 的需求。
@@ -323,7 +323,7 @@ function buildPlatformSourceMap(input: AIContextInput): string {
   const platformDirs = new Set<string>();
   for (const req of input.requirements) {
     const parts = req.split('/');
-    const prdIdx = parts.indexOf('00-产品需求');
+    const prdIdx = parts.indexOf('01-产品需求');
     if (prdIdx >= 0 && prdIdx + 1 < parts.length) {
       const platformDir = parts[prdIdx + 1];
       if (platformDir && !platformDir.startsWith('_')) {

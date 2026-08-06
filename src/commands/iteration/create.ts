@@ -32,7 +32,7 @@ export async function iterationCreateCommand(options: IterationCreateOptions): P
     }
 
     // Create directory structure
-    await ensureDir(join(iterationDir, '00-需求文档'));
+    await ensureDir(join(iterationDir, '02-需求文档'));
     await ensureDir(join(iterationDir, '00-技术文档'));
     await ensureDir(join(iterationDir, '00-迭代总览'));
 
@@ -54,7 +54,7 @@ export async function iterationCreateCommand(options: IterationCreateOptions): P
     spinner.stop(`期次创建: ${fullName}`);
     logger.info('');
     logger.info('Next steps:');
-    logger.info(`  1. Edit ${iterationDir}/00-需求文档/REQUIREMENT.md`);
+    logger.info(`  1. Edit ${iterationDir}/02-需求文档/REQUIREMENT.md`);
     logger.info(`  2. Edit ${iterationDir}/00-技术文档/ARCHITECTURE.md`);
     logger.info(`  3. Run: speccore iteration split`);
   } catch (error) {
@@ -66,7 +66,7 @@ export async function iterationCreateCommand(options: IterationCreateOptions): P
 async function createIterationFiles(iterationDir: string, fullName: string, options: IterationCreateOptions): Promise<void> {
   // REQUIREMENT.md
   await writeFile(
-    join(iterationDir, '00-需求文档', 'REQUIREMENT.md'),
+    join(iterationDir, '02-需求文档', 'REQUIREMENT.md'),
     `# 本期需求文档
 
 > 期次：${fullName}

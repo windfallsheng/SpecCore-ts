@@ -83,13 +83,13 @@ export async function iterationFromGlobalCommand(options: IterationFromGlobalOpt
       }
     }
 
-    await ensureDir(join(iterationDir, '00-需求文档'));
+    await ensureDir(join(iterationDir, '02-需求文档'));
     await ensureDir(join(iterationDir, '00-技术文档'));
     await ensureDir(join(iterationDir, '00-迭代总览'));
 
     // 6. 生成需求文档
     const reqContent = generateIterationRequirement(options.name, reqDetails);
-    await writeFile(join(iterationDir, '00-需求文档', 'REQUIREMENT.md'), reqContent);
+    await writeFile(join(iterationDir, '02-需求文档', 'REQUIREMENT.md'), reqContent);
 
     // 7. 生成架构文档
     const archContent = generateIterationArchitecture(options.name, foundReqs);

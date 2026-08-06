@@ -2,14 +2,14 @@
  * doc2spec — 文档导入 → SpecCore Markdown
  *
  * 将多种格式的 PRD 需求文档转换为 SpecCore 兼容的 Markdown，
- * 自动放入对应期次的 00-需求文档/ 目录。
+ * 自动放入对应期次的 02-需求文档/ 目录。
  *
  * 支持格式: .docx / .doc / .md / .pdf / .html / .pptx / .odt / .ipynb
  * 依赖: pandoc (macOS: brew install pandoc)
  *
  * 图片路径设计:
- *   提取到 → Iteration-xxx/00-需求文档/images/
- *   Task 引用 → ../../00-需求文档/images/xxx.png
+ *   提取到 → Iteration-xxx/02-需求文档/images/
+ *   Task 引用 → ../../02-需求文档/images/xxx.png
  *   这样所有 Task 共享同一份原型图，不需要重复存放。
  *
  * 依赖: pandoc (macOS: brew install pandoc)
@@ -177,7 +177,7 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
       logger.info('跳过安装。你可以：');
       logger.info(`  1. 手动执行: ${installCmd}`);
       logger.info('  2. 使用 word2md 技能（对话中可用）');
-      logger.info('  3. 在 Word 中另存为 .md 后手动放到 00-需求文档/');
+      logger.info('  3. 在 Word 中另存为 .md 后手动放到 02-需求文档/');
       return;
     }
   }
@@ -188,11 +188,11 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
   try {
     const iterName = options.iter.replace(/^Iteration-/, '');
     const iterDir = `Iteration-${iterName}`;
-    // 目标目录：指定 --task 则放入 Task 目录，否则放入 00-产品需求
+    // 目标目录：指定 --task 则放入 Task 目录，否则放入 01-产品需求
     const taskId = options.task ? (options.task.startsWith('Task-') ? options.task : `Task-${options.task}`) : null;
-    const baseDir = taskId ? join(iterDir, taskId) : join(iterDir, '00-产品需求');
+    const baseDir = taskId ? join(iterDir, taskId) : join(iterDir, '01-产品需求');
     const targetDir = baseDir;
-    const imageDir = join(iterDir, '00-产品需求', '素材'); // 共享素材，跨端引用
+    const imageDir = join(iterDir, '01-产品需求', '素材'); // 共享素材，跨端引用
     const platform = options.platform || '需求';
     const outputPath = join(targetDir, `${platform}需求.md`);
 
@@ -276,7 +276,7 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     // 5. 图片引用注释（告知 Task 如何引用这些图）
     content = content.replace(
       /^#/,
-      `# ${platform}需求\n\n<!-- \n  原型图片路径: images/\n  Task 引用方式: ![原型](../../00-需求文档/images/xxx.png)\n  所有 Task 共享此目录，无需重复存放。\n-->\n\n#`
+      `# ${platform}需求\n\n<!-- \n  原型图片路径: images/\n  Task 引用方式: ![原型](../../02-需求文档/images/xxx.png)\n  所有 Task 共享此目录，无需重复存放。\n-->\n\n#`
     );
 
     await writeFile(outputPath, content);

@@ -146,7 +146,7 @@ async function generateHandoverDoc(iteration: string): Promise<string> {
   doc += `### 相关文件\n\n`;
   doc += `- 期次目录: \`${iteration}/\`\n`;
   doc += `- 技术架构: \`${iteration}/00-技术文档/ARCHITECTURE.md\`\n`;
-  doc += `- 需求文档: \`${iteration}/00-需求文档/REQUIREMENT.md\`\n`;
+  doc += `- 需求文档: \`${iteration}/02-需求文档/REQUIREMENT.md\`\n`;
   doc += `- 项目图谱: \`${iteration}/00-迭代总览/PROJECT_GRAPH.md\`\n`;
 
   return doc;
