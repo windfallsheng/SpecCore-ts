@@ -20,14 +20,14 @@ init → doc2spec → analyze → split → plan → execute → pr → done →
 | 命令 | 作用 | 参数 | 上游依赖 | 下游产出 |
 | :--- | :--- | :--- | :--- | :--- |
 | init | 初始化项目 | --interactive/--force/--update | 无 | .speccore/ + 工具集成 |
-| doc2spec | Word→Spec MD | -f <文件> --iter <期次> | PRD/Word | 010-产品需求/*.md |
-| analyze | 需求分析 | -I <期次> --task <任务> | 010-产品需求/ | 020-需求文档/ANALYSIS.md |
-| split | 拆分任务 | -i <期次> --owner <人> | 020-需求文档/ | Task-001~NNN/ |
+| doc2spec | Word→Spec MD | -f <文件> --iter <期次> | PRD/Word | 010-requirements/*.md |
+| analyze | 需求分析 | -I <期次> --task <任务> | 010-requirements/ | 020-specs/ANALYSIS.md |
+| split | 拆分任务 | -i <期次> --owner <人> | 020-specs/ | Task-001~NNN/ |
 | plan | 执行计划 | -I <期次> --owner <人> | Task 列表 | plan.json |
 | execute | 执行开发 | -i <期次> -t <任务> --type <类型> | REQ.md/TECH.md | 代码 + .issues.md |
 | pr | 创建PR | --task <任务> | 代码提交 | Pull Request |
 | done | 归档收尾 | --task <任务> | 全部完成 | .verification |
-| spec2doc | 导出文档 | -i <期次> -o <文件> | 020-需求文档/ | Word/PDF |
+| spec2doc | 导出文档 | -i <期次> -o <文件> | 020-specs/ | Word/PDF |
 | retro | 任务回顾 | --task/--all/--owner/--type | done后 | 回顾报告 |
 | change | 需求变更 | <描述> --task <任务> --type | 进行中任务 | 变更记录 |
 | dev | 智能级联 | --auto/--from/--to | 全部阶段 | 自动全流程 |
@@ -36,9 +36,9 @@ init → doc2spec → analyze → split → plan → execute → pr → done →
 
 ```
 Iteration-xxx/
-├── 000-迭代总览/     ← 进度跟踪
-├── 010-产品需求/     ← doc2spec 写入
-├── 020-需求文档/     ← analyze 输出
+├── 000-overview/     ← 进度跟踪
+├── 010-requirements/     ← doc2spec 写入
+├── 020-specs/     ← analyze 输出
 ├── STAFFING.md      ← 人员排期
 └── Task-*/          ← split 拆分任务（含 .issues.md .needs-retry）
 ```

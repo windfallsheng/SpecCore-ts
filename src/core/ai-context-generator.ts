@@ -155,7 +155,7 @@ ${constitutionInfo ? `## 🏗 项目工程配置 (CONSTITUTION.md)
 
 ${constitutionInfo.split('\n').filter(l => l.trim() && !l.startsWith('# ') && !l.startsWith('> ')).join('\n').slice(0, 2000)}
 
-> 以上为项目配置信息。AI 应据此处配置判断各需求端（APP/H5/小程序/管理后台）对应哪个工程源码。
+> 以上为项目配置信息。AI 应据此处配置判断各需求端（APP/H5/小程序/admin）对应哪个工程源码。
 
 ---
 
@@ -311,7 +311,7 @@ function groupByModule(files: CodeFile[]): Record<string, CodeFile[]> {
  * 2. 01-产品需求/ 下的子目录名 + 源码目录名 → 1:1 简单推断
  *
  * 用户可随时编辑 CONSTITUTION.md 中的「对应需求端」列来调整映射。
- * 格式: "APP端, 管理后台" 表示该工程同时对应 APP端 和 管理后台 的需求。
+ * 格式: "app, admin" 表示该工程同时对应 app 和 admin 的需求。
  */
 function buildPlatformSourceMap(input: AIContextInput): string {
   const lines: string[] = [];
@@ -323,7 +323,7 @@ function buildPlatformSourceMap(input: AIContextInput): string {
   const platformDirs = new Set<string>();
   for (const req of input.requirements) {
     const parts = req.split('/');
-    const prdIdx = parts.indexOf('010-产品需求');
+    const prdIdx = parts.indexOf('010-requirements');
     if (prdIdx >= 0 && prdIdx + 1 < parts.length) {
       const platformDir = parts[prdIdx + 1];
       if (platformDir && !platformDir.startsWith('_')) {
@@ -391,7 +391,7 @@ function buildPlatformSourceMap(input: AIContextInput): string {
 
 /** 
  * 解析 CONSTITUTION.md 中的项目信息表格，提取 N:M 工程↔需求端映射。
- * 返回: { 工程源码路径: { platforms: ['APP端','H5端'], branches: ['main'] } }
+ * 返回: { 工程源码路径: { platforms: ['app','h5'], branches: ['main'] } }
  */
 function readConstitutionPlatformMapping(): Record<string, { platforms: string[]; branches: string[] }> {
   const result: Record<string, { platforms: string[]; branches: string[] }> = {};

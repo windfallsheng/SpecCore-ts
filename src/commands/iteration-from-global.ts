@@ -83,13 +83,13 @@ export async function iterationFromGlobalCommand(options: IterationFromGlobalOpt
       }
     }
 
-    await ensureDir(join(iterationDir, '020-需求文档'));
+    await ensureDir(join(iterationDir, '020-specs'));
     await ensureDir(join(iterationDir, '00-技术文档'));
-    await ensureDir(join(iterationDir, '000-迭代总览'));
+    await ensureDir(join(iterationDir, '000-overview'));
 
     // 6. 生成需求文档
     const reqContent = generateIterationRequirement(options.name, reqDetails);
-    await writeFile(join(iterationDir, '020-需求文档', 'REQUIREMENT.md'), reqContent);
+    await writeFile(join(iterationDir, '020-specs', 'REQUIREMENT.md'), reqContent);
 
     // 7. 生成架构文档
     const archContent = generateIterationArchitecture(options.name, foundReqs);
@@ -97,7 +97,7 @@ export async function iterationFromGlobalCommand(options: IterationFromGlobalOpt
 
     // 8. 生成期次总览
     const graphContent = generateProjectGraph(options.name, foundReqs, reqDetails.length);
-    await writeFile(join(iterationDir, '000-迭代总览', 'PROJECT_GRAPH.md'), graphContent);
+    await writeFile(join(iterationDir, '000-overview', 'PROJECT_GRAPH.md'), graphContent);
 
     // 9. 自动拆分 Task
     const taskIds = await autoSplitTasks(iterationDir, foundReqs);

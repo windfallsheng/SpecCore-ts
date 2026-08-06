@@ -125,7 +125,7 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     ],
     examples: [
       'speccore doc2spec -f PRD.docx -p backend -i Q1',
-      'speccore doc2spec -f 需求.md -p frontend -i Q1',
+      'speccore doc2spec -f requirements.md -p frontend -i Q1',
     ],
   },
   analyze: {

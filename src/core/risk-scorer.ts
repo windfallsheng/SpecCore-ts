@@ -8,7 +8,7 @@ export interface RiskItem {
   level: '🔴' | '🟡' | '🟢';
   description: string;     // 风险描述
   mitigation: string;      // 缓解建议
-  source: '需求' | '源码';  // 来源
+  source: 'requirements' | '源码';  // 来源
 }
 
 export interface RiskScore {
@@ -39,7 +39,7 @@ export async function scoreRisk(content: string, taskName: string, iterationDir?
       level: '🔴',
       description: '涉及资金交易，任何错误都可能导致资损',
       mitigation: '必须双人审查 + 充分测试覆盖 + 添加资金操作日志',
-      source: '需求',
+      source: 'requirements',
     });
   }
 
@@ -53,7 +53,7 @@ export async function scoreRisk(content: string, taskName: string, iterationDir?
       level: '🔴',
       description: '权限变更可能造成越权访问',
       mitigation: '逐接口检查权限注解 + 补充越权测试用例',
-      source: '需求',
+      source: 'requirements',
     });
   }
 
@@ -65,7 +65,7 @@ export async function scoreRisk(content: string, taskName: string, iterationDir?
       level: '🔴',
       description: '物理删除操作不可逆',
       mitigation: '建议改用软删除 + 回收站机制, 生产环境禁止物理删除',
-      source: '需求',
+      source: 'requirements',
     });
   }
 
@@ -79,7 +79,7 @@ export async function scoreRisk(content: string, taskName: string, iterationDir?
       level: '🟡',
       description: '批量操作可能影响大量数据',
       mitigation: '添加批量限制(≤1000) + 异步处理 + 操作确认弹窗',
-      source: '需求',
+      source: 'requirements',
     });
   }
 
@@ -93,7 +93,7 @@ export async function scoreRisk(content: string, taskName: string, iterationDir?
       level: '🟡',
       description: '大数据量导出可能拖垮服务',
       mitigation: '异步导出 + 分页查询 + 文件压缩 + 24h自动清理',
-      source: '需求',
+      source: 'requirements',
     });
   }
 
@@ -107,7 +107,7 @@ export async function scoreRisk(content: string, taskName: string, iterationDir?
       level: '🟡',
       description: '数据库结构变更可能影响已有功能',
       mitigation: '先在测试环境验证 + 写好回滚脚本 + 非高峰期执行',
-      source: '需求',
+      source: 'requirements',
     });
   }
 
@@ -121,7 +121,7 @@ export async function scoreRisk(content: string, taskName: string, iterationDir?
       level: '🟡',
       description: '外部系统不可用时本功能也会受影响',
       mitigation: '添加超时(5s) + 熔断降级 + 重试机制 + 监控告警',
-      source: '需求',
+      source: 'requirements',
     });
   }
 
@@ -134,7 +134,7 @@ export async function scoreRisk(content: string, taskName: string, iterationDir?
       level: '🟢',
       description: '标准增删改查，风险较低',
       mitigation: '注意输入校验 + 异常处理',
-      source: '需求',
+      source: 'requirements',
     });
   }
 

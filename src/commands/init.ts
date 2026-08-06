@@ -149,14 +149,14 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
       '| 命令 | 作用 | 参数 | 上游依赖 | 下游产出 |',
       '| :--- | :--- | :--- | :--- | :--- |',
       '| init | 初始化项目 | --interactive/--force/--update | 无 | .speccore/ + 工具集成 |',
-      '| doc2spec | Word→Spec MD | -f <文件> --iter <期次> | PRD/Word | 010-产品需求/*.md |',
-      '| analyze | 需求分析 | -I <期次> --task <任务> | 010-产品需求/ | 020-需求文档/ANALYSIS.md |',
-      '| split | 拆分任务 | -i <期次> --owner <人> | 020-需求文档/ | Task-001~NNN/ |',
+      '| doc2spec | Word→Spec MD | -f <文件> --iter <期次> | PRD/Word | 010-requirements/*.md |',
+      '| analyze | 需求分析 | -I <期次> --task <任务> | 010-requirements/ | 020-specs/ANALYSIS.md |',
+      '| split | 拆分任务 | -i <期次> --owner <人> | 020-specs/ | Task-001~NNN/ |',
       '| plan | 执行计划 | -I <期次> --owner <人> | Task 列表 | plan.json |',
       '| execute | 执行开发 | -i <期次> -t <任务> --type <类型> | REQ.md/TECH.md | 代码 + .issues.md |',
       '| pr | 创建PR | --task <任务> | 代码提交 | Pull Request |',
       '| done | 归档收尾 | --task <任务> | 全部完成 | .verification |',
-      '| spec2doc | 导出文档 | -i <期次> -o <文件> | 020-需求文档/ | Word/PDF |',
+      '| spec2doc | 导出文档 | -i <期次> -o <文件> | 020-specs/ | Word/PDF |',
       '| retro | 任务回顾 | --task/--all/--owner/--type | done后 | 回顾报告 |',
       '| change | 需求变更 | <描述> --task <任务> --type | 进行中任务 | 变更记录 |',
       '| dev | 智能级联 | --auto/--from/--to | 全部阶段 | 自动全流程 |',
@@ -165,9 +165,9 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
       '',
       '```',
       'Iteration-xxx/',
-      '├── 000-迭代总览/     ← 进度跟踪',
-      '├── 010-产品需求/     ← doc2spec 写入',
-      '├── 020-需求文档/     ← analyze 输出',
+      '├── 000-overview/     ← 进度跟踪',
+      '├── 010-requirements/     ← doc2spec 写入',
+      '├── 020-specs/     ← analyze 输出',
       '├── STAFFING.md      ← 人员排期',
       '└── Task-*/          ← split 拆分任务（含 .issues.md .needs-retry）',
       '```',
@@ -653,7 +653,7 @@ flowchart TB
 | :--- | :--- | :--- | :--- |
 | _待导入_ | - | - | - |
 
-## 小程序端
+## miniapp
 
 | 原型名称 | 位置 | 关联需求 | 说明 |
 | :--- | :--- | :--- | :--- |
@@ -1049,35 +1049,35 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
     '| 成员 | 平台方向 | 投入比例 |',
     '| :--- | :--- | :--- |',
     '| 张三 | APP, H5 | 80% |',
-    '| 李四 | 管理后台, 小程序 | 70% |',
+    '| 李四 | admin, 小程序 | 70% |',
     '',
     '> 编辑此文件后重新运行 split 即可更新默认分配',
   ].join('\n'));
 
   // 01-产品需求/ — 按产品端区分
   // 源文件/ 存放原始文档与素材  各端/ 存放转换后的 MD
-  const prdDir = join(iterDir, '010-产品需求');
+  const prdDir = join(iterDir, '010-requirements');
   // 源文件/ 存放原始文档  素材/ 存放共享图片、原型（跨端引用）
-  await ensureDir(join(prdDir, '源文件'));
-  await ensureDir(join(prdDir, '素材', 'prd'));     // PRD 提取的图片
-  await ensureDir(join(prdDir, '素材', '原型'));    // 产品原型
-  await ensureDir(join(prdDir, '素材', '设计稿'));  // UI 设计稿
-  await ensureDir(join(prdDir, 'APP端'));
-  await ensureDir(join(prdDir, 'H5端'));
-  await ensureDir(join(prdDir, '小程序端'));
-  await ensureDir(join(prdDir, '管理后台'));
+  await ensureDir(join(prdDir, 'sources'));
+  await ensureDir(join(prdDir, 'assets', 'prd'));     // PRD 提取的图片
+  await ensureDir(join(prdDir, 'assets', 'prototypes'));    // 产品原型
+  await ensureDir(join(prdDir, 'assets', 'designs'));  // UI 设计稿
+  await ensureDir(join(prdDir, 'app'));
+  await ensureDir(join(prdDir, 'h5'));
+  await ensureDir(join(prdDir, 'miniapp'));
+  await ensureDir(join(prdDir, 'admin'));
   await ensureDir(join(prdDir, '_shared'));
   
-  await writeFile(join(prdDir, '源文件', 'README.md'), '# 原始文档与素材\n\n请将产品提供的 Word/PDF/原型图 放在此处。\n\n- PRD 文档\n- 产品原型\n- 业务素材');
-  await writeFile(join(prdDir, 'APP端/需求.md'), '# APP端需求\n\n## 核心功能\n- 功能描述\n- 涉及的API和数据');
-  await writeFile(join(prdDir, 'H5端/需求.md'), '# H5端需求\n\n## 核心功能\n- 功能描述');
-  await writeFile(join(prdDir, '小程序端/需求.md'), '# 小程序端需求\n\n## 核心功能\n- 功能描述');
-  await writeFile(join(prdDir, '管理后台/需求.md'), '# 管理后台需求\n\n## 核心功能\n- 功能描述');
+  await writeFile(join(prdDir, 'sources', 'README.md'), '# 原始文档与素材\n\n请将产品提供的 Word/PDF/原型图 放在此处。\n\n- PRD 文档\n- 产品原型\n- 业务素材');
+  await writeFile(join(prdDir, 'app/requirements.md'), '# app需求\n\n## 核心功能\n- 功能描述\n- 涉及的API和数据');
+  await writeFile(join(prdDir, 'h5/requirements.md'), '# h5需求\n\n## 核心功能\n- 功能描述');
+  await writeFile(join(prdDir, 'miniapp/requirements.md'), '# miniapp需求\n\n## 核心功能\n- 功能描述');
+  await writeFile(join(prdDir, 'admin/requirements.md'), '# admin需求\n\n## 核心功能\n- 功能描述');
   await writeFile(join(prdDir, '_shared/业务规则.md'), '# 通用业务规则\n\n- 规则1\n- 规则2');
 
   // 02-需求文档/ — analyze 输出，按端生成
-  const specDir = join(iterDir, '020-需求文档');
-  for (const platform of ['APP端', 'H5端', '小程序端', '管理后台']) {
+  const specDir = join(iterDir, '020-specs');
+  for (const platform of ['app', 'h5', 'miniapp', 'admin']) {
     await ensureDir(join(specDir, platform));
     await writeFile(join(specDir, platform, 'ANALYSIS.md'), [
       `# ${platform} 需求分析`,
@@ -1095,7 +1095,7 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
   }
 
   // 00-迭代总览/
-  const overviewDir = join(iterDir, '000-迭代总览');
+  const overviewDir = join(iterDir, '000-overview');
   await ensureDir(overviewDir);
   await writeFile(join(overviewDir, 'PROJECT_GRAPH.md'), [
     '# 示例任务总览',
@@ -1105,10 +1105,10 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
     '| Task-001 | APP核心功能 | feature | 待开发 | 张三 |',
     '| Task-002 | H5核心功能 | feature | 待开发 | 张三 |',
     '| Task-003 | 小程序核心功能 | feature | 待开发 | 李四 |',
-    '| Task-004 | 管理后台功能 | feature | 待开发 | 李四 |',
+    '| Task-004 | admin功能 | feature | 待开发 | 李四 |',
   ].join('\n'));
 
-  logger.info('   📂 示例期次: Iteration-示例/ (按端区分: APP/H5/小程序/管理后台)');
+  logger.info('   📂 示例期次: Iteration-示例/ (按端区分: APP/H5/小程序/admin)');
 }
 
 function detectGitUrl(root: string): string | undefined {

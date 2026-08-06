@@ -190,11 +190,11 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     const iterDir = `Iteration-${iterName}`;
     // 目标目录：指定 --task 则放入 Task 目录，否则放入 01-产品需求
     const taskId = options.task ? (options.task.startsWith('Task-') ? options.task : `Task-${options.task}`) : null;
-    const baseDir = taskId ? join(iterDir, taskId) : join(iterDir, '010-产品需求');
+    const baseDir = taskId ? join(iterDir, taskId) : join(iterDir, '010-requirements');
     const targetDir = baseDir;
-    const imageDir = join(iterDir, '010-产品需求', '素材', 'prd'); // PRD 提取的图片
-    const platform = options.platform || '需求';
-    const outputPath = join(targetDir, `${platform}需求.md`);
+    const imageDir = join(iterDir, '010-requirements', 'assets', 'prd'); // PRD 提取的图片
+    const platform = options.platform || 'requirements';
+    const outputPath = join(targetDir, `${platform}requirements.md`);
 
     await ensureDir(targetDir);
     await ensureDir(imageDir);
@@ -264,8 +264,8 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     // 2. 空行清理
     content = content.replace(/\n{3,}/g, '\n\n');
 
-    // 3. 图片路径修正（pandoc → 010-产品需求/素材/prd/media/，Markdown → ../../素材/prd/）
-    content = content.replace(/\]\(media\//g, '](../../素材/prd/');
+    // 3. 图片路径修正（pandoc → 010-requirements/assets/prd/media/，Markdown → ../../assets/prd/）
+    content = content.replace(/\]\(media\//g, '](../../assets/prd/');
 
     // 4. 接口表格检测 + 提示
     const hasInterfaceTable = /\|\s*方法\s*\|/i.test(content) || /\|\s*METHOD\s*\|/i.test(content);
@@ -290,7 +290,7 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
       indexContent = '# 本期需求文档索引\n\n> doc2spec 自动生成\n\n| 端 | 文件 | 转换时间 | 来源 |\n| :--- | :--- | :--- | :--- |\n';
     }
     if (!indexContent.includes(`| ${platform} |`)) {
-      const entry = `| ${platform} | ${platform}需求.md | ${new Date().toISOString().split('T')[0]} | ${basename(options.file)} |`;
+      const entry = `| ${platform} | ${platform}requirements.md | ${new Date().toISOString().split('T')[0]} | ${basename(options.file)} |`;
       indexContent += entry + '\n';
     }
     await writeFile(indexPath, indexContent);
@@ -337,10 +337,10 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
 
 /**
  * 将各端需求文档自动合并到统一的 REQUIREMENT.md
- * 格式: ## {端名}需求（取自 {端名}需求.md 的 ## 接口定义 表格）
+ * 格式: ## {端名}需求（取自 {端名}requirements.md 的 ## 接口定义 表格）
  */
 async function mergeToRequirement(iterDir: string, targetDir: string, platform: string): Promise<void> {
-  const reqPath = join(targetDir, `${platform}需求.md`);
+  const reqPath = join(targetDir, `${platform}requirements.md`);
   const globalReqPath = join(targetDir, 'REQUIREMENT.md');
 
   if (!(await pathExists(reqPath))) return;
@@ -366,7 +366,7 @@ async function mergeToRequirement(iterDir: string, targetDir: string, platform: 
     globalContent = `# 本期需求文档\n\n> 由 doc2spec 自动合并各端需求\n\n`;
   }
 
-  const sectionLabel = platform.endsWith('端') ? platform + '需求' : platform + '端需求';
+  const sectionLabel = platform.endsWith('端') ? platform + 'requirements' : platform + '端需求';
   const platformSection = `\n## ${sectionLabel}\n\n${descContent.slice(0, 500)}${apiSection}\n`;
   
   // 去重：如果已有同端内容，替换

@@ -24,7 +24,7 @@ export interface IterationState {
 }
 
 export async function readProjectGraph(iteration: string): Promise<IterationState> {
-  const graphPath = join(`Iteration-${iteration}`, '000-迭代总览', 'PROJECT_GRAPH.md');
+  const graphPath = join(`Iteration-${iteration}`, '000-overview', 'PROJECT_GRAPH.md');
   
   if (!(await pathExists(graphPath))) {
     return {

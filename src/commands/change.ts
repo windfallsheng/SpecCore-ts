@@ -146,7 +146,7 @@ async function dryRunChange(options: ChangeOptions, iteration: string): Promise<
 
     // 查找受影响的依赖任务
     if (await pathExists(taskDir)) {
-      const graphPath = join(process.cwd(), iteration, '000-迭代总览', 'PROJECT_GRAPH.md');
+      const graphPath = join(process.cwd(), iteration, '000-overview', 'PROJECT_GRAPH.md');
       if (await pathExists(graphPath)) {
         const content = await readFile(graphPath, 'utf-8');
         const deps = findDependentTasks(content, options.task || '');
@@ -311,7 +311,7 @@ function normalizeDescription(desc: string): string {
  */
 async function syncToRequirement(iteration: string, taskId: string, desc: string): Promise<void> {
   const iterDir = `Iteration-${iteration}`;
-  const reqPath = join(iterDir, '020-需求文档', 'REQUIREMENT.md');
+  const reqPath = join(iterDir, '020-specs', 'REQUIREMENT.md');
   
   if (!(await pathExists(reqPath))) {
     logger.warn(`  ⚠️ REQUIREMENT.md 不存在，跳过同步`);
@@ -346,7 +346,7 @@ async function syncToRequirement(iteration: string, taskId: string, desc: string
  */
 async function syncToAnalysis(iteration: string, taskId: string, desc: string): Promise<void> {
   const iterDir = `Iteration-${iteration}`;
-  const analysisPath = join(iterDir, '020-需求文档', 'ANALYSIS.md');
+  const analysisPath = join(iterDir, '020-specs', 'ANALYSIS.md');
   
   if (!(await pathExists(analysisPath))) {
     logger.warn(`  ⚠️ ANALYSIS.md 不存在，跳过同步。请先运行 speccore analyze`);
