@@ -25,6 +25,15 @@ function findCommand(cmd: string): string | null {
   try {
     return execSync(`which ${cmd}`, { stdio: 'pipe', encoding: 'utf-8' }).trim();
   } catch {
+    // PATH 找不到时，检查常见安装位置
+    const commonPaths: Record<string, string[]> = {
+      pandoc: ['/usr/local/bin/pandoc', '/opt/homebrew/bin/pandoc', '/usr/bin/pandoc', 'C:\\Program Files\\Pandoc\\pandoc.exe'],
+      libreoffice: ['/Applications/LibreOffice.app/Contents/MacOS/soffice', '/usr/bin/soffice'],
+    };
+    const paths = commonPaths[cmd] || [];
+    for (const p of paths) {
+      try { require('fs').accessSync(p); return p; } catch {}
+    }
     return null;
   }
 }
@@ -148,7 +157,8 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
   }
 
   // pandoc 前置检测
-  if (!findCommand('pandoc')) {
+  const pandocBin = findCommand('pandoc');
+  if (!pandocBin) {
     const installCmd = getInstallCmd('pandoc');
     logger.warn('⚠️  未检测到 pandoc。doc2spec 依赖 pandoc 进行 Word → Markdown 转换。');
     logger.info('');
@@ -238,7 +248,7 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
       const inputFormat = getPandocInputFormat(ext);
       try {
         execSync(
-          `LANG=zh_CN.UTF-8 pandoc "${sourceFile}" -f ${inputFormat} -t gfm --wrap=none --extract-media="${imageDir}" -o "${outputPath}"`,
+          `LANG=zh_CN.UTF-8 "${pandocBin}" "${sourceFile}" -f ${inputFormat} -t gfm --wrap=none --extract-media="${imageDir}" -o "${outputPath}"`,
           { stdio: 'pipe', encoding: 'utf-8' }
         );
         spinner.stop(`✅ 转换完成 → ${outputPath}`);
