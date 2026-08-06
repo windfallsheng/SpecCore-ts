@@ -936,7 +936,7 @@ async function createToolIntegrations(projectRoot: string): Promise<void> {
     ['spec-ops', '操作历史', 'speccore ops'],
   ];
 
-  const tools = ['claude', 'codebuddy', 'cursor', 'trae', 'windsurf'];
+  const tools = ['claude', 'codebuddy', 'cursor', 'trae', 'trae-cn', 'windsurf'];
   for (const tool of tools) {
     const toolDir = join(projectRoot, '.' + tool, 'commands');
     await ensureDir(toolDir);
