@@ -8,7 +8,7 @@ import { logger } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
 
 export async function mergeCheck(iteration: string): Promise<void> {
-  const iterDir = `期次-${iteration}`;
+  const iterDir = `Iteration-${iteration}`;
   const fs = require('fs');
   
   // Find all feature branches
@@ -64,7 +64,7 @@ export async function mergeCheck(iteration: string): Promise<void> {
  * 回滚任务
  */
 export async function rollbackTask(taskId: string, iteration: string, reason?: string): Promise<void> {
-  const iterDir = `期次-${iteration}`;
+  const iterDir = `Iteration-${iteration}`;
   const fs = require('fs');
   
   // Find task directory
@@ -131,7 +131,7 @@ export async function updateArchitecture(iteration: string, newApis: string[], n
     }
     for (const api of newApis) {
       if (!arch.includes(api)) {
-        arch += `- \`${api}\` ← 期次-${iteration}\n`;
+        arch += `- \`${api}\` ← Iteration-${iteration}\n`;
         updated = true;
       }
     }
@@ -144,7 +144,7 @@ export async function updateArchitecture(iteration: string, newApis: string[], n
     }
     for (const table of newTables) {
       if (!arch.includes(table)) {
-        arch += `- \`${table}\` ← 期次-${iteration}\n`;
+        arch += `- \`${table}\` ← Iteration-${iteration}\n`;
         updated = true;
       }
     }

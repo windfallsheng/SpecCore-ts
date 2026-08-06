@@ -69,7 +69,7 @@ async function saveFromTask(options: PatternOptions, targetDir: string): Promise
   }
 
   const cwd = process.cwd();
-  const iterDir = join(cwd, `期次-${iteration}`);
+  const iterDir = join(cwd, `Iteration-${iteration}`);
   const taskDir = join(iterDir, task.id);
   const backendDir = join(taskDir, 'backend');
 

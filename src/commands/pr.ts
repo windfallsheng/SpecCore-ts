@@ -26,7 +26,7 @@ export async function prCommand(options: PrOptions): Promise<void> {
   const iteration = await getDefaultIteration(options.iteration);
   if (!iteration) { logger.error('No active iteration'); return; }
 
-  const iterDir = `期次-${iteration}`;
+  const iterDir = `Iteration-${iteration}`;
   
   let taskId = options.task;
   if (!taskId) {

@@ -75,17 +75,17 @@ export async function iterationFromGlobalCommand(options: IterationFromGlobalOpt
     logger.info('');
 
     // 5. 创建期次目录
-    const iterationDir = join(process.cwd(), `期次-${options.name}`);
+    const iterationDir = join(process.cwd(), `Iteration-${options.name}`);
     if (await pathExists(iterationDir)) {
       if (!options.force) {
-        logger.error(`期次 期次-${options.name} 已存在。使用 --force 覆盖。`);
+        logger.error(`期次 Iteration-${options.name} 已存在。使用 --force 覆盖。`);
         return;
       }
     }
 
     await ensureDir(join(iterationDir, '00-需求文档'));
     await ensureDir(join(iterationDir, '00-技术文档'));
-    await ensureDir(join(iterationDir, '00-期次总览'));
+    await ensureDir(join(iterationDir, '00-迭代总览'));
 
     // 6. 生成需求文档
     const reqContent = generateIterationRequirement(options.name, reqDetails);
@@ -97,7 +97,7 @@ export async function iterationFromGlobalCommand(options: IterationFromGlobalOpt
 
     // 8. 生成期次总览
     const graphContent = generateProjectGraph(options.name, foundReqs, reqDetails.length);
-    await writeFile(join(iterationDir, '00-期次总览', 'PROJECT_GRAPH.md'), graphContent);
+    await writeFile(join(iterationDir, '00-迭代总览', 'PROJECT_GRAPH.md'), graphContent);
 
     // 9. 自动拆分 Task
     const taskIds = await autoSplitTasks(iterationDir, foundReqs);
@@ -124,7 +124,7 @@ export async function iterationFromGlobalCommand(options: IterationFromGlobalOpt
 
     // 11. 更新上下文
     await updateContext({
-      currentIteration: `期次-${options.name}`,
+      currentIteration: `Iteration-${options.name}`,
       lastUpdated: new Date().toISOString(),
     } as Partial<Context>);
 
@@ -132,7 +132,7 @@ export async function iterationFromGlobalCommand(options: IterationFromGlobalOpt
     logger.info('');
     logger.success('✅ 期次生成完成！');
     logger.info('');
-    logger.info(`📁 期次: 期次-${options.name}`);
+    logger.info(`📁 期次: Iteration-${options.name}`);
     logger.info(`📋 包含需求: ${reqIds.join(', ')}`);
     logger.info('');
     logger.info(`📊 生成 Task（${taskIds.length} 个）:`);

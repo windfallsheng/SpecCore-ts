@@ -126,7 +126,7 @@ async function createSingleTask(options: TaskNewOptions): Promise<void> {
       return;
     }
 
-    const iterationDir = `期次-${iteration}`;
+    const iterationDir = `Iteration-${iteration}`;
     
     // Determine task ID
     const rawId = options.id || await findNextTaskId(iterationDir);

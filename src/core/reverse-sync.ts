@@ -75,7 +75,7 @@ export async function reverseSync(rootDir: string, iteration?: string): Promise<
   const entries = await readdir(rootDir, { withFileTypes: true });
   const iterations = iteration
     ? [iteration]
-    : entries.filter((e) => e.isDirectory() && e.name.startsWith('期次-')).map((e) => e.name);
+    : entries.filter((e) => e.isDirectory() && e.name.startsWith('Iteration-')).map((e) => e.name);
 
   for (const taskId of Object.keys(byTask)) {
     for (const iter of iterations) {

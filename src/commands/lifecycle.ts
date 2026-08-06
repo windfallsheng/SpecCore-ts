@@ -66,7 +66,7 @@ export async function lifecycleCommand(options: LifecycleOptions): Promise<void>
     return;
   }
 
-  const iterDir = `期次-${iteration}`;
+  const iterDir = `Iteration-${iteration}`;
   const taskDir = join(iterDir, task.id, 'backend');
   const taskMdPath = join(taskDir, 'TASK.md');
 
@@ -208,7 +208,7 @@ function showNextStep(taskId: string, iteration: string, state: State): void {
 }
 
 async function showAllTasks(iteration: string): Promise<void> {
-  const iterDir = `期次-${iteration}`;
+  const iterDir = `Iteration-${iteration}`;
   const tasks = await scanTasks(iteration);
   
   logger.info(`\n📋 期次 ${iteration} 任务看板:\n`);

@@ -181,7 +181,7 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
 
   try {
     const iterName = options.iter.replace(/^期次-/, '');
-    const iterDir = `期次-${iterName}`;
+    const iterDir = `Iteration-${iterName}`;
     // 目标目录：指定 --task 则放入 Task 目录，否则放入 00-产品需求
     const taskId = options.task ? (options.task.startsWith('Task-') ? options.task : `Task-${options.task}`) : null;
     const baseDir = taskId ? join(iterDir, taskId) : join(iterDir, '00-产品需求');

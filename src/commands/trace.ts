@@ -53,7 +53,7 @@ async function traceFromReq(reqId: string): Promise<void> {
   // Search all iterations for tasks linked to this REQ
   const cwd = process.cwd();
   const entries = await readdir(cwd, { withFileTypes: true });
-  const iterations = entries.filter((e) => e.isDirectory() && e.name.startsWith('期次-'));
+  const iterations = entries.filter((e) => e.isDirectory() && e.name.startsWith('Iteration-'));
 
   for (const iter of iterations) {
     const tasks = await scanTasks(join(cwd, iter.name));
@@ -73,7 +73,7 @@ async function traceFromReq(reqId: string): Promise<void> {
 async function traceFromTask(taskId: string): Promise<void> {
   const cwd = process.cwd();
   const entries = await readdir(cwd, { withFileTypes: true });
-  const iterations = entries.filter((e) => e.isDirectory() && e.name.startsWith('期次-'));
+  const iterations = entries.filter((e) => e.isDirectory() && e.name.startsWith('Iteration-'));
 
   for (const iter of iterations) {
     const taskDir = join(cwd, iter.name, taskId);
@@ -104,7 +104,7 @@ async function traceFull(): Promise<void> {
     logger.info(`  📊 ${reqs.length} requirements registered`);
 
     const entries = await readdir(cwd, { withFileTypes: true });
-    const iterations = entries.filter((e) => e.isDirectory() && e.name.startsWith('期次-'));
+    const iterations = entries.filter((e) => e.isDirectory() && e.name.startsWith('Iteration-'));
     let totalTasks = 0;
 
     for (const iter of iterations) {

@@ -12,7 +12,7 @@ export async function getAllIterationNames(): Promise<string[]> {
   const cwd = process.cwd();
   const entries = await readdir(cwd, { withFileTypes: true });
   return entries
-    .filter(e => e.isDirectory() && e.name.startsWith('期次-'))
+    .filter(e => e.isDirectory() && e.name.startsWith('Iteration-'))
     .map(e => {
       // 期次-001-MyName → MyName
       const parts = e.name.split('-');
@@ -31,7 +31,7 @@ export async function getAllTaskNames(): Promise<string[]> {
   const allTasks: string[] = [];
 
   for (const iter of iterations) {
-    if (!iter.isDirectory() || !iter.name.startsWith('期次-')) continue;
+    if (!iter.isDirectory() || !iter.name.startsWith('Iteration-')) continue;
     const iterPath = join(cwd, iter.name);
     try {
       const entries = await readdir(iterPath, { withFileTypes: true });
@@ -84,7 +84,7 @@ export async function checkTaskNameConflict(name: string, excludeName?: string):
   const conflicts: { name: string; iteration: string }[] = [];
 
   for (const iter of iterations) {
-    if (!iter.isDirectory() || !iter.name.startsWith('期次-')) continue;
+    if (!iter.isDirectory() || !iter.name.startsWith('Iteration-')) continue;
     const iterPath = join(cwd, iter.name);
     try {
       const entries = await readdir(iterPath, { withFileTypes: true });

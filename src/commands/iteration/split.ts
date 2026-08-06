@@ -66,7 +66,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       return;
     }
 
-    const iterationDir = `期次-${iteration}`;
+    const iterationDir = `Iteration-${iteration}`;
 
     // ── 1. 检查 ANALYSIS.md + AI 智能拆分建议 ──
     const analysisPath = join(iterationDir, '00-需求文档', 'ANALYSIS.md');
@@ -589,7 +589,7 @@ ${apiDesc}
 }
 
 async function updateProjectGraph(iterationDir: string, sections: Section[]): Promise<void> {
-  const graphPath = join(iterationDir, '00-期次总览', 'PROJECT_GRAPH.md');
+  const graphPath = join(iterationDir, '00-迭代总览', 'PROJECT_GRAPH.md');
   
   let content = '';
   if (await pathExists(graphPath)) {

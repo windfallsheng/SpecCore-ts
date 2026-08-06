@@ -67,7 +67,7 @@ export async function migrateCommand(options: MigrateOptions): Promise<void> {
 
     // 3. 扫描迭代/任务
     const entries = await readdir(projectRoot, { withFileTypes: true });
-    const iterDirs = entries.filter((e) => e.isDirectory() && e.name.startsWith('期次-'));
+    const iterDirs = entries.filter((e) => e.isDirectory() && e.name.startsWith('Iteration-'));
     report.iterations = iterDirs.length;
 
     for (const iterDir of iterDirs) {

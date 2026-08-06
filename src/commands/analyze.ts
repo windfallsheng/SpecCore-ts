@@ -158,7 +158,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 
       // 显示待确认清单
       try {
-        const iterDir = `期次-${iteration}`;
+        const iterDir = `Iteration-${iteration}`;
         const questions = await extractQuestions(iterDir);
         if (questions.length > 0) {
           showQuestionChecklist(questions, '需求分析待确认');
@@ -182,7 +182,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
  * 期次级 Spec 文档生成: 为 00-需求文档/ 创建全套规范文件
  */
 async function generateIterationSpecDocs(iteration: string): Promise<void> {
-  const specDir = join(`期次-${iteration}`, '00-需求文档');
+  const specDir = join(`Iteration-${iteration}`, '00-需求文档');
   await ensureDir(specDir);
 
   const now = new Date().toISOString().split('T')[0];
@@ -237,7 +237,7 @@ async function generateIterationSpecDocs(iteration: string): Promise<void> {
  */
 async function enrichTaskDocs(iteration: string, taskId: string, reqFiles: string[]): Promise<void> {
   const { readdirSync } = require('fs');
-  const iterDir = `期次-${iteration}`;
+  const iterDir = `Iteration-${iteration}`;
   
   if (!(await pathExists(iterDir))) return;
 

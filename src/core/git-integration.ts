@@ -59,7 +59,7 @@ export function detectDefaultBranch(iteration?: string): string | undefined {
   // 1. 期次级配置 (PROJECT_GRAPH.md 中 默认分支 字段)
   if (iteration) {
     try {
-      const iterGraphPath = join(`期次-${iteration}`, '00-期次总览', 'PROJECT_GRAPH.md');
+      const iterGraphPath = join(`Iteration-${iteration}`, '00-迭代总览', 'PROJECT_GRAPH.md');
       if (require('fs').existsSync(iterGraphPath)) {
         const content = require('fs').readFileSync(iterGraphPath, 'utf-8');
         const match = content.match(/默认分支[：:]\s*(\S+)/);

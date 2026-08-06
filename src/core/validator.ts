@@ -74,7 +74,7 @@ async function validateTask(
     passRate: 0
   };
   
-  const taskPath = join(`期次-${iteration}`, taskId);
+  const taskPath = join(`Iteration-${iteration}`, taskId);
   
   // Check if task directory exists
   if (!(await pathExists(taskPath))) {
@@ -187,15 +187,15 @@ async function findIterations(): Promise<string[]> {
   
   const entries = await readdir('.', { withFileTypes: true });
   return entries
-    .filter(e => e.isDirectory() && e.name.startsWith('期次-'))
-    .map(e => e.name.replace('期次-', ''));
+    .filter(e => e.isDirectory() && e.name.startsWith('Iteration-'))
+    .map(e => e.name.replace('Iteration-', ''));
 }
 
 async function findTasks(iteration: string): Promise<string[]> {
   const { pathExists, readdir } = await import('fs-extra');
   const { join } = await import('path');
   
-  const iterPath = `期次-${iteration}`;
+  const iterPath = `Iteration-${iteration}`;
   if (!(await pathExists(iterPath))) return [];
   
   const entries = await readdir(iterPath, { withFileTypes: true });

@@ -360,7 +360,7 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
   const totalElapsed = Math.round((Date.now() - startTime) / 1000);
   logger.success(`Execution complete! ${total} tasks in ${totalElapsed}s`);
   // Post-execution question review
-  const postQs = await extractQuestions(`期次-${iteration}`);
+  const postQs = await extractQuestions(`Iteration-${iteration}`);
   if (postQs.length > 0) showQuestionChecklist(postQs, '执行后审查');
   
   logOperation('speccore execute done', `completed ${total} tasks in ${totalElapsed}s`);
@@ -452,7 +452,7 @@ async function processBatch(tasks: TaskState[], state: ExecutionState, iteration
   }
   
   // 显示每个任务的 Spec 文件
-  const iterDir = `期次-${iteration}`;
+  const iterDir = `Iteration-${iteration}`;
   for (const task of tasks) {
     logger.info(`   ${task.id}:`);
     for (const f of ['REQ.md', 'TECH.md', 'TASK.md']) {
@@ -537,7 +537,7 @@ function printExecutionPreview(tasks: TaskState[], iteration: string, batchSize 
 // Task execution (transaction protected)
 // ============================================================
 async function simulateTaskExecution(task: TaskState, iteration: string): Promise<void> {
-  const taskDir = join(`期次-${iteration}`, task.id);
+  const taskDir = join(`Iteration-${iteration}`, task.id);
   let filesUpdated = 0;
 
   if (await pathExists(taskDir)) {
@@ -805,7 +805,7 @@ function extractDescription(req: string): string {
 
 async function filterByPlatform(tasks: TaskState[], iteration: string, platform: string): Promise<TaskState[]> {
   const filtered: TaskState[] = [];
-  const iterDir = join(process.cwd(), `期次-${iteration}`);
+  const iterDir = join(process.cwd(), `Iteration-${iteration}`);
   for (const task of tasks) {
     const platformDir = join(iterDir, task.id, 'frontend', platform);
     if (await pathExists(platformDir)) filtered.push(task);
@@ -836,7 +836,7 @@ async function handleHotfix(options: ExecuteOptions, taskIds: string[]): Promise
 // ============================================================
 
 async function preFlightCheck(tasks: TaskState[], iteration: string, options: ExecuteOptions): Promise<TaskState[]> {
-  const iterDir = `期次-${iteration}`;
+  const iterDir = `Iteration-${iteration}`;
   const ask = (q: string): Promise<string> => {
     logger.info(q);
     return new Promise((resolve) => {
@@ -930,7 +930,7 @@ async function preFlightCheck(tasks: TaskState[], iteration: string, options: Ex
  * 从 IMPACT.md 检测任务依赖，返回应作为 base 的依赖任务 ID
  */
 async function detectDependencyBase(iteration: string, taskId: string): Promise<string | undefined> {
-  const impactPath = join(`期次-${iteration}`, 'IMPACT.md');
+  const impactPath = join(`Iteration-${iteration}`, 'IMPACT.md');
   if (!(await pathExists(impactPath))) return undefined;
 
   const impact = await readFile(impactPath, 'utf-8');
@@ -988,10 +988,10 @@ function buildAgentContext(tasks: TaskState[], agent: string): string {
     
     // Progressive loading order
     ctx += `**Read in this order (progressive disclosure):**\n`;
-    ctx += `1. \`期次-*/${task.id}/backend/TASK.md\` — task overview + deliverables checklist\n`;
-    ctx += `2. \`期次-*/${task.id}/backend/REQ.md\` — requirements + acceptance criteria\n`;
-    ctx += `3. \`期次-*/${task.id}/backend/TECH.md\` — tech design + architecture\n`;
-    ctx += `4. \`期次-*/${task.id}/_shared/API_CONTRACT.yaml\` — API contract (if exists)\n\n`;
+    ctx += `1. \`Iteration-*/${task.id}/backend/TASK.md\` — task overview + deliverables checklist\n`;
+    ctx += `2. \`Iteration-*/${task.id}/backend/REQ.md\` — requirements + acceptance criteria\n`;
+    ctx += `3. \`Iteration-*/${task.id}/backend/TECH.md\` — tech design + architecture\n`;
+    ctx += `4. \`Iteration-*/${task.id}/_shared/API_CONTRACT.yaml\` — API contract (if exists)\n\n`;
 
     ctx += `**Supplementary (read only if needed):**\n`;
     ctx += `- TEST.md (test cases) | REVIEW.md (review checklist)\n`;
@@ -1023,7 +1023,7 @@ async function executionVerifyLoop(
   const maxRounds = 3;
   const { join } = require('path');
   const { readFile, writeFile, pathExists } = require('fs-extra');
-  const iterDir = `期次-${iteration}`;
+  const iterDir = `Iteration-${iteration}`;
 
   for (const task of tasks) {
     logger.info(`\n🔍 验证 ${task.id}...`);

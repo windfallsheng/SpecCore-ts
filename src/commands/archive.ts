@@ -36,7 +36,7 @@ export async function archiveCommand(options: ArchiveOptions): Promise<void> {
       return;
     }
 
-    const iterationDir = `期次-${iteration}`;
+    const iterationDir = `Iteration-${iteration}`;
     const archiveDir = join(iterationDir, 'archived');
     await ensureDir(archiveDir);
 
@@ -106,7 +106,7 @@ async function restoreTask(taskId: string, iteration?: string): Promise<void> {
     throw new Error('No iteration specified');
   }
 
-  const iterationDir = `期次-${iter}`;
+  const iterationDir = `Iteration-${iter}`;
   const archiveDir = join(iterationDir, 'archived');
   const archivedPath = join(archiveDir, taskId);
   const targetPath = join(iterationDir, taskId);
@@ -126,7 +126,7 @@ async function listArchived(): Promise<void> {
   
   const entries = await readdir('.', { withFileTypes: true });
   const iterations = entries
-    .filter(e => e.isDirectory() && e.name.startsWith('期次-'))
+    .filter(e => e.isDirectory() && e.name.startsWith('Iteration-'))
     .map(e => e.name);
 
   for (const iteration of iterations) {

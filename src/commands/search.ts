@@ -60,7 +60,7 @@ export async function searchCommand(options: SearchOptions): Promise<void> {
 
 async function searchAllIterations(cwd: string, keyword: string, results: SearchResult[]): Promise<void> {
   const entries = await readdir(cwd, { withFileTypes: true });
-  const iterations = entries.filter((e) => e.isDirectory() && e.name.startsWith('期次-'));
+  const iterations = entries.filter((e) => e.isDirectory() && e.name.startsWith('Iteration-'));
 
   for (const iter of iterations) {
     await searchInDir(join(cwd, iter.name), keyword, results);
@@ -71,7 +71,7 @@ async function searchInIterationOrTask(cwd: string, keyword: string, results: Se
   if (options.task) {
     const entries = await readdir(cwd, { withFileTypes: true });
     for (const e of entries) {
-      if (e.isDirectory() && e.name.startsWith('期次-')) {
+      if (e.isDirectory() && e.name.startsWith('Iteration-')) {
         const taskDir = join(cwd, e.name, options.task);
         if (await pathExists(taskDir)) {
           await searchInDir(taskDir, keyword, results);
