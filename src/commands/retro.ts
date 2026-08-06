@@ -51,7 +51,7 @@ export async function retroCommand(options: RetroOptions): Promise<void> {
 
   // 按责任人/类型过滤（从 PROJECT_GRAPH.md 读取）
   if (((options as any).owner || (options as any).type) && iterDir) {
-    const graphPath = join(process.cwd(), iterDir, '000-迭代总览', 'PROJECT_GRAPH.md');
+    const graphPath = join(process.cwd(), iterDir, '000-overview', 'PROJECT_GRAPH.md');
     if (await pathExists(graphPath)) {
       const graph = await readFile(graphPath, 'utf-8');
       const meta: Record<string, { owner: string; type: string }> = {};

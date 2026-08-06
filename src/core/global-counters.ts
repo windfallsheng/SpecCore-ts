@@ -22,12 +22,28 @@ export async function getCounters(): Promise<Counters> {
   return { iterations: 0, tasks: 0 };
 }
 
+/** 中英文名称转 slug（保留英文/数字，中文转拼音首字母缩写） */
+function toSlug(name: string): string {
+  // 去掉 Iteration- 前缀
+  const clean = name.replace(/^Iteration-/, '');
+  // 提取英文/数字部分
+  const latin = clean.replace(/[^a-zA-Z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+  if (latin.length > 0) return latin.toLowerCase().slice(0, 30);
+  // 如果全是中文，取拼音首字母或直接用短hash
+  if (/[\u4e00-\u9fff]/.test(clean)) {
+    const hash = Math.abs(clean.split('').reduce((a, c) => a + c.charCodeAt(0), 0)).toString(36).slice(0, 4);
+    return 'iter-' + hash;
+  }
+  return 'unknown';
+}
+
 export async function nextIterationId(name: string): Promise<{ id: string; num: number }> {
   const c = await getCounters();
   c.iterations++;
   await save(c);
   const padded = String(c.iterations).padStart(3, '0');
-  return { id: `Iteration-${padded}-${name}`, num: c.iterations };
+  const slug = toSlug(name);
+  return { id: `Iteration-${padded}-${slug}`, num: c.iterations };
 }
 
 export async function nextTaskId(name?: string): Promise<{ id: string; num: number }> {

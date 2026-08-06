@@ -29,7 +29,7 @@ export async function handoverCommand(options: HandoverOptions): Promise<void> {
     const doc = await generateHandoverDoc(iteration);
     const format = options.format || 'md';
     const outputPath =
-      options.output || join(process.cwd(), iterDir, '000-迭代总览', `交接文档.${format}`);
+      options.output || join(process.cwd(), iterDir, '000-overview', `交接文档.${format}`);
 
     await writeFile(outputPath, doc);
 

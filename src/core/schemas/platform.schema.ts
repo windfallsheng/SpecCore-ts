@@ -35,14 +35,14 @@ export const DEFAULT_PLATFORMS: PlatformsConfig = {
       enabled: true,
     },
     h5: {
-      name: 'H5端',
+      name: 'h5',
       description: '移动端 H5',
       default: true,
       tech_stack: 'Vue 3 + Vant + Vite',
       enabled: true,
     },
     miniapp: {
-      name: '小程序端',
+      name: 'miniapp',
       description: '微信小程序',
       default: true,
       tech_stack: 'Taro + TypeScript',

@@ -32,9 +32,9 @@ export async function iterationCreateCommand(options: IterationCreateOptions): P
     }
 
     // Create directory structure
-    await ensureDir(join(iterationDir, '020-需求文档'));
+    await ensureDir(join(iterationDir, '020-specs'));
     await ensureDir(join(iterationDir, '00-技术文档'));
-    await ensureDir(join(iterationDir, '000-迭代总览'));
+    await ensureDir(join(iterationDir, '000-overview'));
 
     // Create default files
     await createIterationFiles(iterationDir, fullName, options);
@@ -66,7 +66,7 @@ export async function iterationCreateCommand(options: IterationCreateOptions): P
 async function createIterationFiles(iterationDir: string, fullName: string, options: IterationCreateOptions): Promise<void> {
   // REQUIREMENT.md
   await writeFile(
-    join(iterationDir, '020-需求文档', 'REQUIREMENT.md'),
+    join(iterationDir, '020-specs', 'REQUIREMENT.md'),
     `# 本期需求文档
 
 > 期次：${fullName}
@@ -125,7 +125,7 @@ async function createIterationFiles(iterationDir: string, fullName: string, opti
 
   // PROJECT_GRAPH.md
   await writeFile(
-    join(iterationDir, '000-迭代总览', 'PROJECT_GRAPH.md'),
+    join(iterationDir, '000-overview', 'PROJECT_GRAPH.md'),
     `# 本期任务总览
 
 > 期次：${fullName}
