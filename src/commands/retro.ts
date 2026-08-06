@@ -29,30 +29,50 @@ interface RetroReport {
 
 export async function retroCommand(options: RetroOptions): Promise<void> {
   const iteration = await getDefaultIteration(options.iteration);
-  const taskId = options.task || 'Task-001';
   const iterDir = iteration ? `Iteration-${iteration}` : '';
 
-  const report = await generateReport(taskId, iterDir);
+  // 确定要生成回顾的任务列表
+  let taskIds: string[] = [];
+  if ((options as any).all && iterDir) {
+    try {
+      const entries = await readdir(join(process.cwd(), iterDir), { withFileTypes: true });
+      taskIds = entries.filter(e => e.isDirectory() && e.name.startsWith('Task-')).map(e => e.name);
+    } catch {}
+  } else if ((options as any).tasks) {
+    taskIds = (options as any).tasks.split(',').map((t: string) => t.trim());
+  } else {
+    taskIds = [options.task || 'Task-001'];
+  }
 
-  // 非 TTY → HTML
-  if (!process.stdout.isTTY) {
-    const html = renderRetroHtml(report);
-    const outPath = options.output || join(process.cwd(), `speccore-retro-${taskId}.html`);
-    await writeFile(outPath, html);
-    logger.info(`✅ 回顾报告: ${outPath}`);
+  if (taskIds.length === 0) {
+    logger.warn('没有找到可回顾的任务');
     return;
   }
 
-  // TTY → 终端
-  logger.info('');
-  logger.info(`📝 任务回顾: ${report.task}`);
-  logger.info(`   期次: ${report.iteration || 'N/A'}`);
-  logger.info(`   完成时间: ${report.completedAt}`);
-  logger.info(`   文件变更: ${report.filesChanged} 个`);
-  logger.info(`   验证通过: ${report.validationPassed ? '✅' : '❌'}`);
-  logger.info(`   评分: ${'⭐'.repeat(report.score)}${report.score < 5 ? '☆'.repeat(5 - report.score) : ''} (${report.score}/5)`);
-  logger.info(`   ${report.summary}`);
-  if (report.improvement) logger.info(`   💡 改进: ${report.improvement}`);
+  // 逐个生成报告
+  for (const taskId of taskIds) {
+    const report = await generateReport(taskId, iterDir);
+
+    if (!process.stdout.isTTY) {
+      const html = renderRetroHtml(report);
+      const outPath = options.output || join(process.cwd(), `speccore-retro-${taskId}.html`);
+      await writeFile(outPath, html);
+      logger.info(`✅ 回顾报告: ${outPath}`);
+      continue;
+    }
+
+    logger.info('');
+    logger.info(`📝 任务回顾: ${report.task}`);
+    logger.info(`   期次: ${report.iteration || 'N/A'}`);
+    logger.info(`   完成时间: ${report.completedAt}`);
+    logger.info(`   文件变更: ${report.filesChanged} 个`);
+    logger.info(`   验证通过: ${report.validationPassed ? '✅' : '❌'}`);
+    logger.info(`   评分: ${'⭐'.repeat(report.score)}${report.score < 5 ? '☆'.repeat(5 - report.score) : ''} (${report.score}/5)`);
+    logger.info(`   ${report.summary}`);
+    if (report.improvement) logger.info(`   💡 改进: ${report.improvement}`);
+  }
+
+  logger.info(`\n📊 共生成 ${taskIds.length} 份回顾报告`);
 }
 
 async function generateReport(taskId: string, iterDir: string): Promise<RetroReport> {
