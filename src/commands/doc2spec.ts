@@ -192,7 +192,7 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     const taskId = options.task ? (options.task.startsWith('Task-') ? options.task : `Task-${options.task}`) : null;
     const baseDir = taskId ? join(iterDir, taskId) : join(iterDir, '00-产品需求');
     const targetDir = baseDir;
-    const imageDir = join(iterDir, '00-产品需求', 'images'); // 图片始终共享
+    const imageDir = join(iterDir, '00-产品需求', '素材'); // 共享素材，跨端引用
     const platform = options.platform || '需求';
     const outputPath = join(targetDir, `${platform}需求.md`);
 
@@ -264,9 +264,8 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     // 2. 空行清理
     content = content.replace(/\n{3,}/g, '\n\n');
 
-    // 3. 图片路径修正（pandoc 提取到 <imageDir>/media/，markdown 中引用为 media/xxx.png）
-    //    修正为 images/xxx.png（与图片实际存放目录对齐）
-    content = content.replace(/\]\(media\//g, '](images/');
+    // 3. 图片路径修正（pandoc 提取到 素材/media/，跨端引用 ../素材/）
+    content = content.replace(/\]\(media\//g, '](../素材/');
 
     // 4. 接口表格检测 + 提示
     const hasInterfaceTable = /\|\s*方法\s*\|/i.test(content) || /\|\s*METHOD\s*\|/i.test(content);

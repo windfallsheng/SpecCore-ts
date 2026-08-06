@@ -998,7 +998,9 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
   // 00-产品需求/ — 按产品端区分
   // 源文件/ 存放原始文档与素材  各端/ 存放转换后的 MD
   const prdDir = join(iterDir, '00-产品需求');
+  // 源文件/ 存放原始文档  素材/ 存放共享图片、原型（跨端引用）
   await ensureDir(join(prdDir, '源文件'));
+  await ensureDir(join(prdDir, '素材'));
   await ensureDir(join(prdDir, 'APP端'));
   await ensureDir(join(prdDir, 'H5端'));
   await ensureDir(join(prdDir, '小程序端'));
