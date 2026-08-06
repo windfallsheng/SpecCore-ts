@@ -1,1 +1,1 @@
-speccore welcome --web
+speccore welcome
