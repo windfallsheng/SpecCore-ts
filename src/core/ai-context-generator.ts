@@ -323,7 +323,7 @@ function buildPlatformSourceMap(input: AIContextInput): string {
   const platformDirs = new Set<string>();
   for (const req of input.requirements) {
     const parts = req.split('/');
-    const prdIdx = parts.indexOf('01-产品需求');
+    const prdIdx = parts.indexOf('010-产品需求');
     if (prdIdx >= 0 && prdIdx + 1 < parts.length) {
       const platformDir = parts[prdIdx + 1];
       if (platformDir && !platformDir.startsWith('_')) {

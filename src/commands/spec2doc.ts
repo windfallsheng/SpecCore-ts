@@ -105,12 +105,12 @@ export async function spec2docCommand(options: Spec2DocOptions): Promise<void> {
       return;
     }
     const iterDir = iterName.startsWith('Iteration-') ? iterName : `Iteration-${iterName}`;
-    const reqFile = join(iterDir, '02-需求文档', 'REQUIREMENT.md');
+    const reqFile = join(iterDir, '020-需求文档', 'REQUIREMENT.md');
     if (await pathExists(reqFile)) {
       sourceFiles.push({ path: reqFile, label: '需求文档' });
     }
     // 也检查 ANALYSIS.md
-    const anaFile = join(iterDir, '02-需求文档', 'ANALYSIS.md');
+    const anaFile = join(iterDir, '020-需求文档', 'ANALYSIS.md');
     if (await pathExists(anaFile)) {
       sourceFiles.push({ path: anaFile, label: '分析文档' });
     }

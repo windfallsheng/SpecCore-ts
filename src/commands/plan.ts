@@ -65,7 +65,7 @@ export async function planCommand(options: PlanOptions): Promise<void> {
     }
 
     const saved = await saveToStore(iteration, taskIds, 3, options, 'manual');
-    const planPath = join(`Iteration-${iteration}`, '00-迭代总览', 'PLAN.md');
+    const planPath = join(`Iteration-${iteration}`, '000-迭代总览', 'PLAN.md');
     const tx = new FileTransaction();
     tx.write(planPath, formatPlanMarkdown(plan, iteration));
     await tx.commit();

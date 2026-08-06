@@ -225,7 +225,7 @@ async function calculatePreview(
     catch { return []; }
   })();
   for (const iter of iterations) {
-    const graphPath = join(process.cwd(), iter, '00-迭代总览', 'PROJECT_GRAPH.md');
+    const graphPath = join(process.cwd(), iter, '000-迭代总览', 'PROJECT_GRAPH.md');
     if (await pathExists(graphPath)) {
       const gContent = await readFile(graphPath, 'utf-8');
       const matches = gContent.split(oldName).length - 1;

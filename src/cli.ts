@@ -871,8 +871,8 @@ if (process.argv.length <= 2) {
       if (idirs.length > 0) {
         iteration = idirs[0].slice(3);
         const base = idirs[0];
-        const req = join(base, '02-需求文档', 'REQUIREMENT.md');
-        const ana = join(base, '02-需求文档', 'ANALYSIS.md');
+        const req = join(base, '020-需求文档', 'REQUIREMENT.md');
+        const ana = join(base, '020-需求文档', 'ANALYSIS.md');
         if (!existsSync(req)) {
           phase = 'require'; nextCmd = 'speccore doc2spec --iteration ' + iteration; nextDesc = '导入需求文档';
         } else if (!existsSync(ana)) {

@@ -1000,7 +1000,7 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
 
   // 01-产品需求/ — 按产品端区分
   // 源文件/ 存放原始文档与素材  各端/ 存放转换后的 MD
-  const prdDir = join(iterDir, '01-产品需求');
+  const prdDir = join(iterDir, '010-产品需求');
   // 源文件/ 存放原始文档  素材/ 存放共享图片、原型（跨端引用）
   await ensureDir(join(prdDir, '源文件'));
   await ensureDir(join(prdDir, '素材'));
@@ -1018,7 +1018,7 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
   await writeFile(join(prdDir, '_shared/业务规则.md'), '# 通用业务规则\n\n- 规则1\n- 规则2');
 
   // 02-需求文档/ — analyze 输出，按端生成
-  const specDir = join(iterDir, '02-需求文档');
+  const specDir = join(iterDir, '020-需求文档');
   for (const platform of ['APP端', 'H5端', '小程序端', '管理后台']) {
     await ensureDir(join(specDir, platform));
     await writeFile(join(specDir, platform, 'ANALYSIS.md'), [
@@ -1037,7 +1037,7 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
   }
 
   // 00-迭代总览/
-  const overviewDir = join(iterDir, '00-迭代总览');
+  const overviewDir = join(iterDir, '000-迭代总览');
   await ensureDir(overviewDir);
   await writeFile(join(overviewDir, 'PROJECT_GRAPH.md'), [
     '# 示例任务总览',
