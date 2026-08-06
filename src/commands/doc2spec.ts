@@ -190,9 +190,9 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     const iterDir = `Iteration-${iterName}`;
     // 目标目录：指定 --task 则放入 Task 目录，否则放入 01-产品需求
     const taskId = options.task ? (options.task.startsWith('Task-') ? options.task : `Task-${options.task}`) : null;
-    const baseDir = taskId ? join(iterDir, taskId) : join(iterDir, '01-产品需求');
+    const baseDir = taskId ? join(iterDir, taskId) : join(iterDir, '010-产品需求');
     const targetDir = baseDir;
-    const imageDir = join(iterDir, '01-产品需求', '素材'); // 共享素材，跨端引用
+    const imageDir = join(iterDir, '010-产品需求', '素材'); // 共享素材，跨端引用
     const platform = options.platform || '需求';
     const outputPath = join(targetDir, `${platform}需求.md`);
 

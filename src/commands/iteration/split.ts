@@ -30,7 +30,7 @@ async function detectPlatforms(iterationDir: string, specified?: string): Promis
   if (specified) return specified.split(',').map(p => p.trim()).filter(Boolean);
   
   // Auto-detect from INDEX.md (populated by doc2spec)
-  const indexPath = join(iterationDir, '02-需求文档', 'INDEX.md');
+  const indexPath = join(iterationDir, '020-需求文档', 'INDEX.md');
   if (await pathExists(indexPath)) {
     const content = await readFile(indexPath, 'utf-8');
     // Parse table rows: skip header and separator lines
@@ -69,7 +69,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     const iterationDir = `Iteration-${iteration}`;
 
     // ── 1. 检查 ANALYSIS.md + AI 智能拆分建议 ──
-    const analysisPath = join(iterationDir, '02-需求文档', 'ANALYSIS.md');
+    const analysisPath = join(iterationDir, '020-需求文档', 'ANALYSIS.md');
     if (await pathExists(analysisPath)) {
       const analysis = await readFile(analysisPath, 'utf-8');
       const blockerLines = analysis.split('\n').filter(l => 
@@ -94,13 +94,13 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       const promptsDir = join('.speccore', 'prompts');
       await ensureDir(promptsDir);
       
-      const reqPath2 = join(iterationDir, '02-需求文档', 'REQUIREMENT.md');
+      const reqPath2 = join(iterationDir, '020-需求文档', 'REQUIREMENT.md');
       let reqContent2 = '';
       if (await pathExists(reqPath2)) {
         reqContent2 = await readFile(reqPath2, 'utf-8');
       }
       
-      const specDir2 = join(iterationDir, '02-需求文档');
+      const specDir2 = join(iterationDir, '020-需求文档');
       const specs: string[] = [];
       for (const f of ['TECH.md', 'TEST.md', 'REVIEW.md', 'RISK.md', 'DEPS.md']) {
         if (await pathExists(join(specDir2, f))) specs.push(f);
@@ -114,7 +114,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       logger.info('   ℹ️ 未找到 ANALYSIS.md，建议先运行 speccore analyze');
     }
 
-    const reqFile = join(iterationDir, '02-需求文档', options.file || 'REQUIREMENT.md');
+    const reqFile = join(iterationDir, '020-需求文档', options.file || 'REQUIREMENT.md');
 
     if (!(await pathExists(reqFile))) {
       spinner.fail(`Requirement file not found: ${reqFile}`);
@@ -589,7 +589,7 @@ ${apiDesc}
 }
 
 async function updateProjectGraph(iterationDir: string, sections: Section[]): Promise<void> {
-  const graphPath = join(iterationDir, '00-迭代总览', 'PROJECT_GRAPH.md');
+  const graphPath = join(iterationDir, '000-迭代总览', 'PROJECT_GRAPH.md');
   
   let content = '';
   if (await pathExists(graphPath)) {
@@ -997,7 +997,7 @@ async function generateEnvExample(iterationDir: string, sections: Section[]): Pr
 }
 
 async function injectTechFromAnalysis(iterationDir: string, taskDir: string, sectionName: string): Promise<void> {
-  const analysisPath = join(iterationDir, '02-需求文档', 'ANALYSIS.md');
+  const analysisPath = join(iterationDir, '020-需求文档', 'ANALYSIS.md');
   if (!(await pathExists(analysisPath))) return;
 
   const analysis = await readFile(analysisPath, 'utf-8');

@@ -15,7 +15,7 @@ export interface Question {
  * 从迭代 ANALYSIS.md 提取所有待确认问题
  */
 export async function extractQuestions(iterationDir: string): Promise<Question[]> {
-  const analysisPath = join(iterationDir, '02-需求文档', 'ANALYSIS.md');
+  const analysisPath = join(iterationDir, '020-需求文档', 'ANALYSIS.md');
   if (!(await pathExists(analysisPath))) return [];
 
   const content = await readFile(analysisPath, 'utf-8');

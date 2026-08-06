@@ -76,7 +76,7 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalysisResult> 
   // 自动检测: 都没指定 → 从 01-产品需求/ 递归读取产品原始需求
   if (requirements.length === 0 && sources.length === 0) {
     if (input.scope === 'iteration' && input.iteration) {
-      const productReqDir = join(`Iteration-${input.iteration}`, '01-产品需求');
+      const productReqDir = join(`Iteration-${input.iteration}`, '010-产品需求');
       if (await pathExists(productReqDir)) {
         // 递归扫描子目录 (backend/ frontend/Web/ 等)
         const scanDir = async (dir: string) => {
@@ -94,7 +94,7 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalysisResult> 
       }
       // 兼容旧路径: 如果没有 01-产品需求/, 回退到 02-需求文档/REQUIREMENT.md
       if (requirements.length === 0) {
-        const legacyReq = join(`Iteration-${input.iteration}`, '01-产品需求', 'REQUIREMENT.md');
+        const legacyReq = join(`Iteration-${input.iteration}`, '010-产品需求', 'REQUIREMENT.md');
         if (await pathExists(legacyReq)) {
           requirements = [legacyReq];
         }
@@ -173,7 +173,7 @@ async function analyzeRequirements(input: AnalyzeInput): Promise<AnalysisResult>
   } else {
     // iteration (default)
     const iterDir = `Iteration-${input.iteration || 'current'}`;
-    outputPath = join(iterDir, '02-需求文档', input.output || 'ANALYSIS.md');
+    outputPath = join(iterDir, '020-需求文档', input.output || 'ANALYSIS.md');
     report = buildIterationReqReport(input, issues, archImpact);
   }
 
@@ -214,7 +214,7 @@ async function analyzeCodebase(input: AnalyzeInput): Promise<AnalysisResult> {
   } else {
     // iteration (default)
     const iterDir = `Iteration-${input.iteration || 'current'}`;
-    outputPath = join(iterDir, '02-需求文档', input.output || 'CODE_ANALYSIS.md');
+    outputPath = join(iterDir, '020-需求文档', input.output || 'CODE_ANALYSIS.md');
     report = buildIterationCodeReport(input, fileStats, apiInventory, hotspots, deps);
   }
 
@@ -287,7 +287,7 @@ async function analyzeCombined(input: AnalyzeInput): Promise<AnalysisResult> {
     report = buildAIEnhancedReport(input, 'task', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents });
   } else {
     const iterDir = `Iteration-${input.iteration || 'current'}`;
-    outputPath = join(iterDir, '02-需求文档', input.output || 'ANALYSIS.md');
+    outputPath = join(iterDir, '020-需求文档', input.output || 'ANALYSIS.md');
     report = buildAIEnhancedReport(input, 'iteration', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents });
   }
 

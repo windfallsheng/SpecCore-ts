@@ -184,8 +184,8 @@ async function countPlatforms(iterDir: string, tasks: any[]): Promise<{backend:n
 }
 
 async function detectPhase(iterDir: string): Promise<string> {
-  const reqDoc = join(iterDir, '02-需求文档', 'REQUIREMENT.md');
-  const analysis = join(iterDir, '02-需求文档', 'ANALYSIS.md');
+  const reqDoc = join(iterDir, '020-需求文档', 'REQUIREMENT.md');
+  const analysis = join(iterDir, '020-需求文档', 'ANALYSIS.md');
   
   if (!(await pathExists(reqDoc))) return 'init';
   if (!(await pathExists(analysis))) return 'require';
@@ -307,8 +307,8 @@ async function exportStatus(
     data.phase = phase;
 
     // ── 读取期次时间范围 ──
-    const metaPath = join(iterDir, "00-迭代总览", "METADATA.md");
-    const graphPath = join(iterDir, '00-迭代总览', 'PROJECT_GRAPH.md');
+    const metaPath = join(iterDir, "000-迭代总览", "METADATA.md");
+    const graphPath = join(iterDir, '000-迭代总览', 'PROJECT_GRAPH.md');
     if (await pathExists(graphPath)) {
       const graph = await readFile(graphPath, 'utf-8');
       const ownerMatch = graph.match(/负责人[：:]?\s*(\S+)/);
@@ -547,8 +547,8 @@ async function buildPersonPlatforms(iterDir: string, tasks: any[]): Promise<Reco
 export async function defaultPhase(iterDir: string): Promise<string> {
 
 
-  const reqDoc = join(iterDir, '02-需求文档', 'REQUIREMENT.md');
-  const analysis = join(iterDir, '02-需求文档', 'ANALYSIS.md');
+  const reqDoc = join(iterDir, '020-需求文档', 'REQUIREMENT.md');
+  const analysis = join(iterDir, '020-需求文档', 'ANALYSIS.md');
   if (!(await pathExists(reqDoc))) return 'init';
   if (!(await pathExists(analysis))) return 'require';
   const tasks = await readdir(iterDir, { withFileTypes: true });
