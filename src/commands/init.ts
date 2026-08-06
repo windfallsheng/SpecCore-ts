@@ -1054,7 +1054,7 @@ async function createToolIntegrations(projectRoot: string, toolFilter?: string):
 
   // TRAE auto-load skills — 写入完整指令，确保 TRAE 正确注册
   const skillContents: Record<string, string> = {
-    'spec-ask': '# SpecCore AI Router\n\nWhen user makes ANY request, read `.speccore/CONSTITUTION.md` for project context and `.speccore/local/context.json` for current state.\n\n**ALWAYS execute**: `speccore ask "<user original request>"`\n\n**NEVER**: answer SpecCore questions yourself, create directories, run mkdir, or skip calling `speccore ask`.',
+    'spec-ask': '# SpecCore AI Router\n\n**CRITICAL: Execute `speccore ask "user request"` for EVERY request. Do NOT analyze, plan, or run commands yourself.**\n\nSteps:\n1. Read `.speccore/CONSTITUTION.md`\n2. Read `.speccore/local/context.json`\n3. Run: `speccore ask "user original words"`\n\nForbidden: mkdir, direct speccore analyze/split/execute, writing files, or saying "I will use plan/schedule instead". Just call speccore ask.',
     'spec-dev': '# SpecCore Smart Pipeline\n\nRead `.speccore/local/context.json` for current phase, then `000-overview/PROJECT_GRAPH.md` for progress.\n\nShow current phase and recommend next step. Execute: `speccore dev -i <iteration> [--auto]`',
     'spec-analyze': '# SpecCore Analysis\n\nRead `010-requirements/` for all platform docs. Ask for iteration name if not provided.\n\nExecute: `speccore analyze -I <iteration>`. Present report and ask for confirmation.',
     'spec-split': '# SpecCore Task Split\n\nRead `020-specs/` for analysis docs and `STAFFING.md` for team allocation.\n\nShow preview before creating tasks. Execute: `speccore iteration split -i <iteration>`',
