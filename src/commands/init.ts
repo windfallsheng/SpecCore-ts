@@ -1037,6 +1037,15 @@ async function createToolIntegrations(projectRoot: string, toolFilter?: string):
     }
   } catch { /* ignore */ }
   } // if hasQoder
+
+  // TRAE auto-load skills
+  for (const [name] of commands) {
+    if (["spec-ask", "spec-dev", "spec-execute", "spec-analyze", "spec-split"].includes(name)) {
+      const sd = join(projectRoot, ".agents", "skills", name);
+      await ensureDir(sd);
+      await writeFile(join(sd, "SKILL.md"), "# SpecCore " + name + "\nAuto-loaded by TRAE. See .trae/commands/" + name + ".md");
+    }
+  }
   
   logger.info('   🤖 已适配: Claude / CodeBuddy / Cursor / Trae / WindSurf / QCoder');
 }
