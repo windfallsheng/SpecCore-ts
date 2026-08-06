@@ -3,7 +3,7 @@
  * 完成时自动生成 RETRO.md 到任务目录，支持 HTML 页面
  */
 import { join } from 'path';
-import { pathExists, readFile, writeFile, ensureDir } from 'fs-extra';
+import { pathExists, readFile, writeFile, ensureDir, readdir } from 'fs-extra';
 import { logger } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
 import { getIssues } from '../core/issue-tracker';
