@@ -37,7 +37,7 @@ export async function rollbackCommand(options: RollbackOptions): Promise<void> {
     }
 
     const cwd = process.cwd();
-    const iterDir = join(cwd, iteration ? `期次-${iteration}` : '');
+    const iterDir = join(cwd, iteration ? `Iteration-${iteration}` : '');
     const taskDir = join(iterDir, task.id);
     const backups = await findBackupFiles(taskDir);
 
@@ -103,7 +103,7 @@ async function findBackupFiles(dir: string): Promise<string[]> {
 async function listAllBackups(iteration: string): Promise<void> {
   const cwd = process.cwd();
   const dirs = ['.speccore'];
-  if (iteration) dirs.push(`期次-${iteration}`);
+  if (iteration) dirs.push(`Iteration-${iteration}`);
 
   let total = 0;
   for (const d of dirs) {

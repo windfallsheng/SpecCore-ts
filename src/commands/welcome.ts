@@ -28,12 +28,12 @@ export async function welcomeCommand(_options: WelcomeOptions): Promise<void> {
 
   if (!process.stdout.isTTY || _options.web) {
     let taskCount = 0;
-    if (iterName) { try { const entries = await readdir(`期次-${iterName}`, { withFileTypes: true }); taskCount = entries.filter(e => e.isDirectory() && e.name.startsWith('Task-')).length; } catch {} }
+    if (iterName) { try { const entries = await readdir(`Iteration-${iterName}`, { withFileTypes: true }); taskCount = entries.filter(e => e.isDirectory() && e.name.startsWith('Task-')).length; } catch {} }
     let phase = 'doc';
     if (iterName) {
-      const reqDoc = join(`期次-${iterName}`, '00-需求文档', 'REQUIREMENT.md');
+      const reqDoc = join(`Iteration-${iterName}`, '00-需求文档', 'REQUIREMENT.md');
       if (!(await pathExists(reqDoc))) phase = 'doc';
-      else if (!(await pathExists(join(`期次-${iterName}`, '00-需求文档', 'ANALYSIS.md')))) phase = 'analyze';
+      else if (!(await pathExists(join(`Iteration-${iterName}`, '00-需求文档', 'ANALYSIS.md')))) phase = 'analyze';
       else if (taskCount === 0) phase = 'split';
       else phase = 'execute';
     }
@@ -63,7 +63,7 @@ export async function welcomeCommand(_options: WelcomeOptions): Promise<void> {
     return;
   }
   let taskCount = 0;
-  try { const entries = await readdir(`期次-${iterName}`, { withFileTypes: true }); taskCount = entries.filter(e => e.isDirectory() && e.name.startsWith('Task-')).length; } catch {}
+  try { const entries = await readdir(`Iteration-${iterName}`, { withFileTypes: true }); taskCount = entries.filter(e => e.isDirectory() && e.name.startsWith('Task-')).length; } catch {}
   logger.info(box(`📦 项目状态 · ${iterName}`, [`${C.gray}任务数: ${taskCount}${C.r}`, `${C.b}speccore dev --auto${C.r}`]));
   logger.info('');
   showAskGuide();

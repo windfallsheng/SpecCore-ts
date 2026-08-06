@@ -33,7 +33,7 @@ export function shortId(): string {
  */
 export function iterationId(name: string): string {
   const cleanName = name.replace(/^期次-/, '').replace(/[\/\\]/g, '-');
-  return `期次-${shortId()}-${cleanName}`;
+  return `Iteration-${shortId()}-${cleanName}`;
 }
 
 /**

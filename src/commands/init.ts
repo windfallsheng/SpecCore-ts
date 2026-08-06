@@ -363,7 +363,7 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 
 async function updateGitignore(projectRoot: string): Promise<void> {
   const gitignorePath = join(projectRoot, '.gitignore');
-  const entry = '# SpecCore local config\n.speccore/local/\n期次-*/.local/\n';
+  const entry = '# SpecCore local config\n.speccore/local/\nIteration-*/.local/\n';
 
   if (await pathExists(gitignorePath)) {
     const content = await readFile(gitignorePath, 'utf-8');
@@ -980,7 +980,7 @@ async function createToolIntegrations(projectRoot: string): Promise<void> {
  * 创建示例期次，展示标准目录结构
  */
 async function createSampleIteration(projectRoot: string): Promise<void> {
-  const iterDir = join(projectRoot, '期次-示例');
+  const iterDir = join(projectRoot, 'Iteration-示例');
   await ensureDir(iterDir);
   
   // STAFFING.md
@@ -1030,8 +1030,8 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
     '功能描述与验收标准',
   ].join('\n'));
 
-  // 00-期次总览/
-  const overviewDir = join(iterDir, '00-期次总览');
+  // 00-迭代总览/
+  const overviewDir = join(iterDir, '00-迭代总览');
   await ensureDir(overviewDir);
   await writeFile(join(overviewDir, 'PROJECT_GRAPH.md'), [
     '# 示例任务总览',
@@ -1044,7 +1044,7 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
     '| Task-004 | 管理后台功能 | feature | 待开发 | 李四 |',
   ].join('\n'));
 
-  logger.info('   📂 示例期次: 期次-示例/ (按端区分: APP/H5/小程序/管理后台)');
+  logger.info('   📂 示例期次: Iteration-示例/ (按端区分: APP/H5/小程序/管理后台)');
 }
 
 function detectGitUrl(root: string): string | undefined {

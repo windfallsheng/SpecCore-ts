@@ -83,7 +83,7 @@ export async function spec2docCommand(options: Spec2DocOptions): Promise<void> {
     sourceFiles.push({ path: options.file, label: basename(options.file, extname(options.file)) });
   } else if (options.all && iterName) {
     // 全量导出：期次下所有 .md 文件
-    const iterDir = iterName.startsWith('期次-') ? iterName : `期次-${iterName}`;
+    const iterDir = iterName.startsWith('Iteration-') ? iterName : `Iteration-${iterName}`;
     if (!await pathExists(iterDir)) {
       logger.error(`期次不存在: ${iterDir}`);
       return;
@@ -91,7 +91,7 @@ export async function spec2docCommand(options: Spec2DocOptions): Promise<void> {
     await collectAllMd(iterDir, sourceFiles);
   } else if (options.task && iterName) {
     // 任务导出
-    const iterDir = iterName.startsWith('期次-') ? iterName : `期次-${iterName}`;
+    const iterDir = iterName.startsWith('Iteration-') ? iterName : `Iteration-${iterName}`;
     const taskDir = join(iterDir, options.task.startsWith('Task-') ? options.task : `Task-${options.task}`);
     if (!await pathExists(taskDir)) {
       logger.error(`任务目录不存在: ${taskDir}`);
@@ -104,7 +104,7 @@ export async function spec2docCommand(options: Spec2DocOptions): Promise<void> {
       logger.error('请指定期次: --iteration <name>');
       return;
     }
-    const iterDir = iterName.startsWith('期次-') ? iterName : `期次-${iterName}`;
+    const iterDir = iterName.startsWith('Iteration-') ? iterName : `Iteration-${iterName}`;
     const reqFile = join(iterDir, '00-需求文档', 'REQUIREMENT.md');
     if (await pathExists(reqFile)) {
       sourceFiles.push({ path: reqFile, label: '需求文档' });

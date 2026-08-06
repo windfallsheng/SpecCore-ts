@@ -863,7 +863,7 @@ if (process.argv.length <= 2) {
   if (existsSync('.speccore')) {
     try {
       const items = readdirSync('.');
-      const idirs = items.filter((d: string) => d.startsWith('期次-')).sort();
+      const idirs = items.filter((d: string) => d.startsWith('Iteration-')).sort();
       if (idirs.length > 0) {
         iteration = idirs[0].slice(3);
         const base = idirs[0];

@@ -146,7 +146,7 @@ async function dryRunChange(options: ChangeOptions, iteration: string): Promise<
 
     // 查找受影响的依赖任务
     if (await pathExists(taskDir)) {
-      const graphPath = join(process.cwd(), iteration, '00-期次总览', 'PROJECT_GRAPH.md');
+      const graphPath = join(process.cwd(), iteration, '00-迭代总览', 'PROJECT_GRAPH.md');
       if (await pathExists(graphPath)) {
         const content = await readFile(graphPath, 'utf-8');
         const deps = findDependentTasks(content, options.task || '');
@@ -310,7 +310,7 @@ function normalizeDescription(desc: string): string {
  * 同步变更到 REQUIREMENT.md（期次聚合需求文档）
  */
 async function syncToRequirement(iteration: string, taskId: string, desc: string): Promise<void> {
-  const iterDir = `期次-${iteration}`;
+  const iterDir = `Iteration-${iteration}`;
   const reqPath = join(iterDir, '00-需求文档', 'REQUIREMENT.md');
   
   if (!(await pathExists(reqPath))) {
@@ -345,7 +345,7 @@ async function syncToRequirement(iteration: string, taskId: string, desc: string
  * 同步变更到 ANALYSIS.md（技术方案文档）
  */
 async function syncToAnalysis(iteration: string, taskId: string, desc: string): Promise<void> {
-  const iterDir = `期次-${iteration}`;
+  const iterDir = `Iteration-${iteration}`;
   const analysisPath = join(iterDir, '00-需求文档', 'ANALYSIS.md');
   
   if (!(await pathExists(analysisPath))) {

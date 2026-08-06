@@ -24,7 +24,7 @@ export interface IterationState {
 }
 
 export async function readProjectGraph(iteration: string): Promise<IterationState> {
-  const graphPath = join(`期次-${iteration}`, '00-期次总览', 'PROJECT_GRAPH.md');
+  const graphPath = join(`Iteration-${iteration}`, '00-迭代总览', 'PROJECT_GRAPH.md');
   
   if (!(await pathExists(graphPath))) {
     return {
@@ -99,7 +99,7 @@ export async function scanTasks(iteration: string): Promise<TaskState[]> {
   const { pathExists, readdir } = await import('fs-extra');
   const { join } = await import('path');
   
-  const iterationDir = `期次-${iteration}`;
+  const iterationDir = `Iteration-${iteration}`;
   if (!(await pathExists(iterationDir))) {
     return [];
   }

@@ -76,7 +76,7 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalysisResult> 
   // 自动检测: 都没指定 → 从 00-产品需求/ 递归读取产品原始需求
   if (requirements.length === 0 && sources.length === 0) {
     if (input.scope === 'iteration' && input.iteration) {
-      const productReqDir = join(`期次-${input.iteration}`, '00-产品需求');
+      const productReqDir = join(`Iteration-${input.iteration}`, '00-产品需求');
       if (await pathExists(productReqDir)) {
         // 递归扫描子目录 (backend/ frontend/Web/ 等)
         const scanDir = async (dir: string) => {
@@ -94,7 +94,7 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalysisResult> 
       }
       // 兼容旧路径: 如果没有 00-产品需求/, 回退到 00-需求文档/REQUIREMENT.md
       if (requirements.length === 0) {
-        const legacyReq = join(`期次-${input.iteration}`, '00-需求文档', 'REQUIREMENT.md');
+        const legacyReq = join(`Iteration-${input.iteration}`, '00-需求文档', 'REQUIREMENT.md');
         if (await pathExists(legacyReq)) {
           requirements = [legacyReq];
         }
@@ -168,11 +168,11 @@ async function analyzeRequirements(input: AnalyzeInput): Promise<AnalysisResult>
     report = buildReqConsistencyReport(input, issues, archImpact);
   } else if (input.scope === 'task') {
     // task scope — 已在入口校验
-    outputPath = join(`期次-${input.iteration}`, input.taskId!, 'backend', input.output || 'ANALYSIS.md');
+    outputPath = join(`Iteration-${input.iteration}`, input.taskId!, 'backend', input.output || 'ANALYSIS.md');
     report = buildTaskReqReport(input, issues, archImpact);
   } else {
     // iteration (default)
-    const iterDir = `期次-${input.iteration || 'current'}`;
+    const iterDir = `Iteration-${input.iteration || 'current'}`;
     outputPath = join(iterDir, '00-需求文档', input.output || 'ANALYSIS.md');
     report = buildIterationReqReport(input, issues, archImpact);
   }
@@ -209,11 +209,11 @@ async function analyzeCodebase(input: AnalyzeInput): Promise<AnalysisResult> {
     report = buildCodeHealthReport(input, fileStats, apiInventory, hotspots, deps);
   } else if (input.scope === 'task') {
     // task scope — 已在入口校验
-    outputPath = join(`期次-${input.iteration}`, input.taskId!, 'backend', input.output || 'CODE_REVIEW.md');
+    outputPath = join(`Iteration-${input.iteration}`, input.taskId!, 'backend', input.output || 'CODE_REVIEW.md');
     report = buildTaskCodeReport(input, fileStats, apiInventory, hotspots);
   } else {
     // iteration (default)
-    const iterDir = `期次-${input.iteration || 'current'}`;
+    const iterDir = `Iteration-${input.iteration || 'current'}`;
     outputPath = join(iterDir, '00-需求文档', input.output || 'CODE_ANALYSIS.md');
     report = buildIterationCodeReport(input, fileStats, apiInventory, hotspots, deps);
   }
@@ -283,10 +283,10 @@ async function analyzeCombined(input: AnalyzeInput): Promise<AnalysisResult> {
     outputPath = join('.speccore', 'GLOBAL', input.output || 'ARCH_IMPACT.md');
     report = buildAIEnhancedReport(input, 'global', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents });
   } else if (input.scope === 'task') {
-    outputPath = join(`期次-${input.iteration}`, input.taskId!, 'backend', input.output || 'ANALYSIS.md');
+    outputPath = join(`Iteration-${input.iteration}`, input.taskId!, 'backend', input.output || 'ANALYSIS.md');
     report = buildAIEnhancedReport(input, 'task', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents });
   } else {
-    const iterDir = `期次-${input.iteration || 'current'}`;
+    const iterDir = `Iteration-${input.iteration || 'current'}`;
     outputPath = join(iterDir, '00-需求文档', input.output || 'ANALYSIS.md');
     report = buildAIEnhancedReport(input, 'iteration', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents });
   }

@@ -35,7 +35,7 @@ function getHints(stage: string, ctx: Record<string, string>): StepHint[] {
     case 'doc2spec':
       return [
         { action: `speccore analyze${iter ? ` --iteration=${iter}` : ''}`, desc: '分析需求：完整性 + 源码对标 + 架构影响 → ANALYSIS.md', args: '--auto 跳过交互直接生成报告' },
-        { action: 'cat 期次-' + (iter || 'X') + '/00-需求文档/ANALYSIS.md', desc: '查看分析报告，填写技术方案部分' },
+        { action: 'cat Iteration-' + (iter || 'X') + '/00-需求文档/ANALYSIS.md', desc: '查看分析报告，填写技术方案部分' },
       ];
 
     case 'analyze':
@@ -47,7 +47,7 @@ function getHints(stage: string, ctx: Record<string, string>): StepHint[] {
 
     case 'split':
       return [
-        { action: `cat 期次-${iter || 'X'}/IMPACT.md`, desc: '查看风险评分 + 任务依赖关系' },
+        { action: `cat Iteration-${iter || 'X'}/IMPACT.md`, desc: '查看风险评分 + 任务依赖关系' },
         { action: `speccore execute --task=Task-001 --strict --force${iter ? ` --iteration=${iter}` : ''}`, desc: '严格模式开发：逐项确认后再生成代码' },
         { action: `speccore execute --all --force${iter ? ` --iteration=${iter}` : ''}`, desc: '快速模式开发：AI 自动生成所有 Task 代码' },
         { action: `speccore lifecycle --all${iter ? ` --iteration=${iter}` : ''}`, desc: '查看任务看板' },

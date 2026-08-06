@@ -231,7 +231,7 @@ async function detectDiscrepancies(options: SyncOptions, iteration: string): Pro
   }
 
   const cwd = process.cwd();
-  const iterDir = join(cwd, `期次-${iteration}`);
+  const iterDir = join(cwd, `Iteration-${iteration}`);
   const taskDir = join(iterDir, options.task);
   const reqPath = join(taskDir, 'backend', 'REQ.md');
 

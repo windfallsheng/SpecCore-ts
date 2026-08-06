@@ -94,7 +94,7 @@ async function findTaskDir(taskName: string): Promise<string | null> {
 
   // 遍历期次目录查找
   for (const entry of entries) {
-    if (entry.isDirectory() && entry.name.startsWith('期次-')) {
+    if (entry.isDirectory() && entry.name.startsWith('Iteration-')) {
       const iterPath = join(cwd, entry.name);
       const tasks = await readdir(iterPath, { withFileTypes: true });
       for (const task of tasks) {

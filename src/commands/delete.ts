@@ -130,7 +130,7 @@ async function deleteIteration(cwd: string, iterName: string, force?: boolean): 
 async function findTask(cwd: string, taskId: string): Promise<{ iterationDir: string; taskDir: string }> {
   // 检查最常见的期次前缀
   const entries = await readdir(cwd, { withFileTypes: true });
-  const iterations = entries.filter((e) => e.isDirectory() && e.name.startsWith('期次-'));
+  const iterations = entries.filter((e) => e.isDirectory() && e.name.startsWith('Iteration-'));
 
   for (const iter of iterations) {
     const taskDir = join(cwd, iter.name, taskId);

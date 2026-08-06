@@ -63,7 +63,7 @@ export async function statusPanelCommand(options: StatusPanelOptions = {}): Prom
   
   if (iteration) {
     logger.info(`│ 期次: ${iteration.padEnd(37)}│`);
-    const iterDir = `期次-${iteration}`;
+    const iterDir = `Iteration-${iteration}`;
     
     // Phase detection
     const phase = await detectPhase(iterDir);
@@ -301,14 +301,14 @@ async function exportStatus(
   };
 
   if (iteration) {
-    const iterDir = join(process.cwd(), '期次-' + iteration);
+    const iterDir = join(process.cwd(), 'Iteration-' + iteration);
     const phase = await require('./status-panel').defaultPhase(iterDir);
 
     data.phase = phase;
 
     // ── 读取期次时间范围 ──
-    const metaPath = join(iterDir, "00-期次总览", "METADATA.md");
-    const graphPath = join(iterDir, '00-期次总览', 'PROJECT_GRAPH.md');
+    const metaPath = join(iterDir, "00-迭代总览", "METADATA.md");
+    const graphPath = join(iterDir, '00-迭代总览', 'PROJECT_GRAPH.md');
     if (await pathExists(graphPath)) {
       const graph = await readFile(graphPath, 'utf-8');
       const ownerMatch = graph.match(/负责人[：:]?\s*(\S+)/);
@@ -1274,7 +1274,7 @@ function setLang(l){document.querySelectorAll('.lang-sw button').forEach(b=>b.cl
 // ── Health Report (merged from health command) ──
 async function showHealthReport(config: any, iteration: string | null): Promise<void> {
   if (!iteration) { logger.info("无活跃期次"); return; }
-  const iterDir = `期次-${iteration}`;
+  const iterDir = `Iteration-${iteration}`;
   const tasks = await scanTaskDirs(iterDir);
   
   let totalTasks = tasks.length, completed = 0, hasTest = 0, hasReview = 0;
@@ -1303,7 +1303,7 @@ async function showHealthReport(config: any, iteration: string | null): Promise<
 // ── Lifecycle Board (merged from lifecycle command) ──
 async function showLifecycleBoard(config: any, iteration: string | null, opts: any): Promise<void> {
   if (!iteration) { logger.info("无活跃期次"); return; }
-  const iterDir = `期次-${iteration}`;
+  const iterDir = `Iteration-${iteration}`;
   const tasks = await scanTaskDirs(iterDir);
   
   logger.info('\\n📋 任务生命周期 — ' + iteration);

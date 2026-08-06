@@ -24,7 +24,7 @@ export async function doneCommand(options: DoneOptions): Promise<void> {
   const iteration = await getDefaultIteration(options.iteration);
   if (!iteration) { logger.error('未找到活跃期次'); return; }
 
-  const iterDir = `期次-${iteration}`;
+  const iterDir = `Iteration-${iteration}`;
 
   // ── --all: 自动扫描已完成任务 ──
   if (options.all) {

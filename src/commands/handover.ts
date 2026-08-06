@@ -20,7 +20,7 @@ export async function handoverCommand(options: HandoverOptions): Promise<void> {
 
   try {
     const iteration = await getDefaultIteration(options.iteration);
-  const iterDir = iteration.startsWith("期次-") ? iteration : `期次-${iteration}`;
+  const iterDir = iteration.startsWith("Iteration-") ? iteration : `Iteration-${iteration}`;
     if (!iteration) {
       spinner.fail('未找到活跃期次。请先运行: speccore iteration create --name <名称>');
       return;
@@ -29,7 +29,7 @@ export async function handoverCommand(options: HandoverOptions): Promise<void> {
     const doc = await generateHandoverDoc(iteration);
     const format = options.format || 'md';
     const outputPath =
-      options.output || join(process.cwd(), iterDir, '00-期次总览', `交接文档.${format}`);
+      options.output || join(process.cwd(), iterDir, '00-迭代总览', `交接文档.${format}`);
 
     await writeFile(outputPath, doc);
 
@@ -147,7 +147,7 @@ async function generateHandoverDoc(iteration: string): Promise<string> {
   doc += `- 期次目录: \`${iteration}/\`\n`;
   doc += `- 技术架构: \`${iteration}/00-技术文档/ARCHITECTURE.md\`\n`;
   doc += `- 需求文档: \`${iteration}/00-需求文档/REQUIREMENT.md\`\n`;
-  doc += `- 项目图谱: \`${iteration}/00-期次总览/PROJECT_GRAPH.md\`\n`;
+  doc += `- 项目图谱: \`${iteration}/00-迭代总览/PROJECT_GRAPH.md\`\n`;
 
   return doc;
 }

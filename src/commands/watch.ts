@@ -84,7 +84,7 @@ async function findIterationForTask(cwd: string, taskId: string): Promise<string
   const { readdir } = await import('fs-extra');
   const entries = await readdir(cwd, { withFileTypes: true });
   for (const e of entries) {
-    if (e.isDirectory() && e.name.startsWith('期次-')) {
+    if (e.isDirectory() && e.name.startsWith('Iteration-')) {
       if (await pathExists(join(cwd, e.name, taskId))) {
         return e.name;
       }

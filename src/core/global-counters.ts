@@ -27,7 +27,7 @@ export async function nextIterationId(name: string): Promise<{ id: string; num: 
   c.iterations++;
   await save(c);
   const padded = String(c.iterations).padStart(3, '0');
-  return { id: `期次-${padded}-${name}`, num: c.iterations };
+  return { id: `Iteration-${padded}-${name}`, num: c.iterations };
 }
 
 export async function nextTaskId(name?: string): Promise<{ id: string; num: number }> {

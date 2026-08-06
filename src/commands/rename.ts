@@ -54,7 +54,7 @@ async function singleRename(options: RenameOptions): Promise<void> {
 
   // 1. 识别目标类型
   let targetType: 'iteration' | 'task';
-  const isIteration = oldName.includes('期次-');
+  const isIteration = oldName.includes('Iteration-');
   const isTask = oldName.match(/Task-\d{3}/);
 
   if (isIteration) {
@@ -225,7 +225,7 @@ async function calculatePreview(
     catch { return []; }
   })();
   for (const iter of iterations) {
-    const graphPath = join(process.cwd(), iter, '00-期次总览', 'PROJECT_GRAPH.md');
+    const graphPath = join(process.cwd(), iter, '00-迭代总览', 'PROJECT_GRAPH.md');
     if (await pathExists(graphPath)) {
       const gContent = await readFile(graphPath, 'utf-8');
       const matches = gContent.split(oldName).length - 1;
@@ -339,6 +339,6 @@ async function updateGlobalReferences(oldName: string, newName: string, type: 'i
 async function findIterations(cwd: string): Promise<string[]> {
   const entries = await readdir(cwd, { withFileTypes: true });
   return entries
-    .filter((e) => e.isDirectory() && e.name.startsWith('期次-'))
+    .filter((e) => e.isDirectory() && e.name.startsWith('Iteration-'))
     .map((e) => e.name);
 }

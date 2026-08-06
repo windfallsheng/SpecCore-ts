@@ -30,7 +30,7 @@ interface RetroReport {
 export async function retroCommand(options: RetroOptions): Promise<void> {
   const iteration = await getDefaultIteration(options.iteration);
   const taskId = options.task || 'Task-001';
-  const iterDir = iteration ? `期次-${iteration}` : '';
+  const iterDir = iteration ? `Iteration-${iteration}` : '';
 
   const report = await generateReport(taskId, iterDir);
 
@@ -81,7 +81,7 @@ async function generateReport(taskId: string, iterDir: string): Promise<RetroRep
 
   const report: RetroReport = {
     task: taskId,
-    iteration: iterDir.replace('期次-', ''),
+    iteration: iterDir.replace('Iteration-', ''),
     completedAt: now,
     summary: `任务 ${taskId} 已完成，共涉及 ${filesChanged} 个文件变更`,
     filesChanged,

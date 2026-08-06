@@ -31,7 +31,7 @@ export async function contextCommand(options: ContextOptions): Promise<void> {
     return; 
   }
 
-  const iterDir = `期次-${iteration}`;
+  const iterDir = `Iteration-${iteration}`;
   if (!(await pathExists(iterDir))) {
     logger.info(`📍 当前期次: ${iteration}`);
     logger.info(`  ⚠️ 期次目录「${iterDir}」不存在，请先创建期次或切换`);

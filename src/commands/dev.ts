@@ -43,7 +43,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
     return;
   }
 
-  const iterDir = `期次-${iteration}`;
+  const iterDir = `Iteration-${iteration}`;
   const legacyReq = join(iterDir, '00-需求文档', 'REQUIREMENT.md');
   const analysis = join(iterDir, '00-需求文档', 'ANALYSIS.md');
 
@@ -67,7 +67,7 @@ async function autoPipeline(options: DevOptions): Promise<void> {
   const iteration = await getDefaultIteration(options.iteration);
   if (!iteration) { execSync('speccore init', { stdio: 'inherit' }); return; }
   spinner.stop(`期次: ${iteration}`);
-  const iterDir = `期次-${iteration}`;
+  const iterDir = `Iteration-${iteration}`;
   const reqDoc = join(iterDir, '00-需求文档', 'REQUIREMENT.md');
   const analysis = join(iterDir, '00-需求文档', 'ANALYSIS.md');
   if (!(await pathExists(reqDoc))) {
@@ -81,7 +81,7 @@ async function renderDevHtml(options: DevOptions): Promise<string> {
   const version = require('../../package.json').version;
   const iteration = await getDefaultIteration(options.iteration);
   const iterName = (!iteration || iteration.length < 2) ? '' : iteration;
-  const iterDir = iterName ? `期次-${iterName}` : '';
+  const iterDir = iterName ? `Iteration-${iterName}` : '';
   const now = new Date().toISOString().split('T')[0];
 
   const isInit = await pathExists('.speccore');

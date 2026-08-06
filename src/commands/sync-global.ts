@@ -67,7 +67,7 @@ async function syncToGlobal(options: SyncGlobalOptions): Promise<void> {
   }
 
   // 标准化期次名称
-  const iterDirName = iterationName.startsWith('期次-') ? iterationName : `期次-${iterationName}`;
+  const iterDirName = iterationName.startsWith('Iteration-') ? iterationName : `Iteration-${iterationName}`;
   const iterDir = join(process.cwd(), iterDirName);
 
   if (!(await pathExists(iterDir))) {
@@ -191,7 +191,7 @@ async function syncFromGlobal(options: SyncGlobalOptions): Promise<void> {
     return;
   }
 
-  const iterDirName = iterationName.startsWith('期次-') ? iterationName : `期次-${iterationName}`;
+  const iterDirName = iterationName.startsWith('Iteration-') ? iterationName : `Iteration-${iterationName}`;
   const iterReqPath = join(process.cwd(), iterDirName, '00-需求文档', 'REQUIREMENT.md');
 
   if (!(await pathExists(iterReqPath))) {
