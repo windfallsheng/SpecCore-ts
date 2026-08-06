@@ -1100,6 +1100,7 @@ async function executionVerifyLoop(
       logger.info(`   ✅ ${task.id} 全部检查通过，可以 speccore done`);
     } else {
       logger.info(`   ⚠️ ${task.id} 仍有未通过项，请审查后手动 done`);
+      logger.info(`   💡 修复后重试: speccore execute --resume`);
     }
     logger.info('');
   }
