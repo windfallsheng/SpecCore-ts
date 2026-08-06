@@ -649,6 +649,8 @@ program
   .option('--task <id>', '任务 ID')
   .option('--tasks <ids>', '批量任务（逗号分隔）')
   .option('--all', '当前期次所有任务')
+  .option('--owner <name>', '按责任人筛选')
+  .option('--type <type>', '按类型筛选: feature|bugfix|research')
   .option('--iteration <name>', '期次名称')
   .action(retroCommand);
 

@@ -49,6 +49,29 @@ export async function retroCommand(options: RetroOptions): Promise<void> {
     return;
   }
 
+  // 按责任人/类型过滤（从 PROJECT_GRAPH.md 读取）
+  if (((options as any).owner || (options as any).type) && iterDir) {
+    const graphPath = join(process.cwd(), iterDir, '00-迭代总览', 'PROJECT_GRAPH.md');
+    if (await pathExists(graphPath)) {
+      const graph = await readFile(graphPath, 'utf-8');
+      const meta: Record<string, { owner: string; type: string }> = {};
+      for (const m of graph.matchAll(/\| (Task-\d+) \| [^|]+ \| (\S+) \| (\S+) \|/g)) {
+        meta[m[1]] = { owner: m[2], type: m[3] };
+      }
+      if ((options as any).owner) {
+        taskIds = taskIds.filter(id => meta[id]?.owner === (options as any).owner);
+      }
+      if ((options as any).type) {
+        taskIds = taskIds.filter(id => meta[id]?.type === (options as any).type);
+      }
+    }
+  }
+
+  if (taskIds.length === 0) {
+    logger.warn('筛选后没有匹配的任务');
+    return;
+  }
+
   // 逐个生成报告
   for (const taskId of taskIds) {
     const report = await generateReport(taskId, iterDir);
