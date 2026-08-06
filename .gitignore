@@ -51,3 +51,5 @@ verify-project/
 .speccore/cache/
 .speccore/GLOBAL/*.md
 .speccore-backup-*
+.trae-cn/
+.trae/

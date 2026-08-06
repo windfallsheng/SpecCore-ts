@@ -65,7 +65,7 @@ export function detectHostAi(): HostAiTool {
   const { pathExistsSync } = require('fs-extra');
   let searchDir = process.cwd();
   for (let i = 0; i < 5; i++) {
-    for (const dir of ['.trae', '.qoder', '.codebuddy', '.cursor', '.claude', '.windsurf']) {
+    for (const dir of ['.trae-cn', '.trae', '.qoder', '.codebuddy', '.cursor', '.claude', '.windsurf']) {
       if (pathExistsSync(join(searchDir, dir))) return 'trae';
     }
     const parent = join(searchDir, '..');
