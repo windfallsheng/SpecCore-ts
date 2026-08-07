@@ -221,7 +221,7 @@ taskCmd
   .alias('n')
   .description('创建新任务')
   .option('-n, --name <name>', '任务名称（必填）')
-  .option('-t, --type <type>', '任务类型: feature|bugfix|research', 'feature')
+  .option('-t, --type <type>', '任务类型: feature|bugfix|research|review|test|docs|refactor', 'feature')
   .option('-d, --desc <desc>', '任务描述')
   .option('--platforms <platforms>', '前端平台: web,h5,miniapp')
   .option('--backend-only', '仅后端')
@@ -666,7 +666,7 @@ program
   .option('--tasks <ids>', '批量任务（逗号分隔）')
   .option('--all', '当前迭代所有任务')
   .option('--owner <name>', '按责任人筛选')
-  .option('--type <type>', '按类型筛选: feature|bugfix|research')
+  .option('--type <type>', '按类型筛选: feature|bugfix|research|review|test|docs|refactor')
   .option('--iteration <name>', '迭代名称')
   .action(retroCommand);
 
