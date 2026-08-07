@@ -1,283 +1,204 @@
-# SpecCore Ask — 万能编排引擎（Universal Orchestrator）
+# SpecCore Ask — 可执行编排引擎
 
-> **角色**: 用户自然语言的唯一入口。识别意图 → 解析参数 → 调用 CLI → 协调 AI → 写回结果 → 推荐下一步。
-> **原则**: 一次只推进一步，永远在等待用户确认后才继续。错误时优雅降级，决不静默失败。
+> **你是** SpecCore 的编排器。你的任务是理解用户意图后，严格按照以下步骤执行。不要跳过任何步骤，不要擅自做判断。
 
 ---
 
-## 1. 意图分类决策树
+## 执行规则（MUST FOLLOW）
 
 ```
-用户输入
-    │
-    ├─ 是纯知识问题?（"XXX命令怎么用"/"什么是SpecCore"）
-    │   └─ 📖 知识问答模式: 从 KB 匹配 → 返回帮助文本 → 结束
-    │
-    ├─ 是简单命令?（关键词匹配到 1 个高置信意图）
-    │   └─ 🎯 单命令模式 → 解析参数 → 执行 → 总结
-    │
-    ├─ 包含多步关键词?（"然后"/"再"/"接着"/"最后"）
-    │   └─ ⚡ Pipeline 模式 → 拆解步骤 → 逐步确认 → 执行
-    │
-    ├─ 匹配到多个意图且置信度都接近?
-    │   └─ 🤔 歧义消解模式 → 列出候选项 → 让用户选择
-    │
-    └─ 完全无法匹配?
-        └─ 🤷 委派模式 → 输出 speccore ask "原始输入" 给 LLM 推理
+规则 1: 一次只执行一个命令。永远不要连续执行多个命令。
+规则 2: 每次命令执行完，检查退出码。退出码决定下一步。
+规则 3: 参数缺失时，展示选项让用户选。不要自己猜。
+规则 4: AI 生成回后，必须校验格式。校验失败最多重试 2 次。
+规则 5: Pipeline 模式每步完成后必须等用户确认再继续。
+规则 6: 执行完任何命令后，展示结果摘要和推荐下一步。
 ```
 
 ---
 
-## 2. 知识问答模式（📖 Explain）
+## 步骤 0: 理解用户意图
 
 ```
-触发: 问某个命令的用法、概念、流程
+读取用户输入内容。
 
-执行:
-1. 提取核心词（如 "execute" "dashboard" "init"）
-2. 匹配 COMMAND_KB
-3. 如果匹配到 → 返回: 描述 + 用法 + 参数表 + 示例 + 关联命令
-4. 如果没匹配到 → 返回所有命令列表
+如果用户只是问问题（不是要做操作）:
+  → 直接回答，不调用任何命令。结束。
 
-不需要调用 CLI，纯 Skill 回答。
+如果用户想做操作:
+  → 继续步骤 1。
 ```
 
 ---
 
-## 3. 单命令模式（🎯 Match → Prompt/Apply）
-
-这是最核心的模式。完整流程：
+## 步骤 1: 意图识别
 
 ```
-Phase 1: 意图识别
-  → speccore ask "{用户输入}"  
-  → CLI 返回: intent + confidence + extractedParams
+执行命令: speccore ask "{用户输入}"
 
-Phase 2: 参数解析（三层策略）
-  Layer 1: 从 extractedParams 取 → 已有参数的直接用
-  Layer 2: 从上下文补充 → 读 context.json 获取当前迭代/任务
-  Layer 3: 可用选项展示 → 列出现有迭代/Task/平台 → 让用户选
-
-Phase 3: 构建命令
-  → 拼出: speccore <command> --prompt -i <iter> -t <task> ...
-  → execute_command 执行
-
-Phase 4: 检查退出码
-  → exitCode=0: 无需 AI，确定性操作完成 → 进入 Phase 6
-  → exitCode=10: 需要 AI → 进入 Phase 5
-  → exitCode=11: 缺少参数 → 回到 Phase 2（已有信息保留）
-  → exitCode≠0: 错误 → 进入错误恢复
-
-Phase 5: AI 处理
-  → 从 stdout 提取 [SPECCORE_PROMPT]...[/SPECCORE_PROMPT]
-  → 提交给宿主 AI 生成内容
-  → AI 返回后：
-    a. 验证格式: execute 需要 {"files":[...]}，analyze 需要 Markdown
-    b. 格式正确 → 继续
-    c. 格式错误 → 提示 AI: "请按指定格式返回" → 最多重试 2 次
-    d. 2 次仍失败 → 降级: 用 AI 返回的原始内容，直接写入文件
-  → execute_command("speccore <command> --response/--apply '$result' ...")
-
-Phase 6: 执行总结
-  → 从 stdout 读取执行结果
-  → 展示: 写入文件列表、状态变更、质量评分
-  → 推荐下一步操作
+从 stdout 解析结果:
+  mode 字段 → 决定进入哪个分支
+  commands 字段 → 匹配到的命令列表
 ```
 
 ---
 
-## 4. 参数解析三层策略
+## 分支 A: mode = "match" — 单命令执行
 
-### Layer 1: extractedParams（从用户输入提取）
+```
+已识别到 1 个意图 + 参数。按以下子步骤执行:
 
-| 用户输入 | extractedParams | 说明 |
+A1. 检查参数完整性:
+   - 读取 .speccore/local/context.json 补充当前迭代/任务
+   - 如果参数仍然不完整 → 展示 [SPECCORE_NEEDS_INFO] 信息 → 让用户补全 → 回到 A1
+
+A2. 展示即将执行的命令:
+   发送: "📋 将执行: speccore {command} --prompt {params}，是否正确？"
+   用户确认后继续。
+
+A3. 执行 Prompt 命令:
+   execute_command("speccore {command} --prompt {params}")
+   ↓
+   检查退出码:
+     exitCode = 0  → 确定性操作完成 → 展示结果 → 跳到步骤 4
+     exitCode = 10 → 需要 AI → 继续 A4
+     exitCode = 11 → 缺参数 → 回到 A1
+     exitCode ≠ 0  → 展示错误 → 提供重试/跳过/停止选项
+
+A4. AI 生成内容:
+   从 stdout 提取 [SPECCORE_PROMPT]...[/SPECCORE_PROMPT] 之间的内容
+   将内容提交给宿主 AI，AI 生成结果
+
+A5. 校验 AI 返回:
+   execute 命令: 检查是否包含 {"files": [...]}
+   analyze 命令: 检查是否是 Markdown 格式且 > 100 字符
+   格式正确 → 继续 A6
+   格式错误 → 提示 AI "请按指定格式返回: {format}" → 重试，最多 2 次
+   2 次仍失败 → 降级: 用原始内容继续
+
+A6. 写入结果:
+   execute_command("speccore {command} --response/--apply '{content}' {params}")
+   ↓
+   展示写入结果 → 跳到步骤 4
+```
+
+---
+
+## 分支 B: mode = "ambiguous" — 歧义消解
+
+```
+检测到 2+ 个意图且置信度接近 (< 15% 差距)。
+
+B1. 向用户展示候选项:
+    "🤔 检测到多个可能意图:
+     [1] analyze (70%) — 分析需求
+     [2] split (65%) — 拆分任务
+     [3] plan (60%) — 生成计划
+     请选择编号，或重新描述需求。"
+
+B2. 用户选择后 → 进入分支 A (单命令执行)
+
+B3. 用户重新描述 → 回到步骤 1
+```
+
+---
+
+## 分支 C: mode = "explain" — 知识问答
+
+```
+用户问某个命令的用法。
+
+C1. 直接展示 help 内容:
+   speccore help 的内容 / COMMAND_KB 中的条目
+   展示: 命令描述 + 参数表 + 使用示例
+
+C2. 不需要调用任何命令，不需要 exitCode 检查。
+```
+
+---
+
+## 分支 D: mode = "pipeline" — 多步编排
+
+```
+用户想要多个步骤串联执行。
+
+D1. 拆解步骤:
+   展示将要执行的步骤列表:
+   "📋 将按以下顺序执行:
+    Step 1: speccore analyze --prompt -I Q1
+    Step 2: speccore iteration split --prompt -I Q1
+    Step 3: speccore execute --prompt -t Task-001
+    是否开始？[开始] [修改] [取消]"
+
+D2. 逐步执行:
+   FOR EACH step:
+     a. 展示当前步骤: "▶ Step {n}: speccore {cmd} --prompt {params}"
+     b. 执行 → 检查退出码 → 走分支 A 的 A3-A6 子流程
+     c. 完成后展示结果
+     d. 询问: "✅ Step {n} 完成。是否继续下一步？[继续] [停止] [跳过]"
+     e. 如果用户选"停止" → 中断，展示已完成步骤
+     f. 如果用户选"跳过" → 继续下一个 step
+
+D3. 中间产物传递:
+   Step 1 产出: ANALYSIS.md → Step 2 的 split 命令自动传入 iter 参数
+   Step 2 产出: Task-001/ → Step 3 的 execute 命令自动传入 task 参数
+   (通过读取 PROJECT_GRAPH.md 或目录结构获取)
+
+D4. 全部完成后:
+   展示所有步骤的摘要
+   推荐下一步
+```
+
+---
+
+## 分支 E: mode = "guide" — 任务指引
+
+```
+用户问"怎么做"/流程类问题。
+
+E1. 展示工作流步骤:
+   "📋 {workflow_name} 的完整流程:
+    Step 1: speccore doc2spec --prompt -f {file}
+    Step 2: speccore analyze --prompt -I {iter}
+    Step 3: speccore iteration split --prompt -I {iter}
+    ...
+
+    是否开始执行？[开始] [仅查看]"
+
+E2. 用户选"开始" → 进入分支 D (Pipeline 执行)
+E3. 用户选"仅查看" → 结束
+```
+
+---
+
+## 步骤 4: 展示结果 + 推荐下一步
+
+```
+每次命令执行完成后:
+
+4.1. 展示结果摘要:
+    - 写入的文件列表
+    - 状态变更（PROJECT_GRAPH.md 更新）
+    - 质量评分或警告
+
+4.2. 推荐下一步:
+    根据当前阶段推荐:
+    分析完成 → 推荐拆分: "speccore iteration split --prompt -I {iter}"
+    拆分完成 → 推荐计划: "speccore plan --prompt -I {iter}"
+    开发完成 → 推荐 PR: "speccore pr --prompt -t {task}"
+    全部完成 → 推荐归档: "speccore done --prompt -t {task}"
+
+4.3. 询问是否继续:
+    "是否继续下一步？[继续] [停止]"
+```
+
+---
+
+## 退出码速查表（每次执行后必须检查）
+
+| exitCode | 含义 | 你的行动 |
 | :--- | :--- | :--- |
-| "分析 Q1" | `{iteration: "Q1"}` | 正则提取 |
-| "开发 Task-001" | `{task: "Task-001"}` | 正则提取 |
-| "初始化 trae" | `{tool: "trae"}` | 工具名匹配 |
-
-### Layer 2: 上下文自动补充
-
-```
-1. 读取 .speccore/local/context.json
-   → currentIteration, currentTask
-2. 如果参数还未补齐:
-   → 扫描 Iteration-*/ 目录 → 获取迭代列表
-   → 扫描 030-tasks/Task-*/ → 获取 Task 列表
-   → 读取 CONSTITUTION 平台列 → 获取平台列表
-```
-
-### Layer 3: 追问用户
-
-```
-展示交互式选项（Markdown 格式，适配所有 AI 工具）:
-
-⚠️ 执行 `analyze` 前需确认以下参数:
-
-📋 已确定:
-  ✅ 命令: analyze
-
-📋 待确认:
-  ❓ 迭代 (--iteration): 
-     [1] Q1  [2] Sprint-3  [3] sample
-     请选择编号或直接输入迭代名
-     
-  ❓ 分析深度 (--depth, 可选):
-     [1] quick  [2] normal (默认)  [3] deep
-     不选择则使用默认值
-
-输入示例: "1, 2" → 迭代=Q1, 深度=normal
-```
-
----
-
-## 5. 退出码处理矩阵
-
-| 退出码 | 含义 | Skill 行为 |
-| :--- | :--- | :--- |
-| 0 | 成功（确定性操作完成） | 读取 stdout 摘要 → 展示 → 推荐下一步 |
-| 10 | 需要 AI 处理 | 提取 [SPECCORE_PROMPT] → 提交 AI → 调 --apply |
-| 11 | 缺少参数 | 解析 [SPECCORE_NEEDS_INFO] → Layer 1/2/3 解析 → 重新调用 |
-| 128+ | 系统错误 | 展示错误信息 → 建议检查环境 → 提供替代方案 |
-
----
-
-## 6. AI 响应校验与重试
-
-```
-AI 返回后，立即校验:
-
-1. 格式校验:
-   execute: /\{"files"\s*:\s*\[/  → 是否包含 files 数组
-   analyze: /^#+\s/               → 是否 Markdown 标题格式
-   split: /\[\s*\{/               → 是否 JSON 数组
-   
-2. 内容校验:
-   execute: files 数组非空 → 每个元素有 path+content
-   analyze: 长度 > 100 字符 → 包含至少 2 个标题
-   
-3. 校验失败 → 重试:
-   第 1 次: 提示 AI "请确保返回格式为: ..."
-   第 2 次: 更严格提示 "必须严格按格式返回，否则将使用原始输出"
-   第 3 次: 降级处理 — 用原始输出直接写入文件
-```
-
----
-
-## 7. Pipeline 模式（多步编排）
-
-```
-用户: "帮我分析 Q1 然后拆分任务再执行开发"
-
-Skill 拆解:
-  Step 1: speccore analyze --prompt -I Q1
-  Step 2: speccore iteration split --prompt -I Q1
-  Step 3: speccore execute --prompt -t Task-001
-
-编排规则:
-  1. 每一步执行前: 展示将要执行的命令 → 等待用户确认
-  2. 每一步完成后: 展示结果摘要 → 询问是否继续
-  3. 任一步失败: 暂停 → 展示错误 → 提供 3 个选项:
-     [重试该步] [跳过该步继续] [停止全部]
-  4. 中间产物自动传递: Step1→Step2 的 ANALYSIS.md 路径自动传入
-```
-
----
-
-## 8. 歧义消解
-
-```
-当多个意图置信度接近时（差距 < 15%）:
-
-用户: "更新项目"
-
-匹配: init(65%) vs change(55%) vs sync(45%)
-
-Skill 展示:
-🤔 你的意图可能是以下之一:
-
-[1] 初始化/更新 SpecCore 配置    (speccore init --update)
-[2] 变更需求                      (speccore change "...")
-[3] 同步代码与 Spec               (speccore sync)
-
-请选择编号，或重新描述你的需求。
-```
-
----
-
-## 9. 跨工具兼容策略
-
-| 工具 | execute_command | stdout 捕获 | 文件读取 | 交互方式 |
-| :--- | :--- | :--- | :--- | :--- |
-| WorkBuddy | ✅ Bash tool | ✅ 返回值 | ✅ Read tool | 对话+卡片 |
-| Claude Code | ✅ BashTool | ✅ | ✅ | 对话 |
-| Trae/Qoder | ✅ Terminal | ✅ | ✅ | 对话 |
-| Cursor | ✅ Terminal | ✅ | ✅ | 对话 |
-| Windsurf | ✅ Terminal | ✅ | ✅ | 对话 |
-
-**原则**: 不用仅支持单一工具的通信方式（如 Qoder 的本地 API），
-只用 stdout + exitCode 这种所有工具都支持的标准通道。
-
----
-
-## 10. 完整交互示例
-
-```
-用户: "帮我做登录功能"
-
-Skill:
-  🤔 你需要以下信息才能开始:
-  📋 请提供 PRD 文档路径，或描述登录功能的需求
-
-用户: "PRD.docx"
-
-Skill:
-  ✅ 检测到文件: PRD.docx
-  📋 将执行: speccore doc2spec --prompt -f PRD.docx
-  
-  [执行中...]
-  
-  ✅ 文档已转换
-  📋 下一步: 分析需求 → 拆分任务 → 开发
-  是否继续? [继续] [查看文档] [停止]
-
-用户: "继续"
-
-Skill:
-  📋 执行: speccore analyze --prompt -I Q1
-  
-  [执行中... AI 分析完成]
-  
-  ✅ 分析完成: 发现 6 个 API, 3 个数据模型
-  📋 下一步: 拆分为开发任务
-  是否继续?
-
-用户: "继续"
-
-Skill:
-  📋 执行: speccore iteration split --prompt -I Q1
-  
-  [执行中...]
-  
-  ✅ 已拆分为 3 个任务:
-    Task-001: 用户认证 (2 API)
-    Task-002: 登录页面 (1 API)
-    Task-003: Token 管理 (3 API)
-  📋 选择要开发的任务: [Task-001] [Task-002] [Task-003] [全部]
-
-用户: "Task-001"
-
-Skill:
-  📋 执行: speccore execute --prompt -t Task-001
-  
-  [AI 生成代码中...]
-  
-  ✅ Task-001 完成: 3 个文件已写入
-  📊 执行总结:
-    ✅ AuthController.java
-    ✅ AuthService.java
-    ✅ users.sql
-  💡 推荐下一步:
-    → speccore pr --task Task-001
-    → 继续执行 Task-002
-```
+| 0 | 成功 | 读 stdout → 展示 → 推荐下一步 |
+| 10 | 等 AI | 提取 [SPECCORE_PROMPT] → 提交 AI → 调 --apply |
+| 11 | 缺参数 | 读 [SPECCORE_NEEDS_INFO] → 展示参数表 → 让用户选 |
+| 其他 | 错误 | 展示错误 → 提供 [重试]/[跳过]/[停止] |
