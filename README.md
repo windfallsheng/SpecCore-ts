@@ -57,31 +57,21 @@ init → doc2spec → analyze → split → plan → execute → pr → done →
 ## 目录结构（全英文）
 
 ```
-Iteration-001-meeting/          ← 会议系统（中文→slug: meeting）
+Iteration-001-meeting/
 ├── 000-overview/               ← 进度跟踪
-├── 010-requirements/           ← doc2spec 导入
+├── 010-requirements/           ← doc2spec 导入（按功能）
 │   ├── sources/                ← 原始 PRD/Word
 │   ├── assets/                 ← 素材
-│   │   ├── prd/                ← PRD 提取图片
+│   │   ├── extracted/          ← 文档提取图片
 │   │   ├── prototypes/         ← 产品原型
 │   │   └── designs/            ← UI 设计稿
-│   ├── app/                    ← APP 端需求
-│   ├── h5/                     ← H5 端需求
-│   ├── miniapp/                ← 小程序端需求
-│   ├── admin/                  ← 管理后台需求
-│   └── _shared/                ← 跨端通用规则
-├── 020-specs/                  ← analyze 输出
-│   ├── app/ANALYSIS.md
-│   ├── h5/ANALYSIS.md
-│   ├── miniapp/ANALYSIS.md
-│   └── admin/ANALYSIS.md
-├── 020-specs/            ← analyze 分端输出
-│   ├── app/ANALYSIS.md
-│   ├── h5/ANALYSIS.md
-│   ├── miniapp/ANALYSIS.md
-│   └── admin/ANALYSIS.md
-├── 030-tasks/            ← 所有开发任务
-│   └── Task-001-*/       ← split 拆分（含 .issues.md .needs-retry）
+│   ├── user-auth/README.md     ← 用户认证需求
+│   └── room-booking/README.md  ← 会议室预订需求
+├── 020-specs/                  ← analyze 分端输出
+├── 030-tasks/                  ← split 开发任务
+└── STAFFING.md                 ← 人员排期
+├── 030-tasks/                  ← split 开发任务
+│   └── Task-001-*/              ← 含 .issues.md .needs-retry
 ```
 
 ## 断点重试
