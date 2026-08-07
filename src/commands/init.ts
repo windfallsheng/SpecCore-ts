@@ -1,8 +1,9 @@
 import { ensureDir, writeFile, pathExists, readFile, readdir, copy } from 'fs-extra';
-import { join } from 'path';
+import { join, basename } from 'path';
 import { logger, Spinner } from '../utils/logger';
 import { createInterface } from 'readline';
 import { updateContext } from '../core/context';
+import { SVG_ONBOARD } from './ask';
 
 export interface InitOptions {
   mode?: string;
@@ -59,7 +60,11 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
 
         // 更新版本号
         const verFile = join(speccoreDir, 'local', 'version.json');
-        await writeFile(verFile, JSON.stringify({ version: require('../../package.json').version, updatedAt: new Date().toISOString() }, null, 2));
+        const { version } = require('../../package.json');
+        await writeFile(verFile, JSON.stringify({ version, updatedAt: new Date().toISOString() }, null, 2));
+
+        // 生成升级欢迎页（与 ask 引导页同风格）
+        await writeUpgradePage(projectRoot, version, speccoreDir);
 
         spinner.stop('命令文件已更新到最新版本 ✅');
         logger.info('');
@@ -1481,6 +1486,43 @@ function generateConstitutionTemplate(projectRoot: string): string {
 | ${projectName} | 待填写 | ./ | ${gitUrl || '待配置'} | main | app, h5, miniapp, admin |
 `;
 
+}
+
+async function writeUpgradePage(projectRoot: string, version: string, speccoreDir: string): Promise<void> {
+  const name = basename(projectRoot);
+  const html = `<!DOCTYPE html><html lang="zh"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>SpecCore ${version} — 升级完成</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}body{min-height:100vh;background:#0a1628;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:20px;font-family:monospace;overflow-x:hidden;position:relative}
+.scanlines{position:fixed;top:0;left:0;width:100%;height:100%;background:repeating-linear-gradient(0deg,rgba(14,165,233,.03),rgba(14,165,233,.03) 1px,transparent 1px,transparent 3px);pointer-events:none;z-index:0}
+.card{max-width:720px;width:100%;background:rgba(13,31,56,.95);border:1px solid rgba(14,165,233,.15);border-radius:16px;padding:28px;position:relative;z-index:1}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,#0ea5e9,transparent);animation:scanX 3s linear infinite}
+h1{font-size:18px;color:#0ea5e9;text-align:center;margin-bottom:8px;font-weight:500}h2{font-size:13px;color:#5b7fa5;text-align:center;margin-bottom:20px;font-weight:400}
+.section{background:rgba(14,165,233,.06);border:1px solid rgba(14,165,233,.1);border-radius:12px;padding:16px;margin-bottom:14px}
+.section h3{font-size:14px;color:#14b8a6;margin-bottom:10px;font-weight:500}
+.section li{color:#94a3b8;font-size:12px;line-height:1.8;list-style:none;padding-left:16px;position:relative}
+.section li::before{content:'>';position:absolute;left:0;color:#0ea5e9}
+.badge{display:inline-block;background:rgba(14,165,233,.15);color:#0ea5e9;padding:4px 12px;border-radius:6px;font-size:12px;margin:4px 4px 4px 0}
+.ft{text-align:center;color:#3b5370;font-size:10px;margin-top:20px}
+@keyframes scanX{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+</style></head><body><div class="scanlines"></div><div class="card">
+<div style="display:block;width:100%">${SVG_ONBOARD}</div>
+<h1>SpecCore 已升级到 v${version}</h1>
+<h2>项目: ${name} | 升级完成</h2>
+<div class="section"><h3>本次更新</h3>
+<ul><li>可执行编排引擎 v4 — 五分支决策树</li>
+<li>Prompt/Apply 协作架构 — 全命令覆盖</li>
+<li>管道传递 + 参数缺省智能补充</li>
+<li>升级保护 — CONSTITUTION 不覆盖</li>
+<li>10 个高阶 Skill 全量更新</li></ul></div>
+<div class="section"><h3>新功能</h3>
+<span class="badge">spec-ask</span><span class="badge">歧义检测</span><span class="badge">升级提示</span><span class="badge">管道传递</span><span class="badge">低置信拒绝</span>
+</div>
+<div class="section"><h3>下一步</h3>
+<ul><li>speccore ask "查看项目进度" — 体验新的意图识别</li>
+<li>speccore init --help — 查看完整命令列表</li></ul></div>
+<div class="ft">SpecCore ${version} | <a href="./speccore-ask-onboarding.html" style="color:#0ea5e9">查看完整引导</a></div>
+</div></body></html>`;
+  await writeFile(join(projectRoot, 'speccore-upgrade.html'), html);
 }
 
 function detectGitUrl(root: string): string | undefined {
