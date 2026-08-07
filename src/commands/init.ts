@@ -1379,7 +1379,7 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
  * 检查受保护文件是否需要升级提示。
  * 文件已存在时不覆盖，但告诉用户模板有什么新变化。
  */
-async function checkUpgradeHints(projectRoot: string, speccoreDir: string): Promise<void> {
+export async function checkUpgradeHints(projectRoot: string, speccoreDir: string): Promise<void> {
   const { version } = require('../../package.json');
   const versionFile = join(speccoreDir, 'local', 'last-init-version.txt');
   let lastVersion = '';

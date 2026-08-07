@@ -143,6 +143,10 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   await ensureDir(join(speccoreDir, 'local'));
   await writeFile(verFile, JSON.stringify({ version: CURRENT_VERSION, updatedAt: new Date().toISOString() }, null, 2));
 
+  // ── 3. 检查升级提示（CONSTITUTION 模板变化等）──
+  const { checkUpgradeHints } = await import('./init');
+  await checkUpgradeHints(projectRoot, speccoreDir);
+
   spinner.stop(`升级完成: v${oldVersion} → v${CURRENT_VERSION}`);
   logger.info('');
   if (addedFiles.length > 0) {
