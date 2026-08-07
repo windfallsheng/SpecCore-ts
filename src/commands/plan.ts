@@ -88,17 +88,19 @@ export async function planCommand(options: PlanOptions): Promise<void> {
 
     const saved = await saveToStore(iteration, taskIds, 3, options, 'manual');
 
-    // 写入带时间戳的计划文件（多版本） + 最新的 PLAN.md
+    // 写入带时间戳 + AI 关键词的计划文件（多版本） + 最新的 PLAN.md
     const planDir = join(`Iteration-${iteration}`, '000-overview');
-    const ts = new Date().toISOString().replace(/T/, '-').replace(/:/g, '').slice(0, 17); // 2026-08-07-2125
-    const versionedPath = join(planDir, `PLAN-${ts}.md`);
+    const ts = new Date().toISOString().replace(/T/, '-').replace(/:/g, '').slice(0, 17);
+    const slug = extractPlanSlug(sortedTasks);
+    const filename = slug ? `PLAN-${ts}-${slug}.md` : `PLAN-${ts}.md`;
+    const versionedPath = join(planDir, filename);
     const latestPath = join(planDir, 'PLAN.md');
     const tx = new FileTransaction();
-    tx.write(versionedPath, formatPlanMarkdown(plan, iteration));
-    tx.write(latestPath, formatPlanMarkdown(plan, iteration)); // 最新版覆盖
+    tx.write(versionedPath, formatPlanMarkdown(plan, iteration, sortedTasks));
+    tx.write(latestPath, formatPlanMarkdown(plan, iteration, sortedTasks)); // 最新版覆盖
     await tx.commit();
 
-    spinner.stop(`Saved: PLAN-${ts}.md | ${taskIds.length} tasks, ${plan.length} phases`);
+    spinner.stop(`Saved: ${filename} | ${taskIds.length} tasks, ${plan.length} phases`);
     printPlan(plan, iteration);
   } catch (error) {
     spinner.fail(`Failed: ${error}`);
@@ -255,42 +257,42 @@ function printPlan(plan: PlanEntry[], iteration: string): void {
   }
 }
 
-function formatPlanMarkdown(plan: PlanEntry[], iteration: string): string {
+function formatPlanMarkdown(plan: PlanEntry[], iteration: string, allRawTasks?: TaskState[]): string {
   const allTasks = plan.flatMap(p => p.tasks);
   const totalHours = allTasks.reduce((s, t) => s + t.estimatedHours, 0);
   const ts = new Date().toISOString();
+  const highRiskTasks = allTasks.filter(t => t.dependencies.length >= 2 || t.priority === 'high');
 
   const lines: string[] = [];
   lines.push(`# 📋 Plan — ${iteration}`);
   lines.push('');
-  lines.push(`> **生成时间**: ${ts}`);
-  lines.push(`> **状态**: ⏳ active`);
-  lines.push(`> **任务数**: ${allTasks.length}  ·  **阶段数**: ${plan.length}  ·  **预估**: ${totalHours}h`);
-  lines.push('');
-  lines.push('---');
+  lines.push(`> **生成**: ${ts}  ·  **状态**: ⏳ active`);
+  lines.push(`> **任务**: ${allTasks.length}  ·  **阶段**: ${plan.length}  ·  **预估**: ${totalHours}h`);
   lines.push('');
 
-  // ── 执行步骤 ──
-  lines.push('## 🗂️ 执行步骤');
+  // ── 1. 概览 ──
+  lines.push('---');
+  lines.push('');
+  lines.push('## 1. 执行概览');
   lines.push('');
   for (const phase of plan) {
     lines.push(`### Phase ${phase.phase}`);
     lines.push('');
-    lines.push('| # | Task | Type | Priority | Branch | Deps | Assignee | Est. | Status |');
-    lines.push('|:-:|:---|:---|:---|:---|:---|:---|:---:|:---|');
+    lines.push('| Task | Type | Priority | Branch | Deps | Assignee | Est. | Status |');
+    lines.push('|:---|:---|:---|:---|:---|:---|:---:|:---|');
     for (const t of phase.tasks) {
-      const st = t.status === 'completed' ? '✅ done' : t.status === 'in_progress' ? '🔄 running' : '⏳ pending';
+      const st = t.status === 'completed' ? '✅' : t.status === 'in_progress' ? '🔄' : '⏳';
       const deps = t.dependencies.length > 0 ? t.dependencies.join(', ') : '—';
       const prio = t.priority === 'high' ? '🔴' : t.priority === 'medium' ? '🟡' : '🟢';
-      lines.push(`| ${phase.phase} | ${t.id} | ${t.type} | ${prio} | \`${t.branch}\` | ${deps} | ${t.assignee} | ${t.estimatedHours}h | ${st} |`);
+      lines.push(`| ${t.id} | ${t.type} | ${prio} | \`${t.branch}\` | ${deps} | ${t.assignee} | ${t.estimatedHours}h | ${st} |`);
     }
     lines.push('');
   }
 
-  // ── 任务详情 ──
+  // ── 2. 任务详情 ──
   lines.push('---');
   lines.push('');
-  lines.push('## 📝 任务详情');
+  lines.push('## 2. 任务详情');
   lines.push('');
   for (const t of allTasks) {
     lines.push(`### ${t.id}: ${t.name}`);
@@ -301,26 +303,23 @@ function formatPlanMarkdown(plan: PlanEntry[], iteration: string): string {
     lines.push(`| 优先级 | ${t.priority} |`);
     lines.push(`| 分支 | \`${t.branch}\` |`);
     lines.push(`| 状态 | ${t.status} |`);
-    lines.push(`| 进度 | ${t.progress}% |`);
     lines.push(`| 负责人 | ${t.assignee} |`);
     lines.push(`| 预估 | ${t.estimatedHours}h |`);
     lines.push(`| 依赖 | ${t.dependencies.length > 0 ? t.dependencies.join(', ') : '无'} |`);
     lines.push('');
   }
 
-  // ── 依赖拓扑 ──
+  // ── 3. 依赖拓扑 ──
   const hasDeps = allTasks.some(t => t.dependencies.length > 0);
   if (hasDeps) {
     lines.push('---');
     lines.push('');
-    lines.push('## 🔗 依赖关系');
+    lines.push('## 3. 依赖关系');
     lines.push('');
     lines.push('```');
     for (const t of allTasks) {
       if (t.dependencies.length > 0) {
-        for (const d of t.dependencies) {
-          lines.push(`  ${d} ──▶ ${t.id}`);
-        }
+        for (const d of t.dependencies) lines.push(`  ${d} ──▶ ${t.id}`);
       } else {
         lines.push(`  ${t.id} (无依赖)`);
       }
@@ -329,17 +328,103 @@ function formatPlanMarkdown(plan: PlanEntry[], iteration: string): string {
     lines.push('');
   }
 
-  // ── 执行记录 ──
+  // ── 4. 风险评估 ──
   lines.push('---');
   lines.push('');
-  lines.push('## 📊 执行记录');
+  lines.push('## 4. 风险评估');
+  lines.push('');
+  if (highRiskTasks.length > 0) {
+    lines.push('| Task | 风险级别 | 风险说明 | 缓解措施 |');
+    lines.push('|:---|:---|:---|:---|');
+    for (const t of highRiskTasks) {
+      const reasons: string[] = [];
+      if (t.dependencies.length >= 2) reasons.push(`多依赖(${t.dependencies.length}个)`);
+      if (t.priority === 'high') reasons.push('高优先级');
+      const reason = reasons.join(', ');
+      const mitigation = t.dependencies.length >= 2 ? '前置任务优先完成后再启动' : '提前评审方案，预留 buffer';
+      lines.push(`| ${t.id} | ${t.priority === 'high' ? '🔴 高' : '🟡 中'} | ${reason} | ${mitigation} |`);
+    }
+  } else {
+    lines.push('> ✅ 无明显高风险任务。');
+  }
+  lines.push('');
+
+  // ── 5. 里程碑 ──
+  lines.push('---');
+  lines.push('');
+  lines.push('## 5. 里程碑');
+  lines.push('');
+  lines.push('| 里程碑 | 触发条件 | 验收标准 | 预计完成 |');
+  lines.push('|:---|:---|:---|:---|');
+  for (const phase of plan) {
+    const phaseTasks = phase.tasks.map(t => t.id).join(', ');
+    lines.push(`| Phase ${phase.phase} 完成 | ${phaseTasks} 全部 done | 所有关联分支合并 / 测试通过 | TBD |`);
+  }
+  lines.push('');
+
+  // ── 6. 回滚方案 ──
+  lines.push('---');
+  lines.push('');
+  lines.push('## 6. 回滚方案');
+  lines.push('');
+  lines.push('- **触发条件**: 任一 Phase 中关键任务阻塞超过 4h 或 P0 问题未解决');
+  lines.push('- **回滚步骤**:');
+  lines.push('  1. 暂停当前 Phase 执行');
+  lines.push('  2. 已合并分支 revert');
+  lines.push('  3. 更新本计划状态为 `abandoned`');
+  lines.push('  4. 生成新的修正计划');
+  lines.push('- **责任人**: 迭代负责人 + 受影响任务 assignee');
+  lines.push('');
+
+  // ── 7. 执行记录 ──
+  lines.push('---');
+  lines.push('');
+  lines.push('## 7. 执行记录');
   lines.push('');
   lines.push('| 时间 | 事件 | 详情 |');
   lines.push('|:---|:---|:---|');
-  lines.push(`| ${new Date().toLocaleString()} | 📋 计划生成 | ${allTasks.length} tasks, ${plan.length} phases |`);
+  lines.push(`| ${new Date().toLocaleString()} | 📋 计划创建 | ${allTasks.length} tasks, ${plan.length} phases, ${totalHours}h |`);
   lines.push('');
-  lines.push('> 后续执行记录将追加到此处。');
+  lines.push('> 执行过程中自动追加事件。');
   lines.push('');
 
   return lines.join('\n');
+}
+
+/**
+ * 从任务名称中提取关键英文词，拼成计划文件名后缀
+ * 例: [login, payment, refactor] → "login-payment-refactor"
+ */
+function extractPlanSlug(tasks: TaskState[]): string {
+  if (tasks.length === 0) return '';
+
+  // 提取所有任务名中的有效英文/拼音词
+  const allWords = tasks.flatMap(t => {
+    const name = (t.name || t.id).toLowerCase();
+    // 提取纯英文词（≥3 字母）和中文转拼音的关键词
+    const englishWords = name.match(/[a-z]{3,}/g) || [];
+    // 从类型中提取
+    const typeWords = (t.type || '').match(/[a-z]{3,}/g) || [];
+    return [...englishWords, ...typeWords];
+  });
+
+  // 去重 + 按频率排序 + 取前 3 个
+  const freq: Record<string, number> = {};
+  for (const w of allWords) {
+    // 过滤常见无意义词
+    if (['the', 'and', 'for', 'new', 'all', 'from', 'with', 'test'].includes(w)) continue;
+    freq[w] = (freq[w] || 0) + 1;
+  }
+  const top = Object.entries(freq)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([w]) => w);
+
+  // 如果英文词不够，用任务类型补
+  if (top.length === 0) {
+    const types = [...new Set(tasks.map(t => t.type).filter(Boolean))];
+    return types.slice(0, 2).join('-').slice(0, 30);
+  }
+
+  return top.join('-').slice(0, 40);
 }
