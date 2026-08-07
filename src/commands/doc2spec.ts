@@ -215,7 +215,7 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
         execSync(installCmd, { stdio: 'inherit' });
         logger.success('pandoc 安装成功！继续转换...\n');
       } catch {
-        logger.error('自动安装失败，请手动执行: ' + installCmd);
+        logger.error('安装失败。替代方案: Word 另存为 .md, 或在 WorkBuddy 中使用 word2md 技能');
         return;
       }
     } else {
