@@ -375,7 +375,7 @@ function filterTemplateNoise(sections: Section[]): Section[] {
 }
 
 async function createTaskFromSection(iterationDir: string, taskId: string, section: Section, allPlatforms: string[]): Promise<void> {
-  const taskDir = join(iterationDir, taskId);
+  const taskDir = join(iterationDir, '030-tasks', taskId);
   
   // 如果 section 有指定平台则只创建该平台，否则创建全部平台
   const taskPlatforms = section.platform ? [section.platform] : allPlatforms;
@@ -832,7 +832,7 @@ async function generateImpactGraph(
     const risk = await scoreRisk(s.content + s.name, s.name, iterationDir);
     impact += `| ${taskId}: ${s.name} | ${risk.level} | ${risk.score} | ${risk.tags.join(' ')} | ${risk.reasons.join('; ')} |\n`;
 
-    const taskDir = join(iterationDir, taskId);
+    const taskDir = join(iterationDir, '030-tasks', taskId);
     if (await pathExists(taskDir)) {
       // 生成风险报告并嵌入 TASK.md
       const taskMdPath = join(taskDir, 'backend', 'TASK.md');
