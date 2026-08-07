@@ -426,32 +426,45 @@ function handlePipeline(input: string): AskResult {
 }
 
 function buildPipelineDetail(steps: PipelineStep[], input: string): string {
-  const immediate = steps.slice(0, 1);  // 只有第一步立即执行
-  const recommended = steps.slice(1);   // 其余为建议后续
+  // 判断: 第一步是 task new → 只执行创建，其余为建议
+  const isTaskCreation = steps[0]?.command === 'task' && steps[0]?.args?.includes('new');
 
-  const lines = [
-    `📋 执行计划 (来源: "${input}")`,
-    ``,
-    `▶ 立即执行:`,
-    ...immediate.map(s =>
-      `  speccore ${s.command}${s.args ? ' ' + s.args : ''}\n     ${s.explanation}`
-    ),
-  ];
-
-  if (recommended.length > 0) {
-    lines.push('');
-    lines.push('💡 创建完成后，建议按以下顺序操作:');
-    lines.push(...recommended.map((s, i) =>
-      `  ${i + 1}. speccore ${s.command}${s.args ? ' ' + s.args : ''} — ${s.explanation}`
-    ));
-    lines.push('');
-    lines.push('⚠️ 后续步骤不会自动执行，需手动确认每一步。');
+  if (isTaskCreation && steps.length > 1) {
+    const immediate = steps[0];
+    const recommended = steps.slice(1);
+    const lines = [
+      `📋 执行计划 (来源: "${input}")`,
+      ``,
+      `▶ 立即执行:`,
+      `  speccore ${immediate.command}${immediate.args ? ' ' + immediate.args : ''}`,
+      `     ${immediate.explanation}`,
+      ``,
+      `💡 创建完成后，建议按以下顺序操作:`,
+      ...recommended.map((s, i) =>
+        `  ${i + 1}. speccore ${s.command}${s.args ? ' ' + s.args : ''} — ${s.explanation}`
+      ),
+      ``,
+      `⚠️ 后续步骤不会自动执行，需手动确认每一步。`,
+      ``,
+      `---`,
+      `是否创建任务？[是/修改/取消]`,
+    ];
+    return lines.join('\n');
   }
 
-  lines.push('');
-  lines.push('---');
-  lines.push('是否创建任务？[是/修改/取消]');
-  return lines.join('\n');
+  // 其他工作流: 完整展示
+  return [
+    `📋 执行计划 (来源: "${input}")`,
+    ``,
+    ...steps.map(s =>
+      `  ${s.order}. speccore ${s.command}${s.args ? ' ' + s.args : ''}` +
+      (s.dependsOn ? `  ← 依赖步骤 ${s.dependsOn}` : '') +
+      `\n     ${s.explanation}`
+    ),
+    ``,
+    `---`,
+    `⚠️  请确认后执行。`,
+  ].join('\n');
 }
 
 // ============================================================
