@@ -164,6 +164,16 @@ function renderPipeline(result: AskResult, plan: PipelinePlan): string {
 }
 
 export async function askCommand(input: string, _options: any): Promise<void> {
+  if (!input || !input.trim()) {
+    logger.info('🔍 SpecCore 万能 AI 入口');
+    logger.info('用法: speccore ask "<自然语言>"');
+    return;
+  }
+
+  const result = await askEngine(input);
+  // 始终输出模式标记到 stdout，供 Skill/编排器解析
+  process.stdout.write(`[SPECCORE_MODE: ${result.mode}]\n`);
+
   // 如果不是 TTY（AI 调用），输出 HTML 页面
   if (isAiContext() || !process.stdout.isTTY) {
     // ── 首次使用：展示 ask 引导页 ──
@@ -200,13 +210,11 @@ export async function askCommand(input: string, _options: any): Promise<void> {
   }
 
   logger.info(`🔍 正在分析: "${input}"`);
+  logger.info('');
+  logger.info(`${modeBadge(result.mode)}`);
+  logger.info('');
 
   try {
-    const result = await askEngine(input);
-    logger.info('');
-    logger.info(`${modeBadge(result.mode)}`);
-    logger.info('');
-
     if (result.mode === 'pipeline' && result.pipeline) {
       logger.info(renderPipeline(result, result.pipeline));
     } else if (result.mode === 'explain') {
