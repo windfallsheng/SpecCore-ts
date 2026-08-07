@@ -1,6 +1,6 @@
 # SpecCore — Code by Spec, Not by Vibe
 
-🖥️ 规范驱动开发 CLI · 21 简洁命令（55 全量）· 人机协同闭环 · 多层 AI 架构
+🖥️ 规范驱动开发 CLI · 23 简洁命令（59 全量）· 人机协同闭环 · 多层 AI 架构
 
 ```bash
 speccore ask "我想做一个登录功能，计划晚8点分批执行"
@@ -44,14 +44,14 @@ init → doc2spec → analyze → split → plan → execute → pr → done →
                    └─ .needs-retry ← 失败标记 ── → execute --resume
 ```
 
-## 21 简洁命令
+## 23 简洁命令
 
 | 分类 | 命令 |
 |------|------|
 | 入口 | `ask` `welcome` `init` `help` |
 | 流水线 | `doc2spec` `analyze` `split` `plan` `execute` `pr` `done` `spec2doc` |
 | 智能 | `dev` |
-| 管理 | `iteration` `task` `change` |
+| 管理 | `iteration` `task` `change` `task-create` `iteration-create` |
 | 查看 | `dashboard` `search` `validate` `retro` `ops` |
 
 ## 目录结构（全英文）
@@ -186,7 +186,7 @@ speccore --help full      # 全量模式，含所有子命令和工具
 | 文档 | 说明 |
 |------|------|
 | [快速开始](docs/快速开始.md) | 5 分钟上手，安装 → 完整流程 |
-| [命令参考](docs/命令参考.md) | 全部 21 命令 + 子命令 + 示例 |
+| [命令参考](docs/命令参考.md) | 全部 23 命令 + 子命令 + 示例 |
 | [总览](docs/总览.md) | 核心概念 + 工作流 + 三种使用方式 |
 | [场景实战](docs/场景实战.md) | 35 个真实开发场景 |
 | [SDD 方法论](docs/SDD方法论.md) | 规范驱动开发理念 |
