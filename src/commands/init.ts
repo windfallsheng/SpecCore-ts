@@ -53,6 +53,10 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
           await require('fs-extra').copy(skillsSrc, skillsDest, { overwrite: true });
         }
 
+        // 更新 AGENTS.md / CLAUDE.md / AI-RULES.md
+        await writeAgentsMd(projectRoot);
+        await writeFile(join(projectRoot, 'CLAUDE.md'), '<!-- 规则请参考 AGENTS.md -->\n\n@AGENTS.md\n');
+
         // 更新版本号
         const verFile = join(speccoreDir, 'local', 'version.json');
         await writeFile(verFile, JSON.stringify({ version: require('../../package.json').version, updatedAt: new Date().toISOString() }, null, 2));
