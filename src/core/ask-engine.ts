@@ -85,7 +85,7 @@ const COMMAND_KB: CommandKnowledge[] = [
   { name: 'dev', aliases: ['d'], description: '智能级联：--auto 全自动流水线 detect→execute',
     usage: 'speccore dev [--auto] [--from <phase>] [--to <phase>]', examples: ['speccore dev --auto', 'speccore dev --from analyze --to execute'], related: ['execute', 'plan'], triggers: ['dev', '流水线', '自动', '级联'] },
   { name: 'task', aliases: ['tk'], description: '任务管理：创建/列表/状态。子命令: new, list, status',
-    usage: 'speccore task new --name <name> [--id <id>] | speccore task list | speccore task status', examples: ['speccore task new --name "用户登录"', 'speccore task list'], related: ['plan', 'execute'], triggers: ['task', '任务', '创建任务', '新建'] },
+    usage: 'speccore task new --name <name> [--id <id>] | speccore task list | speccore task status', examples: ['speccore task new --name "用户登录"', 'speccore task list'], related: ['plan', 'execute'], triggers: ['task', '任务列表', '查看任务', '列出任务'] },
   { name: 'iteration', aliases: ['it'], description: '迭代管理：创建时自动生成唯一编码（Iteration-001-功能名），支持拆分/列表',
     usage: 'speccore iteration create -n <name> | speccore iteration split | speccore iteration list', examples: ['speccore iteration create -n Q3 → Iteration-001-Q3', 'speccore iteration list'], related: ['task', 'plan'], triggers: ['迭代', 'iteration', '迭代', 'sprint'] },
   { name: 'search', aliases: ['sh'], description: '全文搜索：跨所有 Spec 文件关键词检索',
