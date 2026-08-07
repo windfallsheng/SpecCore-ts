@@ -15,7 +15,8 @@
 ```
 1. execute_command("speccore doc2spec -f {file} --iter {iter}")
    → 自动逐行解析，创建 Task-001 ~ Task-NNN
-2. 展示: ✅ 已创建N个任务 + 列表摘要
+   → 自动提取嵌入图片 → assets/images/
+2. 展示: ✅ 已创建N个任务 + 📷 M张图片
 3. 推荐: analyze --prompt -I {iter}
 ```
 

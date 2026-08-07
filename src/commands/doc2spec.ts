@@ -456,11 +456,33 @@ async function importExcelBugList(file: string, iteration: string): Promise<void
       rows.push(row);
     }
   } else {
-    // .xlsx/.xls
+    // .xlsx/.xls: 解析数据 + 提取图片
     const XLSX = require('xlsx');
+    const JSZip = require('jszip');
     const wb = XLSX.readFile(file);
     const sheet = wb.Sheets[wb.SheetNames[0]];
     rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+    // 提取 Excel 嵌入图片
+    try {
+      const buf = await require('fs-extra').readFile(file);
+      const zip = await JSZip.loadAsync(buf);
+      const imagesDir = join(iterDir, '010-requirements', 'assets', 'images');
+      
+      // 遍历 zip 寻找 xl/media/ 下的图片文件
+      const mediaFiles = Object.keys(zip.files).filter(k => k.startsWith('xl/media/'));
+      for (const mf of mediaFiles) {
+        const imgData = await zip.files[mf].async('nodebuffer');
+        const imgName = basename(mf);
+        await ensureDir(imagesDir);
+        await writeFile(join(imagesDir, imgName), imgData);
+      }
+      if (mediaFiles.length > 0) {
+        logger.info(`   📷 提取 ${mediaFiles.length} 张图片 → ${imagesDir}/`);
+      }
+    } catch (e: any) {
+      // 图片提取非关键，静默降级
+    }
   }
 
   if (rows.length === 0) {
