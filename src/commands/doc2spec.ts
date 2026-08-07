@@ -123,6 +123,12 @@ interface Word2SpecOptions {
 }
 
 export async function doc2specCommand(options: Word2SpecOptions): Promise<void> {
+  // ── Excel/CSV Bug 列表导入 ──
+  if (options.file && /\.(xlsx|csv|xls)$/i.test(options.file) && options.iter) {
+    await importExcelBugList(options.file, options.iter);
+    return;
+  }
+
   // ── Prompt 模式: 输出 AI 验证 Prompt ──
   if (options.prompt) {
     if (!options.file) { logger.error('--prompt 需要 --file'); return; }
@@ -429,4 +435,88 @@ async function mergeToRequirement(iterDir: string, targetDir: string, platform: 
     .replace(/#{1,3}\s+\d+\.\s*(需求概述|功能需求|非功能需求|验收标准|附录)[\s\S]*?(?=#{1,3}\s|$)/g, '');
 
   await writeFile(globalReqPath, globalContent);
+}
+
+async function importExcelBugList(file: string, iteration: string): Promise<void> {
+  const iterDir = `Iteration-${iteration}`;
+  const taskDir = join(iterDir, '030-tasks');
+  await ensureDir(taskDir);
+
+  let rows: Record<string, string>[] = [];
+
+  if (/\.csv$/i.test(file)) {
+    const csv = await readFile(file, 'utf-8');
+    const lines = csv.trim().split('\n');
+    const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+    for (const line of lines.slice(1)) {
+      if (!line.trim()) continue;
+      const vals = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+      const row: Record<string, string> = {};
+      headers.forEach((h, i) => row[h] = vals[i] || '');
+      rows.push(row);
+    }
+  } else {
+    // .xlsx/.xls
+    const XLSX = require('xlsx');
+    const wb = XLSX.readFile(file);
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+  }
+
+  if (rows.length === 0) {
+    logger.warn('未找到数据行');
+    return;
+  }
+
+  // 列名智能检测: 标题/描述/优先级/负责人
+  const cols = Object.keys(rows[0]);
+  const titleCol = cols.find(c => /标题|title|名称|name|概要|summary/i.test(c)) || cols[0];
+  const descCol = cols.find(c => /描述|description|详情|detail|内容|content|bug.*描述/i.test(c)) || '';
+  const priorityCol = cols.find(c => /优先级|priority|严重|severity/i.test(c)) || '';
+  const ownerCol = cols.find(c => /负责人|owner|assignee|处理人/i.test(c)) || '';
+
+  let created = 0;
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const title = String(row[titleCol] || `Bug #${i + 1}`).trim();
+    const taskId = `Task-${String(i + 1).padStart(3, '0')}`;
+    const taskPath = join(taskDir, taskId);
+    await ensureDir(taskPath);
+
+    const reqLines = [
+      `# ${title}`,
+      '',
+      `| 属性 | 值 |`,
+      `| :--- | :--- |`,
+      `| 编号 | ${taskId} |`,
+      `| 类型 | bugfix |`,
+      `| 迭代 | ${iteration} |`,
+    ];
+    if (row[priorityCol]) reqLines.push(`| 优先级 | ${row[priorityCol]} |`);
+    if (row[ownerCol]) reqLines.push(`| 负责人 | ${row[ownerCol]} |`);
+    reqLines.push('');
+    reqLines.push('## 问题描述');
+    reqLines.push('');
+    if (descCol && row[descCol]) {
+      reqLines.push(String(row[descCol]));
+    } else {
+      // 用所有非标题列作为描述
+      for (const c of cols) {
+        if (c !== titleCol && row[c]) {
+          reqLines.push(`**${c}**: ${row[c]}`);
+        }
+      }
+    }
+    reqLines.push('');
+
+    await writeFile(join(taskPath, 'REQUIREMENT.md'), reqLines.join('\n'));
+    created++;
+  }
+
+  logger.success(`✅ 从 ${basename(file)} 导入 ${created} 个 Bug 任务`);
+  logger.info(`   📂 位置: ${taskDir}/Task-001~Task-${String(created).padStart(3, '0')}`);
+  logger.info('');
+  logger.info('💡 推荐下一步:');
+  logger.info(`   speccore analyze --prompt -I ${iteration}`);
+  logger.info(`   speccore execute --prompt -t Task-001 -I ${iteration}`);
 }
