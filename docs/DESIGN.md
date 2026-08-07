@@ -281,8 +281,66 @@ speccore schedule daemon start
 | v5.27.29 | 08-07 | Qoder .qoder/rules/ 自动生成 |
 | v5.27.34 | 08-07 | Prompt 架构落地: Skill→CLI→AI→CLI 协作循环 |
 | v5.27.35 | 08-07 | CONSTITUTION 增加"项目名称"列、init 残留清理、意图识别平台参数 |
+| v5.30.0 | 08-07 | 可执行编排引擎 v4 + 升级提示 + 数据保护 + 管道传递 |
 
 > **最后更新**: 2026-08-07
+
+---
+
+## 13. 可执行编排引擎（spec-ask v4）
+
+### 13.1 五分支决策树
+
+```
+用户输入 → 步骤0 判断类型 → 步骤1 意图识别 [SPECCORE_MODE] → 分支选择
+
+分支 A: match    → 补参 → 确认 → --prompt → 自己生成 → 校验 → --response
+分支 B: ambiguous → 展示候选人 → 用户选 → 分支A
+分支 C: explain  → 直接回答，不调CLI
+分支 D: pipeline  → 展示≤5步 → 逐步确认 → 产物传递
+分支 E: guide    → 展示流程 → 进D或结束
+```
+
+### 13.2 协作协议
+
+| exitCode | 含义 | 标准行为 |
+| :--- | :--- | :--- |
+| 0 | 确定性操作完成 | 展示结果 → 推荐下一步 |
+| 10 | 需要 AI | 提取 [SPECCORE_PROMPT] → 自己生成 → --apply |
+| 11 | 缺参数 | 展示 [SPECCORE_NEEDS_INFO] 参数表 → 用户补 |
+
+### 13.3 管道传递
+
+```
+Write /tmp/speccore-resp.json
+cat /tmp/speccore-resp.json | speccore execute --response - -t Task-001
+```
+
+---
+
+## 14. 升级与数据保护
+
+### 14.1 文件保护策略
+
+| 文件 | 策略 |
+| :--- | :--- |
+| CONSTITUTION.md | 永远不覆盖 → 生成 UPGRADE.md 对比文件 |
+| context.json | 永远不覆盖 |
+| Iteration-*/ | 永远不覆盖 |
+| AI-RULES/AGENTS/Skills/模板 | 自动更新 + 输出清单 |
+
+### 14.2 升级提示机制
+
+每次 init 对比 `last-init-version.txt`，检测模板变化：
+1. CONSTITUTION 缺新字段 → 生成 `.speccore/local/UPGRADE.md`
+2. 输出自动更新文件清单
+3. AI 模式：用户说"升级" → AI 智能合并
+4. 手动模式：对照 UPGRADE.md 自行修改
+
+### 14.3 低置信拒绝与歧义检测
+
+- confidence < 45% → 拒绝匹配
+- best.confidence - second.confidence < 15% → ambiguous 模式
 
 ---
 

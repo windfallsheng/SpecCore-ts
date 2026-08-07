@@ -2,6 +2,39 @@
 
 ---
 
+## v5.30.0 (2026-08-07) — "数据保护 + 智能升级"
+
+### 🛡️ 升级保护
+
+- **CONSTITUTION.md**: 永远不覆盖，已存在时跳过
+- **context.json**: 永远不覆盖
+- **Iteration-sample/**: 永远不覆盖
+- **UPGRADE.md**: 检测模板变化时自动生成，含 before/after 对比
+- **last-init-version.txt**: 追踪上次初始化版本
+
+### 📋 升级提示
+
+- init 无 --force 时也显示升级提示
+- 自动更新文件清单（AI-RULES/AGENTS/Skills/模板）
+- AI 模式 + 手动模式双路径
+
+### 🔌 管道传递
+
+- `execute --response -` 支持 stdin 管道（`cat file | speccore execute --response -`）
+
+### 🧠 spec-ask v4
+
+- 五分支决策树（match/ambiguous/explain/pipeline/guide）
+- 低置信拒绝（<45%）+ 歧义检测（gap <15%）
+- [SPECCORE_MODE] 标记供 Skill 解析
+- 全部 10 个 Skill 达到高阶标准
+
+### 📖 设计文档
+
+- DESIGN.md 新增第 13-14 章（编排引擎 + 升级保护）
+
+---
+
 ## v5.29.0 (2026-08-07) — "可执行编排引擎"
 
 ### 🧠 spec-ask: 从操作手册到可执行编排器
