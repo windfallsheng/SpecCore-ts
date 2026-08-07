@@ -22,7 +22,7 @@ PLAN.md 始终为最新版本。
 
 ## 计划文件位置
 
-所有计划统一存放：`Iteration-{name}/000-overview/`
+所有计划统一存放：`Iteration-{name}/000-overview/plans/`
 - `PLAN-{ts}-{slug}.md` — 多版本历史（按时间倒序）
 - `PLAN.md` — 始终为最新版本
 
