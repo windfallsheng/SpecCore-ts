@@ -212,6 +212,7 @@ export async function scheduleRetryCommand(options: ScheduleRetryOptions): Promi
         name: task.name,
         iteration: task.iteration,
         taskId: task.taskId,
+        all: task.all,
         scheduledAt: defaultAt,
         execOptions: task.execOptions,
       });
@@ -224,10 +225,11 @@ export async function scheduleRetryCommand(options: ScheduleRetryOptions): Promi
 
     // 指定了时间的：取消旧任务 + 创建新任务
     await cancelScheduleTask(options.id);
-    const updated = await createScheduledTask({
+    const updated = await createScheduleTask({
       name: task.name,
       iteration: task.iteration,
       taskId: task.taskId,
+      all: task.all,
       scheduledAt: newTime,
       execOptions: task.execOptions,
     });
