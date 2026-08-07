@@ -1255,7 +1255,35 @@ async function runApplyMode(iteration: string, options: ExecuteOptions): Promise
 
   logger.success(`\n📁 完成: ${writtenCount} 个文件已写入`);
   logger.info(`   📂 位置: ${iterDir}/`);
+
+  // ── 执行后总结 ──
+  outputPostSummary(iteration, task, writtenCount, parsed.files.map(f => f.path));
+
   logger.info(`   📋 下一步: speccore pr --task ${task}`);
+}
+
+function outputPostSummary(iteration: string, task: string, fileCount: number, filePaths: string[]): void {
+  logger.info('');
+  logger.info('━'.repeat(40));
+  logger.info('📊 执行总结');
+  logger.info('━'.repeat(40));
+  logger.info(`  迭代: ${iteration} | 任务: ${task} | 文件: ${fileCount}`);
+  for (const fp of filePaths.slice(0, 5)) logger.info(`    ✅ ${fp}`);
+  if (filePaths.length > 5) logger.info(`    ... 等 ${filePaths.length} 个文件`);
+  logger.info('');
+
+  // 推荐下一步
+  const nextSteps = [
+    { cmd: `speccore pr --task ${task}`, desc: '创建 Pull Request' },
+    { cmd: `speccore execute --prompt -t ${task}`, desc: '继续开发下一个任务' },
+    { cmd: `speccore done --task ${task}`, desc: '归档已完成任务' },
+    { cmd: `speccore analyze -I ${iteration}`, desc: '重新分析确认无遗漏' },
+  ];
+  logger.info('💡 推荐下一步:');
+  for (const ns of nextSteps) {
+    logger.info(`   → ${ns.cmd}  # ${ns.desc}`);
+  }
+  logger.info('━'.repeat(40));
 }
 
 async function updateProjectGraphStatus(iteration: string, task: string): Promise<void> {
