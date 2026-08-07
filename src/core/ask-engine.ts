@@ -94,6 +94,8 @@ const COMMAND_KB: CommandKnowledge[] = [
     usage: 'speccore track [--req <id>] [--task <id>] [--full]', examples: ['speccore track --req REQ-001', 'speccore track --full'], related: ['search', 'analyze'], triggers: ['追踪', 'track', 'trace', '链路', '追溯'] },
   { name: 'rename', aliases: ['rn'], description: '重命名迭代/任务，自动更新所有关联引用',
     usage: 'speccore rename [--iteration <old> <new>] [--task <old> <new>]', examples: ['speccore rename --iteration Q2 Q3', 'speccore rename --task T-01 T-10'], related: ['sync'], triggers: ['重命名', 'rename', '改名', '更名'] },
+  { name: 'task-create', aliases: ['tc'], description: '创建任务：交互式需求澄清 → 生成 REQUIREMENT.md',
+    usage: '激活 spec-task-create Skill', examples: ['创建一个bug任务', '新建修复登录问题的任务'], related: ['analyze', 'execute'], triggers: ['创建.*任务', '新建.*任务', '建.*bug', '新增.*任务', '帮我写.*需求', '记录.*bug'] },
 ];
 
 // ============================================================
