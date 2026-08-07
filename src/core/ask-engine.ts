@@ -426,18 +426,32 @@ function handlePipeline(input: string): AskResult {
 }
 
 function buildPipelineDetail(steps: PipelineStep[], input: string): string {
-  return [
-    `📋 执行计划预览 (来源: "${input}")`,
+  const immediate = steps.slice(0, 1);  // 只有第一步立即执行
+  const recommended = steps.slice(1);   // 其余为建议后续
+
+  const lines = [
+    `📋 执行计划 (来源: "${input}")`,
     ``,
-    ...steps.map(s =>
-      `  ${s.order}. \x1b[36mspeccore ${s.command}${s.args ? ' ' + s.args : ''}\x1b[0m` +
-      (s.dependsOn ? `  ← 依赖步骤 ${s.dependsOn}` : '') +
-      `\n     ${s.explanation}`
+    `▶ 立即执行:`,
+    ...immediate.map(s =>
+      `  speccore ${s.command}${s.args ? ' ' + s.args : ''}\n     ${s.explanation}`
     ),
-    ``,
-    `---`,
-    `⚠️  请确认后执行。输入 y 确认，或修改参数后重试。`,
-  ].join('\n');
+  ];
+
+  if (recommended.length > 0) {
+    lines.push('');
+    lines.push('💡 创建完成后，建议按以下顺序操作:');
+    lines.push(...recommended.map((s, i) =>
+      `  ${i + 1}. speccore ${s.command}${s.args ? ' ' + s.args : ''} — ${s.explanation}`
+    ));
+    lines.push('');
+    lines.push('⚠️ 后续步骤不会自动执行，需手动确认每一步。');
+  }
+
+  lines.push('');
+  lines.push('---');
+  lines.push('是否创建任务？[是/修改/取消]');
+  return lines.join('\n');
 }
 
 // ============================================================
