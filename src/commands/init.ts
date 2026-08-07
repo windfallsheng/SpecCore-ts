@@ -1426,6 +1426,16 @@ async function checkUpgradeHints(projectRoot: string, speccoreDir: string): Prom
     }
   }
 
+  // 版本跳跃提示 — 列出自动更新了的文件
+  if (lastVersion && lastVersion !== version) {
+    logger.info(`📋 已自动更新的文件 (${lastVersion} → ${version}):`);
+    logger.info('   ✅ AI-RULES.md — 命令参考表（新增 Prompt 模式）');
+    logger.info('   ✅ AGENTS.md — 项目规则（新增 Skill 描述）');
+    logger.info('   ✅ .agents/skills/ — 10 个 Skill 全量更新');
+    logger.info('   ✅ .claude/ / .codebuddy/ — 命令模板更新');
+    logger.info('');
+  }
+
   await writeFile(versionFile, version);
 }
 
