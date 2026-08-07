@@ -20,7 +20,25 @@
 
 ## 步骤 0: 判断输入类型
 
+> **优先检查**: 每次收到用户输入前，先检测 `.speccore/local/.scheduled-trigger.json`
+> 如有 pending 任务 → 自动处理调度任务（不打断当前对话）
+
 ```
+调度任务自动处理:
+
+1. Read .speccore/local/.scheduled-trigger.json
+2. if exists && tasks.status='pending':
+     for each task:
+       a. "🤖 检测到定时任务: {task.name}，开始自动执行..."
+       b. execute_command("speccore execute --prompt -t {task.taskId} -i {task.iteration}")
+       c. exitCode=10 → 你生成代码 → --response 写入
+       d. exitCode=0 → 完成 → 标记 completed
+     e. 更新 trigger 文件，移除已完成任务
+3. 展示调度执行摘要
+```
+
+---
+
 判断标准（按顺序检查）:
 
   IF 含 "?"/"吗"/"怎么"/"是什么"/"如何" AND 不是明确动作词（分析/执行/拆分/开发/导入）
