@@ -92,12 +92,15 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
     // Create tool integration files (Claude, CodeBuddy, Cursor, Trae, WindSurf, QCoder)
     await createToolIntegrations(projectRoot, options.tool);
 
-    // Create sample iteration
-    await createSampleIteration(projectRoot);
+    // Create sample iteration（已存在则跳过）
+    if (!await pathExists(join(projectRoot, 'Iteration-sample'))) {
+      await createSampleIteration(projectRoot);
+    }
 
-    // Create context.json
-    await writeFile(
-      join(speccoreDir, 'local', 'context.json'),
+    // Create context.json（已存在则跳过）
+    const ctxPath = join(speccoreDir, 'local', 'context.json');
+    if (!await pathExists(ctxPath)) {
+      await writeFile(ctxPath,
       JSON.stringify({
         currentIteration: '',
         currentTask: '',
@@ -115,6 +118,7 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
         history: []
       }, null, 2)
     );
+    } // if context.json 不存在
 
     // 写入版本号追踪
     const { version } = require('../../package.json');
@@ -231,10 +235,13 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
 }
 
 async function createDefaultFiles(projectRoot: string, speccoreDir: string): Promise<void> {
-  // CONSTITUTION.md — 自动检测项目信息
-  const projectName = require('path').basename(projectRoot);
-  const gitUrl = detectGitUrl(projectRoot);
-  await writeFile(
+  // CONSTITUTION.md — 自动检测项目信息（已存在则跳过，保护用户配置）
+  if (await pathExists(join(speccoreDir, 'CONSTITUTION.md'))) {
+    logger.info('   🛡️ CONSTITUTION.md 已存在，跳过（保护用户配置）');
+  } else {
+    const projectName = require('path').basename(projectRoot);
+    const gitUrl = detectGitUrl(projectRoot);
+    await writeFile(
     join(speccoreDir, 'CONSTITUTION.md'),
     `# 技术宪法
 
@@ -298,6 +305,7 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 - 发布分支: release/{version}
 `
   );
+  } // if CONSTITUTION.md 不存在
 
   // PROJECT files
   await writeFile(
