@@ -147,6 +147,21 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   const { checkUpgradeHints } = await import('./init');
   await checkUpgradeHints(projectRoot, speccoreDir);
 
+  // ── 4. 更新 .agents/skills/ + AGENTS.md（每次升级强制刷新）──
+  const skillsSrc = join(__dirname, '..', '..', '.agents', 'skills');
+  const skillsDest = join(projectRoot, '.agents', 'skills');
+  if (await pathExists(skillsSrc)) {
+    await require('fs-extra').copy(skillsSrc, skillsDest, { overwrite: true });
+  }
+  // 更新 AGENTS.md（从内置模板）
+  try {
+    const agentsSrc = join(__dirname, '..', '..', 'AGENTS.md');
+    if (await pathExists(agentsSrc)) {
+      await require('fs-extra').copy(agentsSrc, join(projectRoot, 'AGENTS.md'), { overwrite: true });
+      await require('fs-extra').writeFile(join(projectRoot, 'CLAUDE.md'), '<!-- 规则请参考 AGENTS.md -->\n\n@AGENTS.md\n');
+    }
+  } catch {}
+
   spinner.stop(`升级完成: v${oldVersion} → v${CURRENT_VERSION}`);
   logger.info('');
   if (addedFiles.length > 0) {
