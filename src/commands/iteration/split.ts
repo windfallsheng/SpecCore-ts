@@ -1,4 +1,4 @@
-import { ensureDir, writeFile, pathExists, readFile } from 'fs-extra';
+import { ensureDir, writeFile, pathExists, readFile, readdir } from 'fs-extra';
 import { join } from 'path';
 import { logger, Spinner } from '../../utils/logger';
 import { getDefaultIteration } from '../../core/context';
@@ -29,27 +29,14 @@ export interface IterationSplitOptions {
 async function detectPlatforms(iterationDir: string, specified?: string): Promise<string[]> {
   if (specified) return specified.split(',').map(p => p.trim()).filter(Boolean);
   
-  // Auto-detect from INDEX.md (populated by doc2spec)
-  const indexPath = join(iterationDir, '020-specs', 'INDEX.md');
-  if (await pathExists(indexPath)) {
-    const content = await readFile(indexPath, 'utf-8');
-    // Parse table rows: skip header and separator lines
-    const lines = content.split('\n');
-    const platforms = new Set<string>();
-    let inTable = false;
-    for (const line of lines) {
-      if (line.startsWith('|') && !line.includes(':---')) {
-        const cols = line.split('|').map((c: string) => c.trim()).filter(Boolean);
-        // First column is platform name, skip header row
-        if (cols[0] && cols[0] !== '端' && !String(cols[0]).includes('文件')) {
-          platforms.add(cols[0]);
-          inTable = true;
-        }
-      }
-    }
-    // Also check for common date patterns in first col and filter them
-    const filtered = [...platforms].filter(p => !/^\d{4}-\d{2}-\d{2}$/.test(p));
-    if (filtered.length > 0) return filtered;
+  // Detect from 020-specs/ subdirectories (populated by analyze)
+  const specsDir = join(iterationDir, '020-specs');
+  if (await pathExists(specsDir)) {
+    const entries = await readdir(specsDir, { withFileTypes: true });
+    const platforms = entries
+      .filter((e: any) => e.isDirectory() && !e.name.startsWith('_') && !e.name.startsWith('.'))
+      .map((e: any) => e.name);
+    if (platforms.length > 0) return platforms;
   }
   
   return ['web']; // default

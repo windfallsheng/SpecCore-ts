@@ -1146,24 +1146,49 @@ function icon(severity: string): string {
   }
 }
 
-/** 按需求端分目录写入分析报告 */
+/** 按需求功能 × 端 分目录写入分析报告 */
 async function writePerPlatform(iterDir: string, report: string, filename: string): Promise<void> {
   const reqDir = join(iterDir, '010-requirements');
   const specsBase = join(iterDir, '020-specs');
   try {
     const entries = await readdir(reqDir, { withFileTypes: true });
-    const platforms = entries
-      .filter(e => e.isDirectory() && !e.name.startsWith('_') && !e.name.startsWith('.') && e.name !== 'sources' && e.name !== 'assets')
+    // 检测需求功能目录（非 assets/sources/_开头的子目录）
+    const features = entries
+      .filter(e => e.isDirectory() && !e.name.startsWith('_') && !e.name.startsWith('.') 
+        && e.name !== 'sources' && e.name !== 'assets')
       .map(e => e.name);
 
-    if (platforms.length === 0) return; // 无分端，保持平面文件即可
+    if (features.length === 0) return;
 
+    // 平台列表从 CONSTITUTION 获取，默认四端
+    const platforms = await detectPlatformsFromConstitution();
+    
     for (const platform of platforms) {
       const platformDir = join(specsBase, platform);
       await ensureDir(platformDir);
+      // 写合并报告 + 每个 feature 独立文件
       await writeFile(join(platformDir, filename), report);
+      for (const feature of features) {
+        await writeFile(join(platformDir, `${feature}.md`), report);
+      }
     }
   } catch {
-    // 目录不存在或无分端，静默跳过
+    // 目录不存在，静默跳过
   }
+}
+
+/** 从 CONSTITUTION.md 提取平台列表 */
+async function detectPlatformsFromConstitution(): Promise<string[]> {
+  try {
+    const constitutionPath = join(process.cwd(), '.speccore', 'CONSTITUTION.md');
+    if (require('fs').existsSync(constitutionPath)) {
+      const content = require('fs').readFileSync(constitutionPath, 'utf-8');
+      // 匹配 对应需求端 列: app, h5, miniapp, admin
+      const match = content.match(/对应需求端[|｜]\s*([a-z,\s]+)/i);
+      if (match) {
+        return match[1].split(/[,，]/).map((s: string) => s.trim()).filter(Boolean);
+      }
+    }
+  } catch {}
+  return ['app', 'h5', 'miniapp', 'admin']; // 默认四端
 }

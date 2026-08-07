@@ -37,7 +37,10 @@ init → doc2spec → analyze → split → plan → execute → pr → done →
 ```
 Iteration-xxx/
 ├── 000-overview/     ← 进度跟踪
-├── 010-requirements/     ← doc2spec 写入
+├── 010-requirements/     ← 按需求功能（user-auth/ etc）
+│   ├── sources/        ← 原始文档
+│   ├── assets/         ← 素材（prd/prototypes/designs）
+│   └── {feature}/README.md
 ├── 020-specs/     ← analyze 输出
 ├── 030-tasks/     ← 开发任务
 │   └── Task-*/    ← split 拆分（含 .issues.md .needs-retry）
