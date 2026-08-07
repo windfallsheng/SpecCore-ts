@@ -373,6 +373,15 @@ async function installSystemSchedule(): Promise<void> {
     require('child_process').execSync(`(echo "${cronEntry}") | crontab -`, { stdio: 'pipe' }).toString();
     logger.success('✅ 已安装 crontab 调度');
     logger.info('   每5分钟检查到期任务');
+  } else if (process.platform === 'win32') {
+    const taskName = 'SpecCoreDaemon';
+    const cmdEscaped = `"${process.execPath}" "${join(__dirname, '..', '..', 'dist', 'cli.js')}" schedule daemon --foreground`;
+    // 每5分钟执行
+    const schCmd = `schtasks /create /tn "${taskName}" /tr "${cmdEscaped}" /sc minute /mo 5 /f /ru "INTERACTIVE"`;
+    require('child_process').execSync(schCmd, { stdio: 'pipe' });
+    logger.success('✅ 已安装 Windows Task Scheduler');
+    logger.info(`   任务名: ${taskName}`);
+    logger.info('   每5分钟检查到期任务');
   } else {
     logger.warn('⚠️ 当前平台不支持系统级调度');
     logger.info('   请使用 speccore schedule daemon start 手动启动');
