@@ -66,16 +66,27 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
         // 生成升级欢迎页（与 ask 引导页同风格）
         await writeUpgradePage(projectRoot, version, speccoreDir);
 
-        spinner.stop('命令文件已更新到最新版本 ✅');
+        spinner.stop('命令文件已更新 ✅');
         logger.info('');
-        logger.info('📋 已更新:');
+        logger.info('━'.repeat(50));
+        logger.info(`🔄 已升级到 SpecCore v${version}`);
+        logger.info('');
+        logger.info('📋 自动更新文件:');
         logger.info('   ✅ .claude/ / .codebuddy/ — 命令模板');
-        logger.info('   ✅ .agents/skills/ — 技能文件');
+        logger.info('   ✅ .agents/skills/ — 10 个技能文件');
         logger.info('   ✅ AI-RULES.md / AGENTS.md — 项目规则');
+        logger.info('');
+        logger.info('🆕 本次新能力:');
+        logger.info('   • spec-ask 可执行编排引擎 v4 — 五分支决策树');
+        logger.info('   • Prompt/Apply 协作架构 — 全命令覆盖');
+        logger.info('   • 管道传递 + 参数缺省智能补充');
+        logger.info('   • 歧义检测 + 低置信拒绝');
         logger.info('');
         logger.info('   🛡️ CONSTITUTION.md / context.json 保持不变');
         logger.info('');
-        logger.info('💡 如需强制重置所有配置: speccore init --force');
+        logger.info('📄 升级详情: speccore-upgrade.html');
+        logger.info('💡 强制重置: speccore init --force');
+        logger.info('━'.repeat(50));
         return;
       }
       
@@ -1520,7 +1531,7 @@ h1{font-size:18px;color:#0ea5e9;text-align:center;margin-bottom:8px;font-weight:
 <div class="section"><h3>下一步</h3>
 <ul><li>speccore ask "查看项目进度" — 体验新的意图识别</li>
 <li>speccore init --help — 查看完整命令列表</li></ul></div>
-<div class="ft">SpecCore ${version} | <a href="./speccore-ask-onboarding.html" style="color:#0ea5e9">查看完整引导</a></div>
+<div class="ft">SpecCore ${version} — 升级完成</div>
 </div></body></html>`;
   await writeFile(join(projectRoot, 'speccore-upgrade.html'), html);
 }
