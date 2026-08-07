@@ -37,6 +37,9 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
 
     // Check if already initialized
     if (await pathExists(speccoreDir)) {
+      // 先检查升级提示（即使不 --force 也要提示）
+      await checkUpgradeHints(projectRoot, speccoreDir);
+
       if (!options.force) {
         spinner.fail('SpecCore already initialized. Use --force to overwrite.');
         logger.info('💡 升级命令文件（不覆盖配置）: speccore update');
@@ -91,12 +94,6 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
 
     // Create tool integration files (Claude, CodeBuddy, Cursor, Trae, WindSurf, QCoder)
     await createToolIntegrations(projectRoot, options.tool);
-
-    // 保护用户配置的策略:
-    // 1. 从不覆盖用户编辑过的文件（CONSTITUTION, context.json, Iteration-*）
-    // 2. 但生成升级提示，告诉用户模板新增了什么
-
-    await checkUpgradeHints(projectRoot, speccoreDir);
 
     // Create sample iteration（已存在则跳过）
     if (!await pathExists(join(projectRoot, 'Iteration-sample'))) {
@@ -1368,30 +1365,84 @@ async function checkUpgradeHints(projectRoot: string, speccoreDir: string): Prom
   const hasConstitution = await pathExists(constitutionPath);
 
   if (hasConstitution && lastVersion !== version) {
-    // 检查 CONSTITUTION 是否缺少新版字段
     const content = await readFile(constitutionPath, 'utf-8');
     const hints: string[] = [];
+    let newTemplate = '';
 
+    // 检出缺失的新版字段
     if (!content.includes('项目名称')) {
-      hints.push('  新增 "项目名称" 列 — 在工程表头添加业务名称（如"食堂后台管理"）');
+      hints.push('表头新增 "项目名称" 列');
+      newTemplate = generateConstitutionTemplate(projectRoot);
     }
 
     if (hints.length > 0) {
+      const upgradeDir = join(speccoreDir, 'local');
+      const upgradeFile = join(upgradeDir, 'UPGRADE.md');
+      
+      // 生成升级指南（供用户手动参考 或 AI 处理）
+      const guide = [
+        `# CONSTITUTION.md 升级指南`,
+        '',
+        `> Speccore ${lastVersion || '旧版'} → ${version}`,
+        '',
+        '## 变更内容',
+        ...hints.map(h => `- ${h}`),
+        '',
+        '## 当前文件（你的）',
+        '```',
+        content.slice(0, 2000), // 截取前 2000 字符
+        '```',
+        '',
+        '## 新版模板（参考）',
+        '```',
+        newTemplate.slice(0, 2000),
+        '```',
+        '',
+        '## 操作方式',
+        '',
+        '### 方式 A: AI 智能合并（推荐）',
+        '在 WorkBuddy 中说: "帮我根据 UPGRADE.md 升级 CONSTITUTION.md"',
+        '',
+        '### 方式 B: 手动修改',
+        '1. 打开 .speccore/CONSTITUTION.md',
+        `2. 参考上方新版模板，在表头添加 "项目名称" 列`,
+        '3. 保存后运行 speccore init 确认',
+        '',
+      ].join('\n');
+
+      await writeFile(upgradeFile, guide);
+
       logger.info('');
       logger.info('━'.repeat(50));
-      logger.info(`🔄 检测到 CONSTITUTION.md 模板有更新 (${lastVersion || '旧版'} → ${version})`);
+      logger.info(`🔄 CONSTITUTION.md 模板有更新 (${lastVersion || '旧版'} → ${version})`);
       logger.info('');
-      for (const h of hints) logger.info(`   ${h}`);
+      for (const h of hints) logger.info(`   📝 ${h}`);
       logger.info('');
-      logger.info('   💡 模板变更不会自动覆盖你的配置。');
-      logger.info('      如需查看完整模板: speccore init --help');
+      logger.info('   📄 升级指南: .speccore/local/UPGRADE.md');
+      logger.info('   🤖 AI 模式: 说 "帮我升级 CONSTITUTION.md"');
+      logger.info('   ✋ 手动模式: 对照 UPGRADE.md 自行修改');
       logger.info('━'.repeat(50));
       logger.info('');
     }
   }
 
-  // 记录本次初始化版本
   await writeFile(versionFile, version);
+}
+
+function generateConstitutionTemplate(projectRoot: string): string {
+  const projectName = require('path').basename(projectRoot);
+  const gitUrl = detectGitUrl(projectRoot);
+  return `# 技术宪法
+
+> 本文档是 SpecCore 与 AI 的**最高优先级契约**。analyze/split/execute 均据此执行。
+
+## 项目信息
+
+| 工程 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应需求端 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| ${projectName} | 待填写 | ./ | ${gitUrl || '待配置'} | main | app, h5, miniapp, admin |
+`;
+
 }
 
 function detectGitUrl(root: string): string | undefined {
