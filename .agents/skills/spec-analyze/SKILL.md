@@ -5,6 +5,12 @@ description: >
   自动生成对应分析报告。Use when user says "分析" "审查" "安全审计" "性能分析" "测试用例".
 allowed-tools: ["Bash", "Read", "Write", "Edit"]
 ---
+## 🚫 禁止
+
+- 禁止在无 REQUIREMENT.md 时生成分析
+- 禁止跳过需求确认直接输出结论
+- 禁止不展示 [确认/修改/重新分析] 就写入文件
+
 # SpecCore Analyze — 需求分析器
 
 > **你负责**: 读取需求文档 → 你自己分析 → CLI 写入 ANALYSIS.md。你自己就是分析引擎。

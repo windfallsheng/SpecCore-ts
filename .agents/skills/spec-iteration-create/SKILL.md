@@ -5,6 +5,12 @@ description: >
   Use when user says "创建迭代" "新建迭代" "Sprint".
 allowed-tools: ["Bash", "Read", "Write", "Edit"]
 ---
+## 🚫 禁止
+
+- 禁止直接用中文命名迭代（AI 翻译英文关键词）
+- 禁止重复创建同名迭代
+- 禁止不检查平台兼容性就创建
+
 # SpecCore Iteration Create — 交互式迭代创建（高阶 Skill）
 
 > **你负责**: 接收描述 → 智能命名 → 检查平台映射 → 创建迭代 → 推荐下一步。

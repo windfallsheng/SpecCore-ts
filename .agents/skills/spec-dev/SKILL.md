@@ -5,6 +5,13 @@ description: >
   Use when user says "下一步" "流水线" "进度" "推进" "what's next".
 allowed-tools: ["Bash", "Read"]
 ---
+## 🚫 禁止
+
+- 禁止在探索阶段写代码（只读）
+- 禁止不展示状态就直接执行下一步
+- 禁止跳过用户确认执行 analyze/execute
+- 禁止在没有 context.json 时推进
+
 # SpecCore Pipeline — 智能级联推进器
 
 > **你负责**: 检测迭代阶段 → 推荐并执行下一步 → 逐步推进项目。

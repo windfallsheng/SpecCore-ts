@@ -5,6 +5,12 @@ description: >
   Use when user says "导出" "生成文档" "生成报告" "导出Word" "导出PDF".
 allowed-tools: ["Bash", "Read", "Write", "Edit"]
 ---
+## 🚫 禁止
+
+- 禁止在无 Spec 目录时执行导出
+- 禁止导出未完成分析的文档
+- 禁止跳过格式校验直接输出
+
 # SpecCore spec2doc — AI 排版 + Pandoc 导出
 
 > **你负责**: 审计 Spec 文档 → 你自己编排排版 → Pandoc 机械导出。

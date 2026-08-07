@@ -5,6 +5,12 @@ description: >
   Use when user says "变更" "改需求" "修改" "change".
 allowed-tools: ["Bash", "Read", "Write", "Edit"]
 ---
+## 🚫 禁止
+
+- 禁止不记录变更历史
+- 禁止变更后不联动更新关联 Spec
+- 禁止单次变更超过 3 个模块
+
 # SpecCore Change — 需求变更处理器
 
 > **你负责**: 记录变更 → 分析影响 → 重新生成受影响代码。

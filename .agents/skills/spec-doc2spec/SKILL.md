@@ -5,6 +5,12 @@ description: >
   Use when user says "导入文档" "Word" "Excel" "CSV" "Bug列表".
 allowed-tools: ["Bash", "Read", "Write", "Edit"]
 ---
+## 🚫 禁止
+
+- 禁止在无 pandoc 时直接放弃（AI 上下文自动安装）
+- 禁止跳过图片提取步骤
+- 禁止对非文档文件执行转换
+
 # SpecCore doc2spec — AI + Pandoc 双路验证
 
 > **你负责**: Pandoc 机械转换 + 你自己交叉验证 = 零数据丢失。

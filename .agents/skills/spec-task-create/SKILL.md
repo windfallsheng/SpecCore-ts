@@ -5,6 +5,13 @@ description: >
   Use when user says "创建任务" "新建任务" "bug任务" "测试任务" "审查任务" "文档任务".
 allowed-tools: ["Bash", "Read", "Write", "Edit"]
 ---
+## 🚫 禁止
+
+- 禁止输出 speccore 命令给用户复制
+- 禁止未经用户确认就创建任务
+- 禁止跳过澄清环节直接生成（<80字内容必须追问）
+- 禁止任务创建后自动推进到 analyze
+
 # SpecCore Task Create — 交互式任务创建
 
 > **你负责**: 接收任意输入 → 内容澄清 → 智能命名 → 用 `execute_command` 创建任务 → 推荐下一步。
