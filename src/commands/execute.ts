@@ -303,7 +303,7 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
       if (!taskBase) {
         taskBase = await detectDependencyBase(iteration, task.id);
       }
-      const branch = createTaskBranch(task.id, task.id, taskBase, iteration);
+      const branch = createTaskBranch(task.id, task.name || task.id, taskBase, iteration);
       if (branch) {
         const baseInfo = taskBase ? ` (from ${taskBase})` : ` (from ${defaultBase || 'HEAD'})`;
         logger.info(`🌿 ${task.id}: ${branch}${baseInfo}`);
