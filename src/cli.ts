@@ -850,8 +850,8 @@ scheduleCmd
 
 scheduleCmd
   .command('daemon')
-  .description('守护进程管理 [start|stop|restart|status]')
-  .argument('[action]', 'start | stop | restart | status', 'status')
+  .description('守护进程管理 [start|stop|restart|status|install]')
+  .argument('[action]', 'start | stop | restart | status | install', 'status')
   .option('--foreground', '前台运行守护进程')
   .action((action: string, options: any) => {
     return scheduleDaemonCommand({ action, foreground: options.foreground });
