@@ -50,9 +50,17 @@ speccore dev [--auto] [--from <phase>] [--to <phase>]
 
 ### 🏗️ init — 项目初始化
 ```bash
-speccore init [--interactive] [--name <name>]
+speccore init [--tool <tool>] [--force] [--interactive]
 ```
 别名: `in`
+
+> v5.30: 已初始化项目再执行 init 会自动更新工具命令和 Skill 文件，不覆盖用户配置。
+
+| 选项 | 说明 |
+| :--- | :--- |
+| `--tool <tool>` | 指定工具: trae, claude, codebuddy, cursor, windsurf（逗号分隔）|
+| `--force` | 强制重置全部配置（会备份） |
+| `--interactive` | 交互式引导创建 |
 
 ### 📝 doc2spec — 文档导入
 ```bash
