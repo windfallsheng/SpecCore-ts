@@ -282,6 +282,7 @@ speccore schedule daemon start
 | v5.27.34 | 08-07 | Prompt 架构落地: Skill→CLI→AI→CLI 协作循环 |
 | v5.27.35 | 08-07 | CONSTITUTION 增加"项目名称"列、init 残留清理、意图识别平台参数 |
 | v5.30.0 | 08-07 | 可执行编排引擎 v4 + 升级提示 + 数据保护 + 管道传递 |
+| v5.32.0 | 08-07 | 强制分析保护：任务无 ANALYSIS.md 禁止 execute |
 
 > **最后更新**: 2026-08-07
 
@@ -526,3 +527,31 @@ Qoder、Trae、Claude Code、Cursor 均支持此能力。因此：
 - ✅ 不需要 CLI 内置 LLM/API Key
 - ✅ 不依赖特定 IDE 的通信协议
 - ✅ 标准化的 `stdout` 传递，跨所有工具通用
+
+---
+
+## 15. 强制分析保护
+
+### 15.1 核心规则
+
+任务必须先分析才能执行。这是强制性约束，不可跳过。
+
+```
+创建任务 → 分析 (analyze --prompt) → 计划 (plan --prompt) → 执行 (execute --prompt)
+     ↓
+  只建不推 → 推荐后续步骤
+```
+
+### 15.2 execute 前置检查
+
+```
+execute --prompt 执行前:
+  → 检查 ANALYSIS.md 或 REQUIREMENT.md 是否存在
+  → 不存在 → exitCode 11 + 提示 "请先执行: speccore analyze --prompt"
+  → 存在 → 正常生成 Prompt
+```
+
+### 15.3 Pipeline 展示规则
+
+- `task new` 开头的工作流 → 只展示第 1 步为"立即执行"，其余为"建议后续"
+- 其他工作流 → 完整展示所有步骤
