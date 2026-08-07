@@ -146,6 +146,17 @@ async function executeScheduledTask(task: ScheduleTask): Promise<void> {
     await writeFile(triggerFile, JSON.stringify({ tasks: triggerTasks, updatedAt: new Date().toISOString() }, null, 2));
 
     await updateScheduleTask(task.id, { status: 'ready', result: '等待 AI 处理' });
+    
+    // 写入中断恢复标记
+    const ctxFile = join(triggerDir, 'context.json');
+    try {
+      const ctx = JSON.parse(await require('fs-extra').readFile(ctxFile, 'utf-8'));
+      ctx.interrupted = true;
+      ctx.interruptedTasks = ctx.interruptedTasks || [];
+      ctx.interruptedTasks.push({ id: task.id, name: task.name, taskId: task.taskId, at: new Date().toISOString() });
+      await writeFile(ctxFile, JSON.stringify(ctx, null, 2));
+    } catch {}
+    
     logger.info(`📋 ${task.taskId || task.name} → 等待 AI 处理`);
   } catch (e: any) {
     logger.error(`Failed to write trigger: ${e.message}`);

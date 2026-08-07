@@ -18,10 +18,23 @@
 
 ---
 
+## 调度中断恢复
+
+> **每次对话开始时自动检查**: 如果有未完成的调度任务，提示继续。
+
+```
+1. Read .speccore/local/.scheduled-trigger.json
+2. if 状态 'pending' 的任务:
+     "⚠️ 检测到上次中断的调度任务:
+      - {task.name} (原定 {scheduledAt}) → 已标记继续执行"
+3. 自动恢复: execute_command("speccore execute --prompt -t {taskId}")
+4. 走完整 Prompt/Apply 流程
+5. 完成后标记 completed，更新 trigger 文件
+```
+
 ## 步骤 0: 判断输入类型
 
-> **优先检查**: 每次收到用户输入前，先检测 `.speccore/local/.scheduled-trigger.json`
-> 如有 pending 任务 → 自动处理调度任务（不打断当前对话）
+> **优先检查调度**: 每次收到用户输入前，先检测 trigger 文件
 
 ```
 调度任务自动处理:
