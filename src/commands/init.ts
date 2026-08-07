@@ -92,6 +92,12 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
     // Create tool integration files (Claude, CodeBuddy, Cursor, Trae, WindSurf, QCoder)
     await createToolIntegrations(projectRoot, options.tool);
 
+    // 保护用户配置的策略:
+    // 1. 从不覆盖用户编辑过的文件（CONSTITUTION, context.json, Iteration-*）
+    // 2. 但生成升级提示，告诉用户模板新增了什么
+
+    await checkUpgradeHints(projectRoot, speccoreDir);
+
     // Create sample iteration（已存在则跳过）
     if (!await pathExists(join(projectRoot, 'Iteration-sample'))) {
       await createSampleIteration(projectRoot);
@@ -1346,6 +1352,46 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
   ].join('\n'));
 
   logger.info('   📂 示例迭代: Iteration-sample/ (按端区分: APP/H5/小程序/admin)');
+}
+
+/**
+ * 检查受保护文件是否需要升级提示。
+ * 文件已存在时不覆盖，但告诉用户模板有什么新变化。
+ */
+async function checkUpgradeHints(projectRoot: string, speccoreDir: string): Promise<void> {
+  const { version } = require('../../package.json');
+  const versionFile = join(speccoreDir, 'local', 'last-init-version.txt');
+  let lastVersion = '';
+  try { lastVersion = await readFile(versionFile, 'utf-8').then(v => v.trim()); } catch {}
+
+  const constitutionPath = join(speccoreDir, 'CONSTITUTION.md');
+  const hasConstitution = await pathExists(constitutionPath);
+
+  if (hasConstitution && lastVersion !== version) {
+    // 检查 CONSTITUTION 是否缺少新版字段
+    const content = await readFile(constitutionPath, 'utf-8');
+    const hints: string[] = [];
+
+    if (!content.includes('项目名称')) {
+      hints.push('  新增 "项目名称" 列 — 在工程表头添加业务名称（如"食堂后台管理"）');
+    }
+
+    if (hints.length > 0) {
+      logger.info('');
+      logger.info('━'.repeat(50));
+      logger.info(`🔄 检测到 CONSTITUTION.md 模板有更新 (${lastVersion || '旧版'} → ${version})`);
+      logger.info('');
+      for (const h of hints) logger.info(`   ${h}`);
+      logger.info('');
+      logger.info('   💡 模板变更不会自动覆盖你的配置。');
+      logger.info('      如需查看完整模板: speccore init --help');
+      logger.info('━'.repeat(50));
+      logger.info('');
+    }
+  }
+
+  // 记录本次初始化版本
+  await writeFile(versionFile, version);
 }
 
 function detectGitUrl(root: string): string | undefined {
