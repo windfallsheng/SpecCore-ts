@@ -202,7 +202,7 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     const taskId = options.task ? (options.task.startsWith('Task-') ? options.task : `Task-${options.task}`) : null;
     const baseDir = taskId ? join(iterDir, taskId) : join(iterDir, '010-requirements');
     const targetDir = baseDir;
-    const imageDir = join(iterDir, '010-requirements', 'assets', 'prd'); // PRD 提取的图片
+    const imageDir = join(iterDir, '010-requirements', 'assets', 'extracted'); // PRD 提取的图片
     const platform = options.platform || 'requirements';
     const outputPath = join(targetDir, `${platform}requirements.md`);
 
@@ -217,7 +217,7 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     if (ext === 'md') {
       let converted = await readFile(sourceFile, 'utf-8');
       // 修正 pandoc 风格的图片路径（如果有 media/ 引用）
-      converted = converted.replace(/\]\(media\//g, '](../../assets/prd/');
+      converted = converted.replace(/\]\(media\//g, '](../../assets/extracted/');
       await writeFile(outputPath, converted);
       spinner.stop('📝 .md 直接导入');
     } else if (ext === 'doc') {
@@ -276,10 +276,10 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     // 2. 空行清理
     content = content.replace(/\n{3,}/g, '\n\n');
 
-    // 3. 图片路径修正（pandoc 提取到 assets/prd/media/，MD 引用 media/xxx.png）
-    //    根据 MD 文件所在的目录深度计算相对于 assets/prd/ 的正确路径
+    // 3. 图片路径修正（pandoc 提取到 assets/extracted/media/，MD 引用 media/xxx.png）
+    //    根据 MD 文件所在的目录深度计算相对于 assets/extracted/ 的正确路径
     const mdDir = require('path').dirname(outputPath);
-    const relAssets = require('path').relative(mdDir, join(iterDir, '010-requirements', 'assets', 'prd'));
+    const relAssets = require('path').relative(mdDir, join(iterDir, '010-requirements', 'assets', 'extracted'));
     content = content.replace(/\]\(media\//g, '](' + relAssets + '/');
 
     // 4. 接口表格检测 + 提示
