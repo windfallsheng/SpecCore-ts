@@ -1,6 +1,7 @@
-# SpecCore Task Create — 交互式任务创建（高阶 Skill）
+# SpecCore Task Create — 交互式任务创建
 
-> **你负责**: 接收任意输入 → 内容澄清 → 智能命名 → 生成 REQUIREMENT.md → 推荐下一步。
+> **你负责**: 接收任意输入 → 内容澄清 → 智能命名 → 用 `execute_command` 创建任务 → 推荐下一步。
+> **强制**: 用 `execute_command("speccore task new -n ...")` 执行，**绝不要把命令输出给用户复制**。
 > **分支规则**: 创建任务后，Git 分支名 = `feature/Task-{id}-{任务名}`，与任务目录名完全一致。
 
 ## 任务类型选择器
@@ -148,12 +149,13 @@ Bug 类:
 ```
 1. 接收输入 → 判断长度 → <80字必须澄清
 
-2. 生成 REQUIREMENT.md:
-   属性表(编号/类型/优先级/迭代/负责人) + 描述 + 验收标准
+2. 语音命名 → 展示确认:
+   "📋 将创建: Task-003-login-feature，是否正确？[是/修改]"
 
-3. Write 文件 → 推荐:
-   speccore analyze --prompt -I {iter} --task {taskId}
-   speccore execute --prompt -t {taskId}
+3. execute_command("speccore task new --name '{name}' -t {type}")
+
+4. Write REQUIREMENT.md → 推荐下一步:
+   execute_command("speccore analyze --prompt -I {iter} --task {taskId}")
 ```
 
 ## 退出码
