@@ -113,11 +113,12 @@ const WORKFLOWS: Record<string, PipelineStep[]> = {
   ],
   'bugfix': [
     { order: 1, command: 'task', args: 'new --name "{bug}" --type bugfix', explanation: '创建 Bug 修复任务', dependsOn: undefined },
-    { order: 2, command: 'analyze', args: '--task {task} --audit', explanation: '分析 Bug 影响范围', dependsOn: 1 },
-    { order: 3, command: 'execute', args: '--task {task}', explanation: '执行修复', dependsOn: 2 },
-    { order: 4, command: 'validate', args: '', explanation: '验证修复完整性', dependsOn: 3 },
-    { order: 5, command: 'pr', args: '--task {task}', explanation: '提交修复 PR', dependsOn: 4 },
-    { order: 6, command: 'done', args: '--task {task}', explanation: '归档修复记录', dependsOn: 5 },
+    { order: 2, command: 'analyze', args: '--prompt --task {task}', explanation: '分析 Bug 根因和影响范围', dependsOn: 1 },
+    { order: 3, command: 'plan', args: '--prompt --task {task}', explanation: '生成修复方案和排程', dependsOn: 2 },
+    { order: 4, command: 'execute', args: '--prompt --task {task}', explanation: '按方案执行修复', dependsOn: 3 },
+    { order: 5, command: 'validate', args: '', explanation: '验证修复完整性', dependsOn: 4 },
+    { order: 6, command: 'pr', args: '--task {task}', explanation: '提交修复 PR', dependsOn: 5 },
+    { order: 7, command: 'done', args: '--task {task}', explanation: '归档修复记录', dependsOn: 6 },
   ],
   'batch execute': [
     { order: 1, command: 'plan', args: '--all', explanation: '生成所有待执行任务的计划', dependsOn: undefined },
@@ -156,9 +157,10 @@ export function classifyMode(input: string): AskMode {
     'plan', 'execute', 'schedule', 'batch'];
   const hasTiming = /晚.*点|早上.*点|明天|今天|后天|下周|周[一到日]|(\d+)[点时]/i.test(lower);
   const hasBatch = /分批|批次|batch|一批|一组/i.test(lower);
+  const hasBugfix = /bug|修复|fix|defect/i.test(lower);
   const actionCount = actionWords.filter(w => lower.includes(w)).length;
   const pipelineCount = pipelineKeywords.filter(w => lower.includes(w)).length;
-  if ((actionCount >= 2) || (actionCount >= 1 && (hasTiming || hasBatch)) || pipelineCount >= 2) return 'pipeline';
+  if ((actionCount >= 2) || (actionCount >= 1 && (hasTiming || hasBatch)) || pipelineCount >= 2 || hasBugfix) return 'pipeline';
 
   // 模式2: 任务指引 — 问"怎么做/如何/我想做"
   const guidePatterns = [
