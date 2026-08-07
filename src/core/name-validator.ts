@@ -1,12 +1,12 @@
 /**
  * name-validator — 全局名称唯一性校验
- * 期次名称全项目唯一，任务名称全项目唯一
+ * 迭代名称全项目唯一，任务名称全项目唯一
  */
 import { readdir, pathExists, readFile } from 'fs-extra';
 import { join } from 'path';
 
 /**
- * 扫描所有期次名称（去Iteration-NNN-前缀，返回原始 name 部分）
+ * 扫描所有迭代名称（去Iteration-NNN-前缀，返回原始 name 部分）
  */
 export async function getAllIterationNames(): Promise<string[]> {
   const cwd = process.cwd();
@@ -66,7 +66,7 @@ async function readTaskName(taskDir: string): Promise<string> {
 }
 
 /**
- * 检查期次名称是否重复
+ * 检查迭代名称是否重复
  * @returns 冲突的期次列表
  */
 export async function checkIterationNameConflict(name: string, excludeName?: string): Promise<string[]> {

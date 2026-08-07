@@ -31,7 +31,7 @@ export interface AnalyzeInput {
   requirements: string[];
   /** 输出范围 */
   scope: 'global' | 'iteration' | 'task';
-  /** 期次名称 (scope=iteration|task 必填) */
+  /** 迭代名称 (scope=iteration|task 必填) */
   iteration?: string;
   /** 任务 ID (scope=task 必填) */
   taskId?: string;

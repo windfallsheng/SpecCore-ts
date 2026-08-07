@@ -153,13 +153,13 @@ export async function readGlobalIndex(): Promise<GlobalIndex> {
   }
 
   // 解析期次关联
-  const iterTableMatch = content.match(/\| 期次名称 \|[\s\S]*?(?=\n\n---|$)/);
+  const iterTableMatch = content.match(/\| 迭代名称 \|[\s\S]*?(?=\n\n---|$)/);
   if (iterTableMatch) {
     const lines = iterTableMatch[0].split('\n');
     for (const line of lines) {
       const cols = line.split('|').map((c) => c.trim());
       if (line.includes(':---')) continue;
-      if (cols.length >= 5 && cols[1] && cols[1] !== '_暂无期次_' && cols[1] !== '期次名称') {
+      if (cols.length >= 5 && cols[1] && cols[1] !== '_暂无期次_' && cols[1] !== '迭代名称') {
         index.iterations.push({
           name: cols[1],
           reqs: cols[2].split(',').map((r) => r.trim()),

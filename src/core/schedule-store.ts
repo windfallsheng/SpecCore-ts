@@ -13,7 +13,7 @@ export interface ScheduleTask {
   id: string;
   /** 任务名称/描述 */
   name: string;
-  /** 目标期次 */
+  /** 目标迭代 */
   iteration: string;
   /** 指定执行的 Task ID（单个模式），null 表示批量模式 */
   taskId: string | null;
