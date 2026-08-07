@@ -5,6 +5,12 @@ description: >
   Use when user says "规划" "计划" "plan" "排程".
 allowed-tools: ["Bash", "Read", "Write", "Edit"]
 ---
+## 🚫 禁止
+
+- 禁止在无 Task 时生成计划
+- 禁止计划中遗漏依赖关系
+- 禁止不写回滚方案
+
 # SpecCore Plan — 执行计划生成器
 
 > **你负责**: 读取 Task 列表 → 你自己排程 → CLI 写入 plan.json。

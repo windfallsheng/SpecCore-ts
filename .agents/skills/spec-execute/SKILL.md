@@ -5,6 +5,13 @@ description: >
   Use when user says "开发" "执行" "写代码" "实现" "跑任务".
 allowed-tools: ["Bash", "Read", "Write", "Edit"]
 ---
+## 🚫 禁止
+
+- 禁止在无 ANALYSIS.md 时执行
+- 禁止跳过 plan 直接 execute --all
+- 禁止生成不完整代码（漏 import/漏 API/漏 DDL）
+- 禁止不先创建 feature 分支就改代码
+
 # SpecCore Execute — 代码生成执行器
 
 > **你负责**: 读取 Task Spec → 构建代码生成上下文 → 你自己生成代码 → CLI 写入文件。

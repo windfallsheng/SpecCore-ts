@@ -6,6 +6,13 @@ description: >
   Use when user input is ambiguous or doesn't match any specific Skill trigger.
 allowed-tools: ["Bash", "Read", "Write", "Edit"]
 ---
+## 🚫 禁止
+
+- 禁止输出命令文本给用户复制粘贴
+- 禁止在 AI 上下文中问'是否执行以下命令'
+- 禁止不调用 execute_command 只展示 bash 语句
+- 唯一例外: 用户明确说'只看不跑'
+
 # SpecCore Router — 智能意图路由器
 
 > **定位**：从用户自然语言识别意图，提取参数，**用 execute_command 自动执行** CLI 命令。

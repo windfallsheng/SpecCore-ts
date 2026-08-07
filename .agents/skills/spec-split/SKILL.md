@@ -5,6 +5,12 @@ description: >
   Use when user says "拆分" "分解" "split" "拆任务".
 allowed-tools: ["Bash", "Read", "Write", "Edit"]
 ---
+## 🚫 禁止
+
+- 禁止在无 REQUIREMENT.md 时拆分
+- 禁止拆分粒度过细（单个 Task < 1 文件）
+- 禁止拆分时不标注依赖关系
+
 # SpecCore Split — 任务拆分器
 
 > **你负责**: 读取分析结果 → 你自己拆分 → CLI 创建 Task 目录。

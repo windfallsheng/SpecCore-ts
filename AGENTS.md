@@ -59,3 +59,4 @@ assets/           ← 示例输出/图标
 ---
 
 > 本文件由 Speccore 自动维护。路径: `.agents/skills/*/SKILL.md`
+> 模板: `references/` (analysis-report, code-output, requirement-template, plan-template)
