@@ -1206,28 +1206,31 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
 
   const taskDir = join('Iteration-' + iteration, '030-tasks', task);
 
-  // ── 前置检查：任务必须有分析文件且内容有效才能执行 ──
+  // ── 前置检查：任务必须有有效需求或分析内容 ──
   const analysisFile = join(taskDir, 'ANALYSIS.md');
   const requirementFile = join(taskDir, 'REQUIREMENT.md');
-  const hasAnalysis = await pathExists(analysisFile);
-  const hasRequirement = await pathExists(requirementFile);
 
-  // 读取文件内容验证有效性（拒绝空文件/TODO占位符）
+  // 读取文件内容验证有效性（接受 ANALYSIS.md 或 REQUIREMENT.md）
+  // Bug 任务的 REQUIREMENT.md（问题描述）本身就可以作为AI生成代码的依据
   let effectiveAnalysis = false;
   let contentPreview = '';
-  if (hasAnalysis) {
-    const content = await readFile(analysisFile, 'utf-8');
-    contentPreview = content.trim();
-    // 有效分析：>200字符 且 不是纯 TODO/占位符
-    effectiveAnalysis = contentPreview.length > 200 &&
-      !/^(#+\s*分析|#+\s*Analysis|TODO|待分析|TBD)\s*$/im.test(contentPreview) &&
-      (/#+\s|API|接口|数据模型|数据库|表|风险|架构|ER/i.test(contentPreview));
+
+  for (const f of [analysisFile, requirementFile]) {
+    if (await pathExists(f)) {
+      const content = (await readFile(f, 'utf-8')).trim();
+      // 有效内容：>80字符 且 不是纯占位符
+      if (content.length > 80 &&
+          !/^(#+\s*(TODO|待分析|TBD|分析))\s*$/im.test(content) &&
+          !/^<!--.*TODO.*-->/i.test(content)) {
+        effectiveAnalysis = true;
+        contentPreview = f;
+        break;
+      }
+    }
   }
 
   if (!effectiveAnalysis) {
-    const reason = hasAnalysis
-      ? `任务 ${task} 的 ANALYSIS.md 内容无效（${contentPreview.length}字符，缺少实质分析内容）`
-      : `任务 ${task} 未经过分析`;
+    const reason = `任务 ${task} 缺少有效的需求或分析内容\n（ANALYSIS.md / REQUIREMENT.md 不存在或内容无效）`;
     outputNeedsInfo({
       command: 'execute',
       missing: ['analysis'],
