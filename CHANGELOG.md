@@ -2,6 +2,26 @@
 
 ---
 
+## v5.29.0 (2026-08-07) — "可执行编排引擎"
+
+### 🧠 spec-ask: 从操作手册到可执行编排器
+
+- **5 分支精确指令**: match/ambiguous/explain/pipeline/guide，每个分支精确到工具调用和参数
+- **[SPECCORE_MODE] 标记**: ask 命令始终第一行输出模式，Skill 可精确解析
+- **歧义检测**: confidence gap < 15% → ambiguous 模式，展示候选项让用户选择
+- **低置信拒绝**: confidence < 45% → 拒绝匹配，提示重新描述
+- **AI 60s 超时**: 防止 LLM 无响应卡死
+- **临时文件传递**: AI 返回内容通过 /tmp 文件传递，避免 shell 引号断裂
+- **Pipeline 产物传递**: 每步完成后自动 Read 文件获取下一步参数
+
+### 🔧 修复
+
+- onboarding 页面卡片布局（SVG + badge + ft 垂直排列）
+- 移除已废弃的 import 意图
+- 所有 HTML 页面统一 body/card 居中布局
+
+---
+
 ## v5.28.0 (2026-08-07) — "Prompt/Apply 协作架构"
 
 ### 🏗️ 重大架构: Skill + CLI + AI 协作循环
