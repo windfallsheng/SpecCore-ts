@@ -13,6 +13,8 @@
 4. 你自己生成的内容必须校验格式。失败重试 ≤ 2 次。
 5. Pipeline 每步完成等用户确认。
 6. 执行完成展示摘要 + 推荐下一步。
+7. **任务创建只是创建**，不自动推进到分析/执行。
+8. **任务必须有分析文件才能执行**。execute 前检查 ANALYSIS.md 或 REQUIREMENT.md。
 
 ---
 
@@ -98,9 +100,15 @@ A6. 写入:
 ## 分支 D: pipeline (≤5 步)
 
 ```
-D1. 展示计划，等确认
-D2. 逐步执行（每步走 A3-A6）
-D3. 步间: Read 产出文件 → 提取参数 → 传下一步
+D1. 展示计划:
+   ▶ 立即执行: speccore task new --name "..." --type bugfix
+   💡 建议后续: analyze → plan → execute → validate → pr → done
+
+D2. 只执行第一步 → 完成后等用户确认
+D3. 后续步骤不会自动执行，需用户逐步确认
+
+⚠️ 规则: 任务没有分析文件，不允许 execute
+   → execute 返回 exitCode=11 时展示提示，引导用户先 analyze
 ```
 
 ---

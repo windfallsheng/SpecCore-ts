@@ -1206,6 +1206,22 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
 
   const taskDir = join('Iteration-' + iteration, '030-tasks', task);
 
+  // ── 前置检查：任务必须有分析文件才能执行 ──
+  const analysisFile = join(taskDir, 'ANALYSIS.md');
+  const requirementFile = join(taskDir, 'REQUIREMENT.md');
+  const hasAnalysis = await pathExists(analysisFile);
+  const hasRequirement = await pathExists(requirementFile);
+
+  if (!hasAnalysis && !hasRequirement) {
+    outputNeedsInfo({
+      command: 'execute',
+      missing: ['analysis'],
+      provided: { iteration, task },
+      hint: `任务 ${task} 未经过分析，无法执行。\n请先执行: speccore analyze --prompt -I ${iteration} --task ${task}`,
+    });
+    return;
+  }
+
   const prompt = await buildPrompt('execute', {
     iteration,
     task,
