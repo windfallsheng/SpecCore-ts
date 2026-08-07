@@ -3,7 +3,7 @@ import { ensureDir, readJson, writeJson, pathExists } from 'fs-extra';
 /**
  * 调度任务状态
  */
-export type ScheduleTaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+export type ScheduleTaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'ready';
 
 /**
  * 单个调度任务

@@ -292,6 +292,7 @@ function statusLabel(status: ScheduleTaskStatus): string {
     completed: '✅ 已完成',
     failed: '❌ 失败',
     cancelled: '🚫 已取消',
+    ready: '🤖 等待 AI',
   };
   return map[status] || status;
 }

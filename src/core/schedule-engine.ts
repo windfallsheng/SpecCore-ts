@@ -123,60 +123,32 @@ export async function runDaemonLoop(): Promise<void> {
  * 执行单个调度任务
  */
 async function executeScheduledTask(task: ScheduleTask): Promise<void> {
-  logger.info(`\n━━━ Executing scheduled task: ${task.name} (${task.id}) ━━━`);
+  logger.info(`\n━━━ Scheduled task due: ${task.name} (${task.id}) ━━━`);
 
-  await updateScheduleTask(task.id, {
-    status: 'running',
-    executedAt: new Date().toISOString(),
-  });
-
+  // 写入 AI 触发文件 → spec-ask Skill 轮询后自动处理完整流水线
   try {
-    const args = ['execute'];
+    const { writeFile, ensureDir } = await import('fs-extra');
+    const { join } = await import('path');
+    const triggerDir = join(process.cwd(), '.speccore', 'local');
+    await ensureDir(triggerDir);
+    const triggerFile = join(triggerDir, '.scheduled-trigger.json');
 
-    args.push('--prompt');  // 使用 AI Prompt 模式（需 AI 工具保持开启）
-    if (task.all) {
-      args.push('--all');
-    } else if (task.taskId) {
-      args.push('--task', task.taskId);
-    }
+    let triggerTasks: any[] = [];
+    try { triggerTasks = JSON.parse(await require('fs-extra').readFile(triggerFile, 'utf-8')).tasks || []; } catch {}
 
-    args.push('--force');
-    args.push('--iteration', task.iteration);
-
-    // 传递 execOptions
-    const eo = task.execOptions;
-    if (eo?.batchSize) args.push('--batch-size', String(eo.batchSize));
-    if (eo?.assignee) args.push('--assignee', eo.assignee);
-    if (eo?.type) args.push('--type', eo.type);
-    if (eo?.priority) args.push('--priority', eo.priority);
-    if (eo?.platform) args.push('--platform', eo.platform);
-    if (eo?.backend) args.push('--backend');
-    if (eo?.frontend) args.push('--frontend');
-
-    logger.info(`Running: speccore ${args.join(' ')}`);
-
-    // 同步执行，确保顺序
-    // 输出到 stdout（让 AI 工具可见）
-    const result = execSync(`speccore ${args.join(' ')}`, {
-      encoding: 'utf-8',
-      stdio: 'inherit',  // 输出到 daemon stdout → AI 可捕获
-      timeout: 600000,
+    triggerTasks.push({
+      id: task.id, name: task.name,
+      taskId: task.taskId, iteration: task.iteration,
+      type: task.execOptions?.type || 'execute',
+      scheduledAt: new Date().toISOString(), status: 'pending',
     });
 
-    logger.info(result.slice(-500)); // 只打印最后 500 字符
-    await updateScheduleTask(task.id, {
-      status: 'completed',
-      result: 'Execution completed successfully',
-    });
-    logger.info(`✅ Task ${task.id} completed`);
+    await writeFile(triggerFile, JSON.stringify({ tasks: triggerTasks, updatedAt: new Date().toISOString() }, null, 2));
 
-  } catch (error: any) {
-    const errMsg = error.stderr || error.message || String(error);
-    logger.error(`❌ Task ${task.id} failed: ${errMsg.slice(-300)}`);
-    await updateScheduleTask(task.id, {
-      status: 'failed',
-      result: errMsg.slice(-500),
-    });
+    await updateScheduleTask(task.id, { status: 'ready', result: '等待 AI 处理' });
+    logger.info(`📋 ${task.taskId || task.name} → 等待 AI 处理`);
+  } catch (e: any) {
+    logger.error(`Failed to write trigger: ${e.message}`);
   }
 }
 
