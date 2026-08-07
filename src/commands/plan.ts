@@ -89,7 +89,7 @@ export async function planCommand(options: PlanOptions): Promise<void> {
     const saved = await saveToStore(iteration, taskIds, 3, options, 'manual');
 
     // 写入带时间戳 + AI 关键词的计划文件（多版本） + 最新的 PLAN.md
-    const planDir = join(`Iteration-${iteration}`, '000-overview');
+    const planDir = join(`Iteration-${iteration}`, '000-overview', 'plans');
     const ts = new Date().toISOString().replace(/T/, '-').replace(/:/g, '').slice(0, 17);
     const slug = extractPlanSlug(sortedTasks);
     const filename = slug ? `PLAN-${ts}-${slug}.md` : `PLAN-${ts}.md`;
@@ -125,8 +125,9 @@ async function showPlanHistory(): Promise<void> {
   try {
     const iter = await getDefaultIteration();
     if (iter) {
-      const planDir = join(`Iteration-${iter}`, '000-overview');
-      const files = await readdir(planDir);
+      const planDir = join(`Iteration-${iter}`, '000-overview', 'plans');
+      let files: string[] = [];
+      try { files = await readdir(planDir); } catch { files = []; }
       for (const f of files) {
         const m = f.match(/^PLAN-(\d{4}-\d{2}-\d{2}-\d{4})\.md$/);
         if (m) {
@@ -147,7 +148,7 @@ async function showPlanHistory(): Promise<void> {
   // 展示磁盘文件（倒序）
   if (plans.length > 0) {
     const iter = await getDefaultIteration();
-    logger.info(`\n📋 计划文件 · Iteration-${iter}/000-overview/ (${plans.length}):\n`);
+    logger.info(`\n📋 计划文件 · Iteration-${iter}/000-overview/plans/ (${plans.length}):\n`);
     for (const p of plans) {
       const isLatest = p.file === 'PLAN.md' ? ' 📌 最新' : '';
       logger.info(`  📄 ${p.file}  ${formatFileSize(p.size)}  ${p.time.toLocaleString()}${isLatest}`);
