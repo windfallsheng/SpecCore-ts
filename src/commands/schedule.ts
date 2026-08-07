@@ -215,6 +215,11 @@ export interface ScheduleDaemonOptions {
 
 export async function scheduleDaemonCommand(options: ScheduleDaemonOptions): Promise<void> {
   try {
+    if (options.action === 'install') {
+      await installSystemSchedule();
+      return;
+    }
+
     // --foreground 模式（由 start 子命令内部使用）
     if (options.foreground) {
       await runDaemonLoop();
@@ -331,5 +336,44 @@ export async function scheduleDetailCommand(options: ScheduleDetailOptions): Pro
 
   } catch (error: any) {
     logger.error(`查看失败: ${error.message}`);
+  }
+}
+
+async function installSystemSchedule(): Promise<void> {
+  const { join } = await import('path');
+  const { writeFile, ensureDir } = await import('fs-extra');
+  const projectDir = process.cwd();
+  const cmd = `${process.execPath} ${join(__dirname, '..', '..', 'dist', 'cli.js')} schedule daemon --foreground`;
+  const os = await import('os');
+
+  if (process.platform === 'darwin') {
+    const plist = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>com.speccore.schedule</string>
+<key>ProgramArguments</key><array><string>${process.execPath}</string><string>${join(__dirname, '..', '..', 'dist', 'cli.js')}</string><string>schedule</string><string>daemon</string><string>--foreground</string></array>
+<key>WorkingDirectory</key><string>${projectDir}</string>
+<key>RunAtLoad</key><true/>
+<key>KeepAlive</key><true/>
+<key>StandardOutPath</key><string>${join(os.homedir(), '.speccore', 'daemon.log')}</string>
+<key>StandardErrorPath</key><string>${join(os.homedir(), '.speccore', 'daemon-error.log')}</string>
+</dict></plist>`;
+    const plistPath = join(os.homedir(), 'Library', 'LaunchAgents', 'com.speccore.schedule.plist');
+    await ensureDir(join(os.homedir(), '.speccore'));
+    await writeFile(plistPath, plist);
+    require('child_process').execSync(`launchctl unload "${plistPath}" 2>/dev/null; launchctl load "${plistPath}"`, { stdio: 'pipe' });
+    logger.success(`✅ 已安装系统调度服务`);
+    logger.info(`   macOS LaunchAgent: ${plistPath}`);
+    logger.info('   开机自启，自动轮询到期任务');
+  } else if (process.platform === 'linux') {
+    const cronEntry = `*/5 * * * * cd ${projectDir} && ${cmd}`;
+    const current = await require('fs-extra').readFile('/tmp/speccore-cron', 'utf-8').catch(() => '');
+    await writeFile('/tmp/speccore-cron', cronEntry);
+    require('child_process').execSync(`(echo "${cronEntry}") | crontab -`, { stdio: 'pipe' }).toString();
+    logger.success('✅ 已安装 crontab 调度');
+    logger.info('   每5分钟检查到期任务');
+  } else {
+    logger.warn('⚠️ 当前平台不支持系统级调度');
+    logger.info('   请使用 speccore schedule daemon start 手动启动');
   }
 }
