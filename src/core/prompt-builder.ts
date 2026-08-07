@@ -424,22 +424,183 @@ export function parseAiResponse(response: string): { files: { path: string; cont
 export interface NeedsInfoRequest {
   marker: '[SPECCORE_NEEDS_INFO]';
   command: string;
-  missing: string[];        // 缺失的参数名列表
-  provided: Record<string, string>; // 已提供的参数
-  hint: string;             // 给 AI/Skill 的提示
-  availableOptions?: {      // 可选值（如迭代列表、Task 列表）
+  missing: string[];
+  provided: Record<string, string>;
+  hint: string;
+  availableOptions?: {
     iterations?: string[];
     tasks?: string[];
     platforms?: string[];
   };
 }
 
+/** 命令参数表 */
+const COMMAND_PARAMS: Record<string, { name: string; required: boolean; desc: string; example: string }[]> = {
+  execute: [
+    { name: '-t, --task', required: true, desc: '任务编号', example: 'Task-001' },
+    { name: '-i, --iteration', required: true, desc: '迭代名', example: 'Q1' },
+    { name: '--all', required: false, desc: '执行全部待开发任务', example: '--all' },
+    { name: '--platform', required: false, desc: '指定平台端', example: 'app/h5/miniapp/admin' },
+    { name: '--force', required: false, desc: '跳过确认直接执行', example: '--force' },
+    { name: '--resume', required: false, desc: '断点续跑', example: '--resume' },
+  ],
+  analyze: [
+    { name: '-I, --iteration', required: true, desc: '迭代名', example: 'Q1' },
+    { name: '--task', required: false, desc: '分析特定任务', example: 'Task-001' },
+    { name: '--scope', required: false, desc: '分析范围', example: 'global/iteration/task' },
+    { name: '--depth', required: false, desc: '分析深度', example: 'quick/normal/deep' },
+  ],
+  split: [
+    { name: '-I, --iteration', required: true, desc: '迭代名', example: 'Q1' },
+    { name: '--owner', required: false, desc: '指定负责人', example: '张三' },
+    { name: '--dry-run', required: false, desc: '预览模式不创建', example: '--dry-run' },
+  ],
+  plan: [
+    { name: '-I, --iteration', required: true, desc: '迭代名', example: 'Q1' },
+    { name: '--owner', required: false, desc: '指定负责人', example: '张三' },
+  ],
+  doc2spec: [
+    { name: '-f, --file', required: true, desc: '源文件路径', example: 'PRD.docx' },
+    { name: '--iter', required: true, desc: '目标迭代', example: 'Q1' },
+    { name: '--platform', required: false, desc: '平台标识', example: 'app' },
+  ],
+  spec2doc: [
+    { name: '-i, --iteration', required: true, desc: '迭代名', example: 'Q1' },
+    { name: '-o, --output', required: true, desc: '输出文件名', example: '需求文档.docx' },
+    { name: '-f, --format', required: false, desc: '导出格式', example: 'docx/pdf/html' },
+    { name: '--all', required: false, desc: '全量导出', example: '--all' },
+  ],
+  pr: [
+    { name: '--task', required: true, desc: '任务编号', example: 'Task-001' },
+    { name: '-i, --iteration', required: false, desc: '迭代名', example: 'Q1' },
+    { name: '--title', required: false, desc: 'PR 标题', example: '"feat: 用户认证"' },
+  ],
+  done: [
+    { name: '--task', required: false, desc: '任务编号', example: 'Task-001' },
+    { name: '--all', required: false, desc: '全部归档', example: '--all' },
+    { name: '-i, --iteration', required: false, desc: '迭代名', example: 'Q1' },
+  ],
+};
+
+/** 命令别名和描述 */
+const COMMAND_DESC: Record<string, { desc: string; aliases: string[] }> = {
+  execute: { desc: '执行开发任务：读取 Spec → AI 生成代码 → 写入文件', aliases: ['ex'] },
+  analyze: { desc: '需求分析：读取需求文档 → AI 分析 → 写入 ANALYSIS.md', aliases: ['al'] },
+  split: { desc: '任务拆分：读取分析 → AI 拆分 → 创建 Task 目录', aliases: ['sp'] },
+  plan: { desc: '生成执行计划：读取 Task → AI 排程 → 写入 plan.json', aliases: ['pl'] },
+  doc2spec: { desc: '导入文档：Word/PDF → Pandoc 转换 + AI 验证 → Spec MD', aliases: ['d2s'] },
+  spec2doc: { desc: '导出文档：Spec MD → AI 排版 → Word/PDF/HTML', aliases: ['s2d'] },
+  pr: { desc: '创建 Pull Request：AI 生成描述 → 提交代码', aliases: [] },
+  done: { desc: '任务归档：验证 → 回顾 → 同步全局', aliases: ['dn'] },
+};
+
 /**
- * 输出缺参数请求到 stdout，设置退出码 11。
- * Skill 捕获后从上下文解析或追问用户。
+ * 输出缺参数请求到 stdout，退出码 11。
+ * 重格式：包含命令说明、参数表、可用选项、使用示例、推荐命令。
  */
 export function outputNeedsInfo(req: Omit<NeedsInfoRequest, 'marker'>): void {
-  const full: NeedsInfoRequest = { marker: '[SPECCORE_NEEDS_INFO]', ...req };
-  process.stdout.write(JSON.stringify(full, null, 2));
-  process.exitCode = 11; // 11 = Needs more info
+  const params = COMMAND_PARAMS[req.command] || [];
+  const cmdInfo = COMMAND_DESC[req.command] || { desc: req.command, aliases: [] };
+  const lines: string[] = [];
+
+  lines.push('[SPECCORE_NEEDS_INFO]');
+  lines.push('');
+  lines.push(`## ⚠️ 命令 \`${req.command}\` 缺少必要参数`);
+  lines.push('');
+  lines.push(`**说明**: ${cmdInfo.desc}`);
+  if (cmdInfo.aliases.length > 0) lines.push(`**别名**: ${cmdInfo.aliases.join(', ')}`);
+  lines.push('');
+  lines.push('---');
+  lines.push('');
+  lines.push('### 📋 全部参数');
+  lines.push('');
+  lines.push('| 参数 | 必填 | 说明 | 示例 |');
+  lines.push('| :--- | :--- | :--- | :--- |');
+  for (const p of params) {
+    const isMissing = req.missing.some(m => p.name.includes(m));
+    const icon = p.required ? '🔴 必填' : '🟢 可选';
+    const marker = isMissing ? '**← 缺失**' : '';
+    lines.push(`| \`${p.name}\` | ${icon} | ${p.desc} ${marker} | \`${p.example}\` |`);
+  }
+  lines.push('');
+
+  // 已提供的参数
+  if (Object.keys(req.provided).length > 0) {
+    lines.push('### ✅ 已提供');
+    lines.push('| 参数 | 值 |');
+    lines.push('| :--- | :--- |');
+    for (const [k, v] of Object.entries(req.provided)) {
+      lines.push(`| ${k} | ${v} |`);
+    }
+    lines.push('');
+  }
+
+  // 可用选项
+  if (req.availableOptions) {
+    const opts = req.availableOptions;
+    if (opts.tasks && opts.tasks.length > 0) {
+      lines.push('### 📦 可用的 Task');
+      for (const t of opts.tasks) lines.push(`- \`${t}\``);
+      lines.push('');
+    }
+    if (opts.iterations && opts.iterations.length > 0) {
+      lines.push('### 📅 可用的迭代');
+      for (const i of opts.iterations) lines.push(`- \`${i}\``);
+      lines.push('');
+    }
+    if (opts.platforms && opts.platforms.length > 0) {
+      lines.push('### 📱 可用的平台');
+      for (const p of opts.platforms) lines.push(`- \`${p}\``);
+      lines.push('');
+    }
+  }
+
+  // 使用示例
+  const examples = generateExamples(req.command, req);
+  if (examples.length > 0) {
+    lines.push('### 💡 使用示例');
+    for (const e of examples) lines.push(e);
+    lines.push('');
+  }
+
+  // 推荐命令
+  if (req.availableOptions?.tasks && req.availableOptions.tasks.length > 0 && req.availableOptions.iterations) {
+    const t = req.availableOptions.tasks[0];
+    const i = req.availableOptions.iterations![0] || 'Q1';
+    lines.push(`### 🚀 推荐命令（可直接使用）`);
+    lines.push(`\`\`\``);
+    lines.push(`speccore ${req.command} --prompt -t ${t} -i ${i}`);
+    lines.push(`\`\`\``);
+    lines.push('');
+  }
+
+  lines.push('[/SPECCORE_NEEDS_INFO]');
+
+  process.stdout.write(lines.join('\n'));
+  process.exitCode = 11;
+}
+
+function generateExamples(command: string, req: Omit<NeedsInfoRequest, 'marker'>): string[] {
+  const iter = req.provided.iteration || 'Q1';
+  const task = req.availableOptions?.tasks?.[0] || 'Task-001';
+  switch (command) {
+    case 'execute':
+      return [
+        `- 执行单个任务: \`speccore execute --prompt -t ${task}\``,
+        `- 执行全部: \`speccore execute --all --force\``,
+        `- 断点续跑: \`speccore execute --resume\``,
+      ];
+    case 'analyze':
+      return [
+        `- 分析迭代: \`speccore analyze --prompt -I ${iter}\``,
+        `- 分析特定任务: \`speccore analyze --prompt -I ${iter} --task ${task}\``,
+      ];
+    case 'split':
+      return [
+        `- 拆分任务: \`speccore iteration split --prompt -I ${iter}\``,
+        `- 指定负责人: \`speccore iteration split --prompt -I ${iter} --owner 张三\``,
+      ];
+    default:
+      return [`\`speccore ${command} --prompt ${req.missing.map(m => `<${m}>`).join(' ')}\``];
+  }
 }
