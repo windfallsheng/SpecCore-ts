@@ -67,6 +67,7 @@ import {
   scheduleCancelCommand,
   scheduleDeleteCommand,
   scheduleDaemonCommand,
+  scheduleRetryCommand,
 } from './commands/schedule';
 import { i18n } from './i18n';
 
@@ -835,6 +836,13 @@ scheduleCmd
   .description('取消调度任务')
   .option('--id <id>', '调度任务 ID')
   .action(scheduleCancelCommand);
+
+scheduleCmd
+  .command('retry')
+  .description('重新调度（基于已有任务改时间立即/稍后执行）')
+  .option('--id <id>', '调度任务 ID')
+  .option('--at <datetime>', '新的执行时间，不指定则 1 分钟后立即执行')
+  .action(scheduleRetryCommand);
 
 scheduleCmd
   .command('detail')
