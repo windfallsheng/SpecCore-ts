@@ -41,8 +41,32 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
       await checkUpgradeHints(projectRoot, speccoreDir);
 
       if (!options.force) {
-        spinner.fail('SpecCore already initialized. Use --force to overwrite.');
-        logger.info('💡 升级命令文件（不覆盖配置）: speccore update');
+        spinner.stop('更新命令文件和配置...');
+        // 安全更新：只更新可自动生成的文件，不碰用户数据
+        await createWorkBuddyFiles(projectRoot);
+        await createToolIntegrations(projectRoot, options.tool);
+        
+        // 更新技能文件（Skill）
+        const skillsSrc = join(__dirname, '..', '..', '.agents', 'skills');
+        const skillsDest = join(projectRoot, '.agents', 'skills');
+        if (await pathExists(skillsSrc)) {
+          await require('fs-extra').copy(skillsSrc, skillsDest, { overwrite: true });
+        }
+
+        // 更新版本号
+        const verFile = join(speccoreDir, 'local', 'version.json');
+        await writeFile(verFile, JSON.stringify({ version: require('../../package.json').version, updatedAt: new Date().toISOString() }, null, 2));
+
+        spinner.stop('命令文件已更新到最新版本 ✅');
+        logger.info('');
+        logger.info('📋 已更新:');
+        logger.info('   ✅ .claude/ / .codebuddy/ — 命令模板');
+        logger.info('   ✅ .agents/skills/ — 技能文件');
+        logger.info('   ✅ AI-RULES.md / AGENTS.md — 项目规则');
+        logger.info('');
+        logger.info('   🛡️ CONSTITUTION.md / context.json 保持不变');
+        logger.info('');
+        logger.info('💡 如需强制重置所有配置: speccore init --force');
         return;
       }
       
