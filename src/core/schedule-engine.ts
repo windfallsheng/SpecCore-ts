@@ -116,7 +116,7 @@ export async function runDaemonLoop(): Promise<void> {
 
   // 定时轮询
   const interval = setInterval(check, POLL_INTERVAL);
-  interval.unref();
+  // 不要 unref — daemon 需要事件循环保持存活
 }
 
 /**
@@ -131,6 +131,9 @@ async function executeScheduledTask(task: ScheduleTask): Promise<void> {
     const args = ['execute'];
     if (task.taskId) {
       args.push('-t', task.taskId);
+    }
+    if (task.all) {
+      args.push('--all');
     }
     if (task.iteration) {
       args.push('-I', task.iteration);
