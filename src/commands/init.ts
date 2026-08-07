@@ -167,7 +167,10 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
       '```',
       'Iteration-xxx/',
       '├── 000-overview/     ← 进度跟踪',
-      '├── 010-requirements/     ← doc2spec 写入',
+      '├── 010-requirements/     ← 按需求功能（user-auth/ etc）',
+      '│   ├── sources/        ← 原始文档',
+      '│   ├── assets/         ← 素材（prd/prototypes/designs）',
+      '│   └── {feature}/README.md',
       '├── 020-specs/     ← analyze 输出',
       '├── 030-tasks/     ← 开发任务',
       '│   └── Task-*/    ← split 拆分（含 .issues.md .needs-retry）',
@@ -1095,7 +1098,7 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
     '> 编辑此文件后重新运行 split 即可更新默认分配',
   ].join('\n'));
 
-  // 01-产品需求/ — 按产品端区分
+  // 010-requirements/ — 按需求组织（非按端），analyze 自动提取端相关内容
   // 源文件/ 存放原始文档与素材  各端/ 存放转换后的 MD
   const prdDir = join(iterDir, '010-requirements');
   // 源文件/ 存放原始文档  素材/ 存放共享图片、原型（跨端引用）
@@ -1103,37 +1106,39 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
   await ensureDir(join(prdDir, 'assets', 'prd'));     // PRD 提取的图片
   await ensureDir(join(prdDir, 'assets', 'prototypes'));    // 产品原型
   await ensureDir(join(prdDir, 'assets', 'designs'));  // UI 设计稿
-  await ensureDir(join(prdDir, 'app'));
-  await ensureDir(join(prdDir, 'h5'));
-  await ensureDir(join(prdDir, 'miniapp'));
-  await ensureDir(join(prdDir, 'admin'));
-  await ensureDir(join(prdDir, '_shared'));
   
-  await writeFile(join(prdDir, 'sources', 'README.md'), '# 原始文档与素材\n\n请将产品提供的 Word/PDF/原型图 放在此处。\n\n- PRD 文档\n- 产品原型\n- 业务素材');
-  await writeFile(join(prdDir, 'app/requirements.md'), '# app需求\n\n## 核心功能\n- 功能描述\n- 涉及的API和数据');
-  await writeFile(join(prdDir, 'h5/requirements.md'), '# h5需求\n\n## 核心功能\n- 功能描述');
-  await writeFile(join(prdDir, 'miniapp/requirements.md'), '# miniapp需求\n\n## 核心功能\n- 功能描述');
-  await writeFile(join(prdDir, 'admin/requirements.md'), '# admin需求\n\n## 核心功能\n- 功能描述');
-  await writeFile(join(prdDir, '_shared/业务规则.md'), '# Shared Business Rules\n\n- 规则1\n- 规则2');
+  await writeFile(join(prdDir, 'sources', 'README.md'), '# 原始文档与素材\n\n请将产品提供的 Word/PDF/原型图 放在此处。');
 
-  // 02-需求文档/ — analyze 输出，按端生成
+  // 示例需求目录（按需求功能组织，非按端）
+  const sampleFeature = join(prdDir, 'user-auth');
+  await ensureDir(sampleFeature);
+  await writeFile(join(sampleFeature, 'README.md'), [
+    '# 用户登录与认证',
+    '',
+    '## 概述',
+    '实现统一登录认证，支持 APP/H5/管理后台。',
+    '',
+    '## 涉及的端',
+    '- **app**: 手机号+验证码登录，生物识别',
+    '- **h5**: 微信授权登录',
+    '- **admin**: 账号密码登录，权限控制',
+    '',
+    '## 核心功能',
+    '- 登录/注册/找回密码',
+    '- Token 管理',
+    '- 权限校验',
+    '',
+    '## 涉及的 API',
+    '| 方法 | 路径 | 说明 |',
+    '| :--- | :--- | :--- |',
+    '| POST | /api/auth/login | 登录 |',
+    '| POST | /api/auth/register | 注册 |',
+    '| GET | /api/auth/me | 当前用户信息 |',
+  ].join('\n'));
+
+  // 020-specs/ — analyze 自动按端生成子目录，不再预创建平台目录
   const specDir = join(iterDir, '020-specs');
-  for (const platform of ['app', 'h5', 'miniapp', 'admin']) {
-    await ensureDir(join(specDir, platform));
-    await writeFile(join(specDir, platform, 'ANALYSIS.md'), [
-      `# ${platform} 需求分析`,
-      '',
-      '> 运行 `speccore analyze -I 示例` 生成',
-      '',
-      '## 1. 功能分析',
-      '',
-      '## 2. 接口需求',
-      '',
-      '## 3. 数据模型',
-      '',
-      '## 4. 验收标准',
-    ].join('\n'));
-  }
+  await ensureDir(specDir);
 
   // 00-迭代总览/
   const overviewDir = join(iterDir, '000-overview');
