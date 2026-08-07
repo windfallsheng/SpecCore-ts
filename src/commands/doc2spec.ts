@@ -147,7 +147,7 @@ export async function doc2specCommand(options: Word2SpecOptions): Promise<void> 
 
 async function processSingle(options: Word2SpecOptions): Promise<void> {
   if (!options.iter) {
-    logger.error('请指定期次: speccore doc2spec --iter=<期次>');
+    logger.error('请指定迭代: speccore doc2spec --iter=<期次>');
     return;
   }
 

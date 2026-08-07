@@ -65,7 +65,7 @@ async function generateHandoverDoc(iteration: string): Promise<string> {
   doc += `## 1. 期次概览\n\n`;
   doc += `| 指标 | 数值 |\n`;
   doc += `| :--- | :--- |\n`;
-  doc += `| 期次名称 | ${iteration} |\n`;
+  doc += `| 迭代名称 | ${iteration} |\n`;
   doc += `| 总任务数 | ${tasks.length} |\n`;
   doc += `| 已完成 | ${completed.length} |\n`;
   doc += `| 进行中 | ${inProgress.length} |\n`;

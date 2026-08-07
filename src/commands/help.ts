@@ -66,7 +66,7 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
   'iteration create': {
     desc: '创建新期次',
     params: [
-      { flag: '-n, --name <name>', meaning: '期次名称，如 Q1 / Sprint-3' },
+      { flag: '-n, --name <name>', meaning: '迭代名称，如 Q1 / Sprint-3' },
       { flag: '--from <date>', meaning: '开始日期 YYYY-MM-DD' },
       { flag: '--to <date>', meaning: '结束日期 YYYY-MM-DD' },
       { flag: '--owner <name>', meaning: '期次负责人' },
@@ -76,7 +76,7 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
   'iteration split': {
     desc: '需求拆分为原子 Task',
     params: [
-      { flag: '-i, --iteration <id>', meaning: '目标期次' },
+      { flag: '-i, --iteration <id>', meaning: '目标迭代' },
       { flag: '--interactive', meaning: '预览后逐一确认' },
     ],
     examples: ['speccore iteration split -i Q1', 'speccore iteration split -i Q1 --interactive'],
@@ -90,7 +90,7 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
       { flag: '--platforms <p1,p2>', meaning: '前端平台：web,h5,miniapp' },
       { flag: '--backend-only', meaning: '只创建后端' },
       { flag: '--frontend-only', meaning: '只创建前端' },
-      { flag: '-i, --iteration <id>', meaning: '目标期次' },
+      { flag: '-i, --iteration <id>', meaning: '目标迭代' },
     ],
     examples: [
       'speccore task new -n 用户登录 -t feature',
@@ -121,7 +121,7 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     params: [
       { flag: '-f, --file <path>', meaning: '文档路径' },
       { flag: '-p, --platform <p>', meaning: '平台：backend | frontend | web | h5 | miniapp' },
-      { flag: '-i, --iteration <id>', meaning: '目标期次' },
+      { flag: '-i, --iteration <id>', meaning: '目标迭代' },
     ],
     examples: [
       'speccore doc2spec -f PRD.docx -p backend -i Q1',
@@ -131,7 +131,7 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
   analyze: {
     desc: 'AI 需求分析（全局 / 逐任务）',
     params: [
-      { flag: '-i, --iteration <id>', meaning: '目标期次' },
+      { flag: '-i, --iteration <id>', meaning: '目标迭代' },
       { flag: '-t, --task <id>', meaning: '指定 Task ID' },
       { flag: '--auto', meaning: '自动模式（跳过交互提问）' },
       { flag: '--interactive', meaning: '交互问答模式' },
@@ -144,7 +144,7 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
   plan: {
     desc: '生成执行计划 / 调度方案',
     params: [
-      { flag: '-i, --iteration <id>', meaning: '目标期次' },
+      { flag: '-i, --iteration <id>', meaning: '目标迭代' },
       { flag: '--interactive', meaning: '预览调度方案后确认' },
       { flag: '--team <n>', meaning: '团队人数（控制并行度）' },
       { flag: '--strategy <name>', meaning: '调度策略：priority | dependency | balanced' },
@@ -165,7 +165,7 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
       { flag: '--resume', meaning: '从上次中断处恢复' },
       { flag: '--skip <ids>', meaning: '跳过指定 Task ID(逗号分隔)' },
       { flag: '--only <ids>', meaning: '只执行指定 Task ID' },
-      { flag: '-i, --iteration <id>', meaning: '目标期次' },
+      { flag: '-i, --iteration <id>', meaning: '目标迭代' },
     ],
     examples: [
       'speccore execute -t Task-001 --force',
@@ -196,7 +196,7 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
       { flag: '--all', meaning: '归档所有已完成 Task' },
       { flag: '--interactive', meaning: '预览归档结果后确认' },
       { flag: '--skip-validate', meaning: '跳过合规验证' },
-      { flag: '-i, --iteration <id>', meaning: '目标期次' },
+      { flag: '-i, --iteration <id>', meaning: '目标迭代' },
     ],
     examples: ['speccore done --task=Task-001', 'speccore done --all'],
   },
@@ -209,7 +209,7 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
       { flag: '--batch-file <path>', meaning: '从 .xlsx / .csv 文件批量导入' },
       { flag: '--schedule <mode>', meaning: '调度：night（夜间执行）| now（立即）' },
       { flag: '--interactive', meaning: '预览 → 编辑 → 确认 → 创建' },
-      { flag: '-i, --iteration <id>', meaning: '目标期次' },
+      { flag: '-i, --iteration <id>', meaning: '目标迭代' },
     ],
     examples: [
       'speccore bugfix -n "登录超时" -d "token过期未刷新"',
@@ -236,7 +236,7 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     params: [
       { flag: '--auto', meaning: '全自动：级联执行 init→import→analyze→split→plan→execute→pr→done' },
       { flag: '--from <phase>', meaning: '从指定阶段开始：init|import|analyze|split|plan|execute|pr|done' },
-      { flag: '-i, --iteration <id>', meaning: '目标期次' },
+      { flag: '-i, --iteration <id>', meaning: '目标迭代' },
     ],
     examples: [
       'speccore dev',
@@ -247,7 +247,7 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
   validate: {
     desc: 'Spec 合规检查',
     params: [
-      { flag: '-i, --iteration <id>', meaning: '目标期次' },
+      { flag: '-i, --iteration <id>', meaning: '目标迭代' },
       { flag: '--all', meaning: '检查全部' },
     ],
     examples: ['speccore validate -i Q1', 'speccore validate --all'],

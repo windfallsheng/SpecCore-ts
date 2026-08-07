@@ -18,13 +18,13 @@ export interface IterationFromGlobalOptions {
 
 export async function iterationFromGlobalCommand(options: IterationFromGlobalOptions): Promise<void> {
   if (!options.reqs) {
-    logger.error('请提供需求 ID 列表。用法: speccore iteration-from-global --reqs=REQ-001,REQ-002 --name=<期次名称>');
+    logger.error('请提供需求 ID 列表。用法: speccore iteration-from-global --reqs=REQ-001,REQ-002 --name=<迭代名称>');
     logger.info('提示: 使用 speccore global-status 查看可用的需求列表');
     return;
   }
 
   if (!options.name) {
-    logger.error('请提供期次名称。用法: speccore iteration-from-global --name=<期次名称>');
+    logger.error('请提供迭代名称。用法: speccore iteration-from-global --name=<迭代名称>');
     return;
   }
 
