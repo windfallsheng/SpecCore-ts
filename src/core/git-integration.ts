@@ -27,7 +27,9 @@ interface GitMapping {
  */
 export function createTaskBranch(taskId: string, taskName: string, baseBranch?: string, iteration?: string): string | null {
   try {
-    const branchName = `feature/${taskId}`.substring(0, 100);
+    // 分支名 = taskId + 任务名精简（确保和目录名一致）
+    const safeName = taskName.replace(/[^a-zA-Z0-9\u4e00-\u9fff_-]/g, '-').slice(0, 50);
+    const branchName = `feature/${taskId}-${safeName}`.substring(0, 200);
 
     // 确定 base 分支: 显式指定 > 依赖分支 > 迭代配置 > CONSTITUTION > git检测
     let effectiveBase = baseBranch;
