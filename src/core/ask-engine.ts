@@ -13,7 +13,7 @@ import { tryHostAi } from './ask-host-ai';
 // ============================================================
 
 /** ask 模式 */
-export type AskMode = 'explain' | 'guide' | 'match' | 'pipeline';
+export type AskMode = 'explain' | 'guide' | 'match' | 'pipeline' | 'ambiguous';
 
 /** 命令知识条目 */
 export interface CommandKnowledge {
@@ -305,7 +305,23 @@ async function handleMatch(input: string): Promise<AskResult> {
     return { mode: 'match', summary: '未识别到匹配命令', detail: '我无法完全理解你的意图。试试:\n  speccore help — 查看命令列表\n  或更详细地描述你想做什么', commands: [] };
   }
 
-  // 构建带参数的命令
+  // ── 歧义检测: 第二候选与第一差距 < 15% ──
+  const second = results[1];
+  if (second && (best.confidence - second.confidence) < 15) {
+    const candidates = results.slice(0, 4);
+    const lines = ['🤔 检测到多个可能意图，请选择:', ''];
+    candidates.forEach((r, i) => {
+      lines.push(`[${i + 1}] ${r.intent} (${r.confidence}%) — speccore ${r.command}`);
+    });
+    lines.push('');
+    lines.push('输入编号选择，或重新描述你的需求。');
+    return {
+      mode: 'ambiguous',
+      summary: `歧义: ${candidates.map(c => c.intent).join(' vs ')}`,
+      detail: lines.join('\n'),
+      commands: candidates.map(c => c.command),
+    };
+  }
   const params = best.extractedParams;
   let fullCommand = `speccore ${best.command}`;
   const paramNotes: string[] = [];
@@ -529,7 +545,7 @@ function matchWorkflow(input: string): { name: string; steps: PipelineStep[] } |
 }
 
 function modeLabel(mode: AskMode): string {
-  const labels: Record<AskMode, string> = { explain: '📖 命令解释', guide: '🗺️ 任务指引', match: '🎯 意图匹配', pipeline: '⚡ 复杂编排' };
+  const labels: Record<AskMode, string> = { explain: '📖 命令解释', guide: '🗺️ 任务指引', match: '🎯 意图匹配', pipeline: '⚡ 复杂编排', ambiguous: '🤔 歧义消解' };
   return labels[mode];
 }
 
