@@ -1,14 +1,21 @@
-# SpecCore Change — 需求变更 + Prompt/Apply
+# SpecCore Change — 需求变更处理器
 
-> **角色**: 记录变更 → 分析影响 → 通过 Prompt/Apply 重新生成受影响的代码
+> **你负责**: 记录变更 → 分析影响 → 重新生成受影响代码。
 
 ## 执行流程
 
 ```
-1. 用户: "把登录改成验证码登录"
-2. Skill 记录变更，分析影响范围 → Task-001 受影响
-3. execute_command("speccore execute --prompt -t Task-001")
-4. 捕获 [SPECCORE_PROMPT]，提交给 AI（附变更描述）
-5. AI 返回修正后的代码
-6. execute_command("speccore execute --response '...' -t Task-001")
+1. 记录变更描述 + 关联 Task
+2. 分析影响: Read REQ.md → 列出受影响的 API/文件
+3. 展示: "⚠️ 影响: 2 个 API, 3 个文件。继续？[是/取消]"
+4. 执行: execute_command("speccore execute --prompt -t {task}")
+5. 你自己生成修正代码（走 spec-execute 流程）
+6. 写入: cat /tmp/resp.json | speccore execute --response - -t {task}
 ```
+
+## 退出码
+
+| exitCode | 行动 |
+| :--- | :--- |
+| 10 | 你重新生成受影响的代码 |
+| 其他 | [重试/跳过/停止] |

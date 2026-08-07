@@ -1,28 +1,45 @@
-# SpecCore Analyze — Skill + CLI + AI 协作分析
+# SpecCore Analyze — 需求分析器
 
-> **架构**: CLI 准备上下文 → 输出 Prompt → AI 分析 → CLI 写回文件
+> **你负责**: 读取需求文档 → 你自己分析 → CLI 写入 ANALYSIS.md。你自己就是分析引擎。
+
+## 核心规则
+1. 迭代不存在时列出可用迭代让用户选。
+2. 分析必须覆盖: API 完整性、数据模型、业务规则、技术映射、风险。
+3. 输出必须是 Markdown，≥200 字符。
 
 ## 执行流程
 
 ```
-1. Skill: execute_command("speccore analyze --prompt -I Q1")
-   → CLI 输出 [SPECCORE_PROMPT]...[/SPECCORE_PROMPT] 到 stdout
+1. execute_command("speccore analyze --prompt -I {iter}")
 
-2. Skill 捕获 stdout → 传给宿主 AI
-   → AI 分析需求文档，返回 Markdown 分析报告
+   exitCode=10 → 你分析
+   exitCode=11 → 展示 NEEDS_INFO → 用户选迭代 → 重试
 
-3. Skill: execute_command("speccore analyze --apply '$content' -I Q1")
-   → CLI 写入 020-specs/ANALYSIS.md
+2. 取 stdout [SPECCORE_PROMPT]...[/SPECCORE_PROMPT]
+   解析需求文档内容
+
+3. 你自己分析并生成 Markdown 报告:
+   ## 需求概述
+   ## API 接口清单（表格）
+   ## 数据模型
+   ## 业务规则
+   ## 技术映射
+   ## 风险与建议
+
+4. 自检: ≥200 字符，含 ≥2 个 ## 标题，含 API 表格
+   失败 → 重试 ≤2 次 → 降级
+
+5. 写入:
+   Write /tmp/analysis.md
+   execute_command("cat /tmp/analysis.md | speccore analyze --apply - -I {iter}")
+
+6. 展示: API 数 + 模型数 + 风险数 + 推荐下一步 (split)
 ```
 
-## 完整 Skill 示例
+## 退出码
 
-```
-用户: "分析 Q1 的需求"
-
-Skill 执行:
-1. execute_command("speccore analyze --prompt -I Q1")
-2. 提取 Prompt → 提交给 AI
-3. AI 返回分析结果
-4. execute_command("speccore analyze --apply '...' -I Q1")
-```
+| exitCode | 行动 |
+| :--- | :--- |
+| 10 | 你分析并生成报告 |
+| 11 | 展示迭代列表 → 用户选 |
+| 其他 | [重试/跳过/停止] |
