@@ -1157,6 +1157,8 @@ async function createToolIntegrations(projectRoot: string, toolFilter?: string):
   const skillNames = [
     'speccore-router',
     'spec-ask',
+    'spec-task-create',
+    'spec-iteration-create',
     'spec-analyze',
     'spec-split', 
     'spec-execute',
@@ -1169,12 +1171,12 @@ async function createToolIntegrations(projectRoot: string, toolFilter?: string):
   
   let skillsCopied = 0;
   for (const name of skillNames) {
-    const srcFile = join(cliSkillsDir, name, 'SKILL.md');
+    const srcDir = join(cliSkillsDir, name);
     const destDir = join(projectSkillsDir, name);
     try {
-      if (await pathExists(srcFile)) {
-        await ensureDir(destDir);
-        await copy(srcFile, join(destDir, 'SKILL.md'));
+      if (await pathExists(srcDir)) {
+        // 复制整个 Skill 目录（包括 SKILL.md + references/ + scripts/）
+        await copy(srcDir, destDir, { overwrite: true });
         skillsCopied++;
       } else {
         logger.info(`   ⚠️ Skill 源文件不存在，跳过: ${name}`);
