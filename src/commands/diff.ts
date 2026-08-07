@@ -1,5 +1,5 @@
 /**
- * diff — 对比两个期次或基线的差异
+ * diff — 对比两个迭代或基线的差异
  */
 
 import { pathExists, readdir, readFile } from 'fs-extra';

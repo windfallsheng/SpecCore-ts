@@ -1,6 +1,6 @@
 /**
- * iteration-from-global - 从全量层生成期次命令
- * 从 GLOBAL/INDEX.md 查找需求 ID，定位到对应项目 REQUIREMENT.md 提取需求，生成新的期次
+ * iteration-from-global - 从全量层生成迭代命令
+ * 从 GLOBAL/INDEX.md 查找需求 ID，定位到对应项目 REQUIREMENT.md 提取需求，生成新的迭代
  */
 
 import { logger, Spinner } from '../utils/logger';
@@ -56,7 +56,7 @@ export async function iterationFromGlobalCommand(options: IterationFromGlobalOpt
     }
 
     // 3. 读取需求详情
-    spinner.stop(`找到 ${foundReqs.length} 个需求，正在生成期次...`);
+    spinner.stop(`找到 ${foundReqs.length} 个需求，正在生成迭代...`);
     const reqDetails: { req: typeof index.reqs[0]; detail: string }[] = [];
 
     for (const req of foundReqs) {
@@ -66,7 +66,7 @@ export async function iterationFromGlobalCommand(options: IterationFromGlobalOpt
 
     // 4. 预览方案
     logger.info('');
-    logger.info(`📋 准备生成期次: ${options.name}`);
+    logger.info(`📋 准备生成迭代: ${options.name}`);
     logger.info('');
     logger.info('选择需求:');
     for (const { req } of reqDetails) {
@@ -74,11 +74,11 @@ export async function iterationFromGlobalCommand(options: IterationFromGlobalOpt
     }
     logger.info('');
 
-    // 5. 创建期次目录
+    // 5. 创建迭代目录
     const iterationDir = join(process.cwd(), `Iteration-${options.name}`);
     if (await pathExists(iterationDir)) {
       if (!options.force) {
-        logger.error(`期次 Iteration-${options.name} 已存在。使用 --force 覆盖。`);
+        logger.error(`迭代 Iteration-${options.name} 已存在。使用 --force 覆盖。`);
         return;
       }
     }
@@ -94,7 +94,7 @@ export async function iterationFromGlobalCommand(options: IterationFromGlobalOpt
     const archContent = generateIterationArchitecture(options.name, foundReqs);
     await writeFile(join(iterationDir, '000-overview', 'ARCHITECTURE.md'), archContent);
 
-    // 8. 生成期次总览
+    // 8. 生成迭代总览
     const graphContent = generateProjectGraph(options.name, foundReqs, reqDetails.length);
     await writeFile(join(iterationDir, '000-overview', 'PROJECT_GRAPH.md'), graphContent);
 
@@ -129,9 +129,9 @@ export async function iterationFromGlobalCommand(options: IterationFromGlobalOpt
 
     // 12. 输出结果
     logger.info('');
-    logger.success('✅ 期次生成完成！');
+    logger.success('✅ 迭代生成完成！');
     logger.info('');
-    logger.info(`📁 期次: Iteration-${options.name}`);
+    logger.info(`📁 迭代: Iteration-${options.name}`);
     logger.info(`📋 包含需求: ${reqIds.join(', ')}`);
     logger.info('');
     logger.info(`📊 生成 Task（${taskIds.length} 个）:`);
@@ -145,13 +145,13 @@ export async function iterationFromGlobalCommand(options: IterationFromGlobalOpt
     logger.info('   speccore execute       开始开发');
     logger.info('   需求变更时运行 speccore sync-global 同步回全量层');
   } catch (error) {
-    spinner.fail(`期次生成失败: ${error}`);
+    spinner.fail(`迭代生成失败: ${error}`);
     throw error;
   }
 }
 
 /**
- * 生成期次需求文档
+ * 生成迭代需求文档
  */
 function generateIterationRequirement(
   iterationName: string,
@@ -183,7 +183,7 @@ ${detail}
 }
 
 /**
- * 生成期次架构文档
+ * 生成迭代架构文档
  */
 function generateIterationArchitecture(
   iterationName: string,
@@ -223,7 +223,7 @@ function generateIterationArchitecture(
 }
 
 /**
- * 生成期次总览
+ * 生成迭代总览
  */
 function generateProjectGraph(
   iterationName: string,
@@ -231,7 +231,7 @@ function generateProjectGraph(
   taskCount: number
 ): string {
   const today = new Date().toISOString().split('T')[0];
-  let content = `# ${iterationName} - 期次总览
+  let content = `# ${iterationName} - 迭代总览
 
 > 创建日期: ${today}
 > 状态: 🔄 进行中

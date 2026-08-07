@@ -143,7 +143,7 @@ function buildPrompt(params: {
 }): string {
   const { scope, iteration, taskId, depth, reqContents, fileTree, apiInventory, modules, constitutionInfo, platformSourceMap } = params;
 
-  const scopeLabel = scope === 'global' ? '全局' : scope === 'task' ? `任务 ${taskId}` : `期次 ${iteration || '当前'}`;
+  const scopeLabel = scope === 'global' ? '全局' : scope === 'task' ? `任务 ${taskId}` : `迭代 ${iteration || '当前'}`;
 
   return `# SpecCore AI 分析上下文
 

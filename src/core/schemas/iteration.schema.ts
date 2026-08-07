@@ -1,6 +1,6 @@
 /**
  * Iteration Schema — Zod 数据模型
- * 定义迭代（期次）的核心数据结构
+ * 定义迭代（迭代）的核心数据结构
  */
 
 import { z } from 'zod';

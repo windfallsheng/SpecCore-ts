@@ -303,7 +303,7 @@ async function importToGlobalLayer(
   logger.info('');
   logger.info('📋 下一步:');
   logger.info('   speccore global-status  查看全量层状态');
-  logger.info('   speccore iteration-from-global  从全量层生成期次');
+  logger.info('   speccore iteration-from-global  从全量层生成迭代');
 }
 
 // ============================================================

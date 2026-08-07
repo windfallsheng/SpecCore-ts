@@ -29,7 +29,7 @@ const ALL_COMMANDS: [string, string, string][] = [
   ['spec-track', '全链路追踪', 'speccore track --req=${1:REQ-001}'],
   ['spec-sync', '双向同步', 'speccore sync --global'],
   ['spec-rename', '重命名', 'speccore rename --iteration ${1:Q1} ${2:Q2}'],
-  ['spec-create-iteration', '创建期次', 'speccore iteration create -n ${1:Q2} --owner=${2:张三}'],
+  ['spec-create-iteration', '创建迭代', 'speccore iteration create -n ${1:Q2} --owner=${2:张三}'],
   ['spec-retro', '任务回顾报告', 'speccore retro --task ${1:Task-001}'],
   ['spec-context', '查看/切换上下文', 'speccore context --set --iteration ${1:Q1}'],
   ['spec-ops', '操作历史', 'speccore ops'],

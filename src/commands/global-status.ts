@@ -89,10 +89,10 @@ async function showGlobalOverview(index: Awaited<ReturnType<typeof readGlobalInd
     }
   }
 
-  // 期次关联
+  // 迭代关联
   if (index.iterations.length > 0) {
     logger.info('');
-    logger.info('🔗 期次关联:');
+    logger.info('🔗 迭代关联:');
     for (const iter of index.iterations) {
       logger.info(`   ${iter.name} | ${iter.reqs.length} 个需求 | ${iter.status} | 创建: ${iter.createdAt}`);
     }

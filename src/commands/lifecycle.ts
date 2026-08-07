@@ -211,7 +211,7 @@ async function showAllTasks(iteration: string): Promise<void> {
   const iterDir = `Iteration-${iteration}`;
   const tasks = await scanTasks(iteration);
   
-  logger.info(`\n📋 期次 ${iteration} 任务看板:\n`);
+  logger.info(`\n📋 迭代 ${iteration} 任务看板:\n`);
   
   const byState: Record<string, string[]> = {};
   for (const state of STATES) byState[state] = [];

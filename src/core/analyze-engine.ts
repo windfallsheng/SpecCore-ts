@@ -780,7 +780,7 @@ function buildIterationReqReport(
   const blockerCount = issues.filter(i => i.severity === 'blocker').length;
 
   let r = `# 需求分析报告\n\n`;
-  r += `> 期次: ${iter} | 分析时间: ${now} | 状态: ${blockerCount > 0 ? '🔴 有阻断' : '🟢 可拆分'}\n\n`;
+  r += `> 迭代: ${iter} | 分析时间: ${now} | 状态: ${blockerCount > 0 ? '🔴 有阻断' : '🟢 可拆分'}\n\n`;
   r += `---\n\n`;
 
   r += `## 1. 需求完整性检查\n\n`;
@@ -831,7 +831,7 @@ function buildTaskReqReport(
 ): string {
   const now = new Date().toISOString().split('T')[0];
   let r = `# 任务需求分析\n\n`;
-  r += `> 期次: ${input.iteration} | 任务: ${input.taskId} | 分析: ${now}\n\n---\n\n`;
+  r += `> 迭代: ${input.iteration} | 任务: ${input.taskId} | 分析: ${now}\n\n---\n\n`;
   r += `## 问题清单\n`;
   if (issues.length === 0) r += `> ✅ 无问题\n`;
   else for (const i of issues) r += `- [ ] ${i.message.replace(/\n/g, ' ')}\n`;
@@ -954,7 +954,7 @@ function buildIterationCodeReport(
 ): string {
   const now = new Date().toISOString().split('T')[0];
   let r = `# 代码分析报告\n\n`;
-  r += `> 期次: ${input.iteration || 'current'} | 分析: ${now} | 目录: ${input.sources.join(', ')}\n\n`;
+  r += `> 迭代: ${input.iteration || 'current'} | 分析: ${now} | 目录: ${input.sources.join(', ')}\n\n`;
   r += `---\n\n`;
   r += `## 统计\n\n`;
   r += `| 指标 | 值 |\n| :--- | :--- |\n`;
@@ -985,7 +985,7 @@ function buildTaskCodeReport(
 ): string {
   const now = new Date().toISOString().split('T')[0];
   let r = `# 任务代码审查\n\n`;
-  r += `> 期次: ${input.iteration} | 任务: ${input.taskId} | ${now}\n\n---\n\n`;
+  r += `> 迭代: ${input.iteration} | 任务: ${input.taskId} | ${now}\n\n---\n\n`;
   r += `## 变更文件 (${stats.totalFiles})\n\n`;
   r += `| 文件 | 行数 |\n| :--- | :--- |\n`;
   for (const f of stats.largestFiles.slice(0, 15)) r += `| ${f.path} | ${f.lines} |\n`;
@@ -1027,7 +1027,7 @@ function buildAIEnhancedReport(
   const blockerCount = issues.filter(i => i.severity === 'blocker').length;
 
   let r = `# ${scope === 'global' ? '全局架构影响分析' : scope === 'task' ? '任务综合分析' : '需求分析报告'}\n\n`;
-  r += `> 期次: ${iter} | 时间: ${now} | 状态: ${blockerCount > 0 ? '🔴 有阻断' : '🟢 可拆分'}\n`;
+  r += `> 迭代: ${iter} | 时间: ${now} | 状态: ${blockerCount > 0 ? '🔴 有阻断' : '🟢 可拆分'}\n`;
   r += `> 需求: ${input.requirements.length} 个 | 源码文件: ${fileStats.totalFiles} 个 | API: ${apiInventory.length} 个\n`;
   r += `> **AI 上下文**: [${aiContext.promptPath}](${aiContext.promptPath})\n\n`;
   r += `---\n\n`;

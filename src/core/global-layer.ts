@@ -1,6 +1,6 @@
 /**
  * GLOBAL 全量层管理核心模块
- * 负责管理 GLOBAL/ 目录下的全量需求索引、项目映射、期次关联
+ * 负责管理 GLOBAL/ 目录下的全量需求索引、项目映射、迭代关联
  */
 
 import { ensureDir, writeFile, readFile, pathExists, readdir } from 'fs-extra';
@@ -39,7 +39,7 @@ export interface ProjectEntry {
   lastImport: string;
 }
 
-/** 期次关联条目 */
+/** 迭代关联条目 */
 export interface IterationLink {
   name: string;
   reqs: string[];
@@ -152,14 +152,14 @@ export async function readGlobalIndex(): Promise<GlobalIndex> {
     }
   }
 
-  // 解析期次关联
+  // 解析迭代关联
   const iterTableMatch = content.match(/\| 迭代名称 \|[\s\S]*?(?=\n\n---|$)/);
   if (iterTableMatch) {
     const lines = iterTableMatch[0].split('\n');
     for (const line of lines) {
       const cols = line.split('|').map((c) => c.trim());
       if (line.includes(':---')) continue;
-      if (cols.length >= 5 && cols[1] && cols[1] !== '_暂无期次_' && cols[1] !== '迭代名称') {
+      if (cols.length >= 5 && cols[1] && cols[1] !== '_暂无迭代_' && cols[1] !== '迭代名称') {
         index.iterations.push({
           name: cols[1],
           reqs: cols[2].split(',').map((r) => r.trim()),
@@ -248,7 +248,7 @@ export async function updateReqInIndex(reqId: string, updates: Partial<ReqIndexE
     if (line.includes(`| ${reqId} |`)) {
       const cols = line.split('|').map((c) => c.trim());
       // cols[0]是空, cols[1]是需求ID, cols[2]是项目, cols[3]是名称
-      // cols[4]是状态, cols[5]是版本, cols[6]是关联期次, cols[7]是关联Task, cols[8]是文件路径
+      // cols[4]是状态, cols[5]是版本, cols[6]是关联迭代, cols[7]是关联Task, cols[8]是文件路径
       if (cols.length >= 9 && cols[1] === reqId) {
         if (updates.status) cols[4] = updates.status;
         if (updates.version) cols[5] = updates.version;
@@ -311,7 +311,7 @@ export async function upsertProjectInIndex(project: ProjectEntry): Promise<void>
 }
 
 /**
- * 追加期次关联到 INDEX.md
+ * 追加迭代关联到 INDEX.md
  */
 export async function appendIterationLink(link: IterationLink): Promise<void> {
   const indexPath = getIndexPath();
@@ -320,11 +320,11 @@ export async function appendIterationLink(link: IterationLink): Promise<void> {
   const reqsStr = link.reqs.join(',');
   const newLine = `| ${link.name} | ${reqsStr} | ${link.status} | ${link.createdAt} |`;
 
-  if (content.includes('_暂无期次_')) {
-    content = content.replace(/\| _暂无期次_ \| - \| - \| - \|/, newLine);
+  if (content.includes('_暂无迭代_')) {
+    content = content.replace(/\| _暂无迭代_ \| - \| - \| - \|/, newLine);
   } else {
-    // 在期次关联表格后面追加
-    const iterSectionStart = content.indexOf('## 期次关联');
+    // 在迭代关联表格后面追加
+    const iterSectionStart = content.indexOf('## 迭代关联');
     const iterSectionEnd = content.indexOf('\n---', iterSectionStart);
     const insertPos = iterSectionEnd > iterSectionStart ? iterSectionEnd : content.length;
     content = content.slice(0, insertPos) + '\n' + newLine + content.slice(insertPos);
@@ -417,7 +417,7 @@ export async function writeProjectRequirements(
 > | 当前版本 | v1.0 |
 > | 状态 | 📦 已有实现 |
 > | 最后修改 | ${today} \\| 修改人：SpecCore |
-> | 关联期次 | - |
+> | 关联迭代 | - |
 > | 关联 Task | - |
 
 **需求描述**

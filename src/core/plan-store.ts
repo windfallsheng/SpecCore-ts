@@ -11,7 +11,7 @@ export interface ExecutionPlan {
   id: string;
   /** 计划名称 */
   name: string;
-  /** 期次 */
+  /** 迭代 */
   iteration: string;
   /** 任务列表（按执行顺序） */
   tasks: string[];

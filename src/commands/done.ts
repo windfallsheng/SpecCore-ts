@@ -22,7 +22,7 @@ export interface DoneOptions {
 
 export async function doneCommand(options: DoneOptions): Promise<void> {
   const iteration = await getDefaultIteration(options.iteration);
-  if (!iteration) { logger.error('未找到活跃期次'); return; }
+  if (!iteration) { logger.error('未找到活跃迭代'); return; }
 
   const iterDir = `Iteration-${iteration}`;
 
@@ -78,7 +78,7 @@ async function interactiveDoneFlow(
   const ask = (q: string): Promise<string> => new Promise(r => rl.question(`${q} `, a => r(a.trim())));
 
   if (!resume.resumed) {
-    logger.info(`\n📋 即将收尾: ${taskId} (期次: ${iteration})\n`);
+    logger.info(`\n📋 即将收尾: ${taskId} (迭代: ${iteration})\n`);
     logger.info('   1. validate  — 规范合规校验');
     logger.info('   2. archive   — 任务归档');
     logger.info('   3. sync      — 同步到全局层');
@@ -175,7 +175,7 @@ async function doDone(
   }
 }
 
-/** 扫描期次下所有已完成但未归档的任务 */
+/** 扫描迭代下所有已完成但未归档的任务 */
 async function findCompletedTasks(iterDir: string): Promise<string[]> {
   const fs = require('fs');
   const entries = fs.readdirSync(iterDir, { withFileTypes: true });

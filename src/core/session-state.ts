@@ -12,7 +12,7 @@ export interface CommandSession {
   command: string;
   /** 会话 ID */
   sessionId: string;
-  /** 期次 */
+  /** 迭代 */
   iteration: string;
   /** Task ID（如果有） */
   taskId?: string;

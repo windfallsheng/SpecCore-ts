@@ -62,7 +62,7 @@ const COMMAND_KB: CommandKnowledge[] = [
     usage: 'speccore doc2spec -f <file> --iter <iteration> [--task <task>] [--no-ai]', examples: ['speccore doc2spec -f PRD.docx --iter Q3', 'speccore doc2spec -f 需求.docx --iter Q2 --task T-01 --no-ai'], related: ['spec2doc', 'analyze'], triggers: ['导入', 'doc2spec', 'word转', '文档转换', 'PRD', '需求文档'] },
   { name: 'spec2doc', aliases: ['s2d'], description: 'SpecCore MD 导出为 Word/PDF/HTML/PPTX',
     usage: 'speccore spec2doc [-i <iteration>] [-t <task>] [-f <format>] [-o <output>]', examples: ['speccore spec2doc -i Q3 -o 需求.docx', 'speccore spec2doc -t T-01 -f html'], related: ['doc2spec'], triggers: ['导出', 'spec2doc', '生成文档', '导出word', '导出pdf'] },
-  { name: 'dashboard', aliases: ['db', 'sp'], description: '项目仪表盘：期次状态/进度/健康度，--scope global 全量视图',
+  { name: 'dashboard', aliases: ['db', 'sp'], description: '项目仪表盘：迭代状态/进度/健康度，--scope global 全量视图',
     usage: 'speccore dashboard [--scope global|iteration] [--export html] [--health] [--lifecycle]', examples: ['speccore dashboard', 'speccore dashboard --scope global --export html'], related: ['analyze', 'health'], triggers: ['看板', '仪表盘', 'dashboard', '进度', '状态', '全局', '全量'] },
   { name: 'analyze', aliases: ['al'], description: 'AI 统一分析：需求文档+源码→分析报告，--audit 审计模式',
     usage: 'speccore analyze [--task <id>] [--iteration <name>] [--audit]', examples: ['speccore analyze', 'speccore analyze --task T-01 --audit'], related: ['dashboard', 'validate'], triggers: ['分析', 'analyze', '审计', 'audit', '检查'] },
@@ -87,12 +87,12 @@ const COMMAND_KB: CommandKnowledge[] = [
   { name: 'task', aliases: ['tk'], description: '任务管理：创建/列表/状态。子命令: new, list, status',
     usage: 'speccore task new --name <name> [--id <id>] | speccore task list | speccore task status', examples: ['speccore task new --name "用户登录"', 'speccore task list'], related: ['plan', 'execute'], triggers: ['task', '任务', '创建任务', '新建'] },
   { name: 'iteration', aliases: ['it'], description: '迭代管理：创建时自动生成唯一编码（Iteration-001-功能名），支持拆分/列表',
-    usage: 'speccore iteration create -n <name> | speccore iteration split | speccore iteration list', examples: ['speccore iteration create -n Q3 → Iteration-001-Q3', 'speccore iteration list'], related: ['task', 'plan'], triggers: ['期次', 'iteration', '迭代', 'sprint'] },
+    usage: 'speccore iteration create -n <name> | speccore iteration split | speccore iteration list', examples: ['speccore iteration create -n Q3 → Iteration-001-Q3', 'speccore iteration list'], related: ['task', 'plan'], triggers: ['迭代', 'iteration', '迭代', 'sprint'] },
   { name: 'search', aliases: ['sh'], description: '全文搜索：跨所有 Spec 文件关键词检索',
     usage: 'speccore search <query> [--task <id>] [--iteration <name>]', examples: ['speccore search "登录"', 'speccore search "支付" --iteration Q2'], related: ['track'], triggers: ['搜索', 'search', '查找', '检索', 'grep'] },
   { name: 'track', aliases: ['trk'], description: '合并 trace + tracker: REQ→Task→Code 全链路追踪',
     usage: 'speccore track [--req <id>] [--task <id>] [--full]', examples: ['speccore track --req REQ-001', 'speccore track --full'], related: ['search', 'analyze'], triggers: ['追踪', 'track', 'trace', '链路', '追溯'] },
-  { name: 'rename', aliases: ['rn'], description: '重命名期次/任务，自动更新所有关联引用',
+  { name: 'rename', aliases: ['rn'], description: '重命名迭代/任务，自动更新所有关联引用',
     usage: 'speccore rename [--iteration <old> <new>] [--task <old> <new>]', examples: ['speccore rename --iteration Q2 Q3', 'speccore rename --task T-01 T-10'], related: ['sync'], triggers: ['重命名', 'rename', '改名', '更名'] },
 ];
 
@@ -240,7 +240,7 @@ function handleGuide(input: string): AskResult {
   } else if (/批量|分批|batch|队列/i.test(input)) {
     matchedWorkflow = WORKFLOWS['batch execute'];
     workflowName = '批量执行流程';
-  } else if (/创建.*期次|新建.*期次|iteration.*create|创建.*迭代/i.test(input)) {
+  } else if (/创建.*迭代创建.*迭代/i.test(input)) {
     // 不应该进 guide 模式——让调用方降级到 match
     throw new Error('FALLBACK_TO_MATCH');
   } else {

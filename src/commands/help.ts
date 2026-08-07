@@ -52,8 +52,8 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
   'status-panel': {
     desc: '项目状态看板 → 已合并到 dashboard',
     params: [
-      { flag: '--scope global', meaning: '全量视图（所有项目+期次）' },
-      { flag: '--scope iteration', meaning: '当前期次视图' },
+      { flag: '--scope global', meaning: '全量视图（所有项目+迭代）' },
+      { flag: '--scope iteration', meaning: '当前迭代视图' },
       { flag: '--export <path>', meaning: '导出 HTML 文件' },
     ],
     examples: [
@@ -64,12 +64,12 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     ],
   },
   'iteration create': {
-    desc: '创建新期次',
+    desc: '创建新迭代',
     params: [
       { flag: '-n, --name <name>', meaning: '迭代名称，如 Q1 / Sprint-3' },
       { flag: '--from <date>', meaning: '开始日期 YYYY-MM-DD' },
       { flag: '--to <date>', meaning: '结束日期 YYYY-MM-DD' },
-      { flag: '--owner <name>', meaning: '期次负责人' },
+      { flag: '--owner <name>', meaning: '迭代负责人' },
     ],
     examples: ['speccore iteration create -n Q1 --from=2026-04-01 --to=2026-06-30 --owner=赵六'],
   },
@@ -182,7 +182,7 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
       { flag: '--draft', meaning: '创建草稿 PR' },
       { flag: '--title <title>', meaning: '自定义 PR 标题' },
       { flag: '--base <branch>', meaning: '目标分支（默认 main）' },
-      { flag: '-i, --iteration <id>', meaning: '目���期次' },
+      { flag: '-i, --iteration <id>', meaning: '目���迭代' },
     ],
     examples: [
       'speccore pr -t Task-001',
@@ -253,7 +253,7 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     examples: ['speccore validate -i Q1', 'speccore validate --all'],
   },
   rename: {
-    desc: '重命名任务 / 期次 / 文件',
+    desc: '重命名任务 / 迭代 / 文件',
     params: [
       { flag: '--task <id>', meaning: '任务 ID' },
       { flag: '--name <new-name>', meaning: '新名称' },
@@ -289,7 +289,7 @@ function showAllCommands(): void {
 
   const categories: Record<string, string[]> = {
     '🏗️ 初始化': ['init', 'import', 'doc2spec'],
-    '📋 期次与任务': ['iteration create', 'iteration split', 'task new', 'rename'],
+    '📋 迭代与任务': ['iteration create', 'iteration split', 'task new', 'rename'],
     '🔍 分析与计划': ['analyze', 'plan'],
     '⚡ 执行与审查': ['execute', 'pr', 'done'],
     '🐛 变更与修复': ['change', 'bugfix'],
@@ -458,7 +458,7 @@ async function helpHtml(options: HelpOptions): Promise<void> {
     const categories: Record<string, string[]> = {
       '🧠 AI 入口': ['ask', 'welcome'],
       '🏗️ 初始化': ['init'],
-      '📋 期次与任务': ['iteration', 'task', 'rename'],
+      '📋 迭代与任务': ['iteration', 'task', 'rename'],
       '📝 文档转换': ['doc2spec', 'spec2doc'],
       '🔍 分析与计划': ['analyze', 'plan', 'split'],
       '⚡ 执行与交付': ['execute', 'pr', 'done'],

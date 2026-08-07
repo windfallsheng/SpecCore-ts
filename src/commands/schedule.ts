@@ -56,7 +56,7 @@ export async function scheduleCreateCommand(options: ScheduleCreateOptions): Pro
 
     const iteration = await getDefaultIteration(options.iteration);
     if (!iteration) {
-      logger.error('未找到活跃期次，请使用 --iteration 指定');
+      logger.error('未找到活跃迭代，请使用 --iteration 指定');
       return;
     }
 
@@ -88,7 +88,7 @@ export async function scheduleCreateCommand(options: ScheduleCreateOptions): Pro
     logger.info('');
     logger.info(`  ID:       ${scheduled.id}`);
     logger.info(`  任务:     ${scheduled.name}`);
-    logger.info(`  期次:     ${scheduled.iteration}`);
+    logger.info(`  迭代:     ${scheduled.iteration}`);
     logger.info(`  执行时间: ${scheduled.scheduledAt}`);
     logger.info(`  状态:     ${statusLabel(scheduled.status)}`);
     logger.info('');
@@ -308,7 +308,7 @@ export async function scheduleDetailCommand(options: ScheduleDetailOptions): Pro
     logger.info(`📋 ${task.name}`);
     logger.info(`   ID:          ${task.id}`);
     logger.info(`   状态:        ${statusLabel(task.status)}`);
-    logger.info(`   期次:        ${task.iteration}`);
+    logger.info(`   迭代:        ${task.iteration}`);
     logger.info(`   执行时间:    ${task.scheduledAt}`);
     logger.info(`   创建时间:    ${new Date(task.createdAt).toLocaleString()}`);
     

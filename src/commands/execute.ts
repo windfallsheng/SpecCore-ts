@@ -515,7 +515,7 @@ function printExecutionPreview(tasks: TaskState[], iteration: string, batchSize 
   logger.info('');
   logger.info('📋 执行计划');
   logger.info('');
-  logger.info(`期次: ${iteration} | 任务: ${tasks.length} | 分批: ${batchSize}/批`);
+  logger.info(`迭代: ${iteration} | 任务: ${tasks.length} | 分批: ${batchSize}/批`);
   logger.info('');
 
   for (let i = 0; i < tasks.length; i += batchSize) {
@@ -916,14 +916,14 @@ async function preFlightCheck(tasks: TaskState[], iteration: string, options: Ex
       issuesMd.push('## AI 辅助修复', '');
       issuesMd.push('在 AI 对话中粘贴以下内容让 AI 帮你修复：', '');
       issuesMd.push('> 请根据以上问题清单，帮我修复 Task-' + task.id + ' 的执行问题。');
-      issuesMd.push('> 期次: ' + (iteration || '') + '，任务目录: Iteration-' + (iteration || '') + '/' + task.id);
+      issuesMd.push('> 迭代: ' + (iteration || '') + '，任务目录: Iteration-' + (iteration || '') + '/' + task.id);
       issuesMd.push('', '## 修复记录', '');
       issuesMd.push('| 时间 | 问题 | 决策 | 修改文件 |');
       issuesMd.push('| :--- | :--- | :--- | :--- |');
       issuesMd.push('| | | | |');
       await writeFile(join(taskDir, '.issues.md'), issuesMd.join('\n'));
       logger.info(`  💡 问题已记录到 ${task.id}/.issues.md`);
-      logger.info(`  💡 AI 对话: "帮我修复期次 ${iteration || ''} 的 ${task.id} 问题"`);
+      logger.info(`  💡 AI 对话: "帮我修复迭代 ${iteration || ''} 的 ${task.id} 问题"`);
     }
 
     // ── Per-task decision ──

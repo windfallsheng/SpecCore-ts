@@ -2,7 +2,7 @@
  * doc2spec — 文档导入 → SpecCore Markdown
  *
  * 将多种格式的 PRD 需求文档转换为 SpecCore 兼容的 Markdown，
- * 自动放入对应期次的 02-需求文档/ 目录。
+ * 自动放入对应迭代的 02-需求文档/ 目录。
  *
  * 支持格式: .docx / .doc / .md / .pdf / .html / .pptx / .odt / .ipynb
  * 依赖: pandoc (macOS: brew install pandoc)
@@ -147,7 +147,7 @@ export async function doc2specCommand(options: Word2SpecOptions): Promise<void> 
 
 async function processSingle(options: Word2SpecOptions): Promise<void> {
   if (!options.iter) {
-    logger.error('请指定迭代: speccore doc2spec --iter=<期次>');
+    logger.error('请指定迭代: speccore doc2spec --iter=<迭代>');
     return;
   }
 

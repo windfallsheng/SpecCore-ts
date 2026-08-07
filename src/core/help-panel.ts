@@ -8,7 +8,7 @@ export const HELP_PANEL = `
 ├──────────────────────────────────────────────────────────────┤
 │  📥 资产接入                                                  │
 │  🚀 init          ⚡ 初始化项目                                │
-│  📅 iteration     ⚡ 期次管理                                  │
+│  📅 iteration     ⚡ 迭代管理                                  │
 │  📝 doc2spec      ⚡ 导入 PRD → Spec MD（AI 精炼推荐）          │
 │  📤 spec2doc      ⚡ Spec MD → Word/PDF（AI 排版推荐）          │
 │  📦 task new      ⚡ 创建任务（支持批量/调度）                    │
@@ -27,12 +27,12 @@ export const HELP_PANEL = `
 │  📊 治理 + 调度                                               │
 │  ✅ validate      ⚡ 合规校验                                  │
 │  ⏰ schedule      ⚡ 定时调度（create/list/daemon）              │
-│  🗑  rename       ⚡ 重命名 Task/期次                           │
+│  🗑  rename       ⚡ 重命名 Task/迭代                           │
 ├──────────────────────────────────────────────────────────────┤
 │  💡 智能入口                                                  │
 │  speccore             自适应面板（检测阶段 → 提示下一步）          │
 │  speccore ask "..."   自然语言意图识别                          │
 │  speccore dev         智能级联：自动检测并执行下一步               │
-│  speccore dashboard   可视化仪表盘（期次/全局）                 │
+│  speccore dashboard   可视化仪表盘（迭代/全局）                 │
 └──────────────────────────────────────────────────────────────┘
 `;

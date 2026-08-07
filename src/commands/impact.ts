@@ -78,7 +78,7 @@ async function buildImpactChain(
 ) {
   const projectImpacts: ImpactNode[] = [];      // 项目内影响
   const crossProjectImpacts: ImpactNode[] = [];  // 跨项目影响
-  const iterationImpacts: ImpactNode[] = [];     // 期次影响
+  const iterationImpacts: ImpactNode[] = [];     // 迭代影响
   const lateralImpacts: ImpactNode[] = [];       // 横向关联
 
   // 项目内影响（同一项目的其他需求）
@@ -98,7 +98,7 @@ async function buildImpactChain(
       id: req.id,
       name: req.name,
       type: 'requirement',
-      relation: req.iteration ? '关联期次' : '同项目',
+      relation: req.iteration ? '关联迭代' : '同项目',
       level: 1,
     });
   }
@@ -124,7 +124,7 @@ async function buildImpactChain(
     }
   }
 
-  // 期次影响
+  // 迭代影响
   const relatedIters = index.iterations.filter((iter) =>
     iter.reqs.some((r) =>
       index.reqs
@@ -143,7 +143,7 @@ async function buildImpactChain(
     });
   }
 
-  // 横向关联（同一期次的其他需求）
+  // 横向关联（同一迭代的其他需求）
   if (sourceReq.iteration) {
     const iter = index.iterations.find((i) => i.name === sourceReq.iteration);
     if (iter) {
@@ -155,7 +155,7 @@ async function buildImpactChain(
             id: req.id,
             name: req.name,
             type: 'requirement',
-            relation: '同期次关联',
+            relation: '同迭代关联',
             level: 1,
           });
         }
@@ -218,7 +218,7 @@ function outputImpactReport(
   }
 
   if (impacts.iterationImpacts.length > 0) {
-    logger.info(`   📂 期次影响 (${impacts.iterationImpacts.length} 项)`);
+    logger.info(`   📂 迭代影响 (${impacts.iterationImpacts.length} 项)`);
     for (const n of impacts.iterationImpacts) {
       logger.info(`     ├── ${n.id} ${n.relation}`);
     }
@@ -248,7 +248,7 @@ function outputImpactReport(
 
   const crossCount = impacts.crossProjectImpacts.length;
   const iterCount = impacts.iterationImpacts.length;
-  logger.info(`   ${riskLevel}: 影响 ${crossCount} 个外部项目，涉及 ${iterCount} 个期次`);
+  logger.info(`   ${riskLevel}: 影响 ${crossCount} 个外部项目，涉及 ${iterCount} 个迭代`);
 
   // 建议
   logger.info('');
@@ -260,7 +260,7 @@ function outputImpactReport(
     logger.info(`   ${idx++}. ${riskLevel.includes('🔴') ? '🔴' : '🟡'} 优先通知 ${[...new Set(impacts.crossProjectImpacts.map((i) => i.relation.replace('依赖 ', '')))].join(' 和 ')} 团队`);
   }
   if (impacts.iterationImpacts.filter((i) => i.relation.includes('⚠️')).length > 0) {
-    logger.info(`   ${idx++}. 🔴 对进行中的期次进行回归测试`);
+    logger.info(`   ${idx++}. 🔴 对进行中的迭代进行回归测试`);
   }
   if (impacts.lateralImpacts.length > 0) {
     logger.info(`   ${idx++}. 🟡 建议联合评审 ${sourceReq.id} 和相关需求`);

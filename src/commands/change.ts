@@ -61,7 +61,7 @@ export async function changeCommand(options: ChangeOptions): Promise<void> {
   try {
     const iteration = await getDefaultIteration(options.iteration);
     if (!iteration && !options.global) {
-      spinner.fail('未找到活跃期次。请先运行: speccore iteration create --name <名称>');
+      spinner.fail('未找到活跃迭代。请先运行: speccore iteration create --name <名称>');
       return;
     }
 
@@ -127,7 +127,7 @@ async function dryRunChange(options: ChangeOptions, iteration: string): Promise<
     logger.info('| 文件 | 影响描述 |');
     logger.info('| :--- | :--- |');
     logger.info('| .speccore/CONSTITUTION.md | 全局配置变更 |');
-    logger.info('| 所有期次的 TECH.md | 架构方案需同步 |');
+    logger.info('| 所有迭代的 TECH.md | 架构方案需同步 |');
     logger.info('');
     return;
   }
@@ -307,7 +307,7 @@ function normalizeDescription(desc: string): string {
 }
 
 /**
- * 同步变更到 REQUIREMENT.md（期次聚合需求文档）
+ * 同步变更到 REQUIREMENT.md（迭代聚合需求文档）
  */
 async function syncToRequirement(iteration: string, taskId: string, desc: string): Promise<void> {
   const iterDir = `Iteration-${iteration}`;

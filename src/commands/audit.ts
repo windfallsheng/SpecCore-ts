@@ -57,8 +57,8 @@ export async function auditCommand(options: AuditOptions): Promise<void> {
         severity: '🟡',
         reqId: req.id,
         reqName: req.name,
-        description: `未关联任何期次或 Task，处于孤立状态`,
-        suggestion: `建议纳入近期期次`,
+        description: `未关联任何迭代或 Task，处于孤立状态`,
+        suggestion: `建议纳入近期迭代`,
       });
     }
 
@@ -254,7 +254,7 @@ function outputAuditReport(issues: AuditIssue[], totalReqs: number, detail: bool
   if (orphans.length > 0) {
     logger.info('');
     logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    logger.info('🔶 孤立需求（建议关联期次）');
+    logger.info('🔶 孤立需求（建议关联迭代）');
     logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     for (const o of orphans.slice(0, detail ? 20 : 8)) {
       logger.info(`   ${o.severity} ${o.reqId}: ${o.description}`);
@@ -295,7 +295,7 @@ function outputAuditReport(issues: AuditIssue[], totalReqs: number, detail: bool
     logger.info(`   ${idx++}. 🟡 中优先级: 量化 ${ambCount} 条模糊描述`);
   }
   if (orphans.length > 0) {
-    logger.info(`   ${idx++}. 🟢 低优先级: 为 ${orphans.length} 条孤立需求关联期次`);
+    logger.info(`   ${idx++}. 🟢 低优先级: 为 ${orphans.length} 条孤立需求关联迭代`);
   }
 
   if (issues.length === 0) {
@@ -317,8 +317,8 @@ function autoFixIssues(issues: AuditIssue[]): void {
       logger.info(`   已标记: ${issue.reqId} - "${issue.description}"`);
       fixed++;
     } else if (issue.type === 'orphan') {
-      // 无法自动关联期次
-      logger.info(`   需确认: ${issue.reqId} - 请手动关联期次`);
+      // 无法自动关联迭代
+      logger.info(`   需确认: ${issue.reqId} - 请手动关联迭代`);
     }
   }
   logger.info('');
