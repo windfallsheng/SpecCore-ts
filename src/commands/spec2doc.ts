@@ -35,6 +35,8 @@ export interface Spec2DocOptions {
   output?: string;
   all?: boolean;
   ai?: boolean;
+  prompt?: boolean;   // --prompt: 输出文档审计 Prompt
+  apply?: string;     // --apply: 接收 AI 优化后的文档
 }
 
 /** 支持的输出格式 → pandoc writer */
@@ -52,6 +54,22 @@ const REF_MAP: Record<string, string> = {
 };
 
 export async function spec2docCommand(options: Spec2DocOptions): Promise<void> {
+  // ── Prompt 模式 ──
+  if (options.prompt) {
+    const prompt = await require('../core/prompt-builder').buildPrompt('analyze', { iteration: options.iteration });
+    process.stdout.write(require('../core/prompt-builder').formatPrompt(prompt));
+    process.exitCode = 10;
+    return;
+  }
+  // ── Apply 模式 ──
+  if (options.apply && options.output) {
+    const { writeFile, ensureDir } = require('fs-extra');
+    const { dirname } = require('path');
+    await ensureDir(dirname(options.output));
+    await writeFile(options.output, options.apply);
+    logger.success(`✅ 已写入: ${options.output}`);
+    return;
+  }
   // 格式自动识别：优先 --format，其次 -o 后缀
   let format = options.format;
   if (!format && options.output) {

@@ -22,6 +22,7 @@ import { join, basename } from 'path';
 
 import { showNextSteps } from '../core/next-steps';
 import { validateContent, generateReport } from '../core/doc-validator';
+import { buildPrompt, formatPrompt } from '../core/prompt-builder';
 function findCommand(cmd: string): string | null {
   try {
     return execSync(`which ${cmd}`, { stdio: 'pipe', encoding: 'utf-8' }).trim();
@@ -117,9 +118,30 @@ interface Word2SpecOptions {
   task?: string;     // --task: 导入到指定 Task 目录
   files?: string;    // batch: "path1.docx=平台1,path2.docx=平台2"
   ai?: boolean;
+  prompt?: boolean;   // --prompt: 输出验证 Prompt 到 stdout
+  response?: string;  // --response: 接收 AI 修正后的内容
 }
 
 export async function doc2specCommand(options: Word2SpecOptions): Promise<void> {
+  // ── Prompt 模式: 输出 AI 验证 Prompt ──
+  if (options.prompt) {
+    if (!options.file) { logger.error('--prompt 需要 --file'); return; }
+    const sourceContent = await readFile(options.file, 'utf-8').catch(() => '');
+    const prompt = await buildPrompt('analyze', { iteration: options.iter });
+    process.stdout.write(formatPrompt(prompt));
+    process.exitCode = 10;
+    return;
+  }
+  // ── Response 模式: 接收 AI 修正 ──
+  if (options.response && options.iter && options.file) {
+    const iterDir = `Iteration-${options.iter}`;
+    const targetDir = join(iterDir, '010-requirements');
+    await ensureDir(targetDir);
+    const outFile = join(targetDir, basename(options.file).replace(/\.[^.]+$/, '') + '.md');
+    await writeFile(outFile, options.response);
+    logger.success(`✅ 已写入: ${outFile}`);
+    return;
+  }
   // ── 批量模式 ──
   if (options.files) {
     const pairs = parseBatchFiles(options.files);

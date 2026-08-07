@@ -250,6 +250,8 @@ program
   .option('--draft', 'Create as draft PR')
   .option('--interactive', '分步：预览变更 → 选文件 → commit → 推送 → 创建PR')
   .option('--title <title>', 'Custom PR title')
+    .option("--prompt", "输出 PR 描述 Prompt 到 stdout（Skill 协作模式）")
+  .option("--response <response>", "接收 AI 生成的 PR 描述")
   .action(prCommand);
 
 program
@@ -517,6 +519,8 @@ program
   .option('--task <task>', '导入到指定 Task 目录')
   .option('--files <files>', '批量: "a.docx=平台1,b.pdf=平台2"')
   .option('--no-ai', '纯 pandoc 机械转换（终端快速模式）')
+    .option("--prompt", "输出验证 Prompt 到 stdout（Skill 协作模式）")
+  .option("--response <response>", "接收 AI 修正内容写入文件")
   .action(doc2specCommand);
 
 program
@@ -530,6 +534,8 @@ program
   .option('-o, --output <path>', '输出文件路径')
   .option('--all', '导出迭代全部文档（合并）')
   .option('--no-ai', '纯 pandoc 导出（终端快速模式）')
+    .option("--prompt", "输出文档审计 Prompt 到 stdout（Skill 协作模式）")
+  .option("--apply <content>", "接收 AI 优化文档写入文件")
   .action(spec2docCommand);
 
 // ================================================================
@@ -692,6 +698,8 @@ program
   .option('--skip-validate', 'Skip validation step')
   .option('--skip-sync', 'Skip global sync step')
   .option('--interactive', 'Interactive: preview archive → confirm → complete')
+    .option("--prompt", "输出验收总结 Prompt 到 stdout（Skill 协作模式）")
+  .option("--response <response>", "接收 AI 验收总结")
   .action(doneCommand);
 
 program

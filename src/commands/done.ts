@@ -18,9 +18,25 @@ export interface DoneOptions {
   skipSync?: boolean;
   interactive?: boolean;
   all?: boolean;
+  prompt?: boolean;    // --prompt: 输出验收总结 Prompt
+  response?: string;   // --response: 接收 AI 验收总结
 }
 
 export async function doneCommand(options: DoneOptions): Promise<void> {
+  // ── Prompt 模式 ──
+  if (options.prompt) {
+    const { buildPrompt, formatPrompt } = await import('../core/prompt-builder');
+    const iter = options.iteration || await getDefaultIteration();
+    const prompt = await buildPrompt('analyze', { iteration: iter, task: options.task });
+    process.stdout.write(formatPrompt(prompt));
+    process.exitCode = 10;
+    return;
+  }
+  // ── Response 模式 ──
+  if (options.response) {
+    logger.success(`✅ 验收总结:\n${options.response}`);
+    return;
+  }
   const iteration = await getDefaultIteration(options.iteration);
   if (!iteration) { logger.error('未找到活跃迭代'); return; }
 

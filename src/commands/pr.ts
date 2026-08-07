@@ -7,6 +7,7 @@ import { execSync } from 'child_process';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
 import { createInterface } from 'readline';
+import { buildPrompt, formatPrompt } from '../core/prompt-builder';
 
 function promptUser(q: string): Promise<string> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -20,9 +21,24 @@ export interface PrOptions {
   draft?: boolean;
   title?: string;
   interactive?: boolean;
+  prompt?: boolean;    // --prompt
+  response?: string;   // --response
 }
 
 export async function prCommand(options: PrOptions): Promise<void> {
+  // ── Prompt 模式 ──
+  if (options.prompt) {
+    const iter = options.iteration || await getDefaultIteration();
+    const prompt = await buildPrompt('analyze', { iteration: iter, task: options.task });
+    process.stdout.write(formatPrompt(prompt));
+    process.exitCode = 10;
+    return;
+  }
+  // ── Response 模式 ──
+  if (options.response && options.task) {
+    logger.success(`✅ PR 描述已生成:\n${options.response}`);
+    return;
+  }
   const iteration = await getDefaultIteration(options.iteration);
   if (!iteration) { logger.error('No active iteration'); return; }
 
