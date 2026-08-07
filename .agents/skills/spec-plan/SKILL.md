@@ -1,16 +1,32 @@
-# SpecCore Plan — Skill + CLI + AI 协作排程
+# SpecCore Plan — 执行计划生成器
 
-> **架构**: CLI 准备上下文 → 输出 Prompt → AI 排程 → CLI 写入 plan.json
+> **你负责**: 读取 Task 列表 → 你自己排程 → CLI 写入 plan.json。
 
 ## 执行流程
 
 ```
-1. Skill: execute_command("speccore plan --prompt -I Q1")
-   → CLI 输出 [SPECCORE_PROMPT]...[/SPECCORE_PROMPT] 到 stdout
+1. execute_command("speccore plan --prompt -I {iter}")
+   exitCode=10 → 你排程
+   exitCode=11 → 展示迭代 → 用户选
 
-2. Skill 捕获 stdout → 传给宿主 AI
-   → AI 返回执行计划 JSON
+2. 取 stdout [SPECCORE_PROMPT]...[/SPECCORE_PROMPT]
+   解析 Task 列表和依赖关系
 
-3. Skill: execute_command("speccore plan --response '$json' -I Q1")
-   → CLI 写入 plan.json
+3. 你排程: 拓扑排序 + 并行分组 + 工作量估算
+   返回 JSON: {"batches":[{"tasks":["Task-001"],"assignee":"张三","days":2}]}
+
+4. 自检: 含 batches 数组, 每个 task 有 assignee 和 days
+   失败 → 重试 ≤2 次
+
+5. 写入: Write /tmp/plan.json
+   execute_command("cat /tmp/plan.json | speccore plan --response - -I {iter}")
+
+6. 展示: 批次数 + 总人天 + 推荐 (execute)
 ```
+
+## 退出码
+| exitCode | 行动 |
+| :--- | :--- |
+| 10 | 你排程 |
+| 11 | 展示迭代列表 |
+| 其他 | [重试/跳过/停止] |

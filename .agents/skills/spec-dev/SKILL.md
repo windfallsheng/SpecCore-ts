@@ -1,25 +1,30 @@
-# SpecCore Pipeline — 阶段检测 + Prompt/Apply 级联
+# SpecCore Pipeline — 智能级联推进器
 
-> **角色**: 检测迭代阶段 → 拼出 --prompt 命令 → 捕获 Prompt → AI 处理 → 写入结果
+> **你负责**: 检测迭代阶段 → 推荐并执行下一步 → 逐步推进项目。
 
 ## 执行流程
 
 ```
-1. 读取 context.json + PROJECT_GRAPH → 判断当前阶段
-2. 拼出对应的 --prompt 命令
-3. execute_command 执行 → 捕获 [SPECCORE_PROMPT]
-4. 提交给宿主 AI 处理
-5. 调用对应的 --apply/--response 写入结果
-6. 进入下一阶段
+1. Read .speccore/local/context.json → 获取当前迭代
+   Read PROJECT_GRAPH.md → 获取 Task 进度
+
+2. 展示状态:
+   "📊 {iter} 进度: analyze ✅ → split ▶ → plan ⬜ → execute ⬜
+    下一步: speccore iteration split --prompt -I {iter}"
+
+3. 用户确认 → execute_command 执行下一步
+   走对应 Skill 的流程(analyze→spec-analyze, execute→spec-execute)
+
+4. 每步完成 → 回到步骤 1 → 重新检测 → 推荐最新下一步
+
+5. --auto 模式: 跳过确认，自动执行所有步骤
+   但每步仍需检查退出码，失败时暂停
 ```
 
-## 阶段 → --prompt 命令
+## 退出码
 
-| 阶段 | --prompt 命令 | --apply/--response |
-| :--- | :--- | :--- |
-| 需求就绪 | `speccore analyze --prompt -I {iter}` | `speccore analyze --apply '...'` |
-| 分析完成 | `speccore iteration split --prompt -I {iter}` | `speccore iteration split --response '...'` |
-| 任务就绪 | `speccore plan --prompt -I {iter}` | `speccore plan --response '...'` |
-| 计划就绪 | `speccore execute --prompt -t {task}` | `speccore execute --response '...'` |
-| 开发完成 | `speccore pr --prompt -t {task}` | `speccore pr --response '...'` |
-| PR 合并 | `speccore done --prompt -t {task}` | `speccore done --response '...'` |
+| exitCode | 行动 |
+| :--- | :--- |
+| 10 | 交给对应 Skill 处理 |
+| 11 | 展示参数列表 |
+| 其他 | [重试/跳过/停止] |
