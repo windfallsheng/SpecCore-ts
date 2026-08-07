@@ -85,7 +85,7 @@ export async function spec2docCommand(options: Spec2DocOptions): Promise<void> {
     // 全量导出：期次下所有 .md 文件
     const iterDir = iterName.startsWith('Iteration-') ? iterName : `Iteration-${iterName}`;
     if (!await pathExists(iterDir)) {
-      logger.error(`期次不存在: ${iterDir}`);
+      logger.error(`迭代不存在: ${iterDir}`);
       return;
     }
     await collectAllMd(iterDir, sourceFiles);
@@ -101,7 +101,7 @@ export async function spec2docCommand(options: Spec2DocOptions): Promise<void> {
   } else {
     // 默认：当前期次的 REQUIREMENT.md
     if (!iterName) {
-      logger.error('请指定期次: --iteration <name>');
+      logger.error('请指定迭代: --iteration <name>');
       return;
     }
     const iterDir = iterName.startsWith('Iteration-') ? iterName : `Iteration-${iterName}`;

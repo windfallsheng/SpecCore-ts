@@ -309,7 +309,7 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
     join(speccoreDir, 'ITERATIONS', 'README.md'),
     `# 期次索引
 
-| 期次名称 | 时间范围 | 状态 | 负责人 | 备注 |
+| 迭代名称 | 时间范围 | 状态 | 负责人 | 备注 |
 | :--- | :--- | :--- | :--- | :--- |
 | | | | | |
 `
@@ -490,7 +490,7 @@ async function createGlobalFiles(speccoreDir: string): Promise<void> {
 
 ## 期次关联
 
-| 期次名称 | 包含需求 | 状态 | 创建日期 |
+| 迭代名称 | 包含需求 | 状态 | 创建日期 |
 | :--- | :--- | :--- | :--- |
 | _暂无期次_ | - | - | - |
 
@@ -519,7 +519,7 @@ async function createGlobalFiles(speccoreDir: string): Promise<void> {
 
 ## 期次索引
 
-| 期次名称 | 关联需求 | 状态 | 创建时间 |
+| 迭代名称 | 关联需求 | 状态 | 创建时间 |
 | :--- | :--- | :--- | :--- |
 | _暂无期次_ | - | - | - |
 

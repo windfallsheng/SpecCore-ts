@@ -62,11 +62,11 @@ async function syncToGlobal(options: SyncGlobalOptions): Promise<void> {
   }
 
   if (!iterationName) {
-    logger.error('未指定期次。用法: speccore sync-global --iteration=<期次名称>');
+    logger.error('未指定迭代。用法: speccore sync-global --iteration=<迭代名称>');
     return;
   }
 
-  // 标准化期次名称
+  // 标准化迭代名称
   const iterDirName = iterationName.startsWith('Iteration-') ? iterationName : `Iteration-${iterationName}`;
   const iterDir = join(process.cwd(), iterDirName);
 
@@ -187,7 +187,7 @@ async function syncFromGlobal(options: SyncGlobalOptions): Promise<void> {
   }
 
   if (!iterationName) {
-    logger.error('未指定期次。用法: speccore sync-global --iteration=<期次名称> --direction=from_global');
+    logger.error('未指定迭代。用法: speccore sync-global --iteration=<迭代名称> --direction=from_global');
     return;
   }
 

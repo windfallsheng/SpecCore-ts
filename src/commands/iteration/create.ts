@@ -184,7 +184,7 @@ async function updateIterationsIndex(name: string, options: IterationCreateOptio
   if (await pathExists(indexPath)) {
     content = await readFile(indexPath, 'utf-8');
   } else {
-    content = '# 期次索引\n\n| 期次名称 | 时间范围 | 状态 | 负责人 | 备注 |\n| :--- | :--- | :--- | :--- | :--- |\n';
+    content = '# 期次索引\n\n| 迭代名称 | 时间范围 | 状态 | 负责人 | 备注 |\n| :--- | :--- | :--- | :--- | :--- |\n';
   }
 
   // Add new iteration entry
@@ -225,7 +225,7 @@ async function updateGlobalIndex(name: string, options: IterationCreateOptions):
     }
   } else {
     // 没有期次关联章节，追加简单条目
-    content += `\n## 期次关联\n\n| 期次名称 | 包含需求 | 状态 | 创建日期 |\n| :--- | :--- | :--- | :--- |\n${newEntry}\n`;
+    content += `\n## 期次关联\n\n| 迭代名称 | 包含需求 | 状态 | 创建日期 |\n| :--- | :--- | :--- | :--- |\n${newEntry}\n`;
   }
 
   await writeFile(globalIndexPath, content);
