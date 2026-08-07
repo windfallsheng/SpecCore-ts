@@ -276,8 +276,11 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     // 2. 空行清理
     content = content.replace(/\n{3,}/g, '\n\n');
 
-    // 3. 图片路径修正（pandoc → 010-requirements/assets/prd/media/，Markdown → ../../assets/prd/）
-    content = content.replace(/\]\(media\//g, '](../../assets/prd/');
+    // 3. 图片路径修正（pandoc 提取到 assets/prd/media/，MD 引用 media/xxx.png）
+    //    根据 MD 文件所在的目录深度计算相对于 assets/prd/ 的正确路径
+    const mdDir = require('path').dirname(outputPath);
+    const relAssets = require('path').relative(mdDir, join(iterDir, '010-requirements', 'assets', 'prd'));
+    content = content.replace(/\]\(media\//g, '](' + relAssets + '/');
 
     // 4. 接口表格检测 + 提示
     const hasInterfaceTable = /\|\s*方法\s*\|/i.test(content) || /\|\s*METHOD\s*\|/i.test(content);
