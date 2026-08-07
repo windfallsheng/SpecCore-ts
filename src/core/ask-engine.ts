@@ -389,18 +389,28 @@ async function handleMatch(input: string): Promise<AskResult> {
     };
   }
   const params = best.extractedParams;
-  let fullCommand = `speccore ${best.command}`;
+  let fullCommand: string;
   const paramNotes: string[] = [];
 
-  if (params.name) fullCommand += ` -n "${params.name}"`;
-  if (params.iteration) fullCommand += ` --iter "${params.iteration}"`;
-  if (params.tool) {
-    fullCommand += ` --tool="${params.tool}"`;
-    paramNotes.push(`🔧 工具/平台: ${params.tool}`);
-  }
-  if (params.desc) {
-    fullCommand += ` "${params.desc}"`;
-    paramNotes.push(`📝 描述: ${params.desc}`);
+  // task-create / iteration-create 需要子命令
+  if (best.intent === 'task-create') {
+    const name = params.name || params.desc || input.slice(0, 30);
+    fullCommand = `speccore task new -n "${name}"`;
+  } else if (best.intent === 'iteration-create') {
+    const name = params.name || input.slice(0, 20);
+    fullCommand = `speccore iteration create -n "${name}"`;
+  } else {
+    fullCommand = `speccore ${best.command}`;
+    if (params.name) fullCommand += ` -n "${params.name}"`;
+    if (params.iteration) fullCommand += ` --iter "${params.iteration}"`;
+    if (params.tool) {
+      fullCommand += ` --tool="${params.tool}"`;
+      paramNotes.push(`🔧 工具/平台: ${params.tool}`);
+    }
+    if (params.desc) {
+      fullCommand += ` "${params.desc}"`;
+      paramNotes.push(`📝 描述: ${params.desc}`);
+    }
   }
   if (params.target) paramNotes.push(`🎯 目标: ${params.target}`);
 
@@ -445,8 +455,8 @@ async function handleMatch(input: string): Promise<AskResult> {
     detail,
     commands: [best.command],
     autoExec: best.confidence >= 70 ? {
-      command: best.command,
-      args: fullCommand.replace(/^speccore /, ''),
+      command: fullCommand.replace(/^speccore /, '').split(' ')[0],  // 主命令
+      args: fullCommand.replace(/^speccore [a-z-]+ /, ''),           // 子命令 + 参数
       confirm: true,
     } : undefined,
   };

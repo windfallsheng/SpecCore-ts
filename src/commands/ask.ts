@@ -172,6 +172,25 @@ export async function askCommand(input: string, _options: any): Promise<void> {
     return;
   }
 
+  // ── 🎉 升级仪式：首次使用 / 版本升级时展示引导页 ──
+  const { pathExists, readFile, writeFile, ensureDir } = await import('fs-extra');
+  const { join } = await import('path');
+  const markerDir = join(process.cwd(), '.speccore', 'local');
+  const markerFile = join(markerDir, '.ask-onboarded');
+  await ensureDir(markerDir);
+  let lastVersion = '';
+  if (await pathExists(markerFile)) {
+    try { lastVersion = (await readFile(markerFile, 'utf-8')).trim(); } catch {}
+  }
+  if (lastVersion !== ver) {
+    const html = renderOnboardingHtml();
+    const outPath = join(process.cwd(), 'speccore-ask-onboarding.html');
+    await writeFile(outPath, html);
+    await writeFile(markerFile, ver);
+    logger.info(`👋 ${lastVersion ? `v${lastVersion} → v${ver} 升级` : '首次使用'} — 已生成引导页: ${outPath}`);
+    // 不 return，继续执行后续 ask 逻辑 — 仪式感 + 照常工作
+  }
+
   const result = await askEngine(input);
   // 始终输出模式标记到 stdout，供 Skill/编排器解析
   process.stdout.write(`[SPECCORE_MODE: ${result.mode}]\n`);
