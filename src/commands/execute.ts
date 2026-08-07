@@ -1206,18 +1206,33 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
 
   const taskDir = join('Iteration-' + iteration, '030-tasks', task);
 
-  // ── 前置检查：任务必须有分析文件才能执行 ──
+  // ── 前置检查：任务必须有分析文件且内容有效才能执行 ──
   const analysisFile = join(taskDir, 'ANALYSIS.md');
   const requirementFile = join(taskDir, 'REQUIREMENT.md');
   const hasAnalysis = await pathExists(analysisFile);
   const hasRequirement = await pathExists(requirementFile);
 
-  if (!hasAnalysis && !hasRequirement) {
+  // 读取文件内容验证有效性（拒绝空文件/TODO占位符）
+  let effectiveAnalysis = false;
+  let contentPreview = '';
+  if (hasAnalysis) {
+    const content = await readFile(analysisFile, 'utf-8');
+    contentPreview = content.trim();
+    // 有效分析：>200字符 且 不是纯 TODO/占位符
+    effectiveAnalysis = contentPreview.length > 200 &&
+      !/^(#+\s*分析|#+\s*Analysis|TODO|待分析|TBD)\s*$/im.test(contentPreview) &&
+      (/#+\s|API|接口|数据模型|数据库|表|风险|架构|ER/i.test(contentPreview));
+  }
+
+  if (!effectiveAnalysis) {
+    const reason = hasAnalysis
+      ? `任务 ${task} 的 ANALYSIS.md 内容无效（${contentPreview.length}字符，缺少实质分析内容）`
+      : `任务 ${task} 未经过分析`;
     outputNeedsInfo({
       command: 'execute',
       missing: ['analysis'],
       provided: { iteration, task },
-      hint: `任务 ${task} 未经过分析，无法执行。\n请先执行: speccore analyze --prompt -I ${iteration} --task ${task}`,
+      hint: `${reason}\n请先执行: speccore analyze --prompt -I ${iteration} --task ${task}`,
     });
     return;
   }
