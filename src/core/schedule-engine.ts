@@ -133,6 +133,7 @@ async function executeScheduledTask(task: ScheduleTask): Promise<void> {
   try {
     const args = ['execute'];
 
+    args.push('--prompt');  // 使用 AI Prompt 模式（需 AI 工具保持开启）
     if (task.all) {
       args.push('--all');
     } else if (task.taskId) {
@@ -155,10 +156,11 @@ async function executeScheduledTask(task: ScheduleTask): Promise<void> {
     logger.info(`Running: speccore ${args.join(' ')}`);
 
     // 同步执行，确保顺序
+    // 输出到 stdout（让 AI 工具可见）
     const result = execSync(`speccore ${args.join(' ')}`, {
       encoding: 'utf-8',
-      stdio: 'pipe',
-      timeout: 600000, // 10 分钟超时
+      stdio: 'inherit',  // 输出到 daemon stdout → AI 可捕获
+      timeout: 600000,
     });
 
     logger.info(result.slice(-500)); // 只打印最后 500 字符
