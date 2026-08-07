@@ -200,34 +200,146 @@ async function doCancelPlan(id: string): Promise<void> {
   logger.info(ok ? 'Cancelled (status retained).' : 'Not found.');
 }
 
-// Helpers
-interface PlanEntry { phase: number; tasks: string[]; assignees: string[]; estimatedDuration: number; }
+// ── Helpers ──
+interface TaskPlan {
+  id: string; name: string; type: string; priority: string;
+  branch: string; dependencies: string[]; status: string;
+  assignee: string; progress: number; estimatedHours: number;
+}
+interface PlanEntry { phase: number; tasks: TaskPlan[]; }
 
 function generatePlan(tasks: TaskState[], teamSize: number, mode: string): PlanEntry[] {
-  if (mode === 'claim') return [{ phase: 1, tasks: tasks.map(t => t.id), assignees: [], estimatedDuration: tasks.length * 2 }];
+  if (mode === 'claim') {
+    return [{ phase: 1, tasks: tasks.map(t => buildTaskPlan(t)) }];
+  }
   const phases: PlanEntry[] = [];
-  const pc = Math.min(teamSize, tasks.length);
+  const pc = Math.min(teamSize || 3, tasks.length);
   for (let i = 0; i < tasks.length; i += pc) {
-    phases.push({ phase: phases.length + 1, tasks: tasks.slice(i, i + pc).map(t => t.id), assignees: tasks.slice(i, i + pc).map(t => t.assignee || 'TBD'), estimatedDuration: 2 });
+    phases.push({
+      phase: phases.length + 1,
+      tasks: tasks.slice(i, i + pc).map(t => buildTaskPlan(t)),
+    });
   }
   return phases;
 }
 
+function buildTaskPlan(t: TaskState): TaskPlan {
+  return {
+    id: t.id,
+    name: t.name,
+    type: t.type || 'feature',
+    priority: t.priority || 'medium',
+    branch: `feature/${t.id}-${sanitizeBranchName(t.name)}`,
+    dependencies: t.dependencies || [],
+    status: t.status || 'pending',
+    assignee: t.assignee || 'TBD',
+    progress: t.progress || 0,
+    estimatedHours: t.type === 'bugfix' ? 1 : 2,
+  };
+}
+
+function sanitizeBranchName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9\u4e00-\u9fff_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 50);
+}
+
 function printPlan(plan: PlanEntry[], iteration: string): void {
-  logger.info(`\nPlan: ${iteration}\n`);
+  const allTasks = plan.flatMap(p => p.tasks);
+  logger.info(`\n📋 Plan: ${iteration}  (${allTasks.length} tasks, ${plan.length} phases)\n`);
   for (const phase of plan) {
     logger.info(`Phase ${phase.phase}:`);
-    for (let i = 0; i < phase.tasks.length; i++) logger.info(`  ${phase.tasks[i]} -> ${phase.assignees[i] || 'TBD'}`);
+    for (const t of phase.tasks) {
+      const st = t.status === 'completed' ? '✅' : t.status === 'in_progress' ? '🔄' : '⏳';
+      logger.info(`  ${st} ${t.id}  ${t.name}  [${t.type}] → ${t.branch}`);
+    }
     logger.info('');
   }
 }
 
 function formatPlanMarkdown(plan: PlanEntry[], iteration: string): string {
-  const lines = [`# Plan - ${iteration}`, '', `> ${new Date().toISOString()}`, ''];
+  const allTasks = plan.flatMap(p => p.tasks);
+  const totalHours = allTasks.reduce((s, t) => s + t.estimatedHours, 0);
+  const ts = new Date().toISOString();
+
+  const lines: string[] = [];
+  lines.push(`# 📋 Plan — ${iteration}`);
+  lines.push('');
+  lines.push(`> **生成时间**: ${ts}`);
+  lines.push(`> **状态**: ⏳ active`);
+  lines.push(`> **任务数**: ${allTasks.length}  ·  **阶段数**: ${plan.length}  ·  **预估**: ${totalHours}h`);
+  lines.push('');
+  lines.push('---');
+  lines.push('');
+
+  // ── 执行步骤 ──
+  lines.push('## 🗂️ 执行步骤');
+  lines.push('');
   for (const phase of plan) {
-    lines.push(`## Phase ${phase.phase}`, '', '| Task | Assignee | Est. |', '| :--- | :--- | :--- |');
-    for (let i = 0; i < phase.tasks.length; i++) lines.push(`| ${phase.tasks[i]} | ${phase.assignees[i] || 'TBD'} | 2h |`);
+    lines.push(`### Phase ${phase.phase}`);
+    lines.push('');
+    lines.push('| # | Task | Type | Priority | Branch | Deps | Assignee | Est. | Status |');
+    lines.push('|:-:|:---|:---|:---|:---|:---|:---|:---:|:---|');
+    for (const t of phase.tasks) {
+      const st = t.status === 'completed' ? '✅ done' : t.status === 'in_progress' ? '🔄 running' : '⏳ pending';
+      const deps = t.dependencies.length > 0 ? t.dependencies.join(', ') : '—';
+      const prio = t.priority === 'high' ? '🔴' : t.priority === 'medium' ? '🟡' : '🟢';
+      lines.push(`| ${phase.phase} | ${t.id} | ${t.type} | ${prio} | \`${t.branch}\` | ${deps} | ${t.assignee} | ${t.estimatedHours}h | ${st} |`);
+    }
     lines.push('');
   }
+
+  // ── 任务详情 ──
+  lines.push('---');
+  lines.push('');
+  lines.push('## 📝 任务详情');
+  lines.push('');
+  for (const t of allTasks) {
+    lines.push(`### ${t.id}: ${t.name}`);
+    lines.push('');
+    lines.push('| 属性 | 值 |');
+    lines.push('|:---|:---|');
+    lines.push(`| 类型 | ${t.type} |`);
+    lines.push(`| 优先级 | ${t.priority} |`);
+    lines.push(`| 分支 | \`${t.branch}\` |`);
+    lines.push(`| 状态 | ${t.status} |`);
+    lines.push(`| 进度 | ${t.progress}% |`);
+    lines.push(`| 负责人 | ${t.assignee} |`);
+    lines.push(`| 预估 | ${t.estimatedHours}h |`);
+    lines.push(`| 依赖 | ${t.dependencies.length > 0 ? t.dependencies.join(', ') : '无'} |`);
+    lines.push('');
+  }
+
+  // ── 依赖拓扑 ──
+  const hasDeps = allTasks.some(t => t.dependencies.length > 0);
+  if (hasDeps) {
+    lines.push('---');
+    lines.push('');
+    lines.push('## 🔗 依赖关系');
+    lines.push('');
+    lines.push('```');
+    for (const t of allTasks) {
+      if (t.dependencies.length > 0) {
+        for (const d of t.dependencies) {
+          lines.push(`  ${d} ──▶ ${t.id}`);
+        }
+      } else {
+        lines.push(`  ${t.id} (无依赖)`);
+      }
+    }
+    lines.push('```');
+    lines.push('');
+  }
+
+  // ── 执行记录 ──
+  lines.push('---');
+  lines.push('');
+  lines.push('## 📊 执行记录');
+  lines.push('');
+  lines.push('| 时间 | 事件 | 详情 |');
+  lines.push('|:---|:---|:---|');
+  lines.push(`| ${new Date().toLocaleString()} | 📋 计划生成 | ${allTasks.length} tasks, ${plan.length} phases |`);
+  lines.push('');
+  lines.push('> 后续执行记录将追加到此处。');
+  lines.push('');
+
   return lines.join('\n');
 }
