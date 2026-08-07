@@ -1,10 +1,10 @@
-# SpecCore Ask — 可执行编排引擎 v4
+# SpecCore Ask — 可执行编排引擎 v5
 
-> **⚠️ 强制执行规则**: 当用户说 `/spec:ask X` 或 `speccore ask X` 或类似触发:
-> 1. **必须调用 `execute_command("speccore ask X")`** 来真正运行 CLI 命令
-> 2. **不要**只是输出示例、模板、建议、猜测
-> 3. **不要**询问用户"您想做什么" — CLI 会给出明确答案
-> 4. 你就是宿主 AI，你就是在执行流程
+> **⚠️ 强制执行规则**:
+> 1. **必须调用 `execute_command("speccore ask X")`** 来真正运行 CLI — **绝不能只是输出 bash 命令让用户复制粘贴**
+> 2. 你就是宿主 AI，你就是在执行流程
+> 3. 看到 `[SPECCORE_AUTO_RESULT]` 后展示给用户并继续下一步（不要重复执行）
+> 4. 看到 `[SPECCORE_STATUS: success]` 才能标记完成
 
 ---
 
@@ -79,9 +79,14 @@
 ## 步骤 1: 意图识别
 
 ```
-执行: speccore ask "{用户输入}"
-从 stdout 第一行提取 [SPECCORE_MODE: xxx] → 进对应分支
-若无标记 → 用步骤 0 标准判断
+执行: speccore ask "{用户输入}"  → 不是把这条命令写到回复里给用户，是用 execute_command 真的跑
+从 stdout 提取:
+  [SPECCORE_MODE: pipeline]   → 真正执行了 pipeline（看 [SPECCORE_AUTO_RESULT]）
+  [SPECCORE_MODE: match]     → 推荐了命令（看 [SPECCORE_RECOMMEND]）
+  [SPECCORE_MODE: guide]     → 给了指南
+  [SPECCORE_MODE: explain]   → 解释了用法
+
+若没有任何 SPECCORE_MODE 标记 → 才用步骤 0 标准判断，但这个情况不应该发生
 ```
 
 ---
@@ -91,34 +96,18 @@
 ```
 A-FAIL: 低置信 → 请用户重新描述
 
-A1. 补参:
-    Read .speccore/local/context.json → 获取 currentIteration/currentTask
-    仍缺 → execute_command("speccore {cmd} --prompt {有参}")
-      exitCode=11 → 读 NEEDS_INFO 表格 → 用户选 → 重试
+A1. 展示推荐命令:
+    看到 CLI 输出 [SPECCORE_RECOMMEND: speccore xxx] → 展示给用户确认
+    "📋 即将执行: speccore {cmd} [是/改/停]"
 
-A2. 确认（最多 3 轮追问）:
-    "📋 执行: speccore {cmd} --prompt {params} [是/改/停]"
-
-A3. 执行:
-    execute_command("speccore {cmd} --prompt {params}")
+A2. 用户确认后执行:
+    execute_command("speccore {cmd}")
     exitCode=0  → 步骤 4
-    exitCode=10 → A4
-    exitCode=11 → A1
+    exitCode=11 → 补参 → 重试
     其他        → [重试/跳过/停止]
-
-A4. 你生成 (60s):
-    取 stdout [SPECCORE_PROMPT]...[/SPECCORE_PROMPT]
-    你是 AI — 你自己生成代码/分析/文档
-
-A5. 自检:
-    execute: {"files":[...]}, 其他: Markdown >100 字符
-    失败 → 重试 ≤2 次 → 降级
-
-A6. 写入:
-    Write /tmp/speccore-resp.json
-    execute_command("cat /tmp/speccore-resp.json | speccore {cmd} --response - {params}")
-    注意: --response - 表示从 stdin 读取，已验证可用
 ```
+
+注：v5 中无需 --prompt 模式，CLI 已经自动执行了 pipeline；match 模式需要用户确认后再执行。
 
 ---
 
@@ -141,12 +130,19 @@ A6. 写入:
 ## 分支 D: pipeline (≤5 步)
 
 ```
-D1. 展示计划:
-   ▶ 立即执行: speccore task new --name "..." --type bugfix
-   💡 建议后续: analyze → plan → execute → validate → pr → done
+D1. ✅ 已自动执行（v5）：
+   用户: speccore ask "晚8点创建任务并分批执行"
+   CLI 自动:
+     - 创建任务
+     - 创建调度: schedule create --at "20:00"
+   输出 [SPECCORE_AUTO_RESULT] 标记
 
-D2. 只执行第一步 → 完成后等用户确认
-D3. 后续步骤不会自动执行，需用户逐步确认
+D2. 展示给用户:
+   "✅ 已创建以下调度:
+    [SPECCORE_AUTO_RESULT 内容]
+    是否继续?"
+   
+D3. 后续步骤不会自动执行（如 analyze、execute 需用户确认）
 
 ⚠️ 规则: 任务没有分析文件，不允许 execute
    → execute 返回 exitCode=11 时展示提示，引导用户先 analyze
