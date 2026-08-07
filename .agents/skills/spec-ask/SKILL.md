@@ -1,141 +1,51 @@
-# SpecCore Ask — AI 自然语言引擎
+# SpecCore Ask — 意图识别 + Prompt/Apply 编排器
 
-> **定位**：SpecCore 的通用智能入口。处理复杂的、无法直接映射到单一命令的自然语言请求。
-> **核心能力**：意图理解 → 任务分解 → 逐步执行引导 → 结果汇总
-
----
-
-## 四大模式
-
-```
-用户输入自然语言
-        │
-        ▼
-┌───────────────────────────────────────────────────────┐
-│ 模式识别                                               │
-│                                                        │
-│ 1. 命令解释: "execute 命令怎么用"                       │
-│    → 返回命令帮助文档                                   │
-│                                                        │
-│ 2. 意图匹配: "分析 Q1 的需求"                           │
-│    → 映射到 speccore analyze -I Q1                      │
-│                                                        │
-│ 3. 任务指引: "从需求到代码的完整流程是什么"             │
-│    → 展示流程步骤 + 当前进度 + 下一步                    │
-│                                                        │
-│ 4. 复杂编排: "每天晚上8点检查所有迭代进度并生成报告"     │
-│    → 分解为多步骤计划 + 建议 schedule 命令               │
-└───────────────────────────────────────────────────────┘
-```
+> **角色**: 用户自然语言 → 意图识别 → 拼出 --prompt 命令 → 捕获 Prompt → AI 处理 → 写入结果
 
 ---
 
-## 详细执行逻辑
+## 四大模式（已接入 Prompt/Apply）
 
-### 模式 1: 命令解释
+### 模式1: 命令解释
+用户问某个命令用法时，返回帮助文本（无需 Prompt/Apply）。
+
+### 模式2: 意图匹配 → Prompt/Apply
 ```
-用户问某个命令的用法时：
-1. 查找命令文档
-2. 返回命令的参数说明、示例、注意事项
-
-示例：
-用户: "execute 命令怎么用"
-响应: speccore execute 是开发执行命令
-  用法: speccore execute -t <task> --force
-  参数:
-    -t: 任务编号 (Task-001, Task-002)
-    -i: 迭代名
-    --all: 执行全部任务
-    --force: 跳过确认
-    --resume: 断点续跑
-  示例:
-    speccore execute -t Task-001 --force
-    speccore execute --all --force
+用户: "分析 Q1 的需求"
+  → Skill 识别意图: analyze
+  → 拼命令: speccore analyze --prompt -I Q1
+  → execute_command 执行 → 获取 [SPECCORE_PROMPT]
+  → 提交给宿主 AI 分析
+  → AI 返回分析结果
+  → execute_command("speccore analyze --apply '$result' -I Q1")
+  → ✅ ANALYSIS.md 已写入
 ```
 
-### 模式 2: 意图匹配
+### 模式3: 任务指引 → 多步 Prompt/Apply
 ```
-尝试将用户意图映射到已知命令（同 speccore-router 的映射逻辑）
-
-如果匹配成功：
-→ 输出对应的 CLI 命令
-
-如果匹配失败：
-→ 进入模式 3（任务指引）
+用户: "帮我做登录功能"
+  → 计划: doc2spec --prompt → analyze --prompt → split --prompt → execute --prompt
+  → 每一步都是: CLI --prompt → 捕获 → AI 处理 → CLI --apply/--response
 ```
 
-### 模式 3: 任务指引
+### 模式4: 复杂编排 → 全 Pipeline
 ```
-当用户问"怎么做"、"流程是什么"时：
-
-1. 展示完整流水线：
-   init → doc2spec → analyze → split → plan → execute → pr → done
-
-2. 读取当前状态：
-   - 从 context.json 获取当前阶段
-   - 从 PROJECT_GRAPH.md 获取进度
-
-3. 高亮当前步骤，给出明确指令：
-
-   📋 SpecCore 开发流程
-   ━━━━━━━━━━━━━━━━━━━━━━━━
-   ✅ 1. init            — 项目已初始化
-   ✅ 2. doc2spec        — 需求已导入
-   ▶ 3. analyze         — ⬅ 你在这里
-   ⬜ 4. split           — 下一步
-   ⬜ 5. plan
-   ⬜ 6. execute
-   ⬜ 7. pr
-   ⬜ 8. done
-
-   👉 当前应该执行: speccore analyze -I Q1
-```
-
-### 模式 4: 复杂编排
-```
-对于无法一步完成的复杂请求：
-
-1. 将用户意图分解为步骤序列
-2. 检查每步的前置条件
-3. 生成步骤计划
-4. 输出完整的执行序列
-
-示例：
-用户: "帮我从零开始创建一个会议室预订系统"
-
-分解：
-  Step 1: speccore init                           # 初始化项目
-  Step 2: 编辑 CONSTITUTION.md 定义技术栈          # 手动配置
-  Step 3: speccore iteration create -n Meeting     # 创建迭代
-  Step 4: [用户拖入 PRD 文档]
-  Step 5: speccore doc2spec -f PRD.docx --iter Meeting
-  Step 6: speccore analyze -I Meeting             # 需求分析
-  Step 7: [编辑 STAFFING.md 分配人员]
-  Step 8: speccore iteration split -I Meeting      # 拆分任务
-  Step 9: speccore plan -I Meeting                # 生成计划
-  Step 10: speccore execute --all --force          # 执行开发
-
-👉 建议: 使用 speccore dev 逐步推进，每次完成一步后说"继续"
+用户: "从需求到代码全流程"
+  → 串联: doc2spec → analyze → split → plan → execute → pr → done
+  → 每步都走 --prompt/--apply 循环
 ```
 
 ---
 
-## 上下文感知
+## 意图 → --prompt 命令映射
 
-```
-ask 引擎总是先读取以下文件获取上下文：
-1. .speccore/CONSTITUTION.md    — 项目技术栈和规范
-2. .speccore/local/context.json — 当前迭代、任务、状态
-3. PROJECT_GRAPH.md             — 任务进度
-4. 迭代下的 STAFFING.md         — 人员配置
-```
-
----
-
-## 输出格式
-
-```
-简单匹配 → 直接输出 CLI 命令
-复杂流程 → 分步骤展示 + 每步的 CLI 命令
-无法处理 → 诚实告知 + 建议替代方案
-```
+| 用户意图 | --prompt 命令 | --apply/--response 命令 |
+| :--- | :--- | :--- |
+| 导入需求 | `speccore doc2spec --prompt -f {file}` | `speccore doc2spec --response '...' -f {file}` |
+| 分析需求 | `speccore analyze --prompt -I {iter}` | `speccore analyze --apply '...' -I {iter}` |
+| 拆分任务 | `speccore iteration split --prompt -I {iter}` | `speccore iteration split --response '...' -I {iter}` |
+| 执行开发 | `speccore execute --prompt -t {task}` | `speccore execute --response '...' -t {task}` |
+| 生成计划 | `speccore plan --prompt -I {iter}` | `speccore plan --response '...' -I {iter}` |
+| 导出文档 | `speccore spec2doc --prompt -I {iter}` | `speccore spec2doc --apply '...' -o {file}` |
+| 创建PR | `speccore pr --prompt -t {task}` | `speccore pr --response '...' -t {task}` |
+| 归档验收 | `speccore done --prompt -t {task}` | `speccore done --response '...' -t {task}` |
