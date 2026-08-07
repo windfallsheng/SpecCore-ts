@@ -292,6 +292,9 @@ export async function scheduleDaemonCommand(options: ScheduleDaemonOptions): Pro
 
     switch (action) {
       case 'start': {
+        // 自动安装系统调度（幂等，已安装则跳过）
+        logger.info('📦 安装/更新系统调度...');
+        await installSystemSchedule();
         logger.info('正在启动调度守护进程...');
         const started = startDaemon();
         if (started) {
@@ -402,7 +405,7 @@ export async function scheduleDetailCommand(options: ScheduleDetailOptions): Pro
   }
 }
 
-async function installSystemSchedule(): Promise<void> {
+export async function installSystemSchedule(): Promise<void> {
   const { join } = await import('path');
   const { writeFile, ensureDir } = await import('fs-extra');
   const projectDir = process.cwd();
