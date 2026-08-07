@@ -21,7 +21,7 @@ import {
   ExecutionState,
 } from '../core/execution-state';
 import { createTaskBranch, detectDefaultBranch } from '../core/git-integration';
-import { buildPrompt, formatPrompt, parseAiResponse } from '../core/prompt-builder';
+import { buildPrompt, formatPrompt, parseAiResponse, outputNeedsInfo } from '../core/prompt-builder';
 
 export interface ExecuteOptions {
   all?: boolean;
@@ -1183,6 +1183,27 @@ async function executeByPlan(planId: string, iteration: string, options: Execute
 
 async function runPromptMode(iteration: string, options: ExecuteOptions): Promise<void> {
   const task = options.task || '';
+
+  // ── 缺参数检测 ──
+  if (!task) {
+    const { readdir } = require('fs-extra');
+    const taskDir = join('Iteration-' + iteration, '030-tasks');
+    let availableTasks: string[] = [];
+    try {
+      const entries = await readdir(taskDir, { withFileTypes: true });
+      availableTasks = entries.filter((e: any) => e.isDirectory() && e.name.startsWith('Task-')).map((e: any) => e.name);
+    } catch {}
+    
+    outputNeedsInfo({
+      command: 'execute',
+      missing: ['task'],
+      provided: { iteration },
+      hint: '请指定要执行的任务编号，或使用 --all 执行全部',
+      availableOptions: { tasks: availableTasks },
+    });
+    return;
+  }
+
   const taskDir = join('Iteration-' + iteration, '030-tasks', task);
 
   const prompt = await buildPrompt('execute', {

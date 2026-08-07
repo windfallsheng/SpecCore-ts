@@ -415,3 +415,31 @@ export function parseAiResponse(response: string): { files: { path: string; cont
 
   return null;
 }
+
+// ═══════════════════════════════════════════════════════════
+// 缺参数请求协议
+// ═══════════════════════════════════════════════════════════
+
+/** 缺参数请求 */
+export interface NeedsInfoRequest {
+  marker: '[SPECCORE_NEEDS_INFO]';
+  command: string;
+  missing: string[];        // 缺失的参数名列表
+  provided: Record<string, string>; // 已提供的参数
+  hint: string;             // 给 AI/Skill 的提示
+  availableOptions?: {      // 可选值（如迭代列表、Task 列表）
+    iterations?: string[];
+    tasks?: string[];
+    platforms?: string[];
+  };
+}
+
+/**
+ * 输出缺参数请求到 stdout，设置退出码 11。
+ * Skill 捕获后从上下文解析或追问用户。
+ */
+export function outputNeedsInfo(req: Omit<NeedsInfoRequest, 'marker'>): void {
+  const full: NeedsInfoRequest = { marker: '[SPECCORE_NEEDS_INFO]', ...req };
+  process.stdout.write(JSON.stringify(full, null, 2));
+  process.exitCode = 11; // 11 = Needs more info
+}

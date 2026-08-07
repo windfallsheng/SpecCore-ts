@@ -49,3 +49,37 @@
 | 导出文档 | `speccore spec2doc --prompt -I {iter}` | `speccore spec2doc --apply '...' -o {file}` |
 | 创建PR | `speccore pr --prompt -t {task}` | `speccore pr --response '...' -t {task}` |
 | 归档验收 | `speccore done --prompt -t {task}` | `speccore done --response '...' -t {task}` |
+
+---
+
+## 缺参数处理（退出码 11）
+
+当 CLI 返回退出码 11 时，说明缺少必要参数。Skill 的处理流程：
+
+```
+1. execute_command 返回 exitCode=11
+2. 解析 stdout 中的 [SPECCORE_NEEDS_INFO] JSON
+3. 尝试从上下文补充：
+   - 读取 .speccore/local/context.json 获取当前迭代
+   - 读取 PROJECT_GRAPH.md 获取 Task 列表
+   - 读取 CONSTITUTION.md 获取平台映射
+4. 能自动补充 → 直接用补充后的参数重新调用 --prompt
+5. 无法补充 → 追问用户："检测到缺少参数，请指定：{missing}"
+6. 用户回答后 → 重新调用 --prompt
+```
+
+### 示例
+
+```
+用户: "帮我开发"  (缺少 task 参数)
+
+Skill → execute_command("speccore execute --prompt")
+  → CLI 返回 exitCode=11 + [SPECCORE_NEEDS_INFO] {"missing":["task"], "availableOptions":{"tasks":["Task-001","Task-002"]}}
+
+Skill 追问用户: "请选择要开发的任务：Task-001 (用户认证), Task-002 (支付功能)"
+
+用户: "Task-001"
+
+Skill → execute_command("speccore execute --prompt -t Task-001")
+  → 正常流程继续
+```
