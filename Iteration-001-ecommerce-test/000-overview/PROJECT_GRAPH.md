@@ -1,8 +1,8 @@
 # 本期任务总览
 
-> 期次：Iteration-001-ecommerce-test
+> 迭代：Iteration-001-ecommerce-test
 > 时间范围：未指定 ~ 未指定
-> 期次状态：🔄 进行中
+> 迭代状态：🔄 进行中
 > 负责人：张三
 > 默认分支: 继承全局配置
 

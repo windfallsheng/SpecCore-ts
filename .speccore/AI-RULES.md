@@ -20,14 +20,14 @@ init → doc2spec → analyze → split → plan → execute → pr → done →
 | 命令 | 作用 | 参数 | 上游依赖 | 下游产出 |
 | :--- | :--- | :--- | :--- | :--- |
 | init | 初始化项目 | --interactive/--force/--update | 无 | .speccore/ + 工具集成 |
-| doc2spec | Word→Spec MD | -f <文件> --iter <期次> | PRD/Word | 010-requirements/*.md |
-| analyze | 需求分析 | -I <期次> --task <任务> | 010-requirements/ | 020-specs/ANALYSIS.md |
-| split | 拆分任务 | -i <期次> --owner <人> | 020-specs/ | Task-001~NNN/ |
-| plan | 执行计划 | -I <期次> --owner <人> | Task 列表 | plan.json |
-| execute | 执行开发 | -i <期次> -t <任务> --type <类型> | REQ.md/TECH.md | 代码 + .issues.md |
+| doc2spec | Word→Spec MD | -f <文件> --iter <迭代> | PRD/Word | 010-requirements/*.md |
+| analyze | 需求分析 | -I <迭代> --task <任务> | 010-requirements/ | 020-specs/ANALYSIS.md |
+| split | 拆分任务 | -i <迭代> --owner <人> | 020-specs/ | Task-001~NNN/ |
+| plan | 执行计划 | -I <迭代> --owner <人> | Task 列表 | plan.json |
+| execute | 执行开发 | -i <迭代> -t <任务> --type <类型> | REQ.md/TECH.md | 代码 + .issues.md |
 | pr | 创建PR | --task <任务> | 代码提交 | Pull Request |
 | done | 归档收尾 | --task <任务> | 全部完成 | .verification |
-| spec2doc | 导出文档 | -i <期次> -o <文件> | 020-specs/ | Word/PDF |
+| spec2doc | 导出文档 | -i <迭代> -o <文件> | 020-specs/ | Word/PDF |
 | retro | 任务回顾 | --task/--all/--owner/--type | done后 | 回顾报告 |
 | change | 需求变更 | <描述> --task <任务> --type | 进行中任务 | 变更记录 |
 | dev | 智能级联 | --auto/--from/--to | 全部阶段 | 自动全流程 |
@@ -50,6 +50,6 @@ Iteration-xxx/
 ## AI 行为约束
 
 - **不要自己创建目录** — 用 `speccore iteration create -n <名称>`
-- **不要自己解析需求** — 用 `speccore analyze -I <期次>`
+- **不要自己解析需求** — 用 `speccore analyze -I <迭代>`
 - **失败时读取 .issues.md** — 不要猜测，看文件里的问题清单
 - **续跑用 --resume** — `speccore execute --resume` 自动扫描 .needs-retry

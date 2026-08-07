@@ -13,8 +13,13 @@ import { tryHostAi } from '../core/ask-host-ai';
 
 interface DevOptions {
   iteration?: string; force?: boolean; auto?: boolean; from?: string; to?: string;
-  web?: boolean; output?: string;
+  web?: boolean; output?: string; lang?: string;
 }
+
+const I18N: Record<string, Record<string, string>> = {
+  zh: { title:'SPECCORE DEV', subtitle:'阶段完成', subtitleGuide:'Pipeline 引导', next:'下一步', autoAll:'一键自动', skip:'跳过当前', restart:'重新开始', inputPlaceholder:'或者直接说...', send:'发送', stepInit:'初始化', stepDoc:'导入需求', stepAnalyze:'分析需求', stepSplit:'拆分任务', stepExec:'执行开发', stepPr:'提交 PR', stepDone:'归档收尾', iterLabel:'迭代' },
+  en: { title:'SPECCORE DEV', subtitle:'phases done', subtitleGuide:'Pipeline Guide', next:'Next Step', autoAll:'Auto All', skip:'Skip', restart:'Restart', inputPlaceholder:'Or just say it...', send:'Send', stepInit:'Init', stepDoc:'Import PRD', stepAnalyze:'Analyze', stepSplit:'Split Tasks', stepExec:'Execute', stepPr:'Create PR', stepDone:'Archive', iterLabel:'Iteration' },
+};
 
 async function hasFeatureDirs(iterDir: string): Promise<boolean> {
   try {
@@ -87,6 +92,7 @@ async function autoPipeline(options: DevOptions): Promise<void> {
 }
 
 async function renderDevHtml(options: DevOptions): Promise<string> {
+  const lang = options.lang || 'zh';
   const version = require('../../package.json').version;
   const iteration = await getDefaultIteration(options.iteration);
   const iterName = (!iteration || iteration.length < 2) ? '' : iteration;
@@ -95,13 +101,13 @@ async function renderDevHtml(options: DevOptions): Promise<string> {
 
   const isInit = await pathExists('.speccore');
   const phases: DevPhase[] = [
-    { name: '初始化',   key: 'init',    done: !!isInit,      icon: '🏗️', cmd: 'init',     description: '初始化 SpecCore 项目结构',        args: '' },
-    { name: '导入需求', key: 'doc',     done: false,          icon: '📝', cmd: 'doc2spec', description: '导入 PRD 文档，AI 转换需求规格', args: '-f PRD.docx' + (iterName ? ' --iteration ' + iterName : '') },
-    { name: '分析需求', key: 'analyze', done: false,          icon: '🧠', cmd: 'analyze',  description: 'AI 分析需求文档，生成审计报告', args: iterName ? '--iteration=' + iterName : '' },
-    { name: '拆分任务', key: 'split',   done: false,          icon: '📦', cmd: 'split',    description: '将需求拆分为独立开发任务',         args: '-f REQUIREMENT.md' },
-    { name: '执行开发', key: 'execute', done: false,          icon: '⚡', cmd: 'execute',  description: '按计划分批执行开发任务',           args: '--auto' },
-    { name: '提交 PR',  key: 'pr',      done: false,          icon: '🔀', cmd: 'pr',       description: '代码提交后创建 Pull Request',       args: '--auto' },
-    { name: '归档收尾', key: 'done',    done: false,          icon: '✅', cmd: 'done',     description: '校验、同步、审计，归档记录',       args: '--all' },
+    { name: lang === 'en' ? I18N.en.stepInit : I18N.zh.stepInit,   key: 'init',    done: !!isInit,      icon: '🏗️', cmd: 'init',     description: '初始化 SpecCore 项目结构',        args: '' },
+    { name: lang === 'en' ? I18N.en.stepDoc : I18N.zh.stepDoc, key: 'doc',     done: false,          icon: '📝', cmd: 'doc2spec', description: '导入 PRD 文档，AI 转换需求规格', args: '-f PRD.docx' + (iterName ? ' --iteration ' + iterName : '') },
+    { name: lang === 'en' ? I18N.en.stepAnalyze : I18N.zh.stepAnalyze, key: 'analyze', done: false,          icon: '🧠', cmd: 'analyze',  description: 'AI 分析需求文档，生成审计报告', args: iterName ? '--iteration=' + iterName : '' },
+    { name: lang === 'en' ? I18N.en.stepSplit : I18N.zh.stepSplit, key: 'split',   done: false,          icon: '📦', cmd: 'split',    description: '将需求拆分为独立开发任务',         args: '-f REQUIREMENT.md' },
+    { name: lang === 'en' ? I18N.en.stepExec : I18N.zh.stepExec, key: 'execute', done: false,          icon: '⚡', cmd: 'execute',  description: '按计划分批执行开发任务',           args: '--auto' },
+    { name: lang === 'en' ? I18N.en.stepPr : I18N.zh.stepPr,  key: 'pr',      done: false,          icon: '🔀', cmd: 'pr',       description: '代码提交后创建 Pull Request',       args: '--auto' },
+    { name: lang === 'en' ? I18N.en.stepDone : I18N.zh.stepDone, key: 'done',    done: false,          icon: '✅', cmd: 'done',     description: '校验、同步、审计，归档记录',       args: '--all' },
   ];
 
   if (iterDir) {

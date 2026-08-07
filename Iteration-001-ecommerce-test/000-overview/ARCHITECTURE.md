@@ -1,6 +1,6 @@
 # 本期技术文档
 
-> 期次：Iteration-001-ecommerce-test
+> 迭代：Iteration-001-ecommerce-test
 
 ## 1. 技术架构
 
