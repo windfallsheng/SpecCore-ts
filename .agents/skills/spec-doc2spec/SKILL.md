@@ -1,3 +1,10 @@
+---
+name: spec-doc2spec
+description: >
+  文档导入。Word/Excel/CSV → Spec Markdown，支持图片提取和 Bug 列表解析。
+  Use when user says "导入文档" "Word" "Excel" "CSV" "Bug列表".
+allowed-tools: ["Bash", "Read", "Write", "Edit"]
+---
 # SpecCore doc2spec — AI + Pandoc 双路验证
 
 > **你负责**: Pandoc 机械转换 + 你自己交叉验证 = 零数据丢失。

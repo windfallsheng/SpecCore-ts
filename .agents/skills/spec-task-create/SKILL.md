@@ -1,3 +1,10 @@
+---
+name: spec-task-create
+description: >
+  交互式任务创建。10 种类型选择器 + AI 智能命名 + 内容澄清。
+  Use when user says "创建任务" "新建任务" "bug任务" "测试任务" "审查任务" "文档任务".
+allowed-tools: ["Bash", "Read", "Write", "Edit"]
+---
 # SpecCore Task Create — 交互式任务创建
 
 > **你负责**: 接收任意输入 → 内容澄清 → 智能命名 → 用 `execute_command` 创建任务 → 推荐下一步。

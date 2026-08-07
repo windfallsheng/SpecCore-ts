@@ -1,3 +1,10 @@
+---
+name: spec-change
+description: >
+  需求变更管理。联动更新所有关联 Spec，支持口语化输入。
+  Use when user says "变更" "改需求" "修改" "change".
+allowed-tools: ["Bash", "Read", "Write", "Edit"]
+---
 # SpecCore Change — 需求变更处理器
 
 > **你负责**: 记录变更 → 分析影响 → 重新生成受影响代码。

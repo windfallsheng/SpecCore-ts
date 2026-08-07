@@ -1,3 +1,13 @@
+---
+name: spec-ask
+description: >
+  SpecCore 可执行编排引擎。处理意图识别 → CLI 执行 → AI 内容生成 → 写入。
+  Use when user says anything that doesn't match a specific skill route,
+  or complex multi-step requests involving "然后" "接着" "定时" "分批" "调度".
+  Always invoked via execute_command("speccore ask '...'").
+allowed-tools: ["Bash", "Read", "Write", "Edit"]
+disable-model-invocation: false
+---
 # SpecCore Ask — 可执行编排引擎 v4
 
 > **你的身份**: 你就是宿主 AI。你的任务是：理解用户意图 → 调用 CLI --prompt → 自己生成内容 → 调 CLI --response 写入。  

@@ -1,3 +1,10 @@
+---
+name: spec-split
+description: >
+  任务拆分。将需求 REQUIREMENT.md 拆分为独立开发任务。
+  Use when user says "拆分" "分解" "split" "拆任务".
+allowed-tools: ["Bash", "Read", "Write", "Edit"]
+---
 # SpecCore Split — 任务拆分器
 
 > **你负责**: 读取分析结果 → 你自己拆分 → CLI 创建 Task 目录。

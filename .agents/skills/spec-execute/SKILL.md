@@ -1,3 +1,10 @@
+---
+name: spec-execute
+description: >
+  任务执行引擎。读取 ANALYSIS.md → Prompt/Apply 模式生成代码。
+  Use when user says "开发" "执行" "写代码" "实现" "跑任务".
+allowed-tools: ["Bash", "Read", "Write", "Edit"]
+---
 # SpecCore Execute — 代码生成执行器
 
 > **你负责**: 读取 Task Spec → 构建代码生成上下文 → 你自己生成代码 → CLI 写入文件。
