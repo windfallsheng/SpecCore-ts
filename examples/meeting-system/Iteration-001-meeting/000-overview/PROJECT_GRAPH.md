@@ -1,10 +1,9 @@
-# Meeting System Iteration Overview
+# Meeting System Overview
 
-## Task List
-
-| Task | Name | Type | Status | Assignee |
-| :--- | :--- | :--- | :--- | :--- |
-| Task-001 | App Core | feature | pending | Alice |
-| Task-002 | H5 Core | feature | pending | Alice |
-| Task-003 | Miniapp Core | feature | pending | Bob |
-| Task-004 | Admin Dashboard | feature | pending | Bob |
+| Task | Name | Platform | Type | Status | Assignee |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| Task-001 | App Auth | app | feature | pending | Alice |
+| Task-002 | H5 Auth | h5 | feature | pending | Alice |
+| Task-003 | Admin Auth | admin | feature | pending | Bob |
+| Task-004 | App Booking | app | feature | pending | Alice |
+| Task-005 | Admin Room | admin | feature | pending | Bob |
