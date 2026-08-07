@@ -305,6 +305,16 @@ async function handleMatch(input: string): Promise<AskResult> {
     return { mode: 'match', summary: '未识别到匹配命令', detail: '我无法完全理解你的意图。试试:\n  speccore help — 查看命令列表\n  或更详细地描述你想做什么', commands: [] };
   }
 
+  // ── 低置信度拒绝 ──
+  if (best.confidence < 45) {
+    return {
+      mode: 'match',
+      summary: '置信度过低',
+      detail: `⚠️ 未找到高置信度匹配 (最高: ${best.intent} ${best.confidence}%)\n\n请重新描述你的需求，或使用 speccore help 查看可用命令。`,
+      commands: [],
+    };
+  }
+
   // ── 歧义检测: 第二候选与第一差距 < 15% ──
   const second = results[1];
   if (second && (best.confidence - second.confidence) < 15) {
@@ -371,10 +381,12 @@ async function handleMatch(input: string): Promise<AskResult> {
   detailLines.push('⚠️  请确认后执行以上命令。');
   detailLines.push('  输入 y/回车 确认，或修改参数后重新输入。');
 
+  const detail = `[SPECCORE_MODE: match]\n${detailLines.join('\n')}`;
+
   return {
     mode: 'match',
     summary: `匹配到: ${best.intent} (${best.confidence}%) → ${fullCommand}`,
-    detail: detailLines.join('\n'),
+    detail,
     commands: [best.command],
   };
 }
@@ -466,6 +478,7 @@ export async function askEngine(input: string): Promise<AskResult> {
       try { return handleGuide(input); }
       catch { return handleMatch(input); }
     case 'pipeline': return handlePipeline(input);
+    case 'ambiguous':
     case 'match':
     default: return handleMatch(input);
   }
