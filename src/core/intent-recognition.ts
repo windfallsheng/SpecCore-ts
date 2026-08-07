@@ -32,7 +32,6 @@ export type IntentType =
   | 'demo'                // 体验
   | 'welcome'             // 引导
   | 'init'                // 初始化
-  | 'import'              // 导入
   | 'bugfix'              // Bug 修复
   | 'research'            // 调研
   | 'sync'                // 同步
@@ -177,15 +176,6 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     triggers: ['初始化', '建立项目', '创建项目', '新建项目', '迁移项目'],
     patterns: ['初始化(.+)项目', '建立(.+)项目', '创建(.+)项目'],
     description: '项目初始化 — 创建 .speccore 配置目录和基础文件',
-  },
-  // 导入
-  {
-    id: 'import',
-    intent: 'import',
-    priority: 82,
-    triggers: ['导入', '迁移', '转换', '从代码导入', '从需求导入'],
-    patterns: ['导入(.+)代码', '从(.+)导入', '迁移(.+)项目'],
-    description: '存量项目导入 — 从代码/PRD/原型自动生成 Spec 配置',
   },
   // 审查层
   {
@@ -646,6 +636,29 @@ function extractParams(input: string, mapping: CommandMapping): Record<string, s
   const iterMatch = input.match(/迭代[：:]*\s*(\S+)/);
   if (iterMatch) {
     params.iteration = iterMatch[1];
+  }
+
+  // 检测工具/平台名称（--tool 参数）
+  const toolKeywords: Record<string, string> = {
+    'trae': 'trae', 'tree': 'trae',
+    'codebuddy': 'codebuddy', 'code buddy': 'codebuddy',
+    'claude': 'claude', 'cloud': 'claude',
+    'cursor': 'cursor',
+    'windsurf': 'windsurf', 'wind surf': 'windsurf',
+    'qoder': 'qoder', 'q coder': 'qoder', 'qcoder': 'qoder',
+    'workbuddy': 'workbuddy', 'work buddy': 'workbuddy',
+  };
+  const matchedTools: string[] = [];
+  const lowerInput = input.toLowerCase();
+  for (const [keyword, toolName] of Object.entries(toolKeywords)) {
+    if (lowerInput.includes(keyword)) {
+      if (!matchedTools.includes(toolName)) {
+        matchedTools.push(toolName);
+      }
+    }
+  }
+  if (matchedTools.length > 0) {
+    params.tool = matchedTools.join(',');
   }
 
   return params;

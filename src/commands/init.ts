@@ -150,17 +150,36 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
       '| 命令 | 作用 | 参数 | 上游依赖 | 下游产出 |',
       '| :--- | :--- | :--- | :--- | :--- |',
       '| init | 初始化项目 | --interactive/--force/--update | 无 | .speccore/ + 工具集成 |',
-      '| doc2spec | Word→Spec MD | -f <文件> --iter <迭代> | PRD/Word | 010-requirements/*.md |',
+      '| doc2spec | Word→Spec MD (CLI) | -f <文件> --iter <迭代> | PRD/Word | 010-requirements/*.md |',
+      '| **spec-doc2spec** | **AI+Pandoc 双路交叉验证导入** | **(Skill 自动触发)** | PRD原文 | REQUIREMENT.md + VALIDATION.md |',
       '| analyze | 需求分析 | -I <迭代> --task <任务> | 010-requirements/ | 020-specs/ANALYSIS.md |',
       '| split | 拆分任务 | -i <迭代> --owner <人> | 020-specs/ | Task-001~NNN/ |',
       '| plan | 执行计划 | -I <迭代> --owner <人> | Task 列表 | plan.json |',
       '| execute | 执行开发 | -i <迭代> -t <任务> --type <类型> | REQ.md/TECH.md | 代码 + .issues.md |',
       '| pr | 创建PR | --task <任务> | 代码提交 | Pull Request |',
       '| done | 归档收尾 | --task <任务> | 全部完成 | .verification |',
-      '| spec2doc | 导出文档 | -i <迭代> -o <文件> | 020-specs/ | Word/PDF |',
+      '| spec2doc | Spec→文档导出 (CLI) | -i <迭代> -o <文件> -f <格式> | 020-specs/ | Word/PDF/HTML |',
+      '| **spec-spec2doc** | **AI排版+Pandoc导出+验证** | **(Skill 自动触发)** | SpecCore文档 | 精美排版文档 |',
       '| retro | 任务回顾 | --task/--all/--owner/--type | done后 | 回顾报告 |',
       '| change | 需求变更 | <描述> --task <任务> --type | 进行中任务 | 变更记录 |',
       '| dev | 智能级联 | --auto/--from/--to | 全部阶段 | 自动全流程 |',
+      '',
+      '## AI Skills（.agents/skills/）',
+      '',
+      '项目包含 10 个高阶 Skill，AI 工具自动加载：',
+      '',
+      '| Skill | 能力 | 激活方式 |',
+      '| :--- | :--- | :--- |',
+      '| speccore-router | 中文意图→CLI命令（20+映射） | "分析需求"/"创建迭代" |',
+      '| spec-doc2spec | **AI语义提取+Pandoc机械转换+交叉验证** | "帮我分析这个PRD"/"导入需求文档" |',
+      '| spec-spec2doc | **AI内容编排+Pandoc格式转换+质量验证** | "导出文档"/"生成交付文档" |',
+      '| spec-analyze | 深度需求分析（拆解→映射→风险） | "分析需求" |',
+      '| spec-split | 智能任务拆分（分组→分配→依赖） | "拆分任务" |',
+      '| spec-execute | 代码生成+编译+测试+修复循环 | "开发Task-001" |',
+      '| spec-plan | 排程+里程碑+并行策略 | "生成计划" |',
+      '| spec-dev | 阶段检测+状态展示+推荐下一步 | "推进项目" |',
+      '| spec-change | 变更记录+影响分析+代码更新 | "需求变更" |',
+      '| spec-ask | 自然语言引擎（四大模式） | "怎么做"/"流程是什么" |',
       '',
       '## 目录结构',
       '',
@@ -226,18 +245,23 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 
 > ⚠️ **所有需求端名称（app/h5/miniapp/admin）必须与 010-requirements/ 子目录名严格一致**
 
-| 工程 | 源码路径 | Git 仓库 | 默认分支 | 对应需求端 |
-| :--- | :--- | :--- | :--- | :--- |
-| ${projectName} | ./ | ${gitUrl || '待配置'} | main | app, h5, miniapp, admin |
+| 工程 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应需求端 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| ${projectName} | 待填写 | ./ | ${gitUrl || '待配置'} | main | app, h5, miniapp, admin |
+
+> ⚠️ **项目名称** 是给人和 AI 看的业务名称（如"食堂后台管理"、"商户入驻系统"），不同于技术上的工程名。
+>   AI 会据此理解项目业务范围，在分析/拆分/生成代码时作为上下文参考。
 
 > 多工程示例（monorepo）:
 >
-> | 工程 | 源码路径 | Git 仓库 | 默认分支 | 对应需求端 |
-> | :--- | :--- | :--- | :--- | :--- |
-> | order-service | ./packages/order | git@xxx/order.git | master | app, admin |
-> | payment-service | ./packages/payment | git@xxx/pay.git | main | h5, miniapp |
+> | 工程 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应需求端 |
+> | :--- | :--- | :--- | :--- | :--- | :--- |
+> | order-service | 订单服务 | ./packages/order | git@xxx/order.git | master | app, admin |
+> | payment-service | 支付服务 | ./packages/payment | git@xxx/pay.git | main | h5, miniapp |
 >
-> **关键规则**：「对应需求端」列的值决定了：
+> **关键规则**：
+> 「项目名称」列方便人和 AI 通过业务名称理解和检索项目。
+> 「对应需求端」列的值决定了：
 > 1. 读取哪个 010-requirements/{端}/ 的需求文档
 > 2. 分析结果写入 020-specs/{端}/
 > 3. split 时按端创建 Task 并过滤对应的 API
@@ -444,7 +468,7 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 
 async function updateGitignore(projectRoot: string): Promise<void> {
   const gitignorePath = join(projectRoot, '.gitignore');
-  const entry = '# SpecCore local config\n.speccore/local/\nIteration-*/.local/\n';
+  const entry = '# SpecCore local config\n.speccore/local/\nIteration-*/.local/\n# SpecCore generated AI skills\n.agents/\n';
 
   if (await pathExists(gitignorePath)) {
     const content = await readFile(gitignorePath, 'utf-8');
@@ -1069,59 +1093,109 @@ async function createToolIntegrations(projectRoot: string, toolFilter?: string):
 `);
   } // if hasQoder
 
-  // TRAE auto-load skills — OpenSpec 模式: Skill 只输出命令文本，不执行
-  const skillContents: Record<string, string> = {
-    'speccore-router': `# SpecCore Router — 意图→命令 路由器
-
-## 规则
-1. 从用户对话识别意图
-2. 提取参数
-3. **只输出 CLI 命令文本，不执行**
-4. 参数缺失时追问
-
-## 意图映射
-| 关键词 | CLI 命令 |
-| :--- | :--- |
-| 初始化/init/开始 | speccore init |
-| 创建迭代/新建迭代 {name} | speccore iteration create -n {name} --owner {owner} |
-| 导入需求 {file} 到 {iter} | speccore doc2spec -f {file} --iter {iter} |
-| 分析/检查 {iter} | speccore analyze -I {iter} |
-| 拆分/split {iter} | speccore iteration split -I {iter} |
-| 执行/开发 {task} | speccore execute -t {task} --force |
-| 执行全部 | speccore execute --all --force |
-| 断点续跑 | speccore execute --resume |
-| PR/推代码 {task} | speccore pr --task {task} |
-| 完成/归档 {task} | speccore done --task {task} |
-| 变更需求 "{desc}" {task} | speccore change "{desc}" --task {task} |
-| 校验/验证 {iter} | speccore validate -I {iter} |
-| 进度/仪表盘 | speccore dashboard --scope global |
-| 项目名片 | speccore welcome |
-| 帮助 | speccore help |
-| 回顾/复盘 {task} | speccore retro --task {task} |
-| 全部回顾 | speccore retro --all |
-| 智能级联/推进 | speccore dev |
-| 搜索 {keyword} | speccore search {keyword} |`,
-    'spec-ask': '# SpecCore Router\n\n**OUTPUT a CLI command, do NOT execute.** Read user intent, extract params. If simple intent → output matching CLI command. If complex (multi-step/timed/batch) → output: `speccore ask "user words"`.\n\nRead `.speccore/CONSTITUTION.md` and `.speccore/local/context.json` first.',
-    'spec-dev': '# SpecCore Pipeline\n\n**OUTPUT only. Do NOT execute.**\n\nSteps:\n1. Read `.speccore/local/context.json` for current iteration\n2. Read `000-overview/PROJECT_GRAPH.md` for progress\n3. Show current phase (✅ done / ▶ next / ⬜ pending)\n4. Output: `speccore dev -i <iter> [--auto]`\n\nNEVER run multiple commands automatically.',
-    'spec-analyze': '# SpecCore Analyze\n\n**OUTPUT only. Do NOT execute.**\n\nSteps:\n1. Read `010-requirements/` for all platform docs\n2. Ask for iteration name if not provided\n3. Output: `speccore analyze -I <iter>`\n4. Present analysis report location and ask for confirmation',
-    'spec-split': '# SpecCore Split\n\n**OUTPUT only. Do NOT execute.**\n\nSteps:\n1. Read `020-specs/` for analysis docs\n2. Read `STAFFING.md` for team allocation\n3. Show task preview\n4. Ask user to confirm before outputting: `speccore iteration split -I <iter>`',
-    'spec-execute': '# SpecCore Execute\n\n**OUTPUT only. Do NOT execute.**\n\nSteps:\n1. Read Task `REQ.md` and `TECH.md` for completeness\n2. Check `.needs-retry` for previous failures\n3. Output: `speccore execute -t <task> --force`\n4. If failed, suggest reading `.issues.md` and retrying with `--resume`',
-    'spec-plan': '# SpecCore Plan\n\n**OUTPUT only. Do NOT execute.**\n\nSteps:\n1. Read task list from `000-overview/PROJECT_GRAPH.md`\n2. Read `STAFFING.md` for allocation\n3. Output: `speccore plan -I <iter>`\n4. Show plan summary and ask for confirmation',
-    'spec-change': '# SpecCore Change\n\n**OUTPUT only. Do NOT execute.**\n\nSteps:\n1. Record change description from user\n2. Analyze what tasks are impacted\n3. Output: `speccore change "<desc>" --task <task>`',
-  };
-  for (const [name] of commands) {
-    if (skillContents[name]) {
-      const sd = join(projectRoot, '.agents', 'skills', name);
-      await ensureDir(sd);
-      await writeFile(join(sd, 'SKILL.md'), skillContents[name]);
+  // Skill files — 从 CLI 自身的 .agents/skills/ 读取并复制到项目
+  // 这样 Skill 文件有单一事实来源，修改 Skills 后无需同步修改 init.ts
+  const cliSkillsDir = join(__dirname, '..', '..', '.agents', 'skills');
+  const projectSkillsDir = join(projectRoot, '.agents', 'skills');
+  
+  // 需要部署的 Skill 列表（按依赖顺序）
+  const skillNames = [
+    'speccore-router',
+    'spec-ask',
+    'spec-analyze',
+    'spec-split', 
+    'spec-execute',
+    'spec-plan',
+    'spec-dev',
+    'spec-change',
+    'spec-doc2spec',
+    'spec-spec2doc',
+  ];
+  
+  let skillsCopied = 0;
+  for (const name of skillNames) {
+    const srcFile = join(cliSkillsDir, name, 'SKILL.md');
+    const destDir = join(projectSkillsDir, name);
+    try {
+      if (await pathExists(srcFile)) {
+        await ensureDir(destDir);
+        await copy(srcFile, join(destDir, 'SKILL.md'));
+        skillsCopied++;
+      } else {
+        logger.info(`   ⚠️ Skill 源文件不存在，跳过: ${name}`);
+      }
+    } catch (e) {
+      logger.info(`   ⚠️ 无法复制 Skill ${name}: ${e}`);
     }
   }
-  // 统一路由器 Skill
-  const routerDir = join(projectRoot, '.agents', 'skills', 'speccore-router');
-  await ensureDir(routerDir);
-  await writeFile(join(routerDir, 'SKILL.md'), skillContents['speccore-router']);
   
+  logger.info(`   🤖 已部署 ${skillsCopied}/${skillNames.length} 个 Skill`);
   logger.info('   🤖 已适配: Claude / CodeBuddy / Cursor / Trae / WindSurf / QCoder');
+
+  // ── 清理旧版本残留文件 ──
+  await cleanupStaleFiles(projectRoot, commands, skillNames);
+}
+
+/**
+ * 清理旧版本残留的命令文件和 Skill 目录。
+ * 遍历所有工具目录和 .agents/skills/，移除当前版本不存在的文件。
+ */
+async function cleanupStaleFiles(
+  projectRoot: string,
+  commands: [string, string, string][],
+  skillNames: string[]
+): Promise<void> {
+  const allTools = ['claude', 'codebuddy', 'cursor', 'trae', 'trae-cn', 'windsurf'];
+  const validCmdNames = new Set(commands.map(([name]) => name + '.md'));
+  let cleanedCount = 0;
+
+  // 1. 清理各工具的 commands 目录下 stale 文件
+  for (const tool of allTools) {
+    const cmdDir = join(projectRoot, '.' + tool, 'commands');
+    try {
+      if (!await pathExists(cmdDir)) continue;
+      const files = await readdir(cmdDir);
+      for (const f of files) {
+        if (!validCmdNames.has(f) && f.endsWith('.md')) {
+          await require('fs-extra').unlink(join(cmdDir, f));
+          cleanedCount++;
+        }
+      }
+    } catch { /* ignore missing dirs */ }
+  }
+
+  // 2. 清理 .agents/skills/ 下 stale Skill 目录
+  const skillsDir = join(projectRoot, '.agents', 'skills');
+  try {
+    if (await pathExists(skillsDir)) {
+      const entries = await readdir(skillsDir, { withFileTypes: true });
+      for (const e of entries) {
+        if (e.isDirectory() && !skillNames.includes(e.name)) {
+          await require('fs-extra').remove(join(skillsDir, e.name));
+          cleanedCount++;
+        }
+      }
+    }
+  } catch { /* ignore */ }
+
+  // 3. 清理旧版 .codebuddy/skills/ 和 .trae/skills/ 下的 stale 文件
+  for (const tool of ['codebuddy', 'trae']) {
+    const toolSkillsDir = join(projectRoot, '.' + tool, 'skills');
+    try {
+      if (!await pathExists(toolSkillsDir)) continue;
+      const entries = await readdir(toolSkillsDir, { withFileTypes: true });
+      for (const e of entries) {
+        if (e.isDirectory() && !skillNames.includes(e.name)) {
+          await require('fs-extra').remove(join(toolSkillsDir, e.name));
+          cleanedCount++;
+        }
+      }
+    } catch { /* ignore */ }
+  }
+
+  if (cleanedCount > 0) {
+    logger.info(`   🧹 已清理 ${cleanedCount} 个旧版本残留文件`);
+  }
 }
 
 /**

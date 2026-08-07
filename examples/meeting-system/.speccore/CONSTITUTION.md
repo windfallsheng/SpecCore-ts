@@ -6,11 +6,11 @@
 
 > 多工程时填写各子工程的路径和仓库
 
-| 工程 | 路径 | Git 仓库 | 默认分支 | 对应需求端 |
-| :--- | :--- | :--- | :--- | :--- |
-| 后端服务 | /workspace/backend | git@xxx:backend.git | main | APP端, 管理后台 |
-| 前端H5 | /workspace/frontend | git@xxx:frontend.git | main | H5端 |
-| 小程序 | /workspace/miniapp | git@xxx:miniapp.git | main | 小程序端 |
+| 工程 | 项目名称 | 路径 | Git 仓库 | 默认分支 | 对应需求端 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| 后端服务 | 会议室管理后端 | /workspace/backend | git@xxx:backend.git | main | APP端, 管理后台 |
+| 前端H5 | 会议室预订H5 | /workspace/frontend | git@xxx:frontend.git | main | H5端 |
+| 小程序 | 会议室预订小程序 | /workspace/miniapp | git@xxx:miniapp.git | main | 小程序端 |
 
 ## 技术栈
 ### 后端

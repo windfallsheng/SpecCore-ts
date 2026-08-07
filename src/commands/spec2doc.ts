@@ -11,6 +11,7 @@ import { logger, Spinner } from '../utils/logger';
 import { execSync } from 'child_process';
 import { pathExists, ensureDir, readdir, stat, writeFile } from 'fs-extra';
 import { join, basename, extname } from 'path';
+import { validateContent, generateReport } from '../core/doc-validator';
 
 function detectPlatform(): 'macos' | 'linux' | 'win' {
   if (process.platform === 'darwin') return 'macos';
@@ -119,6 +120,34 @@ export async function spec2docCommand(options: Spec2DocOptions): Promise<void> {
   if (sourceFiles.length === 0) {
     logger.error('未找到可导出的 SpecCore 文档。请指定 --iteration 或 --task');
     return;
+  }
+
+  // ── 导出前质量审计 ──
+  logger.info(`📋 收集到 ${sourceFiles.length} 个源文件:`);
+  for (const sf of sourceFiles) {
+    logger.info(`   - ${sf.label}`);
+  }
+  logger.info('');
+  
+  // 审计每个源文件
+  let totalTodos = 0;
+  let totalIssues = 0;
+  for (const sf of sourceFiles) {
+    const content = await require('fs-extra').readFile(sf.path, 'utf-8');
+    const todos = (content.match(/TODO|TBD|FIXME|XXX/g) || []).length;
+    const placeholders = (content.match(/待填写|待补充|TBD/g) || []).length;
+    totalTodos += todos + placeholders;
+  }
+  
+  if (totalTodos > 0) {
+    logger.warn(`⚠️ 发现 ${totalTodos} 个待完成项（TODO/待填写），导出文档可能不完整`);
+    logger.info('   建议先补全后再导出，或使用 --force 忽略警告');
+    logger.info('');
+  }
+  
+  if (totalTodos === 0) {
+    logger.success('✅ 内容审计通过，所有文档无待完成项');
+    logger.info('');
   }
 
   // ── pandoc 检测 ──

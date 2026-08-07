@@ -282,9 +282,20 @@ async function handleMatch(input: string): Promise<AskResult> {
   const results = await recognizeIntent(input);
   const best = results[0];
   
-  // 如果 KB 有匹配且置信度高于意图识别，用 KB
+  // 如果 KB 有匹配且置信度高于意图识别，用 KB（但要整合意图识别的参数）
   if (kbMatch && (!best || best.confidence < 70)) {
-    return { mode: 'match', summary: `✅ 推荐: ${kbMatch.name}`, detail: `🎯 推荐命令: speccore ${kbMatch.name}\n${kbMatch.description}\n\n用法: ${kbMatch.usage}\n\n示例:\n${kbMatch.examples.map(e=>'  $ '+e).join('\n')}`, commands: [kbMatch.name] };
+    const params = best?.extractedParams || {};
+    let fullCommand = `speccore ${kbMatch.name}`;
+    const paramNotes: string[] = [];
+    if (params.tool) { fullCommand += ` --tool="${params.tool}"`; paramNotes.push(`🔧 平台: ${params.tool}`); }
+    if (params.name) { fullCommand += ` -n "${params.name}"`; paramNotes.push(`📛 名称: ${params.name}`); }
+    if (params.iteration) { fullCommand += ` --iter "${params.iteration}"`; paramNotes.push(`🔄 迭代: ${params.iteration}`); }
+    
+    let detail = `🎯 推荐命令: ${fullCommand}\n${kbMatch.description}\n\n用法: ${kbMatch.usage}`;
+    if (paramNotes.length > 0) detail += `\n\n${paramNotes.join('\n')}`;
+    detail += '\n\n⚠️  请确认后执行以上命令。';
+    
+    return { mode: 'match', summary: `✅ 推荐: ${fullCommand}`, detail, commands: [kbMatch.name] };
   }
   
   if (results.length === 0) {
@@ -294,12 +305,61 @@ async function handleMatch(input: string): Promise<AskResult> {
     return { mode: 'match', summary: '未识别到匹配命令', detail: '我无法完全理解你的意图。试试:\n  speccore help — 查看命令列表\n  或更详细地描述你想做什么', commands: [] };
   }
 
-  const cmdName = kbMatch?.name || best.command || best.intent;
+  // 构建带参数的命令
+  const params = best.extractedParams;
+  let fullCommand = `speccore ${best.command}`;
+  const paramNotes: string[] = [];
+
+  if (params.name) fullCommand += ` -n "${params.name}"`;
+  if (params.iteration) fullCommand += ` --iter "${params.iteration}"`;
+  if (params.tool) {
+    fullCommand += ` --tool="${params.tool}"`;
+    paramNotes.push(`🔧 工具/平台: ${params.tool}`);
+  }
+  if (params.desc) {
+    fullCommand += ` "${params.desc}"`;
+    paramNotes.push(`📝 描述: ${params.desc}`);
+  }
+  if (params.target) paramNotes.push(`🎯 目标: ${params.target}`);
+
+  // 构建详细输出
+  const detailLines: string[] = [];
+  detailLines.push(`🎯 识别意图: ${best.intent} (置信度: ${best.confidence}%)`);
+  detailLines.push('');
+  detailLines.push(`📋 执行命令:`);
+  detailLines.push(`  ${fullCommand}`);
+  detailLines.push('');
+
+  // 显示匹配到的关键词
+  if (best.matchedTriggers.length > 0) {
+    detailLines.push(`🔑 匹配关键词: ${best.matchedTriggers.map(t => t.replace(/.*"([^"]+)".*/, '$1')).join(', ')}`);
+    detailLines.push('');
+  }
+
+  // 显示参数说明
+  if (paramNotes.length > 0) {
+    detailLines.push(...paramNotes);
+    detailLines.push('');
+  }
+
+  // 备选意图
+  if (results.length > 1) {
+    detailLines.push('💡 备选意图:');
+    for (const r of results.slice(1, 4)) {
+      detailLines.push(`  • ${r.intent} (${r.confidence}%) — speccore ${r.command}`);
+    }
+    detailLines.push('');
+  }
+
+  // 确认提示
+  detailLines.push('⚠️  请确认后执行以上命令。');
+  detailLines.push('  输入 y/回车 确认，或修改参数后重新输入。');
+
   return {
     mode: 'match',
-    summary: `匹配到: ${best.intent} (${best.confidence}%)`,
-    detail: kbMatch ? `🎯 推荐命令: speccore ${kbMatch.name}\n${kbMatch.description}\n\n用法: ${kbMatch.usage}` : `🎯 speccore ${cmdName}`,
-    commands: [cmdName],
+    summary: `匹配到: ${best.intent} (${best.confidence}%) → ${fullCommand}`,
+    detail: detailLines.join('\n'),
+    commands: [best.command],
   };
 }
 

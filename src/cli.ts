@@ -204,6 +204,8 @@ iterationCmd
   .option('--strict', 'Review each section before creating tasks')
   .option('--scheduled', '夜间调度：只执行标记为 queue 的任务')
   .option('--verify', '生成代码后自动检查 TEST/REVIEW/DEPLOY → 最多3轮自动修复')
+  .option('--prompt', '输出结构化 Prompt 到 stdout（Skill 协作模式）')
+  .option('--response <response>', '接收 AI 拆分结果创建 Task（配合 --prompt）')
   .action(iterationSplitCommand);
 
 // ================================================================
@@ -266,6 +268,8 @@ program
   .option('--show <id>', 'Show plan detail')
   .option('--delete <id>', 'Delete a plan')
   .option('--cancel <id>', 'Cancel a plan (keep record)')
+  .option('--prompt', '输出结构化 Prompt 到 stdout（Skill 协作模式）')
+  .option('--response <response>', '接收 AI 计划写入 plan.json（配合 --prompt）')
   .action(planCommand);
 
 program
@@ -299,6 +303,8 @@ program
   .option('--only <tasks>', 'Comma-separated task IDs to execute exclusively (whitelist)')
   .option('--agent <tool>', 'External AI: copilot/claude/cursor/trae/qoder/windsurf/codebuddy')
   .option('--hotfix', 'Emergency fix: skip reverse sync (30min grace, 24h mandatory)')
+  .option('--prompt', '输出结构化 Prompt 到 stdout，等待宿主 AI 生成代码（Skill 协作模式）')
+  .option('--response <response>', '接收宿主 AI 返回的代码内容并写入文件（配合 --prompt 使用）')
   .action(executeCommand);
 
 // ================================================================
@@ -619,6 +625,8 @@ program
   .option('--depth <depth>', '分析深度: quick | normal(默认) | deep')
   .option('--auto', '非交互: 直接生成报告 (默认)')
   .option('--interactive', '交互: AI 提问 → 回答 → 优化')
+  .option('--prompt', '输出结构化 Prompt 到 stdout（Skill 协作模式）')
+  .option('--apply <content>', '接收 AI 分析结果写入 ANALYSIS.md（配合 --prompt）')
   .action(analyzeCommand);
 
 program

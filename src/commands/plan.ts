@@ -1,10 +1,12 @@
 import { join } from 'path';
+import { writeFile, ensureDir } from 'fs-extra';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
 import { readProjectGraph, topologicalSort, scanTasks, TaskState } from '../core/state';
 import { FileTransaction } from '../core/transaction';
 import { savePlan, listPlans, getPlan, deletePlan, cancelPlan, ExecutionPlan } from '../core/plan-store';
 import { createInterface } from 'readline';
+import { buildPrompt, formatPrompt } from '../core/prompt-builder';
 
 function promptUser(question: string): Promise<string> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -26,9 +28,29 @@ export interface PlanOptions {
   show?: string;
   delete?: string;
   cancel?: string;
+  prompt?: boolean;    // --prompt
+  response?: string;   // --response: 接收 AI 计划写入 plan.json
 }
 
 export async function planCommand(options: PlanOptions): Promise<void> {
+  // ── Prompt 模式 ──
+  if (options.prompt) {
+    const iter = options.iteration || await getDefaultIteration();
+    const prompt = await buildPrompt('plan', { iteration: iter });
+    process.stdout.write(formatPrompt(prompt));
+    process.exitCode = 10;
+    return;
+  }
+
+  // ── Response 模式 ──
+  if (options.response) {
+    if (!options.iteration) { logger.error('--response 需要 --iteration'); return; }
+    const planDir = join('Iteration-' + options.iteration, '.speccore');
+    await ensureDir(planDir);
+    await writeFile(join(planDir, 'plan.json'), options.response);
+    logger.success('✅ plan.json 已写入');
+    return;
+  }
   if (options.list) { await showPlanHistory(); return; }
   if (options.show) { await showPlanDetail(options.show); return; }
   if (options.delete) { await removePlan(options.delete); return; }

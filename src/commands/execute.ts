@@ -21,6 +21,7 @@ import {
   ExecutionState,
 } from '../core/execution-state';
 import { createTaskBranch, detectDefaultBranch } from '../core/git-integration';
+import { buildPrompt, formatPrompt, parseAiResponse } from '../core/prompt-builder';
 
 export interface ExecuteOptions {
   all?: boolean;
@@ -47,14 +48,26 @@ export interface ExecuteOptions {
   agent?: string;      // external AI tool for code generation (copilot/claude/cursor/trae/qoder/windsurf/codebuddy)
   only?: string;
   plan?: string;
-
-
+  prompt?: boolean;     // --prompt: 输出结构化 Prompt 到 stdout（等待 AI）
+  response?: string;    // --response: AI 返回的代码内容（配合 --prompt 使用）
 }
 export async function executeCommand(options: ExecuteOptions): Promise<void> {
   try {
     const iteration = await getDefaultIteration(options.iteration);
     if (!iteration) {
       logger.error('No active iteration found.');
+      return;
+    }
+
+    // ── Prompt 模式: 输出结构化 Prompt 到 stdout ──
+    if (options.prompt) {
+      await runPromptMode(iteration, options);
+      return;
+    }
+
+    // ── Response 模式: 接收 AI 返回内容并写入文件 ──
+    if (options.response) {
+      await runApplyMode(iteration, options);
       return;
     }
 
@@ -1162,4 +1175,76 @@ async function executeByPlan(planId: string, iteration: string, options: Execute
     await executeWithProgress(planTasks, iteration, options.base, [], {});
   }
   await markPlanExecuted(plan.id, 'Completed ' + planTasks.length + ' tasks');
+}
+
+// ═══════════════════════════════════════════════════════════
+// Prompt 模式 — CLI 输出结构化 Prompt，Skill/AI 消费
+// ═══════════════════════════════════════════════════════════
+
+async function runPromptMode(iteration: string, options: ExecuteOptions): Promise<void> {
+  const task = options.task || '';
+  const taskDir = join('Iteration-' + iteration, '030-tasks', task);
+
+  const prompt = await buildPrompt('execute', {
+    iteration,
+    task,
+    taskDir,
+    platform: options.platform,
+  });
+
+  // 输出到 stdout（Skill 通过 execute_command 捕获）
+  process.stdout.write(formatPrompt(prompt));
+
+  // 退出码 10: 表示等待 AI 处理
+  process.exitCode = 10;
+}
+
+// ═══════════════════════════════════════════════════════════
+// Response 模式 — 接收 AI 返回内容，写入文件
+// ═══════════════════════════════════════════════════════════
+
+async function runApplyMode(iteration: string, options: ExecuteOptions): Promise<void> {
+  const response = options.response || '';
+  const task = options.task || '';
+
+  if (!task) {
+    logger.error('--apply 模式需要指定 --task');
+    return;
+  }
+
+  const parsed = parseAiResponse(response);
+  if (!parsed || !parsed.files || parsed.files.length === 0) {
+    logger.error('无法解析 AI 返回内容，请确保格式为: {"files": [{"path": "...", "content": "..."}]}');
+    return;
+  }
+
+  const iterDir = join('Iteration-' + iteration);
+  let writtenCount = 0;
+
+  for (const file of parsed.files) {
+    const fullPath = join(iterDir, file.path);
+    await require('fs-extra').ensureDir(require('path').dirname(fullPath));
+    await writeFile(fullPath, file.content);
+    logger.info(`   ✅ 写入: ${file.path}`);
+    writtenCount++;
+  }
+
+  // 更新 PROJECT_GRAPH
+  await updateProjectGraphStatus(iteration, task);
+
+  logger.success(`\n📁 完成: ${writtenCount} 个文件已写入`);
+  logger.info(`   📂 位置: ${iterDir}/`);
+  logger.info(`   📋 下一步: speccore pr --task ${task}`);
+}
+
+async function updateProjectGraphStatus(iteration: string, task: string): Promise<void> {
+  const graphPath = join('Iteration-' + iteration, '000-overview', 'PROJECT_GRAPH.md');
+  if (!await pathExists(graphPath)) return;
+
+  let content = await readFile(graphPath, 'utf-8');
+  const taskRegex = new RegExp(`(\\|\\s*${task}\\s*\\|[^|]*\\|\\s*)[^|]*(\\s*\\|)`, 'i');
+  if (taskRegex.test(content)) {
+    content = content.replace(taskRegex, `$1✅ 已完成$2`);
+    await writeFile(graphPath, content);
+  }
 }

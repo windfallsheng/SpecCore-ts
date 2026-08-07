@@ -19,6 +19,7 @@ import { extractQuestions, showQuestionChecklist } from '../core/question-checkl
 import { showNextSteps } from '../core/next-steps';
 import { runAnalysis, AnalyzeInput } from '../core/analyze-engine';
 import { generateGlobalArtifacts } from '../core/global-artifacts';
+import { buildPrompt, formatPrompt } from '../core/prompt-builder';
 
 export interface AnalyzeOptions {
   iteration?: string;
@@ -31,9 +32,37 @@ export interface AnalyzeOptions {
   requirements?: string;
   scope?: 'global' | 'iteration' | 'task';
   depth?: 'quick' | 'normal' | 'deep';
+  prompt?: boolean;     // --prompt: 输出结构化分析 Prompt 到 stdout
+  apply?: string;       // --apply: 接收 AI 分析结果写入 ANALYSIS.md
 }
 
 export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
+  // ── Prompt 模式 ──
+  if (options.prompt) {
+    const iter = options.iteration || await getDefaultIteration();
+    const prompt = await buildPrompt('analyze', { iteration: iter, task: options.task });
+    process.stdout.write(formatPrompt(prompt));
+    process.exitCode = 10;
+    return;
+  }
+
+  // ── Apply 模式 ──
+  if (options.apply) {
+    if (!options.iteration) { logger.error('--apply 需要 --iteration'); return; }
+    const iterDir = `Iteration-${options.iteration}`;
+    const specDir = join(iterDir, '020-specs');
+    await ensureDir(specDir);
+    await writeFile(join(specDir, 'ANALYSIS.md'), options.apply);
+    logger.success(`✅ ANALYSIS.md 已写入 020-specs/`);
+    // 如果指定了 task，写入 task 的 analysis
+    if (options.task) {
+      const taskDir = join(iterDir, '030-tasks', options.task.startsWith('Task-') ? options.task : `Task-${options.task}`);
+      await ensureDir(taskDir);
+      await writeFile(join(taskDir, 'ANALYSIS.md'), options.apply);
+      logger.success(`✅ 任务分析已写入 ${taskDir}/`);
+    }
+    return;
+  }
   // 手动解析 argv (Commander.js 偶发不传递部分选项)
   parseArgv(options);
 
