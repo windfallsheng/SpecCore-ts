@@ -1225,7 +1225,11 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
 // ═══════════════════════════════════════════════════════════
 
 async function runApplyMode(iteration: string, options: ExecuteOptions): Promise<void> {
-  const response = options.response || '';
+  let response = options.response || '';
+  // 支持管道: echo '...' | speccore execute --response -
+  if (response === '-') {
+    response = await readStdin();
+  }
   const task = options.task || '';
 
   if (!task) {
@@ -1296,4 +1300,14 @@ async function updateProjectGraphStatus(iteration: string, task: string): Promis
     content = content.replace(taskRegex, `$1✅ 已完成$2`);
     await writeFile(graphPath, content);
   }
+}
+
+function readStdin(): Promise<string> {
+  return new Promise(resolve => {
+    let data = '';
+    process.stdin.setEncoding('utf-8');
+    process.stdin.on('data', chunk => data += chunk);
+    process.stdin.on('end', () => resolve(data));
+    if (process.stdin.isTTY) resolve('');
+  });
 }

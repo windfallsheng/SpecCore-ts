@@ -74,7 +74,7 @@ A5. 自检:
 A6. 写入:
     Write /tmp/speccore-resp.json
     execute_command("cat /tmp/speccore-resp.json | speccore {cmd} --response - {params}")
-    → 步骤 4
+    注意: --response - 表示从 stdin 读取，已验证可用
 ```
 
 ---
