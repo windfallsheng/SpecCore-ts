@@ -7,6 +7,7 @@ import { nextTaskId } from '../../core/global-counters';
 
 import { showNextSteps } from '../../core/next-steps';
 import { createInterface } from 'readline';
+import { buildPrompt, formatPrompt } from '../../core/prompt-builder';
 
 function promptUser(question: string): Promise<string> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -23,6 +24,9 @@ export interface IterationSplitOptions {
   interactive?: boolean;
   platforms?: string;
   strict?: boolean;
+  owner?: string;
+  prompt?: boolean;     // --prompt: 输出拆分 Prompt
+  response?: string;    // --response: 接收 AI 拆分结果创建 Task 目录
   force?: boolean;
 }
 
@@ -43,6 +47,43 @@ async function detectPlatforms(iterationDir: string, specified?: string): Promis
 }
 
 export async function iterationSplitCommand(options: IterationSplitOptions): Promise<void> {
+  // ── Prompt 模式 ──
+  if (options.prompt) {
+    const iter = options.iteration || await getDefaultIteration() || '';
+    const prompt = await buildPrompt('split', { iteration: iter });
+    process.stdout.write(formatPrompt(prompt));
+    process.exitCode = 10;
+    return;
+  }
+
+  // ── Response 模式 ──
+  if (options.response) {
+    const iter = options.iteration || await getDefaultIteration() || '';
+    if (!iter) { logger.error('--response 需要 --iteration'); return; }
+    const iterDir = join('Iteration-' + iter, '030-tasks');
+    await ensureDir(iterDir);
+    // 尝试解析 AI 返回的 JSON Task 列表
+    try {
+      const tasks = JSON.parse(options.response);
+      if (Array.isArray(tasks)) {
+        for (const task of tasks) {
+          const taskDir = join(iterDir, task.id || `Task-${String(tasks.indexOf(task) + 1).padStart(3, '0')}`);
+          await ensureDir(taskDir);
+          if (task.req) await writeFile(join(taskDir, 'REQ.md'), task.req);
+          if (task.tech) await writeFile(join(taskDir, 'TECH.md'), task.tech);
+          logger.info(`   ✅ 创建: ${taskDir}`);
+        }
+      } else {
+        logger.warn('AI 返回格式非数组，将作为 Markdown 写入 REQUIREMENT.md');
+        await writeFile(join(iterDir, 'REQUIREMENT.md'), options.response);
+      }
+    } catch {
+      await writeFile(join(iterDir, 'REQUIREMENT.md'), options.response);
+    }
+    logger.success('✅ 任务已创建');
+    return;
+  }
+
   const spinner = new Spinner('Splitting requirements into tasks');
   spinner.start();
 

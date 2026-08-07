@@ -21,6 +21,7 @@ import { pathExists, ensureDir, readFile, writeFile, readdir, stat, unlink } fro
 import { join, basename } from 'path';
 
 import { showNextSteps } from '../core/next-steps';
+import { validateContent, generateReport } from '../core/doc-validator';
 function findCommand(cmd: string): string | null {
   try {
     return execSync(`which ${cmd}`, { stdio: 'pipe', encoding: 'utf-8' }).trim();
@@ -313,6 +314,12 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     // ── 自动合并到 REQUIREMENT.md（汇总各端需求，供 iteration split 使用）──
     await mergeToRequirement(iterDir, targetDir, platform);
 
+    // ── 内置质量验证 ──
+    const report = await validateContent(content, targetDir, iterDir);
+    const reportPath = join(targetDir, 'VALIDATION.md');
+    await writeFile(reportPath, generateReport(report, basename(options.file)));
+    const grade = report.score >= 90 ? '🟢' : report.score >= 75 ? '🟡' : '🔴';
+
     // ── 统计 ──
     const imageCount = (await pathExists(imageDir))
       ? (await readdir(imageDir, { recursive: true })).filter((f: string | Buffer) => 
@@ -325,7 +332,10 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     const fileStat = await stat(outputPath);
     logger.success(`输出: ${outputPath} (${fileStat.size} bytes)`);
     logger.info(`图片: ${imageCount} 张 → ${imageDir}/`);
-    logger.info(`接口表: ${hasInterfaceTable ? '✅' : '⚠️ 缺失（已追加提示）'}`);
+    logger.info(`接口表: ${hasInterfaceTable ? '✅' : '⚠️ 缺失（已追加提示）'}`
+    );
+    logger.info(`🔍 质量: ${grade} ${report.score}/100 (${report.errors}错误 ${report.warnings}警告)`);
+    logger.info(`   详见: ${reportPath}`);
     logger.info('');
     logger.info('📋 下一步:');
     if (options.ai !== false) {

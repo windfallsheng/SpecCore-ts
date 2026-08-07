@@ -2,6 +2,45 @@
 
 ---
 
+## v5.28.0 (2026-08-07) — "Prompt/Apply 协作架构"
+
+### 🏗️ 重大架构: Skill + CLI + AI 协作循环
+
+- **Prompt 标准化引擎** `src/core/prompt-builder.ts`
+  - 统一的 Spec → AI Prompt 构建器，支持 execute/analyze/split/plan 四种类型
+  - 自动读取 CONSTITUTION.md + REQ.md + 数据模型，构建结构化上下文
+  - 标准化输出格式: `[SPECCORE_PROMPT]...[/SPECCORE_PROMPT]`
+  - AI 返回解析: `parseAiResponse()` 提取 `{"files":[...]}`
+
+- **execute 命令**: `--prompt` 输出代码生成 Prompt，`--response` 接收 AI 代码写文件
+- **analyze 命令**: `--prompt` 输出分析 Prompt，`--apply` 接收分析写入 ANALYSIS.md
+- **split 命令**: `--prompt` 输出拆分 Prompt，`--response` 接收 Task 列表创建目录
+- **plan 命令**: `--prompt` 输出排程 Prompt，`--response` 接收计划写入 plan.json
+
+### 📋 CONSTITUTION 增强
+
+- 新增"项目名称"列（业务名，如"食堂后台管理"），与工程名分离
+- AI 据此理解业务范围，analyze/split 时作为上下文参考
+
+### 🧹 质量治理
+
+- **init 自动清理**: `cleanupStaleFiles()` 移除旧版本残留命令文件和 Skill 目录
+- **移除 import 意图**: 已不存在的命令从意图识别中移除
+- **ask 引擎增强**: 
+  - 平台参数提取（"初始化tae"→`--tool=trae`）
+  - match 模式增加完整命令展示和确认交互
+  - KB 匹配时整合 extractedParams
+- **doc-validator**: 6 维文档质量检测（编码/结构/表格/API/图片/内容），自动生成 VALIDATION.md
+
+### 📖 文档
+
+- `docs/DESIGN.md` 新增第 10/11/12 章：
+  - Prompt/Apply 协作循环完整流程图
+  - 两层调度机制 (WorkBuddy Automation + CLI schedule)
+  - 与 OpenSpec/Claude Code/Cursor 横向对比
+
+---
+
 ## v5.26.0 (2026-08-05) — "AI 万能入口 + 视觉化看板"
 
 ### v5.26.1 (2026-08-05)

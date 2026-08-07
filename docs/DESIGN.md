@@ -279,5 +279,192 @@ speccore schedule daemon start
 | v5.27.27 | 08-07 | Skill+CLI 输出模式、统一路由器 Skill |
 | v5.27.28 | 08-07 | AGENTS.md + CLAUDE.md 全平台适配 |
 | v5.27.29 | 08-07 | Qoder .qoder/rules/ 自动生成 |
+| v5.27.34 | 08-07 | Prompt 架构落地: Skill→CLI→AI→CLI 协作循环 |
+| v5.27.35 | 08-07 | CONSTITUTION 增加"项目名称"列、init 残留清理、意图识别平台参数 |
 
 > **最后更新**: 2026-08-07
+
+---
+
+## 10. Skill + CLI + AI 协作架构（Prompt/Apply 模式）
+
+### 10.1 核心原则
+
+```
+CLI 只做确定性操作，不做内容生成。
+代码/分析/拆分等创造性工作完全由宿主 AI 完成。
+```
+
+**角色分工**：
+| 角色 | 职责 | 示例 |
+| :--- | :--- | :--- |
+| Skill（.agents/skills/） | 编排流程、调用 CLI、触发 AI | `spec-execute` Skill |
+| CLI（speccore） | 读写文件、构建 Prompt、写入结果 | `speccore execute --prompt` |
+| 宿主 AI（Qoder/Trae/Claude） | 语义理解、内容生成、代码编写 | 根据 Spec 生成 Java 代码 |
+
+### 10.2 Prompt/Apply 协作循环
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  SpecCore Prompt/Apply 协作循环                               │
+│                                                               │
+│  Skill                    CLI                   宿主 AI       │
+│    │                       │                       │          │
+│    │ ① execute_command ──▶│                       │          │
+│    │    --prompt           │ ② 读 Spec             │          │
+│    │                       │ ③ 输出 Prompt ──────▶│          │
+│    │    ◀── capture stdout │                       │          │
+│    │                       │                       │ ④ 生成   │
+│    │  ⑤ extract prompt ──────────────────────────▶│          │
+│    │                       │      ◀── ⑥ 返回代码 ─│          │
+│    │                       │                       │          │
+│    │  ⑦ execute_command ──▶│                       │          │
+│    │    --response         │ ⑧ 解析 JSON           │          │
+│    │                       │ ⑨ 写入文件            │          │
+│    │                       │ ⑩ 更新状态            │          │
+│    │    ◀── ✅ done        │                       │          │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**步骤说明**：
+1. Skill 调用 `speccore execute --prompt -t Task-001`
+2. CLI 读取 Task 的 REQ.md、TECH.md、CONSTITUTION.md
+3. CLI 构建结构化 Prompt，输出到 stdout（`[SPECCORE_PROMPT]...[/SPECCORE_PROMPT]`）
+4. Skill 通过 `execute_command` 工具返回值捕获 stdout
+5. Skill 提取 Prompt 内容，作为上下文传给宿主 AI
+6. 宿主 AI 返回 JSON：`{"files": [{"path": "...", "content": "..."}]}`
+7. Skill 调用 `speccore execute --response '{json}' -t Task-001`
+8. CLI 解析 JSON，写入文件，更新 PROJECT_GRAPH 状态
+
+### 10.3 Prompt 结构化格式
+
+```
+[SPECCORE_PROMPT]
+# 任务: execute — Task-001
+
+## 技术栈
+- 语言: Java
+- 框架: Spring Boot 3.x
+- 数据库: MySQL 8.0
+
+## API 接口定义
+| 方法 | 路径 | 说明 |
+| :--- | :--- | :--- |
+| POST | /api/auth/login | 登录 |
+
+## 数据模型
+### User (users)
+| 字段 | 类型 | 说明 |
+| :--- | :--- | :--- |
+| id | bigint | 主键 |
+
+## 业务规则和约束
+- 接口: /api/v1/{模块}/{操作}
+- 错误码: 4 位数字，按模块划分
+
+## 输出格式要求
+请返回格式: {"files": [{"path": "相对路径", "content": "代码内容"}]}
+
+## 执行指令
+请根据以上 Spec 生成代码。要求: ...
+[/SPECCORE_PROMPT]
+```
+
+### 10.4 适用的命令列表
+
+| 命令 | --prompt 做什么 | --response/--apply 做什么 |
+| :--- | :--- | :--- |
+| `execute` | 读 Spec → 输出代码生成 Prompt | 接收 AI 代码 → 写入文件 |
+| `analyze` | 读需求 → 输出分析 Prompt | 接收 AI 分析 → 写入 ANALYSIS.md |
+| `split` | 读分析结果 → 输出拆分 Prompt | 接收 AI 拆分 → 创建 Task 目录 |
+| `plan` | 读 Task 列表 → 输出排程 Prompt | 接收 AI 计划 → 写入 plan.json |
+| `doc2spec` | 读原始文档 → 输出验证 Prompt | 接收 AI 修正 → 更新 MD |
+
+---
+
+## 11. 定时调度机制
+
+### 11.1 两层调度架构
+
+```
+┌──────────────────────────────────────────┐
+│  Layer 1: WorkBuddy Automation (宿主)    │
+│  cron-like 规则 → 定时触发 Skill          │
+│  例: 每天 20:00 触发 spec-dev Skill       │
+└──────────────┬───────────────────────────┘
+               │ 触发
+               ▼
+┌──────────────────────────────────────────┐
+│  Layer 2: SpecCore schedule CLI (项目)   │
+│  speccore schedule create/list/daemon     │
+│  例: 创建"夜间批量执行"计划               │
+└──────────────┬───────────────────────────┘
+               │ 调度
+               ▼
+┌──────────────────────────────────────────┐
+│  Layer 3: spec-dev Skill                 │
+│  检测当前阶段 → 拼命令 → 执行              │
+└──────────────────────────────────────────┘
+```
+
+### 11.2 定时场景示例
+
+```
+场景: 每晚 8 点自动检查迭代进度并执行待办任务
+
+1. 用户在 WorkBuddy 中创建自动化:
+   - 名称: "夜间进度检查"
+   - 时间: RRULE FREQ=DAILY BYHOUR=20
+   - 提示词: "检查所有迭代进度，执行待办的开发任务"
+
+2. WorkBuddy 到时间后触发 spec-dev Skill
+3. spec-dev 读取 context.json → 发现阶段: execute
+4. Skill 拼命令: speccore execute --all --force
+5. CLI 走 Prompt/Apply 协作循环完成开发
+```
+
+### 11.3 CLI schedule 命令
+
+```
+speccore schedule create --name "夜间批量" --at "20:00" --batch-size 3
+speccore schedule list
+speccore schedule daemon  # 持续运行，等待时间触发
+```
+
+---
+
+## 12. 与 OpenSpec 等行业工具的对比
+
+### 12.1 相同的核心机制
+
+SpecCore 的 Prompt/Apply 模式与以下工具的原理完全一致：
+
+| 工具 | 确定性操作 | AI 生成 | 协作方式 |
+| :--- | :--- | :--- | :--- |
+| **OpenSpec** | CLI 读写文件、解析 Spec | AI 读 Spec 生成代码 | Tool Call → stdout → AI |
+| **Claude Code** | 内置工具(Bash/Read/Write) | Claude 生成内容 | MCP/工具调用 |
+| **Cursor Agent** | Terminal/File 操作 | GPT-4 生成代码 | agentic loop |
+| **GitHub Copilot** | 文件读写、Git 操作 | 代码补全/生成 | inline suggestion |
+| **SpecCore** | speccore CLI 确定性操作 | 宿主 AI(Qoder/Trae) | execute_command → stdout → AI |
+
+### 12.2 关键差异 — SpecCore 的优势
+
+| 维度 | OpenSpec/Claude Code | SpecCore |
+| :--- | :--- | :--- |
+| Prompt 构建 | AI 自己推断上下文 | CLI 程序化构建，100% 确定性 |
+| Spec 规范 | 无强制格式 | CONSTITUTION.md 强制约束 |
+| 跨迭代追踪 | 无 | GLOBAL 层 + PROJECT_GRAPH |
+| 版本管理 | 无 | 基线 + 变更历史 |
+| 质量验证 | 依赖 AI | 内置 doc-validator 6 维检测 |
+| 多平台适配 | 单一工具 | Claude/Cursor/Trae/Windsurf/Qoder |
+| 命令防绕过 | LLM 可能忽略 | Skill 拼命令 + CLI 执行 = 100% 可靠 |
+
+### 12.3 技术可行性
+
+Prompt/Apply 模式依赖的唯一前提是：**宿主 AI 环境提供 `execute_command` 工具调用能力**。
+
+Qoder、Trae、Claude Code、Cursor 均支持此能力。因此：
+- ✅ 技术上无风险
+- ✅ 不需要 CLI 内置 LLM/API Key
+- ✅ 不依赖特定 IDE 的通信协议
+- ✅ 标准化的 `stdout` 传递，跨所有工具通用
