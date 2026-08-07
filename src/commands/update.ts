@@ -147,13 +147,20 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   const { checkUpgradeHints } = await import('./init');
   await checkUpgradeHints(projectRoot, speccoreDir);
 
-  // ── 4. 更新 .agents/skills/ + AGENTS.md（每次升级强制刷新）──
+  // ── 4. 更新 .agents/skills/ + AGENTS.md + 工具命令 + 清理残留 ──
+  const { createToolIntegrations, cleanupStaleFiles } = await import('./init');
+
+  // 4a. 更新所有 AI 工具的命令文件
+  await createToolIntegrations(projectRoot, options.tool);
+
+  // 4b. 更新 .agents/skills/（含 references/）
   const skillsSrc = join(__dirname, '..', '..', '.agents', 'skills');
   const skillsDest = join(projectRoot, '.agents', 'skills');
   if (await pathExists(skillsSrc)) {
     await require('fs-extra').copy(skillsSrc, skillsDest, { overwrite: true });
   }
-  // 更新 AGENTS.md（从内置模板）
+
+  // 4c. 更新 AGENTS.md / CLAUDE.md
   try {
     const agentsSrc = join(__dirname, '..', '..', 'AGENTS.md');
     if (await pathExists(agentsSrc)) {
@@ -161,6 +168,10 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
       await require('fs-extra').writeFile(join(projectRoot, 'CLAUDE.md'), '<!-- 规则请参考 AGENTS.md -->\n\n@AGENTS.md\n');
     }
   } catch {}
+
+  // 4d. 清理旧版本残留的命令文件和 Skill 目录
+  const skillNames = (await require('fs-extra').readdir(skillsSrc)).filter((f: string) => !f.startsWith('.'));
+  await cleanupStaleFiles(projectRoot, ALL_COMMANDS, skillNames);
 
   spinner.stop(`升级完成: v${oldVersion} → v${CURRENT_VERSION}`);
   logger.info('');

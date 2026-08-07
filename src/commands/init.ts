@@ -1068,7 +1068,7 @@ async function askUser(prompt: string): Promise<string> {
   return new Promise(resolve => rl.question(prompt, (ans: string) => { rl.close(); resolve(ans); }));
 }
 
-async function createToolIntegrations(projectRoot: string, toolFilter?: string): Promise<void> {
+export async function createToolIntegrations(projectRoot: string, toolFilter?: string): Promise<void> {
   const commands: [string, string, string][] = [
     ['spec-ask', 'SpecCore AI Router', '1. Read .speccore/CONSTITUTION.md for project context\n2. Read .speccore/local/context.json for current iteration\n3. Execute: speccore ask "${1:描述你的需求}"'],
     ['spec-welcome', '显示项目名片（HTML页面）', 'speccore welcome'],
@@ -1197,7 +1197,7 @@ async function createToolIntegrations(projectRoot: string, toolFilter?: string):
  * 清理旧版本残留的命令文件和 Skill 目录。
  * 遍历所有工具目录和 .agents/skills/，移除当前版本不存在的文件。
  */
-async function cleanupStaleFiles(
+export async function cleanupStaleFiles(
   projectRoot: string,
   commands: [string, string, string][],
   skillNames: string[]
