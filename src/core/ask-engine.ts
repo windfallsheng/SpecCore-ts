@@ -96,6 +96,8 @@ const COMMAND_KB: CommandKnowledge[] = [
     usage: 'speccore rename [--iteration <old> <new>] [--task <old> <new>]', examples: ['speccore rename --iteration Q2 Q3', 'speccore rename --task T-01 T-10'], related: ['sync'], triggers: ['重命名', 'rename', '改名', '更名'] },
   { name: 'task-create', aliases: ['tc'], description: '创建任务：交互式需求澄清 → 生成 REQUIREMENT.md',
     usage: '激活 spec-task-create Skill', examples: ['创建一个bug任务', '新建修复登录问题的任务'], related: ['analyze', 'execute'], triggers: ['创建.*任务', '新建.*任务', '建.*bug', '新增.*任务', '帮我写.*需求', '记录.*bug'] },
+  { name: 'iteration-create', aliases: ['ic'], description: '创建迭代：智能命名 + 平台检查',
+    usage: '激活 spec-iteration-create Skill', examples: ['创建一个新迭代', '创建Q2迭代'], related: ['init', 'doc2spec'], triggers: ['创建.*迭代', '新建.*迭代', '生成.*迭代', '迭代.*新建', '开始.*迭代'] },
 ];
 
 // ============================================================
@@ -235,9 +237,51 @@ function handleGuide(input: string): AskResult {
   if (/bug|修复|fix|defect/i.test(input)) {
     matchedWorkflow = WORKFLOWS['bugfix'];
     workflowName = 'Bug 修复流程';
-  } else if (/审查|review|检查代码|code review/i.test(input)) {
+  } else if (/审查|review|代码检查|code review|检查.*代码/i.test(input)) {
     matchedWorkflow = WORKFLOWS['code review'];
     workflowName = '代码审查流程';
+  } else if (/测试|test|写.*用例|补充.*测试/i.test(input)) {
+    return {
+      mode: 'match',
+      summary: '建议创建测试任务',
+      detail: '📋 建议: speccore ask "创建一个测试任务" 来生成测试计划',
+      commands: ['task-create'],
+    };
+  } else if (/文档|docs|写.*文档|补.*文档/i.test(input)) {
+    return {
+      mode: 'match',
+      summary: '建议创建文档任务',
+      detail: '📋 建议: speccore ask "创建一个文档任务" 来补充文档',
+      commands: ['task-create'],
+    };
+  } else if (/重构|refactor|优化.*代码|整理.*代码/i.test(input)) {
+    return {
+      mode: 'match',
+      summary: '建议创建重构任务',
+      detail: '📋 建议: speccore ask "创建一个重构任务" 来优化代码结构',
+      commands: ['task-create'],
+    };
+  } else if (/部署|deploy|发布|上线/i.test(input)) {
+    return {
+      mode: 'match',
+      summary: '建议创建部署任务',
+      detail: '📋 建议: speccore ask "创建一个部署任务" 来准备发布',
+      commands: ['task-create'],
+    };
+  } else if (/安全|security|漏洞|审计/i.test(input)) {
+    return {
+      mode: 'match',
+      summary: '建议创建安全审计任务',
+      detail: '📋 建议: speccore ask "创建一个安全审计任务"',
+      commands: ['task-create'],
+    };
+  } else if (/性能|performance|优化.*速度|慢/i.test(input)) {
+    return {
+      mode: 'match',
+      summary: '建议创建性能优化任务',
+      detail: '📋 建议: speccore ask "创建一个性能优化任务"',
+      commands: ['task-create'],
+    };
   } else if (/新功能|feature|登录|注册|支付|创建.*功能|做.*功能/i.test(input)) {
     matchedWorkflow = WORKFLOWS['new feature'];
     workflowName = '新功能开发全流程';
