@@ -2,6 +2,26 @@
 
 ---
 
+## v5.37.1 (2026-08-07) — "全类型任务 + 调度自动执行"
+
+### 🎯 10 种任务类型
+- feature / bugfix / research / review / test / docs / refactor / deploy / security / performance
+- spec-task-create: 类型选择器 + 上下文主动建议
+- spec-analyze: 每种类型独立分析模板（自动+交互双模式）
+- spec-execute: 代码生成交互确认
+
+### ⏰ 调度自动执行
+- daemon 写 trigger 文件 → AI Skill 自动检测 → 完整 Prompt/Apply
+- 中断恢复: context.json 追踪 + 重开自动继续
+- `schedule daemon install`: macOS LaunchAgent / Linux crontab 开机自启
+
+### 🔧 其他
+- 分支名 = 任务目录名（feature/Task-001-name）
+- execute 前置检查: ANALYSIS.md/REQUIREMENT.md 内容有效性校验
+- Excel/CSV Bug 列表导入 + 图片提取
+- spec-iteration-create + spec-task-create 智能命名
+- 12 个 Skill 全部高阶标准
+
 ## v5.30.0 (2026-08-07) — "数据保护 + 智能升级"
 
 ### 🛡️ 升级保护
