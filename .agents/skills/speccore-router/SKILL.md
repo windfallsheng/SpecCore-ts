@@ -1,3 +1,11 @@
+---
+name: speccore-router
+description: >
+  智能意图路由器。从自然语言识别意图 → 匹配 Skill → execute_command 执行。
+  核心原则：必须直接执行，决不输出命令文本。唯一下例外："只看不跑"。
+  Use when user input is ambiguous or doesn't match any specific Skill trigger.
+allowed-tools: ["Bash", "Read", "Write", "Edit"]
+---
 # SpecCore Router — 智能意图路由器
 
 > **定位**：从用户自然语言识别意图，提取参数，**用 execute_command 自动执行** CLI 命令。

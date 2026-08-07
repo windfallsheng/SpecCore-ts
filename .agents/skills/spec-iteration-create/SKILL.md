@@ -1,3 +1,10 @@
+---
+name: spec-iteration-create
+description: >
+  迭代创建。AI 英文关键词命名 + 平台检查。
+  Use when user says "创建迭代" "新建迭代" "Sprint".
+allowed-tools: ["Bash", "Read", "Write", "Edit"]
+---
 # SpecCore Iteration Create — 交互式迭代创建（高阶 Skill）
 
 > **你负责**: 接收描述 → 智能命名 → 检查平台映射 → 创建迭代 → 推荐下一步。

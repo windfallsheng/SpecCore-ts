@@ -1,3 +1,10 @@
+---
+name: spec-plan
+description: >
+  执行计划生成。根据任务列表生成多阶段计划(Mermaid 图+风险评估+里程碑)。
+  Use when user says "规划" "计划" "plan" "排程".
+allowed-tools: ["Bash", "Read", "Write", "Edit"]
+---
 # SpecCore Plan — 执行计划生成器
 
 > **你负责**: 读取 Task 列表 → 你自己排程 → CLI 写入 plan.json。

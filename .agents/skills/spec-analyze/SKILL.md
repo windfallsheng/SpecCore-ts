@@ -1,3 +1,10 @@
+---
+name: spec-analyze
+description: >
+  AI 需求分析引擎。按任务类型(feature/bugfix/review/test/docs/refactor/deploy/security/performance)
+  自动生成对应分析报告。Use when user says "分析" "审查" "安全审计" "性能分析" "测试用例".
+allowed-tools: ["Bash", "Read", "Write", "Edit"]
+---
 # SpecCore Analyze — 需求分析器
 
 > **你负责**: 读取需求文档 → 你自己分析 → CLI 写入 ANALYSIS.md。你自己就是分析引擎。

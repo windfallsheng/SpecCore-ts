@@ -1,3 +1,10 @@
+---
+name: spec-spec2doc
+description: >
+  文档导出。Spec Markdown → Word/PDF/HTML/PPTX。
+  Use when user says "导出" "生成文档" "生成报告" "导出Word" "导出PDF".
+allowed-tools: ["Bash", "Read", "Write", "Edit"]
+---
 # SpecCore spec2doc — AI 排版 + Pandoc 导出
 
 > **你负责**: 审计 Spec 文档 → 你自己编排排版 → Pandoc 机械导出。

@@ -1,49 +1,61 @@
-# AGENTS.md — SpecCore 项目规则
+# AGENTS.md — SpecCore AI 助手配置
 
-> 本文档供 AI 编码工具自动读取（Cursor / Copilot / Windsurf / Codex / Claude Code）。
-> 工具会读取本文档理解项目规则，不需要用户重复解释。
+> **定位**: 路由决策表。不装知识，只做路由。始终加载(< 80 行)。
 
-## 项目类型
-SpecCore 规范驱动开发项目。
+---
 
-## 核心工作方式
-- **AI 只拼命令，不执行命令**。识别用户意图后，输出 `speccore` CLI 命令给用户在终端执行。
-- **所有确定性操作通过 `speccore` CLI 完成**（创建目录、读写文件、校验格式）。
-- **代码生成通过宿主 AI 完成**，CLI 负责准备 Spec 上下文和写入文件。
+## 🚫 核心禁止规则
 
-## 项目结构
+| 禁止行为 | 原因 | 例外 |
+|:---|:---|:---|
+| **禁止输出 `speccore xxx` 命令文本给用户复制** | AI 上下文必须用 `execute_command` 执行 | 用户明确要求"只看不跑" |
+| **禁止无 ANALYSIS.md 时执行 execute** | 分析文件是代码生成的前提 | `speccore init` 首次初始化 |
+| **禁止跳过 analyze 直接 execute** | 分析 → 计划 → 执行 是强制性链路 | `--force` 用户明确知晓风险 |
+| **禁止在 explore/spec-dev 模式写代码** | 探索阶段只读不改 | 无 |
+| **禁止一次执行多个不相关的 Task** | 防止上下文过长导致幻觉 | `--all` 批量模式 |
+
+---
+
+## 📋 Skill 路由表
+
+| 用户意图（关键词） | 动作 | 说明 |
+|:---|:---|:---|
+| "创建任务" "新建任务" "bug任务" "审查任务" "测试任务" | 加载 `spec-task-create` → `execute_command` | 10 种任务类型选择器 + 智能命名 |
+| "创建迭代" "新建迭代" | 加载 `spec-iteration-create` → `execute_command` | 自动英文关键词 + 平台检查 |
+| "分析" "audit" "审查代码" "安全审计" | 加载 `spec-analyze` → `execute_command` | 10 种分析模板，自动/交互双模式 |
+| "开发" "执行" "写代码" "跑任务" | 加载 `spec-execute` → `execute_command` | Prompt/Apply 模式 |
+| "下一步" "流水线" "进度" "推进" | 加载 `spec-dev` → 展示状态，等用户确认 | 状态检测 + 推荐下一步 |
+| "导入文档" "Word" "Excel" "CSV" | 加载 `spec-doc2spec` → `execute_command` | 多格式导入 + 图片提取 |
+| "导出文档" "生成报告" | 加载 `spec-spec2doc` → `execute_command` | Spec → Word/PDF/HTML/PPTX |
+| "规划" "拆任务" "分任务" | 加载 `spec-split` 或 `spec-plan` → `execute_command` | 拆分 + 计划生成 |
+| "变更" "改需求" "修改" | 加载 `spec-change` → `execute_command` | 联动更新关联 Spec |
+| **模糊/复杂意图**（无法匹配以上） | `execute_command("speccore ask '...'")` | 路由到 ask 引擎推理 |
+| "多步" "然后" "再" "接着" "定时" "分批" | `execute_command("speccore ask '...'")` | 路由到 ask 引擎 → pipeline 模式 |
+
+---
+
+## 🔄 退出码 → 下一个 Skill
+
+| exitCode | 含义 | 交接给 |
+|:---|:---|:---|
+| 0 | 成功完成 | 展示结果，推荐下一步 |
+| 10 | 需要 AI 生成内容 | 当前 Skill 的生成逻辑 (Prompt/Apply) |
+| 11 | 参数缺失 | 追问用户补参，重试 |
+| 其他 | 执行失败 | [重试 ≤2次 / 跳过 / 停止] |
+
+---
+
+## 📁 Skill 标准结构
+
+每个 Skill 必须遵循三段式：
+
 ```
-Iteration-NNN-name/            ← 迭代目录
-├── 000-overview/              ← 进度总览
-├── 010-requirements/          ← 需求文档（按功能组织）
-│   ├── sources/               ← 原始 PRD
-│   ├── assets/                ← 素材
-│   └── {feature}/README.md    ← 各需求描述
-├── 020-specs/                 ← 需求分析（按端输出）
-├── 030-tasks/                 ← 开发任务
-└── STAFFING.md                ← 人员排期
+SKILL.md          ← ≤500 行，聚焦执行指令
+references/       ← 按需加载的模板、规范文档
+scripts/          ← 确定性操作（验证/格式化）
+assets/           ← 示例输出/图标
 ```
 
-## 核心命令
-| 意图 | CLI 命令 |
-| :--- | :--- |
-| 初始化项目 | `speccore init` |
-| 创建迭代 | `speccore iteration create -n <name> --owner <owner>` |
-| 导入需求文档 | `speccore doc2spec -f <file> --iter <iter>` |
-| 分析需求 | `speccore analyze -I <iter>` |
-| 拆分任务 | `speccore iteration split -I <iter>` |
-| 执行任务 | `speccore execute -t <task> --force` |
-| 查看进度 | `speccore dashboard` |
-| 任务回顾 | `speccore retro --task <task>` |
+---
 
-## 行为约束
-- **不要自己创建目录** — 用 `speccore iteration create`
-- **不要自己解析需求** — 用 `speccore analyze`
-- **失败时读取 .issues.md** — 看文件里的问题清单
-- **续跑用 --resume** — `speccore execute --resume`
-
-## 上下文文件加载顺序
-1. AGENTS.md（本文档）— 项目规则
-2. .speccore/CONSTITUTION.md — 技术栈与需求端映射
-3. .speccore/local/context.json — 当前活跃迭代
-4. .agents/skills/SKILL.md — 技能指令
+> 本文件由 Speccore 自动维护。路径: `.agents/skills/*/SKILL.md`

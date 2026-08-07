@@ -1,3 +1,10 @@
+---
+name: spec-dev
+description: >
+  智能进度推进器。检测迭代阶段 → 展示状态 → 等用户确认后执行下一步。
+  Use when user says "下一步" "流水线" "进度" "推进" "what's next".
+allowed-tools: ["Bash", "Read"]
+---
 # SpecCore Pipeline — 智能级联推进器
 
 > **你负责**: 检测迭代阶段 → 推荐并执行下一步 → 逐步推进项目。
