@@ -180,6 +180,66 @@ export async function scheduleCancelCommand(options: ScheduleCancelOptions): Pro
 }
 
 // ============================================================
+// schedule retry — 重新调度（基于已有任务改时间）
+// ============================================================
+export interface ScheduleRetryOptions {
+  id: string;
+  at?: string;
+}
+
+export async function scheduleRetryCommand(options: ScheduleRetryOptions): Promise<void> {
+  try {
+    if (!options.id) {
+      logger.error('请指定要重调度的任务 ID: --id=<id>');
+      return;
+    }
+
+    const task = await getScheduleTask(options.id);
+    if (!task) {
+      logger.error(`未找到调度任务: ${options.id}`);
+      logger.info('💡 使用 speccore schedule list 查看所有任务');
+      return;
+    }
+
+    const newTime = options.at || task.scheduledAt; // 默认用原时间（到了立即触发）
+    if (!options.at) {
+      // 如果没指定时间，默认 1 分钟后
+      const now = new Date();
+      now.setMinutes(now.getMinutes() + 1);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const defaultAt = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+      const updated = await createScheduleTask({
+        name: task.name,
+        iteration: task.iteration,
+        taskId: task.taskId,
+        scheduledAt: defaultAt,
+        execOptions: task.execOptions,
+      });
+      logger.success(`✅ 已创建新调度: ${updated.id.slice(0, 12)}`);
+      logger.info(`   任务: ${task.name}`);
+      logger.info(`   时间: ${defaultAt}`);
+      logger.info(`   💡 旧任务已保留，可 speccore schedule cancel --id=${options.id} 取消`);
+      return;
+    }
+
+    // 指定了时间的：取消旧任务 + 创建新任务
+    await cancelScheduleTask(options.id);
+    const updated = await createScheduledTask({
+      name: task.name,
+      iteration: task.iteration,
+      taskId: task.taskId,
+      scheduledAt: newTime,
+      execOptions: task.execOptions,
+    });
+    logger.success(`✅ 已重新调度: ${updated.id.slice(0, 12)}`);
+    logger.info(`   原时间: ${task.scheduledAt}`);
+    logger.info(`   新时间: ${newTime}`);
+  } catch (error: any) {
+    logger.error(`重调度失败: ${error.message}`);
+  }
+}
+
+// ============================================================
 // schedule delete — 删除调度记录
 // ============================================================
 export interface ScheduleDeleteOptions {
