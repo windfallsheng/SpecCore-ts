@@ -108,7 +108,7 @@ async function generateHandoverDoc(iteration: string): Promise<string> {
   // 3. 关键决策
   doc += `## 3. 关键决策记录\n\n`;
   // 从 ARCHITECTURE.md 提取
-  const archPath = join(iterDir, '00-技术文档', 'ARCHITECTURE.md');
+  const archPath = join(iterDir, '000-overview', 'ARCHITECTURE.md');
   if (await pathExists(archPath)) {
     const content = await readFile(archPath, 'utf-8');
     const decisions = content.match(/##\s*决策[\s\S]*?(?=\n##|\n---|$)/);
@@ -145,9 +145,9 @@ async function generateHandoverDoc(iteration: string): Promise<string> {
   doc += `## 6. 附录\n\n`;
   doc += `### 相关文件\n\n`;
   doc += `- 期次目录: \`${iteration}/\`\n`;
-  doc += `- 技术架构: \`${iteration}/00-技术文档/ARCHITECTURE.md\`\n`;
-  doc += `- 需求文档: \`${iteration}/02-需求文档/REQUIREMENT.md\`\n`;
-  doc += `- 项目图谱: \`${iteration}/00-迭代总览/PROJECT_GRAPH.md\`\n`;
+  doc += `- 技术架构: \`${iteration}/000-overview/ARCHITECTURE.md\`\n`;
+  doc += `- 需求文档: \`${iteration}/020-specs/\`\n`;
+  doc += `- 项目图谱: \`${iteration}/000-overview/PROJECT_GRAPH.md\`\n`;
 
   return doc;
 }
