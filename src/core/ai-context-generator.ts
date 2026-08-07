@@ -32,7 +32,7 @@ export interface AIContextInput {
   sources: string[];
   /** 分析范围 */
   scope: 'global' | 'iteration' | 'task';
-  /** 期次名称 */
+  /** 迭代名称 */
   iteration?: string;
   /** 任务 ID */
   taskId?: string;

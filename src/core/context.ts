@@ -113,7 +113,7 @@ export async function detectActiveIteration(): Promise<string> {
   const iterations: string[] = [];
   for (const match of matches) {
     const name = match[1].trim();
-    if (name && name !== '期次名称' && !name.startsWith('---')) {
+    if (name && name !== '迭代名称' && !name.startsWith('---')) {
       iterations.push(name);
     }
   }
