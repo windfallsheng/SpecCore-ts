@@ -277,4 +277,21 @@
 | 参数模糊不能确定 | 追问确认，提供选项 |
 | 想做的事情没有映射 | 用 speccore ask 作为通用入口 |
 | 项目未初始化 | 提示执行 speccore init |
+
+---
+
+## Prompt/Apply 模式映射
+
+> **核心规则**: 意图识别后，拼出的命令**始终带 --prompt 标志**。AI 处理完后用 --apply/--response 写入。
+
+| 用户意图 | --prompt 命令 | --apply/--response |
+| :--- | :--- | :--- |
+| 导入需求 {file} | `speccore doc2spec --prompt -f {file}` | `--response '...'` |
+| 分析 {iter} | `speccore analyze --prompt -I {iter}` | `--apply '...'` |
+| 拆分 {iter} | `speccore iteration split --prompt -I {iter}` | `--response '...'` |
+| 生成计划 {iter} | `speccore plan --prompt -I {iter}` | `--response '...'` |
+| 执行/开发 {task} | `speccore execute --prompt -t {task}` | `--response '...'` |
+| 创建 PR {task} | `speccore pr --prompt -t {task}` | `--response '...'` |
+| 完成/归档 {task} | `speccore done --prompt -t {task}` | `--response '...'` |
+| 导出文档 {iter} | `speccore spec2doc --prompt -I {iter}` | `--apply '...' -o {file}` |
 | 迭代不存在 | 列出现有迭代，询问是否创建新迭代 |
