@@ -196,10 +196,16 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     logger.info('   📄 备选方案: 在 Word 中用"另存为" → 选择 .md 格式');
     logger.info('');
 
-    // 非 TTY（AI 调用）→ 不交互，直接报错引导
+    // 非 TTY（AI 调用）→ 自动尝试安装，失败则报错
     if (!process.stdout.isTTY) {
-      logger.error('请先安装 pandoc 后再执行，或在 WorkBuddy 中使用 word2md 技能。');
-      return;
+      logger.info(`🤖 AI 上下文，自动尝试安装 pandoc: ${installCmd}`);
+      try {
+        execSync(installCmd, { stdio: 'inherit', timeout: 120000 });
+        logger.success('pandoc 安装成功！继续转换...\n');
+      } catch {
+        logger.error('自动安装失败，请在 WorkBuddy 中使用 word2md 技能（无需 pandoc）。');
+        return;
+      }
     }
 
     const answer = await promptUser('是否要自动安装 pandoc？(y/N): ');
@@ -213,10 +219,8 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
         return;
       }
     } else {
-      logger.info('跳过安装。你可以：');
-      logger.info(`  1. 手动执行: ${installCmd}`);
-      logger.info('  2. 使用 word2md 技能（对话中可用）');
-      logger.info('  3. 在 Word 中另存为 .md 后手动放到 02-需求文档/');
+      logger.info('已跳过安装。');
+      logger.info('  备选方案: word2md 技能（对话中可用）或 Word 另存为 .md');
       return;
     }
   }

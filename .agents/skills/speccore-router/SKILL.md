@@ -294,6 +294,4 @@
 | 创建 PR {task} | `speccore pr --prompt -t {task}` | `--response '...'` |
 | 完成/归档 {task} | `speccore done --prompt -t {task}` | `--response '...'` |
 | 导出文档 {iter} | `speccore spec2doc --prompt -I {iter}` | `--apply '...' -o {file}` |
-| 创建任务 {desc} | `激活 spec-task-create Skill` | 交互澄清 → task new → REQUIREMENT.md |
-| 导入 Bug 列表 {file} | `speccore doc2spec -f {file} --iter {iter}` | 自动逐行解析 |
 | 迭代不存在 | 列出现有迭代，询问是否创建新迭代 |
