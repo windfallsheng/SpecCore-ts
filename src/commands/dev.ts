@@ -54,7 +54,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
 
   const iterDir = `Iteration-${iteration}`;
   const legacyReq = join(iterDir, '010-requirements', 'REQUIREMENT.md');
-  const analysis = join(iterDir, '010-requirements', 'ANALYSIS.md');
+  const analysis = join(iterDir, '020-specs', 'ANALYSIS.md');
 
   if (!(await pathExists(legacyReq))) {
     showPhase('导入需求', ['speccore doc2spec -f PRD.docx -i ' + iteration]);
@@ -78,7 +78,7 @@ async function autoPipeline(options: DevOptions): Promise<void> {
   spinner.stop(`期次: ${iteration}`);
   const iterDir = `Iteration-${iteration}`;
   const reqDoc = join(iterDir, '010-requirements', 'REQUIREMENT.md');
-  const analysis = join(iterDir, '010-requirements', 'ANALYSIS.md');
+  const analysis = join(iterDir, '020-specs', 'ANALYSIS.md');
   if (!(await pathExists(reqDoc))) {
     execSync(`speccore doc2spec -f PRD.docx -i ${iteration} --no-ai`, { stdio: 'inherit' });
   } else if (!(await pathExists(analysis))) {

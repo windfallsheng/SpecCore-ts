@@ -92,7 +92,7 @@ export async function spec2docCommand(options: Spec2DocOptions): Promise<void> {
   } else if (options.task && iterName) {
     // 任务导出
     const iterDir = iterName.startsWith('Iteration-') ? iterName : `Iteration-${iterName}`;
-    const taskDir = join(iterDir, options.task.startsWith('Task-') ? options.task : `Task-${options.task}`);
+    const taskDir = join(iterDir, '030-tasks', options.task.startsWith('Task-') ? options.task : `Task-${options.task}`);
     if (!await pathExists(taskDir)) {
       logger.error(`任务目录不存在: ${taskDir}`);
       return;

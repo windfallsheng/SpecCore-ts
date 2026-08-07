@@ -84,7 +84,6 @@ export async function iterationFromGlobalCommand(options: IterationFromGlobalOpt
     }
 
     await ensureDir(join(iterationDir, '020-specs'));
-    await ensureDir(join(iterationDir, '00-技术文档'));
     await ensureDir(join(iterationDir, '000-overview'));
 
     // 6. 生成需求文档
@@ -93,7 +92,7 @@ export async function iterationFromGlobalCommand(options: IterationFromGlobalOpt
 
     // 7. 生成架构文档
     const archContent = generateIterationArchitecture(options.name, foundReqs);
-    await writeFile(join(iterationDir, '00-技术文档', 'ARCHITECTURE.md'), archContent);
+    await writeFile(join(iterationDir, '000-overview', 'ARCHITECTURE.md'), archContent);
 
     // 8. 生成期次总览
     const graphContent = generateProjectGraph(options.name, foundReqs, reqDetails.length);
