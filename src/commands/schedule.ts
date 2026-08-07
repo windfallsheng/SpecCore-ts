@@ -440,13 +440,33 @@ export async function installSystemSchedule(): Promise<void> {
     logger.info('   每5分钟检查到期任务');
   } else if (process.platform === 'win32') {
     const taskName = 'SpecCoreDaemon';
-    const cmdEscaped = `"${process.execPath}" "${join(__dirname, '..', '..', 'dist', 'cli.js')}" schedule daemon --foreground`;
-    // 每5分钟执行
-    const schCmd = `schtasks /create /tn "${taskName}" /tr "${cmdEscaped}" /sc minute /mo 5 /f /ru "INTERACTIVE"`;
-    require('child_process').execSync(schCmd, { stdio: 'pipe' });
+    const nodePath = process.execPath;
+    const scriptPath = join(__dirname, '..', '..', 'dist', 'cli.js');
+    // 用 spawnSync 直接传参数数组，避免 shell 转义陷阱
+    const { spawnSync } = require('child_process');
+    // 先删除可能存在的旧任务（-f 仍然需要所以这里手动 delete）
+    try {
+      spawnSync('schtasks', ['/delete', '/tn', taskName, '/f'], { stdio: 'pipe', shell: false });
+    } catch {}
+    const result = spawnSync('schtasks', [
+      '/create',
+      '/tn', taskName,
+      '/tr', `${nodePath} "${scriptPath}" schedule daemon --foreground`,
+      '/sc', 'minute',
+      '/mo', '5',
+      '/f',
+      '/rl', 'LIMITED',
+    ], { stdio: 'pipe', shell: false, encoding: 'utf-8' });
+
+    if (result.status !== 0) {
+      logger.error('❌ 创建计划任务失败');
+      logger.info(`   ${result.stderr || result.stdout || ''}`);
+      return;
+    }
     logger.success('✅ 已安装 Windows Task Scheduler');
     logger.info(`   任务名: ${taskName}`);
-    logger.info('   每5分钟检查到期任务');
+    logger.info(`   节点: ${nodePath}`);
+    logger.info(`   每5分钟检查到期任务`);
   } else {
     logger.warn('⚠️ 当前平台不支持系统级调度');
     logger.info('   请使用 speccore schedule daemon start 手动启动');
