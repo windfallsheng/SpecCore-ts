@@ -1058,6 +1058,15 @@ async function createToolIntegrations(projectRoot: string, toolFilter?: string):
       await require('fs-extra').remove(legacyQcoderDir);
     }
   } catch { /* ignore */ }
+  
+  // Qoder rules — AI 自动读取
+  const qoderRulesDir = join(projectRoot, '.qoder', 'rules');
+  await ensureDir(qoderRulesDir);
+  await writeFile(join(qoderRulesDir, 'speccore.md'), `# SpecCore 规则
+- 只输出 CLI 命令，不自行执行
+- 所有确定性操作通过 speccore CLI 完成
+- 详细规则见 AGENTS.md
+`);
   } // if hasQoder
 
   // TRAE auto-load skills — OpenSpec 模式: Skill 只输出命令文本，不执行
