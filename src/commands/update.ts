@@ -38,10 +38,17 @@ const ALL_COMMANDS: [string, string, string][] = [
 // ── 旧命令文件名（需要清理的）──
 const LEGACY_NAMES = new Set(['spec-status', 'spec-status-panel', 'spec-global-status']);
 
-export async function updateCommand(options: { force?: boolean }): Promise<void> {
+export async function updateCommand(options: { force?: boolean; tool?: string }): Promise<void> {
   const projectRoot = process.cwd();
   const spinner = new Spinner('检测项目状态...');
   spinner.start();
+
+  // 解析工具过滤
+  const toolFilter = options.tool ? options.tool.split(',').map(t => t.trim()) : null;
+  const allTools = ['.claude', '.codebuddy', '.cursor', '.trae', '.windsurf'];
+  const tools = toolFilter
+    ? allTools.filter(t => toolFilter.some(f => t.includes(f)))
+    : allTools;
 
   // 检查是否已初始化
   const speccoreDir = join(projectRoot, '.speccore');
@@ -70,7 +77,8 @@ export async function updateCommand(options: { force?: boolean }): Promise<void>
   const cleanedFiles: string[] = [];
 
   // ── 1. 更新工具目录命令文件 ──
-  const tools = ['.claude', '.codebuddy', '.cursor', '.trae', '.windsurf'];
+
+  logger.info(`  目标工具: ${tools.map(t => t.replace('.', '')).join(', ') || '无'}`);
   const qoderDir = join(projectRoot, '.qoder', 'commands', 'spec');
 
   for (const tool of tools) {
