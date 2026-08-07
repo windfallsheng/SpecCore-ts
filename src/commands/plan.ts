@@ -270,10 +270,62 @@ function formatPlanMarkdown(plan: PlanEntry[], iteration: string, allRawTasks?: 
   lines.push(`> **任务**: ${allTasks.length}  ·  **阶段**: ${plan.length}  ·  **预估**: ${totalHours}h`);
   lines.push('');
 
-  // ── 1. 概览 ──
+  // ── 1. 依赖拓扑 (Mermaid) ──
+  const hasDeps = allTasks.some(t => t.dependencies.length > 0);
+  if (hasDeps || allTasks.length > 1) {
+    lines.push('---');
+    lines.push('');
+    lines.push('## 1. 依赖关系图');
+    lines.push('');
+    lines.push('```mermaid');
+    lines.push('graph LR');
+    for (const t of allTasks) {
+      const label = t.name.length > 15 ? t.name.slice(0, 12) + '...' : t.name;
+      if (t.dependencies.length > 0) {
+        for (const d of t.dependencies) {
+          lines.push(`  ${d}["${d}"] --> ${t.id}["${label}"]`);
+        }
+      } else {
+        lines.push(`  ${t.id}["${label}"]`);
+      }
+    }
+    // 标记风险任务
+    for (const t of highRiskTasks) {
+      lines.push(`  style ${t.id} fill:#f96,stroke:#333`);
+    }
+    lines.push('```');
+    lines.push('');
+  }
+
+  // ── 2. 甘特图 (Mermaid) ──
   lines.push('---');
   lines.push('');
-  lines.push('## 1. 执行概览');
+  lines.push('## 2. 执行甘特图');
+  lines.push('');
+  lines.push('```mermaid');
+  lines.push('gantt');
+  lines.push(`  title ${iteration} 执行计划`);
+  lines.push('  dateFormat YYYY-MM-DD');
+  lines.push('  axisFormat %m-%d');
+  lines.push('');
+  let dayOffset = 0;
+  for (const phase of plan) {
+    for (const t of phase.tasks) {
+      const dur = t.estimatedHours <= 4 ? '1d' : t.estimatedHours <= 8 ? '2d' : '3d';
+      const after = t.dependencies.length > 0 ? `after ${t.dependencies[0]}` : '';
+      const day = dayOffset;
+      lines.push(`  section Phase ${phase.phase}`);
+      lines.push(`  ${t.id}: ${t.name.slice(0, 20)} :${after}${day}, ${dur}`);
+    }
+    dayOffset += 2;
+  }
+  lines.push('```');
+  lines.push('');
+
+  // ── 3. 执行概览 ──
+  lines.push('---');
+  lines.push('');
+  lines.push('## 3. 执行概览');
   lines.push('');
   for (const phase of plan) {
     lines.push(`### Phase ${phase.phase}`);
@@ -289,10 +341,10 @@ function formatPlanMarkdown(plan: PlanEntry[], iteration: string, allRawTasks?: 
     lines.push('');
   }
 
-  // ── 2. 任务详情 ──
+  // ── 4. 任务详情 ──
   lines.push('---');
   lines.push('');
-  lines.push('## 2. 任务详情');
+  lines.push('## 4. 任务详情');
   lines.push('');
   for (const t of allTasks) {
     lines.push(`### ${t.id}: ${t.name}`);
@@ -309,29 +361,10 @@ function formatPlanMarkdown(plan: PlanEntry[], iteration: string, allRawTasks?: 
     lines.push('');
   }
 
-  // ── 3. 依赖拓扑 ──
-  const hasDeps = allTasks.some(t => t.dependencies.length > 0);
-  if (hasDeps) {
-    lines.push('---');
-    lines.push('');
-    lines.push('## 3. 依赖关系');
-    lines.push('');
-    lines.push('```');
-    for (const t of allTasks) {
-      if (t.dependencies.length > 0) {
-        for (const d of t.dependencies) lines.push(`  ${d} ──▶ ${t.id}`);
-      } else {
-        lines.push(`  ${t.id} (无依赖)`);
-      }
-    }
-    lines.push('```');
-    lines.push('');
-  }
-
-  // ── 4. 风险评估 ──
+  // ── 5. 风险评估 ──
   lines.push('---');
   lines.push('');
-  lines.push('## 4. 风险评估');
+  lines.push('## 5. 风险评估');
   lines.push('');
   if (highRiskTasks.length > 0) {
     lines.push('| Task | 风险级别 | 风险说明 | 缓解措施 |');
@@ -352,7 +385,7 @@ function formatPlanMarkdown(plan: PlanEntry[], iteration: string, allRawTasks?: 
   // ── 5. 里程碑 ──
   lines.push('---');
   lines.push('');
-  lines.push('## 5. 里程碑');
+  lines.push('## 6. 里程碑');
   lines.push('');
   lines.push('| 里程碑 | 触发条件 | 验收标准 | 预计完成 |');
   lines.push('|:---|:---|:---|:---|');
@@ -365,7 +398,7 @@ function formatPlanMarkdown(plan: PlanEntry[], iteration: string, allRawTasks?: 
   // ── 6. 回滚方案 ──
   lines.push('---');
   lines.push('');
-  lines.push('## 6. 回滚方案');
+  lines.push('## 7. 回滚方案');
   lines.push('');
   lines.push('- **触发条件**: 任一 Phase 中关键任务阻塞超过 4h 或 P0 问题未解决');
   lines.push('- **回滚步骤**:');
@@ -379,7 +412,7 @@ function formatPlanMarkdown(plan: PlanEntry[], iteration: string, allRawTasks?: 
   // ── 7. 执行记录 ──
   lines.push('---');
   lines.push('');
-  lines.push('## 7. 执行记录');
+  lines.push('## 8. 执行记录');
   lines.push('');
   lines.push('| 时间 | 事件 | 详情 |');
   lines.push('|:---|:---|:---|');
