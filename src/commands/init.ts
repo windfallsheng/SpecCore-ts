@@ -1415,7 +1415,7 @@ export async function checkUpgradeHints(projectRoot: string, speccoreDir: string
 
     // 检出缺失的新版字段
     if (!content.includes('项目名称')) {
-      hints.push('表头新增 "项目名称" 列');
+      hints.push('表头增加-项目名称-列，参考新版模板');
       newTemplate = generateConstitutionTemplate(projectRoot);
     }
 
@@ -1449,7 +1449,7 @@ export async function checkUpgradeHints(projectRoot: string, speccoreDir: string
         '',
         '### 方式 B: 手动修改',
         '1. 打开 .speccore/CONSTITUTION.md',
-        `2. 参考上方新版模板，在表头添加 "项目名称" 列`,
+        `2. 参考上方新版模板，在表头增加【项目名称】列`,
         '3. 保存后运行 speccore init 确认',
         '',
       ].join('\n');

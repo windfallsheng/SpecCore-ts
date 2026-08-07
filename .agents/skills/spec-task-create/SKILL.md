@@ -1,70 +1,53 @@
-# SpecCore Task Create — 交互式任务创建
+# SpecCore Task Create — 交互式任务创建（高阶 Skill）
 
-> **你负责**: 接收任意输入（文件/自然语言） → 内容澄清 → 生成 REQUIREMENT.md → 推荐下一步。
+> **你负责**: 接收任意输入 → 内容澄清 → 生成 REQUIREMENT.md → 推荐下一步。
+> 所有交互用对话完成，不自动跳过任何澄清步骤。
 
 ## 核心规则
 
-1. **先理解再创建**: 不管用户给什么格式的输入，先阅读理解内容。
-2. **主动澄清**: 内容模糊时必须向用户提问，确认后再写 spec。
-3. **生成结构化的 REQUIREMENT.md**: 含属性表 + 描述 + 验收标准。
-4. **创建后推荐**: analyze → plan → execute。
+1. 收到输入后先阅读理解，再决定是否需要澄清。
+2. 内容 < 80 字 → 必须澄清至少 2 个关键问题。
+3. 文件导入（xlsx/csv/txt/docx）→ 先调用 CLI 解析，再逐条确认。
+4. 创建完成后推荐 analyze，不自动推进。
 
-## 输入源支持
+## 执行流程
 
-### A. Excel/CSV (bug列表)
 ```
-1. execute_command("speccore doc2spec -f {file} --iter {iter}")
-   → 自动逐行解析，创建 Task-001 ~ Task-NNN
-   → 自动提取嵌入图片 → assets/images/
-2. 展示: ✅ 已创建N个任务 + 📷 M张图片
-3. 推荐: analyze --prompt -I {iter}
-```
+1. 接收输入:
+   - 自然语言描述 → 进入步骤 2
+   - 文件路径 → execute_command("speccore doc2spec -f {file} --iter {iter}")
+     完成后进入步骤 3
 
-### B. Word/Text/自然语言
-```
-1. 读取用户输入（文件或文字描述）
+2. 内容澄清（< 80 字）:
+   Bug 类:
+   "确认: {总结的问题}
+    1. 复现步骤是什么？
+    2. 影响哪些模块？
+    3. 优先级（P0/P1/P2）？"
 
-2. 你理解和澄清:
-   "📋 我理解你要创建的任务:
-    - 名称: {你推断的标题}
-    - 描述: {你总结的要点}
-    - 类型: {feature/bugfix/research}
-    - 优先级: {推断的优先级}
-    是否正确？需要补充什么？"
+   功能类:
+   "确认: {总结的功能}
+    1. 目标用户是谁？
+    2. 核心交互流程？
+    3. 涉及哪些 API？"
 
-3. 用户确认或补充后:
-   → 生成 REQUIREMENT.md
-   → execute_command("speccore task new {name} --type {type}")
-   → 如果有 iter，自动放到 Iteration-{iter}/030-tasks/ 下
+   等待用户回复后再继续。
+
+3. 创建任务:
+   execute_command("speccore task new {name} --type {type}")
+   或对已有 iter:
+   Write Iteration-{iter}/030-tasks/Task-XXX/REQUIREMENT.md
 
 4. 推荐:
    speccore analyze --prompt -I {iter} --task {taskId}
-```
-
-## 内容澄清模板
-
-```
-当用户提供的需求描述少于 50 字时，主动提问:
-
-针对 Bug:
-  1. 复现步骤是什么？
-  2. 期望行为 vs 实际行为？
-  3. 影响的模块/页面？
-  4. 优先级（P0/P1/P2）？
-
-针对新功能:
-  1. 目标用户是谁？
-  2. 核心交互流程是什么？
-  3. 涉及哪些 API？
-  4. 有哪些边界条件？
-
-你的提问应该简洁（2-3 个关键问题），一次问完。
+   speccore plan --prompt -I {iter}
+   speccore execute --prompt -t {taskId}
 ```
 
 ## 退出码
 
 | exitCode | 行动 |
 | :--- | :--- |
-| 0 | task 创建完成 → 推荐下一步 |
-| 11 | 参数不足 → 追问用户 |
+| 0 | 创建完成 → 推荐下一步 |
+| 11 | 参数不足 → 追问 |
 | 其他 | [重试/跳过] |
