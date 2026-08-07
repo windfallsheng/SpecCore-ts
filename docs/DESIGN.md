@@ -534,7 +534,20 @@ Qoder、Trae、Claude Code、Cursor 均支持此能力。因此：
 
 ### 15.1 核心规则
 
-任务必须先分析才能执行。这是强制性约束，不可跳过。
+任务必须先分析才能执行，且分析文件必须有实质内容。空文件/TODO 占位符视为无效。
+
+**有效性校验**:
+- ANALYSIS.md > 200 字符
+- 包含 API 定义、数据模型、业务规则、风险/架构等实质内容
+- 不是纯 TODO/TBD 占位符
+
+```
+if ANALYSIS.md 不存在 → exitCode 11 → 必须 analyze
+if ANALYSIS.md 无效(<200字/仅TODO) → exitCode 11 → 必须重新 analyze
+if ANALYSIS.md 有效 → 正常执行
+```
+
+依据: 没有有效 Spec，AI 就没有生成代码的依据。Code by Spec, Not by Vibe。
 
 ```
 创建任务 → 分析 (analyze --prompt) → 计划 (plan --prompt) → 执行 (execute --prompt)
