@@ -67,7 +67,7 @@ async function readTaskName(taskDir: string): Promise<string> {
 
 /**
  * 检查迭代名称是否重复
- * @returns 冲突的期次列表
+ * @returns 冲突的迭代列表
  */
 export async function checkIterationNameConflict(name: string, excludeName?: string): Promise<string[]> {
   const existing = await getAllIterationNames();
@@ -76,7 +76,7 @@ export async function checkIterationNameConflict(name: string, excludeName?: str
 
 /**
  * 检查任务名称是否重复（全项目范围）
- * @returns 冲突的任务列表（含所属期次）
+ * @returns 冲突的任务列表（含所属迭代）
  */
 export async function checkTaskNameConflict(name: string, excludeName?: string): Promise<{ name: string; iteration: string }[]> {
   const cwd = process.cwd();

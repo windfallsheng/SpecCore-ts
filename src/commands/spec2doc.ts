@@ -82,7 +82,7 @@ export async function spec2docCommand(options: Spec2DocOptions): Promise<void> {
     }
     sourceFiles.push({ path: options.file, label: basename(options.file, extname(options.file)) });
   } else if (options.all && iterName) {
-    // 全量导出：期次下所有 .md 文件
+    // 全量导出：迭代下所有 .md 文件
     const iterDir = iterName.startsWith('Iteration-') ? iterName : `Iteration-${iterName}`;
     if (!await pathExists(iterDir)) {
       logger.error(`迭代不存在: ${iterDir}`);
@@ -99,7 +99,7 @@ export async function spec2docCommand(options: Spec2DocOptions): Promise<void> {
     }
     await collectAllMd(taskDir, sourceFiles);
   } else {
-    // 默认：当前期次的 REQUIREMENT.md
+    // 默认：当前迭代的 REQUIREMENT.md
     if (!iterName) {
       logger.error('请指定迭代: --iteration <name>');
       return;

@@ -20,10 +20,10 @@ export async function contextCommand(options: ContextOptions): Promise<void> {
       logger.info('📋 SpecCore 上下文信息');
       logger.info('');
       logger.info('当前状态：');
-      logger.info(`  当前期次：${ctx.currentIteration || '无'}`);
+      logger.info(`  当前迭代：${ctx.currentIteration || '无'}`);
       logger.info(`  当前任务：${ctx.currentTask || '无'}`);
       logger.info(`  执行人：${ctx.currentAssignee || '无'}`);
-      logger.info(`  期次状态：${ctx.iterationStatus || '无'}`);
+      logger.info(`  迭代状态：${ctx.iterationStatus || '无'}`);
       logger.info(`  待处理：${ctx.pendingTasks}  进行中：${ctx.inProgressTasks}  已完成：${ctx.completedTasks}  阻塞：${ctx.blockedTasks}`);
       logger.info('');
       logger.info(`  最后操作：${ctx.lastAction || '无'}`);
@@ -92,7 +92,7 @@ async function findTaskDir(taskName: string): Promise<string | null> {
   const exactMatch = join(cwd, taskName);
   if (await pathExists(exactMatch)) return exactMatch;
 
-  // 遍历期次目录查找
+  // 遍历迭代目录查找
   for (const entry of entries) {
     if (entry.isDirectory() && entry.name.startsWith('Iteration-')) {
       const iterPath = join(cwd, entry.name);

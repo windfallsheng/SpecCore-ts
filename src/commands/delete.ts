@@ -1,6 +1,6 @@
 /**
 
- * delete — 安全删除 Task 或期次，自动清理所有关联引用
+ * delete — 安全删除 Task 或迭代，自动清理所有关联引用
  *
  * 不会直接 rm -rf，而是移动到 .speccore/trash/ 并清理：
  *   1. GLOBAL/INDEX.md 引用
@@ -44,7 +44,7 @@ export async function deleteCommand(options: DeleteOptions): Promise<void> {
 // 删除 Task
 // ============================================================
 async function deleteTask(cwd: string, taskId: string, force?: boolean): Promise<void> {
-  // 1. 找到 Task 所在的期次
+  // 1. 找到 Task 所在的迭代
   const { iterationDir, taskDir } = await findTask(cwd, taskId);
   if (!taskDir) {
     logger.error(`Task "${taskId}" not found in any iteration.`);
@@ -128,7 +128,7 @@ async function deleteIteration(cwd: string, iterName: string, force?: boolean): 
 // 辅助函数
 // ============================================================
 async function findTask(cwd: string, taskId: string): Promise<{ iterationDir: string; taskDir: string }> {
-  // 检查最常见的期次前缀
+  // 检查最常见的迭代前缀
   const entries = await readdir(cwd, { withFileTypes: true });
   const iterations = entries.filter((e) => e.isDirectory() && e.name.startsWith('Iteration-'));
 
@@ -139,7 +139,7 @@ async function findTask(cwd: string, taskId: string): Promise<{ iterationDir: st
     }
   }
 
-  // 如果不带期次前缀，检查所有目录
+  // 如果不带迭代前缀，检查所有目录
   const allDirs = entries.filter((e) => e.isDirectory() && !e.name.startsWith('.'));
   for (const dir of allDirs) {
     if (iterations.find((i) => i.name === dir.name)) continue; // already checked

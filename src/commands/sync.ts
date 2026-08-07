@@ -21,7 +21,7 @@ export interface SyncOptions {
 
 export async function syncCommand(options: SyncOptions): Promise<void> {
   if (!options.task && !options.iteration) {
-    logger.error('请指定要同步的 Task 或期次。用法: speccore sync --task=<Task编号> [--auto]');
+    logger.error('请指定要同步的 Task 或迭代。用法: speccore sync --task=<Task编号> [--auto]');
     return;
   }
 
@@ -31,7 +31,7 @@ export async function syncCommand(options: SyncOptions): Promise<void> {
   try {
     const iteration = await getDefaultIteration(options.iteration);
     if (!iteration) {
-      spinner.fail('未找到活跃期次。请先运行: speccore iteration create --name <名称>');
+      spinner.fail('未找到活跃迭代。请先运行: speccore iteration create --name <名称>');
       return;
     }
 
@@ -87,8 +87,8 @@ async function dryRunSync(options: SyncOptions, iteration: string): Promise<void
   if (options.task) {
     await analyzeTaskDiff(options.task, iteration);
   } else {
-    logger.info('📊 期次级差异分析：');
-    logger.info(`   期次: ${iteration}`);
+    logger.info('📊 迭代级差异分析：');
+    logger.info(`   迭代: ${iteration}`);
     // 扫描所有任务
     const iterDir = join(process.cwd(), iteration);
     if (await pathExists(iterDir)) {
@@ -201,7 +201,7 @@ async function syncTaskSpec(task: string, iteration: string, auto: boolean): Pro
 async function syncIterationSpec(iteration: string, auto: boolean): Promise<void> {
   const iterDir = join(process.cwd(), iteration);
   if (!await pathExists(iterDir)) {
-    logger.error(`期次目录不存在: ${iterDir}`);
+    logger.error(`迭代目录不存在: ${iterDir}`);
     return;
   }
 
@@ -210,7 +210,7 @@ async function syncIterationSpec(iteration: string, auto: boolean): Promise<void
   const tasks = entries.filter((e) => e.startsWith('Task-'));
   const total = tasks.length;
 
-  logger.info(`正在同步期次 ${iteration} 的 ${total} 个任务...`);
+  logger.info(`正在同步迭代 ${iteration} 的 ${total} 个任务...`);
 
   let synced = 0;
   for (const task of tasks) {

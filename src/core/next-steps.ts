@@ -28,7 +28,7 @@ function getHints(stage: string, ctx: Record<string, string>): StepHint[] {
   switch (stage) {
     case 'init':
       return [
-        { action: 'speccore iteration create --name=Q3', desc: '创建第一个期次', args: '--from/--to 指定时间范围' },
+        { action: 'speccore iteration create --name=Q3', desc: '创建该迭代', args: '--from/--to 指定时间范围' },
         { action: 'speccore import --project=backend --path=./src', desc: '导入现有代码到全量层', args: '--type backend|frontend|shell' },
       ];
 

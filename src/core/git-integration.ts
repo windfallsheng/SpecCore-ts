@@ -29,7 +29,7 @@ export function createTaskBranch(taskId: string, taskName: string, baseBranch?: 
   try {
     const branchName = `feature/${taskId}`.substring(0, 100);
 
-    // 确定 base 分支: 显式指定 > 依赖分支 > 期次配置 > CONSTITUTION > git检测
+    // 确定 base 分支: 显式指定 > 依赖分支 > 迭代配置 > CONSTITUTION > git检测
     let effectiveBase = baseBranch;
     if (!effectiveBase) {
       effectiveBase = detectDefaultBranch(iteration);
@@ -54,9 +54,9 @@ export function createTaskBranch(taskId: string, taskName: string, baseBranch?: 
   }
 }
 
-/** 检测默认分支: 期次配置 > CONSTITUTION > git remote > 本地 */
+/** 检测默认分支: 迭代配置 > CONSTITUTION > git remote > 本地 */
 export function detectDefaultBranch(iteration?: string): string | undefined {
-  // 1. 期次级配置 (PROJECT_GRAPH.md 中 默认分支 字段)
+  // 1. 迭代级配置 (PROJECT_GRAPH.md 中 默认分支 字段)
   if (iteration) {
     try {
       const iterGraphPath = join(`Iteration-${iteration}`, '000-overview', 'PROJECT_GRAPH.md');

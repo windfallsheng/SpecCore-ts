@@ -1,6 +1,6 @@
 /**
- * sync-global - 期次与全量层双向同步命令
- * 支持 to_global（期次→全量层）和 from_global（全量层→期次）两个方向
+ * sync-global - 迭代与全量层双向同步命令
+ * 支持 to_global（迭代→全量层）和 from_global（全量层→迭代）两个方向
  */
 
 import { logger, Spinner } from '../utils/logger';
@@ -47,10 +47,10 @@ export async function syncGlobalCommand(options: SyncGlobalOptions): Promise<voi
 }
 
 /**
- * 期次 → 全量层同步
+ * 迭代 → 全量层同步
  */
 async function syncToGlobal(options: SyncGlobalOptions): Promise<void> {
-  // 1. 确定期次
+  // 1. 确定迭代
   let iterationName = options.iteration;
   if (!iterationName) {
     // 尝试从上下文获取
@@ -71,14 +71,14 @@ async function syncToGlobal(options: SyncGlobalOptions): Promise<void> {
   const iterDir = join(process.cwd(), iterDirName);
 
   if (!(await pathExists(iterDir))) {
-    logger.error(`期次目录不存在: ${iterDirName}`);
+    logger.error(`迭代目录不存在: ${iterDirName}`);
     return;
   }
 
-  // 2. 读取期次需求文档
+  // 2. 读取迭代需求文档
   const iterReqPath = join(iterDir, '020-specs', 'REQUIREMENT.md');
   if (!(await pathExists(iterReqPath))) {
-    logger.error(`期次需求文档不存在: ${iterReqPath}`);
+    logger.error(`迭代需求文档不存在: ${iterReqPath}`);
     return;
   }
 
@@ -95,7 +95,7 @@ async function syncToGlobal(options: SyncGlobalOptions): Promise<void> {
   }
 
   if (iterReqIds.length === 0) {
-    logger.info('期次需求文档中未找到 REQ 编号，跳过同步。');
+    logger.info('迭代需求文档中未找到 REQ 编号，跳过同步。');
     return;
   }
 
@@ -114,7 +114,7 @@ async function syncToGlobal(options: SyncGlobalOptions): Promise<void> {
   for (const req of relatedReqs) {
     const globalDetail = await readRequirementDetail(req.project, req.id);
 
-    // 从期次需求文档中提取当前需求内容
+    // 从迭代需求文档中提取当前需求内容
     const iterSectionRegex = new RegExp(`### ${req.id}[：:][^]*?(?=\\n### |$)`, 'm');
     const iterMatch = iterReqContent.match(iterSectionRegex);
     const iterDetail = iterMatch ? iterMatch[0] : '';
@@ -138,7 +138,7 @@ async function syncToGlobal(options: SyncGlobalOptions): Promise<void> {
     logger.info('');
 
     if (changes.length === 0) {
-      logger.info('✅ 未检测到变更。期次与全量层保持一致。');
+      logger.info('✅ 未检测到变更。迭代与全量层保持一致。');
       return;
     }
 
@@ -166,15 +166,15 @@ async function syncToGlobal(options: SyncGlobalOptions): Promise<void> {
   logger.info('');
   logger.success('✅ 同步完成！');
   logger.info('');
-  logger.info(`📋 方向: 期次 → 全量层`);
-  logger.info(`   期次: ${iterDirName}`);
+  logger.info(`📋 方向: 迭代 → 全量层`);
+  logger.info(`   迭代: ${iterDirName}`);
   logger.info(`   同步需求: ${changes.length} 条`);
   logger.info(`   涉及项目: ${[...updatedProjects].join(', ')}`);
   logger.info(`   全量层版本: ${index.version} → ${newVersion}`);
 }
 
 /**
- * 全量层 → 期次同步
+ * 全量层 → 迭代同步
  */
 async function syncFromGlobal(options: SyncGlobalOptions): Promise<void> {
   let iterationName = options.iteration;
@@ -195,14 +195,14 @@ async function syncFromGlobal(options: SyncGlobalOptions): Promise<void> {
   const iterReqPath = join(process.cwd(), iterDirName, '020-specs', 'REQUIREMENT.md');
 
   if (!(await pathExists(iterReqPath))) {
-    logger.error(`期次需求文档不存在: ${iterReqPath}`);
+    logger.error(`迭代需求文档不存在: ${iterReqPath}`);
     return;
   }
 
   const index = await readGlobalIndex();
   const iterReqContent = await readFile(iterReqPath, 'utf-8');
 
-  // 解析期次中的需求 ID
+  // 解析迭代中的需求 ID
   const iterReqIds: string[] = [];
   const matches = iterReqContent.matchAll(/###\s+(REQ-\d+)[：:]/g);
   for (const match of matches) {
@@ -224,7 +224,7 @@ async function syncFromGlobal(options: SyncGlobalOptions): Promise<void> {
         reqName: req.name,
         project: req.project,
         changeType: '修改',
-        changeDesc: '全量层已更新，需要同步到期次',
+        changeDesc: '全量层已更新，需要同步到迭代',
       });
     }
   }
@@ -235,7 +235,7 @@ async function syncFromGlobal(options: SyncGlobalOptions): Promise<void> {
     logger.info('');
 
     if (changes.length === 0) {
-      logger.info('✅ 未检测到变更。全量层与期次保持一致。');
+      logger.info('✅ 未检测到变更。全量层与迭代保持一致。');
       return;
     }
 
@@ -247,7 +247,7 @@ async function syncFromGlobal(options: SyncGlobalOptions): Promise<void> {
     return;
   }
 
-  // 执行同步：更新期次需求文档
+  // 执行同步：更新迭代需求文档
   for (const change of changes) {
     const globalDetail = await readRequirementDetail(change.project, change.reqId);
     if (globalDetail) {

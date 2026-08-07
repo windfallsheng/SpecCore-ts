@@ -15,7 +15,7 @@ export type IntentType =
   | 'change'              // 需求变更
   | 'execute'             // 执行开发
   | 'create'              // 创建功能/任务
-  | 'iteration_create'    // 创建期次
+  | 'iteration_create'    // 创建迭代
   | 'analyze'             // 分析需求
   | 'split'               // 任务拆分
   | 'pr'                  // Pull Request
@@ -39,7 +39,7 @@ export type IntentType =
   | 'retro'               // 回顾
   | 'template_add'        // 添加模板
   | 'import_to_global'    // 导入到全量层
-  | 'iteration_from_global' // 从全量生成期次
+  | 'iteration_from_global' // 从全量生成迭代
   | 'sync_to_global'      // 同步到全量层
   | 'global_status'       // 全量层状态
   | 'history'             // 历史查询
@@ -109,14 +109,14 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     description: '快速 Bug 修复 — 创建修复任务并关联变更联动',
   },
   // 创建层
-  // 创建期次（必须在通用创建之前，优先级更高）
+  // 创建迭代（必须在通用创建之前，优先级更高）
   {
     id: 'iteration create',
     intent: 'iteration_create',
     priority: 92,
-    triggers: ['创建期次', '新建期次', '开始迭代', '新建迭代', '创建迭代', '开启期次', '创建sprint'],
-    patterns: ['创建(.+)期次', '新建(.+)期次', '开始(.+)迭代', '创建(.+)迭代'],
-    description: '创建新期次 — 生成 STAFFING + 产品需求 + 需求文档目录',
+    triggers: ['创建迭代', '新建迭代创建sprint'],
+    patterns: ['创建(.+)迭代创建(.+)迭代'],
+    description: '创建新迭代 — 生成 STAFFING + 产品需求 + 需求文档目录',
     args: '--name=<name> --owner=<owner>',
   },
   // 需求分析
@@ -265,7 +265,7 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     priority: 65,
     triggers: ['交接', '转交', '移交', '交付'],
     patterns: ['交接(.+)', '转交(.+)', '生成交接文档'],
-    description: '生成交接文档 — 汇总期次关键信息和待办事项',
+    description: '生成交接文档 — 汇总迭代关键信息和待办事项',
   },
   // 健康度
   {
@@ -283,7 +283,7 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     priority: 60,
     triggers: ['回顾', '总结', '复盘', '反思'],
     patterns: ['回顾(.+)', '总结(.+)', '复盘(.+)'],
-    description: '期次回顾 — 总结经验和改进建议',
+    description: '迭代回顾 — 总结经验和改进建议',
   },
   // 配置
   {
@@ -342,14 +342,14 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     patterns: ['导入(.+)项目到全量', '添加(.+)到全量层', '导入(.+)作为(.+)项目'],
     description: '导入到全量层 — 扫描项目代码并填充 GLOBAL/ 目录',
   },
-  // 从全量生成期次
+  // 从全量生成迭代
   {
     id: 'iteration-from-global',
     intent: 'iteration_from_global',
     priority: 80,
-    triggers: ['从全量生成', '基于全局创建', '选择需求生成期次'],
-    patterns: ['从全量(.*)生成期次', '基于全局(.*)创建期次', '选择(.*)需求生成期次'],
-    description: '从全量层生成期次 — 按需求 ID 选择并生成新的期次',
+    triggers: ['从全量生成', '基于全局创建', '选择需求生成迭代'],
+    patterns: ['从全量(.*)生成迭代创建迭代', '选择(.*)需求生成迭代'],
+    description: '从全量层生成迭代 — 按需求 ID 选择并生成新的迭代',
   },
   // 同步全量
   {
@@ -358,7 +358,7 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     priority: 70,
     triggers: ['同步全量', '同步全局', '更新全量层', '同步到全量'],
     patterns: ['同步(.*)到全量层', '更新全量层', '同步全量'],
-    description: '全量层双向同步 — 期次与全量层之间的双向同步',
+    description: '全量层双向同步 — 迭代与全量层之间的双向同步',
   },
   // 全量状态
   {
@@ -424,7 +424,7 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     priority: 78,
     triggers: ['重命名', '改名', '修改名称', '更换名称', '改成', '改名为', '更名为'],
     patterns: ['把(.*)改成(.*)', '重命名(.*)为(.*)', '修改(.*)名称为(.*)', '(.*)改名为(.*)'],
-    description: '重命名期次/任务 — 自动更新所有关联引用',
+    description: '重命名迭代/任务 — 自动更新所有关联引用',
   },
   // ============================================================
   // v4.0.0 新增命令
@@ -489,15 +489,15 @@ interface ContextRule {
 const CONTEXT_RULES: Record<string, ContextRule> = {
   execute: {
     intent: 'execute',
-    noContextMessage: '当前无活跃期次，请先创建期次',
+    noContextMessage: '当前无活跃迭代，请先创建迭代',
     withContextEnhancement: (ctx) =>
-      `当前期次: ${ctx.currentIteration}，准备执行待开发任务`,
+      `当前迭代: ${ctx.currentIteration}，准备执行待开发任务`,
   },
   query_progress: {
     intent: 'query_progress',
-    noContextMessage: '当前无活跃期次，无法查看进度',
+    noContextMessage: '当前无活跃迭代，无法查看进度',
     withContextEnhancement: (ctx) =>
-      `当前期次: ${ctx.currentIteration}`,
+      `当前迭代: ${ctx.currentIteration}`,
   },
   review: {
     intent: 'review',
@@ -505,7 +505,7 @@ const CONTEXT_RULES: Record<string, ContextRule> = {
     withContextEnhancement: (ctx) =>
       ctx.currentTask
         ? `审查当前 Task: ${ctx.currentTask}`
-        : `审查当前期次: ${ctx.currentIteration}`,
+        : `审查当前迭代: ${ctx.currentIteration}`,
   },
   change: {
     intent: 'change',
@@ -513,7 +513,7 @@ const CONTEXT_RULES: Record<string, ContextRule> = {
     withContextEnhancement: (ctx) =>
       ctx.currentTask
         ? `变更当前 Task: ${ctx.currentTask}`
-        : `变更当前期次: ${ctx.currentIteration}`,
+        : `变更当前迭代: ${ctx.currentIteration}`,
   },
 };
 
@@ -571,13 +571,13 @@ export async function recognizeIntent(input: string): Promise<IntentResult[]> {
         if (activeIteration) {
           totalScore += 15;
           contextAware = true;
-          matched.push('上下文感知: 有活跃期次');
+          matched.push('上下文感知: 有活跃迭代');
         } else if (
           mapping.intent === 'execute' ||
           mapping.intent === 'query_progress'
         ) {
           totalScore -= 20; // 无上下文降权
-          matched.push('上下文感知: 无活跃期次');
+          matched.push('上下文感知: 无活跃迭代');
         }
       }
 
@@ -642,8 +642,8 @@ function extractParams(input: string, mapping: CommandMapping): Record<string, s
     }
   }
 
-  // 检测是否指定了期次
-  const iterMatch = input.match(/期次[：:]*\s*(\S+)/);
+  // 检测是否指定了迭代
+  const iterMatch = input.match(/迭代[：:]*\s*(\S+)/);
   if (iterMatch) {
     params.iteration = iterMatch[1];
   }

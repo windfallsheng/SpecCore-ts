@@ -124,14 +124,14 @@ program
 program
   .command('dashboard')
   .alias('db')
-  .description('项目仪表盘：期次状态+进度+健康度（--scope global 全量视图）')
+  .description('项目仪表盘：迭代状态+进度+健康度（--scope global 全量视图）')
   .option('--export <format>', 'Export: json | md | html')
   .option("--assignee <name>", "导出指定人员的统计")
   .option("--platform <platform>", "导出指定平台: backend | frontend | web | h5 | miniapp")
   .option("--type <type>", "导出指定类型: feature | bugfix | research")
   .option('--health', '项目健康度报告')
   .option('--lifecycle', '任务生命周期看板（等效 lifecycle --all）')
-  .option('--scope <scope>', '视图: iteration(默认/当前期次) | global(全量)', 'iteration')
+  .option('--scope <scope>', '视图: iteration(默认/当前迭代) | global(全量)', 'iteration')
   .action(statusPanelCommand);
 
 program
@@ -172,18 +172,18 @@ program
   .action(initCommand);
 
 // ================================================================
-// 📋 期次管理
+// 📋 迭代管理
 // ================================================================
 const iterationCmd = program
   .command('iteration')
   .alias('it')
-  .description('期次管理：创建/拆分/列表');
+  .description('迭代创建/拆分/列表');
 
 iterationCmd
   .command('create')
   .alias('c')
-  .description('创建新期次')
-  .option('-n, --name <name>', '期次名称（必填）')
+  .description('创建新迭代')
+  .option('-n, --name <name>', '迭代名称（必填）')
   .option('--from <phase>', '从指定阶段开始')
   .option('--to <phase>', '到指定阶段结束')
   .option('--owner <name>', '负责人')
@@ -223,7 +223,7 @@ taskCmd
   .option('--platforms <platforms>', '前端平台: web,h5,miniapp')
   .option('--backend-only', '仅后端')
   .option('--frontend-only', '仅前端')
-  .option('-i, --iteration <iteration>', '目标期次')
+  .option('-i, --iteration <iteration>', '目标迭代')
   .option('--batch <tasks>', '批量创建')
   .option('--batch-file <path>', '从文件批量导入')
   .option('--interactive', '交互式创建')
@@ -380,7 +380,7 @@ program
 program
   .command('progress')
   .alias('pg')
-  .description('查看期次进度：任务完成率 + 各阶段统计')
+  .description('查看迭代进度：任务完成率 + 各阶段统计')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('-a, --assignee <assignee>', 'Filter by assignee')
   .option('-t, --type <type>', 'Filter by task type')
@@ -432,7 +432,7 @@ program
 program
   .command('context')
   .alias('ctx')
-  .description('查看上下文 / 快速切换期次 (--set)')
+  .description('查看上下文 / 快速切换迭代 (--set)')
   .option('-t, --task <task>', 'Target task')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('--set', 'Set current iteration (e.g. --set --iteration Q3)')
@@ -505,7 +505,7 @@ program
   .alias('d2s')
   .description('导入 PRD/文档 → SpecCore MD（双路验证：AI + Pandoc）')
   .option('-f, --file <path>', '源文件路径')
-  .option('--iter <name>', '目标期次（必填）')
+  .option('--iter <name>', '目标迭代（必填）')
   .option('-p, --platform <name>', '平台标识（backend / frontend-web / frontend-h5）')
   .option('--task <task>', '导入到指定 Task 目录')
   .option('--files <files>', '批量: "a.docx=平台1,b.pdf=平台2"')
@@ -516,12 +516,12 @@ program
   .command('spec2doc')
   .alias('s2d')
   .description('SpecCore MD → Word/PDF/HTML/PPTX 导出')
-  .option('-i, --iteration <name>', '目标期次')
+  .option('-i, --iteration <name>', '目标迭代')
   .option('-t, --task <task>', '导出指定任务文档')
   .option('-f, --file <path>', '直接导出指定 .md 文件（相对/绝对路径）')
   .option('--format <format>', '输出格式: docx|pdf|html|pptx', 'docx')
   .option('-o, --output <path>', '输出文件路径')
-  .option('--all', '导出期次全部文档（合并）')
+  .option('--all', '导出迭代全部文档（合并）')
   .option('--no-ai', '纯 pandoc 导出（终端快速模式）')
   .action(spec2docCommand);
 
@@ -565,7 +565,7 @@ program
 program
   .command('sync-global')
   .alias('syg')
-  .description('期次 ↔ 全量层双向同步')
+  .description('迭代 ↔ 全量层双向同步')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('-d, --direction <dir>', 'Sync direction: to_global | from_global', 'to_global')
   .option('--auto', 'Auto-apply without confirmation')
@@ -608,10 +608,10 @@ program
 program
   .command('analyze')
   .alias('al')
-  .description('统一分析: 需求文档 + 源码目录 → 按范围(全局/期次/任务)生成分析报告，--audit 审计模式')
-  .option('-I, --iteration <iteration>', '目标期次 (scope=iteration|task 时必填)')
+  .description('统一分析: 需求文档 + 源码目录 → 按范围(全局/迭代/任务)生成分析报告，--audit 审计模式')
+  .option('-I, --iteration <iteration>', '目标迭代 (scope=iteration|task 时必填)')
   .option('-t, --task <task-id>', '任务 ID (--scope task 快捷方式)')
-  .option('--scope <scope>', '输出范围: global(全局文档) | iteration(期次, 默认) | task(任务)')
+  .option('--scope <scope>', '输出范围: global(全局文档) | iteration(迭代, 默认) | task(任务)')
   .option('--src, --source <dirs>', '源码目录 (逗号分隔: --src backend/src,frontend/src)')
   .option('--req, --requirements <files>', '需求文档 (逗号分隔: --req docs/a.md,docs/b.md)')
   .option('-o, --output <file>', '输出文件名 (覆盖默认)')
@@ -632,7 +632,7 @@ program
 program
   .command('rename')
   .alias('rn')
-  .description('重命名期次/任务，自动更新所有关联引用')
+  .description('重命名迭代/任务，自动更新所有关联引用')
   .option('--target <name>', 'Current name (required for single rename)')
   .option('--new-name <name>', 'New name (required for single rename)')
   .option('--batch', 'Batch rename mode')
@@ -649,10 +649,10 @@ program
   .description('任务回顾：生成复盘报告（RETRO.md + HTML）')
   .option('--task <id>', '任务 ID')
   .option('--tasks <ids>', '批量任务（逗号分隔）')
-  .option('--all', '当前期次所有任务')
+  .option('--all', '当前迭代所有任务')
   .option('--owner <name>', '按责任人筛选')
   .option('--type <type>', '按类型筛选: feature|bugfix|research')
-  .option('--iteration <name>', '期次名称')
+  .option('--iteration <name>', '迭代名称')
   .action(retroCommand);
 
 // ================================================================
@@ -792,7 +792,7 @@ scheduleCmd
   .description('创建定时调度任务')
   .option('--task <task>', '指定 Task ID')
   .option('--all', '批量执行所有任务')
-  .option('-i, --iteration <iteration>', '目标期次')
+  .option('-i, --iteration <iteration>', '目标迭代')
   .option('--at <datetime>', '执行时间: "YYYY-MM-DD HH:mm:ss"')
   .option('-n, --name <name>', '任务名称')
   .option('--plan <id>', '执行已保存的计划')
@@ -906,7 +906,7 @@ if (process.argv.length <= 2) {
   logger.info('┌──────────────────────────────────────────┐');
   logger.info('│    SpecCore · v' + pkg.version + ' · 58 commands              │');
   logger.info('├──────────────────────────────────────────┤');
-  if (iteration) logger.info('│  期次: ' + iteration.padEnd(33) + '│');
+  if (iteration) logger.info('│  迭代: ' + iteration.padEnd(33) + '│');
   logger.info('│  状态: ' + icons[phase] + ' ' + (names[phase] || phase).padEnd(33) + '│');
   if (total > 0) {
     const pct = Math.round(done2 / total * 100);
@@ -919,7 +919,7 @@ if (process.argv.length <= 2) {
   logger.info('│     ' + nextDesc.padEnd(41) + '│');
   logger.info('│                                          │');
   logger.info('│  💡 speccore --help   查看全部命令        │');
-  logger.info('│  📊 speccore dashboard  仪表盘（期次/全局）       │');
+  logger.info('│  📊 speccore dashboard  仪表盘（迭代/全局）       │');
   logger.info('└──────────────────────────────────────────┘');
   logger.info('');
   process.exit(0);

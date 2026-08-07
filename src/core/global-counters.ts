@@ -1,5 +1,5 @@
 /**
- * global-counters — 全局计数器，保证期次/任务 ID 自增唯一
+ * global-counters — 全局计数器，保证迭代/任务 ID 自增唯一
  */
 import { readFile, writeFile, pathExists } from 'fs-extra';
 import { join } from 'path';

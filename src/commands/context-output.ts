@@ -15,26 +15,26 @@ export interface ContextOptions {
 }
 
 export async function contextCommand(options: ContextOptions): Promise<void> {
-  // ── 切换期次模式 ──
+  // ── 切换迭代模式 ──
   if (options.set && options.iteration) {
     const ctx = await loadContext();
     ctx.currentIteration = options.iteration;
     await saveContext(ctx);
-    logger.info(`✅ 已切换到期次: ${options.iteration}`);
+    logger.info(`✅ 已切换到迭代: ${options.iteration}`);
     return;
   }
 
   const iteration = await getDefaultIteration(options.iteration);
   if (!iteration) { 
-    logger.info('📍 当前无活跃期次');
+    logger.info('📍 当前无活跃迭代');
     logger.info('  设置: speccore context --set --iteration Q1');
     return; 
   }
 
   const iterDir = `Iteration-${iteration}`;
   if (!(await pathExists(iterDir))) {
-    logger.info(`📍 当前期次: ${iteration}`);
-    logger.info(`  ⚠️ 期次目录「${iterDir}」不存在，请先创建期次或切换`);
+    logger.info(`📍 当前迭代: ${iteration}`);
+    logger.info(`  ⚠️ 迭代目录「${iterDir}」不存在，请先创建迭代或切换`);
     logger.info('  创建: speccore iteration create -n ' + iteration.replace(/^Iteration-/, ''));
     return;
   }

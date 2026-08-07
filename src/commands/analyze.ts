@@ -62,7 +62,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     if (scope === 'iteration' || scope === 'task') {
       iteration = await getDefaultIteration(options.iteration);
       if (!iteration) {
-        spinner.fail('无效期次: 请用 -i 指定');
+        spinner.fail('无效迭代: 请用 -i 指定');
         return;
       }
     }
@@ -86,8 +86,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     logger.info('║  📊 SpecCore 分析引擎                       ║');
     logger.info('╚══════════════════════════════════════════╝');
     logger.info('');
-    logger.info(`   🎯 范围:   ${scope === 'global' ? '全局' : scope === 'task' ? '任务' : '期次'}`);
-    if (iteration) logger.info(`   📅 期次:   ${iteration}`);
+    logger.info(`   🎯 范围:   ${scope === 'global' ? '全局' : scope === 'task' ? '任务' : '迭代'}`);
+    if (iteration) logger.info(`   📅 迭代:   ${iteration}`);
     if (options.task) logger.info(`   📋 任务:   ${options.task}`);
     if (sources.length > 0) logger.info(`   📁 源码:   ${sources.join(', ')}`);
     if (requirements.length > 0) logger.info(`   📄 需求:   ${requirements.join(', ')}`);
@@ -179,7 +179,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 }
 
 /**
- * 期次级 Spec 文档生成: 为 02-需求文档/ 创建全套规范文件
+ * 迭代创建全套规范文件
  */
 async function generateIterationSpecDocs(iteration: string): Promise<void> {
   const specDir = join(`Iteration-${iteration}`, '020-specs');
@@ -189,30 +189,30 @@ async function generateIterationSpecDocs(iteration: string): Promise<void> {
   const templates: [string, string][] = [
     // ANALYSIS.md 由分析引擎自动生成，此处不覆盖
     ['TECH.md',
-      `# 技术方案\n\n> 期次: ${iteration} | 生成: ${now}\n\n`
+      `# 技术方案\n\n> 迭代: ${iteration} | 生成: ${now}\n\n`
       + `## 架构\n\n_待填充_\n\n`
       + `## 数据库设计\n\n| 表名 | 字段 | 索引 | 说明 |\n| :--- | :--- | :--- | :--- |\n| | | | |\n\n`
       + `## API 设计\n\n| 方法 | 路径 | 说明 |\n| :--- | :--- | :--- |\n| | | |\n\n`
       + `## 缓存策略\n\n_待填充_\n`],
     ['TEST.md',
-      `# 测试计划\n\n> 期次: ${iteration} | 生成: ${now}\n\n`
+      `# 测试计划\n\n> 迭代: ${iteration} | 生成: ${now}\n\n`
       + `## 单元测试\n\n- [ ] 核心模块覆盖\n\n`
       + `## 集成测试\n\n- [ ] API 端到端\n\n`
       + `## 边界测试\n\n- [ ] 异常参数\n- [ ] 超时重试\n- [ ] 并发冲突\n\n`
       + `## 性能测试\n\n- [ ] 压测方案\n`],
     ['REVIEW.md',
-      `# Code Review 清单\n\n> 期次: ${iteration}\n\n`
+      `# Code Review 清单\n\n> 迭代: ${iteration}\n\n`
       + `## 检查项\n\n- [ ] 参数校验完整性\n- [ ] 幂等性处理\n- [ ] 索引覆盖\n- [ ] 迁移脚本可回滚\n- [ ] 鉴权配置\n- [ ] 日志规范\n`],
     ['RISK.md',
-      `# 风险评估\n\n> 期次: ${iteration} | 生成: ${now}\n\n`
+      `# 风险评估\n\n> 迭代: ${iteration} | 生成: ${now}\n\n`
       + `## 风险矩阵\n\n| 风险 | 可能性 | 影响 | 缓解措施 |\n| :--- | :--- | :--- | :--- |\n| | | | |\n\n`
       + `## 回滚方案\n\n1. 触发条件: _待定_\n2. 回滚步骤: _待定_\n`],
     ['DEPS.md',
-      `# 依赖清单\n\n> 期次: ${iteration}\n\n`
+      `# 依赖清单\n\n> 迭代: ${iteration}\n\n`
       + `## 上游依赖\n\n| 服务 | 版本 | 用途 | SLA |\n| :--- | :--- | :--- | :--- |\n| | | | |\n\n`
       + `## 下游影响\n\n| 消费方 | 接口 | 影响 |\n| :--- | :--- | :--- |\n| | | |\n`],
     ['MONITOR.md',
-      `# 监控指标\n\n> 期次: ${iteration}\n\n`
+      `# 监控指标\n\n> 迭代: ${iteration}\n\n`
       + `## 业务指标\n\n| 指标 | 阈值 | 级别 |\n| :--- | :--- | :--- |\n| 成功率 | <99.9% | P1 |\n| P99延迟 | >1000ms | P2 |\n\n`
       + `## 告警规则\n\n| 规则 | 条件 | 通知 |\n| :--- | :--- | :--- |\n| | | |\n`],
   ];

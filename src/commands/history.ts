@@ -1,6 +1,6 @@
 /**
  * history - 查看需求变更历史命令
- * 输出指定需求（REQ-XXX）的完整变更历史，包括来源、版本演进、关联期次
+ * 输出指定需求（REQ-XXX）的完整变更历史，包括来源、版本演进、关联迭代
  */
 
 import { logger, Spinner } from '../utils/logger';
@@ -49,7 +49,7 @@ export async function historyCommand(options: HistoryOptions): Promise<void> {
     logger.info(`   当前版本: ${reqEntry.version}`);
     logger.info(`   状态: ${reqEntry.status}`);
     logger.info(`   来源项目: ${reqEntry.project}`);
-    logger.info(`   关联期次: ${reqEntry.iteration || '-'}`);
+    logger.info(`   关联迭代: ${reqEntry.iteration || '-'}`);
     logger.info(`   关联 Task: ${reqEntry.task || '-'}`);
     logger.info(`   文件位置: ${reqEntry.filePath}`);
 

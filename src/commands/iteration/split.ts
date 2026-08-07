@@ -93,7 +93,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
         if (await pathExists(join(specDir2, f))) specs.push(f);
       }
       
-      const splitPrompt = `# SpecCore AI 智能拆分建议\n\n> 期次: ${iteration} | 生成: ${new Date().toISOString().split('T')[0]}\n\n---\n\n## 📋 需求原文\n\n${reqContent2.slice(0, 5000) || '_未找到_'}\n\n---\n\n## 📊 分析结果\n\n${analysis.slice(0, 3000)}\n\n${specs.length > 0 ? '## 📄 已有 Spec 文档\n' + specs.map(f => '- ' + f).join('\n') + '\n\n---\n\n' : ''}## 🤖 任务\n\n根据以上需求和 AI 分析，请建议：任务粒度（复杂拆分/简单合并）、优先级分配、任务间依赖关系、风险标记。直接回复给用户决策。`;
+      const splitPrompt = `# SpecCore AI 智能拆分建议\n\n> 迭代: ${iteration} | 生成: ${new Date().toISOString().split('T')[0]}\n\n---\n\n## 📋 需求原文\n\n${reqContent2.slice(0, 5000) || '_未找到_'}\n\n---\n\n## 📊 分析结果\n\n${analysis.slice(0, 3000)}\n\n${specs.length > 0 ? '## 📄 已有 Spec 文档\n' + specs.map(f => '- ' + f).join('\n') + '\n\n---\n\n' : ''}## 🤖 任务\n\n根据以上需求和 AI 分析，请建议：任务粒度（复杂拆分/简单合并）、优先级分配、任务间依赖关系、风险标记。直接回复给用户决策。`;
       
       await writeFile(join(promptsDir, `split-suggestion-${iteration}.md`), splitPrompt);
       logger.info(`   🤖 AI 拆分建议 → .speccore/prompts/split-suggestion-${iteration}.md`);
@@ -1265,7 +1265,7 @@ interface SectionComplexity {
 }
 
 /**
- * 读取期次的 STAFFING.md 人员排期配置
+ * 读取迭代的 STAFFING.md 人员排期配置
  */
 function readStaffing(iterationDir: string): StaffMember[] | null {
   try {

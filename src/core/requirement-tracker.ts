@@ -9,8 +9,8 @@ export interface ReqEntry {
   id: string;          // 需求唯一标识
   title: string;       // 需求标题
   status: 'active' | 'modified' | 'deprecated';
-  originIteration: string;      // 首次引入的期次
-  lastModifiedIteration?: string; // 最近修改的期次
+  originIteration: string;      // 首次引入的迭代
+  lastModifiedIteration?: string; // 最近修改的迭代
   changeHistory: { iteration: string; type: '新增' | '修改' | '废弃'; timestamp: string }[];
 }
 
@@ -36,7 +36,7 @@ export async function saveTracker(entries: ReqEntry[]): Promise<void> {
 
 /**
  * 注册或更新需求追踪
- * @returns warnings — 跨期次冲突预警
+ * @returns warnings — 跨迭代冲突预警
  */
 export async function registerRequirement(
   title: string,
@@ -63,14 +63,14 @@ export async function registerRequirement(
       existing.lastModifiedIteration = iteration;
       existing.changeHistory.push({ iteration, type: '修改', timestamp: now });
       
-      // 检测：是否有其他期次也在修改同一个需求
+      // 检测：是否有其他迭代也在修改同一个需求
       const otherModifiers = existing.changeHistory
         .filter(h => h.type === '修改' && h.iteration !== iteration)
         .map(h => h.iteration);
       
       if (otherModifiers.length > 0) {
         warnings.push(
-          `⚠️ "${title}" 曾在以下期次被修改: ${[...new Set(otherModifiers)].join(', ')} — 注意合并冲突`
+          `⚠️ "${title}" 曾在以下迭代被修改: ${[...new Set(otherModifiers)].join(', ')} — 注意合并冲突`
         );
       }
     }
@@ -101,7 +101,7 @@ export async function generateTrackerReport(): Promise<string> {
   
   let report = `# 全量需求追踪\n\n`;
   report += `> 自动生成 | ${new Date().toISOString().slice(0, 10)}\n\n`;
-  report += `| ID | 需求 | 状态 | 首次期次 | 最近修改 | 变更次数 |\n`;
+  report += `| ID | 需求 | 状态 | 首次迭代 | 最近修改 | 变更次数 |\n`;
   report += `| :--- | :--- | :--- | :--- | :--- | :--- |\n`;
 
   for (const e of entries) {

@@ -18,7 +18,7 @@ export interface StatusPanelOptions {
   task?: string;
   status?: string;
   iteration?: string;
-  scope?: 'iteration' | 'global';  // 作用域：期次（默认）或全量层
+  scope?: 'iteration' | 'global';  // 作用域：迭代（默认）或全量层
 }
 
 export async function statusPanelCommand(options: StatusPanelOptions = {}): Promise<void> {
@@ -62,7 +62,7 @@ export async function statusPanelCommand(options: StatusPanelOptions = {}): Prom
   logger.info(`│ 项目: ${config.project.name.padEnd(37)}│`);
   
   if (iteration) {
-    logger.info(`│ 期次: ${iteration.padEnd(37)}│`);
+    logger.info(`│ 迭代: ${iteration.padEnd(37)}│`);
     const iterDir = `Iteration-${iteration}`;
     
     // Phase detection
@@ -306,7 +306,7 @@ async function exportStatus(
 
     data.phase = phase;
 
-    // ── 读取期次时间范围 ──
+    // ── 读取迭代时间范围 ──
     const metaPath = join(iterDir, "000-overview", "METADATA.md");
     const graphPath = join(iterDir, '000-overview', 'PROJECT_GRAPH.md');
     if (await pathExists(graphPath)) {
@@ -493,7 +493,7 @@ async function exportStatus(
     logger.info(`✅ 导出到 ${outPath}`);
   } else if (format === 'md') {
     let md = `# SpecCore Status — ${config.project.name}\n\n`;
-    md += `- 期次: ${iteration || '无'}\n- 阶段: ${data.phase || 'N/A'}\n\n`;
+    md += `- 迭代: ${iteration || '无'}\n- 阶段: ${data.phase || 'N/A'}\n\n`;
     md += '## Tasks\n\n| ID | Status | Type |\n| :--- | :--- | :--- |\n';
     for (const t of data.tasks || []) md += `| ${t.id} | ${t.status} | ${t.type} |\n`;
     if (data.health) {
@@ -761,7 +761,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
       <div class="subtitle">SPECCORE · SPEC-DRIVEN DEVELOPMENT${data.iterationOwner ? " · OWNER: "+data.iterationOwner.toUpperCase() : ""}${data.filterLabels ? " · "+data.filterLabels.join(" · ") : ""}${data.filteredFrom ? " (过滤自 "+data.filteredFrom+" 个任务)" : ""}</div>
     </div>
     <div class="header-right">
-      <div class="header-stat"><div class="num">Q2</div><div class="label">期次</div></div>
+      <div class="header-stat"><div class="num">Q2</div><div class="label">迭代</div></div>
       <div class="header-stat"><div class="num">${total}</div><div class="label">任务</div></div>
       <div class="header-stat"><div class="num">${donePct}%</div><div class="label">完成</div></div>
       <div class="phase-indicator"><div class="dot"></div><span>${phaseLabel.toUpperCase()}</span></div>
@@ -1273,7 +1273,7 @@ function setLang(l){document.querySelectorAll('.lang-sw button').forEach(b=>b.cl
 
 // ── Health Report (merged from health command) ──
 async function showHealthReport(config: any, iteration: string | null): Promise<void> {
-  if (!iteration) { logger.info("无活跃期次"); return; }
+  if (!iteration) { logger.info("无活跃迭代"); return; }
   const iterDir = `Iteration-${iteration}`;
   const tasks = await scanTaskDirs(iterDir);
   
@@ -1302,7 +1302,7 @@ async function showHealthReport(config: any, iteration: string | null): Promise<
 
 // ── Lifecycle Board (merged from lifecycle command) ──
 async function showLifecycleBoard(config: any, iteration: string | null, opts: any): Promise<void> {
-  if (!iteration) { logger.info("无活跃期次"); return; }
+  if (!iteration) { logger.info("无活跃迭代"); return; }
   const iterDir = `Iteration-${iteration}`;
   const tasks = await scanTaskDirs(iterDir);
   
@@ -1339,7 +1339,7 @@ async function getTaskStatus(iterDir: string, task: string): Promise<string> {
 
 // ── Collect Health Data for export ──
 async function collectHealthData(iteration: string): Promise<any> {
-  const iterDir = join(process.cwd(), "期次-" + iteration);
+  const iterDir = join(process.cwd(), "迭代-" + iteration);
   const tasks = await scanTaskDirs(iterDir);
   let total = tasks.length, completed = 0, hasTest = 0, hasReview = 0;
   for (const t of tasks) {
@@ -1357,7 +1357,7 @@ async function collectHealthData(iteration: string): Promise<any> {
 
 // ── Collect Lifecycle Data for export ──
 async function collectLifecycleData(iteration: string): Promise<any> {
-  const iterDir = join(process.cwd(), "期次-" + iteration);
+  const iterDir = join(process.cwd(), "迭代-" + iteration);
   const taskDirs = await scanTaskDirs(iterDir);
   const tasks: any[] = [];
   for (const t of taskDirs) {

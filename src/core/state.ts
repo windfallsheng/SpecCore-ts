@@ -52,7 +52,7 @@ function parseProjectGraph(content: string, iterationName: string): IterationSta
   };
   
   // Extract status from markdown
-  const statusMatch = content.match(/期次状态[:：]\s*(.+)/);
+  const statusMatch = content.match(/迭代状态[:：]\s*(.+)/);
   if (statusMatch) {
     state.status = statusMatch[1].trim();
   }

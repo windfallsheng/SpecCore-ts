@@ -46,13 +46,13 @@ export async function iterationCreateCommand(options: IterationCreateOptions): P
     // Update GLOBAL index
     await updateGlobalIndex(fullName, options);
 
-    // Update context (store without 期次- prefix for consistency)
+    // Update context (store without 迭代- prefix for consistency)
     await updateContext({
       currentIteration: fullName,
       lastUpdated: new Date().toISOString()
     });
 
-    spinner.stop(`期次创建: ${fullName}`);
+    spinner.stop(`迭代创建: ${fullName}`);
     logger.info('');
     logger.info('Next steps:');
     logger.info(`  1. Edit ${iterationDir}/010-requirements/ ← 放需求文档`);
@@ -70,7 +70,7 @@ async function createIterationFiles(iterationDir: string, fullName: string, opti
     join(iterationDir, '020-specs', 'REQUIREMENT.md'),
     `# 本期需求文档
 
-> 期次：${fullName}
+> 迭代：${fullName}
 > 时间范围：${options.from || '未指定'} ~ ${options.to || '未指定'}
 
 ## 1. 需求概述
@@ -106,7 +106,7 @@ async function createIterationFiles(iterationDir: string, fullName: string, opti
     join(iterationDir, '000-overview', 'ARCHITECTURE.md'),
     `# 本期技术文档
 
-> 期次：${fullName}
+> 迭代：${fullName}
 
 ## 1. 技术架构
 
@@ -129,9 +129,9 @@ async function createIterationFiles(iterationDir: string, fullName: string, opti
     join(iterationDir, '000-overview', 'PROJECT_GRAPH.md'),
     `# 本期任务总览
 
-> 期次：${fullName}
+> 迭代：${fullName}
 > 时间范围：${options.from || '未指定'} ~ ${options.to || '未指定'}
-> 期次状态：🔄 进行中
+> 迭代状态：🔄 进行中
 > 负责人：${options.owner || '未指定'}
 > 默认分支: 继承全局配置
 
@@ -161,7 +161,7 @@ graph TD
     join(iterationDir, 'STAFFING.md'),
     `# ${options.name} 人员排期配置
 
-> 期次: ${options.name}${options.owner ? ` | 负责人: ${options.owner}` : ''}
+> 迭代: ${options.name}${options.owner ? ` | 负责人: ${options.owner}` : ''}
 
 ## 人员列表
 
@@ -184,7 +184,7 @@ async function updateIterationsIndex(name: string, options: IterationCreateOptio
   if (await pathExists(indexPath)) {
     content = await readFile(indexPath, 'utf-8');
   } else {
-    content = '# 期次索引\n\n| 迭代名称 | 时间范围 | 状态 | 负责人 | 备注 |\n| :--- | :--- | :--- | :--- | :--- |\n';
+    content = '# 迭代索引\n\n| 迭代名称 | 时间范围 | 状态 | 负责人 | 备注 |\n| :--- | :--- | :--- | :--- | :--- |\n';
   }
 
   // Add new iteration entry
@@ -208,11 +208,11 @@ async function updateGlobalIndex(name: string, options: IterationCreateOptions):
   const today = new Date().toISOString().split('T')[0];
   const newEntry = `| ${name} | - | 🔄 进行中 | ${today} |`;
 
-  // 找到期次关联表格并追加
-  if (content.includes('## 期次关联')) {
-    // 在 "## 期次关联" 之后的表格末尾插入
+  // 找到迭代关联表格并追加
+  if (content.includes('## 迭代关联')) {
+    // 在 "## 迭代关联" 之后的表格末尾插入
     const lines = content.split('\n');
-    const sectionIdx = lines.findIndex(l => l.startsWith('## 期次关联'));
+    const sectionIdx = lines.findIndex(l => l.startsWith('## 迭代关联'));
     if (sectionIdx >= 0) {
       // 找到表格的最后一行数据（非标题非分隔线）
       let insertIdx = sectionIdx + 3; // 跳过标题+表头+分隔线
@@ -224,8 +224,8 @@ async function updateGlobalIndex(name: string, options: IterationCreateOptions):
       content = lines.join('\n');
     }
   } else {
-    // 没有期次关联章节，追加简单条目
-    content += `\n## 期次关联\n\n| 迭代名称 | 包含需求 | 状态 | 创建日期 |\n| :--- | :--- | :--- | :--- |\n${newEntry}\n`;
+    // 没有迭代关联章节，追加简单条目
+    content += `\n## 迭代创建日期 |\n| :--- | :--- | :--- | :--- |\n${newEntry}\n`;
   }
 
   await writeFile(globalIndexPath, content);

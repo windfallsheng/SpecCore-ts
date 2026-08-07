@@ -44,7 +44,7 @@ export async function dashboardCommand(options: DashboardOptions): Promise<void>
     const iterationLabels = index.iterations.map(i => i.name).slice(0, 8);
     const iterationReqCounts = index.iterations.map(i => i.reqs.length).slice(0, 8);
 
-    // ── 新增：期次完成统计 ──
+    // ── 新增：迭代完成统计 ──
     const iterStats = index.iterations.map(it => {
       const iterReqs = index.reqs.filter(r => it.reqs.includes(r.id));
       const done = iterReqs.filter(r => r.status.includes('✅') || r.status.includes('已实现')).length;
@@ -82,7 +82,7 @@ export async function dashboardCommand(options: DashboardOptions): Promise<void>
     logger.info('   - 需求状态分布（饼图）');
     logger.info('   - 项目需求分布（柱状图）');
     logger.info('   - 项目详细列表');
-    logger.info('   - 期次关联状态');
+    logger.info('   - 迭代关联状态');
     logger.info('');
     logger.info('💡 在浏览器中打开即可查看。支持移动端自适应布局。');
   } catch (error) {
@@ -116,7 +116,7 @@ export function generateDashboardHtml(
     projectRows += `<tr><td>${proj.name}</td><td><span class="badge badge-${proj.type}">${proj.type}</span></td><td>${proj.reqCount}</td><td>${proj.lastImport}</td></tr>`;
   }
 
-  // 生成需求表格行（按期次倒序：Q3→Q2→Q1，无期次排最后）
+  // 生成需求表格行（按迭代倒序：Q3→Q2→Q1，无迭代排最后）
   let reqRows = '';
   const sortIter = (a: string, b: string) => {
     const na = parseInt(a.replace(/[^0-9]/g, '')) || 0;
@@ -129,7 +129,7 @@ export function generateDashboardHtml(
   const sortedReqs = [...index.reqs].sort((a, b) => {
     const ia = sortIter(a.iteration || '', b.iteration || '');
     if (ia !== 0) return ia;
-    // 同期次内按状态排：已实现 > 进行中 > 待开发
+    // 同迭代内按状态排：已实现 > 进行中 > 待开发
     const order: Record<string, number> = { '✅': 1, '🔄': 2, '🔲': 3 };
     return (order[a.status.charAt(0)] || 99) - (order[b.status.charAt(0)] || 99);
   });
@@ -375,7 +375,7 @@ tr:hover td{background:var(--hover)}
   </div>
   <div class="chart-card">
     <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
-    <h3>📅 <span data-i18n="iterProgress">期次进度</span></h3>
+    <h3>📅 <span data-i18n="iterProgress">迭代进度</span></h3>
     <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px;max-height:280px;overflow-y:auto">
       ${iterStats.map(it => `
       <div style="display:flex;align-items:center;gap:10px">
@@ -386,7 +386,7 @@ tr:hover td{background:var(--hover)}
         <span style="font-size:10px;color:var(--muted);min-width:55px;text-align:right">${it.done}/${it.total}</span>
       </div>
       `).join('')}
-      ${iterStats.length === 0 ? '<div style="color:var(--muted);text-align:center;padding:20px">暂无期次数据</div>' : ''}
+      ${iterStats.length === 0 ? '<div style="color:var(--muted);text-align:center;padding:20px">暂无迭代数据</div>' : ''}
     </div>
   </div>
 </div>
@@ -401,9 +401,9 @@ tr:hover td{background:var(--hover)}
   </div>
   <div class="stat-card">
     <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
-    <div class="label">📅 <span data-i18n="activeIter">活跃期次</span></div>
+    <div class="label">📅 <span data-i18n="activeIter">活跃迭代</span></div>
     <div class="value c-green">${activeIterCount}</div>
-    <div class="sub">共 ${index.iterations.length} 个期次</div>
+    <div class="sub">共 ${index.iterations.length} 个迭代</div>
     <div class="data-stream"><span>ITERATIONS · ${activeIterCount} ACTIVE · ${index.iterations.length} TOTAL</span></div>
   </div>
   <div class="stat-card">
@@ -429,7 +429,7 @@ tr:hover td{background:var(--hover)}
   <div class="panel-title"><span data-i18n="reqDetail">需求详情</span></div>
   <div class="scroll-table">
   <table>
-    <thead><tr><th><span data-i18n="reqId">需求 ID</span></th><th><span data-i18n="name">名称</span></th><th><span data-i18n="project">项目</span></th><th><span data-i18n="status">状态</span></th><th><span data-i18n="iteration">关联期次</span></th></tr></thead>
+    <thead><tr><th><span data-i18n="reqId">需求 ID</span></th><th><span data-i18n="name">名称</span></th><th><span data-i18n="project">项目</span></th><th><span data-i18n="status">状态</span></th><th><span data-i18n="iteration">关联迭代</span></th></tr></thead>
     <tbody>${reqRows || '<tr><td colspan="5">暂无需求</td></tr>'}</tbody>
   </table>
   </div>
@@ -466,7 +466,7 @@ function exportJSON() {
   download(JSON.stringify(data, null, 2), 'dashboard-data.json', 'application/json');
 }
 function exportCSV() {
-  const rows = [['需求ID','项目','名称','状态','版本','期次'].join(',')];
+  const rows = [['需求ID','项目','名称','状态','版本','迭代'].join(',')];
   ${JSON.stringify(index.reqs)}.forEach(r => rows.push([r.id,r.project,r.name,r.status,r.version,r.iteration||'-'].join(',')));
   download(rows.join('\\n'), 'dashboard-data.csv', 'text/csv');
 }
@@ -506,7 +506,7 @@ function updateChartColors(t) {
 }
 
 // Lang
-var I18N={zh:{total:'总需求数',done:'已完成',progress:'进行中',pending:'待开发',health:'项目健康度',activeIter:'活跃期次',velocity:'交付速率',statusDist:'需求状态分布',projDist:'项目需求分布',createdVsResolved:'需求创建 vs 完成',iterProgress:'期次进度',projHealth:'项目健康度',projList:'项目列表',reqDetail:'需求详情',projName:'项目名称',type:'类型',reqCount:'需求数',lastImport:'最后导入',reqId:'需求 ID',name:'名称',project:'项目',status:'状态',iteration:'关联期次',projects:'项目',reqs:'requirements',done2:'完成',live:'LIVE',globalDash:'全局仪表盘',powered:'由 SpecCore 驱动'},en:{total:'Total Reqs',done:'Done',progress:'In Progress',pending:'Backlog',health:'Project Health',activeIter:'Active Iterations',velocity:'Velocity',statusDist:'Status Distribution',projDist:'Project Distribution',createdVsResolved:'Created vs Resolved',iterProgress:'Iteration Progress',projHealth:'PROJECT HEALTH',projList:'Project List',reqDetail:'Requirement Details',projName:'Project Name',type:'Type',reqCount:'Reqs',lastImport:'Last Import',reqId:'Req ID',name:'Name',project:'Project',status:'Status',iteration:'Iteration',projects:'Projects',reqs:'Reqs',done2:'Done',live:'LIVE',globalDash:'GLOBAL DASHBOARD',powered:'Powered by SpecCore'}};
+var I18N={zh:{total:'总需求数',done:'已完成',progress:'进行中',pending:'待开发',health:'项目健康度',activeIter:'活跃迭代',velocity:'交付速率',statusDist:'需求状态分布',projDist:'项目需求分布',createdVsResolved:'需求创建 vs 完成',iterProgress:'迭代进度',projHealth:'项目健康度',projList:'项目列表',reqDetail:'需求详情',projName:'项目名称',type:'类型',reqCount:'需求数',lastImport:'最后导入',reqId:'需求 ID',name:'名称',project:'项目',status:'状态',iteration:'关联迭代',projects:'项目',reqs:'requirements',done2:'完成',live:'LIVE',globalDash:'全局仪表盘',powered:'由 SpecCore 驱动'},en:{total:'Total Reqs',done:'Done',progress:'In Progress',pending:'Backlog',health:'Project Health',activeIter:'Active Iterations',velocity:'Velocity',statusDist:'Status Distribution',projDist:'Project Distribution',createdVsResolved:'Created vs Resolved',iterProgress:'Iteration Progress',projHealth:'PROJECT HEALTH',projList:'Project List',reqDetail:'Requirement Details',projName:'Project Name',type:'Type',reqCount:'Reqs',lastImport:'Last Import',reqId:'Req ID',name:'Name',project:'Project',status:'Status',iteration:'Iteration',projects:'Projects',reqs:'Reqs',done2:'Done',live:'LIVE',globalDash:'GLOBAL DASHBOARD',powered:'Powered by SpecCore'}};
 function setLang(l) {
   document.querySelectorAll('.lang-sw button[data-lang]').forEach(b => b.classList.toggle('active', b.dataset.lang===l));
   document.querySelectorAll('[data-i18n]').forEach(el => { var k=el.getAttribute('data-i18n'); if(I18N[l]&&I18N[l][k]) el.textContent=I18N[l][k] });

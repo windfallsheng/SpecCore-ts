@@ -150,14 +150,14 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
       '| 命令 | 作用 | 参数 | 上游依赖 | 下游产出 |',
       '| :--- | :--- | :--- | :--- | :--- |',
       '| init | 初始化项目 | --interactive/--force/--update | 无 | .speccore/ + 工具集成 |',
-      '| doc2spec | Word→Spec MD | -f <文件> --iter <期次> | PRD/Word | 010-requirements/*.md |',
-      '| analyze | 需求分析 | -I <期次> --task <任务> | 010-requirements/ | 020-specs/ANALYSIS.md |',
-      '| split | 拆分任务 | -i <期次> --owner <人> | 020-specs/ | Task-001~NNN/ |',
-      '| plan | 执行计划 | -I <期次> --owner <人> | Task 列表 | plan.json |',
-      '| execute | 执行开发 | -i <期次> -t <任务> --type <类型> | REQ.md/TECH.md | 代码 + .issues.md |',
+      '| doc2spec | Word→Spec MD | -f <文件> --iter <迭代> | PRD/Word | 010-requirements/*.md |',
+      '| analyze | 需求分析 | -I <迭代> --task <任务> | 010-requirements/ | 020-specs/ANALYSIS.md |',
+      '| split | 拆分任务 | -i <迭代> --owner <人> | 020-specs/ | Task-001~NNN/ |',
+      '| plan | 执行计划 | -I <迭代> --owner <人> | Task 列表 | plan.json |',
+      '| execute | 执行开发 | -i <迭代> -t <任务> --type <类型> | REQ.md/TECH.md | 代码 + .issues.md |',
       '| pr | 创建PR | --task <任务> | 代码提交 | Pull Request |',
       '| done | 归档收尾 | --task <任务> | 全部完成 | .verification |',
-      '| spec2doc | 导出文档 | -i <期次> -o <文件> | 020-specs/ | Word/PDF |',
+      '| spec2doc | 导出文档 | -i <迭代> -o <文件> | 020-specs/ | Word/PDF |',
       '| retro | 任务回顾 | --task/--all/--owner/--type | done后 | 回顾报告 |',
       '| change | 需求变更 | <描述> --task <任务> --type | 进行中任务 | 变更记录 |',
       '| dev | 智能级联 | --auto/--from/--to | 全部阶段 | 自动全流程 |',
@@ -180,7 +180,7 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
       '## AI 行为约束',
       '',
       '- **不要自己创建目录** — 用 `speccore iteration create -n <名称>`',
-      '- **不要自己解析需求** — 用 `speccore analyze -I <期次>`',
+      '- **不要自己解析需求** — 用 `speccore analyze -I <迭代>`',
       '- **失败时读取 .issues.md** — 不要猜测，看文件里的问题清单',
       '- **续跑用 --resume** — `speccore execute --resume` 自动扫描 .needs-retry',
     ].join('\n'));
@@ -307,7 +307,7 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
   // ITERATIONS/README.md
   await writeFile(
     join(speccoreDir, 'ITERATIONS', 'README.md'),
-    `# 期次索引
+    `# 迭代索引
 
 | 迭代名称 | 时间范围 | 状态 | 负责人 | 备注 |
 | :--- | :--- | :--- | :--- | :--- |
@@ -474,7 +474,7 @@ async function createGlobalFiles(speccoreDir: string): Promise<void> {
 
 ## 需求索引
 
-| 需求 ID | 项目 | 需求名称 | 状态 | 版本 | 关联期次 | 关联 Task | 文件路径 |
+| 需求 ID | 项目 | 需求名称 | 状态 | 版本 | 关联迭代 | 关联 Task | 文件路径 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | _暂无需求_ | - | - | - | - | - | - | - |
 
@@ -488,11 +488,11 @@ async function createGlobalFiles(speccoreDir: string): Promise<void> {
 
 ---
 
-## 期次关联
+## 迭代关联
 
 | 迭代名称 | 包含需求 | 状态 | 创建日期 |
 | :--- | :--- | :--- | :--- |
-| _暂无期次_ | - | - | - |
+| _暂无迭代_ | - | - | - |
 
 ---
 
@@ -517,11 +517,11 @@ async function createGlobalFiles(speccoreDir: string): Promise<void> {
 | :--- | :--- | :--- | :--- |
 | _待导入_ | - | - | - |
 
-## 期次索引
+## 迭代索引
 
 | 迭代名称 | 关联需求 | 状态 | 创建时间 |
 | :--- | :--- | :--- | :--- |
-| _暂无期次_ | - | - | - |
+| _暂无迭代_ | - | - | - |
 
 ## 版本信息
 
@@ -996,24 +996,24 @@ async function createToolIntegrations(projectRoot: string, toolFilter?: string):
     ['spec-help', '显示命令帮助中心（HTML页面）', 'speccore help'],
     ['spec-dashboard', '显示全局仪表盘（HTML页面）', 'speccore dashboard --scope global'],
     ['spec-init', '初始化项目 或 升级命令文件: --update', 'speccore init'],
-    ['spec-doc2spec', '导入需求文档: 文件=${1:PRD.docx} 期次=${2:Q1}', 'speccore doc2spec -f ${1:PRD.docx} --iter ${2:Q1}'],
+    ['spec-doc2spec', '导入需求文档: 文件=${1:PRD.docx} 迭代=${2:Q1}', 'speccore doc2spec -f ${1:PRD.docx} --iter ${2:Q1}'],
     ['spec-analyze', 'SpecCore Analysis', '1. Read 010-requirements/ for all platform docs\n2. Ask user for iteration name if not provided\n3. Execute: speccore analyze -I ${1:Q1} --task ${2:Task-001}\n4. Present analysis report and ask for confirmation'],
     ['spec-split', 'SpecCore Task Split', '1. Read 020-specs/ for analysis docs\n2. Read STAFFING.md for team allocation\n3. Dry-run split and show preview\n4. Ask user to confirm before creating tasks\n5. Execute: speccore iteration split -i ${1:Q1} --owner ${2|张三,李四,王五|}'],
     ['spec-execute', 'SpecCore Execute', '1. Read Task REQ.md and TECH.md for completeness\n2. Check .needs-retry for previous failures\n3. Show execution plan and batch info\n4. Execute: speccore execute -i ${1:Q1} -t ${2:Task-001} --type ${3|feature,bugfix,research|} --force\n5. If failed, write .issues.md and suggest --resume'],
-    ['spec-plan', '生成计划: 期次=${1:Q1} 责任人=${2|张三,李四,王五|}', 'speccore plan -I ${1:Q1} --owner ${2|张三,李四,王五|}'],
+    ['spec-plan', '生成计划: 迭代=${1:Q1} 责任人=${2|张三,李四,王五|}', 'speccore plan -I ${1:Q1} --owner ${2|张三,李四,王五|}'],
     ['spec-pr', '创建PR: 任务=${1:Task-001}', 'speccore pr --task=${1:Task-001}'],
     ['spec-done', '任务归档: 任务=${1:Task-001}', 'speccore done --task=${1:Task-001}'],
-    ['spec-spec2doc', '导出文档: 期次=${1:Q1} 格式=${2|需求.docx,方案.pdf|}', 'speccore spec2doc -i ${1:Q1} -o ${2|需求.docx,方案.pdf|}'],
+    ['spec-spec2doc', '导出文档: 迭代=${1:Q1} 格式=${2|需求.docx,方案.pdf|}', 'speccore spec2doc -i ${1:Q1} -o ${2|需求.docx,方案.pdf|}'],
     ['spec-dev', 'SpecCore Smart Pipeline', '1. Read .speccore/local/context.json for current state\n2. Read 000-overview/PROJECT_GRAPH.md for progress\n3. Present current phase and recommend next step\n4. Execute: speccore dev -i ${1:Q1} ${2|,--auto|}'],
     ['spec-change', '需求变更: 描述=${1:变更描述} 任务=${2:Task-001}', 'speccore change "${1:变更描述}" --task=${2:Task-001} --type ${3|feature,bugfix|}'],
-    ['spec-validate', '合规验证: 期次=${1:Q1}', 'speccore validate --iteration=${1:Q1}'],
+    ['spec-validate', '合规验证: 迭代=${1:Q1}', 'speccore validate --iteration=${1:Q1}'],
     ['spec-search', '全文搜索: ${1:关键词}', 'speccore search ${1:关键词}'],
     ['spec-track', '全链路追踪: 需求=${1:REQ-001}', 'speccore track --req=${1:REQ-001}'],
     ['spec-sync', '双向同步全局', 'speccore sync --global'],
     ['spec-rename', '重命名: 旧名=${1:Q1} 新名=${2:Q2}', 'speccore rename --iteration ${1:Q1} ${2:Q2}'],
     ['spec-create-iteration', '创建迭代: 名称=${1:Q2} 负责人=${2|张三,李四,王五|}', 'speccore iteration create -n ${1:Q2} --owner=${2|张三,李四,王五|}'],
     ['spec-retro', '回顾报告: 任务=${1:Task-001} 可批量 --all', 'speccore retro --task ${1:Task-001}'],
-    ['spec-context', '切换上下文: 期次=${1:Q1}', 'speccore context --set --iteration ${1:Q1}'],
+    ['spec-context', '切换上下文: 迭代=${1:Q1}', 'speccore context --set --iteration ${1:Q1}'],
     ['spec-ops', '操作历史', 'speccore ops'],
   ];
 
@@ -1083,7 +1083,7 @@ async function createToolIntegrations(projectRoot: string, toolFilter?: string):
 | 关键词 | CLI 命令 |
 | :--- | :--- |
 | 初始化/init/开始 | speccore init |
-| 创建迭代/新建期次 {name} | speccore iteration create -n {name} --owner {owner} |
+| 创建迭代/新建迭代 {name} | speccore iteration create -n {name} --owner {owner} |
 | 导入需求 {file} 到 {iter} | speccore doc2spec -f {file} --iter {iter} |
 | 分析/检查 {iter} | speccore analyze -I {iter} |
 | 拆分/split {iter} | speccore iteration split -I {iter} |
@@ -1125,7 +1125,7 @@ async function createToolIntegrations(projectRoot: string, toolFilter?: string):
 }
 
 /**
- * 创建示例期次，展示标准目录结构
+ * 创建示例迭代，展示标准目录结构
  */
 
 /**
@@ -1254,7 +1254,7 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
   await ensureDir(overviewDir);
   await writeFile(join(overviewDir, 'PROJECT_GRAPH.md'), [
     '# 示例任务总览',
-    '> 期次：示例 | 默认分支: main',
+    '> 迭代：示例 | 默认分支: main',
     '| 任务编号 | 任务名称 | 类型 | 状态 | 负责人 |',
     '| :--- | :--- | :--- | :--- | :--- |',
     '| Task-001 | APP核心功能 | feature | 待开发 | 张三 |',
@@ -1263,7 +1263,7 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
     '| Task-004 | admin功能 | feature | 待开发 | 李四 |',
   ].join('\n'));
 
-  logger.info('   📂 示例期次: Iteration-sample/ (按端区分: APP/H5/小程序/admin)');
+  logger.info('   📂 示例迭代: Iteration-sample/ (按端区分: APP/H5/小程序/admin)');
 }
 
 function detectGitUrl(root: string): string | undefined {

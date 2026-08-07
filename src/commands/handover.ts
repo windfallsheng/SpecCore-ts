@@ -1,6 +1,6 @@
 /**
  * handover - 生成交接文档命令
- * 汇总期次关键信息、待办事项和风险点
+ * 汇总迭代关键信息、待办事项和风险点
  */
 
 import { logger, Spinner } from '../utils/logger';
@@ -22,7 +22,7 @@ export async function handoverCommand(options: HandoverOptions): Promise<void> {
     const iteration = await getDefaultIteration(options.iteration);
   const iterDir = iteration.startsWith("Iteration-") ? iteration : `Iteration-${iteration}`;
     if (!iteration) {
-      spinner.fail('未找到活跃期次。请先运行: speccore iteration create --name <名称>');
+      spinner.fail('未找到活跃迭代。请先运行: speccore iteration create --name <名称>');
       return;
     }
 
@@ -36,7 +36,7 @@ export async function handoverCommand(options: HandoverOptions): Promise<void> {
     spinner.stop(`交接文档已生成: ${outputPath}`);
     logger.info('');
     logger.info('📋 交接文档包含:');
-    logger.info('   - 期次概览');
+    logger.info('   - 迭代概览');
     logger.info('   - 任务完成情况');
     logger.info('   - 关键决策记录');
     logger.info('   - 待办事项');
@@ -61,8 +61,8 @@ async function generateHandoverDoc(iteration: string): Promise<string> {
   doc += `> 生成日期: ${now} | 生成工具: SpecCore\n\n`;
   doc += `---\n\n`;
 
-  // 1. 期次概览
-  doc += `## 1. 期次概览\n\n`;
+  // 1. 迭代概览
+  doc += `## 1. 迭代概览\n\n`;
   doc += `| 指标 | 数值 |\n`;
   doc += `| :--- | :--- |\n`;
   doc += `| 迭代名称 | ${iteration} |\n`;
@@ -144,7 +144,7 @@ async function generateHandoverDoc(iteration: string): Promise<string> {
   // 6. 附录
   doc += `## 6. 附录\n\n`;
   doc += `### 相关文件\n\n`;
-  doc += `- 期次目录: \`${iteration}/\`\n`;
+  doc += `- 迭代目录: \`${iteration}/\`\n`;
   doc += `- 技术架构: \`${iteration}/000-overview/ARCHITECTURE.md\`\n`;
   doc += `- 需求文档: \`${iteration}/020-specs/\`\n`;
   doc += `- 项目图谱: \`${iteration}/000-overview/PROJECT_GRAPH.md\`\n`;

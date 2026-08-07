@@ -46,7 +46,7 @@ function buildDevSystemPrompt(state: DevPipelineState): string {
 
   return `你是 SpecCore CLI 的 Pipeline 引导助手。当前项目状态:
 
-## 期次
+## 迭代
 ${state.iteration || '未设置'}
 
 ## Pipeline 阶段
@@ -70,7 +70,7 @@ ${phaseList}
 - jump-to: 跳转到特定阶段
 
 ## 参数规则
-- 有期次时自动加 --iteration=${state.iteration}
+- 有迭代时自动加 --iteration=${state.iteration}
 - 用户说"跳过分析" → skip-to split
 - 用户说"从拆分开始" → start-from split
 - 用户说"直接做 PR" → jump-to pr

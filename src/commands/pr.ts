@@ -174,6 +174,6 @@ async function buildPrBody(backendDir: string, taskName: string, iteration: stri
     body += `### 🧪 测试\n${checked}/${total} 项完成\n\n`;
   }
 
-  body += `---\n> 由 SpecCore 自动生成 | 期次: ${iteration}`;
+  body += `---\n> 由 SpecCore 自动生成 | 迭代: ${iteration}`;
   return body;
 }

@@ -1,5 +1,5 @@
 /**
- * rename - 重命名期次或任务，自动更新所有关联引用
+ * rename - 重命名迭代或任务，自动更新所有关联引用
  * 支持单个重命名和批量重命名
  */
 
@@ -74,7 +74,7 @@ async function singleRename(options: RenameOptions): Promise<void> {
   if (targetType === 'iteration') {
     oldPath = join(cwd, oldName);
   } else {
-    // Task 需要先找到归属期次
+    // Task 需要先找到归属迭代
     const iterations = await findIterations(cwd);
     let found = false;
     oldPath = '';
@@ -262,7 +262,7 @@ async function showPreview(preview: RenamePreview): Promise<void> {
   logger.info('');
   logger.info('📋 重命名预览');
   logger.info('');
-  logger.info(`目标类型: ${preview.type === 'iteration' ? '期次' : '任务'}`);
+  logger.info(`目标类型: ${preview.type === 'iteration' ? '迭代' : '任务'}`);
   logger.info(`旧名称: ${preview.oldName}`);
   logger.info(`新名称: ${preview.newName}`);
   logger.info('');
@@ -334,7 +334,7 @@ async function updateGlobalReferences(oldName: string, newName: string, type: 'i
 }
 
 /**
- * 查找所有期次目录
+ * 查找所有迭代目录
  */
 async function findIterations(cwd: string): Promise<string[]> {
   const entries = await readdir(cwd, { withFileTypes: true });
