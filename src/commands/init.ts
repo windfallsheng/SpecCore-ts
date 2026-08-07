@@ -1142,7 +1142,7 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
   const qoderRulesDir = join(projectRoot, '.qoder', 'rules');
   await ensureDir(qoderRulesDir);
   await writeFile(join(qoderRulesDir, 'speccore.md'), `# SpecCore 规则
-- 只输出 CLI 命令，不自行执行
+- 必须用 execute_command 执行 CLI 命令，决不要输出命令文本给用户复制
 - 所有确定性操作通过 speccore CLI 完成
 - 详细规则见 AGENTS.md
 `);
