@@ -1055,15 +1055,45 @@ async function createToolIntegrations(projectRoot: string, toolFilter?: string):
   } catch { /* ignore */ }
   } // if hasQoder
 
-  // TRAE auto-load skills — 写入完整指令，确保 TRAE 正确注册
+  // TRAE auto-load skills — OpenSpec 模式: Skill 只输出命令文本，不执行
   const skillContents: Record<string, string> = {
-    'spec-ask': '# SpecCore AI Router\n\n**CRITICAL: Execute `speccore ask "user request"` for EVERY request. Do NOT analyze, plan, or run commands yourself.**\n\nSteps:\n1. Read `.speccore/CONSTITUTION.md`\n2. Read `.speccore/local/context.json`\n3. Run: `speccore ask "user original words"`\n\nForbidden: mkdir, direct speccore analyze/split/execute, writing files, or saying "I will use plan/schedule instead". Just call speccore ask.',
-    'spec-dev': '# SpecCore Smart Pipeline\n\nRead `.speccore/local/context.json` for current phase, then `000-overview/PROJECT_GRAPH.md` for progress.\n\nShow current phase and recommend next step. Execute: `speccore dev -i <iteration> [--auto]`',
-    'spec-analyze': '# SpecCore Analysis\n\nRead `010-requirements/` for all platform docs. Ask for iteration name if not provided.\n\nExecute: `speccore analyze -I <iteration>`. Present report and ask for confirmation.',
-    'spec-split': '# SpecCore Task Split\n\nRead `020-specs/` for analysis docs and `STAFFING.md` for team allocation.\n\nShow preview before creating tasks. Execute: `speccore iteration split -i <iteration>`',
-    'spec-execute': '# SpecCore Execute\n\nRead Task `REQ.md` and `TECH.md` for completeness. Check `.needs-retry` for previous failures.\n\nExecute: `speccore execute -i <iteration> -t <task> --force`. If failed, suggest `--resume`.',
-    'spec-plan': '# SpecCore Plan\n\nRead task list from `000-overview/PROJECT_GRAPH.md` and `STAFFING.md` for allocation.\n\nExecute: `speccore plan -I <iteration>`. Show plan and ask for confirmation.',
-    'spec-change': '# SpecCore Change Management\n\nRecord change reason, analyze impact, then execute: `speccore change "<description>" --task <task>`. Update status afterwards.',
+    'speccore-router': `# SpecCore Router — 意图→命令 路由器
+
+## 规则
+1. 从用户对话识别意图
+2. 提取参数
+3. **只输出 CLI 命令文本，不执行**
+4. 参数缺失时追问
+
+## 意图映射
+| 关键词 | CLI 命令 |
+| :--- | :--- |
+| 初始化/init/开始 | speccore init |
+| 创建迭代/新建期次 {name} | speccore iteration create -n {name} --owner {owner} |
+| 导入需求 {file} 到 {iter} | speccore doc2spec -f {file} --iter {iter} |
+| 分析/检查 {iter} | speccore analyze -I {iter} |
+| 拆分/split {iter} | speccore iteration split -I {iter} |
+| 执行/开发 {task} | speccore execute -t {task} --force |
+| 执行全部 | speccore execute --all --force |
+| 断点续跑 | speccore execute --resume |
+| PR/推代码 {task} | speccore pr --task {task} |
+| 完成/归档 {task} | speccore done --task {task} |
+| 变更需求 "{desc}" {task} | speccore change "{desc}" --task {task} |
+| 校验/验证 {iter} | speccore validate -I {iter} |
+| 进度/仪表盘 | speccore dashboard --scope global |
+| 项目名片 | speccore welcome |
+| 帮助 | speccore help |
+| 回顾/复盘 {task} | speccore retro --task {task} |
+| 全部回顾 | speccore retro --all |
+| 智能级联/推进 | speccore dev |
+| 搜索 {keyword} | speccore search {keyword} |`,
+    'spec-ask': '# SpecCore Router\n\n**OUTPUT a CLI command, do NOT execute.**\n\nRead user intent, extract params, output: `speccore ask "user words"`.',
+    'spec-dev': '# SpecCore Pipeline\n\n**OUTPUT only.** Show current phase, then output: `speccore dev -i <iter> [--auto]`. Do NOT execute.',
+    'spec-analyze': '# SpecCore Analyze\n\n**OUTPUT only.** Ask for iteration, then output: `speccore analyze -I <iter>`. Do NOT execute.',
+    'spec-split': '# SpecCore Split\n\n**OUTPUT only.** Read specs, show preview, then output: `speccore iteration split -I <iter>`. Do NOT execute.',
+    'spec-execute': '# SpecCore Execute\n\n**OUTPUT only.** Read task REQ, then output: `speccore execute -t <task> --force`. Do NOT execute.',
+    'spec-plan': '# SpecCore Plan\n\n**OUTPUT only.** Read task list, then output: `speccore plan -I <iter>`. Do NOT execute.',
+    'spec-change': '# SpecCore Change\n\n**OUTPUT only.** Record change, then output: `speccore change "<desc>" --task <task>`. Do NOT execute.',
   };
   for (const [name] of commands) {
     if (skillContents[name]) {
@@ -1072,6 +1102,10 @@ async function createToolIntegrations(projectRoot: string, toolFilter?: string):
       await writeFile(join(sd, 'SKILL.md'), skillContents[name]);
     }
   }
+  // 统一路由器 Skill
+  const routerDir = join(projectRoot, '.agents', 'skills', 'speccore-router');
+  await ensureDir(routerDir);
+  await writeFile(join(routerDir, 'SKILL.md'), skillContents['speccore-router']);
   
   logger.info('   🤖 已适配: Claude / CodeBuddy / Cursor / Trae / WindSurf / QCoder');
 }
