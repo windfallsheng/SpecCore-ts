@@ -153,7 +153,7 @@ speccore retro --all --type bugfix    ← 按类型
 
 ---
 
-## 5. Skill + CLI 架构（OpenSpec 模式）
+## 5. Skill + CLI 架构
 
 ### 5.1 核心理念
 

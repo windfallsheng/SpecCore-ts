@@ -16,6 +16,14 @@ interface DevOptions {
   web?: boolean; output?: string;
 }
 
+async function hasFeatureDirs(iterDir: string): Promise<boolean> {
+  try {
+    const reqDir = join(iterDir, '010-requirements');
+    const entries = await readdir(reqDir, { withFileTypes: true });
+    return entries.some(e => e.isDirectory() && !e.name.startsWith('.') && e.name !== 'sources' && e.name !== 'assets');
+  } catch { return false; }
+}
+
 export async function devCommand(options: DevOptions): Promise<void> {
   // 非 TTY 或 AI 上下文 → HTML 页面
   if (isAiContext() || !process.stdout.isTTY || options.web) {
@@ -98,12 +106,13 @@ async function renderDevHtml(options: DevOptions): Promise<string> {
 
   if (iterDir) {
     const reqDoc = join(iterDir, '010-requirements', 'REQUIREMENT.md');
-    const analysis = join(iterDir, '010-requirements', 'ANALYSIS.md');
-    if (await pathExists(reqDoc)) phases[1].done = true;
+    const hasReqFeature = await hasFeatureDirs(iterDir);  // 新结构: 010-requirements/{feature}/
+    const analysis = join(iterDir, '020-specs', 'ANALYSIS.md');
+    if ((await pathExists(reqDoc)) || hasReqFeature) phases[1].done = true;
     if (await pathExists(analysis)) phases[2].done = true;
     try {
-      const entries = await readdir(iterDir, { withFileTypes: true });
-      if (entries.filter(e => e.isDirectory() && e.name.startsWith('Task-')).length > 0) phases[3].done = true;
+      const entries = await readdir(join(iterDir, '030-tasks'), { withFileTypes: true });
+      if (entries.filter((e: any) => e.isDirectory() && e.name.startsWith('Task-')).length > 0) phases[3].done = true;
     } catch {}
   }
 
