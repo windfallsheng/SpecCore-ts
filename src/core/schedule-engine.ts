@@ -123,43 +123,39 @@ export async function runDaemonLoop(): Promise<void> {
  * 执行单个调度任务
  */
 async function executeScheduledTask(task: ScheduleTask): Promise<void> {
-  logger.info(`\n━━━ Scheduled task due: ${task.name} (${task.id}) ━━━`);
+  logger.info(`\n━━━ 到期任务: ${task.name} (${task.id}) ━━━`);
 
-  // 写入 AI 触发文件 → spec-ask Skill 轮询后自动处理完整流水线
+  // 直接执行到期任务，不再写触发文件等人来捞
   try {
-    const { writeFile, ensureDir } = await import('fs-extra');
-    const { join } = await import('path');
-    const triggerDir = join(process.cwd(), '.speccore', 'local');
-    await ensureDir(triggerDir);
-    const triggerFile = join(triggerDir, '.scheduled-trigger.json');
+    const { spawnSync } = await import('child_process');
+    const args = ['execute'];
+    if (task.taskId) {
+      args.push('-t', task.taskId);
+    }
+    if (task.iteration) {
+      args.push('-I', task.iteration);
+    }
+    args.push('--auto', '--force');
 
-    let triggerTasks: any[] = [];
-    try { triggerTasks = JSON.parse(await require('fs-extra').readFile(triggerFile, 'utf-8')).tasks || []; } catch {}
-
-    triggerTasks.push({
-      id: task.id, name: task.name,
-      taskId: task.taskId, iteration: task.iteration,
-      type: task.execOptions?.type || 'execute',
-      scheduledAt: new Date().toISOString(), status: 'pending',
+    logger.info(`  🚀 自动执行: speccore ${args.join(' ')}`);
+    const result = spawnSync('speccore', args, {
+      cwd: process.cwd(),
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 600000, // 10分钟超时
+      encoding: 'utf-8',
     });
 
-    await writeFile(triggerFile, JSON.stringify({ tasks: triggerTasks, updatedAt: new Date().toISOString() }, null, 2));
-
-    await updateScheduleTask(task.id, { status: 'ready', result: '等待 AI 处理' });
-    
-    // 写入中断恢复标记
-    const ctxFile = join(triggerDir, 'context.json');
-    try {
-      const ctx = JSON.parse(await require('fs-extra').readFile(ctxFile, 'utf-8'));
-      ctx.interrupted = true;
-      ctx.interruptedTasks = ctx.interruptedTasks || [];
-      ctx.interruptedTasks.push({ id: task.id, name: task.name, taskId: task.taskId, at: new Date().toISOString() });
-      await writeFile(ctxFile, JSON.stringify(ctx, null, 2));
-    } catch {}
-    
-    logger.info(`📋 ${task.taskId || task.name} → 等待 AI 处理`);
+    if (result.status === 0) {
+      await updateScheduleTask(task.id, { status: 'completed', result: '执行成功' });
+      logger.success(`  ✅ ${task.name} 执行完成`);
+    } else {
+      const errMsg = (result.stderr || result.stdout || '').slice(-500);
+      await updateScheduleTask(task.id, { status: 'failed', result: errMsg });
+      logger.error(`  ❌ ${task.name} 执行失败 (exit ${result.status})`);
+    }
   } catch (e: any) {
-    logger.error(`Failed to write trigger: ${e.message}`);
+    await updateScheduleTask(task.id, { status: 'failed', result: e.message });
+    logger.error(`  ❌ 执行异常: ${e.message}`);
   }
 }
 
