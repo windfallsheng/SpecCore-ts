@@ -1212,7 +1212,7 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
   const prdDir = join(iterDir, '010-requirements');
   // 源文件/ 存放原始文档  素材/ 存放共享图片、原型（跨端引用）
   await ensureDir(join(prdDir, 'sources'));
-  await ensureDir(join(prdDir, 'assets', 'prd'));     // PRD 提取的图片
+  await ensureDir(join(prdDir, 'assets', 'extracted'));     // PRD 提取的图片
   await ensureDir(join(prdDir, 'assets', 'prototypes'));    // 产品原型
   await ensureDir(join(prdDir, 'assets', 'designs'));  // UI 设计稿
   
