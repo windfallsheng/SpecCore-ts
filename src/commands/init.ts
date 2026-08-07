@@ -1101,13 +1101,13 @@ async function createToolIntegrations(projectRoot: string, toolFilter?: string):
 | 全部回顾 | speccore retro --all |
 | 智能级联/推进 | speccore dev |
 | 搜索 {keyword} | speccore search {keyword} |`,
-    'spec-ask': '# SpecCore Router\n\n**OUTPUT a CLI command, do NOT execute.**\n\nRead user intent, extract params, output: `speccore ask "user words"`.',
-    'spec-dev': '# SpecCore Pipeline\n\n**OUTPUT only.** Show current phase, then output: `speccore dev -i <iter> [--auto]`. Do NOT execute.',
-    'spec-analyze': '# SpecCore Analyze\n\n**OUTPUT only.** Ask for iteration, then output: `speccore analyze -I <iter>`. Do NOT execute.',
-    'spec-split': '# SpecCore Split\n\n**OUTPUT only.** Read specs, show preview, then output: `speccore iteration split -I <iter>`. Do NOT execute.',
-    'spec-execute': '# SpecCore Execute\n\n**OUTPUT only.** Read task REQ, then output: `speccore execute -t <task> --force`. Do NOT execute.',
-    'spec-plan': '# SpecCore Plan\n\n**OUTPUT only.** Read task list, then output: `speccore plan -I <iter>`. Do NOT execute.',
-    'spec-change': '# SpecCore Change\n\n**OUTPUT only.** Record change, then output: `speccore change "<desc>" --task <task>`. Do NOT execute.',
+    'spec-ask': '# SpecCore Router\n\n**OUTPUT a CLI command, do NOT execute.** Read user intent, extract params. If simple intent → output matching CLI command. If complex (multi-step/timed/batch) → output: `speccore ask "user words"`.\n\nRead `.speccore/CONSTITUTION.md` and `.speccore/local/context.json` first.',
+    'spec-dev': '# SpecCore Pipeline\n\n**OUTPUT only. Do NOT execute.**\n\nSteps:\n1. Read `.speccore/local/context.json` for current iteration\n2. Read `000-overview/PROJECT_GRAPH.md` for progress\n3. Show current phase (✅ done / ▶ next / ⬜ pending)\n4. Output: `speccore dev -i <iter> [--auto]`\n\nNEVER run multiple commands automatically.',
+    'spec-analyze': '# SpecCore Analyze\n\n**OUTPUT only. Do NOT execute.**\n\nSteps:\n1. Read `010-requirements/` for all platform docs\n2. Ask for iteration name if not provided\n3. Output: `speccore analyze -I <iter>`\n4. Present analysis report location and ask for confirmation',
+    'spec-split': '# SpecCore Split\n\n**OUTPUT only. Do NOT execute.**\n\nSteps:\n1. Read `020-specs/` for analysis docs\n2. Read `STAFFING.md` for team allocation\n3. Show task preview\n4. Ask user to confirm before outputting: `speccore iteration split -I <iter>`',
+    'spec-execute': '# SpecCore Execute\n\n**OUTPUT only. Do NOT execute.**\n\nSteps:\n1. Read Task `REQ.md` and `TECH.md` for completeness\n2. Check `.needs-retry` for previous failures\n3. Output: `speccore execute -t <task> --force`\n4. If failed, suggest reading `.issues.md` and retrying with `--resume`',
+    'spec-plan': '# SpecCore Plan\n\n**OUTPUT only. Do NOT execute.**\n\nSteps:\n1. Read task list from `000-overview/PROJECT_GRAPH.md`\n2. Read `STAFFING.md` for allocation\n3. Output: `speccore plan -I <iter>`\n4. Show plan summary and ask for confirmation',
+    'spec-change': '# SpecCore Change\n\n**OUTPUT only. Do NOT execute.**\n\nSteps:\n1. Record change description from user\n2. Analyze what tasks are impacted\n3. Output: `speccore change "<desc>" --task <task>`',
   };
   for (const [name] of commands) {
     if (skillContents[name]) {
