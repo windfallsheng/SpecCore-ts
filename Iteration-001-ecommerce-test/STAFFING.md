@@ -1,6 +1,6 @@
 # ecommerce-test 人员排期配置
 
-> 期次: ecommerce-test | 负责人: 张三
+> 迭代: ecommerce-test | 负责人: 张三
 
 ## 人员列表
 

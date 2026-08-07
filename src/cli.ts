@@ -150,6 +150,7 @@ program
   .option('--from <phase>', '从指定阶段开始（init/doc2spec/analyze/split/plan/execute/pr/done/spec2doc）')
   .option('--to <phase>', '到指定阶段结束（init/doc2spec/analyze/split/plan/execute/pr/done/spec2doc）')
   .option('--web', '强制输出 HTML 页面')
+  .option('--lang <lang>', 'en 英文 / zh 中文（默认中文）')
   .action(devCommand);
 
 program

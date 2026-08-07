@@ -1,6 +1,6 @@
 # 本期需求文档
 
-> 期次：Iteration-001-ecommerce-test
+> 迭代：Iteration-001-ecommerce-test
 > 时间范围：未指定 ~ 未指定
 
 ## 1. 需求概述
