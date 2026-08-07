@@ -2,6 +2,59 @@
 
 ---
 
+## v5.51.0 (2026-08-07)
+
+### 🏗️ OpenSpec 标准 Skill 体系重构
+
+**AGENTS.md 路由表** — 62 行决策表，AI 始终加载：
+- 🚫 核心禁止规则 × 5
+- 📋 Skill 路由表 × 12（`| 用户说 | → | 动作 |`）
+- 🔄 退出码 → 下一个 Skill 交接
+
+**12 个 Skill 统一格式**：
+- YAML frontmatter（name + description + allowed-tools）
+- 🚫 禁止规则（每个 3-6 条）
+- `execute_command` 100% 覆盖
+- 4 个 `references/` 模板目录
+
+### ⚡ Ask 引擎全面升级
+
+- `autoExec` 字段：pipeline/guide/match 三种模式全部自动执行
+- `handleMatch` 正确拼子命令（`task new -n "..."`）
+- 模板变量替换：`{time}` → 完整时间格式
+- `extractPlanSlug`：任务名关键词拼入计划文件名
+
+### 🖥️ 全平台调度
+
+- macOS LaunchAgent / Linux crontab / **Windows Task Scheduler**
+- `schedule daemon install` 三端统一
+
+### 📋 Plan 命令增强
+
+- 文件命名：`PLAN-{ts}-{slug}.md`，统一在 `000-overview/plans/`
+- Mermaid 依赖图 + 甘特图
+- 8 章 PMBOK 精简结构（风险评估/里程碑/回滚方案）
+- 10 种任务类型（feature/bugfix/review/test/docs/refactor/deploy/security/performance）
+
+### 🎉 升级仪式感
+
+- 首次使用/版本升级 → ask 先输出 onboarding HTML → 再执行任务
+
+### 🐛 修复
+
+- 移除全部 "输出命令给用户复制" 残留
+- `speccore-router` 核心原则：不执行 → 必须执行
+- `doc2spec` AI 上下文自动安装 pandoc
+- 分支名与任务目录名保持一致
+
+---
+
+## v5.28.0 (2026-08-06)
+
+- Prompt/Apply 架构
+- ask 引擎四模式路由
+- 调度守护进程
+
 ## v5.37.1 (2026-08-07) — "全类型任务 + 调度自动执行"
 
 ### 🎯 10 种任务类型
