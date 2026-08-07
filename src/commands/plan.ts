@@ -1,5 +1,5 @@
 import { join } from 'path';
-import { writeFile, ensureDir } from 'fs-extra';
+import { writeFile, ensureDir, readdir, stat } from 'fs-extra';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
 import { readProjectGraph, topologicalSort, scanTasks, TaskState } from '../core/state';
@@ -87,12 +87,18 @@ export async function planCommand(options: PlanOptions): Promise<void> {
     }
 
     const saved = await saveToStore(iteration, taskIds, 3, options, 'manual');
-    const planPath = join(`Iteration-${iteration}`, '000-overview', 'PLAN.md');
+
+    // 写入带时间戳的计划文件（多版本） + 最新的 PLAN.md
+    const planDir = join(`Iteration-${iteration}`, '000-overview');
+    const ts = new Date().toISOString().replace(/T/, '-').replace(/:/g, '').slice(0, 17); // 2026-08-07-2125
+    const versionedPath = join(planDir, `PLAN-${ts}.md`);
+    const latestPath = join(planDir, 'PLAN.md');
     const tx = new FileTransaction();
-    tx.write(planPath, formatPlanMarkdown(plan, iteration));
+    tx.write(versionedPath, formatPlanMarkdown(plan, iteration));
+    tx.write(latestPath, formatPlanMarkdown(plan, iteration)); // 最新版覆盖
     await tx.commit();
 
-    spinner.stop(`Saved: ${saved.id.slice(0, 12)} | ${taskIds.length} tasks, ${plan.length} phases`);
+    spinner.stop(`Saved: PLAN-${ts}.md | ${taskIds.length} tasks, ${plan.length} phases`);
     printPlan(plan, iteration);
   } catch (error) {
     spinner.fail(`Failed: ${error}`);
@@ -112,20 +118,59 @@ async function saveToStore(
 }
 
 async function showPlanHistory(): Promise<void> {
-  const plans = await listPlans(undefined, 20);
-  if (plans.length === 0) { logger.info('No plans yet.'); return; }
+  // 1. 从磁盘读取所有 PLAN-*.md 文件，按时间倒序
+  const plans: { file: string; time: Date; size: number }[] = [];
+  try {
+    const iter = await getDefaultIteration();
+    if (iter) {
+      const planDir = join(`Iteration-${iter}`, '000-overview');
+      const files = await readdir(planDir);
+      for (const f of files) {
+        const m = f.match(/^PLAN-(\d{4}-\d{2}-\d{2}-\d{4})\.md$/);
+        if (m) {
+          const st = await stat(join(planDir, f));
+          plans.push({ file: f, time: st.mtime, size: st.size });
+        }
+      }
+      // 按时间倒序：最新的在最前面
+      plans.sort((a, b) => b.time.getTime() - a.time.getTime());
+    }
+  } catch {}
 
-  logger.info(`\nPlans (${plans.length}):\n`);
-  for (const p of plans) {
-    const src = { manual: 'manual', auto: 'auto', schedule: 'sched' }[p.source];
-    const icon = p.status === 'completed' ? '✅' : p.status === 'cancelled' ? '🚫' : '⏳';
-    logger.info(`  ${icon} ${p.id.slice(0, 12)}  ${p.name}  [${src}]`);
-    logger.info(`     iter: ${p.iteration}  tasks: ${p.tasks.length}  batch: ${p.batchSize}  status: ${p.status}`);
-    logger.info(`     created: ${new Date(p.createdAt).toLocaleString()}`);
-    if (p.executedAt) logger.info(`     done: ${new Date(p.executedAt).toLocaleString()}`);
-    logger.info('');
+  // 2. 从 store 读取
+  const storePlans = await listPlans(undefined, 20);
+
+  if (plans.length === 0 && storePlans.length === 0) { logger.info('No plan files yet.'); return; }
+
+  // 展示磁盘文件（倒序）
+  if (plans.length > 0) {
+    const iter = await getDefaultIteration();
+    logger.info(`\n📋 计划文件 · Iteration-${iter}/000-overview/ (${plans.length}):\n`);
+    for (const p of plans) {
+      const isLatest = p.file === 'PLAN.md' ? ' 📌 最新' : '';
+      logger.info(`  📄 ${p.file}  ${formatFileSize(p.size)}  ${p.time.toLocaleString()}${isLatest}`);
+    }
+    logger.info(`\n  💡 PLAN.md = 最新版本（可直接打开）`);
+    logger.info(`  ⚙️  历史版本按时间倒序排列\n`);
   }
-  logger.info('speccore plan --show <id>  |  --cancel <id>  |  --delete <id>');
+
+  // 展示 store 记录
+  if (storePlans.length > 0) {
+    logger.info(`📊 执行记录 (${storePlans.length}):\n`);
+    for (const p of storePlans) {
+      const src = { manual: 'manual', auto: 'auto', schedule: 'sched' }[p.source];
+      const icon = p.status === 'completed' ? '✅' : p.status === 'cancelled' ? '🚫' : '⏳';
+      logger.info(`  ${icon} ${p.id.slice(0, 12)}  [${src}]  ${p.status}`);
+    }
+  }
+
+  logger.info('\nspeccore plan --show <id>  |  --cancel <id>  |  --delete <id>');
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }
 
 async function showPlanDetail(id: string): Promise<void> {
