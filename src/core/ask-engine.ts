@@ -49,6 +49,8 @@ export interface AskResult {
   detail: string;
   commands: string[];
   pipeline?: PipelinePlan;
+  /** AI 模式下可直接执行的命令（自动而非打印给人） */
+  autoExec?: { command: string; args: string; confirm?: boolean };
 }
 
 // ============================================================
@@ -313,12 +315,18 @@ function handleGuide(input: string): AskResult {
     `  编排执行: speccore ask "完整描述你的需求" --pipeline`,
   ].join('\n');
 
+  const firstStep = matchedWorkflow[0];
   return {
     mode: 'guide',
     summary: `已为你规划「${workflowName}」（${matchedWorkflow.length} 步）`,
     detail,
     commands: matchedWorkflow.map(s => s.command),
     pipeline: { steps: matchedWorkflow, input, confirm: false },
+    autoExec: firstStep ? {
+      command: firstStep.command,
+      args: (firstStep.args || '').replace(/\{(iteration|task|bug|name)\}/g, input.substring(0, 30)),
+      confirm: true,
+    } : undefined,
   };
 }
 
@@ -436,6 +444,11 @@ async function handleMatch(input: string): Promise<AskResult> {
     summary: `匹配到: ${best.intent} (${best.confidence}%) → ${fullCommand}`,
     detail,
     commands: [best.command],
+    autoExec: best.confidence >= 70 ? {
+      command: best.command,
+      args: fullCommand.replace(/^speccore /, ''),
+      confirm: true,
+    } : undefined,
   };
 }
 
@@ -443,27 +456,51 @@ async function handleMatch(input: string): Promise<AskResult> {
 function handlePipeline(input: string): AskResult {
   const lower = input.toLowerCase();
 
+  // 辅助函数：从输入提取模板变量
+  const fillTemplate = (tmpl: string) => tmpl.replace(/\{(\w+)\}/g, (_: string, k: string) => {
+    if (k === 'time') return extractTime(input);
+    if (k === 'batch') { const m = input.match(/(\d+)[批次个]/); return m ? m[1] : '5'; }
+    if (k === 'iteration') return '';
+    if (k === 'task') return '';
+    if (k === 'bug' || k === 'name') return input.replace(/\s+/g, '-').slice(0, 30);
+    return '';
+  });
+
   // 匹配批量执行流程
   if (/计划.*执行|plan.*execute|分批|batch|定时|schedule|晚.*点|早上|几点/.test(lower)) {
     const steps = WORKFLOWS['batch execute'];
+    const firstStep = steps[0];
+    // 找第一个可自动执行的子命令（task 或 schedule）
+    const autoStep = steps.find(s => s.command === 'task' || s.command === 'schedule') || firstStep;
     return {
       mode: 'pipeline',
       summary: `已编排「批量执行流程」（${steps.length} 步）`,
       detail: buildPipelineDetail(steps, input),
       commands: steps.map(s => s.command),
       pipeline: { steps, input, confirm: true },
+      autoExec: autoStep ? {
+        command: autoStep.command,
+        args: fillTemplate(autoStep.args || ''),
+        confirm: false,
+      } : undefined,
     };
   }
 
   // 匹配新功能流程
   if (/功能|feature|开发|新.*模块|做.*个/.test(lower)) {
     const steps = WORKFLOWS['new feature'];
+    const firstStep = steps[0]; // 'init'
     return {
       mode: 'pipeline',
       summary: `已编排「新功能开发流程」（${steps.length} 步）`,
       detail: buildPipelineDetail(steps, input),
       commands: steps.map(s => s.command),
       pipeline: { steps, input, confirm: true },
+      autoExec: firstStep ? {
+        command: firstStep.command,
+        args: fillTemplate(firstStep.args || ''),
+        confirm: true,
+      } : undefined,
     };
   }
 
@@ -635,6 +672,24 @@ function matchWorkflow(input: string): { name: string; steps: PipelineStep[] } |
 function modeLabel(mode: AskMode): string {
   const labels: Record<AskMode, string> = { explain: '📖 命令解释', guide: '🗺️ 任务指引', match: '🎯 意图匹配', pipeline: '⚡ 复杂编排', ambiguous: '🤔 歧义消解' };
   return labels[mode];
+}
+
+/** 从用户输入中提取时间 → YYYY-MM-DD HH:mm:ss */
+export function extractTime(input: string): string {
+  const m = input.match(/(?:晚|早上|上午|下午|中午)?\s*(\d{1,2})[点时]/);
+  const now = new Date();
+  const target = new Date(now);
+  if (m) {
+    let hour = parseInt(m[1]);
+    if (/晚|晚上|下午/.test(input) && hour < 12) hour += 12;
+    target.setHours(hour, 0, 0, 0);
+    if (target.getTime() < now.getTime()) target.setDate(target.getDate() + 1);
+  } else {
+    target.setHours(20, 0, 0, 0);
+    if (target.getTime() < now.getTime()) target.setDate(target.getDate() + 1);
+  }
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${target.getFullYear()}-${pad(target.getMonth() + 1)}-${pad(target.getDate())} ${pad(target.getHours())}:${pad(target.getMinutes())}:${pad(target.getSeconds())}`;
 }
 
 export { COMMAND_KB, WORKFLOWS };

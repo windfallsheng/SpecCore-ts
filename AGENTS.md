@@ -30,18 +30,11 @@ Iteration-NNN-name/            ← 迭代目录
 | 初始化项目 | `speccore init` |
 | 创建迭代 | `speccore iteration create -n <name> --owner <owner>` |
 | 导入需求文档 | `speccore doc2spec -f <file> --iter <iter>` |
-| **AI 双路导入** | **激活 spec-doc2spec Skill** (AI+Pandoc交叉验证) |
 | 分析需求 | `speccore analyze -I <iter>` |
 | 拆分任务 | `speccore iteration split -I <iter>` |
-| 生成计划 | `speccore plan -I <iter>` |
 | 执行任务 | `speccore execute -t <task> --force` |
-| 导出文档 | `speccore spec2doc -i <iter> -o <output>` |
-| **AI 排版导出** | **激活 spec-spec2doc Skill** (AI排版+Pandoc导出) |
 | 查看进度 | `speccore dashboard` |
 | 任务回顾 | `speccore retro --task <task>` |
-| 需求变更 | `speccore change "<desc>" --task <task>` |
-| 智能推进 | `speccore dev` |
-| 自然语言入口 | `speccore ask "..."` |
 
 ## 行为约束
 - **不要自己创建目录** — 用 `speccore iteration create`

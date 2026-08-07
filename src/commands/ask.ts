@@ -6,7 +6,7 @@
 
 import { logger } from '../utils/logger';
 import { isAiContext, detectHostAi } from '../core/ask-host-ai';
-import { askEngine, AskResult, PipelinePlan } from '../core/ask-engine';
+import { askEngine, AskResult, PipelinePlan, extractTime } from '../core/ask-engine';
 
 const COLORS = {
   reset: '\x1b[0m', bold: '\x1b[1m', dim: '\x1b[2m',
@@ -176,123 +176,69 @@ export async function askCommand(input: string, _options: any): Promise<void> {
   // 始终输出模式标记到 stdout，供 Skill/编排器解析
   process.stdout.write(`[SPECCORE_MODE: ${result.mode}]\n`);
 
+  // ═══════════════════════════════════════════
   // AI 上下文（WorkBuddy / ClaudeCode 等）：自动执行模式
+  // 核心原则：不打印命令让用户复制，直接执行
+  // ═══════════════════════════════════════════
   if (isAiContext() || !process.stdout.isTTY) {
     const { spawnSync } = await import('child_process');
-    const path = await import('path');
+    const { writeFile } = await import('fs-extra');
 
-    // 1. pipeline 模式 → 真正自动执行
-    if (result.mode === 'pipeline' && result.pipeline) {
-      const plan = result.pipeline;
-      const execResults: string[] = [];
-      let allOk = true;
+    // —— 统一执行函数 ——
+    async function autoExecute(command: string, args: string, confirm: boolean): Promise<{ ok: boolean; output: string }> {
+      const fullCmd = `speccore ${command} ${args}`.trim();
+      process.stdout.write(`[SPECCORE_EXEC: ${fullCmd}]\n`);
+      if (confirm) process.stdout.write(`[SPECCORE_CONFIRM: 是否确认执行?]\n`);
 
-      // 标记：宿主 AI 请勿重复执行
-      process.stdout.write(`[SPECCORE_AUTO_EXEC: pipeline]\n`);
-      process.stdout.write(`[SPECCORE_AUTO_INPUT: ${input}]\n`);
-
-      for (const step of plan.steps) {
-        // 仅执行 task creation / schedule create 子命令
-        if (step.command !== 'task' && step.command !== 'schedule') continue;
-
-        // 从用户输入中提取参数替换模板变量
-        const args = (step.args || '').replace(/\{(\w+)\}/g, (_: string, key: string) => {
-          if (key === 'time') {
-            // 匹配: 晚8点 / 早上9点 / 8时 / 20:00 → 转成完整 YYYY-MM-DD HH:mm:ss
-            const m = input.match(/(?:晚|早上|上午|下午|中午)?\s*(\d{1,2})[点时]/);
-            const now = new Date();
-            const target = new Date(now);
-            if (m) {
-              let hour = parseInt(m[1]);
-              if (/晚|晚上|下午/.test(input) && hour < 12) hour += 12;
-              target.setHours(hour, 0, 0, 0);
-              // 如果时间已过，则推到明天
-              if (target.getTime() < now.getTime()) target.setDate(target.getDate() + 1);
-            } else {
-              // 默认今晚 20:00
-              target.setHours(20, 0, 0, 0);
-              if (target.getTime() < now.getTime()) target.setDate(target.getDate() + 1);
-            }
-            const pad = (n: number) => String(n).padStart(2, '0');
-            return `${target.getFullYear()}-${pad(target.getMonth() + 1)}-${pad(target.getDate())} ${pad(target.getHours())}:${pad(target.getMinutes())}:${pad(target.getSeconds())}`;
-          }
-          if (key === 'batch') {
-            const m = input.match(/(\d+)[批次个]/);
-            return m ? m[1] : '5';
-          }
-          if (key === 'iteration') return 'current';
-          if (key === 'task') return '';
-          if (key === 'bug') return input.replace(/\s+/g, '-').slice(0, 30);
-          return '';
+      const argList = (args.match(/(?:[^\s"]+|"[^"]*")+/g) || []).map((s: string) => s.replace(/^"|"$/g, ''));
+      try {
+        const r = spawnSync('speccore', [command, ...argList], {
+          encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'], cwd: process.cwd(),
+          timeout: 60000,
         });
-        // schedule create 强制加 --all（除非用户指定了具体 task）
-        let finalArgs = args;
-        if (step.command === 'schedule' && !args.includes('--task') && !args.includes('--all')) {
-          finalArgs = `${args} --all`.trim();
+        const output = ((r.stdout || '') + (r.stderr || '')).trim();
+        const ok = r.status === 0;
+        process.stdout.write(`[SPECCORE_EXEC_STATUS: ${ok ? 'ok' : `fail(${r.status})`}]\n`);
+        if (ok) {
+          process.stdout.write(output.slice(0, 2000) + '\n');
+        } else {
+          process.stdout.write(output.slice(-800) + '\n');
         }
-
-        const fullCmd = `speccore ${step.command} ${finalArgs}`;
-        process.stdout.write(`[SPECCORE_EXEC: ${fullCmd}]\n`);
-
-        // 解析为参数列表（去掉外层引号包裹）
-        const argList = (finalArgs.match(/(?:[^\s"]+|"[^"]*")+/g) || [])
-          .map((s: string) => s.replace(/^"|"$/g, ''));
-        try {
-          const r = spawnSync('speccore', [step.command, ...argList], {
-            encoding: 'utf-8',
-            stdio: ['ignore', 'pipe', 'pipe'],
-            cwd: process.cwd(),
-          });
-          const output = (r.stdout || '') + (r.stderr || '');
-          if (r.status === 0) {
-            execResults.push(`✅ ${fullCmd}\n${output.trim().split('\n').slice(0, 8).join('\n')}`);
-          } else {
-            execResults.push(`❌ ${fullCmd} (exit ${r.status})\n${output.trim().slice(-400)}`);
-            allOk = false;
-          }
-        } catch (e: any) {
-          execResults.push(`❌ ${fullCmd}: ${e.message}`);
-          allOk = false;
-        }
+        return { ok, output };
+      } catch (e: any) {
+        process.stdout.write(`[SPECCORE_EXEC_ERROR: ${e.message}]\n`);
+        return { ok: false, output: e.message };
       }
-
-      process.stdout.write(`[SPECCORE_AUTO_RESULT]\n`);
-      process.stdout.write(execResults.join('\n\n') + '\n');
-      process.stdout.write(`[SPECCORE_AUTO_RESULT_END]\n`);
-      process.stdout.write(allOk
-        ? `[SPECCORE_STATUS: success]\n`
-        : `[SPECCORE_STATUS: partial]\n`);
-      return;
     }
 
-    // 2. match 模式（推荐命令）→ 让宿主 AI 决定下一步
-    if (result.mode === 'match') {
-      const cmdMatch = (result.detail || '').match(/speccore[^\n]+/);
-      const cmd = cmdMatch ? cmdMatch[0].trim() : '';
-      process.stdout.write(`[SPECCORE_MODE: match]\n`);
-      process.stdout.write(`[SPECCORE_RECOMMEND: ${cmd}]\n`);
-      if (cmd) {
-        // 自动执行该推荐命令
-        try {
-          const r = spawnSync('speccore', cmd.replace(/^speccore /, '').split(' ').filter(Boolean), {
-            encoding: 'utf-8',
-            stdio: ['ignore', 'pipe', 'pipe'],
-            cwd: process.cwd(),
-            timeout: 30000,
-          });
-          process.stdout.write(`[SPECCORE_EXEC_RESULT: ${r.status}]\n`);
-          if (r.stdout) process.stdout.write(r.stdout.slice(0, 2000) + '\n');
-          if (r.stderr) process.stdout.write(`STDERR: ${r.stderr.slice(-500)}\n`);
-        } catch (e: any) {
-          process.stdout.write(`[SPECCORE_EXEC_ERROR: ${e.message}]\n`);
+    // 1. 有 autoExec → 直接执行（所有模式都能走这里）
+    if (result.autoExec) {
+      await autoExecute(result.autoExec.command, result.autoExec.args, !!result.autoExec.confirm);
+      // 仅当 autoExec 不覆盖 task/schedule 时才额外执行 pipeline 中的 task/schedule
+      if (result.pipeline) {
+        const alreadyExecuted = [result.autoExec.command];
+        for (const step of result.pipeline.steps) {
+          if ((step.command === 'task' || step.command === 'schedule') && !alreadyExecuted.includes(step.command)) {
+            const argsFilled = (step.args || '').replace(/\{(\w+)\}/g, (_, k) => k === 'time' ? extractTime(input) : '');
+            const finalArgs = (step.command === 'schedule' && !argsFilled.includes('--task') && !argsFilled.includes('--all'))
+              ? argsFilled + ' --all' : argsFilled;
+            if (finalArgs.trim()) await autoExecute(step.command, finalArgs.trim(), false);
+          }
         }
       }
-      // 也生成 HTML 用于可视化
       await askHtml(input);
       return;
     }
 
-    // 3. guide / explain 模式：生成 HTML 让宿主 AI 解读
+    // 2. ambiguous 模式 → 提示 AI 让用户选择
+    if (result.mode === 'ambiguous') {
+      process.stdout.write(`[SPECCORE_AMBIGUOUS: ${result.commands.join(' | ')}]\n`);
+      process.stdout.write(`请让用户从以下选项中选择:\n${result.detail}\n`);
+      await askHtml(input);
+      return;
+    }
+
+    // 3. explain / 纯 guide → 生成 HTML（没有可执行的操作）
     await askHtml(input);
     return;
   }
