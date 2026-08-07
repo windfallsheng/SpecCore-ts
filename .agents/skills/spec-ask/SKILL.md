@@ -1,6 +1,6 @@
 # SpecCore Ask — 可执行编排引擎 v4
 
-> **你的身份**: 你就是宿主 AI。你的任务是：理解用户意图 → 调用 CLI --prompt → 自己生成内容 → 调 CLI --response 写入。
+> **你的身份**: 你就是宿主 AI。你的任务是：理解用户意图 → 调用 CLI --prompt → 自己生成内容 → 调 CLI --response 写入。  
 > 你不是在"描述"流程，你就是在**执行**流程。不要调用外部 AI，你自己就是那个"AI 生成"环节的负责者。
 
 ---
@@ -124,29 +124,29 @@ D3. 步间: Read 产出文件 → 提取参数 → 传下一步
 
 ## 退出码
 
-| exitCode | 行动 |
-| :--- | :--- |
-| 0 | 展示结果 |
-| 10 | 你自己生成内容 → --apply |
-| 11 | 展示参数表 → 用户补 |
-| 其他 | [重试/跳过/停止] |
+| exitCode | 行动                |
+| :------- | :---------------- |
+| 0        | 展示结果              |
+| 10       | 你自己生成内容 → --apply |
+| 11       | 展示参数表 → 用户补       |
+| 其他       | [重试/跳过/停止]        |
 
 ---
 
 ## 完整命令
 
-| 场景 | --prompt | --apply/response |
-| :--- | :--- | :--- |
-| 导入文档 | `doc2spec --prompt -f {f}` | `--response` |
-| 分析 | `analyze --prompt -I {i}` | `--apply` |
-| 拆分 | `iteration split --prompt -I {i}` | `--response` |
-| 计划 | `plan --prompt -I {i}` | `--response` |
-| 开发 | `execute --prompt -t {t}` | `--response` |
-| PR | `pr --prompt -t {t}` | `--response` |
-| 归档 | `done --prompt -t {t}` | `--response` |
-| 导出 | `spec2doc --prompt -I {i}` | `--apply` |
-| 仪表盘 | `dashboard` | — |
-| 验证 | `validate -I {i}` | — |
-| 回顾 | `retro --task {t}` | — |
-| 搜索 | `search {k}` | — |
-| 初始化 | `init` | — |
+| 场景   | --prompt                          | --apply/response |
+| :--- | :-------------------------------- | :--------------- |
+| 导入文档 | `doc2spec --prompt -f {f}`        | `--response`     |
+| 分析   | `analyze --prompt -I {i}`         | `--apply`        |
+| 拆分   | `iteration split --prompt -I {i}` | `--response`     |
+| 计划   | `plan --prompt -I {i}`            | `--response`     |
+| 开发   | `execute --prompt -t {t}`         | `--response`     |
+| PR   | `pr --prompt -t {t}`              | `--response`     |
+| 归档   | `done --prompt -t {t}`            | `--response`     |
+| 导出   | `spec2doc --prompt -I {i}`        | `--apply`        |
+| 仪表盘  | `dashboard`                       | —                |
+| 验证   | `validate -I {i}`                 | —                |
+| 回顾   | `retro --task {t}`                | —                |
+| 搜索   | `search {k}`                      | —                |
+| 初始化  | `init`                            | —                |
