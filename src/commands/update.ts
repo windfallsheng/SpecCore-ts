@@ -173,6 +173,12 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   const skillNames = (await require('fs-extra').readdir(skillsSrc)).filter((f: string) => !f.startsWith('.'));
   await cleanupStaleFiles(projectRoot, ALL_COMMANDS, skillNames);
 
+  // 4e. 安装/更新调度守护进程
+  try {
+    const { installSystemSchedule } = await import('./schedule');
+    await installSystemSchedule();
+  } catch {}
+
   spinner.stop(`升级完成: v${oldVersion} → v${CURRENT_VERSION}`);
   logger.info('');
   if (addedFiles.length > 0) {
