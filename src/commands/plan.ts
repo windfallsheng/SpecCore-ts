@@ -24,6 +24,7 @@ export interface PlanOptions {
   mode?: string;
   dryRun?: boolean;
   interactive?: boolean;
+  select?: boolean;
   list?: boolean;
   show?: string;
   delete?: string;
@@ -84,6 +85,45 @@ export async function planCommand(options: PlanOptions): Promise<void> {
       logger.info(`共 ${taskIds.length} 个任务，${plan.length} 个阶段`);
       const answer = await promptUser('\n[y] 确认保存  [q] 取消: ');
       if (answer !== 'y') { logger.info('已取消'); return; }
+    }
+
+    // --select 模式：让用户多选具体要执行的任务
+    if (options.select) {
+      spinner.stop('计划预览');
+      logger.info('');
+      printPlan(plan, iteration);
+      logger.info('');
+      // 列出可选项
+      const taskList = sortedTasks.filter(t => t.status !== 'completed');
+      logger.info('📋 可执行的任务：');
+      taskList.forEach((t, idx) => {
+        const num = String(idx + 1).padStart(3, ' ');
+        const st = t.status === 'in_progress' ? '🔄' : '⏳';
+        logger.info(`  [${num}] ${st} ${t.id} - ${t.name.slice(0, 50)}`);
+      });
+      logger.info('');
+      const answer = await promptUser(`选择任务编号（逗号分隔, all=全部, q=取消）: `);
+      if (answer === 'q' || answer === '') { logger.info('已取消'); return; }
+      let selectedTasks: typeof sortedTasks;
+      if (answer === 'all') {
+        selectedTasks = taskList;
+      } else {
+        const nums = answer.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+        selectedTasks = nums.map(n => taskList[n - 1]).filter(Boolean);
+        if (selectedTasks.length === 0) { logger.error('未选中任何任务'); return; }
+      }
+      logger.success(`✅ 已选择 ${selectedTasks.length} 个任务`);
+      selectedTasks.forEach(t => logger.info(`   - ${t.id}: ${t.name}`));
+      // 输出选中的具体命令
+      logger.info('');
+      logger.info('🎯 将执行：');
+      const cmdIds = selectedTasks.map(t => t.id);
+      logger.info(`   speccore execute -I ${iteration} -t ${cmdIds.join(',')} --force`);
+      logger.info(`   或分批:  speccore execute -I ${iteration} -t ${cmdIds[0]} --batch-size 3 --auto`);
+      // 保存到 plan 时只包含选中的任务
+      const _ = await saveToStore(iteration, cmdIds, 3, options, 'manual');
+      logger.info(`   计划文件: Iteration-${iteration}/000-overview/plans/PLAN.md`);
+      return;
     }
 
     const saved = await saveToStore(iteration, taskIds, 3, options, 'manual');
@@ -341,6 +381,27 @@ function formatPlanMarkdown(plan: PlanEntry[], iteration: string, allRawTasks?: 
     }
     lines.push('');
   }
+
+  // ── 3.5 具体命令（供用户选择） ──
+  lines.push('---');
+  lines.push('');
+  lines.push('## 📋 具体命令（反选步骤）');
+  lines.push('');
+  lines.push('每个任务的完整 CLI 命令。AI 可用 AskUserQuestion 多选哪些任务要执行。');
+  lines.push('');
+  lines.push('| # | Task | 命令 |');
+  lines.push('|:--|:---|:---|');
+  for (const t of allTasks) {
+    if (t.status === 'completed') continue; // 已完成不列
+    const cmd = `speccore execute -I ${iteration} -t ${t.id} --type ${t.type} --force`;
+    lines.push(`| ${t.id.replace(/Task-/, '')} | ${t.name.slice(0, 40)} | \`${cmd}\` |`);
+  }
+  lines.push('');
+  lines.push('**批量执行**：');
+  lines.push('```bash');
+  lines.push(`speccore execute -I ${iteration} --all --batch-size 5 --auto --force`);
+  lines.push('```');
+  lines.push('');
 
   // ── 4. 任务详情 ──
   lines.push('---');
