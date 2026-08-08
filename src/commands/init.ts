@@ -1086,8 +1086,8 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
   const commands: [string, string, string][] = [
     ['spec-ask', 'SpecCore AI Router', '1. Read .speccore/CONSTITUTION.md for project context\n2. Read .speccore/local/context.json for current iteration\n3. Execute: speccore ask "${1:描述你的需求}"'],
     ['spec-welcome', '显示项目名片（HTML页面）', 'speccore welcome'],
-    ['spec-help', '显示命令帮助中心（HTML页面）', 'speccore help'],
     ['spec-dashboard', '显示全局仪表盘（HTML页面）', 'speccore dashboard --scope global'],
+    ['spec-about', '版本信息 & 升级亮点 & 文档链接', 'speccore about'],
     ['spec-init', '初始化项目 或 升级命令文件: --update', 'speccore init'],
     ['spec-doc2spec', '导入需求文档: 文件=${1:PRD.docx} 迭代=${2:Q1}', 'speccore doc2spec -f ${1:PRD.docx} --iter ${2:Q1}'],
     ['spec-analyze', 'SpecCore Analysis', '1. Read 010-requirements/ for all platform docs\n2. Ask user for iteration name if not provided\n3. Execute: speccore analyze -I ${1:Q1} --task ${2:Task-001}\n4. Present analysis report and ask for confirmation'],
