@@ -98,9 +98,10 @@ h2{font-size:12px;color:#38bdf8;margin:20px 0 10px;letter-spacing:1px}
 ${milestonesHtml}
 
 <h2>📚 文档</h2>
-<a class="link" href="AGENTS.md" target="_blank">AGENTS.md</a>
-<a class="link" href="README.md" target="_blank">README</a>
-<a class="link" href="CHANGELOG.md" target="_blank">CHANGELOG</a>
+<a class="link" href="https://github.com/windfallsheng/SpecCore-ts/blob/main/AGENTS.md" target="_blank">AGENTS.md</a>
+<a class="link" href="https://github.com/windfallsheng/SpecCore-ts/blob/main/README.md" target="_blank">README</a>
+<a class="link" href="https://github.com/windfallsheng/SpecCore-ts/blob/main/CHANGELOG.md" target="_blank">CHANGELOG</a>
+<a class="link" href="https://www.npmjs.com/package/speccore" target="_blank">npm 包</a>
 
 <div class="footer">
   <a href="https://github.com/windfallsheng/SpecCore-ts" target="_blank">GitHub</a> · 
