@@ -934,6 +934,23 @@ export async function synthesizeIntent(input: string): Promise<SynthesizedIntent
 }
 
 export async function askEngine(input: string): Promise<AskResult> {
+  // ── 第零层: 高置信意图直接路由（跳过 LLM，避免误判）──
+  const lower = input.toLowerCase();
+  // 切换上下文 → context set
+  if (/切换.*[到至].*迭代|设定.*上下文|设置.*上下文|上下文.*切换|context.*set|切换到/.test(input)) {
+    const iterMatch = input.match(/Iteration[- ]?\S+|Q\d+|sample/i);
+    const iter = iterMatch ? (iterMatch[0].startsWith('Iteration') ? iterMatch[0] : `Iteration-${iterMatch[0]}`) : '';
+    if (iter) {
+      return {
+        mode: 'match',
+        summary: `切换当前上下文到 ${iter}`,
+        detail: `✅ 将当前活跃迭代设置为 ${iter}`,
+        commands: ['context'],
+        autoExec: { command: 'context', args: `set --iteration ${iter}`, confirm: true },
+      };
+    }
+  }
+
   // ── 第一层: 自有 LLM (OpenAI/Ollama) ──
   try {
     const llmResult = await askWithLlm(input);
