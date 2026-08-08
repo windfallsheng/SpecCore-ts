@@ -26,33 +26,55 @@ const LOCK_FILE = '.speccore/local/schedule.lock';
 function findDaemonPids(): number[] {
   const myPid = process.pid;
   const pids: number[] = [];
+
+  // 方法1: 用 schedule.json 记录的 daemonPid（可靠）
+  try {
+    const { loadScheduleStore } = require('./schedule-store');
+    const store = loadScheduleStore();
+    if (store.daemonRunning && store.daemonPid && store.daemonPid !== myPid) {
+      try {
+        process.kill(store.daemonPid, 0); // 0 信号不杀进程，只检测
+        pids.push(store.daemonPid);
+        return pids;
+      } catch {
+        store.daemonRunning = false;
+        store.daemonPid = null;
+      }
+    }
+  } catch {}
+
+  // 方法2: 命令行查找（兜底）
   try {
     if (process.platform === 'win32') {
-      // Windows: 用 wmic 查命令行
-      const wmicOut = execSync(
-        'wmic process where "name=\'node.exe\'" get ProcessId,CommandLine /format:csv',
-        { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }
-      );
-      for (const line of wmicOut.split('\n')) {
-        if (line.includes('schedule daemon') && line.includes('--foreground')) {
-          const m = line.match(/,(\d+)\s*$/);
-          if (m) {
-            const pid = parseInt(m[1]);
-            if (pid !== myPid) pids.push(pid);
+      const tasklistOut = execSync('tasklist /FI "IMAGENAME eq node.exe" /NH /FO CSV', {
+        encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore']
+      });
+      const pidsFromTasklist = new Set<number>();
+      for (const line of tasklistOut.split('\n')) {
+        const m = line.match(/^"node\.exe","(\d+)"/);
+        if (m) pidsFromTasklist.add(parseInt(m[1]));
+      }
+      for (const pid of pidsFromTasklist) {
+        if (pid === myPid) continue;
+        try {
+          const wmicOut = execSync(
+            `wmic process where "ProcessId=${pid}" get CommandLine /format:csv`,
+            { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }
+          );
+          if (wmicOut.includes('schedule daemon') && wmicOut.includes('--foreground')) {
+            pids.push(pid);
           }
-        }
+        } catch {}
       }
     } else {
-      // macOS/Linux: pgrep
-      const result = execSync(`pgrep -f "speccore schedule daemon"`, { encoding: 'utf-8' });
+      const result = execSync(`pgrep -f "schedule daemon.*--foreground"`, { encoding: 'utf-8' });
       for (const line of result.trim().split('\n')) {
         const pid = parseInt(line);
         if (!isNaN(pid) && pid !== myPid) pids.push(pid);
       }
     }
-  } catch {
-    // 没找到
-  }
+  } catch {}
+
   return pids;
 }
 
@@ -131,7 +153,7 @@ export async function runDaemonLoop(): Promise<void> {
       for (const task of dueTasks) {
         await executeScheduledTask(task);
       }
-      // 懒停止：没有 pending 任务时自动退出
+      // 懒停止：只在没有任何 pending 任务时才退出（保留未来 pending）
       const { getPendingTasks } = await import('./schedule-store');
       const remaining = await getPendingTasks();
       if (remaining.length === 0) {
@@ -139,6 +161,16 @@ export async function runDaemonLoop(): Promise<void> {
         await updateDaemonStatus(false, null);
         clearInterval(interval);
         process.exit(0);
+      } else {
+        // 还有 pending 任务，提示下一个任务的等待时间
+        const next = remaining.sort((a, b) =>
+          new Date(a.scheduledAtISO).getTime() - new Date(b.scheduledAtISO).getTime()
+        )[0];
+        const waitMs = new Date(next.scheduledAtISO).getTime() - Date.now();
+        if (waitMs > 0) {
+          const waitMin = Math.ceil(waitMs / 60000);
+          logger.info(`Idle: ${remaining.length} pending, next in ${waitMin}min (${next.scheduledAt})`);
+        }
       }
     } catch (err) {
       // 保持运行，记录错误

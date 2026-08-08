@@ -267,6 +267,7 @@ program
   .option('--mode <mode>', 'Plan mode: auto, claim, parallel', 'auto')
   .option('--dry-run', 'Preview without saving')
   .option('--interactive', 'Preview → adjust → confirm before saving')
+  .option('--select', '列出所有任务供多选具体要执行哪些')
   .option('--list', 'Show plan history')
   .option('--show <id>', 'Show plan detail')
   .option('--delete <id>', 'Delete a plan')
