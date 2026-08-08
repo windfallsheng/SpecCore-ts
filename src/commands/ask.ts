@@ -188,9 +188,12 @@ export async function askCommand(input: string, _options: any): Promise<void> {
     await writeFile(outPath, html);
     await writeFile(markerFile, ver);
     logger.info(`👋 ${lastVersion ? `v${lastVersion} → v${ver} 升级` : '首次使用'} — 已生成引导页: ${outPath}`);
-    // 输出标记供宿主 AI 展示引导页
+    // AI 上下文 → 先展示引导页，本次 ask 到此为止
+    // 用户看完页面后可以重新输入 ask
     process.stdout.write(`[SPECCORE_ONBOARD: ${outPath}]\n`);
-    // 不 return，继续执行后续 ask 逻辑 — 仪式感 + 照常工作
+    if (isAiContext()) {
+      return;
+    }
   }
 
   const { synthesizeIntent } = await import('../core/ask-engine');
