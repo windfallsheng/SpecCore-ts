@@ -63,6 +63,9 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
         const { version } = require('../../package.json');
         await writeFile(verFile, JSON.stringify({ version, updatedAt: new Date().toISOString() }, null, 2));
 
+        // 重置 onboard 标记，确保升级后首次 ask 展示引导页
+        try { await unlink(join(speccoreDir, 'local', '.ask-onboarded')); } catch {}
+
         // 生成升级欢迎页（与 ask 引导页同风格）
         await writeUpgradePage(projectRoot, version, speccoreDir);
 
