@@ -59,9 +59,16 @@ export async function aboutCommand(): Promise<void> {
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'JetBrains Mono',monospace;background:#0b1221;color:#bae6fd;min-height:100vh;padding:28px 20px}
 .scanlines{position:fixed;inset:0;pointer-events:none;z-index:999;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,240,255,.006) 2px,rgba(0,240,255,.006) 4px)}
-.card{max-width:680px;margin:0 auto;background:rgba(13,31,56,.95);border:1px solid rgba(14,165,233,.12);border-radius:16px;padding:28px 32px}
+.card{max-width:680px;margin:0 auto;background:rgba(13,31,56,.95);border:1px solid rgba(14,165,233,.12);border-radius:16px;padding:28px 32px;position:relative;overflow:hidden}
 .card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,#0ea5e9,transparent);animation:scanX 3s linear infinite}
+.card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,#0ea5e9,transparent);animation:scanX-rev 3s linear infinite}
 @keyframes scanX{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+@keyframes scanX-rev{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}
+@keyframes scanY{0%{transform:translateY(-100%)}100%{transform:translateY(100%)}}
+@keyframes scanY-rev{0%{transform:translateY(100%)}100%{transform:translateY(-100%)}}
+.vline{position:absolute;top:0;width:1px;bottom:0;pointer-events:none}
+.vline.l{left:0;background:linear-gradient(180deg,transparent,#0ea5e9,transparent);animation:scanY-rev 3s linear infinite}
+.vline.r{right:0;background:linear-gradient(180deg,transparent,#0ea5e9,transparent);animation:scanY 3s linear infinite}
 h1{font-family:'Orbitron',sans-serif;font-size:24px;font-weight:900;background:linear-gradient(135deg,#0ea5e9,#6366f1);-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:2px}
 h1 span{font-size:13px;opacity:.6}
 h2{font-size:12px;color:#38bdf8;margin:20px 0 10px;letter-spacing:1px}
@@ -85,6 +92,7 @@ h2{font-size:12px;color:#38bdf8;margin:20px 0 10px;letter-spacing:1px}
 <body>
 <div class="scanlines"></div>
 <div class="card">
+<div class="vline l"></div><div class="vline r"></div>
 <h1>SPECCORE <span>v${ver}</span></h1>
 <div class="sub">Code by Spec, Not by Vibe.</div>
 
