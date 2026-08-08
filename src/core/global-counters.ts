@@ -46,12 +46,13 @@ export async function nextIterationId(name: string, topic?: string): Promise<{ i
   return { id: `Iteration-${padded}-${slug}`, num: c.iterations };
 }
 
-export async function nextTaskId(name?: string): Promise<{ id: string; num: number }> {
+export async function nextTaskId(name?: string, topic?: string): Promise<{ id: string; num: number }> {
   const c = await getCounters();
   c.tasks++;
   await save(c);
   const padded = String(c.tasks).padStart(3, '0');
-  const suffix = name ? `-${name.slice(0, 20)}` : '';
+  const keyword = topic || name;
+  const suffix = keyword ? `-${toSlug(keyword).slice(0, 20)}` : '';
   return { id: `Task-${padded}${suffix}`, num: c.tasks };
 }
 

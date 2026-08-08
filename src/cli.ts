@@ -227,6 +227,7 @@ taskCmd
   .alias('n')
   .description('创建新任务')
   .option('-n, --name <name>', '任务名称（必填）')
+  .option('--topic <topic>', '英文主题词（如 user-login）')
   .option('-t, --type <type>', '任务类型: feature|bugfix|research|review|test|docs|refactor|deploy|security|performance', 'feature')
   .option('-d, --desc <desc>', '任务描述')
   .option('--platforms <platforms>', '前端平台: web,h5,miniapp')

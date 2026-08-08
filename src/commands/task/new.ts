@@ -1,10 +1,12 @@
 import { ensureDir, writeFile, pathExists, readFile } from 'fs-extra';
 import { join } from 'path';
 import { logger, Spinner } from '../../utils/logger';
-import { getDefaultIteration, updateContext } from '../../core/context';
+import { getDefaultIteration, updateContext, getIterationDir } from '../../core/context';
+import { nextTaskId } from '../../core/global-counters';
 
 export interface TaskNewOptions {
   name?: string;
+  topic?: string;
   type?: string;
   id?: string;
   desc?: string;
@@ -13,7 +15,6 @@ export interface TaskNewOptions {
   backendOnly?: boolean;
   frontendOnly?: boolean;
   iteration?: string;
-  // 批量/调度
   batch?: string;
   batchFile?: string;
   interactive?: boolean;
@@ -126,11 +127,12 @@ async function createSingleTask(options: TaskNewOptions): Promise<void> {
       return;
     }
 
-    const iterationDir = `Iteration-${iteration}`;
+    const iterationDir = await getIterationDir(iteration);
     
-    // Determine task ID
-    const rawId = options.id || await findNextTaskId(iterationDir);
-    const taskId = rawId.replace(/^Task-/, '');
+    // Determine task ID (使用 --topic 英文主题词)
+    const { id: taskId } = options.id 
+      ? { id: options.id.replace(/^Task-/, '') } 
+      : await nextTaskId(options.topic);
     const taskDir = join(iterationDir, '030-tasks', `Task-${taskId}`);
 
     if (await pathExists(taskDir)) {
