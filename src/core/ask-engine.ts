@@ -89,7 +89,7 @@ const COMMAND_KB: CommandKnowledge[] = [
   { name: 'task', aliases: ['tk'], description: '任务管理：创建/列表/状态。子命令: new, list, status',
     usage: 'speccore task new --name <name> [--id <id>] | speccore task list | speccore task status', examples: ['speccore task new --name "用户登录"', 'speccore task list'], related: ['plan', 'execute'], triggers: ['task', '任务列表', '查看任务', '列出任务'] },
   { name: 'schedule', aliases: ['sc'], description: '定时调度管理：创建/查看/取消/重试/守护进程',
-    usage: 'speccore schedule create --at "HH:mm" | speccore schedule list | speccore schedule cancel --id <id> | speccore schedule retry --id <id> | speccore schedule daemon start',
+    usage: 'speccore schedule create --at "HH:mm" | speccore schedule list | speccore schedule cancel --id <id>',
     examples: ['speccore schedule list', 'speccore schedule retry --id sch-xxx'],
     related: ['plan', 'execute', 'task'], triggers: ['调度', '定时', 'schedule', '重调度', 'retry', '守护进程', 'daemon', '队列'] },
   { name: 'iteration', aliases: ['it'], description: '迭代管理：创建时自动生成唯一编码（Iteration-001-功能名），支持拆分/列表',
@@ -135,15 +135,11 @@ const WORKFLOWS: Record<string, PipelineStep[]> = {
   'batch execute': [
     { order: 1, command: 'plan', args: '--select', explanation: '列出所有可执行任务（编号 + CLI命令），用户多选', dependsOn: undefined },
     { order: 2, command: 'schedule', args: 'create --at "{time}" --batch-size {batch}', explanation: '创建定时调度', dependsOn: 1 },
-    { order: 3, command: 'schedule', args: 'daemon start', explanation: '启动调度守护进程', dependsOn: 2 },
-    { order: 4, command: 'execute', args: '--auto --batch-size {batch}', explanation: '到时间自动执行', dependsOn: 2 },
   ],
-  'analyze plan schedule execute': [
+  'analyze plan schedule': [
     { order: 1, command: 'analyze', args: '--prompt --task {task}', explanation: 'AI 分析任务需求（立即执行）', dependsOn: undefined },
     { order: 2, command: 'plan', args: '--prompt --all', explanation: 'AI 制定执行计划（立即执行）', dependsOn: 1 },
-    { order: 3, command: 'schedule', args: 'create --at "{time}" --batch-size {batch}', explanation: '创建定时调度（到点自动执行）', dependsOn: 2 },
-    { order: 4, command: 'schedule', args: 'daemon start', explanation: '启动守护进程', dependsOn: 3 },
-    { order: 5, command: 'execute', args: '--auto --batch-size {batch}', explanation: '定时自动执行任务', dependsOn: 3 },
+    { order: 3, command: 'schedule', args: 'create --at "{time}" --batch-size {batch}', explanation: '创建定时调度', dependsOn: 2 },
   ],
   'batch execute auto': [
     { order: 1, command: 'plan', args: '--all', explanation: '生成全部任务计划', dependsOn: undefined },

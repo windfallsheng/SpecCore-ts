@@ -67,8 +67,6 @@ import {
   scheduleDetailCommand,
   scheduleCancelCommand,
   scheduleDeleteCommand,
-  scheduleDaemonCommand,
-  scheduleRetryCommand,
 } from './commands/schedule';
 import { i18n } from './i18n';
 
@@ -810,7 +808,7 @@ program
 const scheduleCmd = program
   .command('schedule')
   .alias('sc')
-  .description('定时调度：指定时间自动执行+筛选条件+守护进程');
+  .description('定时调度：创建/查看/取消任务');
 
 scheduleCmd
   .command('create')
@@ -845,13 +843,6 @@ scheduleCmd
   .action(scheduleCancelCommand);
 
 scheduleCmd
-  .command('retry')
-  .description('重新调度（基于已有任务改时间立即/稍后执行）')
-  .option('--id <id>', '调度任务 ID')
-  .option('--at <datetime>', '新的执行时间，不指定则 1 分钟后立即执行')
-  .action(scheduleRetryCommand);
-
-scheduleCmd
   .command('detail')
   .description('查看调度详情（含执行参数）')
   .option('--id <id>', '调度任务 ID')
@@ -862,15 +853,6 @@ scheduleCmd
   .description('删除调度记录')
   .option('--id <id>', '调度任务 ID')
   .action(scheduleDeleteCommand);
-
-scheduleCmd
-  .command('daemon')
-  .description('守护进程管理 [start|stop|restart|status|install]')
-  .argument('[action]', 'start | stop | restart | status | install', 'status')
-  .option('--foreground', '前台运行守护进程')
-  .action((action: string, options: any) => {
-    return scheduleDaemonCommand({ action, foreground: options.foreground });
-  });
 
 program
   .command('welcome')
