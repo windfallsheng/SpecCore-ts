@@ -122,8 +122,9 @@ A6. 写入:
 ## 分支 D: pipeline (≤5 步)
 
 ```
-D1. 展示计划，等确认
-D2. 逐步执行（每步走 A3-A6）
+D1. 展示 SPECCORE_INTENT，等确认 → 用户确认后必须进入 D2，禁止输出命令文本
+D2. 逐步执行：原输出中的 [SPECCORE_EXEC: cmd] 逐条 execute_command
+    每步走 A3-A6（执行→生成→自检→写回）
 D3. 步间: Read 产出文件 → 提取参数 → 传下一步
 ```
 
