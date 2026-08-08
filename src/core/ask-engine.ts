@@ -604,7 +604,9 @@ export async function askEngine(input: string): Promise<AskResult> {
     case 'guide':
       try { return handleGuide(input); }
       catch { return handleMatch(input); }
-    case 'pipeline': return handlePipeline(input);
+    case 'pipeline':
+      try { return handlePipeline(input); }
+      catch { return handleMatch(input); }
     case 'ambiguous':
     case 'match':
     default: return handleMatch(input);
