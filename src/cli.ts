@@ -15,6 +15,7 @@ import { planCommand } from './commands/plan';
 import { executeCommand } from './commands/execute';
 // 新增命令
 import { askCommand } from './commands/ask';
+import { aboutCommand } from './commands/about';
 import { changeCommand } from './commands/change';
 import { syncCommand } from './commands/sync';
 import { opsCommand } from './commands/history';
@@ -117,6 +118,11 @@ program
   .command('ask [input...]')
   .description('Natural language intent recognition (previously "spec")')
   .action((input: string[]) => askCommand(input.join(' '), {}));
+
+program
+  .command('about')
+  .description('版本信息 & 升级内容 & 有用的链接')
+  .action(aboutCommand);
 
 // ================================================================
 // 👋 引导与体验
