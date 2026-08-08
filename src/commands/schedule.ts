@@ -92,7 +92,9 @@ export async function scheduleCreateCommand(options: ScheduleCreateOptions): Pro
     logger.info(`  执行时间: ${scheduled.scheduledAt}`);
     logger.info(`  状态:     ${statusLabel(scheduled.status)}`);
     logger.info('');
-    logger.info('💡 确保 schedule daemon 在运行: speccore schedule daemon start');
+
+    // 懒启动：有调度就自动唤醒 daemon
+    try { startDaemon(); } catch {}
 
   } catch (error: any) {
     logger.error(`创建调度任务失败: ${error.message}`);
@@ -174,6 +176,16 @@ export async function scheduleCancelCommand(options: ScheduleCancelOptions): Pro
 
     logger.success(`已取消调度任务: ${task.name}`);
     logger.info(`  原定执行时间: ${task.scheduledAt}`);
+
+    // 懒停止：取消后无 pending 任务则自动退出 daemon
+    try {
+      const { getPendingTasks: getPending } = await import('../core/schedule-store');
+      const { isDaemonRunning, stopDaemon } = await import('../core/schedule-engine');
+      const remaining = await getPending();
+      if (remaining.length === 0 && isDaemonRunning()) {
+        stopDaemon();
+      }
+    } catch {}
   } catch (error: any) {
     logger.error(`取消任务失败: ${error.message}`);
   }

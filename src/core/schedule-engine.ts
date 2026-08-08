@@ -131,6 +131,15 @@ export async function runDaemonLoop(): Promise<void> {
       for (const task of dueTasks) {
         await executeScheduledTask(task);
       }
+      // 懒停止：没有 pending 任务时自动退出
+      const { getPendingTasks } = await import('./schedule-store');
+      const remaining = await getPendingTasks();
+      if (remaining.length === 0) {
+        logger.info('No pending tasks — daemon stopping (idle)');
+        await updateDaemonStatus(false, null);
+        clearInterval(interval);
+        process.exit(0);
+      }
     } catch (err) {
       // 保持运行，记录错误
     }
