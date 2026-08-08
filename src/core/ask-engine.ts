@@ -958,7 +958,7 @@ export async function askEngine(input: string): Promise<AskResult> {
         summary: `切换当前上下文到 Iteration-${iter}`,
         detail: `✅ 将当前活跃迭代设置为 Iteration-${iter}`,
         commands: ['context'],
-        autoExec: { command: 'context', args: `set --iteration ${iter}`, confirm: true },
+        autoExec: { command: 'context', args: `--set --iteration ${iter}`, confirm: true },
       };
     }
   }
