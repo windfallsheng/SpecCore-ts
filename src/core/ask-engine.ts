@@ -958,22 +958,30 @@ export async function askEngine(input: string): Promise<AskResult> {
     }
   }
 
-  // ── 第一层: 自有 LLM（如果配置了 API Key）──
-  const hasLlmKey = process.env.SPECCORE_LLM_KEY || process.env.OPENAI_API_KEY;
-  if (hasLlmKey) {
-    try {
-      const llmResult = await askWithLlm(input);
-      if (llmResult && llmResult.commands.length > 0) {
-        logger.info(`🧠 自有 LLM: ${modeLabel(llmResult.mode as AskMode)}`);
-        (llmResult as any)._source = 'llm';
-        return llmResult;
-      }
-    } catch (e: any) {
-      logger.warn(`自有 LLM 不可用: ${e.message}`);
+  // ── --rules 模式: 自有 LLM + 关键词匹配（显式触发）──
+  if (input.includes('--rules')) {
+    // 优先: 自有 LLM（需要配置 SPECCORE_LLM_KEY）
+    if (process.env.SPECCORE_LLM_KEY) {
+      try {
+        const llmResult = await askWithLlm(input);
+        if (llmResult && llmResult.commands.length > 0) {
+          logger.info(`🧠 自有 LLM: ${modeLabel(llmResult.mode as AskMode)}`);
+          (llmResult as any)._source = 'llm';
+          return llmResult;
+        }
+      } catch (e: any) { logger.warn(`LLM 不可用: ${e.message}`); }
+    }
+    // 兜底: 关键词匹配
+    const mode = classifyMode(input);
+    switch (mode) {
+      case 'explain': return handleExplain(input);
+      case 'guide': return handleGuide(input);
+      case 'pipeline': return handlePipeline(input);
+      default: return handleMatch(input);
     }
   }
 
-  // ── 第二层: 宿主 AI 文件协议（TRAE 等）──
+  // ── 宿主 AI 文件协议（TRAE 等）──
   try {
     const hostResult = await tryHostAi('ask', input);
     if (hostResult) {
@@ -983,7 +991,7 @@ export async function askEngine(input: string): Promise<AskResult> {
     }
   } catch (e: any) { /* 不可用，继续 */ }
 
-  // ── 第三层: 输出知识库，交给宿主 AI 语义分析 ██
+  // ── 输出知识库，交给宿主 AI 语义分析 ......
   const kb = COMMAND_KB.map(c =>
     `  ${c.name}: ${c.description.padEnd(30)} → ${c.usage}`
   ).join('\n');
