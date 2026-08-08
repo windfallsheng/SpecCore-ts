@@ -195,6 +195,36 @@ export async function askCommand(input: string, _options: any): Promise<void> {
   // 始终输出模式标记到 stdout，供 Skill/编排器解析
   process.stdout.write(`[SPECCORE_MODE: ${result.mode}]\n`);
 
+  // ── 意图确认：把 AI 理解的内容展示给用户，用户确认后再拼命令 ──
+  // AI 上下文输出结构化确认信息；TTY 交互式确认
+  const intentSummary: string[] = [];
+  if (result.summary) intentSummary.push(`📝 理解: ${result.summary}`);
+  if (result.detail) intentSummary.push(result.detail.split('\n').slice(0, 8).join('\n'));
+  if (result.commands?.length) intentSummary.push(`\n🔧 将执行: ${result.commands.join(' → ')}`);
+  if (result.mode === 'pipeline' && result.pipeline?.steps) {
+    intentSummary.push(`\n📋 步骤 (${result.pipeline.steps.length}): `);
+    for (const s of result.pipeline.steps) {
+      intentSummary.push(`   ${s.order}. ${s.command} ${s.args || ''}  ← ${s.explanation}`);
+    }
+    if (!result.pipeline.confirm) {
+      intentSummary.push(`\n🤖 模式: 自动执行（用户说了自主/一键，不打断）`);
+    }
+  }
+  if (intentSummary.length > 0) {
+    process.stdout.write(`[SPECCORE_INTENT]\n${intentSummary.join('\n')}\n[SPECCORE_INTENT_END]\n`);
+  }
+  // AI 上下文且有确认需求 → 等待用户确认
+  if (isAiContext() && result.pipeline?.confirm) {
+    process.stdout.write(`[SPECCORE_CONFIRM_NEEDED]
+请确认以上计划是否正确。
+  ✅ 确认: 回复 "确认" 或 "y" 或 "开始"
+  ✏️ 修改: 回复你的修改意见
+  ❌ 取消: 回复 "取消" 或 "q"
+[END_CONFIRM_NEEDED]\n`);
+    // 等待宿主 AI 读取 SPECCORE_CONFIRM_NEEDED 并让用户确认
+    // 实际等待由宿主 AI 处理，这里只是输出标记
+  }
+
   // ═══════════════════════════════════════════
   // AI 上下文（WorkBuddy / ClaudeCode 等）：自动执行模式
   // 核心原则：不打印命令让用户复制，直接执行
