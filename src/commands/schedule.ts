@@ -93,16 +93,13 @@ export async function scheduleCreateCommand(options: ScheduleCreateOptions): Pro
     logger.info(`  状态:     ${statusLabel(scheduled.status)}`);
     logger.info('');
 
-        // 重新安装 LaunchAgent + 确保 daemon 运行
+        // 重新安装 LaunchAgent + 确保 daemon 运行（最多重试 3 次）
     await installSystemSchedule();
-    // 检查 daemon 是否在运行，没在就启动
     const { isDaemonRunning } = await import('../core/schedule-engine');
     if (!isDaemonRunning()) {
-      const started = startDaemon();
-      if (!started) {
-        // 启动失败则等 1s 重试一次
+      for (let i = 0; i < 3; i++) {
+        if (startDaemon()) break;
         await new Promise(r => setTimeout(r, 1000));
-        startDaemon();
       }
     }
 

@@ -147,6 +147,7 @@ export async function runDaemonLoop(): Promise<void> {
   process.on('SIGINT', cleanup);
 
   // 主循环
+  let idleCount = 0; // 连续空闲计数，>=3 才退出（给 schedule create 时间）
   const check = async () => {
     try {
       const dueTasks = await getDueTasks();
@@ -157,11 +158,17 @@ export async function runDaemonLoop(): Promise<void> {
       const { getPendingTasks } = await import('./schedule-store');
       const remaining = await getPendingTasks();
       if (remaining.length === 0) {
-        logger.info('No pending tasks — daemon stopping (idle)');
-        await updateDaemonStatus(false, null);
-        clearInterval(interval);
-        process.exit(0);
+        idleCount++;
+        if (idleCount >= 3) {
+          logger.info('No pending tasks ×3 — daemon stopping (idle)');
+          await updateDaemonStatus(false, null);
+          clearInterval(interval);
+          process.exit(0);
+        } else {
+          logger.info(`No pending tasks (idle check ${idleCount}/3)`);
+        }
       } else {
+        idleCount = 0;
         // 还有 pending 任务，提示下一个任务的等待时间
         const next = remaining.sort((a, b) =>
           new Date(a.scheduledAtISO).getTime() - new Date(b.scheduledAtISO).getTime()
