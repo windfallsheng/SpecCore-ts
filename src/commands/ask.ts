@@ -189,6 +189,8 @@ export async function askCommand(input: string, _options: any): Promise<void> {
     await writeFile(markerFile, ver);
     logger.info(`👋 ${lastVersion ? `v${lastVersion} → v${ver} 升级` : '首次使用'} — 已生成引导页: ${outPath}`);
     process.stdout.write(`[SPECCORE_ONBOARD: ${outPath}]\n`);
+    logger.info(`   📄 file://${outPath}`);
+    process.stdout.write(`[SPECCORE_ONBOARD: ${outPath}]\n`);
   }
 
   const { synthesizeIntent } = await import('../core/ask-engine');
