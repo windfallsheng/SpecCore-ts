@@ -147,37 +147,44 @@ export async function runDaemonLoop(): Promise<void> {
   process.on('SIGINT', cleanup);
 
   // 主循环
-  let idleCount = 0; // 连续空闲计数，>=3 才退出（给 schedule create 时间）
+  let idleCheckTimer: NodeJS.Timeout | null = null;
+  let idleCount = 0; // 连续空闲检查次数，>=3 退出
+  
+  const doIdleCheck = () => {
+    idleCount++;
+    if (idleCount >= 3) {
+      logger.info('No pending tasks ×3 (15min) — daemon stopping (idle)');
+      updateDaemonStatus(false, null);
+      clearInterval(interval);
+      process.exit(0);
+      return;
+    }
+    logger.info(`No pending tasks (idle check ${idleCount}/3, next in 5min)`);
+    idleCheckTimer = setTimeout(doIdleCheck, 5 * 60 * 1000); // 5 分钟后再查
+  };
+
   const check = async () => {
     try {
+      // 有新任务到来 → 取消空闲倒计时，恢复正常轮询
+      if (idleCheckTimer) {
+        clearTimeout(idleCheckTimer);
+        idleCheckTimer = null;
+        idleCount = 0;
+      }
+
       const dueTasks = await getDueTasks();
       for (const task of dueTasks) {
         await executeScheduledTask(task);
       }
-      // 懒停止：只在没有任何 pending 任务时才退出（保留未来 pending）
       const { getPendingTasks } = await import('./schedule-store');
       const remaining = await getPendingTasks();
-      if (remaining.length === 0) {
-        idleCount++;
-        if (idleCount >= 3) {
-          logger.info('No pending tasks ×3 — daemon stopping (idle)');
-          await updateDaemonStatus(false, null);
-          clearInterval(interval);
-          process.exit(0);
-        } else {
-          logger.info(`No pending tasks (idle check ${idleCount}/3)`);
-        }
-      } else {
+      if (remaining.length === 0 && !idleCheckTimer) {
+        // 首次发现无 pending → 启动 5 分钟空闲倒计时
         idleCount = 0;
-        // 还有 pending 任务，提示下一个任务的等待时间
-        const next = remaining.sort((a, b) =>
-          new Date(a.scheduledAtISO).getTime() - new Date(b.scheduledAtISO).getTime()
-        )[0];
-        const waitMs = new Date(next.scheduledAtISO).getTime() - Date.now();
-        if (waitMs > 0) {
-          const waitMin = Math.ceil(waitMs / 60000);
-          logger.info(`Idle: ${remaining.length} pending, next in ${waitMin}min (${next.scheduledAt})`);
-        }
+        logger.info('No pending tasks — will check 3× every 5min before stopping');
+        doIdleCheck();
+      } else if (remaining.length > 0) {
+        logger.info(`Idle: ${remaining.length} pending`);
       }
     } catch (err) {
       // 保持运行，记录错误
