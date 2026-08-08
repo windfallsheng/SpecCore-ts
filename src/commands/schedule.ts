@@ -93,8 +93,18 @@ export async function scheduleCreateCommand(options: ScheduleCreateOptions): Pro
     logger.info(`  状态:     ${statusLabel(scheduled.status)}`);
     logger.info('');
 
-        // 重新安装 LaunchAgent 到当前项目（daemon 的 WorkingDirectory 必须 = 当前项目）
-    try { await installSystemSchedule(); startDaemon(); } catch {}
+        // 重新安装 LaunchAgent + 确保 daemon 运行
+    await installSystemSchedule();
+    // 检查 daemon 是否在运行，没在就启动
+    const { isDaemonRunning } = await import('../core/schedule-engine');
+    if (!isDaemonRunning()) {
+      const started = startDaemon();
+      if (!started) {
+        // 启动失败则等 1s 重试一次
+        await new Promise(r => setTimeout(r, 1000));
+        startDaemon();
+      }
+    }
 
   } catch (error: any) {
     logger.error(`创建调度任务失败: ${error.message}`);
