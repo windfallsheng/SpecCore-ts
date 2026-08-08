@@ -1,7 +1,7 @@
 import { ensureDir, writeFile, pathExists, readFile, readdir } from 'fs-extra';
 import { join } from 'path';
 import { logger, Spinner } from '../../utils/logger';
-import { getDefaultIteration } from '../../core/context';
+import { getDefaultIteration, getIterationDir } from '../../core/context';
 import { scoreRisk, generateRiskReport } from '../../core/risk-scorer';
 import { nextTaskId } from '../../core/global-counters';
 
@@ -94,7 +94,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       return;
     }
 
-    const iterationDir = `Iteration-${iteration}`;
+    const iterationDir = await getIterationDir(iteration);
 
     // ── 1. 检查 ANALYSIS.md + AI 智能拆分建议 ──
     const analysisPath = join(iterationDir, '020-specs', 'ANALYSIS.md');

@@ -1,7 +1,7 @@
 import { join } from 'path';
 import { writeFile, ensureDir, readdir, stat } from 'fs-extra';
 import { logger, Spinner } from '../utils/logger';
-import { getDefaultIteration } from '../core/context';
+import { getDefaultIteration, getIterationDir } from '../core/context';
 import { readProjectGraph, topologicalSort, scanTasks, TaskState } from '../core/state';
 import { FileTransaction } from '../core/transaction';
 import { savePlan, listPlans, getPlan, deletePlan, cancelPlan, ExecutionPlan } from '../core/plan-store';
@@ -46,7 +46,7 @@ export async function planCommand(options: PlanOptions): Promise<void> {
   // ── Response 模式 ──
   if (options.response) {
     if (!options.iteration) { logger.error('--response 需要 --iteration'); return; }
-    const planDir = join('Iteration-' + options.iteration, '.speccore');
+    const planDir = join(await getIterationDir(options.iteration || ''), '.speccore');
     await ensureDir(planDir);
     await writeFile(join(planDir, 'plan.json'), options.response);
     logger.success('✅ plan.json 已写入');
@@ -122,14 +122,14 @@ export async function planCommand(options: PlanOptions): Promise<void> {
       logger.info(`   或分批:  speccore execute -I ${iteration} -t ${cmdIds[0]} --batch-size 3 --auto`);
       // 保存到 plan 时只包含选中的任务
       const _ = await saveToStore(iteration, cmdIds, 3, options, 'manual');
-      logger.info(`   计划文件: Iteration-${iteration}/000-overview/plans/PLAN.md`);
+      logger.info(`   计划文件: ${await getIterationDir(iteration)}/000-overview/plans/PLAN.md`);
       return;
     }
 
     const saved = await saveToStore(iteration, taskIds, 3, options, 'manual');
 
     // 写入带时间戳 + AI 关键词的计划文件（多版本） + 最新的 PLAN.md
-    const planDir = join(`Iteration-${iteration}`, '000-overview', 'plans');
+    const planDir = join(await getIterationDir(iteration), '000-overview', 'plans');
     const ts = new Date().toISOString().replace(/T/, '-').replace(/:/g, '').slice(0, 17);
     const slug = extractPlanSlug(sortedTasks);
     const filename = slug ? `PLAN-${ts}-${slug}.md` : `PLAN-${ts}.md`;
@@ -165,7 +165,7 @@ async function showPlanHistory(): Promise<void> {
   try {
     const iter = await getDefaultIteration();
     if (iter) {
-      const planDir = join(`Iteration-${iter}`, '000-overview', 'plans');
+      const planDir = join(await getIterationDir(iter), '000-overview', 'plans');
       let files: string[] = [];
       try { files = await readdir(planDir); } catch { files = []; }
       for (const f of files) {
@@ -188,7 +188,7 @@ async function showPlanHistory(): Promise<void> {
   // 展示磁盘文件（倒序）
   if (plans.length > 0) {
     const iter = await getDefaultIteration();
-    logger.info(`\n📋 计划文件 · Iteration-${iter}/000-overview/plans/ (${plans.length}):\n`);
+    logger.info(`\n📋 计划文件 · ${await getIterationDir(iter)}/000-overview/plans/ (${plans.length}):\n`);
     for (const p of plans) {
       const isLatest = p.file === 'PLAN.md' ? ' 📌 最新' : '';
       logger.info(`  📄 ${p.file}  ${formatFileSize(p.size)}  ${p.time.toLocaleString()}${isLatest}`);

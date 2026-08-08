@@ -14,7 +14,7 @@
 import { writeFile, pathExists, ensureDir } from 'fs-extra';
 import { join, dirname } from 'path';
 import { logger, Spinner } from '../utils/logger';
-import { getDefaultIteration } from '../core/context';
+import { getDefaultIteration, getIterationDir } from '../core/context';
 import { extractQuestions, showQuestionChecklist } from '../core/question-checklist';
 import { showNextSteps } from '../core/next-steps';
 import { runAnalysis, AnalyzeInput } from '../core/analyze-engine';
@@ -49,7 +49,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
   // ── Apply 模式 ──
   if (options.apply) {
     if (!options.iteration) { logger.error('--apply 需要 --iteration'); return; }
-    const iterDir = `Iteration-${options.iteration}`;
+    const iterDir = await getIterationDir(options.iteration);
     const specDir = join(iterDir, '020-specs');
     await ensureDir(specDir);
     await writeFile(join(specDir, 'ANALYSIS.md'), options.apply);
@@ -187,7 +187,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 
       // 显示待确认清单
       try {
-        const iterDir = `Iteration-${iteration}`;
+        const iterDir = await getIterationDir(iteration || '');
         const questions = await extractQuestions(iterDir);
         if (questions.length > 0) {
           showQuestionChecklist(questions, '需求分析待确认');
@@ -266,12 +266,14 @@ async function generateIterationSpecDocs(iteration: string): Promise<void> {
  */
 async function enrichTaskDocs(iteration: string, taskId: string, reqFiles: string[]): Promise<void> {
   const { readdirSync } = require('fs');
-  const iterDir = `Iteration-${iteration}`;
+  const iterDir = await getIterationDir(iteration);
   
   if (!(await pathExists(iterDir))) return;
 
   const entries = readdirSync(iterDir, { withFileTypes: true });
   const taskEntry = entries.find((e: any) => e.isDirectory() && e.name.startsWith(taskId));
+  // enrichTaskDocs continues, but taskEntry logic remains...
+  if (!taskEntry) return;
   
   if (!taskEntry) {
     logger.info(`   ℹ️ 未找到任务目录 ${taskId}，跳过文档补全`);

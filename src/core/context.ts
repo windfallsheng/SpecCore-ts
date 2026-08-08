@@ -188,3 +188,22 @@ export async function getHotfixStatus(): Promise<{
     mandatoryExpired: now > new Date(ctx.hotfix.mustSyncBy),
   };
 }
+
+/**
+ * 根据简短迭代名（如 Q1）查找完整迭代路径
+ * 返回 .speccore/ITERATIONS/Iteration-NNN-q1
+ */
+export async function getIterationDir(name: string): Promise<string> {
+  const { readdir } = await import('fs-extra');
+  const root = join(process.cwd(), '.speccore', 'ITERATIONS');
+  try {
+    const entries = await readdir(root, { withFileTypes: true });
+    for (const e of entries) {
+      if (e.isDirectory() && e.name.toLowerCase().endsWith(name.toLowerCase())) {
+        return join(root, e.name);
+      }
+    }
+  } catch {}
+  // fallback: 如果没有匹配的，返回 format 拼接（向后兼容）
+  return join(root, `Iteration-000-${name.toLowerCase()}`);
+}
