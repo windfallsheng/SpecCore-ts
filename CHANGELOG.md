@@ -2,6 +2,40 @@
 
 ---
 
+## v5.64.0 (2026-08-08)
+
+### 🧠 智能意图合成 `synthesizeIntent`
+
+Ask 引擎核心升级 — 理解→补全→自检→引导：
+
+- **参数提取**: 时间/类型/优先级/批次/名称 自动从输入提取
+- **上下文补全**: iteration/batch/daemon 自动从当前项目补全
+- **自我检查**: 命令验证 + 置信度计算 + 遗漏检测
+- **精准提问**: AI 能推断的自动补；仅真正歧义时才确认
+- **双模式**: "自主"→确认后全自动；未说明→分步确认
+
+### ⚡ 意图得分系统
+
+关键词硬匹配 → 加权得分：
+动作词(定时+40/分批+30) + 上下文(计划+20/任务+15) + 复杂度判定
+
+### ⏰ Daemon 定时调度修复
+
+- **BUG**: `interval.unref()` 进程立即退出 → LaunchAgent 频繁重启
+- **BUG**: `--all` 调度未传参数给 execute → 命令失败
+- **BUG**: daemon WorkingDirectory 指向旧项目 → 读错 schedule.json
+- **修复**: 删除 unref() + 自动安装 LaunchAgent + 创建时重指向当前项目
+
+### 🖥️ Windows 跨平台
+
+pgrep → `findDaemonPids()` 跨平台；`schtasks` 转义 → `spawnSync` 直接传参
+
+### 🪟 懒启动 + 📋 Plan 增强 + 📖 `speccore about`
+
+daemon 随用随启/用完自停；`plan --select` 多选；about 版本信息 HTML 页
+
+---
+
 ## v5.51.0 (2026-08-07)
 
 ### 🏗️ OpenSpec 标准 Skill 体系重构
