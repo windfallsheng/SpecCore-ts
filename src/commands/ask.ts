@@ -206,8 +206,9 @@ export async function askCommand(input: string, _options: any): Promise<void> {
     for (const s of result.pipeline.steps) {
       intentSummary.push(`   ${s.order}. ${s.command} ${s.args || ''}  ← ${s.explanation}`);
     }
+    // 简单任务说明不用确认；复杂任务说明需要确认
     if (!result.pipeline.confirm) {
-      intentSummary.push(`\n🤖 模式: 自动执行（用户说了自主/一键，不打断）`);
+      intentSummary.push(`\n✅ 简单任务，无歧义，直接执行`);
     }
   }
   if (intentSummary.length > 0) {
