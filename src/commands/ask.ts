@@ -233,16 +233,11 @@ export async function askCommand(input: string, _options: any): Promise<void> {
     // 1. 有 autoExec → 直接执行（所有模式都能走这里）
     if (result.autoExec) {
       await autoExecute(result.autoExec.command, result.autoExec.args, !!result.autoExec.confirm);
-      // 仅当 autoExec 不覆盖 task/schedule 时才额外执行 pipeline 中的 task/schedule
+      // 执行管道中的所有剩余步骤
       if (result.pipeline) {
-        const alreadyExecuted = [result.autoExec.command];
         for (const step of result.pipeline.steps) {
-          if ((step.command === 'task' || step.command === 'schedule') && !alreadyExecuted.includes(step.command)) {
-            const argsFilled = (step.args || '').replace(/\{(\w+)\}/g, (_, k) => k === 'time' ? extractTime(input) : '');
-            const finalArgs = (step.command === 'schedule' && !argsFilled.includes('--task') && !argsFilled.includes('--all'))
-              ? argsFilled + ' --all' : argsFilled;
-            if (finalArgs.trim()) await autoExecute(step.command, finalArgs.trim(), false);
-          }
+          const argsFilled = (step.args || '').replace(/\{(\w+)\}/g, (_: string, k: string) => { if (k === 'time') return extractTime(input); return ''; });
+          if (argsFilled.trim()) await autoExecute(step.command, argsFilled.trim(), false);
         }
       }
       await askHtml(input);
