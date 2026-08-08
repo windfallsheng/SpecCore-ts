@@ -23,7 +23,7 @@ export async function iterationCreateCommand(options: IterationCreateOptions): P
     // Generate globally unique iteration ID
     const rawName = options.name.replace(/^Iteration-/, '');
     const { id: fullName } = await nextIterationId(rawName);
-    const iterationDir = fullName; // e.g. Iteration-001-Q3
+    const iterationDir = join('.speccore', 'ITERATIONS', fullName); // e.g. .speccore/ITERATIONS/Iteration-001-q1
 
     // Check if already exists
     if (await pathExists(iterationDir)) {
