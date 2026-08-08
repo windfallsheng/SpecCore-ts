@@ -513,15 +513,28 @@ function handlePipeline(input: string): AskResult {
   if (/所有|全部|都|each|every|all/.test(lower)) scores.auto += 20;
   if (/先看|先列|先.*看|预览|看看|再说|然后|再.*执行/.test(lower)) scores.auto -= 30; // 说明想要交互
 
-  // 维度3: 复杂度 — 多步骤 = 必须确认
+  // 维度3: 复杂度 — 只要有一点不确定，必须确认
+  // 触发复杂度 = 任何多步骤/定时/多任务/审查/修改 的信号
   const isComplex = (
-    (/计划|plan|安排|排程/.test(lower) && /执行|跑|execute/.test(lower)) || // 计划+执行
-    /定时|指定时间|几点|晚.*点|到.*点/.test(lower) || // 定时调度
-    (/代码|审查|review|安全|测试/.test(lower) && /任务|task/.test(lower)) || // 审查任务
-    /自主|自动|一键|不用确认|直接|全自动/.test(lower) // 自主但多步骤
+    // 计划+执行 组合
+    (/计划|plan|安排|排程/.test(lower) && /执行|跑|execute/.test(lower)) ||
+    // 时间调度
+    /定时|指定时间|几点|晚.*点|早上.*点|明天.*点|到.*点|稍后|一会/.test(lower) ||
+    // 审查/测试/安全 任务
+    (/代码|审查|review|安全|audit|测试|test/.test(lower) && (/任务|task|个|全部|所有/.test(lower))) ||
+    // 多任务批量
+    /全部.*任务|所有.*任务|batch|分批|批量|多个.*任务/.test(lower) ||
+    // 用户明确说自主/自动——仍是复杂，只是确认后全自动
+    /自主|自动|一键|全自动/.test(lower) ||
+    // 多步骤连接词
+    /然后|接着|再|之后|完了|最后|同时|并且|也|还.要/.test(lower) ||
+    // 修改/变更类
+    /修改|变更|改|调整|change/.test(lower) ||
+    // 不确定性: 用户说"看看"/"试试"
+    /看看|试一下|怎么.*弄|帮.*看|不确定/.test(lower)
   );
-  // 简单任务：单个操作，无歧义
-  const isSimple = !isComplex && lower.length < 50 && !/计划|安排|然后|再|同时|并且/.test(lower);
+  // 简单任务 = 纯单一命令，长度短，无任何复杂信号
+  const isSimple = !isComplex && lower.length < 40 && !/计划|安排|然后|再|同时|并且|也|还/.test(lower);
 
   // 维度4: 否定词减分
   if (/别|不要|不.*执行|先别|取消/.test(lower)) { scores.batchExec = 0; scores.auto = 0; }
