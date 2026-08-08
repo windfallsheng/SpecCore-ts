@@ -9,10 +9,24 @@ import { loadContext } from '../core/context';
 
 export interface ContextOptions {
   task?: string;
+  set?: boolean;
+  iteration?: string;
 }
 
 export async function contextCommand(options: ContextOptions): Promise<void> {
   try {
+    // ── --set: 保存迭代上下文 ──
+    if (options.set && options.iteration) {
+      const ctx = await loadContext();
+      ctx.currentIteration = options.iteration;
+      // Write back to file
+      const { writeFile } = await import('fs-extra');
+      const ctxPath = join(process.cwd(), '.speccore', 'local', 'context.json');
+      await writeFile(ctxPath, JSON.stringify(ctx, null, 2));
+      logger.success(`上下文已切换 → Iteration-${options.iteration}`);
+      return;
+    }
+
     const ctx = await loadContext();
     const taskName = options.task || ctx.currentTask;
 
