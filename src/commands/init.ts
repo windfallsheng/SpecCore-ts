@@ -1084,7 +1084,8 @@ async function askUser(prompt: string): Promise<string> {
 
 export async function createToolIntegrations(projectRoot: string, toolFilter?: string): Promise<void> {
   const commands: [string, string, string][] = [
-    ['spec-ask', 'SpecCore AI Router', '1. Read .speccore/CONSTITUTION.md for project context\n2. Read .speccore/local/context.json for current iteration\n3. Execute: speccore ask "${1:描述你的需求}"'],
+    ['spec-ask', 'SpecCore AI Router', '1. Execute: speccore ask "${1:描述你的需求}"\n2. If output has [SPECCORE_ONBOARD:path] → present the HTML file\n3. If [SPECCORE_INTENT] → show to user, wait for confirm\n4. If [SPECCORE_EXEC:cmd] → execute the command'],
+    ['spec-about', '版本信息 & 升级亮点 & 文档链接', 'Execute: speccore about. Output file:// link → click to open. [SPECCORE_ABOUT:path] → present_files.'],
     ['spec-welcome', '显示项目名片（HTML页面）', 'speccore welcome'],
     ['spec-dashboard', '显示全局仪表盘（HTML页面）', 'speccore dashboard --scope global'],
     ['spec-about', '版本信息 & 升级亮点 & 文档链接', 'speccore about'],

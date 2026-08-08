@@ -10,7 +10,8 @@ const CURRENT_VERSION = require('../../package.json').version;
 
 // ── 当前版本的命令列表 ──
 const ALL_COMMANDS: [string, string, string][] = [
-  ['spec-ask', 'AI万能入口', 'speccore ask --web "${1:查看进度}"'],
+  ['spec-ask', 'AI万能入口', '1. Execute: speccore ask "${1:描述你的需求}"\n2. Handle [SPECCORE_ONBOARD:path] → present_files, [SPECCORE_INTENT] → ask user, [SPECCORE_EXEC:cmd] → execute'],
+  ['spec-about', '版本信息 & 升级亮点 & 文档链接', 'Execute: speccore about\nShow the file:// link or [SPECCORE_ABOUT:path] → present_files'],
   ['spec-welcome', '项目名片', 'speccore welcome --web'],
   ['spec-dashboard', '全局仪表盘', 'speccore dashboard --scope global --web'],
   ['spec-init', '初始化项目', 'speccore init'],
