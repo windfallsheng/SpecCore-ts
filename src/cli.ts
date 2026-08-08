@@ -190,6 +190,7 @@ iterationCmd
   .alias('c')
   .description('创建新迭代')
   .option('-n, --name <name>', '迭代名称（必填）')
+  .option('--topic <topic>', '英文主题词（如 meeting-system）')
   .option('--from <phase>', '从指定阶段开始')
   .option('--to <phase>', '到指定阶段结束')
   .option('--owner <name>', '负责人')
