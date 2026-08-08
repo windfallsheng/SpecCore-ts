@@ -157,20 +157,27 @@ speccore retro --all --type bugfix    ← 按类型
 
 ### 5.1 核心理念
 
-**AI 只拼命令，不执行命令。**
+**CLI 输出标签 → AI 执行命令 → CLI 输出下一标签。标签驱动的闭环，AI 和 CLI 交替协作，不输出命令文本给用户复制。**
 
 ```
-用户自然语言 → AI 识别意图 → 拼出 CLI 命令文本 → 用户终端执行
-                                     ↑
-                               AI 到此为止，不参与执行
+用户自然语言
+  → AI 执行 speccore ask
+    → CLI 输出 [SPECCORE_EXEC: analyze --prompt]
+      → AI 执行 analyze
+        → CLI 输出 [SPECCORE_PROMPT]... → AI 生成内容
+        → CLI 输出 [SPECCORE_EXEC: plan --prompt]
+          → AI 执行 plan...
 ```
 
-| | 旧（Slash Command） | 新（Skill + CLI） |
-|------|:--:|:--:|
-| AI 角色 | 理解并执行 | 只理解，只输出命令文本 |
-| 执行者 | 宿主 AI | 终端 Shell |
-| 被截胡 | 经常 | 不会（Shell 执行代码） |
-| 复杂编排 | AI 自行决定 | fallback → `speccore ask "..."` → ask 引擎 |
+### 5.2 命令分类与执行原则
+
+| 类型 | 示例 | 执行方式 |
+|:---|:---|:---|
+| **需 AI 参与** | `analyze --prompt`、`plan --prompt`、`execute --prompt` | 必须走 `[SPECCORE_EXEC]` 标签，AI 用 `execute_command` 执行 |
+| **纯 CLI** | `schedule`、`daemon`、`context`、`dashboard` | AI 执行或终端跑都行 |
+| **查看/展示** | `about`、`welcome`、`ask` | AI 执行，用 `file://` 或 `present_files` 展示结果 |
+
+**🚫 绝不输出命令文本让用户复制**——那等于把 AI 踢出循环。
 
 ### 5.2 路由器 Skill
 
@@ -329,7 +336,7 @@ speccore schedule cancel --id <id>
 | v5.64.0 | 08-08 | speccore about 版本信息页、引导页 file:// 链接 |
 | v5.65.0 | 08-08 | schedule retry/多调度管理、引导页优先输出 |
 
-> **最后更新**: 2026-08-08
+> **最后更新**: 2026-08-08 (v5.67.15) — 核心理念更新：标签驱动 AI 执行，不再输出命令给用户
 
 ---
 
