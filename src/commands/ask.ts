@@ -284,26 +284,45 @@ export async function askCommand(input: string, _options: any): Promise<void> {
       }
     }
 
-    // 1. 有 autoExec → 直接执行（所有模式都能走这里）
-    if (result.autoExec) {
-      await autoExecute(result.autoExec.command, result.autoExec.args, !!result.autoExec.confirm);
-      // 仅当 autoExec 不覆盖 task/schedule 时才额外执行 pipeline 中的 task/schedule
-      if (result.pipeline) {
-        const alreadyExecuted = [result.autoExec.command];
-        for (const step of result.pipeline.steps) {
-          if ((step.command === 'task' || step.command === 'schedule') && !alreadyExecuted.includes(step.command)) {
-            const argsFilled = (step.args || '').replace(/\{(\w+)\}/g, (_, k) => k === 'time' ? extractTime(input) : '');
-            const finalArgs = (step.command === 'schedule' && !argsFilled.includes('--task') && !argsFilled.includes('--all'))
-              ? argsFilled + ' --all' : argsFilled;
-            if (finalArgs.trim()) await autoExecute(step.command, finalArgs.trim(), false);
-          }
-        }
+    // 1. Pipeline 全自动执行（AI 上下文下整条管道逐步执行）
+    if (result.pipeline && result.mode === 'pipeline') {
+      // 展示计划
+      if (intentSummary.length > 0) {
+        process.stdout.write(intentSummary.join('\n') + '\n');
+      }
+      // 逐步执行管道中的每一步
+      const { writeFile } = await import('fs-extra');
+      for (let i = 0; i < result.pipeline.steps.length; i++) {
+        const step = result.pipeline.steps[i];
+        const argsFilled = (step.args || '')
+          .replace(/\{(\w+)\}/g, (_: string, k: string) => {
+            if (k === 'time') return extractTime(input);
+            if (k === 'batch') { const m = input.match(/(\d+)[批次个]/); return m ? m[1] : '5'; }
+            if (k === 'iteration') {
+              const m = input.match(/Iteration[- ]?\S+|Q\d+|sample/i);
+              return m ? m[0].replace(/^Iteration[- ]?/, '') : '';
+            }
+            if (k === 'task') {
+              const tm = input.match(/(?:任务|Task)\s*(\d+[,.，、\s]*\d*)/i);
+              return tm ? tm[1] : '';
+            }
+            return '';
+          });
+        const ok = await autoExecute(step.command, argsFilled, false);
+        if (!ok && step.command !== 'schedule') break; // schedule 失败继续（可能是守护进程已在运行）
       }
       await askHtml(input);
       return;
     }
 
-    // 2. ambiguous 模式 → 提示 AI 让用户选择
+    // 2. 有 autoExec → 直接执行（单命令模式）
+    if (result.autoExec) {
+      await autoExecute(result.autoExec.command, result.autoExec.args, !!result.autoExec.confirm);
+      await askHtml(input);
+      return;
+    }
+
+    // 3. ambiguous 模式 → 提示 AI 让用户选择
     if (result.mode === 'ambiguous') {
       process.stdout.write(`[SPECCORE_AMBIGUOUS: ${result.commands.join(' | ')}]\n`);
       process.stdout.write(`请让用户从以下选项中选择:\n${result.detail}\n`);
