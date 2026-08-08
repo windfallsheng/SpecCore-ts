@@ -57,7 +57,7 @@ export async function aboutCommand(): Promise<void> {
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;600');
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'JetBrains Mono',monospace;background:#0b1221;color:#bae6fd;min-height:100vh;padding:28px 20px}
+body{font-family:'JetBrains Mono',monospace;background:#0b1221;color:#bae6fd;padding:28px 20px}
 .scanlines{position:fixed;inset:0;pointer-events:none;z-index:999;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,240,255,.006) 2px,rgba(0,240,255,.006) 4px)}
 .card{max-width:680px;margin:0 auto;background:rgba(13,31,56,.95);border:1px solid rgba(14,165,233,.12);border-radius:16px;padding:28px 32px;position:relative;overflow:hidden}
 .card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,#0ea5e9,transparent);animation:scanX 3s linear infinite}
