@@ -187,8 +187,9 @@ export async function askCommand(input: string, _options: any): Promise<void> {
     const outPath = join(process.cwd(), 'speccore-ask-onboarding.html');
     await writeFile(outPath, html);
     await writeFile(markerFile, ver);
+    // 输出 SPECCORE_ONBOARD 标记让 AI 展示引导页
+    process.stdout.write(`[SPECCORE_ONBOARD: ${outPath}]\n`);
     logger.info(`👋 ${lastVersion ? `v${lastVersion} → v${ver} 升级` : '首次使用'} — 已生成引导页: ${outPath}`);
-    // 不 return，继续执行后续 ask 逻辑 — 仪式感 + 照常工作
   }
 
   const result = await askEngine(input);
