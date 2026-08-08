@@ -15,13 +15,21 @@ export async function aboutCommand(): Promise<void> {
     { icon: '🤖', title: 'Skill 体系', desc: 'OpenSpec 标准，AI 自动路由' },
   ];
 
+  // 近期亮点
+  const highlights = [
+    '意图合成 — AI 自动提取参数、补全上下文、精准提问',
+    '自我检查 — 命令验证 + 置信度 + 遗漏检测',
+    '定时调度 — daemon 懒启动，跨平台(LaunchAgent/cron/schtasks)',
+    '多选执行 — plan --select 列出任务编号供用户选择',
+    '双模式 — 自主全自动 / 分步确认，不跳过用户检查',
+  ];
+
   // 重要里程碑版本
   const milestones = [
-    { v: '5.50', date: '2026-08', desc: '定时调度 + daemon(LaunchAgent/cron/TaskScheduler)' },
-    { v: '5.27', date: '2026-07', desc: 'Ask 引擎四模式 + OpenSpec Skill 体系' },
-    { v: '4.0', date: '2026-05', desc: '多平台 CLI、文档双向转换、计划拆分' },
-    { v: '3.0', date: '2026-03', desc: '迭代管理、执行概要、PR创建' },
-    { v: '1.0', date: '2026-01', desc: 'Spec 驱动开发、Task 管理、code-gen' },
+    { v: '5.50', date: '2026-08', desc: '定时调度 + 跨平台 daemon' },
+    { v: '5.27', date: '2026-07', desc: 'Ask 四模式 + Skill 体系' },
+    { v: '4.0', date: '2026-05', desc: '多平台 CLI + 文档转换' },
+    { v: '1.0', date: '2026-01', desc: 'Spec 驱动开发，Task 管理' },
   ];
 
   const featuresHtml = features.map(f =>
@@ -30,6 +38,8 @@ export async function aboutCommand(): Promise<void> {
       <div><strong>${f.title}</strong><span class="fsub">${f.desc}</span></div>
     </div>`
   ).join('');
+
+  const highlightsHtml = highlights.map(h => `<li>${h}</li>`).join('');
 
   const milestonesHtml = milestones.map(m =>
     `<div class="mile">
@@ -61,6 +71,9 @@ h2{font-size:12px;color:#38bdf8;margin:20px 0 10px;letter-spacing:1px}
 .feat-item strong{font-size:12px;color:#7dd3fc;display:block}
 .feat-item .fsub{font-size:10px;color:#5b7fa5;margin-top:2px;display:block}
 .ficon{font-size:18px;width:24px;text-align:center}
+.highlights{list-style:none;padding:0}
+.highlights li{font-size:11px;color:#bae6fd;padding:5px 0 5px 16px;position:relative;border-bottom:1px solid rgba(255,255,255,.02)}
+.highlights li::before{content:'▸';position:absolute;left:0;color:#0ea5e9;font-size:10px}
 .mile{display:flex;gap:12px;align-items:baseline;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.02)}
 .mver{font-size:10px;color:#6366f1;background:rgba(99,102,241,.1);padding:2px 6px;border-radius:3px;min-width:40px;text-align:center}
 .mdate{font-size:10px;color:#5b7fa5;min-width:52px}
@@ -77,7 +90,10 @@ h2{font-size:12px;color:#38bdf8;margin:20px 0 10px;letter-spacing:1px}
 <h2>⚡ 主要功能</h2>
 <div class="row">${featuresHtml}</div>
 
-<h2>📜 重要版本</h2>
+<h2>✨ 近期亮点</h2>
+<ul class="highlights">${highlightsHtml}</ul>
+
+<h2>📜 里程碑</h2>
 ${milestonesHtml}
 
 <div class="footer">
