@@ -93,8 +93,8 @@ export async function scheduleCreateCommand(options: ScheduleCreateOptions): Pro
     logger.info(`  状态:     ${statusLabel(scheduled.status)}`);
     logger.info('');
 
-    // 懒启动：有调度就自动唤醒 daemon
-    try { startDaemon(); } catch {}
+        // 重新安装 LaunchAgent 到当前项目（daemon 的 WorkingDirectory 必须 = 当前项目）
+    try { await installSystemSchedule(); startDaemon(); } catch {}
 
   } catch (error: any) {
     logger.error(`创建调度任务失败: ${error.message}`);
