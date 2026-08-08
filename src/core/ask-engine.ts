@@ -487,10 +487,38 @@ function handlePipeline(input: string): AskResult {
     return '';
   });
 
-  // 匹配批量执行流程
-  if (/计划.*执行|plan.*execute|分批|batch|定时|schedule|晚.*点|早上|几点/.test(lower)) {
-    // 自动模式：用户说了 "自主" "自动" "一键" 则 autoExec 全流程
-    const isAuto = /自主|自动|一键|全部.*执行|不用.*确认|直接/.test(lower);
+  // ── 意图得分系统（替代硬关键词匹配，模拟语义理解）──
+  // 得分 = 维度加权，而非单关键词触发
+  const scores = {
+    batchExec: 0,
+    newFeature: 0,
+    auto: 0,
+  };
+
+  // 维度1: 动作词
+  const actionWords: [RegExp, number, keyof typeof scores][] = [
+    [/(?:定时|指定时间|几点|晚.*点|早上.*点|明天.*点|到.*点|时间.*执行)/, 40, 'batchExec'],
+    [/(?:分批|批次|batch|分.*批|多个)|(\d+[\s]*(?:个|批次|任务))/, 30, 'batchExec'],
+    [/(?:执行|跑|运行|execute|run)/, 10, 'batchExec'],
+    [/(?:实现|动手|做|开发|feature|新.*功能|新.*模块)/, 40, 'newFeature'],
+    [/(?:自主|自动|一键|不用确认|直接|全部.*执行|全自动)/, 30, 'auto'],
+  ];
+  for (const [re, wt, key] of actionWords) {
+    if (re.test(lower)) scores[key] += wt;
+  }
+
+  // 维度2: 上下文词（得分加权）
+  if (/计划|plan|安排|排程|规划/.test(lower)) scores.batchExec += 20;
+  if (/任务|task|代码审查|review|测试|test/.test(lower)) scores.batchExec += 15;
+  if (/所有|全部|都|each|every|all/.test(lower)) scores.auto += 20;
+  if (/先看|先列|先.*看|预览|看看|再说|然后|再.*执行/.test(lower)) scores.auto -= 30; // 说明想要交互
+
+  // 维度3: 否定词减分
+  if (/别|不要|不.*执行|先别|取消/.test(lower)) { scores.batchExec = 0; scores.auto = 0; }
+
+  // 判断：batchExec 最高 → 批量流程
+  const isAuto = scores.auto > 0;
+  if (scores.batchExec >= 40) {
     const wfName = isAuto ? 'batch execute auto' : 'batch execute';
     const steps = WORKFLOWS[wfName];
     const firstStep = steps[0];
@@ -509,8 +537,8 @@ function handlePipeline(input: string): AskResult {
     };
   }
 
-  // 匹配新功能流程
-  if (/功能|feature|开发|新.*模块|做.*个/.test(lower)) {
+  // 匹配新功能流程（得分系统）
+  if (scores.newFeature >= 40) {
     const steps = WORKFLOWS['new feature'];
     const firstStep = steps[0]; // 'init'
     return {
