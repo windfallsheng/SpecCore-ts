@@ -163,11 +163,9 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
 
   // 4c. 更新 AGENTS.md / CLAUDE.md
   try {
-    const agentsSrc = join(__dirname, '..', '..', 'AGENTS.md');
-    if (await pathExists(agentsSrc)) {
-      await require('fs-extra').copy(agentsSrc, join(projectRoot, 'AGENTS.md'), { overwrite: true });
-      await require('fs-extra').writeFile(join(projectRoot, 'CLAUDE.md'), '<!-- 规则请参考 AGENTS.md -->\n\n@AGENTS.md\n');
-    }
+    const { writeAgentsMd } = await import('./init');
+    await writeAgentsMd(projectRoot);
+    await require('fs-extra').writeFile(join(projectRoot, 'CLAUDE.md'), '<!-- 规则请参考 AGENTS.md -->\n\n@AGENTS.md\n');
   } catch {}
 
   // 4d. 清理旧版本残留的命令文件和 Skill 目录

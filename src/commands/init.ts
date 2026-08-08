@@ -1278,7 +1278,7 @@ export async function cleanupStaleFiles(
  * 生成 AGENTS.md — 跨工具通用上下文文件。
  * Cursor / Copilot / Windsurf / Codex 原生支持，Claude Code 通过 CLAUDE.md 引用。
  */
-async function writeAgentsMd(projectRoot: string): Promise<void> {
+export async function writeAgentsMd(projectRoot: string): Promise<void> {
   const { writeFile: wf, pathExists } = require('fs-extra');
   const content = `# AGENTS.md — SpecCore 项目规则
 
