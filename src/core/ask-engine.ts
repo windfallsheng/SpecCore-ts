@@ -941,13 +941,12 @@ export async function synthesizeIntent(input: string): Promise<SynthesizedIntent
 }
 
 export async function askEngine(input: string): Promise<AskResult> {
-  // ── 第零层: 高置信意图直接路由（跳过 LLM，避免误判）──
-  const lower = input.toLowerCase();
-  // 切换上下文 → context set
-  if (/切换.*[到至].*迭代|设定.*上下文|设置.*上下文|上下文.*切换|context.*set|切换到/.test(input)) {
+  // ── 第零层: 确定性操作直接路由 ──
+  // 切换上下文 → context set（无歧义，直接执行）
+  if (/切换.*[到至].*迭代|上下文.*切换|切换到/.test(input)) {
     const iterMatch = input.match(/Iteration[- ]?\S+|Q\d+|sample/i);
     const raw = iterMatch ? iterMatch[0] : '';
-    const iter = raw.replace(/^Iteration[- ]?/, ''); // context set 自己加前缀
+    const iter = raw.replace(/^Iteration[- ]?/, '');
     if (iter) {
       return {
         mode: 'match',
@@ -959,49 +958,35 @@ export async function askEngine(input: string): Promise<AskResult> {
     }
   }
 
-  // ── 第一层: 自有 LLM (OpenAI/Ollama) ──
-  try {
-    const llmResult = await askWithLlm(input);
-    if (llmResult && llmResult.commands.length > 0) {
-      logger.info(`🧠 自有 LLM: ${modeLabel(llmResult.mode as AskMode)}`);
-      (llmResult as any)._source = 'llm';
-      
-      if (!llmResult.detail || llmResult.detail.length < 20) {
-        const enriched = enrichWithRules(llmResult, input);
-        return enriched;
-      }
-      return llmResult;
-    }
-  } catch (e: any) {
-    logger.warn(`自有 LLM 不可用: ${e.message}`);
-  }
+  // ── 默认: 输出知识库，让宿主 AI 自行做语义分析 ──
+  const kb = COMMAND_KB.map(c =>
+    `  ${c.name}: ${c.description.padEnd(30)} → ${c.usage}`
+  ).join('\n');
 
-  // ── 第二层: 宿主 AI (WorkBuddy/TRAE/Qoder) ──
-  try {
-    const hostResult = await tryHostAi('ask', input);
-    if (hostResult) {
-      logger.info(`🤖 宿主 AI: ${modeLabel((hostResult.mode || 'match') as AskMode)}`);
-      (hostResult as any)._source = 'host';
-      return hostResult as AskResult;
-    }
-  } catch (e: any) { /* 宿主 AI 不可用，继续 */ }
+  const pipelines = Object.entries(WORKFLOWS).map(([name, steps]) =>
+    `  ${name}: ${steps.map(s => s.command).join(' → ')}`
+  ).join('\n');
 
-  // ── 第三层: 规则引擎兜底 ──
-  const mode = classifyMode(input);
-  logger.info(`📐 规则识别: ${modeLabel(mode)}`);
-
-  switch (mode) {
-    case 'explain': return handleExplain(input);
-    case 'guide':
-      try { return handleGuide(input); }
-      catch { return handleMatch(input); }
-    case 'pipeline':
-      try { return handlePipeline(input); }
-      catch { return handleMatch(input); }
-    case 'ambiguous':
-    case 'match':
-    default: return handleMatch(input);
-  }
+  return {
+    mode: 'match',
+    summary: '宿主 AI 语义分析',
+    detail: [
+      `## 用户输入`,
+      `"${input}"`,
+      ``,
+      `## 可用操作`,
+      kb,
+      ``,
+      `## 常用工作流`,
+      pipelines,
+      ``,
+      `## 你的任务`,
+      `根据用户输入和可用操作，判断用户意图，`,
+      `直接 call speccore CLI 命令（如 analyze/plan/schedule/execute）执行。`,
+      `需要 AI 参与的命令加 --prompt 标志。`,
+    ].join('\n'),
+    commands: [],
+  };
 }
 
 /** 用规则引擎补充 LLM 结果的内容 */
