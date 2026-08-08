@@ -63,6 +63,14 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
         const { version } = require('../../package.json');
         await writeFile(verFile, JSON.stringify({ version, updatedAt: new Date().toISOString() }, null, 2));
 
+        // 重置首次引导标记 → 下次 ask 重新展示引导页
+        try {
+          const onboardMarker = join(speccoreDir, 'local', '.ask-onboarded');
+          if (await require('fs-extra').pathExists(onboardMarker)) {
+            await require('fs-extra').remove(onboardMarker);
+          }
+        } catch {}
+
         // 安装/更新调度守护进程（macOS LaunchAgent / Linux crontab / Windows Task Scheduler）
         try {
           const { installSystemSchedule } = await import('./schedule');

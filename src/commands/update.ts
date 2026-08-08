@@ -179,6 +179,12 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
     await installSystemSchedule();
   } catch {}
 
+  // 4f. 重置首次引导标记 → 下次 ask 重新展示引导页
+  try {
+    const marker = join(speccoreDir, 'local', '.ask-onboarded');
+    if (await require('fs-extra').pathExists(marker)) await require('fs-extra').remove(marker);
+  } catch {}
+
   spinner.stop(`升级完成: v${oldVersion} → v${CURRENT_VERSION}`);
   logger.info('');
   if (addedFiles.length > 0) {
