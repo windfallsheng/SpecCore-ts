@@ -2,7 +2,7 @@ import { pathExists, readFile, writeFile } from 'fs-extra';
 import { join } from 'path';
 import { createInterface } from 'readline';
 import { logger } from '../utils/logger';
-import { getDefaultIteration, updateContext, recordHistory, startHotfix } from '../core/context';
+import { getDefaultIteration, updateContext, recordHistory, startHotfix, getIterationDir } from '../core/context';
 import { scanTasks, topologicalSort, TaskState } from '../core/state';
 import { FileTransaction } from '../core/transaction';
 import { loadSpecRules, generateImports, SpecRules, loadTechStack } from '../core/spec-rules';
@@ -373,7 +373,7 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
   const totalElapsed = Math.round((Date.now() - startTime) / 1000);
   logger.success(`Execution complete! ${total} tasks in ${totalElapsed}s`);
   // Post-execution question review
-  const postQs = await extractQuestions(`Iteration-${iteration}`);
+  const postQs = await extractQuestions(await getIterationDir(iteration));
   if (postQs.length > 0) showQuestionChecklist(postQs, '执行后审查');
   
   logOperation('speccore execute done', `completed ${total} tasks in ${totalElapsed}s`);
@@ -465,7 +465,7 @@ async function processBatch(tasks: TaskState[], state: ExecutionState, iteration
   }
   
   // 显示每个任务的 Spec 文件
-  const iterDir = `Iteration-${iteration}`;
+  const iterDir = await getIterationDir(iteration);
   for (const task of tasks) {
     logger.info(`   ${task.id}:`);
     for (const f of ['REQ.md', 'TECH.md', 'TASK.md']) {
@@ -550,7 +550,7 @@ function printExecutionPreview(tasks: TaskState[], iteration: string, batchSize 
 // Task execution (transaction protected)
 // ============================================================
 async function simulateTaskExecution(task: TaskState, iteration: string): Promise<void> {
-  const taskDir = join(`Iteration-${iteration}`, task.id);
+  const taskDir = join(await getIterationDir(iteration), task.id);
   let filesUpdated = 0;
 
   if (await pathExists(taskDir)) {
@@ -818,7 +818,7 @@ function extractDescription(req: string): string {
 
 async function filterByPlatform(tasks: TaskState[], iteration: string, platform: string): Promise<TaskState[]> {
   const filtered: TaskState[] = [];
-  const iterDir = join(process.cwd(), `Iteration-${iteration}`);
+  const iterDir = await getIterationDir(iteration);
   for (const task of tasks) {
     const platformDir = join(iterDir, task.id, 'frontend', platform);
     if (await pathExists(platformDir)) filtered.push(task);
@@ -849,7 +849,7 @@ async function handleHotfix(options: ExecuteOptions, taskIds: string[]): Promise
 // ============================================================
 
 async function preFlightCheck(tasks: TaskState[], iteration: string, options: ExecuteOptions): Promise<TaskState[]> {
-  const iterDir = `Iteration-${iteration}`;
+  const iterDir = await getIterationDir(iteration);
   const ask = (q: string): Promise<string> => {
     logger.info(q);
     return new Promise((resolve) => {
@@ -929,7 +929,8 @@ async function preFlightCheck(tasks: TaskState[], iteration: string, options: Ex
       issuesMd.push('## AI 辅助修复', '');
       issuesMd.push('在 AI 对话中粘贴以下内容让 AI 帮你修复：', '');
       issuesMd.push('> 请根据以上问题清单，帮我修复 Task-' + task.id + ' 的执行问题。');
-      issuesMd.push('> 迭代: ' + (iteration || '') + '，任务目录: Iteration-' + (iteration || '') + '/' + task.id);
+      const iterDirPath = await getIterationDir(iteration || '');
+      issuesMd.push(`> 迭代: ${iteration || ''}，任务目录: ${iterDirPath}/${task.id}`);
       issuesMd.push('', '## 修复记录', '');
       issuesMd.push('| 时间 | 问题 | 决策 | 修改文件 |');
       issuesMd.push('| :--- | :--- | :--- | :--- |');
@@ -963,7 +964,7 @@ async function preFlightCheck(tasks: TaskState[], iteration: string, options: Ex
  * 从 IMPACT.md 检测任务依赖，返回应作为 base 的依赖任务 ID
  */
 async function detectDependencyBase(iteration: string, taskId: string): Promise<string | undefined> {
-  const impactPath = join(`Iteration-${iteration}`, 'IMPACT.md');
+  const impactPath = join(await getIterationDir(iteration), 'IMPACT.md');
   if (!(await pathExists(impactPath))) return undefined;
 
   const impact = await readFile(impactPath, 'utf-8');
@@ -1056,7 +1057,7 @@ async function executionVerifyLoop(
   const maxRounds = 3;
   const { join } = require('path');
   const { readFile, writeFile, pathExists } = require('fs-extra');
-  const iterDir = `Iteration-${iteration}`;
+  const iterDir = await getIterationDir(iteration);
 
   for (const task of tasks) {
     logger.info(`\n🔍 验证 ${task.id}...`);
@@ -1187,7 +1188,7 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
   // ── 缺参数检测 ──
   if (!task) {
     const { readdir } = require('fs-extra');
-    const taskDir = join('Iteration-' + iteration, '030-tasks');
+    const taskDir = join(await getIterationDir(iteration), '030-tasks');
     let availableTasks: string[] = [];
     try {
       const entries = await readdir(taskDir, { withFileTypes: true });
@@ -1204,7 +1205,7 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
     return;
   }
 
-  const taskDir = join('Iteration-' + iteration, '030-tasks', task);
+  const taskDir = join(await getIterationDir(iteration), '030-tasks', task);
 
   // ── 前置检查：任务必须有有效需求或分析内容 ──
   const analysisFile = join(taskDir, 'ANALYSIS.md');
@@ -1277,7 +1278,7 @@ async function runApplyMode(iteration: string, options: ExecuteOptions): Promise
     return;
   }
 
-  const iterDir = join('Iteration-' + iteration);
+  const iterDir = await getIterationDir(iteration);
   let writtenCount = 0;
 
   for (const file of parsed.files) {
@@ -1325,7 +1326,7 @@ function outputPostSummary(iteration: string, task: string, fileCount: number, f
 }
 
 async function updateProjectGraphStatus(iteration: string, task: string): Promise<void> {
-  const graphPath = join('Iteration-' + iteration, '000-overview', 'PROJECT_GRAPH.md');
+  const graphPath = join(await getIterationDir(iteration), '000-overview', 'PROJECT_GRAPH.md');
   if (!await pathExists(graphPath)) return;
 
   let content = await readFile(graphPath, 'utf-8');

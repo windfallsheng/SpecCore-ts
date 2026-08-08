@@ -1,4 +1,4 @@
-import { ensureDir, writeFile, pathExists, readFile, readdir, copy } from 'fs-extra';
+import { ensureDir, writeFile, pathExists, readFile, readdir, copy, unlink } from 'fs-extra';
 import { join, basename } from 'path';
 import { logger, Spinner } from '../utils/logger';
 import { createInterface } from 'readline';

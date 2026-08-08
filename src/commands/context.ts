@@ -5,7 +5,7 @@
 import { pathExists, readFile, readdir } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
-import { loadContext } from '../core/context';
+import { loadContext, getIterationDir } from '../core/context';
 
 export interface ContextOptions {
   task?: string;
@@ -23,7 +23,7 @@ export async function contextCommand(options: ContextOptions): Promise<void> {
       const { writeFile } = await import('fs-extra');
       const ctxPath = join(process.cwd(), '.speccore', 'local', 'context.json');
       await writeFile(ctxPath, JSON.stringify(ctx, null, 2));
-      logger.success(`上下文已切换 → Iteration-${options.iteration}`);
+      logger.success(`上下文已切换 → ${await getIterationDir(options.iteration)}`);
       return;
     }
 
