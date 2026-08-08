@@ -133,7 +133,8 @@ const WORKFLOWS: Record<string, PipelineStep[]> = {
   'batch execute': [
     { order: 1, command: 'plan', args: '--all', explanation: '生成所有待执行任务的计划', dependsOn: undefined },
     { order: 2, command: 'schedule', args: 'create --at "{time}" --batch-size {batch}', explanation: '创建定时调度，指定执行时间和批次大小', dependsOn: 1 },
-    { order: 3, command: 'execute', args: '--auto --batch-size {batch}', explanation: '按计划分批自动执行', dependsOn: 2 },
+    { order: 3, command: 'schedule', args: 'daemon start', explanation: '启动调度守护进程（仅首次启动，幂等）', dependsOn: 2 },
+    { order: 4, command: 'execute', args: '--auto --batch-size {batch}', explanation: '按计划分批自动执行', dependsOn: 2 },
   ],
   'code review': [
     { order: 1, command: 'validate', args: '', explanation: '合规检查 Spec 完整性', dependsOn: undefined },
