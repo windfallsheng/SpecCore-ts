@@ -139,8 +139,8 @@ const WORKFLOWS: Record<string, PipelineStep[]> = {
     { order: 4, command: 'execute', args: '--auto --batch-size {batch}', explanation: '到时间自动执行', dependsOn: 2 },
   ],
   'analyze plan schedule execute': [
-    { order: 1, command: 'analyze', args: '--task {task}', explanation: '分析任务需求（立即执行）', dependsOn: undefined },
-    { order: 2, command: 'plan', args: '--all', explanation: '制定执行计划（立即执行）', dependsOn: 1 },
+    { order: 1, command: 'analyze', args: '--prompt --task {task}', explanation: 'AI 分析任务需求（立即执行）', dependsOn: undefined },
+    { order: 2, command: 'plan', args: '--prompt --all', explanation: 'AI 制定执行计划（立即执行）', dependsOn: 1 },
     { order: 3, command: 'schedule', args: 'create --at "{time}" --batch-size {batch}', explanation: '创建定时调度（到点自动执行）', dependsOn: 2 },
     { order: 4, command: 'schedule', args: 'daemon start', explanation: '启动守护进程', dependsOn: 3 },
     { order: 5, command: 'execute', args: '--auto --batch-size {batch}', explanation: '定时自动执行任务', dependsOn: 3 },
