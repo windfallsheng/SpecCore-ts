@@ -37,12 +37,12 @@ function toSlug(name: string): string {
   return 'unknown';
 }
 
-export async function nextIterationId(name: string): Promise<{ id: string; num: number }> {
+export async function nextIterationId(name: string, topic?: string): Promise<{ id: string; num: number }> {
   const c = await getCounters();
   c.iterations++;
   await save(c);
   const padded = String(c.iterations).padStart(3, '0');
-  const slug = toSlug(name);
+  const slug = toSlug(topic || name);
   return { id: `Iteration-${padded}-${slug}`, num: c.iterations };
 }
 
