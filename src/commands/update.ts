@@ -33,6 +33,7 @@ const ALL_COMMANDS: [string, string, string][] = [
   ['spec-retro', '任务回顾报告', 'speccore retro --task ${1:Task-001}'],
   ['spec-context', '查看/切换上下文', 'speccore context --set --iteration ${1:Q1}'],
   ['spec-ops', '操作历史', 'speccore ops'],
+  ['spec-about', '版本信息 & 升级亮点 & 文档链接', 'speccore about'],
 ];
 
 // ── 旧命令文件名（需要清理的）──
