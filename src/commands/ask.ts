@@ -190,6 +190,7 @@ export async function askCommand(input: string, _options: any): Promise<void> {
     logger.info(`👋 ${lastVersion ? `v${lastVersion} → v${ver} 升级` : '首次使用'} — 已生成引导页: ${outPath}`);
     process.stdout.write(`[SPECCORE_ONBOARD: ${outPath}]\n`);
     logger.info(`   📄 file://${outPath}`);
+    process.stdout.write(`[SPECCORE_ONBOARD: ${outPath}]\n`);
   }
 
   const { synthesizeIntent } = await import('../core/ask-engine');
@@ -284,45 +285,28 @@ export async function askCommand(input: string, _options: any): Promise<void> {
       }
     }
 
-    // 1. Pipeline 全自动执行（AI 上下文下整条管道逐步执行）
-    if (result.pipeline && result.mode === 'pipeline') {
-      // 展示计划
-      if (intentSummary.length > 0) {
-        process.stdout.write(intentSummary.join('\n') + '\n');
-      }
-      // 逐步执行管道中的每一步
-      const { writeFile } = await import('fs-extra');
-      for (let i = 0; i < result.pipeline.steps.length; i++) {
-        const step = result.pipeline.steps[i];
-        const argsFilled = (step.args || '')
-          .replace(/\{(\w+)\}/g, (_: string, k: string) => {
-            if (k === 'time') return extractTime(input);
-            if (k === 'batch') { const m = input.match(/(\d+)[批次个]/); return m ? m[1] : '5'; }
-            if (k === 'iteration') {
-              const m = input.match(/Iteration[- ]?\S+|Q\d+|sample/i);
-              return m ? m[0].replace(/^Iteration[- ]?/, '') : '';
-            }
-            if (k === 'task') {
-              const tm = input.match(/(?:任务|Task)\s*(\d+[,.，、\s]*\d*)/i);
-              return tm ? tm[1] : '';
-            }
-            return '';
-          });
-        const ok = await autoExecute(step.command, argsFilled, false);
-        if (!ok && step.command !== 'schedule') break; // schedule 失败继续（可能是守护进程已在运行）
-      }
-      await askHtml(input);
-      return;
-    }
-
-    // 2. 有 autoExec → 直接执行（单命令模式）
+    // 1. 有 autoExec → 直接执行（所有模式都能走这里）
     if (result.autoExec) {
       await autoExecute(result.autoExec.command, result.autoExec.args, !!result.autoExec.confirm);
+      // 执行管道中剩余的所有步骤
+      if (result.pipeline) {
+        for (const step of result.pipeline.steps) {
+          if (step.order === 1) continue; // autoExec 已执行第一步,跳过
+          const argsFilled = (step.args || '').replace(/\{(\w+)\}/g, (_: string, k: string) => {
+            if (k === 'time') return extractTime(input);
+            if (k === 'batch') { const m = input.match(/(\d+)[批次个]/); return m ? m[1] : '5'; }
+            if (k === 'iteration') { const m = input.match(/Iteration[- ]?\S+|Q\d+|sample/i); return m ? m[0].replace(/^Iteration[- ]?/, '') : ''; }
+            if (k === 'task') { const tm = input.match(/(?:任务|Task)\s*(\d+[,.，、\s]*\d*)/i); return tm ? tm[1] : ''; }
+            return '';
+          });
+          if (argsFilled.trim()) await autoExecute(step.command, argsFilled.trim(), false);
+        }
+      }
       await askHtml(input);
       return;
     }
 
-    // 3. ambiguous 模式 → 提示 AI 让用户选择
+    // 2. ambiguous 模式 → 提示 AI 让用户选择
     if (result.mode === 'ambiguous') {
       process.stdout.write(`[SPECCORE_AMBIGUOUS: ${result.commands.join(' | ')}]\n`);
       process.stdout.write(`请让用户从以下选项中选择:\n${result.detail}\n`);
