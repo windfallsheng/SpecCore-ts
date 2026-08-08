@@ -492,9 +492,20 @@ function handlePipeline(input: string): AskResult {
   // 辅助函数：从输入提取模板变量
   const fillTemplate = (tmpl: string) => tmpl.replace(/\{(\w+)\}/g, (_: string, k: string) => {
     if (k === 'time') return extractTime(input);
+    if (k === 'iteration') {
+      // 先从输入提取：Iteration-Q1、Q1、Iteration-sample 等
+      const m = input.match(/Iteration[- ]?\S+|Q\d+|sample/i);
+      if (m) {
+        const raw = m[0];
+        return raw.startsWith('Iteration') ? raw : `Iteration-${raw}`;
+      }
+      return '';
+    }
     if (k === 'batch') { const m = input.match(/(\d+)[批次个]/); return m ? m[1] : '5'; }
-    if (k === 'iteration') return '';
-    if (k === 'task') return '';
+    if (k === 'task') {
+      const tm = input.match(/(?:任务|Task)\s*(\d+[,.，、\s]*\d*)/i);
+      return tm ? tm[1] : '';
+    }
     if (k === 'bug' || k === 'name') return input.replace(/\s+/g, '-').slice(0, 30);
     return '';
   });
