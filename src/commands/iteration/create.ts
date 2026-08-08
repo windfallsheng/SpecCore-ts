@@ -5,6 +5,7 @@ import { updateContext } from '../../core/context';
 import { nextIterationId } from '../../core/global-counters';
 export interface IterationCreateOptions {
   name?: string;
+  topic?: string;
   from?: string;
   to?: string;
   owner?: string;
@@ -21,8 +22,9 @@ export async function iterationCreateCommand(options: IterationCreateOptions): P
 
   try {
     // Generate globally unique iteration ID
-    const rawName = options.name.replace(/^Iteration-/, '');
-    const { id: fullName } = await nextIterationId(rawName);
+  const rawName = options.name.replace(/^Iteration-/, '');
+  const topic = options.topic || undefined;
+  const { id: fullName } = await nextIterationId(rawName, topic);
     const iterationDir = join('.speccore', 'ITERATIONS', fullName); // e.g. .speccore/ITERATIONS/Iteration-001-q1
 
     // Check if already exists
