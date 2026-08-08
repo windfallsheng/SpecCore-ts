@@ -19,23 +19,53 @@ const POLL_INTERVAL = 30000; // 30 秒轮询一次
 const LOCK_FILE = '.speccore/local/schedule.lock';
 
 /**
+ * 查找 speccore daemon 进程（跨平台）
+ * macOS/Linux: pgrep -f
+ * Windows: tasklist /FI "IMAGENAME eq node.exe" + wmic 查命令行
+ */
+function findDaemonPids(): number[] {
+  const myPid = process.pid;
+  const pids: number[] = [];
+  try {
+    if (process.platform === 'win32') {
+      // Windows: 用 wmic 查命令行
+      const wmicOut = execSync(
+        'wmic process where "name=\'node.exe\'" get ProcessId,CommandLine /format:csv',
+        { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }
+      );
+      for (const line of wmicOut.split('\n')) {
+        if (line.includes('schedule daemon') && line.includes('--foreground')) {
+          const m = line.match(/,(\d+)\s*$/);
+          if (m) {
+            const pid = parseInt(m[1]);
+            if (pid !== myPid) pids.push(pid);
+          }
+        }
+      }
+    } else {
+      // macOS/Linux: pgrep
+      const result = execSync(`pgrep -f "speccore schedule daemon"`, { encoding: 'utf-8' });
+      for (const line of result.trim().split('\n')) {
+        const pid = parseInt(line);
+        if (!isNaN(pid) && pid !== myPid) pids.push(pid);
+      }
+    }
+  } catch {
+    // 没找到
+  }
+  return pids;
+}
+
+/**
  * 启动调度守护进程
  * 作为独立子进程运行，父进程立即返回
  */
 export function startDaemon(): boolean {
   // 检查是否已在运行
-  try {
-    const result = execSync(`pgrep -f "speccore schedule daemon"`, { encoding: 'utf-8' });
-    const pids = result.trim().split('\n').filter(Boolean);
-    // 排除当前进程
-    const myPid = process.pid.toString();
-    const others = pids.filter(p => p !== myPid);
-    if (others.length > 0) {
-      logger.warn(`Schedule daemon is already running (PID: ${others.join(', ')})`);
-      return false;
-    }
-  } catch {
-    // pgrep 没找到，正常
+  const existing = findDaemonPids();
+  if (existing.length > 0) {
+    logger.warn(`Schedule daemon is already running (PID: ${existing.join(', ')})`);
+    return false;
   }
 
   // 以 detached 模式启动子进程
@@ -59,26 +89,21 @@ export function startDaemon(): boolean {
  * 停止调度守护进程
  */
 export function stopDaemon(): boolean {
-  try {
-    const result = execSync(`pgrep -f "speccore schedule daemon"`, { encoding: 'utf-8' });
-    const pids = result.trim().split('\n').filter(Boolean);
-    const myPid = process.pid.toString();
-    const others = pids.filter(p => p !== myPid);
-
-    if (others.length === 0) {
-      logger.warn('No schedule daemon running');
-      return false;
-    }
-
-    for (const pid of others) {
-      process.kill(parseInt(pid), 'SIGTERM');
-      logger.info(`Stopped daemon process (PID: ${pid})`);
-    }
-    return true;
-  } catch {
+  const pids = findDaemonPids();
+  if (pids.length === 0) {
     logger.warn('No schedule daemon running');
     return false;
   }
+
+  for (const pid of pids) {
+    try {
+      process.kill(pid, 'SIGTERM');
+      logger.info(`Stopped daemon process (PID: ${pid})`);
+    } catch (e: any) {
+      logger.warn(`Failed to stop PID ${pid}: ${e.message}`);
+    }
+  }
+  return true;
 }
 
 /**
@@ -166,15 +191,7 @@ async function executeScheduledTask(task: ScheduleTask): Promise<void> {
  * 检查守护进程是否在运行
  */
 export function isDaemonRunning(): boolean {
-  try {
-    const result = execSync(`pgrep -f "speccore schedule daemon"`, { encoding: 'utf-8' });
-    const pids = result.trim().split('\n').filter(Boolean);
-    const myPid = process.pid.toString();
-    const others = pids.filter(p => p !== myPid);
-    return others.length > 0;
-  } catch {
-    return false;
-  }
+  return findDaemonPids().length > 0;
 }
 
 /**
