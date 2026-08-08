@@ -1297,17 +1297,15 @@ Iteration-NNN-name/            ← 迭代目录
 └── STAFFING.md                ← 人员排期
 \`\`\`
 
-## 核心命令
-| 意图 | CLI 命令 |
-| :--- | :--- |
-| 初始化项目 | \`speccore init\` |
-| 创建迭代 | \`speccore iteration create -n <name> --owner <owner>\` |
-| 导入需求文档 | \`speccore doc2spec -f <file> --iter <iter>\` |
-| 分析需求 | \`speccore analyze -I <iter>\` |
-| 拆分任务 | \`speccore iteration split -I <iter>\` |
-| 执行任务 | \`speccore execute -t <task> --force\` |
-| 查看进度 | \`speccore dashboard\` |
-| 任务回顾 | \`speccore retro --task <task>\` |
+## SpecCore 输出标记
+当执行 \`speccore ask\` 或 \`speccore about\` 时，会输出以下标记，按优先级处理：
+| 标记 | 含义 | 动作 |
+|:---|:---|:---|
+| \`[SPECCORE_ONBOARD: <path>]\` | 首次/升级引导页 | **最先处理**，用 present_files 展示 HTML |
+| \`[SPECCORE_ABOUT: <path>]\` | 版本信息页 | 用 present_files 展示 |
+| \`[SPECCORE_MODE: <mode>]\` | 意图模式 | 识别模式后进入对应流程 |
+| \`[SPECCORE_EXEC: <cmd>]\` | 自动执行命令 | 直接 execute_command |
+| \`[SPECCORE_INTENT]\` | 意图确认块 | 展示给用户确认 |
 
 ## 行为约束
 - **不要自己创建目录** — 用 \`speccore iteration create\`
