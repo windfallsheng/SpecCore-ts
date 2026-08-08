@@ -33,7 +33,9 @@ export async function iterationCreateCommand(options: IterationCreateOptions): P
 
     // Create directory structure
     await ensureDir(join(iterationDir, '000-overview'));
-    await ensureDir(join(iterationDir, '010-requirements'));
+    await ensureDir(join(iterationDir, '010-requirements', 'sources'));
+    await ensureDir(join(iterationDir, '010-requirements', 'materials'));
+    await ensureDir(join(iterationDir, '010-requirements', 'prototypes'));
     await ensureDir(join(iterationDir, '020-specs'));
     await ensureDir(join(iterationDir, '030-tasks'));
 
