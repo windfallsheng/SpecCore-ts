@@ -45,6 +45,22 @@
 
 ---
 
+## 🏷️ 输出标记处理规则
+
+| 标记 | 含义 | 动作 |
+|:---|:---|:---|
+| `[SPECCORE_ONBOARD: <path>]` | 首次/升级引导页 | **必须用 `present_files` 立即展示**，不要等到其他内容处理完 |
+| `[SPECCORE_MODE: <mode>]` | intent 模式 | 读取模式，决定后续流程 |
+| `[SPECCORE_EXEC: <cmd>]` | 自动执行命令 | 按 `autoExecute` 规则执行 |
+| `[SPECCORE_EXEC_STATUS: ok\|fail]` | 执行结果 | 成功继续，失败处理 |
+| `[SPECCORE_INTENT]...[\END]` | 意图确认块 | 展示给用户，等确认 |
+| `[SPECCORE_CONFIRM_NEEDED]...[\END]` | 需要用户确认 | 用 `AskUserQuestion` 确认/修改/取消 |
+| `[SPECCORE_ABOUT: <path>]` | 版本信息页 | 用 `present_files` 展示 |
+
+**关键**: `[SPECCORE_ONBOARD]` 必须优先处理，在展示引导页之前不处理其他标记。
+
+---
+
 ## 📁 Skill 标准结构
 
 每个 Skill 必须遵循三段式：

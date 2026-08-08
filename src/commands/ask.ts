@@ -188,13 +188,7 @@ export async function askCommand(input: string, _options: any): Promise<void> {
     await writeFile(outPath, html);
     await writeFile(markerFile, ver);
     logger.info(`👋 ${lastVersion ? `v${lastVersion} → v${ver} 升级` : '首次使用'} — 已生成引导页: ${outPath}`);
-    // 输出引导页 HTML 文件路径，宿主 AI 应通过 present_files 展示
-    // 同时输出为可被捕获的 SPECCORE_PRESENT 标记
-    process.stdout.write(`[SPECCORE_PRESENT: ${outPath}]\n`);
-    if (isAiContext()) {
-      // 直接输出 HTML 到 stdout 供 AI 内联展示
-      process.stdout.write(html);
-    }
+    process.stdout.write(`[SPECCORE_ONBOARD: ${outPath}]\n`);
   }
 
   const { synthesizeIntent } = await import('../core/ask-engine');
