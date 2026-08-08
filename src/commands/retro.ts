@@ -81,6 +81,7 @@ export async function retroCommand(options: RetroOptions): Promise<void> {
       const outPath = options.output || join(process.cwd(), `speccore-retro-${taskId}.html`);
       await writeFile(outPath, html);
       logger.info(`✅ 回顾报告: ${outPath}`);
+      logger.info(`   📄 file://${outPath}`);
       continue;
     }
 
