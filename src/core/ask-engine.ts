@@ -513,27 +513,36 @@ function handlePipeline(input: string): AskResult {
   if (/所有|全部|都|each|every|all/.test(lower)) scores.auto += 20;
   if (/先看|先列|先.*看|预览|看看|再说|然后|再.*执行/.test(lower)) scores.auto -= 30; // 说明想要交互
 
-  // 维度3: 否定词减分
+  // 维度3: 复杂度 — 多步骤 = 必须确认
+  const isComplex = (
+    (/计划|plan|安排|排程/.test(lower) && /执行|跑|execute/.test(lower)) || // 计划+执行
+    /定时|指定时间|几点|晚.*点|到.*点/.test(lower) || // 定时调度
+    (/代码|审查|review|安全|测试/.test(lower) && /任务|task/.test(lower)) || // 审查任务
+    /自主|自动|一键|不用确认|直接|全自动/.test(lower) // 自主但多步骤
+  );
+  // 简单任务：单个操作，无歧义
+  const isSimple = !isComplex && lower.length < 50 && !/计划|安排|然后|再|同时|并且/.test(lower);
+
+  // 维度4: 否定词减分
   if (/别|不要|不.*执行|先别|取消/.test(lower)) { scores.batchExec = 0; scores.auto = 0; }
 
   // 判断：batchExec 最高 → 批量流程
-  const isAuto = scores.auto > 0;
+  const hasAuto = scores.auto > 0;
+  // auto 模式 ≠ 跳过确认，auto = 确认后全自动执行步骤
+  // 只有简单任务才真正跳过确认
+  const needConfirm = !isSimple;
   if (scores.batchExec >= 40) {
-    const wfName = isAuto ? 'batch execute auto' : 'batch execute';
+    const wfName = hasAuto ? 'batch execute auto' : 'batch execute';
     const steps = WORKFLOWS[wfName];
     const firstStep = steps[0];
-    const autoStep = steps.find(s => s.command === 'task' || s.command === 'schedule') || firstStep;
     return {
       mode: 'pipeline',
-      summary: isAuto ? '🤖 自主执行中' : '📋 需要你确认后再执行',
+      summary: isSimple ? '✅ 直接执行' :
+               hasAuto ? '🤖 自主执行（确认后全自动）' :
+               '📋 需要确认后再执行',
       detail: buildPipelineDetail(steps, input),
       commands: steps.map(s => s.command),
-      pipeline: { steps, input, confirm: !isAuto },
-      autoExec: isAuto ? {
-        command: autoStep.command,
-        args: fillTemplate(autoStep.args || ''),
-        confirm: false,
-      } : undefined,
+      pipeline: { steps, input, confirm: needConfirm },
     };
   }
 
