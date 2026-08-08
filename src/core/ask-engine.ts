@@ -711,6 +711,202 @@ export async function understandIntent(input: string): Promise<IntentUnderstandi
   };
 }
 
+/**
+ * 🧠 SynthesizeIntent — 智能意图合成层
+ * 
+ * 理解 → 参数提取 → 上下文补全 → 命令匹配 → 自检纠错 → 仅模糊点时确认
+ * 
+ * 核心原则:
+ *   - AI 能自己推断的，不打扰用户
+ *   - 缺了参数但能从上下文补的，自动补上并告诉用户
+ *   - 只有真正歧义的才和用户确认
+ */
+export interface SynthesizedIntent {
+  /** AI 理解 */
+  what: string;
+  /** 来源 */
+  source: string;
+  /** 最终理解的结果（含理解说明） */
+  result: AskResult;
+  /** AI 自动补充的内容 */
+  autoFilled: { field: string; value: string; reason: string }[];
+  /** 无法确定、需要用户澄清的问题 */
+  questions: string[];
+  /** 是否需要用户确认 */
+  needsConfirm: boolean;
+  /** 置信度 0-100 */
+  confidence: number;
+  /** 最终将执行的完整命令列表 */
+  finalCommands: { command: string; args: string; explanation: string }[];
+}
+
+export async function synthesizeIntent(input: string): Promise<SynthesizedIntent> {
+  const { result, commands, confidence: baseConf, gaps, source } = await understandIntent(input);
+  const autoFilled: SynthesizedIntent['autoFilled'] = [];
+  const questions: string[] = [];
+  let confidence = baseConf;
+
+  // ═══ 1. 参数提取 ═══
+  // 从输入中提取所有可识别参数
+  const parsed: Record<string, string> = {};
+  
+  // 时间
+  const timeVal = extractTime(input);
+  if (timeVal && timeVal !== new Date().toISOString().slice(0, 19).replace('T', ' ')) {
+    parsed.time = timeVal;
+  }
+  // 任务类型
+  const typeMap: Record<string, string> = {
+    'bug': 'bugfix', '缺陷': 'bugfix', '修复': 'bugfix', 'review': 'review',
+    '审查': 'review', '代码审查': 'review', '测试': 'test', 'test': 'test',
+    '安全': 'security', 'security': 'security', '文档': 'docs', 'docs': 'docs',
+    '重构': 'refactor', 'refactor': 'refactor', '部署': 'deploy', 'deploy': 'deploy',
+    '性能': 'performance', 'performance': 'performance',
+  };
+  for (const [kw, type] of Object.entries(typeMap)) {
+    if (input.includes(kw)) { parsed.type = type; break; }
+  }
+  // 优先级
+  if (/高优|紧急|urgent|critical/.test(input)) parsed.priority = 'high';
+  else if (/低优|low/.test(input)) parsed.priority = 'low';
+  // 批次
+  const batchMatch = input.match(/(\d+)\s*(?:批次|个|任务)/);
+  if (batchMatch) parsed.batch = batchMatch[1];
+  // 平台
+  if (/后端|backend/.test(input)) parsed.platform = 'backend';
+  else if (/前端|frontend/.test(input)) parsed.platform = 'frontend';
+  else if (/小程序|miniapp/.test(input)) parsed.platform = 'miniapp';
+  // 任务名
+  const nameMatch = input.match(/(?:创建|新建|做一个?)\s*(?:一个?\s*)?["""]([^"]+)["'']/);
+  if (!nameMatch) {
+    const alt = input.match(/(?:创建|新建|做一个?)\s*(?:一个?\s*)?(\S{2,20}(?:功能|任务|模块|页面))/);
+    if (alt) parsed.name = alt[1];
+  } else parsed.name = nameMatch[1];
+
+  // ═══ 2. 上下文补全 ═══
+  try {
+    const { getDefaultIteration } = await import('./context');
+    const iter = await getDefaultIteration();
+    if (iter && !parsed.iteration) {
+      parsed.iteration = iter;
+      autoFilled.push({ field: 'iteration', value: iter, reason: '从当前上下文自动补全迭代' });
+      confidence += 5;
+    }
+  } catch {}
+
+  // 批次默认值
+  if (!parsed.batch && commands.includes('execute')) {
+    parsed.batch = '5';
+    autoFilled.push({ field: 'batch', value: '5', reason: '默认批次大小' });
+  }
+
+  // ═══ 3. 命令增强（自动补充缺失步骤） ═══
+  const finalCommands: SynthesizedIntent['finalCommands'] = [];
+  
+  for (const cmd of commands) {
+    let args = '';
+    let explanation = '';
+    
+    switch (cmd) {
+      case 'plan':
+        args = parsed.iteration ? `-I ${parsed.iteration}` : '--all';
+        explanation = '生成执行计划';
+        break;
+      case 'schedule':
+        if (commands.length > 1) {
+          args = parsed.time ? `create --at "${parsed.time}"` : 'create';
+          if (parsed.batch) args += ` --batch-size ${parsed.batch}`;
+          explanation = parsed.time ? `创建定时调度 @ ${parsed.time}` : '创建调度';
+        }
+        break;
+      case 'task':
+        args = 'new';
+        if (parsed.name) args += ` -n "${parsed.name}"`;
+        if (parsed.type) { args += ` --type ${parsed.type}`; autoFilled.push({ field: 'type', value: parsed.type, reason: '从输入中识别任务类型' }); }
+        if (parsed.priority) args += ` --priority ${parsed.priority}`;
+        explanation = parsed.name ? `创建任务: ${parsed.name}` : '创建任务';
+        break;
+      case 'execute':
+        args = parsed.iteration ? `-I ${parsed.iteration}` : '';
+        if (parsed.batch) args += ` --batch-size ${parsed.batch}`;
+        args += ' --auto --force';
+        explanation = '自动执行任务';
+        break;
+      case 'analyze':
+        args = parsed.iteration ? `-I ${parsed.iteration}` : '';
+        if (parsed.type) args += ` --type ${parsed.type}`;
+        explanation = parsed.type ? `深度分析(${parsed.type})` : '深度分析';
+        break;
+      case 'validate':
+        args = parsed.iteration ? `--iteration=${parsed.iteration}` : '';
+        explanation = '合规检查';
+        break;
+      default:
+        explanation = '执行命令';
+    }
+    
+    if (cmd === 'schedule') {
+      // schedule 可能有两个子命令：create 和 daemon start
+      if (args.includes('create')) {
+        finalCommands.push({ command: 'schedule', args, explanation });
+        finalCommands.push({ command: 'schedule', args: 'daemon start', explanation: '启动守护进程（自动）' });
+        autoFilled.push({ field: 'daemon', value: 'auto-start', reason: '创建调度后自动启动守护进程' });
+      }
+    } else {
+      finalCommands.push({ command: cmd, args, explanation });
+    }
+  }
+
+  // ═══ 4. 自检：补全后还有遗漏吗？ ═══
+  // 有执行但没有 schedule → 不需要定时
+  if (commands.includes('execute') && !commands.includes('schedule')) {
+    // 这是直接执行，用户没说定时，不补 schedule
+  }
+  
+  // 有任务名但没 type → 可继续（类型默认 feature）
+  if (parsed.name && !parsed.type) {
+    // 不追问，类型默认即可
+  }
+
+  // ═══ 5. 是否真需要确认？ ═══
+  // 只有这些情况才需要：
+  //  a) AI 理解不清楚（gaps 非空）
+  //  b) 置信度低于阈值
+  //  c) 参数严重缺失（如无任务名就创建任务）
+  // 否则 AI 自主补全后直接执行
+  const isProblematic = gaps.length > 0 || confidence < 70;
+  
+  // 关键参数缺失 → 提问
+  if (commands.includes('task') && !parsed.name && !parsed.type) {
+    questions.push('请描述你要创建的任务类型和名称（如：创建一个登录功能的bug修复任务）');
+  }
+  if (commands.includes('schedule') && !parsed.time) {
+    questions.push('请指定执行时间（如：晚上10点）');
+  }
+
+  const finalConf = confidence + autoFilled.length * 5; // 自动补全加分
+  const needsConfirm = isProblematic || questions.length > 0 || (result.pipeline?.confirm !== false);
+
+  // 给 pipeline 结果填充 auto-fill 后的参数
+  if (result.pipeline) {
+    for (const step of result.pipeline.steps) {
+      const fc = finalCommands.find(c => c.command === step.command);
+      if (fc) step.args = fc.args;
+    }
+  }
+
+  return {
+    what: result.summary || finalCommands.map(c => `${c.command} ${c.args}`).join(' → '),
+    source,
+    result,
+    autoFilled,
+    questions,
+    needsConfirm,
+    confidence: Math.min(100, finalConf),
+    finalCommands,
+  };
+}
+
 export async function askEngine(input: string): Promise<AskResult> {
   // ── 第一层: 自有 LLM (OpenAI/Ollama) ──
   try {
