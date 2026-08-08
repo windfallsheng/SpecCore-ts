@@ -230,17 +230,47 @@ export async function askCommand(input: string, _options: any): Promise<void> {
       }
     }
 
-    // 1. 有 autoExec → 直接执行（所有模式都能走这里）
-    if (result.autoExec) {
-      await autoExecute(result.autoExec.command, result.autoExec.args, !!result.autoExec.confirm);
-      // 执行管道中的所有剩余步骤
-      if (result.pipeline) {
-        for (const step of result.pipeline.steps) {
-          const argsFilled = (step.args || '').replace(/\{(\w+)\}/g, (_: string, k: string) => { if (k === 'time') return extractTime(input); return ''; });
-          if (argsFilled.trim()) await autoExecute(step.command, argsFilled.trim(), false);
+    // 1. Pipeline 交互执行（逐步骤确认）
+    if (result.pipeline && result.mode === 'pipeline') {
+      const isAuto = /一键|全自动|自主|auto/i.test(input) || !result.pipeline?.confirm;
+      process.stdout.write(`\n📋 管道模式: ${result.pipeline.steps.length} 步\n`);
+      if (!isAuto) process.stdout.write(`⚠️ 交互模式: 每步执行前需要确认\n`);
+
+      for (let i = 0; i < result.pipeline.steps.length; i++) {
+        const step = result.pipeline.steps[i];
+        const argsFilled = (step.args || '').replace(/\{(\w+)\}/g, (_: string, k: string) => {
+          if (k === 'time') return extractTime(input);
+          if (k === 'batch') { const m = input.match(/(\d+)[批次个]/); return m ? m[1] : '5'; }
+          if (k === 'iteration') { const m = input.match(/Iteration[- ]?\S+|Q\d+|sample/i); return m ? m[0].replace(/^Iteration[- ]?/, '') : ''; }
+          return '';
+        });
+        const fullCmd = `${step.command} ${argsFilled}`.trim();
+
+        // 交互模式: 每步确认
+        if (!isAuto) {
+          process.stdout.write(`[SPECCORE_CONFIRM_STEP: ${step.order}/${result.pipeline.steps.length}] ${fullCmd} — ${step.explanation}\n`);
+          process.stdout.write(`[SPECCORE_CONFIRM_ASK: 执行这一步? (确认=y, 跳过=s, 停止=q)]\n`);
+          // daemon/schedule 步骤可跳过确认（非破坏性）
+          if (step.command === 'schedule' && step.args?.includes('daemon')) {
+            continue; // daemon start 自动执行
+          }
+        }
+
+        const r = await autoExecute(step.command, argsFilled, false);
+        if (!r.ok && step.command !== 'schedule') {
+          process.stdout.write(`[SPECCORE_STEP_FAIL: ${step.command}] 用户决定: [重试/跳过/停止]\n`);
+          break;
         }
       }
       await askHtml(input);
+      return;
+    }
+
+    // 2. 有 autoExec → 单命令执行
+    if (result.autoExec) {
+      await autoExecute(result.autoExec.command, result.autoExec.args, !!result.autoExec.confirm);
+      await askHtml(input);
+      return;
       return;
     }
 
