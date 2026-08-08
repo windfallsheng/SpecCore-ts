@@ -131,9 +131,15 @@ const WORKFLOWS: Record<string, PipelineStep[]> = {
     { order: 7, command: 'done', args: '--task {task}', explanation: '归档修复记录', dependsOn: 6 },
   ],
   'batch execute': [
-    { order: 1, command: 'plan', args: '--all', explanation: '生成所有待执行任务的计划', dependsOn: undefined },
-    { order: 2, command: 'schedule', args: 'create --at "{time}" --batch-size {batch}', explanation: '创建定时调度，指定执行时间和批次大小', dependsOn: 1 },
-    { order: 3, command: 'schedule', args: 'daemon start', explanation: '启动调度守护进程（仅首次启动，幂等）', dependsOn: 2 },
+    { order: 1, command: 'plan', args: '--select', explanation: '列出所有可执行任务（编号 + CLI命令），用户多选', dependsOn: undefined },
+    { order: 2, command: 'schedule', args: 'create --at "{time}" --batch-size {batch}', explanation: '创建定时调度', dependsOn: 1 },
+    { order: 3, command: 'schedule', args: 'daemon start', explanation: '启动调度守护进程', dependsOn: 2 },
+    { order: 4, command: 'execute', args: '--auto --batch-size {batch}', explanation: '到时间自动执行', dependsOn: 2 },
+  ],
+  'batch execute auto': [
+    { order: 1, command: 'plan', args: '--all', explanation: '生成全部任务计划', dependsOn: undefined },
+    { order: 2, command: 'schedule', args: 'create --at "{time}" --batch-size {batch}', explanation: '创建定时调度', dependsOn: 1 },
+    { order: 3, command: 'schedule', args: 'daemon start', explanation: '启动调度守护进程', dependsOn: 2 },
     { order: 4, command: 'execute', args: '--auto --batch-size {batch}', explanation: '按计划分批自动执行', dependsOn: 2 },
   ],
   'code review': [
@@ -483,17 +489,19 @@ function handlePipeline(input: string): AskResult {
 
   // 匹配批量执行流程
   if (/计划.*执行|plan.*execute|分批|batch|定时|schedule|晚.*点|早上|几点/.test(lower)) {
-    const steps = WORKFLOWS['batch execute'];
+    // 自动模式：用户说了 "自主" "自动" "一键" 则 autoExec 全流程
+    const isAuto = /自主|自动|一键|全部.*执行|不用.*确认|直接/.test(lower);
+    const wfName = isAuto ? 'batch execute auto' : 'batch execute';
+    const steps = WORKFLOWS[wfName];
     const firstStep = steps[0];
-    // 找第一个可自动执行的子命令（task 或 schedule）
     const autoStep = steps.find(s => s.command === 'task' || s.command === 'schedule') || firstStep;
     return {
       mode: 'pipeline',
-      summary: `已编排「批量执行流程」（${steps.length} 步）`,
+      summary: isAuto ? '🤖 自主执行中' : '📋 需要你确认后再执行',
       detail: buildPipelineDetail(steps, input),
       commands: steps.map(s => s.command),
-      pipeline: { steps, input, confirm: true },
-      autoExec: autoStep ? {
+      pipeline: { steps, input, confirm: !isAuto },
+      autoExec: isAuto ? {
         command: autoStep.command,
         args: fillTemplate(autoStep.args || ''),
         confirm: false,
