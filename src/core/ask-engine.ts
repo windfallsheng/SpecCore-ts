@@ -493,13 +493,8 @@ function handlePipeline(input: string): AskResult {
   const fillTemplate = (tmpl: string) => tmpl.replace(/\{(\w+)\}/g, (_: string, k: string) => {
     if (k === 'time') return extractTime(input);
     if (k === 'iteration') {
-      // 先从输入提取：Iteration-Q1、Q1、Iteration-sample 等
       const m = input.match(/Iteration[- ]?\S+|Q\d+|sample/i);
-      if (m) {
-        const raw = m[0];
-        return raw.startsWith('Iteration') ? raw : `Iteration-${raw}`;
-      }
-      return '';
+      return m ? m[0].replace(/^Iteration[- ]?/, '') : '';
     }
     if (k === 'batch') { const m = input.match(/(\d+)[批次个]/); return m ? m[1] : '5'; }
     if (k === 'task') {
@@ -939,12 +934,13 @@ export async function askEngine(input: string): Promise<AskResult> {
   // 切换上下文 → context set
   if (/切换.*[到至].*迭代|设定.*上下文|设置.*上下文|上下文.*切换|context.*set|切换到/.test(input)) {
     const iterMatch = input.match(/Iteration[- ]?\S+|Q\d+|sample/i);
-    const iter = iterMatch ? (iterMatch[0].startsWith('Iteration') ? iterMatch[0] : `Iteration-${iterMatch[0]}`) : '';
+    const raw = iterMatch ? iterMatch[0] : '';
+    const iter = raw.replace(/^Iteration[- ]?/, ''); // context set 自己加前缀
     if (iter) {
       return {
         mode: 'match',
-        summary: `切换当前上下文到 ${iter}`,
-        detail: `✅ 将当前活跃迭代设置为 ${iter}`,
+        summary: `切换当前上下文到 Iteration-${iter}`,
+        detail: `✅ 将当前活跃迭代设置为 Iteration-${iter}`,
         commands: ['context'],
         autoExec: { command: 'context', args: `set --iteration ${iter}`, confirm: true },
       };
