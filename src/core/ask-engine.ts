@@ -958,7 +958,32 @@ export async function askEngine(input: string): Promise<AskResult> {
     }
   }
 
-  // ── 默认: 输出知识库，让宿主 AI 自行做语义分析 ──
+  // ── 第一层: 自有 LLM（如果配置了 API Key）──
+  const hasLlmKey = process.env.SPECCORE_LLM_KEY || process.env.OPENAI_API_KEY;
+  if (hasLlmKey) {
+    try {
+      const llmResult = await askWithLlm(input);
+      if (llmResult && llmResult.commands.length > 0) {
+        logger.info(`🧠 自有 LLM: ${modeLabel(llmResult.mode as AskMode)}`);
+        (llmResult as any)._source = 'llm';
+        return llmResult;
+      }
+    } catch (e: any) {
+      logger.warn(`自有 LLM 不可用: ${e.message}`);
+    }
+  }
+
+  // ── 第二层: 宿主 AI 文件协议（TRAE 等）──
+  try {
+    const hostResult = await tryHostAi('ask', input);
+    if (hostResult) {
+      logger.info(`🤖 宿主 AI: ${modeLabel((hostResult.mode || 'match') as AskMode)}`);
+      (hostResult as any)._source = 'host';
+      return hostResult as AskResult;
+    }
+  } catch (e: any) { /* 不可用，继续 */ }
+
+  // ── 第三层: 输出知识库，交给宿主 AI 语义分析 ██
   const kb = COMMAND_KB.map(c =>
     `  ${c.name}: ${c.description.padEnd(30)} → ${c.usage}`
   ).join('\n');
