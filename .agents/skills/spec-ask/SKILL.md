@@ -55,7 +55,13 @@ disable-model-invocation: false
 
 ```
 执行: speccore ask "{用户输入}"
-从 stdout 第一行提取 [SPECCORE_MODE: xxx] → 进对应分支
+
+⚠️ 先处理 HTML 标记（优先于 SPECCORE_MODE）:
+  [SPECCORE_ONBOARD:<path>] → present_files 展示引导页
+  [SPECCORE_ABOUT:<path>]    → present_files 展示版本信息
+  同时输出 📄 file://... 让用户点击
+
+然后从 stdout 提取 [SPECCORE_MODE: xxx] → 进对应分支
 若无标记 → 用步骤 0 标准判断
 ```
 
