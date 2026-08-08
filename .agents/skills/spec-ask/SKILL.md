@@ -14,7 +14,6 @@ disable-model-invocation: false
 - 禁止在 pipeline 未完成时跳到下一步
 - 禁止无用户确认时执行破坏性操作
 - 禁止输出 speccore 命令给用户
-- 禁止重复执行已完成的 SPECCORE_AUTO_RESULT
 
 # SpecCore Ask — 可执行编排引擎 v4
 
