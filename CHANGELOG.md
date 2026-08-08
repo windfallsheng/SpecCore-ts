@@ -2,6 +2,32 @@
 
 ---
 
+## v5.67.51 (2026-08-08) — 架构重构：宿主 AI 语义分析 + 全局路径修复
+
+### 🔄 架构变更
+- **撤销 CLI 关键词匹配**：`askEngine` 不再做规则引擎意图识别，输出 KB 交给宿主 AI 自主分析
+- **保留 LLM/host AI 层**：自有 LLM（需 `SPECCORE_LLM_KEY`）+ 文件协议，仅通过 `--rules` 显式触发
+- **默认走宿主 AI 语义分析**：`speccore ask` 输出命令知识库 + 工作流模板，AI 自行判断并拼命令
+
+### 🐛 路径修复
+- **迭代目录路径**：所有命令（analyze/plan/execute/split/task create）写入 `.speccore/ITERATIONS/Iteration-NNN-name/` 而非项目根目录
+- **新增 `getIterationDir()` 公共函数**：自动查找迭代目录，向后兼容 fallback
+
+### ✨ 新功能
+- **`--topic` 英文主题词**：iteration create / task new 支持 AI 提取英文关键词（如 `meeting-system`/`user-login`）
+- **迭代目录结构完善**：新增 `sources`/`materials`/`prototypes`/`converted`/`images`/`plans` 默认子目录
+- **升级首次引导页**：`init --update` 重置 onboard 标记，下次 ask 弹出 HTML
+
+### 🗑️ 移除
+- **daemon 调度引擎**：删除 `schedule-engine.ts`/`schedule-store.ts`，schedule 命令回归轻量 CRUD
+- **废弃命令黑名单**：AGENTS.md 明确标记 `schedule daemon`/`execute --auto --force`
+
+### 🎯 交互确认
+- **管道模式每步确认**：非自动模式下每步输出 `[SPECCORE_CONFIRM_STEP]` 等待用户
+- **自动模式仍全跑**：用户说了"一键/全自动"时跳过确认
+
+---
+
 ## v5.65.0 (2026-08-08) — 智能意图合成 + 定时调度完善 + about 页面
 
 ### 🧠 Ask 引擎：synthesizeIntent
