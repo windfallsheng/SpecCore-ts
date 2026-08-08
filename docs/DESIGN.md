@@ -184,21 +184,38 @@ speccore retro --all --type bugfix    ← 按类型
 | "查看进度" | `speccore dashboard` |
 | 复杂意图 | `speccore ask "用户原话"` ← fallback |
 
-### 5.3 ask 引擎两大模式
+### 5.3 ask 引擎四大模式
 
-| 模式 | 场景 | 调用方式 |
+| 模式 | 场景 | 识别方式 |
 |------|------|------|
-| **简单路由** | 关键词匹配 → 拼 CLI | 路由器 Skill |
-| **复杂编排** | plan + schedule + 分批 | fallback → CLI `speccore ask "..."` → 4 模式引擎 |
+| **explain** | 解释命令 | 知识库匹配 |
+| **guide** | 流程指引 | 工作流生成 |
+| **match** | 意图匹配 | 直接映射命令 |
+| **pipeline** | 复杂编排 | plan + schedule + execute |
 
-### 5.4 Skill 行为规范
+### 5.4 意图合成（synthesizeIntent）
 
-```markdown
-**OUTPUT a CLI command, do NOT execute.**
-
-识别用户意图，提取参数，输出 CLI 命令文本。
-参数缺失时追问，无法匹配时 fallback 到 speccore ask。
+三层分析链路：
 ```
+输入 → ① 参数提取(时间/类型/优先级/名称) 
+     → ② 上下文补全(迭代/批次从context.json)
+     → ③ 命令自检(遗漏检查+置信度评分)
+     → ④ 仅歧义时确认
+```
+
+### 5.5 双模式确认
+
+| 用户表述 | 模式 | 行为 |
+|:---|:---|:---|
+| 未说自主/一键 | **交互模式** | 展示理解 → 等用户确认 → 执行 |
+| 说了"自主/一键" | **自主模式** | 展示理解 → 确认一次 → 全自动执行 |
+| 纯单命令 | **跳过确认** | 简单无歧义直接执行 |
+
+### 5.6 HTML 页面输出规范
+
+所有 HTML 页面（引导页、about 等）同时输出两种格式：
+- `file://` 链接：用户可直接点击打开
+- `[SPECCORE_xxx: path]` 标签：WorkBuddy 走 `present_files` 展示
 
 ---
 
@@ -240,21 +257,42 @@ speccore retro --all --type bugfix    ← 按类型
 
 调度和守护是 SpecCore CLI 自身的 TypeScript 功能，与宿主 AI 无关。
 
+### 7.1 调度生命周期
+
 ```
 speccore schedule create --at "20:00" --all
-  → 写入调度队列
+  → 写入 .speccore/local/schedule.json
+  → 自动安装系统守护 + 启动 daemon（懒启动）
 
 speccore schedule daemon start
-  → 启动 Node.js 守护进程
+  → 启动 Node.js 守护进程（幂等，已运行则跳过）
 
-到点: daemon → speccore execute → CLI 调 AI 生成代码 → 写文件
+speccore schedule retry --id <id> [--at "新时间"]
+  → 重新调度失败/未触发的任务
+
+speccore schedule cancel --id <id>
+  → 取消调度；pending=0 → 自动停 daemon（懒停止）
+
+到点: daemon → speccore execute → CLI 执行
 ```
 
-| 环节 | 控制者 | 可被忽略 |
-|------|------|:--:|
-| 调度写入 | CLI | ❌ |
-| 到点触发 | CLI 守护进程 | ❌ |
-| AI 代码生成 | CLI 主动调 AI | ❌ |
+### 7.2 跨平台守护
+
+| 平台 | 机制 | 触发 |
+|:---|:---|:---|
+| macOS | LaunchAgent (`~/Library/LaunchAgents/`) | RunAtLoad + KeepAlive |
+| Linux | crontab | 每 5 分钟 |
+| Windows | Task Scheduler (`schtasks`) | 每 5 分钟 |
+
+- `init` / `init --update` 自动安装
+- `schedule create` 自动重装到当前项目目录
+- daemon 用 `daemonPid` 记录防多开
+
+### 7.3 懒启动/懒停止
+
+- 创建调度 → 自动启动 daemon
+- daemon 每 30s 轮询 → 无 pending 任务 → 自动 exit(0)
+- 零空闲资源消耗
 
 ---
 
@@ -283,8 +321,15 @@ speccore schedule daemon start
 | v5.27.35 | 08-07 | CONSTITUTION 增加"项目名称"列、init 残留清理、意图识别平台参数 |
 | v5.30.0 | 08-07 | 可执行编排引擎 v4 + 升级提示 + 数据保护 + 管道传递 |
 | v5.32.0 | 08-07 | 强制分析保护：任务无 ANALYSIS.md 禁止 execute |
+| v5.56.0 | 08-08 | Daemon 懒启动/懒停止、跨平台守护安装(LaunchAgent/cron/schtasks) |
+| v5.58.0 | 08-08 | Ask 双模式(自主/交互)、plan --select 多选 |
+| v5.59.0 | 08-08 | 意图加权得分系统(替代关键词硬匹配) |
+| v5.60.0 | 08-08 | 意图确认步骤(SPECCORE_INTENT + SPECCORE_CONFIRM_NEEDED) |
+| v5.63.0 | 08-08 | synthesizeIntent 智能意图合成(参数提取+补全+自检) |
+| v5.64.0 | 08-08 | speccore about 版本信息页、引导页 file:// 链接 |
+| v5.65.0 | 08-08 | schedule retry/多调度管理、引导页优先输出 |
 
-> **最后更新**: 2026-08-07
+> **最后更新**: 2026-08-08
 
 ---
 
