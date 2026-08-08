@@ -78,7 +78,8 @@ h2{font-size:12px;color:#38bdf8;margin:20px 0 10px;letter-spacing:1px}
 .mver{font-size:10px;color:#6366f1;background:rgba(99,102,241,.1);padding:2px 6px;border-radius:3px;min-width:40px;text-align:center}
 .mdate{font-size:10px;color:#5b7fa5;min-width:52px}
 .mdesc{font-size:10px;color:#bae6fd}
-.footer{text-align:center;color:#5b7fa5;font-size:9px;margin-top:24px;padding-top:12px;border-top:1px solid rgba(255,255,255,.03)}
+.link{display:inline-block;margin:4px 8px 4px 0;padding:4px 12px;background:rgba(14,165,233,.06);border:1px solid rgba(14,165,233,.1);border-radius:6px;color:#38bdf8;font-size:11px;text-decoration:none}
+.link:hover{background:rgba(14,165,233,.14);color:#0ea5e9}
 .footer a{color:#38bdf8;text-decoration:none}
 </style></head>
 <body>
@@ -95,6 +96,11 @@ h2{font-size:12px;color:#38bdf8;margin:20px 0 10px;letter-spacing:1px}
 
 <h2>📜 里程碑</h2>
 ${milestonesHtml}
+
+<h2>📚 文档</h2>
+<a class="link" href="AGENTS.md" target="_blank">AGENTS.md</a>
+<a class="link" href="README.md" target="_blank">README</a>
+<a class="link" href="CHANGELOG.md" target="_blank">CHANGELOG</a>
 
 <div class="footer">
   <a href="https://github.com/windfallsheng/SpecCore-ts" target="_blank">GitHub</a> · 
