@@ -63,12 +63,6 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
         const { version } = require('../../package.json');
         await writeFile(verFile, JSON.stringify({ version, updatedAt: new Date().toISOString() }, null, 2));
 
-        // 安装/更新调度守护进程（macOS LaunchAgent / Linux crontab / Windows Task Scheduler）
-        try {
-          const { installSystemSchedule } = await import('./schedule');
-          await installSystemSchedule();
-        } catch {}
-
         // 生成升级欢迎页（与 ask 引导页同风格）
         await writeUpgradePage(projectRoot, version, speccoreDir);
 
