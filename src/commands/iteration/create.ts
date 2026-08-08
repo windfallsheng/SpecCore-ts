@@ -39,7 +39,7 @@ export async function iterationCreateCommand(options: IterationCreateOptions): P
     await ensureDir(join(iterationDir, '010-requirements', 'converted'));
     await ensureDir(join(iterationDir, '010-requirements', 'images'));
     await ensureDir(join(iterationDir, '020-specs'));
-    await ensureDir(join(iterationDir, '030-tasks'));
+    await ensureDir(join(iterationDir, '030-tasks', 'plans'));
 
     // Create default files
     await createIterationFiles(iterationDir, fullName, options);
