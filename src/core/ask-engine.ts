@@ -136,6 +136,13 @@ const WORKFLOWS: Record<string, PipelineStep[]> = {
     { order: 3, command: 'schedule', args: 'daemon start', explanation: '启动调度守护进程', dependsOn: 2 },
     { order: 4, command: 'execute', args: '--auto --batch-size {batch}', explanation: '到时间自动执行', dependsOn: 2 },
   ],
+  'analyze plan schedule execute': [
+    { order: 1, command: 'analyze', args: '--task {task}', explanation: '分析任务需求（立即执行）', dependsOn: undefined },
+    { order: 2, command: 'plan', args: '--all', explanation: '制定执行计划（立即执行）', dependsOn: 1 },
+    { order: 3, command: 'schedule', args: 'create --at "{time}" --batch-size {batch}', explanation: '创建定时调度（到点自动执行）', dependsOn: 2 },
+    { order: 4, command: 'schedule', args: 'daemon start', explanation: '启动守护进程', dependsOn: 3 },
+    { order: 5, command: 'execute', args: '--auto --batch-size {batch}', explanation: '定时自动执行任务', dependsOn: 3 },
+  ],
   'batch execute auto': [
     { order: 1, command: 'plan', args: '--all', explanation: '生成全部任务计划', dependsOn: undefined },
     { order: 2, command: 'schedule', args: 'create --at "{time}" --batch-size {batch}', explanation: '创建定时调度', dependsOn: 1 },
@@ -298,6 +305,9 @@ function handleGuide(input: string): AskResult {
   } else if (/新功能|feature|登录|注册|支付|创建.*功能|做.*功能/i.test(input)) {
     matchedWorkflow = WORKFLOWS['new feature'];
     workflowName = '新功能开发全流程';
+  } else if (/先分析.*[再然后].*[计划列计划规划]|分析.*任务.*列.*[计划规划]|分析.*再.*执行/i.test(input)) {
+    matchedWorkflow = WORKFLOWS['analyze plan schedule execute'];
+    workflowName = '分析 → 计划 → 定时执行流程';
   } else if (/批量|分批|batch|队列/i.test(input)) {
     matchedWorkflow = WORKFLOWS['batch execute'];
     workflowName = '批量执行流程';
@@ -545,7 +555,10 @@ function handlePipeline(input: string): AskResult {
   // 只有简单任务才真正跳过确认
   const needConfirm = !isSimple;
   if (scores.batchExec >= 40) {
-    const wfName = hasAuto ? 'batch execute auto' : 'batch execute';
+    // 如果用户要"先分析再计划" → 用 analyze+plan+schedule 模板
+    const hasAnalyzeFirst = /先.*分析|分析.*[再然后]|analyze.*plan/i.test(input);
+    const wfName = hasAnalyzeFirst ? 'analyze plan schedule execute' :
+                   hasAuto ? 'batch execute auto' : 'batch execute';
     const steps = WORKFLOWS[wfName];
     const firstStep = steps[0];
     return {
