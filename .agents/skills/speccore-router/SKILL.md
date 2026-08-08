@@ -50,6 +50,7 @@ allowed-tools: ["Bash", "Read", "Write", "Edit"]
                 │
                 ▼
         执行成功 → 展示结果
+                → 扫描 speccore-*.html 列出 file:// 链接
         执行失败 → 错误处理
 ```
 
