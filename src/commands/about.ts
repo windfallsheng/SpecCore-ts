@@ -108,9 +108,12 @@ h2{font-size:12px;color:#38bdf8;margin:20px 0 10px;letter-spacing:1px}
 ${milestonesHtml}
 
 <h2>📚 文档 & 指南</h2>
-<a class="link" href="https://github.com/windfallsheng/SpecCore-ts/blob/main/README.md" target="_blank"><strong>📖 README</strong><span>项目说明 · 安装 · 场景 · 命令体系</span></a>
-<a class="link" href="https://github.com/windfallsheng/SpecCore-ts/blob/main/AGENTS.md" target="_blank"><strong>🤖 AGENTS.md</strong><span>AI 路由表 · 12 Skill · 禁止规则</span></a>
-<a class="link" href="https://github.com/windfallsheng/SpecCore-ts/tree/main/examples" target="_blank"><strong>📌 场景指南</strong><span>代码审查 · 安全审计 · 多平台开发 · 文档驱动</span></a>
+<a class="link" href="https://github.com/windfallsheng/SpecCore-ts/blob/main/README.md" target="_blank"><strong>📖 README</strong><span>项目说明 · 安装 · 核心概念 · 工作流</span></a>
+<a class="link" href="https://github.com/windfallsheng/SpecCore-ts/blob/main/docs/总览.md" target="_blank"><strong>🔭 总览</strong><span>核心概念 · 工作流 · 三种使用方式</span></a>
+<a class="link" href="https://github.com/windfallsheng/SpecCore-ts/blob/main/docs/命令参考.md" target="_blank"><strong>📋 命令参考</strong><span>全部 23 命令 · 子命令 · 示例</span></a>
+<a class="link" href="https://github.com/windfallsheng/SpecCore-ts/blob/main/docs/场景实战.md" target="_blank"><strong>🎯 场景实战</strong><span>35 个真实开发场景</span></a>
+<a class="link" href="https://github.com/windfallsheng/SpecCore-ts/blob/main/docs/SDD方法论.md" target="_blank"><strong>💡 SDD 方法论</strong><span>规范驱动开发理念</span></a>
+<a class="link" href="https://github.com/windfallsheng/SpecCore-ts/blob/main/docs/工作空间组织.md" target="_blank"><strong>📁 工作空间</strong><span>目录结构与文件规范</span></a>
 <a class="link" href="https://github.com/windfallsheng/SpecCore-ts/blob/main/CHANGELOG.md" target="_blank"><strong>📝 CHANGELOG</strong><span>版本历史</span></a>
 <a class="link" href="https://www.npmjs.com/package/speccore" target="_blank"><strong>📦 npm 包</strong><span>安装 · 版本</span></a>
 <a class="link" href="https://www.npmjs.com/package/speccore" target="_blank">npm 包</a>
