@@ -627,12 +627,97 @@ function buildPipelineDetail(steps: PipelineStep[], input: string): string {
 // 统一入口
 // ============================================================
 
+/**
+ * 理解用户意图并自我检查
+ * 返回结构化分析：AI理解了什么？命令匹配度？是否有遗漏？
+ */
+export interface IntentUnderstanding {
+  /** AI 理解的用户意图摘要 */
+  what: string;
+  /** 匹配到的命令列表 */
+  commands: string[];
+  /** 置信度 (0-100) */
+  confidence: number;
+  /** 是否有分歧/不确定的地方 */
+  gaps: string[];
+  /** 是否应该进入确认流程 */
+  needsConfirm: boolean;
+  /** 来源：llm/host/rules */
+  source: string;
+}
+
+export async function understandIntent(input: string): Promise<IntentUnderstanding & { result: AskResult }> {
+  const result = await askEngine(input);
+  const gaps: string[] = [];
+  let confidence = 0;
+  let source = 'rules';
+
+  // 1. 命令验证：检查返回的命令是否都在 KB 中
+  const validCommands = new Set(COMMAND_KB.map(c => c.name));
+  const unknownCmds = result.commands.filter(c => !validCommands.has(c));
+  if (unknownCmds.length > 0) {
+    gaps.push(`未知命令: ${unknownCmds.join(', ')}`);
+    confidence -= 20;
+  }
+
+  // 2. 来源可信度
+  if (result.detail?.length > 100) confidence += 30; // 有详细解释
+  if (result.commands.length > 0) confidence += 30;  // 有命令
+  if (result.mode === 'pipeline') confidence += 20;   // 流程模式
+  if (result.mode === 'match') confidence += 10;      // 直接匹配
+  if (result.mode === 'ambiguous') { confidence -= 30; gaps.push('意图不明确'); }
+  if (result.mode === 'explain') confidence += 15;    // 帮助模式
+
+  // 3. LLM 来源加分
+  if ((result as any)._source === 'llm') { confidence += 25; source = 'llm'; }
+  else if ((result as any)._source === 'host') { confidence += 15; source = 'host'; }
+  else { confidence += 5; source = 'rules'; }
+
+  // 4. 命令覆盖率检查：是否有关联命令被遗漏？
+  if (result.commands.length > 0) {
+    const primary = result.commands[0];
+    const kbEntry = COMMAND_KB.find(c => c.name === primary);
+    if (kbEntry?.related) {
+      const related = kbEntry.related.filter(r => !result.commands.includes(r));
+      if (related.length > 0) {
+        gaps.push(`建议补充: ${related.join(', ')}（通常与 ${primary} 配合使用）`);
+      }
+    }
+  }
+
+  // 5. 多步骤检查：如果输入含多步骤但只有一个命令
+  if (/然后|再|之后|接着|最后|同时|并且/.test(input) && result.commands.length === 1) {
+    gaps.push('用户描述了多个步骤但只匹配到一个命令，可能遗漏');
+    confidence -= 15;
+  }
+
+  // 6. 时间检查：如果输入含时间但没有 schedule 命令
+  if (/几点|晚.*点|早上|明天|定时|稍后/.test(input) && !result.commands.includes('schedule')) {
+    gaps.push('提到了时间但未生成 schedule 命令');
+    confidence -= 15;
+  }
+
+  confidence = Math.max(0, Math.min(100, confidence));
+  const needsConfirm = confidence < 80 || gaps.length > 0 || (result.pipeline?.confirm !== false);
+
+  return {
+    what: result.summary || `匹配到 ${result.commands.join(' → ')}`,
+    commands: result.commands,
+    confidence,
+    gaps,
+    needsConfirm,
+    source,
+    result,
+  };
+}
+
 export async function askEngine(input: string): Promise<AskResult> {
   // ── 第一层: 自有 LLM (OpenAI/Ollama) ──
   try {
     const llmResult = await askWithLlm(input);
     if (llmResult && llmResult.commands.length > 0) {
       logger.info(`🧠 自有 LLM: ${modeLabel(llmResult.mode as AskMode)}`);
+      (llmResult as any)._source = 'llm';
       
       if (!llmResult.detail || llmResult.detail.length < 20) {
         const enriched = enrichWithRules(llmResult, input);
@@ -649,6 +734,7 @@ export async function askEngine(input: string): Promise<AskResult> {
     const hostResult = await tryHostAi('ask', input);
     if (hostResult) {
       logger.info(`🤖 宿主 AI: ${modeLabel((hostResult.mode || 'match') as AskMode)}`);
+      (hostResult as any)._source = 'host';
       return hostResult as AskResult;
     }
   } catch (e: any) { /* 宿主 AI 不可用，继续 */ }

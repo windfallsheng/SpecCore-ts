@@ -191,15 +191,22 @@ export async function askCommand(input: string, _options: any): Promise<void> {
     // 不 return，继续执行后续 ask 逻辑 — 仪式感 + 照常工作
   }
 
-  const result = await askEngine(input);
+  const { understandIntent } = await import('../core/ask-engine');
+  const intent = await understandIntent(input);
+  const result = intent.result;
   // 始终输出模式标记到 stdout，供 Skill/编排器解析
   process.stdout.write(`[SPECCORE_MODE: ${result.mode}]\n`);
 
   // ── 意图确认：把 AI 理解的内容展示给用户，用户确认后再拼命令 ──
   // AI 上下文输出结构化确认信息；TTY 交互式确认
   const intentSummary: string[] = [];
-  if (result.summary) intentSummary.push(`📝 理解: ${result.summary}`);
-  if (result.detail) intentSummary.push(result.detail.split('\n').slice(0, 8).join('\n'));
+  intentSummary.push(`🧠 来源: ${intent.source} | 置信度: ${intent.confidence}%`);
+  intentSummary.push(`📝 理解: ${intent.what}`);
+  if (intent.gaps.length > 0) {
+    intentSummary.push(`⚠️ 可能的问题:`);
+    for (const g of intent.gaps) intentSummary.push(`   - ${g}`);
+  }
+  if (result.detail) intentSummary.push(`\n${result.detail.split('\n').slice(0, 10).join('\n')}`);
   if (result.commands?.length) intentSummary.push(`\n🔧 将执行: ${result.commands.join(' → ')}`);
   if (result.mode === 'pipeline' && result.pipeline?.steps) {
     intentSummary.push(`\n📋 步骤 (${result.pipeline.steps.length}): `);
