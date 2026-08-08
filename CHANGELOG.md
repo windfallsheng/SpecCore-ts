@@ -2,7 +2,36 @@
 
 ---
 
-## v5.64.0 (2026-08-08)
+## v5.65.0 (2026-08-08) — 智能意图合成 + 定时调度完善 + about 页面
+
+### 🧠 Ask 引擎：synthesizeIntent
+- 参数提取→上下文补全→命令自检→精准提问 四步链路
+- 加权得分系统替代硬关键词匹配
+- 双模式：自主(确认后全自动) / 交互(分步确认)
+- SPECCORE_INTENT 意图确认块 + SPECCORE_CONFIRM_NEEDED
+
+### ⏰ 调度增强
+- 懒启动/懒停止：有调度才运行，无 pending 自停
+- 跨平台 daemon：macOS LaunchAgent / Linux crontab / Windows Task Scheduler
+- schedule retry 重调度、多调度并存管理
+- `init`/`init --update` 自动安装系统守护
+- `schedule create` 自动重装 daemon 到当前项目
+
+### 📖 speccore about
+- 版本信息 HTML 页：功能概览+近期亮点+里程碑+文档链接
+- `file://` 链接直接可点开 + SPECCORE 标签供 WorkBuddy
+
+### 🪟 引导页
+- init/update 后重置标记，首次 ask 输出引导页
+- `file://` 链接 + SPECCORE_ONBOARD 标签双输出
+
+### 📋 plan --select + 文档更新
+- plan --select 任务多选模式
+- DESIGN.md + command-reference.md 补充全部功能设计
+
+---
+
+## v5.51.0 (2026-08-07)## v5.64.0 (2026-08-08)
 
 ### 🧠 智能意图合成 `synthesizeIntent`
 
