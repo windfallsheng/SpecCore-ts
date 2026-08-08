@@ -140,7 +140,7 @@ D3. 步间: Read 产出文件 → 提取参数 → 传下一步
 
 ## 步骤 4: 总结
 
-**🔴 必须输出 HTML 文件链接：** 用 `ls speccore-*.html` 扫描项目根目录所有 HTML 文件，向用户逐个列出 `file://` 完整路径。
+**🔴 仅输出当前操作生成的 HTML 文件链接**（如 `[SPECCORE_ABOUT: path]` 或 `[SPECCORE_ONBOARD: path]` 中的路径），不要扫描所有 `speccore-*.html`。
 ```
 展示: 文件列表 + 警告 + 下一步推荐
 询问继续
