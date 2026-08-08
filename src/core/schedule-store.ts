@@ -1,4 +1,5 @@
 import { ensureDir, readJson, writeJson, pathExists } from 'fs-extra';
+import { join } from 'path';
 
 /**
  * 调度任务状态
@@ -61,7 +62,7 @@ export interface ScheduleStore {
   updatedAt: string;
 }
 
-const SCHEDULE_PATH = '.speccore/local/schedule.json';
+const SCHEDULE_PATH = join(process.cwd(), '.speccore', 'local', 'schedule.json');
 
 /**
  * 生成唯一 ID
@@ -126,9 +127,29 @@ export async function loadScheduleStore(): Promise<ScheduleStore> {
  * 保存调度存储
  */
 export async function saveScheduleStore(store: ScheduleStore): Promise<void> {
-  await ensureDir('.speccore/local');
+  await ensureDir(join(process.cwd(), '.speccore', 'local'));
   store.updatedAt = new Date().toISOString();
+  store.version = (store.version || 0) + 1;
   await writeJson(SCHEDULE_PATH, store, { spaces: 2 });
+}
+
+/**
+ * 带版本锁的原子操作，防止并发写入覆盖
+ */
+async function withStoreLock<T>(fn: (store: ScheduleStore) => Promise<{ result: T; store: ScheduleStore }>, maxRetries = 3): Promise<T> {
+  for (let i = 0; i < maxRetries; i++) {
+    const store = await loadScheduleStore();
+    const { result, store: newStore } = await fn(store);
+    const preVersion = store.version;
+    const currentStore = await loadScheduleStore();
+    if (currentStore.version !== preVersion) {
+      // 被其他进程修改了 → 重试
+      if (i < maxRetries - 1) continue;
+    }
+    await saveScheduleStore(newStore);
+    return result;
+  }
+  throw new Error('Failed to save schedule: max retries exceeded');
 }
 
 /**
@@ -149,25 +170,25 @@ export async function createScheduleTask(params: {
     throw new Error(`Scheduled time must be in the future. Got: ${params.scheduledAt}, current: ${formatScheduleTime(now)}`);
   }
 
-  const store = await loadScheduleStore();
-  const task: ScheduleTask = {
-    id: generateId(),
-    name: params.name,
-    iteration: params.iteration,
-    taskId: params.taskId,
-    all: params.all,
-    scheduledAt: params.scheduledAt,
+  return withStoreLock(async (store) => {
+    const task: ScheduleTask = {
+      id: generateId(),
+      name: params.name,
+      iteration: params.iteration,
+      taskId: params.taskId,
+      all: params.all,
+      scheduledAt: params.scheduledAt,
     scheduledAtISO: iso,
     status: 'pending',
     createdAt: now.toISOString(),
     executedAt: null,
     result: null,
     execOptions: params.execOptions || {},
-  };
+    };
 
-  store.tasks.push(task);
-  await saveScheduleStore(store);
-  return task;
+    store.tasks.push(task);
+    return { result: task, store };
+  });
 }
 
 /**
@@ -206,16 +227,16 @@ export async function updateScheduleTask(
   taskId: string,
   updates: Partial<Pick<ScheduleTask, 'status' | 'executedAt' | 'result'>>
 ): Promise<ScheduleTask | null> {
-  const store = await loadScheduleStore();
-  const task = store.tasks.find(t => t.id === taskId);
-  if (!task) return null;
+  return withStoreLock(async (store) => {
+    const task = store.tasks.find(t => t.id === taskId);
+    if (!task) return { result: null, store };
 
-  if (updates.status !== undefined) task.status = updates.status;
-  if (updates.executedAt !== undefined) task.executedAt = updates.executedAt;
-  if (updates.result !== undefined) task.result = updates.result;
+    if (updates.status !== undefined) task.status = updates.status;
+    if (updates.executedAt !== undefined) task.executedAt = updates.executedAt;
+    if (updates.result !== undefined) task.result = updates.result;
 
-  await saveScheduleStore(store);
-  return task;
+    return { result: task, store };
+  });
 }
 
 /**
