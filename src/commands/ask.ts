@@ -188,67 +188,12 @@ export async function askCommand(input: string, _options: any): Promise<void> {
     await writeFile(outPath, html);
     await writeFile(markerFile, ver);
     logger.info(`👋 ${lastVersion ? `v${lastVersion} → v${ver} 升级` : '首次使用'} — 已生成引导页: ${outPath}`);
-    process.stdout.write(`[SPECCORE_ONBOARD: ${outPath}]\n`);
-    logger.info(`   📄 file://${outPath}`);
-    process.stdout.write(`[SPECCORE_ONBOARD: ${outPath}]\n`);
+    // 不 return，继续执行后续 ask 逻辑 — 仪式感 + 照常工作
   }
 
-  const { synthesizeIntent } = await import('../core/ask-engine');
-  const synth = await synthesizeIntent(input);
-  const intent = synth;
-  const result = synth.result;
+  const result = await askEngine(input);
   // 始终输出模式标记到 stdout，供 Skill/编排器解析
   process.stdout.write(`[SPECCORE_MODE: ${result.mode}]\n`);
-
-  // ── 意图确认：把 AI 理解的内容展示给用户，用户确认后再拼命令 ──
-  // AI 上下文输出结构化确认信息；TTY 交互式确认
-  const intentSummary: string[] = [];
-  intentSummary.push(`🧠 来源: ${synth.source} | 置信度: ${synth.confidence}%`);
-  intentSummary.push(`📝 理解: ${synth.what}`);
-  // 展示 AI 自动补全的内容
-  if (synth.autoFilled.length > 0) {
-    intentSummary.push(`\n✏️ AI 自动补全:`);
-    for (const a of synth.autoFilled) {
-      intentSummary.push(`   ${a.field} → "${a.value}"  (${a.reason})`);
-    }
-  }
-  // 展示最终命令
-  if (synth.finalCommands.length > 0) {
-    intentSummary.push(`\n🔧 将执行:`);
-    for (const c of synth.finalCommands) {
-      intentSummary.push(`   speccore ${c.command} ${c.args}  ← ${c.explanation}`);
-    }
-  }
-  // 展示真正的问题
-  if (synth.questions.length > 0) {
-    intentSummary.push(`\n❓ 需要确认:`);
-    for (const q of synth.questions) intentSummary.push(`   ${q}`);
-  }
-  if (result.detail) intentSummary.push(`\n${result.detail.split('\n').slice(0, 8).join('\n')}`);
-  if (result.mode === 'pipeline' && result.pipeline?.steps) {
-    intentSummary.push(`\n📋 步骤 (${result.pipeline.steps.length}): `);
-    for (const s of result.pipeline.steps) {
-      intentSummary.push(`   ${s.order}. ${s.command} ${s.args || ''}  ← ${s.explanation}`);
-    }
-    // 简单任务说明不用确认；复杂任务说明需要确认
-    if (!result.pipeline.confirm) {
-      intentSummary.push(`\n✅ 简单任务，无歧义，直接执行`);
-    }
-  }
-  if (intentSummary.length > 0) {
-    process.stdout.write(`[SPECCORE_INTENT]\n${intentSummary.join('\n')}\n[SPECCORE_INTENT_END]\n`);
-  }
-  // AI 上下文且有确认需求 → 等待用户确认
-  if (isAiContext() && synth.needsConfirm) {
-    process.stdout.write(`[SPECCORE_CONFIRM_NEEDED]
-请确认以上计划是否正确。
-  ✅ 确认: 回复 "确认" 或 "y" 或 "开始"
-  ✏️ 修改: 回复你的修改意见
-  ❌ 取消: 回复 "取消" 或 "q"
-[END_CONFIRM_NEEDED]\n`);
-    // 等待宿主 AI 读取 SPECCORE_CONFIRM_NEEDED 并让用户确认
-    // 实际等待由宿主 AI 处理，这里只是输出标记
-  }
 
   // ═══════════════════════════════════════════
   // AI 上下文（WorkBuddy / ClaudeCode 等）：自动执行模式
@@ -288,18 +233,16 @@ export async function askCommand(input: string, _options: any): Promise<void> {
     // 1. 有 autoExec → 直接执行（所有模式都能走这里）
     if (result.autoExec) {
       await autoExecute(result.autoExec.command, result.autoExec.args, !!result.autoExec.confirm);
-      // 执行管道中剩余的所有步骤
+      // 仅当 autoExec 不覆盖 task/schedule 时才额外执行 pipeline 中的 task/schedule
       if (result.pipeline) {
+        const alreadyExecuted = [result.autoExec.command];
         for (const step of result.pipeline.steps) {
-          if (step.order === 1) continue; // autoExec 已执行第一步,跳过
-          const argsFilled = (step.args || '').replace(/\{(\w+)\}/g, (_: string, k: string) => {
-            if (k === 'time') return extractTime(input);
-            if (k === 'batch') { const m = input.match(/(\d+)[批次个]/); return m ? m[1] : '5'; }
-            if (k === 'iteration') { const m = input.match(/Iteration[- ]?\S+|Q\d+|sample/i); return m ? m[0].replace(/^Iteration[- ]?/, '') : ''; }
-            if (k === 'task') { const tm = input.match(/(?:任务|Task)\s*(\d+[,.，、\s]*\d*)/i); return tm ? tm[1] : ''; }
-            return '';
-          });
-          if (argsFilled.trim()) await autoExecute(step.command, argsFilled.trim(), false);
+          if ((step.command === 'task' || step.command === 'schedule') && !alreadyExecuted.includes(step.command)) {
+            const argsFilled = (step.args || '').replace(/\{(\w+)\}/g, (_, k) => k === 'time' ? extractTime(input) : '');
+            const finalArgs = (step.command === 'schedule' && !argsFilled.includes('--task') && !argsFilled.includes('--all'))
+              ? argsFilled + ' --all' : argsFilled;
+            if (finalArgs.trim()) await autoExecute(step.command, finalArgs.trim(), false);
+          }
         }
       }
       await askHtml(input);
