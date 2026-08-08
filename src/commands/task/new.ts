@@ -130,9 +130,10 @@ async function createSingleTask(options: TaskNewOptions): Promise<void> {
     const iterationDir = await getIterationDir(iteration);
     
     // Determine task ID (使用 --topic 英文主题词)
-    const { id: taskId } = options.id 
+    const { id: rawId } = options.id 
       ? { id: options.id.replace(/^Task-/, '') } 
       : await nextTaskId(options.topic);
+    const taskId = rawId.replace(/^Task-/, '');
     const taskDir = join(iterationDir, '030-tasks', `Task-${taskId}`);
 
     if (await pathExists(taskDir)) {
