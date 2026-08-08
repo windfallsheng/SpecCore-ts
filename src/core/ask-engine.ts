@@ -603,12 +603,28 @@ function handlePipeline(input: string): AskResult {
 }
 
 function buildPipelineDetail(steps: PipelineStep[], input: string): string {
-  // 判断: 第一步是 task new → 只执行创建，其余为建议
-  const isTaskCreation = steps[0]?.command === 'task' && steps[0]?.args?.includes('new');
+  // fill template placeholders
+  const fill = (s: string) => s.replace(/\{(\w+)\}/g, (_: string, k: string) => {
+    if (k === 'time') return extractTime(input);
+    if (k === 'batch') { const m = input.match(/(\d+)[批次个]/); return m ? m[1] : '5'; }
+    if (k === 'iteration') {
+      const m = input.match(/Iteration[- ]?\S+|Q\d+|sample/i);
+      return m ? m[0].replace(/^Iteration[- ]?/, '') : '';
+    }
+    if (k === 'task') {
+      const tm = input.match(/(?:任务|Task)\s*(\d+[,.，、\s]*\d*)/i);
+      return tm ? tm[1] : '';
+    }
+    return '';
+  });
 
-  if (isTaskCreation && steps.length > 1) {
-    const immediate = steps[0];
-    const recommended = steps.slice(1);
+  const filledSteps = steps.map(s => ({ ...s, args: s.args ? fill(s.args) : '' }));
+  // 判断: 第一步是 task new → 只执行创建，其余为建议
+  const isTaskCreation = filledSteps[0]?.command === 'task' && filledSteps[0]?.args?.includes('new');
+
+  if (isTaskCreation && filledSteps.length > 1) {
+    const immediate = filledSteps[0];
+    const recommended = filledSteps.slice(1);
     const lines = [
       `📋 执行计划 (来源: "${input}")`,
       ``,
@@ -633,7 +649,7 @@ function buildPipelineDetail(steps: PipelineStep[], input: string): string {
   return [
     `📋 执行计划 (来源: "${input}")`,
     ``,
-    ...steps.map(s =>
+    ...filledSteps.map(s =>
       `  ${s.order}. speccore ${s.command}${s.args ? ' ' + s.args : ''}` +
       (s.dependsOn ? `  ← 依赖步骤 ${s.dependsOn}` : '') +
       `\n     ${s.explanation}`
