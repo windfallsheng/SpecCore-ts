@@ -63,14 +63,6 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
         const { version } = require('../../package.json');
         await writeFile(verFile, JSON.stringify({ version, updatedAt: new Date().toISOString() }, null, 2));
 
-        // 重置首次引导标记 → 下次 ask 重新展示引导页
-        try {
-          const onboardMarker = join(speccoreDir, 'local', '.ask-onboarded');
-          if (await require('fs-extra').pathExists(onboardMarker)) {
-            await require('fs-extra').remove(onboardMarker);
-          }
-        } catch {}
-
         // 安装/更新调度守护进程（macOS LaunchAgent / Linux crontab / Windows Task Scheduler）
         try {
           const { installSystemSchedule } = await import('./schedule');
@@ -1084,11 +1076,10 @@ async function askUser(prompt: string): Promise<string> {
 
 export async function createToolIntegrations(projectRoot: string, toolFilter?: string): Promise<void> {
   const commands: [string, string, string][] = [
-    ['spec-ask', 'SpecCore AI Router', '1. Execute: speccore ask "${1:描述你的需求}"\n2. If output has [SPECCORE_ONBOARD:path] → present the HTML file\n3. If [SPECCORE_INTENT] → show to user, wait for confirm\n4. If [SPECCORE_EXEC:cmd] → execute the command'],
-    ['spec-about', '版本信息 & 升级亮点 & 文档链接', 'Execute: speccore about. Output file:// link → click to open. [SPECCORE_ABOUT:path] → present_files.'],
+    ['spec-ask', 'SpecCore AI Router', '1. Read .speccore/CONSTITUTION.md for project context\n2. Read .speccore/local/context.json for current iteration\n3. Execute: speccore ask "${1:描述你的需求}"'],
     ['spec-welcome', '显示项目名片（HTML页面）', 'speccore welcome'],
+    ['spec-help', '显示命令帮助中心（HTML页面）', 'speccore help'],
     ['spec-dashboard', '显示全局仪表盘（HTML页面）', 'speccore dashboard --scope global'],
-    ['spec-about', '版本信息 & 升级亮点 & 文档链接', 'speccore about'],
     ['spec-init', '初始化项目 或 升级命令文件: --update', 'speccore init'],
     ['spec-doc2spec', '导入需求文档: 文件=${1:PRD.docx} 迭代=${2:Q1}', 'speccore doc2spec -f ${1:PRD.docx} --iter ${2:Q1}'],
     ['spec-analyze', 'SpecCore Analysis', '1. Read 010-requirements/ for all platform docs\n2. Ask user for iteration name if not provided\n3. Execute: speccore analyze -I ${1:Q1} --task ${2:Task-001}\n4. Present analysis report and ask for confirmation'],
@@ -1278,7 +1269,7 @@ export async function cleanupStaleFiles(
  * 生成 AGENTS.md — 跨工具通用上下文文件。
  * Cursor / Copilot / Windsurf / Codex 原生支持，Claude Code 通过 CLAUDE.md 引用。
  */
-export async function writeAgentsMd(projectRoot: string): Promise<void> {
+async function writeAgentsMd(projectRoot: string): Promise<void> {
   const { writeFile: wf, pathExists } = require('fs-extra');
   const content = `# AGENTS.md — SpecCore 项目规则
 
@@ -1289,9 +1280,8 @@ export async function writeAgentsMd(projectRoot: string): Promise<void> {
 SpecCore 规范驱动开发项目。
 
 ## 核心工作方式
-- **一切意图走 \`speccore ask\`**。不管用户说什么（切换/分析/计划/开发/查询），AI 第一反应必须是 \`execute_command("speccore ask '用户原话'")\`。
-- \`speccore ask\` 输出标签 → AI 跟随标签执行：\`[SPECCORE_EXEC: <cmd>]\` → \`execute_command\`；\`[SPECCORE_ONBOARD: <path>]\` → \`present_files\`；\`[SPECCORE_INTENT]\` → 展示并等确认。
-- **所有确定性操作通过 \`speccore\` CLI 完成**（创建目录、读写文件、校验格式、知识库验证）。
+- **AI 只拼命令，不执行命令**。识别用户意图后，输出 \`speccore\` CLI 命令给用户在终端执行。
+- **所有确定性操作通过 \`speccore\` CLI 完成**（创建目录、读写文件、校验格式）。
 - **代码生成通过宿主 AI 完成**，CLI 负责准备 Spec 上下文和写入文件。
 
 ## 项目结构
@@ -1318,16 +1308,6 @@ Iteration-NNN-name/            ← 迭代目录
 | 执行任务 | \`speccore execute -t <task> --force\` |
 | 查看进度 | \`speccore dashboard\` |
 | 任务回顾 | \`speccore retro --task <task>\` |
-
-## SpecCore 输出标记
-当执行 \`speccore ask\` 或 \`speccore about\` 时，会输出以下标记，按优先级处理：
-| 标记 | 含义 | 动作 |
-|:---|:---|:---|
-| \`[SPECCORE_ONBOARD: <path>]\` | 首次/升级引导页 | **最先处理**，用 present_files 展示 HTML |
-| \`[SPECCORE_ABOUT: <path>]\` | 版本信息页 | 用 present_files 展示 |
-| \`[SPECCORE_MODE: <mode>]\` | 意图模式 | 识别模式后进入对应流程 |
-| \`[SPECCORE_EXEC: <cmd>]\` | 自动执行命令 | 直接 execute_command |
-| \`[SPECCORE_INTENT]\` | 意图确认块 | 展示给用户确认 |
 
 ## 行为约束
 - **不要自己创建目录** — 用 \`speccore iteration create\`

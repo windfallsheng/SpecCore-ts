@@ -10,8 +10,7 @@ const CURRENT_VERSION = require('../../package.json').version;
 
 // ── 当前版本的命令列表 ──
 const ALL_COMMANDS: [string, string, string][] = [
-  ['spec-ask', 'AI万能入口', '1. Execute: speccore ask "${1:描述你的需求}"\n2. Handle [SPECCORE_ONBOARD:path] → present_files, [SPECCORE_INTENT] → ask user, [SPECCORE_EXEC:cmd] → execute'],
-  ['spec-about', '版本信息 & 升级亮点 & 文档链接', 'Execute: speccore about\nShow the file:// link or [SPECCORE_ABOUT:path] → present_files'],
+  ['spec-ask', 'AI万能入口', 'speccore ask --web "${1:查看进度}"'],
   ['spec-welcome', '项目名片', 'speccore welcome --web'],
   ['spec-dashboard', '全局仪表盘', 'speccore dashboard --scope global --web'],
   ['spec-init', '初始化项目', 'speccore init'],
@@ -163,9 +162,11 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
 
   // 4c. 更新 AGENTS.md / CLAUDE.md
   try {
-    const { writeAgentsMd } = await import('./init');
-    await writeAgentsMd(projectRoot);
-    await require('fs-extra').writeFile(join(projectRoot, 'CLAUDE.md'), '<!-- 规则请参考 AGENTS.md -->\n\n@AGENTS.md\n');
+    const agentsSrc = join(__dirname, '..', '..', 'AGENTS.md');
+    if (await pathExists(agentsSrc)) {
+      await require('fs-extra').copy(agentsSrc, join(projectRoot, 'AGENTS.md'), { overwrite: true });
+      await require('fs-extra').writeFile(join(projectRoot, 'CLAUDE.md'), '<!-- 规则请参考 AGENTS.md -->\n\n@AGENTS.md\n');
+    }
   } catch {}
 
   // 4d. 清理旧版本残留的命令文件和 Skill 目录
@@ -176,12 +177,6 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   try {
     const { installSystemSchedule } = await import('./schedule');
     await installSystemSchedule();
-  } catch {}
-
-  // 4f. 重置首次引导标记 → 下次 ask 重新展示引导页
-  try {
-    const marker = join(speccoreDir, 'local', '.ask-onboarded');
-    if (await require('fs-extra').pathExists(marker)) await require('fs-extra').remove(marker);
   } catch {}
 
   spinner.stop(`升级完成: v${oldVersion} → v${CURRENT_VERSION}`);

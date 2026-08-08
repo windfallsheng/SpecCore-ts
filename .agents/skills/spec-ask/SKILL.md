@@ -14,12 +14,12 @@ disable-model-invocation: false
 - 禁止在 pipeline 未完成时跳到下一步
 - 禁止无用户确认时执行破坏性操作
 - 禁止输出 speccore 命令给用户
+- 禁止重复执行已完成的 SPECCORE_AUTO_RESULT
 
 # SpecCore Ask — 可执行编排引擎 v4
 
 > **你的身份**: 你就是宿主 AI。你的任务是：理解用户意图 → 调用 CLI --prompt → 自己生成内容 → 调 CLI --response 写入。  
 > 你不是在"描述"流程，你就是在**执行**流程。不要调用外部 AI，你自己就是那个"AI 生成"环节的负责者。
-> **每次用户调用 /spec-ask 都必须执行 speccore ask，不可以跳过、缓存或说"已执行过"。**
 
 ---
 
@@ -55,13 +55,7 @@ disable-model-invocation: false
 
 ```
 执行: speccore ask "{用户输入}"
-
-⚠️ 先处理 HTML 标记（优先于 SPECCORE_MODE）:
-  [SPECCORE_ONBOARD:<path>] → present_files 展示引导页
-  [SPECCORE_ABOUT:<path>]    → present_files 展示版本信息
-  同时输出 📄 file://... 让用户点击
-
-然后从 stdout 提取 [SPECCORE_MODE: xxx] → 进对应分支
+从 stdout 第一行提取 [SPECCORE_MODE: xxx] → 进对应分支
 若无标记 → 用步骤 0 标准判断
 ```
 
@@ -122,9 +116,8 @@ A6. 写入:
 ## 分支 D: pipeline (≤5 步)
 
 ```
-D1. 展示 SPECCORE_INTENT，等确认 → 用户确认后必须进入 D2，禁止输出命令文本
-D2. 逐步执行：原输出中的 [SPECCORE_EXEC: cmd] 逐条 execute_command
-    每步走 A3-A6（执行→生成→自检→写回）
+D1. 展示计划，等确认
+D2. 逐步执行（每步走 A3-A6）
 D3. 步间: Read 产出文件 → 提取参数 → 传下一步
 ```
 
@@ -140,7 +133,6 @@ D3. 步间: Read 产出文件 → 提取参数 → 传下一步
 
 ## 步骤 4: 总结
 
-**🔴 仅输出当前操作生成的 HTML 文件链接**（如 `[SPECCORE_ABOUT: path]` 或 `[SPECCORE_ONBOARD: path]` 中的路径），不要扫描所有 `speccore-*.html`。
 ```
 展示: 文件列表 + 警告 + 下一步推荐
 询问继续
