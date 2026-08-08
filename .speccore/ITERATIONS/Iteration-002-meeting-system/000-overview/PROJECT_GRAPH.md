@@ -1,9 +1,9 @@
 # 本期任务总览
 
-> 迭代：Iteration-001-meeting-system
+> 迭代：Iteration-002-meeting-system
 > 时间范围：未指定 ~ 未指定
 > 迭代状态：🔄 进行中
-> 负责人：luzhaosheng
+> 负责人：test
 > 默认分支: 继承全局配置
 
 ## 任务列表
