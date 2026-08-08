@@ -30,6 +30,14 @@ speccore ask "<自然语言描述>"
 ```
 四种模式自动识别: 📖命令解释 / 🗺️任务指引 / 🎯意图匹配 / ⚡复杂编排
 
+**双模式确认**: 未说"自主/一键"→ 展示理解等确认；说了自主 → 确认后全自动执行
+
+### 🏷️ about — 版本信息
+```bash
+speccore about
+```
+生成 HTML 版本信息页：功能概览 + 近期亮点 + 里程碑 + 文档链接
+
 ### 🏷️ welcome — 项目名片
 ```bash
 speccore welcome [--web] [--output <path>]
@@ -172,9 +180,17 @@ speccore task status
 ```
 别名: `tk`
 
-### schedule
+### ⏰ schedule — 定时调度
 ```bash
-speccore schedule create --at <datetime> [--batch-size <n>]
-speccore schedule list
-speccore schedule cancel <id>
+speccore schedule create --at "22:00" [--all] [-t <task>] [--batch-size <n>]
+speccore schedule list [--status pending|completed|failed]
+speccore schedule detail --id <id>
+speccore schedule cancel --id <id>
+speccore schedule retry --id <id> [--at "新时间"]
+speccore schedule delete --id <id>
+speccore schedule daemon start|stop|status
 ```
+- 跨平台守护：macOS LaunchAgent / Linux crontab / Windows Task Scheduler
+- 懒启动：create 自动安装守护并启动；无 pending 任务自动停
+- 多调度并存，各自独立管理
+- retry：任务未触发时可重调度
