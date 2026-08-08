@@ -1289,7 +1289,8 @@ export async function writeAgentsMd(projectRoot: string): Promise<void> {
 SpecCore 规范驱动开发项目。
 
 ## 核心工作方式
-- **AI 跟随 CLI 输出的标签执行**。\`speccore ask\` 输出 \`[SPECCORE_EXEC: <cmd>]\` → AI 用 \`execute_command\` 执行；输出 \`[SPECCORE_ONBOARD]\` → AI 用 \`present_files\` 展示 HTML；输出 \`[SPECCORE_INTENT]\` → AI 展示等确认。
+- **一切意图走 \`speccore ask\`**。不管用户说什么（切换/分析/计划/开发/查询），AI 第一反应必须是 \`execute_command("speccore ask '用户原话'")\`。
+- \`speccore ask\` 输出标签 → AI 跟随标签执行：\`[SPECCORE_EXEC: <cmd>]\` → \`execute_command\`；\`[SPECCORE_ONBOARD: <path>]\` → \`present_files\`；\`[SPECCORE_INTENT]\` → 展示并等确认。
 - **所有确定性操作通过 \`speccore\` CLI 完成**（创建目录、读写文件、校验格式、知识库验证）。
 - **代码生成通过宿主 AI 完成**，CLI 负责准备 Spec 上下文和写入文件。
 
