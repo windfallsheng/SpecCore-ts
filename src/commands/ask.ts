@@ -191,23 +191,38 @@ export async function askCommand(input: string, _options: any): Promise<void> {
     // 不 return，继续执行后续 ask 逻辑 — 仪式感 + 照常工作
   }
 
-  const { understandIntent } = await import('../core/ask-engine');
-  const intent = await understandIntent(input);
-  const result = intent.result;
+  const { synthesizeIntent } = await import('../core/ask-engine');
+  const synth = await synthesizeIntent(input);
+  const intent = synth;
+  const result = synth.result;
   // 始终输出模式标记到 stdout，供 Skill/编排器解析
   process.stdout.write(`[SPECCORE_MODE: ${result.mode}]\n`);
 
   // ── 意图确认：把 AI 理解的内容展示给用户，用户确认后再拼命令 ──
   // AI 上下文输出结构化确认信息；TTY 交互式确认
   const intentSummary: string[] = [];
-  intentSummary.push(`🧠 来源: ${intent.source} | 置信度: ${intent.confidence}%`);
-  intentSummary.push(`📝 理解: ${intent.what}`);
-  if (intent.gaps.length > 0) {
-    intentSummary.push(`⚠️ 可能的问题:`);
-    for (const g of intent.gaps) intentSummary.push(`   - ${g}`);
+  intentSummary.push(`🧠 来源: ${synth.source} | 置信度: ${synth.confidence}%`);
+  intentSummary.push(`📝 理解: ${synth.what}`);
+  // 展示 AI 自动补全的内容
+  if (synth.autoFilled.length > 0) {
+    intentSummary.push(`\n✏️ AI 自动补全:`);
+    for (const a of synth.autoFilled) {
+      intentSummary.push(`   ${a.field} → "${a.value}"  (${a.reason})`);
+    }
   }
-  if (result.detail) intentSummary.push(`\n${result.detail.split('\n').slice(0, 10).join('\n')}`);
-  if (result.commands?.length) intentSummary.push(`\n🔧 将执行: ${result.commands.join(' → ')}`);
+  // 展示最终命令
+  if (synth.finalCommands.length > 0) {
+    intentSummary.push(`\n🔧 将执行:`);
+    for (const c of synth.finalCommands) {
+      intentSummary.push(`   speccore ${c.command} ${c.args}  ← ${c.explanation}`);
+    }
+  }
+  // 展示真正的问题
+  if (synth.questions.length > 0) {
+    intentSummary.push(`\n❓ 需要确认:`);
+    for (const q of synth.questions) intentSummary.push(`   ${q}`);
+  }
+  if (result.detail) intentSummary.push(`\n${result.detail.split('\n').slice(0, 8).join('\n')}`);
   if (result.mode === 'pipeline' && result.pipeline?.steps) {
     intentSummary.push(`\n📋 步骤 (${result.pipeline.steps.length}): `);
     for (const s of result.pipeline.steps) {
@@ -222,7 +237,7 @@ export async function askCommand(input: string, _options: any): Promise<void> {
     process.stdout.write(`[SPECCORE_INTENT]\n${intentSummary.join('\n')}\n[SPECCORE_INTENT_END]\n`);
   }
   // AI 上下文且有确认需求 → 等待用户确认
-  if (isAiContext() && result.pipeline?.confirm) {
+  if (isAiContext() && synth.needsConfirm) {
     process.stdout.write(`[SPECCORE_CONFIRM_NEEDED]
 请确认以上计划是否正确。
   ✅ 确认: 回复 "确认" 或 "y" 或 "开始"
