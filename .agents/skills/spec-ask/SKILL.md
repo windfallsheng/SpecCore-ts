@@ -20,6 +20,7 @@ disable-model-invocation: false
 
 > **你的身份**: 你就是宿主 AI。你的任务是：理解用户意图 → 调用 CLI --prompt → 自己生成内容 → 调 CLI --response 写入。  
 > 你不是在"描述"流程，你就是在**执行**流程。不要调用外部 AI，你自己就是那个"AI 生成"环节的负责者。
+> **每次用户调用 /spec-ask 都必须执行 speccore ask，不可以跳过、缓存或说"已执行过"。**
 
 ---
 
