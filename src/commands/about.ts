@@ -133,6 +133,7 @@ ${milestonesHtml}
   await writeFile(outPath, html);
 
   logger.success(`📖 ${outPath}`);
+  logger.info(`   📄 file://${outPath}`);
   logger.info(`   Speccore v${ver} · ${process.platform} · Node ${process.version}`);
   process.stdout.write(`[SPECCORE_ABOUT: ${outPath}]\n`);
 }
