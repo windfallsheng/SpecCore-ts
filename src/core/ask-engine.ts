@@ -1048,9 +1048,22 @@ function modeLabel(mode: AskMode): string {
 
 /** 从用户输入中提取时间 → YYYY-MM-DD HH:mm:ss */
 export function extractTime(input: string): string {
-  const m = input.match(/(?:晚|早上|上午|下午|中午)?\s*(\d{1,2})[点时]/);
   const now = new Date();
   const target = new Date(now);
+
+  // 优先匹配 HH:MM 格式（如 "17:15"、"17:02"）
+  const colonMatch = input.match(/(\d{1,2}):(\d{2})/);
+  if (colonMatch) {
+    const hour = parseInt(colonMatch[1]);
+    const min = parseInt(colonMatch[2]);
+    target.setHours(hour, min, 0, 0);
+    if (target.getTime() < now.getTime()) target.setDate(target.getDate() + 1);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${target.getFullYear()}-${pad(target.getMonth() + 1)}-${pad(target.getDate())} ${pad(target.getHours())}:${pad(target.getMinutes())}:${pad(target.getSeconds())}`;
+  }
+
+  // 匹配中文格式（如 "晚8点"、"下午3点"）
+  const m = input.match(/(?:晚|早上|上午|下午|中午)?\s*(\d{1,2})[点时]/);
   if (m) {
     let hour = parseInt(m[1]);
     if (/晚|晚上|下午/.test(input) && hour < 12) hour += 12;
