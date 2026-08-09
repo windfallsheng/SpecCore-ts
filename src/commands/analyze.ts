@@ -503,11 +503,19 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
   const includeDocs = isTask ? (DOC_MATRIX[taskType] || DOC_MATRIX['feature']) : DOC_MATRIX['feature'];
   const taskDocs = docs.filter(([n]) => includeDocs.includes(n));
 
-  let prompt = `\n# 任务: ${command}${task} (${taskDocs.length}个文档)\n\n`;
-  prompt += `## 要求\n1. Read 010-requirements/ 和 PRD/PRD.md 等所有需求文档\n`;
+  let prompt = `\n# 任务: ${command}${task} (${taskDocs.length}个文档 · ${isTask ? `类型:${taskType}` : '迭代全量'})\n\n`;
+  prompt += `## 分析范围说明\n`;
+  if (isTask) {
+    prompt += `- 当前是**任务级分析**，类型为 \`${taskType}\`，只需产出 ${taskDocs.length} 个文档：${taskDocs.map(([n]) => n).join('、')}\n`;
+    prompt += `- bugfix: 聚焦根因分析和修复验证；research: 聚焦技术调研；review: 聚焦代码审查\n`;
+    prompt += `- feature/refactor: 全量分析（功能、接口、数据、规则）\n`;
+  } else {
+    prompt += `- 当前是**迭代级分析**，需产出全部 7 个文档，覆盖需求→技术→测试→评审→风险→依赖→监控\n`;
+  }
+  prompt += `\n## 要求\n1. Read 010-requirements/ 和 PRD/PRD.md 等所有需求文档\n`;
   prompt += `2. 读懂需求文档后，对每个文档填入实质内容。内容来自你对需求的理解，不是找现成格式\n`;
   prompt += `3. 每个文档都要具体内容（禁止"待填充"），即使文档中没有现成表格也要输出分析结果\n`;
-  prompt += `3. 写入: speccore analyze --apply '{"ANALYSIS.md":"...","TECH.md":"..."}' -I ${iter}\n\n`;
+  prompt += `4. 写入: speccore analyze --apply '{"${taskDocs.map(([n]) => `${n}":"..."`).join(',')}...}' -I ${iter}\n\n`;
   for (let i = 0; i < taskDocs.length; i++) {
     prompt += `### ${i+1}/${taskDocs.length}: ${taskDocs[i][0]}\n\`\`\`markdown\n${taskDocs[i][1]}\n\`\`\`\n\n`;
   }
