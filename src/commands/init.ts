@@ -63,6 +63,14 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
           await require('fs-extra').copy(skillsSrc, skillsDest, { overwrite: true });
         }
 
+        // 更新 Spec 文档模板（7 个专业模板）
+        const specsSrc = join(__dirname, '..', '..', '.speccore', 'PATTERNS', 'TEMPLATES', 'specs');
+        const specsDest = join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'specs');
+        if (await pathExists(specsSrc)) {
+          await ensureDir(specsDest);
+          await require('fs-extra').copy(specsSrc, specsDest, { overwrite: true });
+        }
+
         // 更新 AGENTS.md / CLAUDE.md / AI-RULES.md
         await writeAgentsMd(projectRoot);
         await writeFile(join(projectRoot, 'CLAUDE.md'), '<!-- 规则请参考 AGENTS.md -->\n\n@AGENTS.md\n');
@@ -139,6 +147,7 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
     await ensureDir(join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'auth'));
     await ensureDir(join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'export'));
     await ensureDir(join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'report'));
+    await ensureDir(join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'specs'));
     await ensureDir(join(speccoreDir, 'GLOBAL', 'BASELINES'));
 
     // Create default files
