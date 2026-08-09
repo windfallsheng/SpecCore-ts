@@ -15,13 +15,14 @@
 | `[SPECCORE_INTENT]` | 展示给用户确认 |
 
 ## 关键命令
-| 命令 | 用途 | 需要 --prompt |
-|:---|:---|:---:|
-| `analyze` | 分析任务需求 | ✅ |
-| `plan` | 制定开发计划 | ✅ |
-| `execute` | 执行开发任务 | ✅ |
-| `context --set` | 切换迭代上下文 | ❌ |
-| `dashboard` | 查看进度 | ❌ |
+| 命令 | 用途 | 类型 | 说明 |
+|:---|:---|:---|:---|
+| `analyze --prompt` | 分析任务需求 | **AI** | 需要宿主 AI 交互，不能直接在终端运行 |
+| `plan --prompt` | 制定开发计划 | **AI** | 需要宿主 AI 交互，不能直接在终端运行 |
+| `execute --prompt` | 执行开发任务 | **AI** | 需要宿主 AI 交互，不能直接在终端运行 |
+| `split --prompt` | 拆分任务 | **AI** | 需要宿主 AI 交互，不能直接在终端运行 |
+| `context --set` | 切换迭代上下文 | **CLI** | 可在终端直接输入 |
+| `dashboard` | 查看进度 | **CLI** | 可在终端直接输入 |
 
 ## 🚫 已废弃，不得使用
 - `schedule`, `schedule create`, `schedule daemon` — **全部废弃**，任何场景都不要推荐

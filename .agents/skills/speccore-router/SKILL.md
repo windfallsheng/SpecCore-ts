@@ -100,7 +100,7 @@ allowed-tools: ["Bash", "Read", "Write", "Edit"]
 | 导出全部 Spec | iter? | `speccore spec2doc -i {iter} --all -o {name}.docx` |
 
 ### 需求分析
-| 用户说法 | 提取参数 | CLI 命令 |
+| 用户说法 | 提取参数 | AI 上下文（需宿主AI交互） |
 | :--- | :--- | :--- |
 | 分析需求/检查需求 | iter?, task? | `speccore analyze -I {iter}` |
 | 分析 {iter} 的需求 | iter | `speccore analyze -I {iter}` |
@@ -109,7 +109,7 @@ allowed-tools: ["Bash", "Read", "Write", "Edit"]
 | 评审需求 | iter? | `speccore analyze -I {iter}` |
 
 ### 任务拆分
-| 用户说法 | 提取参数 | CLI 命令 |
+| 用户说法 | 提取参数 | AI 上下文（需宿主AI交互） |
 | :--- | :--- | :--- |
 | 拆分任务/拆解需求 | iter, owner? | `speccore iteration split -I {iter}` |
 | 分配任务 | iter, owner? | `speccore iteration split -I {iter} --owner {owner}` |
@@ -117,7 +117,7 @@ allowed-tools: ["Bash", "Read", "Write", "Edit"]
 | 生成任务列表 | iter | `speccore iteration split -I {iter}` |
 
 ### 执行开发
-| 用户说法 | 提取参数 | CLI 命令 |
+| 用户说法 | 提取参数 | AI 上下文（需宿主AI交互） |
 | :--- | :--- | :--- |
 | 执行 {task}/开发 {task} | task | `speccore execute -t {task} --force` |
 | 执行全部/全部开发 | - | `speccore execute --all --force` |

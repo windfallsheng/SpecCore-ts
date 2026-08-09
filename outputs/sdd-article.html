@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>从 Vibe Coding 到 Spec Coding</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Inter:wght@400;500;600&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: 'Noto Sans SC', 'Inter', -apple-system, sans-serif;
+    font-size: 16px; line-height: 1.85; color:#2c2c2a;
+    max-width: 720px; margin:0 auto; padding:40px 20px 80px;
+    background: #fff;
+  }
+  h1 { font-size: 28px; font-weight:700; margin: 40px 0 12px; line-height: 1.4; text-align:center; }
+  h2 { font-size: 22px; font-weight:600; margin: 48px 0 16px; padding-bottom: 8px; border-bottom: 1px solid #e8e5dc; }
+  h3 { font-size: 18px; font-weight:600; margin: 32px 0 12px; }
+  p { margin: 16px 0; }
+  blockquote {
+    border-left: 3px solid #378ADD; background: #f8f9fb;
+    padding: 12px 20px; margin: 20px 0; color: #5f5e5a; font-size: 15px;
+  }
+  img { max-width: 100%; margin: 24px 0; border-radius: 8px; border: 1px solid #e8e5dc; }
+  table { width:100%; border-collapse:collapse; margin:20px 0; font-size:14px; }
+  th, td { border: 1px solid #e8e5dc; padding: 10px 14px; text-align:left; }
+  th { background: #f8f9fb; font-weight:600; font-size:13px; color:#5f5e5a; }
+  td { color:#2c2c2a; }
+  code { background:#f0eeeb; padding:2px 6px; border-radius: 4px; font-size:14px; font-family:'SF Mono','Menlo',monospace; }
+  pre { background:#2c2c2a; color:#e8e5dc; padding:16px 20px; border-radius:8px; overflow-x:auto; font-size:13px; line-height:1.6; margin:20px 0; }
+  pre code { background:transparent; padding:0; color:inherit; }
+  .highlight-box {
+    background: linear-gradient(135deg, #e6f1fb, #e1f5ee);
+    border: 1px solid #b5d4f4; border-radius: 12px;
+    padding: 24px; margin: 24px 0;
+  }
+  .highlight-box h3 { margin-top: 0; }
+  .principles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 24px 0; }
+  .principle-card {
+    background: #f8f9fb; border: 1px solid #e8e5dc; border-radius: 12px;
+    padding: 20px; text-align: center;
+  }
+  .principle-card h4 { font-size: 15px; font-weight:600; margin-bottom: 8px; }
+  .principle-card p { font-size: 13px; color:#5f5e5a; margin:0; }
+  .comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 24px 0; }
+  .comparison > div {
+    border: 1px solid #e8e5dc; border-radius: 12px; padding: 24px;
+  }
+  .comparison h4 { font-size: 16px; font-weight:600; margin-bottom: 12px; }
+  .comparison ul { list-style:none; padding:0; }
+  .comparison li { padding: 6px 0; font-size:14px; border-bottom:1px solid #f0eeeb; }
+  .comparison li::before { content:'• '; color:#378ADD; font-weight:bold; }
+  .red li::before { color:#e24b4a; }
+  .green li::before { color:#639922; }
+  .tag {
+    display: inline-block; padding:2px 10px; border-radius:12px;
+    font-size:12px; font-weight:500; margin-right:6px;
+  }
+  .tag-blue { background:#e6f1fb; color:#185fa5; }
+  .tag-green { background:#eaf3de; color:#3b6d11; }
+  .tag-purple { background:#eeedfe; color:#534ab7; }
+  .footer {
+    margin-top: 60px; padding-top: 24px; border-top: 1px solid #e8e5dc;
+    text-align:center; font-size:13px; color:#888780;
+  }
+  @media (max-width: 600px) {
+    .principles { grid-template-columns: 1fr; }
+    .comparison { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<h1>从 Vibe Coding 到 Spec Coding<br>SpecCore 重塑 AI 研发工程化</h1>
+
+<blockquote>
+当 AI 编程从个人玩具走向团队协作，从一次性脚本走向持续交付，
+我们需要的不只是一个更强的模型，而是一套完整的工程纪律。
+</blockquote>
+
+<h2>一、Vibe Coding 的甜蜜与痛苦</h2>
+
+<p>
+2025 年初，Andrej Karpathy 提出了一个概念——<strong>Vibe Coding</strong>。
+不用写设计文档，不用画架构图，不用定义接口。
+对着 AI 说一句"帮我写一个会议室管理系统"，一个下午就能跑起来一个包含登录、CRUD、权限的完整后台。
+</p>
+
+<p>
+听起来很美。直到三个月后：
+</p>
+
+<div class="comparison">
+  <div class="red">
+    <h4 style="color:#e24b4a;">Vibe Coding 的隐患</h4>
+    <ul>
+      <li>代码风格混乱，新人读不懂</li>
+      <li>边界条件全部遗漏</li>
+      <li>架构随每次对话漂移</li>
+      <li>新增需求时 AI 完全不理解历史逻辑</li>
+      <li>需求变更影响不可追踪</li>
+      <li>团队协作上下文断裂</li>
+    </ul>
+  </div>
+  <div class="green">
+    <h4 style="color:#639922;">我们需要的</h4>
+    <ul>
+      <li>统一的代码风格规范</li>
+      <li>完整的边界条件覆盖</li>
+      <li>稳定的架构约束</li>
+      <li>AI 每次拿到精确的上下文</li>
+      <li>需求变更可以精确追溯</li>
+      <li>知识可以跨项目复用</li>
+    </ul>
+  </div>
+</div>
+
+<p>
+这就是我们说的<strong>90 天墙</strong>（90-Day Wall）：
+Vibe Coding 的产出三个月后，代码库进入不可维护状态。
+不是 AI 不够强——问题在于<strong>信息没有结构化</strong>。
+</p>
+
+<img src="./images/01-vibe-vs-spec.png" alt="Vibe Coding vs Spec Coding 对比图" />
+
+<h2>二、SDD：从"感觉驱动"到"规范驱动"</h2>
+
+<h3>Spec-Driven Development 的起源</h3>
+
+<p>
+SDD（Specification-Driven Development）并不是新概念。
+早在 1990 年代，形式化方法（Formal Methods）就在航空航天、金融交易等安全关键领域使用。
+但传统 SDD 的代价太高——写一份完整的形式化 Spec 往往比写代码本身还耗时。
+</p>
+
+<p>
+<strong>AI 改变了这个等式。</strong>
+当 AI 可以在 5 分钟内从需求文档生成一份结构化的 Spec，
+SDD 不再是成本负担，而是效率杠杆。
+</p>
+
+<div class="principles">
+  <div class="principle-card">
+    <h4>No Spec, No Code</h4>
+    <p>没有规范文档，不准 AI 写一行代码。Spec 是代码的准生证。</p>
+  </div>
+  <div class="principle-card">
+    <h4>Spec is Truth</h4>
+    <p>文档与代码不一致时，错的一定是代码。Spec 是唯一事实源。</p>
+  </div>
+  <div class="principle-card">
+    <h4>Reverse Sync</h4>
+    <p>发现 Bug 或需求变更时，先修文档，再修代码。知识永不丢失。</p>
+  </div>
+</div>
+
+<h3>AI-SDD 的三层意义</h3>
+
+<table>
+  <tr>
+    <th>层次</th>
+    <th>传统开发</th>
+    <th>Vibe Coding</th>
+    <th>AI-SDD</th>
+  </tr>
+  <tr>
+    <td><strong>知识管理</strong></td>
+    <td>文档与代码分离，逐渐过时</td>
+    <td>无文档，知识随对话消失</td>
+    <td><span class="tag tag-green">Spec 即知识</span>文档与代码同仓版本化</td>
+  </tr>
+  <tr>
+    <td><strong>上下文管理</strong></td>
+    <td>靠人脑记忆项目全貌</td>
+    <td>AI 窗口爆满，断片重来</td>
+    <td><span class="tag tag-blue">原子任务</span> 2K-5K tokens 精确加载</td>
+  </tr>
+  <tr>
+    <td><strong>变更管理</strong></td>
+    <td>口头沟通，事后补文档</td>
+    <td>直接改代码，因果断裂</td>
+    <td><span class="tag tag-purple">反向同步</span> 先改 Spec 再改代码</td>
+  </tr>
+</table>
+
+<h2>三、SpecCore：AI-SDD 的工程实现</h2>
+
+<p>
+<a href="https://github.com/windfallsheng/SpecCore-ts">SpecCore</a> 是一套开源的 AI-SDD 工具链。
+它不替代 WorkBuddy / Trae / Qcoder 等 AI IDE，
+而是在<strong>这些宿主 AI 之上</strong>提供一套规范化的研发流程。
+</p>
+
+<p>
+核心理念九个字：
+<strong>宪法进规则，流程进技能，数据放项目。</strong>
+</p>
+
+<img src="./images/02-speccore-arch.png" alt="SpecCore 三层架构图" />
+
+<h3>三层分治架构</h3>
+
+<table>
+  <tr>
+    <th style="width:15%">层级</th>
+    <th style="width:25%">内容</th>
+    <th style="width:30%">职责</th>
+    <th>关键文件</th>
+  </tr>
+  <tr>
+    <td><span class="tag tag-blue">GLOBAL</span></td>
+    <td>全局宪法层</td>
+    <td>技术栈、命名规范、API 风格、异常码体系</td>
+    <td>CONSTITUTION.md · INDEX.md · PATTERNS/</td>
+  </tr>
+  <tr>
+    <td><span class="tag tag-green">ITERATION</span></td>
+    <td>期次规范层</td>
+    <td>需求、分析、计划、拆分——每次迭代的完整过程</td>
+    <td>010-requirements/ · 020-specs/ · 030-tasks/</td>
+  </tr>
+  <tr>
+    <td><span class="tag tag-purple">TASK</span></td>
+    <td>任务落地层</td>
+    <td>原子任务：REQ + TECH + TASK 自包含，2K-5K tokens</td>
+    <td>REQ.md · TECH.md · TASK.md</td>
+  </tr>
+</table>
+
+<h3>六个核心优势</h3>
+
+<div class="principles">
+  <div class="principle-card">
+    <h4>分层清晰</h4>
+    <p>GLOBAL/ITERATION/TASK 三层职责不交叉，每层只管自己该管的事</p>
+  </div>
+  <div class="principle-card">
+    <h4>原子任务</h4>
+    <p>每个 Task 自包含所有上下文，AI 不用加载整个项目就能精准完成任务</p>
+  </div>
+  <div class="principle-card">
+    <h4>反向同步</h4>
+    <p>L1/L2/L3 三级冲突裁决，代码与文档永不同步，支持紧急 Hotfix</p>
+  </div>
+  <div class="principle-card">
+    <h4>模式沉淀</h4>
+    <p>每个 Feature 完成后自动提取可复用模式，下次 AI 主动检索复用</p>
+  </div>
+  <div class="principle-card">
+    <h4>多端统一</h4>
+    <p>后台/H5/小程序共用一个需求文档，多端联动不改多份</p>
+  </div>
+  <div class="principle-card">
+    <h4>Git 原生</h4>
+    <p>纯 Markdown + YAML 驱动，零运行时依赖，任意 Git 平台可用</p>
+  </div>
+</div>
+
+<h2>四、一切走 ask：AI 与宿主的智能协作</h2>
+
+<p>
+SpecCore 的核心设计哲学是：<strong>不要让用户记命令，让 AI 自己拼命令。</strong>
+</p>
+
+<img src="./images/03-ai-collab.png" alt="AI 宿主协作流程图" />
+
+<p>
+<strong>工作流程：</strong>
+</p>
+
+<ol>
+  <li>用户在 IDE 中说"分析 Q1 的任务001，然后制定计划"</li>
+  <li><code>speccore ask</code> 输出知识库（KB）：所有可用命令和模板</li>
+  <li>宿主 AI 读 KB，理解意图，拼出两条命令</li>
+  <li><strong>展示计划给用户确认</strong>（非自动模式每步必确认）</li>
+  <li>调用 <code>execute_command</code> 逐步执行</li>
+</ol>
+
+<p>
+对于复杂意图，AI 还会自动拆分为多步骤管道：
+<code>analyze → plan → split → execute</code>（均为 🔒 AI 命令，需宿主 AI 交互），
+并在关键节点暂停，等待用户确认。
+</p>
+
+<p>
+关键的改变是：<strong>AI 不再"猜"用户要什么，而是拿到精确的 Spec 后去执行。</strong>
+</p>
+
+<h2>五、自动模式分级：精确控制自动化范围</h2>
+
+<p>
+SpecCore 的自动模式不是全有或全无。实际工作中，很多时候我们希望前几步自动跑，
+到了关键决策节点（比如执行代码生成）再停下来确认。
+</p>
+
+<img src="./images/04-auto-mode.png" alt="自动模式分级图" />
+
+<table>
+  <tr>
+    <th>模式</th>
+    <th>触发词示例</th>
+    <th>行为</th>
+  </tr>
+  <tr>
+    <td><span class="tag tag-blue">手动</span></td>
+    <td>默认（不说自动）</td>
+    <td>每步展示结果 → 用户确认 → 下一步</td>
+  </tr>
+  <tr>
+    <td><span class="tag tag-green">部分自动</span></td>
+    <td>"analyze 和 plan 自动，execute 前确认"</td>
+    <td>前两步连续执行，execute 前暂停等待</td>
+  </tr>
+  <tr>
+    <td><span class="tag tag-purple">全自动</span></td>
+    <td>"全自动执行" / "一键完成"</td>
+    <td>所有步骤不等确认，全流程自动</td>
+  </tr>
+</table>
+
+<h2>六、分析深度：七种 Spec 文档</h2>
+
+<p>
+一次完整的 feature 分析，SpecCore 会生成 <strong>7 种结构化文档</strong>，
+覆盖从需求到运维的全链路：
+</p>
+
+<table>
+  <tr><th>文档</th><th>内容</th><th>用途</th></tr>
+  <tr><td>ANALYSIS.md</td><td>功能点、接口清单、数据模型、业务规则、异常处理</td><td>需求分析报告</td></tr>
+  <tr><td>TECH.md</td><td>架构方案、DDL、API 设计、缓存策略、核心流程</td><td>技术方案决策</td></tr>
+  <tr><td>TEST.md</td><td>单元/集成/边界/性能测试用例</td><td>质量保证</td></tr>
+  <tr><td>REVIEW.md</td><td>安全检查（SQL注入/XSS/鉴权）、代码质量检查项</td><td>Code Review 清单</td></tr>
+  <tr><td>RISK.md</td><td>风险矩阵、缓解措施、回滚方案</td><td>风险管理</td></tr>
+  <tr><td>DEPS.md</td><td>上下游依赖、SLA 要求</td><td>依赖管理</td></tr>
+  <tr><td>MONITOR.md</td><td>业务监控指标、告警规则</td><td>运维监控</td></tr>
+</table>
+
+<p>
+bugfix / research 类型则精简为 3 个文档（ANALYSIS + TECH + TEST），
+避免过度文档化。
+</p>
+
+<h2>七、多项目管理：从单兵到军团</h2>
+
+<p>
+SpecCore 的 GLOBAL 层是跨项目的知识枢纽：
+</p>
+
+<pre><code>.speccore/
+  GLOBAL/
+    CONSTITUTION.md        # 所有项目共享的技术宪法
+    INDEX.md               # 需求跨项目目录
+    PATTERNS/              # 经验模式库（只增不减）
+  ITERATIONS/
+    Iteration-008-meeting-system/    # 会议室系统
+    Iteration-003-payment/           # 支付系统</code></pre>
+
+<p>
+每个 Feature 完成后，AI 会自动总结可复用模式写入 PATTERNS，
+下次遇到类似场景会说：<em>"这个登录功能我们之前做过，上次踩了 Redis 超时的坑，这次我帮你加上重试机制和降级策略。"</em>
+</p>
+
+<h2>八、实战数据</h2>
+
+<p>在一个会议室管理系统（4 个端、30+ API、7 张数据表）的完整开发中：</p>
+
+<table>
+  <tr><th>指标</th><th>Vibe Coding</th><th>SpecCore SDD</th></tr>
+  <tr><td>分析报告</td><td>无</td><td>7 个 Spec 文档 + ER 图 + SQL</td></tr>
+  <tr><td>任务拆分</td><td>手动 30 分钟</td><td>AI 自动拆分</td></tr>
+  <tr><td>上下文 tokens</td><td>15K-20K / 次</td><td>2K-5K / 次</td></tr>
+  <tr><td>需求变更追踪</td><td>不可追踪</td><td>反向同步 + 变更履历全记录</td></tr>
+  <tr><td>团队接手成本</td><td>数天阅读代码</td><td>读 Spec 文档即可理解</td></tr>
+</table>
+
+<h2>九、适用场景</h2>
+
+<div class="comparison">
+  <div class="green">
+    <h4 style="color:#639922;">强烈推荐</h4>
+    <ul>
+      <li>多端项目（后台 + H5 + 小程序）</li>
+      <li>团队协作（3 人以上）</li>
+      <li>长期维护项目（预期 6 个月以上）</li>
+      <li>企业级项目（有合规/安全要求）</li>
+      <li>需要知识沉淀的研发团队</li>
+    </ul>
+  </div>
+  <div class="red">
+    <h4 style="color:#e24b4a;">不推荐</h4>
+    <ul>
+      <li>一次性脚本 / 原型验证</li>
+      <li>单人玩具项目</li>
+      <li>极短期项目（2 周内交付）</li>
+    </ul>
+  </div>
+</div>
+
+<h2>十、快速上手</h2>
+
+<pre><code>npm install -g speccore          # CLI 命令
+speccore init                    # CLI 命令
+speccore ask "创建会议室管理系统的第一个迭代"  # CLI 命令，路由至 AI 分析</code></pre>
+
+<p>
+在 WorkBuddy / Trae / Qcoder 等 IDE 中，
+只需在对话中 @speccore 或使用 /spec-ask 命令，
+</p>
+
+<div class="highlight-box">
+  <h3>一个典型的工作流对话</h3>
+  <p><strong>用户：</strong>/spec-ask 分析 Q1 的所有需求，拆分任务，分析+计划自动执行，开发前让我确认</p>
+  <p><strong>AI：</strong>我将执行：step1-2 自动（analyze + plan），step3（execute）前暂停确认。是否开始？</p>
+  <p><strong>用户：</strong>开始</p>
+  <p><em>→ AI 自动完成分析和计划，生成 7 个 Spec 文档，然后在执行前问"继续？"</em></p>
+</div>
+
+<h2>十一、开源与社区</h2>
+
+<p>
+SpecCore 完全开源，MIT 协议：
+</p>
+
+<p>
+GitHub: <a href="https://github.com/windfallsheng/SpecCore-ts">github.com/windfallsheng/SpecCore-ts</a><br>
+Gitee: <a href="https://gitee.com/windfullsheng/spec-core-ts">gitee.com/windfullsheng/spec-core-ts</a>
+</p>
+
+<h2>写在最后</h2>
+
+<blockquote>
+Vibe Coding 不会消失——原型阶段它依然是无敌的。
+但当项目进入第 2 个月、第 3 个迭代、第 5 个开发者加入时，
+<strong>Spec Coding 是唯一的解法。</strong>
+</blockquote>
+
+<p>
+不是让 AI 少干活，而是让 AI <strong>干对活、把活干完、把知识留下</strong>。
+</p>
+
+<p style="text-align:center; font-size:20px; font-weight:600; margin:40px 0 8px; color:#378ADD;">
+No Spec, No Code.
+</p>
+
+<div class="footer">
+  <p>本文作者：windfallsheng · SpecCore 项目作者</p>
+  <p>文中架构图由 SpecCore + WorkBuddy AI 生成 · 字体：思源黑体 + Roboto（OFL 免费可商用）</p>
+  <p>2026 年 8 月</p>
+</div>
+
+</body>
+</html>
