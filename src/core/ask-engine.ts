@@ -71,7 +71,7 @@ const COMMAND_KB: CommandKnowledge[] = [
   { name: 'execute', aliases: ['ex'], description: '执行开发任务：依赖排序+分批+交互引导+计划联动',
     usage: 'speccore execute [--task <id>] [--batch-size <n>] [--auto]', examples: ['speccore execute', 'speccore execute --batch-size 3'], related: ['plan', 'done'], triggers: ['执行', 'execute', '开发', '开始做', '干活'] },
   { name: 'plan', aliases: ['pl'], description: '生成执行计划+管理历史：创建/交互/列表/详情/取消',
-    usage: 'speccore plan [--all] [--task <id>] [--interactive]', examples: ['speccore plan --all', 'speccore plan --interactive'], related: ['execute', 'schedule'], triggers: ['计划', 'plan', '调度', '安排', '规划'] },
+    usage: 'speccore plan [--all] [--task <id>] [--interactive]', examples: ['speccore plan --all', 'speccore plan --interactive'], related: ['execute'], triggers: ['计划', 'plan', '安排', '规划'] },
   { name: 'split', aliases: ['sp'], description: '拆分需求为独立 Task：预览→逐一确认/一键创建',
     usage: 'speccore split [-f <file>] [--preview]', examples: ['speccore split -f REQUIREMENT.md', 'speccore split --preview'], related: ['task', 'plan'], triggers: ['拆分', 'split', '分解', '划分', '拆'] },
   { name: 'pr', aliases: ['mr'], description: '创建 Pull Request：提交预览+文件选择+交互确认',
