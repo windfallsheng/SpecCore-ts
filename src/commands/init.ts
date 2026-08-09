@@ -116,7 +116,7 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
           const projectVer = version;
           if (globalVer !== projectVer && globalVer !== '0.0.0') {
             logger.warn(`⚠️  全局 speccore CLI 版本: ${globalVer}，项目要求: ${projectVer}`);
-            logger.warn(`   👉 请执行: npm i -g speccore@${projectVer}`);
+            logger.warn(`   👉 请执行: npm update -g speccore`);
             logger.warn(`   否则 AI 运行的 analyze/split/plan 等命令会使用旧版本，导致结果异常`);
           }
         } catch { /* non-critical */ }
