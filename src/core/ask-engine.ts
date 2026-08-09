@@ -112,18 +112,6 @@ const COMMAND_KB: CommandKnowledge[] = [
 // 任务指引 — 预定义工作流
 // ============================================================
 
-/** 工作流阶段顺序：不管用户口述顺序如何，匹配到的命令都按此逻辑顺序排列 */
-const PHASE_ORDER: Record<string, number> = {
-  init: 0, doc2spec: 1, task: 2, analyze: 3, split: 4, plan: 5,
-  execute: 6, pr: 7, done: 8, spec2doc: 9, validate: 10,
-  dashboard: 99, context: 99, config: 99,
-};
-
-/** 对匹配到的命令按工作流逻辑顺序重排 */
-function reorderCommands(commands: string[]): string[] {
-  return [...commands].sort((a, b) => (PHASE_ORDER[a] ?? 50) - (PHASE_ORDER[b] ?? 50));
-}
-
 const WORKFLOWS: Record<string, PipelineStep[]> = {
   'new feature': [
     { order: 1, command: 'init', args: '', explanation: '初始化项目（如果还没有）', dependsOn: undefined },
@@ -693,8 +681,6 @@ export interface IntentUnderstanding {
 
 export async function understandIntent(input: string): Promise<IntentUnderstanding & { result: AskResult }> {
   const result = await askEngine(input);
-  // 按工作流逻辑顺序重排——不管用户口述顺序如何
-  result.commands = reorderCommands(result.commands);
   const gaps: string[] = [];
   let confidence = 0;
   let source = 'rules';
