@@ -196,14 +196,19 @@ export async function getHotfixStatus(): Promise<{
 export async function getIterationDir(name: string): Promise<string> {
   const { readdir } = await import('fs-extra');
   const root = join(process.cwd(), '.speccore', 'ITERATIONS');
+  // 去掉可能的 Iteration- 前缀（AI 可能传完整名如 Iteration-009-xxx）
+  const shortName = name.replace(/^Iteration-/, '');
   try {
     const entries = await readdir(root, { withFileTypes: true });
     for (const e of entries) {
-      if (e.isDirectory() && e.name.toLowerCase().endsWith(name.toLowerCase())) {
+      if (e.isDirectory() && (
+        e.name === name ||
+        e.name.toLowerCase().endsWith(shortName.toLowerCase())
+      )) {
         return join(root, e.name);
       }
     }
   } catch {}
-  // fallback: 如果没有匹配的，返回 format 拼接（向后兼容）
+  return join(root, `Iteration-000-${shortName.toLowerCase()}`);
   return join(root, `Iteration-000-${name.toLowerCase()}`);
 }
