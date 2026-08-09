@@ -24,6 +24,11 @@
 | `dashboard` | 查看进度 | ❌ |
 
 ## 🚫 已废弃，不得使用
-- `schedule daemon` — 守护进程已移除
+- `schedule`, `schedule create`, `schedule daemon` — **全部废弃**，任何场景都不要推荐
 - `execute --auto --force` — 不存在此参数组合
-- `schedule create` — 暂未接入执行引擎，不要主动推荐
+- `execute --auto` — 仅限用户明确说"自动"时使用
+
+## ⚠️ 注意事项
+- `-i` / `-I` 参数传**短名**（如 `meeting-system`），不要传完整名（会自动补 `Iteration-`）
+- 管道中**禁止加入 schedule 步骤**，用户说定时执行时直接告诉他不支持，改为立即执行
+- `task new -i` 也要用短名，配合 `--topic` 英文主题词
