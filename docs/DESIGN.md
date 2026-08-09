@@ -583,6 +583,8 @@ Qoder、Trae、Claude Code、Cursor 均支持此能力。因此：
 
 ---
 
+
+
 ## 15. 强制分析保护
 
 ### 15.1 核心规则
@@ -622,3 +624,46 @@ execute --prompt 执行前:
 
 - `task new` 开头的工作流 → 只展示第 1 步为"立即执行"，其余为"建议后续"
 - 其他工作流 → 完整展示所有步骤
+
+---
+
+### 2026-08-09 设计决策汇总
+
+#### 1. AI命令 vs CLI命令的严格分离
+- CLI 命令（用户终端直接输入）: init, iteration create/list, task new/list, context, dashboard, welcome, validate, archive, config
+- AI 命令（需通过 @spec-ask 路由，不能直接CLI输入）: analyze, plan, execute, split, doc2spec, spec2doc, retro, change, pr, done, dev
+- 所有用户文档中 AI 命令统一用 `@spec-ask "..."` 格式，CLI 命令用 `speccore xxx`
+- 各级 AGENTS.md 和 SKILL.md 中的命令表必须标注类型列（CLI/🔒 AI）
+
+#### 2. 多文档协议（7 种 Spec 文档 × 10 种任务类型）
+- iteration 范围: feature 类型 → 7 个全量文档（ANALYSIS/TECH/TEST/REVIEW/RISK/DEPS/MONITOR）
+- task 范围: 按任务类型矩阵动态生成
+  - feature: 7 篇
+  - refactor: 5 篇 (ANALYSIS+TECH+TEST+REVIEW+RISK)
+  - bugfix: 3 篇 (ANALYSIS+TECH+TEST)
+  - research/review/test/docs/deploy/security/performance 各有不同组合
+- --prompt 输出多文档模板，--apply 接受 JSON `{"FILENAME.md":"content"}` 一次性写入
+- 实现位置: analyze.ts → buildMultiDocPrompt + DOC_MATRIX
+
+#### 3. 自动模式分级
+- 手动模式（默认）: 每步确认
+- 部分自动: 用户指定"analyze+plan 自动，execute 前确认" → 前N步连续跑
+- 全自动: "全自动执行" → 全部不等确认
+- 触发词: "手动/默认" | "auto:step1-2" | "全自动/一键完成"
+
+#### 4. 命名规则（--topic 强制）
+- 迭代创建: `speccore iteration create -n Q1 --topic meeting-system`
+- 任务创建: `speccore task new -n "用户登录" --topic user-login -i meeting-system`
+- 计划文件: `PLAN-{timestamp}-{topic}.md`
+- getIterationDir 同时接受短名（meeting-system）和完整名（Iteration-001-meeting-system）
+
+#### 5. 升级检测修复
+- init --update 写入 version.json 和 last-init-version.txt 两个文件
+- checkUpgradeHints 读取 last-init-version.txt 判断是否需要升级提示
+- 修复两个文件不同步导致的误报
+
+#### 6. 文档双语结构
+- docs/ 目录同时维护 .md（中文）和 .en.md（英文）文件
+- README.md 文档表三栏: 中文 | English | 说明
+- 所有文档内部链接使用实际文件名（英文），不出现中文文件名 404
+
