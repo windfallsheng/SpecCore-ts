@@ -488,7 +488,15 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
   } else {
     prompt += `- 当前是**迭代级分析**，需产出全部 7 个文档，覆盖需求→技术→测试→评审→风险→依赖→监控\n`;
   }
-  prompt += `\n## 要求\n1. Read .speccore/PATTERNS/TEMPLATES/specs/ 下的专业模板，参考其格式和内容标准\n`;
+  prompt += `\n## 要求\n1. Read .speccore/PATTERNS/TEMPLATES/specs/ 下的专业模板:\n`;
+  const templateMap: Record<string, string> = {
+    'ANALYSIS.md': 'ANALYSIS-template.md', 'TECH.md': 'TECH-template.md', 'TEST.md': 'TEST-template.md',
+    'REVIEW.md': 'REVIEW-template.md', 'RISK.md': 'RISK-template.md', 'DEPS.md': 'DEPS-template.md', 'MONITOR.md': 'MONITOR-template.md'
+  };
+  for (const doc of taskDocs) {
+    const tpl = templateMap[doc[0]] || '';
+    prompt += `   - ${doc[0]} → 参考 ${tpl}\n`;
+  }
   prompt += `2. Read 010-requirements/ 和 PRD/PRD.md 等所有需求文档\n`;
   prompt += `3. 读懂需求文档后，按专业模板标准自由撰写每个文档（不是填空表）\n`;
   prompt += `4. 每个文档都要具体内容（禁止"待填充"），分析完成后支持交互编辑任意文档的任意章节\n`;
