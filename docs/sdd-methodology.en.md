@@ -2,6 +2,8 @@
 
 > Write Specs first, then let AI execute under their constraints.
 
+> 💡 **Command Types**: `speccore execute`, `speccore done` in this doc are 🔒 AI commands — use `@spec-ask` in AI IDE. `speccore init`, `speccore task new` are ✅ CLI commands runnable in terminal. See [Quick Start](quick-start.en.md).
+
 ---
 
 ## 1. What is SDD

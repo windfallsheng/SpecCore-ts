@@ -2,6 +2,8 @@
 
 > 适用版本：v5.22.x+
 
+> 💡 **命令类型**: 本文档中的 `speccore execute` 为 🔒 AI 命令，需在 AI IDE 中通过 `@spec-ask` 使用。详见 [快速开始](快速开始.md)。
+
 ## 三层 Spec 架构
 
 SpecCore 生成的所有 Spec 文件分为两个用途：**人读**和**程序读**。只有标记了 `spec-rule` 的文件会被 execute 自动解析。

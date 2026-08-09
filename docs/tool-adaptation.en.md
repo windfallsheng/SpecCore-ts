@@ -2,6 +2,8 @@
 
 > SpecCore automatically creates AI tool integration files via `speccore init`. This document explains the mechanism and configuration.
 
+> 💡 **Command Types**: `speccore execute`, `speccore plan` referenced below are 🔒 AI commands — use `@spec-ask` in AI IDE, not terminal.
+
 ---
 
 ## 1. Supported AI Tools

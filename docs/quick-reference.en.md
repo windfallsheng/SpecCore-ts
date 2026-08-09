@@ -4,29 +4,31 @@
 
 ---
 
-## 🔧 CLI Commands (speccore prefix)
+## 🔧 CLI Commands (speccore prefix, terminal-safe)
 
 ```bash
 speccore init                         # Initialize project
 speccore iteration create --name=<n>  # Create iteration
 speccore task new --platforms=web,h5  # Create multi-platform task
-speccore execute --all --batch-size=3 # Batch execution
 speccore validate                     # Compliance check
-speccore status-panel --platform=web      # View progress
+speccore dashboard                    # View progress
 speccore update -t T-001 --status=completed  # Update status
 speccore sync                         # Reverse sync @spec → TASK.md
 speccore diff --source=A --target=B   # Compare iterations
 speccore trace --req=REQ-001          # Trace chain
 speccore delete -t Task-005           # Safe delete (trash + clean refs)
-speccore search "payment"                 # Cross-spec search
-speccore watch                            # Auto-validate on save
+speccore search "payment"             # Cross-spec search
+speccore watch                        # Auto-validate on save
 ```
 
-## 🤖 AI Commands (/spec prefix, in AI tools)
+## 🔒 AI Commands (use @spec-ask in AI IDE: WorkBuddy/Cursor/Trae)
 
-```
-/spec-init  /spec-task-new  /spec-execute  /spec-validate
-/spec-progress  /spec-update  /spec-trace  /spec-diff
+```bash
+@spec-ask "execute all tasks with batch size 3"
+@spec-ask "analyze Q1 requirements"
+@spec-ask "plan execution schedule"
+@spec-ask "create PR for Task-001"
+@spec-ask "archive completed tasks"
 ```
 
 ## 📁 File Safety Rules

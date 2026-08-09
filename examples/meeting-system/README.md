@@ -44,12 +44,13 @@ speccore task new -n "H5移动端" --topic h5-mobile -i meeting-system -t featur
 
 | 命令 | 说明 | 类型 |
 |------|------|------|
-| `@spec-ask "..."` | AI 语义入口（IDE 中使用） | 🔒 AI |
 | `speccore init <项目名>` | 初始化项目 | CLI |
-| `speccore iteration init -n <短名>` | 创建迭代 | CLI |
-| `speccore analyze -i <迭代> --prompt '<描述>'` | 分析需求 | 🔒 AI |
-| `speccore plan -i <迭代> --prompt '<描述>'` | 制定计划 | 🔒 AI |
-| `speccore execute -i <迭代> -t <任务> --prompt '<描述>'` | 执行任务 | 🔒 AI |
+| `speccore iteration create -n <短名>` | 创建迭代 | CLI |
+| `speccore task new -n <名称>` | 创建开发任务 | CLI |
+| `@spec-ask "..."` | AI 语义入口（IDE 中使用） | 🔒 AI |
+| `@spec-ask "分析需求"` | 分析需求 | 🔒 AI |
+| `@spec-ask "制定执行计划"` | 制定计划 | 🔒 AI |
+| `@spec-ask "执行任务"` | 执行任务 | 🔒 AI |
 | `speccore dashboard` | 查看进度面板 | CLI |
 | `speccore context --set` | 切换上下文 | CLI |
 

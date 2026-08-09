@@ -7,19 +7,24 @@
 ```
   init → doc2spec → analyze → split → plan → execute → pr → done
   🚀Setup   📝Import   🧠Analyze  📦Split  📋Plan  💻Build  🔀PR  ✅Archive
+  ✅ CLI    🔒 AI      🔒 AI      🔒 AI     🔒 AI    🔒 AI    🔒 AI  🔒 AI
 ```
 
 ## 🚀 5 Minutes to First Task
 
 ```bash
+# CLI usage (direct terminal commands)
 npm install -g speccore
 speccore init
-speccore doc2spec -f requirements.docx --iter=Q1   # Import PRD
-speccore analyze -I Q1                          # AI analysis + code health
-speccore iteration split -I Q1                  # Split into tasks
-speccore plan -I Q1                             # Generate plan
-speccore execute -t Task-001                    # AI-powered development
-speccore done --task=Task-001                       # Validate → archive
+speccore iteration create -n Q1     # Create iteration
+
+# 🔒 AI usage (in WorkBuddy/Cursor/Trae via @spec-ask)
+@spec-ask "import requirements.docx to Q1 iteration"
+@spec-ask "analyze Q1 requirements and code health"
+@spec-ask "split Q1 iteration into tasks"
+@spec-ask "generate execution plan for Q1"
+@spec-ask "execute Task-001 with AI"
+@spec-ask "archive Task-001 after validation"
 ```
 
 ## 🎯 What do you want to do?
@@ -27,17 +32,17 @@ speccore done --task=Task-001                       # Validate → archive
 | I want to... | Command |
 |:---|:---|
 | **Start a new project** | `speccore init --interactive` |
-| **Import a PRD document** | `speccore doc2spec -f PRD.docx -I Q1` |
-| **Analyze requirements + code health** | `speccore analyze -I Q1` |
+| **Import a PRD document** | `@spec-ask "import PRD.docx to Q1"` 🔒 |
+| **Analyze requirements + code health** | `@spec-ask "analyze Q1 requirements"` 🔒 |
 | **Split requirements into tasks** | `speccore iteration split -I Q1 --interactive` |
 | **Fix a bug** | `speccore task new -n "Login timeout" --type=bugfix` |
 | **Batch fix bugs** | `speccore task new --batch-file=bugs.xlsx --type=bugfix` |
 | **Schedule overnight execution** | `speccore schedule create --at "02:00" --all -I Q1` |
-| **AI auto-development** | `speccore execute -t Task-001` |
-| **Create a Pull Request** | `speccore pr --task=Task-001 --interactive` |
-| **Archive a completed task** | `speccore done --task=Task-001 --interactive` |
-| **Check project status** | `speccore` or `speccore status-panel` |
-| **Natural language queries** | `speccore ask "analyze current requirements"` |
+| **AI auto-development** | `@spec-ask "execute Task-001"` 🔒 |
+| **Create a Pull Request** | `@spec-ask "create PR for Task-001"` 🔒 |
+| **Archive a completed task** | `@spec-ask "archive Task-001"` 🔒 |
+| **Check project status** | `speccore` or `speccore dashboard` |
+| **Natural language queries** | `@spec-ask "analyze current requirements"` 🔒 |
 
 > 📋 Full command reference → [Command Reference](docs/commands.en.md) | 中文文档 → [README.zh.md](README.md)
 
@@ -53,9 +58,9 @@ speccore done --task=Task-001                       # Validate → archive
 
 ```bash
 speccore task new -n "Data migration" --schedule=night         # Queue for night
-speccore execute --all --scheduled                              # Run all queued
 speccore schedule create --at "2026-08-10 02:00" --all -I Q1   # Exact time
-speccore schedule daemon start                                   # Auto-execute on schedule
+speccore schedule daemon start                                  # Auto-execute on schedule
+# 🔒 AI: @spec-ask "run all scheduled tasks"
 ```
 
 ## 📚 Documentation
