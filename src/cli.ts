@@ -296,6 +296,7 @@ program
   .option('--cancel <id>', 'Cancel a plan (keep record)')
   .option('--prompt', '输出结构化 Prompt 到 stdout（Skill 协作模式）')
   .option('--response <response>', '接收 AI 计划写入 plan.json（配合 --prompt）')
+  .option('--html', '生成 speccore-plan.html 可视化页面')
   .action(planCommand);
 
 program
