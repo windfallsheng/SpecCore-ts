@@ -168,6 +168,7 @@ program
 program
   .command('init')
   .alias('in')
+  .alias('int')
   .description('初始化 SpecCore（17命令/58全量，--interactive 引导式）')
   .option('--mode <mode>', 'Initialization mode: fresh or migration', 'fresh')
   .option('--full', 'Full mode: all 58 commands (default: simple)')
