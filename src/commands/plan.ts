@@ -552,16 +552,12 @@ async function writeHtmlPlan(
   }));
   const html = generatePlanHtml(htmlData, { version, iteration });
 
-  // 写入项目根目录 speccore-plan.html
-  const rootPath = join(process.cwd(), 'speccore-plan.html');
-  await writeFile(rootPath, html, 'utf-8');
-  logger.success(`✅ HTML 可视化: ${rootPath}`);
-
-  // 同时复制一份到 plans 目录
-  if (planDir) {
-    const planHtmlPath = join(planDir, 'speccore-plan.html');
-    await writeFile(planHtmlPath, html, 'utf-8');
-  }
+  // 写入 plans 目录，和 PLAN.md 放一起
+  const htmlPath = planDir
+    ? join(planDir, 'speccore-plan.html')
+    : join(process.cwd(), 'speccore-plan.html');
+  await writeFile(htmlPath, html, 'utf-8');
+  logger.success(`✅ 计划可视化: ${htmlPath}`);
 }
 
 /**
