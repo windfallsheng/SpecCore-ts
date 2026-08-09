@@ -657,6 +657,7 @@ program
   .option('--auto', '非交互: 直接生成报告 (默认)')
   .option('--interactive', '交互: AI 提问 → 回答 → 优化')
   .option('--prompt', '输出结构化 Prompt 到 stdout（Skill 协作模式）')
+  .option('--with-code', '结合 CONSTITUTION.md 配置的工程源码一起分析')
   .option('--apply <content>', '接收 AI 分析结果写入 ANALYSIS.md（配合 --prompt）')
   .action(analyzeCommand);
 
