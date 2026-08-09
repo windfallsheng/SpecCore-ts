@@ -320,7 +320,11 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
   if (isGlobal) {
     let prompt = `\n# 任务: ${command} (全局分析${ctx.withCode ? '+源码' : ''})\n\n`;
     prompt += `## 要求\n`;
-    prompt += `1. Read .speccore/CONSTITUTION.md 获取全局技术栈和源码配置\n`;
+    prompt += `1. **先读宪法**: Read .speccore/CONSTITUTION.md，这是项目配置的唯一权威来源。获取:\n`;
+    prompt += `   - 「工程」列 → 所有工程名（如 meeting-system, booking-service）\n`;
+    prompt += `   - 「源码路径」列 → 各工程的代码目录（用于 Read 源码）\n`;
+    prompt += `   - 「对应需求端」列 → admin/h5/miniapp/app/android/ios（决定文档分端维度）\n`;
+    prompt += `   - 每个工程独立分析，文档输出到: .speccore/GLOBAL/PROJECTS/{工程名}/\n`;
     prompt += `2. Read .speccore/GLOBAL/ 下所有文档了解跨项目需求\n`;
     if (ctx.withCode) {
       prompt += `3. 从 CONSTITUTION.md 的「源码路径」列读取各工程目录，逐个 Read 源码\n`;
