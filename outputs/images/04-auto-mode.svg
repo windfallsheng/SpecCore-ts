@@ -1,0 +1,52 @@
+<svg viewBox="0 0 680 260" xmlns="http://www.w3.org/2000/svg" style="font-family: 'Source Han Sans SC', 'Roboto', sans-serif;">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="#888780" stroke-width="1.5" stroke-linecap="round"/>
+    </marker>
+  </defs>
+  <rect width="680" height="260" fill="#fff"/>
+  <text x="340" y="28" text-anchor="middle" font-weight="500" font-size="15" fill="#2C2C2A">自动模式分级</text>
+
+  <!-- Level 1: 手动模式 (Blue) -->
+  <rect x="40" y="48" width="600" height="58" rx="10" fill="#EBF0FF" stroke="#7399F5" stroke-width="0.8"/>
+  <rect x="40" y="48" width="8" height="58" rx="4" fill="#2563EB"/>
+  <rect x="40" y="48" width="8" height="58" rx="4" fill="#2563EB"/>
+  <circle cx="70" cy="77" r="12" fill="#2563EB"/>
+  <text x="70" y="81" text-anchor="middle" font-size="11" fill="#fff" font-weight="500">1</text>
+  <text x="92" y="72" font-weight="500" font-size="13" fill="#1E4AD6">手动模式</text>
+  <text x="92" y="90" font-size="11" fill="#5178E0">用户全程控制 · 每步需要确认 · 适合复杂决策场景</text>
+  <rect x="520" y="60" width="100" height="28" rx="14" fill="#2563EB"/>
+  <text x="570" y="78" text-anchor="middle" font-size="11" fill="#fff" font-weight="500">人工主导</text>
+
+  <!-- Arrow 1 → 2 -->
+  <line x1="340" y1="108" x2="340" y2="122" stroke="#888780" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="356" y="118" font-size="9" fill="#888780">自动化程度提升</text>
+
+  <!-- Level 2: 半自动模式 (Green) -->
+  <rect x="40" y="128" width="600" height="58" rx="10" fill="#ECFDF5" stroke="#6EE7B7" stroke-width="0.8"/>
+  <rect x="40" y="128" width="8" height="58" rx="4" fill="#16A34A"/>
+  <rect x="40" y="128" width="8" height="58" rx="4" fill="#16A34A"/>
+  <circle cx="70" cy="157" r="12" fill="#16A34A"/>
+  <text x="70" y="161" text-anchor="middle" font-size="11" fill="#fff" font-weight="500">2</text>
+  <text x="92" y="152" font-weight="500" font-size="13" fill="#15803D">半自动模式</text>
+  <text x="92" y="170" font-size="11" fill="#4ADE80">AI 自动执行 · 关键节点人工确认 · 适合常规开发</text>
+  <rect x="520" y="140" width="100" height="28" rx="14" fill="#16A34A"/>
+  <text x="570" y="158" text-anchor="middle" font-size="11" fill="#fff" font-weight="500">人机协同</text>
+
+  <!-- Arrow 2 → 3 -->
+  <line x1="340" y1="188" x2="340" y2="202" stroke="#888780" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- Level 3: 全自动模式 (Purple) -->
+  <rect x="40" y="208" width="600" height="58" rx="10" fill="#F5F0FF" stroke="#C4B5FD" stroke-width="0.8"/>
+  <rect x="40" y="208" width="8" height="58" rx="4" fill="#7C3AED"/>
+  <rect x="40" y="208" width="8" height="58" rx="4" fill="#7C3AED"/>
+  <circle cx="70" cy="237" r="12" fill="#7C3AED"/>
+  <text x="70" y="241" text-anchor="middle" font-size="11" fill="#fff" font-weight="500">3</text>
+  <text x="92" y="232" font-weight="500" font-size="13" fill="#6D28D9">全自动模式</text>
+  <text x="92" y="250" font-size="11" fill="#A78BFA">AI 自主执行全部流程 · 自动同步 · 适合标准任务</text>
+  <rect x="520" y="220" width="100" height="28" rx="14" fill="#7C3AED"/>
+  <text x="570" y="238" text-anchor="middle" font-size="11" fill="#fff" font-weight="500">AI 自主</text>
+
+  <!-- Legend bar at bottom -->
+  <rect x="160" y="260" width="360" height="0" rx="0" fill="none"/>
+</svg>
