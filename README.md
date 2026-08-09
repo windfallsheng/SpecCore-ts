@@ -30,11 +30,11 @@
 
 ```bash
 npm install -g speccore
-speccore init                               # 初始化项目
-speccore iteration create -n Q1 --topic my-project --owner luzhaosheng  # 创建迭代
-speccore task new -n "用户登录" --topic user-login -i my-project         # 创建任务
-speccore context --set --iteration Iteration-001-my-project              # 切换上下文
-speccore dashboard                                                        # 查看仪表盘
+speccore init                                                    # 初始化项目（CLI）
+speccore iteration create -n Q1 --topic meeting-system --owner luzhaosheng  # 创建迭代（CLI）
+speccore task new -n "用户登录" --topic user-login -i meeting-system         # 创建任务（CLI）
+speccore context --set --iteration Iteration-001-meeting-system              # 切换上下文（CLI）
+speccore dashboard                                                             # 查看仪表盘（CLI）
 ```
 
 > 💡 **AI 命令**（在 WorkBuddy/Trae/Qcoder 中通过 `@spec-ask` 或 `/spec-ask` 使用）：分析需求、制定计划、执行开发。详见 [AGENTS.md](./AGENTS.md)。
