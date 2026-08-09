@@ -374,7 +374,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
   }
 
   const docs: [string, string][] = [
-    ['ANALYSIS.md', `# 需求分析报告\n\n> ${iter} | ${now}\n\n## 1. 功能点\n> 根据需求文档的业务描述，列出所有功能模块和用户故事\n\n## 2. 接口分析\n> ⚠️ 从业务描述中**推导**需要的 API（不是复制现有表格）\n\n| 方法 | 路径 | 入参 | 出参 | 对应的业务功能 |\n|:---|:---|:---|:---|:---|\n\n## 3. 数据模型\n> 从业务描述推导需要的表和字段\n\n## 4. 业务规则\n> 从需求文档的 R-XX-XX 规则编号中提取\n\n## 5. 异常处理\n> 各功能的异常场景和用户提示\n`],
+    ['ANALYSIS.md', `# 需求分析报告\n\n> ${iter} | ${now}\n\n## 1. 功能分析\n> 从需求文档总结所有功能模块、用户角色、业务场景\n\n## 2. 接口推导\n> 根据业务功能推导需要的接口，自由描述\n\n## 3. 数据模型\n> 从业务描述推导数据结构\n\n## 4. 业务规则\n> 提取所有业务约束、校验规则、状态流转\n\n## 5. 异常场景\n> 各功能的异常情况处理\n`],
     ['TECH.md', `# 技术方案\n\n> ${iter}\n\n## 1. 架构\n\n## 2. DDL\n\n\`\`\`sql\n\`\`\`\n\n## 3. 接口\n\n## 4. 缓存\n\n## 5. 流程\n`],
     ['TEST.md', `# 测试计划\n\n> ${iter}\n\n## 1. 单元\n\n## 2. 集成\n\n## 3. 边界\n\n## 4. 性能\n`],
     ['REVIEW.md', `# Code Review\n\n> ${iter}\n\n## 安全\n- [ ] SQL注入\n- [ ] XSS\n\n## 质量\n- [ ] 参数校验\n- [ ] 幂等\n`],
@@ -401,11 +401,8 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
 
   let prompt = `\n# 任务: ${command}${task} (${taskDocs.length}个文档)\n\n`;
   prompt += `## 要求\n1. Read 010-requirements/ 和 PRD/PRD.md 等所有需求文档\n`;
-  prompt += `2. ⚠️ 需求文档是业务语言（功能描述、用户场景、业务规则R-XX-XX），你需要从中**推导**技术规格:\n`;
-  prompt += `   - API: 从功能描述推导需要什么接口（方法+路径+入参+出参），不要只找现成表格\n`;
-  prompt += `   - 数据模型: 从业务字段描述推导表结构\n`;
-  prompt += `   - 业务规则: 提取 R-XX-XX 编号的规则并翻译为技术约束\n`;
-  prompt += `3. 每个文档都要具体内容（禁止"待填充"），API 为 0 不代表没有需求\n`;
+  prompt += `2. 读懂需求文档后，对每个文档填入实质内容。内容来自你对需求的理解，不是找现成格式\n`;
+  prompt += `3. 每个文档都要具体内容（禁止"待填充"），即使文档中没有现成表格也要输出分析结果\n`;
   prompt += `3. 写入: speccore analyze --apply '{"ANALYSIS.md":"...","TECH.md":"..."}' -I ${iter}\n\n`;
   for (let i = 0; i < taskDocs.length; i++) {
     prompt += `### ${i+1}/${taskDocs.length}: ${taskDocs[i][0]}\n\`\`\`markdown\n${taskDocs[i][1]}\n\`\`\`\n\n`;
