@@ -2,7 +2,7 @@
 
 > 适用版本：v5.22.x+
 
-> 💡 **命令类型**: 本文档中的 `speccore execute` 为 🔒 AI 命令，需在 AI IDE 中通过 `@spec-ask` 使用。详见 [快速开始](快速开始.md)。
+> 💡 **命令类型**: 本文档中的 `speccore execute` 为 🔒 AI 命令，需在 AI IDE 中通过 `@spec-ask` 使用。详见 [快速开始](quick-start.md)。
 
 ## 三层 Spec 架构
 

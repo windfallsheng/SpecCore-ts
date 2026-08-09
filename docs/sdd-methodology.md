@@ -2,7 +2,7 @@
 
 > Spec-Driven Development — 以规范为锚点，让 AI 稳定输出。
 
-> 💡 **命令类型**: 本文档中的 `speccore execute`, `speccore done` 等为 🔒 AI 命令，需在 AI IDE 中通过 `@spec-ask` 使用。`speccore init`, `speccore task new` 等 ✅ CLI 命令可在终端直接执行。详见 [快速开始](快速开始.md)。
+> 💡 **命令类型**: 本文档中的 `speccore execute`, `speccore done` 等为 🔒 AI 命令，需在 AI IDE 中通过 `@spec-ask` 使用。`speccore init`, `speccore task new` 等 ✅ CLI 命令可在终端直接执行。详见 [快速开始](quick-start.md)。
 
 ---
 

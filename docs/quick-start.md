@@ -191,8 +191,8 @@ speccore task new --batch-file=bugs.xlsx --type=bugfix --schedule=night
 
 ## 下一步
 
-- [全量命令参考](命令参考.md) — 21 个命令完整说明
-- [总览](总览.md) — 架构与理念
-- [场景实战](场景实战.md) — 35 个真实场景
+- [全量命令参考](command-reference.md) — 21 个命令完整说明
+- [总览](overview.md) — 架构与理念
+- [场景实战](scenarios.md) — 35 个真实场景
 - [示例](https://github.com/windfallsheng/SpecCore-ts/tree/main/examples/meeting-system)
-- [SDD 方法论](SDD方法论.md)
+- [SDD 方法论](sdd-methodology.md)
