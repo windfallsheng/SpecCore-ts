@@ -360,22 +360,28 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `   - ERROR_CODES.md: 扫描 Error/Exception/enum 提取错误码清单和含义\n`;
       prompt += `   - DEPENDENCY_GRAPH.md: 分析模块间 import/require 依赖关系，生成依赖拓扑图\n`;
       prompt += `   - CODE_INDEX.md: 各工程目录结构、关键文件清单、模块职责说明\n`;
-      prompt += `5. 以上所有文档输出到 .speccore/GLOBAL/ 目录，使用 Write 工具写入\n`;
+      prompt += `5. **知识沉淀**: 从源码中识别可复用的设计模式和最佳实践，写入 .speccore/PATTERNS/ 目录:\n`;
+      prompt += `   - 每个模式一个 .md 文件，命名规则: {分类}-{模式名}.md（如 auth-jwt.md, api-pagination.md）\n`;
+      prompt += `   - 模式分为: 架构(architecture)、鉴权(auth)、API设计(api)、数据访问(data)、异常处理(error)、日志(logging)、工具(util)、测试(test)\n`;
+      prompt += `   - 每个模式文件含: 适用场景、核心代码片段、注意事项、反例\n`;
+      prompt += `   - 示例: 发现项目用 JWT 鉴权 → 提取 token生成/校验/刷新模式 → 写入 auth-jwt.md\n`;
+      prompt += `6. 以上文档输出到 .speccore/GLOBAL/ 和 .speccore/PATTERNS/，使用 Write 工具写入\n`;
     } else {
       prompt += `3. 读取 .speccore/GLOBAL/ 下各项目需求文档，生成跨项目索引和需求目录\n`;
     }
-    prompt += `\n## 输出文档 (${ctx.withCode ? '8 个' : '1 个'})\n`;
+    prompt += `\n## 输出文档 (${ctx.withCode ? '9 类' : '1 个'})\n`;
     if (ctx.withCode) {
-      prompt += `| 文档 | 从源码提取内容 |\n`;
-      prompt += `| :--- | :--- |\n`;
-      prompt += `| TECH_STACK.md | 语言、框架、中间件、构建工具 |\n`;
-      prompt += `| API_INVENTORY.md | 接口路径、方法、参数、响应、鉴权 |\n`;
-      prompt += `| DATA_MODEL.md | 表结构、字段、索引、关系 |\n`;
-      prompt += `| BUSINESS_RULES.md | 校验规则、业务约束、状态机 |\n`;
-      prompt += `| CONFIG_MAP.md | 环境变量、开关、密钥（脱敏） |\n`;
-      prompt += `| ERROR_CODES.md | 错误码、含义、HTTP状态 |\n`;
-      prompt += `| DEPENDENCY_GRAPH.md | 模块依赖拓扑、循环依赖检测 |\n`;
-      prompt += `| CODE_INDEX.md | 目录结构、关键文件、模块职责 |\n`;
+      prompt += `| 文档 | 从源码提取内容 | 输出目录 |\n`;
+      prompt += `| :--- | :--- | :--- |\n`;
+      prompt += `| TECH_STACK.md | 语言、框架、中间件、构建工具 | GLOBAL/ |\n`;
+      prompt += `| API_INVENTORY.md | 接口路径、方法、参数、响应、鉴权 | GLOBAL/ |\n`;
+      prompt += `| DATA_MODEL.md | 表结构、字段、索引、关系 | GLOBAL/ |\n`;
+      prompt += `| BUSINESS_RULES.md | 校验规则、业务约束、状态机 | GLOBAL/ |\n`;
+      prompt += `| CONFIG_MAP.md | 环境变量、开关、密钥（脱敏） | GLOBAL/ |\n`;
+      prompt += `| ERROR_CODES.md | 错误码、含义、HTTP状态 | GLOBAL/ |\n`;
+      prompt += `| DEPENDENCY_GRAPH.md | 模块依赖拓扑、循环依赖检测 | GLOBAL/ |\n`;
+      prompt += `| CODE_INDEX.md | 目录结构、关键文件、模块职责 | GLOBAL/ |\n`;
+      prompt += `| PATTERNS/*.md | 可复用设计模式（架构/鉴权/API/数据/异常/日志/工具/测试） | PATTERNS/ |\n`;
     } else {
       prompt += `- REQUIREMENT.md — 合并各迭代需求，生成跨项目需求索引\n`;
     }
