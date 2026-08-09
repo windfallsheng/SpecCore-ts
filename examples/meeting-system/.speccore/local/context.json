@@ -1,0 +1,13 @@
+{
+  "projectName": "Meeting System",
+  "projectShortName": "meeting-system",
+  "currentIteration": "Iteration-001-meeting-system",
+  "currentTask": "Task-001-room-service",
+  "workingDirectory": "/Users/luzhaosheng/SmartDeveloper/DevWorkspace/AI/SpecCore-CLI/ts-cli/examples/meeting-system",
+  "lastCommand": "execute",
+  "lastCommandArgs": {
+    "iteration": "Iteration-001-meeting-system",
+    "task": "Task-001-room-service",
+    "auto": false
+  }
+}

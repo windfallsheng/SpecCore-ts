@@ -1,4 +1,23 @@
-# SpecCore 版本历史
+## v5.67.55 (2026-08-09) — AI 行为约束 + 自动模式分级 + examples 完善
+
+### 🧠 AI 行为约束
+- **Skill 重写**：spec-ask SKILL.md 从旧版（含 schedule 示例）重写为严格约束版
+- **禁止 schedule**：所有 Skill 显式禁止 schedule 命令，定时需求改为立即执行
+- **强制 --topic**：迭代/任务创建必须带英文主题词
+- **每步确认**：非自动模式下每步展示结果等用户确认
+
+### 🤖 自动模式分级
+- **PARTIAL_AUTO**: 用户指定自动范围（如 "analyze 和 plan 自动，execute 前确认"）
+- **FULL_AUTO**: 用户说"全自动/一键完成"时全流程自动
+
+### 🐛 修复
+- `getIterationDir` 同时接受短名和完整名（修复迭代双前缀 bug）
+- `task list` / `iteration list` 新增子命令（修复 ExitCode 1）
+- `init --update` 无迭代时给出明确提示
+
+### 📦 examples 项目完善
+- `examples/meeting-system/` 完整示例：28 个文件，含完整需求、分析、任务
+- README 含技术栈、快速开始、命令示例、自动模式说明
 
 ---
 
