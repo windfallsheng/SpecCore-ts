@@ -239,11 +239,16 @@ async function analyzeCodebase(input: AnalyzeInput): Promise<AnalysisResult> {
 // ================================================================
 
 async function analyzeCombined(input: AnalyzeInput): Promise<AnalysisResult> {
-  // 先做需求分析
+  // 按文档来源结构化合并：每个源文档一级标题，原章节下推一级避免同名冲突
   const allContent: string[] = [];
   for (const reqPath of input.requirements) {
     if (await pathExists(reqPath)) {
-      allContent.push(await readFile(reqPath, 'utf-8'));
+      const raw = await readFile(reqPath, 'utf-8');
+      const fname = reqPath.split('/').pop() || reqPath;
+      // 将原文档 ##/### 标题下推一级 (##→###, ###→####)，源文件名作为 ## 标题
+      const normalized = raw.replace(/^(#{2,3})\s/gm, '#$1 ');
+      const sourced = `## 📄 ${fname}\n\n${normalized}`;
+      allContent.push(sourced);
     }
   }
   const fullReqContent = allContent.join('\n\n---\n\n');
@@ -658,9 +663,9 @@ function scanCompleteness(content: string): Issue[] {
     });
   }
 
-  // 按文档分隔符逐个分析，避免多文档同名标题导致 indexOf 错位
-  const docs = content.split('-'.repeat(60)).filter((d: string) => d.trim());
-  for (const doc of docs) {
+  // 按文档来源 📄 分块检测，每块独立分析避免跨文档同名标题冲突
+  const docBlocks = content.split(/^##\s📄\s/m).filter((d: string) => d.trim());
+  for (const doc of docBlocks) {
     const sections = doc.match(/^(#{2,3})\s+(.+)$/gm) || [];
     let prevIdx = 0;
     for (let i = 0; i < sections.length; i++) {
