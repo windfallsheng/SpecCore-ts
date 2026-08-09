@@ -119,149 +119,22 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       await writeFile(join(taskDir, 'ANALYSIS.md'), options.apply);
     }
     return;
+  // ── 非 prompt/apply 模式 → 自动转为 prompt 模式，所有分析必须经 AI 执行 ──
+  if (!options.prompt && !options.apply) {
+    options.prompt = true;
   }
-  // 手动解析 argv (Commander.js 偶发不传递部分选项)
-  parseArgv(options);
 
-  const spinner = new Spinner('正在分析...');
-  spinner.start();
-
-  try {
-    // ── 应用默认值 ──
-    options.depth = options.depth || 'normal';
-
-    // ── 解析逗号分隔的输入 ──
-    const sources = options.source
-      ? options.source.split(',').map(s => s.trim()).filter(Boolean)
-      : [];
-    const requirements = options.requirements
-      ? options.requirements.split(',').map(s => s.trim()).filter(Boolean)
-      : [];
-
-    // ── 解析 scope ──
-    const scope: 'global' | 'iteration' | 'task' =
-      options.scope ||
-      (options.task ? 'task' : 'iteration');
-
-    // ── 解析 iteration ──
-    let iteration = options.iteration;
-    if (scope === 'iteration' || scope === 'task') {
-      iteration = await getDefaultIteration(options.iteration);
-      if (!iteration) {
-        spinner.fail('无效迭代: 请用 -i 指定');
-        return;
-      }
-    }
-
-    // ── 构建输入 ──
-    const input: AnalyzeInput = {
-      sources,
-      requirements,
-      scope,
-      iteration,
-      taskId: options.task,
-      depth: options.depth || 'normal',
-      output: options.output,
-    };
-
-    spinner.stop();
-
-    // ── 显示分析配置 ──
-    logger.info('');
-    logger.info('╔══════════════════════════════════════════╗');
-    logger.info('║  📊 SpecCore 分析引擎                       ║');
-    logger.info('╚══════════════════════════════════════════╝');
-    logger.info('');
-    logger.info(`   🎯 范围:   ${scope === 'global' ? '全局' : scope === 'task' ? '任务' : '迭代'}`);
-    if (iteration) logger.info(`   📅 迭代:   ${iteration}`);
-    if (options.task) logger.info(`   📋 任务:   ${options.task}`);
-    if (sources.length > 0) logger.info(`   📁 源码:   ${sources.join(', ')}`);
-    if (requirements.length > 0) logger.info(`   📄 需求:   ${requirements.join(', ')}`);
-    logger.info(`   🔍 深度:   ${input.depth}`);
-    logger.info('');
-
-    // ── 执行分析 ──
-    const runSpinner = new Spinner('分析中...');
-    runSpinner.start();
-
-    const result = await runAnalysis(input);
-
-    runSpinner.stop('分析完成');
-
-    // ── 摘要 ──
-    logger.info('');
-    logger.info('📊 分析摘要:');
-    if (result.summary.blockers > 0) logger.info(`   🔴 阻断: ${result.summary.blockers} 个`);
-    logger.info(`   ⚠️  问题: ${result.summary.issues} 个`);
-    logger.info(`   📁 扫描文件: ${result.summary.filesAnalyzed} 个`);
-    logger.info(`   🔗 API: ${result.summary.apisFound} 个`);
-    logger.info(`   ⚡ 风险: ${result.summary.risks} 个`);
-    logger.info(`   📝 报告: ${result.outputPath}`);
-    logger.info('');
-
-    // ── 确认保存 ──
-    const isAuto = options.auto !== false; // --auto 是默认行为
-    if (isAuto) {
-      // 非交互: 直接保存
-      await ensureDir(dirname(result.outputPath));
-      await writeFile(result.outputPath, result.report);
-      logger.info(`  ✅ 报告已保存 → ${result.outputPath}`);
-    } else if (options.interactive) {
-      // 交互确认
-      const ask = (q: string): Promise<string> => {
-        return new Promise(resolve => {
-          const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout });
-          rl.question(q, (a: string) => { rl.close(); resolve(a); });
-        });
-      };
-      
-      const answer = (await ask('  → 保存报告？[y]保存 [N]取消: ')).toLowerCase();
-      if (answer !== 'y' && answer !== 'yes') {
-        logger.info('\n  ❌ 已取消，报告未保存\n');
-        return;
-      }
-
-      await ensureDir(dirname(result.outputPath));
-      await writeFile(result.outputPath, result.report);
-      logger.info(`\n  ✅ 分析完成 → ${result.outputPath}\n`);
-    }
-
-    // ── 全局范围: 生成 TECH_STACK + CODE_INDEX + REQUIREMENT ──
-    if (scope === 'global' && sources.length > 0) {
-      await generateGlobalArtifacts(sources, input.depth);
-    }
-
-    // ── 下一步提示 + Spec 文档生成 (仅 iteration 范围) ──
-    if (scope === 'iteration') {
-      if (result.summary.blockers > 0) {
-        logger.warn('\n⚠️  存在阻断问题，建议解决后再拆分任务。');
-      } else {
-        logger.info('\n✅ 未发现阻断问题，可以继续拆分任务。');
-      }
-
-      // 生成全套 Spec 规范文档
-      await generateIterationSpecDocs(iteration!);
-
-      // 显示待确认清单
-      try {
-        const iterDir = await getIterationDir(iteration || '');
-        const questions = await extractQuestions(iterDir);
-        if (questions.length > 0) {
-          showQuestionChecklist(questions, '需求分析待确认');
-        }
-        showNextSteps('analyze');
-      } catch { /* 非关键步骤 */ }
-    }
-
-    // ── Task 范围: 也检查是否补全 TECH/TEST/REVIEW ──
-    if (scope === 'task' && options.task && iteration) {
-      await enrichTaskDocs(iteration, options.task, requirements);
-    }
-
-  } catch (error: any) {
-    spinner.fail(`分析失败: ${error.message || error}`);
-    throw error;
+  // ── Prompt 模式 ──
+  if (options.prompt) {
+    const iter = options.iteration || await getDefaultIteration();
+    const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task, type: options.type });
+    process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
+    process.exitCode = 10;
+    return;
   }
+
+  // ── Apply 模式 ──
+  if (options.apply) {
 }
 
 /**
