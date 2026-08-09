@@ -658,23 +658,28 @@ function scanCompleteness(content: string): Issue[] {
     });
   }
 
-  const sections = content.match(/^(#{2,3})\s+(.+)$/gm) || [];
-  let prevIdx = 0;
-  for (let i = 0; i < sections.length; i++) {
-    const idx = content.indexOf(sections[i], prevIdx);
-    const nextIdx = i + 1 < sections.length
-      ? content.indexOf(sections[i + 1], idx + 1)
-      : content.length;
-    const sectionContent = content.substring(idx + sections[i].length, nextIdx).trim();
-    if (!sectionContent || sectionContent.length < 20) {
-      issues.push({
-        severity: 'warning',
-        category: '内容完整性',
-        message: `章节「${sections[i].replace(/^#+\s*/, '')}」内容过少（${sectionContent.length} 字符），可能需要补充`,
-        location: sections[i],
-      });
+  // 按文档分隔符逐个分析，避免多文档同名标题导致 indexOf 错位
+  const docs = content.split('-'.repeat(60)).filter((d: string) => d.trim());
+  for (const doc of docs) {
+    const sections = doc.match(/^(#{2,3})\s+(.+)$/gm) || [];
+    let prevIdx = 0;
+    for (let i = 0; i < sections.length; i++) {
+      const idx = doc.indexOf(sections[i], prevIdx);
+      if (idx === -1) continue;
+      const nextIdx = i + 1 < sections.length
+        ? doc.indexOf(sections[i + 1], idx + 1)
+        : doc.length;
+      const sectionContent = doc.substring(idx + sections[i].length, nextIdx).trim();
+      if (!sectionContent || sectionContent.length < 20) {
+        issues.push({
+          severity: 'warning',
+          category: '内容完整性',
+          message: `章节「${sections[i].replace(/^#+\s*/, '')}」内容过少（${sectionContent.length} 字符），可能需要补充`,
+          location: sections[i],
+        });
+      }
+      prevIdx = idx;
     }
-    prevIdx = idx;
   }
 
   const hasInterfaces = content.includes('接口') || content.includes('API');
