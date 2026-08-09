@@ -350,23 +350,26 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     } else {
       prompt += `3. 读取 .speccore/GLOBAL/ 下各项目需求文档，生成跨项目索引和需求目录\n`;
     }
-    prompt += `\n## 输出文档 (${ctx.withCode ? '9 类' : '1 个'})\n`;
+    prompt += `\n## 输出文档 (12 个/工程 + 1 个全局)\n`;
     if (ctx.withCode) {
-      prompt += `| 文档 | 从源码提取内容 | 输出目录 |\n`;
+      prompt += `> 以下文档按工程分目录存放: .speccore/GLOBAL/PROJECTS/{工程名}/\n`;
+      prompt += `> 工程名从 CONSTITUTION 的「工程」列读取\n\n`;
+      prompt += `| 文档 | 存放位置 | 从源码提取内容 |\n`;
       prompt += `| :--- | :--- | :--- |\n`;
-      prompt += `| TECH_STACK.md | 语言、框架、构建工具、UI库（前后端全覆盖） | GLOBAL/ |\n`;
-      prompt += `| API_INVENTORY.md | 接口清单（后台）+ 前端API调用清单 | GLOBAL/ |\n`;
-      prompt += `| DATA_MODEL.md | 表结构+字段+关系（后台）+ 前端Store/State | GLOBAL/ |\n`;
-      prompt += `| BUSINESS_RULES.md | 校验规则+业务约束+状态机 | GLOBAL/ |\n`;
-      prompt += `| CONFIG_MAP.md | 环境变量+开关+密钥（脱敏） | GLOBAL/ |\n`;
-      prompt += `| ERROR_CODES.md | 错误码清单+含义 | GLOBAL/ |\n`;
-      prompt += `| DEPENDENCY_GRAPH.md | 模块依赖拓扑 | GLOBAL/ |\n`;
-      prompt += `| CODE_INDEX.md | 目录结构+关键文件+模块职责 | GLOBAL/ |\n`;
-      prompt += `| TEST.md | 测试计划（用例矩阵+边界+集成） | GLOBAL/ |\n`;
-      prompt += `| REVIEW.md | 评审清单（安全+质量+性能） | GLOBAL/ |\n`;
-      prompt += `| RISK.md | 风险评估（矩阵+缓解+预案） | GLOBAL/ |\n`;
-      prompt += `| DEPS.md | 依赖清单（服务+中间件+库） | GLOBAL/ |\n`;
-      prompt += `| MONITOR.md | 监控方案（指标+告警+追踪） | GLOBAL/ |\n`;
+      prompt += `| TECH_STACK.md | PROJECTS/{工程}/ | 语言、框架、构建工具、UI库 |\n`;
+      prompt += `| API_INVENTORY.md | PROJECTS/{工程}/ | 接口路径、方法、参数、响应、鉴权 |\n`;
+      prompt += `| DATA_MODEL.md | PROJECTS/{工程}/ | 表结构+字段+关系（后台）+ Store/State（前端） |\n`;
+      prompt += `| BUSINESS_RULES.md | PROJECTS/{工程}/ | 校验规则+业务约束+状态机 |\n`;
+      prompt += `| CONFIG_MAP.md | PROJECTS/{工程}/ | 环境变量+开关+密钥（脱敏） |\n`;
+      prompt += `| ERROR_CODES.md | PROJECTS/{工程}/ | 错误码清单+含义 |\n`;
+      prompt += `| DEPENDENCY_GRAPH.md | PROJECTS/{工程}/ | 模块依赖拓扑 |\n`;
+      prompt += `| CODE_INDEX.md | PROJECTS/{工程}/ | 目录结构+关键文件+模块职责 |\n`;
+      prompt += `| TEST.md | PROJECTS/{工程}/ | 测试计划（用例矩阵+边界+集成） |\n`;
+      prompt += `| REVIEW.md | PROJECTS/{工程}/ | 评审清单（安全+质量+性能） |\n`;
+      prompt += `| RISK.md | PROJECTS/{工程}/ | 风险评估（矩阵+缓解+预案） |\n`;
+      prompt += `| DEPS.md | PROJECTS/{工程}/ | 依赖清单（服务+中间件+库） |\n`;
+      prompt += `| MONITOR.md | PROJECTS/{工程}/ | 监控方案（指标+告警+追踪） |\n`;
+      prompt += `| REQUIREMENT.md | GLOBAL/ (全局1份) | 跨项目需求索引 |\n`;
       prompt += `| PATTERNS/*.md | 可复用设计模式，前后端分别提取： | PATTERNS/ |\n`;
       prompt += `  - 后台: 架构(mvc/ddd)、鉴权(jwt/oauth)、API(pagination/restful)、数据(repository)、异常(handler)、日志(aop)\n`;
       prompt += `  - 前端: 组件(composable/hook)、状态管理(pinia/redux)、路由(guard/layout)、请求(interceptor)、表单(validation)、UI(theme/layout)\n`;
