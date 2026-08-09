@@ -108,6 +108,18 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
         logger.info('');
         logger.info('📄 升级详情: speccore-upgrade.html');
         logger.info('💡 强制重置: speccore init --force');
+        logger.info('');
+        // 检查全局 CLI 是否需要更新
+        try {
+          const { execSync } = require('child_process');
+          const globalVer = execSync('speccore --version 2>/dev/null || echo "0.0.0"', { encoding: 'utf-8', timeout: 3000 }).trim();
+          const projectVer = version;
+          if (globalVer !== projectVer && globalVer !== '0.0.0') {
+            logger.warn(`⚠️  全局 speccore CLI 版本: ${globalVer}，项目要求: ${projectVer}`);
+            logger.warn(`   👉 请执行: npm i -g speccore@${projectVer}`);
+            logger.warn(`   否则 AI 运行的 analyze/split/plan 等命令会使用旧版本，导致结果异常`);
+          }
+        } catch { /* non-critical */ }
         logger.info('━'.repeat(50));
         return;
       }
