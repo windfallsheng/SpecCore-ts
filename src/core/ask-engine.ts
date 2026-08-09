@@ -67,7 +67,7 @@ const COMMAND_KB: CommandKnowledge[] = [
   { name: 'dashboard', aliases: ['db', 'sp'], description: '项目仪表盘：迭代状态/进度/健康度，--scope global 全量视图',
     usage: 'speccore dashboard [--scope global|iteration] [--export html] [--health] [--lifecycle]', examples: ['speccore dashboard', 'speccore dashboard --scope global --export html'], related: ['analyze', 'health'], triggers: ['看板', '仪表盘', 'dashboard', '进度', '状态', '全局', '全量'] },
   { name: 'analyze', aliases: ['al'], description: 'AI 统一分析：需求文档+源码→分析报告，--audit 审计模式',
-    usage: 'speccore analyze [--task <id>] [--iteration <name>] [--audit] [--with-code]', examples: ['speccore analyze', 'speccore analyze --with-code'], related: ['dashboard', 'validate'], triggers: ['分析', 'analyze', '审计', 'audit', '检查', '结合源码', '连代码', '带代码', '源码分析'] },
+    usage: 'speccore analyze [--task <id>] [--iteration <name>] [--audit] [--with-code] [--scope global]', examples: ['speccore analyze', 'speccore analyze --with-code', 'speccore analyze --scope global --with-code'], related: ['dashboard', 'validate'], triggers: ['分析', 'analyze', '审计', 'audit', '检查', '结合源码', '连代码', '带代码', '源码分析', '全局分析', '分析全局', '倒推需求', '反推', '从代码生成', '分析代码'] },
   { name: 'execute', aliases: ['ex'], description: '执行开发任务：依赖排序+分批+交互引导+计划联动',
     usage: 'speccore execute [--task <id>] [--batch-size <n>] [--auto]', examples: ['speccore execute', 'speccore execute --batch-size 3'], related: ['plan', 'done'], triggers: ['执行', 'execute', '开发', '开始做', '干活'] },
   { name: 'plan', aliases: ['pl'], description: '生成执行计划+管理历史：创建/交互/列表/详情/取消',

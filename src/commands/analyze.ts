@@ -350,20 +350,37 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     prompt += `1. Read .speccore/CONSTITUTION.md 获取全局技术栈和源码配置\n`;
     prompt += `2. Read .speccore/GLOBAL/ 下所有文档了解跨项目需求\n`;
     if (ctx.withCode) {
-      prompt += `3. 从 CONSTITUTION.md 的「源码路径」列读取工程目录，逐个 Read 源码\n`;
-      prompt += `4. 从源码反推: 接口清单(扫描路由/Controller)、数据模型(扫描Entity/Schema)、业务规则、依赖关系\n`;
-      prompt += `5. 生成或更新 .speccore/GLOBAL/ 下的: TECH_STACK.md, CODE_INDEX.md, API_INVENTORY.md\n`;
+      prompt += `3. 从 CONSTITUTION.md 的「源码路径」列读取各工程目录，逐个 Read 源码\n`;
+      prompt += `4. 从源码反推以下内容，生成对应文档:\n`;
+      prompt += `   - TECH_STACK.md: 扫描 package.json/pom.xml/go.mod 检测语言/框架/中间件版本\n`;
+      prompt += `   - API_INVENTORY.md: 扫描 Controller/Route/handler 提取完整 API 清单（方法+路径+入参+出参+鉴权）\n`;
+      prompt += `   - DATA_MODEL.md: 扫描 Entity/Schema/Model 提取数据模型（表名+字段+类型+约束+索引+关系）\n`;
+      prompt += `   - BUSINESS_RULES.md: 扫描 validator/middleware/guard/service 提取业务规则和约束逻辑\n`;
+      prompt += `   - CONFIG_MAP.md: 扫描 .env/yml/json 等配置文件，提取环境变量、开关、第三方密钥（脱敏）\n`;
+      prompt += `   - ERROR_CODES.md: 扫描 Error/Exception/enum 提取错误码清单和含义\n`;
+      prompt += `   - DEPENDENCY_GRAPH.md: 分析模块间 import/require 依赖关系，生成依赖拓扑图\n`;
+      prompt += `   - CODE_INDEX.md: 各工程目录结构、关键文件清单、模块职责说明\n`;
+      prompt += `5. 以上所有文档输出到 .speccore/GLOBAL/ 目录，使用 Write 工具写入\n`;
     } else {
       prompt += `3. 读取 .speccore/GLOBAL/ 下各项目需求文档，生成跨项目索引和需求目录\n`;
     }
-    prompt += `\n## 输出文档\n`;
-    prompt += `- TECH_STACK.md — 技术栈配置 (从 CONSTITUTION 读取)\n`;
-    prompt += `- CODE_INDEX.md — 代码索引 (${ctx.withCode ? '从源码扫描' : '从已有文档'})\n`;
-    prompt += `- API_INVENTORY.md — API 清单\n`;
-    if (!ctx.withCode) {
-      prompt += `- REQUIREMENT.md — 合并全局需求\n`;
+    prompt += `\n## 输出文档 (${ctx.withCode ? '8 个' : '1 个'})\n`;
+    if (ctx.withCode) {
+      prompt += `| 文档 | 从源码提取内容 |\n`;
+      prompt += `| :--- | :--- |\n`;
+      prompt += `| TECH_STACK.md | 语言、框架、中间件、构建工具 |\n`;
+      prompt += `| API_INVENTORY.md | 接口路径、方法、参数、响应、鉴权 |\n`;
+      prompt += `| DATA_MODEL.md | 表结构、字段、索引、关系 |\n`;
+      prompt += `| BUSINESS_RULES.md | 校验规则、业务约束、状态机 |\n`;
+      prompt += `| CONFIG_MAP.md | 环境变量、开关、密钥（脱敏） |\n`;
+      prompt += `| ERROR_CODES.md | 错误码、含义、HTTP状态 |\n`;
+      prompt += `| DEPENDENCY_GRAPH.md | 模块依赖拓扑、循环依赖检测 |\n`;
+      prompt += `| CODE_INDEX.md | 目录结构、关键文件、模块职责 |\n`;
+    } else {
+      prompt += `- REQUIREMENT.md — 合并各迭代需求，生成跨项目需求索引\n`;
     }
-    prompt += `\n⚠️ 如果 CONSTITUTION.md 中「源码路径」为空或路径不存在: 提示用户先配置 speccore init 或手动设置\n`;
+    prompt += `\n⚠️ 如 CONSTITUTION.md 中「源码路径」为空或路径不存在: 提示用户先配置，给出三个选项：\n`;
+    prompt += `   [1] 停止分析 → 配置后重来 | [2] 跳过源码 → 只用文档分析 | [3] 手动指定路径后继续\n`;
     return prompt;
   }
 
