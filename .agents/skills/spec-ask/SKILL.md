@@ -19,6 +19,12 @@ disable-model-invocation: false
    - 先列出发现的问题（如"已有旧分析结果"、"路径配置为空"）
    - 给用户清晰的选择：继续 / 覆盖 / 跳过 / 停止
    - **由用户决定**，不是你替用户决定
+5. **analyze 必须走完整 prompt→填充→apply 流程**: 分析需求文档时，禁止直接跳到代码修复或跳过文档生成。正确流程:
+   - 步骤1: `speccore analyze --prompt -I <iter> --type <type>` → 获取 SPECCORE_PROMPT
+   - 步骤2: Read 各端 PRD 文档和源码路径，理解需求
+   - 步骤3: 对每个文档（ANALYSIS/TECH/TEST/REVIEW/RISK/DEPS/MONITOR）**填入实质内容**，禁止写"待填充"或复制模板空壳
+   - 步骤4: `speccore analyze --apply '{"ANALYSIS.md":"...",...}' -I <iter>` 写入
+   - ❌ 禁止行为: 跳过文档填充直接写代码、生成 137 行重复空壳、用 "API=0 接口" 为由跳过分析
    `init → doc2spec → analyze → split → plan → execute → pr → done → spec2doc`
    示例: 用户说"执行完再分析" → 你应该排列为 `analyze → execute`，并在计划中说明"根据工作流逻辑，先分析再执行"
    - **全自动**: "全自动执行/一键完成" → 所有步骤不等确认，全部自动跑
