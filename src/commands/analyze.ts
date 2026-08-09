@@ -40,8 +40,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
   // ── Prompt 模式 ──
   if (options.prompt) {
     const iter = options.iteration || await getDefaultIteration();
-    const prompt = await buildPrompt('analyze', { iteration: iter, task: options.task });
-    process.stdout.write(formatPrompt(prompt));
+    const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task });
+    process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
     process.exitCode = 10;
     return;
   }
@@ -52,14 +52,34 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     const iterDir = await getIterationDir(options.iteration);
     const specDir = join(iterDir, '020-specs');
     await ensureDir(specDir);
+    // 支持 JSON 多文档写入: {"ANALYSIS.md":"...","TECH.md":"..."}
+    if (options.apply.startsWith('{')) {
+      try {
+        const docs: Record<string, string> = JSON.parse(options.apply);
+        let count = 0;
+        for (const [filename, content] of Object.entries(docs)) {
+          await writeFile(join(specDir, filename), content);
+          count++;
+        }
+        logger.success(`✅ ${count} 个 Spec 文档已写入 020-specs/`);
+        if (options.task) {
+          const taskDir = join(iterDir, '030-tasks', options.task.startsWith('Task-') ? options.task : `Task-${options.task}`);
+          await ensureDir(taskDir);
+          for (const [filename, content] of Object.entries(docs)) {
+            await writeFile(join(taskDir, filename), content);
+          }
+        }
+        return;
+      } catch {
+        // fallback to single-file mode
+      }
+    }
     await writeFile(join(specDir, 'ANALYSIS.md'), options.apply);
     logger.success(`✅ ANALYSIS.md 已写入 020-specs/`);
-    // 如果指定了 task，写入 task 的 analysis
     if (options.task) {
       const taskDir = join(iterDir, '030-tasks', options.task.startsWith('Task-') ? options.task : `Task-${options.task}`);
       await ensureDir(taskDir);
       await writeFile(join(taskDir, 'ANALYSIS.md'), options.apply);
-      logger.success(`✅ 任务分析已写入 ${taskDir}/`);
     }
     return;
   }
@@ -211,8 +231,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
  * 迭代创建全套规范文件
  */
 async function generateIterationSpecDocs(iteration: string): Promise<void> {
-  const specDir = join(`Iteration-${iteration}`, '020-specs');
-  await ensureDir(specDir);
+  const iterDir = await getIterationDir(iteration);
+  const specDir = join(iterDir, '020-specs');
 
   const now = new Date().toISOString().split('T')[0];
   const templates: [string, string][] = [
@@ -402,4 +422,33 @@ function parseArgv(options: AnalyzeOptions): void {
       }
     }
   }
+}
+
+// ── buildMultiDocPrompt: 多文档协议 ──
+async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; task?: string }): Promise<string> {
+  const iter = ctx.iteration || '当前迭代';
+  const task = ctx.task ? ` — ${ctx.task}` : '';
+  const now = new Date().toISOString().split('T')[0];
+  const isTask = !!ctx.task;
+
+  const docs: [string, string][] = [
+    ['ANALYSIS.md', `# 需求分析报告\n\n> ${iter} | ${now}\n\n## 1. 功能点\n\n## 2. 接口分析\n\n| 方法 | 路径 | 入参 | 出参 |\n|:---|:---|:---|:---|\n\n## 3. 数据模型\n\n## 4. 业务规则\n\n## 5. 异常处理\n`],
+    ['TECH.md', `# 技术方案\n\n> ${iter}\n\n## 1. 架构\n\n## 2. DDL\n\n\`\`\`sql\n\`\`\`\n\n## 3. 接口\n\n## 4. 缓存\n\n## 5. 流程\n`],
+    ['TEST.md', `# 测试计划\n\n> ${iter}\n\n## 1. 单元\n\n## 2. 集成\n\n## 3. 边界\n\n## 4. 性能\n`],
+    ['REVIEW.md', `# Code Review\n\n> ${iter}\n\n## 安全\n- [ ] SQL注入\n- [ ] XSS\n\n## 质量\n- [ ] 参数校验\n- [ ] 幂等\n`],
+    ['RISK.md', `# 风险评估\n\n> ${iter}\n\n| 风险 | 概率 | 影响 | 缓解 |\n|:---|:---|:---|:---|\n`],
+    ['DEPS.md', `# 依赖清单\n\n> ${iter}\n\n| 服务 | 版本 | 用途 |\n|:---|:---|:---|\n`],
+    ['MONITOR.md', `# 监控\n\n> ${iter}\n\n| 指标 | 阈值 | 级别 |\n|:---|:---|:---|\n| 成功率 | <99.9% | P1 |\n`],
+  ];
+
+  const taskDocs = isTask ? docs.filter(([n]) => ['ANALYSIS.md','TECH.md','TEST.md'].includes(n)) : docs;
+
+  let prompt = `\n# 任务: ${command}${task} (${taskDocs.length}个文档)\n\n`;
+  prompt += `## 要求\n1. Read 010-requirements/ 和 020-specs/REQUIREMENT.md\n`;
+  prompt += `2. 填充 ${taskDocs.length} 个文档，每个都要具体内容（禁止"待填充"）\n`;
+  prompt += `3. 写入: speccore analyze --apply '{"ANALYSIS.md":"...","TECH.md":"..."}' -I ${iter}\n\n`;
+  for (let i = 0; i < taskDocs.length; i++) {
+    prompt += `### ${i+1}/${taskDocs.length}: ${taskDocs[i][0]}\n\`\`\`markdown\n${taskDocs[i][1]}\n\`\`\`\n\n`;
+  }
+  return prompt;
 }
