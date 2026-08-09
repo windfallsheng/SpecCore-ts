@@ -4,21 +4,20 @@
 
 ## 两种用法
 
-同一个命令在终端和 AI 对话中写法不同：
-
-| | 终端 CLI | AI 对话 |
+| | 终端 CLI | AI IDE（@spec-ask） |
 |:---|:---|:---|
 | 初始化 | `speccore init` | `speccore init` |
-| 导入需求 | `speccore doc2spec -f PRD.docx -p backend` | `speccore doc2spec PRD.docx` |
-| 分析 | `speccore analyze -I Q1` | `speccore analyze Q1` |
-| 代码分析 | `speccore analyze --scope global --depth deep` | `speccore analyze` (说"分析项目代码") |
-| 拆分任务 | `speccore iteration split -i Q1` | `speccore split Q1` |
-| 执行开发 | `speccore execute -t Task-001 --force` | `speccore execute Task-001` |
-| 提交PR | `speccore pr --task=Task-001` | `speccore pr Task-001` |
 | 查看状态 | `speccore dashboard` | `speccore dashboard` |
-| 自然语言 | `speccore "帮我拆分任务"` | 直接说 "帮我拆分任务" |
-
-> 完整对照表（所有命令的分类说明）→ [命令参考 — 两种使用方式](命令参考.md#-两种使用方式)
+| 创建期次 | `speccore iteration create` | `speccore iteration create` |
+| 创建任务 | `speccore task new -n 用户登录` | `speccore task new -n 用户登录` |
+| 导入需求 | — | `@spec-ask "导入PRD.docx"` 🔒 |
+| 分析需求 | — | `@spec-ask "分析当前迭代需求"` 🔒 |
+| 代码分析 | — | `@spec-ask "全局代码健康扫描"` 🔒 |
+| 拆分任务 | — | `@spec-ask "拆分为开发任务"` 🔒 |
+| 执行开发 | — | `@spec-ask "执行 Task-001"` 🔒 |
+| 提交PR | — | `@spec-ask "提交 Task-001 的 PR"` 🔒 |
+| 完成归档 | — | `@spec-ask "归档 Task-001"` 🔒 |
+| 需求变更 | — | `@spec-ask "把手机号改成国际格式"` 🔒 |
 
 ## 安装
 
@@ -40,113 +39,84 @@ npm install -g speccore
 ## 完整流程
 
 ```bash
-# ① 初始化项目
+# ① 初始化项目（CLI 命令）
 speccore init
 
-# ② 新建期次
+# ② 新建期次（CLI 命令）
 speccore iteration create --name=Q1
 
-# ③ 导入需求文档（支持 Word/PDF/MD/HTML/PPTX）
-speccore doc2spec -f PRD.md -p backend --iter=Q1
+# ③ 导入需求文档（🔒 AI 命令 — 在 AI IDE 中使用 @spec-ask）
+@spec-ask "导入 PRD.md 到 Q1 期次的 backend 平台"
 
-# ④ 需求分析（支持多种模式）
-speccore analyze -I Q1                           # 默认：期次需求分析
-speccore analyze --scope global --depth deep     # 全局代码健康
-speccore analyze --src backend,frontend -I Q1    # 联合分析
+# ④ 需求分析（🔒 AI 命令）
+@spec-ask "分析 Q1 期次需求"
+@spec-ask "全局代码健康扫描"
+@spec-ask "联合分析 backend 和 frontend 代码"
 
-# ⑤ 拆分为原子 Task
-speccore iteration split --iteration=Q1
+# ⑤ 拆分为原子 Task（🔒 AI 命令）
+@spec-ask "拆分 Q1 期次为开发任务"
 
-# ⑥ 生成执行计划
-speccore plan --iteration=Q1
+# ⑥ 生成执行计划（🔒 AI 命令）
+@spec-ask "生成 Q1 期次的执行计划"
 
-# ⑦ AI 执行开发
-speccore execute --task=Task-001 --force --iteration=Q1
+# ⑦ AI 执行开发（🔒 AI 命令）
+@spec-ask "执行 Task-001 的开发"
 
-# ⑧ 提交 PR
-speccore pr --task=Task-001
+# ⑧ 提交 PR（🔒 AI 命令）
+@spec-ask "提交 Task-001 的 Pull Request"
 
-# ⑨ 完成任务
-speccore done --task=Task-001
+# ⑨ 完成任务（🔒 AI 命令）
+@spec-ask "归档 Task-001"
 ```
 
-## 交互模式
+## 交互模式 🔒 AI 命令
 
-复杂场景加 `--interactive` 进入人机协作：
+复杂场景在 AI IDE 中通过交互式执行实现人机协作：
 
 ```bash
-speccore analyze --interactive -I Q1         # AI 提问 → 回答 → 调整
-speccore split --interactive        # 预览 Task → 逐一确认
-speccore plan --interactive         # 预览调度 → 确认
-speccore change --interactive       # 预览影响 → 确认
+@spec-ask "交互式分析 Q1 需求"
+@spec-ask "交互式拆分任务"
+@spec-ask "交互式生成调度计划"
+@spec-ask "交互式变更 Task-001"
 ```
 
 ## 常用操作
 
 ```bash
-# 自然语言（无需记子命令）
-speccore "帮我分析需求"
+# ── CLI 命令（终端直接输入）──
+speccore "帮我分析需求"                         # 自然语言（无需记子命令）
 speccore ask "查看进度"
-
-# 快捷创建 Task
-speccore task new --name=用户登录
-
-# 需求变更
-speccore change "把手机号改成国际格式" --task=Task-001
-
-# 检查合规
-speccore validate --iteration=Q1
-
-# 重命名
+speccore task new --name=用户登录               # 快捷创建 Task
+speccore validate --iteration=Q1               # 检查合规
 speccore rename --target=Task-001 --new-name=用户认证
-
-# 操作历史
-speccore ops
-
-# 可视化看板
-speccore dashboard
-
-# Bug 批量导入
+speccore ops                                    # 操作历史
+speccore dashboard                              # 可视化看板
 speccore task new --batch-file=bugs.xlsx --type=bugfix --schedule=night --interactive
+
+# ── 🔒 AI 命令（在 AI IDE 中使用 @spec-ask）──
+@spec-ask "把手机号改成国际格式"              # 需求变更
 ```
 
 ## 命令速查
 
-直接输入自然语言，或使用以下命令：
+### ✅ CLI 命令（终端直接输入）
 
 ```bash
 # ── 三种入口 ──
 speccore "帮我拆分任务"                 # 直接说人话，无需记命令
 speccore ask "分析需求"                 # 显式调用意图识别
-speccore dev                           # 智能检测阶段 → 级联执行下一步
-speccore dev --auto                    # 全自动流水线（零干预）
 speccore help --command=execute        # 查看命令详细参数
 
 # ── 项目初始化 ──
 speccore init                          # 初始化（默认简洁模式）
-speccore doc2spec -f PRD.docx -p backend --iter=Q1             # 文档导入
 
-# ── 需求 → 任务 ──
-speccore analyze -I Q1                 # AI 分析需求
-speccore analyze --scope global        # 全局代码健康报告
-speccore iteration split -i Q1         # 拆分为 Task
-speccore plan -i Q1                    # 生成执行计划
+# ── 管理 ──
+speccore iteration create -n Q1        # 创建迭代
 speccore task new -n 用户登录           # 手动创建 Task
-
-# ── 开发 → 上线 ──
-speccore execute -t Task-001 --force            # 直接执行
-speccore execute -t Task-001 --force --verify   # 执行+自动验证(3轮)
-speccore execute --all --scheduled              # 夜间批量执行
-speccore pr --task=Task-001                         # 推送+创建PR
-speccore pr --task=Task-001 --interactive           # 分步确认PR
-speccore done --task=Task-001                       # 完成归档
-
-# ── 变更 + Bug ──
-speccore change "改成国际手机号" -t Task-001     # 口语化变更
 speccore task new --batch-file=bugs.xlsx --type=bugfix --interactive  # 批量Bug
 speccore task new --batch-file=bugs.xlsx --type=bugfix --schedule=night # 夜间执行
 
-# ── 查看 + 导出 ──
+# ── 查看 ──
 speccore dashboard                  # 终端状态面板
 speccore dashboard --export=html    # 导出HTML仪表盘
 speccore validate -i Q1                # Spec 合规检查
@@ -155,6 +125,28 @@ speccore ops                           # 操作历史
 # ── 其它 ──
 speccore rename --task=Task-001 --name=用户模块
 speccore help --examples               # 完整场景示例
+```
+
+### 🔒 AI 命令（在 WorkBuddy/Cursor/Trae 中使用 @spec-ask）
+
+```bash
+# ── 需求 → 任务 ──
+@spec-ask "导入 PRD.docx 到 backend 平台 Q1 期次"
+@spec-ask "分析 Q1 需求"
+@spec-ask "全局代码健康报告"
+@spec-ask "拆分 Q1 迭代为开发任务"
+@spec-ask "生成 Q1 执行计划"
+
+# ── 开发 → 上线 ──
+@spec-ask "执行 Task-001"
+@spec-ask "提交 Task-001 的 PR"
+@spec-ask "归档 Task-001"
+
+# ── 变更 ──
+@spec-ask "把手机号改成国际格式"
+
+# ── 智能级联 ──
+@spec-ask "全自动执行"
 ```
 
 ## 目录结构
@@ -188,12 +180,13 @@ speccore schedule cancel --id=xxx    # 取消
 
 ### 批量标记 + 手动触发（轻量方式）
 
-`--schedule=night` 标记任务，之后 `execute --scheduled` 手动触发，不设具体时间。
+`--schedule=night` 标记任务，通过 AI 命令或手动触发执行。
 
 ```bash
 speccore task new -n "修复登录超时" --type=bugfix --schedule=night
 speccore task new --batch-file=bugs.xlsx --type=bugfix --schedule=night
-speccore execute --all --scheduled    # 手动触发所有 queue 任务
+
+# 🔒 AI: @spec-ask "执行所有 scheduled 任务"
 ```
 
 ## 下一步

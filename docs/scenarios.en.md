@@ -2,6 +2,17 @@
 
 > Real-world development scenarios with step-by-step workflows.
 
+## ⚠️ Command Types
+
+Commands in this document fall into two categories:
+
+| Mark | Type | How to Run | Examples |
+|:---:|:---|:---|:---|
+| ✅ | **CLI Commands** | Terminal: `speccore xxx` | `speccore init`, `speccore task new` |
+| 🔒 | **AI Commands** | AI IDE: `@spec-ask "description"` | `execute`, `analyze`, `plan`, `pr`, `done`, `change` |
+
+> 💡 **Important**: `speccore execute`, `speccore pr`, `speccore done`, `speccore change`, `speccore retro`, `speccore analyze`, `speccore plan`, `speccore doc2spec`, `speccore dev` are 🔒 AI commands — **cannot run directly in terminal**. Use `@spec-ask` in WorkBuddy/Cursor/Trae instead.
+
 ---
 
 ## Scenario 1: Start a New Project

@@ -2,6 +2,8 @@
 
 > What can I edit manually? What requires a command? What to do after editing?
 
+> 💡 **Command Types**: `speccore change` below is a 🔒 AI command — use `@spec-ask` in AI IDE.
+
 ---
 
 ## 1. Three-Layer File Overview

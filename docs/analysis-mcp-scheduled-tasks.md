@@ -1,8 +1,9 @@
 # MCP scheduled_tasks 方案分析
 
 > 日期: 2026-08-08 | 版本: v5.67.30
->
 > 目的: 对比现有 daemon 方案与 MCP Sampling 方案，确定 SpecCore 调度能力的升级路径。
+
+> 💡 **命令类型**: 本文档中的 `speccore execute` 为 🔒 AI 命令，需在 AI IDE 中通过 `@spec-ask` 使用。
 
 ---
 

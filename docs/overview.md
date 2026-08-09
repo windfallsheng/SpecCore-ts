@@ -9,13 +9,14 @@ SpecCore 是一个 **规范驱动开发 CLI 工具**。核心理念：**Code by 
 - 全局仪表盘实时追踪项目健康度
 - 万能 AI 入口（ask）自动匹配命令
 
-## 核心流程
+## 核心流程 🔒 AI 命令
 
 ```
 init → doc2spec → analyze → split → plan → execute → pr → done
+✅CLI   🔒AI     🔒AI     🔒AI   🔒AI   🔒AI    🔒AI  🔒AI
 ```
 
-每个阶段都有对应命令，也可以使用 `speccore ask "自然语言"` 自动推进。
+每个阶段都有对应命令，也可以使用 `@spec-ask "自然语言"` 在 AI IDE 中自动推进。
 
 ## 安装
 
@@ -34,15 +35,20 @@ speccore ask "计划任务，晚8点分批执行"
 ```
 
 ### 2. 单命令执行
+
 ```bash
+# ✅ CLI 命令（终端直接输入）
 speccore init
-speccore doc2spec -f PRD.docx --iter Q1
 speccore dashboard --scope global
+
+# 🔒 AI 命令（在 AI IDE 中使用 @spec-ask）
+@spec-ask "导入 PRD.docx 到 Q1"
 ```
 
-### 3. 智能级联
+### 3. 智能级联 🔒 AI 命令
 ```bash
-speccore dev --auto
+# 在 AI IDE 中使用：
+@spec-ask "全自动执行"
 ```
 
 ## 关键概念

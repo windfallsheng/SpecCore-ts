@@ -2,6 +2,8 @@
 
 > SpecCore 通过 `speccore init` 自动创建 AI 工具集成文件。本文档说明工作机制和配置详情。
 
+> 💡 **命令类型**: 下文引用的 `speccore execute` 等为 🔒 AI 命令，需在 AI IDE 中使用 `@spec-ask`。
+
 ---
 
 ## 一、支持的 AI 工具

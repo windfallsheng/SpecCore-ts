@@ -2,6 +2,17 @@
 
 > 从真实开发场景出发，逐步演示 SpecCore 的完整使用流程。
 
+## ⚠️ 命令类型说明
+
+本文档中的命令示例分为两类：
+
+| 标记 | 类型 | 执行方式 | 示例 |
+|:---:|:---|:---|:---|
+| ✅ | **CLI 命令** | 终端直接输入 `speccore xxx` | `speccore init`, `speccore task new` |
+| 🔒 | **AI 命令** | AI IDE 中使用 `@spec-ask "描述"` | `execute`, `analyze`, `plan`, `pr`, `done`, `change` |
+
+> 💡 **重要**: `speccore execute`, `speccore pr`, `speccore done`, `speccore change`, `speccore retro`, `speccore analyze`, `speccore plan`, `speccore doc2spec`, `speccore dev` 均为 🔒 AI 命令，**不能在终端直接执行**，需在 WorkBuddy/Cursor/Trae 中通过 `@spec-ask` 使用。
+
 ## 📑 目录
 
 - [快速上手：简洁模式全流程](#快速上手简洁模式全流程推荐)

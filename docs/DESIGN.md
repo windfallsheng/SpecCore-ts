@@ -142,9 +142,10 @@ init → doc2spec → analyze → split → plan → execute → pr → done →
 execute --all → 部分失败 → .issues.md + .needs-retry → --resume 续跑
 ```
 
-### 回顾复盘
+### 回顾复盘 🔒 AI 命令
 
 ```bash
+# 🔒 AI 命令（在 AI IDE 中使用 @spec-ask）
 speccore retro --task Task-001        ← 单个
 speccore retro --all                  ← 全部
 speccore retro --all --owner 张三     ← 按人
@@ -173,9 +174,9 @@ speccore retro --all --type bugfix    ← 按类型
 
 | 类型 | 示例 | 执行方式 |
 |:---|:---|:---|
-| **需 AI 参与** | `analyze --prompt`、`plan --prompt`、`execute --prompt` | 必须走 `[SPECCORE_EXEC]` 标签，AI 用 `execute_command` 执行 |
-| **纯 CLI** | `schedule`、`daemon`、`context`、`dashboard` | AI 执行或终端跑都行 |
-| **查看/展示** | `about`、`welcome`、`ask` | AI 执行，用 `file://` 或 `present_files` 展示结果 |
+| **🔒 需 AI 参与** | `analyze --prompt`、`plan --prompt`、`execute --prompt` | 必须走 `[SPECCORE_EXEC]` 标签，AI 用 `execute_command` 执行 |
+| **✅ 纯 CLI** | `schedule`、`daemon`、`context`、`dashboard` | AI 执行或终端跑都行 |
+| **✅ 查看/展示** | `about`、`welcome`、`ask` | AI 执行，用 `file://` 或 `present_files` 展示结果 |
 
 **🚫 绝不输出命令文本让用户复制**——那等于把 AI 踢出循环。
 
@@ -183,13 +184,13 @@ speccore retro --all --type bugfix    ← 按类型
 
 统一入口 `.agents/skills/speccore-router/SKILL.md`，20+ 意图映射：
 
-| 用户说 | 输出 |
-|------|------|
-| "开发 Task-001" | `speccore execute -t Task-001 --force` |
-| "分析 Q1" | `speccore analyze -I Q1` |
-| "拆分任务" | `speccore iteration split -I Q1` |
-| "查看进度" | `speccore dashboard` |
-| 复杂意图 | `speccore ask "用户原话"` ← fallback |
+| 用户说 | 输出 | 类型 |
+|------|------|:---:|
+| "开发 Task-001" | `speccore execute -t Task-001 --force` | 🔒 AI |
+| "分析 Q1" | `speccore analyze -I Q1` | 🔒 AI |
+| "拆分任务" | `speccore iteration split -I Q1` | 🔒 AI |
+| "查看进度" | `speccore dashboard` | ✅ CLI |
+| 复杂意图 | `speccore ask "用户原话"` ← fallback | 🔒 AI |
 
 ### 5.3 ask 引擎四大模式
 
@@ -280,7 +281,7 @@ speccore schedule retry --id <id> [--at "新时间"]
 speccore schedule cancel --id <id>
   → 取消调度；pending=0 → 自动停 daemon（懒停止）
 
-到点: daemon → speccore execute → CLI 执行
+到点: daemon → speccore execute → CLI 执行（🔒 AI 命令，通过 Prompt/Apply 循环触发）
 ```
 
 ### 7.2 跨平台守护
@@ -410,7 +411,7 @@ CLI 只做确定性操作，不做内容生成。
 | 角色 | 职责 | 示例 |
 | :--- | :--- | :--- |
 | Skill（.agents/skills/） | 编排流程、调用 CLI、触发 AI | `spec-execute` Skill |
-| CLI（speccore） | 读写文件、构建 Prompt、写入结果 | `speccore execute --prompt` |
+| CLI（speccore） | 读写文件、构建 Prompt、写入结果 | `speccore execute --prompt` 🔒 |
 | 宿主 AI（Qoder/Trae/Claude） | 语义理解、内容生成、代码编写 | 根据 Spec 生成 Java 代码 |
 
 ### 10.2 Prompt/Apply 协作循环
@@ -437,7 +438,7 @@ CLI 只做确定性操作，不做内容生成。
 └──────────────────────────────────────────────────────────────┘
 ```
 
-**步骤说明**：
+**步骤说明**（🔒 AI 命令，通过 Skill → CLI → AI 协作执行）：
 1. Skill 调用 `speccore execute --prompt -t Task-001`
 2. CLI 读取 Task 的 REQ.md、TECH.md、CONSTITUTION.md
 3. CLI 构建结构化 Prompt，输出到 stdout（`[SPECCORE_PROMPT]...[/SPECCORE_PROMPT]`）
@@ -483,7 +484,7 @@ CLI 只做确定性操作，不做内容生成。
 
 ### 10.4 适用的命令列表
 
-| 命令 | --prompt 做什么 | --response/--apply 做什么 |
+| 命令 🔒 | --prompt 做什么 | --response/--apply 做什么 |
 | :--- | :--- | :--- |
 | `execute` | 读 Spec → 输出代码生成 Prompt | 接收 AI 代码 → 写入文件 |
 | `analyze` | 读需求 → 输出分析 Prompt | 接收 AI 分析 → 写入 ANALYSIS.md |
@@ -530,7 +531,7 @@ CLI 只做确定性操作，不做内容生成。
 
 2. WorkBuddy 到时间后触发 spec-dev Skill
 3. spec-dev 读取 context.json → 发现阶段: execute
-4. Skill 拼命令: speccore execute --all --force
+4. Skill 拼命令: speccore execute --all --force  🔒 AI 命令
 5. CLI 走 Prompt/Apply 协作循环完成开发
 ```
 
@@ -606,13 +607,14 @@ if ANALYSIS.md 有效 → 正常执行
      ↓
   只建不推 → 推荐后续步骤
 ```
+> 🔒 以上均为 AI 命令，通过 Prompt/Apply 模式由 AI IDE 执行
 
-### 15.2 execute 前置检查
+### 15.2 execute 前置检查 🔒 AI 命令
 
 ```
 execute --prompt 执行前:
   → 检查 ANALYSIS.md 或 REQUIREMENT.md 是否存在
-  → 不存在 → exitCode 11 + 提示 "请先执行: speccore analyze --prompt"
+  → 不存在 → exitCode 11 + 提示 "请先执行: speccore analyze --prompt"（🔒 AI 命令）
   → 存在 → 正常生成 Prompt
 ```
 

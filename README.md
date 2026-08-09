@@ -39,7 +39,7 @@ speccore dashboard                                                        # 查�
 
 > 💡 **AI 命令**（在 WorkBuddy/Trae/Qcoder 中通过 `@spec-ask` 或 `/spec-ask` 使用）：分析需求、制定计划、执行开发。详见 [AGENTS.md](./AGENTS.md)。
 
-## 核心流水线
+## 核心流水线 🔒 AI 命令
 
 ```
 init → doc2spec → analyze → split → plan → execute → pr → done → spec2doc
@@ -51,11 +51,13 @@ init → doc2spec → analyze → split → plan → execute → pr → done →
 
 | 分类 | 命令 |
 |------|------|
-| 入口 | `ask` `welcome` `init` `help` |
-| 流水线 | `doc2spec` `analyze` `split` `plan` `execute` `pr` `done` `spec2doc` |
-| 智能 | `dev` |
-| 管理 | `iteration` `task` `change` `task-create` `iteration-create` |
-| 查看 | `dashboard` `search` `validate` `retro` `ops` |
+| CLI 入口 | `init` `welcome` `help` |
+| CLI 管理 | `iteration` `task` `context` ✅ |
+| CLI 查看 | `dashboard` `validate` `about` `config` `archive` |
+| 🔒 AI 入口 | `ask` |
+| 🔒 AI 流水线 | `doc2spec` `analyze` `split` `plan` `execute` `pr` `done` `spec2doc` |
+| 🔒 AI 智能 | `dev` |
+| 🔒 AI 变更 | `change` `retro` |
 
 ## 目录结构（全英文）
 
@@ -77,20 +79,22 @@ Iteration-001-meeting/
 │   └── Task-001-*/              ← 含 .issues.md .needs-retry
 ```
 
-## 断点重试
+## 断点重试 🔒 AI 命令
 
 ```bash
-speccore execute --all          # 全量执行
+# 在 AI IDE 中通过 @spec-ask 使用：
+@spec-ask "全量执行"           # 全量执行
 # 部分任务失败 → 写入 .issues.md + .needs-retry
-speccore execute --resume       # 扫描 .needs-retry 续跑
+@spec-ask "断点续传"           # 扫描 .needs-retry 续跑
 ```
 
-## 批量回顾
+## 批量回顾 🔒 AI 命令
 
 ```bash
-speccore retro --all                     # 所有任务
-speccore retro --all --owner 张三         # 按人
-speccore retro --all --type bugfix        # 按类型
+# 在 AI IDE 中通过 @spec-ask 使用：
+@spec-ask "生成所有任务的回顾"
+@spec-ask "生成张三的所有任务回顾"
+@spec-ask "生成所有 bugfix 类型任务的回顾"
 ```
 
 ### 🧠 AI 语义入口
@@ -110,7 +114,7 @@ speccore retro --all --type bugfix        # 按类型
 ### 🔄 dev — 智能级联
 在 AI IDE 中智能推进：`@spec-ask "全自动执行"`
 
-### 🚀 全量流水线
+### 🚀 全量流水线 🔒 AI 命令（在 IDE 中使用）
 | 阶段 | 命令 | AI 模式 |
 |------|------|------|
 | 导入需求 | `doc2spec -f PRD.docx` | 📖 命令解释 |
@@ -132,26 +136,26 @@ speccore --version   # v5.27.0
 
 | 命令 | 别名 | 功能 |
 |------|------|------|
-| `ask` | — | 🧠 万能 AI 入口（4 模式） |
+| `ask` | — | 🧠 🔒 万能 AI 入口（4 模式） |
 | `welcome` | — | 🏷️ 项目名片 + 使用引导 |
 | `dashboard` | `db` | 📊 期次/全局仪表盘 |
-| `dev` | `d` | 🔄 智能级联流水线 |
+| `dev` | `d` | 🔄 🔒 智能级联流水线 |
 | `init` | `in` | 🏗️ 项目初始化 |
-| `doc2spec` | `d2s` | 📝 PRD→SpecCore MD |
-| `spec2doc` | `s2d` | 📤 SpecCore MD→Word/PDF/HTML |
-| `analyze` | `al` | 🧠 AI 需求分析 |
-| `split` | — | 📦 需求拆分 |
-| `plan` | `pl` | 📐 执行计划 |
-| `execute` | `ex` | ⚡ 执行开发 |
-| `pr` | `mr` | 🔀 Pull Request |
-| `done` | `dn` | ✅ 归档收尾 |
-| `change` | `ch` | 🔄 需求变更 |
-| `sync` | `sy` | 🔄 双向同步 |
+| `doc2spec` | `d2s` | 📝 🔒 PRD→SpecCore MD |
+| `spec2doc` | `s2d` | 📤 🔒 SpecCore MD→Word/PDF/HTML |
+| `analyze` | `al` | 🧠 🔒 AI 需求分析 |
+| `split` | — | 📦 🔒 需求拆分 |
+| `plan` | `pl` | 📐 🔒 执行计划 |
+| `execute` | `ex` | ⚡ 🔒 执行开发 |
+| `pr` | `mr` | 🔀 🔒 Pull Request |
+| `done` | `dn` | ✅ 🔒 归档收尾 |
+| `change` | `ch` | 🔄 🔒 需求变更 |
+| `sync` | `sy` | 🔄 🔒 双向同步 |
 | `validate` | `vl` | ✅ 合规验证 |
-| `track` | `trk` | 🔗 REQ→Task→Code 全链路 |
+| `track` | `trk` | 🔗 🔒 REQ→Task→Code 全链路 |
 | `search` | `sh` | 🔍 跨 Spec 全文搜索 |
-| `retro` | `rt` | 📝 任务回顾复盘 + 评分 |
-| `rename` | `rn` | ✏️ 重命名 |
+| `retro` | `rt` | 📝 🔒 任务回顾复盘 + 评分 |
+| `rename` | `rn` | ✏️ 🔒 重命名 |
 | `ops` | `op` | 📜 操作历史 |
 
 ## TTY 智能适配

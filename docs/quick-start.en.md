@@ -9,7 +9,7 @@
 
 - **Node.js**: >= 18.0.0
 - **OS**: macOS / Linux / Windows
-- **Optional**: pandoc (for `speccore doc2spec` Word import; command prompts for auto-install if missing)
+- **Optional**: pandoc (for `speccore doc2spec` 🔒 Word import; command prompts for auto-install if missing)
 
 ## Install
 
@@ -143,27 +143,28 @@ speccore task new --name UserLogin --platforms=web,h5,miniapp
 # Add new platform
 speccore platform-add --name=tablet --description="Tablet" --tech="React Native"
 
-# Execute/stat by platform
-speccore execute --platform=web
-speccore dashboard --platform=h5
+# 🔒 AI: Filter by platform (use @spec-ask in AI IDE)
+@spec-ask "execute web platform tasks"
+speccore dashboard --platform=h5                     # ✅ CLI
 ```
 
-### Development Execution
+### Development Execution 🔒 AI Commands
 
 ```bash
-speccore execute --all
-speccore execute --assignee=Alice
-speccore execute --priority=high
-speccore execute --status=pending
-speccore execute --dry-run          # Preview
-speccore plan                       # Smart scheduling
+# Use @spec-ask in AI IDE:
+@spec-ask "execute all tasks"
+@spec-ask "execute Alice's tasks"  
+@spec-ask "execute high priority tasks"
+@spec-ask "preview execution plan"
+@spec-ask "generate smart scheduling plan"
 ```
 
-### Change & Sync
+### Change & Sync 🔒 AI Commands
 
 ```bash
-speccore change --req=REQ-001 --desc="Add captcha verification"
-speccore sync --task=Task-001
+# Use @spec-ask in AI IDE:
+@spec-ask "change REQ-001 to add captcha verification"
+speccore sync --task=Task-001                        # ✅ CLI
 ```
 
 ### Analysis & Audit
@@ -187,8 +188,10 @@ speccore dashboard
 ```bash
 speccore rename --target=old-name --new-name=new-name
 speccore rename --batch --pattern="Task-" --replacement="Feature-"
-speccore done --all
-speccore handover --iteration=2026-07-UserSystem
+speccore handover --iteration=2026-07-UserSystem      # ✅ CLI
+
+# 🔒 AI: @spec-ask "archive all completed tasks"
+```
 ```
 
 ---
@@ -249,12 +252,11 @@ public class AuthController { ... }
 ```
 
 ```bash
-# Execute task (auto-creates Git branch)
-speccore execute --task=Task-001 --force
+# 🔒 AI: @spec-ask "execute Task-001" (auto-creates Git branch)
 
 # Reverse sync (scan @spec → update TASK.md)
-speccore sync --dry-run     # Preview
-speccore sync               # Write
+speccore sync --dry-run     # Preview ✅ CLI
+speccore sync               # Write ✅ CLI
 
 # View trace chain
 speccore trace --req=REQ-001
@@ -267,10 +269,10 @@ speccore trace --full
 
 | Execute in | Prefix | Example |
 | :--- | :--- | :--- |
-| 🔧 Terminal | `speccore` | `speccore init`、`speccore task new --platforms=web,h5` |
-| 🤖 AI Tool | `/spec-` | `/spec-init`、`/spec-task-new --platforms=web,h5` |
+| ✅ Terminal | `speccore` | `speccore init`、`speccore task new --platforms=web,h5` |
+| 🔒 AI IDE | `@spec-ask` | `@spec-ask "execute Task-001"`、`@spec-ask "analyze Q1"` |
 
-Both share the same logic. AI commands call CLI commands internally when used in WorkBuddy / Cursor / Claude Code.
+> **Note**: `execute`, `analyze`, `plan`, `pr`, `done`, `change`, `retro`, `doc2spec`, `dev` are 🔒 AI commands — use `@spec-ask` in WorkBuddy/Cursor/Trae. Run `speccore init` to set up AI IDE integration.
 
 ---
 

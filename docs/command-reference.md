@@ -1,5 +1,18 @@
 # 命令参考 (v5.27.0)
 
+---
+title: 命令参考
+---
+
+## 命令分类
+
+| 类型 | 说明 | 示例 |
+|:---|:---|:---|
+| 🔒 **AI 命令** | 需在 AI IDE（WorkBuddy/Cursor/Trae）中通过 `@spec-ask` 使用 | `doc2spec`, `analyze`, `plan`, `execute`, `pr`, `done` |
+| ✅ **CLI 命令** | 可在终端直接输入 `speccore xxx` 执行 | `init`, `dashboard`, `validate`, `iteration create` |
+
+> 💡 AI 命令在 AI IDE 中也可通过 `/spec-xxx` 快捷命令或 `@spec-ask "描述"` 自然语言方式使用。
+
 ## 总览
 
 ### 架构
@@ -24,7 +37,7 @@ speccore ask ←── 万能 AI 入口 ──→ speccore dev
 
 ## 核心命令 (19)
 
-### 🧠 ask — 万能 AI 入口
+### 🧠 ask — 万能 AI 入口 🔒 AI 命令
 ```bash
 speccore ask "<自然语言描述>"
 ```
@@ -50,7 +63,7 @@ speccore dashboard [--scope global|iteration] [--export html] [--health] [--life
 ```
 别名: `db`, `sp`
 
-### 🔄 dev — 智能级联
+### 🔄 dev — 智能级联 🔒 AI 命令
 ```bash
 speccore dev [--auto] [--from <phase>] [--to <phase>]
 ```
@@ -70,55 +83,55 @@ speccore init [--tool <tool>] [--force] [--interactive]
 | `--force` | 强制重置全部配置（会备份） |
 | `--interactive` | 交互式引导创建 |
 
-### 📝 doc2spec — 文档导入
+### 📝 doc2spec — 文档导入 🔒 AI 命令
 ```bash
 speccore doc2spec -f <file> --iter <iteration> [--task <task>] [--no-ai]
 ```
 别名: `d2s`
 
-### 📤 spec2doc — 文档导出
+### 📤 spec2doc — 文档导出 🔒 AI 命令
 ```bash
 speccore spec2doc [-i <iteration>] [-t <task>] [-f <format>] [-o <output>]
 ```
 别名: `s2d`
 
-### 🧠 analyze — AI 分析
+### 🧠 analyze — AI 分析 🔒 AI 命令
 ```bash
 speccore analyze [--iteration <name>] [--task <id>] [--audit]
 ```
 别名: `al`
 
-### 📦 split — 任务拆分
+### 📦 split — 任务拆分 🔒 AI 命令
 ```bash
 speccore split [-f <file>] [--preview]
 ```
 别名: `sp`
 
-### 📐 plan — 执行计划
+### 📐 plan — 执行计划 🔒 AI 命令
 ```bash
 speccore plan [--all] [--task <id>] [--interactive]
 ```
 别名: `pl`
 
-### ⚡ execute — 开发执行
+### ⚡ execute — 开发执行 🔒 AI 命令
 ```bash
 speccore execute [--task <id>] [--batch-size <n>] [--auto]
 ```
 别名: `ex`
 
-### 🔀 pr — Pull Request
+### 🔀 pr — Pull Request 🔒 AI 命令
 ```bash
 speccore pr [--task <id>] [--auto]
 ```
 别名: `mr`
 
-### ✅ done — 归档收尾
+### ✅ done — 归档收尾 🔒 AI 命令
 ```bash
 speccore done [--task <id>] [--all] [--interactive]
 ```
 别名: `dn`
 
-### 🔄 change — 需求变更
+### 🔄 change — 需求变更 🔒 AI 命令
 ```bash
 speccore change "<描述>" [--task <id>]
 ```
@@ -166,9 +179,9 @@ speccore ops
 
 ### iteration
 ```bash
-speccore iteration create -n <name>
-speccore iteration split
-speccore iteration list
+speccore iteration create -n <name>          # ✅ CLI
+speccore iteration split                      # 🔒 AI 命令
+speccore iteration list                       # ✅ CLI
 ```
 别名: `it`
 
