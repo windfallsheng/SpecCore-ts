@@ -29,7 +29,7 @@
 - **默认走宿主 AI 语义分析**：`speccore ask` 输出命令知识库 + 工作流模板，AI 自行判断并拼命令
 
 ### 🐛 路径修复
-- **迭代目录路径**：所有命令（analyze/plan/execute/split/task create）写入 `.speccore/ITERATIONS/Iteration-NNN-name/` 而非项目根目录
+- **迭代目录路径**：所有命令（analyze🔒/plan🔒/execute🔒/split🔒/task create）写入 `.speccore/ITERATIONS/Iteration-NNN-name/` 而非项目根目录
 - **新增 `getIterationDir()` 公共函数**：自动查找迭代目录，向后兼容 fallback
 
 ### ✨ 新功能
@@ -246,10 +246,10 @@ daemon 随用随启/用完自停；`plan --select` 多选；about 版本信息 H
   - 标准化输出格式: `[SPECCORE_PROMPT]...[/SPECCORE_PROMPT]`
   - AI 返回解析: `parseAiResponse()` 提取 `{"files":[...]}`
 
-- **execute 命令**: `--prompt` 输出代码生成 Prompt，`--response` 接收 AI 代码写文件
-- **analyze 命令**: `--prompt` 输出分析 Prompt，`--apply` 接收分析写入 ANALYSIS.md
-- **split 命令**: `--prompt` 输出拆分 Prompt，`--response` 接收 Task 列表创建目录
-- **plan 命令**: `--prompt` 输出排程 Prompt，`--response` 接收计划写入 plan.json
+- **execute 命令 🔒 AI**: `--prompt` 输出代码生成 Prompt，`--response` 接收 AI 代码写文件
+- **analyze 命令 🔒 AI**: `--prompt` 输出分析 Prompt，`--apply` 接收分析写入 ANALYSIS.md
+- **split 命令 🔒 AI**: `--prompt` 输出拆分 Prompt，`--response` 接收 Task 列表创建目录
+- **plan 命令 🔒 AI**: `--prompt` 输出排程 Prompt，`--response` 接收计划写入 plan.json
 
 ### 📋 CONSTITUTION 增强
 

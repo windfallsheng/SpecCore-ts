@@ -37,9 +37,9 @@ disable-model-invocation: false
    [自动模式] 将自动执行 step 1-2 (analyze+plan)，step 3 (execute) 前暂停确认。
    [全程确认] 每步展示结果再继续。
    
-   step 1: speccore analyze --prompt -I meeting-system --task user-login
-   step 2: speccore plan --prompt -I meeting-system --task user-login
-   step 3: speccore execute --prompt -I meeting-system --task user-login
+   step 1: 🔒 AI命令: speccore analyze --prompt -I meeting-system --task user-login
+   step 2: 🔒 AI命令: speccore plan --prompt -I meeting-system --task user-login
+   step 3: 🔒 AI命令: speccore execute --prompt -I meeting-system --task user-login
    
    是否确认？
    """
@@ -52,19 +52,19 @@ disable-model-invocation: false
 
 ## 关键命令
 
-| 命令 | 格式 | 需要 AI |
-|:---|:---|:---:|
-| `analyze --prompt -I <短名> --task <短名>` | 分析任务 | ✅ |
-| `plan --prompt -I <短名> --task <短名>` | 制定计划 | ✅ |
-| `execute --prompt -I <短名> --task <短名>` | 执行开发 | ✅ |
-| `context --set --iteration <完整名>` | 切换迭代 | ❌ |
-| `dashboard` | 查看进度 | ❌ |
-| `iteration split -i <短名>` | 拆分任务 | ✅ |
-| `task new -n <名> --topic <英文> -i <短名>` | 创建任务 | ❌ |
+| 命令 | 格式 | 类型 | 说明 |
+|:---|:---|:---|:---|
+| `analyze --prompt -I <短名> --task <短名>` | 分析任务 | 🔒 AI | 需要宿主 AI 交互，`speccore ask "分析..."` 路由进入 |
+| `plan --prompt -I <短名> --task <短名>` | 制定计划 | 🔒 AI | 需要宿主 AI 交互，`speccore ask "制定计划..."` 路由进入 |
+| `execute --prompt -I <短名> --task <短名>` | 执行开发 | 🔒 AI | 需要宿主 AI 交互，`speccore ask "执行开发..."` 路由进入 |
+| `iteration split -I <短名>` | 拆分任务 | 🔒 AI | 需要宿主 AI 交互，`speccore ask "拆分任务..."` 路由进入 |
+| `context --set --iteration <完整名>` | 切换迭代 | CLI | 可在终端直接输入 |
+| `dashboard` | 查看进度 | CLI | 可在终端直接输入 |
+| `task new -n <名> --topic <英文> -i <短名>` | 创建任务 | CLI | 可在终端直接输入 |
 
 ## AI 分析质量要求
 
-执行 analyze --prompt 后:
+执行 analyze --prompt（🔒 AI命令）后:
 1. **Read 迭代目录下所有源码文件**（REQUIREMENT.md、010-requirements/sources/ 下的文档）
 2. **分析报告必须包含 7 个文档**（不同任务类型不同集合）:
 

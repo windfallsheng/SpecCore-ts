@@ -30,8 +30,8 @@ speccore init Meeting-System --stack spring-boot3+vue3
 # 2. 创建第一个迭代
 speccore iteration init -n "meeting-system"
 
-# 3. 分析需求
-speccore analyze -i meeting-system --prompt "分析会议室管理系统的完整需求"
+# 3. 分析需求（🔒 AI命令，需通过 speccore ask 路由）
+speccore ask "分析会议室管理系统的完整需求"
 
 # 4. 创建开发任务
 speccore task new -i meeting-system --topic room-service
@@ -39,22 +39,22 @@ speccore task new -i meeting-system --topic booking-service
 speccore task new -i meeting-system --topic admin-dashboard
 speccore task new -i meeting-system --topic h5-mobile
 
-# 5. 执行任务
-speccore execute -i meeting-system -t Task-001-room-service --prompt "开发会议室服务"
+# 5. 执行任务（🔒 AI命令，需通过 speccore ask 路由）
+speccore ask "开发会议室服务 -i meeting-system -t Task-001-room-service"
 ```
 
 ## SpecCore 常用命令
 
-| 命令 | 说明 |
-|------|------|
-| `speccore ask '<用户原话>'` | 意图入口，所有需求走这里 |
-| `speccore init <项目名>` | 初始化项目 |
-| `speccore iteration init -n <短名>` | 创建迭代 |
-| `speccore analyze -i <迭代> --prompt '<描述>'` | 分析需求 |
-| `speccore plan -i <迭代> --prompt '<描述>'` | 制定计划 |
-| `speccore execute -i <迭代> -t <任务> --prompt '<描述>'` | 执行任务 |
-| `speccore dashboard` | 查看进度面板 |
-| `speccore context --set` | 切换上下文 |
+| 命令 | 说明 | 类型 |
+|------|------|------|
+| `speccore ask '<用户原话>'` | 意图入口，所有需求走这里 | CLI |
+| `speccore init <项目名>` | 初始化项目 | CLI |
+| `speccore iteration init -n <短名>` | 创建迭代 | CLI |
+| `speccore analyze -i <迭代> --prompt '<描述>'` | 分析需求 | 🔒 AI |
+| `speccore plan -i <迭代> --prompt '<描述>'` | 制定计划 | 🔒 AI |
+| `speccore execute -i <迭代> -t <任务> --prompt '<描述>'` | 执行任务 | 🔒 AI |
+| `speccore dashboard` | 查看进度面板 | CLI |
+| `speccore context --set` | 切换上下文 | CLI |
 
 ## 自动模式说明
 
@@ -62,14 +62,16 @@ speccore execute -i meeting-system -t Task-001-room-service --prompt "开发会�
 逐个执行任务，每个任务需要用户确认，适合开发过程需人工审阅的场景。
 
 ```bash
-speccore execute -i meeting-system -t Task-001-room-service --prompt "开发会议室 CRUD 服务"
+# 半自动执行（🔒 AI命令，通过 speccore ask 路由）
+speccore ask "开发会议室 CRUD 服务 -i meeting-system -t Task-001-room-service"
 ```
 
 ### 全自动模式
 自动执行迭代中的所有任务，无需逐个确认。
 
 ```bash
-speccore execute -i meeting-system --auto --prompt "全自动执行所有开发任务"
+# 全自动执行（🔒 AI命令，通过 speccore ask 路由）
+speccore ask "全自动执行所有开发任务 -i meeting-system"
 ```
 
 ## 技术栈
