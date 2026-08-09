@@ -286,4 +286,4 @@ speccore trace --full
 - [Tool Adaptation](tool-adaptation.en.md) — WorkBuddy integration details
 - [README](../README.en.md) — Back to overview
 - [CHANGELOG](../CHANGELOG.en.md) — Version history
-- [中文：快速开始](快速开始.md) | [中文：命令参考](命令参考.md) 
+- [中文：快速开始](quick-start.md) | [中文：命令参考](command-reference.md)

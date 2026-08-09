@@ -187,6 +187,6 @@ speccore dashboard                   # 确认状态更新
 
 ## 五、更多参考
 
-- [25 场景实战](docs/场景实战.md) — 场景实战文档重点讲 CI/CD
-- [命令参考](docs/命令参考.md) — sync/validate/hooks 详细参数
+- [25 场景实战](docs/scenarios.md) — 场景实战文档重点讲 CI/CD
+- [命令参考](docs/command-reference.md) — sync/validate/hooks 详细参数
 - [examples/task-management](examples/task-management/) — 完整示例项目

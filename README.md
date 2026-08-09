@@ -193,15 +193,15 @@ speccore --help full      # 全量模式，含所有子命令和工具
 
 | 文档 | 说明 |
 |------|------|
-| [快速开始](docs/快速开始.md) | 5 分钟上手，安装 → 完整流程 |
-| [命令参考](docs/命令参考.md) | 全部 23 命令 + 子命令 + 示例 |
-| [总览](docs/总览.md) | 核心概念 + 工作流 + 三种使用方式 |
-| [场景实战](docs/场景实战.md) | 35 个真实开发场景 |
-| [SDD 方法论](docs/SDD方法论.md) | 规范驱动开发理念 |
-| [工作空间组织](docs/工作空间组织.md) | 目录结构与文件规范 |
-| [工具适配说明](docs/工具适配说明.md) | Qoder/TRAE 等 AI 工具集成 |
-| [三层加载机制](docs/Spec三层加载机制.md) | GLOBAL/ITERATION/TASK 加载原理 |
-| [CI-CD 集成](docs/CI-CD与spec注释集成指南.md) | CI/CD 流水线 + Spec 注释 |
+| [快速开始](docs/quick-start.md) | 5 分钟上手，安装 → 完整流程 |
+| [命令参考](docs/command-reference.md) | 全部 23 命令 + 子命令 + 示例 |
+| [总览](docs/overview.md) | 核心概念 + 工作流 + 三种使用方式 |
+| [场景实战](docs/scenarios.md) | 35 个真实开发场景 |
+| [SDD 方法论](docs/sdd-methodology.md) | 规范驱动开发理念 |
+| [工作空间组织](docs/workspace-organization.md) | 目录结构与文件规范 |
+| [工具适配说明](docs/tool-adapters.md) | Qoder/TRAE 等 AI 工具集成 |
+| [三层加载机制](docs/spec-layers.md) | GLOBAL/ITERATION/TASK 加载原理 |
+| [CI-CD 集成](docs/ci-cd-spec-integration.md) | CI/CD 流水线 + Spec 注释 |
 | [迁移指南](docs/migration-guide.md) | 从旧版本升级 |
 | [CHANGELOG](CHANGELOG.md) | 版本历史 |
 

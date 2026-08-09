@@ -139,7 +139,7 @@ ln -s ..speccore project/.codebuddy/commands .codebuddy/commands
 
 ## 相关文档
 
-- [快速开始指南](快速开始.md) — 从零上手 SpecCore
+- [快速开始指南](quick-start.md) — 从零上手 SpecCore
 
-- [命令参考手册](命令参考.md) — 完整命令参数
+- [命令参考手册](command-reference.md) — 完整命令参数
 - [README](../README.md) — 项目概述
