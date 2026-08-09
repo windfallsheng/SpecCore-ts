@@ -647,6 +647,7 @@ program
   .description('统一分析: 需求文档 + 源码目录 → 按范围(全局/迭代/任务)生成分析报告，--audit 审计模式')
   .option('-I, --iteration <iteration>', '目标迭代 (scope=iteration|task 时必填)')
   .option('-t, --task <task-id>', '任务 ID (--scope task 快捷方式)')
+  .option('--type <type>', '任务类型: feature|bugfix|refactor|research|review|test|docs|deploy|security|performance', 'feature')
   .option('--scope <scope>', '输出范围: global(全局文档) | iteration(迭代, 默认) | task(任务)')
   .option('--src, --source <dirs>', '源码目录 (逗号分隔: --src backend/src,frontend/src)')
   .option('--req, --requirements <files>', '需求文档 (逗号分隔: --req docs/a.md,docs/b.md)')
