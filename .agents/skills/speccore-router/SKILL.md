@@ -70,8 +70,8 @@ allowed-tools: ["Bash", "Read", "Write", "Edit"]
 ### 迭代管理
 | 用户说法 | 提取参数 | CLI 命令 |
 | :--- | :--- | :--- |
-| 创建迭代/新建迭代 {name} | name, owner? | `speccore iteration create -n {name} --owner {owner}` |
-| 创建 Sprint {n} | name, owner? | `speccore iteration create -n "Sprint-{n}" --owner {owner}` |
+| 创建迭代/新建迭代 {name} | name, topic**, owner? | `speccore iteration create -n {name} --topic {topic} --owner {owner}` |
+| 创建 Sprint {n} | name, topic**, owner? | `speccore iteration create -n "Sprint-{n}" --topic {topic} --owner {owner}` |
 | 查看迭代列表 | - | `speccore iteration list` |
 | 切换到迭代 {name} | name | `speccore context --set --iteration {name}` |
 | 重命名迭代 {old} → {new} | old, new | `speccore rename --iteration {old} {new}` |
@@ -255,7 +255,7 @@ allowed-tools: ["Bash", "Read", "Write", "Edit"]
 ### 定时/批量意图
 ```
 "每天晚上8点检查所有迭代的进度"
-→ speccore ask "每晚8点检查所有迭代进度"
+→ 告知用户定时调度暂不支持，改为立即执行：speccore ask "检查所有迭代进度"
 ```
 
 ### 条件意图
