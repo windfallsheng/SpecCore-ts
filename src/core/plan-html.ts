@@ -285,7 +285,16 @@ main { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; paddin
   text-align: center; color: var(--muted); font-size: 12px;
   margin-top: 40px; padding: 20px 0;
   border-top: 1px solid rgba(14,165,233,.06); letter-spacing: 1px;
+  display: flex; justify-content: center; align-items: center; gap: 20px; flex-wrap: wrap;
 }
+.refresh-btn {
+  cursor: pointer; color: var(--cyan); font-weight: 600;
+  padding: 6px 16px; border: 1px solid rgba(14,165,233,.3); border-radius: 6px;
+  transition: .2s; font-size: 11px;
+}
+.refresh-btn:hover { background: rgba(14,165,233,.12); border-color: var(--cyan); }
+.auto-refresh { color: var(--muted); font-size: 11px; cursor: pointer; }
+.auto-refresh input { accent-color: var(--cyan); margin-right: 4px; }
 
 /* ── Responsive ── */
 @media (max-width: 768px) {
@@ -358,9 +367,28 @@ ${timelineItems}
 
   <!-- Footer -->
   <div class="footer">
-    生成时间: ${now} · Speccore v${opts.version}
+    <label class="auto-refresh"><input type="checkbox" id="autoRefresh" onchange="toggleAutoRefresh()"> 自动刷新（30s）</label>
+    <span class="refresh-btn" onclick="location.reload()" title="刷新页面获取最新数据">🔄 立即刷新</span>
+    <span id="refreshStatus"></span>
   </div>
 </main>
+
+<script>
+let autoTimer = null;
+function toggleAutoRefresh() {
+  if (document.getElementById('autoRefresh').checked) {
+    autoTimer = setInterval(() => location.reload(), 30000);
+    document.getElementById('refreshStatus').textContent = '● 监控中';
+    document.getElementById('refreshStatus').style.color = '#14b8a6';
+  } else {
+    clearInterval(autoTimer);
+    document.getElementById('refreshStatus').textContent = '';
+  }
+}
+// 默认开启自动刷新
+document.getElementById('autoRefresh').checked = true;
+toggleAutoRefresh();
+</script>
 
 <script>
 mermaid.initialize({
