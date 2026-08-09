@@ -67,10 +67,12 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
         await writeAgentsMd(projectRoot);
         await writeFile(join(projectRoot, 'CLAUDE.md'), '<!-- 规则请参考 AGENTS.md -->\n\n@AGENTS.md\n');
 
-        // 更新版本号
+        // 更新版本号（两个文件同步）
         const verFile = join(speccoreDir, 'local', 'version.json');
+        const lastInitFile = join(speccoreDir, 'local', 'last-init-version.txt');
         const { version } = require('../../package.json');
         await writeFile(verFile, JSON.stringify({ version, updatedAt: new Date().toISOString() }, null, 2));
+        await writeFile(lastInitFile, version);
 
         // 重置 onboard 标记，确保升级后首次 ask 展示引导页
         try { await unlink(join(speccoreDir, 'local', '.ask-onboarded')); } catch {}
