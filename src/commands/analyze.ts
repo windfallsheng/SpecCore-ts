@@ -333,11 +333,12 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `   - ERROR_CODES.md: 扫描 Error/Exception/enum 提取错误码清单和含义\n`;
       prompt += `   - DEPENDENCY_GRAPH.md: 分析模块间 import/require 依赖关系，生成依赖拓扑图\n`;
       prompt += `   - CODE_INDEX.md: 各工程目录结构、关键文件清单、模块职责说明\n`;
-      prompt += `5. **知识沉淀**: 从源码中识别可复用的设计模式和最佳实践，写入 .speccore/PATTERNS/ 目录:\n`;
-      prompt += `   - 每个模式一个 .md 文件，命名规则: {分类}-{模式名}.md（如 auth-jwt.md, api-pagination.md）\n`;
-      prompt += `   - 模式分为: 架构(architecture)、鉴权(auth)、API设计(api)、数据访问(data)、异常处理(error)、日志(logging)、工具(util)、测试(test)\n`;
-      prompt += `   - 每个模式文件含: 适用场景、核心代码片段、注意事项、反例\n`;
-      prompt += `   - 示例: 发现项目用 JWT 鉴权 → 提取 token生成/校验/刷新模式 → 写入 auth-jwt.md\n`;
+      prompt += `5. **知识沉淀**: 不分前后端，从所有源码中识别可复用模式，写入 .speccore/PATTERNS/:\n`;
+      prompt += `   - 每个模式一个 .md 文件，命名: {端}-{分类}-{模式名}.md（如 backend-auth-jwt.md, frontend-comp-table.md）\n`;
+      prompt += `   - 后台模式分类: 架构(architecture)、鉴权(auth)、API设计(api)、数据访问(data)、异常处理(error)、日志(logging)、工具(util)\n`;
+      prompt += `   - 前端模式分类: 组件(component)、Hook/Composable(hook)、状态管理(state)、路由(router)、请求(request)、表单(form)、样式(style)、构建(build)\n`;
+      prompt += `   - 每个文件含: 适用场景、核心代码片段、注意事项、反例\n`;
+      prompt += `   - 示例: Vue3项目用 composable 封装请求 → 提取 → frontend-request-axios.md\n`;
       prompt += `6. 以上文档输出到 .speccore/GLOBAL/ 和 .speccore/PATTERNS/，使用 Write 工具写入\n`;
     } else {
       prompt += `3. 读取 .speccore/GLOBAL/ 下各项目需求文档，生成跨项目索引和需求目录\n`;
@@ -346,15 +347,17 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     if (ctx.withCode) {
       prompt += `| 文档 | 从源码提取内容 | 输出目录 |\n`;
       prompt += `| :--- | :--- | :--- |\n`;
-      prompt += `| TECH_STACK.md | 语言、框架、中间件、构建工具 | GLOBAL/ |\n`;
-      prompt += `| API_INVENTORY.md | 接口路径、方法、参数、响应、鉴权 | GLOBAL/ |\n`;
-      prompt += `| DATA_MODEL.md | 表结构、字段、索引、关系 | GLOBAL/ |\n`;
-      prompt += `| BUSINESS_RULES.md | 校验规则、业务约束、状态机 | GLOBAL/ |\n`;
-      prompt += `| CONFIG_MAP.md | 环境变量、开关、密钥（脱敏） | GLOBAL/ |\n`;
-      prompt += `| ERROR_CODES.md | 错误码、含义、HTTP状态 | GLOBAL/ |\n`;
-      prompt += `| DEPENDENCY_GRAPH.md | 模块依赖拓扑、循环依赖检测 | GLOBAL/ |\n`;
-      prompt += `| CODE_INDEX.md | 目录结构、关键文件、模块职责 | GLOBAL/ |\n`;
-      prompt += `| PATTERNS/*.md | 可复用设计模式（架构/鉴权/API/数据/异常/日志/工具/测试） | PATTERNS/ |\n`;
+      prompt += `| TECH_STACK.md | 语言、框架、构建工具、UI库（前后端全覆盖） | GLOBAL/ |\n`;
+      prompt += `| API_INVENTORY.md | 接口路径、方法、参数、响应、鉴权（后台）+ 前端API调用清单（axios/fetch） | GLOBAL/ |\n`;
+      prompt += `| DATA_MODEL.md | 表结构、字段、索引、关系（后台）+ 前端Store/State/Type定义 | GLOBAL/ |\n`;
+      prompt += `| BUSINESS_RULES.md | 校验规则、业务约束、状态机（后台中间件 + 前端表单校验/路由守卫） | GLOBAL/ |\n`;
+      prompt += `| CONFIG_MAP.md | 环境变量、开关、密钥（后台 .env + 前端 .env.local/vite.config） | GLOBAL/ |\n`;
+      prompt += `| ERROR_CODES.md | 错误码清单（后台 Exception + 前端统一错误处理/拦截器） | GLOBAL/ |\n`;
+      prompt += `| DEPENDENCY_GRAPH.md | 模块依赖拓扑（后台 import + 前端组件树/路由嵌套） | GLOBAL/ |\n`;
+      prompt += `| CODE_INDEX.md | 目录结构、关键文件、模块职责（前后端分列） | GLOBAL/ |\n`;
+      prompt += `| PATTERNS/*.md | 可复用设计模式，前后端分别提取： | PATTERNS/ |\n`;
+      prompt += `  - 后台: 架构(mvc/ddd)、鉴权(jwt/oauth)、API(pagination/restful)、数据(repository)、异常(handler)、日志(aop)\n`;
+      prompt += `  - 前端: 组件(composable/hook)、状态管理(pinia/redux)、路由(guard/layout)、请求(interceptor)、表单(validation)、UI(theme/layout)\n`;
     } else {
       prompt += `- REQUIREMENT.md — 合并各迭代需求，生成跨项目需求索引\n`;
     }
