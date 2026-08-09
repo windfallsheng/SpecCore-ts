@@ -77,7 +77,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
   // ── Prompt 模式 ──
   if (options.prompt) {
     const iter = options.iteration || await getDefaultIteration();
-    const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task, type: options.type });
+    const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task, type: options.type, scope: options.scope, withCode: options.withCode });
     process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
     process.exitCode = 10;
     return;
@@ -127,7 +127,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
   // ── Prompt 模式 ──
   if (options.prompt) {
     const iter = options.iteration || await getDefaultIteration();
-    const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task, type: options.type });
+    const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task, type: options.type, scope: options.scope, withCode: options.withCode });
     process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
     process.exitCode = 10;
     return;
@@ -335,12 +335,37 @@ function parseArgv(options: AnalyzeOptions): void {
 }
 
 // ── buildMultiDocPrompt: 多文档协议 ──
-async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; task?: string; type?: string }): Promise<string> {
+async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; task?: string; type?: string; scope?: string; withCode?: boolean }): Promise<string> {
   const iter = ctx.iteration || '当前迭代';
   const task = ctx.task ? ` — ${ctx.task}` : '';
   const taskType = ctx.type || 'feature';
   const now = new Date().toISOString().split('T')[0];
-  const isTask = !!ctx.task;
+  const isTask = ctx.scope === 'task' || !!ctx.task;
+  const isGlobal = ctx.scope === 'global';
+
+  // global 范围: 从源码反推需求 + 生成技术栈配置
+  if (isGlobal) {
+    let prompt = `\n# 任务: ${command} (全局分析${ctx.withCode ? '+源码' : ''})\n\n`;
+    prompt += `## 要求\n`;
+    prompt += `1. Read .speccore/CONSTITUTION.md 获取全局技术栈和源码配置\n`;
+    prompt += `2. Read .speccore/GLOBAL/ 下所有文档了解跨项目需求\n`;
+    if (ctx.withCode) {
+      prompt += `3. 从 CONSTITUTION.md 的「源码路径」列读取工程目录，逐个 Read 源码\n`;
+      prompt += `4. 从源码反推: 接口清单(扫描路由/Controller)、数据模型(扫描Entity/Schema)、业务规则、依赖关系\n`;
+      prompt += `5. 生成或更新 .speccore/GLOBAL/ 下的: TECH_STACK.md, CODE_INDEX.md, API_INVENTORY.md\n`;
+    } else {
+      prompt += `3. 读取 .speccore/GLOBAL/ 下各项目需求文档，生成跨项目索引和需求目录\n`;
+    }
+    prompt += `\n## 输出文档\n`;
+    prompt += `- TECH_STACK.md — 技术栈配置 (从 CONSTITUTION 读取)\n`;
+    prompt += `- CODE_INDEX.md — 代码索引 (${ctx.withCode ? '从源码扫描' : '从已有文档'})\n`;
+    prompt += `- API_INVENTORY.md — API 清单\n`;
+    if (!ctx.withCode) {
+      prompt += `- REQUIREMENT.md — 合并全局需求\n`;
+    }
+    prompt += `\n⚠️ 如果 CONSTITUTION.md 中「源码路径」为空或路径不存在: 提示用户先配置 speccore init 或手动设置\n`;
+    return prompt;
+  }
 
   const docs: [string, string][] = [
     ['ANALYSIS.md', `# 需求分析报告\n\n> ${iter} | ${now}\n\n## 1. 功能点\n\n## 2. 接口分析\n\n| 方法 | 路径 | 入参 | 出参 |\n|:---|:---|:---|:---|\n\n## 3. 数据模型\n\n## 4. 业务规则\n\n## 5. 异常处理\n`],
