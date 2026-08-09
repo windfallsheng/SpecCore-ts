@@ -22,9 +22,14 @@ disable-model-invocation: false
 5. **analyze 必须走完整 prompt→填充→apply 流程**: 分析需求文档时，禁止直接跳到代码修复或跳过文档生成。正确流程:
    - 步骤1: `speccore analyze --prompt -I <iter> --type <type>` → 获取 SPECCORE_PROMPT
    - 步骤2: Read 各端 PRD 文档和源码路径，理解需求
-   - 步骤3: 对每个文档（ANALYSIS/TECH/TEST/REVIEW/RISK/DEPS/MONITOR）**填入实质内容**，禁止写"待填充"或复制模板空壳
-   - 步骤4: `speccore analyze --apply '{"ANALYSIS.md":"...",...}' -I <iter>` 写入
-   - ❌ 禁止行为: 跳过文档填充直接写代码、生成 137 行重复空壳、用 "API=0 接口" 为由跳过分析
+   - 步骤3: 先 Read .speccore/PATTERNS/TEMPLATES/specs/ 中的专业模板，参考其格式和结构
+   - 步骤4: 对每个文档用专业格式自由撰写，禁止写"待填充"或复制模板空壳
+   - 步骤5: `speccore analyze --apply '{"ANALYSIS.md":"...",...}' -I <iter>` 写入
+   - ❌ 禁止: 跳过文档填充直接写代码、生成重复空壳、用 "API=0" 跳过
+6. **交互式文档编辑**: 分析完成后用户可以对任意文档的任意部分进行修改。支持:
+   - "修改 ANALYSIS.md 的接口清单部分，加上签到接口" → 只改指定章节，不改其他部分
+   - "补充 TECH.md 的部署方案" → Read 现有内容 → 追加指定章节
+   - "重写 RISK.md 的第三项" → 定位 → 修改 → Write
    `init → doc2spec → analyze → split → plan → execute → pr → done → spec2doc`
    示例: 用户说"执行完再分析" → 你应该排列为 `analyze → execute`，并在计划中说明"根据工作流逻辑，先分析再执行"
    - **全自动**: "全自动执行/一键完成" → 所有步骤不等确认，全部自动跑

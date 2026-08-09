@@ -488,9 +488,10 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
   } else {
     prompt += `- 当前是**迭代级分析**，需产出全部 7 个文档，覆盖需求→技术→测试→评审→风险→依赖→监控\n`;
   }
-  prompt += `\n## 要求\n1. Read 010-requirements/ 和 PRD/PRD.md 等所有需求文档\n`;
-  prompt += `2. 读懂需求文档后，对每个文档填入实质内容。内容来自你对需求的理解，不是找现成格式\n`;
-  prompt += `3. 每个文档都要具体内容（禁止"待填充"），即使文档中没有现成表格也要输出分析结果\n`;
+  prompt += `\n## 要求\n1. Read .speccore/PATTERNS/TEMPLATES/specs/ 下的专业模板，参考其格式和内容标准\n`;
+  prompt += `2. Read 010-requirements/ 和 PRD/PRD.md 等所有需求文档\n`;
+  prompt += `3. 读懂需求文档后，按专业模板标准自由撰写每个文档（不是填空表）\n`;
+  prompt += `4. 每个文档都要具体内容（禁止"待填充"），分析完成后支持交互编辑任意文档的任意章节\n`;
   prompt += `4. 写入: speccore analyze --apply '{"${taskDocs.map(([n]) => `${n}":"..."`).join(',')}...}' -I ${iter}\n\n`;
   for (let i = 0; i < taskDocs.length; i++) {
     prompt += `### ${i+1}/${taskDocs.length}: ${taskDocs[i][0]}\n\`\`\`markdown\n${taskDocs[i][1]}\n\`\`\`\n\n`;
