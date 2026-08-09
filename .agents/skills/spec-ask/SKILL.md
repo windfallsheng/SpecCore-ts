@@ -12,10 +12,13 @@ disable-model-invocation: false
 ## 🚨 核心铁律
 
 1. **每步必确认** — 用户没明确说"自动/全自动/一键"的，每步展示计划→等确认→再执行
-2. **迭代/任务命名必加 --topic** — 从用户原话提取英文主题词，不要传中文或空
-3. **禁止 schedule** — schedule 命令已废弃，用户说"定时"时直接告知不可用、改为立即执行
-4. **-i 参数用短名** — 传 `meeting-system` 而非 `Iteration-009-meeting-system`
-5. **分析前先读源码** — 生成分析内容前必须 Read 相关源文件，不要凭空写
+2. **自动模式分两级**: 
+   - **部分自动**: "analyze 和 plan 自动执行，execute 前确认" → 只跳过确认的步骤
+   - **全自动**: "全自动执行/一键完成" → 所有步骤不等确认，全部自动跑
+3. **迭代/任务命名必加 --topic** — 从用户原话提取英文主题词
+4. **禁止 schedule** — 用户说"定时"时告知不可用、改为立即执行
+5. **-i 参数用短名** — 传 `meeting-system` 而非 `Iteration-009-meeting-system`
+6. **分析前先读源码** — 生成分析内容前必须 Read 相关源文件
 
 ## 执行流程
 
@@ -23,18 +26,28 @@ disable-model-invocation: false
 1. execute_command("speccore ask '用户原话'")
    → 读 KB 输出，了解可用命令
 
-2. 检查上下文（context.json），确认当前迭代
+2. 检查上下文，识别自动模式:
+   - "全自动/一键/全流程自动" → FULL_AUTO 全流程
+   - "analyze和plan自动，execute前确认" → PARTIAL_AUTO(1-2)
+   - "自动执行到split，plan和execute前确认" → PARTIAL_AUTO(1-2)
+   - 没说自动 → 每步确认
 
-3. 理解意图 → 拼计划 → 展示给用户:
+3. 理解意图 → 拼计划 → 展示:
    """
-   我理解你要:
-   1. 分析 Q1 的任务 user-login（将读取源码后生成分析报告）
-   2. 为任务 user-login 制定开发计划
+   [自动模式] 将自动执行 step 1-2 (analyze+plan)，step 3 (execute) 前暂停确认。
+   [全程确认] 每步展示结果再继续。
+   
+   step 1: speccore analyze --prompt -I meeting-system --task user-login
+   step 2: speccore plan --prompt -I meeting-system --task user-login
+   step 3: speccore execute --prompt -I meeting-system --task user-login
    
    是否确认？
    """
 
-4. 用户确认后逐步执行，每步检查结果
+4. 用户确认后按模式执行:
+   - PARTIAL_AUTO: step 1→2 连续执行，step 3 前暂停问"继续？"
+   - FULL_AUTO: 全部连续执行
+   - 手动: 每步暂停确认
 ```
 
 ## 关键命令
