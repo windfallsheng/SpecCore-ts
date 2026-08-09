@@ -7,6 +7,8 @@ import { FileTransaction } from '../core/transaction';
 import { savePlan, listPlans, getPlan, deletePlan, cancelPlan, ExecutionPlan } from '../core/plan-store';
 import { createInterface } from 'readline';
 import { buildPrompt, formatPrompt } from '../core/prompt-builder';
+import { generatePlanHtml } from '../core/plan-html';
+import { version } from '../../package.json';
 
 function promptUser(question: string): Promise<string> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -32,6 +34,7 @@ export interface PlanOptions {
   cancel?: string;
   prompt?: boolean;    // --prompt
   response?: string;   // --response: 接收 AI 计划写入 plan.json
+  html?: boolean;      // --html: 生成 speccore-plan.html 可视化页面
 }
 
 export async function planCommand(options: PlanOptions): Promise<void> {
@@ -89,7 +92,14 @@ export async function planCommand(options: PlanOptions): Promise<void> {
     const plan = generatePlan(sortedTasks, parseInt(options.team || '1', 10), options.mode || 'auto');
     const taskIds = sortedTasks.map(t => t.id);
 
-    if (options.dryRun) { spinner.stop('Dry run'); printPlan(plan, iteration); return; }
+    if (options.dryRun) { 
+      spinner.stop('Dry run'); 
+      printPlan(plan, iteration);
+      if (options.html) {
+        await writeHtmlPlan(sortedTasks, iteration);
+      }
+      return; 
+    }
 
     if (options.interactive) {
       spinner.stop('执行计划预览');
@@ -135,7 +145,13 @@ export async function planCommand(options: PlanOptions): Promise<void> {
       logger.info(`   或分批:  speccore execute -I ${iteration} -t ${cmdIds[0]} --batch-size 3 --auto`);
       // 保存到 plan 时只包含选中的任务
       const _ = await saveToStore(iteration, cmdIds, 3, options, 'manual');
-      logger.info(`   计划文件: ${await getIterationDir(iteration)}/000-overview/plans/PLAN.md`);
+      const iterDir = await getIterationDir(iteration);
+      logger.info(`   计划文件: ${iterDir}/000-overview/plans/PLAN.md`);
+      // ── HTML 可视化输出 ──
+      if (options.html) {
+        const planDir = join(iterDir, '000-overview', 'plans');
+        await writeHtmlPlan(selectedTasks, iteration, planDir);
+      }
       return;
     }
 
@@ -152,6 +168,11 @@ export async function planCommand(options: PlanOptions): Promise<void> {
     tx.write(versionedPath, formatPlanMarkdown(plan, iteration, sortedTasks));
     tx.write(latestPath, formatPlanMarkdown(plan, iteration, sortedTasks)); // 最新版覆盖
     await tx.commit();
+
+    // ── HTML 可视化输出 ──
+    if (options.html) {
+      await writeHtmlPlan(sortedTasks, iteration, planDir);
+    }
 
     spinner.stop(`Saved: ${filename} | ${taskIds.length} tasks, ${plan.length} phases`);
     printPlan(plan, iteration);
@@ -511,6 +532,36 @@ function formatPlanMarkdown(plan: PlanEntry[], iteration: string, allRawTasks?: 
   lines.push('');
 
   return lines.join('\n');
+}
+
+/**
+ * 抽取任务数据写入 speccore-plan.html
+ */
+async function writeHtmlPlan(
+  tasks: TaskState[],
+  iteration: string,
+  planDir?: string
+): Promise<void> {
+  const htmlData = tasks.map(t => ({
+    id: t.id,
+    name: t.name,
+    priority: t.priority,
+    status: t.status,
+    owner: t.assignee || undefined,
+    dependsOn: t.dependencies || [],
+  }));
+  const html = generatePlanHtml(htmlData, { version, iteration });
+
+  // 写入项目根目录 speccore-plan.html
+  const rootPath = join(process.cwd(), 'speccore-plan.html');
+  await writeFile(rootPath, html, 'utf-8');
+  logger.success(`✅ HTML 可视化: ${rootPath}`);
+
+  // 同时复制一份到 plans 目录
+  if (planDir) {
+    const planHtmlPath = join(planDir, 'speccore-plan.html');
+    await writeFile(planHtmlPath, html, 'utf-8');
+  }
 }
 
 /**
