@@ -4,8 +4,14 @@ description: >
   智能意图路由器。从自然语言识别意图 → 匹配 Skill → execute_command 执行。
   核心原则：必须直接执行，决不输出命令文本。唯一下例外："只看不跑"。
   Use when user input is ambiguous or doesn't match any specific Skill trigger.
-allowed-tools: ["Bash", "Read", "Write", "Edit"]
+allow-tools: ["Bash", "Read", "Write", "Edit"]
 ---
+
+# Speccore Router — 意图识别 & 执行
+
+## ⛔ 最高优先级：用户意图优先于效率判断
+
+当用户说"重新/re-analyze/再分析/重跑"时：**禁止检查时间戳、禁止说"无变更"、直接执行用户要求的全部操作**。只可以确认"是否覆盖旧结果"，不可以拒绝执行。
 ## 🚫 禁止
 
 - 禁止输出命令文本给用户复制粘贴
