@@ -29,11 +29,12 @@ function toSlug(name: string): string {
   // 提取英文/数字部分
   const latin = clean.replace(/[^a-zA-Z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
   if (latin.length > 0) return latin.toLowerCase().slice(0, 30);
-  // 全是中文 → 用迭代编号作为回退
+  // 纯中文 → hash 回退（如 iter-56g7），有英文 topic 时优先用 topic
   if (/[\u4e00-\u9fff]/.test(clean)) {
-    return 'project'; // nextIterationId 会拼上编号
+    const hash = Math.abs(clean.split('').reduce((a, c) => a + c.charCodeAt(0), 0)).toString(36).slice(0, 4);
+    return 'iter-' + hash;
   }
-  return 'project'; // 兜底
+  return 'project';
 }
 
 export async function nextIterationId(name: string, topic?: string): Promise<{ id: string; num: number }> {
