@@ -10,7 +10,9 @@ import { reportCommand } from './commands/report';
 import { configCommand } from './commands/config';
 import { iterationCreateCommand } from './commands/iteration/create';
 import { iterationSplitCommand } from './commands/iteration/split';
+import { iterationListCommand } from './commands/iteration/list';
 import { taskNewCommand } from './commands/task/new';
+import { taskListCommand } from './commands/task/list';
 import { planCommand } from './commands/plan';
 import { executeCommand } from './commands/execute';
 // 新增命令
@@ -214,6 +216,12 @@ iterationCmd
   .option('--response <response>', '接收 AI 拆分结果创建 Task（配合 --prompt）')
   .action(iterationSplitCommand);
 
+iterationCmd
+  .command('list')
+  .alias('ls')
+  .description('列出所有迭代')
+  .action(iterationListCommand);
+
 // ================================================================
 // 📝 任务管理
 // ================================================================
@@ -239,6 +247,13 @@ taskCmd
   .option('--interactive', '交互式创建')
   .option('--schedule <mode>', '调度模式: night|now', 'now')
   .action(taskNewCommand);
+
+taskCmd
+  .command('list')
+  .alias('ls')
+  .description('列出当前迭代的所有任务')
+  .option('-i, --iteration <iteration>', '目标迭代')
+  .action(taskListCommand);
 
 // 完整需求交付
 program
