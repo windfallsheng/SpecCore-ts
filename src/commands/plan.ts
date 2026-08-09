@@ -17,6 +17,7 @@ function promptUser(question: string): Promise<string> {
 
 export interface PlanOptions {
   iteration?: string;
+  topic?: string;   // AI 提取的主题词
   team?: string;
   assign?: string;
   type?: string;
@@ -37,19 +38,31 @@ export async function planCommand(options: PlanOptions): Promise<void> {
   // ── Prompt 模式 ──
   if (options.prompt) {
     const iter = options.iteration || await getDefaultIteration();
-    const prompt = await buildPrompt('plan', { iteration: iter });
+    const taskList = await scanTasks(iter);
+    const taskNames = taskList.map(t => t.id.replace(/^Task-/, '')).join(',');
+    const prompt = await buildPrompt('plan', { iteration: iter, task: taskNames || undefined });
     process.stdout.write(formatPrompt(prompt));
     process.exitCode = 10;
     return;
   }
 
-  // ── Response 模式 ──
+  // ── Response 模式: AI 写入计划内容 ──
   if (options.response) {
     if (!options.iteration) { logger.error('--response 需要 --iteration'); return; }
-    const planDir = join(await getIterationDir(options.iteration || ''), '.speccore');
+    const iterDir = await getIterationDir(options.iteration);
+    const planDir = join(iterDir, '000-overview', 'plans');
     await ensureDir(planDir);
-    await writeFile(join(planDir, 'plan.json'), options.response);
-    logger.success('✅ plan.json 已写入');
+    const ts = new Date().toISOString().replace(/T/, '-').replace(/:/g, '').slice(0, 17);
+    const slug = options.topic || 'plan';
+    const filename = `PLAN-${ts}-${slug}.md`;
+    const versionedPath = join(planDir, filename);
+    const latestPath = join(planDir, 'PLAN.md');
+    const tx = new FileTransaction();
+    tx.write(versionedPath, options.response);
+    tx.write(latestPath, options.response);
+    await tx.commit();
+    logger.success(`✅ 计划已保存: ${filename}`);
+    printPlanFromMarkdown(options.response, options.iteration);
     return;
   }
   if (options.list) { await showPlanHistory(); return; }
@@ -283,6 +296,20 @@ function buildTaskPlan(t: TaskState): TaskPlan {
 
 function sanitizeBranchName(name: string): string {
   return name.replace(/[^a-zA-Z0-9\u4e00-\u9fff_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 50);
+}
+
+/** 从 AI 生成的 Markdown 中提取并打印计划摘要 */
+function printPlanFromMarkdown(md: string, iteration: string): void {
+  const phaseMatch = md.match(/Phase \d+[:：].+/g) || md.match(/\*\*Phase/ig);
+  const taskCount = (md.match(/Task-\d+/g) || []).length;
+  const apiCount = (md.match(/\d+ API/g) || []).length;
+  logger.info(`\n📋 计划摘要: ${iteration}  (${taskCount} 个任务${apiCount > 0 ? ', API分析' : ''})`);
+  if (phaseMatch) {
+    for (const line of phaseMatch.slice(0, 5)) {
+      logger.info(`  ${line.replace(/\*\*/g, '').trim()}`);
+    }
+  }
+  logger.info(`  → 完整版本: 000-overview/plans/PLAN-*.md`);
 }
 
 function printPlan(plan: PlanEntry[], iteration: string): void {

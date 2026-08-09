@@ -281,6 +281,7 @@ program
   .alias('pl')
   .description('生成执行计划+管理历史：创建/交互/列表/详情/取消/删除')
   .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('--topic <topic>', '英文主题词（如 meeting-system）')
   .option('-t, --team <count>', 'Team member count', '3')
   .option('-a, --assign <members>', 'Assign to specific members (comma-separated)')
   .option('--type <type>', 'Filter by task type')
