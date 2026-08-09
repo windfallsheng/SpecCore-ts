@@ -27,6 +27,7 @@ export interface AnalyzeOptions {
   auto?: boolean;
   interactive?: boolean;
   task?: string;
+  type?: string;   // 任务类型: feature|bugfix|refactor|...
   // NEW options (CLI passes comma-separated strings)
   source?: string;
   requirements?: string;
@@ -40,7 +41,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
   // ── Prompt 模式 ──
   if (options.prompt) {
     const iter = options.iteration || await getDefaultIteration();
-    const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task });
+    const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task, type: options.type });
     process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
     process.exitCode = 10;
     return;
@@ -425,9 +426,10 @@ function parseArgv(options: AnalyzeOptions): void {
 }
 
 // ── buildMultiDocPrompt: 多文档协议 ──
-async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; task?: string }): Promise<string> {
+async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; task?: string; type?: string }): Promise<string> {
   const iter = ctx.iteration || '当前迭代';
   const task = ctx.task ? ` — ${ctx.task}` : '';
+  const taskType = ctx.type || 'feature';
   const now = new Date().toISOString().split('T')[0];
   const isTask = !!ctx.task;
 
@@ -441,7 +443,21 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     ['MONITOR.md', `# 监控\n\n> ${iter}\n\n| 指标 | 阈值 | 级别 |\n|:---|:---|:---|\n| 成功率 | <99.9% | P1 |\n`],
   ];
 
-  const taskDocs = isTask ? docs.filter(([n]) => ['ANALYSIS.md','TECH.md','TEST.md'].includes(n)) : docs;
+  // 任务类型 × 文档矩阵: 每种类型生成哪些文档
+  const DOC_MATRIX: Record<string, string[]> = {
+    feature:    ['ANALYSIS.md','TECH.md','TEST.md','REVIEW.md','RISK.md','DEPS.md','MONITOR.md'],
+    refactor:   ['ANALYSIS.md','TECH.md','TEST.md','REVIEW.md','RISK.md'],
+    bugfix:     ['ANALYSIS.md','TECH.md','TEST.md'],
+    research:   ['ANALYSIS.md'],
+    review:     ['REVIEW.md','RISK.md'],
+    test:       ['TEST.md','RISK.md'],
+    docs:       ['ANALYSIS.md'],
+    deploy:     ['ANALYSIS.md','TECH.md','RISK.md','DEPS.md','MONITOR.md'],
+    security:   ['ANALYSIS.md','TEST.md','REVIEW.md','RISK.md'],
+    performance:['ANALYSIS.md','TECH.md','TEST.md','MONITOR.md'],
+  };
+  const includeDocs = isTask ? (DOC_MATRIX[taskType] || DOC_MATRIX['feature']) : DOC_MATRIX['feature'];
+  const taskDocs = docs.filter(([n]) => includeDocs.includes(n));
 
   let prompt = `\n# 任务: ${command}${task} (${taskDocs.length}个文档)\n\n`;
   prompt += `## 要求\n1. Read 010-requirements/ 和 020-specs/REQUIREMENT.md\n`;

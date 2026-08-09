@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>从 Vibe Coding 到 Spec Coding</title>
+<title>从 Vibe Coding 到 Spec Coding · SDD 重塑 AI 研发流程</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Inter:wght@400;500;600&display=swap');
   * { margin:0; padding:0; box-sizing:border-box; }
@@ -71,7 +71,7 @@
 </head>
 <body>
 
-<h1>从 Vibe Coding 到 Spec Coding<br>SpecCore 重塑 AI 研发工程化</h1>
+<h1>从 Vibe Coding 到 Spec Coding<br>SDD 重塑 AI 研发流程</h1>
 
 <blockquote>
 当 AI 编程从个人玩具走向团队协作，从一次性脚本走向持续交付，
@@ -130,27 +130,62 @@ Vibe Coding 的产出三个月后，代码库进入不可维护状态。
 <p>
 SDD（Specification-Driven Development）并不是新概念。
 早在 1990 年代，形式化方法（Formal Methods）就在航空航天、金融交易等安全关键领域使用。
-但传统 SDD 的代价太高——写一份完整的形式化 Spec 往往比写代码本身还耗时。
+Z 语言、VDM、B 方法等形式化规约工具曾被用于验证伦敦地铁信号系统和巴黎地铁 14 号线的安全属性。
+但传统 SDD 的代价太高——写一份完整的形式化 Spec 往往比写代码本身还耗时，
+这导致它在商业软件开发中始终未成为主流。
 </p>
 
 <p>
 <strong>AI 改变了这个等式。</strong>
 当 AI 可以在 5 分钟内从需求文档生成一份结构化的 Spec，
 SDD 不再是成本负担，而是效率杠杆。
+这一转变的本质是：将"人写 Spec → 人写代码"的两段式流程，重构为
+<strong>"人确认 Spec → AI 写代码 → 人审核"的三段式人机协作</strong>。
 </p>
+
+<h3>从 Vibe Coding 到 Spec Coding 的必然性</h3>
+
+<p>
+Vibe Coding 的核心问题是<strong>"信息熵增"</strong>。每次与 AI 对话都从零开始：
+没有文档，没有规范，没有历史约束。代码的增长速度远超理解力的增长速度，
+三个月后，没人能说清任何一行代码"为什么"在那里。
+</p>
+
+<p>
+而 Spec Coding 的本质是<strong>把 AI 的高效从一次性对话延展到整个软件生命周期</strong>。
+它要解决的根本问题不是"AI 能不能写出代码"，而是
+<strong>"三个月后，AI 还记不记得这段代码是干什么的"</strong>。
+</p>
+
+<h3>SDD 与主流开发方法论的定位</h3>
+
+<table>
+  <tr><th>方法论</th><th>关注点</th><th>主要产出</th><th>SDD 与之关系</th></tr>
+  <tr><td>TDD</td><td>测试先行，红-绿-重构</td><td>测试用例</td><td>SDD 在 TDD 之前，先定义"测什么"</td></tr>
+  <tr><td>BDD</td><td>行为驱动，Given-When-Then</td><td>验收场景</td><td>SDD 的 Spec 可直接映射为 BDD 场景</td></tr>
+  <tr><td>DDD</td><td>领域模型，限界上下文</td><td>领域模型图</td><td>SDD 的 Spec 保存领域决策，DDD 则建模</td></tr>
+  <tr><td><strong>SDD</strong></td><td><strong>规范驱动，Spec为真</strong></td><td><strong>结构化 Spec 文档</strong></td><td><strong>TDD/BDD/DDD 的上游输入源</strong></td></tr>
+</table>
+
+<p>
+SDD 不是要替代 TDD、BDD 或 DDD，而是要为它们提供<strong>唯一且精确的输入</strong>。
+在一个 SDD 项目中，Spec 定义了"做什么"，TDD 保证"做对了"，BDD 验证"做得对"，DDD 建模"怎么做"。
+</p>
+
+<h3>三条铁律的深层含义</h3>
 
 <div class="principles">
   <div class="principle-card">
     <h4>No Spec, No Code</h4>
-    <p>没有规范文档，不准 AI 写一行代码。Spec 是代码的准生证。</p>
+    <p>没有规范文档，不准 AI 写一行代码。Spec 是代码的准生证。这条铁律的目的不是增加流程，而是确保每个决策都有据可查。</p>
   </div>
   <div class="principle-card">
     <h4>Spec is Truth</h4>
-    <p>文档与代码不一致时，错的一定是代码。Spec 是唯一事实源。</p>
+    <p>文档与代码不一致时，错的一定是代码。Spec 是唯一事实源。这来自 NASA 的 JPL 编码标准——代码可以重构，但规范必须稳定。</p>
   </div>
   <div class="principle-card">
     <h4>Reverse Sync</h4>
-    <p>发现 Bug 或需求变更时，先修文档，再修代码。知识永不丢失。</p>
+    <p>发现 Bug 或需求变更时，先修文档，再修代码。支持 30 分钟紧急 Hotfix 跳过，但 24 小时内强制补录，确保知识永不丢失。</p>
   </div>
 </div>
 
@@ -167,21 +202,25 @@ SDD 不再是成本负担，而是效率杠杆。
     <td><strong>知识管理</strong></td>
     <td>文档与代码分离，逐渐过时</td>
     <td>无文档，知识随对话消失</td>
-    <td><span class="tag tag-green">Spec 即知识</span>文档与代码同仓版本化</td>
+    <td><span class="tag tag-green">Spec 即知识</span> 文档与代码同仓版本化，变更履历完整可追溯</td>
   </tr>
   <tr>
     <td><strong>上下文管理</strong></td>
     <td>靠人脑记忆项目全貌</td>
     <td>AI 窗口爆满，断片重来</td>
-    <td><span class="tag tag-blue">原子任务</span> 2K-5K tokens 精确加载</td>
+    <td><span class="tag tag-blue">原子任务</span> 2K-5K tokens 精确加载，按需注入规范</td>
   </tr>
   <tr>
     <td><strong>变更管理</strong></td>
     <td>口头沟通，事后补文档</td>
     <td>直接改代码，因果断裂</td>
-    <td><span class="tag tag-purple">反向同步</span> 先改 Spec 再改代码</td>
+    <td><span class="tag tag-purple">反向同步</span> 先改 Spec 再改代码，L1/L2/L3 三级冲突裁决</td>
   </tr>
 </table>
+
+<blockquote>
+SDD 不是让开发变慢，而是让 90 天后的你感谢现在写下 Spec 的自己。
+</blockquote>
 
 <h2>三、SpecCore：AI-SDD 的工程实现</h2>
 
@@ -318,28 +357,143 @@ SpecCore 的自动模式不是全有或全无。实际工作中，很多时候�
   </tr>
 </table>
 
-<h2>六、分析深度：七种 Spec 文档</h2>
+<h2>六、按任务类型生成结构化文档</h2>
+
+<h3>十种任务类型</h3>
 
 <p>
-一次完整的 feature 分析，SpecCore 会生成 <strong>7 种结构化文档</strong>，
-覆盖从需求到运维的全链路：
+SpecCore 定义了 10 种任务类型，覆盖软件研发的完整生命周期。
+AI 根据不同任务类型，自动生成不同集合和深度的 Spec 文档，
+<strong>既保证关键信息不丢失，又避免不必要的文档负担</strong>。
+</p>
+
+<div class="principles">
+  <div class="principle-card">
+    <h4>feature</h4>
+    <p>新功能开发。最完整的文档集合。如"用户登录模块"</p>
+  </div>
+  <div class="principle-card">
+    <h4>bugfix</h4>
+    <p>缺陷修复。聚焦问题定位 + 回归测试。如"修复支付超时"</p>
+  </div>
+  <div class="principle-card">
+    <h4>refactor</h4>
+    <p>代码重构。关注架构影响 + 兼容性。如"迁移到微服务"</p>
+  </div>
+  <div class="principle-card">
+    <h4>research</h4>
+    <p>技术调研。输出调研结论 + 推荐方案。如"选型消息队列"</p>
+  </div>
+  <div class="principle-card">
+    <h4>review</h4>
+    <p>代码审查。生成审查清单 + 问题追踪。如"安全审计"</p>
+  </div>
+  <div class="principle-card">
+    <h4>test</h4>
+    <p>测试专项。完整测试计划 + 覆盖率目标。如"压测双11"</p>
+  </div>
+  <div class="principle-card">
+    <h4>docs</h4>
+    <p>文档编写。API文档/用户手册。如"生成 OpenAPI 文档"</p>
+  </div>
+  <div class="principle-card">
+    <h4>deploy</h4>
+    <p>部署上线。关注回滚方案 + 灰度策略。如"灰度发布 v2.0"</p>
+  </div>
+  <div class="principle-card">
+    <h4>security</h4>
+    <p>安全加固。威胁建模 + 漏洞修复。如"修复 OWASP Top 10"</p>
+  </div>
+  <div class="principle-card">
+    <h4>performance</h4>
+    <p>性能优化。压测报告 + 优化方案。如"数据库慢查询优化"</p>
+  </div>
+</div>
+
+<h3>任务类型 × 文档矩阵</h3>
+
+<p>
+不同类型的任务，AI 生成的 Spec 文档集合不同。
+<strong>feature 最完整（7 篇），bugfix 最精简（2 篇）</strong>：
 </p>
 
 <table>
-  <tr><th>文档</th><th>内容</th><th>用途</th></tr>
-  <tr><td>ANALYSIS.md</td><td>功能点、接口清单、数据模型、业务规则、异常处理</td><td>需求分析报告</td></tr>
-  <tr><td>TECH.md</td><td>架构方案、DDL、API 设计、缓存策略、核心流程</td><td>技术方案决策</td></tr>
-  <tr><td>TEST.md</td><td>单元/集成/边界/性能测试用例</td><td>质量保证</td></tr>
-  <tr><td>REVIEW.md</td><td>安全检查（SQL注入/XSS/鉴权）、代码质量检查项</td><td>Code Review 清单</td></tr>
-  <tr><td>RISK.md</td><td>风险矩阵、缓解措施、回滚方案</td><td>风险管理</td></tr>
-  <tr><td>DEPS.md</td><td>上下游依赖、SLA 要求</td><td>依赖管理</td></tr>
-  <tr><td>MONITOR.md</td><td>业务监控指标、告警规则</td><td>运维监控</td></tr>
+  <tr>
+    <th style="width:12%">任务类型</th>
+    <th style="width:8%">文档数</th>
+    <th style="width:8%">ANALYSIS</th>
+    <th style="width:8%">TECH</th>
+    <th style="width:8%">TEST</th>
+    <th style="width:8%">REVIEW</th>
+    <th style="width:8%">RISK</th>
+    <th style="width:8%">DEPS</th>
+    <th style="width:8%">MONITOR</th>
+    <th>说明</th>
+  </tr>
+  <tr><td><span class="tag tag-green">feature</span></td><td>7</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>全量分析，新功能完整交付</td></tr>
+  <tr><td><span class="tag tag-blue">refactor</span></td><td>5</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>-</td><td>-</td><td>关注架构影响和回归验证</td></tr>
+  <tr><td><span class="tag tag-purple">bugfix</span></td><td>3</td><td>✅</td><td>✅</td><td>✅</td><td>-</td><td>-</td><td>-</td><td>-</td><td>问题定位+修复方案+回归</td></tr>
+  <tr><td>research</td><td>2</td><td>✅</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>调研结论和推荐方案</td></tr>
+  <tr><td>review</td><td>2</td><td>-</td><td>-</td><td>-</td><td>✅</td><td>✅</td><td>-</td><td>-</td><td>审查清单和风险项</td></tr>
+  <tr><td><span class="tag tag-green">test</span></td><td>2</td><td>-</td><td>-</td><td>✅</td><td>-</td><td>✅</td><td>-</td><td>-</td><td>测试计划和风险覆盖</td></tr>
+  <tr><td>docs</td><td>1</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>目标文档直接生成</td></tr>
+  <tr><td>deploy</td><td>5</td><td>✅</td><td>✅</td><td>-</td><td>-</td><td>✅</td><td>✅</td><td>✅</td><td>部署计划+风险+依赖+监控</td></tr>
+  <tr><td>security</td><td>4</td><td>✅</td><td>-</td><td>✅</td><td>✅</td><td>✅</td><td>-</td><td>-</td><td>威胁分析+验证+审查+风险</td></tr>
+  <tr><td>performance</td><td>4</td><td>✅</td><td>✅</td><td>✅</td><td>-</td><td>-</td><td>-</td><td>✅</td><td>性能画像+方案+验证+监控</td></tr>
 </table>
 
-<p>
-bugfix / research 类型则精简为 3 个文档（ANALYSIS + TECH + TEST），
-避免过度文档化。
-</p>
+<h3>七种 Spec 文档详解</h3>
+
+<table>
+  <tr><th style="width:15%">文档</th><th style="width:20%">定位</th><th style="width:35%">包含内容</th><th>对谁有用</th></tr>
+  <tr>
+    <td><strong>ANALYSIS.md</strong></td>
+    <td>需求分析报告</td>
+    <td>功能点列表（含优先级）、接口清单（方法+路径+入参+出参）、数据模型 ER 图、业务规则状态流转图、异常处理矩阵</td>
+    <td>PM · 架构师 · 后端</td>
+  </tr>
+  <tr>
+    <td><strong>TECH.md</strong></td>
+    <td>技术方案</td>
+    <td>系统架构图、数据库 DDL（CREATE TABLE 含索引）、API 设计（OpenAPI 3.0 片段）、缓存策略（Redis Key 设计 + 过期时间）、核心时序图</td>
+    <td>架构师 · 后端 · DBA</td>
+  </tr>
+  <tr>
+    <td><strong>TEST.md</strong></td>
+    <td>测试计划</td>
+    <td>单元测试用例表（输入+预期输出）、集成测试场景、边界测试矩阵（空值/超长/并发/超时）、性能测试方案（QPS 目标+压测脚本）</td>
+    <td>QA · 后端 · 前端</td>
+  </tr>
+  <tr>
+    <td><strong>REVIEW.md</strong></td>
+    <td>审查清单</td>
+    <td>安全检查（SQL注入/XSS/CSRF/鉴权绕过）、代码质量（参数校验+幂等性+索引覆盖+事务边界）、部署检查（迁移脚本可回滚+灰度方案）</td>
+    <td>Tech Lead · 安全</td>
+  </tr>
+  <tr>
+    <td><strong>RISK.md</strong></td>
+    <td>风险评估</td>
+    <td>风险矩阵（可能性×影响×缓解措施）、回滚方案（触发条件+步骤+验证方法）、关键路径分析（阻塞点+备选方案）</td>
+    <td>PM · Tech Lead</td>
+  </tr>
+  <tr>
+    <td><strong>DEPS.md</strong></td>
+    <td>依赖清单</td>
+    <td>上游依赖（服务名+版本+用途+SLA）、下游影响分析（消费方+接口+影响程度）、第三方 SDK 清单（许可证+漏洞等级）</td>
+    <td>架构师 · SRE</td>
+  </tr>
+  <tr>
+    <td><strong>MONITOR.md</strong></td>
+    <td>监控指标</td>
+    <td>业务指标（成功率/延迟/吞吐量+阈值+P级别）、告警规则（触发条件+通知渠道+升级策略）、大盘看板（Grafana 面板定义）</td>
+    <td>SRE · 运维 · on-call</td>
+  </tr>
+</table>
+
+<blockquote>
+不是每类任务都需要全部 7 个文档。SpecCore 的理念是<strong>"该有的一个不少，不该有的一个不多"</strong>——
+feature 走全套，bugfix 只关心问题定位和回归。
+</blockquote>
 
 <h2>七、多项目管理：从单兵到军团</h2>
 
