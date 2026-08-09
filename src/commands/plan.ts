@@ -73,6 +73,32 @@ export async function planCommand(options: PlanOptions): Promise<void> {
   if (options.delete) { await removePlan(options.delete); return; }
   if (options.cancel) { await doCancelPlan(options.cancel); return; }
 
+  // ── 默认: 生成并打开计划可视化页面 ──
+  const iteration = await getDefaultIteration(options.iteration);
+  if (!iteration) { logger.error('未找到活跃迭代。请用 speccore context --set --iteration <name> 设置'); return; }
+  
+  const tasks = await scanTasks(iteration);
+  const planDir = join(await getIterationDir(iteration), '000-overview', 'plans');
+  await ensureDir(planDir);
+  
+  if (tasks.length === 0) {
+    // 无任务时生成空模板页面
+    const html = generatePlanHtml([], { version, iteration });
+    const htmlPath = join(planDir, 'speccore-plan.html');
+    await writeFile(htmlPath, html, 'utf-8');
+    logger.success(`✅ 计划页面: ${htmlPath}`);
+    logger.info('   💡 暂无任务，请先 analyze → split 生成任务');
+    return;
+  }
+
+  const htmlData = tasks.map(t => ({
+    id: t.id, name: t.name, priority: t.priority, status: t.status, owner: (t as any).assignee || (t as any).owner, dependsOn: (t as any).dependencies || [],
+  }));
+  const html = generatePlanHtml(htmlData, { version, iteration });
+  const htmlPath = join(planDir, 'speccore-plan.html');
+  await writeFile(htmlPath, html, 'utf-8');
+  logger.success(`✅ 计划页面: ${htmlPath}`);
+
   const spinner = new Spinner('Generating execution plan');
   spinner.start();
 
