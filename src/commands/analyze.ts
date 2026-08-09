@@ -338,13 +338,14 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `   - ERROR_CODES.md: 扫描 Error/Exception/enum 提取错误码清单和含义\n`;
       prompt += `   - DEPENDENCY_GRAPH.md: 分析模块间 import/require 依赖关系，生成依赖拓扑图\n`;
       prompt += `   - CODE_INDEX.md: 各工程目录结构、关键文件清单、模块职责说明\n`;
-      prompt += `5. **知识沉淀（按端+语言区分）**: 从各端源码识别可复用模式，写入 .speccore/PATTERNS/:\n`;
-      prompt += `   - 命名规则: {端}-{语言/框架}-{分类}-{模式名}.md\n`;
-      prompt += `   - 示例: admin-java-spring-auth-jwt.md | h5-vue3-comp-table.md | app-node-nestjs-api-pagination.md | app-go-gin-middleware.md\n`;
-      prompt += `   - 后台模式分类: 架构(mvc/ddd/clean)、鉴权(jwt/oauth2/rbac)、API(pagination/restful/graphql)、数据访问(repo/orm/cache)、异常(handler/filter)、日志(aop/middleware)、工具(util/helper)\n`;
-      prompt += `   - 前端模式分类: 组件(table/form/modal)、Hook/Composable、状态管理(pinia/redux/zustand)、路由(guard/layout)、请求(axios/fetch interceptor)、表单(validation/rules)、样式(theme/tailwind)、构建(vite/webpack)\n`;
-      prompt += `   - 每个文件含: 适用场景、平台/语言、核心代码片段、注意事项、反例\n`;
-      prompt += `   - 识别方法: 从 package.json 判断前端框架(Vue/React)和端(Web/H5)；从 pom.xml/go.mod/package.json 判断后台语言和框架\n`;
+      prompt += `5. **知识沉淀（按工程+端区分）**: 从各端源码识别可复用模式，写入 .speccore/PATTERNS/:\n`;
+      prompt += `   - 命名规则: **{CONSTITUTION中的工程名}-{端}-{分类}-{模式名}.md**\n`;
+      prompt += `   - 工程名从 CONSTITUTION.md 的「工程」列读取\n`;
+      prompt += `   - 端从 CONSTITUTION.md 的「对应需求端」列读取，如: admin/h5/miniapp/app/android/web\n`;
+      prompt += `   - 示例: meeting-system-admin-auth-jwt.md | booking-service-app-data-repo.md | meeting-system-h5-comp-table.md\n`;
+      prompt += `   - 后台分类: auth(鉴权)、api(接口设计)、data(数据访问)、error(异常)、log(日志)、util(工具)、arch(架构)\n`;
+      prompt += `   - 前端分类: comp(组件)、state(状态管理)、router(路由)、request(请求)、form(表单)、style(样式)、build(构建)\n`;
+      prompt += `   - 每个文件含: 工程名/端/分类 + 适用场景 + 核心代码片段 + 注意事项 + 反例\n`;
       prompt += `6. 以上文档输出到 .speccore/GLOBAL/ 和 .speccore/PATTERNS/，使用 Write 工具写入\n`;
     } else {
       prompt += `3. 读取 .speccore/GLOBAL/ 下各项目需求文档，生成跨项目索引和需求目录\n`;
