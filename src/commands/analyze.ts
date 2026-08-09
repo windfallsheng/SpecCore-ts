@@ -39,39 +39,9 @@ export interface AnalyzeOptions {
 }
 
 export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
-  // ── 源码分析准备：检查 CONSTITUTION.md 中的工程源码路径 ──
-  if (options.withCode) {
-    const iterDir = options.iteration ? await getIterationDir(options.iteration) : process.cwd();
-    const constitutionPath = join(iterDir, '..', '..', 'CONSTITUTION.md');
-    let codePaths: string[] = [];
-    if (await pathExists(constitutionPath)) {
-      const c = await readFile(constitutionPath, 'utf-8');
-      // 解析 | 工程名 | 源码路径 | ... 表格
-      const re = /\|\s*[\w-]+\s*\|\s*([^\|]+)\s*\|/g;
-      let m: RegExpExecArray | null;
-      while ((m = re.exec(c)) !== null) {
-        const p = m[1].trim();
-        if (p && p !== '.' && p !== './' && !p.startsWith('git@') && !p.startsWith('http')) {
-          const abs = join(iterDir, '..', '..', p);
-          if (await pathExists(abs)) codePaths.push(abs);
-        }
-      }
-    }
-    if (codePaths.length === 0) {
-      logger.error('❌ --with-code 已启用，但 CONSTITUTION.md 中未配置有效源码路径，或路径不存在');
-      logger.info('');
-      logger.info('请在 .speccore/CONSTITUTION.md 中配置工程源码路径，格式如下:');
-      logger.info('| 工程 | 源码路径 | Git 仓库 | 默认分支 | 对应需求端 |');
-      logger.info('| :--- | :--- | :--- | :--- | :--- |');
-      logger.info('| meeting-system | ./ | ... | main | admin, h5, miniapp |');
-      logger.info('');
-      logger.info('配置完成后重新执行: speccore analyze --with-code');
-      logger.info('或去掉 --with-code 只做需求分析: speccore analyze');
-      return;
-    }
-    // 将源码路径注入 options.source
-    options.source = codePaths.join(',');
-    logger.info(`📂 关联源码: ${codePaths.length} 个目录`);
+  // ── 非 prompt/apply 模式 → 全部转 AI prompt，不再走代码模板分析 ──
+  if (!options.prompt && !options.apply) {
+    options.prompt = true;
   }
 
   // ── Prompt 模式 ──
@@ -119,6 +89,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       await writeFile(join(taskDir, 'ANALYSIS.md'), options.apply);
     }
     return;
+  }
+
   // ── 非 prompt/apply 模式 → 自动转为 prompt 模式，所有分析必须经 AI 执行 ──
   if (!options.prompt && !options.apply) {
     options.prompt = true;
@@ -135,6 +107,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 
   // ── Apply 模式 ──
   if (options.apply) {
+  }
 }
 
 /**
