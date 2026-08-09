@@ -3,7 +3,7 @@
 🖥️ 规范驱动开发 CLI · 23 简洁命令（59 全量）· 人机协同闭环 · 多层 AI 架构
 
 ```bash
-speccore ask "我想做一个登录功能，计划晚8点分批执行"
+@spec-ask "我想做一个登录功能，计划晚8点分批执行"
 ```
 
 ---
@@ -11,7 +11,7 @@ speccore ask "我想做一个登录功能，计划晚8点分批执行"
 ## 架构概览
 
 ```
-speccore ask ←── AI 万能入口 ──→ speccore dev (智能级联)
+@spec-ask "..."  ← AI 入口 →  @spec-ask "全自动执行"
     │                                     │
     ├─ 📖 命令解释 "dashboard 怎么用"      ├─ 🏗️ 初始化
     ├─ 🗺️ 任务指引 "我想做登录"           ├─ 📝 导入需求
@@ -30,11 +30,14 @@ speccore ask ←── AI 万能入口 ──→ speccore dev (智能级联)
 
 ```bash
 npm install -g speccore
-speccore init                    # 初始化项目
-speccore welcome                 # 查看项目名片
-speccore ask "查看进度"          # AI 万能入口
-speccore dev --auto              # 智能级联一键推进
+speccore init                               # 初始化项目
+speccore iteration create -n Q1 --topic my-project --owner luzhaosheng  # 创建迭代
+speccore task new -n "用户登录" --topic user-login -i my-project         # 创建任务
+speccore context --set --iteration Iteration-001-my-project              # 切换上下文
+speccore dashboard                                                        # 查看仪表盘
 ```
+
+> 💡 **AI 命令**（在 WorkBuddy/Trae/Qcoder 中通过 `@spec-ask` 或 `/spec-ask` 使用）：分析需求、制定计划、执行开发。详见 [AGENTS.md](./AGENTS.md)。
 
 ## 核心流水线
 
@@ -90,12 +93,13 @@ speccore retro --all --owner 张三         # 按人
 speccore retro --all --type bugfix        # 按类型
 ```
 
-### 🧠 ask — AI 万能入口
-4 种模式自动识别，无需记忆命令：
-- **📖 命令解释**：`speccore ask "dashboard 怎么用"`
-- **🗺️ 任务指引**：`speccore ask "我想做一个支付功能"` → 8 步全流程
-- **🎯 意图匹配**：`speccore ask "查看进度"` → 自动匹配 dashboard
-- **⚡ 复杂编排**：`speccore ask "计划任务，晚8点分批执行"` → plan→schedule→execute
+### 🧠 AI 语义入口
+
+在 AI IDE 中使用 `@spec-ask` 或 `/spec-ask`，无需记忆命令：
+- **📖 命令解释**：`@spec-ask "dashboard 怎么用"`
+- **🗺️ 任务指引**：`@spec-ask "我想做一个支付功能"` → AI 自动编排全流程
+- **🎯 意图匹配**：`@spec-ask "查看进度"` → AI 自动匹配 dashboard
+- **⚡ 复杂编排**：`@spec-ask "分析+计划自动，执行前确认"` → analyze→plan 连续跑
 
 ### 📊 dashboard — 全局仪表盘
 `speccore dashboard --scope global` 生成 Jira 标准 7 维度 HTML 看板：
@@ -104,7 +108,7 @@ speccore retro --all --type bugfix        # 按类型
 - 9 套主题、中英文切换、字体/字号调节、F 键全屏、四边脉冲扫描线
 
 ### 🔄 dev — 智能级联
-自动检测项目阶段，一键推进：`speccore dev --auto`
+在 AI IDE 中智能推进：`@spec-ask "全自动执行"`
 
 ### 🚀 全量流水线
 | 阶段 | 命令 | AI 模式 |
@@ -159,7 +163,7 @@ speccore --version   # v5.27.0
 ## 🤖 三层 AI 架构
 
 ```
-speccore ask "..." / speccore dev
+@spec-ask "..."  (AI IDE 入口)
   ├─ 🧠 自有 LLM   → OpenAI / Ollama（SPECCORE_LLM_KEY 环境变量）
   ├─ 🤖 宿主 AI    → WorkBuddy / TRAE / Qoder（自动检测）
   └─ 📐 规则引擎   → 18 条命令 KB + 4 预定义工作流（永远可用）
