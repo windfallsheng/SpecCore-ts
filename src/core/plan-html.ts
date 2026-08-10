@@ -327,38 +327,38 @@ main { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; paddin
 /* ── Header Card Pulse ── */
 .header-card {
   background: linear-gradient(135deg, rgba(14,165,233,.08), rgba(14,165,233,.03));
-  border: 1px solid rgba(14,165,233,.18); border-radius: 16px;
+  border: 1px solid rgba(14,165,233,.25); border-radius: 16px;
   padding: 32px 40px; margin-bottom: 32px; position: relative; overflow: hidden;
 }
 /* 四边扫描线脉冲 */
 .header-card::before {
-  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
-  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(14,165,233,.8), var(--cyan), rgba(14,165,233,.8), transparent);
   animation: scanX 3s linear infinite; z-index: 2;
 }
 .header-card::after {
-  content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
-  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(14,165,233,.8), var(--cyan), rgba(14,165,233,.8), transparent);
   animation: scanX-rev 3s linear infinite; z-index: 2;
 }
 @keyframes scanX { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
 @keyframes scanX-rev { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
 @keyframes scanY { 0% { transform: translateY(-100%); } 100% { transform: translateY(100%); } }
-@keyframes scanY-rev { 0% { transform: translateY(100%); } 100% { transform: translateY(-100%); }
+@keyframes scanY-rev { 0% { transform: translateY(100%); } 100% { transform: translateY(-100%); } }
 
 /* 背景脉冲光晕 */
 .header-card-bg {
   position: absolute; inset: 0; pointer-events: none; z-index: 0;
-  background: radial-gradient(circle at 50% 30%, rgba(14,165,233,.15) 0%, transparent 55%);
+  background: radial-gradient(ellipse at 50% 20%, rgba(14,165,233,.22) 0%, transparent 60%);
   animation: cardGlow 3s ease-in-out infinite;
 }
 @keyframes cardGlow {
-  0%, 100% { opacity: .5; }
+  0%, 100% { opacity: .6; }
   50% { opacity: 1; }
 }
-.vline { position: absolute; top: 16px; width: 2px; bottom: 16px; pointer-events: none; z-index: 2; }
-.vline.l { left: 2px; background: linear-gradient(180deg, transparent, var(--cyan) 20%, var(--cyan) 80%, transparent); animation: scanY-rev 3s linear infinite; }
-.vline.r { right: 2px; background: linear-gradient(180deg, transparent, var(--cyan) 20%, var(--cyan) 80%, transparent); animation: scanY 3s linear infinite; }
+.vline { position: absolute; top: 16px; width: 3px; bottom: 16px; pointer-events: none; z-index: 2; }
+.vline.l { left: 3px; background: linear-gradient(180deg, transparent, rgba(14,165,233,.7), var(--cyan), rgba(14,165,233,.7), transparent); animation: scanY-rev 3s linear infinite; }
+.vline.r { right: 3px; background: linear-gradient(180deg, transparent, rgba(14,165,233,.7), var(--cyan), rgba(14,165,233,.7), transparent); animation: scanY 3s linear infinite; }
 .header-title {
   font: 700 28px 'Orbitron', monospace; color: var(--cyan); letter-spacing: 2px;
   text-transform: uppercase; position: relative; z-index: 1;
