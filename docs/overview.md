@@ -64,7 +64,12 @@ speccore dashboard --scope global
 
 | 命令 | 终端输出 | AI 输出 | HTML 文件 |
 |------|------|------|------|
-| ask | Unicode 框线 | HTML 页面 | `speccore-ask-onboarding.html` / `speccore-ask-result.html` |
+| ask | Unicode 框线 | HTML 页面 | `speccore-ask-onboarding.html` / `speccore-ask-result.html` / `templates/html/speccore-ask-explain.html` |
 | welcome | Unicode 框线 | HTML 页面（彩色卡片） | `deploy/welcome.html` |
 | dashboard | 文本 | HTML（Jira 标准 7 维仪表盘） | `deploy/status.html`（--scope global → `deploy/index.html`） |
 | dev | 文本 | HTML（Pipeline 可视化） | `speccore-dev.html` |
+| help | 文本 | HTML 帮助中心 | `templates/html/speccore-help.html` |
+| retro | 文本 | HTML 回顾报告 | `templates/html/speccore-retro-T-001.html` |
+| about | 文本 | HTML 关于页 | `speccore-about.html` |
+| doc2spec | 文本 | HTML 需求预览 | `templates/html/speccore-ask-result.html` |
+| spec2doc | 文本 | HTML 导出预览 | `templates/html/speccore-ask-result.html` |
