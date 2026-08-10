@@ -10,6 +10,7 @@ export interface PlanHtmlTask {
 export interface PlanHtmlOptions {
   version: string;
   iteration: string;
+  planName?: string;
 }
 
 /**
@@ -179,6 +180,25 @@ main { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; paddin
 }
 .header .sub { color: var(--muted); font-size: 13px; margin-top: 8px; letter-spacing: 1px; }
 
+/* ── Progress ── */
+.progress-section { margin: 20px 0 30px; }
+.progress-bar {
+  height: 8px; background: rgba(255,255,255,.06); border-radius: 4px;
+  position: relative; overflow: hidden;
+}
+.progress-fill {
+  height: 100%; background: linear-gradient(90deg, #14b8a6, #0ea5e9);
+  border-radius: 4px; position: absolute; top: 0; left: 0; transition: width .5s;
+}
+.progress-inprogress {
+  height: 100%; background: #f97316; border-radius: 0 4px 4px 0;
+  position: absolute; top: 0; transition: .5s;
+}
+.progress-legend {
+  display: flex; gap: 20px; justify-content: center; margin-top: 8px;
+  font-size: 12px; color: var(--muted);
+}
+
 /* ── Stats ── */
 .stats {
   display: grid;
@@ -313,9 +333,23 @@ main { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; paddin
 <main>
   <!-- Header -->
   <div class="header">
-    <h1>📋 SpecCore 执行计划</h1>
-    <div class="sub">迭代: ${opts.iteration} · 版本: ${opts.version}</div>
+    <h1>${opts.planName ? `📋 ${opts.planName}` : '📋 SpecCore 执行计划'}</h1>
+    <div class="sub">迭代: ${opts.iteration} · 版本: ${opts.version} · 进度: ${total > 0 ? completed + inProgress : 0}/${total} (${total > 0 ? Math.round((completed / total) * 100) : 0}%)</div>
   </div>
+
+  ${total > 0 ? `
+  <!-- Progress -->
+  <div class="progress-section">
+    <div class="progress-bar">
+      <div class="progress-fill" style="width:${Math.round((completed / total) * 100)}%"></div>
+      <div class="progress-inprogress" style="width:${Math.round((inProgress / total) * 100)}%; left:${Math.round((completed / total) * 100)}%"></div>
+    </div>
+    <div class="progress-legend">
+      <span>🟢 已完成 ${completed}</span>
+      <span>🟡 进行中 ${inProgress}</span>
+      <span>⚪ 待开始 ${pending}</span>
+    </div>
+  </div>` : '<div class="sub" style="text-align:center;margin-top:20px;color:var(--muted)">暂无任务，请先 analyze → split 生成任务</div>'}
 
   <!-- Stats -->
   <div class="stats">
