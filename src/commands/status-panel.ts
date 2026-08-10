@@ -1411,7 +1411,8 @@ async function showGlobalDashboard(options: StatusPanelOptions): Promise<void> {
     const html = generateDashboardHtml(
       index.projects.length, totalReqs, implemented, inProgress, pending,
       completionRate, projectLabels, projectReqs,
-      iterationLabels, iterationReqCounts, iterStats, projectHealth, activeIterations.length, index
+      iterationLabels, iterationReqCounts, iterStats, projectHealth, activeIterations.length, index,
+      (index as any).projectName || (await import('path')).basename(process.cwd())
     );
 
     const outPath = options.export
