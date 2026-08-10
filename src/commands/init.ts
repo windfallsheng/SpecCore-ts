@@ -1114,7 +1114,7 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
     ['spec-analyze', 'SpecCore Analysis', '## ⛔ 铁律: 分析必须落盘 020-specs/，走 prompt→Read→apply 流程\n1. Read 010-requirements/ + PRD/PRD.md\n2. Execute: speccore analyze --prompt -I ${1:Q1} --type feature\n3. Fill docs via speccore analyze --apply'],
     ['spec-split', 'SpecCore Task Split', '## ⛔ 铁律: 分析完成后必须拆分，禁止跳过\n1. Read 020-specs/ for analysis docs\n2. Dry-run split and show preview\n3. Execute: speccore iteration split -i ${1:Q1} --owner ${2|张三,李四,王五|}'],
     ['spec-execute', 'SpecCore Execute', '## ⛔ 铁律: 有任务就执行，禁止说"已完成"跳过\n1. Read Task REQ.md + TECH.md\n2. Show plan then execute: speccore execute -i ${1:Q1} -t ${2:Task-001} --force'],
-    ['spec-plan', '生成计划: 迭代=${1:Q1} 责任人=${2|张三,李四,王五|}', 'speccore plan -I ${1:Q1} --owner ${2|张三,李四,王五|} --html'],
+    ['spec-plan', '生成并展示执行计划可视化页面', '1. 仅生成并展示计划页面，不执行代码修复\n2. speccore plan -I ${1:Q1} --owner ${2|张三,李四,王五|} --html\n3. 打开 speccore-plan.html'],
     ['spec-pr', '创建PR: 任务=${1:Task-001}', 'speccore pr --task=${1:Task-001}'],
     ['spec-done', '任务归档: 任务=${1:Task-001}', 'speccore done --task=${1:Task-001}'],
     ['spec-spec2doc', '导出文档: 迭代=${1:Q1} 格式=${2|需求.docx,方案.pdf|}', 'speccore spec2doc -i ${1:Q1} -o ${2|需求.docx,方案.pdf|}'],
