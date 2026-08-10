@@ -65,7 +65,7 @@ speccore dashboard --scope global
 | 命令 | 终端输出 | AI 输出 | HTML 文件 |
 |------|------|------|------|
 | ask | Unicode 框线 | HTML 页面 | `speccore-ask-onboarding.html` / `speccore-ask-result.html` / `templates/html/speccore-ask-explain.html` |
-| welcome | Unicode 框线 | HTML 页面（彩色卡片） | `deploy/welcome.html` |
+| welcome | Unicode 框线 | HTML 页面（彩色卡片） | `welcome-project-{name}.html` |
 | dashboard | 文本 | HTML（Jira 标准 7 维仪表盘） | `dashboard-iteration-{name}.html`（--scope global → `dashboard-project-{name}.html`） |
 | dev | 文本 | HTML（Pipeline 可视化） | `speccore-dev.html` |
 | help | 文本 | HTML 帮助中心 | `templates/html/speccore-help.html` |
