@@ -17,7 +17,7 @@ export async function initCommand(options: InitOptions): Promise<void> {
   // ── 增量升级模式 ──
   if (options.update) {
     const { updateCommand } = await import('./update');
-    await updateCommand({ force: options.force, tools: options.toolss });
+    await updateCommand({ force: options.force, tool: options.tool });
     return;
   }
 
@@ -54,7 +54,7 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
         spinner.stop('更新命令文件和配置...');
         // 安全更新：只更新可自动生成的文件，不碰用户数据
         await createWorkBuddyFiles(projectRoot);
-        await createToolIntegrations(projectRoot, options.tools);
+        await createToolIntegrations(projectRoot, options.tool);
         
         // 更新技能文件（Skill）
         const skillsSrc = join(__dirname, '..', '..', '.agents', 'skills');
@@ -172,7 +172,7 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
     await createWorkBuddyFiles(projectRoot);
 
     // Create tool integration files (Claude, CodeBuddy, Cursor, Trae, WindSurf, QCoder)
-    await createToolIntegrations(projectRoot, options.tools);
+    await createToolIntegrations(projectRoot, options.tool);
 
     // Create sample iteration（已存在则跳过）
     if (!await pathExists(join(projectRoot, 'Iteration-sample'))) {
@@ -1144,21 +1144,23 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
   }
   const hasQoder = !filter || filter.includes("qoder");
   if (hasQoder) {
-  // QCoder: 项目级指令路径 = .qoder/commands/，支持子目录分类
-  const qoderCommandsDir = join(projectRoot, '.qoder', 'commands', 'spec');
+  // QCoder: 项目级指令路径 = .qoder/commands/，使用 spec: 前缀扁平命名
+  const qoderCommandsDir = join(projectRoot, '.qoder', 'commands');
   await ensureDir(qoderCommandsDir);
   for (const [name, desc, cmd] of commands) {
-    // 去掉 spec- 前缀作为文件名，放在 spec/ 子目录下 → 用户输入 /spec 可浏览子命令
-    const shortName = name.replace(/^spec-/, '');
-    const content = desc + '\n\n执行命令: `' + cmd + '`';
+    // 做 spec:analyze, spec:execute 等 flat 命名（非子目录）
+    const shortName = name.replace(/^spec-/, 'spec:');
+    const content = '---\nname: ' + shortName + '\ndescription: ' + desc + '\n---\n' + desc + '\n\n执行命令: `' + cmd + '`';
     await writeFile(join(qoderCommandsDir, shortName + '.md'), content);
   }
-  // 清理旧版本残留的 orphan 文件
-  const validNames = new Set(commands.map(([name]) => name.replace(/^spec-/, '') + '.md'));
+  // 清理旧版本残留：spec/ 子目录 和 orphan 文件
+  const oldSpecDir = join(projectRoot, '.qoder', 'commands', 'spec');
+  try { if (await pathExists(oldSpecDir)) await require('fs-extra').remove(oldSpecDir); } catch {}
+  const validNames = new Set(commands.map(([name]) => name.replace(/^spec-/, 'spec:') + '.md'));
   try {
     const existing = await readdir(qoderCommandsDir);
     for (const f of existing) {
-      if (!validNames.has(f)) {
+      if (f.startsWith('spec:') && f.endsWith('.md') && !validNames.has(f)) {
         await require('fs-extra').unlink(join(qoderCommandsDir, f));
         logger.info(`  清理旧文件: ${f}`);
       }
