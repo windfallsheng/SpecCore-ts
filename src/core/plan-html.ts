@@ -390,9 +390,9 @@ main { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; paddin
   <!-- Header Card -->
   <div class="header-card">
     <div class="header-title">SPECCORE EXECUTION PLAN</div>
-    <div class="header-plan-name">${opts.planName || opts.iteration}</div>
+    <div class="header-plan-name">📌 计划名: ${opts.planName || opts.iteration}</div>
     <div class="header-meta">
-      <span>📁 ${opts.iteration}</span>
+      <span>📁 所属迭代: ${opts.iteration}</span>
       <span>·</span>
       <span class="status-badge"><span class="status-dot"></span>${overallStatus}</span>
       ${total > 0 ? `<span>·</span><span>📊 ${completed + inProgress}/${total} (${Math.round((completed / total) * 100)}%)</span>` : ''}
