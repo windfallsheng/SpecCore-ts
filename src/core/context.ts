@@ -191,24 +191,23 @@ export async function getHotfixStatus(): Promise<{
 
 /**
  * 根据简短迭代名（如 Q1）查找完整迭代路径
- * 返回 .speccore/ITERATIONS/Iteration-NNN-q1
+ * 返回项目根目录下的 Iteration-NNN-q1
  */
 export async function getIterationDir(name: string): Promise<string> {
   const { readdir } = await import('fs-extra');
-  const root = join(process.cwd(), '.speccore', 'ITERATIONS');
+  const root = process.cwd();
   // 去掉可能的 Iteration- 前缀（AI 可能传完整名如 Iteration-009-xxx）
   const shortName = name.replace(/^Iteration-/, '');
   try {
     const entries = await readdir(root, { withFileTypes: true });
     for (const e of entries) {
-      if (e.isDirectory() && (
-        e.name === name ||
+      if (e.isDirectory() && e.name.startsWith('Iteration-') && (
+        e.name === `Iteration-${shortName}` ||
         e.name.toLowerCase().endsWith(shortName.toLowerCase())
       )) {
         return join(root, e.name);
       }
     }
   } catch {}
-  return join(root, `Iteration-000-${shortName.toLowerCase()}`);
-  return join(root, `Iteration-000-${name.toLowerCase()}`);
+  return join(root, `Iteration-${shortName}`);
 }

@@ -42,8 +42,8 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
       await checkUpgradeHints(projectRoot, speccoreDir);
 
       // 如果没有 iteration 目录，自动走全量 init 流程
-      const iterRoot = join(projectRoot, '.speccore', 'ITERATIONS');
-      const hasIteration = (await pathExists(iterRoot)) && (await import('fs-extra')).readdirSync(iterRoot).filter(n => n.startsWith('Iteration-')).length > 0;
+      const iterRoot = projectRoot;
+      const hasIteration = (await pathExists(iterRoot)) && (await import('fs-extra')).readdirSync(iterRoot).filter((n: string) => n.startsWith('Iteration-')).length > 0;
       if (!hasIteration && !options.force) {
         spinner.stop('⚠️  未检测到任何迭代，请运行: speccore iteration create -n Q1 --topic meeting-system');
         logger.info('  然后再跑 speccore init --update 升级');
