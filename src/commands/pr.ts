@@ -9,6 +9,13 @@ import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
 import { buildPrompt, formatPrompt } from '../core/prompt-builder';
 
+import { createInterface } from 'readline';
+
+function promptUser(q: string): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise(r => rl.question(`${q} `, a => { rl.close(); r(a.trim()); }));
+}
+
 export interface PrOptions {
   task?: string;
   iteration?: string;
