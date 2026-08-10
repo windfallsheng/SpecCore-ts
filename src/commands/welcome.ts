@@ -39,7 +39,7 @@ export async function welcomeCommand(_options: WelcomeOptions): Promise<void> {
       else phase = 'execute';
     }
     const html = renderWelcomeHtml(version, isInit, iterName, phase, taskCount);
-    const outPath = _options.output || join(process.cwd(), 'speccore-welcome.html');
+    const outPath = _options.output || join(process.cwd(), _options.output || 'welcome-' + (config.project.name || 'SpecCore') + '.html');
     if (!!process.env.WORKBUDDY_SESSION) { process.stdout.write(html); }
     else { await writeFile(outPath, html); process.stdout.write('✅ 页面已生成: file://' + outPath + '\n   预览: python3 -m http.server 8080 → http://localhost:8080/' + require('path').basename(outPath) + '\n'); }
     return;
