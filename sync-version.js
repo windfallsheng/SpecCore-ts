@@ -9,7 +9,7 @@ const htmlFiles = [
   'speccore-dev.html',
   'speccore-ask-onboarding.html',
   'speccore-ask-result.html',
-  'outputs/welcome-project-SpecCore.html',
+  'outputs/welcome-SpecCore.html',
   'outputs/dashboard-project-SpecCore.html',
   'outputs/dashboard-iteration-Q2.html',
   'templates/html/speccore-ask-explain.html',
