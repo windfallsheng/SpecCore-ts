@@ -323,6 +323,12 @@ main { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; paddin
 .refresh-btn:hover { background: rgba(14,165,233,.12); border-color: var(--cyan); }
 .auto-refresh { color: var(--muted); font-size: 11px; cursor: pointer; }
 .auto-refresh input { accent-color: var(--cyan); margin-right: 4px; }
+.refresh-panel {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 14px; background: rgba(14,165,233,.05);
+  border: 1px solid rgba(14,165,233,.12); border-radius: 10px;
+  position: relative; z-index: 1;
+}
 
 /* ── Header Card Pulse ── */
 .header-card {
@@ -330,21 +336,24 @@ main { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; paddin
   border: 1px solid rgba(14,165,233,.25); border-radius: 16px;
   padding: 32px 40px; margin-bottom: 32px; position: relative; overflow: hidden;
 }
-/* 四边扫描线脉冲 */
+/* 四边扫描线脉冲 — 与 dev.html 一致 */
 .header-card::before {
-  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(14,165,233,.8), var(--cyan), rgba(14,165,233,.8), transparent);
-  animation: scanX 3s linear infinite; z-index: 2;
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  animation: scanX 3s linear infinite;
 }
 .header-card::after {
-  content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(14,165,233,.8), var(--cyan), rgba(14,165,233,.8), transparent);
-  animation: scanX-rev 3s linear infinite; z-index: 2;
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  animation: scanX-rev 3s linear infinite;
 }
 @keyframes scanX { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
 @keyframes scanX-rev { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
 @keyframes scanY { 0% { transform: translateY(-100%); } 100% { transform: translateY(100%); } }
 @keyframes scanY-rev { 0% { transform: translateY(100%); } 100% { transform: translateY(-100%); } }
+.vline { position: absolute; top: 0; width: 1px; bottom: 0; pointer-events: none; }
+.vline.l { left: 0; background: linear-gradient(180deg, transparent, var(--cyan), transparent); animation: scanY-rev 3s linear infinite; }
+.vline.r { right: 0; background: linear-gradient(180deg, transparent, var(--cyan), transparent); animation: scanY 3s linear infinite; }
 
 /* 背景脉冲光晕 */
 .header-card-bg {
@@ -352,13 +361,7 @@ main { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; paddin
   background: radial-gradient(ellipse at 50% 20%, rgba(14,165,233,.22) 0%, transparent 60%);
   animation: cardGlow 3s ease-in-out infinite;
 }
-@keyframes cardGlow {
-  0%, 100% { opacity: .6; }
-  50% { opacity: 1; }
-}
-.vline { position: absolute; top: 16px; width: 3px; bottom: 16px; pointer-events: none; z-index: 2; }
-.vline.l { left: 3px; background: linear-gradient(180deg, transparent, rgba(14,165,233,.7), var(--cyan), rgba(14,165,233,.7), transparent); animation: scanY-rev 3s linear infinite; }
-.vline.r { right: 3px; background: linear-gradient(180deg, transparent, rgba(14,165,233,.7), var(--cyan), rgba(14,165,233,.7), transparent); animation: scanY 3s linear infinite; }
+@keyframes cardGlow { 0%, 100% { opacity: .6; } 50% { opacity: 1; } }
 .header-title {
   font: 700 28px 'Orbitron', monospace; color: var(--cyan); letter-spacing: 2px;
   text-transform: uppercase; position: relative; z-index: 1;
@@ -417,15 +420,22 @@ main { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; paddin
   <div class="header-card">
     <div class="header-card-bg"></div>
     <div class="vline l"></div><div class="vline r"></div>
-    <div class="header-title">SPECCORE EXECUTION PLAN</div>
-    <div class="header-plan-name">📌 计划名: ${opts.planName || opts.iteration}</div>
-    <div class="header-meta">
-      <span>📁 所属迭代: ${opts.iteration}</span>
-      <span>·</span>
-      <span class="status-badge"><span class="status-dot"></span>${overallStatus}</span>
-      ${total > 0 ? `<span>·</span><span>📊 ${completed + inProgress}/${total} (${Math.round((completed / total) * 100)}%)</span>` : ''}
-      <span>·</span>
-      <span>v${opts.version}</span>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;">
+      <div>
+        <div class="header-title">SPECCORE EXECUTION PLAN</div>
+        <div class="header-plan-name">📌 计划名: ${opts.planName || opts.iteration}</div>
+        <div class="header-meta" style="margin-top:12px;">
+          <span>📁 所属迭代: ${opts.iteration}</span>
+          <span>·</span>
+          <span class="status-badge"><span class="status-dot"></span>${overallStatus}</span>
+          ${total > 0 ? `<span>·</span><span>📊 ${completed + inProgress}/${total} (${Math.round((completed / total) * 100)}%)</span>` : ''}
+        </div>
+      </div>
+      <div class="refresh-panel">
+        <label class="auto-refresh"><input type="checkbox" id="autoRefresh" onchange="toggleAutoRefresh()"> 30s</label>
+        <span class="refresh-btn" onclick="location.reload()">🔄</span>
+        <span id="refreshStatus"></span>
+      </div>
     </div>
   </div>
 
@@ -502,9 +512,7 @@ ${timelineItems}
 
   <!-- Footer -->
   <div class="footer">
-    <label class="auto-refresh"><input type="checkbox" id="autoRefresh" onchange="toggleAutoRefresh()"> 自动刷新（30s）</label>
-    <span class="refresh-btn" onclick="location.reload()" title="刷新页面获取最新数据">🔄 立即刷新</span>
-    <span id="refreshStatus"></span>
+    生成时间: ${now} · Speccore v${opts.version}
   </div>
 </main>
 

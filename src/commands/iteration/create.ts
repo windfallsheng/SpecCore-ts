@@ -25,7 +25,7 @@ export async function iterationCreateCommand(options: IterationCreateOptions): P
   const rawName = options.name.replace(/^Iteration-/, '');
   const topic = options.topic || undefined;
   const { id: fullName } = await nextIterationId(rawName, topic);
-    const iterationDir = join('.speccore', 'ITERATIONS', fullName); // e.g. .speccore/ITERATIONS/Iteration-001-q1
+    const iterationDir = fullName;
 
     // Check if already exists
     if (await pathExists(iterationDir)) {
