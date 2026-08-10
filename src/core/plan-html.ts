@@ -423,18 +423,14 @@ main { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; paddin
   <div class="header-card">
     <div class="header-card-bg"></div>
     <div class="vline l"></div><div class="vline r"></div>
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;">
+    <div class="header-title">SPECCORE EXECUTION PLAN</div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-top:16px;">
       <div>
-        <div class="header-title">SPECCORE EXECUTION PLAN</div>
         <div class="header-plan-name">📌 计划名: ${opts.planName || opts.iteration}</div>
-        <div class="header-meta" style="margin-top:12px;">
-          <span>📁 所属迭代: ${opts.iteration}</span>
-          <span>·</span>
-          <span class="status-badge"><span class="status-dot"></span>${overallStatus}</span>
-          ${total > 0 ? `<span>·</span><span>📊 ${completed + inProgress}/${total} (${Math.round((completed / total) * 100)}%)</span>` : ''}
-          <span>·</span>
-          <span>🕐 ${now}</span>
-        </div>
+        <div style="margin-top:6px;color:var(--muted);font-size:13px;">📁 所属迭代: ${opts.iteration}</div>
+        <div style="color:var(--muted);font-size:13px;">🕐 ${now}</div>
+        <span class="status-badge" style="margin-top:4px;display:inline-flex;"><span class="status-dot"></span>${overallStatus}</span>
+        ${total > 0 ? `<span style="font-size:13px;color:var(--muted);margin-left:8px;">📊 ${completed + inProgress}/${total} (${Math.round((completed / total) * 100)}%)</span>` : ''}
       </div>
       <div class="refresh-panel">
         <label class="auto-refresh"><input type="checkbox" id="autoRefresh" onchange="toggleAutoRefresh()"> 30s</label>
