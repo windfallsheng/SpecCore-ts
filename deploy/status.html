@@ -159,6 +159,8 @@ html{font-size:18px}html.fs-sm{font-size:11px}html.fs-md{font-size:14px}html.fs-
 .font-orbitron,.font-orbitron html{font-size:18px}html.fs-sm{font-size:11px}html.fs-md{font-size:14px}html.fs-lg{font-size:18px}html.fs-xl{font-size:22px}body{font-family:Orbitron,sans-serif!important}.font-orbitron h1,.font-orbitron h3,.font-orbitron .panel-title,.font-orbitron .num-font,.font-orbitron .big-num,.font-orbitron .header-stat .num,.font-orbitron .card-icon{font-family:Orbitron,sans-serif!important}
 .font-jetbrains .num-fontnel-title{font-family:Orbitron}.font-orbitron .num-font{font-size:1.2rem;font-family:Orbitron}
 .collapsible-header{margin-top:20px}
+@keyframes cardGlow{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.6)}}
+.card-bg{position:absolute;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse at 50% 20%,rgba(14,165,233,.25) 0%,transparent 70%);animation:cardGlow 3s ease-in-out infinite}
 </style>
 </style>
 </head>
@@ -173,7 +175,7 @@ html{font-size:18px}html.fs-sm{font-size:11px}html.fs-md{font-size:14px}html.fs-
 <div class="fs-tip" style="display:none">ESC 退出 · F 全屏</div>
 <main>
 
-  <div class="header"><div class="data-stream"><span>SpecCore — Code by Spec, Not by Vibe · SpecCore — Code by Spec, Not by Vibe ·</span></div>
+  <div class="header"><div class="card-bg"></div><div class="data-stream"><span>SpecCore — Code by Spec, Not by Vibe · SpecCore — Code by Spec, Not by Vibe ·</span></div>
     <div class="header-left">
       <h1><span data-i18n="projectName">SPECCORE</span></h1>
       <div class="subtitle">SPECCORE · SPEC-DRIVEN DEVELOPMENT · <span data-i18n="owner">负责人</span>: 赵六</div>
