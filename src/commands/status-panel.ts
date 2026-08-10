@@ -513,9 +513,9 @@ async function exportStatus(
     await writeFile(outPath, md);
     logger.info(`✅ 导出到 ${outPath}`);
   } else if (format === 'html') {
-    const outPath = 'speccore-status.html';
+    const outPath = 'dashboard-iteration-' + config.project.name + '.html';
     await writeFile(outPath, buildHtmlDashboard(data));
-    logger.info(`✅ 导出到 ${outPath}`);
+    logger.info(`✅ 迭代看板已生成: ${outPath}`);
   }
 }
 
@@ -1408,16 +1408,18 @@ async function showGlobalDashboard(options: StatusPanelOptions): Promise<void> {
 
     spinner.stop('数据采集完成');
 
+    const projectName = (index as any).projectName || (await import('path')).basename(process.cwd());
+
     const html = generateDashboardHtml(
       index.projects.length, totalReqs, implemented, inProgress, pending,
       completionRate, projectLabels, projectReqs,
       iterationLabels, iterationReqCounts, iterStats, projectHealth, activeIterations.length, index,
-      (index as any).projectName || (await import('path')).basename(process.cwd())
+      projectName
     );
 
     const outPath = options.export
       ? (options.export.endsWith('.html') ? options.export : options.export + '.html')
-      : join(process.cwd(), 'speccore-dashboard.html');
+      : join(process.cwd(), 'dashboard-project-' + projectName + '.html');
     await writeFile(outPath, html);
 
     logger.success(`全局仪表盘已生成: ${outPath}`);
