@@ -82,7 +82,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
 .fs-fullscreen{position:fixed!important;inset:0!important;z-index:1000!important;border-radius:0!important;overflow-y:auto!important;overscroll-behavior:contain!important}.fs-fullscreen::-webkit-scrollbar{width:6px}.fs-fullscreen::-webkit-scrollbar-thumb{background:rgba(0,240,255,.2);border-radius:3px}.fs-fullscreen{background:var(--bg)!important;backdrop-filter:none!important;opacity:1!important;padding:40px!important;width:100vw!important;height:100vh!important;max-width:none!important}.fs-fullscreen svg{width:100%!important;height:auto!important;max-height:65vh!important}.fs-fullscreen table{font-size:16px}.fs-fullscreen .stat-value{font-size:52px}.fs-fullscreen .big-num{font-size:64px}.fs-fullscreen .card{padding:36px}
 .fs-tip{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(0,240,255,.1);border:1px solid rgba(0,240,255,.2);padding:8px 20px;border-radius:20px;font-size:11px;color:var(--cyan);z-index:1001;letter-spacing:1px;animation:fadeIn .3s ease;pointer-events:none}
 @keyframes fadeIn{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
-@keyframes cardGlow{0%,100%{opacity:.4}50%{opacity:1}}
+@keyframes cardGlow{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.6)}}
 .card-bg{position:absolute;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse at 50% 10%,rgba(14,165,233,.25) 0%,transparent 70%);animation:cardGlow 3s ease-in-out infinite}
 
 </style>
