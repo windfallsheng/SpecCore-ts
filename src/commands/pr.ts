@@ -136,38 +136,92 @@ export async function prCommand(options: PrOptions): Promise<void> {
     return;
   }
 
-  // ── 默认模式：提示走 AI 路径 ──
-  logger.info('💡 pr 是 AI 命令，推荐在 AI IDE 中使用 /spec:pr 获取最佳体验：');
-  logger.info('   1. AI 分析 git diff → 生成中文 commit 信息');
-  logger.info('   2. 对照 ANALYSIS.md 检查变更是否对齐分析范围');
-  logger.info('   3. 对齐则直接提交，不对齐则提示确认');
-  logger.info('');
-  logger.info('⚡ 如果只想快速提交，使用: speccore pr --commit');
+  // ── CLI 默认模式：交互式提交 ──
+  const branch = execSync('git branch --show-current', { encoding: 'utf-8' }).trim();
+  const iter = options.iteration || await getDefaultIteration();
+
+  // 展示变更
+  const status = execSync('git status --short', { encoding: 'utf-8' }).trim();
+  const diff = execSync('git diff --stat', { encoding: 'utf-8' }).trim();
+
+  logger.info(`🌿 当前分支: ${branch}`);
+  if (iter) logger.info(`📂 当前迭代: ${iter}`);
   logger.info('');
 
-  if (options.commit) {
-    const branch = execSync('git branch --show-current', { encoding: 'utf-8' }).trim();
-    const spinner = new Spinner('快速提交...'); spinner.start();
-    try {
-      execSync('git add -A', { stdio: 'pipe' });
-      const msg = options.title || 'Speccore auto commit';
-      execSync(`git commit -m "${msg}"`, { stdio: 'pipe' });
-      spinner.stop(`✅ 已提交: ${msg}`);
-      if (branch !== 'main' && branch !== 'master') {
-        execSync(`git push -u origin "${branch}"`, { stdio: 'pipe' });
-        logger.info(`✅ 已推送: ${branch}`);
+  if (!status) {
+    logger.info('📋 无待提交变更');
+    return;
+  }
+
+  logger.info('📋 变更文件:\n' + status);
+  logger.info('');
+
+  if (diff) {
+    logger.info('📊 变更统计:\n' + diff.split('\n').slice(0, 5).join('\n'));
+    logger.info('');
+  }
+
+  // 交互式确认
+  const addAns = await promptUser('暂存哪些文件？ [a]全部 [s]跳过(已暂存则直接commit) [q]退出: ');
+
+  if (addAns === 'q') { logger.info('已取消'); return; }
+  if (addAns === 'a') {
+    execSync('git add -A', { stdio: 'pipe' });
+    logger.info('✅ 已暂存全部变更');
+  }
+
+  const staged = execSync('git diff --cached --name-only', { encoding: 'utf-8' }).trim();
+  if (!staged) {
+    logger.info('⚠️  无暂存文件，跳过提交');
+    return;
+  }
+
+  logger.info('\n📦 待提交文件:\n' + staged);
+  logger.info('');
+
+  // 输入 commit 信息
+  let msg = options.title;
+  if (!msg) {
+    msg = await promptUser('Commit 信息（留空用 "SpecCore auto commit"）: ');
+    if (!msg) msg = 'SpecCore auto commit';
+  }
+
+  // 分析关联检查（如果有迭代）
+  if (iter) {
+    logger.info(`\n🔍 当前分析关联: ${iter}`);
+    const checkAns = await promptUser('提交到此分析迭代？ [y]是 [n]切换分支再提交: ');
+    if (checkAns !== 'y') {
+      const newBranch = await promptUser('输入目标分支名: ');
+      if (newBranch) {
+        try {
+          execSync(`git checkout "${newBranch}"`, { stdio: 'pipe' });
+          logger.info(`✅ 已切换到: ${newBranch}`);
+        } catch {
+          execSync(`git checkout -b "${newBranch}"`, { stdio: 'pipe' });
+          logger.info(`✅ 已创建并切换到: ${newBranch}`);
+        }
       }
-    } catch (error) {
-      spinner.fail('提交失败');
-      logger.error(String(error));
     }
-  } else {
-    // 展示变更预览
-    const status = execSync('git status --short', { encoding: 'utf-8' }).trim();
-    if (status) {
-      logger.info('📋 当前变更:\n' + status);
+  }
+
+  // 提交
+  const pushAns = await promptUser('\n提交并推送？ [y]是 [n]仅提交本地 [q]取消: ');
+  if (pushAns === 'q') { logger.info('已取消'); return; }
+
+  try {
+    execSync(`git commit -m "${msg.replace(/"/g, '\\"')}"`, { stdio: 'pipe' });
+    logger.success(`✅ 已提交: ${msg}`);
+
+    if (pushAns === 'y') {
+      const currentBranch = execSync('git branch --show-current', { encoding: 'utf-8' }).trim();
+      if (currentBranch !== 'main' && currentBranch !== 'master') {
+        execSync(`git push -u origin "${currentBranch}"`, { stdio: 'pipe' });
+        logger.success(`✅ 已推送: ${currentBranch}`);
+      }
     } else {
-      logger.info('📋 无待提交变更');
+      logger.info('📌 仅提交到本地，未推送');
     }
+  } catch (error: any) {
+    logger.error(`提交失败: ${error.message || error}`);
   }
 }
