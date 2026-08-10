@@ -356,9 +356,9 @@ main { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; paddin
   0%, 100% { opacity: .5; }
   50% { opacity: 1; }
 }
-.vline { position: absolute; top: 0; width: 1px; bottom: 0; pointer-events: none; z-index: 2; }
-.vline.l { left: 0; background: linear-gradient(180deg, transparent, var(--cyan), transparent); animation: scanY-rev 3s linear infinite; }
-.vline.r { right: 0; background: linear-gradient(180deg, transparent, var(--cyan), transparent); animation: scanY 3s linear infinite; }
+.vline { position: absolute; top: 16px; width: 2px; bottom: 16px; pointer-events: none; z-index: 2; }
+.vline.l { left: 2px; background: linear-gradient(180deg, transparent, var(--cyan) 20%, var(--cyan) 80%, transparent); animation: scanY-rev 3s linear infinite; }
+.vline.r { right: 2px; background: linear-gradient(180deg, transparent, var(--cyan) 20%, var(--cyan) 80%, transparent); animation: scanY 3s linear infinite; }
 .header-title {
   font: 700 28px 'Orbitron', monospace; color: var(--cyan); letter-spacing: 2px;
   text-transform: uppercase; position: relative; z-index: 1;
