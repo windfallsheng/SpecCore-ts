@@ -60,13 +60,15 @@ export async function dashboardCommand(options: DashboardOptions): Promise<void>
       .sort((a, b) => b.pct - a.pct);
 
     // 生成 HTML
+    const projectName = (index as any).projectName || (await import('path')).basename(process.cwd());
     const html = generateDashboardHtml(
       index.projects.length,
       totalReqs, implemented, inProgress, pending, completionRate,
       projectLabels, projectReqs,
       iterationLabels, iterationReqCounts,
       iterStats, projectHealth, activeIterations.length,
-      index
+      index,
+      projectName
     );
 
     const outputPath = options.output || join(process.cwd(), 'speccore-dashboard.html');
@@ -105,7 +107,8 @@ export function generateDashboardHtml(
   iterStats: { name: string; total: number; done: number; pct: number }[],
   projectHealth: { name: string; reqCount: number; doneCount: number; pct: number }[],
   activeIterCount: number,
-  index: Awaited<ReturnType<typeof readGlobalIndex>>
+  index: Awaited<ReturnType<typeof readGlobalIndex>>,
+  projectName: string
 ): string {
   const now = new Date().toISOString().split('T')[0];
 
@@ -199,6 +202,8 @@ main{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:40px 32p
 @keyframes scanX-rev{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}
 @keyframes scanY{0%{transform:translateY(-100%)}100%{transform:translateY(100%)}}
 @keyframes scanY-rev{0%{transform:translateY(100%)}100%{transform:translateY(-100%)}}
+@keyframes cardGlow{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.6)}}
+.card-bg{position:absolute;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse at 50% 20%,rgba(14,165,233,.25) 0%,transparent 70%);animation:cardGlow 3s ease-in-out infinite}
 .header-left::before{content:'';position:absolute;top:0;left:0;width:1px;bottom:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY-rev 3s linear infinite;pointer-events:none}
 .header-right::after{content:'';position:absolute;top:0;right:0;width:1px;bottom:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY 3s linear infinite;pointer-events:none}
 .header-left h1{font-family:'Orbitron',sans-serif;font-size:26px;font-weight:900;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:2px;text-shadow:0 0 40px rgba(0,240,255,.3)}
@@ -291,8 +296,9 @@ tr:hover td{background:var(--hover)}
 <div class="scanlines"></div><div class="stars"></div><div class="grid-pattern"></div>
 <main>
 <div class="header">
+  <div class="card-bg"></div>
   <div class="header-left">
-    <h1>SPECCORE</h1>
+    <h1>${projectName || 'SPECCORE'}</h1>
     <div class="subtitle"><span data-i18n="globalDash">全局仪表盘</span> · ${projectCount} <span data-i18n="projects">项目</span> · ${totalReqs} <span data-i18n="reqs">需求</span></div>
   </div>
   <div class="header-right">
