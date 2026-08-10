@@ -3,11 +3,7 @@ import { logger } from '../../utils/logger';
 export async function iterationListCommand(): Promise<void> {
   const { readdir, pathExists } = await import('fs-extra');
   const { join } = await import('path');
-  const root = join(process.cwd(), '.speccore', 'ITERATIONS');
-  if (!await pathExists(root)) {
-    logger.info('📋 无迭代目录，请先运行: speccore iteration create');
-    return;
-  }
+  const root = process.cwd();
   const entries = await readdir(root, { withFileTypes: true });
   const iterDirs = entries.filter(e => e.isDirectory() && e.name.startsWith('Iteration-'));
   if (iterDirs.length === 0) {
