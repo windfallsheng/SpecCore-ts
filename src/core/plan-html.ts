@@ -26,6 +26,14 @@ export function generatePlanHtml(
   const inProgress = tasks.filter(t => t.status === 'in_progress').length;
   const pending = total - completed - inProgress;
 
+  // 整体状态
+  let overallStatus = '未执行';
+  let statusColor = '#64748b';
+  if (total > 0) {
+    if (completed === total) { overallStatus = '已完成'; statusColor = '#14b8a6'; }
+    else if (inProgress > 0 || completed > 0) { overallStatus = '执行中'; statusColor = '#f97316'; }
+  }
+
   // Mermaid flowchart data
   const mermaidLines: string[] = [];
   const hasDeps = tasks.some(t => t.dependsOn.length > 0);
@@ -316,6 +324,54 @@ main { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; paddin
 .auto-refresh { color: var(--muted); font-size: 11px; cursor: pointer; }
 .auto-refresh input { accent-color: var(--cyan); margin-right: 4px; }
 
+/* ── Header Card Pulse ── */
+.header-card {
+  background: linear-gradient(135deg, rgba(14,165,233,.05), rgba(14,165,233,.02));
+  border: 1px solid rgba(14,165,233,.12); border-radius: 16px;
+  padding: 32px 40px; margin-bottom: 32px; position: relative; overflow: hidden;
+}
+.header-card::before {
+  content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+  background: radial-gradient(circle, rgba(14,165,233,.08) 0%, transparent 60%);
+  animation: pulse 4s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: .3; transform: scale(1); }
+  50% { opacity: .7; transform: scale(1.05); }
+}
+.header-title {
+  font: 700 28px 'Orbitron', monospace; color: var(--cyan); letter-spacing: 2px;
+  text-transform: uppercase; position: relative; z-index: 1;
+}
+.header-plan-name {
+  font: 600 18px 'JetBrains Mono', monospace; color: var(--text);
+  margin-top: 8px; position: relative; z-index: 1;
+}
+.header-meta {
+  display: flex; gap: 16px; align-items: center; margin-top: 12px;
+  font-size: 13px; color: var(--muted); position: relative; z-index: 1; flex-wrap: wrap;
+}
+.status-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;
+  background: ${statusColor}22; color: ${statusColor}; border: 1px solid ${statusColor}44;
+}
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: ${statusColor}; }
+
+/* ── Empty State ── */
+.empty-state {
+  text-align: center; padding: 48px 24px;
+  background: rgba(14,165,233,.03); border: 1px dashed rgba(14,165,233,.15);
+  border-radius: 16px; margin: 32px 0;
+}
+.empty-state .icon { font-size: 48px; margin-bottom: 16px; }
+.empty-state .title { font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+.empty-state .hint { font-size: 14px; color: var(--muted); line-height: 1.8; }
+.empty-state code {
+  background: rgba(14,165,233,.12); color: var(--cyan); padding: 2px 8px;
+  border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 13px;
+}
+
 /* ── Responsive ── */
 @media (max-width: 768px) {
   .stats { grid-template-columns: 1fr 1fr; }
@@ -331,10 +387,18 @@ main { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; paddin
 <div class="grid-pattern"></div>
 
 <main>
-  <!-- Header -->
-  <div class="header">
-    <h1>${opts.planName ? `📋 ${opts.planName}` : '📋 SpecCore 执行计划'}</h1>
-    <div class="sub">迭代: ${opts.iteration} · 版本: ${opts.version} · 进度: ${total > 0 ? completed + inProgress : 0}/${total} (${total > 0 ? Math.round((completed / total) * 100) : 0}%)</div>
+  <!-- Header Card -->
+  <div class="header-card">
+    <div class="header-title">SPECCORE EXECUTION PLAN</div>
+    <div class="header-plan-name">${opts.planName || opts.iteration}</div>
+    <div class="header-meta">
+      <span>📁 ${opts.iteration}</span>
+      <span>·</span>
+      <span class="status-badge"><span class="status-dot"></span>${overallStatus}</span>
+      ${total > 0 ? `<span>·</span><span>📊 ${completed + inProgress}/${total} (${Math.round((completed / total) * 100)}%)</span>` : ''}
+      <span>·</span>
+      <span>v${opts.version}</span>
+    </div>
   </div>
 
   ${total > 0 ? `
@@ -349,7 +413,16 @@ main { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; paddin
       <span>🟡 进行中 ${inProgress}</span>
       <span>⚪ 待开始 ${pending}</span>
     </div>
-  </div>` : '<div class="sub" style="text-align:center;margin-top:20px;color:var(--muted)">暂无任务，请先 analyze → split 生成任务</div>'}
+  </div>` : `
+  <div class="empty-state">
+    <div class="icon">📋</div>
+    <div class="title">暂无执行计划</div>
+    <div class="hint">
+      请先执行 <code>speccore analyze</code> 分析需求文档<br>
+      再运行 <code>speccore split</code> 拆分为开发任务<br>
+      任务生成后本页面将自动更新
+    </div>
+  </div>`}
 
   <!-- Stats -->
   <div class="stats">
