@@ -11,7 +11,7 @@ export const HELP_PANEL = `
 │  📅 iteration     ⚡ 迭代管理                                  │
 │  📝 doc2spec      ⚡ 导入 PRD → Spec MD（AI 精炼推荐）          │
 │  📤 spec2doc      ⚡ Spec MD → Word/PDF（AI 排版推荐）          │
-│  📦 task new      ⚡ 创建任务（支持批量/调度）                    │
+│  📦 task new      ⚡ 创建任务                                  │
 ├──────────────────────────────────────────────────────────────┤
 │  🤝 协作决策                                                  │
 │  🔍 analyze       🧠 需求分析+代码审查（--interactive）             │
@@ -19,14 +19,14 @@ export const HELP_PANEL = `
 │  📋 plan          🧠 执行计划（--interactive）                  │
 ├──────────────────────────────────────────────────────────────┤
 │  🚀 执行交付                                                  │
-│  💻 execute       ⚡ 自动排序+分批执行                          │
+│  💻 execute       ⚡ 自动排序执行                              │
 │  🔀 pr            🧠 创建PR（--interactive）                   │
 │  ✅ done          🧠 收尾归档（--interactive）                  │
 │  🔄 change        🧠 需求变更（--interactive）                  │
 ├──────────────────────────────────────────────────────────────┤
-│  📊 治理 + 调度                                               │
+│  📊 治理                                                     │
 │  ✅ validate      ⚡ 合规校验                                  │
-│  ⏰ schedule      ⚡ 定时调度（create/list/daemon）              │
+│  ⏰ schedule      ⚡ 定时调度 [暂未实现] 由 WorkBuddy Automations 替代 │
 │  🗑  rename       ⚡ 重命名 Task/迭代                           │
 ├──────────────────────────────────────────────────────────────┤
 │  💡 智能入口                                                  │

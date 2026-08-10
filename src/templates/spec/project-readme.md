@@ -13,7 +13,7 @@
 2. `speccore iteration create --name=期次名称` - ✅ CLI 命令：创建期次
 3. 编辑 `00-需求文档/REQUIREMENT.md` 填写需求
 4. `@spec-ask "拆分任务"` - 🔒 AI 命令：自动拆分 Task
-5. `@spec-ask "生成3人团队的调度方案"` - 🔒 AI 命令：生成调度方案
+5. `@spec-ask "分析项目需求"` - 分析项目需求
 6. `@spec-ask "批量执行所有任务"` - 🔒 AI 命令：批量执行
 7. `speccore validate` - ✅ CLI 命令：验证合规性
 8. `speccore archive --all` - ✅ CLI 命令：归档

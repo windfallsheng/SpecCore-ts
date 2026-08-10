@@ -297,7 +297,7 @@ export async function askCommand(input: string, _options: any): Promise<void> {
     logger.info('  📖 命令解释: speccore ask "dashboard 怎么用"');
     logger.info('  🗺️ 任务指引: speccore ask "我想做一个登录功能"');
     logger.info('  🎯 意图匹配: speccore ask "查看项目进度"');
-    logger.info('  ⚡ 复杂编排: speccore ask "计划所有任务，晚8点分批执行"');
+    logger.info('  ⚡ 复杂编排: speccore ask "重新分析全部文档，按计划自动开发"');
     return;
   }
 
