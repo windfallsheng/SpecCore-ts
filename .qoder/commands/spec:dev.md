@@ -1,4 +1,7 @@
-SpecCore Smart Pipeline
+---
+name: spec:dev
+description: SpecCore Smart Pipeline
+---
 
 执行命令: `1. Read .speccore/local/context.json for current state
 2. Read 000-overview/PROJECT_GRAPH.md for progress

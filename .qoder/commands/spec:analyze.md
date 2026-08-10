@@ -1,4 +1,7 @@
-SpecCore Analysis
+---
+name: spec:analyze
+description: SpecCore Analysis
+---
 
 执行命令: `1. Read 010-requirements/ for all platform docs
 2. Ask user for iteration name if not provided

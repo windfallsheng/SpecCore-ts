@@ -1,4 +1,7 @@
-SpecCore Execute
+---
+name: spec:execute
+description: SpecCore Execute
+---
 
 执行命令: `1. Read Task REQ.md and TECH.md for completeness
 2. Check .needs-retry for previous failures

@@ -1,4 +1,7 @@
-SpecCore Task Split
+---
+name: spec:split
+description: SpecCore Task Split
+---
 
 执行命令: `1. Read 020-specs/ for analysis docs
 2. Read STAFFING.md for team allocation
