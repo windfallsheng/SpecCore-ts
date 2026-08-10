@@ -358,7 +358,7 @@ main { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; paddin
 /* 背景脉冲光晕 */
 .header-card-bg {
   position: absolute; inset: 0; pointer-events: none; z-index: 0;
-  background: radial-gradient(ellipse at 50% 20%, rgba(14,165,233,.25) 0%, transparent 70%);
+  background: radial-gradient(ellipse at 50% 10%, rgba(14,165,233,.25) 0%, transparent 70%);
   animation: cardGlow 3s ease-in-out infinite;
 }
 @keyframes cardGlow {
