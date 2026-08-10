@@ -136,22 +136,38 @@ export async function prCommand(options: PrOptions): Promise<void> {
     return;
   }
 
-  // ── 默认模式：轻量级直接提交（无分析对照）──
-  const branch = execSync('git branch --show-current', { encoding: 'utf-8' }).trim();
-  const spinner = new Spinner('提交变更...'); spinner.start();
+  // ── 默认模式：提示走 AI 路径 ──
+  logger.info('💡 pr 是 AI 命令，推荐在 AI IDE 中使用 /spec:pr 获取最佳体验：');
+  logger.info('   1. AI 分析 git diff → 生成中文 commit 信息');
+  logger.info('   2. 对照 ANALYSIS.md 检查变更是否对齐分析范围');
+  logger.info('   3. 对齐则直接提交，不对齐则提示确认');
+  logger.info('');
+  logger.info('⚡ 如果只想快速提交，使用: speccore pr --commit');
+  logger.info('');
 
-  try {
-    execSync('git add -A', { stdio: 'pipe' });
-    const msg = options.title || `SpecCore auto commit`;
-    execSync(`git commit -m "${msg}"`, { stdio: 'pipe' });
-    spinner.stop(`✅ 已提交: ${msg}`);
-
-    if (branch !== 'main' && branch !== 'master') {
-      execSync(`git push -u origin "${branch}"`, { stdio: 'pipe' });
-      logger.info(`✅ 已推送: ${branch}`);
+  if (options.commit) {
+    const branch = execSync('git branch --show-current', { encoding: 'utf-8' }).trim();
+    const spinner = new Spinner('快速提交...'); spinner.start();
+    try {
+      execSync('git add -A', { stdio: 'pipe' });
+      const msg = options.title || 'Speccore auto commit';
+      execSync(`git commit -m "${msg}"`, { stdio: 'pipe' });
+      spinner.stop(`✅ 已提交: ${msg}`);
+      if (branch !== 'main' && branch !== 'master') {
+        execSync(`git push -u origin "${branch}"`, { stdio: 'pipe' });
+        logger.info(`✅ 已推送: ${branch}`);
+      }
+    } catch (error) {
+      spinner.fail('提交失败');
+      logger.error(String(error));
     }
-  } catch (error) {
-    spinner.fail('提交失败');
-    logger.error(String(error));
+  } else {
+    // 展示变更预览
+    const status = execSync('git status --short', { encoding: 'utf-8' }).trim();
+    if (status) {
+      logger.info('📋 当前变更:\n' + status);
+    } else {
+      logger.info('📋 无待提交变更');
+    }
   }
 }
