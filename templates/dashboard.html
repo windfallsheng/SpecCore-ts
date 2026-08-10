@@ -83,8 +83,8 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
 .fs-tip{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(0,240,255,.1);border:1px solid rgba(0,240,255,.2);padding:8px 20px;border-radius:20px;font-size:11px;color:var(--cyan);z-index:1001;letter-spacing:1px;animation:fadeIn .3s ease;pointer-events:none}
 @keyframes fadeIn{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 
-.card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanX 3s linear infinite;z-index:2;pointer-events:none}
-.card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanX-rev 3s linear infinite;z-index:2;pointer-events:none}
+.card-main::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanX 3s linear infinite;z-index:2;pointer-events:none}
+.card-main::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanX-rev 3s linear infinite;z-index:2;pointer-events:none}
 .vline{position:absolute;top:0;width:1px;bottom:0;pointer-events:none;z-index:2}
 .vline.l{left:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY-rev 3s linear infinite}
 .vline.r{right:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY 3s linear infinite}
@@ -146,7 +146,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
   </div>
 
   <div class="grid">
-    <div class="card"><div class="card-bg"></div><div class="vline l"></div><div class="vline r"></div>
+    <div class="card">
       <button class="fs-btn" title="Fullscreen (F)" onclick="toggleFS(this.parentElement)">⛶</button>
       <div class="data-stream"><span>ANALYZING PHASE PROGRESS...</span></div>
       <span class="card-icon">⏳</span>
@@ -156,7 +156,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
       <div style="color:var(--muted);font-size:11px;margin-top:8px;letter-spacing:1px">60% COMPLETE</div>
     </div>
 
-    <div class="card"><div class="card-bg"></div><div class="vline l"></div><div class="vline r"></div>
+    <div class="card">
       <button class="fs-btn" title="Fullscreen (F)" onclick="toggleFS(this.parentElement)">⛶</button>
       <div class="data-stream"><span>PARSING TASK DISTRIBUTION...</span></div>
       <span class="card-icon">📊</span>
@@ -172,7 +172,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
       </div>
     </div>
 
-    <div class="card"><div class="card-bg"></div><div class="vline l"></div><div class="vline r"></div>
+    <div class="card">
       <button class="fs-btn" title="Fullscreen (F)" onclick="toggleFS(this.parentElement)">⛶</button>
       <div class="data-stream"><span>CALCULATING COMPLETION RATE...</span></div>
       <span class="card-icon">🎯</span>
@@ -184,7 +184,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
   </div>
 
   <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:0">
-    <div class="card"><div class="card-bg"></div><div class="vline l"></div><div class="vline r"></div>
+    <div class="card">
       <button class="fs-btn" title="Fullscreen (F)" onclick="toggleFS(this.parentElement)">⛶</button>
       <div class="data-stream"><span>GENERATING DONUT METRICS...</span></div>
       <h3 style="margin-bottom:20px">COMPLETION BREAKDOWN</h3>
@@ -209,7 +209,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
       </div>
     </div>
 
-    <div class="card"><div class="card-bg"></div><div class="vline l"></div><div class="vline r"></div>
+    <div class="card">
       <button class="fs-btn" title="Fullscreen (F)" onclick="toggleFS(this.parentElement)">⛶</button>
       <div class="data-stream"><span>RENDERING TASK TIMELINE...</span></div>
       <h3 style="margin-bottom:20px">TASK PROGRESS</h3>
@@ -290,7 +290,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
   </div>
 
   <div class="grid" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:20px">
-    <div class="card"><div class="card-bg"></div><div class="vline l"></div><div class="vline r"></div>
+    <div class="card">
       <h3 style="margin-bottom:14px">TYPE PIE</h3>
       <div style="display:flex;align-items:center;gap:16px;justify-content:center">
         <svg viewBox="0 0 140 140" style="width:140px;height:140px">
@@ -305,7 +305,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
       </div>
     </div>
 
-    <div class="card"><div class="card-bg"></div><div class="vline l"></div><div class="vline r"></div>
+    <div class="card">
       <h3 style="margin-bottom:14px">PACE ANALYSIS</h3>
       <div style="text-align:center;padding:12px 0">
         <div style="font-family:Orbitron;font-size:36px;font-weight:900;color:var(--green);text-shadow:0 0 20px rgba(0,255,136,.3)">5</div>
@@ -319,7 +319,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
       </div>
     </div>
 
-    <div class="card"><div class="card-bg"></div><div class="vline l"></div><div class="vline r"></div>
+    <div class="card">
       <h3 style="margin-bottom:14px">SPRINT ACTIVITY</h3>
       <div style="text-align:center;padding:8px 0">
         <div style="font-size:40px;font-weight:900;background:linear-gradient(135deg,var(--green),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent">+1</div>
