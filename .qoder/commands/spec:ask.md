@@ -1,4 +1,7 @@
-SpecCore AI Router
+---
+name: spec:ask
+description: SpecCore AI Router
+---
 
 执行命令: `1. Read .speccore/CONSTITUTION.md for project context
 2. Read .speccore/local/context.json for current iteration

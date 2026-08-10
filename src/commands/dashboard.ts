@@ -316,7 +316,7 @@ tr:hover td{background:var(--hover)}
     <div class="label">📋 <span data-i18n="total">总需求数</span></div>
     <div class="value c-cyan">${totalReqs}</div>
     <div class="sub">${projectCount} 个项目</div>
-    <div class="data-stream"><span>SPECCORE · TOTAL REQUIREMENTS · ${now} · V${index.version || '1.0'}</span></div>
+    <div class="data-stream"><span>SPECCORE · TOTAL REQUIREMENTS · ${now} · V${require('../package.json').version || '1.0'}</span></div>
   </div>
   <div class="stat-card">
     <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>

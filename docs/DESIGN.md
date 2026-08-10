@@ -239,7 +239,7 @@ speccore retro --all --type bugfix    ← 按类型
 ├── CLAUDE.md              ← Claude Code 引用 @AGENTS.md
 ├── .qoder/rules/          ← Qoder 规则
 │   └── speccore.md
-├── .qoder/commands/spec/  ← Qoder 斜杠命令
+├── .qoder/commands/       ← Qoder 斜杠命令（spec:X.md 格式）
 ├── .agents/skills/        ← TRAE 技能
 │   ├── speccore-router/SKILL.md
 │   ├── spec-ask/SKILL.md
@@ -256,8 +256,76 @@ speccore retro --all --type bugfix    ← 按类型
 | Cursor/Copilot/Windsurf | `AGENTS.md` | ✅ |
 | Codex | `AGENTS.md` | ✅ |
 | Claude Code | `CLAUDE.md` → `@AGENTS.md` | ✅ |
-| Qoder | `.qoder/rules/` + `.qoder/commands/` | ✅ |
+| Qoder | `.qoder/rules/` + `.qoder/commands/spec:X.md` | ✅ |
 | TRAE | `.agents/skills/` + `.trae/commands/` | ✅ |
+
+### 6.3 HTML 页面视觉规范
+
+所有 HTML 展示页面（about / dev / welcome / ask / help / retro 等 20 页）统一遵循以下规范。
+
+#### 光晕效果
+
+单卡页面头部叠加 `card-bg` 光晕层：
+```css
+.card-bg {
+  position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  background: radial-gradient(ellipse at 50% 10%, rgba(14,165,233,.25) 0%, transparent 70%);
+  animation: cardGlow 3s ease-in-out infinite;
+  transform-origin: top center;
+}
+@keyframes cardGlow {
+  0%, 100% { opacity: .5; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.6); }
+}
+```
+光晕圆心位于卡片顶部 10%（标题文字下方），水平居中，呼吸扩张方向锚定顶部。
+
+#### 标题发光
+
+所有 `<h1>`/`<h2>` 统一呼吸发光：
+```css
+h1, h2 {
+  text-shadow: 0 0 20px rgba(14,165,233,.4), 0 0 60px rgba(14,165,233,.15);
+  animation: titleGlow 3s ease-in-out infinite;
+}
+@keyframes titleGlow {
+  0%, 100% { text-shadow: 0 0 20px rgba(14,165,233,.4), 0 0 60px rgba(14,165,233,.15); }
+  50% { text-shadow: 0 0 30px rgba(14,165,233,.7), 0 0 80px rgba(14,165,233,.3); }
+}
+```
+
+#### 四边扫描线
+
+每张卡片叠加横向脉冲（`card::before`/`card::after`）+ 纵向脉冲（`vline.l`/`vline.r`）。
+
+#### ask 页面特殊规则
+
+- 标题用 HTML `<h1>` + `<div class="sub">`，自动继承发光；SVG 仅承载下方流程图
+- SVG viewBox 裁掉顶部空白：`0 80 680 420`
+- 底部 badge-line + footer 在卡片内部
+- 所有 `speccore ask` 文字统一为 `/spec-ask`
+
+#### HTML 文件与功能对应
+
+| 文件路径 | 功能 | CLI 命令 |
+|:---|:---|:---|
+| `speccore-about.html` | 关于页面：版本、GitHub、维护状态 | `speccore about` |
+| `speccore-ask-onboarding.html` | Ask 首次引导页：4 模式流程图 | `speccore ask "…"` (无高速?缓存时) |
+| `speccore-ask-result.html` | Ask 结果展示 | `speccore ask` |
+| `speccore-dev.html` | 开发者工作台 | `speccore dev` |
+| `deploy/welcome.html` | 项目名片/欢迎页 | `speccore welcome` |
+| `deploy/index.html` | 全局看板（所有项目聚合） | `speccore dashboard --scope global` |
+| `deploy/status.html` | 迭代数据看板（当前迭代） | `speccore dashboard` / `speccore status-panel` |
+| `templates/html/speccore-*.html` | Ask 模式子页 + help/retro/demo 模板 | `speccore ask` 内部路由 / `speccore help` / `speccore retro` |
+
+
+#### 版本号同步
+
+| 页面类型 | 版本来源 |
+|:---|:---|
+| 静态 HTML | `npm run build` → `sync-version.js` 从 package.json 自动同步 |
+| 动态渲染（plan/dashboard） | 运行时从 package.json 读取 |
+
 
 ---
 
@@ -336,8 +404,9 @@ speccore schedule cancel --id <id>
 | v5.63.0 | 08-08 | synthesizeIntent 智能意图合成(参数提取+补全+自检) |
 | v5.64.0 | 08-08 | speccore about 版本信息页、引导页 file:// 链接 |
 | v5.65.0 | 08-08 | schedule retry/多调度管理、引导页优先输出 |
+| v5.69.0 | 08-10 | HTML 视觉规范统一：全页面光晕+标题呼吸发光+四边扫描线；ask onboarding SVG→HTML标题重构；/spec-ask 文案统一；Qoder 命令 spec:X.md 格式；sync-version.js 版本自动同步 |
 
-> **最后更新**: 2026-08-08 (v5.67.15) — 核心理念更新：标签驱动 AI 执行，不再输出命令给用户
+> **最后更新**: 2026-08-10 (v5.69.0) — HTML 视觉规范统一 + 版本号自动同步
 
 ---
 

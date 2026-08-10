@@ -70,18 +70,18 @@
 .stars{position:fixed;inset:0;background:radial-gradient(1px 1px at 10% 20%,rgba(255,255,255,.4),transparent),radial-gradient(1px 1px at 25% 65%,rgba(255,255,255,.3),transparent),radial-gradient(1.5px 1.5px at 50% 30%,rgba(0,240,255,.5),transparent),radial-gradient(1px 1px at 70% 55%,rgba(255,255,255,.35),transparent),radial-gradient(1px 1px at 85% 15%,rgba(168,85,247,.4),transparent),radial-gradient(1.5px 1.5px at 15% 80%,rgba(0,240,255,.45),transparent),radial-gradient(1px 1px at 60% 85%,rgba(255,255,255,.3),transparent),radial-gradient(1px 1px at 90% 75%,rgba(0,255,136,.4),transparent);pointer-events:none;z-index:0}
 .grid-pattern{position:fixed;inset:0;background-image:linear-gradient(rgba(0,240,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,240,255,.03) 1px,transparent 1px);background-size:60px 60px;pointer-events:none;z-index:0}
 main{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:40px 32px}
-.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:36px;padding:24px 32px 44px 32px;background:var(--card);border:1px solid var(--border);border-radius:12px;backdrop-filter:blur(20px);position:relative;overflow:hidden}
+.header{display:block;margin-bottom:36px;padding:24px 32px 44px 32px;background:var(--card);border:1px solid var(--border);border-radius:12px;backdrop-filter:blur(20px);position:relative;overflow:hidden}.header-row{display:flex;justify-content:space-between;align-items:flex-start;width:100%;position:relative;z-index:1}
 .header::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanX 3s linear infinite}
 .header::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanX-rev 3s linear infinite}
 @keyframes scanX{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
 @keyframes scanX-rev{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}
 @keyframes scanY{0%{transform:translateY(-100%)}100%{transform:translateY(100%)}}
 @keyframes scanY-rev{0%{transform:translateY(100%)}100%{transform:translateY(-100%)}}
-.header-left::before{content:'';position:absolute;top:0;left:0;width:1px;bottom:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY-rev 3s linear infinite;pointer-events:none}
-.header-right::after{content:'';position:absolute;top:0;right:0;width:1px;bottom:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY 3s linear infinite;pointer-events:none}
+.header-left{text-align:left;position:relative}
+
 .header-left h1{font-size:1.8rem;font-family:'Orbitron',sans-serif;font-size:26px;font-weight:900;background:linear-gradient(135deg,var(--cyan),#818cf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:2px;text-shadow:0 0 40px rgba(0,240,255,.3)}
-.header-left .subtitle{color:var(--muted);font-size:0.85rem;margin-top:4px;letter-spacing:1px}
-.header-right{display:flex;gap:16px;align-items:center}
+.header-left .subtitle{color:var(--muted);font-size:0.85rem;margin-top:4px;letter-spacing:1px;text-align:left}
+.header-right{display:flex;gap:16px;align-items:center;position:relative}
 .header-stat{text-align:center;padding:0 20px;border-left:1px solid rgba(0,240,255,.1)}
 .header-stat .num{font-size:1.5rem;font-family:'Orbitron',sans-serif;font-size:22px;font-weight:700;color:var(--cyan);text-shadow:0 0 20px rgba(0,240,255,.4)}
 .header-stat .label{font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
@@ -159,10 +159,8 @@ html{font-size:18px}html.fs-sm{font-size:11px}html.fs-md{font-size:14px}html.fs-
 .font-orbitron,.font-orbitron html{font-size:18px}html.fs-sm{font-size:11px}html.fs-md{font-size:14px}html.fs-lg{font-size:18px}html.fs-xl{font-size:22px}body{font-family:Orbitron,sans-serif!important}.font-orbitron h1,.font-orbitron h3,.font-orbitron .panel-title,.font-orbitron .num-font,.font-orbitron .big-num,.font-orbitron .header-stat .num,.font-orbitron .card-icon{font-family:Orbitron,sans-serif!important}
 .font-jetbrains .num-fontnel-title{font-family:Orbitron}.font-orbitron .num-font{font-size:1.2rem;font-family:Orbitron}
 .collapsible-header{margin-top:20px}
-@keyframes cardGlow{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.6)}}
-.card-bg{position:absolute;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse at 50% 10%,rgba(14,165,233,.25) 0%,transparent 70%);animation:cardGlow 3s ease-in-out infinite;transform-origin:top center}
-@keyframes titleGlow{0%,100%{text-shadow:0 0 20px rgba(14,165,233,.4),0 0 60px rgba(14,165,233,.15)}50%{text-shadow:0 0 30px rgba(14,165,233,.7),0 0 80px rgba(14,165,233,.3)}}h1,h2{animation:titleGlow 3s ease-in-out infinite}</style>
-@keyframes titleGlow{0%,100%{text-shadow:0 0 20px rgba(14,165,233,.4),0 0 60px rgba(14,165,233,.15)}50%{text-shadow:0 0 30px rgba(14,165,233,.7),0 0 80px rgba(14,165,233,.3)}}h1,h2{animation:titleGlow 3s ease-in-out infinite}</style>
+@keyframes cardGlow{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.6)}}@keyframes titleGlow{0%,100%{text-shadow:0 0 20px rgba(14,165,233,.4),0 0 60px rgba(14,165,233,.15)}50%{text-shadow:0 0 30px rgba(14,165,233,.7),0 0 80px rgba(14,165,233,.3)}}.card-bg{position:absolute;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse at 50% 10%,rgba(14,165,233,.25) 0%,transparent 70%);animation:cardGlow 3s ease-in-out infinite;transform-origin:top center}h1,h2,h3{text-shadow:0 0 20px rgba(14,165,233,.4),0 0 60px rgba(14,165,233,.15);animation:titleGlow 3s ease-in-out infinite}.vline{position:absolute;top:0;width:1px;bottom:0;pointer-events:none}.vline.l{left:0;background:linear-gradient(0deg,transparent,var(--cyan),transparent);animation:scanY-rev 3s linear infinite}.vline.r{right:0;background:linear-gradient(0deg,transparent,var(--cyan),transparent);animation:scanY 3s linear infinite}</style>
+.vline{position:absolute;top:0;width:1px;bottom:0;pointer-events:none}.vline.l{left:0;background:linear-gradient(0deg,transparent,var(--cyan),transparent);animation:scanY-rev 3s linear infinite}.vline.r{right:0;background:linear-gradient(0deg,transparent,var(--cyan),transparent);animation:scanY 3s linear infinite}</style>
 </head>
 <body>
 <div class="ctrl-panel"><button class="ctrl-toggle" onclick="toggleCtrl()" title="设置">⚙</button><div class="ctrl-body">
@@ -175,8 +173,8 @@ html{font-size:18px}html.fs-sm{font-size:11px}html.fs-md{font-size:14px}html.fs-
 <div class="fs-tip" style="display:none">ESC 退出 · F 全屏</div>
 <main>
 
-  <div class="header"><div class="card-bg"></div><div class="data-stream"><span>SpecCore — Code by Spec, Not by Vibe · SpecCore — Code by Spec, Not by Vibe ·</span></div>
-    <div class="header-left">
+  <div class="header"><div class="card-bg"></div><div class="vline l"></div><div class="vline r"></div><div class="data-stream"><span>SpecCore — Code by Spec, Not by Vibe · SpecCore — Code by Spec, Not by Vibe ·</span></div>
+    <div class="header-row"><div class="header-left">
       <h1><span data-i18n="projectName">SPECCORE</span></h1>
       <div class="subtitle">SPECCORE · SPEC-DRIVEN DEVELOPMENT · <span data-i18n="owner">负责人</span>: 赵六</div>
     </div>
@@ -185,7 +183,7 @@ html{font-size:18px}html.fs-sm{font-size:11px}html.fs-md{font-size:14px}html.fs-
       <div class="header-stat"><div class="num">5</div><div class="label"><span data-i18n="tasks">任务</span></div></div>
       <div class="header-stat"><div class="num">0%</div><div class="label"><span data-i18n="done">已完成</span></div></div>
       <div class="phase-indicator"><div class="dot"></div><span data-i18n="phaseDev">开发中</span></div>
-    </div>
+    </div></div>
   </div>
 
   <div class="panel" style="margin-bottom:24px">
@@ -480,7 +478,7 @@ html{font-size:18px}html.fs-sm{font-size:11px}html.fs-md{font-size:14px}html.fs-
 <div class="data-stream"><span style="animation-delay:12.6s">ANALYZING TYPE DISTRIBUTION...</span></div><div class="panel-title"><span data-i18n="lifecycle">任务生命周期</span></div><table><thead><tr><th>Task</th><th><span data-i18n="status">状态</span></th></tr></thead><tbody><tr><td class="code">Task-001</td><td><span class="tx-badge tx-done"><span data-i18n="queued">待排期</span></span></td></tr><tr><td class="code">Task-002</td><td><span class="tx-badge tx-wait"><span data-i18n="queued">待排期</span></span></td></tr><tr><td class="code">Task-003</td><td><span class="tx-badge tx-active"><span data-i18n="active">进行中</span></span></td></tr><tr><td class="code">Task-004</td><td><span class="tx-badge tx-active"><span data-i18n="active">进行中</span></span></td></tr><tr><td class="code">Task-005</td><td><span class="tx-badge tx-wait"><span data-i18n="queued">待排期</span></span></td></tr><tr><td class="code">Task-006</td><td><span class="tx-badge tx-wait"><span data-i18n="queued">待排期</span></span></td></tr><tr><td class="code">Task-007</td><td><span class="tx-badge tx-wait"><span data-i18n="queued">待排期</span></span></td></tr><tr><td class="code">Task-008</td><td><span class="tx-badge tx-wait"><span data-i18n="queued">待排期</span></span></td></tr></tbody></table></div>
 
 <div class="footer">
-    <span>SPECCORE v5.67.73 · SPEC-DRIVEN DEVELOPMENT</span>
+    <span>SPECCORE v5.69.0 · SPEC-DRIVEN DEVELOPMENT</span>
     <span><span data-i18n="exportedAt">导出时间</span>: 2026-08-04 14:58:19</span>
   </div>
 
