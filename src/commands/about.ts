@@ -11,7 +11,7 @@ export async function aboutCommand(): Promise<void> {
     { icon: '📋', title: '任务管理', desc: '10+ 任务类型，迭代/计划/拆分' },
     { icon: '🔍', title: '代码审查', desc: '安全审计/依赖分析/性能诊断' },
     { icon: '🔄', title: '文档驱动', desc: 'Word/Excel/CSV → Spec 双向转换' },
-    { icon: '⚡', title: '定时调度', desc: '创建 → daemon 懒启动 → 到点自执行' },
+    { icon: '⚡', title: '定时调度 [暂未实现]', desc: 'WorkBuddy Automations 替代，计划后续迁移' },
     { icon: '🤖', title: 'Skill 体系', desc: 'OpenSpec 标准，AI 自动路由' },
   ];
 
@@ -19,14 +19,13 @@ export async function aboutCommand(): Promise<void> {
   const highlights = [
     '意图合成 — AI 自动提取参数、补全上下文、精准提问',
     '自我检查 — 命令验证 + 置信度 + 遗漏检测',
-    '定时调度 — daemon 懒启动，跨平台(LaunchAgent/cron/schtasks)',
+    '定时调度 [暂未实现] — 由 WorkBuddy Automations 替代，计划后续迁移',
     '多选执行 — plan --select 列出任务编号供用户选择',
     '双模式 — 自主全自动 / 分步确认，不跳过用户检查',
   ];
 
   // 重要里程碑版本
   const milestones = [
-    { v: '5.50', date: '2026-08', desc: '定时调度 + 跨平台 daemon' },
     { v: '5.27', date: '2026-07', desc: 'Ask 四模式 + Skill 体系' },
     { v: '4.0', date: '2026-05', desc: '多平台 CLI + 文档转换' },
     { v: '1.0', date: '2026-01', desc: 'Spec 驱动开发，Task 管理' },

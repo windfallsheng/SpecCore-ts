@@ -142,12 +142,10 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     ],
   },
   plan: {
-    desc: '生成执行计划 / 调度方案',
+    desc: '生成执行计划',
     params: [
       { flag: '-i, --iteration <id>', meaning: '目标迭代' },
-      { flag: '--interactive', meaning: '预览调度方案后确认' },
       { flag: '--team <n>', meaning: '团队人数（控制并行度）' },
-      { flag: '--strategy <name>', meaning: '调度策略：priority | dependency | balanced' },
     ],
     examples: ['speccore plan -i Q1', 'speccore plan -i Q1 --team=3'],
   },
@@ -161,7 +159,6 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
       { flag: '--dry-run', meaning: '只预览不执行' },
       { flag: '--strict', meaning: '前置检查 req/tech/test 后生成代码' },
       { flag: '--interactive', meaning: '交互选择执行任务' },
-      { flag: '--scheduled', meaning: '只执行标记为夜间队列的任务' },
       { flag: '--resume', meaning: '从上次中断处恢复' },
       { flag: '--skip <ids>', meaning: '跳过指定 Task ID(逗号分隔)' },
       { flag: '--only <ids>', meaning: '只执行指定 Task ID' },
@@ -170,7 +167,6 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     examples: [
       'speccore execute -t Task-001 --force',
       'speccore execute -t Task-001 --force --verify',
-      'speccore execute --all --scheduled',
       'speccore execute -t Task-001 --dry-run',
     ],
   },
@@ -207,13 +203,11 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
       { flag: '-d, --desc <desc>', meaning: '详细描述' },
       { flag: '--batch <bugs>', meaning: '批量导入（换行分隔）' },
       { flag: '--batch-file <path>', meaning: '从 .xlsx / .csv 文件批量导入' },
-      { flag: '--schedule <mode>', meaning: '调度：night（夜间执行）| now（立即）' },
       { flag: '--interactive', meaning: '预览 → 编辑 → 确认 → 创建' },
       { flag: '-i, --iteration <id>', meaning: '目标迭代' },
     ],
     examples: [
       'speccore bugfix -n "登录超时" -d "token过期未刷新"',
-      'speccore bugfix --batch-file=bugs.xlsx --schedule=night --interactive',
     ],
   },
   change: {
@@ -346,8 +340,7 @@ speccore done --task=Task-001                              # 完成归档`,
     },
     {
       title: '五、变更 + Bug',
-      code: `speccore change "把手机号改成国际格式" -t Task-001    # 口语化变更
-speccore bugfix --batch-file=bugs.xlsx --schedule=night --interactive  # 批量 Bug`,
+      code: `speccore change "把手机号改成国际格式" -t Task-001    # 口语化变更`,
     },
     {
       title: '六、全自动流水线',

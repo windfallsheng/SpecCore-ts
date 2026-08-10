@@ -88,7 +88,7 @@ const COMMAND_KB: CommandKnowledge[] = [
     usage: 'speccore dev [--auto] [--from <phase>] [--to <phase>]', examples: ['speccore dev --auto', 'speccore dev --from analyze --to execute'], related: ['execute', 'plan'], triggers: ['dev', '流水线', '自动', '级联'] },
   { name: 'task', aliases: ['tk'], description: '任务管理：创建/列表/状态。子命令: new, list, status',
     usage: 'speccore task new --name <name> [--id <id>] | speccore task list | speccore task status', examples: ['speccore task new --name "用户登录"', 'speccore task list'], related: ['plan', 'execute'], triggers: ['task', '任务列表', '查看任务', '列出任务'] },
-  { name: 'schedule', aliases: ['sc'], description: '定时调度管理：创建/查看/取消/重试/守护进程',
+  { name: 'schedule', aliases: ['sc'], description: '[暂未实现] 定时调度管理：创建/查看/取消/重试/守护进程',
     usage: 'speccore schedule create --at "HH:mm" | speccore schedule list | speccore schedule cancel --id <id>',
     examples: ['speccore schedule list', 'speccore schedule retry --id sch-xxx'],
     related: ['plan', 'execute', 'task'], triggers: ['调度', '定时', 'schedule', '重调度', 'retry', '守护进程', 'daemon', '队列'] },
@@ -134,18 +134,6 @@ const WORKFLOWS: Record<string, PipelineStep[]> = {
   ],
   'batch execute': [
     { order: 1, command: 'plan', args: '--select', explanation: '列出所有可执行任务（编号 + CLI命令），用户多选', dependsOn: undefined },
-    { order: 2, command: 'schedule', args: 'create --at "{time}" --batch-size {batch}', explanation: '创建定时调度', dependsOn: 1 },
-  ],
-  'analyze plan schedule': [
-    { order: 1, command: 'analyze', args: '--prompt --task {task}', explanation: 'AI 分析任务需求（立即执行）', dependsOn: undefined },
-    { order: 2, command: 'plan', args: '--prompt --all', explanation: 'AI 制定执行计划（立即执行）', dependsOn: 1 },
-    { order: 3, command: 'schedule', args: 'create --at "{time}" --batch-size {batch}', explanation: '创建定时调度', dependsOn: 2 },
-  ],
-  'batch execute auto': [
-    { order: 1, command: 'plan', args: '--all', explanation: '生成全部任务计划', dependsOn: undefined },
-    { order: 2, command: 'schedule', args: 'create --at "{time}" --batch-size {batch}', explanation: '创建定时调度', dependsOn: 1 },
-    { order: 3, command: 'schedule', args: 'daemon start', explanation: '启动调度守护进程', dependsOn: 2 },
-    { order: 4, command: 'execute', args: '--auto --batch-size {batch}', explanation: '按计划分批自动执行', dependsOn: 2 },
   ],
   'code review': [
     { order: 1, command: 'validate', args: '', explanation: '合规检查 Spec 完整性', dependsOn: undefined },
@@ -303,9 +291,7 @@ function handleGuide(input: string): AskResult {
   } else if (/新功能|feature|登录|注册|支付|创建.*功能|做.*功能/i.test(input)) {
     matchedWorkflow = WORKFLOWS['new feature'];
     workflowName = '新功能开发全流程';
-  } else if (/先分析.*[再然后].*[计划列计划规划]|分析.*任务.*列.*[计划规划]|分析.*再.*执行/i.test(input)) {
-    matchedWorkflow = WORKFLOWS['analyze plan schedule execute'];
-    workflowName = '分析 → 计划 → 定时执行流程';
+    throw new Error('FALLBACK_TO_MATCH');
   } else if (/批量|分批|batch|队列/i.test(input)) {
     matchedWorkflow = WORKFLOWS['batch execute'];
     workflowName = '批量执行流程';
@@ -559,10 +545,7 @@ function handlePipeline(input: string): AskResult {
   // 只有简单任务才真正跳过确认
   const needConfirm = !isSimple;
   if (scores.batchExec >= 40) {
-    // 如果用户要"先分析再计划" → 用 analyze+plan+schedule 模板
-    const hasAnalyzeFirst = /先.*分析|分析.*[再然后]|analyze.*plan/i.test(input);
-    const wfName = hasAnalyzeFirst ? 'analyze plan schedule execute' :
-                   hasAuto ? 'batch execute auto' : 'batch execute';
+    const wfName = 'batch execute';
     const steps = WORKFLOWS[wfName];
     const firstStep = steps[0];
     return {
@@ -724,12 +707,6 @@ export async function understandIntent(input: string): Promise<IntentUnderstandi
     confidence -= 15;
   }
 
-  // 6. 时间检查：如果输入含时间但没有 schedule 命令
-  if (/几点|晚.*点|早上|明天|定时|稍后/.test(input) && !result.commands.includes('schedule')) {
-    gaps.push('提到了时间但未生成 schedule 命令');
-    confidence -= 15;
-  }
-
   confidence = Math.max(0, Math.min(100, confidence));
   const needsConfirm = confidence < 80 || gaps.length > 0 || (result.pipeline?.confirm !== false);
 
@@ -878,16 +855,7 @@ export async function synthesizeIntent(input: string): Promise<SynthesizedIntent
         explanation = '执行命令';
     }
     
-    if (cmd === 'schedule') {
-      // schedule 可能有两个子命令：create 和 daemon start
-      if (args.includes('create')) {
-        finalCommands.push({ command: 'schedule', args, explanation });
-        finalCommands.push({ command: 'schedule', args: 'daemon start', explanation: '启动守护进程（自动）' });
-        autoFilled.push({ field: 'daemon', value: 'auto-start', reason: '创建调度后自动启动守护进程' });
-      }
-    } else {
-      finalCommands.push({ command: cmd, args, explanation });
-    }
+    finalCommands.push({ command: cmd, args, explanation });
   }
 
   // ═══ 4. 自检：补全后还有遗漏吗？ ═══

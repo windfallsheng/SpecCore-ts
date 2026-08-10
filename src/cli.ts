@@ -825,6 +825,7 @@ program
   .option('--iteration <name>', 'Watch a specific iteration')
   .action(watchCommand);
 
+// ⚠️ schedule 命令已由 WorkBuddy Automations 替代，以下代码保留用于兼容但暂不可用
 // ── 调度任务管理 ──
 const scheduleCmd = program
   .command('schedule')
