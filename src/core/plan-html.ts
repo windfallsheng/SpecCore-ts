@@ -358,10 +358,13 @@ main { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; paddin
 /* 背景脉冲光晕 */
 .header-card-bg {
   position: absolute; inset: 0; pointer-events: none; z-index: 0;
-  background: radial-gradient(ellipse at 50% 20%, rgba(14,165,233,.22) 0%, transparent 60%);
+  background: radial-gradient(ellipse at 50% 20%, rgba(14,165,233,.25) 0%, transparent 70%);
   animation: cardGlow 3s ease-in-out infinite;
 }
-@keyframes cardGlow { 0%, 100% { opacity: .6; } 50% { opacity: 1; } }
+@keyframes cardGlow {
+  0%, 100% { opacity: .5; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.6); }
+}
 .header-title {
   font: 700 28px 'Orbitron', monospace; color: var(--cyan); letter-spacing: 2px;
   text-transform: uppercase; position: relative; z-index: 1;
@@ -429,6 +432,8 @@ main { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; paddin
           <span>·</span>
           <span class="status-badge"><span class="status-dot"></span>${overallStatus}</span>
           ${total > 0 ? `<span>·</span><span>📊 ${completed + inProgress}/${total} (${Math.round((completed / total) * 100)}%)</span>` : ''}
+          <span>·</span>
+          <span>🕐 ${now}</span>
         </div>
       </div>
       <div class="refresh-panel">
@@ -512,7 +517,7 @@ ${timelineItems}
 
   <!-- Footer -->
   <div class="footer">
-    生成时间: ${now} · Speccore v${opts.version}
+    Speccore v${opts.version}
   </div>
 </main>
 
