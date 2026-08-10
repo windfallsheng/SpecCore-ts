@@ -326,22 +326,33 @@ main { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; paddin
 
 /* ── Header Card Pulse ── */
 .header-card {
-  background: linear-gradient(135deg, rgba(14,165,233,.05), rgba(14,165,233,.02));
-  border: 1px solid rgba(14,165,233,.12); border-radius: 16px;
+  background: linear-gradient(135deg, rgba(14,165,233,.08), rgba(14,165,233,.03));
+  border: 1px solid rgba(14,165,233,.18); border-radius: 16px;
   padding: 32px 40px; margin-bottom: 32px; position: relative; overflow: hidden;
 }
 .header-card::before {
   content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
-  background: radial-gradient(circle, rgba(14,165,233,.08) 0%, transparent 60%);
-  animation: pulse 4s ease-in-out infinite;
+  background: radial-gradient(circle, rgba(14,165,233,.15) 0%, transparent 50%);
+  animation: pulse 3s ease-in-out infinite;
 }
 @keyframes pulse {
-  0%, 100% { opacity: .3; transform: scale(1); }
-  50% { opacity: .7; transform: scale(1.05); }
+  0%, 100% { opacity: .4; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+.header-card::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(135deg, transparent 40%, rgba(14,165,233,.06) 100%);
+  pointer-events: none;
 }
 .header-title {
   font: 700 28px 'Orbitron', monospace; color: var(--cyan); letter-spacing: 2px;
   text-transform: uppercase; position: relative; z-index: 1;
+  text-shadow: 0 0 20px rgba(14,165,233,.4), 0 0 60px rgba(14,165,233,.15);
+  animation: titleGlow 3s ease-in-out infinite;
+}
+@keyframes titleGlow {
+  0%, 100% { text-shadow: 0 0 20px rgba(14,165,233,.4), 0 0 60px rgba(14,165,233,.15); }
+  50% { text-shadow: 0 0 30px rgba(14,165,233,.7), 0 0 80px rgba(14,165,233,.3); }
 }
 .header-plan-name {
   font: 600 18px 'JetBrains Mono', monospace; color: var(--text);
