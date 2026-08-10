@@ -418,9 +418,9 @@ main { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; paddin
     <div class="icon">📋</div>
     <div class="title">暂无执行计划</div>
     <div class="hint">
-      请先执行 <code>speccore analyze</code> 分析需求文档<br>
-      再运行 <code>speccore split</code> 拆分为开发任务<br>
-      任务生成后本页面将自动更新
+      请通过 <code>@spec-ask "分析需求并制定开发计划"</code> 启动全流程编排<br>
+      系统将自动完成 需求分析 → 任务拆分 → 计划生成<br>
+      任务生成后本页面将实时同步
     </div>
   </div>`}
 
