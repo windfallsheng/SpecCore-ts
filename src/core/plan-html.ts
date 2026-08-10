@@ -330,20 +330,35 @@ main { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; paddin
   border: 1px solid rgba(14,165,233,.18); border-radius: 16px;
   padding: 32px 40px; margin-bottom: 32px; position: relative; overflow: hidden;
 }
+/* 四边扫描线脉冲 */
 .header-card::before {
-  content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
-  background: radial-gradient(circle, rgba(14,165,233,.15) 0%, transparent 50%);
-  animation: pulse 3s ease-in-out infinite;
-}
-@keyframes pulse {
-  0%, 100% { opacity: .4; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.08); }
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  animation: scanX 3s linear infinite; z-index: 2;
 }
 .header-card::after {
-  content: ''; position: absolute; inset: 0;
-  background: linear-gradient(135deg, transparent 40%, rgba(14,165,233,.06) 100%);
-  pointer-events: none;
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  animation: scanX-rev 3s linear infinite; z-index: 2;
 }
+@keyframes scanX { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+@keyframes scanX-rev { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
+@keyframes scanY { 0% { transform: translateY(-100%); } 100% { transform: translateY(100%); } }
+@keyframes scanY-rev { 0% { transform: translateY(100%); } 100% { transform: translateY(-100%); }
+
+/* 背景脉冲光晕 */
+.header-card-bg {
+  position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  background: radial-gradient(circle at 50% 30%, rgba(14,165,233,.15) 0%, transparent 55%);
+  animation: cardGlow 3s ease-in-out infinite;
+}
+@keyframes cardGlow {
+  0%, 100% { opacity: .5; }
+  50% { opacity: 1; }
+}
+.vline { position: absolute; top: 0; width: 1px; bottom: 0; pointer-events: none; z-index: 2; }
+.vline.l { left: 0; background: linear-gradient(180deg, transparent, var(--cyan), transparent); animation: scanY-rev 3s linear infinite; }
+.vline.r { right: 0; background: linear-gradient(180deg, transparent, var(--cyan), transparent); animation: scanY 3s linear infinite; }
 .header-title {
   font: 700 28px 'Orbitron', monospace; color: var(--cyan); letter-spacing: 2px;
   text-transform: uppercase; position: relative; z-index: 1;
@@ -400,6 +415,8 @@ main { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; paddin
 <main>
   <!-- Header Card -->
   <div class="header-card">
+    <div class="header-card-bg"></div>
+    <div class="vline l"></div><div class="vline r"></div>
     <div class="header-title">SPECCORE EXECUTION PLAN</div>
     <div class="header-plan-name">📌 计划名: ${opts.planName || opts.iteration}</div>
     <div class="header-meta">
