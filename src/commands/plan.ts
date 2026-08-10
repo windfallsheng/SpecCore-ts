@@ -83,7 +83,7 @@ export async function planCommand(options: PlanOptions): Promise<void> {
   
   if (tasks.length === 0) {
     // 无任务时生成空模板页面
-    const html = generatePlanHtml([], { version, iteration });
+    const html = generatePlanHtml([], { version, iteration, planName: iteration });
     const htmlPath = join(planDir, 'speccore-plan.html');
     await writeFile(htmlPath, html, 'utf-8');
     logger.success(`✅ 计划页面: ${htmlPath}`);
@@ -94,7 +94,7 @@ export async function planCommand(options: PlanOptions): Promise<void> {
   const htmlData = tasks.map(t => ({
     id: t.id, name: t.name, priority: t.priority, status: t.status, owner: (t as any).assignee || (t as any).owner, dependsOn: (t as any).dependencies || [],
   }));
-  const html = generatePlanHtml(htmlData, { version, iteration });
+  const html = generatePlanHtml(htmlData, { version, iteration, planName: iteration });
   const htmlPath = join(planDir, 'speccore-plan.html');
   await writeFile(htmlPath, html, 'utf-8');
   logger.success(`✅ 计划页面: ${htmlPath}`);
@@ -576,7 +576,7 @@ async function writeHtmlPlan(
     owner: t.assignee || undefined,
     dependsOn: t.dependencies || [],
   }));
-  const html = generatePlanHtml(htmlData, { version, iteration });
+  const html = generatePlanHtml(htmlData, { version, iteration, planName: iteration });
 
   // 写入 plans 目录，和 PLAN.md 放一起
   const htmlPath = planDir
