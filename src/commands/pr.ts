@@ -1,18 +1,13 @@
 /**
- * pr — 自动创建 Pull Request + 链接 Task
+ * pr — AI 辅助：总结变更 + 检查分析对齐 + 安全提交
+ * 🔒 AI 命令，通过 --prompt/--response 协作
  */
-import { readFile, pathExists } from 'fs-extra';
+import { readFile, pathExists, writeFile } from 'fs-extra';
 import { join } from 'path';
 import { execSync } from 'child_process';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
-import { createInterface } from 'readline';
 import { buildPrompt, formatPrompt } from '../core/prompt-builder';
-
-function promptUser(q: string): Promise<string> {
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  return new Promise(r => rl.question(`${q} `, a => { rl.close(); r(a.trim()); }));
-}
 
 export interface PrOptions {
   task?: string;
@@ -21,175 +16,142 @@ export interface PrOptions {
   draft?: boolean;
   title?: string;
   interactive?: boolean;
-  prompt?: boolean;    // --prompt
-  response?: string;   // --response
+  prompt?: boolean;
+  response?: string;
+  confirm?: boolean;   // 用户要求确认提交内容
+  commit?: boolean;     // 直接提交到本地（不创建远程PR）
 }
 
 export async function prCommand(options: PrOptions): Promise<void> {
-  // ── Prompt 模式 ──
+  // ── Prompt 模式：输出分析 Prompt 给 AI ──
   if (options.prompt) {
     const iter = options.iteration || await getDefaultIteration();
-    const prompt = await buildPrompt('analyze', { iteration: iter, task: options.task });
-    process.stdout.write(formatPrompt(prompt));
+    if (!iter) { logger.error('No active iteration'); process.exit(11); return; }
+    const taskId = options.task || 'current';
+
+    // 收集变更信息
+    const changedFiles = execSync('git diff --name-only HEAD', { encoding: 'utf-8' }).trim();
+    const stagedFiles = execSync('git diff --cached --name-only', { encoding: 'utf-8' }).trim();
+    const diff = execSync('git diff HEAD', { encoding: 'utf-8', maxBuffer: 50 * 1024 * 1024 }).trim();
+
+    // 读取分析文档
+    let analysis = '';
+    if (taskId !== 'current') {
+      const iterDir = join(process.cwd(), `Iteration-${iter}`);
+      try {
+        const fs = require('fs');
+        const entries = fs.readdirSync(iterDir, { withFileTypes: true });
+        const taskEntry = entries.find((e: any) => e.isDirectory() && e.name.includes(taskId));
+        if (taskEntry) {
+          const analysisPath = join(iterDir, taskEntry.name, 'ANALYSIS.md');
+          if (await pathExists(analysisPath)) {
+            analysis = await readFile(analysisPath, 'utf-8');
+          }
+        }
+      } catch {}
+    }
+
+    // 构建 Prompt
+    const prompt = [
+      '# SpecCore PR — 变更分析 + 安全检查',
+      '',
+      '## 你的任务',
+      '1. 分析下面的 git 变更，用中文生成一条简洁的 commit 信息（< 72 字）',
+      '2. 对照 ANALYSIS.md 中的需求/分析内容，判断当前变更是否对齐分析范围',
+      '3. 返回 JSON 格式结果',
+      '',
+      '## 变更文件',
+      changedFiles || '（无变更文件）',
+      '',
+      '## 暂存文件',
+      stagedFiles || '（无暂存文件）',
+      '',
+      '## 变更差异 (diff)',
+      diff ? `\`\`\`\n${diff.slice(0, 8000)}\n\`\`\`` : '（无差异）',
+      '',
+      '## 分析文档 (ANALYSIS.md)',
+      analysis ? `\`\`\`\n${analysis.slice(0, 3000)}\n\`\`\`` : '（无可用分析文档，跳过对照检查）',
+      '',
+      '## 输出格式',
+      '请返回如下 JSON：',
+      '```json',
+      '{',
+      '  "commitMsg": "提交信息（中文，<72字）",',
+      '  "analysisMatch": true|false,',
+      '  "mismatchReason": "不匹配原因（仅 analysisMatch=false 时填写）",',
+      '  "recommendation": "建议：auto-commit 或 confirm-first"',
+      '}',
+      '```',
+      '',
+      '## 规则',
+      '- analysisMatch=true：变更内容符合分析范围，可以直接提交',
+      '- analysisMatch=false：变更超出分析范围，建议用户先确认',
+      '- 若无分析文档，analysisMatch 填 true，但 recommend 填 "confirm-first"',
+    ].join('\n');
+
+    process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}\n[/SPECCORE_PROMPT]`);
     process.exitCode = 10;
     return;
   }
-  // ── Response 模式 ──
-  if (options.response && options.task) {
-    logger.success(`✅ PR 描述已生成:\n${options.response}`);
+
+  // ── Response 模式：AI 返回结果，CLI 执行提交 ──
+  if (options.response) {
+    try {
+      const result = JSON.parse(options.response);
+      const commitMsg = result.commitMsg || 'Auto commit by SpecCore';
+      const analysisMatch = result.analysisMatch !== false;
+      const userConfirm = options.confirm;
+
+      // 如果分析不匹配且用户未要求确认，提示并返回
+      if (!analysisMatch && !userConfirm) {
+        process.stdout.write(`[SPECCORE_CONFIRM_NEEDED]\n不匹配原因: ${result.mismatchReason || '未知'}\n建议先确认再提交。使用 --confirm 强制执行。\n[/SPECCORE_CONFIRM_NEEDED]`);
+        process.exitCode = 11;
+        return;
+      }
+
+      // 安全提交
+      const staged = execSync('git diff --cached --name-only', { encoding: 'utf-8' }).trim();
+      if (!staged) {
+        execSync('git add -A', { stdio: 'pipe' });
+        logger.info('✅ 已暂存全部变更');
+      }
+
+      execSync(`git commit -m "${commitMsg.replace(/"/g, '\\"')}"`, { stdio: 'pipe' });
+      logger.success(`✅ 已提交: ${commitMsg}`);
+
+      // 推送
+      const branch = execSync('git branch --show-current', { encoding: 'utf-8' }).trim();
+      if (branch !== 'main' && branch !== 'master') {
+        execSync(`git push -u origin "${branch}"`, { stdio: 'pipe' });
+        logger.success(`✅ 已推送: ${branch}`);
+      }
+
+      // 输出结果
+      process.stdout.write(`[SPECCORE_RESULT]\n${JSON.stringify({ committed: true, message: commitMsg, branch, analysisMatch })}\n[/SPECCORE_RESULT]`);
+
+    } catch (e) {
+      logger.error(`解析失败: ${e}`);
+      process.exitCode = 1;
+    }
     return;
   }
-  const iteration = await getDefaultIteration(options.iteration);
-  if (!iteration) { logger.error('No active iteration'); return; }
 
-  const iterDir = `Iteration-${iteration}`;
-  
-  let taskId = options.task;
-  if (!taskId) {
-    const branch = execSync('git branch --show-current', { encoding: 'utf-8' }).trim();
-    const match = branch.match(/feature\/(Task-\d+)/);
-    if (match) taskId = match[1];
-  }
-  if (!taskId) { logger.error('请用 --task 指定任务'); return; }
-
-  const fs = require('fs');
-  const entries = fs.readdirSync(iterDir, { withFileTypes: true });
-  const taskEntry = entries.find((e: any) => e.isDirectory() && e.name.startsWith(taskId));
-  if (!taskEntry) { logger.error(`Task 未找到: ${taskId}`); return; }
-
-  const taskName = taskEntry.name;
-  const backendDir = join(iterDir, taskName, 'backend');
+  // ── 默认模式：轻量级直接提交（无分析对照）──
+  const branch = execSync('git branch --show-current', { encoding: 'utf-8' }).trim();
+  const spinner = new Spinner('提交变更...'); spinner.start();
 
   try {
-    const branch = execSync('git branch --show-current', { encoding: 'utf-8' }).trim();
+    execSync('git add -A', { stdio: 'pipe' });
+    const msg = options.title || `SpecCore auto commit`;
+    execSync(`git commit -m "${msg}"`, { stdio: 'pipe' });
+    spinner.stop(`✅ 已提交: ${msg}`);
 
-    // ── Interactive mode ──
-    if (options.interactive) {
-      await interactivePrFlow(branch, backendDir, taskName, iteration, options);
-      return;
+    if (branch !== 'main' && branch !== 'master') {
+      execSync(`git push -u origin "${branch}"`, { stdio: 'pipe' });
+      logger.info(`✅ 已推送: ${branch}`);
     }
-
-    // ── Auto mode ──
-    const spinner = new Spinner(`创建 PR: ${taskName}`); spinner.start();
-
-    execSync(`git push -u origin "${branch}" 2>/dev/null`, { stdio: 'pipe' });
-    const title = options.title || taskName;
-    const body = await buildPrBody(backendDir, taskName, iteration);
-    const base = options.base || 'main';
-    const draftFlag = options.draft ? ' --draft' : '';
-    const result = execSync(
-      `gh pr create --base "${base}" --head "${branch}" --title "${title}" --body "${body}"${draftFlag}`,
-      { encoding: 'utf-8', stdio: 'pipe' }
-    ).trim();
-
-    spinner.stop(`✅ PR 已创建: ${result}`);
-    await updateTaskMd(backendDir, result);
-    logger.info(`\n   📄 ${result}`);
-    logger.info('   💡 审查通过后: speccore lifecycle --task=' + taskId + ' --status=done\n');
-
   } catch (error) {
-    logger.error(`PR 创建失败: ${error}`);
-    logger.info('   💡 请确保已安装 gh CLI: brew install gh && gh auth login');
+    spinner.fail('提交失败');
+    logger.error(String(error));
   }
-}
-
-// ── 分步交互 ──
-async function interactivePrFlow(
-  branch: string, backendDir: string, taskName: string, iteration: string, options: PrOptions
-): Promise<void> {
-  // 1. 预览变更
-  logger.info('📋 当前变更:');
-  logger.info('');
-  const status = execSync('git status --short', { encoding: 'utf-8' }).trim();
-  if (!status) { logger.info('   (无变更)'); return; }
-  logger.info(status);
-  logger.info('');
-
-  // 2. 选文件 → add
-  const addAns = await promptUser(`提交哪些文件？ [a]全部 [p]挑选 [s]跳过提交: `);
-  if (addAns === 's') {
-    logger.info('跳过提交，直接推送已有 commit...');
-  } else if (addAns === 'p') {
-    const files = await promptUser('输入文件路径（空格分隔）: ');
-    const selected = files.split(/\s+/).filter(Boolean);
-    if (selected.length > 0) {
-      execSync(`git add ${selected.join(' ')}`, { stdio: 'pipe' });
-      logger.info(`✅ 已添加 ${selected.length} 个文件`);
-    }
-  } else {
-    execSync('git add .', { stdio: 'pipe' });
-    logger.info('✅ 已添加全部文件');
-  }
-
-  // 3. commit（如果有 staged 文件）
-  const staged = execSync('git diff --cached --name-only', { encoding: 'utf-8' }).trim();
-  if (staged) {
-    logger.info(`\n📦 待提交:\n${staged}\n`);
-    const commitAns = await promptUser('是否 commit？ [y/n]: ');
-    if (commitAns === 'y') {
-      const msg = await promptUser(`Commit 信息（默认: ${taskName}）: `);
-      execSync(`git commit -m "${msg || taskName}"`, { stdio: 'pipe' });
-      logger.info('✅ 已 commit');
-    }
-  }
-
-  // 4. 推送
-  const pushAns = await promptUser('\n推送到 origin？ [y/n]: ');
-  if (pushAns !== 'y') { logger.info('已取消推送'); return; }
-  execSync(`git push -u origin "${branch}"`, { stdio: 'pipe' });
-  logger.info(`✅ 已推送 ${branch}`);
-
-  // 5. 创建 PR
-  const prAns = await promptUser('\n创建 PR？ [y/n]: ');
-  if (prAns !== 'y') { logger.info('已跳过 PR 创建'); return; }
-
-  const spinner = new Spinner('创建 PR'); spinner.start();
-  const title = options.title || taskName;
-  const body = await buildPrBody(backendDir, taskName, iteration);
-  const base = options.base || 'main';
-  const draftFlag = options.draft ? ' --draft' : '';
-  const result = execSync(
-    `gh pr create --base "${base}" --head "${branch}" --title "${title}" --body "${body}"${draftFlag}`,
-    { encoding: 'utf-8', stdio: 'pipe' }
-  ).trim();
-
-  spinner.stop(`✅ PR 已创建: ${result}`);
-  await updateTaskMd(backendDir, result);
-  logger.info(`\n   📄 ${result}\n`);
-}
-
-async function updateTaskMd(backendDir: string, prUrl: string): Promise<void> {
-  const taskMdPath = join(backendDir, 'TASK.md');
-  if (!(await pathExists(taskMdPath))) return;
-  let md = await readFile(taskMdPath, 'utf-8');
-  if (!md.includes('## PR')) {
-    md += `\n\n## PR\n\n| URL | 状态 |\n| :--- | :--- |\n| ${prUrl} | 🔄 待审查 |\n`;
-  } else {
-    md = md.replace('| :--- | :--- |\n', `| :--- | :--- |\n| ${prUrl} | 🔄 待审查 |\n`);
-  }
-  await require('fs-extra').writeFile(taskMdPath, md);
-}
-
-async function buildPrBody(backendDir: string, taskName: string, iteration: string): Promise<string> {
-  let body = `## ${taskName}\n\n`;
-
-  // Add REQ summary
-  const reqPath = join(backendDir, 'REQ.md');
-  if (await pathExists(reqPath)) {
-    const req = await readFile(reqPath, 'utf-8');
-    const desc = req.match(/## 需求描述\n([\s\S]*?)(?=\n##|\n\|\|$)/);
-    if (desc) body += `### 📋 需求\n${desc[1].trim()}\n\n`;
-  }
-
-  // Add test status
-  const testPath = join(backendDir, 'TEST.md');
-  if (await pathExists(testPath)) {
-    const test = await readFile(testPath, 'utf-8');
-    const total = (test.match(/\[[ x]\]/g) || []).length;
-    const checked = (test.match(/\[x\]/gi) || []).length;
-    body += `### 🧪 测试\n${checked}/${total} 项完成\n\n`;
-  }
-
-  body += `---\n> 由 SpecCore 自动生成 | 迭代: ${iteration}`;
-  return body;
 }
