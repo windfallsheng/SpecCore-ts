@@ -82,25 +82,17 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
 .fs-fullscreen{position:fixed!important;inset:0!important;z-index:1000!important;border-radius:0!important;overflow-y:auto!important;overscroll-behavior:contain!important}.fs-fullscreen::-webkit-scrollbar{width:6px}.fs-fullscreen::-webkit-scrollbar-thumb{background:rgba(0,240,255,.2);border-radius:3px}.fs-fullscreen{background:var(--bg)!important;backdrop-filter:none!important;opacity:1!important;padding:40px!important;width:100vw!important;height:100vh!important;max-width:none!important}.fs-fullscreen svg{width:100%!important;height:auto!important;max-height:65vh!important}.fs-fullscreen table{font-size:16px}.fs-fullscreen .stat-value{font-size:52px}.fs-fullscreen .big-num{font-size:64px}.fs-fullscreen .card{padding:36px}
 .fs-tip{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(0,240,255,.1);border:1px solid rgba(0,240,255,.2);padding:8px 20px;border-radius:20px;font-size:11px;color:var(--cyan);z-index:1001;letter-spacing:1px;animation:fadeIn .3s ease;pointer-events:none}
 @keyframes fadeIn{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+@keyframes cardGlow{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.6)}}
+.card-bg{position:absolute;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse at 50% 20%,rgba(14,165,233,.25) 0%,transparent 70%);animation:cardGlow 3s ease-in-out infinite}
 
-.header::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanX 3s linear infinite;z-index:2;pointer-events:none}
-.header::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanX-rev 3s linear infinite;z-index:2;pointer-events:none}
-.vline{position:absolute;top:0;width:1px;bottom:0;pointer-events:none;z-index:2}
-.vline.l{left:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY-rev 3s linear infinite}
-.vline.r{right:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY 3s linear infinite}
-.card-bg{position:absolute;inset:0;pointer-events:none;z-index:0;background:radial-gradient(circle at 50% 30%,rgba(14,165,233,.25) 0%,transparent 70%);animation:cardGlow 3s ease-in-out infinite}
-@keyframes scanX{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
-@keyframes scanX-rev{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}
-@keyframes scanY{0%{transform:translateY(-100%)}100%{transform:translateY(100%)}}
-@keyframes scanY-rev{0%{transform:translateY(100%)}100%{transform:translateY(-100%)}}
-@keyframes cardGlow{0%,100%{opacity:.5}50%{opacity:1}}</style>
+</style>
 </head>
 <body>
 <div class="theme-sw"><button onclick="setTheme('ocean')" title="Ocean Blue">🌊</button><button onclick="setTheme('cyber')" title="Cyber Dark">🌙</button><button onclick="setTheme('light')" title="Light Studio">☀️</button><button onclick="setTheme('mono')" title="Mono Tech">⬛</button><button onclick="setTheme('github')" title="GitHub Dark">🐙</button><button onclick="setTheme('synth')" title="SynthWave">💜</button><button onclick="setTheme('amber')" title="Amber Terminal">🟡</button><button onclick="setTheme('sakura')" title="Cherry Sakura">🌸</button><button onclick="setTheme('forest')" title="Midnight Forest">🌲</button></div>
 <div class="grid-pattern"></div><div class="stars"></div><div class="scanlines"></div>
 <main>
   <div class="header">
-    <div class="card-bg"></div><div class="vline l"></div><div class="vline r"></div>
+    <div class="card-bg"></div>
     <div class="header-left">
       <h1>MY-PROJECT</h1>
       <div class="subtitle">SPECCORE · SPEC-DRIVEN DEVELOPMENT · OWNER: 赵六</div>
