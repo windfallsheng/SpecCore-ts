@@ -202,7 +202,7 @@ main{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:40px 32p
 @keyframes scanX-rev{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}
 @keyframes scanY{0%{transform:translateY(-100%)}100%{transform:translateY(100%)}}
 @keyframes scanY-rev{0%{transform:translateY(100%)}100%{transform:translateY(-100%)}}
-@keyframes cardGlow{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.6)}}
+@keyframes titleGlow{0%,100%{text-shadow:0 0 20px rgba(14,165,233,.4),0 0 60px rgba(14,165,233,.15)}50%{text-shadow:0 0 30px rgba(14,165,233,.7),0 0 80px rgba(14,165,233,.3)}}@keyframes cardGlow{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.6)}}
 .card-bg{position:absolute;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse at 50% 10%,rgba(14,165,233,.25) 0%,transparent 70%);animation:cardGlow 3s ease-in-out infinite}
 .header-left::before{content:'';position:absolute;top:0;left:0;width:1px;bottom:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY-rev 3s linear infinite;pointer-events:none}
 .header-right::after{content:'';position:absolute;top:0;right:0;width:1px;bottom:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY 3s linear infinite;pointer-events:none}
