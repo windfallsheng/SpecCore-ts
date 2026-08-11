@@ -676,7 +676,29 @@ function buildHtmlDashboard(data: any): string {
 [data-theme="amber"]{--cyan:#ffb000;--blue:#ff8c00;--green:#32cd32;--purple:#da70d6;--orange:#ff6347;--bg:#0c0c0c;--card:#1a1a1a;--border:#333;--text:#ffb000;--muted:#666;--surface:#1a1a1a;--hover:rgba(255,176,0,.05)}
 [data-theme="mono"]{--cyan:#64748b;--blue:#475569;--green:#334155;--purple:#1e293b;--orange:#94a3b8;--bg:#0f172a;--card:#1e293b;--border:#334155;--text:#e2e8f0;--muted:#64748b;--surface:#1e293b;--hover:rgba(100,116,139,.05)}
 *,*::after,*::before{box-sizing:border-box;margin:0;padding:0}
-.theme-sw{position:fixed;top:16px;right:16px;z-index:100;display:flex;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px;backdrop-filter:blur(10px)}.theme-sw button{width:32px;height:32px;border-radius:16px;border:none;cursor:pointer;transition:all .2s;font-size:14px;display:flex;align-items:center;justify-content:center;background:transparent}.theme-sw button:hover{transform:scale(1.1)}.theme-sw button.active{box-shadow:0 0 0 2px var(--cyan)}.lang-sw{position:fixed;top:16px;right:200px;z-index:100;display:flex;gap:4px}.lang-sw button{padding:4px 10px;border-radius:12px;border:1px solid var(--border);cursor:pointer;font-size:11px;font-family:'JetBrains Mono',monospace;background:var(--surface);color:var(--muted)}.lang-sw button.active{color:var(--cyan);border-color:var(--cyan)}body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+.ctrl-panel{position:fixed;top:16px;right:16px;z-index:100;display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.ctrl-toggle{width:56px;height:56px;border-radius:50%;border:1px solid var(--border);cursor:pointer;font-size:38px;display:flex;align-items:center;justify-content:center;line-height:0;padding:0;user-select:none;background:var(--surface);color:var(--muted);backdrop-filter:blur(10px);transition:all .3s}
+.ctrl-toggle:hover{color:var(--cyan);border-color:var(--cyan);transform:rotate(90deg);transform-origin:center}
+.ctrl-toggle.open{color:var(--cyan);border-color:var(--cyan);transform:rotate(90deg);transform-origin:center}
+.ctrl-body{max-height:0;overflow:hidden;display:flex;flex-direction:column;gap:6px;align-items:flex-end;transition:max-height .4s ease,opacity .3s ease;opacity:0}
+.ctrl-panel.open .ctrl-body{max-height:280px;opacity:1}
+.theme-sw{display:flex;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px;backdrop-filter:blur(10px)}.theme-sw button{width:32px;height:32px;border-radius:16px;border:none;cursor:pointer;transition:all .2s;font-size:14px;display:flex;align-items:center;justify-content:center;background:transparent}.theme-sw button:hover{transform:scale(1.1)}.theme-sw button.active{box-shadow:0 0 0 2px var(--cyan);background:rgba(0,240,255,.15)}
+.lang-sw{display:flex;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px;backdrop-filter:blur(10px)}
+.lang-sw button{padding:4px 10px;border-radius:12px;border:1px solid var(--border);cursor:pointer;font-size:11px;font-family:'JetBrains Mono',monospace;background:transparent;color:var(--muted)}
+.lang-sw button:hover{color:var(--text)}
+.lang-sw button.active{color:var(--cyan);border-color:var(--cyan);background:rgba(0,240,255,.1)}
+.font-sw{display:flex;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px;backdrop-filter:blur(10px)}
+.font-sw button{padding:4px 10px;border-radius:12px;border:1px solid var(--border);cursor:pointer;font-size:11px;font-family:'JetBrains Mono',monospace;background:transparent;color:var(--muted)}
+.font-sw button:hover{color:var(--text)}
+.font-sw button.active{color:var(--cyan);border-color:var(--cyan);background:rgba(0,240,255,.1)}
+.fs-sw{display:flex;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px;backdrop-filter:blur(10px)}
+.fs-sw button{padding:4px 10px;border-radius:12px;border:1px solid var(--border);cursor:pointer;font-size:11px;font-family:'JetBrains Mono',monospace;background:transparent;color:var(--muted)}
+.fs-sw button:hover{color:var(--text)}
+.fs-sw button.active{color:var(--cyan);border-color:var(--cyan);background:rgba(0,240,255,.1)}
+html{font-size:18px}html.fs-sm{font-size:11px}html.fs-md{font-size:14px}html.fs-lg{font-size:18px}html.fs-xl{font-size:22px}body{font-family:'JetBrains Mono',monospace!important}.font-jetbrains h1,.font-jetbrains h3,.font-jetbrains .panel-title,.font-jetbrains .num-font,.font-jetbrains .big-num,.font-jetbrains .header-stat .num,.font-jetbrains .card-icon{font-family:'JetBrains Mono',monospace!important}
+.font-hybrid,.font-hybrid html{font-size:18px}html.fs-sm{font-size:11px}html.fs-md{font-size:14px}html.fs-lg{font-size:18px}html.fs-xl{font-size:22px}body{font-family:'JetBrains Mono',monospace!important}.font-hybrid h1,.font-hybrid h3,.font-hybrid .panel-title,.font-hybrid .num-font,.font-hybrid .big-num,.font-hybrid .header-stat .num,.font-hybrid .card-icon{font-family:Orbitron,sans-serif!important}
+.font-orbitron,.font-orbitron html{font-size:18px}html.fs-sm{font-size:11px}html.fs-md{font-size:14px}html.fs-lg{font-size:18px}html.fs-xl{font-size:22px}body{font-family:Orbitron,sans-serif!important}.font-orbitron h1,.font-orbitron h3,.font-orbitron .panel-title,.font-orbitron .num-font,.font-orbitron .big-num,.font-orbitron .header-stat .num,.font-orbitron .card-icon{font-family:Orbitron,sans-serif!important}
+body{background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
 .scanlines{position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,240,255,.015) 2px,rgba(0,240,255,.015) 4px);pointer-events:none;z-index:999}
 .stars{position:fixed;inset:0;background:radial-gradient(1px 1px at 10% 20%,rgba(255,255,255,.4),transparent),radial-gradient(1px 1px at 25% 65%,rgba(255,255,255,.3),transparent),radial-gradient(1.5px 1.5px at 50% 30%,rgba(0,240,255,.5),transparent),radial-gradient(1px 1px at 70% 55%,rgba(255,255,255,.35),transparent),radial-gradient(1px 1px at 85% 15%,rgba(168,85,247,.4),transparent),radial-gradient(1.5px 1.5px at 15% 80%,rgba(0,240,255,.45),transparent),radial-gradient(1px 1px at 60% 85%,rgba(255,255,255,.3),transparent),radial-gradient(1px 1px at 90% 75%,rgba(0,255,136,.4),transparent);pointer-events:none;z-index:0}
 .grid-pattern{position:fixed;inset:0;background-image:linear-gradient(rgba(0,240,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,240,255,.03) 1px,transparent 1px);background-size:60px 60px;pointer-events:none;z-index:0}
@@ -753,7 +775,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
 </style>
 </head>
 <body>
-<div class="theme-sw"><button onclick="setTheme('ocean')" title="Ocean Blue">🌊</button><button onclick="setTheme('cyber')" title="Cyber Dark">🌙</button><button onclick="setTheme('light')" title="Light Studio">☀️</button><button onclick="setTheme('mono')" title="Mono Tech">⬛</button><button onclick="setTheme('github')" title="GitHub Dark">🐙</button><button onclick="setTheme('synth')" title="SynthWave">💜</button><button onclick="setTheme('amber')" title="Amber Terminal">🟡</button><button onclick="setTheme('sakura')" title="Cherry Sakura">🌸</button><button onclick="setTheme('forest')" title="Midnight Forest">🌲</button></div>
+<div class="ctrl-panel open"><button class="ctrl-toggle open" onclick="this.classList.toggle('open');this.parentElement.classList.toggle('open')">⚙️</button><div class="ctrl-body"><div class="theme-sw"><button onclick="setTheme('ocean')" title="Ocean Blue">🌊</button><button onclick="setTheme('cyber')" title="Cyber Dark">🌙</button><button onclick="setTheme('light')" title="Light Studio">☀️</button><button onclick="setTheme('mono')" title="Mono Tech">⬛</button><button onclick="setTheme('github')" title="GitHub Dark">🐙</button><button onclick="setTheme('synth')" title="SynthWave">💜</button><button onclick="setTheme('amber')" title="Amber Terminal">🟡</button><button onclick="setTheme('sakura')" title="Cherry Sakura">🌸</button><button onclick="setTheme('forest')" title="Midnight Forest">🌲</button></div><div class="lang-sw"><button data-lang="zh" class="active" onclick="setLang('zh')">中文</button><button data-lang="en" onclick="setLang('en')">EN</button></div><div class="font-sw"><button data-font="jetbrains" class="active" onclick="setFont('jetbrains')">Mono</button><button data-font="hybrid" onclick="setFont('hybrid')">Hybrid</button><button data-font="orbitron" onclick="setFont('orbitron')">Orbit</button></div><div class="fs-sw"><button data-fs="sm" onclick="setFs('sm')">S</button><button data-fs="md" onclick="setFs('md')">M</button><button data-fs="lg" class="active" onclick="setFs('lg')">L</button><button data-fs="xl" onclick="setFs('xl')">XL</button></div></div></div>
 <div class="grid-pattern"></div><div class="stars"></div><div class="scanlines"></div>
 <main>
   <div class="header">
@@ -1228,11 +1250,16 @@ function setTheme(t){document.documentElement.setAttribute('data-theme',t);local
 document.querySelectorAll('.theme-sw button').forEach((b,i)=>{b.classList.toggle('active',['ocean','cyber','light','mono','github','synth','amber','sakura','forest'][i]===(localStorage.getItem('speccore-theme')||'ocean'))});
 </script>
 
-<div class="lang-sw"><button data-lang="zh" class="active" onclick="setLang('zh')">中文</button><button data-lang="en" onclick="setLang('en')">EN</button></div>
 <script>
 var I18N={zh:{phase:'阶段',tasks:'任务',healthScore:'健康度评分',completionRate:'完成率',testCoverage:'测试覆盖',reviewCoverage:'审查覆盖',compositeScore:'综合评分',lifecycle:'任务生命周期'},en:{phase:'Phase',tasks:'Tasks',healthScore:'Health Score',completionRate:'Completion',testCoverage:'Test Coverage',reviewCoverage:'Review Coverage',compositeScore:'Composite',lifecycle:'Lifecycle'}};
 function setLang(l){document.querySelectorAll('.lang-sw button').forEach(b=>b.classList.toggle('active',b.dataset.lang===l));document.querySelectorAll('[data-i18n]').forEach(el=>{var k=el.dataset.i18n;if(I18N[l]&&I18N[l][k])el.textContent=I18N[l][k]});localStorage.setItem('speccore-lang',l)}
 (function(){var l=localStorage.getItem('speccore-lang')||(navigator.language.startsWith('zh')?'zh':'en');setLang(l)})();
+</script>
+
+<script>
+function setFont(f){document.body.className=document.body.className.replace(/font-\w+/g,'');document.body.classList.add('font-'+f);localStorage.setItem('speccore-font',f);document.querySelectorAll('.font-sw button').forEach(b=>b.classList.toggle('active',b.dataset.font===f));}
+function setFs(s){document.documentElement.className=document.documentElement.className.replace(/fs-\w+/g,'');document.documentElement.classList.add('fs-'+s);localStorage.setItem('speccore-fs',s);document.querySelectorAll('.fs-sw button').forEach(b=>b.classList.toggle('active',b.dataset.fs===s));}
+(function(){var f=localStorage.getItem('speccore-font')||'jetbrains';setFont(f);var s=localStorage.getItem('speccore-fs')||'lg';setFs(s);})();
 </script>
 
   \${data.health ? \`
