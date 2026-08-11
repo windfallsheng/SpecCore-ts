@@ -141,7 +141,7 @@ export async function doc2specCommand(options: Word2SpecOptions): Promise<void> 
   // ── Response 模式: 接收 AI 修正 ──
   if (options.response && options.iter && options.file) {
     const iterDir = `Iteration-${options.iter}`;
-    const targetDir = join(iterDir, '010-requirements');
+    const targetDir = join(iterDir, '010-requirements', 'converted');
     await ensureDir(targetDir);
     const outFile = join(targetDir, basename(options.file).replace(/\.[^.]+$/, '') + '.md');
     await writeFile(outFile, options.response);
@@ -233,7 +233,7 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     const iterDir = `Iteration-${iterName}`;
     // 目标目录：指定 --task 则放入 Task 目录，否则放入 01-产品需求
     const taskId = options.task ? (options.task.startsWith('Task-') ? options.task : `Task-${options.task}`) : null;
-    const baseDir = taskId ? join(iterDir, taskId) : join(iterDir, '010-requirements');
+    const baseDir = taskId ? join(iterDir, taskId) : join(iterDir, '010-requirements', 'converted');
     const targetDir = baseDir;
     const imageDir = join(iterDir, '010-requirements', 'assets', 'extracted'); // PRD 提取的图片
     const platform = options.platform || 'requirements';
@@ -330,7 +330,7 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     await writeFile(outputPath, content);
 
     // ── 更新 INDEX.md ──
-    const indexPath = join(targetDir, 'INDEX.md');
+    const indexPath = join(iterDir, '010-requirements', 'INDEX.md');
     let indexContent = '';
     if (await pathExists(indexPath)) {
       indexContent = await readFile(indexPath, 'utf-8');
@@ -348,7 +348,7 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
 
     // ── 内置质量验证 ──
     const report = await validateContent(content, targetDir, iterDir);
-    const reportPath = join(targetDir, 'VALIDATION.md');
+    const reportPath = join(iterDir, '010-requirements', 'VALIDATION.md');
     await writeFile(reportPath, generateReport(report, basename(options.file)));
     const grade = report.score >= 90 ? '🟢' : report.score >= 75 ? '🟡' : '🔴';
 

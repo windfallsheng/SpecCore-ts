@@ -509,10 +509,15 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     const tpl = templateMap[doc[0]] || '';
     prompt += `   - ${doc[0]} → 参考 ${tpl}\n`;
   }
-  prompt += `2. Read 010-requirements/ 和 PRD/PRD.md 等所有需求文档\n`;
+  prompt += `2. 读取需求文档（按优先级顺序）：\n`;
+  prompt += `   a. 先读 010-requirements/INDEX.md — 了解需求全貌和文件清单\n`;
+  prompt += `   b. 再读 010-requirements/converted/*.md — doc2spec 转换后的核心规格（主要依据）\n`;
+  prompt += `   c. 再读 010-requirements/features/*/README.md — 功能级补充需求\n`;
+  prompt += `   d. 参考 010-requirements/assets/prototypes/ 和 designs/ — 原型和设计稿\n`;
+  prompt += `   e. 如用户指定了特定文档，优先读取指定文件；如要求全部，再读 sources/ 原始文档\n`;
   prompt += `3. 读懂需求文档后，按专业模板标准自由撰写每个文档（不是填空表）\n`;
   prompt += `4. 每个文档都要具体内容（禁止"待填充"），分析完成后支持交互编辑任意文档的任意章节\n`;
-  prompt += `4. 写入: speccore analyze --apply '{"${taskDocs.map(([n]) => `${n}":"..."`).join(',')}...}' -I ${iter}\n\n`;
+  prompt += `5. 写入: speccore analyze --apply '{"${taskDocs.map(([n]) => `${n}":"..."`).join(',')}...}' -I ${iter}\n\n`;
   for (let i = 0; i < taskDocs.length; i++) {
     prompt += `### ${i+1}/${taskDocs.length}: ${taskDocs[i][0]}\n\`\`\`markdown\n${taskDocs[i][1]}\n\`\`\`\n\n`;
   }
