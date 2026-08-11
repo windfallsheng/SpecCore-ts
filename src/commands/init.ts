@@ -1627,7 +1627,8 @@ h1{font-size:18px;color:#0ea5e9;text-align:center;margin-bottom:8px;font-weight:
 <li>speccore init --help — 查看完整命令列表</li></ul></div>
 <div class="ft">SpecCore ${version} — 升级完成</div>
 </div></body></html>`;
-  await writeFile(join(projectRoot, 'speccore-upgrade.html'), html);
+  await ensureDir(join(projectRoot, 'outputs'));
+  await writeFile(join(projectRoot, 'outputs', 'speccore-upgrade.html'), html);
 }
 
 function detectGitUrl(root: string): string | undefined {

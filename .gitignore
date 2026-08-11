@@ -6,8 +6,10 @@ build/
 
 # Generated HTML outputs
 speccore-*.html
-!speccore-ask-onboarding.html
 demo-test.html
+outputs/speccore-*.html
+outputs/dashboard-*.html
+outputs/welcome-*.html
 
 .DS_Store
 Thumbs.db

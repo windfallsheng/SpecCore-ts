@@ -1,7 +1,7 @@
 /**
  * status-panel — IDE 风格侧栏状态（实时项目状态一览）
  */
-import { readFile, pathExists, readdir, writeFile } from 'fs-extra';
+import { readFile, pathExists, readdir, writeFile, ensureDir } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
 import { loadConfig } from '../core/unified-config';
@@ -513,7 +513,8 @@ async function exportStatus(
     await writeFile(outPath, md);
     logger.info(`✅ 导出到 ${outPath}`);
   } else if (format === 'html') {
-    const outPath = 'dashboard-iteration-' + config.project.name + '.html';
+    const outPath = join(process.cwd(), 'outputs', 'dashboard-iteration-' + config.project.name + '.html');
+    await ensureDir(join(process.cwd(), 'outputs'));
     await writeFile(outPath, buildHtmlDashboard(data));
     logger.info(`✅ 迭代看板已生成: ${outPath}`);
   }
@@ -1419,7 +1420,8 @@ async function showGlobalDashboard(options: StatusPanelOptions): Promise<void> {
 
     const outPath = options.export
       ? (options.export.endsWith('.html') ? options.export : options.export + '.html')
-      : join(process.cwd(), 'dashboard-project-' + projectName + '.html');
+      : join(process.cwd(), 'outputs', 'dashboard-project-' + projectName + '.html');
+    await ensureDir(join(process.cwd(), 'outputs'));
     await writeFile(outPath, html);
 
     logger.success(`全局仪表盘已生成: ${outPath}`);

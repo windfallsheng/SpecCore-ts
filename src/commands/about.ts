@@ -127,8 +127,9 @@ ${milestonesHtml}
 </body>
 </html>`;
 
-  const { writeFile } = require('fs-extra');
-  const outPath = join(process.cwd(), 'speccore-about.html');
+  const { writeFile, ensureDir } = require('fs-extra');
+  const outPath = join(process.cwd(), 'outputs', 'speccore-about.html');
+  await ensureDir(join(process.cwd(), 'outputs'));
   await writeFile(outPath, html);
 
   logger.success(`📖 ${outPath}`);

@@ -5,7 +5,7 @@
 
 import { logger, Spinner } from '../utils/logger';
 import { readGlobalIndex } from '../core/global-layer';
-import { writeFile } from 'fs-extra';
+import { writeFile, ensureDir } from 'fs-extra';
 import { join } from 'path';
 
 export interface DashboardOptions {
@@ -71,7 +71,8 @@ export async function dashboardCommand(options: DashboardOptions): Promise<void>
       projectName
     );
 
-    const outputPath = options.output || join(process.cwd(), 'speccore-dashboard.html');
+    const outputPath = options.output || join(process.cwd(), 'outputs', 'speccore-dashboard.html');
+    await ensureDir(join(process.cwd(), 'outputs'));
     await writeFile(outputPath, html);
 
     logger.info('');

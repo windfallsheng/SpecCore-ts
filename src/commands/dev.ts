@@ -2,7 +2,7 @@
  * dev — 智能开发入口（AI 引导）
  * TTY → 终端框线，非 TTY → LLM 引导 HTML 页面
  */
-import { pathExists, readdir, writeFile } from 'fs-extra';
+import { pathExists, readdir, writeFile, ensureDir } from 'fs-extra';
 import { join } from 'path';
 import { execSync } from 'child_process';
 import { logger, Spinner } from '../utils/logger';
@@ -33,9 +33,9 @@ export async function devCommand(options: DevOptions): Promise<void> {
   // 非 TTY 或 AI 上下文 → HTML 页面
   if (isAiContext() || !process.stdout.isTTY || options.web) {
     const html = await renderDevHtml(options);
-    const outPath = options.output || join(process.cwd(), 'speccore-dev.html');
+    const outPath = options.output || join(process.cwd(), 'outputs', 'speccore-dev.html');
     if (!!process.env.WORKBUDDY_SESSION) { process.stdout.write(html); }
-    else { await writeFile(outPath, html); process.stdout.write('✅ 页面已生成: file://' + outPath + '\n   预览: python3 -m http.server 8080 → http://localhost:8080/' + require('path').basename(outPath) + '\n'); }
+    else { await ensureDir(join(process.cwd(), 'outputs')); await writeFile(outPath, html); process.stdout.write('✅ 页面已生成: file://' + outPath + '\n   预览: python3 -m http.server 8080 → http://localhost:8080/' + require('path').basename(outPath) + '\n'); }
     return;
   }
 

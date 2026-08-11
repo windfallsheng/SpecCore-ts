@@ -1,4 +1,4 @@
-import { join } from 'path';
+import { join, dirname } from 'path';
 import { writeFile, ensureDir, readdir, stat } from 'fs-extra';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration, getIterationDir } from '../core/context';
@@ -581,7 +581,8 @@ async function writeHtmlPlan(
   // 写入 plans 目录，和 PLAN.md 放一起
   const htmlPath = planDir
     ? join(planDir, 'speccore-plan.html')
-    : join(process.cwd(), 'speccore-plan.html');
+    : join(process.cwd(), 'outputs', 'speccore-plan.html');
+  await ensureDir(dirname(htmlPath));
   await writeFile(htmlPath, html, 'utf-8');
   logger.success(`✅ 计划可视化: ${htmlPath}`);
 }
