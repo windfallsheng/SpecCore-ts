@@ -69,8 +69,10 @@ const COMMAND_KB: CommandKnowledge[] = [
     usage: 'speccore spec2doc [-i <iteration>] [-t <task>] [-f <format>] [-o <output>]', examples: ['speccore spec2doc -i Q3 -o 需求.docx', 'speccore spec2doc -t T-01 -f html'], related: ['doc2spec'], triggers: ['导出', 'spec2doc', '生成文档', '导出word', '导出pdf'] },
   { name: 'dashboard', aliases: ['db', 'sp'], description: '项目仪表盘：迭代状态/进度/健康度，--scope global 全量视图',
     usage: 'speccore dashboard [--scope global|iteration] [--export html] [--health] [--lifecycle]', examples: ['speccore dashboard', 'speccore dashboard --scope global --export html'], related: ['analyze', 'health'], triggers: ['看板', '仪表盘', 'dashboard', '进度', '状态', '全局', '全量'] },
-  { name: 'analyze', aliases: ['al'], description: 'AI 统一分析：需求文档+源码→分析报告，--audit 审计模式',
-    usage: 'speccore analyze [--task <id>] [--iteration <name>] [--audit] [--with-code] [--scope global]', examples: ['speccore analyze', 'speccore analyze --with-code', 'speccore analyze --scope global --with-code'], related: ['dashboard', 'validate'], triggers: ['分析', 'analyze', '审计', 'audit', '检查', '结合源码', '连代码', '带代码', '源码分析', '全局分析', '分析全局', '倒推需求', '反推', '从代码生成', '分析代码'] },
+  { name: 'analyze', aliases: ['al'], description: 'AI 统一分析：需求文档+源码→分析报告，默认读源码，--no-source 跳过，--source-scope 指定目录，--supplement 追加源码',
+    usage: 'speccore analyze [--task <id>] [--iteration <name>] [--audit] [--with-code] [--no-source] [--source-scope <dirs>] [--supplement] [--scope global]', examples: ['speccore analyze', 'speccore analyze --with-code', 'speccore analyze --no-source', 'speccore analyze --source-scope src/commands,src/core', 'speccore analyze --supplement', 'speccore analyze --supplement --source-scope src/core'], related: ['dashboard', 'validate', 'code-index'], triggers: ['分析', 'analyze', '审计', 'audit', '检查', '结合源码', '连代码', '带代码', '源码分析', '全局分析', '分析全局', '倒推需求', '反推', '从代码生成', '分析代码', '不读源码', '不读代码', '跳过源码', '指定目录分析', '只扫描', '补充分析', '追加分析', '补充源码', '追加源码', '遗漏', '没分析到', '没覆盖', '漏掉', '再分析', '多读几个'] },
+  { name: 'code-index', aliases: ['ci', 'idx'], description: '源码索引：扫描项目代码，自动识别多端/模块/依赖，生成 Markdown 索引',
+    usage: 'speccore code-index [--full] [--scope <dirs>] [--show]', examples: ['speccore code-index', 'speccore code-index --full', 'speccore code-index --scope src/commands,src/core', 'speccore code-index --show'], related: ['analyze', 'dev'], triggers: ['代码索引', '源码索引', 'code-index', '索引', '建索引', '更新索引', '扫描代码', '代码结构', '模块索引', '项目结构'] },
   { name: 'execute', aliases: ['ex'], description: '执行开发任务：依赖排序+分批+交互引导+计划联动',
     usage: 'speccore execute [--task <id>] [--batch-size <n>] [--auto]', examples: ['speccore execute', 'speccore execute --batch-size 3'], related: ['plan', 'done'], triggers: ['执行', 'execute', '开发', '开始做', '干活'] },
   { name: 'plan', aliases: ['pl'], description: '生成执行计划+管理历史：创建/交互/列表/详情/取消',
@@ -109,7 +111,63 @@ const COMMAND_KB: CommandKnowledge[] = [
     usage: '激活 spec-task-create Skill', examples: ['创建一个bug任务', '新建修复登录问题的任务'], related: ['analyze', 'execute'], triggers: ['创建.*任务', '新建.*任务', '建.*bug', '新增.*任务', '帮我写.*需求', '记录.*bug', '创建.*审查', '创建.*测试', '创建.*文档', '创建.*部署', '创建.*重构', '创建.*安全', '创建.*性能'] },
   { name: 'iteration-create', aliases: ['ic'], description: '创建迭代：智能命名 + 平台检查',
     usage: '激活 spec-iteration-create Skill', examples: ['创建一个新迭代', '创建Q2迭代'], related: ['init', 'doc2spec'], triggers: ['创建.*迭代', '新建.*迭代', '生成.*迭代', '迭代.*新建', '开始.*迭代'] },
+  { name: 'welcome', aliases: ['wel'], description: '欢迎页：展示 SpecCore 项目状态与引导流程（HTML 页面）',
+    usage: 'speccore welcome', examples: ['speccore welcome'], related: ['help', 'about', 'dashboard'], triggers: ['欢迎', 'welcome', '引导页', '入门', '新手', '开始使用', '使用说明', '帮助页面'] },
+  { name: 'help', aliases: ['h'], description: '帮助页：命令速查 + 场景示例 + 流水线说明（HTML 页面）',
+    usage: 'speccore help', examples: ['speccore help'], related: ['welcome', 'about', 'dashboard'], triggers: ['帮助', 'help', '怎么用', '命令列表', '所有命令', '功能介绍'] },
+  { name: 'about', aliases: ['ab'], description: '关于页：SpecCore 理念 + 方法论 + 版本信息（HTML 页面）',
+    usage: 'speccore about', examples: ['speccore about'], related: ['welcome', 'help'], triggers: ['关于', 'about', '版本', '理念', '方法论', 'SDD', '是什么'] },
 ];
+
+// ============================================================
+// 同义词表 — 扩展 KB 匹配覆盖面（纯数据，不改架构）
+// key = 用户可能的口语化表达，value = 对应命令名
+// ============================================================
+
+const SYNONYM_MAP: Record<string, string> = {
+  // ── dashboard ──
+  '看板': 'dashboard', '面板': 'dashboard', '概览': 'dashboard',
+  '总览': 'dashboard', '全局': 'dashboard', '全量': 'dashboard',
+  '项目状态': 'dashboard', '健康度': 'dashboard',
+  // ── analyze ──
+  '审计': 'analyze', '代码审计': 'analyze', '代码检查': 'analyze',
+  '质量检查': 'analyze', '风险评估': 'analyze',
+  // ── execute ──
+  '开始做': 'execute', '干活': 'execute', '开工': 'execute',
+  '跑任务': 'execute', '开发任务': 'execute',
+  // ── split ──
+  '分解': 'split', '划分': 'split', '拆需求': 'split', '拆任务': 'split',
+  // ── pr ──
+  '提交代码': 'pr', '发起PR': 'pr', '发起MR': 'pr', '创建MR': 'pr',
+  // ── validate ──
+  '合规检查': 'validate', '完整性检查': 'validate', '校验': 'validate',
+  // ── change ──
+  '改需求': 'change', '需求变更': 'change', '改一下': 'change',
+  // ── done ──
+  '收尾': 'done', '归档': 'done', '完结': 'done',
+  // ── init ──
+  '建项目': 'init', '项目初始化': 'init',
+  // ── search ──
+  '找': 'search', '查找': 'search', '全文搜索': 'search',
+  // ── track ──
+  '追踪': 'track', '追溯': 'track', '全链路': 'track',
+  // ── sync ──
+  '对齐': 'sync', '双向同步': 'sync',
+  // ── rename ──
+  '改名': 'rename', '更名': 'rename',
+  // ── context ──
+  '切换迭代': 'context', '当前迭代': 'context',
+  // ── welcome / help / about ──
+  '新手': 'welcome', '入门': 'welcome', '开始使用': 'welcome',
+  '怎么用': 'help', '命令列表': 'help', '所有命令': 'help',
+  '版本': 'about', '理念': 'about', '方法论': 'about', '是什么': 'about',
+  // ── code-index ──
+  '建索引': 'code-index', '扫描代码': 'code-index', '代码结构': 'code-index',
+  // ── iteration ──
+  'sprint': 'iteration',
+  // ── dev ──
+  '流水线': 'dev', '全自动': 'dev',
+};
 
 // ============================================================
 // 任务指引 — 预定义工作流
@@ -155,11 +213,11 @@ export function classifyMode(input: string): AskMode {
 
   // 模式1: 命令解释 — 询问特定命令用法
   const explainPatterns = [
-    /(dashboard|dev|init|execute|plan|pr|sync|validate|analyze|split|search|track|rename|doc2spec|spec2doc|ask)\s*(命令|用法|怎么用|是什么|功能|参数|选项)/,
-    /怎么用\s*(dashboard|dev|init|execute|plan|pr|sync|validate|analyze|split|search|track)/,
-    /(dashboard|dev|init|execute|plan|pr|sync|validate|analyze|split|search|track)\s*有哪些/,
-    /解释[一下]?\s*(dashboard|dev|init|execute|plan|pr|sync|validate|analyze|split|search|track)/,
-    /(what|how).*use.*(dashboard|dev|init|execute|plan|pr|sync)/i,
+    /(dashboard|dev|init|execute|plan|pr|sync|validate|analyze|split|search|track|rename|doc2spec|spec2doc|ask|code-index)\s*(命令|用法|怎么用|是什么|功能|参数|选项)/,
+    /怎么用\s*(dashboard|dev|init|execute|plan|pr|sync|validate|analyze|split|search|track|code-index)/,
+    /(dashboard|dev|init|execute|plan|pr|sync|validate|analyze|split|search|track|code-index)\s*有哪些/,
+    /解释[一下]?\s*(dashboard|dev|init|execute|plan|pr|sync|validate|analyze|split|search|track|code-index)/,
+    /(what|how).*use.*(dashboard|dev|init|execute|plan|pr|sync|code-index)/i,
   ];
   if (explainPatterns.some(p => p.test(lower))) return 'explain';
 
@@ -194,7 +252,7 @@ export function classifyMode(input: string): AskMode {
   return 'match';
 }
 
-/** 匹配命令知识 */
+/** 匹配命令知识（精确匹配 → 触发词 → 同义词表 三层降级） */
 function matchCommandInKB(input: string): CommandKnowledge | null {
   const lower = input.toLowerCase();
   // 精确匹配命令名
@@ -211,7 +269,16 @@ function matchCommandInKB(input: string): CommandKnowledge | null {
     const score = cmd.triggers.filter(t => lower.includes(t)).length;
     if (score > bestScore) { bestScore = score; best = cmd; }
   }
-  return bestScore > 0 ? best : null;
+  if (bestScore > 0) return best;
+
+  // 同义词表兜底：遍历 SYNONYM_MAP，找到第一个命中的
+  for (const [syn, cmdName] of Object.entries(SYNONYM_MAP)) {
+    if (lower.includes(syn)) {
+      const found = COMMAND_KB.find(c => c.name === cmdName);
+      if (found) return found;
+    }
+  }
+  return null;
 }
 
 /** 模式1: 命令解释 */
@@ -338,8 +405,15 @@ function handleGuide(input: string): AskResult | null {
   };
 }
 
+/** 检测补充分析意图：用户说“有遗漏”“补充一下”“再分析”等 */
+const SUPPLEMENT_INTENT = /补充分析|追加分析|补充源码|追加源码|有.*遗漏|遗漏.*分析|没分析到|没覆盖|漏掉|再分析|多读几个|追加.*源码|再.*读.*文件|还有.*没.*分析|补充.*覆盖|补充.*源码|补充.*文件/;
+/** 排除模式：这些场景不应触发补充分析 */
+const SUPPLEMENT_EXCLUDE = /补充测试|补充用例|补充文档|补.*文档|补充.*报告/;
+
 /** 模式3: 意图匹配（当前 ask 逻辑） */
 async function handleMatch(input: string): Promise<AskResult> {
+  // 补充分析意图已在 askEngine 顶层检测（第零层），此处不再重复
+
   // 优先用 KB 精确匹配
   const kbMatch = matchCommandInKB(input);
   const config = await loadAskConfig();
@@ -355,6 +429,8 @@ async function handleMatch(input: string): Promise<AskResult> {
     if (params.tool) { fullCommand += ` --tool="${params.tool}"`; paramNotes.push(`🔧 平台: ${params.tool}`); }
     if (params.name) { fullCommand += ` -n "${params.name}"`; paramNotes.push(`📛 名称: ${params.name}`); }
     if (params.iteration) { fullCommand += ` --iter "${params.iteration}"`; paramNotes.push(`🔄 迭代: ${params.iteration}`); }
+
+    // 补充分析意图已在 askEngine 顶层检测，此处不再重复
     
     let detail = `🎯 推荐命令: ${fullCommand}\n${kbMatch.description}\n\n用法: ${kbMatch.usage}`;
     if (paramNotes.length > 0) detail += `\n\n${paramNotes.join('\n')}`;
@@ -939,6 +1015,23 @@ export async function askEngine(input: string): Promise<AskResult> {
   }
 
   // ═══════════════════════════════════════════════════════════
+  // 第零层: 补充分析意图快速检测（正则零成本，不受缓存干扰）
+  // 放在所有层之前，避免缓存模糊匹配导致误触发
+  // ═══════════════════════════════════════════════════════════
+  if (SUPPLEMENT_INTENT.test(input) && !SUPPLEMENT_EXCLUDE.test(input)) {
+    const fullCommand = `speccore analyze --supplement`;
+    const detail = [
+      `🎯 推荐命令: ${fullCommand}`,
+      `追加未覆盖的源码文件到现有分析报告（不重新生成全部文档）`,
+      ``,
+      `💡 也可以指定目录:`,
+      `  speccore analyze --supplement --source-scope <目录>`,
+      `  speccore analyze --supplement --depth deep（每次多读一些）`,
+    ].join('\n');
+    return { mode: 'match', summary: `✅ 推荐: ${fullCommand}`, detail, commands: ['analyze --supplement'] };
+  }
+
+  // ═══════════════════════════════════════════════════════════
   // 加载统一配置（环境变量 > ask.json > 默认值）
   // ═══════════════════════════════════════════════════════════
   const config = await loadAskConfig();
@@ -979,8 +1072,10 @@ export async function askEngine(input: string): Promise<AskResult> {
   }
 
   // 计算本地置信度（explain/guide/pipeline 视为高置信度）
+  // KB 匹配成功（含同义词表）给予较高基础分，避免误路由到宿主 AI
+  const hasKbMatch = localResult.commands.length > 0 && localResult.mode === 'match' && !localResult.summary.includes('未识别');
   const localConfidence = localCandidates[0]?.confidence ||
-    (localResult.autoExec ? 85 : (mode === 'explain' || mode === 'pipeline') ? 90 : 55);
+    (localResult.autoExec ? 85 : (mode === 'explain' || mode === 'pipeline') ? 90 : hasKbMatch ? 65 : 55);
 
   // --rules / forceHostAi 强制所有请求走 AI
   const forceHostAi = input.includes('--rules') || config.rules.forceHostAi;

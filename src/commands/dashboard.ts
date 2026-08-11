@@ -77,9 +77,7 @@ export async function dashboardCommand(options: DashboardOptions): Promise<void>
 
     logger.info('');
     logger.success('✅ 仪表盘已生成！');
-    logger.info('');
-    logger.info(`📁 输出文件: ${outputPath}`);
-    logger.info('');
+    process.stdout.write(`✅ 页面已生成: file://${outputPath}\n`);
     logger.info('📊 包含内容:');
     logger.info('   - 统计卡片：总需求、已实现、进行中、待开发');
     logger.info('   - 需求状态分布（饼图）');

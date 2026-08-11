@@ -11,6 +11,10 @@
 | 标记 | AI 动作 |
 |:---|:---|
 | `[SPECCORE_ONBOARD: <path>]` | **🚨 必须最先处理，不可跳过**：支持 present_files → 立即展示；不支持 → 输出文件路径提示用户打开，确认后再继续 |
+| `[SPECCORE_WELCOME: <path>]` | 用 present_files 展示欢迎页 HTML |
+| `[SPECCORE_HELP: <path>]` | 用 present_files 展示帮助页 HTML |
+| `[SPECCORE_DEV: <path>]` | 用 present_files 展示 dev 引导页 HTML |
+| `[SPECCORE_ABOUT: <path>]` | 用 present_files 展示关于页 HTML |
 | `[SPECCORE_EXEC: <cmd>]` | 直接 `execute_command` 执行 |
 | `[SPECCORE_INTENT]` | 展示给用户确认 |
 

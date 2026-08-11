@@ -16,7 +16,7 @@
 import { readFile, writeFile, pathExists, readdir, stat, ensureDir } from 'fs-extra';
 import { join, relative, basename } from 'path';
 import { logger } from '../utils/logger';
-import { buildCodeIndex, findRelevantCode, readRelevantSource, isIndexStale } from './code-scanner';
+import { buildCodeIndex, findRelevantCode, readRelevantSource, isIndexStale, loadFullIndex } from './code-scanner';
 import { generateAIContext, AIContextInput, AIContextResult } from './ai-context-generator';
 import { cleanStaleCache } from './git-integration';
 
@@ -39,6 +39,10 @@ export interface AnalyzeInput {
   depth: 'quick' | 'normal' | 'deep';
   /** 输出文件名 */
   output?: string;
+  /** 是否读取源码内容（默认 true） */
+  readSource?: boolean;
+  /** 指定源码扫描范围（逗号分隔目录） */
+  sourceScope?: string;
 }
 
 export interface AnalysisResult {
@@ -259,9 +263,14 @@ async function analyzeCombined(input: AnalyzeInput): Promise<AnalysisResult> {
   const fileStats = await scanSourceDirs(input.sources, input.depth);
   const apiInventory = await buildApiInventory(input.sources);
 
-  // 确保代码索引是最新的
+  // 确保代码索引是最新的（解耦设计：总是全量索引，分析时按 scope 筛选）
   if (await isIndexStale()) {
-    await buildCodeIndex();
+    logger.info('   🔍 索引已过期，自动重建全量代码索引...');
+    await buildCodeIndex();  // 总是全量建，不是按 scope
+    logger.info('   ✅ 代码索引已更新（包含多端识别 + 模块分组 + git 联动分析）');
+    logger.info('   💡 提示：可手动运行 `speccore code-index --show` 查看索引摘要');
+  } else {
+    logger.info('   📚 使用缓存的代码索引（1 小时内已构建）');
   }
 
   // ── AI 上下文生成: 替代关键词匹配 ──
@@ -278,11 +287,19 @@ async function analyzeCombined(input: AnalyzeInput): Promise<AnalysisResult> {
   logger.info(`   📁 源码文件: ${aiContext.totalFiles} 个`);
   logger.info(`   🔗 API: ${aiContext.totalApis} 个`);
 
-  // deep 模式: 仍然读取相关源码内容注入分析
+  // 默认读取相关源码内容注入分析（除非明确关闭）
+  // 解耦设计：从完整索引中按 sourceScope 筛选，不是按 scope 建索引
   let sourceContents: Record<string, string> = {};
-  if (input.depth === 'deep') {
-    const rawMatches = await findRelevantCode(fullReqContent, 15);
-    sourceContents = await readRelevantSource(rawMatches, 80000);
+  const shouldReadSource = input.readSource !== false;
+  if (shouldReadSource) {
+    const limit = input.depth === 'deep' ? 20 : (input.depth === 'quick' ? 5 : 10);
+    const maxBytes = input.depth === 'deep' ? 120000 : (input.depth === 'quick' ? 30000 : 60000);
+    const rawMatches = await findRelevantCode(fullReqContent, limit, input.sourceScope);
+    sourceContents = await readRelevantSource(rawMatches, maxBytes);
+    if (Object.keys(sourceContents).length > 0) {
+      const scopeHint = input.sourceScope ? ` (范围: ${input.sourceScope})` : '';
+      logger.info(`   📖 已读取 ${Object.keys(sourceContents).length} 个源码文件${scopeHint} (${Object.values(sourceContents).reduce((a, c) => a + c.length, 0)} 字符)`);
+    }
   }
 
   let outputPath: string;
@@ -290,14 +307,14 @@ async function analyzeCombined(input: AnalyzeInput): Promise<AnalysisResult> {
 
   if (input.scope === 'global') {
     outputPath = join('.speccore', 'GLOBAL', input.output || 'ARCH_IMPACT.md');
-    report = buildAIEnhancedReport(input, 'global', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents });
+    report = await buildAIEnhancedReport(input, 'global', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents });
   } else if (input.scope === 'task') {
     outputPath = join(`Iteration-${input.iteration}`, '030-tasks', input.taskId!, '00-specs', input.output || 'ANALYSIS.md');
-    report = buildAIEnhancedReport(input, 'task', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents });
+    report = await buildAIEnhancedReport(input, 'task', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents });
   } else {
     const iterDir = `Iteration-${input.iteration || 'current'}`;
     outputPath = join(iterDir, '020-specs', input.output || 'ANALYSIS.md');
-    report = buildAIEnhancedReport(input, 'iteration', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents });
+    report = await buildAIEnhancedReport(input, 'iteration', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents });
     await writePerPlatform(iterDir, report, input.output || 'ANALYSIS.md');
   }
 
@@ -1026,11 +1043,11 @@ interface AIEnhancedReportParams {
   sourceContents: Record<string, string>;
 }
 
-function buildAIEnhancedReport(
+async function buildAIEnhancedReport(
   input: AnalyzeInput,
   scope: 'global' | 'iteration' | 'task',
   params: AIEnhancedReportParams
-): string {
+): Promise<string> {
   const { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents } = params;
   const now = new Date().toISOString().split('T')[0];
   const iter = input.iteration || 'current';
@@ -1113,6 +1130,66 @@ function buildAIEnhancedReport(
   r += `| _其他_ | _待 AI 分析_ | — | — |\n\n`;
   r += `> 📌 请 AI 读取上下文文件完成文件级对标\n\n`;
 
+  // 6.5 源码分析清单（已读 + 未覆盖，方便用户发现遗漏并补充）
+  {
+    const readFiles = Object.keys(sourceContents);
+    const fullIndex = await loadFullIndex();
+    const allIndexedFiles = fullIndex?.files?.map(f => f.path) || [];
+    const uncoveredFiles = allIndexedFiles.filter(f => !readFiles.includes(f));
+
+    if (readFiles.length > 0 || uncoveredFiles.length > 0) {
+      r += `## 📚 源码分析清单\n\n`;
+
+      // 已分析文件
+      if (readFiles.length > 0) {
+        r += `### ✅ 已分析（${readFiles.length} 个文件）\n\n`;
+        for (const [file, content] of Object.entries(sourceContents)) {
+          const lines = content.split('\n').length;
+          const size = (content.length / 1024).toFixed(1);
+          r += `- \`${file}\` (${lines} 行, ${size}KB)\n`;
+        }
+        r += `\n`;
+      }
+
+      // 未覆盖文件（按目录分组）
+      if (uncoveredFiles.length > 0) {
+        r += `### 📂 索引中未覆盖（${uncoveredFiles.length} 个文件）\n\n`;
+        r += `> 以下文件已在索引中，但本次分析未读取。如发现与需求相关，可补充分析。\n\n`;
+
+        // 按第一层目录分组
+        const grouped: Record<string, string[]> = {};
+        for (const f of uncoveredFiles) {
+          const parts = f.split('/');
+          const dir = parts.length >= 2 ? parts.slice(0, 2).join('/') : parts[0];
+          if (!grouped[dir]) grouped[dir] = [];
+          grouped[dir].push(f);
+        }
+
+        for (const [dir, files] of Object.entries(grouped).sort((a, b) => b[1].length - a[1].length)) {
+          r += `**${dir}** (${files.length} 个)\n`;
+          for (const f of files.slice(0, 5)) {
+            r += `  - \`${f}\`\n`;
+          }
+          if (files.length > 5) {
+            r += `  - _... 还有 ${files.length - 5} 个_\n`;
+          }
+          r += `\n`;
+        }
+      }
+
+      // 补充分析指引
+      r += `### 💡 如何补充分析\n\n`;
+      r += `| 场景 | 命令 |\n`;
+      r += `| :--- | :--- |\n`;
+      r += `| **追加源码（不重新生成）** | \`speccore analyze --supplement\` |\n`;
+      r += `| 指定目录追加 | \`speccore analyze --supplement --source-scope src/core\` |\n`;
+      r += `| 扩大读取量（重新分析） | \`speccore analyze --auto --depth deep\` |\n`;
+      r += `| 指定目录重新分析 | \`speccore analyze --auto --source-scope src/core,src/commands\` |\n`;
+      r += `| 查看完整代码索引 | \`speccore code-index --show\` |\n`;
+      r += `| 重建索引（代码有变动） | \`speccore code-index --full\` |\n\n`;
+    }
+  }
+
   // 7. AI 深度分析指引
   r += `## 🤖 AI 深度分析清单\n\n`;
   r += `> **上下文文件**: \`${aiContext.promptPath}\`  \n`;
@@ -1185,6 +1262,177 @@ async function writePerPlatform(iterDir: string, report: string, filename: strin
   } catch {
     // 目录不存在，静默跳过
   }
+}
+
+// ================================================================
+// 补充分析模式（读取现有报告，追加未覆盖的源码文件）
+// ================================================================
+
+export interface SupplementResult {
+  outputPath: string;
+  addedFiles: string[];
+  totalRead: number;
+  remainingUncovered: number;
+}
+
+/**
+ * 补充分析：读取已有报告，找到未覆盖的源码文件，追加到报告中
+ * 不重新生成全部文档，只追加源码内容
+ */
+export async function supplementAnalysis(input: {
+  reportPath: string;
+  scope?: string;
+  maxFiles?: number;
+}): Promise<SupplementResult | null> {
+  const { reportPath, scope, maxFiles = 10 } = input;
+
+  // 1. 读取现有报告（不存在则自动创建初始报告，保证流程不断）
+  let existingReport: string;
+  if (!await pathExists(reportPath)) {
+    logger.info('   📝 报告不存在，自动创建初始分析报告...');
+    // 确保索引存在
+    if (await isIndexStale()) {
+      await buildCodeIndex();
+    }
+    const fullIndex = await loadFullIndex();
+    const totalFiles = fullIndex?.files?.length || 0;
+    const endpoints = fullIndex?.endpoints || [];
+    const modules = fullIndex?.modules || [];
+
+    // 创建初始报告骨架
+    let initialReport = `# 需求分析报告\n\n`;
+    initialReport += `> 由补充分析自动创建（首次分析未生成报告）\n\n`;
+    initialReport += `## 📊 项目概览\n\n`;
+    initialReport += `- 索引文件总数: ${totalFiles}\n`;
+    initialReport += `- 识别端: ${endpoints.map((e: any) => e.name).join(', ') || '未识别'}\n`;
+    initialReport += `- 模块数: ${modules.length}\n\n`;
+    initialReport += `## 📚 源码分析清单\n\n`;
+    initialReport += `### ✅ 已分析（0 个文件）\n\n`;
+    initialReport += `> 初始报告未读取源码文件，等待补充分析填充。\n\n`;
+    initialReport += `## 🤖 AI 深度分析清单\n\n`;
+    initialReport += `> 待 AI 分析\n`;
+
+    // 确保目录存在并写入
+    const dir = join(process.cwd(), reportPath, '..');
+    await ensureDir(dir);
+    await writeFile(reportPath, initialReport);
+    logger.success(`   ✅ 初始报告已创建: ${reportPath}`);
+    existingReport = initialReport;
+  } else {
+    existingReport = await readFile(reportPath, 'utf-8');
+  }
+
+  // 2. 解析已分析文件（从 "✅ 已分析" 和 "📚 源码分析清单" 部分提取）
+  const readFiles = new Set<string>();
+  const filePattern = /`((?:src|lib|app|packages|components)\/[^`]+)`/g;
+  // 匹配整个源码分析清单区域（## 标题行到下一个 ## 标题行，不截断在 ### 子标题）
+  // 使用 tempered greedy token 避免 multiline $ 导致的提前截断
+  const sourceSection = existingReport.match(/## 📚 源码分析清单[^\n]*\n((?:(?!^## [^\n]*$)[\s\S])*)/m)?.[0] || '';
+  let match;
+  while ((match = filePattern.exec(sourceSection)) !== null) {
+    readFiles.add(match[1]);
+  }
+  // 也匹配补充分析区域（可能有多个，使用 tempered greedy token）
+  const supplementSections = existingReport.match(/### 🔄 补充分析[^\n]*\n((?:(?!^### 🔄 )[\s\S])*)/gm) || [];
+  for (const section of supplementSections) {
+    const tablePattern = /`((?:src|lib|app|packages|components)\/[^`]+)`/g;
+    while ((match = tablePattern.exec(section)) !== null) {
+      readFiles.add(match[1]);
+    }
+  }
+  logger.info(`   📋 已分析文件: ${readFiles.size} 个`);
+
+  // 3. 从索引获取所有文件，找出未覆盖的
+  const fullIndex = await loadFullIndex();
+  if (!fullIndex) {
+    logger.error('代码索引不存在，请先运行: speccore code-index --full');
+    return null;
+  }
+
+  const scopeDirs = scope ? scope.split(',').map(s => s.trim()).filter(Boolean) : [];
+  const uncoveredFiles = fullIndex.files
+    .map(f => f.path)
+    .filter(f => !readFiles.has(f))
+    .filter(f => scopeDirs.length === 0 || scopeDirs.some(dir => f.startsWith(dir)));
+
+  if (uncoveredFiles.length === 0) {
+    logger.success('✅ 所有索引文件都已分析过，无需补充');
+    return { outputPath: reportPath, addedFiles: [], totalRead: readFiles.size, remainingUncovered: 0 };
+  }
+
+  // 4. 读取下一批未覆盖文件
+  const filesToRead = uncoveredFiles.slice(0, maxFiles);
+  logger.info(`   📖 补充读取 ${filesToRead.length} 个文件 (剩余 ${uncoveredFiles.length - filesToRead.length} 个未覆盖)`);
+
+  const newContents: Record<string, string> = {};
+  let totalBytes = 0;
+  const maxBytes = 60000;
+  for (const file of filesToRead) {
+    if (totalBytes >= maxBytes) break;
+    try {
+      const content = await readFile(join(process.cwd(), file), 'utf-8');
+      const bytes = Buffer.byteLength(content);
+      if (totalBytes + bytes > maxBytes) {
+        const remaining = maxBytes - totalBytes;
+        const buf = Buffer.from(content, 'utf-8');
+        newContents[file] = buf.slice(0, remaining).toString('utf-8') + '\n// ... truncated';
+        break;
+      }
+      newContents[file] = content;
+      totalBytes += bytes;
+    } catch {}
+  }
+
+  const addedFiles = Object.keys(newContents);
+  if (addedFiles.length === 0) {
+    logger.warn('未能读取任何补充文件（文件可能不存在）');
+    return null;
+  }
+
+  // 5. 构建补充分析章节
+  const supplementCount = (existingReport.match(/### 🔄 补充分析/g) || []).length + 1;
+  let supplement = `\n\n---\n\n`;
+  supplement += `### 🔄 补充分析 #${supplementCount}（${new Date().toISOString().split('T')[0]}）\n\n`;
+  supplement += `> 补充读取了以下 **${addedFiles.length}** 个源码文件（累计已分析 ${readFiles.size + addedFiles.length} / ${fullIndex.files.length} 个）\n\n`;
+
+  // 文件清单表格
+  supplement += `| 文件 | 行数 | 大小 |\n`;
+  supplement += `| :--- | :--- | :--- |\n`;
+  for (const [file, content] of Object.entries(newContents)) {
+    const lines = content.split('\n').length;
+    const size = (content.length / 1024).toFixed(1);
+    supplement += `| \`${file}\` | ${lines} | ${size}KB |\n`;
+  }
+  supplement += `\n`;
+
+  // 源码内容
+  for (const [file, content] of Object.entries(newContents)) {
+    const lang = file.split('.').pop() || '';
+    supplement += `<details>\n<summary>📄 ${file}</summary>\n\n`;
+    supplement += '```' + lang + '\n' + content.slice(0, 8000) + '\n```\n\n';
+    supplement += `</details>\n\n`;
+  }
+
+  // 剩余未覆盖提示
+  const remaining = uncoveredFiles.length - addedFiles.length;
+  if (remaining > 0) {
+    supplement += `> 📌 还有 **${remaining}** 个文件未覆盖\n`;
+    supplement += `> - 再次运行 \`speccore analyze --supplement\` 继续补充\n`;
+    supplement += `> - 或指定目录: \`speccore analyze --supplement --source-scope <目录>\`\n`;
+  } else {
+    supplement += `> ✅ 所有索引文件已全部覆盖！\n`;
+  }
+
+  // 6. 追加到报告并写入
+  const updatedReport = existingReport.replace(/\n*$/, '') + supplement;
+  await writeFile(reportPath, updatedReport);
+
+  return {
+    outputPath: reportPath,
+    addedFiles,
+    totalRead: readFiles.size + addedFiles.length,
+    remainingUncovered: remaining,
+  };
 }
 
 /** 从 CONSTITUTION.md 提取平台列表 */

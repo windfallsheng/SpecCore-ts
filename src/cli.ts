@@ -31,6 +31,7 @@ import { welcomeCommand } from './commands/welcome';
 import { statusPanelCommand } from './commands/status-panel';
 import { doc2specCommand } from './commands/doc2spec';
 import { spec2docCommand } from './commands/spec2doc';
+import { registerCodeIndexCommand } from './commands/code-index';
 // 全量层命令
 import { iterationFromGlobalCommand } from './commands/iteration-from-global';
 import { syncGlobalCommand } from './commands/sync-global';
@@ -404,6 +405,9 @@ program
   .option('--timeout <ms>', 'Check timeout in ms', '120000')
   .action(verifyCommand);
 
+// 源码索引
+registerCodeIndexCommand(program);
+
 // ================================================================
 // 📊 进度与状态
 // ================================================================
@@ -672,6 +676,9 @@ program
   .option('--interactive', '交互: AI 提问 → 回答 → 优化')
   .option('--prompt', '输出结构化 Prompt 到 stdout（Skill 协作模式）')
   .option('--with-code', '结合 CONSTITUTION.md 配置的工程源码一起分析')
+  .option('--no-source', '不读取源码内容（默认会读）')
+  .option('--source-scope <dirs>', '指定源码扫描目录（逗号分隔，如 src/commands,src/core）')
+  .option('--supplement', '补充模式：追加未覆盖的源码到现有报告（不重新生成）')
   .option('--apply <content>', '接收 AI 分析结果写入 ANALYSIS.md（配合 --prompt）')
   .action(analyzeCommand);
 

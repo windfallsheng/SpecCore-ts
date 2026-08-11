@@ -1,3 +1,31 @@
+## v5.74.0 (2026-08-12) — ask 引擎三层增强 + HTML 弹出修复
+
+### 🧠 L1: 同义词表（SYNONYM_MAP）
+- **纯数据层**：50+ 口语化表达 → 23 个命令，不改架构
+- **匹配顺序**：命令名精确匹配 → 触发词 → 同义词表兑底
+- **覆盖示例**：看板/dashboard、提交代码/pr、改名/rename、新手/welcome、审计/analyze
+- **效果**：用户说“看板”“提交代码”等口语均可直接匹配到对应命令
+
+### 🔀 L2: 端配额（Endpoint Quota）
+- `findRelevantCode` 按端分组 → 每端最多占 limit 的 40% → 轮询取结果
+- 避免单端文件垄断搜索结果，前后端/移动端均有代表
+
+### 📝 L3: API 契约关联查询
+- 新增 `loadContractApiPaths`：加载项目中的 API_CONTRACT.yaml
+- 命中契约路径的文件加 15 分，关键词命中契约描述加 3 分
+- 搜索范围：`.speccore/**/API_CONTRACT.yaml` + `Iteration-*/**/API_CONTRACT.yaml`
+
+### 🖥️ HTML 弹出修复
+- welcome/help/dev 三个命令新增 `[SPECCORE_WELCOME/HELP/DEV: path]` 标记
+- AI 宿主（Qoder/Trae/Cursor 等）可识别并用 present_files 展示 HTML 页面
+- AGENTS.md 标记表新增 4 行（WELCOME/HELP/DEV/ABOUT）
+
+### 🐛 置信度计算修复
+- KB 匹配成功但意图识别为空时，置信度从 55 提升到 65
+- 避免不必要的宿主 AI 路由，节省 token
+
+---
+
 ## v5.73.0 (2026-08-11) — Onboarding 页面重构 + 视觉增强
 
 ### 🎨 Onboarding 页面结构重构
