@@ -1,3 +1,26 @@
+## v5.71.0 (2026-08-11) — Task 目录结构重构 + 文档截图 + README 更新
+
+### 📁 Task 目录结构重构（破坏性变更）
+- **新增 `.meta/`**：统一存放任务元信息（type/status/owner/created-at）
+- **新增 `00-specs/`**：执行前核心规格（REQ/TECH/TASK/SCHEMA/CHANGELOG）
+- **新增 `10-backend/`**：后端实现代码目录（src/tests）
+- **新增 `20-frontend/`**：前端实现代码目录（{platform}/src/tests）
+- **新增 `99-artifacts/`**：执行产出（TEST/REVIEW/DEPLOY/RISK/DEPS/MONITOR/ADR）
+- **预创建 `.issues.md`**：问题追踪文件
+- **change 命令增强**：自动更新 CHANGELOG.md，done 状态回退为 needs-rework
+- **全量路径迁移**：28 个文件中的 backend/ → 00-specs/10-backend/，frontend/ → 20-frontend/
+
+### 📸 文档视觉化
+- 为所有 HTML 页面生成截图（about/dashboard/dev/welcome/ask-pipeline/retro/help）
+- README.md 嵌入截图，提升视觉吸引力
+- 新增设计文档 `docs/task-directory-design.md`
+
+### 📝 文档更新
+- README.md 目录结构更新为最新规范
+- 版本号同步更新
+
+---
+
 ## v5.70.0 (2026-08-11) — Ask 引擎 v2.0：三段式动态路由 + 意图缓存 + 宿主AI增强
 
 ### 🧠 Ask 引擎 v2.0 架构重构
