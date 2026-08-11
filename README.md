@@ -6,6 +6,8 @@
 @spec-ask "分析会议预订系统的需求文档，拆分为独立开发任务，按依赖顺序执行"
 ```
 
+![Welcome](docs/images/screenshots/welcome.png)
+
 ---
 
 ## 架构概览
@@ -64,19 +66,25 @@ init → doc2spec → analyze → split → plan → execute → pr → done →
 ```
 Iteration-001-meeting/
 ├── 000-overview/               ← 进度跟踪
-├── 010-requirements/           ← doc2spec 导入（按功能）
-│   ├── sources/                ← 原始 PRD/Word
-│   ├── assets/                 ← 素材
-│   │   ├── extracted/          ← 文档提取图片
-│   │   ├── prototypes/         ← 产品原型
-│   │   └── designs/            ← UI 设计稿
-│   ├── user-auth/README.md     ← 用户认证需求
-│   └── room-booking/README.md  ← 会议室预订需求
+├── 010-requirements/           ← 需求文档（按功能组织）
+│   ├── README.md               ← 目录规范说明
+│   ├── INDEX.md                ← 需求文档索引
+│   ├── sources/                ← [只读] 原始 PRD/Word/PDF
+│   ├── converted/              ← [自动生成] doc2spec 转换后的 MD
+│   ├── features/               ← [手动维护] 按功能模块组织
+│   │   └── {feature}/README.md
+│   └── assets/                 ← 素材（extracted/prototypes/designs/screenshots）
 ├── 020-specs/                  ← analyze 分端输出
 ├── 030-tasks/                  ← split 开发任务
+│   └── Task-001-*/
+│       ├── .meta/              ← 任务元信息（type/status/owner/created-at）
+│       ├── _shared/            ← 共享契约（API_CONTRACT.yaml）
+│       ├── 00-specs/           ← 执行前核心规格（REQ/TECH/TASK/SCHEMA/CHANGELOG）
+│       ├── 10-backend/         ← 后端实现（src/tests）
+│       ├── 20-frontend/        ← 前端实现（{platform}/src/tests）
+│       ├── 99-artifacts/       ← 执行产出（TEST/REVIEW/DEPLOY/RISK/DEPS/MONITOR）
+│       └── .issues.md          ← 问题追踪
 └── STAFFING.md                 ← 人员排期
-├── 030-tasks/                  ← split 开发任务
-│   └── Task-001-*/              ← 含 .issues.md .needs-retry
 ```
 
 ## 断点重试 🔒 AI 命令
@@ -105,14 +113,20 @@ Iteration-001-meeting/
 - **🎯 意图匹配**：`@spec-ask "查看进度"` → AI 自动匹配 dashboard
 - **⚡ 复杂编排**：`@spec-ask "分析+计划自动，执行前确认"` → analyze→plan 连续跑
 
+![Ask Pipeline](docs/images/screenshots/ask-pipeline.png)
+
 ### 📊 dashboard — 全局仪表盘
 `speccore dashboard --scope global` 生成 Jira 标准 7 维度 HTML 看板：
 - 需求状态分布（饼图）+ 项目需求分布（柱状图）+ Created vs Resolved
 - 项目健康度评分 + 期次进度条 + 需求详情表（按期次倒序）
 - 9 套主题、中英文切换、字体/字号调节、F 键全屏、四边脉冲扫描线
 
+![Dashboard](docs/images/screenshots/about.png)
+
 ### 🔄 dev — 智能级联
 在 AI IDE 中智能推进：`@spec-ask "全自动执行"`
+
+![Dev Pipeline](docs/images/screenshots/dev.png)
 
 ### 🚀 全量流水线 🔒 AI 命令（在 IDE 中使用）
 | 阶段 | 命令 | AI 模式 |
@@ -129,7 +143,7 @@ Iteration-001-meeting/
 
 ```bash
 npm install -g speccore
-speccore --version   # v5.27.0
+speccore --version   # v5.71.0
 ```
 
 ## 命令列表
