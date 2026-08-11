@@ -252,7 +252,7 @@ export function classifyMode(input: string): AskMode {
   return 'match';
 }
 
-/** 匹配命令知识（精确匹配 → 触发词 → 同义词表 三层降级） */
+/** 匹配命令知识（精确匹配 → 同义词表 → 触发词 三层降级） */
 function matchCommandInKB(input: string): CommandKnowledge | null {
   const lower = input.toLowerCase();
   // 精确匹配命令名
@@ -262,7 +262,14 @@ function matchCommandInKB(input: string): CommandKnowledge | null {
       if (lower.includes(alias) && alias.length > 1) return cmd;
     }
   }
-  // 触发词匹配
+  // 同义词表优先于触发词：同义词表是显式映射，更准确
+  for (const [syn, cmdName] of Object.entries(SYNONYM_MAP)) {
+    if (lower.includes(syn)) {
+      const found = COMMAND_KB.find(c => c.name === cmdName);
+      if (found) return found;
+    }
+  }
+  // 触发词匹配兆底
   let best: CommandKnowledge | null = null;
   let bestScore = 0;
   for (const cmd of COMMAND_KB) {
@@ -271,13 +278,6 @@ function matchCommandInKB(input: string): CommandKnowledge | null {
   }
   if (bestScore > 0) return best;
 
-  // 同义词表兜底：遍历 SYNONYM_MAP，找到第一个命中的
-  for (const [syn, cmdName] of Object.entries(SYNONYM_MAP)) {
-    if (lower.includes(syn)) {
-      const found = COMMAND_KB.find(c => c.name === cmdName);
-      if (found) return found;
-    }
-  }
   return null;
 }
 
@@ -1074,8 +1074,11 @@ export async function askEngine(input: string): Promise<AskResult> {
   // 计算本地置信度（explain/guide/pipeline 视为高置信度）
   // KB 匹配成功（含同义词表）给予较高基础分，避免误路由到宿主 AI
   const hasKbMatch = localResult.commands.length > 0 && localResult.mode === 'match' && !localResult.summary.includes('未识别');
-  const localConfidence = localCandidates[0]?.confidence ||
-    (localResult.autoExec ? 85 : (mode === 'explain' || mode === 'pipeline') ? 90 : hasKbMatch ? 65 : 55);
+  const fallbackConfidence = localResult.autoExec ? 85 : (mode === 'explain' || mode === 'pipeline') ? 90 : hasKbMatch ? 75 : 55;
+  // 同义词表匹配时，用 max() 确保置信度不低于 75（高分区），避免触发不必要的 AI 调用
+  const localConfidence = hasKbMatch
+    ? Math.max(localCandidates[0]?.confidence || 0, fallbackConfidence)
+    : (localCandidates[0]?.confidence || fallbackConfidence);
 
   // --rules / forceHostAi 强制所有请求走 AI
   const forceHostAi = input.includes('--rules') || config.rules.forceHostAi;

@@ -57,12 +57,14 @@ export async function welcomeCommand(_options: WelcomeOptions): Promise<void> {
     logger.info(box('📦 项目状态', ['', `${C.gray}尚未初始化${C.r}`, '', `${C.cyan}◆ 快速开始:${C.r}  speccore init`]));
     logger.info('');
     showAskGuide();
+    process.stdout.write(`[SPECCORE_WELCOME: ${join(process.cwd(), 'outputs', 'welcome-SpecCore.html')}]\n`);
     return;
   }
   if (!iterName) {
     logger.info(box('📦 项目状态', [`${C.gray}无活跃迭代${C.r}`, `${C.b}speccore iteration create -n Q1${C.r}`]));
     logger.info('');
     showAskGuide();
+    process.stdout.write(`[SPECCORE_WELCOME: ${join(process.cwd(), 'outputs', 'welcome-SpecCore.html')}]\n`);
     return;
   }
   let taskCount = 0;
@@ -70,6 +72,9 @@ export async function welcomeCommand(_options: WelcomeOptions): Promise<void> {
   logger.info(box(`📦 项目状态 · ${iterName}`, [`${C.gray}任务数: ${taskCount}${C.r}`, `${C.b}speccore dev --auto${C.r}`]));
   logger.info('');
   showAskGuide();
+  // 始终输出标记，确保 AI 宿主弹出页面
+  const outPath = join(process.cwd(), 'outputs', 'welcome-SpecCore.html');
+  process.stdout.write(`[SPECCORE_WELCOME: ${outPath}]\n`);
 }
 
 function showAskGuide(): void {
