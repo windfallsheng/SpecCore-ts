@@ -57,3 +57,11 @@ verify-project/
 test-trae/
 .trae-cn/
 .trae/
+
+# 模拟数据（仅用于截图）
+Iteration-Q2/
+.speccore/GLOBAL/
+.speccore/local/
+outputs/dashboard-*.html
+outputs/speccore-dashboard.html
+
