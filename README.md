@@ -6,7 +6,7 @@
 @spec-ask "分析会议预订系统的需求文档，拆分为独立开发任务，按依赖顺序执行"
 ```
 
-![Welcome](docs/images/screenshots/welcome.png)
+![Welcome](docs/screenshots/welcome.png)
 
 ---
 
@@ -113,7 +113,7 @@ Iteration-001-meeting/
 - **🎯 意图匹配**：`@spec-ask "查看进度"` → AI 自动匹配 dashboard
 - **⚡ 复杂编排**：`@spec-ask "分析+计划自动，执行前确认"` → analyze→plan 连续跑
 
-![Ask Pipeline](docs/images/screenshots/ask-pipeline.png)
+![Ask Pipeline](docs/screenshots/ask-pipeline.png)
 
 ### 📊 dashboard — 全局仪表盘
 `speccore dashboard --scope global` 生成 Jira 标准 7 维度 HTML 看板：
@@ -121,12 +121,12 @@ Iteration-001-meeting/
 - 项目健康度评分 + 期次进度条 + 需求详情表（按期次倒序）
 - 9 套主题、中英文切换、字体/字号调节、F 键全屏、四边脉冲扫描线
 
-![Dashboard](docs/images/screenshots/about.png)
+![Dashboard](docs/screenshots/about.png)
 
 ### 🔄 dev — 智能级联
 在 AI IDE 中智能推进：`@spec-ask "全自动执行"`
 
-![Dev Pipeline](docs/images/screenshots/dev.png)
+![Dev Pipeline](docs/screenshots/dev.png)
 
 ### 🚀 全量流水线 🔒 AI 命令（在 IDE 中使用）
 | 阶段 | 命令 | AI 模式 |
