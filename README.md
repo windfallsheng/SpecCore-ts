@@ -8,6 +8,10 @@
 
 ![Welcome](docs/screenshots/welcome.png)
 
+**🧠 万能 AI 入口** — 一个命令解决所有问题
+
+![Ask Onboarding](docs/screenshots/ask-onboarding.png)
+
 ---
 
 ## 架构概览
