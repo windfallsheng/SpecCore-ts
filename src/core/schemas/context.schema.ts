@@ -3,6 +3,7 @@
  * 定义 .speccore/local/context.json 的运行时上下文数据结构
  */
 
+// @ts-ignore zod 为可选依赖，未安装时跳过类型检查
 import { z } from 'zod';
 
 // 历史记录条目

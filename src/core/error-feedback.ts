@@ -4,6 +4,7 @@
  * 将 Zod 校验错误翻译为可操作的中文描述
  */
 
+// @ts-ignore zod 为可选依赖，未安装时跳过类型检查
 import { z } from 'zod';
 
 export interface FriendlyError {

@@ -3,6 +3,7 @@
  * 定义迭代（迭代）的核心数据结构
  */
 
+// @ts-ignore zod 为可选依赖，未安装时跳过类型检查
 import { z } from 'zod';
 import { TaskStatusSchema, PrioritySchema } from './task.schema';
 

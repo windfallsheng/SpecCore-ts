@@ -263,6 +263,7 @@ function printPlan(tasks: TaskState[], iteration: string, batchSize: number): vo
 }
 
 async function loadInquirer() {
+  // @ts-ignore inquirer 为可选依赖，未安装时使用 fallback
   try { return await import("inquirer"); } catch { return { prompt() { return {}; } }; }
 }
 
