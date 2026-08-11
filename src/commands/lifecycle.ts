@@ -4,10 +4,19 @@
 import { readFile, writeFile, pathExists } from 'fs-extra';
 import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
-import { getDefaultIteration } from '../core/context';
+import { getDefaultIteration, getIterationDir } from '../core/context';
 import { scanTasks } from '../core/state';
+import { resolveTask, formatResolveResult } from '../core/resolver';
 
 import { showNextSteps } from '../core/next-steps';
+
+/**
+ * 解析任务目录基础路径：优先 030-tasks/，兼容旧布局（迭代根目录）
+ */
+async function resolveTaskBase(iterDir: string): Promise<string> {
+  const tasksDir = join(iterDir, '030-tasks');
+  return (await pathExists(tasksDir)) ? tasksDir : iterDir;
+}
 export interface LifecycleOptions {
   task?: string;
   status?: string;     // 手动设置状态
@@ -53,29 +62,42 @@ export async function lifecycleCommand(options: LifecycleOptions): Promise<void>
   }
 
   // ── 无 task 显示流程图 ──
-  if (!options.task || "") {
+  if (!options.task) {
     showLifecycleDiagram();
     return;
   }
 
-  // ── 查找 task ──
-  const tasks = await scanTasks(iteration);
-  const task = tasks.find(t => t.id === options.task || "" || "" || t.id.startsWith(options.task || "" + '-') || t.id.includes(options.task || ""));
-  if (!task) {
-    logger.error(`Task 未找到: ${options.task}`);
+  // ── 查找 task（使用统一 resolver） ──
+  const taskResult = await resolveTask(options.task, iteration);
+  if (!taskResult.exact || !taskResult.value) {
+    if (taskResult.candidates.length > 1) {
+      logger.warn(taskResult.hint || '找到多个匹配任务，请指定更精确的名称');
+    } else {
+      logger.error(taskResult.hint || `Task 未找到: ${options.task}`);
+    }
     return;
   }
+  const task = taskResult.value;
+  if (taskResult.matchType !== 'exact') {
+    const hint = formatResolveResult(taskResult, 'Task');
+    if (hint) logger.info(hint);
+  }
 
-  const iterDir = `Iteration-${iteration}`;
-  const taskDir = join(iterDir, task.id, 'backend');
+  const iterDir = await getIterationDir(iteration);
+  const taskRoot = await resolveTaskBase(iterDir);
+  // 优先 00-specs/，兼容旧路径 backend/
+  const taskDir = join(taskRoot, task.id, '00-specs');
+  const legacyTaskDir = join(taskRoot, task.id, 'backend');
   const taskMdPath = join(taskDir, 'TASK.md');
+  const legacyTaskMdPath = join(legacyTaskDir, 'TASK.md');
 
-  if (!(await pathExists(taskMdPath))) {
+  const actualTaskMd = (await pathExists(taskMdPath)) ? taskMdPath : (await pathExists(legacyTaskMdPath)) ? legacyTaskMdPath : null;
+  if (!actualTaskMd) {
     logger.error(`TASK.md 未找到: ${taskMdPath}`);
     return;
   }
 
-  let content = await readFile(taskMdPath, 'utf-8');
+  let content = await readFile(actualTaskMd, 'utf-8');
   const currentState = detectState(content);
   let newState: State | undefined;
 
@@ -93,7 +115,7 @@ export async function lifecycleCommand(options: LifecycleOptions): Promise<void>
     }
 
     // ── 质量关卡 ──
-    const blockReason = await checkQualityGate(taskDir, currentState, target);
+    const blockReason = await checkQualityGate(taskRoot, task.id, currentState, target);
     if (blockReason) {
       logger.warn(`\n🚫 质量关卡未通过: ${blockReason}`);
       logger.info('   💡 请完成后再推进');
@@ -102,7 +124,7 @@ export async function lifecycleCommand(options: LifecycleOptions): Promise<void>
 
     newState = target;
     content = updateState(content, currentState, newState);
-    await writeFile(taskMdPath, content);
+    await writeFile(actualTaskMd, content);
   }
 
   // ── 检查并显示当前状态 ──
@@ -114,7 +136,7 @@ export async function lifecycleCommand(options: LifecycleOptions): Promise<void>
 
   // ── 自动建议 ──
   if (options.check) {
-    await runCheck(task.id, taskDir, displayState);
+    await runCheck(task.id, taskRoot, task.id, displayState);
   }
 }
 
@@ -208,7 +230,8 @@ function showNextStep(taskId: string, iteration: string, state: State): void {
 }
 
 async function showAllTasks(iteration: string): Promise<void> {
-  const iterDir = `Iteration-${iteration}`;
+  const iterDir = await getIterationDir(iteration);
+  const taskBase = await resolveTaskBase(iterDir);
   const tasks = await scanTasks(iteration);
   
   logger.info(`\n📋 迭代 ${iteration} 任务看板:\n`);
@@ -217,7 +240,7 @@ async function showAllTasks(iteration: string): Promise<void> {
   for (const state of STATES) byState[state] = [];
 
   for (const task of tasks) {
-    const taskMdPath = join(iterDir, task.id, '00-specs', 'TASK.md');
+    const taskMdPath = join(taskBase, task.id, '00-specs', 'TASK.md');
     if (await pathExists(taskMdPath)) {
       const content = await readFile(taskMdPath, 'utf-8');
       const state = detectState(content);
@@ -239,9 +262,9 @@ async function showAllTasks(iteration: string): Promise<void> {
   logger.info(`\n  进度: ${done}/${total} (${Math.round(done/total*100)}%)`);
 }
 
-async function runCheck(taskId: string, taskDir: string, state: State): Promise<void> {
-  const testMdPath = join(taskDir, 'TEST.md');
-  const reviewMdPath = join(taskDir, 'REVIEW.md');
+async function runCheck(taskId: string, taskRoot: string, taskDirName: string, state: State): Promise<void> {
+  const testMdPath = join(taskRoot, taskDirName, '99-artifacts', 'TEST.md');
+  const reviewMdPath = join(taskRoot, taskDirName, '99-artifacts', 'REVIEW.md');
 
   if (state === 'testing' && await pathExists(testMdPath)) {
     const testContent = await readFile(testMdPath, 'utf-8');
@@ -270,7 +293,7 @@ async function runCheck(taskId: string, taskDir: string, state: State): Promise<
 /**
  * 质量关卡：禁止跳过必要步骤
  */
-async function checkQualityGate(taskDir: string, from: State, to: State): Promise<string | null> {
+async function checkQualityGate(taskRoot: string, taskId: string, from: State, to: State): Promise<string | null> {
   if (from === 'in_progress' && to === 'review') {
     return '必须先经过 testing 阶段';
   }
@@ -278,24 +301,24 @@ async function checkQualityGate(taskDir: string, from: State, to: State): Promis
     return '必须先经过 review 阶段';
   }
   if (to === 'review') {
-    const testPath = join(taskDir, 'TEST.md');
+    const testPath = join(taskRoot, taskId, '99-artifacts', 'TEST.md');
     if (await pathExists(testPath)) {
       const testContent = await readFile(testPath, 'utf-8');
       const total = (testContent.match(/\[ \]/g) || []).length;
       const checked = (testContent.match(/\[x\]/gi) || []).length;
       if (total > 0 && checked < total) {
-        return `TEST.md \u8fd8\u6709 ${total - checked} \u9879\u672a\u5b8c\u6210 (${checked}/${total})`;
+        return `TEST.md 还有 ${total - checked} 项未完成 (${checked}/${total})`;
       }
     }
   }
   if (to === 'done') {
-    const reviewPath = join(taskDir, 'REVIEW.md');
+    const reviewPath = join(taskRoot, taskId, '99-artifacts', 'REVIEW.md');
     if (await pathExists(reviewPath)) {
       const reviewContent = await readFile(reviewPath, 'utf-8');
       const total = (reviewContent.match(/\[ \]/g) || []).length;
       const checked = (reviewContent.match(/\[x\]/gi) || []).length;
       if (total > 0 && checked === 0) {
-        return `REVIEW.md \u5c1a\u672a\u5f00\u59cb\u5ba1\u67e5 (0/${total})`;
+        return `REVIEW.md 尚未开始审查 (0/${total})`;
       }
     }
   }

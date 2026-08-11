@@ -10,8 +10,8 @@
  * 
  * 输出范围 (scope):
  *   - global    → .speccore/GLOBAL/  全局架构/代码健康
- *   - iteration → Iteration-XX/02-需求文档/  (默认)
- *   - task      → Iteration-XX/Task-NN/  单任务深化
+ *   - iteration → Iteration-XX/020-specs/         迭代级基线（默认）
+ *   - task      → Iteration-XX/030-tasks/Task-NN/00-specs/  任务级独立
  */
 import { readFile, writeFile, pathExists, readdir, stat, ensureDir } from 'fs-extra';
 import { join, relative, basename } from 'path';
@@ -92,7 +92,7 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalysisResult> 
         };
         await scanDir(productReqDir);
       }
-      // 兼容旧路径: 如果没有 01-产品需求/, 回退到 02-需求文档/REQUIREMENT.md
+      // 兼容旧路径: 如果没有 01-产品需求/, 回退到 010-requirements/REQUIREMENT.md
       if (requirements.length === 0) {
         const legacyReq = join(`Iteration-${input.iteration}`, '010-requirements', 'REQUIREMENT.md');
         if (await pathExists(legacyReq)) {

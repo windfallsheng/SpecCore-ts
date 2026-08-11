@@ -77,11 +77,13 @@ export async function planCommand(options: PlanOptions): Promise<void> {
   const iteration = await getDefaultIteration(options.iteration);
   if (!iteration) { logger.error('未找到活跃迭代。请用 speccore context --set --iteration <name> 设置'); return; }
   
-  const tasks = await scanTasks(iteration);
-  const planDir = join(await getIterationDir(iteration), '000-overview', 'plans');
+  const iterDir = await getIterationDir(iteration);
+  const planDir = join(iterDir, '000-overview', 'plans');
   await ensureDir(planDir);
   
-  if (tasks.length === 0) {
+  const allTasks = await scanTasks(iteration);
+  
+  if (allTasks.length === 0) {
     // 无任务时生成空模板页面
     const html = generatePlanHtml([], { version, iteration, planName: iteration });
     const htmlPath = join(planDir, 'speccore-plan.html');
@@ -91,24 +93,12 @@ export async function planCommand(options: PlanOptions): Promise<void> {
     return;
   }
 
-  const htmlData = tasks.map(t => ({
-    id: t.id, name: t.name, priority: t.priority, status: t.status, owner: (t as any).assignee || (t as any).owner, dependsOn: (t as any).dependencies || [],
-  }));
-  const html = generatePlanHtml(htmlData, { version, iteration, planName: iteration });
-  const htmlPath = join(planDir, 'speccore-plan.html');
-  await writeFile(htmlPath, html, 'utf-8');
-  logger.success(`✅ 计划页面: ${htmlPath}`);
-
   const spinner = new Spinner('Generating execution plan');
   spinner.start();
 
   try {
-    const iteration = await getDefaultIteration(options.iteration);
-    if (!iteration) { spinner.fail('No active iteration found.'); return; }
-
     const graph = await readProjectGraph(iteration);
-    const tasks = graph.tasks.length > 0 ? graph.tasks : await scanTasks(iteration);
-    if (tasks.length === 0) { spinner.fail('No tasks found'); return; }
+    const tasks = graph.tasks.length > 0 ? graph.tasks : allTasks;
 
     let filteredTasks = tasks;
     if (options.type) filteredTasks = filteredTasks.filter(t => t.type === options.type);
@@ -184,7 +174,6 @@ export async function planCommand(options: PlanOptions): Promise<void> {
     const saved = await saveToStore(iteration, taskIds, 3, options, 'manual');
 
     // 写入带时间戳 + AI 关键词的计划文件（多版本） + 最新的 PLAN.md
-    const planDir = join(await getIterationDir(iteration), '000-overview', 'plans');
     const ts = new Date().toISOString().replace(/T/, '-').replace(/:/g, '').slice(0, 17);
     const slug = extractPlanSlug(sortedTasks);
     const filename = slug ? `PLAN-${ts}-${slug}.md` : `PLAN-${ts}.md`;
@@ -192,13 +181,11 @@ export async function planCommand(options: PlanOptions): Promise<void> {
     const latestPath = join(planDir, 'PLAN.md');
     const tx = new FileTransaction();
     tx.write(versionedPath, formatPlanMarkdown(plan, iteration, sortedTasks));
-    tx.write(latestPath, formatPlanMarkdown(plan, iteration, sortedTasks)); // 最新版覆盖
+    tx.write(latestPath, formatPlanMarkdown(plan, iteration, sortedTasks));
     await tx.commit();
 
-    // ── HTML 可视化输出 ──
-    if (options.html) {
-      await writeHtmlPlan(sortedTasks, iteration, planDir);
-    }
+    // ── HTML 可视化输出（始终生成） ──
+    await writeHtmlPlan(sortedTasks, iteration, planDir);
 
     spinner.stop(`Saved: ${filename} | ${taskIds.length} tasks, ${plan.length} phases`);
     printPlan(plan, iteration);
@@ -229,7 +216,7 @@ async function showPlanHistory(): Promise<void> {
       let files: string[] = [];
       try { files = await readdir(planDir); } catch { files = []; }
       for (const f of files) {
-        const m = f.match(/^PLAN-(\d{4}-\d{2}-\d{2}-\d{4})\.md$/);
+        const m = f.match(/^PLAN-(\d{4}-\d{2}-\d{2}-\d+)(?:-.*)?\.md$/);
         if (m) {
           const st = await stat(join(planDir, f));
           plans.push({ file: f, time: st.mtime, size: st.size });
@@ -304,29 +291,45 @@ async function doCancelPlan(id: string): Promise<void> {
 }
 
 // ── Helpers ──
-interface TaskPlan {
+export interface TaskPlan {
   id: string; name: string; type: string; priority: string;
   branch: string; dependencies: string[]; status: string;
   assignee: string; progress: number; estimatedHours: number;
 }
-interface PlanEntry { phase: number; tasks: TaskPlan[]; }
+export interface PlanEntry { phase: number; tasks: TaskPlan[]; }
 
-function generatePlan(tasks: TaskState[], teamSize: number, mode: string): PlanEntry[] {
+export function generatePlan(tasks: TaskState[], teamSize: number, mode: string): PlanEntry[] {
   if (mode === 'claim') {
     return [{ phase: 1, tasks: tasks.map(t => buildTaskPlan(t)) }];
   }
+  // 依赖感知分阶段：按拓扑序排列，每阶段放入当前可并行的任务
   const phases: PlanEntry[] = [];
+  const completed = new Set<string>();
+  const remaining = [...tasks];
   const pc = Math.min(teamSize || 3, tasks.length);
-  for (let i = 0; i < tasks.length; i += pc) {
-    phases.push({
-      phase: phases.length + 1,
-      tasks: tasks.slice(i, i + pc).map(t => buildTaskPlan(t)),
-    });
+
+  while (remaining.length > 0) {
+    // 找出所有依赖已完成的 Task
+    const ready = remaining.filter(t =>
+      t.dependencies.every(d => completed.has(d))
+    );
+    if (ready.length === 0) {
+      // 循环依赖或依赖缺失，强制放入剩余全部
+      phases.push({ phase: phases.length + 1, tasks: remaining.map(t => buildTaskPlan(t)) });
+      break;
+    }
+    // 每阶段最多 pc 个任务
+    const batch = ready.slice(0, pc);
+    phases.push({ phase: phases.length + 1, tasks: batch.map(t => buildTaskPlan(t)) });
+    for (const t of batch) {
+      completed.add(t.id);
+      remaining.splice(remaining.indexOf(t), 1);
+    }
   }
   return phases;
 }
 
-function buildTaskPlan(t: TaskState): TaskPlan {
+export function buildTaskPlan(t: TaskState): TaskPlan {
   return {
     id: t.id,
     name: t.name,
@@ -372,7 +375,7 @@ function printPlan(plan: PlanEntry[], iteration: string): void {
   }
 }
 
-function formatPlanMarkdown(plan: PlanEntry[], iteration: string, allRawTasks?: TaskState[]): string {
+export function formatPlanMarkdown(plan: PlanEntry[], iteration: string, allRawTasks?: TaskState[]): string {
   const allTasks = plan.flatMap(p => p.tasks);
   const totalHours = allTasks.reduce((s, t) => s + t.estimatedHours, 0);
   const ts = new Date().toISOString();
@@ -423,16 +426,32 @@ function formatPlanMarkdown(plan: PlanEntry[], iteration: string, allRawTasks?: 
   lines.push('  dateFormat YYYY-MM-DD');
   lines.push('  axisFormat %m-%d');
   lines.push('');
-  let dayOffset = 0;
+  // 用实际日期 + 依赖关系生成甘特图
+  const today = new Date();
+  const taskEndDates: Map<string, Date> = new Map();
   for (const phase of plan) {
+    lines.push(`  section Phase ${phase.phase}`);
+    // 计算本阶段最早开始日期（取所有依赖的最晚完成日）
+    let phaseStart = new Date(today);
     for (const t of phase.tasks) {
-      const dur = t.estimatedHours <= 4 ? '1d' : t.estimatedHours <= 8 ? '2d' : '3d';
-      const after = t.dependencies.length > 0 ? `after ${t.dependencies[0]}` : '';
-      const day = dayOffset;
-      lines.push(`  section Phase ${phase.phase}`);
-      lines.push(`  ${t.id}: ${t.name.slice(0, 20)} :${after}${day}, ${dur}`);
+      for (const dep of t.dependencies) {
+        const depEnd = taskEndDates.get(dep);
+        if (depEnd && depEnd > phaseStart) phaseStart = new Date(depEnd);
+      }
     }
-    dayOffset += 2;
+    for (const t of phase.tasks) {
+      const dur = Math.max(1, Math.ceil(t.estimatedHours / 8));
+      const startStr = phaseStart.toISOString().split('T')[0];
+      lines.push(`  ${t.id}: ${t.name.slice(0, 20)} :${startStr}, ${dur}d`);
+      // 记录结束日期
+      const end = new Date(phaseStart);
+      end.setDate(end.getDate() + dur);
+      taskEndDates.set(t.id, end);
+    }
+    // 下一阶段默认从本阶段结束后 1 天开始
+    const phaseMaxEnd = new Date(Math.max(...phase.tasks.map(t => (taskEndDates.get(t.id) || today).getTime())));
+    phaseMaxEnd.setDate(phaseMaxEnd.getDate() + 1);
+    // phaseStart for next iteration is handled above via dependency check
   }
   lines.push('```');
   lines.push('');

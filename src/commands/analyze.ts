@@ -7,9 +7,9 @@
  *   - 联合分析: --src backend/src --req docs/req.md
  * 
  * 输出范围:
- *   - global    → .speccore/GLOBAL/    全局架构/代码健康
- *   - iteration → Iteration-XX/02-需求文档/  (默认)
- *   - task      → Iteration-XX/Task-NN/     单任务深化
+ *   - global    → .speccore/GLOBAL/              全局架构/代码健康
+ *   - iteration → Iteration-XX/020-specs/         迭代级基线（默认）
+ *   - task      → Iteration-XX/030-tasks/Task-NN/00-specs/  任务级独立（不覆盖基线）
  */
 import { writeFile, pathExists, ensureDir } from 'fs-extra';
 import { join, dirname } from 'path';
@@ -18,6 +18,7 @@ import { getDefaultIteration, getIterationDir } from '../core/context';
 import { extractQuestions, showQuestionChecklist } from '../core/question-checklist';
 import { showNextSteps } from '../core/next-steps';
 import { runAnalysis, AnalyzeInput } from '../core/analyze-engine';
+import { readFile, readdir } from 'fs-extra';
 import { generateGlobalArtifacts } from '../core/global-artifacts';
 import { buildPrompt, formatPrompt } from '../core/prompt-builder';
 
@@ -39,6 +40,52 @@ export interface AnalyzeOptions {
 }
 
 export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
+  // ── --auto 模式: 用分析引擎直接生成报告，不走 AI prompt ──
+  if (options.auto) {
+    const iter = options.iteration || await getDefaultIteration();
+    if (!iter) { logger.error('请指定迭代: -I <iteration>'); return; }
+    const iterDir = await getIterationDir(iter);
+    const reqDir = join(iterDir, '010-requirements');
+    const specDir = join(iterDir, '020-specs');
+    await ensureDir(specDir);
+
+    // 收集需求文档
+    const requirements: string[] = [];
+    const reqIndex = join(reqDir, 'INDEX.md');
+    if (await pathExists(reqIndex)) requirements.push(reqIndex);
+    const convDir = join(reqDir, 'converted');
+    if (await pathExists(convDir)) {
+      try {
+        const files = await readdir(convDir);
+        for (const f of files.filter((f: string) => f.endsWith('.md'))) requirements.push(join(convDir, f));
+      } catch {}
+    }
+    const reqRoot = join(reqDir, 'REQUIREMENT.md');
+    if (await pathExists(reqRoot)) requirements.push(reqRoot);
+
+    if (requirements.length === 0) {
+      logger.warn('未找到需求文档，请先导入: speccore doc2spec');
+      return;
+    }
+
+    const input: AnalyzeInput = {
+      sources: [],
+      requirements,
+      scope: (options.scope as any) || 'iteration',
+      iteration: iter,
+      depth: (options.depth as any) || 'normal',
+    };
+
+    logger.info(`🤖 Auto 分析: ${iter} (${requirements.length} 个需求文档)`);
+    const result = await runAnalysis(input);
+    await writeFile(join(specDir, 'ANALYSIS.md'), result.report);
+    logger.success(`✅ 分析报告已生成: 020-specs/ANALYSIS.md`);
+    if (result.summary) {
+      logger.info(`   📊 分析: ${result.summary.filesAnalyzed} 文件, ${result.summary.apisFound} 接口, ${result.summary.issues} 问题, ${result.summary.risks} 风险`);
+    }
+    return;
+  }
+
   // ── 非 prompt/apply 模式 → 全部转 AI prompt，不再走代码模板分析 ──
   if (!options.prompt && !options.apply) {
     options.prompt = true;
@@ -54,39 +101,59 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
   }
 
   // ── Apply 模式 ──
+  // 两层解耦：迭代级分析写 020-specs/，任务级分析只写 Task 目录（不覆盖迭代级基线）
   if (options.apply) {
     if (!options.iteration) { logger.error('--apply 需要 --iteration'); return; }
     const iterDir = await getIterationDir(options.iteration);
-    const specDir = join(iterDir, '020-specs');
-    await ensureDir(specDir);
-    // 支持 JSON 多文档写入: {"ANALYSIS.md":"...","TECH.md":"..."}
+    const isTaskLevel = !!options.task;
+    const taskDir = isTaskLevel
+      ? join(iterDir, '030-tasks', options.task!.startsWith('Task-') ? options.task! : `Task-${options.task!}`)
+      : null;
+
+    // 支持 JSON 多文档写入
     if (options.apply.startsWith('{')) {
       try {
         const docs: Record<string, string> = JSON.parse(options.apply);
         let count = 0;
-        for (const [filename, content] of Object.entries(docs)) {
-          await writeFile(join(specDir, filename), content);
-          count++;
-        }
-        logger.success(`✅ ${count} 个 Spec 文档已写入 020-specs/`);
-        if (options.task) {
-          const taskDir = join(iterDir, '030-tasks', options.task.startsWith('Task-') ? options.task : `Task-${options.task}`);
-          await ensureDir(taskDir);
+
+        if (isTaskLevel && taskDir) {
+          // 任务级：只写 Task/00-specs/，不动 020-specs/（保持迭代级基线不变）
+          const taskSpecDir = join(taskDir, '00-specs');
+          await ensureDir(taskSpecDir);
           for (const [filename, content] of Object.entries(docs)) {
-            await writeFile(join(taskDir, filename), content);
+            await writeFile(join(taskSpecDir, filename), content);
+            count++;
           }
+          logger.success(`✅ ${count} 个 Spec 文档已写入 ${options.task}/00-specs/（任务级，迭代基线不变）`);
+        } else {
+          // 迭代级：写 020-specs/
+          const specDir = join(iterDir, '020-specs');
+          await ensureDir(specDir);
+          for (const [filename, content] of Object.entries(docs)) {
+            await writeFile(join(specDir, filename), content);
+            count++;
+          }
+          logger.success(`✅ ${count} 个 Spec 文档已写入 020-specs/`);
         }
         return;
       } catch {
         // fallback to single-file mode
       }
     }
-    await writeFile(join(specDir, 'ANALYSIS.md'), options.apply);
-    logger.success(`✅ ANALYSIS.md 已写入 020-specs/`);
-    if (options.task) {
-      const taskDir = join(iterDir, '030-tasks', options.task.startsWith('Task-') ? options.task : `Task-${options.task}`);
-      await ensureDir(taskDir);
-      await writeFile(join(taskDir, 'ANALYSIS.md'), options.apply);
+
+    // 单文件模式
+    if (isTaskLevel && taskDir) {
+      // 任务级：只写 Task/00-specs/
+      const taskSpecDir = join(taskDir, '00-specs');
+      await ensureDir(taskSpecDir);
+      await writeFile(join(taskSpecDir, 'ANALYSIS.md'), options.apply);
+      logger.success(`✅ ANALYSIS.md 已写入 ${options.task}/00-specs/（任务级，迭代基线不变）`);
+    } else {
+      // 迭代级：写 020-specs/
+      const specDir = join(iterDir, '020-specs');
+      await ensureDir(specDir);
+      await writeFile(join(specDir, 'ANALYSIS.md'), options.apply);
+      logger.success(`✅ ANALYSIS.md 已写入 020-specs/`);
     }
     return;
   }
@@ -497,6 +564,8 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     prompt += `- 当前是**任务级分析**，类型为 \`${taskType}\`，只需产出 ${taskDocs.length} 个文档：${taskDocs.map(([n]) => n).join('、')}\n`;
     prompt += `- bugfix: 聚焦根因分析和修复验证；research: 聚焦技术调研；review: 聚焦代码审查\n`;
     prompt += `- feature/refactor: 全量分析（功能、接口、数据、规则）\n`;
+    prompt += `- **双层解耦**：先读 \`020-specs/\` 了解迭代级基线，再读 \`00-specs/REQ.md\` 了解本任务已有的需求切片\n`;
+    prompt += `- 分析结果写入 \`00-specs/\`（任务独立），**不覆盖** \`020-specs/\`（迭代基线）\n`;
   } else {
     prompt += `- 当前是**迭代级分析**，需产出全部 7 个文档，覆盖需求→技术→测试→评审→风险→依赖→监控\n`;
   }
@@ -517,7 +586,8 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
   prompt += `   e. 如用户指定了特定文档，优先读取指定文件；如要求全部，再读 sources/ 原始文档\n`;
   prompt += `3. 读懂需求文档后，按专业模板标准自由撰写每个文档（不是填空表）\n`;
   prompt += `4. 每个文档都要具体内容（禁止"待填充"），分析完成后支持交互编辑任意文档的任意章节\n`;
-  prompt += `5. 写入: speccore analyze --apply '{"${taskDocs.map(([n]) => `${n}":"..."`).join(',')}...}' -I ${iter}\n\n`;
+  const taskFlag = isTask && ctx.task ? ` --task ${ctx.task}` : '';
+  prompt += `5. 写入: speccore analyze --apply '{"${taskDocs.map(([n]) => `${n}:"..."`).join(',')}...}' -I ${iter}${taskFlag}\n\n`;
   for (let i = 0; i < taskDocs.length; i++) {
     prompt += `### ${i+1}/${taskDocs.length}: ${taskDocs[i][0]}\n\`\`\`markdown\n${taskDocs[i][1]}\n\`\`\`\n\n`;
   }

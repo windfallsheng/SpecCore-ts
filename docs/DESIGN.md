@@ -73,7 +73,33 @@ workspace/
 - 默认分支: main
 - 任务分支: feature/{Task-ID}
 - 发布分支: release/{version}
+- 保护分支: main, master, release/*, production
 ```
+
+**保护分支规则：**
+- 在 CONSTITUTION.md 的「保护分支」字段配置，支持精确匹配和通配符（如 `release/*`）
+- 保护分支上禁止直接 commit 和 push，只能通过 PR 合并
+- 通过 pre-commit 和 pre-push git hook 自动拦截
+- 允许从保护分支创建任务分支，但不允许直接在其上工作
+
+**分支创建策略（懒创建 + 依赖合并）：**
+- 每个任务的分支在执行前才创建，确保依赖任务的代码已存在
+- 有依赖的任务会 merge 依赖分支，拿到前序任务的代码
+- 多依赖时可合并多个分支
+
+```
+Task-001 执行前:
+  checkout main → 创建 feature/Task-001 → 执行
+
+Task-002 执行前（依赖 Task-001）:
+  checkout main → 创建 feature/Task-002 → merge feature/Task-001 → 执行
+```
+
+**计划自动生成策略：**
+- 用户执行 `speccore plan` 时始终生成 `PLAN.md` + `speccore-plan.html`
+- 用户执行 `speccore execute` 多任务时（>1 个任务），自动生成计划文件到 `000-overview/plans/`
+- 计划包含：依赖拓扑图（Mermaid）、甘特图（实际日期）、执行概览表、任务详情、风险评估、里程碑、回滚方案
+- `generatePlan()` 按依赖感知分阶段：每阶段放入当前可并行的任务（依赖已完成的优先）
 
 ---
 
@@ -86,10 +112,30 @@ Iteration-NNN-name/
 │   ├── sources/                  ← 原始 PRD
 │   ├── assets/{prd,prototypes,designs}/
 │   └── {feature}/README.md       ← 每个需求一份，描述所有端
-├── 020-specs/                     ← analyze 按端输出
-│   └── {platform}/{feature}.md
+├── 020-specs/                     ← 迭代级 analyze 输出（全局基线）
+│   ├── ANALYSIS.md               ← 需求分析
+│   ├── TECH.md                   ← 技术方案
+│   ├── TEST.md                   ← 测试计划
+│   ├── REVIEW.md                 ← 评审清单
+│   ├── RISK.md                   ← 风险评估
+│   ├── DEPS.md                   ← 依赖清单
+│   ├── MONITOR.md                ← 监控方案
+│   └── REQUIREMENT.md            ← 需求规格汇总
 ├── 030-tasks/                     ← 所有开发任务
 │   └── Task-NNN-name/
+│       ├── .meta/                 ← 任务元信息（type/status/owner）
+│       ├── _shared/               ← 跨平台共享契约
+│       │   └── API_CONTRACT.yaml
+│       ├── 00-specs/              ← 任务级核心规格（执行前必读）
+│       │   ├── REQ.md             ← 需求切片 + 验收标准
+│       │   ├── TECH.md            ← 技术方案
+│       │   ├── TASK.md            ← 任务履历 + 产出物清单
+│       │   ├── SCHEMA.md          ← 数据库 Schema（可选）
+│       │   └── CHANGELOG.md       ← 需求变更记录
+│       ├── 10-backend/            ← 后端实现（execute 生成）
+│       ├── 20-frontend/           ← 前端实现（execute 生成）
+│       ├── 99-artifacts/          ← 执行产出（TEST/REVIEW/RISK/DEPS/...）
+│       └── .issues.md             ← 问题追踪
 └── STAFFING.md
 ```
 
@@ -110,9 +156,37 @@ Iteration-NNN-name/
 
 ```
 文档:  010-requirements/user-auth/README.md
-分析:  020-specs/app/user-auth.md    +   020-specs/admin/user-auth.md
-任务:  030-tasks/Task-001-app-auth/  +   030-tasks/Task-002-admin-auth/
+分析:  020-specs/ANALYSIS.md + TECH.md + TEST.md + ...
+任务:  030-tasks/Task-001-app-auth/  +  Task-002-admin-auth/
 ```
+
+### 双层规格解耦
+
+`020-specs/` 是**迭代级全局基线**，`Task/00-specs/` 是**任务级切片**。
+
+```
+020-specs/（全局视角）
+    │
+    │  split 读取 REQUIREMENT.md 按章节拆分
+    │  每个 Task 拿到属于自己那块需求的子集
+    ▼
+030-tasks/Task-001/00-specs/（切片视角）
+├── REQ.md    ← 从需求文档切出的片段 + 自动生成的验收标准
+├── TECH.md   ← 骨架（AI-FILL 占位），split 注入相关接口信息
+└── ...
+```
+
+**解耦规则：**
+
+| 操作 | 写入位置 | 说明 |
+|:---|:---|:---|
+| 迭代级 `analyze`（无 `--task`） | `020-specs/` | 迭代全量分析，建立基线 |
+| 任务级 `analyze --task Task-001` | `Task-001/00-specs/` | 任务独立分析，**不覆盖迭代基线** |
+| `split` | `Task-NNN/00-specs/` | 从迭代需求切片，创建任务骨架 |
+
+- 两层完全独立，互不覆盖
+- 任务重新分析时，从原始需求（`010-requirements/`）重新读取，不回读 `020-specs/` 已有内容
+- 任务级原型/图片/设计稿统一放在迭代级 `010-requirements/assets/`，任务通过相对路径引用
 
 ---
 
@@ -130,8 +204,8 @@ init → doc2spec → analyze → split → plan → execute → pr → done →
 | doc2spec | Word/MD PRD | `010-requirements/{feature}/README.md` |
 | analyze | 010-requirements/ 所有 .md → CONSTITUTION 映射 | `020-specs/{platform}/{feature}.md` |
 | split | 020-specs/{platform}/ → 扫描子目录 | `030-tasks/Task-NNN/` |
-| plan | 任务列表 + STAFFING | `plan.json` |
-| execute | REQ.md + TECH.md → AI 生成代码 | 源码 + .issues.md |
+| plan | 任务列表 + STAFFING | `PLAN.md` + `speccore-plan.html` + `plan.json` |
+| execute | REQ.md + TECH.md → AI 生成代码 | 源码 + .issues.md + 多任务时自动生成 `PLAN.md` |
 | pr | git branch | Git PR |
 | done | Task 完成归档 | GLOBAL/INDEX 更新 |
 | spec2doc | 020-specs/ | Word/PDF/HTML |

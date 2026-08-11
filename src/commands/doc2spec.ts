@@ -2,14 +2,14 @@
  * doc2spec — 文档导入 → SpecCore Markdown
  *
  * 将多种格式的 PRD 需求文档转换为 SpecCore 兼容的 Markdown，
- * 自动放入对应迭代的 02-需求文档/ 目录。
+ * 自动放入对应迭代的 010-requirements/ 目录。
  *
  * 支持格式: .docx / .doc / .md / .pdf / .html / .pptx / .odt / .ipynb
  * 依赖: pandoc (macOS: brew install pandoc)
  *
  * 图片路径设计:
- *   提取到 → Iteration-xxx/02-需求文档/images/
- *   Task 引用 → ../../02-需求文档/images/xxx.png
+ *   提取到 → Iteration-xxx/010-requirements/assets/extracted/
+ *   Task 引用 → 由 pandoc --extract-media 自动修正相对路径
  *   这样所有 Task 共享同一份原型图，不需要重复存放。
  *
  * 依赖: pandoc (macOS: brew install pandoc)
@@ -324,7 +324,7 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     // 5. 图片引用注释（告知 Task 如何引用这些图）
     content = content.replace(
       /^#/,
-      `# ${platform}需求\n\n<!-- \n  原型图片路径: images/\n  Task 引用方式: ![原型](../../02-需求文档/images/xxx.png)\n  所有 Task 共享此目录，无需重复存放。\n-->\n\n#`
+      `# ${platform}需求\n\n<!-- \n  原型图片路径: 010-requirements/assets/extracted/\n  Task 引用方式: ![原型](../assets/extracted/xxx.png)\n  所有 Task 共享此目录，无需重复存放。\n-->\n\n#`
     );
 
     await writeFile(outputPath, content);

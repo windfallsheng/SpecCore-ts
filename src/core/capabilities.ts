@@ -54,9 +54,9 @@ export function progressiveSpecGuide(taskDir: string): string {
 - \`${taskDir}/INDEX.md\` — 这个 Task 涉及哪些文件
 
 ## Step 3: 核心 Spec（按需，~2000 token each）
-- \`${taskDir}/TASK.md\` — 任务执行追踪
-- \`${taskDir}/REQ.md\` — 需求描述
-- \`${taskDir}/TECH.md\` — 技术方案（如有）
+- \`${taskDir}/00-specs/TASK.md\` — 任务执行追踪
+- \`${taskDir}/00-specs/REQ.md\` — 需求描述
+- \`${taskDir}/00-specs/TECH.md\` — 技术方案（如有）
 
 ## Step 4: 规则参考（按需，~1000 token each）
 - \`.speccore/RULES/CODE_REVIEW.md\`

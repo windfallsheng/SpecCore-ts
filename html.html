@@ -1,148 +1,4 @@
-/**
- * dashboard - 生成可视化仪表盘命令
- * 基于全量层数据生成静态 HTML 仪表盘，含 Chart.js 图表
- */
-
-import { logger, Spinner } from '../utils/logger';
-import { readGlobalIndex } from '../core/global-layer';
-import { writeFile, ensureDir } from 'fs-extra';
-import { join } from 'path';
-
-export interface DashboardOptions {
-  output?: string;
-}
-
-export async function dashboardCommand(options: DashboardOptions): Promise<void> {
-  const spinner = new Spinner('采集全量层数据...');
-  spinner.start();
-
-  try {
-    const index = await readGlobalIndex();
-
-    if (index.projects.length === 0 && index.reqs.length === 0) {
-      spinner.fail('全量层为空，无法生成仪表盘。请先导入项目。');
-      return;
-    }
-
-    spinner.stop('数据采集完成，正在生成仪表盘...');
-
-    // 统计数据
-    const totalReqs = index.reqs.length;
-    const implemented = index.reqs.filter((r) =>
-      r.status === '✅ 已实现' || r.status === '📦 已有实现'
-    ).length;
-    const inProgress = index.reqs.filter((r) => r.status === '🔄 进行中').length;
-    const pending = totalReqs - implemented - inProgress;
-    const completionRate = totalReqs > 0 ? Math.round((implemented / totalReqs) * 100) : 0;
-
-    // 项目分布数据
-    const projectLabels = index.projects.map((p) => p.name);
-    const projectReqs = index.projects.map((p) => p.reqCount);
-
-    // ── 新增：迭代活跃度 ──
-    const activeIterations = index.iterations.filter(i => i.status === 'active' || i.status === '进行中');
-    const iterationLabels = index.iterations.map(i => i.name).slice(0, 8);
-    const iterationReqCounts = index.iterations.map(i => i.reqs.length).slice(0, 8);
-
-    // ── 新增：迭代完成统计 ──
-    const iterStats = index.iterations.map(it => {
-      const iterReqs = index.reqs.filter(r => it.reqs.includes(r.id));
-      const done = iterReqs.filter(r => r.status.includes('✅') || r.status.includes('已实现')).length;
-      return { name: it.name, total: it.reqs.length, done, pct: it.reqs.length > 0 ? Math.round(done / it.reqs.length * 100) : 0 };
-    });
-
-    // ── 新增：健康度评分 ──
-    const projectHealth = index.projects.map(p => ({
-      name: p.name,
-      reqCount: p.reqCount,
-      doneCount: index.reqs.filter(r => r.project === p.name && (r.status.includes('✅') || r.status.includes('已实现'))).length,
-    })).map(p => ({ ...p, pct: p.reqCount > 0 ? Math.round(p.doneCount / p.reqCount * 100) : 0 }))
-      .sort((a, b) => b.pct - a.pct);
-
-    // 生成 HTML
-    const projectName = (index as any).projectName || 'SPECCORE';
-    const html = generateDashboardHtml(
-      index.projects.length,
-      totalReqs, implemented, inProgress, pending, completionRate,
-      projectLabels, projectReqs,
-      iterationLabels, iterationReqCounts,
-      iterStats, projectHealth, activeIterations.length,
-      index,
-      projectName
-    );
-
-    const outputPath = options.output || join(process.cwd(), 'outputs', 'speccore-dashboard.html');
-    await ensureDir(join(process.cwd(), 'outputs'));
-    await writeFile(outputPath, html);
-
-    logger.info('');
-    logger.success('✅ 仪表盘已生成！');
-    logger.info('');
-    logger.info(`📁 输出文件: ${outputPath}`);
-    logger.info('');
-    logger.info('📊 包含内容:');
-    logger.info('   - 统计卡片：总需求、已实现、进行中、待开发');
-    logger.info('   - 需求状态分布（饼图）');
-    logger.info('   - 项目需求分布（柱状图）');
-    logger.info('   - 项目详细列表');
-    logger.info('   - 迭代关联状态');
-    logger.info('');
-    logger.info('💡 在浏览器中打开即可查看。支持移动端自适应布局。');
-  } catch (error) {
-    spinner.fail(`生成仪表盘失败: ${error}`);
-    throw error;
-  }
-}
-
-export function generateDashboardHtml(
-  projectCount: number,
-  totalReqs: number,
-  implemented: number,
-  inProgress: number,
-  pending: number,
-  completionRate: number,
-  projectLabels: string[],
-  projectReqs: number[],
-  iterationLabels: string[],
-  iterationReqCounts: number[],
-  iterStats: { name: string; total: number; done: number; pct: number }[],
-  projectHealth: { name: string; reqCount: number; doneCount: number; pct: number }[],
-  activeIterCount: number,
-  index: Awaited<ReturnType<typeof readGlobalIndex>>,
-  projectName: string
-): string {
-  const now = new Date().toISOString().split('T')[0];
-
-  // 生成项目表格行（按需求数降序）
-  let projectRows = '';
-  const sortedProjects = [...index.projects].sort((a, b) => b.reqCount - a.reqCount);
-  for (const proj of sortedProjects) {
-    projectRows += `<tr><td>${proj.name}</td><td><span class="badge badge-${proj.type}">${proj.type}</span></td><td>${proj.reqCount}</td><td>${proj.lastImport}</td></tr>`;
-  }
-
-  // 生成需求表格行（按迭代倒序：Q3→Q2→Q1，无迭代排最后）
-  let reqRows = '';
-  const sortIter = (a: string, b: string) => {
-    const na = parseInt(a.replace(/[^0-9]/g, '')) || 0;
-    const nb = parseInt(b.replace(/[^0-9]/g, '')) || 0;
-    if (!na && !nb) return 0;
-    if (!na) return 1;
-    if (!nb) return -1;
-    return nb - na;
-  };
-  const sortedReqs = [...index.reqs].sort((a, b) => {
-    const ia = sortIter(a.iteration || '', b.iteration || '');
-    if (ia !== 0) return ia;
-    // 同迭代内按状态排：已实现 > 进行中 > 待开发
-    const order: Record<string, number> = { '✅': 1, '🔄': 2, '🔲': 3 };
-    return (order[a.status.charAt(0)] || 99) - (order[b.status.charAt(0)] || 99);
-  });
-  for (const req of sortedReqs.slice(0, 30)) {
-    const statusClass = req.status.includes('✅') ? 'done' : req.status.includes('🔄') ? 'progress' : 'pending';
-    reqRows += `<tr><td>${req.id}</td><td>${req.name}</td><td>${req.project}</td><td><span class="badge badge-${statusClass}">${req.status}</span></td><td>${req.iteration || '-'}</td></tr>`;
-  }
-
-  return `<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN" data-theme="ocean">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -299,46 +155,46 @@ tr:hover td{background:var(--hover)}
 <div class="header">
   <div class="card-bg"></div>
   <div class="header-left">
-    <h1>${projectName || 'SPECCORE'}</h1>
-    <div class="subtitle"><span data-i18n="globalDash">全局仪表盘</span> · ${projectCount} <span data-i18n="projects">项目</span> · ${totalReqs} <span data-i18n="reqs">需求</span></div>
+    <h1>ts-cli</h1>
+    <div class="subtitle"><span data-i18n="globalDash">全局仪表盘</span> · 3 <span data-i18n="projects">项目</span> · 15 <span data-i18n="reqs">需求</span></div>
   </div>
   <div class="header-right">
-    <div class="header-stat"><div class="num">${projectCount}</div><div class="label" data-i18n="projects">项目</div></div>
-    <div class="header-stat"><div class="num">${totalReqs}</div><div class="label" data-i18n="reqs">需求</div></div>
-    <div class="header-stat"><div class="num">${completionRate}%</div><div class="label" data-i18n="done2">完成</div></div>
+    <div class="header-stat"><div class="num">3</div><div class="label" data-i18n="projects">项目</div></div>
+    <div class="header-stat"><div class="num">15</div><div class="label" data-i18n="reqs">需求</div></div>
+    <div class="header-stat"><div class="num">40%</div><div class="label" data-i18n="done2">完成</div></div>
     <div class="phase-indicator"><div class="dot"></div><span>LIVE</span></div>
   </div>
-  <div class="data-stream" style="position:absolute"><span>SPECCORE · DASHBOARD · ${projectCount} PROJECTS · ${totalReqs} REQUIREMENTS · ${completionRate}% COMPLETE · POWERED BY SPECCORE</span></div>
+  <div class="data-stream" style="position:absolute"><span>SPECCORE · DASHBOARD · 3 PROJECTS · 15 REQUIREMENTS · 40% COMPLETE · POWERED BY SPECCORE</span></div>
 </div>
 
 <div class="stats">
   <div class="stat-card">
     <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
     <div class="label">📋 <span data-i18n="total">总需求数</span></div>
-    <div class="value c-cyan">${totalReqs}</div>
-    <div class="sub">${projectCount} 个项目</div>
-    <div class="data-stream"><span>SPECCORE · TOTAL REQUIREMENTS · ${now} · V${(() => { try { return require(join(process.cwd(), 'package.json')).version; } catch { return '5.71.0'; } })()}</span></div>
+    <div class="value c-cyan">15</div>
+    <div class="sub">3 个项目</div>
+    <div class="data-stream"><span>SPECCORE · TOTAL REQUIREMENTS · 2026-08-11 · V5.73.0</span></div>
   </div>
   <div class="stat-card">
     <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
     <div class="label">✅ <span data-i18n="done">已完成</span></div>
-    <div class="value c-green">${implemented}</div>
-    <div class="sub"><span data-i18n="done2">完成</span>率 ${completionRate}%</div>
-    <div class="data-stream"><span>DONE · ${completionRate}% COMPLETION · ${implemented} IMPLEMENTED</span></div>
+    <div class="value c-green">6</div>
+    <div class="sub"><span data-i18n="done2">完成</span>率 40%</div>
+    <div class="data-stream"><span>DONE · 40% COMPLETION · 6 IMPLEMENTED</span></div>
   </div>
   <div class="stat-card">
     <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
     <div class="label">🔄 <span data-i18n="progress">进行中</span></div>
-    <div class="value c-orange">${inProgress}</div>
-    <div class="sub">${Math.round((inProgress/(totalReqs||1))*100)}%</div>
-    <div class="data-stream"><span>IN PROGRESS · ${inProgress} ACTIVE · ITERATIONS ACTIVE</span></div>
+    <div class="value c-orange">3</div>
+    <div class="sub">20%</div>
+    <div class="data-stream"><span>IN PROGRESS · 3 ACTIVE · ITERATIONS ACTIVE</span></div>
   </div>
   <div class="stat-card">
     <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
     <div class="label">🔲 <span data-i18n="pending">待开发</span></div>
-    <div class="value c-muted">${pending}</div>
-    <div class="sub">${Math.round((pending/(totalReqs||1))*100)}%</div>
-    <div class="data-stream"><span>PENDING · ${pending} BACKLOG · AWAITING SPRINT</span></div>
+    <div class="value c-muted">6</div>
+    <div class="sub">40%</div>
+    <div class="data-stream"><span>PENDING · 6 BACKLOG · AWAITING SPRINT</span></div>
   </div>
 </div>
 
@@ -347,7 +203,7 @@ tr:hover td{background:var(--hover)}
     <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
     <h3>📊 <span data-i18n="statusDist">需求状态分布</span></h3>
     <canvas id="statusChart"></canvas>
-    <div class="data-stream"><span>STATUS · ${implemented} DONE · ${inProgress} ACTIVE · ${pending} BACKLOG</span></div>
+    <div class="data-stream"><span>STATUS · 6 DONE · 3 ACTIVE · 6 BACKLOG</span></div>
   </div>
   <div class="chart-card">
     <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
@@ -359,18 +215,40 @@ tr:hover td{background:var(--hover)}
 <div class="panel">
   <div class="panel-title"><span data-i18n="projHealth">项目健康度</span></div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px">
-    ${projectHealth.map(p => `
+    
     <div style="background:var(--surface);border-radius:8px;padding:14px 16px;display:flex;align-items:center;gap:14px">
-      <div style="font-family:Orbitron;font-size:24px;font-weight:900;color:${p.pct >= 80 ? 'var(--green)' : p.pct >= 40 ? 'var(--orange)' : 'var(--muted)'};min-width:50px">${p.pct}%</div>
+      <div style="font-family:Orbitron;font-size:24px;font-weight:900;color:var(--orange);min-width:50px">40%</div>
       <div style="flex:1">
-        <div style="font-weight:600;margin-bottom:4px">${p.name}</div>
+        <div style="font-weight:600;margin-bottom:4px">meeting-system</div>
         <div style="height:4px;background:rgba(255,255,255,.04);border-radius:2px;overflow:hidden">
-          <div style="width:${p.pct}%;height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:2px"></div>
+          <div style="width:40%;height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:2px"></div>
         </div>
-        <div style="font-size:10px;color:var(--muted);margin-top:4px">${p.doneCount}/${p.reqCount} 完成</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px">2/5 完成</div>
       </div>
     </div>
-    `).join('')}
+    
+    <div style="background:var(--surface);border-radius:8px;padding:14px 16px;display:flex;align-items:center;gap:14px">
+      <div style="font-family:Orbitron;font-size:24px;font-weight:900;color:var(--orange);min-width:50px">40%</div>
+      <div style="flex:1">
+        <div style="font-weight:600;margin-bottom:4px">user-center</div>
+        <div style="height:4px;background:rgba(255,255,255,.04);border-radius:2px;overflow:hidden">
+          <div style="width:40%;height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:2px"></div>
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px">2/5 完成</div>
+      </div>
+    </div>
+    
+    <div style="background:var(--surface);border-radius:8px;padding:14px 16px;display:flex;align-items:center;gap:14px">
+      <div style="font-family:Orbitron;font-size:24px;font-weight:900;color:var(--orange);min-width:50px">40%</div>
+      <div style="flex:1">
+        <div style="font-weight:600;margin-bottom:4px">order-service</div>
+        <div style="height:4px;background:rgba(255,255,255,.04);border-radius:2px;overflow:hidden">
+          <div style="width:40%;height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:2px"></div>
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px">2/5 完成</div>
+      </div>
+    </div>
+    
   </div>
 </div>
 
@@ -384,16 +262,24 @@ tr:hover td{background:var(--hover)}
     <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
     <h3>📅 <span data-i18n="iterProgress">迭代进度</span></h3>
     <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px;max-height:280px;overflow-y:auto">
-      ${iterStats.map(it => `
+      
       <div style="display:flex;align-items:center;gap:10px">
-        <span style="font-family:Orbitron;font-size:11px;color:var(--cyan);min-width:50px">${it.name}</span>
+        <span style="font-family:Orbitron;font-size:11px;color:var(--cyan);min-width:50px">Iteration-Q2</span>
         <div style="flex:1;height:6px;background:rgba(255,255,255,.04);border-radius:3px;overflow:hidden">
-          <div style="width:${it.pct}%;height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:3px;transition:width 1s"></div>
+          <div style="width:67%;height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:3px;transition:width 1s"></div>
         </div>
-        <span style="font-size:10px;color:var(--muted);min-width:55px;text-align:right">${it.done}/${it.total}</span>
+        <span style="font-size:10px;color:var(--muted);min-width:55px;text-align:right">6/9</span>
       </div>
-      `).join('')}
-      ${iterStats.length === 0 ? '<div style="color:var(--muted);text-align:center;padding:20px">暂无迭代数据</div>' : ''}
+      
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-family:Orbitron;font-size:11px;color:var(--cyan);min-width:50px">Iteration-Q3</span>
+        <div style="flex:1;height:6px;background:rgba(255,255,255,.04);border-radius:3px;overflow:hidden">
+          <div style="width:0%;height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:3px;transition:width 1s"></div>
+        </div>
+        <span style="font-size:10px;color:var(--muted);min-width:55px;text-align:right">0/6</span>
+      </div>
+      
+      
     </div>
   </div>
 </div>
@@ -402,23 +288,23 @@ tr:hover td{background:var(--hover)}
   <div class="stat-card">
     <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
     <div class="label">🏥 <span data-i18n="health">项目健康度</span></div>
-    <div class="value c-cyan">${projectHealth.filter(p => p.pct >= 80).length}/${projectHealth.length}</div>
+    <div class="value c-cyan">0/3</div>
     <div class="sub">健康项目 / 全部</div>
-    <div class="data-stream"><span>HEALTH · ${projectHealth.filter(p=>p.pct>=80).length} GREEN · ${projectHealth.filter(p=>p.pct<40).length} AT RISK</span></div>
+    <div class="data-stream"><span>HEALTH · 0 GREEN · 0 AT RISK</span></div>
   </div>
   <div class="stat-card">
     <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
     <div class="label">📅 <span data-i18n="activeIter">活跃迭代</span></div>
-    <div class="value c-green">${activeIterCount}</div>
-    <div class="sub">共 ${index.iterations.length} 个迭代</div>
-    <div class="data-stream"><span>ITERATIONS · ${activeIterCount} ACTIVE · ${index.iterations.length} TOTAL</span></div>
+    <div class="value c-green">1</div>
+    <div class="sub">共 2 个迭代</div>
+    <div class="data-stream"><span>ITERATIONS · 1 ACTIVE · 2 TOTAL</span></div>
   </div>
   <div class="stat-card">
     <button class="fs-btn" title="全屏 (F)" onclick="toggleFS(this.parentElement)">⛶</button>
     <div class="label">📈 <span data-i18n="velocity">交付速率</span></div>
-    <div class="value c-orange">${completionRate}%</div>
+    <div class="value c-orange">40%</div>
     <div class="sub">已完成 / 总需求</div>
-    <div class="data-stream"><span>VELOCITY · ${implemented} DONE · ${totalReqs} TOTAL · ${completionRate}%</span></div>
+    <div class="data-stream"><span>VELOCITY · 6 DONE · 15 TOTAL · 40%</span></div>
   </div>
 </div>
 
@@ -427,7 +313,7 @@ tr:hover td{background:var(--hover)}
   <div class="panel-title"><span data-i18n="projList">项目列表</span></div>
   <table>
     <thead><tr><th><span data-i18n="projName">项目名称</span></th><th><span data-i18n="type">类型</span></th><th><span data-i18n="reqCount">需求数</span></th><th><span data-i18n="lastImport">最后导入</span></th></tr></thead>
-    <tbody>${projectRows || '<tr><td colspan="4">暂无项目</td></tr>'}</tbody>
+    <tbody><tr><td>meeting-system</td><td><span class="badge badge-web">web</span></td><td>5</td><td>2026-08-01</td></tr><tr><td>user-center</td><td><span class="badge badge-backend">backend</span></td><td>5</td><td>2026-08-02</td></tr><tr><td>order-service</td><td><span class="badge badge-backend">backend</span></td><td>5</td><td>2026-08-03</td></tr></tbody>
   </table>
 </div>
 
@@ -437,12 +323,12 @@ tr:hover td{background:var(--hover)}
   <div class="scroll-table">
   <table>
     <thead><tr><th><span data-i18n="reqId">需求 ID</span></th><th><span data-i18n="name">名称</span></th><th><span data-i18n="project">项目</span></th><th><span data-i18n="status">状态</span></th><th><span data-i18n="iteration">关联迭代</span></th></tr></thead>
-    <tbody>${reqRows || '<tr><td colspan="5">暂无需求</td></tr>'}</tbody>
+    <tbody><tr><td>REQ-004</td><td>会议室智能推荐</td><td>meeting-system</td><td><span class="badge badge-pending">🔲 待开发</span></td><td>Iteration-Q3</td></tr><tr><td>REQ-008</td><td>组织架构同步</td><td>user-center</td><td><span class="badge badge-pending">🔲 待开发</span></td><td>Iteration-Q3</td></tr><tr><td>REQ-012</td><td>库存扣减优化</td><td>order-service</td><td><span class="badge badge-pending">🔲 待开发</span></td><td>Iteration-Q3</td></tr><tr><td>REQ-013</td><td>视频会议集成</td><td>meeting-system</td><td><span class="badge badge-pending">🔲 待开发</span></td><td>Iteration-Q3</td></tr><tr><td>REQ-014</td><td>多租户支持</td><td>user-center</td><td><span class="badge badge-pending">🔲 待开发</span></td><td>Iteration-Q3</td></tr><tr><td>REQ-015</td><td>订单导出报表</td><td>order-service</td><td><span class="badge badge-pending">🔲 待开发</span></td><td>Iteration-Q3</td></tr><tr><td>REQ-001</td><td>会议室预订功能</td><td>meeting-system</td><td><span class="badge badge-done">✅ 已实现</span></td><td>Iteration-Q2</td></tr><tr><td>REQ-002</td><td>会议通知推送</td><td>meeting-system</td><td><span class="badge badge-done">✅ 已实现</span></td><td>Iteration-Q2</td></tr><tr><td>REQ-005</td><td>用户注册登录</td><td>user-center</td><td><span class="badge badge-done">✅ 已实现</span></td><td>Iteration-Q2</td></tr><tr><td>REQ-006</td><td>SSO 单点登录</td><td>user-center</td><td><span class="badge badge-done">✅ 已实现</span></td><td>Iteration-Q2</td></tr><tr><td>REQ-009</td><td>订单创建接口</td><td>order-service</td><td><span class="badge badge-done">✅ 已实现</span></td><td>Iteration-Q2</td></tr><tr><td>REQ-010</td><td>支付回调处理</td><td>order-service</td><td><span class="badge badge-done">✅ 已实现</span></td><td>Iteration-Q2</td></tr><tr><td>REQ-003</td><td>会议纪要大模型总结</td><td>meeting-system</td><td><span class="badge badge-progress">🔄 进行中</span></td><td>Iteration-Q2</td></tr><tr><td>REQ-007</td><td>权限管理系统</td><td>user-center</td><td><span class="badge badge-progress">🔄 进行中</span></td><td>Iteration-Q2</td></tr><tr><td>REQ-011</td><td>订单退款流程</td><td>order-service</td><td><span class="badge badge-progress">🔄 进行中</span></td><td>Iteration-Q2</td></tr></tbody>
   </table>
   </div>
 </div>
 
-<div class="footer"><span data-i18n="powered">由 SpecCore 驱动</span> ${index.version || 'v1.0'} &nbsp;&nbsp;|&nbsp;&nbsp; Generated ${now}</div>
+<div class="footer"><span data-i18n="powered">由 SpecCore 驱动</span> v1.0 &nbsp;&nbsp;|&nbsp;&nbsp; Generated 2026-08-11</div>
 </main>
 
 <script>
@@ -469,13 +355,13 @@ document.addEventListener('keydown',e=>{
 
 // Export functions
 function exportJSON() {
-  const data = { projects: ${JSON.stringify(index.projects.map(p=>({name:p.name,type:p.type,reqCount:p.reqCount,lastImport:p.lastImport})))} };
+  const data = { projects: [{"name":"meeting-system","type":"web","reqCount":5,"lastImport":"2026-08-01"},{"name":"user-center","type":"backend","reqCount":5,"lastImport":"2026-08-02"},{"name":"order-service","type":"backend","reqCount":5,"lastImport":"2026-08-03"}] };
   download(JSON.stringify(data, null, 2), 'dashboard-data.json', 'application/json');
 }
 function exportCSV() {
   const rows = [['需求ID','项目','名称','状态','版本','迭代'].join(',')];
-  ${JSON.stringify(index.reqs)}.forEach(r => rows.push([r.id,r.project,r.name,r.status,r.version,r.iteration||'-'].join(',')));
-  download(rows.join('\\n'), 'dashboard-data.csv', 'text/csv');
+  [{"id":"REQ-001","project":"meeting-system","name":"会议室预订功能","status":"✅ 已实现","version":"v1.0","iteration":"Iteration-Q2","task":"Task-001","filePath":"REQUIREMENTS/REQ-001.md"},{"id":"REQ-002","project":"meeting-system","name":"会议通知推送","status":"✅ 已实现","version":"v1.0","iteration":"Iteration-Q2","task":"Task-002","filePath":"REQUIREMENTS/REQ-002.md"},{"id":"REQ-003","project":"meeting-system","name":"会议纪要大模型总结","status":"🔄 进行中","version":"v1.1","iteration":"Iteration-Q2","task":"Task-003","filePath":"REQUIREMENTS/REQ-003.md"},{"id":"REQ-004","project":"meeting-system","name":"会议室智能推荐","status":"🔲 待开发","version":"v1.2","iteration":"Iteration-Q3","task":"","filePath":"REQUIREMENTS/REQ-004.md"},{"id":"REQ-005","project":"user-center","name":"用户注册登录","status":"✅ 已实现","version":"v1.0","iteration":"Iteration-Q2","task":"Task-004","filePath":"REQUIREMENTS/REQ-005.md"},{"id":"REQ-006","project":"user-center","name":"SSO 单点登录","status":"✅ 已实现","version":"v1.0","iteration":"Iteration-Q2","task":"Task-005","filePath":"REQUIREMENTS/REQ-006.md"},{"id":"REQ-007","project":"user-center","name":"权限管理系统","status":"🔄 进行中","version":"v1.1","iteration":"Iteration-Q2","task":"Task-006","filePath":"REQUIREMENTS/REQ-007.md"},{"id":"REQ-008","project":"user-center","name":"组织架构同步","status":"🔲 待开发","version":"v1.2","iteration":"Iteration-Q3","task":"","filePath":"REQUIREMENTS/REQ-008.md"},{"id":"REQ-009","project":"order-service","name":"订单创建接口","status":"✅ 已实现","version":"v1.0","iteration":"Iteration-Q2","task":"Task-007","filePath":"REQUIREMENTS/REQ-009.md"},{"id":"REQ-010","project":"order-service","name":"支付回调处理","status":"✅ 已实现","version":"v1.0","iteration":"Iteration-Q2","task":"Task-008","filePath":"REQUIREMENTS/REQ-010.md"},{"id":"REQ-011","project":"order-service","name":"订单退款流程","status":"🔄 进行中","version":"v1.1","iteration":"Iteration-Q2","task":"Task-009","filePath":"REQUIREMENTS/REQ-011.md"},{"id":"REQ-012","project":"order-service","name":"库存扣减优化","status":"🔲 待开发","version":"v1.2","iteration":"Iteration-Q3","task":"","filePath":"REQUIREMENTS/REQ-012.md"},{"id":"REQ-013","project":"meeting-system","name":"视频会议集成","status":"🔲 待开发","version":"v1.3","iteration":"Iteration-Q3","task":"","filePath":"REQUIREMENTS/REQ-013.md"},{"id":"REQ-014","project":"user-center","name":"多租户支持","status":"🔲 待开发","version":"v1.3","iteration":"Iteration-Q3","task":"","filePath":"REQUIREMENTS/REQ-014.md"},{"id":"REQ-015","project":"order-service","name":"订单导出报表","status":"🔲 待开发","version":"v1.3","iteration":"Iteration-Q3","task":"","filePath":"REQUIREMENTS/REQ-015.md"}].forEach(r => rows.push([r.id,r.project,r.name,r.status,r.version,r.iteration||'-'].join(',')));
+  download(rows.join('\n'), 'dashboard-data.csv', 'text/csv');
 }
 function download(content, name, type) {
   const b = new Blob([content], { type });
@@ -522,7 +408,7 @@ function setLang(l) {
 
 // Font family
 function setFont(f) {
-  document.documentElement.className = document.documentElement.className.replace(/font-\w+/g,'');
+  document.documentElement.className = document.documentElement.className.replace(/font-w+/g,'');
   if(f!=='hybrid') document.documentElement.classList.add('font-'+f);
   document.querySelectorAll('.lang-sw button[data-font]').forEach(b => b.classList.toggle('active', b.dataset.font===f));
   localStorage.setItem('speccore-font', f);
@@ -530,7 +416,7 @@ function setFont(f) {
 
 // Font size
 function setSize(s) {
-  document.documentElement.className = document.documentElement.className.replace(/fs-\w+/g,'');
+  document.documentElement.className = document.documentElement.className.replace(/fs-w+/g,'');
   document.documentElement.classList.add('fs-'+s);
   document.querySelectorAll('.lang-sw button[data-size]').forEach(b => b.classList.toggle('active', b.dataset.size===s));
   localStorage.setItem('speccore-size', s);
@@ -554,7 +440,7 @@ const statusChart = new Chart(document.getElementById('statusChart'), {
   data: {
     labels: ['已完成', '进行中', '待开发'],
     datasets: [{
-      data: [${implemented}, ${inProgress}, ${pending}],
+      data: [6, 3, 6],
       backgroundColor: ['#00ff88', '#00f0ff', 'rgba(255,255,255,.05)'],
       borderWidth: 2,
       borderColor: 'var(--bg)'
@@ -572,10 +458,10 @@ const statusChart = new Chart(document.getElementById('statusChart'), {
 const projectChart = new Chart(document.getElementById('projectChart'), {
   type: 'bar',
   data: {
-    labels: ${JSON.stringify(projectLabels)},
+    labels: ["meeting-system","user-center","order-service"],
     datasets: [{
       label: '需求数',
-      data: ${JSON.stringify(projectReqs)},
+      data: [5,5,5],
       backgroundColor: '#00f0ff',
       borderRadius: 6
     }]
@@ -595,7 +481,7 @@ const resolvedChart = new Chart(document.getElementById('resolvedChart'), {
   data: {
     labels: ['已实现', '进行中', '待开发'],
     datasets: [{
-      data: [${implemented}, ${inProgress}, ${pending}],
+      data: [6, 3, 6],
       backgroundColor: ['rgba(0,255,136,.6)', 'rgba(0,240,255,.6)', 'rgba(255,255,255,.06)'],
       borderRadius: 4
     }]
@@ -612,5 +498,4 @@ const resolvedChart = new Chart(document.getElementById('resolvedChart'), {
 updateChartColors(document.documentElement.getAttribute('data-theme'));
 </script>
 </body>
-</html>`;
-}
+</html>

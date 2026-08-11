@@ -2,6 +2,51 @@
 
 ---
 
+## v5.73.0 (2026-08-11) — Onboarding Page Refactor + Visual Enhancements
+
+### 🎨 Onboarding Page Structure Refactor
+- **Title converted to HTML**: SVG title → `<h1>` + titleGlow glow animation (40px Orbitron gradient font)
+- **SVG retains only four cards**: connecting lines + center circle + mode cards, everything else is HTML
+- **Bottom bar HTML-ized**: unified entry `/spec-ask` text moved to HTML `bottom-bar`
+- **SVG coordinates corrected**: all y-coords shifted -60px for compact layout
+
+### 🔗 Auto Template Copy
+- **ask command** now automatically copies related template pages from `templates/html/` to `outputs/`
+- No more manual `cp`, 5 template pages (explain/guide/match/pipeline/help) auto-synced
+
+### ✨ Visual Details
+- **Title glow**: all pages titleGlow unified to `filter:drop-shadow()` (compatible with gradient text)
+- **Pipeline cards**: flow-step padding 18→28px, dot-to-text gap 6→12px
+- **Tag text centered**: knowledge base / workflow tags moved inside background rects
+- **Copy command updated**: clipboard copy changed from `speccore ask` → `/spec-ask`
+
+---
+
+## v5.72.0 (2026-08-11) — Impact Analysis + Quality Gate + Unified Resolver + Clarification Persistence
+
+### 🎯 Structured Impact Analysis (ImpactReport)
+- **Three-tier classification**: 🔴direct / 🟡indirect / 🟢unaffected
+- **`analyzeImpact` replaces `smartMatchTasks`**: reads REQ + TECH + TASK + status for full analysis
+- **Bidirectional dependency graph**: forward + reverse dependency tracking
+
+### 📝 Clarification Persistence
+- Clarification = requirement analysis, results now persisted to files
+- New requirement → structured REQ.md
+- Changes → `020-specs/CHANGE_SUMMARY.md`
+
+### 🚧 Post-Execute Quality Gate
+- **Mandatory**: runs automatically after execute, cannot be skipped
+- **6 checks**: compile (blocking) + lint + test + deps + security + spec consistency (warnings)
+- **4 languages**: Node.js / Java / Go / Python
+- **Fix loop**: compile failure → AI fix → re-check → max 3 rounds
+- **`speccore verify`**: standalone verification command
+
+### 🔍 Unified Smart Matching (resolver.ts)
+- All commands share `resolveTask()` / `resolveIteration()`
+- Three-level matching: exact → prefix → keyword search
+- Multi-match hinting instead of silent first-pick
+
+---
 
 ## v5.22.0 (2026-08-03) — Latest
 

@@ -241,8 +241,8 @@ ${Object.entries(modules).map(([name, files]) =>
 - **${scope === 'global'
       ? '.speccore/GLOBAL/ANALYSIS.md'
       : scope === 'task'
-        ? `Iteration-${iteration}/${taskId}/backend/ANALYSIS.md`
-        : `Iteration-${iteration || 'current'}/02-需求文档/ANALYSIS.md`}**
+        ? `Iteration-${iteration}/030-tasks/${taskId}/00-specs/ANALYSIS.md`
+        : `Iteration-${iteration || 'current'}/020-specs/ANALYSIS.md`}**
 
 同时参考填充同目录下的 TECH.md、TEST.md、REVIEW.md、RISK.md、DEPS.md、MONITOR.md 模板文件。
 `;

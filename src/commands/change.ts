@@ -5,11 +5,352 @@
 
 import { logger, Spinner } from '../utils/logger';
 import { registerRequirement } from '../core/requirement-tracker';
-import { getDefaultIteration } from '../core/context';
-import { readFile, writeFile, pathExists } from 'fs-extra';
+import { getDefaultIteration, getIterationDir } from '../core/context';
+import { readFile, writeFile, pathExists, ensureDir } from 'fs-extra';
 import { join } from 'path';
 import { FileTransaction } from '../core/transaction';
 import { scanTasks } from '../core/state';
+import { resolveTask, resolveIteration, formatResolveResult } from '../core/resolver';
+import { nextTaskId } from '../core/global-counters';
+import { scanInbox, markProcessed, logInboxScan, buildClarifyPrompt, parseClarifyResponse, logClarifyResult, ensureInboxDir, logImpactReport, InboxFileEntry, ImpactReport, TaskImpact } from '../core/inbox';
+
+/**
+ * 解析任务目录基础路径：优先 030-tasks/，兼容旧布局
+ */
+async function resolveTaskBase(iterDir: string): Promise<string> {
+  const tasksDir = join(iterDir, '030-tasks');
+  return (await pathExists(tasksDir)) ? tasksDir : iterDir;
+}
+
+/**
+ * 从 CHANGELOG.md 提取最新版本号并递增
+ */
+async function nextVersion(changelogPath: string): Promise<string> {
+  if (await pathExists(changelogPath)) {
+    const content = await readFile(changelogPath, 'utf-8');
+    const versions = content.match(/v(\d+\.\d+)/g);
+    if (versions && versions.length > 0) {
+      const last = versions[versions.length - 1].replace('v', '');
+      const [major, minor] = last.split('.').map(Number);
+      return `v${major}.${minor + 1}`;
+    }
+  }
+  return 'v1.1';
+}
+
+/**
+ * 检测意图：变更已有需求 vs 新增需求
+ */
+function detectIntent(desc: string): 'new' | 'change' {
+  const lower = desc.replace(/\s+/g, '');
+  if (/^(新增?|加|添|创建|增加|实现|做[一个]*)/.test(lower)) return 'new';
+  return 'change';
+}
+
+/**
+ * 全量影响分析：读取每个任务的 REQ/TECH/TASK/status，分类为直接/间接/无影响
+ */
+async function analyzeImpact(desc: string, iterDir: string, taskBase: string): Promise<ImpactReport> {
+  const keywords = extractKeywords(desc);
+  const { readdir: rd } = await import('fs-extra');
+
+  // 读取依赖图
+  const graphPath = join(iterDir, '000-overview', 'PROJECT_GRAPH.md');
+  const graphContent = await pathExists(graphPath) ? await readFile(graphPath, 'utf-8') : '';
+
+  // 收集所有任务详情
+  let entries: any[] = [];
+  try { entries = await rd(taskBase, { withFileTypes: true }); } catch { return { directTasks: [], indirectTasks: [], unaffectedTasks: [] }; }
+
+  const allImpacts: TaskImpact[] = [];
+
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entry.name.startsWith('Task-')) continue;
+    const taskId = entry.name;
+    const taskDir = join(taskBase, taskId);
+
+    // 读取任务状态
+    let status = 'unknown';
+    const statusPath1 = join(taskDir, '.task-status');
+    const statusPath2 = join(taskDir, '.meta', 'status');
+    if (await pathExists(statusPath1)) status = (await readFile(statusPath1, 'utf-8')).trim();
+    else if (await pathExists(statusPath2)) status = (await readFile(statusPath2, 'utf-8')).trim();
+
+    // 读取任务名称
+    let name = taskId;
+    const reqPath = join(taskDir, '00-specs', 'REQ.md');
+    const legacyReqPath = join(taskDir, 'REQ.md');
+    const actualReqPath = (await pathExists(reqPath)) ? reqPath : (await pathExists(legacyReqPath)) ? legacyReqPath : null;
+    if (actualReqPath) {
+      const reqContent = await readFile(actualReqPath, 'utf-8');
+      const nameMatch = reqContent.match(/^#\s+(.+)$/m);
+      if (nameMatch) name = nameMatch[1];
+    }
+
+    // 关键词匹配评分
+    let score = 0;
+    let matchedFiles: string[] = [];
+    const filesToCheck = [
+      { path: actualReqPath || '', label: 'REQ.md' },
+      { path: join(taskDir, '00-specs', 'TECH.md'), label: 'TECH.md' },
+      { path: join(taskDir, '00-specs', 'TASK.md'), label: 'TASK.md' },
+    ];
+
+    for (const fc of filesToCheck) {
+      if (!fc.path || !await pathExists(fc.path)) continue;
+      const content = await readFile(fc.path, 'utf-8');
+      for (const kw of keywords) {
+        if (content.includes(kw)) {
+          score++;
+          if (!matchedFiles.includes(fc.label)) matchedFiles.push(fc.label);
+        }
+      }
+    }
+
+    if (score > 0) {
+      allImpacts.push({
+        id: taskId,
+        name,
+        status,
+        level: 'direct',
+        reason: `关键词命中 ${score} 处 [${matchedFiles.join(', ')}]`,
+        affectedFiles: matchedFiles,
+        needReExecute: true,
+        needRegression: false,
+      });
+    } else {
+      allImpacts.push({
+        id: taskId,
+        name,
+        status,
+        level: 'none',
+        reason: '',
+        affectedFiles: [],
+        needReExecute: false,
+        needRegression: false,
+      });
+    }
+  }
+
+  // 依赖图分析：直接受影响任务的上下游 → 间接影响
+  const directIds = new Set(allImpacts.filter(t => t.level === 'direct').map(t => t.id));
+  const indirectIds = new Set<string>();
+
+  for (const directId of directIds) {
+    const deps = findDependentTasks(graphContent, directId);
+    for (const dep of deps) {
+      if (!directIds.has(dep)) {
+        indirectIds.add(dep);
+      }
+    }
+    // 反向查找：谁依赖了直接受影响的任务
+    const reverseDeps = findReverseDependencies(graphContent, directId);
+    for (const rd of reverseDeps) {
+      if (!directIds.has(rd)) {
+        indirectIds.add(rd);
+      }
+    }
+  }
+
+  // 分类结果
+  const directTasks: TaskImpact[] = [];
+  const indirectTasks: TaskImpact[] = [];
+  const unaffectedTasks: TaskImpact[] = [];
+
+  for (const t of allImpacts) {
+    if (directIds.has(t.id)) {
+      directTasks.push(t);
+    } else if (indirectIds.has(t.id)) {
+      // 补充间接影响原因
+      const depReasons: string[] = [];
+      for (const directId of directIds) {
+        const deps = findDependentTasks(graphContent, directId);
+        const rdeps = findReverseDependencies(graphContent, directId);
+        if (deps.includes(t.id)) depReasons.push(`依赖 ${directId}`);
+        if (rdeps.includes(t.id)) depReasons.push(`${directId} 依赖本任务`);
+      }
+      indirectTasks.push({
+        ...t,
+        level: 'indirect',
+        reason: depReasons.join('; ') || '间接关联',
+        needReExecute: false,
+        needRegression: t.status === 'done',
+      });
+    } else {
+      unaffectedTasks.push(t);
+    }
+  }
+
+  return { directTasks, indirectTasks, unaffectedTasks };
+}
+
+/**
+ * 反向查找依赖：找出哪些任务依赖了指定任务
+ */
+function findReverseDependencies(graphContent: string, taskId: string): string[] {
+  const deps: string[] = [];
+  // Mermaid 格式: A[Task-001] --> B[Task-002] 表示 Task-001 → Task-002
+  const mermaidPattern = new RegExp(`\\[${taskId}\\]\\s*-->\\s*\\[(Task-\\d+)\\]`);
+  const reverseMermaidPattern = new RegExp(`\\[(Task-\\d+)\\]\\s*-->\\s*\\[${taskId}\\]`);
+  
+  for (const line of graphContent.split('\n')) {
+    // 正向：taskId 指向别人
+    const m = line.match(mermaidPattern);
+    if (m && m[1] !== taskId && !deps.includes(m[1])) deps.push(m[1]);
+    // 反向：别人指向 taskId
+    const rm = line.match(reverseMermaidPattern);
+    if (rm && rm[1] !== taskId && !deps.includes(rm[1])) deps.push(rm[1]);
+  }
+  return deps;
+}
+
+/**
+ * 构建任务详情（用于澄清 Prompt 上下文）
+ */
+async function buildTaskDetails(taskBase: string): Promise<{ id: string; name: string; reqSummary: string; techSummary: string; status: string; dependencies: string[] }[]> {
+  const { readdir: rd } = await import('fs-extra');
+  let entries: any[] = [];
+  try { entries = await rd(taskBase, { withFileTypes: true }); } catch { return []; }
+
+  const details: { id: string; name: string; reqSummary: string; techSummary: string; status: string; dependencies: string[] }[] = [];
+
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entry.name.startsWith('Task-')) continue;
+    const taskId = entry.name;
+    const taskDir = join(taskBase, taskId);
+
+    // 状态
+    let status = 'unknown';
+    const statusPath1 = join(taskDir, '.task-status');
+    const statusPath2 = join(taskDir, '.meta', 'status');
+    if (await pathExists(statusPath1)) status = (await readFile(statusPath1, 'utf-8')).trim();
+    else if (await pathExists(statusPath2)) status = (await readFile(statusPath2, 'utf-8')).trim();
+
+    // REQ 摘要（取前 300 字符）
+    let reqSummary = '';
+    const reqPath = join(taskDir, '00-specs', 'REQ.md');
+    const legacyReqPath = join(taskDir, 'REQ.md');
+    const actualReqPath = (await pathExists(reqPath)) ? reqPath : (await pathExists(legacyReqPath)) ? legacyReqPath : null;
+    if (actualReqPath) {
+      const content = await readFile(actualReqPath, 'utf-8');
+      reqSummary = content.slice(0, 300).replace(/\n+/g, ' ').trim();
+    }
+
+    // TECH 摘要
+    let techSummary = '';
+    const techPath = join(taskDir, '00-specs', 'TECH.md');
+    if (await pathExists(techPath)) {
+      const content = await readFile(techPath, 'utf-8');
+      techSummary = content.slice(0, 200).replace(/\n+/g, ' ').trim();
+    }
+
+    // 名称
+    let name = taskId;
+    if (reqSummary) {
+      const nameMatch = reqSummary.match(/^#\s+(.+)/);
+      if (nameMatch) name = nameMatch[1];
+    }
+
+    details.push({ id: taskId, name, reqSummary, techSummary, status, dependencies: [] });
+  }
+
+  // 从依赖图补充 dependencies
+  return details;
+}
+
+/**
+ * 提取关键词（2字以上的中文/英文词）
+ */
+function extractKeywords(desc: string): string[] {
+  const normalized = normalizeDescription(desc);
+  const chinese = normalized.match(/[\u4e00-\u9fa5]{2,}/g) || [];
+  const english = normalized.match(/[a-zA-Z]{2,}/g) || [];
+  return [...new Set([...chinese, ...english])];
+}
+
+/**
+ * 新增需求一站式处理：创建任务 → 追加需求 → 更新依赖图 → 引导分析
+ * 澄清结果（需求分析）持久化到 REQ.md
+ */
+async function handleNewRequirement(desc: string, iteration: string, clarifyResult?: { structuredDesc?: string; keyPoints?: string[]; acceptanceCriteria?: string[] }): Promise<void> {
+  const iterDir = await getIterationDir(iteration);
+  const taskBase = await resolveTaskBase(iterDir);
+  await ensureDir(taskBase);
+
+  const { id: taskId } = await nextTaskId();
+  const taskName = desc.replace(/^(新增?|加|创建|实现|做)/, '').replace(/[:：]/g, '').trim() || taskId;
+  const taskDir = join(taskBase, taskId);
+  const specsDir = join(taskDir, '00-specs');
+  await ensureDir(specsDir);
+
+  const now = new Date().toISOString().split('T')[0];
+  const tx = new FileTransaction();
+
+  // 构建结构化 REQ.md（澄清 = 需求分析，结果持久化）
+  const structuredDesc = clarifyResult?.structuredDesc || desc;
+  const keyPoints = clarifyResult?.keyPoints || [];
+  const acceptanceCriteria = clarifyResult?.acceptanceCriteria || [];
+
+  let reqContent = `# ${taskName}\n\n`;
+  reqContent += `## 需求描述\n\n${structuredDesc}\n\n`;
+  reqContent += `## 原始输入\n\n${desc}\n\n`;
+
+  if (keyPoints.length > 0) {
+    reqContent += `## 功能要点\n\n`;
+    for (const p of keyPoints) {
+      reqContent += `- ${p}\n`;
+    }
+    reqContent += '\n';
+  }
+
+  if (acceptanceCriteria.length > 0) {
+    reqContent += `## 验收标准\n\n`;
+    for (const c of acceptanceCriteria) {
+      reqContent += `- [ ] ${c}\n`;
+    }
+    reqContent += '\n';
+  } else {
+    reqContent += `## 验收标准\n\n- [ ] 功能正常\n`;
+  }
+
+  reqContent += `## 分析记录\n\n- 分析时间: ${now}\n- 分析方式: ${clarifyResult ? 'AI 澄清' : '本地分析'}\n`;
+
+  tx.write(join(specsDir, 'REQ.md'), reqContent);
+
+  // 创建 CHANGELOG.md
+  tx.write(join(specsDir, 'CHANGELOG.md'), `# 变更记录\n\n| 时间 | 版本 | 变更内容 | 变更人 |\n| :--- | :--- | :--- | :--- |\n| ${now} | v1.0 | 初始创建 | SpecCore |\n`);
+
+  // 创建 TASK.md
+  tx.write(join(specsDir, 'TASK.md'), `# ${taskName}\n\n- 状态: 待开发\n- 优先级: medium\n- 类型: feature\n\n## 变更履历\n\n| 时间 | 变更内容 | 变更人 |\n| :--- | :--- | :--- |\n| ${now} | 创建任务 | SpecCore |\n`);
+
+  await tx.commit();
+
+  // 追加到 REQUIREMENT.md
+  const reqPath = join(iterDir, '020-specs', 'REQUIREMENT.md');
+  if (await pathExists(reqPath)) {
+    let content = await readFile(reqPath, 'utf-8');
+    content += `\n\n## ${taskName}\n\n${desc}\n`;
+    await writeFile(reqPath, content);
+  }
+
+  // 更新 PROJECT_GRAPH.md
+  const graphPath = join(iterDir, '000-overview', 'PROJECT_GRAPH.md');
+  if (await pathExists(graphPath)) {
+    let content = await readFile(graphPath, 'utf-8');
+    // 直接使用已生成的 taskId，避免重复计数 bug
+    content += `| ${taskId} | ${taskName} | feature | pending |\n`;
+    await writeFile(graphPath, content);
+  }
+
+  logger.info('');
+  logger.success(`✅ 新任务已创建: ${taskId}`);
+  logger.info(`   📄 ${taskId}/00-specs/REQ.md`);
+  logger.info(`   📄 ${taskId}/00-specs/TASK.md`);
+  logger.info('');
+  logger.info('💡 下一步:');
+  logger.info(`   speccore analyze --task=${taskId}     # 分析技术方案`);
+  logger.info(`   speccore execute --task=${taskId} --force  # 执行任务`);
+}
 
 import { createInterface } from 'readline';
 function promptUser(question: string): Promise<string> {
@@ -30,6 +371,11 @@ export interface ChangeOptions {
   analysis?: boolean;
   force?: boolean;
   interactive?: boolean;
+  file?: string;         // --file 指定附件（逗号分隔多个）
+  noInbox?: boolean;     // --no-inbox 跳过默认 inbox
+  reprocess?: boolean;   // --reprocess 强制重新处理所有 inbox 文件
+  prompt?: boolean;      // --prompt 输出澄清 Prompt 到 stdout
+  response?: string;     // --response 接收 AI 澄清结果
 }
 
 export async function changeCommand(options: ChangeOptions): Promise<void> {
@@ -39,7 +385,173 @@ export async function changeCommand(options: ChangeOptions): Promise<void> {
   }
 
   if (!options.task && !options.global) {
-    logger.error('请指定 Task 或使用 --global。用法: speccore change "变更描述" --task=<Task>');
+    // ── 智能匹配 / 新增需求（含 inbox + 附件 + 澄清）──
+    if (!options.desc && !options.file && options.noInbox) {
+      logger.error('请提供变更描述或附件。用法: speccore change "描述" --file=xxx.md');
+      return;
+    }
+  
+    const iteration = await getDefaultIteration(options.iteration);
+    if (!iteration) {
+      logger.error('未找到活跃迭代。请先运行: speccore iteration create --name <名称>');
+      return;
+    }
+  
+    // ── 1. 加载附件 ──
+    const allFiles: InboxFileEntry[] = [];
+  
+    // 1a. 扫描 inbox（默认启用）
+    if (!options.noInbox) {
+      await ensureInboxDir();
+      const inboxResult = await scanInbox({ reprocess: options.reprocess });
+      logInboxScan(inboxResult);
+      const actionable = [...inboxResult.newFiles, ...inboxResult.modifiedFiles];
+      allFiles.push(...actionable);
+    }
+  
+    // 1b. 加载 --file 指定的文件
+    if (options.file) {
+      const { readFile: rf, stat: st } = await import('fs-extra');
+      const filePaths = options.file.split(',').map(f => f.trim());
+      for (const fp of filePaths) {
+        const absPath = join(process.cwd(), fp);
+        if (!await pathExists(absPath)) {
+          logger.warn(`⚠️ 文件不存在: ${fp}`);
+          continue;
+        }
+        const fileStat = await st(absPath);
+        const name = fp.split('/').pop() || fp;
+        const ext = name.split('.').pop()?.toLowerCase() || '';
+        let type: InboxFileEntry['type'] = 'other';
+        if (['md', 'txt', 'markdown', 'json', 'yaml', 'yml', 'csv'].includes(ext)) type = 'text';
+        else if (['xlsx', 'xls'].includes(ext)) type = 'excel';
+        else if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) type = 'image';
+  
+        let content = '';
+        if (type === 'text') {
+          content = await rf(absPath, 'utf-8');
+        } else if (type === 'excel') {
+          try {
+            const XLSX = require('xlsx');
+            const wb = XLSX.readFile(absPath);
+            const sheets: string[] = [];
+            for (const sn of wb.SheetNames) {
+              sheets.push(`## Sheet: ${sn}\n${XLSX.utils.sheet_to_csv(wb.Sheets[sn])}`);
+            }
+            content = sheets.join('\n\n');
+          } catch { content = `[Excel 解析失败]`; }
+        } else if (type === 'image') {
+          content = `[图片文件: ${absPath}]`;
+        } else {
+          try { content = await rf(absPath, 'utf-8'); } catch { content = `[无法读取]`; }
+        }
+  
+        allFiles.push({ name, path: absPath, size: fileStat.size, mtime: fileStat.mtime.toISOString(), type, content });
+        logger.info(`   📎 ${name} (${fileStat.size > 1024 ? (fileStat.size / 1024).toFixed(1) + 'KB' : fileStat.size + 'B'})`);
+      }
+    }
+  
+    // ── 2. 构建澄清上下文 ──
+    const desc = options.desc ? normalizeDescription(options.desc) : '';
+    const iterDir = await getIterationDir(iteration);
+    const taskBase = await resolveTaskBase(iterDir);
+    const allTasks = await scanTasks(iteration);
+    const taskDetails = await buildTaskDetails(taskBase);
+  
+    // ── 3. Prompt 模式：输出澄清 Prompt 到 stdout ──
+    if (options.prompt) {
+      const promptText = buildClarifyPrompt(desc || '(从附件分析需求)', allFiles, taskDetails);
+      logger.info('[SPECCORE_PROMPT]');
+      process.stdout.write(promptText);
+      return;
+    }
+  
+    // ── 4. Response 模式：解析 AI 澄清结果 ──
+    let clarifiedIntent: 'new' | 'change' | undefined;
+    let clarifiedDesc = desc;
+    let clarifiedTasks: string[] = [];
+  
+    if (options.response) {
+      const parsed = parseClarifyResponse(options.response);
+      if (parsed) {
+        clarifiedIntent = parsed.intent;
+        clarifiedDesc = parsed.structuredDesc || desc;
+        // 从 impactReport 中提取直接影响的任务 ID
+        clarifiedTasks = parsed.impactReport?.directTasks?.map(t => t.id) || [];
+        logClarifyResult(parsed);
+      } else {
+        logger.warn('⚠️ AI 澄清结果解析失败，使用本地分析');
+      }
+    }
+  
+    // ── 5. 本地意图检测（无 AI 澄清时） ──
+    const intent = clarifiedIntent || detectIntent(desc || allFiles.map(f => f.content).join(' '));
+  
+    // ── 6. 新增需求 ──
+    if (intent === 'new') {
+      logger.info('🆕 检测到新增需求意图');
+      const newDesc = clarifiedDesc || allFiles.map(f => f.name + ': ' + f.content.slice(0, 200)).join('\n');
+      // 传递澄清结果给 handleNewRequirement，持久化到 REQ.md
+      const parsed = options.response ? parseClarifyResponse(options.response) : null;
+      const clarifyOutput = parsed ? { structuredDesc: parsed.structuredDesc, keyPoints: parsed.keyPoints, acceptanceCriteria: parsed.acceptanceCriteria } : undefined;
+      await handleNewRequirement(newDesc, iteration, clarifyOutput);
+      // 标记 inbox 文件已处理
+      if (allFiles.length > 0) {
+        await markProcessed(allFiles, 'new', []);
+      }
+      return;
+    }
+  
+    // ── 7. 变更：全量影响分析 ──
+    let impactReport: ImpactReport;
+  
+    if (clarifiedTasks.length > 0) {
+      // 使用 AI 澄清结果中的匹配任务构造影响报告
+      const directTasks: TaskImpact[] = clarifiedTasks.map(tid => {
+        const task = allTasks.find(t => t.id === tid);
+        return { id: tid, name: task?.name || tid, status: 'unknown', level: 'direct' as const, reason: 'AI 澄清匹配', affectedFiles: [], needReExecute: true, needRegression: false };
+      }).filter(m => allTasks.some(t => t.id === m.id));
+      impactReport = { directTasks, indirectTasks: [], unaffectedTasks: [] };
+    } else {
+      // 本地全量影响分析
+      const matchDesc = desc || allFiles.map(f => f.content).join(' ');
+      impactReport = await analyzeImpact(matchDesc, iterDir, taskBase);
+    }
+  
+    const hasImpact = impactReport.directTasks.length > 0 || impactReport.indirectTasks.length > 0;
+    if (!hasImpact) {
+      logger.warn('未匹配到受影响任务。请指定 --task 或检查变更描述/附件。');
+      logger.info('💡 如果是新增需求，请确保描述以"新增/加/创建"开头');
+      return;
+    }
+  
+    // 展示影响分析报告
+    logImpactReport(impactReport);
+    logger.info('');
+  
+    // 对所有直接影响任务应用变更
+    const changeDesc = clarifiedDesc || desc;
+    const affectedIds: string[] = [];
+    for (const m of impactReport.directTasks) {
+      const taskOpts = { ...options, task: m.id, desc: changeDesc };
+      await applyTaskChange(taskOpts, iteration);
+      affectedIds.push(m.id);
+    }
+  
+    // 标记 inbox 文件已处理
+    if (allFiles.length > 0) {
+      await markProcessed(allFiles, 'change', affectedIds);
+    }
+  
+    // ── 8. 持久化澄清结果：迭代级 CHANGE_SUMMARY.md ──
+    await writeChangeSummary(iterDir, changeDesc, impactReport, affectedIds);
+  
+    logger.info('');
+    logger.success(`✅ 变更已应用到 ${affectedIds.length} 个任务`);
+    logger.info(`   📄 变更摘要: 020-specs/CHANGE_SUMMARY.md`);
+    logger.info('');
+    logger.info('💡 下一步:');
+    logger.info(`   speccore execute --task=${affectedIds.join(',')} --force  # 重新执行`);
     return;
   }
 
@@ -65,16 +577,21 @@ export async function changeCommand(options: ChangeOptions): Promise<void> {
       return;
     }
 
-    // 短 Task ID 支持: Task-001 → Task-001-订单管理
+    // 短 Task ID 支持: 使用统一 resolver 解析
     if (options.task) {
-      const tasks = await scanTasks(iteration);
-      const exact = tasks.find(t => t.id === options.task);
-      if (!exact) {
-        const prefix = tasks.filter(t => t.id.startsWith(options.task!));
-        if (prefix.length === 1) {
-          logger.info(`📎 Task 短名匹配: ${options.task} → ${prefix[0].id}`);
-          options.task = prefix[0].id;
+      const taskResult = await resolveTask(options.task, iteration);
+      if (taskResult.exact && taskResult.value) {
+        if (taskResult.matchType !== 'exact') {
+          const hint = formatResolveResult(taskResult, 'Task');
+          if (hint) logger.info(hint);
         }
+        options.task = taskResult.value.id;
+      } else if (taskResult.candidates.length > 1) {
+        logger.warn(taskResult.hint || '找到多个匹配任务，请指定更精确的名称');
+        return;
+      } else {
+        logger.warn(taskResult.hint || `Task "${options.task}" 未找到`);
+        return;
       }
     }
 
@@ -107,13 +624,35 @@ export async function changeCommand(options: ChangeOptions): Promise<void> {
       await applyGlobalChange(options);
     } else {
       await applyTaskChange(options, iteration);
+
+      // 任务级变更也记录到 CHANGE_SUMMARY.md
+      if (options.task && iteration) {
+        const iterDir = await getIterationDir(iteration);
+        const taskImpact: TaskImpact = {
+          id: options.task,
+          name: options.task,
+          status: 'changed',
+          level: 'direct',
+          reason: options.desc || '任务级变更',
+          affectedFiles: ['REQ.md', 'CHANGELOG.md', 'TASK.md'],
+          needReExecute: true,
+          needRegression: false,
+        };
+        await writeChangeSummary(iterDir, options.desc || '任务级变更', { directTasks: [taskImpact], indirectTasks: [], unaffectedTasks: [] }, [options.task]);
+      }
     }
 
     spinner.stop('需求变更已生效');
     logger.info('');
+    if (options.task) {
+      logger.info(`   📄 变更摘要: 020-specs/CHANGE_SUMMARY.md`);
+    }
     logger.info('下一步:');
     logger.info('  1. 运行 speccore validate --task=' + (options.task || '') + ' 验证完整性');
     logger.info('  2. 检查受影响的下游任务是否需要回归');
+    if (options.task) {
+      logger.info(`  3. 重新执行变更任务: speccore execute --task=${options.task} --force`);
+    }
   } catch (error) {
     spinner.fail(`变更失败: ${error}`);
     throw error;
@@ -137,7 +676,9 @@ async function dryRunChange(options: ChangeOptions, iteration: string): Promise<
   logger.info(`变更描述: ${options.desc}`);
 
   if (iteration) {
-    const taskDir = join(process.cwd(), iteration, options.task || '');
+    const iterDir = await getIterationDir(iteration);
+    const taskBase = await resolveTaskBase(iterDir);
+    const taskDir = join(taskBase, options.task || '');
     logger.info('| 文件 | 影响描述 |');
     logger.info('| :--- | :--- |');
     logger.info(`| ${options.task}/00-specs/REQ.md | 需求变更 |`);
@@ -147,7 +688,7 @@ async function dryRunChange(options: ChangeOptions, iteration: string): Promise<
 
     // 查找受影响的依赖任务
     if (await pathExists(taskDir)) {
-      const graphPath = join(process.cwd(), iteration, '000-overview', 'PROJECT_GRAPH.md');
+      const graphPath = join(iterDir, '000-overview', 'PROJECT_GRAPH.md');
       if (await pathExists(graphPath)) {
         const content = await readFile(graphPath, 'utf-8');
         const deps = findDependentTasks(content, options.task || '');
@@ -169,7 +710,9 @@ async function applyTaskChange(options: ChangeOptions, iteration: string): Promi
     return;
   }
 
-  const taskDir = join(process.cwd(), iteration, '030-tasks', options.task);
+  const iterDir = await getIterationDir(iteration);
+  const taskBase = await resolveTaskBase(iterDir);
+  const taskDir = join(taskBase, options.task);
   if (!await pathExists(taskDir)) {
     logger.error(`任务目录不存在: ${taskDir}`);
     return;
@@ -177,12 +720,13 @@ async function applyTaskChange(options: ChangeOptions, iteration: string): Promi
 
   const tx = new FileTransaction();
   const now = new Date().toISOString().split('T')[0];
+  const ver = await nextVersion(join(taskDir, '00-specs', 'CHANGELOG.md'));
 
   // 更新 REQ.md（事务保护）
   const reqPath = join(taskDir, '00-specs', 'REQ.md');
   if (await pathExists(reqPath)) {
     let content = await readFile(reqPath, 'utf-8');
-    const changeNote = `\n## 变更记录\n\n| ${now} | v1.1 | ${options.desc} | SpecCore |\n`;
+    const changeNote = `\n## 变更记录\n\n| ${now} | ${ver} | ${options.desc} | SpecCore |\n`;
     tx.write(reqPath, content + changeNote);
   }
 
@@ -190,7 +734,7 @@ async function applyTaskChange(options: ChangeOptions, iteration: string): Promi
   const changelogPath = join(taskDir, '00-specs', 'CHANGELOG.md');
   if (await pathExists(changelogPath)) {
     let content = await readFile(changelogPath, 'utf-8');
-    const changeEntry = `| ${now} | v1.1 | ${options.desc} | SpecCore |\n`;
+    const changeEntry = `| ${now} | ${ver} | ${options.desc} | SpecCore |\n`;
     const updated = content.replace(
       /(\| :--- \| :--- \| :--- \| :--- \|)/,
       `$1\n${changeEntry}`
@@ -198,14 +742,14 @@ async function applyTaskChange(options: ChangeOptions, iteration: string): Promi
     tx.write(changelogPath, updated);
   } else {
     // 如果没有 CHANGELOG.md，创建一个
-    tx.write(changelogPath, `# 变更记录\n\n| 时间 | 版本 | 变更内容 | 变更人 |\n| :--- | :--- | :--- | :--- |\n| ${now} | v1.1 | ${options.desc} | SpecCore |\n`);
+    tx.write(changelogPath, `# 变更记录\n\n| 时间 | 版本 | 变更内容 | 变更人 |\n| :--- | :--- | :--- | :--- |\n| ${now} | ${ver} | ${options.desc} | SpecCore |\n`);
   }
 
   // 更新 TASK.md 变更履历（事务保护）
   const taskMdPath = join(taskDir, '00-specs', 'TASK.md');
   if (await pathExists(taskMdPath)) {
     let content = await readFile(taskMdPath, 'utf-8');
-    const changeEntry = `| ${now} | v1.1 | 需求变更: ${options.desc} | SpecCore |\n`;
+    const changeEntry = `| ${now} | ${ver} | 需求变更: ${options.desc} | SpecCore |\n`;
     const updated = content.replace(
       /(\| :--- \| :--- \| :--- \| :--- \|)/,
       `$1\n${changeEntry}`
@@ -223,7 +767,7 @@ async function applyTaskChange(options: ChangeOptions, iteration: string): Promi
         const ftaskPath = join(frontendDir, pd.name, 'TASK.md');
         if (await pathExists(ftaskPath)) {
           let content = await readFile(ftaskPath, 'utf-8');
-          const changeEntry = `| ${now} | v1.1 | 需求变更: ${options.desc} | SpecCore |\n`;
+          const changeEntry = `| ${now} | ${ver} | 需求变更: ${options.desc} | SpecCore |\n`;
           const updated = content.replace(
             /(\| :--- \| :--- \| :--- \| :--- \|)/,
             `$1\n${changeEntry}`
@@ -252,11 +796,11 @@ async function applyTaskChange(options: ChangeOptions, iteration: string): Promi
     logger.info(`   ${options.task}/00-specs/CHANGELOG.md`);
     logger.info(`   ${options.task}/00-specs/TASK.md`);
 
-    // ── 联动更新上层文档 ──
-    if (options.requirement && options.task) {
+    // ── 联动更新上层文档（默认启用，--no-sync 禁用）──
+    if (options.requirement !== false && options.task) {
       await syncToRequirement(iteration, options.task, options.desc!);
     }
-    if (options.analysis && options.task) {
+    if (options.analysis !== false && options.task) {
       await syncToAnalysis(iteration, options.task, options.desc!);
     }
   }
@@ -336,8 +880,60 @@ function normalizeDescription(desc: string): string {
 /**
  * 同步变更到 REQUIREMENT.md（迭代聚合需求文档）
  */
+/**
+ * 将澄清结果（需求分析）持久化到迭代级 CHANGE_SUMMARY.md
+ */
+async function writeChangeSummary(iterDir: string, changeDesc: string, impactReport: ImpactReport, affectedIds: string[]): Promise<void> {
+  const summaryPath = join(iterDir, '020-specs', 'CHANGE_SUMMARY.md');
+  const now = new Date().toISOString().split('T')[0];
+
+  let content = '';
+  if (await pathExists(summaryPath)) {
+    content = await readFile(summaryPath, 'utf-8');
+  } else {
+    content = `# 变更摘要\n\n> 需求变更的分析记录，由 speccore change 自动生成\n\n`;
+  }
+
+  // 追加本次变更记录
+  content += `\n---\n\n## ${now} — ${changeDesc}\n\n`;
+
+  // 直接影响
+  if (impactReport.directTasks.length > 0) {
+    content += `### 🔴 直接影响（需修改 Spec + 重新执行）\n\n`;
+    for (const t of impactReport.directTasks) {
+      content += `- **${t.id}** ${t.name} — ${t.reason}\n`;
+      if (t.affectedFiles.length > 0) {
+        content += `  - 受影响文件: ${t.affectedFiles.join(', ')}\n`;
+      }
+    }
+    content += '\n';
+  }
+
+  // 间接影响
+  if (impactReport.indirectTasks.length > 0) {
+    content += `### 🟡 间接影响（需回归验证）\n\n`;
+    for (const t of impactReport.indirectTasks) {
+      content += `- **${t.id}** ${t.name} — ${t.reason}\n`;
+    }
+    content += '\n';
+  }
+
+  // 无影响
+  if (impactReport.unaffectedTasks.length > 0) {
+    content += `### 🟢 无影响\n\n`;
+    content += impactReport.unaffectedTasks.map(t => t.id).join(', ') + '\n\n';
+  }
+
+  content += `**已应用变更的任务**: ${affectedIds.join(', ')}\n`;
+
+  await writeFile(summaryPath, content);
+}
+
+/**
+ * 同步变更到 REQUIREMENT.md（迭代聚合需求文档）
+ */
 async function syncToRequirement(iteration: string, taskId: string, desc: string): Promise<void> {
-  const iterDir = `Iteration-${iteration}`;
+  const iterDir = await getIterationDir(iteration);
   const reqPath = join(iterDir, '020-specs', 'REQUIREMENT.md');
   
   if (!(await pathExists(reqPath))) {
@@ -372,7 +968,7 @@ async function syncToRequirement(iteration: string, taskId: string, desc: string
  * 同步变更到 ANALYSIS.md（技术方案文档）
  */
 async function syncToAnalysis(iteration: string, taskId: string, desc: string): Promise<void> {
-  const iterDir = `Iteration-${iteration}`;
+  const iterDir = await getIterationDir(iteration);
   const analysisPath = join(iterDir, '020-specs', 'ANALYSIS.md');
   
   if (!(await pathExists(analysisPath))) {

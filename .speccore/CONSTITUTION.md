@@ -53,3 +53,6 @@
 - 默认分支: main  (可选: master / develop / trunk / release)
 - 任务分支: feature/{Task-ID}
 - 发布分支: release/{version}
+- 保护分支: main, master, release/*, production
+  > 保护分支上禁止直接 commit 和 push，只能通过 PR 合并
+  > 支持精确匹配和通配符（如 release/*）

@@ -6,6 +6,7 @@
  *  - Commit 消息自动生成
  *  - PR 描述自动生成
  *  - Git Hook 安装
+ *  - 保护分支拦截
  */
 
 import { existsSync, readFileSync, writeFileSync, ensureFileSync } from 'fs-extra';
@@ -154,6 +155,44 @@ export function generatePRDescription(taskId: string, taskName: string): string 
 }
 
 /**
+ * 从 CONSTITUTION.md 读取保护分支列表
+ */
+export function getProtectedBranches(): string[] {
+  try {
+    const constitutionPath = join('.speccore', 'CONSTITUTION.md');
+    if (!existsSync(constitutionPath)) return [];
+    const content = readFileSync(constitutionPath, 'utf-8');
+    const match = content.match(/保护分支[：:]\s*(.+)/);
+    if (!match) return [];
+    return match[1]
+      .split(',')
+      .map((s: string) => s.trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 检查分支是否为保护分支
+ * 支持精确匹配和通配符（如 release/*）
+ */
+export function isProtectedBranch(branchName: string): boolean {
+  const protected_ = getProtectedBranches();
+  for (const pattern of protected_) {
+    if (pattern.includes('*')) {
+      // 通配符匹配: release/* → release/1.0.0
+      const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+      if (regex.test(branchName)) return true;
+    } else {
+      // 精确匹配
+      if (branchName === pattern) return true;
+    }
+  }
+  return false;
+}
+
+/**
  * 安装 Git Hooks
  */
 export function installGitHooks(): { preCommit: boolean; prePush: boolean } {
@@ -164,17 +203,69 @@ export function installGitHooks(): { preCommit: boolean; prePush: boolean } {
 
   const hooksDir = join(gitDir, 'hooks');
 
-  // pre-commit: check spec annotations
+  // pre-commit: 保护分支检查 + spec annotations 检查
   const preCommitContent = `#!/bin/sh
 # SpecCore pre-commit hook
+
+# ── 1. 保护分支检查 ──
+CURRENT_BRANCH=$(git branch --show-current 2>/dev/null)
+if [ -n "$CURRENT_BRANCH" ] && [ -f ".speccore/CONSTITUTION.md" ]; then
+  PROTECTED=$(grep '保护分支' .speccore/CONSTITUTION.md | sed 's/.*[：:]\\s*//' | tr ',' '\\n' | sed 's/^[ \\t]*//')
+  for PATTERN in $PROTECTED; do
+    # 精确匹配
+    if [ "$CURRENT_BRANCH" = "$PATTERN" ]; then
+      echo "❌ SpecCore: 保护分支 '$CURRENT_BRANCH' 禁止直接 commit"
+      echo "   请切换到 feature/ 分支或使用 PR 合并"
+      exit 1
+    fi
+    # 通配符匹配 (release/* → release/xxx)
+    case "$PATTERN" in
+      *"*"*)
+        REGEX=$(echo "$PATTERN" | sed 's/\\*/.*/')
+        if echo "$CURRENT_BRANCH" | grep -qE "^\${REGEX}$"; then
+          echo "❌ SpecCore: 保护分支 '$CURRENT_BRANCH' 匹配保护规则 '$PATTERN'，禁止直接 commit"
+          echo "   请切换到 feature/ 分支或使用 PR 合并"
+          exit 1
+        fi
+        ;;
+    esac
+  done
+fi
+
+# ── 2. Spec annotations 检查 ──
 echo "🔍 SpecCore: Checking @spec annotations..."
 git diff --cached --name-only | grep -q "@spec" && echo "✅ Spec annotations found" || true
 `;
   writeFileSync(join(hooksDir, 'pre-commit'), preCommitContent, { mode: 0o755 });
 
-  // pre-push: run validate
+  // pre-push: 保护分支检查 + validate
   const prePushContent = `#!/bin/sh
 # SpecCore pre-push hook
+
+# ── 1. 保护分支检查 ──
+CURRENT_BRANCH=$(git branch --show-current 2>/dev/null)
+if [ -n "$CURRENT_BRANCH" ] && [ -f ".speccore/CONSTITUTION.md" ]; then
+  PROTECTED=$(grep '保护分支' .speccore/CONSTITUTION.md | sed 's/.*[：:]\\s*//' | tr ',' '\\n' | sed 's/^[ \\t]*//')
+  for PATTERN in $PROTECTED; do
+    if [ "$CURRENT_BRANCH" = "$PATTERN" ]; then
+      echo "❌ SpecCore: 保护分支 '$CURRENT_BRANCH' 禁止 push"
+      echo "   请通过 PR 合并代码"
+      exit 1
+    fi
+    case "$PATTERN" in
+      *"*"*)
+        REGEX=$(echo "$PATTERN" | sed 's/\\*/.*/')
+        if echo "$CURRENT_BRANCH" | grep -qE "^\${REGEX}$"; then
+          echo "❌ SpecCore: 保护分支 '$CURRENT_BRANCH' 匹配保护规则 '$PATTERN'，禁止 push"
+          echo "   请通过 PR 合并代码"
+          exit 1
+        fi
+        ;;
+    esac
+  done
+fi
+
+# ── 2. Spec 验证 ──
 echo "🔍 SpecCore: Validating specs..."
 speccore validate --warn-only
 `;

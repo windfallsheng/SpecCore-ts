@@ -107,14 +107,46 @@ async function createIterationFiles(iterationDir: string, fullName: string, opti
 3. **features/** — 按功能模块手动补充需求细节，每个模块一个子目录
 4. **assets/** — 所有图片/原型/设计稿统一放这里，按子目录分类
 
-## analyze 读取顺序
+## AI 读取规则
 
-AI 分析需求时默认按以下优先级读取：
+> 运行 \`speccore analyze\` 时，AI 会按以下规则自动读取本文档：
 
-1. \`INDEX.md\` — 了解需求全貌和文件清单
-2. \`converted/*.md\` — doc2spec 转换后的规格（核心）
-3. \`features/*/README.md\` — 功能级补充需求
-4. \`assets/prototypes/\` 和 \`designs/\` — 原型和设计稿参考
+### 会被 AI 读到的目录 ✅
+
+| 目录 | 读取范围 | 用途建议 |
+|:---|:---|:---|
+| \`INDEX.md\` | 整文件 | 登记所有需求文档清单，AI 先读它了解全貌 |
+| \`converted/*.md\` | 全部 .md 文件 | doc2spec 转换后的核心规格，AI 分析的主要依据 |
+| \`features/*/README.md\` | 每个子目录的 README.md | 按功能模块组织的需求补充，**推荐放自定义文档** |
+| \`assets/prototypes/\` | 原型文件 | 产品原型参考 |
+| \`assets/designs/\` | 设计稿 | UI 设计稿参考 |
+
+### 不会被 AI 读到的目录 ❌
+
+| 目录 | 说明 |
+|:---|:---|
+| \`sources/\` | 只存放原始 PRD/Word/PDF，AI 不直接读取 |
+| \`020-specs/\` | analyze 的**输出**目录，存放分析结果 |
+| \`030-tasks/\` | 开发任务目录，execute 阶段使用 |
+| \`030-tasks/*/99-artifacts/\` | 执行产出目录（测试/评审/部署报告） |
+
+### 如何让 AI 读到你手写的文档？
+
+**推荐做法：** 在 \`features/\` 下按功能模块创建子目录：
+
+\`\`\`
+features/
+  支付模块/
+    README.md    (AI 会读到)
+  订单模块/
+    README.md    (AI 会读到)
+  权限管理/
+    README.md    (AI 会读到)
+\`\`\`
+
+然后在 \`INDEX.md\` 中登记这些文档，AI 第一步就会从索引中发现它们。
+
+**注意：** \`converted/\` 也可以放手写文档，但这个目录的语义是「doc2spec 自动转换产出」，建议优先使用 \`features/\`。
 `
   );
 
