@@ -123,7 +123,7 @@ export async function scanTasks(iteration: string): Promise<TaskState[]> {
       
       // Try to read task name from TASK.md
       let name = taskId;
-      const taskMdPath = join(taskPath, 'backend', 'TASK.md');
+      const taskMdPath = join(taskPath, '00-specs', 'TASK.md');
       if (await pathExists(taskMdPath)) {
         const taskMd = await readFile(taskMdPath, 'utf-8');
         const nameMatch = taskMd.match(/#\s+(.+)/);

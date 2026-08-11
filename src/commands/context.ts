@@ -158,7 +158,7 @@ async function analyzeTaskContext(taskDir: string): Promise<{
   }
 
   // 检查 backend/
-  const backend = join(taskDir, 'backend');
+  const backend = join(taskDir, '10-backend');
   if (await pathExists(backend)) {
     const files = await readdir(backend);
     for (const file of files) {
@@ -178,8 +178,8 @@ async function analyzeTaskContext(taskDir: string): Promise<{
     result.specFiles.push({ name: 'backend/', type: '后端', exists: false, size: '-' });
   }
 
-  // 检查 frontend/{platform}/
-  const frontend = join(taskDir, 'frontend');
+  // 检查 20-frontend/{platform}/
+  const frontend = join(taskDir, '20-frontend');
   if (await pathExists(frontend)) {
     const platformDirs = await readdir(frontend, { withFileTypes: true });
     for (const pd of platformDirs) {

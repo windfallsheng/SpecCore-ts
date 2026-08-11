@@ -153,7 +153,7 @@ async function collectTasks(iterDir: string): Promise<any[]> {
   const entryList = await readdir(iterDir, { withFileTypes: true });
   for (const e of entryList) {
     if (e.isDirectory() && e.name.startsWith('Task-')) {
-      const taskPath = join(iterDir, e.name, 'backend', 'TASK.md');
+      const taskPath = join(iterDir, e.name, '00-specs', 'TASK.md');
       try {
         if (await pathExists(taskPath)) {
           const md = await readFile(taskPath, 'utf-8');
@@ -208,7 +208,7 @@ async function getTaskStats(iterDir: string): Promise<{ total: number; done: num
     const tasks = entries.filter(e => e.isDirectory() && e.name.startsWith('Task-'));
     let done = 0;
     for (const t of tasks) {
-      const taskMd = join(iterDir, t.name, 'backend', 'TASK.md');
+      const taskMd = join(iterDir, t.name, '00-specs', 'TASK.md');
       if (await pathExists(taskMd)) {
         const content = await readFile(taskMd, 'utf-8');
         if (content.includes('已完成') || content.includes('done')) done++;
@@ -232,7 +232,7 @@ async function countTasksInState(iterDir: string, states: string): Promise<numbe
     let count = 0;
     const stateList = states.split('|');
     for (const t of tasks) {
-      const taskMd = join(iterDir, t.name, 'backend', 'TASK.md');
+      const taskMd = join(iterDir, t.name, '00-specs', 'TASK.md');
       if (await pathExists(taskMd)) {
         const content = await readFile(taskMd, 'utf-8');
         if (stateList.some(s => content.includes(s))) count++;
@@ -357,7 +357,7 @@ async function exportStatus(
       const entryList = await readdir(iterDir, { withFileTypes: true });
       for (const e of entryList) {
         if (e.isDirectory() && e.name.startsWith('Task-')) {
-          const taskPath = join(iterDir, e.name, 'backend', 'TASK.md');
+          const taskPath = join(iterDir, e.name, '00-specs', 'TASK.md');
           if (await pathExists(taskPath)) {
             const md = await readFile(taskPath, 'utf-8');
             const status = (md.match(/状态: (.+)/) || [])[1] || 'pending';
@@ -390,7 +390,7 @@ async function exportStatus(
       filterLabels.push(`类型: ${options.type}`);
     }
     if (options.platform) {
-      // 平台过滤: 检查 Task 目录结构 (backend/ frontend/web/ frontend/h5/ etc)
+      // 平台过滤: 检查 Task 目录结构 (backend/ 20-frontend/web/ 20-frontend/h5/ etc)
       const platformTasks = await filterByPlatform(iterDir, filtered, options.platform);
       filtered = platformTasks;
       filterLabels.push(`平台: ${options.platform}`);
@@ -535,7 +535,7 @@ async function buildPersonPlatforms(iterDir: string, tasks: any[]): Promise<Reco
       if (fe && fe.isDirectory()) {
         const subs = await readdir(join(iterDir, t.id, 'frontend'), { withFileTypes: true });
         for (const s of subs) {
-          if (s.isDirectory()) platforms.push('frontend/' + s.name);
+          if (s.isDirectory()) platforms.push('20-frontend/' + s.name);
         }
         if (subs.length === 0) platforms.push('frontend');
       }
@@ -1281,8 +1281,8 @@ async function showHealthReport(config: any, iteration: string | null): Promise<
   let totalTasks = tasks.length, completed = 0, hasTest = 0, hasReview = 0;
   for (const t of tasks) {
     if (await isTaskDone(iterDir, t)) completed++;
-    if (await pathExists(join(iterDir, t, "backend", "TEST.md"))) hasTest++;
-    if (await pathExists(join(iterDir, t, "backend", "REVIEW.md"))) hasReview++;
+    if (await pathExists(join(iterDir, t, "10-backend", "TEST.md"))) hasTest++;
+    if (await pathExists(join(iterDir, t, "10-backend", "REVIEW.md"))) hasReview++;
   }
   
   const donePct = totalTasks > 0 ? Math.round(completed / totalTasks * 100) : 0;
@@ -1345,8 +1345,8 @@ async function collectHealthData(iteration: string): Promise<any> {
   let total = tasks.length, completed = 0, hasTest = 0, hasReview = 0;
   for (const t of tasks) {
     if (await isTaskDone(iterDir, t)) completed++;
-    if (await pathExists(join(iterDir, t, "backend", "TEST.md"))) hasTest++;
-    if (await pathExists(join(iterDir, t, "backend", "REVIEW.md"))) hasReview++;
+    if (await pathExists(join(iterDir, t, "10-backend", "TEST.md"))) hasTest++;
+    if (await pathExists(join(iterDir, t, "10-backend", "REVIEW.md"))) hasReview++;
   }
   const donePct = total > 0 ? Math.round(completed / total * 100) : 0;
   const testPct = total > 0 ? Math.round(hasTest / total * 100) : 0;

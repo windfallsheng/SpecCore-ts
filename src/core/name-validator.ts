@@ -50,7 +50,7 @@ export async function getAllTaskNames(): Promise<string[]> {
  */
 async function readTaskName(taskDir: string): Promise<string> {
   // 尝试多个可能的文件
-  const files = ['backend/TASK.md', 'backend/REQ.md', 'frontend/TASK.md', 'frontend/REQ.md'];
+  const files = ['00-specs/TASK.md', '00-specs/REQ.md', '20-frontend/TASK.md', '20-frontend/REQ.md'];
   for (const f of files) {
     const filePath = join(taskDir, f);
     if (await pathExists(filePath)) {

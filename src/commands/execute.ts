@@ -472,7 +472,7 @@ async function processBatch(tasks: TaskState[], state: ExecutionState, iteration
   for (const task of tasks) {
     logger.info(`   ${task.id}:`);
     for (const f of ['REQ.md', 'TECH.md', 'TASK.md']) {
-      const p = join(iterDir, task.id, 'backend', f);
+      const p = join(iterDir, task.id, '00-specs', f);
       if (await pathExists(p)) {
         const content = await readFile(p, 'utf-8');
         const summary = content.slice(0, 80).replace(/\n/g, ' ');
@@ -565,9 +565,9 @@ async function generateTaskSkeleton(task: TaskState, iteration: string): Promise
     logger.info(`   Tech Stack: ${techStack.backendFramework} + ${techStack.frontendFramework}`);
 
     // 读取后端 Spec 生成代码骨架
-    const backendDir = join(taskDir, 'backend');
+    const backendDir = join(taskDir, '10-backend');
     if (await pathExists(backendDir)) {
-      const reqPath = join(backendDir, 'REQ.md');
+      const reqPath = join(taskDir, '00-specs', 'REQ.md');
 
       let className = convertToClassName(task.name || task.id);
       // 从 CONSTITUTION.md 读取包名，回退到默认值
@@ -581,29 +581,32 @@ async function generateTaskSkeleton(task: TaskState, iteration: string): Promise
         }
       }
 
+      const srcDir = join(backendDir, 'src');
+      await ensureDir(srcDir);
+
       // 生成 Controller 骨架
       if (await pathExists(reqPath)) {
         const req = await readFile(reqPath, 'utf-8');
         const controllerCode = generateJavaController(className, packageName, req, specRules);
-        const ctrlPath = join(backendDir, `${className}Controller.java`);
+        const ctrlPath = join(srcDir, `${className}Controller.java`);
         tx.write(ctrlPath, controllerCode);
         filesUpdated++;
       }
 
       // 生成 Service 骨架
       const serviceCode = generateJavaService(className, packageName);
-      const svcPath = join(backendDir, `${className}Service.java`);
+      const svcPath = join(srcDir, `${className}Service.java`);
       tx.write(svcPath, serviceCode);
       filesUpdated++;
 
       // 生成 Repository 骨架
       const repoCode = generateJavaRepository(className, packageName);
-      const repoPath = join(backendDir, `${className}Repository.java`);
+      const repoPath = join(srcDir, `${className}Repository.java`);
       tx.write(repoPath, repoCode);
       filesUpdated++;
 
       // 更新 TASK.md 状态
-      const taskMdPath = join(backendDir, 'TASK.md');
+      const taskMdPath = join(taskDir, '00-specs', 'TASK.md');
       if (await pathExists(taskMdPath)) {
         const content = await readFile(taskMdPath, 'utf-8');
         const updated = content.replace('状态: 🔲 待开发', '状态: 🔄 进行中');
@@ -613,7 +616,7 @@ async function generateTaskSkeleton(task: TaskState, iteration: string): Promise
     }
 
     // 前端各平台代码生成
-    const frontendDir = join(taskDir, 'frontend');
+    const frontendDir = join(taskDir, '20-frontend');
     if (await pathExists(frontendDir)) {
       const { readdir: rd } = await import('fs-extra');
       const platformDirs = await rd(frontendDir, { withFileTypes: true });
@@ -621,7 +624,9 @@ async function generateTaskSkeleton(task: TaskState, iteration: string): Promise
         if (pd.isDirectory()) {
           const componentName = convertToClassName(task.name || task.id);
           const vueCode = generateVueComponent(componentName);
-          const vuePath = join(frontendDir, pd.name, `${componentName}.vue`);
+          const srcDir = join(frontendDir, pd.name, 'src');
+          await ensureDir(srcDir);
+          const vuePath = join(srcDir, `${componentName}.vue`);
           tx.write(vuePath, vueCode);
           filesUpdated++;
 
@@ -885,7 +890,7 @@ async function preFlightCheck(tasks: TaskState[], iteration: string, options: Ex
     let issues: string[] = [];
 
     // 1. Requirement completeness
-    const reqPath = join(taskDir, 'backend', 'REQ.md');
+    const reqPath = join(taskDir, '00-specs', 'REQ.md');
     if (await pathExists(reqPath)) {
       const req = await readFile(reqPath, 'utf-8');
       const sections = (req.match(/^###?\s+.+/gm) || []).length;
@@ -897,7 +902,7 @@ async function preFlightCheck(tasks: TaskState[], iteration: string, options: Ex
     }
 
     // 2. Tech plan
-    const techPath = join(taskDir, 'backend', 'TECH.md');
+    const techPath = join(taskDir, '00-specs', 'TECH.md');
     if (await pathExists(techPath)) {
       const tech = await readFile(techPath, 'utf-8');
       const s = [tech.includes('数据库') && 'DB', tech.includes('Redis') && 'Redis', tech.includes('MQ') && 'MQ'].filter(Boolean).join('/');
@@ -907,7 +912,7 @@ async function preFlightCheck(tasks: TaskState[], iteration: string, options: Ex
     }
 
     // 3. Test cases
-    const testPath = join(taskDir, 'backend', 'TEST.md');
+    const testPath = join(taskDir, '99-artifacts', 'TEST.md');
     if (await pathExists(testPath)) {
       const test = await readFile(testPath, 'utf-8');
       const n = (test.match(/⬜|✅|❌/g) || []).length;
@@ -915,13 +920,13 @@ async function preFlightCheck(tasks: TaskState[], iteration: string, options: Ex
     }
 
     // 4. Review
-    logger.info(`  4. 审查: ${await pathExists(join(taskDir, 'backend', 'REVIEW.md')) ? '✅' : '❌'}`);
+    logger.info(`  4. 审查: ${await pathExists(join(taskDir, '99-artifacts', 'REVIEW.md')) ? '✅' : '❌'}`);
 
     // 5. API
     logger.info(`  5. 契约: ${await pathExists(join(taskDir, '_shared', 'API_CONTRACT.yaml')) ? '✅' : '⚠️'}`);
 
     // 6. Platform
-    const fd = join(taskDir, 'frontend');
+    const fd = join(taskDir, '20-frontend');
     if (await pathExists(fd)) {
       const pf = readdirSync(fd, { withFileTypes: true }).filter((d: any) => d.isDirectory()).map((d: any) => d.name);
       logger.info(`  6. 端: ${pf.join(', ')}`);
@@ -1033,19 +1038,19 @@ function buildAgentContext(tasks: TaskState[], agent: string): string {
     
     // Progressive loading order
     ctx += `**Read in this order (progressive disclosure):**\n`;
-    ctx += `1. \`Iteration-*/${task.id}/backend/TASK.md\` — task overview + deliverables checklist\n`;
-    ctx += `2. \`Iteration-*/${task.id}/backend/REQ.md\` — requirements + acceptance criteria\n`;
-    ctx += `3. \`Iteration-*/${task.id}/backend/TECH.md\` — tech design + architecture\n`;
+    ctx += `1. \`Iteration-*/${task.id}/00-specs/TASK.md\` — task overview + deliverables checklist\n`;
+    ctx += `2. \`Iteration-*/${task.id}/00-specs/REQ.md\` — requirements + acceptance criteria\n`;
+    ctx += `3. \`Iteration-*/${task.id}/00-specs/TECH.md\` — tech design + architecture\n`;
     ctx += `4. \`Iteration-*/${task.id}/_shared/API_CONTRACT.yaml\` — API contract (if exists)\n\n`;
 
     ctx += `**Supplementary (read only if needed):**\n`;
-    ctx += `- TEST.md (test cases) | REVIEW.md (review checklist)\n`;
-    ctx += `- SCHEMA.md (DB schema) | ADR.md (arch decisions)\n`;
-    ctx += `- RISK.md (risks+rollback) | DEPS.md (dependencies) | MONITOR.md (monitoring)\n`;
-    ctx += `- ERROR_CODES.md (error codes) | DEPLOY.md (deployment)\n\n`;
+    ctx += `- 99-artifacts/TEST.md (test cases) | 99-artifacts/REVIEW.md (review checklist)\n`;
+    ctx += `- 00-specs/SCHEMA.md (DB schema) | 99-artifacts/ADR.md (arch decisions)\n`;
+    ctx += `- 99-artifacts/RISK.md (risks+rollback) | 99-artifacts/DEPS.md (dependencies) | 99-artifacts/MONITOR.md (monitoring)\n`;
+    ctx += `- 99-artifacts/ERROR_CODES.md (error codes) | 99-artifacts/DEPLOY.md (deployment)\n\n`;
 
     ctx += `**Frontend (if exists):**\n`;
-    ctx += `- frontend/{platform}/COMPONENT_TREE.md | ROUTES.md | STATE.md | STYLE_GUIDE.md\n\n`;
+    ctx += `- 20-20-frontend/{platform}/COMPONENT_TREE.md | ROUTES.md | STATE.md | STYLE_GUIDE.md\n\n`;
   }
 
   // 3. Global rules (load last, only if needed)
@@ -1072,7 +1077,6 @@ async function executionVerifyLoop(
     logger.info(`\n🔍 验证 ${task.id}...`);
 
     const taskDir = join(iterDir, '030-tasks', task.id);
-    const backendDir = join(taskDir, 'backend');
     let allPassed = true;
 
     for (let round = 1; round <= maxRounds; round++) {
@@ -1080,7 +1084,7 @@ async function executionVerifyLoop(
       allPassed = true;
 
       // 1. 检查 TEST.md
-      const testPath = join(backendDir, 'TEST.md');
+      const testPath = join(taskDir, '99-artifacts', 'TEST.md');
       if (await pathExists(testPath)) {
         const testContent = await readFile(testPath, 'utf-8');
         const total = (testContent.match(/\[[ x]\]/g) || []).length;
@@ -1097,7 +1101,7 @@ async function executionVerifyLoop(
       }
 
       // 2. 检查 REVIEW.md
-      const reviewPath = join(backendDir, 'REVIEW.md');
+      const reviewPath = join(taskDir, '99-artifacts', 'REVIEW.md');
       if (await pathExists(reviewPath)) {
         const reviewContent = await readFile(reviewPath, 'utf-8');
         const total = (reviewContent.match(/\[[ x]\]/g) || []).length;
@@ -1114,7 +1118,7 @@ async function executionVerifyLoop(
       }
 
       // 3. 检查 DEPLOY.md
-      const deployPath = join(backendDir, 'DEPLOY.md');
+      const deployPath = join(taskDir, '99-artifacts', 'DEPLOY.md');
       if (await pathExists(deployPath)) {
         const depContent = await readFile(deployPath, 'utf-8');
         const total = (depContent.match(/\[[ x]\]/g) || []).length;

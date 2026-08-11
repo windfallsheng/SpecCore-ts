@@ -71,7 +71,7 @@ async function saveFromTask(options: PatternOptions, targetDir: string): Promise
   const cwd = process.cwd();
   const iterDir = join(cwd, `Iteration-${iteration}`);
   const taskDir = join(iterDir, task.id);
-  const backendDir = join(taskDir, 'backend');
+  const backendDir = join(taskDir, '10-backend');
 
   // 复制 Spec 文件，替换占位符
   const taskName = task.name || task.id;

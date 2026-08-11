@@ -140,8 +140,9 @@ async function dryRunChange(options: ChangeOptions, iteration: string): Promise<
     const taskDir = join(process.cwd(), iteration, options.task || '');
     logger.info('| 文件 | 影响描述 |');
     logger.info('| :--- | :--- |');
-    logger.info(`| ${options.task}/backend/REQ.md | 需求变更 |`);
-    logger.info(`| ${options.task}/backend/TECH.md | 方案需调整 |`);
+    logger.info(`| ${options.task}/00-specs/REQ.md | 需求变更 |`);
+    logger.info(`| ${options.task}/00-specs/TECH.md | 方案需调整 |`);
+    logger.info(`| ${options.task}/00-specs/CHANGELOG.md | 变更记录追加 |`);
     logger.info(`| ${options.task}/_shared/API_CONTRACT.yaml | 接口契约可能需更新 |`);
 
     // 查找受影响的依赖任务
@@ -178,15 +179,30 @@ async function applyTaskChange(options: ChangeOptions, iteration: string): Promi
   const now = new Date().toISOString().split('T')[0];
 
   // 更新 REQ.md（事务保护）
-  const reqPath = join(taskDir, 'backend', 'REQ.md');
+  const reqPath = join(taskDir, '00-specs', 'REQ.md');
   if (await pathExists(reqPath)) {
     let content = await readFile(reqPath, 'utf-8');
     const changeNote = `\n## 变更记录\n\n| ${now} | v1.1 | ${options.desc} | SpecCore |\n`;
     tx.write(reqPath, content + changeNote);
   }
 
+  // 更新 CHANGELOG.md（事务保护）
+  const changelogPath = join(taskDir, '00-specs', 'CHANGELOG.md');
+  if (await pathExists(changelogPath)) {
+    let content = await readFile(changelogPath, 'utf-8');
+    const changeEntry = `| ${now} | v1.1 | ${options.desc} | SpecCore |\n`;
+    const updated = content.replace(
+      /(\| :--- \| :--- \| :--- \| :--- \|)/,
+      `$1\n${changeEntry}`
+    );
+    tx.write(changelogPath, updated);
+  } else {
+    // 如果没有 CHANGELOG.md，创建一个
+    tx.write(changelogPath, `# 变更记录\n\n| 时间 | 版本 | 变更内容 | 变更人 |\n| :--- | :--- | :--- | :--- |\n| ${now} | v1.1 | ${options.desc} | SpecCore |\n`);
+  }
+
   // 更新 TASK.md 变更履历（事务保护）
-  const taskMdPath = join(taskDir, 'backend', 'TASK.md');
+  const taskMdPath = join(taskDir, '00-specs', 'TASK.md');
   if (await pathExists(taskMdPath)) {
     let content = await readFile(taskMdPath, 'utf-8');
     const changeEntry = `| ${now} | v1.1 | 需求变更: ${options.desc} | SpecCore |\n`;
@@ -198,7 +214,7 @@ async function applyTaskChange(options: ChangeOptions, iteration: string): Promi
   }
 
   // 同步前端各平台 TASK.md（事务保护）
-  const frontendDir = join(taskDir, 'frontend');
+  const frontendDir = join(taskDir, '20-frontend');
   if (await pathExists(frontendDir)) {
     const { readdir: rd } = await import('fs-extra');
     const platformDirs = await rd(frontendDir, { withFileTypes: true });
@@ -218,12 +234,23 @@ async function applyTaskChange(options: ChangeOptions, iteration: string): Promi
     }
   }
 
+  // 更新任务状态为 needs-rework
+  const metaStatusPath = join(taskDir, '.meta', 'status');
+  if (await pathExists(metaStatusPath)) {
+    const currentStatus = await readFile(metaStatusPath, 'utf-8');
+    if (currentStatus.trim() === 'done') {
+      tx.write(metaStatusPath, 'needs-rework');
+      logger.info(`   📌 任务状态从 done 回退为 needs-rework`);
+    }
+  }
+
   // 提交事务 — 原子写入，失败回滚
   if (tx.length > 0) {
     await tx.commit();
     logger.info(`✅ 已更新 ${tx.length} 个文件（事务保护）`);
-    logger.info(`   ${options.task}/backend/REQ.md`);
-    logger.info(`   ${options.task}/backend/TASK.md`);
+    logger.info(`   ${options.task}/00-specs/REQ.md`);
+    logger.info(`   ${options.task}/00-specs/CHANGELOG.md`);
+    logger.info(`   ${options.task}/00-specs/TASK.md`);
 
     // ── 联动更新上层文档 ──
     if (options.requirement && options.task) {

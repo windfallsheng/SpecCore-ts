@@ -89,12 +89,12 @@ async function validateTask(
   // Check required files
   const requiredFiles = [
     '.task-type',
-    'backend/REQ.md',
-    'backend/TASK.md',
-    'backend/TECH.md',
-    'frontend/REQ.md',
-    'frontend/TASK.md',
-    'frontend/TECH.md'
+    '00-specs/REQ.md',
+    '00-specs/TASK.md',
+    '00-specs/TECH.md',
+    '20-frontend/REQ.md',
+    '20-frontend/TASK.md',
+    '20-frontend/TECH.md'
   ];
   
   for (const file of requiredFiles) {
@@ -107,9 +107,9 @@ async function validateTask(
           severity: 'error',
           fixable: true
         });
-      } else if (file.includes('backend/') || file.includes('frontend/')) {
+      } else if (file.includes('backend/') || file.includes('20-frontend/')) {
         // In non-strict mode, only backend OR frontend is required
-        const counterpart = file.replace('backend/', 'frontend/').replace('frontend/', 'backend/');
+        const counterpart = file.replace('backend/', '20-frontend/').replace('20-frontend/', 'backend/');
         const counterpartPath = join(taskPath, counterpart);
         if (!(await pathExists(counterpartPath))) {
           result.errors.push({
@@ -147,7 +147,7 @@ async function validateTask(
   }
   
   // Check markdown files for content
-  const mdFiles = ['backend/REQ.md', 'backend/TECH.md', 'frontend/REQ.md', 'frontend/TECH.md'];
+  const mdFiles = ['00-specs/REQ.md', '00-specs/TECH.md', '20-frontend/REQ.md', '20-frontend/TECH.md'];
   for (const file of mdFiles) {
     const filePath = join(taskPath, file);
     if (await pathExists(filePath)) {

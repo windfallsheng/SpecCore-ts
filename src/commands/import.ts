@@ -53,7 +53,7 @@ export async function importCommand(options: ImportOptions): Promise<void> {
       const projectName = options.project;
       const projectPath = options.path || `./${projectName}`;
       if (!options.type) {
-        logger.error('请通过 --type 指定项目类型（backend/frontend/web/h5/miniapp）');
+        logger.error('请通过 --type 指定项目类型（backend/20-frontend/web/h5/miniapp）');
         logger.error('示例: speccore import --project=xxx --type=backend --path=.');
         return;
       }

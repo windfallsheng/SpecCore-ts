@@ -278,14 +278,14 @@ async function autoSplitTasks(
   for (let i = 0; i < reqs.length; i++) {
     const taskId = `Task-${String(i + 1).padStart(3, '0')}`;
     const taskDir = join(iterationDir, taskId);
-    await ensureDir(join(taskDir, 'backend'));
-    await ensureDir(join(taskDir, 'frontend'));
+    await ensureDir(join(taskDir, '10-backend'));
+    await ensureDir(join(taskDir, '20-frontend'));
 
     // .task-type
     await writeFile(join(taskDir, '.task-type'), 'feature');
 
-    // backend/TASK.md
-    await writeFile(join(taskDir, 'backend', 'TASK.md'),
+    // 00-specs/TASK.md
+    await writeFile(join(taskDir, '00-specs', 'TASK.md'),
       `# ${taskId}: ${reqs[i].name}
 
 > 来源: ${reqs[i].id}（${reqs[i].project}）
@@ -311,8 +311,8 @@ async function autoSplitTasks(
 `
     );
 
-    // backend/REQ.md
-    await writeFile(join(taskDir, 'backend', 'REQ.md'),
+    // 00-specs/REQ.md
+    await writeFile(join(taskDir, '00-specs', 'REQ.md'),
       `# ${reqs[i].name} - 需求
 
 > 来源: ${reqs[i].id}（${reqs[i].project}）
@@ -330,8 +330,8 @@ async function autoSplitTasks(
 `
     );
 
-    // backend/TECH.md
-    await writeFile(join(taskDir, 'backend', 'TECH.md'),
+    // 00-specs/TECH.md
+    await writeFile(join(taskDir, '00-specs', 'TECH.md'),
       `# ${reqs[i].name} - 技术方案
 
 > 来源: ${reqs[i].id}（${reqs[i].project}）

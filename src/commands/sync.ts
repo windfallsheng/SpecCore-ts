@@ -114,9 +114,9 @@ async function analyzeTaskDiff(task: string, iteration: string): Promise<void> {
   // 检查必需文件 + 内容分析
   const checks = [
     { file: '.task-type', label: '任务类型' },
-    { file: 'backend/REQ.md', label: '后端需求', check: (c: string) => c.includes('## 需求描述'), warn: '缺少需求描述章节' },
-    { file: 'backend/TECH.md', label: '后端方案', check: (c: string) => c.includes('## 技术'), warn: '缺少技术方案章节' },
-    { file: 'backend/TASK.md', label: '任务追踪', check: (c: string) => c.includes('变更履历'), warn: '缺少变更履历' },
+    { file: '00-specs/REQ.md', label: '后端需求', check: (c: string) => c.includes('## 需求描述'), warn: '缺少需求描述章节' },
+    { file: '00-specs/TECH.md', label: '后端方案', check: (c: string) => c.includes('## 技术'), warn: '缺少技术方案章节' },
+    { file: '00-specs/TASK.md', label: '任务追踪', check: (c: string) => c.includes('变更履历'), warn: '缺少变更履历' },
     { file: '_shared/API_CONTRACT.yaml', label: 'API契约', check: (c: string) => c.includes('api:') || c.includes('paths:'), warn: '缺少 API 定义' },
   ];
 
@@ -145,7 +145,7 @@ async function syncTaskSpec(task: string, iteration: string, auto: boolean): Pro
   }
 
   // 更新 TASK.md 中的变更履历
-  const taskMdPath = join(taskDir, 'backend', 'TASK.md');
+  const taskMdPath = join(taskDir, '00-specs', 'TASK.md');
   if (await pathExists(taskMdPath)) {
     let content = await readFile(taskMdPath, 'utf-8');
     const now = new Date().toISOString().split('T')[0];
@@ -170,7 +170,7 @@ async function syncTaskSpec(task: string, iteration: string, auto: boolean): Pro
   }
 
   // 同步前端各平台 TASK.md
-  const frontendDir = join(taskDir, 'frontend');
+  const frontendDir = join(taskDir, '20-frontend');
   if (await pathExists(frontendDir)) {
     const { readdir } = await import('fs-extra');
     const platformDirs = await readdir(frontendDir, { withFileTypes: true });
@@ -233,7 +233,7 @@ async function detectDiscrepancies(options: SyncOptions, iteration: string): Pro
   const cwd = process.cwd();
   const iterDir = join(cwd, `Iteration-${iteration}`);
   const taskDir = join(iterDir, options.task);
-  const reqPath = join(taskDir, 'backend', 'REQ.md');
+  const reqPath = join(taskDir, '00-specs', 'REQ.md');
 
   if (!(await pathExists(reqPath))) {
     logger.warn(`REQ.md 不存在: ${reqPath}`);

@@ -198,9 +198,9 @@ function showNextStep(taskId: string, iteration: string, state: State): void {
   const steps: Record<State, string> = {
     pending:      `speccore execute --task=${taskId} --force`,
     in_progress:  `speccore lifecycle --task=${taskId} --status=testing`,
-    testing:      `参照 backend/TEST.md 逐项验证，通过后: speccore lifecycle --task=${taskId} --status=review`,
+    testing:      `参照 99-artifacts/TEST.md 逐项验证，通过后: speccore lifecycle --task=${taskId} --status=review`,
     test_failed:  '修复代码后: speccore lifecycle --task=Task-001 --status=testing',
-    review:       `对照 backend/REVIEW.md 审查，通过后: speccore lifecycle --task=${taskId} --status=done`,
+    review:       `对照 99-artifacts/REVIEW.md 审查，通过后: speccore lifecycle --task=${taskId} --status=done`,
     review_failed:'修复审查意见后: speccore lifecycle --task=Task-001 --status=review',
     done:         `✅ 完成! 运行: speccore archive --task=${taskId}`,
   };
@@ -217,7 +217,7 @@ async function showAllTasks(iteration: string): Promise<void> {
   for (const state of STATES) byState[state] = [];
 
   for (const task of tasks) {
-    const taskMdPath = join(iterDir, task.id, 'backend', 'TASK.md');
+    const taskMdPath = join(iterDir, task.id, '00-specs', 'TASK.md');
     if (await pathExists(taskMdPath)) {
       const content = await readFile(taskMdPath, 'utf-8');
       const state = detectState(content);
