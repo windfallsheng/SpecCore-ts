@@ -184,7 +184,8 @@ export async function askCommand(input: string, _options: any): Promise<void> {
   }
   if (lastVersion !== ver) {
     const html = renderOnboardingHtml();
-    const outPath = join(process.cwd(), 'speccore-ask-onboarding.html');
+    const outPath = join(process.cwd(), 'outputs', 'speccore-ask-onboarding.html');
+    await ensureDir(join(process.cwd(), 'outputs'));
     await writeFile(outPath, html);
     await writeFile(markerFile, ver);
     // 输出 SPECCORE_ONBOARD 标记让 AI 展示引导页
@@ -330,7 +331,7 @@ async function askHtml(input: string): Promise<void> {
   const html = renderAskHtml(result, input);
   const path = require('path');
   const fs = require('fs');
-  const file = path.join(process.cwd(), 'speccore-ask-result.html');
+  const file = path.join(process.cwd(), 'outputs', 'speccore-ask-result.html');
   if (!!process.env.WORKBUDDY_SESSION) { process.stdout.write(html); } else { fs.writeFileSync(file, html); process.stdout.write('file://' + file + '\n'); }
   logger.info(`✅ 已生成: ${file}`);
 }

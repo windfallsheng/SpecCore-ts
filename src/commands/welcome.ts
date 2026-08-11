@@ -6,7 +6,7 @@
 import { logger } from '../utils/logger';
 import { isAiContext, detectHostAi } from '../core/ask-host-ai';
 import { join } from 'path';
-import { pathExists, readdir, writeFile } from 'fs-extra';
+import { pathExists, readdir, writeFile, ensureDir } from 'fs-extra';
 import { getDefaultIteration } from '../core/context';
 
 const C = { r: '\x1b[0m', b: '\x1b[1m', d: '\x1b[2m', cyan: '\x1b[36m', green: '\x1b[32m', yellow: '\x1b[33m', magenta: '\x1b[35m', gray: '\x1b[90m', blue: '\x1b[34m' };
@@ -39,9 +39,9 @@ export async function welcomeCommand(_options: WelcomeOptions): Promise<void> {
       else phase = 'execute';
     }
     const html = renderWelcomeHtml(version, isInit, iterName, phase, taskCount);
-    const outPath = _options.output || join(process.cwd(), 'welcome-SpecCore.html');
+    const outPath = _options.output || join(process.cwd(), 'outputs', 'welcome-SpecCore.html');
     if (!!process.env.WORKBUDDY_SESSION) { process.stdout.write(html); }
-    else { await writeFile(outPath, html); process.stdout.write('✅ 页面已生成: file://' + outPath + '\n   预览: python3 -m http.server 8080 → http://localhost:8080/' + require('path').basename(outPath) + '\n'); }
+    else { await ensureDir(join(process.cwd(), 'outputs')); await writeFile(outPath, html); process.stdout.write('✅ 页面已生成: file://' + outPath + '\n   预览: python3 -m http.server 8080 → http://localhost:8080/' + require('path').basename(outPath) + '\n'); }
     return;
   }
 
