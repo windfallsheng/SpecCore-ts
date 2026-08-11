@@ -104,8 +104,8 @@ async function loadApiSpecs(cwd: string, taskDir: string): Promise<ApiSpec[]> {
   const content = await readFile(reqPath, 'utf-8');
   const apis: ApiSpec[] = [];
 
-  // 解析 API 表格: | 方法 | 路径 | 说明 |
-  const tableRegex = /\|.*方法.*\|.*路径.*\|.*说明.*\|.*/i;
+  // 解析 API 表格: | 方法 | 路径 | 说明 | 或 | Method | Path | Description |
+  const tableRegex = /\|.*(?:方法|Method).*\|.*(?:路径|Path).*\|.*(?:说明|Description).*\|.*/i;
   const tableMatch = content.match(tableRegex);
   if (tableMatch) {
     const startIdx = content.indexOf(tableMatch[0]);

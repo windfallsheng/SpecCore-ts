@@ -164,15 +164,22 @@ export function emitWorkBuddySignal(type: string, input: string, context: Record
 // ============================================================
 
 export async function tryHostAi(
-  type: 'ask' | 'dev' | 'welcome', 
-  input: string, 
+  type: 'ask' | 'dev' | 'welcome',
+  input: string,
   context: Record<string, any> = {}
 ): Promise<any | null> {
   // 先检测
   const tool = detectHostAi();
   if (tool === 'none') return null;
-  
+
   logger.info(`🤖 检测到 ${tool.toUpperCase()} 环境，尝试宿主 AI 增强...`);
+
+  // 如果 context 包含 formattedContext，优先输出结构化上下文
+  if (context.formattedContext) {
+    process.stdout.write('\n[SPECCORE_AI_CONTEXT]\n');
+    process.stdout.write(context.formattedContext);
+    process.stdout.write('\n[/SPECCORE_AI_CONTEXT]\n\n');
+  }
 
   // WorkBuddy: 两种方式
   if (tool === 'workbuddy') {

@@ -201,9 +201,12 @@ export async function getIterationDir(name: string): Promise<string> {
   try {
     const entries = await readdir(root, { withFileTypes: true });
     for (const e of entries) {
+      const lowerName = e.name.toLowerCase();
+      const lowerShort = shortName.toLowerCase();
       if (e.isDirectory() && e.name.startsWith('Iteration-') && (
         e.name === `Iteration-${shortName}` ||
-        e.name.toLowerCase().endsWith(shortName.toLowerCase())
+        lowerName === lowerShort ||
+        lowerName.endsWith(`-${lowerShort}`)
       )) {
         return join(root, e.name);
       }

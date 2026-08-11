@@ -144,6 +144,10 @@ export class FileTransaction {
             if (existsSync(op.destPath!)) {
               renameSync(op.destPath!, op.path);
             }
+            // 恢复被覆盖的目标文件内容
+            if (op.backup !== null && op.backup !== undefined) {
+              writeFileSync(op.destPath!, op.backup, 'utf-8');
+            }
             break;
         }
       } catch {
