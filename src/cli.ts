@@ -4,6 +4,7 @@ import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { initCommand } from './commands/init';
 import { validateCommand } from './commands/validate';
+import { verifyCommand } from './commands/verify';
 import { archiveCommand } from './commands/archive';
 import { progressCommand } from './commands/progress';
 import { reportCommand } from './commands/report';
@@ -154,6 +155,7 @@ program
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('--force', 'Auto-execute without confirmation')
   .option('--auto', '全自动流水线：init→doc2spec→analyze→split→plan→execute→pr→done→spec2doc')
+  .option('--auto-steps <steps>', '指定连续步骤自动执行（如 analyze,split,execute）')
   .option('--from <phase>', '从指定阶段开始（init/doc2spec/analyze/split/plan/execute/pr/done/spec2doc）')
   .option('--to <phase>', '到指定阶段结束（init/doc2spec/analyze/split/plan/execute/pr/done/spec2doc）')
   .option('--web', '强制输出 HTML 页面')
@@ -390,6 +392,17 @@ program
   .option('--verify', '生成代码后自动检查 TEST/REVIEW/DEPLOY → 最多3轮自动修复')
   .option('--format <format>', 'Output format: text, json', 'text')
   .action(validateCommand);
+
+program
+  .command('verify')
+  .alias('vf')
+  .description('代码验证：编译检查 + Lint + 单元测试（执行后质量门禁）')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('-t, --task <task>', 'Verify specific task')
+  .option('--type <type>', 'Check type: compile, lint, test, all', 'all')
+  .option('--path <path>', 'Code path to verify')
+  .option('--timeout <ms>', 'Check timeout in ms', '120000')
+  .action(verifyCommand);
 
 // ================================================================
 // 📊 进度与状态

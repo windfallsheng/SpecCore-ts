@@ -430,7 +430,75 @@ async function createTaskFromSection(iterationDir: string, taskId: string, secti
   await writeFile(join(taskDir, '.meta', 'owner'), owner);
   await writeFile(join(taskDir, '.meta', 'created-at'), today);
 
-  // ── 2. 共享契约 ──
+  // ── 2. 任务目录指引 ──
+  await writeFile(
+    join(taskDir, 'README.md'),
+    `# ${section.name}
+
+> 任务目录使用指引
+
+## 目录结构
+
+\`\`\`
+${taskId}/
+├── README.md              <-- 本文件（目录指引）
+├── .meta/                 <-- 任务元信息（type/status/owner/created-at）
+├── _shared/               <-- 共享契约（API_CONTRACT.yaml）
+├── 00-specs/              <-- 执行前核心规格（AI 执行时必读）
+│   ├── REQ.md             <-- 需求描述（API + 数据模型 + 业务规则）
+│   ├── TECH.md            <-- 技术方案（架构/接口设计/数据模型/核心逻辑）
+│   ├── TASK.md            <-- 任务执行追踪（状态/负责人/产出物清单）
+│   ├── SCHEMA.md          <-- 数据库设计（Entity/DDL/索引）
+│   └── CHANGELOG.md       <-- 变更记录
+├── 10-backend/            <-- 后端实现（src/tests）
+├── 20-frontend/           <-- 前端实现（{platform}/src/tests）
+├── 99-artifacts/          <-- 执行产出（TEST/REVIEW/DEPLOY/RISK/DEPS/MONITOR）
+└── .issues.md             <-- 问题追踪
+\`\`\`
+
+## AI 执行时读取规则
+
+运行 \`speccore execute -t ${taskId}\` 时，AI 会按以下顺序读取本文档：
+
+### 必读文件（自动嵌入 AI Prompt）
+
+| 文件 | 用途 |
+|:---|:---|
+| \`00-specs/REQ.md\` | 需求描述、API 列表、数据模型、业务规则 |
+| \`00-specs/TECH.md\` | 技术方案、架构设计、接口分层、核心逻辑 |
+| \`00-specs/TASK.md\` | 任务信息、状态追踪、产出物清单 |
+| \`00-specs/SCHEMA.md\` | 数据库表结构、字段、索引（如有） |
+| \`.speccore/CONSTITUTION.md\` | 技术栈、命名规范、异常码体系 |
+
+### 参考文件（AI 按需查阅）
+
+| 文件 | 用途 |
+|:---|:---|
+| \`99-artifacts/TEST.md\` | 测试计划（用例/边界/集成） |
+| \`99-artifacts/REVIEW.md\` | 评审清单（安全/质量/性能） |
+| \`99-artifacts/RISK.md\` | 风险评估 |
+| \`_shared/API_CONTRACT.yaml\` | API 契约（OpenAPI 格式） |
+| \`.issues.md\` | 已知问题和约束 |
+
+### 不会被 AI 读取的文件
+
+- \`10-backend/\` 和 \`20-frontend/\` 下的源码 —— 这是 AI **输出**代码的地方
+- \`99-artifacts/DEPLOY.md\`、\`ERROR_CODES.md\` 等 —— 执行完成后自动更新
+
+## 如何让 AI 读到你补充的文档？
+
+**推荐做法：** 把你的补充内容写到对应的规范文件里：
+
+- 补充需求细节 → 写到 \`00-specs/REQ.md\`
+- 补充技术方案 → 写到 \`00-specs/TECH.md\`
+- 补充数据库设计 → 写到 \`00-specs/SCHEMA.md\`
+- 记录已知问题/约束 → 写到 \`.issues.md\`
+
+AI 执行时会自动读取这些文件，作为生成代码的依据。
+`
+  );
+
+  // ── 3. 共享契约 ──
   await ensureDir(join(taskDir, '_shared'));
   const contractYaml = generateApiContract(section);
   if (contractYaml) {
@@ -879,23 +947,15 @@ async function generateImpactGraph(
 
     const taskDir = join(iterationDir, '030-tasks', taskId);
     if (await pathExists(taskDir)) {
-      // 生成风险报告并嵌入 TASK.md
+      // 生成风险报告并嵌入 TASK.md（去重：只写一次）
       const taskMdPath = join(taskDir, '00-specs', 'TASK.md');
-      const riskReport = generateRiskReport(risk); await writeFile(join(taskDir, '.risk'), riskReport);
+      const riskReport = generateRiskReport(risk);
+      await writeFile(join(taskDir, '.risk'), riskReport);
       if (await pathExists(taskMdPath)) {
         let taskMd = await readFile(taskMdPath, 'utf-8');
         if (!taskMd.includes('## 风险评估')) {
           taskMd += '\n\n## 风险评估\n\n' + riskReport.replace('# 风险评估\n\n', '');
           await writeFile(taskMdPath, taskMd);
-        }
-      }
-      // Inject risk section into TASK.md if it exists
-      const riskTaskPath = join(taskDir, '00-specs', 'TASK.md');
-      if (await pathExists(riskTaskPath)) {
-        let taskMd = await readFile(riskTaskPath, 'utf-8');
-        if (!taskMd.includes('## 风险评估')) {
-          taskMd += '\n\n## 风险评估\n\n' + riskReport.replace('# 风险评估\n\n', '');
-          await writeFile(riskTaskPath, taskMd);
         }
       }
     }
@@ -1446,8 +1506,11 @@ function detectSemanticDependencies(sections: Section[]): Map<string, string[]> 
 
 async function detectExistingTasks(iterDir: string): Promise<string[]> {
   const tasks: string[] = [];
+  // 优先从 030-tasks/ 扫描，兼容旧布局（迭代根目录）
+  const scanDir = join(iterDir, '030-tasks');
+  const targetDir = (await pathExists(scanDir)) ? scanDir : iterDir;
   try {
-    const entries = require('fs').readdirSync(iterDir, { withFileTypes: true });
+    const entries = require('fs').readdirSync(targetDir, { withFileTypes: true });
     for (const e of entries) {
       if (e.isDirectory() && e.name.startsWith('Task-')) {
         tasks.push(e.name);

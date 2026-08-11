@@ -162,6 +162,7 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
     await ensureDir(join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'report'));
     await ensureDir(join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'specs'));
     await ensureDir(join(speccoreDir, 'GLOBAL', 'BASELINES'));
+    await ensureDir(join(speccoreDir, 'inbox'));
 
     // Create default files
     await createDefaultFiles(projectRoot, speccoreDir);
@@ -1689,7 +1690,13 @@ h1{font-size:18px;color:#0ea5e9;text-align:center;margin-bottom:8px;font-weight:
 .badge{display:inline-block;background:rgba(14,165,233,.15);color:#0ea5e9;padding:4px 12px;border-radius:6px;font-size:12px;margin:4px 4px 4px 0}
 .ft{text-align:center;color:#3b5370;font-size:10px;margin-top:20px}
 @keyframes scanX{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
-</style></head><body><div class="scanlines"></div><div class="card">
+.grid-pattern{position:fixed;inset:0;pointer-events:none;z-index:0;background-image:linear-gradient(rgba(14,165,233,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(14,165,233,.03) 1px,transparent 1px);background-size:60px 60px}
+@keyframes cardGlow{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.6)}}
+.card-bg{position:absolute;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse at 50% 10%,rgba(14,165,233,.25) 0%,transparent 70%);animation:cardGlow 3s ease-in-out infinite;transform-origin:top center}
+@keyframes titleGlow{0%,100%{text-shadow:0 0 20px rgba(14,165,233,.4),0 0 60px rgba(14,165,233,.15)}50%{text-shadow:0 0 30px rgba(14,165,233,.7),0 0 80px rgba(14,165,233,.3)}}
+h1,h2{text-shadow:0 0 20px rgba(14,165,233,.4),0 0 60px rgba(14,165,233,.15);animation:titleGlow 3s ease-in-out infinite}
+</style></head><body><div class="scanlines"></div><div class="grid-pattern"></div><div class="card">
+<div class="card-bg"></div>
 <div style="display:block;width:100%">${SVG_ONBOARD}</div>
 <h1>SpecCore 已升级到 v${version}</h1>
 <h2>项目: ${name} | 升级完成</h2>

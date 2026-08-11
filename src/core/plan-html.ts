@@ -265,12 +265,12 @@ main { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; paddin
 .meta-prio { font-weight: 600; }
 .meta-owner, .meta-deps { opacity: 0.8; }
 
-/* ── Progress Bar ── */
-.progress-bar {
+/* ── Task Card Progress Bar ── */
+.task-card .progress-bar {
   margin-top: 10px; height: 3px; background: rgba(255,255,255,.06);
   border-radius: 2px; overflow: hidden;
 }
-.progress-fill {
+.task-card .progress-fill {
   height: 100%; width: 50%;
   background: linear-gradient(90deg, var(--orange), var(--cyan));
   border-radius: 2px; animation: progressPulse 2s ease-in-out infinite;

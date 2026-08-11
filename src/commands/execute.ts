@@ -6,6 +6,7 @@ import { execSync } from 'child_process';
 import { logger } from '../utils/logger';
 import { getDefaultIteration, updateContext, recordHistory, startHotfix, getIterationDir } from '../core/context';
 import { scanTasks, topologicalSort, TaskState } from '../core/state';
+import { resolveTask, formatResolveResult } from '../core/resolver';
 import { FileTransaction } from '../core/transaction';
 import { loadSpecRules, generateImports, SpecRules, loadTechStack } from '../core/spec-rules';
 
@@ -13,6 +14,10 @@ import { logOperation } from '../core/operation-log';
 import { showNextSteps } from '../core/next-steps';
 import { extractQuestions, showQuestionChecklist } from '../core/question-checklist';
 import { savePlan, markPlanExecuted, getPlan, ExecutionPlan } from '../core/plan-store';
+import { generatePlan, formatPlanMarkdown } from './plan';
+import { generatePlanHtml } from '../core/plan-html';
+import { generateReport as generateRetroReport } from './retro';
+import { version } from '../../package.json';
 import {
   initExecutionState,
   loadExecutionState,
@@ -22,8 +27,10 @@ import {
   canResume,
   ExecutionState,
 } from '../core/execution-state';
-import { createTaskBranch, detectDefaultBranch } from '../core/git-integration';
+import { createTaskBranch, detectDefaultBranch, isProtectedBranch } from '../core/git-integration';
 import { buildPrompt, formatPrompt, parseAiResponse, outputNeedsInfo } from '../core/prompt-builder';
+import { runVerification, writeVerifyReport, outputFixTag, runQualityGate } from '../core/verify-engine';
+import { loadConfig } from '../core/unified-config';
 
 export interface ExecuteOptions {
   all?: boolean;
@@ -52,7 +59,19 @@ export interface ExecuteOptions {
   plan?: string;
   prompt?: boolean;     // --prompt: 输出结构化 Prompt 到 stdout（等待 AI）
   response?: string;    // --response: AI 返回的代码内容（配合 --prompt 使用）
+  verify?: boolean;     // --verify: 执行后自动运行代码验证
+  auto?: boolean;       // --auto: 跳过确认，自动选任务，直接执行
 }
+
+/**
+ * 解析任务目录路径：优先 030-tasks/，兼容旧布局（迭代根目录）
+ */
+async function resolveTaskDir(iterDir: string, taskId?: string): Promise<string> {
+  const tasksDir = join(iterDir, '030-tasks');
+  const base = (await pathExists(tasksDir)) ? tasksDir : iterDir;
+  return taskId ? join(base, taskId) : base;
+}
+
 export async function executeCommand(options: ExecuteOptions): Promise<void> {
   try {
     const iteration = await getDefaultIteration(options.iteration);
@@ -87,17 +106,21 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
 
     // Apply filters
     if (options.task) {
-      // Support both exact match and prefix match (Task-001 → Task-001-用户登录)
-      const filtered = tasks.filter(t => t.id === options.task);
-      if (filtered.length > 0) {
-        tasks = filtered;
-      } else {
-        const prefixMatch = tasks.filter(t => t.id && t.id.startsWith(options.task!));
-        if (prefixMatch.length > 0) {
-          tasks = prefixMatch;
-        } else {
-          logger.warn(`Task "${options.task}" not found. Available: ${tasks.map(t => t.id).join(', ')}`);
+      // 使用统一 resolver 解析任务名（支持短名、关键词、前缀匹配）
+      const taskResult = await resolveTask(options.task, iteration);
+      if (taskResult.exact && taskResult.value) {
+        if (taskResult.matchType !== 'exact') {
+          const hint = formatResolveResult(taskResult, 'Task');
+          if (hint) logger.info(hint);
         }
+        tasks = tasks.filter(t => t.id === taskResult.value!.id);
+      } else if (taskResult.candidates.length > 1) {
+        // 多候选时展示列表，让用户选择
+        logger.warn(taskResult.hint || '找到多个匹配任务，请指定更精确的名称');
+        return;
+      } else {
+        logger.warn(taskResult.hint || `Task "${options.task}" not found`);
+        return;
       }
     }
     if (options.type) tasks = tasks.filter(t => t.type === options.type);
@@ -111,6 +134,15 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
     if (tasks.length === 0) {
       logger.warn('No tasks match the specified filters');
       return;
+    }
+
+    // ── --auto: 未指定任务时自动选择第一个待执行任务 ──
+    if (options.auto && !options.task && !options.all) {
+      const pendingTask = tasks.find(t => t.status === 'pending');
+      if (pendingTask) {
+        logger.info(`🤖 Auto 模式: 自动选择 ${pendingTask.id}`);
+        tasks = tasks.filter(t => t.id === pendingTask.id);
+      }
     }
 
     let sortedTasks = topologicalSort(tasks);
@@ -128,7 +160,7 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
       : `Execute-${iteration}-${new Date().toISOString().slice(0, 16).replace('T', ' ')}`;
     const planTasks = sortedTasks.map(t => t.id);
     if (planTasks.length > 0) {
-      await savePlan({
+      const saved = await savePlan({
         name: planName,
         iteration,
         tasks: planTasks,
@@ -143,6 +175,37 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
           frontend: options.frontend,
         },
       });
+
+      // ── 多任务时自动生成 PLAN.md + HTML 可视化 ──
+      if (sortedTasks.length > 1) {
+        const iterDir = await getIterationDir(iteration);
+        const planDir = join(iterDir, '000-overview', 'plans');
+        await ensureDir(planDir);
+
+        const planEntries = generatePlan(sortedTasks, parseInt(options.batchSize || '3', 10), 'auto');
+        const planMd = formatPlanMarkdown(planEntries, iteration, sortedTasks);
+
+        // 写入 PLAN.md（最新版）
+        const latestPath = join(planDir, 'PLAN.md');
+        await writeFile(latestPath, planMd, 'utf-8');
+
+        // 写入带时间戳的版本
+        const ts = new Date().toISOString().replace(/T/, '-').replace(/:/g, '').slice(0, 17);
+        const versionedPath = join(planDir, `PLAN-${ts}-auto.md`);
+        await writeFile(versionedPath, planMd, 'utf-8');
+
+        // 生成 HTML 可视化
+        const htmlData = sortedTasks.map(t => ({
+          id: t.id, name: t.name, priority: t.priority, status: t.status,
+          owner: t.assignee || undefined, dependsOn: t.dependencies || [],
+        }));
+        const html = generatePlanHtml(htmlData, { version, iteration, planName });
+        const htmlPath = join(planDir, 'speccore-plan.html');
+        await writeFile(htmlPath, html, 'utf-8');
+
+        logger.info(`📝 计划已生成: ${planDir}/PLAN.md`);
+        logger.info(`📊 可视化: ${htmlPath}`);
+      }
     }
 
     // === Interactive mode ===
@@ -155,9 +218,9 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
     const batchSize = parseInt(options.batchSize || '3', 10);
     printExecutionPreview(sortedTasks, iteration, batchSize);
 
-    // === Preview (default, unless --force) ===
-    if (!options.force) {
-      logger.info('💡 使用 --force 直接执行，或 --interactive 选择执行');
+    // === Preview (default, unless --force or --auto) ===
+    if (!options.force && !options.auto) {
+      logger.info('💡 使用 --force 或 --auto 直接执行，或 --interactive 选择执行');
       return;
     }
 
@@ -270,7 +333,7 @@ async function loadInquirer() {
 // ============================================================
 // Progress feedback execution
 // ============================================================
-async function executeWithProgress(tasks: TaskState[], iteration: string, base?: string, skip?: string[], options?: { only?: string; agent?: string }): Promise<void> {
+async function executeWithProgress(tasks: TaskState[], iteration: string, base?: string, skip?: string[], options?: { only?: string; agent?: string; verify?: boolean }): Promise<void> {
   const total = tasks.length;
   const startTime = Date.now();
   const completed: string[] = [];
@@ -297,26 +360,11 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
     return;
   }
 
-  // Create branches for each task (dependency-aware)
-  if (tasks.length > 0) {
-    let defaultBase = base || detectDefaultBranch(iteration);
-    for (const task of tasks) {
-      let taskBase = base;
-      // Auto-detect dependency per task from IMPACT.md
-      if (!taskBase) {
-        taskBase = await detectDependencyBase(iteration, task.id);
-      }
-      const branch = createTaskBranch(task.id, task.name || task.id, taskBase, iteration);
-      if (branch) {
-        const baseInfo = taskBase ? ` (from ${taskBase})` : ` (from ${defaultBase || 'HEAD'})`;
-        logger.info(`🌿 ${task.id}: ${branch}${baseInfo}`);
-      }
-      // 切回基础分支，避免下个任务从上个任务分支上拉代码
-      if (defaultBase) {
-        try { execSync(`git checkout "${defaultBase}"`, { stdio: 'pipe' }); } catch {}
-      }
-    }
-  }
+  // ── 分支策略：懒创建 + 依赖合并 ──
+  // 每个任务的分支在执行前才创建，确保依赖任务的代码已存在
+  // 有依赖的任务会 merge 依赖分支，拿到前序任务的代码
+  const defaultBase = base || detectDefaultBranch(iteration);
+  const createdBranches: Map<string, string> = new Map(); // taskId → branchName
 
   // ── Agent mode: output optimized context for external AI ──
   if (options?.agent) {
@@ -344,6 +392,12 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
     // Report current batch
     logger.info(`[${String(i + 1).padStart(2, '0')}/${total}] ${bar} ${progress}%`);
     logger.info(`  🔄 ${task.id} ${task.name || ''} (${task.type || 'feature'})`);
+
+    // ── 懒创建分支 + 合并依赖 ──
+    const branchName = prepareTaskBranch(task, iteration, defaultBase, createdBranches);
+    if (branchName) {
+      logger.info(`  🌿 ${task.id}: ${branchName}`);
+    }
 
     await generateTaskSkeleton(task, iteration);
 
@@ -378,6 +432,74 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
   // Post-execution question review
   const postQs = await extractQuestions(await getIterationDir(iteration));
   if (postQs.length > 0) showQuestionChecklist(postQs, '执行后审查');
+
+  // 自动生成任务回顾报告
+  const iterDirForRetro = await getIterationDir(iteration);
+  for (const task of tasks) {
+    try {
+      await generateRetroReport(task.id, iterDirForRetro);
+      logger.info(`  📝 回顾报告已生成: ${task.id}/RETRO.md`);
+    } catch {}
+  }
+
+  // ── 强制质量门禁：execute 后自动运行，不可跳过 ──
+  // 设计：编译失败时输出 [SPECCORE_EXEC] 标签，由外部 Skill 编排重新执行（最多 3 轮）
+  // 每轮独立运行门禁，轮次状态通过 .verify-state.json 持久化
+  {
+    const config = await loadConfig();
+    const codePath = config.code_scope?.[0] || process.cwd();
+    const absCodePath = codePath.startsWith('/') ? codePath : join(process.cwd(), codePath);
+
+    for (const task of tasks) {
+      const taskDir = join(iterDirForRetro, '030-tasks', task.id);
+      const taskCodePath = (await pathExists(join(taskDir, 'code'))) ? join(taskDir, 'code') : absCodePath;
+
+      // 读取上一轮修复状态（如果有）
+      const statePath = join(taskDir, '99-artifacts', '.verify-state.json');
+      let currentRound = 1;
+      if (await pathExists(statePath)) {
+        try {
+          const state = JSON.parse(await readFile(statePath, 'utf-8'));
+          currentRound = (state.round || 0) + 1;
+        } catch {}
+      }
+
+      const gate = await runQualityGate(task.id, taskCodePath, taskDir);
+
+      if (gate.passed) {
+        if (currentRound > 1) logger.info(`  ✅ ${task.id}: 第 ${currentRound} 轮修复后通过`);
+        // 清除轮次状态
+        if (await pathExists(statePath)) {
+          const { unlink } = await import('fs/promises');
+          try { await unlink(statePath); } catch {}
+        }
+      } else {
+        // 有阻塞性失败
+        logger.warn(`  ❌ ${task.id}: 第 ${currentRound} 轮质量门禁未通过`);
+        for (const f of gate.blockingFailed) {
+          logger.warn(`     ❌ ${f.name}: ${f.details}`);
+        }
+
+        const MAX_ROUNDS = 3;
+        if (currentRound < MAX_ROUNDS) {
+          // 保存轮次状态 + 输出 [SPECCORE_EXEC] 让 AI 修复
+          const { ensureDir } = await import('fs-extra');
+          await ensureDir(join(taskDir, '99-artifacts'));
+          await writeFile(statePath, JSON.stringify({ round: currentRound, taskId: task.id, timestamp: new Date().toISOString() }));
+          logger.info(`     🤖 请求 AI 修复（第 ${currentRound}/${MAX_ROUNDS} 轮）...`);
+          outputFixTag(gate.report, taskDir, currentRound);
+        } else {
+          // 3 轮都失败
+          logger.error(`  💀 ${task.id}: ${MAX_ROUNDS} 轮修复后质量门禁仍未通过`);
+          logger.info(`     📄 报告: ${join(taskDir, '99-artifacts', 'VERIFY_REPORT.md')}`);
+          logger.info(`     💡 请人工检查并修复`);
+        }
+      }
+
+      // 输出非阻塞警告
+      // （质量门禁内部已经打印了，这里不需要重复）
+    }
+  }
   
   logOperation('speccore execute done', `completed ${total} tasks in ${totalElapsed}s`);
 }
@@ -410,6 +532,18 @@ async function executeResume(iteration: string): Promise<void> {
   }
 
   logger.success('All batches completed!');
+
+  // 自动生成任务回顾报告
+  const iterDirForRetro = await getIterationDir(iteration);
+  for (const taskId of state.completedTasks) {
+    try {
+      await generateRetroReport(taskId, iterDirForRetro);
+    } catch {}
+  }
+  if (state.completedTasks.length > 0) {
+    logger.info(`📝 已生成 ${state.completedTasks.length} 份回顾报告`);
+  }
+
   clearExecutionState();
 }
 
@@ -443,6 +577,16 @@ async function executeBatchMode(tasks: TaskState[], iteration: string, batchSize
 
   logger.success('All batches completed!');
   logOperation('speccore execute --batch-size', `${tasks.length} tasks in ${state.totalBatches} batches`);
+
+  // 自动生成任务回顾报告
+  const iterDirForRetro = await getIterationDir(iteration);
+  for (const task of tasks) {
+    try {
+      await generateRetroReport(task.id, iterDirForRetro);
+    } catch {}
+  }
+  logger.info(`📝 已生成 ${tasks.length} 份回顾报告`);
+
   clearExecutionState();
 }
 
@@ -472,7 +616,7 @@ async function processBatch(tasks: TaskState[], state: ExecutionState, iteration
   for (const task of tasks) {
     logger.info(`   ${task.id}:`);
     for (const f of ['REQ.md', 'TECH.md', 'TASK.md']) {
-      const p = join(iterDir, task.id, '00-specs', f);
+      const p = join(await resolveTaskDir(iterDir), task.id, '00-specs', f);
       if (await pathExists(p)) {
         const content = await readFile(p, 'utf-8');
         const summary = content.slice(0, 80).replace(/\n/g, ' ');
@@ -553,7 +697,7 @@ function printExecutionPreview(tasks: TaskState[], iteration: string, batchSize 
 // Task execution (transaction protected)
 // ============================================================
 async function generateTaskSkeleton(task: TaskState, iteration: string): Promise<void> {
-  const taskDir = join(await getIterationDir(iteration), task.id);
+  const taskDir = await resolveTaskDir(await getIterationDir(iteration), task.id);
   let filesUpdated = 0;
 
   if (await pathExists(taskDir)) {
@@ -836,7 +980,7 @@ async function filterByPlatform(tasks: TaskState[], iteration: string, platform:
   const filtered: TaskState[] = [];
   const iterDir = await getIterationDir(iteration);
   for (const task of tasks) {
-    const platformDir = join(iterDir, task.id, 'frontend', platform);
+    const platformDir = join(await resolveTaskDir(iterDir), task.id, 'frontend', platform);
     if (await pathExists(platformDir)) filtered.push(task);
   }
   return filtered;
@@ -884,7 +1028,7 @@ async function preFlightCheck(tasks: TaskState[], iteration: string, options: Ex
   const approved: TaskState[] = [];
 
   for (const task of tasks) {
-    const taskDir = join(iterDir, '030-tasks', task.id);
+    const taskDir = await resolveTaskDir(iterDir, task.id);
     logger.info(`\n── ${task.id} ──`);
     
     let issues: string[] = [];
@@ -974,6 +1118,67 @@ async function preFlightCheck(tasks: TaskState[], iteration: string, options: Ex
   if (confirm.toLowerCase() !== 'y') { logger.info('\n❌ 已取消'); process.exit(0); }
   logger.info('\n✅ 开始执行...\n');
   return approved;
+}
+
+/**
+ * 懒创建任务分支 + 合并依赖分支
+ * 每个任务的分支在执行前才创建，确保依赖任务的代码已存在
+ */
+function prepareTaskBranch(
+  task: TaskState,
+  iteration: string,
+  defaultBase: string | undefined,
+  createdBranches: Map<string, string>
+): string | null {
+  const base = defaultBase || 'HEAD';
+
+  // 1. 切回 base 分支（允许从保护分支拉分支，但 hook 会阻止直接 commit）
+  if (defaultBase && isProtectedBranch(defaultBase)) {
+    logger.info(`  ℹ️ base 分支 '${defaultBase}' 受保护，任务分支将独立工作`);
+  }
+  try { execSync(`git checkout "${base}"`, { stdio: 'pipe' }); } catch {
+    // base 分支不存在时从 HEAD 创建
+    try { execSync('git checkout -', { stdio: 'pipe' }); } catch {}
+  }
+
+  // 2. 创建任务分支
+  const branch = createTaskBranch(task.id, task.name || task.id, undefined, iteration);
+  if (!branch) return null;
+  createdBranches.set(task.id, branch);
+
+  // 3. 检测依赖并合并
+  // 同步方式检测 IMPACT.md 中的依赖
+  let depTaskIds: string[] = [];
+  const impactPath = join(`Iteration-${iteration}`, 'IMPACT.md');
+  try {
+    if (require('fs').existsSync(impactPath)) {
+      const impact = require('fs').readFileSync(impactPath, 'utf-8');
+      for (const line of impact.split('\n')) {
+        if (line.includes('→') && line.includes(task.id)) {
+          const match = line.match(/→\s*\|\s*([^|]+)/);
+          if (match) {
+            const depId = match[1].trim().split(':')[0].trim();
+            depTaskIds.push(depId);
+          }
+        }
+      }
+    }
+  } catch {}
+
+  // 合并已完成的依赖任务分支
+  for (const depId of depTaskIds) {
+    const depBranch = createdBranches.get(depId);
+    if (depBranch) {
+      try {
+        execSync(`git merge "${depBranch}" --no-edit --no-ff`, { stdio: 'pipe' });
+        logger.info(`  🔗 合并依赖分支: ${depBranch}`);
+      } catch (e: any) {
+        logger.warn(`  ⚠️ 合并 ${depBranch} 冲突，需要手动解决`);
+      }
+    }
+  }
+
+  return branch;
 }
 
 /**
@@ -1076,7 +1281,7 @@ async function executionVerifyLoop(
   for (const task of tasks) {
     logger.info(`\n🔍 验证 ${task.id}...`);
 
-    const taskDir = join(iterDir, '030-tasks', task.id);
+    const taskDir = await resolveTaskDir(iterDir, task.id);
     let allPassed = true;
 
     for (let round = 1; round <= maxRounds; round++) {
@@ -1200,7 +1405,9 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
 
   // ── 缺参数检测 ──
   if (!task) {
-    const taskDir = join(await getIterationDir(iteration), '030-tasks');
+    const iterDir = await getIterationDir(iteration);
+    const tasksDir30 = join(iterDir, '030-tasks');
+    const taskDir = (await pathExists(tasksDir30)) ? tasksDir30 : iterDir;
     let availableTasks: string[] = [];
     try {
       const entries = await readdir(taskDir, { withFileTypes: true });
@@ -1217,18 +1424,21 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
     return;
   }
 
-  const taskDir = join(await getIterationDir(iteration), '030-tasks', task);
+  const taskDir = await resolveTaskDir(await getIterationDir(iteration), task);
 
   // ── 前置检查：任务必须有有效需求或分析内容 ──
-  const analysisFile = join(taskDir, 'ANALYSIS.md');
-  const requirementFile = join(taskDir, 'REQUIREMENT.md');
+  // 优先检查 00-specs/（新路径），兼容旧路径（Task 根目录）
+  const analysisFile = join(taskDir, '00-specs', 'ANALYSIS.md');
+  const requirementFile = join(taskDir, '00-specs', 'REQ.md');
+  const legacyAnalysis = join(taskDir, 'ANALYSIS.md');
+  const legacyRequirement = join(taskDir, 'REQUIREMENT.md');
 
-  // 读取文件内容验证有效性（接受 ANALYSIS.md 或 REQUIREMENT.md）
-  // Bug 任务的 REQUIREMENT.md（问题描述）本身就可以作为AI生成代码的依据
+  // 读取文件内容验证有效性（接受 ANALYSIS.md / REQ.md / REQUIREMENT.md）
+  // Bug 任务的 REQ.md（问题描述）本身就可以作为AI生成代码的依据
   let effectiveAnalysis = false;
   let contentPreview = '';
 
-  for (const f of [analysisFile, requirementFile]) {
+  for (const f of [analysisFile, requirementFile, legacyAnalysis, legacyRequirement]) {
     if (await pathExists(f)) {
       const content = (await readFile(f, 'utf-8')).trim();
       // 有效内容：>80字符 且 不是纯占位符
@@ -1243,7 +1453,7 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
   }
 
   if (!effectiveAnalysis) {
-    const reason = `任务 ${task} 缺少有效的需求或分析内容\n（ANALYSIS.md / REQUIREMENT.md 不存在或内容无效）`;
+    const reason = `任务 ${task} 缺少有效的需求或分析内容\n（00-specs/ANALYSIS.md 或 00-specs/REQ.md 不存在或内容无效）`;
     outputNeedsInfo({
       command: 'execute',
       missing: ['analysis'],

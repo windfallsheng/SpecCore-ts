@@ -12,7 +12,8 @@ import { devAiGuide, DevPhase, DevPipelineState } from '../core/dev-llm';
 import { tryHostAi } from '../core/ask-host-ai';
 
 interface DevOptions {
-  iteration?: string; force?: boolean; auto?: boolean; from?: string; to?: string;
+  iteration?: string; force?: boolean; auto?: boolean; autoSteps?: string;
+  from?: string; to?: string;
   web?: boolean; output?: string; lang?: string;
 }
 
@@ -76,19 +77,138 @@ function showPhase(phase: string, cmds: string[]) {
 }
 
 async function autoPipeline(options: DevOptions): Promise<void> {
-  const spinner = new Spinner('Auto-pipeline...');
-  spinner.start();
+  const PIPELINE_PHASES = [
+    { key: 'init',      cmd: 'speccore init' },
+    { key: 'doc2spec',  cmd: 'speccore doc2spec' },
+    { key: 'analyze',   cmd: 'speccore analyze' },
+    { key: 'split',     cmd: 'speccore iteration split' },
+    { key: 'plan',      cmd: 'speccore plan' },
+    { key: 'execute',   cmd: 'speccore execute' },
+    { key: 'pr',        cmd: 'speccore pr' },
+    { key: 'done',      cmd: 'speccore done' },
+    { key: 'spec2doc',  cmd: 'speccore spec2doc' },
+  ];
+
   const iteration = await getDefaultIteration(options.iteration);
-  if (!iteration) { execSync('speccore init', { stdio: 'inherit' }); return; }
-  spinner.stop(`迭代: ${iteration}`);
-  const iterDir = `Iteration-${iteration}`;
-  const reqDoc = join(iterDir, '010-requirements', 'REQUIREMENT.md');
-  const analysis = join(iterDir, '020-specs', 'ANALYSIS.md');
-  if (!(await pathExists(reqDoc))) {
-    execSync(`speccore doc2spec -f PRD.docx -i ${iteration} --no-ai`, { stdio: 'inherit' });
-  } else if (!(await pathExists(analysis))) {
-    execSync(`speccore analyze --iteration=${iteration}`, { stdio: 'inherit' });
+  if (!iteration) {
+    logger.info('🤖 Auto-pipeline: 未找到迭代，先初始化...');
+    execSync('speccore init', { stdio: 'inherit' });
+    return;
   }
+
+  const iterDir = `Iteration-${iteration}`;
+  logger.info(`\n🤖 Auto-pipeline: ${iteration}\n`);
+
+  // ── 解析 auto-steps 范围 ──
+  let startIdx = 0;
+  let endIdx = PIPELINE_PHASES.length - 1;
+
+  if (options.from) {
+    const fi = PIPELINE_PHASES.findIndex(p => p.key === options.from);
+    if (fi >= 0) startIdx = fi;
+    else { logger.error(`未知阶段: ${options.from}`); return; }
+  }
+  if (options.to) {
+    const ti = PIPELINE_PHASES.findIndex(p => p.key === options.to);
+    if (ti >= 0) endIdx = ti;
+    else { logger.error(`未知阶段: ${options.to}`); return; }
+  }
+
+  // ── --auto-steps: 指定连续步骤自动执行 ──
+  if (options.autoSteps) {
+    const stepKeys = options.autoSteps.split(',').map(s => s.trim());
+    const indices = stepKeys.map(k => PIPELINE_PHASES.findIndex(p => p.key === k));
+    if (indices.some(i => i < 0)) {
+      const unknown = stepKeys.filter(k => !PIPELINE_PHASES.find(p => p.key === k));
+      logger.error(`未知阶段: ${unknown.join(', ')}`);
+      logger.info(`可用: ${PIPELINE_PHASES.map(p => p.key).join(', ')}`);
+      return;
+    }
+    // 验证连续性
+    const sorted = [...indices].sort((a, b) => a - b);
+    for (let i = 1; i < sorted.length; i++) {
+      if (sorted[i] !== sorted[i - 1] + 1) {
+        logger.error(`auto-steps 必须连续！${stepKeys.join(',')} 在流水线中不连续`);
+        logger.info(`流水线顺序: ${PIPELINE_PHASES.map(p => p.key).join(' → ')}`);
+        return;
+      }
+    }
+    startIdx = sorted[0];
+    endIdx = sorted[sorted.length - 1];
+    logger.info(`🎯 自动步骤: ${stepKeys.join(' → ')}\n`);
+  }
+
+  // ── 逐步执行 ──
+  for (let i = startIdx; i <= endIdx; i++) {
+    const phase = PIPELINE_PHASES[i];
+    logger.info(`━━━ [${i + 1}/${endIdx - startIdx + 1}] ${phase.key} ━━━`);
+
+    switch (phase.key) {
+      case 'init': {
+        if (!(await pathExists('.speccore'))) {
+          execSync('speccore init', { stdio: 'inherit' });
+        } else {
+          logger.info('  ✅ 已初始化，跳过');
+        }
+        break;
+      }
+      case 'doc2spec': {
+        const reqDoc = join(iterDir, '010-requirements', 'REQUIREMENT.md');
+        const hasFeatures = await hasFeatureDirs(iterDir);
+        if (!(await pathExists(reqDoc)) && !hasFeatures) {
+          logger.info('  ℹ️ 未找到需求文档，跳过（请手动 doc2spec）');
+        } else {
+          logger.info('  ✅ 需求已导入，跳过');
+        }
+        break;
+      }
+      case 'analyze': {
+        const analysis = join(iterDir, '020-specs', 'ANALYSIS.md');
+        if (!(await pathExists(analysis))) {
+          execSync(`speccore analyze --auto -I ${iteration}`, { stdio: 'inherit' });
+        } else {
+          logger.info('  ✅ 分析已完成，跳过');
+        }
+        break;
+      }
+      case 'split': {
+        let hasTasks = false;
+        try {
+          const entries = await readdir(join(iterDir, '030-tasks'), { withFileTypes: true });
+          hasTasks = entries.some((e: any) => e.isDirectory() && e.name.startsWith('Task-'));
+        } catch {}
+        if (!hasTasks) {
+          execSync(`speccore iteration split -i ${iteration} --force`, { stdio: 'inherit' });
+        } else {
+          logger.info('  ✅ 任务已拆分，跳过');
+        }
+        break;
+      }
+      case 'plan': {
+        execSync(`speccore plan -i ${iteration} --force`, { stdio: 'inherit' });
+        break;
+      }
+      case 'execute': {
+        execSync(`speccore execute --auto -i ${iteration}`, { stdio: 'inherit' });
+        break;
+      }
+      case 'pr': {
+        execSync(`speccore pr -i ${iteration}`, { stdio: 'inherit' });
+        break;
+      }
+      case 'done': {
+        execSync(`speccore done --all -i ${iteration}`, { stdio: 'inherit' });
+        break;
+      }
+      case 'spec2doc': {
+        execSync(`speccore spec2doc -i ${iteration}`, { stdio: 'inherit' });
+        break;
+      }
+    }
+    logger.info('');
+  }
+
+  logger.success(`\n✅ Pipeline 完成: ${PIPELINE_PHASES.slice(startIdx, endIdx + 1).map(p => p.key).join(' → ')}\n`);
 }
 
 async function renderDevHtml(options: DevOptions): Promise<string> {

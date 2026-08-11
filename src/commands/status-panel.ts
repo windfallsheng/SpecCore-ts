@@ -294,7 +294,7 @@ async function exportStatus(
 
   
   const data: any = {
-    project: config.project.name,
+    project: config.project.name || 'SPECCORE',
     iteration: iteration || '未设置',
     exportedAt: new Date().toISOString(),
     phases: {} as any,
@@ -712,7 +712,7 @@ main{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:40px 32p
 @keyframes scanY-rev{0%{transform:translateY(100%)}100%{transform:translateY(-100%)}}
 .header-left::before{content:'';position:absolute;top:0;left:0;width:1px;bottom:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY-rev 3s linear infinite;pointer-events:none}
 .header-right::after{content:'';position:absolute;top:0;right:0;width:1px;bottom:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY 3s linear infinite;pointer-events:none}
-.header-left h1{font-family:'Orbitron',sans-serif;font-size:26px;font-weight:900;background:linear-gradient(135deg,var(--cyan),#818cf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:2px;text-shadow:0 0 40px rgba(0,240,255,.3)}
+.header-left h1{font-family:'Orbitron',sans-serif;font-size:26px;font-weight:900;background:linear-gradient(135deg,var(--cyan),#818cf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:2px;animation:titleGlow 3s ease-in-out infinite}@keyframes cardGlow{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.6)}}@keyframes titleGlow{0%,100%{filter:drop-shadow(0 0 20px rgba(14,165,233,.4)) drop-shadow(0 0 60px rgba(14,165,233,.15))}50%{filter:drop-shadow(0 0 30px rgba(14,165,233,.7)) drop-shadow(0 0 80px rgba(14,165,233,.3))}}.header-glow{position:absolute;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse at 50% 10%,rgba(14,165,233,.2) 0%,transparent 70%);animation:cardGlow 3s ease-in-out infinite;transform-origin:top center}
 .header-left .subtitle{color:var(--muted);font-size:12px;margin-top:4px;letter-spacing:1px}
 .header-right{display:flex;gap:16px;align-items:center}
 .header-stat{text-align:center;padding:0 20px;border-left:1px solid rgba(0,240,255,.1)}
@@ -778,7 +778,7 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
 <div class="ctrl-panel open"><button class="ctrl-toggle open" onclick="this.classList.toggle('open');this.parentElement.classList.toggle('open')">⚙️</button><div class="ctrl-body"><div class="theme-sw"><button onclick="setTheme('ocean')" title="Ocean Blue">🌊</button><button onclick="setTheme('cyber')" title="Cyber Dark">🌙</button><button onclick="setTheme('light')" title="Light Studio">☀️</button><button onclick="setTheme('mono')" title="Mono Tech">⬛</button><button onclick="setTheme('github')" title="GitHub Dark">🐙</button><button onclick="setTheme('synth')" title="SynthWave">💜</button><button onclick="setTheme('amber')" title="Amber Terminal">🟡</button><button onclick="setTheme('sakura')" title="Cherry Sakura">🌸</button><button onclick="setTheme('forest')" title="Midnight Forest">🌲</button></div><div class="lang-sw"><button data-lang="zh" class="active" onclick="setLang('zh')">中文</button><button data-lang="en" onclick="setLang('en')">EN</button></div><div class="font-sw"><button data-font="jetbrains" class="active" onclick="setFont('jetbrains')">Mono</button><button data-font="hybrid" onclick="setFont('hybrid')">Hybrid</button><button data-font="orbitron" onclick="setFont('orbitron')">Orbit</button></div><div class="fs-sw"><button data-fs="sm" onclick="setFs('sm')">S</button><button data-fs="md" onclick="setFs('md')">M</button><button data-fs="lg" class="active" onclick="setFs('lg')">L</button><button data-fs="xl" onclick="setFs('xl')">XL</button></div></div></div>
 <div class="grid-pattern"></div><div class="stars"></div><div class="scanlines"></div>
 <main>
-  <div class="header">
+  <div class="header"><div class="header-glow"></div>
     <div class="header-left">
       <h1>${data.project.toUpperCase()}</h1>
       <div class="subtitle">SPECCORE · SPEC-DRIVEN DEVELOPMENT${data.iterationOwner ? " · OWNER: "+data.iterationOwner.toUpperCase() : ""}${data.filterLabels ? " · "+data.filterLabels.join(" · ") : ""}${data.filteredFrom ? " (过滤自 "+data.filteredFrom+" 个任务)" : ""}</div>

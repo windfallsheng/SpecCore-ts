@@ -1,3 +1,62 @@
+## v5.73.0 (2026-08-11) — Onboarding 页面重构 + 视觉增强
+
+### 🎨 Onboarding 页面结构重构
+- **标题改为 HTML**：SVG 标题 → `<h1>` + titleGlow 发光动画（40px Orbitron 渐变字体）
+- **SVG 只保留四卡片**：连线 + 中央圆圈 + 四个模式卡片，其余全部 HTML 化
+- **底部横栏 HTML 化**：统一入口 `/spec-ask` 文字改为 HTML `bottom-bar`
+- **SVG 坐标准确**：所有元素 y 坐标 -60px 紧凑布局，消除顶部空白
+
+### 🔗 模板自动复制
+- **ask 命令生成引导页时**自动从 `templates/html/` 复制关联页面到 `outputs/`
+- 不再需要手动 `cp`，5 个模板页面（explain/guide/match/pipeline/help）自动同步
+
+### ✨ 视觉细节
+- **标题发光**：所有页面 titleGlow 统一使用 `filter:drop-shadow()`（兼容渐变文字）
+- **流水线卡片**：flow-step 左右内边距 18→28px，圆圈与文字间距 6→12px
+- **标签文字居中**：知识库匹配/工作流生成等标签文字移入背景矩形内
+- **复制命令更新**：点击复制从 `speccore ask` → `/spec-ask`
+
+---
+
+## v5.72.0 (2026-08-11) — 影响分析 + 质量门禁 + 统一匹配 + 澄清持久化
+
+### 🎯 结构化影响分析（ImpactReport）
+- **三级影响分类**：🔴直接影响 / 🟡间接影响 / 🟢无影响
+- **`analyzeImpact` 替代 `smartMatchTasks`**：读取 REQ.md + TECH.md + TASK.md + .task-status 全量分析
+- **双向依赖图**：正向 findDependentTasks + 反向 findReverseDependencies
+- **`buildTaskDetails`**：为澄清 Prompt 收集每个任务的完整上下文
+
+### 📝 澄清结果持久化
+- **澄清 = 需求分析**，结果写入文件而非用完即丢
+- 新增需求 → 结构化 REQ.md（描述 + 要点 + 验收标准）
+- 需求变更 → `020-specs/CHANGE_SUMMARY.md`（影响报告 + 受影响任务）
+- 任务级变更也记录到 CHANGE_SUMMARY.md
+
+### 🚧 执行后质量门禁
+- **强制运行**：execute 后自动触发，不可跳过
+- **6 项检查**：编译(阻塞) + Lint + 测试 + 依赖 + 安全 + Spec一致性(警告)
+- **4 语言支持**：Node.js / Java / Go / Python
+- **失败修复循环**：编译失败 → AI 修复 → 再检查 → 最多 3 轮
+- **`speccore verify`** 独立命令：可单独跑验证
+
+### 🔍 统一智能匹配（resolver.ts）
+- **所有命令共用** `resolveTask()` / `resolveIteration()`
+- **三级匹配**：精确 → 前缀 → 关键词搜索（任务名 + REQ.md）
+- **多匹配提示**：列出候选让用户选择，不再静默取第一个
+- **已接入**：change / execute / lifecycle / validate / verify
+
+### 🎨 HTML 页面统一
+- retro 页面：宽度 560→800px + 发光效果 + 质量门禁结果展示
+- welcome/about/init 页面：统一 card 800px + cardGlow/titleGlow/grid-pattern
+
+### 📦 新增文件
+- `src/core/verify-engine.ts` — 代码验证引擎 + 质量门禁
+- `src/core/resolver.ts` — 统一智能匹配模块
+- `src/commands/verify.ts` — verify 命令入口
+- `docs/change-and-new-requirement-design.md` — 需求变更/新增设计文档
+
+---
+
 ## v5.71.0 (2026-08-11) — Task 目录结构重构 + 文档截图 + README 更新
 
 ### 📁 Task 目录结构重构（破坏性变更）

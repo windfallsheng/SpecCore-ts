@@ -1,6 +1,7 @@
 import { validateProject, formatValidationResult, autoFix } from '../core/validator';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration, getHotfixStatus } from '../core/context';
+import { resolveTask, formatResolveResult } from '../core/resolver';
 
 export interface ValidateOptions {
   iteration?: string;
@@ -21,9 +22,30 @@ export async function validateCommand(options: ValidateOptions): Promise<void> {
     // Hotfix check: warn if hotfix is active
     await checkHotfix();
 
+    // 使用统一 resolver 解析任务名（支持短名、关键词、前缀匹配）
+    let resolvedTaskId: string | undefined = options.task || undefined;
+    if (options.task && iteration) {
+      const taskResult = await resolveTask(options.task, iteration);
+      if (taskResult.exact && taskResult.value) {
+        if (taskResult.matchType !== 'exact') {
+          const hint = formatResolveResult(taskResult, 'Task');
+          if (hint) logger.info(hint);
+        }
+        resolvedTaskId = taskResult.value.id;
+      } else if (taskResult.candidates.length > 1) {
+        spinner.stop('验证取消');
+        logger.warn(taskResult.hint || '找到多个匹配任务，请指定更精确的名称');
+        return;
+      } else {
+        spinner.stop('验证取消');
+        logger.warn(taskResult.hint || `Task 未找到: ${options.task}`);
+        return;
+      }
+    }
+
     const result = await validateProject(
       iteration || undefined,
-      options.task || undefined,
+      resolvedTaskId,
       {
         fix: options.fix,
         strict: options.strict

@@ -58,7 +58,7 @@ export async function aboutCommand(): Promise<void> {
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'JetBrains Mono',monospace;background:#0b1221;color:#bae6fd;padding:28px 20px}
 .scanlines{position:fixed;inset:0;pointer-events:none;z-index:999;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,240,255,.006) 2px,rgba(0,240,255,.006) 4px)}
-.card{max-width:800px;width:100%;margin:0 auto;background:rgba(13,31,56,.95);border:1px solid rgba(14,165,233,.12);border-radius:16px;padding:24px;position:relative;overflow:hidden}
+.card{max-width:800px;width:100%;margin:0 auto;background:rgba(13,31,56,.95);border:1px solid rgba(14,165,233,.12);border-radius:16px;padding:24px;position:relative;overflow:hidden;z-index:1}
 .card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,#0ea5e9,transparent);animation:scanX 3s linear infinite}
 .card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,#0ea5e9,transparent);animation:scanX-rev 3s linear infinite}
 @keyframes scanX{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
@@ -89,10 +89,17 @@ h2{font-size:12px;color:#38bdf8;margin:20px 0 10px;letter-spacing:1px}
 .link strong{font-size:12px;color:#38bdf8;margin-right:6px}
 .link span{font-size:10px;color:#5b7fa5}
 .footer a{color:#38bdf8;text-decoration:none}
+.grid-pattern{position:fixed;inset:0;pointer-events:none;z-index:0;background-image:linear-gradient(rgba(14,165,233,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(14,165,233,.03) 1px,transparent 1px);background-size:60px 60px}
+@keyframes cardGlow{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.6)}}
+.card-bg{position:absolute;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse at 50% 10%,rgba(14,165,233,.25) 0%,transparent 70%);animation:cardGlow 3s ease-in-out infinite;transform-origin:top center}
+@keyframes titleGlow{0%,100%{filter:drop-shadow(0 0 20px rgba(14,165,233,.4)) drop-shadow(0 0 60px rgba(14,165,233,.15))}50%{filter:drop-shadow(0 0 30px rgba(14,165,233,.7)) drop-shadow(0 0 80px rgba(14,165,233,.3))}
+h1,h2{animation:titleGlow 3s ease-in-out infinite}
 </style></head>
 <body>
 <div class="scanlines"></div>
+<div class="grid-pattern"></div>
 <div class="card">
+<div class="card-bg"></div>
 <div class="vline l"></div><div class="vline r"></div>
 <h1>SPECCORE <span>v${ver}</span></h1>
 <div class="sub">Code by Spec, Not by Vibe.</div>

@@ -5,12 +5,12 @@
 - **总是先确认再干活**。理解用户意图后，展示执行计划让用户确认，确认后才逐步执行
 - **逐步执行不跳步**。确认后按步骤逐一执行，每步检查结果
 - **有歧义就问**。不确定的时候问用户，不要猜
-- **首次使用先展示引导页**。如遇到 [SPECCORE_ONBOARD] 标签，用 present_files 立即展示
+- **首次使用先展示引导页（仪式感，不可跳过）**。如遇到 [SPECCORE_ONBOARD] 标签：支持 present_files 的立即展示；不支持的输出提示“🎉 首次使用！请先打开引导页：`<path>`”让用户自行打开，确认后再继续
 
 ## SpecCore 输出标记
 | 标记 | AI 动作 |
 |:---|:---|
-| `[SPECCORE_ONBOARD: <path>]` | **最先处理**，`present_files` 展示 HTML |
+| `[SPECCORE_ONBOARD: <path>]` | **🚨 必须最先处理，不可跳过**：支持 present_files → 立即展示；不支持 → 输出文件路径提示用户打开，确认后再继续 |
 | `[SPECCORE_EXEC: <cmd>]` | 直接 `execute_command` 执行 |
 | `[SPECCORE_INTENT]` | 展示给用户确认 |
 

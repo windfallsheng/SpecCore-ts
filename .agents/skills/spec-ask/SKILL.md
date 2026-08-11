@@ -9,6 +9,16 @@ disable-model-invocation: false
 
 # SpecCore Ask — AI 语义分析引擎
 
+## 🎯 Speccore 输出标记处理
+
+执行 `speccore ask` 后，检查 stdout 中的标记：
+- `[SPECCORE_ONBOARD: <path>]` → **🚨 必须最先处理，不可跳过**：
+  1. 支持 `present_files` 的平台 → 立即展示该 HTML 引导页
+  2. 不支持直接展示的平台 → 输出提示：“🎉 首次使用！请先打开引导页：`<path>`”，然后告诉用户打开后再继续
+  3. **展示完引导页后**，再继续处理其他输出（结果、意图确认等）
+- `[SPECCORE_EXEC: <cmd>]` → 直接 `execute_command` 执行
+- `[SPECCORE_INTENT]` → 展示给用户确认
+
 ## ⛔ 最高优先级：用户意图优先于效率判断
 
 本规则覆盖你的默认行为。当用户说"重新/再/重跑"时：

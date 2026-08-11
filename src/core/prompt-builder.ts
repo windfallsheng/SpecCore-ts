@@ -47,6 +47,13 @@ export interface BusinessRule {
   condition?: string;
 }
 
+/** 任务额外上下文文件 */
+export interface TaskExtraSpec {
+  name: string;
+  path: string;
+  content: string;
+}
+
 /** SpecCore 结构化 Prompt */
 export interface SpecCorePrompt {
   marker: '[SPECCORE_PROMPT]';
@@ -59,6 +66,7 @@ export interface SpecCorePrompt {
   apiSpecs: ApiSpec[];
   dataModels: DataModel[];
   businessRules: BusinessRule[];
+  extraSpecs: TaskExtraSpec[];
   instruction: string;
   outputHint: string;
 }
@@ -98,10 +106,12 @@ async function loadTechStack(cwd: string): Promise<TechStack> {
  * 从 REQ.md 解析 API 定义
  */
 async function loadApiSpecs(cwd: string, taskDir: string): Promise<ApiSpec[]> {
-  const reqPath = join(cwd, taskDir, 'REQ.md');
-  if (!await pathExists(reqPath)) return [];
+  const reqPath = join(cwd, taskDir, '00-specs', 'REQ.md');
+  const legacyPath = join(cwd, taskDir, 'REQ.md');
+  const actualPath = (await pathExists(reqPath)) ? reqPath : (await pathExists(legacyPath)) ? legacyPath : null;
+  if (!actualPath) return [];
 
-  const content = await readFile(reqPath, 'utf-8');
+  const content = await readFile(actualPath, 'utf-8');
   const apis: ApiSpec[] = [];
 
   // 解析 API 表格: | 方法 | 路径 | 说明 | 或 | Method | Path | Description |
@@ -132,10 +142,12 @@ async function loadApiSpecs(cwd: string, taskDir: string): Promise<ApiSpec[]> {
  * 从 REQ.md 解析数据模型
  */
 async function loadDataModels(cwd: string, taskDir: string): Promise<DataModel[]> {
-  const reqPath = join(cwd, taskDir, 'REQ.md');
-  if (!await pathExists(reqPath)) return [];
+  const reqPath = join(cwd, taskDir, '00-specs', 'REQ.md');
+  const legacyPath = join(cwd, taskDir, 'REQ.md');
+  const actualPath = (await pathExists(reqPath)) ? reqPath : (await pathExists(legacyPath)) ? legacyPath : null;
+  if (!actualPath) return [];
 
-  const content = await readFile(reqPath, 'utf-8');
+  const content = await readFile(actualPath, 'utf-8');
   const models: DataModel[] = [];
 
   // 查找所有数据模型表格
@@ -202,9 +214,11 @@ async function loadBusinessRules(cwd: string, taskDir?: string): Promise<Busines
   }
 
   if (taskDir) {
-    const reqPath = join(cwd, taskDir, 'REQ.md');
-    if (await pathExists(reqPath)) {
-      const content = await readFile(reqPath, 'utf-8');
+    const reqPath = join(cwd, taskDir, '00-specs', 'REQ.md');
+    const legacyReqPath = join(cwd, taskDir, 'REQ.md');
+    const actualReqPath = (await pathExists(reqPath)) ? reqPath : (await pathExists(legacyReqPath)) ? legacyReqPath : null;
+    if (actualReqPath) {
+      const content = await readFile(actualReqPath, 'utf-8');
       const ruleSection = content.match(/(?:业务规则|约束条件|Constraint)[\s\S]*?(?=## |\n##|$)/i);
       if (ruleSection) {
         const lines = ruleSection[0].split('\n');
@@ -218,6 +232,36 @@ async function loadBusinessRules(cwd: string, taskDir?: string): Promise<Busines
   }
 
   return rules;
+}
+
+/**
+ * 读取任务目录中的额外上下文文件（TECH.md / TASK.md / SCHEMA.md / .issues.md 等）
+ */
+async function loadExtraSpecs(cwd: string, taskDir: string): Promise<TaskExtraSpec[]> {
+  const extras: TaskExtraSpec[] = [];
+  const files = [
+    { name: '技术方案', path: '00-specs/TECH.md' },
+    { name: '任务追踪', path: '00-specs/TASK.md' },
+    { name: '数据库设计', path: '00-specs/SCHEMA.md' },
+    { name: 'API 契约', path: '_shared/API_CONTRACT.yaml' },
+    { name: '测试计划', path: '99-artifacts/TEST.md' },
+    { name: '评审清单', path: '99-artifacts/REVIEW.md' },
+    { name: '风险评估', path: '99-artifacts/RISK.md' },
+    { name: '已知问题', path: '.issues.md' },
+  ];
+
+  for (const f of files) {
+    const fullPath = join(cwd, taskDir, f.path);
+    if (await pathExists(fullPath)) {
+      const content = await readFile(fullPath, 'utf-8');
+      // 跳过空文件或纯占位符文件
+      if (content.trim().length > 50 && !content.trim().match(/^#+\s*待填充|^<!--\s*AI-FILL\s*-->$/m)) {
+        extras.push({ name: f.name, path: f.path, content });
+      }
+    }
+  }
+
+  return extras;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -293,6 +337,7 @@ export async function buildPrompt(
   const apiSpecs = await loadApiSpecs(cwd, taskDir);
   const dataModels = await loadDataModels(cwd, taskDir);
   const businessRules = await loadBusinessRules(cwd, taskDir);
+  const extraSpecs = taskDir ? await loadExtraSpecs(cwd, taskDir) : [];
 
   const context = {
     taskName: options.task,
@@ -311,6 +356,7 @@ export async function buildPrompt(
     apiSpecs,
     dataModels,
     businessRules,
+    extraSpecs,
     instruction: getInstruction(command, context),
     outputHint: command === 'execute'
       ? '请返回格式: {"files": [{"path": "相对路径", "content": "代码内容"}]}'
@@ -378,6 +424,15 @@ export function formatPrompt(prompt: SpecCorePrompt): string {
       lines.push(`- ${rule.rule}`);
     }
     lines.push('');
+  }
+
+  // 额外任务上下文（TECH.md / TASK.md / SCHEMA.md / .issues.md 等）
+  if (prompt.extraSpecs.length > 0) {
+    for (const spec of prompt.extraSpecs) {
+      lines.push(`## ${spec.name} (${spec.path})`);
+      lines.push(spec.content);
+      lines.push('');
+    }
   }
 
   // 输出格式提示
