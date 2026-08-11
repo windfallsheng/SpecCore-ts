@@ -35,8 +35,10 @@ export async function devCommand(options: DevOptions): Promise<void> {
   if (isAiContext() || !process.stdout.isTTY || options.web) {
     const html = await renderDevHtml(options);
     const outPath = options.output || join(process.cwd(), 'outputs', 'speccore-dev.html');
-    if (!!process.env.WORKBUDDY_SESSION) { process.stdout.write(html); }
-    else { await ensureDir(join(process.cwd(), 'outputs')); await writeFile(outPath, html); process.stdout.write('✅ 页面已生成: file://' + outPath + '\n   预览: python3 -m http.server 8080 → http://localhost:8080/' + require('path').basename(outPath) + '\n'); }
+    await ensureDir(join(process.cwd(), 'outputs'));
+    await writeFile(outPath, html);
+    process.stdout.write(`✅ 页面已生成: file://${outPath}\n`);
+    process.stdout.write(`[SPECCORE_DEV: ${outPath}]\n`);
     return;
   }
 

@@ -939,3 +939,36 @@ execute --prompt 执行前:
 - README.md 文档表三栏: 中文 | English | 说明
 - 所有文档内部链接使用实际文件名（英文），不出现中文文件名 404
 
+---
+
+### 2026-08-12 ask 引擎三层增强 + HTML 弹出修复
+
+#### 1. 同义词表（SYNONYM_MAP）
+- **位置**: `src/core/ask-engine.ts`
+- **作用**: 扩展 KB 匹配覆盖面，纯数据不改架构
+- **匹配顺序**: 命令名精确匹配 → 触发词匹配 → 同义词表兑底
+- **覆盖**: 50+ 口语化表达 → 23 个命令，包括看板/dashboard、提交代码/pr、改名/rename 等
+- **效果**: 用户说“看板”“新手”“提交代码”等口语化表达均可直接匹配到对应命令
+
+#### 2. 端配额（Endpoint Quota）
+- **位置**: `src/core/code-scanner.ts` → `findRelevantCode`
+- **作用**: 每个 endpoint 最多占 limit 的 40%，保证多端多样性
+- **算法**: 按端分组 → 组内排序 → 轮询取结果（每端每轮取一个）
+- **效果**: 避免单端文件垄断结果，前后端/移动端均有代表
+
+#### 3. API 契约关联查询
+- **位置**: `src/core/code-scanner.ts` → `loadContractApiPaths`
+- **作用**: 加载项目中的 API_CONTRACT.yaml，命中契约路径的文件加分
+- **搜索范围**: `.speccore/**/API_CONTRACT.yaml` + `Iteration-*/**/API_CONTRACT.yaml`
+- **加分规则**: API 路径匹配 +15，关键词命中契约描述 +3
+- **效果**: 需求提到某个 API 时，实现该 API 的文件排名提升
+
+#### 4. HTML 弹出标记统一
+- **问题**: welcome/help/dev 只输出 `file://` 路径，AI 宿主无法识别并用 present_files 展示
+- **修复**: 三个命令均新增 `[SPECCORE_WELCOME/HELP/DEV: path]` 标记
+- **AGENTS.md 更新**: 标记表新增 4 行（WELCOME/HELP/DEV/ABOUT）
+
+#### 5. 置信度计算修复
+- **问题**: KB 匹配成功但意图识别为空时，置信度默认 55，被路由到宿主 AI
+- **修复**: KB 匹配成功给予 65 基础分，避免不必要的 AI 路由
+

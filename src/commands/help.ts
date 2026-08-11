@@ -271,6 +271,19 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
       'speccore ask "修复支付回调超时的问题"',
     ],
   },
+  'code-index': {
+    desc: '源码索引：扫描代码生成模块索引（多端识别 + git 联动），分析时自动使用',
+    params: [
+      { flag: '--full', meaning: '全量重新扫描（默认增量更新）' },
+      { flag: '--scope <dirs>', meaning: '指定扫描目录（逗号分隔）' },
+      { flag: '--show', meaning: '只显示当前索引摘要' },
+    ],
+    examples: [
+      'speccore code-index --full',
+      'speccore code-index --show',
+      'speccore code-index --scope src/commands,src/core',
+    ],
+  },
 };
 
 // ============================================================
@@ -287,7 +300,7 @@ function showAllCommands(): void {
     '🔍 分析与计划': ['analyze', 'plan'],
     '⚡ 执行与审查': ['execute', 'pr', 'done'],
     '🐛 变更与修复': ['change', 'bugfix'],
-    '📊 状态与查询': ['status-panel', 'validate', 'ops'],
+    '📊 状态与查询': ['status-panel', 'validate', 'ops', 'code-index'],
     '🤖 智能入口': ['ask', 'dev'],
   };
 
@@ -456,7 +469,7 @@ async function helpHtml(options: HelpOptions): Promise<void> {
       '🔍 分析与计划': ['analyze', 'plan', 'split'],
       '⚡ 执行与交付': ['execute', 'pr', 'done'],
       '🔄 同步与变更': ['change', 'sync', 'ops'],
-      '📊 查看与验证': ['dashboard', 'validate', 'track', 'search'],
+      '📊 查看与验证': ['dashboard', 'validate', 'track', 'search', 'code-index'],
       '🤖 智能操作': ['dev'],
     };
     body = Object.entries(categories).map(([cat, cmds]) => 
@@ -468,9 +481,9 @@ async function helpHtml(options: HelpOptions): Promise<void> {
 
   const { writeFile, ensureDir } = require('fs-extra');
   const { join } = require('path');
-  if (isAiContext()) { process.stdout.write(html); return; }
   const outPath = join(process.cwd(), 'outputs', 'speccore-help.html');
   await ensureDir(join(process.cwd(), 'outputs'));
   await writeFile(outPath, html);
-  logger.info(`✅ 已生成: ${outPath}`);
+  process.stdout.write(`✅ 页面已生成: file://${outPath}\n`);
+  process.stdout.write(`[SPECCORE_HELP: ${outPath}]\n`);
 }

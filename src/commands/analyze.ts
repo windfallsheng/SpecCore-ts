@@ -17,7 +17,7 @@ import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration, getIterationDir } from '../core/context';
 import { extractQuestions, showQuestionChecklist } from '../core/question-checklist';
 import { showNextSteps } from '../core/next-steps';
-import { runAnalysis, AnalyzeInput } from '../core/analyze-engine';
+import { runAnalysis, AnalyzeInput, supplementAnalysis } from '../core/analyze-engine';
 import { readFile, readdir } from 'fs-extra';
 import { generateGlobalArtifacts } from '../core/global-artifacts';
 import { buildPrompt, formatPrompt } from '../core/prompt-builder';
@@ -37,9 +37,36 @@ export interface AnalyzeOptions {
   prompt?: boolean;     // --prompt: 输出结构化分析 Prompt 到 stdout
   apply?: string;       // --apply: 接收 AI 分析结果写入 ANALYSIS.md
   withCode?: boolean;   // --with-code: 结合工程源码分析
+  noSource?: boolean;   // --no-source: 不读源码
+  sourceScope?: string; // --source-scope <dirs>: 指定源码目录
+  supplement?: boolean; // --supplement: 补充模式（追加源码到现有报告）
 }
 
 export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
+  // ── --supplement 模式: 追加未覆盖源码到现有报告 ──
+  if (options.supplement) {
+    const iter = options.iteration || await getDefaultIteration();
+    if (!iter) { logger.error('请指定迭代: -I <iteration>'); return; }
+    const iterDir = await getIterationDir(iter);
+    const reportPath = join(iterDir, '020-specs', options.output || 'ANALYSIS.md');
+
+    logger.info(`🔄 补充分析: ${iter}`);
+    const result = await supplementAnalysis({
+      reportPath,
+      scope: options.sourceScope,
+      maxFiles: options.depth === 'deep' ? 20 : (options.depth === 'quick' ? 5 : 10),
+    });
+    if (result) {
+      if (result.addedFiles.length > 0) {
+        logger.success(`✅ 补充完成: 新增 ${result.addedFiles.length} 个文件，累计 ${result.totalRead} 个`);
+        if (result.remainingUncovered > 0) {
+          logger.info(`   📌 还有 ${result.remainingUncovered} 个未覆盖，可再次运行 --supplement 继续补充`);
+        }
+      }
+    }
+    return;
+  }
+
   // ── --auto 模式: 用分析引擎直接生成报告，不走 AI prompt ──
   if (options.auto) {
     const iter = options.iteration || await getDefaultIteration();
@@ -74,6 +101,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       scope: (options.scope as any) || 'iteration',
       iteration: iter,
       depth: (options.depth as any) || 'normal',
+      readSource: options.noSource ? false : true,
+      sourceScope: options.sourceScope,
     };
 
     logger.info(`🤖 Auto 分析: ${iter} (${requirements.length} 个需求文档)`);

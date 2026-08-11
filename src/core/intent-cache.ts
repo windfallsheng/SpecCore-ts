@@ -99,9 +99,15 @@ export async function getCachedIntent(input: string): Promise<AskResult | null> 
     return exact.result;
   }
 
-  // 2. 模糊匹配（编辑距离 ≤ 2）
+  // 2. 模糊匹配（编辑距离 ≤ 2，且长度比例合理）
+  // 防止短字符串误匹配：如"补充测试"匹配"补充分析"（编辑距离 2 但语义完全不同）
   for (const [cachedInput, entry] of Object.entries(cache.entries)) {
-    if (levenshtein(input, cachedInput) <= FUZZY_THRESHOLD) {
+    const dist = levenshtein(input, cachedInput);
+    const maxLen = Math.max(input.length, cachedInput.length);
+    const minLen = Math.min(input.length, cachedInput.length);
+    // 长度比例保护：编辑距离 ≤ 2 时，要求较短串长度 ≥ 6（避免 4 字中文短句误匹配）
+    // 且编辑距离占较长串比例 ≤ 30%（避免长串被短串误匹配）
+    if (dist <= FUZZY_THRESHOLD && minLen >= 6 && dist / maxLen <= 0.3) {
       entry.hitCount++;
       entry.lastUsed = new Date().toISOString();
       await saveCache(cache);
