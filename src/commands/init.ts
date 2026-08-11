@@ -1599,7 +1599,7 @@ async function writeUpgradePage(projectRoot: string, version: string, speccoreDi
 <style>
 *{margin:0;padding:0;box-sizing:border-box}body{min-height:100vh;background:#0a1628;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:20px;font-family:monospace;overflow-x:hidden;position:relative}
 .scanlines{position:fixed;top:0;left:0;width:100%;height:100%;background:repeating-linear-gradient(0deg,rgba(14,165,233,.03),rgba(14,165,233,.03) 1px,transparent 1px,transparent 3px);pointer-events:none;z-index:0}
-.card{max-width:720px;width:100%;background:rgba(13,31,56,.95);border:1px solid rgba(14,165,233,.15);border-radius:16px;padding:28px;position:relative;z-index:1}
+.card{max-width:800px;width:100%;background:rgba(13,31,56,.95);border:1px solid rgba(14,165,233,.15);border-radius:16px;padding:24px;position:relative;z-index:1}
 .card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,#0ea5e9,transparent);animation:scanX 3s linear infinite}
 h1{font-size:18px;color:#0ea5e9;text-align:center;margin-bottom:8px;font-weight:500}h2{font-size:13px;color:#5b7fa5;text-align:center;margin-bottom:20px;font-weight:400}
 .section{background:rgba(14,165,233,.06);border:1px solid rgba(14,165,233,.1);border-radius:12px;padding:16px;margin-bottom:14px}
