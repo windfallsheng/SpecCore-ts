@@ -1,3 +1,30 @@
+## v5.70.0 (2026-08-11) — Ask 引擎 v2.0：三段式动态路由 + 意图缓存 + 宿主AI增强
+
+### 🧠 Ask 引擎 v2.0 架构重构
+- **三段式动态路由**：高分区(≥70)本地直出 / 中分区(45~69)双路并行取优 / 低分区(<45)AI接管
+- **四层路由体系**：确定性路由 → 意图缓存 → 本地引擎 → 宿主AI → 自有LLM冗余 → 兜底
+- **意图缓存与自学习**：精确匹配 + 模糊匹配(编辑距离≤2) + 命中统计固化
+- **Rich Context 构建器**：为宿主AI提供候选意图/项目阶段/活跃迭代/历史命令完整上下文
+- **多 LLM 冗余路由**：Ollama / OpenAI 兼容 Provider，按优先级排序，默认全部禁用
+- **统一配置体系**：`.speccore/config/ask.json` + 环境变量覆盖，支持 `highThreshold` / `lowThreshold` / `forceHostAi`
+- **`--rules` 强制开关**：命令行显式触发或配置持久化，强制所有 ask 走 AI 语义增强
+
+### 🛠 新增核心模块
+- `src/core/ask-config.ts` — Ask 引擎统一配置管理（环境变量 > ask.json > 默认值）
+- `src/core/intent-cache.ts` — 意图缓存与自学习引擎
+- `src/core/ask-context.ts` — Rich Context 构建器
+
+### 🐛 代码审查问题修复（15项）
+- **Critical**: 严格模式预检缺失、重复 `--only` 过滤、move 事务 rollback 不完整
+- **Major**: 错误码误用、函数名歧义、路径匹配缺陷、路径遍历防护、禁用命令描述、引号正则修复
+- **Minor**: 重复 return、API 文档解析、硬编码前缀、动态 require、统一参数解析
+
+### 🗑 清理
+- 删除冗余目录 `.speccore-backup-*` / `test-trae/`
+- `.gitignore` 增加 `test-trae/` 排除规则
+
+---
+
 ## v5.67.55 (2026-08-09) — AI 行为约束 + 自动模式分级 + examples 完善
 
 ### 🧠 AI 行为约束
