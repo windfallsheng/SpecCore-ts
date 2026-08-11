@@ -5,7 +5,7 @@
  * 
  * 输入:
  *   - 纯需求: --req docs/a.md docs/b.md
- *   - 纯代码: --src backend/src frontend/src
+ *   - 纯代码: --src backend/src 20-frontend/src
  *   - 需求+代码: 两者都指定
  * 
  * 输出范围 (scope):
@@ -78,7 +78,7 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalysisResult> 
     if (input.scope === 'iteration' && input.iteration) {
       const productReqDir = join(`Iteration-${input.iteration}`, '010-requirements');
       if (await pathExists(productReqDir)) {
-        // 递归扫描子目录 (backend/ frontend/Web/ 等)
+        // 递归扫描子目录 (backend/ 20-frontend/Web/ 等)
         const scanDir = async (dir: string) => {
           const entries = await readdir(dir, { withFileTypes: true });
           for (const e of entries) {
@@ -168,7 +168,7 @@ async function analyzeRequirements(input: AnalyzeInput): Promise<AnalysisResult>
     report = buildReqConsistencyReport(input, issues, archImpact);
   } else if (input.scope === 'task') {
     // task scope — 已在入口校验
-    outputPath = join(`Iteration-${input.iteration}`, '030-tasks', input.taskId!, 'backend', input.output || 'ANALYSIS.md');
+    outputPath = join(`Iteration-${input.iteration}`, '030-tasks', input.taskId!, '00-specs', input.output || 'ANALYSIS.md');
     report = buildTaskReqReport(input, issues, archImpact);
   } else {
     // iteration (default)
@@ -212,7 +212,7 @@ async function analyzeCodebase(input: AnalyzeInput): Promise<AnalysisResult> {
     report = buildCodeHealthReport(input, fileStats, apiInventory, hotspots, deps);
   } else if (input.scope === 'task') {
     // task scope — 已在入口校验
-    outputPath = join(`Iteration-${input.iteration}`, '030-tasks', input.taskId!, 'backend', input.output || 'CODE_REVIEW.md');
+    outputPath = join(`Iteration-${input.iteration}`, '030-tasks', input.taskId!, '00-specs', input.output || 'CODE_REVIEW.md');
     report = buildTaskCodeReport(input, fileStats, apiInventory, hotspots);
   } else {
     // iteration (default)
@@ -292,7 +292,7 @@ async function analyzeCombined(input: AnalyzeInput): Promise<AnalysisResult> {
     outputPath = join('.speccore', 'GLOBAL', input.output || 'ARCH_IMPACT.md');
     report = buildAIEnhancedReport(input, 'global', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents });
   } else if (input.scope === 'task') {
-    outputPath = join(`Iteration-${input.iteration}`, '030-tasks', input.taskId!, 'backend', input.output || 'ANALYSIS.md');
+    outputPath = join(`Iteration-${input.iteration}`, '030-tasks', input.taskId!, '00-specs', input.output || 'ANALYSIS.md');
     report = buildAIEnhancedReport(input, 'task', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents });
   } else {
     const iterDir = `Iteration-${input.iteration || 'current'}`;

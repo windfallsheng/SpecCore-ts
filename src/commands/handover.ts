@@ -189,7 +189,7 @@ async function scanTasks(iterDir: string): Promise<TaskInfo[]> {
     }
 
     // 读取 TASK.md 获取状态
-    const taskMdPath = join(iterDir, taskDir, 'backend', 'TASK.md');
+    const taskMdPath = join(iterDir, taskDir, '00-specs', 'TASK.md');
     if (await pathExists(taskMdPath)) {
       const content = await readFile(taskMdPath, 'utf-8');
       if (content.includes('✅ 已完成')) taskInfo.status = 'completed';

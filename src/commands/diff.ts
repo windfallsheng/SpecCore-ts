@@ -88,8 +88,8 @@ async function diffIterations(src: string, tgt: string): Promise<void> {
   // Deep compare common tasks
   const common = srcTasks.filter((t) => !removed.includes(t) && !added.includes(t));
   for (const task of common.slice(0, 5)) {
-    const srcTask = join(srcDir, task, 'backend', 'TASK.md');
-    const tgtTask = join(tgtDir, task, 'backend', 'TASK.md');
+    const srcTask = join(srcDir, task, '00-specs', 'TASK.md');
+    const tgtTask = join(tgtDir, task, '00-specs', 'TASK.md');
 
     const srcExists = await pathExists(srcTask);
     const tgtExists = await pathExists(tgtTask);

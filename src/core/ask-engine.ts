@@ -795,7 +795,7 @@ export async function synthesizeIntent(input: string): Promise<SynthesizedIntent
   if (batchMatch) parsed.batch = batchMatch[1];
   // 平台
   if (/后端|backend/.test(input)) parsed.platform = 'backend';
-  else if (/前端|frontend/.test(input)) parsed.platform = 'frontend';
+  else if (/前端|20-frontend/.test(input)) parsed.platform = 'frontend';
   else if (/小程序|miniapp/.test(input)) parsed.platform = 'miniapp';
   // 任务名
   const nameMatch = input.match(/(?:创建|新建|做一个?)\s*(?:一个?\s*)?["""]([^"]+)["'']/);

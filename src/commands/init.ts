@@ -283,7 +283,14 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
       '│   └── assets/         ← 素材（prd/prototypes/designs/screenshots）',
       '├── 020-specs/     ← analyze 输出',
       '├── 030-tasks/     ← 开发任务',
-      '│   └── Task-*/    ← split 拆分（含 .issues.md .needs-retry）',
+      '│   └── Task-*/',
+      '│       ├── .meta/         ← 任务元信息（type/status/owner/created-at）',
+      '│       ├── _shared/       ← 共享契约（API_CONTRACT.yaml）',
+      '│       ├── 00-specs/      ← 执行前核心规格（REQ/TECH/TASK/SCHEMA/CHANGELOG）',
+      '│       ├── 10-backend/    ← 后端实现（src/tests）',
+      '│       ├── 20-frontend/   ← 前端实现（{platform}/src/tests）',
+      '│       ├── 99-artifacts/  ← 执行产出（TEST/REVIEW/DEPLOY/RISK/DEPS/MONITOR）',
+      '│       └── .issues.md     ← 问题追踪',
       '├── STAFFING.md      ← 人员排期',
       '```',
       '',
@@ -1390,6 +1397,14 @@ Iteration-NNN-name/            ← 迭代目录
 │   └── assets/                ← 素材（extracted/prototypes/designs/screenshots）
 ├── 020-specs/                 ← 需求分析
 ├── 030-tasks/                 ← 开发任务
+│   └── Task-*/
+│       ├── .meta/             ← 任务元信息（type/status/owner/created-at）
+│       ├── _shared/           ← 共享契约（API_CONTRACT.yaml）
+│       ├── 00-specs/          ← 执行前核心规格（REQ/TECH/TASK/SCHEMA/CHANGELOG）
+│       ├── 10-backend/        ← 后端实现（src/tests）
+│       ├── 20-frontend/       ← 前端实现（{platform}/src/tests）
+│       ├── 99-artifacts/      ← 执行产出（TEST/REVIEW/DEPLOY/RISK/DEPS/MONITOR）
+│       └── .issues.md         ← 问题追踪
 └── STAFFING.md                ← 人员排期
 \`\`\`
 

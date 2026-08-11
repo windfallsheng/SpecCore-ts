@@ -158,8 +158,8 @@ async function detectCodeRisks(iterationDir?: string, taskName?: string): Promis
   const risks: RiskItem[] = [];
   
   // 检查 TECH.md 中的选型是否有已知风险
-  const techPath = `.speccore/iterations/${iterationDir}/${taskName}/backend/TECH.md`;
-  const altTechPath = `${iterationDir}/${taskName}/backend/TECH.md`;
+  const techPath = `.speccore/iterations/${iterationDir}/${taskName}/00-specs/TECH.md`;
+  const altTechPath = `${iterationDir}/${taskName}/00-specs/TECH.md`;
   
   let techContent = '';
   try {

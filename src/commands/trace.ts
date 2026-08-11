@@ -58,7 +58,7 @@ async function traceFromReq(reqId: string): Promise<void> {
   for (const iter of iterations) {
     const tasks = await scanTasks(join(cwd, iter.name));
     for (const task of tasks) {
-      const reqPath = join(cwd, iter.name, task, 'backend', 'REQ.md');
+      const reqPath = join(cwd, iter.name, task, '00-specs', 'REQ.md');
       if (await pathExists(reqPath)) {
         const content = await readFile(reqPath, 'utf-8');
         if (content.includes(reqId)) {
@@ -138,7 +138,7 @@ function printTraceTree(node: string, depth: number): void {
 
 async function printTaskDetails(taskDir: string, indent: string): Promise<void> {
   // Show spec files present
-  const backend = join(taskDir, 'backend');
+  const backend = join(taskDir, '10-backend');
   if (await pathExists(backend)) {
     logger.info(`${indent}├── 🔧 Backend:`);
     for (const f of ['REQ.md', 'TECH.md', 'TASK.md']) {
@@ -155,7 +155,7 @@ async function printTaskDetails(taskDir: string, indent: string): Promise<void> 
     }
   }
 
-  const frontend = join(taskDir, 'frontend');
+  const frontend = join(taskDir, '20-frontend');
   if (await pathExists(frontend)) {
     logger.info(`${indent}├── 🎨 Frontend:`);
     const entries = await readdir(frontend, { withFileTypes: true });

@@ -79,7 +79,7 @@ export async function rollbackTask(taskId: string, iteration: string, reason?: s
   logger.info(`\n⏪ 回滚 ${taskName}`);
 
   // 1. Update task status
-  const taskMdPath = join(iterDir, taskName, 'backend', 'TASK.md');
+  const taskMdPath = join(iterDir, taskName, '00-specs', 'TASK.md');
   if (await pathExists(taskMdPath)) {
     let content = await readFile(taskMdPath, 'utf-8');
     const now = new Date().toISOString().split('T')[0];

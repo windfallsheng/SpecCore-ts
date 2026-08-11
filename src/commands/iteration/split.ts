@@ -69,8 +69,9 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
         for (const task of tasks) {
           const taskDir = join(iterDir, task.id || `Task-${String(tasks.indexOf(task) + 1).padStart(3, '0')}`);
           await ensureDir(taskDir);
-          if (task.req) await writeFile(join(taskDir, 'REQ.md'), task.req);
-          if (task.tech) await writeFile(join(taskDir, 'TECH.md'), task.tech);
+          await ensureDir(join(taskDir, '00-specs'));
+          if (task.req) await writeFile(join(taskDir, '00-specs', 'REQ.md'), task.req);
+          if (task.tech) await writeFile(join(taskDir, '00-specs', 'TECH.md'), task.tech);
           logger.info(`   ✅ 创建: ${taskDir}`);
         }
       } else {
@@ -417,73 +418,31 @@ function filterTemplateNoise(sections: Section[]): Section[] {
 
 async function createTaskFromSection(iterationDir: string, taskId: string, section: Section, allPlatforms: string[]): Promise<void> {
   const taskDir = join(iterationDir, '030-tasks', taskId);
-  
-  // 如果 section 有指定平台则只创建该平台，否则创建全部平台
   const taskPlatforms = section.platform ? [section.platform] : allPlatforms;
-  
+  const complexity = (section as any)._complexity as SectionComplexity || { estimatedHours: 2, priority: 'medium' as const, complexity: 'medium' as const, apiCount: 0, dbCount: 0, pageCount: 0, wordCount: 0 };
+  const owner = (section as any)._owner || '未分配';
+  const today = new Date().toISOString().split('T')[0];
+
+  // ── 1. 元信息目录 ──
+  await ensureDir(join(taskDir, '.meta'));
+  await writeFile(join(taskDir, '.meta', 'type'), 'feature');
+  await writeFile(join(taskDir, '.meta', 'status'), 'todo');
+  await writeFile(join(taskDir, '.meta', 'owner'), owner);
+  await writeFile(join(taskDir, '.meta', 'created-at'), today);
+
+  // ── 2. 共享契约 ──
   await ensureDir(join(taskDir, '_shared'));
-
-  // Create per-platform directories: backend services under backend/, frontend under frontend/
-  for (const platform of taskPlatforms) {
-    if (platform.startsWith('后台') || platform === 'backend') {
-      // Backend service: e.g., 后台管理端 → backend/管理端
-      const service = platform.replace(/^后台/, '').trim() || 'default';
-      await ensureDir(join(taskDir, 'backend', service || platform));
-    } else {
-      await ensureDir(join(taskDir, 'frontend', platform));
-    }
-  }
-  
-  // Always create a common backend directory for shared backend specs
-  if (!taskPlatforms.some(p => p.startsWith('后台'))) {
-    await ensureDir(join(taskDir, 'backend'));
-  }
-
-  // Write task type
-  await writeFile(join(taskDir, '.task-type'), 'feature');
-
-  // Write TEST.md — auto-generated test outline
-  await writeFile(join(taskDir, 'backend', 'TEST.md'), generateTestOutline(section));
-
-  // Write REVIEW.md — auto-generated code review checklist
-  await writeFile(join(taskDir, 'backend', 'REVIEW.md'), generateReviewChecklist(section));
-
-  // Write SCHEMA.md — DB schema template (only if DB content detected)
-  if (section.content.match(/数据库|数据表|表结构|DDL|ALTER|建表|索引/)) {
-    await writeFile(join(taskDir, 'backend', 'SCHEMA.md'), generateSchemaTemplate(section));
-  }
-
-  // Write DEPLOY.md — deployment checklist
-  await writeFile(join(taskDir, 'backend', 'DEPLOY.md'), generateDeployChecklist(section));
-
-  // Generate API_CONTRACT.yaml in _shared/
   const contractYaml = generateApiContract(section);
   if (contractYaml) {
     await writeFile(join(taskDir, '_shared', 'API_CONTRACT.yaml'), contractYaml);
   }
 
-  // Generate ERROR_CODES.md
-  await writeFile(join(taskDir, 'backend', 'ERROR_CODES.md'), generateErrorCodes(section));
+  // ── 3. 执行前核心规格 00-specs/ ──
+  await ensureDir(join(taskDir, '00-specs'));
 
-  // Generate ADR.md (only if tech stack detected)
-  const adr = generateAdr(section);
-  if (adr) {
-    await writeFile(join(taskDir, 'backend', 'ADR.md'), adr);
-  }
-
-  // Generate RISK.md — risk assessment + rollback
-  await writeFile(join(taskDir, 'backend', 'RISK.md'), generateRiskTemplate(section));
-
-  // Generate DEPS.md — dependency manifest
-  await writeFile(join(taskDir, 'backend', 'DEPS.md'), generateDepsTemplate(section));
-
-  // Generate MONITOR.md — monitoring points
-  await writeFile(join(taskDir, 'backend', 'MONITOR.md'), generateMonitorTemplate(section));
-
-  // Write REQ.md（含自动生成的 AC）
   const acItems = generateAcceptanceCriteria(section);
   await writeFile(
-    join(taskDir, 'backend', 'REQ.md'),
+    join(taskDir, '00-specs', 'REQ.md'),
     `# ${section.name}
 
 ## 需求描述
@@ -496,12 +455,10 @@ ${acItems}
 `
   );
 
-  // Write TECH.md（根据 section 内容注入框架）
   const apiLines = section.content.split('\n').filter(l => l.includes('| GET') || l.includes('| POST') || l.includes('| PUT') || l.includes('| DELETE') || l.includes('| PATCH'));
   const apiDesc = apiLines.length > 0 ? apiLines.map(l => `- ${l.trim()}`).join('\n') : '- 待补充（从 REQ.md 提取接口列表）';
-  
   await writeFile(
-    join(taskDir, 'backend', 'TECH.md'),
+    join(taskDir, '00-specs', 'TECH.md'),
     `# ${section.name} - 技术方案
 
 > ⚠️ 本文档由 split 自动生成框架，AI 执行时会自动填充。
@@ -531,26 +488,12 @@ ${apiDesc}
 `
   );
 
-  // Write API_CONTRACT.yaml if APIs detected
-  if (apiLines.length > 0) {
-    const contracts = apiLines.map(l => {
-      const parts = l.split('|').map(p => p.trim()).filter(Boolean);
-      const method = (parts[0] || 'GET').toUpperCase();
-      const path = parts[1] || '/api/unknown';
-      const desc = parts[2] || path;
-      return `  ${path}:\n    ${method}:\n      summary: "${desc}"\n      description: "<!-- AI-FILL -->"`;
-    }).join('\n');
-    
-    await writeFile(join(taskDir, 'backend', 'API_CONTRACT.yaml'),
-      `# ${section.name} - API Contract\n# Auto-generated from split\n\npaths:\n${contracts}\n`
-    );
+  if (section.content.match(/数据库|数据表|表结构|DDL|ALTER|建表|索引/)) {
+    await writeFile(join(taskDir, '00-specs', 'SCHEMA.md'), generateSchemaTemplate(section));
   }
 
-  // Write TASK.md
-  const complexity = (section as any)._complexity as SectionComplexity || { estimatedHours: 2, priority: 'medium' as const, complexity: 'medium' as const, apiCount: 0, dbCount: 0, pageCount: 0, wordCount: 0 };
-  const owner = (section as any)._owner || '未分配';
   await writeFile(
-    join(taskDir, 'backend', 'TASK.md'),
+    join(taskDir, '00-specs', 'TASK.md'),
     `# ${section.name}
 
 ## 任务信息
@@ -564,56 +507,117 @@ ${apiDesc}
 ## 变更履历
 | 时间 | 变更内容 | 变更人 |
 | :--- | :--- | :--- |
-| ${new Date().toISOString().split('T')[0]} | 创建任务 | CLI |
+| ${today} | 创建任务 | CLI |
 
-## 产出物
+## 产出物清单
 | 产出物 | 状态 | 路径 |
 | :--- | :--- | :--- |
-| REQ.md | ✅ | ./REQ.md |
-| TECH.md | ✅ | ./TECH.md |
-| TASK.md | ✅ | ./TASK.md |
-| TEST.md | ✅ | ./TEST.md |
-| REVIEW.md | ✅ | ./REVIEW.md |
+| REQ.md | ✅ | ./00-specs/REQ.md |
+| TECH.md | ✅ | ./00-specs/TECH.md |
+| TASK.md | ✅ | ./00-specs/TASK.md |
+| SCHEMA.md | ⏳ | ./00-specs/SCHEMA.md |
 | API_CONTRACT.yaml | ✅ | ./_shared/API_CONTRACT.yaml |
-| DEPLOY.md | ✅ | ./DEPLOY.md |
-| SCHEMA.md | ✅ | ./SCHEMA.md |
-| ERROR_CODES.md | ✅ | ./ERROR_CODES.md |
-| ADR.md | ✅ | ./ADR.md |
-| RISK.md | ✅ | ./RISK.md |
-| DEPS.md | ✅ | ./DEPS.md |
-| MONITOR.md | ✅ | ./MONITOR.md |
+| TEST.md | ⏳ | ./99-artifacts/TEST.md |
+| REVIEW.md | ⏳ | ./99-artifacts/REVIEW.md |
+| DEPLOY.md | ⏳ | ./99-artifacts/DEPLOY.md |
+| ERROR_CODES.md | ⏳ | ./99-artifacts/ERROR_CODES.md |
+| ADR.md | ⏳ | ./99-artifacts/ADR.md |
+| RISK.md | ⏳ | ./99-artifacts/RISK.md |
+| DEPS.md | ⏳ | ./99-artifacts/DEPS.md |
+| MONITOR.md | ⏳ | ./99-artifacts/MONITOR.md |
+| CHANGELOG.md | ✅ | ./00-specs/CHANGELOG.md |
 `
   );
 
-  // Copy to each platform directory (backend services + frontend platforms)
-  const reqContent = await readFile(join(taskDir, 'backend', 'REQ.md'), 'utf-8');
-  const techContent = await readFile(join(taskDir, 'backend', 'TECH.md'), 'utf-8');
-  const taskContent = await readFile(join(taskDir, 'backend', 'TASK.md'), 'utf-8');
-  const testContent = await readFile(join(taskDir, 'backend', 'TEST.md'), 'utf-8');
-  const reviewContent = await readFile(join(taskDir, 'backend', 'REVIEW.md'), 'utf-8');
-  
+  await writeFile(
+    join(taskDir, '00-specs', 'CHANGELOG.md'),
+    `# ${section.name} - 变更记录
+
+| 时间 | 版本 | 变更内容 | 变更人 |
+| :--- | :--- | :--- | :--- |
+| ${today} | v1.0 | 初始创建 | CLI |
+`
+  );
+
+  // API_CONTRACT.yaml（按接口）统一放 _shared/
+  if (apiLines.length > 0) {
+    const contracts = apiLines.map(l => {
+      const parts = l.split('|').map(p => p.trim()).filter(Boolean);
+      const method = (parts[0] || 'GET').toUpperCase();
+      const path = parts[1] || '/api/unknown';
+      const desc = parts[2] || path;
+      return `  ${path}:\n    ${method}:\n      summary: "${desc}"\n      description: "<!-- AI-FILL -->"`;
+    }).join('\n');
+    await writeFile(join(taskDir, '_shared', 'API_CONTRACT.yaml'),
+      `# ${section.name} - API Contract\n# Auto-generated from split\n\npaths:\n${contracts}\n`
+    );
+  }
+
+  // ── 4. 执行产出 99-artifacts/ ──
+  await ensureDir(join(taskDir, '99-artifacts'));
+  await writeFile(join(taskDir, '99-artifacts', 'TEST.md'), generateTestOutline(section));
+  await writeFile(join(taskDir, '99-artifacts', 'REVIEW.md'), generateReviewChecklist(section));
+  await writeFile(join(taskDir, '99-artifacts', 'DEPLOY.md'), generateDeployChecklist(section));
+  await writeFile(join(taskDir, '99-artifacts', 'ERROR_CODES.md'), generateErrorCodes(section));
+  await writeFile(join(taskDir, '99-artifacts', 'RISK.md'), generateRiskTemplate(section));
+  await writeFile(join(taskDir, '99-artifacts', 'DEPS.md'), generateDepsTemplate(section));
+  await writeFile(join(taskDir, '99-artifacts', 'MONITOR.md'), generateMonitorTemplate(section));
+
+  const adr = generateAdr(section);
+  if (adr) {
+    await writeFile(join(taskDir, '99-artifacts', 'ADR.md'), adr);
+  }
+
+  // ── 5. 实现目录 10-backend/ 20-20-frontend/ ──
+  for (const platform of taskPlatforms) {
+    if (platform.startsWith('后台') || platform === 'backend') {
+      const service = platform.replace(/^后台/, '').trim() || 'default';
+      await ensureDir(join(taskDir, '10-backend', service || platform, 'src'));
+      await ensureDir(join(taskDir, '10-backend', service || platform, 'tests'));
+    } else {
+      await ensureDir(join(taskDir, '20-frontend', platform, 'src'));
+      await ensureDir(join(taskDir, '20-frontend', platform, 'tests'));
+    }
+  }
+  if (!taskPlatforms.some(p => p.startsWith('后台'))) {
+    await ensureDir(join(taskDir, '10-backend', 'src'));
+    await ensureDir(join(taskDir, '10-backend', 'tests'));
+  }
+
+  // ── 6. 平台目录内复制核心规格 ──
+  const reqContent = await readFile(join(taskDir, '00-specs', 'REQ.md'), 'utf-8');
+  const techContent = await readFile(join(taskDir, '00-specs', 'TECH.md'), 'utf-8');
+  const taskContent = await readFile(join(taskDir, '00-specs', 'TASK.md'), 'utf-8');
+  const testContent = await readFile(join(taskDir, '99-artifacts', 'TEST.md'), 'utf-8');
+  const reviewContent = await readFile(join(taskDir, '99-artifacts', 'REVIEW.md'), 'utf-8');
+
   for (const platform of taskPlatforms) {
     if (platform.startsWith('后台') || platform === 'backend') {
       const service = platform.replace(/^后台/, '').trim() || platform;
-      await ensureDir(join(taskDir, 'backend', service));
-      await writeFile(join(taskDir, 'backend', service, 'REQ.md'), reqContent);
-      await writeFile(join(taskDir, 'backend', service, 'TECH.md'), techContent);
-      await writeFile(join(taskDir, 'backend', service, 'TASK.md'), taskContent);
-      await writeFile(join(taskDir, 'backend', service, 'TEST.md'), testContent);
-      await writeFile(join(taskDir, 'backend', service, 'REVIEW.md'), reviewContent);
+      const svcDir = join(taskDir, '10-backend', service);
+      await ensureDir(svcDir);
+      await writeFile(join(svcDir, 'REQ.md'), reqContent);
+      await writeFile(join(svcDir, 'TECH.md'), techContent);
+      await writeFile(join(svcDir, 'TASK.md'), taskContent);
+      await writeFile(join(svcDir, 'TEST.md'), testContent);
+      await writeFile(join(svcDir, 'REVIEW.md'), reviewContent);
     } else {
-      await ensureDir(join(taskDir, 'frontend', platform));
-      await writeFile(join(taskDir, 'frontend', platform, 'REQ.md'), reqContent);
-      await writeFile(join(taskDir, 'frontend', platform, 'TASK.md'), taskContent);
-      await writeFile(join(taskDir, 'frontend', platform, 'TEST.md'), testContent);
-      await writeFile(join(taskDir, 'frontend', platform, 'REVIEW.md'), reviewContent);
-      // 前端专属文件
-      await writeFile(join(taskDir, 'frontend', platform, 'COMPONENT_TREE.md'), generateComponentTree(section, platform));
-      await writeFile(join(taskDir, 'frontend', platform, 'ROUTES.md'), generateRoutesDoc(section, platform));
-      await writeFile(join(taskDir, 'frontend', platform, 'STATE.md'), generateStateDoc(section, platform));
-      await writeFile(join(taskDir, 'frontend', platform, 'STYLE_GUIDE.md'), generateStyleGuide(section, platform));
+      const feDir = join(taskDir, '20-frontend', platform);
+      await ensureDir(feDir);
+      await writeFile(join(feDir, 'REQ.md'), reqContent);
+      await writeFile(join(feDir, 'TASK.md'), taskContent);
+      await writeFile(join(feDir, 'TEST.md'), testContent);
+      await writeFile(join(feDir, 'REVIEW.md'), reviewContent);
+      await writeFile(join(feDir, 'README.md'), `# ${section.name} - ${platform}\n\n前端实现目录。\n`);
+      await writeFile(join(feDir, 'COMPONENT_TREE.md'), generateComponentTree(section, platform));
+      await writeFile(join(feDir, 'ROUTES.md'), generateRoutesDoc(section, platform));
+      await writeFile(join(feDir, 'STATE.md'), generateStateDoc(section, platform));
+      await writeFile(join(feDir, 'STYLE_GUIDE.md'), generateStyleGuide(section, platform));
     }
   }
+
+  // ── 7. 问题追踪 ──
+  await writeFile(join(taskDir, '.issues.md'), `# ${section.name} - 问题追踪\n\n> 执行过程中发现的问题记录于此。\n\n`);
 }
 
 async function updateProjectGraph(iterationDir: string, sections: Section[]): Promise<void> {
@@ -792,7 +796,7 @@ async function strictSplitPreview(
     
     // Determine target directory
     const target = s.platform
-      ? (s.platform.startsWith('后台') ? `backend/${s.platform.replace(/^后台/, '')}` : `frontend/${s.platform}`)
+      ? (s.platform.startsWith('后台') ? `backend/${s.platform.replace(/^后台/, '')}` : `20-frontend/${s.platform}`)
       : platforms.join(' + ');
 
     logger.info(`── ${taskId}: ${s.name} ──`);
@@ -876,7 +880,7 @@ async function generateImpactGraph(
     const taskDir = join(iterationDir, '030-tasks', taskId);
     if (await pathExists(taskDir)) {
       // 生成风险报告并嵌入 TASK.md
-      const taskMdPath = join(taskDir, 'backend', 'TASK.md');
+      const taskMdPath = join(taskDir, '00-specs', 'TASK.md');
       const riskReport = generateRiskReport(risk); await writeFile(join(taskDir, '.risk'), riskReport);
       if (await pathExists(taskMdPath)) {
         let taskMd = await readFile(taskMdPath, 'utf-8');
@@ -886,7 +890,7 @@ async function generateImpactGraph(
         }
       }
       // Inject risk section into TASK.md if it exists
-      const riskTaskPath = join(taskDir, 'backend', 'TASK.md');
+      const riskTaskPath = join(taskDir, '00-specs', 'TASK.md');
       if (await pathExists(riskTaskPath)) {
         let taskMd = await readFile(riskTaskPath, 'utf-8');
         if (!taskMd.includes('## 风险评估')) {
@@ -1037,7 +1041,7 @@ async function injectTechFromAnalysis(iterationDir: string, taskDir: string, sec
 
   if (!techSection && !dbSection && !depSection) return;
 
-  const techPath = join(taskDir, 'backend', 'TECH.md');
+  const techPath = join(taskDir, '00-specs', 'TECH.md');
   let tech = await readFile(techPath, 'utf-8');
 
   const note = '\n\n> 以下内容自动从 ANALYSIS.md 注入\n\n';

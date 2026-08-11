@@ -235,7 +235,7 @@ async function evolveRules(iterDir: string, taskId: string, iteration: string): 
   const taskDir = join(iterDir, '030-tasks', taskId);
   const patterns: string[] = [];
 
-  const taskPath = join(taskDir, 'backend', 'TASK.md');
+  const taskPath = join(taskDir, '00-specs', 'TASK.md');
   if (await pathExists(taskPath)) {
     const content = await readFile(taskPath, 'utf-8');
     if (content.includes('ExceptionHandler') || content.includes('@ControllerAdvice'))
@@ -248,7 +248,7 @@ async function evolveRules(iterDir: string, taskId: string, iteration: string): 
       patterns.push('| RULES/CACHE.md | 缓存策略 | Redis/本地缓存规范 |');
   }
 
-  const reqPath = join(taskDir, 'backend', 'REQ.md');
+  const reqPath = join(taskDir, '00-specs', 'REQ.md');
   if (await pathExists(reqPath)) {
     const content = await readFile(reqPath, 'utf-8');
     if ((content.match(/GET.*POST.*PUT.*DELETE/s) || []).length > 0 || content.includes('RESTful'))

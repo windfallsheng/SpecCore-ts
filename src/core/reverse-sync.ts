@@ -82,8 +82,8 @@ export async function reverseSync(rootDir: string, iteration?: string): Promise<
       const taskDir = join(rootDir, iter, taskId);
       if (!(await pathExists(taskDir))) continue;
 
-      // 更新 backend/TASK.md
-      const taskMdPath = join(taskDir, 'backend', 'TASK.md');
+      // 更新 00-specs/TASK.md
+      const taskMdPath = join(taskDir, '00-specs', 'TASK.md');
       if (await pathExists(taskMdPath)) {
         const tx = new FileTransaction();
         let content = await readFile(taskMdPath, 'utf-8');

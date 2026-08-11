@@ -3,7 +3,7 @@
  * 
  * 支持:
  *   - 需求分析: --req docs/a.md docs/b.md
- *   - 代码分析: --src backend/src frontend/src
+ *   - 代码分析: --src backend/src 20-frontend/src
  *   - 联合分析: --src backend/src --req docs/req.md
  * 
  * 输出范围:
@@ -184,14 +184,14 @@ async function enrichTaskDocs(iteration: string, taskId: string, reqFiles: strin
   }
 
   const fullTaskDir = join(iterDir, taskEntry.name);
-  const backendDir = join(fullTaskDir, 'backend');
+  const specsDir = join(fullTaskDir, '00-specs');
   
-  if (!(await pathExists(backendDir))) return;
+  if (!(await pathExists(specsDir))) return;
 
   let reqContent = '';
   
   // 读取任务 REQ 或传入的需求文件
-  const taskReqPath = join(backendDir, 'REQ.md');
+  const taskReqPath = join(specsDir, 'REQ.md');
   if (await pathExists(taskReqPath)) {
     reqContent = await require('fs-extra').readFile(taskReqPath, 'utf-8');
   } else if (reqFiles.length > 0) {
@@ -203,7 +203,7 @@ async function enrichTaskDocs(iteration: string, taskId: string, reqFiles: strin
   if (!reqContent) return;
 
   // 补全 TECH.md
-  const techPath = join(backendDir, 'TECH.md');
+  const techPath = join(specsDir, 'TECH.md');
   let techContent = '';
   if (await pathExists(techPath)) {
     techContent = await require('fs-extra').readFile(techPath, 'utf-8');
@@ -225,7 +225,7 @@ async function enrichTaskDocs(iteration: string, taskId: string, reqFiles: strin
   }
 
   // 补全 TEST.md
-  const testPath = join(backendDir, 'TEST.md');
+  const testPath = join(fullTaskDir, '99-artifacts', 'TEST.md');
   if (await pathExists(testPath)) {
     let testContent = await require('fs-extra').readFile(testPath, 'utf-8');
     if (!testContent.includes('## 补充分析')) {
@@ -243,7 +243,7 @@ async function enrichTaskDocs(iteration: string, taskId: string, reqFiles: strin
   }
 
   // 补全 REVIEW.md
-  const reviewPath = join(backendDir, 'REVIEW.md');
+  const reviewPath = join(fullTaskDir, '99-artifacts', 'REVIEW.md');
   if (await pathExists(reviewPath)) {
     let reviewContent = await require('fs-extra').readFile(reviewPath, 'utf-8');
     if (!reviewContent.includes('## 本任务专项检查')) {
@@ -267,10 +267,10 @@ async function enrichTaskDocs(iteration: string, taskId: string, reqFiles: strin
   ];
 
   for (const [filename, content] of templates) {
-    const fp = join(backendDir, filename);
+    const fp = join(fullTaskDir, '99-artifacts', filename);
     if (!(await pathExists(fp))) {
       await writeFile(fp, content);
-      logger.info(`   📄 创建 ${filename}`);
+      logger.info(`   📄 创建 99-artifacts/${filename}`);
     }
   }
 }
