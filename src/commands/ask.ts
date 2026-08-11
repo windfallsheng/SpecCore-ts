@@ -272,7 +272,6 @@ export async function askCommand(input: string, _options: any): Promise<void> {
       await autoExecute(result.autoExec.command, result.autoExec.args, !!result.autoExec.confirm);
       await askHtml(input);
       return;
-      return;
     }
 
     // 2. ambiguous 模式 → 提示 AI 让用户选择

@@ -115,8 +115,8 @@ function checkEncoding(lines: string[], issues: ValidationIssue[]): void {
   }
 
   // 检测中文引号不匹配
-  const leftQuotes = (content: string) => (content.match(/["""]/g) || []).length;
-  const rightQuotes = (content: string) => (content.match(/["""]/g) || []).length;
+  const leftQuotes = (content: string) => (content.match(/[\"\"]/g) || []).length;
+  const rightQuotes = (content: string) => (content.match(/[\"\"]/g) || []).length;
   const allText = lines.join('\n');
   if (Math.abs(leftQuotes(allText) - rightQuotes(allText)) > 3) {
     issues.push({

@@ -1,6 +1,8 @@
-import { pathExists, readFile, writeFile } from 'fs-extra';
-import { join } from 'path';
+import { pathExists, readFile, writeFile, ensureDir, readdir } from 'fs-extra';
+import { join, dirname } from 'path';
 import { createInterface } from 'readline';
+import { readdirSync } from 'fs';
+import { execSync } from 'child_process';
 import { logger } from '../utils/logger';
 import { getDefaultIteration, updateContext, recordHistory, startHotfix, getIterationDir } from '../core/context';
 import { scanTasks, topologicalSort, TaskState } from '../core/state';
@@ -111,7 +113,7 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
       return;
     }
 
-    const sortedTasks = topologicalSort(tasks);
+    let sortedTasks = topologicalSort(tasks);
 
     // 检测并警告循环依赖
     const cycles = detectCycles(sortedTasks);
@@ -160,6 +162,16 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
     }
 
     logger.info('🚀 开始执行...\n');
+
+    // === Strict mode pre-flight check ===
+    if (options.strict) {
+      const approved = await preFlightCheck(sortedTasks, iteration, options);
+      if (approved.length === 0) {
+        logger.info('❌ 严格模式预检未通过，已取消执行');
+        return;
+      }
+      sortedTasks = approved;
+    }
 
     // === Resume mode ===
     if (options.resume) {
@@ -272,16 +284,6 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
     }
   }
 
-  // Filter whitelist (--only)
-  if (options?.only) {
-    const onlyList = options.only.split(',').map(s => s.trim()).filter(Boolean);
-    const before = tasks.length;
-    tasks = tasks.filter(t => onlyList.includes(t.id));
-    if (tasks.length < before) {
-      logger.info(`  🎯 仅执行 ${tasks.length}/${before} 个指定任务`);
-    }
-  }
-
   // Filter skipped tasks
   if (skip && skip.length > 0) {
     const before = tasks.length;
@@ -310,7 +312,7 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
       }
       // 切回基础分支，避免下个任务从上个任务分支上拉代码
       if (defaultBase) {
-        try { require('child_process').execSync(`git checkout "${defaultBase}"`, { stdio: 'pipe' }); } catch {}
+        try { execSync(`git checkout "${defaultBase}"`, { stdio: 'pipe' }); } catch {}
       }
     }
   }
@@ -342,7 +344,7 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
     logger.info(`[${String(i + 1).padStart(2, '0')}/${total}] ${bar} ${progress}%`);
     logger.info(`  🔄 ${task.id} ${task.name || ''} (${task.type || 'feature'})`);
 
-    await simulateTaskExecution(task, iteration);
+    await generateTaskSkeleton(task, iteration);
 
     completed.push(`${task.id} - ${task.name || ''}`);
     logger.info(`  ✅ ${task.id} completed`);
@@ -496,7 +498,7 @@ async function processBatch(tasks: TaskState[], state: ExecutionState, iteration
     }
     logger.info(`  🔄 执行中...`);
 
-    await simulateTaskExecution(task, iteration);
+    await generateTaskSkeleton(task, iteration);
     completed.push(task.id);
 
     logger.info(`  ✅ ${task.id || task} completed`);
@@ -549,7 +551,7 @@ function printExecutionPreview(tasks: TaskState[], iteration: string, batchSize 
 // ============================================================
 // Task execution (transaction protected)
 // ============================================================
-async function simulateTaskExecution(task: TaskState, iteration: string): Promise<void> {
+async function generateTaskSkeleton(task: TaskState, iteration: string): Promise<void> {
   const taskDir = join(await getIterationDir(iteration), task.id);
   let filesUpdated = 0;
 
@@ -567,8 +569,16 @@ async function simulateTaskExecution(task: TaskState, iteration: string): Promis
       const reqPath = join(backendDir, 'REQ.md');
 
       let className = convertToClassName(task.name || task.id);
-      // 使用安全的 Java 包名：com.example.{className小写}
+      // 从 CONSTITUTION.md 读取包名，回退到默认值
       let packageName = `com.example.${className.toLowerCase()}`;
+      const constitutionPath = join(process.cwd(), '.speccore', 'CONSTITUTION.md');
+      if (await pathExists(constitutionPath)) {
+        const constitution = await readFile(constitutionPath, 'utf-8');
+        const pkgMatch = constitution.match(/包名[：:]\s*([a-z.]+)/i) || constitution.match(/package[：:]\s*([a-z.]+)/i);
+        if (pkgMatch) {
+          packageName = `${pkgMatch[1]}.${className.toLowerCase()}`;
+        }
+      }
 
       // 生成 Controller 骨架
       if (await pathExists(reqPath)) {
@@ -912,7 +922,7 @@ async function preFlightCheck(tasks: TaskState[], iteration: string, options: Ex
     // 6. Platform
     const fd = join(taskDir, 'frontend');
     if (await pathExists(fd)) {
-      const pf = require('fs').readdirSync(fd, { withFileTypes: true }).filter((d: any) => d.isDirectory()).map((d: any) => d.name);
+      const pf = readdirSync(fd, { withFileTypes: true }).filter((d: any) => d.isDirectory()).map((d: any) => d.name);
       logger.info(`  6. 端: ${pf.join(', ')}`);
     }
 
@@ -980,7 +990,7 @@ async function detectDependencyBase(iteration: string, taskId: string): Promise<
         logger.info(`   🎯 自动从分支 feature/${depTaskId}-* 创建（避免实体重复）`);
         // Find actual branch name matching this task
       try {
-        const branches = require('child_process').execSync('git branch', { encoding: 'utf-8' });
+        const branches = execSync('git branch', { encoding: 'utf-8' });
         const branchMatch = branches.split('\n').find((b: string) => b.trim().startsWith(`feature/${depTaskId}-`));
         if (branchMatch) {
           const actualBranch = branchMatch.trim().replace(/^\*?\s*/, '');
@@ -1055,8 +1065,6 @@ async function executionVerifyLoop(
   tasks: TaskState[], iteration: string, options: ExecuteOptions
 ): Promise<void> {
   const maxRounds = 3;
-  const { join } = require('path');
-  const { readFile, writeFile, pathExists } = require('fs-extra');
   const iterDir = await getIterationDir(iteration);
 
   for (const task of tasks) {
@@ -1187,7 +1195,6 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
 
   // ── 缺参数检测 ──
   if (!task) {
-    const { readdir } = require('fs-extra');
     const taskDir = join(await getIterationDir(iteration), '030-tasks');
     let availableTasks: string[] = [];
     try {
@@ -1282,8 +1289,13 @@ async function runApplyMode(iteration: string, options: ExecuteOptions): Promise
   let writtenCount = 0;
 
   for (const file of parsed.files) {
+    // 路径遍历防护
+    if (file.path.includes('..')) {
+      logger.warn(`   ⚠️ 跳过危险路径: ${file.path}`);
+      continue;
+    }
     const fullPath = join(iterDir, file.path);
-    await require('fs-extra').ensureDir(require('path').dirname(fullPath));
+    await ensureDir(dirname(fullPath));
     await writeFile(fullPath, file.content);
     logger.info(`   ✅ 写入: ${file.path}`);
     writtenCount++;

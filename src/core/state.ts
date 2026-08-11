@@ -98,8 +98,9 @@ function parseStatus(status: string): TaskState['status'] {
 export async function scanTasks(iteration: string): Promise<TaskState[]> {
   const { pathExists, readdir } = await import('fs-extra');
   const { join } = await import('path');
+  const { getIterationDir } = await import('./context');
   
-  const iterationDir = `Iteration-${iteration}`;
+  const iterationDir = await getIterationDir(iteration);
   if (!(await pathExists(iterationDir))) {
     return [];
   }

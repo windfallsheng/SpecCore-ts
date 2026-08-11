@@ -4,9 +4,12 @@
  */
 
 import { logger } from '../utils/logger';
-import { recognizeIntent } from './intent-recognition';
+import { recognizeIntent, IntentResult } from './intent-recognition';
 import { askWithLlm } from './ask-llm';
 import { tryHostAi } from './ask-host-ai';
+import { loadAskConfig } from './ask-config';
+import { getCachedIntent, cacheIntent } from './intent-cache';
+import { buildAskContext, formatContextForHostAi } from './ask-context';
 
 // ============================================================
 // 类型定义
@@ -88,7 +91,7 @@ const COMMAND_KB: CommandKnowledge[] = [
     usage: 'speccore dev [--auto] [--from <phase>] [--to <phase>]', examples: ['speccore dev --auto', 'speccore dev --from analyze --to execute'], related: ['execute', 'plan'], triggers: ['dev', '流水线', '自动', '级联'] },
   { name: 'task', aliases: ['tk'], description: '任务管理：创建/列表/状态。子命令: new, list, status',
     usage: 'speccore task new --name <name> [--id <id>] | speccore task list | speccore task status', examples: ['speccore task new --name "用户登录"', 'speccore task list'], related: ['plan', 'execute'], triggers: ['task', '任务列表', '查看任务', '列出任务'] },
-  { name: 'schedule', aliases: ['sc'], description: '[暂未实现] 定时调度管理：创建/查看/取消/重试/守护进程',
+  { name: 'schedule', aliases: ['sc'], description: '[已废弃] 定时调度功能已废弃，请勿使用',
     usage: 'speccore schedule create --at "HH:mm" | speccore schedule list | speccore schedule cancel --id <id>',
     examples: ['speccore schedule list', 'speccore schedule retry --id sch-xxx'],
     related: ['plan', 'execute', 'task'], triggers: ['调度', '定时', 'schedule', '重调度', 'retry', '守护进程', 'daemon', '队列'] },
@@ -235,7 +238,7 @@ function handleExplain(input: string): AskResult {
 }
 
 /** 模式2: 任务指引 */
-function handleGuide(input: string): AskResult {
+function handleGuide(input: string): AskResult | null {
   // 匹配工作流
   let matchedWorkflow: PipelineStep[] | null = null;
   let workflowName = '';
@@ -291,16 +294,16 @@ function handleGuide(input: string): AskResult {
   } else if (/新功能|feature|登录|注册|支付|创建.*功能|做.*功能/i.test(input)) {
     matchedWorkflow = WORKFLOWS['new feature'];
     workflowName = '新功能开发全流程';
-    throw new Error('FALLBACK_TO_MATCH');
+    return null;
   } else if (/批量|分批|batch|队列/i.test(input)) {
     matchedWorkflow = WORKFLOWS['batch execute'];
     workflowName = '批量执行流程';
   } else if (/创建.*迭代创建.*迭代/i.test(input)) {
     // 不应该进 guide 模式——让调用方降级到 match
-    throw new Error('FALLBACK_TO_MATCH');
+    return null;
   } else {
-    // 无匹配工作流 → 抛出，由 askEngine 降级到 handleMatch
-    throw new Error('FALLBACK_TO_MATCH');
+    // 无匹配工作流 → 返回 null，由 askEngine 降级到 handleMatch
+    return null;
   }
 
   const steps = matchedWorkflow.map(s =>
@@ -339,12 +342,13 @@ function handleGuide(input: string): AskResult {
 async function handleMatch(input: string): Promise<AskResult> {
   // 优先用 KB 精确匹配
   const kbMatch = matchCommandInKB(input);
+  const config = await loadAskConfig();
   
   const results = await recognizeIntent(input);
   const best = results[0];
   
   // 如果 KB 有匹配且置信度高于意图识别，用 KB（但要整合意图识别的参数）
-  if (kbMatch && (!best || best.confidence < 70)) {
+  if (kbMatch && (!best || best.confidence < 60)) {
     const params = best?.extractedParams || {};
     let fullCommand = `speccore ${kbMatch.name}`;
     const paramNotes: string[] = [];
@@ -367,7 +371,7 @@ async function handleMatch(input: string): Promise<AskResult> {
   }
 
   // ── 低置信度拒绝 ──
-  if (best.confidence < 45) {
+  if (best.confidence < config.routing.lowThreshold) {
     return {
       mode: 'match',
       summary: '置信度过低',
@@ -398,10 +402,10 @@ async function handleMatch(input: string): Promise<AskResult> {
   const paramNotes: string[] = [];
 
   // task-create / iteration-create 需要子命令
-  if (best.intent === 'task-create') {
+  if (best.command === 'task-create') {
     const name = params.name || params.desc || input.slice(0, 30);
     fullCommand = `speccore task new -n "${name}"`;
-  } else if (best.intent === 'iteration-create') {
+  } else if (best.command === 'iteration-create') {
     const name = params.name || input.slice(0, 20);
     fullCommand = `speccore iteration create -n "${name}"`;
   } else {
@@ -459,7 +463,7 @@ async function handleMatch(input: string): Promise<AskResult> {
     summary: `匹配到: ${best.intent} (${best.confidence}%) → ${fullCommand}`,
     detail,
     commands: [best.command],
-    autoExec: best.confidence >= 70 ? {
+    autoExec: best.confidence >= config.routing.highThreshold ? {
       command: fullCommand.replace(/^speccore /, '').split(' ')[0],  // 主命令
       args: fullCommand.replace(/^speccore [a-z-]+ /, ''),           // 子命令 + 参数
       confirm: true,
@@ -577,8 +581,15 @@ function handlePipeline(input: string): AskResult {
     };
   }
 
-  // 默认返回 guide
-  return handleGuide(input);
+  // 默认返回 guide（降级到 match 若 guide 无匹配）
+  const guideResult = handleGuide(input);
+  if (guideResult) return guideResult;
+  return {
+    mode: 'match',
+    summary: '未匹配到编排模式',
+    detail: '无法识别为 Pipeline 模式，请尝试更具体的描述。',
+    commands: [],
+  };
 }
 
 function buildPipelineDetail(steps: PipelineStep[], input: string): string {
@@ -875,7 +886,7 @@ export async function synthesizeIntent(input: string): Promise<SynthesizedIntent
   //  b) 置信度低于阈值
   //  c) 参数严重缺失（如无任务名就创建任务）
   // 否则 AI 自主补全后直接执行
-  const isProblematic = gaps.length > 0 || confidence < 70;
+  const isProblematic = gaps.length > 0 || confidence < 60;
   
   // 关键参数缺失 → 提问
   if (commands.includes('task') && !parsed.name && !parsed.type) {
@@ -909,8 +920,9 @@ export async function synthesizeIntent(input: string): Promise<SynthesizedIntent
 }
 
 export async function askEngine(input: string): Promise<AskResult> {
-  // ── 第零层: 确定性操作直接路由 ──
-  // 切换上下文 → context set（无歧义，直接执行）
+  // ═══════════════════════════════════════════════════════════
+  // 第零层: 确定性操作直接路由（零成本，最高优先级）
+  // ═══════════════════════════════════════════════════════════
   if (/切换.*[到至].*迭代|上下文.*切换|切换到/.test(input)) {
     const iterMatch = input.match(/Iteration[- ]?\S+|Q\d+|sample/i);
     const raw = iterMatch ? iterMatch[0] : '';
@@ -926,68 +938,158 @@ export async function askEngine(input: string): Promise<AskResult> {
     }
   }
 
-  // ── --rules 模式: 自有 LLM + 关键词匹配（显式触发）──
-  if (input.includes('--rules')) {
-    // 优先: 自有 LLM（需要配置 SPECCORE_LLM_KEY）
-    if (process.env.SPECCORE_LLM_KEY) {
-      try {
-        const llmResult = await askWithLlm(input);
-        if (llmResult && llmResult.commands.length > 0) {
-          logger.info(`🧠 自有 LLM: ${modeLabel(llmResult.mode as AskMode)}`);
-          (llmResult as any)._source = 'llm';
-          return llmResult;
-        }
-      } catch (e: any) { logger.warn(`LLM 不可用: ${e.message}`); }
-    }
-    // 兜底: 关键词匹配
-    const mode = classifyMode(input);
-    switch (mode) {
-      case 'explain': return handleExplain(input);
-      case 'guide': return handleGuide(input);
-      case 'pipeline': return handlePipeline(input);
-      default: return handleMatch(input);
+  // ═══════════════════════════════════════════════════════════
+  // 加载统一配置（环境变量 > ask.json > 默认值）
+  // ═══════════════════════════════════════════════════════════
+  const config = await loadAskConfig();
+
+  // ═══════════════════════════════════════════════════════════
+  // 第一层: 意图缓存（零成本，高频意图越用越快）
+  // ═══════════════════════════════════════════════════════════
+  if (config.routing.cacheEnabled) {
+    const cached = await getCachedIntent(input);
+    if (cached) {
+      logger.info(`💾 缓存命中: "${input.slice(0, 30)}..."`);
+      return cached;
     }
   }
 
-  // ── 宿主 AI 文件协议（TRAE 等）──
+  // ═══════════════════════════════════════════════════════════
+  // 第二层: 本地意图引擎（关键词+正则+上下文）
+  // ═══════════════════════════════════════════════════════════
+  const mode = classifyMode(input);
+  let localResult: AskResult;
+  let localCandidates: IntentResult[] = [];
+
+  switch (mode) {
+    case 'explain':
+      localResult = handleExplain(input);
+      break;
+    case 'guide': {
+      const guide = handleGuide(input);
+      localResult = guide || await handleMatch(input);
+      break;
+    }
+    case 'pipeline':
+      localResult = handlePipeline(input);
+      break;
+    default:
+      localCandidates = await recognizeIntent(input);
+      localResult = await handleMatch(input);
+  }
+
+  // 计算本地置信度（explain/guide/pipeline 视为高置信度）
+  const localConfidence = localCandidates[0]?.confidence ||
+    (localResult.autoExec ? 85 : (mode === 'explain' || mode === 'pipeline') ? 90 : 55);
+
+  // --rules / forceHostAi 强制所有请求走 AI
+  const forceHostAi = input.includes('--rules') || config.rules.forceHostAi;
+
+  // ═══════════════════════════════════════════════════════════
+  // 第三层: 三段式动态路由策略
+  // ═══════════════════════════════════════════════════════════
+  //
+  //  ┌─────────────────────────────────────────────────────┐
+  //  │  ≥ highThreshold (70)  │ 本地直接执行，不打扰 AI    │
+  //  │  lowThreshold~high     │ 双路并行，取更优结果       │
+  //  │  < lowThreshold (45)   │ 直接交给 AI，本地只提参数  │
+  //  └─────────────────────────────────────────────────────┘
+
+  // ── 段1: 高分区 ── 本地引擎直接执行，零AI成本 ──
+  if (!forceHostAi && localConfidence >= config.routing.highThreshold) {
+    if (config.routing.cacheEnabled) await cacheIntent(input, localResult, 'local');
+    return localResult;
+  }
+
+  // ── 段2: 中分区 ── 双路并行，取更优结果 ──
+  if (!forceHostAi && localConfidence >= config.routing.lowThreshold) {
+    // 本地结果已就绪，同时触发宿主AI
+    const hostPromise = tryHostAiEnhanced(input, localCandidates);
+    const hostResult = await hostPromise;
+
+    if (hostResult && hostResult.commands.length > 0) {
+      // AI 返回有效结果 → 优先AI（语义理解更精准）
+      if (config.routing.cacheEnabled) await cacheIntent(input, hostResult, 'host-ai');
+      return hostResult;
+    }
+    // AI 不可用或失败 → 回退本地
+    if (config.routing.cacheEnabled) await cacheIntent(input, localResult, 'local');
+    return localResult;
+  }
+
+  // ── 段3: 低分区 ── 直接交给AI，本地只负责提取参数 ──
+  // 此时本地引擎置信度不足，优先AI语义判断
+  if (forceHostAi || config.routing.autoHostAi) {
+    if (mode === 'match' || mode === 'ambiguous') {
+      const hostResult = await tryHostAiEnhanced(input, localCandidates);
+      if (hostResult && hostResult.commands.length > 0) {
+        if (config.routing.cacheEnabled) await cacheIntent(input, hostResult, 'host-ai');
+        return hostResult;
+      }
+      // 自有LLM冗余（用户配置了provider时启用）
+      const llmResult = await tryLlmProviders(input, config);
+      if (llmResult) {
+        if (config.routing.cacheEnabled) await cacheIntent(input, llmResult, 'llm');
+        return llmResult;
+      }
+    }
+  }
+
+  // ── 兜底 ── 所有AI路径都失败，返回本地结果
+  return localResult;
+}
+
+// ═══════════════════════════════════════════════════════════
+// 宿主AI增强（传入Rich Context）
+// ═══════════════════════════════════════════════════════════
+
+async function tryHostAiEnhanced(input: string, candidates: IntentResult[]): Promise<AskResult | null> {
+  const context = await buildAskContext(input, candidates);
   try {
-    const hostResult = await tryHostAi('ask', input);
+    const hostResult = await tryHostAi('ask', input, {
+      ...context,
+      formattedContext: formatContextForHostAi(context),
+    });
     if (hostResult) {
-      logger.info(`🤖 宿主 AI: ${modeLabel((hostResult.mode || 'match') as AskMode)}`);
-      (hostResult as any)._source = 'host';
+      logger.info(`🤖 宿主AI增强成功: ${hostResult.summary || hostResult.mode}`);
       return hostResult as AskResult;
     }
-  } catch (e: any) { /* 不可用，继续 */ }
+  } catch (e: any) {
+    logger.debug(`宿主AI增强失败: ${e.message}`);
+  }
+  return null;
+}
 
-  // ── 输出知识库，交给宿主 AI 语义分析 ......
-  const kb = COMMAND_KB.map(c =>
-    `  ${c.name}: ${c.description.padEnd(30)} → ${c.usage}`
-  ).join('\n');
+// ═══════════════════════════════════════════════════════════
+// 多LLM冗余路由（用户配置了provider时启用，默认禁用）
+// ═══════════════════════════════════════════════════════════
 
-  const pipelines = Object.entries(WORKFLOWS).map(([name, steps]) =>
-    `  ${name}: ${steps.map(s => s.command).join(' → ')}`
-  ).join('\n');
+async function tryLlmProviders(input: string, config: { llmProviders: any[] }): Promise<AskResult | null> {
+  const enabledProviders = (config.llmProviders || [])
+    .filter(p => p.enabled)
+    .sort((a, b) => a.priority - b.priority);
 
-  return {
-    mode: 'match',
-    summary: '宿主 AI 语义分析',
-    detail: [
-      `## 用户输入`,
-      `"${input}"`,
-      ``,
-      `## 可用操作`,
-      kb,
-      ``,
-      `## 常用工作流`,
-      pipelines,
-      ``,
-      `## 你的任务`,
-      `根据用户输入和可用操作，判断用户意图，`,
-      `直接 call speccore CLI 命令（如 analyze/plan/schedule/execute）执行。`,
-      `需要 AI 参与的命令加 --prompt 标志。`,
-    ].join('\n'),
-    commands: [],
-  };
+  if (enabledProviders.length === 0) return null;
+
+  for (const provider of enabledProviders) {
+    try {
+      // 注入provider配置到环境变量（临时）
+      if (provider.endpoint) process.env.SPECCORE_LLM_ENDPOINT = provider.endpoint;
+      if (provider.apiKey) process.env.SPECCORE_LLM_KEY = provider.apiKey;
+      if (provider.model) process.env.SPECCORE_LLM_MODEL = provider.model;
+
+      const llmResult = await askWithLlm(input);
+      if (llmResult && llmResult.commands.length > 0) {
+        logger.info(`🧠 ${provider.name} 响应成功: ${llmResult.mode}`);
+        (llmResult as any)._source = 'llm';
+        return llmResult;
+      }
+    } catch (e: any) {
+      logger.warn(`${provider.name} 不可用: ${e.message}`);
+    }
+  }
+
+  return null;
 }
 
 /** 用规则引擎补充 LLM 结果的内容 */
