@@ -273,10 +273,14 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
       '```',
       'Iteration-xxx/',
       '├── 000-overview/     ← 进度跟踪',
-      '├── 010-requirements/     ← 按需求功能（user-auth/ etc）',
-      '│   ├── sources/        ← 原始文档',
-      '│   ├── assets/         ← 素材（prd/prototypes/designs）',
-      '│   └── {feature}/README.md',
+      '├── 010-requirements/     ← 需求文档（按功能组织）',
+      '│   ├── README.md       ← 目录规范说明',
+      '│   ├── INDEX.md        ← 需求文档索引',
+      '│   ├── sources/        ← [只读] 原始 PRD/Word/PDF',
+      '│   ├── converted/      ← [自动生成] doc2spec 转换后的 MD',
+      '│   ├── features/       ← [手动维护] 按功能模块组织',
+      '│   │   └── {feature}/README.md',
+      '│   └── assets/         ← 素材（prd/prototypes/designs/screenshots）',
       '├── 020-specs/     ← analyze 输出',
       '├── 030-tasks/     ← 开发任务',
       '│   └── Task-*/    ← split 拆分（含 .issues.md .needs-retry）',
@@ -333,7 +337,7 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 
 ## 项目信息
 
-> ⚠️ **所有需求端名称（app/h5/miniapp/admin）必须与 010-requirements/ 子目录名严格一致**
+> ⚠️ **所有需求端名称（app/h5/miniapp/admin）在 features/ 下的功能目录中标注**
 
 | 工程 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应需求端 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -352,8 +356,8 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 > **关键规则**：
 > 「项目名称」列方便人和 AI 通过业务名称理解和检索项目。
 > 「对应需求端」列的值决定了：
-> 1. 读取哪个 010-requirements/{端}/ 的需求文档
-> 2. 分析结果写入 020-specs/{端}/
+> 1. analyze 时从 010-requirements/converted/ 读取转换后的规格，从 features/ 读取功能补充
+> 2. 分析结果写入 020-specs/
 > 3. split 时按端创建 Task 并过滤对应的 API
 
 ## 技术栈
@@ -1168,7 +1172,7 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
     ['spec-dashboard', '显示全局仪表盘（HTML页面）', 'speccore dashboard --scope global'],
     ['spec-init', '初始化项目 或 升级命令文件: --update', 'speccore init'],
     ['spec-doc2spec', '导入需求文档: 文件=${1:PRD.docx} 迭代=${2:Q1}', 'speccore doc2spec -f ${1:PRD.docx} --iter ${2:Q1}'],
-    ['spec-analyze', 'SpecCore Analysis', '## ⛔ 铁律: 分析必须落盘 020-specs/，走 prompt→Read→apply 流程\n1. Read 010-requirements/ + PRD/PRD.md\n2. Execute: speccore analyze --prompt -I ${1:Q1} --type feature\n3. Fill docs via speccore analyze --apply'],
+    ['spec-analyze', 'SpecCore Analysis', '## ⛔ 铁律: 分析必须落盘 020-specs/，走 prompt→Read→apply 流程\n1. Read 010-requirements/INDEX.md → converted/*.md → features/*/README.md\n2. Execute: speccore analyze --prompt -I ${1:Q1} --type feature\n3. Fill docs via speccore analyze --apply'],
     ['spec-split', 'SpecCore Task Split', '## ⛔ 铁律: 分析完成后必须拆分，禁止跳过\n1. Read 020-specs/ for analysis docs\n2. Dry-run split and show preview\n3. Execute: speccore iteration split -i ${1:Q1} --owner ${2|张三,李四,王五|}'],
     ['spec-execute', 'SpecCore Execute', '## ⛔ 铁律: 有任务就执行，禁止说"已完成"跳过\n1. Read Task REQ.md + TECH.md\n2. Show plan then execute: speccore execute -i ${1:Q1} -t ${2:Task-001} --force'],
     ['spec-plan', '生成并展示执行计划可视化页面', '1. 仅生成并展示计划页面，不执行代码修复\n2. speccore plan -I ${1:Q1} --owner ${2|张三,李四,王五|} --html\n3. 打开 speccore-plan.html'],
@@ -1377,10 +1381,14 @@ SpecCore 规范驱动开发项目。
 Iteration-NNN-name/            ← 迭代目录
 ├── 000-overview/              ← 进度总览
 ├── 010-requirements/          ← 需求文档（按功能组织）
-│   ├── sources/               ← 原始 PRD
-│   ├── assets/                ← 素材
-│   └── {feature}/README.md    ← 各需求描述
-├── 020-specs/                 ← 需求分析（按端输出）
+│   ├── README.md              ← 目录规范说明
+│   ├── INDEX.md               ← 需求文档索引
+│   ├── sources/               ← [只读] 原始 PRD
+│   ├── converted/             ← [自动生成] doc2spec 转换后的 MD
+│   ├── features/              ← [手动维护] 按功能模块组织
+│   │   └── {feature}/README.md
+│   └── assets/                ← 素材（extracted/prototypes/designs/screenshots）
+├── 020-specs/                 ← 需求分析
 ├── 030-tasks/                 ← 开发任务
 └── STAFFING.md                ← 人员排期
 \`\`\`
@@ -1431,18 +1439,75 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
   ].join('\n'));
 
   // 010-requirements/ — 按需求组织（非按端），analyze 自动提取端相关内容
-  // 源文件/ 存放原始文档与素材  各端/ 存放转换后的 MD
   const prdDir = join(iterDir, '010-requirements');
-  // 源文件/ 存放原始文档  素材/ 存放共享图片、原型（跨端引用）
   await ensureDir(join(prdDir, 'sources'));
+  await ensureDir(join(prdDir, 'converted'));
+  await ensureDir(join(prdDir, 'features'));
   await ensureDir(join(prdDir, 'assets', 'extracted'));     // PRD 提取的图片
   await ensureDir(join(prdDir, 'assets', 'prototypes'));    // 产品原型
-  await ensureDir(join(prdDir, 'assets', 'designs'));  // UI 设计稿
-  
+  await ensureDir(join(prdDir, 'assets', 'designs'));       // UI 设计稿
+  await ensureDir(join(prdDir, 'assets', 'screenshots'));   // 参考截图
+
   await writeFile(join(prdDir, 'sources', 'README.md'), '# 原始文档与素材\n\n请将产品提供的 Word/PDF/原型图 放在此处。');
 
+  // 010-requirements/README.md — 目录规范说明
+  await writeFile(join(prdDir, 'README.md'), [
+    '# 需求文档目录规范',
+    '',
+    '> 本目录存放本期迭代的全部需求相关文档与素材',
+    '',
+    '## 目录结构',
+    '',
+    '```',
+    '010-requirements/',
+    '├── README.md              ← 本文件',
+    '├── INDEX.md               ← 需求文档索引（自动生成/维护）',
+    '├── sources/               ← [只读] 原始 PRD/Word/PDF，任何人不得修改',
+    '├── converted/             ← [自动生成] doc2spec 转换后的 Markdown 规格',
+    '├── features/              ← [手动维护] 按功能模块组织的需求补充',
+    '│   └── {feature}/',
+    '│       └── README.md',
+    '└── assets/',
+    '    ├── extracted/         ← doc2spec 提取的图片/媒体文件',
+    '    ├── prototypes/        ← 产品原型（Axure/Figma/墨刀等）',
+    '    ├── designs/           ← UI 设计稿',
+    '    └── screenshots/       ← 参考截图/竞品分析',
+    '```',
+    '',
+    '## 使用规范',
+    '',
+    '1. **sources/** — 放产品提供的原始文档，不要直接编辑',
+    '2. **converted/** — doc2spec 命令自动输出转换后的 MD，人工不修改',
+    '3. **features/** — 按功能模块手动补充需求细节，每个模块一个子目录',
+    '4. **assets/** — 所有图片/原型/设计稿统一放这里，按子目录分类',
+  ].join('\n'));
+
+  // 010-requirements/INDEX.md — 需求文档索引
+  await writeFile(join(prdDir, 'INDEX.md'), [
+    '# 本期需求文档索引',
+    '',
+    '> 迭代：示例迭代',
+    '> 更新：' + new Date().toISOString().split('T')[0],
+    '',
+    '## 文档清单',
+    '',
+    '| 类型 | 路径 | 状态 | 说明 |',
+    '| :--- | :--- | :--- | :--- |',
+    '| 原始文档 | sources/ | 待补充 | 放 PRD/Word/PDF |',
+    '| 转换规格 | converted/ | 待生成 | doc2spec 输出 |',
+    '| 功能补充 | features/ | 已示例 | user-auth/ 为示例 |',
+    '| 原型素材 | assets/prototypes/ | 待补充 | 产品原型 |',
+    '| 设计素材 | assets/designs/ | 待补充 | UI 设计稿 |',
+    '',
+    '## 分析配置',
+    '',
+    '- **默认读取**：converted/*.md + features/*/README.md',
+    '- **指定文档**：speccore analyze -I sample --req converted/login.md',
+    '- **全部文档**：speccore analyze -I sample --scope all',
+  ].join('\n'));
+
   // 示例需求目录（按需求功能组织，非按端）
-  const sampleFeature = join(prdDir, 'user-auth');
+  const sampleFeature = join(prdDir, 'features', 'user-auth');
   await ensureDir(sampleFeature);
   await writeFile(join(sampleFeature, 'README.md'), [
     '# 用户登录与认证',

@@ -23,9 +23,9 @@ const I18N: Record<string, Record<string, string>> = {
 
 async function hasFeatureDirs(iterDir: string): Promise<boolean> {
   try {
-    const reqDir = join(iterDir, '010-requirements');
-    const entries = await readdir(reqDir, { withFileTypes: true });
-    return entries.some(e => e.isDirectory() && !e.name.startsWith('.') && e.name !== 'sources' && e.name !== 'assets');
+    const featuresDir = join(iterDir, '010-requirements', 'features');
+    const entries = await readdir(featuresDir, { withFileTypes: true });
+    return entries.some(e => e.isDirectory() && !e.name.startsWith('.'));
   } catch { return false; }
 }
 

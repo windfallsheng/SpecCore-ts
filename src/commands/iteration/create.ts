@@ -36,12 +36,14 @@ export async function iterationCreateCommand(options: IterationCreateOptions): P
     // Create directory structure
     await ensureDir(join(iterationDir, '000-overview'));
     await ensureDir(join(iterationDir, '010-requirements', 'sources'));
-    await ensureDir(join(iterationDir, '010-requirements', 'materials'));
-    await ensureDir(join(iterationDir, '010-requirements', 'prototypes'));
     await ensureDir(join(iterationDir, '010-requirements', 'converted'));
-    await ensureDir(join(iterationDir, '010-requirements', 'images'));
+    await ensureDir(join(iterationDir, '010-requirements', 'features'));
+    await ensureDir(join(iterationDir, '010-requirements', 'assets', 'extracted'));
+    await ensureDir(join(iterationDir, '010-requirements', 'assets', 'prototypes'));
+    await ensureDir(join(iterationDir, '010-requirements', 'assets', 'designs'));
+    await ensureDir(join(iterationDir, '010-requirements', 'assets', 'screenshots'));
     await ensureDir(join(iterationDir, '020-specs'));
-    await ensureDir(join(iterationDir, '030-tasks', 'plans'));
+    await ensureDir(join(iterationDir, '030-tasks'));
 
     // Create default files
     await createIterationFiles(iterationDir, fullName, options);
@@ -71,6 +73,77 @@ export async function iterationCreateCommand(options: IterationCreateOptions): P
 }
 
 async function createIterationFiles(iterationDir: string, fullName: string, options: IterationCreateOptions): Promise<void> {
+  // 010-requirements/README.md — 目录规范说明
+  await writeFile(
+    join(iterationDir, '010-requirements', 'README.md'),
+    `# 需求文档目录规范
+
+> 本目录存放本期迭代的全部需求相关文档与素材
+
+## 目录结构
+
+\`\`\`
+010-requirements/
+├── README.md              ← 本文件
+├── INDEX.md               ← 需求文档索引（自动生成/维护）
+├── sources/               ← [只读] 原始 PRD/Word/PDF，任何人不得修改
+│   └── README.md
+├── converted/             ← [自动生成] doc2spec 转换后的 Markdown 规格
+│   └── *.md
+├── features/              ← [手动维护] 按功能模块组织的需求补充
+│   └── {feature}/
+│       └── README.md
+└── assets/
+    ├── extracted/         ← doc2spec 提取的图片/媒体文件
+    ├── prototypes/        ← 产品原型（Axure/Figma/墨刀等）
+    ├── designs/           ← UI 设计稿
+    └── screenshots/       ← 参考截图/竞品分析
+\`\`\`
+
+## 使用规范
+
+1. **sources/** — 放产品提供的原始文档，不要直接编辑
+2. **converted/** — doc2spec 命令自动输出转换后的 MD，人工不修改
+3. **features/** — 按功能模块手动补充需求细节，每个模块一个子目录
+4. **assets/** — 所有图片/原型/设计稿统一放这里，按子目录分类
+
+## analyze 读取顺序
+
+AI 分析需求时默认按以下优先级读取：
+
+1. \`INDEX.md\` — 了解需求全貌和文件清单
+2. \`converted/*.md\` — doc2spec 转换后的规格（核心）
+3. \`features/*/README.md\` — 功能级补充需求
+4. \`assets/prototypes/\` 和 \`designs/\` — 原型和设计稿参考
+`
+  );
+
+  // 010-requirements/INDEX.md — 需求文档索引
+  await writeFile(
+    join(iterationDir, '010-requirements', 'INDEX.md'),
+    `# 本期需求文档索引
+
+> 迭代：${fullName}
+> 更新：${new Date().toISOString().split('T')[0]}
+
+## 文档清单
+
+| 类型 | 路径 | 状态 | 说明 |
+| :--- | :--- | :--- | :--- |
+| 原始文档 | sources/ | 待补充 | 放 PRD/Word/PDF |
+| 转换规格 | converted/ | 待生成 | doc2spec 输出 |
+| 功能补充 | features/ | 待补充 | 按模块组织 |
+| 原型素材 | assets/prototypes/ | 待补充 | 产品原型 |
+| 设计素材 | assets/designs/ | 待补充 | UI 设计稿 |
+
+## 分析配置
+
+- **默认读取**：converted/*.md + features/*/README.md
+- **指定文档**：speccore analyze -I ${options.name} --req converted/login.md
+- **全部文档**：speccore analyze -I ${options.name} --scope all
+`
+  );
+
   // REQUIREMENT.md
   await writeFile(
     join(iterationDir, '020-specs', 'REQUIREMENT.md'),
