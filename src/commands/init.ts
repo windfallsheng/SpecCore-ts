@@ -393,6 +393,14 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
     logger.info('');
     logger.info('💡 WorkBuddy Integration: .workbuddy/ files created.');
     logger.info('   Reopen this project in WorkBuddy to enable Speccore commands.');
+
+    // ── 生成项目配置引导页（首次 init）──
+    try {
+      const guidePath = await writeSetupGuide(projectRoot, speccoreDir);
+      logger.info('');
+      logger.info(`📋 项目配置引导页已生成: ${guidePath}`);
+      logger.info('   打开查看配置步骤和用法');
+    } catch { /* 引导页生成失败不阻断 init */ }
   } catch (error) {
     spinner.fail(`Initialization failed: ${error}`);
     throw error;
@@ -1821,4 +1829,152 @@ function detectGitUrl(root: string): string | undefined {
     const url = require('child_process').execSync('git remote get-url origin 2>/dev/null', { encoding: 'utf-8', cwd: root }).trim();
     return url || undefined;
   } catch { return undefined; }
+}
+
+/**
+ * 生成项目配置引导页 — 首次 init 后展示
+ * 指导用户填写 CONSTITUTION.md、配置团队、导入需求、开始流水线
+ */
+async function writeSetupGuide(projectRoot: string, speccoreDir: string): Promise<string> {
+  const name = basename(projectRoot);
+  const gitUrl = detectGitUrl(projectRoot) || '待配置';
+  const html = `<!DOCTYPE html><html lang="zh-CN" data-theme="ocean"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>SpecCore — 项目配置引导</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;600;700&display=swap');
+[data-theme="ocean"]{--cyan:#0ea5e9;--bg:#0b1929;--card:rgba(13,31,56,.95);--border:rgba(14,165,233,.15);--text:#bae6fd;--muted:#5b7fa5;--green:#14b8a6;--orange:#f97316;--purple:#6366f1;--red:#ef4444}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--text);min-height:100vh;padding:24px 20px;position:relative}
+.scanlines{position:fixed;inset:0;pointer-events:none;z-index:99;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,240,255,.015) 2px,rgba(0,240,255,.015) 4px)}
+.grid-pattern{position:fixed;inset:0;pointer-events:none;z-index:0;background-image:linear-gradient(rgba(14,165,233,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(14,165,233,.03) 1px,transparent 1px);background-size:60px 60px}
+h1{font-family:'Orbitron',sans-serif;font-size:28px;font-weight:900;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:2px;text-align:center;text-shadow:0 0 20px rgba(14,165,233,.4);animation:titleGlow 3s ease-in-out infinite}
+@keyframes titleGlow{0%,100%{text-shadow:0 0 20px rgba(14,165,233,.4),0 0 60px rgba(14,165,233,.15)}50%{text-shadow:0 0 30px rgba(14,165,233,.7),0 0 80px rgba(14,165,233,.3)}}
+.sub{color:var(--muted);font-size:11px;letter-spacing:1px;text-align:center;margin-top:4px}
+.container{max-width:860px;margin:0 auto;position:relative;z-index:1}
+.step{margin:16px 0;padding:18px;background:var(--card);border:1px solid var(--border);border-radius:12px;position:relative;overflow:hidden}
+.step::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent)}
+.step-num{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--cyan),var(--purple));color:#fff;font-weight:900;font-size:13px;margin-right:10px;flex-shrink:0}
+.step-header{display:flex;align-items:center;margin-bottom:12px}
+.step-title{font-size:15px;font-weight:700;color:var(--cyan)}
+.step-required{display:inline-block;padding:2px 8px;font-size:9px;border-radius:4px;background:rgba(239,68,68,.15);color:var(--red);margin-left:8px;font-weight:600}
+.step-optional{display:inline-block;padding:2px 8px;font-size:9px;border-radius:4px;background:rgba(14,165,233,.1);color:var(--cyan);margin-left:8px}
+.step-desc{font-size:11px;color:var(--muted);margin:8px 0;line-height:1.6}
+.file-box{background:rgba(14,165,233,.06);border:1px solid rgba(14,165,233,.12);border-radius:8px;padding:12px;margin:10px 0;font-size:11px}
+.file-path{color:var(--cyan);font-weight:600;font-size:12px}
+.field-list{margin:8px 0;padding-left:8px}
+.field-item{display:flex;align-items:flex-start;gap:8px;margin:6px 0;font-size:11px;line-height:1.5}
+.field-check{color:var(--green);flex-shrink:0;font-size:13px}
+.field-warn{color:var(--orange);flex-shrink:0;font-size:13px}
+.field-name{color:var(--text);font-weight:600;min-width:100px}
+.field-desc{color:var(--muted)}
+.method-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}
+.method-card{padding:12px;border-radius:8px;border:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.02)}
+.method-title{font-size:11px;font-weight:700;margin-bottom:6px}
+.method-card.m1 .method-title{color:var(--green)}
+.method-card.m2 .method-title{color:var(--orange)}
+.method-card.m3 .method-title{color:var(--cyan)}
+.method-card.m4 .method-title{color:var(--purple)}
+.method-cmd{font-size:10px;color:var(--muted);background:rgba(0,0,0,.2);padding:4px 8px;border-radius:4px;margin-top:6px;word-break:break-all}
+.flow-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:center;padding:16px;margin:16px 0;background:var(--card);border:1px solid var(--border);border-radius:12px}
+.flow-node{padding:8px 14px;border-radius:8px;font-size:11px;font-weight:600;border:1px solid}
+.flow-node.n1{border-color:var(--green);color:var(--green);background:rgba(20,184,166,.08)}
+.flow-node.n2{border-color:var(--cyan);color:var(--cyan);background:rgba(14,165,233,.08)}
+.flow-node.n3{border-color:var(--orange);color:var(--orange);background:rgba(249,115,22,.08)}
+.flow-node.n4{border-color:var(--purple);color:var(--purple);background:rgba(99,102,241,.08)}
+.flow-arrow{color:var(--muted);font-size:14px}
+.kb-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:10px 0}
+.kb-card{padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.02);text-align:center}
+.kb-icon{font-size:20px;margin-bottom:4px}
+.kb-name{font-size:11px;font-weight:600;color:var(--text)}
+.kb-desc{font-size:9px;color:var(--muted);margin-top:4px}
+.start-bar{text-align:center;padding:16px;margin:20px 0 8px;background:linear-gradient(135deg,var(--cyan) 0%,#0284c7 100%);border-radius:40px;color:#fff;font-weight:600;font-size:14px;box-shadow:0 0 30px rgba(14,165,233,.3);cursor:pointer;letter-spacing:1px}
+.footer{text-align:center;color:var(--muted);font-size:10px;margin-top:20px;padding-top:12px;border-top:1px solid rgba(255,255,255,.04)}
+</style></head><body>
+<div class="scanlines"></div><div class="grid-pattern"></div>
+<div class="container">
+<h1>SPECCORE</h1>
+<div class="sub">项目配置引导 · ${name}</div>
+
+<div class="step">
+<div class="step-header"><span class="step-num">1</span><span class="step-title">填写技术宪法</span><span class="step-required">必填</span></div>
+<div class="step-desc">这是 AI 的「最高指令」—— analyze / split / execute 全部据此执行。决定了生成代码的技术栈、命名规范、错误码体系。</div>
+<div class="file-box">
+<div class="file-path">📄 .speccore/CONSTITUTION.md</div>
+<div class="field-list">
+<div class="field-item"><span class="field-check">✅</span><span class="field-name">项目信息表</span><span class="field-desc">— 工程名 / 源码路径 / Git 仓库 / 分支 / 对应需求端</span></div>
+<div class="field-item"><span class="field-check">✅</span><span class="field-name">技术栈</span><span class="field-desc">— 后端语言+框架、前端框架、数据库、缓存</span></div>
+<div class="field-item"><span class="field-check">✅</span><span class="field-name">命名规范</span><span class="field-desc">— API 路径、错误码、数据库、代码命名风格</span></div>
+<div class="field-item"><span class="field-warn">⬜</span><span class="field-name">异常码体系</span><span class="field-desc">— 按模块定义错误码表（可选，按需补充）</span></div>
+<div class="field-item"><span class="field-warn">⬜</span><span class="field-name">Git 分支策略</span><span class="field-desc">— 默认分支、任务分支、保护分支规则（可选）</span></div>
+</div>
+<div class="step-desc" style="margin-top:8px;color:var(--green)">💡 作用：AI 生成代码时会严格遵循这里定义的技术栈和命名规范。例如定义了 Spring Boot + MySQL，AI 就不会生成 NestJS + PostgreSQL 的代码。</div>
+</div>
+</div>
+
+<div class="step">
+<div class="step-header"><span class="step-num">2</span><span class="step-title">配置团队排期</span><span class="step-optional">可选</span></div>
+<div class="step-desc">定义团队成员和分工。split 时会根据团队人数自动推荐任务拆分粒度，一个端可以有多个负责人，作为拆分时的默认责任人参考（后期可手动修改）。</div>
+<div class="file-box">
+<div class="file-path">📄 Iteration-xxx/STAFFING.md</div>
+<div class="step-desc">格式示例：<br>
+| 成员 | 角色 | 负责端 | 每周可用天数 |<br>
+| 张三 | 后端 | API 服务 | 5 |<br>
+| 李四 | 前端 | Web, H5 | 4 |<br>
+| 王五 | 全栈 | Admin | 3 |</div>
+<div class="step-desc" style="color:var(--green)">💡 联动：≤3人 → 粗粒度拆分 | 4-8人 → 中粒度（默认）| >8人 → 细粒度拆分</div>
+</div>
+</div>
+
+<div class="step">
+<div class="step-header"><span class="step-num">3</span><span class="step-title">导入需求文档</span><span class="step-required">必填</span></div>
+<div class="step-desc">将产品需求导入 SpecCore，支持 4 种方式：</div>
+<div class="method-grid">
+<div class="method-card m1"><div class="method-title">📥 方式 1：自然语言输入</div><div class="step-desc">直接用口语描述需求，AI 会澄清并生成标准需求描述</div><div class="method-cmd">speccore change "新增一个通知功能"</div></div>
+<div class="method-card m2"><div class="method-title">📎 方式 2：文件导入</div><div class="step-desc">将 Word/PDF/Markdown 文档转为 Spec 格式</div><div class="method-cmd">speccore doc2spec -f PRD.docx --iter Q1</div></div>
+<div class="method-card m3"><div class="method-title">📂 方式 3：Inbox 收件箱</div><div class="step-desc">把文件丢到 inbox 目录，自动识别处理</div><div class="method-cmd">cp PRD.md .speccore/inbox/ && speccore change</div></div>
+<div class="method-card m4"><div class="method-title">✍️ 方式 4：手动编写</div><div class="step-desc">直接在需求目录写 Markdown 文档</div><div class="method-cmd">编辑 010-requirements/ 目录下的文件</div></div>
+</div>
+<div class="step-desc" style="color:var(--green)">💡 推荐方式 1：自然语言输入 → AI 澄清 → 你确认 → 自动生成标准需求。支持反复修改直到满意。</div>
+</div>
+
+<div class="step">
+<div class="step-header"><span class="step-num">4</span><span class="step-title">知识库与规则</span><span class="step-optional">按需补充</span></div>
+<div class="step-desc">以下内容按需补充，AI 会读取作为参考：</div>
+<div class="kb-grid">
+<div class="kb-card"><div class="kb-icon">📐</div><div class="kb-name">PATTERNS/</div><div class="kb-desc">代码模式模板<br>定义组件/服务/中间件的标准写法</div></div>
+<div class="kb-card"><div class="kb-icon">📏</div><div class="kb-name">RULES/</div><div class="kb-desc">代码审查规则<br>定义 Code Review 的检查项</div></div>
+<div class="kb-card"><div class="kb-icon">🗺️</div><div class="kb-name">PROJECT/</div><div class="kb-desc">项目全景文档<br>架构/团队/依赖关系</div></div>
+</div>
+</div>
+
+<div class="step">
+<div class="step-header"><span class="step-num">5</span><span class="step-title">开始流水线</span></div>
+<div class="step-desc">配置完成后，按以下流程推进项目：</div>
+<div class="flow-bar">
+<span class="flow-node n1">创建迭代</span><span class="flow-arrow">→</span>
+<span class="flow-node n2">需求分析</span><span class="flow-arrow">→</span>
+<span class="flow-node n3">任务拆分</span><span class="flow-arrow">→</span>
+<span class="flow-node n2">执行开发</span><span class="flow-arrow">→</span>
+<span class="flow-node n1">验证交付</span>
+</div>
+<div class="file-box">
+<div class="step-desc">
+1️⃣ <code>speccore iteration create -n Q1 --topic "第一期"</code> — 创建迭代<br><br>
+2️⃣ <code>speccore analyze --prompt -I Q1</code> — AI 分析需求，产出 7 个 Spec 文档<br><br>
+3️⃣ <code>speccore split --prompt -I Q1</code> — AI 拆分任务，生成门禁文件<br><br>
+4️⃣ <code>speccore execute --prompt -t Task-001</code> — AI 生成代码 + 10 项质量自检<br><br>
+5️⃣ <code>speccore done --prompt -t Task-001</code> — 标记完成 + 生成回顾报告
+</div>
+</div>
+<div class="step-desc" style="color:var(--cyan)">💡 也可以用 /spec-ask "你的需求" 让 AI 自动判断下一步该做什么。</div>
+</div>
+
+<div class="start-bar" onclick="this.style.opacity='0.7'">🚀 配置完成！开始使用 /spec-ask "你的需求"</div>
+
+<div class="footer">SpecCore v5.78.0 · 项目配置引导 · ${name}</div>
+</div></body></html>`;
+
+  const outputPath = join(projectRoot, 'outputs', 'speccore-setup-guide.html');
+  await ensureDir(join(projectRoot, 'outputs'));
+  await writeFile(outputPath, html);
+  return outputPath;
 }
