@@ -217,6 +217,7 @@ iterationCmd
   .option('--verify', '生成代码后自动检查 TEST/REVIEW/DEPLOY → 最多3轮自动修复')
   .option('--prompt', '输出结构化 Prompt 到 stdout（Skill 协作模式）')
   .option('--response <response>', '接收 AI 拆分结果创建 Task（配合 --prompt）')
+  .option('-g, --granularity <level>', '拆分粒度: macro(粗) | module(中,默认) | atomic(细)')
   .action(iterationSplitCommand);
 
 iterationCmd
