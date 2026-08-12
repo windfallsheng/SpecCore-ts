@@ -156,11 +156,13 @@ allow-tools: ["Bash", "Read", "Write", "Edit"]
 | 收尾/标记完成 | task? | `speccore done --task {task}` |
 | 验收通过 {task} | task | `speccore done --task {task}` |
 
-### 需求变更
-| 用户说法 | 提取参数 | CLI 命令 |
+### 需求变更 / 新增
+| 用户说法 | 提取参数 | CLI 命令 / 行为 |
 | :--- | :--- | :--- |
-| 需求变更/改需求 "{desc}" | desc, task? | `speccore change "{desc}" --task {task}` |
-| {task} 需求变了 "{desc}" | task, desc | `speccore change "{desc}" --task {task}` |
+| 需求变更/改需求 "{desc}" | desc, task? | **激活 spec-change Skill → AI澄清→用户确认→持久化** |
+| {task} 需求变了 "{desc}" | task, desc | **激活 spec-change Skill** |
+| 新增/加/创建 "{desc}" | desc | **激活 spec-change Skill → 澄清→确认→创建Task** |
+| 加个 {feature} 功能 | desc | **激活 spec-change Skill** |
 
 ### 治理与质量
 | 用户说法 | 提取参数 | CLI 命令 |
@@ -325,6 +327,7 @@ allow-tools: ["Bash", "Read", "Write", "Edit"]
 | 拆分 {iter} | `speccore iteration split --prompt -I {iter}` | `--response '...'` |
 | 生成计划 {iter} | `speccore plan --prompt -I {iter}` | `--response '...'` |
 | 执行/开发 {task} | `speccore execute --prompt -t {task}` | `--response '...'` |
+| 需求变更/新增 {desc} | `speccore change --prompt "{desc}"` | AI澄清→**用户确认**→`--response '{JSON}'` |
 | 创建 PR {task} | `speccore pr --prompt -t {task}` | `--response '...'` |
 | 完成/归档 {task} | `speccore done --prompt -t {task}` | `--response '...'` |
 | 导出文档 {iter} | `speccore spec2doc --prompt -I {iter}` | `--apply '...' -o {file}` |
