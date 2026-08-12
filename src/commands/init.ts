@@ -1973,7 +1973,7 @@ Iteration-xxx/<br>
 <div class="step-desc">把产品需求放进步骤 3 创建的迭代中。推荐直接用自然语言描述，AI 会帮你整理成标准需求文档：</div>
 <div class="method-grid" style="grid-template-columns:1fr 1fr">
 <div class="method-card m1"><div class="method-title">🤖 自然语言（推荐）</div><div class="step-desc">用口语描述需求 → AI 澄清 → 你确认 → 自动生成标准需求文档，支持反复修改</div><div class="method-cmd" style="margin-top:4px">/spec-ask "新增用户登录功能"</div></div>
-<div class="method-card m2"><div class="method-title">📎 文件导入</div><div class="step-desc">Word / PDF / Markdown 文档自动转换</div><div class="method-cmd" style="margin-top:4px">speccore doc2spec -f PRD.docx --iter my-iter</div></div>
+<div class="method-card m2"><div class="method-title">📎 文件导入</div><div class="step-desc">把 Word / PDF / Markdown 文档交给 AI，自动提取需求并转换</div><div class="method-cmd" style="margin-top:4px">/spec-ask "导入 PRD.docx 到 my-iter"</div></div>
 </div>
 <div class="step-desc" style="color:var(--muted);margin-top:4px">还有更多方式：📂 把文件丢到 .speccore/inbox/ 目录自动识别 | ✍️ 直接编辑迭代下 010-requirements/ 目录</div>
 <div class="step-desc" style="color:var(--green)">💡 导入后，下一步 analyze 会自动读取这些需求文档，生成 ANALYSIS.md、TECH.md 等 7 份技术规格。</div>
