@@ -34,6 +34,7 @@ const ALL_COMMANDS: [string, string, string][] = [
   ['spec-retro', '任务回顾报告', 'speccore retro --task ${1:Task-001}'],
   ['spec-context', '查看/切换上下文', 'speccore context --set --iteration ${1:Q1}'],
   ['spec-ops', '操作历史', 'speccore ops'],
+  ['spec-help', '帮助中心', 'speccore help --web'],
 ];
 
 // ── 旧命令文件名（需要清理的）──
@@ -42,9 +43,9 @@ const LEGACY_NAMES = new Set(['spec-status', 'spec-status-panel', 'spec-global-s
 export async function updateCommand(options: { force?: boolean; tool?: string }): Promise<void> {
   const projectRoot = process.cwd();
 
-  // 解析工具过滤
+  // 解析工具过滤（含 trae-cn）
+  const allTools = ['.claude', '.codebuddy', '.cursor', '.trae', '.trae-cn', '.windsurf'];
   const toolFilter = options.tool ? options.tool.split(',').map(t => t.trim()) : null;
-  const allTools = ['.claude', '.codebuddy', '.cursor', '.trae', '.windsurf'];
   const tools = toolFilter
     ? allTools.filter(t => toolFilter.some(f => t.includes(f)))
     : allTools;
@@ -89,63 +90,40 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   const cleanedFiles: string[] = [];
   _updateConflicts.length = 0; // 清空冲突追踪
 
-  // ── 1. 更新工具目录命令文件 ──
+  // ── 1. 清理旧版命令文件（按工具目录）──
 
   for (const tool of tools) {
     const toolCommandsDir = join(projectRoot, tool, 'commands');
-    for (const [name, desc, cmd] of ALL_COMMANDS) {
-      const p = join(toolCommandsDir, name + '.md');
-      const content = `---\nname: ${name}\ndescription: ${desc}\n---\n${cmd}`;
-      if (await pathExists(p)) {
-        const existing = await readFile(p, 'utf-8');
-        if (existing.trim() !== content.trim()) {
-          await safeWriteWithOld(p, content);
-          updated++;
-          updatedFiles.push(`${tool}/commands/${name}.md`);
+    if (await pathExists(toolCommandsDir)) {
+      for (const legacy of LEGACY_NAMES) {
+        const lp = join(toolCommandsDir, legacy + '.md');
+        if (await pathExists(lp)) {
+          await require('fs-extra').remove(lp);
+          cleaned++;
+          cleanedFiles.push(`${tool}/commands/${legacy}.md`);
         }
-      } else {
-        await ensureDir(toolCommandsDir);
-        await writeFile(p, content);
-        added++;
-        addedFiles.push(`${tool}/commands/${name}.md`);
       }
-    }
-    // 清理旧文件
-    for (const legacy of LEGACY_NAMES) {
-      const lp = join(toolCommandsDir, legacy + '.md');
-      if (await pathExists(lp)) { await require('fs-extra').remove(lp); cleaned++; cleanedFiles.push(`${tool}/commands/${legacy}.md`); }
     }
   }
 
-  // Qoder 特殊处理（扁平目录 + spec: 前缀命名）
+  // Qoder 旧版清理（spec/ 子目录 + 旧命令文件）
   const qoderCommandsDir = join(projectRoot, '.qoder', 'commands');
   if (await pathExists(qoderCommandsDir)) {
-    for (const [name, desc, cmd] of ALL_COMMANDS) {
-      const shortName = name.replace(/^spec-/, 'spec:');
-      const p = join(qoderCommandsDir, shortName + '.md');
-      const content = '---\nname: ' + shortName + '\ndescription: ' + desc + '\n---\n' + desc + '\n\n执行命令: `' + cmd + '`';
-      if (await pathExists(p)) {
-        const existing = await readFile(p, 'utf-8');
-        if (existing.trim() !== content.trim()) {
-          await safeWriteWithOld(p, content);
-          updated++;
-          updatedFiles.push(`qoder/commands/${shortName}.md`);
-        }
-      } else {
-        await writeFile(p, content);
-        added++;
-        addedFiles.push(`qoder/commands/${shortName}.md`);
-      }
-    }
-    // 清理旧版 spec/ 子目录
     const oldSpecDir = join(projectRoot, '.qoder', 'commands', 'spec');
     if (await pathExists(oldSpecDir)) {
       await require('fs-extra').remove(oldSpecDir);
       cleaned++;
       cleanedFiles.push('qoder/commands/spec/ (旧版子目录)');
     }
-    // 清理旧 Qoder 文件
     for (const f of await readdir(qoderCommandsDir)) {
+      if (f.includes('-old')) continue;
+      // 清理旧版 spec- 前缀文件（应使用 spec: 前缀）
+      if (f.startsWith('spec-') && f.endsWith('.md')) {
+        await require('fs-extra').remove(join(qoderCommandsDir, f));
+        cleaned++;
+        cleanedFiles.push(`qoder/commands/${f} (旧格式 → spec:${f.slice(5)})`);
+        continue;
+      }
       if (LEGACY_NAMES.has(f.replace('.md', '').replace('spec:', ''))) {
         await require('fs-extra').remove(join(qoderCommandsDir, f));
         cleaned++;
@@ -168,14 +146,14 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   // 4a. 更新所有 AI 工具的命令文件
   await createToolIntegrations(projectRoot, options.tool);
 
-  // 4b. 更新 .agents/skills/（含 references/）— 有差异的文件旧版重命名为 *-old
+  // 4b. 更新 .agents/skills/
   const skillsSrc = join(__dirname, '..', '..', '.agents', 'skills');
   const skillsDest = join(projectRoot, '.agents', 'skills');
   if (await pathExists(skillsSrc)) {
     await safeCopyDirWithOld(skillsSrc, skillsDest);
   }
 
-  // 4c. 更新 AGENTS.md / CLAUDE.md — 有差异时旧版重命名为 *-old
+  // 4c. 更新 AGENTS.md / CLAUDE.md
   try {
     const agentsSrc = join(__dirname, '..', '..', 'AGENTS.md');
     if (await pathExists(agentsSrc)) {

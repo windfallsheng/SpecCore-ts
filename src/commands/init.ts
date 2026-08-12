@@ -1293,6 +1293,14 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
   const tools = filter ? allTools.filter(t => filter.includes(t) || filter.includes(t.replace('-cn', ''))) : allTools;
   for (const tool of tools) {
     const toolDir = join(projectRoot, '.' + tool, 'commands');
+    // 解析符号链接：如果 commands 是符号链接，替换为真实目录
+    try {
+      const stat = await require('fs-extra').lstat(toolDir);
+      if (stat.isSymbolicLink()) {
+        await require('fs-extra').remove(toolDir);
+        await ensureDir(toolDir);
+      }
+    } catch {}
     await ensureDir(toolDir);
     for (const [name, desc, cmd] of commands) {
       const content = '---\nname: ' + name + '\ndescription: ' + desc + '\n---\n' + cmd;
@@ -1303,6 +1311,14 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
   if (hasQoder) {
   // QCoder: 项目级指令路径 = .qoder/commands/，使用 spec: 前缀扁平命名
   const qoderCommandsDir = join(projectRoot, '.qoder', 'commands');
+  // 解析符号链接
+  try {
+    const stat = await require('fs-extra').lstat(qoderCommandsDir);
+    if (stat.isSymbolicLink()) {
+      await require('fs-extra').remove(qoderCommandsDir);
+      await ensureDir(qoderCommandsDir);
+    }
+  } catch {}
   await ensureDir(qoderCommandsDir);
   for (const [name, desc, cmd] of commands) {
     // 做 spec:analyze, spec:execute 等 flat 命名（非子目录）
@@ -1310,7 +1326,7 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
     const content = '---\nname: ' + shortName + '\ndescription: ' + desc + '\n---\n' + desc + '\n\n执行命令: `' + cmd + '`';
     await safeWriteWithOld(join(qoderCommandsDir, shortName + '.md'), content);
   }
-  // 清理旧版本残留：spec/ 子目录 和 orphan 文件
+  // 清理旧版本残留：spec/ 子目录和 orphan 文件
   const oldSpecDir = join(projectRoot, '.qoder', 'commands', 'spec');
   try { if (await pathExists(oldSpecDir)) await require('fs-extra').remove(oldSpecDir); } catch {}
   const validNames = new Set(commands.map(([name]) => name.replace(/^spec-/, 'spec:') + '.md'));
@@ -1319,6 +1335,13 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
     for (const f of existing) {
       // 跳过 *-old 文件（升级冲突保留的旧版）
       if (f.includes('-old')) continue;
+      // 清理旧版 spec- 前缀文件（应使用 spec: 前缀）
+      if (f.startsWith('spec-') && f.endsWith('.md')) {
+        await require('fs-extra').unlink(join(qoderCommandsDir, f));
+        logger.info(`  清理旧格式文件: ${f} → spec:${f.slice(5)}`);
+        continue;
+      }
+      // 清理已废弃的 spec: 文件
       if (f.startsWith('spec:') && f.endsWith('.md') && !validNames.has(f)) {
         await require('fs-extra').unlink(join(qoderCommandsDir, f));
         logger.info(`  清理旧文件: ${f}`);
@@ -1407,6 +1430,9 @@ export async function cleanupStaleFiles(
     const cmdDir = join(projectRoot, '.' + tool, 'commands');
     try {
       if (!await pathExists(cmdDir)) continue;
+      // 跳过符号链接目录（避免误删共享目标文件）
+      const stat = await require('fs-extra').lstat(cmdDir);
+      if (stat.isSymbolicLink()) continue;
       const files = await readdir(cmdDir);
       for (const f of files) {
         // 跳过 *-old 文件（升级冲突保留的旧版）
