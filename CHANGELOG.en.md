@@ -2,6 +2,23 @@
 
 ---
 
+## v5.81.0 (2026-08-12) — Setup Guide Visual Enhancements
+
+### 🌟 Card-bg Glow Effect
+- Added radial-gradient glow inside container (matching onboarding page)
+- cardGlow 3s breathing animation, cyan glow扩散 from top
+- Step card glow enhanced: box-shadow 15px→20px, hover 25px→30px
+
+### 🔗 Start Button Navigation
+- Changed from `<div onclick>` to `<a href="speccore-ask-onboarding.html">`
+- Click navigates to ask onboarding page
+- Added hover effect: glow增强 + translateY(-1px)
+
+### 📐 Container Width
+- 860px → 960px, better for wider screens
+
+---
+
 ## v5.80.0 (2026-08-12) — Setup Guide Full Restructure
 
 ### 📋 Setup Guide Restructure (init.ts — writeSetupGuide)
