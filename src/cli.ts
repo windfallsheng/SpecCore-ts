@@ -179,7 +179,7 @@ program
   .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
   .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
   .option('--update', '增量升级项目命令文件（不重置配置）')
-  .option('--tools <tools>', '指定工具: trae,qoder,claude,workbuddy（逗号分隔，默认全部）')
+  .option('--tools <tools>', '指定工具（逗号分隔，默认全部）: cursor | trae | trae-cn | windsurf | claude | codebuddy | qoder')
   .action(initCommand);
 
 // ================================================================
