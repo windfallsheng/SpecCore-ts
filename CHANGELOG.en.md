@@ -2,6 +2,18 @@
 
 ---
 
+## v5.85.0 (2026-08-12) — Prompt Library Feature
+
+- New `prompts` command (alias `pt`): Prompt library management
+- 19 built-in prompt templates (4 categories: iteration/analysis/execute/change)
+- Search, category filter, CRUD, one-click copy
+- Custom modal replaces native prompt, real-time preview
+- Auto-add `/spec-ask` prefix when copying
+- User data stored in `.speccore/prompts/user/` + localStorage dual backup
+- Simple mode command count 19 → 20
+
+---
+
 ## v5.84.3 (2026-08-12) — Command Registration Consistency Fix + Symlink Safety
 
 - Removed duplicate command-writing loop in update.ts, unified via createToolIntegrations

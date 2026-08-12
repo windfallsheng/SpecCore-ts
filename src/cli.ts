@@ -64,6 +64,7 @@ import { deleteCommand } from './commands/delete';
 // v5.6.0 新增
 import { searchCommand } from './commands/search';
 import { watchCommand } from './commands/watch';
+import { promptsCommand } from './commands/prompts';
 // v5.21.0 任务调度
 import { HELP_PANEL } from './core/help-panel';
 import {
@@ -163,6 +164,14 @@ program
   .option('--web', '强制输出 HTML 页面')
   .option('--lang <lang>', 'en 英文 / zh 中文（默认中文）')
   .action(devCommand);
+
+program
+  .command('prompts')
+  .alias('pt')
+  .description('提示词库：预置模板 + 自定义提示词，搜索/分类/CRUD/复制')
+  .option('--web', '在浏览器中打开')
+  .option('-o, --output <path>', '输出路径')
+  .action(promptsCommand);
 
 program
 

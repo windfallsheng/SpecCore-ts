@@ -1,0 +1,63 @@
+[
+  {
+    "id": "create-iteration",
+    "name": "创建迭代",
+    "category": "iteration",
+    "icon": "🚀",
+    "description": "快速创建一个新的开发迭代",
+    "prompt": "帮我创建一个新迭代 {迭代名}，主题是 {主题}，负责人是 {负责人}",
+    "command": "speccore iteration create -n {迭代名} --topic={主题} --owner={负责人}",
+    "params": [
+      { "key": "迭代名", "placeholder": "Q3", "required": true },
+      { "key": "主题", "placeholder": "用户系统重构", "required": true },
+      { "key": "负责人", "placeholder": "张三", "required": false }
+    ],
+    "builtin": true,
+    "sort": 1
+  },
+  {
+    "id": "create-iteration-with-req",
+    "name": "创建迭代并导入需求",
+    "category": "iteration",
+    "icon": "📥",
+    "description": "创建迭代并导入需求文档",
+    "prompt": "创建迭代 {迭代名}，主题是 {主题}，然后把 {需求文档路径} 导入进去",
+    "command": "speccore iteration create -n {迭代名} --topic={主题} && speccore doc2spec -f {需求文档路径} --iter {迭代名}",
+    "params": [
+      { "key": "迭代名", "placeholder": "Q3", "required": true },
+      { "key": "主题", "placeholder": "订单系统", "required": true },
+      { "key": "需求文档路径", "placeholder": "docs/PRD.docx", "required": true }
+    ],
+    "builtin": true,
+    "sort": 2
+  },
+  {
+    "id": "switch-iteration",
+    "name": "切换迭代上下文",
+    "category": "iteration",
+    "icon": "🔄",
+    "description": "切换到另一个迭代作为当前工作上下文",
+    "prompt": "切换到 {迭代名} 迭代",
+    "command": "speccore context --set --iteration {迭代名}",
+    "params": [
+      { "key": "迭代名", "placeholder": "Q2", "required": true }
+    ],
+    "builtin": true,
+    "sort": 3
+  },
+  {
+    "id": "rename-iteration",
+    "name": "重命名迭代",
+    "category": "iteration",
+    "icon": "✏️",
+    "description": "重命名已有迭代",
+    "prompt": "把迭代 {旧名} 重命名为 {新名}",
+    "command": "speccore rename --iteration {旧名} {新名}",
+    "params": [
+      { "key": "旧名", "placeholder": "Q1", "required": true },
+      { "key": "新名", "placeholder": "Q1-user-system", "required": true }
+    ],
+    "builtin": true,
+    "sort": 4
+  }
+]

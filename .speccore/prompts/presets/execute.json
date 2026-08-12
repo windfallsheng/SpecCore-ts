@@ -1,0 +1,75 @@
+[
+  {
+    "id": "split-tasks",
+    "name": "拆分开发任务",
+    "category": "execute",
+    "icon": "🧩",
+    "description": "将迭代需求拆分为可执行的开发任务",
+    "prompt": "把 {迭代名} 迭代的需求拆分成开发任务",
+    "command": "speccore split -I {迭代名}",
+    "params": [
+      { "key": "迭代名", "placeholder": "Q2", "required": true }
+    ],
+    "builtin": true,
+    "sort": 1
+  },
+  {
+    "id": "execute-task",
+    "name": "执行单个任务",
+    "category": "execute",
+    "icon": "▶️",
+    "description": "执行指定的开发任务",
+    "prompt": "执行 {迭代名} 中的 {任务ID} 任务",
+    "command": "speccore execute --task {任务ID} -I {迭代名}",
+    "params": [
+      { "key": "迭代名", "placeholder": "Q2", "required": true },
+      { "key": "任务ID", "placeholder": "Task-001", "required": true }
+    ],
+    "builtin": true,
+    "sort": 2
+  },
+  {
+    "id": "execute-batch",
+    "name": "批量执行任务",
+    "category": "execute",
+    "icon": "⏩",
+    "description": "批量执行迭代中所有待开始的任务",
+    "prompt": "执行 {迭代名} 中所有待开始的任务",
+    "command": "speccore execute -I {迭代名} --batch",
+    "params": [
+      { "key": "迭代名", "placeholder": "Q2", "required": true }
+    ],
+    "builtin": true,
+    "sort": 3
+  },
+  {
+    "id": "create-pr",
+    "name": "创建 Pull Request",
+    "category": "execute",
+    "icon": "🔀",
+    "description": "为已完成的任务创建 PR",
+    "prompt": "为 {迭代名} 中 {任务ID} 创建 PR",
+    "command": "speccore pr --task {任务ID} -I {迭代名}",
+    "params": [
+      { "key": "迭代名", "placeholder": "Q2", "required": true },
+      { "key": "任务ID", "placeholder": "Task-001", "required": true }
+    ],
+    "builtin": true,
+    "sort": 4
+  },
+  {
+    "id": "mark-done",
+    "name": "标记任务完成",
+    "category": "execute",
+    "icon": "✅",
+    "description": "标记任务为已完成状态",
+    "prompt": "标记 {迭代名} 的 {任务ID} 为完成",
+    "command": "speccore done --task {任务ID} -I {迭代名}",
+    "params": [
+      { "key": "迭代名", "placeholder": "Q2", "required": true },
+      { "key": "任务ID", "placeholder": "Task-001", "required": true }
+    ],
+    "builtin": true,
+    "sort": 5
+  }
+]
