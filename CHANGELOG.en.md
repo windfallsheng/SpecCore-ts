@@ -2,6 +2,44 @@
 
 ---
 
+## v5.80.0 (2026-08-12) — Setup Guide Full Restructure
+
+### 📋 Setup Guide Restructure (init.ts — writeSetupGuide)
+- **Problem**: Original 5-step guide written from experienced user perspective; new users confused about "import requirements" scope (global vs iteration)
+- **Solution**: Restructured from new user perspective into 6 steps, added "Create Iteration" step
+
+### 🔄 Step Order Changes (5 → 6 steps)
+| Step | Before | After |
+|:---|:---|:---|
+| 1 | Tech Constitution | Tech Constitution + **Global Analysis section** |
+| 2 | Team Scheduling | Team Config (STAFFING notes "generated after step 3") |
+| 3 | — | **🆕 Create Iteration** (explains concept + CLI command template + params) |
+| 4 | Import Requirements | Import Requirements (references iteration from step 3) |
+| 5 | Knowledge Base & Rules | Knowledge Base & Rules |
+| 6 | Start Pipeline | **Start Development** (dual-card: intent + Skill commands) |
+
+### 🤖 AI Commands Unified to Skill Command Format
+- All AI commands changed from CLI internal format to Skill commands
+- `speccore analyze --prompt` → `/spec-analyze`
+- `speccore split --prompt` → `/spec-split`
+- `speccore execute --prompt` → `/spec-execute`
+- `speccore done --prompt` → `/spec-done`
+- `speccore dev` → `/spec-dev`
+- `--prompt` built into Skill, no manual addition needed
+
+### ⚡ Automation Mode Documentation
+- New three-card section: Full Confirm (default) / Semi-Auto / Full-Auto
+- Each mode shows both intent and explicit commands (`/spec-dev -i my-iter --auto-steps` / `--auto`)
+- Explains `speccore dev` as pipeline controller
+
+### 🛠️ Other Improvements
+- Version number dynamic from package.json instead of hardcoded
+- Removed internal command terminology (analyze/split/execute → natural language)
+- Added "re-view guide" entry
+- Added setup guide screenshots to docs/screenshots/
+
+---
+
 ## v5.73.0 (2026-08-11) — Onboarding Page Refactor + Visual Enhancements
 
 ### 🎨 Onboarding Page Structure Refactor

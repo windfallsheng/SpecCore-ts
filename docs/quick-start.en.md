@@ -53,6 +53,7 @@ Initialization auto-completes:
 - ✅ Creates `.speccore/` full directory structure (including GLOBAL layer)
 - ✅ Creates `.workbuddy/` WorkBuddy integration (skill + memory)
 - ✅ Creates `.speccore/config/platforms.yaml` multi-platform config
+- ✅ Generates setup guide page (`outputs/speccore-setup-guide.html`) with 6-step onboarding
 - ✅ Updates `.gitignore`
 
 ### Step 2: Edit Tech Constitution

@@ -41,6 +41,9 @@ npm install -g speccore
 ```bash
 # ① 初始化项目（CLI 命令）
 speccore init
+# 初始化后自动生成配置引导页，包含 6 步引导：
+# 1.技术宪法 → 2.团队配置 → 3.创建迭代 → 4.导入需求 → 5.知识库 → 6.开始开发
+# 引导页保存在 outputs/speccore-setup-guide.html，可随时在浏览器中打开查看
 
 # ② 新建期次（CLI 命令）
 speccore iteration create --name=Q1
