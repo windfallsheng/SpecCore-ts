@@ -90,7 +90,6 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   _updateConflicts.length = 0; // 清空冲突追踪
 
   // ── 1. 更新工具目录命令文件 ──
-  const qoderDir = join(projectRoot, '.qoder', 'commands', 'spec');
 
   for (const tool of tools) {
     const toolCommandsDir = join(projectRoot, tool, 'commands');
@@ -118,34 +117,39 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
     }
   }
 
-  // Qoder 特殊处理
-  if (await pathExists(join(projectRoot, '.qoder'))) {
+  // Qoder 特殊处理（扁平目录 + spec: 前缀命名）
+  const qoderCommandsDir = join(projectRoot, '.qoder', 'commands');
+  if (await pathExists(qoderCommandsDir)) {
     for (const [name, desc, cmd] of ALL_COMMANDS) {
-      const shortName = name.replace('spec-', '');
-      const p = join(qoderDir, shortName + '.md');
-      const content = `${cmd}`;
+      const shortName = name.replace(/^spec-/, 'spec:');
+      const p = join(qoderCommandsDir, shortName + '.md');
+      const content = '---\nname: ' + shortName + '\ndescription: ' + desc + '\n---\n' + desc + '\n\n执行命令: `' + cmd + '`';
       if (await pathExists(p)) {
         const existing = await readFile(p, 'utf-8');
         if (existing.trim() !== content.trim()) {
           await safeWriteWithOld(p, content);
           updated++;
-          updatedFiles.push(`qoder/spec/${shortName}.md`);
+          updatedFiles.push(`qoder/commands/${shortName}.md`);
         }
       } else {
-        await ensureDir(qoderDir);
         await writeFile(p, content);
         added++;
-        addedFiles.push(`qoder/spec/${shortName}.md`);
+        addedFiles.push(`qoder/commands/${shortName}.md`);
       }
     }
+    // 清理旧版 spec/ 子目录
+    const oldSpecDir = join(projectRoot, '.qoder', 'commands', 'spec');
+    if (await pathExists(oldSpecDir)) {
+      await require('fs-extra').remove(oldSpecDir);
+      cleaned++;
+      cleanedFiles.push('qoder/commands/spec/ (旧版子目录)');
+    }
     // 清理旧 Qoder 文件
-    if (await pathExists(qoderDir)) {
-      for (const f of await readdir(qoderDir)) {
-        if (LEGACY_NAMES.has(f.replace('.md', ''))) {
-          await require('fs-extra').remove(join(qoderDir, f));
-          cleaned++;
-          cleanedFiles.push(`qoder/spec/${f}`);
-        }
+    for (const f of await readdir(qoderCommandsDir)) {
+      if (LEGACY_NAMES.has(f.replace('.md', '').replace('spec:', ''))) {
+        await require('fs-extra').remove(join(qoderCommandsDir, f));
+        cleaned++;
+        cleanedFiles.push(`qoder/commands/${f}`);
       }
     }
   }
