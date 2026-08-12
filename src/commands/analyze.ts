@@ -21,6 +21,7 @@ import { runAnalysis, AnalyzeInput, supplementAnalysis } from '../core/analyze-e
 import { readFile, readdir } from 'fs-extra';
 import { generateGlobalArtifacts } from '../core/global-artifacts';
 import { buildPrompt, formatPrompt } from '../core/prompt-builder';
+import { buildAutoModeInstruction } from '../core/questions';
 
 export interface AnalyzeOptions {
   iteration?: string;
@@ -494,6 +495,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     prompt += `   \`\`\`\n`;
     prompt += `\n⚠️ 如 CONSTITUTION.md 中「源码路径」为空或路径不存在: 提示用户先配置，给出三个选项：\n`;
     prompt += `   [1] 停止分析 → 配置后重来 | [2] 跳过源码 → 只用文档分析 | [3] 手动指定路径后继续\n`;
+    prompt += '\n' + buildAutoModeInstruction('analyze', iter) + '\n';
     return prompt;
   }
 
@@ -633,6 +635,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
   prompt += `4. 每个文档都要具体内容（禁止"待填充"），分析完成后支持交互编辑任意文档的任意章节\n`;
   const taskFlag = isTask && ctx.task ? ` --task ${ctx.task}` : '';
   prompt += `5. 写入: speccore analyze --apply '{"${taskDocs.map(([n]) => `${n}:"..."`).join(',')}...}' -I ${iter}${taskFlag}\n\n`;
+  prompt += '\n' + buildAutoModeInstruction('analyze', iter) + '\n';
   for (let i = 0; i < taskDocs.length; i++) {
     prompt += `### ${i+1}/${taskDocs.length}: ${taskDocs[i][0]}\n\`\`\`markdown\n${taskDocs[i][1]}\n\`\`\`\n\n`;
   }
