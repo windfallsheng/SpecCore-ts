@@ -1926,6 +1926,7 @@ h1{font-family:'Orbitron',sans-serif;font-size:28px;font-weight:900;background:l
 <div class="step-desc">一句话扫描所有工程源码，自动生成技术栈、接口清单、数据模型等 8 类文档。适合接手新项目时快速摸清全貌：</div>
 <div class="method-cmd">/spec-ask "全局分析所有工程代码" <span style="color:var(--green)">← 意图式</span></div>
 <div class="method-cmd">speccore analyze --prompt --scope global <span style="color:var(--orange)">← 显式命令</span></div>
+<div style="font-size:10px;color:var(--muted);margin-top:4px">--scope global — 全项目范围（非迭代级）| --prompt — 在 AI 对话框中输入</div>
 <div class="step-desc" style="margin-top:4px">📂 输出到 .speccore/GLOBAL/PROJECTS/{工程名}/，每个工程独立一套（TECH_STACK / API_INVENTORY / DATA_MODEL ...）<br>⏱ 与迭代分析不同：全局分析扫源码生成项目文档，迭代分析读需求生成技术规格（步骤 6 做的事）</div>
 </div>
 <div class="field-list">
@@ -1964,8 +1965,9 @@ Iteration-xxx/<br>
 ├── 020-specs/ ← AI 分析后生成的技术规格<br>
 └── 030-tasks/ ← AI 拆分后的开发任务
 </div>
-<div class="method-cmd" style="margin-top:8px">speccore iteration create -n my-iter --topic "登录功能"</div>
-<div class="step-desc" style="color:var(--cyan);margin-top:8px">💡 -n 是迭代短名（自定义），--topic 是中文描述。创建后在下方步骤导入需求时用这个短名引用。</div>
+<div class="method-cmd" style="margin-top:8px">speccore iteration create -n &lt;迭代短名&gt; --topic &lt;中文描述&gt;</div>
+<div style="margin-top:8px;font-size:10px;color:var(--muted)">-n &lt;迭代短名&gt; — 自定义英文名（如 login / Q1），后续命令用它引用<br>--topic &lt;中文描述&gt; — 迭代用途说明（如 "登录功能"）</div>
+<div class="step-desc" style="color:var(--cyan);margin-top:8px">💡 这是 CLI 命令，在终端中执行。创建后在下方步骤导入需求时用这个短名引用。</div>
 </div>
 </div>
 
