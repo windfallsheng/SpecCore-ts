@@ -76,6 +76,8 @@ speccore init
 speccore init --force
 ```
 
+> 💡 After init, a setup guide page is auto-generated at `outputs/speccore-setup-guide.html` with 6-step onboarding (Tech Constitution → Team Config → Create Iteration → Import Requirements → Knowledge Base → Start Development). Open it in browser anytime.
+
 ---
 
 ## 📋 Iteration Management
