@@ -2,6 +2,16 @@
 
 ---
 
+## v5.82.0 (2026-08-12) — update/init Command Output Improvements
+
+- update.ts: Version match now uses logger.info for clear output (no longer spinner.stop)
+- update.ts: Added progress indicators and target tools display during upgrade
+- update.ts: Unified output format with separators and structured reports
+- init.ts: Delegated existing .speccore update path to updateCommand, eliminated ~50 lines of duplicate code
+- init.ts: Removed hardcoded 'new features' list, replaced with concise extra update notes
+
+---
+
 ## v5.81.1 (2026-08-12) — Documentation Updates
 
 - command-reference.md: Added setup guide note to init section
