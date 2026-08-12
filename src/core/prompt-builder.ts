@@ -372,6 +372,14 @@ function getInstruction(command: PromptCommand, context: { taskName?: string; ap
         '4. 遵循 CONSTITUTION 中定义的命名规范和异常码体系',
         '5. 代码必须能直接编译通过',
         '6. 包含必要的 import 语句和注解',
+        '',
+        '## 🤖 自动模式指令',
+        '',
+        '本操作在自动模式下执行，请遵循以下原则:',
+        '1. **不要询问用户** — 按你的最佳判断直接生成代码，不要请求确认或澄清',
+        '2. **有疑问就记录** — 如果对需求理解、技术选型有疑问，按最佳判断实现，并将疑问写入 `.speccore/questions/execute-{任务名}-{日期}-*.md`',
+        '3. **遇阻断就跳过** — 如果某个功能信息不足无法实现，跳过它并在疑问清单中记录',
+        '4. **直接输出代码** — 按 JSON 格式输出文件列表，不要输出多余解释',
       ].join('\n');
     
     case 'analyze':
@@ -382,6 +390,13 @@ function getInstruction(command: PromptCommand, context: { taskName?: string; ap
         '3. 风险识别（技术难点、依赖风险、性能瓶颈）',
         '4. 工作量估算（按 API 数量估算人天）',
         '请按 Markdown 格式输出，包含上述 4 个章节。',
+        '',
+        '## 🤖 自动模式指令',
+        '',
+        '本操作在自动模式下执行，请遵循以下原则:',
+        '1. **不要询问用户** — 按你的最佳判断直接分析，不要请求确认或澄清',
+        '2. **有疑问就记录** — 将疑问写入 `.speccore/questions/analyze-{迭代名}-{日期}-*.md`',
+        '3. **遇阻断就跳过** — 信息不足的章节标注“待补充”，不要停下来问',
       ].join('\n');
 
     case 'split':
@@ -395,6 +410,13 @@ function getInstruction(command: PromptCommand, context: { taskName?: string; ap
         '3. 分配负责人',
         '4. 估算每个 Task 的工作量和里程碑',
         '请按 Markdown 表格格式输出执行计划。',
+        '',
+        '## 🤖 自动模式指令',
+        '',
+        '本操作在自动模式下执行，请遵循以下原则:',
+        '1. **不要询问用户** — 按你的最佳判断直接排计划，不要请求确认或澄清',
+        '2. **有疑问就记录** — 将疑问写入 `.speccore/questions/plan-{迭代名}-{日期}-*.md`',
+        '3. **直接输出结果** — 输出 Markdown 表格，不要输出多余解释',
       ].join('\n');
   }
 }
