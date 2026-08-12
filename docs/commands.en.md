@@ -68,7 +68,7 @@ speccore ask "create user login feature"
 
 | Command | Alias | Description | Options |
 | :--- | :--- | :--- | :--- |
-| `speccore init` | `in` | Initialize SpecCore project | `--force` |
+| `speccore init` | `in` | Initialize SpecCore project | `--update` `--force` `--interactive` |
 | `speccore doc2spec` 🔒 | `d2s` | Convert Word (.docx/.doc) → SpecCore Markdown | `--file <path>` `--iteration <name>` `--platform <name>` |
 
 ```bash
