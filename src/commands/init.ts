@@ -1912,18 +1912,23 @@ h1{font-family:'Orbitron',sans-serif;font-size:28px;font-weight:900;background:l
 </div>
 
 <div class="step">
-<div class="step-header"><span class="step-num">1</span><span class="step-title">填写技术宪法</span><span class="step-required">必填</span></div>
-<div class="step-desc">这是 AI 的「最高指令」—— analyze / split / execute 全部据此执行。决定了生成代码的技术栈、命名规范、错误码体系。</div>
+<div class="step-header"><span class="step-num">1</span><span class="step-title">技术宪法</span><span class="step-required">必填</span></div>
+<div class="step-desc">AI 的「最高指令」—— analyze / split / execute 全部据此执行。决定了生成代码的技术栈、命名规范、错误码体系。</div>
 <div class="file-box">
 <div class="file-path">📄 .speccore/CONSTITUTION.md</div>
+<div class="step-desc" style="color:var(--green);margin-bottom:8px">✅ init 已自动检测：工程名、Git 仓库地址。其余字段可通过以下方式完善：</div>
+<div class="method-grid" style="grid-template-columns:1fr 1fr;margin-bottom:10px">
+<div class="method-card m1"><div class="method-title">🤖 方式 1：AI 扫描工程代码（推荐）</div><div class="step-desc">AI 读取源码自动识别技术栈、框架、命名风格，直接写入宪法</div><div class="method-cmd">/spec-ask "分析项目代码，完善技术宪法"</div></div>
+<div class="method-card m2"><div class="method-title">✍️ 方式 2：手动编辑</div><div class="step-desc">打开文件按注释提示填写，只填必填项即可，其余按需补充</div><div class="method-cmd">编辑 .speccore/CONSTITUTION.md</div></div>
+</div>
 <div class="field-list">
-<div class="field-item"><span class="field-check">✅</span><span class="field-name">项目信息表</span><span class="field-desc">— 工程名 / 源码路径 / Git 仓库 / 分支 / 对应需求端</span></div>
+<div class="field-item"><span class="field-check">✅</span><span class="field-name">项目信息表</span><span class="field-desc">— 工程名 / 源码路径 / Git 仓库（init 已自动填写）</span></div>
 <div class="field-item"><span class="field-check">✅</span><span class="field-name">技术栈</span><span class="field-desc">— 后端语言+框架、前端框架、数据库、缓存</span></div>
 <div class="field-item"><span class="field-check">✅</span><span class="field-name">命名规范</span><span class="field-desc">— API 路径、错误码、数据库、代码命名风格</span></div>
 <div class="field-item"><span class="field-warn">⬜</span><span class="field-name">异常码体系</span><span class="field-desc">— 按模块定义错误码表（可选，按需补充）</span></div>
 <div class="field-item"><span class="field-warn">⬜</span><span class="field-name">Git 分支策略</span><span class="field-desc">— 默认分支、任务分支、保护分支规则（可选）</span></div>
 </div>
-<div class="step-desc" style="margin-top:8px;color:var(--green)">💡 作用：AI 生成代码时会严格遵循这里定义的技术栈和命名规范。例如定义了 Spring Boot + MySQL，AI 就不会生成 NestJS + PostgreSQL 的代码。</div>
+<div class="step-desc" style="margin-top:8px;color:var(--cyan)">💡 作用：AI 生成代码时严格遵循这里的技术栈。例如写了 Spring Boot + MySQL，AI 就不会生成 NestJS + PostgreSQL 的代码。</div>
 </div>
 </div>
 
