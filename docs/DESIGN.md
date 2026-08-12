@@ -613,8 +613,12 @@ speccore schedule cancel --id <id>
 | v5.78.0 | 08-12 | 质量门禁从 6 项扩展到 10 项（TEST/REVIEW/DEPLOY/ERROR_CODES） |
 | v5.79.0 | 08-12 | 需求确认循环 + 项目配置引导页初版 |
 | v5.80.0 | 08-12 | 引导页全面重构：6步流程 + Skill命令格式 + 自动化模式 + 参数说明 |
+| v5.81.0 | 08-12 | 引导页视觉增强：card-bg光晕 + 按钮跳转ask + 容器宽度调整 |
+| v5.81.1 | 08-12 | 文档补充：command-reference/commands.en init引导页说明 |
+| v5.82.0 | 08-12 | update/init命令输出改进：版本相同明确提示 + 消除重复代码 |
+| v5.83.0 | 08-12 | --force模式自动备份：.speccore/ + Iteration-*/ + inbox/ + questions/ |
 
-> **最后更新**: 2026-08-12 (v5.80.0) — 引导页全面重构 + 截图补充
+> **最后更新**: 2026-08-12 (v5.83.0) — --force 模式自动备份重要数据
 
 ---
 
