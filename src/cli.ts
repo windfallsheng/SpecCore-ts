@@ -48,6 +48,7 @@ import { doneCommand } from './commands/done';
 import { renameCommand } from './commands/rename';
 import { retroCommand } from './commands/retro';
 import { updateCommand } from './commands/update';
+import { migrateCommand } from './commands/migrate';
 // v4.6.0 迁移命令
 // v4.7.0 体验增强
 import { completionCommand } from './commands/completion';
@@ -181,6 +182,19 @@ program
   .option('--update', '增量升级项目命令文件（不重置配置）')
   .option('--tools <tools>', '指定工具（逗号分隔，默认全部）: cursor | trae | trae-cn | windsurf | claude | codebuddy | qoder')
   .action(initCommand);
+
+// ================================================================
+// 🔄 迁移命令
+// ================================================================
+program
+  .command('migrate')
+  .alias('mg')
+  .description('项目内容迁移：任务目录、规格文件等')
+  .option('--type <type>', '迁移类型: tasks | specs | all (默认: all)')
+  .option('-i, --iteration <iteration>', '指定迭代（默认所有）')
+  .option('--dry-run', '预览模式，不执行实际迁移')
+  .option('--force', '强制覆盖已存在的目标')
+  .action(migrateCommand);
 
 // ================================================================
 // 📋 迭代管理
