@@ -1,3 +1,45 @@
+## v5.78.0 (2026-08-12) — 门禁文件用起来：质量门禁从 6 项扩展到 10 项
+
+### 🔒 质量门禁扩展（verify-engine.ts）
+- **问题**: 99-artifacts/ 下生成的 TEST.md / REVIEW.md / DEPLOY.md / ERROR_CODES.md 只作为 AI 参考，verify 自检时完全不读
+- **方案**: 新增 4 项启发式检查，读取门禁文件中的条目与代码关键词对比
+
+### 🆕 新增 4 项自检检查
+| 检查项 | 读取文件 | 检查内容 |
+|:---|:---|:---|
+| 测试用例覆盖 | TEST.md | 提取测试用例 → 检查代码中是否有关键词对应 |
+| 评审项合规 | REVIEW.md | 提取评审检查项 → 检查代码中是否有对应实现 |
+| 部署项检查 | DEPLOY.md | 提取部署条目 → 检查代码中是否有关联 |
+| 错误码一致性 | ERROR_CODES.md | 提取错误码 → 检查代码中是否使用 |
+
+### 🛠️ 代码重构
+- 抽取 `scanCodeFiles()` 共享函数：避免 checkSpecConsistency / checkTestCoverage / checkReviewCompliance 重复扫描
+- 抽取 `extractCheckItems()` 通用提取器：支持 `- [ ]` / `⬜` / `✅` / `❌` / 表格行多种 Markdown 格式
+- 新增 `checkArtifactConsistency()` 通用检查函数：用于 DEPLOY.md / ERROR_CODES.md 等文件
+- `checkSpecConsistency()` 重构为使用共享函数，减少 14 行重复代码
+
+### 📝 AI 修复引导增强
+- `generateFixPrompt()` 新增 TEST.md / REVIEW.md 修复指引：AI 修复时会自动检查未覆盖用例和未合规评审项
+
+### 📚 文档分类更新
+- split.ts: 任务目录结构展示 99-artifacts 分为「自检门禁」和「参考文档」两类
+- split.ts: 产出物清单表格新增 `verify 自检？` 列
+- init.ts: 目录结构说明更新为「自检门禁 + 参考文档」
+
+### 质量门禁完整清单（10 项）
+| # | 检查项 | 阻塞？ | 数据来源 |
+|:---|:---|:---|:---|
+| 1 | 编译检查 | ✅ 阻塞 | 项目构建命令 |
+| 2 | Lint 检查 | ❌ 非阻塞 | 项目 lint 命令 |
+| 3 | 单元测试 | ❌ 非阻塞 | 项目测试命令 |
+| 4 | 依赖完整性 | ❌ 非阻塞 | package.json / go.mod 等 |
+| 5 | 安全扫描 | ❌ 非阻塞 | npm audit |
+| 6 | Spec 一致性 | ❌ 非阻塞 | REQ.md 验收标准 |
+| 7 | 测试用例覆盖 | ❌ 非阻塞 | **TEST.md** ← 新增 |
+| 8 | 评审项合规 | ❌ 非阻塞 | **REVIEW.md** ← 新增 |
+| 9 | 部署项检查 | ❌ 非阻塞 | **DEPLOY.md** ← 新增 |
+| 10 | 错误码一致性 | ❌ 非阻塞 | **ERROR_CODES.md** ← 新增 |
+
 ## v5.77.0 (2026-08-12) — AI 智能拆分增强：三档粒度 + 完整上下文
 
 ### 🤖 split 命令 AI 智能拆分增强

@@ -374,6 +374,8 @@ export function generateFixPrompt(report: VerifyReport, taskDir: string): string
   prompt += `   - 编译通过（无类型错误、语法错误）\n`;
   prompt += `   - Lint 通过（无代码风格问题）\n`;
   prompt += `   - 测试通过（所有测试用例绿灯）\n`;
+  prompt += `   - 测试用例覆盖：检查 \`99-artifacts/TEST.md\` 中的未覆盖用例，补充实现\n`;
+  prompt += `   - 评审项合规：检查 \`99-artifacts/REVIEW.md\` 中的未合规项，补充实现\n`;
   prompt += `3. 修复后在下方「修复记录」表格中记录:\n`;
   prompt += `   - 问题描述\n`;
   prompt += `   - 修复方案\n`;
@@ -471,6 +473,209 @@ function checkSecurity(codePath: string, projectType: ProjectType): CheckResult 
 }
 
 /**
+ * 扫描代码目录，读取所有源码文件内容（供启发式检查复用）
+ */
+function scanCodeFiles(codePath: string): string {
+  const srcFiles: string[] = [];
+  const scanDir = (dir: string) => {
+    try {
+      const entries = require('fs').readdirSync(dir, { withFileTypes: true });
+      for (const e of entries) {
+        const full = join(dir, e.name);
+        if (e.isDirectory() && !e.name.startsWith('.') && e.name !== 'node_modules') scanDir(full);
+        else if (e.isFile() && /\.(ts|js|tsx|jsx|java|go|py)$/.test(e.name)) srcFiles.push(full);
+      }
+    } catch {}
+  };
+  scanDir(codePath);
+  return srcFiles.map(f => { try { return require('fs').readFileSync(f, 'utf-8'); } catch { return ''; } }).join('\n');
+}
+
+/**
+ * 从 Markdown 中提取检查项（- [ ] / - [x] / ⬜ / ✅ / ❌ / | 行）
+ */
+function extractCheckItems(content: string): string[] {
+  const items: string[] = [];
+  // checkbox: - [ ] xxx / - [x] xxx
+  for (const m of content.match(/-\s*\[[ x]\]\s*(.+)/g) || []) {
+    items.push(m.replace(/^-\s*\[[ x]\]\s*/, '').trim());
+  }
+  // emoji checkbox: ⬜ xxx / ✅ xxx / ❌ xxx
+  for (const m of content.match(/[⬜✅❌]\s*(.+)/g) || []) {
+    const text = m.replace(/^[⬜✅❌]\s*/, '').trim();
+    if (text.length > 2) items.push(text);
+  }
+  // table rows: | 描述 | ... |
+  for (const m of content.match(/^\|\s*[^|]+\s*\|/gm) || []) {
+    const cells = m.split('|').map(c => c.trim()).filter(Boolean);
+    if (cells.length >= 2 && !cells[0].match(/^[-:]+$/)) items.push(cells[0]);
+  }
+  return [...new Set(items)];
+}
+
+/**
+ * TEST.md 测试用例覆盖率检查
+ * 读取 TEST.md 中的测试用例，检查代码中是否有关键词对应
+ */
+async function checkTestCoverage(codePath: string, taskDir: string): Promise<CheckResult> {
+  const start = Date.now();
+  try {
+    const testPaths = [
+      join(taskDir, '99-artifacts', 'TEST.md'),
+      join(taskDir, 'TEST.md'),
+    ];
+    let testContent = '';
+    for (const p of testPaths) {
+      if (await pathExists(p)) { testContent = await readFile(p, 'utf-8'); break; }
+    }
+    if (!testContent) {
+      return { name: '测试用例覆盖', status: 'skip', duration: Date.now() - start, output: '', details: '未找到 TEST.md', blocking: false };
+    }
+
+    const cases = extractCheckItems(testContent);
+    if (cases.length === 0) {
+      return { name: '测试用例覆盖', status: 'skip', duration: Date.now() - start, output: '', details: 'TEST.md 无可提取用例', blocking: false };
+    }
+
+    const allCode = scanCodeFiles(codePath);
+    const covered: string[] = [];
+    const uncovered: string[] = [];
+    for (const c of cases) {
+      const keywords = [
+        ...(c.match(/[\u4e00-\u9fa5]{2,}/g) || []),
+        ...(c.match(/[a-zA-Z]{3,}/g) || []),
+      ];
+      const found = keywords.some(kw => allCode.toLowerCase().includes(kw.toLowerCase()));
+      if (found) covered.push(c);
+      else uncovered.push(c);
+    }
+
+    const rate = cases.length > 0 ? Math.round((covered.length / cases.length) * 100) : 0;
+    if (uncovered.length === 0) {
+      return { name: '测试用例覆盖', status: 'pass', duration: Date.now() - start, output: '', details: `${covered.length} 个用例全部有代码覆盖`, blocking: false };
+    }
+    return {
+      name: '测试用例覆盖',
+      status: rate >= 60 ? 'warn' : 'fail',
+      duration: Date.now() - start,
+      output: `未覆盖:\n${uncovered.slice(0, 8).map(u => `  - ${u}`).join('\n')}`,
+      details: `${covered.length}/${cases.length} 覆盖 (${rate}%)`,
+      blocking: false,
+    };
+  } catch {
+    return { name: '测试用例覆盖', status: 'skip', duration: Date.now() - start, output: '', details: '检查失败', blocking: false };
+  }
+}
+
+/**
+ * REVIEW.md 评审检查项合规检查
+ * 读取 REVIEW.md 中的检查项，验证代码中是否有对应实现
+ */
+async function checkReviewCompliance(codePath: string, taskDir: string): Promise<CheckResult> {
+  const start = Date.now();
+  try {
+    const reviewPaths = [
+      join(taskDir, '99-artifacts', 'REVIEW.md'),
+      join(taskDir, 'REVIEW.md'),
+    ];
+    let reviewContent = '';
+    for (const p of reviewPaths) {
+      if (await pathExists(p)) { reviewContent = await readFile(p, 'utf-8'); break; }
+    }
+    if (!reviewContent) {
+      return { name: '评审项合规', status: 'skip', duration: Date.now() - start, output: '', details: '未找到 REVIEW.md', blocking: false };
+    }
+
+    const items = extractCheckItems(reviewContent);
+    if (items.length === 0) {
+      return { name: '评审项合规', status: 'skip', duration: Date.now() - start, output: '', details: 'REVIEW.md 无可提取检查项', blocking: false };
+    }
+
+    const allCode = scanCodeFiles(codePath);
+    const passed: string[] = [];
+    const missed: string[] = [];
+    for (const item of items) {
+      const keywords = [
+        ...(item.match(/[\u4e00-\u9fa5]{2,}/g) || []),
+        ...(item.match(/[a-zA-Z]{3,}/g) || []),
+      ];
+      const found = keywords.some(kw => allCode.toLowerCase().includes(kw.toLowerCase()));
+      if (found) passed.push(item);
+      else missed.push(item);
+    }
+
+    const rate = items.length > 0 ? Math.round((passed.length / items.length) * 100) : 0;
+    if (missed.length === 0) {
+      return { name: '评审项合规', status: 'pass', duration: Date.now() - start, output: '', details: `${passed.length} 项全部合规`, blocking: false };
+    }
+    return {
+      name: '评审项合规',
+      status: rate >= 60 ? 'warn' : 'fail',
+      duration: Date.now() - start,
+      output: `未合规:\n${missed.slice(0, 8).map(m => `  - ${m}`).join('\n')}`,
+      details: `${passed.length}/${items.length} 合规 (${rate}%)`,
+      blocking: false,
+    };
+  } catch {
+    return { name: '评审项合规', status: 'skip', duration: Date.now() - start, output: '', details: '检查失败', blocking: false };
+  }
+}
+
+/**
+ * 通用产出物一致性检查
+ * 检查 DEPLOY.md / ERROR_CODES.md 等文件中的条目是否在代码中有对应实现
+ */
+async function checkArtifactConsistency(codePath: string, taskDir: string, filename: string, checkName: string): Promise<CheckResult> {
+  const start = Date.now();
+  try {
+    const filePaths = [
+      join(taskDir, '99-artifacts', filename),
+      join(taskDir, filename),
+    ];
+    let content = '';
+    for (const p of filePaths) {
+      if (await pathExists(p)) { content = await readFile(p, 'utf-8'); break; }
+    }
+    if (!content) {
+      return { name: checkName, status: 'skip', duration: Date.now() - start, output: '', details: `未找到 ${filename}`, blocking: false };
+    }
+
+    const items = extractCheckItems(content);
+    if (items.length === 0) {
+      return { name: checkName, status: 'skip', duration: Date.now() - start, output: '', details: `${filename} 无可提取条目`, blocking: false };
+    }
+
+    const allCode = scanCodeFiles(codePath);
+    const matched: string[] = [];
+    const unmatched: string[] = [];
+    for (const item of items) {
+      const keywords = [
+        ...(item.match(/[\u4e00-\u9fa5]{2,}/g) || []),
+        ...(item.match(/[a-zA-Z]{3,}/g) || []),
+      ];
+      const found = keywords.some(kw => allCode.toLowerCase().includes(kw.toLowerCase()));
+      if (found) matched.push(item);
+      else unmatched.push(item);
+    }
+
+    const rate = items.length > 0 ? Math.round((matched.length / items.length) * 100) : 0;
+    if (unmatched.length === 0) {
+      return { name: checkName, status: 'pass', duration: Date.now() - start, output: '', details: `${matched.length} 项全部有代码对应`, blocking: false };
+    }
+    return {
+      name: checkName,
+      status: rate >= 60 ? 'warn' : 'fail',
+      duration: Date.now() - start,
+      output: `未匹配:\n${unmatched.slice(0, 8).map(u => `  - ${u}`).join('\n')}`,
+      details: `${matched.length}/${items.length} 匹配 (${rate}%)`,
+      blocking: false,
+    };
+  } catch {
+    return { name: checkName, status: 'skip', duration: Date.now() - start, output: '', details: '检查失败', blocking: false };
+  }
+}
+
+/**
  * Spec-代码一致性检查（基础启发式）
  * 检查 REQ.md 中的验收标准是否在代码中有对应实现
  */
@@ -493,48 +698,34 @@ async function checkSpecConsistency(codePath: string, taskDir: string): Promise<
       return { name: 'Spec 一致性', status: 'skip', duration: Date.now() - start, output: '', details: '未找到 REQ.md', blocking: false };
     }
 
-    // 提取验收标准（以 - [ ] 开头的行）
-    const criteria = reqContent.match(/-\s*\[[ x]\]\s*(.+)/g) || [];
+    const criteria = extractCheckItems(reqContent);
     if (criteria.length === 0) {
       return { name: 'Spec 一致性', status: 'skip', duration: Date.now() - start, output: '', details: 'REQ.md 无验收标准', blocking: false };
     }
 
-    // 扫描代码文件，检查是否有关键词匹配
-    const srcFiles: string[] = [];
-    const scanDir = (dir: string) => {
-      try {
-        const entries = require('fs').readdirSync(dir, { withFileTypes: true });
-        for (const e of entries) {
-          const full = join(dir, e.name);
-          if (e.isDirectory() && !e.name.startsWith('.') && e.name !== 'node_modules') scanDir(full);
-          else if (e.isFile() && /\.(ts|js|tsx|jsx|java|go|py)$/.test(e.name)) srcFiles.push(full);
-        }
-      } catch {}
-    };
-    scanDir(codePath);
-
-    const allCode = srcFiles.map(f => { try { return require('fs').readFileSync(f, 'utf-8'); } catch { return ''; } }).join('\n');
+    const allCode = scanCodeFiles(codePath);
 
     // 检查每个验收标准的关键词是否在代码中出现
     const matched: string[] = [];
     const unmatched: string[] = [];
     for (const c of criteria) {
-      const text = c.replace(/^-\s*\[[ x]\]\s*/, '').trim();
-      // 提取关键词（中文 2+ 字，英文 3+ 字母）
-      const keywords = [...(text.match(/[\u4e00-\u9fa5]{2,}/g) || []), ...(text.match(/[a-zA-Z]{3,}/g) || [])];
+      const keywords = [
+        ...(c.match(/[\u4e00-\u9fa5]{2,}/g) || []),
+        ...(c.match(/[a-zA-Z]{3,}/g) || []),
+      ];
       const found = keywords.some(kw => allCode.toLowerCase().includes(kw.toLowerCase()));
-      if (found) matched.push(text);
-      else unmatched.push(text);
+      if (found) matched.push(c);
+      else unmatched.push(c);
     }
 
     if (unmatched.length === 0) {
-      return { name: 'Spec 一致性', status: 'pass', duration: Date.now() - start, output: `${matched.length} 项验收标准均有代码对应`, details: '全部匹配', blocking: false };
+      return { name: 'Spec 一致性', status: 'pass', duration: Date.now() - start, output: '', details: `${matched.length} 项验收标准均有代码对应`, blocking: false };
     }
     return {
       name: 'Spec 一致性',
       status: unmatched.length > matched.length ? 'fail' : 'warn',
       duration: Date.now() - start,
-      output: `未匹配:\n${unmatched.map(u => `  - ${u}`).join('\n')}`,
+      output: `未匹配:\n${unmatched.slice(0, 8).map(u => `  - ${u}`).join('\n')}`,
       details: `${matched.length}/${criteria.length} 项匹配`,
       blocking: false,
     };
@@ -596,6 +787,22 @@ export async function runQualityGate(
   // 6. Spec 一致性（非阻塞）
   logger.info('   📐 Spec 一致性...');
   checks.push(await checkSpecConsistency(codePath, taskDir));
+
+  // 7. 测试用例覆盖率（非阻塞，读取 TEST.md）
+  logger.info('   🧪 测试用例覆盖...');
+  checks.push(await checkTestCoverage(codePath, taskDir));
+
+  // 8. 评审项合规（非阻塞，读取 REVIEW.md）
+  logger.info('   📝 评审项合规...');
+  checks.push(await checkReviewCompliance(codePath, taskDir));
+
+  // 9. 部署清单检查（非阻塞，读取 DEPLOY.md）
+  logger.info('   🚀 部署清单...');
+  checks.push(await checkArtifactConsistency(codePath, taskDir, 'DEPLOY.md', '部署项检查'));
+
+  // 10. 错误码一致性（非阻塞，读取 ERROR_CODES.md）
+  logger.info('   🔢 错误码一致性...');
+  checks.push(await checkArtifactConsistency(codePath, taskDir, 'ERROR_CODES.md', '错误码一致性'));
 
   // 汇总
   const report: VerifyReport = {

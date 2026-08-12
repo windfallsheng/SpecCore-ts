@@ -485,7 +485,17 @@ ${taskId}/
 │   └── CHANGELOG.md       <-- 变更记录
 ├── 10-backend/            <-- 后端实现（src/tests）
 ├── 20-frontend/           <-- 前端实现（{platform}/src/tests）
-├── 99-artifacts/          <-- 执行产出（TEST/REVIEW/DEPLOY/RISK/DEPS/MONITOR）
+├── 99-artifacts/          <-- 执行产出
+│   ├── 🔒 自检门禁（verify 自动读取验证）
+│   │   ├── TEST.md         <-- 测试用例（verify 检查覆盖率）
+│   │   ├── REVIEW.md       <-- 评审清单（verify 检查合规性）
+│   │   ├── DEPLOY.md       <-- 部署清单（verify 检查部署项）
+│   │   └── ERROR_CODES.md  <-- 错误码表（verify 检查一致性）
+│   └── 📚 参考文档（AI/人参考，不参与自动验证）
+│       ├── RISK.md         <-- 风险评估
+│       ├── DEPS.md         <-- 依赖清单
+│       ├── MONITOR.md      <-- 监控配置
+│       └── ADR.md          <-- 架构决策记录
 └── .issues.md             <-- 问题追踪
 \`\`\`
 
@@ -505,13 +515,13 @@ ${taskId}/
 
 ### 参考文件（AI 按需查阅）
 
-| 文件 | 用途 |
-|:---|:---|
-| \`99-artifacts/TEST.md\` | 测试计划（用例/边界/集成） |
-| \`99-artifacts/REVIEW.md\` | 评审清单（安全/质量/性能） |
-| \`99-artifacts/RISK.md\` | 风险评估 |
-| \`_shared/API_CONTRACT.yaml\` | API 契约（OpenAPI 格式） |
-| \`.issues.md\` | 已知问题和约束 |
+| 文件 | 用途 | verify 自检？ |
+|:---|:---|:---|
+| \`99-artifacts/TEST.md\` | 测试计划（用例/边界/集成） | ✅ 检查用例覆盖率 |
+| \`99-artifacts/REVIEW.md\` | 评审清单（安全/质量/性能） | ✅ 检查评审项合规 |
+| \`99-artifacts/RISK.md\` | 风险评估 | ❌ 仅参考 |
+| \`_shared/API_CONTRACT.yaml\` | API 契约（OpenAPI 格式） | ❌ 仅参考 |
+| \`.issues.md\` | 已知问题和约束 | ❌ 仅参考 |
 
 ### 不会被 AI 读取的文件
 
@@ -611,22 +621,22 @@ ${apiDesc}
 | ${today} | 创建任务 | CLI |
 
 ## 产出物清单
-| 产出物 | 状态 | 路径 |
-| :--- | :--- | :--- |
-| REQ.md | ✅ | ./00-specs/REQ.md |
-| TECH.md | ✅ | ./00-specs/TECH.md |
-| TASK.md | ✅ | ./00-specs/TASK.md |
-| SCHEMA.md | ⏳ | ./00-specs/SCHEMA.md |
-| API_CONTRACT.yaml | ✅ | ./_shared/API_CONTRACT.yaml |
-| TEST.md | ⏳ | ./99-artifacts/TEST.md |
-| REVIEW.md | ⏳ | ./99-artifacts/REVIEW.md |
-| DEPLOY.md | ⏳ | ./99-artifacts/DEPLOY.md |
-| ERROR_CODES.md | ⏳ | ./99-artifacts/ERROR_CODES.md |
-| ADR.md | ⏳ | ./99-artifacts/ADR.md |
-| RISK.md | ⏳ | ./99-artifacts/RISK.md |
-| DEPS.md | ⏳ | ./99-artifacts/DEPS.md |
-| MONITOR.md | ⏳ | ./99-artifacts/MONITOR.md |
-| CHANGELOG.md | ✅ | ./00-specs/CHANGELOG.md |
+| 产出物 | 状态 | 路径 | verify 自检？ |
+| :--- | :--- | :--- | :--- |
+| REQ.md | ✅ | ./00-specs/REQ.md | ✅ Spec 一致性 |
+| TECH.md | ✅ | ./00-specs/TECH.md | — |
+| TASK.md | ✅ | ./00-specs/TASK.md | — |
+| SCHEMA.md | ⏳ | ./00-specs/SCHEMA.md | — |
+| API_CONTRACT.yaml | ✅ | ./_shared/API_CONTRACT.yaml | — |
+| TEST.md | ⏳ | ./99-artifacts/TEST.md | ✅ 用例覆盖率 |
+| REVIEW.md | ⏳ | ./99-artifacts/REVIEW.md | ✅ 评审项合规 |
+| DEPLOY.md | ⏳ | ./99-artifacts/DEPLOY.md | ✅ 部署项检查 |
+| ERROR_CODES.md | ⏳ | ./99-artifacts/ERROR_CODES.md | ✅ 错误码一致性 |
+| ADR.md | ⏳ | ./99-artifacts/ADR.md | ❌ 仅参考 |
+| RISK.md | ⏳ | ./99-artifacts/RISK.md | ❌ 仅参考 |
+| DEPS.md | ⏳ | ./99-artifacts/DEPS.md | ❌ 仅参考 |
+| MONITOR.md | ⏳ | ./99-artifacts/MONITOR.md | ❌ 仅参考 |
+| CHANGELOG.md | ✅ | ./00-specs/CHANGELOG.md | — |
 `
   );
 
