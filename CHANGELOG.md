@@ -1,3 +1,11 @@
+## v5.84.1 (2026-08-12) — migrate 命令增强
+
+- 新增 .task-type 文件检测（优先于 TASK.md）
+- 迁移后自动清理 030-tasks/ 根目录下的旧版 Task-* 目录
+- 修复迁移后残留的旧结构目录未被删除的问题
+
+---
+
 ## v5.84.0 (2026-08-12) — migrate 命令 + --tools 参数修复
 
 - 修复 init/update 中 --tools 参数名不匹配（tool → tools）

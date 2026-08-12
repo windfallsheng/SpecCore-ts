@@ -2,6 +2,14 @@
 
 ---
 
+## v5.84.1 (2026-08-12) — migrate Command Enhancement
+
+- Added .task-type file detection (takes priority over TASK.md)
+- Auto-cleanup legacy Task-* directories under 030-tasks/ root after migration
+- Fixed issue where old structure directories remained after migration
+
+---
+
 ## v5.84.0 (2026-08-12) — migrate Command + --tools Parameter Fix
 
 - Fixed --tools parameter name mismatch in init/update (tool → tools)
