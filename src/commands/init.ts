@@ -169,16 +169,58 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
         logger.info('💡 建议使用 speccore update 安全升级');
         return;
       }
-      spinner.start();
 
-      // ── 备份现有配置 ──
+      // ── 自动备份重要数据 ──
       const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
       const backupDir = join(projectRoot, `.speccore-backup-${ts}`);
-      await copy(speccoreDir, backupDir);
-      spinner.stop(`已备份到 ${backupDir}`);
-      logger.info('  (不需要时可手动删除)');
+      await ensureDir(backupDir);
+      
+      const { readdir } = require('fs-extra');
+      const itemsToBackup: string[] = [];
+      
+      // 1. .speccore/ 目录
+      if (await pathExists(speccoreDir)) {
+        await copy(speccoreDir, join(backupDir, '.speccore'));
+        itemsToBackup.push('.speccore/');
+      }
+      
+      // 2. Iteration-* 目录
+      const entries = await readdir(projectRoot, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory() && entry.name.startsWith('Iteration-')) {
+          await copy(join(projectRoot, entry.name), join(backupDir, entry.name));
+          itemsToBackup.push(entry.name + '/');
+        }
+      }
+      
+      // 3. inbox/ 和 questions/（如果存在）
+      for (const subdir of ['inbox', 'questions']) {
+        const srcPath = join(speccoreDir, subdir);
+        if (await pathExists(srcPath)) {
+          await copy(srcPath, join(backupDir, '.speccore', subdir));
+          if (!itemsToBackup.includes('.speccore/')) {
+            itemsToBackup.push('.speccore/' + subdir + '/');
+          }
+        }
+      }
+      
       logger.info('');
-      spinner.stop('重置配置...');
+      logger.info(`📦 已备份 ${itemsToBackup.length} 个项目到:`);
+      logger.info(`   ${backupDir}`);
+      logger.info('');
+      logger.info('   📋 备份内容:');
+      for (const item of itemsToBackup) {
+        logger.info(`      • ${item}`);
+      }
+      logger.info('');
+      logger.info('   💾 如需恢复，执行:');
+      logger.info(`      cp -r ${backupDir}/.speccore .speccore`);
+      logger.info(`      # 如有迭代目录: cp -r ${backupDir}/Iteration-* ./`);
+      logger.info('');
+      logger.info('   🗑  确认无误后可手动删除备份目录');
+      logger.info('');
+      
+      spinner.start();
     }
 
     // Create directory structure
