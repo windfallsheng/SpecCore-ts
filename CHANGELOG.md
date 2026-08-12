@@ -1,3 +1,10 @@
+## v5.81.1 (2026-08-12) — 文档补充
+
+- command-reference.md: init 章节补充引导页说明
+- commands.en.md: init section added setup guide note
+
+---
+
 ## v5.81.0 (2026-08-12) — 引导页视觉增强
 
 ### 🌟 新增 card-bg 光晕效果
