@@ -1,3 +1,11 @@
+## v5.83.0 (2026-08-12) — --force 模式自动备份
+
+- init.ts: --force 模式自动备份 .speccore/ + Iteration-*/ + inbox/ + questions/
+- init.ts: 备份输出改用 logger.info，明确显示备份路径和恢复指令
+- init.ts: 提供 cp -r 恢复命令示例，用户可自行删除备份目录
+
+---
+
 ## v5.82.0 (2026-08-12) — update/init 命令输出改进
 
 - update.ts: 版本相同时改用 logger.info 明确输出（不再用 spinner.stop）

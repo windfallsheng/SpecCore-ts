@@ -2,6 +2,14 @@
 
 ---
 
+## v5.83.0 (2026-08-12) — --force Mode Auto Backup
+
+- init.ts: --force mode auto backs up .speccore/ + Iteration-*/ + inbox/ + questions/
+- init.ts: Backup output uses logger.info for clear backup path and restore instructions
+- init.ts: Provides cp -r restore command examples, users can manually delete backup directory when done
+
+---
+
 ## v5.82.0 (2026-08-12) — update/init Command Output Improvements
 
 - update.ts: Version match now uses logger.info for clear output (no longer spinner.stop)
