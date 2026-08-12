@@ -232,6 +232,7 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
     await ensureDir(join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'specs'));
     await ensureDir(join(speccoreDir, 'GLOBAL', 'BASELINES'));
     await ensureDir(join(speccoreDir, 'inbox'));
+    await ensureDir(join(speccoreDir, 'questions'));
 
     // Create default files
     await createDefaultFiles(projectRoot, speccoreDir);

@@ -112,10 +112,15 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
         for (const line of blockerLines.slice(0, 5)) {
           logger.warn(`   ${line.trim().slice(0, 80)}`);
         }
-        const proceed = await promptUser('\n仍要继续拆分？[y/N] ');
-        if (!proceed || proceed.toLowerCase() !== 'y') {
-          logger.info('已取消拆分');
-          return;
+        // 自动模式不询问用户，直接继续；交互模式才确认
+        if (options.interactive || options.strict) {
+          const proceed = await promptUser('\n仍要继续拆分？[y/N] ');
+          if (!proceed || proceed.toLowerCase() !== 'y') {
+            logger.info('已取消拆分');
+            return;
+          }
+        } else {
+          logger.info('   ℹ️  自动模式：跳过阻断项确认，继续拆分（疑问记录到 .speccore/questions/）');
         }
         spinner.start();
       }
@@ -1502,6 +1507,21 @@ function buildSplitPrompt(
   p += `□ 基础模块排在前面？\n`;
   p += `□ 同领域功能没被过度拆分？\n`;
   p += `□ 总任务数合理（3-15 个/迭代）？\n`;
+
+  // 自动模式指令
+  p += `## 🤖 自动模式指令\n\n`;
+  p += `本拆分在自动模式下执行，请遵循以下原则:\n`;
+  p += `1. **不要询问用户** — 按你的最佳判断直接拆分，不要请求确认或澄清\n`;
+  p += `2. **有疑问就记录** — 如果对需求理解、技术选型、任务边界有疑问，不要停下来问，而是:\n`;
+  p += `   - 按你的最佳判断继续拆分\n`;
+  p += `   - 将疑问写入 \`.speccore/questions/split-{迭代名}-{日期}.md\`\n`;
+  p += `   - 格式: \`## 疑问 N
+- 问题描述
+- 你的判断
+- 建议后续动作\`
+`;
+  p += `3. **遇阻断就跳过** — 如果某个功能模块信息不足无法拆分，跳过它并在疑问清单中记录\n`;
+  p += `4. **输出 JSON** — 直接输出拆分结果的 JSON 数组，不要输出其他内容\n`;
 
   return p;
 }
