@@ -1934,7 +1934,7 @@ h1{font-family:'Orbitron',sans-serif;font-size:28px;font-weight:900;background:l
 
 <div class="step">
 <div class="step-header"><span class="step-num">2</span><span class="step-title">配置团队排期</span><span class="step-optional">可选</span></div>
-<div class="step-desc">定义团队成员和分工。split 时会根据团队人数自动推荐任务拆分粒度，一个端可以有多个负责人，作为拆分时的默认责任人参考（后期可手动修改）。</div>
+<div class="step-desc">填写团队成员和可用天数。AI 拆分任务时会根据团队规模自动调整粒度，一个端可以有多个负责人，作为拆分时的默认责任人参考（后期可手动修改）。</div>
 <div class="file-box">
 <div class="file-path">📄 Iteration-xxx/STAFFING.md</div>
 <div class="step-desc">格式示例：<br>
@@ -1947,20 +1947,35 @@ h1{font-family:'Orbitron',sans-serif;font-size:28px;font-weight:900;background:l
 </div>
 
 <div class="step">
-<div class="step-header"><span class="step-num">3</span><span class="step-title">导入需求文档</span><span class="step-required">必填</span></div>
-<div class="step-desc">将产品需求导入 SpecCore，支持 4 种方式：</div>
-<div class="method-grid">
-<div class="method-card m1"><div class="method-title">📥 方式 1：自然语言输入</div><div class="step-desc">直接用口语描述需求，AI 会澄清并生成标准需求描述</div><div class="method-cmd">speccore change "新增一个通知功能"</div></div>
-<div class="method-card m2"><div class="method-title">📎 方式 2：文件导入</div><div class="step-desc">将 Word/PDF/Markdown 文档转为 Spec 格式</div><div class="method-cmd">speccore doc2spec -f PRD.docx --iter Q1</div></div>
-<div class="method-card m3"><div class="method-title">📂 方式 3：Inbox 收件箱</div><div class="step-desc">把文件丢到 inbox 目录，自动识别处理</div><div class="method-cmd">cp PRD.md .speccore/inbox/ && speccore change</div></div>
-<div class="method-card m4"><div class="method-title">✍️ 方式 4：手动编写</div><div class="step-desc">直接在需求目录写 Markdown 文档</div><div class="method-cmd">编辑 010-requirements/ 目录下的文件</div></div>
+<div class="step-header"><span class="step-num">3</span><span class="step-title">创建迭代</span><span class="step-required">必填</span></div>
+<div class="step-desc">迭代是一组需求的载体，包含需求文档、任务、代码等所有内容。先创建一个迭代，再把需求放进去。</div>
+<div class="file-box">
+<div class="file-path">📁 创建后生成的目录结构</div>
+<div class="step-desc">
+Iteration-xxx/<br>
+├── 010-requirements/ ← 放需求文档的地方<br>
+├── 020-specs/ ← AI 分析后生成的技术规格<br>
+└── 030-tasks/ ← AI 拆分后的开发任务
 </div>
-<div class="step-desc" style="color:var(--green)">💡 推荐方式 1：自然语言输入 → AI 澄清 → 你确认 → 自动生成标准需求。支持反复修改直到满意。</div>
+<div class="method-cmd" style="margin-top:8px">speccore iteration create -n my-iter --topic "登录功能"</div>
+<div class="step-desc" style="color:var(--cyan);margin-top:8px">💡 -n 是迭代短名（自定义），--topic 是中文描述。创建后在下方步骤导入需求时用这个短名引用。</div>
+</div>
 </div>
 
 <div class="step">
-<div class="step-header"><span class="step-num">4</span><span class="step-title">知识库与规则</span><span class="step-optional">按需补充</span></div>
-<div class="step-desc">以下内容按需补充，AI 会读取作为参考：</div>
+<div class="step-header"><span class="step-num">4</span><span class="step-title">导入需求</span><span class="step-required">必填</span></div>
+<div class="step-desc">把产品需求放进步骤 3 创建的迭代中。推荐直接用自然语言描述，AI 会帮你整理成标准需求文档：</div>
+<div class="method-grid" style="grid-template-columns:1fr 1fr">
+<div class="method-card m1"><div class="method-title">🤖 自然语言（推荐）</div><div class="step-desc">用口语描述需求 → AI 澄清 → 你确认 → 自动生成标准需求文档，支持反复修改</div><div class="method-cmd" style="margin-top:4px">/spec-ask "新增用户登录功能"</div></div>
+<div class="method-card m2"><div class="method-title">📎 文件导入</div><div class="step-desc">Word / PDF / Markdown 文档自动转换</div><div class="method-cmd" style="margin-top:4px">speccore doc2spec -f PRD.docx --iter my-iter</div></div>
+</div>
+<div class="step-desc" style="color:var(--muted);margin-top:4px">还有更多方式：📂 把文件丢到 .speccore/inbox/ 目录自动识别 | ✍️ 直接编辑迭代下 010-requirements/ 目录</div>
+<div class="step-desc" style="color:var(--green)">💡 导入后，下一步 analyze 会自动读取这些需求文档，生成 ANALYSIS.md、TECH.md 等 7 份技术规格。</div>
+</div>
+
+<div class="step">
+<div class="step-header"><span class="step-num">5</span><span class="step-title">知识库与规则</span><span class="step-optional">按需补充</span></div>
+<div class="step-desc">以下内容按需补充，AI 在工作时会读取作为参考：</div>
 <div class="kb-grid">
 <div class="kb-card"><div class="kb-icon">📐</div><div class="kb-name">PATTERNS/</div><div class="kb-desc">代码模式模板<br>定义组件/服务/中间件的标准写法</div></div>
 <div class="kb-card"><div class="kb-icon">📏</div><div class="kb-name">RULES/</div><div class="kb-desc">代码审查规则<br>定义 Code Review 的检查项</div></div>
@@ -1969,10 +1984,9 @@ h1{font-family:'Orbitron',sans-serif;font-size:28px;font-weight:900;background:l
 </div>
 
 <div class="step">
-<div class="step-header"><span class="step-num">5</span><span class="step-title">开始流水线</span></div>
-<div class="step-desc">配置完成后，按以下流程推进项目：</div>
+<div class="step-header"><span class="step-num">6</span><span class="step-title">开始开发</span></div>
+<div class="step-desc">一切就绪，按以下流程推进开发：</div>
 <div class="flow-bar">
-<span class="flow-node n1">创建迭代</span><span class="flow-arrow">→</span>
 <span class="flow-node n2">需求分析</span><span class="flow-arrow">→</span>
 <span class="flow-node n3">任务拆分</span><span class="flow-arrow">→</span>
 <span class="flow-node n2">执行开发</span><span class="flow-arrow">→</span>
@@ -1980,11 +1994,10 @@ h1{font-family:'Orbitron',sans-serif;font-size:28px;font-weight:900;background:l
 </div>
 <div class="file-box">
 <div class="step-desc">
-1️⃣ <code>speccore iteration create -n Q1 --topic "第一期"</code> — 创建迭代<br><br>
-2️⃣ <code>speccore analyze --prompt -I Q1</code> — AI 分析需求，产出 7 个 Spec 文档<br><br>
-3️⃣ <code>speccore split --prompt -I Q1</code> — AI 拆分任务，生成门禁文件<br><br>
-4️⃣ <code>speccore execute --prompt -t Task-001</code> — AI 生成代码 + 10 项质量自检<br><br>
-5️⃣ <code>speccore done --prompt -t Task-001</code> — 标记完成 + 生成回顾报告
+1️⃣ <code>speccore analyze --prompt -I my-iter</code> — AI 分析需求，生成 7 份技术规格<br><br>
+2️⃣ <code>speccore split --prompt -I my-iter</code> — AI 拆分任务，生成门禁文件<br><br>
+3️⃣ <code>speccore execute --prompt -t Task-001</code> — AI 生成代码 + 10 项质量自检<br><br>
+4️⃣ <code>speccore done --prompt -t Task-001</code> — 标记完成 + 生成回顾报告
 </div>
 </div>
 <div class="step-desc" style="color:var(--cyan)">💡 也可以用 /spec-ask "你的需求" 让 AI 自动判断下一步该做什么。</div>
