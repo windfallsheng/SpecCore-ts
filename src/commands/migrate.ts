@@ -64,27 +64,45 @@ export async function migrateTasks(projectRoot: string, iterationName: string, o
   for (const taskName of taskDirs) {
     const srcPath = join(iterDir, taskName);
     
-    // 读取 TASK.md 获取类型
+    // 读取任务类型：优先 .task-type 文件，其次 TASK.md
     let taskType = 'feature'; // 默认类型
-    const taskMdPath = join(srcPath, '00-specs', 'TASK.md');
-    if (await pathExists(taskMdPath)) {
+    
+    // 1. 检查 .task-type 文件
+    const taskTypeFile = join(srcPath, '.task-type');
+    if (await pathExists(taskTypeFile)) {
       try {
-        const content = await readFile(taskMdPath, 'utf-8');
-        const typeMatch = content.match(/类型:\s*(\S+)/);
-        if (typeMatch) {
-          const rawType = typeMatch[1];
-          // 映射到标准类型
-          if (rawType.includes('bug') || rawType.includes('修复')) {
-            taskType = 'bugfix';
-          } else if (rawType.includes('重构') || rawType.includes('refactor')) {
-            taskType = 'refactor';
-          } else if (rawType.includes('研究') || rawType.includes('research')) {
-            taskType = 'research';
-          } else {
-            taskType = 'feature';
-          }
+        const rawType = (await readFile(taskTypeFile, 'utf-8')).trim();
+        if (rawType.includes('bug') || rawType.includes('修复')) {
+          taskType = 'bugfix';
+        } else if (rawType.includes('重构') || rawType.includes('refactor')) {
+          taskType = 'refactor';
+        } else if (rawType.includes('研究') || rawType.includes('research')) {
+          taskType = 'research';
+        } else {
+          taskType = 'feature';
         }
       } catch {}
+    } else {
+      // 2. 检查 TASK.md 中的 类型: 字段
+      const taskMdPath = join(srcPath, '00-specs', 'TASK.md');
+      if (await pathExists(taskMdPath)) {
+        try {
+          const content = await readFile(taskMdPath, 'utf-8');
+          const typeMatch = content.match(/类型:\s*(\S+)/);
+          if (typeMatch) {
+            const rawType = typeMatch[1];
+            if (rawType.includes('bug') || rawType.includes('修复')) {
+              taskType = 'bugfix';
+            } else if (rawType.includes('重构') || rawType.includes('refactor')) {
+              taskType = 'refactor';
+            } else if (rawType.includes('研究') || rawType.includes('research')) {
+              taskType = 'research';
+            } else {
+              taskType = 'feature';
+            }
+          }
+        } catch {}
+      }
     }
 
     const destPath = join(tasksDir, taskType, taskName);
@@ -117,6 +135,19 @@ export async function migrateTasks(projectRoot: string, iterationName: string, o
 
   logger.info('');
   logger.info(`📊 迁移完成: ${migrated} 成功, ${skipped} 跳过, ${errors} 失败`);
+  
+  // 清理 030-tasks/ 根目录下的旧版 Task-* 目录（迁移后残留）
+  if (migrated > 0) {
+    const tasksEntries = await readdir(tasksDir, { withFileTypes: true });
+    for (const entry of tasksEntries) {
+      if (entry.isDirectory() && entry.name.match(/^Task-\d+$/)) {
+        const oldPath = join(tasksDir, entry.name);
+        await remove(oldPath);
+        logger.info(`🧹 清理旧版残留: 030-tasks/${entry.name}/`);
+      }
+    }
+  }
+  
   logger.info('');
 }
 
