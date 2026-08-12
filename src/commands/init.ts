@@ -1924,7 +1924,8 @@ h1{font-family:'Orbitron',sans-serif;font-size:28px;font-weight:900;background:l
 <div style="margin:10px 0;padding:10px 12px;border-radius:8px;border:1px solid rgba(14,165,233,.15);background:rgba(14,165,233,.04)">
 <div style="font-size:12px;font-weight:700;color:var(--cyan);margin-bottom:4px">🔍 全局分析（了解现有项目推荐）</div>
 <div class="step-desc">一句话扫描所有工程源码，自动生成技术栈、接口清单、数据模型等 8 类文档。适合接手新项目时快速摸清全貌：</div>
-<div class="method-cmd">/spec-ask "全局分析所有工程代码"</div>
+<div class="method-cmd">/spec-ask "全局分析所有工程代码" <span style="color:var(--green)">← 意图式</span></div>
+<div class="method-cmd">speccore analyze --prompt --scope global <span style="color:var(--orange)">← 显式命令</span></div>
 <div class="step-desc" style="margin-top:4px">📂 输出到 .speccore/GLOBAL/PROJECTS/{工程名}/，每个工程独立一套（TECH_STACK / API_INVENTORY / DATA_MODEL ...）<br>⏱ 与迭代分析不同：全局分析扫源码生成项目文档，迭代分析读需求生成技术规格（步骤 6 做的事）</div>
 </div>
 <div class="field-list">
@@ -1998,15 +1999,11 @@ Iteration-xxx/<br>
 <span class="flow-node n2">执行开发</span><span class="flow-arrow">→</span>
 <span class="flow-node n1">验证交付</span>
 </div>
-<div class="file-box">
-<div class="step-desc">
-1️⃣ <code>speccore analyze --prompt -I my-iter</code> — AI 分析需求，生成 7 份技术规格<br><br>
-2️⃣ <code>speccore split --prompt -I my-iter</code> — AI 拆分任务，生成门禁文件<br><br>
-3️⃣ <code>speccore execute --prompt -t Task-001</code> — AI 生成代码 + 10 项质量自检<br><br>
-4️⃣ <code>speccore done --prompt -t Task-001</code> — 标记完成 + 生成回顾报告
+<div class="method-grid" style="grid-template-columns:1fr 1fr;margin-top:12px">
+<div class="method-card m1"><div class="method-title">🤖 方式 A：意图式（推荐）</div><div class="step-desc">用自然语言告诉 AI，每步自动判断：</div><div class="method-cmd" style="margin-top:4px">/spec-ask "分析 my-iter 的需求"</div><div class="method-cmd">/spec-ask "拆分任务"</div><div class="method-cmd">/spec-ask "开发 Task-001"</div><div class="method-cmd">/spec-ask "完成 Task-001"</div></div>
+<div class="method-card m2"><div class="method-title">⌨️ 方式 B：显式命令</div><div class="step-desc">直接指定命令，精确控制：</div><div class="method-cmd" style="margin-top:4px">speccore analyze --prompt -I my-iter</div><div class="method-cmd">speccore split --prompt -I my-iter</div><div class="method-cmd">speccore execute --prompt -t Task-001</div><div class="method-cmd">speccore done --prompt -t Task-001</div></div>
 </div>
-</div>
-<div class="step-desc" style="color:var(--cyan)">💡 也可以用 /spec-ask "你的需求" 让 AI 自动判断下一步该做什么。</div>
+<div class="step-desc" style="color:var(--cyan)">💡 两种方式都在 AI 对话框中使用，可以混用。例如先用意图式分析，再用显式命令执行特定任务。</div>
 </div>
 
 <div class="start-bar" onclick="this.style.opacity='0.7'">🚀 配置完成！开始使用 /spec-ask "你的需求"</div>
