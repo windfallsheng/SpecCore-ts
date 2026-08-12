@@ -1855,18 +1855,20 @@ h1{font-family:'Orbitron',sans-serif;font-size:28px;font-weight:900;background:l
 .sub{color:var(--muted);font-size:11px;letter-spacing:1px;text-align:center;margin-top:4px}
 .header-card{text-align:center;padding:16px 0 12px;margin-bottom:8px;position:relative;border-bottom:1px solid rgba(14,165,233,.1)}
 .header-card::after{content:'';position:absolute;bottom:-1px;left:20%;right:20%;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent)}
-.container{max-width:860px;margin:0 auto;position:relative;z-index:1;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px 20px;overflow:hidden}
+.container{max-width:960px;margin:0 auto;position:relative;z-index:1;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px 20px;overflow:hidden}
 .container::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanX 3s linear infinite}
 .container::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanX-rev 3s linear infinite}
 .container .vline{position:absolute;top:0;width:1px;bottom:0;pointer-events:none;z-index:2}
 .container .vline.l{left:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY-rev 3s linear infinite}
 .container .vline.r{right:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY 3s linear infinite}
+.card-bg{position:absolute;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse at 50% 10%,rgba(14,165,233,.2) 0%,transparent 70%);animation:cardGlow 3s ease-in-out infinite;transform-origin:top center}
+@keyframes cardGlow{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.6)}}
 @keyframes scanX{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
 @keyframes scanX-rev{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}
 @keyframes scanY{0%{transform:translateY(-100%)}100%{transform:translateY(100%)}}
 @keyframes scanY-rev{0%{transform:translateY(100%)}100%{transform:translateY(-100%)}}
-.step{margin:16px 0;padding:18px;background:var(--card);border:1px solid var(--border);border-radius:12px;position:relative;overflow:hidden;box-shadow:0 0 15px rgba(14,165,233,.06),inset 0 1px 20px rgba(14,165,233,.03);transition:box-shadow .3s ease,border-color .3s ease}
-.step:hover{box-shadow:0 0 25px rgba(14,165,233,.12),inset 0 1px 30px rgba(14,165,233,.06);border-color:rgba(14,165,233,.3)}
+.step{margin:16px 0;padding:18px;background:var(--card);border:1px solid var(--border);border-radius:12px;position:relative;overflow:hidden;box-shadow:0 0 20px rgba(14,165,233,.08),inset 0 1px 24px rgba(14,165,233,.04);transition:box-shadow .3s ease,border-color .3s ease}
+.step:hover{box-shadow:0 0 30px rgba(14,165,233,.15),inset 0 1px 30px rgba(14,165,233,.08);border-color:rgba(14,165,233,.3)}
 .step-num{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--cyan),var(--purple));color:#fff;font-weight:900;font-size:13px;margin-right:10px;flex-shrink:0}
 .step-header{display:flex;align-items:center;margin-bottom:12px}
 .step-title{font-size:15px;font-weight:700;color:var(--cyan)}
@@ -1901,12 +1903,13 @@ h1{font-family:'Orbitron',sans-serif;font-size:28px;font-weight:900;background:l
 .kb-icon{font-size:20px;margin-bottom:4px}
 .kb-name{font-size:11px;font-weight:600;color:var(--text)}
 .kb-desc{font-size:9px;color:var(--muted);margin-top:4px}
-.start-bar{text-align:center;padding:16px;margin:20px 0 8px;background:linear-gradient(135deg,var(--cyan) 0%,#0284c7 100%);border-radius:40px;color:#fff;font-weight:600;font-size:14px;box-shadow:0 0 30px rgba(14,165,233,.3);cursor:pointer;letter-spacing:1px}
+.start-bar{display:block;text-align:center;padding:16px;margin:20px 0 8px;background:linear-gradient(135deg,var(--cyan) 0%,#0284c7 100%);border-radius:40px;color:#fff;font-weight:600;font-size:14px;box-shadow:0 0 30px rgba(14,165,233,.3);cursor:pointer;letter-spacing:1px;text-decoration:none;transition:all .3s;position:relative;z-index:1}
+.start-bar:hover{box-shadow:0 0 45px rgba(14,165,233,.5);transform:translateY(-1px)}
 .footer{text-align:center;color:var(--muted);font-size:10px;margin-top:20px;padding-top:12px;border-top:1px solid rgba(255,255,255,.04)}
 </style></head><body>
 <div class="scanlines"></div><div class="grid-pattern"></div>
 <div class="container">
-<div class="vline l"></div><div class="vline r"></div>
+<div class="vline l"></div><div class="vline r"></div><div class="card-bg"></div>
 <div class="header-card">
 <h1>SPECCORE</h1>
 <div class="sub">项目配置引导 · ${name}</div>
@@ -2035,7 +2038,7 @@ Iteration-xxx/<br>
 <div style="margin:16px 0 8px;font-size:13px;font-weight:700;color:var(--cyan)">📖 重新查看本指南</div>
 <div class="step-desc">本指南保存在 <code>outputs/speccore-setup-guide.html</code>，随时可在浏览器中打开查看。<br>也可以让 AI 重新展示：/spec-ask "打开配置引导"</div>
 
-<div class="start-bar" onclick="this.style.opacity='0.7'">🚀 配置完成！开始使用 /spec-ask "你的需求"</div>
+<a class="start-bar" href="speccore-ask-onboarding.html">🚀 配置完成！开始使用 /spec-ask "你的需求"</a>
 
 <div class="footer">SpecCore v${pkgVersion} · 项目配置引导 · ${name}</div>
 </div></body></html>`;
