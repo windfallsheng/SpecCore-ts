@@ -43,6 +43,10 @@ speccore context --set --iteration Iteration-001-meeting-system              # �
 speccore dashboard                                                             # 查看仪表盘（CLI）
 ```
 
+**📋 配置引导页** — `speccore init` 后自动生成 6 步引导，帮助新用户快速上手：
+
+![Setup Guide Top](docs/screenshots/setup-guide-top.png)
+
 > 💡 **AI 命令**（在 WorkBuddy/Trae/Qcoder 中通过 `@spec-ask` 或 `/spec-ask` 使用）：分析需求、制定计划、执行开发。详见 [AGENTS.md](./AGENTS.md)。
 
 ## 核心流水线 🔒 AI 命令

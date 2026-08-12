@@ -27,6 +27,10 @@ speccore iteration create -n Q1     # Create iteration
 @spec-ask "archive Task-001 after validation"
 ```
 
+**📋 Setup Guide** — `speccore init` auto-generates a 6-step onboarding guide:
+
+![Setup Guide](docs/screenshots/setup-guide-top.png)
+
 ## 🎯 What do you want to do?
 
 | I want to... | Command |

@@ -516,6 +516,7 @@ h1, h2 {
 | `speccore-ask-onboarding.html` | Ask 首次引导页：4 模式流程图 | `speccore ask "…"` (无高速?缓存时) |
 | `speccore-ask-result.html` | Ask 结果展示 | `speccore ask` |
 | `speccore-dev.html` | 开发者工作台 | `speccore dev` |
+| `speccore-setup-guide.html` | 项目配置引导页：6 步引导新用户完成初始化 | `speccore init` 后自动生成 |
 | `deploy/welcome.html` | 项目名片/欢迎页 | `speccore welcome` |
 | `deploy/index.html` | 全局看板（所有项目聚合） | `speccore dashboard --scope global` |
 | `deploy/status.html` | 迭代数据看板（当前迭代） | `speccore dashboard` / `speccore status-panel` |
@@ -608,8 +609,12 @@ speccore schedule cancel --id <id>
 | v5.64.0 | 08-08 | speccore about 版本信息页、引导页 file:// 链接 |
 | v5.65.0 | 08-08 | schedule retry/多调度管理、引导页优先输出 |
 | v5.69.0 | 08-10 | HTML 视觉规范统一：全页面光晕+标题呼吸发光+四边扫描线；ask onboarding SVG→HTML标题重构；/spec-ask 文案统一；Qoder 命令 spec:X.md 格式；sync-version.js 版本自动同步 |
+| v5.73.0 | 08-11 | Onboarding 页面重构 + 全平台引导页强制展示 + 模板自动复制 |
+| v5.78.0 | 08-12 | 质量门禁从 6 项扩展到 10 项（TEST/REVIEW/DEPLOY/ERROR_CODES） |
+| v5.79.0 | 08-12 | 需求确认循环 + 项目配置引导页初版 |
+| v5.80.0 | 08-12 | 引导页全面重构：6步流程 + Skill命令格式 + 自动化模式 + 参数说明 |
 
-> **最后更新**: 2026-08-10 (v5.69.0) — HTML 视觉规范统一 + 版本号自动同步
+> **最后更新**: 2026-08-12 (v5.80.0) — 引导页全面重构 + 截图补充
 
 ---
 
