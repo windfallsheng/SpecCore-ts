@@ -1854,10 +1854,9 @@ h1{font-family:'Orbitron',sans-serif;font-size:28px;font-weight:900;background:l
 .sub{color:var(--muted);font-size:11px;letter-spacing:1px;text-align:center;margin-top:4px}
 .header-card{text-align:center;padding:16px 0 12px;margin-bottom:8px;position:relative;border-bottom:1px solid rgba(14,165,233,.1)}
 .header-card::after{content:'';position:absolute;bottom:-1px;left:20%;right:20%;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent)}
-.container{max-width:860px;margin:0 auto;position:relative;z-index:1;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px 20px;box-shadow:0 0 40px rgba(14,165,233,.12),0 0 80px rgba(14,165,233,.06);animation:containerGlow 4s ease-in-out infinite}
-@keyframes containerGlow{0%,100%{box-shadow:0 0 40px rgba(14,165,233,.12),0 0 80px rgba(14,165,233,.06)}50%{box-shadow:0 0 60px rgba(14,165,233,.2),0 0 100px rgba(14,165,233,.1)}}
+.container{max-width:860px;margin:0 auto;position:relative;z-index:1;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px 20px;overflow:hidden;animation:borderPulse 4s ease-in-out infinite}
+@keyframes borderPulse{0%,100%{border-color:rgba(14,165,233,.15);box-shadow:0 0 20px rgba(14,165,233,.08)}50%{border-color:rgba(14,165,233,.4);box-shadow:0 0 40px rgba(14,165,233,.15),inset 0 0 30px rgba(14,165,233,.03)}}
 .step{margin:16px 0;padding:18px;background:var(--card);border:1px solid var(--border);border-radius:12px;position:relative;overflow:hidden}
-.step::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent)}
 .step-num{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--cyan),var(--purple));color:#fff;font-weight:900;font-size:13px;margin-right:10px;flex-shrink:0}
 .step-header{display:flex;align-items:center;margin-bottom:12px}
 .step-title{font-size:15px;font-weight:700;color:var(--cyan)}
