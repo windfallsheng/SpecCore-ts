@@ -1,3 +1,15 @@
+## v5.76.0 (2026-08-12) — 全局分析冲突处理
+
+### 🧠 全局分析 *-old 冲突机制
+- **问题**: `analyze --scope global` 从源码反推需求文档时，会覆盖已有的 GLOBAL/ 文件
+- **方案**: 与升级冲突一致 — 旧文件重命名为 `*-old.md`，新文件用原名
+- **自动检测文件** (TECH_STACK/CODE_INDEX/REQUIREMENT): `global-artifacts.ts` 用 `safeWrite` 写入，内容不同则自动 *-old
+- **AI 分析文件** (API_INVENTORY/DATA_MODEL 等 12 个/工程): AI prompt 中加入冲突处理指令，AI 写入前自动检查+*-old
+- **PATTERNS/*.md**: 追加不覆盖，不生成 *-old（知识积累型文件）
+- **冲突汇总**: AI 写完所有文件后输出冲突清单 + diff 命令
+
+---
+
 ## v5.75.0 (2026-08-12) — 升级冲突 *-old 重命名机制
 
 ### 🔄 升级冲突处理机制改造

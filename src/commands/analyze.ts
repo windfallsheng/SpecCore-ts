@@ -476,6 +476,22 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     } else {
       prompt += `- REQUIREMENT.md — 合并各迭代需求，生成跨项目需求索引\n`;
     }
+    // 冲突处理指令
+    prompt += `\n## ⚠️ 文件冲突处理（重要）\n`;
+    prompt += `写入每个文件前，必须执行以下冲突检查:\n`;
+    prompt += `1. Read 目标文件（如果存在）\n`;
+    prompt += `2. 对比新旧内容：\n`;
+    prompt += `   - 内容相同 → 跳过，不写入\n`;
+    prompt += `   - 内容不同 → 先将旧内容 Write 为 \`*-old.md\`（同目录，如 \`TECH_STACK-old.md\`），再 Write 新内容到原文件名\n`;
+    prompt += `   - 文件不存在 → 直接 Write\n`;
+    prompt += `3. **PATTERNS/*.md 特殊处理**: 不覆盖，只追加。Read 旧文件 → 合并新内容 → Write 回原文件（不生成 *-old）\n`;
+    prompt += `4. 所有文件写完后，输出冲突汇总:\n`;
+    prompt += `   \`\`\`\n`;
+    prompt += `   ⚠️  N 个文件有冲突，旧版已保存为 *-old：\n`;
+    prompt += `      📄 .speccore/GLOBAL/PROJECTS/xxx/API_INVENTORY.md\n`;
+    prompt += `         对比: diff API_INVENTORY.md API_INVENTORY-old.md\n`;
+    prompt += `      💡 请对比 *-old 文件，合并自定义内容后删除 *-old\n`;
+    prompt += `   \`\`\`\n`;
     prompt += `\n⚠️ 如 CONSTITUTION.md 中「源码路径」为空或路径不存在: 提示用户先配置，给出三个选项：\n`;
     prompt += `   [1] 停止分析 → 配置后重来 | [2] 跳过源码 → 只用文档分析 | [3] 手动指定路径后继续\n`;
     return prompt;
