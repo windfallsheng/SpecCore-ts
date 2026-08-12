@@ -400,6 +400,8 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
       logger.info('');
       logger.info(`📋 项目配置引导页已生成: ${guidePath}`);
       logger.info('   打开查看配置步骤和用法');
+      // AI 平台标记：触发 present_files 弹出引导页
+      console.log(`[SPECCORE_SETUP_GUIDE: ${guidePath}]`);
     } catch { /* 引导页生成失败不阻断 init */ }
   } catch (error) {
     spinner.fail(`Initialization failed: ${error}`);
@@ -1496,6 +1498,7 @@ Iteration-NNN-name/            ← 迭代目录
 | 标记 | 含义 | 动作 |
 |:---|:---|:---|
 | \`[SPECCORE_ONBOARD: <path>]\` | 首次/升级引导页 | **最先处理**，用 present_files 展示 HTML |
+| \`[SPECCORE_SETUP_GUIDE: <path>]\` | 项目配置引导页 | init 后用 present_files 展示，指导用户配置 |
 | \`[SPECCORE_ABOUT: <path>]\` | 版本信息页 | 用 present_files 展示 |
 | \`[SPECCORE_MODE: <mode>]\` | 意图模式 | 识别模式后进入对应流程 |
 | \`[SPECCORE_EXEC: <cmd>]\` | 自动执行命令 | 直接 execute_command |

@@ -14,6 +14,7 @@
 | `[SPECCORE_WELCOME: <path>]` | 用 present_files 展示欢迎页 HTML |
 | `[SPECCORE_HELP: <path>]` | 用 present_files 展示帮助页 HTML |
 | `[SPECCORE_DEV: <path>]` | 用 present_files 展示 dev 引导页 HTML |
+| `[SPECCORE_SETUP_GUIDE: <path>]` | 用 present_files 展示项目配置引导页 HTML（init 后首次展示） |
 | `[SPECCORE_ABOUT: <path>]` | 用 present_files 展示关于页 HTML |
 | `[SPECCORE_EXEC: <cmd>]` | 直接 `execute_command` 执行 |
 | `[SPECCORE_INTENT]` | 展示给用户确认 |
