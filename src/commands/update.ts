@@ -5,6 +5,7 @@
 import { writeFile, pathExists, readFile, readdir, ensureDir } from 'fs-extra';
 import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
+import { safeWriteWithOld, safeCopyDirWithOld, _updateConflicts } from './init';
 
 const CURRENT_VERSION = require('../../package.json').version;
 
@@ -75,6 +76,7 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   const addedFiles: string[] = [];
   const updatedFiles: string[] = [];
   const cleanedFiles: string[] = [];
+  _updateConflicts.length = 0; // 清空冲突追踪
 
   // ── 1. 更新工具目录命令文件 ──
 
@@ -89,7 +91,7 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
       if (await pathExists(p)) {
         const existing = await readFile(p, 'utf-8');
         if (existing.trim() !== content.trim()) {
-          await writeFile(p, content);
+          await safeWriteWithOld(p, content);
           updated++;
           updatedFiles.push(`${tool}/commands/${name}.md`);
         }
@@ -116,7 +118,7 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
       if (await pathExists(p)) {
         const existing = await readFile(p, 'utf-8');
         if (existing.trim() !== content.trim()) {
-          await writeFile(p, content);
+          await safeWriteWithOld(p, content);
           updated++;
           updatedFiles.push(`qoder/spec/${shortName}.md`);
         }
@@ -153,19 +155,20 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   // 4a. 更新所有 AI 工具的命令文件
   await createToolIntegrations(projectRoot, options.tool);
 
-  // 4b. 更新 .agents/skills/（含 references/）
+  // 4b. 更新 .agents/skills/（含 references/）— 有差异的文件旧版重命名为 *-old
   const skillsSrc = join(__dirname, '..', '..', '.agents', 'skills');
   const skillsDest = join(projectRoot, '.agents', 'skills');
   if (await pathExists(skillsSrc)) {
-    await require('fs-extra').copy(skillsSrc, skillsDest, { overwrite: true });
+    await safeCopyDirWithOld(skillsSrc, skillsDest);
   }
 
-  // 4c. 更新 AGENTS.md / CLAUDE.md
+  // 4c. 更新 AGENTS.md / CLAUDE.md — 有差异时旧版重命名为 *-old
   try {
     const agentsSrc = join(__dirname, '..', '..', 'AGENTS.md');
     if (await pathExists(agentsSrc)) {
-      await require('fs-extra').copy(agentsSrc, join(projectRoot, 'AGENTS.md'), { overwrite: true });
-      await require('fs-extra').writeFile(join(projectRoot, 'CLAUDE.md'), '<!-- 规则请参考 AGENTS.md -->\n\n@AGENTS.md\n');
+      const newAgents = await readFile(agentsSrc, 'utf-8');
+      await safeWriteWithOld(join(projectRoot, 'AGENTS.md'), newAgents);
+      await safeWriteWithOld(join(projectRoot, 'CLAUDE.md'), '<!-- 规则请参考 AGENTS.md -->\n\n@AGENTS.md\n');
     }
   } catch {}
 
@@ -190,6 +193,21 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   }
   if (added === 0 && updated === 0 && cleaned === 0) {
     logger.info('  所有命令文件已是最新，无需更新');
+  }
+  logger.info('');
+  // 冲突文件汇总
+  if (_updateConflicts.length > 0) {
+    logger.info(`⚠️  ${_updateConflicts.length} 个文件有内容冲突，旧版已保存为 *-old：`);
+    for (const f of _updateConflicts) {
+      const rel = f.replace(projectRoot + '/', '');
+      const oldRel = rel.replace(/\.(md|json|txt|yaml)$/, '-old.$1');
+      logger.info(`   📄 ${rel}`);
+      logger.info(`      对比: diff ${rel} ${oldRel}`);
+    }
+    logger.info('');
+    logger.info('   💡 请对比 *-old 文件，合并自定义内容后删除 *-old');
+  } else {
+    logger.info('✨ 无内容冲突，所有文件平滑升级');
   }
   logger.info('');
   logger.info('配置文件和 INDEX.md 等用户数据保持不变 ✅');

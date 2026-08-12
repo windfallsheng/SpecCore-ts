@@ -1,5 +1,7 @@
 ---
 name: spec-plan
-description: 生成计划: 迭代=${1:Q1} 责任人=${2|张三,李四,王五|}
+description: 生成并展示执行计划可视化页面
 ---
-speccore plan -I ${1:Q1} --owner ${2|张三,李四,王五|}
+1. 仅生成并展示计划页面，不执行代码修复
+2. speccore plan -I ${1:Q1} --owner ${2|张三,李四,王五|} --html
+3. 打开 speccore-plan.html

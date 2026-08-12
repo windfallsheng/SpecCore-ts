@@ -2,7 +2,7 @@
 name: spec-analyze
 description: SpecCore Analysis
 ---
-1. Read 010-requirements/ for all platform docs
-2. Ask user for iteration name if not provided
-3. Execute: speccore analyze -I ${1:Q1} --task ${2:Task-001}
-4. Present analysis report and ask for confirmation
+## ⛔ 铁律: 分析必须落盘 020-specs/，走 prompt→Read→apply 流程
+1. Read 010-requirements/INDEX.md → converted/*.md → features/*/README.md
+2. Execute: speccore analyze --prompt -I ${1:Q1} --type feature
+3. Fill docs via speccore analyze --apply
