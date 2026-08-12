@@ -2,6 +2,13 @@
 
 ---
 
+## v5.81.1 (2026-08-12) — Documentation Updates
+
+- command-reference.md: Added setup guide note to init section
+- commands.en.md: init section added setup guide note
+
+---
+
 ## v5.81.0 (2026-08-12) — Setup Guide Visual Enhancements
 
 ### 🌟 Card-bg Glow Effect
