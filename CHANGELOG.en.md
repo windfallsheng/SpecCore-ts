@@ -2,6 +2,16 @@
 
 ---
 
+## v5.84.3 (2026-08-12) — Command Registration Consistency Fix + Symlink Safety
+
+- Removed duplicate command-writing loop in update.ts, unified via createToolIntegrations
+- Added missing trae-cn tool and spec-help command to update.ts
+- Auto-cleanup legacy spec- prefix files during Qoder upgrade (migrate to spec: format)
+- Fixed root cause: symlinked commands directories causing cross-tool file deletion
+- cleanupStaleFiles now skips symlinked directories to prevent shared target corruption
+
+---
+
 ## v5.84.2 (2026-08-12) — Qoder Command Format Fix
 
 - Fixed update command Qoder commands from `.qoder/commands/spec/ask.md` to `.qoder/commands/spec:ask.md`

@@ -1,3 +1,13 @@
+## v5.84.3 (2026-08-12) — 命令注册一致性修复 + 符号链接安全
+
+- update.ts 去除重复命令写入循环，统一由 createToolIntegrations 处理
+- 补全 update.ts 缺失的 trae-cn 工具和 spec-help 命令
+- Qoder 升级时自动清理旧版 spec- 前缀文件（迁移到 spec: 格式）
+- 修复符号链接 commands 目录导致跨工具误删的根因问题
+- cleanupStaleFiles 跳过符号链接目录，避免误删共享目标文件
+
+---
+
 ## v5.84.2 (2026-08-12) — Qoder 命令格式修复
 
 - update 命令 Qoder 命令从 `.qoder/commands/spec/ask.md` 改为 `.qoder/commands/spec:ask.md`
