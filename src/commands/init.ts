@@ -96,28 +96,28 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
       // 先检查升级提示（即使不 --force 也要提示）
       await checkUpgradeHints(projectRoot, speccoreDir);
 
-      // 如果没有 iteration 目录，自动走全量 init 流程
-      const iterRoot = projectRoot;
-      const hasIteration = (await pathExists(iterRoot)) && (await import('fs-extra')).readdirSync(iterRoot).filter((n: string) => n.startsWith('Iteration-')).length > 0;
-      if (!hasIteration && !options.force) {
-        spinner.stop('⚠️  未检测到任何迭代，请运行: speccore iteration create -n Q1 --topic meeting-system');
-        logger.info('  然后再跑 speccore init --update 升级');
-        return;
+      // --update 模式：跳过迭代检查，直接更新 Skill/命令文件
+      // 非 --update 模式：检查是否有迭代目录
+      if (!options.update) {
+        const iterRoot = projectRoot;
+        const hasIteration = (await pathExists(iterRoot)) && (await import('fs-extra')).readdirSync(iterRoot).filter((n: string) => n.startsWith('Iteration-')).length > 0;
+        if (!hasIteration && !options.force) {
+          spinner.stop('⚠️  未检测到任何迭代，请运行: speccore iteration create -n Q1 --topic meeting-system');
+          logger.info('  然后再跑 speccore init --update 升级');
+          return;
+        }
       }
 
       if (!options.force) {
         spinner.stop('更新命令文件和配置...');
-        // 安全更新：只更新可自动生成的文件，不碰用户数据
-        _updateConflicts.length = 0; // 清空冲突追踪
-        await createWorkBuddyFiles(projectRoot);
-        await createToolIntegrations(projectRoot, options.tool);
-        
-        // 更新技能文件（Skill）— 有差异的旧文件重命名为 *-old
-        const skillsSrc = join(__dirname, '..', '..', '.agents', 'skills');
-        const skillsDest = join(projectRoot, '.agents', 'skills');
-        await safeCopyDirWithOld(skillsSrc, skillsDest);
+        // 委托给 updateCommand 统一处理（避免重复代码）
+        const { updateCommand } = await import('./update');
+        await updateCommand({ force: true, tool: options.tool });
 
-        // 更新 Spec 文档模板（7 个专业模板）— 有差异的旧文件重命名为 *-old
+        // init 额外步骤（updateCommand 不覆盖的）
+        await createWorkBuddyFiles(projectRoot);
+
+        // 更新 Spec 文档模板 — 有差异的旧文件重命名为 *-old
         const specsSrc = join(__dirname, '..', '..', '.speccore', 'PATTERNS', 'TEMPLATES', 'specs');
         const specsDest = join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'specs');
         if (await pathExists(specsSrc)) {
@@ -125,59 +125,26 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
           await safeCopyDirWithOld(specsSrc, specsDest);
         }
 
-        // 更新 AGENTS.md / CLAUDE.md — 有差异时旧文件重命名为 *-old
-        await writeAgentsMdWithOld(projectRoot);
-        await safeWriteWithOld(join(projectRoot, 'CLAUDE.md'), '<!-- 规则请参考 AGENTS.md -->\n\n@AGENTS.md\n');
-
-        // 更新版本号（两个文件同步）
-        const verFile = join(speccoreDir, 'local', 'version.json');
+        // 更新版本号（last-init-version.txt 同步）
         const lastInitFile = join(speccoreDir, 'local', 'last-init-version.txt');
         const { version } = require('../../package.json');
-        await writeFile(verFile, JSON.stringify({ version, updatedAt: new Date().toISOString() }, null, 2));
         await writeFile(lastInitFile, version);
 
         // 重置 onboard 标记，确保升级后首次 ask 展示引导页
         try { await unlink(join(speccoreDir, 'local', '.ask-onboarded')); } catch {}
 
-        // 生成升级欢迎页（与 ask 引导页同风格）
+        // 生成升级欢迎页
         await writeUpgradePage(projectRoot, version, speccoreDir);
 
-        spinner.stop('命令文件已更新 ✅');
         logger.info('');
-        logger.info('━'.repeat(50));
-        logger.info(`🔄 已升级到 SpecCore v${version}`);
+        logger.info('📋 init 额外更新:');
+        logger.info('   ✅ WorkBuddy 配置');
+        logger.info('   ✅ Spec 文档模板');
+        logger.info('   ✅ 升级欢迎页: speccore-upgrade.html');
         logger.info('');
-        logger.info('📋 自动更新文件:');
-        logger.info('   ✅ .claude/ / .codebuddy/ — 命令模板');
-        logger.info('   ✅ .agents/skills/ — 10 个技能文件');
-        logger.info('   ✅ AI-RULES.md / AGENTS.md — 项目规则');
-        logger.info('');
-        // 冲突文件汇总
-        if (_updateConflicts.length > 0) {
-          logger.info(`⚠️  ${_updateConflicts.length} 个文件有冲突，旧版已重命名为 *-old：`);
-          for (const f of _updateConflicts) {
-            const rel = f.replace(projectRoot + '/', '');
-            const oldRel = rel.replace(/\.(md|json|txt|yaml)$/, '-old.$1').replace(/-old\//, '/');
-            logger.info(`   📄 ${rel}  →  对比: diff ${rel} ${rel.replace(/\.(md)$/, '-old.$1')}`);
-          }
-          logger.info('');
-          logger.info('   💡 请手动对比 *-old 文件，合并自定义内容后删除 *-old');
-          logger.info('');
-        } else {
-          logger.info('   ✨ 无冲突文件，所有文件已平滑升级');
-          logger.info('');
-        }
-        logger.info('🆕 本次新能力:');
-        logger.info('   • spec-ask 可执行编排引擎 v4 — 五分支决策树');
-        logger.info('   • Prompt/Apply 协作架构 — 全命令覆盖');
-        logger.info('   • 管道传递 + 参数缺省智能补充');
-        logger.info('   • 歧义检测 + 低置信拒绝');
-        logger.info('');
-        logger.info('   🛡️ CONSTITUTION.md / context.json 保持不变');
-        logger.info('');
-        logger.info('📄 升级详情: speccore-upgrade.html');
         logger.info('💡 强制重置: speccore init --force');
         logger.info('');
+
         // 检查全局 CLI 是否需要更新
         try {
           const { execSync } = require('child_process');
@@ -189,7 +156,6 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
             logger.warn(`   否则 AI 运行的 analyze/split/plan 等命令会使用旧版本，导致结果异常`);
           }
         } catch { /* non-critical */ }
-        logger.info('━'.repeat(50));
         return;
       }
       

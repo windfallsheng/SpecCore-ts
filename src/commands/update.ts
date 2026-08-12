@@ -41,8 +41,6 @@ const LEGACY_NAMES = new Set(['spec-status', 'spec-status-panel', 'spec-global-s
 
 export async function updateCommand(options: { force?: boolean; tool?: string }): Promise<void> {
   const projectRoot = process.cwd();
-  const spinner = new Spinner('检测项目状态...');
-  spinner.start();
 
   // 解析工具过滤
   const toolFilter = options.tool ? options.tool.split(',').map(t => t.trim()) : null;
@@ -54,7 +52,7 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   // 检查是否已初始化
   const speccoreDir = join(projectRoot, '.speccore');
   if (!(await pathExists(speccoreDir))) {
-    spinner.fail('项目未初始化，请先运行 speccore init');
+    logger.warn('⚠️  项目未初始化，请先运行: speccore init');
     return;
   }
 
@@ -65,12 +63,25 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
     try { oldVersion = JSON.parse(await readFile(verFile, 'utf-8')).version; } catch {}
   }
 
-  if (oldVersion === CURRENT_VERSION && !options.force) {
-    spinner.stop(`已是最新版本 v${CURRENT_VERSION}`);
+  const isSameVersion = oldVersion === CURRENT_VERSION;
+  if (isSameVersion && !options.force) {
+    logger.info('');
+    logger.info(`✅ 已是最新版本 v${CURRENT_VERSION}，无需升级`);
+    logger.info('');
+    logger.info('💡 如需强制更新所有命令文件: speccore init --update --force');
+    logger.info('');
     return;
   }
 
-  logger.info(`  从 v${oldVersion} 升级到 v${CURRENT_VERSION}...`);
+  const spinner = new Spinner(isSameVersion ? '强制更新命令文件...' : `升级 v${oldVersion} → v${CURRENT_VERSION}...`);
+  spinner.start();
+  if (!isSameVersion) {
+    logger.info(`  📦 从 v${oldVersion} 升级到 v${CURRENT_VERSION}...`);
+  } else {
+    logger.info(`  🔄 强制更新 v${CURRENT_VERSION} 命令文件...`);
+  }
+
+  logger.info(`  🎯 目标工具: ${tools.map(t => t.replace('.', '')).join(', ') || '无'}`);
 
   let added = 0, updated = 0, cleaned = 0;
   const addedFiles: string[] = [];
@@ -79,8 +90,6 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   _updateConflicts.length = 0; // 清空冲突追踪
 
   // ── 1. 更新工具目录命令文件 ──
-
-  logger.info(`  目标工具: ${tools.map(t => t.replace('.', '')).join(', ') || '无'}`);
   const qoderDir = join(projectRoot, '.qoder', 'commands', 'spec');
 
   for (const tool of tools) {
@@ -176,39 +185,49 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   const skillNames = (await require('fs-extra').readdir(skillsSrc)).filter((f: string) => !f.startsWith('.'));
   await cleanupStaleFiles(projectRoot, ALL_COMMANDS, skillNames);
 
-  spinner.stop(`升级完成: v${oldVersion} → v${CURRENT_VERSION}`);
+  const verLabel = isSameVersion ? `v${CURRENT_VERSION}` : `v${oldVersion} → v${CURRENT_VERSION}`;
+  spinner.stop(`升级完成: ${verLabel}`);
+  logger.info('');
+  logger.info('━'.repeat(50));
+  logger.info(`🔄 SpecCore ${isSameVersion ? '命令文件已强制更新' : '升级完成'}`);
   logger.info('');
   if (addedFiles.length > 0) {
     logger.info(`  ✨ 新增 ${added} 个命令:`);
     for (const f of addedFiles) logger.info(`     + ${f}`);
+    logger.info('');
   }
   if (updatedFiles.length > 0) {
     logger.info(`  🔄 更新 ${updated} 个命令:`);
-    for (const f of updatedFiles.slice(0, 5)) logger.info(`     ~ ${f}`);
-    if (updatedFiles.length > 5) logger.info(`     ... 等 ${updatedFiles.length} 个文件`);
+    for (const f of updatedFiles.slice(0, 8)) logger.info(`     ~ ${f}`);
+    if (updatedFiles.length > 8) logger.info(`     ... 共 ${updatedFiles.length} 个文件`);
+    logger.info('');
   }
   if (cleanedFiles.length > 0) {
     logger.info(`  🗑  清理 ${cleaned} 个旧文件:`);
     for (const f of cleanedFiles) logger.info(`     - ${f}`);
+    logger.info('');
   }
   if (added === 0 && updated === 0 && cleaned === 0) {
-    logger.info('  所有命令文件已是最新，无需更新');
+    logger.info('  所有命令文件内容未变化');
+    logger.info('');
   }
-  logger.info('');
   // 冲突文件汇总
   if (_updateConflicts.length > 0) {
-    logger.info(`⚠️  ${_updateConflicts.length} 个文件有内容冲突，旧版已保存为 *-old：`);
+    logger.info(`  ⚠️  ${_updateConflicts.length} 个文件有内容冲突，旧版已保存为 *-old`);
     for (const f of _updateConflicts) {
       const rel = f.replace(projectRoot + '/', '');
       const oldRel = rel.replace(/\.(md|json|txt|yaml)$/, '-old.$1');
-      logger.info(`   📄 ${rel}`);
-      logger.info(`      对比: diff ${rel} ${oldRel}`);
+      logger.info(`     📄 ${rel}`);
+      logger.info(`        对比: diff ${rel} ${oldRel}`);
     }
     logger.info('');
-    logger.info('   💡 请对比 *-old 文件，合并自定义内容后删除 *-old');
+    logger.info('  💡 请对比 *-old 文件，合并自定义内容后删除 *-old');
   } else {
-    logger.info('✨ 无内容冲突，所有文件平滑升级');
+    logger.info('  ✨ 无内容冲突，所有文件平滑升级');
   }
   logger.info('');
-  logger.info('配置文件和 INDEX.md 等用户数据保持不变 ✅');
+  logger.info('  🛡️  CONSTITUTION.md / context.json 等用户数据保持不变');
+  logger.info('');
+  logger.info('━'.repeat(50));
+  logger.info('');
 }
