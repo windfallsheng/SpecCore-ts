@@ -1,9 +1,22 @@
 /**
  * global-artifacts — 全局分析时从源码反推技术栈、代码索引、需求框架
  */
-import { writeFile, ensureDir } from 'fs-extra';
+import { writeFile, ensureDir, readFile, pathExists, rename } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
+
+/** 写入前检查冲突：内容不同则旧文件重命名为 *-old */
+async function safeWrite(filePath: string, newContent: string): Promise<void> {
+  if (await pathExists(filePath)) {
+    const existing = await readFile(filePath, 'utf-8');
+    if (existing.trim() !== newContent.trim()) {
+      const oldPath = filePath.replace(/\.md$/, '-old.md');
+      await rename(filePath, oldPath);
+      logger.info(`   ⚠️  冲突: ${join('.', filePath)} → 旧版保存为 ${join('.', oldPath)}`);
+    }
+  }
+  await writeFile(filePath, newContent);
+}
 
 export async function generateGlobalArtifacts(sources: string[], depth: string): Promise<void> {
   const globalDir = join('.speccore', 'GLOBAL');
@@ -12,7 +25,7 @@ export async function generateGlobalArtifacts(sources: string[], depth: string):
 
   // TECH_STACK.md
   const techStack = await detectTechStack(sources);
-  await writeFile(join(globalDir, 'TECH_STACK.md'), [
+  await safeWrite(join(globalDir, 'TECH_STACK.md'), [
     '# 统一技术栈注册表',
     '> 自动检测 | ' + now,
     '',
@@ -20,7 +33,7 @@ export async function generateGlobalArtifacts(sources: string[], depth: string):
   ].join('\n'));
 
   // CODE_INDEX.md
-  await writeFile(join(globalDir, 'CODE_INDEX.md'), [
+  await safeWrite(join(globalDir, 'CODE_INDEX.md'), [
     '# 全局代码索引',
     '> 自动生成 | ' + now,
     '',
@@ -30,7 +43,7 @@ export async function generateGlobalArtifacts(sources: string[], depth: string):
   ].join('\n'));
 
   // REQUIREMENT.md
-  await writeFile(join(globalDir, 'REQUIREMENT.md'), [
+  await safeWrite(join(globalDir, 'REQUIREMENT.md'), [
     '# 全局需求概览',
     '> 从源码反推 | ' + now,
     '',
