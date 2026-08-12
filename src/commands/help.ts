@@ -284,6 +284,18 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
       'speccore code-index --scope src/commands,src/core',
     ],
   },
+  prompts: {
+    desc: '提示词库：预置模板 + 自定义提示词，搜索/分类/CRUD/复制',
+    params: [
+      { flag: '--web', meaning: '在浏览器中打开' },
+      { flag: '-o, --output <path>', meaning: '输出路径' },
+    ],
+    examples: [
+      'speccore prompts',
+      'speccore pt',
+      'speccore prompts --web',
+    ],
+  },
 };
 
 // ============================================================
@@ -291,7 +303,7 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
 // ============================================================
 
 function showAllCommands(): void {
-  logger.info('📖 SpecCore 命令帮助 — 简洁模式（19 个命令）');
+  logger.info('📖 SpecCore 命令帮助 — 简洁模式（20 个命令）');
   logger.info('');
 
   const categories: Record<string, string[]> = {
@@ -300,8 +312,8 @@ function showAllCommands(): void {
     '🔍 分析与计划': ['analyze', 'plan'],
     '⚡ 执行与审查': ['execute', 'pr', 'done'],
     '🐛 变更与修复': ['change', 'bugfix'],
-    '📊 状态与查询': ['status-panel', 'validate', 'ops', 'code-index'],
-    '🤖 智能入口': ['ask', 'dev'],
+    ' 状态与查询': ['status-panel', 'validate', 'ops', 'code-index'],
+    ' 智能入口': ['ask', 'dev', 'prompts'],
   };
 
   for (const [cat, cmds] of Object.entries(categories)) {

@@ -35,5 +35,6 @@ export const HELP_PANEL = `
 │  speccore dev         智能级联：自动检测并执行下一步               │
 │  speccore about       版本信息/功能说明/文档链接                  │
 │  speccore dashboard   可视化仪表盘（迭代/全局）                 │
+│  speccore prompts     提示词库：预置模板 + 自定义提示词           │
 └──────────────────────────────────────────────────────────────┘
 `;
