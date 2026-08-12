@@ -2,6 +2,15 @@
 
 ---
 
+## v5.84.0 (2026-08-12) — migrate Command + --tools Parameter Fix
+
+- Fixed --tools parameter name mismatch in init/update (tool → tools)
+- Added migrate command: auto-migrate task directories to 030-tasks/<type>/
+- update.ts: Auto-detect and migrate legacy Task-* directories during upgrade
+- Supports --dry-run preview, --force overwrite, --iteration targeting
+
+---
+
 ## v5.83.0 (2026-08-12) — --force Mode Auto Backup
 
 - init.ts: --force mode auto backs up .speccore/ + Iteration-*/ + inbox/ + questions/

@@ -1,3 +1,12 @@
+## v5.84.0 (2026-08-12) — migrate 命令 + --tools 参数修复
+
+- 修复 init/update 中 --tools 参数名不匹配（tool → tools）
+- 新增 migrate 命令：支持任务目录自动迁移到 030-tasks/<type>/
+- update.ts: 升级时自动检测并迁移旧版 Task-* 目录
+- 支持 --dry-run 预览、--force 强制覆盖、--iteration 指定迭代
+
+---
+
 ## v5.83.0 (2026-08-12) — --force 模式自动备份
 
 - init.ts: --force 模式自动备份 .speccore/ + Iteration-*/ + inbox/ + questions/
