@@ -2,6 +2,14 @@
 
 ---
 
+## v5.84.2 (2026-08-12) — Qoder Command Format Fix
+
+- Fixed update command Qoder commands from `.qoder/commands/spec/ask.md` to `.qoder/commands/spec:ask.md`
+- Aligned with init: flat directory + `spec:` prefix naming
+- Auto-cleanup legacy `spec/` subdirectory
+
+---
+
 ## v5.84.1 (2026-08-12) — migrate Command Enhancement
 
 - Added .task-type file detection (takes priority over TASK.md)

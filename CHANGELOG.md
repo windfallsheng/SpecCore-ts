@@ -1,3 +1,11 @@
+## v5.84.2 (2026-08-12) — Qoder 命令格式修复
+
+- update 命令 Qoder 命令从 `.qoder/commands/spec/ask.md` 改为 `.qoder/commands/spec:ask.md`
+- 与 init 保持一致：扁平目录 + `spec:` 前缀命名
+- 自动清理旧版 `spec/` 子目录
+
+---
+
 ## v5.84.1 (2026-08-12) — migrate 命令增强
 
 - 新增 .task-type 文件检测（优先于 TASK.md）
