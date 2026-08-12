@@ -1921,6 +1921,12 @@ h1{font-family:'Orbitron',sans-serif;font-size:28px;font-weight:900;background:l
 <div class="method-card m1"><div class="method-title">🤖 方式 1：AI 扫描工程代码（推荐）</div><div class="step-desc">AI 读取源码自动识别技术栈、框架、命名风格，直接写入。说不同的话，改不同的范围：</div><div class="method-cmd" style="margin-top:4px">/spec-ask "分析代码，完善技术宪法" <span style="color:var(--green)">← 只改宪法</span></div><div class="method-cmd">/spec-ask "分析项目，完善所有配置" <span style="color:var(--cyan)">← 宪法+团队+索引</span></div><div class="method-cmd">/spec-ask "扫描代码，生成代码索引" <span style="color:var(--orange)">← 只建索引</span></div></div>
 <div class="method-card m2"><div class="method-title">✍️ 方式 2：手动编辑</div><div class="step-desc">打开文件按注释提示填写，只填必填项即可，其余按需补充</div><div class="method-cmd">编辑 .speccore/CONSTITUTION.md</div></div>
 </div>
+<div style="margin:10px 0;padding:10px 12px;border-radius:8px;border:1px solid rgba(14,165,233,.15);background:rgba(14,165,233,.04)">
+<div style="font-size:12px;font-weight:700;color:var(--cyan);margin-bottom:4px">🔍 全局分析（了解现有项目推荐）</div>
+<div class="step-desc">一句话扫描所有工程源码，自动生成技术栈、接口清单、数据模型等 8 类文档。适合接手新项目时快速摸清全貌：</div>
+<div class="method-cmd">/spec-ask "全局分析所有工程代码"</div>
+<div class="step-desc" style="margin-top:4px">📂 输出到 .speccore/GLOBAL/PROJECTS/{工程名}/，每个工程独立一套（TECH_STACK / API_INVENTORY / DATA_MODEL ...）<br>⏱ 与迭代分析不同：全局分析扫源码生成项目文档，迭代分析读需求生成技术规格（步骤 6 做的事）</div>
+</div>
 <div class="field-list">
 <div class="field-item"><span class="field-check">✅</span><span class="field-name">项目信息表</span><span class="field-desc">— 工程名 / 源码路径 / Git 仓库（init 已自动填写）</span></div>
 <div class="field-item"><span class="field-check">✅</span><span class="field-name">技术栈</span><span class="field-desc">— 后端语言+框架、前端框架、数据库、缓存</span></div>
