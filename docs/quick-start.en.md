@@ -56,6 +56,10 @@ Initialization auto-completes:
 - ✅ Generates setup guide page (`outputs/speccore-setup-guide.html`) with 6-step onboarding
 - ✅ Updates `.gitignore`
 
+**📋 Setup Guide** — auto-generated 6-step onboarding page:
+
+![Setup Guide](screenshots/setup-guide-top.png)
+
 ### Step 2: Edit Tech Constitution
 
 Edit `.speccore/CONSTITUTION.md` with your project's tech stack and naming conventions.

@@ -72,6 +72,10 @@ speccore iteration create --name=Q1
 @spec-ask "归档 Task-001"
 ```
 
+**📋 配置引导页** — `speccore init` 后自动生成 6 步引导，帮助新用户快速上手：
+
+![Setup Guide](screenshots/setup-guide-top.png)
+
 ## 交互模式 🔒 AI 命令
 
 复杂场景在 AI IDE 中通过交互式执行实现人机协作：
