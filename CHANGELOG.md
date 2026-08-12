@@ -1,3 +1,20 @@
+## v5.81.0 (2026-08-12) — 引导页视觉增强
+
+### 🌟 新增 card-bg 光晕效果
+- 容器内新增 radial-gradient 径向渐变光晕（参考 onboarding 页面）
+- cardGlow 3s 呼吸动画，从顶部向下扩散青色光晕
+- 步骤卡片光晕增强：box-shadow 15px→20px，hover 25px→30px
+
+### 🔗 “开始使用” 按钮跳转
+- 从 `<div onclick>` 改为 `<a href="speccore-ask-onboarding.html">`
+- 点击直接跳转到 ask 引导页
+- 新增 hover 效果：光晕增强 + 上移 1px
+
+### 📐 容器宽度调整
+- 860px → 960px，适配更宽屏幕
+
+---
+
 ## v5.80.0 (2026-08-12) — 引导页全面重构
 
 ### 📋 项目配置引导页重构（init.ts — writeSetupGuide）
