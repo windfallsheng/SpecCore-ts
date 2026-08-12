@@ -83,6 +83,8 @@ speccore init [--tool <tool>] [--force] [--interactive]
 | `--force` | 强制重置全部配置（会备份） |
 | `--interactive` | 交互式引导创建 |
 
+> 💡 init 完成后自动生成配置引导页 `outputs/speccore-setup-guide.html`，包含 6 步引导（技术宪法 → 团队配置 → 创建迭代 → 导入需求 → 知识库 → 开始开发），可在浏览器中打开查看。
+
 ### 📝 doc2spec — 文档导入 🔒 AI 命令
 ```bash
 speccore doc2spec -f <file> --iter <iteration> [--task <task>] [--no-ai]
