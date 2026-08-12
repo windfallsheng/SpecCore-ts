@@ -1925,8 +1925,8 @@ h1{font-family:'Orbitron',sans-serif;font-size:28px;font-weight:900;background:l
 <div style="font-size:12px;font-weight:700;color:var(--cyan);margin-bottom:4px">🔍 全局分析（了解现有项目推荐）</div>
 <div class="step-desc">一句话扫描所有工程源码，自动生成技术栈、接口清单、数据模型等 8 类文档。适合接手新项目时快速摸清全貌：</div>
 <div class="method-cmd">/spec-ask "全局分析所有工程代码" <span style="color:var(--green)">← 意图式</span></div>
-<div class="method-cmd">speccore analyze --prompt --scope global <span style="color:var(--orange)">← 显式命令</span></div>
-<div style="font-size:10px;color:var(--muted);margin-top:4px">--scope global — 全项目范围（非迭代级）| --prompt — 在 AI 对话框中输入</div>
+<div class="method-cmd">/spec-analyze --scope global <span style="color:var(--orange)">← 显式命令</span></div>
+<div style="font-size:10px;color:var(--muted);margin-top:4px">--scope global — 全项目范围（非迭代级），在 AI 对话框中输入</div>
 <div class="step-desc" style="margin-top:4px">📂 输出到 .speccore/GLOBAL/PROJECTS/{工程名}/，每个工程独立一套（TECH_STACK / API_INVENTORY / DATA_MODEL ...）<br>⏱ 与迭代分析不同：全局分析扫源码生成项目文档，迭代分析读需求生成技术规格（步骤 6 做的事）</div>
 </div>
 <div class="field-list">
@@ -2003,7 +2003,7 @@ Iteration-xxx/<br>
 </div>
 <div class="method-grid" style="grid-template-columns:1fr 1fr;margin-top:12px">
 <div class="method-card m1"><div class="method-title">🤖 方式 A：意图式（推荐）</div><div class="step-desc">用自然语言告诉 AI，每步自动判断：</div><div class="method-cmd" style="margin-top:4px">/spec-ask "分析 my-iter 的需求"</div><div class="method-cmd">/spec-ask "拆分任务"</div><div class="method-cmd">/spec-ask "开发 Task-001"</div><div class="method-cmd">/spec-ask "完成 Task-001"</div></div>
-<div class="method-card m2"><div class="method-title">⌨️ 方式 B：显式命令（也在 AI 对话框中使用）</div><div class="step-desc">命令模板，将 &lt;参数&gt; 替换为你的实际值：</div><div class="method-cmd" style="margin-top:4px">speccore analyze --prompt -I &lt;迭代名&gt;</div><div class="method-cmd">speccore split --prompt -I &lt;迭代名&gt;</div><div class="method-cmd">speccore execute --prompt -t &lt;任务名&gt;</div><div class="method-cmd">speccore done --prompt -t &lt;任务名&gt;</div><div style="margin-top:8px;font-size:10px;color:var(--muted)">-I &lt;迭代名&gt; — 步骤 3 创建的短名（如 my-iter）<br>-t &lt;任务名&gt; — Task-001 / Task-002 ...<br>--prompt — 表示需要 AI 交互，在 AI 对话框中输入</div></div>
+<div class="method-card m2"><div class="method-title">⌨️ 方式 B：显式命令（也在 AI 对话框中使用）</div><div class="step-desc">命令模板，将 &lt;参数&gt; 替换为你的实际值：</div><div class="method-cmd" style="margin-top:4px">/spec-analyze -I &lt;迭代名&gt;</div><div class="method-cmd">/spec-split -i &lt;迭代名&gt;</div><div class="method-cmd">/spec-execute -t &lt;任务名&gt;</div><div class="method-cmd">/spec-done -t &lt;任务名&gt;</div><div style="margin-top:8px;font-size:10px;color:var(--muted)">-I &lt;迭代名&gt; — analyze 用大写 -I，其余用小写 -i<br>-t &lt;任务名&gt; — Task-001 / Task-002 ...<br>--prompt 已内置在 Skill 中，无需手动添加</div></div>
 </div>
 <div class="step-desc" style="color:var(--cyan)">💡 两种方式都在 AI 对话框中使用，可以混用。例如先用意图式分析，再用显式命令执行特定任务。</div>
 </div>
@@ -2020,13 +2020,13 @@ Iteration-xxx/<br>
 <div style="font-size:11px;font-weight:700;color:var(--orange);margin-bottom:4px">⚡ 半自动</div>
 <div class="step-desc">分析和拆分自动完成，执行开发前暂停。适合日常开发。</div>
 <div class="method-cmd">/spec-ask "半自动执行 my-iter"</div>
-<div class="method-cmd">speccore dev -I my-iter --auto-steps analyze,split</div>
+<div class="method-cmd">/spec-dev -i my-iter --auto-steps analyze,split</div>
 </div>
 <div style="padding:12px;border-radius:8px;border:1px solid rgba(99,102,241,.2);background:rgba(99,102,241,.04)">
 <div style="font-size:11px;font-weight:700;color:var(--purple);margin-bottom:4px">🚀 全自动</div>
 <div class="step-desc">一键跑完整个流水线，不中途暂停。适合熟悉后批量推进。</div>
 <div class="method-cmd">/spec-ask "全自动执行 my-iter"</div>
-<div class="method-cmd">speccore dev -I my-iter --auto</div>
+<div class="method-cmd">/spec-dev -i my-iter --auto</div>
 </div>
 </div>
 <div class="step-desc" style="margin-top:6px">💡 <code>speccore dev</code> 是流水线控制器：自动检测当前阶段 → 推荐下一步 → 执行。还可用 <code>--from analyze --to execute</code> 指定范围。</div>
