@@ -1918,7 +1918,7 @@ h1{font-family:'Orbitron',sans-serif;font-size:28px;font-weight:900;background:l
 <div class="file-path">📄 .speccore/CONSTITUTION.md</div>
 <div class="step-desc" style="color:var(--green);margin-bottom:8px">✅ init 已自动检测：工程名、Git 仓库地址。其余字段可通过以下方式完善：</div>
 <div class="method-grid" style="grid-template-columns:1fr 1fr;margin-bottom:10px">
-<div class="method-card m1"><div class="method-title">🤖 方式 1：AI 扫描工程代码（推荐）</div><div class="step-desc">AI 读取源码自动识别技术栈、框架、命名风格，直接写入宪法</div><div class="method-cmd">/spec-ask "分析项目代码，完善技术宪法"</div></div>
+<div class="method-card m1"><div class="method-title">🤖 方式 1：AI 扫描工程代码（推荐）</div><div class="step-desc">AI 读取源码自动识别技术栈、框架、命名风格，直接写入。说不同的话，改不同的范围：</div><div class="method-cmd" style="margin-top:4px">/spec-ask "分析代码，完善技术宪法" <span style="color:var(--green)">← 只改宪法</span></div><div class="method-cmd">/spec-ask "分析项目，完善所有配置" <span style="color:var(--cyan)">← 宪法+团队+索引</span></div><div class="method-cmd">/spec-ask "扫描代码，生成代码索引" <span style="color:var(--orange)">← 只建索引</span></div></div>
 <div class="method-card m2"><div class="method-title">✍️ 方式 2：手动编辑</div><div class="step-desc">打开文件按注释提示填写，只填必填项即可，其余按需补充</div><div class="method-cmd">编辑 .speccore/CONSTITUTION.md</div></div>
 </div>
 <div class="field-list">
