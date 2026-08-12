@@ -2001,7 +2001,7 @@ Iteration-xxx/<br>
 </div>
 <div class="method-grid" style="grid-template-columns:1fr 1fr;margin-top:12px">
 <div class="method-card m1"><div class="method-title">🤖 方式 A：意图式（推荐）</div><div class="step-desc">用自然语言告诉 AI，每步自动判断：</div><div class="method-cmd" style="margin-top:4px">/spec-ask "分析 my-iter 的需求"</div><div class="method-cmd">/spec-ask "拆分任务"</div><div class="method-cmd">/spec-ask "开发 Task-001"</div><div class="method-cmd">/spec-ask "完成 Task-001"</div></div>
-<div class="method-card m2"><div class="method-title">⌨️ 方式 B：显式命令</div><div class="step-desc">直接指定命令，精确控制：</div><div class="method-cmd" style="margin-top:4px">speccore analyze --prompt -I my-iter</div><div class="method-cmd">speccore split --prompt -I my-iter</div><div class="method-cmd">speccore execute --prompt -t Task-001</div><div class="method-cmd">speccore done --prompt -t Task-001</div></div>
+<div class="method-card m2"><div class="method-title">⌨️ 方式 B：显式命令（也在 AI 对话框中使用）</div><div class="step-desc">命令模板，将 &lt;参数&gt; 替换为你的实际值：</div><div class="method-cmd" style="margin-top:4px">speccore analyze --prompt -I &lt;迭代名&gt;</div><div class="method-cmd">speccore split --prompt -I &lt;迭代名&gt;</div><div class="method-cmd">speccore execute --prompt -t &lt;任务名&gt;</div><div class="method-cmd">speccore done --prompt -t &lt;任务名&gt;</div><div style="margin-top:8px;font-size:10px;color:var(--muted)">-I &lt;迭代名&gt; — 步骤 3 创建的短名（如 my-iter）<br>-t &lt;任务名&gt; — Task-001 / Task-002 ...<br>--prompt — 表示需要 AI 交互，在 AI 对话框中输入</div></div>
 </div>
 <div class="step-desc" style="color:var(--cyan)">💡 两种方式都在 AI 对话框中使用，可以混用。例如先用意图式分析，再用显式命令执行特定任务。</div>
 </div>
