@@ -1,9 +1,64 @@
-import { ensureDir, writeFile, pathExists, readFile, readdir, copy, unlink } from 'fs-extra';
+import { ensureDir, writeFile, pathExists, readFile, readdir, copy, unlink, rename } from 'fs-extra';
 import { join, basename } from 'path';
 import { logger, Spinner } from '../utils/logger';
 import { createInterface } from 'readline';
 import { updateContext } from '../core/context';
 import { SVG_ONBOARD } from './ask';
+
+// ── 升级冲突追踪 ── 覆盖前旧文件重命名为 *-old，汇总提示用户对比
+export const _updateConflicts: string[] = [];
+
+/** 写入前检查冲突：内容不同则 rename 旧文件为 *-old */
+export async function safeWriteWithOld(filePath: string, newContent: string): Promise<void> {
+  if (await pathExists(filePath)) {
+    const existing = await readFile(filePath, 'utf-8');
+    if (existing.trim() !== newContent.trim()) {
+      const oldPath = filePath.replace(/\.(md|json|txt|yaml)$/, '-old.$1');
+      await rename(filePath, oldPath);
+      _updateConflicts.push(filePath);
+    }
+  }
+  await writeFile(filePath, newContent);
+}
+
+/** 目录复制前，对每个有差异的文件做 *-old 重命名 */
+export async function safeCopyDirWithOld(srcDir: string, destDir: string): Promise<void> {
+  if (!(await pathExists(srcDir))) return;
+  // 源和目标相同则跳过（CLI 自身项目运行时）
+  const { realpath } = require('fs-extra');
+  try {
+    if (await pathExists(destDir)) {
+      const realSrc = await realpath(srcDir);
+      const realDest = await realpath(destDir);
+      if (realSrc === realDest) return;
+    }
+  } catch {}
+  const { copy } = require('fs-extra');
+  const { readdir: rd, stat } = require('fs-extra');
+  const walk = async (src: string, dest: string) => {
+    if (!(await pathExists(src))) return;
+    const entries = await rd(src, { withFileTypes: true });
+    for (const entry of entries) {
+      const srcPath = join(src, entry.name);
+      const destPath = join(dest, entry.name);
+      if (entry.isDirectory()) {
+        await walk(srcPath, destPath);
+      } else if (entry.isFile()) {
+        if (await pathExists(destPath)) {
+          const oldContent = await readFile(destPath, 'utf-8');
+          const newContent = await readFile(srcPath, 'utf-8');
+          if (oldContent.trim() !== newContent.trim()) {
+            const oldPath = destPath + '-old';
+            await rename(destPath, oldPath);
+            _updateConflicts.push(destPath);
+          }
+        }
+      }
+    }
+  };
+  await walk(srcDir, destDir);
+  await copy(srcDir, destDir, { overwrite: true });
+}
 
 export interface InitOptions {
   mode?: string;
@@ -53,27 +108,26 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
       if (!options.force) {
         spinner.stop('更新命令文件和配置...');
         // 安全更新：只更新可自动生成的文件，不碰用户数据
+        _updateConflicts.length = 0; // 清空冲突追踪
         await createWorkBuddyFiles(projectRoot);
         await createToolIntegrations(projectRoot, options.tool);
         
-        // 更新技能文件（Skill）
+        // 更新技能文件（Skill）— 有差异的旧文件重命名为 *-old
         const skillsSrc = join(__dirname, '..', '..', '.agents', 'skills');
         const skillsDest = join(projectRoot, '.agents', 'skills');
-        if (await pathExists(skillsSrc)) {
-          await require('fs-extra').copy(skillsSrc, skillsDest, { overwrite: true });
-        }
+        await safeCopyDirWithOld(skillsSrc, skillsDest);
 
-        // 更新 Spec 文档模板（7 个专业模板）
+        // 更新 Spec 文档模板（7 个专业模板）— 有差异的旧文件重命名为 *-old
         const specsSrc = join(__dirname, '..', '..', '.speccore', 'PATTERNS', 'TEMPLATES', 'specs');
         const specsDest = join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'specs');
         if (await pathExists(specsSrc)) {
           await ensureDir(specsDest);
-          await require('fs-extra').copy(specsSrc, specsDest, { overwrite: true });
+          await safeCopyDirWithOld(specsSrc, specsDest);
         }
 
-        // 更新 AGENTS.md / CLAUDE.md / AI-RULES.md
-        await writeAgentsMd(projectRoot);
-        await writeFile(join(projectRoot, 'CLAUDE.md'), '<!-- 规则请参考 AGENTS.md -->\n\n@AGENTS.md\n');
+        // 更新 AGENTS.md / CLAUDE.md — 有差异时旧文件重命名为 *-old
+        await writeAgentsMdWithOld(projectRoot);
+        await safeWriteWithOld(join(projectRoot, 'CLAUDE.md'), '<!-- 规则请参考 AGENTS.md -->\n\n@AGENTS.md\n');
 
         // 更新版本号（两个文件同步）
         const verFile = join(speccoreDir, 'local', 'version.json');
@@ -98,6 +152,21 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
         logger.info('   ✅ .agents/skills/ — 10 个技能文件');
         logger.info('   ✅ AI-RULES.md / AGENTS.md — 项目规则');
         logger.info('');
+        // 冲突文件汇总
+        if (_updateConflicts.length > 0) {
+          logger.info(`⚠️  ${_updateConflicts.length} 个文件有冲突，旧版已重命名为 *-old：`);
+          for (const f of _updateConflicts) {
+            const rel = f.replace(projectRoot + '/', '');
+            const oldRel = rel.replace(/\.(md|json|txt|yaml)$/, '-old.$1').replace(/-old\//, '/');
+            logger.info(`   📄 ${rel}  →  对比: diff ${rel} ${rel.replace(/\.(md)$/, '-old.$1')}`);
+          }
+          logger.info('');
+          logger.info('   💡 请手动对比 *-old 文件，合并自定义内容后删除 *-old');
+          logger.info('');
+        } else {
+          logger.info('   ✨ 无冲突文件，所有文件已平滑升级');
+          logger.info('');
+        }
         logger.info('🆕 本次新能力:');
         logger.info('   • spec-ask 可执行编排引擎 v4 — 五分支决策树');
         logger.info('   • Prompt/Apply 协作架构 — 全命令覆盖');
@@ -1208,7 +1277,7 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
     await ensureDir(toolDir);
     for (const [name, desc, cmd] of commands) {
       const content = '---\nname: ' + name + '\ndescription: ' + desc + '\n---\n' + cmd;
-      await writeFile(join(toolDir, name + '.md'), content);
+      await safeWriteWithOld(join(toolDir, name + '.md'), content);
     }
   }
   const hasQoder = !filter || filter.includes("qoder");
@@ -1220,7 +1289,7 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
     // 做 spec:analyze, spec:execute 等 flat 命名（非子目录）
     const shortName = name.replace(/^spec-/, 'spec:');
     const content = '---\nname: ' + shortName + '\ndescription: ' + desc + '\n---\n' + desc + '\n\n执行命令: `' + cmd + '`';
-    await writeFile(join(qoderCommandsDir, shortName + '.md'), content);
+    await safeWriteWithOld(join(qoderCommandsDir, shortName + '.md'), content);
   }
   // 清理旧版本残留：spec/ 子目录 和 orphan 文件
   const oldSpecDir = join(projectRoot, '.qoder', 'commands', 'spec');
@@ -1229,6 +1298,8 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
   try {
     const existing = await readdir(qoderCommandsDir);
     for (const f of existing) {
+      // 跳过 *-old 文件（升级冲突保留的旧版）
+      if (f.includes('-old')) continue;
       if (f.startsWith('spec:') && f.endsWith('.md') && !validNames.has(f)) {
         await require('fs-extra').unlink(join(qoderCommandsDir, f));
         logger.info(`  清理旧文件: ${f}`);
@@ -1281,8 +1352,8 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
     const destDir = join(projectSkillsDir, name);
     try {
       if (await pathExists(srcDir)) {
-        // 复制整个 Skill 目录（包括 SKILL.md + references/ + scripts/）
-        await copy(srcDir, destDir, { overwrite: true });
+        // 复制整个 Skill 目录（包括 SKILL.md + references/ + scripts/）— 有差异的文件旧版重命名为 *-old
+        await safeCopyDirWithOld(srcDir, destDir);
         skillsCopied++;
       } else {
         logger.info(`   ⚠️ Skill 源文件不存在，跳过: ${name}`);
@@ -1319,6 +1390,8 @@ export async function cleanupStaleFiles(
       if (!await pathExists(cmdDir)) continue;
       const files = await readdir(cmdDir);
       for (const f of files) {
+        // 跳过 *-old 文件（升级冲突保留的旧版）
+        if (f.includes('-old')) continue;
         if (!validCmdNames.has(f) && f.endsWith('.md')) {
           await require('fs-extra').unlink(join(cmdDir, f));
           cleanedCount++;
@@ -1433,6 +1506,30 @@ Iteration-NNN-name/            ← 迭代目录
 `;
 
   await wf(require('path').join(projectRoot, 'AGENTS.md'), content);
+}
+
+/** AGENTS.md 写入（冲突时旧文件重命名为 *-old） */
+async function writeAgentsMdWithOld(projectRoot: string): Promise<void> {
+  const agentsPath = join(projectRoot, 'AGENTS.md');
+  // 1. 读取旧版内容（如果存在）
+  let oldContent = '';
+  if (await pathExists(agentsPath)) {
+    oldContent = await readFile(agentsPath, 'utf-8');
+  }
+  // 2. 写新版（通过原有函数）
+  await writeAgentsMd(projectRoot);
+  // 3. 如果旧版存在且不同，将新版保存为旧版的 *-old 副本
+  //    实际做法：先写新版到临时文件，rename 旧版 → *-old，再写新版
+  //    但 writeAgentsMd 已经写了，所以换个思路：
+  //    读新版内容，对比旧版，如果不同则把旧版内容写入 *-old
+  if (oldContent) {
+    const newContent = await readFile(agentsPath, 'utf-8');
+    if (oldContent.trim() !== newContent.trim()) {
+      const oldPath = agentsPath.replace(/\.md$/, '-old.md');
+      await writeFile(oldPath, oldContent);
+      _updateConflicts.push(agentsPath);
+    }
+  }
 }
 
 async function createSampleIteration(projectRoot: string): Promise<void> {

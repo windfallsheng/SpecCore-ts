@@ -2,13 +2,14 @@
 name: spec-ask
 description: SpecCore AI Router
 ---
-1. Read .speccore/CONSTITUTION.md for project context
-2. Read .speccore/local/context.json for current iteration
-3. Execute: speccore ask "${1:描述你的需求}"
-4. **Check stdout for markers — ONBOARD is mandatory:**
-   - If output contains `[SPECCORE_ONBOARD: <path>]` → 🚨 **MUST handle first, cannot skip:**
-     a. If your platform supports `present_files` or file preview → immediately show that HTML onboarding page
-     b. If your platform cannot directly show HTML → output to user: "🎉 首次使用 SpecCore！请先打开引导页查看使用说明：`<path>`" and wait for user acknowledgment before proceeding
-     c. Only AFTER the onboarding page is shown/acknowledged, continue processing other output
-   - If output contains `[SPECCORE_EXEC: <cmd>]` → execute that command
-   - If output contains `[SPECCORE_INTENT]` → show the intent to user for confirmation
+## ⛔ 核心铁律
+1. 用户说"重新/再/重跑"禁止用"未变/已完成"拒绝
+2. 分析结果必须落盘 020-specs/，禁止只输出聊天文字
+3. 全流程（analyze→split→plan→execute）必须自动继续
+4. 复杂流程先展示执行计划页面再执行
+5. 用户说"自主/全自动"，展示计划后直接执行，禁止每步确认
+
+## 执行
+1. Read CONITUTION.md + context.json
+2. 识别意图，展示执行计划
+3. speccore ask "${1:描述你的需求}"
