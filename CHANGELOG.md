@@ -1,3 +1,13 @@
+## v5.82.0 (2026-08-12) — update/init 命令输出改进
+
+- update.ts: 版本相同时改用 logger.info 明确输出（不再用 spinner.stop）
+- update.ts: 升级过程增加进度提示和目标工具显示
+- update.ts: 统一输出格式，增加分隔线和结构化报告
+- init.ts: 已有 .speccore 时的更新路径委托给 updateCommand，消除 ~50 行重复代码
+- init.ts: 移除硬编码的'新能力'列表，改为简洁的额外更新说明
+
+---
+
 ## v5.81.1 (2026-08-12) — 文档补充
 
 - command-reference.md: init 章节补充引导页说明
