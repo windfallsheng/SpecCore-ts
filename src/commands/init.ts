@@ -65,14 +65,14 @@ export interface InitOptions {
   force?: boolean;
   interactive?: boolean;
   update?: boolean;
-  tool?: string;
+  tools?: string;  // CLI 参数是 --tools（复数）
 }
 
 export async function initCommand(options: InitOptions): Promise<void> {
   // ── 增量升级模式 ──
   if (options.update) {
     const { updateCommand } = await import('./update');
-    await updateCommand({ force: options.force, tool: options.tool });
+    await updateCommand({ force: options.force, tool: options.tools });
     return;
   }
 
@@ -112,7 +112,7 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
         spinner.stop('更新命令文件和配置...');
         // 委托给 updateCommand 统一处理（避免重复代码）
         const { updateCommand } = await import('./update');
-        await updateCommand({ force: true, tool: options.tool });
+        await updateCommand({ force: true, tool: options.tools });
 
         // init 额外步骤（updateCommand 不覆盖的）
         await createWorkBuddyFiles(projectRoot);
@@ -252,7 +252,7 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
     await createWorkBuddyFiles(projectRoot);
 
     // Create tool integration files (Claude, CodeBuddy, Cursor, Trae, WindSurf, QCoder)
-    await createToolIntegrations(projectRoot, options.tool);
+    await createToolIntegrations(projectRoot, options.tools);
 
     // Create sample iteration（已存在则跳过）
     if (!await pathExists(join(projectRoot, 'Iteration-sample'))) {

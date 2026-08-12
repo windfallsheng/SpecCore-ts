@@ -230,4 +230,25 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   logger.info('');
   logger.info('━'.repeat(50));
   logger.info('');
+
+  // ── 5. 自动迁移任务目录（如果存在旧结构）──
+  try {
+    const { migrateTasks } = await import('./migrate');
+    const entries = await require('fs-extra').readdir(projectRoot, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory() && entry.name.startsWith('Iteration-')) {
+        const iterDir = join(projectRoot, entry.name);
+        const hasOldTasks = (await require('fs-extra').readdir(iterDir)).some((f: string) => f.match(/^Task-\d+$/));
+        if (hasOldTasks) {
+          logger.info('🔄 检测到旧版任务目录结构，开始自动迁移...');
+          logger.info('');
+          await migrateTasks(projectRoot, entry.name, { dryRun: false, force: false });
+          break; // 只处理第一个有旧任务的迭代
+        }
+      }
+    }
+  } catch (err) {
+    // 迁移失败不影响主流程
+    logger.warn(`⚠️  自动迁移跳过: ${err}`);
+  }
 }
