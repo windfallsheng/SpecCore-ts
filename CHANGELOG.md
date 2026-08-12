@@ -1,3 +1,29 @@
+## v5.77.0 (2026-08-12) — AI 智能拆分增强：三档粒度 + 完整上下文
+
+### 🤖 split 命令 AI 智能拆分增强
+- **问题**: 原 split 的 `--prompt` 模式只给 AI 薄弱的上下文（需求原文 + 分析摘要），无法基于 SpecCore 理念做智能拆分
+- **方案**: 重写 split prompt，注入完整 Spec 上下文 + 原子任务原则 + 三档粒度控制
+
+### 📏 三档粒度控制
+- **`--granularity macro`**: 粗粒度，每个任务 1-2 周，按业务方向合并（适合 1-3 人独立项目）
+- **`--granularity module`**: 中粒度，每个任务 3-5 天，按功能/端拆分（适合 4-8 人标准团队，默认）
+- **`--granularity atomic`**: 细粒度，每个任务 1-3 天，按接口/表拆分（适合 8+ 人大团队）
+- **STAFFING 联动**: 自动读取 STAFFING.md 团队配置，根据人数推荐最佳粒度
+- **用户可覆盖**: `--granularity` 参数覆盖自动推荐
+
+### 📜 完整 AI 上下文
+- **CONSTITUTION.md**: 技术宪法（技术栈、命名规范、异常码体系）
+- **020-specs/ 全部文件**: ANALYSIS.md + TECH.md + TEST.md + REVIEW.md + RISK.md + DEPS.md + MONITOR.md
+- **STAFFING.md**: 团队人员配置（影响任务分配和粒度）
+- **原子任务定义**: 独立输入输出 / 00-specs 三件套 / 独立 execute / 明确 AC / 独立 PR
+- **合并规则**: 同一实体 CRUD / 页面+接口<5 / 配置微调 / 紧密小功能
+- **拆分规则**: 接口>8 / 新表>3 / 超出粒度上限 / 跨端 / 第三方集成
+- **依赖关系**: 基础模块优先 / 链深≤3 / 无循环
+- **JSON 输出格式**: id/name/type/reason/scope/apis/tables/estimatedHours/priority/dependencies/acceptanceCriteria/risk/owner
+- **质量自检**: 6 项自查清单
+
+---
+
 ## v5.76.0 (2026-08-12) — 全局分析冲突处理
 
 ### 🧠 全局分析 *-old 冲突机制

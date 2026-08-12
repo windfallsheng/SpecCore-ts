@@ -28,6 +28,7 @@ export interface IterationSplitOptions {
   prompt?: boolean;     // --prompt: 输出拆分 Prompt
   response?: string;    // --response: 接收 AI 拆分结果创建 Task 目录
   force?: boolean;
+  granularity?: 'macro' | 'module' | 'atomic';  // 拆分粒度
 }
 
 async function detectPlatforms(iterationDir: string, specified?: string): Promise<string[]> {
@@ -119,10 +120,18 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
         spinner.start();
       }
       
-      // 生成 AI 拆分建议上下文
+      // 生成 AI 智能拆分上下文（含完整 Spec 上下文 + 粒度规则）
       const promptsDir = join('.speccore', 'prompts');
       await ensureDir(promptsDir);
       
+      // 读取 CONSTITUTION.md（技术宪法）
+      const constitutionPath = join('.speccore', 'CONSTITUTION.md');
+      let constitutionContent = '';
+      if (await pathExists(constitutionPath)) {
+        constitutionContent = await readFile(constitutionPath, 'utf-8');
+      }
+      
+      // 读取 020-specs/ 全部文件（完整上下文）
       const reqPath2 = join(iterationDir, '020-specs', 'REQUIREMENT.md');
       let reqContent2 = '';
       if (await pathExists(reqPath2)) {
@@ -130,15 +139,34 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       }
       
       const specDir2 = join(iterationDir, '020-specs');
-      const specs: string[] = [];
-      for (const f of ['TECH.md', 'TEST.md', 'REVIEW.md', 'RISK.md', 'DEPS.md']) {
-        if (await pathExists(join(specDir2, f))) specs.push(f);
+      const specContents: { name: string; content: string }[] = [];
+      for (const f of ['ANALYSIS.md', 'TECH.md', 'TEST.md', 'REVIEW.md', 'RISK.md', 'DEPS.md', 'MONITOR.md']) {
+        const fp = join(specDir2, f);
+        if (await pathExists(fp)) {
+          const content = await readFile(fp, 'utf-8');
+          if (content.trim().length > 50 && !content.trim().match(/^#+\s*\u5f85\u586b\u5145|^<!--\s*AI-FILL/m)) {
+            specContents.push({ name: f, content });
+          }
+        }
       }
       
-      const splitPrompt = `# SpecCore AI 智能拆分建议\n\n> 迭代: ${iteration} | 生成: ${new Date().toISOString().split('T')[0]}\n\n---\n\n## 📋 需求原文\n\n${reqContent2.slice(0, 5000) || '_未找到_'}\n\n---\n\n## 📊 分析结果\n\n${analysis.slice(0, 3000)}\n\n${specs.length > 0 ? '## 📄 已有 Spec 文档\n' + specs.map(f => '- ' + f).join('\n') + '\n\n---\n\n' : ''}## 🤖 任务\n\n根据以上需求和 AI 分析，请建议：任务粒度（复杂拆分/简单合并）、优先级分配、任务间依赖关系、风险标记。直接回复给用户决策。`;
+      // 粒度推荐（基于 STAFFING 人数）
+      const staffing = readStaffing(iterationDir);
+      const teamSize = staffing ? staffing.length : 0;
+      const recommendedGranularity = options.granularity ||
+        (teamSize <= 3 ? 'macro' : teamSize <= 8 ? 'module' : 'atomic');
+      const granularityLabel = recommendedGranularity === 'macro' ? '\u7c97\u7c92\u5ea6 (macro)' :
+        recommendedGranularity === 'module' ? '\u4e2d\u7c92\u5ea6 (module)' : '\u7ec6\u7c92\u5ea6 (atomic)';
+      const granularityHint = recommendedGranularity === 'macro' ? '\u6bcf\u4e2a\u4efb\u52a1 1-2 \u5468\uff0c\u6309\u4e1a\u52a1\u65b9\u5411\u5408\u5e76' :
+        recommendedGranularity === 'module' ? '\u6bcf\u4e2a\u4efb\u52a1 3-5 \u5929\uff0c\u6309\u529f\u80fd/\u7aef\u62c6\u5206' : '\u6bcf\u4e2a\u4efb\u52a1 1-3 \u5929\uff0c\u6309\u63a5\u53e3/\u8868\u62c6\u5206';
+      
+      // 构建完整 prompt
+      let splitPrompt = buildSplitPrompt(iteration, constitutionContent, reqContent2, specContents, staffing, teamSize, granularityLabel, granularityHint);
       
       await writeFile(join(promptsDir, `split-suggestion-${iteration}.md`), splitPrompt);
       logger.info(`   🤖 AI 拆分建议 → .speccore/prompts/split-suggestion-${iteration}.md`);
+      logger.info(`   📏 推荐粒度: ${granularityLabel}${options.granularity ? ' (用户指定)' : ` (基于 ${teamSize} 人团队自动推荐)`}`);
+      logger.info(`   📜 上下文: CONSTITUTION + REQUIREMENT + ${specContents.length} 个 Spec 文档`);
     } else {
       logger.info('   ℹ️ 未找到 ANALYSIS.md，建议先运行 speccore analyze');
     }
@@ -1367,6 +1395,115 @@ interface SectionComplexity {
   complexity: 'low' | 'medium' | 'high';
   estimatedHours: number;
   priority: 'high' | 'medium' | 'low';
+}
+
+/**
+ * 构建完整的 AI 智能拆分 Prompt（含 SpecCore 理念 + 粒度规则 + 完整上下文）
+ */
+function buildSplitPrompt(
+  iteration: string,
+  constitutionContent: string,
+  reqContent: string,
+  specContents: { name: string; content: string }[],
+  staffing: StaffMember[] | null,
+  teamSize: number,
+  granularityLabel: string,
+  granularityHint: string,
+): string {
+  let p = `# SpecCore AI 智能拆分\n\n`;
+  p += `> 迭代: ${iteration} | 粒度: ${granularityLabel} | 生成: ${new Date().toISOString().split('T')[0]}\n\n`;
+
+  // 技术宪法
+  if (constitutionContent) {
+    p += `## 📜 技术宪法 (CONSTITUTION.md)\n\n${constitutionContent.slice(0, 3000)}\n\n---\n\n`;
+  }
+
+  // 需求原文
+  p += `## 📋 需求原文 (REQUIREMENT.md)\n\n${reqContent.slice(0, 5000) || '_未找到_'}\n\n---\n\n`;
+
+  // 全部 Spec 文档
+  for (const spec of specContents) {
+    p += `## 📜 ${spec.name}\n\n${spec.content.slice(0, 3000)}\n\n---\n\n`;
+  }
+
+  // 团队配置
+  if (staffing && staffing.length > 0) {
+    p += `## 👥 团队配置 (STAFFING.md)\n\n`;
+    p += `| 人员 | 擅长端 | 负荷 |\n| :--- | :--- | :--- |\n`;
+    for (const m of staffing) {
+      p += `| ${m.name} | ${m.platforms.join(', ')} | ${m.capacity}% |\n`;
+    }
+    p += `\n检测到 ${teamSize} 人团队，推荐粒度: ${granularityLabel}\n\n---\n\n`;
+  }
+
+  // 粒度说明
+  p += `## 🎯 拆分粒度: ${granularityLabel}\n\n`;
+  p += `${granularityHint}\n\n`;
+  p += `用户可通过 --granularity macro|module|atomic 调整全局粒度。\n\n`;
+
+  // SpecCore 拆分原则
+  p += `## ⚙️ SpecCore 拆分原则\n\n`;
+  p += `SpecCore 核心理念: "Code by Spec, Not by Vibe" — 每个任务必须有对应的 Spec，AI 在 Spec 约束下工作。\n\n`;
+
+  p += `### 原子任务定义\n`;
+  p += `一个原子任务 = 一个开发者在指定粒度内可独立完成的、有明确验收标准的最小工作单元。\n`;
+  p += `判定标准（全部满足）:\n`;
+  p += `- 有独立的输入/输出（API 接口 / 页面 / 数据表）\n`;
+  p += `- 00-specs/ 三件套能独立写满（REQ.md + TECH.md + TASK.md）\n`;
+  p += `- execute 时不强依赖其他 Task 的运行时状态\n`;
+  p += `- 有明确的验收标准（AC 可枚举）\n`;
+  p += `- 可独立提 PR、独立 review\n\n`;
+
+  p += `### 合并规则\n`;
+  p += `- 同一数据实体的 CRUD → 共享数据模型，合并为 1 个任务\n`;
+  p += `- 页面 + 对应后端接口 < 5 个 → 前后端强耦合，一人做效率最高\n`;
+  p += `- 纯配置/文案/样式微调 → 不构成独立工作单元\n`;
+  p += `- 关联紧密的小功能（如列表页 + 详情页）→ 共享路由和状态\n\n`;
+
+  p += `### 拆分规则\n`;
+  p += `- 接口 > 8 个 → 按业务领域拆\n`;
+  p += `- 涉及 > 3 张新表 → 按数据层拆\n`;
+  p += `- 超出粒度时间上限 → 必须再拆\n`;
+  p += `- 跨端功能 → 按端拆（后端 1 个 + 每个前端各 1 个）\n`;
+  p += `- 独立第三方集成（支付/短信/OSS）→ 独立任务\n\n`;
+
+  p += `### 依赖关系\n`;
+  p += `- 基础模块（认证/数据库/配置）优先拆出，作为第一批任务\n`;
+  p += `- 依赖链深度 ≤ 3\n`;
+  p += `- 同层级无循环依赖\n\n`;
+
+  // 输出格式
+  p += `## 📤 输出格式\n\n`;
+  p += `请输出 JSON 数组，每个 Task 包含:\n`;
+  p += '```json\n';
+  p += `[\n  {\n`;
+  p += `    "id": "Task-001",\n`;
+  p += `    "name": "任务名称",\n`;
+  p += `    "type": "feature|bugfix|refactor|research",\n`;
+  p += `    "reason": "为什么这样拆分",\n`;
+  p += `    "scope": ["后端", "admin"],\n`;
+  p += `    "apis": ["POST /api/auth/login"],\n`;
+  p += `    "tables": ["users"],\n`;
+  p += `    "estimatedHours": 8,\n`;
+  p += `    "priority": "high|medium|low",\n`;
+  p += `    "dependencies": [],\n`;
+  p += `    "acceptanceCriteria": ["AC1: ..."],\n`;
+  p += `    "risk": "low|medium|high",\n`;
+  p += `    "owner": "建议负责人"\n`;
+  p += `  }\n]\n`;
+  p += '```\n\n';
+
+  // 质量自检
+  p += `## ✅ 质量自检\n\n`;
+  p += `拆分完成后自查:\n`;
+  p += `□ 每个任务都满足原子任务定义？\n`;
+  p += `□ 没有超出粒度时间上限的任务？\n`;
+  p += `□ 没有循环依赖？\n`;
+  p += `□ 基础模块排在前面？\n`;
+  p += `□ 同领域功能没被过度拆分？\n`;
+  p += `□ 总任务数合理（3-15 个/迭代）？\n`;
+
+  return p;
 }
 
 /**

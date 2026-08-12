@@ -265,6 +265,83 @@ async function loadExtraSpecs(cwd: string, taskDir: string): Promise<TaskExtraSp
 }
 
 // ═══════════════════════════════════════════════════════════
+// Split 智能拆分指令
+// ═══════════════════════════════════════════════════════════
+
+/** 构建 SpecCore 智能拆分指令（含三档粒度 + 原子任务原则） */
+function buildSplitInstruction(): string {
+  return [
+    '',
+    '## SpecCore 任务拆分原则',
+    '',
+    'SpecCore 核心理念: "Code by Spec, Not by Vibe" — 每个任务必须有对应的 Spec，AI 在 Spec 约束下工作。',
+    '',
+    '### 原子任务定义',
+    '一个原子任务 = 一个开发者在指定粒度内可独立完成的、有明确验收标准的最小工作单元。',
+    '判定标准（全部满足）:',
+    '- 有独立的输入/输出（API 接口 / 页面 / 数据表）',
+    '- 00-specs/ 三件套能独立写满（REQ.md + TECH.md + TASK.md）',
+    '- execute 时不强依赖其他 Task 的运行时状态（可通过 API_CONTRACT.yaml 解耦）',
+    '- 有明确的验收标准（AC 可枚举）',
+    '- 可独立提 PR、独立 review',
+    '',
+    '### 粒度规则',
+    '',
+    '**合并规则（这些应该是一个任务）:**',
+    '- 同一数据实体的 CRUD（如用户管理的增删改查）→ 共享数据模型',
+    '- 页面 + 对应后端接口 < 5 个 → 前后端强耦合，一人做效率最高',
+    '- 纯配置/文案/样式微调 → 不构成独立工作单元',
+    '- 关联紧密的小功能（如列表页 + 详情页）→ 共享路由和状态',
+    '- 同一模块的接口 + 单元测试 → 测试是接口的一部分',
+    '',
+    '**拆分规则（这些必须是独立任务）:**',
+    '- 接口 > 8 个 → 按业务领域拆',
+    '- 涉及 > 3 张新表 → 按数据层拆',
+    '- 超出粒度时间上限 → 必须再拆',
+    '- 跨端功能（后端 + Admin + H5）→ 按端拆',
+    '- 独立第三方集成（支付/短信/OSS）→ 有独立文档和调试流程',
+    '- 数据迁移/脚本 → 独立执行窗口',
+    '',
+    '### 依赖关系规则',
+    '- 数据依赖: Task-B 需要 Task-A 创建的表 → B 依赖 A',
+    '- API 依赖: Task-B 调用 Task-A 的接口 → B 依赖 A（需先定义 API_CONTRACT.yaml）',
+    '- 依赖链深度 ≤ 3（A→B→C 可以，A→B→C→D 需重新拆）',
+    '- 基础模块（认证/数据库/配置）优先拆出，作为第一批任务',
+    '',
+    '### 输出格式',
+    '请输出 JSON 数组，每个 Task 包含:',
+    '```json',
+    '[',
+    '  {',
+    '    "id": "Task-001",',
+    '    "name": "任务名称",',
+    '    "type": "feature|bugfix|refactor|research",',
+    '    "reason": "为什么这样拆分（语义解释）",',
+    '    "scope": ["后端", "admin"],',
+    '    "apis": ["POST /api/auth/login", "GET /api/auth/me"],',
+    '    "tables": ["users", "sessions"],',
+    '    "estimatedHours": 8,',
+    '    "priority": "high|medium|low",',
+    '    "dependencies": [],',
+    '    "acceptanceCriteria": ["AC1: ...", "AC2: ..."],',
+    '    "risk": "low|medium|high"',
+    '  }',
+    ']',
+    '```',
+    '',
+    '### 质量自检',
+    '拆分完成后自查:',
+    '□ 每个任务都满足原子任务定义？',
+    '□ 没有超出粒度时间上限的任务？',
+    '□ 没有循环依赖？',
+    '□ 基础模块排在前面？',
+    '□ 同领域功能没被过度拆分？',
+    '□ 总任务数合理（一般 3-15 个/迭代）？',
+    '',
+  ].join('\n');
+}
+
+// ═══════════════════════════════════════════════════════════
 // Prompt 构建
 // ═══════════════════════════════════════════════════════════
 
@@ -297,14 +374,7 @@ function getInstruction(command: PromptCommand, context: { taskName?: string; ap
       ].join('\n');
 
     case 'split':
-      return [
-        '请根据以下需求分析结果，拆分开发任务。',
-        '1. 按端（app/h5/miniapp/admin）分组',
-        '2. 每个 API 3~8 个接口为一个 Task',
-        '3. 标注 Task 间的依赖关系',
-        '4. 给出建议的负责人分配',
-        '请按 Markdown 表格格式输出 Task 列表。',
-      ].join('\n');
+      return buildSplitInstruction();
 
     case 'plan':
       return [
@@ -360,7 +430,9 @@ export async function buildPrompt(
     instruction: getInstruction(command, context),
     outputHint: command === 'execute'
       ? '请返回格式: {"files": [{"path": "相对路径", "content": "代码内容"}]}'
-      : '请返回 Markdown 格式的分析结果',
+      : command === 'split'
+        ? '请返回 JSON 数组格式的任务列表（参见拆分原则中的输出格式）'
+        : '请返回 Markdown 格式的分析结果',
   };
 }
 
