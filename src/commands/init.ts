@@ -1841,6 +1841,7 @@ function detectGitUrl(root: string): string | undefined {
 async function writeSetupGuide(projectRoot: string, speccoreDir: string): Promise<string> {
   const name = basename(projectRoot);
   const gitUrl = detectGitUrl(projectRoot) || '待配置';
+  const pkgVersion = await readFile(join(projectRoot, 'package.json'), 'utf-8').then(s => JSON.parse(s).version).catch(() => '0.0.0');
   const html = `<!DOCTYPE html><html lang="zh-CN" data-theme="ocean"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>SpecCore — 项目配置引导</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;600;700&display=swap');
@@ -1913,7 +1914,7 @@ h1{font-family:'Orbitron',sans-serif;font-size:28px;font-weight:900;background:l
 
 <div class="step">
 <div class="step-header"><span class="step-num">1</span><span class="step-title">技术宪法</span><span class="step-required">必填</span></div>
-<div class="step-desc">AI 的「最高指令」—— analyze / split / execute 全部据此执行。决定了生成代码的技术栈、命名规范、错误码体系。</div>
+<div class="step-desc">AI 的「最高指令」—— 所有需求分析、任务拆分、代码生成全部据此执行。决定了生成代码的技术栈、命名规范、错误码体系。</div>
 <div class="file-box">
 <div class="file-path">📄 .speccore/CONSTITUTION.md</div>
 <div class="step-desc" style="color:var(--green);margin-bottom:8px">✅ init 已自动检测：工程名、Git 仓库地址。其余字段可通过以下方式完善：</div>
@@ -1944,7 +1945,7 @@ h1{font-family:'Orbitron',sans-serif;font-size:28px;font-weight:900;background:l
 <div class="step-header"><span class="step-num">2</span><span class="step-title">配置团队排期</span><span class="step-optional">可选</span></div>
 <div class="step-desc">填写团队成员和可用天数。AI 拆分任务时会根据团队规模自动调整粒度，一个端可以有多个负责人，作为拆分时的默认责任人参考（后期可手动修改）。</div>
 <div class="file-box">
-<div class="file-path">📄 Iteration-xxx/STAFFING.md</div>
+<div class="file-path">📄 Iteration-xxx/STAFFING.md（步骤 3 创建迭代后生成）</div>
 <div class="step-desc">格式示例：<br>
 | 成员 | 角色 | 负责端 | 每周可用天数 |<br>
 | 张三 | 后端 | API 服务 | 5 |<br>
@@ -1979,7 +1980,7 @@ Iteration-xxx/<br>
 <div class="method-card m2"><div class="method-title">📎 文件导入</div><div class="step-desc">把 Word / PDF / Markdown 文档交给 AI，自动提取需求并转换</div><div class="method-cmd" style="margin-top:4px">/spec-ask "导入 PRD.docx 到 my-iter"</div></div>
 </div>
 <div class="step-desc" style="color:var(--muted);margin-top:4px">还有更多方式：📂 把文件丢到 .speccore/inbox/ 目录自动识别 | ✍️ 直接编辑迭代下 010-requirements/ 目录</div>
-<div class="step-desc" style="color:var(--green)">💡 导入后，下一步 analyze 会自动读取这些需求文档，生成 ANALYSIS.md、TECH.md 等 7 份技术规格。</div>
+<div class="step-desc" style="color:var(--green)">💡 导入后，下一步 AI 分析会自动读取这些需求文档，生成 ANALYSIS.md、TECH.md 等 7 份技术规格。</div>
 </div>
 
 <div class="step">
@@ -2036,7 +2037,7 @@ Iteration-xxx/<br>
 
 <div class="start-bar" onclick="this.style.opacity='0.7'">🚀 配置完成！开始使用 /spec-ask "你的需求"</div>
 
-<div class="footer">SpecCore v5.78.0 · 项目配置引导 · ${name}</div>
+<div class="footer">SpecCore v${pkgVersion} · 项目配置引导 · ${name}</div>
 </div></body></html>`;
 
   const outputPath = join(projectRoot, 'outputs', 'speccore-setup-guide.html');
