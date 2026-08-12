@@ -2012,20 +2012,24 @@ Iteration-xxx/<br>
 <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
 <div style="padding:12px;border-radius:8px;border:1px solid rgba(20,184,166,.2);background:rgba(20,184,166,.04)">
 <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:4px">🔒 全程确认（默认）</div>
-<div class="step-desc">每步展示结果，等你确认后再继续。适合首次使用或不熟悉的流程。</div>
+<div class="step-desc">每步展示结果，等你确认后再继续。适合首次使用。</div>
 <div class="method-cmd">/spec-ask "分析 my-iter 的需求"</div>
+<div class="step-desc" style="margin-top:4px">逐条执行步骤 6 的命令即可，每步都会确认。</div>
 </div>
 <div style="padding:12px;border-radius:8px;border:1px solid rgba(249,115,22,.2);background:rgba(249,115,22,.04)">
 <div style="font-size:11px;font-weight:700;color:var(--orange);margin-bottom:4px">⚡ 半自动</div>
-<div class="step-desc">分析和规划自动执行，执行开发前暂停确认。适合日常开发。</div>
+<div class="step-desc">分析和拆分自动完成，执行开发前暂停。适合日常开发。</div>
 <div class="method-cmd">/spec-ask "半自动执行 my-iter"</div>
+<div class="method-cmd">speccore dev -I my-iter --auto-steps analyze,split</div>
 </div>
 <div style="padding:12px;border-radius:8px;border:1px solid rgba(99,102,241,.2);background:rgba(99,102,241,.04)">
 <div style="font-size:11px;font-weight:700;color:var(--purple);margin-bottom:4px">🚀 全自动</div>
-<div class="step-desc">一键跑完整个流水线，不中途暂停。适合熟悉流程后批量推进。</div>
+<div class="step-desc">一键跑完整个流水线，不中途暂停。适合熟悉后批量推进。</div>
 <div class="method-cmd">/spec-ask "全自动执行 my-iter"</div>
+<div class="method-cmd">speccore dev -I my-iter --auto</div>
 </div>
 </div>
+<div class="step-desc" style="margin-top:6px">💡 <code>speccore dev</code> 是流水线控制器：自动检测当前阶段 → 推荐下一步 → 执行。还可用 <code>--from analyze --to execute</code> 指定范围。</div>
 
 <div style="margin:16px 0 8px;font-size:13px;font-weight:700;color:var(--cyan)">📖 重新查看本指南</div>
 <div class="step-desc">本指南保存在 <code>outputs/speccore-setup-guide.html</code>，随时可在浏览器中打开查看。<br>也可以让 AI 重新展示：/spec-ask "打开配置引导"</div>
