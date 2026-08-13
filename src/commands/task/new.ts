@@ -130,10 +130,11 @@ async function createSingleTask(options: TaskNewOptions): Promise<void> {
     const iterationDir = await getIterationDir(iteration);
     
     // Determine task ID (使用 --topic 英文主题词)
-    const { id: rawId } = options.id 
-      ? { id: options.id.replace(/^Task-/, '') } 
-      : await nextTaskId(options.topic);
-    const taskId = rawId.replace(/^Task-/, '');
+    // 始终递增计数器，即使手动指定 --id 也如此，避免后续自动编号冲突
+    const { id: counterId } = await nextTaskId(options.topic);
+    const taskId = options.id
+      ? options.id.replace(/^Task-/, '')
+      : counterId.replace(/^Task-/, '');
     const taskDir = join(iterationDir, '030-tasks', `Task-${taskId}`);
 
     if (await pathExists(taskDir)) {

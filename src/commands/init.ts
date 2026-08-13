@@ -1304,8 +1304,17 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
     await ensureDir(toolDir);
     for (const [name, desc, cmd] of commands) {
       const content = '---\nname: ' + name + '\ndescription: ' + desc + '\n---\n' + cmd;
-      await safeWriteWithOld(join(toolDir, name + '.md'), content);
+      await writeFile(join(toolDir, name + '.md'), content);
     }
+    // 清理该工具目录下的废弃命令文件
+    const validNames = new Set(commands.map(([n]) => n + '.md'));
+    try {
+      const existing = await readdir(toolDir);
+      for (const f of existing) {
+        if (f.endsWith('-old.md')) { await require('fs-extra').unlink(join(toolDir, f)); continue; }
+        if (f.endsWith('.md') && !validNames.has(f)) { await require('fs-extra').unlink(join(toolDir, f)); }
+      }
+    } catch {}
   }
   const hasQoder = !filter || filter.includes("qoder");
   if (hasQoder) {
@@ -1321,31 +1330,22 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
   } catch {}
   await ensureDir(qoderCommandsDir);
   for (const [name, desc, cmd] of commands) {
-    // 做 spec:analyze, spec:execute 等 flat 命名（非子目录）
-    const shortName = name.replace(/^spec-/, 'spec:');
-    const content = '---\nname: ' + shortName + '\ndescription: ' + desc + '\n---\n' + desc + '\n\n执行命令: `' + cmd + '`';
-    await safeWriteWithOld(join(qoderCommandsDir, shortName + '.md'), content);
+    // Qoder 统一使用 spec-analyze 格式（跨平台安全，Linux 不支持冒号）
+    const content = '---\nname: ' + name + '\ndescription: ' + desc + '\n---\n' + desc + '\n\n执行命令: `' + cmd + '`';
+    await writeFile(join(qoderCommandsDir, name + '.md'), content);
   }
-  // 清理旧版本残留：spec/ 子目录和 orphan 文件
-  const oldSpecDir = join(projectRoot, '.qoder', 'commands', 'spec');
-  try { if (await pathExists(oldSpecDir)) await require('fs-extra').remove(oldSpecDir); } catch {}
-  const validNames = new Set(commands.map(([name]) => name.replace(/^spec-/, 'spec:') + '.md'));
+  // 清理 Qoder 目录：废弃文件 + 旧格式 + *-old 残留
+  const validQoderNames = new Set(commands.map(([n]) => n + '.md'));
   try {
     const existing = await readdir(qoderCommandsDir);
     for (const f of existing) {
-      // 跳过 *-old 文件（升级冲突保留的旧版）
-      if (f.includes('-old')) continue;
-      // 清理旧版 spec- 前缀文件（应使用 spec: 前缀）
-      if (f.startsWith('spec-') && f.endsWith('.md')) {
-        await require('fs-extra').unlink(join(qoderCommandsDir, f));
-        logger.info(`  清理旧格式文件: ${f} → spec:${f.slice(5)}`);
-        continue;
-      }
-      // 清理已废弃的 spec: 文件
-      if (f.startsWith('spec:') && f.endsWith('.md') && !validNames.has(f)) {
-        await require('fs-extra').unlink(join(qoderCommandsDir, f));
-        logger.info(`  清理旧文件: ${f}`);
-      }
+      const fp = join(qoderCommandsDir, f);
+      // 清理 *-old 备份文件
+      if (f.includes('-old')) { await require('fs-extra').unlink(fp); continue; }
+      // 清理旧版 spec: 前缀文件（已改用 spec- 前缀）
+      if (f.startsWith('spec:') && f.endsWith('.md')) { await require('fs-extra').unlink(fp); continue; }
+      // 清理已废弃的命令文件
+      if (f.startsWith('spec') && f.endsWith('.md') && !validQoderNames.has(f)) { await require('fs-extra').unlink(fp); }
     }
   } catch {}
   
@@ -1386,6 +1386,7 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
     'spec-change',
     'spec-doc2spec',
     'spec-spec2doc',
+    'spec-synthesize',
   ];
   
   let skillsCopied = 0;
@@ -1394,8 +1395,9 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
     const destDir = join(projectSkillsDir, name);
     try {
       if (await pathExists(srcDir)) {
-        // 复制整个 Skill 目录（包括 SKILL.md + references/ + scripts/）— 有差异的文件旧版重命名为 *-old
-        await safeCopyDirWithOld(srcDir, destDir);
+        // 复制整个 Skill 目录（包括 SKILL.md + references/ + scripts/）— 直接覆盖
+        const { copy } = require('fs-extra');
+        await copy(srcDir, destDir, { overwrite: true });
         skillsCopied++;
       } else {
         logger.info(`   ⚠️ Skill 源文件不存在，跳过: ${name}`);
@@ -1435,8 +1437,8 @@ export async function cleanupStaleFiles(
       if (stat.isSymbolicLink()) continue;
       const files = await readdir(cmdDir);
       for (const f of files) {
-        // 跳过 *-old 文件（升级冲突保留的旧版）
-        if (f.includes('-old')) continue;
+        // 清理 *-old 备份文件
+        if (f.includes('-old')) { await require('fs-extra').unlink(join(cmdDir, f)); cleanedCount++; continue; }
         if (!validCmdNames.has(f) && f.endsWith('.md')) {
           await require('fs-extra').unlink(join(cmdDir, f));
           cleanedCount++;
@@ -1445,7 +1447,7 @@ export async function cleanupStaleFiles(
     } catch { /* ignore missing dirs */ }
   }
 
-  // 2. 清理 .agents/skills/ 下 stale Skill 目录
+  // 2. 清理 .agents/skills/ 下 stale Skill 目录 + *-old 残留
   const skillsDir = join(projectRoot, '.agents', 'skills');
   try {
     if (await pathExists(skillsDir)) {
@@ -1453,6 +1455,11 @@ export async function cleanupStaleFiles(
       for (const e of entries) {
         if (e.isDirectory() && !skillNames.includes(e.name)) {
           await require('fs-extra').remove(join(skillsDir, e.name));
+          cleanedCount++;
+        }
+        // 清理 *-old 备份文件（旧版 safeCopyDirWithOld 残留）
+        if (e.isFile() && e.name.includes('-old')) {
+          await require('fs-extra').unlink(join(skillsDir, e.name));
           cleanedCount++;
         }
       }
@@ -1889,19 +1896,19 @@ h1{font-family:'Orbitron',sans-serif;font-size:28px;font-weight:900;background:l
 .sub{color:var(--muted);font-size:11px;letter-spacing:1px;text-align:center;margin-top:4px}
 .header-card{text-align:center;padding:16px 0 12px;margin-bottom:8px;position:relative;border-bottom:1px solid rgba(14,165,233,.1)}
 .header-card::after{content:'';position:absolute;bottom:-1px;left:20%;right:20%;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent)}
-.container{max-width:960px;margin:0 auto;position:relative;z-index:1;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px 20px;overflow:hidden}
+.container{max-width:960px;margin:0 auto;position:relative;z-index:1;background:rgba(13,31,56,.85);border:1px solid var(--border);border-radius:16px;padding:24px 20px;overflow:hidden}
 .container::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanX 3s linear infinite}
 .container::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanX-rev 3s linear infinite}
 .container .vline{position:absolute;top:0;width:1px;bottom:0;pointer-events:none;z-index:2}
 .container .vline.l{left:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY-rev 3s linear infinite}
 .container .vline.r{right:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY 3s linear infinite}
-.card-bg{position:absolute;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse at 50% 10%,rgba(14,165,233,.2) 0%,transparent 70%);animation:cardGlow 3s ease-in-out infinite;transform-origin:top center}
+.card-bg{position:absolute;inset:0;pointer-events:none;z-index:5;background:radial-gradient(ellipse at 50% 10%,rgba(14,165,233,.2) 0%,transparent 70%);animation:cardGlow 3s ease-in-out infinite;transform-origin:top center}
 @keyframes cardGlow{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.6)}}
 @keyframes scanX{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
 @keyframes scanX-rev{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}
 @keyframes scanY{0%{transform:translateY(-100%)}100%{transform:translateY(100%)}}
 @keyframes scanY-rev{0%{transform:translateY(100%)}100%{transform:translateY(-100%)}}
-.step{margin:16px 0;padding:18px;background:var(--card);border:1px solid var(--border);border-radius:12px;position:relative;overflow:hidden;box-shadow:0 0 20px rgba(14,165,233,.08),inset 0 1px 24px rgba(14,165,233,.04);transition:box-shadow .3s ease,border-color .3s ease}
+.step{margin:16px 0;padding:18px;background:rgba(13,31,56,.75);border:1px solid var(--border);border-radius:12px;position:relative;overflow:hidden;box-shadow:0 0 20px rgba(14,165,233,.08),inset 0 1px 24px rgba(14,165,233,.04);transition:box-shadow .3s ease,border-color .3s ease}
 .step:hover{box-shadow:0 0 30px rgba(14,165,233,.15),inset 0 1px 30px rgba(14,165,233,.08);border-color:rgba(14,165,233,.3)}
 .step-num{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--cyan),var(--purple));color:#fff;font-weight:900;font-size:13px;margin-right:10px;flex-shrink:0}
 .step-header{display:flex;align-items:center;margin-bottom:12px}

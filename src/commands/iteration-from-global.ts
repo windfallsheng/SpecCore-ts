@@ -7,6 +7,8 @@ import { logger, Spinner } from '../utils/logger';
 import { ensureDir, writeFile, pathExists, readFile } from 'fs-extra';
 import { FileTransaction } from '../core/transaction';
 import { join } from 'path';
+import { backupWithTimestamp } from '../utils/task-utils';
+import { nextTaskId } from '../core/global-counters';
 import { readGlobalIndex, readRequirementDetail, appendIterationLink, updateReqInIndex, updateIndexVersion, bumpGlobalVersion } from '../core/global-layer';
 import { updateContext, Context } from '../core/context';
 
@@ -88,18 +90,21 @@ export async function iterationFromGlobalCommand(options: IterationFromGlobalOpt
 
     // 6. 生成需求文档
     const reqContent = generateIterationRequirement(options.name, reqDetails);
-    await writeFile(join(iterationDir, '020-specs', 'REQUIREMENT.md'), reqContent);
+    const reqPath = join(iterationDir, '020-specs', 'REQUIREMENT.md');
+    const bk = await backupWithTimestamp(reqPath);
+    if (bk) logger.info(`   📦 旧版已备份: ${bk.split('/').pop()}`);
+    await writeFile(reqPath, reqContent);
 
     // 7. 生成架构文档
     const archContent = generateIterationArchitecture(options.name, foundReqs);
     await writeFile(join(iterationDir, '000-overview', 'ARCHITECTURE.md'), archContent);
 
-    // 8. 生成迭代总览
-    const graphContent = generateProjectGraph(options.name, foundReqs, reqDetails.length);
-    await writeFile(join(iterationDir, '000-overview', 'PROJECT_GRAPH.md'), graphContent);
-
-    // 9. 自动拆分 Task
+    // 8. 自动拆分 Task（先生成以获取实际任务 ID）
     const taskIds = await autoSplitTasks(iterationDir, foundReqs);
+
+    // 9. 生成迭代总览（使用实际任务 ID）
+    const graphContent = generateProjectGraph(options.name, foundReqs, reqDetails.length, taskIds);
+    await writeFile(join(iterationDir, '000-overview', 'PROJECT_GRAPH.md'), graphContent);
 
     // 10. 更新全量索引
     const today = new Date().toISOString().split('T')[0];
@@ -228,7 +233,8 @@ function generateIterationArchitecture(
 function generateProjectGraph(
   iterationName: string,
   reqs: { id: string; name: string; project: string }[],
-  taskCount: number
+  taskCount: number,
+  taskIds: string[]
 ): string {
   const today = new Date().toISOString().split('T')[0];
   let content = `# ${iterationName} - 迭代总览
@@ -243,7 +249,7 @@ function generateProjectGraph(
 `;
 
   for (let i = 0; i < reqs.length; i++) {
-    const taskId = `Task-${String(i + 1).padStart(3, '0')}`;
+    const taskId = taskIds[i] || `Task-${String(i + 1).padStart(3, '0')}`;
     content += `| ${taskId} | ${reqs[i].name} | ${reqs[i].id} | 高 | 🔲 待开发 |\n`;
   }
 
@@ -276,7 +282,7 @@ async function autoSplitTasks(
   const today = new Date().toISOString().split('T')[0];
 
   for (let i = 0; i < reqs.length; i++) {
-    const taskId = `Task-${String(i + 1).padStart(3, '0')}`;
+    const { id: taskId } = await nextTaskId(reqs[i].name);
     const taskDir = join(iterationDir, taskId);
     await ensureDir(join(taskDir, '10-backend'));
     await ensureDir(join(taskDir, '20-frontend'));

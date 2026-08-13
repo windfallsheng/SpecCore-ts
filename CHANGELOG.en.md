@@ -2,6 +2,22 @@
 
 ---
 
+## v5.86.0 (2026-08-13) — ID Safety System + Plan Subdirectories + Backup Filtering
+
+- Plan files in subdirectories: `000-overview/plans/Plan-NNN-slug/` (PLAN.md + HTML), no more duplicate MD files
+- analyze command generates REQUIREMENT.md (JSON multi-doc mode + DOC_MATRIX feature 8 docs)
+- split --response creates full task directories (23-27 files, reuses createTaskFromSection)
+- Global counter protection: `getCounters()` scans actual directories for `max(stored, scanned)`, prevents ID collision on counters.json loss
+- All split modes (default/strict/interactive/--response) use pre-allocated `_taskId`, eliminating hardcoded IDs
+- `updateProjectGraph`/`generateImpactGraph`/`detectSemanticDependencies` use pre-allocated IDs
+- task new `--id` now increments counter even with manual ID, preventing auto-ID rollback
+- doc2spec CSV batch import, iteration-from-global auto-split now use `nextTaskId`
+- search.ts / analyze-engine.ts / synthesize.ts / spec2doc.ts filter timestamp backup files (`isTimestampBackup`)
+- CLI options registered: split `--force`, task new `--id`
+- Removed dead code `generateTaskId`
+
+---
+
 ## v5.85.0 (2026-08-12) — Prompt Library Feature
 
 - New `prompts` command (alias `pt`): Prompt library management

@@ -5,28 +5,8 @@
  */
 
 import { existsSync, readFileSync } from 'fs';
+import { rename, pathExists } from 'fs-extra';
 import { join } from 'path';
-
-/**
- * 生成下一个 Task ID
- */
-export function generateTaskId(iterationDir: string): string {
-  try {
-    const fs = require('fs');
-    const entries = fs.readdirSync(iterationDir, { withFileTypes: true });
-    const tasks = entries
-      .filter((e: any) => e.isDirectory() && e.name.startsWith('Task-'))
-      .map((e: any) => {
-        const match = e.name.match(/^Task-(\d{3})/);
-        return match ? parseInt(match[1], 10) : 0;
-      });
-
-    const maxId = tasks.length > 0 ? Math.max(...tasks) : 0;
-    return `Task-${String(maxId + 1).padStart(3, '0')}`;
-  } catch {
-    return 'Task-001';
-  }
-}
 
 /**
  * 检测项目根目录（向上查找 .speccore/）
@@ -111,4 +91,51 @@ export function today(): string {
  */
 export function now(): string {
   return new Date().toISOString();
+}
+
+/**
+ * 写入前自动备份：旧文件按时间戳重命名，永不覆盖
+ * 返回备份文件路径（无旧文件则返回 null）
+ */
+export async function backupWithTimestamp(filePath: string): Promise<string | null> {
+  if (await pathExists(filePath)) {
+    const ext = filePath.match(/\.[^.]+$/)?.[0] || '';
+    const base = filePath.slice(0, filePath.length - ext.length);
+    const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+    const backupPath = `${base}-${ts}${ext}`;
+    await rename(filePath, backupPath);
+    return backupPath;
+  }
+  return null;
+}
+
+/**
+ * 判断文件名是否为时间戳备份文件（如 ANALYSIS-20260813021034.md）
+ */
+export function isTimestampBackup(filename: string): boolean {
+  return /-\d{14}\./.test(filename);
+}
+
+/**
+ * 写入前智能决策：交互模式询问用户，自动模式静默备份
+ * @returns true = 可以继续写入，false = 用户取消
+ */
+export async function shouldOverwrite(
+  filePath: string,
+  interactive: boolean
+): Promise<boolean> {
+  if (!(await pathExists(filePath))) return true;
+
+  if (interactive) {
+    const { createInterface } = require('readline');
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    const answer: string = await new Promise(resolve => {
+      rl.question(`   ⚠️  ${filePath.split('/').pop()} 已存在，是否覆盖？(y/N) `, resolve);
+    });
+    rl.close();
+    return answer.trim().toLowerCase() === 'y';
+  }
+
+  // 自动模式：静默备份
+  return true;
 }

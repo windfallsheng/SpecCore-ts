@@ -13,6 +13,7 @@
  */
 import { writeFile, pathExists, ensureDir } from 'fs-extra';
 import { join, dirname } from 'path';
+import { backupWithTimestamp, isTimestampBackup, shouldOverwrite } from '../utils/task-utils';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration, getIterationDir } from '../core/context';
 import { extractQuestions, showQuestionChecklist } from '../core/question-checklist';
@@ -85,7 +86,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     if (await pathExists(convDir)) {
       try {
         const files = await readdir(convDir);
-        for (const f of files.filter((f: string) => f.endsWith('.md'))) requirements.push(join(convDir, f));
+        for (const f of files.filter((f: string) => f.endsWith('.md') && !isTimestampBackup(f))) requirements.push(join(convDir, f));
       } catch {}
     }
     const reqRoot = join(reqDir, 'REQUIREMENT.md');
@@ -108,8 +109,15 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 
     logger.info(`🤖 Auto 分析: ${iter} (${requirements.length} 个需求文档)`);
     const result = await runAnalysis(input);
-    await writeFile(join(specDir, 'ANALYSIS.md'), result.report);
-    logger.success(`✅ 分析报告已生成: 020-specs/ANALYSIS.md`);
+    const analysisPath = join(specDir, 'ANALYSIS.md');
+    if (await shouldOverwrite(analysisPath, !!options.interactive)) {
+      const backup = await backupWithTimestamp(analysisPath);
+      if (backup) logger.info(`   📦 旧版已备份: ${backup.split('/').pop()}`);
+      await writeFile(analysisPath, result.report);
+      logger.success(`✅ 分析报告已生成: 020-specs/ANALYSIS.md`);
+    } else {
+      logger.info(`   ⏭️  用户取消覆盖，跳过写入`);
+    }
     if (result.summary) {
       logger.info(`   📊 分析: ${result.summary.filesAnalyzed} 文件, ${result.summary.apisFound} 接口, ${result.summary.issues} 问题, ${result.summary.risks} 风险`);
     }
@@ -151,7 +159,11 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
           const taskSpecDir = join(taskDir, '00-specs');
           await ensureDir(taskSpecDir);
           for (const [filename, content] of Object.entries(docs)) {
-            await writeFile(join(taskSpecDir, filename), content);
+            const fp = join(taskSpecDir, filename);
+            if (!(await shouldOverwrite(fp, !!options.interactive))) { logger.info(`   ⏭️  跳过: ${filename}`); continue; }
+            const bk = await backupWithTimestamp(fp);
+            if (bk) logger.info(`   📦 ${filename} 旧版已备份: ${bk.split('/').pop()}`);
+            await writeFile(fp, content);
             count++;
           }
           logger.success(`✅ ${count} 个 Spec 文档已写入 ${options.task}/00-specs/（任务级，迭代基线不变）`);
@@ -160,7 +172,11 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
           const specDir = join(iterDir, '020-specs');
           await ensureDir(specDir);
           for (const [filename, content] of Object.entries(docs)) {
-            await writeFile(join(specDir, filename), content);
+            const fp = join(specDir, filename);
+            if (!(await shouldOverwrite(fp, !!options.interactive))) { logger.info(`   ⏭️  跳过: ${filename}`); continue; }
+            const bk = await backupWithTimestamp(fp);
+            if (bk) logger.info(`   📦 ${filename} 旧版已备份: ${bk.split('/').pop()}`);
+            await writeFile(fp, content);
             count++;
           }
           logger.success(`✅ ${count} 个 Spec 文档已写入 020-specs/`);
@@ -176,14 +192,24 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       // 任务级：只写 Task/00-specs/
       const taskSpecDir = join(taskDir, '00-specs');
       await ensureDir(taskSpecDir);
-      await writeFile(join(taskSpecDir, 'ANALYSIS.md'), options.apply);
-      logger.success(`✅ ANALYSIS.md 已写入 ${options.task}/00-specs/（任务级，迭代基线不变）`);
+      const taskAnalysisPath = join(taskSpecDir, 'ANALYSIS.md');
+      if (await shouldOverwrite(taskAnalysisPath, !!options.interactive)) {
+        const taskBackup = await backupWithTimestamp(taskAnalysisPath);
+        if (taskBackup) logger.info(`   📦 旧版已备份: ${taskBackup.split('/').pop()}`);
+        await writeFile(taskAnalysisPath, options.apply);
+        logger.success(`✅ ANALYSIS.md 已写入 ${options.task}/00-specs/`);
+      } else { logger.info(`   ⏭️  用户取消覆盖`); }
     } else {
       // 迭代级：写 020-specs/
       const specDir = join(iterDir, '020-specs');
       await ensureDir(specDir);
-      await writeFile(join(specDir, 'ANALYSIS.md'), options.apply);
-      logger.success(`✅ ANALYSIS.md 已写入 020-specs/`);
+      const iterAnalysisPath = join(specDir, 'ANALYSIS.md');
+      if (await shouldOverwrite(iterAnalysisPath, !!options.interactive)) {
+        const iterBackup = await backupWithTimestamp(iterAnalysisPath);
+        if (iterBackup) logger.info(`   📦 旧版已备份: ${iterBackup.split('/').pop()}`);
+        await writeFile(iterAnalysisPath, options.apply);
+        logger.success(`✅ ANALYSIS.md 已写入 020-specs/`);
+      } else { logger.info(`   ⏭️  用户取消覆盖`); }
     }
     return;
   }
@@ -500,6 +526,20 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
   }
 
   const docs: [string, string][] = [
+    ['REQUIREMENT.md',
+`# 需求规格说明书
+
+> ${iter} | ${now}
+
+## 写作要求
+将原始需求文档综合整理为一份结构化的需求规格说明书，不是简单复制原文，而是：
+- 按功能模块组织，每个模块包含：功能描述、用户故事、验收标准、业务规则
+- 提取所有 API 接口需求（方法、路径、参数、响应格式）
+- 提取数据模型和字段需求
+- 标注异常场景和边界条件
+- 去重合并多端需求的公共部分，标注差异
+`],
+
     ['ANALYSIS.md',
 `# 需求分析报告
 
@@ -591,7 +631,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
 
   // 任务类型 × 文档矩阵: 每种类型生成哪些文档
   const DOC_MATRIX: Record<string, string[]> = {
-    feature:    ['ANALYSIS.md','TECH.md','TEST.md','REVIEW.md','RISK.md','DEPS.md','MONITOR.md'],
+    feature:    ['REQUIREMENT.md','ANALYSIS.md','TECH.md','TEST.md','REVIEW.md','RISK.md','DEPS.md','MONITOR.md'],
     refactor:   ['ANALYSIS.md','TECH.md','TEST.md','REVIEW.md','RISK.md'],
     bugfix:     ['ANALYSIS.md','TECH.md','TEST.md'],
     research:   ['ANALYSIS.md'],
