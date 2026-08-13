@@ -1,3 +1,12 @@
+## v5.91.0 (2026-08-13) — 清理旧版备份文件 + 参数速查优化
+
+- `cleanupStaleFiles` 新增清理逻辑：自动删除 `-old` / `-backup` 后缀的旧版备份文件（v5.87.2 之前创建）
+- 清理范围覆盖：各 AI 平台 commands/skills 目录 + 项目根目录
+- help.html 核心参数速查精简：去掉低频参数（--web/--export/--scope），添加高频参数（--platforms/--type/--force）
+- help.html 卡片宽度调整为 960px，与 setup-guide 保持一致
+
+---
+
 ## v5.90.0 (2026-08-13) — help.html 全面优化
 
 - welcome 页按钮文字颜色修复：三个按钮描述文字统一为白色 `rgba(255,255,255,.85)`

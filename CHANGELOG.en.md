@@ -2,6 +2,15 @@
 
 ---
 
+## v5.91.0 (2026-08-13) — Legacy Backup Cleanup + Params Reference Optimization
+
+- `cleanupStaleFiles` adds cleanup logic: auto-remove `-old` / `-backup` suffix legacy backup files (created before v5.87.2)
+- Cleanup scope covers: all AI platform commands/skills directories + project root
+- help.html core params reference streamlined: removed low-frequency params (--web/--export/--scope), added high-frequency params (--platforms/--type/--force)
+- help.html card width adjusted to 960px, consistent with setup-guide
+
+---
+
 ## v5.90.0 (2026-08-13) — help.html Comprehensive Optimization
 
 - Welcome page button text color fix: all three button descriptions unified to white `rgba(255,255,255,.85)`
