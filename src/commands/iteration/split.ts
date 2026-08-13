@@ -159,6 +159,26 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
         for (let i = 0; i < tasks.length; i++) {
           const task = tasks[i];
 
+          // 📌 核心原则校验：一个功能章节 = 一个任务
+          // 如果 AI 把同一个功能拆成多个任务，给出警告
+          if (i > 0) {
+            const prevTask = tasks[i - 1];
+            const sameFunction = (
+              // 检查是否有相同的关键词（如 "用户管理"、"订单管理" 等）
+              task.name && prevTask.name && 
+              task.name.split(' ')[0] === prevTask.name.split(' ')[0] &&
+              // 或者 scope 高度重叠
+              Array.isArray(task.scope) && Array.isArray(prevTask.scope) &&
+              task.scope.some((s: string) => prevTask.scope.includes(s))
+            );
+            if (sameFunction) {
+              logger.warn(`   ⚠️  检测到可能的过度拆分：`);
+              logger.warn(`      Task ${i}: ${prevTask.name}`);
+              logger.warn(`      Task ${i + 1}: ${task.name}`);
+              logger.warn(`      💡 建议：同一功能的不同子模块应该合并为一个任务`);
+            }
+          }
+
           // 将 AI JSON 转换为 Section，复用 createTaskFromSection 创建完整目录
           const desc = task.description || task.name || '';
           const scopeArr = Array.isArray(task.scope) ? task.scope : [];
