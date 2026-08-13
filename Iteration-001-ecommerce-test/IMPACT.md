@@ -6,15 +6,18 @@
 
 | Task | Risk | Score | Tags | Reasons |
 | :--- | :--- | ---: | :--- | :--- |
-| Task-016-user-auth: User Auth | 🟢 low | 0 | 🟢 低风险 |  |
-| Task-017-fix-login-bug: Fix Login Bug | 🟢 low | 0 | 🟢 低风险 |  |
-| Task-018-refactor-db-layer: Refactor DB Layer | 🟢 low | 0 | 🟢 低风险 |  |
+| Task-024-user-auth: 用户认证 | 🟡 medium | 25 | 🔐 权限 | 涉及权限/认证变更 |
+| Task-025-product-crud: 商品管理 | 🟢 low | 0 | 🟢 低风险 |  |
+| Task-026-fix-login-timeout: 修复登录超时 | 🟡 medium | 25 | 🔐 权限 | 涉及权限/认证变更 |
 
 ## Dependencies
 
 | Consumer | -> | Producer | 类型 |
 | :--- | :---: | :--- | :--- |
-| Task-016-user-auth: User Auth | → | Task-017-fix-login-bug: Fix Login Bug | API: `/api/login` |
-| Task-017-fix-login-bug: Fix Login Bug | → | Task-016-user-auth: User Auth | API: `/api/login` |
+| Task-024-user-auth: 用户认证 | → | Task-026-fix-login-timeout: 修复登录超时 | API: `/api/login` |
+| Task-026-fix-login-timeout: 修复登录超时 | → | Task-024-user-auth: 用户认证 | API: `/api/login` |
+| Task-024-user-auth | → | Task-026-fix-login-timeout(修复登录超时) | 语义推断 |
+| Task-025-product-crud | → | Task-024-user-auth(用户认证) | 语义推断 |
+| Task-025-product-crud | → | Task-026-fix-login-timeout(修复登录超时) | 语义推断 |
 
 > Consumer tasks must wait for Producer tasks, or pre-define API contracts.
