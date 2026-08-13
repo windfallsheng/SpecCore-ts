@@ -196,6 +196,8 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           };
           (section as any)._owner = task.owner || '未分配';
           (section as any)._taskType = (task.type && ['feature', 'bugfix', 'refactor', 'research'].includes(task.type)) ? task.type : 'feature';
+          // 保存 topic slug，用于生成任务目录名
+          (section as any)._topic = task.topic || slugify(task.name || `Task ${i + 1}`);
           if (taskScopePlatforms.length > 0) (section as any)._scopePlatforms = taskScopePlatforms;
           sections.push(section);
         }
@@ -227,7 +229,8 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
         const teamSize2 = staffing2 ? staffing2.length : 0;
         const granularity: Granularity = (options.granularity as Granularity) || recommendGranularity(teamSize2);
         const granRule = GRANULARITY_RULES[granularity];
-        const isInteractive = process.stdin.isTTY; // 非 TTY（管道调用）时自动确认
+        // 交互模式判断：显式 --interactive 或 stdin 是 TTY
+        const isInteractive = options.interactive || process.stdin.isTTY;
         logger.info(`   📏 粒度: ${granRule.label}${options.granularity ? ' (用户指定)' : ` (${teamSize2} 人团队自动推荐)`}`);
         if (!isInteractive) logger.info('   ℹ️  非交互终端，自动确认所有任务');
 
@@ -282,7 +285,9 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
             }
           }
 
-          const { id: taskId } = await nextTaskId(sec.name, (tasks[i] as any).topic);
+          // 使用保存的 topic slug 生成任务ID
+          const taskTopic = (sec as any)._topic || slugify(sec.name);
+          const { id: taskId } = await nextTaskId(sec.name, taskTopic);
           (sec as any)._taskId = taskId;
           await createTaskFromSection(iterDirFull, taskId, sec, allPlatforms, taskType);
           createdSections.push(sec);
