@@ -401,7 +401,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           await updateProjectGraph(iterDirFull, createdSections);
           // 生成任务总览报告 → 000-overview/TASK_SUMMARY.md
           const summaryMd = await generateTaskSummary(iterDirFull, tasks, createdSections);
-          logger.info(`   📊 任务总览 → 000-overview/TASK_SUMMARY.md`);
+          logger.info(`   📊 任务总览 → 000-overview/task-summaries/TASK_SUMMARY-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 16)}.md`);
           // 输出报告到 stdout，供宿主 AI 展示给用户
           process.stdout.write('\n[SPECCORE_TASK_SUMMARY]\n');
           process.stdout.write(summaryMd);
@@ -704,7 +704,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
 
     // 生成任务总览报告
     const summaryMd = await generateTaskSummary(iterationDir, [], sections);
-    logger.info(`📊 任务总览 → 000-overview/TASK_SUMMARY.md`);
+    logger.info(`📊 任务总览 → 000-overview/task-summaries/`);
 
     spinner.stop(`Created ${sections.length} tasks from requirements`);
     
@@ -2218,10 +2218,11 @@ async function generateTaskSummary(
     md += `| ${unit} | ${count} |\n`;
   }
 
-  // 写入文件
-  const overviewDir = join(iterationDir, '000-overview');
+  // 写入文件（带时间戳，放单独子目录）
+  const overviewDir = join(iterationDir, '000-overview', 'task-summaries');
   await ensureDir(overviewDir);
-  const summaryPath = join(overviewDir, 'TASK_SUMMARY.md');
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 16); // 2026-08-13T14-30
+  const summaryPath = join(overviewDir, `TASK_SUMMARY-${timestamp}.md`);
   await writeFile(summaryPath, md);
 
   return md;

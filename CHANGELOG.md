@@ -1,3 +1,11 @@
+## v5.95.1 (2026-08-13) — TASK_SUMMARY 报告路径优化
+
+- 报告放单独子目录 `000-overview/task-summaries/`
+- 文件名带时间戳：`TASK_SUMMARY-2026-08-13T14-30.md`
+- 多次拆分不会互相覆盖
+
+---
+
 ## v5.95.0 (2026-08-13) — 任务总览报告：TASK_SUMMARY.md
 
 - **新增任务总览报告**：拆分完成后自动生成 `000-overview/TASK_SUMMARY.md`
