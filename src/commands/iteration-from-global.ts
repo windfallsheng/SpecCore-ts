@@ -92,7 +92,11 @@ export async function iterationFromGlobalCommand(options: IterationFromGlobalOpt
     const reqContent = generateIterationRequirement(options.name, reqDetails);
     const reqPath = join(iterationDir, '020-specs', 'REQUIREMENT.md');
     const bk = await backupWithTimestamp(reqPath);
-    if (bk) logger.info(`   📦 旧版已备份: ${bk.split('/').pop()}`);
+    const backups: string[] = [];
+    if (bk) {
+      backups.push(bk);
+      logger.info(`   📦 旧版已备份: ${bk.split('/').pop()}`);
+    }
     await writeFile(reqPath, reqContent);
 
     // 7. 生成架构文档
@@ -149,6 +153,16 @@ export async function iterationFromGlobalCommand(options: IterationFromGlobalOpt
     logger.info('   speccore plan          生成调度方案');
     logger.info('   speccore execute       开始开发');
     logger.info('   需求变更时运行 speccore sync-global 同步回全量层');
+    
+    // 备份汇总
+    if (backups.length > 0) {
+      logger.info('');
+      logger.info(`📦 备份文件 (${backups.length} 个):`);
+      for (const bp of backups) {
+        logger.info(`   ${bp}`);
+      }
+      logger.info('   💡 如不再需要可手动删除');
+    }
   } catch (error) {
     spinner.fail(`迭代生成失败: ${error}`);
     throw error;

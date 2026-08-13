@@ -1,5 +1,5 @@
 ---
-name: spec:dev
+name: spec-dev
 description: SpecCore Smart Pipeline
 ---
 SpecCore Smart Pipeline

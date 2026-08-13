@@ -1,5 +1,5 @@
 ---
-name: spec:analyze
+name: spec-analyze
 description: SpecCore Analysis
 ---
 SpecCore Analysis

@@ -1,3 +1,16 @@
+## v5.87.0 (2026-08-13) — 冲突处理统一时间戳 + 备份汇总
+
+- `*-old` 命名风格全面替换为时间戳格式 `{name}-{YYYYMMDDHHmmss}.md`
+- 删除 `.speccore-backup` 整体备份机制（init --force 不再备份整个 .speccore/ 目录）
+- 新增 `backupDirWithTimestamp` 目录级时间戳备份函数（task-utils.ts）
+- 所有 `--force` 操作路径补上时间戳保护：import / pattern / migrate
+- 所有备份操作统一输出汇总：列出备份文件路径 + diff 命令 + 清理提示
+- `_updateConflicts` 结构升级为 `{file, backup}[]`，支持 diff 对比提示
+- 删除死代码：`writeAgentsMdWithOld`、所有 `*-old` 清理逻辑
+- init --force 不碰 Iteration-*/ 用户目录，冲突文件自动重命名并告知用户
+
+---
+
 ## v5.86.0 (2026-08-13) — 编号安全体系 + 计划子目录化 + 备份过滤
 
 - 计划文件子目录化：`000-overview/plans/Plan-NNN-slug/`（PLAN.md + HTML），消除重复 MD 文件

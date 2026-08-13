@@ -64,6 +64,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     if (!iter) { logger.error('--response 需要 --iteration'); return; }
     const iterDir = join('Iteration-' + iter, '030-tasks');
     await ensureDir(iterDir);
+    const backups: string[] = [];
     // 尝试解析 AI 返回的 JSON Task 列表
     try {
       const tasks = JSON.parse(options.response);
@@ -130,16 +131,32 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
         logger.warn('AI 返回格式非数组，将作为 Markdown 写入 REQUIREMENT.md');
         const reqPath = join(iterDir, 'REQUIREMENT.md');
         const bk = await backupWithTimestamp(reqPath);
-        if (bk) logger.info(`   📦 旧版已备份: ${bk.split('/').pop()}`);
+        if (bk) {
+          backups.push(bk);
+          logger.info(`   📦 旧版已备份: ${bk.split('/').pop()}`);
+        }
         await writeFile(reqPath, options.response);
       }
     } catch {
       const reqPath = join(iterDir, 'REQUIREMENT.md');
       const bk = await backupWithTimestamp(reqPath);
-      if (bk) logger.info(`   📦 旧版已备份: ${bk.split('/').pop()}`);
+      if (bk) {
+        backups.push(bk);
+        logger.info(`   📦 旧版已备份: ${bk.split('/').pop()}`);
+      }
       await writeFile(reqPath, options.response);
     }
     logger.success('✅ 任务已创建');
+    
+    // 备份汇总
+    if (backups.length > 0) {
+      logger.info('');
+      logger.info(`📦 备份文件 (${backups.length} 个):`);
+      for (const bp of backups) {
+        logger.info(`   ${bp}`);
+      }
+      logger.info('   💡 如不再需要可手动删除');
+    }
     return;
   }
 

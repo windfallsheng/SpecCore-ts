@@ -1,5 +1,5 @@
 ---
-name: spec:execute
+name: spec-execute
 description: SpecCore Execute
 ---
 SpecCore Execute

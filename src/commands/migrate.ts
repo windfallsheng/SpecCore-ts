@@ -5,6 +5,7 @@
 import { readdir, pathExists, copy, remove, ensureDir, readFile, writeFile } from 'fs-extra';
 import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
+import { backupDirWithTimestamp } from '../utils/task-utils';
 
 export interface MigrateOptions {
   type?: string;        // 迁移类型：tasks | specs | all
@@ -60,6 +61,7 @@ export async function migrateTasks(projectRoot: string, iterationName: string, o
   let migrated = 0;
   let skipped = 0;
   let errors = 0;
+  const backups: string[] = [];
 
   for (const taskName of taskDirs) {
     const srcPath = join(iterDir, taskName);
@@ -114,7 +116,12 @@ export async function migrateTasks(projectRoot: string, iterationName: string, o
         skipped++;
         continue;
       }
-      // 强制覆盖：先删除旧目录
+      // 强制覆盖：先备份旧目录为时间戳格式，再删除
+      const backupPath = await backupDirWithTimestamp(destPath);
+      if (backupPath) {
+        backups.push(backupPath);
+        logger.info(`   📦 旧版已备份: ${backupPath.split('/').pop()}`);
+      }
       await remove(destPath);
     }
 
@@ -135,6 +142,16 @@ export async function migrateTasks(projectRoot: string, iterationName: string, o
 
   logger.info('');
   logger.info(`📊 迁移完成: ${migrated} 成功, ${skipped} 跳过, ${errors} 失败`);
+  
+  // 备份汇总
+  if (backups.length > 0) {
+    logger.info('');
+    logger.info(`📦 备份文件 (${backups.length} 个):`);
+    for (const bp of backups) {
+      logger.info(`   ${bp}`);
+    }
+    logger.info('   💡 如不再需要可手动删除');
+  }
   
   // 清理 030-tasks/ 根目录下的旧版 Task-* 目录（迁移后残留）
   if (migrated > 0) {

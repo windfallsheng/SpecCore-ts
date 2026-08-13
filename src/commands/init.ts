@@ -5,24 +5,30 @@ import { createInterface } from 'readline';
 import { updateContext } from '../core/context';
 import { SVG_ONBOARD } from './ask';
 
-// ── 升级冲突追踪 ── 覆盖前旧文件重命名为 *-old，汇总提示用户对比
-export const _updateConflicts: string[] = [];
+// ── 升级冲突追踪 ── 覆盖前旧文件重命名为时间戳格式，汇总提示用户对比
+export const _updateConflicts: { file: string; backup: string }[] = [];
 
-/** 写入前检查冲突：内容不同则 rename 旧文件为 *-old */
-export async function safeWriteWithOld(filePath: string, newContent: string): Promise<void> {
+/** 生成时间戳后缀：YYYYMMDDHHmmss */
+function timestampSuffix(): string {
+  return new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+}
+
+/** 写入前检查冲突：内容不同则 rename 旧文件为 {name}-{timestamp}.{ext} */
+export async function safeWriteWithBackup(filePath: string, newContent: string): Promise<void> {
   if (await pathExists(filePath)) {
     const existing = await readFile(filePath, 'utf-8');
     if (existing.trim() !== newContent.trim()) {
-      const oldPath = filePath.replace(/\.(md|json|txt|yaml)$/, '-old.$1');
-      await rename(filePath, oldPath);
-      _updateConflicts.push(filePath);
+      const ts = timestampSuffix();
+      const backupPath = filePath.replace(/\.(md|json|txt|yaml)$/, `-${ts}.$1`);
+      await rename(filePath, backupPath);
+      _updateConflicts.push({ file: filePath, backup: backupPath });
     }
   }
   await writeFile(filePath, newContent);
 }
 
-/** 目录复制前，对每个有差异的文件做 *-old 重命名 */
-export async function safeCopyDirWithOld(srcDir: string, destDir: string): Promise<void> {
+/** 目录复制前，对每个有差异的文件做时间戳重命名 */
+export async function safeCopyDirWithBackup(srcDir: string, destDir: string): Promise<void> {
   if (!(await pathExists(srcDir))) return;
   // 源和目标相同则跳过（CLI 自身项目运行时）
   const { realpath } = require('fs-extra');
@@ -34,7 +40,7 @@ export async function safeCopyDirWithOld(srcDir: string, destDir: string): Promi
     }
   } catch {}
   const { copy } = require('fs-extra');
-  const { readdir: rd, stat } = require('fs-extra');
+  const { readdir: rd } = require('fs-extra');
   const walk = async (src: string, dest: string) => {
     if (!(await pathExists(src))) return;
     const entries = await rd(src, { withFileTypes: true });
@@ -48,9 +54,10 @@ export async function safeCopyDirWithOld(srcDir: string, destDir: string): Promi
           const oldContent = await readFile(destPath, 'utf-8');
           const newContent = await readFile(srcPath, 'utf-8');
           if (oldContent.trim() !== newContent.trim()) {
-            const oldPath = destPath + '-old';
-            await rename(destPath, oldPath);
-            _updateConflicts.push(destPath);
+            const ts = timestampSuffix();
+            const backupPath = destPath.replace(/\.(md|json|txt|yaml)$/, `-${ts}.$1`);
+            await rename(destPath, backupPath);
+            _updateConflicts.push({ file: destPath, backup: backupPath });
           }
         }
       }
@@ -117,12 +124,12 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
         // init 额外步骤（updateCommand 不覆盖的）
         await createWorkBuddyFiles(projectRoot);
 
-        // 更新 Spec 文档模板 — 有差异的旧文件重命名为 *-old
+        // 更新 Spec 文档模板 — 有差异的旧文件重命名为时间戳格式
         const specsSrc = join(__dirname, '..', '..', '.speccore', 'PATTERNS', 'TEMPLATES', 'specs');
         const specsDest = join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'specs');
         if (await pathExists(specsSrc)) {
           await ensureDir(specsDest);
-          await safeCopyDirWithOld(specsSrc, specsDest);
+          await safeCopyDirWithBackup(specsSrc, specsDest);
         }
 
         // 更新版本号（last-init-version.txt 同步）
@@ -170,54 +177,8 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
         return;
       }
 
-      // ── 自动备份重要数据 ──
-      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-      const backupDir = join(projectRoot, `.speccore-backup-${ts}`);
-      await ensureDir(backupDir);
-      
-      const { readdir } = require('fs-extra');
-      const itemsToBackup: string[] = [];
-      
-      // 1. .speccore/ 目录
-      if (await pathExists(speccoreDir)) {
-        await copy(speccoreDir, join(backupDir, '.speccore'));
-        itemsToBackup.push('.speccore/');
-      }
-      
-      // 2. Iteration-* 目录
-      const entries = await readdir(projectRoot, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.isDirectory() && entry.name.startsWith('Iteration-')) {
-          await copy(join(projectRoot, entry.name), join(backupDir, entry.name));
-          itemsToBackup.push(entry.name + '/');
-        }
-      }
-      
-      // 3. inbox/ 和 questions/（如果存在）
-      for (const subdir of ['inbox', 'questions']) {
-        const srcPath = join(speccoreDir, subdir);
-        if (await pathExists(srcPath)) {
-          await copy(srcPath, join(backupDir, '.speccore', subdir));
-          if (!itemsToBackup.includes('.speccore/')) {
-            itemsToBackup.push('.speccore/' + subdir + '/');
-          }
-        }
-      }
-      
-      logger.info('');
-      logger.info(`📦 已备份 ${itemsToBackup.length} 个项目到:`);
-      logger.info(`   ${backupDir}`);
-      logger.info('');
-      logger.info('   📋 备份内容:');
-      for (const item of itemsToBackup) {
-        logger.info(`      • ${item}`);
-      }
-      logger.info('');
-      logger.info('   💾 如需恢复，执行:');
-      logger.info(`      cp -r ${backupDir}/.speccore .speccore`);
-      logger.info(`      # 如有迭代目录: cp -r ${backupDir}/Iteration-* ./`);
-      logger.info('');
-      logger.info('   🗑  确认无误后可手动删除备份目录');
+      // ── 冲突提示（不备份，init 只写 .speccore/ 和自动生成文件）──
+      // Iteration-*/ 等用户目录 init 不会触碰，无需备份
       logger.info('');
       
       spinner.start();
@@ -1311,7 +1272,6 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
     try {
       const existing = await readdir(toolDir);
       for (const f of existing) {
-        if (f.endsWith('-old.md')) { await require('fs-extra').unlink(join(toolDir, f)); continue; }
         if (f.endsWith('.md') && !validNames.has(f)) { await require('fs-extra').unlink(join(toolDir, f)); }
       }
     } catch {}
@@ -1334,14 +1294,12 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
     const content = '---\nname: ' + name + '\ndescription: ' + desc + '\n---\n' + desc + '\n\n执行命令: `' + cmd + '`';
     await writeFile(join(qoderCommandsDir, name + '.md'), content);
   }
-  // 清理 Qoder 目录：废弃文件 + 旧格式 + *-old 残留
+  // 清理 Qoder 目录：废弃文件 + 旧格式残留
   const validQoderNames = new Set(commands.map(([n]) => n + '.md'));
   try {
     const existing = await readdir(qoderCommandsDir);
     for (const f of existing) {
       const fp = join(qoderCommandsDir, f);
-      // 清理 *-old 备份文件
-      if (f.includes('-old')) { await require('fs-extra').unlink(fp); continue; }
       // 清理旧版 spec: 前缀文件（已改用 spec- 前缀）
       if (f.startsWith('spec:') && f.endsWith('.md')) { await require('fs-extra').unlink(fp); continue; }
       // 清理已废弃的命令文件
@@ -1437,8 +1395,6 @@ export async function cleanupStaleFiles(
       if (stat.isSymbolicLink()) continue;
       const files = await readdir(cmdDir);
       for (const f of files) {
-        // 清理 *-old 备份文件
-        if (f.includes('-old')) { await require('fs-extra').unlink(join(cmdDir, f)); cleanedCount++; continue; }
         if (!validCmdNames.has(f) && f.endsWith('.md')) {
           await require('fs-extra').unlink(join(cmdDir, f));
           cleanedCount++;
@@ -1447,7 +1403,7 @@ export async function cleanupStaleFiles(
     } catch { /* ignore missing dirs */ }
   }
 
-  // 2. 清理 .agents/skills/ 下 stale Skill 目录 + *-old 残留
+  // 2. 清理 .agents/skills/ 下 stale Skill 目录
   const skillsDir = join(projectRoot, '.agents', 'skills');
   try {
     if (await pathExists(skillsDir)) {
@@ -1455,11 +1411,6 @@ export async function cleanupStaleFiles(
       for (const e of entries) {
         if (e.isDirectory() && !skillNames.includes(e.name)) {
           await require('fs-extra').remove(join(skillsDir, e.name));
-          cleanedCount++;
-        }
-        // 清理 *-old 备份文件（旧版 safeCopyDirWithOld 残留）
-        if (e.isFile() && e.name.includes('-old')) {
-          await require('fs-extra').unlink(join(skillsDir, e.name));
           cleanedCount++;
         }
       }
@@ -1559,30 +1510,6 @@ Iteration-NNN-name/            ← 迭代目录
 `;
 
   await wf(require('path').join(projectRoot, 'AGENTS.md'), content);
-}
-
-/** AGENTS.md 写入（冲突时旧文件重命名为 *-old） */
-async function writeAgentsMdWithOld(projectRoot: string): Promise<void> {
-  const agentsPath = join(projectRoot, 'AGENTS.md');
-  // 1. 读取旧版内容（如果存在）
-  let oldContent = '';
-  if (await pathExists(agentsPath)) {
-    oldContent = await readFile(agentsPath, 'utf-8');
-  }
-  // 2. 写新版（通过原有函数）
-  await writeAgentsMd(projectRoot);
-  // 3. 如果旧版存在且不同，将新版保存为旧版的 *-old 副本
-  //    实际做法：先写新版到临时文件，rename 旧版 → *-old，再写新版
-  //    但 writeAgentsMd 已经写了，所以换个思路：
-  //    读新版内容，对比旧版，如果不同则把旧版内容写入 *-old
-  if (oldContent) {
-    const newContent = await readFile(agentsPath, 'utf-8');
-    if (oldContent.trim() !== newContent.trim()) {
-      const oldPath = agentsPath.replace(/\.md$/, '-old.md');
-      await writeFile(oldPath, oldContent);
-      _updateConflicts.push(agentsPath);
-    }
-  }
 }
 
 async function createSampleIteration(projectRoot: string): Promise<void> {

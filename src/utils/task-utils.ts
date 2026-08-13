@@ -110,6 +110,20 @@ export async function backupWithTimestamp(filePath: string): Promise<string | nu
 }
 
 /**
+ * 目录备份：旧目录按时间戳重命名，永不覆盖
+ * 返回备份目录路径（无旧目录则返回 null）
+ */
+export async function backupDirWithTimestamp(dirPath: string): Promise<string | null> {
+  if (await pathExists(dirPath)) {
+    const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+    const backupPath = `${dirPath}-${ts}`;
+    await rename(dirPath, backupPath);
+    return backupPath;
+  }
+  return null;
+}
+
+/**
  * 判断文件名是否为时间戳备份文件（如 ANALYSIS-20260813021034.md）
  */
 export function isTimestampBackup(filename: string): boolean {

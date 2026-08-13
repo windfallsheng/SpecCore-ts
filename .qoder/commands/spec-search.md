@@ -1,5 +1,5 @@
 ---
-name: spec:search
+name: spec-search
 description: 全文搜索: ${1:关键词}
 ---
 全文搜索: ${1:关键词}
