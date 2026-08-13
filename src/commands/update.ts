@@ -65,21 +65,14 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   }
 
   const isSameVersion = oldVersion === CURRENT_VERSION;
-  if (isSameVersion && !options.force) {
-    logger.info('');
-    logger.info(`✅ 已是最新版本 v${CURRENT_VERSION}，无需升级`);
-    logger.info('');
-    logger.info('💡 如需强制更新所有命令文件: speccore init --update --force');
-    logger.info('');
-    return;
-  }
 
-  const spinner = new Spinner(isSameVersion ? '强制更新命令文件...' : `升级 v${oldVersion} → v${CURRENT_VERSION}...`);
+  // 始终执行更新和清理，不再因版本相同跳过（确保旧格式文件、废弃命令等被清理）
+  const spinner = new Spinner(isSameVersion ? `刷新 v${CURRENT_VERSION} 命令文件...` : `升级 v${oldVersion} → v${CURRENT_VERSION}...`);
   spinner.start();
   if (!isSameVersion) {
     logger.info(`  📦 从 v${oldVersion} 升级到 v${CURRENT_VERSION}...`);
   } else {
-    logger.info(`  🔄 强制更新 v${CURRENT_VERSION} 命令文件...`);
+    logger.info(`  🔄 刷新 v${CURRENT_VERSION} 命令文件 + 清理旧格式残留...`);
   }
 
   logger.info(`  🎯 目标工具: ${tools.map(t => t.replace('.', '')).join(', ') || '无'}`);

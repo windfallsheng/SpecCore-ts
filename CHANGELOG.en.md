@@ -2,6 +2,13 @@
 
 ---
 
+## v5.87.2 (2026-08-13) — Upgrade Safety Optimization
+
+- `init --update` no longer skips on same version; always runs cleanup and file refresh (legacy format cleanup works without `--force`)
+- `init --force` confirmation prompt enhanced: explicitly lists counter/INDEX/config loss risks, guides users to `--update --force` for safe upgrade
+
+---
+
 ## v5.87.1 (2026-08-13) — Qoder Legacy Cleanup Fix
 
 - Fixed reversed cleanup logic in update.ts: was incorrectly deleting `spec-` (new format), now correctly cleans `spec:` (old format)
