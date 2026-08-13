@@ -485,25 +485,162 @@ async function helpHtml(options: HelpOptions): Promise<void> {
   if (options.command) {
     const info = COMMAND_PARAMS[options.command];
     title = `${options.command} 命令详解`;
-    body = info ? `<div class="cmd-detail"><div class="cmd-desc">${info.desc}</div>${info.params.length ? `<div class="param-list">${info.params.map(p=>`<div class="param"><span class="param-flag">${p.flag}</span><span class="param-meaning">${p.meaning}</span></div>`).join('')}</div>` : ''}${info.examples.length ? `<div class="example-list"><div class="section-label">示例</div>${info.examples.map(e=>`<code>$ ${e}</code>`).join('')}</div>` : ''}</div>` : `<p>未找到命令 "${options.command}"</p>`;
+    body = info ? `<div class="cmd-detail"><div class="cmd-desc">${info.desc}</div>${info.params.length ? `<div class="param-list"><div class="section-label">参数说明</div>${info.params.map(p=>`<div class="param"><span class="param-flag">${p.flag}</span><span class="param-meaning">${p.meaning}</span></div>`).join('')}</div>` : ''}${info.examples.length ? `<div class="example-list"><div class="section-label">使用示例</div>${info.examples.map(e=>`<code>$ ${e}</code>`).join('')}</div>` : ''}</div>` : `<p>未找到命令 "${options.command}"</p>`;
   } else {
-    const categories: Record<string, string[]> = {
-      '🧠 AI 入口': ['ask', 'welcome'],
-      '🏗️ 初始化': ['init'],
-      '📋 迭代与任务': ['iteration', 'task', 'rename'],
-      '📝 文档转换': ['doc2spec', 'spec2doc', 'synthesize'],
-      '🔍 分析与计划': ['analyze', 'plan', 'split'],
-      '⚡ 执行与交付': ['execute', 'pr', 'done'],
-      '🔄 同步与变更': ['change', 'sync', 'ops'],
-      '📊 查看与验证': ['dashboard', 'validate', 'track', 'search', 'code-index'],
-      '🤖 智能操作': ['dev'],
+    // 首页：结构化展示，不只是罗列命令
+    const introSection = `
+      <div class="intro-card">
+        <div class="intro-title">🎯 SpecCore — SDD 开发方法论 CLI 工具</div>
+        <div class="intro-text">SpecCore 采用 <strong>Specification-Driven Development（规格驱动开发）</strong>方法论，通过标准化流程和 AI 辅助，实现从需求到交付的自动化流水线。</div>
+        <div class="highlight-box">
+          <div class="highlight-icon">💡</div>
+          <div class="highlight-content">
+            <div class="highlight-title">核心原则</div>
+            <ul class="highlight-list">
+              <li><strong>规格先行</strong>：先写规格文档，再执行代码</li>
+              <li><strong>AI 协同</strong>：自然语言交互，智能意图识别</li>
+              <li><strong>迭代管理</strong>：任务拆分、计划、执行、审查闭环</li>
+              <li><strong>多端适配</strong>：后端 / Web / H5 / 小程序全栈支持</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const quickStartSection = `
+      <div class="quick-start">
+        <div class="section-header">
+          <span class="header-icon">⚡</span>
+          <span class="header-title">快速开始</span>
+        </div>
+        <div class="step-row">
+          <div class="step-item">
+            <div class="step-num">1</div>
+            <div class="step-text"><strong>初始化项目</strong><br><code>speccore init</code></div>
+          </div>
+          <div class="step-arrow">→</div>
+          <div class="step-item">
+            <div class="step-num">2</div>
+            <div class="step-text"><strong>创建迭代</strong><br><code>iteration create -n Q1</code></div>
+          </div>
+          <div class="step-arrow">→</div>
+          <div class="step-item">
+            <div class="step-num">3</div>
+            <div class="step-text"><strong>导入需求</strong><br><code>import --project=my-app</code></div>
+          </div>
+          <div class="step-arrow">→</div>
+          <div class="step-item">
+            <div class="step-num">4</div>
+            <div class="step-text"><strong>AI 分析</strong><br><code>analyze -i Q1</code></div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const categories: Record<string, { cmds: string[]; icon: string; desc: string }> = {
+      '🧠 AI 智能入口': { 
+        cmds: ['ask', 'welcome'],
+        icon: '🤖',
+        desc: '自然语言交互，自动匹配意图'
+      },
+      '🏗️ 项目初始化': { 
+        cmds: ['init'],
+        icon: '🚀',
+        desc: '搭建 SpecCore 目录结构和配置'
+      },
+      '📋 迭代与任务管理': { 
+        cmds: ['iteration', 'task', 'rename'],
+        icon: '📊',
+        desc: '创建迭代、拆分任务、重命名'
+      },
+      '📝 文档转换与合成': { 
+        cmds: ['doc2spec', 'spec2doc', 'synthesize'],
+        icon: '📄',
+        desc: 'Word/PDF/MD → 规格文档，多端需求合成'
+      },
+      '🔍 分析与计划': { 
+        cmds: ['analyze', 'plan', 'split'],
+        icon: '🔬',
+        desc: 'AI 需求分析、生成执行计划、原子化拆分'
+      },
+      '⚡ 执行与交付': { 
+        cmds: ['execute', 'pr', 'done'],
+        icon: '⚙️',
+        desc: '自动执行任务、代码审查、标记完成'
+      },
+      '🔄 同步与变更管理': { 
+        cmds: ['change', 'sync', 'ops'],
+        icon: '🔄',
+        desc: '需求变更追踪、操作历史查询'
+      },
+      '📊 查看与验证': { 
+        cmds: ['dashboard', 'validate', 'track', 'search', 'code-index'],
+        icon: '📈',
+        desc: '进度看板、代码验证、源码索引'
+      },
+      '🛠️ 智能开发助手': { 
+        cmds: ['dev'],
+        icon: '🛠️',
+        desc: '自动化开发流程编排'
+      },
     };
-    body = Object.entries(categories).map(([cat, cmds]) => 
-      `<div class="cat"><div class="cat-title">${cat}</div><div class="cat-cmds">${cmds.map(c => `<span class="cmd-pill">speccore ${c}</span>`).join('')}</div></div>`
+
+    const catBody = Object.entries(categories).map(([cat, { cmds, icon, desc }]) => 
+      `<div class="cat">
+        <div class="cat-header">
+          <span class="cat-icon">${icon}</span>
+          <div class="cat-info">
+            <div class="cat-title">${cat}</div>
+            <div class="cat-desc">${desc}</div>
+          </div>
+        </div>
+        <div class="cat-cmds">${cmds.map(c => `<span class="cmd-pill">speccore ${c}</span>`).join('')}</div>
+      </div>`
     ).join('');
+
+    const tipsSection = `
+      <div class="tips-section">
+        <div class="section-header">
+          <span class="header-icon">💡</span>
+          <span class="header-title">使用技巧</span>
+        </div>
+        <div class="tip-grid">
+          <div class="tip-card">
+            <div class="tip-icon">🎯</div>
+            <div class="tip-content">
+              <div class="tip-title">优先使用 ask</div>
+              <div class="tip-text">不确定用哪个命令？直接说人话：<br><code>speccore ask "我想创建一个登录功能"</code></div>
+            </div>
+          </div>
+          <div class="tip-card">
+            <div class="tip-icon">🔍</div>
+            <div class="tip-content">
+              <div class="tip-title">搜索命令</div>
+              <div class="tip-text">忘记命令名？用搜索：<br><code>speccore help --search=导入</code></div>
+            </div>
+          </div>
+          <div class="tip-card">
+            <div class="tip-icon">📖</div>
+            <div class="tip-content">
+              <div class="tip-title">查看详细参数</div>
+              <div class="tip-text">了解命令用法：<br><code>speccore help --command=execute</code></div>
+            </div>
+          </div>
+          <div class="tip-card">
+            <div class="tip-icon">🌐</div>
+            <div class="tip-content">
+              <div class="tip-title">HTML 帮助页</div>
+              <div class="tip-text">在浏览器中查看：<br><code>speccore help > outputs/speccore-help.html</code></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    body = introSection + quickStartSection + catBody + tipsSection;
   }
 
-  const html = `<!DOCTYPE html><html lang="zh-CN" data-theme="ocean"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>SpecCore Help</title><style>@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;600;700&display=swap');[data-theme="ocean"]{--cyan:#0ea5e9;--bg:#0b1929;--card:rgba(13,31,56,.95);--border:rgba(14,165,233,.15);--text:#bae6fd;--muted:#5b7fa5;--green:#14b8a6;--orange:#f97316;--purple:#6366f1}*{margin:0;padding:0;box-sizing:border-box}body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--text);min-height:100vh;padding:40px 20px}.scanlines{position:fixed;inset:0;pointer-events:none;z-index:99;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,240,255,.01) 2px,rgba(0,240,255,.01) 4px)}.card{max-width:720px;margin:0 auto;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:36px;position:relative;overflow:hidden}.card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanX 3s linear infinite}.card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanX-rev 3s linear infinite}@keyframes scanX{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}@keyframes scanX-rev{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}@keyframes scanY{0%{transform:translateY(-100%)}100%{transform:translateY(100%)}}@keyframes scanY-rev{0%{transform:translateY(100%)}100%{transform:translateY(-100%)}}.vline{position:absolute;top:0;width:1px;bottom:0;pointer-events:none}.vline.l{left:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY-rev 3s linear infinite}.vline.r{right:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY 3s linear infinite}h1{font-family:'Orbitron',sans-serif;font-size:24px;font-weight:900;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:2px;margin-bottom:4px}.sub{color:var(--muted);font-size:11px;margin-bottom:20px}.cat{margin:12px 0;padding:12px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.04);border-radius:10px}.cat-title{font-size:10px;font-weight:700;color:var(--cyan);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}.cat-cmds{display:flex;flex-wrap:wrap;gap:6px}.cmd-pill{padding:3px 10px;border-radius:4px;font-size:10px;background:rgba(14,165,233,.1);color:var(--cyan);border:1px solid rgba(14,165,233,.15)}.cmd-detail{padding:8px 0}.cmd-desc{font-size:13px;margin-bottom:16px}.param-list{margin:12px 0}.param{display:flex;gap:12px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.03)}.param-flag{color:var(--green);font-size:11px;min-width:160px}.param-meaning{color:var(--muted);font-size:11px}.example-list{margin:12px 0}.section-label{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}code{display:block;background:rgba(14,165,233,.1);padding:4px 10px;border-radius:4px;color:var(--cyan);font-size:11px;margin:4px 0}.footer{text-align:center;color:var(--muted);font-size:10px;margin-top:24px;padding-top:16px;border-top:1px solid rgba(255,255,255,.04)}</style></head><body><div class="scanlines"></div><div class="card"><div class="vline l"></div><div class="vline r"></div><h1>SPECCORE HELP</h1><div class="sub">${title} · v${version}</div>${body}<div class="footer">由 SpecCore 驱动 v${version} · ${now}</div></div></body></html>`;
+  const html = `<!DOCTYPE html><html lang="zh-CN" data-theme="ocean"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>SpecCore Help</title><style>@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;600;700&display=swap');[data-theme="ocean"]{--cyan:#0ea5e9;--bg:#0b1929;--card:rgba(13,31,56,.95);--border:rgba(14,165,233,.15);--text:#bae6fd;--muted:#5b7fa5;--green:#14b8a6;--orange:#f97316;--purple:#6366f1}*{margin:0;padding:0;box-sizing:border-box}body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--text);min-height:100vh;padding:40px 20px}.scanlines{position:fixed;inset:0;pointer-events:none;z-index:99;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,240,255,.01) 2px,rgba(0,240,255,.01) 4px)}.card{max-width:900px;margin:0 auto;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:36px;position:relative;overflow:hidden}.card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanX 3s linear infinite}.card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanX-rev 3s linear infinite}@keyframes scanX{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}@keyframes scanX-rev{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}@keyframes scanY{0%{transform:translateY(-100%)}100%{transform:translateY(100%)}}@keyframes scanY-rev{0%{transform:translateY(100%)}100%{transform:translateY(-100%)}}.vline{position:absolute;top:0;width:1px;bottom:0;pointer-events:none}.vline.l{left:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY-rev 3s linear infinite}.vline.r{right:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY 3s linear infinite}h1{font-family:'Orbitron',sans-serif;font-size:24px;font-weight:900;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:2px;margin-bottom:4px}.sub{color:var(--muted);font-size:11px;margin-bottom:24px}.intro-card{padding:20px;margin-bottom:20px;background:linear-gradient(135deg,rgba(14,165,233,.08),rgba(99,102,241,.08));border:1px solid rgba(14,165,233,.2);border-radius:12px}.intro-title{font-size:16px;font-weight:700;color:var(--cyan);margin-bottom:12px}.intro-text{font-size:13px;line-height:1.6;color:var(--text);margin-bottom:16px}.highlight-box{display:flex;gap:16px;padding:16px;background:rgba(20,184,166,.08);border:1px solid rgba(20,184,166,.2);border-radius:10px}.highlight-icon{font-size:32px}.highlight-content{flex:1}.highlight-title{font-size:12px;font-weight:700;color:var(--green);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px}.highlight-list{list-style:none;padding:0;margin:0}.highlight-list li{font-size:12px;color:var(--text);padding:4px 0;line-height:1.5}.highlight-list strong{color:var(--cyan)}.quick-start{padding:20px;margin:20px 0;background:rgba(249,115,22,.05);border:1px solid rgba(249,115,22,.15);border-radius:12px}.section-header{display:flex;align-items:center;gap:8px;margin-bottom:16px}.header-icon{font-size:20px}.header-title{font-size:14px;font-weight:700;color:var(--orange);text-transform:uppercase;letter-spacing:1px}.step-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:center}.step-item{display:flex;gap:12px;padding:12px 16px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:10px;min-width:180px}.step-num{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--orange),#ea580c);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#fff;flex-shrink:0}.step-text{font-size:12px;line-height:1.5}.step-text code{display:inline-block;margin-top:4px;padding:2px 8px;background:rgba(249,115,22,.1);border-radius:4px;color:var(--orange);font-size:11px}.step-arrow{color:var(--muted);font-size:20px;font-weight:700}.cat{margin:16px 0;padding:16px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.04);border-radius:12px;transition:all .3s}.cat:hover{border-color:rgba(14,165,233,.3);background:rgba(14,165,233,.03)}.cat-header{display:flex;align-items:center;gap:12px;margin-bottom:12px}.cat-icon{font-size:24px}.cat-info{flex:1}.cat-title{font-size:13px;font-weight:700;color:var(--cyan);margin-bottom:2px}.cat-desc{font-size:11px;color:var(--muted)}.cat-cmds{display:flex;flex-wrap:wrap;gap:8px}.cmd-pill{padding:4px 12px;border-radius:6px;font-size:11px;background:rgba(14,165,233,.08);color:var(--cyan);border:1px solid rgba(14,165,233,.15);transition:all .2s;cursor:pointer}.cmd-pill:hover{background:rgba(14,165,233,.15);border-color:rgba(14,165,233,.3);transform:translateY(-1px)}.cmd-detail{padding:8px 0}.cmd-desc{font-size:14px;margin-bottom:16px;color:var(--text);line-height:1.6}.param-list{margin:16px 0}.param{display:flex;gap:16px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.03)}.param-flag{color:var(--green);font-size:12px;min-width:180px;font-weight:600}.param-meaning{color:var(--muted);font-size:12px;line-height:1.5}.example-list{margin:16px 0}.section-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}.tips-section{padding:20px;margin:20px 0;background:rgba(99,102,241,.05);border:1px solid rgba(99,102,241,.15);border-radius:12px}.tip-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:16px}.tip-card{padding:14px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:10px;display:flex;gap:12px;transition:all .3s}.tip-card:hover{border-color:rgba(99,102,241,.3);background:rgba(99,102,241,.05);transform:translateY(-2px)}.tip-icon{font-size:24px;flex-shrink:0}.tip-content{flex:1}.tip-title{font-size:12px;font-weight:700;color:var(--purple);margin-bottom:4px}.tip-text{font-size:11px;color:var(--muted);line-height:1.5}.tip-text code{display:inline-block;margin-top:4px;padding:2px 6px;background:rgba(99,102,241,.1);border-radius:4px;color:var(--purple);font-size:10px}code{display:block;background:rgba(14,165,233,.08);padding:6px 12px;border-radius:6px;color:var(--cyan);font-size:12px;margin:6px 0;transition:all .2s}code:hover{background:rgba(14,165,233,.12)}.footer{text-align:center;color:var(--muted);font-size:10px;margin-top:24px;padding-top:16px;border-top:1px solid rgba(255,255,255,.04)}</style></head><body><div class="scanlines"></div><div class="card"><div class="vline l"></div><div class="vline r"></div><h1>SPECCORE HELP</h1><div class="sub">${title} · v${version}</div>${body}<div class="footer">由 SpecCore 驱动 v${version} · ${now}</div></div></body></html>`;
 
   const { writeFile, ensureDir } = require('fs-extra');
   const { join } = require('path');
