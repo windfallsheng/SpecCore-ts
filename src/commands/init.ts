@@ -1391,6 +1391,44 @@ export async function cleanupStaleFiles(
   const validCmdNames = new Set(commands.map(([name]) => name + '.md'));
   let cleanedCount = 0;
 
+  // 0. 清理旧版 -old 后缀备份文件（v5.87.2 之前创建的）
+  const oldSuffixPatterns = ['-old', '-backup'];
+  for (const tool of [...allTools, 'qoder']) {
+    const dirs = [
+      join(projectRoot, '.' + tool, 'commands'),
+      join(projectRoot, '.' + tool, 'skills'),
+    ];
+    if (tool === 'qoder') {
+      dirs.push(join(projectRoot, '.qoder', 'commands'));
+    }
+    for (const dir of dirs) {
+      try {
+        if (!await pathExists(dir)) continue;
+        const files = await readdir(dir);
+        for (const f of files) {
+          if (oldSuffixPatterns.some(p => f.includes(p))) {
+            await require('fs-extra').unlink(join(dir, f));
+            cleanedCount++;
+          }
+        }
+      } catch { /* ignore */ }
+    }
+  }
+  // 也清理项目根目录下的 -old 文件
+  try {
+    const rootFiles = await readdir(projectRoot);
+    for (const f of rootFiles) {
+      if (oldSuffixPatterns.some(p => f.endsWith(p) || f.includes('-old.'))) {
+        const filePath = join(projectRoot, f);
+        const stat = await require('fs-extra').lstat(filePath);
+        if (stat.isFile()) {
+          await require('fs-extra').unlink(filePath);
+          cleanedCount++;
+        }
+      }
+    }
+  } catch { /* ignore */ }
+
   // 1. 清理各工具的 commands 目录下 stale 文件
   for (const tool of allTools) {
     const cmdDir = join(projectRoot, '.' + tool, 'commands');
