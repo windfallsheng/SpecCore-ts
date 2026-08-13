@@ -2,6 +2,22 @@
 
 ---
 
+## v5.92.0 (2026-08-13) — Split Constraint Redesign: Functional Unit Basis
+
+- **Split constraint system redesign**: from global limit / section-based to **functional unit basis**
+- Core principle: split based on functional units, not document chapter structure
+- Each functional unit defaults to 1 task, max 3 (code-level hard enforcement)
+- JSON output adds `functionalUnit` field for AI to annotate each task's functional unit
+- Code layer validates by `functionalUnit` grouping, terminates on overflow (`--force` to bypass)
+- Removed global task count limit (was MAX_TASKS_HARD_LIMIT = 20)
+- Warning when adjacent tasks belong to same functional unit
+- Prompt fully unified from "章节" to "功能单元"
+- DESIGN.md / command-reference.md updated with functional unit constraint docs
+- help.html card width adjusted to 960px
+- `cleanupStaleFiles` adds cleanup for `-old` / `-backup` suffix legacy backup files
+
+---
+
 ## v5.91.0 (2026-08-13) — Legacy Backup Cleanup + Params Reference Optimization
 
 - `cleanupStaleFiles` adds cleanup logic: auto-remove `-old` / `-backup` suffix legacy backup files (created before v5.87.2)
