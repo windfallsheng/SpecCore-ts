@@ -1,5 +1,5 @@
 ---
-name: spec:split
+name: spec-split
 description: SpecCore Task Split
 ---
 SpecCore Task Split

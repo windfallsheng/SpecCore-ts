@@ -8,6 +8,7 @@ import { FileTransaction } from '../core/transaction';
 import { syncCapabilities } from '../core/capabilities';
 import { join, extname } from 'path';
 import { logger, Spinner } from '../utils/logger';
+import { backupDirWithTimestamp } from '../utils/task-utils';
 import {
   readGlobalIndex,
   getNextReqId,
@@ -106,6 +107,9 @@ async function importToGlobalLayer(
   projectType: ProjectType,
   options: ImportOptions
 ): Promise<void> {
+  // 备份追踪
+  let backupPath: string | null = null;
+  
   // 1. 检查路径
   if (!(await pathExists(projectPath))) {
     throw new Error(`Project path not found: ${projectPath}`);
@@ -121,7 +125,13 @@ async function importToGlobalLayer(
     const existingDir = join(globalDir, 'PROJECTS', projectName);
     if (await pathExists(existingDir)) {
       if (options.force) {
-        logger.info('🔁 强制覆盖模式：已存在项目将被重新扫描替换');
+        // 备份旧目录为时间戳格式
+        backupPath = await backupDirWithTimestamp(existingDir);
+        if (backupPath) {
+          logger.info(`🔁 强制覆盖模式：旧版已备份为 ${backupPath.split('/').pop()}`);
+        } else {
+          logger.info('🔁 强制覆盖模式：已存在项目将被重新扫描替换');
+        }
       } else if (options.update) {
         logger.info('🔄 增量更新模式：追加新 API，保留已有');
       } else if (options.interactive) {
@@ -304,6 +314,14 @@ async function importToGlobalLayer(
   logger.info('📋 下一步:');
   logger.info('   speccore global-status  查看全量层状态');
   logger.info('   speccore iteration-from-global  从全量层生成迭代');
+  
+  // 备份汇总
+  if (backupPath) {
+    logger.info('');
+    logger.info('📦 备份文件:');
+    logger.info(`   ${backupPath}`);
+    logger.info('   💡 如不再需要可手动删除');
+  }
 }
 
 // ============================================================

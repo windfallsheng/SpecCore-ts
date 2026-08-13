@@ -6,6 +6,7 @@ import { getDefaultIteration } from '../core/context';
 import { scanTasks } from '../core/state';
 import { readFile, writeFile, pathExists, ensureDir } from 'fs-extra';
 import { join } from 'path';
+import { backupDirWithTimestamp } from '../utils/task-utils';
 
 export interface PatternOptions {
   name: string;
@@ -26,10 +27,18 @@ export async function patternCommand(options: PatternOptions): Promise<void> {
   const patternsDir = join(process.cwd(), '.speccore', 'patterns');
   const targetDir = join(patternsDir, options.name);
 
-  // 同名检查
-  if (await pathExists(targetDir) && !options.force) {
-    logger.warn(`模式 "${options.name}" 已存在。使用 --force 覆盖`);
-    return;
+  // 同名检查 + 备份
+  let backupPath: string | null = null;
+  if (await pathExists(targetDir)) {
+    if (!options.force) {
+      logger.warn(`模式 "${options.name}" 已存在。使用 --force 覆盖`);
+      return;
+    }
+    // --force 模式：备份旧目录为时间戳格式
+    backupPath = await backupDirWithTimestamp(targetDir);
+    if (backupPath) {
+      logger.info(`📦 旧模式已备份为 ${backupPath.split('/').pop()}`);
+    }
   }
 
   await ensureDir(targetDir);
@@ -56,6 +65,14 @@ export async function patternCommand(options: PatternOptions): Promise<void> {
   logger.success(`模式 "${options.name}" 已保存 (${files.length} 个文件)`);
   logger.info(`   路径: .speccore/patterns/${options.name}/`);
   logger.info('   使用: speccore new-task --name="xxx" --pattern=' + options.name);
+  
+  // 备份汇总
+  if (backupPath) {
+    logger.info('');
+    logger.info('📦 备份文件:');
+    logger.info(`   ${backupPath}`);
+    logger.info('   💡 如不再需要可手动删除');
+  }
 }
 
 async function saveFromTask(options: PatternOptions, targetDir: string): Promise<void> {

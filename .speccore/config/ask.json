@@ -1,0 +1,54 @@
+{
+  "routing": {
+    "mode": "hybrid",
+    "highThreshold": 70,
+    "lowThreshold": 45,
+    "autoHostAi": true,
+    "cacheEnabled": true,
+    "cacheMinHits": 3
+  },
+  "rules": {
+    "forceHostAi": false
+  },
+  "llmProviders": [
+    {
+      "name": "ollama-local",
+      "enabled": false,
+      "type": "ollama",
+      "endpoint": "http://localhost:11434",
+      "model": "qwen2.5:7b",
+      "priority": 1
+    },
+    {
+      "name": "openai-compatible",
+      "enabled": false,
+      "type": "openai",
+      "endpoint": "https://api.openai.com/v1/chat/completions",
+      "model": "gpt-4o-mini",
+      "priority": 2
+    }
+  ],
+  "_example": {
+    "description": "以下是 AI 响应 JSON 格式示例与 Provider 配置示例（供参考，不会实际生效）",
+    "aiResponseFormat": {
+      "intent": "execute",
+      "command": "execute",
+      "args": {
+        "task": "Task-001",
+        "batchSize": "3"
+      },
+      "confidence": 92,
+      "reasoning": "用户说'把登录做了'，当前迭代有 Task-001-用户登录，且项目已进入 execute 阶段",
+      "needsConfirm": true
+    },
+    "providerConfigExample": {
+      "name": "your-custom-provider",
+      "enabled": true,
+      "type": "openai",
+      "endpoint": "https://your-api.com/v1/chat/completions",
+      "model": "gpt-4o",
+      "apiKey": "${SPECCORE_LLM_KEY}",
+      "priority": 1
+    }
+  }
+}

@@ -5,7 +5,7 @@
 import { writeFile, pathExists, readFile, readdir, ensureDir } from 'fs-extra';
 import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
-import { safeWriteWithOld, safeCopyDirWithOld, _updateConflicts } from './init';
+import { safeWriteWithBackup, safeCopyDirWithBackup, _updateConflicts } from './init';
 
 const CURRENT_VERSION = require('../../package.json').version;
 
@@ -116,7 +116,6 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
       cleanedFiles.push('qoder/commands/spec/ (旧版子目录)');
     }
     for (const f of await readdir(qoderCommandsDir)) {
-      if (f.includes('-old')) continue;
       // 清理旧版 spec- 前缀文件（应使用 spec: 前缀）
       if (f.startsWith('spec-') && f.endsWith('.md')) {
         await require('fs-extra').remove(join(qoderCommandsDir, f));
@@ -159,8 +158,8 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
     const agentsSrc = join(__dirname, '..', '..', 'AGENTS.md');
     if (await pathExists(agentsSrc)) {
       const newAgents = await readFile(agentsSrc, 'utf-8');
-      await safeWriteWithOld(join(projectRoot, 'AGENTS.md'), newAgents);
-      await safeWriteWithOld(join(projectRoot, 'CLAUDE.md'), '<!-- 规则请参考 AGENTS.md -->\n\n@AGENTS.md\n');
+      await safeWriteWithBackup(join(projectRoot, 'AGENTS.md'), newAgents);
+      await safeWriteWithBackup(join(projectRoot, 'CLAUDE.md'), '<!-- 规则请参考 AGENTS.md -->\n\n@AGENTS.md\n');
     }
   } catch {}
 
@@ -196,15 +195,15 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   }
   // 冲突文件汇总
   if (_updateConflicts.length > 0) {
-    logger.info(`  ⚠️  ${_updateConflicts.length} 个文件有内容冲突，旧版已保存为 *-old`);
-    for (const f of _updateConflicts) {
-      const rel = f.replace(projectRoot + '/', '');
-      const oldRel = rel.replace(/\.(md|json|txt|yaml)$/, '-old.$1');
+    logger.info(`  ⚠️  ${_updateConflicts.length} 个文件有内容冲突，旧版已重命名为时间戳格式`);
+    for (const { file, backup } of _updateConflicts) {
+      const rel = file.replace(projectRoot + '/', '');
+      const backupRel = backup.replace(projectRoot + '/', '');
       logger.info(`     📄 ${rel}`);
-      logger.info(`        对比: diff ${rel} ${oldRel}`);
+      logger.info(`        对比: diff ${rel} ${backupRel}`);
     }
     logger.info('');
-    logger.info('  💡 请对比 *-old 文件，合并自定义内容后删除 *-old');
+    logger.info('  💡 请对比时间戳文件，合并自定义内容后删除');
   } else {
     logger.info('  ✨ 无内容冲突，所有文件平滑升级');
   }

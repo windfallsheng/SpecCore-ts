@@ -45,6 +45,19 @@ export interface AnalyzeOptions {
 }
 
 export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
+  // 备份追踪
+  const backups: string[] = [];
+  const printBackupSummary = () => {
+    if (backups.length > 0) {
+      logger.info('');
+      logger.info(`📦 备份文件 (${backups.length} 个):`);
+      for (const bp of backups) {
+        logger.info(`   ${bp}`);
+      }
+      logger.info('   💡 如不再需要可手动删除');
+    }
+  };
+
   // ── --supplement 模式: 追加未覆盖源码到现有报告 ──
   if (options.supplement) {
     const iter = options.iteration || await getDefaultIteration();
@@ -112,7 +125,10 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     const analysisPath = join(specDir, 'ANALYSIS.md');
     if (await shouldOverwrite(analysisPath, !!options.interactive)) {
       const backup = await backupWithTimestamp(analysisPath);
-      if (backup) logger.info(`   📦 旧版已备份: ${backup.split('/').pop()}`);
+      if (backup) {
+        backups.push(backup);
+        logger.info(`   📦 旧版已备份: ${backup.split('/').pop()}`);
+      }
       await writeFile(analysisPath, result.report);
       logger.success(`✅ 分析报告已生成: 020-specs/ANALYSIS.md`);
     } else {
@@ -121,6 +137,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     if (result.summary) {
       logger.info(`   📊 分析: ${result.summary.filesAnalyzed} 文件, ${result.summary.apisFound} 接口, ${result.summary.issues} 问题, ${result.summary.risks} 风险`);
     }
+    printBackupSummary();
     return;
   }
 
@@ -162,7 +179,10 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
             const fp = join(taskSpecDir, filename);
             if (!(await shouldOverwrite(fp, !!options.interactive))) { logger.info(`   ⏭️  跳过: ${filename}`); continue; }
             const bk = await backupWithTimestamp(fp);
-            if (bk) logger.info(`   📦 ${filename} 旧版已备份: ${bk.split('/').pop()}`);
+            if (bk) {
+              backups.push(bk);
+              logger.info(`   📦 ${filename} 旧版已备份: ${bk.split('/').pop()}`);
+            }
             await writeFile(fp, content);
             count++;
           }
@@ -175,12 +195,16 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
             const fp = join(specDir, filename);
             if (!(await shouldOverwrite(fp, !!options.interactive))) { logger.info(`   ⏭️  跳过: ${filename}`); continue; }
             const bk = await backupWithTimestamp(fp);
-            if (bk) logger.info(`   📦 ${filename} 旧版已备份: ${bk.split('/').pop()}`);
+            if (bk) {
+              backups.push(bk);
+              logger.info(`   📦 ${filename} 旧版已备份: ${bk.split('/').pop()}`);
+            }
             await writeFile(fp, content);
             count++;
           }
           logger.success(`✅ ${count} 个 Spec 文档已写入 020-specs/`);
         }
+        printBackupSummary();
         return;
       } catch {
         // fallback to single-file mode
@@ -195,7 +219,10 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       const taskAnalysisPath = join(taskSpecDir, 'ANALYSIS.md');
       if (await shouldOverwrite(taskAnalysisPath, !!options.interactive)) {
         const taskBackup = await backupWithTimestamp(taskAnalysisPath);
-        if (taskBackup) logger.info(`   📦 旧版已备份: ${taskBackup.split('/').pop()}`);
+        if (taskBackup) {
+          backups.push(taskBackup);
+          logger.info(`   📦 旧版已备份: ${taskBackup.split('/').pop()}`);
+        }
         await writeFile(taskAnalysisPath, options.apply);
         logger.success(`✅ ANALYSIS.md 已写入 ${options.task}/00-specs/`);
       } else { logger.info(`   ⏭️  用户取消覆盖`); }
@@ -206,11 +233,15 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       const iterAnalysisPath = join(specDir, 'ANALYSIS.md');
       if (await shouldOverwrite(iterAnalysisPath, !!options.interactive)) {
         const iterBackup = await backupWithTimestamp(iterAnalysisPath);
-        if (iterBackup) logger.info(`   📦 旧版已备份: ${iterBackup.split('/').pop()}`);
+        if (iterBackup) {
+          backups.push(iterBackup);
+          logger.info(`   📦 旧版已备份: ${iterBackup.split('/').pop()}`);
+        }
         await writeFile(iterAnalysisPath, options.apply);
         logger.success(`✅ ANALYSIS.md 已写入 020-specs/`);
       } else { logger.info(`   ⏭️  用户取消覆盖`); }
     }
+    printBackupSummary();
     return;
   }
 
@@ -509,15 +540,15 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     prompt += `1. Read 目标文件（如果存在）\n`;
     prompt += `2. 对比新旧内容：\n`;
     prompt += `   - 内容相同 → 跳过，不写入\n`;
-    prompt += `   - 内容不同 → 先将旧内容 Write 为 \`*-old.md\`（同目录，如 \`TECH_STACK-old.md\`），再 Write 新内容到原文件名\n`;
+    prompt += `   - 内容不同 → 先将旧内容 Write 为 \`{name}-{YYYYMMDDHHmmss}.md\`（同目录，如 \`TECH_STACK-20260813143025.md\`），再 Write 新内容到原文件名\n`;
     prompt += `   - 文件不存在 → 直接 Write\n`;
-    prompt += `3. **PATTERNS/*.md 特殊处理**: 不覆盖，只追加。Read 旧文件 → 合并新内容 → Write 回原文件（不生成 *-old）\n`;
+    prompt += `3. **PATTERNS/*.md 特殊处理**: 不覆盖，只追加。Read 旧文件 → 合并新内容 → Write 回原文件（不生成备份）\n`;
     prompt += `4. 所有文件写完后，输出冲突汇总:\n`;
     prompt += `   \`\`\`\n`;
-    prompt += `   ⚠️  N 个文件有冲突，旧版已保存为 *-old：\n`;
+    prompt += `   ⚠️  N 个文件有冲突，旧版已重命名为时间戳格式：\n`;
     prompt += `      📄 .speccore/GLOBAL/PROJECTS/xxx/API_INVENTORY.md\n`;
-    prompt += `         对比: diff API_INVENTORY.md API_INVENTORY-old.md\n`;
-    prompt += `      💡 请对比 *-old 文件，合并自定义内容后删除 *-old\n`;
+    prompt += `         对比: diff API_INVENTORY.md API_INVENTORY-20260813143025.md\n`;
+    prompt += `      💡 请对比时间戳文件，合并自定义内容后删除\n`;
     prompt += `   \`\`\`\n`;
     prompt += `\n⚠️ 如 CONSTITUTION.md 中「源码路径」为空或路径不存在: 提示用户先配置，给出三个选项：\n`;
     prompt += `   [1] 停止分析 → 配置后重来 | [2] 跳过源码 → 只用文档分析 | [3] 手动指定路径后继续\n`;

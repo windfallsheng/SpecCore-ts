@@ -5,14 +5,15 @@ import { writeFile, ensureDir, readFile, pathExists, rename } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
 
-/** 写入前检查冲突：内容不同则旧文件重命名为 *-old */
+/** 写入前检查冲突：内容不同则旧文件重命名为时间戳格式 */
 async function safeWrite(filePath: string, newContent: string): Promise<void> {
   if (await pathExists(filePath)) {
     const existing = await readFile(filePath, 'utf-8');
     if (existing.trim() !== newContent.trim()) {
-      const oldPath = filePath.replace(/\.md$/, '-old.md');
-      await rename(filePath, oldPath);
-      logger.info(`   ⚠️  冲突: ${join('.', filePath)} → 旧版保存为 ${join('.', oldPath)}`);
+      const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+      const backupPath = filePath.replace(/\.md$/, `-${ts}.md`);
+      await rename(filePath, backupPath);
+      logger.info(`   ⚠️  冲突: ${join('.', filePath)} → 旧版重命名为 ${join('.', backupPath)}`);
     }
   }
   await writeFile(filePath, newContent);

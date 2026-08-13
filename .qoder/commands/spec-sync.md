@@ -1,5 +1,5 @@
 ---
-name: spec:sync
+name: spec-sync
 description: 双向同步全局
 ---
 双向同步全局

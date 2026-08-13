@@ -1,5 +1,5 @@
 ---
-name: spec:ask
+name: spec-ask
 description: SpecCore AI Router
 ---
 SpecCore AI Router

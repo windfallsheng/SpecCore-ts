@@ -1,5 +1,5 @@
 ---
-name: spec:done
+name: spec-done
 description: 任务归档: 任务=${1:Task-001}
 ---
 任务归档: 任务=${1:Task-001}

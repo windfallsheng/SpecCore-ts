@@ -2,6 +2,19 @@
 
 ---
 
+## v5.87.0 (2026-08-13) — Unified Timestamp Conflict Handling + Backup Summaries
+
+- `*-old` naming style fully replaced with timestamp format `{name}-{YYYYMMDDHHmmss}.md`
+- Removed `.speccore-backup` overall backup mechanism (init --force no longer backs up entire .speccore/)
+- New `backupDirWithTimestamp` directory-level timestamp backup function (task-utils.ts)
+- All `--force` operation paths now have timestamp protection: import / pattern / migrate
+- All backup operations output unified summary: backup file paths + diff commands + cleanup hints
+- `_updateConflicts` structure upgraded to `{file, backup}[]` for diff comparison prompts
+- Removed dead code: `writeAgentsMdWithOld`, all `*-old` cleanup logic
+- init --force never touches Iteration-*/ user directories; conflicting files auto-renamed with user notification
+
+---
+
 ## v5.86.0 (2026-08-13) — ID Safety System + Plan Subdirectories + Backup Filtering
 
 - Plan files in subdirectories: `000-overview/plans/Plan-NNN-slug/` (PLAN.md + HTML), no more duplicate MD files

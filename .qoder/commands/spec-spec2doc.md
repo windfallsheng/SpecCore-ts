@@ -1,5 +1,5 @@
 ---
-name: spec:spec2doc
+name: spec-spec2doc
 description: 导出文档: 迭代=${1:Q1} 格式=${2|需求.docx,方案.pdf|}
 ---
 导出文档: 迭代=${1:Q1} 格式=${2|需求.docx,方案.pdf|}

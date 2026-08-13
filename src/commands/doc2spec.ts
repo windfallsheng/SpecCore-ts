@@ -460,6 +460,7 @@ async function importExcelBugList(file: string, iteration: string): Promise<void
   const taskDir = join(iterDir, '030-tasks');
   await ensureDir(taskDir);
 
+  const backups: string[] = [];
   let rows: Record<string, string>[] = [];
 
   if (/\.csv$/i.test(file)) {
@@ -551,13 +552,27 @@ async function importExcelBugList(file: string, iteration: string): Promise<void
 
     const taskReqPath = join(taskPath, 'REQUIREMENT.md');
     const bk = await backupWithTimestamp(taskReqPath);
-    if (bk) logger.info(`   📦 旧版已备份: ${bk.split('/').pop()}`);
+    if (bk) {
+      backups.push(bk);
+      logger.info(`   📦 旧版已备份: ${bk.split('/').pop()}`);
+    }
     await writeFile(taskReqPath, reqLines.join('\n'));
     created++;
   }
 
   logger.success(`✅ 从 ${basename(file)} 导入 ${created} 个 Bug 任务`);
   logger.info(`   📂 位置: ${taskDir}/`);
+  
+  // 备份汇总
+  if (backups.length > 0) {
+    logger.info('');
+    logger.info(`📦 备份文件 (${backups.length} 个):`);
+    for (const bp of backups) {
+      logger.info(`   ${bp}`);
+    }
+    logger.info('   💡 如不再需要可手动删除');
+  }
+  
   logger.info('');
   logger.info('💡 推荐下一步:');
   logger.info(`   speccore analyze --prompt -I ${iteration}`);

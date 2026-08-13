@@ -1,5 +1,5 @@
 ---
-name: spec:dashboard
+name: spec-dashboard
 description: 显示全局仪表盘（HTML页面）
 ---
 显示全局仪表盘（HTML页面）

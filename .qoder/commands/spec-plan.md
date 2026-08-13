@@ -1,5 +1,5 @@
 ---
-name: spec:plan
+name: spec-plan
 description: 生成并展示执行计划可视化页面
 ---
 生成并展示执行计划可视化页面
