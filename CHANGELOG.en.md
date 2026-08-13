@@ -2,6 +2,17 @@
 
 ---
 
+## v5.90.0 (2026-08-13) — help.html Comprehensive Optimization
+
+- Welcome page button text color fix: all three button descriptions unified to white `rgba(255,255,255,.85)`
+- help.html structural upgrade: added intro card (SDD methodology + core principles), quick-start 4-step flow, common parameters reference table (8 core params)
+- help.html title glow effect: h1 adds `animation:titleGlow` + `background-clip:text`, following gradient text inline declaration spec
+- help.html glow shifted left: `.card-bg` radial gradient center changed from `50% 10%` to `30% 10%`, breathing animation `cardGlow`
+- help.html width unified: card max-width adjusted from `900px` to `800px`, consistent with welcome/setup-guide pages
+- Tips section: four tip cards — prefer ask / search commands / view detailed params / HTML help page
+
+---
+
 ## v5.89.0 (2026-08-13) — Smart Split Overhaul
 
 - Granularity hard constraints: three tiers (macro 20-80h / module 12-40h / atomic 4-24h) with API/table/page limits
