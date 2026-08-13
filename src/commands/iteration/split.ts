@@ -249,17 +249,36 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
         const teamSize2 = staffing2 ? staffing2.length : 0;
         const granularity: Granularity = (options.granularity as Granularity) || recommendGranularity(teamSize2);
         const granRule = GRANULARITY_RULES[granularity];
-        
-        // 🚨 硬约束：任务数量上限检查
-        const MAX_TASKS_HARD_LIMIT = 20;
-        if (sections.length > MAX_TASKS_HARD_LIMIT) {
-          logger.error(`\n   ❌ 任务数量爆炸！AI 拆分出 ${sections.length} 个任务，超过硬上限 ${MAX_TASKS_HARD_LIMIT}`);
-          logger.error(`   💡 可能原因：`);
-          logger.error(`      1. AI 没有遵守 Prompt 中的数量约束`);
-          logger.error(`      2. 需求本身过于复杂，需要人工介入合并`);
+                
+        // 🚨 逐章节校验：每个章节拆出的任务数不超过 3 个
+        const MAX_TASKS_PER_SECTION = 3;
+        const sectionTaskCount: Record<string, number> = {};
+                
+        // 按 section 分组统计（通过任务名相似度推断）
+        for (let i = 0; i < sections.length; i++) {
+          const sec = sections[i];
+          const task = tasks[i];
+          const sectionName = (task as any).section || sec.name.split('-')[0].trim();
+          sectionTaskCount[sectionName] = (sectionTaskCount[sectionName] || 0) + 1;
+        }
+                
+        // 检查每个章节的任务数
+        let hasOverSplit = false;
+        for (const [sectionName, count] of Object.entries(sectionTaskCount)) {
+          if (count > MAX_TASKS_PER_SECTION) {
+            if (!hasOverSplit) {
+              logger.error(`\n   ❌ 检测到过度拆分！某些功能章节拆出过多任务：`);
+              hasOverSplit = true;
+            }
+            logger.error(`      📌 "${sectionName}" 章节拆出了 ${count} 个任务（上限 ${MAX_TASKS_PER_SECTION}）`);
+          }
+        }
+                
+        if (hasOverSplit) {
+          logger.error(`   💡 核心原则：一个功能章节默认 1 个任务，最多 3 个`);
           logger.error(`   🔧 建议操作：`);
-          logger.error(`      1. 重新执行 split，并告诉 AI：“任务太多，请合并相关功能”`);
-          logger.error(`      2. 或者手动编辑 .speccore/prompts/split-suggestion-${iter}.md，明确要求“控制在 12 个任务以内”`);
+          logger.error(`      1. 重新执行 split，并告诉 AI："任务太多，请合并相关功能"`);
+          logger.error(`      2. 或者手动编辑 .speccore/prompts/split-suggestion-${iter}.md，明确要求"每个章节最多拆 2 个任务"`);
           logger.error(`      3. 如果确实需要这么多任务，使用 --force 跳过检查（不推荐）`);
           if (!options.force) {
             logger.info('\n   ℹ️  如需强制继续，添加 --force 参数');
@@ -267,7 +286,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           }
           logger.warn('   ⚠️  --force 已启用，继续创建所有任务...');
         }
-        
+                
         // 交互模式判断：显式 --interactive 或 stdin 是 TTY
         const isInteractive = options.interactive || process.stdin.isTTY;
         logger.info(`   📏 粒度: ${granRule.label}${options.granularity ? ' (用户指定)' : ` (${teamSize2} 人团队自动推荐)`}`);
