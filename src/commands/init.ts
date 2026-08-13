@@ -168,12 +168,18 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
       
       // ── 二次确认 ──
       spinner.stop();
-      logger.warn('⚠️  --force 将重置所有配置文件！');
+      logger.warn('⚠️  --force 将完全重置 .speccore/ 配置！');
       logger.info('');
-      const answer = await askUser('确认重置？现有的 INDEX.md/需求数据将丢失 (y/N): ');
+      logger.warn('   ❌ 计数器 (counters.json) 将丢失 → 可能导致编号重复');
+      logger.warn('   ❌ INDEX.md / 需求数据将丢失');
+      logger.warn('   ❌ 项目配置 (PROJECT/*.md) 将重置为模板');
+      logger.info('');
+      logger.info('   💡 升级请用: speccore init --update --force（保留计数器和数据）');
+      logger.info('');
+      const answer = await askUser('确认完全重置？(y/N): ');
       if (!answer.toLowerCase().startsWith('y')) {
         logger.info('已取消');
-        logger.info('💡 建议使用 speccore update 安全升级');
+        logger.info('💡 安全升级: speccore init --update');
         return;
       }
 
