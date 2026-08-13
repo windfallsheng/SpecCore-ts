@@ -30,14 +30,28 @@ const GRANULARITY_RULES = {
 } as const;
 type Granularity = keyof typeof GRANULARITY_RULES;
 
-/** 校验任务工时是否在粒度范围内 */
-function validateGranularity(gran: Granularity, hours: number, apiCount: number, tableCount: number) {
+/** 校验任务工时是否在粒度范围内（按单人 max 工时计算） */
+function validateGranularity(gran: Granularity, hoursByPlatform: Record<string, number>, apiCount: number, tableCount: number) {
   const rule = GRANULARITY_RULES[gran];
   const warnings: string[] = [];
-  if (hours > rule.maxHours) warnings.push(`⚠️  工时 ${hours}h 超出上限 ${rule.maxHours}h → 建议再拆`);
-  else if (hours < rule.minHours) warnings.push(`⚠️  工时 ${hours}h 低于下限 ${rule.minHours}h → 建议合并到关联任务`);
+  const platformEntries = Object.entries(hoursByPlatform);
+  const maxPerPerson = platformEntries.length > 0 ? Math.max(...platformEntries.map(([, h]) => h)) : 0;
+  const totalHours = platformEntries.reduce((sum, [, h]) => sum + h, 0);
+  const maxPlatform = platformEntries.length > 0 ? platformEntries.reduce((a, b) => (b[1] > a[1] ? b : a))[0] : '';
+
+  if (maxPerPerson > rule.maxHours) {
+    warnings.push(`⚠️  单人最大工时 ${maxPerPerson}h（${maxPlatform}）超出上限 ${rule.maxHours}h → 建议再拆`);
+  } else if (maxPerPerson < rule.minHours) {
+    warnings.push(`⚠️  单人最大工时 ${maxPerPerson}h（${maxPlatform}）低于下限 ${rule.minHours}h → 建议合并到关联任务`);
+  }
   if (apiCount > rule.maxApis) warnings.push(`⚠️  接口 ${apiCount} 个超出上限 ${rule.maxApis} → 建议按业务领域拆分`);
   if (tableCount > rule.maxTables) warnings.push(`⚠️  数据表 ${tableCount} 张超出上限 ${rule.maxTables} → 建议按数据层拆分`);
+
+  // 返回额外信息供展示
+  if (platformEntries.length > 1) {
+    const breakdown = platformEntries.map(([p, h]) => `${p}:${h}h`).join(' + ');
+    warnings.unshift(`ℹ️  工时分布: ${breakdown} = ${totalHours}h（max per person: ${maxPerPerson}h）`);
+  }
   return warnings;
 }
 
@@ -172,6 +186,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           };
           (section as any)._complexity = {
             estimatedHours: task.estimatedHours || 8,
+            hoursByPlatform: (task.hoursByPlatform && typeof task.hoursByPlatform === 'object') ? task.hoursByPlatform : {},
             priority: task.priority || 'medium',
             complexity: task.risk === 'high' ? 'high' : task.risk === 'low' ? 'low' : 'medium',
             apiCount: (task.apis || []).length,
@@ -228,7 +243,17 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           // 展示任务摘要
           logger.info(`\n   ━━━━ 任务 ${i + 1}/${sections.length} ━━━━`);
           logger.info(`   📌 ${sec.name}`);
-          logger.info(`   🏷  类型: ${taskType} | ⏱ 预估: ${complexity.estimatedHours}h | 🎯 优先级: ${complexity.priority || 'medium'}`);
+          logger.info(`   🏷  类型: ${taskType} | 🎯 优先级: ${complexity.priority || 'medium'}`);
+          // 按端展示工时分布
+          const hbp = complexity.hoursByPlatform || {};
+          const hbpEntries = Object.entries(hbp);
+          if (hbpEntries.length > 0) {
+            const breakdown = hbpEntries.map(([p, h]) => `${p}:${h}h`).join(' + ');
+            const maxPerPerson = Math.max(...hbpEntries.map(([, h]) => h as number));
+            logger.info(`   ⏱ 工时: ${breakdown} = ${complexity.estimatedHours}h（max per person: ${maxPerPerson}h）`);
+          } else {
+            logger.info(`   ⏱ 预估: ${complexity.estimatedHours}h`);
+          }
           if (complexity.apiCount) logger.info(`   🔌 接口: ${complexity.apiCount} 个 | 🗄 数据表: ${complexity.dbCount || 0} 张`);
           if (deps.length > 0) logger.info(`   🔗 依赖: ${deps.join(', ')}`);
           if (acs.length > 0) {
@@ -236,10 +261,13 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
             for (const ac of acs.slice(0, 5)) logger.info(`      ${ac}`);
           }
 
-          // 粒度校验
-          const warnings = validateGranularity(granularity, complexity.estimatedHours || 8, complexity.apiCount || 0, complexity.dbCount || 0);
+          // 粒度校验（按单人 max 工时）
+          const warnings = validateGranularity(granularity, hbp, complexity.apiCount || 0, complexity.dbCount || 0);
           if (warnings.length > 0) {
-            for (const w of warnings) logger.warn(`   ${w}`);
+            for (const w of warnings) {
+              if (w.startsWith('ℹ️')) logger.info(`   ${w}`);
+              else logger.warn(`   ${w}`);
+            }
           }
 
           // 交互确认（仅确认，调整应回到 AI 对话重新生成方案）
@@ -254,7 +282,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
             }
           }
 
-          const { id: taskId } = await nextTaskId(sec.name);
+          const { id: taskId } = await nextTaskId(sec.name, (tasks[i] as any).topic);
           (sec as any)._taskId = taskId;
           await createTaskFromSection(iterDirFull, taskId, sec, allPlatforms, taskType);
           createdSections.push(sec);
@@ -1687,12 +1715,13 @@ function buildSplitPrompt(
   p += `## 🎯 拆分粒度: ${granularityLabel}\n\n`;
   p += `${granularityHint}\n\n`;
   p += `### 当前粒度硬约束（必须严格遵守）\n`;
+  p += `> ⚠️ 工时约束按 **max(各端工时)** 计算，即单个开发人员的实际工作量，不是所有端的总和\n\n`;
   if (granularityLabel.includes('粗')) {
-    p += `- 每任务工时: 20-80h（1-2 周）\n- 接口上限: 15 个/任务\n- 数据表上限: 5 张/任务\n- 页面上限: 5 个/任务\n`;
+    p += `- 每人工时: 20-80h（1-2 周）\n- 接口上限: 15 个/任务\n- 数据表上限: 5 张/任务\n- 页面上限: 5 个/任务\n`;
   } else if (granularityLabel.includes('中')) {
-    p += `- 每任务工时: 12-40h（3-5 天）\n- 接口上限: 8 个/任务\n- 数据表上限: 3 张/任务\n- 页面上限: 3 个/任务\n`;
+    p += `- 每人工时: 12-40h（3-5 天）\n- 接口上限: 8 个/任务\n- 数据表上限: 3 张/任务\n- 页面上限: 3 个/任务\n`;
   } else {
-    p += `- 每任务工时: 4-24h（1-3 天）\n- 接口上限: 3 个/任务\n- 数据表上限: 2 张/任务\n- 页面上限: 1 个/任务\n`;
+    p += `- 每人工时: 4-24h（1-3 天）\n- 接口上限: 3 个/任务\n- 数据表上限: 2 张/任务\n- 页面上限: 1 个/任务\n`;
   }
   p += `\n**超出上限必须再拆，低于下限必须合并。**\n\n`;
   p += `用户可通过 --granularity macro|module|atomic 调整全局粒度。\n\n`;
@@ -1742,13 +1771,15 @@ function buildSplitPrompt(
   p += '```json\n';
   p += `[\n  {\n`;
   p += `    "id": "Task-001",\n`;
-  p += `    "name": "任务名称",\n`;
+  p += `    "name": "任务名称（中文）",\n`;
+  p += `    "topic": "english-slug-for-directory",\n`;
   p += `    "type": "feature|bugfix|refactor|research",\n`;
   p += `    "reason": "为什么这样拆分",\n`;
   p += `    "scope": ["后端", "admin"],\n`;
   p += `    "apis": ["POST /api/auth/login"],\n`;
   p += `    "tables": ["users"],\n`;
-  p += `    "estimatedHours": 8,\n`;
+  p += `    "hoursByPlatform": { "后端": 8, "admin": 8 },\n`;
+  p += `    "estimatedHours": 16,\n`;
   p += `    "priority": "high|medium|low",\n`;
   p += `    "dependencies": [],\n`;
   p += `    "acceptanceCriteria": ["AC1: ..."],\n`;
@@ -1756,6 +1787,14 @@ function buildSplitPrompt(
   p += `    "owner": "建议负责人"\n`;
   p += `  }\n]\n`;
   p += '```\n\n';
+  p += `> **topic** 必须是英文短横线格式（如 \`user-authentication\`、\`product-crud\`），用于生成任务目录名 Task-NNN-{topic}\n\n`;
+
+  p += `### ⚠️ 工时估算规则（重要）\n\n`;
+  p += `- **hoursByPlatform**: 按端分别估算工时，key 对应 scope 中的端名称\n`;
+  p += `- **estimatedHours**: 各端工时总和（仅用于展示，不参与粒度校验）\n`;
+  p += `- **粒度校验用 max(各端工时)**：衡量「一个开发人员实际干多少」，不是总和\n`;
+  p += `- 例：后端 8h + admin 8h = total 16h，但 per-person max = 8h，按 8h 判断粒度\n`;
+  p += `- 同一功能的前后端各端工作必须在一个原子任务里，不要按端拆分任务\n\n`;
 
   // 质量自检
   p += `## ✅ 质量自检（必须全部通过）\n\n`;

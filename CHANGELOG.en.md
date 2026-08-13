@@ -2,19 +2,23 @@
 
 ---
 
-## v5.88.0 (2026-08-13) — Smart Split Overhaul
+## v5.89.0 (2026-08-13) — Smart Split Overhaul
 
 - Granularity hard constraints: three tiers (macro 20-80h / module 12-40h / atomic 4-24h) with API/table/page limits
-- `validateGranularity()` warns when task hours/APIs/tables exceed granularity bounds
+- **Per-developer hours**: granularity validation uses `max(hoursByPlatform)`, not total
+- AI output adds `hoursByPlatform` (per-platform estimation) and `topic` (English slug for directory naming)
+- `validateGranularity()` warns by per-person max hours, identifies which platform exceeds
 - `recommendGranularity(teamSize)` auto-recommends granularity based on STAFFING.md team size
 - AI prompt merge tendency: forces merge when complexity below granularity lower bound, "less is more" principle
+- Same feature across all platforms must be in one atomic task, not split by platform
 - Simplified interaction: show task summary → y confirms and auto-advances / n exits with adjustment hints
 - Persistent adjustment instructions: prompt file includes "Adjustment Guide" for AI to re-read when adjusting
 - CONSTITUTION.md platform detection: `detectPlatforms()` reads global platform config first
 - Scope → platform mapping fix: correctly extracts backend + frontend platforms for directory creation
 - Backend directory nesting fix: `platform === 'backend'` creates `10-backend/src/` directly
 - Task type subdirectories verified: feature/bugfix/refactor/research based on AI's `type` field
-- Design docs updated: DESIGN.md adds granularity rules chapter + interaction flow
+- Task summary shows per-platform hours: `backend:16h + admin:12h + app:12h = 40h (max per person: 16h)`
+- Design docs updated: DESIGN.md adds granularity rules + per-platform hours + AI output field table
 - Command docs updated: command-reference.md with full split parameter/granularity/interaction docs
 
 ---
