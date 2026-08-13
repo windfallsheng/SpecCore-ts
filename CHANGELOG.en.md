@@ -2,6 +2,14 @@
 
 ---
 
+## v5.95.1 (2026-08-13) — TASK_SUMMARY Report Path Optimization
+
+- Reports in dedicated subdirectory `000-overview/task-summaries/`
+- Filename includes timestamp: `TASK_SUMMARY-2026-08-13T14-30.md`
+- Multiple splits won't overwrite each other
+
+---
+
 ## v5.95.0 (2026-08-13) — Task Summary Report: TASK_SUMMARY.md
 
 - **New task summary report**: auto-generated `000-overview/TASK_SUMMARY.md` after split
