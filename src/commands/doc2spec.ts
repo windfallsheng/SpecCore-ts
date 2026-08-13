@@ -19,6 +19,8 @@ import { logger, Spinner } from '../utils/logger';
 import { execSync } from 'child_process';
 import { pathExists, ensureDir, readFile, writeFile, readdir, stat, unlink } from 'fs-extra';
 import { join, basename } from 'path';
+import { backupWithTimestamp } from '../utils/task-utils';
+import { nextTaskId } from '../core/global-counters';
 
 import { showNextSteps } from '../core/next-steps';
 import { validateContent, generateReport } from '../core/doc-validator';
@@ -346,6 +348,18 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     // ── 自动合并到 REQUIREMENT.md（汇总各端需求，供 iteration split 使用）──
     await mergeToRequirement(iterDir, targetDir, platform);
 
+    // ── 检测多端文档，提示智能合成 ──
+    const convDir = join(iterDir, '010-requirements', 'converted');
+    if (await pathExists(convDir)) {
+      const convFiles = (await readdir(convDir)).filter(f => f.endsWith('requirements.md'));
+      if (convFiles.length >= 2) {
+        logger.info('');
+        logger.info(`🧩 检测到 ${convFiles.length} 份端需求文档，建议智能合成:`);
+        logger.info(`   speccore synthesize -I ${options.iter || '当前迭代'}`);
+        logger.info(`   → 章节原子化 · 去重合并 · 跨端关联 · 冲突标注`);
+      }
+    }
+
     // ── 内置质量验证 ──
     const report = await validateContent(content, targetDir, iterDir);
     const reportPath = join(iterDir, '010-requirements', 'VALIDATION.md');
@@ -505,7 +519,7 @@ async function importExcelBugList(file: string, iteration: string): Promise<void
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     const title = String(row[titleCol] || `Bug #${i + 1}`).trim();
-    const taskId = `Task-${String(i + 1).padStart(3, '0')}`;
+    const { id: taskId } = await nextTaskId(title);
     const taskPath = join(taskDir, taskId);
     await ensureDir(taskPath);
 
@@ -535,12 +549,15 @@ async function importExcelBugList(file: string, iteration: string): Promise<void
     }
     reqLines.push('');
 
-    await writeFile(join(taskPath, 'REQUIREMENT.md'), reqLines.join('\n'));
+    const taskReqPath = join(taskPath, 'REQUIREMENT.md');
+    const bk = await backupWithTimestamp(taskReqPath);
+    if (bk) logger.info(`   📦 旧版已备份: ${bk.split('/').pop()}`);
+    await writeFile(taskReqPath, reqLines.join('\n'));
     created++;
   }
 
   logger.success(`✅ 从 ${basename(file)} 导入 ${created} 个 Bug 任务`);
-  logger.info(`   📂 位置: ${taskDir}/Task-001~Task-${String(created).padStart(3, '0')}`);
+  logger.info(`   📂 位置: ${taskDir}/`);
   logger.info('');
   logger.info('💡 推荐下一步:');
   logger.info(`   speccore analyze --prompt -I ${iteration}`);

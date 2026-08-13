@@ -146,11 +146,12 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   // 4a. 更新所有 AI 工具的命令文件
   await createToolIntegrations(projectRoot, options.tool);
 
-  // 4b. 更新 .agents/skills/
+  // 4b. 更新 .agents/skills/（直接覆盖，不备份）
   const skillsSrc = join(__dirname, '..', '..', '.agents', 'skills');
   const skillsDest = join(projectRoot, '.agents', 'skills');
   if (await pathExists(skillsSrc)) {
-    await safeCopyDirWithOld(skillsSrc, skillsDest);
+    const { copy } = require('fs-extra');
+    await copy(skillsSrc, skillsDest, { overwrite: true });
   }
 
   // 4c. 更新 AGENTS.md / CLAUDE.md

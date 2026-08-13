@@ -39,7 +39,7 @@ export async function helpCommand(options: HelpOptions): Promise<void> {
 }
 
 // ============================================================
-// 核心命令参数详解（按简洁模式 19 个命令）
+// 核心命令参数详解（按简洁模式 21 个命令）
 // ============================================================
 const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; meaning: string }[]; examples: string[] }> = {
   init: {
@@ -296,6 +296,20 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
       'speccore prompts --web',
     ],
   },
+  synthesize: {
+    desc: '需求文档智能合成：多端需求 → 一篇原子化综合需求文档',
+    params: [
+      { flag: '-I, --iteration <iteration>', meaning: '目标迭代' },
+      { flag: '--with-code', meaning: '结合源码检查需求冲突' },
+      { flag: '--prompt', meaning: '输出结构化 Prompt 到 stdout' },
+      { flag: '--apply <content>', meaning: '接收 AI 合成结果写入文件' },
+    ],
+    examples: [
+      'speccore synthesize -I Q2',
+      'speccore syn',
+      'speccore synthesize -I Q2 --with-code',
+    ],
+  },
 };
 
 // ============================================================
@@ -303,11 +317,11 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
 // ============================================================
 
 function showAllCommands(): void {
-  logger.info('📖 SpecCore 命令帮助 — 简洁模式（20 个命令）');
+  logger.info('📖 SpecCore 命令帮助 — 简洁模式（21 个命令）');
   logger.info('');
 
   const categories: Record<string, string[]> = {
-    '🏗️ 初始化': ['init', 'import', 'doc2spec'],
+    '🏗️ 初始化': ['init', 'import', 'doc2spec', 'synthesize'],
     '📋 迭代与任务': ['iteration create', 'iteration split', 'task new', 'rename'],
     '🔍 分析与计划': ['analyze', 'plan'],
     '⚡ 执行与审查': ['execute', 'pr', 'done'],
@@ -477,7 +491,7 @@ async function helpHtml(options: HelpOptions): Promise<void> {
       '🧠 AI 入口': ['ask', 'welcome'],
       '🏗️ 初始化': ['init'],
       '📋 迭代与任务': ['iteration', 'task', 'rename'],
-      '📝 文档转换': ['doc2spec', 'spec2doc'],
+      '📝 文档转换': ['doc2spec', 'spec2doc', 'synthesize'],
       '🔍 分析与计划': ['analyze', 'plan', 'split'],
       '⚡ 执行与交付': ['execute', 'pr', 'done'],
       '🔄 同步与变更': ['change', 'sync', 'ops'],

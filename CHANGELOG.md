@@ -1,3 +1,19 @@
+## v5.86.0 (2026-08-13) — 编号安全体系 + 计划子目录化 + 备份过滤
+
+- 计划文件子目录化：`000-overview/plans/Plan-NNN-slug/`（PLAN.md + HTML），消除重复 MD 文件
+- analyze 命令增加 REQUIREMENT.md 生成（JSON 多文档模式 + DOC_MATRIX feature 8 文档）
+- split --response 创建完整任务目录（23-27 个文件，复用 createTaskFromSection）
+- 全局计数器保护机制：`getCounters()` 扫描实际目录取 `max(存储值, 扫描值)`，防止 counters.json 丢失导致编号重复
+- split 所有模式（默认/strict/interactive/--response）统一预分配 `_taskId`，消除硬编码
+- `updateProjectGraph`/`generateImpactGraph`/`detectSemanticDependencies` 改用预分配 ID
+- task new `--id` 手动指定时也递增计数器，避免后续自动编号回退
+- doc2spec CSV 批量导入、iteration-from-global 自动拆分改用 `nextTaskId`
+- search.ts / analyze-engine.ts / synthesize.ts / spec2doc.ts 备份文件过滤（`isTimestampBackup`）
+- CLI 选项补注册：split `--force`、task new `--id`
+- 清理死代码 `generateTaskId`
+
+---
+
 ## v5.85.0 (2026-08-12) — 提示词库功能
 
 - 新增 `prompts` 命令（简写 `pt`）：提示词库管理

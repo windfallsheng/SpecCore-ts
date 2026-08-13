@@ -6,6 +6,7 @@ import { pathExists, readFile, readdir } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
 import { t } from '../i18n/t';
+import { isTimestampBackup } from '../utils/task-utils';
 
 export interface SearchOptions {
   query: string;
@@ -92,7 +93,7 @@ async function searchInDir(dir: string, keyword: string, results: SearchResult[]
     if (e.isDirectory()) {
       if (e.name.startsWith('.') || e.name === 'node_modules' || e.name === 'trash' || e.name === 'archived') continue;
       await searchInDir(fullPath, keyword, results);
-    } else if (e.name.endsWith('.md') || e.name.endsWith('.yaml') || e.name.endsWith('.json')) {
+    } else if ((e.name.endsWith('.md') || e.name.endsWith('.yaml') || e.name.endsWith('.json')) && !isTimestampBackup(e.name)) {
       try {
         const content = await readFile(fullPath, 'utf-8');
         const lines = content.split('\n');

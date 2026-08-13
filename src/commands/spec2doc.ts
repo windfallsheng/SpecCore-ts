@@ -11,6 +11,7 @@ import { logger, Spinner } from '../utils/logger';
 import { execSync } from 'child_process';
 import { pathExists, ensureDir, readdir, stat, writeFile } from 'fs-extra';
 import { join, basename, extname } from 'path';
+import { isTimestampBackup } from '../utils/task-utils';
 import { validateContent, generateReport } from '../core/doc-validator';
 
 function detectPlatform(): 'macos' | 'linux' | 'win' {
@@ -232,7 +233,7 @@ async function collectAllMd(dir: string, list: { path: string; label: string }[]
     const full = join(dir, e.name);
     if (e.isDirectory() && !e.name.startsWith('.') && e.name !== 'images') {
       await collectAllMd(full, list);
-    } else if (e.isFile() && e.name.endsWith('.md')) {
+    } else if (e.isFile() && e.name.endsWith('.md') && !isTimestampBackup(e.name)) {
       list.push({ path: full, label: e.name.replace('.md', '') });
     }
   }

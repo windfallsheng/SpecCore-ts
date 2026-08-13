@@ -16,6 +16,7 @@ import { extractQuestions, showQuestionChecklist } from '../core/question-checkl
 import { savePlan, markPlanExecuted, getPlan, ExecutionPlan } from '../core/plan-store';
 import { generatePlan, formatPlanMarkdown } from './plan';
 import { generatePlanHtml } from '../core/plan-html';
+import { nextPlanId } from '../core/global-counters';
 import { generateReport as generateRetroReport } from './retro';
 import { version } from '../../package.json';
 import {
@@ -176,35 +177,31 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
         },
       });
 
-      // ── 多任务时自动生成 PLAN.md + HTML 可视化 ──
+      // ── 多任务时自动生成计划子目录（PLAN.md + HTML 可视化） ──
       if (sortedTasks.length > 1) {
         const iterDir = await getIterationDir(iteration);
-        const planDir = join(iterDir, '000-overview', 'plans');
-        await ensureDir(planDir);
+        const plansRoot = join(iterDir, '000-overview', 'plans');
+        await ensureDir(plansRoot);
 
         const planEntries = generatePlan(sortedTasks, parseInt(options.batchSize || '3', 10), 'auto');
         const planMd = formatPlanMarkdown(planEntries, iteration, sortedTasks);
 
-        // 写入 PLAN.md（最新版）
-        const latestPath = join(planDir, 'PLAN.md');
-        await writeFile(latestPath, planMd, 'utf-8');
+        // 创建计划子目录
+        const slug = sortedTasks.map(t => t.name).join('-').slice(0, 30);
+        const { id: planId } = await nextPlanId(slug);
+        const planDir = join(plansRoot, planId);
+        await ensureDir(planDir);
+        await writeFile(join(planDir, 'PLAN.md'), planMd, 'utf-8');
 
-        // 写入带时间戳的版本
-        const ts = new Date().toISOString().replace(/T/, '-').replace(/:/g, '').slice(0, 17);
-        const versionedPath = join(planDir, `PLAN-${ts}-auto.md`);
-        await writeFile(versionedPath, planMd, 'utf-8');
-
-        // 生成 HTML 可视化
+        // 生成 HTML 可视化（放入同一子目录）
         const htmlData = sortedTasks.map(t => ({
           id: t.id, name: t.name, priority: t.priority, status: t.status,
           owner: t.assignee || undefined, dependsOn: t.dependencies || [],
         }));
         const html = generatePlanHtml(htmlData, { version, iteration, planName });
-        const htmlPath = join(planDir, 'speccore-plan.html');
-        await writeFile(htmlPath, html, 'utf-8');
+        await writeFile(join(planDir, 'speccore-plan.html'), html, 'utf-8');
 
-        logger.info(`📝 计划已生成: ${planDir}/PLAN.md`);
-        logger.info(`📊 可视化: ${htmlPath}`);
+        logger.info(`📝 计划已生成: 000-overview/plans/${planId}/`);
       }
     }
 

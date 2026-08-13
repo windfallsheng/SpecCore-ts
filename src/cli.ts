@@ -65,6 +65,7 @@ import { deleteCommand } from './commands/delete';
 import { searchCommand } from './commands/search';
 import { watchCommand } from './commands/watch';
 import { promptsCommand } from './commands/prompts';
+import { synthesizeCommand } from './commands/synthesize';
 // v5.21.0 任务调度
 import { HELP_PANEL } from './core/help-panel';
 import {
@@ -105,7 +106,7 @@ const MODE = readMode();
 /** 简洁模式下在 help 中显示的命令 */
 const SIMPLE_COMMANDS = new Set([
   'ask', 'welcome', 'init', 'doc2spec', 'spec2doc', 'dashboard', 'analyze', 'split', 'execute',
-  'pr', 'done', 'dev', 'search', 'help',
+  'pr', 'done', 'dev', 'search', 'help', 'synthesize',
   'iteration', 'task', 'plan', 'ops', 'change', 'validate', 'retro',
   ]);
 
@@ -166,6 +167,16 @@ program
   .action(devCommand);
 
 program
+  .command('synthesize')
+  .alias('syn')
+  .description('需求文档智能合成：多端需求 → 一篇原子化综合需求文档')
+  .option('-I, --iteration <iteration>', '目标迭代')
+  .option('--with-code', '结合源码检查需求冲突')
+  .option('--prompt', '输出结构化 Prompt 到 stdout（Skill 协作模式）')
+  .option('--apply <content>', '接收 AI 合成结果写入文件（配合 --prompt）')
+  .action(synthesizeCommand);
+
+program
   .command('prompts')
   .alias('pt')
   .description('提示词库：预置模板 + 自定义提示词，搜索/分类/CRUD/复制')
@@ -183,7 +194,7 @@ program
   .alias('in')
   .description('初始化 SpecCore（17命令/58全量，--interactive 引导式）')
   .option('--mode <mode>', 'Initialization mode: fresh or migration', 'fresh')
-  .option('--full', 'Full mode: all 58 commands (default: simple)')
+  .option('--full', 'Full mode: all 59 commands (default: simple)')
   .option('--force', 'Force overwrite existing configuration')
   .option('--interactive', 'Interactive guided setup: mode → confirm → init')
   .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
@@ -240,6 +251,7 @@ iterationCmd
   .option('--verify', '生成代码后自动检查 TEST/REVIEW/DEPLOY → 最多3轮自动修复')
   .option('--prompt', '输出结构化 Prompt 到 stdout（Skill 协作模式）')
   .option('--response <response>', '接收 AI 拆分结果创建 Task（配合 --prompt）')
+  .option('--force', '已有任务时强制覆盖')
   .option('-g, --granularity <level>', '拆分粒度: macro(粗) | module(中,默认) | atomic(细)')
   .action(iterationSplitCommand);
 
@@ -272,6 +284,7 @@ taskCmd
   .option('--batch <tasks>', '批量创建')
   .option('--batch-file <path>', '从文件批量导入')
   .option('--interactive', '交互式创建')
+  .option('--id <id>', '手动指定任务 ID（如 Task-005），计数器仍会递增')
   .option('--schedule <mode>', '调度模式: night|now', 'now')
   .action(taskNewCommand);
 
@@ -984,7 +997,7 @@ if (process.argv.length <= 2) {
 
   logger.info('');
   logger.info('┌──────────────────────────────────────────┐');
-  logger.info('│    SpecCore · v' + pkg.version + ' · 58 commands              │');
+  logger.info('│    SpecCore · v' + pkg.version + ' · 59 commands              │');
   logger.info('├──────────────────────────────────────────┤');
   if (iteration) logger.info('│  迭代: ' + iteration.padEnd(33) + '│');
   logger.info('│  状态: ' + icons[phase] + ' ' + (names[phase] || phase).padEnd(33) + '│');

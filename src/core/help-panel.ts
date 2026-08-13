@@ -10,6 +10,7 @@ export const HELP_PANEL = `
 │  🚀 init          ⚡ 初始化项目                                │
 │  📅 iteration     ⚡ 迭代管理                                  │
 │  📝 doc2spec      ⚡ 导入 PRD → Spec MD（AI 精炼推荐）          │
+│  🧩 synthesize    ⚡ 多端需求 → 一篇原子化综合需求文档          │
 │  📤 spec2doc      ⚡ Spec MD → Word/PDF（AI 排版推荐）          │
 │  📦 task new      ⚡ 创建任务                                  │
 ├──────────────────────────────────────────────────────────────┤

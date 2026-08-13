@@ -51,7 +51,8 @@ export type IntentType =
   | 'platform_add'        // 添加平台
   | 'index_update'        // 更新索引
   | 'context'            // 查看上下文
-  | 'doc2spec';          // Word 需求文档导入
+  | 'doc2spec'           // Word 需求文档导入
+  | 'synthesize';        // 需求文档智能合成
 
 /** 意图匹配结果 */
 export interface IntentResult {
@@ -464,6 +465,15 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     triggers: ['导入文档', 'word转', '需求文档', 'doc2spec', 'Word需求', 'PRD导入', '转换文档', 'docx'],
     patterns: ['导入.*文档', '.*word.*转', '需求.*word', 'PRD.*导入', '文档.*转换'],
     description: 'Word 需求文档导入 — 将 .docx/.doc 格式的 PRD 转换为 SpecCore Markdown',
+  },
+  // 需求文档智能合成
+  {
+    id: 'synthesize',
+    intent: 'synthesize',
+    priority: 44,
+    triggers: ['合成需求', '合并需求', '需求合成', 'synthesize', '智能合成', '需求合并', '多端合成'],
+    patterns: ['合成.*需求', '合并.*需求', '需求.*合成', '多端.*合并', '.*综合需求'],
+    description: '需求文档智能合成 — 将多端需求文档合并为一篇原子化综合需求文档',
   },
 ];
 

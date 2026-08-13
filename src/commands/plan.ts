@@ -9,6 +9,7 @@ import { createInterface } from 'readline';
 import { buildPrompt, formatPrompt } from '../core/prompt-builder';
 import { generatePlanHtml } from '../core/plan-html';
 import { version } from '../../package.json';
+import { nextPlanId } from '../core/global-counters';
 
 function promptUser(question: string): Promise<string> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -53,18 +54,15 @@ export async function planCommand(options: PlanOptions): Promise<void> {
   if (options.response) {
     if (!options.iteration) { logger.error('--response 需要 --iteration'); return; }
     const iterDir = await getIterationDir(options.iteration);
-    const planDir = join(iterDir, '000-overview', 'plans');
-    await ensureDir(planDir);
-    const ts = new Date().toISOString().replace(/T/, '-').replace(/:/g, '').slice(0, 17);
+    const plansRoot = join(iterDir, '000-overview', 'plans');
+    await ensureDir(plansRoot);
     const slug = options.topic || 'plan';
-    const filename = `PLAN-${ts}-${slug}.md`;
-    const versionedPath = join(planDir, filename);
-    const latestPath = join(planDir, 'PLAN.md');
-    const tx = new FileTransaction();
-    tx.write(versionedPath, options.response);
-    tx.write(latestPath, options.response);
-    await tx.commit();
-    logger.success(`✅ 计划已保存: ${filename}`);
+    const { id: planId } = await nextPlanId(slug, options.topic);
+    const planDir = join(plansRoot, planId);
+    await ensureDir(planDir);
+    const planMdPath = join(planDir, 'PLAN.md');
+    await writeFile(planMdPath, options.response, 'utf-8');
+    logger.success(`✅ 计划已保存: ${planId}/PLAN.md`);
     printPlanFromMarkdown(options.response, options.iteration);
     return;
   }
@@ -159,35 +157,41 @@ export async function planCommand(options: PlanOptions): Promise<void> {
       const cmdIds = selectedTasks.map(t => t.id);
       logger.info(`   speccore execute -I ${iteration} -t ${cmdIds.join(',')} --force`);
       logger.info(`   或分批:  speccore execute -I ${iteration} -t ${cmdIds[0]} --batch-size 3 --auto`);
-      // 保存到 plan 时只包含选中的任务
+      // 保存到 plan 并创建子目录
       const _ = await saveToStore(iteration, cmdIds, 3, options, 'manual');
-      const iterDir = await getIterationDir(iteration);
-      logger.info(`   计划文件: ${iterDir}/000-overview/plans/PLAN.md`);
+      const plansRoot = join(iterDir, '000-overview', 'plans');
+      const slug = extractPlanSlug(selectedTasks);
+      const { id: planId } = await nextPlanId(slug, options.topic);
+      const planSubDir = join(plansRoot, planId);
+      await ensureDir(planSubDir);
+      const planMdContent = formatPlanMarkdown(
+        generatePlan(selectedTasks, parseInt(options.team || '3', 10), 'auto'),
+        iteration, selectedTasks
+      );
+      await writeFile(join(planSubDir, 'PLAN.md'), planMdContent, 'utf-8');
+      logger.info(`   📁 计划目录: 000-overview/plans/${planId}/`);
       // ── HTML 可视化输出 ──
-      if (options.html) {
-        const planDir = join(iterDir, '000-overview', 'plans');
-        await writeHtmlPlan(selectedTasks, iteration, planDir);
-      }
+      await writeHtmlPlan(selectedTasks, iteration, planSubDir);
       return;
     }
 
     const saved = await saveToStore(iteration, taskIds, 3, options, 'manual');
 
-    // 写入带时间戳 + AI 关键词的计划文件（多版本） + 最新的 PLAN.md
-    const ts = new Date().toISOString().replace(/T/, '-').replace(/:/g, '').slice(0, 17);
+    // 写入计划子目录（每个计划独立目录，含 PLAN.md + HTML）
+    const plansRoot = join(iterDir, '000-overview', 'plans');
+    await ensureDir(plansRoot);
     const slug = extractPlanSlug(sortedTasks);
-    const filename = slug ? `PLAN-${ts}-${slug}.md` : `PLAN-${ts}.md`;
-    const versionedPath = join(planDir, filename);
-    const latestPath = join(planDir, 'PLAN.md');
-    const tx = new FileTransaction();
-    tx.write(versionedPath, formatPlanMarkdown(plan, iteration, sortedTasks));
-    tx.write(latestPath, formatPlanMarkdown(plan, iteration, sortedTasks));
-    await tx.commit();
+    const { id: planId } = await nextPlanId(slug, options.topic);
+    const planDir = join(plansRoot, planId);
+    await ensureDir(planDir);
+    const planMdContent = formatPlanMarkdown(plan, iteration, sortedTasks);
+    await writeFile(join(planDir, 'PLAN.md'), planMdContent, 'utf-8');
 
-    // ── HTML 可视化输出（始终生成） ──
+    // ── HTML 可视化输出（放入同一子目录） ──
     await writeHtmlPlan(sortedTasks, iteration, planDir);
 
-    spinner.stop(`Saved: ${filename} | ${taskIds.length} tasks, ${plan.length} phases`);
+    spinner.stop(`Saved: ${planId} | ${taskIds.length} tasks, ${plan.length} phases`);
+    logger.info(`   📁 计划目录: 000-overview/plans/${planId}/`);
     printPlan(plan, iteration);
   } catch (error) {
     spinner.fail(`Failed: ${error}`);
@@ -207,41 +211,40 @@ async function saveToStore(
 }
 
 async function showPlanHistory(): Promise<void> {
-  // 1. 从磁盘读取所有 PLAN-*.md 文件，按时间倒序
-  const plans: { file: string; time: Date; size: number }[] = [];
+  // 扫描计划子目录（Plan-NNN-*），按时间倒序
+  const plans: { dir: string; time: Date; size: number }[] = [];
   try {
     const iter = await getDefaultIteration();
     if (iter) {
-      const planDir = join(await getIterationDir(iter), '000-overview', 'plans');
-      let files: string[] = [];
-      try { files = await readdir(planDir); } catch { files = []; }
-      for (const f of files) {
-        const m = f.match(/^PLAN-(\d{4}-\d{2}-\d{2}-\d+)(?:-.*)?\.md$/);
-        if (m) {
-          const st = await stat(join(planDir, f));
-          plans.push({ file: f, time: st.mtime, size: st.size });
+      const plansRoot = join(await getIterationDir(iter), '000-overview', 'plans');
+      let entries: import('fs-extra').Dirent[] = [];
+      try { entries = await readdir(plansRoot, { withFileTypes: true }); } catch { entries = []; }
+      for (const e of entries) {
+        if (e.isDirectory() && e.name.startsWith('Plan-')) {
+          const planMd = join(plansRoot, e.name, 'PLAN.md');
+          if (await stat(planMd).catch(() => null)) {
+            const st = await stat(planMd);
+            plans.push({ dir: e.name, time: st.mtime, size: st.size });
+          }
         }
       }
-      // 按时间倒序：最新的在最前面
       plans.sort((a, b) => b.time.getTime() - a.time.getTime());
     }
   } catch {}
 
-  // 2. 从 store 读取
+  // 从 store 读取
   const storePlans = await listPlans(undefined, 20);
 
   if (plans.length === 0 && storePlans.length === 0) { logger.info('No plan files yet.'); return; }
 
-  // 展示磁盘文件（倒序）
+  // 展示磁盘计划子目录
   if (plans.length > 0) {
     const iter = await getDefaultIteration();
-    logger.info(`\n📋 计划文件 · ${await getIterationDir(iter)}/000-overview/plans/ (${plans.length}):\n`);
+    logger.info(`\n📋 计划目录 · ${await getIterationDir(iter)}/000-overview/plans/ (${plans.length}):\n`);
     for (const p of plans) {
-      const isLatest = p.file === 'PLAN.md' ? ' 📌 最新' : '';
-      logger.info(`  📄 ${p.file}  ${formatFileSize(p.size)}  ${p.time.toLocaleString()}${isLatest}`);
+      logger.info(`  📁 ${p.dir}/  ${formatFileSize(p.size)}  ${p.time.toLocaleString()}`);
     }
-    logger.info(`\n  💡 PLAN.md = 最新版本（可直接打开）`);
-    logger.info(`  ⚙️  历史版本按时间倒序排列\n`);
+    logger.info(`\n  💡 每个计划独立子目录，含 PLAN.md + speccore-plan.html\n`);
   }
 
   // 展示 store 记录

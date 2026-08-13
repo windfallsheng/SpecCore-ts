@@ -4,6 +4,7 @@ import { logger, Spinner } from '../../utils/logger';
 import { getDefaultIteration, getIterationDir } from '../../core/context';
 import { scoreRisk, generateRiskReport } from '../../core/risk-scorer';
 import { nextTaskId } from '../../core/global-counters';
+import { backupWithTimestamp } from '../../utils/task-utils';
 
 import { showNextSteps } from '../../core/next-steps';
 import { createInterface } from 'readline';
@@ -67,20 +68,76 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     try {
       const tasks = JSON.parse(options.response);
       if (Array.isArray(tasks)) {
-        for (const task of tasks) {
-          const taskDir = join(iterDir, task.id || `Task-${String(tasks.indexOf(task) + 1).padStart(3, '0')}`);
-          await ensureDir(taskDir);
-          await ensureDir(join(taskDir, '00-specs'));
-          if (task.req) await writeFile(join(taskDir, '00-specs', 'REQ.md'), task.req);
-          if (task.tech) await writeFile(join(taskDir, '00-specs', 'TECH.md'), task.tech);
-          logger.info(`   ✅ 创建: ${taskDir}`);
+        // 获取迭代根目录（createTaskFromSection 需要迭代根路径）
+        const iterDirFull = await getIterationDir(iter);
+        const allPlatforms = await detectPlatforms(iterDirFull);
+        const sections: Section[] = [];
+
+        for (let i = 0; i < tasks.length; i++) {
+          const task = tasks[i];
+
+          // 将 AI JSON 转换为 Section，复用 createTaskFromSection 创建完整目录
+          const desc = task.description || task.name || '';
+          const scope = Array.isArray(task.scope) ? task.scope.join(', ') : (task.scope || '');
+          const apis = Array.isArray(task.apis) ? task.apis.join('\n') : '';
+          const acs = Array.isArray(task.acceptanceCriteria) ? task.acceptanceCriteria.join('\n') : '';
+
+          let content = desc;
+          if (scope) content += `\n\n范围: ${scope}`;
+          if (apis) content += `\n\n接口:\n${apis}`;
+          if (acs) content += `\n\n验收标准:\n${acs}`;
+
+          const section: Section = {
+            name: task.name || `Task ${i + 1}`,
+            content,
+            level: 2,
+            platform: scope?.match(/后台|backend/) ? 'backend' : undefined,
+          };
+          (section as any)._complexity = {
+            estimatedHours: task.estimatedHours || 8,
+            priority: task.priority || 'medium',
+            complexity: task.risk === 'high' ? 'high' : task.risk === 'low' ? 'low' : 'medium',
+            apiCount: (task.apis || []).length,
+            dbCount: (task.tables || []).length,
+            pageCount: 0,
+            wordCount: content.length,
+          };
+          (section as any)._owner = task.owner || '未分配';
+          sections.push(section);
         }
+
+        // 检测已有任务 + 冲突处理
+        const existingTasks = await detectExistingTasks(iterDirFull);
+        if (existingTasks.length > 0 && !options.force) {
+          logger.warn(`   ⚠️  已有 ${existingTasks.length} 个任务: ${existingTasks.slice(0, 5).join(', ')}...`);
+          logger.info('   使用 --force 强制覆盖');
+          return;
+        }
+
+        // 创建完整任务目录（复用本地拆分的完整流程）
+        // 注意：始终走计数器，不使用 AI 提供的 ID，避免编号重复
+        for (let i = 0; i < sections.length; i++) {
+          const { id: taskId } = await nextTaskId(sections[i].name);
+          (sections[i] as any)._taskId = taskId;
+          await createTaskFromSection(iterDirFull, taskId, sections[i], allPlatforms);
+          logger.info(`   ✅ 创建: ${taskId} - ${sections[i].name}`);
+        }
+
+        await generateImpactGraph(iterDirFull, sections, allPlatforms);
+        await updateProjectGraph(iterDirFull, sections);
+        logger.success(`✅ 创建了 ${sections.length} 个任务（完整目录结构）`);
       } else {
         logger.warn('AI 返回格式非数组，将作为 Markdown 写入 REQUIREMENT.md');
-        await writeFile(join(iterDir, 'REQUIREMENT.md'), options.response);
+        const reqPath = join(iterDir, 'REQUIREMENT.md');
+        const bk = await backupWithTimestamp(reqPath);
+        if (bk) logger.info(`   📦 旧版已备份: ${bk.split('/').pop()}`);
+        await writeFile(reqPath, options.response);
       }
     } catch {
-      await writeFile(join(iterDir, 'REQUIREMENT.md'), options.response);
+      const reqPath = join(iterDir, 'REQUIREMENT.md');
+      const bk = await backupWithTimestamp(reqPath);
+      if (bk) logger.info(`   📦 旧版已备份: ${bk.split('/').pop()}`);
+      await writeFile(reqPath, options.response);
     }
     logger.success('✅ 任务已创建');
     return;
@@ -225,6 +282,12 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     logger.info(`Found ${sections.length} sections to split`);
     logger.info(`Platforms: ${platforms.join(', ')}`);
 
+    // ── 预分配任务 ID（确保所有路径使用计数器，避免编号重复） ──
+    for (const section of sections) {
+      const { id: taskId } = await nextTaskId(section.name);
+      (section as any)._taskId = taskId;
+    }
+
     // ── Strict mode: preview + confirm each task's split plan ──
     if (options.strict) {
       const approved = await strictSplitPreview(sections, platforms, iterationDir);
@@ -233,8 +296,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
         return;
       }
       for (const section of approved) {
-        const idx = sections.indexOf(section);
-        const taskId = `Task-${String(idx + 1).padStart(3, '0')}`;
+        const taskId = (section as any)._taskId;
         await createTaskFromSection(iterationDir, taskId, section, platforms);
       }
       spinner.stop(`✅ 创建了 ${approved.length} 个任务`);
@@ -267,7 +329,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       logger.info(`📋 共 ${sections.length} 个任务将被创建:\n`);
 
       for (let i = 0; i < sections.length; i++) {
-        const taskId = `Task-${String(i + 1).padStart(3, '0')}`;
+        const taskId = (sections[i] as any)._taskId;
         const contentPreview = sections[i].content?.split('\n')[0]?.slice(0, 60) || '';
         const c = complexities[i];
         const owner = (sections[i] as any)._owner || '未分配';
@@ -294,7 +356,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
         logger.info('进入逐一确认模式...');
         let created = 0;
         for (let i = 0; i < sections.length; i++) {
-          const taskId = `Task-${String(i + 1).padStart(3, '0')}`;
+          const taskId = (sections[i] as any)._taskId;
           const resp = await promptUser(`  创建 ${taskId} - ${sections[i].name}? [y/n/q]`);
           if (resp?.toLowerCase() === 'q') {
             logger.info(`已取消，剩余 ${sections.length - i} 个任务未创建`);
@@ -318,7 +380,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
 
       // Default: create all
       for (let i = 0; i < sections.length; i++) {
-        const taskId = `Task-${String(i + 1).padStart(3, '0')}`;
+        const taskId = (sections[i] as any)._taskId;
         await createTaskFromSection(iterationDir, taskId, sections[i], platforms);
       }
       await generateImpactGraph(iterationDir, sections, platforms);
@@ -329,9 +391,9 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       return;
     }
 
-    // Create tasks
+    // Create tasks（使用预分配的 ID）
     for (let i = 0; i < sections.length; i++) {
-      const { id: taskId } = await nextTaskId(sections[i].name);
+      const taskId = (sections[i] as any)._taskId;
       await createTaskFromSection(iterationDir, taskId, sections[i], platforms);
     }
 
@@ -740,7 +802,7 @@ async function updateProjectGraph(iterationDir: string, sections: Section[]): Pr
   }
 
   for (let i = 0; i < sections.length; i++) {
-    const { id: taskId } = await nextTaskId(sections[i].name);
+    const taskId = (sections[i] as any)._taskId || `Task-${String(i + 1).padStart(3, '0')}`;
     let taskName = sections[i].name; while (/端端/.test(taskName)) taskName = taskName.replace('端端', '端');
     
     if (!content.includes(taskId)) {
@@ -903,7 +965,7 @@ async function strictSplitPreview(
 
   for (let i = 0; i < sections.length; i++) {
     const s = sections[i];
-    const taskId = `Task-${String(i + 1).padStart(3, '0')}`;
+    const taskId = (s as any)._taskId || `Task-${String(i + 1).padStart(3, '0')}`;
     
     // Determine target directory
     const target = s.platform
@@ -960,7 +1022,7 @@ async function generateImpactGraph(
   const deps: { from: string; fromName: string; to: string; toName: string; reason: string }[] = [];
 
   const sectionApis: { name: string; apis: string[] }[] = sections.map((s, i) => {
-    const taskId = `Task-${String(i + 1).padStart(3, '0')}`;
+    const taskId = (s as any)._taskId || `Task-${String(i + 1).padStart(3, '0')}`;
     const apis = (s.content.match(/\/api\/[a-zA-Z0-9\/-]+/g) || []).map(a => a.trim());
     return { name: taskId, apis };
   });
@@ -984,7 +1046,7 @@ async function generateImpactGraph(
 
   for (let i = 0; i < sections.length; i++) {
     const s = sections[i];
-    const taskId = `Task-${String(i + 1).padStart(3, '0')}`;
+    const taskId = (s as any)._taskId || `Task-${String(i + 1).padStart(3, '0')}`;
     const risk = await scoreRisk(s.content + s.name, s.name, iterationDir);
     impact += `| ${taskId}: ${s.name} | ${risk.level} | ${risk.score} | ${risk.tags.join(' ')} | ${risk.reasons.join('; ')} |\n`;
 
@@ -1656,7 +1718,7 @@ function detectSemanticDependencies(sections: Section[]): Map<string, string[]> 
       // 语义匹配
       for (const [fromPat, toPat, reason] of semanticPairs) {
         if (fromPat.test(siContent) && toPat.test(sjContent)) {
-          const depLabel = `Task-${String(j + 1).padStart(3, '0')}(${sj.name.slice(0, 10)})`;
+          const depLabel = `${(sections[j] as any)._taskId || `Task-${String(j + 1).padStart(3, '0')}`}(${sj.name.slice(0, 10)})`;
           if (!taskDeps.includes(depLabel)) taskDeps.push(depLabel);
           break; // 每对只匹配一次
         }
@@ -1664,7 +1726,7 @@ function detectSemanticDependencies(sections: Section[]): Map<string, string[]> 
     }
     
     if (taskDeps.length > 0) {
-      deps.set(`Task-${String(i + 1).padStart(3, '0')}`, taskDeps);
+      deps.set((sections[i] as any)._taskId || `Task-${String(i + 1).padStart(3, '0')}`, taskDeps);
     }
   }
   

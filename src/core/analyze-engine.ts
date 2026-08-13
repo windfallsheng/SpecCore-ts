@@ -16,6 +16,7 @@
 import { readFile, writeFile, pathExists, readdir, stat, ensureDir } from 'fs-extra';
 import { join, relative, basename } from 'path';
 import { logger } from '../utils/logger';
+import { isTimestampBackup } from '../utils/task-utils';
 import { buildCodeIndex, findRelevantCode, readRelevantSource, isIndexStale, loadFullIndex } from './code-scanner';
 import { generateAIContext, AIContextInput, AIContextResult } from './ai-context-generator';
 import { cleanStaleCache } from './git-integration';
@@ -89,7 +90,7 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalysisResult> 
             const full = join(dir, e.name);
             if (e.isDirectory() && !e.name.startsWith('_') && !e.name.startsWith('.')) {
               await scanDir(full);
-            } else if (e.isFile() && e.name.endsWith('.md') && !e.name.startsWith('README')) {
+            } else if (e.isFile() && e.name.endsWith('.md') && !e.name.startsWith('README') && !isTimestampBackup(e.name)) {
               requirements.push(full);
             }
           }
