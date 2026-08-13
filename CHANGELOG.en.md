@@ -2,6 +2,13 @@
 
 ---
 
+## v5.87.1 (2026-08-13) — Qoder Legacy Cleanup Fix
+
+- Fixed reversed cleanup logic in update.ts: was incorrectly deleting `spec-` (new format), now correctly cleans `spec:` (old format)
+- Legacy command cleanup now checks both `spec:` and `spec-` prefixes
+
+---
+
 ## v5.87.0 (2026-08-13) — Unified Timestamp Conflict Handling + Backup Summaries
 
 - `*-old` naming style fully replaced with timestamp format `{name}-{YYYYMMDDHHmmss}.md`

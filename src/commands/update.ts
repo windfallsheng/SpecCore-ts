@@ -116,14 +116,16 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
       cleanedFiles.push('qoder/commands/spec/ (旧版子目录)');
     }
     for (const f of await readdir(qoderCommandsDir)) {
-      // 清理旧版 spec- 前缀文件（应使用 spec: 前缀）
-      if (f.startsWith('spec-') && f.endsWith('.md')) {
+      // 清理旧版 spec: 前缀文件（已改用 spec- 前缀，跨平台安全）
+      if (f.startsWith('spec:') && f.endsWith('.md')) {
         await require('fs-extra').remove(join(qoderCommandsDir, f));
         cleaned++;
-        cleanedFiles.push(`qoder/commands/${f} (旧格式 → spec:${f.slice(5)})`);
+        cleanedFiles.push(`qoder/commands/${f} (旧格式 → spec-${f.slice(5)})`);
         continue;
       }
-      if (LEGACY_NAMES.has(f.replace('.md', '').replace('spec:', ''))) {
+      // 清理废弃命令文件（spec: 和 spec- 前缀都检查）
+      const baseName = f.replace('.md', '').replace(/^spec[:.-]/, '');
+      if (LEGACY_NAMES.has('spec-' + baseName) || LEGACY_NAMES.has('spec:' + baseName)) {
         await require('fs-extra').remove(join(qoderCommandsDir, f));
         cleaned++;
         cleanedFiles.push(`qoder/commands/${f}`);
