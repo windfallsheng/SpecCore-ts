@@ -1,0 +1,66 @@
+[
+  {
+    "id": "init-project",
+    "name": "初始化项目",
+    "category": "workflow",
+    "icon": "🏗️",
+    "description": "在当前项目中初始化 SpecCore",
+    "prompt": "初始化 SpecCore 项目",
+    "params": [],
+    "builtin": true,
+    "sort": 1
+  },
+  {
+    "id": "analyze-iteration",
+    "name": "分析需求",
+    "category": "workflow",
+    "icon": "🔍",
+    "description": "分析迭代需求，生成规格说明",
+    "prompt": "分析 {迭代名} 迭代的需求文档，生成完整的规格说明",
+    "params": [
+      { "key": "迭代名", "placeholder": "Q2", "required": true }
+    ],
+    "builtin": true,
+    "sort": 2
+  },
+  {
+    "id": "split-tasks",
+    "name": "拆分任务",
+    "category": "workflow",
+    "icon": "🧩",
+    "description": "将迭代需求拆分为可执行的开发任务",
+    "prompt": "把 {迭代名} 迭代的需求拆分成开发任务",
+    "params": [
+      { "key": "迭代名", "placeholder": "Q2", "required": true }
+    ],
+    "builtin": true,
+    "sort": 3
+  },
+  {
+    "id": "execute-task",
+    "name": "执行任务",
+    "category": "workflow",
+    "icon": "▶️",
+    "description": "执行指定的开发任务",
+    "prompt": "执行 {迭代名} 中的 {任务ID} 任务",
+    "params": [
+      { "key": "迭代名", "placeholder": "Q2", "required": true },
+      { "key": "任务ID", "placeholder": "Task-001", "required": true }
+    ],
+    "builtin": true,
+    "sort": 4
+  },
+  {
+    "id": "view-dashboard",
+    "name": "查看进度",
+    "category": "workflow",
+    "icon": "📊",
+    "description": "查看迭代进度仪表盘",
+    "prompt": "查看 {迭代名} 的进度",
+    "params": [
+      { "key": "迭代名", "placeholder": "Q2", "required": false }
+    ],
+    "builtin": true,
+    "sort": 5
+  }
+]

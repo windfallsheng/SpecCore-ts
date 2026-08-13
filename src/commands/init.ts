@@ -1879,6 +1879,20 @@ h1{font-family:'Orbitron',sans-serif;font-size:28px;font-weight:900;background:l
 .kb-desc{font-size:9px;color:var(--muted);margin-top:4px}
 .start-bar{display:block;text-align:center;padding:16px;margin:20px 0 8px;background:linear-gradient(135deg,var(--cyan) 0%,#0284c7 100%);border-radius:40px;color:#fff;font-weight:600;font-size:14px;box-shadow:0 0 30px rgba(14,165,233,.3);cursor:pointer;letter-spacing:1px;text-decoration:none;transition:all .3s;position:relative;z-index:1}
 .start-bar:hover{box-shadow:0 0 45px rgba(14,165,233,.5);transform:translateY(-1px)}
+.action-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:20px 0}
+.action-card{padding:16px;border-radius:12px;border:1px solid var(--border);background:rgba(13,31,56,.7);text-align:center;cursor:pointer;text-decoration:none;transition:all .3s;position:relative;z-index:1}
+.action-card.primary{background:linear-gradient(135deg,var(--cyan) 0%,#0284c7 100%);border-color:var(--cyan);color:#fff}
+.action-card.secondary{border-color:rgba(14,165,233,.2);color:var(--text)}
+.action-card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(14,165,233,.2)}
+.action-icon{font-size:28px;margin-bottom:8px}
+.action-title{font-size:13px;font-weight:700;margin-bottom:4px}
+.action-desc{font-size:10px;color:var(--muted);line-height:1.4}
+.action-card.primary .action-desc{color:rgba(255,255,255,.8)}
+.faq-section{margin:16px 0;padding:16px;background:rgba(13,31,56,.6);border:1px solid var(--border);border-radius:12px}
+.faq-title{font-size:13px;font-weight:700;color:var(--cyan);margin-bottom:12px}
+.faq-item{margin:10px 0;padding:10px 12px;border-radius:8px;background:rgba(14,165,233,.04);border:1px solid rgba(14,165,233,.1)}
+.faq-q{font-size:11px;font-weight:600;color:var(--text);margin-bottom:6px}
+.faq-a{font-size:10px;color:var(--muted);line-height:1.6}
 .footer{text-align:center;color:var(--muted);font-size:10px;margin-top:20px;padding-top:12px;border-top:1px solid rgba(255,255,255,.04)}
 </style></head><body>
 <div class="scanlines"></div><div class="grid-pattern"></div>
@@ -1979,6 +1993,17 @@ Iteration-xxx/<br>
 <span class="flow-node n2">执行开发</span><span class="flow-arrow">→</span>
 <span class="flow-node n1">验证交付</span>
 </div>
+<div style="margin:12px 0;padding:12px;border-radius:8px;border:1px solid rgba(20,184,166,.2);background:rgba(20,184,166,.04)">
+<div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:8px">📋 完整示例流程</div>
+<div class="method-cmd" style="margin-bottom:4px"># 1. 创建迭代（终端执行）</div>
+<div class="method-cmd" style="margin-bottom:8px">speccore iteration create -n login --topic "登录功能"</div>
+<div class="method-cmd" style="margin-bottom:4px"># 2. 分析需求（AI 对话框）</div>
+<div class="method-cmd" style="margin-bottom:8px">/spec-ask "分析 login 的需求"</div>
+<div class="method-cmd" style="margin-bottom:4px"># 3. 拆分任务（AI 对话框）</div>
+<div class="method-cmd" style="margin-bottom:8px">/spec-ask "拆分 login 的任务"</div>
+<div class="method-cmd" style="margin-bottom:4px"># 4. 执行开发（AI 对话框）</div>
+<div class="method-cmd">/spec-ask "开发 Task-001"</div>
+</div>
 <div class="method-grid" style="grid-template-columns:1fr 1fr;margin-top:12px">
 <div class="method-card m1"><div class="method-title">🤖 方式 A：意图式（推荐）</div><div class="step-desc">用自然语言告诉 AI，每步自动判断：</div><div class="method-cmd" style="margin-top:4px">/spec-ask "分析 my-iter 的需求"</div><div class="method-cmd">/spec-ask "拆分任务"</div><div class="method-cmd">/spec-ask "开发 Task-001"</div><div class="method-cmd">/spec-ask "完成 Task-001"</div></div>
 <div class="method-card m2"><div class="method-title">⌨️ 方式 B：显式命令（也在 AI 对话框中使用）</div><div class="step-desc">命令模板，将 &lt;参数&gt; 替换为你的实际值：</div><div class="method-cmd" style="margin-top:4px">/spec-analyze -I &lt;迭代名&gt;</div><div class="method-cmd">/spec-split -i &lt;迭代名&gt;</div><div class="method-cmd">/spec-execute -t &lt;任务名&gt;</div><div class="method-cmd">/spec-done -t &lt;任务名&gt;</div><div style="margin-top:8px;font-size:10px;color:var(--muted)">-I &lt;迭代名&gt; — analyze 用大写 -I，其余用小写 -i<br>-t &lt;任务名&gt; — Task-001 / Task-002 ...<br>--prompt 已内置在 Skill 中，无需手动添加</div></div>
@@ -1987,32 +2012,81 @@ Iteration-xxx/<br>
 </div>
 
 <div style="margin:16px 0 8px;font-size:13px;font-weight:700;color:var(--cyan)">⚡ 自动化模式</div>
+<div style="padding:12px;border-radius:8px;border:1px solid rgba(14,165,233,.15);background:rgba(14,165,233,.04)">
+<div style="font-size:11px;font-weight:700;color:var(--cyan);margin-bottom:8px">🎯 三种执行模式（按需选择）</div>
 <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
-<div style="padding:12px;border-radius:8px;border:1px solid rgba(20,184,166,.2);background:rgba(20,184,166,.04)">
-<div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:4px">🔒 全程确认（默认）</div>
-<div class="step-desc">每步展示结果，等你确认后再继续。适合首次使用。</div>
-<div class="method-cmd">/spec-ask "分析 my-iter 的需求"</div>
-<div class="step-desc" style="margin-top:4px">逐条执行步骤 6 的命令即可，每步都会确认。</div>
+<div style="padding:10px;border-radius:6px;border:1px solid rgba(20,184,166,.2);background:rgba(20,184,166,.04)">
+<div style="font-size:10px;font-weight:700;color:var(--green);margin-bottom:4px">🔒 全程确认</div>
+<div class="step-desc" style="font-size:9px">每步展示结果，等你确认后再继续。适合首次使用。</div>
+<div class="method-cmd" style="font-size:9px">/spec-ask "分析 my-iter 的需求"</div>
 </div>
-<div style="padding:12px;border-radius:8px;border:1px solid rgba(249,115,22,.2);background:rgba(249,115,22,.04)">
-<div style="font-size:11px;font-weight:700;color:var(--orange);margin-bottom:4px">⚡ 半自动</div>
-<div class="step-desc">分析和拆分自动完成，执行开发前暂停。适合日常开发。</div>
-<div class="method-cmd">/spec-ask "半自动执行 my-iter"</div>
-<div class="method-cmd">/spec-dev -i my-iter --auto-steps analyze,split</div>
+<div style="padding:10px;border-radius:6px;border:1px solid rgba(249,115,22,.2);background:rgba(249,115,22,.04)">
+<div style="font-size:10px;font-weight:700;color:var(--orange);margin-bottom:4px">⚡ 半自动</div>
+<div class="step-desc" style="font-size:9px">分析和拆分自动完成，执行开发前暂停。适合日常开发。</div>
+<div class="method-cmd" style="font-size:9px">/spec-dev -i my-iter --auto-steps analyze,split</div>
 </div>
+<div style="padding:10px;border-radius:6px;border:1px solid rgba(99,102,241,.2);background:rgba(99,102,241,.04)">
+<div style="font-size:10px;font-weight:700;color:var(--purple);margin-bottom:4px">🚀 全自动</div>
+<div class="step-desc" style="font-size:9px">一键跑完整个流水线，不中途暂停。适合熟悉后批量推进。</div>
+<div class="method-cmd" style="font-size:9px">/spec-dev -i my-iter --auto</div>
+</div>
+</div>
+<div class="step-desc" style="margin-top:8px;font-size:10px">💡 <code>speccore dev</code> 是流水线控制器：自动检测当前阶段 → 推荐下一步 → 执行。还可用 <code>--from analyze --to execute</code> 指定范围。</div>
+</div>
+
+<div style="margin:16px 0 8px;font-size:13px;font-weight:700;color:var(--cyan)">📚 提示词库（快速上手）</div>
 <div style="padding:12px;border-radius:8px;border:1px solid rgba(99,102,241,.2);background:rgba(99,102,241,.04)">
-<div style="font-size:11px;font-weight:700;color:var(--purple);margin-bottom:4px">🚀 全自动</div>
-<div class="step-desc">一键跑完整个流水线，不中途暂停。适合熟悉后批量推进。</div>
-<div class="method-cmd">/spec-ask "全自动执行 my-iter"</div>
-<div class="method-cmd">/spec-dev -i my-iter --auto</div>
+<div class="step-desc">内置常用操作模板，按场景分类（核心流程/迭代管理/分析文档/开发执行），复制即用：</div>
+<div class="method-cmd" style="margin-bottom:8px">speccore prompts</div>
+<div style="font-size:10px;color:var(--muted);margin-top:4px">打开提示词库页面，浏览预设模板，点击复制自动带上 /spec-ask 前缀</div>
+<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+<span style="padding:4px 8px;border-radius:4px;background:rgba(14,165,233,.1);color:var(--cyan);font-size:9px">🔍 分析需求</span>
+<span style="padding:4px 8px;border-radius:4px;background:rgba(249,115,22,.1);color:var(--orange);font-size:9px">🧩 拆分任务</span>
+<span style="padding:4px 8px;border-radius:4px;background:rgba(20,184,166,.1);color:var(--green);font-size:9px">▶️ 执行任务</span>
+<span style="padding:4px 8px;border-radius:4px;background:rgba(99,102,241,.1);color:var(--purple);font-size:9px">📊 查看进度</span>
 </div>
 </div>
-<div class="step-desc" style="margin-top:6px">💡 <code>speccore dev</code> 是流水线控制器：自动检测当前阶段 → 推荐下一步 → 执行。还可用 <code>--from analyze --to execute</code> 指定范围。</div>
 
 <div style="margin:16px 0 8px;font-size:13px;font-weight:700;color:var(--cyan)">📖 重新查看本指南</div>
 <div class="step-desc">本指南保存在 <code>outputs/speccore-setup-guide.html</code>，随时可在浏览器中打开查看。<br>也可以让 AI 重新展示：/spec-ask "打开配置引导"</div>
 
-<a class="start-bar" href="speccore-ask-onboarding.html">🚀 配置完成！开始使用 /spec-ask "你的需求"</a>
+<div class="faq-section">
+<div class="faq-title">❓ 常见问题</div>
+<div class="faq-item">
+<div class="faq-q">Q: 我怎么知道 CONSTITUTION.md 填对了？</div>
+<div class="faq-a">A: 不用完美！init 已自动填写工程名和 Git 仓库。技术栈可以用 AI 扫描：<code>/spec-ask "分析代码，完善技术宪法"</code>。必填项只有技术栈（后端/前端/数据库），其他按需补充。</div>
+</div>
+<div class="faq-item">
+<div class="faq-q">Q: 团队排期不填会怎样？</div>
+<div class="faq-a">A: 不影响使用。AI 会用默认的中粒度拆分（4-8人规模）。后续需要时再编辑 Iteration-xxx/STAFFING.md 即可。</div>
+</div>
+<div class="faq-item">
+<div class="faq-q">Q: 我能改迭代名吗？</div>
+<div class="faq-a">A: 可以。用 <code>speccore rename --iteration 旧名 新名</code> 或在 AI 对话框说 <code>/spec-ask "把迭代 old-name 重命名为 new-name"</code>。</div>
+</div>
+<div class="faq-item">
+<div class="faq-q">Q: 需求文档放哪？</div>
+<div class="faq-a">A: 放到迭代目录下的 <code>010-requirements/</code> 文件夹。或者直接用自然语言描述：<code>/spec-ask "新增用户登录功能"</code>，AI 会自动生成标准需求文档。</div>
+</div>
+</div>
+
+<div class="action-grid">
+<a class="action-card primary" href="#" onclick="alert('请在终端执行：\nspeccore iteration create -n xxx --topic \"xxx\"')">
+<div class="action-icon">🚀</div>
+<div class="action-title">创建第一个迭代</div>
+<div class="action-desc">开始你的第一个开发周期</div>
+</a>
+<a class="action-card secondary" href="speccore-prompts.html">
+<div class="action-icon">📚</div>
+<div class="action-title">查看提示词库</div>
+<div class="action-desc">浏览常用操作模板</div>
+</a>
+<a class="action-card secondary" href="speccore-setup-guide.html">
+<div class="action-icon">📖</div>
+<div class="action-title">重新看配置指南</div>
+<div class="action-desc">随时回顾初始化步骤</div>
+</a>
+</div>
 
 <div class="footer">SpecCore v${pkgVersion} · 项目配置引导 · ${name}</div>
 </div></body></html>`;
