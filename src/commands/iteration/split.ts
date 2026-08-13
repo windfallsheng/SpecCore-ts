@@ -399,6 +399,13 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
         if (createdSections.length > 0) {
           await generateImpactGraph(iterDirFull, createdSections, allPlatforms);
           await updateProjectGraph(iterDirFull, createdSections);
+          // 生成任务总览报告 → 000-overview/TASK_SUMMARY.md
+          const summaryMd = await generateTaskSummary(iterDirFull, tasks, createdSections);
+          logger.info(`   📊 任务总览 → 000-overview/TASK_SUMMARY.md`);
+          // 输出报告到 stdout，供宿主 AI 展示给用户
+          process.stdout.write('\n[SPECCORE_TASK_SUMMARY]\n');
+          process.stdout.write(summaryMd);
+          process.stdout.write('\n[/SPECCORE_TASK_SUMMARY]\n');
         }
         logger.success(`✅ 创建了 ${createdSections.length}/${sections.length} 个任务（${sections.length - createdSections.length} 个跳过）`);
       } else {
@@ -694,6 +701,10 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
 
     // Update PROJECT_GRAPH.md
     await updateProjectGraph(iterationDir, sections);
+
+    // 生成任务总览报告
+    const summaryMd = await generateTaskSummary(iterationDir, [], sections);
+    logger.info(`📊 任务总览 → 000-overview/TASK_SUMMARY.md`);
 
     spinner.stop(`Created ${sections.length} tasks from requirements`);
     
@@ -2142,4 +2153,76 @@ async function detectExistingTasks(iterDir: string): Promise<string[]> {
   };
   await scanRecursive(targetDir);
   return tasks;
+}
+
+/**
+ * 生成任务总览报告 → 000-overview/TASK_SUMMARY.md
+ * 包含：任务名、功能单元、人工工时、AI工时、优先级、依赖、风险
+ */
+async function generateTaskSummary(
+  iterationDir: string,
+  tasks: any[],
+  createdSections: Section[],
+): Promise<string> {
+  const today = new Date().toISOString().split('T')[0];
+  let md = `# 任务总览报告\n\n`;
+  md += `> 生成时间: ${today} | 任务总数: ${createdSections.length}\n\n`;
+
+  // 汇总表
+  md += `## 任务清单\n\n`;
+  md += `| # | 任务名 | 功能单元 | 人工工时 | AI工时 | 优先级 | 依赖 | 风险 |\n`;
+  md += `| :--- | :--- | :--- | ---: | ---: | :---: | :--- | :---: |\n`;
+
+  let totalHumanHours = 0;
+  let totalAiHours = 0;
+
+  for (let i = 0; i < createdSections.length; i++) {
+    const task = tasks[i] || {};
+    const sec = createdSections[i];
+    const taskId = (sec as any)._taskId || `Task-${String(i + 1).padStart(3, '0')}`;
+    const name = sec.name || task.name || '';
+    const unit = task.functionalUnit || '(未标注)';
+    const estimatedHours = task.estimatedHours || (sec as any)._complexity?.estimatedHours || 0;
+    // AI 工时 = estimatedHours 中标注为 AI 可自动完成的部分（目前全部算 AI 工时）
+    const aiHours = Math.round(estimatedHours * 0.7); // 预估 70% 可由 AI 完成
+    const humanHours = estimatedHours - aiHours;
+    const priority = task.priority || (sec as any)._complexity?.priority || 'medium';
+    const deps = (task.dependencies || []).join(', ') || '-';
+    const risk = task.risk || 'medium';
+
+    totalHumanHours += humanHours;
+    totalAiHours += aiHours;
+
+    const priorityIcon = priority === 'high' ? '🔴' : priority === 'low' ? '🟢' : '🟡';
+    const riskIcon = risk === 'high' ? '🔴' : risk === 'low' ? '🟢' : '🟡';
+    md += `| ${taskId} | ${name} | ${unit} | ${humanHours}h | ${aiHours}h | ${priorityIcon} ${priority} | ${deps} | ${riskIcon} ${risk} |\n`;
+  }
+
+  // 汇总
+  md += `\n## 工时汇总\n\n`;
+  md += `| 指标 | 值 |\n| :--- | ---: |\n`;
+  md += `| 人工总工时 | **${totalHumanHours}h** |\n`;
+  md += `| AI总工时 | **${totalAiHours}h** |\n`;
+  md += `| 总预估工时 | **${totalHumanHours + totalAiHours}h** |\n`;
+  md += `| AI 占比 | **${totalHumanHours + totalAiHours > 0 ? Math.round(totalAiHours / (totalHumanHours + totalAiHours) * 100) : 0}%** |\n`;
+
+  // 功能单元分布
+  const unitCounts: Record<string, number> = {};
+  for (const task of tasks.slice(0, createdSections.length)) {
+    const unit = task.functionalUnit || '(未标注)';
+    unitCounts[unit] = (unitCounts[unit] || 0) + 1;
+  }
+  md += `\n## 功能单元分布\n\n`;
+  md += `| 功能单元 | 任务数 |\n| :--- | ---: |\n`;
+  for (const [unit, count] of Object.entries(unitCounts)) {
+    md += `| ${unit} | ${count} |\n`;
+  }
+
+  // 写入文件
+  const overviewDir = join(iterationDir, '000-overview');
+  await ensureDir(overviewDir);
+  const summaryPath = join(overviewDir, 'TASK_SUMMARY.md');
+  await writeFile(summaryPath, md);
+
+  return md;
 }

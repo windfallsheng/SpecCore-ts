@@ -2,6 +2,17 @@
 
 ---
 
+## v5.95.0 (2026-08-13) — Task Summary Report: TASK_SUMMARY.md
+
+- **New task summary report**: auto-generated `000-overview/TASK_SUMMARY.md` after split
+- **Report contents**: task name, functional unit, human hours, AI hours, priority, dependencies, risk
+- **Hours summary**: total human hours, total AI hours, total estimated hours, AI percentage
+- **Functional unit distribution**: task count per functional unit
+- **stdout output**: `[SPECCORE_TASK_SUMMARY]` marker wrapping report for host AI to display to user
+- Supports both `--response` path and regular split path
+
+---
+
 ## v5.94.0 (2026-08-13) — Split AI Content Generation: Tasks with Actual REQ.md / TECH.md Content
 
 - **JSON schema extended**: Each task now includes `reqContent` / `techContent` fields
