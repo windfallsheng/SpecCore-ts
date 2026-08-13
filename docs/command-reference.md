@@ -136,6 +136,13 @@ speccore iteration split [-i <iteration>] [-f <file>] [-g <level>] [--force] [--
 
 粒度由 STAFFING.md 团队规模自动推荐，用户可通过 `--granularity` 手动覆盖。
 
+**拆分约束（功能单元基准）：**
+
+- 核心原则：以需求的功能单元为基准拆分，而非需求文档的章节划分
+- 每个功能单元默认 1 个任务，最多 3 个
+- AI 在 JSON 中标注 `functionalUnit` 字段，代码层按功能单元分组校验
+- 超过上限时终止（可用 `--force` 跳过）
+
 **交互流程：**
 
 ```
