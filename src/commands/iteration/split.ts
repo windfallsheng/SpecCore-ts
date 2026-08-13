@@ -12,14 +12,18 @@ import { buildPrompt, formatPrompt } from '../../core/prompt-builder';
 
 /** 将名称转为目录安全的短 slug（2-4 词） */
 function slugify(name: string): string {
-  return name
+  const cleaned = name
     .replace(/[\u4e00-\u9fff]/g, '') // 去掉中文
     .replace(/[^a-zA-Z0-9\s-]/g, '')  // 去特殊字符
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 3)                       // 最多 3 词
     .join('-')
-    .toLowerCase() || 'task';
+    .toLowerCase();
+  if (cleaned.length > 0) return cleaned;
+  // 纯中文/空名称 → 生成短 hash 作为 slug（如 a3f2）
+  const hash = Math.abs(name.split('').reduce((a, c) => a * 31 + c.charCodeAt(0), 7)).toString(36);
+  return hash.slice(0, 6);
 }
 
 /** 粒度约束常量 */
@@ -565,7 +569,8 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
 
     // ── 预分配任务 ID（确保所有路径使用计数器，避免编号重复） ──
     for (const section of sections) {
-      const { id: taskId } = await nextTaskId(section.name);
+      const topic = slugify(section.name);
+      const { id: taskId } = await nextTaskId(section.name, topic);
       (section as any)._taskId = taskId;
     }
 

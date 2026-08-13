@@ -2,6 +2,14 @@
 
 ---
 
+## v5.93.1 (2026-08-13) — Topic Slug Fallback Fix
+
+- **slugify fallback improvement**: pure Chinese names now generate short hash slug (e.g. `a3f2`) instead of meaningless `'task'`
+- **Regular path passes topic**: `nextTaskId` now receives slugified topic in regular path too
+- Result: `Task-001-a3f2` instead of `Task-001-task` or `Task-001`
+
+---
+
 ## v5.93.0 (2026-08-13) — Split Guards: Global Hard Limit + functionalUnit Validation + Non-Functional Section Filter
 
 - **Global task count hard limit**: MAX_TASKS_HARD = 20, terminates on overflow (`--force` to bypass)
