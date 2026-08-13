@@ -19,7 +19,6 @@ export interface PromptTemplate {
   icon: string;
   description: string;
   prompt: string;
-  command: string;
   params: PromptParam[];
   builtin: boolean;
   sort: number;
@@ -94,10 +93,10 @@ async function loadUserPrompts(): Promise<PromptTemplate[]> {
 function generatePromptsHtml(prompts: PromptTemplate[]): string {
   const categories = [...new Set(prompts.map(p => p.category))];
   const categoryLabels: Record<string, string> = {
-    iteration: '迭代',
-    analysis: '分析',
-    execute: '执行',
-    change: '变更',
+    workflow: '核心流程',
+    iteration: '迭代管理',
+    analysis: '分析文档',
+    execute: '开发执行',
     custom: '我的'
   };
 
@@ -451,10 +450,6 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
           <label>提示词内容 *</label>
           <textarea id="editPrompt" placeholder="输入提示词内容，使用 {参数名} 作为占位符"></textarea>
         </div>
-        <div class="form-group">
-          <label>对应命令</label>
-          <input type="text" id="editCommand" placeholder="例如：speccore analyze -I Q2">
-        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeModal()">取消</button>
@@ -684,7 +679,6 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
       document.getElementById('editIcon').value = '📝';
       document.getElementById('editDescription').value = '';
       document.getElementById('editPrompt').value = '';
-      document.getElementById('editCommand').value = '';
       document.getElementById('editModal').classList.add('active');
     }
 
@@ -699,7 +693,6 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
       document.getElementById('editIcon').value = p.icon || '📝';
       document.getElementById('editDescription').value = p.description || '';
       document.getElementById('editPrompt').value = p.prompt;
-      document.getElementById('editCommand').value = p.command || '';
       document.getElementById('editModal').classList.add('active');
     }
 
@@ -723,7 +716,6 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
         icon: document.getElementById('editIcon').value || '📝',
         description: document.getElementById('editDescription').value.trim(),
         prompt,
-        command: document.getElementById('editCommand').value.trim(),
         params: extractParams(prompt),
         builtin: false,
         sort: 99,

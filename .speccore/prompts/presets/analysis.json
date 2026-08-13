@@ -1,48 +1,18 @@
 [
   {
-    "id": "analyze-iteration",
-    "name": "分析迭代需求",
-    "category": "analysis",
-    "icon": "🔍",
-    "description": "对当前迭代的需求文档进行全面分析，生成规格说明",
-    "prompt": "分析 {迭代名} 迭代的需求文档，生成完整的规格说明",
-    "command": "speccore analyze -I {迭代名}",
-    "params": [
-      { "key": "迭代名", "placeholder": "Q2", "required": true }
-    ],
-    "builtin": true,
-    "sort": 1
-  },
-  {
-    "id": "analyze-deep",
-    "name": "深度分析（含源码）",
-    "category": "analysis",
-    "icon": "🔬",
-    "description": "结合源码进行深度需求分析",
-    "prompt": "深度分析 {迭代名} 的需求，结合源码 {源码路径} 一起看",
-    "command": "speccore analyze -I {迭代名} --with-code --source-scope {源码路径}",
-    "params": [
-      { "key": "迭代名", "placeholder": "Q2", "required": true },
-      { "key": "源码路径", "placeholder": "src/", "required": false }
-    ],
-    "builtin": true,
-    "sort": 2
-  },
-  {
     "id": "import-doc",
     "name": "导入需求文档",
     "category": "analysis",
     "icon": "📄",
     "description": "将 Word/PDF 需求文档转换为 Markdown 规格",
     "prompt": "把 {文件路径} 导入到 {迭代名} 迭代，端是 {平台}",
-    "command": "speccore doc2spec -f {文件路径} --iter {迭代名} --platform {平台}",
     "params": [
       { "key": "文件路径", "placeholder": "docs/PRD.docx", "required": true },
       { "key": "迭代名", "placeholder": "Q2", "required": true },
       { "key": "平台", "placeholder": "admin", "required": false }
     ],
     "builtin": true,
-    "sort": 3
+    "sort": 1
   },
   {
     "id": "export-doc",
@@ -51,10 +21,36 @@
     "icon": "📤",
     "description": "将迭代规格说明导出为 Word/PDF",
     "prompt": "把 {迭代名} 迭代的规格文档导出为 {输出文件名}",
-    "command": "speccore spec2doc -i {迭代名} -o {输出文件名}",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true },
       { "key": "输出文件名", "placeholder": "需求规格.docx", "required": true }
+    ],
+    "builtin": true,
+    "sort": 2
+  },
+  {
+    "id": "analyze-deep",
+    "name": "深度分析（含源码）",
+    "category": "analysis",
+    "icon": "🔬",
+    "description": "结合源码进行深度需求分析",
+    "prompt": "深度分析 {迭代名} 的需求，结合源码 {源码路径} 一起看",
+    "params": [
+      { "key": "迭代名", "placeholder": "Q2", "required": true },
+      { "key": "源码路径", "placeholder": "src/", "required": false }
+    ],
+    "builtin": true,
+    "sort": 3
+  },
+  {
+    "id": "validate-spec",
+    "name": "规格合规校验",
+    "category": "analysis",
+    "icon": "🛡️",
+    "description": "校验迭代规格是否符合宪法规范",
+    "prompt": "校验 {迭代名} 的规格是否合规",
+    "params": [
+      { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
     "builtin": true,
     "sort": 4
