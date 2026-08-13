@@ -1,3 +1,14 @@
+## v5.95.0 (2026-08-13) — 任务总览报告：TASK_SUMMARY.md
+
+- **新增任务总览报告**：拆分完成后自动生成 `000-overview/TASK_SUMMARY.md`
+- **报告内容**：任务名、功能单元、人工工时、AI工时、优先级、依赖、风险
+- **工时汇总**：人工总工时、AI总工时、总预估工时、AI 占比
+- **功能单元分布**：每个功能单元的任务数统计
+- **stdout 输出**：`[SPECCORE_TASK_SUMMARY]` 标记包裹报告，供宿主 AI 展示给用户
+- 同时支持 `--response` 路径和常规拆分路径
+
+---
+
 ## v5.94.0 (2026-08-13) — split AI 内容生成：任务自带 REQ.md / TECH.md 实际内容
 
 - **JSON schema 扩展**：AI 拆分时每个任务新增 `reqContent` / `techContent` 字段
