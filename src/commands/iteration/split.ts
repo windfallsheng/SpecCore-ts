@@ -159,23 +159,19 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
         for (let i = 0; i < tasks.length; i++) {
           const task = tasks[i];
 
-          // 📌 核心原则校验：一个功能章节 = 一个任务
-          // 如果 AI 把同一个功能拆成多个任务，给出警告
+          // 📌 核心原则校验：同一功能单元内的任务是否应该合并
+          // 如果 AI 把同一个功能单元拆成过多任务，给出警告
           if (i > 0) {
             const prevTask = tasks[i - 1];
-            const sameFunction = (
-              // 检查是否有相同的关键词（如 "用户管理"、"订单管理" 等）
-              task.name && prevTask.name && 
-              task.name.split(' ')[0] === prevTask.name.split(' ')[0] &&
-              // 或者 scope 高度重叠
-              Array.isArray(task.scope) && Array.isArray(prevTask.scope) &&
-              task.scope.some((s: string) => prevTask.scope.includes(s))
+            const sameUnit = (
+              (task as any).functionalUnit && (prevTask as any).functionalUnit &&
+              (task as any).functionalUnit === (prevTask as any).functionalUnit
             );
-            if (sameFunction) {
-              logger.warn(`   ⚠️  检测到可能的过度拆分：`);
+            if (sameUnit) {
+              logger.warn(`   ⚠️  同一功能单元 "${(task as any).functionalUnit}" 已有多个任务：`);
               logger.warn(`      Task ${i}: ${prevTask.name}`);
               logger.warn(`      Task ${i + 1}: ${task.name}`);
-              logger.warn(`      💡 建议：同一功能的不同子模块应该合并为一个任务`);
+              logger.warn(`      💡 建议：同一功能单元的不同子模块应该尽量合并为一个任务`);
             }
           }
 
@@ -250,35 +246,34 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
         const granularity: Granularity = (options.granularity as Granularity) || recommendGranularity(teamSize2);
         const granRule = GRANULARITY_RULES[granularity];
                 
-        // 🚨 逐章节校验：每个章节拆出的任务数不超过 3 个
-        const MAX_TASKS_PER_SECTION = 3;
-        const sectionTaskCount: Record<string, number> = {};
+        // 🚨 逐功能单元校验：每个功能单元拆出的任务数不超过 3 个
+        const MAX_TASKS_PER_UNIT = 3;
+        const unitTaskCount: Record<string, number> = {};
                 
-        // 按 section 分组统计（通过任务名相似度推断）
+        // 按 functionalUnit 分组统计（AI 在 JSON 中标注所属功能单元）
         for (let i = 0; i < sections.length; i++) {
-          const sec = sections[i];
           const task = tasks[i];
-          const sectionName = (task as any).section || sec.name.split('-')[0].trim();
-          sectionTaskCount[sectionName] = (sectionTaskCount[sectionName] || 0) + 1;
+          const unitName = (task as any).functionalUnit || (task as any).section || '未分类';
+          unitTaskCount[unitName] = (unitTaskCount[unitName] || 0) + 1;
         }
                 
-        // 检查每个章节的任务数
+        // 检查每个功能单元的任务数
         let hasOverSplit = false;
-        for (const [sectionName, count] of Object.entries(sectionTaskCount)) {
-          if (count > MAX_TASKS_PER_SECTION) {
+        for (const [unitName, count] of Object.entries(unitTaskCount)) {
+          if (count > MAX_TASKS_PER_UNIT) {
             if (!hasOverSplit) {
-              logger.error(`\n   ❌ 检测到过度拆分！某些功能章节拆出过多任务：`);
+              logger.error(`\n   ❌ 检测到过度拆分！某些功能单元拆出过多任务：`);
               hasOverSplit = true;
             }
-            logger.error(`      📌 "${sectionName}" 章节拆出了 ${count} 个任务（上限 ${MAX_TASKS_PER_SECTION}）`);
+            logger.error(`      📌 "${unitName}" 功能单元拆出了 ${count} 个任务（上限 ${MAX_TASKS_PER_UNIT}）`);
           }
         }
                 
         if (hasOverSplit) {
-          logger.error(`   💡 核心原则：一个功能章节默认 1 个任务，最多 3 个`);
+          logger.error(`   💡 核心原则：一个功能单元默认 1 个任务，最多 3 个`);
           logger.error(`   🔧 建议操作：`);
           logger.error(`      1. 重新执行 split，并告诉 AI："任务太多，请合并相关功能"`);
-          logger.error(`      2. 或者手动编辑 .speccore/prompts/split-suggestion-${iter}.md，明确要求"每个章节最多拆 2 个任务"`);
+          logger.error(`      2. 或者手动编辑 .speccore/prompts/split-suggestion-${iter}.md，明确要求"每个功能单元最多拆 2 个任务"`);
           logger.error(`      3. 如果确实需要这么多任务，使用 --force 跳过检查（不推荐）`);
           if (!options.force) {
             logger.info('\n   ℹ️  如需强制继续，添加 --force 参数');
