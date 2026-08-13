@@ -218,6 +218,9 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           (section as any)._taskType = (task.type && ['feature', 'bugfix', 'refactor', 'research'].includes(task.type)) ? task.type : 'feature';
           // 保存 topic slug，用于生成任务目录名
           (section as any)._topic = task.topic || slugify(task.name || `Task ${i + 1}`);
+          // 保存 AI 生成的实际内容（用于写入 REQ.md / TECH.md）
+          if (task.reqContent) (section as any)._reqContent = task.reqContent;
+          if (task.techContent) (section as any)._techContent = task.techContent;
           if (taskScopePlatforms.length > 0) (section as any)._scopePlatforms = taskScopePlatforms;
           sections.push(section);
         }
@@ -925,25 +928,33 @@ AI 执行时会自动读取这些文件，作为生成代码的依据。
   await ensureDir(join(taskDir, '00-specs'));
 
   const acItems = generateAcceptanceCriteria(section);
-  await writeFile(
-    join(taskDir, '00-specs', 'REQ.md'),
-    `# ${section.name}
-
-## 需求描述
-
-${section.content}
-
-## 验收标准
-
-${acItems}
-`
-  );
+  const aiReqContent = (section as any)._reqContent;
+  // REQ.md: 优先用 AI 生成的实际内容，回退到模板
+  if (aiReqContent && aiReqContent.length > 50) {
+    await writeFile(
+      join(taskDir, '00-specs', 'REQ.md'),
+      `# ${section.name}\n\n${aiReqContent}\n\n## 验收标准\n\n${acItems}\n`
+    );
+  } else {
+    await writeFile(
+      join(taskDir, '00-specs', 'REQ.md'),
+      `# ${section.name}\n\n## 需求描述\n\n${section.content}\n\n## 验收标准\n\n${acItems}\n`
+    );
+  }
 
   const apiLines = section.content.split('\n').filter(l => l.includes('| GET') || l.includes('| POST') || l.includes('| PUT') || l.includes('| DELETE') || l.includes('| PATCH'));
   const apiDesc = apiLines.length > 0 ? apiLines.map(l => `- ${l.trim()}`).join('\n') : '- 待补充（从 REQ.md 提取接口列表）';
-  await writeFile(
-    join(taskDir, '00-specs', 'TECH.md'),
-    `# ${section.name} - 技术方案
+  const aiTechContent = (section as any)._techContent;
+  // TECH.md: 优先用 AI 生成的实际内容，回退到模板
+  if (aiTechContent && aiTechContent.length > 50) {
+    await writeFile(
+      join(taskDir, '00-specs', 'TECH.md'),
+      `# ${section.name} - 技术方案\n\n${aiTechContent}\n`
+    );
+  } else {
+    await writeFile(
+      join(taskDir, '00-specs', 'TECH.md'),
+      `# ${section.name} - 技术方案
 
 > ⚠️ 本文档由 split 自动生成框架，AI 执行时会自动填充。
 
@@ -970,7 +981,8 @@ ${apiDesc}
 - 接口测试覆盖正常/异常/边界
 - 自动化测试通过后方可提 PR
 `
-  );
+    );
+  }
 
   if (section.content.match(/数据库|数据表|表结构|DDL|ALTER|建表|索引/)) {
     await writeFile(join(taskDir, '00-specs', 'SCHEMA.md'), generateSchemaTemplate(section));
@@ -1917,11 +1929,16 @@ function buildSplitPrompt(
   p += `    "dependencies": [],\n`;
   p += `    "acceptanceCriteria": ["AC1: ..."],\n`;
   p += `    "risk": "low|medium|high",\n`;
-  p += `    "owner": "建议负责人"\n`;
+  p += `    "owner": "建议负责人",\n`;
+  p += `    "reqContent": "需求描述内容（Markdown 格式，写入 REQ.md）",\n`;
+  p += `    "techContent": "技术方案内容（Markdown 格式，写入 TECH.md）"\n`;
   p += `  }\n]\n`;
   p += '```\n\n';
   p += `> **functionalUnit 必须填写**：功能单元名称，不是章节名。同一功能模块的任务填相同的值。\n`;
-  p += `> **topic** 必须是英文短横线格式（如 \`user-authentication\`、\`product-crud\`），用于生成任务目录名 Task-NNN-{topic}\n\n`;
+  p += `> **topic** 必须是英文短横线格式（如 \`user-authentication\`、\`product-crud\`），用于生成任务目录名 Task-NNN-{topic}\n`;
+  p += `> **reqContent** 必须填写：该任务的需求描述（含业务规则、数据模型、接口定义），直接写入 REQ.md\n`;
+  p += `> **techContent** 必须填写：该任务的技术方案（含架构设计、核心逻辑、测试策略），直接写入 TECH.md\n`;
+  p += `> reqContent/techContent 是该任务的**子切面**，只包含该任务负责的部分，不是整个功能单元的内容\n\n`;
 
   p += `### ⚠️ 工时估算规则（重要）\n\n`;
   p += `- **hoursByPlatform**: 按端分别估算工时，key 对应 scope 中的端名称\n`;
