@@ -216,10 +216,11 @@ speccore analyze -I Q1                                    # Reads 00-产品需�
 speccore analyze -I Q1 --src backend/src                  # Combined req+code (explicit --src)
 speccore analyze --src backend,frontend --req docs/a.md,docs/b.md --scope global
 
-# AI smart split — ANALYSIS.md check + complexity + staffing
-speccore iteration split -i Q1                            # Auto (reads STAFFING.md)
-speccore iteration split -i Q1 --interactive               # Shows deps/priority/hours/assignee
-speccore iteration split -i Q1 --strict                    # Per-task confirm
+# AI smart split — ANALYSIS.md check + granularity + staffing
+speccore iteration split -i Q1                            # Auto (reads STAFFING.md, recommends granularity)
+speccore iteration split -i Q1 -g macro                   # Coarse granularity (1-2 weeks/task)
+speccore iteration split -i Q1 -g atomic                  # Fine granularity (1-3 days/task)
+speccore iteration split -i Q1 --force                    # Force re-split (cleans old tasks)
 
 # Execute — auto branch + dependency-aware
 speccore execute -i Q1 --all                              # From CONSTITUTION default branch

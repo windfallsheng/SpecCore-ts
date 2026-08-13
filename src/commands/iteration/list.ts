@@ -12,7 +12,21 @@ export async function iterationListCommand(): Promise<void> {
   }
   logger.info(`📋 迭代列表 (${iterDirs.length}):`);
   for (const it of iterDirs) {
-    const tasks = (await readdir(join(root, it.name, '030-tasks'), { withFileTypes: true })).filter(e => e.isDirectory() && e.name.startsWith('Task-')).length;
+    const tasksRoot = join(root, it.name, '030-tasks');
+    let tasks = 0;
+    if (await pathExists(tasksRoot)) {
+      const entries = await readdir(tasksRoot, { withFileTypes: true });
+      for (const e of entries) {
+        if (e.isDirectory() && e.name.startsWith('Task-')) tasks++;
+        else if (e.isDirectory() && !e.name.startsWith('.')) {
+          // 递归扫描类型子目录
+          try {
+            const sub = await readdir(join(tasksRoot, e.name), { withFileTypes: true });
+            tasks += sub.filter((s: any) => s.isDirectory() && s.name.startsWith('Task-')).length;
+          } catch {}
+        }
+      }
+    }
     logger.info(`  • ${it.name}  (任务: ${tasks})`);
   }
 }

@@ -1,3 +1,20 @@
+## v5.88.0 (2026-08-13) — split 智能拆分全面升级
+
+- 粒度硬约束量化：三档粒度（macro 20-80h / module 12-40h / atomic 4-24h）含接口/数据表/页面上限
+- `validateGranularity()` 校验函数：任务工时/接口/数据表超出粒度范围时自动警告
+- `recommendGranularity(teamSize)` 根据 STAFFING.md 团队规模自动推荐粒度
+- AI prompt 合并倾向加强：复杂度低于粒度下限时强制合并，「宁少勿多」原则
+- 交互流程简化：逐任务展示摘要 → y 确认自动推进 / n 退出提示调整方式
+- 持久化调整指令：prompt 文件末尾含「调整指令」，AI 调整时回读文件保持规则
+- CONSTITUTION.md 端配置读取：`detectPlatforms()` 优先读全局「对应需求端」列
+- scope → 平台映射修复：正确提取 backend + 各前端平台，创建对应目录
+- 后端目录嵌套修复：`platform === 'backend'` 直接 `10-backend/src/`，不嵌套
+- 任务类型子目录验证通过：feature/bugfix/refactor/research 按 AI 返回的 type 分类
+- 设计文档更新：DESIGN.md 新增拆分粒度规则章节 + 交互流程说明
+- 命令文档更新：command-reference.md 完整 split 参数/粒度/交互文档
+
+---
+
 ## v5.87.2 (2026-08-13) — 升级安全优化
 
 - `init --update` 不再因版本相同跳过，始终执行清理和文件刷新（旧格式文件无需 `--force` 即可清理）

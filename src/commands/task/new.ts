@@ -135,7 +135,9 @@ async function createSingleTask(options: TaskNewOptions): Promise<void> {
     const taskId = options.id
       ? options.id.replace(/^Task-/, '')
       : counterId.replace(/^Task-/, '');
-    const taskDir = join(iterationDir, '030-tasks', `Task-${taskId}`);
+    const taskType = options.type || 'feature';
+    // counterId 已含 slug（nextTaskId 返回 Task-NNN-slug），直接用
+    const taskDir = join(iterationDir, '030-tasks', taskType, `Task-${taskId}`);
 
     if (await pathExists(taskDir)) {
       spinner.fail(`Task already exists: Task-${taskId}`);
