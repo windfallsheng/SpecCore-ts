@@ -2,6 +2,23 @@
 
 ---
 
+## v5.88.0 (2026-08-13) — Smart Split Overhaul
+
+- Granularity hard constraints: three tiers (macro 20-80h / module 12-40h / atomic 4-24h) with API/table/page limits
+- `validateGranularity()` warns when task hours/APIs/tables exceed granularity bounds
+- `recommendGranularity(teamSize)` auto-recommends granularity based on STAFFING.md team size
+- AI prompt merge tendency: forces merge when complexity below granularity lower bound, "less is more" principle
+- Simplified interaction: show task summary → y confirms and auto-advances / n exits with adjustment hints
+- Persistent adjustment instructions: prompt file includes "Adjustment Guide" for AI to re-read when adjusting
+- CONSTITUTION.md platform detection: `detectPlatforms()` reads global platform config first
+- Scope → platform mapping fix: correctly extracts backend + frontend platforms for directory creation
+- Backend directory nesting fix: `platform === 'backend'` creates `10-backend/src/` directly
+- Task type subdirectories verified: feature/bugfix/refactor/research based on AI's `type` field
+- Design docs updated: DESIGN.md adds granularity rules chapter + interaction flow
+- Command docs updated: command-reference.md with full split parameter/granularity/interaction docs
+
+---
+
 ## v5.87.2 (2026-08-13) — Upgrade Safety Optimization
 
 - `init --update` no longer skips on same version; always runs cleanup and file refresh (legacy format cleanup works without `--force`)

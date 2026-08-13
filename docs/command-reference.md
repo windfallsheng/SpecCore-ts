@@ -108,9 +108,69 @@ speccore analyze [--iteration <name>] [--task <id>] [--audit]
 
 ### 📦 split — 任务拆分 🔒 AI 命令
 ```bash
-speccore split [-f <file>] [--preview]
+speccore iteration split [-i <iteration>] [-f <file>] [-g <level>] [--force] [--interactive]
 ```
 别名: `sp`
+
+**参数说明：**
+
+| 参数 | 说明 |
+|:--|:--|
+| `-i, --iteration <name>` | 目标迭代名称（短名，如 `Q1`） |
+| `-f, --file <file>` | 需求文件路径（默认 `REQUIREMENT.md`） |
+| `-g, --granularity <level>` | 拆分粒度: `macro`(粗) / `module`(中,默认) / `atomic`(细) |
+| `--interactive` | 逐任务交互确认（默认开启） |
+| `--force` | 已有任务时强制覆盖（清理旧任务后重建） |
+| `--prompt` | 输出结构化 Prompt（Skill 协作模式） |
+| `--response <json>` | 接收 AI 拆分结果，逐任务确认后创建目录 |
+
+**拆分粒度：**
+
+| 粒度 | 每任务工时 | 接口上限 | 数据表上限 | 适用团队 |
+|:--|:--|:--|:--|:--|
+| macro | 20-80h (1-2周) | 15 | 5 | 1-3 人 |
+| module | 12-40h (3-5天) | 8 | 3 | 3-8 人 |
+| atomic | 4-24h (1-3天) | 3 | 2 | 8+ 人 |
+
+粒度由 STAFFING.md 团队规模自动推荐，用户可通过 `--granularity` 手动覆盖。
+
+**交互流程：**
+
+```
+AI 输出 JSON 拆分方案
+  → CLI 逐任务展示摘要（名称/类型/工时/依赖/验收标准）
+  → 用户确认 (y/回车) 创建，或 n 退出并提示调整方式
+  → 粒度不达标时自动警告
+  → 创建完整任务目录结构
+```
+
+> 💡 如需调整拆分方案，按 n 退出后回到宿主 AI 对话，用自然语言调整（如“合并”“拆分”“改工时”），AI 重新生成方案后再次执行。
+
+**任务目录结构：**
+
+```
+030-tasks/{type}/Task-NNN-slug/
+├── .meta/              ← 元信息 (type/status/owner)
+├── 00-specs/           ← 核心规格 (REQ/TECH/TASK/SCHEMA/CHANGELOG)
+├── _shared/            ← API 契约 (API_CONTRACT.yaml)
+├── 10-backend/         ← 后端实现
+├── 20-frontend/{端}/   ← 前端实现（端名来自 CONSTITUTION.md）
+├── 99-artifacts/       ← 产出 (TEST/REVIEW/DEPLOY/ERROR_CODES/RISK/DEPS/MONITOR)
+└── .issues.md          ← 问题追踪
+```
+
+**示例：**
+
+```bash
+# 默认拆分（自动推荐粒度）
+speccore iteration split -i Q1
+
+# 指定粗粒度（小团队）
+speccore iteration split -i Q1 -g macro
+
+# 强制重新拆分（清理旧任务）
+speccore iteration split -i Q1 --force
+```
 
 ### 📐 plan — 执行计划 🔒 AI 命令
 ```bash

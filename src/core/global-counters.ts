@@ -48,13 +48,25 @@ async function scanMaxIds(): Promise<Counters> {
       const iterDir = join(cwd, name);
       try {
         const subEntries = await readdir(iterDir);
-        // 030-tasks/Task-NNN
+        // 030-tasks/{type}/Task-NNN* （新布局 + 旧布局兼容）
         const tasksDir = join(iterDir, '030-tasks');
         if (subEntries.includes('030-tasks')) {
           const taskEntries = await readdir(tasksDir);
           for (const t of taskEntries) {
             const m = t.match(/^Task-(\d+)/);
             if (m) tasks = Math.max(tasks, parseInt(m[1], 10));
+            // 递归扫描类型子目录（feature/bugfix/refactor/research）
+            try {
+              const subPath = join(tasksDir, t);
+              const stat = await require('fs-extra').stat(subPath);
+              if (stat.isDirectory()) {
+                const subTasks = await readdir(subPath);
+                for (const st of subTasks) {
+                  const sm = st.match(/^Task-(\d+)/);
+                  if (sm) tasks = Math.max(tasks, parseInt(sm[1], 10));
+                }
+              }
+            } catch {}
           }
         }
         // 兼容旧布局：迭代根目录下的 Task-NNN

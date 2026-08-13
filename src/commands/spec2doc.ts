@@ -12,6 +12,7 @@ import { execSync } from 'child_process';
 import { pathExists, ensureDir, readdir, stat, writeFile } from 'fs-extra';
 import { join, basename, extname } from 'path';
 import { isTimestampBackup } from '../utils/task-utils';
+import { findTaskDir } from '../core/task-paths';
 import { validateContent, generateReport } from '../core/doc-validator';
 
 function detectPlatform(): 'macos' | 'linux' | 'win' {
@@ -112,8 +113,9 @@ export async function spec2docCommand(options: Spec2DocOptions): Promise<void> {
   } else if (options.task && iterName) {
     // 任务导出
     const iterDir = iterName.startsWith('Iteration-') ? iterName : `Iteration-${iterName}`;
-    const taskDir = join(iterDir, '030-tasks', options.task.startsWith('Task-') ? options.task : `Task-${options.task}`);
-    if (!await pathExists(taskDir)) {
+    const taskId = options.task.startsWith('Task-') ? options.task : `Task-${options.task}`;
+    const taskDir = await findTaskDir(join(iterDir, '030-tasks'), taskId);
+    if (!taskDir) {
       logger.error(`任务目录不存在: ${taskDir}`);
       return;
     }

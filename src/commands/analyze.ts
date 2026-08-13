@@ -16,6 +16,7 @@ import { join, dirname } from 'path';
 import { backupWithTimestamp, isTimestampBackup, shouldOverwrite } from '../utils/task-utils';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration, getIterationDir } from '../core/context';
+import { findTaskDir } from '../core/task-paths';
 import { extractQuestions, showQuestionChecklist } from '../core/question-checklist';
 import { showNextSteps } from '../core/next-steps';
 import { runAnalysis, AnalyzeInput, supplementAnalysis } from '../core/analyze-engine';
@@ -161,9 +162,12 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     if (!options.iteration) { logger.error('--apply 需要 --iteration'); return; }
     const iterDir = await getIterationDir(options.iteration);
     const isTaskLevel = !!options.task;
-    const taskDir = isTaskLevel
-      ? join(iterDir, '030-tasks', options.task!.startsWith('Task-') ? options.task! : `Task-${options.task!}`)
-      : null;
+    let taskDir: string | null = null;
+    if (isTaskLevel) {
+      const taskId = options.task!.startsWith('Task-') ? options.task! : `Task-${options.task!}`;
+      taskDir = await findTaskDir(join(iterDir, '030-tasks'), taskId);
+      if (!taskDir) { logger.error(`未找到任务: ${taskId}`); return; }
+    }
 
     // 支持 JSON 多文档写入
     if (options.apply.startsWith('{')) {

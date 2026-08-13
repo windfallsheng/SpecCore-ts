@@ -121,21 +121,29 @@ Iteration-NNN-name/
 │   ├── DEPS.md                   ← 依赖清单
 │   ├── MONITOR.md                ← 监控方案
 │   └── REQUIREMENT.md            ← 需求规格汇总
-├── 030-tasks/                     ← 所有开发任务
-│   └── Task-NNN-name/
-│       ├── .meta/                 ← 任务元信息（type/status/owner）
-│       ├── _shared/               ← 跨平台共享契约
-│       │   └── API_CONTRACT.yaml
-│       ├── 00-specs/              ← 任务级核心规格（执行前必读）
-│       │   ├── REQ.md             ← 需求切片 + 验收标准
-│       │   ├── TECH.md            ← 技术方案
-│       │   ├── TASK.md            ← 任务履历 + 产出物清单
-│       │   ├── SCHEMA.md          ← 数据库 Schema（可选）
-│       │   └── CHANGELOG.md       ← 需求变更记录
-│       ├── 10-backend/            ← 后端实现（execute 生成）
-│       ├── 20-frontend/           ← 前端实现（execute 生成）
-│       ├── 99-artifacts/          ← 执行产出（TEST/REVIEW/RISK/DEPS/...）
-│       └── .issues.md             ← 问题追踪
+├── 030-tasks/                     ← 所有开发任务（按类型分层）
+│   ├── feature/                   ← 功能类任务
+│   │   └── Task-NNN-slug/
+│   ├── bugfix/                    ← 缺陷修复任务
+│   ├── refactor/                  ← 重构类任务
+│   └── research/                  ← 调研类任务
+│       └── Task-NNN-slug/
+│           ├── .meta/                 ← 任务元信息（type/status/owner）
+│           ├── _shared/               ← 跨平台共享契约
+│           │   └── API_CONTRACT.yaml
+│           ├── 00-specs/              ← 任务级核心规格（执行前必读）
+│           │   ├── REQ.md             ← 需求切片 + 验收标准
+│           │   ├── TECH.md            ← 技术方案
+│           │   ├── TASK.md            ← 任务履历 + 产出物清单
+│           │   ├── SCHEMA.md          ← 数据库 Schema（可选）
+│           │   └── CHANGELOG.md       ← 需求变更记录
+│           ├── 10-backend/            ← 后端实现（src/tests + 平台规格副本）
+│           ├── 20-frontend/           ← 前端实现（按 CONSTITUTION 端配置创建子目录）
+│           │   ├── app/               ← 端名称来自 CONSTITUTION.md「对应需求端」
+│           │   ├── admin/
+│           │   └── ...
+│           ├── 99-artifacts/          ← 执行产出（TEST/REVIEW/RISK/DEPS/...）
+│           └── .issues.md             ← 问题追踪
 └── STAFFING.md
 ```
 
@@ -157,8 +165,10 @@ Iteration-NNN-name/
 ```
 文档:  010-requirements/user-auth/README.md
 分析:  020-specs/ANALYSIS.md + TECH.md + TEST.md + ...
-任务:  030-tasks/Task-001-app-auth/  +  Task-002-admin-auth/
+任务:  030-tasks/feature/Task-001-app-auth/  +  030-tasks/feature/Task-002-admin-auth/
 ```
+
+端名称来自 CONSTITUTION.md「对应需求端」列（如 app/h5/miniapp/admin），split 时自动读取并创建对应前端子目录。
 
 ### 双层规格解耦
 
@@ -188,6 +198,65 @@ Iteration-NNN-name/
 - 任务重新分析时，从原始需求（`010-requirements/`）重新读取，不回读 `020-specs/` 已有内容
 - 任务级原型/图片/设计稿统一放在迭代级 `010-requirements/assets/`，任务通过相对路径引用
 
+### 拆分粒度规则
+
+split 的核心原则：**1 人 × N 天 = 1 个可独立验收的交付单元**。
+
+#### 三档粒度
+
+| 粒度 | 每任务工时 | 接口上限 | 数据表上限 | 页面上限 | 适用团队 |
+|:--|:--|:--|:--|:--|:--|
+| macro（粗） | 20-80h (1-2周) | 15 | 5 | 5 | 1-3 人 |
+| module（中，默认） | 12-40h (3-5天) | 8 | 3 | 3 | 3-8 人 |
+| atomic（细） | 4-24h (1-3天) | 3 | 2 | 1 | 8+ 人 |
+
+粒度由 STAFFING.md 团队规模自动推荐，用户可通过 `--granularity macro|module|atomic` 手动覆盖。
+
+#### 原子任务判定标准（全部满足）
+
+- 有独立的输入/输出（API 接口 / 页面 / 数据表）
+- 00-specs/ 三件套能独立写满（REQ.md + TECH.md + TASK.md）
+- execute 时不强依赖其他 Task 的运行时状态
+- 有明确的验收标准（AC 可枚举）
+- 可独立提 PR、独立 review
+
+#### 合并规则（不拆）
+
+- 同一数据实体的 CRUD → 共享数据模型，合并为 1 个任务
+- 页面 + 对应后端接口 < 5 个 → 前后端强耦合，一人做效率最高
+- 纯配置/文案/样式微调 → 不构成独立工作单元
+- 关联紧密的小功能（如列表页 + 详情页）→ 共享路由和状态
+
+#### 拆分规则（必拆）
+
+- 超出当前粒度工时上限 → 必须再拆
+- 超出当前粒度接口/数据表上限 → 按业务领域或数据层拆
+- 低于当前粒度工时下限 → 合并到关联任务
+- 跨端功能 → 按端拆（后端 1 个 + 每个前端各 1 个）
+- 独立第三方集成（支付/短信/OSS）→ 独立任务
+
+#### 总量约束
+
+- 单次迭代总任务数: 3-15 个（超出说明粒度不合适）
+- 每个任务必须有明确的 owner（对应 STAFFING 中的成员）
+- 依赖链深度 ≤ 3，同层级无循环依赖
+
+#### 交互流程
+
+split 默认采用逐任务交互确认：
+
+```
+AI 输出 JSON 拆分方案 → CLI 逐任务展示摘要 → 用户确认/跳过/调整 → 创建目录
+```
+
+每个任务创建前展示：名称、类型、工时、优先级、接口数、依赖、验收标准。粒度不达标时自动警告。
+
+用户可选操作：
+- `y`/回车 — 确认创建
+- `n` — 退出并提示调整方式，用户回到 AI 对话用自然语言调整，AI 重新生成方案后再次执行
+
+**调整方案的正确方式：** 回到宿主 AI 对话，用自然语言告诉 AI 如何调整（如“拆太细了，合并为一个”），AI 在同一套拆分规则下重新生成 JSON，CLI 再次展示确认，循环直到满意。
+
 ---
 
 ## 4. 核心命令流水线
@@ -203,7 +272,7 @@ init → doc2spec → analyze → split → plan → execute → pr → done →
 | init | - | `.speccore/` + `Iteration-sample/` + AGENTS.md |
 | doc2spec | Word/MD PRD | `010-requirements/{feature}/README.md` |
 | analyze | 010-requirements/ 所有 .md → CONSTITUTION 映射 | `020-specs/{platform}/{feature}.md` |
-| split | 020-specs/{platform}/ → 扫描子目录 | `030-tasks/Task-NNN/` |
+| split | 020-specs/ + CONSTITUTION.md 端配置 | `030-tasks/{type}/Task-NNN-slug/` |
 | plan | 任务列表 + STAFFING | `PLAN.md` + `speccore-plan.html` + `plan.json` |
 | execute | REQ.md + TECH.md → AI 生成代码 | 源码 + .issues.md + 多任务时自动生成 `PLAN.md` |
 | pr | git branch | Git PR |
