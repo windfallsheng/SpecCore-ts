@@ -1,3 +1,14 @@
+## v5.90.0 (2026-08-13) — help.html 全面优化
+
+- welcome 页按钮文字颜色修复：三个按钮描述文字统一为白色 `rgba(255,255,255,.85)`
+- help.html 结构化升级：新增介绍卡片(SDD方法论+核心原则)、快速开始4步流程、常用参数速查表格(8个核心参数)
+- help.html 标题发光效果：h1 添加 `animation:titleGlow` + `background-clip:text`，遵循渐变文字内联声明规范
+- help.html 光晕偏左：`.card-bg` 径向渐变中心从 `50% 10%` 改为 `30% 10%`，呼吸动画 `cardGlow`
+- help.html 宽度统一：卡片最大宽度从 `900px` 调整为 `800px`，与 welcome/setup-guide 等页面保持一致
+- 使用技巧模块：优先使用 ask / 搜索命令 / 查看详细参数 / HTML 帮助页 四个技巧卡片
+
+---
+
 ## v5.89.0 (2026-08-13) — split 智能拆分全面升级
 
 - 粒度硬约束量化：三档粒度（macro 20-80h / module 12-40h / atomic 4-24h）含接口/数据表/页面上限
