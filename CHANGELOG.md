@@ -1,3 +1,11 @@
+## v5.93.1 (2026-08-13) — topic slug 回退修复
+
+- **slugify 回退改进**：纯中文名称生成短 hash 作为 slug（如 `a3f2`），不再回退到无意义的 `'task'`
+- **常规路径传 topic**：`nextTaskId` 在常规路径也传入 slugified topic
+- 效果：`Task-001-a3f2` 而非 `Task-001-task` 或 `Task-001`
+
+---
+
 ## v5.93.0 (2026-08-13) — split 防护补全：全局硬限制 + functionalUnit 校验 + 非功能章节过滤
 
 - **全局任务数硬限制**：MAX_TASKS_HARD = 20，超出即终止（`--force` 可跳过）
