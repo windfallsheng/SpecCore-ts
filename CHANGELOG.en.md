@@ -2,6 +2,18 @@
 
 ---
 
+## v5.93.0 (2026-08-13) — Split Guards: Global Hard Limit + functionalUnit Validation + Non-Functional Section Filter
+
+- **Global task count hard limit**: MAX_TASKS_HARD = 20, terminates on overflow (`--force` to bypass)
+- **functionalUnit field enforced**: buildSplitPrompt JSON schema now requires `functionalUnit` field
+- **functionalUnit missing warning**: warns when >50% tasks lack the field
+- **Non-TTY task summary**: shows functional-unit-grouped task overview in non-interactive mode
+- **TEMPLATE_PATTERNS expanded**: 24 new non-functional section filters (background/overview/architecture/terms/goals etc.)
+- **Content threshold raised**: filterTemplateNoise minimum content from 3 to 20 chars
+- **Removed section fallback**: per-unit validation no longer falls back to section name
+
+---
+
 ## v5.92.0 (2026-08-13) — Split Constraint Redesign: Functional Unit Basis
 
 - **Split constraint system redesign**: from global limit / section-based to **functional unit basis**

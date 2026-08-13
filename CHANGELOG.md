@@ -1,3 +1,15 @@
+## v5.93.0 (2026-08-13) — split 防护补全：全局硬限制 + functionalUnit 校验 + 非功能章节过滤
+
+- **全局任务数硬限制**：MAX_TASKS_HARD = 20，超出即终止（`--force` 可跳过）
+- **functionalUnit 字段强制**：buildSplitPrompt JSON schema 新增 `functionalUnit` 必填字段
+- **functionalUnit 缺失警告**：超过 50% 任务缺少时输出警告
+- **非 TTY 任务总览**：非交互模式下按功能单元分组显示任务摘要
+- **TEMPLATE_PATTERNS 扩展**：新增 24 个非功能章节过滤模式（背景/概述/架构/术语/目标等）
+- **内容阈值提升**：filterTemplateNoise 最低内容量从 3 字符提升到 20 字符
+- **移除 section 回退**：per-unit 校验不再回退到 section 名（避免每个任务独占一个“单元”）
+
+---
+
 ## v5.92.0 (2026-08-13) — split 约束重构：功能单元基准
 
 - **split 约束体系重构**：从全局上限/章节基准改为**功能单元基准**

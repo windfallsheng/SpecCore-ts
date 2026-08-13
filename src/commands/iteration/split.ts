@@ -246,15 +246,41 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
         const granularity: Granularity = (options.granularity as Granularity) || recommendGranularity(teamSize2);
         const granRule = GRANULARITY_RULES[granularity];
                 
+        // 🚨 全局任务数硬限制（安全网：防止 AI 输出爆炸）
+        const MAX_TASKS_HARD = 20;
+        if (sections.length > MAX_TASKS_HARD && !options.force) {
+          logger.error(`\n   ❌ 任务数爆炸！AI 输出了 ${sections.length} 个任务（上限 ${MAX_TASKS_HARD}）`);
+          logger.error(`   💡 这说明拆分粒度过细，必须合并。请告诉 AI："任务太多，请合并相关功能，总数控制在 ${MAX_TASKS_HARD} 以内"`);
+          logger.error(`   🔧 如确实需要，使用 --force 跳过检查（不推荐）`);
+          logger.info('\n   ℹ️  如需强制继续，添加 --force 参数');
+          return;
+        }
+        if (sections.length > MAX_TASKS_HARD && options.force) {
+          logger.warn(`   ⚠️  任务数 ${sections.length} 超出建议上限 ${MAX_TASKS_HARD}，--force 已启用，继续...`);
+        }
+
         // 🚨 逐功能单元校验：每个功能单元拆出的任务数不超过 3 个
         const MAX_TASKS_PER_UNIT = 3;
         const unitTaskCount: Record<string, number> = {};
+        let missingFunctionalUnit = 0;
                 
         // 按 functionalUnit 分组统计（AI 在 JSON 中标注所属功能单元）
         for (let i = 0; i < sections.length; i++) {
           const task = tasks[i];
-          const unitName = (task as any).functionalUnit || (task as any).section || '未分类';
-          unitTaskCount[unitName] = (unitTaskCount[unitName] || 0) + 1;
+          const unitName = (task as any).functionalUnit;
+          if (!unitName) {
+            missingFunctionalUnit++;
+            unitTaskCount['__missing__'] = (unitTaskCount['__missing__'] || 0) + 1;
+          } else {
+            unitTaskCount[unitName] = (unitTaskCount[unitName] || 0) + 1;
+          }
+        }
+
+        // functionalUnit 缺失警告
+        if (missingFunctionalUnit > sections.length * 0.5) {
+          logger.warn(`   ⚠️  ${missingFunctionalUnit}/${sections.length} 个任务缺少 functionalUnit 字段`);
+          logger.warn(`      💡 AI 未按约束填写功能单元，校验可能不准确`);
+          logger.warn(`      💡 建议重新执行 split，确保 Prompt 包含 functionalUnit 要求`);
         }
                 
         // 检查每个功能单元的任务数
@@ -265,7 +291,8 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
               logger.error(`\n   ❌ 检测到过度拆分！某些功能单元拆出过多任务：`);
               hasOverSplit = true;
             }
-            logger.error(`      📌 "${unitName}" 功能单元拆出了 ${count} 个任务（上限 ${MAX_TASKS_PER_UNIT}）`);
+            const displayName = unitName === '__missing__' ? '(未标注功能单元)' : unitName;
+            logger.error(`      📌 "${displayName}" 拆出了 ${count} 个任务（上限 ${MAX_TASKS_PER_UNIT}）`);
           }
         }
                 
@@ -281,11 +308,26 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           }
           logger.warn('   ⚠️  --force 已启用，继续创建所有任务...');
         }
-                
+
         // 交互模式判断：显式 --interactive 或 stdin 是 TTY
         const isInteractive = options.interactive || process.stdin.isTTY;
         logger.info(`   📏 粒度: ${granRule.label}${options.granularity ? ' (用户指定)' : ` (${teamSize2} 人团队自动推荐)`}`);
-        if (!isInteractive) logger.info('   ℹ️  非交互终端，自动确认所有任务');
+
+        // 非交互模式：显示任务总览摘要
+        if (!isInteractive) {
+          logger.info(`\n   📋 任务总览（共 ${sections.length} 个）：`);
+          const unitSummary: Record<string, string[]> = {};
+          for (let i = 0; i < tasks.length; i++) {
+            const unit = (tasks[i] as any).functionalUnit || '(未标注)';
+            if (!unitSummary[unit]) unitSummary[unit] = [];
+            unitSummary[unit].push(tasks[i].name || `Task ${i + 1}`);
+          }
+          for (const [unit, names] of Object.entries(unitSummary)) {
+            logger.info(`      📌 ${unit} (${names.length} 个):`);
+            for (const n of names) logger.info(`         - ${n}`);
+          }
+          logger.info('');
+        }
 
         // 逐任务交互确认
         const createdSections: Section[] = [];
@@ -734,6 +776,30 @@ const TEMPLATE_PATTERNS = [
   /^版本历史$/,
   /^项目概述$/,
   /^BDD 验收标准$/,
+  // 背景/概述/架构类（非功能内容）
+  /项目背景/,
+  /项目目标/,
+  /系统概述/,
+  /系统架构/,
+  /技术架构/,
+  /整体架构/,
+  /名词解释/,
+  /术语定义/,
+  /参考文献/,
+  /修订记录/,
+  /变更历史/,
+  /文档说明/,
+  /编写说明/,
+  /阅读指南/,
+  /目录$/,
+  // 抽象约束类（不是具体功能）
+  /^约束条件$/,
+  /^假设条件$/,
+  /^设计原则$/,
+  /^总体目标$/,
+  /^建设目标$/,
+  /^业务背景$/,
+  /^技术背景$/,
 ];
 
 function filterTemplateNoise(sections: Section[]): Section[] {
@@ -742,9 +808,9 @@ function filterTemplateNoise(sections: Section[]): Section[] {
     for (const pattern of TEMPLATE_PATTERNS) {
       if (pattern.test(s.name)) return false;
     }
-    // Skip sections with effectively empty content
+    // Skip sections with effectively empty content (< 20 meaningful chars = no real substance)
     const meaningful = (s.content || '').replace(/[\s\n>#*-|]/g, '').length;
-    if (meaningful < 3) return false;
+    if (meaningful < 20) return false;
     // Skip sections without API tables (structural headings)
     return true;
   });
@@ -1818,10 +1884,13 @@ function buildSplitPrompt(
   p += `- 依赖链深度 ≤ 3\n`;
   p += `- 同层级无循环依赖\n\n`;
 
-  p += `### 总量约束\n`;
-  p += `- 单次迭代总任务数: 3-15 个（超出说明粒度不合适）\n`;
+  p += `### 总量约束（功能单元基准）\n`;
+  p += `- 核心原则：以需求的功能单元为基准拆分，而非需求文档的章节划分\n`;
+  p += `- 每个功能单元默认 1 个任务，最多 3 个\n`;
+  p += `- 单次迭代总任务数**不得超过 20 个**（超出说明粒度过细，必须合并）\n`;
   p += `- 每个任务必须有明确的 owner（对应 STAFFING 中的成员）\n`;
-  p += `- 高优先级任务排在前面\n\n`;
+  p += `- 高优先级任务排在前面\n`;
+  p += `- 没有实质性功能内容的章节（如背景、概述、架构、术语等）不能作为拆分依据\n\n`;
 
   // 输出格式
   p += `## 📤 输出格式\n\n`;
@@ -1829,6 +1898,7 @@ function buildSplitPrompt(
   p += '```json\n';
   p += `[\n  {\n`;
   p += `    "id": "Task-001",\n`;
+  p += `    "functionalUnit": "所属功能单元（必填！如：用户管理、订单系统、支付模块）",\n`;
   p += `    "name": "任务名称（中文）",\n`;
   p += `    "topic": "english-slug-for-directory",\n`;
   p += `    "type": "feature|bugfix|refactor|research",\n`;
@@ -1845,6 +1915,7 @@ function buildSplitPrompt(
   p += `    "owner": "建议负责人"\n`;
   p += `  }\n]\n`;
   p += '```\n\n';
+  p += `> **functionalUnit 必须填写**：功能单元名称，不是章节名。同一功能模块的任务填相同的值。\n`;
   p += `> **topic** 必须是英文短横线格式（如 \`user-authentication\`、\`product-crud\`），用于生成任务目录名 Task-NNN-{topic}\n\n`;
 
   p += `### ⚠️ 工时估算规则（重要）\n\n`;
@@ -1860,8 +1931,9 @@ function buildSplitPrompt(
   p += `□ 每个任务的 estimatedHours 在当前粒度范围内？（不满足 → 合并或再拆）\n`;
   p += `□ 没有循环依赖？\n`;
   p += `□ 基础模块排在前面？\n`;
-  p += `□ 同领域功能没被过度拆分？（同一数据实体的 CRUD 必须合并）\n`;
-  p += `□ 总任务数在 3-15 个范围内？\n`;
+  p += `□ 同功能单元内的任务没被过度拆分？（每个功能单元 ≤ 3 个任务）\n`;
+  p += `□ 总任务数不超过 20 个？\n`;
+  p += `□ 没有把非功能章节（背景/概述/架构/术语）作为拆分依据？\n`;
   p += `□ 每个任务都有明确的 owner 和 acceptanceCriteria？\n`;
   p += `□ 每个任务都能独立提 PR、独立 review？\n`;
 
