@@ -229,6 +229,25 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
         const teamSize2 = staffing2 ? staffing2.length : 0;
         const granularity: Granularity = (options.granularity as Granularity) || recommendGranularity(teamSize2);
         const granRule = GRANULARITY_RULES[granularity];
+        
+        // 🚨 硬约束：任务数量上限检查
+        const MAX_TASKS_HARD_LIMIT = 20;
+        if (sections.length > MAX_TASKS_HARD_LIMIT) {
+          logger.error(`\n   ❌ 任务数量爆炸！AI 拆分出 ${sections.length} 个任务，超过硬上限 ${MAX_TASKS_HARD_LIMIT}`);
+          logger.error(`   💡 可能原因：`);
+          logger.error(`      1. AI 没有遵守 Prompt 中的数量约束`);
+          logger.error(`      2. 需求本身过于复杂，需要人工介入合并`);
+          logger.error(`   🔧 建议操作：`);
+          logger.error(`      1. 重新执行 split，并告诉 AI：“任务太多，请合并相关功能”`);
+          logger.error(`      2. 或者手动编辑 .speccore/prompts/split-suggestion-${iter}.md，明确要求“控制在 12 个任务以内”`);
+          logger.error(`      3. 如果确实需要这么多任务，使用 --force 跳过检查（不推荐）`);
+          if (!options.force) {
+            logger.info('\n   ℹ️  如需强制继续，添加 --force 参数');
+            return;
+          }
+          logger.warn('   ⚠️  --force 已启用，继续创建所有任务...');
+        }
+        
         // 交互模式判断：显式 --interactive 或 stdin 是 TTY
         const isInteractive = options.interactive || process.stdin.isTTY;
         logger.info(`   📏 粒度: ${granRule.label}${options.granularity ? ' (用户指定)' : ` (${teamSize2} 人团队自动推荐)`}`);
