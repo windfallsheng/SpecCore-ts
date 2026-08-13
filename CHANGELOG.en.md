@@ -2,6 +2,17 @@
 
 ---
 
+## v5.94.0 (2026-08-13) — Split AI Content Generation: Tasks with Actual REQ.md / TECH.md Content
+
+- **JSON schema extended**: Each task now includes `reqContent` / `techContent` fields
+- **REQ.md actual content**: AI generates requirement description (business rules, data models, API definitions), written directly to REQ.md
+- **TECH.md actual content**: AI generates technical plan (architecture, core logic, test strategy), written directly to TECH.md
+- **Fallback mechanism**: Falls back to original template (`<!-- AI-FILL -->`) when AI doesn't provide content
+- **Sub-facet principle**: Content is task-level, not a repeat of the entire functional unit
+- All quantity constraints preserved (functional unit ≤ 3, total ≤ 20, non-functional section filtering, etc.)
+
+---
+
 ## v5.93.1 (2026-08-13) — Topic Slug Fallback Fix
 
 - **slugify fallback improvement**: pure Chinese names now generate short hash slug (e.g. `a3f2`) instead of meaningless `'task'`
