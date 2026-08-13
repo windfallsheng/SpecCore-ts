@@ -641,7 +641,7 @@ async function helpHtml(options: HelpOptions): Promise<void> {
       <div class="params-section">
         <div class="section-header">
           <span class="header-icon">📋</span>
-          <span class="header-title">常用参数速查</span>
+          <span class="header-title">核心参数速查</span>
         </div>
         <div class="param-table">
           <div class="param-row header-row">
@@ -656,8 +656,8 @@ async function helpHtml(options: HelpOptions): Promise<void> {
           </div>
           <div class="param-row">
             <div class="param-col flag"><code>-t</code></div>
-            <div class="param-col meaning">任务 ID 或类型</div>
-            <div class="param-col example"><code>-t Task-001</code> / <code>-t feature</code></div>
+            <div class="param-col meaning">任务 ID（Task-001 / Task-002 ...）</div>
+            <div class="param-col example"><code>-t Task-001</code></div>
           </div>
           <div class="param-row">
             <div class="param-col flag"><code>-n</code></div>
@@ -675,19 +675,19 @@ async function helpHtml(options: HelpOptions): Promise<void> {
             <div class="param-col example"><code>execute --auto</code></div>
           </div>
           <div class="param-row">
-            <div class="param-col flag"><code>--web</code></div>
-            <div class="param-col meaning">生成 HTML 页面</div>
-            <div class="param-col example"><code>welcome --web</code></div>
+            <div class="param-col flag"><code>--platforms</code></div>
+            <div class="param-col meaning">多端平台（逗号分隔：web,h5,miniapp）</div>
+            <div class="param-col example"><code>--platforms=web,h5</code></div>
           </div>
           <div class="param-row">
-            <div class="param-col flag"><code>--export</code></div>
-            <div class="param-col meaning">导出文件路径</div>
-            <div class="param-col example"><code>dashboard --export=demo.html</code></div>
+            <div class="param-col flag"><code>--type</code></div>
+            <div class="param-col meaning">任务类型（feature/bugfix/refactor/research）</div>
+            <div class="param-col example"><code>--type feature</code></div>
           </div>
           <div class="param-row">
-            <div class="param-col flag"><code>--scope</code></div>
-            <div class="param-col meaning">作用范围（global/iteration/all/core/api）</div>
-            <div class="param-col example"><code>dashboard --scope global</code></div>
+            <div class="param-col flag"><code>--force</code></div>
+            <div class="param-col meaning">强制覆盖（init/update/import）</div>
+            <div class="param-col example"><code>init --force</code></div>
           </div>
         </div>
       </div>
