@@ -2,6 +2,18 @@
 
 ---
 
+## v5.99.0 (2026-08-14) — Smart Global Context Injection: split/execute/analyze Auto-Reference Global Knowledge
+
+- **prompt-builder.ts**: New `loadGlobalContext()` function with smart injection per command type
+- **execute/plan**: Auto-inject architecture constraints + tech constraints + platform-specific rules (GLOBAL/platforms/{platform}/)
+- **split**: Auto-inject cross-platform relationship summary + global index
+- **analyze**: Auto-inject architecture summary
+- **synthesize Phase 2**: Auto-generate `GLOBAL/INDEX.md` lightweight index after apply
+- **Summary extraction**: `extractSummary()` takes first 3 lines per section, `extractArchConstraints()` extracts by keywords
+- **Global context output**: `formatPrompt()` adds `## 🌐 Global Context` section for AI code generation
+
+---
+
 ## v5.98.0 (2026-08-14) — Phase 1 Platform Type Auto-Detection + Platform-Specific Professional Dimensions
 
 - Phase 1 Prompt adds platform type identification rules (Backend/Web Admin/Mobile H5/Mini Program/Native App)

@@ -185,6 +185,10 @@ async function handleApplyPhase(
     logger.info(`   📄 CROSS_PLATFORM.md — 跨端关系图`);
     logger.info(`   📄 ARCHITECTURE.md  — 全量架构`);
     logger.info(`   📄 TECH_FULL.md    — 全量技术方案`);
+
+    // 自动生成 INDEX.md 轻量索引
+    await generateGlobalIndex(globalDir);
+
     logger.info(`\n   📌 下一步: speccore synthesize --phase 3 -I ${iter}`);
   } else if (phase === 3) {
     await ensureDir(reqDir);
@@ -780,6 +784,60 @@ function buildPhase3Prompt(
   p += `- 需求以产品文档为准，不要臆造需求\n`;
 
   return p;
+}
+
+// ================================================================
+// 生成 GLOBAL/INDEX.md 轻量索引
+// ================================================================
+async function generateGlobalIndex(globalDir: string): Promise<void> {
+  const synthesisDir = join(globalDir, 'synthesis');
+  const platformsDir = join(globalDir, 'platforms');
+  const lines: string[] = [];
+
+  lines.push(`# 全局知识库索引`);
+  lines.push(`> 自动生成于 ${new Date().toISOString().split('T')[0]}，供 split/execute/analyze 智能注入\n`);
+
+  // 工程列表
+  lines.push(`## 工程列表\n`);
+  try {
+    const entries = await parseConstitution();
+    for (const e of entries) {
+      lines.push(`- **${e.project}** (${e.srcPath}) → 端: ${e.platforms.join(', ')}`);
+    }
+  } catch { /* ignore */ }
+  lines.push('');
+
+  // 各端摘要
+  if (await pathExists(platformsDir)) {
+    lines.push(`## 各端分析文档\n`);
+    const entries = await readdir(platformsDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const files = await readdir(join(platformsDir, entry.name));
+        const mdFiles = files.filter(f => f.endsWith('.md'));
+        lines.push(`- **${entry.name}** (${mdFiles.length} 个文档)`);
+      }
+    }
+    lines.push('');
+  }
+
+  // synthesis 文档摘要
+  if (await pathExists(synthesisDir)) {
+    lines.push(`## 跨端综合文档\n`);
+    const files = await readdir(synthesisDir);
+    for (const f of files.filter(f => f.endsWith('.md'))) {
+      const content = await readFile(join(synthesisDir, f), 'utf-8');
+      // 取第一个 ## 章节作为摘要
+      const firstSection = content.match(/##\s+(.+)/);
+      lines.push(`- **${f}**${firstSection ? ` — ${firstSection[1]}` : ''}`);
+    }
+    lines.push('');
+  }
+
+  // 写入
+  const indexPath = join(globalDir, 'INDEX.md');
+  await writeFile(indexPath, lines.join('\n'));
+  logger.info(`   📇 全局索引已生成: .speccore/GLOBAL/INDEX.md`);
 }
 
 // ================================================================

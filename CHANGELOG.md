@@ -1,3 +1,15 @@
+## v5.99.0 (2026-08-14) — 智能全局上下文注入：split/execute/analyze 自动参考全局知识
+
+- **prompt-builder.ts**: 新增 `loadGlobalContext()` 函数，按命令类型智能注入全局上下文
+- **execute/plan**: 自动注入架构约束 + 技术方案约束 + 端专属规则（GLOBAL/platforms/{端}/）
+- **split**: 自动注入跨端关系摘要 + 全局索引
+- **analyze**: 自动注入架构摘要
+- **synthesize Phase 2**: apply 后自动生成 `GLOBAL/INDEX.md` 轻量索引
+- **摘要提取**: `extractSummary()` 取每章节前 3 行，`extractArchConstraints()` 按关键词精准提取
+- **全局上下文输出**: `formatPrompt()` 新增 `## 🌐 全局上下文` 段，AI 生成代码时自动参考
+
+---
+
 ## v5.98.0 (2026-08-14) — Phase 1 端类型自动识别 + 端专属专业维度
 
 - Phase 1 Prompt 新增端类型识别规则（后端/Web管理端/移动H5/小程序/原生App）
