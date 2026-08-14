@@ -148,7 +148,6 @@ async function createSingleTask(options: TaskNewOptions): Promise<void> {
     const today = new Date().toISOString().split('T')[0];
     await ensureDir(join(taskDir, '.meta'));
     await ensureDir(join(taskDir, '_shared'));
-    await ensureDir(join(taskDir, '00-specs'));
     await ensureDir(join(taskDir, '99-artifacts'));
     if (!options.frontendOnly) {
       await ensureDir(join(taskDir, '10-backend', 'src'));
@@ -169,25 +168,22 @@ async function createSingleTask(options: TaskNewOptions): Promise<void> {
     // Generate task content
     const taskContent = await generateTaskContent(options);
 
-    // Write core specs to 00-specs/
-    await writeFile(join(taskDir, '00-specs', 'REQ.md'), taskContent.req);
-    await writeFile(join(taskDir, '00-specs', 'TECH.md'), taskContent.tech);
-    await writeFile(join(taskDir, '00-specs', 'TASK.md'), taskContent.task);
-    await writeFile(join(taskDir, '00-specs', 'CHANGELOG.md'), `# ${options.name} - 变更记录\n\n| 时间 | 版本 | 变更内容 | 变更人 |\n| :--- | :--- | :--- | :--- |\n| ${today} | v1.0 | 初始创建 | CLI |\n`);
+    // Write core specs to _shared/
+    await writeFile(join(taskDir, '_shared', 'REQ.md'), taskContent.req);
+    await writeFile(join(taskDir, '_shared', 'TECH.md'), taskContent.tech);
+    await writeFile(join(taskDir, '_shared', 'CHANGELOG.md'), `# ${options.name} - 变更记录\n\n| 时间 | 版本 | 变更内容 | 变更人 |\n| :--- | :--- | :--- | :--- |\n| ${today} | v1.0 | 初始创建 | CLI |\n`);
 
-    // Write to backend platform dir
+    // Write per-platform TASK.md (each platform gets its own sub-task)
     if (!options.frontendOnly) {
-      await writeFile(join(taskDir, '10-backend', 'REQ.md'), taskContent.req);
-      await writeFile(join(taskDir, '10-backend', 'TECH.md'), taskContent.tech);
-      await writeFile(join(taskDir, '10-backend', 'TASK.md'), taskContent.task);
+      await ensureDir(join(taskDir, 'backend', 'src'));
+      await ensureDir(join(taskDir, 'backend', 'tests'));
+      await writeFile(join(taskDir, 'backend', 'TASK.md'), taskContent.task);
     }
-
-    // Write to frontend platform dir
     if (!options.backendOnly) {
-      await writeFile(join(taskDir, '20-frontend', 'REQ.md'), taskContent.req);
-      await writeFile(join(taskDir, '20-frontend', 'TECH.md'), taskContent.tech);
-      await writeFile(join(taskDir, '20-frontend', 'TASK.md'), taskContent.task);
-      await writeFile(join(taskDir, '20-frontend', 'README.md'), `# ${options.name}\n\n前端实现目录。\n`);
+      await ensureDir(join(taskDir, 'frontend', 'src'));
+      await ensureDir(join(taskDir, 'frontend', 'tests'));
+      await writeFile(join(taskDir, 'frontend', 'TASK.md'), taskContent.task);
+      await writeFile(join(taskDir, 'frontend', 'README.md'), `# ${options.name}\n\n前端实现目录。\n`);
     }
 
     // Pre-create issues tracker

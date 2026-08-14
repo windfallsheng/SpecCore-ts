@@ -9,7 +9,7 @@
  * 输出范围:
  *   - global    → .speccore/GLOBAL/              全局架构/代码健康
  *   - iteration → Iteration-XX/020-specs/         迭代级基线（默认）
- *   - task      → Iteration-XX/030-tasks/Task-NN/00-specs/  任务级独立（不覆盖基线）
+ *   - task      → Iteration-XX/030-tasks/Task-NN/_shared/  任务级独立（不覆盖基线）
  */
 import { writeFile, pathExists, ensureDir } from 'fs-extra';
 import { join, dirname } from 'path';
@@ -176,8 +176,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         let count = 0;
 
         if (isTaskLevel && taskDir) {
-          // 任务级：只写 Task/00-specs/，不动 020-specs/（保持迭代级基线不变）
-          const taskSpecDir = join(taskDir, '00-specs');
+          // 任务级：写 Task/_shared/，不动 020-specs/（保持迭代级基线不变）
+          const taskSpecDir = join(taskDir, '_shared');
           await ensureDir(taskSpecDir);
           for (const [filename, content] of Object.entries(docs)) {
             const fp = join(taskSpecDir, filename);
@@ -190,7 +190,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
             await writeFile(fp, content);
             count++;
           }
-          logger.success(`✅ ${count} 个 Spec 文档已写入 ${options.task}/00-specs/（任务级，迭代基线不变）`);
+          logger.success(`✅ ${count} 个 Spec 文档已写入 ${options.task}/_shared/（任务级，迭代基线不变）`);
         } else {
           // 迭代级：写 020-specs/
           const specDir = join(iterDir, '020-specs');
@@ -217,8 +217,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 
     // 单文件模式
     if (isTaskLevel && taskDir) {
-      // 任务级：只写 Task/00-specs/
-      const taskSpecDir = join(taskDir, '00-specs');
+      // 任务级：写 Task/_shared/
+      const taskSpecDir = join(taskDir, '_shared');
       await ensureDir(taskSpecDir);
       const taskAnalysisPath = join(taskSpecDir, 'ANALYSIS.md');
       if (await shouldOverwrite(taskAnalysisPath, !!options.interactive)) {
@@ -228,7 +228,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
           logger.info(`   📦 旧版已备份: ${taskBackup.split('/').pop()}`);
         }
         await writeFile(taskAnalysisPath, options.apply);
-        logger.success(`✅ ANALYSIS.md 已写入 ${options.task}/00-specs/`);
+        logger.success(`✅ ANALYSIS.md 已写入 ${options.task}/_shared/`);
       } else { logger.info(`   ⏭️  用户取消覆盖`); }
     } else {
       // 迭代级：写 020-specs/
@@ -342,7 +342,10 @@ async function enrichTaskDocs(iteration: string, taskId: string, reqFiles: strin
   }
 
   const fullTaskDir = join(iterDir, taskEntry.name);
-  const specsDir = join(fullTaskDir, '00-specs');
+  // 向后兼容: _shared/ → 00-specs/
+  const specsDir = (await pathExists(join(fullTaskDir, '_shared')))
+    ? join(fullTaskDir, '_shared')
+    : join(fullTaskDir, '00-specs');
   
   if (!(await pathExists(specsDir))) return;
 
@@ -686,8 +689,8 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     prompt += `- 当前是**任务级分析**，类型为 \`${taskType}\`，只需产出 ${taskDocs.length} 个文档：${taskDocs.map(([n]) => n).join('、')}\n`;
     prompt += `- bugfix: 聚焦根因分析和修复验证；research: 聚焦技术调研；review: 聚焦代码审查\n`;
     prompt += `- feature/refactor: 全量分析（功能、接口、数据、规则）\n`;
-    prompt += `- **双层解耦**：先读 \`020-specs/\` 了解迭代级基线，再读 \`00-specs/REQ.md\` 了解本任务已有的需求切片\n`;
-    prompt += `- 分析结果写入 \`00-specs/\`（任务独立），**不覆盖** \`020-specs/\`（迭代基线）\n`;
+    prompt += `- **双层解耦**：先读 \`020-specs/\` 了解迭代级基线，再读 \`_shared/REQ.md\` 了解本任务已有的需求切片\n`;
+    prompt += `- 分析结果写入 \`_shared/\`（任务独立），**不覆盖** \`020-specs/\`（迭代基线）\n`;
   } else {
     prompt += `- 当前是**迭代级分析**，需产出全部 7 个文档，覆盖需求→技术→测试→评审→风险→依赖→监控\n`;
   }

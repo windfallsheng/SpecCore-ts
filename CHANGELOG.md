@@ -1,3 +1,17 @@
+## v6.1.0 (2026-08-14) — 任务目录结构重构：_shared/ + 按端嵌套 + 子任务命名
+
+- **Task 目录结构重构**: 从扁平 `00-specs/` 改为 `_shared/` + `{端}/` 嵌套
+  - `_shared/` — 共享规格（REQ/TECH/SCHEMA/CHANGELOG/API_CONTRACT）
+  - `{端}/` — 各端独立子任务（TASK.md + src/tests）
+  - `99-artifacts/` — 执行产出（不变）
+- **子任务全局命名**: `Task-{父编号}-{端名}-{hash4}` 格式，如 `Task-001-backend-a3f2`
+- **方案 C 混合**: 迭代层 020-specs/ 支持全局 + platforms/ 双层结构
+- **split 命令改造**: 功能单元为模块，按端生成子任务，各端独立负责人
+- **向后兼容**: analyze/execute/prompt-builder 支持 `_shared/` → `00-specs/` 回退
+- **init 模板更新**: 新任务目录结构模板
+
+---
+
 ## v6.0.1 (2026-08-14) — TOC 条目增强：摘要/端/行数/标签
 
 - **`TOCEntry` 接口增强**: 新增 4 个字段

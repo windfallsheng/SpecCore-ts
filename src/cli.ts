@@ -981,8 +981,29 @@ if (process.argv.length <= 2) {
           } else {
             total = tds.length;
             for (const td of tds) {
-              const tm = join(base, td, '00-specs', 'TASK.md');
-              if (existsSync(tm) && readFileSync(tm, 'utf-8').includes('已完成')) done2++;
+              // 向后兼容: 检查 {端}/TASK.md → _shared/TASK.md → 00-specs/TASK.md
+              const taskDirPath = join(base, td);
+              let found = false;
+              // 新结构: 扫描子目录中的 TASK.md
+              try {
+                const subdirs = readdirSync(taskDirPath).filter((d: string) =>
+                  !d.startsWith('.') && !d.startsWith('_') && !d.startsWith('9') &&
+                  existsSync(join(taskDirPath, d)) && 
+                  require('fs').statSync(join(taskDirPath, d)).isDirectory()
+                );
+                for (const sd of subdirs) {
+                  const subTask = join(taskDirPath, sd, 'TASK.md');
+                  if (existsSync(subTask) && readFileSync(subTask, 'utf-8').includes('已完成')) {
+                    found = true; break;
+                  }
+                }
+              } catch {}
+              // 旧结构回退
+              if (!found) {
+                const tm = join(base, td, '00-specs', 'TASK.md');
+                if (existsSync(tm) && readFileSync(tm, 'utf-8').includes('已完成')) found = true;
+              }
+              if (found) done2++;
             }
             if (done2 < total) {
               phase = 'dev'; nextCmd = 'speccore execute --task=' + tds[done2] + ' --force'; nextDesc = '执行开发 (' + (done2 + 1) + '/' + total + ')';
