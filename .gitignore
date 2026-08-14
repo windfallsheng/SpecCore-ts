@@ -5,6 +5,7 @@ build/
 *.log
 
 # Generated HTML outputs
+html.html
 speccore-*.html
 demo-test.html
 outputs/speccore-*.html
