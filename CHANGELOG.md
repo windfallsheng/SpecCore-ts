@@ -1,3 +1,13 @@
+## v5.99.2 (2026-08-14) — 验证修复 + 设计文档更新
+
+- **修复**: `buildGlobalTOC()` 过滤时间戳备份文件（`isTimestampBackup`）
+- **修复**: `generateGlobalIndex()` 同步过滤备份文件
+- **修复**: `buildPrompt()` 全局上下文条件判断（无内容时不注入空段）
+- **修复**: `readdir` 从动态导入改为顶层导入（兼容 Node 16）
+- **文档**: `spec-layers.md` 全面更新，新增 Layer 0 全局知识库 + 智能注入机制
+
+---
+
 ## v5.99.1 (2026-08-14) — 全局知识库目录化：AI 自主决定读什么
 
 - **重构 GlobalContext**: 从预取内容改为 TOC 目录结构（`TOCEntry` 接口）

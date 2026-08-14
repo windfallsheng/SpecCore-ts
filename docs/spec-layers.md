@@ -1,30 +1,129 @@
-# Spec 三层加载机制说明
+# Spec 多层加载机制说明
 
-> 适用版本：v5.22.x+
+> 适用版本：v5.99.x+
 
 > 💡 **命令类型**: 本文档中的 `speccore execute` 为 🔒 AI 命令，需在 AI IDE 中通过 `@spec-ask` 使用。详见 [快速开始](quick-start.md)。
 
-## 三层 Spec 架构
+## 多层 Spec 架构
 
-SpecCore 生成的所有 Spec 文件分为两个用途：**人读**和**程序读**。只有标记了 `spec-rule` 的文件会被 execute 自动解析。
+SpecCore 生成的所有 Spec 文件分为多个层次：**全局知识库**（synthesize 自动生成）、**全局约束**（init 时配置）、**期次上下文**（迭代级文档）、**Task 执行**（任务级输入）。
 
 ```
-Layer 1 — 全局约束（execute 自动注入）
+Layer 0 — 全局知识库（synthesize 自动生成 + 智能注入）
+  🤖 GLOBAL/platforms/{端}/ → Phase 1 逐端分析
+  🤖 GLOBAL/synthesis/      → Phase 2 跨端综合
+  🤖 GLOBAL/INDEX.md         → Phase 2 后自动生成的轻量索引
+  ✅ split/execute/analyze   → 必读注入 + TOC 目录，AI 自主 Read
+
+Layer 1 — 全局约束（execute 自动解析）
   ✅ CONSTITUTION.md  spec-rule 区块 → 代码规范自动生效
   ✅ TECH_STACK.md    tech-stack 区块 → 技术栈自动检测
 
 Layer 2 — 期次上下文（人类文档，手动查阅）
-  📖 00-需求文档/      本期需求总览
-  📖 00-技术文档/      架构决策记录
-  📖 00-期次总览/      任务依赖图
+  📖 010-requirements/  本期需求总览
+  📖 020-specs/         架构决策、技术分析
 
 Layer 3 — Task 执行（execute 核心输入）
-  ✅ Task/REQ.md      接口表格 → 生成方法骨架
-  ✅ Task/TASK.md     状态更新
-  📖 Task/TECH.md     技术方案（人类可读）
+  ✅ Task/REQ.md      需求文档（接口表格解析 ✓）
+  ✅ Task/TECH.md     技术方案
+  ✅ Task/TASK.md     任务分解（状态更新 ✓）
 ```
 
-## 一、Layer 1：全局约束（程序自动解析）
+## 一、Layer 0：全局知识库（synthesize 自动生成 + 智能注入）
+
+### 三阶段全自动流水线
+
+```
+Phase 1: 逐端分析
+  CLI 读源码 → AI 按端类型生成专业分析 → 写入 GLOBAL/platforms/{端}/
+  端类型自动识别：后端 / Web管理端 / 移动H5 / 小程序 / 原生App
+  通用 10 维度 + 端专属专业维度
+
+Phase 2: 跨端综合
+  CLI 读 Phase 1 结果 → AI 生成三份综合文档 → 写入 GLOBAL/synthesis/
+  - CROSS_PLATFORM.md — 跨端业务关系图
+  - ARCHITECTURE.md  — 全量系统架构 + ADR + 安全架构
+  - TECH_FULL.md     — 全量技术方案 + 容量规划
+  完成后自动生成 GLOBAL/INDEX.md 轻量索引
+
+Phase 3: 功能单元合成
+  CLI 读 Phase 2 结果 → AI 按功能单元拆分 → 写入迭代级 010-requirements/
+  每个功能单元含：用户故事 + 各端需求 + 接口汇总 + 数据字典 + 测试要点
+```
+
+### 智能上下文注入（核心机制）
+
+**设计理念：CLI 给地图 + 标必读物，AI 自己看目录决定读哪些文件。**
+
+```
+synthesize Phase 2 完成后
+├── 写入 GLOBAL/synthesis/（CROSS_PLATFORM + ARCHITECTURE + TECH_FULL）
+├── 写入 GLOBAL/platforms/{端}/（各端专业分析）
+├── 自动生成 GLOBAL/INDEX.md（轻量索引）
+│
+├──→ split 的 Prompt 自动注入：
+│    ├── 📌 必读：INDEX.md 全文（≤ 1500 字）
+│    └── 📂 可选：TOC 目录（文件路径 + 描述 + ## 标题列表）
+│
+├──→ execute 的 Prompt 自动注入：
+│    ├── 📌 必读：INDEX.md 全文
+│    ├── 📂 可选：TOC 目录（综合文档 + 各端文档）
+│    └── 💡 当前端标记 ⬅ 箭头，AI 自行 Read 需要的文件
+│
+└──→ analyze 的 Prompt 自动注入：
+     ├── 📌 必读：INDEX.md 全文
+     └── 📂 可选：TOC 目录
+```
+
+### AI 在 Prompt 中看到的全局知识库段
+
+```markdown
+## 🌐 全局知识库
+> 必读内容已注入，其余文件请按需自行 Read。
+
+### 📌 必读（已注入）
+（INDEX.md 全文 — 工程列表、各端文档清单、跨端综合文档清单）
+
+### 📂 可选参考（按需 Read）
+> 当前任务涉及 **admin** 端，建议优先参考该端文档
+
+**全局综合文档** (.speccore/GLOBAL/)
+- `synthesis/ARCHITECTURE.md` — 全量系统架构
+  章节: 系统架构概览 | 服务依赖 | 技术栈 | 部署架构 | 架构决策(ADR) | 安全架构
+- `synthesis/TECH_FULL.md` — 全量技术方案
+  章节: 公共模块 | API版本策略 | 数据一致性 | 性能优化
+
+**各端分析文档** (.speccore/GLOBAL/)
+📂 admin/ ⬅ 当前端
+  - `platforms/admin/ANALYSIS.md` — admin 端 — ANALYSIS
+    章节: 功能清单 | 接口定义 | 数据模型 | 业务规则 | 安全分析
+📂 h5/
+  - `platforms/h5/ANALYSIS.md` — h5 端 — ANALYSIS
+    章节: 功能清单 | 接口定义 | 适配方案 | 首屏性能
+
+### 💡 使用方式
+以上文件均可通过 Read 工具直接读取（路径相对于 `.speccore/GLOBAL/`）。
+建议根据当前任务需要选择性阅读，不必全部读取。
+```
+
+### 实现细节
+
+| 函数 | 位置 | 作用 |
+| :--- | :--- | :--- |
+| `buildGlobalTOC()` | prompt-builder.ts | 扫描 GLOBAL/synthesis/ + platforms/，提取每个文件的 ## 标题行 |
+| `loadGlobalContext()` | prompt-builder.ts | 必读 INDEX.md 直接注入 + 其余只给 TOC 目录 |
+| `generateGlobalIndex()` | synthesize.ts | Phase 2 apply 后自动生成 INDEX.md |
+| `extractHeadings()` | prompt-builder.ts | 从 Markdown 提取 ## 标题行（不读正文，非常轻量） |
+
+**关键设计决策：**
+- 不预取内容，只给目录 — AI 自己决定读什么，避免关键词匹配不准
+- 只读 ## 标题行 — 每个文件只读几行，TOC 生成非常快
+- 过滤时间戳备份文件 — `isTimestampBackup()` 排除 `.bak` 类文件
+- 当前端标记 — execute 时自动标记当前端的文档，引导 AI 优先参考
+
+---
+
+## 二、Layer 1：全局约束（程序自动解析）
 
 ### CONSTITUTION.md → spec-rule 规则注入
 
@@ -77,17 +176,17 @@ speccore execute --task=Task-001 --force
 
 支持检测的语言：Java / TypeScript / Go / Python
 
-## 二、Layer 2：期次上下文（人类文档）
+## 三、Layer 2：期次上下文（人类文档）
 
 这些文件不参与代码生成，但提供关键的项目信息：
 
 | 文件 | 用途 | 谁看 |
 | :--- | :--- | :--- |
-| `00-需求文档/REQUIREMENT.md` | 本期要做的所有需求、优先级、里程碑 | PM、开发者 |
-| `00-技术文档/ARCHITECTURE.md` | 期次级别的架构决策 | 架构师 |
-| `00-期次总览/PROJECT_GRAPH.md` | 任务依赖关系图，决定开发顺序 | 开发者 |
+| `010-requirements/REQUIREMENT.md` | 本期要做的所有需求、优先级、里程碑 | PM、开发者 |
+| `020-specs/ANALYSIS.md` | 需求分析 | 开发者 |
+| `020-specs/TECH.md` | 技术方案 | 开发者 |
 
-## 三、Layer 3：Task 执行（核心输入）
+## 四、Layer 3：Task 执行（核心输入）
 
 每个 Task 目录是 execute 的核心输入：
 
@@ -112,7 +211,7 @@ Task-001-订单管理/
 3. 读取 Task/backend/REQ.md → 解析接口表格
 4. 根据 REQ.md 接口 + spec-rule 规则 + 技术栈 → 生成代码
 
-## 四、其他文件（人类文档）
+## 五、其他文件（人类文档）
 
 这些文件不参与代码生成，但同样重要：
 
@@ -128,7 +227,7 @@ Task-001-订单管理/
 | `PROJECT/INDEX.md` | 项目索引 | 项目管理者 |
 | `PROJECT/TEAM.md` | 团队成员与分工 | 全员 |
 
-## 五、完整开发流程
+## 六、完整开发流程
 
 ### 💬 对话式（推荐新用户）
 
@@ -175,7 +274,7 @@ speccore execute --task=Task-001 --force
 # → 生成 Vue 组件
 ```
 
-## 六、备份与回滚
+## 七、备份与回滚
 
 AI 修改任何 Spec 文件前自动创建 `.bak` 备份，防止改坏：
 
