@@ -48,6 +48,7 @@ export interface AnalyzeOptions {
   supplement?: boolean; // --supplement: 补充模式（追加源码到现有报告）
   feature?: string;     // --feature: 局部分析单个功能模块
   doc?: string;         // --doc: 局部分析类型文档（如 bugs/login-timeout, refactors/db-pool）
+  sync?: boolean;       // --sync: 任务分析后局部回写 020-specs/（不全覆盖）
 }
 
 export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
@@ -376,6 +377,25 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         logger.success(`✅ ANALYSIS.md 已写入 020-specs/`);
       } else { logger.info(`   ⏭️  用户取消覆盖`); }
     }
+    // ── --sync: 任务分析后局部回写 020-specs/ ──
+    if (options.sync && isTaskLevel && taskDir) {
+      logger.info('');
+      logger.info('🔄 局部回写: 将任务分析结果同步到 020-specs/ ...');
+      try {
+        const { syncTaskToSpecs } = await import('../core/spec-merger');
+        const iterDirPath = iterDir;
+        const taskName = options.task || '';
+        const mergeResult = await syncTaskToSpecs(iterDirPath, taskDir, taskName);
+        if (mergeResult.filesUpdated > 0) {
+          logger.success(`✅ 局部回写完成: ${mergeResult.filesUpdated} 个 spec 文件已更新`);
+        } else {
+          logger.info('   ℹ️ 未找到匹配的 spec 文件，无需回写');
+        }
+      } catch (e) {
+        logger.debug('局部回写失败（非关键）:', e);
+      }
+    }
+
     printBackupSummary();
     return;
   }
@@ -392,10 +412,6 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
     process.exitCode = 10;
     return;
-  }
-
-  // ── Apply 模式 ──
-  if (options.apply) {
   }
 }
 
