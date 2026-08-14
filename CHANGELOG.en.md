@@ -2,6 +2,16 @@
 
 ---
 
+## v5.97.0 (2026-08-14) — Synthesize Three-Phase Prompts Upgraded to Professional-Grade
+
+- **Phase 1 Per-Platform Analysis**: Upgraded from 5 items to 10 dimensions (feature list + user stories, API specs, data model, business rules, security analysis, performance characteristics, error handling, testing strategy, third-party dependencies, cross-platform associations)
+- **Phase 2 Cross-Platform Synthesis**: CROSS_PLATFORM adds data flow / transaction consistency; ARCHITECTURE adds ADR / security architecture / monitoring / disaster recovery; TECH_FULL adds API versioning / capacity planning / data consistency
+- **Phase 3 Functional Unit Synthesis**: Adds user stories (Given/When/Then), data dictionary, state machines, non-functional requirements, test points
+- **User document support**: Each phase automatically reads user-placed documents from GLOBAL directories as supplementary input
+- **Prompt notes**: AI is instructed not to overwrite existing user documents and to prioritize them
+
+---
+
 ## v5.96.2 (2026-08-14) — Synthesize Global-Level Write Path Migration
 
 - Phase 1/2 output migrated from `Iteration-NNN/020-specs/` to `.speccore/GLOBAL/`
