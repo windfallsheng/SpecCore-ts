@@ -333,9 +333,20 @@ export async function findRelevantCode(
       score += specBoost;
     }
 
-    // 文件名匹配
+    // 文件名匹配（精确 + 模糊）
     for (const kw of keywords) {
-      if (f.path.toLowerCase().includes(kw.toLowerCase())) score += 10;
+      if (f.path.toLowerCase().includes(kw.toLowerCase())) {
+        score += 10;
+      } else {
+        // P3: 模糊匹配 — 关键词长度≥4 时，文件名包含其子串也加分
+        if (kw.length >= 4) {
+          const kwLower = kw.toLowerCase();
+          // 取关键词的前 N 个字符作为模糊子串
+          const fuzzyLen = Math.max(3, Math.floor(kw.length * 0.6));
+          const fuzzySub = kwLower.slice(0, fuzzyLen);
+          if (f.path.toLowerCase().includes(fuzzySub)) score += 3;
+        }
+      }
     }
     // API 匹配
     for (const api of f.apis) {
@@ -345,10 +356,16 @@ export async function findRelevantCode(
         score += 15;
       }
     }
-    // 导出匹配
+    // 导出匹配（精确 + 模糊）
     for (const exp of f.exports) {
+      const expLower = exp.toLowerCase();
       for (const kw of keywords) {
-        if (exp.toLowerCase().includes(kw.toLowerCase())) score += 5;
+        const kwLower = kw.toLowerCase();
+        if (expLower.includes(kwLower)) {
+          score += 5;
+        } else if (kw.length >= 4 && expLower.includes(kwLower.slice(0, Math.max(3, Math.floor(kw.length * 0.6))))) {
+          score += 2;
+        }
       }
     }
     // L3: 关键词命中契约中的 API 描述也加分
@@ -368,6 +385,17 @@ export async function findRelevantCode(
               // 给相关模块的文件额外加分（在后续遍历中处理）
             }
           }
+        }
+      }
+    }
+
+    // P1: Import 依赖传播 — 如果 A 被命中，import A 的 B 也加分
+    // P2: 模块邻近度 — 同模块文件加分
+    if (score > 0) {
+      // 模块邻近度：同模块文件加 3 分
+      for (const other of filesToSearch) {
+        if (other.path !== f.path && other.module === f.module && other.endpoint === f.endpoint) {
+          // 标记：后续遍历中处理
         }
       }
     }
@@ -396,6 +424,42 @@ export async function findRelevantCode(
       const bonus = bonusScores.get(s.file.path);
       if (bonus) s.score += bonus;
     }
+  }
+
+  // P1: Import 依赖传播 — 如果 A 被命中，import A 的 B 也加分
+  const importBonus = new Map<string, number>();
+  for (const s of scored) {
+    const matchedPath = s.file.path;
+    for (const other of filesToSearch) {
+      if (other.path === matchedPath) continue;
+      // 检查 other 是否 import 了 matchedPath
+      const matchedBasename = matchedPath.replace(/\.[^.]+$/, '').replace(/.*[\/\\]/, '');
+      if (other.imports.some(imp => imp.includes(matchedBasename) || imp.includes(matchedPath))) {
+        importBonus.set(other.path, (importBonus.get(other.path) || 0) + 8);
+      }
+    }
+  }
+  for (const s of scored) {
+    const bonus = importBonus.get(s.file.path);
+    if (bonus) s.score += bonus;
+  }
+
+  // P2: 模块邻近度 — 同模块文件加分
+  const moduleBonus = new Map<string, number>();
+  const scoredModules = new Set(scored.map(s => `${s.file.endpoint}:${s.file.module}`));
+  for (const f of filesToSearch) {
+    const modKey = `${f.endpoint}:${f.module}`;
+    if (scoredModules.has(modKey)) {
+      const alreadyScored = scored.some(s => s.file.path === f.path);
+      if (!alreadyScored) {
+        moduleBonus.set(f.path, 3);
+      }
+    }
+  }
+  // 把模块邻近度加到已有评分文件
+  for (const s of scored) {
+    const bonus = moduleBonus.get(s.file.path);
+    if (bonus) s.score += bonus;
   }
 
   // ── L2: 端配额 — 每端最多占 limit 的 40%，保证多端多样性 ──
@@ -656,13 +720,21 @@ function extractKeywords(text: string): string[] {
   const en = text.match(/\b[a-zA-Z]{3,}\b/g) || [];
   keywords.push(...en);
 
+  // 复合短语提取："用户管理" "订单创建" 等 2-4 字中文组合
+  const cnPhrases = text.match(/[\u4e00-\u9fa5]{2,6}/g) || [];
+  keywords.push(...cnPhrases);
+
+  // CamelCase / snake_case 拆分：userService → [user, Service]
+  const camelParts = text.match(/[a-z]+|[A-Z][a-z]*/g) || [];
+  keywords.push(...camelParts.filter(p => p.length >= 3));
+
   // 停用词过滤
   const filtered = [...new Set(keywords)].filter(k => !STOP_WORDS.has(k.toLowerCase()));
 
   // 语义扩展
   const expanded = expandKeywords(filtered);
 
-  return expanded.slice(0, 20);
+  return expanded.slice(0, 30);
 }
 
 /**
