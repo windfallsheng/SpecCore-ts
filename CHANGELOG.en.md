@@ -2,6 +2,19 @@
 
 ---
 
+## v5.98.0 (2026-08-14) — Phase 1 Platform Type Auto-Detection + Platform-Specific Professional Dimensions
+
+- Phase 1 Prompt adds platform type identification rules (Backend/Web Admin/Mobile H5/Mini Program/Native App)
+- Common 10 dimensions + platform-specific dimensions layered design
+- Backend: database design, caching, concurrency, message queues, logging/monitoring
+- Web Admin: complex components, permission UI, data visualization, accessibility
+- Mobile H5: viewport adaptation, touch interaction, first-screen performance, weak network optimization
+- Mini Program: package size constraints, platform APIs, rendering limitations, sub-package strategy
+- Native App: native bridge, push notifications, offline capability, app store compliance
+- Output format adds Chapter 11 "Platform-Specific Professional Dimensions"
+
+---
+
 ## v5.97.0 (2026-08-14) — Synthesize Three-Phase Prompts Upgraded to Professional-Grade
 
 - **Phase 1 Per-Platform Analysis**: Upgraded from 5 items to 10 dimensions (feature list + user stories, API specs, data model, business rules, security analysis, performance characteristics, error handling, testing strategy, third-party dependencies, cross-platform associations)
