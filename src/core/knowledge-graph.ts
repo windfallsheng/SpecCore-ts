@@ -39,7 +39,7 @@ export interface KnowledgeGraph {
 
 export interface GraphEntity {
   id: string;
-  type: 'requirement' | 'spec' | 'task' | 'subtask' | 'user-file';
+  type: 'requirement' | 'spec' | 'task' | 'subtask' | 'user-file' | 'source-file';
   title: string;
   file: string;           // 相对路径
   hash: string;           // 内容 hash（用于衰减检测）
@@ -48,12 +48,19 @@ export interface GraphEntity {
   platform?: string;      // 子任务所属端
   parentTaskId?: string;  // 子任务的父任务 ID
   tags?: string[];        // 标签
+  // source-file 专属
+  endpoint?: string;      // 所属端: frontend/backend/mobile/cli/shared
+  module?: string;        // 所属模块
+  language?: string;      // 编程语言
+  exports?: string[];     // 导出的类/函数名
+  imports?: string[];     // 导入的模块
+  apis?: string[];        // API 路径
 }
 
 export interface GraphRelation {
   from: string;
   to: string;
-  type: 'implements' | 'specifies' | 'subtask_of' | 'depends_on' | 'references';
+  type: 'implements' | 'specifies' | 'subtask_of' | 'depends_on' | 'references' | 'imports' | 'module_depends' | 'co_changes';
 }
 
 export interface GraphStats {
@@ -62,6 +69,7 @@ export interface GraphStats {
   tasks: number;
   subtasks: number;
   userFiles: number;
+  sourceFiles: number;
   relations: number;
 }
 
@@ -487,6 +495,130 @@ async function scanUserFiles(iterDir: string): Promise<GraphEntity[]> {
 }
 
 // ═══════════════════════════════════════════════
+// 源码文件扫描（从 code-index 缓存读取）
+// ═══════════════════════════════════════════════
+
+async function scanSourceFiles(cwd: string): Promise<{ entities: GraphEntity[]; relations: GraphRelation[] }> {
+  const entities: GraphEntity[] = [];
+  const relations: GraphRelation[] = [];
+
+  // 从 code-index 缓存读取
+  const indexPath = join(cwd, '.speccore', 'cache', 'code-structure.json');
+  if (!(await pathExists(indexPath))) return { entities, relations };
+
+  try {
+    const index = JSON.parse(await readFile(indexPath, 'utf-8'));
+    const files: any[] = index.files || [];
+
+    // 只取核心文件（每个模块 top 3）
+    const moduleGroups = new Map<string, any[]>();
+    for (const f of files) {
+      const key = `${f.endpoint || 'common'}:${f.module || 'root'}`;
+      if (!moduleGroups.has(key)) moduleGroups.set(key, []);
+      moduleGroups.get(key)!.push(f);
+    }
+
+    const coreFiles: any[] = [];
+    for (const group of moduleGroups.values()) {
+      group.sort((a: any, b: any) => (b.exports?.length || 0) - (a.exports?.length || 0));
+      coreFiles.push(...group.slice(0, 3));
+    }
+
+    // 限制总数，避免图谱过大
+    const maxFiles = Math.min(coreFiles.length, 50);
+    const selectedFiles = coreFiles.slice(0, maxFiles);
+
+    for (const f of selectedFiles) {
+      const id = `SRC:${f.path.replace(/\//g, '-').replace(/\.[^.]+$/, '')}`;
+      entities.push({
+        id,
+        type: 'source-file',
+        title: f.path.split('/').pop() || f.path,
+        file: f.path,
+        hash: '',
+        mtime: new Date(f.lastModified || 0).toISOString(),
+        endpoint: f.endpoint || 'common',
+        module: f.module || 'root',
+        language: f.language || 'unknown',
+        exports: (f.exports || []).slice(0, 10),
+        imports: (f.imports || []).slice(0, 15),
+        apis: f.apis || [],
+        tags: ['source', f.endpoint || 'common', f.module || 'root'],
+      });
+    }
+
+    // 构建 import 关系
+    const entityMap = new Map(entities.map(e => [e.id, e]));
+    for (const f of selectedFiles) {
+      const fromId = `SRC:${f.path.replace(/\//g, '-').replace(/\.[^.]+$/, '')}`;
+      for (const imp of (f.imports || [])) {
+        // 查找被 import 的文件
+        const impBasename = imp.replace(/\.[^.]+$/, '').replace(/.*[\/\\]/, '');
+        for (const other of selectedFiles) {
+          if (other.path === f.path) continue;
+          const otherBasename = other.path.replace(/\.[^.]+$/, '').replace(/.*[\/\\]/, '');
+          if (imp.includes(otherBasename) || imp.includes(other.path)) {
+            const toId = `SRC:${other.path.replace(/\//g, '-').replace(/\.[^.]+$/, '')}`;
+            if (entityMap.has(toId) && !relations.some(r => r.from === fromId && r.to === toId && r.type === 'imports')) {
+              relations.push({ from: fromId, to: toId, type: 'imports' });
+            }
+          }
+        }
+      }
+    }
+
+    // 构建模块依赖关系
+    const moduleDeps = new Map<string, Set<string>>();
+    for (const f of selectedFiles) {
+      const fromMod = `${f.endpoint || 'common'}:${f.module || 'root'}`;
+      for (const imp of (f.imports || [])) {
+        for (const other of selectedFiles) {
+          if (other.path === f.path) continue;
+          const otherBasename = other.path.replace(/\.[^.]+$/, '').replace(/.*[\/\\]/, '');
+          if (imp.includes(otherBasename)) {
+            const toMod = `${other.endpoint || 'common'}:${other.module || 'root'}`;
+            if (toMod !== fromMod) {
+              if (!moduleDeps.has(fromMod)) moduleDeps.set(fromMod, new Set());
+              moduleDeps.get(fromMod)!.add(toMod);
+            }
+          }
+        }
+      }
+    }
+
+    // 添加模块依赖关系（用模块名作为虚拟节点）
+    for (const [fromMod, toMods] of moduleDeps) {
+      for (const toMod of toMods) {
+        if (!relations.some(r => r.from === fromMod && r.to === toMod && r.type === 'module_depends')) {
+          relations.push({ from: fromMod, to: toMod, type: 'module_depends' });
+        }
+      }
+    }
+
+    // 构建 Git 共变关系
+    const correlations: any[] = index.correlations || [];
+    for (const corr of correlations) {
+      const filesInCorr = corr.files || [];
+      for (let i = 0; i < filesInCorr.length; i++) {
+        for (let j = i + 1; j < filesInCorr.length; j++) {
+          const fromId = `SRC:${filesInCorr[i].replace(/\//g, '-').replace(/\.[^.]+$/, '')}`;
+          const toId = `SRC:${filesInCorr[j].replace(/\//g, '-').replace(/\.[^.]+$/, '')}`;
+          if (entityMap.has(fromId) && entityMap.has(toId)) {
+            if (!relations.some(r => r.from === fromId && r.to === toId && r.type === 'co_changes')) {
+              relations.push({ from: fromId, to: toId, type: 'co_changes' });
+            }
+          }
+        }
+      }
+    }
+  } catch {
+    // 索引不存在或解析失败，跳过
+  }
+
+  return { entities, relations };
+}
+
+// ═══════════════════════════════════════════════
 // 关联推断
 // ═══════════════════════════════════════════════
 
@@ -619,7 +751,7 @@ export async function buildKnowledgeGraph(
     iteration: iterName,
     entities: {},
     relations: [],
-    stats: { requirements: 0, specs: 0, tasks: 0, subtasks: 0, userFiles: 0, relations: 0 },
+    stats: { requirements: 0, specs: 0, tasks: 0, subtasks: 0, userFiles: 0, sourceFiles: 0, relations: 0 },
   };
 
   if (!iterDir || !(await pathExists(iterDir))) return graph;
@@ -629,6 +761,7 @@ export async function buildKnowledgeGraph(
   const specResult = await scanSpecs(iterDir);
   const taskResult = await scanTasks(iterDir);
   const userFiles = await scanUserFiles(iterDir);
+  const sourceResult = await scanSourceFiles(cwd);
 
   // 合并实体（处理 ID 冲突：同名实体用路径前缀去重）
   const allEntities = [
@@ -636,6 +769,7 @@ export async function buildKnowledgeGraph(
     ...specResult.entities,
     ...taskResult.entities,
     ...userFiles,
+    ...sourceResult.entities,
   ];
 
   const idRemap = new Map<string, string>();
@@ -661,6 +795,7 @@ export async function buildKnowledgeGraph(
     ...reqResult.relations,
     ...specResult.relations,
     ...taskResult.relations,
+    ...sourceResult.relations,
     ...(await inferRelations(allEntities, iterDir)),
   ];
 
@@ -671,6 +806,7 @@ export async function buildKnowledgeGraph(
     tasks: taskResult.entities.filter(e => e.type === 'task').length,
     subtasks: taskResult.entities.filter(e => e.type === 'subtask').length,
     userFiles: userFiles.length,
+    sourceFiles: sourceResult.entities.length,
     relations: graph.relations.length,
   };
 
