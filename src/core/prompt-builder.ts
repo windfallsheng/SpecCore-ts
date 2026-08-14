@@ -293,6 +293,18 @@ const FILE_DESC: Record<string, string> = {
   'ARCHITECTURE.md': '全量系统架构',
   'TECH_FULL.md': '全量技术方案',
   'CROSS_PLATFORM.md': '跨端业务关系',
+  'CODE_INDEX.md': '代码路径索引',
+  'GLOSSARY.md': '术语定义表',
+  'OVERVIEW.md': '项目全景描述',
+  'TECH_STACK.md': '技术栈配置',
+  'CHANGELOG.md': '变更历史',
+  'PROTOTYPE_INDEX.md': '原型索引',
+};
+
+/** 规则文件描述 */
+const RULES_DESC: Record<string, string> = {
+  'CODE_REVIEW.md': '代码审查规则',
+  'POST_COMPLETION.md': '任务完成检查清单',
 };
 
 /**
@@ -314,6 +326,7 @@ function extractHeadings(content: string): string[] {
  */
 async function buildGlobalTOC(globalDir: string): Promise<TOCEntry[]> {
   const toc: TOCEntry[] = [];
+  const speccoreDir = join(globalDir, '..'); // .speccore/
 
   // 1. synthesis/ 下的综合文档
   const synthesisDir = join(globalDir, 'synthesis');
@@ -348,6 +361,75 @@ async function buildGlobalTOC(globalDir: string): Promise<TOCEntry[]> {
     }
   }
 
+  // 3. PROJECTS/ 下各工程文档
+  const projectsDir = join(globalDir, 'PROJECTS');
+  if (await pathExists(projectsDir)) {
+    const entries = await readdir(projectsDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith('_')) continue;
+      const projectName = entry.name;
+      const subFiles = await readdir(join(projectsDir, projectName));
+      for (const f of subFiles.filter(f => f.endsWith('.md') && !isTimestampBackup(f))) {
+        const content = await readFile(join(projectsDir, projectName, f), 'utf-8');
+        toc.push({
+          path: `PROJECTS/${projectName}/${f}`,
+          description: `${projectName} — ${f.replace('.md', '')}`,
+          sections: extractHeadings(content),
+        });
+      }
+    }
+  }
+
+  // 4. GLOBAL/ 下扁平文件（排除 INDEX.md 和已有子目录的文件）
+  const globalFiles = await readdir(globalDir);
+  for (const f of globalFiles.filter(f => {
+    if (!f.endsWith('.md') || isTimestampBackup(f)) return false;
+    if (f === 'INDEX.md') return false; // 必读，已单独注入
+    return true;
+  })) {
+    const content = await readFile(join(globalDir, f), 'utf-8');
+    toc.push({
+      path: `GLOBAL:${f}`,
+      description: FILE_DESC[f] || f.replace('.md', ''),
+      sections: extractHeadings(content),
+    });
+  }
+
+  // 5. PATTERNS/TEMPLATES/ 写作模板
+  const patternsDir = join(speccoreDir, 'PATTERNS', 'TEMPLATES');
+  if (await pathExists(patternsDir)) {
+    const scanPatterns = async (dir: string, prefix: string) => {
+      const entries = await readdir(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          await scanPatterns(join(dir, entry.name), `${prefix}${entry.name}/`);
+        } else if (entry.name.endsWith('.md')) {
+          const content = await readFile(join(dir, entry.name), 'utf-8');
+          toc.push({
+            path: `PATTERNS:${prefix}${entry.name}`,
+            description: entry.name.replace('-template.md', '').toUpperCase() + ' 写作模板',
+            sections: extractHeadings(content).slice(0, 6), // 模板章节多，只取前 6
+          });
+        }
+      }
+    };
+    await scanPatterns(patternsDir, '');
+  }
+
+  // 6. RULES/ 规则文件
+  const rulesDir = join(speccoreDir, 'RULES');
+  if (await pathExists(rulesDir)) {
+    const files = await readdir(rulesDir);
+    for (const f of files.filter(f => f.endsWith('.md') && !isTimestampBackup(f))) {
+      const content = await readFile(join(rulesDir, f), 'utf-8');
+      toc.push({
+        path: `RULES:${f}`,
+        description: RULES_DESC[f] || f.replace('.md', ''),
+        sections: extractHeadings(content),
+      });
+    }
+  }
+
   return toc;
 }
 
@@ -376,6 +458,88 @@ export async function loadGlobalContext(
   ctx.toc = await buildGlobalTOC(globalDir);
 
   return ctx;
+}
+
+/**
+ * 格式化全局上下文为 Markdown 字符串（供 formatPrompt 和 split.ts 共用）
+ */
+export function formatGlobalContext(ctx: GlobalContext, platform?: string): string {
+  const lines: string[] = [];
+
+  lines.push('## 🌐 全局知识库');
+  lines.push('> 以下信息来自项目全局知识库。必读内容已注入，其余文件请按需自行 Read。\n');
+
+  if (ctx.indexSummary) {
+    lines.push('### 📌 必读（已注入）');
+    lines.push(ctx.indexSummary);
+    lines.push('');
+  }
+
+  if (ctx.toc.length > 0) {
+    lines.push('### 📂 可选参考（按需 Read）');
+    if (platform) {
+      lines.push(`> 当前任务涉及 **${platform}** 端，建议优先参考该端文档\n`);
+    }
+
+    const groups: { label: string; prefix: string; basePath: string }[] = [
+      { label: '**📚 跨端综合文档**', prefix: 'synthesis/', basePath: '.speccore/GLOBAL/synthesis/' },
+      { label: '**📱 各端分析文档**', prefix: 'platforms/', basePath: '.speccore/GLOBAL/platforms/' },
+      { label: '**🏗 工程级文档**', prefix: 'PROJECTS/', basePath: '.speccore/GLOBAL/PROJECTS/' },
+      { label: '**📖 参考文档**', prefix: 'GLOBAL:', basePath: '.speccore/GLOBAL/' },
+      { label: '**✏️ 写作模板**', prefix: 'PATTERNS:', basePath: '.speccore/PATTERNS/' },
+      { label: '**📏 规则与检查清单**', prefix: 'RULES:', basePath: '.speccore/RULES/' },
+    ];
+
+    for (const group of groups) {
+      const entries = ctx.toc.filter(e => e.path.startsWith(group.prefix));
+      if (entries.length === 0) continue;
+
+      lines.push(group.label + ` (${group.basePath})`);
+
+      // 特殊提示
+      if (group.prefix === 'PATTERNS:') {
+        lines.push('> 写 Spec 文档时可参考模板格式\n');
+      }
+
+      // 需要按子目录分组的（platforms, PROJECTS）
+      if (group.prefix === 'platforms/' || group.prefix === 'PROJECTS/') {
+        const bySub = new Map<string, TOCEntry[]>();
+        for (const e of entries) {
+          const sub = e.path.split('/')[1];
+          if (!bySub.has(sub)) bySub.set(sub, []);
+          bySub.get(sub)!.push(e);
+        }
+        for (const [sub, subEntries] of bySub) {
+          const marker = group.prefix === 'platforms/' && sub === platform ? ' ⬅ 当前端' : '';
+          lines.push(`📂 ${sub}/${marker}`);
+          for (const e of subEntries) {
+            lines.push(`  - \`${e.path}\` — ${e.description}`);
+            if (e.sections.length > 0) {
+              lines.push(`    章节: ${e.sections.slice(0, 8).join(' | ')}`);
+            }
+          }
+        }
+      } else {
+        for (const e of entries) {
+          const displayPath = e.path.replace(/^(GLOBAL:|PATTERNS:|RULES:)/, '');
+          lines.push(`- \`${displayPath}\` — ${e.description}`);
+          if (e.sections.length > 0) {
+            lines.push(`  章节: ${e.sections.slice(0, 6).join(' | ')}`);
+          }
+        }
+      }
+      lines.push('');
+    }
+
+    lines.push('### 💡 使用方式');
+    lines.push('- GLOBAL/ 下的文件：路径相对于 `.speccore/GLOBAL/`');
+    lines.push('- PATTERNS/ 下的文件：路径相对于 `.speccore/PATTERNS/`');
+    lines.push('- RULES/ 下的文件：路径相对于 `.speccore/RULES/`');
+    lines.push('- 建议根据当前任务需要选择性阅读，不必全部读取');
+    lines.push('');
+  }
+
+  return lines.join('\n');
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -707,67 +871,8 @@ export function formatPrompt(prompt: SpecCorePrompt): string {
 
   // 全局上下文（从 GLOBAL 层智能注入）
   if (prompt.globalContext) {
-    const gc = prompt.globalContext;
-    lines.push('## 🌐 全局知识库');
-    lines.push('> 以下信息来自项目全局知识库。必读内容已注入，其余文件请按需自行 Read。\n');
-
-    // 必读：INDEX.md
-    if (gc.indexSummary) {
-      lines.push('### 📌 必读（已注入）');
-      lines.push(gc.indexSummary);
-      lines.push('');
-    }
-
-    // 可选：TOC 目录
-    if (gc.toc.length > 0) {
-      lines.push('### 📂 可选参考（按需 Read）');
-      if (prompt.platform) {
-        lines.push(`> 当前任务涉及 **${prompt.platform}** 端，建议优先参考该端文档\n`);
-      }
-
-      // 按目录分组
-      const synthesisEntries = gc.toc.filter(e => e.path.startsWith('synthesis/'));
-      const platformEntries = gc.toc.filter(e => e.path.startsWith('platforms/'));
-
-      if (synthesisEntries.length > 0) {
-        lines.push('**全局综合文档** (.speccore/GLOBAL/)');
-        for (const e of synthesisEntries) {
-          lines.push(`- \`${e.path}\` — ${e.description}`);
-          if (e.sections.length > 0) {
-            lines.push(`  章节: ${e.sections.join(' | ')}`);
-          }
-        }
-        lines.push('');
-      }
-
-      if (platformEntries.length > 0) {
-        lines.push('**各端分析文档** (.speccore/GLOBAL/)');
-        // 按端分组
-        const byPlatform = new Map<string, TOCEntry[]>();
-        for (const e of platformEntries) {
-          const plat = e.path.split('/')[1]; // platforms/{plat}/...
-          if (!byPlatform.has(plat)) byPlatform.set(plat, []);
-          byPlatform.get(plat)!.push(e);
-        }
-        for (const [plat, entries] of byPlatform) {
-          const marker = plat === prompt.platform ? ' ⬅ 当前端' : '';
-          lines.push(`📂 ${plat}/${marker}`);
-          for (const e of entries) {
-            lines.push(`  - \`${e.path}\` — ${e.description}`);
-            if (e.sections.length > 0) {
-              lines.push(`    章节: ${e.sections.slice(0, 8).join(' | ')}`);
-            }
-          }
-        }
-        lines.push('');
-      }
-
-      // 指示 AI 可以自行 Read
-      lines.push('### 💡 使用方式');
-      lines.push('以上文件均可通过 Read 工具直接读取（路径相对于 `.speccore/GLOBAL/`）。');
-      lines.push('建议根据当前任务需要选择性阅读，不必全部读取。');
-      lines.push('');
-    }
+    lines.push(formatGlobalContext(prompt.globalContext, prompt.platform));
+    lines.push('');
   }
 
   // 输出格式提示
