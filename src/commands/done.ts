@@ -97,8 +97,9 @@ async function interactiveDoneFlow(
     logger.info(`\n📋 即将收尾: ${taskId} (迭代: ${iteration})\n`);
     logger.info('   1. validate  — 规范合规校验');
     logger.info('   2. archive   — 任务归档');
-    logger.info('   3. sync      — 同步到全局层');
-    logger.info('   4. audit     — 生成审计摘要');
+    logger.info('   3. merge     — 新增需求合并回原文档');
+    logger.info('   4. sync      — 同步到全局层');
+    logger.info('   5. audit     — 生成审计摘要');
 
     const ans = await ask('\n跳过？ [0]全部 [1]跳过校验 [2]跳过同步 [3]都跳过: ');
     if (ans === '1') skipValidate = true;
@@ -138,7 +139,7 @@ async function doDone(
   }
 
   spinner.stop();
-  logger.info('   2/4 归档...');
+  logger.info('   2/5 归档...');
   try {
     execSync(`speccore archive --task=${taskId} --iteration=${iteration}`, { stdio: 'pipe' });
     steps.push({ ok: true, step: 'archive' });
@@ -150,9 +151,27 @@ async function doDone(
   spinner = new Spinner(`正在收尾 ${taskId}`);
   spinner.start();
 
+  // ── 2.5 新增需求合并回原文档 ──
+  spinner.stop();
+  logger.info('   3/5 新增需求合并...');
+  try {
+    const { mergeNewRequirementsOnArchive } = await import('../core/spec-merger');
+    const mergeResult = await mergeNewRequirementsOnArchive(iterDir);
+    if (mergeResult.filesUpdated > 0) {
+      steps.push({ ok: true, step: 'merge-requirements' });
+      logger.info(`     ✅ 已合并 ${mergeResult.filesUpdated} 个新增需求到原文档`);
+    } else {
+      logger.info('     ℹ️️ 无新增需求需合并');
+    }
+  } catch (e) {
+    logger.debug('新增需求合并失败（非关键）:', e);
+  }
+  spinner = new Spinner(`正在收尾 ${taskId}`);
+  spinner.start();
+
   if (!options.skipSync) {
     spinner.stop();
-    logger.info('   3/4 同步到全局...');
+    logger.info('   4/5 同步到全局...');
     try {
       execSync(`speccore sync-global --iteration=${iteration} --direction=to_global`, { stdio: 'pipe' });
       steps.push({ ok: true, step: 'sync-global' });
@@ -166,7 +185,7 @@ async function doDone(
   }
 
   spinner.stop();
-  logger.info('   4/4 生成摘要...');
+  logger.info('   5/5 生成摘要...');
   try {
     execSync(`speccore audit --detail --iteration=${iteration}`, { stdio: 'pipe', encoding: 'utf-8' });
     logger.info('     ✅ 审计完成');
