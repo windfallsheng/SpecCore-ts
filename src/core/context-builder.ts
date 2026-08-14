@@ -74,10 +74,10 @@ export function buildContextMarkdown(
           const subtaskStr = subtasks.length > 0
             ? subtasks.map(s => `${s.platform || '?'}(${s.id.slice(-4)}) ${statusEmoji(s.status)}`).join(' · ')
             : '—';
-          lines.push(`| ${req.id} ${req.title} | ${task.id} | ${statusEmoji(task.status)} ${statusLabel(task.status)} | ${subtaskStr} |`);
+          lines.push(`| ${req.title} | ${task.title || task.id} | ${statusEmoji(task.status)} ${statusLabel(task.status)} | ${subtaskStr} |`);
         }
       } else {
-        lines.push(`| ${req.id} ${req.title} | — | — | — |`);
+        lines.push(`| ${req.title} | — | — | — |`);
       }
     }
 
@@ -89,7 +89,7 @@ export function buildContextMarkdown(
       const subtaskStr = subtasks.length > 0
         ? subtasks.map(s => `${s.platform || '?'}(${s.id.slice(-4)}) ${statusEmoji(s.status)}`).join(' · ')
         : '—';
-      lines.push(`| — | ${task.id} ${task.title} | ${statusEmoji(task.status)} ${statusLabel(task.status)} | ${subtaskStr} |`);
+      lines.push(`| — | ${task.title || task.id} | ${statusEmoji(task.status)} ${statusLabel(task.status)} | ${subtaskStr} |`);
     }
 
     lines.push('');
