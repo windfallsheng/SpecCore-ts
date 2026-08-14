@@ -27,6 +27,12 @@
   - 每片包含：JSDoc 注释 + 签名 + 前 50 行实现
   - 轻量级正则分片，不需要 AST 解析器
   - 相关性评分：名称命中 +5 分，路径/签名/注释匹配 +1 分
+- **RAG 索引 CLI 命令**: `speccore rag-index`（新增）
+  - `speccore rag-index` — 显示当前索引状态（文件列表、块数、新鲜度）
+  - `speccore rag-index --refresh --task Task-001` — 增量刷新（只重建变更文件）
+  - `speccore rag-index --full --task Task-001` — 全量重建（删除旧索引重新扫描）
+  - 状态检测：过期文件标 ⚠️，新鲜文件标 ✅
+  - 解决用户手动修改文档后无法刷新索引的问题
 
 ### 代码索引智能增强（P0-1 ~ P0-3）
 
