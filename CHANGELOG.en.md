@@ -2,6 +2,15 @@
 
 ---
 
+## v6.5.1 (2026-08-14) — Auto Knowledge Graph Update
+
+- **Lazy loading**: prompt-builder auto-detects stale graph and rebuilds on-the-fly
+- **Staleness check**: `isGraphStale()` compares graph generation time vs directory mtime
+- **Auto refresh**: `refreshKnowledgeGraph()` silently rebuilds without blocking main flow
+- After users create tasks/update docs, next execute automatically sees updated context chain
+
+---
+
 ## v6.5.0 (2026-08-14) — Knowledge Graph + Decay Detection + AI Context Chain
 
 - **New `knowledge-graph.ts`**: Knowledge graph builder
