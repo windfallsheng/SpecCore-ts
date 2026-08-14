@@ -64,14 +64,14 @@ export interface AskResult {
 const COMMAND_KB: CommandKnowledge[] = [
   { name: 'init', aliases: ['in'], description: '初始化 SpecCore 项目，创建 .speccore 目录和配置',
     usage: 'speccore init [--interactive] [--name <name>]', examples: ['speccore init', 'speccore init --name my-project'], related: ['dev', 'config'], triggers: ['初始化', 'init', '开始', '新建项目', '创建项目'] },
-  { name: 'doc2spec', aliases: ['d2s'], description: '导入 PRD/Word 文档，AI + Pandoc 双路转换为 SpecCore MD',
-    usage: 'speccore doc2spec -f <file> --iter <iteration> [--task <task>] [--no-ai]', examples: ['speccore doc2spec -f PRD.docx --iter Q3', 'speccore doc2spec -f 需求.docx --iter Q2 --task T-01 --no-ai'], related: ['spec2doc', 'analyze'], triggers: ['导入', 'doc2spec', 'word转', '文档转换', 'PRD', '需求文档'] },
+  { name: 'doc2spec', aliases: ['d2s'], description: '导入 PRD/Word 文档，AI + Pandoc 双路转换为 SpecCore MD。--classify 智能分类 sources/ 文档到 staging/（按类型提取 feature/bug/refactor/research）',
+    usage: 'speccore doc2spec -f <file> --iter <iteration> [--task <task>] [--no-ai] [--classify [--prompt] [--response <json>]]', examples: ['speccore doc2spec -f PRD.docx --iter Q3', 'speccore doc2spec -f 需求.docx --iter Q2 --task T-01 --no-ai', 'speccore doc2spec --classify --prompt -I Q3', 'speccore doc2spec --classify -I Q3'], related: ['spec2doc', 'analyze'], triggers: ['导入', 'doc2spec', 'word转', '文档转换', 'PRD', '需求文档', '智能分类', 'classify', '分类文档', '提取需求'] },
   { name: 'spec2doc', aliases: ['s2d'], description: 'SpecCore MD 导出为 Word/PDF/HTML/PPTX',
     usage: 'speccore spec2doc [-i <iteration>] [-t <task>] [-f <format>] [-o <output>]', examples: ['speccore spec2doc -i Q3 -o 需求.docx', 'speccore spec2doc -t T-01 -f html'], related: ['doc2spec'], triggers: ['导出', 'spec2doc', '生成文档', '导出word', '导出pdf'] },
   { name: 'dashboard', aliases: ['db', 'sp'], description: '项目仪表盘：迭代状态/进度/健康度，--scope global 全量视图',
     usage: 'speccore dashboard [--scope global|iteration] [--export html] [--health] [--lifecycle]', examples: ['speccore dashboard', 'speccore dashboard --scope global --export html'], related: ['analyze', 'health'], triggers: ['看板', '仪表盘', 'dashboard', '进度', '状态', '全局', '全量'] },
-  { name: 'analyze', aliases: ['al'], description: 'AI 统一分析：需求文档+源码→分析报告，默认读源码，--no-source 跳过，--source-scope 指定目录，--supplement 追加源码',
-    usage: 'speccore analyze [--task <id>] [--iteration <name>] [--audit] [--with-code] [--no-source] [--source-scope <dirs>] [--supplement] [--scope global]', examples: ['speccore analyze', 'speccore analyze --with-code', 'speccore analyze --no-source', 'speccore analyze --source-scope src/commands,src/core', 'speccore analyze --supplement', 'speccore analyze --supplement --source-scope src/core'], related: ['dashboard', 'validate', 'code-index'], triggers: ['分析', 'analyze', '审计', 'audit', '检查', '结合源码', '连代码', '带代码', '源码分析', '全局分析', '分析全局', '倒推需求', '反推', '从代码生成', '分析代码', '不读源码', '不读代码', '跳过源码', '指定目录分析', '只扫描', '补充分析', '追加分析', '补充源码', '追加源码', '遗漏', '没分析到', '没覆盖', '漏掉', '再分析', '多读几个'] },
+  { name: 'analyze', aliases: ['al'], description: 'AI 统一分析：需求文档+源码→分析报告。支持 --feature 局部分析功能模块，--doc 局部分析类型文档（bugs/refactors/research），--no-source 跳过源码，--supplement 追加源码',
+    usage: 'speccore analyze [--task <id>] [--iteration <name>] [--feature <module>] [--doc <type/slug>] [--with-code] [--no-source] [--source-scope <dirs>] [--supplement] [--scope global]', examples: ['speccore analyze', 'speccore analyze --feature 支付模块', 'speccore analyze --doc bugs/login-timeout', 'speccore analyze --doc refactors/db-pool', 'speccore analyze --with-code', 'speccore analyze --supplement --source-scope src/core'], related: ['dashboard', 'validate', 'code-index', 'refresh'], triggers: ['分析', 'analyze', '审计', 'audit', '检查', '结合源码', '连代码', '带代码', '源码分析', '全局分析', '分析全局', '倒推需求', '反推', '从代码生成', '分析代码', '不读源码', '不读代码', '跳过源码', '指定目录分析', '只扫描', '补充分析', '追加分析', '补充源码', '追加源码', '遗漏', '没分析到', '没覆盖', '漏掉', '再分析', '多读几个', '局部分析', '单个模块', '单独分析', 'bug分析', '重构分析'] },
   { name: 'code-index', aliases: ['ci', 'idx'], description: '源码索引：扫描项目代码，自动识别多端/模块/依赖，生成 Markdown 索引',
     usage: 'speccore code-index [--full] [--scope <dirs>] [--show]', examples: ['speccore code-index', 'speccore code-index --full', 'speccore code-index --scope src/commands,src/core', 'speccore code-index --show'], related: ['analyze', 'dev'], triggers: ['代码索引', '源码索引', 'code-index', '索引', '建索引', '更新索引', '扫描代码', '代码结构', '模块索引', '项目结构'] },
   { name: 'execute', aliases: ['ex'], description: '执行开发任务：依赖排序+分批+交互引导+计划联动',
@@ -118,6 +118,10 @@ const COMMAND_KB: CommandKnowledge[] = [
     usage: 'speccore help', examples: ['speccore help'], related: ['welcome', 'about', 'dashboard'], triggers: ['帮助', 'help', '怎么用', '命令列表', '所有命令', '功能介绍'] },
   { name: 'about', aliases: ['ab'], description: '关于页：SpecCore 理念 + 方法论 + 版本信息（HTML 页面）',
     usage: 'speccore about', examples: ['speccore about'], related: ['welcome', 'help'], triggers: ['关于', 'about', '版本', '理念', '方法论', 'SDD', '是什么'] },
+  { name: 'refresh', aliases: ['rf'], description: '统一刷新所有检索层：代码索引 + 文档RAG + 知识图谱。支持 --code/--rag/--graph 单独刷新',
+    usage: 'speccore refresh [--code] [--rag] [--graph] [--task <id>]', examples: ['speccore refresh', 'speccore refresh --code', 'speccore refresh --rag --graph'], related: ['reindex', 'analyze', 'code-index'], triggers: ['刷新', 'refresh', '更新索引', '刷新索引', '索引过期', '索引过时', '重建索引'] },
+  { name: 'reindex', aliases: ['ri'], description: '全量重建所有层级索引 + 知识图谱 + 衰减检测。--check 只检查不修复',
+    usage: 'speccore reindex [--check]', examples: ['speccore reindex', 'speccore reindex --check'], related: ['refresh', 'validate'], triggers: ['重建', 'reindex', '全量重建', '重建图谱', '重建索引', '索引不一致', '死链'] },
 ];
 
 // ============================================================
@@ -133,6 +137,8 @@ const SYNONYM_MAP: Record<string, string> = {
   // ── analyze ──
   '审计': 'analyze', '代码审计': 'analyze', '代码检查': 'analyze',
   '质量检查': 'analyze', '风险评估': 'analyze',
+  '局部分析': 'analyze', '单个模块': 'analyze', '单独分析': 'analyze',
+  'bug分析': 'analyze', '重构分析': 'analyze',
   // ── execute ──
   '开始做': 'execute', '干活': 'execute', '开工': 'execute',
   '跑任务': 'execute', '开发任务': 'execute',
@@ -148,6 +154,9 @@ const SYNONYM_MAP: Record<string, string> = {
   '收尾': 'done', '归档': 'done', '完结': 'done',
   // ── init ──
   '建项目': 'init', '项目初始化': 'init',
+  // ── doc2spec ──
+  '智能分类': 'doc2spec', '分类文档': 'doc2spec', '提取需求': 'doc2spec',
+  'classify': 'doc2spec', '导入文档': 'doc2spec',
   // ── search ──
   '找': 'search', '查找': 'search', '全文搜索': 'search',
   // ── track ──
@@ -168,6 +177,10 @@ const SYNONYM_MAP: Record<string, string> = {
   'sprint': 'iteration',
   // ── dev ──
   '流水线': 'dev', '全自动': 'dev',
+  // ── refresh ──
+  '刷新': 'refresh', '更新索引': 'refresh', '刷新索引': 'refresh', '索引过期': 'refresh',
+  // ── reindex ──
+  '重建': 'reindex', '全量重建': 'reindex', '重建图谱': 'reindex', '死链': 'reindex',
 };
 
 // ============================================================
@@ -362,6 +375,9 @@ function handleGuide(input: string): AskResult | null {
   } else if (/新功能|feature|登录|注册|支付|创建.*功能|做.*功能/i.test(input)) {
     matchedWorkflow = WORKFLOWS['new feature'];
     workflowName = '新功能开发全流程';
+    return null;
+  } else if (/分类|classify|提取需求|智能导入|批量导入|文档.*分类|导入.*分类|sources/i.test(input)) {
+    // 分类只是 doc2spec 的一个模式，不触发 pipeline，让用户逐步交互
     return null;
   } else if (/批量|分批|batch|队列/i.test(input)) {
     matchedWorkflow = WORKFLOWS['batch execute'];

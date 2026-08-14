@@ -36,6 +36,10 @@ export interface DocumentChunk {
   keywords: string[];
   /** 字数 */
   charCount: number;
+  /** 起始行号（1-based，用于精确读取） */
+  startLine?: number;
+  /** 结束行号（1-based，含） */
+  endLine?: number;
   /** 相关性分数（检索时动态计算） */
   relevanceScore?: number;
 }
@@ -64,6 +68,8 @@ export interface RetrievalOptions {
   maxChunkChars?: number;
   /** 总字数上限 */
   maxTotalChars?: number;
+  /** 按端过滤（backend/web/h5/admin/...） */
+  platforms?: string[];
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -291,14 +297,15 @@ const SEMANTIC_MAP: Record<string, string[]> = {
 export function chunkByHeaders(content: string, filePath: string): DocumentChunk[] {
   const lines = content.split('\n');
   const chunks: DocumentChunk[] = [];
-  let current: { title: string; level: number; lines: string[] } | null = null;
+  let current: { title: string; level: number; lines: string[]; startLine: number } | null = null;
   const fileName = basename(filePath);
 
   // 文档开头（# 标题之前的内容）作为第一个隐式块
   let preambleLines: string[] = [];
   let foundFirstHeader = false;
 
-  for (const line of lines) {
+  for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+    const line = lines[lineIdx];
     const match = line.match(/^(#{2,4})\s+(.+)$/);
     if (match) {
       foundFirstHeader = true;
@@ -309,11 +316,11 @@ export function chunkByHeaders(content: string, filePath: string): DocumentChunk
         // 保存序言块
         const preamble = preambleLines.join('\n').trim();
         if (preamble.length > 20) {
-          chunks.push(createChunk(filePath, fileName, '文档概述', 1, preamble));
+          chunks.push(createChunk(filePath, fileName, '文档概述', 1, preamble, undefined, undefined, 1, lineIdx));
         }
       }
-      // 开始新块
-      current = { title: match[2].trim(), level: match[1].length, lines: [] };
+      // 开始新块（记录起始行号，1-based）
+      current = { title: match[2].trim(), level: match[1].length, lines: [], startLine: lineIdx + 1 };
     } else {
       if (!foundFirstHeader) {
         preambleLines.push(line);
@@ -332,14 +339,16 @@ export function chunkByHeaders(content: string, filePath: string): DocumentChunk
 }
 
 function finalizeChunk(
-  current: { title: string; level: number; lines: string[] },
+  current: { title: string; level: number; lines: string[]; startLine: number },
   filePath: string,
   fileName: string,
 ): DocumentChunk {
   const content = current.lines.join('\n').trim();
   const summary = extractSummary(content);
   const keywords = extractKeywords(current.title + ' ' + content);
-  return createChunk(filePath, fileName, current.title, current.level, content, summary, keywords);
+  // endLine = startLine + headerLine(1) + contentLines
+  const endLine = current.startLine + current.lines.length;
+  return createChunk(filePath, fileName, current.title, current.level, content, summary, keywords, current.startLine, endLine);
 }
 
 function createChunk(
@@ -350,6 +359,8 @@ function createChunk(
   content: string,
   summary?: string,
   keywords?: string[],
+  startLine?: number,
+  endLine?: number,
 ): DocumentChunk {
   const id = createHash('md5').update(`${filePath}::${title}`).digest('hex').slice(0, 12);
   return {
@@ -362,6 +373,8 @@ function createChunk(
     summary: summary || extractSummary(content),
     keywords: keywords || extractKeywords(title + ' ' + content),
     charCount: content.length,
+    startLine,
+    endLine,
   };
 }
 
@@ -547,18 +560,27 @@ export function retrieveRelevantChunks(
   index: RagIndex,
   options: RetrievalOptions,
 ): DocumentChunk[] {
-  const { query, topK = 5, minScore = 0.5, maxChunkChars = 1500, maxTotalChars = 6000 } = options;
+  const { query, topK = 5, minScore = 0.5, maxChunkChars = 1500, maxTotalChars = 6000, platforms } = options;
 
   const queryKeywords = extractKeywords(query);
+
+  // 按端过滤：如果指定了 platforms，只保留路径中包含对应端名的 chunk
+  const platformFilter = (c: DocumentChunk): boolean => {
+    if (!platforms || platforms.length === 0) return true;
+    const fp = c.filePath.toLowerCase();
+    return platforms.some(p => fp.includes(p.toLowerCase()));
+  };
+
   if (queryKeywords.length === 0) {
     // 无关键词时返回最高级别的块
     return index.chunks
       .filter(c => c.level <= 3)
+      .filter(platformFilter)
       .sort((a, b) => a.level - b.level || b.charCount - a.charCount)
       .slice(0, topK);
   }
 
-  const scored = index.chunks.map(chunk => {
+  const scored = index.chunks.filter(platformFilter).map(chunk => {
     let score = 0;
 
     // 标题匹配（权重最高）
@@ -703,6 +725,7 @@ export async function indexTaskDocuments(
   const filesToIndex: { filePath: string; content: string; mtime: number }[] = [];
 
   const candidates = [
+    join(cwd, taskDir, '_shared', 'CONTEXT.md'),
     join(cwd, taskDir, '_shared', 'TECH.md'),
     join(cwd, taskDir, '_shared', 'REQ.md'),
     join(cwd, taskDir, '_shared', 'SCHEMA.md'),
@@ -913,4 +936,50 @@ export async function refreshRagIndex(
 
   await saveRagIndex(cwd, refreshed, fileName);
   return refreshed;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 11. 精确读取（按行号范围）
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * 按 chunk 的行号范围精确读取源文件对应章节
+ *
+ * 用途：AI 拿到 chunk 的 startLine/endLine 后，用 Read 工具的
+ *       offset/limit 只读目标章节，节省 80-95% Token
+ *
+ * @param chunk  带有 startLine/endLine 的 DocumentChunk
+ * @returns      精确读取的文本，若无行号则回退到 chunk.content
+ */
+export async function readChunkPrecise(chunk: DocumentChunk): Promise<string> {
+  if (!chunk.startLine || !chunk.endLine) {
+    return chunk.content;
+  }
+  if (!(await pathExists(chunk.filePath))) {
+    return chunk.content;
+  }
+  try {
+    const content = await readFile(chunk.filePath, 'utf-8');
+    const lines = content.split('\n');
+    // startLine/endLine 是 1-based
+    const start = Math.max(0, chunk.startLine - 1);
+    const end = Math.min(lines.length, chunk.endLine);
+    return lines.slice(start, end).join('\n');
+  } catch {
+    return chunk.content;
+  }
+}
+
+/**
+ * 批量精确读取多个 chunk
+ */
+export async function readChunksPrecise(chunks: DocumentChunk[]): Promise<
+  { chunk: DocumentChunk; content: string }[]
+> {
+  const results: { chunk: DocumentChunk; content: string }[] = [];
+  for (const chunk of chunks) {
+    const content = await readChunkPrecise(chunk);
+    results.push({ chunk, content });
+  }
+  return results;
 }

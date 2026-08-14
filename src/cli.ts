@@ -620,6 +620,7 @@ program
   .option('--no-ai', '纯 pandoc 机械转换（终端快速模式）')
     .option("--prompt", "输出验证 Prompt 到 stdout（Skill 协作模式）")
   .option("--response <response>", "接收 AI 修正内容写入文件")
+  .option("--classify", "AI 智能分类 sources/ 文档 → staging/（按类型提取）")
   .action(doc2specCommand);
 
 program
@@ -736,6 +737,8 @@ program
   .option('--no-source', '不读取源码内容（默认会读）')
   .option('--source-scope <dirs>', '指定源码扫描目录（逗号分隔，如 src/commands,src/core）')
   .option('--supplement', '补充模式：追加未覆盖的源码到现有报告（不重新生成）')
+  .option('--feature <name>', '局部分析：只分析指定功能模块（010-requirements/features/{name}/）')
+  .option('--doc <path>', '局部分析：类型文档（如 bugs/login-timeout, refactors/db-pool）')
   .option('--apply <content>', '接收 AI 分析结果写入 ANALYSIS.md（配合 --prompt）')
   .action(analyzeCommand);
 

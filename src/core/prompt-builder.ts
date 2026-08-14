@@ -341,6 +341,7 @@ async function loadExtraSpecs(
   let totalChars = 0;
 
   const files = [
+    { name: '任务上下文', path: '_shared/CONTEXT.md' },
     { name: '技术方案', path: '_shared/TECH.md' },
     { name: '技术方案(旧)', path: '00-specs/TECH.md' },
     { name: '任务追踪', path: '00-specs/TASK.md' },

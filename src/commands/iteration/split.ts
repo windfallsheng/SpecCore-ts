@@ -10,6 +10,7 @@ import { showNextSteps } from '../../core/next-steps';
 import { createInterface } from 'readline';
 import { buildPrompt, formatPrompt } from '../../core/prompt-builder';
 import { generatePlatformsRegistry } from '../../core/platform-registry';
+import { warnIfIndexStale } from '../../core/index-guard';
 
 /** 将名称转为目录安全的短 slug（2-4 词） */
 function slugify(name: string): string {
@@ -232,6 +233,9 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           // 保存 AI 生成的实际内容（用于写入 REQ.md / TECH.md）
           if (task.reqContent) (section as any)._reqContent = task.reqContent;
           if (task.techContent) (section as any)._techContent = task.techContent;
+          if (task.sourceFile) (section as any)._sourceFile = task.sourceFile;
+          if (task.functionalUnit) (section as any).functionalUnit = task.functionalUnit;
+          if (task.reason) (section as any)._reason = task.reason;
           if (taskScopePlatforms.length > 0) (section as any)._scopePlatforms = taskScopePlatforms;
           sections.push(section);
         }
@@ -402,7 +406,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           const taskTopic = (sec as any)._topic || slugify(sec.name);
           const { id: taskId } = await nextTaskId(sec.name, taskTopic);
           (sec as any)._taskId = taskId;
-          await createTaskFromSection(iterDirFull, taskId, sec, allPlatforms, taskType);
+          await createTaskFromSection(iterDirFull, taskId, sec, allPlatforms, taskType, sections);
           createdSections.push(sec);
           logger.info(`   ✅ 创建: ${taskId} - [${taskType}] ${sec.name}`);
         }
@@ -451,6 +455,9 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     }
     return;
   }
+
+  // 命令前索引新鲜度检查（非阻塞）
+  await warnIfIndexStale(process.cwd(), 'split', options.iteration);
 
   const spinner = new Spinner('Splitting requirements into tasks');
   spinner.start();
@@ -535,6 +542,34 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
                 specContents.push({ name: `platforms/${pe.name}/${pf}`, content });
               }
             }
+          }
+        }
+      }
+      // 读取功能模块分析（020-specs/features/）
+      const iterFeaturesDir = join(specDir2, 'features');
+      if (await pathExists(iterFeaturesDir)) {
+        const featureEntries = await readdir(iterFeaturesDir, { withFileTypes: true });
+        for (const fe of featureEntries) {
+          if (!fe.name.startsWith('.') && fe.name.endsWith('.md')) {
+            const fp = join(iterFeaturesDir, fe.name);
+            const content = await readFile(fp, 'utf-8');
+            if (content.trim().length > 50 && !content.trim().match(/^#+\s*\u5f85\u586b\u5145|^<!--\s*AI-FILL/m)) {
+              specContents.push({ name: `features/${fe.name}`, content });
+            }
+          }
+        }
+      }
+      // 读取类型文档分析（020-specs/{bugs,refactors,research}/）
+      for (const typeDir of ['bugs', 'refactors', 'research']) {
+        const typeDirPath = join(specDir2, typeDir);
+        if (!(await pathExists(typeDirPath))) continue;
+        const typeEntries = await readdir(typeDirPath, { withFileTypes: true });
+        for (const te of typeEntries) {
+          if (!te.isFile() || !te.name.endsWith('.md')) continue;
+          const fp = join(typeDirPath, te.name);
+          const content = await readFile(fp, 'utf-8');
+          if (content.trim().length > 50 && !content.trim().match(/^#+\s*\u5f85\u586b\u5145|^<!--\s*AI-FILL/m)) {
+            specContents.push({ name: `${typeDir}/${te.name}`, content });
           }
         }
       }
@@ -629,7 +664,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       }
       for (const section of approved) {
         const taskId = (section as any)._taskId;
-        await createTaskFromSection(iterationDir, taskId, section, platforms, (section as any)._taskType);
+        await createTaskFromSection(iterationDir, taskId, section, platforms, (section as any)._taskType, approved);
       }
       spinner.stop(`✅ 创建了 ${approved.length} 个任务`);
       return;
@@ -695,7 +730,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
             break;
           }
           if (resp?.toLowerCase() === 'y' || resp === '') {
-            await createTaskFromSection(iterationDir, taskId, sections[i], platforms, (sections[i] as any)._taskType);
+            await createTaskFromSection(iterationDir, taskId, sections[i], platforms, (sections[i] as any)._taskType, sections);
             created++;
             logger.info(`    ✅ ${taskId}`);
           } else {
@@ -713,7 +748,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       // Default: create all
       for (let i = 0; i < sections.length; i++) {
         const taskId = (sections[i] as any)._taskId;
-        await createTaskFromSection(iterationDir, taskId, sections[i], platforms, (sections[i] as any)._taskType);
+        await createTaskFromSection(iterationDir, taskId, sections[i], platforms, (sections[i] as any)._taskType, sections);
       }
       await generateImpactGraph(iterationDir, sections, platforms);
       await generateEnvExample(iterationDir, sections);
@@ -726,7 +761,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     // Create tasks（使用预分配的 ID）
     for (let i = 0; i < sections.length; i++) {
       const taskId = (sections[i] as any)._taskId;
-      await createTaskFromSection(iterationDir, taskId, sections[i], platforms, (sections[i] as any)._taskType);
+      await createTaskFromSection(iterationDir, taskId, sections[i], platforms, (sections[i] as any)._taskType, sections);
     }
 
     // ── Generate impact graph + risk scores ──
@@ -871,7 +906,7 @@ function filterTemplateNoise(sections: Section[]): Section[] {
   });
 }
 
-async function createTaskFromSection(iterationDir: string, taskId: string, section: Section, allPlatforms: string[], taskType: string = 'feature'): Promise<void> {
+async function createTaskFromSection(iterationDir: string, taskId: string, section: Section, allPlatforms: string[], taskType: string = 'feature', allSections?: Section[]): Promise<void> {
   // taskId 已含 slug（nextTaskId 返回 Task-NNN-slug），直接用
   const taskDir = join(iterationDir, '030-tasks', taskType, taskId);
   const taskPlatforms = (section as any)._scopePlatforms || (section.platform ? [section.platform] : allPlatforms);
@@ -907,6 +942,7 @@ ${taskId}/
 ├── README.md              <-- 本文件
 ├── .meta/                 <-- 任务元信息（type/status/owner/created-at）
 ├── _shared/               <-- 共享规格（所有端共用）
+│   ├── CONTEXT.md         <-- 任务上下文（来源追溯 + 原始描述 + 关联任务）
 │   ├── REQ.md             <-- 需求描述（API + 数据模型 + 业务规则）
 │   ├── TECH.md            <-- 技术方案（架构/接口设计/核心逻辑）
 │   ├── SCHEMA.md          <-- 数据库设计（如有）
@@ -937,6 +973,7 @@ ${taskPlatforms.map((p: string) => `| ${subtaskIdMap.get(p)} | ${p} | ${owner} |
 运行 \`speccore execute -t ${taskId} --platform {端}\` 时:
 
 ### 必读（自动嵌入）
+- \`_shared/CONTEXT.md\` — 任务上下文（来源 + 关联）
 - \`_shared/REQ.md\` — 共享需求
 - \`_shared/TECH.md\` — 共享技术方案
 - \`{端}/TASK.md\` — 该端子任务详情
@@ -1135,7 +1172,74 @@ ${apiDesc}
     await writeFile(join(taskDir, '99-artifacts', 'ADR.md'), adr);
   }
 
-  // ── 6. 问题追踪 ──
+  // ── 6. 任务上下文 CONTEXT.md ──
+  const sourceFile = (section as any)._sourceFile || '';
+  const topic = (section as any)._topic || slugify(section.name);
+  // 推导 010-requirements 源路径
+  const reqSourcePath = sourceFile
+    ? `010-requirements/${sourceFile}`
+    : `010-requirements/${taskType === 'feature' ? 'features' : taskType === 'bugfix' ? 'bugs' : taskType === 'refactor' ? 'refactors' : 'research'}/${topic}.md`;
+  // 推导 020-specs 分析文档路径
+  const specSourcePath = sourceFile
+    ? `020-specs/${sourceFile}`
+    : `020-specs/${taskType === 'feature' ? 'features' : taskType === 'bugfix' ? 'bugs' : taskType === 'refactor' ? 'refactors' : 'research'}/${topic}.md`;
+  // 任务类型中文标签
+  const typeLabels: Record<string, string> = { feature: '功能开发', bugfix: '缺陷修复', refactor: '重构优化', research: '技术调研' };
+  const typeLabel = typeLabels[taskType] || taskType;
+
+  // 收集同迭代的其它任务（用于关联关系）
+  const relatedTasks = allSections
+    ? allSections
+        .filter((s: Section) => s !== section)
+        .slice(0, 5)
+        .map((s: Section, idx: number) => {
+          const sId = (s as any)._taskId || `Task-${String(allSections.indexOf(s) + 1).padStart(3, '0')}`;
+          const sType = (s as any)._taskType || 'feature';
+          return `- \`${sId}\` (${s.name}) — ${typeLabels[sType] || sType}`;
+        })
+    : [];
+
+  // 提取原始描述摘要（从 REQ.md 内容截取前 500 字）
+  const reqMdPath = join(taskDir, '_shared', 'REQ.md');
+  let originalDesc = '';
+  if (await pathExists(reqMdPath)) {
+    const reqContent = await readFile(reqMdPath, 'utf-8');
+    // 跳过标题行，取正文前 500 字
+    const body = reqContent.replace(/^#[^\n]*\n/, '').trim();
+    originalDesc = body.length > 500 ? body.slice(0, 500) + '...' : body;
+  }
+
+  await writeFile(
+    join(taskDir, '_shared', 'CONTEXT.md'),
+    `# 任务上下文
+
+## 来源追溯
+
+| 属性 | 值 |
+|:---|:---|
+| 任务类型 | ${typeLabel}（\`${taskType}\`） |
+| 需求文档 | \`${reqSourcePath}\` |
+| 分析文档 | \`${specSourcePath}\` |
+| 功能单元 | ${(section as any).functionalUnit || section.name} |
+| 拆分原因 | ${(section as any)._reason || '—'} |
+
+## 原始描述
+
+${originalDesc || '> 待补充（执行 analyze 后自动生成）'}
+
+## 关联任务
+
+${relatedTasks.length > 0 ? relatedTasks.join('\n') : '> 暂无关联任务（split 时自动填充）'}
+
+## 影响范围
+
+| 端 | 影响说明 |
+|:---|:---|
+${taskPlatforms.map((p: string) => `| ${p} | 待补充 |`).join('\n')}
+`
+  );
+
+  // ── 7. 问题追踪 ──
   await writeFile(join(taskDir, '.issues.md'), `# ${section.name} - 问题追踪\n\n> 执行过程中发现的问题记录于此。\n\n`);
 }
 
@@ -1904,6 +2008,15 @@ function buildSplitPrompt(
   p += `- 跨端功能 → 按端拆（后端 1 个 + 每个前端各 1 个）\n`;
   p += `- 独立第三方集成（支付/短信/OSS）→ 独立任务\n\n`;
 
+  // 类型文档 1:1 映射规则
+  p += `### 类型文档拆分规则（bugs/refactors/research）\n`;
+  p += `与 feature 不同，类型文档采用 **1:1 映射**——每个文档直接对应一个任务，不拆分不合并：\n`;
+  p += `- \`bugs/xxx.md\` → 1 个 bugfix 任务（一个 bug 就是一个任务，不要把多个 bug 合并）\n`;
+  p += `- \`refactors/xxx.md\` → 1 个 refactor 任务\n`;
+  p += `- \`research/xxx.md\` → 1 个 research 任务\n`;
+  p += `- \`features/xxx.md\` → 按功能单元拆分规则处理（可能 1~3 个 feature 任务）\n`;
+  p += `- **sourceFile 必须填写**：类型文档任务的 sourceFile 就是该文档的相对路径（如 \`bugs/login-timeout.md\`）\n\n`;
+
   p += `### 依赖关系\n`;
   p += `- 基础模块（认证/数据库/配置）优先拆出，作为第一批任务\n`;
   p += `- 依赖链深度 ≤ 3\n`;
@@ -1923,7 +2036,7 @@ function buildSplitPrompt(
   p += '```json\n';
   p += `[\n  {\n`;
   p += `    "id": "Task-001",\n`;
-  p += `    "functionalUnit": "所属功能单元（必填！如：用户管理、订单系统、支付模块）",\n`;
+  p += `    "functionalUnit": "所属功能单元/影响域（必填！见下方类型规则）",\n`;
   p += `    "name": "任务名称（中文）",\n`;
   p += `    "topic": "english-slug-for-directory",\n`;
   p += `    "type": "feature|bugfix|refactor|research",\n`;
@@ -1938,12 +2051,19 @@ function buildSplitPrompt(
   p += `    "acceptanceCriteria": ["AC1: ..."],\n`;
   p += `    "risk": "low|medium|high",\n`;
   p += `    "owner": "建议负责人",\n`;
+  p += `    "sourceFile": "来源文档路径（如 bugs/login-timeout.md、features/user-auth.md）",\n`;
   p += `    "reqContent": "需求描述内容（Markdown 格式，写入 REQ.md）",\n`;
   p += `    "techContent": "技术方案内容（Markdown 格式，写入 TECH.md）"\n`;
   p += `  }\n]\n`;
   p += '```\n\n';
-  p += `> **functionalUnit 必须填写**：功能单元名称，不是章节名。同一功能模块的任务填相同的值。\n`;
+  p += `> **functionalUnit 必须填写**：根据任务类型语义不同：\n`;
+  p += `>   - feature → 功能模块名（如：用户管理、订单系统、支付模块）\n`;
+  p += `>   - bugfix → 受影响组件/流程（如：登录流程、支付回调、数据同步）\n`;
+  p += `>   - refactor → 重构目标范围（如：数据库层、API网关、状态管理）\n`;
+  p += `>   - research → 研究主题（如：WebSocket方案、缓存策略）\n`;
+  p += `> 同一模块/领域的任务填相同的值，用于粒度校验和任务分组\n`;
   p += `> **topic** 必须是英文短横线格式（如 \`user-authentication\`、\`product-crud\`），用于生成任务目录名 Task-NNN-{topic}\n`;
+  p += `> **sourceFile** 必须填写：该任务对应的 020-specs 源文档路径（如 \`bugs/login-timeout.md\`、\`features/user-auth.md\`、\`refactors/db-pool.md\`），用于在 CONTEXT.md 中生成来源追溯\n`;
   p += `> **reqContent** 必须填写：该任务的需求描述（含业务规则、数据模型、接口定义），直接写入 REQ.md\n`;
   p += `> **techContent** 必须填写：该任务的技术方案（含架构设计、核心逻辑、测试策略），直接写入 TECH.md\n`;
   p += `> reqContent/techContent 是该任务的**子切面**，只包含该任务负责的部分，不是整个功能单元的内容\n\n`;
