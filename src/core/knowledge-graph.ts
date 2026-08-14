@@ -123,6 +123,8 @@ async function scanRequirements(iterDir: string, iterName: string): Promise<{
       const relPath = `${prefix}${item.name}`;
 
       if (item.isDirectory()) {
+        // sources/ 由 scanUserFiles() 单独处理，避免双重注册
+        if (item.name === 'sources') continue;
         await scanDir(fullPath, `${relPath}/`);
       } else if (item.name.endsWith('.md') && item.name !== 'INDEX.md' && !isTimestampBackup(item.name)) {
         const { hash, mtime } = await fileHash(fullPath);
@@ -343,8 +345,31 @@ async function scanTasks(iterDir: string): Promise<{
         else if (raw.includes('进行中') || raw.includes('in_progress')) status = 'in_progress';
       }
     }
+    // 回退：从 _shared/REQ.md 提取标题和状态
+    if (title === taskId) {
+      const reqMdPath = join(taskPath, '_shared', 'REQ.md');
+      if (await pathExists(reqMdPath)) {
+        const reqContent = await readFile(reqMdPath, 'utf-8');
+        const reqTitleMatch = reqContent.match(/^#\s+(.+)/m);
+        if (reqTitleMatch) title = reqTitleMatch[1].trim().slice(0, 80);
+      }
+    }
 
-    const { hash, mtime } = taskMdPath ? await fileHash(taskMdPath) : { hash: '', mtime: '' };
+    // hash/mtime 回退链：TASK.md → REQ.md → .meta/status
+    let hash = '', mtime = '';
+    if (taskMdPath) {
+      const h = await fileHash(taskMdPath);
+      hash = h.hash; mtime = h.mtime;
+    } else {
+      const fallbackPaths = [join(taskPath, '_shared', 'REQ.md'), join(taskPath, '.meta', 'status')];
+      for (const fp of fallbackPaths) {
+        if (await pathExists(fp)) {
+          const h = await fileHash(fp);
+          hash = h.hash; mtime = h.mtime;
+          break;
+        }
+      }
+    }
 
     entities.push({
       id: taskId,
@@ -365,25 +390,39 @@ async function scanTasks(iterDir: string): Promise<{
       if (isTimestampBackup(de.name)) continue;
 
       const platformTaskMd = join(taskPath, de.name, 'TASK.md');
-      if (!(await pathExists(platformTaskMd))) continue;
-
-      const subContent = await readFile(platformTaskMd, 'utf-8');
-      let subTitle = `${title} - ${de.name}`;
+      let subTitle = `${title} — ${de.name}`;
       let subStatus = 'pending';
       let subTaskId = `${taskId}-${de.name}`;
 
-      const titleMatch = subContent.match(/^#\s+(.+)/m);
-      if (titleMatch) subTitle = titleMatch[1].trim().slice(0, 80);
-      const statusMatch = subContent.match(/\*\*状态\*\*[:\s]*(.+)/);
-      if (statusMatch) {
-        const raw = statusMatch[1].trim();
-        if (raw.includes('已完成') || raw.includes('completed')) subStatus = 'completed';
-        else if (raw.includes('进行中') || raw.includes('in_progress')) subStatus = 'in_progress';
+      if (await pathExists(platformTaskMd)) {
+        const subContent = await readFile(platformTaskMd, 'utf-8');
+        const titleMatch = subContent.match(/^#\s+(.+)/m);
+        if (titleMatch) subTitle = titleMatch[1].trim().slice(0, 80);
+        const statusMatch = subContent.match(/\*\*状态\*\*[:\s]*(.+)/);
+        if (statusMatch) {
+          const raw = statusMatch[1].trim();
+          if (raw.includes('已完成') || raw.includes('completed')) subStatus = 'completed';
+          else if (raw.includes('进行中') || raw.includes('in_progress')) subStatus = 'in_progress';
+        }
+        const subIdMatch = subContent.match(/子任务 ID\*\*[:\s]*`(Task-[^`]+)`/);
+        if (subIdMatch) subTaskId = subIdMatch[1];
       }
-      const subIdMatch = subContent.match(/子任务 ID\*\*[:\s]*`(Task-[^`]+)`/);
-      if (subIdMatch) subTaskId = subIdMatch[1];
 
-      const subHash = await fileHash(platformTaskMd);
+      // hash 回退：TASK.md → src/ 目录文件 → 空
+      let subHash: { hash: string; mtime: string } = { hash: '', mtime: '' };
+      if (await pathExists(platformTaskMd)) {
+        subHash = await fileHash(platformTaskMd);
+      } else {
+        const srcDir = join(taskPath, de.name, 'src');
+        if (await pathExists(srcDir)) {
+          try {
+            const srcFiles = await readdir(srcDir);
+            if (srcFiles.length > 0) {
+              subHash = await fileHash(join(srcDir, srcFiles[0]));
+            }
+          } catch { /* 忽略 */ }
+        }
+      }
 
       entities.push({
         id: subTaskId,
@@ -466,6 +505,27 @@ async function inferRelations(entities: GraphEntity[], iterDir: string): Promise
       const taskNum = task.id.match(/\d+/)?.[0];
       if (taskNum === reqNum) {
         relations.push({ from: task.id, to: req.id, type: 'implements' });
+      }
+    }
+  }
+
+  // 需求 → 任务：内容关键词匹配（当编号匹配失败时回退）
+  // 从需求标题中提取 ≥3 字符的特征关键词，匹配任务标题
+  const matchedPairs = new Set(relations.map(r => `${r.from}:${r.to}`));
+  for (const req of reqs) {
+    const reqKeywords = req.title
+      .split(/[-_\s]+/)
+      .filter(w => w.length >= 3);
+    if (reqKeywords.length === 0) continue;
+
+    for (const task of tasks) {
+      const pairKey = `${task.id}:${req.id}`;
+      if (matchedPairs.has(pairKey)) continue;
+
+      const hasMatch = reqKeywords.some(kw => task.title.includes(kw));
+      if (hasMatch) {
+        relations.push({ from: task.id, to: req.id, type: 'implements' });
+        matchedPairs.add(pairKey);
       }
     }
   }
