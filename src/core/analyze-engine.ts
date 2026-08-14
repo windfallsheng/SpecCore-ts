@@ -143,37 +143,39 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalysisResult> 
     } catch {} // 非关键，静默失败
   }
 
-  // ── 为当前 scope 构建/刷新 RAG 索引 ──
+  // ── 为当前 scope 构建/刷新 RAG 索引（按 scope 分文件，避免互相覆盖）──
   try {
     const cwd = process.cwd();
     if (effectiveInput.scope === 'task' && effectiveInput.taskId && effectiveInput.iteration) {
-      // task 模式：索引任务目录
+      // task 模式：索引任务目录（默认文件名 rag-index.json）
       const taskDir = join(`Iteration-${effectiveInput.iteration}`, '030-tasks', effectiveInput.taskId);
       if (await pathExists(taskDir)) {
-        const { staleFiles } = await checkRagIndexFreshness(cwd);
+        const { staleFiles, newFiles } = await checkRagIndexFreshness(cwd);
         await refreshRagIndex(cwd, taskDir, effectiveInput.iteration);
-        if (staleFiles.length > 0) {
-          logger.info(`   🔄 RAG 索引已增量刷新 (${staleFiles.length} 个文件更新): ${taskDir}`);
+        const totalChanges = staleFiles.length + newFiles.length;
+        if (totalChanges > 0) {
+          logger.info(`   🔄 RAG 索引已增量刷新 (${totalChanges} 个文件更新): ${taskDir}`);
         } else {
           logger.info(`   🔍 RAG 索引已生成: ${taskDir}`);
         }
       }
     } else if (effectiveInput.scope === 'iteration' && effectiveInput.iteration) {
-      // iteration 模式：索引 020-specs/ 目录
+      // iteration 模式：索引 020-specs/ 目录（独立文件名）
       const specsDir = join(`Iteration-${effectiveInput.iteration}`, '020-specs');
       if (await pathExists(specsDir)) {
         const scope = `${effectiveInput.iteration}_020-specs_iteration_all`;
-        await indexDirectoryDocuments(cwd, specsDir, scope);
-        logger.info(`   🔍 迭代 RAG 索引已生成: ${specsDir}`);
+        const fileName = `rag-index-${effectiveInput.iteration}.json`;
+        await indexDirectoryDocuments(cwd, specsDir, scope, fileName);
+        logger.info(`   🔍 迭代 RAG 索引已生成: ${specsDir} → ${fileName}`);
       }
     } else if (effectiveInput.scope === 'global') {
-      // global 模式：索引全局 specs 目录
+      // global 模式：索引全局 specs 目录（独立文件名）
       const globalSpecsDir = join(cwd, '.speccore', 'GLOBAL', '020-specs');
       const fallbackDir = join(cwd, '.speccore');
       const targetDir = await pathExists(globalSpecsDir) ? globalSpecsDir : fallbackDir;
       const scope = 'GLOBAL_020-specs_global_all';
-      await indexDirectoryDocuments(cwd, targetDir, scope);
-      logger.info(`   🔍 全局 RAG 索引已生成: ${targetDir}`);
+      await indexDirectoryDocuments(cwd, targetDir, scope, 'rag-index-global.json');
+      logger.info(`   🔍 全局 RAG 索引已生成: ${targetDir} → rag-index-global.json`);
     }
   } catch (e) {
     logger.debug('RAG 索引生成失败（非关键）:', e);

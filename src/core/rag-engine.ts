@@ -311,14 +311,22 @@ export async function buildRagIndex(
   };
 }
 
-export async function saveRagIndex(cwd: string, index: RagIndex): Promise<void> {
-  const filePath = join(cwd, RAG_INDEX_PATH);
+/**
+ * 获取 RAG 索引文件路径
+ * 支持按 scope 分文件存储，避免 task/iteration/global 互相覆盖
+ */
+export function getRagIndexPath(cwd: string, fileName: string = 'rag-index.json'): string {
+  return join(cwd, '.speccore', 'cache', fileName);
+}
+
+export async function saveRagIndex(cwd: string, index: RagIndex, fileName?: string): Promise<void> {
+  const filePath = getRagIndexPath(cwd, fileName);
   await ensureDir(join(cwd, '.speccore', 'cache'));
   await writeFile(filePath, JSON.stringify(index, null, 2));
 }
 
-export async function loadRagIndex(cwd: string): Promise<RagIndex | null> {
-  const filePath = join(cwd, RAG_INDEX_PATH);
+export async function loadRagIndex(cwd: string, fileName?: string): Promise<RagIndex | null> {
+  const filePath = getRagIndexPath(cwd, fileName);
   if (!(await pathExists(filePath))) return null;
   try {
     const content = await readFile(filePath, 'utf-8');
@@ -504,6 +512,7 @@ export async function indexTaskDocuments(
   taskDir: string,
   iteration?: string,
   platform?: string,
+  fileName?: string,
 ): Promise<RagIndex> {
   const filesToIndex: { filePath: string; content: string; mtime: number }[] = [];
 
@@ -550,7 +559,7 @@ export async function indexTaskDocuments(
 
   const scope = `${iteration || 'global'}_${taskDir.replace(/\//g, '_')}_${platform || 'all'}`;
   const index = await buildRagIndex(filesToIndex, scope);
-  await saveRagIndex(cwd, index);
+  await saveRagIndex(cwd, index, fileName);
   return index;
 }
 
@@ -558,11 +567,16 @@ export async function indexTaskDocuments(
  * 检查 RAG 索引是否新鲜（对比源文件 mtime）
  * 返回: { fresh: boolean; staleFiles: string[] }
  */
-export async function checkRagIndexFreshness(cwd: string): Promise<{ fresh: boolean; staleFiles: string[] }> {
-  const index = await loadRagIndex(cwd);
-  if (!index) return { fresh: false, staleFiles: [] };
+export async function checkRagIndexFreshness(
+  cwd: string,
+  fileName?: string,
+): Promise<{ fresh: boolean; staleFiles: string[]; newFiles: string[] }> {
+  const index = await loadRagIndex(cwd, fileName);
+  if (!index) return { fresh: false, staleFiles: [], newFiles: [] };
 
   const staleFiles: string[] = [];
+  const indexedPaths = new Set(Object.keys(index.fileMtimes));
+
   for (const [filePath, cachedMtime] of Object.entries(index.fileMtimes)) {
     try {
       const st = await stat(filePath);
@@ -575,10 +589,41 @@ export async function checkRagIndexFreshness(cwd: string): Promise<{ fresh: bool
     }
   }
 
+  // 检测新增文件：扫描索引目录中未记录的文件
+  const newFiles: string[] = [];
+  try {
+    const scopeDir = index.scope.includes('_030-tasks_')
+      ? join(cwd, index.scope.split('_').slice(1, -1).join('/').replace(/_/g, '/'))
+      : null;
+    if (scopeDir && await pathExists(scopeDir)) {
+      await scanForNewFiles(scopeDir, indexedPaths, newFiles);
+    }
+  } catch {
+    // 非关键，忽略
+  }
+
   return {
-    fresh: staleFiles.length === 0,
+    fresh: staleFiles.length === 0 && newFiles.length === 0,
     staleFiles,
+    newFiles,
   };
+}
+
+/** 递归扫描目录，找出未在索引中的新增 .md 文件 */
+async function scanForNewFiles(
+  dir: string,
+  indexedPaths: Set<string>,
+  newFiles: string[],
+): Promise<void> {
+  const items = await readdir(dir, { withFileTypes: true });
+  for (const item of items) {
+    const fullPath = join(dir, item.name);
+    if (item.isDirectory() && !item.name.startsWith('.') && item.name !== 'node_modules') {
+      await scanForNewFiles(fullPath, indexedPaths, newFiles);
+    } else if (item.isFile() && item.name.endsWith('.md') && !indexedPaths.has(fullPath)) {
+      newFiles.push(fullPath);
+    }
+  }
 }
 
 /**
@@ -589,6 +634,7 @@ export async function indexDirectoryDocuments(
   cwd: string,
   dirPath: string,
   scope: string,
+  fileName?: string,
 ): Promise<RagIndex> {
   const filesToIndex: { filePath: string; content: string; mtime: number }[] = [];
 
@@ -614,7 +660,7 @@ export async function indexDirectoryDocuments(
   await scanDir(dirPath);
 
   const index = await buildRagIndex(filesToIndex, scope);
-  await saveRagIndex(cwd, index);
+  await saveRagIndex(cwd, index, fileName);
   return index;
 }
 
@@ -626,14 +672,15 @@ export async function refreshRagIndex(
   taskDir: string,
   iteration?: string,
   platform?: string,
+  fileName?: string,
 ): Promise<RagIndex> {
-  const existing = await loadRagIndex(cwd);
+  const existing = await loadRagIndex(cwd, fileName);
   if (!existing) {
-    return indexTaskDocuments(cwd, taskDir, iteration, platform);
+    return indexTaskDocuments(cwd, taskDir, iteration, platform, fileName);
   }
 
-  const { staleFiles } = await checkRagIndexFreshness(cwd);
-  if (staleFiles.length === 0) {
+  const { staleFiles, newFiles } = await checkRagIndexFreshness(cwd, fileName);
+  if (staleFiles.length === 0 && newFiles.length === 0) {
     return existing;
   }
 
@@ -678,6 +725,6 @@ export async function refreshRagIndex(
     fileMtimes: freshMtimes,
   };
 
-  await saveRagIndex(cwd, refreshed);
+  await saveRagIndex(cwd, refreshed, fileName);
   return refreshed;
 }

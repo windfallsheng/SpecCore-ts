@@ -14,7 +14,7 @@ import { join } from 'path';
 import { pathExists } from 'fs-extra';
 import { logger, Spinner } from '../utils/logger';
 import { buildCodeIndex } from '../core/code-scanner';
-import { refreshRagIndex, checkRagIndexFreshness, loadRagIndex } from '../core/rag-engine';
+import { refreshRagIndex, checkRagIndexFreshness, loadRagIndex, indexDirectoryDocuments } from '../core/rag-engine';
 import { refreshKnowledgeGraph, loadKnowledgeGraph } from '../core/knowledge-graph';
 import { getDefaultIteration } from '../core/context';
 
@@ -73,47 +73,53 @@ export async function refreshCommand(options: RefreshOptions): Promise<void> {
     const spinner = new Spinner('刷新文档 RAG...');
     spinner.start();
     try {
+      const refreshedFiles: string[] = [];
+
+      // 2.1 刷新 task 级索引（默认文件名）
       if (taskDir && await pathExists(taskDir)) {
-        const { staleFiles } = await checkRagIndexFreshness(cwd);
+        const before = await loadRagIndex(cwd);
         await refreshRagIndex(cwd, taskDir, iteration);
-        if (staleFiles.length > 0) {
-          spinner.stop(`文档 RAG 增量刷新完成 (${staleFiles.length} 个文件更新)`);
-          results.push({ name: '文档 RAG', status: 'success', detail: `${staleFiles.length} 个文件更新` });
-        } else {
-          spinner.stop('文档 RAG 已是最新');
-          results.push({ name: '文档 RAG', status: 'skip', detail: '已是最新' });
+        const after = await loadRagIndex(cwd);
+        if (!before || before.updatedAt !== after?.updatedAt) {
+          refreshedFiles.push('task');
         }
-      } else {
-        // 尝试从现有 RAG 索引推断任务目录
-        const existingRag = await loadRagIndex(cwd);
-        if (existingRag) {
-          const scopeParts = existingRag.scope.split('_');
-          if (scopeParts.length >= 2) {
-            const inferredIter = scopeParts[0];
-            const inferredTaskDir = scopeParts[1].replace(/_/g, '/');
-            const fullTaskDir = join(cwd, `Iteration-${inferredIter}`, inferredTaskDir);
-            if (await pathExists(fullTaskDir)) {
-              const { staleFiles } = await checkRagIndexFreshness(cwd);
-              await refreshRagIndex(cwd, fullTaskDir, inferredIter);
-              if (staleFiles.length > 0) {
-                spinner.stop(`文档 RAG 增量刷新完成 (${staleFiles.length} 个文件更新)`);
-                results.push({ name: '文档 RAG', status: 'success', detail: `${staleFiles.length} 个文件更新` });
-              } else {
-                spinner.stop('文档 RAG 已是最新');
-                results.push({ name: '文档 RAG', status: 'skip', detail: '已是最新' });
-              }
-            } else {
-              spinner.stop('未找到任务目录，跳过 RAG 刷新');
-              results.push({ name: '文档 RAG', status: 'skip', detail: '未找到任务目录' });
-            }
-          } else {
-            spinner.stop('未找到任务目录，跳过 RAG 刷新');
-            results.push({ name: '文档 RAG', status: 'skip', detail: '未找到任务目录' });
+      }
+
+      // 2.2 刷新 iteration 级索引
+      if (iteration) {
+        const iterFileName = `rag-index-${iteration}.json`;
+        const iterSpecsDir = join(`Iteration-${iteration}`, '020-specs');
+        if (await pathExists(iterSpecsDir)) {
+          const before = await loadRagIndex(cwd, iterFileName);
+          const scope = `${iteration}_020-specs_iteration_all`;
+          await indexDirectoryDocuments(cwd, iterSpecsDir, scope, iterFileName);
+          const after = await loadRagIndex(cwd, iterFileName);
+          if (!before || before.updatedAt !== after?.updatedAt) {
+            refreshedFiles.push(`iteration-${iteration}`);
           }
-        } else {
-          spinner.stop('未找到 RAG 索引，跳过');
-          results.push({ name: '文档 RAG', status: 'skip', detail: '无索引' });
         }
+      }
+
+      // 2.3 刷新全局索引
+      const globalFileName = 'rag-index-global.json';
+      const beforeGlobal = await loadRagIndex(cwd, globalFileName);
+      const globalSpecsDir = join(cwd, '.speccore', 'GLOBAL', '020-specs');
+      const fallbackDir = join(cwd, '.speccore');
+      const targetDir = await pathExists(globalSpecsDir) ? globalSpecsDir : fallbackDir;
+      if (await pathExists(targetDir)) {
+        await indexDirectoryDocuments(cwd, targetDir, 'GLOBAL_all_all_aggregated', globalFileName);
+        const afterGlobal = await loadRagIndex(cwd, globalFileName);
+        if (!beforeGlobal || beforeGlobal.updatedAt !== afterGlobal?.updatedAt) {
+          refreshedFiles.push('global');
+        }
+      }
+
+      if (refreshedFiles.length > 0) {
+        spinner.stop(`文档 RAG 刷新完成 (${refreshedFiles.join(', ')})`);
+        results.push({ name: '文档 RAG', status: 'success', detail: refreshedFiles.join(', ') });
+      } else {
+        spinner.stop('文档 RAG 已是最新');
+        results.push({ name: '文档 RAG', status: 'skip', detail: '已是最新' });
       }
     } catch (err: any) {
       spinner.fail('文档 RAG 刷新失败');

@@ -105,16 +105,17 @@ export function sliceCodeFile(content: string, filePath: string): CodeSlice[] {
       const type = match[1] ? 'function' : match[2] ? 'class' : match[3] ? 'interface' : match[4] ? 'type' : match[5] ? 'enum' : 'variable';
       const lineStart = i + 1;
 
-      // 向前找 JSDoc / 注释
+      // 向前找 JSDoc / 注释（支持前导空格，如 ' * @param'）
       let commentStart = i - 1;
       const comments: string[] = [];
       while (commentStart >= 0) {
-        const cl = lines[commentStart].trim();
-        if (cl.startsWith('/**') || cl.startsWith('*') || cl.startsWith('//') || cl.startsWith('*')) {
+        const cl = lines[commentStart];
+        const trimmed = cl.trimStart();
+        if (trimmed.startsWith('/**') || trimmed.startsWith('*') || trimmed.startsWith('//')) {
           comments.unshift(cl);
           commentStart--;
-          if (cl.startsWith('/**')) break;
-        } else if (cl === '') {
+          if (trimmed.startsWith('/**')) break;
+        } else if (cl.trim() === '') {
           commentStart--;
         } else {
           break;
@@ -138,9 +139,10 @@ export function sliceCodeFile(content: string, filePath: string): CodeSlice[] {
         }
 
         // 简单括号计数（不完美但够用）
-        for (const ch of bl) {
+        for (let ci = 0; ci < bl.length; ci++) {
+          const ch = bl[ci];
           if (inString) {
-            if (ch === stringChar && bl[bl.indexOf(ch) - 1] !== '\\') {
+            if (ch === stringChar && bl[ci - 1] !== '\\') {
               inString = false;
             }
           } else if (ch === '"' || ch === "'" || ch === '`') {
@@ -253,25 +255,45 @@ export async function unifiedSearch(
   let documentChunks: DocumentChunk[] = [];
   let docStats = 0;
   try {
-    // 检查索引新鲜度，过期则自动刷新
-    const { fresh: ragFresh, staleFiles } = await checkRagIndexFreshness(cwd);
-    if (!ragFresh && taskDir && staleFiles.length > 0) {
-      logger?.info?.(`   🔄 RAG 索引过期 (${staleFiles.length} 个文件)，自动增量刷新...`);
-      await refreshRagIndex(cwd, taskDir, iteration, platform);
+    // 根据查询参数确定要加载的索引文件（避免 scope 间互相覆盖）
+    const indexFiles: string[] = [];
+    if (taskId && iteration) {
+      // task 查询：优先加载 task 级索引，同时加载 iteration 级作为补充
+      indexFiles.push('rag-index.json');                    // task 级
+      indexFiles.push(`rag-index-${iteration}.json`);       // iteration 级
+    } else if (iteration) {
+      // iteration 查询：加载 iteration 级 + 全局级
+      indexFiles.push(`rag-index-${iteration}.json`);
+      indexFiles.push('rag-index-global.json');
+    } else {
+      // 全局查询：加载全局级
+      indexFiles.push('rag-index-global.json');
     }
 
-    const ragIndex = await loadRagIndex(cwd);
-    if (ragIndex) {
-      const chunks = retrieveRelevantChunks(ragIndex, {
-        query: queryStr,
-        topK: 5,
-        minScore: 0.3,
-        maxChunkChars: 1500,
-        maxTotalChars: 5000,
-      });
-      documentChunks = chunks;
-      docStats = chunks.length;
+    // 逐个加载索引，合并结果
+    const allChunks: DocumentChunk[] = [];
+    for (const fileName of indexFiles) {
+      const ragIndex = await loadRagIndex(cwd, fileName);
+      if (ragIndex) {
+        const chunks = retrieveRelevantChunks(ragIndex, {
+          query: queryStr,
+          topK: 5,
+          minScore: 0.3,
+          maxChunkChars: 1500,
+          maxTotalChars: 5000,
+        });
+        allChunks.push(...chunks);
+      }
     }
+
+    // 去重（按 id）并限制数量
+    const seen = new Set<string>();
+    documentChunks = allChunks.filter(c => {
+      if (seen.has(c.id)) return false;
+      seen.add(c.id);
+      return true;
+    }).slice(0, 8);
+    docStats = documentChunks.length;
   } catch (e) {
     logger?.debug?.('RAG 检索失败:', e);
   }

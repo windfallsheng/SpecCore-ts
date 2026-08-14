@@ -55,6 +55,26 @@
     - 支持手动编辑，不完美没关系，下次 sync-global 会覆盖更新
     - 全局 RAG 索引 scope: `GLOBAL_all_{iteration}_aggregated`
 
+### Bug 修复（深度检查）
+
+- **P0-1: RAG 索引文件互相覆盖** — task/iteration/global 共用 `rag-index.json`，后建的覆盖先建的
+  - 修复：每个 scope 分配独立文件
+    - task: `rag-index.json`（默认，兼容已有）
+    - iteration: `rag-index-{iteration}.json`
+    - global: `rag-index-global.json`
+  - `saveRagIndex` / `loadRagIndex` / `checkRagIndexFreshness` 支持可选 `fileName` 参数
+  - `unifiedSearch` 根据查询参数（taskId/iteration）加载对应索引文件，合并去重后返回
+  - `rag-index` 命令显示所有索引文件状态，`refresh` 命令刷新所有层级
+- **P0-2: sliceCodeFile JSDoc 提取 bug** — `cl.startsWith('*')` 不会匹配有空格前缀的注释行（如 ` * @param`）
+  - 修复：改用 `cl.trimStart().startsWith('*')`，保留原始缩进格式
+- **P0-3: sliceCodeFile 字符串转义判断 bug** — `bl[bl.indexOf(ch) - 1] !== '\\'` 中 `indexOf` 只会找到第一个匹配位置
+  - 修复：改用 `for (let ci = 0; ci < bl.length; ci++)` 遍历，用 `bl[ci - 1]` 判断当前字符前一个是否为转义符
+- **P1-4: checkRagIndexFreshness 不检测新增文件** — 只对比已有文件的 mtime，新增 .md 文件被忽略
+  - 修复：新增 `scanForNewFiles()` 递归扫描，返回 `{ fresh, staleFiles, newFiles }`
+- **P1-5: global-knowledge.ts 动态导入冗余** — `await import('./rag-engine')` 改为静态导入
+- **P1-6: refresh.ts 重复调用 checkRagIndexFreshness** — 外部调用一次 + refreshRagIndex 内部又调用一次
+  - 修复：改为 before/after 对比 `updatedAt` 判断是否有变更
+
 ### 代码索引智能增强（P0-1 ~ P0-3）
 
 - **findRelevantCode 接入知识图谱**: `code-scanner.ts`
