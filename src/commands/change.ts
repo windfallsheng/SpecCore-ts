@@ -351,6 +351,7 @@ async function handleNewRequirement(desc: string, iteration: string, clarifyResu
   logger.info('💡 下一步:');
   logger.info(`   speccore analyze --task=${taskId} --sync  # 分析并局部回写 020-specs/`);
   logger.info(`   speccore execute --task=${taskId} --force  # 执行任务`);
+  logger.info(`   speccore done --all                      # 归档时自动合并新增需求到原文档`);
 }
 
 import { createInterface } from 'readline';
