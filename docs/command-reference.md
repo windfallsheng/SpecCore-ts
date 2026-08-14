@@ -45,6 +45,20 @@ speccore ask "<自然语言描述>"
 
 **双模式确认**: 未说"自主/一键"→ 展示理解等确认；说了自主 → 确认后全自动执行
 
+**使用示例**：
+```bash
+# AI 窗口中（推荐）：
+直接说 "帮我分析登录需求"          # 自然语言，AI 自动路由
+/spec-ask "执行 Task-001"             # 斜杠命令，显式触发
+
+# 终端中：
+speccore ask "拆分任务"              # 显式调用意图识别
+speccore ask "查看进度"              # 匹配到 dashboard
+```
+
+> 💡 Skill（`.agents/skills/spec-ask/SKILL.md`）在 `init` 后自动加载，AI 已具备完整行为规则。
+> `/spec-ask` 斜杠命令只是手动快捷入口，与自然语言效果相同。
+
 ### 🏷️ about — 版本信息
 ```bash
 speccore about
