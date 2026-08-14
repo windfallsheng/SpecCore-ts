@@ -315,6 +315,90 @@ init → doc2spec → analyze → split → plan → execute → pr → done →
 | done | Task 完成归档 | GLOBAL/INDEX 更新 |
 | spec2doc | 020-specs/ | Word/PDF/HTML |
 
+### 多端全量分析与合成（全自动三阶段）
+
+> 当 CONSTITUTION.md 配置了多个工程/多端时，`synthesize --full` 自动执行三阶段流程。
+> 整个过程全部自动完成，无需人工干预。
+
+```
+Phase 1: 逐端分析（per-platform analysis）
+  ├── 后端工程 → analyze → 020-specs/backend/ANALYSIS.md + TECH.md
+  ├── Web 前端 → analyze → 020-specs/web/ANALYSIS.md + TECH.md
+  ├── Admin 端  → analyze → 020-specs/admin/ANALYSIS.md + TECH.md
+  └── App 端    → analyze → 020-specs/app/ANALYSIS.md + TECH.md
+
+Phase 2: 跨端综合（cross-platform synthesis）
+  ├── 汇总各端 specs
+  ├── 识别跨端业务关系（如 Web 用户列表 → 后端用户查询 API）
+  └── 输出:
+      ├── 020-specs/CROSS_PLATFORM.md    ← 跨端关系图 + 接口映射
+      ├── 020-specs/ARCHITECTURE.md      ← 全量架构文档
+      └── 020-specs/TECH_FULL.md         ← 全量技术方案
+
+Phase 3: 按功能单元合成需求文档（functional-unit synthesis）
+  ├── 从 Phase 1+2 的结果中提取功能单元
+  ├── 每个功能单元聚合所有端的需求（后端 API + 前端页面 + 管理端操作）
+  └── 输出:
+      └── 010-requirements/REQUIREMENT.md ← 按功能单元组织的完整需求文档
+```
+
+**核心原则：**
+- 功能单元是分组概念，不是内容容器。内容在任务级别
+- 一个功能单元的需求文档包含该功能关联的所有端的需求
+- 结构清晰：每个功能单元独立章节，内含各端子节
+- 公共逻辑只写一次，端差异用子标题标注
+
+**目录结构示例：**
+```markdown
+# REQUIREMENT.md（按功能单元组织）
+
+## 1. 用户管理
+> 公共逻辑：用户 CRUD、权限校验
+### 1.1 后端
+- API: POST /api/users, GET /api/users/:id
+- 数据模型: users, roles 表
+### 1.2 Web 前端
+- 页面: 用户列表、用户详情
+- 组件: UserTable, UserForm
+### 1.3 Admin 端
+- 页面: 用户审核、角色分配
+
+## 2. 订单系统
+> 公共逻辑：订单生命周期管理
+### 2.1 后端
+### 2.2 Web 前端
+### 2.3 App 端
+```
+
+**命令入口：**
+```bash
+# 全自动三阶段（推荐）
+speccore synthesize --full -I <迭代名>
+
+# 单阶段手动执行
+speccore synthesize --phase 1 -I <迭代名>   # 只跑逐端分析
+speccore synthesize --phase 2 -I <迭代名>   # 只跑跨端综合
+speccore synthesize --phase 3 -I <迭代名>   # 只跑需求合成
+
+# 原有模式（向后兼容）
+speccore synthesize -I <迭代名>             # 只做需求合成（无全量分析）
+```
+
+**自动化流水线：**
+```
+用户: speccore synthesize --full -I Q2
+  → CLI Phase 1: 读取 CONSTITUTION 工程列表
+    → 逐端输出 [SPECCORE_PROMPT] → AI 分析各端
+    → CLI 收集各端结果
+  → CLI Phase 2: 汇总各端 specs
+    → 输出 [SPECCORE_PROMPT] → AI 跨端综合
+    → CLI 写入 CROSS_PLATFORM.md + ARCHITECTURE.md + TECH_FULL.md
+  → CLI Phase 3: 按功能单元合成
+    → 输出 [SPECCORE_PROMPT] → AI 按功能单元组织需求
+    → CLI 写入 REQUIREMENT.md（--apply 回写）
+  → 完成 ✅
+```
+
 ### 错误处理
 
 ```

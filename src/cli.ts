@@ -174,6 +174,9 @@ program
   .option('--with-code', '结合源码检查需求冲突')
   .option('--prompt', '输出结构化 Prompt 到 stdout（Skill 协作模式）')
   .option('--apply <content>', '接收 AI 合成结果写入文件（配合 --prompt）')
+  .option('--full', '全自动三阶段：逐端分析 → 跨端综合 → 功能单元需求合成')
+  .option('--phase <n>', '单阶段执行: 1=逐端分析, 2=跨端综合, 3=功能单元合成')
+  .option('--apply-phase <n>', '配合 --apply 使用，指定写入哪个阶段的结果')
   .action(synthesizeCommand);
 
 program

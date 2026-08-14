@@ -1,3 +1,16 @@
+## v5.96.0 (2026-08-14) — synthesize 多端全量分析与合成（三阶段全自动流程）
+
+- **Phase 1: 逐端分析** — 读取 CONSTITUTION 工程列表，各端独立生成 specs
+- **Phase 2: 跨端综合** — 汇总各端 specs，识别跨端业务关系，生成 CROSS_PLATFORM.md + ARCHITECTURE.md + TECH_FULL.md
+- **Phase 3: 功能单元合成** — 按功能单元组织需求文档，每个单元包含所有端的需求
+- **`--full` 模式**：全自动三阶段流水线，无需人工干预
+- **`--phase N` 模式**：单阶段手动执行
+- **`--apply-phase N` 模式**：接收某阶段 AI 结果写入文件
+- 原有简单合成模式向后兼容
+- DESIGN.md 新增多端全量分析与合成设计章节
+
+---
+
 ## v5.95.1 (2026-08-13) — TASK_SUMMARY 报告路径优化
 
 - 报告放单独子目录 `000-overview/task-summaries/`
