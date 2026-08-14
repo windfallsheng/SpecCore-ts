@@ -33,6 +33,13 @@
   - `speccore rag-index --full --task Task-001` — 全量重建（删除旧索引重新扫描）
   - 状态检测：过期文件标 ⚠️，新鲜文件标 ✅
   - 解决用户手动修改文档后无法刷新索引的问题
+- **统一刷新命令**: `speccore refresh`（新增）
+  - `speccore refresh` — 一键刷新所有检索层（代码索引 + 文档 RAG + 知识图谱）
+  - `speccore refresh --code` — 只刷新代码索引
+  - `speccore refresh --rag --task Task-001` — 只刷新文档 RAG
+  - `speccore refresh --graph` — 只刷新知识图谱
+  - 自动推断当前任务（从已有 RAG 索引的 scope 解析），无需手动指定
+  - 汇总输出：✅ 成功 / ⏭️ 跳过 / ❌ 失败，一目了然
 
 ### 代码索引智能增强（P0-1 ~ P0-3）
 

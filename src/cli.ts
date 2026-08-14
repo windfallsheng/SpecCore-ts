@@ -33,6 +33,7 @@ import { doc2specCommand } from './commands/doc2spec';
 import { spec2docCommand } from './commands/spec2doc';
 import { registerCodeIndexCommand } from './commands/code-index';
 import { registerRagIndexCommand } from './commands/rag-index';
+import { registerRefreshCommand } from './commands/refresh';
 // 全量层命令
 import { iterationFromGlobalCommand } from './commands/iteration-from-global';
 import { syncGlobalCommand } from './commands/sync-global';
@@ -452,6 +453,9 @@ registerCodeIndexCommand(program);
 
 // RAG 索引管理
 registerRagIndexCommand(program);
+
+// 统一刷新所有检索层
+registerRefreshCommand(program);
 
 // 全量索引重建与一致性检查
 program
