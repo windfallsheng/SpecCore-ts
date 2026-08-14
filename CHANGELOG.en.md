@@ -2,6 +2,21 @@
 
 ---
 
+## v6.4.0 (2026-08-14) — Full Index Rebuild & Consistency Check
+
+- **New `reindex` command**: Scan global/iteration layers, detect stale links, discover new files, rebuild indexes
+  - `speccore reindex` — Full rebuild of all layer indexes
+  - `speccore reindex --check` — Check consistency only, no fixes
+  - `speccore reindex -i Q2` — Specify iteration
+- **New `reindex-engine.ts`**: Core scanning engine
+  - Global: scan `.speccore/GLOBAL/` .md files, check INDEX.md stale links, find unindexed files
+  - Iteration: scan `010-requirements/`, `020-specs/`, `030-tasks/`, verify PROJECT_GRAPH.md task references
+  - PLATFORMS.md consistency: check sub-task status vs actual TASK.md
+  - Auto-rebuild: `GLOBAL/INDEX.md`, `020-specs/INDEX.md`
+  - Integrity snapshot: save `.speccore/cache/integrity.json` for next comparison
+
+---
+
 ## v6.3.1 (2026-08-14) — Full Pipeline Verification: 5 Bug Fixes
 
 - **Bug#1**: `generateSubtaskId` called multiple times producing different IDs → pre-generate ID map, consistent across README/TASK.md/PLATFORMS.md

@@ -1,3 +1,18 @@
+## v6.4.0 (2026-08-14) — 全量索引重建与一致性检查
+
+- **新增 `reindex` 命令**: 全量扫描全局层/迭代层，检测死链、发现新文件、重建索引
+  - `speccore reindex` — 全量重建所有层级索引
+  - `speccore reindex --check` — 只检查一致性，不修复
+  - `speccore reindex -i Q2` — 指定迭代
+- **新增 `reindex-engine.ts`**: 核心扫描引擎
+  - 全局层: 扫描 `.speccore/GLOBAL/` 下所有 .md，检查 INDEX.md 死链，发现未索引文件
+  - 迭代层: 扫描 `010-requirements/`、`020-specs/`、`030-tasks/`，检查 PROJECT_GRAPH.md 任务引用有效性
+  - PLATFORMS.md 一致性: 检查子任务状态是否与实际 TASK.md 一致
+  - 自动重建: `GLOBAL/INDEX.md`、`020-specs/INDEX.md`
+  - 完整性快照: 保存 `.speccore/cache/integrity.json` 供下次对比
+
+---
+
 ## v6.3.1 (2026-08-14) — 全链路验证修复：5 个 Bug 修复
 
 - **Bug#1 修复**: `generateSubtaskId` 多次调用产生不同 ID → 预生成 ID map，README/TASK.md/PLATFORMS.md 保持一致

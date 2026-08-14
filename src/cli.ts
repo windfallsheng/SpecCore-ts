@@ -47,6 +47,7 @@ import { doneCommand } from './commands/done';
 // rename 命令
 import { renameCommand } from './commands/rename';
 import { retroCommand } from './commands/retro';
+import { reindexCommand } from './commands/reindex';
 import { updateCommand } from './commands/update';
 import { migrateCommand } from './commands/migrate';
 // v4.6.0 迁移命令
@@ -447,6 +448,14 @@ program
 
 // 源码索引
 registerCodeIndexCommand(program);
+
+// 全量索引重建与一致性检查
+program
+  .command('reindex')
+  .description('全量索引重建与一致性检查（扫描全局/迭代/代码三层）')
+  .option('--check', '只检查一致性，不修复')
+  .option('-i, --iteration <iteration>', '指定迭代（默认当前迭代）')
+  .action(reindexCommand);
 
 // ================================================================
 // 📊 进度与状态
