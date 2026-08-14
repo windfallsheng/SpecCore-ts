@@ -57,6 +57,30 @@ function printReport(result: ReindexResult, checkOnly: boolean): void {
   if (added > 0) logger.info(`   ⚠️  新增未索引: ${added}`);
   if (fixed > 0 && !checkOnly) logger.info(`   🔧 已修复: ${fixed}`);
 
+  // ── 知识图谱 ──
+  if (result.knowledgeGraph) {
+    logger.info('');
+    logger.info('── 知识图谱 ──');
+    logger.info(`   📊 实体: ${result.knowledgeGraph.entities} 个`);
+    logger.info(`   🔗 关系: ${result.knowledgeGraph.relations} 条`);
+    logger.info(`   💾 图谱文件: ${result.knowledgeGraph.graphFile}`);
+    logger.info(`   📄 上下文: ${result.knowledgeGraph.contextFile}`);
+  }
+
+  // ── 衰减检测 ──
+  if (result.decayReport) {
+    const { decayed, healthy } = result.decayReport.summary;
+    if (decayed > 0) {
+      logger.info('');
+      logger.info('── 知识衰减 ──');
+      const critical = result.decayReport.decayedFiles.filter(d => d.severity === 'critical');
+      const warning = result.decayReport.decayedFiles.filter(d => d.severity === 'warning');
+      if (critical.length > 0) logger.info(`   ❌ 严重（上下游不一致）: ${critical.length} 个`);
+      if (warning.length > 0) logger.info(`   ⚠️  内容已变更: ${warning.length} 个`);
+      logger.info(`   ✅ 健康: ${healthy} 个`);
+    }
+  }
+
   if (stale === 0 && added === 0) {
     logger.info('');
     logger.success('✅ 所有索引一致，无死链，无遗漏');

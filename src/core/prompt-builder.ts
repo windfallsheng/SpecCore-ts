@@ -9,6 +9,8 @@
 import { readFile, pathExists, readdir } from 'fs-extra';
 import { join } from 'path';
 import { isTimestampBackup } from '../utils/task-utils';
+import { loadKnowledgeGraph, getTaskContext } from './knowledge-graph';
+import { buildCompactContext } from './context-builder';
 
 // ═══════════════════════════════════════════════════════════
 // 类型定义
@@ -95,6 +97,7 @@ export interface SpecCorePrompt {
   businessRules: BusinessRule[];
   extraSpecs: TaskExtraSpec[];
   globalContext?: GlobalContext;
+  taskContext?: string;  // 知识图谱：当前任务的关联链
   instruction: string;
   outputHint: string;
 }
@@ -909,6 +912,18 @@ export async function buildPrompt(
   // 加载全局上下文（智能注入）
   const globalContext = await loadGlobalContext(cwd, command, options.platform);
 
+  // 加载知识图谱 → 生成任务关联链（< 500 tokens）
+  let taskContextStr: string | undefined;
+  if (options.task) {
+    const graph = await loadKnowledgeGraph(cwd);
+    if (graph) {
+      taskContextStr = buildCompactContext(graph, {
+        taskId: options.task,
+        platform: options.platform,
+      }) || undefined;
+    }
+  }
+
   const context = {
     taskName: options.task,
     apiCount: apiSpecs.length,
@@ -928,6 +943,7 @@ export async function buildPrompt(
     businessRules,
     extraSpecs,
     globalContext: (globalContext.indexSummary || globalContext.toc.length > 0) ? globalContext : undefined,
+    taskContext: taskContextStr,
     instruction: getInstruction(command, context),
     outputHint: command === 'execute'
       ? '请返回格式: {"files": [{"path": "相对路径", "content": "代码内容"}]}'
@@ -1006,6 +1022,13 @@ export function formatPrompt(prompt: SpecCorePrompt): string {
       lines.push(spec.content);
       lines.push('');
     }
+  }
+
+  // 任务关联链（知识图谱）
+  if (prompt.taskContext) {
+    lines.push('## 🔗 任务关联链');
+    lines.push(prompt.taskContext);
+    lines.push('');
   }
 
   // 全局上下文（从 GLOBAL 层智能注入）

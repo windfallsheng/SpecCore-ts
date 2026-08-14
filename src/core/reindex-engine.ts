@@ -9,6 +9,9 @@ import { join, relative, extname } from 'path';
 import { createHash } from 'crypto';
 import { getDefaultIteration, getIterationDir } from './context';
 import { findTaskDir, TASK_TYPES } from './task-paths';
+import { buildKnowledgeGraph, saveKnowledgeGraph, KnowledgeGraph } from './knowledge-graph';
+import { detectDecay, formatDecayReport, DecayReport } from './decay-detector';
+import { buildContextMarkdown, saveContextMarkdown } from './context-builder';
 
 // ═══════════════════════════════════════════════
 // 类型定义
@@ -17,6 +20,13 @@ import { findTaskDir, TASK_TYPES } from './task-paths';
 export interface ReindexResult {
   global: LayerResult;
   iteration: LayerResult | null;
+  knowledgeGraph?: {
+    entities: number;
+    relations: number;
+    graphFile: string;
+    contextFile: string;
+  };
+  decayReport?: DecayReport;
   summary: {
     totalFiles: number;
     valid: number;
@@ -489,6 +499,25 @@ export async function runReindex(cwd: string, options: { check?: boolean; iterat
 
     // 保存完整性快照
     await saveIntegritySnapshot(cwd, result);
+
+    // ── Phase 2: 知识图谱 + 衰减检测 + CONTEXT.md ──
+    const graph = await buildKnowledgeGraph(cwd, iteration);
+    const graphFile = await saveKnowledgeGraph(cwd, graph);
+
+    // 衰减检测（对比上次快照）
+    const decay = await detectDecay(cwd, graph);
+    result.decayReport = decay;
+
+    // 生成 CONTEXT.md
+    const contextMd = buildContextMarkdown(graph, decay);
+    const contextFile = await saveContextMarkdown(cwd, contextMd, iteration);
+
+    result.knowledgeGraph = {
+      entities: Object.keys(graph.entities).length,
+      relations: graph.relations.length,
+      graphFile,
+      contextFile,
+    };
   }
 
   return result;

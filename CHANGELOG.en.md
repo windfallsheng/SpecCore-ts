@@ -2,6 +2,27 @@
 
 ---
 
+## v6.5.0 (2026-08-14) — Knowledge Graph + Decay Detection + AI Context Chain
+
+- **New `knowledge-graph.ts`**: Knowledge graph builder
+  - Scans requirements/specs/tasks/subtasks, extracts entities and relations
+  - Auto-matches requirement→task by number
+  - Subtask→parent task relation tracking
+  - User custom file discovery and tagging
+  - Outputs `knowledge-graph.json` (machine-readable)
+- **New `decay-detector.ts`**: Knowledge decay detection
+  - Compares against integrity snapshot to detect content changes
+  - Downstream stale detection: upstream req changed but task not synced
+  - Orphan detection: entity in graph but file no longer exists
+- **New `context-builder.ts`**: Compact context generator
+  - Generates CONTEXT.md (requirement→task trace table + decay report + user files)
+  - `buildCompactContext()` generates < 500 tokens context chain for prompts
+- **Integrated prompt-builder.ts**: Auto-inject task context chain during execute/split
+  - AI sees: upstream requirement, sibling subtask progress, platform status
+- **Integrated reindex**: `speccore reindex` auto-builds graph + decay detection + CONTEXT.md
+
+---
+
 ## v6.4.0 (2026-08-14) — Full Index Rebuild & Consistency Check
 
 - **New `reindex` command**: Scan global/iteration layers, detect stale links, discover new files, rebuild indexes
