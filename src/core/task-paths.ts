@@ -13,13 +13,15 @@ export const TASKS_DIR = '030-tasks';
 export const TASK_TYPES = ['feature', 'bugfix', 'refactor', 'research'] as const;
 
 /** 获取指定迭代中某个 Task 的完整目录路径（新布局：含类型子目录） */
-export function getTaskPath(iteration: string, taskId: string): string {
-  return join(process.cwd(), `Iteration-${iteration}`, TASKS_DIR, taskId);
+export function getTaskPath(iteration: string, taskId: string, cwd?: string): string {
+  const base = cwd || process.cwd();
+  return join(base, `Iteration-${iteration}`, TASKS_DIR, taskId);
 }
 
 /** 获取指定迭代中 030-tasks/ 目录路径 */
-export function getTasksRoot(iteration: string): string {
-  return join(process.cwd(), `Iteration-${iteration}`, TASKS_DIR);
+export function getTasksRoot(iteration: string, cwd?: string): string {
+  const base = cwd || process.cwd();
+  return join(base, `Iteration-${iteration}`, TASKS_DIR);
 }
 
 /** 获取 Task 在迭代目录中的相对路径 */

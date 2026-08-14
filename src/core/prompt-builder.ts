@@ -276,7 +276,7 @@ async function loadBusinessRules(cwd: string, taskDir?: string): Promise<Busines
 /**
  * 读取任务目录中的额外上下文文件（TECH.md / TASK.md / SCHEMA.md / .issues.md 等）
  */
-async function loadExtraSpecs(cwd: string, taskDir: string, platform?: string): Promise<TaskExtraSpec[]> {
+async function loadExtraSpecs(cwd: string, taskDir: string, platform?: string, iteration?: string): Promise<TaskExtraSpec[]> {
   const extras: TaskExtraSpec[] = [];
   const files = [
     { name: '技术方案', path: '_shared/TECH.md' },
@@ -290,6 +290,22 @@ async function loadExtraSpecs(cwd: string, taskDir: string, platform?: string): 
     { name: '风险评估', path: '99-artifacts/RISK.md' },
     { name: '已知问题', path: '.issues.md' },
   ];
+
+  // 加载迭代级设计文档（020-specs/）—— 填补迭代层上下文断裂
+  if (iteration) {
+    const iterDir = join(cwd, `Iteration-${iteration}`);
+    files.push(
+      { name: '迭代设计文档', path: join(iterDir, '020-specs', 'DESIGN.md') },
+    );
+    if (platform) {
+      // 迭代级各端规格文档
+      const platSpecDir = join(iterDir, '020-specs', 'platforms', platform);
+      // 动态扫描该端的 spec 文件（在调用时处理）
+      files.push(
+        { name: `${platform}端迭代规格`, path: join(platSpecDir, 'SPEC.md') },
+      );
+    }
+  }
 
   // 按端执行时，加载该端的子任务文件
   if (platform) {
@@ -907,7 +923,7 @@ export async function buildPrompt(
   const apiSpecs = await loadApiSpecs(cwd, taskDir);
   const dataModels = await loadDataModels(cwd, taskDir);
   const businessRules = await loadBusinessRules(cwd, taskDir);
-  const extraSpecs = taskDir ? await loadExtraSpecs(cwd, taskDir, options.platform) : [];
+  const extraSpecs = taskDir ? await loadExtraSpecs(cwd, taskDir, options.platform, options.iteration) : [];
 
   // 加载全局上下文（智能注入）
   const globalContext = await loadGlobalContext(cwd, command, options.platform);

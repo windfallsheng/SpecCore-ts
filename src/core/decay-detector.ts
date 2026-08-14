@@ -101,8 +101,22 @@ export async function detectDecay(
   for (const entity of entities) {
     if (!entity.file || !entity.hash) continue;
 
-    if (snapshot && snapshot.files[entity.file]) {
-      const oldHash = snapshot.files[entity.file].hash;
+    // 直接查找（路径格式一致时匹配）
+    let snapshotEntry = snapshot?.files[entity.file];
+
+    // 回退：basename 匹配（应对路径格式不一致的情况）
+    if (!snapshotEntry && snapshot) {
+      const entityBase = entity.file.split('/').pop();
+      for (const [snapPath, snapEntry] of Object.entries(snapshot.files)) {
+        if (snapPath.split('/').pop() === entityBase) {
+          snapshotEntry = snapEntry;
+          break;
+        }
+      }
+    }
+
+    if (snapshotEntry) {
+      const oldHash = snapshotEntry.hash;
       if (oldHash !== entity.hash) {
         report.decayedFiles.push({
           entityId: entity.id,

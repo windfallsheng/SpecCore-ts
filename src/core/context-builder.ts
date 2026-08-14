@@ -8,6 +8,7 @@
 import { readFile, writeFile, pathExists, ensureDir } from 'fs-extra';
 import { join } from 'path';
 import { KnowledgeGraph, GraphEntity, getTaskContext } from './knowledge-graph';
+import { getIterationDir } from './context';
 import { DecayReport } from './decay-detector';
 
 // ═══════════════════════════════════════════════
@@ -173,14 +174,14 @@ export async function saveContextMarkdown(
   content: string,
   iteration?: string
 ): Promise<string> {
-  const iterDir = iteration
-    ? join(cwd, `Iteration-${iteration}`)
-    : null;
-
   let targetDir: string;
-  if (iterDir && await pathExists(iterDir)) {
-    // 保存到迭代的 000-overview/ 下
-    targetDir = join(iterDir, '000-overview');
+  if (iteration) {
+    const iterDir = await getIterationDir(iteration);
+    if (iterDir) {
+      targetDir = join(iterDir, '000-overview');
+    } else {
+      targetDir = join(cwd, '.speccore', 'cache');
+    }
   } else {
     // 保存到全局 cache 下
     targetDir = join(cwd, '.speccore', 'cache');

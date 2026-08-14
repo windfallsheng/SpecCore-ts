@@ -5,7 +5,7 @@
  * 输出 knowledge-graph.json（机器读）+ CONTEXT.md（AI 读）
  */
 
-import { readFile, writeFile, pathExists, readdir, ensureDir } from 'fs-extra';
+import { readFile, writeFile, pathExists, readdir, ensureDir, stat } from 'fs-extra';
 import { join, relative } from 'path';
 import { createHash } from 'crypto';
 import { getIterationDir, getDefaultIteration } from './context';
@@ -112,11 +112,13 @@ async function scanRequirements(iterDir: string, iterName: string): Promise<{
 
       if (item.isDirectory()) {
         await scanDir(fullPath, `${relPath}/`);
-      } else if (item.name.endsWith('.md') && item.name !== 'INDEX.md') {
+      } else if (item.name.endsWith('.md') && item.name !== 'INDEX.md' && !isTimestampBackup(item.name)) {
         const { hash, mtime } = await fileHash(fullPath);
         const title = await extractTitle(fullPath);
         const content = await readFile(fullPath, 'utf-8').catch(() => '');
-        const reqId = extractReqId(content, item.name.replace('.md', ''));
+        // 用路径前缀确保 ID 唯一性，避免不同文件引用同一 REQ-xxx 时覆盖
+        const pathPrefix = relPath.replace(/\.md$/, '').replace(/\//g, '-');
+        const reqId = extractReqId(content, pathPrefix);
 
         entities.push({
           id: reqId,
@@ -272,6 +274,7 @@ async function scanTasks(iterDir: string): Promise<{
     for (const de of dirEntries) {
       if (!de.isDirectory()) continue;
       if (de.name.startsWith('.') || de.name.startsWith('0') || de.name === '_shared' || de.name === '99-artifacts') continue;
+      if (isTimestampBackup(de.name)) continue;
 
       const platformTaskMd = join(taskPath, de.name, 'TASK.md');
       if (!(await pathExists(platformTaskMd))) continue;
@@ -360,11 +363,12 @@ async function scanUserFiles(iterDir: string): Promise<GraphEntity[]> {
 // 关联推断
 // ═══════════════════════════════════════════════
 
-function inferRelations(entities: GraphEntity[]): GraphRelation[] {
+async function inferRelations(entities: GraphEntity[], iterDir: string): Promise<GraphRelation[]> {
   const relations: GraphRelation[] = [];
   const reqs = entities.filter(e => e.type === 'requirement');
   const tasks = entities.filter(e => e.type === 'task');
   const specs = entities.filter(e => e.type === 'spec');
+  const entityMap = new Map(entities.map(e => [e.id, e]));
 
   // 需求 → 任务：按编号匹配（REQ-001 → Task-001）
   for (const req of reqs) {
@@ -378,8 +382,21 @@ function inferRelations(entities: GraphEntity[]): GraphRelation[] {
     }
   }
 
-  // 规格 → 需求：spec 文件内容中引用了 REQ-xxx
-  // （这里只做结构推断，实际内容分析在 CONTEXT.md 生成时做）
+  // 规格 → 需求：读取 spec 文件内容，提取 REQ-xxx 引用
+  for (const spec of specs) {
+    const specPath = join(iterDir, spec.file);
+    try {
+      const content = await readFile(specPath, 'utf-8');
+      const reqRefs = content.match(/REQ-\d+/g);
+      if (reqRefs) {
+        for (const ref of [...new Set(reqRefs)]) {
+          if (entityMap.has(ref)) {
+            relations.push({ from: spec.id, to: ref, type: 'specifies' });
+          }
+        }
+      }
+    } catch { /* 文件不存在或无法读取，跳过 */ }
+  }
 
   return relations;
 }
@@ -429,7 +446,7 @@ export async function buildKnowledgeGraph(
     ...reqResult.relations,
     ...specResult.relations,
     ...taskResult.relations,
-    ...inferRelations(allEntities),
+    ...(await inferRelations(allEntities, iterDir)),
   ];
 
   // 统计
@@ -481,13 +498,23 @@ export function getTaskContext(graph: KnowledgeGraph, taskId: string): {
   let parentTask: GraphEntity | null = null;
   const siblingSubtasks: GraphEntity[] = [];
 
-  // 找上游需求
+  // 找上游需求（直接 implements 或通过父任务间接关联）
   for (const rel of graph.relations) {
     if (rel.from === taskId && rel.type === 'implements') {
       requirement = graph.entities[rel.to] || null;
     }
     if (rel.from === taskId && rel.type === 'subtask_of') {
       parentTask = graph.entities[rel.to] || null;
+    }
+  }
+
+  // 子任务没有直接 implements 关系 → 通过父任务找上游需求
+  if (!requirement && parentTask) {
+    for (const rel of graph.relations) {
+      if (rel.from === parentTask.id && rel.type === 'implements') {
+        requirement = graph.entities[rel.to] || null;
+        break;
+      }
     }
   }
 
@@ -508,6 +535,26 @@ export function getTaskContext(graph: KnowledgeGraph, taskId: string): {
 // 自动更新机制
 // ═══════════════════════════════════════════════
 
+/** 递归获取目录下所有文件的最新 mtime */
+async function getLatestMtime(dir: string): Promise<number> {
+  if (!(await pathExists(dir))) return 0;
+  let latest = 0;
+  const items = await readdir(dir, { withFileTypes: true });
+  for (const item of items) {
+    if (item.name.startsWith('.') || isTimestampBackup(item.name)) continue;
+    const fullPath = join(dir, item.name);
+    const st = await stat(fullPath);
+    if (item.isDirectory()) {
+      if (item.name === 'node_modules' || item.name === 'cache') continue;
+      const subLatest = await getLatestMtime(fullPath);
+      if (subLatest > latest) latest = subLatest;
+    } else {
+      if (st.mtimeMs > latest) latest = st.mtimeMs;
+    }
+  }
+  return latest;
+}
+
 /** 检查知识图谱是否已过期 */
 export async function isGraphStale(cwd: string, iteration?: string): Promise<boolean> {
   const graph = await loadKnowledgeGraph(cwd);
@@ -517,10 +564,9 @@ export async function isGraphStale(cwd: string, iteration?: string): Promise<boo
   const iterDir = await getIterationDir(iterName);
   if (!iterDir) return false;
 
-  const { stat } = await import('fs-extra');
   const graphTime = new Date(graph.generated).getTime();
 
-  // 检查关键目录的最新修改时间
+  // 递归检查目录下所有文件的最新 mtime（目录 mtime 只在增删文件时变）
   const dirsToCheck = [
     join(iterDir, '010-requirements'),
     join(iterDir, '020-specs'),
@@ -528,11 +574,8 @@ export async function isGraphStale(cwd: string, iteration?: string): Promise<boo
   ];
 
   for (const dir of dirsToCheck) {
-    if (!(await import('fs-extra')).pathExists(dir)) continue;
-    try {
-      const st = await stat(dir);
-      if (st.mtimeMs > graphTime) return true;
-    } catch { /* ignore */ }
+    const latestMtime = await getLatestMtime(dir);
+    if (latestMtime > graphTime) return true;
   }
 
   return false;
