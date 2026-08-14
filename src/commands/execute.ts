@@ -34,6 +34,7 @@ import { createTaskBranch, detectDefaultBranch, isProtectedBranch } from '../cor
 import { buildPrompt, formatPrompt, parseAiResponse, outputNeedsInfo } from '../core/prompt-builder';
 import { runVerification, writeVerifyReport, outputFixTag, runQualityGate } from '../core/verify-engine';
 import { loadConfig } from '../core/unified-config';
+import { checkCodeIndexFreshness } from '../core/code-scanner';
 
 export interface ExecuteOptions {
   all?: boolean;
@@ -237,6 +238,24 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
     if (!options.force && !options.auto) {
       logger.info('💡 使用 --force 或 --auto 直接执行，或 --interactive 选择执行');
       return;
+    }
+
+    // === 代码新鲜度检查：索引过期时警告但不阻塞 ===
+    const freshness = await checkCodeIndexFreshness();
+    if (!freshness.fresh) {
+      logger.warn('⚠️  代码索引可能过期');
+      logger.warn(`   ${freshness.message}`);
+      if (freshness.staleFiles.length > 0) {
+        logger.warn(`   最近修改的文件（${freshness.staleFiles.length} 个）:`);
+        for (const f of freshness.staleFiles.slice(0, 5)) {
+          logger.warn(`     - ${f}`);
+        }
+        if (freshness.staleFiles.length > 5) {
+          logger.warn(`     ... 等 ${freshness.staleFiles.length} 个文件`);
+        }
+      }
+      logger.info('   💡 如需更新索引: speccore code-index');
+      logger.info('');
     }
 
     logger.info('🚀 开始执行...\n');

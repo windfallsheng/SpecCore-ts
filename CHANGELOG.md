@@ -1,3 +1,34 @@
+## v6.8.0 (2026-08-14) — 代码索引智能增强 + 衰减检测影响链推断
+
+### 代码索引智能增强（P0-1 ~ P0-3）
+
+- **findRelevantCode 接入知识图谱**: `code-scanner.ts`
+  - 新增 `iteration`/`taskId` 参数，自动加载知识图谱关联的代码文件
+  - 依赖任务（`depends_on`）关联的代码文件也纳入匹配范围
+- **@spec 注释扫描加分**: 扫描代码中的 `@spec Task-XXX` 注释
+  - 命中当前 taskId 的文件 +50 分，命中依赖任务 +30 分
+  - 支持前缀匹配：`Task-001` 可匹配 `Task-001-user-login-backend-a3f2`
+- **Git 联动加分**: 命中文件 A 时，A 常一起变更的文件组（correlations）中的 B/C 也 +10 分
+  - 解决"改了 Controller 但没改 Service"的遗漏问题
+- **关键词语义扩展**: `expandKeywords()` 自动扩展同义词
+  - 支持中英双语语义映射：`login` → `auth/session/token`，`权限` → `rbac/acl`
+  - 停用词过滤：去除 `功能/实现/需要/the/and` 等噪声词
+- **execute 前代码新鲜度检查**: `execute.ts`
+  - 执行前自动检查 `code-structure.json` 索引是否过期
+  - 对比源码最新 mtime 与索引 updatedAt，5 分钟容差
+  - 过期时警告并列出最近修改的文件，提示运行 `speccore code-index`
+
+### 衰减检测影响链推断（P0-4）
+
+- **代码→Task→Spec 漂移检测**: `decay-detector.ts` 新增 `detectCodeSpecDrift()`
+  - 扫描 `@spec` 注释建立 code-file → taskId 映射
+  - 对比 code-index 的 `lastModified` 与当前文件 mtime
+  - 代码已变更但关联 Task/Spec 未更新时，生成 `code_ahead_of_spec` 类型告警
+  - 通过知识图谱推断完整影响链：`Task → implements → Req` / `Task → references → Spec` / `Task → depends_on → Task`
+  - 报告格式新增「📝 代码先行」章节，展示影响链
+
+---
+
 ## v6.7.0 (2026-08-14) — 知识图谱深度集成 + 意图缓存增强 + 宿主AI协议优化
 
 ### 核心架构增强
