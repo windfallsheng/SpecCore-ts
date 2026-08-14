@@ -519,6 +519,23 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       
       // 构建完整 prompt
       let splitPrompt = buildSplitPrompt(iteration, constitutionContent, reqContent2, specContents, staffing, teamSize, granularityLabel, granularityHint);
+
+      // 注入全局上下文（跨端关系 + 全局索引）
+      const { loadGlobalContext } = await import('../../core/prompt-builder');
+      const globalCtx = await loadGlobalContext(process.cwd(), 'split');
+      if (globalCtx.crossPlatform || globalCtx.indexSummary) {
+        splitPrompt += '\n## 🌐 全局上下文\n';
+        splitPrompt += '> 以下信息来自项目全局知识库，拆分任务时必须参考\n\n';
+        if (globalCtx.indexSummary) {
+          splitPrompt += '### 项目概览\n';
+          splitPrompt += globalCtx.indexSummary + '\n\n';
+        }
+        if (globalCtx.crossPlatform) {
+          splitPrompt += '### 跨端关系\n';
+          splitPrompt += '> 拆分时必须考虑跨端依赖和数据流向\n';
+          splitPrompt += globalCtx.crossPlatform + '\n\n';
+        }
+      }
       
       await writeFile(join(promptsDir, `split-suggestion-${iteration}.md`), splitPrompt);
       logger.info(`   🤖 AI 拆分建议 → .speccore/prompts/split-suggestion-${iteration}.md`);

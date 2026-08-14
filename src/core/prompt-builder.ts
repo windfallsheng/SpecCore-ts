@@ -54,6 +54,20 @@ export interface TaskExtraSpec {
   content: string;
 }
 
+/** 全局上下文（从 GLOBAL 层注入） */
+export interface GlobalContext {
+  /** 全局架构约束（ARCHITECTURE.md 摘要） */
+  architecture?: string;
+  /** 跨端关系摘要（CROSS_PLATFORM.md 摘要） */
+  crossPlatform?: string;
+  /** 技术方案摘要（TECH_FULL.md 摘要） */
+  techFull?: string;
+  /** 当前端专属规则（GLOBAL/platforms/{端}/ 摘要） */
+  platformRules?: string;
+  /** 全局索引摘要（GLOBAL/INDEX.md） */
+  indexSummary?: string;
+}
+
 /** SpecCore 结构化 Prompt */
 export interface SpecCorePrompt {
   marker: '[SPECCORE_PROMPT]';
@@ -67,6 +81,7 @@ export interface SpecCorePrompt {
   dataModels: DataModel[];
   businessRules: BusinessRule[];
   extraSpecs: TaskExtraSpec[];
+  globalContext?: GlobalContext;
   instruction: string;
   outputHint: string;
 }
@@ -262,6 +277,165 @@ async function loadExtraSpecs(cwd: string, taskDir: string): Promise<TaskExtraSp
   }
 
   return extras;
+}
+
+// ═══════════════════════════════════════════════════════════
+// 全局上下文加载（智能注入）
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * 从文档中提取关键段落（摘要）
+ * 提取策略：取每个 ## 章节的前 3 行，总长度不超过 maxLen
+ */
+function extractSummary(content: string, maxLen: number = 2000): string {
+  const lines = content.split('\n');
+  const summary: string[] = [];
+  let currentSection = '';
+  let sectionLines = 0;
+  let totalLen = 0;
+
+  for (const line of lines) {
+    if (line.startsWith('## ')) {
+      currentSection = line;
+      sectionLines = 0;
+      if (totalLen < maxLen) {
+        summary.push(line);
+        totalLen += line.length;
+      }
+    } else if (currentSection && sectionLines < 3 && line.trim()) {
+      if (totalLen < maxLen) {
+        summary.push(line);
+        totalLen += line.length;
+        sectionLines++;
+      }
+    }
+  }
+  return summary.join('\n');
+}
+
+/**
+ * 按命令类型和端类型加载全局上下文
+ * - execute: 架构约束 + 技术方案 + 端专属规则
+ * - split: 跨端关系 + 全局索引
+ * - analyze: 架构摘要 + 全局索引
+ * - plan: 同 execute
+ */
+export async function loadGlobalContext(
+  cwd: string,
+  command: PromptCommand,
+  platform?: string
+): Promise<GlobalContext> {
+  const globalDir = join(cwd, '.speccore', 'GLOBAL');
+  const synthesisDir = join(globalDir, 'synthesis');
+  const ctx: GlobalContext = {};
+
+  // 读取全局索引（所有命令都读）
+  const indexPath = join(globalDir, 'INDEX.md');
+  if (await pathExists(indexPath)) {
+    const content = await readFile(indexPath, 'utf-8');
+    ctx.indexSummary = content.slice(0, 1500);
+  }
+
+  if (command === 'execute' || command === 'plan') {
+    // execute/plan: 读架构约束 + 技术方案
+    const archPath = join(synthesisDir, 'ARCHITECTURE.md');
+    if (await pathExists(archPath)) {
+      const content = await readFile(archPath, 'utf-8');
+      // 提取关键段：架构约束、安全架构、编码规范、监控告警
+      ctx.architecture = extractArchConstraints(content);
+    }
+
+    const techPath = join(synthesisDir, 'TECH_FULL.md');
+    if (await pathExists(techPath)) {
+      const content = await readFile(techPath, 'utf-8');
+      // 提取关键段：公共模块、API 版本、性能优化、技术风险
+      ctx.techFull = extractTechConstraints(content);
+    }
+
+    // 端专属规则：读 GLOBAL/platforms/{端}/ 下的文档摘要
+    if (platform) {
+      const platformDir = join(globalDir, 'platforms', platform);
+      if (await pathExists(platformDir)) {
+        const { readdir } = await import('fs-extra');
+        const files = await readdir(platformDir);
+        const mdFiles = files.filter(f => f.endsWith('.md'));
+        if (mdFiles.length > 0) {
+          const parts: string[] = [];
+          for (const f of mdFiles.slice(0, 3)) { // 最多读 3 个文件
+            const content = await readFile(join(platformDir, f), 'utf-8');
+            parts.push(`### ${f}\n${extractSummary(content, 1500)}`);
+          }
+          ctx.platformRules = parts.join('\n\n');
+        }
+      }
+    }
+  } else if (command === 'split') {
+    // split: 读跨端关系 + 全局索引
+    const cpPath = join(synthesisDir, 'CROSS_PLATFORM.md');
+    if (await pathExists(cpPath)) {
+      const content = await readFile(cpPath, 'utf-8');
+      ctx.crossPlatform = extractSummary(content, 2000);
+    }
+  } else if (command === 'analyze') {
+    // analyze: 读架构摘要
+    const archPath = join(synthesisDir, 'ARCHITECTURE.md');
+    if (await pathExists(archPath)) {
+      const content = await readFile(archPath, 'utf-8');
+      ctx.architecture = extractSummary(content, 2000);
+    }
+  }
+
+  return ctx;
+}
+
+/**
+ * 从 ARCHITECTURE.md 提取架构约束段
+ */
+function extractArchConstraints(content: string): string {
+  const keywords = ['架构约束', '安全架构', '编码规范', '监控告警', '容灾', 'ADR', '架构决策'];
+  const lines = content.split('\n');
+  const result: string[] = [];
+  let inTarget = false;
+  let lineCount = 0;
+
+  for (const line of lines) {
+    if (line.startsWith('## ') || line.startsWith('### ')) {
+      inTarget = keywords.some(k => line.includes(k));
+      if (inTarget) lineCount = 0;
+    }
+    if (inTarget) {
+      result.push(line);
+      lineCount++;
+      if (lineCount > 15) inTarget = false; // 每段最多取 15 行
+    }
+  }
+
+  return result.length > 0 ? result.join('\n') : extractSummary(content, 2000);
+}
+
+/**
+ * 从 TECH_FULL.md 提取技术约束段
+ */
+function extractTechConstraints(content: string): string {
+  const keywords = ['公共模块', 'API 版本', '性能优化', '技术风险', '数据一致性', '容量规划'];
+  const lines = content.split('\n');
+  const result: string[] = [];
+  let inTarget = false;
+  let lineCount = 0;
+
+  for (const line of lines) {
+    if (line.startsWith('## ') || line.startsWith('### ')) {
+      inTarget = keywords.some(k => line.includes(k));
+      if (inTarget) lineCount = 0;
+    }
+    if (inTarget) {
+      result.push(line);
+      lineCount++;
+      if (lineCount > 15) inTarget = false;
+    }
+  }
+
+  return result.length > 0 ? result.join('\n') : extractSummary(content, 2000);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -489,6 +663,9 @@ export async function buildPrompt(
   const businessRules = await loadBusinessRules(cwd, taskDir);
   const extraSpecs = taskDir ? await loadExtraSpecs(cwd, taskDir) : [];
 
+  // 加载全局上下文（智能注入）
+  const globalContext = await loadGlobalContext(cwd, command, options.platform);
+
   const context = {
     taskName: options.task,
     apiCount: apiSpecs.length,
@@ -507,6 +684,7 @@ export async function buildPrompt(
     dataModels,
     businessRules,
     extraSpecs,
+    globalContext: Object.keys(globalContext).length > 0 ? globalContext : undefined,
     instruction: getInstruction(command, context),
     outputHint: command === 'execute'
       ? '请返回格式: {"files": [{"path": "相对路径", "content": "代码内容"}]}'
@@ -585,6 +763,44 @@ export function formatPrompt(prompt: SpecCorePrompt): string {
       lines.push(spec.content);
       lines.push('');
     }
+  }
+
+  // 全局上下文（从 GLOBAL 层智能注入）
+  if (prompt.globalContext) {
+    const gc = prompt.globalContext;
+    lines.push('## 🌐 全局上下文');
+    lines.push('> 以下信息来自项目全局知识库，生成代码/分析/拆分时必须参考\n');
+
+    if (gc.indexSummary) {
+      lines.push('### 项目概览');
+      lines.push(gc.indexSummary);
+      lines.push('');
+    }
+    if (gc.architecture) {
+      lines.push('### 架构约束与规范');
+      lines.push('> 生成代码时必须遵守以下架构约束\n');
+      lines.push(gc.architecture);
+      lines.push('');
+    }
+    if (gc.techFull) {
+      lines.push('### 技术方案约束');
+      lines.push('> 公共模块、API 版本、性能优化等技术约束\n');
+      lines.push(gc.techFull);
+      lines.push('');
+    }
+    if (gc.crossPlatform) {
+      lines.push('### 跨端关系');
+      lines.push('> 拆分任务时必须考虑跨端依赖\n');
+      lines.push(gc.crossPlatform);
+      lines.push('');
+    }
+    if (gc.platformRules) {
+      lines.push(`### ${prompt.platform || '当前端'} 专属规则`);
+      lines.push('> 开发该端代码时必须参考以下端专属规范\n');
+      lines.push(gc.platformRules);
+      lines.push('');
+    }
+    lines.push('');
   }
 
   // 输出格式提示
