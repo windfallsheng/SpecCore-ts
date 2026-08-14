@@ -20,7 +20,8 @@ import { isTimestampBackup } from '../utils/task-utils';
 import { buildCodeIndex, findRelevantCode, readRelevantSource, isIndexStale, loadFullIndex } from './code-scanner';
 import { generateAIContext, AIContextInput, AIContextResult } from './ai-context-generator';
 import { cleanStaleCache } from './git-integration';
-import { refreshRagIndex, checkRagIndexFreshness } from './rag-engine';
+import { refreshRagIndex, checkRagIndexFreshness, indexDirectoryDocuments } from './rag-engine';
+import { refreshKnowledgeGraph } from './knowledge-graph';
 
 // ================================================================
 // 类型定义
@@ -142,22 +143,57 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalysisResult> 
     } catch {} // 非关键，静默失败
   }
 
-  // ── task 模式：为任务目录构建 RAG 索引（供后续 execute/plan 检索使用） ──
-  if (effectiveInput.scope === 'task' && effectiveInput.taskId && effectiveInput.iteration) {
-    try {
+  // ── 为当前 scope 构建/刷新 RAG 索引 ──
+  try {
+    const cwd = process.cwd();
+    if (effectiveInput.scope === 'task' && effectiveInput.taskId && effectiveInput.iteration) {
+      // task 模式：索引任务目录
       const taskDir = join(`Iteration-${effectiveInput.iteration}`, '030-tasks', effectiveInput.taskId);
       if (await pathExists(taskDir)) {
-        const { staleFiles } = await checkRagIndexFreshness(process.cwd());
-        await refreshRagIndex(process.cwd(), taskDir, effectiveInput.iteration);
+        const { staleFiles } = await checkRagIndexFreshness(cwd);
+        await refreshRagIndex(cwd, taskDir, effectiveInput.iteration);
         if (staleFiles.length > 0) {
           logger.info(`   🔄 RAG 索引已增量刷新 (${staleFiles.length} 个文件更新): ${taskDir}`);
         } else {
           logger.info(`   🔍 RAG 索引已生成: ${taskDir}`);
         }
       }
-    } catch (e) {
-      logger.debug('RAG 索引生成失败（非关键）:', e);
+    } else if (effectiveInput.scope === 'iteration' && effectiveInput.iteration) {
+      // iteration 模式：索引 020-specs/ 目录
+      const specsDir = join(`Iteration-${effectiveInput.iteration}`, '020-specs');
+      if (await pathExists(specsDir)) {
+        const scope = `${effectiveInput.iteration}_020-specs_iteration_all`;
+        await indexDirectoryDocuments(cwd, specsDir, scope);
+        logger.info(`   🔍 迭代 RAG 索引已生成: ${specsDir}`);
+      }
+    } else if (effectiveInput.scope === 'global') {
+      // global 模式：索引全局 specs 目录
+      const globalSpecsDir = join(cwd, '.speccore', 'GLOBAL', '020-specs');
+      const fallbackDir = join(cwd, '.speccore');
+      const targetDir = await pathExists(globalSpecsDir) ? globalSpecsDir : fallbackDir;
+      const scope = 'GLOBAL_020-specs_global_all';
+      await indexDirectoryDocuments(cwd, targetDir, scope);
+      logger.info(`   🔍 全局 RAG 索引已生成: ${targetDir}`);
     }
+  } catch (e) {
+    logger.debug('RAG 索引生成失败（非关键）:', e);
+  }
+
+  // ── 统一刷新代码索引 + 知识图谱（所有 scope）──
+  try {
+    logger.info('   🔄 刷新代码索引...');
+    await buildCodeIndex(undefined, true);
+    logger.info('   ✅ 代码索引已刷新');
+  } catch (e) {
+    logger.debug('代码索引刷新失败（非关键）:', e);
+  }
+
+  try {
+    logger.info('   🔄 刷新知识图谱...');
+    await refreshKnowledgeGraph(process.cwd(), effectiveInput.iteration);
+    logger.info('   ✅ 知识图谱已刷新');
+  } catch (e) {
+    logger.debug('知识图谱刷新失败（非关键）:', e);
   }
 
   return result;

@@ -9,7 +9,7 @@
  *   执行阶段: 根据 task/需求关键词 → 检索相关块 → 按分数排序 → 组装进 Prompt
  */
 
-import { readFile, pathExists, writeFile, ensureDir, stat } from 'fs-extra';
+import { readFile, pathExists, writeFile, ensureDir, stat, readdir } from 'fs-extra';
 import { join, basename } from 'path';
 import { createHash } from 'crypto';
 
@@ -579,6 +579,43 @@ export async function checkRagIndexFreshness(cwd: string): Promise<{ fresh: bool
     fresh: staleFiles.length === 0,
     staleFiles,
   };
+}
+
+/**
+ * 为任意目录构建 RAG 索引（通用版本，不限于任务目录）
+ * 扫描目录下所有 .md 文件，自动分块建索引
+ */
+export async function indexDirectoryDocuments(
+  cwd: string,
+  dirPath: string,
+  scope: string,
+): Promise<RagIndex> {
+  const filesToIndex: { filePath: string; content: string; mtime: number }[] = [];
+
+  async function scanDir(dir: string) {
+    if (!(await pathExists(dir))) return;
+    const items = await readdir(dir, { withFileTypes: true });
+    for (const item of items) {
+      const fullPath = join(dir, item.name);
+      if (item.isDirectory() && !item.name.startsWith('.') && item.name !== 'node_modules') {
+        await scanDir(fullPath);
+      } else if (item.isFile() && item.name.endsWith('.md') && !item.name.startsWith('README')) {
+        const [content, st] = await Promise.all([
+          readFile(fullPath, 'utf-8'),
+          stat(fullPath),
+        ]);
+        if (content.trim().length > 50 && !content.trim().match(/^#+\s*待填充|^<!--\s*AI-FILL\s*-->$/m)) {
+          filesToIndex.push({ filePath: fullPath, content, mtime: st.mtimeMs });
+        }
+      }
+    }
+  }
+
+  await scanDir(dirPath);
+
+  const index = await buildRagIndex(filesToIndex, scope);
+  await saveRagIndex(cwd, index);
+  return index;
 }
 
 /**

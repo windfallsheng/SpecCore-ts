@@ -40,6 +40,12 @@
   - `speccore refresh --graph` — 只刷新知识图谱
   - 自动推断当前任务（从已有 RAG 索引的 scope 解析），无需手动指定
   - 汇总输出：✅ 成功 / ⏭️ 跳过 / ❌ 失败，一目了然
+- **analyze 阶段自动刷新所有检索层**
+  - 无论什么 scope（task/iteration/global），analyze 完成后统一刷新三层索引
+  - task scope: 刷新任务目录 RAG + 代码索引 + 知识图谱
+  - iteration scope: 为 020-specs/ 目录新建迭代级 RAG 索引 + 刷新代码索引 + 知识图谱
+  - global scope: 为全局 specs 目录新建全局 RAG 索引 + 刷新代码索引 + 知识图谱
+  - 新增 `indexDirectoryDocuments()` 通用函数：可为任意目录递归扫描 .md 文件建 RAG 索引
 
 ### 代码索引智能增强（P0-1 ~ P0-3）
 
