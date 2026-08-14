@@ -2,6 +2,17 @@
 
 ---
 
+## v6.3.1 (2026-08-14) — Full Pipeline Verification: 5 Bug Fixes
+
+- **Bug#1**: `generateSubtaskId` called multiple times producing different IDs → pre-generate ID map, consistent across README/TASK.md/PLATFORMS.md
+- **Bug#2**: execute pre-check only looked at `00-specs/` → added `_shared/REQ.md`, `_shared/TECH.md` fallback
+- **Bug#3**: `resolveTaskDir` didn't support type subdirectories → now uses `findTaskDir()` for recursive lookup
+- **Bug#4**: `loadExtraSpecs` didn't read platform sub-task files → loads `{platform}/TASK.md` etc. when `--platform` specified
+- **Bug#5**: `filterByPlatform` path construction skipped type subdirectories → uses fixed `resolveTaskDir`
+- **Extra**: `generateTaskSkeleton` and batch execution logs also get `_shared/` path fallback
+
+---
+
 ## v6.3.0 (2026-08-14) — Platform Registry + Fuzzy Matching + Per-Platform Analysis
 
 - **New `platform-registry.ts`**: Unified platform name resolution module

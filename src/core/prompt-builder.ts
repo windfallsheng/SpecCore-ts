@@ -273,12 +273,13 @@ async function loadBusinessRules(cwd: string, taskDir?: string): Promise<Busines
 /**
  * 读取任务目录中的额外上下文文件（TECH.md / TASK.md / SCHEMA.md / .issues.md 等）
  */
-async function loadExtraSpecs(cwd: string, taskDir: string): Promise<TaskExtraSpec[]> {
+async function loadExtraSpecs(cwd: string, taskDir: string, platform?: string): Promise<TaskExtraSpec[]> {
   const extras: TaskExtraSpec[] = [];
   const files = [
     { name: '技术方案', path: '_shared/TECH.md' },
     { name: '技术方案(旧)', path: '00-specs/TECH.md' },
     { name: '任务追踪', path: '00-specs/TASK.md' },
+    { name: '需求规格', path: '_shared/REQ.md' },
     { name: '数据库设计', path: '_shared/SCHEMA.md' },
     { name: 'API 契约', path: '_shared/API_CONTRACT.yaml' },
     { name: '测试计划', path: '99-artifacts/TEST.md' },
@@ -286,6 +287,16 @@ async function loadExtraSpecs(cwd: string, taskDir: string): Promise<TaskExtraSp
     { name: '风险评估', path: '99-artifacts/RISK.md' },
     { name: '已知问题', path: '.issues.md' },
   ];
+
+  // 按端执行时，加载该端的子任务文件
+  if (platform) {
+    files.unshift(
+      { name: `${platform}端子任务`, path: `${platform}/TASK.md` },
+      { name: `${platform}端组件树`, path: `${platform}/COMPONENT_TREE.md` },
+      { name: `${platform}端路由`, path: `${platform}/ROUTES.md` },
+      { name: `${platform}端状态管理`, path: `${platform}/STATE.md` },
+    );
+  }
 
   for (const f of files) {
     const fullPath = join(cwd, taskDir, f.path);
@@ -893,7 +904,7 @@ export async function buildPrompt(
   const apiSpecs = await loadApiSpecs(cwd, taskDir);
   const dataModels = await loadDataModels(cwd, taskDir);
   const businessRules = await loadBusinessRules(cwd, taskDir);
-  const extraSpecs = taskDir ? await loadExtraSpecs(cwd, taskDir) : [];
+  const extraSpecs = taskDir ? await loadExtraSpecs(cwd, taskDir, options.platform) : [];
 
   // 加载全局上下文（智能注入）
   const globalContext = await loadGlobalContext(cwd, command, options.platform);
