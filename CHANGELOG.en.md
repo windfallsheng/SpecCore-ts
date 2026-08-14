@@ -2,6 +2,16 @@
 
 ---
 
+## v5.96.1 (2026-08-14) — Synthesize Directory Organization Optimization
+
+- Phase 1 output: `per-platform/` → `platforms/` (per-endpoint subdirectories)
+- Phase 2 output: scattered files → `synthesis/` subdirectory (CROSS_PLATFORM.md + ARCHITECTURE.md + TECH_FULL.md)
+- New `snapshots/` directory: auto-archive old Phase 2 results on re-run
+- Phase 2 apply now parses `===MARKER===` separators into individual files
+- Phase 1/3 read logic adapted to new directory structure
+
+---
+
 ## v5.96.0 (2026-08-14) — Synthesize Multi-Platform Full Analysis & Synthesis (Three-Phase Automated Pipeline)
 
 - **Phase 1: Per-platform analysis** — Reads CONSTITUTION project list, generates independent specs per platform

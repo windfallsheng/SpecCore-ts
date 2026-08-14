@@ -322,18 +322,18 @@ init → doc2spec → analyze → split → plan → execute → pr → done →
 
 ```
 Phase 1: 逐端分析（per-platform analysis）
-  ├── 后端工程 → analyze → 020-specs/backend/ANALYSIS.md + TECH.md
-  ├── Web 前端 → analyze → 020-specs/web/ANALYSIS.md + TECH.md
-  ├── Admin 端  → analyze → 020-specs/admin/ANALYSIS.md + TECH.md
-  └── App 端    → analyze → 020-specs/app/ANALYSIS.md + TECH.md
+  ├── 后端工程 → analyze → 020-specs/platforms/backend/ANALYSIS.md + TECH.md
+  ├── Web 前端 → analyze → 020-specs/platforms/web/ANALYSIS.md + TECH.md
+  ├── Admin 端  → analyze → 020-specs/platforms/admin/ANALYSIS.md + TECH.md
+  └── App 端    → analyze → 020-specs/platforms/app/ANALYSIS.md + TECH.md
 
 Phase 2: 跨端综合（cross-platform synthesis）
   ├── 汇总各端 specs
   ├── 识别跨端业务关系（如 Web 用户列表 → 后端用户查询 API）
   └── 输出:
-      ├── 020-specs/CROSS_PLATFORM.md    ← 跨端关系图 + 接口映射
-      ├── 020-specs/ARCHITECTURE.md      ← 全量架构文档
-      └── 020-specs/TECH_FULL.md         ← 全量技术方案
+      ├── 020-specs/synthesis/CROSS_PLATFORM.md    ← 跨端关系图 + 接口映射
+      ├── 020-specs/synthesis/ARCHITECTURE.md      ← 全量架构文档
+      └── 020-specs/synthesis/TECH_FULL.md         ← 全量技术方案
 
 Phase 3: 按功能单元合成需求文档（functional-unit synthesis）
   ├── 从 Phase 1+2 的结果中提取功能单元
@@ -389,10 +389,10 @@ speccore synthesize -I <迭代名>             # 只做需求合成（无全量�
 用户: speccore synthesize --full -I Q2
   → CLI Phase 1: 读取 CONSTITUTION 工程列表
     → 逐端输出 [SPECCORE_PROMPT] → AI 分析各端
-    → CLI 收集各端结果
+    → CLI 收集各端结果 → 020-specs/platforms/{端名}/
   → CLI Phase 2: 汇总各端 specs
     → 输出 [SPECCORE_PROMPT] → AI 跨端综合
-    → CLI 写入 CROSS_PLATFORM.md + ARCHITECTURE.md + TECH_FULL.md
+    → CLI 写入 020-specs/synthesis/（旧版归档到 snapshots/）
   → CLI Phase 3: 按功能单元合成
     → 输出 [SPECCORE_PROMPT] → AI 按功能单元组织需求
     → CLI 写入 REQUIREMENT.md（--apply 回写）

@@ -8,9 +8,10 @@
  *   CLI:  speccore synthesize -I <迭代名>
  *
  * 模式 B: 全自动三阶段（--full）
- *   Phase 1: 逐端分析 → 各端独立 specs
- *   Phase 2: 跨端综合 → CROSS_PLATFORM.md + ARCHITECTURE.md + TECH_FULL.md
+ *   Phase 1: 逐端分析 → 020-specs/platforms/{端名}/ 各端独立 specs
+ *   Phase 2: 跨端综合 → 020-specs/synthesis/ CROSS_PLATFORM.md + ARCHITECTURE.md + TECH_FULL.md
  *   Phase 3: 功能单元合成 → REQUIREMENT.md（按功能单元组织，含所有端需求）
+ *   旧版自动归档到 020-specs/snapshots/{时间戳}/
  *   CLI:  speccore synthesize --full -I <迭代名>
  *
  * 模式 C: 单阶段执行（--phase N）
@@ -127,18 +128,62 @@ async function handleApplyPhase(
 ): Promise<void> {
   await ensureDir(specDir);
   if (phase === 1) {
-    // Phase 1 apply: 写入各端 specs（内容按端分文件）
-    const phase1Dir = join(specDir, 'per-platform');
-    await ensureDir(phase1Dir);
+    // Phase 1 apply: 写入各端 specs（按端分目录）
+    const platformsDir = join(specDir, 'platforms');
+    await ensureDir(platformsDir);
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 16);
-    await writeFile(join(phase1Dir, `ANALYSIS-${timestamp}.md`), content);
-    logger.success(`✅ Phase 1 结果已写入: 020-specs/per-platform/`);
+    await writeFile(join(platformsDir, `ANALYSIS-${timestamp}.md`), content);
+    logger.success(`✅ Phase 1 结果已写入: 020-specs/platforms/`);
     // 提示下一阶段
     logger.info(`\n   📌 下一步: speccore synthesize --phase 2 -I ${iter}`);
   } else if (phase === 2) {
+    // Phase 2 apply: 解析分隔标记，写入 synthesis/ 下的独立文件
+    const synthesisDir = join(specDir, 'synthesis');
+    await ensureDir(synthesisDir);
+    // 备份旧版到 snapshots/
+    const snapshotsDir = join(specDir, 'snapshots');
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 16);
-    await writeFile(join(specDir, `CROSS_PLATFORM-${timestamp}.md`), content);
-    logger.success(`✅ Phase 2 结果已写入: 020-specs/CROSS_PLATFORM-${timestamp}.md`);
+    if (await pathExists(synthesisDir)) {
+      const existingFiles = (await readdir(synthesisDir)).filter(f => f.endsWith('.md'));
+      if (existingFiles.length > 0) {
+        const snapshotDir = join(snapshotsDir, timestamp);
+        await ensureDir(snapshotDir);
+        for (const f of existingFiles) {
+          const src = join(synthesisDir, f);
+          const dst = join(snapshotDir, f);
+          await writeFile(dst, await readFile(src));
+        }
+        logger.info(`   📦 旧版已归档: snapshots/${timestamp}/`);
+      }
+    }
+    // 解析分隔标记写入独立文件
+    const sections: Record<string, string> = {};
+    const markers = ['===CROSS_PLATFORM===', '===ARCHITECTURE===', '===TECH_FULL==='];
+    const fileNames: Record<string, string> = {
+      '===CROSS_PLATFORM===': 'CROSS_PLATFORM.md',
+      '===ARCHITECTURE===': 'ARCHITECTURE.md',
+      '===TECH_FULL===': 'TECH_FULL.md',
+    };
+    let remaining = content;
+    for (let i = 0; i < markers.length; i++) {
+      const marker = markers[i];
+      const idx = remaining.indexOf(marker);
+      if (idx >= 0) {
+        const nextIdx = i + 1 < markers.length ? remaining.indexOf(markers[i + 1], idx + marker.length) : -1;
+        const sectionContent = nextIdx >= 0
+          ? remaining.substring(idx + marker.length, nextIdx).trim()
+          : remaining.substring(idx + marker.length).trim();
+        await writeFile(join(synthesisDir, fileNames[marker]), sectionContent + '\n');
+      }
+    }
+    // 如果没有分隔标记，整体写入 CROSS_PLATFORM.md
+    if (!markers.some(m => content.includes(m))) {
+      await writeFile(join(synthesisDir, 'CROSS_PLATFORM.md'), content);
+    }
+    logger.success(`✅ Phase 2 结果已写入: 020-specs/synthesis/`);
+    logger.info(`   📄 CROSS_PLATFORM.md — 跨端关系图`);
+    logger.info(`   📄 ARCHITECTURE.md  — 全量架构`);
+    logger.info(`   📄 TECH_FULL.md    — 全量技术方案`);
     logger.info(`\n   📌 下一步: speccore synthesize --phase 3 -I ${iter}`);
   } else if (phase === 3) {
     await ensureDir(reqDir);
@@ -183,10 +228,9 @@ async function runFullPipeline(
   await runPhase3(iter, iterDir, specDir, reqDir, convDir, withCode);
 
   logger.info(`\n✅ 全量分析合成完成！`);
-  logger.info(`   📄 020-specs/per-platform/  ← 各端分析结果`);
-  logger.info(`   📄 020-specs/CROSS_PLATFORM*.md  ← 跨端关系`);
-  logger.info(`   📄 020-specs/ARCHITECTURE*.md    ← 全量架构`);
-  logger.info(`   📄 020-specs/TECH_FULL*.md       ← 全量技术方案`);
+  logger.info(`   📄 020-specs/platforms/     ← 各端分析结果`);
+  logger.info(`   📄 020-specs/synthesis/     ← 跨端综合文档`);
+  logger.info(`   📄 020-specs/snapshots/     ← 历史快照`);
   logger.info(`   📄 010-requirements/REQUIREMENT.md ← 按功能单元组织的完整需求`);
 }
 
@@ -202,8 +246,8 @@ async function runPhase1(
     return;
   }
 
-  const phase1Dir = join(specDir, 'per-platform');
-  await ensureDir(phase1Dir);
+  const platformsDir = join(specDir, 'platforms');
+  await ensureDir(platformsDir);
 
   // 读取各端需求文档
   const platformDocs: { platform: string; name: string; content: string }[] = [];
@@ -310,30 +354,37 @@ async function runPhase2(
   iter: string, iterDir: string, specDir: string, reqDir: string
 ): Promise<void> {
   // 读取 Phase 1 的结果
-  const phase1Dir = join(specDir, 'per-platform');
-  if (!await pathExists(phase1Dir)) {
+  const platformsDir = join(specDir, 'platforms');
+  if (!await pathExists(platformsDir)) {
     logger.warn('未找到 Phase 1 结果，请先运行: speccore synthesize --phase 1');
     return;
   }
 
-  const files = await readdir(phase1Dir);
-  const mdFiles = files.filter(f => f.endsWith('.md'));
-  if (mdFiles.length === 0) {
+  // 递归读取 platforms/ 下所有端目录的 MD 文件
+  const platformSpecs: { name: string; content: string }[] = [];
+  const platformEntries = await readdir(platformsDir, { withFileTypes: true });
+  for (const entry of platformEntries) {
+    if (entry.isDirectory()) {
+      const subFiles = await readdir(join(platformsDir, entry.name));
+      for (const f of subFiles.filter(f => f.endsWith('.md'))) {
+        const content = await readFile(join(platformsDir, entry.name, f), 'utf-8');
+        platformSpecs.push({ name: `${entry.name}/${f}`, content });
+      }
+    } else if (entry.name.endsWith('.md')) {
+      const content = await readFile(join(platformsDir, entry.name), 'utf-8');
+      platformSpecs.push({ name: entry.name, content });
+    }
+  }
+  if (platformSpecs.length === 0) {
     logger.warn('Phase 1 结果为空，请先运行: speccore synthesize --phase 1');
     return;
-  }
-
-  const platformSpecs: { name: string; content: string }[] = [];
-  for (const f of mdFiles) {
-    const content = await readFile(join(phase1Dir, f), 'utf-8');
-    platformSpecs.push({ name: f, content });
   }
 
   // 也读取已有的 020-specs/ 下的其他文件作为补充
   const existingSpecs: { name: string; content: string }[] = [];
   if (await pathExists(specDir)) {
     const specFiles = await readdir(specDir);
-    for (const f of specFiles.filter(f => f.endsWith('.md') && !f.startsWith('CROSS_PLATFORM') && !f.startsWith('ARCHITECTURE') && !f.startsWith('TECH_FULL'))) {
+    for (const f of specFiles.filter(f => f.endsWith('.md') && !['platforms', 'synthesis', 'snapshots'].includes(f))) {
       const content = await readFile(join(specDir, f), 'utf-8');
       existingSpecs.push({ name: f, content });
     }
@@ -416,20 +467,28 @@ async function runPhase3(
   const allSpecs: { name: string; content: string }[] = [];
 
   // Phase 1 结果
-  const phase1Dir = join(specDir, 'per-platform');
-  if (await pathExists(phase1Dir)) {
-    for (const f of (await readdir(phase1Dir)).filter(f => f.endsWith('.md'))) {
-      allSpecs.push({ name: `per-platform/${f}`, content: await readFile(join(phase1Dir, f), 'utf-8') });
+  const platformsDir = join(specDir, 'platforms');
+  if (await pathExists(platformsDir)) {
+    const platformEntries = await readdir(platformsDir, { withFileTypes: true });
+    for (const entry of platformEntries) {
+      if (entry.isDirectory()) {
+        const subFiles = await readdir(join(platformsDir, entry.name));
+        for (const f of subFiles.filter(f => f.endsWith('.md'))) {
+          const content = await readFile(join(platformsDir, entry.name, f), 'utf-8');
+          allSpecs.push({ name: `platforms/${entry.name}/${f}`, content });
+        }
+      } else if (entry.name.endsWith('.md')) {
+        const content = await readFile(join(platformsDir, entry.name), 'utf-8');
+        allSpecs.push({ name: `platforms/${entry.name}`, content });
+      }
     }
   }
 
-  // Phase 2 结果
-  for (const prefix of ['CROSS_PLATFORM', 'ARCHITECTURE', 'TECH_FULL']) {
-    if (await pathExists(specDir)) {
-      const files = (await readdir(specDir)).filter(f => f.startsWith(prefix) && f.endsWith('.md'));
-      for (const f of files) {
-        allSpecs.push({ name: f, content: await readFile(join(specDir, f), 'utf-8') });
-      }
+  // Phase 2 结果（从 synthesis/ 目录读取）
+  const synthesisDir = join(specDir, 'synthesis');
+  if (await pathExists(synthesisDir)) {
+    for (const f of (await readdir(synthesisDir)).filter(f => f.endsWith('.md'))) {
+      allSpecs.push({ name: `synthesis/${f}`, content: await readFile(join(synthesisDir, f), 'utf-8') });
     }
   }
 
