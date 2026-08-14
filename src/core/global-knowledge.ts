@@ -17,7 +17,7 @@
 import { readFile, pathExists, readdir, writeFile, ensureDir, stat } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
-import { indexDirectoryDocuments, loadRagIndex } from './rag-engine';
+import { indexDirectoryDocuments, loadRagIndex, buildRagIndex, saveRagIndex } from './rag-engine';
 import { refreshKnowledgeGraph } from './knowledge-graph';
 
 export interface GlobalKnowledgeOptions {
@@ -72,7 +72,7 @@ export async function syncGlobalKnowledge(options: GlobalKnowledgeOptions = {}):
   }
 
   // ── 2. 为每个 specs 目录构建/更新 RAG 索引 ──
-  // 全局 RAG 索引：聚合所有迭代的 specs
+  // 全局 RAG 索引：聚合所有迭代的 specs（使用独立文件名，避免覆盖任务级索引）
   const globalScope = iteration
     ? `GLOBAL_all_${iteration}_aggregated`
     : 'GLOBAL_all_all_aggregated';
@@ -89,12 +89,11 @@ export async function syncGlobalKnowledge(options: GlobalKnowledgeOptions = {}):
     return;
   }
 
-  // 用通用函数建全局 RAG 索引
-  const { buildRagIndex, saveRagIndex } = await import('./rag-engine');
+  // 用通用函数建全局 RAG 索引（保存到独立文件）
   const index = await buildRagIndex(allFiles, globalScope);
-  await saveRagIndex(cwd, index);
+  await saveRagIndex(cwd, index, 'rag-index-global.json');
 
-  logger.info(`   ✅ 全局 RAG 索引已更新: ${allFiles.length} 个文件, ${index.chunks.length} 个块`);
+  logger.info(`   ✅ 全局 RAG 索引已更新: ${allFiles.length} 个文件, ${index.chunks.length} 个块 → rag-index-global.json`);
 
   // ── 3. 生成/更新 GLOBAL/SUMMARY.md ──
   await generateGlobalSummary(cwd, allFiles, iteration);

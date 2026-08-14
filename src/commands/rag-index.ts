@@ -10,11 +10,11 @@
 
 import { Command } from 'commander';
 import { join } from 'path';
-import { pathExists, remove } from 'fs-extra';
+import { pathExists, remove, readdir } from 'fs-extra';
 import { logger, Spinner } from '../utils/logger';
 import {
   loadRagIndex, checkRagIndexFreshness, refreshRagIndex,
-  indexTaskDocuments, RagIndex,
+  indexTaskDocuments, indexDirectoryDocuments, RagIndex,
 } from '../core/rag-engine';
 import { getDefaultIteration } from '../core/context';
 
@@ -62,78 +62,160 @@ export async function ragIndexCommand(options: RagIndexOptions): Promise<void> {
 
   // ── 显示模式（无 --refresh/--full）──
   if (!isRefresh && !isFull) {
-    await showRagStatus(cwd, taskDir, iteration);
+    await showAllRagStatus(cwd);
     return;
   }
 
   // ── 刷新/重建模式 ──
-  if (!taskDir || !iteration) {
-    logger.error('❌ 无法确定任务目录');
-    logger.info('   💡 请指定任务: speccore rag-index --refresh --task Task-001');
-    logger.info('   💡 或先运行 analyze 生成初始索引: speccore analyze --task Task-001');
-    return;
-  }
-
   const mode = isFull ? '全量重建' : '增量刷新';
   const spinner = new Spinner(`${mode} RAG 索引...`);
   spinner.start();
 
   try {
-    let result: RagIndex;
+    let result: RagIndex | null = null;
+    const refreshedFiles: string[] = [];
 
-    if (isFull) {
-      // 全量重建：删除旧索引，重新扫描
-      const indexPath = join(cwd, '.speccore', 'cache', 'rag-index.json');
-      if (await pathExists(indexPath)) {
-        await remove(indexPath);
+    // 1. task 级索引
+    if (taskDir && iteration) {
+      if (isFull) {
+        const indexPath = join(cwd, '.speccore', 'cache', 'rag-index.json');
+        if (await pathExists(indexPath)) await remove(indexPath);
+        result = await indexTaskDocuments(cwd, taskDir, iteration);
+      } else {
+        result = await refreshRagIndex(cwd, taskDir, iteration);
       }
-      result = await indexTaskDocuments(cwd, taskDir, iteration);
-    } else {
-      // 增量刷新
-      result = await refreshRagIndex(cwd, taskDir, iteration);
+      refreshedFiles.push('task');
+    }
+
+    // 2. iteration 级索引
+    if (iteration) {
+      const iterFileName = `rag-index-${iteration}.json`;
+      const iterSpecsDir = join(`Iteration-${iteration}`, '020-specs');
+      if (await pathExists(iterSpecsDir)) {
+        if (isFull) {
+          const indexPath = join(cwd, '.speccore', 'cache', iterFileName);
+          if (await pathExists(indexPath)) await remove(indexPath);
+          await indexDirectoryDocuments(cwd, iterSpecsDir, `${iteration}_020-specs_iteration_all`, iterFileName);
+        }
+        refreshedFiles.push(`iteration-${iteration}`);
+      }
+    }
+
+    // 3. 全局索引
+    const globalFileName = 'rag-index-global.json';
+    const globalSpecsDir = join(cwd, '.speccore', 'GLOBAL', '020-specs');
+    const fallbackDir = join(cwd, '.speccore');
+    const targetDir = await pathExists(globalSpecsDir) ? globalSpecsDir : fallbackDir;
+    if (await pathExists(targetDir)) {
+      if (isFull) {
+        const indexPath = join(cwd, '.speccore', 'cache', globalFileName);
+        if (await pathExists(indexPath)) await remove(indexPath);
+        await indexDirectoryDocuments(cwd, targetDir, 'GLOBAL_all_all_aggregated', globalFileName);
+      }
+      refreshedFiles.push('global');
     }
 
     spinner.stop(`${mode}完成`);
 
+    if (refreshedFiles.length === 0) {
+      logger.warn('   ⚠️ 未找到可刷新的索引');
+      return;
+    }
+
     // 输出摘要
     logger.info('');
     logger.info(`═══ RAG 索引${mode}结果 ═══`);
-    logger.info(`  作用域: ${result.scope}`);
-    logger.info(`  文档块: ${result.chunks.length} 个`);
-    logger.info(`  源文件: ${Object.keys(result.fileSummaries).length} 个`);
+    logger.info(`  已刷新: ${refreshedFiles.join(', ')}`);
 
-    // 显示文件级摘要
-    if (Object.keys(result.fileSummaries).length > 0) {
-      logger.info('');
-      logger.info('  已索引文件:');
-      for (const [fp, summary] of Object.entries(result.fileSummaries)) {
-        const fileName = fp.split('/').pop() || fp;
-        const chunkCount = result.chunks.filter(c => c.filePath === fp).length;
-        logger.info(`    📄 ${fileName} (${chunkCount} 块)`);
-      }
-    }
+    if (result) {
+      logger.info(`  作用域: ${result.scope}`);
+      logger.info(`  文档块: ${result.chunks.length} 个`);
+      logger.info(`  源文件: ${Object.keys(result.fileSummaries).length} 个`);
 
-    // 显示 top-level 块标题
-    const topChunks = result.chunks
-      .filter(c => c.level <= 3)
-      .slice(0, 10);
-    if (topChunks.length > 0) {
-      logger.info('');
-      logger.info('  主要章节:');
-      for (const chunk of topChunks) {
-        logger.info(`    ${'#'.repeat(chunk.level)} ${chunk.title}`);
+      // 显示文件级摘要
+      if (Object.keys(result.fileSummaries).length > 0) {
+        logger.info('');
+        logger.info('  已索引文件:');
+        for (const [fp, summary] of Object.entries(result.fileSummaries)) {
+          const fileName = fp.split('/').pop() || fp;
+          const chunkCount = result.chunks.filter(c => c.filePath === fp).length;
+          logger.info(`    📄 ${fileName} (${chunkCount} 块)`);
+        }
       }
-      if (result.chunks.length > 10) {
-        logger.info(`    ... 及其他 ${result.chunks.length - 10} 个块`);
+
+      // 显示 top-level 块标题
+      const topChunks = result.chunks
+        .filter(c => c.level <= 3)
+        .slice(0, 10);
+      if (topChunks.length > 0) {
+        logger.info('');
+        logger.info('  主要章节:');
+        for (const chunk of topChunks) {
+          logger.info(`    ${'#'.repeat(chunk.level)} ${chunk.title}`);
+        }
+        if (result.chunks.length > 10) {
+          logger.info(`    ... 及其他 ${result.chunks.length - 10} 个块`);
+        }
       }
     }
 
     logger.info('');
-    logger.success(`✅ RAG 索引已${isFull ? '重建' : '刷新'}: .speccore/cache/rag-index.json`);
+    logger.success(`✅ RAG 索引已${isFull ? '重建' : '刷新'}: ${refreshedFiles.join(', ')}`);
 
   } catch (err: any) {
     spinner.fail(`${mode}失败`);
     logger.error(err.message);
+  }
+}
+
+/**
+ * 显示所有 RAG 索引文件状态
+ */
+async function showAllRagStatus(cwd: string): Promise<void> {
+  const cacheDir = join(cwd, '.speccore', 'cache');
+  if (!(await pathExists(cacheDir))) {
+    logger.info('═══ RAG 索引状态 ═══');
+    logger.info('  ❌ 暂无 RAG 索引');
+    return;
+  }
+
+  const files = await readdir(cacheDir);
+  const indexFiles = files.filter(f => f.startsWith('rag-index') && f.endsWith('.json'));
+
+  if (indexFiles.length === 0) {
+    logger.info('═══ RAG 索引状态 ═══');
+    logger.info('  ❌ 暂无 RAG 索引');
+    logger.info('');
+    logger.info('  💡 生成方式:');
+    logger.info('     speccore analyze --task <task>     # 分析时自动生成');
+    logger.info('     speccore rag-index --refresh --task <task>  # 手动刷新');
+    logger.info('     speccore rag-index --full --task <task>     # 全量重建');
+    return;
+  }
+
+  logger.info('═══ RAG 索引状态 ═══');
+  logger.info(`  发现 ${indexFiles.length} 个索引文件:`);
+  logger.info('');
+
+  for (const fileName of indexFiles.sort()) {
+    const index = await loadRagIndex(cwd, fileName);
+    if (!index) continue;
+
+    const label = fileName === 'rag-index.json' ? 'task' :
+      fileName === 'rag-index-global.json' ? 'global' :
+        fileName.replace('rag-index-', '').replace('.json', '');
+
+    const { fresh, staleFiles } = await checkRagIndexFreshness(cwd, fileName);
+    const status = fresh ? '✅' : '⚠️';
+
+    logger.info(`  ${status} [${label}] ${fileName}`);
+    logger.info(`     作用域: ${index.scope}`);
+    logger.info(`     块数: ${index.chunks.length} | 源文件: ${Object.keys(index.fileSummaries).length}`);
+    logger.info(`     更新: ${new Date(index.updatedAt).toLocaleString('zh-CN')}`);
+    if (!fresh && staleFiles.length > 0) {
+      logger.info(`     过期文件: ${staleFiles.length} 个`);
+    }
+    logger.info('');
   }
 }
 
