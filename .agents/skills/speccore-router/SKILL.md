@@ -174,6 +174,15 @@ allow-tools: ["Bash", "Read", "Write", "Edit"]
 | 追溯 {req} | req | `speccore track --req {req}` |
 | 影响分析 {req} | req | `speccore impact --req {req}` |
 
+### 知识库与索引
+| 用户说法 | 提取参数 | CLI 命令 |
+| :--- | :--- | :--- |
+| 更新知识库/刷新索引 | iter? | `speccore reindex` |
+| 重建知识图谱 | iter? | `speccore reindex` |
+| 检查索引一致性 | iter? | `speccore reindex --check` |
+| 索引过期了吗 | iter? | `speccore reindex --check` |
+| 更新 {iter} 的知识库 | iter | `speccore reindex -i {iter}` |
+
 ### 进度查看
 | 用户说法 | 提取参数 | CLI 命令 |
 | :--- | :--- | :--- |
