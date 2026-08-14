@@ -6,11 +6,48 @@
  * 
  * 架构: CLI(确定性) → stdout(Prompt) → AI(生成) → CLI(确定性写入)
  */
-import { readFile, pathExists, readdir } from 'fs-extra';
+import { readFile, pathExists, readdir, stat } from 'fs-extra';
 import { join } from 'path';
 import { isTimestampBackup } from '../utils/task-utils';
+import { logger } from '../utils/logger';
 import { loadKnowledgeGraph, getTaskContext, isGraphStale, refreshKnowledgeGraph } from './knowledge-graph';
 import { buildCompactContext } from './context-builder';
+
+// ═══════════════════════════════════════════════════════════
+// 进程级缓存（避免重复 I/O + 重复解析）
+// ═══════════════════════════════════════════════════════════
+
+interface CacheEntry<T> {
+  data: T;
+  mtime: number;
+  key: string;
+}
+
+const techStackCache = new Map<string, CacheEntry<TechStack>>();
+const constitutionCache = new Map<string, CacheEntry<string>>();
+const reqContentCache = new Map<string, CacheEntry<string>>();
+const tocCache = new Map<string, CacheEntry<TOCEntry[]>>();
+
+/** 通用文件缓存读取 */
+async function cachedRead<T>(
+  cache: Map<string, CacheEntry<T>>,
+  filePath: string,
+  loader: () => Promise<T>,
+): Promise<T> {
+  try {
+    const st = await stat(filePath);
+    const cached = cache.get(filePath);
+    if (cached && cached.mtime >= st.mtimeMs) {
+      return cached.data;
+    }
+    const data = await loader();
+    cache.set(filePath, { data, mtime: st.mtimeMs, key: filePath });
+    return data;
+  } catch {
+    // 文件不存在时直接加载（不缓存）
+    return loader();
+  }
+}
 
 // ═══════════════════════════════════════════════════════════
 // 类型定义
@@ -107,46 +144,68 @@ export interface SpecCorePrompt {
 // ═══════════════════════════════════════════════════════════
 
 /**
- * 从 CONSTITUTION.md 解析技术栈
+ * 从 CONSTITUTION.md 解析技术栈（带进程缓存）
  */
 async function loadTechStack(cwd: string): Promise<TechStack> {
   const constitutionPath = join(cwd, '.speccore', 'CONSTITUTION.md');
   if (!await pathExists(constitutionPath)) return {};
 
-  const content = await readFile(constitutionPath, 'utf-8');
-  const stack: TechStack = {};
+  return cachedRead(techStackCache, constitutionPath, async () => {
+    const content = await readFile(constitutionPath, 'utf-8');
+    const stack: TechStack = {};
 
-  // 解析技术栈章节
-  const techSection = content.match(/##\s*技术栈[\s\S]*?(?=## |$)/i);
-  if (techSection) {
-    const section = techSection[0];
-    const langMatch = section.match(/语言[：:]\s*(.+)/i);
-    if (langMatch) stack.language = langMatch[1].trim();
-    const frameworkMatch = section.match(/框架[：:]\s*(.+)/i);
-    if (frameworkMatch) stack.framework = frameworkMatch[1].trim();
-    const dbMatch = section.match(/数据库[：:]\s*(.+)/i);
-    if (dbMatch) stack.database = dbMatch[1].trim();
-    const cacheMatch = section.match(/缓存[：:]\s*(.+)/i);
-    if (cacheMatch) stack.cache = cacheMatch[1].trim();
-  }
+    // 解析技术栈章节
+    const techSection = content.match(/##\s*技术栈[\s\S]*?(?=## |$)/i);
+    if (techSection) {
+      const section = techSection[0];
+      const langMatch = section.match(/语言[：:]\s*(.+)/i);
+      if (langMatch) stack.language = langMatch[1].trim();
+      const frameworkMatch = section.match(/框架[：:]\s*(.+)/i);
+      if (frameworkMatch) stack.framework = frameworkMatch[1].trim();
+      const dbMatch = section.match(/数据库[：:]\s*(.+)/i);
+      if (dbMatch) stack.database = dbMatch[1].trim();
+      const cacheMatch = section.match(/缓存[：:]\s*(.+)/i);
+      if (cacheMatch) stack.cache = cacheMatch[1].trim();
+    }
 
-  return stack;
+    return stack;
+  });
 }
 
 /**
- * 从 REQ.md 解析 API 定义
+ * 定位 REQ.md 实际路径（支持新旧结构）
  */
-async function loadApiSpecs(cwd: string, taskDir: string): Promise<ApiSpec[]> {
-  const newPath = join(cwd, taskDir, '_shared', 'REQ.md');
-  const oldPath = join(cwd, taskDir, '00-specs', 'REQ.md');
-  const legacyPath = join(cwd, taskDir, 'REQ.md');
-  let actualPath: string | null = null;
-  if (await pathExists(newPath)) actualPath = newPath;
-  else if (await pathExists(oldPath)) actualPath = oldPath;
-  else if (await pathExists(legacyPath)) actualPath = legacyPath;
-  if (!actualPath) return [];
+async function resolveReqPath(cwd: string, taskDir: string): Promise<string | null> {
+  const paths = [
+    join(cwd, taskDir, '_shared', 'REQ.md'),
+    join(cwd, taskDir, '00-specs', 'REQ.md'),
+    join(cwd, taskDir, 'REQ.md'),
+  ];
+  for (const p of paths) {
+    if (await pathExists(p)) return p;
+  }
+  return null;
+}
 
-  const content = await readFile(actualPath, 'utf-8');
+/**
+ * 加载 REQ.md 内容（带进程缓存）
+ */
+async function loadReqContent(cwd: string, taskDir: string): Promise<string | null> {
+  const reqPath = await resolveReqPath(cwd, taskDir);
+  if (!reqPath) return null;
+
+  return cachedRead(reqContentCache, reqPath, async () => {
+    return await readFile(reqPath, 'utf-8');
+  });
+}
+
+/**
+ * 从 REQ.md 解析 API 定义（支持传入已读取的内容，避免重复 I/O）
+ */
+async function loadApiSpecs(cwd: string, taskDir: string, reqContent?: string): Promise<ApiSpec[]> {
+  const content = reqContent ?? await loadReqContent(cwd, taskDir);
+  if (!content) return [];
+
   const apis: ApiSpec[] = [];
 
   // 解析 API 表格: | 方法 | 路径 | 说明 | 或 | Method | Path | Description |
@@ -174,19 +233,12 @@ async function loadApiSpecs(cwd: string, taskDir: string): Promise<ApiSpec[]> {
 }
 
 /**
- * 从 REQ.md 解析数据模型
+ * 从 REQ.md 解析数据模型（支持传入已读取的内容）
  */
-async function loadDataModels(cwd: string, taskDir: string): Promise<DataModel[]> {
-  const newPath = join(cwd, taskDir, '_shared', 'REQ.md');
-  const oldPath = join(cwd, taskDir, '00-specs', 'REQ.md');
-  const legacyPath = join(cwd, taskDir, 'REQ.md');
-  let actualPath: string | null = null;
-  if (await pathExists(newPath)) actualPath = newPath;
-  else if (await pathExists(oldPath)) actualPath = oldPath;
-  else if (await pathExists(legacyPath)) actualPath = legacyPath;
-  if (!actualPath) return [];
+async function loadDataModels(cwd: string, taskDir: string, reqContent?: string): Promise<DataModel[]> {
+  const content = reqContent ?? await loadReqContent(cwd, taskDir);
+  if (!content) return [];
 
-  const content = await readFile(actualPath, 'utf-8');
   const models: DataModel[] = [];
 
   // 查找所有数据模型表格
@@ -232,15 +284,15 @@ async function loadDataModels(cwd: string, taskDir: string): Promise<DataModel[]
 }
 
 /**
- * 从 CONSTITUTION.md + REQ.md 提取业务规则
+ * 从 CONSTITUTION.md + REQ.md 提取业务规则（支持传入已读取的 REQ 内容）
  */
-async function loadBusinessRules(cwd: string, taskDir?: string): Promise<BusinessRule[]> {
+async function loadBusinessRules(cwd: string, taskDir?: string, reqContent?: string): Promise<BusinessRule[]> {
   const rules: BusinessRule[] = [];
-  
-  // 从 CONSTITUTION 读取命名规范等
+
+  // 从 CONSTITUTION 读取命名规范等（带缓存）
   const constitutionPath = join(cwd, '.speccore', 'CONSTITUTION.md');
   if (await pathExists(constitutionPath)) {
-    const content = await readFile(constitutionPath, 'utf-8');
+    const content = await cachedRead(constitutionCache, constitutionPath, async () => await readFile(constitutionPath, 'utf-8'));
     const namingSection = content.match(/##\s*命名规范[\s\S]*?(?=## |$)/i);
     if (namingSection) {
       const lines = namingSection[0].split('\n');
@@ -253,11 +305,8 @@ async function loadBusinessRules(cwd: string, taskDir?: string): Promise<Busines
   }
 
   if (taskDir) {
-    const reqPath = join(cwd, taskDir, '00-specs', 'REQ.md');
-    const legacyReqPath = join(cwd, taskDir, 'REQ.md');
-    const actualReqPath = (await pathExists(reqPath)) ? reqPath : (await pathExists(legacyReqPath)) ? legacyReqPath : null;
-    if (actualReqPath) {
-      const content = await readFile(actualReqPath, 'utf-8');
+    const content = reqContent ?? await loadReqContent(cwd, taskDir);
+    if (content) {
       const ruleSection = content.match(/(?:业务规则|约束条件|Constraint)[\s\S]*?(?=## |\n##|$)/i);
       if (ruleSection) {
         const lines = ruleSection[0].split('\n');
@@ -275,9 +324,17 @@ async function loadBusinessRules(cwd: string, taskDir?: string): Promise<Busines
 
 /**
  * 读取任务目录中的额外上下文文件（TECH.md / TASK.md / SCHEMA.md / .issues.md 等）
+ * 带大小限制，防止 prompt 爆炸
  */
-async function loadExtraSpecs(cwd: string, taskDir: string, platform?: string, iteration?: string): Promise<TaskExtraSpec[]> {
+async function loadExtraSpecs(
+  cwd: string, taskDir: string, platform?: string, iteration?: string,
+  options?: { maxCharsPerFile?: number; maxTotalChars?: number },
+): Promise<TaskExtraSpec[]> {
   const extras: TaskExtraSpec[] = [];
+  const MAX_PER_FILE = options?.maxCharsPerFile ?? 2000;
+  const MAX_TOTAL = options?.maxTotalChars ?? 8000;
+  let totalChars = 0;
+
   const files = [
     { name: '技术方案', path: '_shared/TECH.md' },
     { name: '技术方案(旧)', path: '00-specs/TECH.md' },
@@ -320,11 +377,26 @@ async function loadExtraSpecs(cwd: string, taskDir: string, platform?: string, i
   for (const f of files) {
     const fullPath = join(cwd, taskDir, f.path);
     if (await pathExists(fullPath)) {
-      const content = await readFile(fullPath, 'utf-8');
+      let content = await readFile(fullPath, 'utf-8');
       // 跳过空文件或纯占位符文件
-      if (content.trim().length > 50 && !content.trim().match(/^#+\s*待填充|^<!--\s*AI-FILL\s*-->$/m)) {
-        extras.push({ name: f.name, path: f.path, content });
+      if (content.trim().length <= 50 || content.trim().match(/^#+\s*待填充|^<!--\s*AI-FILL\s*-->$/m)) {
+        continue;
       }
+      // 单文件大小限制
+      if (content.length > MAX_PER_FILE) {
+        content = content.slice(0, MAX_PER_FILE) + `\n\n> ... (已截断，原文件 ${content.length} 字)`;
+      }
+      // 总大小限制
+      if (totalChars + content.length > MAX_TOTAL) {
+        const remain = MAX_TOTAL - totalChars;
+        if (remain > 200) {
+          content = content.slice(0, remain) + `\n\n> ... (已达总上限 ${MAX_TOTAL} 字)`;
+          extras.push({ name: f.name, path: f.path, content });
+        }
+        break; // 总大小超限，停止加载更多文件
+      }
+      totalChars += content.length;
+      extras.push({ name: f.name, path: f.path, content });
     }
   }
 
@@ -563,7 +635,7 @@ async function buildGlobalTOC(globalDir: string): Promise<TOCEntry[]> {
 }
 
 /**
- * 加载全局上下文
+ * 加载全局上下文（带 TOC 缓存）
  * 策略：必读的 INDEX.md 直接注入 + 其余文件只给目录，AI 自己 Read
  */
 export async function loadGlobalContext(
@@ -576,15 +648,21 @@ export async function loadGlobalContext(
 
   if (!await pathExists(globalDir)) return ctx;
 
-  // 必读：INDEX.md 直接注入
+  // 必读：INDEX.md 直接注入（带缓存）
   const indexPath = join(globalDir, 'INDEX.md');
   if (await pathExists(indexPath)) {
-    const content = await readFile(indexPath, 'utf-8');
+    const content = await cachedRead(constitutionCache, indexPath, async () => await readFile(indexPath, 'utf-8'));
     ctx.indexSummary = content.slice(0, 1500);
   }
 
-  // 其余：只给目录，AI 自己决定读什么
-  ctx.toc = await buildGlobalTOC(globalDir);
+  // 其余：只给目录，AI 自己决定读什么（带缓存）
+  const cached = tocCache.get(globalDir);
+  if (cached) {
+    ctx.toc = cached.data;
+  } else {
+    ctx.toc = await buildGlobalTOC(globalDir);
+    tocCache.set(globalDir, { data: ctx.toc, mtime: Date.now(), key: globalDir });
+  }
 
   return ctx;
 }
@@ -920,10 +998,20 @@ export async function buildPrompt(
   const cwd = options.cwd || process.cwd();
   const techStack = await loadTechStack(cwd);
   const taskDir = options.taskDir || '';
-  const apiSpecs = await loadApiSpecs(cwd, taskDir);
-  const dataModels = await loadDataModels(cwd, taskDir);
-  const businessRules = await loadBusinessRules(cwd, taskDir);
-  const extraSpecs = taskDir ? await loadExtraSpecs(cwd, taskDir, options.platform, options.iteration) : [];
+
+  // P0-1: 统一读取 REQ.md，避免 loadApiSpecs/loadDataModels/loadBusinessRules 各读一次
+  const reqContent = taskDir ? await loadReqContent(cwd, taskDir) : null;
+  const apiSpecs = await loadApiSpecs(cwd, taskDir, reqContent || undefined);
+  const dataModels = await loadDataModels(cwd, taskDir, reqContent || undefined);
+  const businessRules = await loadBusinessRules(cwd, taskDir, reqContent || undefined);
+
+  // P0-2: ExtraSpecs 带大小限制，防止 prompt 爆炸
+  const extraSpecs = taskDir
+    ? await loadExtraSpecs(cwd, taskDir, options.platform, options.iteration, {
+        maxCharsPerFile: 2000,
+        maxTotalChars: 8000,
+      })
+    : [];
 
   // 加载全局上下文（智能注入）
   const globalContext = await loadGlobalContext(cwd, command, options.platform);
@@ -979,16 +1067,85 @@ export async function buildPrompt(
 // ═══════════════════════════════════════════════════════════
 
 /**
- * 将 Prompt 序列化为 AI 可读的文本（输出到 stdout）
+ * 粗略估算 token 数（中文 ≈ 1.5 tokens/字，英文 ≈ 0.25 tokens/字符）
  */
-export function formatPrompt(prompt: SpecCorePrompt): string {
+function estimateTokens(text: string): number {
+  let tokens = 0;
+  for (const ch of text) {
+    tokens += ch.charCodeAt(0) > 127 ? 1.5 : 0.25;
+  }
+  return Math.ceil(tokens);
+}
+
+/**
+ * 将 Prompt 序列化为 AI 可读的文本（输出到 stdout）
+ * 带动态裁剪：超出预算时按优先级逐级简化
+ */
+export function formatPrompt(prompt: SpecCorePrompt, maxTokens: number = 12000): string {
+  // 尝试完整构建
+  let result = buildPromptText(prompt);
+  let tokens = estimateTokens(result);
+
+  if (tokens <= maxTokens) return result;
+
+  // Level 1: 简化全局上下文（只保留 INDEX.md，去掉 TOC 目录）
+  if (prompt.globalContext) {
+    const slimGlobal = { ...prompt.globalContext, toc: [] };
+    result = buildPromptText({ ...prompt, globalContext: slimGlobal });
+    tokens = estimateTokens(result);
+    if (tokens <= maxTokens) {
+      logger?.info?.(`   🪶 Prompt 已简化：隐藏全局目录（-${estimateTokens(formatGlobalContext(prompt.globalContext!, prompt.platform))} tokens）`);
+      return result;
+    }
+  }
+
+  // Level 2: 压缩 extraSpecs（截断到 500 字/文件）
+  if (prompt.extraSpecs.length > 0) {
+    const slimExtras = prompt.extraSpecs.map(s => ({
+      ...s,
+      content: s.content.length > 500 ? s.content.slice(0, 500) + '\n> ... (已截断)' : s.content,
+    }));
+    result = buildPromptText({ ...prompt, extraSpecs: slimExtras });
+    tokens = estimateTokens(result);
+    if (tokens <= maxTokens) {
+      logger?.info?.(`   🪶 Prompt 已简化：压缩 extraSpecs 至 500 字/文件`);
+      return result;
+    }
+  }
+
+  // Level 3: 移除 taskContext（知识图谱关联链）
+  if (prompt.taskContext) {
+    result = buildPromptText({ ...prompt, taskContext: undefined });
+    tokens = estimateTokens(result);
+    if (tokens <= maxTokens) {
+      logger?.info?.(`   🪶 Prompt 已简化：隐藏任务关联链`);
+      return result;
+    }
+  }
+
+  // Level 4: 终极简化——只保留核心（技术栈 + API + 指令）
+  const minimalPrompt: SpecCorePrompt = {
+    ...prompt,
+    extraSpecs: [],
+    taskContext: undefined,
+    globalContext: undefined,
+    dataModels: prompt.dataModels.slice(0, 2),
+    businessRules: prompt.businessRules.slice(0, 3),
+  };
+  result = buildPromptText(minimalPrompt);
+  logger?.info?.(`   🪶 Prompt 已极简模式：仅保留技术栈/API/核心指令`);
+  return result;
+}
+
+/** 实际构建 prompt 文本（无裁剪逻辑） */
+function buildPromptText(prompt: SpecCorePrompt): string {
   const lines: string[] = [];
-  
+
   lines.push('[SPECCORE_PROMPT]');
   lines.push('');
   lines.push(`# 任务: ${prompt.command} — ${prompt.task || prompt.iteration}`);
   lines.push('');
-  
+
   // 技术栈
   if (Object.keys(prompt.techStack).length > 0) {
     lines.push('## 技术栈');

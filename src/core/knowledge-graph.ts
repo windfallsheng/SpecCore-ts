@@ -14,6 +14,17 @@ import { isTimestampBackup } from '../utils/task-utils';
 import { logger } from '../utils/logger';
 
 // ═══════════════════════════════════════════════
+// 进程级缓存（避免每次 ask 都重新加载知识图谱）
+// ═══════════════════════════════════════════════
+
+interface KGCacheEntry {
+  graph: KnowledgeGraph;
+  mtime: number;
+}
+
+const kgCache = new Map<string, KGCacheEntry>();
+
+// ═══════════════════════════════════════════════
 // 类型定义
 // ═══════════════════════════════════════════════
 
@@ -540,12 +551,25 @@ export async function saveKnowledgeGraph(cwd: string, graph: KnowledgeGraph): Pr
 }
 
 /** 加载已存在的知识图谱 */
+/**
+ * 加载知识图谱（带进程缓存）
+ * 文件 mtime 未变时直接返回缓存，避免重复 JSON 解析
+ */
 export async function loadKnowledgeGraph(cwd: string): Promise<KnowledgeGraph | null> {
   const filePath = join(cwd, '.speccore', 'cache', 'knowledge-graph.json');
   if (!(await pathExists(filePath))) return null;
+
   try {
+    const st = await stat(filePath);
+    const cached = kgCache.get(filePath);
+    if (cached && cached.mtime >= st.mtimeMs) {
+      return cached.graph;
+    }
+
     const content = await readFile(filePath, 'utf-8');
-    return JSON.parse(content) as KnowledgeGraph;
+    const graph = JSON.parse(content) as KnowledgeGraph;
+    kgCache.set(filePath, { graph, mtime: st.mtimeMs });
+    return graph;
   } catch {
     return null;
   }

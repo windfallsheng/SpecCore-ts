@@ -127,8 +127,8 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalysisResult> 
     default: throw new Error(`Unknown analysis type: ${type}`);
   }
 
-  // ── 所有模式生成 AI 上下文（如果还没生成） ──
-  if (type !== 'combined') {
+  // ── code 模式生成 AI 上下文（req/combined 已在各自分析函数内处理） ──
+  if (type === 'code') {
     try {
       await generateAIContext({
         requirements: effectiveInput.requirements,
@@ -198,6 +198,19 @@ async function analyzeRequirements(input: AnalyzeInput): Promise<AnalysisResult>
     // 按端分目录输出
     await writePerPlatform(iterDir, report, input.output || 'ANALYSIS.md');
   }
+
+  // ── 生成 AI 上下文（传入已读取的需求内容，避免重复 readFile） ──
+  try {
+    await generateAIContext({
+      requirements: input.requirements,
+      reqContents: allContent,
+      sources: input.sources,
+      scope: input.scope,
+      iteration: input.iteration,
+      taskId: input.taskId,
+      depth: input.depth,
+    });
+  } catch {} // 非关键，静默失败
 
   return {
     outputPath,
@@ -288,9 +301,10 @@ async function analyzeCombined(input: AnalyzeInput): Promise<AnalysisResult> {
     logger.info('   📚 使用缓存的代码索引（1 小时内已构建）');
   }
 
-  // ── AI 上下文生成: 替代关键词匹配 ──
+  // ── AI 上下文生成: 替代关键词匹配（传入已读取的需求内容，避免重复 readFile） ──
   const aiContext = await generateAIContext({
     requirements: input.requirements,
+    reqContents: allContent,
     sources: input.sources,
     scope: input.scope,
     iteration: input.iteration,

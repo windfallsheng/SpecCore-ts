@@ -28,6 +28,8 @@ interface CodeIndex {
 export interface AIContextInput {
   /** 需求文档路径列表 */
   requirements: string[];
+  /** 已读取的需求内容（避免重复 readFile） */
+  reqContents?: string[];
   /** 源码目录列表 */
   sources: string[];
   /** 分析范围 */
@@ -61,12 +63,14 @@ const INDEX_PATH = join('.speccore', 'cache', 'code-structure.json');
 export async function generateAIContext(input: AIContextInput): Promise<AIContextResult> {
   await ensureDir(PROMPTS_DIR);
 
-  // 1. 读取需求文档
-  const reqContents: string[] = [];
-  for (const reqPath of input.requirements) {
-    if (await pathExists(reqPath)) {
-      const content = await readFile(reqPath, 'utf-8');
-      reqContents.push(`## 来源: ${reqPath}\n\n${content}`);
+  // 1. 读取需求文档（若调用方已提供则跳过重复读取）
+  let reqContents: string[] = input.reqContents || [];
+  if (reqContents.length === 0) {
+    for (const reqPath of input.requirements) {
+      if (await pathExists(reqPath)) {
+        const content = await readFile(reqPath, 'utf-8');
+        reqContents.push(`## 来源: ${reqPath}\n\n${content}`);
+      }
     }
   }
 
