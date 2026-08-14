@@ -28,12 +28,12 @@ function slugify(name: string): string {
 
 /**
  * 生成子任务全局唯一 ID
- * 格式: Task-{编号}-{端名}-{hash4}
- * 例: Task-001-backend-a3f2, Task-001-web-b7c1
+ * 格式: Task-{父任务完整名}-{端名}-{hash4}
+ * 例: Task-001-user-login-backend-a3f2, Task-001-user-login-web-b7c1
  */
-function generateSubtaskId(taskNum: string, platform: string): string {
-  const hash = Math.abs(`${taskNum}-${platform}-${Date.now()}-${Math.random()}`.split('').reduce((a, c) => a * 31 + c.charCodeAt(0), 13)).toString(36);
-  return `Task-${taskNum}-${platform}-${hash.slice(0, 4)}`;
+function generateSubtaskId(parentTaskId: string, platform: string): string {
+  const hash = Math.abs(`${parentTaskId}-${platform}-${Date.now()}-${Math.random()}`.split('').reduce((a, c) => a * 31 + c.charCodeAt(0), 13)).toString(36);
+  return `Task-${parentTaskId}-${platform}-${hash.slice(0, 4)}`;
 }
 
 /** 粒度约束常量 */
@@ -918,11 +918,11 @@ ${taskId}/
 
 ## 子任务命名规则
 
-每个端的子任务 ID 格式: \`Task-{编号}-{端名}-{hash}\`
+每个端的子任务 ID 格式: \`Task-{父任务名}-{端名}-{hash}\`
 
 | 子任务 ID | 所属端 | 负责人 | 状态 |
 | :--- | :--- | :--- | :--- |
-${taskPlatforms.map((p: string) => `| ${generateSubtaskId(taskId.replace(/^Task-/, '').split('-')[0], p)} | ${p} | ${owner} | 🔲 待开发 |`).join('\n')}
+${taskPlatforms.map((p: string) => `| ${generateSubtaskId(taskId.replace(/^Task-/, ''), p)} | ${p} | ${owner} | 🔲 待开发 |`).join('\n')}
 
 ## AI 执行时读取规则
 
@@ -1039,7 +1039,7 @@ ${apiDesc}
   }
 
   // ── 4. 各端独立子任务目录 ──
-  const taskNum = taskId.replace(/^Task-/, '').split('-')[0];
+  const taskNum = taskId.replace(/^Task-/, '');
   const sharedReqContent = await readFile(join(taskDir, '_shared', 'REQ.md'), 'utf-8');
   const sharedTechContent = await readFile(join(taskDir, '_shared', 'TECH.md'), 'utf-8');
 

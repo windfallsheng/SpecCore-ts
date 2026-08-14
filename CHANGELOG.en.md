@@ -2,6 +2,15 @@
 
 ---
 
+## v6.1.1 (2026-08-14) — Sub-task Naming Rule: Full Parent Task Name
+
+- **Sub-task ID format change**: From `Task-{number}-{platform}-{hash}` to `Task-{full-parent-name}-{platform}-{hash}`
+  - Old: `Task-001-backend-a3f2`
+  - New: `Task-001-user-login-backend-a3f2`
+- Parent name includes number + slug for easy traceability
+
+---
+
 ## v6.1.0 (2026-08-14) — Task Directory Restructure: _shared/ + Platform Nesting + Sub-task Naming
 
 - **Task directory restructure**: From flat `00-specs/` to `_shared/` + `{platform}/` nesting
