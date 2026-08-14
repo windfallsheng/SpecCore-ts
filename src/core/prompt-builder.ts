@@ -63,6 +63,14 @@ export interface TOCEntry {
   description: string;
   /** ## 标题列表 */
   sections: string[];
+  /** 首段摘要（标题后第一段非空内容，≤200字） */
+  summary?: string;
+  /** 涉及的端列表（从路径/内容推断） */
+  platforms?: string[];
+  /** 文件行数（AI 判断阅读成本） */
+  lineCount?: number;
+  /** 关键词标签（从 ## 标题提取核心词） */
+  tags?: string[];
 }
 
 /** 全局上下文（从 GLOBAL 层注入） */
@@ -321,8 +329,114 @@ function extractHeadings(content: string): string[] {
 }
 
 /**
+ * 提取首段摘要：# 标题后的第一段非空内容，≤ 200 字
+ */
+function extractSummary(content: string): string {
+  const lines = content.split('\n');
+  let foundTitle = false;
+  let summaryLines: string[] = [];
+  let totalLen = 0;
+
+  for (const line of lines) {
+    if (line.startsWith('# ') && !foundTitle) {
+      foundTitle = true;
+      continue;
+    }
+    if (!foundTitle) continue;
+    // 遇到下一个 ## 就停
+    if (line.startsWith('## ')) break;
+    // 跳过空行和分隔线
+    if (!line.trim() || line.startsWith('---') || line.startsWith('```')) continue;
+    // 跳过表格头、图片、HTML 注释
+    if (line.startsWith('|') || line.startsWith('![') || line.startsWith('<!--')) continue;
+
+    summaryLines.push(line.trim());
+    totalLen += line.trim().length;
+    if (totalLen >= 200) break;
+  }
+
+  const result = summaryLines.join(' ');
+  return result.length > 200 ? result.slice(0, 197) + '...' : result;
+}
+
+/**
+ * 从路径和内容推断涉及的端
+ */
+function extractPlatforms(path: string, content: string): string[] {
+  const platforms = new Set<string>();
+  const knownPlatforms = ['backend', 'admin', 'h5', 'miniapp', 'app', 'web', 'ios', 'android'];
+
+  // 从路径推断
+  for (const p of knownPlatforms) {
+    if (path.toLowerCase().includes(p)) {
+      platforms.add(p);
+    }
+  }
+  // platforms/{端名}/ 路径
+  const platMatch = path.match(/^platforms\/([^/]+)\//);
+  if (platMatch) {
+    platforms.add(platMatch[1].toLowerCase());
+  }
+
+  // 从内容中扫描（前 2000 字）
+  const head = content.slice(0, 2000).toLowerCase();
+  for (const p of knownPlatforms) {
+    if (head.includes(p)) {
+      platforms.add(p);
+    }
+  }
+
+  return Array.from(platforms);
+}
+
+/**
+ * 从 ## 标题提取关键词标签（去停用词，取核心名词）
+ */
+function extractTags(headings: string[]): string[] {
+  const stopWords = new Set([
+    '的', '与', '和', '及', '在', '中', '对', '为', '是', '有', '从', '到',
+    'of', 'the', 'and', 'or', 'in', 'for', 'to', 'from', 'with', 'by',
+    '概述', '说明', '介绍', '详情', '附录', '参考', '其他', '更多',
+  ]);
+
+  const tags = new Set<string>();
+  for (const h of headings) {
+    // 去掉编号前缀（如 "1. ", "2.1 "）
+    const cleaned = h.replace(/^\d+(\.\d+)*\.?\s*/, '').trim();
+    // 按常见分隔符拆分
+    const parts = cleaned.split(/[、，,；;\/\|]/).map(s => s.trim()).filter(Boolean);
+    for (const part of parts) {
+      if (part.length <= 1 || stopWords.has(part.toLowerCase())) continue;
+      if (part.length > 12) continue; // 太长的不要
+      tags.add(part);
+    }
+    // 整个标题也作为一个 tag（如果不长）
+    if (cleaned.length <= 10 && !stopWords.has(cleaned.toLowerCase())) {
+      tags.add(cleaned);
+    }
+  }
+  return Array.from(tags).slice(0, 10); // 最多 10 个
+}
+
+/**
+ * 构建单个 TOC 条目（含摘要/端/行数/标签）
+ */
+function buildTOCEntry(path: string, description: string, content: string, maxSections?: number): TOCEntry {
+  const sections = extractHeadings(content);
+  return {
+    path,
+    description,
+    sections: maxSections ? sections.slice(0, maxSections) : sections,
+    summary: extractSummary(content) || undefined,
+    platforms: extractPlatforms(path, content) || undefined,
+    lineCount: content.split('\n').length,
+    tags: extractTags(sections) || undefined,
+  };
+}
+
+/**
  * 构建全局知识库目录（TOC）
- * 只读 ## 标题行，不读正文，非常轻量
+ * 只读 ## 标题行 + 摘要/端/行数/标签，非常轻量
  */
 async function buildGlobalTOC(globalDir: string): Promise<TOCEntry[]> {
   const toc: TOCEntry[] = [];
@@ -334,11 +448,7 @@ async function buildGlobalTOC(globalDir: string): Promise<TOCEntry[]> {
     const files = await readdir(synthesisDir);
     for (const f of files.filter(f => f.endsWith('.md') && !isTimestampBackup(f))) {
       const content = await readFile(join(synthesisDir, f), 'utf-8');
-      toc.push({
-        path: `synthesis/${f}`,
-        description: FILE_DESC[f] || f.replace('.md', ''),
-        sections: extractHeadings(content),
-      });
+      toc.push(buildTOCEntry(`synthesis/${f}`, FILE_DESC[f] || f.replace('.md', ''), content));
     }
   }
 
@@ -352,11 +462,7 @@ async function buildGlobalTOC(globalDir: string): Promise<TOCEntry[]> {
       const subFiles = await readdir(join(platformsDir, platformName));
       for (const f of subFiles.filter(f => f.endsWith('.md') && !isTimestampBackup(f))) {
         const content = await readFile(join(platformsDir, platformName, f), 'utf-8');
-        toc.push({
-          path: `platforms/${platformName}/${f}`,
-          description: `${platformName} 端 — ${f.replace('.md', '')}`,
-          sections: extractHeadings(content),
-        });
+        toc.push(buildTOCEntry(`platforms/${platformName}/${f}`, `${platformName} 端 — ${f.replace('.md', '')}`, content));
       }
     }
   }
@@ -371,11 +477,7 @@ async function buildGlobalTOC(globalDir: string): Promise<TOCEntry[]> {
       const subFiles = await readdir(join(projectsDir, projectName));
       for (const f of subFiles.filter(f => f.endsWith('.md') && !isTimestampBackup(f))) {
         const content = await readFile(join(projectsDir, projectName, f), 'utf-8');
-        toc.push({
-          path: `PROJECTS/${projectName}/${f}`,
-          description: `${projectName} — ${f.replace('.md', '')}`,
-          sections: extractHeadings(content),
-        });
+        toc.push(buildTOCEntry(`PROJECTS/${projectName}/${f}`, `${projectName} — ${f.replace('.md', '')}`, content));
       }
     }
   }
@@ -388,11 +490,7 @@ async function buildGlobalTOC(globalDir: string): Promise<TOCEntry[]> {
     return true;
   })) {
     const content = await readFile(join(globalDir, f), 'utf-8');
-    toc.push({
-      path: `GLOBAL:${f}`,
-      description: FILE_DESC[f] || f.replace('.md', ''),
-      sections: extractHeadings(content),
-    });
+    toc.push(buildTOCEntry(`GLOBAL:${f}`, FILE_DESC[f] || f.replace('.md', ''), content));
   }
 
   // 5. PATTERNS/TEMPLATES/ 写作模板
@@ -405,11 +503,7 @@ async function buildGlobalTOC(globalDir: string): Promise<TOCEntry[]> {
           await scanPatterns(join(dir, entry.name), `${prefix}${entry.name}/`);
         } else if (entry.name.endsWith('.md')) {
           const content = await readFile(join(dir, entry.name), 'utf-8');
-          toc.push({
-            path: `PATTERNS:${prefix}${entry.name}`,
-            description: entry.name.replace('-template.md', '').toUpperCase() + ' 写作模板',
-            sections: extractHeadings(content).slice(0, 6), // 模板章节多，只取前 6
-          });
+          toc.push(buildTOCEntry(`PATTERNS:${prefix}${entry.name}`, entry.name.replace('-template.md', '').toUpperCase() + ' 写作模板', content, 6));
         }
       }
     };
@@ -422,11 +516,7 @@ async function buildGlobalTOC(globalDir: string): Promise<TOCEntry[]> {
     const files = await readdir(rulesDir);
     for (const f of files.filter(f => f.endsWith('.md') && !isTimestampBackup(f))) {
       const content = await readFile(join(rulesDir, f), 'utf-8');
-      toc.push({
-        path: `RULES:${f}`,
-        description: RULES_DESC[f] || f.replace('.md', ''),
-        sections: extractHeadings(content),
-      });
+      toc.push(buildTOCEntry(`RULES:${f}`, RULES_DESC[f] || f.replace('.md', ''), content));
     }
   }
 
@@ -458,6 +548,42 @@ export async function loadGlobalContext(
   ctx.toc = await buildGlobalTOC(globalDir);
 
   return ctx;
+}
+
+/**
+ * 格式化单个 TOC 条目（含摘要/端/行数/标签）
+ * @param indent 缩进空格数（0/2）
+ */
+function formatTOCEntry(e: TOCEntry, indent: number): string {
+  const pad = ' '.repeat(indent);
+  const displayPath = e.path.replace(/^(GLOBAL:|PATTERNS:|RULES:)/, '');
+  const lineCountStr = e.lineCount ? ` [~${e.lineCount}行]` : '';
+  const lines: string[] = [];
+
+  // 第一行：路径 + 描述 + 行数
+  lines.push(`${pad}- \`${displayPath}\` — ${e.description}${lineCountStr}`);
+
+  // 标签
+  if (e.tags && e.tags.length > 0) {
+    lines.push(`${pad}  🏷 ${e.tags.join(', ')}`);
+  }
+
+  // 涉及端
+  if (e.platforms && e.platforms.length > 0) {
+    lines.push(`${pad}  📱 ${e.platforms.join(', ')}`);
+  }
+
+  // 摘要
+  if (e.summary) {
+    lines.push(`${pad}  📝 ${e.summary}`);
+  }
+
+  // 章节
+  if (e.sections.length > 0) {
+    lines.push(`${pad}  章节: ${e.sections.slice(0, 8).join(' | ')}`);
+  }
+
+  return lines.join('\n');
 }
 
 /**
@@ -513,19 +639,12 @@ export function formatGlobalContext(ctx: GlobalContext, platform?: string): stri
           const marker = group.prefix === 'platforms/' && sub === platform ? ' ⬅ 当前端' : '';
           lines.push(`📂 ${sub}/${marker}`);
           for (const e of subEntries) {
-            lines.push(`  - \`${e.path}\` — ${e.description}`);
-            if (e.sections.length > 0) {
-              lines.push(`    章节: ${e.sections.slice(0, 8).join(' | ')}`);
-            }
+            lines.push(formatTOCEntry(e, 2));
           }
         }
       } else {
         for (const e of entries) {
-          const displayPath = e.path.replace(/^(GLOBAL:|PATTERNS:|RULES:)/, '');
-          lines.push(`- \`${displayPath}\` — ${e.description}`);
-          if (e.sections.length > 0) {
-            lines.push(`  章节: ${e.sections.slice(0, 6).join(' | ')}`);
-          }
+          lines.push(formatTOCEntry(e, 0));
         }
       }
       lines.push('');
