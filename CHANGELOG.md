@@ -1,3 +1,16 @@
+## v5.99.1 (2026-08-14) — 全局知识库目录化：AI 自主决定读什么
+
+- **重构 GlobalContext**: 从预取内容改为 TOC 目录结构（`TOCEntry` 接口）
+- **`buildGlobalTOC()`**: 扫描 GLOBAL 目录，提取每个文件的 ## 标题行，不读正文
+- **`loadGlobalContext()`**: 必读的 INDEX.md 直接注入 + 其余文件只给目录
+- **`formatPrompt()` 全局知识库段**: 分“📌 必读（已注入）”和“📂 可选参考（按需 Read）”
+- **各端文档分组**: 按端类型分组显示，当前端标记 ⬅ 箭头
+- **split.ts**: 同步改用 TOC 目录方式注入全局上下文
+- **删除旧函数**: `extractArchConstraints()` / `extractTechConstraints()` 关键词匹配已移除
+- **核心理念**: CLI 给地图 + 标必读物，AI 自己看目录决定读哪些文件
+
+---
+
 ## v5.99.0 (2026-08-14) — 智能全局上下文注入：split/execute/analyze 自动参考全局知识
 
 - **prompt-builder.ts**: 新增 `loadGlobalContext()` 函数，按命令类型智能注入全局上下文
