@@ -2,6 +2,23 @@
 
 ---
 
+## v6.0.0 (2026-08-14) — Global Knowledge Base TOC Full Coverage: PATTERNS + RULES + PROJECTS + Flat Files
+
+- **`buildGlobalTOC()` expanded**: From 2 directories to 6 sources
+  - synthesis/ — Cross-platform synthesis docs (existing)
+  - platforms/ — Per-platform analysis docs (existing)
+  - PROJECTS/ — Per-project analysis docs (new)
+  - GLOBAL flat files — ARCHITECTURE/CODE_INDEX/GLOSSARY/OVERVIEW/TECH_STACK etc. (new)
+  - PATTERNS/TEMPLATES/ — Spec writing templates (new, AI can reference when writing Specs)
+  - RULES/ — Code review rules + completion checklist (new)
+- **`formatGlobalContext()`**: Extracted as shared function for formatPrompt and split.ts
+- **TOC grouped display**: 6 groups (📚Cross-platform / 📱Per-platform / 🏗Projects / 📖Reference / ✏️Templates / 📏Rules)
+- **Path hints**: Clear base paths for GLOBAL/PATTERNS/RULES
+- **FILE_DESC expanded**: Added CODE_INDEX/GLOSSARY/OVERVIEW/TECH_STACK/CHANGELOG/PROTOTYPE_INDEX descriptions
+- **RULES_DESC**: New rules file description mapping
+
+---
+
 ## v5.99.2 (2026-08-14) — Verification Fixes + Design Doc Update
 
 - **Fix**: `buildGlobalTOC()` filters timestamp backup files (`isTimestampBackup`)

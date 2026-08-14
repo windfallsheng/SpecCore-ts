@@ -55,6 +55,17 @@ Phase 3: 功能单元合成
 
 **设计理念：CLI 给地图 + 标必读物，AI 自己看目录决定读哪些文件。**
 
+TOC 目录覆盖 6 个来源：
+
+| 分组 | 来源 | 用途 | AI 何时参考 |
+|:---|:---|:---|:---|
+| 📚 跨端综合文档 | GLOBAL/synthesis/ | 架构、技术方案、跨端关系 | execute 生成代码时参考架构约束 |
+| 📱 各端分析文档 | GLOBAL/platforms/ | 各端专业分析 | execute 开发特定端时参考 |
+| 🏗 工程级文档 | GLOBAL/PROJECTS/ | 逐工程分析 | execute 开发特定工程时参考 |
+| 📖 参考文档 | GLOBAL/*.md | 术语、代码索引、全景、技术栈 | 任何命令需要项目上下文时 |
+| ✏️ 写作模板 | PATTERNS/TEMPLATES/ | Spec 文档写作模板 | analyze/synthesize 写 Spec 时参考格式 |
+| 📏 规则与检查清单 | RULES/ | 代码审查、完成检查 | execute/done 时参考 |
+
 ```
 synthesize Phase 2 完成后
 ├── 写入 GLOBAL/synthesis/（CROSS_PLATFORM + ARCHITECTURE + TECH_FULL）
@@ -110,16 +121,18 @@ synthesize Phase 2 完成后
 
 | 函数 | 位置 | 作用 |
 | :--- | :--- | :--- |
-| `buildGlobalTOC()` | prompt-builder.ts | 扫描 GLOBAL/synthesis/ + platforms/，提取每个文件的 ## 标题行 |
+| `buildGlobalTOC()` | prompt-builder.ts | 扫描 6 个来源，提取每个文件的 ## 标题行 |
 | `loadGlobalContext()` | prompt-builder.ts | 必读 INDEX.md 直接注入 + 其余只给 TOC 目录 |
 | `generateGlobalIndex()` | synthesize.ts | Phase 2 apply 后自动生成 INDEX.md |
-| `extractHeadings()` | prompt-builder.ts | 从 Markdown 提取 ## 标题行（不读正文，非常轻量） |
+| `formatGlobalContext()` | prompt-builder.ts | 格式化为分组 Markdown，formatPrompt 和 split.ts 共用 |
 
 **关键设计决策：**
 - 不预取内容，只给目录 — AI 自己决定读什么，避免关键词匹配不准
 - 只读 ## 标题行 — 每个文件只读几行，TOC 生成非常快
 - 过滤时间戳备份文件 — `isTimestampBackup()` 排除 `.bak` 类文件
 - 当前端标记 — execute 时自动标记当前端的文档，引导 AI 优先参考
+- 6 个来源全覆盖 — synthesis/platforms/PROJECTS/扁平文件/PATTERNS/RULES 全部纳入 TOC
+- `formatGlobalContext()` 公共函数 — formatPrompt 和 split.ts 共用同一套分组逻辑
 
 ---
 

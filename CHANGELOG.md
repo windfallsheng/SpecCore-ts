@@ -1,3 +1,20 @@
+## v6.0.0 (2026-08-14) — 全局知识库 TOC 全覆盖：PATTERNS + RULES + PROJECTS + 扁平文件
+
+- **`buildGlobalTOC()` 扩展**: 从 2 个目录扩展到 6 个来源
+  - synthesis/ — 跨端综合文档（原有）
+  - platforms/ — 各端分析文档（原有）
+  - PROJECTS/ — 工程级分析文档（新增）
+  - GLOBAL 扁平文件 — ARCHITECTURE/CODE_INDEX/GLOSSARY/OVERVIEW/TECH_STACK 等（新增）
+  - PATTERNS/TEMPLATES/ — Spec 写作模板（新增，AI 写 Spec 时可参考格式）
+  - RULES/ — 代码审查规则 + 完成检查清单（新增）
+- **`formatGlobalContext()`**: 提取为公共函数，formatPrompt 和 split.ts 共用
+- **TOC 分组显示**: 6 组（📚跨端综合 / 📱各端分析 / 🏗工程级 / 📖参考文档 / ✏️写作模板 / 📏规则）
+- **路径提示**: 明确 GLOBAL/PATTERNS/RULES 各自的基础路径
+- **FILE_DESC 扩展**: 新增 CODE_INDEX/GLOSSARY/OVERVIEW/TECH_STACK/CHANGELOG/PROTOTYPE_INDEX 描述
+- **RULES_DESC**: 新增规则文件描述映射
+
+---
+
 ## v5.99.2 (2026-08-14) — 验证修复 + 设计文档更新
 
 - **修复**: `buildGlobalTOC()` 过滤时间戳备份文件（`isTimestampBackup`）

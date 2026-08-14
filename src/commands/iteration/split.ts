@@ -521,28 +521,10 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       let splitPrompt = buildSplitPrompt(iteration, constitutionContent, reqContent2, specContents, staffing, teamSize, granularityLabel, granularityHint);
 
       // 注入全局上下文（INDEX + TOC 目录，AI 自主读取）
-      const { loadGlobalContext } = await import('../../core/prompt-builder');
+      const { loadGlobalContext, formatGlobalContext } = await import('../../core/prompt-builder');
       const globalCtx = await loadGlobalContext(process.cwd(), 'split');
       if (globalCtx.indexSummary || globalCtx.toc.length > 0) {
-        splitPrompt += '\n## 🌐 全局知识库\n';
-        splitPrompt += '> 以下信息来自项目全局知识库。必读内容已注入，其余文件请按需自行 Read。\n\n';
-        if (globalCtx.indexSummary) {
-          splitPrompt += '### 📌 必读（已注入）\n';
-          splitPrompt += globalCtx.indexSummary + '\n\n';
-        }
-        if (globalCtx.toc.length > 0) {
-          splitPrompt += '### 📂 可选参考（按需 Read）\n';
-          splitPrompt += '> 拆分任务时建议参考跨端关系文档，了解端间依赖\n\n';
-          for (const entry of globalCtx.toc) {
-            splitPrompt += `- \`${entry.path}\` — ${entry.description}\n`;
-            if (entry.sections.length > 0) {
-              splitPrompt += `  章节: ${entry.sections.join(' | ')}\n`;
-            }
-          }
-          splitPrompt += '\n### 💡 使用方式\n';
-          splitPrompt += '以上文件均可通过 Read 工具直接读取（路径相对于 `.speccore/GLOBAL/`）。\n';
-          splitPrompt += '建议根据拆分需要选择性阅读，不必全部读取。\n\n';
-        }
+        splitPrompt += '\n' + formatGlobalContext(globalCtx) + '\n';
       }
       
       await writeFile(join(promptsDir, `split-suggestion-${iteration}.md`), splitPrompt);
