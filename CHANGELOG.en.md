@@ -2,6 +2,20 @@
 
 ---
 
+## v6.3.0 (2026-08-14) — Platform Registry + Fuzzy Matching + Per-Platform Analysis
+
+- **New `platform-registry.ts`**: Unified platform name resolution module
+  - `parseGlobalPlatforms()`: Parse global platform names from CONSTITUTION.md "对应需求端" column
+  - `fuzzyMatchPlatform()`: Fuzzy matching (exact → prefix → contains)
+  - `resolvePlatform()`: Unified entry point for commands, lists available platforms on error
+  - `generatePlatformsRegistry()`: Auto-generate `_shared/PLATFORMS.md` during split
+- **split auto-generates platform registry**: Writes `_shared/PLATFORMS.md` after task creation with platform names/sub-task IDs/assignees/command references
+- **analyze `--platform`**: Analyze only one platform, writes to `{platform}/` directory without affecting others
+- **execute `--platform` fuzzy matching**: Input `back` auto-matches `backend`, friendly error on mismatch
+- **Three-layer platform consistency**: CONSTITUTION.md (global authority) → PLATFORMS.md (task-level) → fuzzy matching (command layer)
+
+---
+
 ## v6.2.0 (2026-08-14) — Sub-task Discovery & Filtering: scanTasks Expansion + Platform/Assignee Filter
 
 - **`scanTasks` restructured**: Auto-discover per-platform sub-tasks, expand to independent TaskState

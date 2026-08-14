@@ -1,3 +1,17 @@
+## v6.3.0 (2026-08-14) — 端注册表 + 模糊匹配 + 按端分析
+
+- **新增 `platform-registry.ts`**: 统一端名解析模块
+  - `parseGlobalPlatforms()`: 从 CONSTITUTION.md「对应需求端」列解析全局端名
+  - `fuzzyMatchPlatform()`: 模糊匹配（精确 → 前缀 → 包含）
+  - `resolvePlatform()`: 命令层统一入口，错误时列出可用端
+  - `generatePlatformsRegistry()`: split 自动生成 `_shared/PLATFORMS.md`
+- **split 自动生成端注册表**: 任务创建后写入 `_shared/PLATFORMS.md`，列出端名/子任务 ID/负责人/命令参考
+- **analyze `--platform`**: 支持只分析某端，写入 `{platform}/` 目录，不影响其他端
+- **execute `--platform` 模糊匹配**: 输入 `back` 自动匹配 `backend`，错误时友好提示
+- **三层端名一致性**: CONSTITUTION.md（全局权威）→ PLATFORMS.md（任务级）→ 模糊匹配（命令层）
+
+---
+
 ## v6.2.0 (2026-08-14) — 子任务发现与筛选：scanTasks 展开各端 + 按端/责任人过滤
 
 - **`scanTasks` 重构**: 自动发现各端子任务，展开为独立 TaskState
