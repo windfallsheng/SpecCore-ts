@@ -3,6 +3,7 @@ import { join } from 'path';
 import { logger, Spinner } from '../../utils/logger';
 import { updateContext } from '../../core/context';
 import { nextIterationId } from '../../core/global-counters';
+import { showNextSteps } from '../../core/next-steps';
 export interface IterationCreateOptions {
   name?: string;
   topic?: string;
@@ -64,11 +65,7 @@ export async function iterationCreateCommand(options: IterationCreateOptions): P
     });
 
     spinner.stop(`迭代创建: ${fullName}`);
-    logger.info('');
-    logger.info('Next steps:');
-    logger.info(`  1. Edit ${iterationDir}/010-requirements/ ← 放需求文档`);
-    logger.info(`  2. Run speccore analyze to generate specs`);
-    logger.info(`  3. Run: speccore iteration split`);
+    showNextSteps('iteration-create', { iteration: fullName });
   } catch (error) {
     spinner.fail(`Failed to create iteration: ${error}`);
     throw error;
