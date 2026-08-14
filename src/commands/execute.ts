@@ -14,6 +14,7 @@ import { logOperation } from '../core/operation-log';
 import { showNextSteps } from '../core/next-steps';
 import { extractQuestions, showQuestionChecklist } from '../core/question-checklist';
 import { resolvePlatform } from '../core/platform-registry';
+import { findTaskDir } from '../core/task-paths';
 import { savePlan, markPlanExecuted, getPlan, ExecutionPlan } from '../core/plan-store';
 import { generatePlan, formatPlanMarkdown } from './plan';
 import { generatePlanHtml } from '../core/plan-html';
@@ -66,12 +67,16 @@ export interface ExecuteOptions {
 }
 
 /**
- * 解析任务目录路径：优先 030-tasks/，兼容旧布局（迭代根目录）
+ * 解析任务目录路径：支持类型子目录（030-tasks/{type}/Task-XXX/）+ 旧布局兼容
  */
 async function resolveTaskDir(iterDir: string, taskId?: string): Promise<string> {
   const tasksDir = join(iterDir, '030-tasks');
   const base = (await pathExists(tasksDir)) ? tasksDir : iterDir;
-  return taskId ? join(base, taskId) : base;
+  if (!taskId) return base;
+
+  // 用 findTaskDir 递归查找（支持 030-tasks/{type}/Task-XXX/ 和旧布局）
+  const found = await findTaskDir(base, taskId);
+  return found || join(base, taskId);
 }
 
 export async function executeCommand(options: ExecuteOptions): Promise<void> {
@@ -625,12 +630,14 @@ async function processBatch(tasks: TaskState[], state: ExecutionState, iteration
   const iterDir = await getIterationDir(iteration);
   for (const task of tasks) {
     logger.info(`   ${task.id}:`);
-    for (const f of ['REQ.md', 'TECH.md', 'TASK.md']) {
-      const p = join(await resolveTaskDir(iterDir), task.id, '00-specs', f);
+    const tDir = await resolveTaskDir(iterDir, task.id);
+    for (const specPath of ['_shared/REQ.md', '_shared/TECH.md', '00-specs/REQ.md', '00-specs/TECH.md']) {
+      const p = join(tDir, specPath);
       if (await pathExists(p)) {
         const content = await readFile(p, 'utf-8');
         const summary = content.slice(0, 80).replace(/\n/g, ' ');
-        logger.info(`     📄 ${f} → ${summary}...`);
+        const fname = specPath.split('/').pop()!;
+        logger.info(`     📄 ${fname} → ${summary}...`);
       }
     }
   }
@@ -721,7 +728,9 @@ async function generateTaskSkeleton(task: TaskState, iteration: string): Promise
     // 读取后端 Spec 生成代码骨架
     const backendDir = join(taskDir, '10-backend');
     if (await pathExists(backendDir)) {
-      const reqPath = join(taskDir, '00-specs', 'REQ.md');
+      const reqPath = (await pathExists(join(taskDir, '_shared', 'REQ.md')))
+        ? join(taskDir, '_shared', 'REQ.md')
+        : join(taskDir, '00-specs', 'REQ.md');
 
       let className = convertToClassName(task.name || task.id);
       // 从 CONSTITUTION.md 读取包名，回退到默认值
@@ -995,15 +1004,15 @@ async function filterByPlatform(tasks: TaskState[], iteration: string, platform:
       filtered.push(task);
       continue;
     }
-    // 新结构: 父任务下查 {platform}/ 目录
-    const taskBase = await resolveTaskDir(iterDir);
-    const platformDir = join(taskBase, task.id, platform);
+    // 新结构: 用 resolveTaskDir 查找任务目录（支持类型子目录），再查 {platform}/
+    const taskDir = await resolveTaskDir(iterDir, task.id);
+    const platformDir = join(taskDir, platform);
     if (await pathExists(platformDir)) {
       filtered.push(task);
       continue;
     }
     // 旧结构回退: frontend/{platform}/
-    const legacyDir = join(taskBase, task.id, 'frontend', platform);
+    const legacyDir = join(taskDir, 'frontend', platform);
     if (await pathExists(legacyDir)) filtered.push(task);
   }
   return filtered;
@@ -1450,18 +1459,26 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
   const taskDir = await resolveTaskDir(await getIterationDir(iteration), task);
 
   // ── 前置检查：任务必须有有效需求或分析内容 ──
-  // 优先检查 00-specs/（新路径），兼容旧路径（Task 根目录）
-  const analysisFile = join(taskDir, '00-specs', 'ANALYSIS.md');
-  const requirementFile = join(taskDir, '00-specs', 'REQ.md');
-  const legacyAnalysis = join(taskDir, 'ANALYSIS.md');
-  const legacyRequirement = join(taskDir, 'REQUIREMENT.md');
+  // 路径优先级: _shared/（新结构）→ 00-specs/（旧结构）→ 根目录（legacy）
+  const candidates = [
+    join(taskDir, '_shared', 'REQ.md'),
+    join(taskDir, '_shared', 'TECH.md'),
+    join(taskDir, '00-specs', 'ANALYSIS.md'),
+    join(taskDir, '00-specs', 'REQ.md'),
+    join(taskDir, 'ANALYSIS.md'),
+    join(taskDir, 'REQUIREMENT.md'),
+  ];
+  // 按端执行时，额外检查该端的 TASK.md
+  if (options.platform) {
+    candidates.unshift(join(taskDir, options.platform, 'TASK.md'));
+  }
 
   // 读取文件内容验证有效性（接受 ANALYSIS.md / REQ.md / REQUIREMENT.md）
   // Bug 任务的 REQ.md（问题描述）本身就可以作为AI生成代码的依据
   let effectiveAnalysis = false;
   let contentPreview = '';
 
-  for (const f of [analysisFile, requirementFile, legacyAnalysis, legacyRequirement]) {
+  for (const f of candidates) {
     if (await pathExists(f)) {
       const content = (await readFile(f, 'utf-8')).trim();
       // 有效内容：>80字符 且 不是纯占位符
@@ -1476,7 +1493,7 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
   }
 
   if (!effectiveAnalysis) {
-    const reason = `任务 ${task} 缺少有效的需求或分析内容\n（00-specs/ANALYSIS.md 或 00-specs/REQ.md 不存在或内容无效）`;
+    const reason = `任务 ${task} 缺少有效的需求或分析内容\n（_shared/REQ.md、_shared/TECH.md、00-specs/ANALYSIS.md 均不存在或内容无效）`;
     outputNeedsInfo({
       command: 'execute',
       missing: ['analysis'],

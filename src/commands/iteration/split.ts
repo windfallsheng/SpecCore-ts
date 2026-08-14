@@ -879,6 +879,13 @@ async function createTaskFromSection(iterationDir: string, taskId: string, secti
   const owner = (section as any)._owner || '未分配';
   const today = new Date().toISOString().split('T')[0];
 
+  // 预生成所有端的子任务 ID（保证同一端在所有文件中 ID 一致）
+  const taskNum = taskId.replace(/^Task-/, '');
+  const subtaskIdMap = new Map<string, string>();
+  for (const p of taskPlatforms) {
+    subtaskIdMap.set(p, generateSubtaskId(taskNum, p));
+  }
+
   // ── 1. 元信息目录 ──
   await ensureDir(join(taskDir, '.meta'));
   await writeFile(join(taskDir, '.meta', 'type'), taskType);
@@ -923,7 +930,7 @@ ${taskId}/
 
 | 子任务 ID | 所属端 | 负责人 | 状态 |
 | :--- | :--- | :--- | :--- |
-${taskPlatforms.map((p: string) => `| ${generateSubtaskId(taskId.replace(/^Task-/, ''), p)} | ${p} | ${owner} | 🔲 待开发 |`).join('\n')}
+${taskPlatforms.map((p: string) => `| ${subtaskIdMap.get(p)} | ${p} | ${owner} | 🔲 待开发 |`).join('\n')}
 
 ## AI 执行时读取规则
 
@@ -1040,12 +1047,11 @@ ${apiDesc}
   }
 
   // ── 4. 各端独立子任务目录 ──
-  const taskNum = taskId.replace(/^Task-/, '');
   const sharedReqContent = await readFile(join(taskDir, '_shared', 'REQ.md'), 'utf-8');
   const sharedTechContent = await readFile(join(taskDir, '_shared', 'TECH.md'), 'utf-8');
 
   for (const platform of taskPlatforms) {
-    const subtaskId = generateSubtaskId(taskNum, platform);
+    const subtaskId = subtaskIdMap.get(platform)!;
     const platformDir = join(taskDir, platform);
     await ensureDir(join(platformDir, 'src'));
     await ensureDir(join(platformDir, 'tests'));
@@ -1103,7 +1109,7 @@ ${apiDesc}
   // ── 生成端注册表 _shared/PLATFORMS.md ──
   const platformEntries = taskPlatforms.map((p: string) => ({
     name: p,
-    subtaskId: generateSubtaskId(taskNum, p),
+    subtaskId: subtaskIdMap.get(p)!,
     owner,
   }));
   await generatePlatformsRegistry(taskDir, taskId, platformEntries);

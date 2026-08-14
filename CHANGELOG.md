@@ -1,3 +1,14 @@
+## v6.3.1 (2026-08-14) — 全链路验证修复：5 个 Bug 修复
+
+- **Bug#1 修复**: `generateSubtaskId` 多次调用产生不同 ID → 预生成 ID map，README/TASK.md/PLATFORMS.md 保持一致
+- **Bug#2 修复**: execute 前置检查只查 `00-specs/` → 添加 `_shared/REQ.md`、`_shared/TECH.md` 回退
+- **Bug#3 修复**: `resolveTaskDir` 不支持类型子目录 → 改用 `findTaskDir()` 递归查找
+- **Bug#4 修复**: `loadExtraSpecs` 不读平台端子任务文件 → 按端执行时加载 `{platform}/TASK.md` 等
+- **Bug#5 修复**: `filterByPlatform` 路径拼接不经过类型子目录 → 使用修复后的 `resolveTaskDir`
+- **额外修复**: `generateTaskSkeleton` 和批量执行日志也添加 `_shared/` 路径回退
+
+---
+
 ## v6.3.0 (2026-08-14) — 端注册表 + 模糊匹配 + 按端分析
 
 - **新增 `platform-registry.ts`**: 统一端名解析模块
