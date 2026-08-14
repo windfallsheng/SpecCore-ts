@@ -349,7 +349,7 @@ async function handleNewRequirement(desc: string, iteration: string, clarifyResu
   logger.info(`   📄 ${taskId}/00-specs/TASK.md`);
   logger.info('');
   logger.info('💡 下一步:');
-  logger.info(`   speccore analyze --task=${taskId}     # 分析技术方案`);
+  logger.info(`   speccore analyze --task=${taskId} --sync  # 分析并局部回写 020-specs/`);
   logger.info(`   speccore execute --task=${taskId} --force  # 执行任务`);
 }
 
@@ -555,6 +555,9 @@ export async function changeCommand(options: ChangeOptions): Promise<void> {
     logger.info(`   📄 变更摘要: 020-specs/CHANGE_SUMMARY.md`);
     logger.info('');
     logger.info('💡 下一步:');
+    for (const id of affectedIds) {
+      logger.info(`   speccore analyze --task=${id} --sync  # 局部回写受影响的 specs`);
+    }
     logger.info(`   speccore execute --task=${affectedIds.join(',')} --force  # 重新执行`);
     return;
   }
@@ -652,10 +655,14 @@ export async function changeCommand(options: ChangeOptions): Promise<void> {
       logger.info(`   📄 变更摘要: 020-specs/CHANGE_SUMMARY.md`);
     }
     logger.info('下一步:');
-    logger.info('  1. 运行 speccore validate --task=' + (options.task || '') + ' 验证完整性');
-    logger.info('  2. 检查受影响的下游任务是否需要回归');
     if (options.task) {
-      logger.info(`  3. 重新执行变更任务: speccore execute --task=${options.task} --force`);
+      logger.info(`  1. speccore analyze --task=${options.task} --sync  # 局部回写受影响的 specs`);
+      logger.info(`  2. speccore validate --task=${options.task}  # 验证完整性`);
+      logger.info(`  3. 检查受影响的下游任务是否需要回归`);
+      logger.info(`  4. speccore execute --task=${options.task} --force  # 重新执行`);
+    } else {
+      logger.info('  1. 运行 speccore validate 验证完整性');
+      logger.info('  2. 检查受影响的下游任务是否需要回归');
     }
   } catch (error) {
     spinner.fail(`变更失败: ${error}`);

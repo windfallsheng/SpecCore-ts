@@ -740,6 +740,7 @@ program
   .option('--feature <name>', '局部分析：只分析指定功能模块（010-requirements/features/{name}/）')
   .option('--doc <path>', '局部分析：类型文档（如 bugs/login-timeout, refactors/db-pool）')
   .option('--apply <content>', '接收 AI 分析结果写入 ANALYSIS.md（配合 --prompt）')
+  .option('--sync', '任务分析后局部回写 020-specs/（只更新受影响的功能模块，不全覆盖）')
   .action(analyzeCommand);
 
 program

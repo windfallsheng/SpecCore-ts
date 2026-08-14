@@ -4,7 +4,7 @@
  */
 
 import { logger, Spinner } from '../utils/logger';
-import { pathExists, readFile } from 'fs-extra';
+import { pathExists, readFile, writeFile, ensureDir } from 'fs-extra';
 import { join } from 'path';
 import {
   readGlobalIndex,
@@ -14,6 +14,7 @@ import {
   bumpGlobalVersion,
   ReqChange,
 } from '../core/global-layer';
+import { syncIterationToGlobal, MergeResult } from '../core/spec-merger';
 
 export interface SyncGlobalOptions {
   iteration?: string;
@@ -171,6 +172,23 @@ async function syncToGlobal(options: SyncGlobalOptions): Promise<void> {
   logger.info(`   同步需求: ${changes.length} 条`);
   logger.info(`   涉及项目: ${[...updatedProjects].join(', ')}`);
   logger.info(`   全量层版本: ${index.version} → ${newVersion}`);
+
+  // ── 8b. Spec 文件局部合并（section 级，不全覆盖）──
+  try {
+    const globalDir = join(process.cwd(), '.speccore');
+    const mergeResult = await syncIterationToGlobal(iterDir, globalDir);
+    if (mergeResult.filesUpdated > 0) {
+      logger.info('');
+      logger.success(`📝 Spec 局部合并: ${mergeResult.filesUpdated} 个文件已更新`);
+      for (const change of mergeResult.changes) {
+        if (change.action !== 'skipped') {
+          logger.info(`   ${change.action === 'created' ? '✨' : '✅'} ${change.file}: ${change.sectionsPatched.length} 个段落`);
+        }
+      }
+    }
+  } catch (e) {
+    logger.debug('Spec 局部合并失败（非关键）:', e);
+  }
 
   // ── 9. 全局知识沉淀（RAG 索引 + SUMMARY.md）──
   try {
