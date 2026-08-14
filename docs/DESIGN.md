@@ -11,9 +11,24 @@
 ```
 workspace/
 ├── .speccore/GLOBAL/              ← 跨工程全局索引（唯一一份）
-│   ├── INDEX.md                   ← 所有迭代的摘要索引
-│   ├── REQUIREMENTS.md           ← 所有工程的需求合并视图
-│   └── ARCHITECTURE.md           ← 跨工程的服务依赖关系
+│   ├── INDEX.md                   ← 所有迭代的摘要索引（自动生成，≤1500字）
+│   ├── OVERVIEW.md               ← 项目全景描述
+│   ├── ARCHITECTURE.md           ← 跨工程的服务依赖关系
+│   ├── TECH_STACK.md             ← 技术栈概览
+│   ├── CODE_INDEX.md             ← 代码路径索引
+│   ├── GLOSSARY.md               ← 术语定义表
+│   ├── CHANGELOG.md              ← 全局变更日志
+│   ├── PROTOTYPE_INDEX.md        ← 原型索引
+│   ├── PROJECTS/                 ← 各工程独立目录
+│   │   └── {project}/            ← 工程级需求/元数据
+│   ├── REQUIREMENTS/             ← 跨工程需求合并视图
+│   ├── BASELINES/                ← 基线快照
+│   ├── synthesis/                ← [synthesize --full 生成] 跨端综合文档
+│   │   ├── CROSS_PLATFORM.md    ← 跨端业务关系 + 接口映射
+│   │   ├── ARCHITECTURE.md      ← 全量架构文档
+│   │   └── TECH_FULL.md         ← 全量技术方案
+│   └── platforms/                ← [synthesize --full 生成] 各端分析文档
+│       └── {platform}/           ← 端名来自 CONSTITUTION
 │
 ├── project-a/                     ← 独立工程 A
 │   ├── .speccore/                 ← 工程自己的配置（独立）
@@ -31,7 +46,7 @@ workspace/
 
 | 层级 | 职责 | 共享 |
 |------|------|:--:|
-| **GLOBAL** | 需求合并视图、跨工程索引、服务依赖 | 一份 |
+| **GLOBAL** | 需求合并视图、跨工程索引、服务依赖、跨端综合、各端分析 | 一份 |
 | **工程 .speccore/** | 技术栈、规范、平台映射、活跃迭代 | 每工程独立 |
 | **工程 Iteration-*/** | 需求文档、分析、任务、进度 | 每迭代独立 |
 
@@ -396,8 +411,8 @@ init → doc2spec → analyze → split → plan → execute → pr → done →
 | 阶段 | 输入 | 输出 |
 |------|------|------|
 | init | - | `.speccore/` + `Iteration-sample/` + AGENTS.md |
-| doc2spec | Word/MD PRD | `010-requirements/{feature}/README.md` |
-| analyze | 010-requirements/ 所有 .md → CONSTITUTION 映射 | `020-specs/{platform}/{feature}.md` |
+| doc2spec | Word/MD PRD | `010-requirements/{feature}/README.md`；`--classify` 模式：sources/ → staging/ → 020-specs/{type}/ |
+| analyze | 010-requirements/ 所有 .md → CONSTITUTION 映射 | `020-specs/` 按类型分层（features/ + bugs/ + refactors/ + research/ + platforms/） |
 | split | 020-specs/ + CONSTITUTION.md 端配置 | `030-tasks/{type}/Task-NNN-slug/` |
 | plan | 任务列表 + STAFFING | `PLAN.md` + `speccore-plan.html` + `plan.json` |
 | execute | REQ.md + TECH.md → AI 生成代码 | 源码 + .issues.md + 多任务时自动生成 `PLAN.md` |
@@ -535,7 +550,7 @@ speccore retro --all --type bugfix    ← 按类型
 
 ### 5.2 路由器 Skill
 
-统一入口 `.agents/skills/speccore-router/SKILL.md`，20+ 意图映射：
+统一入口 `.agents/skills/speccore-router/SKILL.md`，83 条同义词映射覆盖 25+ 个命令：
 
 | 用户说 | 输出 | 类型 |
 |------|------|:---:|
@@ -737,13 +752,27 @@ speccore retro --all --type bugfix    ← 按类型
 ├── CLAUDE.md              ← Claude Code 引用 @AGENTS.md
 ├── .qoder/rules/          ← Qoder 规则
 │   └── speccore.md
-├── .qoder/commands/       ← Qoder 斜杠命令（spec:X.md 格式）
-├── .agents/skills/        ← TRAE 技能
-│   ├── speccore-router/SKILL.md
-│   ├── spec-ask/SKILL.md
-│   ├── spec-execute/SKILL.md
-│   └── ...
-└── .trae/commands/        ← TRAE 斜杠命令
+├── .qoder/commands/       ← Qoder 斜杠命令（spec-*.md 格式）
+├── .agents/skills/        ← Skills 技能（14 个）
+│   ├── speccore-router/SKILL.md   ← 智能路由器
+│   ├── spec-ask/SKILL.md          ← Ask 引擎入口
+│   ├── spec-analyze/SKILL.md      ← 需求分析
+│   ├── spec-change/SKILL.md       ← 需求变更
+│   ├── spec-dev/SKILL.md          ← 开发流水线
+│   ├── spec-doc2spec/SKILL.md     ← 文档导入
+│   ├── spec-execute/SKILL.md      ← 任务执行
+│   ├── spec-iteration-create/SKILL.md ← 迭代创建
+│   ├── spec-plan/SKILL.md         ← 计划生成
+│   ├── spec-reindex/SKILL.md      ← 索引重建
+│   ├── spec-spec2doc/SKILL.md     ← 规格导出
+│   ├── spec-split/SKILL.md        ← 任务拆分
+│   ├── spec-synthesize/SKILL.md   ← 多端综合
+│   └── spec-task-create/SKILL.md  ← 任务创建
+├── .claude/commands/      ← Claude Code 斜杠命令
+├── .codebuddy/commands/   ← CodeBuddy 斜杠命令
+├── .trae/commands/        ← TRAE 斜杠命令
+├── .trae-cn/commands/     ← TRAE-CN 斜杠命令
+└── .windsurf/commands/    ← Windsurf 斜杠命令
 ```
 
 ### 6.2 覆盖矩阵
@@ -753,9 +782,11 @@ speccore retro --all --type bugfix    ← 按类型
 | WorkBuddy | `.speccore/` + CONSTITUTION.md | ✅ |
 | Cursor/Copilot/Windsurf | `AGENTS.md` | ✅ |
 | Codex | `AGENTS.md` | ✅ |
-| Claude Code | `CLAUDE.md` → `@AGENTS.md` | ✅ |
-| Qoder | `.qoder/rules/` + `.qoder/commands/spec:X.md` | ✅ |
+| Claude Code | `CLAUDE.md` → `@AGENTS.md` + `.claude/commands/` | ✅ |
+| CodeBuddy | `.codebuddy/commands/` | ✅ |
+| Qoder | `.qoder/rules/` + `.qoder/commands/spec-*.md` | ✅ |
 | TRAE | `.agents/skills/` + `.trae/commands/` | ✅ |
+| TRAE-CN | `.trae-cn/commands/` | ✅ |
 
 ### 6.3 HTML 页面视觉规范
 
@@ -922,14 +953,14 @@ speccore schedule cancel --id <id>
 | v6.7.0 | 08-14 | 知识图谱深度集成 + 意图缓存增强 + 宿主AI协议优化 |
 | v6.8.0 | 08-14 | 代码索引智能增强 + RAG 检索 + 统一检索层 + Prompt 性能优化 |
 | v6.9.0 | 08-14 | 全局知识沉淀 + 检索层深度检查修复（7 bug）+ 文档同步 |
+| v6.10.0 | 08-14 | 智能文档分类摄入（doc2spec --classify）+ nature/type 两步分类 + CONTEXT.md 来源追溯 + 多类型任务支持 |
 
-> **最后更新**: 2026-08-14 (v6.9.0) — 统一检索层 + RAG 检索 + 全局知识沉淀
+> **最后更新**: 2026-08-14 (v6.10.0) — 智能文档分类摄入 + 任务上下文追溯 + 多类型任务支持
 
 ---
+## 10. 可执行编排引擎（spec-ask v4）
 
-## 13. 可执行编排引擎（spec-ask v4）
-
-### 13.1 五分支决策树
+### 10.1 五分支决策树
 
 ```
 用户输入 → 步骤0 判断类型 → 步骤1 意图识别 [SPECCORE_MODE] → 分支选择
@@ -941,7 +972,7 @@ speccore schedule cancel --id <id>
 分支 E: guide    → 展示流程 → 进D或结束
 ```
 
-### 13.2 协作协议
+### 10.2 协作协议
 
 | exitCode | 含义 | 标准行为 |
 | :--- | :--- | :--- |
@@ -949,7 +980,7 @@ speccore schedule cancel --id <id>
 | 10 | 需要 AI | 提取 [SPECCORE_PROMPT] → 自己生成 → --apply |
 | 11 | 缺参数 | 展示 [SPECCORE_NEEDS_INFO] 参数表 → 用户补 |
 
-### 13.3 管道传递
+### 10.3 管道传递
 
 ```
 Write /tmp/speccore-resp.json
@@ -958,9 +989,9 @@ cat /tmp/speccore-resp.json | speccore execute --response - -t Task-001
 
 ---
 
-## 14. 升级与数据保护
+## 11. 升级与数据保护
 
-### 14.1 文件保护策略
+### 11.1 文件保护策略
 
 | 文件 | 策略 |
 | :--- | :--- |
@@ -969,7 +1000,7 @@ cat /tmp/speccore-resp.json | speccore execute --response - -t Task-001
 | Iteration-*/ | 永远不覆盖 |
 | AI-RULES/AGENTS/Skills/模板 | 自动更新 + 输出清单 |
 
-### 14.2 升级提示机制
+### 11.2 升级提示机制
 
 每次 init 对比 `last-init-version.txt`，检测模板变化：
 1. CONSTITUTION 缺新字段 → 生成 `.speccore/local/UPGRADE.md`
@@ -977,16 +1008,16 @@ cat /tmp/speccore-resp.json | speccore execute --response - -t Task-001
 3. AI 模式：用户说"升级" → AI 智能合并
 4. 手动模式：对照 UPGRADE.md 自行修改
 
-### 14.3 低置信拒绝与歧义检测
+### 11.3 低置信拒绝与歧义检测
 
 - confidence < 45% → 拒绝匹配
 - best.confidence - second.confidence < 15% → ambiguous 模式
 
 ---
 
-## 10. Skill + CLI + AI 协作架构（Prompt/Apply 模式）
+## 12. Skill + CLI + AI 协作架构（Prompt/Apply 模式）
 
-### 10.1 核心原则
+### 12.1 核心原则
 
 ```
 CLI 只做确定性操作，不做内容生成。
@@ -1000,7 +1031,7 @@ CLI 只做确定性操作，不做内容生成。
 | CLI（speccore） | 读写文件、构建 Prompt、写入结果 | `speccore execute --prompt` 🔒 |
 | 宿主 AI（Qoder/Trae/Claude） | 语义理解、内容生成、代码编写 | 根据 Spec 生成 Java 代码 |
 
-### 10.2 Prompt/Apply 协作循环
+### 12.2 Prompt/Apply 协作循环
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
@@ -1034,7 +1065,7 @@ CLI 只做确定性操作，不做内容生成。
 7. Skill 调用 `speccore execute --response '{json}' -t Task-001`
 8. CLI 解析 JSON，写入文件，更新 PROJECT_GRAPH 状态
 
-### 10.3 Prompt 结构化格式
+### 12.3 Prompt 结构化格式
 
 ```
 [SPECCORE_PROMPT]
@@ -1068,7 +1099,7 @@ CLI 只做确定性操作，不做内容生成。
 [/SPECCORE_PROMPT]
 ```
 
-### 10.4 适用的命令列表
+### 12.4 适用的命令列表
 
 | 命令 🔒 | --prompt 做什么 | --response/--apply 做什么 |
 | :--- | :--- | :--- |
@@ -1076,13 +1107,13 @@ CLI 只做确定性操作，不做内容生成。
 | `analyze` | 读需求 → 输出分析 Prompt | 接收 AI 分析 → 写入 ANALYSIS.md |
 | `split` | 读分析结果 → 输出拆分 Prompt | 接收 AI 拆分 → 创建 Task 目录 |
 | `plan` | 读 Task 列表 → 输出排程 Prompt | 接收 AI 计划 → 写入 plan.json |
-| `doc2spec` | 读原始文档 → 输出验证 Prompt | 接收 AI 修正 → 更新 MD |
+| `doc2spec` | 读原始文档 → 输出验证 Prompt；`--classify` 模式：读 sources/ → 输出分类 Prompt（AI 理解意图 nature + 映射类型 type） | 接收 AI 修正 → 更新 MD；`--classify`：接收 JSON → 写入 staging/（带 frontmatter） |
 
 ---
 
-## 11. 定时调度机制
+## 13. 定时调度机制
 
-### 11.1 两层调度架构
+### 13.1 两层调度架构
 
 ```
 ┌──────────────────────────────────────────┐
@@ -1105,7 +1136,7 @@ CLI 只做确定性操作，不做内容生成。
 └──────────────────────────────────────────┘
 ```
 
-### 11.2 定时场景示例
+### 13.2 定时场景示例
 
 ```
 场景: 每晚 8 点自动检查迭代进度并执行待办任务
@@ -1121,7 +1152,7 @@ CLI 只做确定性操作，不做内容生成。
 5. CLI 走 Prompt/Apply 协作循环完成开发
 ```
 
-### 11.3 CLI schedule 命令
+### 13.3 CLI schedule 命令
 
 ```
 speccore schedule create --name "夜间批量" --at "20:00" --batch-size 3
@@ -1131,9 +1162,9 @@ speccore schedule daemon  # 持续运行，等待时间触发
 
 ---
 
-## 12. 与 OpenSpec 等行业工具的对比
+## 14. 与 OpenSpec 等行业工具的对比
 
-### 12.1 相同的核心机制
+### 14.1 相同的核心机制
 
 SpecCore 的 Prompt/Apply 模式与以下工具的原理完全一致：
 
@@ -1145,7 +1176,7 @@ SpecCore 的 Prompt/Apply 模式与以下工具的原理完全一致：
 | **GitHub Copilot** | 文件读写、Git 操作 | 代码补全/生成 | inline suggestion |
 | **SpecCore** | speccore CLI 确定性操作 | 宿主 AI(Qoder/Trae) | execute_command → stdout → AI |
 
-### 12.2 关键差异 — SpecCore 的优势
+### 14.2 关键差异 — SpecCore 的优势
 
 | 维度 | OpenSpec/Claude Code | SpecCore |
 | :--- | :--- | :--- |
@@ -1157,7 +1188,7 @@ SpecCore 的 Prompt/Apply 模式与以下工具的原理完全一致：
 | 多平台适配 | 单一工具 | Claude/Cursor/Trae/Windsurf/Qoder |
 | 命令防绕过 | LLM 可能忽略 | Skill 拼命令 + CLI 执行 = 100% 可靠 |
 
-### 12.3 技术可行性
+### 14.3 技术可行性
 
 Prompt/Apply 模式依赖的唯一前提是：**宿主 AI 环境提供 `execute_command` 工具调用能力**。
 
@@ -1438,4 +1469,65 @@ execute --prompt 执行前:
 - **P1-5**: `global-knowledge.ts` 动态导入冗余 → 静态导入
 - **P1-6**: `refresh.ts` 重复调用 `checkRagIndexFreshness` → before/after 对比 `updatedAt`
 - **编译错误**: `indexDirectoryDocuments` 未导入 → 添加静态导入
+
+---
+
+### 2026-08-14 智能文档分类摄入 + 多类型任务支持
+
+#### 1. doc2spec --classify 两步分类 Prompt
+- **位置**: `src/commands/doc2spec.ts`
+- **设计**: AI 先理解文档实际意图（nature），再映射到任务类型（type）
+- **nature 字段**: 文档实际意图的简短描述（如"安全漏洞"、"性能瓶颈"、"新功能需求"）
+- **type 字段**: 映射后的任务类型（feature/bugfix/refactor/research）
+- **映射规则**:
+
+| nature（文档实际意图） | type（映射任务类型） | 示例 |
+|:---|:---|:---|
+| 新功能、功能需求、产品规格 | feature | "用户需要扫码登录" |
+| 缺陷、故障、异常、安全问题 | bugfix | "登录超时"、"SQL注入漏洞" |
+| 技术债、架构改进、性能优化 | refactor | "数据库连接池过小" |
+| 调研、选型、方案对比 | research | "WebSocket vs SSE 对比" |
+| 安全审计、渗透测试、合规检查 | bugfix | "XSS 漏洞报告" |
+| 性能瓶颈、响应慢、资源浪费 | refactor | "首页加载超 3 秒" |
+
+#### 2. staging/ 文件格式
+```yaml
+---
+type: bugfix
+nature: 安全漏洞
+title: XSS 反射型漏洞修复
+source: sources/
+created: 2026-08-14
+---
+```
+- staging/ 是临时目录，analyze 完成后可清理
+- analyze 读取 frontmatter 中的 type 和 nature，写入 `020-specs/{type}/` 并在 header 标注 `> 意图: {nature}`
+
+#### 3. nature 透传链路
+```
+doc2spec --classify --prompt → AI 输出 nature + type
+doc2spec --classify --response → staging/{slug}.md（frontmatter 含 nature）
+analyze → 020-specs/{type}/{slug}.md（header 含 `> 意图: {nature}`）
+split → Task/_shared/CONTEXT.md（来源追溯）
+```
+
+#### 4. 非 pipeline 交互决策
+- **问题**: classify 相关输入（"分类文档""classify sources"）是否触发 smart intake pipeline？
+- **决策**: 不触发。classify 只是 doc2spec 的一个模式，用户逐步交互
+- **实现**: `handleGuide` 中 classify 触发词返回 null（不匹配 pipeline），`matchWorkflow` 中也删除 classify 触发词
+- **效果**: 用户说"帮我分类导入的文档" → 只匹配到 doc2spec 命令，mode=match，hasPipeline=false
+
+#### 5. 多类型任务拆分规则
+| 文档类型 | 拆分规则 | 说明 |
+|:---|:---|:---|
+| features/ | 按功能单元拆合（1~3 个任务） | 功能可拆分、可合并 |
+| bugs/ | 1:1 映射（1 文件 = 1 bugfix 任务） | 每个 bug 独立修复 |
+| refactors/ | 1:1 映射 | 每个重构项独立执行 |
+| research/ | 1:1 映射 | 每个调研主题独立进行 |
+
+#### 6. CONTEXT.md 来源追溯
+- **位置**: `src/commands/iteration/split.ts` → `generateContextMd()`
+- **内容**: 来源追溯表 + 原始描述摘要 + 关联任务 + 影响范围
+- **来源路径**: 支持 `sourceFile` 字段（AI 提供）和回退规则（type + topic）
+- **注入时机**: execute 时自动加载，AI 可追溯需求源头
 
