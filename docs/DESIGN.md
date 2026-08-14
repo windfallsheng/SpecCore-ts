@@ -830,8 +830,10 @@ speccore schedule cancel --id <id>
 | v6.5.0 | 08-14 | 知识图谱 + 衰减检测 + AI 关联链注入 |
 | v6.6.0 | 08-14 | 知识库系统全面修复（13 项问题修复） |
 | v6.7.0 | 08-14 | 知识图谱深度集成 + 意图缓存增强 + 宿主AI协议优化 |
+| v6.8.0 | 08-14 | 代码索引智能增强 + RAG 检索 + 统一检索层 + Prompt 性能优化 |
+| v6.9.0 | 08-14 | 全局知识沉淀 + 检索层深度检查修复（7 bug）+ 文档同步 |
 
-> **最后更新**: 2026-08-14 (v6.7.0) — 知识图谱深度集成 + 意图缓存增强
+> **最后更新**: 2026-08-14 (v6.9.0) — 统一检索层 + RAG 检索 + 全局知识沉淀
 
 ---
 
@@ -1243,16 +1245,107 @@ execute --prompt 执行前:
   - 其他 → minor → info
 - **效果**: typo 修复、注释修改不再误报 downstream_stale，只有实质性变更才触发级联警告
 
-#### 7. 代码索引 ↔ 知识图谱打通（设计阶段）
-- **当前状态**: `findRelevantCode()` 与知识图谱完全脱节，关键词匹配粗糙
-- **已识别缺口**:
-  - 知识图谱已知道 `REQ-001 → SPEC-001 → Task-001`，但 `findRelevantCode` 完全不用
-  - 关键词提取无停用词过滤、无语义扩展
-  - Git 联动数据（共同变更模块）完全闲置
-  - 缺少 Spec→代码 正向映射（只有代码→Spec 的 `@spec` 反向同步）
-- **优化方向（P0）**:
-  1. `findRelevantCode` 优先加载知识图谱中关联的代码文件（通过 `@spec` 注释或分析阶段映射）
-  2. 关键词增加停用词过滤 + 语义扩展映射（`login` ↔ `auth`/`authentication`）
-  3. execute 前增加代码新鲜度检查，代码变更后提示重新分析
-  4. 衰减检测推断影响范围：代码变了 → 哪些 Task/Spec 受影响
+#### 7. 代码索引 ↔ 知识图谱打通（v6.8.0 已完成）
+
+**架构升级：统一检索层（Unified Retrieval Layer）**
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                     统一检索层 (unified-retrieval.ts)                  │
+│                                                                      │
+│   用户查询 ──▶ unifiedSearch(query)                                  │
+│                │                                                     │
+│    ├──────────┼──────────┬─────────────────┐                        │
+│    ▼          ▼          ▼                 ▼                        │
+│  文档 RAG   代码切片    知识图谱          组装                        │
+│  rag-engine sliceCodeFile knowledge-graph  assemble                   │
+│    │          │          │                 │                        │
+│    ▼          ▼          ▼                 ▼                        │
+│  Top-5      Top-5       关联实体链      统一上下文                    │
+│  chunks     slices      + 关系图        (60%+20%+20%)               │
+│                                                                      │
+│  assembleUnifiedContext() ──▶ 注入 Prompt                            │
+│  🔍 统一检索: 3 文档块 + 5 代码切片 + 2 实体 | ~4200 tokens          │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**已实现的能力：**
+
+| 设计目标 | 实现方式 | 版本 |
+|---------|---------|------|
+| 代码索引 ↔ 知识图谱打通 | `findRelevantCode()` 加载知识图谱关联文件 + `@spec` 注释扫描 + Git 联动 | v6.8.0 |
+| 关键词语义扩展 | `expandKeywords()` 中英双语映射 + 停用词过滤 | v6.8.0 |
+| 代码新鲜度检查 | execute 前对比 `code-structure.json` 与源码 mtime | v6.8.0 |
+| 需求分析默认关联代码 | `analyzeRequirements` 默认调用 `findRelevantCode` | v6.8.0 |
+| 函数级代码索引 | `sliceCodeFile()` 按 `export function/class/interface` 切分 | v6.8.0 |
+| 文档 RAG 检索 | `rag-engine.ts` 按标题分块 + 摘要提取 + 关键词标签 | v6.8.0 |
+| 增量刷新 | `checkRagIndexFreshness()` mtime 检测 + 只重建变更文件 | v6.8.0 |
+| 统一检索层 | `unified-retrieval.ts` 一次查询三源合并 | v6.8.0 |
+| 全局知识沉淀 | `global-knowledge.ts` sync-global 后自动聚合 specs | v6.8.0 |
+| 手动刷新命令 | `speccore rag-index` / `speccore refresh` | v6.8.0 |
+
+---
+
+### 2026-08-14 统一检索层 + RAG 检索 + 全局知识沉淀
+
+#### 1. 统一检索层架构
+- **位置**: `src/core/unified-retrieval.ts`
+- **三层协作**:
+  1. **文档 RAG** (`rag-engine.ts`): 按 Markdown 标题分块 → 提取结构化摘要 → 关键词标签 → 相关性评分检索
+  2. **代码切片** (`sliceCodeFile()`): 按 `export function/class/interface/type/enum/const` 正则切分，每片含 JSDoc + 签名 + 前 50 行实现
+  3. **知识图谱** (`knowledge-graph.ts`): 实体匹配 + 关系链推断
+- **组装策略**: 文档占 60% + 代码 20% + 图谱 20%，统一输出为 Prompt 注入格式
+- **日志**: `🔍 统一检索: 3 文档块 + 5 代码切片 + 2 实体 | ~4200 tokens`
+
+#### 2. RAG 轻量级检索（无向量数据库）
+- **分块策略**: 按 `##`/`###`/`####` 标题分块，不是硬截断
+- **摘要提取**: 表格 → 表头+前3行 / 列表 → 前5项 / 段落 → 前2句 / 代码 → 函数签名
+- **关键词标签**: 中文 2-4 字词 + 英文标识符 + CamelCase 拆分 + 语义扩展
+- **相关性评分**: 标题匹配 +3 分/词，摘要 +2 分，关键词 +2.5 分，内容 +1 分
+- **索引生命周期**: analyze 阶段生成 → buildPrompt 阶段消费 → `.speccore/cache/rag-index*.json`
+- **Scope 隔离**: task `rag-index.json` / iteration `rag-index-{name}.json` / global `rag-index-global.json`
+
+#### 3. 增量刷新机制
+- **检测**: 对比源文件 mtime 与索引缓存中记录的 mtime
+- **重建**: 只重建有变更的文件 chunk，未变更的保留
+- **新增文件**: `scanForNewFiles()` 递归扫描目录，检测索引中不存在的 .md 文件
+- **触发点**: analyze 阶段自动检测、手动 `speccore rag-index --refresh`、统一 `speccore refresh`
+
+#### 4. 代码切片（函数级索引）
+- **切分规则**: `export (async )?(function|class|interface|type|enum|const)` 正则匹配
+- **每片内容**: JSDoc 注释（保留缩进）+ 完整签名 + 前 50 行实现
+- **相关性评分**: 名称命中 +5 分，路径/签名/注释匹配 +1 分
+- **与代码索引的关系**: `code-scanner.ts` 负责"找哪些文件"，代码切片负责"文件中哪段代码最相关"
+
+#### 5. 全局知识沉淀
+- **位置**: `src/core/global-knowledge.ts`
+- **触发**: `sync-global to_global` 完成后自动调用
+- **流程**: 扫描迭代所有 specs → 建全局 RAG 索引 → 生成 `GLOBAL/SUMMARY.md` → 刷新知识图谱
+- **设计哲学**: 不追求完美文档，追求"能检索到"。支持手动编辑，下次 sync-global 覆盖更新
+- **SUMMARY.md 内容**: 功能清单 + 技术要点 + API 概览 + 已知问题
+
+#### 6. 新 CLI 命令
+- `speccore rag-index` — 显示所有索引文件状态（task/iteration/global）
+- `speccore rag-index --refresh --task Task-001` — 增量刷新
+- `speccore rag-index --full --task Task-001` — 全量重建
+- `speccore refresh` — 一键刷新所有检索层（代码索引 + 文档 RAG + 知识图谱）
+- `speccore refresh --code` / `--rag` / `--graph` — 分别刷新
+
+#### 7. Prompt 构建性能优化
+- **REQ.md 统一读取**: `loadReqContent()` 一次读取，三个函数共用缓存（减少 2 次 I/O）
+- **进程级文件缓存**: `cachedRead()` 按 mtime 缓存，文件未变时直接返回内存对象
+- **ExtraSpecs 大小限制**: 单文件 2000 chars / 总量 8000 chars，超限截断并标注
+- **TOC + TechStack 缓存**: `techStackCache`/`tocCache`/`constitutionCache` 多次 buildPrompt 间共享
+- **分析引擎去重读**: `AIContextInput.reqContents` 避免同一份文档被 readFile 两次
+- **知识图谱进程缓存**: `kgCache` 避免每次 ask 都 JSON.parse 数万节点
+- **动态 Prompt 裁剪**: `formatPrompt()` 12000 tokens 预算，超限时逐级简化
+
+#### 8. 深度检查修复的 Bug
+- **P0-1**: RAG 索引文件 scope 间互相覆盖 → 分文件存储（task/iteration/global 各独立）
+- **P0-2**: `sliceCodeFile` JSDoc 提取不匹配空格前缀注释 → `trimStart().startsWith('*')`
+- **P0-3**: `sliceCodeFile` 字符串转义判断 `indexOf` 只找第一个 → `for` 遍历逐字符判断
+- **P1-4**: `checkRagIndexFreshness` 不检测新增文件 → 新增 `scanForNewFiles()`
+- **P1-5**: `global-knowledge.ts` 动态导入冗余 → 静态导入
+- **P1-6**: `refresh.ts` 重复调用 `checkRagIndexFreshness` → before/after 对比 `updatedAt`
+- **编译错误**: `indexDirectoryDocuments` 未导入 → 添加静态导入
 

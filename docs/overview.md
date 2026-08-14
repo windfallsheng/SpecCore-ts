@@ -59,6 +59,25 @@ speccore dashboard --scope global
 | **任务 (Task)** | 期次下的独立开发任务 |
 | **全量层 (Global)** | 跨项目需求总索引 |
 | **Spec** | 需求规格文档 |
+| **统一检索层** | 文档 RAG + 代码切片 + 知识图谱三源合一的检索系统 |
+| **RAG 索引** | 按标题分块的结构化文档索引，`.speccore/cache/rag-index*.json` |
+
+## 检索层命令（v6.8.0+）
+
+```bash
+# 一键刷新所有检索层（代码索引 + 文档 RAG + 知识图谱）
+speccore refresh
+speccore refresh --code      # 只刷新代码索引
+speccore refresh --rag       # 只刷新文档 RAG
+speccore refresh --graph     # 只刷新知识图谱
+
+# RAG 索引管理
+speccore rag-index                    # 显示所有索引文件状态
+speccore rag-index --refresh --task Task-001   # 增量刷新任务索引
+speccore rag-index --full --task Task-001      # 全量重建任务索引
+```
+
+检索层在 `analyze` 阶段自动构建和刷新，手动命令用于用户修改文档后的即时同步。
 
 ## 输出
 

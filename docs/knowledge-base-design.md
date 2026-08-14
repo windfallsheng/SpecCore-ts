@@ -207,7 +207,7 @@ speccore knowledge scan --from-code
 | 知识过期检测 | `decay-detector.ts` 对比 `integrity.json` 快照 | v6.5.0 |
 | 经验自动回补 | retro → candidate/（设计阶段，待实现） | — |
 
-### 与代码索引的关系
+### 与代码索引的关系（v6.8.0 已打通）
 
 ```
 知识图谱（knowledge-graph.ts）          代码索引（code-scanner.ts）
@@ -217,13 +217,129 @@ speccore knowledge scan --from-code
     ├─ 任务实体 Task-001                     ├─ 导出函数 validateCredential
     └─ 关系: Task-001 implements REQ-001     └─ Git: auth 模块常与 user 模块联动
          │                                        │
-         └────────────── 待打通 ──────────────────┘
-              findRelevantCode() 应优先读图谱关联的代码文件
+         └────────── ✅ v6.8.0 已打通 ─────────────┘
+              findRelevantCode() 加载知识图谱关联的代码文件
+              + @spec 注释扫描 + Git 联动 + 关键词语义扩展
 ```
 
-### 下一步优化
+### 统一检索层（v6.8.0 新增）
 
-1. **P0**: `findRelevantCode` 接入知识图谱（代码索引 ↔ 知识图谱打通）
-2. **P1**: 分析阶段写入"需求-代码映射"，持久化到知识图谱
-3. **P1**: execute 前代码新鲜度检查，代码变更后自动提示重新分析
-4. **P2**: 函数级代码索引（当前只到文件级）
+```
+                    用户查询（自然语言/关键词）
+                           │
+                    unifiedSearch(query)
+                           │
+        ┌──────────────────┼──────────────────┐
+        ▼                  ▼                  ▼
+   文档 RAG            代码切片            知识图谱
+   rag-engine.ts       unified-retrieval.ts knowledge-graph.ts
+        │                  │                  │
+        ▼                  ▼                  ▼
+   Top-5 chunks      Top-5 slices       关联实体链
+   + 结构化摘要      + JSDoc+签名       + 关系图
+        │                  │                  │
+        └──────────────────┼──────────────────┘
+                           ▼
+                    assembleUnifiedContext()
+                           │
+                           ▼
+                    统一 Prompt 注入格式
+                    (文档60% + 代码20% + 图谱20%)
+```
+
+### 检索层三层对比
+
+| 维度 | 文档 RAG | 代码切片 | 知识图谱 |
+|------|---------|---------|---------|
+| **数据来源** | `010-requirements/` `020-specs/` | `src/**/*.ts` | 文件系统扫描 |
+| **粒度** | 标题级 chunk (~200-500字) | 函数/类级 slice (~50行) | 实体级 (REQ/SPEC/Task) |
+| **检索方式** | 关键词相关性评分 | 名称+签名匹配 | 实体ID+关系链 |
+| **何时构建** | analyze 阶段 | 实时切片（不缓存） | reindex / sync-global |
+| **何时消费** | buildPrompt | unifiedSearch | ask 引擎补参 |
+| **优势** | 语义相关、有摘要 | 精准到函数、有注释 | 关系推断、影响链 |
+
+## 十一、RAG 轻量级检索（v6.8.0）
+
+> 不引入向量数据库，纯关键词 + 结构化摘要实现轻量级 RAG。
+
+### 核心设计
+
+| 组件 | 实现 | 说明 |
+|------|------|------|
+| **分块** | `chunkByHeaders()` | 按 `##`/`###`/`####` 标题分块，保留上下文 |
+| **摘要** | `extractSummary()` | 表格→表头+前3行 / 列表→前5项 / 段落→前2句 |
+| **关键词** | `extractKeywords()` | 中文2-4字词 + 英文标识符 + CamelCase拆分 + 语义扩展 |
+| **评分** | `scoreChunk()` | 标题+3分/词 / 摘要+2分 / 关键词+2.5分 / 内容+1分 |
+| **索引** | `saveRagIndex()` | `.speccore/cache/rag-index*.json`，scope 隔离 |
+| **刷新** | `refreshRagIndex()` | mtime 检测 + 增量重建 + 新增文件扫描 |
+
+### Scope 隔离
+
+| Scope | 索引文件 | 覆盖范围 | 触发时机 |
+|-------|---------|---------|---------|
+| Task | `rag-index.json` | 任务目录 `00-specs/` `_shared/` | `analyze --task` |
+| Iteration | `rag-index-{name}.json` | `020-specs/` | `analyze --iteration` |
+| Global | `rag-index-global.json` | 所有迭代 specs + GLOBAL/ | `sync-global` |
+
+### 与代码索引的协作
+
+```
+文档检索（RAG）              代码检索（切片）
+    │                            │
+    ├─ "登录功能技术方案"         ├─ "export function login()"
+    ├─ "用户认证接口设计"         ├─ "export class AuthService"
+    └─ "权限校验规则"             └─ "export interface LoginDTO"
+         │                            │
+         └────── 统一检索层 ──────────┘
+                    │
+                    ▼
+            "登录功能" 查询
+            → 返回: 技术方案 + 代码实现 + 关联任务
+```
+
+## 十二、全局知识沉淀（v6.8.0）
+
+### 设计哲学
+
+**不追求完美文档，追求"能检索到"。**
+
+- 迭代完成后自动聚合所有 specs 到全局索引
+- 生成轻量级 `GLOBAL/SUMMARY.md`（功能清单 + 技术要点 + API + 已知问题）
+- 支持手动编辑，不完美没关系，下次 sync-global 覆盖更新
+- 全局 RAG 索引使跨迭代查询成为可能
+
+### 触发流程
+
+```
+sync-global to_global
+    │
+    ▼
+syncGlobalKnowledge()
+    │
+    ├── 扫描所有迭代的 020-specs/
+    ├── 扫描所有任务的 00-specs/ + _shared/
+    ├── buildRagIndex() → rag-index-global.json
+    ├── generateGlobalSummary() → GLOBAL/SUMMARY.md
+    └── buildKnowledgeGraph() → knowledge-graph.json (刷新)
+```
+
+### SUMMARY.md 结构
+
+```markdown
+# 全局知识概览
+
+## 功能清单
+- 用户认证系统（v6.8.0）
+- 订单管理系统（v6.8.0）
+
+## 技术要点
+- 后端: NestJS + TypeORM + PostgreSQL
+- 前端: React + Zustand + Ant Design
+
+## API 概览
+- POST /api/auth/login
+- GET /api/orders
+
+## 已知问题
+- 订单并发锁待优化（Issue #42）
+```

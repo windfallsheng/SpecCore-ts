@@ -9,23 +9,30 @@ export async function aboutCommand(): Promise<void> {
   const features = [
     { icon: '🧠', title: 'Ask 引擎', desc: '自然语言 → 意图识别 → 自动编排执行' },
     { icon: '📋', title: '任务管理', desc: '10+ 任务类型，迭代/计划/拆分' },
-    { icon: '🔍', title: '代码审查', desc: '安全审计/依赖分析/性能诊断' },
+    { icon: '🔍', title: '统一检索层', desc: '文档 RAG + 代码切片 + 知识图谱三源合一' },
     { icon: '🔄', title: '文档驱动', desc: 'Word/Excel/CSV → Spec 双向转换' },
-    { icon: '⚡', title: '定时调度 [暂未实现]', desc: 'WorkBuddy Automations 替代，计划后续迁移' },
+    { icon: '📚', title: '全局知识沉淀', desc: 'sync-global 自动聚合 specs 到全局索引' },
     { icon: '🤖', title: 'Skill 体系', desc: 'OpenSpec 标准，AI 自动路由' },
   ];
 
   // 近期亮点
   const highlights = [
+    '统一检索层 — 文档 RAG + 代码切片 + 知识图谱，一次查询三源合并',
+    'RAG 轻量级检索 — 按标题分块 + 结构化摘要 + 关键词标签，无向量数据库',
+    '全局知识沉淀 — sync-global 后自动聚合 specs，生成 GLOBAL/SUMMARY.md',
+    '代码索引智能增强 — 知识图谱关联 + @spec 注释 + Git 联动 + 语义扩展',
+    'Prompt 性能优化 — 统一读取 + 进程缓存 + 动态裁剪 + ExtraSpecs 大小限制',
+    '增量刷新 — mtime 检测 + 只重建变更文件 + 新增文件扫描',
     '意图合成 — AI 自动提取参数、补全上下文、精准提问',
     '自我检查 — 命令验证 + 置信度 + 遗漏检测',
-    '定时调度 [暂未实现] — 由 WorkBuddy Automations 替代，计划后续迁移',
     '多选执行 — plan --select 列出任务编号供用户选择',
     '双模式 — 自主全自动 / 分步确认，不跳过用户检查',
   ];
 
   // 重要里程碑版本
   const milestones = [
+    { v: '6.8', date: '2026-08', desc: '统一检索层 + RAG 检索 + 全局知识沉淀' },
+    { v: '6.5', date: '2026-08', desc: '知识图谱 + 衰减检测 + AI 关联链注入' },
     { v: '5.27', date: '2026-07', desc: 'Ask 四模式 + Skill 体系' },
     { v: '4.0', date: '2026-05', desc: '多平台 CLI + 文档转换' },
     { v: '1.0', date: '2026-01', desc: 'Spec 驱动开发，Task 管理' },
