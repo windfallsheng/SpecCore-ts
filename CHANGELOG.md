@@ -23,6 +23,26 @@
   - 报告新增「关联代码现状」章节，展示代码预览供技术方案参考
   - 避免"分析只看文档、执行又重复读代码"的 token 浪费
 
+### Prompt 构建性能优化（v6.8.0 补充）
+
+- **REQ.md 统一读取去重**: `prompt-builder.ts`
+  - `loadApiSpecs`/`loadDataModels`/`loadBusinessRules` 各自独立读取 REQ.md → 统一为 `loadReqContent()` 一次读取，三个函数共用缓存
+  - 减少 2 次重复 I/O + 引入进程级文件缓存（`cachedRead`），文件 mtime 未变时直接返回内存缓存
+- **ExtraSpecs 大小限制**: `loadExtraSpecs()` 新增 `maxCharsPerFile`（默认 2000）+ `maxTotalChars`（默认 8000）
+  - 单文件超限截断并标注，总大小超限停止加载更多文件
+  - 防止 TECH.md/TASK.md/SCHEMA.md 等大文件把 prompt 撑爆
+- **TOC + TechStack 进程缓存**: `loadGlobalContext()` / `loadTechStack()` 引入 `techStackCache`/`tocCache`/`constitutionCache`
+  - 多次 buildPrompt 调用之间共享缓存，避免重复扫描目录和重复读取 CONSTITUTION.md
+- **分析引擎去重读**: `analyze-engine.ts` + `ai-context-generator.ts`
+  - `AIContextInput` 新增 `reqContents` 字段
+  - `analyzeRequirements` / `analyzeCombined` 将已读取的需求内容直接传给 `generateAIContext`，避免同一份文档被 readFile 两次
+- **知识图谱进程缓存**: `knowledge-graph.ts`
+  - `loadKnowledgeGraph()` 引入 `kgCache`，文件 mtime 未变时直接返回已解析的图对象
+  - 避免每次 ask 都重新 JSON.parse 数万节点的知识图谱
+- **动态 Prompt 裁剪**: `prompt-builder.ts` `formatPrompt()`
+  - 默认预算 12000 tokens，超出时按优先级逐级简化：隐藏全局目录 → 压缩 extraSpecs → 隐藏任务关联链 → 极简模式
+  - 适配不同模型上下文窗口（gpt-4 32k / Claude 100k 等）
+
 ### 衰减检测影响链推断（P0-4）
 
 - **代码→Task→Spec 漂移检测**: `decay-detector.ts` 新增 `detectCodeSpecDrift()`
