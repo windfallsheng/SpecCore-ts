@@ -297,17 +297,21 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     ],
   },
   synthesize: {
-    desc: '需求文档智能合成：多端需求 → 一篇原子化综合需求文档',
+    desc: '需求文档智能合成：多端全量分析 → 跨端综合 → 按功能单元合成需求文档',
     params: [
       { flag: '-I, --iteration <iteration>', meaning: '目标迭代' },
       { flag: '--with-code', meaning: '结合源码检查需求冲突' },
       { flag: '--prompt', meaning: '输出结构化 Prompt 到 stdout' },
       { flag: '--apply <content>', meaning: '接收 AI 合成结果写入文件' },
+      { flag: '--full', meaning: '全自动三阶段：逐端分析 → 跨端综合 → 功能单元合成' },
+      { flag: '--phase <n>', meaning: '单阶段执行: 1=逐端分析, 2=跨端综合, 3=功能单元合成' },
+      { flag: '--apply-phase <n>', meaning: '配合 --apply 指定写入哪个阶段的结果' },
     ],
     examples: [
       'speccore synthesize -I Q2',
+      'speccore synthesize --full -I Q2',
+      'speccore synthesize --phase 1 -I Q2',
       'speccore syn',
-      'speccore synthesize -I Q2 --with-code',
     ],
   },
 };

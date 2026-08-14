@@ -1,17 +1,20 @@
 /**
  * synthesize — 需求文档智能合成命令
  *
- * 将迭代下多端需求文档（converted/*.md）智能合并为一篇原子化的综合需求文档
- * 输出到 010-requirements/REQUIREMENT.md
+ * 三种模式：
  *
- * 合成原则：
- *   - 章节需求原子化：一个业务功能一个章节，不按端拆分
- *   - 公共优先：多端共享逻辑只写一次
- *   - 差异标注：端差异用子标题明确标出
- *   - 接口汇总：同一功能的接口放一起，标注所属端
- *   - 冲突标记：需求间矛盾或需求与源码不一致时标注
- *   - 去重合并：相同描述只保留一份
- *   - 统一结构：每个原子章节遵循固定模板
+ * 模式 A: 简单合成（向后兼容）
+ *   将 converted/*.md 合并为 REQUIREMENT.md
+ *   CLI:  speccore synthesize -I <迭代名>
+ *
+ * 模式 B: 全自动三阶段（--full）
+ *   Phase 1: 逐端分析 → 各端独立 specs
+ *   Phase 2: 跨端综合 → CROSS_PLATFORM.md + ARCHITECTURE.md + TECH_FULL.md
+ *   Phase 3: 功能单元合成 → REQUIREMENT.md（按功能单元组织，含所有端需求）
+ *   CLI:  speccore synthesize --full -I <迭代名>
+ *
+ * 模式 C: 单阶段执行（--phase N）
+ *   CLI:  speccore synthesize --phase 1 -I <迭代名>
  *
  * 使用方式：
  *   CLI:  speccore synthesize -I <迭代名>
@@ -29,6 +32,41 @@ export interface SynthesizeOptions {
   withCode?: boolean;
   prompt?: boolean;
   apply?: string;
+  full?: boolean;
+  phase?: string;
+  applyPhase?: string;  // --apply-phase N <content>
+}
+
+// ── CONSTITUTION 工程列表解析 ──
+interface PlatformEntry {
+  project: string;
+  srcPath: string;
+  gitRepo: string;
+  branch: string;
+  platforms: string[];  // 对应需求端
+}
+
+async function parseConstitution(): Promise<PlatformEntry[]> {
+  const constitutionPath = join('.speccore', 'CONSTITUTION.md');
+  if (!await pathExists(constitutionPath)) return [];
+  const content = await readFile(constitutionPath, 'utf-8');
+  const entries: PlatformEntry[] = [];
+  // 解析表格行: | project | srcPath | gitRepo | branch | platforms |
+  const lines = content.split('\n');
+  for (const line of lines) {
+    if (!line.startsWith('|') || line.includes('---') || line.includes('工程') && line.includes('源码路径')) continue;
+    const cells = line.split('|').map(c => c.trim()).filter(Boolean);
+    if (cells.length >= 5) {
+      entries.push({
+        project: cells[0],
+        srcPath: cells[1],
+        gitRepo: cells[2],
+        branch: cells[3],
+        platforms: cells[4].split(',').map(p => p.trim()).filter(Boolean),
+      });
+    }
+  }
+  return entries;
 }
 
 export async function synthesizeCommand(options: SynthesizeOptions): Promise<void> {
@@ -40,24 +78,470 @@ export async function synthesizeCommand(options: SynthesizeOptions): Promise<voi
 
   const iterDir = await getIterationDir(iter);
   const reqDir = join(iterDir, '010-requirements');
+  const specDir = join(iterDir, '020-specs');
   const convDir = join(reqDir, 'converted');
   const outputPath = join(reqDir, 'REQUIREMENT.md');
 
-  // ── Apply 模式：接收 AI 合成结果写入文件 ──
-  if (options.apply) {
+  // ── Apply 模式（简单合成，向后兼容）──
+  if (options.apply && !options.applyPhase) {
     await ensureDir(reqDir);
-
-    // 备份旧文件（时间戳命名，不覆盖）
     const bk = await backupWithTimestamp(outputPath);
     if (bk) logger.info(`   📦 旧版已备份: ${bk.split('/').pop()}`);
-
     await writeFile(outputPath, options.apply);
     logger.success(`✅ 综合需求文档已生成: 010-requirements/REQUIREMENT.md`);
     return;
   }
 
-  // ── Prompt 模式：输出结构化 Prompt 到 stdout ──
-  // 收集所有端需求文档
+  // ── Apply Phase 模式：接收某阶段的 AI 结果写入文件 ──
+  if (options.applyPhase && options.apply) {
+    await handleApplyPhase(iter, iterDir, specDir, reqDir, parseInt(options.applyPhase), options.apply);
+    return;
+  }
+
+  // ── --full 模式：全自动三阶段 ──
+  if (options.full) {
+    await runFullPipeline(iter, iterDir, specDir, reqDir, convDir, options.withCode);
+    return;
+  }
+
+  // ── --phase N 模式：单阶段执行 ──
+  if (options.phase) {
+    const phaseNum = parseInt(options.phase);
+    if (phaseNum === 1) await runPhase1(iter, iterDir, specDir, reqDir);
+    else if (phaseNum === 2) await runPhase2(iter, iterDir, specDir, reqDir);
+    else if (phaseNum === 3) await runPhase3(iter, iterDir, specDir, reqDir, convDir, options.withCode);
+    else logger.error(`无效阶段: ${options.phase}，可选 1/2/3`);
+    return;
+  }
+
+  // ── 默认模式：简单合成（向后兼容）──
+  await runSimpleSynthesize(iter, iterDir, reqDir, convDir, outputPath, options.withCode);
+}
+
+// ================================================================
+// Apply Phase 处理
+// ================================================================
+async function handleApplyPhase(
+  iter: string, iterDir: string, specDir: string, reqDir: string,
+  phase: number, content: string
+): Promise<void> {
+  await ensureDir(specDir);
+  if (phase === 1) {
+    // Phase 1 apply: 写入各端 specs（内容按端分文件）
+    const phase1Dir = join(specDir, 'per-platform');
+    await ensureDir(phase1Dir);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 16);
+    await writeFile(join(phase1Dir, `ANALYSIS-${timestamp}.md`), content);
+    logger.success(`✅ Phase 1 结果已写入: 020-specs/per-platform/`);
+    // 提示下一阶段
+    logger.info(`\n   📌 下一步: speccore synthesize --phase 2 -I ${iter}`);
+  } else if (phase === 2) {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 16);
+    await writeFile(join(specDir, `CROSS_PLATFORM-${timestamp}.md`), content);
+    logger.success(`✅ Phase 2 结果已写入: 020-specs/CROSS_PLATFORM-${timestamp}.md`);
+    logger.info(`\n   📌 下一步: speccore synthesize --phase 3 -I ${iter}`);
+  } else if (phase === 3) {
+    await ensureDir(reqDir);
+    const bk = await backupWithTimestamp(join(reqDir, 'REQUIREMENT.md'));
+    if (bk) logger.info(`   📦 旧版已备份: ${bk.split('/').pop()}`);
+    await writeFile(join(reqDir, 'REQUIREMENT.md'), content);
+    logger.success(`✅ Phase 3 结果已写入: 010-requirements/REQUIREMENT.md`);
+    logger.info(`\n   ✅ 全量分析合成完成！`);
+  }
+}
+
+// ================================================================
+// --full 全自动三阶段流水线
+// ================================================================
+async function runFullPipeline(
+  iter: string, iterDir: string, specDir: string, reqDir: string,
+  convDir: string, withCode?: boolean
+): Promise<void> {
+  const entries = await parseConstitution();
+  if (entries.length === 0) {
+    logger.warn('CONSTITUTION.md 未配置多工程，回退到简单合成模式');
+    await runSimpleSynthesize(iter, iterDir, reqDir, convDir, join(reqDir, 'REQUIREMENT.md'), withCode);
+    return;
+  }
+
+  logger.info(`\n🚀 全量分析合成 — 迭代「${iter}」`);
+  logger.info(`   📋 检测到 ${entries.length} 个工程/端配置`);
+  for (const e of entries) {
+    logger.info(`      🔹 ${e.project} → 端: ${e.platforms.join(', ')}`);
+  }
+
+  // Phase 1: 逐端分析
+  logger.info(`\n━━━ Phase 1/3: 逐端分析 ━━━`);
+  await runPhase1(iter, iterDir, specDir, reqDir);
+
+  // Phase 2: 跨端综合
+  logger.info(`\n━━━ Phase 2/3: 跨端综合 ━━━`);
+  await runPhase2(iter, iterDir, specDir, reqDir);
+
+  // Phase 3: 功能单元合成
+  logger.info(`\n━━━ Phase 3/3: 功能单元需求合成 ━━━`);
+  await runPhase3(iter, iterDir, specDir, reqDir, convDir, withCode);
+
+  logger.info(`\n✅ 全量分析合成完成！`);
+  logger.info(`   📄 020-specs/per-platform/  ← 各端分析结果`);
+  logger.info(`   📄 020-specs/CROSS_PLATFORM*.md  ← 跨端关系`);
+  logger.info(`   📄 020-specs/ARCHITECTURE*.md    ← 全量架构`);
+  logger.info(`   📄 020-specs/TECH_FULL*.md       ← 全量技术方案`);
+  logger.info(`   📄 010-requirements/REQUIREMENT.md ← 按功能单元组织的完整需求`);
+}
+
+// ================================================================
+// Phase 1: 逐端分析
+// ================================================================
+async function runPhase1(
+  iter: string, iterDir: string, specDir: string, reqDir: string
+): Promise<void> {
+  const entries = await parseConstitution();
+  if (entries.length === 0) {
+    logger.warn('CONSTITUTION.md 未配置工程列表，无法执行逐端分析');
+    return;
+  }
+
+  const phase1Dir = join(specDir, 'per-platform');
+  await ensureDir(phase1Dir);
+
+  // 读取各端需求文档
+  const platformDocs: { platform: string; name: string; content: string }[] = [];
+  for (const entry of entries) {
+    for (const platform of entry.platforms) {
+      // 尝试读取 010-requirements/{platform}/ 下的文档
+      const platformReqDir = join(reqDir, platform);
+      if (await pathExists(platformReqDir)) {
+        const files = await readdir(platformReqDir);
+        for (const f of files.filter(f => f.endsWith('.md') && !isTimestampBackup(f))) {
+          const content = await readFile(join(platformReqDir, f), 'utf-8');
+          platformDocs.push({ platform, name: `${platform}/${f}`, content });
+        }
+      }
+      // 也读取 converted/ 下带端标记的文件
+      const convDir = join(reqDir, 'converted');
+      if (await pathExists(convDir)) {
+        const files = await readdir(convDir);
+        for (const f of files.filter(f => f.endsWith('.md') && f.includes(platform) && !isTimestampBackup(f))) {
+          const content = await readFile(join(convDir, f), 'utf-8');
+          platformDocs.push({ platform, name: `converted/${f}`, content });
+        }
+      }
+    }
+  }
+
+  if (platformDocs.length === 0) {
+    logger.warn('未找到各端需求文档，跳过 Phase 1');
+    return;
+  }
+
+  // 构建 Phase 1 Prompt
+  const prompt = buildPhase1Prompt(iter, entries, platformDocs);
+  process.stdout.write(`[SPECCORE_PHASE1]\n${prompt}`);
+  process.exitCode = 10;
+}
+
+function buildPhase1Prompt(
+  iter: string,
+  entries: PlatformEntry[],
+  platformDocs: { platform: string; name: string; content: string }[]
+): string {
+  let p = `# Phase 1: 逐端需求分析\n\n`;
+  p += `## 目标\n`;
+  p += `对迭代「${iter}」的每个端独立分析，生成各端的需求规格文档。\n\n`;
+
+  p += `## 工程配置\n\n`;
+  p += `| 工程 | 源码路径 | 对应需求端 |\n`;
+  p += `|:--|:--|:--|\n`;
+  for (const e of entries) {
+    p += `| ${e.project} | ${e.srcPath} | ${e.platforms.join(', ')} |\n`;
+  }
+  p += `\n`;
+
+  p += `## 各端需求文档\n\n`;
+  // 按端分组
+  const byPlatform: Record<string, typeof platformDocs> = {};
+  for (const doc of platformDocs) {
+    if (!byPlatform[doc.platform]) byPlatform[doc.platform] = [];
+    byPlatform[doc.platform].push(doc);
+  }
+  for (const [platform, docs] of Object.entries(byPlatform)) {
+    p += `### ${platform} 端\n\n`;
+    for (const doc of docs) {
+      p += `#### ${doc.name}\n\n`;
+      p += doc.content.slice(0, 5000); // 限制单文档长度
+      p += `\n\n---\n\n`;
+    }
+  }
+
+  p += `## 要求\n\n`;
+  p += `1. 对每个端独立分析，提取该端的需求规格\n`;
+  p += `2. 每个端输出：功能清单、接口定义、数据模型、业务规则、验收标准\n`;
+  p += `3. 按端分别组织，不要跨端合并\n`;
+  p += `4. 标注与其他端可能的关联点（如：该 API 被 Web 端调用）\n\n`;
+
+  p += `## 输出格式\n\n`;
+  p += `\`\`\`markdown\n`;
+  p += `# {端名} 端需求分析\n\n`;
+  p += `## 1. 功能清单\n`;
+  p += `| 功能 | 描述 | 关联端 |\n|:--|:--|:--|\n\n`;
+  p += `## 2. 接口定义\n`;
+  p += `### {模块名}\n`;
+  p += `| 方法 | 路径 | 参数 | 响应 | 说明 |\n|:--|:--|:--|:--|:--|\n\n`;
+  p += `## 3. 数据模型\n`;
+  p += `### {实体名}\n`;
+  p += `| 字段 | 类型 | 说明 | 约束 |\n|:--|:--|:--|:--|\n\n`;
+  p += `## 4. 业务规则\n`;
+  p += `- {规则描述}\n\n`;
+  p += `## 5. 跨端关联点\n`;
+  p += `- {该端的哪些功能/接口与其他端有关联}\n`;
+  p += `\`\`\`\n\n`;
+
+  p += `## 写入命令\n`;
+  p += `speccore synthesize --apply-phase 1 '{分析内容}' -I ${iter}\n`;
+
+  return p;
+}
+
+// ================================================================
+// Phase 2: 跨端综合
+// ================================================================
+async function runPhase2(
+  iter: string, iterDir: string, specDir: string, reqDir: string
+): Promise<void> {
+  // 读取 Phase 1 的结果
+  const phase1Dir = join(specDir, 'per-platform');
+  if (!await pathExists(phase1Dir)) {
+    logger.warn('未找到 Phase 1 结果，请先运行: speccore synthesize --phase 1');
+    return;
+  }
+
+  const files = await readdir(phase1Dir);
+  const mdFiles = files.filter(f => f.endsWith('.md'));
+  if (mdFiles.length === 0) {
+    logger.warn('Phase 1 结果为空，请先运行: speccore synthesize --phase 1');
+    return;
+  }
+
+  const platformSpecs: { name: string; content: string }[] = [];
+  for (const f of mdFiles) {
+    const content = await readFile(join(phase1Dir, f), 'utf-8');
+    platformSpecs.push({ name: f, content });
+  }
+
+  // 也读取已有的 020-specs/ 下的其他文件作为补充
+  const existingSpecs: { name: string; content: string }[] = [];
+  if (await pathExists(specDir)) {
+    const specFiles = await readdir(specDir);
+    for (const f of specFiles.filter(f => f.endsWith('.md') && !f.startsWith('CROSS_PLATFORM') && !f.startsWith('ARCHITECTURE') && !f.startsWith('TECH_FULL'))) {
+      const content = await readFile(join(specDir, f), 'utf-8');
+      existingSpecs.push({ name: f, content });
+    }
+  }
+
+  const prompt = buildPhase2Prompt(iter, platformSpecs, existingSpecs);
+  process.stdout.write(`[SPECCORE_PHASE2]\n${prompt}`);
+  process.exitCode = 11;
+}
+
+function buildPhase2Prompt(
+  iter: string,
+  platformSpecs: { name: string; content: string }[],
+  existingSpecs: { name: string; content: string }[]
+): string {
+  let p = `# Phase 2: 跨端综合分析\n\n`;
+  p += `## 目标\n`;
+  p += `基于迭代「${iter}」各端的独立分析结果，进行跨端综合，生成：\n`;
+  p += `1. **CROSS_PLATFORM.md** — 跨端业务关系图 + 接口映射\n`;
+  p += `2. **ARCHITECTURE.md** — 全量架构文档\n`;
+  p += `3. **TECH_FULL.md** — 全量技术方案\n\n`;
+
+  p += `## 各端分析结果\n\n`;
+  for (const spec of platformSpecs) {
+    p += `### ${spec.name}\n\n`;
+    p += spec.content.slice(0, 8000);
+    p += `\n\n---\n\n`;
+  }
+
+  if (existingSpecs.length > 0) {
+    p += `## 已有技术文档（补充参考）\n\n`;
+    for (const spec of existingSpecs.slice(0, 3)) {
+      p += `### ${spec.name}\n\n`;
+      p += spec.content.slice(0, 3000);
+      p += `\n\n---\n\n`;
+    }
+  }
+
+  p += `## 分析要求\n\n`;
+  p += `### CROSS_PLATFORM.md\n`;
+  p += `1. 识别跨端的业务关系（如：Web 的用户列表 → 后端的用户查询 API）\n`;
+  p += `2. 绘制跨端调用关系图（Mermaid）\n`;
+  p += `3. 汇总接口映射表：哪个端调用哪个接口\n`;
+  p += `4. 标注数据流向和依赖关系\n\n`;
+
+  p += `### ARCHITECTURE.md\n`;
+  p += `1. 全量系统架构（含所有端）\n`;
+  p += `2. 服务间依赖关系\n`;
+  p += `3. 技术栈汇总\n`;
+  p += `4. 部署架构\n\n`;
+
+  p += `### TECH_FULL.md\n`;
+  p += `1. 全量技术方案（综合各端）\n`;
+  p += `2. 公共模块/组件识别\n`;
+  p += `3. 跨端共享的数据模型\n`;
+  p += `4. 技术风险和约束\n\n`;
+
+  p += `## 输出格式\n\n`;
+  p += `请将三个文档用以下分隔标记分开：\n`;
+  p += `\`\`\`\n`;
+  p += `===CROSS_PLATFORM===\n{CROSS_PLATFORM.md 内容}\n`;
+  p += `===ARCHITECTURE===\n{ARCHITECTURE.md 内容}\n`;
+  p += `===TECH_FULL===\n{TECH_FULL.md 内容}\n`;
+  p += `\`\`\`\n\n`;
+
+  p += `## 写入命令\n`;
+  p += `speccore synthesize --apply-phase 2 '{综合内容}' -I ${iter}\n`;
+
+  return p;
+}
+
+// ================================================================
+// Phase 3: 按功能单元合成需求文档
+// ================================================================
+async function runPhase3(
+  iter: string, iterDir: string, specDir: string, reqDir: string,
+  convDir: string, withCode?: boolean
+): Promise<void> {
+  // 收集所有可用输入：各端 specs + 跨端综合 + 原始需求文档
+  const allSpecs: { name: string; content: string }[] = [];
+
+  // Phase 1 结果
+  const phase1Dir = join(specDir, 'per-platform');
+  if (await pathExists(phase1Dir)) {
+    for (const f of (await readdir(phase1Dir)).filter(f => f.endsWith('.md'))) {
+      allSpecs.push({ name: `per-platform/${f}`, content: await readFile(join(phase1Dir, f), 'utf-8') });
+    }
+  }
+
+  // Phase 2 结果
+  for (const prefix of ['CROSS_PLATFORM', 'ARCHITECTURE', 'TECH_FULL']) {
+    if (await pathExists(specDir)) {
+      const files = (await readdir(specDir)).filter(f => f.startsWith(prefix) && f.endsWith('.md'));
+      for (const f of files) {
+        allSpecs.push({ name: f, content: await readFile(join(specDir, f), 'utf-8') });
+      }
+    }
+  }
+
+  // 原始需求文档
+  const sourceDocs: { name: string; content: string }[] = [];
+  if (await pathExists(convDir)) {
+    for (const f of (await readdir(convDir)).filter(f => f.endsWith('.md') && !isTimestampBackup(f))) {
+      sourceDocs.push({ name: f, content: await readFile(join(convDir, f), 'utf-8') });
+    }
+  }
+  // features/ 下
+  const featuresDir = join(reqDir, 'features');
+  if (await pathExists(featuresDir)) {
+    for (const e of await readdir(featuresDir, { withFileTypes: true })) {
+      if (e.isDirectory() && !e.name.startsWith('.')) {
+        const readme = join(featuresDir, e.name, 'README.md');
+        if (await pathExists(readme)) {
+          sourceDocs.push({ name: `features/${e.name}/README.md`, content: await readFile(readme, 'utf-8') });
+        }
+      }
+    }
+  }
+
+  if (allSpecs.length === 0 && sourceDocs.length === 0) {
+    logger.warn('无可用输入文档，请先运行 Phase 1 和 Phase 2');
+    return;
+  }
+
+  const prompt = buildPhase3Prompt(iter, allSpecs, sourceDocs);
+  process.stdout.write(`[SPECCORE_PHASE3]\n${prompt}`);
+  process.exitCode = 12;
+}
+
+function buildPhase3Prompt(
+  iter: string,
+  allSpecs: { name: string; content: string }[],
+  sourceDocs: { name: string; content: string }[]
+): string {
+  let p = `# Phase 3: 按功能单元合成需求文档\n\n`;
+  p += `## 目标\n`;
+  p += `基于迭代「${iter}」的全量分析结果，按**功能单元**组织合成综合需求文档。\n`;
+  p += `每个功能单元一个章节，包含该功能关联的所有端的需求。\n\n`;
+
+  p += `## 输入：全量分析结果\n\n`;
+  for (const spec of allSpecs) {
+    p += `### ${spec.name}\n\n`;
+    p += spec.content.slice(0, 6000);
+    p += `\n\n---\n\n`;
+  }
+
+  if (sourceDocs.length > 0) {
+    p += `## 输入：原始需求文档\n\n`;
+    for (const doc of sourceDocs) {
+      p += `### ${doc.name}\n\n`;
+      p += doc.content.slice(0, 4000);
+      p += `\n\n---\n\n`;
+    }
+  }
+
+  p += `## 合成原则\n\n`;
+  p += `1. **按功能单元组织**：一个功能单元一个章节，不按端拆分\n`;
+  p += `2. **全端聚合**：每个功能单元包含所有相关端的需求（后端 API + 前端页面 + 管理端操作）\n`;
+  p += `3. **公共逻辑只写一次**：多端共享的逻辑放在章节开头\n`;
+  p += `4. **端差异用子标题**：\`#### {端名} 端\` 子标题标出差异\n`;
+  p += `5. **接口汇总**：同一功能的接口放一起，用表格标注所属端\n`;
+  p += `6. **结构清晰**：每个功能单元遵循统一模板\n`;
+  p += `7. **冲突标记**：需求矛盾用 ⚠️ 标注，汇总到"待确认事项"\n\n`;
+
+  p += `## 输出结构\n\n`;
+  p += `\`\`\`markdown\n`;
+  p += `# ${iter} 迭代综合需求文档\n\n`;
+  p += `> 全量分析合成 | 生成时间: {当前日期}\n\n`;
+  p += `## 1. 需求概述\n`;
+  p += `> 整体业务背景、目标用户、核心场景\n\n`;
+  p += `## 2. 功能单元\n\n`;
+  p += `### 2.1 {功能单元名}\n`;
+  p += `> 公共逻辑描述（多端共享）\n\n`;
+  p += `#### 后端\n`;
+  p += `- API 定义、数据模型、业务规则\n\n`;
+  p += `#### Web 前端\n`;
+  p += `- 页面、组件、交互逻辑\n\n`;
+  p += `#### Admin 端\n`;
+  p += `- 管理页面、操作流程\n\n`;
+  p += `#### 接口汇总\n`;
+  p += `| 方法 | 路径 | 说明 | 端 |\n|:--|:--|:--|:--|\n\n`;
+  p += `#### 验收标准\n`;
+  p += `- AC1: ...\n\n`;
+  p += `### 2.2 {功能单元名}\n`;
+  p += `...\n\n`;
+  p += `## 3. 非功能需求\n\n`;
+  p += `## 4. ⚠️ 待确认事项\n`;
+  p += `\`\`\`\n\n`;
+
+  p += `## 要求\n`;
+  p += `1. 功能单元必须是业务维度的划分（不是技术维度）\n`;
+  p += `2. 每个功能单元必须包含所有相关端的需求\n`;
+  p += `3. 接口必须汇总，标注所属端\n`;
+  p += `4. 输出完整 Markdown，不省略\n\n`;
+
+  p += `## 写入命令\n`;
+  p += `speccore synthesize --apply-phase 3 '{合成内容}' -I ${iter}\n`;
+
+  return p;
+}
+
+// ================================================================
+// 简单合成（向后兼容）
+// ================================================================
+async function runSimpleSynthesize(
+  iter: string, iterDir: string, reqDir: string, convDir: string,
+  outputPath: string, withCode?: boolean
+): Promise<void> {
   const sourceDocs: { name: string; content: string }[] = [];
 
   if (await pathExists(convDir)) {
@@ -69,7 +553,6 @@ export async function synthesizeCommand(options: SynthesizeOptions): Promise<voi
     }
   }
 
-  // 也读取 features/ 下的需求补充
   const featuresDir = join(reqDir, 'features');
   if (await pathExists(featuresDir)) {
     const entries = await readdir(featuresDir, { withFileTypes: true });
@@ -89,20 +572,18 @@ export async function synthesizeCommand(options: SynthesizeOptions): Promise<voi
     return;
   }
 
-  // 读取现有 REQUIREMENT.md（如果有）
   let existingReq = '';
   if (await pathExists(outputPath)) {
     existingReq = await readFile(outputPath, 'utf-8');
   }
 
-  // 读取 INDEX.md
   let indexContent = '';
   const indexPath = join(reqDir, 'INDEX.md');
   if (await pathExists(indexPath)) {
     indexContent = await readFile(indexPath, 'utf-8');
   }
 
-  const prompt = buildSynthesizePrompt(iter, sourceDocs, existingReq, indexContent, options.withCode);
+  const prompt = buildSynthesizePrompt(iter, sourceDocs, existingReq, indexContent, withCode);
   process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
   process.exitCode = 10;
 }

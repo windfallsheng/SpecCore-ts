@@ -2,6 +2,19 @@
 
 ---
 
+## v5.96.0 (2026-08-14) — Synthesize Multi-Platform Full Analysis & Synthesis (Three-Phase Automated Pipeline)
+
+- **Phase 1: Per-platform analysis** — Reads CONSTITUTION project list, generates independent specs per platform
+- **Phase 2: Cross-platform synthesis** — Aggregates all platform specs, identifies cross-platform business relationships, generates CROSS_PLATFORM.md + ARCHITECTURE.md + TECH_FULL.md
+- **Phase 3: Functional unit synthesis** — Organizes requirement docs by functional unit, each unit containing all platforms' requirements
+- **`--full` mode**: Fully automated three-phase pipeline, no manual intervention
+- **`--phase N` mode**: Single-phase manual execution
+- **`--apply-phase N` mode**: Receives AI results for a specific phase
+- Original simple synthesis mode preserved for backward compatibility
+- DESIGN.md updated with multi-platform full analysis & synthesis design section
+
+---
+
 ## v5.95.1 (2026-08-13) — TASK_SUMMARY Report Path Optimization
 
 - Reports in dedicated subdirectory `000-overview/task-summaries/`
