@@ -322,24 +322,24 @@ init → doc2spec → analyze → split → plan → execute → pr → done →
 
 ```
 Phase 1: 逐端分析（per-platform analysis）
-  ├── 后端工程 → analyze → 020-specs/platforms/backend/ANALYSIS.md + TECH.md
-  ├── Web 前端 → analyze → 020-specs/platforms/web/ANALYSIS.md + TECH.md
-  ├── Admin 端  → analyze → 020-specs/platforms/admin/ANALYSIS.md + TECH.md
-  └── App 端    → analyze → 020-specs/platforms/app/ANALYSIS.md + TECH.md
+  ├── 后端工程 → analyze → .speccore/GLOBAL/platforms/backend/ANALYSIS.md + TECH.md
+  ├── Web 前端 → analyze → .speccore/GLOBAL/platforms/web/ANALYSIS.md + TECH.md
+  ├── Admin 端  → analyze → .speccore/GLOBAL/platforms/admin/ANALYSIS.md + TECH.md
+  └── App 端    → analyze → .speccore/GLOBAL/platforms/app/ANALYSIS.md + TECH.md
 
 Phase 2: 跨端综合（cross-platform synthesis）
   ├── 汇总各端 specs
   ├── 识别跨端业务关系（如 Web 用户列表 → 后端用户查询 API）
   └── 输出:
-      ├── 020-specs/synthesis/CROSS_PLATFORM.md    ← 跨端关系图 + 接口映射
-      ├── 020-specs/synthesis/ARCHITECTURE.md      ← 全量架构文档
-      └── 020-specs/synthesis/TECH_FULL.md         ← 全量技术方案
+      ├── .speccore/GLOBAL/synthesis/CROSS_PLATFORM.md    ← 跨端关系图 + 接口映射
+      ├── .speccore/GLOBAL/synthesis/ARCHITECTURE.md      ← 全量架构文档
+      └── .speccore/GLOBAL/synthesis/TECH_FULL.md         ← 全量技术方案
 
 Phase 3: 按功能单元合成需求文档（functional-unit synthesis）
-  ├── 从 Phase 1+2 的结果中提取功能单元
+  ├── 从 GLOBAL 层 + 迭代层的结果中提取功能单元
   ├── 每个功能单元聚合所有端的需求（后端 API + 前端页面 + 管理端操作）
   └── 输出:
-      └── 010-requirements/REQUIREMENT.md ← 按功能单元组织的完整需求文档
+      └── Iteration-NNN/010-requirements/REQUIREMENT.md ← 按功能单元组织的完整需求文档
 ```
 
 **核心原则：**
@@ -389,10 +389,10 @@ speccore synthesize -I <迭代名>             # 只做需求合成（无全量�
 用户: speccore synthesize --full -I Q2
   → CLI Phase 1: 读取 CONSTITUTION 工程列表
     → 逐端输出 [SPECCORE_PROMPT] → AI 分析各端
-    → CLI 收集各端结果 → 020-specs/platforms/{端名}/
+    → CLI 收集各端结果 → .speccore/GLOBAL/platforms/{端名}/
   → CLI Phase 2: 汇总各端 specs
     → 输出 [SPECCORE_PROMPT] → AI 跨端综合
-    → CLI 写入 020-specs/synthesis/（旧版归档到 snapshots/）
+    → CLI 写入 .speccore/GLOBAL/synthesis/（旧版归档到 snapshots/）
   → CLI Phase 3: 按功能单元合成
     → 输出 [SPECCORE_PROMPT] → AI 按功能单元组织需求
     → CLI 写入 REQUIREMENT.md（--apply 回写）

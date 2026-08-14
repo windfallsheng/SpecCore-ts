@@ -1,3 +1,14 @@
+## v5.96.2 (2026-08-14) — synthesize 全局层写入路径迁移
+
+- Phase 1/2 输出从 `Iteration-NNN/020-specs/` 迁移到 `.speccore/GLOBAL/`
+- Phase 1 → `.speccore/GLOBAL/platforms/{端名}/`
+- Phase 2 → `.speccore/GLOBAL/synthesis/`（CROSS_PLATFORM + ARCHITECTURE + TECH_FULL）
+- 快照归档 → `.speccore/GLOBAL/snapshots/`
+- Phase 3 输出仍在迭代层 `010-requirements/REQUIREMENT.md`
+- Phase 3 读取逻辑同时从 GLOBAL 层 + 迭代层收集输入
+
+---
+
 ## v5.96.1 (2026-08-14) — synthesize 目录组织优化
 
 - Phase 1 输出: `per-platform/` → `platforms/`（按端分目录）

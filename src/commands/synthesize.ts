@@ -8,10 +8,10 @@
  *   CLI:  speccore synthesize -I <迭代名>
  *
  * 模式 B: 全自动三阶段（--full）
- *   Phase 1: 逐端分析 → 020-specs/platforms/{端名}/ 各端独立 specs
- *   Phase 2: 跨端综合 → 020-specs/synthesis/ CROSS_PLATFORM.md + ARCHITECTURE.md + TECH_FULL.md
- *   Phase 3: 功能单元合成 → REQUIREMENT.md（按功能单元组织，含所有端需求）
- *   旧版自动归档到 020-specs/snapshots/{时间戳}/
+ *   Phase 1: 逐端分析 → .speccore/GLOBAL/platforms/{端名}/ 各端独立 specs
+ *   Phase 2: 跨端综合 → .speccore/GLOBAL/synthesis/ CROSS_PLATFORM.md + ARCHITECTURE.md + TECH_FULL.md
+ *   Phase 3: 功能单元合成 → Iteration-NNN/010-requirements/REQUIREMENT.md
+ *   旧版自动归档到 .speccore/GLOBAL/snapshots/{时间戳}/
  *   CLI:  speccore synthesize --full -I <迭代名>
  *
  * 模式 C: 单阶段执行（--phase N）
@@ -82,6 +82,8 @@ export async function synthesizeCommand(options: SynthesizeOptions): Promise<voi
   const specDir = join(iterDir, '020-specs');
   const convDir = join(reqDir, 'converted');
   const outputPath = join(reqDir, 'REQUIREMENT.md');
+  // 全局层目录：Phase 1/2 写入此处
+  const globalDir = join('.speccore', 'GLOBAL');
 
   // ── Apply 模式（简单合成，向后兼容）──
   if (options.apply && !options.applyPhase) {
@@ -95,22 +97,22 @@ export async function synthesizeCommand(options: SynthesizeOptions): Promise<voi
 
   // ── Apply Phase 模式：接收某阶段的 AI 结果写入文件 ──
   if (options.applyPhase && options.apply) {
-    await handleApplyPhase(iter, iterDir, specDir, reqDir, parseInt(options.applyPhase), options.apply);
+    await handleApplyPhase(iter, iterDir, globalDir, specDir, reqDir, parseInt(options.applyPhase), options.apply);
     return;
   }
 
   // ── --full 模式：全自动三阶段 ──
   if (options.full) {
-    await runFullPipeline(iter, iterDir, specDir, reqDir, convDir, options.withCode);
+    await runFullPipeline(iter, iterDir, globalDir, specDir, reqDir, convDir, options.withCode);
     return;
   }
 
   // ── --phase N 模式：单阶段执行 ──
   if (options.phase) {
     const phaseNum = parseInt(options.phase);
-    if (phaseNum === 1) await runPhase1(iter, iterDir, specDir, reqDir);
-    else if (phaseNum === 2) await runPhase2(iter, iterDir, specDir, reqDir);
-    else if (phaseNum === 3) await runPhase3(iter, iterDir, specDir, reqDir, convDir, options.withCode);
+    if (phaseNum === 1) await runPhase1(iter, iterDir, globalDir, reqDir);
+    else if (phaseNum === 2) await runPhase2(iter, iterDir, globalDir, specDir);
+    else if (phaseNum === 3) await runPhase3(iter, iterDir, globalDir, specDir, reqDir, convDir, options.withCode);
     else logger.error(`无效阶段: ${options.phase}，可选 1/2/3`);
     return;
   }
@@ -123,25 +125,24 @@ export async function synthesizeCommand(options: SynthesizeOptions): Promise<voi
 // Apply Phase 处理
 // ================================================================
 async function handleApplyPhase(
-  iter: string, iterDir: string, specDir: string, reqDir: string,
+  iter: string, iterDir: string, globalDir: string, specDir: string, reqDir: string,
   phase: number, content: string
 ): Promise<void> {
-  await ensureDir(specDir);
   if (phase === 1) {
-    // Phase 1 apply: 写入各端 specs（按端分目录）
-    const platformsDir = join(specDir, 'platforms');
+    // Phase 1 apply: 写入全局层 platforms/（按端分目录）
+    const platformsDir = join(globalDir, 'platforms');
     await ensureDir(platformsDir);
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 16);
     await writeFile(join(platformsDir, `ANALYSIS-${timestamp}.md`), content);
-    logger.success(`✅ Phase 1 结果已写入: 020-specs/platforms/`);
+    logger.success(`✅ Phase 1 结果已写入: .speccore/GLOBAL/platforms/`);
     // 提示下一阶段
     logger.info(`\n   📌 下一步: speccore synthesize --phase 2 -I ${iter}`);
   } else if (phase === 2) {
-    // Phase 2 apply: 解析分隔标记，写入 synthesis/ 下的独立文件
-    const synthesisDir = join(specDir, 'synthesis');
+    // Phase 2 apply: 解析分隔标记，写入 GLOBAL/synthesis/ 下的独立文件
+    const synthesisDir = join(globalDir, 'synthesis');
     await ensureDir(synthesisDir);
-    // 备份旧版到 snapshots/
-    const snapshotsDir = join(specDir, 'snapshots');
+    // 备份旧版到 GLOBAL/snapshots/
+    const snapshotsDir = join(globalDir, 'snapshots');
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 16);
     if (await pathExists(synthesisDir)) {
       const existingFiles = (await readdir(synthesisDir)).filter(f => f.endsWith('.md'));
@@ -180,7 +181,7 @@ async function handleApplyPhase(
     if (!markers.some(m => content.includes(m))) {
       await writeFile(join(synthesisDir, 'CROSS_PLATFORM.md'), content);
     }
-    logger.success(`✅ Phase 2 结果已写入: 020-specs/synthesis/`);
+    logger.success(`✅ Phase 2 结果已写入: .speccore/GLOBAL/synthesis/`);
     logger.info(`   📄 CROSS_PLATFORM.md — 跨端关系图`);
     logger.info(`   📄 ARCHITECTURE.md  — 全量架构`);
     logger.info(`   📄 TECH_FULL.md    — 全量技术方案`);
@@ -199,8 +200,8 @@ async function handleApplyPhase(
 // --full 全自动三阶段流水线
 // ================================================================
 async function runFullPipeline(
-  iter: string, iterDir: string, specDir: string, reqDir: string,
-  convDir: string, withCode?: boolean
+  iter: string, iterDir: string, globalDir: string, specDir: string,
+  reqDir: string, convDir: string, withCode?: boolean
 ): Promise<void> {
   const entries = await parseConstitution();
   if (entries.length === 0) {
@@ -217,20 +218,20 @@ async function runFullPipeline(
 
   // Phase 1: 逐端分析
   logger.info(`\n━━━ Phase 1/3: 逐端分析 ━━━`);
-  await runPhase1(iter, iterDir, specDir, reqDir);
+  await runPhase1(iter, iterDir, globalDir, reqDir);
 
   // Phase 2: 跨端综合
   logger.info(`\n━━━ Phase 2/3: 跨端综合 ━━━`);
-  await runPhase2(iter, iterDir, specDir, reqDir);
+  await runPhase2(iter, iterDir, globalDir, specDir);
 
   // Phase 3: 功能单元合成
   logger.info(`\n━━━ Phase 3/3: 功能单元需求合成 ━━━`);
-  await runPhase3(iter, iterDir, specDir, reqDir, convDir, withCode);
+  await runPhase3(iter, iterDir, globalDir, specDir, reqDir, convDir, withCode);
 
   logger.info(`\n✅ 全量分析合成完成！`);
-  logger.info(`   📄 020-specs/platforms/     ← 各端分析结果`);
-  logger.info(`   📄 020-specs/synthesis/     ← 跨端综合文档`);
-  logger.info(`   📄 020-specs/snapshots/     ← 历史快照`);
+  logger.info(`   📄 .speccore/GLOBAL/platforms/     ← 各端分析结果`);
+  logger.info(`   📄 .speccore/GLOBAL/synthesis/     ← 跨端综合文档`);
+  logger.info(`   📄 .speccore/GLOBAL/snapshots/     ← 历史快照`);
   logger.info(`   📄 010-requirements/REQUIREMENT.md ← 按功能单元组织的完整需求`);
 }
 
@@ -238,7 +239,7 @@ async function runFullPipeline(
 // Phase 1: 逐端分析
 // ================================================================
 async function runPhase1(
-  iter: string, iterDir: string, specDir: string, reqDir: string
+  iter: string, iterDir: string, globalDir: string, reqDir: string
 ): Promise<void> {
   const entries = await parseConstitution();
   if (entries.length === 0) {
@@ -246,7 +247,7 @@ async function runPhase1(
     return;
   }
 
-  const platformsDir = join(specDir, 'platforms');
+  const platformsDir = join(globalDir, 'platforms');
   await ensureDir(platformsDir);
 
   // 读取各端需求文档
@@ -351,10 +352,10 @@ function buildPhase1Prompt(
 // Phase 2: 跨端综合
 // ================================================================
 async function runPhase2(
-  iter: string, iterDir: string, specDir: string, reqDir: string
+  iter: string, iterDir: string, globalDir: string, specDir: string
 ): Promise<void> {
-  // 读取 Phase 1 的结果
-  const platformsDir = join(specDir, 'platforms');
+  // 读取 Phase 1 的结果（从 GLOBAL/platforms/）
+  const platformsDir = join(globalDir, 'platforms');
   if (!await pathExists(platformsDir)) {
     logger.warn('未找到 Phase 1 结果，请先运行: speccore synthesize --phase 1');
     return;
@@ -460,14 +461,14 @@ function buildPhase2Prompt(
 // Phase 3: 按功能单元合成需求文档
 // ================================================================
 async function runPhase3(
-  iter: string, iterDir: string, specDir: string, reqDir: string,
-  convDir: string, withCode?: boolean
+  iter: string, iterDir: string, globalDir: string, specDir: string,
+  reqDir: string, convDir: string, withCode?: boolean
 ): Promise<void> {
-  // 收集所有可用输入：各端 specs + 跨端综合 + 原始需求文档
+  // 收集所有可用输入：GLOBAL 层各端 specs + 跨端综合 + 迭代层 specs + 原始需求文档
   const allSpecs: { name: string; content: string }[] = [];
 
-  // Phase 1 结果
-  const platformsDir = join(specDir, 'platforms');
+  // Phase 1 结果（从 GLOBAL/platforms/）
+  const platformsDir = join(globalDir, 'platforms');
   if (await pathExists(platformsDir)) {
     const platformEntries = await readdir(platformsDir, { withFileTypes: true });
     for (const entry of platformEntries) {
@@ -475,20 +476,20 @@ async function runPhase3(
         const subFiles = await readdir(join(platformsDir, entry.name));
         for (const f of subFiles.filter(f => f.endsWith('.md'))) {
           const content = await readFile(join(platformsDir, entry.name, f), 'utf-8');
-          allSpecs.push({ name: `platforms/${entry.name}/${f}`, content });
+          allSpecs.push({ name: `GLOBAL/platforms/${entry.name}/${f}`, content });
         }
       } else if (entry.name.endsWith('.md')) {
         const content = await readFile(join(platformsDir, entry.name), 'utf-8');
-        allSpecs.push({ name: `platforms/${entry.name}`, content });
+        allSpecs.push({ name: `GLOBAL/platforms/${entry.name}`, content });
       }
     }
   }
 
-  // Phase 2 结果（从 synthesis/ 目录读取）
-  const synthesisDir = join(specDir, 'synthesis');
+  // Phase 2 结果（从 GLOBAL/synthesis/）
+  const synthesisDir = join(globalDir, 'synthesis');
   if (await pathExists(synthesisDir)) {
     for (const f of (await readdir(synthesisDir)).filter(f => f.endsWith('.md'))) {
-      allSpecs.push({ name: `synthesis/${f}`, content: await readFile(join(synthesisDir, f), 'utf-8') });
+      allSpecs.push({ name: `GLOBAL/synthesis/${f}`, content: await readFile(join(synthesisDir, f), 'utf-8') });
     }
   }
 
