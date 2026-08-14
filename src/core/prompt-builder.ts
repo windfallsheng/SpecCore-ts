@@ -54,18 +54,22 @@ export interface TaskExtraSpec {
   content: string;
 }
 
+/** 全局知识库目录条目 */
+export interface TOCEntry {
+  /** 文件相对路径（如 synthesis/ARCHITECTURE.md） */
+  path: string;
+  /** 文件简述 */
+  description: string;
+  /** ## 标题列表 */
+  sections: string[];
+}
+
 /** 全局上下文（从 GLOBAL 层注入） */
 export interface GlobalContext {
-  /** 全局架构约束（ARCHITECTURE.md 摘要） */
-  architecture?: string;
-  /** 跨端关系摘要（CROSS_PLATFORM.md 摘要） */
-  crossPlatform?: string;
-  /** 技术方案摘要（TECH_FULL.md 摘要） */
-  techFull?: string;
-  /** 当前端专属规则（GLOBAL/platforms/{端}/ 摘要） */
-  platformRules?: string;
-  /** 全局索引摘要（GLOBAL/INDEX.md） */
+  /** 全局索引摘要（INDEX.md 全文，必读） */
   indexSummary?: string;
+  /** 全局知识库目录（AI 按需 Read） */
+  toc: TOCEntry[];
 }
 
 /** SpecCore 结构化 Prompt */
@@ -280,162 +284,98 @@ async function loadExtraSpecs(cwd: string, taskDir: string): Promise<TaskExtraSp
 }
 
 // ═══════════════════════════════════════════════════════════
-// 全局上下文加载（智能注入）
+// 全局上下文加载（目录索引 + AI 自主读取）
 // ═══════════════════════════════════════════════════════════
 
-/**
- * 从文档中提取关键段落（摘要）
- * 提取策略：取每个 ## 章节的前 3 行，总长度不超过 maxLen
- */
-function extractSummary(content: string, maxLen: number = 2000): string {
-  const lines = content.split('\n');
-  const summary: string[] = [];
-  let currentSection = '';
-  let sectionLines = 0;
-  let totalLen = 0;
+/** 文件描述映射 */
+const FILE_DESC: Record<string, string> = {
+  'ARCHITECTURE.md': '全量系统架构',
+  'TECH_FULL.md': '全量技术方案',
+  'CROSS_PLATFORM.md': '跨端业务关系',
+};
 
-  for (const line of lines) {
+/**
+ * 从 Markdown 文件中提取 ## 标题行
+ */
+function extractHeadings(content: string): string[] {
+  const headings: string[] = [];
+  for (const line of content.split('\n')) {
     if (line.startsWith('## ')) {
-      currentSection = line;
-      sectionLines = 0;
-      if (totalLen < maxLen) {
-        summary.push(line);
-        totalLen += line.length;
-      }
-    } else if (currentSection && sectionLines < 3 && line.trim()) {
-      if (totalLen < maxLen) {
-        summary.push(line);
-        totalLen += line.length;
-        sectionLines++;
-      }
+      headings.push(line.replace(/^##\s+/, '').trim());
     }
   }
-  return summary.join('\n');
+  return headings;
 }
 
 /**
- * 按命令类型和端类型加载全局上下文
- * - execute: 架构约束 + 技术方案 + 端专属规则
- * - split: 跨端关系 + 全局索引
- * - analyze: 架构摘要 + 全局索引
- * - plan: 同 execute
+ * 构建全局知识库目录（TOC）
+ * 只读 ## 标题行，不读正文，非常轻量
+ */
+async function buildGlobalTOC(globalDir: string): Promise<TOCEntry[]> {
+  const { readdir } = await import('fs-extra');
+  const toc: TOCEntry[] = [];
+
+  // 1. synthesis/ 下的综合文档
+  const synthesisDir = join(globalDir, 'synthesis');
+  if (await pathExists(synthesisDir)) {
+    const files = await readdir(synthesisDir);
+    for (const f of files.filter(f => f.endsWith('.md'))) {
+      const content = await readFile(join(synthesisDir, f), 'utf-8');
+      toc.push({
+        path: `synthesis/${f}`,
+        description: FILE_DESC[f] || f.replace('.md', ''),
+        sections: extractHeadings(content),
+      });
+    }
+  }
+
+  // 2. platforms/ 下各端文档
+  const platformsDir = join(globalDir, 'platforms');
+  if (await pathExists(platformsDir)) {
+    const entries = await readdir(platformsDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const platformName = entry.name;
+      const subFiles = await readdir(join(platformsDir, platformName));
+      for (const f of subFiles.filter(f => f.endsWith('.md'))) {
+        const content = await readFile(join(platformsDir, platformName, f), 'utf-8');
+        toc.push({
+          path: `platforms/${platformName}/${f}`,
+          description: `${platformName} 端 — ${f.replace('.md', '')}`,
+          sections: extractHeadings(content),
+        });
+      }
+    }
+  }
+
+  return toc;
+}
+
+/**
+ * 加载全局上下文
+ * 策略：必读的 INDEX.md 直接注入 + 其余文件只给目录，AI 自己 Read
  */
 export async function loadGlobalContext(
   cwd: string,
-  command: PromptCommand,
-  platform?: string
+  _command: PromptCommand,
+  _platform?: string
 ): Promise<GlobalContext> {
   const globalDir = join(cwd, '.speccore', 'GLOBAL');
-  const synthesisDir = join(globalDir, 'synthesis');
-  const ctx: GlobalContext = {};
+  const ctx: GlobalContext = { toc: [] };
 
-  // 读取全局索引（所有命令都读）
+  if (!await pathExists(globalDir)) return ctx;
+
+  // 必读：INDEX.md 直接注入
   const indexPath = join(globalDir, 'INDEX.md');
   if (await pathExists(indexPath)) {
     const content = await readFile(indexPath, 'utf-8');
     ctx.indexSummary = content.slice(0, 1500);
   }
 
-  if (command === 'execute' || command === 'plan') {
-    // execute/plan: 读架构约束 + 技术方案
-    const archPath = join(synthesisDir, 'ARCHITECTURE.md');
-    if (await pathExists(archPath)) {
-      const content = await readFile(archPath, 'utf-8');
-      // 提取关键段：架构约束、安全架构、编码规范、监控告警
-      ctx.architecture = extractArchConstraints(content);
-    }
-
-    const techPath = join(synthesisDir, 'TECH_FULL.md');
-    if (await pathExists(techPath)) {
-      const content = await readFile(techPath, 'utf-8');
-      // 提取关键段：公共模块、API 版本、性能优化、技术风险
-      ctx.techFull = extractTechConstraints(content);
-    }
-
-    // 端专属规则：读 GLOBAL/platforms/{端}/ 下的文档摘要
-    if (platform) {
-      const platformDir = join(globalDir, 'platforms', platform);
-      if (await pathExists(platformDir)) {
-        const { readdir } = await import('fs-extra');
-        const files = await readdir(platformDir);
-        const mdFiles = files.filter(f => f.endsWith('.md'));
-        if (mdFiles.length > 0) {
-          const parts: string[] = [];
-          for (const f of mdFiles.slice(0, 3)) { // 最多读 3 个文件
-            const content = await readFile(join(platformDir, f), 'utf-8');
-            parts.push(`### ${f}\n${extractSummary(content, 1500)}`);
-          }
-          ctx.platformRules = parts.join('\n\n');
-        }
-      }
-    }
-  } else if (command === 'split') {
-    // split: 读跨端关系 + 全局索引
-    const cpPath = join(synthesisDir, 'CROSS_PLATFORM.md');
-    if (await pathExists(cpPath)) {
-      const content = await readFile(cpPath, 'utf-8');
-      ctx.crossPlatform = extractSummary(content, 2000);
-    }
-  } else if (command === 'analyze') {
-    // analyze: 读架构摘要
-    const archPath = join(synthesisDir, 'ARCHITECTURE.md');
-    if (await pathExists(archPath)) {
-      const content = await readFile(archPath, 'utf-8');
-      ctx.architecture = extractSummary(content, 2000);
-    }
-  }
+  // 其余：只给目录，AI 自己决定读什么
+  ctx.toc = await buildGlobalTOC(globalDir);
 
   return ctx;
-}
-
-/**
- * 从 ARCHITECTURE.md 提取架构约束段
- */
-function extractArchConstraints(content: string): string {
-  const keywords = ['架构约束', '安全架构', '编码规范', '监控告警', '容灾', 'ADR', '架构决策'];
-  const lines = content.split('\n');
-  const result: string[] = [];
-  let inTarget = false;
-  let lineCount = 0;
-
-  for (const line of lines) {
-    if (line.startsWith('## ') || line.startsWith('### ')) {
-      inTarget = keywords.some(k => line.includes(k));
-      if (inTarget) lineCount = 0;
-    }
-    if (inTarget) {
-      result.push(line);
-      lineCount++;
-      if (lineCount > 15) inTarget = false; // 每段最多取 15 行
-    }
-  }
-
-  return result.length > 0 ? result.join('\n') : extractSummary(content, 2000);
-}
-
-/**
- * 从 TECH_FULL.md 提取技术约束段
- */
-function extractTechConstraints(content: string): string {
-  const keywords = ['公共模块', 'API 版本', '性能优化', '技术风险', '数据一致性', '容量规划'];
-  const lines = content.split('\n');
-  const result: string[] = [];
-  let inTarget = false;
-  let lineCount = 0;
-
-  for (const line of lines) {
-    if (line.startsWith('## ') || line.startsWith('### ')) {
-      inTarget = keywords.some(k => line.includes(k));
-      if (inTarget) lineCount = 0;
-    }
-    if (inTarget) {
-      result.push(line);
-      lineCount++;
-      if (lineCount > 15) inTarget = false;
-    }
-  }
-
-  return result.length > 0 ? result.join('\n') : extractSummary(content, 2000);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -768,39 +708,66 @@ export function formatPrompt(prompt: SpecCorePrompt): string {
   // 全局上下文（从 GLOBAL 层智能注入）
   if (prompt.globalContext) {
     const gc = prompt.globalContext;
-    lines.push('## 🌐 全局上下文');
-    lines.push('> 以下信息来自项目全局知识库，生成代码/分析/拆分时必须参考\n');
+    lines.push('## 🌐 全局知识库');
+    lines.push('> 以下信息来自项目全局知识库。必读内容已注入，其余文件请按需自行 Read。\n');
 
+    // 必读：INDEX.md
     if (gc.indexSummary) {
-      lines.push('### 项目概览');
+      lines.push('### 📌 必读（已注入）');
       lines.push(gc.indexSummary);
       lines.push('');
     }
-    if (gc.architecture) {
-      lines.push('### 架构约束与规范');
-      lines.push('> 生成代码时必须遵守以下架构约束\n');
-      lines.push(gc.architecture);
+
+    // 可选：TOC 目录
+    if (gc.toc.length > 0) {
+      lines.push('### 📂 可选参考（按需 Read）');
+      if (prompt.platform) {
+        lines.push(`> 当前任务涉及 **${prompt.platform}** 端，建议优先参考该端文档\n`);
+      }
+
+      // 按目录分组
+      const synthesisEntries = gc.toc.filter(e => e.path.startsWith('synthesis/'));
+      const platformEntries = gc.toc.filter(e => e.path.startsWith('platforms/'));
+
+      if (synthesisEntries.length > 0) {
+        lines.push('**全局综合文档** (.speccore/GLOBAL/)');
+        for (const e of synthesisEntries) {
+          lines.push(`- \`${e.path}\` — ${e.description}`);
+          if (e.sections.length > 0) {
+            lines.push(`  章节: ${e.sections.join(' | ')}`);
+          }
+        }
+        lines.push('');
+      }
+
+      if (platformEntries.length > 0) {
+        lines.push('**各端分析文档** (.speccore/GLOBAL/)');
+        // 按端分组
+        const byPlatform = new Map<string, TOCEntry[]>();
+        for (const e of platformEntries) {
+          const plat = e.path.split('/')[1]; // platforms/{plat}/...
+          if (!byPlatform.has(plat)) byPlatform.set(plat, []);
+          byPlatform.get(plat)!.push(e);
+        }
+        for (const [plat, entries] of byPlatform) {
+          const marker = plat === prompt.platform ? ' ⬅ 当前端' : '';
+          lines.push(`📂 ${plat}/${marker}`);
+          for (const e of entries) {
+            lines.push(`  - \`${e.path}\` — ${e.description}`);
+            if (e.sections.length > 0) {
+              lines.push(`    章节: ${e.sections.slice(0, 8).join(' | ')}`);
+            }
+          }
+        }
+        lines.push('');
+      }
+
+      // 指示 AI 可以自行 Read
+      lines.push('### 💡 使用方式');
+      lines.push('以上文件均可通过 Read 工具直接读取（路径相对于 `.speccore/GLOBAL/`）。');
+      lines.push('建议根据当前任务需要选择性阅读，不必全部读取。');
       lines.push('');
     }
-    if (gc.techFull) {
-      lines.push('### 技术方案约束');
-      lines.push('> 公共模块、API 版本、性能优化等技术约束\n');
-      lines.push(gc.techFull);
-      lines.push('');
-    }
-    if (gc.crossPlatform) {
-      lines.push('### 跨端关系');
-      lines.push('> 拆分任务时必须考虑跨端依赖\n');
-      lines.push(gc.crossPlatform);
-      lines.push('');
-    }
-    if (gc.platformRules) {
-      lines.push(`### ${prompt.platform || '当前端'} 专属规则`);
-      lines.push('> 开发该端代码时必须参考以下端专属规范\n');
-      lines.push(gc.platformRules);
-      lines.push('');
-    }
-    lines.push('');
   }
 
   // 输出格式提示

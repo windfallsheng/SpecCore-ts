@@ -2,6 +2,19 @@
 
 ---
 
+## v5.99.1 (2026-08-14) — Global Knowledge Base as TOC Directory: AI Decides What to Read
+
+- **Refactor GlobalContext**: From pre-fetched content to TOC directory structure (`TOCEntry` interface)
+- **`buildGlobalTOC()`**: Scans GLOBAL directory, extracts ## heading lines without reading full content
+- **`loadGlobalContext()`**: Mandatory INDEX.md injected directly + rest only as directory listing
+- **`formatPrompt()` global knowledge section**: Split into "📌 Must Read (injected)" and "📂 Optional (Read on demand)"
+- **Platform-grouped display**: Documents grouped by platform, current platform marked with ⬅ arrow
+- **split.ts**: Synced to use TOC directory injection
+- **Removed old functions**: `extractArchConstraints()` / `extractTechConstraints()` keyword matching removed
+- **Core concept**: CLI provides the map + marks must-reads, AI decides which files to read
+
+---
+
 ## v5.99.0 (2026-08-14) — Smart Global Context Injection: split/execute/analyze Auto-Reference Global Knowledge
 
 - **prompt-builder.ts**: New `loadGlobalContext()` function with smart injection per command type
