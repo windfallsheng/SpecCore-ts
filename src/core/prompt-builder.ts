@@ -134,9 +134,13 @@ async function loadTechStack(cwd: string): Promise<TechStack> {
  * 从 REQ.md 解析 API 定义
  */
 async function loadApiSpecs(cwd: string, taskDir: string): Promise<ApiSpec[]> {
-  const reqPath = join(cwd, taskDir, '00-specs', 'REQ.md');
+  const newPath = join(cwd, taskDir, '_shared', 'REQ.md');
+  const oldPath = join(cwd, taskDir, '00-specs', 'REQ.md');
   const legacyPath = join(cwd, taskDir, 'REQ.md');
-  const actualPath = (await pathExists(reqPath)) ? reqPath : (await pathExists(legacyPath)) ? legacyPath : null;
+  let actualPath: string | null = null;
+  if (await pathExists(newPath)) actualPath = newPath;
+  else if (await pathExists(oldPath)) actualPath = oldPath;
+  else if (await pathExists(legacyPath)) actualPath = legacyPath;
   if (!actualPath) return [];
 
   const content = await readFile(actualPath, 'utf-8');
@@ -170,9 +174,13 @@ async function loadApiSpecs(cwd: string, taskDir: string): Promise<ApiSpec[]> {
  * 从 REQ.md 解析数据模型
  */
 async function loadDataModels(cwd: string, taskDir: string): Promise<DataModel[]> {
-  const reqPath = join(cwd, taskDir, '00-specs', 'REQ.md');
+  const newPath = join(cwd, taskDir, '_shared', 'REQ.md');
+  const oldPath = join(cwd, taskDir, '00-specs', 'REQ.md');
   const legacyPath = join(cwd, taskDir, 'REQ.md');
-  const actualPath = (await pathExists(reqPath)) ? reqPath : (await pathExists(legacyPath)) ? legacyPath : null;
+  let actualPath: string | null = null;
+  if (await pathExists(newPath)) actualPath = newPath;
+  else if (await pathExists(oldPath)) actualPath = oldPath;
+  else if (await pathExists(legacyPath)) actualPath = legacyPath;
   if (!actualPath) return [];
 
   const content = await readFile(actualPath, 'utf-8');
@@ -268,9 +276,10 @@ async function loadBusinessRules(cwd: string, taskDir?: string): Promise<Busines
 async function loadExtraSpecs(cwd: string, taskDir: string): Promise<TaskExtraSpec[]> {
   const extras: TaskExtraSpec[] = [];
   const files = [
-    { name: '技术方案', path: '00-specs/TECH.md' },
+    { name: '技术方案', path: '_shared/TECH.md' },
+    { name: '技术方案(旧)', path: '00-specs/TECH.md' },
     { name: '任务追踪', path: '00-specs/TASK.md' },
-    { name: '数据库设计', path: '00-specs/SCHEMA.md' },
+    { name: '数据库设计', path: '_shared/SCHEMA.md' },
     { name: 'API 契约', path: '_shared/API_CONTRACT.yaml' },
     { name: '测试计划', path: '99-artifacts/TEST.md' },
     { name: '评审清单', path: '99-artifacts/REVIEW.md' },

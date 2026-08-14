@@ -331,10 +331,9 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
       '├── 030-tasks/     ← 开发任务',
       '│   └── Task-*/',
       '│       ├── .meta/         ← 任务元信息（type/status/owner/created-at）',
-      '│       ├── _shared/       ← 共享契约（API_CONTRACT.yaml）',
-      '│       ├── 00-specs/      ← 执行前核心规格（REQ/TECH/TASK/SCHEMA/CHANGELOG）',
-      '│       ├── 10-backend/    ← 后端实现（src/tests）',
-      '│       ├── 20-frontend/   ← 前端实现（{platform}/src/tests）',
+      '│       ├── _shared/       ← 共享规格（REQ/TECH/SCHEMA/CHANGELOG/API_CONTRACT）',
+      '│       ├── backend/       ← 后端子任务（TASK.md + src/tests）',
+      '│       ├── web/           ← Web前端子任务（TASK.md + src/tests）',
       '│       ├── 99-artifacts/  ← 执行产出（自检门禁 + 参考文档）',
       '│       └── .issues.md     ← 问题追踪',
       '├── STAFFING.md      ← 人员排期',
@@ -1520,10 +1519,9 @@ Iteration-NNN-name/            ← 迭代目录
 ├── 030-tasks/                 ← 开发任务
 │   └── Task-*/
 │       ├── .meta/             ← 任务元信息（type/status/owner/created-at）
-│       ├── _shared/           ← 共享契约（API_CONTRACT.yaml）
-│       ├── 00-specs/          ← 执行前核心规格（REQ/TECH/TASK/SCHEMA/CHANGELOG）
-│       ├── 10-backend/        ← 后端实现（src/tests）
-│       ├── 20-frontend/       ← 前端实现（{platform}/src/tests）
+│       ├── _shared/           ← 共享规格（REQ/TECH/SCHEMA/CHANGELOG/API_CONTRACT）
+│       ├── backend/           ← 后端子任务（TASK.md + src/tests）
+│       ├── web/               ← Web前端子任务（TASK.md + src/tests）
 │       ├── 99-artifacts/      ← 执行产出（自检门禁 + 参考文档）
 │       └── .issues.md         ← 问题追踪
 └── STAFFING.md                ← 人员排期

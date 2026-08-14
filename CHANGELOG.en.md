@@ -2,6 +2,20 @@
 
 ---
 
+## v6.1.0 (2026-08-14) — Task Directory Restructure: _shared/ + Platform Nesting + Sub-task Naming
+
+- **Task directory restructure**: From flat `00-specs/` to `_shared/` + `{platform}/` nesting
+  - `_shared/` — Shared specs (REQ/TECH/SCHEMA/CHANGELOG/API_CONTRACT)
+  - `{platform}/` — Per-platform sub-tasks (TASK.md + src/tests)
+  - `99-artifacts/` — Execution artifacts (unchanged)
+- **Sub-task global naming**: `Task-{parent}-{platform}-{hash4}` format, e.g. `Task-001-backend-a3f2`
+- **Scheme C mixed**: Iteration 020-specs/ supports global + platforms/ dual-layer structure
+- **Split command rework**: Functional units as modules, per-platform sub-tasks with independent owners
+- **Backward compatible**: analyze/execute/prompt-builder support `_shared/` → `00-specs/` fallback
+- **Init templates updated**: New task directory structure templates
+
+---
+
 ## v6.0.1 (2026-08-14) — TOC Entry Enhancement: Summary/Platforms/LineCount/Tags
 
 - **`TOCEntry` interface enhanced**: Added 4 new fields
