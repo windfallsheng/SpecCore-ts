@@ -19,12 +19,13 @@ import { getDefaultIteration, getIterationDir } from '../core/context';
 import { findTaskDir } from '../core/task-paths';
 import { extractQuestions, showQuestionChecklist } from '../core/question-checklist';
 import { showNextSteps } from '../core/next-steps';
-import { runAnalysis, AnalyzeInput, supplementAnalysis } from '../core/analyze-engine';
+import { runAnalysis, AnalyzeInput, supplementAnalysis, analyzeSingleFeature } from '../core/analyze-engine';
 import { readFile, readdir } from 'fs-extra';
 import { generateGlobalArtifacts } from '../core/global-artifacts';
 import { buildPrompt, formatPrompt } from '../core/prompt-builder';
 import { buildAutoModeInstruction } from '../core/questions';
 import { resolvePlatform } from '../core/platform-registry';
+import { warnIfIndexStale } from '../core/index-guard';
 
 export interface AnalyzeOptions {
   iteration?: string;
@@ -45,9 +46,80 @@ export interface AnalyzeOptions {
   noSource?: boolean;   // --no-source: 不读源码
   sourceScope?: string; // --source-scope <dirs>: 指定源码目录
   supplement?: boolean; // --supplement: 补充模式（追加源码到现有报告）
+  feature?: string;     // --feature: 局部分析单个功能模块
+  doc?: string;         // --doc: 局部分析类型文档（如 bugs/login-timeout, refactors/db-pool）
 }
 
 export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
+  // ── --feature 模式: 局部刷新单个功能模块 ──
+  if (options.feature) {
+    const iter = options.iteration || await getDefaultIteration();
+    if (!iter) { logger.error('请指定迭代: -I <iteration>'); return; }
+    const iterDir = await getIterationDir(iter);
+    const featureName = options.feature;
+
+    const spinner = new Spinner(`局部分析: ${featureName}`);
+    spinner.start();
+
+    const result = await analyzeSingleFeature(iterDir, featureName);
+    if (!result) {
+      spinner.fail(`未找到功能模块: 010-requirements/features/${featureName}/README.md`);
+      return;
+    }
+
+    spinner.stop(`✅ 局部分析完成: 020-specs/features/${featureName}.md`);
+    logger.info('');
+
+    // 自动刷新知识图谱
+    try {
+      const { refreshKnowledgeGraph } = await import('../core/knowledge-graph');
+      await refreshKnowledgeGraph(process.cwd(), iter);
+      logger.info('🧠 知识图谱已刷新');
+    } catch {}
+
+    logger.info('');
+    logger.info('📋 下一步:');
+    logger.info(`   speccore split -I ${iter}          # 重新拆分任务`);
+    logger.info(`   speccore reindex                    # 完整重建索引`);
+    return;
+  }
+
+  // ── --doc 模式: 局部刷新单个类型文档（bugs/refactors/research） ──
+  if (options.doc) {
+    const iter = options.iteration || await getDefaultIteration();
+    if (!iter) { logger.error('请指定迭代: -I <iteration>'); return; }
+    const iterDir = await getIterationDir(iter);
+    const docPath = options.doc; // e.g. "bugs/login-timeout" or "refactors/db-pool"
+
+    const spinner = new Spinner(`局部分析: ${docPath}`);
+    spinner.start();
+
+    const { analyzeSingleTypedDoc } = await import('../core/analyze-engine');
+    const result = await analyzeSingleTypedDoc(iterDir, docPath);
+    if (!result) {
+      spinner.fail(`未找到类型文档: 010-requirements/${docPath}.md`);
+      logger.info('   支持的格式: bugs/<slug>, refactors/<slug>, research/<slug>');
+      return;
+    }
+
+    const typeDir = docPath.split('/')[0];
+    spinner.stop(`✅ 局部分析完成: 020-specs/${docPath}.md`);
+    logger.info('');
+
+    // 自动刷新知识图谱
+    try {
+      const { refreshKnowledgeGraph } = await import('../core/knowledge-graph');
+      await refreshKnowledgeGraph(process.cwd(), iter);
+      logger.info('🧠 知识图谱已刷新');
+    } catch {}
+
+    logger.info('');
+    logger.info('📋 下一步:');
+    logger.info(`   speccore split -I ${iter}          # 重新拆分任务`);
+    logger.info(`   speccore reindex                    # 完整重建索引`);
+    return;
+  }
+
   // 模糊匹配端名
   if (options.platform) {
     const resolved = await resolvePlatform(options.platform);
@@ -60,6 +132,9 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     }
     options.platform = resolved.resolved!;
   }
+
+  // 命令前索引新鲜度检查（非阻塞）
+  await warnIfIndexStale(process.cwd(), 'analyze', options.iteration);
 
   // 备份追踪
   const backups: string[] = [];
@@ -120,6 +195,43 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     }
     const reqRoot = join(reqDir, 'REQUIREMENT.md');
     if (await pathExists(reqRoot)) requirements.push(reqRoot);
+
+    // 收集 features/*/README.md
+    const featuresDir = join(reqDir, 'features');
+    if (await pathExists(featuresDir)) {
+      try {
+        const featureEntries = await readdir(featuresDir, { withFileTypes: true });
+        for (const fe of featureEntries) {
+          if (fe.isDirectory() && !fe.name.startsWith('.')) {
+            const readmePath = join(featuresDir, fe.name, 'README.md');
+            if (await pathExists(readmePath)) requirements.push(readmePath);
+          }
+        }
+      } catch {}
+    }
+
+    // 收集 staging/ 下的分类文档（doc2spec --classify 产物，带 type frontmatter）
+    const stagingDir = join(reqDir, 'staging');
+    if (await pathExists(stagingDir)) {
+      try {
+        const stagingFiles = await readdir(stagingDir);
+        for (const f of stagingFiles.filter((f: string) => f.endsWith('.md') && !isTimestampBackup(f))) {
+          requirements.push(join(stagingDir, f));
+        }
+      } catch {}
+    }
+
+    // 收集类型目录下的文档（bugs/, refactors/, research/ — 扁平 .md 文件）
+    for (const typeDir of ['bugs', 'refactors', 'research']) {
+      const typeDirPath = join(reqDir, typeDir);
+      if (!(await pathExists(typeDirPath))) continue;
+      try {
+        const typeFiles = await readdir(typeDirPath);
+        for (const f of typeFiles.filter((f: string) => f.endsWith('.md') && !isTimestampBackup(f))) {
+          requirements.push(join(typeDirPath, f));
+        }
+      } catch {}
+    }
 
     if (requirements.length === 0) {
       logger.warn('未找到需求文档，请先导入: speccore doc2spec');
@@ -469,6 +581,7 @@ function parseArgv(options: AnalyzeOptions): void {
     [['--req', '--requirements'], (v) => { options.requirements = v; }],
     [['--output', '-o'], (v) => { options.output = v; }],
     [['--depth'], (v) => { options.depth = v as any; }],
+    [['--feature'], (v) => { options.feature = v; }],
   ];
 
   for (let i = 0; i < argv.length; i++) {

@@ -109,11 +109,21 @@ Task-002 执行前（依赖 Task-001）:
 Iteration-NNN-name/
 ├── 000-overview/                  ← 进度总览
 ├── 010-requirements/              ← 按功能组织（非按端）
-│   ├── sources/                  ← 原始 PRD
-│   ├── assets/{prd,prototypes,designs}/
-│   └── {feature}/README.md       ← 每个需求一份，描述所有端
-├── 020-specs/                     ← 迭代级 analyze 输出（全局基线）
-│   ├── ANALYSIS.md               ← 需求分析
+│   ├── sources/                  ← 原始 PRD（待分类文档也放这里）
+│   ├── staging/                  ← [临时] doc2spec --classify 分类产物（分析后可清理）
+│   ├── features/{feature}/README.md  ← 功能需求（每个功能一份，描述所有端）
+│   ├── bugs/{bug}.md             ← 扁平缺陷文档（1 文件 = 1 bugfix 任务）
+│   ├── refactors/{refactor}.md   ← 扁平重构文档（1 文件 = 1 refactor 任务）
+│   ├── research/{topic}.md       ← 扁平调研文档（1 文件 = 1 research 任务）
+│   └── assets/{prd,prototypes,designs}/
+├── 020-specs/                     ← 迭代级 analyze 输出（全局基线，按类型分层）
+│   ├── features/                  ← 功能类规格
+│   │   ├── ANALYSIS.md / TECH.md / TEST.md / ...  ← 按功能模块拆分
+│   │   └── REQUIREMENT.md
+│   ├── bugs/                      ← 缺陷修复规格
+│   ├── refactors/                 ← 重构规格
+│   ├── research/                  ← 调研规格
+│   ├── ANALYSIS.md               ← 全量需求分析（非类型化文档触发）
 │   ├── TECH.md                   ← 技术方案
 │   ├── TEST.md                   ← 测试计划
 │   ├── REVIEW.md                 ← 评审清单
@@ -130,7 +140,8 @@ Iteration-NNN-name/
 │       └── Task-NNN-slug/
 │           ├── .meta/                 ← 任务元信息（type/status/owner）
 │           ├── _shared/               ← 跨平台共享契约
-│           │   └── API_CONTRACT.yaml
+│           │   ├── API_CONTRACT.yaml
+│           │   └── CONTEXT.md         ← 来源追溯 + 关联任务 + 影响范围
 │           ├── 00-specs/              ← 任务级核心规格（执行前必读）
 │           │   ├── REQ.md             ← 需求切片 + 验收标准
 │           │   ├── TECH.md            ← 技术方案
@@ -197,6 +208,85 @@ Iteration-NNN-name/
 - 两层完全独立，互不覆盖
 - 任务重新分析时，从原始需求（`010-requirements/`）重新读取，不回读 `020-specs/` 已有内容
 - 任务级原型/图片/设计稿统一放在迭代级 `010-requirements/assets/`，任务通过相对路径引用
+
+### 智能文档分类摄入（doc2spec --classify）
+
+支持将任意文档（安全报告、性能分析、用户反馈等）通过 AI 智能理解后分类导入。
+
+#### 流程
+
+```
+sources/（原始文档）
+    ↓  doc2spec --classify --prompt
+AI 理解意图（nature）+ 映射类型（type）
+    ↓  doc2spec --classify --response
+staging/（带 frontmatter 的分类产物）
+    ↓  analyze
+020-specs/{features,bugs,refactors,research}/（按类型写入）
+    ↓  split
+030-tasks/{type}/Task-NNN-slug/（按规则拆分）
+```
+
+#### AI 意图理解
+
+AI 先判断文档**实际上在说什么**（nature），再映射到任务类型（type）：
+
+| nature（文档实际意图） | type（映射任务类型） | 示例 |
+|:---|:---|:---|
+| 新功能、功能需求、产品规格 | feature | "用户需要扫码登录" |
+| 缺陷、故障、异常、安全问题 | bugfix | "登录超时页面卡死"、"SQL注入漏洞" |
+| 技术债、架构改进、性能优化 | refactor | "数据库连接池过小"、"首页加载超 3 秒" |
+| 调研、选型、方案对比 | research | "WebSocket vs SSE 对比" |
+
+#### staging/ 文件格式
+
+```yaml
+---
+type: bugfix
+nature: 安全漏洞
+title: XSS 反射型漏洞修复
+source: sources/
+created: 2026-08-14
+---
+```
+
+- `type`: 映射后的任务类型（feature/bugfix/refactor/research）
+- `nature`: AI 理解的文档实际意图（如"安全漏洞"、"性能瓶颈"）
+- staging/ 是临时目录，analyze 完成后可清理
+
+#### 拆分规则
+
+| 文档类型 | 拆分规则 | 说明 |
+|:---|:---|:---|
+| features/ | 按功能单元拆合（1~3 个任务） | 功能可拆分、可合并 |
+| bugs/ | 1:1 映射（1 文件 = 1 bugfix 任务） | 每个 bug 独立修复 |
+| refactors/ | 1:1 映射 | 每个重构项独立执行 |
+| research/ | 1:1 映射 | 每个调研主题独立进行 |
+
+### 任务上下文（CONTEXT.md）
+
+每个任务目录的 `_shared/CONTEXT.md` 提供来源追溯和关联信息：
+
+```markdown
+## 来源追溯
+| 层级 | 路径 |
+|:---|:---|
+| 需求文档 | 010-requirements/bugs/login-timeout.md |
+| 规格文档 | 020-specs/bugs/login-timeout.md |
+
+## 原始描述摘要
+（需求文档前 500 字）
+
+## 关联任务
+- Task-002-xxx（同一迭代的其他任务）
+
+## 影响范围
+（AI 分析的影响描述）
+```
+
+- 来源路径支持 `sourceFile` 字段（AI 提供）和回退规则（type + topic）
+- execute 时自动加载 CONTEXT.md，AI 可追溯需求源头
+- RAG 索引和 prompt-builder 均将 CONTEXT.md 作为候选文件
 
 ### 拆分粒度规则
 

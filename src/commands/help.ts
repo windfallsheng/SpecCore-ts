@@ -117,15 +117,17 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     ],
   },
   doc2spec: {
-    desc: '将 Word/PDF/MD 文档转换为 SpecCore 需求',
+    desc: '将 Word/PDF/MD 文档转换为 SpecCore 需求，或智能分类 sources/ 文档',
     params: [
       { flag: '-f, --file <path>', meaning: '文档路径' },
       { flag: '-p, --platform <p>', meaning: '平台：backend | frontend | web | h5 | miniapp' },
       { flag: '-i, --iteration <id>', meaning: '目标迭代' },
+      { flag: '--classify', meaning: 'AI 智能分类 sources/ 文档 → staging/' },
     ],
     examples: [
       'speccore doc2spec -f PRD.docx -p backend -i Q1',
-      'speccore doc2spec -f requirements.md -p frontend -i Q1',
+      'speccore doc2spec --classify --prompt -I Q1          # 智能分类',
+      'speccore doc2spec --classify --response <json> -I Q1',
     ],
   },
   analyze: {
@@ -314,6 +316,31 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
       'speccore syn',
     ],
   },
+  refresh: {
+    desc: '统一刷新所有检索层：代码索引 + 文档 RAG + 知识图谱',
+    params: [
+      { flag: '--code', meaning: '只刷新代码索引' },
+      { flag: '--rag', meaning: '只刷新文档 RAG 索引' },
+      { flag: '--graph', meaning: '只刷新知识图谱' },
+      { flag: '--task <id>', meaning: '指定任务范围刷新' },
+    ],
+    examples: [
+      'speccore refresh',
+      'speccore refresh --code',
+      'speccore refresh --rag --graph',
+    ],
+  },
+  reindex: {
+    desc: '全量重建所有层级索引 + 知识图谱 + 衰减检测',
+    params: [
+      { flag: '--check', meaning: '只检查一致性，不修复' },
+      { flag: '-I, --iteration <iteration>', meaning: '指定迭代' },
+    ],
+    examples: [
+      'speccore reindex',
+      'speccore reindex --check',
+    ],
+  },
 };
 
 // ============================================================
@@ -330,7 +357,7 @@ function showAllCommands(): void {
     '🔍 分析与计划': ['analyze', 'plan'],
     '⚡ 执行与审查': ['execute', 'pr', 'done'],
     '🐛 变更与修复': ['change', 'bugfix'],
-    ' 状态与查询': ['status-panel', 'validate', 'ops', 'code-index'],
+    ' 状态与查询': ['status-panel', 'validate', 'ops', 'code-index', 'refresh', 'reindex'],
     ' 智能入口': ['ask', 'dev', 'prompts'],
   };
 
@@ -578,9 +605,9 @@ async function helpHtml(options: HelpOptions): Promise<void> {
         desc: '需求变更追踪、操作历史查询'
       },
       '📊 查看与验证': { 
-        cmds: ['dashboard', 'validate', 'track', 'search', 'code-index'],
+        cmds: ['dashboard', 'validate', 'track', 'search', 'code-index', 'refresh', 'reindex'],
         icon: '📈',
-        desc: '进度看板、代码验证、源码索引'
+        desc: '进度看板、代码验证、源码索引、索引刷新与重建'
       },
       '🛠️ 智能开发助手': { 
         cmds: ['dev'],

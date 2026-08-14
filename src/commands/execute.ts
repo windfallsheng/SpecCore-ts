@@ -35,6 +35,7 @@ import { buildPrompt, formatPrompt, parseAiResponse, outputNeedsInfo } from '../
 import { runVerification, writeVerifyReport, outputFixTag, runQualityGate } from '../core/verify-engine';
 import { loadConfig } from '../core/unified-config';
 import { checkCodeIndexFreshness } from '../core/code-scanner';
+import { warnIfIndexStale } from '../core/index-guard';
 
 export interface ExecuteOptions {
   all?: boolean;
@@ -240,23 +241,8 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
       return;
     }
 
-    // === 代码新鲜度检查：索引过期时警告但不阻塞 ===
-    const freshness = await checkCodeIndexFreshness();
-    if (!freshness.fresh) {
-      logger.warn('⚠️  代码索引可能过期');
-      logger.warn(`   ${freshness.message}`);
-      if (freshness.staleFiles.length > 0) {
-        logger.warn(`   最近修改的文件（${freshness.staleFiles.length} 个）:`);
-        for (const f of freshness.staleFiles.slice(0, 5)) {
-          logger.warn(`     - ${f}`);
-        }
-        if (freshness.staleFiles.length > 5) {
-          logger.warn(`     ... 等 ${freshness.staleFiles.length} 个文件`);
-        }
-      }
-      logger.info('   💡 如需更新索引: speccore code-index');
-      logger.info('');
-    }
+    // === 统一索引新鲜度检查（非阻塞） ===
+    await warnIfIndexStale(process.cwd(), 'execute', iteration);
 
     logger.info('🚀 开始执行...\n');
 
@@ -428,7 +414,7 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
     logger.info(`  🔄 ${task.id} ${task.name || ''} (${task.type || 'feature'})`);
 
     // ── 懒创建分支 + 合并依赖 ──
-    const branchName = prepareTaskBranch(task, iteration, defaultBase, createdBranches);
+    const branchName = await prepareTaskBranch(task, iteration, defaultBase, createdBranches);
     if (branchName) {
       logger.info(`  🌿 ${task.id}: ${branchName}`);
     }
@@ -650,7 +636,7 @@ async function processBatch(tasks: TaskState[], state: ExecutionState, iteration
   for (const task of tasks) {
     logger.info(`   ${task.id}:`);
     const tDir = await resolveTaskDir(iterDir, task.id);
-    for (const specPath of ['_shared/REQ.md', '_shared/TECH.md', '00-specs/REQ.md', '00-specs/TECH.md']) {
+    for (const specPath of ['_shared/CONTEXT.md', '_shared/REQ.md', '_shared/TECH.md', '00-specs/REQ.md', '00-specs/TECH.md']) {
       const p = join(tDir, specPath);
       if (await pathExists(p)) {
         const content = await readFile(p, 'utf-8');
@@ -1175,12 +1161,12 @@ async function preFlightCheck(tasks: TaskState[], iteration: string, options: Ex
  * 懒创建任务分支 + 合并依赖分支
  * 每个任务的分支在执行前才创建，确保依赖任务的代码已存在
  */
-function prepareTaskBranch(
+async function prepareTaskBranch(
   task: TaskState,
   iteration: string,
   defaultBase: string | undefined,
   createdBranches: Map<string, string>
-): string | null {
+): Promise<string | null> {
   const base = defaultBase || 'HEAD';
 
   // 1. 切回 base 分支（允许从保护分支拉分支，但 hook 会阻止直接 commit）
@@ -1192,12 +1178,23 @@ function prepareTaskBranch(
     try { execSync('git checkout -', { stdio: 'pipe' }); } catch {}
   }
 
-  // 2. 创建任务分支
-  const branch = createTaskBranch(task.id, task.name || task.id, undefined, iteration);
+  // 2. 查找任务目录 + 读取任务类型（用于子任务级 git 配置 + 分支类型映射）
+  const iterDir = await getIterationDir(iteration);
+  const taskDir = await resolveTaskDir(iterDir, task.id);
+  let taskType: string | undefined;
+  try {
+    const typePath = join(taskDir, '.meta', 'type');
+    if (await pathExists(typePath)) {
+      taskType = (await readFile(typePath, 'utf-8')).trim();
+    }
+  } catch {}
+
+  // 3. 创建任务分支（传入 taskDir + taskType 支持子任务级 git 配置）
+  const branch = createTaskBranch(task.id, task.name || task.id, undefined, iteration, taskDir, taskType);
   if (!branch) return null;
   createdBranches.set(task.id, branch);
 
-  // 3. 检测依赖并合并
+  // 4. 检测依赖并合并
   // 同步方式检测 IMPACT.md 中的依赖
   let depTaskIds: string[] = [];
   const impactPath = join(`Iteration-${iteration}`, 'IMPACT.md');

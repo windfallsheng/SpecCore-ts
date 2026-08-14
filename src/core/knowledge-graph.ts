@@ -139,7 +139,13 @@ async function scanRequirements(iterDir: string, iterName: string): Promise<{
           file: `010-requirements/${relPath}`,
           hash,
           mtime,
-          tags: [prefix.includes('features/') ? 'feature' : 'requirement'],
+          tags: [
+            prefix.includes('features/') ? 'feature'
+            : prefix.includes('bugs/') ? 'bug'
+            : prefix.includes('refactors/') ? 'refactor'
+            : prefix.includes('research/') ? 'research'
+            : 'requirement'
+          ],
         });
       }
     }
@@ -203,6 +209,76 @@ async function scanSpecs(iterDir: string): Promise<{
           hash,
           mtime,
           platform: pe.name,
+        });
+      }
+    }
+  }
+
+  // 扫描 features/ 子目录（按功能模块的分析产出）
+  const featuresDir = join(specsDir, 'features');
+  if (await pathExists(featuresDir)) {
+    const featureEntries = await readdir(featuresDir, { withFileTypes: true });
+    for (const fe of featureEntries) {
+      if (fe.name.startsWith('.') || isTimestampBackup(fe.name)) continue;
+      if (!fe.name.endsWith('.md')) continue;
+      const fullPath = join(featuresDir, fe.name);
+      const { hash, mtime } = await fileHash(fullPath);
+      const title = await extractTitle(fullPath);
+      const featureName = fe.name.replace('.md', '');
+
+      entities.push({
+        id: `SPEC:features/${featureName}`,
+        type: 'spec',
+        title: title || featureName,
+        file: `020-specs/features/${fe.name}`,
+        hash,
+        mtime,
+        tags: ['feature-spec'],
+      });
+
+      // 关联到对应的需求 feature（同名匹配）
+      const reqFeaturePath = join('010-requirements', 'features', featureName);
+      const matchedReq = entities.find(e => e.file?.startsWith(reqFeaturePath));
+      if (matchedReq) {
+        relations.push({
+          from: `SPEC:features/${featureName}`,
+          to: matchedReq.id,
+          type: 'references',
+        });
+      }
+    }
+  }
+
+  // 扫描类型目录（bugs/refactors/research — 扁平文件）
+  for (const typeDir of ['bugs', 'refactors', 'research']) {
+    const typeDirPath = join(specsDir, typeDir);
+    if (!(await pathExists(typeDirPath))) continue;
+    const typeEntries = await readdir(typeDirPath, { withFileTypes: true });
+    for (const te of typeEntries) {
+      if (!te.isFile() || !te.name.endsWith('.md') || isTimestampBackup(te.name)) continue;
+      const fullPath = join(typeDirPath, te.name);
+      const { hash, mtime } = await fileHash(fullPath);
+      const title = await extractTitle(fullPath);
+      const slug = te.name.replace('.md', '');
+
+      entities.push({
+        id: `SPEC:${typeDir}/${slug}`,
+        type: 'spec',
+        title: title || slug,
+        file: `020-specs/${typeDir}/${te.name}`,
+        hash,
+        mtime,
+        tags: [`${typeDir}-spec`],
+      });
+
+      // 关联到对应的需求文件（同名匹配）
+      const reqPath = join('010-requirements', typeDir, te.name);
+      const matchedReq = entities.find(e => e.file === reqPath);
+      if (matchedReq) {
+        relations.push({
+          from: `SPEC:${typeDir}/${slug}`,
+          to: matchedReq.id,
+          type: 'references',
         });
       }
     }

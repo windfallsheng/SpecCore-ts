@@ -13,6 +13,7 @@ import { scanTasks } from '../core/state';
 import { resolveTask, resolveIteration, formatResolveResult } from '../core/resolver';
 import { nextTaskId } from '../core/global-counters';
 import { scanInbox, markProcessed, logInboxScan, buildClarifyPrompt, parseClarifyResponse, logClarifyResult, ensureInboxDir, logImpactReport, InboxFileEntry, ImpactReport, TaskImpact } from '../core/inbox';
+import { warnIfIndexStale } from '../core/index-guard';
 
 /**
  * 解析任务目录基础路径：优先 030-tasks/，兼容旧布局
@@ -379,6 +380,9 @@ export interface ChangeOptions {
 }
 
 export async function changeCommand(options: ChangeOptions): Promise<void> {
+  // 命令前新鲜度检查
+  await warnIfIndexStale(process.cwd(), 'change', options.iteration);
+
   // 自然语言输入 → 当作 desc 处理
   if (options.input && !options.desc) {
     options.desc = options.input;

@@ -91,8 +91,36 @@ speccore init [--tool <tool>] [--force] [--interactive]
 ### 📝 doc2spec — 文档导入 🔒 AI 命令
 ```bash
 speccore doc2spec -f <file> --iter <iteration> [--task <task>] [--no-ai]
+speccore doc2spec --classify --prompt -I <iteration>   # 智能分类 sources/ 文档
+speccore doc2spec --classify --response <json> -I <iteration>
 ```
 别名: `d2s`
+
+**智能分类模式（`--classify`）：**
+
+| 参数 | 说明 |
+|:--|:--|
+| `--classify` | 启用智能分类模式 |
+| `--prompt` | 输出分类 Prompt 给 AI（AI 理解文档意图后返回 JSON） |
+| `--response <json>` | 接收 AI 分类结果，写入 `staging/` |
+| `-I, --iter <iteration>` | 目标迭代 |
+
+**分类流程：**
+
+1. 将待分类文档放入 `010-requirements/sources/`
+2. `speccore doc2spec --classify --prompt -I <iter>` → AI 理解文档意图（nature）+ 映射类型（type）
+3. `speccore doc2spec --classify --response <json> -I <iter>` → 写入 `staging/`
+4. `speccore analyze -I <iter>` → 按类型路由到 `020-specs/{features,bugs,refactors,research}/`
+5. `speccore split -I <iter>` → 按类型规则拆分任务（feature 拆合 / bug 1:1）
+
+**AI 意图理解：**
+
+| 文档实际意图（nature） | 映射类型（type） | 示例 |
+|:---|:---|:---|
+| 新功能、功能需求 | feature | "扫码登录" |
+| 缺陷、安全问题 | bugfix | "XSS 漏洞"、"登录超时" |
+| 技术债、性能优化 | refactor | "首页加载慢" |
+| 调研、选型 | research | "WebSocket vs SSE" |
 
 ### 📤 spec2doc — 文档导出 🔒 AI 命令
 ```bash

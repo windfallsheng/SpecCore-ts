@@ -2,6 +2,43 @@
 
 ---
 
+## v6.10.0 (2026-08-14) — Smart Document Classification + Task Context Traceability + Multi-Type Task Support
+
+### Smart Document Classification (doc2spec --classify)
+
+- **Overview**: Import any documents (security reports, performance analysis, user feedback) via AI-powered classification
+- **Two-step interaction**: `--prompt` outputs classification Prompt → AI returns JSON with intent → `--response` writes to staging/
+- **AI intent understanding**: AI first determines document nature (e.g., "security vulnerability"), then maps to task type
+  - Security/defects → bugfix | New features → feature | Performance → refactor | Research → research
+- **staging/ temp directory**: YAML frontmatter with type/nature/title/source/created
+- **analyze routing**: Reads type frontmatter from staging/ files, routes to `020-specs/{features,bugs,refactors,research}/`
+- **nature field passthrough**: Analyzed spec files preserve AI's intent description
+
+### Multi-Type Task Support
+
+- **Flat document directories**: `010-requirements/{bugs,refactors,research}/` for direct type-specific documents
+- **1:1 mapping rule**: bugs/refactors/research docs each map to exactly one task (no split/merge)
+- **features split/merge**: Split by functional unit (1-3 tasks), with granularity validation
+- **split prompt enhancement**: New sourceFile/functionalUnit/reason fields for source tracing
+
+### Task Context (CONTEXT.md)
+
+- **`_shared/CONTEXT.md`**: Auto-generated source traceability document in each task directory
+  - Source trace table: 010-requirements → 020-specs full path chain
+  - Original description summary: First 500 chars of requirement doc
+  - Related tasks list: Other tasks in the same iteration
+  - Impact scope: AI-analyzed impact description
+- **sourceFile field**: AI outputs source document path per task during split
+- **RAG/prompt integration**: CONTEXT.md included in RAG index candidates and prompt-builder loading list
+
+### Ask Engine Enhancement
+
+- **COMMAND_KB update**: doc2spec entry now includes --classify description/usage/examples/triggers
+- **SYNONYM_MAP expansion**: Added smart classification/classify/extract requirements/import docs → doc2spec
+- **Interaction mode**: classify triggers match to doc2spec command only, no pipeline auto-execution
+
+---
+
 ## v6.6.0 (2026-08-14) — Knowledge Base System Comprehensive Fix (13 issues)
 
 ### P0 Critical Fixes

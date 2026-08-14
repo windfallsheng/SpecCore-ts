@@ -100,10 +100,16 @@ disable-model-invocation: false
 
 | 命令 | 格式 | 类型 | 说明 |
 |:---|:---|:---|:---|
+| `doc2spec -f <file> --iter <短名>` | 导入文档 | 🔒 AI | PRD/Word → SpecCore MD，双路验证 |
+| `doc2spec --classify --prompt -I <短名>` | 智能分类 | 🔒 AI | AI 提取 sources/ 文档，按类型分类到 staging/ |
 | `analyze --prompt -I <短名> --task <短名>` | 分析任务 | 🔒 AI | 需要宿主 AI 交互，`speccore ask "分析..."` 路由进入 |
+| `analyze --feature <模块名>` | 局部分析功能模块 | 🔒 AI | 只分析单个功能模块，不重跑全量 |
+| `analyze --doc <type/slug>` | 局部分析类型文档 | 🔒 AI | 分析 bugs/login-timeout、refactors/db-pool 等 |
 | `plan --prompt -I <短名> --task <短名>` | 制定计划 | 🔒 AI | 需要宿主 AI 交互，`speccore ask "制定计划..."` 路由进入 |
 | `execute --prompt -I <短名> --task <短名>` | 执行开发 | 🔒 AI | 需要宿主 AI 交互，`speccore ask "执行开发..."` 路由进入 |
 | `iteration split -I <短名>` | 拆分任务 | 🔒 AI | 需要宿主 AI 交互，`speccore ask "拆分任务..."` 路由进入 |
+| `refresh [--code] [--rag] [--graph]` | 刷新索引 | CLI | 统一刷新所有检索层，可单独指定 |
+| `reindex [--check]` | 重建索引 | CLI | 全量重建 + 知识图谱 + 衰减检测 |
 | `context --set --iteration <完整名>` | 切换迭代 | CLI | 可在终端直接输入 |
 | `dashboard` | 查看进度 | CLI | 可在终端直接输入 |
 | `task new -n <名> --topic <英文> -i <短名>` | 创建任务 | CLI | 可在终端直接输入 |

@@ -58,6 +58,8 @@ export interface UnifiedQuery {
   taskDir?: string;
   /** 源码范围 */
   sourceScope?: string;
+  /** 按端过滤（backend/web/h5/admin/...） */
+  platforms?: string[];
 }
 
 export interface UnifiedResult {
@@ -249,7 +251,7 @@ export async function unifiedSearch(
   cwd: string,
   query: UnifiedQuery,
 ): Promise<UnifiedResult> {
-  const { query: queryStr, iteration, taskId, platform, taskDir, sourceScope } = query;
+  const { query: queryStr, iteration, taskId, platform, taskDir, sourceScope, platforms } = query;
 
   // ── 3.1 文档 RAG 检索 ──
   let documentChunks: DocumentChunk[] = [];
@@ -281,6 +283,7 @@ export async function unifiedSearch(
           minScore: 0.3,
           maxChunkChars: 1500,
           maxTotalChars: 5000,
+          platforms: platforms || (platform ? [platform] : undefined),
         });
         allChunks.push(...chunks);
       }
@@ -440,4 +443,156 @@ function estimateTokens(
   if (graphContext) chars += graphContext.length;
   // 中文 ≈ 1.5 tokens/字，英文 ≈ 0.25 tokens/字符
   return Math.ceil(chars * 0.8);
+}
+
+// ═══════════════════════════════════════════════════════════
+// 6. AI 两步检索闭环（目录摘要 → AI 判断 → CLI 精确读取）
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * 目录条目（轻量级，用于 AI 判断）
+ */
+export interface CatalogEntry {
+  /** chunk ID */
+  id: string;
+  /** 块标题 */
+  title: string;
+  /** 源文件名 */
+  fileName: string;
+  /** 标题级别 */
+  level: number;
+  /** 自动摘要（≤100字） */
+  summary: string;
+  /** 关键词 */
+  keywords: string[];
+  /** 字数 */
+  charCount: number;
+  /** 起始行号 */
+  startLine?: number;
+  /** 结束行号 */
+  endLine?: number;
+}
+
+/**
+ * 构建轻量级目录摘要（给 AI 看的“地图”）
+ *
+ * 设计目标：
+ *   - 只包含 ID + 标题 + 摘要 + 关键词，不包含完整内容
+ *   - 总大小控制在 ~2000 字以内
+ *   - AI 看完后返回候选 ID 列表，CLI 用这些 ID 做精确读取
+ *
+ * 用法：
+ *   const catalog = await buildDirectoryCatalog(cwd, iteration);
+ *   // 注入 Prompt 让 AI 判断
+ *   const prompt = `以下是可用的文档块目录：\n${catalog}\n\n请根据用户需求返回最相关的 chunk ID 列表（JSON 数组）`;
+ */
+export async function buildDirectoryCatalog(
+  cwd: string,
+  iteration?: string,
+  options?: { maxEntries?: number; maxSummaryChars?: number },
+): Promise<string> {
+  const maxEntries = options?.maxEntries ?? 50;
+  const maxSummaryChars = options?.maxSummaryChars ?? 100;
+
+  // 加载所有相关索引
+  const indexFiles: string[] = [];
+  if (iteration) {
+    indexFiles.push(`rag-index-${iteration}.json`);
+    indexFiles.push('rag-index-global.json');
+  } else {
+    indexFiles.push('rag-index-global.json');
+  }
+
+  const entries: CatalogEntry[] = [];
+  for (const fileName of indexFiles) {
+    const index = await loadRagIndex(cwd, fileName);
+    if (!index) continue;
+
+    for (const chunk of index.chunks) {
+      entries.push({
+        id: chunk.id,
+        title: chunk.title,
+        fileName: chunk.fileName,
+        level: chunk.level,
+        summary: chunk.summary.slice(0, maxSummaryChars),
+        keywords: chunk.keywords.slice(0, 5),
+        charCount: chunk.charCount,
+        startLine: chunk.startLine,
+        endLine: chunk.endLine,
+      });
+    }
+  }
+
+  // 去重（按 id）
+  const seen = new Set<string>();
+  const unique = entries.filter(e => {
+    if (seen.has(e.id)) return false;
+    seen.add(e.id);
+    return true;
+  });
+
+  // 按级别排序（## 优先）并限制数量
+  const sorted = unique
+    .sort((a, b) => a.level - b.level || b.charCount - a.charCount)
+    .slice(0, maxEntries);
+
+  // 格式化为轻量级文本
+  const lines: string[] = [
+    `📚 文档目录（共 ${sorted.length} 个块，总计 ${unique.reduce((s, e) => s + e.charCount, 0)} 字）`,
+    '',
+  ];
+
+  for (const entry of sorted) {
+    const indent = '  '.repeat(entry.level - 2);
+    const lineRange = entry.startLine && entry.endLine
+      ? ` L${entry.startLine}-${entry.endLine}`
+      : '';
+    lines.push(
+      `${indent}[${entry.id}] ${entry.fileName} › ${entry.title}${lineRange} (${entry.charCount}字)`,
+    );
+    if (entry.summary) {
+      lines.push(`${indent}  ↳ ${entry.summary}`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * 根据 AI 返回的候选 ID 列表，精确读取对应 chunk 内容
+ *
+ * 用法：
+ *   const candidateIds = ['a1b2c3d4e5f6', 'f6e5d4c3b2a1'];
+ *   const chunks = await fetchChunksByIds(cwd, candidateIds, iteration);
+ */
+export async function fetchChunksByIds(
+  cwd: string,
+  ids: string[],
+  iteration?: string,
+): Promise<DocumentChunk[]> {
+  const indexFiles: string[] = [];
+  if (iteration) {
+    indexFiles.push(`rag-index-${iteration}.json`);
+    indexFiles.push('rag-index-global.json');
+  } else {
+    indexFiles.push('rag-index-global.json');
+  }
+
+  const idSet = new Set(ids);
+  const result: DocumentChunk[] = [];
+
+  for (const fileName of indexFiles) {
+    const index = await loadRagIndex(cwd, fileName);
+    if (!index) continue;
+
+    for (const chunk of index.chunks) {
+      if (idSet.has(chunk.id)) {
+        result.push(chunk);
+        idSet.delete(chunk.id);
+        if (idSet.size === 0) break;
+      }
+    }
+  }
+
+  return result;
 }

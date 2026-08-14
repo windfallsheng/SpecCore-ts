@@ -1,3 +1,55 @@
+## v6.10.0 (2026-08-14) — 智能文档分类摄入 + 任务上下文追溯 + 多类型任务支持
+
+### 智能文档分类摄入（doc2spec --classify）
+
+- **功能概述**: 支持将任意文档（安全报告、性能分析、用户反馈等）通过 AI 智能理解后分类导入
+- **两步交互**: `--prompt` 输出分类 Prompt → AI 理解意图返回 JSON → `--response` 写入 staging/
+- **AI 意图理解**: AI 先判断文档实际意图（nature），再映射到任务类型（type）
+  - 安全漏洞/缺陷 → bugfix | 新功能 → feature | 性能优化 → refactor | 调研 → research
+- **staging/ 临时目录**: 带 YAML frontmatter（type/nature/title/source/created）
+- **analyze 路由**: 读取 staging/ 文件的 type frontmatter，分发到 `020-specs/{features,bugs,refactors,research}/`
+- **nature 字段透传**: analyze 生成的规格文件保留 AI 理解的意图描述
+
+### 多类型任务支持
+
+- **扁平文档目录**: `010-requirements/{bugs,refactors,research}/` 支持直接放入对应类型文档
+- **1:1 映射规则**: bugs/refactors/research 文档每个直接对应一个任务，不拆分不合并
+- **features 拆合规则**: 按功能单元拆分（1~3 个任务），保持原有粒度校验
+- **split prompt 增强**: 新增 sourceFile/functionalUnit/reason 字段，AI 输出来源追溯信息
+
+### 任务上下文（CONTEXT.md）
+
+- **`_shared/CONTEXT.md`**: 每个任务目录自动生成来源追溯文档
+  - 来源追溯表：010-requirements → 020-specs 完整路径链
+  - 原始描述摘要：需求文档前 500 字
+  - 关联任务列表：同一迭代的其他任务
+  - 影响范围：AI 分析的影响描述
+- **sourceFile 字段**: split 时 AI 输出每个任务的来源文档路径，支持精确追溯
+- **RAG/prompt 集成**: CONTEXT.md 纳入 RAG 索引候选和 prompt-builder 加载列表
+
+### ask 引擎增强
+
+- **COMMAND_KB 更新**: doc2spec 条目新增 --classify 描述/用法/示例/triggers
+- **SYNONYM_MAP 扩展**: 新增智能分类/classify/分类文档/提取需求/导入文档 → doc2spec
+- **交互模式**: classify 触发词只匹配到 doc2spec 命令，不触发 pipeline，每步人机交互
+
+### 涉及文件
+
+- `src/commands/doc2spec.ts` — 新增 classifySources() 函数（~180 行）
+- `src/commands/analyze.ts` — 收集 staging/ + typed 目录
+- `src/core/analyze-engine.ts` — writePerTypedDoc staging 路由 + nature 透传
+- `src/commands/iteration/split.ts` — CONTEXT.md 生成 + 1:1 规则 + sourceFile
+- `src/core/ask-engine.ts` — KB/SYNONYM_MAP 更新 + classify 触发词
+- `src/core/prompt-builder.ts` — CONTEXT.md 纳入加载列表
+- `src/core/rag-engine.ts` — CONTEXT.md 纳入索引候选
+- `src/commands/execute.ts` — CONTEXT.md 纳入摘要展示
+- `src/cli.ts` — 注册 --classify 选项
+- `.agents/skills/spec-ask/SKILL.md` — 命令表新增 doc2spec 条目
+- `docs/DESIGN.md` — 新增智能分类摄入 + CONTEXT.md 章节
+- `docs/command-reference.md` — doc2spec 新增 --classify 参数说明
+
+---
+
 ## v6.8.0 (2026-08-14) — 代码索引智能增强 + 衰减检测影响链推断 + RAG 检索增强
 
 ### RAG 轻量级检索增强（新增）

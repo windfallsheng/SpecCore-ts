@@ -17,7 +17,7 @@
  */
 import { logger, Spinner } from '../utils/logger';
 import { execSync } from 'child_process';
-import { pathExists, ensureDir, readFile, writeFile, readdir, stat, unlink } from 'fs-extra';
+import { pathExists, ensureDir, readFile, writeFile, readdir, stat, unlink, copy } from 'fs-extra';
 import { join, basename } from 'path';
 import { backupWithTimestamp } from '../utils/task-utils';
 import { nextTaskId } from '../core/global-counters';
@@ -122,9 +122,16 @@ interface Word2SpecOptions {
   ai?: boolean;
   prompt?: boolean;   // --prompt: 输出验证 Prompt 到 stdout
   response?: string;  // --response: 接收 AI 修正后的内容
+  classify?: boolean; // --classify: AI 智能分类 → staging/
 }
 
 export async function doc2specCommand(options: Word2SpecOptions): Promise<void> {
+  // ── --classify: AI 智能分类模式 ──
+  if (options.classify) {
+    await classifySources(options);
+    return;
+  }
+
   // ── Excel/CSV Bug 列表导入 ──
   if (options.file && /\.(xlsx|csv|xls)$/i.test(options.file) && options.iter) {
     await importExcelBugList(options.file, options.iter);
@@ -243,6 +250,20 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
 
     await ensureDir(targetDir);
     await ensureDir(imageDir);
+
+    // ── 保存原始文件到 sources/（只读存档，方便溯源）──
+    if (!taskId) {
+      try {
+        const sourcesDir = join(iterDir, '010-requirements', 'sources');
+        await ensureDir(sourcesDir);
+        const sourceDestName = basename(options.file);
+        const sourceDestPath = join(sourcesDir, sourceDestName);
+        if (!(await pathExists(sourceDestPath))) {
+          await copy(options.file, sourceDestPath);
+          logger.info(`📁 原始文件已存档 → ${sourceDestPath}`);
+        }
+      } catch {}
+    }
 
     let sourceFile = options.file;
     let cleanupFile: string | null = null;
@@ -453,6 +474,174 @@ async function mergeToRequirement(iterDir: string, targetDir: string, platform: 
     .replace(/#{1,3}\s+\d+\.\s*(需求概述|功能需求|非功能需求|验收标准|附录)[\s\S]*?(?=#{1,3}\s|$)/g, '');
 
   await writeFile(globalReqPath, globalContent);
+}
+
+/**
+ * --classify 模式：扫描 sources/ 下所有文件，AI 智能分类后输出到 staging/
+ *
+ * 流程:
+ *   1. 扫描 010-requirements/sources/ 下所有文件
+ *   2. 读取内容（.md/.txt 直接读，其它格式尝试 pandoc 转换）
+ *   3. --prompt: 输出分类 Prompt 给 AI
+ *   4. --response: 接收 AI 分类结果，写入 staging/
+ */
+async function classifySources(options: Word2SpecOptions): Promise<void> {
+  const iter = options.iter;
+  if (!iter) {
+    logger.error('请指定迭代: speccore doc2spec --classify -I <迭代>');
+    return;
+  }
+  const iterDir = `Iteration-${iter.replace(/^Iteration-/, '')}`;
+  const sourcesDir = join(iterDir, '010-requirements', 'sources');
+  const stagingDir = join(iterDir, '010-requirements', 'staging');
+
+  if (!(await pathExists(sourcesDir))) {
+    logger.error(`未找到 sources 目录: ${sourcesDir}`);
+    logger.info('请先将文件放入该目录，再运行 --classify');
+    return;
+  }
+
+  // 扫描 sources/ 下所有文件
+  const entries = await readdir(sourcesDir, { withFileTypes: true });
+  const sourceFiles = entries.filter(e => e.isFile() && !e.name.startsWith('.'));
+  if (sourceFiles.length === 0) {
+    logger.warn('sources/ 目录为空，请先放入待分类的文档');
+    return;
+  }
+
+  // 读取每个文件的内容
+  const fileContents: { name: string; content: string }[] = [];
+  for (const entry of sourceFiles) {
+    const filePath = join(sourcesDir, entry.name);
+    const ext = entry.name.split('.').pop()?.toLowerCase();
+    let content = '';
+
+    if (ext === 'md' || ext === 'txt' || ext === 'markdown') {
+      content = await readFile(filePath, 'utf-8');
+    } else if (ext === 'csv') {
+      content = await readFile(filePath, 'utf-8');
+    } else {
+      // 尝试 pandoc 转换
+      const pandocBin = findCommand('pandoc');
+      if (pandocBin && ext && PANDOC_FORMAT_MAP[ext]) {
+        try {
+          const tmpOut = join(sourcesDir, `.${entry.name}.tmp.md`);
+          execSync(
+            `LANG=zh_CN.UTF-8 "${pandocBin}" "${filePath}" -f ${PANDOC_FORMAT_MAP[ext]} -t gfm --wrap=none -o "${tmpOut}"`,
+            { stdio: 'pipe', encoding: 'utf-8' }
+          );
+          content = await readFile(tmpOut, 'utf-8');
+          await unlink(tmpOut);
+        } catch {
+          content = `[无法转换的 ${ext} 格式文件]`;
+        }
+      } else {
+        content = `[不支持的格式: .${ext}]`;
+      }
+    }
+
+    fileContents.push({ name: entry.name, content: content.slice(0, 5000) });
+  }
+
+  // ── --prompt 模式: 输出分类 Prompt ──
+  if (options.prompt) {
+    let prompt = `# SpecCore 智能分类\n\n`;
+    prompt += `> 迭代: ${iter} | 来源: ${sourceFiles.length} 个文件\n\n`;
+    prompt += `请仔细阅读每份文档，理解其意图，然后提取需求条目并分类。\n\n`;
+    prompt += `## 第一步：理解文档意图\n\n`;
+    prompt += `对每个条目，先判断它**实际上在说什么**（nature），再映射到任务类型（type）：\n\n`;
+    prompt += `| nature（文档实际意图） | type（映射任务类型） | 示例 |\n`;
+    prompt += `|:---|:---|:---|\n`;
+    prompt += `| 新功能、功能需求、产品规格 | feature | "用户需要扫码登录" |\n`;
+    prompt += `| 缺陷、故障、异常、安全问题 | bugfix | "登录超时页面卡死"、"SQL注入漏洞" |\n`;
+    prompt += `| 技术债、架构改进、性能优化 | refactor | "数据库连接池过小"、"模块耦合过高" |\n`;
+    prompt += `| 调研、选型、方案对比、可行性分析 | research | "WebSocket vs SSE 对比" |\n`;
+    prompt += `| 安全审计、渗透测试、合规检查 | bugfix | "XSS 漏洞报告"、"GDPR 合规差距" |\n`;
+    prompt += `| 性能瓶颈、响应慢、资源浪费 | refactor | "首页加载超 3 秒"、"内存泄漏" |\n\n`;
+    prompt += `## 第二步：提取并结构化\n\n`;
+    prompt += `- 一份文档可能包含多种类型的条目，请分别提取\n`;
+    prompt += `- 每个条目应该是独立的需求单元（一个功能/一个 bug/一个重构项/一个调研主题）\n`;
+    prompt += `- 为每个条目生成简洁的英文 slug 作为文件名（如 login-timeout, xss-prevention）\n`;
+    prompt += `- content 必须包含：原始描述的关键细节、影响范围、验收标准（如原文有）\n\n`;
+    prompt += `## 输出格式\n\n`;
+    prompt += `请输出 JSON 数组:\n`;
+    prompt += '```json\n[\n  {\n';
+    prompt += `    "nature": "文档实际意图的简短描述（如：安全漏洞、新功能、性能瓶颈）",\n`;
+    prompt += `    "type": "feature|bugfix|refactor|research",\n`;
+    prompt += `    "title": "中文标题",\n`;
+    prompt += `    "slug": "english-slug",\n`;
+    prompt += `    "content": "结构化的 Markdown 内容（包含完整的需求描述、背景、验收标准等）"\n`;
+    prompt += `  }\n]\n`;
+    prompt += '```\n\n';
+    prompt += `## 待分类文档\n\n`;
+    for (const fc of fileContents) {
+      prompt += `### 📄 ${fc.name}\n\n${fc.content}\n\n---\n\n`;
+    }
+    process.stdout.write(prompt);
+    process.exitCode = 10;
+    return;
+  }
+
+  // ── --response 模式: 接收 AI 分类结果，写入 staging/ ──
+  if (options.response) {
+    await ensureDir(stagingDir);
+    let items: { type: string; nature?: string; title: string; slug: string; content: string }[];
+    try {
+      // 尝试解析 JSON（可能被 markdown 代码块包裹）
+      const jsonMatch = options.response.match(/```(?:json)?\s*([\s\S]*?)```/);
+      const jsonStr = jsonMatch ? jsonMatch[1].trim() : options.response.trim();
+      items = JSON.parse(jsonStr);
+    } catch (e: any) {
+      logger.error(`AI 返回内容解析失败: ${e.message}`);
+      return;
+    }
+
+    if (!Array.isArray(items) || items.length === 0) {
+      logger.warn('未提取到任何需求条目');
+      return;
+    }
+
+    // 类型到目录的映射
+    const typeToDir: Record<string, string> = {
+      feature: 'features',
+      bugfix: 'bugs',
+      refactor: 'refactors',
+      research: 'research',
+    };
+
+    let written = 0;
+    for (const item of items) {
+      const type = typeToDir[item.type] ? item.type : 'feature';
+      const slug = item.slug || item.title.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/g, '-').replace(/^-|-$/g, '');
+      const fileName = `${slug}.md`;
+      const filePath = join(stagingDir, fileName);
+
+      // 写入带 frontmatter 的 MD 文件
+      const nature = item.nature || '';
+      const md = `---\ntype: ${type}\nnature: ${nature}\ntitle: ${item.title}\nsource: sources/\ncreated: ${new Date().toISOString().split('T')[0]}\n---\n\n# ${item.title}\n\n${item.content}\n`;
+      await writeFile(filePath, md);
+      written++;
+      logger.info(`   ✅ [${type}] ${fileName}${nature ? ` — ${nature}` : ''}`);
+    }
+
+    logger.success(`\n✅ ${written} 个条目已分类到 staging/`);
+    logger.info(`   📂 ${stagingDir}/`);
+    logger.info('');
+    logger.info('📋 下一步:');
+    logger.info(`   speccore analyze -I ${iter}     # 分析 staging/ 中的文档`);
+    logger.info(`   # 分析完成后可清理 staging/ 目录`);
+    return;
+  }
+
+  // ── 无 --prompt/--response: 列出 sources/ 内容并提示 ──
+  logger.info(`📂 sources/ 目录包含 ${sourceFiles.length} 个文件:\n`);
+  for (const fc of fileContents) {
+    const preview = fc.content.slice(0, 80).replace(/\n/g, ' ').trim();
+    logger.info(`   📄 ${fc.name} — ${preview}...`);
+  }
+  logger.info('');
+  logger.info('📋 使用 --prompt 让 AI 分类这些文档:');
+  logger.info(`   speccore doc2spec --classify --prompt -I ${iter}`);
 }
 
 async function importExcelBugList(file: string, iteration: string): Promise<void> {

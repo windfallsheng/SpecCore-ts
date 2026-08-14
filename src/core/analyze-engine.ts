@@ -254,6 +254,10 @@ async function analyzeRequirements(input: AnalyzeInput): Promise<AnalysisResult>
 
     // 按端分目录输出
     await writePerPlatform(iterDir, report, input.output || 'ANALYSIS.md');
+    // 按功能模块输出到 020-specs/features/
+    await writePerFeature(iterDir, report, input.output || 'ANALYSIS.md');
+    // 按类型输出扁平文件到 020-specs/{bugs,refactors,research}/
+    await writePerTypedDoc(iterDir, report, input.output || 'ANALYSIS.md');
   }
 
   // ── 生成 AI 上下文（传入已读取的需求内容，避免重复 readFile） ──
@@ -309,6 +313,7 @@ async function analyzeCodebase(input: AnalyzeInput): Promise<AnalysisResult> {
     outputPath = join(iterDir, '020-specs', input.output || 'CODE_ANALYSIS.md');
     report = buildIterationCodeReport(input, fileStats, apiInventory, hotspots, deps);
     await writePerPlatform(iterDir, report, input.output || 'CODE_ANALYSIS.md');
+    await writePerFeature(iterDir, report, input.output || 'CODE_ANALYSIS.md');
   }
 
   return {
@@ -402,6 +407,7 @@ async function analyzeCombined(input: AnalyzeInput): Promise<AnalysisResult> {
     outputPath = join(iterDir, '020-specs', input.output || 'ANALYSIS.md');
     report = await buildAIEnhancedReport(input, 'iteration', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents });
     await writePerPlatform(iterDir, report, input.output || 'ANALYSIS.md');
+    await writePerFeature(iterDir, report, input.output || 'ANALYSIS.md');
   }
 
   return {
@@ -1371,6 +1377,230 @@ async function writePerPlatform(iterDir: string, report: string, filename: strin
   } catch {
     // 目录不存在，静默跳过
   }
+}
+
+/**
+ * 局部分析：只分析单个功能模块，写入 020-specs/features/{feature}.md
+ * 用于 --feature 模式，避免全量重跑
+ */
+export async function analyzeSingleFeature(
+  iterDir: string,
+  featureName: string,
+): Promise<{ outputPath: string; report: string } | null> {
+  const reqDir = join(iterDir, '010-requirements');
+  const featureReqPath = join(reqDir, 'features', featureName, 'README.md');
+
+  if (!(await pathExists(featureReqPath))) {
+    return null;
+  }
+
+  const content = await readFile(featureReqPath, 'utf-8');
+  const issues = scanCompleteness(content);
+  const archImpact = await analyzeArchitectureImpact(content);
+  const now = new Date().toISOString().split('T')[0];
+  const blockerCount = issues.filter(i => i.severity === 'blocker').length;
+
+  // 构建单模块分析报告
+  let r = `# ${featureName} — 需求分析报告\n\n`;
+  r += `> 模块: ${featureName} | 分析时间: ${now} | 模式: 局部刷新 | 状态: ${blockerCount > 0 ? '🔴 有阻断' : '🟢 可拆分'}\n\n`;
+  r += `---\n\n`;
+
+  r += `## 1. 需求完整性检查\n\n`;
+  r += `| 严重度 | 分类 | 问题 |\n| :--- | :--- | :--- |\n`;
+  for (const issue of issues) {
+    r += `| ${icon(issue.severity)} ${issue.severity} | ${issue.category} | ${issue.message.replace(/\n/g, '<br>')} |\n`;
+  }
+  if (issues.length === 0) r += `| ✅ | - | 未发现明显问题 |\n`;
+  r += `\n`;
+
+  r += `## 2. 架构影响\n\n`;
+  if (archImpact.modules.length > 0) r += `**影响模块**: ${archImpact.modules.join(', ')}\n\n`;
+  if (archImpact.risks.length > 0) {
+    r += `**风险**:\n`;
+    for (const risk of archImpact.risks) r += `- ⚠️ ${risk}\n`;
+    r += `\n`;
+  }
+  if (archImpact.apis.length > 0) {
+    r += `**涉及接口**:\n`;
+    for (const api of archImpact.apis) r += `- \`${api}\`\n`;
+    r += `\n`;
+  }
+  if (archImpact.modules.length === 0 && archImpact.risks.length === 0) {
+    r += `_未检测到明显架构影响_\n\n`;
+  }
+
+  r += `## 3. 需求原文\n\n${content}\n`;
+
+  // 写入 020-specs/features/
+  const featuresDir = join(iterDir, '020-specs', 'features');
+  await ensureDir(featuresDir);
+  const outputPath = join(featuresDir, `${featureName}.md`);
+  await writeFile(outputPath, r);
+
+  return { outputPath, report: r };
+}
+
+/**
+ * 局部分析：单个类型文档（bugs/refactors/research）
+ *
+ * @param iterDir   迭代目录
+ * @param docPath   类型路径，如 "bugs/login-timeout" 或 "refactors/db-pool"
+ *                  对应 010-requirements/{typeDir}/{slug}.md
+ */
+export async function analyzeSingleTypedDoc(
+  iterDir: string,
+  docPath: string,
+): Promise<{ outputPath: string; report: string } | null> {
+  const reqDir = join(iterDir, '010-requirements');
+  const parts = docPath.split('/');
+  if (parts.length !== 2) return null;
+
+  const [typeDir, slug] = parts;
+  if (!['bugs', 'refactors', 'research'].includes(typeDir)) return null;
+
+  const docFilePath = join(reqDir, typeDir, `${slug}.md`);
+  if (!(await pathExists(docFilePath))) return null;
+
+  const content = await readFile(docFilePath, 'utf-8');
+  const issues = scanCompleteness(content);
+  const archImpact = await analyzeArchitectureImpact(content);
+  const now = new Date().toISOString().split('T')[0];
+  const blockerCount = issues.filter(i => i.severity === 'blocker').length;
+
+  const typeLabel = typeDir === 'bugs' ? 'Bug 分析' : typeDir === 'refactors' ? '重构分析' : '研究分析';
+
+  let r = `# ${slug} — ${typeLabel}\n\n`;
+  r += `> 类型: ${typeDir} | 分析时间: ${now} | 状态: ${blockerCount > 0 ? '🔴 有阻断' : '🟢 可拆分'}\n\n`;
+  r += `---\n\n`;
+
+  // 完整性检查
+  r += `## 完整性检查\n\n`;
+  if (issues.length === 0) {
+    r += `✅ 无阻断项\n\n`;
+  } else {
+    for (const issue of issues) {
+      const icon = issue.severity === 'blocker' ? '🔴' : issue.severity === 'warning' ? '🟡' : 'ℹ️';
+      r += `${icon} **${issue.category}**: ${issue.message}\n`;
+    }
+    r += '\n';
+  }
+
+  // 架构影响
+  r += `## 架构影响分析\n\n`;
+  r += archImpact + '\n\n';
+
+  // 写入 020-specs/{typeDir}/
+  const destDir = join(iterDir, '020-specs', typeDir);
+  await ensureDir(destDir);
+  const outputPath = join(destDir, `${slug}.md`);
+  await writeFile(outputPath, r);
+
+  return { outputPath, report: r };
+}
+
+/** 按功能模块写入 020-specs/features/ */
+async function writePerFeature(iterDir: string, report: string, filename: string): Promise<void> {
+  const reqDir = join(iterDir, '010-requirements');
+  const featuresDir = join(iterDir, '020-specs', 'features');
+  // 非 feature 型目录的排除名单
+  const EXCLUDED_DIRS = new Set(['sources', 'assets', 'converted', 'staging', 'bugs', 'refactors', 'research']);
+  try {
+    const entries = await readdir(reqDir, { withFileTypes: true });
+    const features = entries
+      .filter(e => e.isDirectory() && !e.name.startsWith('_') && !e.name.startsWith('.')
+        && !EXCLUDED_DIRS.has(e.name))
+      .map(e => e.name);
+    if (features.length === 0) return;
+
+    await ensureDir(featuresDir);
+    for (const feature of features) {
+      // 读取该 feature 的 README.md 作为头部，拼接完整报告
+      const featureReqPath = join(reqDir, feature, 'README.md');
+      let featureHeader = '';
+      if (await pathExists(featureReqPath)) {
+        featureHeader = `# ${feature} — 需求分析\n\n> 来源: 010-requirements/features/${feature}/README.md\n\n---\n\n`;
+      }
+      const featureContent = featureHeader + report;
+      await writeFile(join(featuresDir, `${feature}.md`), featureContent);
+    }
+  } catch {}
+}
+
+/**
+ * 按类型写入 020-specs/{bugs,refactors,research}/
+ *
+ * 与 writePerFeature 的区别：
+ * - feature 用子目录（features/{module}/README.md）
+ * - bugfix/refactor/research 用扁平文件（bugs/{slug}.md）
+ *
+ * 对每个类型目录下的 .md 文件，生成对应的分析报告到 020-specs/ 下
+ */
+async function writePerTypedDoc(iterDir: string, report: string, filename: string): Promise<void> {
+  const reqDir = join(iterDir, '010-requirements');
+  const typeDirs = ['bugs', 'refactors', 'research'];
+
+  for (const typeDir of typeDirs) {
+    const srcDir = join(reqDir, typeDir);
+    const destDir = join(iterDir, '020-specs', typeDir);
+
+    try {
+      if (!(await pathExists(srcDir))) continue;
+      const entries = await readdir(srcDir, { withFileTypes: true });
+      const mdFiles = entries.filter(
+        e => e.isFile() && e.name.endsWith('.md') && !e.name.startsWith('README') && !isTimestampBackup(e.name)
+      );
+      if (mdFiles.length === 0) continue;
+
+      await ensureDir(destDir);
+      for (const entry of mdFiles) {
+        const content = await readFile(join(srcDir, entry.name), 'utf-8');
+        const slug = entry.name.replace(/\.md$/, '');
+        const header = `# ${slug} — 需求分析\n\n> 来源: 010-requirements/${typeDir}/${entry.name}\n\n---\n\n`;
+        await writeFile(join(destDir, entry.name), header + report);
+      }
+    } catch {}
+  }
+
+  // ── 处理 staging/ 目录（doc2spec --classify 产物，带 type frontmatter）──
+  const stagingDir = join(reqDir, 'staging');
+  try {
+    if (!(await pathExists(stagingDir))) return;
+    const stagingFiles = (await readdir(stagingDir, { withFileTypes: true }))
+      .filter(e => e.isFile() && e.name.endsWith('.md') && !e.name.startsWith('README') && !isTimestampBackup(e.name));
+    if (stagingFiles.length === 0) return;
+
+    // type frontmatter → 020-specs 目标目录
+    const typeToSpecDir: Record<string, string> = {
+      feature: 'features',
+      bugfix: 'bugs',
+      refactor: 'refactors',
+      research: 'research',
+    };
+
+    for (const entry of stagingFiles) {
+      const content = await readFile(join(stagingDir, entry.name), 'utf-8');
+      // 解析 frontmatter 中的 type 和 nature 字段
+      const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
+      let specType = 'features'; // 默认
+      let nature = '';
+      if (fmMatch) {
+        const typeLine = fmMatch[1].split('\n').find(l => l.startsWith('type:'));
+        if (typeLine) {
+          const typeVal = typeLine.replace('type:', '').trim();
+          specType = typeToSpecDir[typeVal] || 'features';
+        }
+        const natureLine = fmMatch[1].split('\n').find(l => l.startsWith('nature:'));
+        if (natureLine) {
+          nature = natureLine.replace('nature:', '').trim();
+        }
+      }
+      const destDir = join(iterDir, '020-specs', specType);
+      await ensureDir(destDir);
+      const slug = entry.name.replace(/\.md$/, '');
+      const header = `# ${slug} — 需求分析\n\n> 来源: 010-requirements/staging/${entry.name}\n> 意图: ${nature || '未标注'}\n\n---\n\n`;
+      await writeFile(join(destDir, entry.name), header + report);
+    }
+  } catch {}
 }
 
 // ================================================================
