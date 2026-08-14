@@ -184,11 +184,46 @@ speccore knowledge scan --from-code
 
 ## 九、实施计划
 
-| 阶段 | 内容 | 优先级 |
-|------|------|:--:|
-| P0 | 创建 `.speccore/knowledge/` 骨架目录 + ROUTING.md | 🔴 |
-| P0 | `speccore knowledge init` 交互式初始化 | 🔴 |
-| P1 | ask 引擎接入 ROUTING，动态注入知识到 prompt | 🔴 |
-| P1 | retro 自动回补到 candidate/ | 🟡 |
-| P2 | `speccore knowledge scan --from-code` | 🟡 |
-| P2 | candidate → official review 流程 | 🟡 |
+| 阶段 | 内容 | 优先级 | 状态 |
+|------|------|:--:|:--:|
+| P0 | 创建 `.speccore/knowledge/` 骨架目录 + ROUTING.md | 🔴 | 待实现 |
+| P0 | `speccore knowledge init` 交互式初始化 | 🔴 | 待实现 |
+| P1 | ask 引擎接入 ROUTING，动态注入知识到 prompt | 🔴 | **已完成**（v6.7.0 改为接入知识图谱） |
+| P1 | retro 自动回补到 candidate/ | 🟡 | 待实现 |
+| P2 | `speccore knowledge scan --from-code` | 🟡 | 部分完成（code-index 已存在） |
+| P2 | candidate → official review 流程 | 🟡 | 待实现 |
+
+## 十、知识图谱实现（v6.5.0 ~ v6.7.0）
+
+> 知识库设计的最初设想是 `.speccore/knowledge/` 人工维护的知识体系，实际落地时先用**知识图谱**（自动从文件系统构建）实现了类似能力。
+
+### 已实现的机制
+
+| 设计目标 | 实现方式 | 版本 |
+|---------|---------|------|
+| 业务知识可检索 | `knowledge-graph.json` 自动扫描需求/规格/任务 | v6.5.0 |
+| 知识关联可路由 | 实体关系：`implements`/`specifies`/`subtask_of`/`depends_on`/`references` | v6.5.0 |
+| Ask 引擎动态注入 | `enrichWithKG()` 在本地引擎后加载图谱匹配实体 | v6.7.0 |
+| 知识过期检测 | `decay-detector.ts` 对比 `integrity.json` 快照 | v6.5.0 |
+| 经验自动回补 | retro → candidate/（设计阶段，待实现） | — |
+
+### 与代码索引的关系
+
+```
+知识图谱（knowledge-graph.ts）          代码索引（code-scanner.ts）
+    │                                        │
+    ├─ 需求实体 REQ-001                      ├─ 源码文件 auth/login.ts
+    ├─ 规格实体 SPEC-001                     ├─ API 路径 /api/auth/login
+    ├─ 任务实体 Task-001                     ├─ 导出函数 validateCredential
+    └─ 关系: Task-001 implements REQ-001     └─ Git: auth 模块常与 user 模块联动
+         │                                        │
+         └────────────── 待打通 ──────────────────┘
+              findRelevantCode() 应优先读图谱关联的代码文件
+```
+
+### 下一步优化
+
+1. **P0**: `findRelevantCode` 接入知识图谱（代码索引 ↔ 知识图谱打通）
+2. **P1**: 分析阶段写入"需求-代码映射"，持久化到知识图谱
+3. **P1**: execute 前代码新鲜度检查，代码变更后自动提示重新分析
+4. **P2**: 函数级代码索引（当前只到文件级）

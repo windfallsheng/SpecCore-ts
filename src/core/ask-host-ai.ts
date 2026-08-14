@@ -175,23 +175,26 @@ export async function tryHostAi(
   logger.info(`🤖 检测到 ${tool.toUpperCase()} 环境，尝试宿主 AI 增强...`);
 
   // 如果 context 包含 formattedContext，优先输出结构化上下文
+  // 宿主 AI（外层 agent）会从 stdout 中读取此标记并做决策
   if (context.formattedContext) {
     process.stdout.write('\n[SPECCORE_AI_CONTEXT]\n');
     process.stdout.write(context.formattedContext);
     process.stdout.write('\n[/SPECCORE_AI_CONTEXT]\n\n');
   }
 
+  // 非 TTY 模式 = AI 调用模式：上下文已输出到 stdout，外层 AI 会直接读取
+  // 不再阻塞等待文件协议（避免 15 秒超时），直接返回 null 让外层 AI 接管
+  if (!process.stdout.isTTY) {
+    logger.info('🤖 AI 调用模式：上下文已推送至 stdout，跳过文件协议阻塞');
+    return null;
+  }
+
+  // TTY 模式（用户在终端直接运行）：尝试文件协议通信
   // WorkBuddy: 两种方式
   if (tool === 'workbuddy') {
-    // 方式1: 文件协议（agent 需要配置监听）
     const fileResult = await askHostAi(type, input, context);
     if (fileResult) return fileResult;
-
-    // 方式2: stdout 标记（agent 从输出流捕获）
-    // 注: 仅在非 TTY 模式下有效（AI 调用模式）
-    if (!process.stdout.isTTY) {
-      emitWorkBuddySignal(type, input, context);
-    }
+    emitWorkBuddySignal(type, input, context);
   }
 
   // TRAE/Qoder: 仅文件协议

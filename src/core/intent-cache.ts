@@ -20,6 +20,8 @@ import type { AskResult } from './ask-engine';
 export interface CachedIntent {
   /** 缓存的输入文本 */
   input: string;
+  /** 归一化后的输入（用于语义级缓存命中） */
+  normalizedInput: string;
   /** 匹配的 AskResult */
   result: AskResult;
   /** 来源：local / host-ai / llm */
@@ -44,9 +46,27 @@ export interface IntentCache {
 // ═══════════════════════════════════════════════════════════
 
 const CACHE_PATH = '.speccore/local/intent-cache.json';
-const CACHE_VERSION = '1.0';
+const CACHE_VERSION = '1.1'; // 升级到 1.1 支持 normalizedInput
 const MAX_ENTRIES = 200;
 const FUZZY_THRESHOLD = 2; // 编辑距离阈值
+
+/** 停用词表 */
+const NORMALIZE_STOP_WORDS = new Set([
+  '的', '与', '和', '及', '在', '中', '对', '为', '是', '有', '从', '到',
+  'the', 'a', 'an', 'and', 'or', 'to', 'of', 'in', 'for', 'on', 'with', 'by',
+  '请', '帮我', '给我', '一下', '一个', '这个', '那个',
+]);
+
+/** 将输入归一化为语义键（去停用词 + 排序） */
+function normalizeInput(input: string): string {
+  const tokens = input
+    .toLowerCase()
+    .replace(/[^\u4e00-\u9fa5a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(t => t.length >= 2 && !NORMALIZE_STOP_WORDS.has(t))
+    .sort();
+  return tokens.slice(0, 6).join('|'); // 取前6个关键词，用 | 分隔
+}
 
 // ═══════════════════════════════════════════════════════════
 // 缓存读写
@@ -84,7 +104,7 @@ async function saveCache(cache: IntentCache): Promise<void> {
 // ═══════════════════════════════════════════════════════════
 
 /**
- * 查询缓存：先精确匹配，再模糊匹配
+ * 查询缓存：精确 → 归一化语义 → 编辑距离模糊
  */
 export async function getCachedIntent(input: string): Promise<AskResult | null> {
   const cache = await loadCache();
@@ -99,7 +119,21 @@ export async function getCachedIntent(input: string): Promise<AskResult | null> 
     return exact.result;
   }
 
-  // 2. 模糊匹配（编辑距离 ≤ 2，且长度比例合理）
+  // 2. 归一化语义匹配（"分析一下登录" ≈ "分析登录功能"）
+  const normalized = normalizeInput(input);
+  if (normalized) {
+    for (const entry of Object.values(cache.entries)) {
+      if (entry.normalizedInput === normalized) {
+        entry.hitCount++;
+        entry.lastUsed = new Date().toISOString();
+        await saveCache(cache);
+        logger.info(`💾 意图缓存命中(语义): "${input.slice(0, 30)}..." ≈ "${entry.input.slice(0, 30)}..."`);
+        return entry.result;
+      }
+    }
+  }
+
+  // 3. 模糊匹配（编辑距离 ≤ 2，且长度比例合理）
   // 防止短字符串误匹配：如"补充测试"匹配"补充分析"（编辑距离 2 但语义完全不同）
   for (const [cachedInput, entry] of Object.entries(cache.entries)) {
     const dist = levenshtein(input, cachedInput);
@@ -127,6 +161,7 @@ export async function cacheIntent(input: string, result: AskResult, source: stri
 
   cache.entries[input] = {
     input,
+    normalizedInput: normalizeInput(input),
     result,
     source,
     hitCount: 1,

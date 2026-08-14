@@ -7,7 +7,7 @@
  *   层级 3: 模糊匹配 — 命令层自动纠错
  */
 
-import { readFile, pathExists, writeFile, ensureDir } from 'fs-extra';
+import { readFile, pathExists, writeFile, ensureDir, readdir } from 'fs-extra';
 import { join } from 'path';
 
 /** 从 CONSTITUTION.md 解析全局端名列表 */
@@ -159,4 +159,58 @@ export async function generatePlatformsRegistry(
   ];
 
   await writeFile(join(sharedDir, 'PLATFORMS.md'), lines.join('\n'), 'utf-8');
+}
+
+/**
+ * 刷新任务级 PLATFORMS.md 状态（execute 完成后调用）
+ * 扫描各端 TASK.md 的实际状态，回写到 PLATFORMS.md 的状态列
+ */
+export async function refreshPlatformsStatus(taskDir: string): Promise<void> {
+  const platformsMd = join(taskDir, '_shared', 'PLATFORMS.md');
+  if (!(await pathExists(platformsMd))) return;
+
+  const content = await readFile(platformsMd, 'utf-8');
+  const lines = content.split('\n');
+  let changed = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.startsWith('|') || line.match(/^\|\s*[-:]/) || line.includes('端名')) continue;
+
+    const cells = line.split('|').map(c => c.trim()).filter(Boolean);
+    if (cells.length < 4) continue;
+
+    const platformName = cells[0];
+    // 找到对应端的 TASK.md，读取实际状态
+    const platformTaskMd = join(taskDir, platformName, 'TASK.md');
+    if (!(await pathExists(platformTaskMd))) continue;
+
+    const taskContent = await readFile(platformTaskMd, 'utf-8');
+    let newStatus = cells[3]; // 保持原状态
+
+    // 精确读取 TASK.md 中的 **状态** 字段，避免整文件关键词误判
+    const statusMatch = taskContent.match(/\*\*状态\*\*\s*[:：]\s*(.+)/m);
+    if (statusMatch) {
+      const rawStatus = statusMatch[1].trim().toLowerCase();
+      if (rawStatus.includes('已完成') || rawStatus.includes('completed') || rawStatus.includes('✅')) {
+        newStatus = '✅ 已完成';
+      } else if (rawStatus.includes('进行中') || rawStatus.includes('in_progress') || rawStatus.includes('🔄')) {
+        newStatus = '🔄 进行中';
+      } else if (rawStatus.includes('未开始') || rawStatus.includes('pending') || rawStatus.includes('🔲')) {
+        newStatus = '🔲 未开始';
+      }
+    }
+
+    if (newStatus !== cells[3]) {
+      // 替换该行的状态列
+      const newCells = [...cells];
+      newCells[3] = newStatus;
+      lines[i] = '| ' + newCells.join(' | ') + ' |';
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    await writeFile(platformsMd, lines.join('\n'), 'utf-8');
+  }
 }

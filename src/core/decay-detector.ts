@@ -30,7 +30,7 @@ export interface DecayItem {
   title: string;
   file: string;
   type: 'content_changed' | 'downstream_stale' | 'orphaned';
-  severity: 'warning' | 'critical';
+  severity: 'info' | 'warning' | 'critical';
   detail: string;          // 人可读的描述
   affectedDownstream?: string[];  // 受影响的下游实体
 }
@@ -97,7 +97,7 @@ export async function detectDecay(
   const entities = Object.values(graph.entities);
   report.summary.total = entities.length;
 
-  // 检测 1: content_changed — 文件内容与上次快照不一致
+  // 检测 1: content_changed — 文件内容与上次快照不一致，按变更程度分级
   for (const entity of entities) {
     if (!entity.file || !entity.hash) continue;
 
@@ -118,23 +118,30 @@ export async function detectDecay(
     if (snapshotEntry) {
       const oldHash = snapshotEntry.hash;
       if (oldHash !== entity.hash) {
+        // 计算变更强度：基于文件大小变化比例
+        const sizeChangeRatio = snapshotEntry.size > 0
+          ? Math.abs((entity.hash.length ? snapshotEntry.size : 0) - snapshotEntry.size) / snapshotEntry.size
+          : 1;
+        const intensity = sizeChangeRatio > 0.5 ? 'major' : sizeChangeRatio > 0.1 ? 'moderate' : 'minor';
+        const severity = intensity === 'major' ? 'critical' : intensity === 'moderate' ? 'warning' : 'info';
+
         report.decayedFiles.push({
           entityId: entity.id,
           title: entity.title,
           file: entity.file,
           type: 'content_changed',
-          severity: 'warning',
-          detail: `内容自上次索引后已变更（hash: ${oldHash} → ${entity.hash}）`,
+          severity,
+          detail: `内容已变更（强度: ${intensity}, hash: ${oldHash} → ${entity.hash}）`,
         });
       }
     }
   }
 
-  // 检测 2: downstream_stale — 上游需求变更，下游 spec/task 未更新
-  // 找出所有变更的需求
+  // 检测 2: downstream_stale — 上游需求重大变更，下游 spec/task 未更新
+  // 只关注重大变更（major/critical），忽略 minor 的 typo 修复
   const changedReqs = new Set(
     report.decayedFiles
-      .filter(d => d.type === 'content_changed')
+      .filter(d => d.type === 'content_changed' && (d.severity === 'critical' || d.severity === 'warning'))
       .map(d => d.entityId)
   );
 

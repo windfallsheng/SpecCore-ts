@@ -140,7 +140,8 @@ export function buildContextMarkdown(
   // ── 4. 当前任务上下文（如果指定了任务） ──
   if (options?.currentTask) {
     const taskContext = getTaskContext(graph, options.currentTask);
-    if (taskContext.requirement || taskContext.parentTask || taskContext.siblingSubtasks.length > 0) {
+    if (taskContext.requirement || taskContext.parentTask || taskContext.siblingSubtasks.length > 0
+        || taskContext.relatedSpecs.length > 0 || taskContext.dependsOn.length > 0) {
       lines.push('## 当前任务关联链');
       lines.push('');
 
@@ -155,6 +156,18 @@ export function buildContextMarkdown(
         for (const sub of taskContext.siblingSubtasks) {
           const current = sub.platform === options.currentPlatform ? ' ⬅ 当前' : '';
           lines.push(`  - ${sub.platform || '?'}: ${statusEmoji(sub.status)} ${sub.title}${current}`);
+        }
+      }
+      if (taskContext.relatedSpecs.length > 0) {
+        lines.push('- **关联规格**:');
+        for (const spec of taskContext.relatedSpecs) {
+          lines.push(`  - ${spec.id}: ${spec.title}`);
+        }
+      }
+      if (taskContext.dependsOn.length > 0) {
+        lines.push('- **依赖任务**:');
+        for (const dep of taskContext.dependsOn) {
+          lines.push(`  - ${dep.id}: ${dep.title}`);
         }
       }
       lines.push('');
@@ -220,6 +233,14 @@ export function buildCompactContext(
       return `${s.platform}:${statusEmoji(s.status)}${current}`;
     });
     lines.push(`各端进度: ${parts.join(' · ')}`);
+  }
+
+  if (taskContext.relatedSpecs.length > 0) {
+    lines.push(`关联规格: ${taskContext.relatedSpecs.map(s => s.id).join(', ')}`);
+  }
+
+  if (taskContext.dependsOn.length > 0) {
+    lines.push(`依赖任务: ${taskContext.dependsOn.map(d => d.id).join(', ')}`);
   }
 
   return lines.length > 0 ? lines.join('\n') : '';

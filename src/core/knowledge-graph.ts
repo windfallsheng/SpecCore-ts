@@ -11,6 +11,7 @@ import { createHash } from 'crypto';
 import { getIterationDir, getDefaultIteration } from './context';
 import { findTaskDir, TASK_TYPES } from './task-paths';
 import { isTimestampBackup } from '../utils/task-utils';
+import { logger } from '../utils/logger';
 
 // ═══════════════════════════════════════════════
 // 类型定义
@@ -398,6 +399,59 @@ async function inferRelations(entities: GraphEntity[], iterDir: string): Promise
     } catch { /* 文件不存在或无法读取，跳过 */ }
   }
 
+  // 任务 → 需求 / 任务 → 规格：读取任务目录下的 REQ.md 和 TECH.md
+  for (const task of tasks) {
+    const taskAbsDir = join(iterDir, task.file);
+    const reqPaths = [
+      join(taskAbsDir, '_shared', 'REQ.md'),
+      join(taskAbsDir, '00-specs', 'REQ.md'),
+      join(taskAbsDir, 'REQ.md'),
+    ];
+    for (const reqPath of reqPaths) {
+      if (!(await pathExists(reqPath))) continue;
+      try {
+        const content = await readFile(reqPath, 'utf-8');
+        // 提取 REQ-xxx 引用 → task implements req
+        const reqRefs = content.match(/REQ-\d+/g);
+        if (reqRefs) {
+          for (const ref of [...new Set(reqRefs)]) {
+            if (entityMap.has(ref) && !relations.some(r => r.from === task.id && r.to === ref && r.type === 'implements')) {
+              relations.push({ from: task.id, to: ref, type: 'implements' });
+            }
+          }
+        }
+        // 提取 SPEC:xxx 引用 → task references spec
+        const specRefs = content.match(/SPEC:[\w\/\-]+/g);
+        if (specRefs) {
+          for (const ref of [...new Set(specRefs)]) {
+            if (entityMap.has(ref) && !relations.some(r => r.from === task.id && r.to === ref && r.type === 'references')) {
+              relations.push({ from: task.id, to: ref, type: 'references' });
+            }
+          }
+        }
+      } catch { /* 跳过 */ }
+      break; // 只读第一个存在的
+    }
+
+    // 读取 API_CONTRACT.yaml 解析依赖
+    const contractPath = join(taskAbsDir, '_shared', 'API_CONTRACT.yaml');
+    if (await pathExists(contractPath)) {
+      try {
+        const content = await readFile(contractPath, 'utf-8');
+        // 提取依赖的任务引用: dependsOn: Task-xxx 或 # Depends on Task-xxx
+        const depRefs = content.match(/(?:dependsOn|depends on|依赖)\s*[:：]\s*(Task-\S+)/gi);
+        if (depRefs) {
+          for (const raw of depRefs) {
+            const m = raw.match(/(Task-\S+)/i);
+            if (m && entityMap.has(m[1]) && !relations.some(r => r.from === task.id && r.to === m![1] && r.type === 'depends_on')) {
+              relations.push({ from: task.id, to: m[1], type: 'depends_on' });
+            }
+          }
+        }
+      } catch { /* 跳过 */ }
+    }
+  }
+
   return relations;
 }
 
@@ -429,7 +483,7 @@ export async function buildKnowledgeGraph(
   const taskResult = await scanTasks(iterDir);
   const userFiles = await scanUserFiles(iterDir);
 
-  // 合并实体
+  // 合并实体（处理 ID 冲突：同名实体用路径前缀去重）
   const allEntities = [
     ...reqResult.entities,
     ...specResult.entities,
@@ -437,8 +491,22 @@ export async function buildKnowledgeGraph(
     ...userFiles,
   ];
 
+  const idRemap = new Map<string, string>();
   for (const e of allEntities) {
+    let finalId = e.id;
+    if (graph.entities[e.id]) {
+      finalId = `${e.id}@${e.file.replace(/\//g, '-')}`;
+      idRemap.set(e.id, finalId);
+    }
+    e.id = finalId;
     graph.entities[e.id] = e;
+  }
+
+  // 同步更新已有关系中的旧 ID
+  const remapId = (id: string) => idRemap.get(id) || id;
+  for (const r of [...reqResult.relations, ...specResult.relations, ...taskResult.relations]) {
+    r.from = remapId(r.from);
+    r.to = remapId(r.to);
   }
 
   // 合并关系
@@ -488,23 +556,42 @@ export function getTaskContext(graph: KnowledgeGraph, taskId: string): {
   requirement: GraphEntity | null;
   siblingSubtasks: GraphEntity[];
   parentTask: GraphEntity | null;
+  relatedSpecs: GraphEntity[];
+  dependsOn: GraphEntity[];
 } {
   const entity = graph.entities[taskId];
   if (!entity) {
-    return { requirement: null, siblingSubtasks: [], parentTask: null };
+    return { requirement: null, siblingSubtasks: [], parentTask: null, relatedSpecs: [], dependsOn: [] };
   }
 
   let requirement: GraphEntity | null = null;
   let parentTask: GraphEntity | null = null;
-  const siblingSubtasks: GraphEntity[] = [];
+  const relatedSpecs: GraphEntity[] = [];
+  const dependsOn: GraphEntity[] = [];
 
-  // 找上游需求（直接 implements 或通过父任务间接关联）
-  for (const rel of graph.relations) {
-    if (rel.from === taskId && rel.type === 'implements') {
-      requirement = graph.entities[rel.to] || null;
+  // 预建索引：避免多次遍历全量关系
+  const parentIndex = new Map<string, GraphEntity[]>();
+  for (const e of Object.values(graph.entities)) {
+    if (e.type === 'subtask' && e.parentTaskId) {
+      const list = parentIndex.get(e.parentTaskId) || [];
+      list.push(e);
+      parentIndex.set(e.parentTaskId, list);
     }
-    if (rel.from === taskId && rel.type === 'subtask_of') {
-      parentTask = graph.entities[rel.to] || null;
+  }
+
+  // 找上游需求、关联规格、依赖任务
+  for (const rel of graph.relations) {
+    if (rel.from === taskId) {
+      if (rel.type === 'implements') requirement = graph.entities[rel.to] || null;
+      if (rel.type === 'references') {
+        const spec = graph.entities[rel.to];
+        if (spec) relatedSpecs.push(spec);
+      }
+      if (rel.type === 'depends_on') {
+        const dep = graph.entities[rel.to];
+        if (dep) dependsOn.push(dep);
+      }
+      if (rel.type === 'subtask_of') parentTask = graph.entities[rel.to] || null;
     }
   }
 
@@ -518,44 +605,49 @@ export function getTaskContext(graph: KnowledgeGraph, taskId: string): {
     }
   }
 
-  // 如果是子任务，找兄弟子任务
+  // 如果是子任务，找兄弟子任务（用索引，O(1)）
+  const siblingSubtasks: GraphEntity[] = [];
   const parentId = entity.parentTaskId || parentTask?.id;
   if (parentId) {
-    for (const e of Object.values(graph.entities)) {
-      if (e.type === 'subtask' && e.parentTaskId === parentId) {
-        siblingSubtasks.push(e);
-      }
-    }
+    const siblings = parentIndex.get(parentId);
+    if (siblings) siblingSubtasks.push(...siblings);
   }
 
-  return { requirement, siblingSubtasks, parentTask };
+  return { requirement, siblingSubtasks, parentTask, relatedSpecs, dependsOn };
 }
 
 // ═══════════════════════════════════════════════
 // 自动更新机制
 // ═══════════════════════════════════════════════
 
-/** 递归获取目录下所有文件的最新 mtime */
-async function getLatestMtime(dir: string): Promise<number> {
+/**
+ * 递归获取目录下所有文件的最新 mtime
+ * 限制：每个目录最多检查 MAX_FILES_PER_DIR 个文件，避免大型项目阻塞
+ */
+const MAX_FILES_PER_DIR = 100;
+
+async function getLatestMtime(dir: string, fileCount: { value: number } = { value: 0 }): Promise<number> {
   if (!(await pathExists(dir))) return 0;
   let latest = 0;
   const items = await readdir(dir, { withFileTypes: true });
   for (const item of items) {
     if (item.name.startsWith('.') || isTimestampBackup(item.name)) continue;
+    if (fileCount.value >= MAX_FILES_PER_DIR) break;
     const fullPath = join(dir, item.name);
     const st = await stat(fullPath);
     if (item.isDirectory()) {
       if (item.name === 'node_modules' || item.name === 'cache') continue;
-      const subLatest = await getLatestMtime(fullPath);
+      const subLatest = await getLatestMtime(fullPath, fileCount);
       if (subLatest > latest) latest = subLatest;
     } else {
+      fileCount.value++;
       if (st.mtimeMs > latest) latest = st.mtimeMs;
     }
   }
   return latest;
 }
 
-/** 检查知识图谱是否已过期 */
+/** 检查知识图谱是否已过期（带 500ms 超时保护） */
 export async function isGraphStale(cwd: string, iteration?: string): Promise<boolean> {
   const graph = await loadKnowledgeGraph(cwd);
   if (!graph) return true; // 不存在视为过期
@@ -574,7 +666,13 @@ export async function isGraphStale(cwd: string, iteration?: string): Promise<boo
   ];
 
   for (const dir of dirsToCheck) {
+    // 超时保护：单目录扫描超过 200ms 就放弃
+    const start = Date.now();
     const latestMtime = await getLatestMtime(dir);
+    if (Date.now() - start > 200) {
+      logger.debug(`isGraphStale: ${dir} 扫描超时，假设未过期`);
+      continue;
+    }
     if (latestMtime > graphTime) return true;
   }
 

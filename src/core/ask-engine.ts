@@ -10,6 +10,7 @@ import { tryHostAi } from './ask-host-ai';
 import { loadAskConfig } from './ask-config';
 import { getCachedIntent, cacheIntent } from './intent-cache';
 import { buildAskContext, formatContextForHostAi } from './ask-context';
+import { loadKnowledgeGraph, GraphEntity } from './knowledge-graph';
 
 // ============================================================
 // 类型定义
@@ -1071,6 +1072,9 @@ export async function askEngine(input: string): Promise<AskResult> {
       localResult = await handleMatch(input);
   }
 
+  // 知识图谱语义增强：如果本地引擎匹配到需要 task 的命令但缺少参数，尝试从图谱补全
+  localResult = await enrichWithKG(localResult, input);
+
   // 计算本地置信度（explain/guide/pipeline 视为高置信度）
   // KB 匹配成功（含同义词表）给予较高基础分，避免误路由到宿主 AI
   const hasKbMatch = localResult.commands.length > 0 && localResult.mode === 'match' && !localResult.summary.includes('未识别');
@@ -1135,6 +1139,109 @@ export async function askEngine(input: string): Promise<AskResult> {
 
   // ── 兜底 ── 所有AI路径都失败，返回本地结果
   return localResult;
+}
+
+// ═══════════════════════════════════════════════════════════
+// 知识图谱语义增强：把用户输入中的任务/需求描述映射到图谱实体
+// ═══════════════════════════════════════════════════════════
+
+const STOP_WORDS = new Set(['的', '与', '和', '及', '在', '中', '对', '为', '是', '有', '从', '到', 'the', 'a', 'an', 'and', 'or', 'to', 'of', 'in', 'for', 'on', 'with']);
+
+/** 从输入中提取有意义的查询词 */
+function extractQueryTokens(input: string): string[] {
+  return input
+    .toLowerCase()
+    .replace(/[^\u4e00-\u9fa5a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(t => t.length >= 2 && !STOP_WORDS.has(t));
+}
+
+/** 计算两个字符串的相似分 (0-1) */
+function similarityScore(queryTokens: string[], title: string): number {
+  const lowerTitle = title.toLowerCase();
+  let hits = 0;
+  for (const t of queryTokens) {
+    if (lowerTitle.includes(t)) hits++;
+  }
+  return queryTokens.length > 0 ? hits / queryTokens.length : 0;
+}
+
+/**
+ * 尝试从知识图谱中匹配用户输入引用的任务或需求
+ * 返回最佳匹配的实体 ID 和类型
+ */
+async function tryMatchEntityFromKG(
+  input: string
+): Promise<{ id: string; type: string; title: string; score: number } | null> {
+  try {
+    const graph = await loadKnowledgeGraph(process.cwd());
+    if (!graph || Object.keys(graph.entities).length === 0) return null;
+
+    // 优先检查是否直接提及了实体 ID（如 Task-001, REQ-001）
+    const idMatch = input.match(/(?:Task|REQ)-\d+/i);
+    if (idMatch) {
+      const exactId = idMatch[0];
+      const entity = graph.entities[exactId];
+      if (entity) {
+        return { id: entity.id, type: entity.type, title: entity.title, score: 1.0 };
+      }
+    }
+
+    const queryTokens = extractQueryTokens(input);
+    if (queryTokens.length === 0) return null;
+
+    let best: { id: string; type: string; title: string; score: number } | null = null;
+
+    for (const entity of Object.values(graph.entities)) {
+      // 只关注 task / requirement / spec
+      if (!['task', 'subtask', 'requirement', 'spec'].includes(entity.type)) continue;
+
+      const score = similarityScore(queryTokens, entity.title);
+      if (score >= 0.5 && (!best || score > best.score)) {
+        best = { id: entity.id, type: entity.type, title: entity.title, score };
+      }
+    }
+
+    return best;
+  } catch {
+    return null;
+  }
+}
+
+/** 判断命令是否需要 task 参数 */
+function commandNeedsTask(command: string): boolean {
+  return ['execute', 'analyze', 'plan', 'track', 'pr', 'done', 'change', 'task-create'].includes(command);
+}
+
+/** 将知识图谱匹配结果注入到 AskResult 中 */
+async function enrichWithKG(
+  result: AskResult,
+  input: string
+): Promise<AskResult> {
+  if (result.mode !== 'match' || result.commands.length === 0) return result;
+  const primaryCommand = result.commands[0];
+  if (!commandNeedsTask(primaryCommand)) return result;
+
+  // 如果已经有 task 参数，不重复注入
+  const hasTaskParam = result.autoExec?.args?.includes('--task') || result.autoExec?.args?.includes('-t');
+  if (hasTaskParam) return result;
+
+  const match = await tryMatchEntityFromKG(input);
+  if (!match || match.score < 0.6) return result;
+
+  const taskArg = match.type === 'subtask' ? match.id.split('-').slice(0, 2).join('-') : match.id;
+  const newArgs = result.autoExec?.args ? `${result.autoExec.args} --task ${taskArg}` : `--task ${taskArg}`;
+
+  logger.info(`🔗 知识图谱增强: "${input.slice(0, 30)}..." → ${match.id}(${match.title})`);
+
+  return {
+    ...result,
+    summary: `${result.summary} (KG: ${match.id})`,
+    detail: result.detail + `\n\n🔗 知识图谱匹配: ${match.id} — ${match.title}`,
+    autoExec: result.autoExec
+      ? { ...result.autoExec, args: newArgs }
+      : { command: primaryCommand, args: newArgs, confirm: true },
+  };
 }
 
 // ═══════════════════════════════════════════════════════════

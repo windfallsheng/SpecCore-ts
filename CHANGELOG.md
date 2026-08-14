@@ -1,3 +1,52 @@
+## v6.7.0 (2026-08-14) — 知识图谱深度集成 + 意图缓存增强 + 宿主AI协议优化
+
+### 核心架构增强
+
+- **Ask 引擎接入知识图谱**: `ask-engine.ts` 新增 `tryMatchEntityFromKG()` + `enrichWithKG()`
+  - 本地引擎结果后自动加载 `knowledge-graph.json`，优先匹配 `Task-xxx`/`REQ-xxx` 实体 ID
+  - 对 title 做关键词相似度匹配（≥0.6 命中），命令需要 task 参数且缺失时自动注入 `--task <id>`
+  - 解决知识图谱"建而不用"的核心架构断层
+- **宿主 AI 协议可用化**: `ask-host-ai.ts` 非 TTY 模式输出上下文后直接返回，不再阻塞 15 秒等待文件协议
+  - AI agent 调用 `speccore ask` 时，上下文通过 `[SPECCORE_AI_CONTEXT]` 标记输出到 stdout 后直接接管
+- **意图缓存归一化**: `intent-cache.ts` 升级到 v1.1
+  - 新增 `normalizedInput` 字段：去停用词 → 排序 → 取前 6 个词拼接
+  - 第二层"归一化语义匹配"：同义不同形的输入也能命中缓存
+  - 解决意图缓存"同义不同形"无法命中的问题
+
+### 知识图谱加固
+
+- **实体 ID 冲突去重**: `buildKnowledgeGraph()` 中用路径前缀作为 fallback ID，不同文件的同名实体自动区分
+  - 冲突时生成 `${e.id}@${e.file.replace(/\//g, '-')}` 唯一 ID
+- **关系推断扩展**: `inferRelations()` 新增三类推断
+  - 任务目录下 `_shared/REQ.md` → 需求(`implements`)
+  - `SPEC:xxx` 引用 → 规格(`references`)
+  - `API_CONTRACT.yaml` → `depends_on`
+- **getTaskContext 索引优化**: 预建 `parentTaskId` Map，兄弟子任务查找从 O(n) 降至 O(1)
+  - 返回类型新增 `relatedSpecs` 和 `dependsOn` 字段
+- **isGraphStale 性能优化**: `MAX_FILES_PER_DIR = 100` 限制扫描文件数 + 单目录 200ms 超时保护
+  - 解决大项目下 prompt 构建被阻塞的问题
+
+### 衰减检测增强
+
+- **变更程度分级**: `decay-detector.ts` severity 扩展为 `info | warning | critical`
+  - minor（改注释/格式化）→ info，不触发 downstream_stale
+  - moderate（改逻辑/加字段）→ warning
+  - major（改接口/删表）→ critical
+  - 解决 typo 修复误报 downstream_stale 的问题
+
+### 上下文构建增强
+
+- **taskContext 增强**: `context-builder.ts` 的 `buildCompactContext()` 和 `buildContextMarkdown()`
+  - 新增"关联规格"输出：`relatedSpecs.map(s => s.id)`
+  - 新增"依赖任务"输出：`dependsOn.map(d => d.id)`
+
+### 平台注册表精确化
+
+- **refreshPlatformsStatus 精确化**: `platform-registry.ts` 从全文关键词搜索改为精确正则匹配 `**状态**:` 字段
+  - 只判断状态字段值，不再因正文中出现"已完成"等词而误判
+
+---
+
 ## v6.6.0 (2026-08-14) — 知识库系统全面修复（13 项问题修复）
 
 ### P0 严重修复

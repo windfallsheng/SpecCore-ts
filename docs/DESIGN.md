@@ -548,6 +548,8 @@ speccore retro --all --type bugfix    ← 按类型
 ```
 精确匹配 ──→ 相同输入直接命中返回
     │
+归一化匹配 ──→ 去停用词+排序后的语义匹配（v1.1 新增）
+    │
 模糊匹配 ──→ 编辑距离 ≤2 也命中（容错拼写错误）
     │
 命中统计 ──→ 记录命中次数、最后使用时间
@@ -555,7 +557,15 @@ speccore retro --all --type bugfix    ← 按类型
 缓存固化 ──→ 命中次数 ≥ cacheMinHits (默认3) 视为高频意图，持久化到磁盘
 ```
 
+**缓存版本**: v1.1（新增归一化语义匹配层）
+
 缓存文件：`.speccore/local/intent-cache.json`
+
+**归一化策略（v1.1）**：
+- 提取输入中的实词（去停用词：`的`、`了`、`the`、`and` 等）
+- 按字母/拼音排序后取前 6 个词，用 `|` 拼接为 `normalizedInput`
+- 示例：`"帮我分析一下登录需求"` → `"分析|登录|需求"`
+- 示例：`"分析下登录的需求"` → `"分析|登录|需求"`（同一归一化键，命中同一缓存）
 
 #### 5.7.4 Rich Context 构建器
 
@@ -567,8 +577,14 @@ speccore retro --all --type bugfix    ← 按类型
 | **项目阶段** | 当前生命周期（init/plan/execute/done） | AI 知道该推荐什么命令 |
 | **活跃迭代** | 当前上下文中的 iteration + task | 精准定位操作目标 |
 | **历史命令** | 最近 10 条命令的时间序列 | 行为模式推断 |
+| **知识图谱关联** | 当前 task 的上游需求、兄弟子任务、依赖任务 | AI 理解任务在全局中的位置 |
 
 输出标记：`[SPECCORE_AI_CONTEXT]...[/SPECCORE_AI_CONTEXT]`
+
+**宿主AI协议（非TTY优化）**：
+- TTY 模式：输出标记后等待 15 秒文件协议响应（供人工终端使用）
+- 非TTY模式（AI Agent）：输出 `[SPECCORE_AI_CONTEXT]` 标记后直接返回，不阻塞等待文件协议
+- AI Agent 可直接从 stdout 提取上下文，接管后续决策
 
 #### 5.7.5 多 LLM 冗余路由（默认禁用）
 
@@ -806,8 +822,16 @@ speccore schedule cancel --id <id>
 | v5.81.1 | 08-12 | 文档补充：command-reference/commands.en init引导页说明 |
 | v5.82.0 | 08-12 | update/init命令输出改进：版本相同明确提示 + 消除重复代码 |
 | v5.83.0 | 08-12 | --force模式自动备份：.speccore/ + Iteration-*/ + inbox/ + questions/ |
+| v6.0.0 | 08-14 | 全局知识库 TOC 全覆盖：PATTERNS + RULES + PROJECTS + 扁平文件 |
+| v6.1.0 | 08-14 | 任务目录结构重构：_shared/ + 按端嵌套 + 子任务命名 |
+| v6.2.0 | 08-14 | 子任务发现与筛选：scanTasks 展开各端 + 按端/责任人过滤 |
+| v6.3.0 | 08-14 | 端注册表 + 模糊匹配 + 按端分析 |
+| v6.4.0 | 08-14 | 全量索引重建与一致性检查（reindex 命令） |
+| v6.5.0 | 08-14 | 知识图谱 + 衰减检测 + AI 关联链注入 |
+| v6.6.0 | 08-14 | 知识库系统全面修复（13 项问题修复） |
+| v6.7.0 | 08-14 | 知识图谱深度集成 + 意图缓存增强 + 宿主AI协议优化 |
 
-> **最后更新**: 2026-08-12 (v5.83.0) — --force 模式自动备份重要数据
+> **最后更新**: 2026-08-14 (v6.7.0) — 知识图谱深度集成 + 意图缓存增强
 
 ---
 
@@ -1171,4 +1195,64 @@ execute --prompt 执行前:
 - **问题**: KB 匹配成功但意图识别为空时，置信度默认 55，被路由到宿主 AI；同义词匹配时 `recognizeIntent` 只给 32%，拖低整体置信度
 - **修复**: KB 匹配成功给予 **75** 基础分（高分区），用 `Math.max()` 确保同义词匹配的置信度不被低分拖塾
 - **效果**: 同义词匹配本地直接执行，不触发宿主 AI 调用，消除 15 秒超时
+
+---
+
+### 2026-08-14 知识图谱深度集成 + 系统加固
+
+#### 1. Ask 引擎知识图谱增强层
+- **位置**: `src/core/ask-engine.ts`
+- **架构**: 在本地引擎结果之后、计算置信度之前，插入 `enrichWithKG()` 调用
+- **功能**:
+  - `tryMatchEntityFromKG()`: 加载 `knowledge-graph.json`，优先精确匹配实体 ID（`Task-xxx`/`REQ-xxx`），其次对 title 做关键词相似度匹配（≥0.6 命中）
+  - `enrichWithKG()`: 当命令需要 task 参数且缺失时，调用 KG 匹配并注入 `--task <id>` 到 `autoExec.args`
+  - `commandNeedsTask()`: 白名单判断哪些命令需要 task 参数（execute/analyze/validate/verify/trace 等）
+- **效果**: 解决知识图谱"建而不用"的核心架构断层，用户说"执行登录任务"时自动推断出 Task-001
+
+#### 2. 宿主 AI 协议非TTY优化
+- **位置**: `src/core/ask-host-ai.ts`
+- **问题**: AI Agent 调用 `speccore ask` 时，`tryHostAi()` 输出上下文后阻塞 15 秒等待文件协议响应，但 AI Agent 不会写那个文件
+- **修复**: 非 TTY 模式下输出 `[SPECCORE_AI_CONTEXT]` 标记后直接返回 `null`，不再阻塞
+- **效果**: AI Agent 可直接从 stdout 提取上下文并接管，消除 15 秒无效等待
+
+#### 3. 意图缓存归一化（v1.1）
+- **位置**: `src/core/intent-cache.ts`
+- **新增字段**: `CachedIntent.normalizedInput: string`
+- **归一化算法**: `normalizeInput()` 去停用词 → 排序 → 取前 6 个词用 `|` 拼接
+- **匹配层级**: 精确匹配 → 归一化语义匹配 → 模糊匹配（编辑距离≤2）
+- **效果**: `"分析登录需求"` 和 `"分析下登录的需求"` 共享同一缓存条目
+
+#### 4. 知识图谱实体 ID 去重
+- **位置**: `src/core/knowledge-graph.ts` → `buildKnowledgeGraph()`
+- **问题**: 不同文件可能生成相同 ID（如两个目录下的 `REQ-001`），后写入覆盖前者
+- **修复**: 用 `idRemap` Map 检测冲突，冲突时生成 `${e.id}@${e.file.replace(/\//g, '-')}` 唯一 ID，并同步重写所有关系的 from/to
+
+#### 5. 关系推断扩展
+- **位置**: `src/core/knowledge-graph.ts` → `inferRelations()`
+- **新增推断**:
+  - 任务目录下 `_shared/REQ.md` → 建立 `implements` 关系到对应需求
+  - 规格文件中 `SPEC:xxx` 引用 → 建立 `references` 关系
+  - `API_CONTRACT.yaml` 存在 → 建立 `depends_on` 关系到任务
+
+#### 6. 衰减检测变更程度分级
+- **位置**: `src/core/decay-detector.ts`
+- **severity 扩展**: `'warning' | 'critical'` → `'info' | 'warning' | 'critical'`
+- **分级逻辑**: 按文件大小变化比例判断
+  - `sizeChangeRatio > 0.5` → major → critical
+  - `sizeChangeRatio > 0.1` → moderate → warning
+  - 其他 → minor → info
+- **效果**: typo 修复、注释修改不再误报 downstream_stale，只有实质性变更才触发级联警告
+
+#### 7. 代码索引 ↔ 知识图谱打通（设计阶段）
+- **当前状态**: `findRelevantCode()` 与知识图谱完全脱节，关键词匹配粗糙
+- **已识别缺口**:
+  - 知识图谱已知道 `REQ-001 → SPEC-001 → Task-001`，但 `findRelevantCode` 完全不用
+  - 关键词提取无停用词过滤、无语义扩展
+  - Git 联动数据（共同变更模块）完全闲置
+  - 缺少 Spec→代码 正向映射（只有代码→Spec 的 `@spec` 反向同步）
+- **优化方向（P0）**:
+  1. `findRelevantCode` 优先加载知识图谱中关联的代码文件（通过 `@spec` 注释或分析阶段映射）
+  2. 关键词增加停用词过滤 + 语义扩展映射（`login` ↔ `auth`/`authentication`）
+  3. execute 前增加代码新鲜度检查，代码变更后提示重新分析
+  4. 衰减检测推断影响范围：代码变了 → 哪些 Task/Spec 受影响
 
