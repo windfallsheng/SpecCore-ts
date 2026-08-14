@@ -13,6 +13,8 @@ import { join, relative, dirname, basename } from 'path';
 import { execSync } from 'child_process';
 import { logger } from '../utils/logger';
 import { extractAnnotations, buildModuleGroups, matchModule, discoverProjectRoots } from './spec-annotations';
+import { loadKnowledgeGraph, KnowledgeGraph } from './knowledge-graph';
+import { scanCodeForSpecAnnotations } from './reverse-sync';
 
 // ── 数据结构 ──
 
@@ -252,15 +254,21 @@ function extractApis(content: string, lang: string): string[] {
 
 /**
  * 根据需求内容查找匹配的源码文件（解耦设计：从完整索引中按 scope 筛选）
- * 
- * v2 增强:
+ *
+ * v3 增强:
  *   - 端配额：每个 endpoint 最多占 limit 的 40%，保证多端多样性
  *   - API 契约：加载 API_CONTRACT.yaml，命中契约路径的文件加分
+ *   - 知识图谱：传入 iteration/taskId 时优先加载 KG 关联的代码文件
+ *   - @spec 关联：扫描代码中的 @spec 注释，命中 taskId 的文件加分
+ *   - Git 联动：命中了常一起变更的文件组，联动文件也加分
+ *   - 语义扩展：关键词自动扩展同义词
  */
 export async function findRelevantCode(
   requirements: string,
   limit: number = 10,
-  scope?: string  // 查询时过滤：如 'src/commands,src/core'
+  scope?: string,           // 查询时过滤：如 'src/commands,src/core'
+  iteration?: string,       // 迭代名（用于加载知识图谱）
+  taskId?: string,          // 任务 ID（用于 KG 关联 + @spec 扫描）
 ): Promise<{ file: string; exports: string[]; apis: string[]; score: number }[]> {
   const index = await loadIndex();
   if (!index) return [];
@@ -271,6 +279,45 @@ export async function findRelevantCode(
     ? index.files.filter(f => scopeDirs.some(dir => f.path.startsWith(dir)))
     : index.files;
 
+  // ── P0: 加载知识图谱关联 ──
+  let kgBoostedFiles = new Set<string>();
+  let kgTaskIds = new Set<string>();
+  if (iteration) {
+    const kg = await loadKnowledgeGraph(process.cwd());
+    if (kg && taskId) {
+      // 1. 当前任务直接关联
+      kgTaskIds.add(taskId);
+      // 2. 依赖任务也纳入
+      for (const rel of kg.relations) {
+        if (rel.from === taskId && rel.type === 'depends_on') {
+          kgTaskIds.add(rel.to);
+        }
+      }
+    }
+  }
+
+  // ── P0: 扫描 @spec 注释，找到关联的代码文件 ──
+  let specAnnotatedFiles = new Map<string, number>(); // filePath -> score boost
+  if (taskId) {
+    for (const srcDir of ['src', 'app', 'lib', 'pkg', 'packages', 'server', 'client']) {
+      if (!(await pathExists(srcDir))) continue;
+      try {
+        const refs = await scanCodeForSpecAnnotations(srcDir);
+        for (const ref of refs) {
+          // 支持 Task-001 匹配 Task-001-user-login-backend-a3f2（前缀匹配）
+          if (ref.taskId === taskId || ref.taskId.startsWith(taskId + '-')) {
+            specAnnotatedFiles.set(ref.file, 50);
+          }
+          // 依赖任务的代码也加分（低一些）
+          if (kgTaskIds.has(ref.taskId) || ref.taskId.startsWith([...kgTaskIds].find(t => ref.taskId.startsWith(t + '-')) || '___')) {
+            const existing = specAnnotatedFiles.get(ref.file) || 0;
+            specAnnotatedFiles.set(ref.file, Math.max(existing, 30));
+          }
+        }
+      } catch { /* 扫描失败不阻断 */ }
+    }
+  }
+
   // ── L3: 加载 API 契约路径（用于加分） ──
   const contractApis = await loadContractApiPaths();
 
@@ -279,6 +326,13 @@ export async function findRelevantCode(
 
   for (const f of filesToSearch) {
     let score = 0;
+
+    // P0: 知识图谱 / @spec 关联加分（最高优先级）
+    const specBoost = specAnnotatedFiles.get(f.path);
+    if (specBoost) {
+      score += specBoost;
+    }
+
     // 文件名匹配
     for (const kw of keywords) {
       if (f.path.toLowerCase().includes(kw.toLowerCase())) score += 10;
@@ -303,7 +357,45 @@ export async function findRelevantCode(
         if (cp.toLowerCase().includes(kw.toLowerCase())) score += 3;
       }
     }
+
+    // P0: Git 联动加分 — 如果命中了文件 A，且 A 常和 B/C 一起改，B/C 也加分
+    if (score > 0 && index.correlations) {
+      for (const corr of index.correlations) {
+        const filesInCorr = corr.files || [];
+        if (filesInCorr.some(name => f.path.includes(name))) {
+          for (const related of filesInCorr) {
+            if (!f.path.includes(related)) {
+              // 给相关模块的文件额外加分（在后续遍历中处理）
+            }
+          }
+        }
+      }
+    }
+
     if (score > 0) scored.push({ file: f, score });
+  }
+
+  // P0: Git 联动 — 给相关文件加 bonus（第二轮遍历）
+  if (index.correlations && index.correlations.length > 0) {
+    const topFiles = new Set(scored.slice(0, 3).map(s => s.file.path));
+    const bonusScores = new Map<string, number>();
+    for (const corr of index.correlations) {
+      const filesInCorr = corr.files || [];
+      if (filesInCorr.some(name => [...topFiles].some(tf => tf.includes(name)))) {
+        for (const related of filesInCorr) {
+          for (const sf of filesToSearch) {
+            if (sf.path.includes(related) && !topFiles.has(sf.path)) {
+              bonusScores.set(sf.path, (bonusScores.get(sf.path) || 0) + 10);
+            }
+          }
+        }
+      }
+    }
+    // 把 bonus 加到已评分的文件上
+    for (const s of scored) {
+      const bonus = bonusScores.get(s.file.path);
+      if (bonus) s.score += bonus;
+    }
   }
 
   // ── L2: 端配额 — 每端最多占 limit 的 40%，保证多端多样性 ──
@@ -402,11 +494,158 @@ export async function readRelevantSource(
   return result;
 }
 
-async function loadIndex(): Promise<CodeIndex | null> {
+export async function loadCodeIndex(): Promise<CodeIndex | null> {
   if (await pathExists(INDEX_PATH)) {
     return JSON.parse(await readFile(INDEX_PATH, 'utf-8'));
   }
   return null;
+}
+
+// 兼容旧调用
+async function loadIndex(): Promise<CodeIndex | null> {
+  return loadCodeIndex();
+}
+
+/**
+ * 检查代码索引新鲜度
+ * 返回：{ fresh: boolean; indexAge: number; sourceAge: number; staleFiles: string[] }
+ *   - fresh: 索引是否新鲜（源码无更新，或更新在索引之后）
+ *   - indexAge: 索引更新时间戳
+ *   - sourceAge: 源码最新修改时间戳
+ *   - staleFiles: 索引后修改过的文件列表（最多10个）
+ */
+export async function checkCodeIndexFreshness(
+  scope?: string[]
+): Promise<{ fresh: boolean; indexAge: number; sourceAge: number; staleFiles: string[]; message: string }> {
+  const index = await loadCodeIndex();
+  const indexAge = index ? new Date(index.updatedAt).getTime() : 0;
+
+  const dirs = scope && scope.length > 0 ? scope : DEFAULT_SCOPE;
+  let sourceAge = 0;
+  const staleFiles: string[] = [];
+
+  for (const dir of dirs) {
+    if (!(await pathExists(dir))) continue;
+    try {
+      const files = await findSourceFiles(dir);
+      for (const f of files) {
+        try {
+          const st = await stat(f);
+          if (st.mtimeMs > sourceAge) sourceAge = st.mtimeMs;
+          if (indexAge > 0 && st.mtimeMs > indexAge + 60000) { // 1分钟容差
+            staleFiles.push(f);
+          }
+        } catch {}
+      }
+    } catch {}
+  }
+
+  // 如果没有索引，认为不新鲜
+  if (!index) {
+    return {
+      fresh: false,
+      indexAge: 0,
+      sourceAge,
+      staleFiles,
+      message: '代码索引不存在，请先运行: speccore code-index',
+    };
+  }
+
+  // 如果源码有更新且比索引新
+  const threshold = 5 * 60 * 1000; // 5分钟容差
+  if (sourceAge > indexAge + threshold) {
+    return {
+      fresh: false,
+      indexAge,
+      sourceAge,
+      staleFiles: staleFiles.slice(0, 10),
+      message: `代码索引已过期（索引: ${new Date(indexAge).toLocaleString()}, 源码最新: ${new Date(sourceAge).toLocaleString()}），建议先运行: speccore code-index`,
+    };
+  }
+
+  return {
+    fresh: true,
+    indexAge,
+    sourceAge,
+    staleFiles: [],
+    message: '代码索引新鲜',
+  };
+}
+
+/** 递归查找源码文件 */
+async function findSourceFiles(dir: string): Promise<string[]> {
+  const results: string[] = [];
+  const codeExts = ['.ts', '.tsx', '.js', '.jsx', '.java', '.py', '.go', '.vue', '.rb', '.php', '.cs'];
+
+  async function scan(d: string): Promise<void> {
+    const entries = await readdir(d, { withFileTypes: true });
+    for (const e of entries) {
+      const p = join(d, e.name);
+      if (e.isDirectory()) {
+        if (e.name.startsWith('.') || e.name === 'node_modules' || e.name === 'dist' || e.name === 'build') continue;
+        await scan(p);
+      } else if (codeExts.some(ext => e.name.endsWith(ext))) {
+        results.push(p);
+      }
+    }
+  }
+
+  await scan(dir);
+  return results;
+}
+
+// ── 关键词提取增强: 停用词过滤 + 语义扩展 ──
+
+const STOP_WORDS = new Set([
+  // 中文停用词
+  '功能', '实现', '需要', '进行', '一个', '可以', '使用', '通过', '根据', '按照',
+  '对于', '关于', '以及', '或者', '并且', '但是', '如果', '然后', '最后', '如下',
+  // 英文停用词
+  'the', 'and', 'for', 'with', 'from', 'this', 'that', 'are', 'was', 'were',
+  'been', 'have', 'has', 'had', 'does', 'did', 'will', 'would', 'could', 'should',
+  'shall', 'may', 'might', 'must', 'can', 'need', 'used', 'using', 'based',
+]);
+
+const SEMANTIC_MAP: Record<string, string[]> = {
+  'login': ['auth', 'authentication', 'signin', 'session', 'credential', 'token'],
+  'auth': ['login', 'authentication', 'session', 'credential', 'token', 'jwt'],
+  'user': ['account', 'profile', 'member', 'person', 'customer'],
+  'order': ['purchase', 'transaction', 'payment', 'cart', 'checkout'],
+  'payment': ['pay', 'order', 'transaction', 'checkout', 'billing'],
+  'product': ['goods', 'item', 'sku', 'spu', 'merchandise'],
+  'inventory': ['stock', 'warehouse', 'storage', 'reserve'],
+  'notification': ['message', 'push', 'alert', 'remind', 'notice'],
+  'report': ['statistics', 'analytics', 'dashboard', 'metrics', 'chart'],
+  'config': ['setting', 'configuration', 'preference', 'option'],
+  'upload': ['file', 'import', 'batch', 'excel', 'csv'],
+  'export': ['download', 'output', 'report', 'excel', 'csv'],
+  'search': ['query', 'filter', 'find', 'lookup', 'retrieve'],
+  'validate': ['verify', 'check', 'confirm', 'authentication'],
+  'cache': ['redis', 'memory', 'store', 'buffer', 'ttl'],
+  'queue': ['mq', 'message', 'kafka', 'rabbitmq', 'producer', 'consumer'],
+  '日志': ['log', 'record', 'trace', 'audit', '监控'],
+  '监控': ['monitor', 'alert', 'metric', 'observability', '日志'],
+  '权限': ['auth', 'role', 'rbac', 'acl', 'access', '授权'],
+  '认证': ['login', 'auth', 'sso', 'oauth', 'jwt', 'token'],
+};
+
+function expandKeywords(keywords: string[]): string[] {
+  const expanded = new Set(keywords);
+  for (const kw of keywords) {
+    const lower = kw.toLowerCase();
+    if (SEMANTIC_MAP[lower]) {
+      for (const syn of SEMANTIC_MAP[lower]) {
+        expanded.add(syn);
+      }
+    }
+    // 反向查找：如果语义映射的值中包含当前词，也加入其同义词
+    for (const [key, syns] of Object.entries(SEMANTIC_MAP)) {
+      if (syns.includes(lower) && !expanded.has(key)) {
+        expanded.add(key);
+      }
+    }
+  }
+  return [...expanded];
 }
 
 function extractKeywords(text: string): string[] {
@@ -416,7 +655,14 @@ function extractKeywords(text: string): string[] {
   keywords.push(...cn);
   const en = text.match(/\b[a-zA-Z]{3,}\b/g) || [];
   keywords.push(...en);
-  return [...new Set(keywords)].slice(0, 15);
+
+  // 停用词过滤
+  const filtered = [...new Set(keywords)].filter(k => !STOP_WORDS.has(k.toLowerCase()));
+
+  // 语义扩展
+  const expanded = expandKeywords(filtered);
+
+  return expanded.slice(0, 20);
 }
 
 /**

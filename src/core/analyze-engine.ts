@@ -295,7 +295,7 @@ async function analyzeCombined(input: AnalyzeInput): Promise<AnalysisResult> {
   if (shouldReadSource) {
     const limit = input.depth === 'deep' ? 20 : (input.depth === 'quick' ? 5 : 10);
     const maxBytes = input.depth === 'deep' ? 120000 : (input.depth === 'quick' ? 30000 : 60000);
-    const rawMatches = await findRelevantCode(fullReqContent, limit, input.sourceScope);
+    const rawMatches = await findRelevantCode(fullReqContent, limit, input.sourceScope, input.iteration, input.taskId);
     sourceContents = await readRelevantSource(rawMatches, maxBytes);
     if (Object.keys(sourceContents).length > 0) {
       const scopeHint = input.sourceScope ? ` (范围: ${input.sourceScope})` : '';
