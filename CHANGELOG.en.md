@@ -2,6 +2,18 @@
 
 ---
 
+## v6.2.0 (2026-08-14) — Sub-task Discovery & Filtering: scanTasks Expansion + Platform/Assignee Filter
+
+- **`scanTasks` restructured**: Auto-discover per-platform sub-tasks, expand to independent TaskState
+  - New structure: Scan `{platform}/TASK.md`, extract sub-task ID, assignee, status
+  - Backward compatible: Fall back to parent task level when no sub-tasks
+  - TaskState adds `platform` and `parentTaskId` fields
+- **`--platform` filter enhanced**: Supports new `{platform}/` + legacy `frontend/{platform}/`
+- **`--assignee` filter**: Now correctly matches per-platform sub-task owners
+- **TASK.md path compatibility**: `_shared/TASK.md` → `00-specs/TASK.md` fallback
+
+---
+
 ## v6.1.1 (2026-08-14) — Sub-task Naming Rule: Full Parent Task Name
 
 - **Sub-task ID format change**: From `Task-{number}-{platform}-{hash}` to `Task-{full-parent-name}-{platform}-{hash}`
