@@ -13,6 +13,7 @@ import { loadSpecRules, generateImports, SpecRules, loadTechStack } from '../cor
 import { logOperation } from '../core/operation-log';
 import { showNextSteps } from '../core/next-steps';
 import { extractQuestions, showQuestionChecklist } from '../core/question-checklist';
+import { resolvePlatform } from '../core/platform-registry';
 import { savePlan, markPlanExecuted, getPlan, ExecutionPlan } from '../core/plan-store';
 import { generatePlan, formatPlanMarkdown } from './plan';
 import { generatePlanHtml } from '../core/plan-html';
@@ -130,7 +131,19 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
     if (options.assignee) tasks = tasks.filter(t => t.assignee === options.assignee);
     if (options.backend) tasks = tasks.filter(t => t.id.includes('backend'));
     if (options.frontend) tasks = tasks.filter(t => t.id.includes('frontend'));
-    if (options.platform) tasks = await filterByPlatform(tasks, iteration, options.platform);
+    if (options.platform) {
+      // 模糊匹配端名
+      const resolved = await resolvePlatform(options.platform);
+      if (resolved.error) {
+        logger.error(`❌ ${resolved.error}`);
+        return;
+      }
+      if (!resolved.exact) {
+        logger.info(`📍 --platform ${options.platform} → 匹配 ${resolved.resolved}`);
+      }
+      options.platform = resolved.resolved!;
+      tasks = await filterByPlatform(tasks, iteration, options.platform);
+    }
 
     if (tasks.length === 0) {
       logger.warn('No tasks match the specified filters');

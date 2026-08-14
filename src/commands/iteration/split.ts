@@ -9,6 +9,7 @@ import { backupWithTimestamp } from '../../utils/task-utils';
 import { showNextSteps } from '../../core/next-steps';
 import { createInterface } from 'readline';
 import { buildPrompt, formatPrompt } from '../../core/prompt-builder';
+import { generatePlatformsRegistry } from '../../core/platform-registry';
 
 /** 将名称转为目录安全的短 slug（2-4 词） */
 function slugify(name: string): string {
@@ -1098,6 +1099,14 @@ ${apiDesc}
       await writeFile(join(platformDir, 'STYLE_GUIDE.md'), generateStyleGuide(section, platform));
     }
   }
+
+  // ── 生成端注册表 _shared/PLATFORMS.md ──
+  const platformEntries = taskPlatforms.map((p: string) => ({
+    name: p,
+    subtaskId: generateSubtaskId(taskNum, p),
+    owner,
+  }));
+  await generatePlatformsRegistry(taskDir, taskId, platformEntries);
 
   // 确保至少有 backend 目录
   if (!taskPlatforms.some((p: string) => p === 'backend' || p.startsWith('后台'))) {

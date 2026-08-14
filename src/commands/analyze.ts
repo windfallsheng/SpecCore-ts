@@ -24,6 +24,7 @@ import { readFile, readdir } from 'fs-extra';
 import { generateGlobalArtifacts } from '../core/global-artifacts';
 import { buildPrompt, formatPrompt } from '../core/prompt-builder';
 import { buildAutoModeInstruction } from '../core/questions';
+import { resolvePlatform } from '../core/platform-registry';
 
 export interface AnalyzeOptions {
   iteration?: string;
@@ -32,6 +33,7 @@ export interface AnalyzeOptions {
   interactive?: boolean;
   task?: string;
   type?: string;   // 任务类型: feature|bugfix|refactor|...
+  platform?: string; // 指定端: backend/web/admin/...
   // NEW options (CLI passes comma-separated strings)
   source?: string;
   requirements?: string;
@@ -46,6 +48,19 @@ export interface AnalyzeOptions {
 }
 
 export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
+  // 模糊匹配端名
+  if (options.platform) {
+    const resolved = await resolvePlatform(options.platform);
+    if (resolved.error) {
+      logger.error(`❌ ${resolved.error}`);
+      return;
+    }
+    if (!resolved.exact) {
+      logger.info(`📍 --platform ${options.platform} → 匹配 ${resolved.resolved}`);
+    }
+    options.platform = resolved.resolved!;
+  }
+
   // 备份追踪
   const backups: string[] = [];
   const printBackupSummary = () => {
@@ -150,7 +165,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
   // ── Prompt 模式 ──
   if (options.prompt) {
     const iter = options.iteration || await getDefaultIteration();
-    const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task, type: options.type, scope: options.scope, withCode: options.withCode });
+    const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task, type: options.type, scope: options.scope, withCode: options.withCode, platform: options.platform });
     process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
     process.exitCode = 10;
     return;
@@ -176,8 +191,9 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         let count = 0;
 
         if (isTaskLevel && taskDir) {
-          // 任务级：写 Task/_shared/，不动 020-specs/（保持迭代级基线不变）
-          const taskSpecDir = join(taskDir, '_shared');
+          // 任务级：写 Task/{platform}/ 或 Task/_shared/
+          const targetSubDir = options.platform || '_shared';
+          const taskSpecDir = join(taskDir, targetSubDir);
           await ensureDir(taskSpecDir);
           for (const [filename, content] of Object.entries(docs)) {
             const fp = join(taskSpecDir, filename);
@@ -190,7 +206,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
             await writeFile(fp, content);
             count++;
           }
-          logger.success(`✅ ${count} 个 Spec 文档已写入 ${options.task}/_shared/（任务级，迭代基线不变）`);
+          const platformLabel = options.platform ? `/${options.platform}` : '';
+          logger.success(`✅ ${count} 个 Spec 文档已写入 ${options.task}${platformLabel}/（任务级，迭代基线不变）`);
         } else {
           // 迭代级：写 020-specs/
           const specDir = join(iterDir, '020-specs');
@@ -217,8 +234,9 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 
     // 单文件模式
     if (isTaskLevel && taskDir) {
-      // 任务级：写 Task/_shared/
-      const taskSpecDir = join(taskDir, '_shared');
+      // 任务级：写 Task/{platform}/ 或 Task/_shared/
+      const targetSubDir = options.platform || '_shared';
+      const taskSpecDir = join(taskDir, targetSubDir);
       await ensureDir(taskSpecDir);
       const taskAnalysisPath = join(taskSpecDir, 'ANALYSIS.md');
       if (await shouldOverwrite(taskAnalysisPath, !!options.interactive)) {
@@ -228,7 +246,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
           logger.info(`   📦 旧版已备份: ${taskBackup.split('/').pop()}`);
         }
         await writeFile(taskAnalysisPath, options.apply);
-        logger.success(`✅ ANALYSIS.md 已写入 ${options.task}/_shared/`);
+        const platformLabel = options.platform ? `/${options.platform}` : '';
+        logger.success(`✅ ANALYSIS.md 已写入 ${options.task}${platformLabel}/`);
       } else { logger.info(`   ⏭️  用户取消覆盖`); }
     } else {
       // 迭代级：写 020-specs/
@@ -257,7 +276,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
   // ── Prompt 模式 ──
   if (options.prompt) {
     const iter = options.iteration || await getDefaultIteration();
-    const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task, type: options.type, scope: options.scope, withCode: options.withCode });
+    const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task, type: options.type, scope: options.scope, withCode: options.withCode, platform: options.platform });
     process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
     process.exitCode = 10;
     return;
@@ -444,6 +463,7 @@ function parseArgv(options: AnalyzeOptions): void {
   const strFlags: [string[], (v: string) => void][] = [
     [['--iteration', '-i', '-I'], (v) => { options.iteration = v; }],
     [['--task', '-t'], (v) => { options.task = v; }],
+    [['--platform'], (v) => { options.platform = v; }],
     [['--scope'], (v) => { options.scope = v as any; }],
     [['--src', '--source'], (v) => { options.source = v; }],
     [['--req', '--requirements'], (v) => { options.requirements = v; }],
@@ -469,7 +489,7 @@ function parseArgv(options: AnalyzeOptions): void {
 }
 
 // ── buildMultiDocPrompt: 多文档协议 ──
-async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; task?: string; type?: string; scope?: string; withCode?: boolean }): Promise<string> {
+async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; task?: string; type?: string; scope?: string; withCode?: boolean; platform?: string }): Promise<string> {
   const iter = ctx.iteration || '当前迭代';
   const task = ctx.task ? ` — ${ctx.task}` : '';
   const taskType = ctx.type || 'feature';
@@ -690,7 +710,12 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     prompt += `- bugfix: 聚焦根因分析和修复验证；research: 聚焦技术调研；review: 聚焦代码审查\n`;
     prompt += `- feature/refactor: 全量分析（功能、接口、数据、规则）\n`;
     prompt += `- **双层解耦**：先读 \`020-specs/\` 了解迭代级基线，再读 \`_shared/REQ.md\` 了解本任务已有的需求切片\n`;
-    prompt += `- 分析结果写入 \`_shared/\`（任务独立），**不覆盖** \`020-specs/\`（迭代基线）\n`;
+    if (ctx.platform) {
+      prompt += `- **只分析 ${ctx.platform} 端**：只关注 ${ctx.platform} 端的需求/技术/测试，分析结果写入 \`${ctx.platform}/\` 目录\n`;
+      prompt += `- **不要修改**其他端的内容，只写入 \`${ctx.platform}/\` 目录\n`;
+    } else {
+      prompt += `- 分析结果写入 \`_shared/\`（任务独立），**不覆盖** \`020-specs/\`（迭代基线）\n`;
+    }
   } else {
     prompt += `- 当前是**迭代级分析**，需产出全部 7 个文档，覆盖需求→技术→测试→评审→风险→依赖→监控\n`;
   }
@@ -712,7 +737,8 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
   prompt += `3. 读懂需求文档后，按专业模板标准自由撰写每个文档（不是填空表）\n`;
   prompt += `4. 每个文档都要具体内容（禁止"待填充"），分析完成后支持交互编辑任意文档的任意章节\n`;
   const taskFlag = isTask && ctx.task ? ` --task ${ctx.task}` : '';
-  prompt += `5. 写入: speccore analyze --apply '{"${taskDocs.map(([n]) => `${n}:"..."`).join(',')}...}' -I ${iter}${taskFlag}\n\n`;
+  const platformFlag = ctx.platform ? ` --platform ${ctx.platform}` : '';
+  prompt += `5. 写入: speccore analyze --apply '{"${taskDocs.map(([n]) => `${n}:"..."`).join(',')}...}' -I ${iter}${taskFlag}${platformFlag}\n\n`;
   prompt += '\n' + buildAutoModeInstruction('analyze', iter) + '\n';
   for (let i = 0; i < taskDocs.length; i++) {
     prompt += `### ${i+1}/${taskDocs.length}: ${taskDocs[i][0]}\n\`\`\`markdown\n${taskDocs[i][1]}\n\`\`\`\n\n`;
