@@ -17,6 +17,11 @@
   - 执行前自动检查 `code-structure.json` 索引是否过期
   - 对比源码最新 mtime 与索引 updatedAt，5 分钟容差
   - 过期时警告并列出最近修改的文件，提示运行 `speccore code-index`
+- **需求分析默认关联代码**: `analyze-engine.ts`
+  - `analyzeRequirements` 默认调用 `findRelevantCode` 读取关联源码（`readSource !== false`）
+  - 利用知识图谱 + 语义扩展，根据需求内容自动匹配相关代码文件
+  - 报告新增「关联代码现状」章节，展示代码预览供技术方案参考
+  - 避免"分析只看文档、执行又重复读代码"的 token 浪费
 
 ### 衰减检测影响链推断（P0-4）
 

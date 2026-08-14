@@ -165,6 +165,20 @@ async function analyzeRequirements(input: AnalyzeInput): Promise<AnalysisResult>
   const issues = scanCompleteness(fullContent);
   const archImpact = await analyzeArchitectureImpact(fullContent);
 
+  // ── 需求分析时默认读取关联代码（避免分析不接地气 + 减少重复 token 消耗） ──
+  let sourceContents: Record<string, string> = {};
+  const shouldReadSource = input.readSource !== false;
+  if (shouldReadSource && (input.iteration || input.taskId)) {
+    const limit = input.depth === 'deep' ? 15 : (input.depth === 'quick' ? 3 : 8);
+    const maxBytes = input.depth === 'deep' ? 80000 : (input.depth === 'quick' ? 20000 : 40000);
+    const rawMatches = await findRelevantCode(fullContent, limit, input.sourceScope, input.iteration, input.taskId);
+    sourceContents = await readRelevantSource(rawMatches, maxBytes);
+    if (Object.keys(sourceContents).length > 0) {
+      const scopeHint = input.sourceScope ? ` (范围: ${input.sourceScope})` : '';
+      logger.info(`   📖 需求分析已关联 ${Object.keys(sourceContents).length} 个源码文件${scopeHint}`);
+    }
+  }
+
   let outputPath: string;
   let report: string;
 
@@ -174,12 +188,12 @@ async function analyzeRequirements(input: AnalyzeInput): Promise<AnalysisResult>
   } else if (input.scope === 'task') {
     // task scope — 已在入口校验
     outputPath = join(`Iteration-${input.iteration}`, '030-tasks', input.taskId!, '00-specs', input.output || 'ANALYSIS.md');
-    report = buildTaskReqReport(input, issues, archImpact);
+    report = buildTaskReqReport(input, issues, archImpact, sourceContents);
   } else {
     // iteration (default)
     const iterDir = `Iteration-${input.iteration || 'current'}`;
     outputPath = join(iterDir, '020-specs', input.output || 'ANALYSIS.md');
-    report = buildIterationReqReport(input, issues, archImpact);
+    report = buildIterationReqReport(input, issues, archImpact, sourceContents);
 
     // 按端分目录输出
     await writePerPlatform(iterDir, report, input.output || 'ANALYSIS.md');
@@ -191,7 +205,7 @@ async function analyzeRequirements(input: AnalyzeInput): Promise<AnalysisResult>
     summary: {
       issues: issues.length,
       blockers: issues.filter(i => i.severity === 'blocker').length,
-      filesAnalyzed: input.requirements.length,
+      filesAnalyzed: input.requirements.length + Object.keys(sourceContents).length,
       apisFound: archImpact.apis?.length || 0,
       risks: archImpact.risks?.length || 0,
     },
@@ -801,7 +815,8 @@ function buildReqConsistencyReport(
 function buildIterationReqReport(
   input: AnalyzeInput,
   issues: Issue[],
-  archImpact: ArchImpact
+  archImpact: ArchImpact,
+  sourceContents?: Record<string, string>,
 ): string {
   const now = new Date().toISOString().split('T')[0];
   const iter = input.iteration || 'current';
@@ -843,6 +858,16 @@ function buildIterationReqReport(
   for (const rk of archImpact.risks) r += `- [ ] ${rk}\n`;
   if (archImpact.newDependencies.length > 0) r += `- [ ] 确认新增依赖的引入方案和排期\n`;
 
+  // ── 代码关联分析（v6.8.0 新增：需求分析默认关联代码） ──
+  if (sourceContents && Object.keys(sourceContents).length > 0) {
+    r += `\n---\n\n## 3.5 关联代码现状\n\n`;
+    r += `> 以下源码文件与当前需求相关，供技术方案参考\n\n`;
+    for (const [path, content] of Object.entries(sourceContents)) {
+      const preview = content.slice(0, 600).replace(/\n/g, '\n  ');
+      r += `### \`${path}\`\n\n\`\`\`${path.split('.').pop() || 'ts'}\n${preview}${content.length > 600 ? '\n  // ... 截断 ...' : ''}\n\`\`\`\n\n`;
+    }
+  }
+
   r += `\n---\n\n## 4. 技术方案（待填写）\n\n`;
   r += `| 模块 | 技术方案 | 负责人 | 预计工时 |\n| :--- | :--- | :--- | :--- |\n| | | | |\n\n`;
   r += `### 数据库变更\n| 表名 | 变更类型 | 说明 |\n| :--- | :--- | :--- |\n| | | |\n\n`;
@@ -855,7 +880,8 @@ function buildIterationReqReport(
 function buildTaskReqReport(
   input: AnalyzeInput,
   issues: Issue[],
-  archImpact: ArchImpact
+  archImpact: ArchImpact,
+  sourceContents?: Record<string, string>,
 ): string {
   const now = new Date().toISOString().split('T')[0];
   let r = `# 任务需求分析\n\n`;
@@ -867,6 +893,17 @@ function buildTaskReqReport(
     r += `\n## 风险\n`;
     for (const rk of archImpact.risks) r += `- ⚠️ ${rk}\n`;
   }
+
+  // ── 代码关联分析（v6.8.0 新增） ──
+  if (sourceContents && Object.keys(sourceContents).length > 0) {
+    r += `\n## 关联代码\n\n`;
+    r += `> 以下源码与当前任务相关\n\n`;
+    for (const [path, content] of Object.entries(sourceContents)) {
+      const preview = content.slice(0, 400).replace(/\n/g, '\n  ');
+      r += `- **\`${path}\`**\n\n  \`\`\`${path.split('.').pop() || 'ts'}\n  ${preview}${content.length > 400 ? '\n  // ... 截断 ...' : ''}\n  \`\`\`\n\n`;
+    }
+  }
+
   return r;
 }
 
