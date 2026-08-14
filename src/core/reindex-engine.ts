@@ -346,7 +346,7 @@ async function rebuildGlobalIndex(cwd: string, files: FileEntry[]): Promise<stri
     lines.push('');
     for (const f of dirFiles) {
       const name = f.path.split('/').pop()!.replace('.md', '');
-      const desc = getFileDescription(join(globalDir, f.path));
+      const desc = await extractFileDescription(join(globalDir, f.path));
       lines.push(`- \`${f.path}\` — ${desc || name}`);
     }
     lines.push('');
@@ -378,7 +378,7 @@ async function rebuildSpecsIndex(iterDir: string, files: FileEntry[]): Promise<s
     if (f.path === 'INDEX.md') continue;
     // 跳过 platforms/ 子目录（它们有自己的索引）
     const name = f.path.split('/').pop()!.replace('.md', '');
-    const desc = getFileDescription(join(specsDir, f.path));
+    const desc = await extractFileDescription(join(specsDir, f.path));
     const sizeStr = f.size > 1024 ? `${(f.size / 1024).toFixed(1)}KB` : `${f.size}B`;
     lines.push(`| \`${f.path}\` | ${desc || name} | ${sizeStr} |`);
   }
@@ -391,9 +391,9 @@ async function rebuildSpecsIndex(iterDir: string, files: FileEntry[]): Promise<s
 
 /** 从文件内容提取简要描述（取第一个 # 标题或前 60 字符） */
 function getFileDescription(filePath: string): string {
-  // 这个函数是同步的简化版，实际从文件内容提取
-  // 在重建索引时，用文件名作为 fallback
-  return '';
+  // 同步版本：从文件名提取
+  const name = filePath.split('/').pop()?.replace('.md', '') || '';
+  return name;
 }
 
 /** 从文件内容异步提取描述 */

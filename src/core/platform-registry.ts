@@ -11,8 +11,9 @@ import { readFile, pathExists, writeFile, ensureDir } from 'fs-extra';
 import { join } from 'path';
 
 /** 从 CONSTITUTION.md 解析全局端名列表 */
-export async function parseGlobalPlatforms(): Promise<string[]> {
-  const constitutionPath = join('.speccore', 'CONSTITUTION.md');
+export async function parseGlobalPlatforms(cwd?: string): Promise<string[]> {
+  const base = cwd || process.cwd();
+  const constitutionPath = join(base, '.speccore', 'CONSTITUTION.md');
   if (!(await pathExists(constitutionPath))) return [];
 
   const content = await readFile(constitutionPath, 'utf-8');
@@ -104,13 +105,13 @@ export function fuzzyMatchPlatform(input: string, validPlatforms: string[]): { m
  * 2. 模糊匹配用户输入
  * 3. 返回结果或错误信息
  */
-export async function resolvePlatform(input: string): Promise<{
+export async function resolvePlatform(input: string, cwd?: string): Promise<{
   resolved: string | null;
   exact: boolean;
   candidates: string[];
   error?: string;
 }> {
-  const globalPlatforms = await parseGlobalPlatforms();
+  const globalPlatforms = await parseGlobalPlatforms(cwd);
 
   if (globalPlatforms.length === 0) {
     return { resolved: input, exact: true, candidates: [] };

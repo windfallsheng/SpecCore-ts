@@ -2,6 +2,27 @@
 
 ---
 
+## v6.6.0 (2026-08-14) — Knowledge Base System Comprehensive Fix (13 issues)
+
+### P0 Critical Fixes
+- **Subtask context chain**: `getTaskContext()` now follows subtask_of → parent → implements to find upstream requirements
+- **Staleness detection**: `isGraphStale()` now recursively scans file mtimes instead of directory mtime
+- **Decay detection paths**: Added basename fallback matching for path format inconsistencies
+
+### P1 Important Fixes
+- **Requirement ID uniqueness**: Path-based fallback ID prevents entity collision
+- **Spec→requirement relations**: `inferRelations()` now reads spec file content to extract REQ-xxx references
+- **Iteration design docs visibility**: `loadExtraSpecs()` loads 020-specs/DESIGN.md into AI prompt
+- **Platform registry**: Added cwd parameter to `parseGlobalPlatforms()`/`resolvePlatform()`
+- **Context builder**: `saveContextMarkdown()` uses `getIterationDir()` for consistent paths
+- **Reindex engine**: `getFileDescription()` now calls `extractFileDescription()` for real titles
+
+### P2 Other Fixes
+- **Task paths**: `getTaskPath()`/`getTasksRoot()` accept cwd parameter
+- **Timestamp backup filtering**: Knowledge graph scans now filter timestamp backup files
+
+---
+
 ## v6.5.1 (2026-08-14) — Auto Knowledge Graph Update
 
 - **Lazy loading**: prompt-builder auto-detects stale graph and rebuilds on-the-fly

@@ -1,3 +1,31 @@
+## v6.6.0 (2026-08-14) — 知识库系统全面修复（13 项问题修复）
+
+### P0 严重修复
+- **子任务关联链修复**: `getTaskContext()` 子任务现在能通过父任务找到上游需求
+  - 之前: execute --task Task-001-web-a1b2 → 看不到上游需求 ❌
+  - 现在: 自动沿 subtask_of → parent → implements 链路找到 REQ-001 ✅
+- **过期检测修复**: `isGraphStale()` 改为递归扫描文件 mtime
+  - 之前: 用目录 mtime，修改文件内容不触发更新 ❌
+  - 现在: 递归检查所有文件的最新 mtime ✅
+- **衰减检测路径修复**: 增加 basename 回退匹配，应对路径格式不一致
+
+### P1 重要修复
+- **需求 ID 唯一性**: 用路径前缀作为 fallback ID，避免不同文件覆盖同一实体
+- **spec→需求关联**: `inferRelations()` 现在读取 spec 文件内容提取 REQ-xxx 引用
+  - 之前: spec 关联推断什么都没做 ❌
+  - 现在: 自动建立 spec → requirement 的 `specifies` 关系 ✅
+- **迭代级设计文档可见**: `loadExtraSpecs()` 加载 020-specs/DESIGN.md 到 AI prompt
+  - 填补了迭代层上下文断裂（断裂 1 + 断裂 4）
+- **platform-registry**: `parseGlobalPlatforms()`/`resolvePlatform()` 加 cwd 参数
+- **context-builder**: `saveContextMarkdown()` 改用 `getIterationDir()` 保证路径一致
+- **reindex-engine**: `getFileDescription()` 改为调用 `extractFileDescription()` 提取真实标题
+
+### P2 其他修复
+- **task-paths**: `getTaskPath()`/`getTasksRoot()` 支持 cwd 参数，不再硬编码 process.cwd()
+- **时间戳备份过滤**: 知识图谱扫描时过滤时间戳备份文件（需求目录 + 平台子目录）
+
+---
+
 ## v6.5.1 (2026-08-14) — 知识图谱自动更新机制
 
 - **懒加载**: prompt-builder 加载图谱时自动检测过期，过期则自动重建
