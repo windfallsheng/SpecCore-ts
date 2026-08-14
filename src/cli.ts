@@ -29,6 +29,7 @@ import { helpCommand } from './commands/help';
 import { devCommand } from './commands/dev';
 import { welcomeCommand } from './commands/welcome';
 import { statusPanelCommand } from './commands/status-panel';
+import { knowledgeCommand } from './commands/knowledge';
 import { doc2specCommand } from './commands/doc2spec';
 import { spec2docCommand } from './commands/spec2doc';
 import { registerCodeIndexCommand } from './commands/code-index';
@@ -154,6 +155,14 @@ program
   .alias('sp')
   .description('→ dashboard（同一命令）')
   .action((opts: any) => statusPanelCommand(opts));
+
+program
+  .command('knowledge')
+  .alias('kg')
+  .description('知识图谱可视化：交互式图谱 + 衰减检测 + RAG 上下文预览')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('--export <path>', 'Export HTML to custom path')
+  .action(knowledgeCommand);
 
 program
   .command('dev')
