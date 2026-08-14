@@ -1143,6 +1143,14 @@ ${apiDesc}
     }
   }
 
+  // 确保至少有 backend 目录（AI 未输出 backend 时自动补充）
+  if (!taskPlatforms.some((p: string) => p === 'backend' || p.startsWith('后台'))) {
+    await ensureDir(join(taskDir, 'backend', 'src'));
+    await ensureDir(join(taskDir, 'backend', 'tests'));
+    taskPlatforms.push('backend');
+    subtaskIdMap.set('backend', `${taskId}-backend-auto`);
+  }
+
   // ── 生成端注册表 _shared/PLATFORMS.md ──
   const platformEntries = taskPlatforms.map((p: string) => ({
     name: p,
@@ -1150,12 +1158,6 @@ ${apiDesc}
     owner,
   }));
   await generatePlatformsRegistry(taskDir, taskId, platformEntries);
-
-  // 确保至少有 backend 目录
-  if (!taskPlatforms.some((p: string) => p === 'backend' || p.startsWith('后台'))) {
-    await ensureDir(join(taskDir, 'backend', 'src'));
-    await ensureDir(join(taskDir, 'backend', 'tests'));
-  }
 
   // ── 5. 执行产出 99-artifacts/ ──
   await ensureDir(join(taskDir, '99-artifacts'));
