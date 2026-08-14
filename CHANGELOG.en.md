@@ -2,6 +2,20 @@
 
 ---
 
+## v6.0.1 (2026-08-14) — TOC Entry Enhancement: Summary/Platforms/LineCount/Tags
+
+- **`TOCEntry` interface enhanced**: Added 4 new fields
+  - `summary` — First paragraph summary (≤200 chars)
+  - `platforms` — Involved platforms (auto-detected from path/content)
+  - `lineCount` — File line count (helps AI estimate reading cost)
+  - `tags` — Keyword tags (extracted from ## headings, stop words removed)
+- **New extraction functions**: `extractSummary()` / `extractPlatforms()` / `extractTags()`
+- **New `buildTOCEntry()`**: Unified TOC entry builder, avoids code duplication
+- **New `formatTOCEntry()`**: Formats single TOC entry with all enhanced fields
+- **AI decision support**: Tags for semantic matching, platforms for relevance, lineCount for cost estimation
+
+---
+
 ## v6.0.0 (2026-08-14) — Global Knowledge Base TOC Full Coverage: PATTERNS + RULES + PROJECTS + Flat Files
 
 - **`buildGlobalTOC()` expanded**: From 2 directories to 6 sources

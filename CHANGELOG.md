@@ -1,3 +1,17 @@
+## v6.0.1 (2026-08-14) — TOC 条目增强：摘要/端/行数/标签
+
+- **`TOCEntry` 接口增强**: 新增 4 个字段
+  - `summary` — 首段摘要（标题后第一段非空内容，≤200字）
+  - `platforms` — 涉及的端列表（从路径/内容自动推断）
+  - `lineCount` — 文件行数（AI 判断阅读成本）
+  - `tags` — 关键词标签（从 ## 标题提取核心词，去停用词）
+- **新增提取函数**: `extractSummary()` / `extractPlatforms()` / `extractTags()`
+- **新增 `buildTOCEntry()`**: 统一构建 TOC 条目，避免重复代码
+- **新增 `formatTOCEntry()`**: 格式化单个 TOC 条目（含所有增强字段）
+- **AI 决策辅助**: 标签帮语义匹配、端标记帮判断相关性、行数帮估算阅读成本
+
+---
+
 ## v6.0.0 (2026-08-14) — 全局知识库 TOC 全覆盖：PATTERNS + RULES + PROJECTS + 扁平文件
 
 - **`buildGlobalTOC()` 扩展**: 从 2 个目录扩展到 6 个来源
