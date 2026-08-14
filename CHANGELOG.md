@@ -1,3 +1,13 @@
+## v5.96.1 (2026-08-14) — synthesize 目录组织优化
+
+- Phase 1 输出: `per-platform/` → `platforms/`（按端分目录）
+- Phase 2 输出: 散落文件 → `synthesis/` 子目录（CROSS_PLATFORM.md + ARCHITECTURE.md + TECH_FULL.md）
+- 新增 `snapshots/` 目录：Phase 2 重复执行时旧版自动归档
+- Phase 2 apply 支持解析 `===MARKER===` 分隔标记，写入独立文件
+- Phase 1/3 读取逻辑适配新目录结构
+
+---
+
 ## v5.96.0 (2026-08-14) — synthesize 多端全量分析与合成（三阶段全自动流程）
 
 - **Phase 1: 逐端分析** — 读取 CONSTITUTION 工程列表，各端独立生成 specs
