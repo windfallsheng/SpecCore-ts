@@ -814,7 +814,7 @@ async function generateGlobalIndex(globalDir: string): Promise<void> {
     for (const entry of entries) {
       if (entry.isDirectory()) {
         const files = await readdir(join(platformsDir, entry.name));
-        const mdFiles = files.filter(f => f.endsWith('.md'));
+        const mdFiles = files.filter(f => f.endsWith('.md') && !isTimestampBackup(f));
         lines.push(`- **${entry.name}** (${mdFiles.length} 个文档)`);
       }
     }
@@ -825,9 +825,8 @@ async function generateGlobalIndex(globalDir: string): Promise<void> {
   if (await pathExists(synthesisDir)) {
     lines.push(`## 跨端综合文档\n`);
     const files = await readdir(synthesisDir);
-    for (const f of files.filter(f => f.endsWith('.md'))) {
+    for (const f of files.filter(f => f.endsWith('.md') && !isTimestampBackup(f))) {
       const content = await readFile(join(synthesisDir, f), 'utf-8');
-      // 取第一个 ## 章节作为摘要
       const firstSection = content.match(/##\s+(.+)/);
       lines.push(`- **${f}**${firstSection ? ` — ${firstSection[1]}` : ''}`);
     }

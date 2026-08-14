@@ -2,6 +2,16 @@
 
 ---
 
+## v5.99.2 (2026-08-14) — Verification Fixes + Design Doc Update
+
+- **Fix**: `buildGlobalTOC()` filters timestamp backup files (`isTimestampBackup`)
+- **Fix**: `generateGlobalIndex()` also filters backup files
+- **Fix**: `buildPrompt()` global context condition (skip empty section)
+- **Fix**: `readdir` changed from dynamic import to top-level import (Node 16 compat)
+- **Docs**: `spec-layers.md` fully updated, new Layer 0 global knowledge base + smart injection
+
+---
+
 ## v5.99.1 (2026-08-14) — Global Knowledge Base as TOC Directory: AI Decides What to Read
 
 - **Refactor GlobalContext**: From pre-fetched content to TOC directory structure (`TOCEntry` interface)

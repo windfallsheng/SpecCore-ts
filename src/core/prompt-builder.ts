@@ -6,8 +6,9 @@
  * 
  * 架构: CLI(确定性) → stdout(Prompt) → AI(生成) → CLI(确定性写入)
  */
-import { readFile, pathExists } from 'fs-extra';
+import { readFile, pathExists, readdir } from 'fs-extra';
 import { join } from 'path';
+import { isTimestampBackup } from '../utils/task-utils';
 
 // ═══════════════════════════════════════════════════════════
 // 类型定义
@@ -312,14 +313,13 @@ function extractHeadings(content: string): string[] {
  * 只读 ## 标题行，不读正文，非常轻量
  */
 async function buildGlobalTOC(globalDir: string): Promise<TOCEntry[]> {
-  const { readdir } = await import('fs-extra');
   const toc: TOCEntry[] = [];
 
   // 1. synthesis/ 下的综合文档
   const synthesisDir = join(globalDir, 'synthesis');
   if (await pathExists(synthesisDir)) {
     const files = await readdir(synthesisDir);
-    for (const f of files.filter(f => f.endsWith('.md'))) {
+    for (const f of files.filter(f => f.endsWith('.md') && !isTimestampBackup(f))) {
       const content = await readFile(join(synthesisDir, f), 'utf-8');
       toc.push({
         path: `synthesis/${f}`,
@@ -337,7 +337,7 @@ async function buildGlobalTOC(globalDir: string): Promise<TOCEntry[]> {
       if (!entry.isDirectory()) continue;
       const platformName = entry.name;
       const subFiles = await readdir(join(platformsDir, platformName));
-      for (const f of subFiles.filter(f => f.endsWith('.md'))) {
+      for (const f of subFiles.filter(f => f.endsWith('.md') && !isTimestampBackup(f))) {
         const content = await readFile(join(platformsDir, platformName, f), 'utf-8');
         toc.push({
           path: `platforms/${platformName}/${f}`,
@@ -624,7 +624,7 @@ export async function buildPrompt(
     dataModels,
     businessRules,
     extraSpecs,
-    globalContext: Object.keys(globalContext).length > 0 ? globalContext : undefined,
+    globalContext: (globalContext.indexSummary || globalContext.toc.length > 0) ? globalContext : undefined,
     instruction: getInstruction(command, context),
     outputHint: command === 'execute'
       ? '请返回格式: {"files": [{"path": "相对路径", "content": "代码内容"}]}'
