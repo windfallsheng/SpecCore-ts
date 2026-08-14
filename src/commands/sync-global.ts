@@ -171,6 +171,14 @@ async function syncToGlobal(options: SyncGlobalOptions): Promise<void> {
   logger.info(`   同步需求: ${changes.length} 条`);
   logger.info(`   涉及项目: ${[...updatedProjects].join(', ')}`);
   logger.info(`   全量层版本: ${index.version} → ${newVersion}`);
+
+  // ── 9. 全局知识沉淀（RAG 索引 + SUMMARY.md）──
+  try {
+    const { syncGlobalKnowledge } = await import('../core/global-knowledge');
+    await syncGlobalKnowledge({ iteration: iterationName });
+  } catch (e) {
+    logger.debug('全局知识沉淀失败（非关键）:', e);
+  }
 }
 
 /**

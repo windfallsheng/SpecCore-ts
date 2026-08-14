@@ -46,6 +46,14 @@
   - iteration scope: 为 020-specs/ 目录新建迭代级 RAG 索引 + 刷新代码索引 + 知识图谱
   - global scope: 为全局 specs 目录新建全局 RAG 索引 + 刷新代码索引 + 知识图谱
   - 新增 `indexDirectoryDocuments()` 通用函数：可为任意目录递归扫描 .md 文件建 RAG 索引
+- **sync-global 全局知识沉淀**（新增）
+  - 设计哲学：不追求完美文档，追求"能检索到"
+  - sync-global 完成后自动触发：扫描迭代所有 specs → 建全局 RAG 索引 → 生成 SUMMARY.md → 刷新知识图谱
+  - `src/core/global-knowledge.ts`: 全局知识沉淀引擎
+    - 聚合所有迭代的 020-specs/ + 任务 00-specs/ + _shared/ 文档
+    - 生成 `.speccore/GLOBAL/SUMMARY.md`: 轻量级全局概览（功能清单 + 技术要点 + API + 已知问题）
+    - 支持手动编辑，不完美没关系，下次 sync-global 会覆盖更新
+    - 全局 RAG 索引 scope: `GLOBAL_all_{iteration}_aggregated`
 
 ### 代码索引智能增强（P0-1 ~ P0-3）
 
