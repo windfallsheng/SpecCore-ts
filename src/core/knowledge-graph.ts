@@ -503,3 +503,52 @@ export function getTaskContext(graph: KnowledgeGraph, taskId: string): {
 
   return { requirement, siblingSubtasks, parentTask };
 }
+
+// ═══════════════════════════════════════════════
+// 自动更新机制
+// ═══════════════════════════════════════════════
+
+/** 检查知识图谱是否已过期 */
+export async function isGraphStale(cwd: string, iteration?: string): Promise<boolean> {
+  const graph = await loadKnowledgeGraph(cwd);
+  if (!graph) return true; // 不存在视为过期
+
+  const iterName = iteration || await getDefaultIteration();
+  const iterDir = await getIterationDir(iterName);
+  if (!iterDir) return false;
+
+  const { stat } = await import('fs-extra');
+  const graphTime = new Date(graph.generated).getTime();
+
+  // 检查关键目录的最新修改时间
+  const dirsToCheck = [
+    join(iterDir, '010-requirements'),
+    join(iterDir, '020-specs'),
+    join(iterDir, '030-tasks'),
+  ];
+
+  for (const dir of dirsToCheck) {
+    if (!(await import('fs-extra')).pathExists(dir)) continue;
+    try {
+      const st = await stat(dir);
+      if (st.mtimeMs > graphTime) return true;
+    } catch { /* ignore */ }
+  }
+
+  return false;
+}
+
+/** 刷新知识图谱（重建 + 保存）—— 供命令完成后调用 */
+export async function refreshKnowledgeGraph(
+  cwd: string,
+  iteration?: string
+): Promise<KnowledgeGraph | null> {
+  try {
+    const iterName = iteration || await getDefaultIteration();
+    const graph = await buildKnowledgeGraph(cwd, iterName);
+    await saveKnowledgeGraph(cwd, graph);
+    return graph;
+  } catch {
+    return null; // 静默失败，不影响主流程
+  }
+}

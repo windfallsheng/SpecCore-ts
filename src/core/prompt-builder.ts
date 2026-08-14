@@ -9,7 +9,7 @@
 import { readFile, pathExists, readdir } from 'fs-extra';
 import { join } from 'path';
 import { isTimestampBackup } from '../utils/task-utils';
-import { loadKnowledgeGraph, getTaskContext } from './knowledge-graph';
+import { loadKnowledgeGraph, getTaskContext, isGraphStale, refreshKnowledgeGraph } from './knowledge-graph';
 import { buildCompactContext } from './context-builder';
 
 // ═══════════════════════════════════════════════════════════
@@ -913,9 +913,14 @@ export async function buildPrompt(
   const globalContext = await loadGlobalContext(cwd, command, options.platform);
 
   // 加载知识图谱 → 生成任务关联链（< 500 tokens）
+  // 懒加载：如果图谱已过期，自动重建
   let taskContextStr: string | undefined;
   if (options.task) {
-    const graph = await loadKnowledgeGraph(cwd);
+    let graph = await loadKnowledgeGraph(cwd);
+    const stale = await isGraphStale(cwd, options.iteration);
+    if (stale) {
+      graph = await refreshKnowledgeGraph(cwd, options.iteration);
+    }
     if (graph) {
       taskContextStr = buildCompactContext(graph, {
         taskId: options.task,
