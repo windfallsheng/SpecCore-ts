@@ -12,6 +12,10 @@ import { isTimestampBackup } from '../utils/task-utils';
 import { logger } from '../utils/logger';
 import { loadKnowledgeGraph, getTaskContext, isGraphStale, refreshKnowledgeGraph } from './knowledge-graph';
 import { buildCompactContext } from './context-builder';
+import {
+  loadRagIndex, isRagIndexStale, retrieveRelevantChunks,
+  assembleChunksForPrompt, indexTaskDocuments,
+} from './rag-engine';
 
 // ═══════════════════════════════════════════════════════════
 // 进程级缓存（避免重复 I/O + 重复解析）
@@ -1005,13 +1009,40 @@ export async function buildPrompt(
   const dataModels = await loadDataModels(cwd, taskDir, reqContent || undefined);
   const businessRules = await loadBusinessRules(cwd, taskDir, reqContent || undefined);
 
-  // P0-2: ExtraSpecs 带大小限制，防止 prompt 爆炸
-  const extraSpecs = taskDir
-    ? await loadExtraSpecs(cwd, taskDir, options.platform, options.iteration, {
+  // RAG: 优先用检索增强生成加载参考文档，无索引时回退到截断模式
+  let extraSpecs: TaskExtraSpec[] = [];
+  if (taskDir) {
+    const ragIndex = await loadRagIndex(cwd);
+    const scope = `${options.iteration || 'global'}_${taskDir.replace(/\//g, '_')}_${options.platform || 'all'}`;
+    if (ragIndex && !isRagIndexStale(ragIndex, scope)) {
+      // RAG 模式：按 task 关键词检索最相关的块
+      const query = options.task || options.iteration || '';
+      const relevantChunks = retrieveRelevantChunks(ragIndex, {
+        query,
+        topK: 5,
+        minScore: 0.3,
+        maxChunkChars: 1500,
+        maxTotalChars: 6000,
+      });
+      if (relevantChunks.length > 0) {
+        extraSpecs = assembleChunksForPrompt(relevantChunks, {
+          maxCharsPerChunk: 1500,
+          maxTotalChars: 6000,
+        });
+        logger?.info?.(`   🔍 RAG 检索: ${relevantChunks.length} 个相关块已注入 Prompt`);
+      }
+    }
+    // 回退：无 RAG 索引或检索结果为空时，用传统截断模式
+    if (extraSpecs.length === 0) {
+      extraSpecs = await loadExtraSpecs(cwd, taskDir, options.platform, options.iteration, {
         maxCharsPerFile: 2000,
         maxTotalChars: 8000,
-      })
-    : [];
+      });
+      if (extraSpecs.length > 0) {
+        logger?.info?.(`   📄 传统模式: ${extraSpecs.length} 个参考文档已加载（未找到 RAG 索引）`);
+      }
+    }
+  }
 
   // 加载全局上下文（智能注入）
   const globalContext = await loadGlobalContext(cwd, command, options.platform);
