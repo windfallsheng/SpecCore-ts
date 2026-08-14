@@ -9,7 +9,7 @@
  *   执行阶段: 根据 task/需求关键词 → 检索相关块 → 按分数排序 → 组装进 Prompt
  */
 
-import { readFile, pathExists, writeFile, ensureDir } from 'fs-extra';
+import { readFile, pathExists, writeFile, ensureDir, stat } from 'fs-extra';
 import { join, basename } from 'path';
 import { createHash } from 'crypto';
 
@@ -49,6 +49,8 @@ export interface RagIndex {
   chunks: DocumentChunk[];
   /** 文件摘要映射: filePath → 文件级摘要 */
   fileSummaries: Record<string, string>;
+  /** 源文件修改时间: filePath → mtimeMs */
+  fileMtimes: Record<string, number>;
 }
 
 export interface RetrievalOptions {
@@ -275,11 +277,12 @@ function expandKeywords(keywords: string[]): string[] {
  * 为多个文档构建 RAG 索引
  */
 export async function buildRagIndex(
-  documents: { filePath: string; content: string }[],
+  documents: { filePath: string; content: string; mtime?: number }[],
   scope: string,
 ): Promise<RagIndex> {
   const chunks: DocumentChunk[] = [];
   const fileSummaries: Record<string, string> = {};
+  const fileMtimes: Record<string, number> = {};
 
   for (const doc of documents) {
     const docChunks = chunkByHeaders(doc.content, doc.filePath);
@@ -291,6 +294,11 @@ export async function buildRagIndex(
       .sort((a, b) => a.level - b.level || b.charCount - a.charCount)
       .slice(0, 3);
     fileSummaries[doc.filePath] = topLevelChunks.map(c => `• ${c.title}: ${c.summary.slice(0, 80)}`).join('\n');
+
+    // 记录文件修改时间
+    if (doc.mtime) {
+      fileMtimes[doc.filePath] = doc.mtime;
+    }
   }
 
   return {
@@ -299,6 +307,7 @@ export async function buildRagIndex(
     scope,
     chunks,
     fileSummaries,
+    fileMtimes,
   };
 }
 
@@ -496,7 +505,7 @@ export async function indexTaskDocuments(
   iteration?: string,
   platform?: string,
 ): Promise<RagIndex> {
-  const filesToIndex: { filePath: string; content: string }[] = [];
+  const filesToIndex: { filePath: string; content: string; mtime: number }[] = [];
 
   const candidates = [
     join(cwd, taskDir, '_shared', 'TECH.md'),
@@ -529,9 +538,12 @@ export async function indexTaskDocuments(
 
   for (const fp of candidates) {
     if (await pathExists(fp)) {
-      const content = await readFile(fp, 'utf-8');
+      const [content, st] = await Promise.all([
+        readFile(fp, 'utf-8'),
+        stat(fp),
+      ]);
       if (content.trim().length > 50 && !content.trim().match(/^#+\s*待填充|^<!--\s*AI-FILL\s*-->$/m)) {
-        filesToIndex.push({ filePath: fp, content });
+        filesToIndex.push({ filePath: fp, content, mtime: st.mtimeMs });
       }
     }
   }
@@ -540,4 +552,95 @@ export async function indexTaskDocuments(
   const index = await buildRagIndex(filesToIndex, scope);
   await saveRagIndex(cwd, index);
   return index;
+}
+
+/**
+ * 检查 RAG 索引是否新鲜（对比源文件 mtime）
+ * 返回: { fresh: boolean; staleFiles: string[] }
+ */
+export async function checkRagIndexFreshness(cwd: string): Promise<{ fresh: boolean; staleFiles: string[] }> {
+  const index = await loadRagIndex(cwd);
+  if (!index) return { fresh: false, staleFiles: [] };
+
+  const staleFiles: string[] = [];
+  for (const [filePath, cachedMtime] of Object.entries(index.fileMtimes)) {
+    try {
+      const st = await stat(filePath);
+      if (st.mtimeMs > cachedMtime + 1000) { // 1秒容差
+        staleFiles.push(filePath);
+      }
+    } catch {
+      // 文件被删除也算过期
+      staleFiles.push(filePath);
+    }
+  }
+
+  return {
+    fresh: staleFiles.length === 0,
+    staleFiles,
+  };
+}
+
+/**
+ * 增量刷新 RAG 索引：只重建有变更的文件
+ */
+export async function refreshRagIndex(
+  cwd: string,
+  taskDir: string,
+  iteration?: string,
+  platform?: string,
+): Promise<RagIndex> {
+  const existing = await loadRagIndex(cwd);
+  if (!existing) {
+    return indexTaskDocuments(cwd, taskDir, iteration, platform);
+  }
+
+  const { staleFiles } = await checkRagIndexFreshness(cwd);
+  if (staleFiles.length === 0) {
+    return existing;
+  }
+
+  // 保留未变更的 chunk，替换变更文件的 chunk
+  const freshChunks = existing.chunks.filter(c => !staleFiles.includes(c.filePath));
+  const freshSummaries = { ...existing.fileSummaries };
+
+  for (const fp of staleFiles) {
+    if (await pathExists(fp)) {
+      const content = await readFile(fp, 'utf-8');
+      const docChunks = chunkByHeaders(content, fp);
+      freshChunks.push(...docChunks);
+
+      const topLevel = docChunks
+        .filter(c => c.level <= 3)
+        .sort((a, b) => a.level - b.level || b.charCount - a.charCount)
+        .slice(0, 3);
+      freshSummaries[fp] = topLevel.map(c => `• ${c.title}: ${c.summary.slice(0, 80)}`).join('\n');
+    } else {
+      delete freshSummaries[fp];
+    }
+  }
+
+  // 更新 mtime
+  const freshMtimes = { ...existing.fileMtimes };
+  for (const fp of staleFiles) {
+    if (await pathExists(fp)) {
+      const st = await stat(fp);
+      freshMtimes[fp] = st.mtimeMs;
+    } else {
+      delete freshMtimes[fp];
+    }
+  }
+
+  const scope = `${iteration || 'global'}_${taskDir.replace(/\//g, '_')}_${platform || 'all'}`;
+  const refreshed: RagIndex = {
+    ...existing,
+    updatedAt: new Date().toISOString(),
+    scope,
+    chunks: freshChunks,
+    fileSummaries: freshSummaries,
+    fileMtimes: freshMtimes,
+  };
+
+  await saveRagIndex(cwd, refreshed);
+  return refreshed;
 }

@@ -16,6 +16,7 @@ import {
   loadRagIndex, isRagIndexStale, retrieveRelevantChunks,
   assembleChunksForPrompt, indexTaskDocuments,
 } from './rag-engine';
+import { unifiedSearch, assembleUnifiedContext } from './unified-retrieval';
 
 // ═══════════════════════════════════════════════════════════
 // 进程级缓存（避免重复 I/O + 重复解析）
@@ -1009,37 +1010,36 @@ export async function buildPrompt(
   const dataModels = await loadDataModels(cwd, taskDir, reqContent || undefined);
   const businessRules = await loadBusinessRules(cwd, taskDir, reqContent || undefined);
 
-  // RAG: 优先用检索增强生成加载参考文档，无索引时回退到截断模式
+  // 统一检索层：同时查询文档 RAG + 代码切片 + 知识图谱
   let extraSpecs: TaskExtraSpec[] = [];
   if (taskDir) {
-    const ragIndex = await loadRagIndex(cwd);
-    const scope = `${options.iteration || 'global'}_${taskDir.replace(/\//g, '_')}_${options.platform || 'all'}`;
-    if (ragIndex && !isRagIndexStale(ragIndex, scope)) {
-      // RAG 模式：按 task 关键词检索最相关的块
-      const query = options.task || options.iteration || '';
-      const relevantChunks = retrieveRelevantChunks(ragIndex, {
-        query,
-        topK: 5,
-        minScore: 0.3,
-        maxChunkChars: 1500,
-        maxTotalChars: 6000,
+    try {
+      const unifiedResult = await unifiedSearch(cwd, {
+        query: options.task || options.iteration || '',
+        iteration: options.iteration,
+        taskId: options.task,
+        platform: options.platform,
+        taskDir,
       });
-      if (relevantChunks.length > 0) {
-        extraSpecs = assembleChunksForPrompt(relevantChunks, {
-          maxCharsPerChunk: 1500,
-          maxTotalChars: 6000,
-        });
-        logger?.info?.(`   🔍 RAG 检索: ${relevantChunks.length} 个相关块已注入 Prompt`);
+
+      if (unifiedResult.documentChunks.length > 0 || unifiedResult.codeSlices.length > 0) {
+        extraSpecs = assembleUnifiedContext(unifiedResult, { maxTotalChars: 8000 });
+        logger?.info?.(
+          `   🔍 统一检索: ${unifiedResult.stats.docChunksFound} 文档块 + ${unifiedResult.stats.codeSlicesFound} 代码切片 | ~${unifiedResult.stats.totalTokensEstimate} tokens`
+        );
       }
+    } catch (e) {
+      logger?.debug?.('统一检索失败，回退到传统模式:', e);
     }
-    // 回退：无 RAG 索引或检索结果为空时，用传统截断模式
+
+    // 回退：统一检索失败或结果为空时，用传统截断模式
     if (extraSpecs.length === 0) {
       extraSpecs = await loadExtraSpecs(cwd, taskDir, options.platform, options.iteration, {
         maxCharsPerFile: 2000,
         maxTotalChars: 8000,
       });
       if (extraSpecs.length > 0) {
-        logger?.info?.(`   📄 传统模式: ${extraSpecs.length} 个参考文档已加载（未找到 RAG 索引）`);
+        logger?.info?.(`   📄 传统模式: ${extraSpecs.length} 个参考文档已加载`);
       }
     }
   }

@@ -14,6 +14,19 @@
   - `analyze-engine.ts`: task 模式分析完成后自动调用 `indexTaskDocuments()` 建索引
   - `prompt-builder.ts`: `buildPrompt()` 优先加载 RAG 索引，无索引时回退到传统截断模式
   - 索引缓存：`.speccore/cache/rag-index.json`，scope 变化时自动重建
+- **增量刷新**: `checkRagIndexFreshness()` + `refreshRagIndex()`
+  - 对比源文件 mtime 与索引缓存，检测变更文件列表
+  - 只重建有变更的文件 chunk，未变更的 chunk 保留，避免全量重建
+  - analyze 阶段自动检测，过期时提示 `🔄 RAG 索引已增量刷新 (N 个文件更新)`
+- **统一检索层**: `src/core/unified-retrieval.ts`（新增）
+  - 一次查询同时检索三个来源：文档 RAG + 代码切片 + 知识图谱
+  - `unifiedSearch()` → `assembleUnifiedContext()` → 注入 Prompt
+  - 日志统一输出：`🔍 统一检索: 3 文档块 + 5 代码切片 | ~4200 tokens`
+- **代码切片**: `sliceCodeFile()`
+  - 按 `export function/class/interface/type/enum/const` 切分源码
+  - 每片包含：JSDoc 注释 + 签名 + 前 50 行实现
+  - 轻量级正则分片，不需要 AST 解析器
+  - 相关性评分：名称命中 +5 分，路径/签名/注释匹配 +1 分
 
 ### 代码索引智能增强（P0-1 ~ P0-3）
 

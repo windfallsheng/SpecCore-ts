@@ -20,7 +20,7 @@ import { isTimestampBackup } from '../utils/task-utils';
 import { buildCodeIndex, findRelevantCode, readRelevantSource, isIndexStale, loadFullIndex } from './code-scanner';
 import { generateAIContext, AIContextInput, AIContextResult } from './ai-context-generator';
 import { cleanStaleCache } from './git-integration';
-import { indexTaskDocuments } from './rag-engine';
+import { refreshRagIndex, checkRagIndexFreshness } from './rag-engine';
 
 // ================================================================
 // 类型定义
@@ -147,8 +147,13 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalysisResult> 
     try {
       const taskDir = join(`Iteration-${effectiveInput.iteration}`, '030-tasks', effectiveInput.taskId);
       if (await pathExists(taskDir)) {
-        await indexTaskDocuments(process.cwd(), taskDir, effectiveInput.iteration);
-        logger.info(`   🔍 RAG 索引已生成: ${taskDir}`);
+        const { staleFiles } = await checkRagIndexFreshness(process.cwd());
+        await refreshRagIndex(process.cwd(), taskDir, effectiveInput.iteration);
+        if (staleFiles.length > 0) {
+          logger.info(`   🔄 RAG 索引已增量刷新 (${staleFiles.length} 个文件更新): ${taskDir}`);
+        } else {
+          logger.info(`   🔍 RAG 索引已生成: ${taskDir}`);
+        }
       }
     } catch (e) {
       logger.debug('RAG 索引生成失败（非关键）:', e);
