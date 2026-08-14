@@ -914,6 +914,9 @@ async function createTaskFromSection(iterationDir: string, taskId: string, secti
   const owner = (section as any)._owner || '未分配';
   const today = new Date().toISOString().split('T')[0];
 
+  // 加载迭代级 analyze 产出（020-specs/），用于填充任务级文件
+  const specContents = await loadSpecContents(iterationDir);
+
   // 预生成所有端的子任务 ID（保证同一端在所有文件中 ID 一致）
   const taskNum = taskId.replace(/^Task-/, '');
   const subtaskIdMap = new Map<string, string>();
@@ -1016,11 +1019,18 @@ ${taskPlatforms.map((p: string) => `| ${subtaskIdMap.get(p)} | ${p} | ${owner} |
   const apiLines = section.content.split('\n').filter(l => l.includes('| GET') || l.includes('| POST') || l.includes('| PUT') || l.includes('| DELETE') || l.includes('| PATCH'));
   const apiDesc = apiLines.length > 0 ? apiLines.map(l => `- ${l.trim()}`).join('\n') : '- 待补充（从 REQ.md 提取接口列表）';
   const aiTechContent = (section as any)._techContent;
-  // TECH.md: 优先用 AI 生成的实际内容，回退到模板
+  // 从 analyze TECH.md 提取本任务相关内容
+  const specTechContent = extractTaskTechContent(specContents, section);
+  // TECH.md: 优先 AI 生成 → 回退 analyze 提取 → 回退模板
   if (aiTechContent && aiTechContent.length > 50) {
     await writeFile(
       join(taskDir, '_shared', 'TECH.md'),
       `# ${section.name} - 技术方案\n\n${aiTechContent}\n`
+    );
+  } else if (specTechContent && specTechContent.length > 30) {
+    await writeFile(
+      join(taskDir, '_shared', 'TECH.md'),
+      `# ${section.name} - 技术方案\n\n> 来源: analyze → TECH.md（自动提取）\n\n${specTechContent}\n`
     );
   } else {
     await writeFile(
@@ -1056,7 +1066,8 @@ ${apiDesc}
   }
 
   if (section.content.match(/数据库|数据表|表结构|DDL|ALTER|建表|索引/)) {
-    await writeFile(join(taskDir, '_shared', 'SCHEMA.md'), generateSchemaTemplate(section));
+    const schemaMaterial = extractRelevantSection(specContents['TECH.md'] || '', section.name, 'DDL 建表 表结构 索引 CREATE TABLE');
+    await writeFile(join(taskDir, '_shared', 'SCHEMA.md'), generateSchemaTemplate(section, schemaMaterial));
   }
 
   await writeFile(
@@ -1134,12 +1145,13 @@ ${apiDesc}
 `
     );
 
-    // 后端端额外生成组件/路由等前端文档
+    // 非 backend 端额外生成前端设计文档（从 analyze TECH.md 提取）
     if (!isBackend) {
-      await writeFile(join(platformDir, 'COMPONENT_TREE.md'), generateComponentTree(section, platform));
-      await writeFile(join(platformDir, 'ROUTES.md'), generateRoutesDoc(section, platform));
-      await writeFile(join(platformDir, 'STATE.md'), generateStateDoc(section, platform));
-      await writeFile(join(platformDir, 'STYLE_GUIDE.md'), generateStyleGuide(section, platform));
+      const feContent = extractTaskTechContent(specContents, section, platform);
+      await writeFile(join(platformDir, 'COMPONENT_TREE.md'), generateComponentTree(section, platform, feContent));
+      await writeFile(join(platformDir, 'ROUTES.md'), generateRoutesDoc(section, platform, feContent));
+      await writeFile(join(platformDir, 'STATE.md'), generateStateDoc(section, platform, feContent));
+      await writeFile(join(platformDir, 'STYLE_GUIDE.md'), generateStyleGuide(section, platform, feContent));
     }
   }
 
@@ -1161,13 +1173,17 @@ ${apiDesc}
 
   // ── 5. 执行产出 99-artifacts/ ──
   await ensureDir(join(taskDir, '99-artifacts'));
-  await writeFile(join(taskDir, '99-artifacts', 'TEST.md'), generateTestOutline(section));
+  const testMaterial = extractRelevantSection(specContents['TEST.md'] || '', section.name);
+  const riskMaterial = extractRelevantSection(specContents['RISK.md'] || '', section.name);
+  const depsMaterial = extractRelevantSection(specContents['DEPS.md'] || '', section.name);
+  const monitorMaterial = extractRelevantSection(specContents['MONITOR.md'] || '', section.name);
+  await writeFile(join(taskDir, '99-artifacts', 'TEST.md'), generateTestOutline(section, testMaterial));
   await writeFile(join(taskDir, '99-artifacts', 'REVIEW.md'), generateReviewChecklist(section));
   await writeFile(join(taskDir, '99-artifacts', 'DEPLOY.md'), generateDeployChecklist(section));
   await writeFile(join(taskDir, '99-artifacts', 'ERROR_CODES.md'), generateErrorCodes(section));
-  await writeFile(join(taskDir, '99-artifacts', 'RISK.md'), generateRiskTemplate(section));
-  await writeFile(join(taskDir, '99-artifacts', 'DEPS.md'), generateDepsTemplate(section));
-  await writeFile(join(taskDir, '99-artifacts', 'MONITOR.md'), generateMonitorTemplate(section));
+  await writeFile(join(taskDir, '99-artifacts', 'RISK.md'), generateRiskTemplate(section, riskMaterial));
+  await writeFile(join(taskDir, '99-artifacts', 'DEPS.md'), generateDepsTemplate(section, depsMaterial));
+  await writeFile(join(taskDir, '99-artifacts', 'MONITOR.md'), generateMonitorTemplate(section, monitorMaterial));
 
   const adr = generateAdr(section);
   if (adr) {
@@ -1272,7 +1288,10 @@ async function updateProjectGraph(iterationDir: string, sections: Section[]): Pr
 /**
  * 根据需求内容自动生成测试用例框架
  */
-function generateTestOutline(section: Section): string {
+function generateTestOutline(section: Section, material?: string): string {
+  if (material && material.trim().length > 30) {
+    return `# ${section.name} — 测试用例\n\n> 来源: analyze → TEST.md（自动提取）\n\n${material.trim()}\n`;
+  }
   const name = section.name;
   const content = section.content || '';
   
@@ -1542,8 +1561,11 @@ async function generateImpactGraph(
   logger.info(`\nImpact analysis: ${iterationDir}/IMPACT.md`);
 }
 
-function generateSchemaTemplate(section: Section): string {
+function generateSchemaTemplate(section: Section, material?: string): string {
   const name = section.name;
+  if (material && material.trim().length > 30) {
+    return `# ${name} — Database Schema\n\n> 来源: analyze → TECH.md（自动提取）\n\n${material.trim()}\n`;
+  }
   return `# ${name} — Database Schema
 
 > Auto-generated. Fill in DDL before development.
@@ -1807,33 +1829,145 @@ function generateAcceptanceCriteria(section: Section): string {
 }
 
 // 风险评估
-function generateRiskTemplate(section: Section): string {
+function generateRiskTemplate(section: Section, material?: string): string {
+  if (material && material.trim().length > 30) {
+    return `# ${section.name} — 风险评估\n\n> 来源: analyze → RISK.md（自动提取）\n\n${material.trim()}\n`;
+  }
   return `# ${section.name} — 风险评估\n\n> split | ${new Date().toISOString().split('T')[0]}\n\n## 风险矩阵\n\n| 风险 | 可能 | 影响 | 缓解 |\n| :--- | :--- | :--- | :--- |\n| 兼容性 | 中 | 高 | 版本号+测试 |\n| 性能 | 低 | 中 | 压测+索引 |\n| 依赖故障 | 低 | 高 | 降级方案 |\n\n## 回滚\n\n1. 触发: 线上错误率 > 1%\n2. 步骤: git revert → 重部署\n3. 验证: 冒烟测试 + 监控\n`;
 }
 
 // 依赖清单
-function generateDepsTemplate(section: Section): string {
+function generateDepsTemplate(section: Section, material?: string): string {
+  if (material && material.trim().length > 30) {
+    return `# ${section.name} — 依赖清单\n\n> 来源: analyze → DEPS.md（自动提取）\n\n${material.trim()}\n`;
+  }
   return `# ${section.name} — 依赖清单\n\n## 上游依赖\n\n| 服务 | 版本 | 用途 | SLA |\n| :--- | :--- | :--- | :--- |\n| _待补充_ | — | — | — |\n\n## 下游影响\n\n| 服务 | 影响 | 通知 |\n| :--- | :--- | :--- |\n| _待补充_ | — | — |\n`;
 }
 
 // 监控指标
-function generateMonitorTemplate(section: Section): string {
+function generateMonitorTemplate(section: Section, material?: string): string {
+  if (material && material.trim().length > 30) {
+    return `# ${section.name} — 监控\n\n> 来源: analyze → MONITOR.md（自动提取）\n\n${material.trim()}\n`;
+  }
   return `# ${section.name} — 监控\n\n## 关键指标\n\n| 指标 | 阈值 | 级别 |\n| :--- | :--- | :--- |\n| 成功率 | <99.9% | P1 |\n| P99延迟 | >1000ms | P2 |\n| 错误率 | >0.1% | P0 |\n\n## 关键日志\n\n- 请求入口 (traceId)\n- 业务异常 (上下文)\n- 外部调用 (耗时)\n`;
 }
 
+// ═══════════════════════════════════════════════
+// 从 analyze 产出中提取任务相关内容
+// ═══════════════════════════════════════════════
+
+/** 加载迭代级 020-specs/ 文档内容 */
+async function loadSpecContents(iterationDir: string): Promise<Record<string, string>> {
+  const specs: Record<string, string> = {};
+  const specDir = join(iterationDir, '020-specs');
+  if (!(await pathExists(specDir))) return specs;
+  for (const f of ['TECH.md', 'TEST.md', 'RISK.md', 'DEPS.md', 'MONITOR.md', 'ANALYSIS.md', 'REQUIREMENT.md']) {
+    const fp = join(specDir, f);
+    if (await pathExists(fp)) {
+      const content = await readFile(fp, 'utf-8');
+      if (content.trim().length > 50 && !content.trim().match(/^#+\s*待填充|^<!--\s*AI-FILL/m)) {
+        specs[f] = content;
+      }
+    }
+  }
+  return specs;
+}
+
+/** 从完整文档中提取与任务名相关的段落 */
+function extractRelevantSection(fullContent: string, taskName: string, sectionHint?: string): string {
+  if (!fullContent || !taskName) return '';
+  const lines = fullContent.split('\n');
+  const nameKeywords = new Set<string>();
+  for (const m of taskName.matchAll(/[a-zA-Z]+/g)) { if (m[0].length > 1) nameKeywords.add(m[0].toLowerCase()); }
+  for (const m of taskName.matchAll(/[\u4e00-\u9fff]+/g)) { if (m[0].length >= 2) nameKeywords.add(m[0]); }
+  if (sectionHint) {
+    for (const m of sectionHint.matchAll(/[a-zA-Z]+/g)) { if (m[0].length > 1) nameKeywords.add(m[0].toLowerCase()); }
+    for (const m of sectionHint.matchAll(/[\u4e00-\u9fff]+/g)) { if (m[0].length >= 2) nameKeywords.add(m[0]); }
+  }
+  if (nameKeywords.size === 0) return '';
+  const kwArray = [...nameKeywords];
+
+  // 按 Markdown 标题拆分，查找包含关键词的完整段落
+  const sections: { heading: string; level: number; content: string; headingLine: string }[] = [];
+  let cur: { heading: string; level: number; content: string[]; headingLine: string } = { heading: '', level: 0, content: [], headingLine: '' };
+  for (const line of lines) {
+    const hm = line.match(/^(#{1,4})\s+(.+)/);
+    if (hm) {
+      if (cur.heading || cur.content.length > 0) sections.push({ heading: cur.heading, level: cur.level, content: cur.content.join('\n'), headingLine: cur.headingLine });
+      cur = { heading: hm[2].trim(), level: hm[1].length, content: [], headingLine: line };
+    } else {
+      cur.content.push(line);
+    }
+  }
+  if (cur.heading || cur.content.length > 0) sections.push({ heading: cur.heading, level: cur.level, content: cur.content.join('\n'), headingLine: cur.headingLine });
+
+  // 匹配：标题或内容包含关键词
+  const matched: string[] = [];
+  for (const sec of sections) {
+    const text = (sec.heading + ' ' + sec.content).toLowerCase();
+    const hit = kwArray.some(kw => text.includes(kw));
+    if (hit && (sec.heading || sec.content.trim())) {
+      const prefix = '#'.repeat(Math.max(sec.level + 1, 2));
+      matched.push(`${prefix} ${sec.heading}\n${sec.content.trim()}`);
+    }
+  }
+  if (matched.length > 0) return matched.join('\n\n');
+
+  // 回退：提取包含关键词的连续行
+  const fallback: string[] = [];
+  for (const line of lines) {
+    const lower = line.toLowerCase();
+    if (kwArray.some(kw => lower.includes(kw))) fallback.push(line);
+  }
+  return fallback.length > 0 ? fallback.join('\n') : '';
+}
+
+/** 从 TECH.md 提取前端平台相关内容 */
+function extractFrontendContent(techContent: string, taskName: string, platform: string): string {
+  if (!techContent) return '';
+  // 先提取该前端平台相关的顶层段落（如 "H5移动端"、"后台管理端"）
+  const platformLabels: Record<string, string[]> = {
+    'h5': ['H5', 'h5', '移动端', 'mobile'],
+    'admin': ['admin', '后台', '管理端', 'Admin'],
+    'web': ['Web', 'web', '前端', '桌面'],
+    'app': ['App', 'app', '客户端'],
+    'miniapp': ['小程序', 'miniapp'],
+  };
+  const platformKws = platformLabels[platform] || [platform];
+  const platformSection = extractRelevantSection(techContent, taskName, platformKws.join(' '));
+  if (platformSection) return platformSection;
+  // 回退：用任务名匹配
+  return extractRelevantSection(techContent, taskName);
+}
+
+/** 从 specContents 提取任务级 TECH 内容 */
+function extractTaskTechContent(specContents: Record<string, string>, section: Section, platform?: string): string {
+  const techMd = specContents['TECH.md'];
+  if (!techMd) return '';
+  if (platform && platform !== 'backend') {
+    return extractFrontendContent(techMd, section.name, platform);
+  }
+  // 后端/共享：提取技术方案、架构、接口设计、数据模型等
+  const techSection = extractRelevantSection(techMd, section.name, '技术方案 架构 接口设计 数据模型 模块设计');
+  return techSection;
+}
+
 // 前端专属：组件树
-function generateComponentTree(section: Section, platform: string): string {
+function generateComponentTree(section: Section, platform: string, material?: string): string {
+  if (material && material.trim().length > 30) {
+    return `# ${section.name} — 组件树 (${platform})\n\n> 来源: analyze → TECH.md（自动提取）\n\n${material.trim()}\n`;
+  }
   return `# ${section.name} — 组件树 (${platform})
 
 > split | ${new Date().toISOString().split('T')[0]}
 
 ## 页面结构
-<!-- AI-FILL: 根据需求描述页面的组件层级 -->
+<!-- 从 analyze TECH.md 自动提取，若无内容则待补充 -->
 
 ## 组件清单
 | 组件 | 路径 | 类型 | 状态 |
 | :--- | :--- | :--- | :--- |
-| _待AI分析_ | — | — | — |
+| _待补充_ | — | — | — |
 
 ## 共享组件
 | 组件 | 来源 | 用途 |
@@ -1843,7 +1977,10 @@ function generateComponentTree(section: Section, platform: string): string {
 }
 
 // 前端专属：路由
-function generateRoutesDoc(section: Section, platform: string): string {
+function generateRoutesDoc(section: Section, platform: string, material?: string): string {
+  if (material && material.trim().length > 30) {
+    return `# ${section.name} — 路由设计 (${platform})\n\n> 来源: analyze → TECH.md（自动提取）\n\n${material.trim()}\n`;
+  }
   return `# ${section.name} — 路由设计 (${platform})
 
 > split | ${new Date().toISOString().split('T')[0]}
@@ -1859,7 +1996,10 @@ function generateRoutesDoc(section: Section, platform: string): string {
 }
 
 // 前端专属：状态管理
-function generateStateDoc(section: Section, platform: string): string {
+function generateStateDoc(section: Section, platform: string, material?: string): string {
+  if (material && material.trim().length > 30) {
+    return `# ${section.name} — 状态管理 (${platform})\n\n> 来源: analyze → TECH.md（自动提取）\n\n${material.trim()}\n`;
+  }
   return `# ${section.name} — 状态管理 (${platform})
 
 > split | ${new Date().toISOString().split('T')[0]}
@@ -1880,7 +2020,10 @@ function generateStateDoc(section: Section, platform: string): string {
 }
 
 // 前端专属：样式规范
-function generateStyleGuide(section: Section, platform: string): string {
+function generateStyleGuide(section: Section, platform: string, material?: string): string {
+  if (material && material.trim().length > 30) {
+    return `# ${section.name} — 样式规范 (${platform})\n\n> 来源: analyze → TECH.md（自动提取）\n\n${material.trim()}\n`;
+  }
   const isH5 = platform.includes('h5') || platform.includes('mobile');
   const isMiniapp = platform.includes('miniapp') || platform.includes('小程序');
   const styleCtx = isH5 ? '移动端 H5，注意触控交互和移动适配' : 
