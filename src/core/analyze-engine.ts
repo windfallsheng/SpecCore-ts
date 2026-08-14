@@ -20,6 +20,7 @@ import { isTimestampBackup } from '../utils/task-utils';
 import { buildCodeIndex, findRelevantCode, readRelevantSource, isIndexStale, loadFullIndex } from './code-scanner';
 import { generateAIContext, AIContextInput, AIContextResult } from './ai-context-generator';
 import { cleanStaleCache } from './git-integration';
+import { indexTaskDocuments } from './rag-engine';
 
 // ================================================================
 // 类型定义
@@ -139,6 +140,19 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalysisResult> 
         depth: effectiveInput.depth,
       });
     } catch {} // 非关键，静默失败
+  }
+
+  // ── task 模式：为任务目录构建 RAG 索引（供后续 execute/plan 检索使用） ──
+  if (effectiveInput.scope === 'task' && effectiveInput.taskId && effectiveInput.iteration) {
+    try {
+      const taskDir = join(`Iteration-${effectiveInput.iteration}`, '030-tasks', effectiveInput.taskId);
+      if (await pathExists(taskDir)) {
+        await indexTaskDocuments(process.cwd(), taskDir, effectiveInput.iteration);
+        logger.info(`   🔍 RAG 索引已生成: ${taskDir}`);
+      }
+    } catch (e) {
+      logger.debug('RAG 索引生成失败（非关键）:', e);
+    }
   }
 
   return result;
