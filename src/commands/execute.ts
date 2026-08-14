@@ -977,8 +977,21 @@ async function filterByPlatform(tasks: TaskState[], iteration: string, platform:
   const filtered: TaskState[] = [];
   const iterDir = await getIterationDir(iteration);
   for (const task of tasks) {
-    const platformDir = join(await resolveTaskDir(iterDir), task.id, 'frontend', platform);
-    if (await pathExists(platformDir)) filtered.push(task);
+    // 新结构: 子任务已有 platform 字段
+    if (task.platform === platform) {
+      filtered.push(task);
+      continue;
+    }
+    // 新结构: 父任务下查 {platform}/ 目录
+    const taskBase = await resolveTaskDir(iterDir);
+    const platformDir = join(taskBase, task.id, platform);
+    if (await pathExists(platformDir)) {
+      filtered.push(task);
+      continue;
+    }
+    // 旧结构回退: frontend/{platform}/
+    const legacyDir = join(taskBase, task.id, 'frontend', platform);
+    if (await pathExists(legacyDir)) filtered.push(task);
   }
   return filtered;
 }

@@ -1,3 +1,15 @@
+## v6.2.0 (2026-08-14) — 子任务发现与筛选：scanTasks 展开各端 + 按端/责任人过滤
+
+- **`scanTasks` 重构**: 自动发现各端子任务，展开为独立 TaskState
+  - 新结构: 扫描 `{platform}/TASK.md`，提取子任务 ID、负责人、状态
+  - 旧结构兼容: 无子任务时回退到父任务级别
+  - TaskState 新增 `platform` 和 `parentTaskId` 字段
+- **`--platform` 筛选增强**: 支持新结构 `{platform}/` + 旧结构 `frontend/{platform}/`
+- **`--assignee` 筛选**: 现在能正确匹配各端子任务的负责人
+- **TASK.md 路径兼容**: `_shared/TASK.md` → `00-specs/TASK.md` 回退
+
+---
+
 ## v6.1.1 (2026-08-14) — 子任务命名规则调整：父任务完整名
 
 - **子任务 ID 格式变更**: 从 `Task-{编号}-{端名}-{hash}` 改为 `Task-{父任务完整名}-{端名}-{hash}`

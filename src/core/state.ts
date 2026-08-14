@@ -1,4 +1,4 @@
-import { readFile, pathExists, readdir } from 'fs-extra';
+import { readFile, pathExists, readdir, stat } from 'fs-extra';
 import { join } from 'path';
 
 export interface TaskState {
@@ -12,6 +12,10 @@ export interface TaskState {
   progress: number;
   startDate?: string;
   endDate?: string;
+  /** 所属端（子任务级别） */
+  platform?: string;
+  /** 父任务 ID（子任务才有） */
+  parentTaskId?: string;
 }
 
 export interface IterationState {
@@ -97,8 +101,17 @@ function parseStatus(status: string): TaskState['status'] {
   return 'pending';
 }
 
+/** 排除的目录名前缀（不是端目录） */
+const NON_PLATFORM_DIRS = new Set(['.', '_', '9', '.meta', '_shared', '99-artifacts', '00-specs']);
+
+/** 判断某个目录是否为端子任务目录（含 TASK.md 且不是特殊目录） */
+async function isPlatformDir(dirPath: string): Promise<boolean> {
+  const taskMd = join(dirPath, 'TASK.md');
+  return await pathExists(taskMd);
+}
+
 export async function scanTasks(iteration: string): Promise<TaskState[]> {
-  const { pathExists, readdir } = await import('fs-extra');
+  const { pathExists, readdir, stat } = await import('fs-extra');
   const { join } = await import('path');
   const { getIterationDir } = await import('./context');
   
@@ -111,61 +124,136 @@ export async function scanTasks(iteration: string): Promise<TaskState[]> {
   const tasksDir = join(iterationDir, '030-tasks');
   const scanRoot = (await pathExists(tasksDir)) ? tasksDir : iterationDir;
   
-  const entries = await readdir(scanRoot, { withFileTypes: true });
   const tasks: TaskState[] = [];
   
-  for (const entry of entries) {
-    if (entry.isDirectory() && entry.name.startsWith('Task-')) {
-      const taskId = entry.name;
-      const taskPath = join(scanRoot, taskId);
-      
-      // 读取元信息（.meta/ 优先，兼容旧 .task-type）
-      let type = 'feature';
-      let status: TaskState['status'] = 'pending';
-      let assignee = '';
-      let priority: TaskState['priority'] = 'medium';
-      
-      const metaDir = join(taskPath, '.meta');
-      if (await pathExists(metaDir)) {
-        const typePath = join(metaDir, 'type');
-        if (await pathExists(typePath)) type = (await readFile(typePath, 'utf-8')).trim();
-        const statusPath = join(metaDir, 'status');
-        if (await pathExists(statusPath)) status = parseStatus((await readFile(statusPath, 'utf-8')).trim());
-        const ownerPath = join(metaDir, 'owner');
-        if (await pathExists(ownerPath)) assignee = (await readFile(ownerPath, 'utf-8')).trim();
-      } else {
-        // 兼容旧布局
-        const typePath = join(taskPath, '.task-type');
-        if (await pathExists(typePath)) type = (await readFile(typePath, 'utf-8')).trim();
-      }
-      
-      // 从 TASK.md 读取名称和补充信息
-      let name = taskId;
-      const taskMdPath = join(taskPath, '00-specs', 'TASK.md');
-      if (await pathExists(taskMdPath)) {
-        const taskMd = await readFile(taskMdPath, 'utf-8');
-        const nameMatch = taskMd.match(/#\s+(.+)/);
-        if (nameMatch) name = nameMatch[1].trim();
-        // 从 TASK.md 表格中提取优先级和负责人
-        const prioMatch = taskMd.match(/优先级[:\s]*.*(high|medium|low|高|中|低)/i);
-        if (prioMatch) {
-          const p = prioMatch[1].toLowerCase();
-          if (p.includes('high') || p.includes('高')) priority = 'high';
-          else if (p.includes('low') || p.includes('低')) priority = 'low';
+  // 递归扫描: 支持 030-tasks/Task-XXX/ 和 030-tasks/{type}/Task-XXX/ 两种布局
+  const taskDirs: { taskId: string; taskPath: string }[] = [];
+  const rootEntries = await readdir(scanRoot, { withFileTypes: true });
+  
+  for (const entry of rootEntries) {
+    if (!entry.isDirectory()) continue;
+    if (entry.name.startsWith('Task-')) {
+      taskDirs.push({ taskId: entry.name, taskPath: join(scanRoot, entry.name) });
+    } else if (!entry.name.startsWith('.') && !entry.name.startsWith('0')) {
+      // 可能是类型子目录（feature/bugfix/refactor/research）
+      const typeDir = join(scanRoot, entry.name);
+      const typeEntries = await readdir(typeDir, { withFileTypes: true }).catch(() => []);
+      for (const te of typeEntries) {
+        if (te.isDirectory() && te.name.startsWith('Task-')) {
+          taskDirs.push({ taskId: te.name, taskPath: join(typeDir, te.name) });
         }
-        const ownerMatch = taskMd.match(/负责人[:\s]*([^\n|]+)/);
-        if (ownerMatch && !assignee) assignee = ownerMatch[1].trim();
       }
+    }
+  }
+  
+  for (const { taskId, taskPath } of taskDirs) {
+    // 读取父任务元信息
+    let type = 'feature';
+    let parentStatus: TaskState['status'] = 'pending';
+    let parentAssignee = '';
+    let priority: TaskState['priority'] = 'medium';
+    
+    const metaDir = join(taskPath, '.meta');
+    if (await pathExists(metaDir)) {
+      const typePath = join(metaDir, 'type');
+      if (await pathExists(typePath)) type = (await readFile(typePath, 'utf-8')).trim();
+      const statusPath = join(metaDir, 'status');
+      if (await pathExists(statusPath)) parentStatus = parseStatus((await readFile(statusPath, 'utf-8')).trim());
+      const ownerPath = join(metaDir, 'owner');
+      if (await pathExists(ownerPath)) parentAssignee = (await readFile(ownerPath, 'utf-8')).trim();
+    } else {
+      const typePath = join(taskPath, '.task-type');
+      if (await pathExists(typePath)) type = (await readFile(typePath, 'utf-8')).trim();
+    }
+    
+    // 从 _shared/ 或 00-specs/ 读取父任务名称
+    let name = taskId;
+    const sharedTaskMd = join(taskPath, '_shared', 'TASK.md');
+    const oldTaskMd = join(taskPath, '00-specs', 'TASK.md');
+    const taskMdPath = (await pathExists(sharedTaskMd)) ? sharedTaskMd :
+                       (await pathExists(oldTaskMd)) ? oldTaskMd : null;
+    if (taskMdPath) {
+      const taskMd = await readFile(taskMdPath, 'utf-8');
+      const nameMatch = taskMd.match(/#\s+(.+)/);
+      if (nameMatch) name = nameMatch[1].trim();
+      const prioMatch = taskMd.match(/优先级[:\s]*(high|medium|low|高|中|低)/i);
+      if (prioMatch) {
+        const p = prioMatch[1].toLowerCase();
+        if (p.includes('high') || p.includes('高')) priority = 'high';
+        else if (p.includes('low') || p.includes('低')) priority = 'low';
+      }
+      const ownerMatch = taskMd.match(/负责人[:\s]*([^\n|]+)/);
+      if (ownerMatch && !parentAssignee) parentAssignee = ownerMatch[1].trim();
+    }
+    
+    // 扫描各端子任务目录（新结构: {platform}/TASK.md）
+    let hasSubTasks = false;
+    const subTasks: TaskState[] = [];
+    const dirEntries = await readdir(taskPath, { withFileTypes: true }).catch(() => []);
+    
+    for (const de of dirEntries) {
+      if (!de.isDirectory()) continue;
+      if (NON_PLATFORM_DIRS.has(de.name)) continue;
+      if (de.name.startsWith('.') || de.name.startsWith('0')) continue;
       
+      const platformDirPath = join(taskPath, de.name);
+      if (await isPlatformDir(platformDirPath)) {
+        hasSubTasks = true;
+        const platform = de.name;
+        const subTaskMd = await readFile(join(platformDirPath, 'TASK.md'), 'utf-8');
+        
+        // 提取子任务负责人、状态、子任务 ID
+        let subAssignee = parentAssignee;
+        const subOwnerMatch = subTaskMd.match(/\*\*负责人\*\*[:\s]*([^\n]+)/);
+        if (subOwnerMatch) subAssignee = subOwnerMatch[1].trim();
+        
+        let subStatus: TaskState['status'] = 'pending';
+        const subStatusMatch = subTaskMd.match(/\*\*状态\*\*[:\s]*(.+)/);
+        if (subStatusMatch) {
+          const raw = subStatusMatch[1].trim();
+          if (raw.includes('已完成') || raw.includes('completed')) subStatus = 'completed';
+          else if (raw.includes('进行中') || raw.includes('in_progress')) subStatus = 'in_progress';
+        }
+        
+        // 提取子任务 ID
+        let subTaskId = `${taskId}-${platform}`;
+        const subIdMatch = subTaskMd.match(/子任务 ID\*\*[:\s]*`(Task-[^`]+)`/);
+        if (subIdMatch) subTaskId = subIdMatch[1];
+        
+        // 提取子任务名称
+        let subName = `${name} - ${platform}`;
+        const subNameMatch = subTaskMd.match(/#\s+(.+)/);
+        if (subNameMatch) subName = subNameMatch[1].trim();
+        
+        subTasks.push({
+          id: subTaskId,
+          name: subName,
+          type,
+          status: subStatus,
+          assignee: subAssignee,
+          dependencies: [],
+          priority,
+          progress: subStatus === 'completed' ? 100 : 0,
+          platform,
+          parentTaskId: taskId,
+        });
+      }
+    }
+    
+    if (hasSubTasks && subTasks.length > 0) {
+      // 新结构: 展开为各端子任务
+      tasks.push(...subTasks);
+    } else {
+      // 旧结构或无子任务的父任务
       tasks.push({
         id: taskId,
         name,
         type,
-        status,
-        assignee,
+        status: parentStatus,
+        assignee: parentAssignee,
         dependencies: [],
         priority,
-        progress: status === 'completed' ? 100 : 0
+        progress: parentStatus === 'completed' ? 100 : 0
       });
     }
   }
