@@ -80,18 +80,204 @@ const STOP_WORDS = new Set([
 ]);
 
 /** 语义映射（轻量版，可扩展） */
+/**
+ * 语义同义词映射表 — 轻量级语义扩展
+ *
+ * 设计原则：
+ * - 覆盖常见业务领域（电商、金融、社交、企业应用）
+ * - 中英双语映射，支持跨语言检索
+ * - 每个词条 3-6 个同义词，避免过度扩展导致噪声
+ * - 反向查找自动建立（expandKeywords 中已实现）
+ *
+ * 维护建议：项目初始化后可按业务领域补充行业术语
+ */
 const SEMANTIC_MAP: Record<string, string[]> = {
-  login: ['auth', 'session', 'token', 'signin', 'authenticate'],
-  auth: ['login', 'session', 'token', 'permission', 'authenticate'],
-  permission: ['rbac', 'acl', 'role', 'authorize', 'access'],
-  rbac: ['permission', 'role', 'access', 'authorize'],
-  user: ['account', 'member', 'profile', 'person'],
-  order: ['purchase', 'transaction', 'payment', 'buy'],
-  payment: ['pay', 'order', 'transaction', 'checkout', 'alipay', 'wechat'],
-  登录: ['认证', '鉴权', '会话', 'token', '密码'],
-  权限: ['RBAC', '角色', '访问控制', '授权'],
-  订单: ['购买', '交易', '支付', '下单'],
-  支付: ['付款', '订单', '交易', '收银台'],
+  // ═══════════════════════════════════════════════════════════
+  // 1. 用户与认证 (14组)
+  // ═══════════════════════════════════════════════════════════
+  login: ['auth', 'session', 'token', 'signin', 'authenticate', 'sso'],
+  auth: ['login', 'session', 'token', 'permission', 'authenticate', 'authorization'],
+  permission: ['rbac', 'acl', 'role', 'authorize', 'access', 'privilege'],
+  rbac: ['permission', 'role', 'access', 'authorize', 'acl'],
+  user: ['account', 'member', 'profile', 'person', 'customer', 'client'],
+  account: ['user', 'member', 'profile', 'registration', 'signup'],
+  register: ['signup', 'enrollment', 'createAccount', 'join'],
+  logout: ['signout', 'exit', 'quit', 'sessionEnd'],
+  password: ['credential', 'passphrase', 'pwd', 'secret'],
+  session: ['token', 'cookie', 'jwt', 'state', 'connection'],
+  jwt: ['token', 'session', 'auth', 'bearer', 'claim'],
+  sso: ['singleSignOn', 'federated', 'oauth', 'ldap', 'cas'],
+  oauth: ['sso', 'openid', 'authorization', 'token', 'grant'],
+  captcha: ['verification', 'challenge', 'validateCode'],
+
+  // ═══════════════════════════════════════════════════════════
+  // 2. 电商与交易 (18组)
+  // ═══════════════════════════════════════════════════════════
+  order: ['purchase', 'transaction', 'payment', 'buy', 'checkout', 'cart'],
+  payment: ['pay', 'order', 'transaction', 'checkout', 'billing', 'settlement'],
+  cart: ['basket', 'trolley', 'shoppingCart', 'itemList'],
+  checkout: ['payment', 'order', 'settlement', 'pay', 'purchase'],
+  refund: ['return', 'reimbursement', 'cashback', 'chargeback'],
+  invoice: ['receipt', 'bill', 'ticket', 'statement'],
+  coupon: ['voucher', 'discount', 'promo', 'code'],
+  discount: ['coupon', 'voucher', 'promo', 'reduction', 'sale'],
+  promotion: ['campaign', 'marketing', 'sale', 'activity'],
+  price: ['cost', 'amount', 'fee', 'charge', 'rate'],
+  sku: ['stockKeepingUnit', 'item', 'product', 'variant', 'spec'],
+  inventory: ['stock', 'warehouse', 'storage', 'reserve'],
+  stock: ['inventory', 'warehouse', 'storage', 'supply'],
+  shipping: ['delivery', 'logistics', 'transport', 'freight'],
+  delivery: ['shipping', 'logistics', 'transport', 'courier'],
+  warehouse: ['storage', 'depot', 'inventory', 'stock'],
+  supplier: ['vendor', 'provider', 'merchant', 'seller'],
+  merchant: ['seller', 'vendor', 'shop', 'store', 'retailer'],
+
+  // ═══════════════════════════════════════════════════════════
+  // 3. 商品与内容 (12组)
+  // ═══════════════════════════════════════════════════════════
+  product: ['item', 'goods', 'merchandise', 'sku', 'commodity'],
+  category: ['classification', 'type', 'group', 'taxonomy'],
+  brand: ['trademark', 'label', 'make', 'manufacturer'],
+  review: ['comment', 'rating', 'feedback', 'evaluation'],
+  search: ['query', 'lookup', 'find', 'retrieve', 'discover'],
+  filter: ['sort', 'condition', 'criteria', 'refine', 'screen'],
+  recommend: ['suggest', 'propose', 'advise', 'personalized'],
+  favorite: ['bookmark', 'like', 'wishlist', 'collect'],
+  bookmark: ['favorite', 'save', 'mark'],
+  tag: ['label', 'keyword', 'mark', 'category'],
+  catalog: ['directory', 'listing', 'index', 'inventory'],
+  content: ['article', 'post', 'material', 'document', 'media'],
+
+  // ═══════════════════════════════════════════════════════════
+  // 4. 通知与消息 (8组)
+  // ═══════════════════════════════════════════════════════════
+  notification: ['alert', 'reminder', 'message', 'notice', 'push'],
+  message: ['msg', 'notification', 'email', 'sms', 'chat'],
+  email: ['mail', 'message', 'newsletter', 'electronicMail'],
+  sms: ['message', 'text', 'mobile', 'shortMessage'],
+  push: ['notification', 'alert', 'broadcast', 'realtime'],
+  subscribe: ['follow', 'register', 'enrollment'],
+  unsubscribe: ['cancel', 'optout'],
+  template: ['pattern', 'model', 'format', 'layout'],
+
+  // ═══════════════════════════════════════════════════════════
+  // 5. 数据与分析 (10组)
+  // ═══════════════════════════════════════════════════════════
+  analytics: ['analysis', 'statistics', 'metrics', 'reporting'],
+  metric: ['indicator', 'kpi', 'measurement', 'stat'],
+  report: ['dashboard', 'summary', 'analytics', 'chart'],
+  dashboard: ['panel', 'overview', 'board', 'console'],
+  chart: ['graph', 'diagram', 'visualization', 'plot'],
+  export: ['download', 'output', 'backup', 'extract'],
+  import: ['upload', 'input', 'load', 'ingest'],
+  sync: ['synchronize', 'replicate', 'refresh', 'update'],
+  backup: ['snapshot', 'copy', 'archive', 'restore'],
+  cache: ['buffer', 'store', 'memo', 'redis'],
+
+  // ═══════════════════════════════════════════════════════════
+  // 6. 系统与架构 (16组)
+  // ═══════════════════════════════════════════════════════════
+  api: ['interface', 'endpoint', 'rest', 'graphql', 'contract'],
+  endpoint: ['api', 'route', 'url', 'path'],
+  service: ['microservice', 'module', 'component', 'business'],
+  module: ['component', 'package', 'library', 'plugin'],
+  component: ['widget', 'element', 'part', 'module'],
+  config: ['configuration', 'setting', 'preference', 'option'],
+  deploy: ['release', 'publish', 'rollout', 'ship'],
+  release: ['deploy', 'version', 'publish', 'launch'],
+  rollback: ['revert', 'undo', 'fallback', 'restore'],
+  environment: ['env', 'stage', 'context', 'runtime'],
+  production: ['prod', 'live', 'online'],
+  staging: ['test', 'preview', 'uat', 'preprod'],
+  monitor: ['observe', 'track', 'watch', 'supervise'],
+  log: ['record', 'trace', 'audit', 'journal'],
+  error: ['exception', 'fault', 'bug', 'failure', 'issue'],
+  exception: ['error', 'fault', 'throw', 'catch'],
+
+  // ═══════════════════════════════════════════════════════════
+  // 7. 任务与调度 (6组)
+  // ═══════════════════════════════════════════════════════════
+  retry: ['attempt', 'replay', 'resend'],
+  timeout: ['deadline', 'expiration', 'limit'],
+  queue: ['buffer', 'pipeline', 'backlog'],
+  schedule: ['cron', 'timer', 'job', 'task'],
+  job: ['task', 'cron', 'worker', 'batch'],
+  worker: ['processor', 'handler', 'executor', 'consumer'],
+
+  // ═══════════════════════════════════════════════════════════
+  // 8. 安全与合规 (6组)
+  // ═══════════════════════════════════════════════════════════
+  security: ['safety', 'protection', 'defense', 'secure'],
+  encrypt: ['encode', 'cipher', 'crypt'],
+  decrypt: ['decode', 'decipher'],
+  hash: ['digest', 'checksum', 'fingerprint'],
+  signature: ['sign', 'sig', 'verification'],
+  verify: ['validate', 'confirm', 'check', 'authenticate'],
+  validate: ['verify', 'check', 'confirm'],
+  audit: ['review', 'inspect', 'examine'],
+  compliance: ['regulation', 'policy', 'standard'],
+  privacy: ['confidentiality', 'dataProtection', 'gdpr'],
+
+  // ═══════════════════════════════════════════════════════════
+  // 9. 前端与UI (8组)
+  // ═══════════════════════════════════════════════════════════
+  page: ['screen', 'view', 'route', 'interface'],
+  form: ['input', 'field', 'entry'],
+  table: ['grid', 'list', 'datatable'],
+  modal: ['dialog', 'popup', 'overlay'],
+  toast: ['notification', 'snackbar', 'message'],
+  menu: ['navigation', 'nav', 'sidebar'],
+  theme: ['style', 'skin', 'appearance'],
+  responsive: ['adaptive', 'mobile', 'fluid'],
+
+  // ═══════════════════════════════════════════════════════════
+  // 10. 中文业务术语 (16组)
+  // ═══════════════════════════════════════════════════════════
+  登录: ['认证', '鉴权', '会话', 'token', '密码', '登陆'],
+  注册: ['开户', '创建账号', '新用户', '加入', 'signup'],
+  权限: ['RBAC', '角色', '访问控制', '授权', '特权'],
+  用户: ['客户', '会员', '账号', '账户', '使用者'],
+  密码: ['口令', '凭证', '密钥', '密文'],
+  订单: ['购买', '交易', '支付', '下单', '采购'],
+  支付: ['付款', '结算', '收银台', '扣款', 'billing'],
+  购物车: ['购物篮', '采购车', '商品列表'],
+  退款: ['退货', '返现', '撤销', '冲正'],
+  优惠券: ['代金券', '折扣码', '促销码', '红包'],
+  库存: ['存货', '仓储', '备货', '储备'],
+  物流: ['配送', '快递', '运输', '发货'],
+  价格: ['金额', '费用', '单价', '定价', '报价'],
+  商品: ['产品', '货品', 'SKU', '单品'],
+  分类: ['类目', '类别', '类型', '分组'],
+  搜索: ['查询', '查找', '检索', '发现'],
+  推荐: ['建议', '个性化', '猜你喜欢', '智能推荐'],
+  评价: ['评论', '评分', '反馈', '口碑'],
+  通知: ['提醒', '告警', '消息', '公告', '推送'],
+  消息: ['信息', '通知', '邮件', '短信', '站内信'],
+  邮件: ['email', '信箱', '电子信'],
+  短信: ['SMS', '短消息', '文本消息'],
+  数据: ['信息', '资料', '数值', '记录'],
+  分析: ['统计', '报表', '洞察', '解析'],
+  报表: ['报告', '看板', '图表', '统计表'],
+  导出: ['下载', '输出', '备份', '提取'],
+  导入: ['上传', '输入', '加载', '录入'],
+  同步: ['一致', '复制', '刷新', '更新'],
+  接口: ['API', '端点', '路由', '契约'],
+  服务: ['微服务', '模块', '组件', '业务'],
+  部署: ['发布', '上线', '投产', '发版'],
+  环境: ['运行环境', '上下文', '阶段', '场景'],
+  监控: ['观测', '追踪', '告警', '监管'],
+  日志: ['记录', '追踪', '审计', '日记'],
+  错误: ['异常', '故障', '缺陷', '问题'],
+  队列: ['缓冲', '管道', '任务队列', '消息队列'],
+  调度: ['定时', '计划', '任务', '排程'],
+  安全: ['防护', '保护', '加密', '防御'],
+  加密: ['编码', '混淆', '密文', '加密算法'],
+  验证: ['校验', '确认', '核实', '认证'],
+  审计: ['审查', '检查', '日志审计', '合规检查'],
+  页面: ['视图', '路由', '屏幕', '界面'],
+  组件: ['元件', '控件', '部件', '模块'],
+  表单: ['输入框', '字段', '录入'],
+  弹窗: ['对话框', '浮层', '模态框'],
 };
 
 // ═══════════════════════════════════════════════════════════
