@@ -2,6 +2,17 @@
 
 ---
 
+## v5.96.2 (2026-08-14) — Synthesize Global-Level Write Path Migration
+
+- Phase 1/2 output migrated from `Iteration-NNN/020-specs/` to `.speccore/GLOBAL/`
+- Phase 1 → `.speccore/GLOBAL/platforms/{endpoint}/`
+- Phase 2 → `.speccore/GLOBAL/synthesis/` (CROSS_PLATFORM + ARCHITECTURE + TECH_FULL)
+- Snapshot archival → `.speccore/GLOBAL/snapshots/`
+- Phase 3 output remains at iteration level `010-requirements/REQUIREMENT.md`
+- Phase 3 read logic collects input from both GLOBAL and iteration layers
+
+---
+
 ## v5.96.1 (2026-08-14) — Synthesize Directory Organization Optimization
 
 - Phase 1 output: `per-platform/` → `platforms/` (per-endpoint subdirectories)
