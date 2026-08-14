@@ -26,6 +26,13 @@ function getHints(stage: string, ctx: Record<string, string>): StepHint[] {
   const iter = ctx.iteration || '';
 
   switch (stage) {
+    case 'iteration-create':
+      return [
+        { action: `speccore doc2spec -f <PRD文件> --iter=${iter || '<迭代名>'}`, desc: '导入需求文档到 010-requirements/' },
+        { action: `speccore analyze --prompt -I ${iter || '<迭代名>'}`, desc: '分析需求 → 生成 020-specs/ 规格文档' },
+        { action: `speccore iteration split -I ${iter || '<迭代名>'}`, desc: '拆分为开发任务 → 030-tasks/' },
+      ];
+
     case 'init':
       return [
         { action: 'speccore iteration create --name=Q3', desc: '创建该迭代', args: '--from/--to 指定时间范围' },
