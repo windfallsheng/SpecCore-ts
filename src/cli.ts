@@ -32,6 +32,7 @@ import { statusPanelCommand } from './commands/status-panel';
 import { doc2specCommand } from './commands/doc2spec';
 import { spec2docCommand } from './commands/spec2doc';
 import { registerCodeIndexCommand } from './commands/code-index';
+import { registerRagIndexCommand } from './commands/rag-index';
 // 全量层命令
 import { iterationFromGlobalCommand } from './commands/iteration-from-global';
 import { syncGlobalCommand } from './commands/sync-global';
@@ -448,6 +449,9 @@ program
 
 // 源码索引
 registerCodeIndexCommand(program);
+
+// RAG 索引管理
+registerRagIndexCommand(program);
 
 // 全量索引重建与一致性检查
 program
