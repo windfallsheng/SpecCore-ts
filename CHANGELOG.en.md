@@ -2,6 +2,16 @@
 
 ---
 
+## v6.35.0 (2026-08-15) — Analyze --auto Generates Platform-Specific Docs (Global + Per-Platform Separation)
+
+### Core Changes
+
+- **analyze-engine.ts**: `generateSpecsFromRequirements()` refactored to "global docs + per-platform docs" dual-layer architecture
+  - **Global docs** (cross-platform): REQUIREMENT.md, ANALYSIS.md, DEPS.md, RISK.md, MONITOR.md, REVIEW.md
+  - **Per-platform docs**: Generate TECH.md, TEST.md, UI_SPEC.md (frontend only) under `020-specs/{platform}/`
+  - Added `buildTechSpecForPlatform()`, `buildTestSpecForPlatform()`, `buildUISpecForPlatform()` three platform-specific builders
+  - Added `isBackendPlatform()` helper function to identify backend platforms
+
 ## v6.34.0 (2026-08-15) — Split/Prompt-Builder/Knowledge-Graph Adapt to New Platform Directory Path
 
 ### Core Changes

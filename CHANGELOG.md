@@ -1,3 +1,13 @@
+## v6.35.0 (2026-08-15) — analyze --auto 按端生成专属文档（全局+各端分离）
+
+### 核心变更
+
+- **analyze-engine.ts**：`generateSpecsFromRequirements()` 重构为「全局文档 + 各端专属文档」双层架构
+  - **全局文档**（跨端通用）：REQUIREMENT.md、ANALYSIS.md、DEPS.md、RISK.md、MONITOR.md、REVIEW.md
+  - **各端专属文档**：在 `020-specs/{端}/` 下生成 TECH.md、TEST.md、UI_SPEC.md（仅前端）
+  - 新增 `buildTechSpecForPlatform()`、`buildTestSpecForPlatform()`、`buildUISpecForPlatform()` 三个按端构建函数
+  - 新增 `isBackendPlatform()` 辅助函数判断后端平台
+
 ## v6.34.0 (2026-08-15) — split/prompt-builder/knowledge-graph 适配端级目录新路径
 
 ### 核心变更

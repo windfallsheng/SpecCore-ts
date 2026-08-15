@@ -1947,55 +1947,66 @@ export async function generateSpecsFromRequirements(
   // 3. 生成各 Spec 文件
   const files: { filename: string; content: string }[] = [];
 
-  // REQUIREMENT.md — 结构化需求规格
+  // ── 全局文档（跨端通用）──
+  // REQUIREMENT.md — 结构化需求规格（业务功能 + API + 数据模型 + 业务规则）
   files.push({
     filename: 'REQUIREMENT.md',
     content: buildRequirementSpec(iteration, now, features, apis, dataModels, businessRules),
   });
 
-  // TECH.md — 技术方案
+  // ANALYSIS.md — 需求分析报告（完整性检查 + 架构影响 + 待确认清单）
+  const issues = scanCompleteness(fullContent);
+  const archImpactForAnalysis = await analyzeArchitectureImpact(fullContent);
   files.push({
-    filename: 'TECH.md',
-    content: buildTechSpec(iteration, now, apis, dataModels, archImpact, platforms, features, uiPatterns),
+    filename: 'ANALYSIS.md',
+    content: buildIterationReqReport({} as any, issues, archImpactForAnalysis, {}),
   });
 
-  // TEST.md — 测试计划
-  files.push({
-    filename: 'TEST.md',
-    content: buildTestSpec(iteration, now, features, apis),
-  });
-
-  // REVIEW.md — 评审清单
-  files.push({
-    filename: 'REVIEW.md',
-    content: buildReviewSpec(iteration, now, apis, archImpact),
-  });
-
-  // RISK.md — 风险评估
-  files.push({
-    filename: 'RISK.md',
-    content: buildRiskSpec(iteration, now, archImpact),
-  });
-
-  // DEPS.md — 依赖清单
+  // DEPS.md — 依赖清单（全局公共依赖）
   files.push({
     filename: 'DEPS.md',
     content: buildDepsSpec(iteration, now, archImpact),
   });
 
-  // MONITOR.md — 监控指标
+  // RISK.md — 风险评估（全局风险）
+  files.push({
+    filename: 'RISK.md',
+    content: buildRiskSpec(iteration, now, archImpact),
+  });
+
+  // MONITOR.md — 监控指标（全局指标）
   files.push({
     filename: 'MONITOR.md',
     content: buildMonitorSpec(iteration, now, apis, features),
   });
 
-  // UI_SPEC.md — 前端 UI 规格
+  // REVIEW.md — 评审清单（全局评审要点）
   files.push({
-    filename: 'UI_SPEC.md',
-    content: buildUISpec(iteration, now, uiPatterns),
+    filename: 'REVIEW.md',
+    content: buildReviewSpec(iteration, now, apis, archImpact),
   });
 
-  // 4. 写入文件（覆盖空模板，不覆盖已有实质内容的文件）
+  // ── 各端专属文档 ──
+  for (const platform of platforms) {
+    const platformDir = join(specDir, platform);
+    await ensureDir(platformDir);
+
+    // TECH.md — 该端技术方案
+    const techContent = buildTechSpecForPlatform(iteration, now, apis, dataModels, archImpact, platform, features, uiPatterns);
+    await writeFile(join(platformDir, 'TECH.md'), techContent);
+
+    // TEST.md — 该端测试计划
+    const testContent = buildTestSpecForPlatform(iteration, now, features, apis, platform);
+    await writeFile(join(platformDir, 'TEST.md'), testContent);
+
+    // UI_SPEC.md — 该端 UI 规格（仅前端）
+    if (!isBackendPlatform(platform)) {
+      const uiContent = buildUISpecForPlatform(iteration, now, uiPatterns, platform);
+      await writeFile(join(platformDir, 'UI_SPEC.md'), uiContent);
+    }
+  }
+
+  // 4. 写入全局文件（覆盖空模板，不覆盖已有实质内容的文件）
   let withContent = 0;
   let skipped = 0;
   await ensureDir(specDir);
@@ -2016,7 +2027,7 @@ export async function generateSpecsFromRequirements(
 
   return {
     files,
-    summary: { total: files.length, withContent, skipped },
+    summary: { total: files.length + platforms.length * 3, withContent, skipped },
   };
 }
 
@@ -2118,6 +2129,11 @@ function extractBusinessRules(content: string): string[] {
     }
   }
   return rules.slice(0, 15);
+}
+
+// ── 辅助函数：判断是否为后端平台 ──
+function isBackendPlatform(platform: string): boolean {
+  return platform === 'backend' || platform.startsWith('后台') || platform.includes('服务');
 }
 
 function stripTemplateNoise(content: string): string {
@@ -2251,7 +2267,174 @@ function buildTechSpec(
   return md;
 }
 
-// ── UI 规格提取与构建 ──
+// ── 按端专属文档构建器 ──
+
+/**
+ * 生成指定端的技术方案（该端专属内容）
+ */
+function buildTechSpecForPlatform(
+  iter: string, now: string,
+  apis: { method: string; path: string; desc: string }[],
+  models: { table: string; fields: string; desc: string }[],
+  archImpact: ArchImpact,
+  platform: string,
+  features: { name: string; desc: string }[],
+  uiPatterns: ReturnType<typeof extractUIPatterns>,
+): string {
+  let md = `# ${platform} 端技术方案\n\n> 迭代: ${iter} | 端: ${platform} | 生成: ${now}\n\n`;
+
+  if (isBackendPlatform(platform)) {
+    // 后端专属内容
+    md += `## 1. 接口设计\n\n`;
+    const backendApis = apis.filter(a => !a.path.startsWith('/h5') && !a.path.startsWith('/admin'));
+    if (backendApis.length > 0) {
+      md += `| 方法 | 路径 | 说明 |\n| :--- | :--- | :--- |\n`;
+      backendApis.forEach(a => { md += `| ${a.method} | \`${a.path}\` | ${a.desc || '—'} |\n`; });
+    } else {
+      md += `_未检测到后端 API，需根据需求补充。_\n`;
+    }
+
+    md += `\n## 2. 数据模型\n\n`;
+    if (models.length > 0) {
+      md += `| 表名 | 字段 | 说明 |\n| :--- | :--- | :--- |\n`;
+      models.forEach(m => { md += `| \`${m.table}\` | ${m.fields || '待补充'} | ${m.desc} |\n`; });
+    } else {
+      md += `_需求中未检测到数据模型，需根据功能需求推导。_\n`;
+    }
+
+    md += `\n## 3. 业务逻辑\n\n`;
+    md += `_待 AI 分析各功能的实现细节、事务约束、异常处理。_\n`;
+
+  } else {
+    // 前端专属内容
+    md += `## 1. 页面结构\n\n`;
+    const platformPages = uiPatterns.pages.filter(p => p.route.includes(`/${platform}`) || p.name.includes(platform));
+    if (platformPages.length > 0) {
+      md += `| 页面 | 路由 | 描述 |\n| :--- | :--- | :--- |\n`;
+      platformPages.forEach(p => { md += `| ${p.name} | \`${p.route}\` | ${p.desc} |\n`; });
+    } else {
+      md += `_待补充：从需求中提取 ${platform} 端的页面清单。_\n`;
+    }
+
+    md += `\n## 2. 组件设计\n\n`;
+    const platformComponents = uiPatterns.components.filter(c => c.page.includes(platform) || c.type.includes(platform));
+    if (platformComponents.length > 0) {
+      md += `| 组件 | 类型 | 所属页面 |\n| :--- | :--- | :--- |\n`;
+      platformComponents.forEach(c => { md += `| ${c.name} | ${c.type} | ${c.page} |\n`; });
+    } else {
+      md += `_待补充：从需求中提取 ${platform} 端的组件清单。_\n`;
+    }
+
+    md += `\n## 3. 状态管理\n\n`;
+    md += `_待 AI 分析 ${platform} 端的状态管理方案（Pinia/Redux/Context 等）。_\n`;
+
+    md += `\n## 4. 交互设计\n\n`;
+    if (platform === 'h5' || platform === 'miniapp') {
+      md += `- 触摸交互优化\n- 弱网环境适配\n- 响应式布局\n`;
+    } else if (platform === 'admin') {
+      md += `- 表格/表单交互规范\n- 权限控制\n- 批量操作\n`;
+    } else {
+      md += `_待补充 ${platform} 端特有的交互要求。_\n`;
+    }
+  }
+
+  return md;
+}
+
+/**
+ * 生成指定端的测试计划（该端专属内容）
+ */
+function buildTestSpecForPlatform(
+  iter: string, now: string,
+  features: { name: string; desc: string }[],
+  apis: { method: string; path: string; desc: string }[],
+  platform: string,
+): string {
+  let md = `# ${platform} 端测试计划\n\n> 迭代: ${iter} | 端: ${platform} | 生成: ${now}\n\n`;
+
+  if (isBackendPlatform(platform)) {
+    md += `## 1. 接口测试\n\n`;
+    const backendApis = apis.filter(a => !a.path.startsWith('/h5') && !a.path.startsWith('/admin'));
+    if (backendApis.length > 0) {
+      backendApis.forEach(a => {
+        md += `- [ ] ${a.method} ${a.path}: ${a.desc || '验证接口功能'}\n`;
+      });
+    } else {
+      md += `_待补充：根据需求编写接口测试用例。_\n`;
+    }
+
+    md += `\n## 2. 性能测试\n\n`;
+    md += `- QPS 目标：待补充\n- 响应时间 P99：待补充\n- 并发用户数：待补充\n`;
+
+  } else {
+    md += `## 1. 页面流转测试\n\n`;
+    md += `_待 AI 分析 ${platform} 端的页面跳转流程、入口校验、权限拦截。_\n`;
+
+    md += `\n## 2. 交互测试\n\n`;
+    if (platform === 'h5' || platform === 'miniapp') {
+      md += `- 触摸手势识别\n- 下拉刷新/上拉加载\n- 键盘弹出适配\n`;
+    } else if (platform === 'admin') {
+      md += `- 表格排序/筛选/分页\n- 表单校验提示\n- 批量操作确认\n`;
+    }
+
+    md += `\n## 3. 四态测试\n\n`;
+    md += `- 空状态（无数据时展示）\n- 加载中状态\n- 错误状态（网络异常/超时）\n- 成功状态\n`;
+  }
+
+  return md;
+}
+
+/**
+ * 生成指定端的 UI 规格（仅前端）
+ */
+function buildUISpecForPlatform(
+  iter: string, now: string,
+  uiPatterns: ReturnType<typeof extractUIPatterns>,
+  platform: string,
+): string {
+  let md = `# ${platform} 端 UI 规格\n\n> 迭代: ${iter} | 端: ${platform} | 生成: ${now}\n\n`;
+
+  md += `## 1. 路由表\n\n`;
+  const platformPages = uiPatterns.pages.filter(p => p.route.includes(`/${platform}`) || p.name.includes(platform));
+  if (platformPages.length > 0) {
+    md += `| 页面 | 路由 | 入口 | 权限 |\n| :--- | :--- | :--- | :--- |\n`;
+    platformPages.forEach(p => { md += `| ${p.name} | \`${p.route}\` | 待补充 | 待补充 |\n`; });
+  } else {
+    md += `_待补充：从需求中提取 ${platform} 端的路由配置。_\n`;
+  }
+
+  md += `\n## 2. 组件清单\n\n`;
+  const platformComponents = uiPatterns.components.filter(c => c.page.includes(platform) || c.type.includes(platform));
+  if (platformComponents.length > 0) {
+    md += `| 组件 | 类型 | 复用性 |\n| :--- | :--- | :--- |\n`;
+    platformComponents.forEach(c => { md += `| ${c.name} | ${c.type} | 高/中/低 |\n`; });
+  } else {
+    md += `_待补充：从需求中提取 ${platform} 端的组件清单。_\n`;
+  }
+
+  md += `\n## 3. 字段→UI 映射\n\n`;
+  const platformFields = uiPatterns.formFields.filter(f => f.page.includes(platform));
+  if (platformFields.length > 0) {
+    md += `| 页面/表单 | 字段 | UI 组件 |\n| :--- | :--- | :--- |\n`;
+    platformFields.forEach(f => { md += `| ${f.page} | ${f.fields.join(', ')} | Input/Select/DatePicker |\n`; });
+  } else {
+    md += `_待补充：从需求中提取 ${platform} 端的字段与 UI 映射关系。_\n`;
+  }
+
+  md += `\n## 4. 状态枚举\n\n`;
+  if (uiPatterns.statusEnums.length > 0) {
+    md += `| 字段 | 值 | 含义 |\n| :--- | :--- | :--- |\n`;
+    uiPatterns.statusEnums.forEach(s => {
+      md += `| ${s.field} | ${s.values.join(' / ')} | ${s.labels.join(' / ')} |\n`;
+    });
+  } else {
+    md += `_待补充：前后端共享的状态值定义。_\n`;
+  }
+
+  return md;
+}
+
+// ─ UI 规格提取与构建 ──
 
 function extractUIPatterns(content: string): {
   pages: { name: string; route: string; desc: string }[];
