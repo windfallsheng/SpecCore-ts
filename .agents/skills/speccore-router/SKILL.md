@@ -12,10 +12,11 @@ allow-tools: ["Bash", "Read", "Write", "Edit"]
 ## 🎯 Speccore 输出标记处理
 
 执行任何 `speccore` 命令后，检查 stdout 中的标记：
-- `[SPECCORE_ONBOARD: <path>]` → **🚨 必须最先处理，不可跳过**：
-  1. 支持 `present_files` 的平台 → 立即展示该 HTML 引导页
-  2. 不支持直接展示的平台 → 输出提示：“🎉 首次使用！请先打开引导页：`<path>`”，然后告诉用户打开后再继续
-  3. **展示完引导页后**，再继续处理其他输出
+- `[SPECCORE_ONBOARD: <path>]` → **🚨 必须最先处理，不可跳过，不可只口头提及**：
+  1. **立即执行** `present_files(<path>)` 展示 HTML 引导页（Qoder/Trae/Cursor 均支持）
+  2. ❌ 禁止只说"检测到引导页"而不执行展示动作 — 说了不等于做了
+  3. ❌ 禁止用文字描述引导页内容代替实际展示 — 必须让用户看到 HTML 页面
+  4. **展示完成后**，再继续处理其他输出
 - `[SPECCORE_EXEC: <cmd>]` → 直接 `execute_command` 执行
 - `[SPECCORE_INTENT]` → 展示给用户确认
 

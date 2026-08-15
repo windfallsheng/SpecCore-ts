@@ -1,3 +1,11 @@
+## v6.32.0 (2026-08-15) — 引导页强制展示修复（全平台）
+
+### 核心变更
+
+- **speccore-router/SKILL.md**：`[SPECCORE_ONBOARD]` 处理规则从条件式（"支持 present_files 的平台 → 展示"）改为强制式（"**立即执行** present_files"），消除 AI 选择性忽略的漏洞
+- **7 个平台 spec-ask.md**（.claude/.codebuddy/.cursor/.qoder/.trae/.trae-cn/.windsurf）：新增「引导页强制展示」章节，与 SKILL.md 规则同步
+- **init.ts**：spec-ask 命令模板新增引导页强制展示规则，确保 `speccore init --update` 后新项目也能正确展示
+
 ## v6.31.0 (2026-08-15) — CONSTITUTION 升级章节对比 + update 同步清单增强
 
 ### 核心变更
