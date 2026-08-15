@@ -1,3 +1,11 @@
+## v6.34.0 (2026-08-15) — split/prompt-builder/knowledge-graph 适配端级目录新路径
+
+### 核心变更
+
+- **split.ts**：`loadSpecContents()` 从 `020-specs/{端}/` 读取端级分析文档（兼容旧路径 `020-specs/platforms/{端}/`），解决 analyze 按端分目录后 split 读不到端级内容的问题
+- **prompt-builder.ts**：端级规格文件路径从 `020-specs/platforms/{端}/` 改为优先 `020-specs/{端}/`，旧路径回退
+- **knowledge-graph.ts**：知识图谱扫描从 `020-specs/platforms/{端}/` 改为 `020-specs/{端}/`，旧路径回退
+
 ## v6.33.0 (2026-08-15) — analyze prompt 增加目录结构指导
 
 ### 核心变更

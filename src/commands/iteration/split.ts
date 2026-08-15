@@ -528,20 +528,36 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           }
         }
       }
-      // 读取各端详情（020-specs/platforms/{端}/）
+      // 读取各端详情（020-specs/{端}/，兼容旧路径 020-specs/platforms/{端}/）
+      const platformDirs: string[] = [];
+      // 新路径：020-specs/{端}/
+      const directPlatformEntries = await readdir(specDir2, { withFileTypes: true });
+      for (const e of directPlatformEntries) {
+        if (e.isDirectory() && !e.name.startsWith('_') && !e.name.startsWith('.')
+          && !['sources', 'assets', 'prototypes', 'converted', 'features', 'bugs', 'refactors', 'research', 'staging', 'platforms', 'snapshots'].includes(e.name)) {
+          platformDirs.push(e.name);
+        }
+      }
+      // 旧路径回退：020-specs/platforms/{端}/
       const iterPlatformsDir = join(specDir2, 'platforms');
       if (await pathExists(iterPlatformsDir)) {
         const platformEntries = await readdir(iterPlatformsDir, { withFileTypes: true });
         for (const pe of platformEntries) {
-          if (pe.isDirectory() && !pe.name.startsWith('.')) {
-            const pFiles = await readdir(join(iterPlatformsDir, pe.name));
-            for (const pf of pFiles.filter((f: string) => f.endsWith('.md'))) {
-              const fp = join(iterPlatformsDir, pe.name, pf);
-              const content = await readFile(fp, 'utf-8');
-              if (content.trim().length > 50 && !content.trim().match(/^#+\s*\u5f85\u586b\u5145|^<!--\s*AI-FILL/m)) {
-                specContents.push({ name: `platforms/${pe.name}/${pf}`, content });
-              }
-            }
+          if (pe.isDirectory() && !pe.name.startsWith('.') && !platformDirs.includes(pe.name)) {
+            platformDirs.push(pe.name);
+          }
+        }
+      }
+      // 读取每个端目录下的文件
+      for (const pName of platformDirs) {
+        const pDir = join(specDir2, pName);
+        if (!(await pathExists(pDir))) continue;
+        const pFiles = await readdir(pDir);
+        for (const pf of pFiles.filter((f: string) => f.endsWith('.md'))) {
+          const fp = join(pDir, pf);
+          const content = await readFile(fp, 'utf-8');
+          if (content.trim().length > 50 && !content.trim().match(/^#+\s*\u5f85\u586b\u5145|^<!--\s*AI-FILL/m)) {
+            specContents.push({ name: `${pName}/${pf}`, content });
           }
         }
       }

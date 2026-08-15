@@ -200,29 +200,44 @@ async function scanSpecs(iterDir: string): Promise<{
     });
   }
 
-  // 扫描 platforms/ 子目录
+  // 扫描各端子目录（新路径 020-specs/{端}/，兼容旧路径 020-specs/platforms/{端}/）
+  const knownNonPlatformDirs = new Set(['sources', 'assets', 'prototypes', 'converted', 'features', 'bugs', 'refactors', 'research', 'staging', 'platforms', 'snapshots']);
+  const platformDirs: string[] = [];
+  const specsEntries = await readdir(specsDir, { withFileTypes: true });
+  for (const e of specsEntries) {
+    if (e.isDirectory() && !e.name.startsWith('_') && !e.name.startsWith('.') && !knownNonPlatformDirs.has(e.name)) {
+      platformDirs.push(e.name);
+    }
+  }
+  // 旧路径回退
   const platformsDir = join(specsDir, 'platforms');
   if (await pathExists(platformsDir)) {
     const platformEntries = await readdir(platformsDir, { withFileTypes: true });
     for (const pe of platformEntries) {
-      if (!pe.isDirectory()) continue;
-      const pFiles = await readdir(join(platformsDir, pe.name));
-      for (const f of pFiles) {
-        if (!f.endsWith('.md') || isTimestampBackup(f)) continue;
-        const fullPath = join(platformsDir, pe.name, f);
-        const { hash, mtime } = await fileHash(fullPath);
-        const title = await extractTitle(fullPath);
-
-        entities.push({
-          id: `SPEC:${pe.name}/${f.replace('.md', '')}`,
-          type: 'spec',
-          title: title || f.replace('.md', ''),
-          file: `020-specs/platforms/${pe.name}/${f}`,
-          hash,
-          mtime,
-          platform: pe.name,
-        });
+      if (pe.isDirectory() && !pe.name.startsWith('.') && !platformDirs.includes(pe.name)) {
+        platformDirs.push(pe.name);
       }
+    }
+  }
+  for (const pName of platformDirs) {
+    const pDir = join(specsDir, pName);
+    if (!(await pathExists(pDir))) continue;
+    const pFiles = await readdir(pDir);
+    for (const f of pFiles) {
+      if (!f.endsWith('.md') || isTimestampBackup(f)) continue;
+      const fullPath = join(pDir, f);
+      const { hash, mtime } = await fileHash(fullPath);
+      const title = await extractTitle(fullPath);
+
+      entities.push({
+        id: `SPEC:${pName}/${f.replace('.md', '')}`,
+        type: 'spec',
+        title: title || f.replace('.md', ''),
+        file: `020-specs/${pName}/${f}`,
+        hash,
+        mtime,
+        platform: pName,
+      });
     }
   }
 
