@@ -307,7 +307,7 @@ speccore ops
 
 ---
 
-## 子命令 (全量模式)
+## 子命令
 
 ### iteration
 ```bash

@@ -1078,12 +1078,9 @@ async function interactiveInitFlow(options: InitOptions): Promise<void> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const ask = (q: string): Promise<string> => new Promise(r => rl.question(`${q} `, a => r(a.trim())));
 
-  logger.info('\n🧭 SpecCore 初始化向导\n');
-  const modeAns = await ask('选择模式 [1]简洁(17个核心命令) [2]全量(51个命令) (默认:1): ');
-  if (modeAns === '2') options.mode = 'full';
+  logger.info('\n SpecCore 初始化向导\n');
 
   logger.info(`\n📁 .speccore/ + .workbuddy/ 集成文件`);
-  logger.info(`   模式: ${options.mode === 'full' ? '全量 (51命令)' : '简洁 (17命令)'}`);
 
   const confirm = await ask('\n确认初始化？ [y/n]: ');
   rl.close();
