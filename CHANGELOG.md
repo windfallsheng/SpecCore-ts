@@ -1,3 +1,17 @@
+## v6.18.3 (2026-08-15) — Prompt 瘦身：分阶段加载
+
+### 优化
+
+- **代码生成阶段排除自检文件**: `loadAllTaskContext` 全量兜底时排除 TEST.md / SCHEMA.md / REVIEW.md / CHANGELOG.md / DEPLOY.md / .issues.md 以及 99-artifacts/ 目录
+- **每任务 prompt 减少 ~3-5K tokens**: 自检/审查/产出文件留到 verify 阶段加载，代码生成阶段只加载必需上下文
+- **效果**: 7 个任务的项目可能一个对话就能完成（优化前 6 个任务就溢出）
+
+### 涉及文件
+
+- `src/core/prompt-builder.ts` — `loadAllTaskContext` 新增 `CODEGEN_EXCLUDE_DIRS` + `CODEGEN_EXCLUDE_FILES` 排除列表
+
+---
+
 ## v6.18.2 (2026-08-15) — AI 模式批次执行 + 任务状态追踪
 
 ### 新增功能

@@ -2,6 +2,16 @@
 
 ---
 
+## v6.18.3 (2026-08-15) — Prompt Slimming: Phase-Based Loading
+
+### Optimization
+
+- **Exclude self-check files during code generation**: `loadAllTaskContext` now excludes TEST.md / SCHEMA.md / REVIEW.md / CHANGELOG.md / DEPLOY.md / .issues.md and 99-artifacts/ directory
+- **~3-5K tokens saved per task**: Self-check/review/artifact files deferred to verify phase; code gen only loads essential context
+- **Impact**: 7-task projects may fit in a single conversation (previously overflowed at 6 tasks)
+
+---
+
 ## v6.18.2 (2026-08-15) — AI Mode Batch Execution + Task Status Tracking
 
 ### New Features

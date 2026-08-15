@@ -439,6 +439,9 @@ async function loadAllTaskContext(
   };
 
   // 1. 递归扫描任务目录所有 .md / .yaml 文件
+  // 排除自检/审查/产出阶段文件（这些在代码生成后的 verify 阶段才需要）
+  const CODEGEN_EXCLUDE_DIRS = new Set(['node_modules', '10-backend', '20-frontend', '99-artifacts', '.meta']);
+  const CODEGEN_EXCLUDE_FILES = new Set(['test.md', 'schema.md', 'review.md', 'changelog.md', 'deploy.md', '.issues.md']);
   const scanTaskDir = async (dir: string, prefix: string) => {
     if (!(await pathExists(dir))) return;
     try {
@@ -447,9 +450,11 @@ async function loadAllTaskContext(
         if (item.name.startsWith('.') || isTimestampBackup(item.name)) continue;
         const fullPath = join(dir, item.name);
         if (item.isDirectory()) {
-          if (item.name === 'node_modules' || item.name === '10-backend' || item.name === '20-frontend') continue;
+          if (CODEGEN_EXCLUDE_DIRS.has(item.name)) continue;
           await scanTaskDir(fullPath, `${prefix}${item.name}/`);
         } else if (/\.(md|yaml|yml)$/i.test(item.name)) {
+          // 排除自检阶段文件（TEST.md / SCHEMA.md / REVIEW.md 等）
+          if (CODEGEN_EXCLUDE_FILES.has(item.name.toLowerCase())) continue;
           await addFile(fullPath, `${prefix}${item.name}`, `${prefix}${item.name}`);
         }
       }
