@@ -1015,13 +1015,10 @@ ${taskId}/
 ├── README.md                  ← 本文件
 ├── _shared/                   ← 共享契约（API_CONTRACT.yaml + CONTEXT.md）
 ├── 00-specs/                  ← 模块级核心规格（REQ/TECH/SCHEMA/CHANGELOG）
-├── 10-backend/                ← 后端
-│   └── {服务名}/              ← 端（如 api）
-│       └── {子任务}/          ← 执行单元（.meta/TASK.md/src/tests + 产出）
-├── 20-frontend/               ← 前端
-│   └── {端名}/                ← 端（如 h5/admin）
-│       └── {子任务}/          ← 执行单元（.meta/TASK.md/src/tests + 前端设计 + 产出）
-└── .issues.md                 ← 问题追踪
+├── {服务名}/                  ← 后端服务（如 api/booking-service，v6.40.0+ 简化架构）
+│   ─ {子任务}/              ← 执行单元（.meta/TASK.md/src/tests + 产出）
+├── {端名}/                    ← 前端端（如 h5/admin/app，v6.40.0+ 简化架构）
+│   ── {子任务}/              ← 执行单元（.meta/TASK.md/src/tests + 前端设计 + 产出）
 \`\`\`
 
 ## 子任务列表
@@ -1335,12 +1332,12 @@ ${section.content}
       }
     };
 
-    // ── 后端：10-backend/{服务名}/{子任务}/ ──
+    // ─ 后端：{服务名}/{子任务}/ （v6.40.0+ 简化架构）──
     if (backendPlatforms.length > 0) {
-      const backendCategoryDir = join(taskDir, '10-backend');
       for (const platform of backendPlatforms) {
         const serviceName = getServiceName(platform);
-        const platformDir = join(backendCategoryDir, serviceName);
+        // 【v6.40.0】直接使用服务名，不再使用 10-backend/ 前缀
+        const platformDir = join(taskDir, serviceName);
         const subtaskId = subtaskIdMap.get(platform)!;
         const subtaskName = slugify(section.name) || 'impl';
         const subtaskDir = join(platformDir, subtaskName);
@@ -1349,11 +1346,11 @@ ${section.content}
       }
     }
 
-    // ── 前端：20-frontend/{端名}/{子任务}/ ──
+    // ── 前端：{端名}/{子任务}/ （v6.40.0+ 简化架构）──
     if (frontendPlatforms.length > 0) {
-      const frontendCategoryDir = join(taskDir, '20-frontend');
       for (const platform of frontendPlatforms) {
-        const platformDir = join(frontendCategoryDir, platform);
+        // 【v6.40.0】直接使用端名，不再使用 20-frontend/ 前缀
+        const platformDir = join(taskDir, platform);
         const subtaskId = subtaskIdMap.get(platform)!;
         const subtaskName = slugify(section.name) || 'impl';
         const subtaskDir = join(platformDir, subtaskName);
@@ -1365,7 +1362,8 @@ ${section.content}
 
   // 确保至少有 backend 子任务（AI 未输出 backend 时自动补充，仅非 research）
   if (!isResearch && !taskPlatforms.some((p: string) => p === 'backend' || p.startsWith('后台'))) {
-    const autoSubtaskDir = join(taskDir, '10-backend', 'api', 'impl');
+    // 【v6.40.0】直接使用服务名 'api'，不再使用 10-backend/api/
+    const autoSubtaskDir = join(taskDir, 'api', 'impl');
     await ensureDir(join(autoSubtaskDir, '.meta'));
     await ensureDir(join(autoSubtaskDir, 'src'));
     await ensureDir(join(autoSubtaskDir, 'tests'));
