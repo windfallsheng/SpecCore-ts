@@ -228,4 +228,12 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
     // 迁移失败不影响主流程
     logger.warn(`⚠️  自动迁移跳过: ${err}`);
   }
+
+  // ── 6. CONSTITUTION.md 格式升级检查 ──
+  try {
+    const { checkUpgradeHints } = await import('./init');
+    await checkUpgradeHints(projectRoot, speccoreDir);
+  } catch {
+    // 检查失败不影响主流程
+  }
 }
