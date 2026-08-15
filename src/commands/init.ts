@@ -1578,61 +1578,51 @@ export async function checkUpgradeHints(projectRoot: string, speccoreDir: string
 
   if (hasConstitution && lastVersion !== version) {
     const content = await readFile(constitutionPath, 'utf-8');
-    const hints: string[] = [];
-    let newTemplate = '';
+    let updated = content;
+    const migrations: string[] = [];
 
-    // 检出缺失的新版字段
-    if (!content.includes('项目名称')) {
-      hints.push('表头增加-项目名称-列，参考新版模板');
-      newTemplate = generateConstitutionTemplate(projectRoot);
+    // ── 自动迁移：补充缺失的"项目名称"列 ──
+    if (!updated.includes('项目名称')) {
+      // 表头: | 工程 | 源码路径 | → | 工程 | 项目名称 | 源码路径 |
+      updated = updated.replace(
+        /\|\s*工程\s*\|\s*源码路径\s*\|/,
+        '| 工程 | 项目名称 | 源码路径 |'
+      );
+      // 分隔行: 5列 → 6列（加一个 |:--- |）
+      updated = updated.replace(
+        /\|\s*:---\s*\|\s*:---\s*\|\s*:---\s*\|\s*:---\s*\|\s*:---\s*\|/,
+        '| :--- | :--- | :--- | :--- | :--- |'
+      );
+      // 数据行: | xxx | ./ | → | xxx | 待填写 | ./ |
+      updated = updated.replace(
+        /^(\|\s*\S+\s*)\|(\s*\.\/)/gm,
+        '$1| 待填写 |$2'
+      );
+      // monorepo 示例行也处理
+      updated = updated.replace(
+        /^(\|\s*\S+-service\s*)\|(\s*\.\/packages)/gm,
+        '$1| 待填写 |$2'
+      );
+      migrations.push('自动补充「项目名称」列（值暂填"待填写"，请后续修改）');
     }
 
-    if (hints.length > 0) {
-      const upgradeDir = join(speccoreDir, 'local');
-      const upgradeFile = join(upgradeDir, 'UPGRADE.md');
-      
-      // 生成升级指南（供用户手动参考 或 AI 处理）
-      const guide = [
-        `# CONSTITUTION.md 升级指南`,
-        '',
-        `> Speccore ${lastVersion || '旧版'} → ${version}`,
-        '',
-        '## 变更内容',
-        ...hints.map(h => `- ${h}`),
-        '',
-        '## 当前文件（你的）',
-        '```',
-        content.slice(0, 2000), // 截取前 2000 字符
-        '```',
-        '',
-        '## 新版模板（参考）',
-        '```',
-        newTemplate.slice(0, 2000),
-        '```',
-        '',
-        '## 操作方式',
-        '',
-        '### 方式 A: AI 智能合并（推荐）',
-        '在 WorkBuddy 中说: "帮我根据 UPGRADE.md 升级 CONSTITUTION.md"',
-        '',
-        '### 方式 B: 手动修改',
-        '1. 打开 .speccore/CONSTITUTION.md',
-        `2. 参考上方新版模板，在表头增加【项目名称】列`,
-        '3. 保存后运行 speccore init 确认',
-        '',
-      ].join('\n');
-
-      await writeFile(upgradeFile, guide);
+    if (migrations.length > 0) {
+      // 旧文件时间戳备份
+      if (content.trim() !== updated.trim()) {
+        const ts = timestampSuffix();
+        const backupPath = constitutionPath.replace(/\.md$/, `-${ts}.md`);
+        await rename(constitutionPath, backupPath);
+        _updateConflicts.push({ file: constitutionPath, backup: backupPath });
+      }
+      await writeFile(constitutionPath, updated);
 
       logger.info('');
       logger.info('━'.repeat(50));
-      logger.info(`🔄 CONSTITUTION.md 模板有更新 (${lastVersion || '旧版'} → ${version})`);
+      logger.info(`🔄 CONSTITUTION.md 自动升级 (${lastVersion || '旧版'} → ${version})`);
       logger.info('');
-      for (const h of hints) logger.info(`   📝 ${h}`);
+      for (const m of migrations) logger.info(`   ✅ ${m}`);
       logger.info('');
-      logger.info('   📄 升级指南: .speccore/local/UPGRADE.md');
-      logger.info('   🤖 AI 模式: 说 "帮我升级 CONSTITUTION.md"');
-      logger.info('   ✋ 手动模式: 对照 UPGRADE.md 自行修改');
+      logger.info('   💡 旧版已备份，请补充「项目名称」列的实际值');
       logger.info('━'.repeat(50));
       logger.info('');
     }
@@ -1641,10 +1631,11 @@ export async function checkUpgradeHints(projectRoot: string, speccoreDir: string
   // 版本跳跃提示 — 列出自动更新了的文件
   if (lastVersion && lastVersion !== version) {
     logger.info(`📋 已自动更新的文件 (${lastVersion} → ${version}):`);
-    logger.info('   ✅ AI-RULES.md — 命令参考表（新增 Prompt 模式）');
-    logger.info('   ✅ AGENTS.md — 项目规则（新增 Skill 描述）');
-    logger.info('   ✅ .agents/skills/ — 10 个 Skill 全量更新');
-    logger.info('   ✅ .claude/ / .codebuddy/ — 命令模板更新');
+    logger.info('   ✅ AI-RULES.md — 命令参考表');
+    logger.info('   ✅ AGENTS.md — 项目规则');
+    logger.info('   ✅ SETTINGS.md — 框架配置');
+    logger.info('   ✅ .agents/skills/ — Skill 全量更新');
+    logger.info('   ✅ .claude/ / .codebuddy/ 等 — 命令模板');
     logger.info('');
   }
 
