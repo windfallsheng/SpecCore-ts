@@ -116,6 +116,95 @@ Task-002 执行前（依赖 Task-001）:
 - 计划包含：依赖拓扑图（Mermaid）、甘特图（实际日期）、执行概览表、任务详情、风险评估、里程碑、回滚方案
 - `generatePlan()` 按依赖感知分阶段：每阶段放入当前可并行的任务（依赖已完成的优先）
 
+### 2.4 智能端识别与双层架构
+
+**核心原则：一份需求文档对应一个端，跨端通用文档单独标识。**
+
+#### 2.4.1 三层推断机制
+
+`analyze` 命令通过以下优先级自动识别需求文档所属的端：
+
+**第一层：文件路径推断（优先级最高）**
+```typescript
+// 目录名包含端名
+010-requirements/app/REQUIREMENT.md      → app 端
+010-requirements/h5/login.md             → h5 端
+
+// 文件名前缀/后缀包含端名
+app-requirement.md                       → app 端
+requirement-admin.md                     → admin 端
+```
+
+**第二层：文件内容推断**
+扫描文档前 50 行，匹配以下模式：
+```markdown
+## APP 端需求              → app 端
+### H5端登录流程            → h5 端
+> Admin 端平台说明          → admin 端
+```
+
+**第三层：智能默认策略（无法推断时）**
+| 文档类型 | 判断依据 | 处理方式 |
+|:--|:--|:--|
+| **跨端通用文档** | REQUIREMENT.md / INDEX.md / PRD.md | ✅ 加入全局分析<br>✅ 用于生成全局基线文档 |
+| **其他未识别文档** | 既无端名也非通用名 | ⚠️ 输出警告提示<br>→ 端专属文档使用占位符 |
+
+#### 2.4.2 数据处理流程
+
+```
+需求文档输入
+    ↓
+┌─────────────────────────┐
+│  inferPlatformFromPathOrContent()  │
+│  - 检查文件路径           │
+│  - 扫描文档内容           │
+└──────────┬──────────────┘
+           ↓
+    ┌──────────────┐
+    │ 能推断出端？   │
+    └──┬───────┬───┘
+       YES     NO
+        ↓       ↓
+   端专属文档  跨端通用？
+   (不加入全局)  YES → 加入全局
+                 NO  → 警告 + 占位符
+```
+
+#### 2.4.3 双层架构生成规则
+
+**全局文档（020-specs/ 根目录）**
+- 来源：所有跨端通用文档的内容
+- 包含：ANALYSIS.md, DEPS.md, RISK.md, MONITOR.md, REVIEW.md
+- 用途：建立迭代级基线，供所有端共享
+
+**端专属文档（020-specs/{端}/ 子目录）**
+- 来源：该端的专属文档内容 + 全局内容中按端分割的片段
+- 包含：TECH.md, TEST.md, UI_SPEC.md
+- 用途：指导各端差异化实现
+
+**数据隔离保证：**
+```typescript
+// ❌ 错误：端专属内容污染全局分析
+if (inferredPlatform) {
+  allContent.push(content);  // 不要这样做
+}
+
+// ✅ 正确：端专属内容只用于该端
+if (inferredPlatform) {
+  platformFileMap[inferredPlatform].push(filePath);
+  // 不加入 allContent
+} else if (isGlobalDoc) {
+  allContent.push(content);  // 只有跨端文档才加入全局
+}
+```
+
+#### 2.4.4 实现位置
+
+- **端推断函数**：`src/core/analyze-engine.ts::inferPlatformFromPathOrContent()`
+- **内容分割函数**：`src/core/analyze-engine.ts::splitContentByPlatform()`
+- **端专属文档生成**：`src/core/analyze-engine.ts::buildTechSpecForPlatform()`
+- **调用入口**：`src/core/analyze-engine.ts::generateSpecsFromRequirements()`
+
 ---
 
 ## 3. 迭代目录结构
