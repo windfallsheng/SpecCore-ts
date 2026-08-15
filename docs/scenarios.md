@@ -446,10 +446,34 @@ jobs:
 
 ## 场景十：全量层管理
 
+**背景**: 多工程/多端项目需要跨迭代的全局视图。
 
+```bash
+# 查看全局需求索引
+speccore dashboard --scope global
+# → 各迭代进度、各端文档清单、跨端综合文档
+
+# 同步迭代级 Spec 到全量层
+speccore sync --global
+# → 合并 REQUIREMENT.md → GLOBAL/INDEX.md
+# → 更新跨迭代需求追踪
+
+# 全量层文档结构
+# .speccore/GLOBAL/
+# ├── INDEX.md              ← 全局需求索引
+# ├── platforms/{端}/       ← 各端分析文档
+# ├── synthesis/            ← 跨端综合文档
+# └── PROJECTS/             ← 逐工程分析
+```
+
+**全量层 vs 迭代层**:
+
+| 层级 | 范围 | 典型操作 |
+|:---|:---|:---|
+| 迭代层 | 单个 Iteration | analyze, split, execute |
+| 全量层 | 跨所有迭代 | sync --global, dashboard --scope global |
 
 ---
-
 
 ## 场景十一：项目健康检查
 
@@ -465,21 +489,6 @@ speccore health -t Task-001
 ```bash
 speccore baseline --name=v1.0-release
 speccore baseline --restore=v1.0-release --req=REQ-005
-```
-
----
-
-## 场景十四：清理废弃任务/期次
-
-```bash
-# 1. 删除单个任务（软删除，移到 trash）
-speccore delete -t Task-003
-
-# 2. 删除整个测试期次（不确认）
-speccore delete -I 期次-2026-07-test --force
-
-# 3. 恢复误删（手动移回）
-mv .speccore/trash/期次-2026-07-test-TIMESTAMP 期次-2026-07-test
 ```
 
 ---
@@ -545,6 +554,21 @@ speccore iteration split --strict
 # → [y]确认 [e]编辑名称 [N]跳过 [q]取消
 # → 不确认不创建，批量确认后一次性生成
 ```
+
+## 场景十四：清理废弃任务/期次
+
+```bash
+# 1. 删除单个任务（软删除，移到 trash）
+speccore delete -t Task-003
+
+# 2. 删除整个测试期次（不确认）
+speccore delete -I 期次-2026-07-test --force
+
+# 3. 恢复误删（手动移回）
+mv .speccore/trash/期次-2026-07-test-TIMESTAMP 期次-2026-07-test
+```
+
+---
 
 ## 场景十五：恢复误归档任务
 
