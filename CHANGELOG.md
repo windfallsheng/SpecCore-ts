@@ -7,7 +7,7 @@
 - **物理参数调优**: 节点间距适中（gravitationalConstant -70, centralGravity 0.005, springLength 180）
 - **术语统一**: HTML 展示层统一使用"功能模块"（task）和"任务"（subtask）
 - **模板保存**: HTML 示例保存到 `templates/html/speccore-knowledge-graph.html`
-- **截图文档**: 知识图谱截图添加到 `docs/screenshots/knowledge-graph.png`
+- **截图文档**: 知识图谱截图添加到 `docs/screenshots/knowledge-graph-full.png` + `knowledge-graph-zoom.png`
 
 ### 意图识别语境校准
 
@@ -35,7 +35,7 @@
 - `src/core/unified-retrieval.ts` — 检索兜底机制
 - `src/commands/knowledge.ts` — 项目名多源兜底
 - `templates/html/speccore-knowledge-graph.html` — 新增模板
-- `docs/screenshots/knowledge-graph.png` — 新增截图
+- `docs/screenshots/knowledge-graph-full.png` + `knowledge-graph-zoom.png` — 新增截图
 - `README.md` — 新增 knowledge 命令说明 + 截图
 - `docs/DESIGN.md` — 新增语境校准设计说明
 - `docs/command-reference.md` — 新增 knowledge 命令参考
