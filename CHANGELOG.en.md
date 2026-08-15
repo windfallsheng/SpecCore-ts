@@ -2,6 +2,14 @@
 
 ---
 
+## v6.31.0 (2026-08-15) — CONSTITUTION Section Diff on Upgrade + Update Sync Summary
+
+### Core Changes
+
+- **init.ts**: `checkUpgradeHints` now detects missing sections in existing CONSTITUTION.md compared to latest template (project info/tech stack/naming conventions/error codes/git branch strategy), prompts user to fill gaps
+- **init.ts**: Removed deprecated `generateConstitutionTemplate()` function (superseded by template files)
+- **update.ts**: When command files are unchanged, now displays synced file list (skills/AGENTS.md/SETTINGS.md/AI-RULES.md) for clear confirmation
+
 ## v6.30.0 (2026-08-15) — Full-Chain Path Consistency Fix + CONTEXT.md Migration
 
 ### Core Changes

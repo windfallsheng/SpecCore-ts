@@ -1,3 +1,11 @@
+## v6.31.0 (2026-08-15) — CONSTITUTION 升级章节对比 + update 同步清单增强
+
+### 核心变更
+
+- **init.ts**：`checkUpgradeHints` 新增通用章节对比逻辑 — 检测新版 CONSTITUTION.md 模板中新增的章节（项目信息/技术栈/命名规范/异常码体系/Git 分支策略），提示用户补充缺失章节
+- **init.ts**：清理废弃的 `generateConstitutionTemplate()` 函数（已被模板文件替代）
+- **update.ts**：命令文件无变化时，显示已同步文件清单（skills/AGENTS.md/SETTINGS.md/AI-RULES.md），用户可直观确认同步状态
+
 ## v6.30.0 (2026-08-15) — 全链路路径一致性修复 + CONTEXT.md 路径迁移
 
 ### 核心变更

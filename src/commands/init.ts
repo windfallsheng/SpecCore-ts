@@ -1360,6 +1360,17 @@ export async function checkUpgradeHints(projectRoot: string, speccoreDir: string
       migrations.push('自动补充「保护分支」配置（保护分支禁止直接 commit/push）');
     }
 
+    // ── 通用章节对比：检测新版模板新增的章节 ──
+    const expectedSections = [
+      '项目信息',
+      '技术栈',
+      '命名规范',
+      '异常码体系',
+      'Git 分支策略',
+    ];
+    const userSections = Array.from(content.matchAll(/^##\s+(.+)$/gm)).map(m => m[1].trim());
+    const missingSections = expectedSections.filter(s => !userSections.some(us => us.includes(s)));
+
     if (migrations.length > 0) {
       // 旧文件时间戳备份
       if (content.trim() !== updated.trim()) {
@@ -1379,6 +1390,18 @@ export async function checkUpgradeHints(projectRoot: string, speccoreDir: string
       logger.info('   💡 旧版已备份，请补充「项目名称」列的实际值');
       logger.info('━'.repeat(50));
       logger.info('');
+    } else if (missingSections.length > 0) {
+      // 没有特定迁移，但有新版章节 → 提示用户手动补充
+      logger.info('');
+      logger.info('━'.repeat(50));
+      logger.info(`📋 CONSTITUTION.md 章节对比`);
+      logger.info('');
+      logger.info(`   当前文件已有: ${userSections.join(', ') || '(无)'}`);
+      logger.info(`   新版模板新增: ${missingSections.join(', ')}`);
+      logger.info('');
+      logger.info('   💡 建议手动补充缺失章节，或在全新目录执行 speccore init 查看最新模板');
+      logger.info('━'.repeat(50));
+      logger.info('');
     }
   }
 
@@ -1396,20 +1419,6 @@ export async function checkUpgradeHints(projectRoot: string, speccoreDir: string
   await writeFile(versionFile, version);
 }
 
-function generateConstitutionTemplate(projectRoot: string): string {
-  const projectName = require('path').basename(projectRoot);
-  const gitUrl = detectGitUrl(projectRoot);
-  return `# 技术宪法
-
-> 本文档是 SpecCore 与 AI 的**最高优先级契约**。analyze/split/execute 均据此执行。
-
-## 项目信息
-
-| 工程 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应需求端 |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| ${projectName} | 待填写 | ./ | ${gitUrl || '待配置'} | main | app, h5, miniapp, admin |
-`;
-}
 
 /** SETTINGS.md 模板内容 */
 export function generateSettingsContent(): string {
