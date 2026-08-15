@@ -2,6 +2,22 @@
 
 ---
 
+## v6.18.0 (2026-08-15) — Auto Pipeline Anti-Block + Protected Branch Unified Check
+
+### Pipeline Anti-Blocking Fixes
+
+- **split --force anti-block**: `isInteractive` adds `&& !options.force`, fixing dev --auto pipeline blocking due to TTY inheritance causing split to enter interactive mode
+- **pr --force non-interactive auto-commit**: New `--force` mode for automatic `git add -A` + commit + push without user interaction
+- **pr protected branch unified check**: 3 hardcoded `branch !== 'main' && branch !== 'master'` replaced with `isProtectedBranch()`, consistent with CONSTITUTION.md config (supports wildcards like release/*)
+
+### Protected Branch Auto-Migration
+
+- **CONSTITUTION.md template enhanced**: New files now include `保护分支: main, master, release/*, production` config line
+- **Upgrade auto-migration**: `checkUpgradeHints()` detects missing `保护分支` config in existing files with `Git 分支策略` section and auto-appends it
+- **Three-layer protection**: Config declaration (CONSTITUTION.md) → Runtime check (isProtectedBranch) → Git Hook interception (pre-commit/pre-push)
+
+---
+
 ## v6.17.0 (2026-08-15) — Pipeline Fix: analyze --auto Generates Full Spec Files
 
 ### P0: analyze --auto Full Spec Generation

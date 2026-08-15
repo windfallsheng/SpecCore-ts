@@ -1,3 +1,26 @@
+## v6.18.0 (2026-08-15) — 自动化流水线防阻塞 + 保护分支统一检查
+
+### 流水线防阻塞修复
+
+- **split --force 防阻塞**: `isInteractive` 增加 `&& !options.force`，修复 dev --auto 流水线因 TTY 继承导致 split 进入交互模式阻塞的问题
+- **pr --force 非交互自动提交**: 新增 `--force` 模式，自动 `git add -A` + commit + push，无需用户交互
+- **pr 保护分支统一检查**: 3 处硬编码 `branch !== 'main' && branch !== 'master'` 替换为 `isProtectedBranch()`，与 CONSTITUTION.md 配置保持一致（支持 release/* 等通配符）
+
+### 保护分支自动迁移
+
+- **CONSTITUTION.md 模板完善**: 新建时即包含「保护分支: main, master, release/*, production」配置行
+- **升级自动迁移**: `checkUpgradeHints()` 新增检测：有「Git 分支策略」章节但缺「保护分支」配置时，自动在「发布分支」行后追加保护分支配置
+- **三层防护闭环**: 配置声明（CONSTITUTION.md）→ 运行时校验（isProtectedBranch）→ Git Hook 拦截（pre-commit/pre-push）
+
+### 涉及文件
+
+- `src/commands/iteration/split.ts` — isInteractive 增加 `&& !options.force`
+- `src/commands/pr.ts` — 新增 --force 模式 + 3 处硬编码替换为 isProtectedBranch()
+- `src/commands/dev.ts` — pr 阶段改用 `pr --force`
+- `src/commands/init.ts` — 模板补充保护分支行 + checkUpgradeHints 新增保护分支迁移检测
+
+---
+
 ## v6.17.0 (2026-08-15) — 流程链路修复：analyze --auto 生成全套 Spec 文件
 
 ### P0 修复：analyze --auto 全流程数据流修复

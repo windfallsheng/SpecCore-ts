@@ -367,6 +367,9 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 - 默认分支: main  (可选: master / develop / trunk / release)
 - 任务分支: feature/{Task-ID}
 - 发布分支: release/{version}
+- 保护分支: main, master, release/*, production
+  > 保护分支上禁止直接 commit 和 push，只能通过 PR 合并
+  > 支持精确匹配和通配符（如 release/*）
 `
   );
   } // if CONSTITUTION.md 不存在
@@ -1627,6 +1630,18 @@ export async function checkUpgradeHints(projectRoot: string, speccoreDir: string
         `## 项目信息\n\n| 工程 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应需求端 |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n| ${projShort} | ${projName} | ./ | ${repo} | main | 待填写 |\n`
       );
       migrations.push(`旧版「项目标识」纵向表 → 新版「项目信息」横向表（项目名称: ${projName}）`);
+    }
+
+    // ── 自动迁移：补充缺失的「保护分支」配置 ──
+    const hasBranchSection = /##\s*Git\s*分支策略/.test(updated);
+    const hasProtectedBranch = /保护分支/.test(updated);
+    if (hasBranchSection && !hasProtectedBranch) {
+      // 在「发布分支」行后追加保护分支配置
+      updated = updated.replace(
+        /(-\s*发布分支[：:].*)/,
+        `$1\n- 保护分支: main, master, release/*, production\n  > 保护分支上禁止直接 commit 和 push，只能通过 PR 合并\n  > 支持精确匹配和通配符（如 release/*）`
+      );
+      migrations.push('自动补充「保护分支」配置（保护分支禁止直接 commit/push）');
     }
 
     if (migrations.length > 0) {
