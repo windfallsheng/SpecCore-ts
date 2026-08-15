@@ -997,8 +997,15 @@ speccore schedule cancel --id <id>
 | v6.8.0 | 08-14 | 代码索引智能增强 + RAG 检索 + 统一检索层 + Prompt 性能优化 |
 | v6.9.0 | 08-14 | 全局知识沉淀 + 检索层深度检查修复（7 bug）+ 文档同步 |
 | v6.10.0 | 08-14 | 智能文档分类摄入（doc2spec --classify）+ nature/type 两步分类 + CONTEXT.md 来源追溯 + 多类型任务支持 |
+| v6.31.0 | 08-15 | init.ts CONSTITUTION 升级章节对比 + update.ts 同步文件清单增强 |
+| v6.32.0 | 08-15 | 引导页强制展示修复（全平台）：speccore-router + 7 平台 command + init 模板全部改为强制式措辞 |
+| v6.33.0 | 08-15 | analyze --prompt 新增目录结构指导（第 5 步），要求 AI 按端创建子目录 |
+| v6.34.0 | 08-15 | split/prompt-builder/knowledge-graph 适配端级目录新路径（优先 020-specs/{端}/，回退 platforms/） |
+| v6.35.0 | 08-15 | analyze --auto 双层文档架构（全局+各端分离）：全局放根目录，各端专属放 {端}/ 子目录 |
+| v6.36.0 | 08-15 | REQUIREMENT.md 功能涉及端标注 + split 三级推断逻辑（_scopePlatforms → TECH.md 内容检测 → 回退所有端） |
+| v6.37.0 | 08-15 | split 读取各端子目录文档 + 优先提取端专属内容（loadSpecContents 双层读取 + extractTaskTechContent 优先匹配） |
 
-> **最后更新**: 2026-08-14 (v6.10.0) — 智能文档分类摄入 + 任务上下文追溯 + 多类型任务支持
+> **最后更新**: 2026-08-15 (v6.37.0) — analyze 按端生成专属文档 + split 智能拆分
 
 ---
 ## 10. 可执行编排引擎（spec-ask v4）
@@ -1240,6 +1247,126 @@ Qoder、Trae、Claude Code、Cursor 均支持此能力。因此：
 - ✅ 不需要 CLI 内置 LLM/API Key
 - ✅ 不依赖特定 IDE 的通信协议
 - ✅ 标准化的 `stdout` 传递，跨所有工具通用
+
+---
+
+### 2026-08-15 analyze 按端生成专属文档 + split 智能拆分
+
+#### 1. analyze --auto 双层文档架构（全局+各端分离）
+- **位置**: `src/core/analyze-engine.ts` → `generateSpecsFromRequirements()`
+- **设计哲学**: 迭代内全局文档放跨端通用内容，各端子目录放该端专属内容
+- **全局文档**（放在 `020-specs/` 根目录）:
+  - `REQUIREMENT.md` — 业务需求规格（功能模块、API、数据模型、业务规则）
+  - `ANALYSIS.md` — 需求分析报告（完整性检查、架构影响、待确认清单）
+  - `DEPS.md` — 依赖清单（公共依赖）
+  - `RISK.md` — 风险评估（全局风险）
+  - `MONITOR.md` — 监控指标（全局监控方案）
+  - `REVIEW.md` — 评审清单（全局评审项）
+- **各端专属文档**（放在 `020-specs/{端}/` 子目录）:
+  - `TECH.md` — 该端技术方案（后端是接口设计+数据模型，前端是页面路由+组件+状态管理）
+  - `TEST.md` — 该端测试计划（后端是接口测试，前端是页面流转+交互测试）
+  - `UI_SPEC.md` — 该端 UI 规格（仅前端，包含路由表+组件清单+字段映射）
+- **新增构建函数**:
+  - `buildTechSpecForPlatform()` — 按端生成技术方案
+  - `buildTestSpecForPlatform()` — 按端生成测试计划
+  - `buildUISpecForPlatform()` — 按端生成 UI 规格
+  - `isBackendPlatform()` — 判断是否为后端平台（backend/后台/服务）
+
+#### 2. REQUIREMENT.md 功能涉及端标注
+- **位置**: `src/core/analyze-engine.ts` → `buildRequirementSpec()`
+- **功能模块清单新增「涉及端」列**: `| # | 功能模块 | 描述 | 涉及端 |`
+- **默认值**: `_待 AI 标注_`，供后续 AI 或人工补充
+- **用途**: split 命令据此推断任务涉及的端，只生成对应端的子任务
+
+#### 3. analyze --prompt 目录结构指导
+- **位置**: `src/commands/analyze.ts` line 1076+
+- **Prompt 第 5 步新增指令**:
+  ```
+  5. **目录结构**：必须按端创建子目录，不要全部扁平放在 020-specs/ 根目录
+     - 从 CONSTITUTION.md 的「对应需求端」列读取端列表
+     - 在 020-specs/ 下创建 {端名}/ 子目录
+     - 每个端目录下写入该端专属的分析文档
+     - 根目录只放跨端通用文档
+  ```
+- **效果**: `--prompt` 和 `--auto` 两种模式都会按端分目录，保持一致性
+
+#### 4. split 端推断逻辑重构
+- **位置**: `src/commands/iteration/split.ts` → `createTaskFromSection()`
+- **三级推断优先级**:
+  1. **优先使用 AI 标注的 `_scopePlatforms`**（AI 在 JSON 里标注该功能涉及哪些端）
+  2. **否则从 `020-specs/{端}/TECH.md` 是否有实质内容推断**:
+     - 文件存在且移除模板占位符后长度 > 50 字符 → 认为涉及该端
+     - 模板占位符包括：`_待填充_`、`_待补充_`、`_待 AI 分析_`、`_待定_`、`_待导入_`
+  3. **都没检测到时回退到所有端**（兼容旧行为）
+- **核心原则**: 一个功能涉及哪些端由 AI 智能分析决定，不是固定写死
+
+#### 5. split 读取各端子目录文档
+- **位置**: `src/commands/iteration/split.ts` → `loadSpecContents()`
+- **重构为双层读取**:
+  - **第一层**: 读取根目录全局文档（TECH.md、TEST.md、RISK.md、DEPS.md、MONITOR.md、ANALYSIS.md、REQUIREMENT.md、UI_SPEC.md）
+  - **第二层**: 读取各端子目录文档（`{端}/TECH.md`、`{端}/TEST.md`、`{端}/UI_SPEC.md`）
+  - **key 命名规则**: 用平台前缀区分，如 `admin/TECH.md` → key 为 `'admin/TECH.md'`
+- **提取函数优化**:
+  - `extractTaskTechContent()` 优先读取对应端的 TECH.md（如 `admin/TECH.md`）
+  - 回退到根目录 TECH.md（兼容旧结构或全局文档）
+  - `extractFrontendContent()` 作为最终回退（从全局 TECH.md 中按关键词提取）
+
+#### 6. 路径适配策略（新路径优先 + 旧路径回退）
+- **位置**: `split.ts`、`prompt-builder.ts`、`knowledge-graph.ts`
+- **路径规则**:
+  1. **优先读取新路径**: `020-specs/{端名}/` (如 `020-specs/admin/`)
+  2. **若不存在则回退到旧路径**: `020-specs/platforms/{端名}/` (如 `020-specs/platforms/admin/`)
+- **设计原则**:
+  - 向后兼容：已有项目使用旧路径不会受影响
+  - 渐进迁移：新项目自动使用新路径，旧项目逐步过渡
+  - 容错机制：避免单点故障导致整个分析流程失败
+- **数据流**:
+  ```
+  analyze --prompt → 写入 020-specs/{端}/
+                  ↓
+  split/prompt-builder/knowledge-graph → 优先读 {端}/，失败则读 platforms/{端}/
+                  ↓
+  任务执行 → 读取端级分析内容
+  ```
+
+#### 7. 完整数据流示例
+```
+用户: speccore analyze --auto -I meeting-upgrade
+  ↓
+analyze 阶段:
+  ├── 读取 010-requirements/ 下的需求文档
+  ├── 生成全局文档 → 020-specs/REQUIREMENT.md（含「涉及端」列）
+  ├── 生成各端专属文档 → 020-specs/admin/TECH.md、020-specs/h5/TECH.md 等
+  └── 功能模块清单标注「涉及端」（默认 _待 AI 标注_）
+  ↓
+用户: speccore iteration split -I meeting-upgrade
+  ↓
+split 阶段:
+  ├── 读取 020-specs/ 下的文档（根目录 + 各端子目录）
+  ├── 对每个功能模块:
+  │   ├── 优先使用 AI 标注的 _scopePlatforms
+  │   ├── 否则检查 020-specs/{端}/TECH.md 是否有实质内容
+  │   └── 确定该功能涉及的端列表
+  ├── 为每个功能创建一个 Task-NNN-slug
+  └── 在该 Task 下按端拆分子任务（默认一个端一个子任务）
+  ↓
+任务目录结构:
+  030-tasks/feature/Task-001-meeting-create/
+  ├── .meta/
+  ├── _shared/
+  │   ├── API_CONTRACT.yaml
+  │   └── CONTEXT.md
+  ├── 00-specs/
+  │   ├── REQ.md          ← 从 020-specs/REQUIREMENT.md 切出该功能的片段
+  │   ├── TECH.md         ← 从 020-specs/{端}/TECH.md 提取该端内容
+  │   └── TASK.md
+  ├── 10-backend/
+  │   └── backend/        ← 后端子任务
+  ├── 20-frontend/
+  │   ├── admin/          ← 管理端子任务
+  │   └── h5/             ← H5 端子任务
+  └── 99-artifacts/
+```
 
 ---
 
