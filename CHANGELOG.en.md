@@ -2,6 +2,14 @@
 
 ---
 
+## v6.34.0 (2026-08-15) — Split/Prompt-Builder/Knowledge-Graph Adapt to New Platform Directory Path
+
+### Core Changes
+
+- **split.ts**: `loadSpecContents()` now reads platform-level analysis docs from `020-specs/{platform}/` (fallback to `020-specs/platforms/{platform}/`), fixing the issue where split couldn't find platform content after analyze switched to per-platform directories
+- **prompt-builder.ts**: Platform spec file path changed from `020-specs/platforms/{platform}/` to prefer `020-specs/{platform}/`, with legacy fallback
+- **knowledge-graph.ts**: Knowledge graph scanning changed from `020-specs/platforms/{platform}/` to `020-specs/{platform}/`, with legacy fallback
+
 ## v6.33.0 (2026-08-15) — Analyze Prompt Adds Directory Structure Guidance
 
 ### Core Changes

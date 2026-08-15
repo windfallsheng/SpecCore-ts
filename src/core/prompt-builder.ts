@@ -496,14 +496,17 @@ async function loadAllTaskContext(
           if (!item.name.endsWith('.md') || isTimestampBackup(item.name)) continue;
           await addFile(join(specsDir, item.name), `迭代规格: ${item.name}`, `020-specs/${item.name}`);
         }
-        // 各端规格
+        // 各端规格（新路径 020-specs/{端}/，兼容旧路径 020-specs/platforms/{端}/）
         if (platform) {
-          const platDir = join(specsDir, 'platforms', platform);
+          let platDir = join(specsDir, platform);
+          if (!(await pathExists(platDir))) {
+            platDir = join(specsDir, 'platforms', platform);
+          }
           if (await pathExists(platDir)) {
             const platItems = await readdir(platDir, { withFileTypes: true });
             for (const item of platItems) {
               if (!item.name.endsWith('.md') || isTimestampBackup(item.name)) continue;
-              await addFile(join(platDir, item.name), `${platform}端规格: ${item.name}`, `020-specs/platforms/${platform}/${item.name}`);
+              await addFile(join(platDir, item.name), `${platform}端规格: ${item.name}`, `020-specs/${platform}/${item.name}`);
             }
           }
         }
