@@ -725,19 +725,55 @@ export async function indexTaskDocuments(
   const filesToIndex: { filePath: string; content: string; mtime: number }[] = [];
 
   const candidates = [
+    // 核心规格（新结构 00-specs/）
+    join(cwd, taskDir, '00-specs', 'REQ.md'),
+    join(cwd, taskDir, '00-specs', 'TECH.md'),
+    join(cwd, taskDir, '00-specs', 'SCHEMA.md'),
+    join(cwd, taskDir, '00-specs', 'CHANGELOG.md'),
+    join(cwd, taskDir, '00-specs', 'CONTEXT.md'),
+    // 共享契约
+    join(cwd, taskDir, '_shared', 'API_CONTRACT.yaml'),
+    // 回退: 旧结构 _shared/
     join(cwd, taskDir, '_shared', 'CONTEXT.md'),
     join(cwd, taskDir, '_shared', 'TECH.md'),
     join(cwd, taskDir, '_shared', 'REQ.md'),
     join(cwd, taskDir, '_shared', 'SCHEMA.md'),
-    join(cwd, taskDir, '_shared', 'API_CONTRACT.yaml'),
-    join(cwd, taskDir, '00-specs', 'TECH.md'),
-    join(cwd, taskDir, '00-specs', 'TASK.md'),
-    join(cwd, taskDir, '99-artifacts', 'TEST.md'),
-    join(cwd, taskDir, '99-artifacts', 'REVIEW.md'),
-    join(cwd, taskDir, '99-artifacts', 'RISK.md'),
+    // 问题追踪
     join(cwd, taskDir, '.issues.md'),
+    // 调研文档（research 类型）
+    join(cwd, taskDir, 'RESEARCH.md'),
+    join(cwd, taskDir, 'COMPARISON.md'),
   ];
 
+  // 新结构: 扫描 10-backend/{服务}/*/ 和 20-frontend/{端}/*/ 下的子任务文档
+  for (const catDir of ['10-backend', '20-frontend']) {
+    const catPath = join(cwd, taskDir, catDir);
+    if (await pathExists(catPath)) {
+      try {
+        const platEntries = await readdir(catPath, { withFileTypes: true });
+        for (const pe of platEntries) {
+          if (!pe.isDirectory()) continue;
+          const platPath = join(catPath, pe.name);
+          const stEntries = await readdir(platPath, { withFileTypes: true });
+          for (const st of stEntries) {
+            if (!st.isDirectory() || st.name.startsWith('.')) continue;
+            const stDir = join(platPath, st.name);
+            candidates.push(
+              join(stDir, 'TASK.md'),
+              join(stDir, 'TEST.md'),
+              join(stDir, 'RISK.md'),
+              join(stDir, 'REVIEW.md'),
+              join(stDir, 'COMPONENT_TREE.md'),
+              join(stDir, 'ROUTES.md'),
+              join(stDir, 'STATE.md'),
+            );
+          }
+        }
+      } catch { /* ignore */ }
+    }
+  }
+
+  // 回退: 旧结构 {platform}/ 直接在任务根目录
   if (platform) {
     candidates.push(
       join(cwd, taskDir, `${platform}`, 'TASK.md'),
@@ -746,6 +782,12 @@ export async function indexTaskDocuments(
       join(cwd, taskDir, `${platform}`, 'STATE.md'),
     );
   }
+  // 回退: 旧结构 99-artifacts/
+  candidates.push(
+    join(cwd, taskDir, '99-artifacts', 'TEST.md'),
+    join(cwd, taskDir, '99-artifacts', 'REVIEW.md'),
+    join(cwd, taskDir, '99-artifacts', 'RISK.md'),
+  );
 
   if (iteration) {
     candidates.push(join(cwd, `Iteration-${iteration}`, '020-specs', 'DESIGN.md'));

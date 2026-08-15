@@ -53,8 +53,11 @@ export async function contextCommand(options: ContextOptions): Promise<void> {
   const taskEntry = entries.find((e: any) => e.isDirectory() && e.name.startsWith(taskId));
   if (!taskEntry) { logger.error(`Task not found: ${taskId}`); return; }
 
-  const backendDir = join(iterDir, taskEntry.name, 'backend');
-  const sharedDir = join(iterDir, taskEntry.name, '_shared');
+  const taskBase = join(iterDir, taskEntry.name);
+  // 新结构: 00-specs/ 优先，旧结构: backend/ 回退
+  const specsDir = join(taskBase, '00-specs');
+  const backendDir = (await pathExists(join(specsDir, 'REQ.md'))) ? specsDir : join(taskBase, 'backend');
+  const sharedDir = join(taskBase, '_shared');
   const config = await loadConfig();
 
   // Collect context
@@ -68,16 +71,20 @@ export async function contextCommand(options: ContextOptions): Promise<void> {
     context.push(constitution);
   }
 
-  // REQ
-  if (await pathExists(join(backendDir, 'REQ.md'))) {
+  // REQ（00-specs/ 优先，旧 backend/ 回退）
+  const reqPath = (await pathExists(join(specsDir, 'REQ.md'))) ? join(specsDir, 'REQ.md') :
+                  (await pathExists(join(backendDir, 'REQ.md'))) ? join(backendDir, 'REQ.md') : null;
+  if (reqPath) {
     context.push('\n## 需求规格\n');
-    context.push(await readFile(join(backendDir, 'REQ.md'), 'utf-8'));
+    context.push(await readFile(reqPath, 'utf-8'));
   }
 
   // TECH
-  if (await pathExists(join(backendDir, 'TECH.md'))) {
+  const techPath = (await pathExists(join(specsDir, 'TECH.md'))) ? join(specsDir, 'TECH.md') :
+                   (await pathExists(join(backendDir, 'TECH.md'))) ? join(backendDir, 'TECH.md') : null;
+  if (techPath) {
     context.push('\n## 技术方案\n');
-    const tech = await readFile(join(backendDir, 'TECH.md'), 'utf-8');
+    const tech = await readFile(techPath, 'utf-8');
     context.push(tech.slice(0, 2000)); // limit
   }
 
@@ -88,10 +95,12 @@ export async function contextCommand(options: ContextOptions): Promise<void> {
     context.push('```');
   }
 
-  // TEST
-  if (await pathExists(join(backendDir, 'TEST.md'))) {
+  // TEST（00-specs/ 优先，旧 backend/ 回退）
+  const testPath = (await pathExists(join(specsDir, 'TEST.md'))) ? join(specsDir, 'TEST.md') :
+                   (await pathExists(join(backendDir, 'TEST.md'))) ? join(backendDir, 'TEST.md') : null;
+  if (testPath) {
     context.push('\n## 测试要求\n');
-    const test = await readFile(join(backendDir, 'TEST.md'), 'utf-8');
+    const test = await readFile(testPath, 'utf-8');
     context.push(test.slice(0, 1000));
   }
 

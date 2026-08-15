@@ -69,8 +69,8 @@ function getHints(stage: string, ctx: Record<string, string>): StepHint[] {
 
     case 'lifecycle':
       return [
-        { action: '参照 99-artifacts/TEST.md 逐项验证', desc: '测试通过后推进', args: `speccore lifecycle --task=${ctx.task || 'Task-001'} --status=review` },
-        { action: '对照 99-artifacts/REVIEW.md 审查', desc: '审查通过后推进', args: `speccore lifecycle --task=${ctx.task || 'Task-001'} --status=done` },
+        { action: '参照子任务目录/TEST.md 逐项验证', desc: '测试通过后推进', args: `speccore lifecycle --task=${ctx.task || 'Task-001'} --status=review` },
+        { action: '对照子任务目录/REVIEW.md 审查', desc: '审查通过后推进', args: `speccore lifecycle --task=${ctx.task || 'Task-001'} --status=done` },
         { action: `speccore archive --task=${ctx.task || 'Task-001'}`, desc: '归档完成的任务' },
       ];
 

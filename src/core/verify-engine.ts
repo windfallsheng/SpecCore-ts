@@ -3,12 +3,12 @@
  *
  * 执行后自动验证：编译检查 + Lint + 单元测试
  * 根据项目类型（Node.js/Java/Go/Python）自动检测命令
- * 生成结构化报告到 99-artifacts/VERIFY_REPORT.md
+ * 生成结构化报告到 VERIFY_REPORT.md（任务根目录）
  */
 
 import { execSync } from 'child_process';
 import { join } from 'path';
-import { pathExists, readFile, writeFile, ensureDir } from 'fs-extra';
+import { pathExists, readFile, writeFile, ensureDir, readdir } from 'fs-extra';
 import { logger } from '../utils/logger';
 
 // ============================================================
@@ -374,8 +374,8 @@ export function generateFixPrompt(report: VerifyReport, taskDir: string): string
   prompt += `   - 编译通过（无类型错误、语法错误）\n`;
   prompt += `   - Lint 通过（无代码风格问题）\n`;
   prompt += `   - 测试通过（所有测试用例绿灯）\n`;
-  prompt += `   - 测试用例覆盖：检查 \`99-artifacts/TEST.md\` 中的未覆盖用例，补充实现\n`;
-  prompt += `   - 评审项合规：检查 \`99-artifacts/REVIEW.md\` 中的未合规项，补充实现\n`;
+  prompt += `   - 测试用例覆盖：检查子任务目录下的 \`TEST.md\` 中的未覆盖用例，补充实现\n`;
+  prompt += `   - 评审项合规：检查子任务目录下的 \`REVIEW.md\` 中的未合规项，补充实现\n`;
   prompt += `3. 修复后在下方「修复记录」表格中记录:\n`;
   prompt += `   - 问题描述\n`;
   prompt += `   - 修复方案\n`;
@@ -520,10 +520,28 @@ function extractCheckItems(content: string): string[] {
 async function checkTestCoverage(codePath: string, taskDir: string): Promise<CheckResult> {
   const start = Date.now();
   try {
-    const testPaths = [
-      join(taskDir, '99-artifacts', 'TEST.md'),
+    const testPaths: string[] = [
       join(taskDir, 'TEST.md'),
     ];
+    // 扫描子任务目录下的 TEST.md（新结构: 10-backend/svc/sub/ 20-frontend/plat/sub/）
+    for (const catDir of ['10-backend', '20-frontend']) {
+      const catPath = join(taskDir, catDir);
+      if (await pathExists(catPath)) {
+        try {
+          const services = await readdir(catPath, { withFileTypes: true });
+          for (const svc of services) {
+            if (!svc.isDirectory()) continue;
+            const subs = await readdir(join(catPath, svc.name), { withFileTypes: true });
+            for (const sub of subs) {
+              if (!sub.isDirectory()) continue;
+              testPaths.push(join(catPath, svc.name, sub.name, 'TEST.md'));
+            }
+          }
+        } catch { /* 跳过 */ }
+      }
+    }
+    // 旧结构回退
+    testPaths.push(join(taskDir, '99-artifacts', 'TEST.md'));
     let testContent = '';
     for (const p of testPaths) {
       if (await pathExists(p)) { testContent = await readFile(p, 'utf-8'); break; }
@@ -574,10 +592,28 @@ async function checkTestCoverage(codePath: string, taskDir: string): Promise<Che
 async function checkReviewCompliance(codePath: string, taskDir: string): Promise<CheckResult> {
   const start = Date.now();
   try {
-    const reviewPaths = [
-      join(taskDir, '99-artifacts', 'REVIEW.md'),
+    const reviewPaths: string[] = [
       join(taskDir, 'REVIEW.md'),
     ];
+    // 扫描子任务目录下的 REVIEW.md（新结构）
+    for (const catDir of ['10-backend', '20-frontend']) {
+      const catPath = join(taskDir, catDir);
+      if (await pathExists(catPath)) {
+        try {
+          const services = await readdir(catPath, { withFileTypes: true });
+          for (const svc of services) {
+            if (!svc.isDirectory()) continue;
+            const subs = await readdir(join(catPath, svc.name), { withFileTypes: true });
+            for (const sub of subs) {
+              if (!sub.isDirectory()) continue;
+              reviewPaths.push(join(catPath, svc.name, sub.name, 'REVIEW.md'));
+            }
+          }
+        } catch { /* 跳过 */ }
+      }
+    }
+    // 旧结构回退
+    reviewPaths.push(join(taskDir, '99-artifacts', 'REVIEW.md'));
     let reviewContent = '';
     for (const p of reviewPaths) {
       if (await pathExists(p)) { reviewContent = await readFile(p, 'utf-8'); break; }
@@ -628,10 +664,28 @@ async function checkReviewCompliance(codePath: string, taskDir: string): Promise
 async function checkArtifactConsistency(codePath: string, taskDir: string, filename: string, checkName: string): Promise<CheckResult> {
   const start = Date.now();
   try {
-    const filePaths = [
-      join(taskDir, '99-artifacts', filename),
+    const filePaths: string[] = [
       join(taskDir, filename),
     ];
+    // 扫描子任务目录（新结构）
+    for (const catDir of ['10-backend', '20-frontend']) {
+      const catPath = join(taskDir, catDir);
+      if (await pathExists(catPath)) {
+        try {
+          const services = await readdir(catPath, { withFileTypes: true });
+          for (const svc of services) {
+            if (!svc.isDirectory()) continue;
+            const subs = await readdir(join(catPath, svc.name), { withFileTypes: true });
+            for (const sub of subs) {
+              if (!sub.isDirectory()) continue;
+              filePaths.push(join(catPath, svc.name, sub.name, filename));
+            }
+          }
+        } catch { /* 跳过 */ }
+      }
+    }
+    // 旧结构回退
+    filePaths.push(join(taskDir, '99-artifacts', filename));
     let content = '';
     for (const p of filePaths) {
       if (await pathExists(p)) { content = await readFile(p, 'utf-8'); break; }
@@ -823,8 +877,8 @@ export async function runQualityGate(
   const blockingFailed = checks.filter(c => c.blocking && c.status === 'fail');
   const warnings = checks.filter(c => !c.blocking && (c.status === 'fail' || c.status === 'warn'));
 
-  // 写入报告
-  const reportDir = join(taskDir, '99-artifacts');
+  // 写入报告（任务根目录）
+  const reportDir = taskDir;
   await writeVerifyReport(report, reportDir);
 
   // 输出结果

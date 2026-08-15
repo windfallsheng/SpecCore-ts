@@ -1,3 +1,251 @@
+## v6.30.0 (2026-08-15) — 全链路路径一致性修复 + CONTEXT.md 路径迁移
+
+### 核心变更
+
+- **spec-merger.ts**：5 处 `_shared/` 主路径统一改为 `readTaskSpecByFilename`（`00-specs/` 优先，`_shared/` 回退）
+- **context-output.ts**：`backend/` 旧路径改为 `00-specs/` 优先 + `backend/` 回退
+- **status-panel.ts**：平台检测适配 `10-backend/` + `20-frontend/` 新目录名，保留旧结构回退
+- **split.ts**：CONTEXT.md 写入路径从 `_shared/` 迁移到 `00-specs/`
+- **rag-engine.ts**：RAG 索引候选路径新增 `00-specs/CONTEXT.md`，`_shared/CONTEXT.md` 降为回退
+
+## v6.29.0 (2026-08-15) — 文件即记忆 + [SPECCORE_CONTINUE] 自动续批机制
+
+### 核心变更
+
+- **execution-state.ts**：新增 TaskSummary 接口 + addTaskSummary/generateContextSummary/writeContextSummaryFile
+  - 每个任务完成后写入摘要（任务名/类型/产出/依赖）
+  - 批次结束时生成紧凑上下文摘要（~1K tokens），写入 `.speccore/local/execution-summary.md`
+  - 新会话只需读取摘要文件即可快速恢复全局视角
+- **execute.ts**：processBatch 中每个任务完成后记录摘要；批次结束写入摘要文件
+  - prompt 模式批次完成时输出 `[SPECCORE_CONTINUE: <path>]` 标记（替代 `[SPECCORE_BATCH_COMPLETE]`）
+- **AGENTS.md + init.ts**：标记表更新为 `[SPECCORE_CONTINUE: <path>]`
+- **spec-execute SKILL.md**：批次执行步骤 3 更新为自动续批流程
+- clearExecutionState 同时清除摘要文件
+
+## v6.28.0 (2026-08-15) — task/new + next-steps + spec-merger 路径适配三级嵌套
+
+### 核心变更
+
+- **task/new.ts**：手动新建任务全面适配三级嵌套目录结构
+  - `_shared/` → `00-specs/`（核心规格写入路径）
+  - 删除 `99-artifacts/` 创建
+  - `backend/` → `10-backend/api/impl/`（含 .meta/src/tests/TASK.md）
+  - `frontend/` → `20-frontend/web/impl/`（含 .meta/src/tests/TASK.md）
+  - research 类型跳过平台子任务目录
+- **next-steps.ts**：lifecycle 阶段提示从 `99-artifacts/TEST.md` 改为「子任务目录/TEST.md」
+- **spec-merger.ts**：readTaskSpecByFilename 路径优先级修正为 `00-specs/` > `_shared/` > `99-artifacts/`
+
+## v6.27.1 (2026-08-15) — 子任务目录名去除数字前缀
+
+### 核心变更
+
+- **split.ts**：子任务目录名从 `01-{slug}` 改为 `{slug}`（如 `login-api/` 而非 `01-login-api/`）
+- **prompt-builder.ts**：加载子任务文件改为动态扫描服务目录下第一个子任务，不再硬编码 `01-impl`
+
+## v6.27.0 (2026-08-15) — 三级嵌套关联修复：全链路路径适配
+
+### 核心变更
+
+- **verify-engine.ts**：质量门禁（TEST.md/REVIEW.md/DEPLOY.md）扫描子任务目录，报告写入任务根目录
+- **execute.ts**：verify 流程、合规检查、质量门禁全部扫描子任务目录；`_shared/` 路径优先级调整为 `00-specs/` 优先
+- **analyze.ts**：文档补全（TEST.md/REVIEW.md/RISK.md/DEPS.md/MONITOR.md）扫描子任务目录
+- **retro.ts**：VERIFY_REPORT.md 查找路径适配（任务根优先，99-artifacts/ 回退）
+- **knowledge-graph.ts**：知识图谱扫描逻辑适配三级嵌套（scanTasks + scanTaskSpecs 两处）
+- **init.ts + create.ts**：目录树模板更新为三级嵌套结构
+- 所有修改均保留旧结构回退，兼容已有项目
+
+## v6.26.0 (2026-08-15) — 任务目录三级嵌套 + 任务类型差异化
+
+### 核心变更
+
+- **任务目录三级嵌套**：从扁平的 `10-{端}/` 改为 `10-backend/{服务名}/{子任务}/` 三级嵌套
+  - 第一层：前后端大类（`10-backend/` / `20-frontend/`）
+  - 第二层：端/服务（`api/` / `h5/` / `admin/`）
+  - 第三层：子任务（`01-xxx/` — 真正执行单元）
+- **任务类型差异化**：
+  - **feature/bugfix/refactor**：完整三级嵌套，前后端分开 → 各端 → 各子任务
+  - **research**：无前后端分层，直接产出调研文档（RESEARCH.md + COMPARISON.md）
+- **split.ts 重构**：平台分类为后端/前端，创建三级目录结构；research 类型跳过平台目录
+- **execute.ts 适配**：扫描 `10-backend/*/` 和 `20-frontend/*/` 下的子任务目录，保留旧结构回退
+- **rag-engine.ts 修复**：`indexTaskDocuments` 候选路径更新为新结构，动态扫描子任务文档
+- **prompt-builder.ts 修复**：`loadExtraSpecs` 路径更新；`loadAllTaskContext` 排除规则正确匹配大类目录
+- **AGENTS.md 更新**：目录结构文档反映三级嵌套 + research 类型
+
+## v6.25.0 (2026-08-15) — 子任务重构：子任务成为真正的工作单元
+
+### 核心变更
+
+- **任务目录结构根本性重构**：父 Task 从"执行单元"变为"功能模块分组"，子任务成为真正的工作单元
+  - **父任务（Task-NNN-slug）**：只保留共享内容（`00-specs/` + `_shared/` + `.issues.md`）
+  - **子任务（10-{服务名}/、20-{端名}/）**：每个子任务有独立的 `.meta/`（type/status/owner）、`git-config`、`TASK.md`、`src/`、`tests/` + 执行产出文档（TEST/RISK/DEPS/MONITOR/REVIEW/DEPLOY/ERROR_CODES/ADR）
+  - **删除 `99-artifacts/`**：执行产出文档移到各子任务目录下
+  - **删除父任务级 `.meta/`**：元信息移到各子任务目录下
+- **split.ts 重构**：平台循环改为子任务循环，每个子任务独立生成完整文档集
+- **execute.ts 适配**：扫描 `10-*/`/`20-*/` 目录替代硬编码的 `10-backend/`/`20-frontend/`
+- **AGENTS.md 更新**：目录结构文档反映新设计
+
+## v6.24.0 (2026-08-15) — split 任务目录结构标准化
+
+### 核心变更
+
+- **split 命令目录结构对齐设计**：修复 split 生成的 Task 目录不符合 AGENTS.md 设计的问题
+  - 新增 `00-specs/` 目录：REQ.md、TECH.md、SCHEMA.md、CHANGELOG.md 从 `_shared/` 移入
+  - `_shared/` 精简为共享契约：仅保留 `API_CONTRACT.yaml` + `CONTEXT.md`
+  - 平台目录加数字前缀：`backend/` → `10-backend/`，`{端}/` → `20-frontend/{端}/`
+  - README 模板同步更新，反映新目录结构
+- **向后兼容**：execute.ts 已有 `_shared/` → `00-specs/` 的回退逻辑，旧任务不受影响
+
+## v6.23.0 (2026-08-15) — 全局层目录精简 + PROJECTS/BASELINES 废弃
+
+### 核心变更
+
+- **GLOBAL/ 目录精简**：删除 7 个空模板文件 + 3 个空目录，只保留三层核心结构
+  - 删除：`OVERVIEW.md`、`ARCHITECTURE.md`、`TECH_STACK.md`、`CODE_INDEX.md`、`PROTOTYPE_INDEX.md`、`CHANGELOG.md`（全部空占位，从未被填充）
+  - 删除：`PROJECTS/` 整个目录（含 `_template/`、3 个空子目录）
+  - 删除：`REQUIREMENTS/`、`BASELINES/` 空目录
+  - 保留：`INDEX.md`（导航入口）+ `GLOSSARY.md`（术语表）+ `synthesis/` + `platforms/`
+- **INDEX.md 重写**：从复杂的需求索引表简化为清晰的导航入口（指向 synthesis/ 和 platforms/）
+- **analyze prompt 统一**：`PROJECTS/{工程}/` → `platforms/{端}/`，与 synthesize 产出路径一致
+- **prompt-builder 清理**：去掉根目录空文件的读取，FILE_DESC 只保留 synthesis/ 实际生成的文件
+- **修复重复条目**：analyze prompt 中 ERROR_CODES/DEPENDENCY_GRAPH/CODE_INDEX 各出现两次，删除重复
+
+### 修改文件
+
+- `src/commands/init.ts` — 删除 ~340 行空模板创建代码，重写 INDEX.md，删除 BASELINES ensureDir
+- `src/core/prompt-builder.ts` — 去掉根目录 ARCHITECTURE/TECH_STACK 读取，清理 FILE_DESC，删除 PROJECTS TOC 分组
+- `src/commands/analyze.ts` — PROJECTS/{工程}/ → platforms/{端}/，删除重复条目
+- `src/commands/global-status.ts` — 更新路径显示
+- `src/commands/import.ts` — 更新路径引用和日志输出
+- `src/commands/iteration-from-global.ts` — 更新模板文本
+
+### 精简后的 GLOBAL 结构
+
+```
+.speccore/GLOBAL/
+├── INDEX.md                ← 全局知识库导航入口
+├── GLOSSARY.md             ← 跨项目统一术语表
+├── synthesis/              ← 跨端综合文档（synthesize Phase 2 生成）
+│   ├── ARCHITECTURE.md     ← 全量技术架构
+│   ├── TECH_FULL.md        ← 全量技术方案
+│   └── CROSS_PLATFORM.md   ← 跨端关系图
+└── platforms/              ← 各端分析文档（synthesize Phase 1 / analyze 生成）
+    └── {端名}/             ← 如 admin/ h5/ backend/
+```
+
+---
+
+## v6.22.0 (2026-08-15) — 需求目录精简 + 原型提升为顶层目录
+
+### 核心变更
+
+- **010-requirements/ 目录精简**：
+  - 删除 `assets/screenshots/`、`assets/designs/` — 代码零引用，无用
+  - `assets/prototypes/` 提升为顶层 `prototypes/` — 原型（HTML/图片/链接，内容不限）
+  - `assets/` 仅保留 `extracted/` 子目录 — doc2spec 提取的图片
+  - `assets/images/` 合并到 `assets/extracted/` — Excel 图片提取路径统一
+
+- **analyze 原型读取增强**：
+  - analyze prompt 更新：需求文档中链接到原型的，必须主动 Read 该原型文件
+  - analyze-engine.ts 排除列表加入 `prototypes`，避免被误识别为 feature 目录
+
+- **模板同步更新**：init.ts、create.ts、AGENTS.md 所有目录结构描述统一更新
+
+### 新目录结构
+
+```
+010-requirements/
+├── sources/        ← 原始 PRD 存档
+├── converted/      ← doc2spec 转换后的 MD（各端文档）
+├── features/       ← 变更/补充需求
+├── prototypes/     ← 原型（HTML/图片/链接，内容不限）
+└── assets/
+    └── extracted/  ← doc2spec 提取的图片
+```
+
+---
+
+## v6.21.0 (2026-08-15) — synthesize 架构重构：Phase 2 直接读 PRD + Phase 3 改为索引生成
+
+### 核心变更
+
+- **Phase 2 重构**：从读取 Phase 1 分析结果改为直接读取 PRD 原文
+  - 输入源：converted/ + REQUIREMENT.md + features/
+  - Prompt 从"分析"改为"提取"：明确标注"提取，不是推断"
+  - 提取目标：接口映射表、共享数据模型、数据流向图、跨端调用关系图、端专属功能清单
+  - Phase 2 不再依赖 Phase 1，可独立运行
+
+- **Phase 3 简化**：从"功能单元合成"改为"生成全局索引"
+  - 删除 152 行合并逻辑（runPhase3 + buildPhase3Prompt）
+  - 新增 generatePhase3Index()：生成 GLOBAL/INDEX.md
+  - 索引内容：工程列表 + 各端分析文档 + 跨端综合文档 + 原始需求文档导航 + 使用指南
+
+### 架构改进
+
+**之前**：
+```
+PRD → Phase 1（逐端分析）→ Phase 2（分析 Phase 1 结果）→ Phase 3（合并为 REQUIREMENT.md）
+```
+
+**现在**：
+```
+PRD ─┬→ Phase 1（逐端专业分析）→ GLOBAL/platforms/{端}/
+     └→ Phase 2（直接提取跨端关系）→ GLOBAL/synthesis/
+     └→ Phase 3（生成索引）→ GLOBAL/INDEX.md
+```
+
+### 设计原则
+
+- **提取优于推断**：Phase 2 从 PRD 直接提取已有信息，不做二次分析
+- **端独立性**：各端文档保持独立，不强行合并不同端的差异化功能
+- **索引导航**：Phase 3 生成索引供 AI 导航，而非合并文档
+
+## v6.20.0 (2026-08-15) — 全链路端专业性提示词优化 + 模板补全
+
+### 新增
+
+- **4 个缺失模板补全**: TEST-template.md / REVIEW-template.md / MONITOR-template.md / UI_SPEC-template.md
+  - TEST: 后端接口测试 + 前端页面测试 + E2E 测试 + 四态测试（加载/空/错误/边界）
+  - REVIEW: 按端分章节（后端安全/事务/性能 + 前端兼容/体验/性能）
+  - MONITOR: 后端指标(QPS/延迟/错误率) + 前端指标(FCP/LCP/CLS/JS错误率) + 告警分级
+  - UI_SPEC: 路由表 + 组件清单 + 字段→UI 映射 + 状态枚举 + 交互设计 + 响应式适配
+
+### 修复
+
+- **端分类 Bug**: `classifyPlatform('app-android')` 被误判为后端 → 前端关键词优先匹配
+- **execute 提示词纯后端导向**: 新增前端代码生成指引（字段→UI 映射/路由/状态枚举/四态/响应式）
+
+### 优化
+
+- **analyze 端专业性约束对齐 synthesize Phase 1**: 后端/Web管理端/H5/小程序各有独立的必含内容清单
+- **REQUIREMENT.md 写作提示**: 新增各端差异化需求说明
+- **ANALYSIS.md 写作提示**: 新增按端分析 + 跨端关联要求
+- **REVIEW.md 写作提示**: 按端分章节（后端安全/事务 + 前端兼容/体验）
+- **MONITOR.md 写作提示**: 后端指标 + 前端 Core Web Vitals + 告警分级
+- **templateMap 引用补全**: TEST/REVIEW/MONITOR/UI_SPEC 都有明确的前端模板引用指引
+
+---
+
+## v6.19.0 (2026-08-15) — 端专业性质量保障体系
+
+### 新增
+
+- **质量核验系统 (quality-audit.ts)**: AI 生成 Spec 文档后自动检查各端内容完整性
+  - 后端检查: API 接口定义、请求/响应字段、数据模型、业务规则、错误码
+  - 前端检查: 页面路由、组件清单、字段→UI 映射、状态枚举、交互设计、响应式适配
+  - 通用检查: 内容充实度、文档结构化、占位符检测、表格使用
+  - 输出 `QUALITY_AUDIT.md` 质量报告，含评分、修复建议、推荐修复轮次
+- **`--audit-fix` 选项**: 读取质量审计报告并生成修复指令，最多 2 轮自动修复
+  - 用法: `speccore analyze -I <迭代> --audit-fix --prompt`
+- **前端专属模板 (TECH-FRONTEND-template.md)**: 覆盖页面路由、组件设计、状态管理、请求封装、样式方案、构建部署、字段→UI 映射
+
+### 优化
+
+- **writePerPlatform 按端提取**: 不再将同一份报告原封不动写到所有端目录，改为按端关键词提取差异化内容
+- **analyze prompt 端专业约束**: 新增“端专业性约束”章节，明确要求后端必须有 API/数据模型，前端必须有页面/组件/字段映射
+- **validate 端针对性检查**: 验证时检查后端 TECH.md 是否含 API 定义和数据模型，前端 TECH.md 是否含字段映射和状态枚举
+
+---
+
 ## v6.18.4 (2026-08-15) — 批次执行默认开启
 
 ### 变更

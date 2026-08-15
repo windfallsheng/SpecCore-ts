@@ -314,7 +314,7 @@ export async function findAffectedSpecSections(
   iterDir: string,
   keywords: string[]
 ): Promise<{ file: string; sections: string[] }[]> {
-  const specFiles = ['TECH.md', 'TEST.md', 'RISK.md', 'DEPS.md', 'MONITOR.md'];
+  const specFiles = ['TECH.md', 'TEST.md', 'RISK.md', 'DEPS.md', 'MONITOR.md', 'UI_SPEC.md'];
   const results: { file: string; sections: string[] }[] = [];
 
   for (const filename of specFiles) {
@@ -371,10 +371,9 @@ export async function syncTaskToSpecs(
 
   // 1. 提取关键词
   const keywords = extractKeywords(taskName);
-  // 补充：从 _shared/REQ.md 提取更多关键词
-  const reqMdPath = join(taskDir, '_shared', 'REQ.md');
-  if (await pathExists(reqMdPath)) {
-    const reqContent = await readFile(reqMdPath, 'utf-8');
+  // 补充：从 REQ.md 提取更多关键词（00-specs/ 优先，_shared/ 回退）
+  const reqContent = await readTaskSpecByFilename(taskDir, 'REQ.md');
+  if (reqContent) {
     const reqKw = extractKeywords(reqContent.slice(0, 1000));
     keywords.push(...reqKw);
   }
@@ -555,16 +554,15 @@ async function readTaskSpecContent(
   featureName: string,
   keywords: string[]
 ): Promise<string | null> {
-  // 优先从 _shared/TECH.md 提取
-  const techPath = join(taskDir, '_shared', 'TECH.md');
-  if (await pathExists(techPath)) {
-    const content = await readFile(techPath, 'utf-8');
+  // 优先从 TECH.md 提取（00-specs/ 优先，_shared/ 回退）
+  const techContent = await readTaskSpecByFilename(taskDir, 'TECH.md');
+  if (techContent) {
     // 尝试提取与 featureName 相关的段落
-    const sectionContent = extractSection(content, featureName);
+    const sectionContent = extractSection(techContent, featureName);
     if (sectionContent) return `## ${featureName}\n${sectionContent}`;
 
     // 回退：提取包含关键词的段落
-    const sections = splitMarkdownSections(content);
+    const sections = splitMarkdownSections(techContent);
     const relevant = sections.filter(s => {
       if (!s.heading) return false;
       return keywords.some(kw => s.heading.includes(kw) || s.content.slice(0, 200).includes(kw));
@@ -574,11 +572,10 @@ async function readTaskSpecContent(
     }
   }
 
-  // 回退：读取 _shared/REQ.md
-  const reqPath = join(taskDir, '_shared', 'REQ.md');
-  if (await pathExists(reqPath)) {
-    const content = await readFile(reqPath, 'utf-8');
-    return content;
+  // 回退：读取 REQ.md
+  const reqContent2 = await readTaskSpecByFilename(taskDir, 'REQ.md');
+  if (reqContent2) {
+    return reqContent2;
   }
 
   return null;
@@ -589,10 +586,10 @@ async function readTaskSpecByFilename(
   taskDir: string,
   filename: string
 ): Promise<string | null> {
-  // 优先 _shared/，回退 99-artifacts/
+  // 优先 00-specs/，回退 _shared/ → 子任务目录 → 99-artifacts/（legacy）
   const paths = [
-    join(taskDir, '_shared', filename),
     join(taskDir, '00-specs', filename),
+    join(taskDir, '_shared', filename),
     join(taskDir, '99-artifacts', filename),
   ];
   for (const p of paths) {
@@ -638,10 +635,9 @@ export async function mergeNewRequirementsOnArchive(
     const isNewReq = await detectNewRequirement(taskDir, taskId, changeSummaryContent);
     if (!isNewReq) continue;
 
-    // 读取任务的 REQ.md
-    const reqMdPath = join(taskDir, '_shared', 'REQ.md');
-    if (!(await pathExists(reqMdPath))) continue;
-    const reqContent = await readFile(reqMdPath, 'utf-8');
+    // 读取任务的 REQ.md（00-specs/ 优先，_shared/ 回退）
+    const reqContent = await readTaskSpecByFilename(taskDir, 'REQ.md');
+    if (!reqContent) continue;
 
     // 提取关键词
     const titleMatch = reqContent.match(/^#\s+(.+)/m);
@@ -755,11 +751,10 @@ async function detectNewRequirement(
     if (content.includes('new') || content.includes('新增')) return true;
   }
 
-  // 信号 3：任务名/REQ.md 标题含「新增」特征
-  const reqMdPath = join(taskDir, '_shared', 'REQ.md');
-  if (await pathExists(reqMdPath)) {
-    const content = await readFile(reqMdPath, 'utf-8');
-    const titleMatch = content.match(/^#\s+(.+)/m);
+  // 信号 3：任务名/REQ.md 标题含「新增」特征（00-specs/ 优先，_shared/ 回退）
+  const reqContent = await readTaskSpecByFilename(taskDir, 'REQ.md');
+  if (reqContent) {
+    const titleMatch = reqContent.match(/^#\s+(.+)/m);
     if (titleMatch) {
       const title = titleMatch[1];
       if (/^新增|新增需求|^\[?new\]?/i.test(title)) return true;

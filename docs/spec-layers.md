@@ -207,22 +207,29 @@ speccore execute --task=Task-001 --force
 Task-001-订单管理/
 ├── _shared/
 │   └── API_CONTRACT.yaml     → 接口契约
-├── backend/
-│   ├── REQ.md                → 需求文档（接口表格解析 ✓）
+├── 00-specs/
+│   ├── REQ.md                → 需求文档
 │   ├── TECH.md               → 技术方案
-│   └── TASK.md               → 任务分解（状态更新 ✓）
-└── frontend/
+│   ├── CONTEXT.md            → 任务上下文
+│   └── TASK.md               → 任务分解
+├── 10-backend/
+│   └── api/
+│       └── order-api/        → 后端子任务
+│           ├── src/ + tests/
+│           └── TASK.md
+└── 20-frontend/
     └── web/
-        ├── REQ.md            → 前端需求
-        └── TASK.md           → 前端任务
+        └── order-page/       → 前端子任务
+            ├── src/ + tests/
+            └── TASK.md
 ```
 
 **execute 的工作流程：**
 
 1. 加载 CONSTITUTION.md → 提取 spec-rule 规则
 2. 加载 TECH_STACK.md → 检测语言/框架
-3. 读取 Task/backend/REQ.md → 解析接口表格
-4. 根据 REQ.md 接口 + spec-rule 规则 + 技术栈 → 生成代码
+3. 读取 00-specs/REQ.md → 解析接口表格
+4. 根据 REQ.md 接口 + spec-rule 规则 + 技术栈 → 生成代码到子任务目录
 
 ## 五、其他文件（人类文档）
 

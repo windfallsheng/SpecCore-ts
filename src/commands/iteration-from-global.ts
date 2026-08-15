@@ -179,7 +179,7 @@ function generateIterationRequirement(
   const today = new Date().toISOString().split('T')[0];
   let content = `# ${iterationName} - 需求文档
 
-> 本文件从全量层生成。需求来源: GLOBAL/PROJECTS/
+> 本文件从全量层生成。需求来源: GLOBAL/platforms/
 > 创建日期: ${today}
 
 ---

@@ -8,6 +8,17 @@
 import { ensureFileSync, readFileSync, writeFileSync, existsSync } from 'fs-extra';
 import { join } from 'path';
 
+export interface TaskSummary {
+  taskId: string;
+  taskName: string;
+  type: string;
+  status: 'completed' | 'failed' | 'skipped';
+  summary: string;          // 一句话摘要（AI 生成或自动提取）
+  outputs: string[];         // 关键产出文件路径（相对任务目录）
+  dependencies: string[];    // 依赖的任务 ID
+  completedAt: string;
+}
+
 export interface ExecutionState {
   iteration: string;
   totalBatches: number;
@@ -18,6 +29,8 @@ export interface ExecutionState {
   failedTasks: string[];
   pendingTasks: string[];
   batchStatus: Record<string, BatchStatus>;
+  taskSummaries: Record<string, TaskSummary>;
+  contextSummary?: string;   // 紧凑的上下文摘要，供新会话快速恢复
   startedAt: string;
   updatedAt: string;
 }
@@ -59,6 +72,7 @@ export function initExecutionState(
     failedTasks: [],
     pendingTasks: tasks.slice(),
     batchStatus,
+    taskSummaries: {},
     startedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -130,6 +144,107 @@ export function failTask(state: ExecutionState, taskId: string): ExecutionState 
 }
 
 /**
+ * 记录单个任务的执行摘要
+ */
+export function addTaskSummary(
+  state: ExecutionState,
+  summary: TaskSummary
+): ExecutionState {
+  state.taskSummaries[summary.taskId] = summary;
+  // 同步更新 completedTasks / failedTasks
+  if (summary.status === 'completed' && !state.completedTasks.includes(summary.taskId)) {
+    state.completedTasks.push(summary.taskId);
+  } else if (summary.status === 'failed' && !state.failedTasks.includes(summary.taskId)) {
+    state.failedTasks.push(summary.taskId);
+  }
+  state.pendingTasks = state.pendingTasks.filter(
+    t => t !== summary.taskId
+  );
+  saveExecutionState(state);
+  return state;
+}
+
+/**
+ * 生成紧凑的上下文摘要（~1K tokens），供新会话快速恢复全局视角
+ */
+export function generateContextSummary(state: ExecutionState): string {
+  const lines: string[] = [];
+  lines.push(`# 执行状态摘要`);
+  lines.push(``);
+  lines.push(`- 迭代: ${state.iteration}`);
+  lines.push(`- 进度: ${state.completedTasks.length}/${state.totalTasks} 任务完成`);
+  lines.push(`- 批次: ${state.currentBatch}/${state.totalBatches}`);
+  lines.push(`- 开始时间: ${state.startedAt}`);
+  lines.push(``);
+
+  // 已完成任务摘要
+  if (state.completedTasks.length > 0) {
+    lines.push(`## ✅ 已完成`);
+    for (const taskId of state.completedTasks) {
+      const s = state.taskSummaries[taskId];
+      if (s) {
+        const outputs = s.outputs.length > 0 ? ` → ${s.outputs.join(', ')}` : '';
+        lines.push(`- **${taskId}** (${s.type}): ${s.summary}${outputs}`);
+      } else {
+        lines.push(`- **${taskId}**: 已完成`);
+      }
+    }
+    lines.push(``);
+  }
+
+  // 失败任务
+  if (state.failedTasks.length > 0) {
+    lines.push(`## ❌ 失败`);
+    for (const taskId of state.failedTasks) {
+      const s = state.taskSummaries[taskId];
+      lines.push(`- **${taskId}**: ${s?.summary || '执行失败'}`);
+    }
+    lines.push(``);
+  }
+
+  // 待执行任务 + 依赖
+  if (state.pendingTasks.length > 0) {
+    lines.push(`## ⏳ 待执行`);
+    for (const taskId of state.pendingTasks) {
+      const s = state.taskSummaries[taskId];
+      const deps = s?.dependencies?.length ? ` (依赖: ${s.dependencies.join(', ')})` : '';
+      lines.push(`- **${taskId}**${deps}`);
+    }
+    lines.push(``);
+  }
+
+  // 下一批次指引
+  const nextBatch = state.batchStatus[String(state.currentBatch)];
+  if (nextBatch && nextBatch.status !== 'completed') {
+    lines.push(`## 📦 下一批次`);
+    lines.push(`批次 ${state.currentBatch}/${state.totalBatches}，任务: ${nextBatch.tasks.join(', ')}`);
+    lines.push(``);
+    lines.push(`继续执行命令:`);
+    lines.push(`\`\`\`bash`);
+    lines.push(`speccore execute --prompt --task=${nextBatch.tasks[0]} -i ${state.iteration} --batch-size ${state.batchSize}`);
+    lines.push(`\`\`\``);
+  } else {
+    lines.push(`✅ 所有批次已完成！`);
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * 将上下文摘要写入文件，供新会话读取
+ */
+export async function writeContextSummaryFile(state: ExecutionState): Promise<string> {
+  const { ensureDir, writeFile } = await import('fs-extra');
+  const summaryPath = join('.speccore', 'local', 'execution-summary.md');
+  const summary = generateContextSummary(state);
+  state.contextSummary = summary;
+  saveExecutionState(state);
+  await ensureDir(join('.speccore', 'local'));
+  await writeFile(summaryPath, summary, 'utf-8');
+  return summaryPath;
+}
+
+/**
  * 清除执行状态（完成或取消后）
  */
 export function clearExecutionState(): void {
@@ -137,6 +252,12 @@ export function clearExecutionState(): void {
     if (existsSync(STATE_PATH)) {
       const { unlinkSync } = require('fs');
       unlinkSync(STATE_PATH);
+    }
+    // 同时清除摘要文件
+    const summaryPath = join('.speccore', 'local', 'execution-summary.md');
+    if (existsSync(summaryPath)) {
+      const { unlinkSync } = require('fs');
+      unlinkSync(summaryPath);
     }
   } catch {}
 }

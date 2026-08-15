@@ -22,16 +22,41 @@ Iteration-NNN-name/            ← 迭代目录
 │   ├── converted/             ← [自动生成] doc2spec 转换后的 MD
 │   ├── features/              ← [手动维护] 按功能模块组织
 │   │   └── {feature}/README.md
-│   └── assets/                ← 素材（extracted/prototypes/designs/screenshots）
+│   ├── prototypes/            ← 原型（HTML/图片/链接，内容不限）
+│   └── assets/                ← doc2spec 提取的图片
 ├── 020-specs/                 ← 需求分析
 ├── 030-tasks/                 ← 开发任务
-│   └── Task-*/
-│       ├── .meta/             ← 任务元信息（type/status/owner/created-at）
-│       ├── _shared/           ← 共享契约（API_CONTRACT.yaml）
-│       ├── 00-specs/          ← 执行前核心规格（REQ/TECH/TASK/SCHEMA/CHANGELOG）
-│       ├── 10-backend/        ← 后端实现（src/tests）
-│       ├── 20-frontend/       ← 前端实现（{platform}/src/tests）
-│       ├── 99-artifacts/      ← 执行产出（自检门禁 + 参考文档）
+│   └── Task-*/                ← 功能模块分组（聚合相关子任务）
+│       ├── _shared/           ← 共享契约（API_CONTRACT.yaml + CONTEXT.md）
+│       ├── 00-specs/          ← 模块级核心规格（REQ/TECH/SCHEMA/CHANGELOG）
+│       ├── 10-backend/        ← 后端（大类）
+│       │   └── {服务名}/      ← 端（如 api）
+│       │       └── {子任务}/  ← 执行单元
+│       ├── 20-frontend/       ← 前端（大类）
+│       │   └── {端名}/        ← 端（如 h5/admin）
+│       │       └── {子任务}/  ← 执行单元
+│       └── .issues.md         ← 问题追踪
+│
+│   子任务目录结构（10-backend/{端}/{子任务}/ 或 20-frontend/{端}/{子任务}/）：
+│       ├── .meta/             ← 子任务元信息（type/status/owner/created-at）
+│       ├── git-config         ← 子任务级 Git 配置
+│       ├── TASK.md            ← 子任务追踪
+│       ├── src/               ← AI 输出代码
+│       ├── tests/             ← AI 输出测试
+│       ├── TEST.md            ← 测试用例
+│       ├── RISK.md            ← 风险评估
+│       ├── DEPS.md            ← 依赖分析
+│       ├── MONITOR.md         ← 监控方案
+│       ├── REVIEW.md          ← 评审清单
+│       ├── DEPLOY.md          ← 部署清单
+│       ├── ERROR_CODES.md     ← 错误码
+│       └── COMPONENT_TREE.md  ← 组件树（仅前端）
+│
+│   research 类型任务目录结构（无前后端分层）：
+│       ├── _shared/           ← 共享上下文
+│       ├── 00-specs/          ← 核心规格（REQ.md/TECH.md）
+│       ├── RESEARCH.md        ← 调研报告
+│       ├── COMPARISON.md      ← 方案对比
 │       └── .issues.md         ← 问题追踪
 └── STAFFING.md                ← 人员排期
 ```
@@ -46,7 +71,7 @@ Iteration-NNN-name/            ← 迭代目录
 | `[SPECCORE_MODE: <mode>]` | 意图模式 | 识别模式后进入对应流程 |
 | `[SPECCORE_EXEC: <cmd>]` | 自动执行命令 | 直接 execute_command |
 | `[SPECCORE_INTENT]` | 意图确认块 | 展示给用户确认 |
-| `[SPECCORE_BATCH_COMPLETE]` | 批次执行完成 | **必须开始新对话**，按提示命令继续下一批次 |
+| `[SPECCORE_CONTINUE: <path>]` | 批次执行完成，需续批 | **必须开始新对话**，先读取 `<path>` 恢复上下文，再按提示命令继续下一批次 |
 
 ## 行为约束
 - **不要自己创建目录** — 用 `speccore iteration create`

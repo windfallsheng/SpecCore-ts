@@ -49,6 +49,7 @@ export interface AnalyzeOptions {
   feature?: string;     // --feature: 局部分析单个功能模块
   doc?: string;         // --doc: 局部分析类型文档（如 bugs/login-timeout, refactors/db-pool）
   sync?: boolean;       // --sync: 任务分析后局部回写 020-specs/（不全覆盖）
+  auditFix?: boolean;   // --audit-fix: 读取质量审计报告并生成修复指令
   // synthesize 整合选项
   full?: boolean;       // --full: 全自动三阶段合成（原 synthesize --full）
   phase?: string;       // --phase N: 单阶段合成执行
@@ -68,6 +69,33 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       phase: options.phase,
       applyPhase: options.applyPhase,
     });
+  }
+
+  // ── --audit-fix 模式: 读取质量审计报告并生成修复指令 ──
+  if (options.auditFix) {
+    const iter = options.iteration || await getDefaultIteration();
+    if (!iter) { logger.error('请指定迭代: -I <iteration>'); return; }
+    const iterDir = await getIterationDir(iter);
+    const specDir = join(iterDir, '020-specs');
+    const auditPath = join(specDir, 'QUALITY_AUDIT.md');
+    if (!(await import('fs-extra')).pathExists(auditPath)) {
+      logger.warn('未找到 QUALITY_AUDIT.md，请先运行 speccore analyze 生成质量审计报告');
+      return;
+    }
+    const auditContent = await (await import('fs-extra')).readFile(auditPath, 'utf-8');
+    let prompt = `\n# 任务: 质量修复（基于 QUALITY_AUDIT.md）\n\n`;
+    prompt += `## 审计报告\n\n${auditContent}\n\n`;
+    prompt += `## 修复要求\n`;
+    prompt += `1. Read 上述审计报告中标记为 ❌ 和 ⚠️ 的维度\n`;
+    prompt += `2. 逐个修复对应文档中的缺失内容：\n`;
+    prompt += `   - 后端缺失: 补充 API 接口定义、数据模型、业务规则、错误码\n`;
+    prompt += `   - 前端缺失: 补充页面路由表、组件清单、字段→UI 映射、状态枚举、交互设计\n`;
+    prompt += `3. 修复后重新运行 \`speccore analyze -I ${iter}\` 重新审计\n`;
+    prompt += `4. 最多修复 2 轮，超过 2 轮仍有问题则标记为“需人工确认”\n`;
+    prompt += `5. 写入: speccore analyze --apply '{...}' -I ${iter}\n`;
+    process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
+    process.exitCode = 10;
+    return;
   }
 
   // ── --feature 模式: 局部刷新单个功能模块 ──
@@ -556,9 +584,28 @@ async function enrichTaskDocs(iteration: string, taskId: string, reqFiles: strin
     }
   }
 
-  // 补全 TEST.md
-  const testPath = join(fullTaskDir, '99-artifacts', 'TEST.md');
-  if (await pathExists(testPath)) {
+  // 补全 TEST.md（扫描子任务目录）
+  const testFiles: string[] = [];
+  for (const catDir of ['10-backend', '20-frontend']) {
+    const catPath = join(fullTaskDir, catDir);
+    if (await pathExists(catPath)) {
+      try {
+        for (const svc of await readdir(catPath, { withFileTypes: true })) {
+          if (!svc.isDirectory()) continue;
+          for (const sub of await readdir(join(catPath, svc.name), { withFileTypes: true })) {
+            if (!sub.isDirectory()) continue;
+            const fp = join(catPath, svc.name, sub.name, 'TEST.md');
+            if (await pathExists(fp)) testFiles.push(fp);
+          }
+        }
+      } catch { /* 跳过 */ }
+    }
+  }
+  if (testFiles.length === 0) {
+    const legacy = join(fullTaskDir, '99-artifacts', 'TEST.md');
+    if (await pathExists(legacy)) testFiles.push(legacy);
+  }
+  for (const testPath of testFiles) {
     let testContent = await require('fs-extra').readFile(testPath, 'utf-8');
     if (!testContent.includes('## 补充分析')) {
       const items: string[] = [];
@@ -569,14 +616,33 @@ async function enrichTaskDocs(iteration: string, taskId: string, reqFiles: strin
       if (items.length > 0) {
         testContent += `\n\n---\n\n## 补充分析\n${items.join('\n')}\n`;
         await writeFile(testPath, testContent);
-        logger.info(`   📄 更新 TEST.md`);
+        logger.info(`   📄 更新 ${testPath.replace(fullTaskDir + '/', '')}`);
       }
     }
   }
 
-  // 补全 REVIEW.md
-  const reviewPath = join(fullTaskDir, '99-artifacts', 'REVIEW.md');
-  if (await pathExists(reviewPath)) {
+  // 补全 REVIEW.md（扫描子任务目录）
+  const reviewFiles: string[] = [];
+  for (const catDir of ['10-backend', '20-frontend']) {
+    const catPath = join(fullTaskDir, catDir);
+    if (await pathExists(catPath)) {
+      try {
+        for (const svc of await readdir(catPath, { withFileTypes: true })) {
+          if (!svc.isDirectory()) continue;
+          for (const sub of await readdir(join(catPath, svc.name), { withFileTypes: true })) {
+            if (!sub.isDirectory()) continue;
+            const fp = join(catPath, svc.name, sub.name, 'REVIEW.md');
+            if (await pathExists(fp)) reviewFiles.push(fp);
+          }
+        }
+      } catch { /* 跳过 */ }
+    }
+  }
+  if (reviewFiles.length === 0) {
+    const legacy = join(fullTaskDir, '99-artifacts', 'REVIEW.md');
+    if (await pathExists(legacy)) reviewFiles.push(legacy);
+  }
+  for (const reviewPath of reviewFiles) {
     let reviewContent = await require('fs-extra').readFile(reviewPath, 'utf-8');
     if (!reviewContent.includes('## 本任务专项检查')) {
       const items: string[] = [];
@@ -586,23 +652,47 @@ async function enrichTaskDocs(iteration: string, taskId: string, reqFiles: strin
       if (items.length > 0) {
         reviewContent += `\n\n---\n\n## 本任务专项检查\n${items.join('\n')}\n`;
         await writeFile(reviewPath, reviewContent);
-        logger.info(`   📄 更新 REVIEW.md`);
+        logger.info(`   📄 更新 ${reviewPath.replace(fullTaskDir + '/', '')}`);
       }
     }
   }
 
-  // 创建缺失文件
+  // 创建缺失文件（扫描子任务目录，在每个子任务下创建）
+  const subtaskDirs: string[] = [];
+  for (const catDir of ['10-backend', '20-frontend']) {
+    const catPath = join(fullTaskDir, catDir);
+    if (await pathExists(catPath)) {
+      try {
+        for (const svc of await readdir(catPath, { withFileTypes: true })) {
+          if (!svc.isDirectory()) continue;
+          for (const sub of await readdir(join(catPath, svc.name), { withFileTypes: true })) {
+            if (!sub.isDirectory()) continue;
+            subtaskDirs.push(join(catPath, svc.name, sub.name));
+          }
+        }
+      } catch { /* 跳过 */ }
+    }
+  }
+  // 旧结构回退
+  if (subtaskDirs.length === 0) {
+    const legacyArtifacts = join(fullTaskDir, '99-artifacts');
+    if (await pathExists(legacyArtifacts)) subtaskDirs.push(legacyArtifacts);
+    else subtaskDirs.push(fullTaskDir); // 最后回退到任务根
+  }
+
   const templates: [string, string][] = [
     ['RISK.md', `# 风险评估\n\n> analyze | ${new Date().toISOString().split('T')[0]}\n\n## 风险矩阵\n| 风险 | 可能 | 影响 | 缓解 |\n| :--- | :--- | :--- | :--- |\n| 兼容性 | 中 | 高 | 版本号+测试 |\n\n## 回滚\n1. 触发: 线上错误率 > 1%\n2. 步骤: git revert → 重部署\n`],
     ['DEPS.md', `# 依赖清单\n\n## 上游依赖\n| 服务 | 版本 | 用途 |\n| :--- | :--- | :--- |\n| _待补充_ | — | — |\n`],
     ['MONITOR.md', `# 监控\n\n## 关键指标\n| 指标 | 阈值 | 级别 |\n| :--- | :--- | :--- |\n| 成功率 | <99.9% | P1 |\n| P99延迟 | >1000ms | P2 |\n`],
   ];
 
-  for (const [filename, content] of templates) {
-    const fp = join(fullTaskDir, '99-artifacts', filename);
-    if (!(await pathExists(fp))) {
-      await writeFile(fp, content);
-      logger.info(`   📄 创建 99-artifacts/${filename}`);
+  for (const subtaskDir of subtaskDirs) {
+    for (const [filename, content] of templates) {
+      const fp = join(subtaskDir, filename);
+      if (!(await pathExists(fp))) {
+        await writeFile(fp, content);
+        logger.info(`   📄 创建 ${fp.replace(fullTaskDir + '/', '')}`);
+      }
     }
   }
 }
@@ -658,7 +748,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     prompt += `   - 「工程」列 → 所有工程名（如 meeting-system, booking-service）\n`;
     prompt += `   - 「源码路径」列 → 各工程的代码目录（用于 Read 源码）\n`;
     prompt += `   - 「对应需求端」列 → admin/h5/miniapp/app/android/ios（决定文档分端维度）\n`;
-    prompt += `   - 每个工程独立分析，文档输出到: .speccore/GLOBAL/PROJECTS/{工程名}/\n`;
+    prompt += `   - 每个工程独立分析，文档输出到: .speccore/GLOBAL/platforms/{端名}/\n`;
     prompt += `2. Read .speccore/GLOBAL/ 下所有文档了解跨项目需求\n`;
     if (ctx.withCode) {
       prompt += `3. 从 CONSTITUTION.md 的「源码路径」列读取各工程目录，逐个 Read 源码\n`;
@@ -673,9 +763,6 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `   - ERROR_CODES.md: Exception/enum → 错误码清单（Java/Node/Go 分别列出）\n`;
       prompt += `   - DEPENDENCY_GRAPH.md: import/require → 模块依赖拓扑（按端分图）\n`;
       prompt += `   - CODE_INDEX.md: 各端目录结构、关键文件、语言和框架标注\n`;
-      prompt += `   - ERROR_CODES.md: 扫描 Error/Exception/enum 提取错误码清单和含义\n`;
-      prompt += `   - DEPENDENCY_GRAPH.md: 分析模块间 import/require 依赖关系，生成依赖拓扑图\n`;
-      prompt += `   - CODE_INDEX.md: 各工程目录结构、关键文件清单、模块职责说明\n`;
       prompt += `5. **知识沉淀（按工程+端区分）**: 从各端源码识别可复用模式，写入 .speccore/PATTERNS/:\n`;
       prompt += `   - 命名规则: **{CONSTITUTION中的工程名}-{端}-{分类}-{模式名}.md**\n`;
       prompt += `   - 工程名从 CONSTITUTION.md 的「工程」列读取\n`;
@@ -690,24 +777,23 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     }
     prompt += `\n## 输出文档 (12 个/工程 + 1 个全局)\n`;
     if (ctx.withCode) {
-      prompt += `> 以下文档按工程分目录存放: .speccore/GLOBAL/PROJECTS/{工程名}/\n`;
-      prompt += `> 工程名从 CONSTITUTION 的「工程」列读取\n\n`;
+      prompt += `> 以下文档按端分目录存放: .speccore/GLOBAL/platforms/{端名}/\n`;
+      prompt += `> 端名从 CONSTITUTION 的「对应需求端」列读取（admin/h5/backend 等）\n\n`;
       prompt += `| 文档 | 存放位置 | 从源码提取内容 |\n`;
       prompt += `| :--- | :--- | :--- |\n`;
-      prompt += `| TECH_STACK.md | PROJECTS/{工程}/ | 语言、框架、构建工具、UI库 |\n`;
-      prompt += `| API_INVENTORY.md | PROJECTS/{工程}/ | 接口路径、方法、参数、响应、鉴权 |\n`;
-      prompt += `| DATA_MODEL.md | PROJECTS/{工程}/ | 表结构+字段+关系（后台）+ Store/State（前端） |\n`;
-      prompt += `| BUSINESS_RULES.md | PROJECTS/{工程}/ | 校验规则+业务约束+状态机 |\n`;
-      prompt += `| CONFIG_MAP.md | PROJECTS/{工程}/ | 环境变量+开关+密钥（脱敏） |\n`;
-      prompt += `| ERROR_CODES.md | PROJECTS/{工程}/ | 错误码清单+含义 |\n`;
-      prompt += `| DEPENDENCY_GRAPH.md | PROJECTS/{工程}/ | 模块依赖拓扑 |\n`;
-      prompt += `| CODE_INDEX.md | PROJECTS/{工程}/ | 目录结构+关键文件+模块职责 |\n`;
-      prompt += `| TEST.md | PROJECTS/{工程}/ | 测试计划（用例矩阵+边界+集成） |\n`;
-      prompt += `| REVIEW.md | PROJECTS/{工程}/ | 评审清单（安全+质量+性能） |\n`;
-      prompt += `| RISK.md | PROJECTS/{工程}/ | 风险评估（矩阵+缓解+预案） |\n`;
-      prompt += `| DEPS.md | PROJECTS/{工程}/ | 依赖清单（服务+中间件+库） |\n`;
-      prompt += `| MONITOR.md | PROJECTS/{工程}/ | 监控方案（指标+告警+追踪） |\n`;
-      prompt += `| REQUIREMENT.md | GLOBAL/ (全局1份) | 跨项目需求索引 |\n`;
+      prompt += `| TECH_STACK.md | platforms/{端}/ | 语言、框架、构建工具、UI库 |\n`;
+      prompt += `| API_INVENTORY.md | platforms/{端}/ | 接口路径、方法、参数、响应、鉴权 |\n`;
+      prompt += `| DATA_MODEL.md | platforms/{端}/ | 表结构+字段+关系（后台）+ Store/State（前端） |\n`;
+      prompt += `| BUSINESS_RULES.md | platforms/{端}/ | 校验规则+业务约束+状态机 |\n`;
+      prompt += `| CONFIG_MAP.md | platforms/{端}/ | 环境变量+开关+密钥（脱敏） |\n`;
+      prompt += `| ERROR_CODES.md | platforms/{端}/ | 错误码清单+含义 |\n`;
+      prompt += `| DEPENDENCY_GRAPH.md | platforms/{端}/ | 模块依赖拓扑 |\n`;
+      prompt += `| CODE_INDEX.md | platforms/{端}/ | 目录结构+关键文件+模块职责 |\n`;
+      prompt += `| TEST.md | platforms/{端}/ | 测试计划（用例矩阵+边界+集成） |\n`;
+      prompt += `| REVIEW.md | platforms/{端}/ | 评审清单（安全+质量+性能） |\n`;
+      prompt += `| RISK.md | platforms/{端}/ | 风险评估（矩阵+缓解+预案） |\n`;
+      prompt += `| DEPS.md | platforms/{端}/ | 依赖清单（服务+中间件+库） |\n`;
+      prompt += `| MONITOR.md | platforms/{端}/ | 监控方案（指标+告警+追踪） |\n`;
       prompt += `| PATTERNS/*.md | 可复用设计模式，前后端分别提取： | PATTERNS/ |\n`;
       prompt += `  - 后台: 架构(mvc/ddd)、鉴权(jwt/oauth)、API(pagination/restful)、数据(repository)、异常(handler)、日志(aop)\n`;
       prompt += `  - 前端: 组件(composable/hook)、状态管理(pinia/redux)、路由(guard/layout)、请求(interceptor)、表单(validation)、UI(theme/layout)\n`;
@@ -726,7 +812,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     prompt += `4. 所有文件写完后，输出冲突汇总:\n`;
     prompt += `   \`\`\`\n`;
     prompt += `   ⚠️  N 个文件有冲突，旧版已重命名为时间戳格式：\n`;
-    prompt += `      📄 .speccore/GLOBAL/PROJECTS/xxx/API_INVENTORY.md\n`;
+    prompt += `      📄 .speccore/GLOBAL/platforms/xxx/API_INVENTORY.md\n`;
     prompt += `         对比: diff API_INVENTORY.md API_INVENTORY-20260813143025.md\n`;
     prompt += `      💡 请对比时间戳文件，合并自定义内容后删除\n`;
     prompt += `   \`\`\`\n`;
@@ -751,6 +837,11 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
 - 提取数据模型和字段需求
 - 标注异常场景和边界条件
 - 去重合并多端需求的公共部分，标注差异
+- **各端差异化需求**：同一功能在不同端的交互方式可能不同，必须分别说明：
+  - 后端：接口规格、数据校验规则、事务约束
+  - Web 管理端：页面布局、表格/表单交互、权限控制
+  - H5/移动端：触摸交互、响应式适配、弱网处理
+  - 小程序：包体积约束、平台 API 限制、原生能力调用
 `],
 
     ['ANALYSIS.md',
@@ -765,6 +856,10 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
 - 从业务字段描述推导出的数据实体及字段
 - 文档中标注的业务规则（R-XX-XX）
 - 各功能的异常场景和边界条件
+- **按端分析**：每个功能模块分别分析各端的实现需求：
+  - 后端：接口设计、数据模型、业务逻辑、事务约束
+  - 前端各端：页面结构、组件拆分、字段展示、交互流程、状态管理
+- **跨端关联**：标注哪些功能需要跨端协作，数据如何在各端之间流转
 `],
 
     ['TECH.md',
@@ -806,10 +901,18 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
 > ${iter}
 
 ## 写作要求
-从安全、质量、性能三个维度，逐项列出本次需求的评审要点：
-- 安全: 每个接口的鉴权需求、数据校验、敏感信息保护
-- 质量: 幂等性、事务一致性、错误处理
-- 性能: 批量操作风险、缓存策略、查询优化
+**按端分章节**，从安全、质量、性能三个维度，逐项列出本次需求的评审要点：
+
+### 后端评审
+- 安全: 每个接口的鉴权需求、数据校验、敏感信息保护、SQL 注入防护
+- 质量: 幂等性、事务一致性、错误处理、并发安全
+- 性能: 批量操作风险、缓存策略、查询优化、连接池配置
+
+### 前端评审
+- 安全: XSS 防护、CSRF Token、Token 存储安全
+- 质量: 表单校验完整性、防重复提交、错误提示、内存泄漏
+- 性能: 首屏加载、长列表优化、打包体积、图片优化
+- 兼容性: 浏览器/设备兼容、响应式布局、触摸交互
 `],
 
     ['RISK.md',
@@ -842,16 +945,44 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
 > ${iter}
 
 ## 写作要求
-根据需求中的业务功能和规则，定义监控指标：
-- 业务指标（如预订成功率、审批超时率）
-- 技术指标（如接口响应时间、错误率）
-- 告警阈值和级别
+**按端分章节**，根据需求中的业务功能和规则，定义监控指标：
+
+### 业务指标
+- 核心业务成功率、转化率、处理时延
+
+### 后端技术指标
+- 接口性能：响应时间(P50/P95/P99)、QPS、错误率
+- 基础设施：CPU/内存/数据库连接数/慢查询/Redis 命中率
+- 异常监控：未捕获异常、OOM 重启、死锁
+
+### 前端技术指标
+- 性能：FCP/LCP/FID/CLS（Core Web Vitals）
+- 稳定性：JS 错误率、API 失败率、白屏率
+- 体验：TTI、资源加载失败率、长任务数
+
+### 告警规则
+- 按 Fatal/Critical/Warning/Info 分级，定义触发条件、通知方式、响应时间
+`],
+
+    ['UI_SPEC.md',
+`# 前端 UI 规格
+
+> ${iter} | ${now}
+
+## 写作要求
+根据 REQUIREMENT.md 和 TECH.md 中的前端需求，逐端整理 UI 规格：
+- 页面结构与路由（每个页面的路径、入口、权限）
+- 组件清单（列表、表单、详情、仪表盘等）
+- 字段→UI 映射（每个页面/表单展示哪些字段，来源哪个 API）
+- 状态枚举（前后端共享的状态值定义，如 0=空闲 1=使用中 2=维护中）
+
+⚠️ 这是前后端契约的关键桥梁 — 字段映射必须与后端 API 响应字段一一对应
 `],
   ];
 
   // 任务类型 × 文档矩阵: 每种类型生成哪些文档
   const DOC_MATRIX: Record<string, string[]> = {
-    feature:    ['REQUIREMENT.md','ANALYSIS.md','TECH.md','TEST.md','REVIEW.md','RISK.md','DEPS.md','MONITOR.md'],
+    feature:    ['REQUIREMENT.md','ANALYSIS.md','TECH.md','TEST.md','REVIEW.md','RISK.md','DEPS.md','MONITOR.md','UI_SPEC.md'],
     refactor:   ['ANALYSIS.md','TECH.md','TEST.md','REVIEW.md','RISK.md'],
     bugfix:     ['ANALYSIS.md','TECH.md','TEST.md'],
     research:   ['ANALYSIS.md'],
@@ -879,22 +1010,64 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `- 分析结果写入 \`_shared/\`（任务独立），**不覆盖** \`020-specs/\`（迭代基线）\n`;
     }
   } else {
-    prompt += `- 当前是**迭代级分析**，需产出全部 7 个文档，覆盖需求→技术→测试→评审→风险→依赖→监控\n`;
+    prompt += `- 当前是**迭代级分析**，需产出全部 8 个文档，覆盖需求→技术→测试→评审→风险→依赖→监控→UI规格\n`;
   }
   prompt += `\n## 要求\n1. Read .speccore/PATTERNS/TEMPLATES/specs/ 下的专业模板（如目录不存在或为空，用你的专业知识自由撰写，绝不允许产出一行垃圾）\n`;
   const templateMap: Record<string, string> = {
     'ANALYSIS.md': 'ANALYSIS-template.md', 'TECH.md': 'TECH-template.md', 'TEST.md': 'TEST-template.md',
-    'REVIEW.md': 'REVIEW-template.md', 'RISK.md': 'RISK-template.md', 'DEPS.md': 'DEPS-template.md', 'MONITOR.md': 'MONITOR-template.md'
+    'REVIEW.md': 'REVIEW-template.md', 'RISK.md': 'RISK-template.md', 'DEPS.md': 'DEPS-template.md', 'MONITOR.md': 'MONITOR-template.md', 'UI_SPEC.md': 'UI_SPEC-template.md'
   };
   for (const doc of taskDocs) {
     const tpl = templateMap[doc[0]] || '';
     prompt += `   - ${doc[0]} → 参考 ${tpl}\n`;
   }
+  prompt += `   - TECH.md → 后端参考 TECH-template.md，前端参考 TECH-FRONTEND-template.md（两个都要读）\n`;
+  prompt += `   - TEST.md → 后端测试参考 TEST-template.md，前端测试参考同一模板（页面流转/交互/四态章节）\n`;
+  prompt += `   - REVIEW.md → 按端分章节检查：后端安全/事务/性能，前端兼容/体验/性能\n`;
+  prompt += `   - MONITOR.md → 后端指标(QPS/延迟/错误率) + 前端指标(FCP/LCP/CLS/JS错误率)\n`;
+  prompt += `   - UI_SPEC.md → 按端分章节：路由表 + 组件清单 + 字段→UI 映射 + 状态枚举 + 交互设计\n`;
+  // 端专业性约束（对齐 synthesize Phase 1 的完整维度）
+  prompt += `\n## ⚠️ 端专业性约束（重要 — 对齐 synthesize Phase 1 标准）\n`;
+  prompt += `CONSTITUTION.md 中配置了多个端，每个端的文档必须有该端专属内容。\n`;
+  prompt += `**先识别端类型，再应用对应的专业维度**：\n\n`;
+  prompt += `### 后端服务必含内容\n`;
+  prompt += `- API 接口定义（路径/方法/参数/响应字段/状态码/错误码）\n`;
+  prompt += `- 数据库表结构（字段/类型/索引/约束）\n`;
+  prompt += `- 业务规则（含边界条件和异常流）\n`;
+  prompt += `- 缓存策略/并发与事务/消息队列（如涉及）\n`;
+  prompt += `- 安全：SQL 注入防护/接口鉴权/数据脱敏\n`;
+  prompt += `- 性能：QPS 预估/慢查询优化/连接池配置\n\n`;
+  prompt += `### Web 管理端（Admin）必含内容\n`;
+  prompt += `- 页面路由表 + 组件清单 + 字段→UI 映射\n`;
+  prompt += `- 复杂组件：大数据表格/复杂表单联动/树形结构\n`;
+  prompt += `- 权限 UI：菜单权限/按钮权限/数据权限\n`;
+  prompt += `- 状态枚举（与后端一致）+ 交互设计\n`;
+  prompt += `- 安全：XSS 防护/CSRF Token/Token 安全存储\n\n`;
+  prompt += `### 移动 H5 必含内容\n`;
+  prompt += `- 页面路由表 + 组件清单 + 字段→UI 映射\n`;
+  prompt += `- 适配方案：viewport/rem/vw/刘海屏/底部安全区\n`;
+  prompt += `- 触摸交互：手势识别/滑动冲突/触摸反馈\n`;
+  prompt += `- 首屏性能：骨架屏/资源预加载/关键 CSS\n`;
+  prompt += `- 弱网优化：离线缓存/请求合并/图片懒加载\n\n`;
+  prompt += `### 小程序必含内容\n`;
+  prompt += `- 页面路由表 + 组件清单 + 字段→UI 映射\n`;
+  prompt += `- 包体积约束：主包 2MB 限制/分包策略\n`;
+  prompt += `- 平台 API 约束：微信/支付宝差异/权限申请\n`;
+  prompt += `- 渲染限制：无 DOM 操作/setData 性能优化\n`;
+  prompt += `- 导航：页面栈限制(10层)/TabBar/分享扫码\n\n`;
+  prompt += `### 文档与端的对应关系\n`;
+  prompt += `- **TECH.md**：不要只写后端技术方案 — 每个前端都要有独立的页面结构/组件设计/状态管理章节\n`;
+  prompt += `- **TEST.md**：不要只写后端接口测试 — 每个前端页面都要有页面流转测试/交互测试/四态测试\n`;
+  prompt += `- **REVIEW.md**：按端分章节 — 后端安全/事务/性能 + 前端兼容/体验/性能\n`;
+  prompt += `- **MONITOR.md**：后端指标(QPS/延迟) + 前端指标(FCP/LCP/CLS/JS错误率)\n`;
+  prompt += `- **UI_SPEC.md**：按端分章节，字段映射必须与后端 API 响应字段一一对应\n`;
+  prompt += `- 分析完成后会自动生成 QUALITY_AUDIT.md 质量报告，检查各端内容是否完整\n`;
   prompt += `2. 读取需求文档（按优先级顺序）：\n`;
   prompt += `   a. 先读 010-requirements/INDEX.md — 了解需求全貌和文件清单\n`;
   prompt += `   b. 再读 010-requirements/converted/*.md — doc2spec 转换后的核心规格（主要依据）\n`;
   prompt += `   c. 再读 010-requirements/features/*/README.md — 功能级补充需求\n`;
-  prompt += `   d. 参考 010-requirements/assets/prototypes/ 和 designs/ — 原型和设计稿\n`;
+  prompt += `   d. 读取 010-requirements/prototypes/ — 原型文件（HTML/图片/链接均读取）\n`;
+  prompt += `      ⚠️ 需求文档中链接到原型的（如 \`![原型](../prototypes/xxx.png)\` 或 \`详见 prototypes/xxx.html\`），必须主动 Read 该原型文件\n`;
   prompt += `   e. 如用户指定了特定文档，优先读取指定文件；如要求全部，再读 sources/ 原始文档\n`;
   prompt += `3. 读懂需求文档后，按专业模板标准自由撰写每个文档（不是填空表）\n`;
   prompt += `4. 每个文档都要具体内容（禁止"待填充"），分析完成后支持交互编辑任意文档的任意章节\n`;

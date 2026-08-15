@@ -138,8 +138,8 @@ async function showProjectDetail(
   }
 
   logger.info('');
-  logger.info(`📁 需求文件: GLOBAL/PROJECTS/${projectName}/REQUIREMENT.md`);
-  logger.info(`📋 元数据文件: GLOBAL/PROJECTS/${projectName}/METADATA.md`);
+  logger.info(`📁 分析文档: GLOBAL/platforms/${projectName}/`);
+  logger.info(`📋 元数据: GLOBAL/platforms/${projectName}/METADATA.md`);
 }
 
 /**

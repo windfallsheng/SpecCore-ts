@@ -22,6 +22,7 @@ import { generateAIContext, AIContextInput, AIContextResult } from './ai-context
 import { cleanStaleCache } from './git-integration';
 import { refreshRagIndex, checkRagIndexFreshness, indexDirectoryDocuments } from './rag-engine';
 import { refreshKnowledgeGraph } from './knowledge-graph';
+import { generateQualityAudit } from './quality-audit';
 
 // ================================================================
 // 类型定义
@@ -258,6 +259,13 @@ async function analyzeRequirements(input: AnalyzeInput): Promise<AnalysisResult>
     await writePerFeature(iterDir, report, input.output || 'ANALYSIS.md');
     // 按类型输出扁平文件到 020-specs/{bugs,refactors,research}/
     await writePerTypedDoc(iterDir, report, input.output || 'ANALYSIS.md');
+
+    // ── 质量核验：检查 AI 生成文档的端专业性 ──
+    try {
+      const platforms = await detectPlatformsFromConstitution();
+      const specDir = join(iterDir, '020-specs');
+      await generateQualityAudit(specDir, platforms);
+    } catch {} // 非关键，静默失败
   }
 
   // ── 生成 AI 上下文（传入已读取的需求内容，避免重复 readFile） ──
@@ -1319,10 +1327,12 @@ async function buildAIEnhancedReport(
   r += `### 必须完成\n`;
   r += `- [ ] **需求完整性分析**: 功能点覆盖、边界条件、异常处理、非功能需求\n`;
   r += `- [ ] **需求-代码对标**: 将每个功能点映射到具体源码文件和方法\n`;
+  r += `- [ ] **前后端契约对标**: 每个 API 的请求/响应字段与前端页面字段一一映射，确保无遗漏\n`;
   r += `- [ ] **变更影响范围**: 评估每个变更的波及面和级联影响\n`;
   r += `- [ ] **风险矩阵填充**: 补充技术/业务/依赖/安全/性能风险详情\n`;
   r += `- [ ] **文件级变更清单**: 列出所有需要修改的文件及修改类型\n`;
   r += `### 可选\n`;
+  r += `- [ ] **UI 规格补充**: 根据 UI_SPEC.md 校验页面/组件/字段映射完整性\n`;
   r += `- [ ] **任务拆分建议**: 推荐任务粒度和依赖关系\n`;
   r += `- [ ] **技术方案推荐**: 架构方案、DB 设计、API 设计建议\n`;
   r += `- [ ] **工时评估**: 基于改动范围的工时估算\n`;
@@ -1337,7 +1347,7 @@ async function buildAIEnhancedReport(
 
   // 8. 确认清单
   r += `\n---\n\n## ✅ 确认清单\n\n`;
-  r += `- [ ] AI 分析完成\n- [ ] 需求确认无遗漏\n- [ ] 改动范围达成共识\n- [ ] 风险评估无遗漏\n- [ ] 技术方案评审通过\n- [ ] 可以开始拆分任务\n`;
+  r += `- [ ] AI 分析完成\n- [ ] 需求确认无遗漏\n- [ ] 前后端契约对齐（API 字段↔ UI 字段）\n- [ ] UI 规格审查通过\n- [ ] 改动范围达成共识\n- [ ] 风险评估无遗漏\n- [ ] 技术方案评审通过\n- [ ] 可以开始拆分任务\n`;
 
   return r;
 }
@@ -1355,7 +1365,7 @@ function icon(severity: string): string {
   }
 }
 
-/** 按需求功能 × 端 分目录写入分析报告 */
+/** 按需求功能 × 端 分目录写入分析报告（按端提取差异化内容） */
 async function writePerPlatform(iterDir: string, report: string, filename: string): Promise<void> {
   const reqDir = join(iterDir, '010-requirements');
   const specsBase = join(iterDir, '020-specs');
@@ -1364,7 +1374,7 @@ async function writePerPlatform(iterDir: string, report: string, filename: strin
     // 检测需求功能目录（非 assets/sources/_开头的子目录）
     const features = entries
       .filter(e => e.isDirectory() && !e.name.startsWith('_') && !e.name.startsWith('.') 
-        && e.name !== 'sources' && e.name !== 'assets')
+        && e.name !== 'sources' && e.name !== 'assets' && e.name !== 'prototypes')
       .map(e => e.name);
 
     if (features.length === 0) return;
@@ -1375,15 +1385,111 @@ async function writePerPlatform(iterDir: string, report: string, filename: strin
     for (const platform of platforms) {
       const platformDir = join(specsBase, platform);
       await ensureDir(platformDir);
-      // 写合并报告 + 每个 feature 独立文件
-      await writeFile(join(platformDir, filename), report);
+
+      // 按端提取差异化内容（而非写入同一份报告）
+      const platformReport = extractPlatformContent(report, platform);
+      
+      await writeFile(join(platformDir, filename), platformReport);
       for (const feature of features) {
-        await writeFile(join(platformDir, `${feature}.md`), report);
+        // 每个 feature 文件也按端提取
+        const featureContent = extractFeatureForPlatform(report, feature, platform);
+        await writeFile(join(platformDir, `${feature}.md`), featureContent);
       }
     }
   } catch {
     // 目录不存在，静默跳过
   }
+}
+
+/** 端关键词映射表（用于从合并报告中提取特定端的内容） */
+const PLATFORM_KEYWORDS: Record<string, string[]> = {
+  admin:    ['后台管理', '管理端', 'admin', 'Admin', 'Web管理', '后台'],
+  h5:       ['H5', 'h5', '移动端', 'mobile', 'Mobile', 'H5移动'],
+  miniapp:  ['小程序', 'miniapp', 'MiniApp', '微信'],
+  app:      ['后端服务', 'app', 'App', '服务端', '后端'],
+  web:      ['Web', 'web', '桌面端', 'PC'],
+  android:  ['Android', 'android', '安卓'],
+  ios:      ['iOS', 'ios', '苹果'],
+};
+
+/** 从合并报告中提取特定端的内容 */
+function extractPlatformContent(report: string, platform: string): string {
+  const keywords = PLATFORM_KEYWORDS[platform] || [platform];
+  const lines = report.split('\n');
+  
+  // 按 Markdown 二级标题拆分
+  const sections: { heading: string; content: string[] }[] = [];
+  let current: { heading: string; content: string[] } = { heading: '', content: [] };
+  for (const line of lines) {
+    const hm = line.match(/^(#{1,3})\s+(.+)/);
+    if (hm) {
+      if (current.heading || current.content.length > 0) {
+        sections.push({ heading: current.heading, content: current.content });
+      }
+      current = { heading: line, content: [] };
+    } else {
+      current.content.push(line);
+    }
+  }
+  if (current.heading || current.content.length > 0) {
+    sections.push({ heading: current.heading, content: current.content });
+  }
+
+  // 提取与该端相关的段落
+  const matched = sections.filter(s => {
+    const text = s.heading + ' ' + s.content.join(' ');
+    return keywords.some(kw => text.includes(kw));
+  });
+
+  if (matched.length > 0) {
+    const platformLabel = platform.charAt(0).toUpperCase() + platform.slice(1);
+    const header = `<!-- 以下为 ${platformLabel} 端相关内容（从合并报告中自动提取） -->\n\n`;
+    return header + matched.map(s => s.heading + '\n' + s.content.join('\n')).join('\n\n');
+  }
+
+  // 无匹配段落时，返回完整报告 + 标注
+  return `<!-- ⚠️ 未找到 ${platform} 端专属内容，以下为完整报告，建议补充该端专属章节 -->\n\n${report}`;
+}
+
+/** 从报告中提取特定功能 × 特定端的内容 */
+function extractFeatureForPlatform(report: string, feature: string, platform: string): string {
+  // 先提取该功能的段落
+  const featureKeywords = [feature, feature.replace(/-/g, ' ')];
+  const lines = report.split('\n');
+  const sections: { heading: string; content: string[] }[] = [];
+  let current: { heading: string; content: string[] } = { heading: '', content: [] };
+  for (const line of lines) {
+    const hm = line.match(/^(#{1,4})\s+(.+)/);
+    if (hm) {
+      if (current.heading || current.content.length > 0) {
+        sections.push({ heading: current.heading, content: current.content });
+      }
+      current = { heading: line, content: [] };
+    } else {
+      current.content.push(line);
+    }
+  }
+  if (current.heading || current.content.length > 0) {
+    sections.push({ heading: current.heading, content: current.content });
+  }
+
+  // 先按功能名匹配，再按端关键词过滤
+  const featureSections = sections.filter(s => {
+    const text = (s.heading + ' ' + s.content.join(' ')).toLowerCase();
+    return featureKeywords.some(kw => text.includes(kw.toLowerCase()));
+  });
+
+  if (featureSections.length > 0) {
+    const platformKws = PLATFORM_KEYWORDS[platform] || [platform];
+    const platformMatched = featureSections.filter(s => {
+      const text = s.heading + ' ' + s.content.join(' ');
+      return platformKws.some(kw => text.includes(kw));
+    });
+    const result = platformMatched.length > 0 ? platformMatched : featureSections;
+    return result.map(s => s.heading + '\n' + s.content.join('\n')).join('\n\n');
+  }
+
+  return `# ${feature} (${platform})\n\n_该功能在 ${platform} 端暂无独立分析内容，请参考完整报告。_\n`;
 }
 
 /**
@@ -1510,7 +1616,7 @@ async function writePerFeature(iterDir: string, report: string, filename: string
   const reqDir = join(iterDir, '010-requirements');
   const featuresDir = join(iterDir, '020-specs', 'features');
   // 非 feature 型目录的排除名单
-  const EXCLUDED_DIRS = new Set(['sources', 'assets', 'converted', 'staging', 'bugs', 'refactors', 'research']);
+  const EXCLUDED_DIRS = new Set(['sources', 'assets', 'converted', 'staging', 'bugs', 'refactors', 'research', 'prototypes']);
   try {
     const entries = await readdir(reqDir, { withFileTypes: true });
     const features = entries
@@ -1833,6 +1939,7 @@ export async function generateSpecsFromRequirements(
   const features = extractFeatures(fullContent);
   const dataModels = extractDataModels(fullContent);
   const businessRules = extractBusinessRules(fullContent);
+  const uiPatterns = extractUIPatterns(fullContent);
   const archImpact = await analyzeArchitectureImpact(fullContent);
   const platforms = await detectPlatformsFromConstitution();
   const now = new Date().toISOString().split('T')[0];
@@ -1849,7 +1956,7 @@ export async function generateSpecsFromRequirements(
   // TECH.md — 技术方案
   files.push({
     filename: 'TECH.md',
-    content: buildTechSpec(iteration, now, apis, dataModels, archImpact, platforms, features),
+    content: buildTechSpec(iteration, now, apis, dataModels, archImpact, platforms, features, uiPatterns),
   });
 
   // TEST.md — 测试计划
@@ -1880,6 +1987,12 @@ export async function generateSpecsFromRequirements(
   files.push({
     filename: 'MONITOR.md',
     content: buildMonitorSpec(iteration, now, apis, features),
+  });
+
+  // UI_SPEC.md — 前端 UI 规格
+  files.push({
+    filename: 'UI_SPEC.md',
+    content: buildUISpec(iteration, now, uiPatterns),
   });
 
   // 4. 写入文件（覆盖空模板，不覆盖已有实质内容的文件）
@@ -2066,6 +2179,7 @@ function buildTechSpec(
   archImpact: ArchImpact,
   platforms: string[],
   features: { name: string; desc: string }[],
+  uiPatterns: ReturnType<typeof extractUIPatterns>,
 ): string {
   let md = `# 技术方案\n\n> 迭代: ${iter} | 生成: ${now} | 由 analyze --auto 自动提取\n\n`;
   // 架构
@@ -2100,6 +2214,220 @@ function buildTechSpec(
     md += `| 依赖 | 用途 |\n| :--- | :--- |\n`;
     archImpact.newDependencies.forEach(d => { md += `| ${d} | 需求文档提及 |\n`; });
   }
+  // 前端 UI 规格
+  if (uiPatterns.pages.length > 0 || uiPatterns.components.length > 0) {
+    md += `\n## 5. 前端 UI 规格\n\n`;
+    md += `### 5.1 页面结构\n\n`;
+    if (uiPatterns.pages.length > 0) {
+      md += `| 页面 | 路由 | 描述 |\n| :--- | :--- | :--- |\n`;
+      uiPatterns.pages.forEach(p => { md += `| ${p.name} | \`${p.route}\` | ${p.desc} |\n`; });
+    } else {
+      md += `_待补充_\n`;
+    }
+    md += `\n### 5.2 组件清单\n\n`;
+    if (uiPatterns.components.length > 0) {
+      md += `| 组件 | 类型 | 所属页面 |\n| :--- | :--- | :--- |\n`;
+      uiPatterns.components.forEach(c => { md += `| ${c.name} | ${c.type} | ${c.page} |\n`; });
+    } else {
+      md += `_待补充_\n`;
+    }
+    md += `\n### 5.3 字段→UI 映射\n\n`;
+    if (uiPatterns.formFields.length > 0) {
+      md += `| 页面/表单 | 字段 |\n| :--- | :--- |\n`;
+      uiPatterns.formFields.forEach(f => { md += `| ${f.page} | ${f.fields.join(', ')} |\n`; });
+    } else {
+      md += `_待补充_\n`;
+    }
+    md += `\n### 5.4 状态枚举\n\n`;
+    if (uiPatterns.statusEnums.length > 0) {
+      md += `| 字段 | 值 | 含义 |\n| :--- | :--- | :--- |\n`;
+      uiPatterns.statusEnums.forEach(s => {
+        md += `| ${s.field} | ${s.values.join(' / ')} | ${s.labels.join(' / ')} |\n`;
+      });
+    } else {
+      md += `_待补充_\n`;
+    }
+  }
+  return md;
+}
+
+// ── UI 规格提取与构建 ──
+
+function extractUIPatterns(content: string): {
+  pages: { name: string; route: string; desc: string }[];
+  components: { name: string; type: string; page: string }[];
+  formFields: { page: string; fields: string[] }[];
+  statusEnums: { field: string; values: string[]; labels: string[] }[];
+} {
+  const pages: { name: string; route: string; desc: string }[] = [];
+  const components: { name: string; type: string; page: string }[] = [];
+  const formFields: { page: string; fields: string[] }[] = [];
+  const statusEnums: { field: string; values: string[]; labels: string[] }[] = [];
+
+  // 1. 提取页面：匹配「XX页面」「XX界面」
+  const pageRegex = /(?:^|\n)#{1,4}\s+(.+?(?:页面|界面|首页|列表|详情|设置|登录|注册))/g;
+  let m: RegExpExecArray | null;
+  const pageNames = new Set<string>();
+  while ((m = pageRegex.exec(content)) !== null) {
+    const name = m[1].trim().replace(/^#+\s*/, '');
+    if (!pageNames.has(name) && name.length >= 2 && name.length < 30) {
+      pageNames.add(name);
+      const routeGuess = '/' + name.replace(/页面|界面/g, '').toLowerCase().replace(/\s+/g, '-');
+      // 取后续 2 行作为描述
+      const after = content.slice(m.index + m[0].length, m.index + m[0].length + 200);
+      const descLines = after.split('\n').filter(l => l.trim() && !l.startsWith('#')).slice(0, 2);
+      pages.push({ name, route: routeGuess, desc: descLines.join(' ').slice(0, 80) || '—' });
+    }
+  }
+  // 从路由定义补充页面
+  const routeRegex = /(?:路由|路径|route)[：:]\s*(\/\S+)/gi;
+  while ((m = routeRegex.exec(content)) !== null) {
+    const route = m[1].trim();
+    const before = content.slice(Math.max(0, m.index - 100), m.index);
+    const nameMatch = before.match(/[#*\-]\s*(.+?)(?:\n|$)/);
+    if (nameMatch) {
+      const name = nameMatch[1].trim().replace(/[`*]/g, '');
+      if (!pages.some(p => p.route === route) && name.length >= 2 && name.length < 30) {
+        pages.push({ name, route, desc: '从路由定义提取' });
+      }
+    }
+  }
+
+  // 2. 提取组件：从 UI 关键词推断
+  const lines = content.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // 列表/表格组件
+    if (/列表|清单|记录/.test(line) && !/待补充|待填充/.test(line)) {
+      const heading = findNearestHeading(lines, i);
+      if (heading && !components.some(c => c.name === heading + '列表')) {
+        components.push({ name: heading + '列表', type: 'Table/List', page: heading });
+      }
+    }
+    // 表单组件
+    if (/表单|表单页|填写|录入|新建|创建.*页|编辑.*页/.test(line) && !/待补充|待填充/.test(line)) {
+      const heading = findNearestHeading(lines, i);
+      if (heading && !components.some(c => c.name.includes('表单'))) {
+        components.push({ name: heading + '表单', type: 'Form', page: heading });
+      }
+    }
+    // 详情组件
+    if (/详情页|详情展示|查看.*详情/.test(line) && !/待补充|待填充/.test(line)) {
+      const heading = findNearestHeading(lines, i);
+      if (heading && !components.some(c => c.name.includes('详情'))) {
+        components.push({ name: heading + '详情', type: 'Detail', page: heading });
+      }
+    }
+    // Dashboard/仪表盘
+    if (/仪表盘|Dashboard|看板|数据大屏|统计概览/.test(line)) {
+      if (!components.some(c => c.type === 'Dashboard')) {
+        components.push({ name: '仪表盘', type: 'Dashboard', page: '首页' });
+      }
+    }
+  }
+
+  // 3. 提取表单字段：匹配「字段：」「字段:」模式
+  const formLabels = /(?:字段|参数|输入项|表项|属性)[：:]\s*(.+)/g;
+  while ((m = formLabels.exec(content)) !== null) {
+    const fieldsStr = m[1];
+    const fields = fieldsStr.split(/[,，、;；\s]+/).filter(f => f.length >= 1 && f.length < 20);
+    if (fields.length > 0) {
+      const heading = findNearestHeading(lines, content.slice(0, m.index).split('\n').length - 1);
+      formFields.push({ page: heading || '通用', fields: fields.slice(0, 10) });
+    }
+  }
+
+  // 4. 提取状态枚举：匹配「status = 0:xxx, 1:yyy」或「状态：0=xxx 1=yyy」
+  const statusRegex = /(?:status|状态|type|类型)\s*[：:]\s*(.+)/gi;
+  while ((m = statusRegex.exec(content)) !== null) {
+    const defs = m[1];
+    const valueMatches = defs.matchAll(/(\d+)\s*[=:：]\s*([^,，;；\d]+)/g);
+    const values: string[] = [];
+    const labels: string[] = [];
+    for (const vm of valueMatches) {
+      values.push(vm[1]);
+      labels.push(vm[2].trim());
+    }
+    if (values.length >= 2) {
+      statusEnums.push({ field: m[0].split(/[：:]/)[0].trim(), values, labels });
+    }
+  }
+
+  return {
+    pages: pages.slice(0, 15),
+    components: components.slice(0, 20),
+    formFields: formFields.slice(0, 10),
+    statusEnums: statusEnums.slice(0, 10),
+  };
+}
+
+function findNearestHeading(lines: string[], lineIndex: number): string | null {
+  for (let i = lineIndex; i >= Math.max(0, lineIndex - 8); i--) {
+    const headingMatch = lines[i].match(/^#{1,4}\s+(.+)$/);
+    if (headingMatch) {
+      const name = headingMatch[1].trim();
+      if (name.length >= 2 && name.length < 30) return name;
+    }
+  }
+  return null;
+}
+
+function buildUISpec(
+  iter: string, now: string,
+  uiPatterns: {
+    pages: { name: string; route: string; desc: string }[];
+    components: { name: string; type: string; page: string }[];
+    formFields: { page: string; fields: string[] }[];
+    statusEnums: { field: string; values: string[]; labels: string[] }[];
+  },
+): string {
+  let md = `# 前端 UI 规格\n\n> 迭代: ${iter} | 生成: ${now} | 由 analyze --auto 自动提取\n\n`;
+
+  // 1. 页面结构
+  md += `## 1. 页面结构\n\n`;
+  if (uiPatterns.pages.length > 0) {
+    md += `| # | 页面 | 路由 | 描述 |\n| :--- | :--- | :--- | :--- |\n`;
+    uiPatterns.pages.forEach((p, i) => {
+      md += `| ${i + 1} | ${p.name} | \`${p.route}\` | ${p.desc} |\n`;
+    });
+  } else {
+    md += `_需求文档中未检测到页面定义，建议补充页面清单。_\n`;
+  }
+
+  // 2. 组件清单
+  md += `\n## 2. 组件清单\n\n`;
+  if (uiPatterns.components.length > 0) {
+    md += `| 组件 | 类型 | 所属页面 |\n| :--- | :--- | :--- |\n`;
+    uiPatterns.components.forEach(c => {
+      md += `| ${c.name} | ${c.type} | ${c.page} |\n`;
+    });
+  } else {
+    md += `_需求文档中未检测到 UI 组件，建议根据页面功能补充。_\n`;
+  }
+
+  // 3. 字段→UI 映射
+  md += `\n## 3. 字段→UI 映射\n\n`;
+  if (uiPatterns.formFields.length > 0) {
+    md += `| 页面/表单 | 字段列表 |\n| :--- | :--- |\n`;
+    uiPatterns.formFields.forEach(f => {
+      md += `| ${f.page} | ${f.fields.join(', ')} |\n`;
+    });
+  } else {
+    md += `_需求文档中未检测到表单字段定义，建议补充各页面字段映射。_\n`;
+  }
+
+  // 4. 状态枚举
+  md += `\n## 4. 状态枚举\n\n`;
+  if (uiPatterns.statusEnums.length > 0) {
+    md += `| 字段 | 值→含义 |\n| :--- | :--- |\n`;
+    uiPatterns.statusEnums.forEach(s => {
+      const mapping = s.values.map((v, i) => `${v}=${s.labels[i]}`).join('; ');
+      md += `| ${s.field} | ${mapping} |\n`;
+    });
+  } else {
+    md += `_需求文档中未检测到状态枚举定义，建议补充前后端共享的状态值。_\n`;
+  }
+
   return md;
 }
 
