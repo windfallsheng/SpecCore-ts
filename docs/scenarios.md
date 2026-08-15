@@ -63,7 +63,7 @@
 
 ```bash
 speccore init                          # 初始化
-# 生成: .speccore/ + 20 个 Slash Command
+# 生成: .speccore/ + 24 个 Slash Command
 # 生成: CAPABILITIES.md（项目能力注册表）
 ```
 
@@ -810,7 +810,7 @@ SpecCore 是 SDD 工具（Spec-Driven Development）工具，但定位不同：
 
 ## 场景三十一：智能引导（一个命令走天下）
 
-**背景**: 44 个命令太多记不住？只需记住一个。
+**背景**: 22 个命令太多记不住？只需记住一个。
 
 ```bash
 # 自动检测项目阶段，提示下一步

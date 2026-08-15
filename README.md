@@ -1,6 +1,6 @@
 # SpecCore — Code by Spec, Not by Vibe
 
-🖥️ 规范驱动开发 CLI · 21 命令 · 人机协同闭环 · 多层 AI 架构
+🖥️ 规范驱动开发 CLI · 22 命令 · 人机协同闭环 · 多层 AI 架构
 
 ```bash
 @spec-ask "分析会议预订系统的需求文档，拆分为独立开发任务，按依赖顺序执行"
