@@ -1071,9 +1071,14 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
   prompt += `   e. 如用户指定了特定文档，优先读取指定文件；如要求全部，再读 sources/ 原始文档\n`;
   prompt += `3. 读懂需求文档后，按专业模板标准自由撰写每个文档（不是填空表）\n`;
   prompt += `4. 每个文档都要具体内容（禁止"待填充"），分析完成后支持交互编辑任意文档的任意章节\n`;
+  prompt += `5. **目录结构**：必须按端创建子目录，不要全部扁平放在 020-specs/ 根目录\n`;
+  prompt += `   - 从 CONSTITUTION.md 的「对应需求端」列读取端列表（如 admin, h5, backend）\n`;
+  prompt += `   - 在 020-specs/ 下创建 {端名}/ 子目录（如 020-specs/admin/、020-specs/h5/、020-specs/backend/）\n`;
+  prompt += `   - 每个端目录下写入该端专属的分析文档（ANALYSIS.md、TECH.md 等）\n`;
+  prompt += `   - 根目录只放跨端通用文档（REQUIREMENT.md、DEPS.md、RISK.md 等）\n`;
   const taskFlag = isTask && ctx.task ? ` --task ${ctx.task}` : '';
   const platformFlag = ctx.platform ? ` --platform ${ctx.platform}` : '';
-  prompt += `5. 写入: speccore analyze --apply '{"${taskDocs.map(([n]) => `${n}:"..."`).join(',')}...}' -I ${iter}${taskFlag}${platformFlag}\n\n`;
+  prompt += `6. 写入: speccore analyze --apply '{"${taskDocs.map(([n]) => `${n}:"..."`).join(',')}...}' -I ${iter}${taskFlag}${platformFlag}\n\n`;
   prompt += '\n' + buildAutoModeInstruction('analyze', iter) + '\n';
   for (let i = 0; i < taskDocs.length; i++) {
     prompt += `### ${i+1}/${taskDocs.length}: ${taskDocs[i][0]}\n\`\`\`markdown\n${taskDocs[i][1]}\n\`\`\`\n\n`;
