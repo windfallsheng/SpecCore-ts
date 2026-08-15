@@ -1,6 +1,6 @@
 # SpecCore — Code by Spec, Not by Vibe
 
-🖥️ 规范驱动开发 CLI · 23 简洁命令（59 全量）· 人机协同闭环 · 多层 AI 架构
+🖥️ 规范驱动开发 CLI · 21 命令 · 人机协同闭环 · 多层 AI 架构
 
 ```bash
 @spec-ask "分析会议预订系统的需求文档，拆分为独立开发任务，按依赖顺序执行"
@@ -57,7 +57,7 @@ init → doc2spec → analyze → split → plan → execute → pr → done →
                    └─ .needs-retry ← 失败标记 ── → execute --resume
 ```
 
-## 23 简洁命令
+## 命令列表
 
 | 分类 | 命令 |
 |------|------|
@@ -226,20 +226,6 @@ speccore --version   # v6.14.0
 ```
 
 零配置：没配 Key 自动降级，功能不受影响。
-
-## 🎯 两种模式
-
-| 模式 | 触发 | 命令数 | 适用场景 |
-|------|------|:--:|------|
-| **简洁模式**（默认） | `speccore --help` | 22 个 | 日常开发够用：init → ask → dev → done |
-| **全量模式** | `speccore --help full` | 55+ 个 | 高级用户：子命令 + 工具 + 调试 |
-
-```bash
-speccore --help           # 简洁模式，日常高频命令
-speccore --help full      # 全量模式，含所有子命令和工具
-```
-
-简洁模式 = 高信号比，只展示真正日常用到的。全量模式 = 一个不漏。
 
 ## 📖 文档
 

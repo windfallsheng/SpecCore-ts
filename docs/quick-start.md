@@ -59,17 +59,6 @@
 npm install -g speccore
 ```
 
-## 两种模式
-
-| 模式 | 命令数 | 开启 | 适用 |
-| :--- | :--- | :--- | :--- |
-| **简洁模式**（默认） | 21 个 | `speccore init` | 日常开发够用 |
-| 全量模式 | 55 个 | `speccore init --full` | 高级用户 |
-
-> 💡 切换：随时重新 `speccore init` 即可。
-
----
-
 ## 完整流程
 
 ```bash
@@ -149,7 +138,7 @@ speccore ask "分析需求"                 # 显式调用意图识别
 speccore help --command=execute        # 查看命令详细参数
 
 # ── 项目初始化 ──
-speccore init                          # 初始化（默认简洁模式）
+speccore init                          # 初始化
 
 # ── 管理 ──
 speccore iteration create -n Q1        # 创建迭代
@@ -232,7 +221,7 @@ speccore task new --batch-file=bugs.xlsx --type=bugfix --schedule=night
 
 ## 下一步
 
-- [全量命令参考](command-reference.md) — 21 个命令完整说明
+- [命令参考](command-reference.md) — 所有命令完整说明
 - [总览](overview.md) — 架构与理念
 - [场景实战](scenarios.md) — 35 个真实场景
 - [示例](https://github.com/windfallsheng/SpecCore-ts/tree/main/examples/meeting-system)

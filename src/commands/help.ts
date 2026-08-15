@@ -39,15 +39,13 @@ export async function helpCommand(options: HelpOptions): Promise<void> {
 }
 
 // ============================================================
-// 核心命令参数详解（按简洁模式 21 个命令）
+// 核心命令参数详解
 // ============================================================
 const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; meaning: string }[]; examples: string[] }> = {
   init: {
     desc: '初始化 SpecCore 项目',
-    params: [
-      { flag: '--full', meaning: '全量模式（79+ 命令），默认简洁模式' },
-    ],
-    examples: ['speccore init', 'speccore init --full'],
+    params: [],
+    examples: ['speccore init', 'speccore init --interactive'],
   },
   'status-panel': {
     desc: '项目状态看板 → 已合并到 dashboard',
@@ -348,7 +346,7 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
 // ============================================================
 
 function showAllCommands(): void {
-  logger.info('📖 SpecCore 命令帮助 — 简洁模式（21 个命令）');
+  logger.info('📖 SpecCore 命令帮助');
   logger.info('');
 
   const categories: Record<string, string[]> = {

@@ -93,36 +93,6 @@ program
     }
   });
 
-// ── 模式检测：简洁版(默认) vs 全量版 ──
-function readMode(): 'simple' | 'full' {
-  try {
-    const p = join(process.cwd(), '.speccore', 'config', 'mode.json');
-    if (existsSync(p)) {
-      const data = JSON.parse(readFileSync(p, 'utf-8'));
-      return data.mode === 'full' ? 'full' : 'simple';
-    }
-  } catch { /* ignore */ }
-  return 'simple';
-}
-
-const MODE = readMode();
-
-/** 简洁模式下在 help 中显示的命令 */
-const SIMPLE_COMMANDS = new Set([
-  'ask', 'welcome', 'init', 'doc2spec', 'spec2doc', 'dashboard', 'analyze', 'split', 'execute',
-  'pr', 'done', 'dev', 'search', 'help', 'synthesize',
-  'iteration', 'task', 'plan', 'ops', 'change', 'validate', 'retro',
-  ]);
-
-/** 简洁模式下过滤 help 命令列表 */
-function filterCommands(commands: readonly import('commander').Command[]): import('commander').Command[] {
-  if (MODE === 'full') return [...commands];
-  return [...commands].filter(c => SIMPLE_COMMANDS.has(c.name()));
-}
-
-program.configureHelp({
-  visibleCommands: (cmd) => filterCommands(cmd.commands),
-});
 program
   .command('ask [input...]')
   .description('Natural language intent recognition (previously "spec")')
@@ -207,9 +177,8 @@ program
 program
   .command('init')
   .alias('in')
-  .description('初始化 SpecCore（17命令/58全量，--interactive 引导式）')
+  .description('初始化 SpecCore（--interactive 引导式）')
   .option('--mode <mode>', 'Initialization mode: fresh or migration', 'fresh')
-  .option('--full', 'Full mode: all 59 commands (default: simple)')
   .option('--force', 'Force overwrite existing configuration')
   .option('--interactive', 'Interactive guided setup: mode → confirm → init')
   .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
