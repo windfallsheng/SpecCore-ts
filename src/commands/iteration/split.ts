@@ -331,8 +331,8 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           logger.warn('   ⚠️  --force 已启用，继续创建所有任务...');
         }
 
-        // 交互模式判断：显式 --interactive 或 stdin 是 TTY
-        const isInteractive = options.interactive || process.stdin.isTTY;
+        // 交互模式判断：显式 --interactive 或 stdin 是 TTY（--force 时跳过交互，直接执行）
+        const isInteractive = (options.interactive || process.stdin.isTTY) && !options.force;
         logger.info(`   📏 粒度: ${granRule.label}${options.granularity ? ' (用户指定)' : ` (${teamSize2} 人团队自动推荐)`}`);
 
         // 非交互模式：显示任务总览摘要

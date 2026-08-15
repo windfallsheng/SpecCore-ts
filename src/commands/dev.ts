@@ -218,7 +218,7 @@ async function autoPipeline(options: DevOptions): Promise<void> {
         break;
       }
       case 'pr': {
-        execSync(`speccore pr -i ${iteration}`, { stdio: 'inherit' });
+        execSync(`speccore pr -i ${iteration} --force`, { stdio: 'inherit' });
         break;
       }
       case 'done': {

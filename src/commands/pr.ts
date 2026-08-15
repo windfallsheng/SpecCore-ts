@@ -8,6 +8,7 @@ import { execSync } from 'child_process';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
 import { buildPrompt, formatPrompt } from '../core/prompt-builder';
+import { isProtectedBranch } from '../core/git-integration';
 
 import { createInterface } from 'readline';
 
@@ -27,6 +28,7 @@ export interface PrOptions {
   response?: string;
   confirm?: boolean;   // 用户要求确认提交内容
   commit?: boolean;     // 直接提交到本地（不创建远程PR）
+  force?: boolean;      // 非交互自动提交（流水线用）
 }
 
 export async function prCommand(options: PrOptions): Promise<void> {
@@ -128,9 +130,11 @@ export async function prCommand(options: PrOptions): Promise<void> {
 
       // 推送
       const branch = execSync('git branch --show-current', { encoding: 'utf-8' }).trim();
-      if (branch !== 'main' && branch !== 'master') {
+      if (!isProtectedBranch(branch)) {
         execSync(`git push -u origin "${branch}"`, { stdio: 'pipe' });
         logger.success(`✅ 已推送: ${branch}`);
+      } else {
+        logger.info(`ℹ️ ${branch} 为保护分支，跳过推送（请通过 PR 合并）`);
       }
 
       // 输出结果
@@ -139,6 +143,37 @@ export async function prCommand(options: PrOptions): Promise<void> {
     } catch (e) {
       logger.error(`解析失败: ${e}`);
       process.exitCode = 1;
+    }
+    return;
+  }
+
+  // ── --force: 非交互自动提交（流水线用）──
+  if (options.force) {
+    const status = execSync('git status --short', { encoding: 'utf-8' }).trim();
+    if (!status) {
+      logger.info('📋 无待提交变更');
+      return;
+    }
+    const iter = options.iteration || await getDefaultIteration();
+    const msg = options.title || `SpecCore auto commit${iter ? ` (${iter})` : ''}`;
+    execSync('git add -A', { stdio: 'pipe' });
+    try {
+      execSync(`git commit -m "${msg.replace(/"/g, '\\"')}"`, { stdio: 'pipe' });
+      logger.success(`✅ 已提交: ${msg}`);
+    } catch {
+      logger.info('ℹ️ 无变更可提交');
+      return;
+    }
+    const branch = execSync('git branch --show-current', { encoding: 'utf-8' }).trim();
+    if (!isProtectedBranch(branch)) {
+      try {
+        execSync(`git push -u origin "${branch}"`, { stdio: 'pipe' });
+        logger.success(`✅ 已推送: ${branch}`);
+      } catch {
+        logger.info(`ℹ️ 推送跳过（远程可能不存在）`);
+      }
+    } else {
+      logger.info(`ℹ️ ${branch} 为保护分支，跳过推送（请通过 PR 合并）`);
     }
     return;
   }
@@ -221,9 +256,11 @@ export async function prCommand(options: PrOptions): Promise<void> {
 
     if (pushAns === 'y') {
       const currentBranch = execSync('git branch --show-current', { encoding: 'utf-8' }).trim();
-      if (currentBranch !== 'main' && currentBranch !== 'master') {
+      if (!isProtectedBranch(currentBranch)) {
         execSync(`git push -u origin "${currentBranch}"`, { stdio: 'pipe' });
         logger.success(`✅ 已推送: ${currentBranch}`);
+      } else {
+        logger.info(`ℹ️ ${currentBranch} 为保护分支，跳过推送（请通过 PR 合并）`);
       }
     } else {
       logger.info('📌 仅提交到本地，未推送');
