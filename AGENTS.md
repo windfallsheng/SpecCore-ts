@@ -46,12 +46,14 @@ Iteration-NNN-name/            ← 迭代目录
 | `[SPECCORE_MODE: <mode>]` | 意图模式 | 识别模式后进入对应流程 |
 | `[SPECCORE_EXEC: <cmd>]` | 自动执行命令 | 直接 execute_command |
 | `[SPECCORE_INTENT]` | 意图确认块 | 展示给用户确认 |
+| `[SPECCORE_BATCH_COMPLETE]` | 批次执行完成 | **必须开始新对话**，按提示命令继续下一批次 |
 
 ## 行为约束
 - **不要自己创建目录** — 用 `speccore iteration create`
 - **不要自己解析需求** — 用 `speccore analyze`
 - **失败时读取 .issues.md** — 看文件里的问题清单
 - **续跑用 --resume** — `speccore execute --resume`
+- **多任务执行用批次** — `speccore execute --list-pending --batch-size 3` 先获取清单，每批完成后开新对话
 
 ## 上下文文件加载顺序
 1. AGENTS.md（本文档）— 项目规则

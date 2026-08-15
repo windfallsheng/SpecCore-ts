@@ -2,6 +2,23 @@
 
 ---
 
+## v6.18.2 (2026-08-15) — AI Mode Batch Execution + Task Status Tracking
+
+### New Features
+
+- **`--list-pending` lists pending tasks**: Outputs JSON task list (topological sort + batch grouping) for host AI to get full task overview
+- **`--batch-size` batch metadata**: Prompt mode outputs batch info (current batch/total/next task), outputs `[SPECCORE_BATCH_COMPLETE]` signal when batch ends to guide host AI to start new conversation
+- **Task status auto-tracking**: Prompt mode marks `in_progress` before prompt, marks `completed` after response write (via `.meta/status` file)
+
+### Problem Solved
+
+AI mode (`execute --prompt`) accumulates context across multiple tasks in same conversation, causing overflow. Batch execution solves this by:
+1. 3 tasks per batch (configurable)
+2. Signal to start new conversation after batch completes
+3. New conversation resumes from breakpoint
+
+---
+
 ## v6.18.1 (2026-08-15) — Fix execute --prompt Branch Creation
 
 ### Bug Fix

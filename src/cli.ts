@@ -351,6 +351,7 @@ program
   .option('--hotfix', 'Emergency fix: skip reverse sync (30min grace, 24h mandatory)')
   .option('--prompt', '输出结构化 Prompt 到 stdout，等待宿主 AI 生成代码（Skill 协作模式）')
   .option('--response <response>', '接收宿主 AI 返回的代码内容并写入文件（配合 --prompt 使用）')
+  .option('--list-pending', '列出待执行任务清单（拓扑排序 + 批次分组，JSON 格式）')
   .action(executeCommand);
 
 // ================================================================

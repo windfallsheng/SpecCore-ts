@@ -66,6 +66,7 @@ export interface ExecuteOptions {
   response?: string;    // --response: AI 返回的代码内容（配合 --prompt 使用）
   verify?: boolean;     // --verify: 执行后自动运行代码验证
   auto?: boolean;       // --auto: 跳过确认，自动选任务，直接执行
+  listPending?: boolean; // --list-pending: 列出待执行任务清单（配合 --prompt 使用）
 }
 
 /**
@@ -86,6 +87,12 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
     const iteration = await getDefaultIteration(options.iteration);
     if (!iteration) {
       logger.error('No active iteration found.');
+      return;
+    }
+
+    // ── --list-pending: 列出待执行任务清单（拓扑排序）──
+    if (options.listPending) {
+      await listPendingTasks(iteration, options);
       return;
     }
 
@@ -1445,6 +1452,49 @@ async function executeByPlan(planId: string, iteration: string, options: Execute
 }
 
 // ═══════════════════════════════════════════════════════════
+// --list-pending: 列出待执行任务清单（拓扑排序 + 批次分组）
+// ═══════════════════════════════════════════════════════════
+
+async function listPendingTasks(iteration: string, options: ExecuteOptions): Promise<void> {
+  let tasks = await scanTasks(iteration);
+  if (tasks.length === 0) {
+    logger.info('ℹ️ 没有任务');
+    return;
+  }
+
+  // 过滤已完成的任务
+  const pending = tasks.filter(t => t.status !== 'completed' && t.status !== 'archived');
+  if (pending.length === 0) {
+    logger.info('✅ 所有任务已完成');
+    return;
+  }
+
+  // 拓扑排序（尊重依赖关系）
+  const sorted = topologicalSort(pending);
+  const batchSize = parseInt(options.batchSize || '3', 10);
+  const totalBatches = Math.ceil(sorted.length / batchSize);
+
+  // 输出 JSON 格式（便于宿主 AI 解析）
+  const output = {
+    iteration,
+    totalTasks: sorted.length,
+    batchSize,
+    totalBatches,
+    tasks: sorted.map((t, idx) => ({
+      id: t.id,
+      name: t.name || t.id,
+      type: t.type || 'feature',
+      priority: t.priority || 'medium',
+      dependencies: t.dependencies || [],
+      batch: Math.floor(idx / batchSize) + 1,
+      position: (idx % batchSize) + 1,
+    })),
+  };
+
+  process.stdout.write(JSON.stringify(output, null, 2));
+}
+
+// ═══════════════════════════════════════════════════════════
 // Prompt 模式 — CLI 输出结构化 Prompt，Skill/AI 消费
 // ═══════════════════════════════════════════════════════════
 
@@ -1543,6 +1593,13 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
     logger.info(`  🌿 ${task}: ${branchName}`);
   }
 
+  // ── 标记任务状态为 in_progress ──
+  try {
+    const metaDir = join(taskDir, '.meta');
+    await ensureDir(metaDir);
+    await writeFile(join(metaDir, 'status'), 'in_progress');
+  } catch {}
+
   const prompt = await buildPrompt('execute', {
     iteration,
     task,
@@ -1556,6 +1613,34 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
     promptText += `\n\n## 🔀 Git 分支\n`;
     promptText += `当前已切换到任务分支: \`${branchName}\`\n`;
     promptText += `请在此分支上编写代码。\n`;
+  }
+
+  // ── 批次元数据（--batch-size 时输出，指导宿主 AI 分批执行）──
+  if (options.batchSize) {
+    const allTasks = await scanTasks(iteration);
+    const pending = allTasks.filter(t => t.status !== 'completed' && t.status !== 'archived');
+    const sorted = topologicalSort(pending);
+    const bs = parseInt(options.batchSize, 10);
+    const totalBatches = Math.ceil(sorted.length / bs);
+    const currentIdx = sorted.findIndex(t => t.id === task);
+    const currentBatch = Math.floor(currentIdx / bs) + 1;
+    const nextTask = sorted[currentIdx + 1];
+    const isBatchEnd = currentIdx % bs === bs - 1 || currentIdx === sorted.length - 1;
+
+    promptText += `\n\n## 📦 批次信息\n`;
+    promptText += `- 当前任务: ${task} (${currentIdx + 1}/${sorted.length})\n`;
+    promptText += `- 当前批次: ${currentBatch}/${totalBatches}\n`;
+    promptText += `- 批次大小: ${bs}\n`;
+
+    if (isBatchEnd && nextTask) {
+      promptText += `\n[SPECCORE_BATCH_COMPLETE]\n`;
+      promptText += `本批次已完成。请开始新的对话，然后执行:\n`;
+      promptText += `speccore execute --prompt --task=${nextTask.id} -i ${iteration} --batch-size ${bs}\n`;
+    } else if (nextTask) {
+      promptText += `\n下一个任务: ${nextTask.id}（继续当前对话）\n`;
+    } else {
+      promptText += `\n✅ 所有任务已完成！\n`;
+    }
   }
 
   // 输出到 stdout（Skill 通过 execute_command 捕获）
@@ -1606,6 +1691,14 @@ async function runApplyMode(iteration: string, options: ExecuteOptions): Promise
 
   // 更新 PROJECT_GRAPH
   await updateProjectGraphStatus(iteration, task);
+
+  // ── 标记任务状态为 completed ──
+  const taskDirForStatus = await resolveTaskDir(iterDir, task);
+  try {
+    const metaDir = join(taskDirForStatus, '.meta');
+    await ensureDir(metaDir);
+    await writeFile(join(metaDir, 'status'), 'completed');
+  } catch {}
 
   logger.success(`\n📁 完成: ${writtenCount} 个文件已写入`);
   logger.info(`   📂 位置: ${iterDir}/`);
