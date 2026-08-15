@@ -1582,7 +1582,11 @@ export async function checkUpgradeHints(projectRoot: string, speccoreDir: string
     const migrations: string[] = [];
 
     // ── 自动迁移：补充缺失的"项目名称"列 ──
-    if (!updated.includes('项目名称')) {
+    // 精确匹配表头格式：| 工程 | 源码路径 |（旧5列）→ 需要补列
+    // 不能用 includes('项目名称')，因为说明文字/示例中可能已出现该词
+    const hasOldHeader = /\|\s*工程\s*\|\s*源码路径\s*\|/.test(updated);
+    const hasNewHeader = /\|\s*工程\s*\|\s*项目名称\s*\|\s*源码路径\s*\|/.test(updated);
+    if (hasOldHeader && !hasNewHeader) {
       // 表头: | 工程 | 源码路径 | → | 工程 | 项目名称 | 源码路径 |
       updated = updated.replace(
         /\|\s*工程\s*\|\s*源码路径\s*\|/,
