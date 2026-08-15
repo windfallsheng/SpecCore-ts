@@ -2,6 +2,27 @@
 
 ---
 
+## v6.15.0 (2026-08-15) — Remove Simple/Full Mode Concept
+
+### Refactor: Unified Command System
+
+- **Remove mode distinction**: Delete `readMode()`, `SIMPLE_COMMANDS`, `filterCommands`, `configureHelp` logic
+- **Simplify init command**: Remove `--full` option, interactive init no longer asks for mode selection
+- **Simplify help command**: Remove simple mode title and `--full` parameter description
+- **Documentation update**: README, quick-start, scenarios, command-reference all remove "simple/full mode" concept
+
+### Files Changed
+
+- `src/cli.ts` — Delete mode detection and command filtering logic (-32 lines)
+- `src/commands/init.ts` — Remove mode selection interaction (-4 lines)
+- `src/commands/help.ts` — Remove simple mode title and parameters (-3 lines)
+- `README.md` — Delete "Two Modes" section
+- `docs/quick-start.md` — Delete "Two Modes" table
+- `docs/scenarios.md` — Update titles and comments
+- `docs/command-reference.md` — Subcommand title removes "Full Mode"
+
+---
+
 ## v6.10.0 (2026-08-14) — Smart Document Classification + Task Context Traceability + Multi-Type Task Support
 
 ### Smart Document Classification (doc2spec --classify)
