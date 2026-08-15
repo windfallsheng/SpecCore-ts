@@ -1,22 +1,26 @@
 # Task 目录结构设计
 
 > 本文档定义 SpecCore 中开发任务（Task）的目录结构规范。
-> 规范版本: v2.0
-> 最后更新: 2026-08-11
+> 规范版本: v3.0
+> 最后更新: 2026-08-15
 
 ---
 
 ## 设计目标
 
-1. **阶段清晰** — 执行前、执行中、执行后三个阶段的文件物理隔离
-2. **元信息集中** — 任务状态、类型、负责人等统一放在 `.meta/` 下
-3. **AI 友好** — AI 执行时能按优先级加载文件，不迷失在 10+ 个文件中
-4. **变更可追溯** — 独立的 CHANGELOG.md 记录需求变更历史
-5. **平台隔离** — 前后端实现目录分离，支持多端并行开发
+1. **阶段清晰** — 执行前规格与执行后产出物理隔离
+2. **三级嵌套** — 前后端大类 → 端/服务 → 子任务，子任务是真正执行单元
+3. **元信息集中** — 任务状态、类型、负责人等统一放在 `.meta/` 下
+4. **AI 友好** — AI 执行时能按优先级加载文件，不迷失在 10+ 个文件中
+5. **变更可追溯** — 独立的 CHANGELOG.md 记录需求变更历史
+6. **平台隔离** — 前后端实现目录分离，支持多端并行开发
+7. **文件即记忆** — 执行状态持久化到文件，新会话可快速恢复全局视角
 
 ---
 
 ## 目录结构
+
+### feature / bugfix / refactor 类型（完整三级嵌套）
 
 ```
 Task-001-user-login/
@@ -32,39 +36,47 @@ Task-001-user-login/
 ├── 00-specs/                       ← 执行前核心规格
 │   ├── REQ.md                      ← 需求描述 + 验收标准
 │   ├── TECH.md                     ← 技术方案 + 接口设计
-│   ├── TASK.md                     ← 任务履历 + 产出物清单 + 依赖关系
+│   ├── CONTEXT.md                  ← 任务上下文（来源追溯）
+│   ├── TASK.md                     ← 任务履历 + 产出物清单
 │   ├── SCHEMA.md                   ← 数据库 Schema（可选）
 │   └── CHANGELOG.md                ← 需求变更记录
 │
 ├── 10-backend/                     ← 后端实现
-│   ├── src/                        ← 源代码（execute 生成）
-│   ├── tests/                      ← 测试代码
-│   └── {service}/                  ← 多服务时按服务拆分
-│       ├── src/
-│       └── tests/
+│   └── {service}/                  ← 服务名（如 api）
+│       └── {subtask}/              ← 子任务名（如 login-api）
+│           ├── .meta/              ← 子任务元信息 + git-config
+│           ├── TASK.md             ← 子任务追踪
+│           ├── src/                ← 源代码
+│           └── tests/              ← 测试代码
 │
 ├── 20-frontend/                    ← 前端实现
-│   └── {platform}/                 ← web / admin / h5 / miniapp
-│       ├── src/                    ← 源代码
-│       ├── tests/                  ← 测试代码
-│       ├── README.md               ← 前端任务说明
-│       ├── COMPONENT_TREE.md       ← 组件树
-│       ├── ROUTES.md               ← 路由设计
-│       ├── STATE.md                ← 状态管理
-│       └── STYLE_GUIDE.md          ← 样式规范
+│   └── {platform}/                 ← 端名（h5/web/admin/miniapp）
+│       └── {subtask}/              ← 子任务名（如 login-page）
+│           ├── .meta/              ← 子任务元信息 + git-config
+│           ├── TASK.md             ← 子任务追踪
+│           ├── src/                ← 源代码
+│           ├── tests/              ← 测试代码
+│           ├── COMPONENT_TREE.md   ← 组件树
+│           ├── ROUTES.md           ← 路由设计
+│           ├── STATE.md            ← 状态管理
+│           └── STYLE_GUIDE.md      ← 样式规范
 │
-├── 99-artifacts/                   ← 执行产出（执行后填充）
-│   ├── TEST.md                     ← 测试大纲 / 测试报告
-│   ├── REVIEW.md                   ← 代码审查清单
-│   ├── DEPLOY.md                   ← 部署检查清单
-│   ├── RISK.md                     ← 风险评估 + 回滚方案
-│   ├── DEPS.md                     ← 依赖清单
-│   ├── MONITOR.md                  ← 监控点
-│   ├── ERROR_CODES.md              ← 错误码定义
-│   ├── ADR.md                      ← 架构决策记录（可选）
-│   └── CODE_REVIEW.md              ← 代码审查报告（可选）
-│
-└── .issues.md                      ← 问题追踪（预创建空文件）
+└── .issues.md                      ← 问题追踪
+```
+
+> **子任务命名规则**：`slugify(需求章节名)`，如“登录接口” → `login-api`
+> 无数字前缀，因为在 `10-backend/api/` 下已按服务归类。
+
+### research 类型（无平台分层）
+
+```
+Task-002-investigate-auth/
+├── .meta/
+├── 00-specs/
+│   ├── REQ.md
+│   └── CONTEXT.md
+├── RESEARCH.md                     ← 调研报告
+└── COMPARISON.md                   ← 对比分析
 ```
 
 ---
@@ -82,18 +94,28 @@ Task-001-user-login/
 
 编号排序确保目录按开发流程自然排列。
 
-### 2. 核心规格与执行产出分离
+### 2. 三级嵌套 + 子任务即执行单元
 
-**之前的问题：**
-- `backend/` 下同时放了 REQ.md（规格）和 TEST.md（产出）
-- AI 执行时需要从 10+ 个文件中找核心输入
+**核心设计：**
+- `10-backend/{service}/{subtask}/` — 后端子任务
+- `20-frontend/{platform}/{subtask}/` — 前端子任务
+- 每个子任务有独立的 `.meta/` + `git-config` + `src/` + `tests/`
+- 子任务是 AI 代码生成的真正目标单元
+
+**为什么不用 `99-artifacts/`：**
+- 旧结构把 TEST.md/REVIEW.md 等放在任务根的 `99-artifacts/`
+- 新结构把这些产出放在每个子任务目录下，与代码紧邻
+- 质量门禁扫描所有子任务目录下的产出文件
+
+### 3. 核心规格与子任务产出分离
 
 **现在的方案：**
-- `00-specs/` 只放 AI 执行时**必须读取**的文件（REQ/TECH/TASK）
-- `99-artifacts/` 放执行过程中或执行后**生成/填充**的文件
-- AI 加载顺序：`00-specs/` → `_shared/` → `10-backend/src/` → `99-artifacts/`
+- `00-specs/` 只放 AI 执行时**必须读取**的文件（REQ/TECH/TASK/CONTEXT）
+- 子任务目录下的 `src/`/`tests/` 是 AI 输出代码的位置
+- `_shared/` 只放跨平台共享契约（API_CONTRACT.yaml）
+- AI 加载顺序：`00-specs/` → `_shared/` → `10-backend/{service}/{subtask}/` → `20-frontend/{platform}/{subtask}/`
 
-### 3. 元信息集中化
+### 4. 元信息集中化
 
 **之前的问题：**
 - `.task-type` 和 `.task-status` 散落在 Task 根目录
@@ -104,7 +126,7 @@ Task-001-user-login/
 - 每个元信息一个文件，方便脚本读取
 - 支持扩展（如 `.meta/priority`、`.meta/due-date`）
 
-### 4. 需求变更可追溯
+### 5. 需求变更可追溯
 
 **之前的问题：**
 - change 命令在 REQ.md 末尾追加变更记录
@@ -124,19 +146,57 @@ Task-001-user-login/
 ```
 1. Task-001/.meta/type              → 了解任务类型
 2. Task-001/.meta/status            → 了解当前状态
-3. Task-001/00-specs/TASK.md        → 任务概览 + 产出物清单
-4. Task-001/00-specs/REQ.md         → 需求 + 验收标准
-5. Task-001/00-specs/TECH.md        → 技术方案 + 接口设计
-6. Task-001/_shared/API_CONTRACT.yaml → API 契约
-7. Task-001/00-specs/CHANGELOG.md   → 了解变更历史（如有）
-8. Task-001/10-backend/src/         → 已有代码（续跑时）
+3. Task-001/00-specs/CONTEXT.md     → 任务上下文 + 来源追溯
+4. Task-001/00-specs/TASK.md        → 任务概览 + 产出物清单
+5. Task-001/00-specs/REQ.md         → 需求 + 验收标准
+6. Task-001/00-specs/TECH.md        → 技术方案 + 接口设计
+7. Task-001/_shared/API_CONTRACT.yaml → API 契约
+8. Task-001/00-specs/CHANGELOG.md   → 了解变更历史（如有）
+9. Task-001/10-backend/{service}/{subtask}/src/  → 已有代码（续跑时）
 
 【补充阅读（按需）】
-- 99-artifacts/TEST.md      → 测试要求
-- 99-artifacts/RISK.md      → 风险注意点
-- 99-artifacts/DEPS.md      → 依赖约束
-- 99-artifacts/ERROR_CODES.md → 错误码规范
+- 子任务目录/TEST.md      → 测试要求
+- 子任务目录/RISK.md      → 风险注意点
+- 子任务目录/DEPS.md      → 依赖约束
 ```
+
+---
+
+## 文件即记忆架构
+
+> v6.29.0 新增，解决全自动模式下上下文溢出问题。
+
+### 问题背景
+
+全自动执行时，每个任务注入 ~12K tokens 输入 + 生成 ~10K tokens 代码 = ~25K/任务。
+6-7 个任务后累积 ~150K tokens，超出 128K 上下文窗口。
+
+### 两层解决方案
+
+```
+任务完成 → addTaskSummary() 写入摘要到 execution-state.json
+批次结束 → writeContextSummaryFile() 生成 ~1K tokens 摘要文件
+         → 输出 [SPECCORE_CONTINUE: <path>] 标记
+         
+新会话启动 → 读取摘要文件（~1K tokens）→ 恢复全局视角 → 继续执行
+```
+
+**第一层：文件即记忆**
+- 每个任务完成后，CLI 自动将进度、产出摘要、依赖关系写入 `.speccore/local/execution-state.json`
+- 批次结束时，生成紧凑的 `execution-summary.md`（~1K tokens）
+- 新会话只需读取这个文件就能恢复全局视角
+
+**第二层：自动续批**
+- 批次完成时输出 `[SPECCORE_CONTINUE: <path>]` 标记
+- 宿主 AI 识别后引导用户开新会话，自动读取摘要继续
+
+### 适用模式
+
+| 模式 | 需要自动续批？ | 原因 |
+|:--|:--|:--|
+| 全自动 | 需要 | 无人值守，必须自动处理上下文切换 |
+| 半自动 | 可选 | execute 前已有暂停点 |
+| 全程确认 | 不需要 | 每步都有确认，用户自己控制节奏 |
 
 ---
 
@@ -256,9 +316,14 @@ echo "# 变更记录" > 00-specs/CHANGELOG.md
 
 | 文件 | 说明 |
 |:---|:---|
-| `src/commands/iteration/split.ts` | 任务拆分创建目录结构 |
-| `src/commands/task/new.ts` | 手动创建任务目录结构 |
-| `src/commands/execute.ts` | 执行任务时读取路径 |
-| `src/commands/change.ts` | 需求变更时更新路径 |
-| `src/commands/analyze.ts` | 分析时补全文档路径 |
-| `src/core/state.ts` | 状态扫描读取路径 |
+| `src/commands/iteration/split.ts` | 任务拆分，创建三级嵌套目录结构 |
+| `src/commands/task/new.ts` | 手动创建任务，适配三级嵌套 |
+| `src/commands/execute.ts` | 执行任务，扫描子任务目录，批次摘要 |
+| `src/core/execution-state.ts` | 执行状态追踪 + 文件即记忆 |
+| `src/core/rag-engine.ts` | RAG 索引，动态扫描子任务文档 |
+| `src/core/knowledge-graph.ts` | 知识图谱，适配三级嵌套扫描 |
+| `src/core/prompt-builder.ts` | Prompt 构建，动态加载子任务文件 |
+| `src/core/spec-merger.ts` | 局部更新引擎，00-specs/ 优先 |
+| `src/commands/analyze.ts` | 分析时补全文档到子任务目录 |
+| `src/commands/status-panel.ts` | 状态面板，适配新目录名 |
+| `src/commands/context-output.ts` | 上下文输出，00-specs/ 优先 |

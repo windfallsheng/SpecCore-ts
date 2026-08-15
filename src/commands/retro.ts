@@ -144,10 +144,14 @@ export async function generateReport(taskId: string, iterDir: string): Promise<R
   // 检查问题记录
   const issues = await getIssues(taskDir);
 
-  // 读取质量门禁结果（如果存在）
+  // 读取质量门禁结果（如果存在）—— 新结构在任务根目录，旧结构在 99-artifacts/
   let verifyResult: RetroReport['verifyResult'];
-  const verifyPath = join(taskDir, '99-artifacts', 'VERIFY_REPORT.md');
-  if (await pathExists(verifyPath)) {
+  const verifyPath = await pathExists(join(taskDir, 'VERIFY_REPORT.md'))
+    ? join(taskDir, 'VERIFY_REPORT.md')
+    : await pathExists(join(taskDir, '99-artifacts', 'VERIFY_REPORT.md'))
+      ? join(taskDir, '99-artifacts', 'VERIFY_REPORT.md')
+      : null;
+  if (verifyPath && await pathExists(verifyPath)) {
     const verifyContent = await readFile(verifyPath, 'utf-8');
     const compileMatch = verifyContent.match(/编译检查.*?(✅|❌|⏭️)/);
     const lintMatch = verifyContent.match(/Lint.*?(✅|❌|⚠️|⏭️)/);
@@ -161,6 +165,49 @@ export async function generateReport(taskId: string, iterDir: string): Promise<R
       passedChecks: totalMatch ? parseInt(totalMatch[2]) : 0,
       failedChecks: totalMatch ? parseInt(totalMatch[3]) : 0,
     };
+  }
+
+  // UI 规格覆盖率检查
+  let uiCoverage: { specPages: number; specComponents: number; implementedPages: number; contractAligned: boolean } | undefined;
+  const uiSpecShared = join(taskDir, '_shared', 'UI_SPEC.md');
+  const uiSpecIter = join(iterDir, '020-specs', 'UI_SPEC.md');
+  let uiSpecText = '';
+  if (await pathExists(uiSpecShared)) {
+    uiSpecText = await readFile(uiSpecShared, 'utf-8');
+  } else if (await pathExists(uiSpecIter)) {
+    uiSpecText = await readFile(uiSpecIter, 'utf-8');
+  }
+  if (uiSpecText) {
+    const specPages = (uiSpecText.match(/页面/g) || []).length;
+    const specComponents = (uiSpecText.match(/组件/g) || []).length;
+    // 检查前端目录中实际实现的页面文件
+    let implementedPages = 0;
+    const frontendDir = join(taskDir, '20-frontend');
+    if (await pathExists(frontendDir)) {
+      try {
+        const platforms = await readdir(frontendDir);
+        for (const p of platforms) {
+          const srcDir = join(frontendDir, p, 'src');
+          if (await pathExists(srcDir)) {
+            const pages = await readdir(srcDir);
+            implementedPages += pages.filter((f: string) => f.endsWith('.vue') || f.endsWith('.tsx') || f.endsWith('.jsx')).length;
+          }
+          const pagesDir = join(frontendDir, p, 'src', 'pages');
+          if (await pathExists(pagesDir)) {
+            const pageFiles = await readdir(pagesDir);
+            implementedPages += pageFiles.filter((f: string) => f.endsWith('.vue') || f.endsWith('.tsx') || f.endsWith('.jsx')).length;
+          }
+        }
+      } catch {}
+    }
+    // 检查 API_CONTRACT 是否有字段定义
+    let contractAligned = false;
+    const contractPath = join(taskDir, '_shared', 'API_CONTRACT.yaml');
+    if (await pathExists(contractPath)) {
+      const contract = await readFile(contractPath, 'utf-8');
+      contractAligned = contract.includes('fields:');
+    }
+    uiCoverage = { specPages, specComponents, implementedPages, contractAligned };
   }
 
   const report: RetroReport = {
@@ -200,6 +247,15 @@ export async function generateReport(taskId: string, iterDir: string): Promise<R
         `- Lint: ${verifyResult.lintStatus}`,
         `- 测试: ${verifyResult.testStatus}`,
         `- 检查项: ${verifyResult.totalChecks} 总计 / ${verifyResult.passedChecks} 通过 / ${verifyResult.failedChecks} 失败`,
+        '',
+      ] : []),
+      ...(uiCoverage ? [
+        `## UI 规格覆盖`,
+        '',
+        `- UI_SPEC 页面引用: ${uiCoverage.specPages}`,
+        `- UI_SPEC 组件引用: ${uiCoverage.specComponents}`,
+        `- 前端实现文件: ${uiCoverage.implementedPages}`,
+        `- 前后端契约对齐: ${uiCoverage.contractAligned ? '✅ API_CONTRACT 含字段定义' : '⚠️ API_CONTRACT 缺少字段定义'}`,
         '',
       ] : []),
       `## 改进建议`,

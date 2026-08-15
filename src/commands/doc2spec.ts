@@ -678,7 +678,7 @@ async function importExcelBugList(file: string, iteration: string): Promise<void
     try {
       const buf = await require('fs-extra').readFile(file);
       const zip = await JSZip.loadAsync(buf);
-      const imagesDir = join(iterDir, '010-requirements', 'assets', 'images');
+      const imagesDir = join(iterDir, '010-requirements', 'assets', 'extracted');
       
       // 遍历 zip 寻找 xl/media/ 下的图片文件
       const mediaFiles = Object.keys(zip.files).filter(k => k.startsWith('xl/media/'));

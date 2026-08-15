@@ -31,11 +31,15 @@ speccore execute --prompt --task=<任务ID> -i <迭代名> --batch-size 3
 speccore execute --response '<代码JSON>' --task=<任务ID> -i <迭代名>
 ```
 
-### 步骤 3：批次完成后重新开始对话
-当 Prompt 输出中包含 `[SPECCORE_BATCH_COMPLETE]` 时：
+### 步骤 3：批次完成后自动续批
+当 Prompt 输出中包含 `[SPECCORE_CONTINUE: <path>]` 时：
 1. 当前对话的批次已完成
 2. **必须开始新的对话**
-3. 在新对话中执行提示的命令继续下一批次
+3. 在新对话中，先读取 `<path>` 文件恢复上下文（约 1K tokens，包含已完成任务摘要、待执行任务、依赖关系）
+4. 然后执行提示的命令继续下一批次
+
+> 💡 “文件即记忆”机制：每个任务完成后，CLI 自动将进度、产出摘要、依赖关系写入摘要文件。
+> 新会话只需读取这个文件（~1K tokens）就能恢复全局视角，无需重新扫描全部文件。
 
 ### 为什么需要批次执行？
 - 每个任务的 Prompt + AI 回复会累积在对话上下文中

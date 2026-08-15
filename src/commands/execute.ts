@@ -28,7 +28,10 @@ import {
   clearExecutionState,
   getCurrentBatchTasks,
   canResume,
+  addTaskSummary,
+  writeContextSummaryFile,
   ExecutionState,
+  TaskSummary,
 } from '../core/execution-state';
 import { createTaskBranch, detectDefaultBranch, isProtectedBranch } from '../core/git-integration';
 import { buildPrompt, formatPrompt, parseAiResponse, outputNeedsInfo } from '../core/prompt-builder';
@@ -482,7 +485,7 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
       const taskCodePath = (await pathExists(join(taskDir, 'code'))) ? join(taskDir, 'code') : absCodePath;
 
       // 读取上一轮修复状态（如果有）
-      const statePath = join(taskDir, '99-artifacts', '.verify-state.json');
+      const statePath = join(taskDir, '.verify-state.json');
       let currentRound = 1;
       if (await pathExists(statePath)) {
         try {
@@ -510,15 +513,13 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
         const MAX_ROUNDS = 3;
         if (currentRound < MAX_ROUNDS) {
           // 保存轮次状态 + 输出 [SPECCORE_EXEC] 让 AI 修复
-          const { ensureDir } = await import('fs-extra');
-          await ensureDir(join(taskDir, '99-artifacts'));
           await writeFile(statePath, JSON.stringify({ round: currentRound, taskId: task.id, timestamp: new Date().toISOString() }));
           logger.info(`     🤖 请求 AI 修复（第 ${currentRound}/${MAX_ROUNDS} 轮）...`);
           outputFixTag(gate.report, taskDir, currentRound);
         } else {
           // 3 轮都失败
           logger.error(`  💀 ${task.id}: ${MAX_ROUNDS} 轮修复后质量门禁仍未通过`);
-          logger.info(`     📄 报告: ${join(taskDir, '99-artifacts', 'VERIFY_REPORT.md')}`);
+          logger.info(`     📄 报告: ${join(taskDir, 'VERIFY_REPORT.md')}`);
           logger.info(`     💡 请人工检查并修复`);
         }
       }
@@ -643,7 +644,7 @@ async function processBatch(tasks: TaskState[], state: ExecutionState, iteration
   for (const task of tasks) {
     logger.info(`   ${task.id}:`);
     const tDir = await resolveTaskDir(iterDir, task.id);
-    for (const specPath of ['_shared/CONTEXT.md', '_shared/REQ.md', '_shared/TECH.md', '00-specs/REQ.md', '00-specs/TECH.md']) {
+    for (const specPath of ['00-specs/REQ.md', '00-specs/TECH.md', '00-specs/CONTEXT.md', '_shared/REQ.md', '_shared/TECH.md']) {
       const p = join(tDir, specPath);
       if (await pathExists(p)) {
         const content = await readFile(p, 'utf-8');
@@ -675,6 +676,19 @@ async function processBatch(tasks: TaskState[], state: ExecutionState, iteration
     await generateTaskSkeleton(task, iteration);
     completed.push(task.id);
 
+    // 写入任务摘要到 execution-state（文件即记忆）
+    const taskSummary: TaskSummary = {
+      taskId: task.id,
+      taskName: task.name || task.id,
+      type: task.type || 'feature',
+      status: 'completed',
+      summary: `${task.name || task.id} 骨架已生成`,
+      outputs: ['00-specs/', '10-backend/', '20-frontend/'],
+      dependencies: task.dependencies || [],
+      completedAt: new Date().toISOString(),
+    };
+    addTaskSummary(state, taskSummary);
+
     logger.info(`  ✅ ${task.id || task} completed`);
 
     const elapsed = Math.round((Date.now() - startTime) / 1000);
@@ -684,8 +698,13 @@ async function processBatch(tasks: TaskState[], state: ExecutionState, iteration
 
   // Mark batch complete
   completeBatch(state, batchNum, completed);
+
+  // 写入上下文摘要文件（供新会话快速恢复）
+  const summaryPath = await writeContextSummaryFile(state);
+
   logger.info(``);
   logger.info(`✅ Batch ${batchNum} complete (${completed.length} tasks)`);
+  logger.info(`📄 上下文摘要: ${summaryPath}`);
 
   // Context reset note
   logger.info(`🔄 Resetting context for next batch...`);
@@ -737,12 +756,35 @@ async function generateTaskSkeleton(task: TaskState, iteration: string): Promise
     const techStack = await loadTechStack();
     logger.info(`   Tech Stack: ${techStack.backendFramework} + ${techStack.frontendFramework}`);
 
-    // 读取后端 Spec 生成代码骨架
-    const backendDir = join(taskDir, '10-backend');
-    if (await pathExists(backendDir)) {
-      const reqPath = (await pathExists(join(taskDir, '_shared', 'REQ.md')))
-        ? join(taskDir, '_shared', 'REQ.md')
-        : join(taskDir, '00-specs', 'REQ.md');
+    // 读取后端 Spec 生成代码骨架（扫描 10-backend/{服务}/{子任务}/ 三级嵌套）
+    const { readdir: rd } = await import('fs-extra');
+    const taskEntries = await rd(taskDir, { withFileTypes: true });
+    const backendSubtaskDirs: string[] = [];
+    // 新结构: 10-backend/{服务名}/{子任务}/
+    const backendCategoryDir = join(taskDir, '10-backend');
+    if (await pathExists(backendCategoryDir)) {
+      const serviceEntries = await rd(backendCategoryDir, { withFileTypes: true });
+      for (const service of serviceEntries) {
+        if (!service.isDirectory()) continue;
+        const serviceDir = join(backendCategoryDir, service.name);
+        const subtaskEntries = await rd(serviceDir, { withFileTypes: true });
+        for (const st of subtaskEntries) {
+          if (st.isDirectory() && !st.name.startsWith('.')) {
+            backendSubtaskDirs.push(join(serviceDir, st.name));
+          }
+        }
+      }
+    }
+    // 回退: 旧结构 10-*/ 直接在任务根目录
+    if (backendSubtaskDirs.length === 0) {
+      const legacy = taskEntries
+        .filter((d: any) => d.isDirectory() && d.name.startsWith('10-'))
+        .map((d: any) => join(taskDir, d.name));
+      backendSubtaskDirs.push(...legacy);
+    }
+
+    for (const backendDir of backendSubtaskDirs) {
+      const reqPath = join(taskDir, '00-specs', 'REQ.md');
 
       let className = convertToClassName(task.name || task.id);
       // 从 CONSTITUTION.md 读取包名，回退到默认值
@@ -780,8 +822,8 @@ async function generateTaskSkeleton(task: TaskState, iteration: string): Promise
       tx.write(repoPath, repoCode);
       filesUpdated++;
 
-      // 更新 TASK.md 状态
-      const taskMdPath = join(taskDir, '00-specs', 'TASK.md');
+      // 更新子任务 TASK.md 状态
+      const taskMdPath = join(backendDir, 'TASK.md');
       if (await pathExists(taskMdPath)) {
         const content = await readFile(taskMdPath, 'utf-8');
         const updated = content.replace('状态: 🔲 待开发', '状态: 🔄 进行中');
@@ -790,30 +832,47 @@ async function generateTaskSkeleton(task: TaskState, iteration: string): Promise
       }
     }
 
-    // 前端各平台代码生成
-    const frontendDir = join(taskDir, '20-frontend');
-    if (await pathExists(frontendDir)) {
-      const { readdir: rd } = await import('fs-extra');
-      const platformDirs = await rd(frontendDir, { withFileTypes: true });
-      for (const pd of platformDirs) {
-        if (pd.isDirectory()) {
-          const componentName = convertToClassName(task.name || task.id);
-          const vueCode = generateVueComponent(componentName);
-          const srcDir = join(frontendDir, pd.name, 'src');
-          await ensureDir(srcDir);
-          const vuePath = join(srcDir, `${componentName}.vue`);
-          tx.write(vuePath, vueCode);
-          filesUpdated++;
+    // 前端各平台代码生成（扫描 20-frontend/{端名}/{子任务}/ 三级嵌套）
+    const frontendSubtaskDirs: string[] = [];
+    // 新结构: 20-frontend/{端名}/{子任务}/
+    const frontendCategoryDir = join(taskDir, '20-frontend');
+    if (await pathExists(frontendCategoryDir)) {
+      const platformEntries = await rd(frontendCategoryDir, { withFileTypes: true });
+      for (const plat of platformEntries) {
+        if (!plat.isDirectory()) continue;
+        const platformDir = join(frontendCategoryDir, plat.name);
+        const subtaskEntries = await rd(platformDir, { withFileTypes: true });
+        for (const st of subtaskEntries) {
+          if (st.isDirectory() && !st.name.startsWith('.')) {
+            frontendSubtaskDirs.push(join(platformDir, st.name));
+          }
+        }
+      }
+    }
+    // 回退: 旧结构 20-*/ 直接在任务根目录
+    if (frontendSubtaskDirs.length === 0) {
+      const legacy = taskEntries
+        .filter((d: any) => d.isDirectory() && d.name.startsWith('20-'))
+        .map((d: any) => join(taskDir, d.name));
+      frontendSubtaskDirs.push(...legacy);
+    }
 
-          const ftaskPath = join(frontendDir, pd.name, 'TASK.md');
+    for (const frontendDir of frontendSubtaskDirs) {
+      const componentName = convertToClassName(task.name || task.id);
+      const vueCode = generateVueComponent(componentName);
+      const srcDir = join(frontendDir, 'src');
+      await ensureDir(srcDir);
+      const vuePath = join(srcDir, `${componentName}.vue`);
+      tx.write(vuePath, vueCode);
+      filesUpdated++;
+
+      const ftaskPath = join(frontendDir, 'TASK.md');
           if (await pathExists(ftaskPath)) {
             const content = await readFile(ftaskPath, 'utf-8');
             const updated = content.replace('状态: 🔲 待开发', '状态: 🔄 进行中');
             tx.write(ftaskPath, updated);
             filesUpdated++;
           }
-        }
-      }
     }
 
     if (tx.length > 0) {
@@ -1016,16 +1075,33 @@ async function filterByPlatform(tasks: TaskState[], iteration: string, platform:
       filtered.push(task);
       continue;
     }
-    // 新结构: 用 resolveTaskDir 查找任务目录（支持类型子目录），再查 {platform}/
+    // 新结构: 用 resolveTaskDir 查找任务目录（支持类型子目录），再查 10-backend/{端}/ 或 20-frontend/{端}/
     const taskDir = await resolveTaskDir(iterDir, task.id);
-    const platformDir = join(taskDir, platform);
+    const isBackend = platform === 'backend' || platform.startsWith('后台');
+    const categoryDir = isBackend ? join(taskDir, '10-backend') : join(taskDir, '20-frontend');
+    const serviceName = isBackend && platform === 'backend' ? 'api' : platform;
+    // 新结构: 10-backend/{端}/ 或 20-frontend/{端}/
+    const platformDir = join(categoryDir, serviceName);
     if (await pathExists(platformDir)) {
       filtered.push(task);
       continue;
     }
-    // 旧结构回退: frontend/{platform}/
-    const legacyDir = join(taskDir, 'frontend', platform);
-    if (await pathExists(legacyDir)) filtered.push(task);
+    // 回退: 扫描 category 目录下是否有匹配的子目录
+    try {
+      if (await pathExists(categoryDir)) {
+        const { readdir: readDir } = await import('fs-extra');
+        const entries = await readDir(categoryDir, { withFileTypes: true });
+        const matched = entries.find((d: any) => d.isDirectory() && d.name === serviceName);
+        if (matched) { filtered.push(task); continue; }
+      }
+    } catch { /* ignore */ }
+    // 旧结构回退: 10-{端}/ 或 20-{端}/ 直接在任务根目录
+    const subtaskPrefix = isBackend ? '10-' : '20-';
+    const legacyDir = join(taskDir, `${subtaskPrefix}${serviceName}`);
+    if (await pathExists(legacyDir)) { filtered.push(task); continue; }
+    // 更旧结构回退: frontend/{platform}/
+    const legacyDir2 = join(taskDir, 'frontend', platform);
+    if (await pathExists(legacyDir2)) filtered.push(task);
   }
   return filtered;
 }
@@ -1099,29 +1175,136 @@ async function preFlightCheck(tasks: TaskState[], iteration: string, options: Ex
       issues.push('缺少 TECH.md');
     }
 
-    // 3. Test cases
-    const testPath = join(taskDir, '99-artifacts', 'TEST.md');
-    if (await pathExists(testPath)) {
-      const test = await readFile(testPath, 'utf-8');
-      const n = (test.match(/⬜|✅|❌/g) || []).length;
-      logger.info(`  3. 测试: ${n} 用例`);
+    // 3. Test cases（扫描子任务目录）
+    let testFound = false;
+    for (const catDir of ['10-backend', '20-frontend']) {
+      const catPath = join(taskDir, catDir);
+      if (await pathExists(catPath)) {
+        try {
+          for (const svc of await readdir(catPath, { withFileTypes: true })) {
+            if (!svc.isDirectory()) continue;
+            for (const sub of await readdir(join(catPath, svc.name), { withFileTypes: true })) {
+              if (!sub.isDirectory()) continue;
+              const tp = join(catPath, svc.name, sub.name, 'TEST.md');
+              if (await pathExists(tp)) {
+                const test = await readFile(tp, 'utf-8');
+                const n = (test.match(/⬜|✅|❌/g) || []).length;
+                logger.info(`  3. 测试[${svc.name}/${sub.name}]: ${n} 用例`);
+                testFound = true;
+              }
+            }
+          }
+        } catch { /* 跳过 */ }
+      }
+    }
+    if (!testFound) {
+      // 旧结构回退
+      const testPath = join(taskDir, '99-artifacts', 'TEST.md');
+      if (await pathExists(testPath)) {
+        const test = await readFile(testPath, 'utf-8');
+        const n = (test.match(/⬜|✅|❌/g) || []).length;
+        logger.info(`  3. 测试: ${n} 用例`);
+      }
     }
 
-    // 4. Review
-    logger.info(`  4. 审查: ${await pathExists(join(taskDir, '99-artifacts', 'REVIEW.md')) ? '✅' : '❌'}`);
+    // 4. Review（扫描子任务目录）
+    let reviewFound = false;
+    for (const catDir of ['10-backend', '20-frontend']) {
+      const catPath = join(taskDir, catDir);
+      if (await pathExists(catPath)) {
+        try {
+          for (const svc of await readdir(catPath, { withFileTypes: true })) {
+            if (!svc.isDirectory()) continue;
+            for (const sub of await readdir(join(catPath, svc.name), { withFileTypes: true })) {
+              if (!sub.isDirectory()) continue;
+              if (await pathExists(join(catPath, svc.name, sub.name, 'REVIEW.md'))) {
+                logger.info(`  4. 审查[${svc.name}/${sub.name}]: ✅`);
+                reviewFound = true;
+              }
+            }
+          }
+        } catch { /* 跳过 */ }
+      }
+    }
+    if (!reviewFound) {
+      logger.info(`  4. 审查: ${await pathExists(join(taskDir, '99-artifacts', 'REVIEW.md')) ? '✅' : '❌'}`);
+    }
 
-    // 5. API
-    logger.info(`  5. 契约: ${await pathExists(join(taskDir, '_shared', 'API_CONTRACT.yaml')) ? '✅' : '⚠️'}`);
+    // 5. API（00-specs/ 优先，_shared/ 回退）
+    const hasApiContract = await pathExists(join(taskDir, '00-specs', 'API_CONTRACT.yaml')) || await pathExists(join(taskDir, '_shared', 'API_CONTRACT.yaml'));
+    logger.info(`  5. 契约: ${hasApiContract ? '✅' : '⚠️'}`);
 
-    // 6. Platform
-    const fd = join(taskDir, '20-frontend');
-    if (await pathExists(fd)) {
-      const pf = readdirSync(fd, { withFileTypes: true }).filter((d: any) => d.isDirectory()).map((d: any) => d.name);
-      logger.info(`  6. 端: ${pf.join(', ')}`);
+    // 6. Platform（扫描 10-backend/*/ 和 20-frontend/*/ 子任务目录）
+    const subtaskDirs: string[] = [];
+    for (const catDir of ['10-backend', '20-frontend']) {
+      const catPath = join(taskDir, catDir);
+      if (await pathExists(catPath)) {
+        try {
+          const platEntries = readdirSync(catPath, { withFileTypes: true });
+          for (const pe of platEntries) {
+            if (pe.isDirectory()) {
+              const stEntries = readdirSync(join(catPath, pe.name), { withFileTypes: true });
+              for (const st of stEntries) {
+                if (st.isDirectory() && !st.name.startsWith('.')) {
+                  subtaskDirs.push(`${catDir}/${pe.name}/${st.name}`);
+                }
+              }
+            }
+          }
+        } catch { /* ignore */ }
+      }
+    }
+    // 回退: 旧结构 10-*/20-*
+    if (subtaskDirs.length === 0) {
+      const legacy = readdirSync(taskDir, { withFileTypes: true })
+        .filter((d: any) => d.isDirectory() && (d.name.startsWith('10-') || d.name.startsWith('20-')))
+        .map((d: any) => d.name);
+      subtaskDirs.push(...legacy);
+    }
+    if (subtaskDirs.length > 0) {
+      logger.info(`  6. 子任务: ${subtaskDirs.join(', ')}`);
     }
 
     // 7. Constitution
     logger.info(`  7. 合规: 待 validate ${issues.length > 0 ? '⚠️  ' + issues.join(', ') : ''}`);
+
+    // 8. UI 规格检查（00-specs/ 优先，_shared/ 回退）
+    const uiSpecPath = join(taskDir, '00-specs', 'UI_SPEC.md');
+    const uiSpecFallback = join(taskDir, '_shared', 'UI_SPEC.md');
+    const iterUiSpec = join(iterDir, '020-specs', 'UI_SPEC.md');
+    let uiSpecContent = '';
+    if (await pathExists(uiSpecPath)) {
+      uiSpecContent = await readFile(uiSpecPath, 'utf-8');
+    } else if (await pathExists(uiSpecFallback)) {
+      uiSpecContent = await readFile(uiSpecFallback, 'utf-8');
+    } else if (await pathExists(iterUiSpec)) {
+      uiSpecContent = await readFile(iterUiSpec, 'utf-8');
+    }
+    if (uiSpecContent) {
+      const uiPages = (uiSpecContent.match(/页面/g) || []).length;
+      const uiComponents = (uiSpecContent.match(/组件/g) || []).length;
+      logger.info(`  8. UI规格: ${uiPages} 页面引用 / ${uiComponents} 组件引用`);
+    } else {
+      logger.info(`  8. UI规格: ⚠️ 无 UI_SPEC.md`);
+    }
+
+    // 9. 前后端契约对标（00-specs/ 优先，_shared/ 回退）
+    const apiContractPath = await pathExists(join(taskDir, '00-specs', 'API_CONTRACT.yaml'))
+      ? join(taskDir, '00-specs', 'API_CONTRACT.yaml')
+      : join(taskDir, '_shared', 'API_CONTRACT.yaml');
+    if (await pathExists(apiContractPath) && uiSpecContent) {
+      const contract = await readFile(apiContractPath, 'utf-8');
+      const contractFields = (contract.match(/fields:/g) || []).length;
+      const uiFields = (uiSpecContent.match(/字段/g) || []).length;
+      if (contractFields === 0 && uiFields > 0) {
+        issues.push('API_CONTRACT.yaml 缺少字段定义，但 UI_SPEC.md 有字段映射 — 前后端契约未对齐');
+        logger.info(`  9. 契约: ⚠️ API 无字段定义但 UI 有 ${uiFields} 处字段引用`);
+      } else {
+        logger.info(`  9. 契约: API ${contractFields} 组字段 / UI ${uiFields} 处引用`);
+      }
+    } else {
+      logger.info(`  9. 契约: ⏭️ 跳过（缺 API_CONTRACT 或 UI_SPEC）`);
+    }
 
     // 写入问题文件，供 AI 辅助修复
     if (issues.length > 0) {
@@ -1298,19 +1481,20 @@ function buildAgentContext(tasks: TaskState[], agent: string): string {
     
     // Progressive loading order
     ctx += `**Read in this order (progressive disclosure):**\n`;
-    ctx += `1. \`Iteration-*/${task.id}/00-specs/TASK.md\` — task overview + deliverables checklist\n`;
-    ctx += `2. \`Iteration-*/${task.id}/00-specs/REQ.md\` — requirements + acceptance criteria\n`;
-    ctx += `3. \`Iteration-*/${task.id}/00-specs/TECH.md\` — tech design + architecture\n`;
-    ctx += `4. \`Iteration-*/${task.id}/_shared/API_CONTRACT.yaml\` — API contract (if exists)\n\n`;
+    ctx += `1. \`Iteration-*/${task.id}/10-backend/{service}/{subtask}/TASK.md\` — 后端子任务概览\n`;
+    ctx += `2. \`Iteration-*/${task.id}/20-frontend/{platform}/{subtask}/TASK.md\` — 前端子任务概览\n`;
+    ctx += `3. \`Iteration-*/${task.id}/00-specs/REQ.md\` — 需求 + 验收标准\n`;
+    ctx += `4. \`Iteration-*/${task.id}/00-specs/TECH.md\` — 技术设计\n`;
+    ctx += `5. \`Iteration-*/${task.id}/00-specs/API_CONTRACT.yaml\` — API 契约 (if exists)\n\n`;
 
     ctx += `**Supplementary (read only if needed):**\n`;
-    ctx += `- 99-artifacts/TEST.md (test cases) | 99-artifacts/REVIEW.md (review checklist)\n`;
-    ctx += `- 00-specs/SCHEMA.md (DB schema) | 99-artifacts/ADR.md (arch decisions)\n`;
-    ctx += `- 99-artifacts/RISK.md (risks+rollback) | 99-artifacts/DEPS.md (dependencies) | 99-artifacts/MONITOR.md (monitoring)\n`;
-    ctx += `- 99-artifacts/ERROR_CODES.md (error codes) | 99-artifacts/DEPLOY.md (deployment)\n\n`;
+    ctx += `- 子任务目录/TEST.md (测试用例) | 子任务目录/REVIEW.md (评审清单)\n`;
+    ctx += `- 00-specs/SCHEMA.md (DB schema) | 子任务目录/ADR.md (架构决策)\n`;
+    ctx += `- 子任务目录/RISK.md (风险+回滚) | 子任务目录/DEPS.md (依赖) | 子任务目录/MONITOR.md (监控)\n`;
+    ctx += `- 子任务目录/ERROR_CODES.md (错误码) | 子任务目录/DEPLOY.md (部署)\n\n`;
 
-    ctx += `**Frontend (if exists):**\n`;
-    ctx += `- 20-20-frontend/{platform}/COMPONENT_TREE.md | ROUTES.md | STATE.md | STYLE_GUIDE.md\n\n`;
+    ctx += `**Frontend design docs (if exists):**\n`;
+    ctx += `- 20-{platform}/COMPONENT_TREE.md | ROUTES.md | STATE.md | STYLE_GUIDE.md\n\n`;
   }
 
   // 3. Global rules (load last, only if needed)
@@ -1343,51 +1527,108 @@ async function executionVerifyLoop(
       if (round > 1) logger.info(`   🔄 第 ${round} 轮修复...`);
       allPassed = true;
 
-      // 1. 检查 TEST.md
-      const testPath = join(taskDir, '99-artifacts', 'TEST.md');
-      if (await pathExists(testPath)) {
+      // 1. 检查 TEST.md（扫描子任务目录，合并结果）
+      const testFiles: string[] = [];
+      for (const catDir of ['10-backend', '20-frontend']) {
+        const catPath = join(taskDir, catDir);
+        if (await pathExists(catPath)) {
+          try {
+            for (const svc of await readdir(catPath, { withFileTypes: true })) {
+              if (!svc.isDirectory()) continue;
+              for (const sub of await readdir(join(catPath, svc.name), { withFileTypes: true })) {
+                if (!sub.isDirectory()) continue;
+                const fp = join(catPath, svc.name, sub.name, 'TEST.md');
+                if (await pathExists(fp)) testFiles.push(fp);
+              }
+            }
+          } catch { /* 跳过 */ }
+        }
+      }
+      if (testFiles.length === 0) {
+        // 旧结构回退
+        const legacy = join(taskDir, '99-artifacts', 'TEST.md');
+        if (await pathExists(legacy)) testFiles.push(legacy);
+      }
+      for (const testPath of testFiles) {
         const testContent = await readFile(testPath, 'utf-8');
         const total = (testContent.match(/\[[ x]\]/g) || []).length;
         const done = (testContent.match(/\[x\]/g) || []).length;
+        const label = testPath.replace(taskDir + '/', '');
         if (done < total) {
-          logger.info(`   🧪 TEST.md: ${done}/${total} 通过`);
-          if (round === maxRounds) {
-            logger.warn(`   ⚠️ 仍有 ${total - done} 项未通过（已达最大重试次数）`);
-          }
+          logger.info(`   🧪 ${label}: ${done}/${total} 通过`);
+          if (round === maxRounds) logger.warn(`   ⚠️ 仍有 ${total - done} 项未通过`);
           allPassed = false;
         } else {
-          logger.info(`   🧪 TEST.md: ${done}/${total} ✅`);
+          logger.info(`   🧪 ${label}: ${done}/${total} ✅`);
         }
       }
 
-      // 2. 检查 REVIEW.md
-      const reviewPath = join(taskDir, '99-artifacts', 'REVIEW.md');
-      if (await pathExists(reviewPath)) {
+      // 2. 检查 REVIEW.md（扫描子任务目录）
+      const reviewFiles: string[] = [];
+      for (const catDir of ['10-backend', '20-frontend']) {
+        const catPath = join(taskDir, catDir);
+        if (await pathExists(catPath)) {
+          try {
+            for (const svc of await readdir(catPath, { withFileTypes: true })) {
+              if (!svc.isDirectory()) continue;
+              for (const sub of await readdir(join(catPath, svc.name), { withFileTypes: true })) {
+                if (!sub.isDirectory()) continue;
+                const fp = join(catPath, svc.name, sub.name, 'REVIEW.md');
+                if (await pathExists(fp)) reviewFiles.push(fp);
+              }
+            }
+          } catch { /* 跳过 */ }
+        }
+      }
+      if (reviewFiles.length === 0) {
+        const legacy = join(taskDir, '99-artifacts', 'REVIEW.md');
+        if (await pathExists(legacy)) reviewFiles.push(legacy);
+      }
+      for (const reviewPath of reviewFiles) {
         const reviewContent = await readFile(reviewPath, 'utf-8');
         const total = (reviewContent.match(/\[[ x]\]/g) || []).length;
         const doneR = (reviewContent.match(/\[x\]/gi) || []).length;
+        const label = reviewPath.replace(taskDir + '/', '');
         if (doneR < total) {
-          logger.info(`   📋 REVIEW.md: ${doneR}/${total} 通过`);
-          if (round === maxRounds) {
-            logger.warn(`   ⚠️ 仍有 ${total - doneR} 项未审查（已达最大重试次数）`);
-          }
+          logger.info(`   📋 ${label}: ${doneR}/${total} 通过`);
+          if (round === maxRounds) logger.warn(`   ⚠️ 仍有 ${total - doneR} 项未审查`);
           allPassed = false;
         } else {
-          logger.info(`   📋 REVIEW.md: ${doneR}/${total} ✅`);
+          logger.info(`   📋 ${label}: ${doneR}/${total} ✅`);
         }
       }
 
-      // 3. 检查 DEPLOY.md
-      const deployPath = join(taskDir, '99-artifacts', 'DEPLOY.md');
-      if (await pathExists(deployPath)) {
+      // 3. 检查 DEPLOY.md（扫描子任务目录）
+      const deployFiles: string[] = [];
+      for (const catDir of ['10-backend', '20-frontend']) {
+        const catPath = join(taskDir, catDir);
+        if (await pathExists(catPath)) {
+          try {
+            for (const svc of await readdir(catPath, { withFileTypes: true })) {
+              if (!svc.isDirectory()) continue;
+              for (const sub of await readdir(join(catPath, svc.name), { withFileTypes: true })) {
+                if (!sub.isDirectory()) continue;
+                const fp = join(catPath, svc.name, sub.name, 'DEPLOY.md');
+                if (await pathExists(fp)) deployFiles.push(fp);
+              }
+            }
+          } catch { /* 跳过 */ }
+        }
+      }
+      if (deployFiles.length === 0) {
+        const legacy = join(taskDir, '99-artifacts', 'DEPLOY.md');
+        if (await pathExists(legacy)) deployFiles.push(legacy);
+      }
+      for (const deployPath of deployFiles) {
         const depContent = await readFile(deployPath, 'utf-8');
         const total = (depContent.match(/\[[ x]\]/g) || []).length;
         const doneD = (depContent.match(/\[x\]/g) || []).length;
+        const label = deployPath.replace(taskDir + '/', '');
         if (doneD < total) {
-          logger.info(`   🚀 DEPLOY.md: ${doneD}/${total} 通过`);
+          logger.info(`   🚀 ${label}: ${doneD}/${total} 通过`);
           allPassed = false;
         } else {
-          logger.info(`   🚀 DEPLOY.md: ${doneD}/${total} ✅`);
+          logger.info(`   🚀 ${label}: ${doneD}/${total} ✅`);
         }
       }
 
@@ -1525,18 +1766,22 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
   const taskDir = await resolveTaskDir(await getIterationDir(iteration), task);
 
   // ── 前置检查：任务必须有有效需求或分析内容 ──
-  // 路径优先级: _shared/（新结构）→ 00-specs/（旧结构）→ 根目录（legacy）
+  // 路径优先级: 00-specs/（标准）→ _shared/（兼容）→ 子任务目录 → 根目录（legacy）
   const candidates = [
+    join(taskDir, '00-specs', 'REQ.md'),
+    join(taskDir, '00-specs', 'TECH.md'),
     join(taskDir, '_shared', 'REQ.md'),
     join(taskDir, '_shared', 'TECH.md'),
     join(taskDir, '00-specs', 'ANALYSIS.md'),
-    join(taskDir, '00-specs', 'REQ.md'),
     join(taskDir, 'ANALYSIS.md'),
     join(taskDir, 'REQUIREMENT.md'),
   ];
-  // 按端执行时，额外检查该端的 TASK.md
+  // 按端执行时，额外检查该端子任务的 TASK.md
   if (options.platform) {
-    candidates.unshift(join(taskDir, options.platform, 'TASK.md'));
+    const isBackend = options.platform === 'backend' || options.platform.startsWith('后台');
+    const prefix = isBackend ? '10-' : '20-';
+    const subtaskName = isBackend && options.platform === 'backend' ? 'api' : options.platform;
+    candidates.unshift(join(taskDir, `${prefix}${subtaskName}`, 'TASK.md'));
   }
 
   // 读取文件内容验证有效性（接受 ANALYSIS.md / REQ.md / REQUIREMENT.md）
@@ -1559,7 +1804,7 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
   }
 
   if (!effectiveAnalysis) {
-    const reason = `任务 ${task} 缺少有效的需求或分析内容\n（_shared/REQ.md、_shared/TECH.md、00-specs/ANALYSIS.md 均不存在或内容无效）`;
+    const reason = `任务 ${task} 缺少有效的需求或分析内容\n（00-specs/REQ.md、00-specs/TECH.md、00-specs/ANALYSIS.md 均不存在或内容无效）`;
     outputNeedsInfo({
       command: 'execute',
       missing: ['analysis'],
@@ -1633,9 +1878,18 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
     promptText += `- 批次大小: ${bs}\n`;
 
     if (isBatchEnd && nextTask) {
-      promptText += `\n[SPECCORE_BATCH_COMPLETE]\n`;
+      // 写入上下文摘要文件（如果 execution-state 存在）
+      let summaryPath = '';
+      const existingState = loadExecutionState();
+      if (existingState) {
+        summaryPath = await writeContextSummaryFile(existingState);
+      }
+      promptText += `\n[SPECCORE_CONTINUE${summaryPath ? `: ${summaryPath}` : ''}]\n`;
       promptText += `本批次已完成。请开始新的对话，然后执行:\n`;
       promptText += `speccore execute --prompt --task=${nextTask.id} -i ${iteration}\n`;
+      if (summaryPath) {
+        promptText += `\n💡 新会话会自动读取摘要文件恢复上下文\n`;
+      }
     } else if (nextTask) {
       promptText += `\n下一个任务: ${nextTask.id}（继续当前对话）\n`;
     } else {

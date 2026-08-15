@@ -342,15 +342,13 @@ async function loadExtraSpecs(
 
   const files = [
     { name: '任务上下文', path: '_shared/CONTEXT.md' },
-    { name: '技术方案', path: '_shared/TECH.md' },
-    { name: '技术方案(旧)', path: '00-specs/TECH.md' },
-    { name: '任务追踪', path: '00-specs/TASK.md' },
-    { name: '需求规格', path: '_shared/REQ.md' },
-    { name: '数据库设计', path: '_shared/SCHEMA.md' },
+    { name: '技术方案', path: '00-specs/TECH.md' },
+    { name: '技术方案(旧)', path: '_shared/TECH.md' },
+    { name: '需求规格', path: '00-specs/REQ.md' },
+    { name: '需求规格(旧)', path: '_shared/REQ.md' },
+    { name: '数据库设计', path: '00-specs/SCHEMA.md' },
+    { name: '数据库设计(旧)', path: '_shared/SCHEMA.md' },
     { name: 'API 契约', path: '_shared/API_CONTRACT.yaml' },
-    { name: '测试计划', path: '99-artifacts/TEST.md' },
-    { name: '评审清单', path: '99-artifacts/REVIEW.md' },
-    { name: '风险评估', path: '99-artifacts/RISK.md' },
     { name: '已知问题', path: '.issues.md' },
   ];
 
@@ -370,13 +368,37 @@ async function loadExtraSpecs(
     }
   }
 
-  // 按端执行时，加载该端的子任务文件
+  // 按端执行时，加载该端的子任务文件（新结构: 10-backend/{服务}/ 或 20-frontend/{端}/）
   if (platform) {
-    files.unshift(
-      { name: `${platform}端子任务`, path: `${platform}/TASK.md` },
-      { name: `${platform}端组件树`, path: `${platform}/COMPONENT_TREE.md` },
-      { name: `${platform}端路由`, path: `${platform}/ROUTES.md` },
-      { name: `${platform}端状态管理`, path: `${platform}/STATE.md` },
+    const isBackend = platform === 'backend' || platform.startsWith('后台');
+    const categoryDir = isBackend ? '10-backend' : '20-frontend';
+    const serviceName = isBackend && platform === 'backend' ? 'api' : platform;
+    const platformBase = join(cwd, taskDir, categoryDir, serviceName);
+    // 动态扫描子任务目录（不再硬编码 01-impl）
+    let subtaskDirs: string[] = [];
+    try {
+      if (await pathExists(platformBase)) {
+        const entries = await readdir(platformBase, { withFileTypes: true });
+        subtaskDirs = entries.filter(e => e.isDirectory() && !e.name.startsWith('.')).map(e => e.name);
+      }
+    } catch { /* 跳过 */ }
+    // 加载第一个子任务的 TASK.md（作为主要上下文）
+    if (subtaskDirs.length > 0) {
+      const firstSub = subtaskDirs[0];
+      files.unshift(
+        { name: `${platform}端子任务`, path: join(categoryDir, serviceName, firstSub, 'TASK.md') },
+      );
+      if (!isBackend) {
+        files.unshift(
+          { name: `${platform}端组件树`, path: join(categoryDir, serviceName, firstSub, 'COMPONENT_TREE.md') },
+          { name: `${platform}端路由`, path: join(categoryDir, serviceName, firstSub, 'ROUTES.md') },
+          { name: `${platform}端状态管理`, path: join(categoryDir, serviceName, firstSub, 'STATE.md') },
+        );
+      }
+    }
+    // 回退: 旧结构 {platform}/TASK.md
+    files.push(
+      { name: `${platform}端子任务(旧)`, path: `${platform}/TASK.md` },
     );
   }
 
@@ -440,6 +462,7 @@ async function loadAllTaskContext(
 
   // 1. 递归扫描任务目录所有 .md / .yaml 文件
   // 排除自检/审查/产出阶段文件（这些在代码生成后的 verify 阶段才需要）
+  // 排除整个 10-backend/ 和 20-frontend/ 大类目录（子任务代码目录不参与全量兜底）
   const CODEGEN_EXCLUDE_DIRS = new Set(['node_modules', '10-backend', '20-frontend', '99-artifacts', '.meta']);
   const CODEGEN_EXCLUDE_FILES = new Set(['test.md', 'schema.md', 'review.md', 'changelog.md', 'deploy.md', '.issues.md']);
   const scanTaskDir = async (dir: string, prefix: string) => {
@@ -524,11 +547,6 @@ async function loadAllTaskContext(
     }
   }
 
-  // 4. 全局文档（核心 2 个）
-  const globalDir = join(cwd, '.speccore', 'GLOBAL');
-  await addFile(join(globalDir, 'ARCHITECTURE.md'), '全局架构', 'GLOBAL/ARCHITECTURE.md');
-  await addFile(join(globalDir, 'TECH_STACK.md'), '全局技术栈', 'GLOBAL/TECH_STACK.md');
-
   return extras;
 }
 
@@ -541,12 +559,7 @@ const FILE_DESC: Record<string, string> = {
   'ARCHITECTURE.md': '全量系统架构',
   'TECH_FULL.md': '全量技术方案',
   'CROSS_PLATFORM.md': '跨端业务关系',
-  'CODE_INDEX.md': '代码路径索引',
   'GLOSSARY.md': '术语定义表',
-  'OVERVIEW.md': '项目全景描述',
-  'TECH_STACK.md': '技术栈配置',
-  'CHANGELOG.md': '变更历史',
-  'PROTOTYPE_INDEX.md': '原型索引',
 };
 
 /** 规则文件描述 */
@@ -856,7 +869,6 @@ export function formatGlobalContext(ctx: GlobalContext, platform?: string): stri
     const groups: { label: string; prefix: string; basePath: string }[] = [
       { label: '**📚 跨端综合文档**', prefix: 'synthesis/', basePath: '.speccore/GLOBAL/synthesis/' },
       { label: '**📱 各端分析文档**', prefix: 'platforms/', basePath: '.speccore/GLOBAL/platforms/' },
-      { label: '**🏗 工程级文档**', prefix: 'PROJECTS/', basePath: '.speccore/GLOBAL/PROJECTS/' },
       { label: '**📖 参考文档**', prefix: 'GLOBAL:', basePath: '.speccore/GLOBAL/' },
       { label: '**✏️ 写作模板**', prefix: 'PATTERNS:', basePath: '.speccore/PATTERNS/' },
       { label: '**📏 规则与检查清单**', prefix: 'RULES:', basePath: '.speccore/RULES/' },
@@ -1053,15 +1065,25 @@ function getInstruction(command: PromptCommand, context: { taskName?: string; ap
   switch (command) {
     case 'execute':
       return [
-        `请根据以下 Spec 规范，为 "${context.taskName || '当前任务'}" 生成完整的代码实现。`,
+        `请根据以下 Spec 规范，为 “${context.taskName || '当前任务'}” 生成完整的代码实现。`,
         '',
-        '要求：',
+        '## 后端实现要求',
         `1. 严格遵循上面的技术栈选型`,
         `2. 实现所有 ${context.apiCount} 个 API 接口`,
         `3. 创建所有 ${context.modelCount} 个数据模型的 DDL`,
         '4. 遵循 CONSTITUTION 中定义的命名规范和异常码体系',
         '5. 代码必须能直接编译通过',
         '6. 包含必要的 import 语句和注解',
+        '',
+        '## 前端实现要求',
+        '如果任务涉及前端各端（admin/H5/小程序/App），还需：',
+        '1. 按 UI_SPEC.md 中的字段→UI 映射实现每个页面',
+        '2. 按路由表创建页面组件和路由配置',
+        '3. 实现状态枚举的前端展示（与后端数据模型一致）',
+        '4. 实现表单校验规则（与后端校验规则一致）',
+        '5. 实现页面四态：加载中/正常/空态/错误态',
+        '6. 实现响应式适配（按 UI_SPEC.md 中的断点和布局策略）',
+        '7. 前端组件必须与后端 API 响应字段一一对应，不能硬编码',
         '',
         '## 🤖 自动模式指令',
         '',

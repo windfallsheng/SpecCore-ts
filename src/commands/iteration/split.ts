@@ -519,7 +519,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       const specDir2 = join(iterationDir, '020-specs');
       const specContents: { name: string; content: string }[] = [];
       // 读取全局层扁平文件（迭代级跨端综合）
-      for (const f of ['ANALYSIS.md', 'TECH.md', 'TEST.md', 'REVIEW.md', 'RISK.md', 'DEPS.md', 'MONITOR.md']) {
+      for (const f of ['ANALYSIS.md', 'TECH.md', 'TEST.md', 'REVIEW.md', 'RISK.md', 'DEPS.md', 'MONITOR.md', 'UI_SPEC.md']) {
         const fp = join(specDir2, f);
         if (await pathExists(fp)) {
           const content = await readFile(fp, 'utf-8');
@@ -924,65 +924,59 @@ async function createTaskFromSection(iterationDir: string, taskId: string, secti
     subtaskIdMap.set(p, generateSubtaskId(taskNum, p));
   }
 
-  // ── 1. 元信息目录 ──
-  await ensureDir(join(taskDir, '.meta'));
-  await writeFile(join(taskDir, '.meta', 'type'), taskType);
-  await writeFile(join(taskDir, '.meta', 'status'), 'todo');
-  await writeFile(join(taskDir, '.meta', 'owner'), owner);
-  await writeFile(join(taskDir, '.meta', 'created-at'), today);
 
-  // ── 1a. Git 配置模板（默认继承迭代级配置） ──
-  await writeFile(
-    join(taskDir, '.meta', 'git-config'),
-    `# 任务级 Git 配置
-# 以下配置覆盖迭代级 PROJECT_GRAPH.md，未配置项自动继承上一级。
-# 修改时去掉注释符 #，填入具体值即可。
 
-# 源分支: 继承迭代配置
-# 分支前缀: 继承迭代配置
-# 分支格式: 继承迭代配置
-# 自动拉取: 继承迭代配置
-# 远程名称: 继承迭代配置
-`
-  );
-
-  // ── 2. 任务目录指引 ──
+  // ── 1. 任务目录指引（功能模块分组） ──
+  const isResearch = taskType === 'research';
   await writeFile(
     join(taskDir, 'README.md'),
-    `# ${section.name}
+    isResearch
+      ? `# ${section.name}
 
-> 任务模块分组 — 按功能单元组织，各端并行开发
+> 技术调研任务 — 产出调研文档，不产出代码
 
 ## 目录结构
 
 \`\`\`
 ${taskId}/
-├── README.md              <-- 本文件
-├── .meta/                 <-- 任务元信息（type/status/owner/created-at）
-├── _shared/               <-- 共享规格（所有端共用）
-│   ├── CONTEXT.md         <-- 任务上下文（来源追溯 + 原始描述 + 关联任务）
-│   ├── REQ.md             <-- 需求描述（API + 数据模型 + 业务规则）
-│   ├── TECH.md            <-- 技术方案（架构/接口设计/核心逻辑）
-│   ├── SCHEMA.md          <-- 数据库设计（如有）
-│   ├── API_CONTRACT.yaml  <-- API 契约
-│   └── CHANGELOG.md       <-- 变更记录
-├── {端名}/                <-- 各端独立子任务（backend/admin/web/h5/...）
-│   ├── TASK.md            <-- 子任务追踪（含子任务表、负责人、状态）
-│   ├── src/               <-- 源码实现
-│   └── tests/             <-- 测试用例
-├── 99-artifacts/          <-- 执行产出
-│   ├── TEST.md             <-- 测试用例
-│   ├── REVIEW.md           <-- 评审清单
-│   ├── DEPLOY.md           <-- 部署清单
-│   └── ...
-└── .issues.md             <-- 问题追踪
+├── README.md              ← 本文件（调研任务说明）
+├── _shared/               ← 共享上下文（CONTEXT.md）
+├── 00-specs/              ← 核心规格（REQ.md/TECH.md）
+├── RESEARCH.md            ← 调研报告
+├── COMPARISON.md          ← 方案对比
+└── .issues.md             ← 问题追踪
 \`\`\`
 
-## 子任务命名规则
+## AI 执行时读取规则
 
-每个端的子任务 ID 格式: \`Task-{父任务名}-{端名}-{hash}\`
+运行 \`speccore execute -t ${taskId}\` 时:
+- 读取 \`00-specs/REQ.md\` — 调研目标
+- 读取 \`_shared/CONTEXT.md\` — 任务上下文
+- 产出写入 \`RESEARCH.md\` 和 \`COMPARISON.md\`
+`
+      : `# ${section.name}
 
-| 子任务 ID | 所属端 | 负责人 | 状态 |
+> 功能模块分组 — 聚合相关子任务，共享规格与契约
+
+## 目录结构
+
+\`\`\`
+${taskId}/
+├── README.md                  ← 本文件
+├── _shared/                   ← 共享契约（API_CONTRACT.yaml + CONTEXT.md）
+├── 00-specs/                  ← 模块级核心规格（REQ/TECH/SCHEMA/CHANGELOG）
+├── 10-backend/                ← 后端
+│   └── {服务名}/              ← 端（如 api）
+│       └── {子任务}/          ← 执行单元（.meta/TASK.md/src/tests + 产出）
+├── 20-frontend/               ← 前端
+│   └── {端名}/                ← 端（如 h5/admin）
+│       └── {子任务}/          ← 执行单元（.meta/TASK.md/src/tests + 前端设计 + 产出）
+└── .issues.md                 ← 问题追踪
+\`\`\`
+
+## 子任务列表
+
+| 子任务 ID | 所属端/服务 | 负责人 | 状态 |
 | :--- | :--- | :--- | :--- |
 ${taskPlatforms.map((p: string) => `| ${subtaskIdMap.get(p)} | ${p} | ${owner} | 🔲 待开发 |`).join('\n')}
 
@@ -991,42 +985,44 @@ ${taskPlatforms.map((p: string) => `| ${subtaskIdMap.get(p)} | ${p} | ${owner} |
 运行 \`speccore execute -t ${taskId} --platform {端}\` 时:
 
 ### 必读（自动嵌入）
+- \`00-specs/REQ.md\` — 模块需求描述
+- \`00-specs/TECH.md\` — 模块技术方案
 - \`_shared/CONTEXT.md\` — 任务上下文（来源 + 关联）
-- \`_shared/REQ.md\` — 共享需求
-- \`_shared/TECH.md\` — 共享技术方案
-- \`{端}/TASK.md\` — 该端子任务详情
+- \`_shared/API_CONTRACT.yaml\` — API 契约
+- \`10-backend/{端}/{子任务}/TASK.md\` — 子任务详情
+- \`.meta/type\` + \`.meta/status\` — 子任务元信息
 
 ### 参考（按需读取）
-- \`020-specs/\` 下的迭代全局文档（架构、技术方案等）
+- \`020-specs/\` 下的迭代全局文档
 - \`.speccore/GLOBAL/\` 下的全局知识库
 
 ### 不会被读取
-- \`{端}/src/\` 和 \`{端}/tests/\` — 这是 AI **输出**代码的地方
-- \`99-artifacts/\` — 执行完成后自动更新
+- \`{子任务}/src/\` 和 \`{子任务}/tests/\` — AI **输出**代码的地方
+- \`{子任务}/TEST.md\` 等执行产出 — 执行完成后自动更新
 `
   );
 
-  // ── 3. 共享契约 ──
+  // ── 3. 共享契约 + 核心规格目录 ──
   await ensureDir(join(taskDir, '_shared'));
+  await ensureDir(join(taskDir, '00-specs'));
   const contractYaml = generateApiContract(section);
   if (contractYaml) {
     await writeFile(join(taskDir, '_shared', 'API_CONTRACT.yaml'), contractYaml);
   }
 
-  // ── 3. 共享规格 _shared/（所有端共用） ──
-  await ensureDir(join(taskDir, '_shared'));
+  // ── 4. 核心规格写入 00-specs/（REQ/TECH/SCHEMA/CHANGELOG） ──
 
   const acItems = generateAcceptanceCriteria(section);
   const aiReqContent = (section as any)._reqContent;
   // REQ.md: 优先用 AI 生成的实际内容，回退到模板
   if (aiReqContent && aiReqContent.length > 50) {
     await writeFile(
-      join(taskDir, '_shared', 'REQ.md'),
+      join(taskDir, '00-specs', 'REQ.md'),
       `# ${section.name}\n\n${aiReqContent}\n\n## 验收标准\n\n${acItems}\n`
     );
   } else {
     await writeFile(
-      join(taskDir, '_shared', 'REQ.md'),
+      join(taskDir, '00-specs', 'REQ.md'),
       `# ${section.name}\n\n## 需求描述\n\n${section.content}\n\n## 验收标准\n\n${acItems}\n`
     );
   }
@@ -1039,17 +1035,17 @@ ${taskPlatforms.map((p: string) => `| ${subtaskIdMap.get(p)} | ${p} | ${owner} |
   // TECH.md: 优先 AI 生成 → 回退 analyze 提取 → 回退模板
   if (aiTechContent && aiTechContent.length > 50) {
     await writeFile(
-      join(taskDir, '_shared', 'TECH.md'),
+      join(taskDir, '00-specs', 'TECH.md'),
       `# ${section.name} - 技术方案\n\n${aiTechContent}\n`
     );
   } else if (specTechContent && specTechContent.length > 30) {
     await writeFile(
-      join(taskDir, '_shared', 'TECH.md'),
+      join(taskDir, '00-specs', 'TECH.md'),
       `# ${section.name} - 技术方案\n\n> 来源: analyze → TECH.md（自动提取）\n\n${specTechContent}\n`
     );
   } else {
     await writeFile(
-      join(taskDir, '_shared', 'TECH.md'),
+      join(taskDir, '00-specs', 'TECH.md'),
       `# ${section.name} - 技术方案
 
 > ⚠️ 本文档由 split 自动生成框架，AI 执行时会自动填充。
@@ -1076,17 +1072,28 @@ ${apiDesc}
 - 单元测试覆盖核心 Service 逻辑
 - 接口测试覆盖正常/异常/边界
 - 自动化测试通过后方可提 PR
+
+## 6. 前端 UI 设计
+<!-- AI-FILL: 页面结构、组件清单、状态管理、路由设计 -->
+### 6.1 页面/路由
+<!-- AI-FILL: 路由表 -->
+
+### 6.2 组件清单
+<!-- AI-FILL: 组件列表及职责 -->
+
+### 6.3 状态管理
+<!-- AI-FILL: 状态字段及枚举值，需与后端保持一致 -->
 `
     );
   }
 
   if (section.content.match(/数据库|数据表|表结构|DDL|ALTER|建表|索引/)) {
     const schemaMaterial = extractRelevantSection(specContents['TECH.md'] || '', section.name, 'DDL 建表 表结构 索引 CREATE TABLE');
-    await writeFile(join(taskDir, '_shared', 'SCHEMA.md'), generateSchemaTemplate(section, schemaMaterial));
+    await writeFile(join(taskDir, '00-specs', 'SCHEMA.md'), generateSchemaTemplate(section, schemaMaterial));
   }
 
   await writeFile(
-    join(taskDir, '_shared', 'CHANGELOG.md'),
+    join(taskDir, '00-specs', 'CHANGELOG.md'),
     `# ${section.name} - 变更记录
 
 | 时间 | 版本 | 变更内容 | 变更人 |
@@ -1097,115 +1104,260 @@ ${apiDesc}
 
   // API_CONTRACT.yaml 统一放 _shared/
   if (apiLines.length > 0) {
+    // 从 section 内容提取每个 API 的请求/响应字段
+    const sectionContent = section.content || '';
+    const apiFieldMap: Record<string, string[]> = {};
+    for (const l of apiLines) {
+      const parts = l.split('|').map(p => p.trim()).filter(Boolean);
+      const path = parts[1] || '/api/unknown';
+      const apiIdx = sectionContent.indexOf(path);
+      if (apiIdx >= 0) {
+        const after = sectionContent.slice(apiIdx, apiIdx + 800);
+        const fields: string[] = [];
+        const fieldRegex = /[`']([a-zA-Z]\w{1,25})[`']\s*[（(]?[：:]?\s*(?:类型[：:])?\s*([\u4e00-\u9fa5A-Za-z]+)/g;
+        let fm: RegExpExecArray | null;
+        while ((fm = fieldRegex.exec(after)) !== null) {
+          if (!['api', 'data', 'code', 'message', 'msg', 'status', 'ok', 'err'].includes(fm[1].toLowerCase())) {
+            fields.push(`${fm[1]}: ${fm[2]}`);
+          }
+        }
+        if (fields.length > 0) apiFieldMap[path] = fields.slice(0, 10);
+      }
+    }
     const contracts = apiLines.map(l => {
       const parts = l.split('|').map(p => p.trim()).filter(Boolean);
       const method = (parts[0] || 'GET').toUpperCase();
       const path = parts[1] || '/api/unknown';
       const desc = parts[2] || path;
-      return `  ${path}:\n    ${method}:\n      summary: "${desc}"\n      description: "<!-- AI-FILL -->"`;
+      let yaml = `  ${path}:\n    ${method}:\n      summary: "${desc}"`;
+      if (apiFieldMap[path]) {
+        yaml += `\n      fields:`;
+        for (const f of apiFieldMap[path]) {
+          yaml += `\n        - "${f}"`;
+        }
+      }
+      yaml += `\n      responses:\n        "200":\n          description: Success`;
+      return yaml;
     }).join('\n');
     await writeFile(join(taskDir, '_shared', 'API_CONTRACT.yaml'),
       `# ${section.name} - API Contract\n# Auto-generated from split\n\npaths:\n${contracts}\n`
     );
   }
 
-  // ── 4. 各端独立子任务目录 ──
-  const sharedReqContent = await readFile(join(taskDir, '_shared', 'REQ.md'), 'utf-8');
-  const sharedTechContent = await readFile(join(taskDir, '_shared', 'TECH.md'), 'utf-8');
+  // ── 4. 子任务目录（按任务类型差异化） ──
 
-  for (const platform of taskPlatforms) {
-    const subtaskId = subtaskIdMap.get(platform)!;
-    const platformDir = join(taskDir, platform);
-    await ensureDir(join(platformDir, 'src'));
-    await ensureDir(join(platformDir, 'tests'));
+  // 预加载执行产出模板材料（每个子任务都需要）
+  const testMaterial = extractRelevantSection(specContents['TEST.md'] || '', section.name);
+  const riskMaterial = extractRelevantSection(specContents['RISK.md'] || '', section.name);
+  const depsMaterial = extractRelevantSection(specContents['DEPS.md'] || '', section.name);
+  const monitorMaterial = extractRelevantSection(specContents['MONITOR.md'] || '', section.name);
 
-    // 各端 TASK.md — 含子任务表、负责人、状态
-    const isBackend = platform === 'backend' || platform.startsWith('后台');
-    const platformLabel = isBackend ? '后端' : platform;
-    const subtaskHours = (section as any)._hoursByPlatform?.[platform] || Math.ceil(complexity.estimatedHours / taskPlatforms.length);
-
+  // ── 4a. research 类型：不创建平台/子任务目录，直接产出调研文档 ──
+  if (isResearch) {
     await writeFile(
-      join(platformDir, 'TASK.md'),
-      `# ${section.name} — ${platformLabel}
+      join(taskDir, 'RESEARCH.md'),
+      `# ${section.name} — 调研报告
+
+## 调研目标
+${section.content}
+
+## 调研结果
+<!-- AI-FILL: 调研发现、技术选型分析 -->
+
+## 推荐方案
+<!-- AI-FILL: 推荐方案及理由 -->
+
+## 风险与建议
+<!-- AI-FILL -->
+`
+    );
+    await writeFile(
+      join(taskDir, 'COMPARISON.md'),
+      `# ${section.name} — 方案对比
+
+| 维度 | 方案 A | 方案 B | 方案 C |
+|:---|:---|:---|:---|
+| 技术栈 | | | |
+| 开发成本 | | | |
+| 性能 | | | |
+| 可维护性 | | | |
+| 社区生态 | | | |
+
+## 综合评价
+<!-- AI-FILL -->
+`
+    );
+  } else {
+    // ── 4b. feature/bugfix/refactor：三级嵌套（前后端大类 → 端 → 子任务） ──
+
+    // 分类平台：后端 vs 前端
+    const isBackendPlatform = (p: string) => p === 'backend' || p.startsWith('后台');
+    const getServiceName = (p: string) => isBackendPlatform(p) && p === 'backend' ? 'api' : p;
+
+    const backendPlatforms = taskPlatforms.filter(isBackendPlatform);
+    const frontendPlatforms = taskPlatforms.filter((p: string) => !isBackendPlatform(p));
+
+    // 创建子任务的通用函数
+    const createSubtask = async (
+      subtaskDir: string, subtaskId: string, platformName: string,
+      platformLabel: string, isBk: boolean, hours: number
+    ) => {
+      // .meta/
+      await ensureDir(join(subtaskDir, '.meta'));
+      await writeFile(join(subtaskDir, '.meta', 'type'), taskType);
+      await writeFile(join(subtaskDir, '.meta', 'status'), 'todo');
+      await writeFile(join(subtaskDir, '.meta', 'owner'), owner);
+      await writeFile(join(subtaskDir, '.meta', 'created-at'), today);
+
+      // git-config
+      await writeFile(
+        join(subtaskDir, '.meta', 'git-config'),
+        `# 子任务级 Git 配置（${platformLabel}）
+# 以下配置覆盖迭代级 PROJECT_GRAPH.md，未配置项自动继承上一级。
+# 修改时去掉注释符 #，填入具体值即可。
+
+# 源分支: 继承迭代配置
+# 分支前缀: 继承迭代配置
+# 分支格式: 继承迭代配置
+# 自动拉取: 继承迭代配置
+# 远程名称: 继承迭代配置
+`
+      );
+
+      // src/ + tests/
+      await ensureDir(join(subtaskDir, 'src'));
+      await ensureDir(join(subtaskDir, 'tests'));
+
+      // TASK.md
+      await writeFile(
+        join(subtaskDir, 'TASK.md'),
+        `# ${section.name} — ${platformLabel}
 
 ## 子任务信息
 - **子任务 ID**: \`${subtaskId}\`
 - **所属模块**: \`${taskId}\`
-- **端**: ${platform}
+- **端**: ${platformName}
 - **负责人**: ${owner}
-- **状态**: 🔲 待开发
-- **预计耗时**: ${subtaskHours}h
-
-## 子任务列表
-
-| 子任务 ID | 名称 | 负责人 | 状态 | 预估工时 | 依赖 |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| \`${subtaskId}-01\` | ${section.name} - ${platformLabel}实现 | ${owner} | 🔲 待开发 | ${subtaskHours}h | 无 |
+- **状态**: 待开发
+- **预计耗时**: ${hours}h
 
 ## 共享规格引用
-- REQ.md → ../_shared/REQ.md
-- TECH.md → ../_shared/TECH.md
+- REQ.md → ../../../00-specs/REQ.md
+- TECH.md → ../../../00-specs/TECH.md
 
 ## 产出物
 | 产出物 | 状态 | 路径 |
 | :--- | :--- | :--- |
-| TASK.md | ✅ | ./${platform}/TASK.md |
-| src/ | ⏳ | ./${platform}/src/ |
-| tests/ | ⏳ | ./${platform}/tests/ |
+| TASK.md | ✅ | ./TASK.md |
+| src/ | ⏳ | ./src/ |
+| tests/ | ⏳ | ./tests/ |
+| TEST.md | ⏳ | ./TEST.md |
+| RISK.md | ⏳ | ./RISK.md |
 
 ## 变更履历
 | 时间 | 变更内容 | 变更人 |
 | :--- | :--- | :--- |
 | ${today} | 创建子任务 | CLI |
 `
-    );
+      );
 
-    // 非 backend 端额外生成前端设计文档（从 analyze TECH.md 提取）
-    if (!isBackend) {
-      const feContent = extractTaskTechContent(specContents, section, platform);
-      await writeFile(join(platformDir, 'COMPONENT_TREE.md'), generateComponentTree(section, platform, feContent));
-      await writeFile(join(platformDir, 'ROUTES.md'), generateRoutesDoc(section, platform, feContent));
-      await writeFile(join(platformDir, 'STATE.md'), generateStateDoc(section, platform, feContent));
-      await writeFile(join(platformDir, 'STYLE_GUIDE.md'), generateStyleGuide(section, platform, feContent));
+      // 前端设计文档（仅非 backend 端）
+      if (!isBk) {
+        const feContent = extractTaskTechContent(specContents, section, platformName);
+        await writeFile(join(subtaskDir, 'COMPONENT_TREE.md'), generateComponentTree(section, platformName, feContent));
+        await writeFile(join(subtaskDir, 'ROUTES.md'), generateRoutesDoc(section, platformName, feContent));
+        await writeFile(join(subtaskDir, 'STATE.md'), generateStateDoc(section, platformName, feContent));
+        await writeFile(join(subtaskDir, 'STYLE_GUIDE.md'), generateStyleGuide(section, platformName, feContent));
+      }
+
+      // 执行产出文档
+      await writeFile(join(subtaskDir, 'TEST.md'), generateTestOutline(section, testMaterial));
+      await writeFile(join(subtaskDir, 'REVIEW.md'), generateReviewChecklist(section));
+      await writeFile(join(subtaskDir, 'DEPLOY.md'), generateDeployChecklist(section));
+      await writeFile(join(subtaskDir, 'ERROR_CODES.md'), generateErrorCodes(section));
+      await writeFile(join(subtaskDir, 'RISK.md'), generateRiskTemplate(section, riskMaterial));
+      await writeFile(join(subtaskDir, 'DEPS.md'), generateDepsTemplate(section, depsMaterial));
+      await writeFile(join(subtaskDir, 'MONITOR.md'), generateMonitorTemplate(section, monitorMaterial));
+
+      const adr = generateAdr(section);
+      if (adr) {
+        await writeFile(join(subtaskDir, 'ADR.md'), adr);
+      }
+    };
+
+    // ── 后端：10-backend/{服务名}/{子任务}/ ──
+    if (backendPlatforms.length > 0) {
+      const backendCategoryDir = join(taskDir, '10-backend');
+      for (const platform of backendPlatforms) {
+        const serviceName = getServiceName(platform);
+        const platformDir = join(backendCategoryDir, serviceName);
+        const subtaskId = subtaskIdMap.get(platform)!;
+        const subtaskName = slugify(section.name) || 'impl';
+        const subtaskDir = join(platformDir, subtaskName);
+        const subtaskHours = (section as any)._hoursByPlatform?.[platform] || Math.ceil(complexity.estimatedHours / taskPlatforms.length);
+        await createSubtask(subtaskDir, subtaskId, platform, '后端', true, subtaskHours);
+      }
+    }
+
+    // ── 前端：20-frontend/{端名}/{子任务}/ ──
+    if (frontendPlatforms.length > 0) {
+      const frontendCategoryDir = join(taskDir, '20-frontend');
+      for (const platform of frontendPlatforms) {
+        const platformDir = join(frontendCategoryDir, platform);
+        const subtaskId = subtaskIdMap.get(platform)!;
+        const subtaskName = slugify(section.name) || 'impl';
+        const subtaskDir = join(platformDir, subtaskName);
+        const subtaskHours = (section as any)._hoursByPlatform?.[platform] || Math.ceil(complexity.estimatedHours / taskPlatforms.length);
+        await createSubtask(subtaskDir, subtaskId, platform, platform, false, subtaskHours);
+      }
     }
   }
 
-  // 确保至少有 backend 目录（AI 未输出 backend 时自动补充）
-  if (!taskPlatforms.some((p: string) => p === 'backend' || p.startsWith('后台'))) {
-    await ensureDir(join(taskDir, 'backend', 'src'));
-    await ensureDir(join(taskDir, 'backend', 'tests'));
+  // 确保至少有 backend 子任务（AI 未输出 backend 时自动补充，仅非 research）
+  if (!isResearch && !taskPlatforms.some((p: string) => p === 'backend' || p.startsWith('后台'))) {
+    const autoSubtaskDir = join(taskDir, '10-backend', 'api', 'impl');
+    await ensureDir(join(autoSubtaskDir, '.meta'));
+    await ensureDir(join(autoSubtaskDir, 'src'));
+    await ensureDir(join(autoSubtaskDir, 'tests'));
+    await writeFile(join(autoSubtaskDir, '.meta', 'type'), taskType);
+    await writeFile(join(autoSubtaskDir, '.meta', 'status'), 'todo');
+    await writeFile(join(autoSubtaskDir, '.meta', 'owner'), owner);
+    await writeFile(join(autoSubtaskDir, '.meta', 'created-at'), today);
+    await writeFile(
+      join(autoSubtaskDir, '.meta', 'git-config'),
+      `# 子任务级 Git 配置（后端）
+# 以下配置覆盖迭代级 PROJECT_GRAPH.md，未配置项自动继承上一级。
+`
+    );
+    await writeFile(
+      join(autoSubtaskDir, 'TASK.md'),
+      `# ${section.name} — 后端（自动补充）
+
+## 子任务信息
+- **子任务 ID**: \`${taskId}-backend-auto\`
+- **所属模块**: \`${taskId}\`
+- **端**: backend
+- **负责人**: ${owner}
+- **状态**: 待开发
+
+## 共享规格引用
+- REQ.md → ../../../00-specs/REQ.md
+- TECH.md → ../../../00-specs/TECH.md
+`
+    );
+    // 自动补充的后端也需要执行产出文档
+    await writeFile(join(autoSubtaskDir, 'TEST.md'), generateTestOutline(section, testMaterial));
+    await writeFile(join(autoSubtaskDir, 'REVIEW.md'), generateReviewChecklist(section));
+    await writeFile(join(autoSubtaskDir, 'DEPLOY.md'), generateDeployChecklist(section));
+    await writeFile(join(autoSubtaskDir, 'ERROR_CODES.md'), generateErrorCodes(section));
+    await writeFile(join(autoSubtaskDir, 'RISK.md'), generateRiskTemplate(section, riskMaterial));
+    await writeFile(join(autoSubtaskDir, 'DEPS.md'), generateDepsTemplate(section, depsMaterial));
+    await writeFile(join(autoSubtaskDir, 'MONITOR.md'), generateMonitorTemplate(section, monitorMaterial));
     taskPlatforms.push('backend');
     subtaskIdMap.set('backend', `${taskId}-backend-auto`);
   }
 
-  // ── 生成端注册表 _shared/PLATFORMS.md ──
-  const platformEntries = taskPlatforms.map((p: string) => ({
-    name: p,
-    subtaskId: subtaskIdMap.get(p)!,
-    owner,
-  }));
-  await generatePlatformsRegistry(taskDir, taskId, platformEntries);
-
-  // ── 5. 执行产出 99-artifacts/ ──
-  await ensureDir(join(taskDir, '99-artifacts'));
-  const testMaterial = extractRelevantSection(specContents['TEST.md'] || '', section.name);
-  const riskMaterial = extractRelevantSection(specContents['RISK.md'] || '', section.name);
-  const depsMaterial = extractRelevantSection(specContents['DEPS.md'] || '', section.name);
-  const monitorMaterial = extractRelevantSection(specContents['MONITOR.md'] || '', section.name);
-  await writeFile(join(taskDir, '99-artifacts', 'TEST.md'), generateTestOutline(section, testMaterial));
-  await writeFile(join(taskDir, '99-artifacts', 'REVIEW.md'), generateReviewChecklist(section));
-  await writeFile(join(taskDir, '99-artifacts', 'DEPLOY.md'), generateDeployChecklist(section));
-  await writeFile(join(taskDir, '99-artifacts', 'ERROR_CODES.md'), generateErrorCodes(section));
-  await writeFile(join(taskDir, '99-artifacts', 'RISK.md'), generateRiskTemplate(section, riskMaterial));
-  await writeFile(join(taskDir, '99-artifacts', 'DEPS.md'), generateDepsTemplate(section, depsMaterial));
-  await writeFile(join(taskDir, '99-artifacts', 'MONITOR.md'), generateMonitorTemplate(section, monitorMaterial));
-
-  const adr = generateAdr(section);
-  if (adr) {
-    await writeFile(join(taskDir, '99-artifacts', 'ADR.md'), adr);
-  }
-
-  // ── 6. 任务上下文 CONTEXT.md ──
+  // ─ 5. 任务上下文 CONTEXT.md ─
   const sourceFile = (section as any)._sourceFile || '';
   const topic = (section as any)._topic || slugify(section.name);
   // 推导 010-requirements 源路径
@@ -1233,7 +1385,7 @@ ${apiDesc}
     : [];
 
   // 提取原始描述摘要（从 REQ.md 内容截取前 500 字）
-  const reqMdPath = join(taskDir, '_shared', 'REQ.md');
+  const reqMdPath = join(taskDir, '00-specs', 'REQ.md');
   let originalDesc = '';
   if (await pathExists(reqMdPath)) {
     const reqContent = await readFile(reqMdPath, 'utf-8');
@@ -1243,7 +1395,7 @@ ${apiDesc}
   }
 
   await writeFile(
-    join(taskDir, '_shared', 'CONTEXT.md'),
+    join(taskDir, '00-specs', 'CONTEXT.md'),
     `# 任务上下文
 
 ## 来源追溯
@@ -1539,8 +1691,10 @@ async function generateImpactGraph(
     const taskType = (s as any)._taskType || 'feature';
     const taskDir = join(iterationDir, '030-tasks', taskType, taskId);
     if (await pathExists(taskDir)) {
-      // 生成风险报告并嵌入 _shared/TECH.md（去重：只写一次）
-      const taskMdPath = join(taskDir, '_shared', 'TECH.md');
+      // 生成风险报告并嵌入 00-specs/TECH.md（去重：只写一次）
+      const taskMdPath = (await pathExists(join(taskDir, '00-specs', 'TECH.md')))
+        ? join(taskDir, '00-specs', 'TECH.md')
+        : join(taskDir, '_shared', 'TECH.md');
       const riskReport = generateRiskReport(risk);
       await writeFile(join(taskDir, '.risk'), riskReport);
       if (await pathExists(taskMdPath)) {
@@ -1696,7 +1850,9 @@ async function injectTechFromAnalysis(iterationDir: string, taskDir: string, sec
 
   if (!techSection && !dbSection && !depSection) return;
 
-  const techPath = join(taskDir, '_shared', 'TECH.md');
+  const techPath = (await pathExists(join(taskDir, '00-specs', 'TECH.md')))
+    ? join(taskDir, '00-specs', 'TECH.md')
+    : join(taskDir, '_shared', 'TECH.md');
   let tech = await readFile(techPath, 'utf-8');
 
   const note = '\n\n> 以下内容自动从 ANALYSIS.md 注入\n\n';
@@ -1726,6 +1882,25 @@ function generateApiContract(section: Section): string {
   }
   
   if (apis.length === 0) return '';
+
+  // 从 section 内容提取每个 API 的请求/响应字段
+  const fullContent = section.content || '';
+  const apiFieldMap: Record<string, string[]> = {};
+  for (const api of apis) {
+    const apiIdx = fullContent.indexOf(api.path);
+    if (apiIdx >= 0) {
+      const after = fullContent.slice(apiIdx, apiIdx + 800);
+      const fields: string[] = [];
+      const fieldRegex = /[`']([a-zA-Z]\w{1,25})[`']\s*[（(]?[：:]?\s*(?:类型[：:])?\s*([\u4e00-\u9fa5A-Za-z]+)/g;
+      let fm: RegExpExecArray | null;
+      while ((fm = fieldRegex.exec(after)) !== null) {
+        if (!['api', 'data', 'code', 'message', 'msg', 'status', 'ok', 'err'].includes(fm[1].toLowerCase())) {
+          fields.push(`${fm[1]}: ${fm[2]}`);
+        }
+      }
+      if (fields.length > 0) apiFieldMap[api.path] = fields.slice(0, 10);
+    }
+  }
   
   let yaml = `# ${section.name} — API Contract
 # Auto-generated from REQ.md
@@ -1744,7 +1919,17 @@ paths:
     ${api.method.toLowerCase()}:
       tags: [${tag}]
       summary: "${api.desc}"
-      responses:
+`;
+    // 添加字段定义
+    if (apiFieldMap[api.path]) {
+      yaml += `      fields:
+`;
+      for (const f of apiFieldMap[api.path]) {
+        yaml += `        - "${f}"
+`;
+      }
+    }
+    yaml += `      responses:
         "200":
           description: Success
 `;
@@ -1876,7 +2061,7 @@ async function loadSpecContents(iterationDir: string): Promise<Record<string, st
   const specs: Record<string, string> = {};
   const specDir = join(iterationDir, '020-specs');
   if (!(await pathExists(specDir))) return specs;
-  for (const f of ['TECH.md', 'TEST.md', 'RISK.md', 'DEPS.md', 'MONITOR.md', 'ANALYSIS.md', 'REQUIREMENT.md']) {
+  for (const f of ['TECH.md', 'TEST.md', 'RISK.md', 'DEPS.md', 'MONITOR.md', 'ANALYSIS.md', 'REQUIREMENT.md', 'UI_SPEC.md']) {
     const fp = join(specDir, f);
     if (await pathExists(fp)) {
       const content = await readFile(fp, 'utf-8');

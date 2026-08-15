@@ -738,6 +738,7 @@ program
   .option('--feature <name>', '局部分析：只分析指定功能模块（010-requirements/features/{name}/）')
   .option('--doc <path>', '局部分析：类型文档（如 bugs/login-timeout, refactors/db-pool）')
   .option('--apply <content>', '接收 AI 分析结果写入 ANALYSIS.md（配合 --prompt）')
+  .option('--audit-fix', '读取 QUALITY_AUDIT.md 并生成修复指令（配合 --prompt，最多 2 轮）')
   .option('--sync', '任务分析后局部回写 020-specs/（只更新受影响的功能模块，不全覆盖）')
   .option('--full', '全自动三阶段合成：逐端分析 → 跨端综合 → 功能单元需求合成（原 synthesize）')
   .option('--phase <n>', '单阶段合成执行: 1=逐端分析, 2=跨端综合, 3=功能单元合成')

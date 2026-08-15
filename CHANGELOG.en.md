@@ -2,6 +2,245 @@
 
 ---
 
+## v6.30.0 (2026-08-15) — Full-Chain Path Consistency Fix + CONTEXT.md Migration
+
+### Core Changes
+
+- **spec-merger.ts**: 5 `_shared/` primary paths unified to `readTaskSpecByFilename` (`00-specs/` first, `_shared/` fallback)
+- **context-output.ts**: `backend/` legacy path changed to `00-specs/` first + `backend/` fallback
+- **status-panel.ts**: Platform detection adapted for `10-backend/` + `20-frontend/` new directory names, legacy fallback retained
+- **split.ts**: CONTEXT.md write path migrated from `_shared/` to `00-specs/`
+- **rag-engine.ts**: RAG index candidates added `00-specs/CONTEXT.md`, `_shared/CONTEXT.md` demoted to fallback
+
+## v6.29.0 (2026-08-15) — File-as-Memory + [SPECCORE_CONTINUE] Auto-Continuation Mechanism
+
+### Core Changes
+
+- **execution-state.ts**: New TaskSummary interface + addTaskSummary/generateContextSummary/writeContextSummaryFile
+  - Write task summary after each task completes (name/type/outputs/dependencies)
+  - Generate compact context summary (~1K tokens) at batch end, written to `.speccore/local/execution-summary.md`
+  - New sessions only need to read the summary file to quickly restore global context
+- **execute.ts**: processBatch records summary after each task; writes summary file at batch end
+  - Prompt mode outputs `[SPECCORE_CONTINUE: <path>]` marker at batch end (replaces `[SPECCORE_BATCH_COMPLETE]`)
+- **AGENTS.md + init.ts**: Marker table updated to `[SPECCORE_CONTINUE: <path>]`
+- **spec-execute SKILL.md**: Batch execution step 3 updated to auto-continuation flow
+- clearExecutionState also clears summary file
+
+## v6.28.0 (2026-08-15) — task/new + next-steps + spec-merger Path Adaptation for Three-Level Nesting
+
+### Core Changes
+
+- **task/new.ts**: Manual task creation fully adapted to three-level nesting
+  - `_shared/` → `00-specs/` (core spec write paths)
+  - Removed `99-artifacts/` creation
+  - `backend/` → `10-backend/api/impl/` (with .meta/src/tests/TASK.md)
+  - `frontend/` → `20-frontend/web/impl/` (with .meta/src/tests/TASK.md)
+  - research type skips platform subtask directories
+- **next-steps.ts**: lifecycle suggestions changed from `99-artifacts/TEST.md` to "subtask directory/TEST.md"
+- **spec-merger.ts**: readTaskSpecByFilename priority corrected to `00-specs/` > `_shared/` > `99-artifacts/`
+
+## v6.27.1 (2026-08-15) — Remove Numeric Prefix from Subtask Directory Names
+
+### Core Changes
+
+- **split.ts**: Subtask directory name changed from `01-{slug}` to `{slug}` (e.g., `login-api/` instead of `01-login-api/`)
+- **prompt-builder.ts**: Loading subtask files now dynamically scans the first subtask under the service directory, no longer hardcoded `01-impl`
+
+## v6.27.0 (2026-08-15) — Three-Level Nesting Associated Fix: Full-Chain Path Adaptation
+
+### Core Changes
+
+- **verify-engine.ts**: Quality gate (TEST.md/REVIEW.md/DEPLOY.md) scans subtask directories; report written to task root
+- **execute.ts**: Verify flow, compliance checks, quality gates all scan subtask directories; `_shared/` path priority adjusted to `00-specs/` first
+- **analyze.ts**: Document augmentation (TEST.md/REVIEW.md/RISK.md/DEPS.md/MONITOR.md) scans subtask directories
+- **retro.ts**: VERIFY_REPORT.md lookup path adapted (task root first, 99-artifacts/ fallback)
+- **knowledge-graph.ts**: Knowledge graph scanning adapted for three-level nesting (scanTasks + scanTaskSpecs)
+- **init.ts + create.ts**: Directory tree templates updated to three-level nesting structure
+- All changes retain legacy structure fallback for backward compatibility
+
+## v6.26.0 (2026-08-15) — Three-Level Task Nesting + Task Type Differentiation
+
+### Core Changes
+
+- **Three-level task directory nesting**: Changed from flat `10-{platform}/` to `10-backend/{service}/{subtask}/`
+  - Level 1: Backend/Frontend category (`10-backend/` / `20-frontend/`)
+  - Level 2: Platform/Service (`api/` / `h5/` / `admin/`)
+  - Level 3: Subtask (`01-xxx/` — real execution unit)
+- **Task type differentiation**:
+  - **feature/bugfix/refactor**: Full three-level nesting, backend/frontend split → platforms → subtasks
+  - **research**: No platform nesting, directly produces research docs (RESEARCH.md + COMPARISON.md)
+- **split.ts refactor**: Platform classification into backend/frontend, three-level directory creation; research type skips platform directories
+- **execute.ts adaptation**: Scans subtask dirs under `10-backend/*/` and `20-frontend/*/`, with legacy structure fallback
+- **rag-engine.ts fix**: `indexTaskDocuments` candidate paths updated to new structure, dynamic subtask document scanning
+- **prompt-builder.ts fix**: `loadExtraSpecs` paths updated; `loadAllTaskContext` exclusion rules correctly match category directories
+- **AGENTS.md update**: Directory structure docs reflect three-level nesting + research type
+
+## v6.25.0 (2026-08-15) — Subtask Refactor: Subtasks Become Real Work Units
+
+### Core Changes
+
+- **Fundamental task directory restructuring**: Parent Task changed from "execution unit" to "feature module grouping", subtasks become the real work units
+  - **Parent Task (Task-NNN-slug)**: Only keeps shared content (`00-specs/` + `_shared/` + `.issues.md`)
+  - **Subtasks (10-{service}/, 20-{platform}/)**: Each subtask has independent `.meta/` (type/status/owner), `git-config`, `TASK.md`, `src/`, `tests/` + execution artifacts (TEST/RISK/DEPS/MONITOR/REVIEW/DEPLOY/ERROR_CODES/ADR)
+  - **Removed `99-artifacts/`**: Execution artifact docs moved into each subtask directory
+  - **Removed parent-level `.meta/`**: Metadata moved into each subtask directory
+- **split.ts refactored**: Platform loop changed to subtask loop, each subtask generates complete document set
+- **execute.ts adapted**: Scans `10-*/`/`20-*/` directories instead of hardcoded `10-backend/`/`20-frontend/`
+- **AGENTS.md updated**: Directory structure docs reflect new design
+
+## v6.24.0 (2026-08-15) — Split Task Directory Structure Standardization
+
+### Core Changes
+
+- **Split command directory structure aligned with AGENTS.md design**: Fixed Task directories generated by split not matching the design spec
+  - Added `00-specs/` directory: REQ.md, TECH.md, SCHEMA.md, CHANGELOG.md moved from `_shared/` into `00-specs/`
+  - `_shared/` slimmed down to shared contracts: only `API_CONTRACT.yaml` + `CONTEXT.md`
+  - Platform directories prefixed: `backend/` → `10-backend/`, `{platform}/` → `20-frontend/{platform}/`
+  - README template updated to reflect new directory structure
+- **Backward compatible**: execute.ts already has `_shared/` → `00-specs/` fallback logic, old tasks unaffected
+
+## v6.23.0 (2026-08-15) — GLOBAL Directory Cleanup + PROJECTS/BASELINES Removed
+
+### Core Changes
+
+- **GLOBAL/ directory simplified**: Removed 7 empty template files + 3 empty directories, kept only 3-layer core structure
+  - Removed: `OVERVIEW.md`, `ARCHITECTURE.md`, `TECH_STACK.md`, `CODE_INDEX.md`, `PROTOTYPE_INDEX.md`, `CHANGELOG.md` (all empty placeholders, never populated)
+  - Removed: `PROJECTS/` entire directory (including `_template/` and 3 empty subdirectories)
+  - Removed: `REQUIREMENTS/`, `BASELINES/` empty directories
+  - Kept: `INDEX.md` (navigation entry) + `GLOSSARY.md` (glossary) + `synthesis/` + `platforms/`
+- **INDEX.md rewritten**: Simplified from complex requirement index table to clean navigation entry pointing to synthesis/ and platforms/
+- **analyze prompt unified**: `PROJECTS/{project}/` → `platforms/{platform}/`, aligned with synthesize output paths
+- **prompt-builder cleanup**: Removed root-level empty file reading, FILE_DESC only keeps files actually generated by synthesis/
+- **Fixed duplicate entries**: ERROR_CODES/DEPENDENCY_GRAPH/CODE_INDEX each appeared twice in analyze prompt, removed duplicates
+
+### Simplified GLOBAL Structure
+
+```
+.speccore/GLOBAL/
+├── INDEX.md                ← Global knowledge base navigation entry
+├── GLOSSARY.md             ← Cross-project unified glossary
+├── synthesis/              ← Cross-platform synthesis (synthesize Phase 2)
+│   ├── ARCHITECTURE.md
+│   ├── TECH_FULL.md
+│   └── CROSS_PLATFORM.md
+└── platforms/              ← Per-platform analysis (synthesize Phase 1 / analyze)
+    └── {platform}/
+```
+
+---
+
+## v6.22.0 (2026-08-15) — Requirements Directory Simplification + Prototypes Promoted to Top-Level
+
+### Core Changes
+
+- **010-requirements/ directory simplified**:
+  - Removed `assets/screenshots/`, `assets/designs/` — zero code references, unused
+  - `assets/prototypes/` promoted to top-level `prototypes/` — prototypes (HTML/images/links, any content)
+  - `assets/` now only contains `extracted/` subdirectory — doc2spec extracted images
+  - `assets/images/` merged into `assets/extracted/` — unified Excel image extraction path
+
+- **analyze prototype reading enhanced**:
+  - analyze prompt updated: must actively Read prototype files linked from requirement documents
+  - analyze-engine.ts exclusion list added `prototypes` to prevent misidentification as feature directory
+
+- **Templates synced**: init.ts, create.ts, AGENTS.md all directory structure descriptions updated uniformly
+
+### New Directory Structure
+
+```
+010-requirements/
+├── sources/        ← Original PRD archive
+├── converted/      ← doc2spec converted MD (per-platform docs)
+├── features/       ← Changes/supplementary requirements
+├── prototypes/     ← Prototypes (HTML/images/links, any content)
+└── assets/
+    └── extracted/  ← doc2spec extracted images
+```
+
+---
+
+## v6.21.0 (2026-08-15) — Synthesize Architecture Refactor: Phase 2 Reads PRD Directly + Phase 3 Changed to Index Generation
+
+### Core Changes
+
+- **Phase 2 Refactor**: Changed from reading Phase 1 analysis results to reading PRD source directly
+  - Input sources: converted/ + REQUIREMENT.md + features/
+  - Prompt changed from "analysis" to "extraction": explicitly marked "extract, don't infer"
+  - Extraction targets: interface mapping table, shared data models, data flow diagrams, cross-platform call graphs, platform-specific feature lists
+  - Phase 2 no longer depends on Phase 1, can run independently
+
+- **Phase 3 Simplification**: Changed from "functional unit synthesis" to "global index generation"
+  - Removed 152 lines of merge logic (runPhase3 + buildPhase3Prompt)
+  - Added generatePhase3Index(): generates GLOBAL/INDEX.md
+  - Index content: project list + per-platform analysis docs + cross-platform synthesis docs + source requirement docs navigation + usage guide
+
+### Architecture Improvement
+
+**Before**:
+```
+PRD → Phase 1 (per-platform analysis) → Phase 2 (analyze Phase 1 results) → Phase 3 (merge into REQUIREMENT.md)
+```
+
+**Now**:
+```
+PRD ─┬→ Phase 1 (per-platform professional analysis) → GLOBAL/platforms/{platform}/
+     └→ Phase 2 (directly extract cross-platform relationships) → GLOBAL/synthesis/
+     └→ Phase 3 (generate index) → GLOBAL/INDEX.md
+```
+
+### Design Principles
+
+- **Extraction over inference**: Phase 2 extracts existing information from PRD, no secondary analysis
+- **Platform independence**: Per-platform documents remain independent, don't force-merge differentiated features
+- **Index navigation**: Phase 3 generates index for AI navigation, not merged documents
+
+## v6.20.0 (2026-08-15) — Full-Pipeline Platform-Specific Prompt Enhancement + Template Completion
+
+### Added
+
+- **4 missing templates**: TEST-template.md / REVIEW-template.md / MONITOR-template.md / UI_SPEC-template.md
+  - TEST: Backend API tests + Frontend page tests + E2E tests + Four-state tests (loading/empty/error/boundary)
+  - REVIEW: Per-platform sections (backend security/transactions/performance + frontend compatibility/UX/performance)
+  - MONITOR: Backend metrics (QPS/latency/error rate) + Frontend metrics (FCP/LCP/CLS/JS error rate) + Alert levels
+  - UI_SPEC: Route table + Component list + Field→UI mapping + State enums + Interaction design + Responsive adaptation
+
+### Fixed
+
+- **Platform classification bug**: `classifyPlatform('app-android')` was misclassified as backend → Frontend keywords now matched first
+- **Execute prompt was backend-only**: Added frontend code generation guidance (field→UI mapping/routes/state enums/four-states/responsive)
+
+### Enhanced
+
+- **Analyze platform constraints aligned with synthesize Phase 1**: Backend/Web Admin/H5/MiniApp each have independent required content checklists
+- **REQUIREMENT.md prompt**: Added per-platform differentiation requirements
+- **ANALYSIS.md prompt**: Added per-platform analysis + cross-platform association requirements
+- **REVIEW.md prompt**: Per-platform sections (backend security/transactions + frontend compatibility/UX)
+- **MONITOR.md prompt**: Backend metrics + Frontend Core Web Vitals + Alert level classification
+- **templateMap references**: TEST/REVIEW/MONITOR/UI_SPEC now have explicit frontend template references
+
+---
+
+## v6.19.0 (2026-08-15) — Platform-Specific Quality Assurance
+
+### New
+
+- **Quality Audit System (quality-audit.ts)**: Auto-checks AI-generated Spec documents for platform-specific completeness
+  - Backend checks: API definitions, request/response fields, data models, business rules, error codes
+  - Frontend checks: page routes, component inventory, field→UI mappings, status enums, interaction design, responsive adaptation
+  - General checks: content substance, document structure, placeholder detection, table usage
+  - Outputs `QUALITY_AUDIT.md` with score, fix suggestions, recommended fix rounds
+- **`--audit-fix` option**: Reads quality audit report and generates fix instructions, max 2 rounds
+  - Usage: `speccore analyze -I <iteration> --audit-fix --prompt`
+- **Frontend-specific template (TECH-FRONTEND-template.md)**: Covers page routes, component design, state management, request encapsulation, styling, build/deploy, field→UI mapping
+
+### Improved
+
+- **writePerPlatform platform-specific extraction**: No longer writes identical report to all platform directories; now extracts platform-differentiated content using keyword matching
+- **analyze prompt platform constraints**: New "Platform Specificity Constraints" section requiring backend to have API/data model, frontend to have pages/components/field mappings
+- **validate platform-specific checks**: Validates backend TECH.md contains API definitions and data model, frontend TECH.md contains field mappings and status enums
+
+---
+
 ## v6.18.4 (2026-08-15) — Batch Execution Enabled by Default
 
 ### Change

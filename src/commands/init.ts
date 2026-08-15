@@ -205,7 +205,6 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
     await ensureDir(join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'export'));
     await ensureDir(join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'report'));
     await ensureDir(join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'specs'));
-    await ensureDir(join(speccoreDir, 'GLOBAL', 'BASELINES'));
     await ensureDir(join(speccoreDir, 'inbox'));
     await ensureDir(join(speccoreDir, 'questions'));
 
@@ -576,225 +575,29 @@ async function updateGitignore(projectRoot: string): Promise<void> {
 async function createGlobalFiles(speccoreDir: string): Promise<void> {
   const globalDir = join(speccoreDir, 'GLOBAL');
 
-  // GLOBAL/INDEX.md - 全量需求索引
+  // GLOBAL/INDEX.md - 全局知识库索引（导航入口）
   await writeFile(
     join(globalDir, 'INDEX.md'),
-    `# 全量需求索引（Global Catalog）
+    `# 全局知识库索引
 
-> 本文件是需求定位的"地图"。具体需求内容请查看各项目的 \`PROJECTS/{项目名}/REQUIREMENT.md\`。
-> 本文件由 \`speccore import\` 和 \`speccore sync-global\` 自动维护，请勿手动编辑。
+> 本文件是全局知识库的导航入口。由 \`speccore synthesize --phase 3\` 自动更新。
+> 各端分析文档见 \`platforms/\`，跨端综合文档见 \`synthesis/\`。
 
----
+## 跨端综合文档（synthesis/）
 
-## 需求索引
+| 文档 | 说明 |
+| :--- | :--- |
+| _等待 synthesize 生成_ | 跨端架构、技术方案、业务关系 |
 
-| 需求 ID | 项目 | 需求名称 | 状态 | 版本 | 关联迭代 | 关联 Task | 文件路径 |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| _暂无需求_ | - | - | - | - | - | - | - |
+## 各端分析文档（platforms/）
 
----
-
-## 项目列表
-
-| 项目名称 | 项目类型 | 需求数 | 已实现 | 进行中 | 待开发 | 最后导入 |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| _暂无项目_ | - | - | - | - | - | - |
-
----
-
-## 迭代关联
-
-| 迭代名称 | 包含需求 | 状态 | 创建日期 |
-| :--- | :--- | :--- | :--- |
-| _暂无迭代_ | - | - | - |
-
----
-
-## 版本信息
-
-| 版本 | 日期 | 变更说明 |
+| 端 | 文档 | 说明 |
 | :--- | :--- | :--- |
-| v1.0 | ${new Date().toISOString().split('T')[0]} | 初始创建 |
-`
-  );
+| _等待 synthesize 生成_ | — | 各端独立分析 |
 
-  // GLOBAL/OVERVIEW.md - 全量项目全景
-  await writeFile(
-    join(globalDir, 'OVERVIEW.md'),
-    `# 全量项目全景
+## 术语表
 
-> 本文档是从全局视角描述所有项目的全景视图，跨项目、跨系统的统一入口。
-
-## 项目列表
-
-| 项目名称 | 类型 | 状态 | 描述 |
-| :--- | :--- | :--- | :--- |
-| _待导入_ | - | - | - |
-
-## 迭代索引
-
-| 迭代名称 | 关联需求 | 状态 | 创建时间 |
-| :--- | :--- | :--- | :--- |
-| _暂无迭代_ | - | - | - |
-
-## 版本信息
-
-- 全量层版本：v1.0
-- 最后更新：${new Date().toISOString().split('T')[0]}
-`
-  );
-
-  // GLOBAL/ARCHITECTURE.md - 全量技术架构
-  await writeFile(
-    join(globalDir, 'ARCHITECTURE.md'),
-    `# 全量技术架构
-
-> 本文档描述所有项目的整体技术架构，是跨项目、跨系统的全量视图。
-
-## 系统架构图
-
-\`\`\`mermaid
-flowchart TB
-    subgraph "服务层"
-        direction LR
-        SVC1[服务A]
-        SVC2[服务B]
-        SVC3[服务C]
-    end
-
-    subgraph "前端层"
-        direction LR
-        WEB[Web 应用]
-        H5[H5 应用]
-        MP[小程序]
-    end
-
-    subgraph "数据层"
-        direction LR
-        DB1[(数据库A)]
-        DB2[(数据库B)]
-    end
-
-    WEB --> SVC1
-    WEB --> SVC2
-    H5 --> SVC1
-    H5 --> SVC2
-    MP --> SVC1
-    MP --> SVC2
-    SVC1 --> DB1
-    SVC2 --> DB2
-\`\`\`
-
-## 服务列表
-
-| 服务名称 | 类型 | 技术栈 | 端口 | 描述 |
-| :--- | :--- | :--- | :--- | :--- |
-| _待导入_ | - | - | - | - |
-
-## 服务间调用关系
-
-| 调用方 | 被调用方 | 通信方式 | 说明 |
-| :--- | :--- | :--- | :--- |
-| _待导入_ | - | - | - |
-
-## 跨服务数据模型
-
-| 模型名称 | 所属服务 | 被依赖服务 | 说明 |
-| :--- | :--- | :--- | :--- |
-| _待导入_ | - | - | - |
-
-## 外部依赖
-
-| 依赖名称 | 用途 | 版本 | 说明 |
-| :--- | :--- | :--- | :--- |
-| _待导入_ | - | - | - |
-`
-  );
-
-  // GLOBAL/TECH_STACK.md - 全量技术栈
-  await writeFile(
-    join(globalDir, 'TECH_STACK.md'),
-    `# 全量技术栈
-
-> 本文档汇总所有项目的技术栈信息，跨项目统一管理版本和依赖。
-
-## 后端技术栈
-
-| 项目名称 | 语言/框架 | ORM | 数据库 | 缓存 | 消息队列 |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| _待导入_ | - | - | - | - | - |
-
-## 前端技术栈
-
-| 项目名称 | 平台类型 | 框架 | 状态管理 | UI 库 | 构建工具 |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| _待导入_ | - | - | - | - | - |
-
-## 中间件与基础设施
-
-| 组件 | 版本 | 用途 | 使用项目 |
-| :--- | :--- | :--- | :--- |
-| _待导入_ | - | - | - |
-
-## 版本兼容性矩阵
-
-| 组件 | 当前版本 | 最新版本 | 升级建议 |
-| :--- | :--- | :--- | :--- |
-| _待导入_ | - | - | - |
-`
-  );
-
-  // GLOBAL/CODE_INDEX.md - 全量代码索引
-  await writeFile(
-    join(globalDir, 'CODE_INDEX.md'),
-    `# 全量代码索引
-
-> 本文档是多工程代码路径映射，将所有项目的代码路径统一索引。
-
-## 工程映射
-
-| 工程名称 | 类型 | 本地路径 | Git 仓库 | 分支 |
-| :--- | :--- | :--- | :--- | :--- |
-| _待导入_ | - | - | - | - |
-
-## 关键目录说明
-
-| 工程名称 | 目录 | 说明 |
-| :--- | :--- | :--- |
-| _待导入_ | - | - |
-
-## 跨工程引用
-
-| 引用方 | 被引用方 | 引用方式 | 说明 |
-| :--- | :--- | :--- | :--- |
-| _待导入_ | - | - | - |
-`
-  );
-
-  // GLOBAL/PROTOTYPE_INDEX.md - 全量原型索引
-  await writeFile(
-    join(globalDir, 'PROTOTYPE_INDEX.md'),
-    `# 全量原型索引
-
-> 本文档按平台分类管理所有设计原型。
-
-## Web 端
-
-| 原型名称 | 位置 | 关联需求 | 说明 |
-| :--- | :--- | :--- | :--- |
-| _待导入_ | - | - | - |
-
-## H5 端
-
-| 原型名称 | 位置 | 关联需求 | 说明 |
-| :--- | :--- | :--- | :--- |
-| _待导入_ | - | - | - |
-
-## miniapp
-
-| 原型名称 | 位置 | 关联需求 | 说明 |
-| :--- | :--- | :--- | :--- |
-| _待导入_ | - | - | - |
+- [GLOSSARY.md](./GLOSSARY.md) — 跨项目统一术语定义
 `
   );
 
@@ -822,96 +625,6 @@ flowchart TB
 | 缩写 | 全称 | 说明 |
 | :--- | :--- | :--- |
 | _待补充_ | - | - |
-`
-  );
-
-  // GLOBAL/CHANGELOG.md - 全量变更日志
-  await writeFile(
-    join(globalDir, 'CHANGELOG.md'),
-    `# 全量变更日志
-
-> 本文档记录全量层的所有变更操作（导入、同步、手动修改）。
-
-## 变更记录
-
-| 日期 | 版本 | 操作 | 描述 | 操作者 |
-| :--- | :--- | :--- | :--- | :--- |
-| ${new Date().toISOString().split('T')[0]} | v1.0 | 创建 | 全量层模板初始化 | SpecCore |
-
-## 版本说明
-
-- **版本格式**：v{主版本}.{次版本}
-- **主版本变更**：新增/删除项目、大范围需求重构
-- **次版本变更**：需求条目增删改、同步操作
-`
-  );
-
-  // GLOBAL/PROJECTS/_template/REQUIREMENT.md
-  await writeFile(
-    join(globalDir, 'PROJECTS', '_template', 'REQUIREMENT.md'),
-    `# {项目名称} - 需求文档
-
-> 本文件仅包含本项目需求。跨项目引用请通过 \`GLOBAL/INDEX.md\` 映射。
-> 最后更新：{日期}
-
----
-
-## 项目信息
-
-| 属性 | 值 |
-| :--- | :--- |
-| 项目名称 | {project} |
-| 项目类型 | {type} |
-| 技术栈 | {tech_stack} |
-| 负责人 | {owner} |
-
----
-
-## 需求列表
-
-_暂无需求，等待 \`speccore import\` 导入_
-
----
-
-## 已废弃需求
-
-<!-- 已废弃的需求条目移动到这里，保留完整历史 -->
-`
-  );
-
-  // GLOBAL/PROJECTS/_template/METADATA.md
-  await writeFile(
-    join(globalDir, 'PROJECTS', '_template', 'METADATA.md'),
-    `# {项目名称} - 元数据
-
-| 属性 | 值 |
-| :--- | :--- |
-| 项目名称 | {project} |
-| 项目类型 | {type} |
-| 技术栈 | {tech_stack} |
-| 版本 | {version} |
-| 负责人 | {owner} |
-| 代码仓库 | {repo_url} |
-| 最后扫描 | {date} |
-
-## 依赖关系
-
-| 依赖项目 | 依赖方式 | 说明 |
-| :--- | :--- | :--- |
-| _待填写_ | - | - |
-`
-  );
-
-    // GLOBAL/BASELINES/README.md - 基线索引
-  await writeFile(
-    join(globalDir, 'BASELINES', 'README.md'),
-    `# 基线索引
-
-> 本文件记录所有创建的基线版本。
-
-| 基线名称 | 创建时间 | 需求数 | 项目数 | 备注 |
-| :--- | :--- | :--- | :--- | :--- |
-| _暂无基线_ | - | - | - | - |
 `
   );
 }
@@ -1388,15 +1101,19 @@ Iteration-NNN-name/            ← 迭代目录
 │   ├── converted/             ← [自动生成] doc2spec 转换后的 MD
 │   ├── features/              ← [手动维护] 按功能模块组织
 │   │   └── {feature}/README.md
-│   └── assets/                ← 素材（extracted/prototypes/designs/screenshots）
+│   ├── prototypes/            ← 原型（HTML/图片/链接，内容不限）
+│   └── assets/                ← doc2spec 提取的图片
 ├── 020-specs/                 ← 需求分析
 ├── 030-tasks/                 ← 开发任务
 │   └── Task-*/
 │       ├── .meta/             ← 任务元信息（type/status/owner/created-at）
-│       ├── _shared/           ← 共享规格（REQ/TECH/SCHEMA/CHANGELOG/API_CONTRACT）
-│       ├── backend/           ← 后端子任务（TASK.md + src/tests）
-│       ├── web/               ← Web前端子任务（TASK.md + src/tests）
-│       ├── 99-artifacts/      ← 执行产出（自检门禁 + 参考文档）
+│       ├── 00-specs/          ← 核心规格（REQ/TECH/TASK/SCHEMA/CHANGELOG）
+│       ├── 10-backend/        ← 后端实现
+│       │   └── {service}/     ← 服务（如 api）
+│       │       └── {subtask}/ ← 子任务（TASK.md + src/tests）
+│       ├── 20-frontend/       ← 前端实现
+│       │   └── {platform}/    ← 端（如 h5/web）
+│       │       └── {subtask}/ ← 子任务（TASK.md + src/tests）
 │       └── .issues.md         ← 问题追踪
 └── STAFFING.md                ← 人员排期
 \`\`\`
@@ -1411,6 +1128,7 @@ Iteration-NNN-name/            ← 迭代目录
 | \`[SPECCORE_MODE: <mode>]\` | 意图模式 | 识别模式后进入对应流程 |
 | \`[SPECCORE_EXEC: <cmd>]\` | 自动执行命令 | 直接 execute_command |
 | \`[SPECCORE_INTENT]\` | 意图确认块 | 展示给用户确认 |
+| \`[SPECCORE_CONTINUE: <path>]\` | 批次执行完成，需续批 | **必须开始新对话**，先读取 \`<path>\` 恢复上下文，再按提示命令继续下一批次 |
 
 ## 行为约束
 - **不要自己创建目录** — 用 \`speccore iteration create\`
@@ -1476,11 +1194,9 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
     '├── features/              ← [手动维护] 按功能模块组织的需求补充',
     '│   └── {feature}/',
     '│       └── README.md',
+    '├── prototypes/            ← 原型（HTML/图片/链接，内容不限）',
     '└── assets/',
-    '    ├── extracted/         ← doc2spec 提取的图片/媒体文件',
-    '    ├── prototypes/        ← 产品原型（Axure/Figma/墨刀等）',
-    '    ├── designs/           ← UI 设计稿',
-    '    └── screenshots/       ← 参考截图/竞品分析',
+    '    └── extracted/         ← doc2spec 提取的图片/媒体文件',
     '```',
     '',
     '## 使用规范',
@@ -1488,7 +1204,8 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
     '1. **sources/** — 放产品提供的原始文档，不要直接编辑',
     '2. **converted/** — doc2spec 命令自动输出转换后的 MD，人工不修改',
     '3. **features/** — 按功能模块手动补充需求细节，每个模块一个子目录',
-    '4. **assets/** — 所有图片/原型/设计稿统一放这里，按子目录分类',
+    '4. **prototypes/** — 原型文件，HTML/图片/链接均可，需求文档中链接到原型的会被主动读取',
+    '5. **assets/extracted/** — doc2spec 自动提取的图片，人工不修改',
   ].join('\n'));
 
   // 010-requirements/INDEX.md — 需求文档索引
@@ -1505,8 +1222,7 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
     '| 原始文档 | sources/ | 待补充 | 放 PRD/Word/PDF |',
     '| 转换规格 | converted/ | 待生成 | doc2spec 输出 |',
     '| 功能补充 | features/ | 已示例 | user-auth/ 为示例 |',
-    '| 原型素材 | assets/prototypes/ | 待补充 | 产品原型 |',
-    '| 设计素材 | assets/designs/ | 待补充 | UI 设计稿 |',
+    '| 原型素材 | prototypes/ | 待补充 | 原型（HTML/图片/链接） |',
     '',
     '## 分析配置',
     '',
@@ -1809,15 +1525,17 @@ export function generateAIRulesContent(): string {
     '│   ├── converted/      ← [自动生成] doc2spec 转换后的 MD',
     '│   ├── features/       ← [手动维护] 按功能模块组织',
     '│   │   └── {feature}/README.md',
-    '│   └── assets/         ← 素材（prd/prototypes/designs/screenshots）',
+    '│   ├── prototypes/        ← 原型（HTML/图片/链接，内容不限）',
+    '│   └── assets/            ← doc2spec 提取的图片',
     '├── 020-specs/     ← analyze 输出',
     '├── 030-tasks/     ← 开发任务',
     '│   └── Task-*/',
     '│       ├── .meta/         ← 任务元信息（type/status/owner/created-at）',
-    '│       ├── _shared/       ← 共享规格（REQ/TECH/SCHEMA/CHANGELOG/API_CONTRACT）',
-    '│       ├── backend/       ← 后端子任务（TASK.md + src/tests）',
-    '│       ├── web/           ← Web前端子任务（TASK.md + src/tests）',
-    '│       ├── 99-artifacts/  ← 执行产出（自检门禁 + 参考文档）',
+    '│       ├── 00-specs/      ← 核心规格（REQ/TECH/TASK/SCHEMA/CHANGELOG）',
+    '│       ├── 10-backend/    ← 后端实现',
+    '│       │   └── {service}/{subtask}/ ← 子任务（TASK.md + src/tests）',
+    '│       ├── 20-frontend/   ← 前端实现',
+    '│       │   └── {platform}/{subtask}/ ← 子任务（TASK.md + src/tests）',
     '│       └── .issues.md     ← 问题追踪',
     '├── STAFFING.md      ← 人员排期',
     '```',
@@ -1993,7 +1711,7 @@ h1{font-family:'Orbitron',sans-serif;font-size:28px;font-weight:900;background:l
 <div class="method-cmd">/spec-ask "全局分析所有工程代码" <span style="color:var(--green)">← 意图式</span></div>
 <div class="method-cmd">/spec-analyze --scope global <span style="color:var(--orange)">← 显式命令</span></div>
 <div style="font-size:10px;color:var(--muted);margin-top:4px">--scope global — 全项目范围（非迭代级），在 AI 对话框中输入</div>
-<div class="step-desc" style="margin-top:4px">📂 输出到 .speccore/GLOBAL/PROJECTS/{工程名}/，每个工程独立一套（TECH_STACK / API_INVENTORY / DATA_MODEL ...）<br>⏱ 与迭代分析不同：全局分析扫源码生成项目文档，迭代分析读需求生成技术规格（步骤 6 做的事）</div>
+<div class="step-desc" style="margin-top:4px">📂 输出到 .speccore/GLOBAL/platforms/{端名}/，每端独立一套（TECH_STACK / API_INVENTORY / DATA_MODEL ...）<br>⏱ 与迭代分析不同：全局分析扫源码生成项目文档，迭代分析读需求生成技术规格（步骤 6 做的事）</div>
 </div>
 <div class="field-list">
 <div class="field-item"><span class="field-check">✅</span><span class="field-name">项目信息表</span><span class="field-desc">— 工程名 / 源码路径 / Git 仓库（init 已自动填写）</span></div>

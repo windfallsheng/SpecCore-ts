@@ -1,6 +1,6 @@
 /**
  * import - 多项目导入命令
- * 将存量项目导入到全量层（GLOBAL/PROJECTS/），填充全量需求和索引
+ * 将存量项目导入到全量层（GLOBAL/platforms/），填充全量需求和索引
  */
 
 import { pathExists, readdir, readFile, stat, writeFile } from 'fs-extra';
@@ -304,12 +304,10 @@ async function importToGlobalLayer(
   logger.info(`   生成需求: ${entries.map((e) => e.id).join(', ')}`);
   logger.info('');
   logger.info('📁 已创建:');
-  logger.info(`   GLOBAL/PROJECTS/${projectName}/REQUIREMENT.md`);
-  logger.info(`   GLOBAL/PROJECTS/${projectName}/METADATA.md`);
+  logger.info(`   GLOBAL/platforms/${projectName}/`);
   logger.info('');
   logger.info('📋 已更新:');
   logger.info('   GLOBAL/INDEX.md（需求映射 + 项目列表）');
-  logger.info('   GLOBAL/OVERVIEW.md');
   logger.info('');
   logger.info('📋 下一步:');
   logger.info('   speccore global-status  查看全量层状态');

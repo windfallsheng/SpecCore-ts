@@ -206,11 +206,12 @@ AI 输出 JSON 拆分方案
 ```
 030-tasks/{type}/Task-NNN-slug/
 ├── .meta/              ← 元信息 (type/status/owner)
-├── 00-specs/           ← 核心规格 (REQ/TECH/TASK/SCHEMA/CHANGELOG)
+├── 00-specs/           ← 核心规格 (REQ/TECH/CONTEXT/TASK/SCHEMA/CHANGELOG)
 ├── _shared/            ← API 契约 (API_CONTRACT.yaml)
 ├── 10-backend/         ← 后端实现
-├── 20-frontend/{端}/   ← 前端实现（端名来自 CONSTITUTION.md）
-├── 99-artifacts/       ← 产出 (TEST/REVIEW/DEPLOY/ERROR_CODES/RISK/DEPS/MONITOR)
+│   └── {服务}/{子任务}/ ← 子任务目录 (.meta/src/tests/TASK.md)
+├── 20-frontend/{端}/   ← 前端实现
+│   └── {子任务}/        ← 子任务目录 (.meta/src/tests/TASK.md)
 └── .issues.md          ← 问题追踪
 ```
 

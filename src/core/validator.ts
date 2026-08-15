@@ -166,6 +166,51 @@ async function validateTask(
           severity: 'warning'
         });
       }
+
+      // ── 端专业性内容检查 ──
+      // 后端文档检查
+      if (file.includes('backend/') || file === '00-specs/TECH.md' || file === '00-specs/REQ.md') {
+        const hasApiDef = /\|?\s*(GET|POST|PUT|DELETE)\s+\//i.test(content) || /\/api\//i.test(content);
+        const hasDataModel = /(CREATE TABLE|数据表|表结构|字段|entity|schema)/i.test(content);
+        if (file === '00-specs/TECH.md' && !hasApiDef && !hasDataModel) {
+          result.warnings.push({
+            file: filePath,
+            issue: 'Backend TECH.md missing API definitions and data model — 后端技术方案应包含接口定义和数据模型',
+            severity: 'warning'
+          });
+        }
+      }
+
+      // 前端文档检查
+      if (file.includes('20-frontend/') || file === '00-specs/TECH.md') {
+        const hasPageRoute = /(页面|路由|route|path|\/\w+)/i.test(content);
+        const hasComponent = /(组件|component|模块|视图)/i.test(content);
+        if (file === '00-specs/TECH.md' && !hasPageRoute && !hasComponent) {
+          result.warnings.push({
+            file: filePath,
+            issue: 'TECH.md missing frontend page/component definitions — 技术方案应包含前端页面路由和组件设计',
+            severity: 'warning'
+          });
+        }
+        if (file.includes('20-frontend/TECH.md')) {
+          const hasFieldMapping = /(字段.*映射|UI.*字段|来源.*API|响应字段)/i.test(content);
+          const hasStateEnum = /(状态.*枚举|枚举.*状态|待|进行中|已完成)/i.test(content);
+          if (!hasFieldMapping) {
+            result.warnings.push({
+              file: filePath,
+              issue: 'Frontend TECH.md missing field→UI mapping — 前端技术方案应包含字段→UI 映射表',
+              severity: 'warning'
+            });
+          }
+          if (!hasStateEnum) {
+            result.warnings.push({
+              file: filePath,
+              issue: 'Frontend TECH.md missing status enums — 前端技术方案应包含状态枚举定义',
+              severity: 'warning'
+            });
+          }
+        }
+      }
     }
   }
   

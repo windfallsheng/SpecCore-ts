@@ -530,14 +530,27 @@ async function buildPersonPlatforms(iterDir: string, tasks: any[]): Promise<Reco
     try {
       const entries = await readdir(join(iterDir, t.id), { withFileTypes: true });
       const platforms: string[] = [];
-      if (entries.some((e: any) => e.name === 'backend')) platforms.push('backend');
-      const fe = entries.find((e: any) => e.name === 'frontend');
-      if (fe && fe.isDirectory()) {
-        const subs = await readdir(join(iterDir, t.id, 'frontend'), { withFileTypes: true });
-        for (const s of subs) {
+      // 新结构: 10-backend/ + 20-frontend/
+      if (entries.some((e: any) => e.name === '10-backend')) platforms.push('10-backend');
+      const fe20 = entries.find((e: any) => e.name === '20-frontend');
+      if (fe20 && fe20.isDirectory()) {
+        const subs20 = await readdir(join(iterDir, t.id, '20-frontend'), { withFileTypes: true });
+        for (const s of subs20) {
           if (s.isDirectory()) platforms.push('20-frontend/' + s.name);
         }
-        if (subs.length === 0) platforms.push('frontend');
+        if (subs20.length === 0) platforms.push('20-frontend');
+      }
+      // 旧结构回退: backend/ + frontend/
+      if (!platforms.some(p => p.includes('backend')) && entries.some((e: any) => e.name === 'backend')) platforms.push('backend');
+      if (!platforms.some(p => p.includes('frontend'))) {
+        const fe = entries.find((e: any) => e.name === 'frontend');
+        if (fe && fe.isDirectory()) {
+          const subs = await readdir(join(iterDir, t.id, 'frontend'), { withFileTypes: true });
+          for (const s of subs) {
+            if (s.isDirectory()) platforms.push('frontend/' + s.name);
+          }
+          if (subs.length === 0) platforms.push('frontend');
+        }
       }
       map[t.assignee] = platforms.join(', ') || '';
     } catch { map[t.assignee] = ''; }

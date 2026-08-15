@@ -99,11 +99,9 @@ async function createIterationFiles(iterationDir: string, fullName: string, opti
 │   └── {refactor-slug}.md
 ├── research/              ← [手动维护] research 型：扁平文件
 │   └── {topic-slug}.md
+├── prototypes/          ← 原型（HTML/图片/链接，内容不限）
 └── assets/
-    ├── extracted/         ← doc2spec 提取的图片/媒体文件
-    ├── prototypes/        ← 产品原型（Axure/Figma/墨刀等）
-    ├── designs/           ← UI 设计稿
-    └── screenshots/       ← 参考截图/竞品分析
+    └── extracted/         ← doc2spec 提取的图片/媒体文件
 \`\`\`
 
 ## 使用规范
@@ -114,7 +112,8 @@ async function createIterationFiles(iterationDir: string, fullName: string, opti
 4. **bugs/** — bugfix 型任务：每个 bug 一个扁平 MD 文件（如 \`login-timeout.md\`）
 5. **refactors/** — refactor 型任务：每个重构目标一个扁平 MD 文件
 6. **research/** — research 型任务：每个研究主题一个扁平 MD 文件
-7. **assets/** — 所有图片/原型/设计稿统一放这里，按子目录分类
+7. **prototypes/** — 原型文件，HTML/图片/链接均可，需求文档中链接到原型的会被主动读取
+8. **assets/extracted/** — doc2spec 自动提取的图片，人工不修改
 
 ## AI 读取规则
 
@@ -130,8 +129,7 @@ async function createIterationFiles(iterationDir: string, fullName: string, opti
 | \`bugs/*.md\` | 全部 .md 文件 | bugfix 型：bug 描述与影响分析 |
 | \`refactors/*.md\` | 全部 .md 文件 | refactor 型：重构目标与方案 |
 | \`research/*.md\` | 全部 .md 文件 | research 型：研究主题与对比 |
-| \`assets/prototypes/\` | 原型文件 | 产品原型参考 |
-| \`assets/designs/\` | 设计稿 | UI 设计稿参考 |
+| \`prototypes/\` | 原型文件 | 原型（HTML/图片/链接），需求文档链接过来会被主动读取 |
 
 ### 不会被 AI 读到的目录 ❌
 
@@ -140,7 +138,7 @@ async function createIterationFiles(iterationDir: string, fullName: string, opti
 | \`sources/\` | 只存放原始 PRD/Word/PDF，AI 不直接读取 |
 | \`020-specs/\` | analyze 的**输出**目录，存放分析结果 |
 | \`030-tasks/\` | 开发任务目录，execute 阶段使用 |
-| \`030-tasks/*/99-artifacts/\` | 执行产出目录（测试/评审/部署报告） |
+| \`030-tasks/*/10-backend/*/\` | 后端子任务目录（execute 阶段使用） |
 
 ### 如何让 AI 读到你手写的文档？
 
@@ -190,8 +188,7 @@ research/
 | Bug 描述 | bugs/ | 待补充 | bugfix 型：扁平 MD 文件 |
 | 重构目标 | refactors/ | 待补充 | refactor 型：扁平 MD 文件 |
 | 研究主题 | research/ | 待补充 | research 型：扁平 MD 文件 |
-| 原型素材 | assets/prototypes/ | 待补充 | 产品原型 |
-| 设计素材 | assets/designs/ | 待补充 | UI 设计稿 |
+| 原型素材 | prototypes/ | 待补充 | 原型（HTML/图片/链接） |
 
 ## 分析配置
 
