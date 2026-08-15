@@ -82,8 +82,8 @@ jobs:
 ### 原理
 
 ```
-代码中的 @spec 注释  →  speccore sync --reverse  →  自动更新 Spec 文件
-Spec 文件中的定义    →  speccore execute          →  自动生成代码骨架
+代码中的 @spec 注释  →  speccore sync（自动反向同步）  →  自动更新 Spec 文件
+Spec 文件中的定义    →  speccore execute              →  自动生成代码骨架
 ```
 
 ### 后端示例：Java
@@ -109,9 +109,9 @@ public Result<PageResult<Task>> listTasks(@RequestParam(defaultValue = "1") int 
 }
 ```
 
-运行 `speccore sync --reverse` 后，SpecCore 会：
+运行 `speccore sync` 后，SpecCore 会自动执行反向同步：
 - 扫描所有 `@spec Task-001-任务CRUD` 注释
-- 自动更新 `Task-001-任务CRUD/backend/TASK.md` 标记"已实现"
+- 自动更新 `Task-001-任务CRUD/backend/TASK.md` 标记“已实现”
 - 更新 `.speccore/GLOBAL/CODE_INDEX.md` 代码索引
 
 ### 前端示例：Vue
@@ -136,18 +136,18 @@ public Result<PageResult<Task>> listTasks(@RequestParam(defaultValue = "1") int 
 
 ```bash
 # 1. 写完代码后加 @spec 注释
-# 2. 反向同步：代码 → Spec
-speccore sync --reverse
+# 2. 同步（自动反向同步：代码 → Spec）
+speccore sync --task=Task-001
 
 # 3. 校验完整性
 speccore validate
 
-# 4. 查看 Spec 有哪些还没写的接口
-speccore trace --task=Task-001
+# 4. 预览同步结果（不实际修改）
+speccore sync --task=Task-001 --dry-run
 
 # 5. 补充缺失的代码...
-# 6. 再次反向同步
-speccore sync --reverse
+# 6. 再次同步
+speccore sync --task=Task-001
 ```
 
 ---
@@ -167,9 +167,9 @@ git commit -m "feat: 实现任务 CRUD"
 # → 不通过则阻止提交
 
 # 提交成功后
-speccore sync --reverse             # 反向同步 Spec
-speccore update --task=Task-001 --status=completed
-speccore dashboard                   # 确认状态更新
+speccore sync --task=Task-001    # 同步 Spec（自动反向同步）
+speccore done --task=Task-001    # 完成归档
+speccore dashboard               # 确认状态更新
 ```
 
 ---
