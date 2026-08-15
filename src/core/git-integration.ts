@@ -187,27 +187,41 @@ export function loadSubtaskGitConfig(taskDir: string): Partial<GitConfig> {
   try {
     const configPath = join(taskDir, '.meta', 'git-config');
     if (!existsSync(configPath)) return config;
-    const content = readFileSync(configPath, 'utf-8');
+    const rawContent = readFileSync(configPath, 'utf-8');
+    // 过滤注释行和空行，只保留有效配置行
+    const content = rawContent.split('\n')
+      .filter(line => !line.trim().startsWith('#') && line.trim().length > 0)
+      .join('\n');
+
+    // 辅助函数：提取值，跳过占位符
+    const extractValue = (key: string): string | null => {
+      const match = content.match(new RegExp(`${key}[：:]\\s*(\\S+)`));
+      if (match && match[1] !== '继承迭代配置' && match[1] !== '继承全局配置') return match[1];
+      return null;
+    };
 
     // 分支前缀
-    const prefixMatch = content.match(/分支前缀[：:]\s*(\S+)/);
-    if (prefixMatch) config.branchPrefix = prefixMatch[1];
+    const branchPrefix = extractValue('分支前缀');
+    if (branchPrefix) config.branchPrefix = branchPrefix;
 
     // 源分支
-    const branchMatch = content.match(/源分支[：:]\s*(\S+)/);
-    if (branchMatch) config.defaultBranch = branchMatch[1];
+    const defaultBranch = extractValue('源分支');
+    if (defaultBranch) config.defaultBranch = defaultBranch;
 
     // 分支格式
     const formatMatch = content.match(/分支格式[：:]\s*(.+)/);
-    if (formatMatch) config.branchFormat = formatMatch[1].trim();
+    if (formatMatch) {
+      const val = formatMatch[1].trim();
+      if (val !== '继承迭代配置' && val !== '继承全局配置') config.branchFormat = val;
+    }
 
     // 自动拉取
-    const pullMatch = content.match(/自动拉取[：:]\s*(\S+)/);
-    if (pullMatch) config.autoPull = pullMatch[1] === 'true' || pullMatch[1] === '开启';
+    const autoPull = extractValue('自动拉取');
+    if (autoPull) config.autoPull = autoPull === 'true' || autoPull === '开启';
 
     // 远程名称
-    const remoteMatch = content.match(/远程名称[：:]\s*(\S+)/);
-    if (remoteMatch) config.remoteName = remoteMatch[1];
+    const remoteName = extractValue('远程名称');
+    if (remoteName) config.remoteName = remoteName;
   } catch {}
   return config;
 }
@@ -258,27 +272,39 @@ export function loadGitConfig(iteration?: string, taskDir?: string): GitConfig {
       if (existsSync(iterGraphPath)) {
         const content = readFileSync(iterGraphPath, 'utf-8');
 
+        // 辅助函数：从表格或冒号格式提取值
+        const extractValue = (key: string): string | null => {
+          // 表格格式: | 配置项 | 值 | 说明 |
+          const tableMatch = content.match(new RegExp(`\\|\\s*${key}\\s*\\|\\s*([^|]+)\\s*\\|`));
+          if (tableMatch) {
+            const val = tableMatch[1].trim();
+            if (val && val !== '继承全局配置' && val !== '-' && val !== '') return val;
+          }
+          // 冒号格式: 配置项: 值
+          const colonMatch = content.match(new RegExp(`${key}[：:]\\s*(\\S+)`));
+          if (colonMatch && colonMatch[1] !== '继承全局配置') return colonMatch[1];
+          return null;
+        };
+
         // 默认分支
-        const branchMatch = content.match(/默认分支[：:]\s*(\S+)/);
-        if (branchMatch && branchMatch[1] !== '继承全局配置') {
-          config.defaultBranch = branchMatch[1];
-        }
+        const defaultBranch = extractValue('默认分支');
+        if (defaultBranch) config.defaultBranch = defaultBranch;
 
         // 分支前缀
-        const prefixMatch = content.match(/分支前缀[：:]\s*(\S+)/);
-        if (prefixMatch) config.branchPrefix = prefixMatch[1];
+        const branchPrefix = extractValue('分支前缀');
+        if (branchPrefix) config.branchPrefix = branchPrefix;
 
         // 分支格式
-        const formatMatch = content.match(/分支格式[：:]\s*(.+)/);
-        if (formatMatch) config.branchFormat = formatMatch[1].trim();
+        const branchFormat = extractValue('分支格式');
+        if (branchFormat) config.branchFormat = branchFormat;
 
         // 自动拉取
-        const pullMatch = content.match(/自动拉取[：:]\s*(\S+)/);
-        if (pullMatch) config.autoPull = pullMatch[1] === 'true' || pullMatch[1] === '开启';
+        const autoPull = extractValue('自动拉取');
+        if (autoPull) config.autoPull = autoPull === 'true' || autoPull === '开启';
 
         // 远程名称
-        const remoteMatch = content.match(/远程名称[：:]\s*(\S+)/);
-        if (remoteMatch) config.remoteName = remoteMatch[1];
+        const remoteName = extractValue('远程名称');
+        if (remoteName) config.remoteName = remoteName;
       }
     } catch {}
   }
