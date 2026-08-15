@@ -1615,17 +1615,17 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
     promptText += `请在此分支上编写代码。\n`;
   }
 
-  // ── 批次元数据（--batch-size 时输出，指导宿主 AI 分批执行）──
-  if (options.batchSize) {
-    const allTasks = await scanTasks(iteration);
-    const pending = allTasks.filter(t => t.status !== 'completed' && t.status !== 'archived');
-    const sorted = topologicalSort(pending);
-    const bs = parseInt(options.batchSize, 10);
+  // ── 批次元数据（多任务时默认输出，指导宿主 AI 分批执行）──
+  const allTasksForBatch = await scanTasks(iteration);
+  const pendingForBatch = allTasksForBatch.filter(t => t.status !== 'completed' && t.status !== 'archived');
+  if (pendingForBatch.length > 1) {
+    const sorted = topologicalSort(pendingForBatch);
+    const bs = parseInt(options.batchSize || '3', 10);
     const totalBatches = Math.ceil(sorted.length / bs);
     const currentIdx = sorted.findIndex(t => t.id === task);
-    const currentBatch = Math.floor(currentIdx / bs) + 1;
-    const nextTask = sorted[currentIdx + 1];
-    const isBatchEnd = currentIdx % bs === bs - 1 || currentIdx === sorted.length - 1;
+    const currentBatch = currentIdx >= 0 ? Math.floor(currentIdx / bs) + 1 : 1;
+    const nextTask = currentIdx >= 0 ? sorted[currentIdx + 1] : undefined;
+    const isBatchEnd = currentIdx >= 0 && (currentIdx % bs === bs - 1 || currentIdx === sorted.length - 1);
 
     promptText += `\n\n## 📦 批次信息\n`;
     promptText += `- 当前任务: ${task} (${currentIdx + 1}/${sorted.length})\n`;
@@ -1635,7 +1635,7 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
     if (isBatchEnd && nextTask) {
       promptText += `\n[SPECCORE_BATCH_COMPLETE]\n`;
       promptText += `本批次已完成。请开始新的对话，然后执行:\n`;
-      promptText += `speccore execute --prompt --task=${nextTask.id} -i ${iteration} --batch-size ${bs}\n`;
+      promptText += `speccore execute --prompt --task=${nextTask.id} -i ${iteration}\n`;
     } else if (nextTask) {
       promptText += `\n下一个任务: ${nextTask.id}（继续当前对话）\n`;
     } else {

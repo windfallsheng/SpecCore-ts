@@ -2,6 +2,16 @@
 
 ---
 
+## v6.18.4 (2026-08-15) — Batch Execution Enabled by Default
+
+### Change
+
+- **Prompt mode batches by default**: Automatically outputs batch metadata when multiple tasks exist (default 3 tasks/batch), no need for `--batch-size`
+- Outputs `[SPECCORE_BATCH_COMPLETE]` signal + next task command when batch ends
+- No batch info for single tasks (zero overhead)
+
+---
+
 ## v6.18.3 (2026-08-15) — Prompt Slimming: Phase-Based Loading
 
 ### Optimization
