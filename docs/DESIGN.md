@@ -205,6 +205,118 @@ if (inferredPlatform) {
 - **端专属文档生成**：`src/core/analyze-engine.ts::buildTechSpecForPlatform()`
 - **调用入口**：`src/core/analyze-engine.ts::generateSpecsFromRequirements()`
 
+### 2.5 端名语义映射与目录层级简化（v6.39.1+ / v6.40.0+）
+
+#### 2.5.1 端名语义映射（v6.39.1+）
+
+**问题背景**：
+CONSTITUTION.md 中定义的端名可能是中文（如 `H5移动端`、`后台管理端`），而需求文档中的写法也可能不一致（如 `H5 移动端` vs `h5`）。之前的精确匹配逻辑导致无法识别。
+
+**解决方案**：
+引入 `PLATFORM_ALIAS_MAP` 语义映射表，支持多种写法自动映射到标准端名。
+
+```typescript
+const PLATFORM_ALIAS_MAP: Record<string, string[]> = {
+  'h5': ['h5', 'h5移动端', 'h5移动', 'mobile', '移动端', '手机浏览器'],
+  'admin': ['admin', '后台管理端', '后台', '管理端', 'web', 'pc', '桌面端'],
+  'app': ['app', '客户端', 'ios', 'android', 'native', '原生'],
+  'miniapp': ['miniapp', '小程序', '微信小程序', '支付宝小程序'],
+  'backend': ['backend', '后端', '服务', 'api', 'server', '服务端']
+};
+```
+
+**推断优先级**：
+1. 文件路径推断（不变）
+2. **语义映射匹配（新增）** ← 关键改进
+   - 扫描需求文档前 50 行
+   - 匹配别名列表中的任意写法
+   - 输出日志：`🔄 语义映射: "H5 移动端" → "h5"`
+3. 精确匹配标准端名（不变）
+
+**效果验证**：
+```bash
+# 需求文档中包含 "H5 移动端"
+$ speccore analyze --auto -I 011-meeting-upgrade
+[INFO] 🔄 语义映射: "H5 移动端" → "h5"
+[INFO] 🔍 已按端分割需求内容: 1 个端有专属内容
+
+# 生成端子目录
+$ ls Iteration-011-meeting-upgrade/020-specs/
+analysis.md  h5/  admin/  app/  miniapp/
+```
+
+#### 2.5.2 任务目录层级简化（v6.40.0+）
+
+**架构演进**：
+
+| 版本 | 目录结构 | 层级数 |
+|:--|:--|:--|
+| v6.24.0-v6.39.0 | `Task-001/10-backend/{服务名}/{子任务}/` | 3 层 |
+| **v6.40.0+** | `Task-001/{服务名}/{子任务}/` | **2 层** ✅ |
+
+**旧架构（3层）**：
+```
+Task-001-feature-login/
+├── .meta/
+├── _shared/
+├── 00-specs/
+├── 10-backend/              ← 类型前缀（冗余）
+│   └── api/                 ← 服务名
+│       └── impl/            ← 子任务
+├── 20-frontend/             ← 类型前缀（冗余）
+│   └── h5/                  ← 端名
+│       └── impl/            ← 子任务
+└── 99-artifacts/
+```
+
+**新架构（2层）**：
+```
+Task-001-feature-login/
+├── .meta/
+├── _shared/
+├── 00-specs/
+├── api/                     ← 直接用服务名 ✅
+│   └── impl/                ← 子任务
+├── h5/                      ← 直接用端名 ✅
+│   └── impl/                ← 子任务
+└── 99-artifacts/
+```
+
+**设计原则**：
+1. **扁平化优先**：减少不必要的中间层级，提升导航效率
+2. **语义清晰**：直接使用 CONSTITUTION.md 中的工程名/端名，无需转换
+3. **向后兼容**：execute.ts 已有回退逻辑，旧任务不受影响
+
+**实现位置**：
+- `/ts-cli/src/commands/iteration/split.ts`:
+  - `createSubtask()` 函数：直接使用 `{服务名}/{子任务}/` 和 `{端名}/{子任务}/`
+  - README 模板：更新目录树示例，标注 v6.40.0+ 简化架构
+
+**相关代码片段**：
+```typescript
+// split.ts line 1338+
+// ── 后端：{服务名}/{子任务}/ （v6.40.0+ 简化架构）──
+if (backendPlatforms.length > 0) {
+  for (const platform of backendPlatforms) {
+    const serviceName = getServiceName(platform);
+    // 【v6.40.0】直接使用服务名，不再使用 10-backend/ 前缀
+    const platformDir = join(taskDir, serviceName);
+    const subtaskDir = join(platformDir, subtaskName);
+    await createSubtask(subtaskDir, ...);
+  }
+}
+
+// ─ 前端：{端名}/{子任务}/ （v6.40.0+ 简化架构）──
+if (frontendPlatforms.length > 0) {
+  for (const platform of frontendPlatforms) {
+    // 【v6.40.0】直接使用端名，不再使用 20-frontend/ 前缀
+    const platformDir = join(taskDir, platform);
+    const subtaskDir = join(platformDir, subtaskName);
+    await createSubtask(subtaskDir, ...);
+  }
+}
+```
+
 ---
 
 ## 3. 迭代目录结构
