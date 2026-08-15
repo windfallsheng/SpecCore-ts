@@ -2,6 +2,15 @@
 
 ---
 
+## v6.33.0 (2026-08-15) — Analyze Prompt Adds Directory Structure Guidance
+
+### Core Changes
+
+- **analyze.ts**: `--prompt` mode now includes "Directory Structure" step (step 5), explicitly instructing AI to create per-platform subdirectories (`020-specs/{platform}/`) instead of flat files in root
+  - Reads platform list from CONSTITUTION.md
+  - Each platform directory contains platform-specific analysis docs
+  - Root directory only holds cross-platform documents
+
 ## v6.32.0 (2026-08-15) — Onboarding Page Force-Display Fix (All Platforms)
 
 ### Core Changes
