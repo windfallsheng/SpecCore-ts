@@ -2,6 +2,14 @@
 
 ---
 
+## v6.32.0 (2026-08-15) — Onboarding Page Force-Display Fix (All Platforms)
+
+### Core Changes
+
+- **speccore-router/SKILL.md**: `[SPECCORE_ONBOARD]` handling changed from conditional ("platforms supporting present_files → display") to imperative ("**immediately execute** present_files"), eliminating AI selective-ignore loophole
+- **7 platform spec-ask.md** (.claude/.codebuddy/.cursor/.qoder/.trae/.trae-cn/.windsurf): Added "Onboarding Force Display" section, synced with SKILL.md rules
+- **init.ts**: spec-ask command template now includes onboarding force-display rule, ensuring new projects after `speccore init --update` also show the page correctly
+
 ## v6.31.0 (2026-08-15) — CONSTITUTION Section Diff on Upgrade + Update Sync Summary
 
 ### Core Changes
