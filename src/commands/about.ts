@@ -123,7 +123,7 @@ ${milestonesHtml}
 <h2>📚 文档 & 指南</h2>
 <a class="link" href="https://github.com/windfallsheng/SpecCore-ts/blob/main/README.md" target="_blank"><strong>📖 README</strong><span>项目说明 · 安装 · 核心概念 · 工作流</span></a>
 <a class="link" href="https://github.com/windfallsheng/SpecCore-ts/blob/main/docs/总览.md" target="_blank"><strong>🔭 总览</strong><span>核心概念 · 工作流 · 三种使用方式</span></a>
-<a class="link" href="https://github.com/windfallsheng/SpecCore-ts/blob/main/docs/命令参考.md" target="_blank"><strong>📋 命令参考</strong><span>全部 23 命令 · 子命令 · 示例</span></a>
+<a class="link" href="https://github.com/windfallsheng/SpecCore-ts/blob/main/docs/命令参考.md" target="_blank"><strong>📋 命令参考</strong><span>全部 22 命令 · 子命令 · 示例</span></a>
 <a class="link" href="https://github.com/windfallsheng/SpecCore-ts/blob/main/docs/场景实战.md" target="_blank"><strong>🎯 场景实战</strong><span>35 个真实开发场景</span></a>
 <a class="link" href="https://github.com/windfallsheng/SpecCore-ts/blob/main/docs/SDD方法论.md" target="_blank"><strong>💡 SDD 方法论</strong><span>规范驱动开发理念</span></a>
 <a class="link" href="https://github.com/windfallsheng/SpecCore-ts/blob/main/docs/工作空间组织.md" target="_blank"><strong>📁 工作空间</strong><span>目录结构与文件规范</span></a>
