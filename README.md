@@ -32,18 +32,6 @@
     └─────────────────────────────┘
 ```
 
-## 知识图谱可视化
-
-`speccore knowledge` 生成交互式 HTML 知识图谱，8 种形状区分实体类型，衰减检测自动发现风险：
-
-**全量视图（大节点）**
-
-![Knowledge Graph Full](docs/screenshots/knowledge-graph-full.png)
-
-**缩放视图（紧凑布局）**
-
-![Knowledge Graph Zoom](docs/screenshots/knowledge-graph-zoom.png)
-
 ## 快速开始
 
 ```bash
@@ -192,7 +180,7 @@ Iteration-001-meeting/
 
 ```bash
 npm install -g speccore
-speccore --version   # v5.71.0
+speccore --version   # v6.14.0
 ```
 
 ## 命令列表
@@ -243,7 +231,7 @@ speccore --version   # v5.71.0
 
 | 模式 | 触发 | 命令数 | 适用场景 |
 |------|------|:--:|------|
-| **简洁模式**（默认） | `speccore --help` | 21 个 | 日常开发够用：init → ask → dev → done |
+| **简洁模式**（默认） | `speccore --help` | 22 个 | 日常开发够用：init → ask → dev → done |
 | **全量模式** | `speccore --help full` | 55+ 个 | 高级用户：子命令 + 工具 + 调试 |
 
 ```bash
