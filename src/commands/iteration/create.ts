@@ -43,9 +43,7 @@ export async function iterationCreateCommand(options: IterationCreateOptions): P
     await ensureDir(join(iterationDir, '010-requirements', 'refactors'));
     await ensureDir(join(iterationDir, '010-requirements', 'research'));
     await ensureDir(join(iterationDir, '010-requirements', 'assets', 'extracted'));
-    await ensureDir(join(iterationDir, '010-requirements', 'assets', 'prototypes'));
-    await ensureDir(join(iterationDir, '010-requirements', 'assets', 'designs'));
-    await ensureDir(join(iterationDir, '010-requirements', 'assets', 'screenshots'));
+    await ensureDir(join(iterationDir, '010-requirements', 'prototypes'));
     await ensureDir(join(iterationDir, '020-specs'));
     await ensureDir(join(iterationDir, '030-tasks'));
 
