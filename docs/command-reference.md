@@ -145,8 +145,12 @@ speccore spec2doc [-i <iteration>] [-t <task>] [-f <format>] [-o <output>]
 ### 🧠 analyze — AI 分析 🔒 AI 命令
 ```bash
 speccore analyze [--iteration <name>] [--task <id>] [--audit]
+speccore analyze --full              # 全量分析（原 synthesize）
+speccore analyze --auto              # 自动分析 + 生成全套 Spec 文件
 ```
 别名: `al`
+
+> 💡 `--auto` 模式现在会自动生成全套 Spec 文件（TECH/TEST/REVIEW/RISK/DEPS/MONITOR/REQUIREMENT），不再产出空模板。
 
 ### 📦 split — 任务拆分 🔒 AI 命令
 ```bash
@@ -256,8 +260,11 @@ speccore change "<描述>" [--task <id>]
 ### 🔄 sync — 双向同步
 ```bash
 speccore sync [--global] [--iteration <name>]
+speccore sync --global --direction to_global   # 迭代 → 全量层
 ```
 别名: `sy`
+
+> 💡 `--global` 选项整合了原 `sync-global` 命令（sync-global 保留为向后兼容别名）。
 
 ### ✅ validate — 合规验证
 ```bash
@@ -325,17 +332,8 @@ speccore task status
 ```
 别名: `tk`
 
-### ⏰ schedule — 定时调度
+### ⏰ schedule — 定时调度 [已废弃]
 ```bash
-speccore schedule create --at "22:00" [--all] [-t <task>] [--batch-size <n>]
-speccore schedule list [--status pending|completed|failed]
-speccore schedule detail --id <id>
-speccore schedule cancel --id <id>
-speccore schedule retry --id <id> [--at "新时间"]
-speccore schedule delete --id <id>
-speccore schedule daemon start|stop|status
+speccore schedule
 ```
-- 跨平台守护：macOS LaunchAgent / Linux crontab / Windows Task Scheduler
-- 懒启动：create 自动安装守护并启动；无 pending 任务自动停
-- 多调度并存，各自独立管理
-- retry：任务未触发时可重调度
+> ℹ️️ 定时调度已由 WorkBuddy Automations 替代，此命令已废弃。

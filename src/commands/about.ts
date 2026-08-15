@@ -11,7 +11,7 @@ export async function aboutCommand(): Promise<void> {
     { icon: '📋', title: '任务管理', desc: '10+ 任务类型，迭代/计划/拆分' },
     { icon: '🔍', title: '统一检索层', desc: '文档 RAG + 代码切片 + 知识图谱三源合一' },
     { icon: '🔄', title: '文档驱动', desc: 'Word/Excel/CSV → Spec 双向转换' },
-    { icon: '📚', title: '全局知识沉淀', desc: 'sync-global 自动聚合 specs 到全局索引' },
+    { icon: '📚', title: '全局知识沉淀', desc: 'sync --global 自动聚合 specs 到全局索引' },
     { icon: '🤖', title: 'Skill 体系', desc: 'OpenSpec 标准，AI 自动路由' },
   ];
 
@@ -19,7 +19,7 @@ export async function aboutCommand(): Promise<void> {
   const highlights = [
     '统一检索层 — 文档 RAG + 代码切片 + 知识图谱，一次查询三源合并',
     'RAG 轻量级检索 — 按标题分块 + 结构化摘要 + 关键词标签，无向量数据库',
-    '全局知识沉淀 — sync-global 后自动聚合 specs，生成 GLOBAL/SUMMARY.md',
+    '全局知识沉淀 — sync --global 后自动聚合 specs，生成 GLOBAL/SUMMARY.md',
     '代码索引智能增强 — 知识图谱关联 + @spec 注释 + Git 联动 + 语义扩展',
     'Prompt 性能优化 — 统一读取 + 进程缓存 + 动态裁剪 + ExtraSpecs 大小限制',
     '增量刷新 — mtime 检测 + 只重建变更文件 + 新增文件扫描',

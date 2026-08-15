@@ -19,7 +19,7 @@ import { getDefaultIteration, getIterationDir } from '../core/context';
 import { findTaskDir } from '../core/task-paths';
 import { extractQuestions, showQuestionChecklist } from '../core/question-checklist';
 import { showNextSteps } from '../core/next-steps';
-import { runAnalysis, AnalyzeInput, supplementAnalysis, analyzeSingleFeature } from '../core/analyze-engine';
+import { runAnalysis, AnalyzeInput, supplementAnalysis, analyzeSingleFeature, generateSpecsFromRequirements } from '../core/analyze-engine';
 import { readFile, readdir } from 'fs-extra';
 import { generateGlobalArtifacts } from '../core/global-artifacts';
 import { buildPrompt, formatPrompt } from '../core/prompt-builder';
@@ -284,6 +284,12 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     if (result.summary) {
       logger.info(`   📊 分析: ${result.summary.filesAnalyzed} 文件, ${result.summary.apisFound} 接口, ${result.summary.issues} 问题, ${result.summary.risks} 风险`);
     }
+
+    // ── 自动生成全套 Spec 文件（替代空模板） ──
+    logger.info(`   📄 生成全套 Spec 文件...`);
+    const specResult = await generateSpecsFromRequirements(requirements, iter, specDir);
+    logger.success(`   ✅ Spec 文件: 生成 ${specResult.summary.withContent} 个, 跳过 ${specResult.summary.skipped} 个 (已有实质内容)`);
+
     printBackupSummary();
     return;
   }

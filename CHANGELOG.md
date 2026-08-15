@@ -1,3 +1,40 @@
+## v6.17.0 (2026-08-15) — 流程链路修复：analyze --auto 生成全套 Spec 文件
+
+### P0 修复：analyze --auto 全流程数据流修复
+
+- **analyze --auto 现在生成全套 Spec 文件**: 原来只生成 ANALYSIS.md，其他 spec 文件（TECH/TEST/REVIEW/RISK/DEPS/MONITOR/REQUIREMENT）保持空模板。现在 analyze --auto 会从需求内容中提取 API、功能模块、数据模型、业务规则等结构化信息，自动生成有实质内容的 spec 文件
+- **新增 `generateSpecsFromRequirements()` 函数**: analyze-engine.ts 新增 438 行，包含信息提取（API/功能/数据模型/业务规则）+ 7 个 Spec 文件内容构建器
+- **智能覆盖策略**: 已有实质内容的文件不会被覆盖（>50 非模板字符即跳过），空模板会被替换为有内容的版本
+- **数据流完整打通**: init → analyze --auto（生成全套 spec）→ split（从 spec 提取内容填充任务文件）→ execute
+
+### P1 修复：文档内容质量
+
+- **ANALYSIS.md 去重**: 修复 scanCompleteness() 在多文档内容重复时产生重复告警的问题（同一 message 只保留首次出现）
+- **doc2spec 文件名修复**: 未指定 --platform 时，输出文件名从 `requirementsrequirements.md` 修正为 `requirements.md`
+
+### P2 修复：流水线与文档
+
+- **dev 流水线内容验证**: doc2spec 阶段检查需求文档是否有实质内容（不是空文件）；analyze 阶段检查 TECH.md 是否有实质内容（不只是空模板），否则重新执行分析
+- **command-reference.md**: schedule 命令标记为已废弃，analyze 命令新增 --full/--auto 说明，sync 命令新增 --global 说明
+- **spec-layers.md**: synthesize 引用更新为 analyze --full
+- **knowledge-base-design.md**: sync-global 引用更新为 sync --global
+- **quick-start.md**: schedule 章节标记为已废弃，引导至 WorkBuddy Automations
+- **about.ts**: sync-global 引用更新为 sync --global
+
+### 涉及文件
+
+- `src/core/analyze-engine.ts` — 新增 generateSpecsFromRequirements + 信息提取 + 7 个 Spec 构建器 + scanCompleteness 去重
+- `src/commands/analyze.ts` — --auto 模式调用 generateSpecsFromRequirements
+- `src/commands/dev.ts` — doc2spec/analyze 阶段内容验证
+- `src/commands/doc2spec.ts` — 修复 requirementsrequirements.md 文件名异常
+- `src/commands/about.ts` — sync-global → sync --global
+- `docs/command-reference.md` — schedule 废弃 + analyze/sync 新选项说明
+- `docs/spec-layers.md` — synthesize → analyze --full
+- `docs/knowledge-base-design.md` — sync-global → sync --global
+- `docs/quick-start.md` — schedule 废弃
+
+---
+
 ## v6.16.0 (2026-08-15) — 命令整合优化
 
 ### 重构：命令合并与精简

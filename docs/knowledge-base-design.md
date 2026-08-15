@@ -254,7 +254,7 @@ speccore knowledge scan --from-code
 | **数据来源** | `010-requirements/` `020-specs/` | `src/**/*.ts` | 文件系统扫描 |
 | **粒度** | 标题级 chunk (~200-500字) | 函数/类级 slice (~50行) | 实体级 (REQ/SPEC/Task) |
 | **检索方式** | 关键词相关性评分 | 名称+签名匹配 | 实体ID+关系链 |
-| **何时构建** | analyze 阶段 | 实时切片（不缓存） | reindex / sync-global |
+| **何时构建** | analyze 阶段 | 实时切片（不缓存） | reindex / sync --global |
 | **何时消费** | buildPrompt | unifiedSearch | ask 引擎补参 |
 | **优势** | 语义相关、有摘要 | 精准到函数、有注释 | 关系推断、影响链 |
 
@@ -279,7 +279,7 @@ speccore knowledge scan --from-code
 |-------|---------|---------|---------|
 | Task | `rag-index.json` | 任务目录 `00-specs/` `_shared/` | `analyze --task` |
 | Iteration | `rag-index-{name}.json` | `020-specs/` | `analyze --iteration` |
-| Global | `rag-index-global.json` | 所有迭代 specs + GLOBAL/ | `sync-global` |
+| Global | `rag-index-global.json` | 所有迭代 specs + GLOBAL/ | `sync --global` |
 
 ### 与代码索引的协作
 
@@ -305,13 +305,13 @@ speccore knowledge scan --from-code
 
 - 迭代完成后自动聚合所有 specs 到全局索引
 - 生成轻量级 `GLOBAL/SUMMARY.md`（功能清单 + 技术要点 + API + 已知问题）
-- 支持手动编辑，不完美没关系，下次 sync-global 覆盖更新
+- 支持手动编辑，不完美没关系，下次 sync --global 覆盖更新
 - 全局 RAG 索引使跨迭代查询成为可能
 
 ### 触发流程
 
 ```
-sync-global to_global
+sync --global --direction to_global
     │
     ▼
 syncGlobalKnowledge()

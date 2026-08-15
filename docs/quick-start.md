@@ -193,20 +193,9 @@ speccore help --examples               # 完整场景示例
 │       └── frontend/{平台}/
 ```
 
-## ⏰ 调度执行
+## ⏰️ 调度执行 [已废弃]
 
-### 指定时间自动执行
-
-`schedule create --at` 直接指定时间，守护进程到点自动跑，不需要先放队列。
-
-```bash
-speccore schedule create --at "2026-08-10 02:00:00" --all -i Q1 -a 张三 --batch-size=3
-speccore schedule create --at "2026-08-10 21:00:00" -t Task-001
-speccore schedule daemon start       # 启动守护进程
-speccore schedule list               # 查看排队
-speccore schedule detail --id=xxx    # 查看详情(人员/分批/类型)
-speccore schedule cancel --id=xxx    # 取消
-```
+> ℹ️️ 定时调度已由 WorkBuddy Automations 替代。请使用 WorkBuddy 的自动化工作流实现定时任务。
 
 ### 批量标记 + 手动触发（轻量方式）
 

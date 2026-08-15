@@ -160,13 +160,36 @@ async function autoPipeline(options: DevOptions): Promise<void> {
         if (!(await pathExists(reqDoc)) && !hasFeatures) {
           logger.info('  ℹ️ 未找到需求文档，跳过（请手动 doc2spec）');
         } else {
-          logger.info('  ✅ 需求已导入，跳过');
+          // 检查需求文档是否有实质内容（不是空文件）
+          let hasContent = false;
+          try {
+            const { readFile: rf } = require('fs-extra');
+            const content = await rf(reqDoc, 'utf-8');
+            hasContent = content.replace(/^#+\s.*$/gm, '').replace(/\s/g, '').length > 50;
+          } catch {}
+          if (hasContent) {
+            logger.info('  ✅ 需求已导入且有实质内容，跳过');
+          } else {
+            logger.info('  ⚠️ 需求文档存在但内容为空，请手动 doc2spec 导入');
+          }
         }
         break;
       }
       case 'analyze': {
         const analysis = join(iterDir, '020-specs', 'ANALYSIS.md');
-        if (!(await pathExists(analysis))) {
+        const techSpec = join(iterDir, '020-specs', 'TECH.md');
+        // 检查 ANALYSIS.md 存在且 TECH.md 有实质内容（不只是空模板）
+        let needsAnalysis = !(await pathExists(analysis));
+        let needsSpecs = false;
+        if (!needsAnalysis) {
+          try {
+            const { readFile: rf } = require('fs-extra');
+            const techContent = await rf(techSpec, 'utf-8');
+            const meaningful = techContent.replace(/_待填充_|_待补充_|\|\s*\|/g, '').replace(/\s/g, '');
+            needsSpecs = meaningful.length < 50;
+          } catch { needsSpecs = true; }
+        }
+        if (needsAnalysis || needsSpecs) {
           execSync(`speccore analyze --auto -I ${iteration}`, { stdio: 'inherit' });
         } else {
           logger.info('  ✅ 分析已完成，跳过');

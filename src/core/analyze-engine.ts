@@ -805,7 +805,14 @@ function scanCompleteness(content: string): Issue[] {
     issues.push({ severity: 'info', category: '内容完整性', message: '未找到数据模型/数据表描述。如需数据库变更，建议补充。' });
   }
 
-  return issues;
+  // 去重：同一 message 只保留第一次出现（避免多文档内容重复扫描导致重复告警）
+  const seen = new Set<string>();
+  return issues.filter(issue => {
+    const key = issue.message;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 interface ArchImpact {
@@ -1788,4 +1795,442 @@ async function detectPlatformsFromConstitution(): Promise<string[]> {
     }
   } catch {}
   return ['app', 'h5', 'miniapp', 'admin']; // 默认四端
+}
+
+// ================================================================
+// 从需求内容自动生成全套 Spec 文件（替代空模板）
+// ================================================================
+
+export interface SpecGenerationResult {
+  files: { filename: string; content: string }[];
+  summary: { total: number; withContent: number; skipped: number };
+}
+
+/**
+ * 从需求文档内容中提取结构化信息，生成有实质内容的 Spec 文件。
+ * 用于 analyze --auto 模式，替代 init 创建的空模板。
+ */
+export async function generateSpecsFromRequirements(
+  reqPaths: string[],
+  iteration: string,
+  specDir: string,
+): Promise<SpecGenerationResult> {
+  // 1. 读取所有需求内容
+  const allContent: string[] = [];
+  for (const p of reqPaths) {
+    if (await pathExists(p)) {
+      allContent.push(await readFile(p, 'utf-8'));
+    }
+  }
+  const fullContent = allContent.join('\n\n---\n\n');
+  if (fullContent.trim().length < 20) {
+    logger.warn('   ⚠️ 需求文档内容过少，无法生成有效 Spec 文件');
+    return { files: [], summary: { total: 0, withContent: 0, skipped: 0 } };
+  }
+
+  // 2. 提取结构化信息
+  const apis = extractApis(fullContent);
+  const features = extractFeatures(fullContent);
+  const dataModels = extractDataModels(fullContent);
+  const businessRules = extractBusinessRules(fullContent);
+  const archImpact = await analyzeArchitectureImpact(fullContent);
+  const platforms = await detectPlatformsFromConstitution();
+  const now = new Date().toISOString().split('T')[0];
+
+  // 3. 生成各 Spec 文件
+  const files: { filename: string; content: string }[] = [];
+
+  // REQUIREMENT.md — 结构化需求规格
+  files.push({
+    filename: 'REQUIREMENT.md',
+    content: buildRequirementSpec(iteration, now, features, apis, dataModels, businessRules),
+  });
+
+  // TECH.md — 技术方案
+  files.push({
+    filename: 'TECH.md',
+    content: buildTechSpec(iteration, now, apis, dataModels, archImpact, platforms, features),
+  });
+
+  // TEST.md — 测试计划
+  files.push({
+    filename: 'TEST.md',
+    content: buildTestSpec(iteration, now, features, apis),
+  });
+
+  // REVIEW.md — 评审清单
+  files.push({
+    filename: 'REVIEW.md',
+    content: buildReviewSpec(iteration, now, apis, archImpact),
+  });
+
+  // RISK.md — 风险评估
+  files.push({
+    filename: 'RISK.md',
+    content: buildRiskSpec(iteration, now, archImpact),
+  });
+
+  // DEPS.md — 依赖清单
+  files.push({
+    filename: 'DEPS.md',
+    content: buildDepsSpec(iteration, now, archImpact),
+  });
+
+  // MONITOR.md — 监控指标
+  files.push({
+    filename: 'MONITOR.md',
+    content: buildMonitorSpec(iteration, now, apis, features),
+  });
+
+  // 4. 写入文件（覆盖空模板，不覆盖已有实质内容的文件）
+  let withContent = 0;
+  let skipped = 0;
+  await ensureDir(specDir);
+  for (const f of files) {
+    const filePath = join(specDir, f.filename);
+    // 如果文件已存在且有实质内容（>50 非模板字符），跳过
+    if (await pathExists(filePath)) {
+      const existing = await readFile(filePath, 'utf-8');
+      const meaningful = stripTemplateNoise(existing);
+      if (meaningful.length > 50) {
+        skipped++;
+        continue;
+      }
+    }
+    await writeFile(filePath, f.content);
+    withContent++;
+  }
+
+  return {
+    files,
+    summary: { total: files.length, withContent, skipped },
+  };
+}
+
+// ── 信息提取工具函数 ──
+
+function extractApis(content: string): { method: string; path: string; desc: string }[] {
+  const apis: { method: string; path: string; desc: string }[] = [];
+  // 从表格中提取: | GET | /api/xxx | 说明 |
+  const tableRegex = /\|\s*(GET|POST|PUT|DELETE|PATCH|get|post|put|delete|patch)\s*\|\s*(\/[^\s|]+)\s*\|\s*([^|\n]*)\|/g;
+  let m: RegExpExecArray | null;
+  while ((m = tableRegex.exec(content)) !== null) {
+    apis.push({ method: m[1].toUpperCase(), path: m[2].trim(), desc: m[3].trim() });
+  }
+  // 从行内提取: POST /api/xxx
+  const inlineRegex = /(GET|POST|PUT|DELETE|PATCH)\s+(\/api\/[^\s,，。]+)/gi;
+  while ((m = inlineRegex.exec(content)) !== null) {
+    const path = m[2].trim();
+    if (!apis.some(a => a.path === path)) {
+      apis.push({ method: m[1].toUpperCase(), path, desc: '' });
+    }
+  }
+  // 去重
+  const seen = new Set<string>();
+  return apis.filter(a => {
+    const key = `${a.method}:${a.path}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function extractFeatures(content: string): { name: string; desc: string }[] {
+  const features: { name: string; desc: string }[] = [];
+  // 从 ## / ### 标题提取功能模块
+  const lines = content.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const headingMatch = line.match(/^#{2,3}\s+(.+)$/);
+    if (headingMatch) {
+      const name = headingMatch[1].trim();
+      // 跳过通用标题
+      if (/^(需求|功能|接口|附录|目录|概述|背景|目标|范围|非功能)/.test(name)) continue;
+      if (/^(测试|评审|风险|依赖|监控|技术)/.test(name)) continue;
+      // 取后续 1-2 行作为描述
+      let desc = '';
+      for (let j = i + 1; j < Math.min(i + 4, lines.length); j++) {
+        if (lines[j].match(/^#/)) break;
+        if (lines[j].trim()) desc += lines[j].trim() + ' ';
+      }
+      if (name.length > 1 && name.length < 30) {
+        features.push({ name, desc: desc.slice(0, 100).trim() });
+      }
+    }
+  }
+  // 去重（按名称）
+  const seen = new Set<string>();
+  return features.filter(f => {
+    if (seen.has(f.name)) return false;
+    seen.add(f.name);
+    return true;
+  }).slice(0, 20); // 最多 20 个功能模块
+}
+
+function extractDataModels(content: string): { table: string; fields: string; desc: string }[] {
+  const models: { table: string; fields: string; desc: string }[] = [];
+  // 检测数据表关键词
+  const tablePatterns = [
+    /(?:表名|数据表|实体|模型)[：:]\s*(\w+)/gi,
+    /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"']?(\w+)/gi,
+    /(?:user|order|product|item|payment|auth|log|config|setting)s?\b/gi,
+  ];
+  const tables = new Set<string>();
+  for (const pattern of tablePatterns) {
+    let m: RegExpExecArray | null;
+    while ((m = pattern.exec(content)) !== null) {
+      tables.add(m[1] || m[0]);
+    }
+  }
+  for (const t of tables) {
+    models.push({ table: t, fields: '—', desc: '从需求推导' });
+  }
+  return models.slice(0, 15);
+}
+
+function extractBusinessRules(content: string): string[] {
+  const rules: string[] = [];
+  // 匹配 R-XX 格式的业务规则编号
+  const ruleRegex = /R-\d{2,4}[-.]?\d{0,2}[：:]*\s*(.+)/g;
+  let m: RegExpExecArray | null;
+  while ((m = ruleRegex.exec(content)) !== null) {
+    rules.push(m[1].trim());
+  }
+  // 匹配「必须」「不允许」「应当」等规则描述
+  const mustRegex = /(?:必须|不允许|应当|不能|需要|确保)\s*(.{5,60})/g;
+  while ((m = mustRegex.exec(content)) !== null) {
+    const rule = m[1].trim().replace(/[。，,.]+$/, '');
+    if (rule.length > 5 && !rules.some(r => r.includes(rule))) {
+      rules.push(rule);
+    }
+  }
+  return rules.slice(0, 15);
+}
+
+function stripTemplateNoise(content: string): string {
+  // 移除模板占位符后计算有效内容长度
+  return content
+    .replace(/_待填充_|_待补充_|_待 AI 分析_|_待定_|_待导入_/g, '')
+    .replace(/\|\s*:---[\s|:-]*\|/g, '')  // 表格分隔行
+    .replace(/\|\s*\|\s*\|/g, '')          // 空表格行
+    .replace(/^#+\s.*$/gm, '')             // 标题行
+    .replace(/^>.*$/gm, '')                // 引用行
+    .replace(/\s/g, '')
+    .trim();
+}
+
+// ── Spec 文件内容构建器 ──
+
+function buildRequirementSpec(
+  iter: string, now: string,
+  features: { name: string; desc: string }[],
+  apis: { method: string; path: string; desc: string }[],
+  models: { table: string; fields: string; desc: string }[],
+  rules: string[],
+): string {
+  let md = `# 需求规格说明书\n\n> 迭代: ${iter} | 生成: ${now} | 由 analyze --auto 自动提取\n\n`;
+  md += `## 1. 功能模块清单\n\n`;
+  if (features.length > 0) {
+    md += `| # | 功能模块 | 描述 |\n| :--- | :--- | :--- |\n`;
+    features.forEach((f, i) => { md += `| ${i + 1} | ${f.name} | ${f.desc || '—'} |\n`; });
+  } else {
+    md += `_需求文档中未检测到明确的功能模块标题，建议补充功能章节。_\n`;
+  }
+  md += `\n## 2. 接口清单\n\n`;
+  if (apis.length > 0) {
+    md += `| 方法 | 路径 | 说明 |\n| :--- | :--- | :--- |\n`;
+    apis.forEach(a => { md += `| ${a.method} | \`${a.path}\` | ${a.desc || '—'} |\n`; });
+  } else {
+    md += `_需求文档中未检测到接口定义，建议补充 API 规格。_\n`;
+  }
+  md += `\n## 3. 数据模型\n\n`;
+  if (models.length > 0) {
+    md += `| 实体/表 | 关键字段 | 说明 |\n| :--- | :--- | :--- |\n`;
+    models.forEach(m => { md += `| ${m.table} | ${m.fields} | ${m.desc} |\n`; });
+  } else {
+    md += `_需求文档中未检测到数据模型描述。_\n`;
+  }
+  md += `\n## 4. 业务规则\n\n`;
+  if (rules.length > 0) {
+    rules.forEach((r, i) => { md += `${i + 1}. ${r}\n`; });
+  } else {
+    md += `_需求文档中未检测到明确业务规则。_\n`;
+  }
+  return md;
+}
+
+function buildTechSpec(
+  iter: string, now: string,
+  apis: { method: string; path: string; desc: string }[],
+  models: { table: string; fields: string; desc: string }[],
+  archImpact: ArchImpact,
+  platforms: string[],
+  features: { name: string; desc: string }[],
+): string {
+  let md = `# 技术方案\n\n> 迭代: ${iter} | 生成: ${now} | 由 analyze --auto 自动提取\n\n`;
+  // 架构
+  md += `## 1. 整体架构\n\n`;
+  md += `基于需求分析，系统涉及以下端: ${platforms.join('、') || '未配置'}\n\n`;
+  if (archImpact.modules.length > 0) {
+    md += `**架构影响**: ${archImpact.modules.join('; ')}\n\n`;
+  }
+  // API 设计
+  md += `## 2. API 设计\n\n`;
+  if (apis.length > 0) {
+    md += `| 方法 | 路径 | 说明 | 所属模块 |\n| :--- | :--- | :--- | :--- |\n`;
+    apis.forEach(a => {
+      const mod = guessModule(a.path, features);
+      md += `| ${a.method} | \`${a.path}\` | ${a.desc || '—'} | ${mod} |\n`;
+    });
+  } else {
+    md += `_未检测到 API 定义，需根据需求补充。_\n`;
+  }
+  // 数据库
+  md += `\n## 3. 数据库设计\n\n`;
+  if (models.length > 0) {
+    md += `| 表名 | 说明 |\n| :--- | :--- |\n`;
+    models.forEach(m => { md += `| \`${m.table}\` | ${m.desc} |\n`; });
+    md += `\n> 💡 详细字段设计需在开发阶段补充 DDL。\n`;
+  } else {
+    md += `_需求中未检测到数据模型，需根据功能需求推导。_\n`;
+  }
+  // 中间件
+  if (archImpact.newDependencies.length > 0) {
+    md += `\n## 4. 中间件与外部依赖\n\n`;
+    md += `| 依赖 | 用途 |\n| :--- | :--- |\n`;
+    archImpact.newDependencies.forEach(d => { md += `| ${d} | 需求文档提及 |\n`; });
+  }
+  return md;
+}
+
+function buildTestSpec(
+  iter: string, now: string,
+  features: { name: string; desc: string }[],
+  apis: { method: string; path: string; desc: string }[],
+): string {
+  let md = `# 测试计划\n\n> 迭代: ${iter} | 生成: ${now} | 由 analyze --auto 自动提取\n\n`;
+  // 单元测试
+  md += `## 1. 单元测试\n\n`;
+  if (features.length > 0) {
+    features.forEach(f => {
+      md += `- [ ] ${f.name}: 核心逻辑覆盖\n`;
+    });
+  } else {
+    md += `- [ ] 核心模块覆盖\n`;
+  }
+  // 接口测试
+  md += `\n## 2. 接口测试\n\n`;
+  if (apis.length > 0) {
+    md += `| 接口 | 测试场景 | 预期结果 |\n| :--- | :--- | :--- |\n`;
+    apis.forEach(a => {
+      md += `| \`${a.method} ${a.path}\` | 正常请求 | 200 响应 |\n`;
+      md += `| \`${a.method} ${a.path}\` | 缺少必填参数 | 400 错误 |\n`;
+    });
+  } else {
+    md += `_未检测到接口定义，需补充接口测试用例。_\n`;
+  }
+  // E2E
+  md += `\n## 3. E2E 端到端测试\n\n`;
+  if (features.length >= 2) {
+    md += `- [ ] 核心业务流程: ${features.slice(0, 3).map(f => f.name).join(' → ')}\n`;
+  }
+  md += `- [ ] 异常流程: 网络超时、并发冲突、权限不足\n`;
+  // 性能
+  md += `\n## 4. 性能测试\n\n`;
+  md += `- [ ] 接口响应时间 < 500ms (P99)\n`;
+  md += `- [ ] 并发用户数 ≥ 100\n`;
+  return md;
+}
+
+function buildReviewSpec(
+  iter: string, now: string,
+  apis: { method: string; path: string; desc: string }[],
+  archImpact: ArchImpact,
+): string {
+  let md = `# 评审检查清单\n\n> 迭代: ${iter} | 生成: ${now} | 由 analyze --auto 自动提取\n\n`;
+  md += `## 安全\n\n`;
+  apis.forEach(a => {
+    const authCheck = a.method === 'POST' || a.method === 'PUT' || a.method === 'DELETE' ? '鉴权 + 参数校验' : '鉴权检查';
+    md += `- [ ] \`${a.path}\` — ${authCheck}\n`;
+  });
+  if (apis.length === 0) md += `- [ ] 接口鉴权完整性\n`;
+  md += `\n## 质量\n\n`;
+  md += `- [ ] 幂等性处理（POST/PUT 接口）\n`;
+  md += `- [ ] 事务一致性（涉及多表操作）\n`;
+  md += `- [ ] 错误处理与友好提示\n`;
+  md += `- [ ] 日志规范（关键操作记录）\n`;
+  if (archImpact.risks.length > 0) {
+    md += `\n## 风险相关\n\n`;
+    archImpact.risks.forEach(r => { md += `- [ ] ${r}\n`; });
+  }
+  return md;
+}
+
+function buildRiskSpec(iter: string, now: string, archImpact: ArchImpact): string {
+  let md = `# 风险评估\n\n> 迭代: ${iter} | 生成: ${now} | 由 analyze --auto 自动提取\n\n`;
+  md += `## 风险矩阵\n\n`;
+  if (archImpact.risks.length > 0) {
+    md += `| 风险 | 可能性 | 影响 | 缓解措施 |\n| :--- | :--- | :--- | :--- |\n`;
+    archImpact.risks.forEach(r => {
+      md += `| ${r} | 中 | 中 | 需评审确认 |\n`;
+    });
+  } else {
+    md += `_从需求中未检测到明显风险项，建议在评审中确认。_\n`;
+  }
+  md += `\n## 回滚方案\n\n`;
+  md += `1. 触发条件: 核心接口错误率 > 5% 或数据不一致\n`;
+  md += `2. 回滚步骤: 回退至上一稳定版本镜像 + 数据库回滚脚本\n`;
+  md += `3. 验证方式: 冒烟测试通过 + 监控指标恢复正常\n`;
+  return md;
+}
+
+function buildDepsSpec(iter: string, now: string, archImpact: ArchImpact): string {
+  let md = `# 依赖清单\n\n> 迭代: ${iter} | 生成: ${now} | 由 analyze --auto 自动提取\n\n`;
+  md += `## 上游依赖\n\n`;
+  if (archImpact.newDependencies.length > 0) {
+    md += `| 服务 | 用途 | 备注 |\n| :--- | :--- | :--- |\n`;
+    archImpact.newDependencies.forEach(d => { md += `| ${d} | 需求文档提及 | 需确认版本和 SLA |\n`; });
+  } else {
+    md += `_从需求中未检测到外部依赖，需评审确认。_\n`;
+  }
+  md += `\n## 下游影响\n\n`;
+  md += `_需根据 API 变更评估下游消费方影响。_\n`;
+  return md;
+}
+
+function buildMonitorSpec(
+  iter: string, now: string,
+  apis: { method: string; path: string; desc: string }[],
+  features: { name: string; desc: string }[],
+): string {
+  let md = `# 监控指标\n\n> 迭代: ${iter} | 生成: ${now} | 由 analyze --auto 自动提取\n\n`;
+  md += `## 业务指标\n\n`;
+  md += `| 指标 | 阈值 | 级别 |\n| :--- | :--- | :--- |\n`;
+  md += `| 接口成功率 | < 99.9% | P1 |\n`;
+  md += `| P99 延迟 | > 1000ms | P2 |\n`;
+  if (features.length > 0) {
+    md += `| 核心功能可用率 | < 99.5% | P1 |\n`;
+  }
+  md += `\n## 告警规则\n\n`;
+  md += `| 规则 | 条件 | 通知 |\n| :--- | :--- | :--- |\n`;
+  md += `| 接口错误率突增 | 5 分钟内错误率 > 1% | 企微/钉钉 |\n`;
+  md += `| 响应时间劣化 | P99 > 2s 持续 3 分钟 | 企微/钉钉 |\n`;
+  if (apis.length > 0) {
+    md += `| 关键接口异常 | \`${apis[0].path}\` 连续失败 3 次 | 电话告警 |\n`;
+  }
+  return md;
+}
+
+function guessModule(apiPath: string, features: { name: string; desc: string }[]): string {
+  // 简单启发式：API 路径关键词匹配功能模块
+  const segments = apiPath.split('/').filter(Boolean);
+  for (const f of features) {
+    const nameLower = f.name.toLowerCase();
+    for (const seg of segments) {
+      if (nameLower.includes(seg.toLowerCase()) || seg.toLowerCase().includes(nameLower.slice(0, 4))) {
+        return f.name;
+      }
+    }
+  }
+  return segments[1] || '—';
 }
