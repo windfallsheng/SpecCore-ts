@@ -277,7 +277,9 @@ speccore knowledge [-i <iteration>] [--export html] [--scope global|iteration|ta
 - **RAG 上下文预览**：查看 AI 检索时会注入的完整上下文
 - **9 套主题 / 3 种字体 / 4 档字号 / 全屏模式 / 实体搜索**
 
-![Knowledge Graph](screenshots/knowledge-graph.png)
+![Knowledge Graph](screenshots/knowledge-graph-full.png)
+
+![Knowledge Graph Zoom](screenshots/knowledge-graph-zoom.png)
 
 ### 🔗 track — 全链路追踪
 ```bash
