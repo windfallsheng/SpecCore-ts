@@ -2,6 +2,16 @@
 
 ---
 
+## v6.36.0 (2026-08-15) — Analyze Marks Feature Platforms + Split Smartly Splits by Platform
+
+### Core Changes
+
+- **analyze-engine.ts**: `buildRequirementSpec()` adds "涉及端" (involved platforms) column to feature module list, defaulting to "_待 AI 标注_" for subsequent AI or manual annotation
+- **split.ts**: `createTaskFromSection()` refactors platform inference logic:
+  - Priority: Use AI-annotated `_scopePlatforms`
+  - Fallback: Infer from whether `020-specs/{platform}/TECH.md` has substantial content
+  - Final fallback: All platforms (backward compatible)
+
 ## v6.35.0 (2026-08-15) — Analyze --auto Generates Platform-Specific Docs (Global + Per-Platform Separation)
 
 ### Core Changes

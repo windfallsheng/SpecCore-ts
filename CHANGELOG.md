@@ -1,3 +1,13 @@
+## v6.36.0 (2026-08-15) — analyze 标注功能涉及端 + split 按端智能拆分
+
+### 核心变更
+
+- **analyze-engine.ts**：`buildRequirementSpec()` 在功能模块清单新增「涉及端」列，默认填「_待 AI 标注_」，供后续 AI 或人工补充
+- **split.ts**：`createTaskFromSection()` 重构端推断逻辑：
+  - 优先使用 AI 标注的 `_scopePlatforms`
+  - 否则从 `020-specs/{端}/TECH.md` 是否有实质内容推断该功能是否涉及该端
+  - 都没检测到时回退到所有端（兼容旧行为）
+
 ## v6.35.0 (2026-08-15) — analyze --auto 按端生成专属文档（全局+各端分离）
 
 ### 核心变更
