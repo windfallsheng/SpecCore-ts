@@ -5,7 +5,7 @@
 import { writeFile, pathExists, readFile, readdir, ensureDir } from 'fs-extra';
 import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
-import { safeWriteWithBackup, safeCopyDirWithBackup, _updateConflicts } from './init';
+import { safeWriteWithBackup, safeCopyDirWithBackup, _updateConflicts, generateSettingsContent, generateAIRulesContent } from './init';
 
 const CURRENT_VERSION = require('../../package.json').version;
 
@@ -156,6 +156,12 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
       await safeWriteWithBackup(join(projectRoot, 'AGENTS.md'), newAgents);
       await safeWriteWithBackup(join(projectRoot, 'CLAUDE.md'), '<!-- 规则请参考 AGENTS.md -->\n\n@AGENTS.md\n');
     }
+  } catch {}
+
+  // 4c-2. 更新 SETTINGS.md / AI-RULES.md（旧文件重命名时间戳，提示用户迁移数据）
+  try {
+    await safeWriteWithBackup(join(speccoreDir, 'SETTINGS.md'), generateSettingsContent());
+    await safeWriteWithBackup(join(speccoreDir, 'AI-RULES.md'), generateAIRulesContent());
   } catch {}
 
   // 4d. 清理旧版本残留的命令文件和 Skill 目录

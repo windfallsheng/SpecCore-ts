@@ -260,92 +260,7 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
     await updateGitignore(projectRoot);
 
     // ── AI 使用规则 ──
-    await writeFile(join(projectRoot, '.speccore', 'AI-RULES.md'), [
-      '# AI 使用 SpecCore 的规则',
-      '',
-      '> 本文档帮助 AI 代理（TRAE/Claude/Qoder等）正确使用 SpecCore 命令。',
-      '',
-      '## 核心原则',
-      '',
-      '1. **/spec:ask 是智能路由入口** — 用户说"新建迭代"、"分析需求" → 调用 `speccore ask`，不要自己写 mkdir/analyze',
-      '2. **不要跨命令猜测** — 每个斜杠命令只做它描述的事，不要自动级联后续步骤',
-      '3. **参数从命令描述获取** — /spec:execute 的描述中有完整的参数说明',
-      '4. **上下文不足时读取文件** — 查看 .speccore/CONSTITUTION.md、STAFFING.md 等',
-      '',
-      '## 核心流水线',
-      '',
-      '```',
-      'init → doc2spec → analyze → split → plan → execute → pr → done → spec2doc',
-      '```',
-      '',
-      '## 命令快速参考',
-      '',
-      '| 命令 | 作用 | 参数 | 上游依赖 | 下游产出 |',
-      '| :--- | :--- | :--- | :--- | :--- |',
-      '| init | 初始化项目 | --interactive/--force/--update | 无 | .speccore/ + 工具集成 |',
-      '| doc2spec | Word→Spec MD (CLI) | -f <文件> --iter <迭代> | PRD/Word | 010-requirements/*.md |',
-      '| **spec-doc2spec** | **AI+Pandoc 双路交叉验证导入** | **(Skill 自动触发)** | PRD原文 | REQUIREMENT.md + VALIDATION.md |',
-      '| analyze | 需求分析 | -I <迭代> --task <任务> | 010-requirements/ | 020-specs/ANALYSIS.md |',
-      '| split | 拆分任务 | -i <迭代> --owner <人> | 020-specs/ | Task-001~NNN/ |',
-      '| plan | 执行计划 | -I <迭代> --owner <人> | Task 列表 | plan.json |',
-      '| execute | 执行开发 | -i <迭代> -t <任务> --type <类型> | REQ.md/TECH.md | 代码 + .issues.md |',
-      '| pr | 创建PR | --task <任务> | 代码提交 | Pull Request |',
-      '| done | 归档收尾 | --task <任务> | 全部完成 | .verification |',
-      '| spec2doc | Spec→文档导出 (CLI) | -i <迭代> -o <文件> -f <格式> | 020-specs/ | Word/PDF/HTML |',
-      '| **spec-spec2doc** | **AI排版+Pandoc导出+验证** | **(Skill 自动触发)** | SpecCore文档 | 精美排版文档 |',
-      '| retro | 任务回顾 | --task/--all/--owner/--type | done后 | 回顾报告 |',
-      '| change | 需求变更 | <描述> --task <任务> --type | 进行中任务 | 变更记录 |',
-      '| dev | 智能级联 | --auto/--from/--to | 全部阶段 | 自动全流程 |',
-      '',
-      '## AI Skills（.agents/skills/）',
-      '',
-      '项目包含 10 个高阶 Skill，AI 工具自动加载：',
-      '',
-      '| Skill | 能力 | 激活方式 |',
-      '| :--- | :--- | :--- |',
-      '| speccore-router | 中文意图→CLI命令（20+映射） | "分析需求"/"创建迭代" |',
-      '| spec-doc2spec | **AI语义提取+Pandoc机械转换+交叉验证** | "帮我分析这个PRD"/"导入需求文档" |',
-      '| spec-spec2doc | **AI内容编排+Pandoc格式转换+质量验证** | "导出文档"/"生成交付文档" |',
-      '| spec-analyze | 深度需求分析（拆解→映射→风险） | "分析需求" |',
-      '| spec-split | 智能任务拆分（分组→分配→依赖） | "拆分任务" |',
-      '| spec-execute | 代码生成+编译+测试+修复循环 | "开发Task-001" |',
-      '| spec-plan | 排程+里程碑+并行策略 | "生成计划" |',
-      '| spec-dev | 阶段检测+状态展示+推荐下一步 | "推进项目" |',
-      '| spec-change | 变更记录+影响分析+代码更新 | "需求变更" |',
-      '| spec-ask | 自然语言引擎（四大模式） | "怎么做"/"流程是什么" |',
-      '',
-      '## 目录结构',
-      '',
-      '```',
-      'Iteration-xxx/',
-      '├── 000-overview/     ← 进度跟踪',
-      '├── 010-requirements/     ← 需求文档（按功能组织）',
-      '│   ├── README.md       ← 目录规范说明',
-      '│   ├── INDEX.md        ← 需求文档索引',
-      '│   ├── sources/        ← [只读] 原始 PRD/Word/PDF',
-      '│   ├── converted/      ← [自动生成] doc2spec 转换后的 MD',
-      '│   ├── features/       ← [手动维护] 按功能模块组织',
-      '│   │   └── {feature}/README.md',
-      '│   └── assets/         ← 素材（prd/prototypes/designs/screenshots）',
-      '├── 020-specs/     ← analyze 输出',
-      '├── 030-tasks/     ← 开发任务',
-      '│   └── Task-*/',
-      '│       ├── .meta/         ← 任务元信息（type/status/owner/created-at）',
-      '│       ├── _shared/       ← 共享规格（REQ/TECH/SCHEMA/CHANGELOG/API_CONTRACT）',
-      '│       ├── backend/       ← 后端子任务（TASK.md + src/tests）',
-      '│       ├── web/           ← Web前端子任务（TASK.md + src/tests）',
-      '│       ├── 99-artifacts/  ← 执行产出（自检门禁 + 参考文档）',
-      '│       └── .issues.md     ← 问题追踪',
-      '├── STAFFING.md      ← 人员排期',
-      '```',
-      '',
-      '## AI 行为约束',
-      '',
-      '- **不要自己创建目录** — 用 `speccore iteration create -n <名称>`',
-      '- **不要自己解析需求** — 用 `speccore analyze -I <迭代>`',
-      '- **失败时读取 .issues.md** — 不要猜测，看文件里的问题清单',
-      '- **续跑用 --resume** — `speccore execute --resume` 自动扫描 .needs-retry',
-    ].join('\n'));
+    await writeFile(join(projectRoot, '.speccore', 'AI-RULES.md'), generateAIRulesContent());
     logger.info('   🤖 已生成 AI 使用规则: .speccore/AI-RULES.md');
 
     // ── AGENTS.md + 工具适配（Cursor/Windsurf/Claude 等）──
@@ -499,48 +414,7 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
   // SETTINGS.md
   await writeFile(
     join(speccoreDir, 'SETTINGS.md'),
-    `# SpecCore 框架配置
-
-> 修改后，AI 将在下一次执行命令时自动生效。
-
----
-
-## 1. 执行人追踪（Assignee Tracking）
-
-| 配置项 | 可选值 | 默认值 | 说明 |
-| :--- | :--- | :--- | :--- |
-| \`assignee.enabled\` | \`true\`/\`false\` | \`true\` | 是否启用执行人追踪 |
-| \`assignee.mode\` | \`strict\`/\`loose\`/\`off\` | \`loose\` | 强制程度 |
-
-### 模式说明
-| 模式 | 行为 |
-| :--- | :--- |
-| **\`strict\`** | 校验执行人与 Git 提交者，不一致时阻断命令执行 |
-| **\`loose\`** | 自动填写 Git 提交者，仅发出警告（推荐） |
-| **\`off\`** | 不读取、不校验、不推荐任何人 |
-
-## 2. 双向追溯配置
-
-| 配置项 | 可选值 | 默认值 | 说明 |
-| :--- | :--- | :--- | :--- |
-| \`trace.enabled\` | \`true\`/\`false\` | \`true\` | 是否启用双向追溯 |
-| \`trace.auto_annotate\` | \`true\`/\`false\` | \`true\` | 生成代码时是否自动添加 @spec 注释 |
-
-## 3. 其他配置
-
-| 配置项 | 可选值 | 默认值 | 说明 |
-| :--- | :--- | :--- | :--- |
-| \`archive.auto_cleanup\` | \`true\`/\`false\` | \`false\` | 归档时是否自动清理未使用的资源 |
-| \`plan.parallel_suggest\` | \`true\`/\`false\` | \`true\` | 是否自动推荐并行开发策略 |
-| \`validation.strict_mode\` | \`true\`/\`false\` | \`false\` | 合规性检查是否为严格模式 |
-| \`sync.auto_check\` | \`true\`/\`false\` | \`true\` | 开发完成后是否自动检查反向同步 |
-| \`review.check_assignee\` | \`true\`/\`false\` | \`false\` | 审查时是否检查执行人签名 |
-
-## 4. 配置变更记录
-
-| 日期 | 变更项 | 旧值 | 新值 | 变更人 |
-| :--- | :--- | :--- | :--- | :--- |
-`
+    generateSettingsContent()
   );
 
   // Ask 引擎配置
@@ -1790,7 +1664,142 @@ function generateConstitutionTemplate(projectRoot: string): string {
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | ${projectName} | 待填写 | ./ | ${gitUrl || '待配置'} | main | app, h5, miniapp, admin |
 `;
+}
 
+/** SETTINGS.md 模板内容 */
+export function generateSettingsContent(): string {
+  return `# SpecCore 框架配置
+
+> 修改后，AI 将在下一次执行命令时自动生效。
+
+---
+
+## 1. 执行人追踪（Assignee Tracking）
+
+| 配置项 | 可选值 | 默认值 | 说明 |
+| :--- | :--- | :--- | :--- |
+| \`assignee.enabled\` | \`true\`/\`false\` | \`true\` | 是否启用执行人追踪 |
+| \`assignee.mode\` | \`strict\`/\`loose\`/\`off\` | \`loose\` | 强制程度 |
+
+### 模式说明
+| 模式 | 行为 |
+| :--- | :--- |
+| **\`strict\`** | 校验执行人与 Git 提交者，不一致时阻断命令执行 |
+| **\`loose\`** | 自动填写 Git 提交者，仅发出警告（推荐） |
+| **\`off\`** | 不读取、不校验、不推荐任何人 |
+
+## 2. 双向追溯配置
+
+| 配置项 | 可选值 | 默认值 | 说明 |
+| :--- | :--- | :--- | :--- |
+| \`trace.enabled\` | \`true\`/\`false\` | \`true\` | 是否启用双向追溯 |
+| \`trace.auto_annotate\` | \`true\`/\`false\` | \`true\` | 生成代码时是否自动添加 @spec 注释 |
+
+## 3. 其他配置
+
+| 配置项 | 可选值 | 默认值 | 说明 |
+| :--- | :--- | :--- | :--- |
+| \`archive.auto_cleanup\` | \`true\`/\`false\` | \`false\` | 归档时是否自动清理未使用的资源 |
+| \`plan.parallel_suggest\` | \`true\`/\`false\` | \`true\` | 是否自动推荐并行开发策略 |
+| \`validation.strict_mode\` | \`true\`/\`false\` | \`false\` | 合规性检查是否为严格模式 |
+| \`sync.auto_check\` | \`true\`/\`false\` | \`true\` | 开发完成后是否自动检查反向同步 |
+| \`review.check_assignee\` | \`true\`/\`false\` | \`false\` | 审查时是否检查执行人签名 |
+
+## 4. 配置变更记录
+
+| 日期 | 变更项 | 旧值 | 新值 | 变更人 |
+| :--- | :--- | :--- | :--- | :--- |
+`;
+}
+
+/** AI-RULES.md 模板内容 */
+export function generateAIRulesContent(): string {
+  return [
+    '# AI 使用 SpecCore 的规则',
+    '',
+    '> 本文档帮助 AI 代理（TRAE/Claude/Qoder等）正确使用 SpecCore 命令。',
+    '',
+    '## 核心原则',
+    '',
+    '1. **/spec:ask 是智能路由入口** — 用户说"新建迭代"、"分析需求" → 调用 `speccore ask`，不要自己写 mkdir/analyze',
+    '2. **不要跨命令猜测** — 每个斜杠命令只做它描述的事，不要自动级联后续步骤',
+    '3. **参数从命令描述获取** — /spec:execute 的描述中有完整的参数说明',
+    '4. **上下文不足时读取文件** — 查看 .speccore/CONSTITUTION.md、STAFFING.md 等',
+    '',
+    '## 核心流水线',
+    '',
+    '```',
+    'init → doc2spec → analyze → split → plan → execute → pr → done → spec2doc',
+    '```',
+    '',
+    '## 命令快速参考',
+    '',
+    '| 命令 | 作用 | 参数 | 上游依赖 | 下游产出 |',
+    '| :--- | :--- | :--- | :--- | :--- |',
+    '| init | 初始化项目 | --interactive/--force/--update | 无 | .speccore/ + 工具集成 |',
+    '| doc2spec | Word→Spec MD (CLI) | -f <文件> --iter <迭代> | PRD/Word | 010-requirements/*.md |',
+    '| **spec-doc2spec** | **AI+Pandoc 双路交叉验证导入** | **(Skill 自动触发)** | PRD原文 | REQUIREMENT.md + VALIDATION.md |',
+    '| analyze | 需求分析 | -I <迭代> --task <任务> | 010-requirements/ | 020-specs/ANALYSIS.md |',
+    '| split | 拆分任务 | -i <迭代> --owner <人> | 020-specs/ | Task-001~NNN/ |',
+    '| plan | 执行计划 | -I <迭代> --owner <人> | Task 列表 | plan.json |',
+    '| execute | 执行开发 | -i <迭代> -t <任务> --type <类型> | REQ.md/TECH.md | 代码 + .issues.md |',
+    '| pr | 创建PR | --task <任务> | 代码提交 | Pull Request |',
+    '| done | 归档收尾 | --task <任务> | 全部完成 | .verification |',
+    '| spec2doc | Spec→文档导出 (CLI) | -i <迭代> -o <文件> -f <格式> | 020-specs/ | Word/PDF/HTML |',
+    '| **spec-spec2doc** | **AI排版+Pandoc导出+验证** | **(Skill 自动触发)** | SpecCore文档 | 精美排版文档 |',
+    '| retro | 任务回顾 | --task/--all/--owner/--type | done后 | 回顾报告 |',
+    '| change | 需求变更 | <描述> --task <任务> --type | 进行中任务 | 变更记录 |',
+    '| dev | 智能级联 | --auto/--from/--to | 全部阶段 | 自动全流程 |',
+    '',
+    '## AI Skills（.agents/skills/）',
+    '',
+    '项目包含 10 个高阶 Skill，AI 工具自动加载：',
+    '',
+    '| Skill | 能力 | 激活方式 |',
+    '| :--- | :--- | :--- |',
+    '| speccore-router | 中文意图→CLI命令（20+映射） | "分析需求"/"创建迭代" |',
+    '| spec-doc2spec | **AI语义提取+Pandoc机械转换+交叉验证** | "帮我分析这个PRD"/"导入需求文档" |',
+    '| spec-spec2doc | **AI内容编排+Pandoc格式转换+质量验证** | "导出文档"/"生成交付文档" |',
+    '| spec-analyze | 深度需求分析（拆解→映射→风险） | "分析需求" |',
+    '| spec-split | 智能任务拆分（分组→分配→依赖） | "拆分任务" |',
+    '| spec-execute | 代码生成+编译+测试+修复循环 | "开发Task-001" |',
+    '| spec-plan | 排程+里程碑+并行策略 | "生成计划" |',
+    '| spec-dev | 阶段检测+状态展示+推荐下一步 | "推进项目" |',
+    '| spec-change | 变更记录+影响分析+代码更新 | "需求变更" |',
+    '| spec-ask | 自然语言引擎（四大模式） | "怎么做"/"流程是什么" |',
+    '',
+    '## 目录结构',
+    '',
+    '```',
+    'Iteration-xxx/',
+    '├── 000-overview/     ← 进度跟踪',
+    '├── 010-requirements/     ← 需求文档（按功能组织）',
+    '│   ├── README.md       ← 目录规范说明',
+    '│   ├── INDEX.md        ← 需求文档索引',
+    '│   ├── sources/        ← [只读] 原始 PRD/Word/PDF',
+    '│   ├── converted/      ← [自动生成] doc2spec 转换后的 MD',
+    '│   ├── features/       ← [手动维护] 按功能模块组织',
+    '│   │   └── {feature}/README.md',
+    '│   └── assets/         ← 素材（prd/prototypes/designs/screenshots）',
+    '├── 020-specs/     ← analyze 输出',
+    '├── 030-tasks/     ← 开发任务',
+    '│   └── Task-*/',
+    '│       ├── .meta/         ← 任务元信息（type/status/owner/created-at）',
+    '│       ├── _shared/       ← 共享规格（REQ/TECH/SCHEMA/CHANGELOG/API_CONTRACT）',
+    '│       ├── backend/       ← 后端子任务（TASK.md + src/tests）',
+    '│       ├── web/           ← Web前端子任务（TASK.md + src/tests）',
+    '│       ├── 99-artifacts/  ← 执行产出（自检门禁 + 参考文档）',
+    '│       └── .issues.md     ← 问题追踪',
+    '├── STAFFING.md      ← 人员排期',
+    '```',
+    '',
+    '## AI 行为约束',
+    '',
+    '- **不要自己创建目录** — 用 `speccore iteration create -n <名称>`',
+    '- **不要自己解析需求** — 用 `speccore analyze -I <迭代>`',
+    '- **失败时读取 .issues.md** — 不要猜测，看文件里的问题清单',
+    '- **续跑用 --resume** — `speccore execute --resume` 自动扫描 .needs-retry',
+  ].join('\n');
 }
 
 async function writeUpgradePage(projectRoot: string, version: string, speccoreDir: string): Promise<void> {
