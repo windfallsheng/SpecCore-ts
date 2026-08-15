@@ -2,12 +2,6 @@
 
 ---
 
-## v6.31.1 (2026-08-15) — iteration create Prototype Directory Fix
-
-### Fix
-
-- **iteration/create.ts**: New iteration now creates top-level `prototypes/` under `010-requirements/` (replacing legacy `assets/prototypes/`), removes deprecated `assets/designs/` and `assets/screenshots/`, aligned with v6.22.0 directory spec
-
 ## v6.31.0 (2026-08-15) — CONSTITUTION Section Diff on Upgrade + Update Sync Summary
 
 ### Core Changes

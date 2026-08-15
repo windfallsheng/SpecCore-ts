@@ -1,9 +1,3 @@
-## v6.31.1 (2026-08-15) — iteration create 原型目录修复
-
-### 修复
-
-- **iteration/create.ts**：新建迭代时 `010-requirements/` 下创建顶层 `prototypes/` 目录（替代旧结构 `assets/prototypes/`），同时移除废弃的 `assets/designs/` 和 `assets/screenshots/`，与 v6.22.0 目录规范对齐
-
 ## v6.31.0 (2026-08-15) — CONSTITUTION 升级章节对比 + update 同步清单增强
 
 ### 核心变更
