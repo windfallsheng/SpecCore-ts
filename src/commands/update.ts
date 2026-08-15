@@ -158,10 +158,11 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
     }
   } catch {}
 
-  // 4c-2. 更新 SETTINGS.md / AI-RULES.md（旧文件重命名时间戳，提示用户迁移数据）
+  // 4c-2. 更新 SETTINGS.md（用户可能自定义，旧文件重命名时间戳提示迁移）
+  //       AI-RULES.md 是纯生成物（AI 参考手册），直接覆盖
   try {
     await safeWriteWithBackup(join(speccoreDir, 'SETTINGS.md'), generateSettingsContent());
-    await safeWriteWithBackup(join(speccoreDir, 'AI-RULES.md'), generateAIRulesContent());
+    await writeFile(join(speccoreDir, 'AI-RULES.md'), generateAIRulesContent());
   } catch {}
 
   // 4d. 清理旧版本残留的命令文件和 Skill 目录
