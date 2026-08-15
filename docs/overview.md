@@ -79,6 +79,14 @@ speccore rag-index --full --task Task-001      # 全量重建任务索引
 
 检索层在 `analyze` 阶段自动构建和刷新，手动命令用于用户修改文档后的即时同步。
 
+### 🧠 知识图谱可视化
+
+`speccore knowledge` 生成交互式 HTML 知识图谱：
+
+![Knowledge Graph Full](screenshots/knowledge-graph-full.png)
+
+![Knowledge Graph Zoom](screenshots/knowledge-graph-zoom.png)
+
 ## 输出
 
 | 命令 | 终端输出 | AI 输出 | HTML 文件 |
@@ -88,6 +96,7 @@ speccore rag-index --full --task Task-001      # 全量重建任务索引
 | dashboard | 文本 | HTML（Jira 标准 7 维仪表盘） | `dashboard-iteration-{name}.html`（--scope global → `dashboard-project-{name}.html`） |
 | dev | 文本 | HTML（Pipeline 可视化） | `speccore-dev.html` |
 | help | 文本 | HTML 帮助中心 | `templates/html/speccore-help.html` |
+| knowledge | 文本 | HTML（交互式知识图谱） | `knowledge-graph-{iteration}.html` |
 | retro | 文本 | HTML 回顾报告 | `templates/html/speccore-retro-T-001.html` |
 | about | 文本 | HTML 关于页 | `speccore-about.html` |
 | doc2spec | 文本 | HTML 需求预览 | `templates/html/speccore-ask-result.html` |

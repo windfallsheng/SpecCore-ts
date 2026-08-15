@@ -31,6 +31,18 @@ speccore iteration create -n Q1     # Create iteration
 
 ![Setup Guide](docs/screenshots/setup-guide-top.png)
 
+## 🧠 Knowledge Graph Visualization
+
+`speccore knowledge` generates an interactive HTML knowledge graph with 8 shape types for entity distinction and automatic decay detection:
+
+**Full View (Large Nodes)**
+
+![Knowledge Graph Full](docs/screenshots/knowledge-graph-full.png)
+
+**Zoomed View (Compact Layout)**
+
+![Knowledge Graph Zoom](docs/screenshots/knowledge-graph-zoom.png)
+
 ## 🎯 What do you want to do?
 
 | I want to... | Command |

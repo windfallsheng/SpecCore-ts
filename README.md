@@ -32,6 +32,18 @@
     └─────────────────────────────┘
 ```
 
+## 知识图谱可视化
+
+`speccore knowledge` 生成交互式 HTML 知识图谱，8 种形状区分实体类型，衰减检测自动发现风险：
+
+**全量视图（大节点）**
+
+![Knowledge Graph Full](docs/screenshots/knowledge-graph-full.png)
+
+**缩放视图（紧凑布局）**
+
+![Knowledge Graph Zoom](docs/screenshots/knowledge-graph-zoom.png)
+
 ## 快速开始
 
 ```bash
@@ -156,7 +168,9 @@ Iteration-001-meeting/
 - RAG 上下文预览：查看 AI 检索时会注入的完整上下文
 - 9 套主题 / 3 种字体 / 4 档字号 / 全屏模式 / 实体搜索
 
-![Knowledge Graph](docs/screenshots/knowledge-graph.png)
+![Knowledge Graph](docs/screenshots/knowledge-graph-full.png)
+
+![Knowledge Graph Zoom](docs/screenshots/knowledge-graph-zoom.png)
 
 ### 🔄 dev — 智能级联
 在 AI IDE 中智能推进：`@spec-ask "全自动执行"`
