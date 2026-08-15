@@ -6,390 +6,358 @@
 <title>SpecCore 知识图谱 — Project</title>
 <script src="https://unpkg.com/vis-network@9.1.6/standalone/umd/vis-network.min.js"></script>
 <style>
-  :root {
-    --bg: #0a0e17;
-    --surface: #111827;
-    --surface-2: #1a2332;
-    --border: rgba(0, 240, 255, 0.08);
-    --border-hover: rgba(0, 240, 255, 0.2);
-    --cyan: #00f0ff;
-    --green: #10b981;
-    --yellow: #f59e0b;
-    --red: #ef4444;
-    --purple: #8b5cf6;
-    --pink: #ec4899;
-    --muted: #6b7280;
-    --text: #e5e7eb;
-    --text-bright: #f9fafb;
-  }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
-  /* ── Header ── */
-  .header {
-    padding: 24px 32px;
-    border-bottom: 1px solid var(--border);
-    background: linear-gradient(180deg, rgba(0,240,255,0.02) 0%, transparent 100%);
-  }
-  .header h1 {
-    font-size: 20px;
-    font-weight: 600;
-    color: var(--text-bright);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-  .header h1 .icon { font-size: 24px; }
-  .header .subtitle {
-    font-size: 12px;
-    color: var(--muted);
-    margin-top: 4px;
-  }
-  /* ── Stats Cards ── */
-  .stats-row {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 12px;
-    padding: 20px 32px;
-  }
-  .stat-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 16px;
-    transition: border-color 0.2s;
-  }
-  .stat-card:hover { border-color: var(--border-hover); }
-  .stat-card .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
-  .stat-card .value { font-size: 28px; font-weight: 700; margin-top: 4px; }
-  .stat-card .value.cyan { color: var(--cyan); }
-  .stat-card .value.green { color: var(--green); }
-  .stat-card .value.yellow { color: var(--yellow); }
-  .stat-card .value.red { color: var(--red); }
-  .stat-card .value.purple { color: var(--purple); }
-  .stat-card .value.pink { color: var(--pink); }
-  /* ── Layout ── */
-  .main-grid {
-    display: grid;
-    grid-template-columns: 1fr 380px;
-    gap: 0;
-    min-height: calc(100vh - 200px);
-  }
-  /* ── Graph Panel ── */
-  .graph-panel {
-    position: relative;
-    border-right: 1px solid var(--border);
-  }
-  #graph { width: 100%; height: 500px; }
-  .graph-toolbar {
-    position: absolute;
-    top: 12px;
-    left: 12px;
-    display: flex;
-    gap: 6px;
-    z-index: 10;
-  }
-  .filter-btn {
-    padding: 5px 12px;
-    font-size: 11px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--surface);
-    color: var(--muted);
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-  .filter-btn:hover { border-color: var(--border-hover); color: var(--text); }
-  .filter-btn.active { border-color: var(--cyan); color: var(--cyan); background: rgba(0,240,255,0.05); }
-  /* ── Side Panel ── */
-  .side-panel {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-  .panel-tabs {
-    display: flex;
-    border-bottom: 1px solid var(--border);
-  }
-  .panel-tab {
-    flex: 1;
-    padding: 12px 8px;
-    font-size: 12px;
-    text-align: center;
-    color: var(--muted);
-    cursor: pointer;
-    border-bottom: 2px solid transparent;
-    transition: all 0.2s;
-  }
-  .panel-tab:hover { color: var(--text); }
-  .panel-tab.active { color: var(--cyan); border-bottom-color: var(--cyan); }
-  .panel-content {
-    flex: 1;
-    overflow-y: auto;
-    padding: 16px;
-  }
-  .panel-content::-webkit-scrollbar { width: 4px; }
-  .panel-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-  /* ── Entity Table ── */
-  .search-box {
-    width: 100%;
-    padding: 8px 12px;
-    font-size: 12px;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    color: var(--text);
-    outline: none;
-    margin-bottom: 12px;
-  }
-  .search-box:focus { border-color: var(--cyan); }
-  .entity-list { display: flex; flex-direction: column; gap: 6px; }
-  .entity-item {
-    padding: 10px 12px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-  .entity-item:hover { border-color: var(--border-hover); background: var(--surface-2); }
-  .entity-item .name { font-size: 13px; font-weight: 500; color: var(--text-bright); }
-  .entity-item .meta { font-size: 11px; color: var(--muted); margin-top: 3px; display: flex; gap: 8px; align-items: center; }
-  .entity-item .type-badge {
-    display: inline-block;
-    padding: 1px 6px;
-    font-size: 10px;
-    border-radius: 4px;
-    font-weight: 500;
-  }
-  .type-requirement { background: rgba(0,240,255,0.1); color: var(--cyan); }
-  .type-spec { background: rgba(139,92,246,0.1); color: var(--purple); }
-  .type-task { background: rgba(16,185,129,0.1); color: var(--green); }
-  .type-subtask { background: rgba(236,72,153,0.1); color: var(--pink); }
-  .type-user-file { background: rgba(245,158,11,0.1); color: var(--yellow); }
-  /* ── Decay List ── */
-  .decay-item {
-    padding: 10px 12px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    margin-bottom: 6px;
-  }
-  .decay-item .title { font-size: 13px; font-weight: 500; }
-  .decay-item .detail { font-size: 11px; color: var(--muted); margin-top: 3px; }
-  .decay-item .severity {
-    display: inline-block;
-    padding: 1px 6px;
-    font-size: 10px;
-    border-radius: 4px;
-    margin-left: 6px;
-  }
-  .severity-high { background: rgba(239,68,68,0.15); color: var(--red); }
-  .severity-medium { background: rgba(245,158,11,0.15); color: var(--yellow); }
-  .severity-low { background: rgba(16,185,129,0.15); color: var(--green); }
-  /* ── Context Panel ── */
-  .context-preview {
-    font-size: 13px;
-    line-height: 1.6;
-    color: var(--text);
-  }
-  .context-preview h1, .context-preview h2, .context-preview h3 {
-    color: var(--text-bright);
-    margin: 16px 0 8px;
-  }
-  .context-preview h1 { font-size: 18px; }
-  .context-preview h2 { font-size: 15px; }
-  .context-preview h3 { font-size: 13px; }
-  .context-preview table {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 8px 0;
-    font-size: 12px;
-  }
-  .context-preview th, .context-preview td {
-    padding: 6px 8px;
-    border: 1px solid var(--border);
-    text-align: left;
-  }
-  .context-preview th { background: var(--surface-2); color: var(--muted); font-weight: 500; }
-  .context-preview code {
-    background: var(--surface-2);
-    padding: 1px 4px;
-    border-radius: 3px;
-    font-size: 12px;
-  }
-  /* ── Relations Panel ── */
-  .relation-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 0;
-    border-bottom: 1px solid var(--border);
-    font-size: 12px;
-  }
-  .relation-arrow { color: var(--cyan); font-size: 14px; }
-  .relation-type {
-    padding: 1px 6px;
-    font-size: 10px;
-    border-radius: 4px;
-    background: rgba(0,240,255,0.08);
-    color: var(--cyan);
-  }
-  /* ── Footer ── */
-  .footer {
-    padding: 16px 32px;
-    border-top: 1px solid var(--border);
-    font-size: 11px;
-    color: var(--muted);
-    text-align: center;
-  }
-  /* ── Responsive ── */
-  @media (max-width: 900px) {
-    .main-grid { grid-template-columns: 1fr; }
-    .graph-panel { border-right: none; border-bottom: 1px solid var(--border); }
-  }
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;600;700&display=swap');
+[data-theme="cyber"]{--cyan:#00f0ff;--blue:#3b82f6;--green:#00ff88;--purple:#a78bfa;--orange:#f59e0b;--bg:#060b14;--card:rgba(8,16,32,.85);--border:rgba(0,240,255,.12);--text:#c4d5e7;--muted:#4a5568;--surface:rgba(17,25,40,.7);--hover:rgba(0,240,255,.02)}
+[data-theme="light"]{--cyan:#2563eb;--blue:#3b82f6;--green:#059669;--purple:#7c3aed;--orange:#d97706;--bg:#f8fafc;--card:rgba(255,255,255,.95);--border:rgba(0,0,0,.08);--text:#1e293b;--muted:#94a3b8;--surface:rgba(255,255,255,.95);--hover:rgba(37,99,235,.02)}
+[data-theme="github"]{--cyan:#2da44e;--blue:#0969da;--green:#1a7f37;--purple:#8250df;--orange:#cf222e;--bg:#0d1117;--card:#161b22;--border:#30363d;--text:#c9d1d9;--muted:#8b949e;--surface:#161b22;--hover:rgba(45,164,78,.05)}
+[data-theme="synth"]{--cyan:#f92aad;--blue:#ff7edb;--green:#36f9f6;--purple:#b381f9;--orange:#ffb86c;--bg:#1a0024;--card:rgba(30,0,50,.9);--border:rgba(249,42,173,.2);--text:#f8f8f2;--muted:#6b3e7a;--surface:rgba(30,0,50,.9);--hover:rgba(249,42,173,.05)}
+[data-theme="ocean"]{--cyan:#0ea5e9;--blue:#0284c7;--green:#14b8a6;--purple:#6366f1;--orange:#f97316;--bg:#0b1929;--card:rgba(13,31,56,.9);--border:rgba(14,165,233,.15);--text:#bae6fd;--muted:#5b7fa5;--surface:rgba(13,31,56,.9);--hover:rgba(14,165,233,.05)}
+[data-theme="sakura"]{--cyan:#f472b6;--blue:#c084fc;--green:#a3e635;--purple:#e879f9;--orange:#fb923c;--bg:#1a0a14;--card:rgba(30,10,20,.9);--border:rgba(244,114,182,.2);--text:#fce7f3;--muted:#9d4a6d;--surface:rgba(30,10,20,.9);--hover:rgba(244,114,182,.05)}
+[data-theme="forest"]{--cyan:#059669;--blue:#0284c7;--green:#22c55e;--purple:#6366f1;--orange:#ca8a04;--bg:#0a140a;--card:rgba(12,24,12,.9);--border:rgba(5,150,105,.15);--text:#d1fae5;--muted:#3b6b4e;--surface:rgba(12,24,12,.9);--hover:rgba(5,150,105,.05)}
+[data-theme="amber"]{--cyan:#ffb000;--blue:#ff8c00;--green:#32cd32;--purple:#da70d6;--orange:#ff6347;--bg:#0c0c0c;--card:#1a1a1a;--border:#333;--text:#ffb000;--muted:#666;--surface:#1a1a1a;--hover:rgba(255,176,0,.05)}
+[data-theme="mono"]{--cyan:#64748b;--blue:#475569;--green:#334155;--purple:#1e293b;--orange:#94a3b8;--bg:#0f172a;--card:#1e293b;--border:#334155;--text:#e2e8f0;--muted:#64748b;--surface:#1e293b;--hover:rgba(100,116,139,.05)}
+*,*::after,*::before{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+.scanlines{position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,240,255,.015) 2px,rgba(0,240,255,.015) 4px);pointer-events:none;z-index:999}
+.stars{position:fixed;inset:0;background:radial-gradient(1px 1px at 10% 20%,rgba(255,255,255,.4),transparent),radial-gradient(1px 1px at 25% 65%,rgba(255,255,255,.3),transparent),radial-gradient(1.5px 1.5px at 50% 30%,rgba(0,240,255,.5),transparent),radial-gradient(1px 1px at 70% 55%,rgba(255,255,255,.35),transparent),radial-gradient(1px 1px at 85% 15%,rgba(168,85,247,.4),transparent),radial-gradient(1.5px 1.5px at 15% 80%,rgba(0,240,255,.45),transparent),radial-gradient(1px 1px at 60% 85%,rgba(255,255,255,.3),transparent),radial-gradient(1px 1px at 90% 75%,rgba(0,255,136,.4),transparent);pointer-events:none;z-index:0}
+.grid-pattern{position:fixed;inset:0;background-image:linear-gradient(rgba(0,240,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,240,255,.03) 1px,transparent 1px);background-size:60px 60px;pointer-events:none;z-index:0}
+.theme-sw{position:fixed;top:16px;right:16px;z-index:100;display:flex;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px;backdrop-filter:blur(10px)}
+.theme-sw button{width:32px;height:32px;border-radius:16px;border:none;cursor:pointer;transition:all .2s;font-size:14px;display:flex;align-items:center;justify-content:center;background:transparent}
+.theme-sw button:hover{transform:scale(1.1)}
+.theme-sw button.active{box-shadow:0 0 0 2px var(--cyan)}
+main{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:40px 32px}
+/* ── Header ── */
+.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:28px;padding:24px 32px;background:var(--card);border:1px solid var(--border);border-radius:12px;backdrop-filter:blur(20px);position:relative;overflow:hidden}
+.header::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scan 3s linear infinite}
+@keyframes scan{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+@keyframes titleGlow{0%,100%{filter:drop-shadow(0 0 20px rgba(0,240,255,.4))}50%{filter:drop-shadow(0 0 30px rgba(0,240,255,.7))}}
+.header-left h1{font-family:'Orbitron',sans-serif;font-size:24px;font-weight:900;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:2px;animation:titleGlow 3s ease-in-out infinite}
+.header-left .subtitle{color:var(--muted);font-size:12px;margin-top:4px;letter-spacing:1px}
+.header-right{display:flex;gap:16px;align-items:center}
+.header-stat{text-align:center;padding:0 16px;border-left:1px solid rgba(0,240,255,.1)}
+.header-stat .num{font-family:'Orbitron',sans-serif;font-size:20px;font-weight:700;color:var(--cyan);text-shadow:0 0 20px rgba(0,240,255,.4)}
+.header-stat .label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+/* ── Stats Cards ── */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:16px;margin-bottom:28px}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;backdrop-filter:blur(20px);position:relative;overflow:hidden;transition:all .3s}
+.stat-card:hover{border-color:rgba(0,240,255,.25);box-shadow:0 0 30px rgba(0,240,255,.08),inset 0 0 30px rgba(0,240,255,.02)}
+.stat-card .card-bg{position:absolute;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse at 25% 10%,rgba(14,165,233,.15) 0%,transparent 70%);animation:cardGlow 3s ease-in-out infinite;transform-origin:top center}
+@keyframes cardGlow{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.6)}}
+.stat-card .label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;position:relative;z-index:1}
+.stat-card .value{font-family:'Orbitron',sans-serif;font-size:32px;font-weight:900;margin-top:4px;position:relative;z-index:1}
+.stat-card .value.cyan{color:var(--cyan);text-shadow:0 0 30px rgba(0,240,255,.3)}
+.stat-card .value.green{color:var(--green);text-shadow:0 0 30px rgba(0,255,136,.3)}
+.stat-card .value.yellow{color:var(--orange);text-shadow:0 0 30px rgba(245,158,11,.3)}
+.stat-card .value.red{color:#ef4444;text-shadow:0 0 30px rgba(239,68,68,.3)}
+.stat-card .value.purple{color:var(--purple);text-shadow:0 0 30px rgba(168,85,247,.3)}
+.stat-card .value.pink{color:#ec4899;text-shadow:0 0 30px rgba(236,72,153,.3)}
+/* ── Main Layout ── */
+.main-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:0;backdrop-filter:blur(20px);position:relative;overflow:hidden;margin-bottom:28px;display:flex;height:65vh;min-height:500px}
+.graph-panel{flex:1;position:relative;border-right:1px solid var(--border);overflow:hidden;min-width:0}
+#graph{width:100%;height:100%}
+.graph-toolbar{position:absolute;top:12px;left:12px;display:flex;gap:6px;z-index:10}
+.filter-btn{padding:5px 14px;font-size:11px;font-family:'JetBrains Mono',monospace;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--muted);cursor:pointer;transition:all .2s;letter-spacing:.5px}
+.filter-btn:hover{border-color:rgba(0,240,255,.3);color:var(--text)}
+.filter-btn.active{border-color:var(--cyan);color:var(--cyan);background:rgba(0,240,255,.05);box-shadow:0 0 12px rgba(0,240,255,.15)}
+/* ── Side Panel ── */
+.side-panel{width:380px;flex-shrink:0;display:flex;flex-direction:column;overflow:hidden}
+.panel-tabs{display:flex;border-bottom:1px solid var(--border)}
+.panel-tab{flex:1;padding:14px 8px;font-size:11px;font-family:'JetBrains Mono',monospace;text-align:center;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;letter-spacing:.5px;text-transform:uppercase}
+.panel-tab:hover{color:var(--text)}
+.panel-tab.active{color:var(--cyan);border-bottom-color:var(--cyan)}
+.panel-content{flex:1;overflow-y:auto;padding:16px}
+.panel-content::-webkit-scrollbar{width:4px}
+.panel-content::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+/* ── Search ── */
+.search-box{width:100%;padding:10px 14px;font-size:12px;font-family:'JetBrains Mono',monospace;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);outline:none;margin-bottom:14px;transition:border-color .2s}
+.search-box:focus{border-color:var(--cyan);box-shadow:0 0 12px rgba(0,240,255,.1)}
+.search-box::placeholder{color:var(--muted)}
+/* ── Entity List ── */
+.entity-list{display:flex;flex-direction:column;gap:6px}
+.entity-item{padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s}
+.entity-item:hover{border-color:rgba(0,240,255,.25);background:var(--hover);box-shadow:0 0 15px rgba(0,240,255,.05)}
+.entity-item .name{font-size:13px;font-weight:500;color:var(--text)}
+.entity-item .meta{font-size:11px;color:var(--muted);margin-top:4px;display:flex;gap:8px;align-items:center}
+.entity-item .type-badge{display:inline-block;padding:2px 8px;font-size:10px;border-radius:4px;font-weight:600;letter-spacing:.5px}
+.type-requirement{background:rgba(0,240,255,.1);color:var(--cyan)}
+.type-spec{background:rgba(168,85,247,.1);color:var(--purple)}
+.type-task{background:rgba(0,255,136,.1);color:var(--green)}
+.type-subtask{background:rgba(236,72,153,.1);color:#ec4899}
+.type-user-file{background:rgba(245,158,11,.1);color:var(--orange)}
+.type-source-file{background:rgba(59,130,246,.1);color:#60a5fa}
+/* ── Decay List ── */
+.decay-item{padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:6px}
+.decay-item .title{font-size:13px;font-weight:500}
+.decay-item .detail{font-size:11px;color:var(--muted);margin-top:4px}
+.decay-item .severity{display:inline-block;padding:2px 8px;font-size:10px;border-radius:4px;margin-left:6px;font-weight:600}
+.severity-critical{background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.2)}
+.severity-warning{background:rgba(245,158,11,.15);color:var(--orange);border:1px solid rgba(245,158,11,.2)}
+.severity-info{background:rgba(0,255,136,.15);color:var(--green);border:1px solid rgba(0,255,136,.2)}
+/* ── Context Preview ── */
+.context-preview{font-size:13px;line-height:1.7;color:var(--text)}
+.context-preview h1,.context-preview h2,.context-preview h3{color:var(--text);margin:16px 0 8px;font-family:'Orbitron',sans-serif;letter-spacing:1px}
+.context-preview h1{font-size:18px;color:var(--cyan)}
+.context-preview h2{font-size:15px}
+.context-preview h3{font-size:13px}
+.context-preview table{width:100%;border-collapse:collapse;margin:8px 0;font-size:12px}
+.context-preview th,.context-preview td{padding:8px 10px;border:1px solid var(--border);text-align:left}
+.context-preview th{background:var(--surface);color:var(--muted);font-weight:600;letter-spacing:.5px}
+.context-preview code{background:var(--surface);padding:2px 6px;border-radius:4px;font-size:12px}
+/* ── Footer ── */
+.footer{display:flex;justify-content:space-between;align-items:center;padding:16px 0;border-top:1px solid rgba(0,240,255,.06);color:var(--muted);font-size:11px;letter-spacing:1px}
+/* ── Responsive ── */
+@media(max-width:900px){.main-panel{flex-direction:column;height:auto}.graph-panel{border-right:none;border-bottom:1px solid var(--border);height:400px}.side-panel{width:100%}.stats-grid{grid-template-columns:repeat(auto-fit,minmax(120px,1fr))}}
 </style>
 </head>
 <body>
 
-<div class="header">
-  <h1><span class="icon">🧠</span> SpecCore 知识图谱</h1>
-  <div class="subtitle">Project · 迭代 Q2 · 生成于 2026-08-14 23:22</div>
+<div class="theme-sw">
+  <button onclick="setTheme('ocean')" title="Ocean Blue">🌊</button>
+  <button onclick="setTheme('cyber')" title="Cyber Dark">🌙</button>
+  <button onclick="setTheme('light')" title="Light Studio">☀️</button>
+  <button onclick="setTheme('mono')" title="Mono Tech">⬛</button>
+  <button onclick="setTheme('github')" title="GitHub Dark">🐙</button>
+  <button onclick="setTheme('synth')" title="SynthWave">💜</button>
+  <button onclick="setTheme('amber')" title="Amber Terminal">🟡</button>
+  <button onclick="setTheme('sakura')" title="Cherry Sakura">🌸</button>
+  <button onclick="setTheme('forest')" title="Midnight Forest">🌲</button>
 </div>
+<div class="grid-pattern"></div>
+<div class="stars"></div>
+<div class="scanlines"></div>
 
-<!-- Stats -->
-<div class="stats-row">
-  <div class="stat-card">
-    <div class="label">需求</div>
-    <div class="value cyan">0</div>
-  </div>
-  <div class="stat-card">
-    <div class="label">规格</div>
-    <div class="value purple">2</div>
-  </div>
-  <div class="stat-card">
-    <div class="label">任务</div>
-    <div class="value green">6</div>
-  </div>
-  <div class="stat-card">
-    <div class="label">子任务</div>
-    <div class="value pink">0</div>
-  </div>
-  <div class="stat-card">
-    <div class="label">源码文件</div>
-    <div class="value yellow">0</div>
-  </div>
-  <div class="stat-card">
-    <div class="label">关系</div>
-    <div class="value cyan">0</div>
-  </div>
-  <div class="stat-card">
-    <div class="label">衰减告警</div>
-    <div class="value green">0</div>
-  </div>
-</div>
-
-<!-- Main -->
-<div class="main-grid">
-  <!-- Graph -->
-  <div class="graph-panel">
-    <div class="graph-toolbar">
-      <button class="filter-btn active" data-filter="all">全部</button>
-      <button class="filter-btn" data-filter="requirement">需求</button>
-      <button class="filter-btn" data-filter="spec">规格</button>
-      <button class="filter-btn" data-filter="task">任务</button>
-      <button class="filter-btn" data-filter="subtask">子任务</button>
-      <button class="filter-btn" data-filter="user-file">源码</button>
+<main>
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <h1>🧠 KNOWLEDGE GRAPH</h1>
+      <div class="subtitle">SPECCORE · Project · 迭代 Q2</div>
     </div>
-    <div id="graph"></div>
+    <div class="header-right">
+      <div class="header-stat"><div class="num">20</div><div class="label">实体</div></div>
+      <div class="header-stat"><div class="num">30</div><div class="label">关系</div></div>
+      <div class="header-stat"><div class="num" style="color:#ef4444;text-shadow:0 0 20px rgba(239,68,68,.4)">12</div><div class="label">衰减</div></div>
+    </div>
   </div>
 
-  <!-- Side Panel -->
-  <div class="side-panel">
-    <div class="panel-tabs">
-      <div class="panel-tab active" data-panel="entities">实体列表</div>
-      <div class="panel-tab" data-panel="decay">衰减检测</div>
-      <div class="panel-tab" data-panel="context">RAG 上下文</div>
+  <!-- Stats -->
+  <div class="stats-grid">
+    <div class="stat-card"><div class="card-bg"></div><div class="label">需求</div><div class="value cyan">0</div></div>
+    <div class="stat-card"><div class="card-bg"></div><div class="label">规格</div><div class="value purple">2</div></div>
+    <div class="stat-card"><div class="card-bg"></div><div class="label">任务</div><div class="value green">6</div></div>
+    <div class="stat-card"><div class="card-bg"></div><div class="label">子任务</div><div class="value pink">0</div></div>
+    <div class="stat-card"><div class="card-bg"></div><div class="label">源码文件</div><div class="value yellow">12</div></div>
+    <div class="stat-card"><div class="card-bg"></div><div class="label">关系</div><div class="value cyan">30</div></div>
+    <div class="stat-card"><div class="card-bg"></div><div class="label">衰减告警</div><div class="value red">12</div></div>
+  </div>
+
+  <!-- Main Graph + Side Panel -->
+  <div class="main-panel">
+    <div class="graph-panel">
+      <div class="graph-toolbar">
+        <button class="filter-btn active" data-filter="all">全部</button>
+        <button class="filter-btn" data-filter="requirement">需求</button>
+        <button class="filter-btn" data-filter="spec">规格</button>
+        <button class="filter-btn" data-filter="task">任务</button>
+        <button class="filter-btn" data-filter="subtask">子任务</button>
+        <button class="filter-btn" data-filter="user-file">用户文件</button>
+        <button class="filter-btn" data-filter="source-file">源码</button>
+      </div>
+      <div id="graph"></div>
     </div>
-    <div class="panel-content" id="panel-entities">
-      <input class="search-box" id="entity-search" placeholder="搜索实体名称..." />
-      <div class="entity-list" id="entity-list">
-        <div class="entity-item" onclick="focusNode('SPEC:ANALYSIS')">
+    <div class="side-panel">
+      <div class="panel-tabs">
+        <div class="panel-tab active" data-panel="entities">实体列表</div>
+        <div class="panel-tab" data-panel="decay">衰减检测</div>
+        <div class="panel-tab" data-panel="context">RAG 上下文</div>
+      </div>
+      <div class="panel-content" id="panel-entities">
+        <input class="search-box" id="entity-search" placeholder="搜索实体名称..." />
+        <div class="entity-list" id="entity-list">
+          <div class="entity-item" onclick="focusNode('SPEC:ANALYSIS')">
     <div class="name">需求分析报告</div>
     <div class="meta">
       <span class="type-badge type-spec">规格</span>
       
       <span title="020-specs/ANALYSIS.md">ANALYSIS.md</span>
     </div>
-  </div>
-<div class="entity-item" onclick="focusNode('SPEC:REQUIREMENT')">
+  </div><div class="entity-item" onclick="focusNode('SPEC:REQUIREMENT')">
     <div class="name">REQUIREMENT</div>
     <div class="meta">
       <span class="type-badge type-spec">规格</span>
       
       <span title="020-specs/REQUIREMENT.md">REQUIREMENT.md</span>
     </div>
-  </div>
-<div class="entity-item" onclick="focusNode('Task-001')">
+  </div><div class="entity-item" onclick="focusNode('Task-001')">
     <div class="name">Task-001: 会议室预订功能</div>
     <div class="meta">
       <span class="type-badge type-task">任务</span>
       <span>pending</span>
       <span title="030-tasks/Task-001">Task-001</span>
     </div>
-  </div>
-<div class="entity-item" onclick="focusNode('Task-002')">
+  </div><div class="entity-item" onclick="focusNode('Task-002')">
     <div class="name">Task-002: 会议通知推送</div>
     <div class="meta">
       <span class="type-badge type-task">任务</span>
       <span>pending</span>
       <span title="030-tasks/Task-002">Task-002</span>
     </div>
-  </div>
-<div class="entity-item" onclick="focusNode('Task-003')">
+  </div><div class="entity-item" onclick="focusNode('Task-003')">
     <div class="name">Task-003: 会议纪要大模型总结</div>
     <div class="meta">
       <span class="type-badge type-task">任务</span>
       <span>pending</span>
       <span title="030-tasks/Task-003">Task-003</span>
     </div>
-  </div>
-<div class="entity-item" onclick="focusNode('Task-004')">
+  </div><div class="entity-item" onclick="focusNode('Task-004')">
     <div class="name">Task-004: 用户注册登录</div>
     <div class="meta">
       <span class="type-badge type-task">任务</span>
       <span>pending</span>
       <span title="030-tasks/Task-004">Task-004</span>
     </div>
-  </div>
-<div class="entity-item" onclick="focusNode('Task-005')">
+  </div><div class="entity-item" onclick="focusNode('Task-005')">
     <div class="name">Task-005: SSO单点登录</div>
     <div class="meta">
       <span class="type-badge type-task">任务</span>
       <span>pending</span>
       <span title="030-tasks/Task-005">Task-005</span>
     </div>
-  </div>
-<div class="entity-item" onclick="focusNode('Task-006')">
+  </div><div class="entity-item" onclick="focusNode('Task-006')">
     <div class="name">Task-006: 权限管理系统</div>
     <div class="meta">
       <span class="type-badge type-task">任务</span>
       <span>pending</span>
       <span title="030-tasks/bugfix/Task-006">Task-006</span>
     </div>
+  </div><div class="entity-item" onclick="focusNode('SRC:src-cli')">
+    <div class="name">cli.ts</div>
+    <div class="meta">
+      <span class="type-badge type-source-file">源码</span>
+      
+      <span title="src/cli.ts">cli.ts</span>
+    </div>
+  </div><div class="entity-item" onclick="focusNode('SRC:src-commands-plan')">
+    <div class="name">plan.ts</div>
+    <div class="meta">
+      <span class="type-badge type-source-file">源码</span>
+      
+      <span title="src/commands/plan.ts">plan.ts</span>
+    </div>
+  </div><div class="entity-item" onclick="focusNode('SRC:src-commands-code-index')">
+    <div class="name">code-index.ts</div>
+    <div class="meta">
+      <span class="type-badge type-source-file">源码</span>
+      
+      <span title="src/commands/code-index.ts">code-index.ts</span>
+    </div>
+  </div><div class="entity-item" onclick="focusNode('SRC:src-commands-config')">
+    <div class="name">config.ts</div>
+    <div class="meta">
+      <span class="type-badge type-source-file">源码</span>
+      
+      <span title="src/commands/config.ts">config.ts</span>
+    </div>
+  </div><div class="entity-item" onclick="focusNode('SRC:src-core-inbox')">
+    <div class="name">inbox.ts</div>
+    <div class="meta">
+      <span class="type-badge type-source-file">源码</span>
+      
+      <span title="src/core/inbox.ts">inbox.ts</span>
+    </div>
+  </div><div class="entity-item" onclick="focusNode('SRC:src-core-execution-state')">
+    <div class="name">execution-state.ts</div>
+    <div class="meta">
+      <span class="type-badge type-source-file">源码</span>
+      
+      <span title="src/core/execution-state.ts">execution-state.ts</span>
+    </div>
+  </div><div class="entity-item" onclick="focusNode('SRC:src-core-prompt-builder')">
+    <div class="name">prompt-builder.ts</div>
+    <div class="meta">
+      <span class="type-badge type-source-file">源码</span>
+      
+      <span title="src/core/prompt-builder.ts">prompt-builder.ts</span>
+    </div>
+  </div><div class="entity-item" onclick="focusNode('SRC:src-i18n-index')">
+    <div class="name">index.ts</div>
+    <div class="meta">
+      <span class="type-badge type-source-file">源码</span>
+      
+      <span title="src/i18n/index.ts">index.ts</span>
+    </div>
+  </div><div class="entity-item" onclick="focusNode('SRC:src-i18n-t')">
+    <div class="name">t.ts</div>
+    <div class="meta">
+      <span class="type-badge type-source-file">源码</span>
+      
+      <span title="src/i18n/t.ts">t.ts</span>
+    </div>
+  </div><div class="entity-item" onclick="focusNode('SRC:src-index')">
+    <div class="name">index.ts</div>
+    <div class="meta">
+      <span class="type-badge type-source-file">源码</span>
+      
+      <span title="src/index.ts">index.ts</span>
+    </div>
+  </div><div class="entity-item" onclick="focusNode('SRC:src-utils-task-utils')">
+    <div class="name">task-utils.ts</div>
+    <div class="meta">
+      <span class="type-badge type-source-file">源码</span>
+      
+      <span title="src/utils/task-utils.ts">task-utils.ts</span>
+    </div>
+  </div><div class="entity-item" onclick="focusNode('SRC:src-utils-logger')">
+    <div class="name">logger.ts</div>
+    <div class="meta">
+      <span class="type-badge type-source-file">源码</span>
+      
+      <span title="src/utils/logger.ts">logger.ts</span>
+    </div>
+  </div>
+        </div>
+      </div>
+      <div class="panel-content" id="panel-decay" style="display:none">
+        <div class="decay-item">
+    <div class="title">cli.ts<span class="severity severity-warning">warning</span></div>
+    <div class="detail">文件丢失 · src/cli.ts</div>
+  </div><div class="decay-item">
+    <div class="title">plan.ts<span class="severity severity-warning">warning</span></div>
+    <div class="detail">文件丢失 · src/commands/plan.ts</div>
+  </div><div class="decay-item">
+    <div class="title">code-index.ts<span class="severity severity-warning">warning</span></div>
+    <div class="detail">文件丢失 · src/commands/code-index.ts</div>
+  </div><div class="decay-item">
+    <div class="title">config.ts<span class="severity severity-warning">warning</span></div>
+    <div class="detail">文件丢失 · src/commands/config.ts</div>
+  </div><div class="decay-item">
+    <div class="title">inbox.ts<span class="severity severity-warning">warning</span></div>
+    <div class="detail">文件丢失 · src/core/inbox.ts</div>
+  </div><div class="decay-item">
+    <div class="title">execution-state.ts<span class="severity severity-warning">warning</span></div>
+    <div class="detail">文件丢失 · src/core/execution-state.ts</div>
+  </div><div class="decay-item">
+    <div class="title">prompt-builder.ts<span class="severity severity-warning">warning</span></div>
+    <div class="detail">文件丢失 · src/core/prompt-builder.ts</div>
+  </div><div class="decay-item">
+    <div class="title">index.ts<span class="severity severity-warning">warning</span></div>
+    <div class="detail">文件丢失 · src/i18n/index.ts</div>
+  </div><div class="decay-item">
+    <div class="title">t.ts<span class="severity severity-warning">warning</span></div>
+    <div class="detail">文件丢失 · src/i18n/t.ts</div>
+  </div><div class="decay-item">
+    <div class="title">index.ts<span class="severity severity-warning">warning</span></div>
+    <div class="detail">文件丢失 · src/index.ts</div>
+  </div><div class="decay-item">
+    <div class="title">task-utils.ts<span class="severity severity-warning">warning</span></div>
+    <div class="detail">文件丢失 · src/utils/task-utils.ts</div>
+  </div><div class="decay-item">
+    <div class="title">logger.ts<span class="severity severity-warning">warning</span></div>
+    <div class="detail">文件丢失 · src/utils/logger.ts</div>
   </div>
       </div>
-    </div>
-    <div class="panel-content" id="panel-decay" style="display:none">
-      <div style="text-align:center;color:var(--muted);padding:40px 0">✅ 无衰减告警，所有文件健康</div>
-    </div>
-    <div class="panel-content" id="panel-context" style="display:none">
-      <div class="context-preview"><h1>项目上下文快照</h1>
+      <div class="panel-content" id="panel-context" style="display:none">
+        <div class="context-preview"><h1>项目上下文快照</h1>
 > 自动生成于 2026-08-14 · speccore reindex · 迭代 Q2<br/><br/><h2>需求→任务追踪</h2><br/><br/><tr><td>需求</td}<td>任务</td}<td>状态</td}<td>子任务</td}</tr>
 
 <tr><td>—</td}<td>Task-001: 会议室预订功能</td}<td>🔲 未开始</td}<td>—</td}</tr>
@@ -397,97 +365,92 @@
 <tr><td>—</td}<td>Task-003: 会议纪要大模型总结</td}<td>🔲 未开始</td}<td>—</td}</tr>
 <tr><td>—</td}<td>Task-004: 用户注册登录</td}<td>🔲 未开始</td}<td>—</td}</tr>
 <tr><td>—</td}<td>Task-005: SSO单点登录</td}<td>🔲 未开始</td}<td>—</td}</tr>
-<tr><td>—</td}<td>Task-006: 权限管理系统</td}<td>🔲 未开始</td}<td>—</td}</tr><br/><br/><h2>知识衰减检测</h2>
-> ✅ 所有知识均为最新状态<br/><br/>---
+<tr><td>—</td}<td>Task-006: 权限管理系统</td}<td>🔲 未开始</td}<td>—</td}</tr><br/><br/><h2>知识衰减检测</h2><br/><br/><h3>⚠️ 内容已变更</h3><br/><br/>• <code>SRC:src-cli</code> cli.ts — 文件不存在或无法读取<br/>
+• <code>SRC:src-commands-plan</code> plan.ts — 文件不存在或无法读取<br/>
+• <code>SRC:src-commands-code-index</code> code-index.ts — 文件不存在或无法读取<br/>
+• <code>SRC:src-commands-config</code> config.ts — 文件不存在或无法读取<br/>
+• <code>SRC:src-core-inbox</code> inbox.ts — 文件不存在或无法读取<br/><br/><br/>---
 > 0 需求 · 2 规格 · 6 任务 · 0 子任务</div>
+      </div>
     </div>
   </div>
-</div>
 
-<div class="footer">
-  SpecCore Knowledge Visualizer · 2026 · Generated by speccore knowledge
-</div>
+  <!-- Footer -->
+  <div class="footer">
+    <span>SPECCORE · KNOWLEDGE VISUALIZER · 2026</span>
+    <span>GENERATED: 2026-08-14T23:46:11.547Z</span>
+  </div>
+</main>
 
 <script>
+// ── Theme ──
+(function(){var t=localStorage.getItem('speccore-theme')||'ocean';document.documentElement.setAttribute('data-theme',t)})();
+function setTheme(t){document.documentElement.setAttribute('data-theme',t);localStorage.setItem('speccore-theme',t);document.querySelectorAll('.theme-sw button').forEach((b,i)=>{b.classList.toggle('active',['ocean','cyber','light','mono','github','synth','amber','sakura','forest'][i]===t)});}
+document.querySelectorAll('.theme-sw button').forEach((b,i)=>{b.classList.toggle('active',['ocean','cyber','light','mono','github','synth','amber','sakura','forest'][i]===(localStorage.getItem('speccore-theme')||'ocean'))});
+
 // ── Data ──
-const nodes = new vis.DataSet([{"id":"SPEC:ANALYSIS","label":"需求分析报告","title":"需求分析报告\n020-specs/ANALYSIS.md\n类型: spec","color":{"background":"#8b5cf620","border":"#8b5cf6","highlight":{"background":"#8b5cf640","border":"#8b5cf6"}},"shape":"dot","size":14,"borderWidth":2,"font":{"color":"#e5e7eb","size":11},"entityType":"spec"},{"id":"SPEC:REQUIREMENT","label":"REQUIREMENT","title":"REQUIREMENT\n020-specs/REQUIREMENT.md\n类型: spec","color":{"background":"#8b5cf620","border":"#8b5cf6","highlight":{"background":"#8b5cf640","border":"#8b5cf6"}},"shape":"dot","size":14,"borderWidth":2,"font":{"color":"#e5e7eb","size":11},"entityType":"spec"},{"id":"Task-001","label":"Task-001: 会议室预订功能","title":"Task-001: 会议室预订功能\n030-tasks/Task-001\n类型: task\n状态: pending","color":{"background":"#10b98120","border":"#10b981","highlight":{"background":"#10b98140","border":"#10b981"}},"shape":"square","size":18,"borderWidth":2,"font":{"color":"#e5e7eb","size":11},"entityType":"task"},{"id":"Task-002","label":"Task-002: 会议通知推送","title":"Task-002: 会议通知推送\n030-tasks/Task-002\n类型: task\n状态: pending","color":{"background":"#10b98120","border":"#10b981","highlight":{"background":"#10b98140","border":"#10b981"}},"shape":"square","size":18,"borderWidth":2,"font":{"color":"#e5e7eb","size":11},"entityType":"task"},{"id":"Task-003","label":"Task-003: 会议纪要大模型总结","title":"Task-003: 会议纪要大模型总结\n030-tasks/Task-003\n类型: task\n状态: pending","color":{"background":"#10b98120","border":"#10b981","highlight":{"background":"#10b98140","border":"#10b981"}},"shape":"square","size":18,"borderWidth":2,"font":{"color":"#e5e7eb","size":11},"entityType":"task"},{"id":"Task-004","label":"Task-004: 用户注册登录","title":"Task-004: 用户注册登录\n030-tasks/Task-004\n类型: task\n状态: pending","color":{"background":"#10b98120","border":"#10b981","highlight":{"background":"#10b98140","border":"#10b981"}},"shape":"square","size":18,"borderWidth":2,"font":{"color":"#e5e7eb","size":11},"entityType":"task"},{"id":"Task-005","label":"Task-005: SSO单点登录","title":"Task-005: SSO单点登录\n030-tasks/Task-005\n类型: task\n状态: pending","color":{"background":"#10b98120","border":"#10b981","highlight":{"background":"#10b98140","border":"#10b981"}},"shape":"square","size":18,"borderWidth":2,"font":{"color":"#e5e7eb","size":11},"entityType":"task"},{"id":"Task-006","label":"Task-006: 权限管理系统","title":"Task-006: 权限管理系统\n030-tasks/bugfix/Task-006\n类型: task\n状态: pending","color":{"background":"#10b98120","border":"#10b981","highlight":{"background":"#10b98140","border":"#10b981"}},"shape":"square","size":18,"borderWidth":2,"font":{"color":"#e5e7eb","size":11},"entityType":"task"}]);
-const edges = new vis.DataSet([]);
-const allEntities = [{"id":"SPEC:ANALYSIS","type":"spec","title":"需求分析报告","file":"020-specs/ANALYSIS.md","status":""},{"id":"SPEC:REQUIREMENT","type":"spec","title":"REQUIREMENT","file":"020-specs/REQUIREMENT.md","status":""},{"id":"Task-001","type":"task","title":"Task-001: 会议室预订功能","file":"030-tasks/Task-001","status":"pending"},{"id":"Task-002","type":"task","title":"Task-002: 会议通知推送","file":"030-tasks/Task-002","status":"pending"},{"id":"Task-003","type":"task","title":"Task-003: 会议纪要大模型总结","file":"030-tasks/Task-003","status":"pending"},{"id":"Task-004","type":"task","title":"Task-004: 用户注册登录","file":"030-tasks/Task-004","status":"pending"},{"id":"Task-005","type":"task","title":"Task-005: SSO单点登录","file":"030-tasks/Task-005","status":"pending"},{"id":"Task-006","type":"task","title":"Task-006: 权限管理系统","file":"030-tasks/bugfix/Task-006","status":"pending"}];
+var nodes = new vis.DataSet([{"id":"SPEC:ANALYSIS","label":"需求分析报告","title":"需求分析报告\n020-specs/ANALYSIS.md\n类型: spec","color":{"background":"#a78bfa20","border":"#a78bfa","highlight":{"background":"#a78bfa40","border":"#a78bfa"}},"shape":"dot","size":14,"borderWidth":2,"font":{"color":"#c4d5e7","size":11},"entityType":"spec"},{"id":"SPEC:REQUIREMENT","label":"REQUIREMENT","title":"REQUIREMENT\n020-specs/REQUIREMENT.md\n类型: spec","color":{"background":"#a78bfa20","border":"#a78bfa","highlight":{"background":"#a78bfa40","border":"#a78bfa"}},"shape":"dot","size":14,"borderWidth":2,"font":{"color":"#c4d5e7","size":11},"entityType":"spec"},{"id":"Task-001","label":"Task-001: 会议室预订功能","title":"Task-001: 会议室预订功能\n030-tasks/Task-001\n类型: task\n状态: pending","color":{"background":"#00ff8820","border":"#00ff88","highlight":{"background":"#00ff8840","border":"#00ff88"}},"shape":"square","size":18,"borderWidth":2,"font":{"color":"#c4d5e7","size":11},"entityType":"task"},{"id":"Task-002","label":"Task-002: 会议通知推送","title":"Task-002: 会议通知推送\n030-tasks/Task-002\n类型: task\n状态: pending","color":{"background":"#00ff8820","border":"#00ff88","highlight":{"background":"#00ff8840","border":"#00ff88"}},"shape":"square","size":18,"borderWidth":2,"font":{"color":"#c4d5e7","size":11},"entityType":"task"},{"id":"Task-003","label":"Task-003: 会议纪要大模型总结","title":"Task-003: 会议纪要大模型总结\n030-tasks/Task-003\n类型: task\n状态: pending","color":{"background":"#00ff8820","border":"#00ff88","highlight":{"background":"#00ff8840","border":"#00ff88"}},"shape":"square","size":18,"borderWidth":2,"font":{"color":"#c4d5e7","size":11},"entityType":"task"},{"id":"Task-004","label":"Task-004: 用户注册登录","title":"Task-004: 用户注册登录\n030-tasks/Task-004\n类型: task\n状态: pending","color":{"background":"#00ff8820","border":"#00ff88","highlight":{"background":"#00ff8840","border":"#00ff88"}},"shape":"square","size":18,"borderWidth":2,"font":{"color":"#c4d5e7","size":11},"entityType":"task"},{"id":"Task-005","label":"Task-005: SSO单点登录","title":"Task-005: SSO单点登录\n030-tasks/Task-005\n类型: task\n状态: pending","color":{"background":"#00ff8820","border":"#00ff88","highlight":{"background":"#00ff8840","border":"#00ff88"}},"shape":"square","size":18,"borderWidth":2,"font":{"color":"#c4d5e7","size":11},"entityType":"task"},{"id":"Task-006","label":"Task-006: 权限管理系统","title":"Task-006: 权限管理系统\n030-tasks/bugfix/Task-006\n类型: task\n状态: pending","color":{"background":"#00ff8820","border":"#00ff88","highlight":{"background":"#00ff8840","border":"#00ff88"}},"shape":"square","size":18,"borderWidth":2,"font":{"color":"#c4d5e7","size":11},"entityType":"task"},{"id":"SRC:src-cli","label":"cli.ts","title":"cli.ts\nsrc/cli.ts\n类型: source-file","color":{"background":"#60a5fa20","border":"#f59e0b","highlight":{"background":"#60a5fa40","border":"#f59e0b"}},"shape":"database","size":12,"borderWidth":3,"font":{"color":"#c4d5e7","size":11},"entityType":"source-file"},{"id":"SRC:src-commands-plan","label":"plan.ts","title":"plan.ts\nsrc/commands/plan.ts\n类型: source-file","color":{"background":"#60a5fa20","border":"#f59e0b","highlight":{"background":"#60a5fa40","border":"#f59e0b"}},"shape":"database","size":12,"borderWidth":3,"font":{"color":"#c4d5e7","size":11},"entityType":"source-file"},{"id":"SRC:src-commands-code-index","label":"code-index.ts","title":"code-index.ts\nsrc/commands/code-index.ts\n类型: source-file","color":{"background":"#60a5fa20","border":"#f59e0b","highlight":{"background":"#60a5fa40","border":"#f59e0b"}},"shape":"database","size":12,"borderWidth":3,"font":{"color":"#c4d5e7","size":11},"entityType":"source-file"},{"id":"SRC:src-commands-config","label":"config.ts","title":"config.ts\nsrc/commands/config.ts\n类型: source-file","color":{"background":"#60a5fa20","border":"#f59e0b","highlight":{"background":"#60a5fa40","border":"#f59e0b"}},"shape":"database","size":12,"borderWidth":3,"font":{"color":"#c4d5e7","size":11},"entityType":"source-file"},{"id":"SRC:src-core-inbox","label":"inbox.ts","title":"inbox.ts\nsrc/core/inbox.ts\n类型: source-file","color":{"background":"#60a5fa20","border":"#f59e0b","highlight":{"background":"#60a5fa40","border":"#f59e0b"}},"shape":"database","size":12,"borderWidth":3,"font":{"color":"#c4d5e7","size":11},"entityType":"source-file"},{"id":"SRC:src-core-execution-state","label":"execution-state.ts","title":"execution-state.ts\nsrc/core/execution-state.ts\n类型: source-file","color":{"background":"#60a5fa20","border":"#f59e0b","highlight":{"background":"#60a5fa40","border":"#f59e0b"}},"shape":"database","size":12,"borderWidth":3,"font":{"color":"#c4d5e7","size":11},"entityType":"source-file"},{"id":"SRC:src-core-prompt-builder","label":"prompt-builder.ts","title":"prompt-builder.ts\nsrc/core/prompt-builder.ts\n类型: source-file","color":{"background":"#60a5fa20","border":"#f59e0b","highlight":{"background":"#60a5fa40","border":"#f59e0b"}},"shape":"database","size":12,"borderWidth":3,"font":{"color":"#c4d5e7","size":11},"entityType":"source-file"},{"id":"SRC:src-i18n-index","label":"index.ts","title":"index.ts\nsrc/i18n/index.ts\n类型: source-file","color":{"background":"#60a5fa20","border":"#f59e0b","highlight":{"background":"#60a5fa40","border":"#f59e0b"}},"shape":"database","size":12,"borderWidth":3,"font":{"color":"#c4d5e7","size":11},"entityType":"source-file"},{"id":"SRC:src-i18n-t","label":"t.ts","title":"t.ts\nsrc/i18n/t.ts\n类型: source-file","color":{"background":"#60a5fa20","border":"#f59e0b","highlight":{"background":"#60a5fa40","border":"#f59e0b"}},"shape":"database","size":12,"borderWidth":3,"font":{"color":"#c4d5e7","size":11},"entityType":"source-file"},{"id":"SRC:src-index","label":"index.ts","title":"index.ts\nsrc/index.ts\n类型: source-file","color":{"background":"#60a5fa20","border":"#f59e0b","highlight":{"background":"#60a5fa40","border":"#f59e0b"}},"shape":"database","size":12,"borderWidth":3,"font":{"color":"#c4d5e7","size":11},"entityType":"source-file"},{"id":"SRC:src-utils-task-utils","label":"task-utils.ts","title":"task-utils.ts\nsrc/utils/task-utils.ts\n类型: source-file","color":{"background":"#60a5fa20","border":"#f59e0b","highlight":{"background":"#60a5fa40","border":"#f59e0b"}},"shape":"database","size":12,"borderWidth":3,"font":{"color":"#c4d5e7","size":11},"entityType":"source-file"},{"id":"SRC:src-utils-logger","label":"logger.ts","title":"logger.ts\nsrc/utils/logger.ts\n类型: source-file","color":{"background":"#60a5fa20","border":"#f59e0b","highlight":{"background":"#60a5fa40","border":"#f59e0b"}},"shape":"database","size":12,"borderWidth":3,"font":{"color":"#c4d5e7","size":11},"entityType":"source-file"}]);
+var edges = new vis.DataSet([{"from":"SRC:src-cli","to":"SRC:src-i18n-t","title":"imports","color":{"color":"#60a5fa"},"label":"imports","font":{"size":9,"color":"#4a5568","align":"middle","strokeWidth":0}},{"from":"SRC:src-cli","to":"SRC:src-commands-config","title":"imports","color":{"color":"#60a5fa"},"label":"imports","font":{"size":9,"color":"#4a5568","align":"middle","strokeWidth":0}},{"from":"SRC:src-cli","to":"SRC:src-commands-plan","title":"imports","color":{"color":"#60a5fa"},"label":"imports","font":{"size":9,"color":"#4a5568","align":"middle","strokeWidth":0}},{"from":"SRC:src-commands-plan","to":"SRC:src-i18n-t","title":"imports","color":{"color":"#60a5fa"},"label":"imports","font":{"size":9,"color":"#4a5568","align":"middle","strokeWidth":0}},{"from":"SRC:src-commands-plan","to":"SRC:src-utils-logger","title":"imports","color":{"color":"#60a5fa"},"label":"imports","font":{"size":9,"color":"#4a5568","align":"middle","strokeWidth":0}},{"from":"SRC:src-commands-plan","to":"SRC:src-core-prompt-builder","title":"imports","color":{"color":"#60a5fa"},"label":"imports","font":{"size":9,"color":"#4a5568","align":"middle","strokeWidth":0}},{"from":"SRC:src-commands-code-index","to":"SRC:src-i18n-t","title":"imports","color":{"color":"#60a5fa"},"label":"imports","font":{"size":9,"color":"#4a5568","align":"middle","strokeWidth":0}},{"from":"SRC:src-commands-code-index","to":"SRC:src-i18n-index","title":"imports","color":{"color":"#60a5fa"},"label":"imports","font":{"size":9,"color":"#4a5568","align":"middle","strokeWidth":0}},{"from":"SRC:src-commands-code-index","to":"SRC:src-index","title":"imports","color":{"color":"#60a5fa"},"label":"imports","font":{"size":9,"color":"#4a5568","align":"middle","strokeWidth":0}},{"from":"SRC:src-commands-code-index","to":"SRC:src-utils-logger","title":"imports","color":{"color":"#60a5fa"},"label":"imports","font":{"size":9,"color":"#4a5568","align":"middle","strokeWidth":0}},{"from":"SRC:src-commands-config","to":"SRC:src-i18n-t","title":"imports","color":{"color":"#60a5fa"},"label":"imports","font":{"size":9,"color":"#4a5568","align":"middle","strokeWidth":0}},{"from":"SRC:src-commands-config","to":"SRC:src-utils-logger","title":"imports","color":{"color":"#60a5fa"},"label":"imports","font":{"size":9,"color":"#4a5568","align":"middle","strokeWidth":0}},{"from":"SRC:src-core-inbox","to":"SRC:src-i18n-t","title":"imports","color":{"color":"#60a5fa"},"label":"imports","font":{"size":9,"color":"#4a5568","align":"middle","strokeWidth":0}},{"from":"SRC:src-core-inbox","to":"SRC:src-utils-logger","title":"imports","color":{"color":"#60a5fa"},"label":"imports","font":{"size":9,"color":"#4a5568","align":"middle","strokeWidth":0}},{"from":"SRC:src-core-execution-state","to":"SRC:src-i18n-t","title":"imports","color":{"color":"#60a5fa"},"label":"imports","font":{"size":9,"color":"#4a5568","align":"middle","strokeWidth":0}},{"from":"SRC:src-core-prompt-builder","to":"SRC:src-i18n-t","title":"imports","color":{"color":"#60a5fa"},"label":"imports","font":{"size":9,"color":"#4a5568","align":"middle","strokeWidth":0}},{"from":"SRC:src-i18n-index","to":"SRC:src-i18n-t","title":"imports","color":{"color":"#60a5fa"},"label":"imports","font":{"size":9,"color":"#4a5568","align":"middle","strokeWidth":0}},{"from":"SRC:src-i18n-t","to":"SRC:src-i18n-index","title":"imports","color":{"color":"#60a5fa"},"label":"imports","font":{"size":9,"color":"#4a5568","align":"middle","strokeWidth":0}},{"from":"SRC:src-i18n-t","to":"SRC:src-index","title":"imports","color":{"color":"#60a5fa"},"label":"imports","font":{"size":9,"color":"#4a5568","align":"middle","strokeWidth":0}},{"from":"SRC:src-utils-task-utils","to":"SRC:src-i18n-t","title":"imports","color":{"color":"#60a5fa"},"label":"imports","font":{"size":9,"color":"#4a5568","align":"middle","strokeWidth":0}},{"from":"cli:cli.ts","to":"common:i18n","title":"module_depends","color":{"color":"#0ea5e9"},"label":"module_depends","font":{"size":9,"color":"#4a5568","align":"middle","strokeWidth":0}},{"from":"cli:cli.ts","to":"cli:commands","title":"module_depends","color":{"color":"#0ea5e9"},"label":"module_depends","font":{"size":9,"color":"#4a5568","align":"middle","strokeWidth":0}},{"from":"cli:commands","to":"common:i18n","title":"module_depends","color":{"color":"#0ea5e9"},"label":"module_depends","font":{"size":9,"color":"#4a5568","align":"middle","strokeWidth":0}},{"from":"cli:commands","to":"shared:utils","title":"module_depends","color":{"color":"#0ea5e9"},"label":"module_depends","font":{"size":9,"color":"#4a5568","align":"middle","strokeWidth":0}},{"from":"cli:commands","to":"common:core","title":"module_depends","color":{"color":"#0ea5e9"},"label":"module_depends","font":{"size":9,"color":"#4a5568","align":"middle","strokeWidth":0}},{"from":"cli:commands","to":"common:index.ts","title":"module_depends","color":{"color":"#0ea5e9"},"label":"module_depends","font":{"size":9,"color":"#4a5568","align":"middle","strokeWidth":0}},{"from":"common:core","to":"common:i18n","title":"module_depends","color":{"color":"#0ea5e9"},"label":"module_depends","font":{"size":9,"color":"#4a5568","align":"middle","strokeWidth":0}},{"from":"common:core","to":"shared:utils","title":"module_depends","color":{"color":"#0ea5e9"},"label":"module_depends","font":{"size":9,"color":"#4a5568","align":"middle","strokeWidth":0}},{"from":"common:i18n","to":"common:index.ts","title":"module_depends","color":{"color":"#0ea5e9"},"label":"module_depends","font":{"size":9,"color":"#4a5568","align":"middle","strokeWidth":0}},{"from":"shared:utils","to":"common:i18n","title":"module_depends","color":{"color":"#0ea5e9"},"label":"module_depends","font":{"size":9,"color":"#4a5568","align":"middle","strokeWidth":0}}]);
+var allEntities = [{"id":"SPEC:ANALYSIS","type":"spec","title":"需求分析报告","file":"020-specs/ANALYSIS.md","status":""},{"id":"SPEC:REQUIREMENT","type":"spec","title":"REQUIREMENT","file":"020-specs/REQUIREMENT.md","status":""},{"id":"Task-001","type":"task","title":"Task-001: 会议室预订功能","file":"030-tasks/Task-001","status":"pending"},{"id":"Task-002","type":"task","title":"Task-002: 会议通知推送","file":"030-tasks/Task-002","status":"pending"},{"id":"Task-003","type":"task","title":"Task-003: 会议纪要大模型总结","file":"030-tasks/Task-003","status":"pending"},{"id":"Task-004","type":"task","title":"Task-004: 用户注册登录","file":"030-tasks/Task-004","status":"pending"},{"id":"Task-005","type":"task","title":"Task-005: SSO单点登录","file":"030-tasks/Task-005","status":"pending"},{"id":"Task-006","type":"task","title":"Task-006: 权限管理系统","file":"030-tasks/bugfix/Task-006","status":"pending"},{"id":"SRC:src-cli","type":"source-file","title":"cli.ts","file":"src/cli.ts","status":""},{"id":"SRC:src-commands-plan","type":"source-file","title":"plan.ts","file":"src/commands/plan.ts","status":""},{"id":"SRC:src-commands-code-index","type":"source-file","title":"code-index.ts","file":"src/commands/code-index.ts","status":""},{"id":"SRC:src-commands-config","type":"source-file","title":"config.ts","file":"src/commands/config.ts","status":""},{"id":"SRC:src-core-inbox","type":"source-file","title":"inbox.ts","file":"src/core/inbox.ts","status":""},{"id":"SRC:src-core-execution-state","type":"source-file","title":"execution-state.ts","file":"src/core/execution-state.ts","status":""},{"id":"SRC:src-core-prompt-builder","type":"source-file","title":"prompt-builder.ts","file":"src/core/prompt-builder.ts","status":""},{"id":"SRC:src-i18n-index","type":"source-file","title":"index.ts","file":"src/i18n/index.ts","status":""},{"id":"SRC:src-i18n-t","type":"source-file","title":"t.ts","file":"src/i18n/t.ts","status":""},{"id":"SRC:src-index","type":"source-file","title":"index.ts","file":"src/index.ts","status":""},{"id":"SRC:src-utils-task-utils","type":"source-file","title":"task-utils.ts","file":"src/utils/task-utils.ts","status":""},{"id":"SRC:src-utils-logger","type":"source-file","title":"logger.ts","file":"src/utils/logger.ts","status":""}];
 
 // ── Graph ──
-const container = document.getElementById('graph');
-const network = new vis.Network(container, { nodes, edges }, {
-  nodes: {
-    shape: 'dot',
-    size: 16,
-    font: { size: 11, color: '#e5e7eb', face: 'system-ui' },
-    borderWidth: 2,
-  },
-  edges: {
-    width: 1.5,
-    color: { color: 'rgba(0,240,255,0.3)', highlight: '#00f0ff' },
-    arrows: { to: { enabled: true, scaleFactor: 0.5 } },
-    smooth: { type: 'continuous' },
-  },
-  physics: {
-    solver: 'forceAtlas2Based',
-    forceAtlas2Based: { gravitationalConstant: -40, centralGravity: 0.008, springLength: 120 },
-    stabilization: { iterations: 150 },
-  },
+var container = document.getElementById('graph');
+var network = new vis.Network(container, { nodes: nodes, edges: edges }, {
+  nodes: { shape: 'dot', size: 16, font: { size: 11, color: '#c4d5e7', face: 'JetBrains Mono' }, borderWidth: 2 },
+  edges: { width: 1.5, color: { color: 'rgba(0,240,255,0.3)', highlight: '#00f0ff' }, arrows: { to: { enabled: true, scaleFactor: 0.5 } }, smooth: { type: 'continuous' } },
+  physics: { solver: 'forceAtlas2Based', forceAtlas2Based: { gravitationalConstant: -40, centralGravity: 0.008, springLength: 120 }, stabilization: { iterations: 150 } },
   interaction: { hover: true, tooltipDelay: 200 },
   layout: { randomSeed: 42 },
 });
 
 // ── Filter ──
-document.querySelectorAll('.filter-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+document.querySelectorAll('.filter-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
     btn.classList.add('active');
-    const filter = btn.dataset.filter;
+    var filter = btn.dataset.filter;
     if (filter === 'all') {
-      nodes.forEach(n => nodes.update({ id: n.id, hidden: false }));
+      nodes.forEach(function(n) { nodes.update({ id: n.id, hidden: false }); });
     } else {
-      nodes.forEach(n => nodes.update({ id: n.id, hidden: n.entityType !== filter }));
+      nodes.forEach(function(n) { nodes.update({ id: n.id, hidden: n.entityType !== filter }); });
     }
   });
 });
 
 // ── Panel Tabs ──
-document.querySelectorAll('.panel-tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.panel-tab').forEach(t => t.classList.remove('active'));
+document.querySelectorAll('.panel-tab').forEach(function(tab) {
+  tab.addEventListener('click', function() {
+    document.querySelectorAll('.panel-tab').forEach(function(t) { t.classList.remove('active'); });
     tab.classList.add('active');
-    document.querySelectorAll('.panel-content').forEach(p => p.style.display = 'none');
+    document.querySelectorAll('.panel-content').forEach(function(p) { p.style.display = 'none'; });
     document.getElementById('panel-' + tab.dataset.panel).style.display = 'block';
   });
 });
 
 // ── Search ──
-document.getElementById('entity-search').addEventListener('input', (e) => {
-  const q = e.target.value.toLowerCase();
-  const list = document.getElementById('entity-list');
+document.getElementById('entity-search').addEventListener('input', function(e) {
+  var q = e.target.value.toLowerCase();
+  var list = document.getElementById('entity-list');
   list.innerHTML = allEntities
-    .filter(ent => !q || ent.title.toLowerCase().includes(q) || ent.id.toLowerCase().includes(q))
-    .map(ent => entityItemHtml(ent))
+    .filter(function(ent) { return !q || ent.title.toLowerCase().includes(q) || ent.id.toLowerCase().includes(q); })
+    .map(function(ent) { return entityItemHtml(ent); })
     .join('');
 });
 
-// ── Node Click → highlight ──
-network.on('click', (params) => {
+// ── Node Click ──
+network.on('click', function(params) {
   if (params.nodes.length > 0) {
-    const nodeId = params.nodes[0];
-    const connected = network.getConnectedNodes(nodeId);
-    const connectedSet = new Set([nodeId, ...connected]);
-    nodes.forEach(n => {
-      nodes.update({ id: n.id, opacity: connectedSet.has(n.id) ? 1 : 0.15 });
-    });
-    setTimeout(() => nodes.forEach(n => nodes.update({ id: n.id, opacity: 1 })), 3000);
+    var nodeId = params.nodes[0];
+    var connected = network.getConnectedNodes(nodeId);
+    var connectedSet = new Set([nodeId].concat(connected));
+    nodes.forEach(function(n) { nodes.update({ id: n.id, opacity: connectedSet.has(n.id) ? 1 : 0.15 }); });
+    setTimeout(function() { nodes.forEach(function(n) { nodes.update({ id: n.id, opacity: 1 }); }); }, 3000);
   }
 });
 
 function entityItemHtml(ent) {
-  const typeClass = 'type-' + ent.type.replace('_', '-');
-  const typeLabel = { requirement: '需求', spec: '规格', task: '任务', subtask: '子任务', 'user-file': '源码' }[ent.type] || ent.type;
+  var typeClass = 'type-' + ent.type.replace('_', '-');
+  var typeLabel = { requirement: '需求', spec: '规格', task: '任务', subtask: '子任务', 'user-file': '用户文件', 'source-file': '源码' }[ent.type] || ent.type;
   return '<div class="entity-item" onclick="focusNode(\'' + ent.id + '\')">' +
     '<div class="name">' + ent.title + '</div>' +
     '<div class="meta"><span class="type-badge ' + typeClass + '">' + typeLabel + '</span>' +
