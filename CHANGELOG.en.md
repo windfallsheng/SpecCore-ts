@@ -2,6 +2,20 @@
 
 ---
 
+## v6.38.0 (2026-08-15) — Design Doc Update + Code Sync
+
+### Core Changes
+
+- **DESIGN.md**: Added "2026-08-15 Analyze Generates Platform-Specific Docs + Split Smart Splits" section, documenting architectural changes from v6.31.0-v6.37.0
+  - Analyze --auto dual-layer doc architecture (global + per-platform separation)
+  - REQUIREMENT.md feature platform annotation
+  - Analyze --prompt directory structure guidance
+  - Split platform inference logic refactoring (three-tier priority)
+  - Split reads per-platform subdirectory docs (dual-layer reading)
+  - Path adaptation strategy (new path priority + legacy fallback)
+  - Complete data flow example
+- **Version history table**: Added changelog entries for v6.31.0-v6.37.0 (7 versions total)
+
 ## v6.37.0 (2026-08-15) — Split Reads Per-Platform Subdirectory Docs + Prioritizes Platform-Specific Extraction
 
 ### Core Changes
