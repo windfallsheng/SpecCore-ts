@@ -1921,13 +1921,69 @@ export async function generateSpecsFromRequirements(
   iteration: string,
   specDir: string,
 ): Promise<SpecGenerationResult> {
-  // 1. 读取所有需求内容
+  // 1. 【增强】读取所有需求内容，并按端分类
+  const platforms = await detectPlatformsFromConstitution(); // 【提前定义】
   const allContent: string[] = [];
+  const platformFileMap: Record<string, string[]> = {}; // platform -> [file paths]
+  const unclassifiedFiles: { path: string; content: string }[] = []; // 无法分类的文件
+  
   for (const p of reqPaths) {
     if (await pathExists(p)) {
-      allContent.push(await readFile(p, 'utf-8'));
+      const content = await readFile(p, 'utf-8');
+      
+      // 【新增】尝试从文件路径或内容中推断所属的端
+      const inferredPlatform = inferPlatformFromPathOrContent(p, content, platforms);
+      if (inferredPlatform) {
+        // ✅ 端专属文档：不加入全局内容，只记录到平台映射
+        if (!platformFileMap[inferredPlatform]) {
+          platformFileMap[inferredPlatform] = [];
+        }
+        platformFileMap[inferredPlatform].push(p);
+        logger.info(`   📄 检测到 ${p} 属于 ${inferredPlatform} 端（端专属文档）`);
+      } else {
+        // ❓ 无法推断，检查是否为跨端通用文档
+        const fileName = p.split(/[/\\]/).pop() || '';
+        const isGlobalDoc = fileName.toUpperCase().includes('REQUIREMENT') || 
+                           fileName.toUpperCase().includes('INDEX') ||
+                           fileName.toUpperCase().includes('PRD');
+        
+        if (isGlobalDoc) {
+          // ✅ 跨端通用文档：加入全局内容
+          allContent.push(content);
+          logger.info(`   📄 ${fileName} 识别为跨端通用文档`);
+        } else {
+          // ⚠️ 无法分类的非通用文档
+          unclassifiedFiles.push({ path: p, content });
+          logger.warn(`   ⚠️ 无法自动识别 ${p} 所属的端`);
+        }
+      }
     }
   }
+  
+  // 【新增】如果有无法分类的文件，给出处理建议
+  if (unclassifiedFiles.length > 0) {
+    logger.info('');
+    logger.info(`   ❓ 发现 ${unclassifiedFiles.length} 个文档无法自动识别所属端`);
+    logger.info(`   💡 可用端列表: ${platforms.join(', ')}`);
+    logger.info('');
+    
+    for (const file of unclassifiedFiles) {
+      const fileName = file.path.split(/[/\\]/).pop() || file.path;
+      logger.info(`   📄 ${fileName}`);
+      
+      // 检查是否有全局的 REQUIREMENT.md 或 INDEX.md，这些通常是跨端的
+      if (fileName.toUpperCase().includes('REQUIREMENT') || 
+          fileName.toUpperCase().includes('INDEX') ||
+          fileName.toUpperCase().includes('PRD')) {
+        logger.info(`      → 假设为跨端通用文档，内容将合并到全局分析中`);
+      } else {
+        logger.info(`      → 未指定端，将在生成端专属文档时使用占位符`);
+        logger.info(`      → 后续可运行: speccore ask "将 ${fileName} 标注为 [端名] 端"`);
+      }
+    }
+    logger.info('');
+  }
+  
   const fullContent = allContent.join('\n\n---\n\n');
   if (fullContent.trim().length < 20) {
     logger.warn('   ⚠️ 需求文档内容过少，无法生成有效 Spec 文件');
@@ -1941,8 +1997,28 @@ export async function generateSpecsFromRequirements(
   const businessRules = extractBusinessRules(fullContent);
   const uiPatterns = extractUIPatterns(fullContent);
   const archImpact = await analyzeArchitectureImpact(fullContent);
-  const platforms = await detectPlatformsFromConstitution();
+  // const platforms 已在前面定义
   const now = new Date().toISOString().split('T')[0];
+
+  // 3. 【新增】按端分割需求内容，为每个端单独提取专属信息
+  // 【修复】不仅要分割全局内容，还要合并端专属文件的内容
+  const platformContents = splitContentByPlatform(fullContent, platforms);
+  
+  // 合并端专属文件的内容
+  for (const [platform, filePaths] of Object.entries(platformFileMap)) {
+    let platformContent = platformContents[platform] || '';
+    for (const filePath of filePaths) {
+      const content = await readFile(filePath, 'utf-8');
+      if (platformContent) {
+        platformContent += '\n\n---\n\n' + content;
+      } else {
+        platformContent = content;
+      }
+    }
+    platformContents[platform] = platformContent;
+  }
+  
+  logger.info(`   🔍 已按端分割需求内容: ${Object.keys(platformContents).length} 个端有专属内容`);
 
   // 3. 生成各 Spec 文件
   const files: { filename: string; content: string }[] = [];
@@ -1992,7 +2068,7 @@ export async function generateSpecsFromRequirements(
     await ensureDir(platformDir);
 
     // TECH.md — 该端技术方案
-    const techContent = buildTechSpecForPlatform(iteration, now, apis, dataModels, archImpact, platform, features, uiPatterns);
+    const techContent = buildTechSpecForPlatform(iteration, now, apis, dataModels, archImpact, platform, features, uiPatterns, platformContents);
     await writeFile(join(platformDir, 'TECH.md'), techContent);
 
     // TEST.md — 该端测试计划
@@ -2281,6 +2357,7 @@ function buildTechSpecForPlatform(
   platform: string,
   features: { name: string; desc: string }[],
   uiPatterns: ReturnType<typeof extractUIPatterns>,
+  platformContents: Record<string, string>, // 【新增】按端分割的需求内容
 ): string {
   let md = `# ${platform} 端技术方案\n\n> 迭代: ${iter} | 端: ${platform} | 生成: ${now}\n\n`;
 
@@ -2314,7 +2391,12 @@ function buildTechSpecForPlatform(
       md += `| 页面 | 路由 | 描述 |\n| :--- | :--- | :--- |\n`;
       platformPages.forEach(p => { md += `| ${p.name} | \`${p.route}\` | ${p.desc} |\n`; });
     } else {
+      // 【增强】添加智能填充提示
       md += `_待补充：从需求中提取 ${platform} 端的页面清单。_\n`;
+      md += `\n> 💡 **如何填充**：\n`;
+      md += `> 1. 运行 \`speccore ask "为 ${platform} 端补充页面结构和组件设计"\`\n`;
+      md += `> 2. AI 会读取 010-requirements/ 中「${platform} 端需求」章节，自动提取页面清单\n`;
+      md += `> 3. 或手动编辑此文件，参考需求文档中的功能描述\n`;
     }
 
     md += `\n## 2. 组件设计\n\n`;
@@ -2745,4 +2827,124 @@ function guessModule(apiPath: string, features: { name: string; desc: string }[]
     }
   }
   return segments[1] || '—';
+}
+
+// ============================================================
+// 【新增】按端分割需求内容
+// ============================================================
+
+/**
+ * 将需求文档按端分割，提取每个端的专属内容
+ * @param fullContent 完整的需求文档内容
+ * @param platforms CONSTITUTION.md 定义的端列表
+ * @returns Record<platform, content> 每个端的专属内容
+ */
+function splitContentByPlatform(
+  fullContent: string,
+  platforms: string[]
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  const lines = fullContent.split('\n');
+  
+  // 1. 识别端标题的正则模式（支持多种写法）
+  const platformPatterns = platforms.map(p => ({
+    platform: p,
+    // 匹配: "## APP 端需求" / "## H5端需求" / "## Admin 端" / "## miniapp"
+    regex: new RegExp(`^#{1,4}\\s*.*?(?:${p}|${p.toUpperCase()}|${p.charAt(0).toUpperCase() + p.slice(1)}).*?(?:端|需求|$)`, 'i')
+  }));
+  
+  // 2. 扫描文档，找到每个端的起始位置
+  const platformStartLines: Record<string, number> = {};
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    for (const { platform, regex } of platformPatterns) {
+      if (regex.test(line) && !(platform in platformStartLines)) {
+        platformStartLines[platform] = i;
+      }
+    }
+  }
+  
+  // 3. 提取每个端的内容（从该端标题到下一个端标题之前）
+  for (const platform of platforms) {
+    if (!(platform in platformStartLines)) continue;
+    
+    const startLine = platformStartLines[platform];
+    let endLine = lines.length; // 默认到文档末尾
+    
+    // 查找下一个端的起始位置
+    for (const [otherPlatform, otherStart] of Object.entries(platformStartLines)) {
+      if (otherPlatform !== platform && otherStart > startLine) {
+        endLine = Math.min(endLine, otherStart);
+      }
+    }
+    
+    // 提取内容并去除 Markdown 标题标记
+    const content = lines.slice(startLine, endLine).join('\n');
+    result[platform] = content;
+  }
+  
+  return result;
+}
+
+// ============================================================
+// 【新增】从文件路径或内容推断所属的端
+// ============================================================
+
+/**
+ * 根据文件路径或内容推断该文档属于哪个端
+ * @param filePath 文件路径
+ * @param content 文件内容
+ * @param platforms CONSTITUTION.md 定义的端列表
+ * @returns 推断出的端名，或 null（无法推断）
+ */
+function inferPlatformFromPathOrContent(
+  filePath: string,
+  content: string,
+  platforms: string[]
+): string | null {
+  // 1. 从文件路径推断（优先级最高）
+  const pathLower = filePath.toLowerCase();
+  
+  // 检查路径中是否包含端名目录，如: 010-requirements/app/REQUIREMENT.md
+  for (const platform of platforms) {
+    const platformPatterns = [
+      new RegExp(`[/\\\\]${platform}[/\\\\]`, 'i'),  // /app/ 或 \app\
+      new RegExp(`[/\\\\]${platform}-`, 'i'),         // /app-xxx.md
+      new RegExp(`[/\\\\]${platform}_`, 'i'),         // /app_xxx.md
+    ];
+    
+    for (const pattern of platformPatterns) {
+      if (pattern.test(pathLower)) {
+        return platform;
+      }
+    }
+  }
+  
+  // 检查文件名本身，如: app-requirement.md
+  const fileName = filePath.split(/[/\\]/).pop()?.toLowerCase() || '';
+  for (const platform of platforms) {
+    if (fileName.startsWith(platform + '-') || 
+        fileName.startsWith(platform + '_') ||
+        fileName.includes('-' + platform + '.') ||
+        fileName.includes('_' + platform + '.')) {
+      return platform;
+    }
+  }
+  
+  // 2. 从文件内容推断（检查前 50 行是否有端标题）
+  const firstLines = content.split('\n').slice(0, 50).join('\n');
+  for (const platform of platforms) {
+    const patterns = [
+      new RegExp(`^#{1,4}\\s*.*?(?:${platform}|${platform.toUpperCase()}|${platform.charAt(0).toUpperCase() + platform.slice(1)}).*?(?:端|需求)`, 'im'),
+      new RegExp(`(?:^|\n)>?.*?(?:${platform}|${platform.toUpperCase()}).*?(?:端|平台|前端|后端)`, 'im'),
+    ];
+    
+    for (const pattern of patterns) {
+      if (pattern.test(firstLines)) {
+        return platform;
+      }
+    }
+  }
+  
+  return null; // 无法推断
 }
