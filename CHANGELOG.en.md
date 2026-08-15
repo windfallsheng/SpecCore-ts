@@ -2,6 +2,15 @@
 
 ---
 
+## v6.18.1 (2026-08-15) — Fix execute --prompt Branch Creation
+
+### Bug Fix
+
+- **execute --prompt now creates task branches**: Previously AI mode (--prompt/--response) didn't create branches, all code was written to current branch. Now consistent with direct execution mode - each task gets its own branch, and AI is told which branch to work on
+- **Dependency merging**: AI mode also supports dependency branch merging (for serial dependencies, branches from completed task's branch)
+
+---
+
 ## v6.18.0 (2026-08-15) — Auto Pipeline Anti-Block + Protected Branch Unified Check
 
 ### Pipeline Anti-Blocking Fixes

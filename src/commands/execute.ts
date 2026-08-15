@@ -1519,6 +1519,30 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
     return;
   }
 
+  // ── 懒创建任务分支 + 合并依赖（与直接执行模式保持一致）──
+  const createdBranches = new Map<string, string>();
+  const taskState: TaskState = {
+    id: task,
+    name: task,
+    status: 'pending',
+    type: 'feature',
+    assignee: '',
+    dependencies: [],
+    priority: 'medium',
+    progress: 0,
+  };
+  // 读取任务类型
+  try {
+    const typePath = join(taskDir, '.meta', 'type');
+    if (await pathExists(typePath)) {
+      taskState.type = (await readFile(typePath, 'utf-8')).trim() || 'feature';
+    }
+  } catch {}
+  const branchName = await prepareTaskBranch(taskState, iteration, options.base, createdBranches);
+  if (branchName) {
+    logger.info(`  🌿 ${task}: ${branchName}`);
+  }
+
   const prompt = await buildPrompt('execute', {
     iteration,
     task,
@@ -1526,8 +1550,16 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
     platform: options.platform,
   });
 
+  // 在 prompt 中追加分支信息（告诉 AI 在哪个分支上工作）
+  let promptText = formatPrompt(prompt);
+  if (branchName) {
+    promptText += `\n\n## 🔀 Git 分支\n`;
+    promptText += `当前已切换到任务分支: \`${branchName}\`\n`;
+    promptText += `请在此分支上编写代码。\n`;
+  }
+
   // 输出到 stdout（Skill 通过 execute_command 捕获）
-  process.stdout.write(formatPrompt(prompt));
+  process.stdout.write(promptText);
 
   // 退出码 10: 表示等待 AI 处理
   process.exitCode = 10;
