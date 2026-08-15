@@ -1611,6 +1611,27 @@ export async function checkUpgradeHints(projectRoot: string, speccoreDir: string
       migrations.push('自动补充「项目名称」列（值暂填"待填写"，请后续修改）');
     }
 
+    // ── 自动迁移：旧版"项目标识"纵向表 → 新版"项目信息"横向表 ──
+    const hasOldFormat = /##\s*项目标识/.test(updated) && /\|\s*属性\s*\|\s*值\s*\|/.test(updated);
+    const hasNewFormat = /##\s*项目信息/.test(updated) && /\|\s*工程\s*\|/.test(updated);
+    if (hasOldFormat && !hasNewFormat) {
+      // 提取旧表数据
+      const extractField = (key: string): string => {
+        const m = updated.match(new RegExp(`\\|\\s*${key}\\s*\\|\\s*([^|]+?)\\s*\\|`));
+        return m ? m[1].trim() : '待填写';
+      };
+      const projName = extractField('项目名');
+      const projShort = extractField('项目短名');
+      const repo = extractField('代码仓库');
+
+      // 替换整个"项目标识"章节为"项目信息"（从 ## 项目标识 到下一个 ## 之间）
+      updated = updated.replace(
+        new RegExp('##\\s*\u9879\u76ee\u6807\u8bc6[\\s\\S]*?(?=##\\s|\\Z)'),
+        `## 项目信息\n\n| 工程 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应需求端 |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n| ${projShort} | ${projName} | ./ | ${repo} | main | 待填写 |\n`
+      );
+      migrations.push(`旧版「项目标识」纵向表 → 新版「项目信息」横向表（项目名称: ${projName}）`);
+    }
+
     if (migrations.length > 0) {
       // 旧文件时间戳备份
       if (content.trim() !== updated.trim()) {
