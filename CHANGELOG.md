@@ -1,3 +1,24 @@
+## v6.15.0 (2026-08-15) — 移除简洁模式/全量模式概念
+
+### 重构：统一命令体系
+
+- **移除模式区分**: 删除 `readMode()`、`SIMPLE_COMMANDS`、`filterCommands`、`configureHelp` 逻辑
+- **init 命令简化**: 移除 `--full` 选项，交互式初始化不再询问模式选择
+- **help 命令简化**: 移除简洁模式标题和 `--full` 参数说明
+- **文档更新**: README、quick-start、scenarios、command-reference 全面移除「简洁模式/全量模式」概念
+
+### 涉及文件
+
+- `src/cli.ts` — 删除模式检测、命令过滤逻辑（-32 行）
+- `src/commands/init.ts` — 移除模式选择交互（-4 行）
+- `src/commands/help.ts` — 移除简洁模式标题和参数（-3 行）
+- `README.md` — 删除「两种模式」章节
+- `docs/quick-start.md` — 删除「两种模式」表格
+- `docs/scenarios.md` — 更新标题和注释
+- `docs/command-reference.md` — 子命令标题移除「全量模式」
+
+---
+
 ## v6.11.0 (2026-08-15) — 知识图谱可视化增强 + 意图识别语境校准
 
 ### 知识图谱可视化增强
