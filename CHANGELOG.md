@@ -1,3 +1,27 @@
+## v6.18.2 (2026-08-15) — AI 模式批次执行 + 任务状态追踪
+
+### 新增功能
+
+- **`--list-pending` 列出待执行任务**: 输出 JSON 格式任务清单（拓扑排序 + 批次分组），便于宿主 AI 获取完整任务列表
+- **`--batch-size` 批次元数据**: prompt 模式中输出批次信息（当前批次/总批次/下一任务），批次完成时输出 `[SPECCORE_BATCH_COMPLETE]` 信号指导宿主 AI 开新对话
+- **任务状态自动追踪**: prompt 模式执行前标记 `in_progress`，response 写入后标记 `completed`（通过 `.meta/status` 文件）
+
+### 解决什么问题？
+
+AI 模式（`execute --prompt`）在同一对话中执行多个任务时，上下文会累积导致溢出。批次执行通过：
+1. 每批 3 个任务（可配置）
+2. 批次完成后提示开新对话
+3. 新对话从断点继续
+
+### 涉及文件
+
+- `src/commands/execute.ts` — 新增 `listPendingTasks()` + `runPromptMode` 批次元数据 + 状态追踪
+- `src/cli.ts` — 新增 `--list-pending` 选项
+- `AGENTS.md` — 新增 `[SPECCORE_BATCH_COMPLETE]` 标记 + 批次执行约束
+- `.agents/skills/spec-execute/SKILL.md` — 新增批次执行模式指南
+
+---
+
 ## v6.18.1 (2026-08-15) — 修复 execute --prompt 模式分支创建
 
 ### 问题修复
