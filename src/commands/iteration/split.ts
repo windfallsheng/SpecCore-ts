@@ -931,6 +931,21 @@ async function createTaskFromSection(iterationDir: string, taskId: string, secti
   await writeFile(join(taskDir, '.meta', 'owner'), owner);
   await writeFile(join(taskDir, '.meta', 'created-at'), today);
 
+  // ── 1a. Git 配置模板（默认继承迭代级配置） ──
+  await writeFile(
+    join(taskDir, '.meta', 'git-config'),
+    `# 任务级 Git 配置
+# 以下配置覆盖迭代级 PROJECT_GRAPH.md，未配置项自动继承上一级。
+# 修改时去掉注释符 #，填入具体值即可。
+
+# 源分支: 继承迭代配置
+# 分支前缀: 继承迭代配置
+# 分支格式: 继承迭代配置
+# 自动拉取: 继承迭代配置
+# 远程名称: 继承迭代配置
+`
+  );
+
   // ── 2. 任务目录指引 ──
   await writeFile(
     join(taskDir, 'README.md'),
