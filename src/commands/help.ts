@@ -129,16 +129,22 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     ],
   },
   analyze: {
-    desc: 'AI 需求分析（全局 / 逐任务）',
+    desc: '统一分析：需求文档 + 源码 + 多端合成（--full）',
     params: [
       { flag: '-i, --iteration <id>', meaning: '目标迭代' },
       { flag: '-t, --task <id>', meaning: '指定 Task ID' },
       { flag: '--auto', meaning: '自动模式（跳过交互提问）' },
       { flag: '--interactive', meaning: '交互问答模式' },
+      { flag: '--full', meaning: '全自动三阶段合成（原 synthesize）：逐端→跨端→功能单元' },
+      { flag: '--phase <n>', meaning: '单阶段合成: 1=逐端, 2=跨端, 3=功能单元' },
+      { flag: '--feature <module>', meaning: '局部分析单个功能模块' },
+      { flag: '--sync', meaning: '任务分析后局部回写 020-specs/' },
     ],
     examples: [
       'speccore analyze -i Q1',
-      'speccore analyze -t Task-001 -i Q1 --auto',
+      'speccore analyze --full -i Q2',
+      'speccore analyze --phase 1 -i Q2',
+      'speccore analyze --feature 支付模块',
     ],
   },
   plan: {
@@ -297,21 +303,16 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     ],
   },
   synthesize: {
-    desc: '需求文档智能合成：多端全量分析 → 跨端综合 → 按功能单元合成需求文档',
+    desc: '→ analyze --full（同一命令，向后兼容别名）',
     params: [
       { flag: '-I, --iteration <iteration>', meaning: '目标迭代' },
-      { flag: '--with-code', meaning: '结合源码检查需求冲突' },
-      { flag: '--prompt', meaning: '输出结构化 Prompt 到 stdout' },
-      { flag: '--apply <content>', meaning: '接收 AI 合成结果写入文件' },
       { flag: '--full', meaning: '全自动三阶段：逐端分析 → 跨端综合 → 功能单元合成' },
       { flag: '--phase <n>', meaning: '单阶段执行: 1=逐端分析, 2=跨端综合, 3=功能单元合成' },
-      { flag: '--apply-phase <n>', meaning: '配合 --apply 指定写入哪个阶段的结果' },
     ],
     examples: [
-      'speccore synthesize -I Q2',
-      'speccore synthesize --full -I Q2',
-      'speccore synthesize --phase 1 -I Q2',
-      'speccore syn',
+      'speccore analyze --full -I Q2',
+      'speccore analyze --phase 1 -I Q2',
+      'speccore synthesize -I Q2  # 向后兼容',
     ],
   },
   refresh: {
@@ -350,7 +351,7 @@ function showAllCommands(): void {
   logger.info('');
 
   const categories: Record<string, string[]> = {
-    '🏗️ 初始化': ['init', 'import', 'doc2spec', 'synthesize'],
+    '🏗️ 初始化': ['init', 'import', 'doc2spec'],
     '📋 迭代与任务': ['iteration create', 'iteration split', 'task new', 'rename'],
     '🔍 分析与计划': ['analyze', 'plan'],
     '⚡ 执行与审查': ['execute', 'pr', 'done'],

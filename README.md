@@ -1,6 +1,6 @@
 # SpecCore — Code by Spec, Not by Vibe
 
-🖥️ 规范驱动开发 CLI · 22 命令 · 人机协同闭环 · 多层 AI 架构
+🖥️ 规范驱动开发 CLI · 20 命令 · 人机协同闭环 · 多层 AI 架构
 
 ```bash
 @spec-ask "分析会议预订系统的需求文档，拆分为独立开发任务，按依赖顺序执行"
@@ -232,7 +232,7 @@ speccore --version   # v6.14.0
 | 中文 | English | 说明 |
 |------|---------|------|
 | [快速开始](docs/quick-start.md) | [Quick Start](docs/quick-start.en.md) | 5 分钟上手，安装 → 完整流程 |
-| [命令参考](docs/command-reference.md) | [Commands](docs/commands.en.md) | 全部 22 命令 + 子命令 + 示例 |
+| [命令参考](docs/command-reference.md) | [Commands](docs/commands.en.md) | 全部 20 命令 + 子命令 + 示例 |
 | [总览](docs/overview.md) | — | 核心概念 + 工作流 + 三种使用方式 |
 | [场景实战](docs/scenarios.md) | [Scenarios](docs/scenarios.en.md) | 35 个真实开发场景 |
 | [SDD 方法论](docs/sdd-methodology.md) | [SDD](docs/sdd-methodology.en.md) | 规范驱动开发理念 |

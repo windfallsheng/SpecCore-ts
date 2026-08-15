@@ -1,6 +1,6 @@
 # SpecCore — Command Reference
 
-> 🔧 Commands: 22 | 🧠 Intent Types: 41 | v6.15.0 | See [README](../README.en.md)
+> 🔧 Commands: 20 | 🧠 Intent Types: 41 | v6.16.0 | See [README](../README.en.md)
 
 ---
 
