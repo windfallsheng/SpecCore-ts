@@ -925,7 +925,41 @@ function filterTemplateNoise(sections: Section[]): Section[] {
 async function createTaskFromSection(iterationDir: string, taskId: string, section: Section, allPlatforms: string[], taskType: string = 'feature', allSections?: Section[]): Promise<void> {
   // taskId 已含 slug（nextTaskId 返回 Task-NNN-slug），直接用
   const taskDir = join(iterationDir, '030-tasks', taskType, taskId);
-  const taskPlatforms = (section as any)._scopePlatforms || (section.platform ? [section.platform] : allPlatforms);
+  
+  // 确定任务涉及的端：优先使用 AI 标注的 _scopePlatforms，否则从 020-specs/{端}/TECH.md 是否存在且有内容来推断
+  let taskPlatforms: string[];
+  if ((section as any)._scopePlatforms && (section as any)._scopePlatforms.length > 0) {
+    taskPlatforms = (section as any)._scopePlatforms;
+  } else if (section.platform) {
+    taskPlatforms = [section.platform];
+  } else {
+    // 从 020-specs/{端}/TECH.md 推断：文件存在且有实质内容才认为涉及该端
+    const specsBase = join(iterationDir, '020-specs');
+    taskPlatforms = [];
+    for (const platform of allPlatforms) {
+      const techPath = join(specsBase, platform, 'TECH.md');
+      if (await pathExists(techPath)) {
+        const content = await readFile(techPath, 'utf-8');
+        // 简单判断：移除模板占位符后长度 > 50 认为有实质内容
+        const meaningful = content
+          .replace(/_待填充_|_待补充_|_待 AI 分析_|_待定_|_待导入_/g, '')
+          .replace(/\|\s*:---[\s|:-]*\|/g, '')
+          .replace(/\|\s*\|\s*\|/g, '')
+          .replace(/^#+\s.*$/gm, '')
+          .replace(/^>.*$/gm, '')
+          .replace(/\s/g, '')
+          .trim().length;
+        if (meaningful > 50) {
+          taskPlatforms.push(platform);
+        }
+      }
+    }
+    // 如果都没检测到，回退到所有端
+    if (taskPlatforms.length === 0) {
+      taskPlatforms = allPlatforms;
+    }
+  }
+  
   const complexity = (section as any)._complexity as SectionComplexity || { estimatedHours: 2, priority: 'medium' as const, complexity: 'medium' as const, apiCount: 0, dbCount: 0, pageCount: 0, wordCount: 0 };
   const owner = (section as any)._owner || '未分配';
   const today = new Date().toISOString().split('T')[0];
