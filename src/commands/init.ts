@@ -1576,7 +1576,8 @@ export async function checkUpgradeHints(projectRoot: string, speccoreDir: string
   const constitutionPath = join(speccoreDir, 'CONSTITUTION.md');
   const hasConstitution = await pathExists(constitutionPath);
 
-  if (hasConstitution && lastVersion !== version) {
+  // ── CONSTITUTION.md 格式迁移检测（不受版本限制，只要旧格式存在就迁移）──
+  if (hasConstitution) {
     const content = await readFile(constitutionPath, 'utf-8');
     let updated = content;
     const migrations: string[] = [];
@@ -1622,7 +1623,7 @@ export async function checkUpgradeHints(projectRoot: string, speccoreDir: string
 
       logger.info('');
       logger.info('━'.repeat(50));
-      logger.info(`🔄 CONSTITUTION.md 自动升级 (${lastVersion || '旧版'} → ${version})`);
+      logger.info(`🔄 CONSTITUTION.md 自动升级`);
       logger.info('');
       for (const m of migrations) logger.info(`   ✅ ${m}`);
       logger.info('');
