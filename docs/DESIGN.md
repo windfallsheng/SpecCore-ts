@@ -27,8 +27,8 @@ workspace/
 │   │   ├── CROSS_PLATFORM.md    ← 跨端业务关系 + 接口映射
 │   │   ├── ARCHITECTURE.md      ← 全量架构文档
 │   │   └── TECH_FULL.md         ← 全量技术方案
-│   └── platforms/                ← [synthesize --full 生成] 各端分析文档
-│       └── {platform}/           ← 端名来自 CONSTITUTION
+│   └── {端名}/                  ← [synthesize --full 生成] 各端分析文档（新路径）
+│       └── {platform}/           ← 端名来自 CONSTITUTION（如 admin/h5/backend）
 │
 ├── project-a/                     ← 独立工程 A
 │   ├── .speccore/                 ← 工程自己的配置（独立）
@@ -131,21 +131,25 @@ Iteration-NNN-name/
 │   ├── refactors/{refactor}.md   ← 扁平重构文档（1 文件 = 1 refactor 任务）
 │   ├── research/{topic}.md       ← 扁平调研文档（1 文件 = 1 research 任务）
 │   └── assets/{prd,prototypes,designs}/
-├── 020-specs/                     ← 迭代级 analyze 输出（全局基线，按类型分层）
-│   ├── features/                  ← 功能类规格
+├── 020-specs/                     ← 迭代级 analyze 输出（全局基线，双层架构）
+│   ├── REQUIREMENT.md            ← 全局：需求规格汇总（含「涉及端」列）
+│   ├── ANALYSIS.md               ← 全局：全量需求分析
+│   ├── TECH.md                   ← 全局：技术方案（跨端通用）
+│   ├── TEST.md                   ← 全局：测试计划（跨端通用）
+│   ├── REVIEW.md                 ← 全局：评审清单
+│   ├── RISK.md                   ← 全局：风险评估
+│   ├── DEPS.md                   ← 全局：依赖清单
+│   ├── MONITOR.md                ← 全局：监控方案
+│   ├── {端名}/                    ← 各端专属文档（新路径，如 admin/h5/backend）
+│   │   ├── TECH.md               ← 该端技术方案（页面路由/组件/接口设计）
+│   │   ├── TEST.md               ← 该端测试计划
+│   │   └── UI_SPEC.md            ← 该端 UI 规格（仅前端）
+│   ├── features/                  ← 功能类规格（旧路径，兼容）
 │   │   ├── ANALYSIS.md / TECH.md / TEST.md / ...  ← 按功能模块拆分
 │   │   └── REQUIREMENT.md
 │   ├── bugs/                      ← 缺陷修复规格
 │   ├── refactors/                 ← 重构规格
-│   ├── research/                  ← 调研规格
-│   ├── ANALYSIS.md               ← 全量需求分析（非类型化文档触发）
-│   ├── TECH.md                   ← 技术方案
-│   ├── TEST.md                   ← 测试计划
-│   ├── REVIEW.md                 ← 评审清单
-│   ├── RISK.md                   ← 风险评估
-│   ├── DEPS.md                   ← 依赖清单
-│   ├── MONITOR.md                ← 监控方案
-│   └── REQUIREMENT.md            ← 需求规格汇总
+│   └── research/                  ← 调研规格
 ├── 030-tasks/                     ← 所有开发任务（按类型分层）
 │   ├── feature/                   ← 功能类任务
 │   │   └── Task-NNN-slug/
@@ -186,29 +190,38 @@ Iteration-NNN-name/
 
 ### 核心原则
 
-**需求按功能组织，分析按端拆分，任务按端+功能创建。**
+**需求按功能组织，分析双层架构（全局+各端），任务按端+功能创建。**
 
 ```
 文档:  010-requirements/user-auth/README.md
-分析:  020-specs/ANALYSIS.md + TECH.md + TEST.md + ...
-任务:  030-tasks/feature/Task-001-app-auth/  +  030-tasks/feature/Task-002-admin-auth/
+分析:  020-specs/REQUIREMENT.md（全局） + 020-specs/admin/TECH.md（管理端专属） + 020-specs/h5/TECH.md（H5 端专属）
+任务:  030-tasks/feature/Task-001-user-auth/
+       ├── 00-specs/TECH.md ← 从对应端的 TECH.md 提取
+       ├── 10-backend/backend/
+       └── 20-frontend/admin/ + h5/
 ```
 
 端名称来自 CONSTITUTION.md「对应需求端」列（如 app/h5/miniapp/admin），split 时自动读取并创建对应前端子目录。
 
 ### 双层规格解耦
 
-`020-specs/` 是**迭代级全局基线**，`Task/00-specs/` 是**任务级切片**。
+`020-specs/` 是**迭代级全局基线**（双层架构：全局文档 + 各端专属），`Task/00-specs/` 是**任务级切片**。
 
 ```
-020-specs/（全局视角）
+020-specs/（全局视角，双层架构）
+    │
+    ├── REQUIREMENT.md（全局需求规格，含「涉及端」列）
+    ├── TECH.md（跨端通用技术方案）
+    ├── admin/TECH.md（管理端专属技术方案）
+    ├── h5/TECH.md（H5 端专属技术方案）
+    └── backend/TECH.md（后端专属技术方案）
     │
     │  split 读取 REQUIREMENT.md 按章节拆分
-    │  每个 Task 拿到属于自己那块需求的子集
+    │  从对应端的 TECH.md 提取该端内容
     ▼
 030-tasks/Task-001/00-specs/（切片视角）
 ├── REQ.md    ← 从需求文档切出的片段 + 自动生成的验收标准
-├── TECH.md   ← 骨架（AI-FILL 占位），split 注入相关接口信息
+├── TECH.md   ← 从 020-specs/{端}/TECH.md 提取该端内容
 └── ...
 ```
 
@@ -412,8 +425,8 @@ init → doc2spec → analyze → split → plan → execute → pr → done →
 |------|------|------|
 | init | - | `.speccore/` + `Iteration-sample/` + AGENTS.md |
 | doc2spec | Word/MD PRD | `010-requirements/{feature}/README.md`；`--classify` 模式：sources/ → staging/ → 020-specs/{type}/ |
-| analyze | 010-requirements/ 所有 .md → CONSTITUTION 映射 | `020-specs/` 按类型分层（features/ + bugs/ + refactors/ + research/ + platforms/） |
-| split | 020-specs/ + CONSTITUTION.md 端配置 | `030-tasks/{type}/Task-NNN-slug/` |
+| analyze | 010-requirements/ 所有 .md → CONSTITUTION 映射 | `020-specs/` 双层架构（全局文档放根目录 + 各端专属文档放 `{端名}/` 子目录） |
+| split | 020-specs/ + CONSTITUTION.md 端配置 | `030-tasks/{type}/Task-NNN-slug/`，按端智能推断涉及的端并拆分子任务 |
 | plan | 任务列表 + STAFFING | `PLAN.md` + `speccore-plan.html` + `plan.json` |
 | execute | REQ.md + TECH.md → AI 生成代码 | 源码 + .issues.md + 多任务时自动生成 `PLAN.md` |
 | pr | git branch | Git PR |
@@ -427,10 +440,10 @@ init → doc2spec → analyze → split → plan → execute → pr → done →
 
 ```
 Phase 1: 逐端分析（per-platform analysis）
-  ├── 后端工程 → analyze → .speccore/GLOBAL/platforms/backend/ANALYSIS.md + TECH.md
-  ├── Web 前端 → analyze → .speccore/GLOBAL/platforms/web/ANALYSIS.md + TECH.md
-  ├── Admin 端  → analyze → .speccore/GLOBAL/platforms/admin/ANALYSIS.md + TECH.md
-  └── App 端    → analyze → .speccore/GLOBAL/platforms/app/ANALYSIS.md + TECH.md
+  ├── 后端工程 → analyze → .speccore/GLOBAL/backend/ANALYSIS.md + TECH.md
+  ├── Web 前端 → analyze → .speccore/GLOBAL/web/ANALYSIS.md + TECH.md
+  ├── Admin 端  → analyze → .speccore/GLOBAL/admin/ANALYSIS.md + TECH.md
+  └── App 端    → analyze → .speccore/GLOBAL/app/ANALYSIS.md + TECH.md
 
 Phase 2: 跨端综合（cross-platform synthesis）
   ├── 汇总各端 specs
@@ -494,7 +507,7 @@ speccore synthesize -I <迭代名>             # 只做需求合成（无全量�
 用户: speccore synthesize --full -I Q2
   → CLI Phase 1: 读取 CONSTITUTION 工程列表
     → 逐端输出 [SPECCORE_PROMPT] → AI 分析各端
-    → CLI 收集各端结果 → .speccore/GLOBAL/platforms/{端名}/
+    → CLI 收集各端结果 → .speccore/GLOBAL/{端名}/
   → CLI Phase 2: 汇总各端 specs
     → 输出 [SPECCORE_PROMPT] → AI 跨端综合
     → CLI 写入 .speccore/GLOBAL/synthesis/（旧版归档到 snapshots/）
