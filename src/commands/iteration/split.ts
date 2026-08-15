@@ -2106,11 +2106,13 @@ function generateMonitorTemplate(section: Section, material?: string): string {
 // 从 analyze 产出中提取任务相关内容
 // ═══════════════════════════════════════════════
 
-/** 加载迭代级 020-specs/ 文档内容 */
+/** 加载迭代级 020-specs/ 文档内容（包括根目录全局文档 + 各端子目录文档） */
 async function loadSpecContents(iterationDir: string): Promise<Record<string, string>> {
   const specs: Record<string, string> = {};
   const specDir = join(iterationDir, '020-specs');
   if (!(await pathExists(specDir))) return specs;
+
+  // 1. 读取根目录全局文档
   for (const f of ['TECH.md', 'TEST.md', 'RISK.md', 'DEPS.md', 'MONITOR.md', 'ANALYSIS.md', 'REQUIREMENT.md', 'UI_SPEC.md']) {
     const fp = join(specDir, f);
     if (await pathExists(fp)) {
@@ -2120,6 +2122,28 @@ async function loadSpecContents(iterationDir: string): Promise<Record<string, st
       }
     }
   }
+
+  // 2. 读取各端子目录文档（如 admin/TECH.md、h5/TECH.md 等）
+  const entries = await readdir(specDir, { withFileTypes: true });
+  const knownNonPlatformDirs = new Set(['sources', 'assets', 'prototypes', 'converted', 'features', 'bugs', 'refactors', 'research', 'staging', 'platforms', 'snapshots']);
+  for (const e of entries) {
+    if (e.isDirectory() && !e.name.startsWith('_') && !e.name.startsWith('.') && !knownNonPlatformDirs.has(e.name)) {
+      const platform = e.name;
+      const platformDir = join(specDir, platform);
+      // 读取该端下的 TECH.md、TEST.md、UI_SPEC.md
+      for (const f of ['TECH.md', 'TEST.md', 'UI_SPEC.md']) {
+        const fp = join(platformDir, f);
+        if (await pathExists(fp)) {
+          const content = await readFile(fp, 'utf-8');
+          if (content.trim().length > 50 && !content.trim().match(/^#+\s*待填充|^<!--\s*AI-FILL/m)) {
+            // 用平台前缀区分：admin/TECH.md → 'admin/TECH.md'
+            specs[`${platform}/${f}`] = content;
+          }
+        }
+      }
+    }
+  }
+
   return specs;
 }
 
@@ -2190,8 +2214,19 @@ function extractFrontendContent(techContent: string, taskName: string, platform:
   return extractRelevantSection(techContent, taskName);
 }
 
-/** 从 specContents 提取任务级 TECH 内容 */
+/** 从 specContents 提取任务级 TECH 内容（优先读取对应端的文档） */
 function extractTaskTechContent(specContents: Record<string, string>, section: Section, platform?: string): string {
+  // 优先读取对应端的 TECH.md
+  if (platform) {
+    const platformTechKey = `${platform}/TECH.md`;
+    const platformTechMd = specContents[platformTechKey];
+    if (platformTechMd) {
+      // 从该端专属文档中提取
+      return extractRelevantSection(platformTechMd, section.name);
+    }
+  }
+
+  // 回退：尝试从根目录 TECH.md 提取（兼容旧结构或全局文档）
   const techMd = specContents['TECH.md'];
   if (!techMd) return '';
   if (platform && platform !== 'backend') {

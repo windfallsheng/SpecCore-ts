@@ -2,6 +2,16 @@
 
 ---
 
+## v6.37.0 (2026-08-15) — Split Reads Per-Platform Subdirectory Docs + Prioritizes Platform-Specific Extraction
+
+### Core Changes
+
+- **split.ts**: `loadSpecContents()` refactored to read "root-level global docs + per-platform subdirectory docs"
+  - Root: TECH.md, TEST.md, RISK.md, DEPS.md, MONITOR.md, ANALYSIS.md, REQUIREMENT.md, UI_SPEC.md
+  - Per-platform: `{platform}/TECH.md`, `{platform}/TEST.md`, `{platform}/UI_SPEC.md`
+  - Distinguished by platform prefix: `admin/TECH.md` → key is `'admin/TECH.md'`
+- **split.ts**: `extractTaskTechContent()` prioritizes reading corresponding platform's TECH.md, falls back to root TECH.md (backward compatible)
+
 ## v6.36.0 (2026-08-15) — Analyze Marks Feature Platforms + Split Smartly Splits by Platform
 
 ### Core Changes

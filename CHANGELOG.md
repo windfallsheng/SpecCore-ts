@@ -1,3 +1,13 @@
+## v6.37.0 (2026-08-15) — split 读取各端子目录文档 + 优先提取端专属内容
+
+### 核心变更
+
+- **split.ts**：`loadSpecContents()` 重构为读取「根目录全局文档 + 各端子目录文档」
+  - 根目录：TECH.md、TEST.md、RISK.md、DEPS.md、MONITOR.md、ANALYSIS.md、REQUIREMENT.md、UI_SPEC.md
+  - 各端子目录：`{端}/TECH.md`、`{端}/TEST.md`、`{端}/UI_SPEC.md`
+  - 用平台前缀区分：`admin/TECH.md` → key 为 `'admin/TECH.md'`
+- **split.ts**：`extractTaskTechContent()` 优先读取对应端的 TECH.md，回退到根目录 TECH.md（兼容旧结构）
+
 ## v6.36.0 (2026-08-15) — analyze 标注功能涉及端 + split 按端智能拆分
 
 ### 核心变更
