@@ -56,7 +56,7 @@ export async function knowledgeCommand(options: KnowledgeOptions): Promise<void>
     logger.debug('上下文构建失败（非关键）:', e);
   }
 
-  // 4. 读取项目名
+  // 4. 读取项目名（多源兜底：project.json → package.json → 目录名）
   let projectName = 'Project';
   const configPath = join(cwd, '.speccore', 'config', 'project.json');
   if (await pathExists(configPath)) {
@@ -64,6 +64,20 @@ export async function knowledgeCommand(options: KnowledgeOptions): Promise<void>
       const config = JSON.parse(await readFile(configPath, 'utf-8'));
       projectName = config.name || projectName;
     } catch {}
+  }
+  // 兜底：从 package.json 取
+  if (projectName === 'Project') {
+    const pkgPath = join(cwd, 'package.json');
+    if (await pathExists(pkgPath)) {
+      try {
+        const pkg = JSON.parse(await readFile(pkgPath, 'utf-8'));
+        projectName = pkg.name || projectName;
+      } catch {}
+    }
+  }
+  // 兜底：用当前目录名
+  if (projectName === 'Project') {
+    projectName = cwd.split('/').pop() || 'Project';
   }
 
   // 5. 生成 HTML

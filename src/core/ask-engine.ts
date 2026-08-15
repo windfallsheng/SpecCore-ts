@@ -490,6 +490,27 @@ async function handleMatch(input: string): Promise<AskResult> {
       commands: candidates.map(c => c.command),
     };
   }
+  // ── 中置信度确认: 匹配到了但不确定，询问用户 ──
+  if (best.confidence < config.routing.highThreshold && best.confidence >= config.routing.lowThreshold) {
+    const lines = ['🤔 我理解你想做这个，但不太确定，请确认:', ''];
+    lines.push(`🎯 我的理解: ${best.intent} (${best.confidence}%)`);
+    lines.push(`📋 建议命令: speccore ${best.command}`);
+    lines.push('');
+    if (results.length > 1) {
+      lines.push('其他可能:');
+      for (const r of results.slice(1, 3)) {
+        lines.push(`  • ${r.intent} (${r.confidence}%) — speccore ${r.command}`);
+      }
+      lines.push('');
+    }
+    lines.push('输入 y/回车 确认执行，或重新描述你的需求。');
+    return {
+      mode: 'ambiguous',
+      summary: `待确认: ${best.intent} (${best.confidence}%)`,
+      detail: lines.join('\n'),
+      commands: [best.command],
+    };
+  }
   const params = best.extractedParams;
   let fullCommand: string;
   const paramNotes: string[] = [];

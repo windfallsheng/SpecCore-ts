@@ -279,10 +279,10 @@ export async function unifiedSearch(
       if (ragIndex) {
         const chunks = retrieveRelevantChunks(ragIndex, {
           query: queryStr,
-          topK: 5,
-          minScore: 0.3,
+          topK: 8,
+          minScore: 0.15,
           maxChunkChars: 1500,
-          maxTotalChars: 5000,
+          maxTotalChars: 8000,
           platforms: platforms || (platform ? [platform] : undefined),
         });
         allChunks.push(...chunks);
@@ -295,7 +295,7 @@ export async function unifiedSearch(
       if (seen.has(c.id)) return false;
       seen.add(c.id);
       return true;
-    }).slice(0, 8);
+    }).slice(0, 12);
     docStats = documentChunks.length;
   } catch (e) {
     logger?.debug?.('RAG 检索失败:', e);
@@ -306,11 +306,11 @@ export async function unifiedSearch(
   let codeStats = 0;
   try {
     // 先用 findRelevantCode 找到相关文件（复用现有能力）
-    const codeMatches = await findRelevantCode(queryStr, 8, sourceScope, iteration, taskId);
+    const codeMatches = await findRelevantCode(queryStr, 12, sourceScope, iteration, taskId);
 
     // 对相关文件做切片
     const allSlices: CodeSlice[] = [];
-    for (const match of codeMatches.slice(0, 5)) { // 最多切 5 个文件
+    for (const match of codeMatches.slice(0, 8)) { // 最多切 8 个文件
       const fp = match.file;
       if (await pathExists(fp)) {
         const content = await readFile(fp, 'utf-8');
@@ -363,24 +363,28 @@ export async function unifiedSearch(
  */
 export function assembleUnifiedContext(
   result: UnifiedResult,
-  options?: { maxTotalChars?: number },
+  options?: { maxTotalChars?: number; generous?: boolean },
 ): { name: string; path: string; content: string }[] {
   const maxTotal = options?.maxTotalChars ?? 8000;
+  const generous = options?.generous ?? false;
   const output: { name: string; path: string; content: string }[] = [];
   let totalChars = 0;
 
   // 先放文档块
   for (const chunk of result.documentChunks) {
     const text = `### ${chunk.title}（${chunk.fileName}）\n\n${chunk.content}`;
-    if (totalChars + text.length > maxTotal * 0.6 && output.length > 0) break; // 文档占 60%
+    // generous 模式下不限制文档占比
+    if (!generous && totalChars + text.length > maxTotal * 0.6 && output.length > 0) break;
+    if (totalChars + text.length > maxTotal && output.length > 0) break;
     output.push({ name: `📄 ${chunk.fileName} › ${chunk.title}`, path: chunk.filePath, content: text });
     totalChars += text.length;
   }
 
-  // 再放代码切片
+  // 再放代码切片（generous 模式下截断阈值从 600 提升到 1500）
+  const codeTruncate = generous ? 1500 : 600;
   for (const slice of result.codeSlices) {
     const commentBlock = slice.comments ? `${slice.comments}\n` : '';
-    const body = slice.body.length > 600 ? slice.body.slice(0, 600) + '\n// ... (截断)' : slice.body;
+    const body = slice.body.length > codeTruncate ? slice.body.slice(0, codeTruncate) + '\n// ... (截断)' : slice.body;
     const text = `### ${slice.name} (${slice.type}) — ${slice.fileName}:L${slice.lineStart}\n\n\`\`\`typescript\n${commentBlock}${slice.signature}\n${body}\n\`\`\``;
 
     if (totalChars + text.length > maxTotal && output.length > 0) break;
