@@ -1,6 +1,6 @@
 # SpecCore CI/CD 与 @spec 注释集成指南
 
-> 适用版本：v5.22.x+ | 难度：入门
+> 适用版本：v6.15.x+ | 难度：入门
 
 > 💡 **命令类型**: 本文档中的 `speccore execute` 为 🔒 AI 命令，需在 AI IDE 中通过 `@spec-ask` 使用。
 
@@ -187,6 +187,6 @@ speccore dashboard                   # 确认状态更新
 
 ## 五、更多参考
 
-- [25 场景实战](docs/scenarios.md) — 场景实战文档重点讲 CI/CD
+- [34 场景实战](docs/scenarios.md) — 场景实战文档重点讲 CI/CD
 - [命令参考](docs/command-reference.md) — sync/validate/hooks 详细参数
 - [examples/task-management](examples/task-management/) — 完整示例项目
