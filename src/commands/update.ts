@@ -192,7 +192,13 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
     logger.info('');
   }
   if (added === 0 && updated === 0 && cleaned === 0) {
-    logger.info('  所有命令文件内容未变化');
+    logger.info('  命令文件内容未变化（命令模板无更新）');
+    logger.info('');
+    logger.info('  📦 以下文件已同步到最新版本:');
+    logger.info('     ✅ .agents/skills/ — Skill 全量更新');
+    logger.info('     ✅ AGENTS.md — 项目规则');
+    logger.info('     ✅ SETTINGS.md — 框架配置');
+    logger.info('     ✅ AI-RULES.md — AI 参考手册');
     logger.info('');
   }
   // 冲突文件汇总
