@@ -2,6 +2,34 @@
 
 ---
 
+## v6.16.0 (2026-08-15) — Command Consolidation
+
+### Refactor: Command Merging
+
+- **synthesize → analyze --full**: synthesize kept as backward-compat alias, main entry unified to `analyze --full`
+- **sync-global → sync --global**: sync command adds `--global` option, sync-global kept as alias
+- **tracker → track**: tracker marked as backward-compat alias, unified to track
+- **arch-update → update --arch**: update command adds `--arch` option, arch-update kept as alias
+- **schedule deprecated**: Scheduled tasks replaced by WorkBuddy Automations, command kept but marked deprecated
+
+### Ask Engine Updates
+
+- analyze KB: added `--full`/`--phase` params and synthesize-related triggers
+- sync KB: added `--global` option and sync-to-global triggers
+- track KB: added tracker alias and triggers
+- schedule KB: marked as deprecated
+- SYNONYM_MAP: added synthesize/sync-global synonyms → route to analyze/sync
+- intent-recognition.ts: synthesize intent → analyze, sync-global intent → sync
+
+### Documentation
+
+- README.md: tagline 22 → 20 commands
+- help-panel.ts: removed synthesize/schedule entries
+- help.ts: analyze params updated, categories adjusted
+- All docs unified to 20 commands
+
+---
+
 ## v6.15.0 (2026-08-15) — Remove Simple/Full Mode Concept
 
 ### Refactor: Unified Command System

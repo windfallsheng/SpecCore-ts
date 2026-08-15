@@ -49,9 +49,27 @@ export interface AnalyzeOptions {
   feature?: string;     // --feature: 局部分析单个功能模块
   doc?: string;         // --doc: 局部分析类型文档（如 bugs/login-timeout, refactors/db-pool）
   sync?: boolean;       // --sync: 任务分析后局部回写 020-specs/（不全覆盖）
+  // synthesize 整合选项
+  full?: boolean;       // --full: 全自动三阶段合成（原 synthesize --full）
+  phase?: string;       // --phase N: 单阶段合成执行
+  applyPhase?: string;  // --apply-phase N: 指定写入哪个阶段的合成结果
 }
 
 export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
+  // ── --full / --phase 模式: 委托给 synthesizeCommand（原 synthesize 命令） ──
+  if (options.full || options.phase) {
+    const { synthesizeCommand } = await import('./synthesize');
+    return synthesizeCommand({
+      iteration: options.iteration,
+      withCode: options.withCode,
+      prompt: options.prompt,
+      apply: options.apply,
+      full: options.full,
+      phase: options.phase,
+      applyPhase: options.applyPhase,
+    });
+  }
+
   // ── --feature 模式: 局部刷新单个功能模块 ──
   if (options.feature) {
     const iter = options.iteration || await getDefaultIteration();

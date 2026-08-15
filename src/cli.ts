@@ -69,16 +69,8 @@ import { deleteCommand } from './commands/delete';
 import { searchCommand } from './commands/search';
 import { watchCommand } from './commands/watch';
 import { promptsCommand } from './commands/prompts';
-import { synthesizeCommand } from './commands/synthesize';
 // v5.21.0 任务调度
 import { HELP_PANEL } from './core/help-panel';
-import {
-  scheduleCreateCommand,
-  scheduleListCommand,
-  scheduleDetailCommand,
-  scheduleCancelCommand,
-  scheduleDeleteCommand,
-} from './commands/schedule';
 import { i18n } from './i18n';
 
 program
@@ -151,7 +143,7 @@ program
 program
   .command('synthesize')
   .alias('syn')
-  .description('需求文档智能合成：多端需求 → 一篇原子化综合需求文档')
+  .description('→ analyze --full（同一命令，向后兼容别名）')
   .option('-I, --iteration <iteration>', '目标迭代')
   .option('--with-code', '结合源码检查需求冲突')
   .option('--prompt', '输出结构化 Prompt 到 stdout（Skill 协作模式）')
@@ -159,7 +151,10 @@ program
   .option('--full', '全自动三阶段：逐端分析 → 跨端综合 → 功能单元需求合成')
   .option('--phase <n>', '单阶段执行: 1=逐端分析, 2=跨端综合, 3=功能单元合成')
   .option('--apply-phase <n>', '配合 --apply 使用，指定写入哪个阶段的结果')
-  .action(synthesizeCommand);
+  .action((opts: any) => {
+    // 向后兼容：synthesize 自动转为 analyze --full
+    analyzeCommand({ ...opts, full: true });
+  });
 
 program
   .command('prompts')
@@ -393,10 +388,22 @@ program
   .option('--auto', 'Auto-apply sync without confirmation')
   .option('--dry-run', 'Preview differences without modifying')
   .option('--force', 'Skip preview')
-  .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
-  .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
+  .option('--global', '迭代 ↔ 全量层双向同步（原 sync-global）')
+  .option('--direction <dir>', '配合 --global: to_global | from_global', 'to_global')
   .option('--detect', 'Detect code-spec discrepancies (read-only, no changes)')
-  .action(syncCommand);
+  .action(async (opts: any) => {
+    if (opts.global) {
+      // --global: 委托给 syncGlobalCommand
+      return syncGlobalCommand({
+        iteration: opts.iteration,
+        direction: opts.direction || 'to_global',
+        auto: opts.auto,
+        dryRun: opts.dryRun,
+        force: opts.force,
+      });
+    }
+    return syncCommand(opts);
+  });
 
 // ================================================================
 // ✅ 审查与验证
@@ -529,7 +536,19 @@ program
   .alias('up')
   .description('升级项目文件和命令（增量更新，不破坏数据）')
   .option('-f, --force', '强制刷新所有命令文件')
-  .action(updateCommand);
+  .option('--arch', '更新 ARCHITECTURE.md（原 arch-update）')
+  .option('-i, --iteration <iteration>', '配合 --arch: 源迭代')
+  .option('--apis <apis>', '配合 --arch: 逗号分隔 API 路径')
+  .option('--tables <tables>', '配合 --arch: 逗号分隔表名')
+  .action(async (opts: any) => {
+    if (opts.arch) {
+      // --arch: 委托给 arch-update 逻辑
+      const it = await require('../core/context').getDefaultIteration(opts.iteration);
+      if (it) await updateArchitecture(it, (opts.apis || '').split(',').filter(Boolean), (opts.tables || '').split(',').filter(Boolean));
+      return;
+    }
+    return updateCommand(opts);
+  });
 
 program
 
@@ -656,13 +675,13 @@ program
 program
   .command('sync-global')
   .alias('syg')
-  .description('迭代 ↔ 全量层双向同步')
+  .description('→ sync --global（同一命令，向后兼容别名）')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('-d, --direction <dir>', 'Sync direction: to_global | from_global', 'to_global')
   .option('--auto', 'Auto-apply without confirmation')
   .option('--dry-run', 'Preview without modifying')
   .option('--force', 'Skip confirmation')
-  .action(syncGlobalCommand);
+  .action((opts: any) => syncGlobalCommand(opts));
 
 program
   .command('ops')
@@ -719,6 +738,9 @@ program
   .option('--doc <path>', '局部分析：类型文档（如 bugs/login-timeout, refactors/db-pool）')
   .option('--apply <content>', '接收 AI 分析结果写入 ANALYSIS.md（配合 --prompt）')
   .option('--sync', '任务分析后局部回写 020-specs/（只更新受影响的功能模块，不全覆盖）')
+  .option('--full', '全自动三阶段合成：逐端分析 → 跨端综合 → 功能单元需求合成（原 synthesize）')
+  .option('--phase <n>', '单阶段合成执行: 1=逐端分析, 2=跨端综合, 3=功能单元合成')
+  .option('--apply-phase <n>', '配合 --apply 使用，指定写入哪个阶段的合成结果')
   .action(analyzeCommand);
 
 program
@@ -809,8 +831,8 @@ program
 program
   .command('tracker')
   .alias('tr')
-  .description('View global requirement change tracker')
-  .action(trackerCommand);
+  .description('→ track（同一命令，向后兼容别名）')
+  .action(() => trackerCommand());
 
 program
   .command('merge-check')
@@ -824,7 +846,7 @@ program
 program
   .command('arch-update')
   .alias('au')
-  .description('Auto-update ARCHITECTURE.md with new APIs/tables')
+  .description('→ update --arch（同一命令，向后兼容别名）')
   .option('-i, --iteration <iteration>', 'Source iteration')
   .option('--apis <apis>', 'Comma-separated API paths')
   .option('--tables <tables>', 'Comma-separated table names')
@@ -838,18 +860,17 @@ program
 
 program
   .command('trace')
-  .alias('tr')
-  .description('Show REQ → Task → Code trace chain (v5.3)')
+  .description('→ track（同一命令，向后兼容别名）')
   .option('--req <id>', 'Trace from requirement ID')
   .option('--task <id>', 'Trace from task ID')
   .option('--full', 'Full project trace')
-  .action(traceCommand);
+  .action((opts: any) => traceCommand(opts));
 
 // v5.25 — 统一追踪入口
 program
   .command('track')
   .alias('trk')
-  .description('合并 trace + tracker: REQ→Task→Code 全链路追踪')
+  .description('REQ→Task→Code 全链路追踪')
   .option('--req <id>', 'Trace from requirement ID')
   .option('--task <id>', 'Trace from task ID')
   .option('--full', 'Full project trace')
@@ -884,56 +905,16 @@ program
   .option('--iteration <name>', 'Watch a specific iteration')
   .action(watchCommand);
 
-// ⚠️ schedule 命令已由 WorkBuddy Automations 替代，以下代码保留用于兼容但暂不可用
-// ── 调度任务管理 ──
-const scheduleCmd = program
+// ⚠️ schedule 命令已由 WorkBuddy Automations 替代
+// 保留命令注册但标记为废弃，不再注册子命令
+program
   .command('schedule')
   .alias('sc')
-  .description('定时调度：创建/查看/取消任务');
-
-scheduleCmd
-  .command('create')
-  .description('创建定时调度任务')
-  .option('--task <task>', '指定 Task ID')
-  .option('--all', '批量执行所有任务')
-  .option('-i, --iteration <iteration>', '目标迭代')
-  .option('--at <datetime>', '执行时间: "YYYY-MM-DD HH:mm:ss"')
-  .option('-n, --name <name>', '任务名称')
-  .option('--plan <id>', '执行已保存的计划')
-  .option('--batch-size <n>', '分批数量 (默认 3)')
-  .option('--parallel <n>', '并行数量 (默认 1)')
-  .option('-a, --assignee <name>', '指定人员')
-  .option('--type <type>', '任务类型: feature|bugfix')
-  .option('--priority <level>', '优先级: low|medium|high|critical')
-  .option('--status <status>', '按状态筛选')
-  .option('--platform <platform>', '平台: web|h5|miniapp')
-  .option('--backend', '仅后端')
-  .option('--frontend', '仅前端')
-  .action(scheduleCreateCommand);
-
-scheduleCmd
-  .command('list')
-  .description('查看调度队列（含守护进程状态）')
-  .option('--status <status>', '按状态筛选: pending|running|completed|failed|cancelled')
-  .action(scheduleListCommand);
-
-scheduleCmd
-  .command('cancel')
-  .description('取消调度任务')
-  .option('--id <id>', '调度任务 ID')
-  .action(scheduleCancelCommand);
-
-scheduleCmd
-  .command('detail')
-  .description('查看调度详情（含执行参数）')
-  .option('--id <id>', '调度任务 ID')
-  .action(scheduleDetailCommand);
-
-scheduleCmd
-  .command('delete')
-  .description('删除调度记录')
-  .option('--id <id>', '调度任务 ID')
-  .action(scheduleDeleteCommand);
+  .description('[已废弃] 定时调度已由 WorkBuddy Automations 替代')
+  .action(() => {
+    console.warn('⚠️  schedule 命令已废弃，定时调度功能由 WorkBuddy Automations 替代');
+    console.log('   参考: https://github.com/windfallsheng/SpecCore-ts');
+  });
 
 program
   .command('welcome')

@@ -343,14 +343,14 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     patterns: ['从全量(.*)生成迭代创建迭代', '选择(.*)需求生成迭代'],
     description: '从全量层生成迭代 — 按需求 ID 选择并生成新的迭代',
   },
-  // 同步全量
+  // 同步全量（已整合到 sync --global）
   {
     id: 'sync-global',
-    intent: 'sync_to_global',
+    intent: 'sync',
     priority: 70,
     triggers: ['同步全量', '同步全局', '更新全量层', '同步到全量'],
     patterns: ['同步(.*)到全量层', '更新全量层', '同步全量'],
-    description: '全量层双向同步 — 迭代与全量层之间的双向同步',
+    description: '全量层双向同步 — 已整合到 sync --global（迭代与全量层之间的双向同步）',
   },
   // 全量状态
   {
@@ -466,14 +466,14 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     patterns: ['导入.*文档', '.*word.*转', '需求.*word', 'PRD.*导入', '文档.*转换'],
     description: 'Word 需求文档导入 — 将 .docx/.doc 格式的 PRD 转换为 SpecCore Markdown',
   },
-  // 需求文档智能合成
+  // 需求文档智能合成（已整合到 analyze --full）
   {
     id: 'synthesize',
-    intent: 'synthesize',
+    intent: 'analyze',
     priority: 44,
     triggers: ['合成需求', '合并需求', '需求合成', 'synthesize', '智能合成', '需求合并', '多端合成', '全量分析', '跨端综合', '全量合成'],
     patterns: ['合成.*需求', '合并.*需求', '需求.*合成', '多端.*合并', '.*综合需求', '全量.*分析', '跨端.*综合', '.*功能单元.*合成'],
-    description: '需求文档智能合成 — 多端全量分析 → 跨端综合 → 按功能单元合成需求文档',
+    description: '需求文档智能合成 — 已整合到 analyze --full（多端全量分析 → 跨端综合 → 功能单元合成）',
   },
 ];
 

@@ -1,3 +1,41 @@
+## v6.16.0 (2026-08-15) — 命令整合优化
+
+### 重构：命令合并与精简
+
+- **synthesize → analyze --full**: synthesize 保留为向后兼容别名，主入口统一为 `analyze --full`
+- **sync-global → sync --global**: sync 命令新增 `--global` 选项，sync-global 保留为别名
+- **tracker → track**: tracker 标记为向后兼容别名，统一使用 track
+- **arch-update → update --arch**: update 命令新增 `--arch` 选项，arch-update 保留为别名
+- **schedule 废弃**: 定时调度已由 WorkBuddy Automations 替代，保留命令注册但标记为废弃
+
+### ask 引擎更新
+
+- analyze KB 新增 `--full`/`--phase` 参数说明和 synthesize 相关触发词
+- sync KB 新增 `--global` 选项和同步全量触发词
+- track KB 新增 tracker 别名和触发词
+- schedule KB 标记为已废弃
+- SYNONYM_MAP 新增合成需求/同步全量同义词 → 路由到 analyze/sync
+- intent-recognition.ts: synthesize intent → analyze, sync-global intent → sync
+
+### 文档更新
+
+- README.md: tagline 22 → 20 命令
+- help-panel.ts: 移除 synthesize 独立条目和 schedule 条目
+- help.ts: analyze 命令新增 --full/--phase 参数，分类移除 synthesize
+- 全部文档统一命令数量为 20（README/docs/about.ts/commands.en.md 等）
+
+### 涉及文件
+
+- `src/cli.ts` — sync/update 命令新增选项，synthesize/tracker/sync-global/arch-update 改为别名，schedule 废弃
+- `src/core/help-panel.ts` — 移除 synthesize/schedule 条目
+- `src/commands/help.ts` — analyze 参数更新，分类调整
+- `src/core/ask-engine.ts` — KB/SYNONYM_MAP/triggerPatterns 更新
+- `src/core/intent-recognition.ts` — synthesize→analyze, sync-global→sync 路由
+- `src/commands/about.ts` — 22 → 20 命令
+- `docs/*.md` — 统一命令数量 22 → 20
+
+---
+
 ## v6.15.0 (2026-08-15) — 移除简洁模式/全量模式概念
 
 ### 重构：统一命令体系
