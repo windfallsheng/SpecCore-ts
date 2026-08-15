@@ -10,7 +10,7 @@ import { readFile, pathExists, readdir, stat } from 'fs-extra';
 import { join } from 'path';
 import { isTimestampBackup } from '../utils/task-utils';
 import { logger } from '../utils/logger';
-import { loadKnowledgeGraph, getTaskContext, isGraphStale, refreshKnowledgeGraph } from './knowledge-graph';
+import { loadKnowledgeGraph, getTaskContext, isGraphStale, refreshKnowledgeGraph, KnowledgeGraph } from './knowledge-graph';
 import { buildCompactContext } from './context-builder';
 import {
   loadRagIndex, isRagIndexStale, retrieveRelevantChunks,
@@ -405,6 +405,124 @@ async function loadExtraSpecs(
       extras.push({ name: f.name, path: f.path, content });
     }
   }
+
+  return extras;
+}
+
+// ═══════════════════════════════════════════════════════════
+// 全量兜底读取（检索不足时，读取所有内容）
+// ═══════════════════════════════════════════════════════════
+
+/** 全量兜底：当统一检索结果不足时，读取任务目录 + 迭代规格 + 关联任务的所有内容 */
+async function loadAllTaskContext(
+  cwd: string, taskDir: string, platform?: string, iteration?: string,
+  graph?: KnowledgeGraph | null,
+): Promise<TaskExtraSpec[]> {
+  const extras: TaskExtraSpec[] = [];
+  const MAX_PER_FILE = 8000;
+  const MAX_TOTAL = 20000;
+  let totalChars = 0;
+  const seen = new Set<string>();
+
+  const addFile = async (fullPath: string, name: string, relPath: string) => {
+    if (seen.has(fullPath)) return;
+    seen.add(fullPath);
+    if (!(await pathExists(fullPath))) return;
+    let content = await readFile(fullPath, 'utf-8');
+    if (content.trim().length <= 50 || content.trim().match(/^#+\s*待填充|^<!--\s*AI-FILL\s*-->$/m)) return;
+    if (content.length > MAX_PER_FILE) {
+      content = content.slice(0, MAX_PER_FILE) + `\n\n> ... (已截断，原文件 ${content.length} 字)`;
+    }
+    if (totalChars + content.length > MAX_TOTAL) return;
+    totalChars += content.length;
+    extras.push({ name, path: relPath, content });
+  };
+
+  // 1. 递归扫描任务目录所有 .md / .yaml 文件
+  const scanTaskDir = async (dir: string, prefix: string) => {
+    if (!(await pathExists(dir))) return;
+    try {
+      const items = await readdir(dir, { withFileTypes: true });
+      for (const item of items) {
+        if (item.name.startsWith('.') || isTimestampBackup(item.name)) continue;
+        const fullPath = join(dir, item.name);
+        if (item.isDirectory()) {
+          if (item.name === 'node_modules' || item.name === '10-backend' || item.name === '20-frontend') continue;
+          await scanTaskDir(fullPath, `${prefix}${item.name}/`);
+        } else if (/\.(md|yaml|yml)$/i.test(item.name)) {
+          await addFile(fullPath, `${prefix}${item.name}`, `${prefix}${item.name}`);
+        }
+      }
+    } catch { /* 跳过 */ }
+  };
+  await scanTaskDir(taskDir, '');
+
+  // 2. 迭代规格 020-specs/ 所有 .md
+  if (iteration) {
+    const iterDir = join(cwd, `Iteration-${iteration}`);
+    const specsDir = join(iterDir, '020-specs');
+    if (await pathExists(specsDir)) {
+      try {
+        const items = await readdir(specsDir, { withFileTypes: true });
+        for (const item of items) {
+          if (!item.name.endsWith('.md') || isTimestampBackup(item.name)) continue;
+          await addFile(join(specsDir, item.name), `迭代规格: ${item.name}`, `020-specs/${item.name}`);
+        }
+        // 各端规格
+        if (platform) {
+          const platDir = join(specsDir, 'platforms', platform);
+          if (await pathExists(platDir)) {
+            const platItems = await readdir(platDir, { withFileTypes: true });
+            for (const item of platItems) {
+              if (!item.name.endsWith('.md') || isTimestampBackup(item.name)) continue;
+              await addFile(join(platDir, item.name), `${platform}端规格: ${item.name}`, `020-specs/platforms/${platform}/${item.name}`);
+            }
+          }
+        }
+        // features/ 规格
+        const featuresDir = join(specsDir, 'features');
+        if (await pathExists(featuresDir)) {
+          const featItems = await readdir(featuresDir, { withFileTypes: true });
+          for (const item of featItems) {
+            if (!item.name.endsWith('.md') || isTimestampBackup(item.name)) continue;
+            await addFile(join(featuresDir, item.name), `功能规格: ${item.name}`, `020-specs/features/${item.name}`);
+          }
+        }
+      } catch { /* 跳过 */ }
+    }
+  }
+
+  // 3. 关联任务的 00-specs/（从知识图谱获取依赖任务）
+  if (graph) {
+    const relatedIds: string[] = [];
+    for (const rel of graph.relations) {
+      if (rel.type === 'depends_on' || rel.type === 'subtask_of') {
+        relatedIds.push(rel.from, rel.to);
+      }
+    }
+    const uniqueRelated = [...new Set(relatedIds)];
+    if (iteration && uniqueRelated.length > 0) {
+      const iterDir = join(cwd, `Iteration-${iteration}`);
+      const tasksDir = join(iterDir, '030-tasks');
+      for (const relId of uniqueRelated.slice(0, 3)) {
+        const relTaskDir = join(tasksDir, relId, '00-specs');
+        if (await pathExists(relTaskDir)) {
+          try {
+            const relItems = await readdir(relTaskDir, { withFileTypes: true });
+            for (const item of relItems) {
+              if (!item.name.endsWith('.md') || isTimestampBackup(item.name)) continue;
+              await addFile(join(relTaskDir, item.name), `关联任务 ${relId}: ${item.name}`, `030-tasks/${relId}/00-specs/${item.name}`);
+            }
+          } catch { /* 跳过 */ }
+        }
+      }
+    }
+  }
+
+  // 4. 全局文档（核心 2 个）
+  const globalDir = join(cwd, '.speccore', 'GLOBAL');
+  await addFile(join(globalDir, 'ARCHITECTURE.md'), '全局架构', 'GLOBAL/ARCHITECTURE.md');
+  await addFile(join(globalDir, 'TECH_STACK.md'), '全局技术栈', 'GLOBAL/TECH_STACK.md');
 
   return extras;
 }
@@ -1024,7 +1142,7 @@ export async function buildPrompt(
       });
 
       if (unifiedResult.documentChunks.length > 0 || unifiedResult.codeSlices.length > 0) {
-        extraSpecs = assembleUnifiedContext(unifiedResult, { maxTotalChars: 8000 });
+        extraSpecs = assembleUnifiedContext(unifiedResult, { maxTotalChars: 8000, generous: true });
         logger?.info?.(
           `   🔍 统一检索: ${unifiedResult.stats.docChunksFound} 文档块 + ${unifiedResult.stats.codeSlicesFound} 代码切片 | ~${unifiedResult.stats.totalTokensEstimate} tokens`
         );
@@ -1043,13 +1161,32 @@ export async function buildPrompt(
         logger?.info?.(`   📄 传统模式: ${extraSpecs.length} 个参考文档已加载`);
       }
     }
+
+    // 稀疏检测 + 全量兜底：检索内容不足时，读取所有内容
+    const SPARSE_THRESHOLD = 3000;
+    const currentChars = extraSpecs.reduce((sum, s) => sum + s.content.length, 0);
+    if (currentChars < SPARSE_THRESHOLD) {
+      // 提前加载知识图谱（供全量兜底使用）
+      let fallbackGraph: KnowledgeGraph | null = null;
+      try {
+        fallbackGraph = await loadKnowledgeGraph(cwd);
+        if (fallbackGraph && await isGraphStale(cwd, options.iteration)) {
+          fallbackGraph = await refreshKnowledgeGraph(cwd, options.iteration);
+        }
+      } catch { /* 图谱不可用时跳过 */ }
+
+      const fullContext = await loadAllTaskContext(cwd, taskDir, options.platform, options.iteration, fallbackGraph || undefined);
+      if (fullContext.length > extraSpecs.length) {
+        extraSpecs = fullContext;
+        logger?.info?.(`   📚 全量兜底: ${fullContext.length} 个文件 (检索内容不足 ${currentChars} < ${SPARSE_THRESHOLD})`);
+      }
+    }
   }
 
   // 加载全局上下文（智能注入）
   const globalContext = await loadGlobalContext(cwd, command, options.platform);
 
   // 加载知识图谱 → 生成任务关联链（< 500 tokens）
-  // 懒加载：如果图谱已过期，自动重建
   let taskContextStr: string | undefined;
   if (options.task) {
     let graph = await loadKnowledgeGraph(cwd);

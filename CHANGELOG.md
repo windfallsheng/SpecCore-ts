@@ -1,3 +1,45 @@
+## v6.11.0 (2026-08-15) — 知识图谱可视化增强 + 意图识别语境校准
+
+### 知识图谱可视化增强
+
+- **项目名自动检测**: 三级兜底（project.json → package.json → 目录名），标题不再显示默认 "Project"
+- **UI 优化**: 设置按钮下移（top: 120px）、节点放大（+30%）、文字放大（11→13px）
+- **物理参数调优**: 节点间距适中（gravitationalConstant -70, centralGravity 0.005, springLength 180）
+- **术语统一**: HTML 展示层统一使用"功能模块"（task）和"任务"（subtask）
+- **模板保存**: HTML 示例保存到 `templates/html/speccore-knowledge-graph.html`
+- **截图文档**: 知识图谱截图添加到 `docs/screenshots/knowledge-graph.png`
+
+### 意图识别语境校准
+
+- **语境加成/减分机制**: 在基础匹配分之上增加语境信号调整
+  - 开发术语（功能/模块/接口/需求/代码/登录...）→ +10
+  - speccore 专有词（Task-/Iteration-/speccore/analyze...）→ +10
+  - 域外信号（错别字/翻译/排版/表格/word文件...）→ -30
+- **中置信度确认机制**: 45~69 分区间不直接执行，展示匹配意图 + 备选方案，等待用户确认
+- **设计原则**: 不设门槛，只调分数。该放的放，该拦的拦
+
+### RAG 检索优化
+
+- **检索兜底机制**: 检索内容 < 3000 字符时触发 loadAllTaskContext() 全量兜底
+- **RAG 门槛降低**: minScore 0.3→0.15, topK 5→8, maxTotalChars 5000→8000
+- **generous 模式**: assembleUnifiedContext 宽松模式（去掉文档 60% 占比限制，代码截断 600→1500）
+
+### 涉及文件
+
+- `src/core/intent-recognition.ts` — 语境加成/减分机制（+24 行）
+- `src/core/ask-engine.ts` — 中置信度确认机制（+21 行）
+- `src/core/knowledge-visualizer.ts` — UI 优化 + 物理参数调优
+- `src/core/knowledge-graph.ts` — 源码语义集成增强
+- `src/core/context-builder.ts` — 术语统一（任务→功能模块）
+- `src/core/prompt-builder.ts` — RAG 上下文构建增强
+- `src/core/unified-retrieval.ts` — 检索兜底机制
+- `src/commands/knowledge.ts` — 项目名多源兜底
+- `templates/html/speccore-knowledge-graph.html` — 新增模板
+- `docs/screenshots/knowledge-graph.png` — 新增截图
+- `README.md` — 新增 knowledge 命令说明 + 截图
+- `docs/DESIGN.md` — 新增语境校准设计说明
+- `docs/command-reference.md` — 新增 knowledge 命令参考
+
 ## v6.10.0 (2026-08-14) — 智能文档分类摄入 + 任务上下文追溯 + 多类型任务支持
 
 ### 智能文档分类摄入（doc2spec --classify）

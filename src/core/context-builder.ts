@@ -46,14 +46,14 @@ export function buildContextMarkdown(
   lines.push(`> 自动生成于 ${now} · speccore reindex · 迭代 ${graph.iteration}`);
   lines.push('');
 
-  // ── 1. 需求→任务追踪表 ──
+  // ── 1. 需求→功能模块追踪表 ──
   const reqs = Object.values(graph.entities).filter(e => e.type === 'requirement');
   const tasks = Object.values(graph.entities).filter(e => e.type === 'task');
 
   if (reqs.length > 0 || tasks.length > 0) {
-    lines.push('## 需求→任务追踪');
+    lines.push('## 需求→功能模块追踪');
     lines.push('');
-    lines.push('| 需求 | 任务 | 状态 | 子任务 |');
+    lines.push('| 需求 | 功能模块 | 状态 | 任务 |');
     lines.push('| :--- | :--- | :--- | :--- |');
 
     // 按编号配对
@@ -152,7 +152,7 @@ export function buildContextMarkdown(
         lines.push(`- **父任务**: ${taskContext.parentTask.id} — ${taskContext.parentTask.title}`);
       }
       if (taskContext.siblingSubtasks.length > 0) {
-        lines.push('- **兄弟子任务**:');
+        lines.push('- **兄弟任务**:');
         for (const sub of taskContext.siblingSubtasks) {
           const current = sub.platform === options.currentPlatform ? ' ⬅ 当前' : '';
           lines.push(`  - ${sub.platform || '?'}: ${statusEmoji(sub.status)} ${sub.title}${current}`);
@@ -176,7 +176,7 @@ export function buildContextMarkdown(
 
   // ── 5. 统计 ──
   lines.push('---');
-  lines.push(`> ${graph.stats.requirements} 需求 · ${graph.stats.specs} 规格 · ${graph.stats.tasks} 任务 · ${graph.stats.subtasks} 子任务${userFiles.length > 0 ? ` · ${userFiles.length} 用户文件` : ''}`);
+  lines.push(`> ${graph.stats.requirements} 需求 · ${graph.stats.specs} 规格 · ${graph.stats.tasks} 功能模块 · ${graph.stats.subtasks} 任务${userFiles.length > 0 ? ` · ${userFiles.length} 用户文件` : ''}`);
 
   return lines.join('\n');
 }

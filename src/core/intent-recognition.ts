@@ -582,8 +582,30 @@ export async function recognizeIntent(input: string): Promise<IntentResult[]> {
         }
       }
 
-      // 5. 计算置信度百分比 (0-100)
-      const confidence = Math.min(100, Math.round(totalScore));
+      // 5. 语境加成/减分：区分 speccore 域内 vs 域外表达
+      // 5a. 开发术语加成（+10）：输入包含 speccore 领域的专业词汇
+      const devTerms = /功能|模块|接口|需求|迭代|任务|代码|登录|支付|用户|权限|数据库|API|前端|后端|部署|测试|Bug|bug|PR|分支|合并|发布|上线|配置|环境|服务|组件|页面|路由|状态|数据|模型|实体|规格|架构|方案|设计|文档.*spec|spec.*文档/i;
+      if (devTerms.test(input)) {
+        totalScore += 10;
+        matched.push('语境加成: 含开发术语');
+      }
+
+      // 5b. speccore 结构词加成（+10）：提到目录结构或 speccore 专有概念
+      const specTerms = /speccore|010-|020-|030-|\.speccore|Task-\d|Iteration-|Q\d|需求文档|规格文档|功能模块|知识图谱|衰减检测|RAG|reindex|analyze|split|execute|dashboard/i;
+      if (specTerms.test(input)) {
+        totalScore += 10;
+        matched.push('语境加成: 含 speccore 专有词');
+      }
+
+      // 5c. 非 speccore 域信号减分（-30）：明确是文档编辑/日常办公场景
+      const outOfDomain = /错别字|拼写|语法错误|word文件|excel|表格|PPT|演示文稿|邮件|日程|会议记录[^需]|翻译.*文档|排版|格式调整|字体|字号.*文档|打印|导出.*pdf|导出.*word/i;
+      if (outOfDomain.test(input)) {
+        totalScore -= 30;
+        matched.push('域外信号: 非 speccore 场景');
+      }
+
+      // 6. 计算置信度百分比 (0-100)
+      const confidence = Math.max(0, Math.min(100, Math.round(totalScore)));
 
       // 6. 提取参数
       const extractedParams = extractParams(input, mapping);

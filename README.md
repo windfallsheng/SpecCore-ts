@@ -149,6 +149,15 @@ Iteration-001-meeting/
 
 ![Dashboard Iteration](docs/screenshots/dashboard-iteration.png)
 
+### 🧠 knowledge — 知识图谱可视化
+`speccore knowledge` 生成交互式 HTML 知识图谱：
+- vis-network 力导向图：8 种形状区分实体类型（需求◆ 规格🛢 功能模块■ 任务▲ 全局★ 源码⬡）
+- 衰减检测：自动发现内容变更、下游过期、文件丢失、代码超前等风险
+- RAG 上下文预览：查看 AI 检索时会注入的完整上下文
+- 9 套主题 / 3 种字体 / 4 档字号 / 全屏模式 / 实体搜索
+
+![Knowledge Graph](docs/screenshots/knowledge-graph.png)
+
 ### 🔄 dev — 智能级联
 在 AI IDE 中智能推进：`@spec-ask "全自动执行"`
 
@@ -192,6 +201,7 @@ speccore --version   # v5.71.0
 | `change` | `ch` | 🔄 🔒 需求变更 |
 | `sync` | `sy` | 🔄 🔒 双向同步 |
 | `validate` | `vl` | ✅ 合规验证 |
+| `knowledge` | `kg` |  知识图谱可视化 + 衰减检测 |
 | `track` | `trk` | 🔗 🔒 REQ→Task→Code 全链路 |
 | `search` | `sh` | 🔍 跨 Spec 全文搜索 |
 | `retro` | `rt` | 📝 🔒 任务回顾复盘 + 评分 |

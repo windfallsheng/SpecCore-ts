@@ -265,6 +265,20 @@ speccore validate [--iteration <name>]
 ```
 别名: `vl`
 
+### 🧠 knowledge — 知识图谱可视化
+```bash
+speccore knowledge [-i <iteration>] [--export html] [--scope global|iteration|task]
+```
+别名: `kg`
+
+生成交互式 HTML 知识图谱，支持：
+- **vis-network 力导向图**：8 种形状区分实体类型（需求◆ 规格🛢 功能模块■ 任务▲ 全局★ 源码⬡）
+- **衰减检测**：自动发现内容变更、下游过期、文件丢失、代码超前等风险
+- **RAG 上下文预览**：查看 AI 检索时会注入的完整上下文
+- **9 套主题 / 3 种字体 / 4 档字号 / 全屏模式 / 实体搜索**
+
+![Knowledge Graph](screenshots/knowledge-graph.png)
+
 ### 🔗 track — 全链路追踪
 ```bash
 speccore track [--req <id>] [--task <id>] [--full]

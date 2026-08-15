@@ -57,19 +57,48 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--tex
 .scanlines{position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,240,255,.015) 2px,rgba(0,240,255,.015) 4px);pointer-events:none;z-index:999}
 .stars{position:fixed;inset:0;background:radial-gradient(1px 1px at 10% 20%,rgba(255,255,255,.4),transparent),radial-gradient(1px 1px at 25% 65%,rgba(255,255,255,.3),transparent),radial-gradient(1.5px 1.5px at 50% 30%,rgba(0,240,255,.5),transparent),radial-gradient(1px 1px at 70% 55%,rgba(255,255,255,.35),transparent),radial-gradient(1px 1px at 85% 15%,rgba(168,85,247,.4),transparent),radial-gradient(1.5px 1.5px at 15% 80%,rgba(0,240,255,.45),transparent),radial-gradient(1px 1px at 60% 85%,rgba(255,255,255,.3),transparent),radial-gradient(1px 1px at 90% 75%,rgba(0,255,136,.4),transparent);pointer-events:none;z-index:0}
 .grid-pattern{position:fixed;inset:0;background-image:linear-gradient(rgba(0,240,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,240,255,.03) 1px,transparent 1px);background-size:60px 60px;pointer-events:none;z-index:0}
-.theme-sw{position:fixed;top:16px;right:16px;z-index:100;display:flex;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px;backdrop-filter:blur(10px)}
+/* ── Ctrl Panel ── */
+.ctrl-panel{position:fixed;top:120px;right:16px;z-index:100;display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.ctrl-toggle{width:48px;height:48px;border-radius:50%;border:1px solid var(--border);cursor:pointer;font-size:32px;display:flex;align-items:center;justify-content:center;line-height:0;padding:0;user-select:none;background:var(--surface);color:var(--muted);backdrop-filter:blur(10px);transition:all .3s}
+.ctrl-toggle:hover{color:var(--cyan);border-color:var(--cyan);transform:rotate(90deg);transform-origin:center}
+.ctrl-toggle.open{color:var(--cyan);border-color:var(--cyan);transform:rotate(90deg);transform-origin:center}
+.ctrl-body{max-height:0;overflow:hidden;display:flex;flex-direction:column;gap:6px;align-items:flex-end;transition:max-height .4s ease,opacity .3s ease;opacity:0}
+.ctrl-panel.open .ctrl-body{max-height:320px;opacity:1}
+.theme-sw{display:flex;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px;backdrop-filter:blur(10px)}
 .theme-sw button{width:32px;height:32px;border-radius:16px;border:none;cursor:pointer;transition:all .2s;font-size:14px;display:flex;align-items:center;justify-content:center;background:transparent}
 .theme-sw button:hover{transform:scale(1.1)}
-.theme-sw button.active{box-shadow:0 0 0 2px var(--cyan)}
-main{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:40px 32px}
+.theme-sw button.active{box-shadow:0 0 0 2px var(--cyan);background:rgba(0,240,255,.15)}
+.font-sw{display:flex;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px;backdrop-filter:blur(10px)}
+.font-sw button{padding:4px 10px;border-radius:12px;border:1px solid var(--border);cursor:pointer;font-size:11px;font-family:'JetBrains Mono',monospace;background:transparent;color:var(--muted)}
+.font-sw button:hover{color:var(--text)}
+.font-sw button.active{color:var(--cyan);border-color:var(--cyan);background:rgba(0,240,255,.1)}
+.fs-sw{display:flex;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px;backdrop-filter:blur(10px)}
+.fs-sw button{padding:4px 10px;border-radius:12px;border:1px solid var(--border);cursor:pointer;font-size:11px;font-family:'JetBrains Mono',monospace;background:transparent;color:var(--muted)}
+.fs-sw button:hover{color:var(--text)}
+.fs-sw button.active{color:var(--cyan);border-color:var(--cyan);background:rgba(0,240,255,.1)}
+/* ── Font classes ── */
+html{font-size:16px}html.fs-sm{font-size:13px}html.fs-md{font-size:16px}html.fs-lg{font-size:19px}html.fs-xl{font-size:22px}
+body{font-family:'JetBrains Mono',monospace!important}
+.font-orbitron body,.font-orbitron h1,.font-orbitron .header-left h1,.font-orbitron .stat-card .value,.font-orbitron .header-stat .num{font-family:'Orbitron',sans-serif!important}
+.font-hybrid body,.font-hybrid html{font-family:'JetBrains Mono',monospace!important}
+.font-hybrid h1,.font-hybrid .header-left h1,.font-hybrid .stat-card .value,.font-hybrid .header-stat .num,.font-hybrid .panel-tab{font-family:'Orbitron',sans-serif!important}
+main{position:relative;z-index:1;max-width:calc(100vw - 90px);margin:0 45px;padding:40px 32px}
 /* ── Header ── */
 .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:28px;padding:24px 32px;background:var(--card);border:1px solid var(--border);border-radius:12px;backdrop-filter:blur(20px);position:relative;overflow:hidden}
-.header::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scan 3s linear infinite}
-@keyframes scan{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+.header::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanX 3s linear infinite}
+.header::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanX-rev 3s linear infinite}
+.header .vline{position:absolute;top:0;width:1px;bottom:0;pointer-events:none;z-index:2}
+.header .vline.l{left:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY-rev 3s linear infinite}
+.header .vline.r{right:0;background:linear-gradient(180deg,transparent,var(--cyan),transparent);animation:scanY 3s linear infinite}
+.header .card-bg{position:absolute;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse at 30% 10%,rgba(14,165,233,.2) 0%,transparent 70%);animation:cardGlow 3s ease-in-out infinite;transform-origin:top center}
+@keyframes scanX{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+@keyframes scanX-rev{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}
+@keyframes scanY{0%{transform:translateY(-100%)}100%{transform:translateY(100%)}}
+@keyframes scanY-rev{0%{transform:translateY(100%)}100%{transform:translateY(-100%)}}
 @keyframes titleGlow{0%,100%{filter:drop-shadow(0 0 20px rgba(0,240,255,.4))}50%{filter:drop-shadow(0 0 30px rgba(0,240,255,.7))}}
-.header-left h1{font-family:'Orbitron',sans-serif;font-size:24px;font-weight:900;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:2px;animation:titleGlow 3s ease-in-out infinite}
-.header-left .subtitle{color:var(--muted);font-size:12px;margin-top:4px;letter-spacing:1px}
-.header-right{display:flex;gap:16px;align-items:center}
+.header-left h1{font-family:'Orbitron',sans-serif;font-size:24px;font-weight:900;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:2px;animation:titleGlow 3s ease-in-out infinite;position:relative;z-index:1}
+.header-left .subtitle{color:var(--muted);font-size:12px;margin-top:4px;letter-spacing:1px;position:relative;z-index:1}
+.header-right{display:flex;gap:16px;align-items:center;position:relative;z-index:1}
 .header-stat{text-align:center;padding:0 16px;border-left:1px solid rgba(0,240,255,.1)}
 .header-stat .num{font-family:'Orbitron',sans-serif;font-size:20px;font-weight:700;color:var(--cyan);text-shadow:0 0 20px rgba(0,240,255,.4)}
 .header-stat .label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
@@ -88,10 +117,13 @@ main{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:40px 32p
 .stat-card .value.purple{color:var(--purple);text-shadow:0 0 30px rgba(168,85,247,.3)}
 .stat-card .value.pink{color:#ec4899;text-shadow:0 0 30px rgba(236,72,153,.3)}
 /* ── Main Layout ── */
-.main-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:0;backdrop-filter:blur(20px);position:relative;overflow:hidden;margin-bottom:28px;display:flex;height:65vh;min-height:500px}
+.main-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:0;backdrop-filter:blur(20px);position:relative;overflow:hidden;margin-bottom:28px;display:flex;height:calc(100vh - 320px);min-height:600px}
+.main-panel.fullscreen{position:fixed;inset:0;z-index:1000;border-radius:0;margin:0;height:100vh;min-height:100vh}
 .graph-panel{flex:1;position:relative;border-right:1px solid var(--border);overflow:hidden;min-width:0}
 #graph{width:100%;height:100%}
-.graph-toolbar{position:absolute;top:12px;left:12px;display:flex;gap:6px;z-index:10}
+.graph-toolbar{position:absolute;top:12px;left:12px;display:flex;gap:6px;z-index:10;flex-wrap:wrap}
+.fullscreen-btn{position:absolute;top:12px;right:12px;z-index:10;width:36px;height:36px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:all .2s}
+.fullscreen-btn:hover{border-color:var(--cyan);color:var(--cyan);box-shadow:0 0 12px rgba(0,240,255,.15)}
 .filter-btn{padding:5px 14px;font-size:11px;font-family:'JetBrains Mono',monospace;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--muted);cursor:pointer;transition:all .2s;letter-spacing:.5px}
 .filter-btn:hover{border-color:rgba(0,240,255,.3);color:var(--text)}
 .filter-btn.active{border-color:var(--cyan);color:var(--cyan);background:rgba(0,240,255,.05);box-shadow:0 0 12px rgba(0,240,255,.15)}
@@ -121,6 +153,8 @@ main{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:40px 32p
 .type-subtask{background:rgba(236,72,153,.1);color:#ec4899}
 .type-user-file{background:rgba(245,158,11,.1);color:var(--orange)}
 .type-source-file{background:rgba(59,130,246,.1);color:#60a5fa}
+.type-global-doc{background:rgba(249,115,22,.1);color:#f97316}
+.type-task-spec{background:rgba(20,184,166,.1);color:#14b8a6}
 /* ── Decay List ── */
 .decay-item{padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:6px}
 .decay-item .title{font-size:13px;font-weight:500}
@@ -147,16 +181,32 @@ main{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:40px 32p
 </head>
 <body>
 
-<div class="theme-sw">
-  <button onclick="setTheme('ocean')" title="Ocean Blue">🌊</button>
-  <button onclick="setTheme('cyber')" title="Cyber Dark">🌙</button>
-  <button onclick="setTheme('light')" title="Light Studio">☀️</button>
-  <button onclick="setTheme('mono')" title="Mono Tech">⬛</button>
-  <button onclick="setTheme('github')" title="GitHub Dark">🐙</button>
-  <button onclick="setTheme('synth')" title="SynthWave">💜</button>
-  <button onclick="setTheme('amber')" title="Amber Terminal">🟡</button>
-  <button onclick="setTheme('sakura')" title="Cherry Sakura">🌸</button>
-  <button onclick="setTheme('forest')" title="Midnight Forest">🌲</button>
+<div class="ctrl-panel" id="ctrl-panel">
+  <button class="ctrl-toggle" id="ctrl-toggle" onclick="toggleCtrl()" title="设置">⚙</button>
+  <div class="ctrl-body">
+    <div class="theme-sw">
+      <button onclick="setTheme('ocean')" title="Ocean Blue">🌊</button>
+      <button onclick="setTheme('cyber')" title="Cyber Dark">🌙</button>
+      <button onclick="setTheme('light')" title="Light Studio">☀️</button>
+      <button onclick="setTheme('mono')" title="Mono Tech">⬛</button>
+      <button onclick="setTheme('github')" title="GitHub Dark">🐙</button>
+      <button onclick="setTheme('synth')" title="SynthWave">💜</button>
+      <button onclick="setTheme('amber')" title="Amber Terminal">🟡</button>
+      <button onclick="setTheme('sakura')" title="Cherry Sakura">🌸</button>
+      <button onclick="setTheme('forest')" title="Midnight Forest">🌲</button>
+    </div>
+    <div class="font-sw">
+      <button onclick="setFont('jetbrains')" data-font="jetbrains">JetBrains</button>
+      <button onclick="setFont('orbitron')" data-font="orbitron">Orbitron</button>
+      <button onclick="setFont('hybrid')" data-font="hybrid">Hybrid</button>
+    </div>
+    <div class="fs-sw">
+      <button onclick="setFontSize('sm')" data-fs="sm">A⁻</button>
+      <button onclick="setFontSize('md')" data-fs="md">A</button>
+      <button onclick="setFontSize('lg')" data-fs="lg">A⁺</button>
+      <button onclick="setFontSize('xl')" data-fs="xl">A⁺⁺</button>
+    </div>
+  </div>
 </div>
 <div class="grid-pattern"></div>
 <div class="stars"></div>
@@ -165,9 +215,12 @@ main{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:40px 32p
 <main>
   <!-- Header -->
   <div class="header">
+    <div class="card-bg"></div>
+    <div class="vline l"></div>
+    <div class="vline r"></div>
     <div class="header-left">
-      <h1>🧠 KNOWLEDGE GRAPH</h1>
-      <div class="subtitle">SPECCORE · ${projectName || 'Project'} · 迭代 ${iterationName || 'N/A'}</div>
+      <h1>SPECCORE — KNOWLEDGE GRAPH</h1>
+      <div class="subtitle">${projectName || 'Project'} · 迭代 ${iterationName || 'N/A'}</div>
     </div>
     <div class="header-right">
       <div class="header-stat"><div class="num">${Object.keys(graph.entities).length}</div><div class="label">实体</div></div>
@@ -180,9 +233,11 @@ main{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:40px 32p
   <div class="stats-grid">
     <div class="stat-card"><div class="card-bg"></div><div class="label">需求</div><div class="value cyan">${stats.requirements}</div></div>
     <div class="stat-card"><div class="card-bg"></div><div class="label">规格</div><div class="value purple">${stats.specs}</div></div>
-    <div class="stat-card"><div class="card-bg"></div><div class="label">任务</div><div class="value green">${stats.tasks}</div></div>
-    <div class="stat-card"><div class="card-bg"></div><div class="label">子任务</div><div class="value pink">${stats.subtasks}</div></div>
+    <div class="stat-card"><div class="card-bg"></div><div class="label">功能模块</div><div class="value green">${stats.tasks}</div></div>
+    <div class="stat-card"><div class="card-bg"></div><div class="label">任务</div><div class="value pink">${stats.subtasks}</div></div>
     <div class="stat-card"><div class="card-bg"></div><div class="label">源码文件</div><div class="value yellow">${stats.sourceFiles || stats.userFiles}</div></div>
+    <div class="stat-card"><div class="card-bg"></div><div class="label">全局文档</div><div class="value" style="color:#f97316;text-shadow:0 0 30px rgba(249,115,22,.3)">${stats.globalDocs || 0}</div></div>
+    <div class="stat-card"><div class="card-bg"></div><div class="label">任务规格</div><div class="value" style="color:#14b8a6;text-shadow:0 0 30px rgba(20,184,166,.3)">${stats.taskSpecs || 0}</div></div>
     <div class="stat-card"><div class="card-bg"></div><div class="label">关系</div><div class="value cyan">${stats.relations}</div></div>
     <div class="stat-card"><div class="card-bg"></div><div class="label">衰减告警</div><div class="value ${decayStats.total > 0 ? 'red' : 'green'}">${decayStats.total}</div></div>
   </div>
@@ -194,11 +249,14 @@ main{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:40px 32p
         <button class="filter-btn active" data-filter="all">全部</button>
         <button class="filter-btn" data-filter="requirement">需求</button>
         <button class="filter-btn" data-filter="spec">规格</button>
-        <button class="filter-btn" data-filter="task">任务</button>
-        <button class="filter-btn" data-filter="subtask">子任务</button>
+        <button class="filter-btn" data-filter="task">功能模块</button>
+        <button class="filter-btn" data-filter="subtask">任务</button>
         <button class="filter-btn" data-filter="user-file">用户文件</button>
         <button class="filter-btn" data-filter="source-file">源码</button>
+        <button class="filter-btn" data-filter="global-doc">全局</button>
+        <button class="filter-btn" data-filter="task-spec">任务规格</button>
       </div>
+      <button class="fullscreen-btn" id="fullscreen-btn" title="全屏">⛶</button>
       <div id="graph"></div>
     </div>
     <div class="side-panel">
@@ -228,15 +286,30 @@ main{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:40px 32p
   <!-- Footer -->
   <div class="footer">
     <span>SPECCORE · KNOWLEDGE VISUALIZER · ${new Date().getFullYear()}</span>
-    <span>GENERATED: ${data.generatedAt || new Date().toISOString()}</span>
+    <span>GENERATED: ${formatDate(data.generatedAt || new Date().toISOString())}</span>
   </div>
 </main>
 
 <script>
 // ── Theme ──
+var THEMES=['ocean','cyber','light','mono','github','synth','amber','sakura','forest'];
 (function(){var t=localStorage.getItem('speccore-theme')||'ocean';document.documentElement.setAttribute('data-theme',t)})();
-function setTheme(t){document.documentElement.setAttribute('data-theme',t);localStorage.setItem('speccore-theme',t);document.querySelectorAll('.theme-sw button').forEach((b,i)=>{b.classList.toggle('active',['ocean','cyber','light','mono','github','synth','amber','sakura','forest'][i]===t)});}
-document.querySelectorAll('.theme-sw button').forEach((b,i)=>{b.classList.toggle('active',['ocean','cyber','light','mono','github','synth','amber','sakura','forest'][i]===(localStorage.getItem('speccore-theme')||'ocean'))});
+function setTheme(t){document.documentElement.setAttribute('data-theme',t);localStorage.setItem('speccore-theme',t);updateThemeActive();}
+function updateThemeActive(){var cur=localStorage.getItem('speccore-theme')||'ocean';document.querySelectorAll('.theme-sw button').forEach(function(b,i){b.classList.toggle('active',THEMES[i]===cur)});}
+updateThemeActive();
+
+// ── Font Family ──
+function setFont(f){document.body.classList.remove('font-jetbrains','font-orbitron','font-hybrid');document.body.classList.add('font-'+f);localStorage.setItem('speccore-font',f);updateFontActive();}
+function updateFontActive(){var cur=localStorage.getItem('speccore-font')||'jetbrains';document.querySelectorAll('.font-sw button').forEach(function(b){b.classList.toggle('active',b.dataset.font===cur)});}
+(function(){var f=localStorage.getItem('speccore-font')||'jetbrains';setFont(f)})();
+
+// ── Font Size ──
+function setFontSize(s){document.documentElement.classList.remove('fs-sm','fs-md','fs-lg','fs-xl');if(s!=='md')document.documentElement.classList.add('fs-'+s);localStorage.setItem('speccore-fs',s);updateFsActive();}
+function updateFsActive(){var cur=localStorage.getItem('speccore-fs')||'md';document.querySelectorAll('.fs-sw button').forEach(function(b){b.classList.toggle('active',b.dataset.fs===cur)});}
+(function(){var s=localStorage.getItem('speccore-fs')||'md';setFontSize(s)})();
+
+// ── Ctrl Panel Toggle ──
+function toggleCtrl(){var p=document.getElementById('ctrl-panel');p.classList.toggle('open');document.getElementById('ctrl-toggle').classList.toggle('open',p.classList.contains('open'));}
 
 // ── Data ──
 var nodes = new vis.DataSet(${JSON.stringify(visNodes)});
@@ -246,11 +319,11 @@ var allEntities = ${JSON.stringify(entities.map(e => ({ id: e.id, type: e.type, 
 // ── Graph ──
 var container = document.getElementById('graph');
 var network = new vis.Network(container, { nodes: nodes, edges: edges }, {
-  nodes: { shape: 'dot', size: 16, font: { size: 11, color: '#c4d5e7', face: 'JetBrains Mono' }, borderWidth: 2 },
-  edges: { width: 1.5, color: { color: 'rgba(0,240,255,0.3)', highlight: '#00f0ff' }, arrows: { to: { enabled: true, scaleFactor: 0.5 } }, smooth: { type: 'continuous' } },
-  physics: { solver: 'forceAtlas2Based', forceAtlas2Based: { gravitationalConstant: -40, centralGravity: 0.008, springLength: 120 }, stabilization: { iterations: 150 } },
-  interaction: { hover: true, tooltipDelay: 200 },
-  layout: { randomSeed: 42 },
+  nodes: { shape: 'dot', size: 24, font: { size: 13, color: '#c4d5e7', face: 'JetBrains Mono' }, borderWidth: 2, chosen: true },
+  edges: { width: 1.5, color: { color: 'rgba(0,240,255,0.3)', highlight: '#00f0ff' }, arrows: { to: { enabled: true, scaleFactor: 0.5 } }, smooth: { type: 'continuous', roundness: 0.2 } },
+  physics: { solver: 'forceAtlas2Based', forceAtlas2Based: { gravitationalConstant: -70, centralGravity: 0.005, springLength: 180, springConstant: 0.012 }, stabilization: { iterations: 250 } },
+  interaction: { hover: true, tooltipDelay: 200, zoomView: true, dragView: true },
+  layout: { randomSeed: 42, improvedLayout: true },
 });
 
 // ── Filter ──
@@ -300,7 +373,7 @@ network.on('click', function(params) {
 
 function entityItemHtml(ent) {
   var typeClass = 'type-' + ent.type.replace('_', '-');
-  var typeLabel = { requirement: '需求', spec: '规格', task: '任务', subtask: '子任务', 'user-file': '用户文件', 'source-file': '源码' }[ent.type] || ent.type;
+  var typeLabel = { requirement: '需求', spec: '规格', task: '功能模块', subtask: '任务', 'user-file': '用户文件', 'source-file': '源码', 'global-doc': '全局', 'task-spec': '任务规格' }[ent.type] || ent.type;
   return '<div class="entity-item" onclick="focusNode(\\'' + ent.id + '\\')">' +
     '<div class="name">' + ent.title + '</div>' +
     '<div class="meta"><span class="type-badge ' + typeClass + '">' + typeLabel + '</span>' +
@@ -312,6 +385,22 @@ function focusNode(id) {
   network.focusNode(id, { scale: 1.2, animation: { duration: 300 } });
   network.selectNodes([id]);
 }
+
+// ── Fullscreen ──
+var fsBtn = document.getElementById('fullscreen-btn');
+var mainPanel = document.querySelector('.main-panel');
+fsBtn.addEventListener('click', function() {
+  mainPanel.classList.toggle('fullscreen');
+  fsBtn.textContent = mainPanel.classList.contains('fullscreen') ? '⛶' : '⛶';
+  fsBtn.title = mainPanel.classList.contains('fullscreen') ? '退出全屏' : '全屏查看';
+  setTimeout(function() { network.fit({ animation: { duration: 300 } }); }, 100);
+});
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && mainPanel.classList.contains('fullscreen')) {
+    mainPanel.classList.remove('fullscreen');
+    setTimeout(function() { network.fit({ animation: { duration: 300 } }); }, 100);
+  }
+});
 <\/script>
 </body>
 </html>`;
@@ -328,15 +417,19 @@ const TYPE_COLORS: Record<string, string> = {
   subtask: '#ec4899',
   'user-file': '#f59e0b',
   'source-file': '#60a5fa',
+  'global-doc': '#f97316',
+  'task-spec': '#14b8a6',
 };
 
 const TYPE_SHAPES: Record<string, string> = {
   requirement: 'diamond',
-  spec: 'dot',
+  spec: 'database',
   task: 'square',
   subtask: 'triangle',
-  'user-file': 'dot',
-  'source-file': 'database',
+  'user-file': 'ellipse',
+  'source-file': 'hexagon',
+  'global-doc': 'star',
+  'task-spec': 'box',
 };
 
 function buildVisNodes(entities: GraphEntity[], decayItems: DecayItem[]): any[] {
@@ -364,9 +457,9 @@ function buildVisNodes(entities: GraphEntity[], decayItems: DecayItem[]): any[] 
         highlight: { background: color + '40', border: borderColor },
       },
       shape,
-      size: e.type === 'requirement' ? 22 : e.type === 'task' ? 18 : e.type === 'source-file' ? 12 : 14,
+      size: e.type === 'requirement' ? 30 : e.type === 'task' ? 26 : e.type === 'global-doc' ? 28 : e.type === 'spec' ? 24 : e.type === 'source-file' ? 18 : 20,
       borderWidth,
-      font: { color: '#c4d5e7', size: 11 },
+      font: { color: '#c4d5e7', size: 13 },
       entityType: e.type,
     };
   });
@@ -382,6 +475,8 @@ function buildVisEdges(relations: GraphRelation[], entities: Record<string, Grap
     imports: '#60a5fa',
     module_depends: '#0ea5e9',
     co_changes: '#f97316',
+    governs: '#f97316',
+    elaborates: '#14b8a6',
   };
 
   return relations.map(r => ({
@@ -390,14 +485,14 @@ function buildVisEdges(relations: GraphRelation[], entities: Record<string, Grap
     title: r.type,
     color: { color: EDGE_COLORS[r.type] || '#6b7280' + '60' },
     label: r.type,
-    font: { size: 9, color: '#4a5568', align: 'middle', strokeWidth: 0 },
+    font: { size: 11, color: '#4a5568', align: 'middle', strokeWidth: 0 },
   }));
 }
 
 function renderEntityItem(e: GraphEntity): string {
   const typeClass = `type-${e.type.replace('_', '-')}`;
   const typeLabel: Record<string, string> = {
-    requirement: '需求', spec: '规格', task: '任务', subtask: '子任务', 'user-file': '用户文件', 'source-file': '源码'
+    requirement: '需求', spec: '规格', task: '功能模块', subtask: '任务', 'user-file': '用户文件', 'source-file': '源码', 'global-doc': '全局', 'task-spec': '任务规格'
   };
   return `<div class="entity-item" onclick="focusNode('${e.id}')">
     <div class="name">${escapeHtml(e.title)}</div>
@@ -444,4 +539,14 @@ function renderMarkdownPreview(md: string): string {
 
 function escapeHtml(str: string): string {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function formatDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  } catch {
+    return iso;
+  }
 }

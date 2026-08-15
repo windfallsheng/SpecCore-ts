@@ -39,7 +39,7 @@ export interface KnowledgeGraph {
 
 export interface GraphEntity {
   id: string;
-  type: 'requirement' | 'spec' | 'task' | 'subtask' | 'user-file' | 'source-file';
+  type: 'requirement' | 'spec' | 'task' | 'subtask' | 'user-file' | 'source-file' | 'global-doc' | 'task-spec';
   title: string;
   file: string;           // 相对路径
   hash: string;           // 内容 hash（用于衰减检测）
@@ -60,7 +60,7 @@ export interface GraphEntity {
 export interface GraphRelation {
   from: string;
   to: string;
-  type: 'implements' | 'specifies' | 'subtask_of' | 'depends_on' | 'references' | 'imports' | 'module_depends' | 'co_changes';
+  type: 'implements' | 'specifies' | 'subtask_of' | 'depends_on' | 'references' | 'imports' | 'module_depends' | 'co_changes' | 'governs' | 'elaborates';
 }
 
 export interface GraphStats {
@@ -70,6 +70,8 @@ export interface GraphStats {
   subtasks: number;
   userFiles: number;
   sourceFiles: number;
+  globalDocs: number;
+  taskSpecs: number;
   relations: number;
 }
 
@@ -619,6 +621,127 @@ async function scanSourceFiles(cwd: string): Promise<{ entities: GraphEntity[]; 
 }
 
 // ═══════════════════════════════════════════════
+// 全局层扫描（.speccore/GLOBAL/）
+// ═══════════════════════════════════════════════
+
+async function scanGlobalDocs(cwd: string): Promise<{ entities: GraphEntity[]; relations: GraphRelation[] }> {
+  const entities: GraphEntity[] = [];
+  const relations: GraphRelation[] = [];
+  const globalDir = join(cwd, '.speccore', 'GLOBAL');
+
+  if (!(await pathExists(globalDir))) return { entities, relations };
+
+  const scanDir = async (dir: string, prefix: string) => {
+    const items = await readdir(dir, { withFileTypes: true });
+    for (const item of items) {
+      if (item.name.startsWith('.') || isTimestampBackup(item.name)) continue;
+      const fullPath = join(dir, item.name);
+      const relPath = `${prefix}${item.name}`;
+
+      if (item.isDirectory()) {
+        if (item.name === '_template' || item.name === 'RULES') continue;
+        await scanDir(fullPath, `${relPath}/`);
+      } else if (item.name.endsWith('.md') && item.name !== 'INDEX.md') {
+        const { hash, mtime } = await fileHash(fullPath);
+        const title = await extractTitle(fullPath);
+        const tags: string[] = ['global'];
+        if (prefix.includes('synthesis/')) tags.push('synthesis');
+        else if (prefix.includes('platforms/')) { tags.push('platform'); tags.push(prefix.split('platforms/')[1]?.split('/')[0] || ''); }
+        else if (prefix.includes('baselines/')) tags.push('baseline');
+        else if (prefix.includes('projects/')) tags.push('project');
+
+        entities.push({
+          id: `GLOBAL:${relPath.replace(/\.md$/, '').replace(/\//g, '-')}`,
+          type: 'global-doc',
+          title: title || item.name.replace('.md', ''),
+          file: `.speccore/GLOBAL/${relPath}`,
+          hash,
+          mtime,
+          tags,
+        });
+      }
+    }
+  };
+
+  await scanDir(globalDir, '');
+  return { entities, relations };
+}
+
+// ═══════════════════════════════════════════════
+// 任务层详细规格扫描（Task-xxx/{platform}/REQ.md, TECH.md 等）
+// ═══════════════════════════════════════════════
+
+const TASK_SPEC_FILES = ['REQ.md', 'TECH.md', 'SCHEMA.md', 'CHANGELOG.md', 'TEST.md', 'TASK.md'];
+
+async function scanTaskSpecs(iterDir: string): Promise<{ entities: GraphEntity[]; relations: GraphRelation[] }> {
+  const entities: GraphEntity[] = [];
+  const relations: GraphRelation[] = [];
+  const tasksDir = join(iterDir, '030-tasks');
+
+  if (!(await pathExists(tasksDir))) return { entities, relations };
+
+  const findTaskDirs = async (dir: string): Promise<string[]> => {
+    const results: string[] = [];
+    try {
+      const entries = await readdir(dir, { withFileTypes: true });
+      for (const e of entries) {
+        const p = join(dir, e.name);
+        if (e.isDirectory()) {
+          if (e.name.startsWith('Task-')) results.push(p);
+          else if (!e.name.startsWith('.') && e.name !== 'node_modules') {
+            results.push(...await findTaskDirs(p));
+          }
+        }
+      }
+    } catch { /* 跳过 */ }
+    return results;
+  };
+
+  const taskDirs = await findTaskDirs(tasksDir);
+
+  for (const taskDir of taskDirs) {
+    const taskId = taskDir.split('/').pop() || '';
+    const subDirs = ['_shared', '00-specs'];
+    try {
+      const entries = await readdir(taskDir, { withFileTypes: true });
+      for (const e of entries) {
+        if (e.isDirectory() && !e.name.startsWith('.') && !e.name.startsWith('0') && e.name !== '_shared' && e.name !== '99-artifacts' && !isTimestampBackup(e.name)) {
+          subDirs.push(e.name);
+        }
+      }
+    } catch { /* 跳过 */ }
+
+    for (const subDir of subDirs) {
+      const specDir = join(taskDir, subDir);
+      if (!(await pathExists(specDir))) continue;
+
+      for (const specFile of TASK_SPEC_FILES) {
+        const specPath = join(specDir, specFile);
+        if (!(await pathExists(specPath))) continue;
+
+        const { hash, mtime } = await fileHash(specPath);
+        const title = await extractTitle(specPath);
+        const specType = specFile.replace('.md', '').toLowerCase();
+
+        entities.push({
+          id: `TSPEC:${taskId}-${subDir}-${specType}`,
+          type: 'task-spec',
+          title: title || `${taskId}/${subDir}/${specFile}`,
+          file: `030-tasks/**/${taskId}/${subDir}/${specFile}`,
+          hash,
+          mtime,
+          tags: ['task-spec', specType, subDir === '_shared' ? 'shared' : subDir],
+        });
+
+        relations.push({ from: `TSPEC:${taskId}-${subDir}-${specType}`, to: taskId, type: 'elaborates' });
+      }
+    }
+  }
+
+  return { entities, relations };
+}
+
+// ═══════════════════════════════════════════════
 // 关联推断
 // ═══════════════════════════════════════════════
 
@@ -751,7 +874,7 @@ export async function buildKnowledgeGraph(
     iteration: iterName,
     entities: {},
     relations: [],
-    stats: { requirements: 0, specs: 0, tasks: 0, subtasks: 0, userFiles: 0, sourceFiles: 0, relations: 0 },
+    stats: { requirements: 0, specs: 0, tasks: 0, subtasks: 0, userFiles: 0, sourceFiles: 0, globalDocs: 0, taskSpecs: 0, relations: 0 },
   };
 
   if (!iterDir || !(await pathExists(iterDir))) return graph;
@@ -762,6 +885,8 @@ export async function buildKnowledgeGraph(
   const taskResult = await scanTasks(iterDir);
   const userFiles = await scanUserFiles(iterDir);
   const sourceResult = await scanSourceFiles(cwd);
+  const globalResult = await scanGlobalDocs(cwd);
+  const taskSpecResult = await scanTaskSpecs(iterDir);
 
   // 合并实体（处理 ID 冲突：同名实体用路径前缀去重）
   const allEntities = [
@@ -770,6 +895,8 @@ export async function buildKnowledgeGraph(
     ...taskResult.entities,
     ...userFiles,
     ...sourceResult.entities,
+    ...globalResult.entities,
+    ...taskSpecResult.entities,
   ];
 
   const idRemap = new Map<string, string>();
@@ -785,7 +912,7 @@ export async function buildKnowledgeGraph(
 
   // 同步更新已有关系中的旧 ID
   const remapId = (id: string) => idRemap.get(id) || id;
-  for (const r of [...reqResult.relations, ...specResult.relations, ...taskResult.relations]) {
+  for (const r of [...reqResult.relations, ...specResult.relations, ...taskResult.relations, ...taskSpecResult.relations]) {
     r.from = remapId(r.from);
     r.to = remapId(r.to);
   }
@@ -796,6 +923,7 @@ export async function buildKnowledgeGraph(
     ...specResult.relations,
     ...taskResult.relations,
     ...sourceResult.relations,
+    ...taskSpecResult.relations,
     ...(await inferRelations(allEntities, iterDir)),
   ];
 
@@ -807,6 +935,8 @@ export async function buildKnowledgeGraph(
     subtasks: taskResult.entities.filter(e => e.type === 'subtask').length,
     userFiles: userFiles.length,
     sourceFiles: sourceResult.entities.length,
+    globalDocs: globalResult.entities.length,
+    taskSpecs: taskSpecResult.entities.length,
     relations: graph.relations.length,
   };
 
