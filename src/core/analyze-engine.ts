@@ -2891,6 +2891,23 @@ function splitContentByPlatform(
 // ============================================================
 
 /**
+ * 端名语义映射表：将各种写法映射到标准端名
+ * 支持：中文端名、英文缩写、混合写法等
+ */
+const PLATFORM_ALIAS_MAP: Record<string, string[]> = {
+  // H5 移动端
+  'h5': ['h5', 'h5移动端', 'h5移动', 'mobile', '移动端', '手机浏览器', 'web mobile'],
+  // Admin 后台管理
+  'admin': ['admin', '后台管理端', '后台', '管理端', 'web', 'pc', '桌面端', '管理后台', 'dashboard'],
+  // App 客户端
+  'app': ['app', '客户端', 'ios', 'android', 'native', '原生', '移动端app', '手机app'],
+  // 小程序
+  'miniapp': ['miniapp', '小程序', '微信小程序', '支付宝小程序', 'miniprogram'],
+  // 后端服务
+  'backend': ['backend', '后端', '服务', 'api', 'server', '服务端', '微服务']
+};
+
+/**
  * 根据文件路径或内容推断该文档属于哪个端
  * @param filePath 文件路径
  * @param content 文件内容
@@ -2931,8 +2948,23 @@ function inferPlatformFromPathOrContent(
     }
   }
   
-  // 2. 从文件内容推断（检查前 50 行是否有端标题）
+  // 【新增】2. 语义映射匹配：尝试将内容中的中文端名映射到标准端名
   const firstLines = content.split('\n').slice(0, 50).join('\n');
+  for (const [standardPlatform, aliases] of Object.entries(PLATFORM_ALIAS_MAP)) {
+    // 只检查这个标准端名是否在 platforms 列表中
+    if (!platforms.includes(standardPlatform)) continue;
+    
+    // 检查是否有别名出现在内容中
+    for (const alias of aliases) {
+      const aliasPattern = new RegExp(alias, 'i');
+      if (aliasPattern.test(firstLines)) {
+        logger.info(`   🔄 语义映射: "${alias}" → "${standardPlatform}"`);
+        return standardPlatform;
+      }
+    }
+  }
+  
+  // 3. 从文件内容推断（精确匹配标准端名）
   for (const platform of platforms) {
     const patterns = [
       new RegExp(`^#{1,4}\\s*.*?(?:${platform}|${platform.toUpperCase()}|${platform.charAt(0).toUpperCase() + platform.slice(1)}).*?(?:端|需求)`, 'im'),
