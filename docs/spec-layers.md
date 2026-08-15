@@ -6,10 +6,10 @@
 
 ## 多层 Spec 架构
 
-SpecCore 生成的所有 Spec 文件分为多个层次：**全局知识库**（synthesize 自动生成）、**全局约束**（init 时配置）、**期次上下文**（迭代级文档）、**Task 执行**（任务级输入）。
+SpecCore 生成的所有 Spec 文件分为多个层次：**全局知识库**（analyze --full 自动生成）、**全局约束**（init 时配置）、**期次上下文**（迭代级文档）、**Task 执行**（任务级输入）。
 
 ```
-Layer 0 — 全局知识库（synthesize 自动生成 + 智能注入）
+Layer 0 — 全局知识库（analyze --full 自动生成 + 智能注入）
   🤖 GLOBAL/platforms/{端}/ → Phase 1 逐端分析
   🤖 GLOBAL/synthesis/      → Phase 2 跨端综合
   🤖 GLOBAL/INDEX.md         → Phase 2 后自动生成的轻量索引
@@ -29,7 +29,7 @@ Layer 3 — Task 执行（execute 核心输入）
   ✅ Task/TASK.md     任务分解（状态更新 ✓）
 ```
 
-## 一、Layer 0：全局知识库（synthesize 自动生成 + 智能注入）
+## 一、Layer 0：全局知识库（analyze --full 自动生成 + 智能注入）
 
 ### 三阶段全自动流水线
 
@@ -63,11 +63,11 @@ TOC 目录覆盖 6 个来源：
 | 📱 各端分析文档 | GLOBAL/platforms/ | 各端专业分析 | execute 开发特定端时参考 |
 | 🏗 工程级文档 | GLOBAL/PROJECTS/ | 逐工程分析 | execute 开发特定工程时参考 |
 | 📖 参考文档 | GLOBAL/*.md | 术语、代码索引、全景、技术栈 | 任何命令需要项目上下文时 |
-| ✏️ 写作模板 | PATTERNS/TEMPLATES/ | Spec 文档写作模板 | analyze/synthesize 写 Spec 时参考格式 |
+| ✏️ 写作模板 | PATTERNS/TEMPLATES/ | Spec 文档写作模板 | analyze 写 Spec 时参考格式 |
 | 📏 规则与检查清单 | RULES/ | 代码审查、完成检查 | execute/done 时参考 |
 
 ```
-synthesize Phase 2 完成后
+analyze --full Phase 2 完成后
 ├── 写入 GLOBAL/synthesis/（CROSS_PLATFORM + ARCHITECTURE + TECH_FULL）
 ├── 写入 GLOBAL/platforms/{端}/（各端专业分析）
 ├── 自动生成 GLOBAL/INDEX.md（轻量索引）
@@ -123,7 +123,7 @@ synthesize Phase 2 完成后
 | :--- | :--- | :--- |
 | `buildGlobalTOC()` | prompt-builder.ts | 扫描 6 个来源，提取每个文件的 ## 标题行 |
 | `loadGlobalContext()` | prompt-builder.ts | 必读 INDEX.md 直接注入 + 其余只给 TOC 目录 |
-| `generateGlobalIndex()` | synthesize.ts | Phase 2 apply 后自动生成 INDEX.md |
+| `generateGlobalIndex()` | synthesize.ts (analyze --full) | Phase 2 apply 后自动生成 INDEX.md |
 | `formatGlobalContext()` | prompt-builder.ts | 格式化为分组 Markdown，formatPrompt 和 split.ts 共用 |
 
 **关键设计决策：**

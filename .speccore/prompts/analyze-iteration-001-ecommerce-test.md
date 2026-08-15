@@ -1,15 +1,15 @@
 # SpecCore AI 分析上下文
 
-> 自动生成 | 2026-08-07 | Scope: 迭代 001-ecommerce-test | Depth: normal
+> 自动生成 | 2026-08-15 | Scope: 迭代 001-ecommerce-test | Depth: normal
 
 ---
 
 ## 🏗 项目工程配置 (CONSTITUTION.md)
 
 ## 项目信息
-| 工程 | 源码路径 | Git 仓库 | 默认分支 | 对应需求端 |
+| 工程 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应需求端 |
 | :--- | :--- | :--- | :--- | :--- |
-| ts-cli | ./ | git@gitee.com:windfullsheng/spec-core-ts.git | main | app, h5, miniapp, admin |
+| ts-cli | 待填写 | ./ | git@gitee.com:windfullsheng/spec-core-ts.git | main | app, h5, miniapp, admin |
 >
 >
 ## 技术栈
@@ -37,6 +37,9 @@
 - 默认分支: main  (可选: master / develop / trunk / release)
 - 任务分支: feature/{Task-ID}
 - 发布分支: release/{version}
+- 保护分支: main, master, release/*, production
+  > 保护分支上禁止直接 commit 和 push，只能通过 PR 合并
+  > 支持精确匹配和通配符（如 release/*）
 
 > 以上为项目配置信息。AI 应据此处配置判断各需求端（APP/H5/小程序/admin）对应哪个工程源码。
 
@@ -50,9 +53,9 @@
 | 工程源码 | 默认分支 | 对应需求端 |
 | :--- | :--- | :--- |
 | `./` | main | app, h5, miniapp, admin |
-| `含义` | main | — |
-| `用户不存在` | main | — |
-| `密码错误` | main | — |
+| `场景` | main | — |
+| `登录时手机号未注册` | main | — |
+| `登录密码不匹配` | main | — |
 | `...` | main | — |
 
 > **跨端需求**: `_shared/` 或标记为多端共用的需求，AI 分析时应覆盖所有相关工程。
@@ -65,7 +68,7 @@
 
 ## 📋 需求文档
 
-## 来源: Iteration-001-ecommerce-test/010-requirements/INDEX.md
+## 来源: INDEX.md
 
 # 本期需求文档索引
 
@@ -78,7 +81,7 @@
 
 ---
 
-## 来源: Iteration-001-ecommerce-test/010-requirements/REQUIREMENT.md
+## 来源: REQUIREMENT.md
 
 # 本期需求文档
 
@@ -101,28 +104,6 @@
 | :--- | :--- | :--- |
 | POST | /api/auth/login | 登录 |
 
-
-
----
-
-## 来源: Iteration-001-ecommerce-test/010-requirements/requirementsrequirements.md
-
-# requirements需求
-
-<!-- 
-  原型图片路径: images/
-  Task 引用方式: ![原型](../../02-需求文档/images/xxx.png)
-  所有 Task 共享此目录，无需重复存放。
--->
-
-## APP端需求
-### 用户登录
-### 功能
-- 手机号验证码登录
-### 接口
-| 方法 | 路径 | 说明 |
-| :--- | :--- | :--- |
-| POST | /api/auth/login | 登录 |
 
 
 ---
@@ -182,6 +163,6 @@ _未扫描源码 (未传 --src)_
 ## 📝 输出格式
 
 请将分析结果写入以下文件:
-- **Iteration-001-ecommerce-test/02-需求文档/ANALYSIS.md**
+- **Iteration-001-ecommerce-test/020-specs/ANALYSIS.md**
 
 同时参考填充同目录下的 TECH.md、TEST.md、REVIEW.md、RISK.md、DEPS.md、MONITOR.md 模板文件。

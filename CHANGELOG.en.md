@@ -2,6 +2,27 @@
 
 ---
 
+## v6.17.0 (2026-08-15) — Pipeline Fix: analyze --auto Generates Full Spec Files
+
+### P0: analyze --auto Full Spec Generation
+
+- **analyze --auto now generates all spec files**: Previously only generated ANALYSIS.md, leaving other spec files as empty templates. Now extracts APIs, features, data models, and business rules from requirements to generate substantive spec files
+- **New `generateSpecsFromRequirements()`**: 438 lines in analyze-engine.ts with information extraction + 7 spec file builders
+- **Smart overwrite**: Files with existing content (>50 non-template chars) are preserved; empty templates replaced
+- **Complete data flow**: init → analyze --auto → split → execute
+
+### P1: Document Quality
+
+- **ANALYSIS.md deduplication**: Fixed duplicate warnings in scanCompleteness()
+- **doc2spec filename fix**: `requirementsrequirements.md` → `requirements.md`
+
+### P2: Pipeline & Documentation
+
+- **dev pipeline content validation**: doc2spec/analyze stages check for actual content
+- **Documentation**: command-reference.md, spec-layers.md, knowledge-base-design.md, quick-start.md updated
+
+---
+
 ## v6.16.0 (2026-08-15) — Command Consolidation
 
 ### Refactor: Command Merging

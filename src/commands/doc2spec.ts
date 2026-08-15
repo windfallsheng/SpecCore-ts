@@ -245,8 +245,8 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     const baseDir = taskId ? join(iterDir, taskId) : join(iterDir, '010-requirements', 'converted');
     const targetDir = baseDir;
     const imageDir = join(iterDir, '010-requirements', 'assets', 'extracted'); // PRD 提取的图片
-    const platform = options.platform || 'requirements';
-    const outputPath = join(targetDir, `${platform}requirements.md`);
+    const platform = options.platform || '';
+    const outputPath = join(targetDir, platform ? `${platform}requirements.md` : 'requirements.md');
 
     await ensureDir(targetDir);
     await ensureDir(imageDir);
@@ -347,7 +347,7 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     // 5. 图片引用注释（告知 Task 如何引用这些图）
     content = content.replace(
       /^#/,
-      `# ${platform}需求\n\n<!-- \n  原型图片路径: 010-requirements/assets/extracted/\n  Task 引用方式: ![原型](../assets/extracted/xxx.png)\n  所有 Task 共享此目录，无需重复存放。\n-->\n\n#`
+      `# ${platform || '通用'}需求\n\n<!-- \n  原型图片路径: 010-requirements/assets/extracted/\n  Task 引用方式: ![原型](../assets/extracted/xxx.png)\n  所有 Task 共享此目录，无需重复存放。\n-->\n\n#`
     );
 
     await writeFile(outputPath, content);
@@ -360,14 +360,16 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     } else {
       indexContent = '# 本期需求文档索引\n\n> doc2spec 自动生成\n\n| 端 | 文件 | 转换时间 | 来源 |\n| :--- | :--- | :--- | :--- |\n';
     }
-    if (!indexContent.includes(`| ${platform} |`)) {
-      const entry = `| ${platform} | ${platform}requirements.md | ${new Date().toISOString().split('T')[0]} | ${basename(options.file)} |`;
+    const platformLabel = platform || '通用';
+    const outputFilename = platform ? `${platform}requirements.md` : 'requirements.md';
+    if (!indexContent.includes(`| ${platformLabel} |`)) {
+      const entry = `| ${platformLabel} | ${outputFilename} | ${new Date().toISOString().split('T')[0]} | ${basename(options.file)} |`;
       indexContent += entry + '\n';
     }
     await writeFile(indexPath, indexContent);
 
     // ── 自动合并到 REQUIREMENT.md（汇总各端需求，供 iteration split 使用）──
-    await mergeToRequirement(iterDir, targetDir, platform);
+    await mergeToRequirement(iterDir, targetDir, platformLabel);
 
     // ── 检测多端文档，提示智能合成 ──
     const convDir = join(iterDir, '010-requirements', 'converted');
@@ -432,7 +434,8 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
  * 格式: ## {端名}需求（取自 {端名}requirements.md 的 ## 接口定义 表格）
  */
 async function mergeToRequirement(iterDir: string, targetDir: string, platform: string): Promise<void> {
-  const reqPath = join(targetDir, `${platform}requirements.md`);
+  const reqFilename = (platform === '通用' || !platform) ? 'requirements.md' : `${platform}requirements.md`;
+  const reqPath = join(targetDir, reqFilename);
   const globalReqPath = join(targetDir, 'REQUIREMENT.md');
 
   if (!(await pathExists(reqPath))) return;
