@@ -2,6 +2,17 @@
 
 ---
 
+## v6.44.0 (2026-08-16) — Analyze --task Task-Level Deep Analysis
+
+### Key Changes
+
+- **Apply write path fix**: Task-level spec files now write to `Task/00-specs/` instead of `Task/_shared/`
+- **Task-level document set override**: 00-specs/ uses task-specific document set (REQ.md/TECH.md/TASK.md/SCHEMA.md) per task type
+- **Task-level deep analysis prompt**: AI Reads existing 00-specs + global/ context + platform-specific context to regenerate deep analysis
+- **Task-level templates**: Each document has targeted writing requirements (function/interface/component level)
+
+---
+
 ## v6.43.0 (2026-08-16) — Split Aggregation Analysis + Task-Level Spec Analysis Guidance
 
 ### Key Changes

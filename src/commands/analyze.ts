@@ -327,8 +327,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         let count = 0;
 
         if (isTaskLevel && taskDir) {
-          // 任务级：写 Task/{platform}/ 或 Task/_shared/
-          const targetSubDir = options.platform || '_shared';
+          // 任务级：写 Task/00-specs/（v6.44.0+ 统一写入 00-specs/）
+          const targetSubDir = options.platform && !isTaskLevel ? options.platform : '00-specs';
           const taskSpecDir = join(taskDir, targetSubDir);
           await ensureDir(taskSpecDir);
           for (const [filename, content] of Object.entries(docs)) {
@@ -376,8 +376,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 
     // 单文件模式
     if (isTaskLevel && taskDir) {
-      // 任务级：写 Task/{platform}/ 或 Task/_shared/
-      const targetSubDir = options.platform || '_shared';
+      // 任务级：写 Task/00-specs/（v6.44.0+）
+      const targetSubDir = '00-specs';
       const taskSpecDir = join(taskDir, targetSubDir);
       await ensureDir(taskSpecDir);
       const taskAnalysisPath = join(taskSpecDir, 'ANALYSIS.md');
@@ -1007,6 +1007,42 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     taskDocs = taskDocs.filter(([n]) => PLATFORM_DOCS.includes(n));
   }
 
+  // ── 任务级文档覆盖：00-specs/ 使用任务级文档集（v6.44.0+） ──
+  if (isTask && !ctx.phase) {
+    const TASK_DOCS: Record<string, string[]> = {
+      feature:    ['REQ.md', 'TECH.md', 'TASK.md', 'SCHEMA.md'],
+      refactor:   ['REQ.md', 'TECH.md', 'TASK.md'],
+      bugfix:     ['REQ.md', 'TECH.md'],
+      research:   ['REQ.md'],
+      review:     ['REQ.md'],
+      test:       ['REQ.md', 'TECH.md'],
+      deploy:     ['REQ.md', 'TECH.md'],
+      security:   ['REQ.md', 'TECH.md'],
+      performance:['REQ.md', 'TECH.md'],
+    };
+    const taskDocNames = TASK_DOCS[taskType] || TASK_DOCS['feature'];
+    taskDocs = taskDocs.filter(([n]) => taskDocNames.includes(n));
+    // 补充 TASK.md 和 SCHEMA.md（不在全局 docs 数组中）
+    if (taskDocNames.includes('TASK.md') && !taskDocs.find(([n]) => n === 'TASK.md')) {
+      taskDocs.push(['TASK.md', '']);
+    }
+    if (taskDocNames.includes('SCHEMA.md') && !taskDocs.find(([n]) => n === 'SCHEMA.md')) {
+      taskDocs.push(['SCHEMA.md', '']);
+    }
+    // 任务级模板覆盖（v6.44.0+）
+    for (const doc of taskDocs) {
+      if (doc[0] === 'REQ.md') {
+        doc[1] = `# \u672c\u4efb\u52a1\u9700\u6c42\u89c4\u683c\n\n> ${iter} | ${ctx.task} | ${now}\n\n## \u5199\u4f5c\u8981\u6c42\n\u6839\u636e split \u4ea7\u51fa\u7684\u9700\u6c42\u5207\u7247\uff0c\u7ed3\u5408\u5168\u5c40\u4e0a\u4e0b\u6587\uff0c\u91cd\u65b0\u7ec4\u7ec7\u672c\u4efb\u52a1\u7684\u9700\u6c42\u89c4\u683c\uff1a\n- \u660e\u786e\u672c\u4efb\u52a1\u7684\u9a8c\u6536\u6807\u51c6\uff08\u53ef\u6d4b\u8bd5\u7684\u3001\u5177\u4f53\u7684\uff09\n- \u7ec6\u5316\u4e1a\u52a1\u89c4\u5219\u548c\u8fb9\u754c\u6761\u4ef6\n- \u5217\u51fa\u5f02\u5e38\u573a\u666f\u548c\u5904\u7406\u65b9\u5f0f\n- \u6807\u6ce8\u4e0e\u5176\u4ed6 Task \u7684\u4f9d\u8d56\u5173\u7cfb\n`;
+      } else if (doc[0] === 'TECH.md') {
+        doc[1] = `# \u672c\u4efb\u52a1\u6280\u672f\u65b9\u6848\n\n> ${iter} | ${ctx.task} | ${now}\n\n## \u5199\u4f5c\u8981\u6c42\n\u57fa\u4e8e global/TECH.md \u7684\u6574\u4f53\u67b6\u6784\uff0c\u7ec6\u5316\u5230\u51fd\u6570/\u63a5\u53e3\u7ea7\u522b\uff1a\n- \u5177\u4f53\u7684\u63a5\u53e3\u5b9a\u4e49\uff08\u8def\u5f84/\u53c2\u6570/\u54cd\u5e94\uff09\n- \u6570\u636e\u6a21\u578b\u8bbe\u8ba1\uff08Entity/DTO/VO \u5b57\u6bb5\u6620\u5c04\uff09\n- \u6838\u5fc3\u4e1a\u52a1\u903b\u8f91\u7684\u4f2a\u4ee3\u7801\u6216\u6d41\u7a0b\u63cf\u8ff0\n- \u524d\u7aef\u7ec4\u4ef6\u62c6\u5206\u548c\u72b6\u6001\u8bbe\u8ba1\n- \u5fc5\u987b\u4e0e global/TECH.md \u7684\u6574\u4f53\u67b6\u6784\u4fdd\u6301\u4e00\u81f4\n`;
+      } else if (doc[0] === 'TASK.md') {
+        doc[1] = `# \u5b9e\u65bd\u8ba1\u5212\n\n> ${iter} | ${ctx.task} | ${now}\n\n## \u5199\u4f5c\u8981\u6c42\n\u6839\u636e\u672c\u4efb\u52a1\u7684\u9700\u6c42\u548c\u6280\u672f\u65b9\u6848\uff0c\u5236\u5b9a\u5177\u4f53\u5b9e\u65bd\u6b65\u9aa4\uff1a\n- \u6309\u5f00\u53d1\u987a\u5e8f\u5217\u51fa\u5177\u4f53\u6b65\u9aa4\n- \u6bcf\u4e2a\u6b65\u9aa4\u6709\u660e\u786e\u7684\u5b8c\u6210\u6807\u51c6\n- \u6807\u6ce8\u6b65\u9aa4\u95f4\u7684\u4f9d\u8d56\u5173\u7cfb\n- \u4f30\u7b97\u6bcf\u6b65\u7684\u5de5\u4f5c\u91cf\n`;
+      } else if (doc[0] === 'SCHEMA.md') {
+        doc[1] = `# \u6570\u636e\u6a21\u578b\n\n> ${iter} | ${ctx.task} | ${now}\n\n## \u5199\u4f5c\u8981\u6c42\n\u68b3\u7406\u672c\u4efb\u52a1\u6d89\u53ca\u7684\u6570\u636e\u6a21\u578b\u53d8\u66f4\uff1a\n- \u5b8c\u6574\u7684\u5b57\u6bb5\u5b9a\u4e49\uff08\u540d\u79f0/\u7c7b\u578b/\u7ea6\u675f/\u8bf4\u660e\uff09\n- \u7d22\u5f15\u8bbe\u8ba1\n- DDL \u8bed\u53e5\uff08\u5982\u9002\u7528\uff09\n- \u5b57\u6bb5\u2192API \u54cd\u5e94\u5b57\u6bb5\u7684\u6620\u5c04\u5173\u7cfb\n`;
+      }
+    }
+  }
+
   // Phase 1: TECH.md 模板侧重整体架构
   if (ctx.phase === '1') {
     const techDoc = taskDocs.find(([n]) => n === 'TECH.md');
@@ -1028,13 +1064,44 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     prompt += `- 当前是**任务级分析**，类型为 \`${taskType}\`，只需产出 ${taskDocs.length} 个文档：${taskDocs.map(([n]) => n).join('、')}\n`;
     prompt += `- bugfix: 聚焦根因分析和修复验证；research: 聚焦技术调研；review: 聚焦代码审查\n`;
     prompt += `- feature/refactor: 全量分析（功能、接口、数据、规则）\n`;
-    prompt += `- **双层解耦**：先读 \`020-specs/\` 了解迭代级基线，再读 \`_shared/REQ.md\` 了解本任务已有的需求切片\n`;
-    if (ctx.platform) {
-      prompt += `- **只分析 ${ctx.platform} 端**：只关注 ${ctx.platform} 端的需求/技术/测试，分析结果写入 \`${ctx.platform}/\` 目录\n`;
-      prompt += `- **不要修改**其他端的内容，只写入 \`${ctx.platform}/\` 目录\n`;
-    } else {
-      prompt += `- 分析结果写入 \`_shared/\`（任务独立），**不覆盖** \`020-specs/\`（迭代基线）\n`;
-    }
+    prompt += `- **双层解耦**：分析结果写入 Task/00-specs/，不覆盖 020-specs/（迭代基线）\n`;
+    // ── 任务级深度分析指令（v6.44.0+）──
+    prompt += `\n## 🧠 任务级深度分析\n\n`;
+    prompt += `当前是对 **单个 Task** 的深度分析。split 已在 00-specs/ 中生成了基础内容（机械提取），你需要 Read 这些内容 + 全局上下文，重新生成**任务级深度分析**。\n\n`;
+    prompt += `### Step 1: 读取已有任务文档（split 产出）\n`;
+    prompt += `- Read ${ctx.task}/00-specs/REQ.md → 本任务的需求切片\n`;
+    prompt += `- Read ${ctx.task}/00-specs/TECH.md → 本任务的技术方案框架\n`;
+    prompt += `- Read ${ctx.task}/00-specs/TASK.md（如存在）→ 已有的实施计划\n`;
+    prompt += `- Read ${ctx.task}/00-specs/SCHEMA.md（如存在）→ 已有的数据模型\n`;
+    prompt += `- Read ${ctx.task}/_shared/API_CONTRACT.yaml（如存在）→ 共享 API 契约\n\n`;
+    prompt += `### Step 2: 读取全局上下文（作为参考）\n`;
+    prompt += `- Read .speccore/CONSTITUTION.md → 项目配置\n`;
+    prompt += `- Read 020-specs/PLATFORMS.md → 端列表\n`;
+    prompt += `- Read 020-specs/global/REQUIREMENT.md → 全局需求规格\n`;
+    prompt += `- Read 020-specs/global/TECH.md → 整体技术架构\n`;
+    prompt += `- Read 020-specs/global/ANALYSIS.md → 全局分析报告\n`;
+    prompt += `- Read 020-specs/{本任务端名}/TECH.md → 该端专属技术方案\n\n`;
+    prompt += `### Step 3: 撰写任务级深度分析文档\n\n`;
+    prompt += `**REQ.md** — 本任务的需求规格（不是 global/REQUIREMENT.md 的复制）：\n`;
+    prompt += `- 明确本任务的验收标准（可测试的、具体的）\n`;
+    prompt += `- 细化业务规则和边界条件\n`;
+    prompt += `- 列出本任务涉及的异常场景\n\n`;
+    prompt += `**TECH.md** — 本任务的实现方案（基于全局架构，细化到函数/接口级）：\n`;
+    prompt += `- 具体的接口定义（路径/参数/响应）\n`;
+    prompt += `- 数据模型设计（Entity/DTO/VO 字段映射）\n`;
+    prompt += `- 核心业务逻辑的伪代码或流程描述\n`;
+    prompt += `- 前端组件拆分和状态设计\n`;
+    prompt += `- 必须与 global/TECH.md 的整体架构保持一致\n\n`;
+    prompt += `**TASK.md** — 本任务的实施步骤：\n`;
+    prompt += `- 按开发顺序列出具体步骤\n`;
+    prompt += `- 每个步骤有明确的完成标准\n`;
+    prompt += `- 标注步骤间的依赖关系\n\n`;
+    prompt += `**SCHEMA.md** — 本任务涉及的数据模型：\n`;
+    prompt += `- 完整的字段定义（名称/类型/约束/说明）\n`;
+    prompt += `- 索引设计\n`;
+    prompt += `- DDL 语句（如适用）\n\n`;
+    prompt += `### 写入方式\n`;
+    prompt += `speccore analyze --apply '{"REQ.md":"...","TECH.md":"...","TASK.md":"...","SCHEMA.md":"..."}' -I ${iter} --task ${ctx.task || 'Task-NNN'}\n\n`;
   } else {
     prompt += `- 当前是**迭代级分析**，需产出全部 8 个文档，覆盖需求→技术→测试→评审→风险→依赖→监控→UI规格\n`;
     if (ctx.platform) {
