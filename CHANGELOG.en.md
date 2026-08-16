@@ -2,6 +2,42 @@
 
 ---
 
+## v6.60.0 (2026-08-16) — Remove Phase 1/Phase 2 Step Logic, Generate All Documents at Once
+
+### Core Fixes
+
+- **analyze.ts**: Removed Phase 1/Phase 2 step execution logic, now generates all documents for global/ and {platform}/ in one execution
+- **analyze.ts**: Deleted `GLOBAL_DOCS` and `PLATFORM_DOCS` constants, no longer filter documents by phase
+- **analyze.ts**: Deleted Phase 2 prompt code block (lines 1198-1224)
+- **analyze.ts**: Deleted two-phase analysis hint (lines 1355-1361)
+- **analyze.ts**: Simplified TECH.md template logic, no longer distinguish between Phase 1/Phase 2
+
+### Root Cause
+
+Old design was two-step execution:
+1. Phase 1: Generate global documents (global/REQUIREMENT.md, ANALYSIS.md, etc.)
+2. Phase 2: Generate platform-specific documents ({platform}/TECH.md, TEST.md, etc.)
+
+But the problem was CLI didn't automatically trigger Phase 2 after completing Phase 1. AI saw Phase 1 completion and thought the task was done, wouldn't continue to Phase 2 on its own.
+
+This caused meeting project to only generate 10 documents in global/, but didn't generate platform-specific documents.
+
+### Fix Approach
+
+Removed Phase 1/Phase 2 step logic, let AI generate all documents for global/ and {platform}/ in one execution. Now user only needs to run `speccore analyze --prompt -I iter` once, AI will:
+1. First read requirement documents and global context
+2. Generate global/REQUIREMENT.md, ANALYSIS.md, DEPS.md and other global documents
+3. Simultaneously generate {platform}/TECH.md, TEST.md, UI_SPEC.md and other platform-specific documents
+4. Write all documents at once via `--apply`
+
+### Advantages
+
+1. **Simpler**: No need to modify CLI logic to auto-trigger Phase 2
+2. **More efficient**: AI can see global context and platform requirements at once, generating more consistent documents
+3. **Better UX**: User only needs to execute one command, no multiple interactions needed
+
+---
+
 ## v6.59.0 (2026-08-16) — Analyze Prompt Strongest Warning: No Self-Created Directories
 
 ### Core Fixes
