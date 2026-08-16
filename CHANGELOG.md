@@ -1,3 +1,13 @@
+## v6.49.16 (2026-08-16) — analyze prompt 文件分配规则明确 + 禁止 AI 自创目录
+
+### 改动
+
+- **analyze prompt: 文件分配规则明确**：明确列出 global/ 只放 REQUIREMENT.md/ANALYSIS.md/DEPS.md，其余 6 个文件（TECH/TEST/UI_SPEC/RISK/REVIEW/MONITOR）放 {端名}/ 目录
+- **analyze prompt: 禁止自创目录**：新增指令禁止 AI 在 020-specs/ 下创建额外子目录（如数字编号、中文名称等）
+- **文档与端对应关系更新**：移除过时的 global/TECH.md 引用，改为各端专属
+
+---
+
 ## v6.49.15 (2026-08-16) — 文档更新 + prompt 编号修复
 
 ### 改动
