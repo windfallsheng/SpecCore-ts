@@ -1,3 +1,13 @@
+## v6.49.3 (2026-08-16) — 子任务目录命名规则 + task/new 同步
+
+### 修复
+
+- **子任务目录命名规则**：`{taskId}-{subtaskSlug}`（如 `Task-001-booking-order-mgmt/`），确保多任务同平台不冲突
+- **task/new 同步**：`task new` 命令也使用新平铺结构（`{端名}/{taskId}-impl/`），不再用 `10-backend/`、`20-frontend/` 前缀
+- **fallback 同步**：自动补充的后端子任务也使用 `{taskId}-impl` 命名
+
+---
+
 ## v6.49.2 (2026-08-16) — 子任务功能单元标识
 
 ### 新功能
