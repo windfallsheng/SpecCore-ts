@@ -2,6 +2,43 @@
 
 ---
 
+## v6.62.0 (2026-08-16) — Phase 2 Mandatory Trigger Guarantee Mechanism
+
+### Core Fixes
+
+- **analyze.ts**: Changed Phase 2 trigger condition from `platforms.length > 1` to `platforms.length > 0`
+- **analyze.ts**: Added warning log: if no platform list detected, output clear warning and suggestion
+- **analyze.ts**: Comment explanation: even with only 1 platform, need to generate that platform's exclusive documents (TECH.md, TEST.md, etc.)
+
+### Root Cause
+
+v6.61.0's trigger condition was `if (platforms.length > 1)`, causing:
+1. **Single-platform projects don't trigger Phase 2**: But single-platform projects still need to generate that platform's exclusive documents
+2. **Silent failure when no platform list**: If CONSTITUTION.md doesn't configure platform list, CLI outputs no提示, user doesn't know they need to manually execute Phase 2
+
+### Fix Approach
+
+**Mandatory guarantee mechanism**:
+```typescript
+// Old: Only trigger for multi-platform
+if (platforms.length > 1) { ... }
+
+// New: Trigger as long as there are platforms (regardless of count)
+if (platforms.length > 0) {
+  // Auto-trigger Phase 2
+} else {
+  // Output warning, guide user to check CONSTITUTION.md
+  logger.warn('⚠️ No platform list detected, please check .speccore/CONSTITUTION.md');
+}
+```
+
+**Guarantee effect**:
+- ✅ Multi-platform projects: Auto-trigger Phase 2
+- ✅ Single-platform projects: Also trigger Phase 2 (generate that platform's exclusive documents)
+- ✅ No platform list: Output clear warning, guide user to fix
+
+---
+
 ## v6.61.0 (2026-08-16) — CLI Auto Loop Phase 1 → Phase 2
 
 ### Core Fixes

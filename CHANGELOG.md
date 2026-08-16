@@ -1,3 +1,40 @@
+## v6.62.0 (2026-08-16) — Phase 2 强制触发保证机制
+
+### 核心修复
+
+- **analyze.ts**: 修改 Phase 2 触发条件：从 `platforms.length > 1` 改为 `platforms.length > 0`
+- **analyze.ts**: 新增警告日志：如果未检测到端列表，输出明确警告和建议
+- **analyze.ts**: 注释说明：即使只有 1 个端，也需要生成该端的专属文档（TECH.md、TEST.md 等）
+
+### 问题根因
+
+v6.61.0 的触发条件是 `if (platforms.length > 1)`，导致：
+1. **单端项目不会触发 Phase 2**：但单端项目仍然需要生成该端的专属文档
+2. **无端列表时静默失败**：如果 CONSTITUTION.md 没有配置端列表，CLI 不会输出任何提示，用户不知道需要手动执行 Phase 2
+
+### 修复方案
+
+**强制保证机制**:
+```typescript
+// 旧版：只有多端才触发
+if (platforms.length > 1) { ... }
+
+// 新版：只要有端就触发（无论数量）
+if (platforms.length > 0) {
+  // 自动触发 Phase 2
+} else {
+  // 输出警告，指导用户检查 CONSTITUTION.md
+  logger.warn('⚠️ 未检测到端列表，请检查 .speccore/CONSTITUTION.md');
+}
+```
+
+**保证效果**:
+- ✅ 多端项目：自动触发 Phase 2
+- ✅ 单端项目：也会触发 Phase 2（生成该端的专属文档）
+- ✅ 无端列表：输出明确警告，指导用户修复
+
+---
+
 ## v6.61.0 (2026-08-16) — CLI 自动循环执行 Phase 1 → Phase 2
 
 ### 核心修复
