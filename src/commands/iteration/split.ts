@@ -432,6 +432,13 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       }
       logger.info('   💡 如不再需要可手动删除');
     }
+
+    // 自动刷新知识图谱（v6.49.10+）
+    try {
+      const { refreshKnowledgeGraph } = await import('../../core/knowledge-graph');
+      await refreshKnowledgeGraph(process.cwd(), iter);
+      logger.info('🧠 知识图谱已刷新');
+    } catch {}
     return;
   }
 
@@ -673,6 +680,12 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
         await createTaskFromSection(iterationDir, taskId, section, platforms, (section as any)._taskType, approved);
       }
       spinner.stop(`✅ 创建了 ${approved.length} 个任务`);
+      // 自动刷新知识图谱（v6.49.10+）
+      try {
+        const { refreshKnowledgeGraph } = await import('../../core/knowledge-graph');
+        await refreshKnowledgeGraph(process.cwd(), iteration);
+        logger.info('🧠 知识图谱已刷新');
+      } catch {}
       return;
     }
 
@@ -747,6 +760,12 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
         if (created > 0) {
           await generateImpactGraph(iterationDir, sections.slice(0, created), platforms);
           await updateProjectGraph(iterationDir, sections.slice(0, created));
+          // 自动刷新知识图谱（v6.49.10+）
+          try {
+            const { refreshKnowledgeGraph } = await import('../../core/knowledge-graph');
+            await refreshKnowledgeGraph(process.cwd(), iteration);
+            logger.info('🧠 知识图谱已刷新');
+          } catch {}
         }
         return;
       }
@@ -761,6 +780,12 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       await updateProjectGraph(iterationDir, sections);
       spinner.stop(`✅ 创建了 ${sections.length} 个任务`);
       showNextSteps('split');
+      // 自动刷新知识图谱（v6.49.10+）
+      try {
+        const { refreshKnowledgeGraph } = await import('../../core/knowledge-graph');
+        await refreshKnowledgeGraph(process.cwd(), iteration);
+        logger.info('🧠 知识图谱已刷新');
+      } catch {}
       return;
     }
 
@@ -786,6 +811,13 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     spinner.stop(`Created ${sections.length} tasks from requirements`);
     
     showNextSteps('split');
+
+    // 自动刷新知识图谱（v6.49.10+）
+    try {
+      const { refreshKnowledgeGraph } = await import('../../core/knowledge-graph');
+      await refreshKnowledgeGraph(process.cwd(), iteration);
+      logger.info('🧠 知识图谱已刷新');
+    } catch {}
   } catch (error) {
     spinner.fail(`Split failed: ${error}`);
     throw error;

@@ -427,6 +427,15 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     }
 
     printBackupSummary();
+
+    // 自动刷新知识图谱（v6.49.10+）
+    if (options.iteration) {
+      try {
+        const { refreshKnowledgeGraph } = await import('../core/knowledge-graph');
+        await refreshKnowledgeGraph(process.cwd(), options.iteration);
+        logger.info('🧠 知识图谱已刷新');
+      } catch {}
+    }
     return;
   }
 

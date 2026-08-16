@@ -2,6 +2,17 @@
 
 ---
 
+## v6.49.10 (2026-08-16) — Knowledge Graph Auto-Refresh Completion
+
+### Fixes
+
+- **analyze.ts**: Main analysis flow (`--apply` mode) now auto-refreshes knowledge graph after completion
+- **split.ts**: All split modes (`--response`/`--strict`/`--interactive`/default) now auto-refresh knowledge graph after completion
+
+### Notes
+
+Previously only `--feature` and `--doc` local modes refreshed the knowledge graph; main flows were missing this. Now the full analyze → split pipeline automatically updates the knowledge graph.
+
 ## v6.49.9 (2026-08-16) — Full Migration to Flat Platform Architecture: Clean Up 10-backend/20-frontend References
 
 ### Core Changes
