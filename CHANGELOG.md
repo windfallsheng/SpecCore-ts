@@ -1,3 +1,30 @@
+## v6.49.14 (2026-08-16) — split 从 global/REQUIREMENT.md 读取涉及端，按模块精确创建端目录
+
+### 改动
+
+- **analyze prompt: 功能模块涉及端必填**：新增第 6 步指令，要求 AI 在 `global/REQUIREMENT.md` 的功能模块清单表中必须填写「涉及端」列
+- **split: 从 global/REQUIREMENT.md 解析涉及端**：新增 `parseModulePlatforms()` 函数，解析功能模块清单表的「涉及端」列，每个模块只创建涉及的端目录
+- **split: 回退机制**：如果 REQUIREMENT.md 无功能模块表，回退到 `features/*/README.md`（使用全端）
+- **split: 内容填充 Prompt 按模块显示涉及端**：每个任务显示其各自的涉及端，不再显示全局端列表
+
+### 涉及端定义
+
+- **涉及 = 该端在本模块中有新开发工作**（新接口/新页面/新逻辑）
+- **不涉及 = 只是提到、调用已有接口、纯展示**
+- 端名必须与 CONSTITUTION.md「端列表」中的标准端名完全匹配
+
+### 数据流
+
+```
+analyze AI → global/REQUIREMENT.md 功能模块清单（含涉及端列）
+    ↓
+split CLI → 读取涉及端列 → 只创建涉及的端目录
+    ↓
+AI 填充 → 每个端子任务的 REQ.md + TECH.md
+```
+
+---
+
 ## v6.49.13 (2026-08-16) — CLI 控制目录结构：analyze 预创建 + split 模块驱动拆分
 
 ### 新增
