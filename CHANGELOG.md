@@ -1,3 +1,15 @@
+## v6.48.0 (2026-08-16) — 后端端名识别 + 双层目录强制 + 端名一致性
+
+### 核心修复
+
+- **`isBackendPlatform()` 增强识别**：支持 `-service`/`-api`/`-server`/`-backend` 后缀，修复 `booking-service` 等端名被误判为前端的问题
+- **split fallback 端名一致**：自动补充后端子任务时使用 CONSTITUTION.md 端列表中的实际后端端名，不再硬编码 `api/impl`
+- **`GLOBAL_SPEC_FILES` 精简**：TECH/RISK/REVIEW/MONITOR 不再强制写入 `global/`，支持按端分目录（如 `020-specs/booking-service/TECH.md`）
+- **analyze prompt 强制双层目录**：明确指导 AI 必须创建 `020-specs/{端名}/` 子目录，每个端单独调用 `--apply --platform`
+- **code-scanner 端名一致**：`detectEndpoint()` 优先匹配 CONSTITUTION.md 端列表，回退通用模式（frontend/backend/mobile）
+
+---
+
 ## v6.47.0 (2026-08-16) — 验证修复 + 文档补充
 
 ### Bug 修复
