@@ -157,8 +157,6 @@ async function createSingleTask(options: TaskNewOptions): Promise<void> {
       if (!options.frontendOnly) {
         const backendSubtaskDir = join(taskDir, 'api', `Task-${taskId}-impl`);
         await ensureDir(join(backendSubtaskDir, '.meta'));
-        await ensureDir(join(backendSubtaskDir, 'src'));
-        await ensureDir(join(backendSubtaskDir, 'tests'));
         // 子任务元信息
         await writeFile(join(backendSubtaskDir, '.meta', 'type'), options.type || 'feature');
         await writeFile(join(backendSubtaskDir, '.meta', 'status'), status);
@@ -168,8 +166,6 @@ async function createSingleTask(options: TaskNewOptions): Promise<void> {
       if (!options.backendOnly) {
         const frontendSubtaskDir = join(taskDir, 'web', `Task-${taskId}-impl`);
         await ensureDir(join(frontendSubtaskDir, '.meta'));
-        await ensureDir(join(frontendSubtaskDir, 'src'));
-        await ensureDir(join(frontendSubtaskDir, 'tests'));
         await writeFile(join(frontendSubtaskDir, '.meta', 'type'), options.type || 'feature');
         await writeFile(join(frontendSubtaskDir, '.meta', 'status'), status);
         await writeFile(join(frontendSubtaskDir, '.meta', 'owner'), '未分配');

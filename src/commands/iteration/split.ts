@@ -1267,10 +1267,6 @@ ${section.content}
 `
       );
 
-      // src/ + tests/
-      await ensureDir(join(subtaskDir, 'src'));
-      await ensureDir(join(subtaskDir, 'tests'));
-
       // TASK.md
       await writeFile(
         join(subtaskDir, 'TASK.md'),
@@ -1293,10 +1289,11 @@ ${section.content}
 | 产出物 | 状态 | 路径 |
 | :--- | :--- | :--- |
 | TASK.md | ✅ | ./TASK.md |
-| src/ | ⏳ | ./src/ |
-| tests/ | ⏳ | ./tests/ |
 | TEST.md | ⏳ | ./TEST.md |
 | RISK.md | ⏳ | ./RISK.md |
+| 代码 | ⏳ | CONSTITUTION.md 中定义的工程路径 |
+
+> 💡 代码输出位置：execute 命令会读取 CONSTITUTION.md 中的「源码路径」列，将代码写入实际工程目录。
 
 ## 变更履历
 | 时间 | 变更内容 | 变更人 |
@@ -1359,8 +1356,6 @@ ${section.content}
     ) || 'backend';
     const autoSubtaskDir = join(taskDir, fallbackBackend, `${taskId}-impl`);
     await ensureDir(join(autoSubtaskDir, '.meta'));
-    await ensureDir(join(autoSubtaskDir, 'src'));
-    await ensureDir(join(autoSubtaskDir, 'tests'));
     await writeFile(join(autoSubtaskDir, '.meta', 'type'), taskType);
     await writeFile(join(autoSubtaskDir, '.meta', 'status'), 'todo');
     await writeFile(join(autoSubtaskDir, '.meta', 'owner'), owner);
