@@ -1201,8 +1201,10 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     prompt += `### Step 2: 为每个端撰写专属文档\n`;
     prompt += `根据全局上下文，为 PLATFORMS.md 中的**每个端**分别撰写：\n`;
     prompt += `- **{端}/TECH.md**：该端专属技术方案（必须对齐 global/TECH.md 架构）\n`;
-    prompt += `  - ⚠️ **必须包含「业务-代码映射」章节**：在 TECH.md 末尾添加表格，列出本端涉及的业务模块及其对应的代码实体（文件/表/API/组件等），关系类型由你根据技术栈自主决定\n`;
+    prompt += `  - ⚠️ **必须包含「业务-代码映射」章节**：在 TECH.md 末尾添加表格，列出本端涉及的业务模块及其对应的代码实体（文件/表/API/组件等），关系类型由你根据技术栈自主决定（如 api_controller、uses_table、page、component、route、middleware、interceptor、gateway 等）\n`;
     prompt += `  - 表格格式：| 业务模块 | 代码实体 | 关系类型 | 说明 |\n`;
+    prompt += `  - 示例：| 会议室档案 | backend/RoomController.java | api_controller | REST 控制器 |\n`;
+    prompt += `  - 示例：| 会议室档案 | admin-web/src/pages/RoomList.vue | page | 列表页 |\n`;
     prompt += `- **{端}/TEST.md**：该端专属测试计划\n`;
     prompt += `- **{端}/UI_SPEC.md**：该端专属 UI 规格（仅前端端需要）\n\n`;
     prompt += `### Step 3: 一致性检查\n`;

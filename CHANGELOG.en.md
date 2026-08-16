@@ -2,6 +2,16 @@
 
 ---
 
+## v6.50.3 (2026-08-16) — Regex Fix + Prompt Format Consistency
+
+### Fixes
+
+- **knowledge-graph.ts**: Removed `m` flag from regex, fixing `$` matching end-of-line instead of end-of-string in multiline mode, which caused "业务-代码映射" section to only match the heading line
+- **analyze.ts**: Default mode prompt indentation unified from 4 spaces to 2 spaces, consistent with Phase 2
+- **analyze.ts**: Phase 2 prompt now includes relation type examples (api_controller/page/component etc.) and table examples
+
+---
+
 ## v6.50.2 (2026-08-16) — CONTEXT.md Business-Code Mapping Platform Isolation
 
 ### Fixes
