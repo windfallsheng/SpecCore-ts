@@ -1,3 +1,26 @@
+## v6.56.0 (2026-08-16) — 全平台 command 动态路由修复
+
+### 核心修复
+
+- **init.ts**: `ALL_COMMANDS` 中 `spec-analyze` 的 cmd 从静态指令文本改为动态路由格式
+- **init.ts**: 其他平台（Claude、CodeBuddy、Windsurf、Trae）的 command 生成逻辑也支持动态路由格式（spec-analyze/spec-dev/spec-execute/spec-split）
+
+### 影响范围
+
+之前只修复了 Qoder 平台，现在所有平台都使用动态路由格式：
+- `.claude/commands/spec-analyze.md`
+- `.codebuddy/commands/spec-analyze.md`
+- `.windsurf/commands/spec-analyze.md`
+- `.trae/commands/spec-analyze.md`
+- `.trae-cn/commands/spec-analyze.md`
+- `.qoder/commands/spec-analyze.md`
+
+### 解决的问题
+
+旧版静态模板导致 AI 绕过 CLI 路径路由，直接 Write 文件到 `020-specs/` 根目录。新版动态路由格式确保 AI 走 `--apply` 路径，CLI 自动路由到 `global/` 或 `{端}/` 子目录。
+
+---
+
 ## v6.55.0 (2026-08-16) — Qoder command 动态路由修复
 
 ### 核心修复

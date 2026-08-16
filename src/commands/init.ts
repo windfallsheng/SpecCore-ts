@@ -843,7 +843,7 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
     ['spec-dashboard', '显示全局仪表盘（HTML页面）', 'speccore dashboard --scope global'],
     ['spec-init', '初始化项目 或 升级命令文件: --update', 'speccore init'],
     ['spec-doc2spec', '导入需求文档: 文件=${1:PRD.docx} 迭代=${2:Q1}', 'speccore doc2spec -f ${1:PRD.docx} --iter ${2:Q1}'],
-    ['spec-analyze', 'SpecCore Analysis', '## ⛔ 铁律: 分析必须落盘 020-specs/，走 prompt→Read→apply 流程\n1. Read 010-requirements/INDEX.md → converted/*.md → features/*/README.md\n2. Execute: speccore analyze --prompt -I ${1:Q1} --type feature\n3. Fill docs via speccore analyze --apply'],
+    ['spec-analyze', 'SpecCore Analysis', '直接执行: execute_command("speccore ask \'用户原话\'")\n\n不要输出命令文本，不要分析意图，一切交给 speccore ask。'],
     ['spec-split', 'SpecCore Task Split', '## ⛔ 铁律: 分析完成后必须拆分，禁止跳过\n1. Read 020-specs/ for analysis docs\n2. Dry-run split and show preview\n3. Execute: speccore iteration split -i ${1:Q1} --owner ${2|张三,李四,王五|}'],
     ['spec-execute', 'SpecCore Execute', '## ⛔ 铁律: 有任务就执行，禁止说"已完成"跳过\n1. Read Task REQ.md + TECH.md\n2. Show plan then execute: speccore execute -i ${1:Q1} -t ${2:Task-001} --force'],
     ['spec-plan', '生成并展示执行计划可视化页面', '1. 仅生成并展示计划页面，不执行代码修复\n2. speccore plan -I ${1:Q1} --owner ${2|张三,李四,王五|} --html\n3. 打开 speccore-plan.html'],
@@ -878,7 +878,11 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
     } catch {}
     await ensureDir(toolDir);
     for (const [name, desc, cmd] of commands) {
-      const content = '---\nname: ' + name + '\ndescription: ' + desc + '\n---\n' + cmd;
+      // v6.55.0+: spec-analyze/spec-dev/spec-execute/spec-split 使用动态路由格式，其他命令保持静态
+      const isDynamicRouting = ['spec-analyze', 'spec-dev', 'spec-execute', 'spec-split'].includes(name);
+      const content = isDynamicRouting
+        ? '---\nname: ' + name + '\ndescription: ' + desc + '\n---\n\n' + cmd
+        : '---\nname: ' + name + '\ndescription: ' + desc + '\n---\n' + cmd;
       await writeFile(join(toolDir, name + '.md'), content);
     }
     // 清理该工具目录下的废弃命令文件
