@@ -1255,9 +1255,9 @@ export async function buildPrompt(
   if (command === 'execute') {
     const projectInfoMap = await parseProjectInfo();
     if (projectInfoMap.size > 0) {
-      const lines = ['## 📂 工程路径（代码输出位置）', '', '| 工程标识 | 源码路径 | 对应端 |', '| :--- | :--- | :--- |'];
+      const lines = ['## 📂 工程路径（代码输出位置）', '', '| 工程标识 | 工程类型 | 源码路径 | 对应端 |', '| :--- | :--- | :--- | :--- |'];
       for (const [identifier, info] of projectInfoMap) {
-        lines.push(`| ${identifier} | \`${info.srcPath}\` | ${info.platform} |`);
+        lines.push(`| ${identifier} | ${info.projectType || '-'} | \`${info.srcPath}\` | ${info.platform} |`);
       }
       lines.push('');
       lines.push('**重要**：输出文件时，路径必须以工程标识开头。');
