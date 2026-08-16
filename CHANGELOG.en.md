@@ -2,7 +2,50 @@
 
 ---
 
-## v6.65.0 (2026-08-16) — Phase 2 Trigger Mechanism Correction: Remove Auto-Output Prompt
+## v6.66.0 (2026-08-16) — AI Actively Asks User to Continue Phase 2 After Phase 1 Completion
+
+### Core Fixes
+
+- **analyze.ts**: Added explicit instruction at end of Phase 1 prompt, requiring AI to actively ask user whether to continue to Phase 2 after writing global documents via --apply
+- **analyze.ts**: Added提示文本: "✅ Phase 1 completed... detected X platforms in project, need to continue Phase 2 to generate platform-specific documents?"
+- **analyze.ts**: Explicitly told AI "Do not wait for CLI提示信息, you may not see CLI output. You need to actively ask user."
+
+### Root Cause
+
+v6.65.0 removed auto-output Phase 2 prompt logic, changed to output提示信息 after apply mode completion. But actual effect was:
+1. CLI did output提示信息: "⚠️ Please manually execute the following command to generate platform-specific documents"
+2. But AI, after writing back files via --apply, considered task completed and **would not read CLI output information**
+3. Resulted in AI directly waiting for user's next instruction, instead of continuing to Phase 2
+
+**Root cause**: AI workflow limitation — AI won't continue reading CLI output after completing one command call, considers task finished.
+
+### Fix Approach
+
+**No longer rely on CLI提示信息**, instead **explicitly require AI to actively ask user in prompt**:
+1. When AI writes all global documents via --apply
+2. CLI detects project has multiple platforms (≥2)
+3. **AI needs to actively ask user**: "✅ Phase 1 completed... need to continue Phase 2?"
+4. If user confirms, AI executes `speccore analyze --prompt -I <iteration> --phase 2`
+
+### Workflow
+
+```bash
+# Step 1: User executes Phase 1
+speccore analyze --prompt -I meeting-upgrade
+# AI generates global documents, writes back via --apply
+# AI actively asks: "✅ Phase 1 completed, detected 4 platforms in project, need to continue Phase 2?"
+
+# Step 2: After user confirms, AI automatically executes Phase 2
+User inputs: "continue"
+AI executes: speccore analyze --prompt -I meeting-upgrade --phase 2
+# AI generates platform-specific documents based on global context
+```
+
+### Version History
+- v6.61.0: Implemented CLI auto-loop mechanism (output Phase 2 prompt inside apply mode) → Failed
+- v6.62.0-v6.64.0: Corrected Phase 2 trigger condition → Still failed
+- v6.65.0: Removed auto-output prompt, changed to CLI output提示信息 → Still failed (AI doesn't read)
+- **v6.66.0: Require AI to actively ask user in prompt** ← Current version
 
 ### Core Fixes
 

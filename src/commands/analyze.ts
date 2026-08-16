@@ -1423,6 +1423,19 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
   // v6.60.0+: 移除两阶段分析提示，一次性生成所有文档
   prompt += '\n' + buildAutoModeInstruction('analyze', iter) + '\n';
 
+  // ── v6.65.0+: Phase 1 完成后主动询问用户是否继续 Phase 2 ──
+  if (!ctx.phase && !isTask) {
+    prompt += `\n## ⚠️ 重要：Phase 1 完成后的下一步\n\n`;
+    prompt += `当你通过 --apply 写入所有全局文档后，CLI 会检测到项目有多个端（≥2 个端）。\n`;
+    prompt += `**此时你需要主动询问用户**：\n\n`;
+    prompt += `"✅ Phase 1 已完成，生成了 global/ 的全局文档。\n`;
+    prompt += `检测到项目有 ${'{'}端列表{'}'} 个端，需要继续执行 Phase 2 生成各端专属文档吗？\n`;
+    prompt += `请确认：输入 '继续' 或 'yes' 以执行 Phase 2"\n\n`;
+    prompt += `**如果用户确认继续**，你需要执行：\n`;
+    prompt += `\`speccore analyze --prompt -I ${iter} --phase 2\`\n\n`;
+    prompt += `**不要等待 CLI 的提示信息**，CLI 的输出你可能看不到。你需要主动询问用户。\n\n`;
+  }
+
   // ── v6.52.0+: 图谱 RAG 上下文注入（analyze 阶段也检索项目关联内容）──
   if (!isTask && ctx.phase !== '2') {
     try {
