@@ -106,10 +106,15 @@ export function buildContextMarkdown(
     lines.push('');
   }
 
-  // ── 2.5 业务-代码映射 ──
-  const bizModules = Object.values(graph.entities).filter(e => e.type === 'business_module');
+  // ── 2.5 业务-代码映射（按端过滤） ──
+  const allBizModules = Object.values(graph.entities).filter(e => e.type === 'business_module');
+  // 如果指定了当前端，只展示该端的业务模块；否则展示全部
+  const bizModules = options?.currentPlatform
+    ? allBizModules.filter(m => m.platform === options.currentPlatform)
+    : allBizModules;
   if (bizModules.length > 0) {
     lines.push('## 业务-代码映射');
+    if (options?.currentPlatform) lines.push(`> 当前端: ${options.currentPlatform}`);
     lines.push('');
     lines.push('| 业务模块 | 端 | 关联代码实体 |');
     lines.push('| :--- | :--- | :--- |');
