@@ -446,14 +446,19 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       } catch {}
     }
 
-    // ── v6.62.0+: Phase 1 完成后强制触发 Phase 2（多端项目）──
+    // ── v6.64.0+: Phase 1 完成后自动触发 Phase 2（仅多端项目）──
     if (!options.phase && !isTaskLevel && options.iteration) {
-      // 检查是否有端列表
+      // 检查是否有多个端
       const platforms = await parsePlatformList();
       
-      // 强制保证：只要有端列表（无论数量），就必须执行 Phase 2
-      // 原因：即使只有 1 个端，也需要生成该端的专属文档（TECH.md、TEST.md 等）
-      if (platforms.length > 0) {
+      // 只有多端项目(≥2 个端)才需要分两阶段:
+      // - Phase 1: 生成全局文档(global/REQUIREMENT.md、ANALYSIS.md、DEPS.md)
+      // - Phase 2: 生成各端专属文档({端}/TECH.md、TEST.md、UI_SPEC.md)
+      // 
+      // 单端项目(=1 个端)不需要分阶段:
+      // - Phase 1 生成的 global/TECH.md 本身就是该端的专属文档
+      // - 不需要再生成 {端}/TECH.md(会重复)
+      if (platforms.length >= 2) {
         logger.info('');
         logger.info(`🔄 Phase 1 已完成，检测到 ${platforms.length} 个端 (${platforms.join(', ')})`);
         logger.info('🚀 自动进入 Phase 2：生成各端专属文档...');
@@ -472,11 +477,12 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         process.stdout.write(`[SPECCORE_PROMPT]\n${phase2Prompt}`);
         process.exitCode = 10;
         return;
-      } else {
+      } else if (platforms.length === 0) {
         // 如果没有检测到端列表，输出警告
         logger.warn('⚠️ 未检测到端列表，请检查 .speccore/CONSTITUTION.md 是否配置了「端列表」');
         logger.warn('   建议：在 CONSTITUTION.md 中添加端列表，或手动执行 speccore analyze --phase 2 -I <迭代名>');
       }
+      // platforms.length === 1: 单端项目，Phase 1 已完成，无需 Phase 2
     }
 
     return;

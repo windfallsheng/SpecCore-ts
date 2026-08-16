@@ -2,6 +2,39 @@
 
 ---
 
+## v6.64.0 (2026-08-16) — Phase 2 Trigger Condition Correction: Multi-Platform Projects Only (≥2 Platforms)
+
+### Core Fixes
+
+- **analyze.ts**: Changed Phase 2 trigger condition from `platforms.length > 0` to `platforms.length >= 2`
+- **analyze.ts**: Added comment explanation: single-platform projects don't need phased approach, global/TECH.md is already that platform's exclusive document
+- **analyze.ts**: Kept warning output when no platform list detected
+
+### Root Cause
+
+v6.62.0 changed trigger condition to `platforms.length > 0`, causing single-platform projects to also trigger Phase 2. But this was wrong:
+- **Single-platform project**: Phase 1 generated global/TECH.md is already that platform's exclusive document, no need to generate {platform}/TECH.md again (would duplicate)
+- **Multi-platform project**: Need two phases, Phase 1 generates global documents, Phase 2 generates platform-specific documents
+
+### Fix Approach
+
+**Correct logic**:
+```typescript
+if (platforms.length >= 2) {
+  // Multi-platform project: auto-trigger Phase 2
+} else if (platforms.length === 0) {
+  // No platform list: output warning
+} 
+// platforms.length === 1: Single-platform project, Phase 1 complete, no need for Phase 2
+```
+
+**Guarantee effect**:
+- ✅ Multi-platform projects (≥2 platforms): Auto-trigger Phase 2
+- ✅ Single-platform project (=1 platform): Don't trigger Phase 2 (avoid duplication)
+- ✅ No platform list (=0 platforms): Output warning, guide user to fix
+
+---
+
 ## v6.63.0 (2026-08-16) — spec-ask Command Onboarding Mandatory Display Rule
 
 ### Core Fixes
