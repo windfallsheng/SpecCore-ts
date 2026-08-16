@@ -331,7 +331,8 @@ export async function unifiedSearch(
   let graphContext: string | undefined;
   try {
     const graph = await loadKnowledgeGraph(cwd);
-    if (graph && taskId) {
+    if (graph) {
+      // taskId 存在时返回任务关联链；无 taskId 时返回业务模块摘要
       graphContext = buildCompactContext(graph, { taskId, platform });
     }
   } catch (e) {

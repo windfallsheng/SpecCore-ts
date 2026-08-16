@@ -2,6 +2,24 @@
 
 ---
 
+## v6.54.0 (2026-08-16) — Analyze Phase Knowledge Graph Injection Fix
+
+### Core Fixes
+
+- **unified-retrieval.ts**: Fixed `if (graph && taskId)` condition, removed taskId restriction so analyze phase can also load knowledge graph context
+- **context-builder.ts**: `buildCompactContext()` added no-taskId branch that returns business module summary (business-code mapping graph), resolving the issue where analyze phase couldn't see "business module → code entity" associations
+
+### Effect
+
+Analyze phase now injects three layers of related content:
+1. **Document RAG** — Relevant chunks from historical analysis documents
+2. **Code slices** — Related functions/classes/interfaces from source code
+3. **Knowledge graph** — Business modules and their associated code entities (up to 10 modules, up to 5 code entities per module)
+
+AI can now see existing business-code mappings in the project during requirement analysis, generating technical solutions that better align with existing architecture.
+
+---
+
 ## v6.53.0 (2026-08-16) — Analyze Phase RAG Enhancement + --apply Path Enforcement
 
 ### Core Improvements
