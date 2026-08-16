@@ -63,16 +63,52 @@ workspace/
 
 ## 2. CONSTITUTION.md 设计
 
-### 2.1 工程-需求端映射
+### 2.1 端列表（全局权威，v6.46.0+）
+
+CONSTITUTION.md 的「## 端列表」章节是全项目唯一的端名来源：
 
 ```markdown
-| 工程 | 源码路径 | Git 仓库 | 默认分支 | 对应需求端 |
-| :--- | :--- | :--- | :--- | :--- |
-| order-service | ./packages/order | git@xxx | main | app, admin |
-| web-app | ./src/frontend | git@xxx | main | app, h5 |
+## 端列表（全局权威）
+
+| 端名 | 描述 | 类型 |
+| :--- | :--- | :--- |
+| backend | 后台服务 | backend |
+| h5 | 移动 H5 端 | frontend |
+| admin | 后台管理端 | frontend |
 ```
 
-"对应需求端"列决定：analyze 写哪、split 拆几个端、execute 拉什么分支。
+**核心原则：端名 = 工程名，一一对应。**
+
+- 端名是全项目唯一的标识符
+- 所有命令（analyze/split/execute）、目录名（020-specs/{端}/）、模板目录（templates/{level}/{端}/）均使用此处声明的端名
+- 「项目信息」表格的「对应端」列引用此列表中的端名，每行只填一个
+
+**端发现优先级（统一）**：
+```
+Layer 0: CONSTITUTION.md「## 端列表」章节 ← v6.46.0+ 全局权威
+Layer 1: CONSTITUTION.md「对应端」列 ← 旧版回退
+Layer 2: 020-specs/ 子目录扫描 ← 目录回退
+Layer 3: 默认 ['web']
+```
+
+**跨端需求处理链路**：
+```
+需求（可能跨端）→ analyze 分析文档（综合内容 + 按端分章节）
+               → split 按端拆 Task（每个 Task 对应一个工程）
+               → execute 在各自工程目录生成代码（物理隔离）
+```
+
+### 2.1.1 项目信息表（工程→端映射）
+
+```markdown
+| 工程 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应端 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| admin-web | 后台管理端 | ./packages/admin | git@xxx/admin.git | main | admin |
+| h5-app | 移动H5端 | ./packages/h5 | git@xxx/h5.git | main | h5 |
+| backend-service | 后台服务 | ./packages/backend | git@xxx/backend.git | main | backend |
+```
+
+一一对应：每行一个工程对应一个端名（不填多个）。
 
 ### 2.2 技术栈
 
@@ -2074,4 +2110,90 @@ split → Task/_shared/CONTEXT.md（来源追溯）
 - **内容**: 来源追溯表 + 原始描述摘要 + 关联任务 + 影响范围
 - **来源路径**: 支持 `sourceFile` 字段（AI 提供）和回退规则（type + topic）
 - **注入时机**: execute 时自动加载，AI 可追溯需求源头
+
+---
+
+## 8. 任务级深度分析 + 用户自定义模板 + 链式生成（v6.44.0-v6.46.0）
+
+### 8.1 完整数据流
+
+```
+analyze (Phase 1 + 2) → 全局知识库（global/ + {端}/）
+       ↓
+split (聚合度分析) → Task 目录结构 + 底料（机械提取）
+       ↓
+analyze --task (深度分析 + 链式生成) → 00-specs/ 深度文档
+       ↓
+execute → 开发实现
+```
+
+**双层解耦**：分析结果写入 Task/00-specs/，不覆盖 020-specs/（迭代基线）。
+
+### 8.2 任务级深度分析（v6.44.0+）
+
+split 已在 00-specs/ 中生成了基础内容（机械提取），`analyze --task` AI Read 这些内容 + 全局上下文，重新生成任务级深度分析。
+
+**任务级文档集（按任务类型区分）**：
+| 任务类型 | 文档集 |
+|:---|:---|
+| feature | REQ.md, TECH.md, TASK.md, SCHEMA.md |
+| refactor | REQ.md, TECH.md, TASK.md |
+| bugfix | REQ.md, TECH.md |
+| research | REQ.md |
+
+**深度分析上下文**：
+- Read Task/00-specs/ → 本任务的需求切片（split 产出）
+- Read global/REQUIREMENT.md + global/TECH.md → 全局上下文
+- Read {端}/TECH.md → 该端专属技术方案
+
+### 8.3 用户自定义模板（v6.45.0+）
+
+**目录约定**：`.speccore/templates/{global|iteration|task}/`
+
+```
+.speccore/templates/
+├── global/              ← 全局分析模板
+├── iteration/           ← 迭代级分析模板
+│   └── {端}/            ← 端专属模板（用户自建，端名匹配 CONSTITUTION 端列表）
+└── task/                ← 任务级分析模板
+    ├── feature/         ← feature 类型
+    │   └── {端}/        ← 类型 + 端组合（最高优先级）
+    ├── _shared/         ← 所有任务类型共享
+    └── {自定义}.md      ← 自定义文档
+```
+
+**查找优先级**：type/platform/ > type/ > _shared/ > 根目录自定义 > 内置模板
+
+**核心规则**：
+- 零配置：无需 manifest，纯目录约定
+- 同名覆盖：用户模板替换内置模板作为参考
+- 新名追加：用户自定义文档追加到文档集
+- 没放用户模板 = 用内置默认
+
+### 8.4 链式生成（v6.45.0+）
+
+文档按依赖顺序逐个生成，后一个 Read 前序产出：
+
+```
+REQ.md (无依赖，直接生成)
+  ↓
+TECH.md (Read REQ.md → 基于需求做设计)
+  ↓
+SCHEMA.md (Read REQ + TECH → 提取数据模型)
+  ↓
+TASK.md (Read 前三者 → 制定实施步骤)
+```
+
+**混合模式**：有用户模板时参考其结构/风格，无用户模板时 AI 根据目标自行组织。
+
+### 8.5 统一端发现（v6.46.0+）
+
+**共享函数**：`parsePlatformList()` in `src/core/spec-paths.ts`
+
+所有端发现统一调用此函数：
+- `split.ts::detectPlatforms()` → 优先 `parsePlatformList()`
+- `analyze-engine.ts::detectPlatformsFromConstitution()` → Layer 0 调用 `parsePlatformList()`
+- `analyze.ts` prompt 文本 → 引用「## 端列表」章节
+
+**解析兼容**：同时识别「对应端」和「对应需求端」两种列名，确保旧项目无缝升级。
 
