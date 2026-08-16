@@ -910,7 +910,18 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
   for (const [name, desc, cmd] of commands) {
     // Qoder 统一使用 spec-analyze 格式（跨平台安全，Linux 不支持冒号）
     // v6.54.0+: 使用动态路由格式，调用 speccore ask 引擎
-    const content = '---\nname: ' + name + '\ndescription: ' + desc + '\n---\n\n直接执行: execute_command("speccore ask \'用户原话\'")\n\n不要输出命令文本，不要分析意图，一切交给 speccore ask。';
+    let content = '---\nname: ' + name + '\ndescription: ' + desc + '\n---\n\n直接执行: execute_command("speccore ask \'用户原话\'")\n\n不要输出命令文本，不要分析意图，一切交给 speccore ask。';
+    
+    // v6.62.0+: spec-ask 必须包含引导页强制展示规则
+    if (name === 'spec-ask') {
+      content += '\n\n## 🚨 引导页强制展示规则\n\n';
+      content += '执行 `speccore ask` 后，检查 stdout 中的 `[SPECCORE_ONBOARD: <path>]` 标记：\n';
+      content += '- **如果检测到该标记，必须立即执行** `present_files(<path>)` 展示 HTML 引导页\n';
+      content += '- ❌ **禁止**只说“检测到引导页”而不执行展示动作 — 说了不等于做了\n';
+      content += '- ❌ **禁止**用文字描述引导页内容代替实际展示 — 必须让用户看到 HTML 页面\n';
+      content += '- **展示完成后**，再继续处理其他输出\n';
+    }
+    
     await writeFile(join(qoderCommandsDir, name + '.md'), content);
   }
   // 清理 Qoder 目录：废弃文件 + 旧格式残留

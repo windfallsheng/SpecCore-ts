@@ -1,3 +1,54 @@
+## v6.63.0 (2026-08-16) — spec-ask command 引导页强制展示规则
+
+### 核心修复
+
+- **init.ts**: 在 Qoder spec-ask command 模板中添加「引导页强制展示规则」章节
+- **init.ts**: 明确指导 AI:检测到 `[SPECCORE_ONBOARD: <path>]` 必须立即执行 `present_files(<path>)`
+- **init.ts**: 添加两条禁止规则：❌ 禁止只说检测到而不执行、❌ 禁止用文字描述代替实际展示
+
+### 问题根因
+
+用户升级后首次使用 `speccore ask`，没有弹出 HTML 引导页。原因：
+1. `.qoder/commands/spec-ask.md` 只有 8 行简单指令，没有引导页规则
+2. AGENTS.md 虽有规则，但 AI 可能优先读取 command 文件
+3. init.ts 生成的 spec-ask command 模板太简单，缺少强制性指令
+
+### 修复方案
+
+在 init.ts 第 910-915 行，为 spec-ask command 添加引导页规则：
+```markdown
+## 🚨 引导页强制展示规则
+
+执行 `speccore ask` 后，检查 stdout 中的 `[SPECCORE_ONBOARD: <path>]` 标记：
+- **如果检测到该标记，必须立即执行** `present_files(<path>)` 展示 HTML 引导页
+- ❌ **禁止**只说“检测到引导页”而不执行展示动作 — 说了不等于做了
+- ❌ **禁止**用文字描述引导页内容代替实际展示 — 必须让用户看到 HTML 页面
+- **展示完成后**，再继续处理其他输出
+```
+
+### 用户操作
+
+会议项目需要重新运行：
+```bash
+speccore init --update --tools qoder
+```
+
+这会更新 `.qoder/commands/spec-ask.md`，添加引导页规则。
+
+然后删除旧标识：
+```bash
+rm .speccore/local/.ask-onboarded
+```
+
+再执行：
+```bash
+speccore ask "测试"
+```
+
+这次应该会弹出 HTML 引导页。
+
+---
+
 ## v6.62.0 (2026-08-16) — Phase 2 强制触发保证机制
 
 ### 核心修复

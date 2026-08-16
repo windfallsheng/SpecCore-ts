@@ -2,6 +2,57 @@
 
 ---
 
+## v6.63.0 (2026-08-16) — spec-ask Command Onboarding Mandatory Display Rule
+
+### Core Fixes
+
+- **init.ts**: Added "Onboarding Mandatory Display Rule" section to Qoder spec-ask command template
+- **init.ts**: Explicitly guide AI: when detecting `[SPECCORE_ONBOARD: <path>]`, must immediately execute `present_files(<path>)`
+- **init.ts**: Added two prohibition rules: ❌ Prohibit only saying "detected" without executing, ❌ Prohibit describing content instead of actual display
+
+### Root Cause
+
+User upgraded and first used `speccore ask`, but HTML onboarding page didn't pop up. Reasons:
+1. `.qoder/commands/spec-ask.md` only had 8 lines of simple instructions, no onboarding rule
+2. AGENTS.md had the rule, but AI might prioritize reading command file
+3. init.ts generated spec-ask command template was too simple, lacking mandatory instructions
+
+### Fix Approach
+
+In init.ts lines 910-915, added onboarding rule for spec-ask command:
+```markdown
+## 🚨 引导页强制展示规则
+
+执行 `speccore ask` 后，检查 stdout 中的 `[SPECCORE_ONBOARD: <path>]` 标记：
+- **如果检测到该标记，必须立即执行** `present_files(<path>)` 展示 HTML 引导页
+- ❌ **禁止**只说“检测到引导页”而不执行展示动作 — 说了不等于做了
+- ❌ **禁止**用文字描述引导页内容代替实际展示 — 必须让用户看到 HTML 页面
+- **展示完成后**，再继续处理其他输出
+```
+
+### User Action
+
+Meeting project needs to re-run:
+```bash
+speccore init --update --tools qoder
+```
+
+This will update `.qoder/commands/spec-ask.md`, adding onboarding rule.
+
+Then delete old marker:
+```bash
+rm .speccore/local/.ask-onboarded
+```
+
+Then execute:
+```bash
+speccore ask "test"
+```
+
+This time it should pop up HTML onboarding page.
+
+---
+
 ## v6.62.0 (2026-08-16) — Phase 2 Mandatory Trigger Guarantee Mechanism
 
 ### Core Fixes
