@@ -2,6 +2,16 @@
 
 ---
 
+## v6.49.3 (2026-08-16) — Subtask Directory Naming + task/new Sync
+
+### Fixes
+
+- **Subtask directory naming rule**: `{taskId}-{subtaskSlug}` (e.g., `Task-001-booking-order-mgmt/`), ensuring no conflicts when multiple tasks share the same platform
+- **task/new sync**: `task new` command now uses the new flat structure (`{platform}/{taskId}-impl/`), no longer uses `10-backend/` or `20-frontend/` prefixes
+- **fallback sync**: Auto-supplemented backend subtasks also use `{taskId}-impl` naming
+
+---
+
 ## v6.49.2 (2026-08-16) — Subtask Feature Unit Identification
 
 ### New Features

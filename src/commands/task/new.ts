@@ -151,11 +151,11 @@ async function createSingleTask(options: TaskNewOptions): Promise<void> {
     await ensureDir(join(taskDir, '00-specs'));
     await ensureDir(join(taskDir, '_shared'));  // 共享契约（API_CONTRACT.yaml 等）
 
-    // 创建子任务目录（新结构: 10-backend/{服务}/{子任务}/ + 20-frontend/{端}/{子任务}/）
+    // 创建子任务目录（新结构: {端名}/{taskId}-impl/，v6.49.2+ 平铺架构）
     const isResearch = taskType === 'research';
     if (!isResearch) {
       if (!options.frontendOnly) {
-        const backendSubtaskDir = join(taskDir, '10-backend', 'api', 'impl');
+        const backendSubtaskDir = join(taskDir, 'api', `Task-${taskId}-impl`);
         await ensureDir(join(backendSubtaskDir, '.meta'));
         await ensureDir(join(backendSubtaskDir, 'src'));
         await ensureDir(join(backendSubtaskDir, 'tests'));
@@ -166,7 +166,7 @@ async function createSingleTask(options: TaskNewOptions): Promise<void> {
         await writeFile(join(backendSubtaskDir, '.meta', 'created-at'), today);
       }
       if (!options.backendOnly) {
-        const frontendSubtaskDir = join(taskDir, '20-frontend', 'web', 'impl');
+        const frontendSubtaskDir = join(taskDir, 'web', `Task-${taskId}-impl`);
         await ensureDir(join(frontendSubtaskDir, '.meta'));
         await ensureDir(join(frontendSubtaskDir, 'src'));
         await ensureDir(join(frontendSubtaskDir, 'tests'));
@@ -191,14 +191,14 @@ async function createSingleTask(options: TaskNewOptions): Promise<void> {
     await writeFile(join(taskDir, '00-specs', 'TECH.md'), taskContent.tech);
     await writeFile(join(taskDir, '00-specs', 'CHANGELOG.md'), `# ${options.name} - 变更记录\n\n| 时间 | 版本 | 变更内容 | 变更人 |\n| :--- | :--- | :--- | :--- |\n| ${today} | v1.0 | 初始创建 | CLI |\n`);
 
-    // Write per-platform TASK.md + 执行产出文档（新结构: 子任务目录下）
+    // Write per-platform TASK.md + 执行产出文档（新结构: {端名}/{taskId}-impl/）
     if (!isResearch) {
       if (!options.frontendOnly) {
-        const backendSub = join(taskDir, '10-backend', 'api', 'impl');
+        const backendSub = join(taskDir, 'api', `Task-${taskId}-impl`);
         await writeFile(join(backendSub, 'TASK.md'), taskContent.task);
       }
       if (!options.backendOnly) {
-        const frontendSub = join(taskDir, '20-frontend', 'web', 'impl');
+        const frontendSub = join(taskDir, 'web', `Task-${taskId}-impl`);
         await writeFile(join(frontendSub, 'TASK.md'), taskContent.task);
         await writeFile(join(frontendSub, 'README.md'), `# ${options.name}\n\n前端实现目录。\n`);
       }

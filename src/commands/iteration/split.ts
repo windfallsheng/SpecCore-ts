@@ -1318,13 +1318,16 @@ ${section.content}
       }
     };
 
-    // ── 所有端平铺：{端名}/{子任务}/ （v6.49.0+ 统一架构）──
+    // ── 所有端平铺：{端名}/{子任务}/ （v6.49.2+ 统一架构）──
     // 不再区分前后端，所有端平铺在任务目录下
+    // 子任务目录命名规则：{taskId}-{subtaskSlug}（确保多任务同平台不冲突）
     for (const platform of taskPlatforms) {
       const platformDir = join(taskDir, platform);
       const subtaskId = subtaskIdMap.get(platform)!;
-      const subtaskName = slugify(section.name) || 'impl';
-      const subtaskDir = join(platformDir, subtaskName);
+      const subtaskSlug = slugify(section.name) || 'impl';
+      // 子任务目录名：{taskId}-{subtaskSlug}，确保唯一性
+      const subtaskDirName = `${taskId}-${subtaskSlug}`;
+      const subtaskDir = join(platformDir, subtaskDirName);
       const subtaskHours = (section as any)._hoursByPlatform?.[platform] || Math.ceil(complexity.estimatedHours / taskPlatforms.length);
       // 判断是否后端（用于生成不同的文档内容）
       const isBk = platform === 'backend' || platform.startsWith('后台') || /-(service|api|server|backend)$/i.test(platform);
@@ -1343,7 +1346,7 @@ ${section.content}
     const fallbackBackend = allPlatforms.find(p =>
       p === 'backend' || p.startsWith('后台') || /-(service|api|server|backend)$/i.test(p)
     ) || 'backend';
-    const autoSubtaskDir = join(taskDir, fallbackBackend, 'impl');
+    const autoSubtaskDir = join(taskDir, fallbackBackend, `${taskId}-impl`);
     await ensureDir(join(autoSubtaskDir, '.meta'));
     await ensureDir(join(autoSubtaskDir, 'src'));
     await ensureDir(join(autoSubtaskDir, 'tests'));
