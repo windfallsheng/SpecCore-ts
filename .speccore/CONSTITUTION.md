@@ -29,17 +29,18 @@
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | ts-cli | SpecCore CLI | ./ | git@gitee.com:windfullsheng/spec-core-ts.git | main | 待填写 |
 
-> 多工程示例（monorepo）:
+> 多工程示例（每个端 = 一个独立工程）:
 >
-> | 工程 | 源码路径 | Git 仓库 | 默认分支 | 对应需求端 |
+> | 工程 | 源码路径 | Git 仓库 | 默认分支 | 对应端 |
 > | :--- | :--- | :--- | :--- | :--- |
-> | order-service | ./packages/order | git@xxx/order.git | master | app, admin |
-> | payment-service | ./packages/payment | git@xxx/pay.git | main | h5, miniapp |
+> | admin-web | ./packages/admin | git@xxx/admin.git | main | admin |
+> | h5-app | ./packages/h5 | git@xxx/h5.git | main | h5 |
+> | backend-service | ./packages/backend | git@xxx/backend.git | main | backend |
 >
-> **关键规则**：「对应需求端」列的值决定了：
-> 1. 读取哪个 010-requirements/{端}/ 的需求文档
-> 2. 分析结果写入 020-specs/{端}/
-> 3. split 时按端创建 Task 并过滤对应的 API
+> **关键规则**：
+> - 「对应端」列的值必须引用「端列表」中已声明的端名
+> - 一一对应：每行一个工程对应一个端名（不填多个）
+> - 如果一个服务拆成多个工程（如 user-service + order-service 都属于 backend），应在「端列表」中分别声明
 
 ## 技术栈
 
