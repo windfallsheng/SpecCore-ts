@@ -115,6 +115,7 @@ main{position:relative;z-index:1;max-width:calc(100vw - 90px);margin:0 45px;padd
 .type-spec{background:rgba(168,85,247,.1);color:var(--purple)}
 .type-task{background:rgba(0,255,136,.1);color:var(--green)}
 .type-subtask{background:rgba(236,72,153,.1);color:#ec4899}
+.type-business_module{background:rgba(251,191,36,.1);color:#fbbf24}
 .type-user-file{background:rgba(245,158,11,.1);color:var(--orange)}
 .type-source-file{background:rgba(59,130,246,.1);color:#60a5fa}
 .type-global-doc{background:rgba(249,115,22,.1);color:#f97316}
@@ -215,6 +216,7 @@ main{position:relative;z-index:1;max-width:calc(100vw - 90px);margin:0 45px;padd
         <button class="filter-btn" data-filter="spec">规格</button>
         <button class="filter-btn" data-filter="task">功能模块</button>
         <button class="filter-btn" data-filter="subtask">任务</button>
+        <button class="filter-btn" data-filter="business_module">业务模块</button>
         <button class="filter-btn" data-filter="user-file">用户文件</button>
         <button class="filter-btn" data-filter="source-file">源码</button>
         <button class="filter-btn" data-filter="global-doc">全局</button>
@@ -621,7 +623,7 @@ network.on('click', function(params) {
 
 function entityItemHtml(ent) {
   var typeClass = 'type-' + ent.type.replace('_', '-');
-  var typeLabel = { requirement: '需求', spec: '规格', task: '功能模块', subtask: '任务', 'user-file': '用户文件', 'source-file': '源码', 'global-doc': '全局', 'task-spec': '任务规格' }[ent.type] || ent.type;
+  var typeLabel = { requirement: '需求', spec: '规格', task: '功能模块', subtask: '任务', business_module: '业务模块', 'user-file': '用户文件', 'source-file': '源码', 'global-doc': '全局', 'task-spec': '任务规格' }[ent.type] || ent.type;
   return '<div class="entity-item" onclick="focusNode(\'' + ent.id + '\')">' +
     '<div class="name">' + ent.title + '</div>' +
     '<div class="meta"><span class="type-badge ' + typeClass + '">' + typeLabel + '</span>' +

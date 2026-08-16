@@ -2,6 +2,20 @@
 
 ---
 
+## v6.50.1 (2026-08-16) — Business-Code Mapping Graph Enhancement Fixes + Documentation Updates
+
+### Fixes
+
+- **context-builder.ts**: Added "业务-代码映射" section display, showing business modules grouped by platform with their related code entities
+- **speccore-knowledge-graph.html**: Added filter button, CSS styles, and type label for `business_module` entity type
+
+### Documentation
+
+- **DESIGN.md**: Added section 8.8 "Business-Code Association Graph", explaining design principles, expected format, and data flow
+- **command-reference.md**: Updated analyze command description, explaining chain generation uses graph RAG intelligent retrieval + business-code mapping
+
+---
+
 ## v6.50.0 (2026-08-16) — Business-Code Mapping Graph Enhancement
 
 ### New Features
