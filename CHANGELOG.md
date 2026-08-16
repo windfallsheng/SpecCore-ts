@@ -1,3 +1,21 @@
+## v6.50.0 (2026-08-16) — 业务-代码关联图谱增强
+
+### 新功能
+
+- **知识图谱新增业务模块实体类型**：`business_module` 类型，支持从 TECH.md 提取业务模块→代码实体的映射关系
+- **灵活扩展的关系类型**：GraphRelation.type 支持 `maps_to`、`uses_table`、`calls_api`、`affects` 等自定义关系类型，不再限制于固定枚举
+- **图谱新增 `scanBusinessCodeMappings()` 扫描器**：自动扫描各端 TECH.md 中的「业务-代码映射」章节，提取业务模块实体和代码实体，建立关联关系
+- **analyze prompt 增强**：指导 AI 在 TECH.md 末尾添加「业务-代码映射」表格，关系类型由 AI 根据技术栈自主决定（如 api_controller、page、component、route、middleware、interceptor、gateway 等）
+- **GraphStats 新增 `businessModules` 统计**
+
+### 设计原则
+
+- **开放实体类型**：不预设固定类型，AI 看到什么技术栈就提取什么实体类型
+- **按端隔离**：每端从自己的 TECH.md 提取，不会混
+- **增量更新**：复用现有的 `refreshKnowledgeGraph()` 机制
+
+---
+
 ## v6.49.17 (2026-08-16) — 链式生成机制修正为图谱 RAG 智能检索 + 功能模块来源链接
 
 ### 改动

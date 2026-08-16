@@ -39,7 +39,7 @@ export interface KnowledgeGraph {
 
 export interface GraphEntity {
   id: string;
-  type: 'requirement' | 'spec' | 'task' | 'subtask' | 'user-file' | 'source-file' | 'global-doc' | 'task-spec';
+  type: 'requirement' | 'spec' | 'task' | 'subtask' | 'user-file' | 'source-file' | 'global-doc' | 'task-spec' | 'business_module';
   title: string;
   file: string;           // 相对路径
   hash: string;           // 内容 hash（用于衰减检测）
@@ -55,12 +55,16 @@ export interface GraphEntity {
   exports?: string[];     // 导出的类/函数名
   imports?: string[];     // 导入的模块
   apis?: string[];        // API 路径
+  // business_module 专属
+  codeEntities?: string[];  // 关联的代码实体（文件/表/API/组件等）
+  businessModule?: string;  // 所属业务模块名
 }
 
 export interface GraphRelation {
   from: string;
   to: string;
-  type: 'implements' | 'specifies' | 'subtask_of' | 'depends_on' | 'references' | 'imports' | 'module_depends' | 'co_changes' | 'governs' | 'elaborates';
+  type: 'implements' | 'specifies' | 'subtask_of' | 'depends_on' | 'references' | 'imports' | 'module_depends' | 'co_changes' | 'governs' | 'elaborates' | 'maps_to' | 'uses_table' | 'calls_api' | 'affects' | string;
+  metadata?: Record<string, string>;  // 扩展元数据（如关系来源、置信度等）
 }
 
 export interface GraphStats {
@@ -72,6 +76,7 @@ export interface GraphStats {
   sourceFiles: number;
   globalDocs: number;
   taskSpecs: number;
+  businessModules: number;
   relations: number;
 }
 
@@ -314,9 +319,154 @@ async function scanSpecs(iterDir: string): Promise<{
   return { entities, relations };
 }
 
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
+// 业务-代码映射扫描（从 TECH.md 提取业务模块→代码实体映射）
+// ═══════════════════════════════════════════════════
+
+/**
+ * 扫描各端 TECH.md 中的「业务-代码映射」章节
+ * 提取业务模块实体及其关联的代码实体（文件/表/API/组件等）
+ *
+ * 期望的 TECH.md 格式：
+ * ````
+ * ## 业务-代码映射
+ *
+ * | 业务模块 | 代码实体 | 关系类型 | 说明 |
+ * |:--|:--|:--|:--|
+ * | 会议室档案 | backend/RoomController.java | api_controller | REST 控制器 |
+ * | 会议室档案 | table-meeting_room | uses_table | 主数据表 |
+ * | 会议室档案 | admin-web/src/pages/RoomList.vue | page | 列表页 |
+ * ```
+ */
+async function scanBusinessCodeMappings(iterDir: string): Promise<{
+  entities: GraphEntity[];
+  relations: GraphRelation[];
+}> {
+  const entities: GraphEntity[] = [];
+  const relations: GraphRelation[] = [];
+  const specsDir = join(iterDir, '020-specs');
+
+  if (!(await pathExists(specsDir))) return { entities, relations };
+
+  // 扫描各端子目录
+  const knownNonPlatformDirs = new Set(['sources', 'assets', 'prototypes', 'converted', 'features', 'bugs', 'refactors', 'research', 'staging', 'platforms', 'snapshots', 'global']);
+  const specsEntries = await readdir(specsDir, { withFileTypes: true });
+
+  for (const e of specsEntries) {
+    if (!e.isDirectory() || e.name.startsWith('_') || e.name.startsWith('.') || knownNonPlatformDirs.has(e.name)) continue;
+    const platformName = e.name;
+    const techMdPath = join(specsDir, platformName, 'TECH.md');
+
+    if (!(await pathExists(techMdPath))) continue;
+
+    const content = await readFile(techMdPath, 'utf-8').catch(() => '');
+    if (!content) continue;
+
+    // 查找「业务-代码映射」章节
+    const mappingSectionMatch = content.match(/##\s+业务-代码映射[\s\S]*?(?=\n##\s|\Z)/i);
+    if (!mappingSectionMatch) continue;
+
+    const sectionContent = mappingSectionMatch[0];
+
+    // 解析表格
+    const lines = sectionContent.split('\n');
+    let inTable = false;
+    let headerParsed = false;
+    let colIndices = { module: -1, entity: -1, relation: -1, desc: -1 };
+
+    // 用于去重的业务模块集合
+    const seenModules = new Set<string>();
+
+    for (const line of lines) {
+      const cells = line.split('|').map(c => c.trim()).filter(Boolean);
+      if (cells.length < 2) continue;
+
+      // 表头行
+      if (!headerParsed && cells.some(c => c.includes('业务模块') || c.includes('代码实体'))) {
+        colIndices = {
+          module: cells.findIndex(c => c.includes('业务模块')),
+          entity: cells.findIndex(c => c.includes('代码实体')),
+          relation: cells.findIndex(c => c.includes('关系类型')),
+          desc: cells.findIndex(c => c.includes('说明')),
+        };
+        if (colIndices.module < 0) colIndices.module = 0;
+        if (colIndices.entity < 0) colIndices.entity = 1;
+        headerParsed = true;
+        inTable = true;
+        continue;
+      }
+
+      // 分隔行跳过
+      if (cells.every(c => /^[-:]+$/.test(c))) continue;
+
+      if (!inTable || !headerParsed) continue;
+
+      // 数据行
+      const moduleName = cells[colIndices.module];
+      const codeEntity = cells[colIndices.entity];
+      const relationType = colIndices.relation >= 0 && colIndices.relation < cells.length ? cells[colIndices.relation] : 'maps_to';
+      const desc = colIndices.desc >= 0 && colIndices.desc < cells.length ? cells[colIndices.desc] : '';
+
+      if (!moduleName || !codeEntity) continue;
+      if (moduleName === '业务模块' || moduleName === '#') continue;
+
+      // 创建业务模块实体（去重）
+      const bizModuleId = `biz:${platformName}:${moduleName}`;
+      if (!seenModules.has(bizModuleId)) {
+        seenModules.add(bizModuleId);
+        entities.push({
+          id: bizModuleId,
+          type: 'business_module',
+          title: moduleName,
+          file: `020-specs/${platformName}/TECH.md`,
+          hash: '',
+          mtime: '',
+          platform: platformName,
+          businessModule: moduleName,
+          tags: ['business-mapping'],
+        });
+
+        // 关联到对应的 spec 实体
+        const specId = `SPEC:${platformName}/TECH`;
+        relations.push({
+          from: bizModuleId,
+          to: specId,
+          type: 'elaborates',
+          metadata: { source: 'tech-md-mapping' },
+        });
+      }
+
+      // 创建代码实体（作为 business_module 的关联目标）
+      const codeEntityId = `code:${platformName}:${codeEntity.replace(/[/\\]/g, '-')}`;
+      if (!entities.find(e => e.id === codeEntityId)) {
+        entities.push({
+          id: codeEntityId,
+          type: 'source-file',
+          title: codeEntity,
+          file: codeEntity,
+          hash: '',
+          mtime: '',
+          platform: platformName,
+          tags: ['code-entity', relationType],
+        });
+      }
+
+      // 创建关系
+      relations.push({
+        from: bizModuleId,
+        to: codeEntityId,
+        type: relationType || 'maps_to',
+        metadata: { description: desc, source: 'tech-md-mapping' },
+      });
+    }
+  }
+
+  return { entities, relations };
+}
+
+// ═══════════════════════════════════════════════════
 // 任务扫描（含子任务）
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 
 async function scanTasks(iterDir: string): Promise<{
   entities: GraphEntity[];
@@ -1005,7 +1155,7 @@ export async function buildKnowledgeGraph(
     iteration: iterName,
     entities: {},
     relations: [],
-    stats: { requirements: 0, specs: 0, tasks: 0, subtasks: 0, userFiles: 0, sourceFiles: 0, globalDocs: 0, taskSpecs: 0, relations: 0 },
+    stats: { requirements: 0, specs: 0, tasks: 0, subtasks: 0, userFiles: 0, sourceFiles: 0, globalDocs: 0, taskSpecs: 0, businessModules: 0, relations: 0 },
   };
 
   if (!iterDir || !(await pathExists(iterDir))) return graph;
@@ -1018,6 +1168,7 @@ export async function buildKnowledgeGraph(
   const sourceResult = await scanSourceFiles(cwd);
   const globalResult = await scanGlobalDocs(cwd);
   const taskSpecResult = await scanTaskSpecs(iterDir);
+  const bizMappingResult = await scanBusinessCodeMappings(iterDir);
 
   // 合并实体（处理 ID 冲突：同名实体用路径前缀去重）
   const allEntities = [
@@ -1028,6 +1179,7 @@ export async function buildKnowledgeGraph(
     ...sourceResult.entities,
     ...globalResult.entities,
     ...taskSpecResult.entities,
+    ...bizMappingResult.entities,
   ];
 
   const idRemap = new Map<string, string>();
@@ -1055,6 +1207,7 @@ export async function buildKnowledgeGraph(
     ...taskResult.relations,
     ...sourceResult.relations,
     ...taskSpecResult.relations,
+    ...bizMappingResult.relations,
     ...(await inferRelations(allEntities, iterDir)),
   ];
 
@@ -1068,6 +1221,7 @@ export async function buildKnowledgeGraph(
     sourceFiles: sourceResult.entities.length,
     globalDocs: globalResult.entities.length,
     taskSpecs: taskSpecResult.entities.length,
+    businessModules: bizMappingResult.entities.filter(e => e.type === 'business_module').length,
     relations: graph.relations.length,
   };
 
