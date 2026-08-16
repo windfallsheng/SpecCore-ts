@@ -26,7 +26,7 @@ import { buildPrompt, formatPrompt } from '../core/prompt-builder';
 import { buildAutoModeInstruction } from '../core/questions';
 import { resolvePlatform } from '../core/platform-registry';
 import { warnIfIndexStale } from '../core/index-guard';
-import { GLOBAL_SPECS_DIR, GLOBAL_SPEC_FILES } from '../core/spec-paths';
+import { GLOBAL_SPECS_DIR, GLOBAL_SPEC_FILES, parsePlatformTypes } from '../core/spec-paths';
 
 export interface AnalyzeOptions {
   iteration?: string;
@@ -1229,6 +1229,28 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     prompt += `   - 第 3 步：如果没有「端列表」章节，从「对应端」列提取\n`;
     prompt += `   - 第 4 步：如果以上都无法确定，根据需求文档内容判断\n`;
     prompt += `   - 第 5 步：将发现的端列表写入 020-specs/PLATFORMS.md\n`;
+    // 注入工程类型信息（v6.49.0+）
+    const platformTypes = await parsePlatformTypes();
+    if (platformTypes.size > 0) {
+      prompt += `7. **工程类型识别**：CONSTITUTION.md 已配置各端的工程类型，请据此生成针对性内容\n`;
+      prompt += `   | 工程标识 | 工程类型 |\n`;
+      prompt += `   | :--- | :--- |\n`;
+      for (const [name, type] of platformTypes) {
+        prompt += `   | ${name} | ${type} |\n`;
+      }
+      prompt += `\n   **根据工程类型应用对应的专业维度**：\n`;
+      prompt += `   - Java服务 → API设计、数据库、缓存、消息队列、安全、性能\n`;
+      prompt += `   - Node服务 → API设计、数据库、中间件、异步处理、安全\n`;
+      prompt += `   - Go服务 → API设计、数据库、并发、微服务、性能\n`;
+      prompt += `   - Python服务 → API设计、数据库、数据分析、AI/ML集成\n`;
+      prompt += `   - H5微信公众号 → 微信JS-SDK、OAuth授权、分享、支付、模板消息\n`;
+      prompt += `   - H5移动端 → 响应式、viewport适配、触摸交互、弱网优化、首屏性能\n`;
+      prompt += `   - Android移动端 → 生命周期、权限、推送、适配、内存优化\n`;
+      prompt += `   - iOS移动端 → Swift/SwiftUI、App Store规范、推送、性能\n`;
+      prompt += `   - 微信小程序 → 包体积(2MB)、平台API、setData优化、页面栈\n`;
+      prompt += `   - Web管理后台 → 复杂表单、数据表格、权限UI、状态管理\n`;
+      prompt += `   - 桌面应用 → 本地存储、系统API、自动更新、离线支持\n`;
+    }
     prompt += `6. **目录结构（必须严格遵守）**：\n`;
     prompt += `   - 全局跨端文档写入 \`020-specs/global/\`（如 REQUIREMENT.md、DEPS.md、RISK.md 等）\n`;
     prompt += `   - 端专属文档必须写入 \`020-specs/{端名}/\` 子目录（如 \`020-specs/booking-service/TECH.md\`）\n`;

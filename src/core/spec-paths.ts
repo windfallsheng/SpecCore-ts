@@ -117,3 +117,66 @@ export async function parsePlatformList(): Promise<string[]> {
   }
   return [...platforms];
 }
+
+/**
+ * 从 CONSTITUTION.md 解析各端的工程类型（v6.49.0+）
+ * 返回 Map<端名, 工程类型>
+ */
+export async function parsePlatformTypes(): Promise<Map<string, string>> {
+  const constitutionPath = join('.speccore', 'CONSTITUTION.md');
+  if (!(await pathExists(constitutionPath))) return new Map();
+  const content = await readFile(constitutionPath, 'utf-8');
+  const lines = content.split('\n');
+
+  let inPlatformSection = false;
+  let platformColIdx = -1;
+  let typeColIdx = -1;
+  const result = new Map<string, string>();
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    // 检测章节标题
+    if (line.match(/^##\s+.*\u7aef\u5217\u8868/) || line.match(/^##\s+.*\u5e73\u53f0\u5217\u8868/)) {
+      inPlatformSection = true;
+      platformColIdx = -1;
+      typeColIdx = -1;
+      continue;
+    }
+    if (inPlatformSection && line.match(/^##\s/)) break;
+    if (!inPlatformSection) continue;
+    if (!line.startsWith('|')) continue;
+    if (line.match(/^\|\s*[-:]/)) continue;
+
+    const cells = line.split('|').map(c => c.trim()).filter(Boolean);
+
+    // 表头行：动态查找列索引
+    if (platformColIdx === -1 && cells.length > 0) {
+      platformColIdx = cells.findIndex(h =>
+        h === '端名' || h === '平台名' || h === '工程标识' || h === '工程ID' ||
+        h.includes('端名') || h.includes('平台名') || h.includes('工程标识')
+      );
+      if (platformColIdx < 0) platformColIdx = 0;
+
+      // 查找工程类型列：工程类型 / 类型 / 技术类型
+      typeColIdx = cells.findIndex(h =>
+        h === '工程类型' || h === '类型' || h === '技术类型' ||
+        h.includes('工程类型') || h.includes('技术类型')
+      );
+      if (typeColIdx < 0) typeColIdx = -1; // 没有工程类型列
+      continue;
+    }
+
+    // 数据行：提取端名和工程类型
+    if (cells.length > platformColIdx) {
+      const platformName = cells[platformColIdx].trim();
+      if (platformName && typeColIdx >= 0 && cells.length > typeColIdx) {
+        const platformType = cells[typeColIdx].trim();
+        if (platformType) {
+          result.set(platformName, platformType);
+        }
+      }
+    }
+  }
+
+  return result;
+}
