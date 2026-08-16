@@ -2,6 +2,32 @@
 
 ---
 
+## v6.57.0 (2026-08-16) — update.ts Statistics Logic Fix
+
+### Core Fixes
+
+- **update.ts**: Removed meaningless `added/updated/cleaned` statistics variables and arrays because `createToolIntegrations()` returns `Promise<void>` without counts
+- **update.ts**: Simplified upgrade completion log output to directly show "The following files have been synced to the latest version", no longer showing "Command file content unchanged"
+
+### Root Cause
+
+Old `update.ts` defined `added/updated/cleaned` variables and corresponding arrays, but `createToolIntegrations()` didn't update these variables, causing them to always be 0. When users ran `speccore init --update --tools qoder`, the output showed "Command file content unchanged (command template not updated)", misleading users into thinking files weren't being updated.
+
+In reality, `createToolIntegrations()` directly overwrites all command files; only the statistics logic in `update.ts` was incomplete.
+
+### Fix Approach
+
+Removed all code referencing `added/updated/cleaned/addedFiles/updatedFiles/cleanedFiles`, simplified log output to:
+```
+📦 The following files have been synced to the latest version:
+   ✅ .agents/skills/ — Full Skill update
+   ✅ AGENTS.md — Project rules
+   ✅ SETTINGS.md — Framework configuration
+   ✅ AI-RULES.md — AI reference manual
+```
+
+---
+
 ## v6.56.0 (2026-08-16) — Cross-Platform Command Dynamic Routing Fix
 
 ### Core Fixes
