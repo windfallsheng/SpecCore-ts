@@ -1,3 +1,17 @@
+## v6.53.0 (2026-08-16) — analyze 阶段图谱 RAG 增强 + --apply 路径强制
+
+### 核心改进
+
+- **analyze 阶段注入图谱 RAG 上下文**：`buildMultiDocPrompt()` 中调用 `unifiedSearch()` 检索项目知识图谱、代码索引和文档 RAG，将关联内容注入 prompt，AI 分析时可参考现有代码架构和历史文档
+- **强制 AI 走 --apply 路径写文件**：修正 prompt 中「直接用 Write 工具写入即可」的错误指令，改为「必须通过 --apply 写入，CLI 自动路由到 global/ 或 {端名}/ 子目录」，解决 AI 绕过 CLI 导致文档扁平在根目录的问题
+
+### 技术细节
+
+- `src/commands/analyze.ts`: 新增 `unifiedSearch` + `formatUnifiedContext` 导入，在 prompt 末尾注入「项目关联上下文」章节
+- `src/commands/analyze.ts`: 目录结构指令从「Write 到」改为「通过 --apply 写入，CLI 自动路由到」，新增禁止直接 Write 的警告
+
+---
+
 ## v6.52.0 (2026-08-16) — 文档全面更新 + HTML 帮助中心补全
 
 ### 设计文档
