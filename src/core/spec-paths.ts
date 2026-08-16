@@ -10,9 +10,9 @@ import { pathExists, ensureDir } from 'fs-extra';
 /** 全局文档子目录名 */
 export const GLOBAL_SPECS_DIR = 'global';
 
-/** 全局文档文件名列表 */
+/** 全局文档文件名列表（含 TECH.md — 整体技术架构，各端另有专属 TECH.md） */
 export const GLOBAL_SPEC_FILES = [
-  'REQUIREMENT.md', 'ANALYSIS.md', 'RISK.md', 'DEPS.md', 'REVIEW.md', 'MONITOR.md',
+  'REQUIREMENT.md', 'ANALYSIS.md', 'TECH.md', 'RISK.md', 'DEPS.md', 'REVIEW.md', 'MONITOR.md',
 ];
 
 /**

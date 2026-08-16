@@ -522,7 +522,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
             
       const specContents: { name: string; content: string }[] = [];
       // 读取全局层文档（优先 global/ 子目录，回退根目录 — v6.41.0+ 向后兼容）
-      for (const f of ['ANALYSIS.md', 'RISK.md', 'DEPS.md', 'REVIEW.md', 'MONITOR.md', 'REQUIREMENT.md']) {
+      for (const f of ['ANALYSIS.md', 'TECH.md', 'RISK.md', 'DEPS.md', 'REVIEW.md', 'MONITOR.md', 'REQUIREMENT.md']) {
         const resolved = await resolveGlobalSpecPath(specDir2, f);
         if (resolved) {
           const content = await readFile(resolved, 'utf-8');
@@ -531,8 +531,8 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           }
         }
       }
-      // 根目录下的 TECH.md、TEST.md、UI_SPEC.md（端无关模板/回退）
-      for (const f of ['TECH.md', 'TEST.md', 'UI_SPEC.md']) {
+      // 根目录下的 TEST.md、UI_SPEC.md（端无关模板/回退）
+      for (const f of ['TEST.md', 'UI_SPEC.md']) {
         const fp = join(specDir2, f);
         if (await pathExists(fp)) {
           const content = await readFile(fp, 'utf-8');
@@ -2124,7 +2124,7 @@ async function loadSpecContents(iterationDir: string): Promise<Record<string, st
   if (!(await pathExists(specDir))) return specs;
 
   // 1. 读取全局文档（优先 global/ 子目录，回退根目录 — v6.41.0+ 向后兼容）
-  for (const f of ['REQUIREMENT.md', 'ANALYSIS.md', 'RISK.md', 'DEPS.md', 'REVIEW.md', 'MONITOR.md']) {
+  for (const f of ['REQUIREMENT.md', 'ANALYSIS.md', 'TECH.md', 'RISK.md', 'DEPS.md', 'REVIEW.md', 'MONITOR.md']) {
     const resolved = await resolveGlobalSpecPath(specDir, f);
     if (resolved) {
       const content = await readFile(resolved, 'utf-8');
@@ -2133,8 +2133,8 @@ async function loadSpecContents(iterationDir: string): Promise<Record<string, st
       }
     }
   }
-  // 根目录下的 TECH.md、TEST.md、UI_SPEC.md（端无关模板/回退）
-  for (const f of ['TECH.md', 'TEST.md', 'UI_SPEC.md']) {
+  // 根目录下的 TEST.md、UI_SPEC.md（端无关模板/回退）
+  for (const f of ['TEST.md', 'UI_SPEC.md']) {
     const fp = join(specDir, f);
     if (await pathExists(fp)) {
       const content = await readFile(fp, 'utf-8');

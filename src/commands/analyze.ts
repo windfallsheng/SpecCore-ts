@@ -478,16 +478,16 @@ async function generateIterationSpecDocs(iteration: string): Promise<void> {
       `# 监控指标\n\n> 迭代: ${iteration}\n\n`
       + `## 业务指标\n\n| 指标 | 阈值 | 级别 |\n| :--- | :--- | :--- |\n| 成功率 | <99.9% | P1 |\n| P99延迟 | >1000ms | P2 |\n\n`
       + `## 告警规则\n\n| 规则 | 条件 | 通知 |\n| :--- | :--- | :--- |\n| | | |\n`],
+    ['TECH.md',
+      `# 技术架构（跨端全局）\n\n> 迭代: ${iteration} | 生成: ${now}\n\n`
+      + `## 整体架构\n\n_待填充_\n\n`
+      + `## 跨端交互\n\n| 调用方 | 被调方 | 协议 | 说明 |\n| :--- | :--- | :--- | :--- |\n| | | | |\n\n`
+      + `## 中间件选型\n\n| 组件 | 用途 | 版本 |\n| :--- | :--- | :--- |\n| | | |\n\n`
+      + `## 数据库设计\n\n| 表名 | 字段 | 索引 | 说明 |\n| :--- | :--- | :--- | :--- |\n| | | | |\n`],
   ];
 
   // 端无关模板 → 写入 020-specs/ 根目录（各端分析时覆盖）
   const rootTemplates: [string, string][] = [
-    ['TECH.md',
-      `# 技术方案\n\n> 迭代: ${iteration} | 生成: ${now}\n\n`
-      + `## 架构\n\n_待填充_\n\n`
-      + `## 数据库设计\n\n| 表名 | 字段 | 索引 | 说明 |\n| :--- | :--- | :--- | :--- |\n| | | | |\n\n`
-      + `## API 设计\n\n| 方法 | 路径 | 说明 |\n| :--- | :--- | :--- |\n| | | |\n\n`
-      + `## 缓存策略\n\n_待填充_\n`],
     ['TEST.md',
       `# 测试计划\n\n> 迭代: ${iteration} | 生成: ${now}\n\n`
       + `## 单元测试\n\n- [ ] 核心模块覆盖\n\n`
@@ -1085,9 +1085,10 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
   prompt += `   - 第 4 步：如果以上都无法确定，根据需求文档内容判断项目涉及哪些端\n`;
   prompt += `   - 第 5 步：将发现的端列表写入 020-specs/PLATFORMS.md（格式：每行一个端名）\n`;
   prompt += `6. **目录结构**：必须按端创建子目录，不要全部扁平放在 020-specs/ 根目录\n`;
-  prompt += `   - 跨端通用文档写入 020-specs/global/（REQUIREMENT.md、ANALYSIS.md、DEPS.md、RISK.md、REVIEW.md、MONITOR.md）\n`;
+  prompt += `   - 跨端通用文档写入 020-specs/global/（REQUIREMENT.md、ANALYSIS.md、TECH.md、DEPS.md、RISK.md、REVIEW.md、MONITOR.md）\n`;
   prompt += `   - 各端专属文档写入 020-specs/{端名}/（如 admin/TECH.md、h5/TEST.md、admin/UI_SPEC.md）\n`;
-  prompt += `   - TECH.md 不放在 global/，各端分别撰写自己的技术方案\n`;
+  prompt += `   - global/TECH.md 写整体技术架构（跨端交互、中间件选型、整体分层）\n`;
+  prompt += `   - {端}/TECH.md 写该端专属技术方案（后端：接口设计+数据模型；前端：页面结构+组件设计）\n`;
   const taskFlag = isTask && ctx.task ? ` --task ${ctx.task}` : '';
   const platformFlag = ctx.platform ? ` --platform ${ctx.platform}` : '';
   prompt += `7. 写入: speccore analyze --apply '{"${taskDocs.map(([n]) => `${n}:"..."`).join(',')}...}' -I ${iter}${taskFlag}${platformFlag}\n\n`;
