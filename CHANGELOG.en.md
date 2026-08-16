@@ -2,6 +2,14 @@
 
 ---
 
+## v6.50.2 (2026-08-16) — CONTEXT.md Business-Code Mapping Platform Isolation
+
+### Fixes
+
+- **context-builder.ts**: Business-code mapping section in CONTEXT.md now filters by current platform, no longer shows all platforms' mappings to avoid wasting tokens (e.g., frontend analysis reading backend business mappings)
+
+---
+
 ## v6.50.1 (2026-08-16) — Business-Code Mapping Graph Enhancement Fixes + Documentation Updates
 
 ### Fixes
