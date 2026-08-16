@@ -100,6 +100,7 @@ export async function retroCommand(options: RetroOptions): Promise<void> {
       await writeFile(outPath, html);
       logger.info(`✅ 回顾报告: ${outPath}`);
       logger.info(`   📄 file://${outPath}`);
+      process.stdout.write(`[SPECCORE_RETRO: ${outPath}]\n`);
       continue;
     }
 

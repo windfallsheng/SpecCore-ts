@@ -519,6 +519,7 @@ async function exportStatus(
     await ensureDir(join(process.cwd(), 'outputs'));
     await writeFile(outPath, buildHtmlDashboard(data));
     logger.info(`✅ 迭代看板已生成: ${outPath}`);
+    process.stdout.write(`[SPECCORE_DASHBOARD: ${outPath}]\n`);
   }
 }
 
@@ -1478,6 +1479,7 @@ async function showGlobalDashboard(options: StatusPanelOptions): Promise<void> {
     await writeFile(outPath, html);
 
     logger.success(`全局仪表盘已生成: ${outPath}`);
+    process.stdout.write(`[SPECCORE_DASHBOARD: ${outPath}]\n`);
     if (!options.export) {
       logger.info('💡 在浏览器中打开查看（9 套主题可选，Chart.js 图表）');
     }

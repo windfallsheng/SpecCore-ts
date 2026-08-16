@@ -837,7 +837,7 @@ async function askUser(prompt: string): Promise<string> {
 
 export async function createToolIntegrations(projectRoot: string, toolFilter?: string): Promise<void> {
   const commands: [string, string, string][] = [
-    ['spec-ask', 'SpecCore AI Router', '##  核心铁律\n1. 用户说"重新/再/重跑"禁止用"未变/已完成"拒绝\n2. 分析结果必须落盘 020-specs/，禁止只输出聊天文字\n3. 全流程（analyze→split→plan→execute）必须自动继续\n4. 复杂流程先展示执行计划页面再执行\n5. 用户说"自主/全自动"，展示计划后直接执行，禁止每步确认\n\n## 🎯 引导页强制展示\n\n执行 `speccore ask` 后，若 stdout 出现 `[SPECCORE_ONBOARD: <path>]` 标记：\n1. **立即执行** `present_files(<path>)` 展示 HTML 引导页\n2. ❌ 禁止只说"检测到引导页"而不执行展示\n3. ❌ 禁止用文字描述代替实际展示\n4. **展示完成后**，再继续处理其他输出\n\n## 执行\n1. Read CONITUTION.md + context.json\n2. 识别意图，展示执行计划\n3. speccore ask "${1:描述你的需求}"'],
+    ['spec-ask', 'SpecCore AI Router', '##  核心铁律\n1. 用户说"重新/再/重跑"禁止用"未变/已完成"拒绝\n2. 分析结果必须落盘 020-specs/，禁止只输出聊天文字\n3. 全流程（analyze→split→plan→execute）必须自动继续\n4. 复杂流程先展示执行计划页面再执行\n5. 用户说"自主/全自动"，展示计划后直接执行，禁止每步确认\n\n## 🎯 HTML 页面强制展示\n\n执行任何 `speccore` 命令后，检查 stdout 中的标记，**立即执行** `present_files(<path>)`：\n- `[SPECCORE_ONBOARD: <path>]` → 引导页（🚨 最先处理，禁止跳过）\n- `[SPECCORE_SETUP_GUIDE: <path>]` → 配置引导页\n- `[SPECCORE_ABOUT: <path>]` → 版本信息页\n- `[SPECCORE_HELP: <path>]` → 帮助中心页\n- `[SPECCORE_WELCOME: <path>]` → 项目名片页\n- `[SPECCORE_DEV: <path>]` → 开发流程页\n- `[SPECCORE_KNOWLEDGE: <path>]` → 知识图谱页\n- `[SPECCORE_PLAN: <path>]` → 执行计划页\n- `[SPECCORE_RETRO: <path>]` → 回顾报告页\n- `[SPECCORE_DASHBOARD: <path>]` → 仪表盘页\n\n❌ 禁止只说"检测到"而不执行展示\n❌ 禁止用文字描述代替实际展示\n\n## 执行\n1. Read CONITUTION.md + context.json\n2. 识别意图，展示执行计划\n3. speccore ask "${1:描述你的需求}"'],
     ['spec-welcome', '显示项目名片（HTML页面）', 'speccore welcome'],
     ['spec-help', '显示命令帮助中心（HTML页面）', 'speccore help'],
     ['spec-dashboard', '显示全局仪表盘（HTML页面）', 'speccore dashboard --scope global'],

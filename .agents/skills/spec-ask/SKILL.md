@@ -11,12 +11,21 @@ disable-model-invocation: false
 
 ## 🎯 Speccore 输出标记处理
 
-执行 `speccore ask` 后，检查 stdout 中的标记：
+执行任何 `speccore` 命令后，检查 stdout 中的标记：
 - `[SPECCORE_ONBOARD: <path>]` → **🚨 必须最先处理，不可跳过，不可只口头提及**：
   1. **立即执行** `present_files(<path>)` 展示 HTML 引导页（Qoder/Trae/Cursor 均支持）
   2. ❌ 禁止只说“检测到引导页”而不执行展示动作 — 说了不等于做了
   3. ❌ 禁止用文字描述引导页内容代替实际展示 — 必须让用户看到 HTML 页面
   4. **展示完成后**，再继续处理其他输出（结果、意图确认等）
+- `[SPECCORE_SETUP_GUIDE: <path>]` → **立即执行** `present_files(<path>)` 展示配置引导页
+- `[SPECCORE_ABOUT: <path>]` → **立即执行** `present_files(<path>)` 展示版本信息页
+- `[SPECCORE_HELP: <path>]` → **立即执行** `present_files(<path>)` 展示帮助中心页
+- `[SPECCORE_WELCOME: <path>]` → **立即执行** `present_files(<path>)` 展示项目名片页
+- `[SPECCORE_DEV: <path>]` → **立即执行** `present_files(<path>)` 展示开发流程页
+- `[SPECCORE_KNOWLEDGE: <path>]` → **立即执行** `present_files(<path>)` 展示知识图谱页
+- `[SPECCORE_PLAN: <path>]` → **立即执行** `present_files(<path>)` 展示执行计划页
+- `[SPECCORE_RETRO: <path>]` → **立即执行** `present_files(<path>)` 展示回顾报告页
+- `[SPECCORE_DASHBOARD: <path>]` → **立即执行** `present_files(<path>)` 展示仪表盘页
 - `[SPECCORE_EXEC: <cmd>]` → 直接 `execute_command` 执行
 - `[SPECCORE_INTENT]` → 展示给用户确认
 
