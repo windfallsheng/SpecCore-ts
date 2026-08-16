@@ -1951,7 +1951,7 @@ function buildDynamicAliasesFromTechStack(
 }
 
 /** 从 CONSTITUTION.md 提取平台列表（两层确定性匹配）
- *  Layer 1: 表格「对应需求端」列（用户显式声明）
+ *  Layer 1: 表格「对应端」/「对应需求端」列（旧版回退）
  *  Layer 2: 技术栈章节标题 ### 中文端名 (English Name)
  *  ⚠️ 不再提供硬编码默认值 — 端列表应由 AI 根据项目实际情况判断
  */
@@ -1970,12 +1970,12 @@ async function detectPlatformsFromConstitution(): Promise<string[]> {
       const content = require('fs').readFileSync(constitutionPath, 'utf-8');
       const lines = content.split('\n');
       
-      // ── Layer 1: 表格「对应需求端」列（旧版回退）──
+      // ── Layer 1: 表格「对应端」/「对应需求端」列（旧版回退）──
       let headerRowIndex = -1;
       let headerCells: string[] = [];
       for (let i = 0; i < lines.length; i++) {
         const cells = lines[i].split('|').map((c: string) => c.trim()).filter(Boolean);
-        const platformColIdx = cells.findIndex((c: string) => c.includes('对应需求端'));
+        const platformColIdx = cells.findIndex((c: string) => c.includes('对应端') || c.includes('对应需求端'));
         if (platformColIdx >= 0) {
           headerRowIndex = i;
           headerCells = cells;

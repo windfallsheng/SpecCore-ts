@@ -19,15 +19,15 @@
 > - 全小写、无空格、用短横线分隔（如 order-service）
 > - 类型：frontend / backend / infra
 > - 此列表是 analyze/split/execute 的唯一端名来源
-> - 「对应需求端」列引用此列表中的端名
+> - 「对应端」列引用此列表中的端名，每行只填一个
 
 ## 项目信息
 
-> ⚠️ **所有需求端名称（app/h5/miniapp/admin）必须与 010-requirements/ 子目录名严格一致**
+> ⚠️ **所有端名称（app/h5/miniapp/admin）必须与 010-requirements/ 子目录名严格一致**
 
-| 工程 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应需求端 |
-| :--- | :--- | :--- | :--- | :--- |
-| ts-cli | 待填写 | ./ | git@gitee.com:windfullsheng/spec-core-ts.git | main | app, h5, miniapp, admin |
+| 工程 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应端 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| ts-cli | SpecCore CLI | ./ | git@gitee.com:windfullsheng/spec-core-ts.git | main | 待填写 |
 
 > 多工程示例（monorepo）:
 >
