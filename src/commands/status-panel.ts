@@ -532,17 +532,27 @@ async function buildPersonPlatforms(iterDir: string, tasks: any[]): Promise<Reco
     try {
       const entries = await readdir(join(iterDir, t.id), { withFileTypes: true });
       const platforms: string[] = [];
-      // 新结构: 10-backend/ + 20-frontend/
-      if (entries.some((e: any) => e.name === '10-backend')) platforms.push('10-backend');
-      const fe20 = entries.find((e: any) => e.name === '20-frontend');
-      if (fe20 && fe20.isDirectory()) {
-        const subs20 = await readdir(join(iterDir, t.id, '20-frontend'), { withFileTypes: true });
-        for (const s of subs20) {
-          if (s.isDirectory()) platforms.push('20-frontend/' + s.name);
+      // v6.49.9+: 新结构 — 所有端平铺在任务目录下
+      const { parsePlatformList } = await import('../core/spec-paths');
+      const platformList = await parsePlatformList();
+      for (const e of entries) {
+        if (e.isDirectory() && platformList.includes(e.name)) {
+          platforms.push(e.name);
         }
-        if (subs20.length === 0) platforms.push('20-frontend');
       }
-      // 旧结构回退: backend/ + frontend/
+      // 回退: 旧结构 10-backend/ + 20-frontend/
+      if (platforms.length === 0) {
+        if (entries.some((e: any) => e.name === '10-backend')) platforms.push('10-backend');
+        const fe20 = entries.find((e: any) => e.name === '20-frontend');
+        if (fe20 && fe20.isDirectory()) {
+          const subs20 = await readdir(join(iterDir, t.id, '20-frontend'), { withFileTypes: true });
+          for (const s of subs20) {
+            if (s.isDirectory()) platforms.push('20-frontend/' + s.name);
+          }
+          if (subs20.length === 0) platforms.push('20-frontend');
+        }
+      }
+      // 更旧结构回退: backend/ + frontend/
       if (!platforms.some(p => p.includes('backend')) && entries.some((e: any) => e.name === 'backend')) platforms.push('backend');
       if (!platforms.some(p => p.includes('frontend'))) {
         const fe = entries.find((e: any) => e.name === 'frontend');
@@ -1324,8 +1334,8 @@ async function showHealthReport(config: any, iteration: string | null): Promise<
   let totalTasks = tasks.length, completed = 0, hasTest = 0, hasReview = 0;
   for (const t of tasks) {
     if (await isTaskDone(iterDir, t)) completed++;
-    if (await pathExists(join(iterDir, t, "10-backend", "TEST.md"))) hasTest++;
-    if (await pathExists(join(iterDir, t, "10-backend", "REVIEW.md"))) hasReview++;
+    if (await taskHasFile(iterDir, t, 'TEST.md')) hasTest++;
+    if (await taskHasFile(iterDir, t, 'REVIEW.md')) hasReview++;
   }
   
   const donePct = totalTasks > 0 ? Math.round(completed / totalTasks * 100) : 0;
@@ -1388,8 +1398,8 @@ async function collectHealthData(iteration: string): Promise<any> {
   let total = tasks.length, completed = 0, hasTest = 0, hasReview = 0;
   for (const t of tasks) {
     if (await isTaskDone(iterDir, t)) completed++;
-    if (await pathExists(join(iterDir, t, "10-backend", "TEST.md"))) hasTest++;
-    if (await pathExists(join(iterDir, t, "10-backend", "REVIEW.md"))) hasReview++;
+    if (await taskHasFile(iterDir, t, 'TEST.md')) hasTest++;
+    if (await taskHasFile(iterDir, t, 'REVIEW.md')) hasReview++;
   }
   const donePct = total > 0 ? Math.round(completed / total * 100) : 0;
   const testPct = total > 0 ? Math.round(hasTest / total * 100) : 0;
@@ -1474,4 +1484,29 @@ async function showGlobalDashboard(options: StatusPanelOptions): Promise<void> {
   } catch (error) {
     spinner.fail(`生成仪表盘失败: ${error}`);
   }
+}
+
+// ── v6.49.9+: 扫描任务目录检查文件是否存在（支持平铺结构和旧结构） ──
+async function taskHasFile(iterDir: string, taskId: string, fileName: string): Promise<boolean> {
+  const taskDir = join(iterDir, taskId);
+  if (!(await pathExists(taskDir))) return false;
+  const { parsePlatformList } = await import('../core/spec-paths');
+  const platformList = await parsePlatformList();
+  // 新结构: 扫描平铺的端目录下的子任务
+  for (const platform of platformList) {
+    const platDir = join(taskDir, platform);
+    if (!(await pathExists(platDir))) continue;
+    try {
+      const entries = await readdir(platDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory() && !entry.name.startsWith('.')) {
+          if (await pathExists(join(platDir, entry.name, fileName))) return true;
+        }
+      }
+    } catch { /* ignore */ }
+  }
+  // 回退: 旧结构 10-backend/
+  if (await pathExists(join(taskDir, '10-backend', fileName))) return true;
+  if (await pathExists(join(taskDir, '99-artifacts', fileName))) return true;
+  return false;
 }

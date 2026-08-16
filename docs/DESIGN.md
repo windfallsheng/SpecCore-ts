@@ -281,77 +281,71 @@ $ ls Iteration-011-meeting-upgrade/020-specs/
 analysis.md  h5/  admin/  app/  miniapp/
 ```
 
-#### 2.5.2 任务目录层级简化（v6.40.0+）
+#### 2.5.2 任务目录架构演进（v6.40.0 → v6.49.1）
 
 **架构演进**：
 
-| 版本 | 目录结构 | 层级数 |
+| 版本 | 目录结构 | 特点 |
 |:--|:--|:--|
-| v6.24.0-v6.39.0 | `Task-001/10-backend/{服务名}/{子任务}/` | 3 层 |
-| **v6.40.0+** | `Task-001/{服务名}/{子任务}/` | **2 层** ✅ |
+| v6.24.0-v6.39.0 | `Task-001/10-backend/{服务名}/{子任务}/` | 3 层，前后端大类分层 |
+| v6.40.0-v6.49.0 | `Task-001/{服务名}/{子任务}/` | 2 层，但仍有前后端分类变量 |
+| **v6.49.1+** | `Task-001/{platform}/{taskId}-{subtaskSlug}/` | **端平铺 + 确定性命名** ✅ |
 
-**旧架构（3层）**：
+**旧架构（10-backend/ 和 20-frontend/ 分层）**：
 ```
 Task-001-feature-login/
 ├── .meta/
 ├── _shared/
 ├── 00-specs/
 ├── 10-backend/              ← 类型前缀（冗余）
-│   └── api/                 ← 服务名
-│       └── impl/            ← 子任务
+│   └── api/
+│       └── impl/
 ├── 20-frontend/             ← 类型前缀（冗余）
-│   └── h5/                  ← 端名
-│       └── impl/            ← 子任务
+│   └── h5/
+│       └── impl/
 └── 99-artifacts/
 ```
 
-**新架构（2层）**：
+**新架构（v6.49.1+ 端平铺）**：
 ```
 Task-001-feature-login/
-├── .meta/
+├── .meta/                   ← 任务级元信息（含 feature）
 ├── _shared/
 ├── 00-specs/
-├── api/                     ← 直接用服务名 ✅
-│   └── impl/                ← 子任务
-├── h5/                      ← 直接用端名 ✅
-│   └── impl/                ← 子任务
-└── 99-artifacts/
+├── booking-service/         ← 所有端平铺 ✅
+│   └── Task-001-booking-order/  ← {taskId}-{subtaskSlug}
+│       ├── .meta/           ← 子任务元信息（含 feature）
+│       ├── TASK.md
+│       ├── TEST.md / REVIEW.md / ...
+│       └── （代码写入 CONSTITUTION 指定路径）
+├── h5-mobile/               ← 所有端平铺 ✅
+│   └── Task-001-login-page/
+│       ├── .meta/
+│       ├── TASK.md
+│       ├── COMPONENT_TREE.md / ROUTES.md / ...
+│       └── ...
+└── .issues.md
 ```
 
-**设计原则**：
-1. **扁平化优先**：减少不必要的中间层级，提升导航效率
-2. **语义清晰**：直接使用 CONSTITUTION.md 中的工程名/端名，无需转换
-3. **向后兼容**：execute.ts 已有回退逻辑，旧任务不受影响
+**v6.49.x 关键改进**：
+1. **端平铺**：删除 `backendPlatforms`/`frontendPlatforms` 分类变量，所有端统一循环
+2. **功能单元标识**：任务级和子任务级都有 `.meta/feature`
+3. **确定性命名**：`{taskId}-{subtaskSlug}` 确保全项目唯一
+4. **子任务 ID 确定性**：`Task-{taskId}-{platform}` 格式，不使用随机 hash
+5. **工程路径感知**：execute 命令写入 CONSTITUTION.md 指定的实际工程路径
+6. **子任务目录清理**：移除无用的 `src/` 和 `tests/` 目录
 
 **实现位置**：
 - `/ts-cli/src/commands/iteration/split.ts`:
-  - `createSubtask()` 函数：直接使用 `{服务名}/{子任务}/` 和 `{端名}/{子任务}/`
-  - README 模板：更新目录树示例，标注 v6.40.0+ 简化架构
-
-**相关代码片段**：
-```typescript
-// split.ts line 1338+
-// ── 后端：{服务名}/{子任务}/ （v6.40.0+ 简化架构）──
-if (backendPlatforms.length > 0) {
-  for (const platform of backendPlatforms) {
-    const serviceName = getServiceName(platform);
-    // 【v6.40.0】直接使用服务名，不再使用 10-backend/ 前缀
-    const platformDir = join(taskDir, serviceName);
-    const subtaskDir = join(platformDir, subtaskName);
-    await createSubtask(subtaskDir, ...);
-  }
-}
-
-// ─ 前端：{端名}/{子任务}/ （v6.40.0+ 简化架构）──
-if (frontendPlatforms.length > 0) {
-  for (const platform of frontendPlatforms) {
-    // 【v6.40.0】直接使用端名，不再使用 20-frontend/ 前缀
-    const platformDir = join(taskDir, platform);
-    const subtaskDir = join(platformDir, subtaskName);
-    await createSubtask(subtaskDir, ...);
-  }
-}
-```
+  - `createTaskFromSection()`：创建任务级 `.meta/`
+  - `createSubtask()`：创建子任务级 `.meta/` + 文档
+  - 所有端统一循环，不再区分前后端
+- `/ts-cli/src/core/spec-paths.ts`:
+  - `parseProjectInfo()`：解析 CONSTITUTION.md 项目信息表
+  - `getProjectPathForPlatform()`：获取实际工程路径
+- `/ts-cli/src/commands/execute.ts`:
+  - `getPlatformSubtaskDirs()`：扫描平铺端目录
+  - `--response` 模式：检查文件路径写入实际工程路径
 
 ### 2.6 端发现机制重构与 --auto 模式 AI 化（v6.40.2）
 
@@ -564,11 +558,8 @@ Iteration-NNN-name/
 │           │   ├── TASK.md            ← 任务履历 + 产出物清单
 │           │   ├── SCHEMA.md          ← 数据库 Schema（可选）
 │           │   └── CHANGELOG.md       ← 需求变更记录
-│           ├── 10-backend/            ← 后端实现（src/tests + 平台规格副本）
-│           ├── 20-frontend/           ← 前端实现（按 CONSTITUTION 端配置创建子目录）
-│           │   ├── app/               ← 端名称来自 CONSTITUTION.md「对应需求端」
-│           │   ├── admin/
-│           │   └── ...
+│           ├── {platform}/            ← 所有端平铺（v6.49.1+）
+│           │   └── {taskId}-{subtask}/ ← 子任务（含 .meta/ + 文档）
 │           ├── 99-artifacts/          ← 执行产出（TEST/REVIEW/RISK/DEPS/...）
 │           └── .issues.md             ← 问题追踪
 └── STAFFING.md
@@ -594,8 +585,9 @@ Iteration-NNN-name/
 分析:  020-specs/REQUIREMENT.md（全局） + 020-specs/admin/TECH.md（管理端专属） + 020-specs/h5/TECH.md（H5 端专属）
 任务:  030-tasks/feature/Task-001-user-auth/
        ├── 00-specs/TECH.md ← 从对应端的 TECH.md 提取
-       ├── 10-backend/backend/
-       └── 20-frontend/admin/ + h5/
+       ├── backend/          ← 后端子任务（平铺）
+       ├── admin/            ← 管理端子任务（平铺）
+       └── h5/               ← H5 端子任务（平铺）
 ```
 
 端名称来自 CONSTITUTION.md「对应需求端」列（如 app/h5/miniapp/admin），split 时自动读取并创建对应前端子目录。
@@ -1770,12 +1762,9 @@ split 阶段:
   │   ├── REQ.md          ← 从 020-specs/REQUIREMENT.md 切出该功能的片段
   │   ├── TECH.md         ← 从 020-specs/{端}/TECH.md 提取该端内容
   │   └── TASK.md
-  ├── 10-backend/
-  │   └── backend/        ← 后端子任务
-  ├── 20-frontend/
-  │   ├── admin/          ← 管理端子任务
-  │   └── h5/             ← H5 端子任务
-  └── 99-artifacts/
+  ├── {platform}/              ← 所有端平铺（v6.49.1+）
+  │   └── {taskId}-{subtask}/  ← 子任务
+  └── .issues.md
 ```
 
 ---

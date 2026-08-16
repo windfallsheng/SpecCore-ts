@@ -2,6 +2,30 @@
 
 ---
 
+## v6.49.9 (2026-08-16) — Full Migration to Flat Platform Architecture: Clean Up 10-backend/20-frontend References
+
+### Core Changes
+
+- **execute.ts**: scaffold mode, filterByPlatform, readiness checks, self-repair loop all use flat platform dir scanning; added `getPlatformSubtaskDirs()` helper
+- **analyze.ts**: TEST.md/REVIEW.md completion and missing file creation use flat platform dir scanning; added `getSubtaskDirs()` helper
+- **prompt-builder.ts**: platform file loading uses flat structure; CODEGEN_EXCLUDE_DIRS adds `00-specs`/`_shared`
+- **status-panel.ts**: person-platform mapping and health checks use flat platform dir scanning; added `taskHasFile()` helper
+- **split.ts**: comment path references updated
+- **init.ts**: directory structure templates updated to flat platform architecture
+- **analyze.ts**: file header comment updated
+
+### Documentation Updates
+
+- **docs/task-directory-design.md**: Fully rewritten to reflect v6.49.x flat platform + feature unit + project path awareness architecture
+- **docs/DESIGN.md**: Updated task directory architecture evolution section, reflecting v6.40.0 → v6.49.1 changes
+
+### Design Principles
+
+- All old structure references preserved as fallback compatibility code for seamless transition
+- New structure: `{platform}/{taskId}-{subtaskSlug}/` unifies subtask directory format across all platforms
+
+---
+
 ## v6.49.8 (2026-08-16) — Project Info Table Parsing: Support Project Type Column
 
 ### Fixes

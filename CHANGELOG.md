@@ -1,3 +1,27 @@
+## v6.49.9 (2026-08-16) — 全面迁移端平铺架构：清理 10-backend/20-frontend 旧引用
+
+### 核心改造
+
+- **execute.ts**：scaffold 模式、filterByPlatform、readiness 检查、自检修复循环全部改用平铺端目录扫描，新增 `getPlatformSubtaskDirs()` 辅助函数
+- **analyze.ts**：TEST.md/REVIEW.md 补全和缺失文件创建改用平铺端目录扫描，新增 `getSubtaskDirs()` 辅助函数
+- **prompt-builder.ts**：平台文件加载改用平铺结构，CODEGEN_EXCLUDE_DIRS 增加 `00-specs`/`_shared`
+- **status-panel.ts**：人员平台映射和健康度检查改用平铺端目录扫描，新增 `taskHasFile()` 辅助函数
+- **split.ts**：注释中的路径引用更新
+- **init.ts**：目录结构模板更新为端平铺架构
+- **analyze.ts**：文件头注释更新
+
+### 文档更新
+
+- **docs/task-directory-design.md**：全面重写，反映 v6.49.x 端平铺 + 功能单元标识 + 工程路径感知架构
+- **docs/DESIGN.md**：更新任务目录架构演进章节，反映 v6.40.0 → v6.49.1 变化
+
+### 设计原则
+
+- 所有旧结构引用保留为回退兼容代码，确保旧项目无缝过渡
+- 新结构：`{platform}/{taskId}-{subtaskSlug}/` 统一所有端的子任务目录格式
+
+---
+
 ## v6.49.8 (2026-08-16) — 项目信息表解析增强：支持工程类型列
 
 ### 修复

@@ -370,38 +370,50 @@ async function loadExtraSpecs(
     }
   }
 
-  // 按端执行时，加载该端的子任务文件（新结构: 10-backend/{服务}/ 或 20-frontend/{端}/）
+  // v6.49.9+: 按端执行时，加载该端的子任务文件（新结构: {platform}/{subtask}/）
   if (platform) {
-    const isBackend = platform === 'backend' || platform.startsWith('后台');
-    const categoryDir = isBackend ? '10-backend' : '20-frontend';
-    const serviceName = isBackend && platform === 'backend' ? 'api' : platform;
-    const platformBase = join(cwd, taskDir, categoryDir, serviceName);
-    // 动态扫描子任务目录（不再硬编码 01-impl）
-    let subtaskDirs: string[] = [];
+    const platformBase = join(cwd, taskDir, platform);
+    // 动态扫描子任务目录
+    let subtaskDirsList: string[] = [];
     try {
       if (await pathExists(platformBase)) {
         const entries = await readdir(platformBase, { withFileTypes: true });
-        subtaskDirs = entries.filter(e => e.isDirectory() && !e.name.startsWith('.')).map(e => e.name);
+        subtaskDirsList = entries.filter(e => e.isDirectory() && !e.name.startsWith('.')).map(e => e.name);
       }
     } catch { /* 跳过 */ }
     // 加载第一个子任务的 TASK.md（作为主要上下文）
-    if (subtaskDirs.length > 0) {
-      const firstSub = subtaskDirs[0];
+    if (subtaskDirsList.length > 0) {
+      const firstSub = subtaskDirsList[0];
       files.unshift(
-        { name: `${platform}端子任务`, path: join(categoryDir, serviceName, firstSub, 'TASK.md') },
+        { name: `${platform}端子任务`, path: join(platform, firstSub, 'TASK.md') },
       );
+      const isBackend = platform === 'backend' || platform.startsWith('后台') || /-(service|api|server|backend)$/i.test(platform);
       if (!isBackend) {
         files.unshift(
-          { name: `${platform}端组件树`, path: join(categoryDir, serviceName, firstSub, 'COMPONENT_TREE.md') },
-          { name: `${platform}端路由`, path: join(categoryDir, serviceName, firstSub, 'ROUTES.md') },
-          { name: `${platform}端状态管理`, path: join(categoryDir, serviceName, firstSub, 'STATE.md') },
+          { name: `${platform}端组件树`, path: join(platform, firstSub, 'COMPONENT_TREE.md') },
+          { name: `${platform}端路由`, path: join(platform, firstSub, 'ROUTES.md') },
+          { name: `${platform}端状态管理`, path: join(platform, firstSub, 'STATE.md') },
         );
       }
     }
-    // 回退: 旧结构 {platform}/TASK.md
-    files.push(
-      { name: `${platform}端子任务(旧)`, path: `${platform}/TASK.md` },
-    );
+    // 回退: 旧结构 10-backend/{服务}/ 或 20-frontend/{端}/
+    const isBk = platform === 'backend' || platform.startsWith('后台');
+    const categoryDir = isBk ? '10-backend' : '20-frontend';
+    const serviceName = isBk && platform === 'backend' ? 'api' : platform;
+    const legacyBase = join(cwd, taskDir, categoryDir, serviceName);
+    if (subtaskDirsList.length === 0) {
+      try {
+        if (await pathExists(legacyBase)) {
+          const entries = await readdir(legacyBase, { withFileTypes: true });
+          const legacySubs = entries.filter(e => e.isDirectory() && !e.name.startsWith('.')).map(e => e.name);
+          if (legacySubs.length > 0) {
+            files.unshift(
+              { name: `${platform}端子任务(旧)`, path: join(categoryDir, serviceName, legacySubs[0], 'TASK.md') },
+            );
+          }
+        }
+      } catch { /* ignore */ }
+    }
   }
 
   for (const f of files) {
@@ -464,8 +476,8 @@ async function loadAllTaskContext(
 
   // 1. 递归扫描任务目录所有 .md / .yaml 文件
   // 排除自检/审查/产出阶段文件（这些在代码生成后的 verify 阶段才需要）
-  // 排除整个 10-backend/ 和 20-frontend/ 大类目录（子任务代码目录不参与全量兜底）
-  const CODEGEN_EXCLUDE_DIRS = new Set(['node_modules', '10-backend', '20-frontend', '99-artifacts', '.meta']);
+  // 排除整个 10-backend/ 和 20-frontend/ 旧大类目录 + 00-specs/ _shared/ 等非代码目录
+  const CODEGEN_EXCLUDE_DIRS = new Set(['node_modules', '10-backend', '20-frontend', '00-specs', '_shared', '99-artifacts', '.meta']);
   const CODEGEN_EXCLUDE_FILES = new Set(['test.md', 'schema.md', 'review.md', 'changelog.md', 'deploy.md', '.issues.md']);
   const scanTaskDir = async (dir: string, prefix: string) => {
     if (!(await pathExists(dir))) return;
