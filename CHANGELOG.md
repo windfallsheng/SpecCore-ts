@@ -1,3 +1,25 @@
+## v6.52.0 (2026-08-16) — 文档全面更新 + HTML 帮助中心补全
+
+### 设计文档
+
+- **DESIGN.md**: 新增 8.9「HTML 页面标记系统（present_files 协议）」章节，包含 10 个标记清单、注册点、数据流
+- **DESIGN.md**: 8.8 业务-代码关联图谱补充 CONTEXT.md 端隔离说明（v6.50.2+）
+- **DESIGN.md**: 版本记录补充 v6.49.15–v6.51.0 共 6 条变更日志
+
+### 说明文档
+
+- **README.md**: 目录结构更新为扁平端架构（v6.49.x+），移除旧的 10-backend/20-frontend 结构
+- **README.md**: 知识图谱描述更新，新增 business_module 实体类型 + 业务-代码关联图谱 + 类型过滤
+- **README.md**: 版本号从 v6.14.0 更新到 v6.52.0
+- **command-reference.md**: 版本号从 v6.16.0 更新到 v6.52.0
+
+### HTML 页面
+
+- **help.ts**: 帮助中心动态页面补充 `retro`（同步与变更分类）和 `knowledge`（查看与验证分类）命令
+- **speccore-help.html**: 静态模板同步补充 `retro` 和 `knowledge` 命令
+
+---
+
 ## v6.51.0 (2026-08-16) — HTML 页面 present_files 全量覆盖 + 命令标记补全
 
 ### 新功能
