@@ -6,6 +6,7 @@ import { join } from 'path';
 import { execSync } from 'child_process';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
+import { warnIfIndexStale } from '../core/index-guard';
 import { showNextSteps } from '../core/next-steps';
 import { extractQuestions, showQuestionChecklist } from '../core/question-checklist';
 import { saveSession, clearSession, tryResume } from '../core/session-state';
@@ -39,6 +40,9 @@ export async function doneCommand(options: DoneOptions): Promise<void> {
   }
   const iteration = await getDefaultIteration(options.iteration);
   if (!iteration) { logger.error('未找到活跃迭代'); return; }
+
+  // 命令前索引新鲜度检查（非阻塞）
+  await warnIfIndexStale(process.cwd(), 'done', iteration);
 
   const iterDir = `Iteration-${iteration}`;
 
@@ -208,6 +212,13 @@ async function doDone(
   if (taskId) {
     try { await retroCommand({ task: taskId, iteration }); } catch {}
   }
+
+  // 自动刷新知识图谱（v6.49.10+）
+  try {
+    const { refreshKnowledgeGraph } = await import('../core/knowledge-graph');
+    await refreshKnowledgeGraph(process.cwd(), iteration);
+    logger.info('🧠 知识图谱已刷新');
+  } catch {}
 }
 
 /** 扫描迭代下所有已完成但未归档的任务 */
