@@ -20,7 +20,7 @@ import { findTaskDir } from '../core/task-paths';
 import { extractQuestions, showQuestionChecklist } from '../core/question-checklist';
 import { showNextSteps } from '../core/next-steps';
 import { runAnalysis, AnalyzeInput, supplementAnalysis, analyzeSingleFeature, generateSpecsFromRequirements } from '../core/analyze-engine';
-import { readFile, readdir } from 'fs-extra';
+import { readFile, readdir, readdirSync } from 'fs-extra';
 import { generateGlobalArtifacts } from '../core/global-artifacts';
 import { buildPrompt, formatPrompt } from '../core/prompt-builder';
 import { buildAutoModeInstruction } from '../core/questions';
@@ -733,6 +733,52 @@ function parseArgv(options: AnalyzeOptions): void {
   }
 }
 
+// ── 用户自定义模板加载（v6.45.0+）──
+// 目录约定：.speccore/templates/{global|iteration|task}/
+// 查找优先级：type/platform/ > type/ > _shared/ > 根目录自定义 > 内置模板
+async function loadUserTemplates(
+  level: 'global' | 'iteration' | 'task',
+  type?: string,
+  platform?: string
+): Promise<Map<string, string>> {
+  const { readdirSync } = require('fs');
+  const templateBase = join('.speccore', 'templates', level);
+  const candidates: string[] = [];
+
+  if (level === 'task') {
+    const t = type || 'feature';
+    if (platform) candidates.push(join(templateBase, t, platform));
+    candidates.push(join(templateBase, t));
+    candidates.push(join(templateBase, '_shared'));
+    candidates.push(templateBase);
+  } else if (level === 'iteration') {
+    if (platform) candidates.push(join(templateBase, platform));
+    candidates.push(templateBase);
+  } else {
+    candidates.push(templateBase);
+  }
+
+  const result = new Map<string, string>();
+  const seen = new Set<string>();
+
+  for (const dir of candidates) {
+    if (seen.has(dir)) continue;
+    seen.add(dir);
+    if (!(await pathExists(dir))) continue;
+    try {
+      const files = readdirSync(dir).filter((f: string) => f.endsWith('.md'));
+      for (const file of files) {
+        const content = await readFile(join(dir, file), 'utf-8');
+        if (content.trim().length > 0) {
+          result.set(file, content);
+        }
+      }
+    } catch { /* skip */ }
+  }
+
+  return result;
+}
+
 // ── buildMultiDocPrompt: 多文档协议 ──
 async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; task?: string; type?: string; scope?: string; withCode?: boolean; platform?: string; phase?: string }): Promise<string> {
   const iter = ctx.iteration || '当前迭代';
@@ -1043,6 +1089,25 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     }
   }
 
+  // ── 用户自定义模板集成（v6.45.0+）──
+  const templateLevel = isGlobal ? 'global' : (isTask ? 'task' : 'iteration');
+  const userTemplates = await loadUserTemplates(templateLevel, isTask ? taskType : undefined, ctx.platform);
+  const hasUserTemplates = userTemplates.size > 0;
+
+  if (hasUserTemplates) {
+    // 用户模板覆盖/追加：用户放了什么文档就生成什么文档
+    for (const [docName, docContent] of userTemplates) {
+      const existing = taskDocs.find(([n]) => n === docName);
+      if (existing) {
+        // 同名覆盖：用户模板作为参考
+        existing[1] = docContent;
+      } else {
+        // 新文档追加：用户自定义文档
+        taskDocs.push([docName, docContent]);
+      }
+    }
+  }
+
   // Phase 1: TECH.md 模板侧重整体架构
   if (ctx.phase === '1') {
     const techDoc = taskDocs.find(([n]) => n === 'TECH.md');
@@ -1216,9 +1281,34 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
   // 步骤 2-7 已在上面的 phase 分支中处理
   const taskFlag = isTask && ctx.task ? ` --task ${ctx.task}` : '';
   const platformFlag = ctx.platform ? ` --platform ${ctx.platform}` : '';
-  if (ctx.phase !== '2') {
-    // Phase 1 或默认模式: 写入指令
-    prompt += `7. 写入: speccore analyze --apply '{"${taskDocs.map(([n]) => `${n}:"..."`).join(',')}...}' -I ${iter}${taskFlag}${platformFlag}\n\n`;
+
+  // ── 链式生成指令（v6.45.0+）──
+  if (hasUserTemplates || isTask) {
+    prompt += `\n## 🔗 链式生成（重要）\n\n`;
+    prompt += `请按以下顺序**逐个生成**文档，每个文档生成后立即 --apply 写入，然后 Read 自己的产出再生成下一个：\n\n`;
+    // 定义生成顺序
+    const chainOrder = isTask
+      ? ['REQ.md', 'TECH.md', 'SCHEMA.md', 'TASK.md']
+      : ['REQUIREMENT.md', 'ANALYSIS.md', 'TECH.md', 'TEST.md', 'REVIEW.md', 'RISK.md', 'DEPS.md', 'MONITOR.md', 'UI_SPEC.md'];
+    const orderedDocs = taskDocs.filter(([n]) => chainOrder.includes(n));
+    const customDocs = taskDocs.filter(([n]) => !chainOrder.includes(n));
+    const ordered = [...orderedDocs.sort((a, b) => chainOrder.indexOf(a[0]) - chainOrder.indexOf(b[0])), ...customDocs];
+    for (let i = 0; i < ordered.length; i++) {
+      const prevDocs = ordered.slice(0, i).map(([n]) => n);
+      prompt += `${i + 1}. **${ordered[i][0]}**`;
+      if (prevDocs.length > 0) {
+        prompt += ` ← 先 Read ${prevDocs.slice(-2).join(' + ')}`;
+      }
+      prompt += `\n`;
+    }
+    prompt += `\n每个文档用单独的 --apply 调用写入：\n`;
+    for (const doc of ordered) {
+      prompt += `speccore analyze --apply '{"${doc[0]}":"..."}' -I ${iter}${taskFlag}${platformFlag}\n`;
+    }
+    prompt += `\n`;
+  } else if (ctx.phase !== '2') {
+    // 传统模式：一次性写入
+    prompt += `7. 写入: speccore analyze --apply '{"${taskDocs.map(([n]) => `${n}:"..."`).join(',')}..."}' -I ${iter}${taskFlag}${platformFlag}\n\n`;
   }
   // Phase 2 提示：Phase 1 完成后引导进入 Phase 2
   if (!ctx.phase) {
@@ -1229,8 +1319,19 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     prompt += `Phase 2 会 Read Phase 1 的全局文档作为上下文，确保各端方案与整体架构一致。\n\n`;
   }
   prompt += '\n' + buildAutoModeInstruction('analyze', iter) + '\n';
-  for (let i = 0; i < taskDocs.length; i++) {
-    prompt += `### ${i+1}/${taskDocs.length}: ${taskDocs[i][0]}\n\`\`\`markdown\n${taskDocs[i][1]}\n\`\`\`\n\n`;
+  // 文档模板展示（有用户模板时只展示用户模板，无用户模板时展示内置模板）
+  if (hasUserTemplates) {
+    prompt += `## 📄 参考模板（用户自定义）\n\n`;
+    prompt += `以下文档使用了用户自定义模板，请参考其结构和风格来生成内容：\n\n`;
+    for (let i = 0; i < taskDocs.length; i++) {
+      if (taskDocs[i][1]) {
+        prompt += `### ${i + 1}/${taskDocs.length}: ${taskDocs[i][0]}\n\`\`\`markdown\n${taskDocs[i][1]}\n\`\`\`\n\n`;
+      }
+    }
+  } else {
+    for (let i = 0; i < taskDocs.length; i++) {
+      prompt += `### ${i + 1}/${taskDocs.length}: ${taskDocs[i][0]}\n\`\`\`markdown\n${taskDocs[i][1]}\n\`\`\`\n\n`;
+    }
   }
   return prompt;
 }

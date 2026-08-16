@@ -2,6 +2,17 @@
 
 ---
 
+## v6.45.0 (2026-08-16) — User Custom Templates + Chain Generation
+
+### Key Changes
+
+- **User custom templates**: `.speccore/templates/{global|iteration|task}/` — same-name files override built-in templates, new files add custom documents
+- **Template lookup priority**: type/platform/ > type/ > _shared/ > root custom > built-in
+- **Chain generation**: documents generated sequentially, each reads previous outputs for consistency
+- **Hybrid mode**: user templates used as reference when present, AI decides structure when absent
+
+---
+
 ## v6.44.0 (2026-08-16) — Analyze --task Task-Level Deep Analysis
 
 ### Key Changes
