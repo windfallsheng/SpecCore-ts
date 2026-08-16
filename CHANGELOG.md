@@ -1,3 +1,39 @@
+## v6.60.0 (2026-08-16) — 移除 Phase 1/Phase 2 分步逻辑，一次性生成所有文档
+
+### 核心修复
+
+- **analyze.ts**: 移除 Phase 1/Phase 2 分步执行逻辑，改为一次性生成 global/ 和 {端}/ 的所有文档
+- **analyze.ts**: 删除 `GLOBAL_DOCS` 和 `PLATFORM_DOCS` 常量，不再根据 phase 过滤文档
+- **analyze.ts**: 删除 Phase 2 的 prompt 代码块（第 1198-1224 行）
+- **analyze.ts**: 删除两阶段分析提示（第 1355-1361 行）
+- **analyze.ts**: 简化 TECH.md 模板逻辑，不再区分 Phase 1/Phase 2
+
+### 问题根因
+
+旧版设计是分两步执行：
+1. Phase 1: 生成全局文档(global/REQUIREMENT.md、ANALYSIS.md 等)
+2. Phase 2: 生成各端专属文档({端}/TECH.md、TEST.md 等)
+
+但问题是 CLI 在执行完 Phase 1 后，没有自动触发 Phase 2。AI 看到 Phase 1 完成后，认为任务已结束，不会自己继续执行 Phase 2。
+
+这导致会议项目只生成了 global/ 的 10 份文档，但没有生成各端的专属文档。
+
+### 修复方案
+
+移除 Phase 1/Phase 2 的分步逻辑，让 AI 在一次执行中同时生成 global/ 和 {端}/ 的所有文档。这样用户只需要执行一次 `speccore analyze --prompt -I iter`，AI 就会：
+1. 先读取需求文档和全局上下文
+2. 生成 global/REQUIREMENT.md、ANALYSIS.md、DEPS.md 等全局文档
+3. 同时生成 {端}/TECH.md、TEST.md、UI_SPEC.md 等各端专属文档
+4. 通过 `--apply` 一次性写入所有文档
+
+### 优势
+
+1. **更简单**：不需要修改 CLI 逻辑来自动触发 Phase 2
+2. **更高效**：AI 可以一次性看到全局上下文和各端需求，生成的文档更一致
+3. **用户体验更好**：用户只需要执行一次命令，不需要多次交互
+
+---
+
 ## v6.59.0 (2026-08-16) — analyze prompt 最强警告：禁止自创目录
 
 ### 核心修复
