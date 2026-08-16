@@ -4,7 +4,7 @@ import { logger, Spinner } from '../../utils/logger';
 import { getDefaultIteration, getIterationDir } from '../../core/context';
 import { scoreRisk, generateRiskReport } from '../../core/risk-scorer';
 import { nextTaskId } from '../../core/global-counters';
-import { backupWithTimestamp } from '../../utils/task-utils';
+import { backupWithTimestamp, isTimestampBackup } from '../../utils/task-utils';
 
 import { showNextSteps } from '../../core/next-steps';
 import { createInterface } from 'readline';
@@ -12,6 +12,7 @@ import { buildPrompt, formatPrompt } from '../../core/prompt-builder';
 import { generatePlatformsRegistry } from '../../core/platform-registry';
 import { warnIfIndexStale } from '../../core/index-guard';
 import { resolveGlobalSpecPath, GLOBAL_SPECS_DIR, parsePlatformList } from '../../core/spec-paths';
+import { buildAutoModeInstruction } from '../../core/questions';
 
 /** 将名称转为目录安全的短 slug（2-4 词） */
 function slugify(name: string): string {
@@ -456,6 +457,14 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     }
 
     const iterationDir = await getIterationDir(iteration);
+
+    // ── v6.49.13+: 模块驱动拆分 — CLI 按功能模块×端创建任务目录，AI 只填充内容 ──
+    if (!options.prompt && !options.response) {
+      const moduleDrivenResult = await tryModuleDrivenSplit(iteration, iterationDir, options);
+      if (moduleDrivenResult) {
+        return;
+      }
+    }
 
     // ── 1. 检查 ANALYSIS.md + AI 智能拆分建议 ──
     const analysisPath = join(iterationDir, '020-specs', 'ANALYSIS.md');
@@ -2853,4 +2862,197 @@ speccore analyze --task ${taskId}${iterFlag}
   process.stdout.write('\n[SPECCORE_NEXT_STEPS]\n');
   process.stdout.write(md);
   process.stdout.write('\n[/SPECCORE_NEXT_STEPS]\n');
+}
+
+// ── v6.49.13+: 模块驱动拆分 — CLI 控制任务结构，AI 只填内容 ──
+
+/**
+ * 尝试模块驱动拆分：从功能模块创建任务目录结构
+ * 成功返回 true，无功能模块时返回 false（回退到传统流程）
+ */
+async function tryModuleDrivenSplit(
+  iteration: string, iterationDir: string, options: IterationSplitOptions
+): Promise<boolean> {
+  const reqDir = join(iterationDir, '010-requirements');
+  const featuresDir = join(reqDir, 'features');
+
+  // 收集功能模块
+  const modules: { name: string; slug: string; type: string; sourceFile: string }[] = [];
+
+  // 1. 读取 features/*/README.md
+  if (await pathExists(featuresDir)) {
+    try {
+      const entries = await readdir(featuresDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory() && !entry.name.startsWith('.')) {
+          const readmePath = join(featuresDir, entry.name, 'README.md');
+          if (await pathExists(readmePath)) {
+            modules.push({ name: entry.name, slug: slugify(entry.name), type: 'feature', sourceFile: `features/${entry.name}/README.md` });
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // 2. 读取类型文档（bugs/refactors/research）
+  for (const typeDir of ['bugs', 'refactors', 'research']) {
+    const typeDirPath = join(reqDir, typeDir);
+    if (!(await pathExists(typeDirPath))) continue;
+    try {
+      const entries = await readdir(typeDirPath, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isFile() && entry.name.endsWith('.md') && !isTimestampBackup(entry.name)) {
+          const slug = slugify(entry.name.replace('.md', ''));
+          const taskType = typeDir === 'bugs' ? 'bugfix' : typeDir;
+          modules.push({ name: entry.name.replace('.md', ''), slug, type: taskType, sourceFile: `${typeDir}/${entry.name}` });
+        }
+      }
+    } catch {}
+  }
+
+  if (modules.length === 0) {
+    return false; // 无功能模块，回退到传统流程
+  }
+
+  // 检测已有任务
+  const existingTasks = await detectExistingTasks(iterationDir);
+  if (existingTasks.length > 0 && !options.force) {
+    logger.warn(`   ⚠️  已有 ${existingTasks.length} 个任务: ${existingTasks.slice(0, 5).join(', ')}...`);
+    logger.info('   使用 --force 强制覆盖');
+    return true; // 已处理，不继续传统流程
+  }
+
+  // --force 清理旧任务
+  if (options.force) {
+    const tasksRoot = join(iterationDir, '030-tasks');
+    if (await pathExists(tasksRoot)) {
+      const entries = await readdir(tasksRoot, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          await remove(join(tasksRoot, entry.name));
+        }
+      }
+      logger.info(`   🗑️  已清理旧任务目录`);
+    }
+  }
+
+  const allPlatforms = await detectPlatforms(iterationDir);
+  logger.info(`\n📦 模块驱动拆分: ${modules.length} 个功能模块 × ${allPlatforms.length} 个端`);
+  logger.info(`   端列表: ${allPlatforms.join(', ')}`);
+
+  // 逐模块创建任务目录
+  const createdSections: Section[] = [];
+  for (const mod of modules) {
+    const { id: taskId } = await nextTaskId(mod.name, mod.slug);
+
+    const section: Section = {
+      name: mod.name,
+      content: '',
+      level: 2,
+    };
+    (section as any)._topic = mod.slug;
+    (section as any)._taskType = mod.type;
+    (section as any)._sourceFile = mod.sourceFile;
+    (section as any)._scopePlatforms = allPlatforms;
+    (section as any)._complexity = {
+      estimatedHours: 8,
+      hoursByPlatform: {},
+      priority: 'medium',
+      complexity: 'medium',
+      apiCount: 0,
+      dbCount: 0,
+      pageCount: 0,
+      wordCount: 0,
+    };
+    (section as any)._owner = '未分配';
+    (section as any)._taskId = taskId;
+    (section as any).functionalUnit = mod.name;
+
+    await createTaskFromSection(iterationDir, taskId, section, allPlatforms, mod.type, []);
+    createdSections.push(section);
+    logger.info(`   ✅ 创建: ${taskId} [${mod.type}] — ${mod.name} (${allPlatforms.length} 个端子任务)`);
+  }
+
+  // 生成任务总览
+  if (createdSections.length > 0) {
+    await generateImpactGraph(iterationDir, createdSections, allPlatforms);
+    logger.info(`\n   📊 创建了 ${createdSections.length} 个任务（每端一个子任务）`);
+
+    // 生成内容填充提示
+    const fillPrompt = buildContentFillingPrompt(iteration, iterationDir, createdSections, allPlatforms);
+    const promptsDir = join('.speccore', 'prompts');
+    await ensureDir(promptsDir);
+    await writeFile(join(promptsDir, `split-content-${iteration}.md`), fillPrompt);
+    logger.info(`   📝 内容填充提示 → .speccore/prompts/split-content-${iteration}.md`);
+  }
+
+  logger.success(`✅ 模块驱动拆分完成: ${createdSections.length} 个任务`);
+
+  // 自动刷新知识图谱
+  try {
+    const { refreshKnowledgeGraph } = await import('../../core/knowledge-graph');
+    await refreshKnowledgeGraph(process.cwd(), iteration);
+    logger.info('🧠 知识图谱已刷新');
+  } catch {}
+
+  return true;
+}
+
+/**
+ * 生成内容填充 Prompt — AI 为预创建的任务填充 REQ.md/TECH.md
+ */
+function buildContentFillingPrompt(
+  iteration: string,
+  iterationDir: string,
+  sections: Section[],
+  allPlatforms: string[],
+): string {
+  let p = `# 任务内容填充（模块驱动拆分）\n\n`;
+  p += `> 迭代: ${iteration} | 任务数: ${sections.length} | 端: ${allPlatforms.join(', ')}\n\n`;
+
+  p += `## 说明\n\n`;
+  p += `CLI 已按功能模块×端创建了任务目录结构。每个任务目录下已有子任务目录（含 .meta/、TASK.md 等）。\n`;
+  p += `你的任务是为每个子任务填充 REQ.md 和 TECH.md。\n\n`;
+
+  p += `## 上下文\n\n`;
+  p += `1. Read .speccore/CONSTITUTION.md — 项目配置\n`;
+  p += `2. Read 020-specs/global/REQUIREMENT.md — 全局需求规格\n`;
+  p += `3. Read 020-specs/global/ANALYSIS.md — 全局分析报告\n`;
+  p += `4. Read 020-specs/global/TECH.md — 整体技术架构\n`;
+  p += `5. Read 020-specs/{端}/TECH.md — 各端专属技术方案\n\n`;
+
+  p += `## 任务清单\n\n`;
+  for (const sec of sections) {
+    const taskId = (sec as any)._taskId || sec.name;
+    const sourceFile = (sec as any)._sourceFile || '';
+    const featureName = (sec as any).functionalUnit || sec.name;
+    p += `### ${taskId} — ${sec.name}\n`;
+    p += `- 功能单元: ${featureName}\n`;
+    if (sourceFile) p += `- 来源: 010-requirements/${sourceFile}\n`;
+    p += `- 子任务目录: ${allPlatforms.map(pl => `${pl}/`).join(', ')}\n`;
+    p += `- 需要填充:\n`;
+    for (const platform of allPlatforms) {
+      p += `  - ${platform}/*/REQ.md — 子任务需求规格\n`;
+      p += `  - ${platform}/*/TECH.md — 子任务技术方案\n`;
+    }
+    p += `\n`;
+  }
+
+  p += `## 填充规则\n\n`;
+  p += `1. 先 Read 子任务目录下的 TASK.md（已有基本信息）和 .meta/feature（功能单元名）\n`;
+  p += `2. REQ.md: 根据全局需求文档，撰写本子任务的需求规格（验收标准、业务规则、边界条件）\n`;
+  p += `3. TECH.md: 根据全局 TECH.md，细化本子任务的技术方案（接口定义、数据模型、核心逻辑）\n`;
+  p += `4. 用 Write 工具直接写入对应路径\n`;
+  p += `5. 同一功能模块的各端子任务要保持 API 契约一致\n`;
+  p += `6. 禁止产出垃圾内容——每个文件必须有实质性专业内容\n\n`;
+
+  p += `## ⚠️ 绝对禁止\n\n`;
+  p += `- 不要创建新目录 — 目录已由 CLI 创建\n`;
+  p += `- 不要修改 .meta/ 下的文件\n`;
+  p += `- 不要修改 TASK.md（已由 CLI 生成）\n`;
+  p += `- 只写 REQ.md 和 TECH.md\n`;
+
+  p += '\n' + buildAutoModeInstruction('split', iteration) + '\n';
+
+  return p;
 }
