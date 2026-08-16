@@ -313,9 +313,9 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 
 ## 端列表（全局权威）
 
-> ⚠️ **端名是全项目唯一的标识符**，所有命令（analyze/split/execute）、目录名（020-specs/{端}/）、模板目录（templates/{level}/{端}/）均使用此处声明的端名。
+> ⚠️ **工程标识是全项目唯一的端标识符**，所有命令（analyze/split/execute）、目录名（020-specs/{端}/）、模板目录（templates/{level}/{端}/）均使用此处声明的端名。
 
-| 端名 | 描述 | 类型 |
+| 工程标识 | 描述 | 类型 |
 | :--- | :--- | :--- |
 | app | 移动端 APP | frontend |
 | h5 | 移动 H5 端 | frontend |
@@ -323,24 +323,24 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 | admin | 后台管理端 | frontend |
 
 > **端名规则**：
-> - 端名 = 工程名，一一对应（一个端 = 一个完整的服務/应用 = 一个 git 仓库）
+> - 工程标识 = 工程名，一一对应（一个端 = 一个完整的服務/应用 = 一个 git 仓库）
 > - 全小写、无空格、用短横线分隔（如 order-service）
 > - 类型：frontend / backend / infra
 > - 此列表是 analyze/split/execute 的唯一端名来源
-> - 「对应端」列引用此列表中的端名，每行只填一个
+> - 「对应端」列引用此列表中的工程标识，每行只填一个
 
 ## 项目信息
 
-| 工程 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应端 |
+| 工程标识 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应端 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | ${projectName} | 待填写 | ./ | ${gitUrl || '待配置'} | main | 待填写 |
 
-> ⚠️ **项目名称** 是给人和 AI 看的业务名称（如“食堂后台管理”、“商户入驻系统”），不同于技术上的工程名。
+> ⚠️ **项目名称** 是给人和 AI 看的业务名称（如"食堂后台管理"、"商户入驻系统"），不同于技术上的工程标识。
 >   AI 会据此理解项目业务范围，在分析/拆分/生成代码时作为上下文参考。
 
 > 多工程示例（每个端 = 一个独立工程）:
 >
-> | 工程 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应端 |
+> | 工程标识 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应端 |
 > | :--- | :--- | :--- | :--- | :--- | :--- |
 > | admin-web | 后台管理端 | ./packages/admin | git@xxx/admin.git | main | admin |
 > | h5-app | 移动H5端 | ./packages/h5 | git@xxx/h5.git | main | h5 |

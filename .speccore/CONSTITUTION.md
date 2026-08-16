@@ -7,7 +7,7 @@
 
 > ⚠️ **端名是全项目唯一的标识符**，所有命令（analyze/split/execute）、目录名（020-specs/{端}/）、模板目录（templates/{level}/{端}/）均使用此处声明的端名。
 
-| 端名 | 描述 | 类型 |
+| 工程标识 | 描述 | 类型 |
 | :--- | :--- | :--- |
 | app | 移动端 APP | frontend |
 | h5 | 移动 H5 端 | frontend |

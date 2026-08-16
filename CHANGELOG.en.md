@@ -2,6 +2,16 @@
 
 ---
 
+## v6.48.1 (2026-08-16) — Platform List Parsing Enhancement + Column Name Optimization
+
+### Improvements
+
+- **`parsePlatformList()` dynamic column lookup**: no longer hardcodes column 1; parses header first to find "工程标识/端名/平台名" column index, works regardless of column position
+- **Column name optimized**: `端名` → `工程标识`, clearer semantics (both platform identifier and project/directory name)
+- **init template synced**: CONSTITUTION.md template and project config both updated to "工程标识"
+
+---
+
 ## v6.48.0 (2026-08-16) — Backend Platform Detection + Dual-Layer Directories + Name Consistency
 
 ### Core Fixes

@@ -52,23 +52,38 @@ export async function parsePlatformList(): Promise<string[]> {
 
   // 1. 优先解析「端列表」章节（v6.46.0+ 显式声明）
   let inPlatformSection = false;
+  let platformColIdx = -1; // 端名列索引（动态查找）
   const platforms = new Set<string>();
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
     // 检测章节标题
     if (line.match(/^##\s+.*\u7aef\u5217\u8868/) || line.match(/^##\s+.*\u5e73\u53f0\u5217\u8868/)) {
       inPlatformSection = true;
+      platformColIdx = -1; // 重置，每个章节重新找表头
       continue;
     }
     // 遇到下一个 ## 章节就停止
     if (inPlatformSection && line.match(/^##\s/)) break;
     if (!inPlatformSection) continue;
-    // 解析表格行（跳过标题行和分隔行）
-    if (!line.startsWith('|') || line.match(/^\|\s*[-:]/)) continue;
+    // 解析表格行
+    if (!line.startsWith('|')) continue;
+    // 分隔行跳过
+    if (line.match(/^\|\s*[-:]/)) continue;
     const cells = line.split('|').map(c => c.trim()).filter(Boolean);
-    if (cells.length >= 1) {
-      const platformName = cells[0].trim();
-      if (platformName && platformName !== '端名' && platformName !== '平台名') {
+    // 表头行：动态查找端名列索引
+    if (platformColIdx === -1 && cells.length > 0) {
+      // 匹配表头中的端名列：端名 / 平台名 / 工程标识 / 工程ID
+      platformColIdx = cells.findIndex(h =>
+        h === '端名' || h === '平台名' || h === '工程标识' || h === '工程ID' ||
+        h.includes('端名') || h.includes('平台名') || h.includes('工程标识')
+      );
+      if (platformColIdx < 0) platformColIdx = 0; // 兜底：取第 1 列
+      continue; // 表头行本身不是数据
+    }
+    // 数据行：取端名列
+    if (cells.length > platformColIdx) {
+      const platformName = cells[platformColIdx].trim();
+      if (platformName) {
         platforms.add(platformName);
       }
     }
@@ -85,14 +100,14 @@ export async function parsePlatformList(): Promise<string[]> {
   }
   if (headerIdx >= 0) {
     const headers = lines[headerIdx].split('|').map(h => h.trim()).filter(Boolean);
-    const platformColIdx = headers.findIndex(h => h.includes('对应需求端') || h.includes('对应端'));
-    if (platformColIdx >= 0) {
+    const colIdx = headers.findIndex(h => h.includes('对应需求端') || h.includes('对应端'));
+    if (colIdx >= 0) {
       for (let i = headerIdx + 1; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line.startsWith('|') || line.match(/^\|\s*[-:]/)) continue;
         const cells = line.split('|').map(c => c.trim()).filter(Boolean);
-        if (cells[platformColIdx]) {
-          cells[platformColIdx].split(',').forEach((p: string) => {
+        if (cells[colIdx]) {
+          cells[colIdx].split(',').forEach((p: string) => {
             const trimmed = p.trim();
             if (trimmed && !trimmed.startsWith('>')) platforms.add(trimmed);
           });
