@@ -12,6 +12,7 @@ import { isTimestampBackup } from '../utils/task-utils';
 import { logger } from '../utils/logger';
 import { loadKnowledgeGraph, getTaskContext, isGraphStale, refreshKnowledgeGraph, KnowledgeGraph } from './knowledge-graph';
 import { buildCompactContext } from './context-builder';
+import { parseProjectInfo } from './spec-paths';
 import {
   loadRagIndex, isRagIndexStale, retrieveRelevantChunks,
   assembleChunksForPrompt, indexTaskDocuments,
@@ -140,6 +141,7 @@ export interface SpecCorePrompt {
   extraSpecs: TaskExtraSpec[];
   globalContext?: GlobalContext;
   taskContext?: string;  // 知识图谱：当前任务的关联链
+  projectPaths?: string; // v6.49.6+：工程路径信息（用于 execute 命令）
   instruction: string;
   outputHint: string;
 }
@@ -1248,6 +1250,23 @@ export async function buildPrompt(
     modelCount: dataModels.length,
   };
 
+  // v6.49.6+：加载工程路径信息（用于 execute 命令告诉 AI 代码写到哪里）
+  let projectPathsInfo: string | undefined;
+  if (command === 'execute') {
+    const projectInfoMap = await parseProjectInfo();
+    if (projectInfoMap.size > 0) {
+      const lines = ['## 📂 工程路径（代码输出位置）', '', '| 工程标识 | 源码路径 | 对应端 |', '| :--- | :--- | :--- |'];
+      for (const [identifier, info] of projectInfoMap) {
+        lines.push(`| ${identifier} | \`${info.srcPath}\` | ${info.platform} |`);
+      }
+      lines.push('');
+      lines.push('**重要**：输出文件时，路径必须以工程标识开头。');
+      lines.push('例如：`booking-service/src/main/java/...` 会写入 `../outputs-project/backend/booking-service/src/main/java/...`');
+      lines.push('如果不以工程标识开头，文件将写入迭代目录（兼容旧行为）。');
+      projectPathsInfo = lines.join('\n');
+    }
+  }
+
   return {
     marker: '[SPECCORE_PROMPT]',
     version: '1.0',
@@ -1262,9 +1281,10 @@ export async function buildPrompt(
     extraSpecs,
     globalContext: (globalContext.indexSummary || globalContext.toc.length > 0) ? globalContext : undefined,
     taskContext: taskContextStr,
+    projectPaths: projectPathsInfo,
     instruction: getInstruction(command, context),
     outputHint: command === 'execute'
-      ? '请返回格式: {"files": [{"path": "相对路径", "content": "代码内容"}]}'
+      ? '请返回格式: {"files": [{"path": "工程标识/相对路径", "content": "代码内容"}]}'
       : command === 'split'
         ? '请返回 JSON 数组格式的任务列表（参见拆分原则中的输出格式）'
         : '请返回 Markdown 格式的分析结果',
@@ -1421,6 +1441,12 @@ function buildPromptText(prompt: SpecCorePrompt): string {
   // 全局上下文（从 GLOBAL 层智能注入）
   if (prompt.globalContext) {
     lines.push(formatGlobalContext(prompt.globalContext, prompt.platform));
+    lines.push('');
+  }
+
+  // v6.49.6+：工程路径信息（用于 execute 命令）
+  if (prompt.projectPaths) {
+    lines.push(prompt.projectPaths);
     lines.push('');
   }
 

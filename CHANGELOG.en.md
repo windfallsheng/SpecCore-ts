@@ -2,6 +2,22 @@
 
 ---
 
+## v6.49.6 (2026-08-16) — Project Path Awareness: Code Writes to CONSTITUTION-Specified Locations
+
+### Core Fixes
+
+- **`parseProjectInfo()` function**: Parses project info table from CONSTITUTION.md, returns Map<project identifier, { projectName, srcPath, gitRepo, branch, platform }>
+- **`getProjectPathForPlatform()` function**: Gets actual project path by platform name, supports exact match and "corresponding platform" column matching
+- **execute command project path awareness**: `--response` mode now checks if file path starts with platform name, if so writes to actual project path defined in CONSTITUTION.md
+- **prompt builder injects project paths**: execute command's Prompt includes project path table, telling AI where to write code
+
+### Issues Fixed
+
+- Previously code was written to iteration directory (e.g., `Iteration-011/10-backend/`), not actual project paths defined in CONSTITUTION.md (e.g., `../outputs-project/backend/booking-service`)
+- Git branch logic failed because code wasn't in actual repositories
+
+---
+
 ## v6.49.5 (2026-08-16) — Deterministic Subtask ID Format
 
 ### Fixes
