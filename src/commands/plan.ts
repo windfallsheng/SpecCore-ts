@@ -607,6 +607,7 @@ async function writeHtmlPlan(
   await ensureDir(dirname(htmlPath));
   await writeFile(htmlPath, html, 'utf-8');
   logger.success(`✅ 计划可视化: ${htmlPath}`);
+  process.stdout.write(`[SPECCORE_PLAN: ${htmlPath}]\n`);
 }
 
 /**

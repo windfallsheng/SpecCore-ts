@@ -1,3 +1,25 @@
+## v6.51.0 (2026-08-16) — HTML 页面 present_files 全量覆盖 + 命令标记补全
+
+### 新功能
+
+- **dashboard 命令**: 新增 `[SPECCORE_DASHBOARD]` 标记，迭代看板和全局仪表盘生成后自动触发 present_files
+- **retro 命令**: 新增 `[SPECCORE_RETRO]` 标记，回顾报告生成后自动触发 present_files
+- **plan 命令**: 新增 `[SPECCORE_PLAN]` 标记，执行计划页面生成后自动触发 present_files
+
+### 修复
+
+- **speccore-router/SKILL.md**: 新增 10 个 HTML 页面标记的 present_files 指令（ONBOARD/SETUP_GUIDE/ABOUT/HELP/WELCOME/DEV/KNOWLEDGE/PLAN/RETRO/DASHBOARD）
+- **spec-ask/SKILL.md**: 同步新增 10 个 HTML 页面标记
+- **7 个平台 command 文件**: 全部更新为「HTML 页面强制展示」章节，覆盖所有标记
+- **init.ts 模板**: spec-ask 命令模板更新，确保 `init --update` 后新项目自动继承
+
+### 设计原则
+
+- 所有生成 HTML 页面的命令都必须输出对应的 `[SPECCORE_*: <path>]` 标记
+- AI 平台通过标记触发 `present_files` 展示，不依赖文件路径猜测
+
+---
+
 ## v6.50.3 (2026-08-16) — 正则匹配修复 + prompt 格式统一
 
 ### 修复

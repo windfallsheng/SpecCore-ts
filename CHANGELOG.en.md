@@ -2,6 +2,28 @@
 
 ---
 
+## v6.51.0 (2026-08-16) — HTML Page present_files Full Coverage + Command Marker Completion
+
+### New Features
+
+- **dashboard command**: Added `[SPECCORE_DASHBOARD]` marker, auto-triggers present_files after iteration dashboard and global dashboard generation
+- **retro command**: Added `[SPECCORE_RETRO]` marker, auto-triggers present_files after retro report generation
+- **plan command**: Added `[SPECCORE_PLAN]` marker, auto-triggers present_files after plan page generation
+
+### Fixes
+
+- **speccore-router/SKILL.md**: Added present_files instructions for 10 HTML page markers (ONBOARD/SETUP_GUIDE/ABOUT/HELP/WELCOME/DEV/KNOWLEDGE/PLAN/RETRO/DASHBOARD)
+- **spec-ask/SKILL.md**: Synced with 10 HTML page markers
+- **7 platform command files**: All updated to "HTML 页面强制展示" section, covering all markers
+- **init.ts template**: spec-ask command template updated, ensuring new projects inherit via `init --update`
+
+### Design Principle
+
+- All commands generating HTML pages must output corresponding `[SPECCORE_*: <path>]` markers
+- AI platforms trigger `present_files` via markers, not file path guessing
+
+---
+
 ## v6.50.3 (2026-08-16) — Regex Fix + Prompt Format Consistency
 
 ### Fixes
