@@ -2,6 +2,36 @@
 
 ---
 
+## v6.40.2 (2026-08-16) — Platform Discovery Refactoring + --auto Mode AI-ification
+
+### Core Changes
+
+- **analyze-engine.ts**: Three-layer platform detection architecture refactoring
+  - **Removed hardcoded default platform list** `['app', 'h5', 'miniapp', 'admin']` → returns empty array
+  - **New Layer 2**: Tech stack header parsing `### Chinese Name (English Name)`
+  - **New functions**: `parseTechStackHeaders()` + `buildDynamicAliasesFromTechStack()`
+  - **Fixed `normalizeToStandardPlatform()`**: Two-phase longest-match strategy
+    - Phase 1 exact match, Phase 2 contains match, prevents short alias mis-matching
+    - Fixed "后台服务端" → admin (should be backend), "移动端" → app (should be h5)
+  - **Enhanced `inferPlatformFromPathOrContent()`**: Merges static mapping + CONSTITUTION.md dynamic aliases
+
+- **analyze.ts**: --auto mode refactoring + platform filtering
+  - **--auto no longer skips AI**: Removed `runAnalysis()` + `generateSpecsFromRequirements()` calls
+  - Now sets `options.prompt = true`, falls through to prompt generation for host AI analysis
+  - **Iteration-level --platform filtering**: Prompt includes platform filtering instructions
+  - **AI platform discovery instructions**: Prompt step 5 guides AI to discover platforms from CONSTITUTION.md + requirements
+  - AI writes discovered platform list to `020-specs/PLATFORMS.md`
+
+- **cli.ts**: Registered `--platform` option for analyze command
+
+### Design Principles
+
+- ✅ **Platform list determined by AI**: CLI only does deterministic detection (table + headers), uncertain cases delegated to AI
+- ✅ **--auto must go through AI**: Auto mode means non-interactive, not skip AI
+- ✅ **Dynamic project adaptation**: No hardcoded platform lists, each project's platforms determined by AI based on actual content
+
+---
+
 ## v6.38.0 (2026-08-15) — Design Doc Update + Code Sync
 
 ### Core Changes

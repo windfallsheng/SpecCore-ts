@@ -1379,7 +1379,7 @@ async function writePerPlatform(iterDir: string, report: string, filename: strin
 
     if (features.length === 0) return;
 
-    // 平台列表从 CONSTITUTION 获取，默认四端
+    // 平台列表从 CONSTITUTION 获取（不再硬编码默认值）
     const platforms = await detectPlatformsFromConstitution();
     
     for (const platform of platforms) {
@@ -1893,7 +1893,67 @@ export async function supplementAnalysis(input: {
 /** 已检测到的后端平台列表（从 CONSTITUTION.md 解析） */
 let _detectedBackendPlatforms: string[] = [];
 
-/** 从 CONSTITUTION.md 提取平台列表（支持中文端名 + 工程名映射） */
+/** 从 CONSTITUTION.md 动态提取的端名映射（技术栈标题解析） */
+let _dynamicPlatformAliases: Record<string, string[]> = {};
+
+/**
+ * 从 CONSTITUTION.md 技术栈章节标题提取端名信息。
+ * 匹配模式: ### 中文端名 (English Name)
+ * 例如: ### 后台管理端 (Admin Dashboard) → { chinese: '后台管理端', english: 'Admin Dashboard' }
+ */
+function parseTechStackHeaders(content: string): Array<{ chinese: string; english: string; fullTitle: string }> {
+  const results: Array<{ chinese: string; english: string; fullTitle: string }> = [];
+  const lines = content.split('\n');
+  
+  for (const line of lines) {
+    // 匹配: ### 后台管理端 (Admin Dashboard) 或 ### H5 移动端 (Mobile H5)
+    const match = line.match(/^###\s+(.+?)\s*\(([^)]+)\)/);
+    if (match) {
+      results.push({
+        chinese: match[1].trim(),
+        english: match[2].trim(),
+        fullTitle: line.trim(),
+      });
+    }
+  }
+  
+  return results;
+}
+
+/**
+ * 将技术栈标题解析结果合并到动态别名映射中。
+ * 这样 inferPlatformFromPathOrContent 也能使用 CONSTITUTION.md 定义的端名。
+ */
+function buildDynamicAliasesFromTechStack(
+  techStackEntries: Array<{ chinese: string; english: string; fullTitle: string }>
+): Record<string, string[]> {
+  const aliases: Record<string, string[]> = {};
+  
+  for (const entry of techStackEntries) {
+    const normalized = normalizeToStandardPlatform(entry.chinese) || normalizeToStandardPlatform(entry.english);
+    if (!normalized) continue;
+    
+    if (!aliases[normalized]) {
+      aliases[normalized] = [];
+    }
+    // 添加中文名、英文名、全标题作为别名
+    const newAliases = [entry.chinese, entry.english, entry.fullTitle];
+    for (const a of newAliases) {
+      const lower = a.toLowerCase();
+      if (!aliases[normalized].includes(lower)) {
+        aliases[normalized].push(lower);
+      }
+    }
+  }
+  
+  return aliases;
+}
+
+/** 从 CONSTITUTION.md 提取平台列表（两层确定性匹配）
+ *  Layer 1: 表格「对应需求端」列（用户显式声明）
+ *  Layer 2: 技术栈章节标题 ### 中文端名 (English Name)
+ *  ⚠️ 不再提供硬编码默认值 — 端列表应由 AI 根据项目实际情况判断
+ */
 async function detectPlatformsFromConstitution(): Promise<string[]> {
   try {
     const constitutionPath = join(process.cwd(), '.speccore', 'CONSTITUTION.md');
@@ -1901,7 +1961,7 @@ async function detectPlatformsFromConstitution(): Promise<string[]> {
       const content = require('fs').readFileSync(constitutionPath, 'utf-8');
       const lines = content.split('\n');
       
-      // 1. 先尝试从表头定位「对应需求端」和「工程名」列的索引
+      // ── Layer 1: 表格「对应需求端」列 ──
       let headerRowIndex = -1;
       let headerCells: string[] = [];
       for (let i = 0; i < lines.length; i++) {
@@ -1919,24 +1979,28 @@ async function detectPlatformsFromConstitution(): Promise<string[]> {
         const backendPlatforms: string[] = [];
         const seen = new Set<string>();
         
-        // 解析数据行（跳过头部和分隔线）
         for (let i = headerRowIndex + 2; i < lines.length; i++) {
           const line = lines[i].trim();
-          if (!line.startsWith('|') || line.match(/^\|[\s:-]+/)) continue;
+          // 分隔行跳过（如 | :--- | :--- |）
+          if (line.match(/^\|[\s:-]+/)) continue;
+          // 空行跳过（表格内可能有空行）
+          if (line === '') continue;
+          // 非表格行 → 当前表格结束，终止读取
+          if (!line.startsWith('|')) break;
           
           const cells = line.split('|').map((c: string) => c.trim()).filter(Boolean);
           const projectName = cells[0] || '';
           const platformChinese = cells[5] || cells[cells.length - 1] || '';
           
+          // 跳过空值和占位符（如「待填写」）
           if (!platformChinese || !projectName) continue;
+          if (/待填写|待补充|TODO|TBD|N\/A/i.test(platformChinese)) continue;
           
-          // 归一化：中文端名 → 标准端名
           const normalized = normalizeToStandardPlatform(platformChinese);
           if (normalized && !seen.has(normalized)) {
             seen.add(normalized);
             platforms.push(normalized);
             
-            // 判断前后端：从工程名或中文端名推断
             const isBackend = /service|server|api|backend|后台|服务|后端/i.test(projectName) ||
                              /后台|服务|后端/.test(platformChinese);
             if (isBackend) {
@@ -1947,18 +2011,54 @@ async function detectPlatformsFromConstitution(): Promise<string[]> {
         
         if (platforms.length > 0) {
           _detectedBackendPlatforms = backendPlatforms;
+          // Layer 1 成功：也解析技术栈标题来构建动态别名
+          const techStackEntries = parseTechStackHeaders(content);
+          if (techStackEntries.length > 0) {
+            _dynamicPlatformAliases = buildDynamicAliasesFromTechStack(techStackEntries);
+          }
           return platforms;
         }
       }
       
-      // 2. 回退：简单正则匹配（兼容旧格式）
+      // ── Layer 2: 技术栈章节标题 ### 中文端名 (English Name) ──
+      const techStackEntries = parseTechStackHeaders(content);
+      if (techStackEntries.length > 0) {
+        const platforms: string[] = [];
+        const backendPlatforms: string[] = [];
+        const seen = new Set<string>();
+        
+        for (const entry of techStackEntries) {
+          const normalized = normalizeToStandardPlatform(entry.chinese) || normalizeToStandardPlatform(entry.english);
+          if (!normalized || seen.has(normalized)) continue;
+          seen.add(normalized);
+          platforms.push(normalized);
+          
+          // 判断前后端
+          const isBackend = /service|server|api|backend|后台|服务|后端/i.test(entry.chinese + ' ' + entry.english);
+          if (isBackend) {
+            backendPlatforms.push(normalized);
+          }
+        }
+        
+        if (platforms.length > 0) {
+          _detectedBackendPlatforms = backendPlatforms;
+          _dynamicPlatformAliases = buildDynamicAliasesFromTechStack(techStackEntries);
+          logger.info(`   📋 从技术栈标题检测到 ${platforms.length} 个端: ${platforms.join(', ')}`);
+          return platforms;
+        }
+      }
+      
+      // Layer 2.5: 简单正则匹配（兼容旧格式）
       const match = content.match(/对应需求端[|｜]\s*([a-z,\s]+)/i);
       if (match) {
-        return match[1].split(/[,，]/).map((s: string) => s.trim()).filter(Boolean);
+        const result = match[1].split(/[,，]/).map((s: string) => s.trim()).filter(Boolean);
+        if (result.length > 0) return result;
       }
     }
   } catch {}
-  return ['app', 'h5', 'miniapp', 'admin']; // 默认四端
+  // ⚠️ 不再硬编码默认端列表 — 端列表应由 AI 根据 CONSTITUTION.md + 需求文档判断
+  // 如果 Layer 1 和 Layer 2 都无法检测到端，返回空数组，由 AI 在 prompt 中自行发现
+  return [];
 }
 
 /**
@@ -1968,11 +2068,29 @@ async function detectPlatformsFromConstitution(): Promise<string[]> {
 function normalizeToStandardPlatform(name: string): string | null {
   const nameLower = name.toLowerCase().trim();
   
+  // 【v6.40.2 修复】两阶段最长匹配策略：
+  // Phase 1: 精确匹配（name === alias），最长优先
+  // Phase 2: 包含匹配（name.includes(alias) 或 alias.includes(name)），最长优先
+  // 避免「后台服务端」被短别名「后台」先匹配到 admin
+  // 避免「移动端」被更长别名「移动端app」误匹配到 app
+  const allPairs: Array<{ alias: string; platform: string }> = [];
   for (const [standardName, aliases] of Object.entries(PLATFORM_ALIAS_MAP)) {
     for (const alias of aliases) {
-      if (nameLower === alias || nameLower.includes(alias) || alias.includes(nameLower)) {
-        return standardName;
-      }
+      allPairs.push({ alias: alias.toLowerCase(), platform: standardName });
+    }
+  }
+  allPairs.sort((a, b) => b.alias.length - a.alias.length);
+  
+  // Phase 1: 精确匹配
+  for (const pair of allPairs) {
+    if (nameLower === pair.alias) {
+      return pair.platform;
+    }
+  }
+  // Phase 2: 包含匹配
+  for (const pair of allPairs) {
+    if (nameLower.includes(pair.alias) || pair.alias.includes(nameLower)) {
+      return pair.platform;
     }
   }
   
@@ -2041,7 +2159,11 @@ export async function generateSpecsFromRequirements(
   if (unclassifiedFiles.length > 0) {
     logger.info('');
     logger.info(`   ❓ 发现 ${unclassifiedFiles.length} 个文档无法自动识别所属端`);
-    logger.info(`   💡 可用端列表: ${platforms.join(', ')}`);
+    if (platforms.length > 0) {
+      logger.info(`   💡 可用端列表: ${platforms.join(', ')}`);
+    } else {
+      logger.info(`   💡 CONSTITUTION.md 未检测到端列表，将由 AI 根据需求文档内容判断`);
+    }
     logger.info('');
     
     for (const file of unclassifiedFiles) {
@@ -3087,17 +3209,30 @@ function inferPlatformFromPathOrContent(
     }
   }
   
-  // 【新增】2. 语义映射匹配：尝试将内容中的中文端名映射到标准端名
+  // 2. 语义映射匹配：硬编码 PLATFORM_ALIAS_MAP + CONSTITUTION.md 动态别名
   const firstLines = content.split('\n').slice(0, 50).join('\n');
-  for (const [standardPlatform, aliases] of Object.entries(PLATFORM_ALIAS_MAP)) {
-    // 只检查这个标准端名是否在 platforms 列表中
+  
+  // 合并硬编码映射和 CONSTITUTION.md 动态提取的别名
+  const mergedAliases: Record<string, string[]> = { ...PLATFORM_ALIAS_MAP };
+  for (const [platform, aliases] of Object.entries(_dynamicPlatformAliases)) {
+    if (!mergedAliases[platform]) {
+      mergedAliases[platform] = [];
+    }
+    for (const a of aliases) {
+      if (!mergedAliases[platform].includes(a)) {
+        mergedAliases[platform].push(a);
+      }
+    }
+  }
+  
+  for (const [standardPlatform, aliases] of Object.entries(mergedAliases)) {
     if (!platforms.includes(standardPlatform)) continue;
     
-    // 检查是否有别名出现在内容中
     for (const alias of aliases) {
       const aliasPattern = new RegExp(alias, 'i');
       if (aliasPattern.test(firstLines)) {
-        logger.info(`   🔄 语义映射: "${alias}" → "${standardPlatform}"`);
+        const source = PLATFORM_ALIAS_MAP[standardPlatform]?.includes(alias) ? '静态映射' : 'CONSTITUTION动态';
+        logger.info(`   🔄 语义映射(${source}): "${alias}" → "${standardPlatform}"`);
         return standardPlatform;
       }
     }

@@ -1,3 +1,35 @@
+## v6.40.2 (2026-08-16) — 端发现机制重构 + --auto 模式 AI 化
+
+### 核心变更
+
+- **analyze-engine.ts**: 端检测三层架构重构
+  - **删除硬编码默认端列表** `['app', 'h5', 'miniapp', 'admin']` → 返回空数组
+  - **新增 Layer 2**: 技术栈标题解析 `### 中文端名 (English Name)`
+  - **新增函数**: `parseTechStackHeaders()` + `buildDynamicAliasesFromTechStack()`
+  - **修复 `normalizeToStandardPlatform()`**: 两阶段最长匹配策略
+    - Phase 1 精确匹配，Phase 2 包含匹配，避免短别名误匹配
+    - 修复「后台服务端」→ admin（应为 backend）、「移动端」→ app（应为 h5）
+  - **增强 `inferPlatformFromPathOrContent()`**: 合并静态映射 + CONSTITUTION.md 动态别名
+  - **表格解析修复**: 非表格行 `break` 终止（不再误读技术栈表格）
+
+- **analyze.ts**: --auto 模式重构 + 端过滤支持
+  - **--auto 不再跳过 AI**: 移除 `runAnalysis()` + `generateSpecsFromRequirements()` 调用
+  - 改为设置 `options.prompt = true`，fall through 到 prompt 生成，宿主 AI 执行专业分析
+  - **迭代级 --platform 过滤**: prompt 中新增端过滤指令，只生成指定端的文档
+  - **AI 端发现指令**: prompt 第 5 步指导 AI 从 CONSTITUTION.md + 需求文档发现端列表
+  - AI 将发现的端列表写入 `020-specs/PLATFORMS.md`
+
+- **cli.ts**: 补注册 `--platform` 选项
+  - analyze 命令的 `--platform` 选项之前在代码中实现但未在 cli.ts 注册
+
+### 设计原则
+
+- ✅ **端列表由 AI 判断**: CLI 只做确定性检测（表格 + 标题），不确定时交给 AI
+- ✅ **--auto 必须经过 AI**: 自动模式只是不交互，不是跳过 AI
+- ✅ **动态适配项目**: 不再硬编码端列表，每个项目的端由 AI 根据实际内容判断
+
+---
+
 ## v6.40.0 (2026-08-16) — 目录层级简化 + 语义映射增强
 
 ### 核心变更
