@@ -2,6 +2,29 @@
 
 ---
 
+## v6.56.0 (2026-08-16) — Cross-Platform Command Dynamic Routing Fix
+
+### Core Fixes
+
+- **init.ts**: `ALL_COMMANDS` array's `spec-analyze` cmd changed from static instruction text to dynamic routing format
+- **init.ts**: Other platforms (Claude, CodeBuddy, Windsurf, Trae) command generation logic now supports dynamic routing format for spec-analyze/spec-dev/spec-execute/spec-split
+
+### Impact Scope
+
+Previously only Qoder platform was fixed; now all platforms use dynamic routing format:
+- `.claude/commands/spec-analyze.md`
+- `.codebuddy/commands/spec-analyze.md`
+- `.windsurf/commands/spec-analyze.md`
+- `.trae/commands/spec-analyze.md`
+- `.trae-cn/commands/spec-analyze.md`
+- `.qoder/commands/spec-analyze.md`
+
+### Problem Solved
+
+Old static templates caused AI to bypass CLI path routing and write files directly to `020-specs/` root directory. New dynamic routing format ensures AI uses `--apply` path, allowing CLI to auto-route to `global/` or `{platform}/` subdirectory.
+
+---
+
 ## v6.55.0 (2026-08-16) — Qoder Command Dynamic Routing Fix
 
 ### Core Fix
