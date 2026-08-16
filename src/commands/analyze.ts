@@ -1135,6 +1135,27 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
   }
 
   let prompt = `\n# 任务: ${command}${task} (${taskDocs.length}个文档 · ${isTask ? `类型:${taskType}` : '迭代全量'}${ctx.phase ? ` · Phase ${ctx.phase}` : ''})\n\n`;
+  // ── v6.59.0+: 最强警告：禁止自创目录，必须走 --apply ──
+  prompt += `## 🚨 最高优先级警告（违反将导致分析失败）\n\n`;
+  prompt += `### ⛔ 绝对禁止创建任何额外目录\n`;
+  prompt += `- ❌ **错误行为**：创建 020-specs/1001/、020-specs/1002/、020-specs/错误码/、020-specs/工程标识/ 等垃圾目录\n`;
+  prompt += `- ✅ **正确行为**：只使用 CLI 预创建的 global/ 和 {端名}/ 目录，不要手动 mkdir 或 Write 到不存在的目录\n`;
+  prompt += `- ⚠️ **后果**：如果创建额外目录，会导致后续 split/execute 命令找不到文件，整个工作流失败\n\n`;
+  prompt += `###  绝对禁止直接用 Write 工具写文件\n`;
+  prompt += `- ❌ **错误行为**：Write("020-specs/global/ANALYSIS.md", content) 或直接 Write 到任何路径\n`;
+  prompt += `- ✅ **正确行为**：必须通过 \`speccore analyze --apply '{"global/ANALYSIS.md":"...","admin-web/TECH.md":"..."}' -I ${iter}\` 写入\n`;
+  prompt += `- ⚠️ **原因**：--apply 会让 CLI 自动路由文件到正确的子目录，直接 Write 会绕过这个机制，导致所有文件扁平在根目录\n\n`;
+  prompt += `### ✅ 正确的目录结构\n`;
+  prompt += `\`\`\`\n`;
+  prompt += `020-specs/\n`;
+  prompt += `├── global/          ← REQUIREMENT.md, ANALYSIS.md, DEPS.md（跨端通用）\n`;
+  prompt += `├── admin-web/       ← TECH.md, TEST.md, UI_SPEC.md（Admin 端专属）\n`;
+  prompt += `├── booking-service/ ← TECH.md, TEST.md（后端服务专属）\n`;
+  prompt += `├── h5-mobile/       ← TECH.md, TEST.md, UI_SPEC.md（H5 端专属）\n`;
+  prompt += `└── room-service/    ← TECH.md, TEST.md（后端服务专属）\n`;
+  prompt += `\`\`\`\n`;
+  prompt += `- 每个端目录下只有该端的专属文档，不要混放\n`;
+  prompt += `- 不要创建上述之外的任何子目录\n\n`;
   prompt += `## 分析范围说明\n`;
   if (isTask) {
     prompt += `- 当前是**任务级分析**，类型为 \`${taskType}\`，只需产出 ${taskDocs.length} 个文档：${taskDocs.map(([n]) => n).join('、')}\n`;

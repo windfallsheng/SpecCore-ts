@@ -1,3 +1,44 @@
+## v6.59.0 (2026-08-16) — analyze prompt 最强警告：禁止自创目录
+
+### 核心修复
+
+- **analyze.ts**: 在 prompt 最开头新增「 最高优先级警告」章节，用最强语气禁止 AI 创建额外目录和直接 Write 文件
+- **analyze.ts**: 明确列出错误行为（创建 1001/、错误码/等垃圾目录）和正确行为（只使用 global/ 和 {端名}/ 目录）
+- **analyze.ts**: 给出正确的目录结构示例，明确每个端目录下只有该端的专属文档
+
+### 问题根因
+
+旧版 prompt 虽有「禁止自创目录」指令，但放在后面，AI 可能忽略或没注意到。导致会议项目仍然创建 `1001/`、`1002/`、`错误码/` 等垃圾目录，且所有文档都写入 global/ 而非按端拆分。
+
+### 修复方案
+
+在 prompt 第 1137 行之后（任务标题之后）立即插入最强警告章节：
+```markdown
+##  最高优先级警告（违反将导致分析失败）
+
+### ⛔ 绝对禁止创建任何额外目录
+- ❌ 错误行为：创建 020-specs/1001/、020-specs/1002/、020-specs/错误码/、020-specs/工程标识/ 等垃圾目录
+- ✅ 正确行为：只使用 CLI 预创建的 global/ 和 {端名}/ 目录
+- ⚠️ 后果：如果创建额外目录，会导致后续 split/execute 命令找不到文件，整个工作流失败
+
+###  绝对禁止直接用 Write 工具写文件
+- ❌ 错误行为：Write("020-specs/global/ANALYSIS.md", content)
+- ✅ 正确行为：必须通过 `speccore analyze --apply '{"global/ANALYSIS.md":"...","admin-web/TECH.md":"..."}' -I iter` 写入
+- ⚠️ 原因：--apply 会让 CLI 自动路由文件到正确的子目录
+
+### ✅ 正确的目录结构
+```
+020-specs/
+├── global/          ← REQUIREMENT.md, ANALYSIS.md, DEPS.md（跨端通用）
+├── admin-web/       ← TECH.md, TEST.md, UI_SPEC.md（Admin 端专属）
+├── booking-service/ ← TECH.md, TEST.md（后端服务专属）
+├── h5-mobile/       ← TECH.md, TEST.md, UI_SPEC.md（H5 端专属）
+└── room-service/    ← TECH.md, TEST.md（后端服务专属）
+```
+```
+
+---
+
 ## v6.58.0 (2026-08-16) — split prompt 按端拆分强化
 
 ### 核心修复
