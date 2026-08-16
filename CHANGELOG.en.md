@@ -2,6 +2,17 @@
 
 ---
 
+## v6.49.0 (2026-08-16) — Platform Type Recognition + AI Smart Analysis
+
+### New Features
+
+- **Platform Type column**: CONSTITUTION.md platform list now includes "工程类型" column (e.g., Java服务, H5微信公众号, Android移动端)
+- **AI Smart Analysis**: analyze command reads platform types and automatically applies corresponding professional dimensions for targeted content generation
+- **Platform Type Enum**: Java服务/Node服务/Go服务/Python服务, H5微信公众号/H5移动端, Android/iOS移动端, 微信/支付宝小程序, Web管理后台, 桌面应用
+- **`parsePlatformTypes()` function**: Dynamically parses platform type column from platform list, returns Map<platform, type>
+
+---
+
 ## v6.48.1 (2026-08-16) — Platform List Parsing Enhancement + Column Name Optimization
 
 ### Improvements

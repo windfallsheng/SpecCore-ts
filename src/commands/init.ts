@@ -315,19 +315,25 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 
 > ⚠️ **工程标识是全项目唯一的端标识符**，所有命令（analyze/split/execute）、目录名（020-specs/{端}/）、模板目录（templates/{level}/{端}/）均使用此处声明的端名。
 
-| 工程标识 | 描述 | 类型 |
+| 工程标识 | 描述 | 工程类型 |
 | :--- | :--- | :--- |
-| app | 移动端 APP | frontend |
-| h5 | 移动 H5 端 | frontend |
-| miniapp | 小程序端 | frontend |
-| admin | 后台管理端 | frontend |
+| app | 移动端 APP | Android移动端 |
+| h5 | 移动 H5 端 | H5移动端 |
+| miniapp | 小程序端 | 微信小程序 |
+| admin | 后台管理端 | Web管理后台 |
 
 > **端名规则**：
 > - 工程标识 = 工程名，一一对应（一个端 = 一个完整的服務/应用 = 一个 git 仓库）
 > - 全小写、无空格、用短横线分隔（如 order-service）
-> - 类型：frontend / backend / infra
+> - 工程类型：AI 据此生成针对性内容（见下方工程类型枚举）
 > - 此列表是 analyze/split/execute 的唯一端名来源
 > - 「对应端」列引用此列表中的工程标识，每行只填一个
+
+> **工程类型枚举**（可自定义）：
+> - 后端：Java服务 / Node服务 / Go服务 / Python服务
+> - 前端：H5微信公众号 / H5移动端 / Web管理后台 / 桌面应用
+> - 移动端：Android移动端 / iOS移动端
+> - 小程序：微信小程序 / 支付宝小程序
 
 ## 项目信息
 
