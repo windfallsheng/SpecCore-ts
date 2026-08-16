@@ -1,4 +1,47 @@
-## v6.65.0 (2026-08-16) — Phase 2 触发机制修正：移除自动输出 prompt
+## v6.66.0 (2026-08-16) — Phase 1 完成后 AI 主动询问用户是否继续 Phase 2
+
+### 核心修复
+
+- **analyze.ts**: 在 Phase 1 prompt 结尾添加明确指令，要求 AI 在通过 --apply 写入全局文档后主动询问用户是否继续 Phase 2
+- **analyze.ts**: 新增提示文本："✅ Phase 1 已完成...检测到项目有 X 个端，需要继续执行 Phase 2 生成各端专属文档吗？"
+- **analyze.ts**: 明确告诉 AI "不要等待 CLI 的提示信息，CLI 的输出你可能看不到。你需要主动询问用户。"
+
+### 问题根因
+
+v6.65.0 移除了自动输出 Phase 2 prompt 的逻辑，改为在 apply 模式完成后输出提示信息。但实际效果是：
+1. CLI 确实输出了提示信息："⚠️ 请手动执行以下命令以生成各端专属文档"
+2. 但 AI 在通过 --apply 写回文件后，认为任务已完成，**不会读取 CLI 的输出信息**
+3. 导致 AI 直接等待用户的下一个指令，而不是继续执行 Phase 2
+
+**根本原因**：AI 的工作流限制 —— AI 在一次命令调用完成后，不会继续读取 CLI 的输出，而是认为任务已结束。
+
+### 修复方案
+
+**不再依赖 CLI 的提示信息**，而是在 **prompt 中明确要求 AI 主动询问用户**：
+1. 当 AI 通过 --apply 写入所有全局文档后
+2. CLI 检测到项目有多个端（≥2 个端）
+3. **AI 需要主动询问用户**："✅ Phase 1 已完成...需要继续执行 Phase 2 吗？"
+4. 如果用户确认，AI 再执行 `speccore analyze --prompt -I <iteration> --phase 2`
+
+### 工作流程
+
+```bash
+# Step 1: 用户执行 Phase 1
+speccore analyze --prompt -I meeting-upgrade
+# AI 生成全局文档，通过 --apply 写回
+# AI 主动询问："✅ Phase 1 已完成，检测到项目有 4 个端，需要继续执行 Phase 2 吗？"
+
+# Step 2: 用户确认后，AI 自动执行 Phase 2
+用户输入："继续"
+AI 执行：speccore analyze --prompt -I meeting-upgrade --phase 2
+# AI 基于全局上下文生成各端专属文档
+```
+
+### 版本历史
+- v6.61.0: 实现 CLI 自动循环机制（在 apply 模式内输出 Phase 2 prompt）→ 失败
+- v6.62.0-v6.64.0: 修正 Phase 2 触发条件 → 仍然失败
+- v6.65.0: 移除自动输出 prompt，改为 CLI 输出提示信息 → 仍然失败（AI 不读取）
+- **v6.66.0: 在 prompt 中要求 AI 主动询问用户** ← 当前版本
 
 ### 核心修复
 
