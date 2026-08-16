@@ -2273,3 +2273,44 @@ AI 综合分析，生成新内容
 - **task 级**：`rag-index.json` — 任务级文档索引
 - 按需加载：task 查询加载 task + iteration 级；iteration 查询加载 iteration + global 级
 
+### 8.8 业务-代码关联图谱（v6.50.0+）
+
+**核心能力**：知识图谱新增 `business_module` 实体类型，支持从 TECH.md 提取业务模块→代码实体的映射关系。
+
+#### 设计原则
+- **开放实体类型**：不预设固定类型，AI 根据技术栈自主决定（如 api_controller、page、component、route、middleware、interceptor、gateway 等）
+- **按端隔离**：每端从自己的 TECH.md 提取，不会混
+- **增量更新**：复用现有的 `refreshKnowledgeGraph()` 机制
+- **灵活扩展**：关系类型是开放字符串，支持任意自定义类型
+
+#### 期望的 TECH.md 格式
+```markdown
+## 业务-代码映射
+
+| 业务模块 | 代码实体 | 关系类型 | 说明 |
+|:--|:--|:--|:--|
+| 会议室档案 | backend/RoomController.java | api_controller | REST 控制器 |
+| 会议室档案 | table-meeting_room | uses_table | 主数据表 |
+| 会议室档案 | admin-web/src/pages/RoomList.vue | page | 列表页 |
+```
+
+#### 数据流
+```
+analyze AI → TECH.md（含「业务-代码映射」表格）
+    ↓ refreshKnowledgeGraph()
+scanBusinessCodeMappings() 扫描 TECH.md
+    ↓ 提取
+business_module 实体 + code 实体 + 关系
+    ↓ 写入图谱
+knowledge-graph.json 自动包含业务-代码映射
+    ↓ CONTEXT.md
+展示业务-代码映射表（按端分组）
+    ↓ unifiedSearch()
+检索时自动包含业务模块相关信息
+```
+
+#### 关键代码位置
+- `src/core/knowledge-graph.ts`: `scanBusinessCodeMappings()` 函数
+- `src/commands/analyze.ts`: prompt 中「业务-代码映射」指导
+- `src/core/context-builder.ts`: CONTEXT.md 中展示业务-代码映射表
+

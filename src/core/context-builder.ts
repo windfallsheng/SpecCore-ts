@@ -106,6 +106,43 @@ export function buildContextMarkdown(
     lines.push('');
   }
 
+  // ── 2.5 业务-代码映射 ──
+  const bizModules = Object.values(graph.entities).filter(e => e.type === 'business_module');
+  if (bizModules.length > 0) {
+    lines.push('## 业务-代码映射');
+    lines.push('');
+    lines.push('| 业务模块 | 端 | 关联代码实体 |');
+    lines.push('| :--- | :--- | :--- |');
+
+    // 按端分组
+    const byPlatform = new Map<string, GraphEntity[]>();
+    for (const m of bizModules) {
+      const p = m.platform || 'unknown';
+      if (!byPlatform.has(p)) byPlatform.set(p, []);
+      byPlatform.get(p)!.push(m);
+    }
+
+    for (const [platform, modules] of byPlatform) {
+      // 获取该端的所有关系
+      const codeRelations = graph.relations.filter(r =>
+        modules.some(m => m.id === r.from) &&
+        r.type !== 'elaborates'  // 排除到 TECH.md 的关系
+      );
+
+      for (const m of modules) {
+        const relatedCodes = codeRelations
+          .filter(r => r.from === m.id)
+          .map(r => {
+            const target = graph.entities[r.to];
+            return target ? `${r.type}: ${target.title}` : r.to;
+          });
+        const codeStr = relatedCodes.length > 0 ? relatedCodes.join(', ') : '—';
+        lines.push(`| ${m.title} | ${platform} | ${codeStr.slice(0, 100)} |`);
+      }
+    }
+    lines.push('');
+  }
+
   // ── 3. 衰减检测 ──
   if (decay && decay.decayedFiles.length > 0) {
     lines.push('## 知识衰减检测');

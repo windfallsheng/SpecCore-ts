@@ -159,8 +159,9 @@ speccore analyze --task Task-001     # 任务级深度分析（split 后执行�
 split 后，每个 Task 的 00-specs/ 已有基础内容（机械提取）。执行 `analyze --task` 时，AI Read 这些内容 + global/ 全局上下文 + {端}/ 专属上下文，重新生成任务级深度分析。
 
 - 文档集按任务类型区分：feature → REQ/TECH/TASK/SCHEMA，bugfix → REQ/TECH
-- 链式生成：文档按依赖顺序逐个生成（REQ → TECH → SCHEMA → TASK）
+- 链式生成：文档按依赖顺序逐个生成，通过图谱 RAG 智能检索相关内容（不是无脑全读）
 - 用户自定义模板：`.speccore/templates/{global|iteration|task}/` 目录，同名覆盖 + 新名追加
+- **业务-代码映射**：TECH.md 末尾包含「业务-代码映射」表格，图谱自动提取并建立关联
 
 **端发现（v6.46.0+）**：
 
