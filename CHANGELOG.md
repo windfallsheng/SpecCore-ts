@@ -1,3 +1,45 @@
+## v6.61.0 (2026-08-16) — CLI 自动循环执行 Phase 1 → Phase 2
+
+### 核心修复
+
+- **analyze.ts**: 恢复 Phase 1/Phase 2 分步逻辑，但 CLI 在 Phase 1 完成后自动触发 Phase 2
+- **analyze.ts**: 在 apply 模式结尾添加检测逻辑：如果刚完成 Phase 1 且有多个端，自动输出 Phase 2 prompt
+- **analyze.ts**: 新增 Phase 2 prompt 代码块（指导 AI Read Phase 1 产出并生成各端专属文档）
+- **analyze.ts**: 删除 v6.60.0 的"一次性生成所有文档"逻辑
+
+### 问题根因
+
+v6.60.0 移除了 Phase 1/Phase 2 分步逻辑，改为一次性生成所有文档。但这导致:
+1. AI Token 消耗过大(同时处理 10+ 个文档)
+2. 文档质量下降(AI 注意力分散)
+3. 无法充分利用"链式生成"的优势(Read 前一个文档再生成下一个)
+4. 各端文档无法参考全局上下文(global/TECH.md 等)
+
+### 修复方案
+
+**保留分阶段的优势**:
+- Phase 1: 生成全局文档(global/REQUIREMENT.md、ANALYSIS.md、DEPS.md 等)
+- Phase 2: 生成各端专属文档({端}/TECH.md、TEST.md、UI_SPEC.md 等)，参考 Phase 1 产出
+
+**但改进用户体验**:
+- CLI 在 Phase 1 完成后自动检测端数量
+- 如果有多个端，自动输出 Phase 2 prompt，无需用户手动执行第二次命令
+- 用户只需要执行一次 `speccore analyze --prompt -I iter`，CLI 自动完成 Phase 1 → Phase 2 流转
+
+### 工作流程
+
+```bash
+# 用户执行一次命令
+speccore analyze --prompt -I meeting-upgrade
+
+# CLI 输出 Phase 1 prompt → AI 生成全局文档 → AI 通过 --apply 写回
+# CLI 检测到 Phase 1 完成 + 有多个端 → 自动输出 Phase 2 prompt
+# AI 生成各端专属文档 → AI 通过 --apply 写回
+# 完成！
+```
+
+---
+
 ## v6.60.0 (2026-08-16) — 移除 Phase 1/Phase 2 分步逻辑，一次性生成所有文档
 
 ### 核心修复

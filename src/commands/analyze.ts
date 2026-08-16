@@ -445,6 +445,33 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         logger.info('🧠 知识图谱已刷新');
       } catch {}
     }
+
+    // ── v6.61.0+: Phase 1 完成后自动触发 Phase 2 ──
+    if (!options.phase && !isTaskLevel && options.iteration) {
+      // 检查是否有多个端
+      const platforms = await parsePlatformList();
+      if (platforms.length > 1) {
+        logger.info('');
+        logger.info(`🔄 Phase 1 已完成，检测到 ${platforms.length} 个端 (${platforms.join(', ')})`);
+        logger.info('🚀 自动进入 Phase 2：生成各端专属文档...');
+        logger.info('');
+        
+        // 自动输出 Phase 2 的 prompt
+        const phase2Prompt = await buildMultiDocPrompt('analyze', {
+          iteration: options.iteration,
+          task: options.task,
+          type: options.type,
+          scope: options.scope,
+          withCode: options.withCode,
+          platform: options.platform,
+          phase: '2'  // ← 关键：设置为 Phase 2
+        });
+        process.stdout.write(`[SPECCORE_PROMPT]\n${phase2Prompt}`);
+        process.exitCode = 10;
+        return;
+      }
+    }
+
     return;
   }
 
@@ -1054,9 +1081,17 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
   };
   const includeDocs = isTask ? (DOC_MATRIX[taskType] || DOC_MATRIX['feature']) : DOC_MATRIX['feature'];
 
-  // ── v6.60.0+: 一次性生成所有文档（不再分 Phase 1/Phase 2）──
-  // AI 在一次执行中同时生成 global/ 和 {端}/ 的所有文档
+  // ── v6.61.0+: 恢复 Phase 1/Phase 2 分步逻辑，但 CLI 自动触发 Phase 2 ──
+  // Phase 1: 生成全局文档(global/REQUIREMENT.md、ANALYSIS.md、DEPS.md 等)
+  // Phase 2: 生成各端专属文档({端}/TECH.md、TEST.md、UI_SPEC.md 等)
+  const GLOBAL_DOCS = ['REQUIREMENT.md', 'ANALYSIS.md', 'TECH.md', 'RISK.md', 'DEPS.md', 'REVIEW.md', 'MONITOR.md'];
+  const PLATFORM_DOCS = ['TECH.md', 'TEST.md', 'UI_SPEC.md'];
   let taskDocs = docs.filter(([n]) => includeDocs.includes(n));
+  if (ctx.phase === '1') {
+    taskDocs = taskDocs.filter(([n]) => GLOBAL_DOCS.includes(n));
+  } else if (ctx.phase === '2') {
+    taskDocs = taskDocs.filter(([n]) => PLATFORM_DOCS.includes(n));
+  }
 
   // ── 任务级文档覆盖：00-specs/ 使用任务级文档集（v6.44.0+） ──
   if (isTask && !ctx.phase) {
@@ -1193,8 +1228,36 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `- 全局跨端文档写入 020-specs/global/（REQUIREMENT.md、DEPS.md、RISK.md 等）\n`;
       prompt += `- **不要生成**其他端的子目录和文档\n`;
     }
-    // v6.60.0+: 一次性生成所有文档（global/ + {端}/）
-    prompt += `## 要求\n1. Read .speccore/PATTERNS/TEMPLATES/specs/ 下的专业模板（如目录不存在或为空，用你的专业知识自由撰写，绝不允许产出一行垃圾）\n`;
+    // ── v6.61.0+: 阶段专属指令（Phase 2）──
+    if (ctx.phase === '2') {
+      prompt += `## 要求\n\n`;
+      prompt += `### Step 1: 读取全局上下文（Phase 1 产出）\n`;
+      prompt += `依次 Read 以下文件，建立全局技术架构认知：\n`;
+      prompt += `- Read .speccore/CONSTITUTION.md\n`;
+      prompt += `- Read 020-specs/PLATFORMS.md → 获取端列表\n`;
+      prompt += `- Read 020-specs/global/REQUIREMENT.md → 需求规格\n`;
+      prompt += `- Read 020-specs/global/ANALYSIS.md → 分析报告\n`;
+      prompt += `- Read 020-specs/global/TECH.md → 整体技术架构\n`;
+      prompt += `- Read 020-specs/global/RISK.md、DEPS.md、REVIEW.md、MONITOR.md（如存在）\n\n`;
+      prompt += `### Step 2: 为每个端撰写专属文档\n`;
+      prompt += `根据全局上下文，为 PLATFORMS.md 中的**每个端**分别撰写：\n`;
+      prompt += `- **{端}/TECH.md**：该端专属技术方案（必须对齐 global/TECH.md 架构）\n`;
+      prompt += `  - ⚠️ **必须包含「业务-代码映射」章节**：在 TECH.md 末尾添加表格，列出本端涉及的业务模块及其对应的代码实体（文件/表/API/组件等），关系类型由你根据技术栈自主决定（如 api_controller、uses_table、page、component、route、middleware、interceptor、gateway 等）\n`;
+      prompt += `  - 表格格式：| 业务模块 | 代码实体 | 关系类型 | 说明 |\n`;
+      prompt += `  - 示例：| 会议室档案 | backend/RoomController.java | api_controller | REST 控制器 |\n`;
+      prompt += `  - 示例：| 会议室档案 | admin-web/src/pages/RoomList.vue | page | 列表页 |\n`;
+      prompt += `- **{端}/TEST.md**：该端专属测试计划\n`;
+      prompt += `- **{端}/UI_SPEC.md**：该端专属 UI 规格（仅前端端需要）\n\n`;
+      prompt += `### Step 3: 一致性检查\n`;
+      prompt += `- 各端 TECH.md 的技术选型必须与 global/TECH.md 一致\n`;
+      prompt += `- UI_SPEC.md 的字段映射必须与后端 API 响应字段一一对应\n`;
+      prompt += `- TEST.md 必须覆盖 REQUIREMENT.md 中该端的验收标准\n\n`;
+      prompt += `### 写入方式\n`;
+      prompt += `逐端写入，每个端一次 --apply 调用：\n`;
+      prompt += `speccore analyze --apply '{"TECH.md":"...","TEST.md":"...","UI_SPEC.md":"..."}' -I ${iter} --platform {端名}\n\n`;
+    } else {
+      // v6.61.0+: 一次性生成所有文档（global/ + {端}/）
+      prompt += `## 要求\n1. Read .speccore/PATTERNS/TEMPLATES/specs/ 下的专业模板（如目录不存在或为空，用你的专业知识自由撰写，绝不允许产出一行垃圾）\n`;
     const templateMap: Record<string, string> = {
       'ANALYSIS.md': 'ANALYSIS-template.md', 'TECH.md': 'TECH-template.md', 'TEST.md': 'TEST-template.md',
       'REVIEW.md': 'REVIEW-template.md', 'RISK.md': 'RISK-template.md', 'DEPS.md': 'DEPS-template.md',
@@ -1319,6 +1382,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     prompt += `- **{端}/MONITOR.md**：该端专属监控指标\n`;
     prompt += `- **{端}/UI_SPEC.md**：前端端专属 UI 规格，字段映射必须与后端 API 响应字段一一对应\n`;
     prompt += `- 分析完成后会自动生成 QUALITY_AUDIT.md 质量报告，检查各端内容是否完整\n`;
+    }
   // 步骤 2-7 已在上面的 phase 分支中处理
   const taskFlag = isTask && ctx.task ? ` --task ${ctx.task}` : '';
   const platformFlag = ctx.platform ? ` --platform ${ctx.platform}` : '';

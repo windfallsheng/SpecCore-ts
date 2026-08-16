@@ -2,6 +2,48 @@
 
 ---
 
+## v6.61.0 (2026-08-16) — CLI Auto Loop Phase 1 → Phase 2
+
+### Core Fixes
+
+- **analyze.ts**: Restored Phase 1/Phase 2 step logic, but CLI auto-triggers Phase 2 after Phase 1 completion
+- **analyze.ts**: Added detection logic at end of apply mode: if Phase 1 just completed and multiple platforms exist, auto-output Phase 2 prompt
+- **analyze.ts**: Added Phase 2 prompt code block (guides AI to Read Phase 1 output and generate platform-specific documents)
+- **analyze.ts**: Removed v6.60.0's "generate all documents at once" logic
+
+### Root Cause
+
+v6.60.0 removed Phase 1/Phase 2 step logic, generating all documents at once. But this caused:
+1. Excessive AI Token consumption (processing 10+ documents simultaneously)
+2. Reduced document quality (AI attention分散)
+3. Cannot leverage "chain generation" advantage (Read previous document before generating next)
+4. Platform documents cannot reference global context (global/TECH.md, etc.)
+
+### Fix Approach
+
+**Preserve advantages of phased approach**:
+- Phase 1: Generate global documents (global/REQUIREMENT.md, ANALYSIS.md, DEPS.md, etc.)
+- Phase 2: Generate platform-specific documents ({platform}/TECH.md, TEST.md, UI_SPEC.md, etc.), referencing Phase 1 output
+
+**But improve UX**:
+- CLI detects platform count after Phase 1 completion
+- If multiple platforms exist, auto-output Phase 2 prompt, no need for user to manually execute second command
+- User only needs to run `speccore analyze --prompt -I iter` once, CLI auto-completes Phase 1 → Phase 2 flow
+
+### Workflow
+
+```bash
+# User executes one command
+speccore analyze --prompt -I meeting-upgrade
+
+# CLI outputs Phase 1 prompt → AI generates global docs → AI writes back via --apply
+# CLI detects Phase 1 complete + multiple platforms → auto-outputs Phase 2 prompt
+# AI generates platform-specific docs → AI writes back via --apply
+# Done!
+```
+
+---
+
 ## v6.60.0 (2026-08-16) — Remove Phase 1/Phase 2 Step Logic, Generate All Documents at Once
 
 ### Core Fixes
