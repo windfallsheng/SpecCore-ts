@@ -2,6 +2,16 @@
 
 ---
 
+## v6.49.15 (2026-08-16) — Documentation Updates + Prompt Numbering Fix
+
+### Changes
+
+- **analyze prompt numbering fix**: Fixed step numbering conflict (two step 6s), directory structure step now uses dynamic numbering (7 or 8)
+- **DESIGN.md**: Added section 8.6 "CLI Controls Directories + AI Fills Content", including architecture design, data flow, involved platforms definition
+- **command-reference.md**: Updated split command description to "module-driven split"
+
+---
+
 ## v6.49.14 (2026-08-16) — split Reads Involved Platforms from global/REQUIREMENT.md
 
 ### Changes
