@@ -1406,8 +1406,10 @@ speccore schedule cancel --id <id>
 | v6.35.0 | 08-15 | analyze --auto 双层文档架构（全局+各端分离）：全局放根目录，各端专属放 {端}/ 子目录 |
 | v6.36.0 | 08-15 | REQUIREMENT.md 功能涉及端标注 + split 三级推断逻辑（_scopePlatforms → TECH.md 内容检测 → 回退所有端） |
 | v6.37.0 | 08-15 | split 读取各端子目录文档 + 优先提取端专属内容（loadSpecContents 双层读取 + extractTaskTechContent 优先匹配） |
+| v6.49.13 | 08-16 | CLI 控制目录结构：analyze 预创建 020-specs/ + split 模块驱动拆分 + 内容填充 Prompt |
+| v6.49.14 | 08-16 | split 从 global/REQUIREMENT.md 读取涉及端，按模块精确创建端目录 |
 
-> **最后更新**: 2026-08-15 (v6.37.0) — analyze 按端生成专属文档 + split 智能拆分
+> **最后更新**: 2026-08-16 (v6.49.14) — 涉及端从 REQUIREMENT.md 读取 + 模块级精确端目录
 
 ---
 ## 10. 可执行编排引擎（spec-ask v4）
@@ -2185,4 +2187,43 @@ TASK.md (Read 前三者 → 制定实施步骤)
 - `analyze.ts` prompt 文本 → 引用「## 端列表」章节
 
 **解析兼容**：同时识别「对应端」和「对应需求端」两种列名，确保旧项目无缝升级。
+
+### 8.6 CLI 控制目录 + AI 填内容（v6.49.13+）
+
+**核心原则**：CLI 控制所有目录创建（确定性操作），AI 只负责内容生成（智能操作）。
+
+#### analyze 命令
+- CLI 执行前自动读 CONSTITUTION.md 端列表，预创建 `020-specs/global/` + `020-specs/{端}/` 目录
+- prompt 新增第 6 步：功能模块涉及端必填，AI 必须在 `global/REQUIREMENT.md` 功能模块清单表填写「涉及端」列
+- 关键函数：`preCreateSpecDirectories()` in `analyze.ts`
+
+#### split 命令（v6.49.14+）
+- `tryModuleDrivenSplit()` 优先从 `020-specs/global/REQUIREMENT.md` 解析功能模块清单的「涉及端」列
+- 新增 `parseModulePlatforms()` 函数：解析 Markdown 表格，提取每个模块的涉及端
+- 每个模块只创建涉及的端目录（不是全端）
+- 回退机制：REQUIREMENT.md 无表时回退到 `010-requirements/features/`（使用全端）
+- 内容填充 Prompt 按模块显示各自的涉及端
+
+#### 「涉及端」定义
+- **涉及 = 该端在本模块中有新开发工作**（新接口/新页面/新逻辑）
+- **不涉及 = 只是提到、调用已有接口、纯展示**
+- 端名必须与 CONSTITUTION.md「端列表」中的标准端名完全匹配
+
+#### 数据流
+```
+analyze AI → global/REQUIREMENT.md 功能模块清单（含涉及端列）
+    ↓ split CLI 读取
+每个模块 → 只创建涉及的端目录
+    ↓ AI 填充
+每个端子任务的 REQ.md + TECH.md
+    ↓ analyze --task 深度分析
+子任务级深度文档
+    ↓ execute
+代码实现
+```
+
+#### 关键特性
+- 人工修改 REQUIREMENT.md 后 split 能读到最新内容（运行时读文件）
+- analyze --task 深度分析逻辑完全保留不受影响
+- 子任务作为执行上下文：每个端的 REQ.md/TECH.md 只含本端内容，AI 不分心
 
