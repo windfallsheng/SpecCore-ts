@@ -2,6 +2,16 @@
 
 ---
 
+## v6.49.7 (2026-08-16) — Subtask Directory Cleanup: Remove Unused src/ and tests/
+
+### Fixes
+
+- **Remove `src/` and `tests/` directory creation**: Code now writes to actual project paths specified in CONSTITUTION.md, so `src/` and `tests/` in subtask directories are no longer used
+- **TASK.md deliverables table updated**: Removed `src/` and `tests/` entries, added "Code" entry pointing to project paths defined in CONSTITUTION.md
+- **split.ts and task/new.ts synced**: Both files no longer create empty `src/` and `tests/` directories
+
+---
+
 ## v6.49.6 (2026-08-16) — Project Path Awareness: Code Writes to CONSTITUTION-Specified Locations
 
 ### Core Fixes
