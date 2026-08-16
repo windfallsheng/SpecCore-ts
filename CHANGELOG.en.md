@@ -2,6 +2,47 @@
 
 ---
 
+## v6.59.0 (2026-08-16) — Analyze Prompt Strongest Warning: No Self-Created Directories
+
+### Core Fixes
+
+- **analyze.ts**: Added "  Highest Priority Warning" section at the very beginning of prompt, using strongest tone to prohibit AI from creating extra directories and directly writing files
+- **analyze.ts**: Explicitly listed error behaviors (creating 1001/, 错误码/, etc.) and correct behaviors (only use global/ and {platform}/ directories)
+- **analyze.ts**: Provided correct directory structure example, clarifying that each platform directory contains only that platform's exclusive documents
+
+### Root Cause
+
+Old prompt had "no self-created directories" instruction, but placed it later in the prompt, so AI might ignore or miss it. This caused meeting project to still create `1001/`, `1002/`, `错误码/` garbage directories, and all documents were written to global/ instead of being split by platform.
+
+### Fix Approach
+
+Inserted strongest warning section immediately after line 1137 (after task title):
+```markdown
+##  最高优先级警告（违反将导致分析失败）
+
+###  绝对禁止创建任何额外目录
+- ❌ 错误行为：创建 020-specs/1001/、020-specs/1002/、020-specs/错误码/、020-specs/工程标识/ 等垃圾目录
+- ✅ 正确行为：只使用 CLI 预创建的 global/ 和 {端名}/ 目录
+- ⚠️ 后果：如果创建额外目录，会导致后续 split/execute 命令找不到文件，整个工作流失败
+
+###  绝对禁止直接用 Write 工具写文件
+- ❌ 错误行为：Write("020-specs/global/ANALYSIS.md", content)
+- ✅ 正确行为：必须通过 `speccore analyze --apply '{"global/ANALYSIS.md":"...","admin-web/TECH.md":"..."}' -I iter` 写入
+- ⚠️ 原因：--apply 会让 CLI 自动路由文件到正确的子目录
+
+### ✅ 正确的目录结构
+```
+020-specs/
+├── global/          ← REQUIREMENT.md, ANALYSIS.md, DEPS.md（跨端通用）
+├── admin-web/       ← TECH.md, TEST.md, UI_SPEC.md（Admin 端专属）
+├── booking-service/ ← TECH.md, TEST.md（后端服务专属）
+├── h5-mobile/       ← TECH.md, TEST.md, UI_SPEC.md（H5 端专属）
+└── room-service/    ← TECH.md, TEST.md（后端服务专属）
+```
+```
+
+---
+
 ## v6.58.0 (2026-08-16) — Split Prompt Platform-Based Splitting Enhancement
 
 ### Core Fixes
