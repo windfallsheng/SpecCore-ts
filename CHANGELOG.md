@@ -1,3 +1,19 @@
+## v6.49.6 (2026-08-16) — 工程路径感知：代码写入 CONSTITUTION 指定位置
+
+### 核心修复
+
+- **`parseProjectInfo()` 函数**：从 CONSTITUTION.md 解析项目信息表，返回 Map<工程标识, { projectName, srcPath, gitRepo, branch, platform }>
+- **`getProjectPathForPlatform()` 函数**：根据端名获取实际工程路径，支持精确匹配和「对应端」列匹配
+- **execute 命令工程路径感知**：`--response` 模式现在检查文件路径是否以端名开头，如果是则写入 CONSTITUTION.md 中定义的实际工程路径
+- **prompt builder 注入工程路径**：execute 命令的 Prompt 中包含工程路径表，告诉 AI 代码应该写到哪里
+
+### 修复的问题
+
+- 之前代码被写入迭代目录（如 `Iteration-011/10-backend/`），而不是 CONSTITUTION.md 中定义的实际工程路径（如 `../outputs-project/backend/booking-service`）
+- Git 分支逻辑失效，因为代码不在实际仓库中
+
+---
+
 ## v6.49.5 (2026-08-16) — 子任务 ID 确定性格式
 
 ### 修复

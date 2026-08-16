@@ -180,3 +180,114 @@ export async function parsePlatformTypes(): Promise<Map<string, string>> {
 
   return result;
 }
+
+/**
+ * 从 CONSTITUTION.md 解析项目信息表（v6.49.6+）
+ * 返回 Map<工程标识, { projectName, srcPath, gitRepo, branch, platform }>
+ * 用于 execute 命令确定代码输出位置
+ */
+export interface ProjectInfo {
+  projectIdentifier: string;
+  projectName: string;
+  srcPath: string;
+  gitRepo: string;
+  branch: string;
+  platform: string;
+}
+
+export async function parseProjectInfo(): Promise<Map<string, ProjectInfo>> {
+  const constitutionPath = join('.speccore', 'CONSTITUTION.md');
+  if (!(await pathExists(constitutionPath))) return new Map();
+  const content = await readFile(constitutionPath, 'utf-8');
+  const lines = content.split('\n');
+
+  let inProjectSection = false;
+  let headerParsed = false;
+  let identifierColIdx = -1;
+  let nameColIdx = -1;
+  let pathColIdx = -1;
+  let gitColIdx = -1;
+  let branchColIdx = -1;
+  let platformColIdx = -1;
+  const result = new Map<string, ProjectInfo>();
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    // 检测「项目信息」章节开始
+    if (line.match(/^##\s+.*项目信息/)) {
+      inProjectSection = true;
+      continue;
+    }
+    // 检测下一个章节开始，退出项目信息
+    if (inProjectSection && line.match(/^##\s/)) break;
+    if (!inProjectSection) continue;
+    if (!line.startsWith('|')) continue;
+    if (line.match(/^\|\s*[-:]/)) continue;
+
+    const cells = line.split('|').map(c => c.trim()).filter(Boolean);
+
+    // 表头行：动态查找列索引
+    if (!headerParsed && cells.length > 0) {
+      identifierColIdx = cells.findIndex(h =>
+        h === '工程标识' || h === '工程' || h === '工程名' ||
+        h.includes('工程标识') || h.includes('工程名')
+      );
+      nameColIdx = cells.findIndex(h =>
+        h === '项目名称' || h === '项目名' || h.includes('项目名称')
+      );
+      pathColIdx = cells.findIndex(h =>
+        h === '源码路径' || h === '工程路径' || h.includes('源码路径') || h.includes('工程路径')
+      );
+      gitColIdx = cells.findIndex(h =>
+        h === 'Git 仓库' || h === 'Git' || h.includes('Git')
+      );
+      branchColIdx = cells.findIndex(h =>
+        h === '默认分支' || h === '分支' || h.includes('分支')
+      );
+      platformColIdx = cells.findIndex(h =>
+        h === '对应端' || h === '对应需求端' || h.includes('对应端')
+      );
+      // 兜底：如果没找到工程标识列，取第 1 列
+      if (identifierColIdx < 0) identifierColIdx = 0;
+      headerParsed = true;
+      continue;
+    }
+
+    // 数据行：提取项目信息
+    if (headerParsed && cells.length > identifierColIdx) {
+      const projectIdentifier = cells[identifierColIdx]?.trim();
+      if (projectIdentifier) {
+        const info: ProjectInfo = {
+          projectIdentifier,
+          projectName: nameColIdx >= 0 && cells.length > nameColIdx ? cells[nameColIdx].trim() : '',
+          srcPath: pathColIdx >= 0 && cells.length > pathColIdx ? cells[pathColIdx].replace(/`/g, '').trim() : '',
+          gitRepo: gitColIdx >= 0 && cells.length > gitColIdx ? cells[gitColIdx].trim() : '',
+          branch: branchColIdx >= 0 && cells.length > branchColIdx ? cells[branchColIdx].trim() : 'main',
+          platform: platformColIdx >= 0 && cells.length > platformColIdx ? cells[platformColIdx].trim() : '',
+        };
+        result.set(projectIdentifier, info);
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * 根据端名获取实际的工程路径（v6.49.6+）
+ * 用于 execute 命令确定代码输出位置
+ */
+export async function getProjectPathForPlatform(platform: string): Promise<string | null> {
+  const projectInfoMap = await parseProjectInfo();
+  // 先精确匹配工程标识
+  if (projectInfoMap.has(platform)) {
+    return projectInfoMap.get(platform)!.srcPath || null;
+  }
+  // 再匹配「对应端」列
+  for (const [, info] of projectInfoMap) {
+    if (info.platform === platform || info.platform.split(',').map(p => p.trim()).includes(platform)) {
+      return info.srcPath || null;
+    }
+  }
+  return null;
+}

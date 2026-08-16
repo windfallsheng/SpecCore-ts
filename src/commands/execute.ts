@@ -10,6 +10,7 @@ import { resolveTask, formatResolveResult } from '../core/resolver';
 import { FileTransaction } from '../core/transaction';
 import { loadSpecRules, generateImports, SpecRules, loadTechStack } from '../core/spec-rules';
 
+import { getProjectPathForPlatform } from '../core/spec-paths';
 import { logOperation } from '../core/operation-log';
 import { showNextSteps } from '../core/next-steps';
 import { extractQuestions, showQuestionChecklist } from '../core/question-checklist';
@@ -1929,6 +1930,7 @@ async function runApplyMode(iteration: string, options: ExecuteOptions): Promise
 
   const iterDir = await getIterationDir(iteration);
   let writtenCount = 0;
+  const writtenPlatforms = new Set<string>();
 
   for (const file of parsed.files) {
     // 路径遍历防护
@@ -1936,10 +1938,27 @@ async function runApplyMode(iteration: string, options: ExecuteOptions): Promise
       logger.warn(`   ⚠️ 跳过危险路径: ${file.path}`);
       continue;
     }
-    const fullPath = join(iterDir, file.path);
+
+    // v6.49.6+：检查文件路径是否以端名开头，如果是则写入实际工程路径
+    let fullPath: string;
+    const pathParts = file.path.split('/');
+    const possiblePlatform = pathParts[0];
+    const projectPath = await getProjectPathForPlatform(possiblePlatform);
+    
+    if (projectPath) {
+      // 写入实际工程路径
+      const relativePath = pathParts.slice(1).join('/');
+      fullPath = join(projectPath, relativePath);
+      logger.info(`   📂 使用 CONSTITUTION 工程路径: ${projectPath}`);
+      writtenPlatforms.add(possiblePlatform);
+    } else {
+      // 回退：写入迭代目录（兼容旧行为）
+      fullPath = join(iterDir, file.path);
+    }
+    
     await ensureDir(dirname(fullPath));
     await writeFile(fullPath, file.content);
-    logger.info(`   ✅ 写入: ${file.path}`);
+    logger.info(`   ✅ 写入: ${fullPath}`);
     writtenCount++;
   }
 
