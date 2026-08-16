@@ -2,6 +2,26 @@
 
 ---
 
+## v6.49.2 (2026-08-16) — Subtask Feature Unit Identification
+
+### New Features
+
+- **`.meta/feature` file**: Each subtask directory now includes a feature unit identification file, defaulting to AI-generated `functionalUnit` or `section.name`
+- **TASK.md enhanced**: Subtask info now includes "Feature Unit" field for easier tracking and statistics
+- **Fallback compatible**: Auto-supplemented backend subtasks also include feature unit identification
+
+---
+
+## v6.49.1 (2026-08-16) — Task Directory Structure Simplification: Flat Platforms
+
+### Fixes
+
+- **Task directory structure simplified**: No longer distinguishes backend/frontend categories; all platforms are flat under task directory (e.g., `Task-001/booking-service/impl/`, `Task-001/h5-mobile/impl/`)
+- **Redundant variables removed**: Removed `backendPlatforms`, `frontendPlatforms`, `getServiceName()` and other backend/frontend classification logic
+- **Unified loop**: All platforms use a single loop to create subtasks, using `isBk` to determine if backend for generating different document content
+
+---
+
 ## v6.49.0 (2026-08-16) — Platform Type Recognition + AI Smart Analysis
 
 ### New Features
