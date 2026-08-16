@@ -148,10 +148,23 @@ speccore analyze [--iteration <name>] [--task <id>] [--audit]
 speccore analyze --full              # 全量分析（原 synthesize）
 speccore analyze --auto              # 全自动分析（经过 AI，不交互）
 speccore analyze --auto --platform admin  # 只分析指定端
+speccore analyze --task Task-001     # 任务级深度分析（split 后执行）
 ```
 别名: `al`
 
 > 💡 `--auto` 模式会自动生成 prompt 交给宿主 AI 执行专业分析，产出全套 Spec 文件。支持 `--platform` 指定端过滤。
+
+**任务级深度分析（v6.44.0+）**：
+
+split 后，每个 Task 的 00-specs/ 已有基础内容（机械提取）。执行 `analyze --task` 时，AI Read 这些内容 + global/ 全局上下文 + {端}/ 专属上下文，重新生成任务级深度分析。
+
+- 文档集按任务类型区分：feature → REQ/TECH/TASK/SCHEMA，bugfix → REQ/TECH
+- 链式生成：文档按依赖顺序逐个生成（REQ → TECH → SCHEMA → TASK）
+- 用户自定义模板：`.speccore/templates/{global|iteration|task}/` 目录，同名覆盖 + 新名追加
+
+**端发现（v6.46.0+）**：
+
+analyze 从 CONSTITUTION.md「## 端列表」章节读取全局权威端名列表，不再动态推断。
 
 ### 📦 split — 任务拆分 🔒 AI 命令
 ```bash

@@ -2,6 +2,22 @@
 
 ---
 
+## v6.47.0 (2026-08-16) — Verification Fixes + Documentation
+
+### Bug Fixes
+
+- **loadUserTemplates priority fix**: high-priority directory writes first, low-priority does not overwrite (first-write-wins)
+- **Redundant require removed**: loadUserTemplates no longer re-requires 'fs' internally
+- **JSON template format fix**: chain generation apply command JSON keys now properly quoted
+
+### Documentation
+
+- **DESIGN.md**: New chapter 8 "Task-level Deep Analysis + User Templates + Chain Generation" (v6.44-6.46 architecture changes)
+- **DESIGN.md 2.1**: Rewritten as "Platform List (Global Authority)" with 1:1 mapping principle + discovery priority
+- **command-reference.md**: analyze command updated with --task usage + deep analysis docs + platform discovery
+
+---
+
 ## v6.46.1 (2026-08-16) — Platform List Consistency Fix
 
 - Column name unified: "对应需求端" → "对应端" (template + migration + output text)

@@ -741,7 +741,6 @@ async function loadUserTemplates(
   type?: string,
   platform?: string
 ): Promise<Map<string, string>> {
-  const { readdirSync } = require('fs');
   const templateBase = join('.speccore', 'templates', level);
   const candidates: string[] = [];
 
@@ -768,9 +767,12 @@ async function loadUserTemplates(
     try {
       const files = readdirSync(dir).filter((f: string) => f.endsWith('.md'));
       for (const file of files) {
-        const content = await readFile(join(dir, file), 'utf-8');
-        if (content.trim().length > 0) {
-          result.set(file, content);
+        // 高优先级目录先写入，后续低优先级目录不覆盖（首次写入胜出）
+        if (!result.has(file)) {
+          const content = await readFile(join(dir, file), 'utf-8');
+          if (content.trim().length > 0) {
+            result.set(file, content);
+          }
         }
       }
     } catch { /* skip */ }
@@ -1308,7 +1310,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     prompt += `\n`;
   } else if (ctx.phase !== '2') {
     // 传统模式：一次性写入
-    prompt += `7. 写入: speccore analyze --apply '{"${taskDocs.map(([n]) => `${n}:"..."`).join(',')}..."}' -I ${iter}${taskFlag}${platformFlag}\n\n`;
+    prompt += `7. 写入: speccore analyze --apply '{${taskDocs.map(([n]) => `"${n}":"..."`).join(',')}}' -I ${iter}${taskFlag}${platformFlag}\n\n`;
   }
   // Phase 2 提示：Phase 1 完成后引导进入 Phase 2
   if (!ctx.phase) {
