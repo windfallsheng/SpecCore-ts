@@ -1229,7 +1229,13 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     prompt += `   - 第 3 步：如果没有「端列表」章节，从「对应端」列提取\n`;
     prompt += `   - 第 4 步：如果以上都无法确定，根据需求文档内容判断\n`;
     prompt += `   - 第 5 步：将发现的端列表写入 020-specs/PLATFORMS.md\n`;
-    prompt += `6. **目录结构**：全局文档写入 020-specs/global/\n`;
+    prompt += `6. **目录结构（必须严格遵守）**：\n`;
+    prompt += `   - 全局跨端文档写入 \`020-specs/global/\`（如 REQUIREMENT.md、DEPS.md、RISK.md 等）\n`;
+    prompt += `   - 端专属文档必须写入 \`020-specs/{端名}/\` 子目录（如 \`020-specs/booking-service/TECH.md\`）\n`;
+    prompt += `   - 写入时使用 --platform 参数指定端名，例如：\n`;
+    prompt += `     \`speccore analyze --apply '{"TECH.md":"..."}' -I ${iter} --platform booking-service\`\n`;
+    prompt += `   - 每个端单独调用一次 --apply，不要把所有端的内容混在一个文档中\n`;
+    prompt += `   - 如果只有一个端，仍然需要创建子目录（如 \`020-specs/booking-service/\`）\n`;
     if (ctx.phase !== '1') {
       // 端专业性约束只在默认模式（全量）中输出
       prompt += `\n## ⚠️ 端专业性约束\n`;

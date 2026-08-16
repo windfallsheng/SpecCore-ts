@@ -15,6 +15,16 @@ import { logger } from '../utils/logger';
 import { extractAnnotations, buildModuleGroups, matchModule, discoverProjectRoots } from './spec-annotations';
 import { loadKnowledgeGraph, KnowledgeGraph } from './knowledge-graph';
 import { scanCodeForSpecAnnotations } from './reverse-sync';
+import { parsePlatformList } from './spec-paths';
+
+// ── 端名缓存（v6.48.0+）：从 CONSTITUTION.md 加载，优先于通用模式匹配 ──
+let _constitutionPlatforms: string[] | null = null;
+async function getConstitutionPlatforms(): Promise<string[]> {
+  if (_constitutionPlatforms === null) {
+    _constitutionPlatforms = await parsePlatformList();
+  }
+  return _constitutionPlatforms;
+}
 
 // ── 数据结构 ──
 
@@ -183,7 +193,7 @@ async function scanDirectory(
           const apis = extractApis(content, lang);
           const imports = extractImports(content, lang);
           const lines = content.split('\n').length;
-          const endpoint = detectEndpoint(relPath);
+          const endpoint = await detectEndpoint(relPath);
           const module = detectModule(relPath);
 
           const fileEntry: CodeFile = {
@@ -756,8 +766,14 @@ export async function loadFullIndex(): Promise<CodeIndex | null> {
 
 // ── 端识别 ──
 
-function detectEndpoint(filePath: string): string {
+async function detectEndpoint(filePath: string): Promise<string> {
   const normalized = filePath.replace(/\\/g, '/').toLowerCase();
+  // v6.48.0+：优先匹配 CONSTITUTION.md 端列表中的端名
+  const platforms = await getConstitutionPlatforms();
+  for (const platform of platforms) {
+    if (normalized.includes(platform.toLowerCase())) return platform;
+  }
+  // 回退：通用模式匹配
   for (const [endpoint, config] of Object.entries(ENDPOINT_PATTERNS)) {
     for (const pattern of config.patterns) {
       if (normalized.includes(pattern.toLowerCase())) return endpoint;

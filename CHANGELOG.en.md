@@ -2,6 +2,18 @@
 
 ---
 
+## v6.48.0 (2026-08-16) — Backend Platform Detection + Dual-Layer Directories + Name Consistency
+
+### Core Fixes
+
+- **`isBackendPlatform()` enhanced**: supports `-service`/`-api`/`-server`/`-backend` suffixes, fixing `booking-service` being misclassified as frontend
+- **split fallback platform consistency**: auto-supplemented backend subtasks now use actual backend platform names from CONSTITUTION.md, no longer hardcoded `api/impl`
+- **`GLOBAL_SPEC_FILES`精简**: TECH/RISK/REVIEW/MONITOR no longer forced into `global/`, now support per-platform directories (e.g. `020-specs/booking-service/TECH.md`)
+- **analyze prompt enforces dual-layer**: explicitly instructs AI to create `020-specs/{platform}/` subdirectories, each platform calls `--apply --platform` separately
+- **code-scanner platform consistency**: `detectEndpoint()` now prioritizes CONSTITUTION.md platform list, falls back to generic patterns (frontend/backend/mobile)
+
+---
+
 ## v6.47.0 (2026-08-16) — Verification Fixes + Documentation
 
 ### Bug Fixes

@@ -1226,8 +1226,11 @@ ${section.content}
   } else {
     // ── 4b. feature/bugfix/refactor：三级嵌套（前后端大类 → 端 → 子任务） ──
 
-    // 分类平台：后端 vs 前端
-    const isBackendPlatform = (p: string) => p === 'backend' || p.startsWith('后台');
+    // 分类平台：后端 vs 前端（v6.48.0+ 增强识别）
+    // 后端识别：精确匹配 'backend' / 以 '后台' 开头 / 以 -service/-api/-server/-backend 结尾
+    const isBackendPlatform = (p: string) =>
+      p === 'backend' || p.startsWith('后台') ||
+      /-(service|api|server|backend)$/i.test(p);
     const getServiceName = (p: string) => isBackendPlatform(p) && p === 'backend' ? 'api' : p;
 
     const backendPlatforms = taskPlatforms.filter(isBackendPlatform);
@@ -1350,9 +1353,17 @@ ${section.content}
   }
 
   // 确保至少有 backend 子任务（AI 未输出 backend 时自动补充，仅非 research）
-  if (!isResearch && !taskPlatforms.some((p: string) => p === 'backend' || p.startsWith('后台'))) {
-    // 【v6.40.0】直接使用服务名 'api'，不再使用 10-backend/api/
-    const autoSubtaskDir = join(taskDir, 'api', 'impl');
+  // v6.48.0+：从 CONSTITUTION.md 端列表查找后端端名，不再硬编码 'backend'
+  const hasAnyBackend = taskPlatforms.some((p: string) =>
+    p === 'backend' || p.startsWith('后台') || /-(service|api|server|backend)$/i.test(p)
+  );
+  if (!isResearch && !hasAnyBackend) {
+    // 从端列表查找第一个后端端名作为 fallback（v6.48.0+）
+    const allPlatforms = await parsePlatformList();
+    const fallbackBackend = allPlatforms.find(p =>
+      p === 'backend' || p.startsWith('后台') || /-(service|api|server|backend)$/i.test(p)
+    ) || 'backend';
+    const autoSubtaskDir = join(taskDir, fallbackBackend, 'impl');
     await ensureDir(join(autoSubtaskDir, '.meta'));
     await ensureDir(join(autoSubtaskDir, 'src'));
     await ensureDir(join(autoSubtaskDir, 'tests'));
@@ -1368,12 +1379,12 @@ ${section.content}
     );
     await writeFile(
       join(autoSubtaskDir, 'TASK.md'),
-      `# ${section.name} — 后端（自动补充）
+      `# ${section.name} — ${fallbackBackend}（自动补充）
 
 ## 子任务信息
-- **子任务 ID**: \`${taskId}-backend-auto\`
+- **子任务 ID**: \`${taskId}-${fallbackBackend}-auto\`
 - **所属模块**: \`${taskId}\`
-- **端**: backend
+- **端**: ${fallbackBackend}
 - **负责人**: ${owner}
 - **状态**: 待开发
 
@@ -1390,8 +1401,8 @@ ${section.content}
     await writeFile(join(autoSubtaskDir, 'RISK.md'), generateRiskTemplate(section, riskMaterial));
     await writeFile(join(autoSubtaskDir, 'DEPS.md'), generateDepsTemplate(section, depsMaterial));
     await writeFile(join(autoSubtaskDir, 'MONITOR.md'), generateMonitorTemplate(section, monitorMaterial));
-    taskPlatforms.push('backend');
-    subtaskIdMap.set('backend', `${taskId}-backend-auto`);
+    taskPlatforms.push(fallbackBackend);
+    subtaskIdMap.set(fallbackBackend, `${taskId}-${fallbackBackend}-auto`);
   }
 
   // ─ 5. 任务上下文 CONTEXT.md ─
