@@ -35,7 +35,7 @@ export interface AnalyzeOptions {
   auto?: boolean;
   interactive?: boolean;
   task?: string;
-  type?: string;   // 任务类型: feature|bugfix|refactor|...
+  type?: string;   // 任务类型: feature|bugfix|refactor/...
   platform?: string; // 指定端: backend/web/admin/...
   // NEW options (CLI passes comma-separated strings)
   source?: string;
@@ -56,6 +56,8 @@ export interface AnalyzeOptions {
   full?: boolean;       // --full: 全自动三阶段合成（原 synthesize --full）
   phase?: string;       // --phase N: 单阶段合成执行
   applyPhase?: string;  // --apply-phase N: 指定写入哪个阶段的合成结果
+  // Pipeline 选项 (v6.68.0+)
+  pipeline?: boolean;   // --pipeline: 启用流水线模式，自动执行 Phase 1 → Phase 2
 }
 
 export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {

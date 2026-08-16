@@ -2426,7 +2426,90 @@ speccore analyze --prompt -I meeting-upgrade
 2. Phase 2 的 prompt 中能检索到 Phase 1 的产出
 3. AI Read 全局文档再生成各端专属文档
 
-### 8.11 spec-ask onboarding 强制展示修复（v6.63.0）
+### 8.11 Pipeline 引擎架构设计（v6.67.0-v6.68.0）
+
+**核心问题**：analyze 命令需要分两阶段执行（Phase 1 全局文档 → Phase 2 各端专属文档），但 CLI 无法在一次调用中连续执行两个阶段，因为 apply 命令和 prompt 命令是独立的 CLI 调用。
+
+**历史尝试及失败原因**：
+- **v6.61.0-v6.64.0**: CLI 在 apply 模式完成后自动输出 Phase 2 prompt → **失败**：AI 不读取新的 `[SPECCORE_PROMPT]`
+- **v6.65.0**: CLI 输出提示信息到 stdout → **失败**：AI 看不到终端输出
+- **v6.66.0**: prompt 结尾要求 AI 主动询问用户 → **效果不佳**：AI 可能忽略指令
+
+**最终方案（v6.67.0）**：在 prompt 的**最开头**明确完整工作流程，使用最强语气要求 AI 遵守。
+
+#### Prompt 开头的强制指令
+
+```markdown
+## 📋 完整工作流程（两阶段分析）
+
+本项目检测到有 4 个端(admin-web、booking-service、h5-mobile、room-service)，需要分两阶段执行：
+
+**Phase 1（当前阶段）**: 生成全局文档(global/REQUIREMENT.md、ANALYSIS.md、DEPS.md 等)
+**Phase 2（下一阶段）**: 生成各端专属文档({端}/TECH.md、TEST.md、UI_SPEC.md 等)
+
+## ⚠️ 强制要求：Phase 1 完成后立即执行 Phase 2
+
+当你通过 --apply 写入所有全局文档后，**必须立即执行**以下命令进入 Phase 2：
+
+```bash
+speccore analyze --prompt -I Iteration-011-meeting-upgrade --phase 2
+```
+
+**这是强制要求，不是可选操作**。不要等待用户确认，直接执行上述命令。
+```
+
+**关键设计原则**：
+1. **位置优先**: 放在 prompt 的**最开头**,确保 AI 第一时间看到
+2. **语气最强**: 使用"强制要求"、"必须"、"不要等待"等强制性词汇
+3. **明确命令**: 直接给出完整的 bash 命令,不需要 AI 自己构造
+4. **消除歧义**: 明确说明"不是可选操作",避免 AI 理解为建议
+
+#### PipelineEngine 基础设施（v6.68.0+ 规划）
+
+**长期目标**：实现通用的 Pipeline 引擎，支持多步骤流水线自动执行。
+
+**核心接口**：
+```typescript
+interface PipelineStep {
+  name: string;           // 步骤名称
+  prompt: string;         // 该步骤的 prompt
+  applyHandler: (data: any) => Promise<void>;  // apply 处理器
+  onComplete?: () => Promise<boolean>;  // 完成后是否继续下一步
+}
+
+class PipelineEngine {
+  async execute(steps: PipelineStep[]): Promise<void> {
+    for (const step of steps) {
+      // 输出 prompt
+      process.stdout.write(`[SPECCORE_PROMPT]\n${step.prompt}`);
+      
+      // 等待 AI 通过 --apply 写回
+      await waitForApply(step.applyHandler);
+      
+      // 检查是否继续
+      if (step.onComplete && !(await step.onComplete())) {
+        break;
+      }
+    }
+  }
+}
+```
+
+**适用场景**：
+- `analyze --pipeline`: Phase 1 → Phase 2
+- `split --pipeline`: 任务拆分 → 逐个创建任务
+- `execute --pipeline`: 逐个任务执行 → PR → 合并
+- `dev --pipeline`: init → doc2spec → analyze → split → plan → execute → pr
+
+**技术挑战**：
+1. CLI 需要在一次调用中等待多次 `--apply`
+2. 需要状态管理机制记录执行进度
+3. 需要支持断点续跑（`--resume`）
+4. 需要错误恢复和重试机制
+
+**当前状态**：PipelineEngine 核心类已创建（`src/core/pipeline-engine.ts`），但尚未完全集成到 analyze 命令中。v6.67.0 采用 prompt 开头的强制指令作为过渡方案。
+
+### 8.12 spec-ask onboarding 强制展示修复（v6.63.0）
 
 **问题根因**：`.qoder/commands/spec-ask.md` 只有 8 行简单指令，没有包含「引导页强制展示规则」，导致 AI 忽略 `[SPECCORE_ONBOARD: <path>]` 标记。
 
