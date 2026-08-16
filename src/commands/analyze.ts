@@ -27,6 +27,7 @@ import { buildAutoModeInstruction } from '../core/questions';
 import { resolvePlatform } from '../core/platform-registry';
 import { warnIfIndexStale } from '../core/index-guard';
 import { GLOBAL_SPECS_DIR, GLOBAL_SPEC_FILES, parsePlatformTypes, parsePlatformList } from '../core/spec-paths';
+import { unifiedSearch, formatUnifiedContext } from '../core/unified-retrieval';
 
 export interface AnalyzeOptions {
   iteration?: string;
@@ -1279,11 +1280,11 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     }
     const dirStepNum = platformTypes.size > 0 ? 8 : 7;
     prompt += `${dirStepNum}. **目录结构（严格遵循，禁止自创目录）**：\n`;
-    prompt += `   - **全局文档**（跨端通用）→ Write 到 \`020-specs/global/{文件名}\`\n`;
+    prompt += `   - **全局文档**（跨端通用）→ 通过 --apply 写入，CLI 自动路由到 \`020-specs/global/{文件名}\`\n`;
     prompt += `     - REQUIREMENT.md（需求文档，含功能模块清单+涉及端列）\n`;
     prompt += `     - ANALYSIS.md（需求分析）\n`;
     prompt += `     - DEPS.md（依赖清单）\n`;
-    prompt += `   - **端专属文档**（每端各一份）→ Write 到 \`020-specs/{端名}/{文件名}\`\n`;
+    prompt += `   - **端专属文档**（每端各一份）→ 通过 --apply 写入，CLI 自动路由到 \`020-specs/{端名}/{文件名}\`\n`;
     prompt += `     - TECH.md（技术方案：API/数据库/组件/路由等）\n`;
     prompt += `     - TEST.md（测试用例）\n`;
     prompt += `     - UI_SPEC.md（UI 规范，仅前端端）\n`;
@@ -1291,7 +1292,8 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     prompt += `     - REVIEW.md（评审检查项）\n`;
     prompt += `     - MONITOR.md（监控指标）\n`;
     prompt += `   - **禁止**：不要创建 020-specs/ 下的任何额外子目录（如数字编号、中文名称等）\n`;
-    prompt += `   - 目录已由 CLI 预创建，直接用 Write 工具写入即可\n`;
+    prompt += `   - **禁止直接用 Write 工具写文件到 020-specs/**：必须通过 \`speccore analyze --apply '{"文件名":"内容"}' -I ${iter}\` 写入\n`;
+    prompt += `   - ⚠️ 直接 Write 会导致目录结构错误（所有文件扁平在根目录），必须走 --apply 让 CLI 自动路由到 global/ 或 {端名}/ 子目录\n`;
     if (ctx.phase !== '1') {
       // 端专业性约束只在默认模式（全量）中输出
       prompt += `\n## ⚠️ 端专业性约束\n`;
@@ -1390,6 +1392,27 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     prompt += `Phase 2 会 Read Phase 1 的全局文档作为上下文，确保各端方案与整体架构一致。\n\n`;
   }
   prompt += '\n' + buildAutoModeInstruction('analyze', iter) + '\n';
+
+  // ── v6.52.0+: 图谱 RAG 上下文注入（analyze 阶段也检索项目关联内容）──
+  if (!isTask && ctx.phase !== '2') {
+    try {
+      const ragResult = await unifiedSearch(process.cwd(), {
+        query: ctx.iteration || '',
+        iteration: ctx.iteration,
+        platform: ctx.platform,
+      });
+      if (ragResult.documentChunks.length > 0 || ragResult.codeSlices.length > 0 || ragResult.graphContext) {
+        prompt += `\n##  项目关联上下文（图谱 RAG 智能检索）\n\n`;
+        prompt += `以下是从项目知识图谱、代码索引和文档 RAG 中检索到的关联内容，请在分析时参考：\n\n`;
+        prompt += formatUnifiedContext(ragResult);
+        prompt += `\n> ⚠️ 以上是检索到的关联上下文，不是需求文档本身。请结合需求文档和这些上下文综合分析。\n\n`;
+        logger?.info?.(`   🔍 analyze RAG: ${ragResult.stats.docChunksFound} 文档块 + ${ragResult.stats.codeSlicesFound} 代码切片`);
+      }
+    } catch (e) {
+      logger?.debug?.('analyze RAG 检索失败（非关键）:', e);
+    }
+  }
+
   // 文档模板展示（有用户模板时只展示用户模板，无用户模板时展示内置模板）
   if (hasUserTemplates) {
     prompt += `## 📄 参考模板（用户自定义）\n\n`;

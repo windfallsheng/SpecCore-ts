@@ -2,6 +2,20 @@
 
 ---
 
+## v6.53.0 (2026-08-16) — Analyze Phase RAG Enhancement + --apply Path Enforcement
+
+### Core Improvements
+
+- **Analyze phase injects knowledge graph RAG context**: `buildMultiDocPrompt()` now calls `unifiedSearch()` to retrieve project knowledge graph, code index, and document RAG, injecting related content into the prompt so AI can reference existing code architecture and historical documents during analysis
+- **Force AI to use --apply path for file writes**: Fixed incorrect instruction "use Write tool directly" in prompt, changed to "must use --apply, CLI auto-routes to global/ or {platform}/ subdirectory", resolving the issue of AI bypassing CLI and dumping all files in root directory
+
+### Technical Details
+
+- `src/commands/analyze.ts`: Added `unifiedSearch` + `formatUnifiedContext` imports, injected "Project Related Context" section at end of prompt
+- `src/commands/analyze.ts`: Directory structure instruction changed from "Write to" to "via --apply, CLI auto-routes to", added warning against direct Write
+
+---
+
 ## v6.52.0 (2026-08-16) — Documentation Overhaul + Help Center Completion
 
 ### Design Documentation
