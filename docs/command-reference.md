@@ -146,11 +146,12 @@ speccore spec2doc [-i <iteration>] [-t <task>] [-f <format>] [-o <output>]
 ```bash
 speccore analyze [--iteration <name>] [--task <id>] [--audit]
 speccore analyze --full              # 全量分析（原 synthesize）
-speccore analyze --auto              # 自动分析 + 生成全套 Spec 文件
+speccore analyze --auto              # 全自动分析（经过 AI，不交互）
+speccore analyze --auto --platform admin  # 只分析指定端
 ```
 别名: `al`
 
-> 💡 `--auto` 模式现在会自动生成全套 Spec 文件（TECH/TEST/REVIEW/RISK/DEPS/MONITOR/REQUIREMENT），不再产出空模板。
+> 💡 `--auto` 模式会自动生成 prompt 交给宿主 AI 执行专业分析，产出全套 Spec 文件。支持 `--platform` 指定端过滤。
 
 ### 📦 split — 任务拆分 🔒 AI 命令
 ```bash

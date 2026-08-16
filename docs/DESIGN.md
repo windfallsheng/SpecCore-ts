@@ -317,6 +317,99 @@ if (frontendPlatforms.length > 0) {
 }
 ```
 
+### 2.6 端发现机制重构与 --auto 模式 AI 化（v6.40.2）
+
+#### 2.6.1 问题背景
+
+v6.40.0 之前的 `detectPlatformsFromConstitution()` 存在三个核心问题：
+
+1. **硬编码默认值**：Layer 3 回退到 `['app', 'h5', 'miniapp', 'admin']`，不同项目的端完全不同
+2. **无 AI 参与**：全靠正则匹配，准确率有限
+3. **--auto 模式跳过 AI**：直接调用代码分析生成空模板
+
+#### 2.6.2 新的三层端发现架构
+
+| 层级 | 执行者 | 数据来源 | 说明 |
+|:--|:--|:--|:--|
+| Layer 1 | CLI | CONSTITUTION.md 表格「对应需求端」列 | 用户显式声明，跳过「待填写」占位符 |
+| Layer 2 | CLI | CONSTITUTION.md 技术栈标题 `### 中文端名 (English Name)` | 自动提取端名，构建动态别名 |
+| Layer 3 | **AI** | CONSTITUTION.md + 需求文档内容 | AI 语义判断，结果写入 `020-specs/PLATFORMS.md` |
+
+**关键设计决策**：
+- Layer 1+2 无法检测时返回**空数组**（不再硬编码默认值）
+- AI 在 prompt 指导下自主发现端列表（第 5 步端发现指令）
+- AI 将发现的端列表写入 `020-specs/PLATFORMS.md`，后续流程（split 等）可读取
+
+#### 2.6.3 技术栈标题解析（Layer 2）
+
+新增两个函数从 CONSTITUTION.md 技术栈章节提取端名：
+
+```typescript
+// 解析: ### 后台管理端 (Admin Dashboard) → { chinese: '后台管理端', english: 'Admin Dashboard' }
+function parseTechStackHeaders(content: string): Array<{ chinese; english; fullTitle }>
+
+// 将解析结果合并到动态别名映射，供 inferPlatformFromPathOrContent 使用
+function buildDynamicAliasesFromTechStack(entries): Record<string, string[]>
+```
+
+#### 2.6.4 两阶段最长匹配策略
+
+`normalizeToStandardPlatform()` 采用两阶段匹配，避免短别名误匹配：
+
+| 阶段 | 策略 | 示例 |
+|:--|:--|:--|
+| Phase 1 | 精确匹配（`name === alias`），最长优先 | `"后台管理端"` → admin |
+| Phase 2 | 包含匹配（`name.includes(alias)`），最长优先 | `"后台服务端"` → backend（不是 admin） |
+
+**修复的误匹配问题**：
+- `"后台服务端"` → ~~admin~~ → backend（"后台"短别名不再先匹配）
+- `"移动端"` → ~~app~~ → h5（"移动端app"长别名不再误包含）
+
+#### 2.6.5 --auto 模式重构
+
+**修改前**：
+```
+--auto → 代码分析 → 生成空模板 → 返回（无 AI）
+```
+
+**修改后**：
+```
+--auto → 收集文档 → 设置 options.prompt = true → fall through 到 prompt 生成
+       → 宿主 AI 分析 → --apply 写回
+```
+
+**核心改变**：`--auto` 只是「不交互」，不是「跳过 AI」。
+
+#### 2.6.6 --platform 端过滤支持
+
+迭代级分析现在支持 `--platform` 过滤：
+
+```bash
+# 只分析 admin 端
+speccore analyze -I 011-meeting-upgrade --auto --platform admin
+```
+
+Prompt 会指示 AI：
+- 只生成指定端的专属文档
+- 写入 `020-specs/{端名}/` 目录
+- 不生成其他端的子目录
+
+#### 2.6.7 AI 端发现指令（Prompt 第 5 步）
+
+```
+5. **端发现（重要）**：先确定项目有哪些端，再按端组织文档
+   - 第 1 步：Read .speccore/CONSTITUTION.md
+   - 第 2 步：从表格「对应需求端」列提取端列表
+   - 第 3 步：如果表格列为空或「待填写」，从技术栈章节标题提取
+   - 第 4 步：如果以上都无法确定，根据需求文档内容判断
+   - 第 5 步：将发现的端列表写入 020-specs/PLATFORMS.md
+```
+
+**实现位置**：
+- `src/cli.ts`: `--platform` 选项注册
+- `src/commands/analyze.ts`: `--auto` 重构 + `buildMultiDocPrompt()` 端过滤 + 端发现指令
+- `src/core/analyze-engine.ts`: `detectPlatformsFromConstitution()` 重构 + `normalizeToStandardPlatform()` 两阶段匹配 + `inferPlatformFromPathOrContent()` 动态别名合并
+
 ---
 
 ## 3. 迭代目录结构

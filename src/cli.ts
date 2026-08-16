@@ -737,6 +737,7 @@ program
   .option('--supplement', '补充模式：追加未覆盖的源码到现有报告（不重新生成）')
   .option('--feature <name>', '局部分析：只分析指定功能模块（010-requirements/features/{name}/）')
   .option('--doc <path>', '局部分析：类型文档（如 bugs/login-timeout, refactors/db-pool）')
+  .option('--platform <platform>', '指定端分析：只分析指定端的需求（如 admin / h5 / app / miniapp）')
   .option('--apply <content>', '接收 AI 分析结果写入 ANALYSIS.md（配合 --prompt）')
   .option('--audit-fix', '读取 QUALITY_AUDIT.md 并生成修复指令（配合 --prompt，最多 2 轮）')
   .option('--sync', '任务分析后局部回写 020-specs/（只更新受影响的功能模块，不全覆盖）')

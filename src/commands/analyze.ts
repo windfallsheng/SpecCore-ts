@@ -220,7 +220,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     return;
   }
 
-  // ── --auto 模式: 用分析引擎直接生成报告，不走 AI prompt ──
+  // ── --auto 模式: 全自动分析（收集文档 → 生成 prompt → 交给 AI，不交互） ──
+  // 【v6.40.2 修复】--auto 不再跳过 AI，而是自动生成 prompt 让宿主 AI 执行专业分析
   if (options.auto) {
     const iter = options.iteration || await getDefaultIteration();
     if (!iter) { logger.error('请指定迭代: -I <iteration>'); return; }
@@ -285,41 +286,10 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       return;
     }
 
-    const input: AnalyzeInput = {
-      sources: [],
-      requirements,
-      scope: (options.scope as any) || 'iteration',
-      iteration: iter,
-      depth: (options.depth as any) || 'normal',
-      readSource: options.noSource ? false : true,
-      sourceScope: options.sourceScope,
-    };
-
-    logger.info(`🤖 Auto 分析: ${iter} (${requirements.length} 个需求文档)`);
-    const result = await runAnalysis(input);
-    const analysisPath = join(specDir, 'ANALYSIS.md');
-    if (await shouldOverwrite(analysisPath, !!options.interactive)) {
-      const backup = await backupWithTimestamp(analysisPath);
-      if (backup) {
-        backups.push(backup);
-        logger.info(`   📦 旧版已备份: ${backup.split('/').pop()}`);
-      }
-      await writeFile(analysisPath, result.report);
-      logger.success(`✅ 分析报告已生成: 020-specs/ANALYSIS.md`);
-    } else {
-      logger.info(`   ⏭️  用户取消覆盖，跳过写入`);
-    }
-    if (result.summary) {
-      logger.info(`   📊 分析: ${result.summary.filesAnalyzed} 文件, ${result.summary.apisFound} 接口, ${result.summary.issues} 问题, ${result.summary.risks} 风险`);
-    }
-
-    // ── 自动生成全套 Spec 文件（替代空模板） ──
-    logger.info(`   📄 生成全套 Spec 文件...`);
-    const specResult = await generateSpecsFromRequirements(requirements, iter, specDir);
-    logger.success(`   ✅ Spec 文件: 生成 ${specResult.summary.withContent} 个, 跳过 ${specResult.summary.skipped} 个 (已有实质内容)`);
-
-    printBackupSummary();
-    return;
+    // 【v6.40.2 修复】--auto 不再跳过 AI，而是自动生成 prompt 让宿主 AI 执行专业分析
+    logger.info(` Auto 分析: ${iter} (${requirements.length} 个需求文档 → AI 专业分析)`);
+    // 设置 prompt 模式，fall through 到下面的 prompt 生成逻辑
+    options.prompt = true;
   }
 
   // ── 非 prompt/apply 模式 → 全部转 AI prompt，不再走代码模板分析 ──
@@ -1011,6 +981,12 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     }
   } else {
     prompt += `- 当前是**迭代级分析**，需产出全部 8 个文档，覆盖需求→技术→测试→评审→风险→依赖→监控→UI规格\n`;
+    if (ctx.platform) {
+      prompt += `- **只分析 ${ctx.platform} 端**：从 CONSTITUTION.md 读取端列表，但只生成 ${ctx.platform} 端的专属文档\n`;
+      prompt += `- 在 020-specs/${ctx.platform}/ 下写入该端专属文档（ANALYSIS.md、TECH.md、TEST.md 等）\n`;
+      prompt += `- 根目录只放跨端通用文档（REQUIREMENT.md、DEPS.md、RISK.md 等）\n`;
+      prompt += `- **不要生成**其他端的子目录和文档\n`;
+    }
   }
   prompt += `\n## 要求\n1. Read .speccore/PATTERNS/TEMPLATES/specs/ 下的专业模板（如目录不存在或为空，用你的专业知识自由撰写，绝不允许产出一行垃圾）\n`;
   const templateMap: Record<string, string> = {
@@ -1071,14 +1047,19 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
   prompt += `   e. 如用户指定了特定文档，优先读取指定文件；如要求全部，再读 sources/ 原始文档\n`;
   prompt += `3. 读懂需求文档后，按专业模板标准自由撰写每个文档（不是填空表）\n`;
   prompt += `4. 每个文档都要具体内容（禁止"待填充"），分析完成后支持交互编辑任意文档的任意章节\n`;
-  prompt += `5. **目录结构**：必须按端创建子目录，不要全部扁平放在 020-specs/ 根目录\n`;
-  prompt += `   - 从 CONSTITUTION.md 的「对应需求端」列读取端列表（如 admin, h5, backend）\n`;
+  prompt += `5. **端发现（重要）**：先确定项目有哪些端，再按端组织文档\n`;
+  prompt += `   - 第 1 步：Read .speccore/CONSTITUTION.md\n`;
+  prompt += `   - 第 2 步：从表格「对应需求端」列提取端列表（如 admin, h5, backend）\n`;
+  prompt += `   - 第 3 步：如果表格列为空或「待填写」，从技术栈章节标题提取（如 ### 后台管理端 (Admin Dashboard) → admin）\n`;
+  prompt += `   - 第 4 步：如果以上都无法确定，根据需求文档内容判断项目涉及哪些端\n`;
+  prompt += `   - 第 5 步：将发现的端列表写入 020-specs/PLATFORMS.md（格式：每行一个端名）\n`;
+  prompt += `6. **目录结构**：必须按端创建子目录，不要全部扁平放在 020-specs/ 根目录\n`;
   prompt += `   - 在 020-specs/ 下创建 {端名}/ 子目录（如 020-specs/admin/、020-specs/h5/、020-specs/backend/）\n`;
   prompt += `   - 每个端目录下写入该端专属的分析文档（ANALYSIS.md、TECH.md 等）\n`;
   prompt += `   - 根目录只放跨端通用文档（REQUIREMENT.md、DEPS.md、RISK.md 等）\n`;
   const taskFlag = isTask && ctx.task ? ` --task ${ctx.task}` : '';
   const platformFlag = ctx.platform ? ` --platform ${ctx.platform}` : '';
-  prompt += `6. 写入: speccore analyze --apply '{"${taskDocs.map(([n]) => `${n}:"..."`).join(',')}...}' -I ${iter}${taskFlag}${platformFlag}\n\n`;
+  prompt += `7. 写入: speccore analyze --apply '{"${taskDocs.map(([n]) => `${n}:"..."`).join(',')}...}' -I ${iter}${taskFlag}${platformFlag}\n\n`;
   prompt += '\n' + buildAutoModeInstruction('analyze', iter) + '\n';
   for (let i = 0; i < taskDocs.length; i++) {
     prompt += `### ${i+1}/${taskDocs.length}: ${taskDocs[i][0]}\n\`\`\`markdown\n${taskDocs[i][1]}\n\`\`\`\n\n`;
