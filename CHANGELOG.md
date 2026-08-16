@@ -1,3 +1,36 @@
+## v6.64.0 (2026-08-16) — Phase 2 触发条件修正：仅多端项目(≥2 个端)
+
+### 核心修复
+
+- **analyze.ts**: 修改 Phase 2 触发条件：从 `platforms.length > 0` 改为 `platforms.length >= 2`
+- **analyze.ts**: 新增注释说明：单端项目不需要分阶段，global/TECH.md 本身就是该端的专属文档
+- **analyze.ts**: 保留无端列表时的警告输出
+
+### 问题根因
+
+v6.62.0 把触发条件改为 `platforms.length > 0`，导致单端项目也会触发 Phase 2。但这是错误的：
+- **单端项目**：Phase 1 生成的 global/TECH.md 本身就是该端的专属文档，不需要再生成 {端}/TECH.md（会重复）
+- **多端项目**：需要分两阶段，Phase 1 生成全局文档，Phase 2 生成各端专属文档
+
+### 修复方案
+
+**正确的逻辑**:
+```typescript
+if (platforms.length >= 2) {
+  // 多端项目：自动触发 Phase 2
+} else if (platforms.length === 0) {
+  // 无端列表：输出警告
+} 
+// platforms.length === 1: 单端项目，Phase 1 已完成，无需 Phase 2
+```
+
+**保证效果**:
+- ✅ 多端项目(≥2 个端)：自动触发 Phase 2
+- ✅ 单端项目(=1 个端)：不触发 Phase 2（避免重复）
+- ✅ 无端列表(=0 个端)：输出警告，指导用户修复
+
+---
+
 ## v6.63.0 (2026-08-16) — spec-ask command 引导页强制展示规则
 
 ### 核心修复
