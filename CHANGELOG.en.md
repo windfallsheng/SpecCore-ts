@@ -2,6 +2,16 @@
 
 ---
 
+## v6.49.8 (2026-08-16) — Project Info Table Parsing: Support Project Type Column
+
+### Fixes
+
+- **`parseProjectInfo()` supports "Project Type" column**: `ProjectInfo` interface adds `projectType` field
+- **Prompt project paths table includes project type**: execute command's Prompt displays project type to help AI understand platform characteristics
+- **Dynamic column index matching**: supports multiple header variations like "工程类型", "类型"
+
+---
+
 ## v6.49.7 (2026-08-16) — Subtask Directory Cleanup: Remove Unused src/ and tests/
 
 ### Fixes

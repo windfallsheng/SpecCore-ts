@@ -183,11 +183,12 @@ export async function parsePlatformTypes(): Promise<Map<string, string>> {
 
 /**
  * 从 CONSTITUTION.md 解析项目信息表（v6.49.6+）
- * 返回 Map<工程标识, { projectName, srcPath, gitRepo, branch, platform }>
+ * 返回 Map<工程标识, { projectType, projectName, srcPath, gitRepo, branch, platform }>
  * 用于 execute 命令确定代码输出位置
  */
 export interface ProjectInfo {
   projectIdentifier: string;
+  projectType: string;      // 工程类型（Java服务/H5移动端/Web管理后台等）
   projectName: string;
   srcPath: string;
   gitRepo: string;
@@ -204,6 +205,7 @@ export async function parseProjectInfo(): Promise<Map<string, ProjectInfo>> {
   let inProjectSection = false;
   let headerParsed = false;
   let identifierColIdx = -1;
+  let typeColIdx = -1;
   let nameColIdx = -1;
   let pathColIdx = -1;
   let gitColIdx = -1;
@@ -232,6 +234,9 @@ export async function parseProjectInfo(): Promise<Map<string, ProjectInfo>> {
         h === '工程标识' || h === '工程' || h === '工程名' ||
         h.includes('工程标识') || h.includes('工程名')
       );
+      typeColIdx = cells.findIndex(h =>
+        h === '工程类型' || h === '类型' || h.includes('工程类型')
+      );
       nameColIdx = cells.findIndex(h =>
         h === '项目名称' || h === '项目名' || h.includes('项目名称')
       );
@@ -259,6 +264,7 @@ export async function parseProjectInfo(): Promise<Map<string, ProjectInfo>> {
       if (projectIdentifier) {
         const info: ProjectInfo = {
           projectIdentifier,
+          projectType: typeColIdx >= 0 && cells.length > typeColIdx ? cells[typeColIdx].trim() : '',
           projectName: nameColIdx >= 0 && cells.length > nameColIdx ? cells[nameColIdx].trim() : '',
           srcPath: pathColIdx >= 0 && cells.length > pathColIdx ? cells[pathColIdx].replace(/`/g, '').trim() : '',
           gitRepo: gitColIdx >= 0 && cells.length > gitColIdx ? cells[gitColIdx].trim() : '',
