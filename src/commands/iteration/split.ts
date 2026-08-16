@@ -423,6 +423,8 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           process.stdout.write('\n[SPECCORE_TASK_SUMMARY]\n');
           process.stdout.write(summaryMd);
           process.stdout.write('\n[/SPECCORE_TASK_SUMMARY]\n');
+          // 输出下一步操作标记：引导宿主 AI 对每个 Task 执行 analyze --task
+          outputAnalyzeTaskHints(iter, createdSections);
         }
         logger.success(`✅ 创建了 ${createdSections.length}/${sections.length} 个任务（${sections.length - createdSections.length} 个跳过）`);
       } else {
@@ -2459,6 +2461,28 @@ function buildSplitPrompt(
   p += `- 跨端功能 → 按端拆（后端 1 个 + 每个前端各 1 个）\n`;
   p += `- 独立第三方集成（支付/短信/OSS）→ 独立任务\n\n`;
 
+  // 聚合度分析（v6.43.0+）
+  p += `### 🔍 功能聚合度分析（重要 — 拆分前必须执行）\n\n`;
+  p += `对 REQUIREMENT.md 中的每个功能模块，判断它是「聚合的」还是「单端的」：\n\n`;
+  p += `**聚合功能**（涉及多个端）：\n`;
+  p += `- 判定标准：功能的「涉及端」列包含 2 个以上端，或功能描述中涉及多端交互\n`;
+  p += `- 拆分策略：**按端拆分**，每个端一个独立 Task\n`;
+  p += `  - 例：「用户登录」涉及 h5 + backend + admin → 拆成 3 个 Task：\n`;
+  p += `    - Task-NNN-h5-login（h5 端登录页面 + 交互）\n`;
+  p += `    - Task-NNN-backend-login（登录接口 + 鉴权 + 数据模型）\n`;
+  p += `    - Task-NNN-admin-login（管理端登录入口）\n`;
+  p += `  - 共享契约：\`_shared/API_CONTRACT.yaml\` 定义跨端接口\n`;
+  p += `  - 每个 Task 的 scope 只包含该端，不要跨端\n\n`;
+  p += `**单端功能**（只涉及一个端）：\n`;
+  p += `- 直接生成 1 个 Task，scope 只包含该端\n`;
+  p += `- 但仍需检查隐含跨端依赖（如 admin 页面需要 backend 提供新接口）\n`;
+  p += `- 如有隐含依赖，在 dependencies 中标注，或在 scope 中加入对应端\n\n`;
+  p += `**判断流程**：\n`;
+  p += `1. 读 global/REQUIREMENT.md 的功能模块清单 → 查看「涉及端」列\n`;
+  p += `2. 读 global/ANALYSIS.md → 确认跨端关联和数据流向\n`;
+  p += `3. 读 global/TECH.md → 了解整体架构中的端交互\n`;
+  p += `4. 对每个功能模块判定聚合度，决定拆分策略\n\n`;
+
   // 类型文档 1:1 映射规则
   p += `### 类型文档拆分规则（bugs/refactors/research）\n`;
   p += `与 feature 不同，类型文档采用 **1:1 映射**——每个文档直接对应一个任务，不拆分不合并：\n`;
@@ -2794,4 +2818,29 @@ async function generateTaskSummary(
   await writeFile(summaryPath, md);
 
   return md;
+}
+
+/**
+ * 输出 [SPECCORE_NEXT_STEPS] 标记，引导宿主 AI 对每个 Task 执行 analyze --task
+ * split 完成后调用，生成任务级 00-specs/ 文档
+ */
+function outputAnalyzeTaskHints(iteration: string, sections: Section[]): void {
+  if (sections.length === 0) return;
+  const iterFlag = iteration ? ` -I ${iteration}` : '';
+  let md = `\n## 🧠 下一步：任务级 Spec 分析\n\n`;
+  md += `拆分完成！每个 Task 需要执行 AI 分析，生成任务级 00-specs/ 文档（REQ.md、TECH.md、TASK.md、SCHEMA.md）。\n\n`;
+  md += `AI 会 Read global/ 和 {端}/ 的全局 spec 作为参考，根据本 Task 的原子范围生成针对性分析。\n\n`;
+  md += `### 执行命令\n\n`;
+  for (const sec of sections) {
+    const taskId = (sec as any)._taskId || sec.name;
+    md += `\`\`\`bash
+speccore analyze --task ${taskId}${iterFlag}
+\`\`\`
+
+`;
+  }
+  md += `> 自动模式可逐个执行，或告诉 AI：“对所有新建 Task 执行 analyze --task”\n`;
+  process.stdout.write('\n[SPECCORE_NEXT_STEPS]\n');
+  process.stdout.write(md);
+  process.stdout.write('\n[/SPECCORE_NEXT_STEPS]\n');
 }

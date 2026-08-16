@@ -1,3 +1,27 @@
+## v6.43.0 (2026-08-16) — split 聚合度分析 + 任务级 spec 分析引导
+
+### 核心变更
+
+- **split prompt 增强：功能聚合度分析**
+  - AI 拆分前先判断每个功能是「聚合的」（跨多端）还是「单端的」
+  - 聚合功能按端拆分：每端一个独立 Task，共享契约写入 `_shared/API_CONTRACT.yaml`
+  - 单端功能检查隐含跨端依赖，在 dependencies 中标注
+- **split 完成后输出 `[SPECCORE_NEXT_STEPS]` 标记**
+  - 列出每个 Task 的 `speccore analyze --task` 命令
+  - 引导宿主 AI 对每个 Task 执行任务级 spec 分析
+- **next-steps.ts 更新**：split 后续步骤新增 `analyze --task` 为第一步
+
+### 数据流完善
+
+```
+analyze (Phase 1 + 2) → 全局知识库
+split (聚合度分析) → Task 目录结构
+analyze --task (自动引导) → 每个 Task 的 00-specs/ 文档
+execute → 开发实现
+```
+
+---
+
 ## v6.42.0 (2026-08-16) — analyze 两阶段分析架构
 
 ### 核心变更
