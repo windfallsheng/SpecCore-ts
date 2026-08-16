@@ -256,34 +256,57 @@ export function buildCompactContext(
   graph: KnowledgeGraph,
   options: { taskId?: string; platform?: string }
 ): string {
-  if (!options.taskId) return '';
+  // ── 有 taskId：返回任务关联链 ──
+  if (options.taskId) {
+    const taskContext = getTaskContext(graph, options.taskId);
+    const lines: string[] = [];
 
-  const taskContext = getTaskContext(graph, options.taskId);
-  const lines: string[] = [];
+    if (taskContext.requirement) {
+      lines.push(`上游需求: ${taskContext.requirement.id}（${taskContext.requirement.title}）`);
+    }
 
-  if (taskContext.requirement) {
-    lines.push(`上游需求: ${taskContext.requirement.id}（${taskContext.requirement.title}）`);
+    if (taskContext.parentTask) {
+      lines.push(`父任务: ${taskContext.parentTask.id}（${taskContext.parentTask.title}）`);
+    }
+
+    if (taskContext.siblingSubtasks.length > 0) {
+      const parts = taskContext.siblingSubtasks.map(s => {
+        const current = s.platform === options.platform ? ' ⬅当前' : '';
+        return `${s.platform}:${statusEmoji(s.status)}${current}`;
+      });
+      lines.push(`各端进度: ${parts.join(' · ')}`);
+    }
+
+    if (taskContext.relatedSpecs.length > 0) {
+      lines.push(`关联规格: ${taskContext.relatedSpecs.map(s => s.id).join(', ')}`);
+    }
+
+    if (taskContext.dependsOn.length > 0) {
+      lines.push(`依赖任务: ${taskContext.dependsOn.map(d => d.id).join(', ')}`);
+    }
+
+    return lines.length > 0 ? lines.join('\n') : '';
   }
 
-  if (taskContext.parentTask) {
-    lines.push(`父任务: ${taskContext.parentTask.id}（${taskContext.parentTask.title}）`);
+  // ── 无 taskId（analyze 阶段）：返回业务模块摘要 ─
+  const businessModules = Object.values(graph.entities)
+    .filter(e => e.type === 'business_module');
+
+  if (businessModules.length === 0) return '';
+
+  const lines: string[] = ['## 业务-代码映射图谱'];
+  for (const bm of businessModules.slice(0, 10)) { // 最多展示 10 个业务模块
+    const codeEntities = bm.codeEntities || [];
+    if (codeEntities.length === 0) continue;
+    lines.push(`\n### ${bm.title}`);
+    lines.push(`关联代码实体 (${codeEntities.length} 个):`);
+    for (const ce of codeEntities.slice(0, 5)) { // 每个模块最多展示 5 个代码实体
+      lines.push(`- \`${ce}\``);
+    }
+    if (codeEntities.length > 5) {
+      lines.push(`- ... 还有 ${codeEntities.length - 5} 个`);
+    }
   }
 
-  if (taskContext.siblingSubtasks.length > 0) {
-    const parts = taskContext.siblingSubtasks.map(s => {
-      const current = s.platform === options.platform ? ' ⬅当前' : '';
-      return `${s.platform}:${statusEmoji(s.status)}${current}`;
-    });
-    lines.push(`各端进度: ${parts.join(' · ')}`);
-  }
-
-  if (taskContext.relatedSpecs.length > 0) {
-    lines.push(`关联规格: ${taskContext.relatedSpecs.map(s => s.id).join(', ')}`);
-  }
-
-  if (taskContext.dependsOn.length > 0) {
-    lines.push(`依赖任务: ${taskContext.dependsOn.map(d => d.id).join(', ')}`);
-  }
-
-  return lines.length > 0 ? lines.join('\n') : '';
+  return lines.join('\n');
 }
