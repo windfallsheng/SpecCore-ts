@@ -1028,7 +1028,7 @@ ${taskPlatforms.map((p: string) => `| ${subtaskIdMap.get(p)} | ${p} | ${owner} |
 - \`00-specs/TECH.md\` — 模块技术方案
 - \`_shared/CONTEXT.md\` — 任务上下文（来源 + 关联）
 - \`_shared/API_CONTRACT.yaml\` — API 契约
-- \`10-backend/{端}/{子任务}/TASK.md\` — 子任务详情
+- \`{platform}/{子任务}/TASK.md\` — 子任务详情
 - \`.meta/type\` + \`.meta/status\` — 子任务元信息
 
 ### 参考（按需读取）

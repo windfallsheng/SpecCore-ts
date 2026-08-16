@@ -3,7 +3,7 @@
  * 
  * 支持:
  *   - 需求分析: --req docs/a.md docs/b.md
- *   - 代码分析: --src backend/src 20-frontend/src
+ *   - 代码分析: --src backend/src h5-mobile/src
  *   - 联合分析: --src backend/src --req docs/req.md
  * 
  * 输出范围:
@@ -26,7 +26,7 @@ import { buildPrompt, formatPrompt } from '../core/prompt-builder';
 import { buildAutoModeInstruction } from '../core/questions';
 import { resolvePlatform } from '../core/platform-registry';
 import { warnIfIndexStale } from '../core/index-guard';
-import { GLOBAL_SPECS_DIR, GLOBAL_SPEC_FILES, parsePlatformTypes } from '../core/spec-paths';
+import { GLOBAL_SPECS_DIR, GLOBAL_SPEC_FILES, parsePlatformTypes, parsePlatformList } from '../core/spec-paths';
 
 export interface AnalyzeOptions {
   iteration?: string;
@@ -585,22 +585,12 @@ async function enrichTaskDocs(iteration: string, taskId: string, reqFiles: strin
     }
   }
 
-  // 补全 TEST.md（扫描子任务目录）
+  // 补全 TEST.md（v6.49.9+: 扫描平铺的端目录）
   const testFiles: string[] = [];
-  for (const catDir of ['10-backend', '20-frontend']) {
-    const catPath = join(fullTaskDir, catDir);
-    if (await pathExists(catPath)) {
-      try {
-        for (const svc of await readdir(catPath, { withFileTypes: true })) {
-          if (!svc.isDirectory()) continue;
-          for (const sub of await readdir(join(catPath, svc.name), { withFileTypes: true })) {
-            if (!sub.isDirectory()) continue;
-            const fp = join(catPath, svc.name, sub.name, 'TEST.md');
-            if (await pathExists(fp)) testFiles.push(fp);
-          }
-        }
-      } catch { /* 跳过 */ }
-    }
+  const subtaskPaths = await getSubtaskDirs(fullTaskDir);
+  for (const stDir of subtaskPaths) {
+    const fp = join(stDir, 'TEST.md');
+    if (await pathExists(fp)) testFiles.push(fp);
   }
   if (testFiles.length === 0) {
     const legacy = join(fullTaskDir, '99-artifacts', 'TEST.md');
@@ -622,22 +612,11 @@ async function enrichTaskDocs(iteration: string, taskId: string, reqFiles: strin
     }
   }
 
-  // 补全 REVIEW.md（扫描子任务目录）
+  // 补全 REVIEW.md（v6.49.9+: 扫描平铺的端目录）
   const reviewFiles: string[] = [];
-  for (const catDir of ['10-backend', '20-frontend']) {
-    const catPath = join(fullTaskDir, catDir);
-    if (await pathExists(catPath)) {
-      try {
-        for (const svc of await readdir(catPath, { withFileTypes: true })) {
-          if (!svc.isDirectory()) continue;
-          for (const sub of await readdir(join(catPath, svc.name), { withFileTypes: true })) {
-            if (!sub.isDirectory()) continue;
-            const fp = join(catPath, svc.name, sub.name, 'REVIEW.md');
-            if (await pathExists(fp)) reviewFiles.push(fp);
-          }
-        }
-      } catch { /* 跳过 */ }
-    }
+  for (const stDir of subtaskPaths) {
+    const fp = join(stDir, 'REVIEW.md');
+    if (await pathExists(fp)) reviewFiles.push(fp);
   }
   if (reviewFiles.length === 0) {
     const legacy = join(fullTaskDir, '99-artifacts', 'REVIEW.md');
@@ -658,22 +637,8 @@ async function enrichTaskDocs(iteration: string, taskId: string, reqFiles: strin
     }
   }
 
-  // 创建缺失文件（扫描子任务目录，在每个子任务下创建）
-  const subtaskDirs: string[] = [];
-  for (const catDir of ['10-backend', '20-frontend']) {
-    const catPath = join(fullTaskDir, catDir);
-    if (await pathExists(catPath)) {
-      try {
-        for (const svc of await readdir(catPath, { withFileTypes: true })) {
-          if (!svc.isDirectory()) continue;
-          for (const sub of await readdir(join(catPath, svc.name), { withFileTypes: true })) {
-            if (!sub.isDirectory()) continue;
-            subtaskDirs.push(join(catPath, svc.name, sub.name));
-          }
-        }
-      } catch { /* 跳过 */ }
-    }
-  }
+  // 创建缺失文件（v6.49.9+: 扫描平铺的端目录）
+  const subtaskDirs: string[] = subtaskPaths;
   // 旧结构回退
   if (subtaskDirs.length === 0) {
     const legacyArtifacts = join(fullTaskDir, '99-artifacts');
@@ -1364,4 +1329,40 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     }
   }
   return prompt;
+}
+
+// ── v6.49.9+: 扫描平铺的端目录，返回所有子任务目录路径 ──
+async function getSubtaskDirs(taskDir: string): Promise<string[]> {
+  const result: string[] = [];
+  const platformList = await parsePlatformList();
+  for (const platform of platformList) {
+    const platDir = join(taskDir, platform);
+    if (!(await pathExists(platDir))) continue;
+    try {
+      const entries = await readdir(platDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory() && !entry.name.startsWith('.')) {
+          result.push(join(platDir, entry.name));
+        }
+      }
+    } catch { /* ignore */ }
+  }
+  // 回退: 旧结构 10-backend/ 和 20-frontend/
+  if (result.length === 0) {
+    for (const catDir of ['10-backend', '20-frontend']) {
+      const catPath = join(taskDir, catDir);
+      if (!(await pathExists(catPath))) continue;
+      try {
+        for (const svc of await readdir(catPath, { withFileTypes: true })) {
+          if (!svc.isDirectory()) continue;
+          for (const sub of await readdir(join(catPath, svc.name), { withFileTypes: true })) {
+            if (sub.isDirectory() && !sub.name.startsWith('.')) {
+              result.push(join(catPath, svc.name, sub.name));
+            }
+          }
+        }
+      } catch { /* ignore */ }
+    }
+  }
+  return result;
 }

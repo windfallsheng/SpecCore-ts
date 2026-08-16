@@ -1130,12 +1130,8 @@ Iteration-NNN-name/            ← 迭代目录
 │   └── Task-*/
 │       ├── .meta/             ← 任务元信息（type/status/owner/created-at）
 │       ├── 00-specs/          ← 核心规格（REQ/TECH/TASK/SCHEMA/CHANGELOG）
-│       ├── 10-backend/        ← 后端实现
-│       │   └── {service}/     ← 服务（如 api）
-│       │       └── {subtask}/ ← 子任务（TASK.md + src/tests）
-│       ├── 20-frontend/       ← 前端实现
-│       │   └── {platform}/    ← 端（如 h5/web）
-│       │       └── {subtask}/ ← 子任务（TASK.md + src/tests）
+│       ├── {platform}/        ← 所有端平铺（如 booking-service/h5-mobile）
+│       │   └── {subtask}/     ← 子任务（TASK.md + .meta/）
 │       └── .issues.md         ← 问题追踪
 └── STAFFING.md                ← 人员排期
 \`\`\`
@@ -1563,10 +1559,8 @@ export function generateAIRulesContent(): string {
     '│   └── Task-*/',
     '│       ├── .meta/         ← 任务元信息（type/status/owner/created-at）',
     '│       ├── 00-specs/      ← 核心规格（REQ/TECH/TASK/SCHEMA/CHANGELOG）',
-    '│       ├── 10-backend/    ← 后端实现',
-    '│       │   └── {service}/{subtask}/ ← 子任务（TASK.md + src/tests）',
-    '│       ├── 20-frontend/   ← 前端实现',
-    '│       │   └── {platform}/{subtask}/ ← 子任务（TASK.md + src/tests）',
+    '│       ├── {platform}/    ← 所有端平铺（如 booking-service/h5-mobile）',
+    '│       │   └── {subtask}/ ← 子任务（TASK.md + .meta/）',
     '│       └── .issues.md     ← 问题追踪',
     '├── STAFFING.md      ← 人员排期',
     '```',
