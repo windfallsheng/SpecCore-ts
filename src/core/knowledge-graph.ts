@@ -362,8 +362,8 @@ async function scanBusinessCodeMappings(iterDir: string): Promise<{
     const content = await readFile(techMdPath, 'utf-8').catch(() => '');
     if (!content) continue;
 
-    // 查找「业务-代码映射」章节
-    const mappingSectionMatch = content.match(/##\s+业务-代码映射[\s\S]*?(?=\n##\s|\Z)/i);
+    // 查找「业务-代码映射」章节（不用 m 标志，$ 仅匹配字符串末尾）
+    const mappingSectionMatch = content.match(/##\s+业务-代码映射[\s\S]*?(?=\n##\s|$)/i);
     if (!mappingSectionMatch) continue;
 
     const sectionContent = mappingSectionMatch[0];

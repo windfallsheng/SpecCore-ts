@@ -1,3 +1,13 @@
+## v6.50.3 (2026-08-16) — 正则匹配修复 + prompt 格式统一
+
+### 修复
+
+- **knowledge-graph.ts**: 移除正则 `m` 标志，修复 `$` 在 multiline 模式下匹配行尾导致「业务-代码映射」章节只能匹配到标题行的 bug
+- **analyze.ts**: 默认模式 prompt 缩进从 4 空格统一为 2 空格，与 Phase 2 保持一致
+- **analyze.ts**: Phase 2 prompt 补充关系类型示例（api_controller/page/component 等）和表格示例
+
+---
+
 ## v6.50.2 (2026-08-16) — CONTEXT.md 业务-代码映射端隔离
 
 ### 修复
