@@ -2,6 +2,24 @@
 
 ---
 
+## v6.50.0 (2026-08-16) — Business-Code Mapping Graph Enhancement
+
+### New Features
+
+- **Knowledge graph adds `business_module` entity type**: Supports extracting business module → code entity mappings from TECH.md
+- **Extensible relation types**: GraphRelation.type now supports `maps_to`, `uses_table`, `calls_api`, `affects` and other custom relation types, no longer limited to fixed enums
+- **New `scanBusinessCodeMappings()` scanner**: Automatically scans the "业务-代码映射" section in each platform's TECH.md, extracts business module entities and code entities, and establishes relationships
+- **analyze prompt enhanced**: Guides AI to add a "业务-代码映射" table at the end of TECH.md, with relation types determined by AI based on tech stack (e.g., api_controller, page, component, route, middleware, interceptor, gateway, etc.)
+- **GraphStats adds `businessModules` count**
+
+### Design Principles
+
+- **Open entity types**: No predefined fixed types; AI extracts whatever entity types the tech stack produces
+- **Platform-isolated**: Each platform extracts from its own TECH.md, no cross-contamination
+- **Incremental updates**: Reuses existing `refreshKnowledgeGraph()` mechanism
+
+---
+
 ## v6.49.17 (2026-08-16) — Chain Generation Corrected to Graph RAG Retrieval + Feature Module Source Links
 
 ### Changes
