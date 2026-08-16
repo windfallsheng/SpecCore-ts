@@ -1,3 +1,35 @@
+## v6.42.0 (2026-08-16) — analyze 两阶段分析架构
+
+### 核心变更
+
+- **analyze 命令新增 `--phase` 选项**：支持两阶段分析流程
+  - `--phase 1`：全局文档阶段 — 生成 REQUIREMENT.md、ANALYSIS.md、TECH.md（整体架构）、RISK.md、DEPS.md、REVIEW.md、MONITOR.md + PLATFORMS.md 端发现
+  - `--phase 2`：各端专属阶段 — Read Phase 1 全局产出作为上下文，为每个端生成 TECH.md、TEST.md、UI_SPEC.md
+  - 默认模式（不指定 --phase）：全量模式，prompt 中推荐分两阶段执行
+- **TECH.md 双层设计**：
+  - `global/TECH.md`：整体技术架构（跨端交互、中间件选型、整体分层）
+  - `{端}/TECH.md`：各端专属技术方案（后端：接口+数据模型；前端：页面+组件）
+- **Prompt 架构升级**：
+  - Phase 1 prompt：端发现 + 全局文档撰写 + 端专业性约束
+  - Phase 2 prompt：Read 全局上下文 → 逐端撰写 → 一致性检查
+  - 默认模式：包含两阶段流程引导说明
+
+### 设计理由
+
+单次 prompt 让 AI 同时生成全局文档和各端专属文档存在循环依赖：
+- global/TECH.md（整体架构）需要知道各端做什么
+- {端}/TECH.md（端方案）需要对齐整体架构
+
+两阶段分析让 Phase 2 的 AI 能真正 Read global/ 下的文档作为上下文，而不是靠“脑中记忆”。
+
+### 相关文件
+
+- `src/commands/analyze.ts`: `--phase` 选项 + `buildMultiDocPrompt()` 两阶段拆分
+- `src/core/spec-paths.ts`: `GLOBAL_SPEC_FILES` 增加 TECH.md
+- `docs/DESIGN.md`: 2.7 章节 TECH.md 双层设计说明
+
+---
+
 ## v6.41.0 (2026-08-17) — 020-specs/ 全局文档目录重构
 
 ### 核心变更

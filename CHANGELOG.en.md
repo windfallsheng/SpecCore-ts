@@ -2,6 +2,19 @@
 
 ---
 
+## v6.42.0 (2026-08-16) — Analyze Two-Phase Analysis Architecture
+
+### Key Changes
+
+- **`--phase` option for analyze command**: Supports two-phase analysis workflow
+  - `--phase 1`: Global docs — REQUIREMENT.md, ANALYSIS.md, TECH.md (overall architecture), RISK.md, DEPS.md, REVIEW.md, MONITOR.md + PLATFORMS.md discovery
+  - `--phase 2`: Per-platform docs — Reads Phase 1 global outputs as context, generates TECH.md, TEST.md, UI_SPEC.md for each platform
+  - Default mode (no --phase): Full mode with two-phase recommendation in prompt
+- **TECH.md dual-layer design**: `global/TECH.md` (cross-platform architecture) + `{platform}/TECH.md` (platform-specific)
+- **Prompt architecture upgrade**: Phase 1 prompt (platform discovery + global docs) → Phase 2 prompt (read global context → per-platform docs → consistency check)
+
+---
+
 ## v6.41.0 (2026-08-17) — 020-specs/ Global Document Directory Refactoring
 
 ### Core Changes
