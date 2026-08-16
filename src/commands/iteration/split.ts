@@ -35,8 +35,9 @@ function slugify(name: string): string {
  * 例: Task-001-user-login-backend-a3f2, Task-001-user-login-web-b7c1
  */
 function generateSubtaskId(parentTaskId: string, platform: string): string {
-  const hash = Math.abs(`${parentTaskId}-${platform}-${Date.now()}-${Math.random()}`.split('').reduce((a, c) => a * 31 + c.charCodeAt(0), 13)).toString(36);
-  return `Task-${parentTaskId}-${platform}-${hash.slice(0, 4)}`;
+  // v6.49.5+：确定性格式 {taskId}-{platform}，保证全项目唯一
+  // 因为每个任务每个端只有一个子任务，所以 {taskId}-{platform} 已经唯一
+  return `Task-${parentTaskId}-${platform}`;
 }
 
 /** 粒度约束常量 */

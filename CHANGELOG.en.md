@@ -2,6 +2,16 @@
 
 ---
 
+## v6.49.5 (2026-08-16) — Deterministic Subtask ID Format
+
+### Fixes
+
+- **Subtask ID format simplified**: Changed from `{taskId}-{platform}-{hash}` to `{taskId}-{platform}`, ensuring global uniqueness and determinism
+- **Random hash removed**: No longer uses `Date.now()` and `Math.random()`, subtask IDs are now predictable
+- **Uniqueness guaranteed**: Each task has only one subtask per platform, so `{taskId}-{platform}` is already unique
+
+---
+
 ## v6.49.4 (2026-08-16) — Task-Level Feature Unit Identification
 
 ### New Features
