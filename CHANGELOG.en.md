@@ -2,6 +2,24 @@
 
 ---
 
+## v6.41.0 (2026-08-17) — 020-specs/ Global Document Directory Refactoring
+
+### Core Changes
+
+- **New `src/core/spec-paths.ts`**: Centralized path helper module
+  - `resolveGlobalSpecPath()`: Read-side fallback (global/ → root → null)
+  - `globalSpecWritePath()`: Write-side always uses global/ with auto ensureDir
+  - `GLOBAL_SPEC_FILES`: Global document file list
+- **020-specs/ directory structure evolution**:
+  - Global docs (REQUIREMENT.md, ANALYSIS.md, RISK.md, DEPS.md, REVIEW.md, MONITOR.md) moved to `global/` subdirectory
+  - Platform-specific docs (TECH.md, TEST.md, UI_SPEC.md) remain in platform directories
+  - PLATFORMS.md stays at root (metadata)
+- **Write-side refactoring**: analyze-engine.ts, analyze.ts, create.ts
+- **Read-side refactoring** (all with backward-compatible fallback): split.ts, prompt-builder.ts, dev.ts, status-panel.ts, cli.ts, iteration-from-global.ts, ai-context-generator.ts, next-steps.ts
+- **AI Prompt update**: `buildMultiDocPrompt()` directory structure instructions updated
+
+---
+
 ## v6.40.2 (2026-08-16) — Platform Discovery Refactoring + --auto Mode AI-ification
 
 ### Core Changes

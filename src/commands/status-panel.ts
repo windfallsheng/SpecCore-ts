@@ -7,6 +7,7 @@ import { logger } from '../utils/logger';
 import { loadConfig } from '../core/unified-config';
 import { getDefaultIteration } from '../core/context';
 import { readGlobalIndex } from '../core/global-layer';
+import { resolveGlobalSpecPath } from '../core/spec-paths';
 
 export interface StatusPanelOptions {
   export?: string;
@@ -184,8 +185,9 @@ async function countPlatforms(iterDir: string, tasks: any[]): Promise<{backend:n
 }
 
 async function detectPhase(iterDir: string): Promise<string> {
-  const reqDoc = join(iterDir, '020-specs', 'REQUIREMENT.md');
-  const analysis = join(iterDir, '020-specs', 'ANALYSIS.md');
+  const specDir = join(iterDir, '020-specs');
+  const reqDoc = await resolveGlobalSpecPath(specDir, 'REQUIREMENT.md') || join(specDir, 'REQUIREMENT.md');
+  const analysis = await resolveGlobalSpecPath(specDir, 'ANALYSIS.md') || join(specDir, 'ANALYSIS.md');
   
   if (!(await pathExists(reqDoc))) return 'init';
   if (!(await pathExists(analysis))) return 'require';
@@ -561,8 +563,9 @@ async function buildPersonPlatforms(iterDir: string, tasks: any[]): Promise<Reco
 export async function defaultPhase(iterDir: string): Promise<string> {
 
 
-  const reqDoc = join(iterDir, '020-specs', 'REQUIREMENT.md');
-  const analysis = join(iterDir, '020-specs', 'ANALYSIS.md');
+  const specDir = join(iterDir, '020-specs');
+  const reqDoc = await resolveGlobalSpecPath(specDir, 'REQUIREMENT.md') || join(specDir, 'REQUIREMENT.md');
+  const analysis = await resolveGlobalSpecPath(specDir, 'ANALYSIS.md') || join(specDir, 'ANALYSIS.md');
   if (!(await pathExists(reqDoc))) return 'init';
   if (!(await pathExists(analysis))) return 'require';
   const tasks = await readdir(iterDir, { withFileTypes: true });

@@ -1,3 +1,37 @@
+## v6.41.0 (2026-08-17) — 020-specs/ 全局文档目录重构
+
+### 核心变更
+
+- **新增 `src/core/spec-paths.ts`**: 全局文档路径辅助模块
+  - `resolveGlobalSpecPath()`: 读取侧三级回退（global/ → 根目录 → null）
+  - `globalSpecWritePath()`: 写入侧始终使用 global/，自动 ensureDir
+  - `GLOBAL_SPEC_FILES`: 全局文档文件名列表
+- **020-specs/ 目录结构演进**:
+  - 全局文档（REQUIREMENT.md、ANALYSIS.md、RISK.md、DEPS.md、REVIEW.md、MONITOR.md）迁移到 `global/` 子目录
+  - 端专属文档（TECH.md、TEST.md、UI_SPEC.md）保持在各端目录
+  - PLATFORMS.md 留在根目录（元数据）
+- **写入侧重构**:
+  - `analyze-engine.ts`: `generateSpecsFromRequirements()` 全局文件写入 `global/`
+  - `analyze.ts`: `--apply` 模式全局文档路由到 `global/`，端文档路由到 `{端}/`
+  - `analyze.ts`: `generateIterationSpecDocs()` 模板文件分流到 `global/`
+  - `create.ts`: 迭代创建时创建 `global/` 目录 + REQUIREMENT.md 写入 `global/`
+- **读取侧重构**（全部加 backward-compatible 回退）:
+  - `split.ts`: `loadSpecContents()` + `detectPlatforms()` + 第二读取点
+  - `prompt-builder.ts`: 迭代规格扫描增加 `global/` 子目录
+  - `dev.ts` / `status-panel.ts` / `cli.ts`: ANALYSIS.md + REQUIREMENT.md 路径回退
+  - `iteration-from-global.ts`: REQUIREMENT.md 写入 `global/`
+  - `ai-context-generator.ts` / `next-steps.ts`: 字符串路径引用更新
+- **AI Prompt 更新**: `buildMultiDocPrompt()` 目录结构指令更新，指导 AI 写入 `global/`
+- **质量审计**: `quality-audit.ts` 导入改为从 `spec-paths.ts`
+
+### 设计原则
+
+- 全局文档与端专属文档物理分离，结构更清晰
+- 所有读取路径向后兼容，旧迭代不受影响
+- 路径辅助集中管理，避免散落各处的硬编码路径
+
+---
+
 ## v6.40.2 (2026-08-16) — 端发现机制重构 + --auto 模式 AI 化
 
 ### 核心变更

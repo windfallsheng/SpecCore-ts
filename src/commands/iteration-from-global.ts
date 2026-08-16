@@ -86,11 +86,12 @@ export async function iterationFromGlobalCommand(options: IterationFromGlobalOpt
     }
 
     await ensureDir(join(iterationDir, '020-specs'));
+    await ensureDir(join(iterationDir, '020-specs', 'global'));
     await ensureDir(join(iterationDir, '000-overview'));
 
-    // 6. 生成需求文档
+    // 6. 生成需求文档（写入 global/ 子目录，v6.41.0+）
     const reqContent = generateIterationRequirement(options.name, reqDetails);
-    const reqPath = join(iterationDir, '020-specs', 'REQUIREMENT.md');
+    const reqPath = join(iterationDir, '020-specs', 'global', 'REQUIREMENT.md');
     const bk = await backupWithTimestamp(reqPath);
     const backups: string[] = [];
     if (bk) {

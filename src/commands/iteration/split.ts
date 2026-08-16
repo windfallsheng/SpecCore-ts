@@ -11,6 +11,7 @@ import { createInterface } from 'readline';
 import { buildPrompt, formatPrompt } from '../../core/prompt-builder';
 import { generatePlatformsRegistry } from '../../core/platform-registry';
 import { warnIfIndexStale } from '../../core/index-guard';
+import { resolveGlobalSpecPath, GLOBAL_SPECS_DIR } from '../../core/spec-paths';
 
 /** 将名称转为目录安全的短 slug（2-4 词） */
 function slugify(name: string): string {
@@ -133,12 +134,13 @@ async function detectPlatforms(iterationDir: string, specified?: string): Promis
     }
   }
 
-  // 2. 回退：扫描 020-specs/ 子目录
+  // 2. 回退：扫描 020-specs/ 子目录（排除 global/ 等非端目录）
   const specsDir = join(iterationDir, '020-specs');
   if (await pathExists(specsDir)) {
     const entries = await readdir(specsDir, { withFileTypes: true });
+    const knownNonPlatformDirs = new Set(['sources', 'assets', 'prototypes', 'converted', 'features', 'bugs', 'refactors', 'research', 'staging', 'platforms', 'snapshots', GLOBAL_SPECS_DIR]);
     const platforms = entries
-      .filter((e: any) => e.isDirectory() && !e.name.startsWith('_') && !e.name.startsWith('.'))
+      .filter((e: any) => e.isDirectory() && !e.name.startsWith('_') && !e.name.startsWith('.') && !knownNonPlatformDirs.has(e.name))
       .map((e: any) => e.name);
     if (platforms.length > 0) return platforms;
   }
@@ -510,20 +512,31 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       }
       
       // 读取 020-specs/ 全部文件（完整上下文）
-      const reqPath2 = join(iterationDir, '020-specs', 'REQUIREMENT.md');
+      const specDir2 = join(iterationDir, '020-specs');
+      // REQUIREMENT.md 优先从 global/ 读取（v6.41.0+），回退根目录
+      const reqPath2 = await resolveGlobalSpecPath(specDir2, 'REQUIREMENT.md') || join(iterationDir, '020-specs', 'REQUIREMENT.md');
       let reqContent2 = '';
       if (await pathExists(reqPath2)) {
         reqContent2 = await readFile(reqPath2, 'utf-8');
       }
-      
-      const specDir2 = join(iterationDir, '020-specs');
+            
       const specContents: { name: string; content: string }[] = [];
-      // 读取全局层扁平文件（迭代级跨端综合）
-      for (const f of ['ANALYSIS.md', 'TECH.md', 'TEST.md', 'REVIEW.md', 'RISK.md', 'DEPS.md', 'MONITOR.md', 'UI_SPEC.md']) {
+      // 读取全局层文档（优先 global/ 子目录，回退根目录 — v6.41.0+ 向后兼容）
+      for (const f of ['ANALYSIS.md', 'RISK.md', 'DEPS.md', 'REVIEW.md', 'MONITOR.md', 'REQUIREMENT.md']) {
+        const resolved = await resolveGlobalSpecPath(specDir2, f);
+        if (resolved) {
+          const content = await readFile(resolved, 'utf-8');
+          if (content.trim().length > 50 && !content.trim().match(/^#+\s*待填充|^<!--\s*AI-FILL/m)) {
+            specContents.push({ name: f, content });
+          }
+        }
+      }
+      // 根目录下的 TECH.md、TEST.md、UI_SPEC.md（端无关模板/回退）
+      for (const f of ['TECH.md', 'TEST.md', 'UI_SPEC.md']) {
         const fp = join(specDir2, f);
         if (await pathExists(fp)) {
           const content = await readFile(fp, 'utf-8');
-          if (content.trim().length > 50 && !content.trim().match(/^#+\s*\u5f85\u586b\u5145|^<!--\s*AI-FILL/m)) {
+          if (content.trim().length > 50 && !content.trim().match(/^#+\s*待填充|^<!--\s*AI-FILL/m)) {
             specContents.push({ name: f, content });
           }
         }
@@ -534,7 +547,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       const directPlatformEntries = await readdir(specDir2, { withFileTypes: true });
       for (const e of directPlatformEntries) {
         if (e.isDirectory() && !e.name.startsWith('_') && !e.name.startsWith('.')
-          && !['sources', 'assets', 'prototypes', 'converted', 'features', 'bugs', 'refactors', 'research', 'staging', 'platforms', 'snapshots'].includes(e.name)) {
+          && !['sources', 'assets', 'prototypes', 'converted', 'features', 'bugs', 'refactors', 'research', 'staging', 'platforms', 'snapshots', GLOBAL_SPECS_DIR].includes(e.name)) {
           platformDirs.push(e.name);
         }
       }
@@ -2104,14 +2117,24 @@ function generateMonitorTemplate(section: Section, material?: string): string {
 // 从 analyze 产出中提取任务相关内容
 // ═══════════════════════════════════════════════
 
-/** 加载迭代级 020-specs/ 文档内容（包括根目录全局文档 + 各端子目录文档） */
+/** 加载迭代级 020-specs/ 文档内容（包括 global/ 全局文档 + 根目录回退 + 各端子目录文档） */
 async function loadSpecContents(iterationDir: string): Promise<Record<string, string>> {
   const specs: Record<string, string> = {};
   const specDir = join(iterationDir, '020-specs');
   if (!(await pathExists(specDir))) return specs;
 
-  // 1. 读取根目录全局文档
-  for (const f of ['TECH.md', 'TEST.md', 'RISK.md', 'DEPS.md', 'MONITOR.md', 'ANALYSIS.md', 'REQUIREMENT.md', 'UI_SPEC.md']) {
+  // 1. 读取全局文档（优先 global/ 子目录，回退根目录 — v6.41.0+ 向后兼容）
+  for (const f of ['REQUIREMENT.md', 'ANALYSIS.md', 'RISK.md', 'DEPS.md', 'REVIEW.md', 'MONITOR.md']) {
+    const resolved = await resolveGlobalSpecPath(specDir, f);
+    if (resolved) {
+      const content = await readFile(resolved, 'utf-8');
+      if (content.trim().length > 50 && !content.trim().match(/^#+\s*待填充|^<!--\s*AI-FILL/m)) {
+        specs[f] = content;
+      }
+    }
+  }
+  // 根目录下的 TECH.md、TEST.md、UI_SPEC.md（端无关模板/回退）
+  for (const f of ['TECH.md', 'TEST.md', 'UI_SPEC.md']) {
     const fp = join(specDir, f);
     if (await pathExists(fp)) {
       const content = await readFile(fp, 'utf-8');
@@ -2123,7 +2146,7 @@ async function loadSpecContents(iterationDir: string): Promise<Record<string, st
 
   // 2. 读取各端子目录文档（如 admin/TECH.md、h5/TECH.md 等）
   const entries = await readdir(specDir, { withFileTypes: true });
-  const knownNonPlatformDirs = new Set(['sources', 'assets', 'prototypes', 'converted', 'features', 'bugs', 'refactors', 'research', 'staging', 'platforms', 'snapshots']);
+  const knownNonPlatformDirs = new Set(['sources', 'assets', 'prototypes', 'converted', 'features', 'bugs', 'refactors', 'research', 'staging', 'platforms', 'snapshots', GLOBAL_SPECS_DIR]);
   for (const e of entries) {
     if (e.isDirectory() && !e.name.startsWith('_') && !e.name.startsWith('.') && !knownNonPlatformDirs.has(e.name)) {
       const platform = e.name;

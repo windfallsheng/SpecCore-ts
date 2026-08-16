@@ -951,11 +951,13 @@ if (process.argv.length <= 2) {
       if (idirs.length > 0) {
         iteration = idirs[0].slice(3);
         const base = idirs[0];
-        const req = join(base, '020-specs', 'REQUIREMENT.md');
-        const ana = join(base, '020-specs', 'ANALYSIS.md');
-        if (!existsSync(req)) {
+        const req = join(base, '020-specs', 'global', 'REQUIREMENT.md');
+        const reqFallback = join(base, '020-specs', 'REQUIREMENT.md');
+        const ana = join(base, '020-specs', 'global', 'ANALYSIS.md');
+        const anaFallback = join(base, '020-specs', 'ANALYSIS.md');
+        if (!existsSync(req) && !existsSync(reqFallback)) {
           phase = 'require'; nextCmd = 'speccore doc2spec --iteration ' + iteration; nextDesc = '导入需求文档';
-        } else if (!existsSync(ana)) {
+        } else if (!existsSync(ana) && !existsSync(anaFallback)) {
           phase = 'analyze'; nextCmd = 'speccore analyze --iteration=' + iteration; nextDesc = '需求分析';
         } else {
           const tds = readdirSync(base).filter((d: string) => d.startsWith('Task-'));

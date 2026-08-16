@@ -485,16 +485,26 @@ async function loadAllTaskContext(
   };
   await scanTaskDir(taskDir, '');
 
-  // 2. 迭代规格 020-specs/ 所有 .md
+  // 2. 迭代规格 020-specs/ 所有 .md（含 global/ 子目录）
   if (iteration) {
     const iterDir = join(cwd, `Iteration-${iteration}`);
     const specsDir = join(iterDir, '020-specs');
     if (await pathExists(specsDir)) {
       try {
+        // 2a. 根目录下的 .md（TECH.md、TEST.md 等端无关模板）
         const items = await readdir(specsDir, { withFileTypes: true });
         for (const item of items) {
           if (!item.name.endsWith('.md') || isTimestampBackup(item.name)) continue;
           await addFile(join(specsDir, item.name), `迭代规格: ${item.name}`, `020-specs/${item.name}`);
+        }
+        // 2b. global/ 子目录下的全局文档（v6.41.0+）
+        const globalDir = join(specsDir, 'global');
+        if (await pathExists(globalDir)) {
+          const globalItems = await readdir(globalDir, { withFileTypes: true });
+          for (const item of globalItems) {
+            if (!item.name.endsWith('.md') || isTimestampBackup(item.name)) continue;
+            await addFile(join(globalDir, item.name), `迭代全局规格: ${item.name}`, `020-specs/global/${item.name}`);
+          }
         }
         // 各端规格（新路径 020-specs/{端}/，兼容旧路径 020-specs/platforms/{端}/）
         if (platform) {

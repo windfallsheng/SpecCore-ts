@@ -410,6 +410,73 @@ Prompt 会指示 AI：
 - `src/commands/analyze.ts`: `--auto` 重构 + `buildMultiDocPrompt()` 端过滤 + 端发现指令
 - `src/core/analyze-engine.ts`: `detectPlatformsFromConstitution()` 重构 + `normalizeToStandardPlatform()` 两阶段匹配 + `inferPlatformFromPathOrContent()` 动态别名合并
 
+### 2.7 020-specs/ 全局文档目录重构（v6.41.0）
+
+#### 背景
+
+v6.40.2 及之前版本，`020-specs/` 根目录混合存放全局文档和端专属目录，结构不清晰：
+
+```
+020-specs/           ← 全局文档和端目录混在一起
+├── REQUIREMENT.md   ← 全局
+├── ANALYSIS.md      ← 全局
+├── admin/           ← 端专属
+└── h5/
+```
+
+#### 新结构
+
+全局文档独立到 `global/` 子目录，端专属文档保持不变：
+
+```
+020-specs/
+├── PLATFORMS.md              ← 端发现元数据（留在根目录）
+├── global/                   ← 迭代级全局文档（新）
+│   ├── REQUIREMENT.md
+│   ├── ANALYSIS.md
+│   ├── RISK.md
+│   ├── DEPS.md
+│   ├── REVIEW.md
+│   └── MONITOR.md
+├── admin/                    ← 端专属文档
+│   ├── ANALYSIS.md
+│   ├── TECH.md
+│   ├── TEST.md
+│   └── UI_SPEC.md
+└── h5/
+    └── ...
+```
+
+**关键决策**：
+- TECH.md 不再放在 `global/`，各端分别撰写自己的技术方案
+- PLATFORMS.md 留在根目录（它是元数据，不是分析文档）
+- TECH.md、TEST.md、UI_SPEC.md 是端专属文档，放在各端目录中
+
+#### 路径辅助模块
+
+新增 `src/core/spec-paths.ts`，提供统一的路径解析：
+
+| 函数 | 用途 |
+|:---|:---|
+| `resolveGlobalSpecPath(specDir, filename)` | 读取侧：优先 `global/`，回退根目录 |
+| `globalSpecWritePath(specDir, filename)` | 写入侧：始终使用 `global/`，自动 ensureDir |
+| `GLOBAL_SPEC_FILES` | 全局文档文件名列表 |
+
+#### 向后兼容策略
+
+所有读取路径统一采用三级回退：
+1. 优先读 `020-specs/global/{filename}`（新路径）
+2. 回退读 `020-specs/{filename}`（旧路径）
+3. 不存在则返回 null
+
+已有迭代（旧结构）不受影响，新迭代使用新结构。
+
+#### 影响范围
+
+- **写入侧**（3 个文件）：analyze-engine.ts、analyze.ts、create.ts
+- **读取侧**（10 个文件）：split.ts、prompt-builder.ts、dev.ts、status-panel.ts、cli.ts、iteration-from-global.ts、ai-context-generator.ts、next-steps.ts、quality-audit.ts
+- **Prompt 侧**：buildMultiDocPrompt() 更新 AI 写入指令
+
 ---
 
 ## 3. 迭代目录结构
