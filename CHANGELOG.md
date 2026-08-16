@@ -1,4 +1,49 @@
-## v6.66.0 (2026-08-16) — Phase 1 完成后 AI 主动询问用户是否继续 Phase 2
+## v6.67.0 (2026-08-16) — 在 prompt 开头明确完整工作流程
+
+### 核心修复
+
+- **analyze.ts**: 在 Phase 1 prompt 的**最开头**就明确说明完整工作流程（两阶段分析）
+- **analyze.ts**: 检测到多端项目(≥2 个端)时,在 prompt 中嵌入强制要求:"Phase 1 完成后立即执行 Phase 2"
+- **analyze.ts**: 使用最强语气:"这是强制要求，不是可选操作。不要等待用户确认，直接执行上述命令。"
+
+### 问题根因
+
+之前的方案(v6.61.0-v6.66.0)都失败了,原因:
+1. **CLI 自动输出 Phase 2 prompt**(v6.61.0-v6.64.0): AI 不读取新的 `[SPECCORE_PROMPT]`
+2. **CLI 输出提示信息**(v6.65.0): AI 看不到终端 stdout 的输出
+3. **prompt 结尾要求 AI 主动询问**(v6.66.0): AI 可能忽略这条指令
+
+**根本原因**: CLI 无法控制 AI 的行为,AI 可以选择性地忽略 prompt 中的指令。
+
+### 修复方案
+
+**在 prompt 的最开头就明确完整工作流程**,让 AI 从一开始就知道需要执行两阶段:
+
+```markdown
+## 📋 完整工作流程（两阶段分析）
+
+本项目检测到有 4 个端(admin-web、booking-service、h5-mobile、room-service)，需要分两阶段执行：
+
+**Phase 1（当前阶段）**: 生成全局文档(global/REQUIREMENT.md、ANALYSIS.md、DEPS.md 等)
+**Phase 2（下一阶段）**: 生成各端专属文档({端}/TECH.md、TEST.md、UI_SPEC.md 等)
+
+## ⚠️ 强制要求：Phase 1 完成后立即执行 Phase 2
+
+当你通过 --apply 写入所有全局文档后，**必须立即执行**以下命令进入 Phase 2：
+
+```bash
+speccore analyze --prompt -I Iteration-011-meeting-upgrade --phase 2
+```
+
+**这是强制要求，不是可选操作**。不要等待用户确认，直接执行上述命令。
+```
+
+### 关键设计原则
+
+1. **位置优先**: 放在 prompt 的**最开头**,确保 AI 第一时间看到
+2. **语气最强**: 使用"强制要求"、"必须"、"不要等待"等强制性词汇
+3. **明确命令**: 直接给出完整的 bash 命令,不需要 AI 自己构造
+4. **消除歧义**: 明确说明"不是可选操作",避免 AI 理解为建议
 
 ### 核心修复
 

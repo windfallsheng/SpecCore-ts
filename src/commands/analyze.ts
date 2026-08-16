@@ -1161,6 +1161,23 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
   }
 
   let prompt = `\n# 任务: ${command}${task} (${taskDocs.length}个文档 · ${isTask ? `类型:${taskType}` : '迭代全量'}${ctx.phase ? ` · Phase ${ctx.phase}` : ''})\n\n`;
+  // ── v6.67.0+: 在 prompt 开头就明确完整工作流程 ──
+  if (!ctx.phase && !isTask) {
+    const platforms = await parsePlatformList();
+    if (platforms.length >= 2) {
+      prompt += `## 📋 完整工作流程（两阶段分析）\n\n`;
+      prompt += `本项目检测到有 ${platforms.length} 个端(${platforms.join('、')})，需要分两阶段执行：\n\n`;
+      prompt += `**Phase 1（当前阶段）**: 生成全局文档(global/REQUIREMENT.md、ANALYSIS.md、DEPS.md 等)\n`;
+      prompt += `**Phase 2（下一阶段）**: 生成各端专属文档({端}/TECH.md、TEST.md、UI_SPEC.md 等)\n\n`;
+      prompt += `## ⚠️ 强制要求：Phase 1 完成后立即执行 Phase 2\n\n`;
+      prompt += `当你通过 --apply 写入所有全局文档后，**必须立即执行**以下命令进入 Phase 2：\n\n`;
+      prompt += `\`\`\`bash\n`;
+      prompt += `speccore analyze --prompt -I ${ctx.iteration} --phase 2\n`;
+      prompt += `\`\`\`\n\n`;
+      prompt += `**这是强制要求，不是可选操作**。不要等待用户确认，直接执行上述命令。\n\n`;
+      prompt += `---\n\n`;
+    }
+  }
   // ── v6.59.0+: 最强警告：禁止自创目录，必须走 --apply ──
   prompt += `## 🚨 最高优先级警告（违反将导致分析失败）\n\n`;
   prompt += `### ⛔ 绝对禁止创建任何额外目录\n`;

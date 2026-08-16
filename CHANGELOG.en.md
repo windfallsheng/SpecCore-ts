@@ -2,7 +2,52 @@
 
 ---
 
-## v6.66.0 (2026-08-16) — AI Actively Asks User to Continue Phase 2 After Phase 1 Completion
+## v6.67.0 (2026-08-16) — Clarify Complete Workflow at Beginning of Prompt
+
+### Core Fixes
+
+- **analyze.ts**: Clarified complete workflow (two-phase analysis) at the **very beginning** of Phase 1 prompt
+- **analyze.ts**: When detecting multi-platform project (≥2 platforms), embedded mandatory requirement in prompt: "Execute Phase 2 immediately after Phase 1 completion"
+- **analyze.ts**: Used strongest tone: "This is a mandatory requirement, not optional. Do not wait for user confirmation, execute the above command directly."
+
+### Root Cause
+
+Previous approaches (v6.61.0-v6.66.0) all failed because:
+1. **CLI auto-output Phase 2 prompt** (v6.61.0-v6.64.0): AI doesn't read new `[SPECCORE_PROMPT]`
+2. **CLI output提示信息** (v6.65.0): AI can't see terminal stdout output
+3. **Prompt ending requires AI to actively ask** (v6.66.0): AI may ignore this instruction
+
+**Root cause**: CLI cannot control AI behavior, AI can selectively ignore instructions in prompt.
+
+### Fix Approach
+
+**Clarify complete workflow at the very beginning of prompt**, so AI knows from the start that two phases need to be executed:
+
+```markdown
+## 📋 Complete Workflow (Two-Phase Analysis)
+
+This project detected 4 platforms (admin-web, booking-service, h5-mobile, room-service), needs two-phase execution:
+
+**Phase 1 (Current)**: Generate global documents (global/REQUIREMENT.md, ANALYSIS.md, DEPS.md, etc.)
+**Phase 2 (Next)**: Generate platform-specific documents ({platform}/TECH.md, TEST.md, UI_SPEC.md, etc.)
+
+## ⚠️ Mandatory Requirement: Execute Phase 2 Immediately After Phase 1 Completion
+
+After you write all global documents via --apply, **must immediately execute** the following command to enter Phase 2:
+
+```bash
+speccore analyze --prompt -I Iteration-011-meeting-upgrade --phase 2
+```
+
+**This is a mandatory requirement, not optional**. Do not wait for user confirmation, execute the above command directly.
+```
+
+### Key Design Principles
+
+1. **Position Priority**: Place at the **very beginning** of prompt, ensure AI sees it first
+2. **Strongest Tone**: Use mandatory words like "mandatory requirement", "must", "do not wait"
+3. **Explicit Command**: Provide complete bash command directly, no need for AI to construct
+4. **Eliminate Ambiguity**: Explicitly state "not optional", avoid AI interpreting as suggestion
 
 ### Core Fixes
 
