@@ -3,6 +3,19 @@
 > 本文档供 AI 编码工具自动读取（Cursor / Copilot / Windsurf / Codex / Claude Code）。
 > 工具会读取本文档理解项目规则，不需要用户重复解释。
 
+## ⛔ 新会话第一步（最高优先级）
+
+**每次新会话开始时，必须先执行以下操作，不要做任何其他事情：**
+
+```
+Read .speccore/local/context.json    ← 获取当前活跃迭代
+Read .speccore/CONSTITUTION.md       ← 获取项目配置（端名、源码路径等）
+```
+
+- `context.json` 中的 `currentIteration` 字段就是当前迭代名
+- **绝对不要自己创建迭代目录** — 迭代已存在，读 context.json 就知道了
+- **绝对不要写 JS/Python 脚本绕过 CLI** — 所有操作通过 `speccore` CLI 完成
+
 ## 项目类型
 SpecCore 规范驱动开发项目。
 
@@ -10,6 +23,14 @@ SpecCore 规范驱动开发项目。
 - **AI 只拼命令，不执行命令**。识别用户意图后，输出 `speccore` CLI 命令给用户在终端执行。
 - **所有确定性操作通过 `speccore` CLI 完成**（创建目录、读写文件、校验格式）。
 - **代码生成通过宿主 AI 完成**，CLI 负责准备 Spec 上下文和写入文件。
+- **代码写到 CONSTITUTION.md 指定的源码路径**，不要写到迭代目录里。
+
+## ⛔ 绝对禁止
+
+1. **禁止自己创建迭代目录** — 用 `speccore iteration create`（通常迭代已存在）
+2. **禁止写脚本绕过 CLI** — 不要写 build-xxx.js / run-xxx.py 等脚本
+3. **禁止在迭代目录下创建 10-backend/ 20-frontend/** — 任务目录是端平铺结构
+4. **禁止把代码写到迭代目录内** — 代码写到 CONSTITUTION.md 中各工程的「源码路径」
 
 ## 项目结构
 ```
@@ -80,8 +101,10 @@ Iteration-NNN-name/            ← 迭代目录
 - **续跑用 --resume** — `speccore execute --resume`
 - **多任务执行用批次** — `speccore execute --list-pending --batch-size 3` 先获取清单，每批完成后开新对话
 
-## 上下文文件加载顺序
-1. AGENTS.md（本文档）— 项目规则
-2. .speccore/CONSTITUTION.md — 技术栈与需求端映射
-3. .speccore/local/context.json — 当前活跃迭代
-4. .agents/skills/SKILL.md — 技能指令
+## 常用命令速查
+```bash
+speccore status                          # 当前迭代状态面板
+speccore analyze -I <迭代名> --auto      # 全量分析
+speccore split -I <迭代名>               # 自动拆分任务
+speccore execute -I <迭代名> --all       # 执行所有任务
+```
