@@ -2,6 +2,15 @@
 
 ---
 
+## v6.46.1 (2026-08-16) — Platform List Consistency Fix
+
+- Column name unified: "对应需求端" → "对应端" (template + migration + output text)
+- Parsing compatibility: all parsing functions recognize both "对应端" and "对应需求端"
+- Template fix: default "对应端" column shows "待填写" (no longer pre-filled with multiple platform names)
+- Example fix: multi-project example updated to 1:1 mapping (admin-web→admin, h5-app→h5 ...)
+
+---
+
 ## v6.46.0 (2026-08-16) — Explicit Platform List (Plan A)
 
 ### Key Changes

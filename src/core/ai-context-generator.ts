@@ -311,10 +311,10 @@ function groupByModule(files: CodeFile[]): Record<string, CodeFile[]> {
  * 构建产品需求端目录与工程源码路径的对应关系。
  *
  * 从两个来源推断（优先级从高到低）：
- * 1. CONSTITUTION.md 中「项目信息」表格的「对应需求端」列 → N:M 映射
+ * 1. CONSTITUTION.md 中「项目信息」表格的「对应端」列 → N:M 映射
  * 2. 01-产品需求/ 下的子目录名 + 源码目录名 → 1:1 简单推断
  *
- * 用户可随时编辑 CONSTITUTION.md 中的「对应需求端」列来调整映射。
+ * 用户可随时编辑 CONSTITUTION.md 中的「对应端」列来调整映射。
  * 格式: "app, admin" 表示该工程同时对应 app 和 admin 的需求。
  */
 function buildPlatformSourceMap(input: AIContextInput): string {
@@ -346,9 +346,9 @@ function buildPlatformSourceMap(input: AIContextInput): string {
 
   if (hasConstitution) {
     // — 使用 CONSTITUTION 中的 N:M 映射 —
-    lines.push('> 以下映射来自 CONSTITUTION.md「项目信息」表格的「对应需求端」列');
+    lines.push('> 以下映射来自 CONSTITUTION.md「项目信息」表格的「对应端」列');
     lines.push('');
-    lines.push('| 工程源码 | 默认分支 | 对应需求端 |');
+    lines.push('| 工程源码 | 默认分支 | 对应端 |');
     lines.push('| :--- | :--- | :--- |');
 
     // 先写出 CONSTITUTION 中明确配置的
@@ -367,7 +367,7 @@ function buildPlatformSourceMap(input: AIContextInput): string {
     }
   } else {
     // — 无 CONSTITUTION 时用简单推断 —
-    lines.push('> ⚠️ CONSTITUTION.md 未配置「对应需求端」，以下为自动推断。请编辑 CONSTITUTION 完善映射。');
+    lines.push('> ⚠️️ CONSTITUTION.md 未配置「对应端」，以下为自动推断。请编辑 CONSTITUTION 完善映射。');
     lines.push('');
     lines.push('| 产品需求端 | 工程源码 | 说明 |');
     lines.push('| :--- | :--- | :--- |');
@@ -388,7 +388,7 @@ function buildPlatformSourceMap(input: AIContextInput): string {
   // 标注跨端共用
   lines.push('');
   lines.push('> **跨端需求**: `_shared/` 或标记为多端共用的需求，AI 分析时应覆盖所有相关工程。');
-  lines.push('> **调整方式**: 编辑 CONSTITUTION.md → 「项目信息」表格的「对应需求端」列，用逗号分隔多个端。');
+  lines.push('> **调整方式**: 编辑 CONSTITUTION.md → 「项目信息」表格的「对应端」列，用逗号分隔多个端。');
 
   return lines.join('\n');
 }
@@ -422,8 +422,8 @@ function readConstitutionPlatformMapping(): Record<string, { platforms: string[]
       const cols: string[] = trimmed.split('|').map((c: string) => c.trim()).filter(Boolean);
       
       if (!headerParsed) {
-        // 解析表头: 找到「对应需求端」「路径」「默认分支」的列索引
-        platformColIdx = cols.findIndex((c: string) => c.includes('需求端'));
+        // 解析表头: 找到「对应端」「路径」「默认分支」的列索引
+        platformColIdx = cols.findIndex((c: string) => c.includes('需求端') || c.includes('对应端'));
         pathColIdx = cols.findIndex((c: string) => c.includes('路径'));
         branchColIdx = cols.findIndex((c: string) => c.includes('分支'));
         headerParsed = true;

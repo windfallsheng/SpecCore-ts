@@ -44,7 +44,7 @@ interface PlatformEntry {
   srcPath: string;
   gitRepo: string;
   branch: string;
-  platforms: string[];  // 对应需求端
+  platforms: string[];  // 对应端
 }
 
 async function parseConstitution(): Promise<PlatformEntry[]> {
@@ -318,7 +318,7 @@ function buildPhase1Prompt(
   p += `对迭代「${iter}」的每个端独立分析，生成各端的需求规格文档。\n\n`;
 
   p += `## 工程配置\n\n`;
-  p += `| 工程 | 源码路径 | 对应需求端 |\n`;
+  p += `| 工程 | 源码路径 | 对应端 |\n`;
   p += `|:--|:--|:--|\n`;
   for (const e of entries) {
     p += `| ${e.project} | ${e.srcPath} | ${e.platforms.join(', ')} |\n`;
@@ -564,7 +564,7 @@ function buildPhase2Prompt(
 
   // 工程配置
   p += `## 工程配置\n\n`;
-  p += `| 工程 | 源码路径 | 对应需求端 |\n`;
+  p += `| 工程 | 源码路径 | 对应端 |\n`;
   p += `|:--|:--|:--|\n`;
   p += `> 从 PRD 内容推断工程与端的关系\n\n`;
 

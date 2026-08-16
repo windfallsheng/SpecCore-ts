@@ -323,30 +323,34 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 | admin | 后台管理端 | frontend |
 
 > **端名规则**：
-> - 端名 = 工程名，一一对应
+> - 端名 = 工程名，一一对应（一个端 = 一个完整的服務/应用 = 一个 git 仓库）
 > - 全小写、无空格、用短横线分隔（如 order-service）
 > - 类型：frontend / backend / infra
 > - 此列表是 analyze/split/execute 的唯一端名来源
-> - 「对应需求端」列引用此列表中的端名
+> - 「对应端」列引用此列表中的端名，每行只填一个
 
 ## 项目信息
 
 | 工程 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应端 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| ${projectName} | 待填写 | ./ | ${gitUrl || '待配置'} | main | app, h5, miniapp, admin |
+| ${projectName} | 待填写 | ./ | ${gitUrl || '待配置'} | main | 待填写 |
 
 > ⚠️ **项目名称** 是给人和 AI 看的业务名称（如“食堂后台管理”、“商户入驻系统”），不同于技术上的工程名。
 >   AI 会据此理解项目业务范围，在分析/拆分/生成代码时作为上下文参考。
 
-> 多工程示例（monorepo）:
+> 多工程示例（每个端 = 一个独立工程）:
 >
 > | 工程 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应端 |
 > | :--- | :--- | :--- | :--- | :--- | :--- |
-> | order-service | 订单服务 | ./packages/order | git@xxx/order.git | master | app, admin |
-> | payment-service | 支付服务 | ./packages/payment | git@xxx/pay.git | main | h5, miniapp |
+> | admin-web | 后台管理端 | ./packages/admin | git@xxx/admin.git | main | admin |
+> | h5-app | 移动H5端 | ./packages/h5 | git@xxx/h5.git | main | h5 |
+> | android-app | Android端 | ./packages/android | git@xxx/android.git | main | android |
+> | backend-service | 后台服务 | ./packages/backend | git@xxx/backend.git | main | backend |
 >
 > **关键规则**：
-> 「对应端」列的值必须引用「端列表」中已声明的端名。
+> - 「对应端」列的值必须引用「端列表」中已声明的端名
+> - 一一对应：每行一个工程对应一个端名（不填多个）
+> - 如果一个服务拆成多个工程（如 user-service + order-service 都属于 backend），应在「端列表」中分别声明
 
 ## 技术栈
 
@@ -1355,7 +1359,7 @@ export async function checkUpgradeHints(projectRoot: string, speccoreDir: string
       // 替换整个"项目标识"章节为"项目信息"（从 ## 项目标识 到下一个 ## 之间）
       updated = updated.replace(
         new RegExp('##\\s*\u9879\u76ee\u6807\u8bc6[\\s\\S]*?(?=##\\s|\\Z)'),
-        `## 项目信息\n\n| 工程 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应需求端 |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n| ${projShort} | ${projName} | ./ | ${repo} | main | 待填写 |\n`
+        `## 项目信息\n\n| 工程 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应端 |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n| ${projShort} | ${projName} | ./ | ${repo} | main | 待填写 |\n`
       );
       migrations.push(`旧版「项目标识」纵向表 → 新版「项目信息」横向表（项目名称: ${projName}）`);
     }

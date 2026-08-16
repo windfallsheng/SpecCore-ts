@@ -2,7 +2,7 @@
  * platform-registry — 端名注册与解析
  *
  * 三层端名一致性保障:
- *   层级 1: CONSTITUTION.md「对应需求端」列 — 全局权威
+ *   层级 1: CONSTITUTION.md「端列表」章节 / 「对应端」列 — 全局权威
  *   层级 2: _shared/PLATFORMS.md — 任务级实际涉及的端
  *   层级 3: 模糊匹配 — 命令层自动纠错
  */
@@ -19,15 +19,15 @@ export async function parseGlobalPlatforms(cwd?: string): Promise<string[]> {
   const content = await readFile(constitutionPath, 'utf-8');
   const lines = content.split('\n');
 
-  // 找到「对应需求端」表头
+  // 找到「对应端」或「对应需求端」表头
   let headerIdx = -1;
   for (let i = 0; i < lines.length; i++) {
-    if (lines[i].includes('对应需求端')) { headerIdx = i; break; }
+    if (lines[i].includes('对应端') || lines[i].includes('对应需求端')) { headerIdx = i; break; }
   }
   if (headerIdx < 0) return [];
 
   const headers = lines[headerIdx].split('|').map(h => h.trim()).filter(Boolean);
-  const platformColIdx = headers.findIndex(h => h.includes('对应需求端'));
+  const platformColIdx = headers.findIndex(h => h.includes('对应端') || h.includes('对应需求端'));
   if (platformColIdx < 0) return [];
 
   const platforms = new Set<string>();
