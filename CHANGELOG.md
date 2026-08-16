@@ -1,3 +1,29 @@
+## v6.57.0 (2026-08-16) — update.ts 统计逻辑修复
+
+### 核心修复
+
+- **update.ts**: 删除无意义的 `added/updated/cleaned` 统计变量和数组,因为 `createToolIntegrations()` 返回 `Promise<void>` 且不返回计数
+- **update.ts**: 简化升级完成日志输出,直接显示「以下文件已同步到最新版本」,不再显示「命令文件内容未变化」
+
+### 问题根因
+
+旧版 `update.ts` 定义了 `added/updated/cleaned` 变量和对应的数组,但 `createToolIntegrations()` 没有更新这些变量,导致它们始终是 0。当用户运行 `speccore init --update --tools qoder` 时,输出显示「命令文件内容未变化(命令模板无更新)」,误导用户认为文件没有被更新。
+
+实际上 `createToolIntegrations()` 会直接覆盖写入所有 command 文件,只是 `update.ts` 的统计逻辑是残缺的。
+
+### 修复方案
+
+删除所有引用 `added/updated/cleaned/addedFiles/updatedFiles/cleanedFiles` 的代码,简化日志输出为:
+```
+📦 以下文件已同步到最新版本:
+   ✅ .agents/skills/ — Skill 全量更新
+   ✅ AGENTS.md — 项目规则
+   ✅ SETTINGS.md — 框架配置
+   ✅ AI-RULES.md — AI 参考手册
+```
+
+---
+
 ## v6.56.0 (2026-08-16) — 全平台 command 动态路由修复
 
 ### 核心修复

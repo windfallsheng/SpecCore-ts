@@ -77,10 +77,6 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
 
   logger.info(`  🎯 目标工具: ${tools.map(t => t.replace('.', '')).join(', ') || '无'}`);
 
-  let added = 0, updated = 0, cleaned = 0;
-  const addedFiles: string[] = [];
-  const updatedFiles: string[] = [];
-  const cleanedFiles: string[] = [];
   _updateConflicts.length = 0; // 清空冲突追踪
 
   // ── 1. 清理旧版命令文件（按工具目录）──
@@ -92,8 +88,6 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
         const lp = join(toolCommandsDir, legacy + '.md');
         if (await pathExists(lp)) {
           await require('fs-extra').remove(lp);
-          cleaned++;
-          cleanedFiles.push(`${tool}/commands/${legacy}.md`);
         }
       }
     }
@@ -105,23 +99,17 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
     const oldSpecDir = join(projectRoot, '.qoder', 'commands', 'spec');
     if (await pathExists(oldSpecDir)) {
       await require('fs-extra').remove(oldSpecDir);
-      cleaned++;
-      cleanedFiles.push('qoder/commands/spec/ (旧版子目录)');
     }
     for (const f of await readdir(qoderCommandsDir)) {
       // 清理旧版 spec: 前缀文件（已改用 spec- 前缀，跨平台安全）
       if (f.startsWith('spec:') && f.endsWith('.md')) {
         await require('fs-extra').remove(join(qoderCommandsDir, f));
-        cleaned++;
-        cleanedFiles.push(`qoder/commands/${f} (旧格式 → spec-${f.slice(5)})`);
         continue;
       }
       // 清理废弃命令文件（spec: 和 spec- 前缀都检查）
       const baseName = f.replace('.md', '').replace(/^spec[:.-]/, '');
       if (LEGACY_NAMES.has('spec-' + baseName) || LEGACY_NAMES.has('spec:' + baseName)) {
         await require('fs-extra').remove(join(qoderCommandsDir, f));
-        cleaned++;
-        cleanedFiles.push(`qoder/commands/${f}`);
       }
     }
   }
@@ -175,32 +163,12 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   logger.info('━'.repeat(50));
   logger.info(`🔄 SpecCore ${isSameVersion ? '命令文件已强制更新' : '升级完成'}`);
   logger.info('');
-  if (addedFiles.length > 0) {
-    logger.info(`  ✨ 新增 ${added} 个命令:`);
-    for (const f of addedFiles) logger.info(`     + ${f}`);
-    logger.info('');
-  }
-  if (updatedFiles.length > 0) {
-    logger.info(`  🔄 更新 ${updated} 个命令:`);
-    for (const f of updatedFiles.slice(0, 8)) logger.info(`     ~ ${f}`);
-    if (updatedFiles.length > 8) logger.info(`     ... 共 ${updatedFiles.length} 个文件`);
-    logger.info('');
-  }
-  if (cleanedFiles.length > 0) {
-    logger.info(`  🗑  清理 ${cleaned} 个旧文件:`);
-    for (const f of cleanedFiles) logger.info(`     - ${f}`);
-    logger.info('');
-  }
-  if (added === 0 && updated === 0 && cleaned === 0) {
-    logger.info('  命令文件内容未变化（命令模板无更新）');
-    logger.info('');
-    logger.info('  📦 以下文件已同步到最新版本:');
-    logger.info('     ✅ .agents/skills/ — Skill 全量更新');
-    logger.info('     ✅ AGENTS.md — 项目规则');
-    logger.info('     ✅ SETTINGS.md — 框架配置');
-    logger.info('     ✅ AI-RULES.md — AI 参考手册');
-    logger.info('');
-  }
+  logger.info('  📦 以下文件已同步到最新版本:');
+  logger.info('     ✅ .agents/skills/ — Skill 全量更新');
+  logger.info('     ✅ AGENTS.md — 项目规则');
+  logger.info('     ✅ SETTINGS.md — 框架配置');
+  logger.info('     ✅ AI-RULES.md — AI 参考手册');
+  logger.info('');
   // 冲突文件汇总
   if (_updateConflicts.length > 0) {
     logger.info(`  ⚠️  ${_updateConflicts.length} 个文件有内容冲突，旧版已重命名为时间戳格式`);
