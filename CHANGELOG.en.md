@@ -2,6 +2,16 @@
 
 ---
 
+## v6.49.16 (2026-08-16) — Analyze Prompt File Assignment Rules +禁止 AI 自创目录
+
+### Changes
+
+- **analyze prompt: Explicit file assignment rules**: global/ only contains REQUIREMENT.md/ANALYSIS.md/DEPS.md; remaining 6 files (TECH/TEST/UI_SPEC/RISK/REVIEW/MONITOR) go to {platform}/ directories
+- **analyze prompt:禁止 AI 自创目录**: Added instruction prohibiting AI from creating extra subdirectories under 020-specs/ (e.g., numbered dirs, Chinese names)
+- **Document-platform mapping updated**: Removed outdated global/TECH.md reference, changed to per-platform
+
+---
+
 ## v6.49.15 (2026-08-16) — Documentation Updates + Prompt Numbering Fix
 
 ### Changes

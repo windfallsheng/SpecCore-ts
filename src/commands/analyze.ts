@@ -1268,10 +1268,20 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `   - 桌面应用 → 本地存储、系统API、自动更新、离线支持\n`;
     }
     const dirStepNum = platformTypes.size > 0 ? 8 : 7;
-    prompt += `${dirStepNum}. **目录结构（已预创建，直接用 Write 工具写入）**：\n`;
-    prompt += `   - 全局文档 → Write 到 \`020-specs/global/{文件名}\`\n`;
-    prompt += `   - 端专属文档 → Write 到 \`020-specs/{端名}/{文件名}\`\n`;
-    prompt += `   - 目录已由 CLI 预创建，无需手动创建，直接用 Write 工具写入即可\n`;
+    prompt += `${dirStepNum}. **目录结构（严格遵循，禁止自创目录）**：\n`;
+    prompt += `   - **全局文档**（跨端通用）→ Write 到 \`020-specs/global/{文件名}\`\n`;
+    prompt += `     - REQUIREMENT.md（需求文档，含功能模块清单+涉及端列）\n`;
+    prompt += `     - ANALYSIS.md（需求分析）\n`;
+    prompt += `     - DEPS.md（依赖清单）\n`;
+    prompt += `   - **端专属文档**（每端各一份）→ Write 到 \`020-specs/{端名}/{文件名}\`\n`;
+    prompt += `     - TECH.md（技术方案：API/数据库/组件/路由等）\n`;
+    prompt += `     - TEST.md（测试用例）\n`;
+    prompt += `     - UI_SPEC.md（UI 规范，仅前端端）\n`;
+    prompt += `     - RISK.md（风险评估）\n`;
+    prompt += `     - REVIEW.md（评审检查项）\n`;
+    prompt += `     - MONITOR.md（监控指标）\n`;
+    prompt += `   - **禁止**：不要创建 020-specs/ 下的任何额外子目录（如数字编号、中文名称等）\n`;
+    prompt += `   - 目录已由 CLI 预创建，直接用 Write 工具写入即可\n`;
     if (ctx.phase !== '1') {
       // 端专业性约束只在默认模式（全量）中输出
       prompt += `\n## ⚠️ 端专业性约束\n`;
@@ -1307,19 +1317,22 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
   // 文档与端的对应关系（Phase 2 专属）
   if (ctx.phase === '2') {
     prompt += `### 文档与端的对应关系\n`;
-    prompt += `- **TECH.md**：该端专属技术方案，必须对齐 global/TECH.md 的整体架构\n`;
+    prompt += `- **TECH.md**：该端专属技术方案，必须对齐 REQUIREMENT.md 的整体需求\n`;
     prompt += `- **TEST.md**：该端专属测试计划，覆盖该端的验收标准\n`;
     prompt += `- **UI_SPEC.md**：该端专属 UI 规格，字段映射必须与后端 API 响应字段一一对应\n`;
     prompt += `- 分析完成后会自动生成 QUALITY_AUDIT.md 质量报告，检查各端内容是否完整\n`;
   } else if (ctx.phase !== '1') {
     // 默认模式（全量）的文档对应关系
     prompt += `### 文档与端的对应关系\n`;
-    prompt += `- **global/TECH.md**：整体技术架构（跨端交互、中间件选型、整体分层）\n`;
+    prompt += `- **global/REQUIREMENT.md**：整体需求（功能模块清单+涉及端列）\n`;
+    prompt += `- **global/ANALYSIS.md**：整体需求分析\n`;
+    prompt += `- **global/DEPS.md**：整体依赖清单\n`;
     prompt += `- **{端}/TECH.md**：该端专属技术方案（后端：接口设计+数据模型；前端：页面结构+组件设计）\n`;
-    prompt += `- **TEST.md**：各端分别撰写自己的测试计划\n`;
-    prompt += `- **REVIEW.md**：按端分章节 — 后端安全/事务/性能 + 前端兼容/体验/性能\n`;
-    prompt += `- **MONITOR.md**：后端指标(QPS/延迟) + 前端指标(FCP/LCP/CLS/JS错误率)\n`;
-    prompt += `- **UI_SPEC.md**：按端分章节，字段映射必须与后端 API 响应字段一一对应\n`;
+    prompt += `- **{端}/TEST.md**：该端专属测试计划\n`;
+    prompt += `- **{端}/RISK.md**：该端专属风险评估\n`;
+    prompt += `- **{端}/REVIEW.md**：该端专属评审检查项\n`;
+    prompt += `- **{端}/MONITOR.md**：该端专属监控指标\n`;
+    prompt += `- **{端}/UI_SPEC.md**：前端端专属 UI 规格，字段映射必须与后端 API 响应字段一一对应\n`;
     prompt += `- 分析完成后会自动生成 QUALITY_AUDIT.md 质量报告，检查各端内容是否完整\n`;
   }
   // 步骤 2-7 已在上面的 phase 分支中处理
