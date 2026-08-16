@@ -2490,6 +2490,8 @@ function buildSplitPrompt(
   p += `    - Task-NNN-h5-login（h5 端登录页面 + 交互）\n`;
   p += `    - Task-NNN-backend-login（登录接口 + 鉴权 + 数据模型）\n`;
   p += `    - Task-NNN-admin-login（管理端登录入口）\n`;
+  p += `  -  错误示例：Task-116-approval-scheduler（跨端功能未拆分）\n`;
+  p += `  - ✅ 正确做法：Task-116-approval-backend + Task-117-approval-admin + Task-118-approval-h5\n`;
   p += `  - 共享契约：\`_shared/API_CONTRACT.yaml\` 定义跨端接口\n`;
   p += `  - 每个 Task 的 scope 只包含该端，不要跨端\n\n`;
   p += `**单端功能**（只涉及一个端）：\n`;
