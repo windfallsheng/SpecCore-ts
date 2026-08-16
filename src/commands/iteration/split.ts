@@ -1237,6 +1237,9 @@ ${section.content}
       await writeFile(join(subtaskDir, '.meta', 'status'), 'todo');
       await writeFile(join(subtaskDir, '.meta', 'owner'), owner);
       await writeFile(join(subtaskDir, '.meta', 'created-at'), today);
+      // 功能单元标识（v6.49.2+）：默认取 section 的 functionalUnit 或 section.name
+      const featureName = (section as any).functionalUnit || section.name || '未分类';
+      await writeFile(join(subtaskDir, '.meta', 'feature'), featureName);
 
       // git-config
       await writeFile(
@@ -1265,6 +1268,7 @@ ${section.content}
 ## 子任务信息
 - **子任务 ID**: \`${subtaskId}\`
 - **所属模块**: \`${taskId}\`
+- **功能单元**: ${featureName}
 - **端**: ${platformName}
 - **负责人**: ${owner}
 - **状态**: 待开发
@@ -1347,6 +1351,9 @@ ${section.content}
     await writeFile(join(autoSubtaskDir, '.meta', 'status'), 'todo');
     await writeFile(join(autoSubtaskDir, '.meta', 'owner'), owner);
     await writeFile(join(autoSubtaskDir, '.meta', 'created-at'), today);
+    // 功能单元标识（v6.49.2+）
+    const featureName = (section as any).functionalUnit || section.name || '未分类';
+    await writeFile(join(autoSubtaskDir, '.meta', 'feature'), featureName);
     await writeFile(
       join(autoSubtaskDir, '.meta', 'git-config'),
       `# 子任务级 Git 配置（后端）
@@ -1360,6 +1367,7 @@ ${section.content}
 ## 子任务信息
 - **子任务 ID**: \`${taskId}-${fallbackBackend}-auto\`
 - **所属模块**: \`${taskId}\`
+- **功能单元**: ${featureName}
 - **端**: ${fallbackBackend}
 - **负责人**: ${owner}
 - **状态**: 待开发
