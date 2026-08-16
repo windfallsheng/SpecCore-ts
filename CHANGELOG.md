@@ -1,3 +1,36 @@
+## v6.55.0 (2026-08-16) — Qoder command 动态路由修复
+
+### 核心修复
+
+- **init.ts**: Qoder command 模板从静态命令文本改为动态路由格式（调用 `execute_command("speccore ask '用户原话'")`），解决 AI 绕过 CLI 路径路由的问题
+
+### 问题根因
+
+旧版 `.qoder/commands/spec-analyze.md` 是静态模板：
+```markdown
+执行命令: `speccore analyze --prompt -I ${1:Q1} --type feature`
+```
+
+AI 看到后直接执行 `speccore analyze --prompt`，然后看到 CLI 输出的 `[SPECCORE_PROMPT]`。但 prompt 中虽有「禁止直接 Write」指令，AI 仍可能忽略，直接用 Write 工具写文件到 `020-specs/` 根目录，导致：
+- 所有文档扁平在根目录（没有进入 `global/` 或 `{端}/`）
+- 多余目录（如 `1001/`、`错误码/` 等，AI 把需求文档中的编号章节误当成目录）
+
+新版动态路由格式：
+```markdown
+直接执行: execute_command("speccore ask '用户原话'")
+
+不要输出命令文本，不要分析意图，一切交给 speccore ask。
+```
+
+这样 AI 会调用 `speccore ask` → `speccore-router` → `execute_command("speccore analyze ...")` → CLI 输出 `[SPECCORE_PROMPT]` → AI 捕获 prompt → 走 `--apply` 路径 → CLI 自动路由到 `global/` 或 `{端}/` 子目录。
+
+### 影响范围
+
+- 新项目：`speccore init` 生成动态路由格式的 command 文件
+- 旧项目：`speccore init --update` 更新 command 文件为动态路由格式
+
+---
+
 ## v6.54.0 (2026-08-16) — analyze 阶段知识图谱注入修复
 
 ### 核心修复

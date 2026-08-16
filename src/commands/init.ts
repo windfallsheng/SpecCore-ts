@@ -905,7 +905,8 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
   await ensureDir(qoderCommandsDir);
   for (const [name, desc, cmd] of commands) {
     // Qoder 统一使用 spec-analyze 格式（跨平台安全，Linux 不支持冒号）
-    const content = '---\nname: ' + name + '\ndescription: ' + desc + '\n---\n' + desc + '\n\n执行命令: `' + cmd + '`';
+    // v6.54.0+: 使用动态路由格式，调用 speccore ask 引擎
+    const content = '---\nname: ' + name + '\ndescription: ' + desc + '\n---\n\n直接执行: execute_command("speccore ask \'用户原话\'")\n\n不要输出命令文本，不要分析意图，一切交给 speccore ask。';
     await writeFile(join(qoderCommandsDir, name + '.md'), content);
   }
   // 清理 Qoder 目录：废弃文件 + 旧格式残留

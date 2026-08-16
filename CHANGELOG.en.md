@@ -2,6 +2,39 @@
 
 ---
 
+## v6.55.0 (2026-08-16) — Qoder Command Dynamic Routing Fix
+
+### Core Fix
+
+- **init.ts**: Qoder command template changed from static command text to dynamic routing format (calling `execute_command("speccore ask 'user input'")`), resolving the issue of AI bypassing CLI path routing
+
+### Root Cause
+
+Old `.qoder/commands/spec-analyze.md` was a static template:
+```markdown
+Execute command: `speccore analyze --prompt -I ${1:Q1} --type feature`
+```
+
+AI would directly execute `speccore analyze --prompt`, then see `[SPECCORE_PROMPT]` output from CLI. But even though the prompt contained "do not use Write directly" instruction, AI might still ignore it and write files directly to `020-specs/` root directory, causing:
+- All documents flat in root directory (not entering `global/` or `{platform}/`)
+- Extra directories (like `1001/`, `错误码/`, etc., AI mistook numbered sections in requirement docs as directory names)
+
+New dynamic routing format:
+```markdown
+Directly execute: execute_command("speccore ask 'user input'")
+
+Do not output command text, do not analyze intent, leave everything to speccore ask.
+```
+
+Now AI calls `speccore ask` → `speccore-router` → `execute_command("speccore analyze ...")` → CLI outputs `[SPECCORE_PROMPT]` → AI captures prompt → uses `--apply` path → CLI auto-routes to `global/` or `{platform}/` subdirectory.
+
+### Impact Scope
+
+- New projects: `speccore init` generates dynamic routing format command files
+- Existing projects: `speccore init --update` updates command files to dynamic routing format
+
+---
+
 ## v6.54.0 (2026-08-16) — Analyze Phase Knowledge Graph Injection Fix
 
 ### Core Fixes
