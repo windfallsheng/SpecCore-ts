@@ -2,6 +2,17 @@
 
 ---
 
+## v6.46.0 (2026-08-16) — Explicit Platform List (Plan A)
+
+### Key Changes
+
+- **CONSTITUTION.md adds "Platform List" section**: platform = project name, 1:1 mapping, project-wide unique identifier
+- **`parsePlatformList()` shared function**: reads "Platform List" section first, falls back to "Corresponding Platform" column
+- **Unified platform discovery**: split/analyze/analyze-engine all prioritize "Platform List" section
+- **init template updated**: new projects automatically include "Platform List" section
+
+---
+
 ## v6.45.0 (2026-08-16) — User Custom Templates + Chain Generation
 
 ### Key Changes

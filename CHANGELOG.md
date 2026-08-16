@@ -1,3 +1,31 @@
+## v6.46.0 (2026-08-16) — 端列表显式声明（方案 A）
+
+### 核心变更
+
+- **CONSTITUTION.md 增加「端列表」章节**：端名 = 工程名，一一对应，全项目唯一标识符
+- **`parsePlatformList()` 共享函数**：优先读「端列表」章节，回退「对应需求端」列
+- **统一端发现逻辑**：split/analyze/analyze-engine 全部优先使用「端列表」章节
+- **init 模板更新**：新建项目的 CONSTITUTION.md 自动包含「端列表」章节
+
+### 端发现优先级（统一）
+
+```
+Layer 0: CONSTITUTION.md「## 端列表」章节 ← v6.46.0+ 全局权威
+Layer 1: CONSTITUTION.md「对应需求端」列 ← 旧版回退
+Layer 2: 020-specs/ 子目录扫描 ← 目录回退
+Layer 3: 默认 ['web']
+```
+
+### 改动文件
+
+- `src/core/spec-paths.ts` — 新增 `parsePlatformList()`
+- `src/commands/iteration/split.ts` — `detectPlatforms()` 优先用 `parsePlatformList()`
+- `src/core/analyze-engine.ts` — `detectPlatformsFromConstitution()` 增加 Layer 0
+- `src/commands/analyze.ts` — prompt 文本统一引用「端列表」章节
+- `src/commands/init.ts` — CONSTITUTION 模板增加「端列表」章节
+
+---
+
 ## v6.45.0 (2026-08-16) — 用户自定义模板 + 链式生成
 
 ### 核心变更

@@ -795,7 +795,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     prompt += `1. **先读宪法**: Read .speccore/CONSTITUTION.md，这是项目配置的唯一权威来源。获取:\n`;
     prompt += `   - 「工程」列 → 所有工程名（如 meeting-system, booking-service）\n`;
     prompt += `   - 「源码路径」列 → 各工程的代码目录（用于 Read 源码）\n`;
-    prompt += `   - 「对应需求端」列 → admin/h5/miniapp/app/android/ios（决定文档分端维度）\n`;
+    prompt += `   - 「## 端列表」章节 → 全局权威端名列表（如 backend/h5/admin）\n`;
     prompt += `   - 每个工程独立分析，文档输出到: .speccore/GLOBAL/platforms/{端名}/\n`;
     prompt += `2. Read .speccore/GLOBAL/ 下所有文档了解跨项目需求\n`;
     if (ctx.withCode) {
@@ -814,7 +814,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `5. **知识沉淀（按工程+端区分）**: 从各端源码识别可复用模式，写入 .speccore/PATTERNS/:\n`;
       prompt += `   - 命名规则: **{CONSTITUTION中的工程名}-{端}-{分类}-{模式名}.md**\n`;
       prompt += `   - 工程名从 CONSTITUTION.md 的「工程」列读取\n`;
-      prompt += `   - 端从 CONSTITUTION.md 的「对应需求端」列读取，如: admin/h5/miniapp/app/android/web\n`;
+      prompt += `   - 端从 CONSTITUTION.md 的「## 端列表」章节读取（如: admin/h5/miniapp/backend）\n`;
       prompt += `   - 示例: meeting-system-admin-auth-jwt.md | booking-service-app-data-repo.md | meeting-system-h5-comp-table.md\n`;
       prompt += `   - 后台分类: auth(鉴权)、api(接口设计)、data(数据访问)、error(异常)、log(日志)、util(工具)、arch(架构)\n`;
       prompt += `   - 前端分类: comp(组件)、state(状态管理)、router(路由)、request(请求)、form(表单)、style(样式)、build(构建)\n`;
@@ -826,7 +826,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     prompt += `\n## 输出文档 (12 个/工程 + 1 个全局)\n`;
     if (ctx.withCode) {
       prompt += `> 以下文档按端分目录存放: .speccore/GLOBAL/platforms/{端名}/\n`;
-      prompt += `> 端名从 CONSTITUTION 的「对应需求端」列读取（admin/h5/backend 等）\n\n`;
+      prompt += `> 端名从 CONSTITUTION 的「## 端列表」章节读取（backend/h5/admin 等）\n\n`;
       prompt += `| 文档 | 存放位置 | 从源码提取内容 |\n`;
       prompt += `| :--- | :--- | :--- |\n`;
       prompt += `| TECH_STACK.md | platforms/{端}/ | 语言、框架、构建工具、UI库 |\n`;
@@ -1223,8 +1223,8 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     prompt += `4. 每个文档都要具体内容（禁止"待填充"）\n`;
     prompt += `5. **端发现（重要）**：先确定项目有哪些端，再按端组织文档\n`;
     prompt += `   - 第 1 步：Read .speccore/CONSTITUTION.md\n`;
-    prompt += `   - 第 2 步：从表格「对应需求端」列提取端列表（如 admin, h5, backend）\n`;
-    prompt += `   - 第 3 步：如果表格列为空或「待填写」，从技术栈章节标题提取\n`;
+    prompt += `   - 第 2 步：从「## 端列表」章节提取端名（这是全局权威来源）\n`;
+    prompt += `   - 第 3 步：如果没有「端列表」章节，从「对应端」列提取\n`;
     prompt += `   - 第 4 步：如果以上都无法确定，根据需求文档内容判断\n`;
     prompt += `   - 第 5 步：将发现的端列表写入 020-specs/PLATFORMS.md\n`;
     prompt += `6. **目录结构**：全局文档写入 020-specs/global/\n`;
