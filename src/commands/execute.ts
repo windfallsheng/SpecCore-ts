@@ -530,6 +530,13 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
     }
   }
   
+  // 自动刷新知识图谱（v6.49.10+）
+  try {
+    const { refreshKnowledgeGraph } = await import('../core/knowledge-graph');
+    await refreshKnowledgeGraph(process.cwd(), iteration);
+    logger.info('🧠 知识图谱已刷新');
+  } catch {}
+
   logOperation('speccore execute done', `completed ${total} tasks in ${totalElapsed}s`);
 }
 
@@ -573,6 +580,13 @@ async function executeResume(iteration: string): Promise<void> {
     logger.info(`📝 已生成 ${state.completedTasks.length} 份回顾报告`);
   }
 
+  // 自动刷新知识图谱（v6.49.10+）
+  try {
+    const { refreshKnowledgeGraph } = await import('../core/knowledge-graph');
+    await refreshKnowledgeGraph(process.cwd(), iteration);
+    logger.info('🧠 知识图谱已刷新');
+  } catch {}
+
   clearExecutionState();
 }
 
@@ -615,6 +629,13 @@ async function executeBatchMode(tasks: TaskState[], iteration: string, batchSize
     } catch {}
   }
   logger.info(`📝 已生成 ${tasks.length} 份回顾报告`);
+
+  // 自动刷新知识图谱（v6.49.10+）
+  try {
+    const { refreshKnowledgeGraph } = await import('../core/knowledge-graph');
+    await refreshKnowledgeGraph(process.cwd(), iteration);
+    logger.info('🧠 知识图谱已刷新');
+  } catch {}
 
   clearExecutionState();
 }

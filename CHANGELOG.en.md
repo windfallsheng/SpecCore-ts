@@ -2,6 +2,24 @@
 
 ---
 
+## v6.49.11 (2026-08-16) — Knowledge Graph/RAG Trigger Timing Full Audit & Completion
+
+### Fixes
+
+- **execute.ts**: All 3 exit paths (main/resume/batch) now auto-refresh knowledge graph
+- **change.ts**: Both exit paths (new requirement/create change) now auto-refresh knowledge graph
+- **done.ts**: Added `warnIfIndexStale` pre-check + `refreshKnowledgeGraph` post-refresh
+
+### Audit Results
+
+| Command | Pre-check | Knowledge Graph Refresh |
+|:--------|:---------:|:----------------------:|
+| analyze | ✅ | ✅ |
+| split | ✅ | ✅ |
+| execute | ✅ | ✅ Fixed |
+| change | ✅ | ✅ Fixed |
+| done | ✅ Fixed | ✅ Fixed |
+
 ## v6.49.10 (2026-08-16) — Knowledge Graph Auto-Refresh Completion
 
 ### Fixes
