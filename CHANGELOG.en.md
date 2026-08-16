@@ -2,6 +2,27 @@
 
 ---
 
+## v6.58.0 (2026-08-16) — Split Prompt Platform-Based Splitting Enhancement
+
+### Core Fixes
+
+- **split.ts**: Added "error example + correct approach" comparison in split prompt, explicitly prohibiting cross-platform tasks without splitting (e.g., Task-116-approval-scheduler)
+- **split.ts**: Emphasized that aggregated features must be split into multiple independent Tasks by platform (Task-NNN-{platform}-{feature}), with each Task's scope containing only that platform
+
+### Root Cause
+
+Old split prompt had "split by platform" instruction, but AI might ignore or misunderstand it, resulting in single Task for cross-platform features (like approval scheduler, billing system) instead of splitting by platform.
+
+### Fix Approach
+
+Added error example and correct approach comparison at lines 2493-2494 in split prompt:
+```markdown
+- ❌ Error: Task-116-approval-scheduler (cross-platform feature not split)
+- ✅ Correct: Task-116-approval-backend + Task-117-approval-admin + Task-118-approval-h5
+```
+
+---
+
 ## v6.57.0 (2026-08-16) — update.ts Statistics Logic Fix
 
 ### Core Fixes

@@ -1,3 +1,24 @@
+## v6.58.0 (2026-08-16) — split prompt 按端拆分强化
+
+### 核心修复
+
+- **split.ts**: split prompt 中新增「错误示例 + 正确做法」对比，明确禁止跨端功能未拆分的任务命名（如 Task-116-approval-scheduler）
+- **split.ts**: 强调聚合功能必须按端拆分成多个独立 Task（Task-NNN-{端名}-{功能}），每个 Task 的 scope 只包含该端
+
+### 问题根因
+
+旧版 split prompt 虽有「按端拆分」指令，但 AI 可能忽略或理解不清，导致跨端功能（如审批调度器、计费系统）生成单个 Task，未按端拆分。
+
+### 修复方案
+
+在 split prompt 第 2493-2494 行新增错误示例和正确做法对比：
+```markdown
+- ❌ 错误示例：Task-116-approval-scheduler（跨端功能未拆分）
+- ✅ 正确做法：Task-116-approval-backend + Task-117-approval-admin + Task-118-approval-h5
+```
+
+---
+
 ## v6.57.0 (2026-08-16) — update.ts 统计逻辑修复
 
 ### 核心修复
