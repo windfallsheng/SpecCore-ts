@@ -599,14 +599,14 @@ async function helpHtml(options: HelpOptions): Promise<void> {
         desc: '自动执行任务、代码审查、标记完成'
       },
       '🔄 同步与变更管理': { 
-        cmds: ['change', 'sync', 'ops'],
+        cmds: ['change', 'sync', 'retro', 'ops'],
         icon: '🔄',
-        desc: '需求变更追踪、操作历史查询'
+        desc: '需求变更追踪、任务回顾、操作历史查询'
       },
       '📊 查看与验证': { 
-        cmds: ['dashboard', 'validate', 'track', 'search', 'code-index', 'refresh', 'reindex'],
+        cmds: ['dashboard', 'validate', 'track', 'search', 'knowledge', 'code-index', 'refresh', 'reindex'],
         icon: '📈',
-        desc: '进度看板、代码验证、源码索引、索引刷新与重建'
+        desc: '进度看板、知识图谱可视化、代码验证、源码索引'
       },
       '🛠️ 智能开发助手': { 
         cmds: ['dev'],

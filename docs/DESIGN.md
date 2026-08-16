@@ -1408,8 +1408,13 @@ speccore schedule cancel --id <id>
 | v6.37.0 | 08-15 | split 读取各端子目录文档 + 优先提取端专属内容（loadSpecContents 双层读取 + extractTaskTechContent 优先匹配） |
 | v6.49.13 | 08-16 | CLI 控制目录结构：analyze 预创建 020-specs/ + split 模块驱动拆分 + 内容填充 Prompt |
 | v6.49.14 | 08-16 | split 从 global/REQUIREMENT.md 读取涉及端，按模块精确创建端目录 |
+| v6.49.15–v6.49.17 | 08-16 | 文档更新 + prompt 编号修复 + 功能模块来源链接 + 链式生成→图谱 RAG 检索纠正 |
+| v6.50.0 | 08-16 | 业务-代码关联图谱：business_module 实体 + scanBusinessCodeMappings() + 开放关系类型 |
+| v6.50.1–v6.50.2 | 08-16 | CONTEXT.md 业务映射按端隔离 + 知识图谱可视化 business_module 过滤按钮 |
+| v6.50.3 | 08-16 | 正则 m 标志 bug 修复 + prompt 缩进统一 + Phase 2 关系类型示例补充 |
+| v6.51.0 | 08-16 | HTML 页面 present_files 全量覆盖：10 个标记 + 7 平台 command + Skill + init 模板同步 |
 
-> **最后更新**: 2026-08-16 (v6.49.14) — 涉及端从 REQUIREMENT.md 读取 + 模块级精确端目录
+> **最后更新**: 2026-08-16 (v6.51.0) — HTML 页面标记系统全量覆盖 + 业务-代码关联图谱 + 端隔离检索
 
 ---
 ## 10. 可执行编排引擎（spec-ask v4）
@@ -2309,8 +2314,51 @@ knowledge-graph.json 自动包含业务-代码映射
 检索时自动包含业务模块相关信息
 ```
 
+#### CONTEXT.md 端隔离（v6.50.2+）
+- CONTEXT.md 中的「业务-代码映射」章节按当前端过滤，不再展示所有端的映射
+- 避免浪费 token（如前端分析时读到后端的业务映射）
+- 通过 `options.currentPlatform` 参数控制过滤
+
 #### 关键代码位置
 - `src/core/knowledge-graph.ts`: `scanBusinessCodeMappings()` 函数
 - `src/commands/analyze.ts`: prompt 中「业务-代码映射」指导
-- `src/core/context-builder.ts`: CONTEXT.md 中展示业务-代码映射表
+- `src/core/context-builder.ts`: CONTEXT.md 中展示业务-代码映射表（按端过滤）
+
+### 8.9 HTML 页面标记系统（present_files 协议）
+
+**核心机制**：CLI 生成 HTML 页面后输出 `[SPECCORE_*: <path>]` 标记，AI 平台识别标记后调用 `present_files(<path>)` 展示页面。
+
+#### 设计原则
+- **CLI 只输出标记，不直接展示**：CLI 无法控制 AI 平台的 UI，只能通过标记通知
+- **AI 平台通过标记触发**：不猜测文件路径，严格按标记执行
+- **全量覆盖**：所有生成 HTML 的命令都必须输出对应标记
+
+#### 标记清单（v6.51.0+，共 10 个）
+| 标记 | 命令 | 触发时机 |
+|:--|:--|:--|
+| `[SPECCORE_ONBOARD: <path>]` | `ask` | 首次/升级引导页 |
+| `[SPECCORE_SETUP_GUIDE: <path>]` | `init` | 项目配置引导页 |
+| `[SPECCORE_ABOUT: <path>]` | `about` | 版本信息页 |
+| `[SPECCORE_HELP: <path>]` | `help` | 帮助中心页 |
+| `[SPECCORE_WELCOME: <path>]` | `welcome` | 项目名片页 |
+| `[SPECCORE_DEV: <path>]` | `dev` | 流水线页 |
+| `[SPECCORE_KNOWLEDGE: <path>]` | `knowledge` | 知识图谱页 |
+| `[SPECCORE_PLAN: <path>]` | `plan` | 执行计划页 |
+| `[SPECCORE_RETRO: <path>]` | `retro` | 回顾报告页 |
+| `[SPECCORE_DASHBOARD: <path>]` | `dashboard` | 仪表盘页 |
+
+#### 注册点（确保标记被处理）
+- `.agents/skills/speccore-router/SKILL.md`：路由器 Skill，10 个标记全部注册
+- `.agents/skills/spec-ask/SKILL.md`：ask Skill，同步注册
+- 7 个平台 command 文件（`.claude/.codebuddy/.cursor/.qoder/.trae/.trae-cn/.windsurf/commands/spec-ask.md`）
+- `init.ts` 模板：`init --update` 自动传播到已有项目
+
+#### 数据流
+```
+CLI 命令执行 → 生成 HTML 到 outputs/
+    ↓ process.stdout.write
+输出 [SPECCORE_XXX: /path/to/page.html]
+    ↓ AI 平台识别
+present_files(<path>) → 用户在预览面板看到 HTML 页面
+```
 

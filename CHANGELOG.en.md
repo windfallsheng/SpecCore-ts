@@ -2,6 +2,28 @@
 
 ---
 
+## v6.52.0 (2026-08-16) — Documentation Overhaul + Help Center Completion
+
+### Design Documentation
+
+- **DESIGN.md**: Added section 8.9 "HTML Page Marker System (present_files Protocol)", including 10 markers list, registration points, data flow
+- **DESIGN.md**: Section 8.8 Business-Code Association Graph updated with CONTEXT.md platform isolation notes (v6.50.2+)
+- **DESIGN.md**: Version records supplemented with v6.49.15–v6.51.0 (6 entries)
+
+### User Documentation
+
+- **README.md**: Directory structure updated to flat platform architecture (v6.49.x+), removed old 10-backend/20-frontend structure
+- **README.md**: Knowledge graph description updated: business_module entity + business-code mapping + type filtering
+- **README.md**: Version bumped from v6.14.0 to v6.52.0
+- **command-reference.md**: Version bumped from v6.16.0 to v6.52.0
+
+### HTML Pages
+
+- **help.ts**: Dynamic help page added `retro` (Sync & Change category) and `knowledge` (View & Verify category) commands
+- **speccore-help.html**: Static template synced with `retro` and `knowledge` commands
+
+---
+
 ## v6.51.0 (2026-08-16) — HTML Page present_files Full Coverage + Command Marker Completion
 
 ### New Features

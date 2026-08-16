@@ -81,16 +81,17 @@ Iteration-001-meeting/
 │   ├── converted/              ← [自动生成] doc2spec 转换后的 MD
 │   ├── features/               ← [手动维护] 按功能模块组织
 │   │   └── {feature}/README.md
-│   └── assets/                 ← 素材（extracted/prototypes/designs/screenshots）
+│   ├── prototypes/             ← 原型（HTML/图片/链接）
+│   └── assets/                 ← 素材（extracted/）
 ├── 020-specs/                  ← analyze 分端输出
+│   ├── global/                 ← 跨端文档（REQUIREMENT/ANALYSIS/RISK/DEPS/REVIEW/MONITOR）
+│   └── {platform}/             ← 各端专属（TECH/TEST/UI_SPEC）
 ├── 030-tasks/                  ← split 开发任务
 │   └── Task-001-*/
-│       ├── .meta/              ← 任务元信息（type/status/owner/created-at）
+│       ├── .meta/              ← 任务元信息（type/status/owner/feature/created-at）
 │       ├── _shared/            ← 共享契约（API_CONTRACT.yaml）
 │       ├── 00-specs/           ← 执行前核心规格（REQ/TECH/TASK/SCHEMA/CHANGELOG）
-│       ├── 10-backend/         ← 后端实现（src/tests）
-│       ├── 20-frontend/        ← 前端实现（{platform}/src/tests）
-│       ├── 99-artifacts/       ← 执行产出（TEST/REVIEW/DEPLOY/RISK/DEPS/MONITOR）
+│       ├── {platform}/         ← 各端实现（平铺，如 booking-service/ h5-mobile/ admin-web/）
 │       └── .issues.md          ← 问题追踪
 └── STAFFING.md                 ← 人员排期
 ```
@@ -135,10 +136,11 @@ Iteration-001-meeting/
 
 ### 🧠 knowledge — 知识图谱可视化
 `speccore knowledge` 生成交互式 HTML 知识图谱：
-- vis-network 力导向图：8 种形状区分实体类型（需求◆ 规格🛢 功能模块■ 任务▲ 全局★ 源码）
+- vis-network 力导向图：9 种形状区分实体类型（需求◆ 规格🛢 功能模块■ 任务▲ 全局★ 业务模块⭐ 源码）
+- 业务-代码关联图谱：从 TECH.md 提取业务模块→代码实体映射，支持开放关系类型
 - 衰减检测：自动发现内容变更、下游过期、文件丢失、代码超前等风险
 - RAG 上下文预览：查看 AI 检索时会注入的完整上下文
-- 9 套主题 / 3 种字体 / 4 档字号 / 全屏模式 / 实体搜索
+- 9 套主题 / 3 种字体 / 4 档字号 / 全屏模式 / 实体搜索 / 类型过滤
 
 ![Knowledge Graph](docs/screenshots/knowledge-graph-full.png)
 
@@ -180,7 +182,7 @@ Iteration-001-meeting/
 
 ```bash
 npm install -g speccore
-speccore --version   # v6.14.0
+speccore --version   # v6.52.0
 ```
 
 ## 命令列表
