@@ -54,6 +54,7 @@ function getHints(stage: string, ctx: Record<string, string>): StepHint[] {
 
     case 'split':
       return [
+        { action: `speccore analyze --task=Task-001${iter ? ` -I ${iter}` : ''}`, desc: '🧠 AI 分析任务级 spec → 生成 00-specs/ 文档（每个 Task 都要执行）' },
         { action: `cat Iteration-${iter || 'X'}/IMPACT.md`, desc: '查看风险评分 + 任务依赖关系' },
         { action: `speccore execute --task=Task-001 --strict --force${iter ? ` --iteration=${iter}` : ''}`, desc: '严格模式开发：逐项确认后再生成代码' },
         { action: `speccore execute --all --force${iter ? ` --iteration=${iter}` : ''}`, desc: '快速模式开发：AI 自动生成所有 Task 代码' },

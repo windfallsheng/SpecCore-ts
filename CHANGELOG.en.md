@@ -2,6 +2,16 @@
 
 ---
 
+## v6.43.0 (2026-08-16) — Split Aggregation Analysis + Task-Level Spec Analysis Guidance
+
+### Key Changes
+
+- **Split prompt enhancement: feature aggregation analysis** — AI analyzes whether features are aggregated (cross-platform) or single-platform before splitting
+- **Post-split `[SPECCORE_NEXT_STEPS]` marker** — lists `analyze --task` commands for each created task
+- **next-steps.ts updated**: `analyze --task` is now the first step after split
+
+---
+
 ## v6.42.0 (2026-08-16) — Analyze Two-Phase Analysis Architecture
 
 ### Key Changes
