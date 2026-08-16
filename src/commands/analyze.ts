@@ -26,6 +26,7 @@ import { buildPrompt, formatPrompt } from '../core/prompt-builder';
 import { buildAutoModeInstruction } from '../core/questions';
 import { resolvePlatform } from '../core/platform-registry';
 import { warnIfIndexStale } from '../core/index-guard';
+import { GLOBAL_SPECS_DIR, GLOBAL_SPEC_FILES } from '../core/spec-paths';
 
 export interface AnalyzeOptions {
   iteration?: string;
@@ -344,11 +345,17 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
           const platformLabel = options.platform ? `/${options.platform}` : '';
           logger.success(`✅ ${count} 个 Spec 文档已写入 ${options.task}${platformLabel}/（任务级，迭代基线不变）`);
         } else {
-          // 迭代级：写 020-specs/
+          // 迭代级：写 020-specs/（全局文档写入 global/ 子目录，v6.41.0+）
           const specDir = join(iterDir, '020-specs');
           await ensureDir(specDir);
+          const globalSet = new Set(GLOBAL_SPEC_FILES);
           for (const [filename, content] of Object.entries(docs)) {
-            const fp = join(specDir, filename);
+            // 全局文档写入 global/ 子目录，端专属文档写入 {端}/ 子目录
+            const targetDir = globalSet.has(filename)
+              ? join(specDir, GLOBAL_SPECS_DIR)
+              : options.platform ? join(specDir, options.platform) : specDir;
+            await ensureDir(targetDir);
+            const fp = join(targetDir, filename);
             if (!(await shouldOverwrite(fp, !!options.interactive))) { logger.info(`   ⏭️  跳过: ${filename}`); continue; }
             const bk = await backupWithTimestamp(fp);
             if (bk) {
@@ -385,10 +392,11 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         logger.success(`✅ ANALYSIS.md 已写入 ${options.task}${platformLabel}/`);
       } else { logger.info(`   ⏭️  用户取消覆盖`); }
     } else {
-      // 迭代级：写 020-specs/
+      // 迭代级：写 020-specs/global/（全局文档，v6.41.0+）
       const specDir = join(iterDir, '020-specs');
-      await ensureDir(specDir);
-      const iterAnalysisPath = join(specDir, 'ANALYSIS.md');
+      const globalDir = join(specDir, GLOBAL_SPECS_DIR);
+      await ensureDir(globalDir);
+      const iterAnalysisPath = join(globalDir, 'ANALYSIS.md');
       if (await shouldOverwrite(iterAnalysisPath, !!options.interactive)) {
         const iterBackup = await backupWithTimestamp(iterAnalysisPath);
         if (iterBackup) {
@@ -396,7 +404,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
           logger.info(`   📦 旧版已备份: ${iterBackup.split('/').pop()}`);
         }
         await writeFile(iterAnalysisPath, options.apply);
-        logger.success(`✅ ANALYSIS.md 已写入 020-specs/`);
+        logger.success(`✅ ANALYSIS.md 已写入 020-specs/global/`);
       } else { logger.info(`   ⏭️  用户取消覆盖`); }
     }
     // ── --sync: 任务分析后局部回写 020-specs/ ──
@@ -443,10 +451,37 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 async function generateIterationSpecDocs(iteration: string): Promise<void> {
   const iterDir = await getIterationDir(iteration);
   const specDir = join(iterDir, '020-specs');
+  const globalDir = join(specDir, GLOBAL_SPECS_DIR);
+  await ensureDir(globalDir);
 
   const now = new Date().toISOString().split('T')[0];
-  const templates: [string, string][] = [
-    // ANALYSIS.md 由分析引擎自动生成，此处不覆盖
+  // 全局文档模板 → 写入 global/ 子目录（v6.41.0+）
+  const globalTemplates: [string, string][] = [
+    ['REQUIREMENT.md',
+      `# 本期需求文档\n\n> 迭代：${iteration}\n> 时间范围：${new Date().toISOString().split('T')[0]}\n\n`
+      + `## 1. 需求概述\n\n### 1.1 背景\n\n### 1.2 目标\n\n### 1.3 范围\n\n`
+      + `## 2. 功能需求\n\n### 2.1 功能模块一\n\n### 2.2 功能模块二\n\n`
+      + `## 3. 非功能需求\n\n### 3.1 性能\n\n### 3.2 安全\n\n### 3.3 兼容性\n\n`
+      + `## 4. 验收标准\n\n## 5. 附录\n`],
+    ['RISK.md',
+      `# 风险评估\n\n> 迭代: ${iteration} | 生成: ${now}\n\n`
+      + `## 风险矩阵\n\n| 风险 | 可能性 | 影响 | 缓解措施 |\n| :--- | :--- | :--- | :--- |\n| | | | |\n\n`
+      + `## 回滚方案\n\n1. 触发条件: _待定_\n2. 回滚步骤: _待定_\n`],
+    ['DEPS.md',
+      `# 依赖清单\n\n> 迭代: ${iteration}\n\n`
+      + `## 上游依赖\n\n| 服务 | 版本 | 用途 | SLA |\n| :--- | :--- | :--- | :--- |\n| | | | |\n\n`
+      + `## 下游影响\n\n| 消费方 | 接口 | 影响 |\n| :--- | :--- | :--- |\n| | | |\n`],
+    ['REVIEW.md',
+      `# Code Review 清单\n\n> 迭代: ${iteration}\n\n`
+      + `## 检查项\n\n- [ ] 参数校验完整性\n- [ ] 幂等性处理\n- [ ] 索引覆盖\n- [ ] 迁移脚本可回滚\n- [ ] 鉴权配置\n- [ ] 日志规范\n`],
+    ['MONITOR.md',
+      `# 监控指标\n\n> 迭代: ${iteration}\n\n`
+      + `## 业务指标\n\n| 指标 | 阈值 | 级别 |\n| :--- | :--- | :--- |\n| 成功率 | <99.9% | P1 |\n| P99延迟 | >1000ms | P2 |\n\n`
+      + `## 告警规则\n\n| 规则 | 条件 | 通知 |\n| :--- | :--- | :--- |\n| | | |\n`],
+  ];
+
+  // 端无关模板 → 写入 020-specs/ 根目录（各端分析时覆盖）
+  const rootTemplates: [string, string][] = [
     ['TECH.md',
       `# 技术方案\n\n> 迭代: ${iteration} | 生成: ${now}\n\n`
       + `## 架构\n\n_待填充_\n\n`
@@ -459,26 +494,22 @@ async function generateIterationSpecDocs(iteration: string): Promise<void> {
       + `## 集成测试\n\n- [ ] API 端到端\n\n`
       + `## 边界测试\n\n- [ ] 异常参数\n- [ ] 超时重试\n- [ ] 并发冲突\n\n`
       + `## 性能测试\n\n- [ ] 压测方案\n`],
-    ['REVIEW.md',
-      `# Code Review 清单\n\n> 迭代: ${iteration}\n\n`
-      + `## 检查项\n\n- [ ] 参数校验完整性\n- [ ] 幂等性处理\n- [ ] 索引覆盖\n- [ ] 迁移脚本可回滚\n- [ ] 鉴权配置\n- [ ] 日志规范\n`],
-    ['RISK.md',
-      `# 风险评估\n\n> 迭代: ${iteration} | 生成: ${now}\n\n`
-      + `## 风险矩阵\n\n| 风险 | 可能性 | 影响 | 缓解措施 |\n| :--- | :--- | :--- | :--- |\n| | | | |\n\n`
-      + `## 回滚方案\n\n1. 触发条件: _待定_\n2. 回滚步骤: _待定_\n`],
-    ['DEPS.md',
-      `# 依赖清单\n\n> 迭代: ${iteration}\n\n`
-      + `## 上游依赖\n\n| 服务 | 版本 | 用途 | SLA |\n| :--- | :--- | :--- | :--- |\n| | | | |\n\n`
-      + `## 下游影响\n\n| 消费方 | 接口 | 影响 |\n| :--- | :--- | :--- |\n| | | |\n`],
-    ['MONITOR.md',
-      `# 监控指标\n\n> 迭代: ${iteration}\n\n`
-      + `## 业务指标\n\n| 指标 | 阈值 | 级别 |\n| :--- | :--- | :--- |\n| 成功率 | <99.9% | P1 |\n| P99延迟 | >1000ms | P2 |\n\n`
-      + `## 告警规则\n\n| 规则 | 条件 | 通知 |\n| :--- | :--- | :--- |\n| | | |\n`],
   ];
 
   let created = 0;
   let skipped = 0;
-  for (const [filename, content] of templates) {
+  // 写入全局文档到 global/
+  for (const [filename, content] of globalTemplates) {
+    const filePath = join(globalDir, filename);
+    if (!(await pathExists(filePath))) {
+      await writeFile(filePath, content);
+      created++;
+    } else {
+      skipped++;
+    }
+  }
+  // 写入端无关模板到根目录
+  for (const [filename, content] of rootTemplates) {
     const filePath = join(specDir, filename);
     if (!(await pathExists(filePath))) {
       await writeFile(filePath, content);
@@ -488,7 +519,7 @@ async function generateIterationSpecDocs(iteration: string): Promise<void> {
     }
   }
 
-  logger.info(`\n📄 Spec 文档: 新建 ${created} 个, 跳过 ${skipped} 个 (已存在) → ${specDir}/`);
+  logger.info(`\n📄 Spec 文档: 新建 ${created} 个, 跳过 ${skipped} 个 (已存在) → ${specDir}/ (global/ + 根目录)`);
 }
 
 /**
@@ -984,7 +1015,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     if (ctx.platform) {
       prompt += `- **只分析 ${ctx.platform} 端**：从 CONSTITUTION.md 读取端列表，但只生成 ${ctx.platform} 端的专属文档\n`;
       prompt += `- 在 020-specs/${ctx.platform}/ 下写入该端专属文档（ANALYSIS.md、TECH.md、TEST.md 等）\n`;
-      prompt += `- 根目录只放跨端通用文档（REQUIREMENT.md、DEPS.md、RISK.md 等）\n`;
+      prompt += `- 全局跨端文档写入 020-specs/global/（REQUIREMENT.md、DEPS.md、RISK.md 等）\n`;
       prompt += `- **不要生成**其他端的子目录和文档\n`;
     }
   }
@@ -1054,9 +1085,9 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
   prompt += `   - 第 4 步：如果以上都无法确定，根据需求文档内容判断项目涉及哪些端\n`;
   prompt += `   - 第 5 步：将发现的端列表写入 020-specs/PLATFORMS.md（格式：每行一个端名）\n`;
   prompt += `6. **目录结构**：必须按端创建子目录，不要全部扁平放在 020-specs/ 根目录\n`;
-  prompt += `   - 在 020-specs/ 下创建 {端名}/ 子目录（如 020-specs/admin/、020-specs/h5/、020-specs/backend/）\n`;
-  prompt += `   - 每个端目录下写入该端专属的分析文档（ANALYSIS.md、TECH.md 等）\n`;
-  prompt += `   - 根目录只放跨端通用文档（REQUIREMENT.md、DEPS.md、RISK.md 等）\n`;
+  prompt += `   - 跨端通用文档写入 020-specs/global/（REQUIREMENT.md、ANALYSIS.md、DEPS.md、RISK.md、REVIEW.md、MONITOR.md）\n`;
+  prompt += `   - 各端专属文档写入 020-specs/{端名}/（如 admin/TECH.md、h5/TEST.md、admin/UI_SPEC.md）\n`;
+  prompt += `   - TECH.md 不放在 global/，各端分别撰写自己的技术方案\n`;
   const taskFlag = isTask && ctx.task ? ` --task ${ctx.task}` : '';
   const platformFlag = ctx.platform ? ` --platform ${ctx.platform}` : '';
   prompt += `7. 写入: speccore analyze --apply '{"${taskDocs.map(([n]) => `${n}:"..."`).join(',')}...}' -I ${iter}${taskFlag}${platformFlag}\n\n`;

@@ -4,6 +4,7 @@ import { logger, Spinner } from '../../utils/logger';
 import { updateContext } from '../../core/context';
 import { nextIterationId } from '../../core/global-counters';
 import { showNextSteps } from '../../core/next-steps';
+import { GLOBAL_SPECS_DIR } from '../../core/spec-paths';
 export interface IterationCreateOptions {
   name?: string;
   topic?: string;
@@ -47,6 +48,7 @@ export async function iterationCreateCommand(options: IterationCreateOptions): P
     await ensureDir(join(iterationDir, '010-requirements', 'assets', 'designs'));
     await ensureDir(join(iterationDir, '010-requirements', 'assets', 'screenshots'));
     await ensureDir(join(iterationDir, '020-specs'));
+    await ensureDir(join(iterationDir, '020-specs', GLOBAL_SPECS_DIR));
     await ensureDir(join(iterationDir, '030-tasks'));
 
     // Create default files
@@ -198,9 +200,9 @@ research/
 `
   );
 
-  // REQUIREMENT.md
+  // REQUIREMENT.md → 写入 global/ 子目录（v6.41.0+）
   await writeFile(
-    join(iterationDir, '020-specs', 'REQUIREMENT.md'),
+    join(iterationDir, '020-specs', GLOBAL_SPECS_DIR, 'REQUIREMENT.md'),
     `# 本期需求文档
 
 > 迭代：${fullName}

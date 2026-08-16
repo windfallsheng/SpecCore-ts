@@ -8,6 +8,7 @@ import { execSync } from 'child_process';
 import { logger, Spinner } from '../utils/logger';
 import { isAiContext, detectHostAi } from '../core/ask-host-ai';
 import { getDefaultIteration } from '../core/context';
+import { resolveGlobalSpecPath } from '../core/spec-paths';
 import { devAiGuide, DevPhase, DevPipelineState } from '../core/dev-llm';
 import { tryHostAi } from '../core/ask-host-ai';
 
@@ -62,8 +63,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
 
   const iterDir = `Iteration-${iteration}`;
   const legacyReq = join(iterDir, '010-requirements', 'REQUIREMENT.md');
-  const analysis = join(iterDir, '020-specs', 'ANALYSIS.md');
-
+  const analysis = await resolveGlobalSpecPath(join(iterDir, '020-specs'), 'ANALYSIS.md') || join(iterDir, '020-specs', 'ANALYSIS.md');
   if (!(await pathExists(legacyReq))) {
     showPhase('导入需求', ['speccore doc2spec -f PRD.docx -i ' + iteration]);
   } else if (!(await pathExists(analysis))) {
@@ -176,7 +176,7 @@ async function autoPipeline(options: DevOptions): Promise<void> {
         break;
       }
       case 'analyze': {
-        const analysis = join(iterDir, '020-specs', 'ANALYSIS.md');
+        const analysis = await resolveGlobalSpecPath(join(iterDir, '020-specs'), 'ANALYSIS.md') || join(iterDir, '020-specs', 'ANALYSIS.md');
         const techSpec = join(iterDir, '020-specs', 'TECH.md');
         // 检查 ANALYSIS.md 存在且 TECH.md 有实质内容（不只是空模板）
         let needsAnalysis = !(await pathExists(analysis));
@@ -258,7 +258,7 @@ async function renderDevHtml(options: DevOptions): Promise<string> {
   if (iterDir) {
     const reqDoc = join(iterDir, '010-requirements', 'REQUIREMENT.md');
     const hasReqFeature = await hasFeatureDirs(iterDir);  // 新结构: 010-requirements/{feature}/
-    const analysis = join(iterDir, '020-specs', 'ANALYSIS.md');
+    const analysis = await resolveGlobalSpecPath(join(iterDir, '020-specs'), 'ANALYSIS.md') || join(iterDir, '020-specs', 'ANALYSIS.md');
     if ((await pathExists(reqDoc)) || hasReqFeature) phases[1].done = true;
     if (await pathExists(analysis)) phases[2].done = true;
     try {

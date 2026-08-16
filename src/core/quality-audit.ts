@@ -11,9 +11,10 @@
  *   - 输出 QUALITY_AUDIT.md 供 AI 参考修复
  *   - 支持最大修复轮次控制（默认 2 轮）
  */
-import { readFile, writeFile, pathExists, ensureDir } from 'fs-extra';
+import { readFile, writeFile, pathExists, ensureDir, readdir } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
+import { GLOBAL_SPECS_DIR, GLOBAL_SPEC_FILES, resolveGlobalSpecPath } from './spec-paths';
 
 // ================================================================
 // 类型定义
@@ -337,17 +338,39 @@ export async function generateQualityAudit(
   platforms: string[],
   maxRounds: number = 2,
 ): Promise<QualityAuditResult | null> {
-  const docTypes = ['REQUIREMENT.md', 'ANALYSIS.md', 'TECH.md', 'TEST.md', 'UI_SPEC.md'];
+  // 全局文档（在 global/ 子目录或根目录）
+  const globalDocTypes = ['REQUIREMENT.md', 'ANALYSIS.md'];
+  // 端专属文档（在各端目录中）
+  const platformDocTypes = ['TECH.md', 'TEST.md', 'UI_SPEC.md'];
   const allResults: QualityAuditResult[] = [];
 
-  for (const docType of docTypes) {
-    const docPath = join(specDir, docType);
-    if (!(await pathExists(docPath))) continue;
+  // 1. 审计全局文档（优先 global/，回退根目录）
+  for (const docType of globalDocTypes) {
+    const docPath = await resolveGlobalSpecPath(specDir, docType);
+    if (!docPath) continue;
 
     const content = await readFile(docPath, 'utf-8');
     const result = await auditDocument(content, docType, platforms);
     allResults.push(result);
   }
+
+  // 2. 审计各端专属文档（扫描 platform 子目录）
+  try {
+    const entries = await readdir(specDir, { withFileTypes: true });
+    const knownNonPlatformDirs = new Set(['sources', 'assets', 'prototypes', 'converted', 'features', 'bugs', 'refactors', 'research', 'staging', 'platforms', 'snapshots', GLOBAL_SPECS_DIR]);
+    for (const e of entries) {
+      if (!e.isDirectory() || e.name.startsWith('_') || e.name.startsWith('.') || knownNonPlatformDirs.has(e.name)) continue;
+      const platform = e.name;
+      const platformDir = join(specDir, platform);
+      for (const docType of platformDocTypes) {
+        const docPath = join(platformDir, docType);
+        if (!(await pathExists(docPath))) continue;
+        const content = await readFile(docPath, 'utf-8');
+        const result = await auditDocument(content, `${platform}/${docType}`, [platform]);
+        allResults.push(result);
+      }
+    }
+  } catch { /* 目录不存在，跳过 */ }
 
   if (allResults.length === 0) return null;
 
