@@ -2449,9 +2449,10 @@ function buildRequirementSpec(
   let md = `# 需求规格说明书\n\n> 迭代: ${iter} | 生成: ${now} | 由 analyze --auto 自动提取\n\n`;
   md += `## 1. 功能模块清单\n\n`;
   if (features.length > 0) {
-    md += `| # | 功能模块 | 描述 | 涉及端 |\n| :--- | :--- | :--- | :--- |\n`;
-    features.forEach((f, i) => { md += `| ${i + 1} | ${f.name} | ${f.desc || '—'} | _待 AI 标注_ |\n`; });
+    md += `| # | 功能模块 | 涉及端 | 来源 | 说明 |\n| :--- | :--- | :--- | :--- | :--- |\n`;
+    features.forEach((f, i) => { md += `| M-${String(i + 1).padStart(2, '0')} | ${f.name} | _待 AI 标注_ | _待 AI 标注_ | ${f.desc || '—'} |\n`; });
     md += `\n> 💡 **涉及端说明**：请 AI 或人工为每个功能模块标注涉及的端（如 admin、h5、backend），split 命令将据此生成对应端的子任务。\n`;
+    md += `> 💡 **来源说明**：请 AI 或人工为每个功能模块标注需求文档中的具体位置（Markdown 链接格式），如 [PRD v2.0](../010-requirements/sources/PRD-v2.0.md#2-1)。\n`;
   } else {
     md += `_需求文档中未检测到明确的功能模块标题，建议补充功能章节。_\n`;
   }

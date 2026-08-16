@@ -2,6 +2,17 @@
 
 ---
 
+## v6.49.17 (2026-08-16) — Chain Generation Corrected to Graph RAG Retrieval + Feature Module Source Links
+
+### Changes
+
+- **DESIGN.md chain generation corrected**: Changed from "Read previous outputs" to "Graph RAG intelligent retrieval of relevant content", added section 8.7 detailing retrieval mechanism
+- **analyze prompt: Feature module source links**: Added "来源" column to table, using Markdown links to point to specific locations in requirement documents
+- **analyze-engine.ts: Template updated**: Feature module table format updated to | # | 功能模块 | 涉及端 | 来源 | 说明 |
+- **Memory updated**: Corrected chain generation mechanism description, emphasizing graph RAG intelligent retrieval instead of blind full reads
+
+---
+
 ## v6.49.16 (2026-08-16) — Analyze Prompt File Assignment Rules +禁止 AI 自创目录
 
 ### Changes

@@ -2161,19 +2161,25 @@ split 已在 00-specs/ 中生成了基础内容（机械提取），`analyze --t
 - 新名追加：用户自定义文档追加到文档集
 - 没放用户模板 = 用内置默认
 
-### 8.4 链式生成（v6.45.0+）
+### 8.4 链式生成 + 图谱 RAG 智能检索（v6.45.0+）
 
-文档按依赖顺序逐个生成，后一个 Read 前序产出：
+文档按依赖顺序逐个生成，**不是无脑全读前序产出，而是通过知识图谱 + RAG 智能检索相关内容**：
 
 ```
 REQ.md (无依赖，直接生成)
-  ↓
-TECH.md (Read REQ.md → 基于需求做设计)
-  ↓
-SCHEMA.md (Read REQ + TECH → 提取数据模型)
-  ↓
-TASK.md (Read 前三者 → 制定实施步骤)
+  ↓ refreshKnowledgeGraph()
+TECH.md (图谱 RAG 检索 REQ 相关内容 → 基于需求做设计)
+  ↓ refreshKnowledgeGraph()
+SCHEMA.md (图谱 RAG 检索 REQ + TECH 相关内容 → 提取数据模型)
+  ↓ refreshKnowledgeGraph()
+TASK.md (图谱 RAG 检索前三者相关内容 → 制定实施步骤)
 ```
+
+**智能检索机制**：
+- `unifiedSearch()` 从 RAG 索引检索相关 chunk（topK=8, minScore=0.15, maxTotalChars=8000）
+- `buildCompactContext()` 从知识图谱获取关联链（<500 tokens）
+- 分层索引：task 级、iteration 级、global 级分开，按需加载
+- 每步完成后 `refreshKnowledgeGraph()` 刷新图谱，确保后续检索基于最新数据
 
 **混合模式**：有用户模板时参考其结构/风格，无用户模板时 AI 根据目标自行组织。
 
@@ -2226,4 +2232,44 @@ analyze AI → global/REQUIREMENT.md 功能模块清单（含涉及端列）
 - 人工修改 REQUIREMENT.md 后 split 能读到最新内容（运行时读文件）
 - analyze --task 深度分析逻辑完全保留不受影响
 - 子任务作为执行上下文：每个端的 REQ.md/TECH.md 只含本端内容，AI 不分心
+
+### 8.7 图谱 RAG 跨层智能检索（核心机制）
+
+**核心原则**：所有分析都不是基于单一文档，而是在知识图谱上智能检索相关内容综合分析。
+
+#### 检索范围
+- 不同层的文档（global/、{端}/、00-specs/）
+- 代码切片（业务实现逻辑）
+- 需求文档（原始 PRD）
+- 知识图谱关联链（上游需求、依赖任务、关联子任务）
+
+#### 关键节点图谱刷新
+| 命令 | 刷新时机 | 函数 |
+|:--|:--|:--|
+| `analyze` | 分析完成后 | `refreshKnowledgeGraph()` |
+| `split` | 拆分完成后 | `refreshKnowledgeGraph()` |
+| `done` | 任务完成后 | `refreshKnowledgeGraph()` |
+| `change` | 变更完成后 | `refreshKnowledgeGraph()` |
+
+#### 检索流程
+```
+步骤 N 生成内容
+    ↓ refreshKnowledgeGraph()
+图谱更新 + RAG 索引更新
+    ↓
+步骤 N+1 开始分析
+    ↓ unifiedSearch()
+    → 从 RAG 索引检索相关 chunk（topK=8, minScore=0.15）
+    → 从知识图谱获取关联链（<500 tokens）
+    → 从代码索引检索相关代码切片
+    → 按相关性排序，只注入 ~8000 字符最相关内容
+    ↓
+AI 综合分析，生成新内容
+```
+
+#### 分层索引
+- **global 级**：`rag-index-global.json` — 全局文档索引
+- **iteration 级**：`rag-index-{iteration}.json` — 迭代级文档索引
+- **task 级**：`rag-index.json` — 任务级文档索引
+- 按需加载：task 查询加载 task + iteration 级；iteration 查询加载 iteration + global 级
 
