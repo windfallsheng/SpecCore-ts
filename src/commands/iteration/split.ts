@@ -1224,18 +1224,8 @@ ${section.content}
 `
     );
   } else {
-    // ── 4b. feature/bugfix/refactor：三级嵌套（前后端大类 → 端 → 子任务） ──
-
-    // 分类平台：后端 vs 前端（v6.48.0+ 增强识别）
-    // 后端识别：精确匹配 'backend' / 以 '后台' 开头 / 以 -service/-api/-server/-backend 结尾
-    const isBackendPlatform = (p: string) =>
-      p === 'backend' || p.startsWith('后台') ||
-      /-(service|api|server|backend)$/i.test(p);
-    const getServiceName = (p: string) => isBackendPlatform(p) && p === 'backend' ? 'api' : p;
-
-    const backendPlatforms = taskPlatforms.filter(isBackendPlatform);
-    const frontendPlatforms = taskPlatforms.filter((p: string) => !isBackendPlatform(p));
-
+    // ── 4b. feature/bugfix/refactor：端平铺 → 子任务（v6.49.0+ 统一架构）──
+    
     // 创建子任务的通用函数
     const createSubtask = async (
       subtaskDir: string, subtaskId: string, platformName: string,
@@ -1324,31 +1314,17 @@ ${section.content}
       }
     };
 
-    // ─ 后端：{服务名}/{子任务}/ （v6.40.0+ 简化架构）──
-    if (backendPlatforms.length > 0) {
-      for (const platform of backendPlatforms) {
-        const serviceName = getServiceName(platform);
-        // 【v6.40.0】直接使用服务名，不再使用 10-backend/ 前缀
-        const platformDir = join(taskDir, serviceName);
-        const subtaskId = subtaskIdMap.get(platform)!;
-        const subtaskName = slugify(section.name) || 'impl';
-        const subtaskDir = join(platformDir, subtaskName);
-        const subtaskHours = (section as any)._hoursByPlatform?.[platform] || Math.ceil(complexity.estimatedHours / taskPlatforms.length);
-        await createSubtask(subtaskDir, subtaskId, platform, '后端', true, subtaskHours);
-      }
-    }
-
-    // ── 前端：{端名}/{子任务}/ （v6.40.0+ 简化架构）──
-    if (frontendPlatforms.length > 0) {
-      for (const platform of frontendPlatforms) {
-        // 【v6.40.0】直接使用端名，不再使用 20-frontend/ 前缀
-        const platformDir = join(taskDir, platform);
-        const subtaskId = subtaskIdMap.get(platform)!;
-        const subtaskName = slugify(section.name) || 'impl';
-        const subtaskDir = join(platformDir, subtaskName);
-        const subtaskHours = (section as any)._hoursByPlatform?.[platform] || Math.ceil(complexity.estimatedHours / taskPlatforms.length);
-        await createSubtask(subtaskDir, subtaskId, platform, platform, false, subtaskHours);
-      }
+    // ── 所有端平铺：{端名}/{子任务}/ （v6.49.0+ 统一架构）──
+    // 不再区分前后端，所有端平铺在任务目录下
+    for (const platform of taskPlatforms) {
+      const platformDir = join(taskDir, platform);
+      const subtaskId = subtaskIdMap.get(platform)!;
+      const subtaskName = slugify(section.name) || 'impl';
+      const subtaskDir = join(platformDir, subtaskName);
+      const subtaskHours = (section as any)._hoursByPlatform?.[platform] || Math.ceil(complexity.estimatedHours / taskPlatforms.length);
+      // 判断是否后端（用于生成不同的文档内容）
+      const isBk = platform === 'backend' || platform.startsWith('后台') || /-(service|api|server|backend)$/i.test(platform);
+      await createSubtask(subtaskDir, subtaskId, platform, isBk ? '后端' : platform, isBk, subtaskHours);
     }
   }
 
