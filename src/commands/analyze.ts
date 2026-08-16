@@ -1267,7 +1267,8 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `   - Web管理后台 → 复杂表单、数据表格、权限UI、状态管理\n`;
       prompt += `   - 桌面应用 → 本地存储、系统API、自动更新、离线支持\n`;
     }
-    prompt += `6. **目录结构（已预创建，直接用 Write 工具写入）**：\n`;
+    const dirStepNum = platformTypes.size > 0 ? 8 : 7;
+    prompt += `${dirStepNum}. **目录结构（已预创建，直接用 Write 工具写入）**：\n`;
     prompt += `   - 全局文档 → Write 到 \`020-specs/global/{文件名}\`\n`;
     prompt += `   - 端专属文档 → Write 到 \`020-specs/{端名}/{文件名}\`\n`;
     prompt += `   - 目录已由 CLI 预创建，无需手动创建，直接用 Write 工具写入即可\n`;

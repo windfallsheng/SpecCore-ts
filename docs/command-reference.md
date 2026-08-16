@@ -125,7 +125,7 @@ speccore doc2spec --classify --response <json> -I <iteration>
 2. `speccore doc2spec --classify --prompt -I <iter>` → AI 理解文档意图（nature）+ 映射类型（type）
 3. `speccore doc2spec --classify --response <json> -I <iter>` → 写入 `staging/`
 4. `speccore analyze -I <iter>` → 按类型路由到 `020-specs/{features,bugs,refactors,research}/`
-5. `speccore split -I <iter>` → 按类型规则拆分任务（feature 拆合 / bug 1:1）
+5. `speccore split -I <iter>` → 模块驱动拆分：从 `global/REQUIREMENT.md` 读取功能模块清单及「涉及端」列，每个模块创建一个 Task，按涉及端创建子任务目录
 
 **AI 意图理解：**
 
