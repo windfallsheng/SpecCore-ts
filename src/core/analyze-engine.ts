@@ -23,7 +23,7 @@ import { cleanStaleCache } from './git-integration';
 import { refreshRagIndex, checkRagIndexFreshness, indexDirectoryDocuments } from './rag-engine';
 import { refreshKnowledgeGraph } from './knowledge-graph';
 import { generateQualityAudit } from './quality-audit';
-import { GLOBAL_SPECS_DIR, GLOBAL_SPEC_FILES, resolveGlobalSpecPath, globalSpecWritePath } from './spec-paths';
+import { GLOBAL_SPECS_DIR, GLOBAL_SPEC_FILES, resolveGlobalSpecPath, globalSpecWritePath, parsePlatformList } from './spec-paths';
 
 // ================================================================
 // 类型定义
@@ -1957,12 +1957,20 @@ function buildDynamicAliasesFromTechStack(
  */
 async function detectPlatformsFromConstitution(): Promise<string[]> {
   try {
+    // ── Layer 0: 「端列表」章节（v6.46.0+ 显式声明，全局权威）──
+    const explicitPlatforms = await parsePlatformList();
+    if (explicitPlatforms.length > 0) {
+      logger.info(`   📋 从 CONSTITUTION.md「端列表」读取到 ${explicitPlatforms.length} 个端: ${explicitPlatforms.join(', ')}`);
+      _detectedBackendPlatforms = explicitPlatforms.filter(p => /service|server|api|backend|后台|服务|后端/i.test(p));
+      return explicitPlatforms;
+    }
+
     const constitutionPath = join(process.cwd(), '.speccore', 'CONSTITUTION.md');
     if (require('fs').existsSync(constitutionPath)) {
       const content = require('fs').readFileSync(constitutionPath, 'utf-8');
       const lines = content.split('\n');
       
-      // ── Layer 1: 表格「对应需求端」列 ──
+      // ── Layer 1: 表格「对应需求端」列（旧版回退）──
       let headerRowIndex = -1;
       let headerCells: string[] = [];
       for (let i = 0; i < lines.length; i++) {

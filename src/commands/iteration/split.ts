@@ -11,7 +11,7 @@ import { createInterface } from 'readline';
 import { buildPrompt, formatPrompt } from '../../core/prompt-builder';
 import { generatePlatformsRegistry } from '../../core/platform-registry';
 import { warnIfIndexStale } from '../../core/index-guard';
-import { resolveGlobalSpecPath, GLOBAL_SPECS_DIR } from '../../core/spec-paths';
+import { resolveGlobalSpecPath, GLOBAL_SPECS_DIR, parsePlatformList } from '../../core/spec-paths';
 
 /** 将名称转为目录安全的短 slug（2-4 词） */
 function slugify(name: string): string {
@@ -104,35 +104,9 @@ export interface IterationSplitOptions {
 async function detectPlatforms(iterationDir: string, specified?: string): Promise<string[]> {
   if (specified) return specified.split(',').map(p => p.trim()).filter(Boolean);
   
-  // 1. 优先从 CONSTITUTION.md 读取「对应需求端」配置
-  const constitutionPath = join('.speccore', 'CONSTITUTION.md');
-  if (await pathExists(constitutionPath)) {
-    const content = await readFile(constitutionPath, 'utf-8');
-    const lines = content.split('\n');
-    let headerIdx = -1;
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].includes('对应需求端')) { headerIdx = i; break; }
-    }
-    if (headerIdx >= 0) {
-      const headers = lines[headerIdx].split('|').map(h => h.trim()).filter(Boolean);
-      const platformColIdx = headers.findIndex(h => h.includes('对应需求端'));
-      if (platformColIdx >= 0) {
-        const platforms = new Set<string>();
-        for (let i = headerIdx + 1; i < lines.length; i++) {
-          const line = lines[i].trim();
-          if (!line.startsWith('|') || line.match(/^\|\s*[-:]/)) continue;
-          const cells = line.split('|').map(c => c.trim()).filter(Boolean);
-          if (cells[platformColIdx]) {
-            cells[platformColIdx].split(',').forEach((p: string) => {
-              const trimmed = p.trim();
-              if (trimmed && !trimmed.startsWith('>')) platforms.add(trimmed);
-            });
-          }
-        }
-        if (platforms.size > 0) return [...platforms];
-      }
-    }
-  }
+  // 1. 优先从 CONSTITUTION.md「端列表」章节读取（v6.46.0+ 显式声明）
+  const platforms = await parsePlatformList();
+  if (platforms.length > 0) return platforms;
 
   // 2. 回退：扫描 020-specs/ 子目录（排除 global/ 等非端目录）
   const specsDir = join(iterationDir, '020-specs');

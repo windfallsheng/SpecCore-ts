@@ -311,30 +311,42 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 > 本文档是 SpecCore 与 AI 的**最高优先级契约**。analyze/split/execute 均据此执行。
 > AI 读取顺序：CONSTITUTION → context.json → 迭代目录
 
+## 端列表（全局权威）
+
+> ⚠️ **端名是全项目唯一的标识符**，所有命令（analyze/split/execute）、目录名（020-specs/{端}/）、模板目录（templates/{level}/{端}/）均使用此处声明的端名。
+
+| 端名 | 描述 | 类型 |
+| :--- | :--- | :--- |
+| app | 移动端 APP | frontend |
+| h5 | 移动 H5 端 | frontend |
+| miniapp | 小程序端 | frontend |
+| admin | 后台管理端 | frontend |
+
+> **端名规则**：
+> - 端名 = 工程名，一一对应
+> - 全小写、无空格、用短横线分隔（如 order-service）
+> - 类型：frontend / backend / infra
+> - 此列表是 analyze/split/execute 的唯一端名来源
+> - 「对应需求端」列引用此列表中的端名
+
 ## 项目信息
 
-> ⚠️ **所有需求端名称（app/h5/miniapp/admin）在 features/ 下的功能目录中标注**
-
-| 工程 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应需求端 |
+| 工程 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应端 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | ${projectName} | 待填写 | ./ | ${gitUrl || '待配置'} | main | app, h5, miniapp, admin |
 
-> ⚠️ **项目名称** 是给人和 AI 看的业务名称（如"食堂后台管理"、"商户入驻系统"），不同于技术上的工程名。
+> ⚠️ **项目名称** 是给人和 AI 看的业务名称（如“食堂后台管理”、“商户入驻系统”），不同于技术上的工程名。
 >   AI 会据此理解项目业务范围，在分析/拆分/生成代码时作为上下文参考。
 
 > 多工程示例（monorepo）:
 >
-> | 工程 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应需求端 |
+> | 工程 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应端 |
 > | :--- | :--- | :--- | :--- | :--- | :--- |
 > | order-service | 订单服务 | ./packages/order | git@xxx/order.git | master | app, admin |
 > | payment-service | 支付服务 | ./packages/payment | git@xxx/pay.git | main | h5, miniapp |
 >
 > **关键规则**：
-> 「项目名称」列方便人和 AI 通过业务名称理解和检索项目。
-> 「对应需求端」列的值决定了：
-> 1. analyze 时从 010-requirements/converted/ 读取转换后的规格，从 features/ 读取功能补充
-> 2. 分析结果写入 020-specs/
-> 3. split 时按端创建 Task 并过滤对应的 API
+> 「对应端」列的值必须引用「端列表」中已声明的端名。
 
 ## 技术栈
 
