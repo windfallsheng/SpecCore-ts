@@ -2,6 +2,19 @@
 
 ---
 
+## v6.49.12 (2026-08-16) — AGENTS.md Template Hardening: Session Context Loading + Prohibition List
+
+### Fixes
+
+- **AGENTS.md template**: Added "⛔ First Step in New Session" section at top, forcing context.json + CONSTITUTION.md reading first
+- **AGENTS.md template**: Added "⛔ Absolute Prohibitions" list (no self-creating iterations / no scripts bypassing CLI / no old directory structures / no code in wrong paths)
+- **AGENTS.md template**: Project structure updated to flat platform architecture + common commands reference
+- **meeting-system project**: Cleaned 3 junk iteration dirs + 46 temp files + old structure dirs, rewrote AGENTS.md
+
+### Background
+
+New session AI didn't read context.json, didn't know the current iteration, then created wrong directories, wrote scripts to bypass CLI, and put code in iteration directories. Fixed by adding mandatory "First Step" section and clear "Prohibitions" list at the top of AGENTS.md.
+
 ## v6.49.11 (2026-08-16) — Knowledge Graph/RAG Trigger Timing Full Audit & Completion
 
 ### Fixes
