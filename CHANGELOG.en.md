@@ -2,7 +2,49 @@
 
 ---
 
-## v6.64.0 (2026-08-16) — Phase 2 Trigger Condition Correction: Multi-Platform Projects Only (≥2 Platforms)
+## v6.65.0 (2026-08-16) — Phase 2 Trigger Mechanism Correction: Remove Auto-Output Prompt
+
+### Core Fixes
+
+- **analyze.ts**: Removed logic that automatically outputs Phase 2 prompt inside apply mode
+- **analyze.ts**: Changed to output clear提示信息, guiding users to manually execute Phase 2 command
+- **analyze.ts**: Added explanation: why manual execution is needed (apply and prompt are two independent calls)
+
+### Root Cause
+
+v6.61.0-v6.64.0 attempted to auto-output Phase 2 prompt after apply mode completion, but actual effect was:
+1. CLI did output `[SPECCORE_PROMPT]` + Phase 2 prompt
+2. But AI considered task completed after apply command, wouldn't continue reading new prompt from stdout
+3. Resulted in meeting project only generating global/ documents, not platform-specific documents
+
+**Root cause**: apply command and prompt command are two independent CLI calls, AI won't automatically wait for next prompt after apply command completes.
+
+### Fix Approach
+
+**No longer attempt to auto-output Phase 2 prompt**, instead:
+1. After apply mode completion, output clear提示信息
+2. Tell users they need to manually execute `speccore analyze --prompt -I <iteration> --phase 2`
+3. Explain why manual execution is needed (apply and prompt are independent calls)
+
+### Workflow
+
+```bash
+# Step 1: User executes Phase 1
+speccore analyze --prompt -I meeting-upgrade
+# AI generates global documents, writes back via --apply
+# CLI outputs提示: "Please manually execute the following command to generate platform-specific documents"
+
+# Step 2: After user confirms Phase 1 results are satisfactory, manually execute Phase 2
+speccore analyze --prompt -I meeting-upgrade --phase 2
+# AI generates platform-specific documents based on global context
+```
+
+### Version History
+- v6.61.0: Implemented CLI auto-loop mechanism (output Phase 2 prompt inside apply mode)
+- v6.62.0: Strengthened Phase 2 mandatory trigger guarantee (platforms.length > 0)
+- v6.63.0: Fixed spec-ask command onboarding issue
+- v6.64.0: Corrected Phase 2 trigger condition (platforms.length >= 2)
+- **v6.65.0: Removed auto-output prompt, changed to manual execution提示** ← Current version
 
 ### Core Fixes
 
