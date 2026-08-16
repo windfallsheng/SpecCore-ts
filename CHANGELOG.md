@@ -1,4 +1,46 @@
-## v6.64.0 (2026-08-16) — Phase 2 触发条件修正：仅多端项目(≥2 个端)
+## v6.65.0 (2026-08-16) — Phase 2 触发机制修正：移除自动输出 prompt
+
+### 核心修复
+
+- **analyze.ts**: 移除 apply 模式内部自动输出 Phase 2 prompt 的逻辑
+- **analyze.ts**: 改为输出明确的提示信息，指导用户手动执行 Phase 2 命令
+- **analyze.ts**: 新增说明：为什么需要手动执行（apply 和 prompt 是两个独立调用）
+
+### 问题根因
+
+v6.61.0-v6.64.0 尝试在 apply 模式完成后自动输出 Phase 2 prompt，但实际效果是：
+1. CLI 确实输出了 `[SPECCORE_PROMPT]` + Phase 2 prompt
+2. 但 AI 在 apply 命令完成后认为任务已结束，不会继续读取 stdout 中的新 prompt
+3. 导致会议项目只生成了 global/ 的文档，没有生成各端专属文档
+
+**根本原因**：apply 命令和 prompt 命令是两个独立的 CLI 调用，AI 不会在 apply 命令完成后自动等待下一个 prompt。
+
+### 修复方案
+
+**不再尝试自动输出 Phase 2 prompt**，而是：
+1. 在 apply 模式完成后，输出明确的提示信息
+2. 告诉用户需要手动执行 `speccore analyze --prompt -I <iteration> --phase 2`
+3. 解释为什么需要手动执行（apply 和 prompt 是独立调用）
+
+### 工作流程
+
+```bash
+# Step 1: 用户执行 Phase 1
+speccore analyze --prompt -I meeting-upgrade
+# AI 生成全局文档，通过 --apply 写回
+# CLI 输出提示："请手动执行以下命令以生成各端专属文档"
+
+# Step 2: 用户确认 Phase 1 结果满意后，手动执行 Phase 2
+speccore analyze --prompt -I meeting-upgrade --phase 2
+# AI 基于全局上下文生成各端专属文档
+```
+
+### 版本历史
+- v6.61.0: 实现 CLI 自动循环机制（在 apply 模式内输出 Phase 2 prompt）
+- v6.62.0: 强化 Phase 2 强制触发保证（platforms.length > 0）
+- v6.63.0: 修复 spec-ask command 引导页问题
+- v6.64.0: 修正 Phase 2 触发条件（platforms.length >= 2）
+- **v6.65.0: 移除自动输出 prompt，改为手动执行提示** ← 当前版本
 
 ### 核心修复
 

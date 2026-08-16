@@ -461,22 +461,14 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       if (platforms.length >= 2) {
         logger.info('');
         logger.info(`🔄 Phase 1 已完成，检测到 ${platforms.length} 个端 (${platforms.join(', ')})`);
-        logger.info('🚀 自动进入 Phase 2：生成各端专属文档...');
+        logger.info('⚠️  请手动执行以下命令以生成各端专属文档：');
+        logger.info(`   speccore analyze --prompt -I ${options.iteration} --phase 2`);
         logger.info('');
-        
-        // 自动输出 Phase 2 的 prompt
-        const phase2Prompt = await buildMultiDocPrompt('analyze', {
-          iteration: options.iteration,
-          task: options.task,
-          type: options.type,
-          scope: options.scope,
-          withCode: options.withCode,
-          platform: options.platform,
-          phase: '2'  // ← 关键：设置为 Phase 2
-        });
-        process.stdout.write(`[SPECCORE_PROMPT]\n${phase2Prompt}`);
-        process.exitCode = 10;
-        return;
+        logger.info('💡 为什么需要手动执行？');
+        logger.info('   - apply 命令和 prompt 命令是两个独立的调用');
+        logger.info('   - AI 在 apply 命令完成后不会自动等待下一个 prompt');
+        logger.info('   - 需要用户确认 Phase 1 结果满意后，再手动触发 Phase 2');
+        logger.info('');
       } else if (platforms.length === 0) {
         // 如果没有检测到端列表，输出警告
         logger.warn('⚠️ 未检测到端列表，请检查 .speccore/CONSTITUTION.md 是否配置了「端列表」');
