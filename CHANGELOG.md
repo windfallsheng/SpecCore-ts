@@ -1,3 +1,14 @@
+## v6.49.4 (2026-08-16) — 任务级功能单元标识
+
+### 新功能
+
+- **任务级 `.meta/feature`**：Task 目录本身也有功能单元标识（如 `Task-001/.meta/feature`），默认取 `functionalUnit` 或任务名称
+- **任务级 `.meta/` 完整属性**：`feature`/`type`/`status`/`owner`/`created-at`，与子任务级保持一致
+- **README.md 更新**：目录结构说明中增加 `.meta/` 目录
+- **task/new 同步**：`task new` 命令也写入任务级 `.meta/feature`
+
+---
+
 ## v6.49.3 (2026-08-16) — 子任务目录命名规则 + task/new 同步
 
 ### 修复

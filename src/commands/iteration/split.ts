@@ -978,6 +978,7 @@ async function createTaskFromSection(iterationDir: string, taskId: string, secti
 
 \`\`\`
 ${taskId}/
+├── .meta/                 ← 任务元信息（feature/type/status/owner）
 ├── README.md              ← 本文件（调研任务说明）
 ├── _shared/               ← 共享上下文（CONTEXT.md）
 ├── 00-specs/              ← 核心规格（REQ.md/TECH.md）
@@ -1001,13 +1002,14 @@ ${taskId}/
 
 \`\`\`
 ${taskId}/
+├── .meta/                     ← 任务元信息（feature/type/status/owner）
 ├── README.md                  ← 本文件
 ├── _shared/                   ← 共享契约（API_CONTRACT.yaml + CONTEXT.md）
 ├── 00-specs/                  ← 模块级核心规格（REQ/TECH/SCHEMA/CHANGELOG）
-├── {服务名}/                  ← 后端服务（如 api/booking-service，v6.40.0+ 简化架构）
-│   ─ {子任务}/              ← 执行单元（.meta/TASK.md/src/tests + 产出）
-├── {端名}/                    ← 前端端（如 h5/admin/app，v6.40.0+ 简化架构）
-│   ── {子任务}/              ← 执行单元（.meta/TASK.md/src/tests + 前端设计 + 产出）
+├── {服务名}/                  ← 后端服务（如 booking-service，v6.49.3+ 平铺架构）
+│   └── {taskId}-{子任务}/     ← 执行单元（.meta/TASK.md/src/tests + 产出）
+├── {端名}/                    ← 前端端（如 h5-mobile/admin-web，v6.49.3+ 平铺架构）
+│   └── {taskId}-{子任务}/     ← 执行单元（.meta/TASK.md/src/tests + 前端设计 + 产出）
 \`\`\`
 
 ## 子任务列表
@@ -1038,7 +1040,15 @@ ${taskPlatforms.map((p: string) => `| ${subtaskIdMap.get(p)} | ${p} | ${owner} |
 `
   );
 
-  // ── 3. 共享契约 + 核心规格目录 ──
+  // ── 3. 任务级 .meta/（功能单元标识）+ 共享契约 + 核心规格目录 ──
+  await ensureDir(join(taskDir, '.meta'));
+  const taskFeatureName = (section as any).functionalUnit || section.name || '未分类';
+  await writeFile(join(taskDir, '.meta', 'feature'), taskFeatureName);
+  await writeFile(join(taskDir, '.meta', 'type'), taskType);
+  await writeFile(join(taskDir, '.meta', 'status'), 'todo');
+  await writeFile(join(taskDir, '.meta', 'owner'), owner);
+  await writeFile(join(taskDir, '.meta', 'created-at'), today);
+
   await ensureDir(join(taskDir, '_shared'));
   await ensureDir(join(taskDir, '00-specs'));
   const contractYaml = generateApiContract(section);
