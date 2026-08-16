@@ -2,6 +2,22 @@
 
 ---
 
+## v6.49.13 (2026-08-16) — CLI-Controlled Directory Structure: analyze Pre-creation + split Module-Driven Split
+
+### Added
+
+- **analyze: CLI pre-creates 020-specs/ directory structure**: Automatically reads CONSTITUTION.md platform list and pre-creates `global/` and platform directories before prompt generation
+- **analyze: Simplified prompt**: Directory instructions changed from "call --apply" to "write directly to pre-created directories using Write tool"
+- **split: Module-driven split**: New `tryModuleDrivenSplit()` reads feature modules from `010-requirements/features/`, creates one subtask per module×platform, CLI controls task count
+- **split: Content-filling prompt**: Auto-generates `split-content-{iteration}.md` for AI to fill REQ.md/TECH.md in pre-created task directories
+
+### Core Principle
+
+- **CLI controls directories (deterministic), AI fills content (intelligent)**
+- Task count = feature modules × platforms involved — impossible to explode
+
+---
+
 ## v6.49.12 (2026-08-16) — AGENTS.md Template Hardening: Session Context Loading + Prohibition List
 
 ### Fixes

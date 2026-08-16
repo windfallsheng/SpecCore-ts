@@ -293,6 +293,14 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     options.prompt = true;
   }
 
+  // ── v6.49.13+: 预创建 020-specs/ 目录结构（CLI 控制目录，AI 只填内容）──
+  if (options.prompt) {
+    const iterForDirs = options.iteration || await getDefaultIteration();
+    if (iterForDirs) {
+      await preCreateSpecDirectories(iterForDirs);
+    }
+  }
+
   // ── 非 prompt/apply 模式 → 全部转 AI prompt，不再走代码模板分析 ──
   if (!options.prompt && !options.apply) {
     options.prompt = true;
@@ -451,6 +459,32 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
     process.exitCode = 10;
     return;
+  }
+}
+
+/**
+ * v6.49.13+: 预创建 020-specs/ 目录结构
+ * CLI 控制目录创建（确定性操作），AI 只负责内容生成
+ */
+async function preCreateSpecDirectories(iteration: string): Promise<void> {
+  const iterDir = await getIterationDir(iteration);
+  const specDir = join(iterDir, '020-specs');
+  await ensureDir(specDir);
+
+  // 预创建 global/ 子目录
+  const globalDir = join(specDir, GLOBAL_SPECS_DIR);
+  await ensureDir(globalDir);
+
+  // 读取端列表并预创建各端目录
+  const platforms = await parsePlatformList();
+  for (const platform of platforms) {
+    await ensureDir(join(specDir, platform));
+  }
+
+  if (platforms.length > 0) {
+    logger.info(`📁 已预创建 020-specs/ 目录结构: global/ + ${platforms.length} 个端目录 (${platforms.join(', ')})`);
+  } else {
+    logger.info(`📁 已预创建 020-specs/ 目录结构: global/`);
   }
 }
 
@@ -1225,13 +1259,10 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `   - Web管理后台 → 复杂表单、数据表格、权限UI、状态管理\n`;
       prompt += `   - 桌面应用 → 本地存储、系统API、自动更新、离线支持\n`;
     }
-    prompt += `6. **目录结构（必须严格遵守）**：\n`;
-    prompt += `   - 全局跨端文档写入 \`020-specs/global/\`（如 REQUIREMENT.md、DEPS.md、RISK.md 等）\n`;
-    prompt += `   - 端专属文档必须写入 \`020-specs/{端名}/\` 子目录（如 \`020-specs/booking-service/TECH.md\`）\n`;
-    prompt += `   - 写入时使用 --platform 参数指定端名，例如：\n`;
-    prompt += `     \`speccore analyze --apply '{"TECH.md":"..."}' -I ${iter} --platform booking-service\`\n`;
-    prompt += `   - 每个端单独调用一次 --apply，不要把所有端的内容混在一个文档中\n`;
-    prompt += `   - 如果只有一个端，仍然需要创建子目录（如 \`020-specs/booking-service/\`）\n`;
+    prompt += `6. **目录结构（已预创建，直接用 Write 工具写入）**：\n`;
+    prompt += `   - 全局文档 → Write 到 \`020-specs/global/{文件名}\`\n`;
+    prompt += `   - 端专属文档 → Write 到 \`020-specs/{端名}/{文件名}\`\n`;
+    prompt += `   - 目录已由 CLI 预创建，无需手动创建，直接用 Write 工具写入即可\n`;
     if (ctx.phase !== '1') {
       // 端专业性约束只在默认模式（全量）中输出
       prompt += `\n## ⚠️ 端专业性约束\n`;

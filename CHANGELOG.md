@@ -1,3 +1,21 @@
+## v6.49.13 (2026-08-16) — CLI 控制目录结构：analyze 预创建 + split 模块驱动拆分
+
+### 新增
+
+- **analyze: CLI 预创建 020-specs/ 目录结构**：执行 analyze 前自动读取 CONSTITUTION.md 端列表，预创建 `global/` 和各端目录，AI 无法写错位置
+- **analyze: prompt 简化**：目录结构指令从“调用 --apply”简化为“直接用 Write 工具写入预创建目录”，消除 AI 绕过 CLI 的可能
+- **split: 模块驱动拆分**：新增 `tryModuleDrivenSplit()`，从 `010-requirements/features/` 读取功能模块，每个模块×端创建一个子任务，CLI 控制任务数量
+- **split: 内容填充 Prompt**：模块驱动拆分后自动生成 `split-content-{iteration}.md`，AI 只需为预创建的任务填充 REQ.md/TECH.md
+
+### 核心原则
+
+- **CLI 控制目录（确定性操作），AI 只填内容（智能操作）**
+- analyze：CLI 创建 `020-specs/global/` + `020-specs/{端}/`，AI 用 Write 写入
+- split：CLI 按功能模块×端创建任务目录，AI 填充 REQ.md/TECH.md
+- 任务数 = 功能模块数 × 涉及端数，不可能爆炸
+
+---
+
 ## v6.49.12 (2026-08-16) — AGENTS.md 模板强化：新会话上下文加载 + 绝对禁止清单
 
 ### 修复
