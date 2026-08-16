@@ -2,6 +2,17 @@
 
 ---
 
+## v6.49.14 (2026-08-16) — split Reads Involved Platforms from global/REQUIREMENT.md
+
+### Changes
+
+- **analyze prompt: Feature module involved platforms required**: Added step 6 instruction requiring AI to fill in the "Involved Platforms" column in `global/REQUIREMENT.md` feature module table
+- **split: Parse involved platforms from global/REQUIREMENT.md**: New `parseModulePlatforms()` function parses the feature module table's "Involved Platforms" column, creating only involved platform directories per module
+- **split: Fallback mechanism**: Falls back to `features/*/README.md` (using all platforms) if REQUIREMENT.md has no feature module table
+- **split: Content filling prompt shows per-module platforms**: Each task displays its own involved platforms instead of global platform list
+
+---
+
 ## v6.49.13 (2026-08-16) — CLI-Controlled Directory Structure: analyze Pre-creation + split Module-Driven Split
 
 ### Added

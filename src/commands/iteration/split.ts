@@ -2864,7 +2864,63 @@ speccore analyze --task ${taskId}${iterFlag}
   process.stdout.write('\n[/SPECCORE_NEXT_STEPS]\n');
 }
 
-// ── v6.49.13+: 模块驱动拆分 — CLI 控制任务结构，AI 只填内容 ──
+// ── v6.49.14+: 模块驱动拆分 — 从 global/REQUIREMENT.md 读取涉及端 ──
+
+/**
+ * 从 global/REQUIREMENT.md 解析功能模块清单的「涉及端」列
+ * 返回模块列表及其涉及的标准端名
+ */
+function parseModulePlatforms(content: string, allPlatforms: string[]): { name: string; platforms: string[] }[] {
+  const modules: { name: string; platforms: string[] }[] = [];
+  const lines = content.split('\n');
+  let inFeatureTable = false;
+  let platformColIdx = -1;
+
+  for (const line of lines) {
+    // 检测功能模块清单表格开始
+    if (line.includes('功能模块清单')) {
+      inFeatureTable = true;
+      continue;
+    }
+    if (!inFeatureTable) continue;
+
+    // 检测下一个 ## 标题 → 表格结束
+    if (line.startsWith('## ') && !line.includes('功能模块清单')) {
+      break;
+    }
+
+    const cells = line.split('|').map(c => c.trim()).filter(Boolean);
+    if (cells.length < 2) continue;
+
+    // 表头行 → 找到「涉及端」列索引
+    if (cells.some(c => c.includes('涉及端'))) {
+      platformColIdx = cells.findIndex(c => c.includes('涉及端'));
+      continue;
+    }
+    // 分隔行跳过
+    if (cells.every(c => /^[-:]+$/.test(c))) continue;
+
+    // 数据行
+    const moduleName = cells[1]; // 第2列通常是模块名
+    if (!moduleName || moduleName === '#' || moduleName === '模块') continue;
+
+    if (platformColIdx >= 0 && platformColIdx < cells.length) {
+      const raw = cells[platformColIdx];
+      if (raw && raw !== '_待 AI 标注_' && raw !== '—' && raw !== '-') {
+        const platforms = raw.split(/[,，]/)
+          .map(p => p.trim())
+          .filter(p => p && allPlatforms.includes(p));
+        if (platforms.length > 0) {
+          modules.push({ name: moduleName, platforms });
+          continue;
+        }
+      }
+    }
+    // 涉及端为空或无法解析 → 回退全端
+    modules.push({ name: moduleName, platforms: [...allPlatforms] });
+  }
+  return modules;
+}
 
 /**
  * 尝试模块驱动拆分：从功能模块创建任务目录结构
@@ -2874,27 +2930,57 @@ async function tryModuleDrivenSplit(
   iteration: string, iterationDir: string, options: IterationSplitOptions
 ): Promise<boolean> {
   const reqDir = join(iterationDir, '010-requirements');
-  const featuresDir = join(reqDir, 'features');
+  const allPlatforms = await detectPlatforms(iterationDir);
 
-  // 收集功能模块
-  const modules: { name: string; slug: string; type: string; sourceFile: string }[] = [];
+  // 收集功能模块（含涉及端信息）
+  const modules: { name: string; slug: string; type: string; sourceFile: string; platforms: string[] }[] = [];
 
-  // 1. 读取 features/*/README.md
-  if (await pathExists(featuresDir)) {
+  // 1. 优先从 global/REQUIREMENT.md 读取功能模块清单（含涉及端）
+  const globalReqPath = join(iterationDir, '020-specs', GLOBAL_SPECS_DIR, 'REQUIREMENT.md');
+  let modulePlatformsParsed = false;
+  if (await pathExists(globalReqPath)) {
     try {
-      const entries = await readdir(featuresDir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.isDirectory() && !entry.name.startsWith('.')) {
-          const readmePath = join(featuresDir, entry.name, 'README.md');
-          if (await pathExists(readmePath)) {
-            modules.push({ name: entry.name, slug: slugify(entry.name), type: 'feature', sourceFile: `features/${entry.name}/README.md` });
-          }
+      const content = await readFile(globalReqPath, 'utf-8');
+      const parsed = parseModulePlatforms(content, allPlatforms);
+      if (parsed.length > 0) {
+        for (const m of parsed) {
+          modules.push({
+            name: m.name,
+            slug: slugify(m.name),
+            type: 'feature',
+            sourceFile: 'global/REQUIREMENT.md',
+            platforms: m.platforms,
+          });
         }
+        modulePlatformsParsed = true;
+        logger.info(`   📋 从 global/REQUIREMENT.md 读取到 ${parsed.length} 个功能模块（含涉及端）`);
       }
     } catch {}
   }
 
-  // 2. 读取类型文档（bugs/refactors/research）
+  // 2. 回退：读取 features/*/README.md（无涉及端信息，使用全端）
+  if (!modulePlatformsParsed) {
+    const featuresDir = join(reqDir, 'features');
+    if (await pathExists(featuresDir)) {
+      try {
+        const entries = await readdir(featuresDir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.isDirectory() && !entry.name.startsWith('.')) {
+            const readmePath = join(featuresDir, entry.name, 'README.md');
+            if (await pathExists(readmePath)) {
+              modules.push({
+                name: entry.name, slug: slugify(entry.name), type: 'feature',
+                sourceFile: `features/${entry.name}/README.md`,
+                platforms: [...allPlatforms],
+              });
+            }
+          }
+        }
+      } catch {}
+    }
+  }
+
+  // 3. 读取类型文档（bugs/refactors/research）
   for (const typeDir of ['bugs', 'refactors', 'research']) {
     const typeDirPath = join(reqDir, typeDir);
     if (!(await pathExists(typeDirPath))) continue;
@@ -2904,7 +2990,11 @@ async function tryModuleDrivenSplit(
         if (entry.isFile() && entry.name.endsWith('.md') && !isTimestampBackup(entry.name)) {
           const slug = slugify(entry.name.replace('.md', ''));
           const taskType = typeDir === 'bugs' ? 'bugfix' : typeDir;
-          modules.push({ name: entry.name.replace('.md', ''), slug, type: taskType, sourceFile: `${typeDir}/${entry.name}` });
+          modules.push({
+            name: entry.name.replace('.md', ''), slug, type: taskType,
+            sourceFile: `${typeDir}/${entry.name}`,
+            platforms: [...allPlatforms],
+          });
         }
       }
     } catch {}
@@ -2936,14 +3026,14 @@ async function tryModuleDrivenSplit(
     }
   }
 
-  const allPlatforms = await detectPlatforms(iterationDir);
-  logger.info(`\n📦 模块驱动拆分: ${modules.length} 个功能模块 × ${allPlatforms.length} 个端`);
-  logger.info(`   端列表: ${allPlatforms.join(', ')}`);
+  logger.info(`\n📦 模块驱动拆分: ${modules.length} 个功能模块`);
+  logger.info(`   全局端列表: ${allPlatforms.join(', ')}`);
 
-  // 逐模块创建任务目录
+  // 逐模块创建任务目录（按模块各自的涉及端）
   const createdSections: Section[] = [];
   for (const mod of modules) {
     const { id: taskId } = await nextTaskId(mod.name, mod.slug);
+    const modPlatforms = mod.platforms.length > 0 ? mod.platforms : [...allPlatforms];
 
     const section: Section = {
       name: mod.name,
@@ -2953,7 +3043,7 @@ async function tryModuleDrivenSplit(
     (section as any)._topic = mod.slug;
     (section as any)._taskType = mod.type;
     (section as any)._sourceFile = mod.sourceFile;
-    (section as any)._scopePlatforms = allPlatforms;
+    (section as any)._scopePlatforms = modPlatforms;
     (section as any)._complexity = {
       estimatedHours: 8,
       hoursByPlatform: {},
@@ -2968,9 +3058,9 @@ async function tryModuleDrivenSplit(
     (section as any)._taskId = taskId;
     (section as any).functionalUnit = mod.name;
 
-    await createTaskFromSection(iterationDir, taskId, section, allPlatforms, mod.type, []);
+    await createTaskFromSection(iterationDir, taskId, section, modPlatforms, mod.type, []);
     createdSections.push(section);
-    logger.info(`   ✅ 创建: ${taskId} [${mod.type}] — ${mod.name} (${allPlatforms.length} 个端子任务)`);
+    logger.info(`   ✅ 创建: ${taskId} [${mod.type}] — ${mod.name} (${modPlatforms.length} 个端: ${modPlatforms.join(', ')})`);
   }
 
   // 生成任务总览
@@ -3026,12 +3116,14 @@ function buildContentFillingPrompt(
     const taskId = (sec as any)._taskId || sec.name;
     const sourceFile = (sec as any)._sourceFile || '';
     const featureName = (sec as any).functionalUnit || sec.name;
+    const modPlatforms: string[] = (sec as any)._scopePlatforms || allPlatforms;
     p += `### ${taskId} — ${sec.name}\n`;
     p += `- 功能单元: ${featureName}\n`;
+    p += `- 涉及端: ${modPlatforms.join(', ')}\n`;
     if (sourceFile) p += `- 来源: 010-requirements/${sourceFile}\n`;
-    p += `- 子任务目录: ${allPlatforms.map(pl => `${pl}/`).join(', ')}\n`;
+    p += `- 子任务目录: ${modPlatforms.map(pl => `${pl}/`).join(', ')}\n`;
     p += `- 需要填充:\n`;
-    for (const platform of allPlatforms) {
+    for (const platform of modPlatforms) {
       p += `  - ${platform}/*/REQ.md — 子任务需求规格\n`;
       p += `  - ${platform}/*/TECH.md — 子任务技术方案\n`;
     }

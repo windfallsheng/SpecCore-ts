@@ -1237,6 +1237,14 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     prompt += `   - 第 3 步：如果没有「端列表」章节，从「对应端」列提取\n`;
     prompt += `   - 第 4 步：如果以上都无法确定，根据需求文档内容判断\n`;
     prompt += `   - 第 5 步：将发现的端列表写入 020-specs/PLATFORMS.md\n`;
+    // v6.49.14+: 功能模块清单必须含涉及端列
+    prompt += `6. **功能模块涉及端（重要）**：写入 global/REQUIREMENT.md 时，功能模块清单表格的「涉及端」列必须填写\n`;
+    prompt += `   - 每个模块标注需要**新开发工作**的端（标准端名，逗号分隔）\n`;
+    prompt += `   - 「涉及」= 该端需要写新接口/新页面/新逻辑\n`;
+    prompt += `   - 「不涉及」= 只是提到、调用已有接口、纯展示 → 不标注\n`;
+    prompt += `   - 端名必须与 CONSTITUTION.md「端列表」中的标准端名完全匹配\n`;
+    prompt += `   - 示例：| 会议室管理 | booking-service, admin-web | 后端接口+管理页面 |\n`;
+    prompt += `   - split 命令将读取此列来决定创建哪些端的子任务目录\n`;
     // 注入工程类型信息（v6.49.0+）
     const platformTypes = await parsePlatformTypes();
     if (platformTypes.size > 0) {
