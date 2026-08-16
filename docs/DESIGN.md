@@ -2362,3 +2362,93 @@ CLI 命令执行 → 生成 HTML 到 outputs/
 present_files(<path>) → 用户在预览面板看到 HTML 页面
 ```
 
+### 8.10 Phase 1/Phase 2 自动触发机制（v6.59.0-v6.64.0）
+
+**核心问题**：analyze 命令采用分阶段分析架构（Phase 1 生成全局文档 → Phase 2 生成各端专属文档），但旧版需要用户手动执行两次命令，用户体验差。
+
+#### 设计原则
+
+**为什么必须分阶段？**
+- **Phase 1**：生成全局文档（global/REQUIREMENT.md、ANALYSIS.md、DEPS.md 等），建立跨端统一视角
+- **Phase 2**：生成各端专属文档（{端}/TECH.md、TEST.md、UI_SPEC.md 等），参考全局上下文后注入端专属专业维度
+  - 后端服务 → API 设计、数据库、缓存、消息队列
+  - Web 管理端 → 页面路由、组件拆分、权限控制
+  - H5/小程序 → 页面结构、平台 API 适配、性能约束
+
+**为什么不合并为一次性生成？**
+- Token 消耗过大（同时处理 10+ 个文档）
+- 文档质量下降（AI 注意力分散）
+- 无法充分利用链式生成优势（Read 前序产出再生成下一个）
+
+#### 自动触发机制
+
+**触发条件**：
+```typescript
+if (platforms.length >= 2) {
+  // 多端项目：自动触发 Phase 2
+} else if (platforms.length === 0) {
+  // 无端列表：输出警告
+}
+// platforms.length === 1: 单端项目，Phase 1 已完成，无需 Phase 2
+```
+
+**工作流程**：
+```bash
+# 用户执行一次命令
+speccore analyze --prompt -I meeting-upgrade
+
+# CLI 输出 Phase 1 prompt → AI 生成全局文档 → AI 通过 --apply 写回
+# CLI 检测到 Phase 1 完成 + 有多个端 → 自动输出 Phase 2 prompt
+# AI 生成各端专属文档 → AI 通过 --apply 写回
+# 完成！
+```
+
+**关键代码位置**：
+- `src/commands/analyze.ts` lines 450-485：Apply 模式结尾的 Phase 2 自动触发逻辑
+- `src/commands/analyze.ts` lines 1230-1260：Phase 2 prompt 构建（指导 AI Read Phase 1 产出并生成各端专属文档）
+
+#### 图谱 & RAG 刷新保证
+
+**每次分析前**：
+- `buildMultiDocPrompt()` → 调用 `unifiedSearch()` 检索项目关联内容
+  - 从 RAG 索引中检索相关 chunk（topK=8, minScore=0.15）
+  - 从知识图谱中获取关联链（<500 tokens）
+  - 注入到 prompt 中作为上下文
+
+**每次分析后**：
+- Apply 模式完成后 → 调用 `refreshKnowledgeGraph()`
+  - 重建当前 iteration 的知识图谱
+  - 更新 RAG 索引
+  - 确保下一阶段能看到最新的分析结果
+
+**Phase 1 → Phase 2 的上下文传递**：
+1. Phase 1 完成后刷新图谱
+2. Phase 2 的 prompt 中能检索到 Phase 1 的产出
+3. AI Read 全局文档再生成各端专属文档
+
+### 8.11 spec-ask onboarding 强制展示修复（v6.63.0）
+
+**问题根因**：`.qoder/commands/spec-ask.md` 只有 8 行简单指令，没有包含「引导页强制展示规则」，导致 AI 忽略 `[SPECCORE_ONBOARD: <path>]` 标记。
+
+**修复方案**：在 `init.ts` 第 910-925 行为 spec-ask command 添加引导页规则：
+```markdown
+## 🚨 引导页强制展示规则
+
+执行 `speccore ask` 后，检查 stdout 中的 `[SPECCORE_ONBOARD: <path>]` 标记：
+- **如果检测到该标记，必须立即执行** `present_files(<path>)` 展示 HTML 引导页
+- ❌ **禁止**只说“检测到引导页”而不执行展示动作 — 说了不等于做了
+- ❌ **禁止**用文字描述引导页内容代替实际展示 — 必须让用户看到 HTML 页面
+- **展示完成后**，再继续处理其他输出
+```
+
+**用户操作**：
+```bash
+# 1. 更新 command 文件
+speccore init --update --tools qoder
+
+# 2. 删除旧标识（强制重新触发 onboarding）
+rm .speccore/local/.ask-onboarded
+
+# 3. 测试
+speccore ask "测试"
+```

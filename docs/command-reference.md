@@ -1,4 +1,4 @@
-# 命令参考 (v6.52.0)
+# 命令参考 (v6.64.0)
 
 ---
 title: 命令参考
@@ -153,6 +153,16 @@ speccore analyze --task Task-001     # 任务级深度分析（split 后执行�
 别名: `al`
 
 > 💡 `--auto` 模式会自动生成 prompt 交给宿主 AI 执行专业分析，产出全套 Spec 文件。支持 `--platform` 指定端过滤。
+
+**分阶段分析架构(v6.64.0)**:
+- **Phase 1**: 生成全局文档(global/REQUIREMENT.md、ANALYSIS.md、DEPS.md 等)，建立跨端统一视角
+- **Phase 2**: 生成各端专属文档({端}/TECH.md、TEST.md、UI_SPEC.md 等)，参考全局上下文后注入端专属专业维度
+- **自动触发**: CLI 在 Phase 1 完成后,检测到 ≥2 个端时自动输出 Phase 2 prompt,无需用户手动执行两次命令
+
+**图谱 RAG 智能检索**:
+- Phase 1/Phase 2 执行前均调用 `unifiedSearch()` 从知识图谱和 RAG 索引中检索项目关联内容
+- Phase 1 完成后自动调用 `refreshKnowledgeGraph()` 重建知识图谱和 RAG 索引
+- 确保 Phase 2 能基于最新的全局文档生成各端专属方案
 
 **任务级深度分析（v6.44.0+）**：
 
