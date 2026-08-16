@@ -178,10 +178,13 @@ async function createSingleTask(options: TaskNewOptions): Promise<void> {
     }
 
     // Write task meta
+    await ensureDir(join(taskDir, '.meta'));
     await writeFile(join(taskDir, '.meta', 'type'), options.type || 'feature');
     await writeFile(join(taskDir, '.meta', 'status'), status);
     await writeFile(join(taskDir, '.meta', 'owner'), '未分配');
     await writeFile(join(taskDir, '.meta', 'created-at'), today);
+    // 功能单元标识（v6.49.4+）：默认取任务名称
+    await writeFile(join(taskDir, '.meta', 'feature'), options.name || '未分类');
 
     // Generate task content
     const taskContent = await generateTaskContent(options);

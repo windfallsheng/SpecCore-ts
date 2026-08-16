@@ -2,6 +2,17 @@
 
 ---
 
+## v6.49.4 (2026-08-16) — Task-Level Feature Unit Identification
+
+### New Features
+
+- **Task-level `.meta/feature`**: Task directory itself now has feature unit identification (e.g., `Task-001/.meta/feature`), defaulting to `functionalUnit` or task name
+- **Task-level `.meta/` complete attributes**: `feature`/`type`/`status`/`owner`/`created-at`, consistent with subtask level
+- **README.md updated**: Directory structure documentation now includes `.meta/` directory
+- **task/new sync**: `task new` command also writes task-level `.meta/feature`
+
+---
+
 ## v6.49.3 (2026-08-16) — Subtask Directory Naming + task/new Sync
 
 ### Fixes
