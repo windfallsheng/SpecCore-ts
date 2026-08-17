@@ -2848,6 +2848,50 @@ phase1-prompt → phase1-done → contract-prompt → contract-done
 
 ---
 
+#### Split 命令质量修复（v6.69.3+）
+
+**问题根因**：`speccore split` 生成 030-tasks/ 时存在多个质量问题：
+
+| 问题 | 影响 | 示例 |
+|:---|:---|:---|
+| AI 使用中文简写作为 scope | 端目录名错误 | `web/`、`api/` 而不是 `admin-web/`、`booking-service/` |
+| 子任务命名无意义 | 目录可读性差 | `Task-004-impl` 而不是 `approval-flow-booking-service` |
+| CONTEXT.md 位置错误 | 不符合规范 | `00-specs/CONTEXT.md` 而不是 `_shared/CONTEXT.md` |
+| reqContent/techContent 模板化 | 执行时无有效输入 | 只有 `<!-- AI-FILL -->` 占位符 |
+
+**端名映射修复**：
+
+```
+AI 返回 scope: ["后端", "admin", "h5"]
+        ↓
+normalizeScopePlatforms(standardPlatforms = ["booking-service", "admin-web", "h5-mobile"])
+        ↓
+"后端" → 匹配 /-(service|api|server|backend)$/ → "booking-service"
+"admin" → 模糊匹配 "admin-web" → "admin-web"
+"h5" → 关键词映射 → "h5-mobile"
+        ↓
+标准化后: ["booking-service", "admin-web", "h5-mobile"]
+```
+
+**子任务命名修复**：
+
+```
+// 旧命名
+{platformDir}/Task-004-impl/
+
+// 新命名
+{platformDir}/{功能单元slug}-{端名}/
+例: booking-service/approval-flow-booking-service/
+    admin-web/approval-flow-admin-web/
+```
+
+**Prompt 质量加固**：
+1. 在 prompt 开头注入标准端名列表，明确要求 AI 使用标准端名
+2. scope 示例从 `["后端", "admin"]` 改为 `["booking-service", "admin-web"]`
+3. reqContent/techContent 增加"质量红线"：禁止模板化占位符
+
+---
+
 ### 8.12 spec-ask onboarding 强制展示修复（v6.63.0）
 
 **问题根因**：`.qoder/commands/spec-ask.md` 只有 8 行简单指令，没有包含「引导页强制展示规则」，导致 AI 忽略 `[SPECCORE_ONBOARD: <path>]` 标记。
