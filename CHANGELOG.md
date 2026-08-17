@@ -1,3 +1,29 @@
+## v6.69.3 (2026-08-17) — Split 命令修复：端名映射 + 子任务命名 + 内容质量
+
+### 修复
+
+- **端名白名单映射**（`split.ts` scope 解析）：
+  - 新增 `normalizeScopePlatforms()` 函数，将 AI 返回的中文简写（如 `"后端"`、`"admin"`、`"web"`）映射到 CONSTITUTION.md 标准端名
+  - 映射规则：精确匹配 → 后端模糊匹配 → 前端模糊匹配 → 关键词映射 → 保留原值
+  - 解决 `web/`、`api/` 等非法端目录问题，确保生成 `admin-web/`、`booking-service/` 等正确目录
+
+- **子任务目录命名**（`split.ts` 子任务创建）：
+  - 从 `Task-004-impl` 改为 `{功能单元slug}-{端名}`，如 `approval-flow-booking-service`
+  - 使用 `functionalUnit` 或 `section.name` 生成有意义的 slug，避免无意义的 "impl"
+
+- **CONTEXT.md 位置**：
+  - 从 `00-specs/CONTEXT.md` 修正为 `_shared/CONTEXT.md`（符合 AGENTS.md 规范）
+  - 保留 `00-specs/CONTEXT.md` 副本供兼容
+
+### 改进
+
+- **Split Prompt 注入标准端名列表**：在 prompt 开头注入项目端列表，明确告知 AI 必须使用标准端名
+- **Split Prompt scope/API 示例修正**：示例从 `["后端", "admin"]` 改为 `["booking-service", "admin-web"]`
+- **reqContent/techContent 质量红线**：prompt 中明确要求 AI 生成具体内容，禁止模板化占位符
+- **buildSplitPrompt 签名扩展**：新增 `standardPlatforms` 参数，用于 prompt 注入
+
+---
+
 ## v6.69.2 (2026-08-17) — 文档质量加固：白名单校验 + 自检 Prompt + 自动审计
 
 ### 修复

@@ -15,6 +15,82 @@ import { resolveGlobalSpecPath, GLOBAL_SPECS_DIR, parsePlatformList } from '../.
 import { buildAutoModeInstruction } from '../../core/questions';
 import { PipelineEngine } from '../../core/pipeline-engine';
 
+/**
+ * 将 AI 返回的 scope 简写映射到 CONSTITUTION.md 标准端名
+ * v6.69.3+: 解决中文简写（如 "后端"、"admin"）导致目录名错误的问题
+ */
+function normalizeScopePlatforms(scopeArr: string[], standardPlatforms: string[]): string[] {
+  const result: string[] = [];
+  const used = new Set<string>();
+
+  for (const raw of scopeArr) {
+    const s = raw.trim();
+    if (!s) continue;
+
+    // 1. 如果已经是标准端名，直接使用
+    if (standardPlatforms.includes(s)) {
+      if (!used.has(s)) { result.push(s); used.add(s); }
+      continue;
+    }
+
+    // 2. 后端类简写 → 匹配第一个后端端名
+    if (/后端|backend|服务端|server/i.test(s)) {
+      const backendPlatform = standardPlatforms.find(p =>
+        /-(service|api|server|backend)$/i.test(p) || p.startsWith('后台')
+      );
+      if (backendPlatform && !used.has(backendPlatform)) {
+        result.push(backendPlatform);
+        used.add(backendPlatform);
+      }
+      continue;
+    }
+
+    // 3. 前端类简写 → 模糊匹配标准端名
+    const lower = s.toLowerCase();
+    const matched = standardPlatforms.find(p => {
+      const pl = p.toLowerCase();
+      // 直接包含关系：admin-web 包含 admin
+      return pl.includes(lower) || lower.includes(pl);
+    });
+    if (matched && !used.has(matched)) {
+      result.push(matched);
+      used.add(matched);
+      continue;
+    }
+
+    // 4. 关键词匹配
+    const keywordMap: Record<string, string[]> = {
+      'h5': ['h5-mobile', 'h5', 'mobile', '移动端'],
+      'mobile': ['h5-mobile', 'h5', 'mobile', '移动端'],
+      '小程序': ['miniapp', 'mini-app', '小程序'],
+      'admin': ['admin-web', 'admin', '后台管理'],
+      'web': ['admin-web', 'web', 'h5-mobile'],
+      'app': ['app', 'android', 'ios'],
+      '安卓': ['android'],
+      'ios': ['ios'],
+    };
+    const candidates = keywordMap[lower];
+    if (candidates) {
+      const found = standardPlatforms.find(p =>
+        candidates.some(c => p.toLowerCase().includes(c.toLowerCase()))
+      );
+      if (found && !used.has(found)) {
+        result.push(found);
+        used.add(found);
+        continue;
+      }
+    }
+
+    // 5. 无法匹配时保留原始值（后续可能创建非法目录，但至少不丢失信息）
+    if (!used.has(s)) {
+      result.push(s);
+      used.add(s);
+    }
+  }
+
+  return result.length > 0 ? result : standardPlatforms;
+}
+
 /** 将名称转为目录安全的短 slug（2-4 词） */
 function slugify(name: string): string {
   const cleaned = name
@@ -284,18 +360,14 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           if (apis) content += `\n\n接口:\n${apis}`;
           if (acs) content += `\n\n验收标准:\n${acs}`;
 
-          // 从 scope 提取平台列表（后端 + 前端各端）
-          const taskScopePlatforms: string[] = [];
-          const isBackend = scopeArr.some((s: string) => /后端|backend/i.test(s));
-          const fePlatforms = scopeArr.filter((s: string) => !/后端|backend/i.test(s)).map((s: string) => s.trim()).filter(Boolean);
-          if (isBackend) taskScopePlatforms.push('backend');
-          taskScopePlatforms.push(...fePlatforms);
+          // v6.69.3+: 将 AI 返回的 scope 简写映射到标准端名
+          const taskScopePlatforms = normalizeScopePlatforms(scopeArr, allPlatforms);
 
           const section: Section = {
             name: task.name || `Task ${i + 1}`,
             content,
             level: 2,
-            platform: isBackend ? 'backend' : (fePlatforms[0] || undefined),
+            platform: taskScopePlatforms[0] || undefined,
           };
           (section as any)._complexity = {
             estimatedHours: task.estimatedHours || 8,
@@ -706,8 +778,10 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       const granularityLabel = GRANULARITY_RULES[recommendedGranularity].label;
       const granularityHint = GRANULARITY_RULES[recommendedGranularity].desc;
       
-      // 构建完整 prompt
-      let splitPrompt = buildSplitPrompt(iteration, constitutionContent, reqContent2, specContents, staffing, teamSize, granularityLabel, granularityHint);
+      // 获取标准端名列表（用于 prompt 注入和 scope 规范化）
+      const allPlatforms = await detectPlatforms(iterationDir);
+      // 构建完整 prompt（v6.69.3+: 传入标准端名列表，确保 AI 使用正确的端名）
+      let splitPrompt = buildSplitPrompt(iteration, constitutionContent, reqContent2, specContents, staffing, teamSize, granularityLabel, granularityHint, allPlatforms);
 
       // 注入全局上下文（INDEX + TOC 目录，AI 自主读取）
       const { loadGlobalContext, formatGlobalContext } = await import('../../core/prompt-builder');
@@ -1472,13 +1546,16 @@ ${section.content}
 
     // ── 所有端平铺：{端名}/{子任务}/ （v6.49.2+ 统一架构）──
     // 不再区分前后端，所有端平铺在任务目录下
-    // 子任务目录命名规则：{taskId}-{subtaskSlug}（确保多任务同平台不冲突）
+    // v6.69.3+: 子任务目录命名使用功能单元+端名，避免无意义的 "impl"
+    const featureSlug = slugify((section as any).functionalUnit || section.name);
+    const rawNameSlug = slugify(section.name);
+    const baseSlug = featureSlug || rawNameSlug || 'task';
     for (const platform of taskPlatforms) {
       const platformDir = join(taskDir, platform);
       const subtaskId = subtaskIdMap.get(platform)!;
-      const subtaskSlug = slugify(section.name) || 'impl';
-      // 子任务目录名：{taskId}-{subtaskSlug}，确保唯一性
-      const subtaskDirName = `${taskId}-${subtaskSlug}`;
+      // 子任务目录名：{baseSlug}-{platform}，如 "approval-flow-booking-service"
+      const subtaskSlug = `${baseSlug}-${slugify(platform) || platform}`;
+      const subtaskDirName = subtaskSlug;
       const subtaskDir = join(platformDir, subtaskDirName);
       const subtaskHours = (section as any)._hoursByPlatform?.[platform] || Math.ceil(complexity.estimatedHours / taskPlatforms.length);
       // 判断是否后端（用于生成不同的文档内容）
@@ -1498,7 +1575,8 @@ ${section.content}
     const fallbackBackend = allPlatforms.find(p =>
       p === 'backend' || p.startsWith('后台') || /-(service|api|server|backend)$/i.test(p)
     ) || 'backend';
-    const autoSubtaskDir = join(taskDir, fallbackBackend, `${taskId}-impl`);
+    const fallbackSlug = slugify((section as any).functionalUnit || section.name) || 'task';
+    const autoSubtaskDir = join(taskDir, fallbackBackend, `${fallbackSlug}-${fallbackBackend}`);
     await ensureDir(join(autoSubtaskDir, '.meta'));
     await writeFile(join(autoSubtaskDir, '.meta', 'type'), taskType);
     await writeFile(join(autoSubtaskDir, '.meta', 'status'), 'todo');
@@ -1579,9 +1657,8 @@ ${section.content}
     originalDesc = body.length > 500 ? body.slice(0, 500) + '...' : body;
   }
 
-  await writeFile(
-    join(taskDir, '00-specs', 'CONTEXT.md'),
-    `# 任务上下文
+  // v6.69.3+: CONTEXT.md 写入 _shared/（符合规范），同时保留 00-specs/ 副本供兼容
+  const contextContent = `# 任务上下文
 
 ## 来源追溯
 
@@ -1606,8 +1683,10 @@ ${relatedTasks.length > 0 ? relatedTasks.join('\n') : '> 暂无关联任务（sp
 | 端 | 影响说明 |
 |:---|:---|
 ${taskPlatforms.map((p: string) => `| ${p} | 待补充 |`).join('\n')}
-`
-  );
+`;
+  await writeFile(join(taskDir, '_shared', 'CONTEXT.md'), contextContent);
+  // 兼容：00-specs/ 下也保留一份（部分旧代码可能读取 00-specs/CONTEXT.md）
+  await writeFile(join(taskDir, '00-specs', 'CONTEXT.md'), contextContent);
 
   // ── 7. 问题追踪 ──
   await writeFile(join(taskDir, '.issues.md'), `# ${section.name} - 问题追踪\n\n> 执行过程中发现的问题记录于此。\n\n`);
@@ -2512,6 +2591,7 @@ function buildSplitPrompt(
   teamSize: number,
   granularityLabel: string,
   granularityHint: string,
+  standardPlatforms: string[],
 ): string {
   let p = `# SpecCore AI 智能拆分\n\n`;
   p += `> 迭代: ${iteration} | 粒度: ${granularityLabel} | 生成: ${new Date().toISOString().split('T')[0]}\n\n`;
@@ -2553,6 +2633,16 @@ function buildSplitPrompt(
   }
   p += `\n**超出上限必须再拆，低于下限必须合并。**\n\n`;
   p += `用户可通过 --granularity macro|module|atomic 调整全局粒度。\n\n`;
+
+  // v6.69.3+: 注入标准端名列表
+  if (standardPlatforms.length > 0) {
+    p += `## 🖥️ 项目端列表（标准端名）\n\n`;
+    p += `本项目已配置以下端，所有 scope、hoursByPlatform 必须使用这些**标准端名**，禁止使用简写或中文：\n\n`;
+    p += `\`${standardPlatforms.join('`, `')}\`\n\n`;
+    p += `- 后端端名示例: \`booking-service\`, \`room-service\`（不是 "后端"、"backend"）\n`;
+    p += `- 前端端名示例: \`admin-web\`, \`h5-mobile\`（不是 "web"、"admin"、"h5"）\n`;
+    p += `- **scope 数组必须使用上述标准端名**，否则会导致目录结构错误\n\n`;
+  }
 
   // SpecCore 拆分原则
   p += `## ⚙️ SpecCore 拆分原则\n\n`;
@@ -2640,10 +2730,10 @@ function buildSplitPrompt(
   p += `    "topic": "english-slug-for-directory",\n`;
   p += `    "type": "feature|bugfix|refactor|research",\n`;
   p += `    "reason": "为什么这样拆分",\n`;
-  p += `    "scope": ["后端", "admin"],\n`;
+  p += `    "scope": ["booking-service", "admin-web"],\n`;
   p += `    "apis": ["POST /api/auth/login"],\n`;
   p += `    "tables": ["users"],\n`;
-  p += `    "hoursByPlatform": { "后端": 8, "admin": 8 },\n`;
+  p += `    "hoursByPlatform": { "booking-service": 8, "admin-web": 8 },\n`;
   p += `    "estimatedHours": 16,\n`;
   p += `    "priority": "high|medium|low",\n`;
   p += `    "dependencies": [],\n`;
@@ -2663,9 +2753,17 @@ function buildSplitPrompt(
   p += `> 同一模块/领域的任务填相同的值，用于粒度校验和任务分组\n`;
   p += `> **topic** 必须是英文短横线格式（如 \`user-authentication\`、\`product-crud\`），用于生成任务目录名 Task-NNN-{topic}\n`;
   p += `> **sourceFile** 必须填写：该任务对应的 020-specs 源文档路径（如 \`bugs/login-timeout.md\`、\`features/user-auth.md\`、\`refactors/db-pool.md\`），用于在 CONTEXT.md 中生成来源追溯\n`;
-  p += `> **reqContent** 必须填写：该任务的需求描述（含业务规则、数据模型、接口定义），直接写入 REQ.md\n`;
-  p += `> **techContent** 必须填写：该任务的技术方案（含架构设计、核心逻辑、测试策略），直接写入 TECH.md\n`;
-  p += `> reqContent/techContent 是该任务的**子切面**，只包含该任务负责的部分，不是整个功能单元的内容\n\n`;
+  p += `> **reqContent 质量要求（必填，禁止模板化）**：\n`;
+  p += `>   - 必须是**具体的、可执行的需求描述**，不是"待补充"或"参考全局文档"\n`;
+  p += `>   - 包含：业务规则（含边界条件）、数据模型（字段/类型/约束）、接口清单（方法/路径/参数/响应）\n`;
+  p += `>   - 从 020-specs/global/REQUIREMENT.md 和对应端 TECH.md 中提取本任务相关的具体内容\n`;
+  p += `>   - 直接写入 00-specs/REQ.md，执行时 AI 不再重新分析需求\n`;
+  p += `> **techContent 质量要求（必填，禁止模板化）**：\n`;
+  p += `>   - 必须是**具体的技术实现方案**，不是框架模板\n`;
+  p += `>   - 包含：架构设计、核心逻辑伪代码/流程、数据库设计（表结构/索引）、API 详细定义、测试策略\n`;
+  p += `>   - 从 020-specs/global/TECH.md 和对应端 TECH.md 中提取本任务相关的技术细节\n`;
+  p += `>   - 直接写入 00-specs/TECH.md，执行时 AI 据此直接开发\n`;
+  p += `> **质量红线**：如果 reqContent/techContent 只有标题和占位符（如 "<!-- AI-FILL -->"），视为不合格，必须重新生成\n\n`;
 
   p += `### ⚠️ 工时估算规则（重要）\n\n`;
   p += `- **hoursByPlatform**: 按端分别估算工时，key 对应 scope 中的端名称\n`;
