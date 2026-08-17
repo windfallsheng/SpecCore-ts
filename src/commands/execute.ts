@@ -41,6 +41,7 @@ import { loadConfig } from '../core/unified-config';
 import { PipelineEngine } from '../core/pipeline-engine';
 import { checkCodeIndexFreshness } from '../core/code-scanner';
 import { warnIfIndexStale } from '../core/index-guard';
+import { recordAnalysisSnapshot } from '../core/change-detection';
 
 export interface ExecuteOptions {
   all?: boolean;
@@ -2077,6 +2078,9 @@ async function runApplyMode(iteration: string, options: ExecuteOptions): Promise
 
   logger.success(`\n📁 完成: ${writtenCount} 个文件已写入`);
   logger.info(`   📂 位置: ${iterDir}/`);
+
+  // v6.69.1: 记录任务执行快照，支持下次增量检测
+  await recordAnalysisSnapshot(`Task-${task}`);
 
   // ── 执行后总结 ──
   outputPostSummary(iteration, task, writtenCount, parsed.files.map(f => f.path));

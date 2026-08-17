@@ -1,3 +1,26 @@
+## v6.69.1 (2026-08-17) — 变更感知修复：默认分支 + 分析快照
+
+### 修复
+
+- **对比基准修正**：`getChangedFiles()` 默认对比基准从 `HEAD` 改为 CONSTITUTION.md 配置的**默认分支**（如 `main`）
+  - 新增 `getDefaultBaseRef()` 函数，通过 `loadGitConfig()` 读取配置并缓存
+  - 解决 feature 分支上变更检测不准确的问题
+
+### 新增
+
+- **分析快照持久化**（`.speccore/cache/analysis-snapshots.json`）：
+  - `recordAnalysisSnapshot(scope)` — 分析/执行完成后记录当前 commit hash、分支、时间
+  - `getIncrementalChangedFiles(scope)` — 基于上次分析的 commit 做 `git diff <last>..HEAD` 增量检测
+  - `readAnalysisSnapshots()` / `writeAnalysisSnapshots()` — 快照读写
+  - `clearAnalysisSnapshot(scope?)` — 清除指定或全部快照
+  - `getCurrentCommitHash()` / `getCurrentBranch()` — Git 信息获取
+- **增量分析集成**：
+  - `detectAffectedPlatforms()` 新增 `options: { scope?, incremental? }` 参数
+  - `analyze.ts` Pipeline 完成时自动记录快照（scope = `global` 或 `Iteration-{name}`）
+  - `execute.ts` 任务完成时自动记录快照（scope = `Task-{id}`）
+
+---
+
 ## v6.69.0 (2026-08-17) — 三层分析策略 + 四个增强策略
 
 ### 核心功能

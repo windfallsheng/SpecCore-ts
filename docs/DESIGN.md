@@ -2711,7 +2711,7 @@ Git diff 识别变更范围 → 仅分析受影响端 → 跨端影响评估 →
 | 增强策略 | 代码实现 | 状态 |
 |---------|---------|------|
 | **契约先行**（迭代层） | `createAnalyzePipeline` 插入 `contract-prompt` 步骤；`buildContractFirstPrompt()` 生成跨端契约 | ✅ 已完成 |
-| **变更感知**（全局层） | `detectAffectedPlatforms()` 通过 Git diff + CONSTITUTION.md 源码路径映射检测受影响端；Pipeline 自动过滤 | ✅ 已完成 |
+| **变更感知**（全局层） | `detectAffectedPlatforms()` 通过 Git diff + CONSTITUTION.md 源码路径映射检测受影响端；**v6.69.1** 修正对比基准为默认分支；新增快照持久化支持增量分析 | ✅ 已完成 |
 | **关键路径优先**（迭代层） | `detectPlatformPriorityOrder()` 按任务优先级统计排序端；Pipeline 按优先级生成步骤 | ✅ 已完成 |
 | **横向关联**（任务层） | `checkCrossTaskDependencies()` 检查依赖任务状态和契约对齐；`traceDependencyChain()` 追踪完整依赖链路 | ✅ 已完成 |
 | **知识图谱链路补全** | `inferRelations()` 从 IMPACT.md 补充 `depends_on`；`getFullTaskContext()` 包含上下游任务和依赖链路 | ✅ 已完成 |
@@ -2721,7 +2721,9 @@ Git diff 识别变更范围 → 仅分析受影响端 → 跨端影响评估 →
 **变更感知模块（`src/core/change-detection.ts`）**
 
 ```
-Git diff --name-only → 变更文件列表
+对比基准：CONSTITUTION.md「默认分支」（如 main）← v6.69.1 修正，原为 HEAD
+        ↓
+git diff --name-only <defaultBranch> → 变更文件列表
         ↓
 CONSTITUTION.md「项目信息」表格 → 源码路径 → 端映射
         ↓
@@ -2731,6 +2733,23 @@ CONSTITUTION.md「项目信息」表格 → 源码路径 → 端映射
         ↓
 输出：受影响的端名列表 [backend, h5]
 ```
+
+**分析快照持久化（v6.69.1+）**
+
+```
+分析/执行完成后 → recordAnalysisSnapshot(scope)
+        ↓
+写入 .speccore/cache/analysis-snapshots.json
+  { "Iteration-Q2": { "lastCommit": "abc123", "analyzedAt": "...", "branch": "main" } }
+        ↓
+下次增量分析 → getIncrementalChangedFiles(scope)
+        ↓
+git diff <lastCommit>..HEAD --name-only → 仅检测新增变更
+```
+
+- **全量模式**：与默认分支对比（适合首次分析）
+- **增量模式**：与上次分析的 commit 对比（适合后续迭代，避免重复分析已处理过的变更）
+- **scope 标识**：`global`（全局层）、`Iteration-{name}`（迭代层）、`Task-{id}`（任务层）
 
 **关键路径优先排序算法**
 
