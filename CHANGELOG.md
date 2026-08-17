@@ -1,3 +1,45 @@
+## v6.68.0 (2026-08-17) — Pipeline 引擎完整实现
+
+### 核心功能
+
+- **pipeline-engine.ts**: 完整的 Pipeline 引擎实现（状态机设计）
+  - 支持多步骤流水线，每步等待 AI 通过 --apply 写回
+  - 支持条件分支（如多端才执行 Phase 2）
+  - 支持断点续跑（--resume）
+  - 支持错误恢复和重试
+  - 状态文件追踪当前步骤（.speccore/local/.pipeline-{iteration}.json）
+
+- **analyze.ts**: 集成 Pipeline 引擎
+  - 新增 `--pipeline` 选项：启用流水线模式，自动执行 Phase 1 → Phase 2
+  - Prompt 模式：初始化 Pipeline 状态，输出 Phase 1 prompt + Pipeline 继续指令
+  - Apply 模式：写入文件后自动推进到下一步，输出 `[SPECCORE_PIPELINE_NEXT]` 标记和 Phase 2 prompt
+  - AI 看到标记后自动执行下一个命令，无需用户干预
+
+### 工作流程
+
+```bash
+# 用户执行 Pipeline 模式
+speccore analyze --prompt --pipeline -I meeting-upgrade
+
+# CLI 初始化 Pipeline 状态 → 输出 Phase 1 prompt
+# AI 生成全局文档 → --apply
+# CLI 写入文件 → 自动推进到 Phase 2 → 输出 [SPECCORE_PIPELINE_NEXT] + Phase 2 prompt
+# AI 看到标记 → 自动执行 Phase 2 → 生成各端文档 → --apply
+# CLI 写入文件 → 标记完成 → Pipeline 结束
+```
+
+### 技术实现
+
+- **状态机设计**: PipelineEngine 类管理步骤状态（phase1-prompt → phase1-done → phase2-prompt → done）
+- **自动推进**: Apply 模式完成后检查 Pipeline 状态，自动调用 advance() 推进到下一步
+- **标记机制**: 输出 `[SPECCORE_PIPELINE_NEXT]` 标记，AI 识别后自动执行下一个命令
+- **条件分支**: 检测端数量，只有多端项目（≥2 个端）才执行 Phase 2
+
+### 向后兼容
+
+- 非 Pipeline 模式保持原有行为（输出提示信息，要求用户手动执行 Phase 2）
+- 提示信息中新增 `--pipeline` 选项的使用建议
+
 ## v6.67.0 (2026-08-16) — 在 prompt 开头明确完整工作流程
 
 ### 核心修复

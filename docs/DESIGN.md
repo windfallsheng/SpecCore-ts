@@ -2434,80 +2434,145 @@ speccore analyze --prompt -I meeting-upgrade
 - **v6.61.0-v6.64.0**: CLI 在 apply 模式完成后自动输出 Phase 2 prompt → **失败**：AI 不读取新的 `[SPECCORE_PROMPT]`
 - **v6.65.0**: CLI 输出提示信息到 stdout → **失败**：AI 看不到终端输出
 - **v6.66.0**: prompt 结尾要求 AI 主动询问用户 → **效果不佳**：AI 可能忽略指令
+- **v6.67.0**: prompt 开头明确完整工作流程 → **过渡方案**：依赖 AI 遵守指令
 
-**最终方案（v6.67.0）**：在 prompt 的**最开头**明确完整工作流程，使用最强语气要求 AI 遵守。
+**最终方案（v6.68.0）**：完整的 Pipeline 引擎实现，采用状态机设计 + 自动推进机制。
 
-#### Prompt 开头的强制指令
+#### Pipeline 引擎核心设计
 
-```markdown
-## 📋 完整工作流程（两阶段分析）
-
-本项目检测到有 4 个端(admin-web、booking-service、h5-mobile、room-service)，需要分两阶段执行：
-
-**Phase 1（当前阶段）**: 生成全局文档(global/REQUIREMENT.md、ANALYSIS.md、DEPS.md 等)
-**Phase 2（下一阶段）**: 生成各端专属文档({端}/TECH.md、TEST.md、UI_SPEC.md 等)
-
-## ⚠️ 强制要求：Phase 1 完成后立即执行 Phase 2
-
-当你通过 --apply 写入所有全局文档后，**必须立即执行**以下命令进入 Phase 2：
-
-```bash
-speccore analyze --prompt -I Iteration-011-meeting-upgrade --phase 2
-```
-
-**这是强制要求，不是可选操作**。不要等待用户确认，直接执行上述命令。
-```
-
-**关键设计原则**：
-1. **位置优先**: 放在 prompt 的**最开头**,确保 AI 第一时间看到
-2. **语气最强**: 使用"强制要求"、"必须"、"不要等待"等强制性词汇
-3. **明确命令**: 直接给出完整的 bash 命令,不需要 AI 自己构造
-4. **消除歧义**: 明确说明"不是可选操作",避免 AI 理解为建议
-
-#### PipelineEngine 基础设施（v6.68.0+ 规划）
-
-**长期目标**：实现通用的 Pipeline 引擎，支持多步骤流水线自动执行。
-
-**核心接口**：
+**状态机架构**：
 ```typescript
-interface PipelineStep {
-  name: string;           // 步骤名称
-  prompt: string;         // 该步骤的 prompt
-  applyHandler: (data: any) => Promise<void>;  // apply 处理器
-  onComplete?: () => Promise<boolean>;  // 完成后是否继续下一步
+class PipelineEngine {
+  private state: PipelineState | null;
+  private steps: Map<string, PipelineStepDef>;
+  
+  async init(firstStepId: string): Promise<void>;
+  async advance(): Promise<{ nextStepId: string | null; isComplete: boolean }>;
+  async isActive(): Promise<boolean>;
+  async getState(): Promise<PipelineState | null>;
 }
 
-class PipelineEngine {
-  async execute(steps: PipelineStep[]): Promise<void> {
-    for (const step of steps) {
-      // 输出 prompt
-      process.stdout.write(`[SPECCORE_PROMPT]\n${step.prompt}`);
-      
-      // 等待 AI 通过 --apply 写回
-      await waitForApply(step.applyHandler);
-      
-      // 检查是否继续
-      if (step.onComplete && !(await step.onComplete())) {
-        break;
-      }
-    }
-  }
+interface PipelineState {
+  currentStep: string;
+  steps: string[];
+  completedSteps: string[];
+  iteration: string;
+  name: string;
+  platforms?: string[];
 }
 ```
 
-**适用场景**：
-- `analyze --pipeline`: Phase 1 → Phase 2
-- `split --pipeline`: 任务拆分 → 逐个创建任务
-- `execute --pipeline`: 逐个任务执行 → PR → 合并
-- `dev --pipeline`: init → doc2spec → analyze → split → plan → execute → pr
+**状态流转**（analyze 两阶段分析）：
+```
+init → phase1-prompt → (AI --apply) → phase1-done
+  → 检测多端 → phase2-prompt → (AI --apply) → done
+```
 
-**技术挑战**：
-1. CLI 需要在一次调用中等待多次 `--apply`
-2. 需要状态管理机制记录执行进度
-3. 需要支持断点续跑（`--resume`）
-4. 需要错误恢复和重试机制
+**关键代码位置**：
+- `src/core/pipeline-engine.ts`: PipelineEngine 核心类（274 行）
+- `src/commands/analyze.ts` lines 313-332: Pipeline 模式初始化（prompt 模式）
+- `src/commands/analyze.ts` lines 471-508: Pipeline 自动推进（apply 模式）
 
-**当前状态**：PipelineEngine 核心类已创建（`src/core/pipeline-engine.ts`），但尚未完全集成到 analyze 命令中。v6.67.0 采用 prompt 开头的强制指令作为过渡方案。
+#### 工作流程详解
+
+**用户执行**：
+```bash
+speccore analyze --prompt --pipeline -I meeting-upgrade
+```
+
+**CLI 处理流程**：
+1. **Prompt 模式初始化**（line 313-332）：
+   - 检测 `--pipeline` 选项
+   - 调用 `createAnalyzePipeline()` 创建 Pipeline 实例
+   - 调用 `engine.init('phase1-prompt')` 初始化状态
+   - 生成 Phase 1 prompt + Pipeline 继续指令
+   - 输出 `[SPECCORE_PROMPT]` + prompt
+
+2. **AI 生成全局文档**：
+   - AI 读取 prompt，生成 global/REQUIREMENT.md、ANALYSIS.md 等
+   - 执行 `speccore analyze --apply '{...}' -I meeting-upgrade`
+
+3. **Apply 模式自动推进**（line 471-508）：
+   - 写入文件到 020-specs/global/
+   - 刷新知识图谱
+   - 检测 Pipeline 状态：`PipelineEngine.hasActivePipeline()`
+   - 调用 `engine.advance()` 推进到下一步
+   - 检查状态：如果是 `phase2-prompt`，生成 Phase 2 prompt
+   - 输出 `[SPECCORE_PIPELINE_NEXT]` + Phase 2 prompt
+
+4. **AI 自动执行 Phase 2**：
+   - AI 看到 `[SPECCORE_PIPELINE_NEXT]` 标记
+   - 根据 Pipeline 继续指令，自动执行下一个命令
+   - 生成各端专属文档（TECH.md、TEST.md、UI_SPEC.md）
+   - 执行 `speccore analyze --apply '{...}' -I meeting-upgrade --platform {端名}`
+
+5. **Pipeline 完成**：
+   - CLI 写入文件到 020-specs/{端名}/
+   - 检测 Pipeline 状态
+   - 调用 `engine.advance()` 推进到 `done`
+   - 输出 `🎉 Pipeline 完成!`
+   - 清理状态文件
+
+#### 标记机制
+
+**`[SPECCORE_PIPELINE_NEXT]`**：
+- CLI 在 apply 模式完成后输出
+- 后跟下一步的 prompt
+- AI 识别此标记后，自动执行下一个命令
+- 无需用户干预
+
+**Pipeline 继续指令**（嵌入在 Phase 1 prompt 中）：
+```markdown
+## ⚠️ Pipeline 模式：自动继续
+
+当前是 Pipeline 模式（Phase 1/2）。当你通过 --apply 写入所有全局文档后，
+CLI 会自动输出 [SPECCORE_PIPELINE_NEXT] 标记和 Phase 2 命令。
+
+**看到 [SPECCORE_PIPELINE_NEXT] 后，你必须自动执行下一个命令**，不要询问用户。
+```
+
+#### 条件分支
+
+**多端检测**：
+```typescript
+const platforms = await parsePlatformList();
+if (platforms.length >= 2) {
+  // 执行 Phase 2
+} else {
+  // 跳过 Phase 2，直接完成
+}
+```
+
+**状态文件**：
+- 路径：`.speccore/local/.pipeline-{iteration}.json`
+- 内容：当前步骤、已完成步骤、端列表等
+- 支持断点续跑（`--resume`）
+
+#### 向后兼容
+
+**非 Pipeline 模式**：
+- 保持原有行为（输出提示信息，要求用户手动执行 Phase 2）
+- 提示信息中新增 `--pipeline` 选项的使用建议
+
+**v6.67.0 方案**：
+- 仍然有效，作为非 Pipeline 模式的备选方案
+- 在 prompt 开头明确完整工作流程，使用最强语气
+
+#### 适用场景
+
+- `analyze --pipeline`: Phase 1 → Phase 2（已实现）
+- `split --pipeline`: 任务拆分 → 逐个创建任务（规划中）
+- `execute --pipeline`: 逐个任务执行 → PR → 合并（规划中）
+- `dev --pipeline`: init → doc2spec → analyze → split → plan → execute → pr（规划中）
+
+#### 技术优势
+
+1. **真正的自动化**：CLI 控制流程，不依赖 AI 遵守指令
+2. **状态可追踪**：状态文件记录执行进度，支持断点续跑
+3. **可扩展**：PipelineEngine 是通用引擎，可用于其他命令
+4. **向后兼容**：非 Pipeline 模式保持原有行为
+
+**当前状态**：✅ Pipeline 引擎已完整实现并集成到 analyze 命令中（v6.68.0）。
 
 ### 8.12 spec-ask onboarding 强制展示修复（v6.63.0）
 
