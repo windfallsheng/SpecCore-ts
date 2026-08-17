@@ -5,10 +5,15 @@
 
 import { logger, Spinner } from '../utils/logger';
 import { readGlobalIndex, readRequirementDetail } from '../core/global-layer';
+import { getDefaultIteration, getIterationDir } from '../core/context';
+import { join } from 'path';
+import { readdir, readFile, pathExists } from 'fs-extra';
 
 export interface AuditOptions {
   fix?: boolean;
   detail?: boolean;
+  specs?: boolean;
+  iteration?: string;
 }
 
 interface AuditIssue {
@@ -21,6 +26,12 @@ interface AuditIssue {
 }
 
 export async function auditCommand(options: AuditOptions): Promise<void> {
+  // v6.69.2+: specs 模式审计 020-specs/ 文档质量
+  if (options.specs) {
+    await auditSpecsCommand(options);
+    return;
+  }
+
   const spinner = new Spinner('扫描全量层...');
   spinner.start();
 
@@ -323,4 +334,308 @@ function autoFixIssues(issues: AuditIssue[]): void {
   }
   logger.info('');
   logger.info(`✅ 已自动处理 ${fixed} 条问题`);
+}
+
+// ============================================
+// v6.69.2+: 020-specs/ 文档质量审计
+// ============================================
+
+interface SpecAuditIssue {
+  type: 'enum_mismatch' | 'api_mismatch' | 'coverage_gap' | 'dir_illegal' | 'ref_broken';
+  severity: '🔴' | '🟡' | '🟢';
+  file: string;
+  description: string;
+  suggestion: string;
+}
+
+async function auditSpecsCommand(options: AuditOptions): Promise<void> {
+  const iteration = await getDefaultIteration(options.iteration);
+  const iterDir = await getIterationDir(iteration);
+  const specDir = join(iterDir, '020-specs');
+
+  if (!(await pathExists(specDir))) {
+    logger.error(`❌ 未找到 020-specs/ 目录: ${specDir}`);
+    logger.info('   请先执行 speccore analyze 生成 spec 文档');
+    return;
+  }
+
+  const spinner = new Spinner('扫描 020-specs/ 文档质量...');
+  spinner.start();
+
+  try {
+    // 收集所有 .md 文件
+    const files = await collectSpecFiles(specDir);
+    if (files.length === 0) {
+      spinner.fail('020-specs/ 为空，无法执行审计');
+      return;
+    }
+
+    spinner.stop(`扫描 ${files.length} 个 spec 文档...`);
+
+    // 读取所有文件内容
+    const contents: Record<string, string> = {};
+    for (const f of files) {
+      contents[f.relative] = await readFile(f.absolute, 'utf-8');
+    }
+
+    const issues: SpecAuditIssue[] = [];
+
+    // 1. 目录结构合法性检查
+    issues.push(...checkDirectoryStructure(files, specDir));
+
+    // 2. 枚举值一致性检查
+    issues.push(...checkEnumConsistency(contents));
+
+    // 3. 接口路径一致性检查
+    issues.push(...checkApiPathConsistency(contents));
+
+    // 4. 功能覆盖完整性检查
+    issues.push(...checkCoverageGaps(contents, files));
+
+    // 输出报告
+    outputSpecAuditReport(issues, files.length, iteration);
+  } catch (error) {
+    spinner.fail(`审计失败: ${error}`);
+    throw error;
+  }
+}
+
+async function collectSpecFiles(specDir: string): Promise<{ relative: string; absolute: string; platform: string }[]> {
+  const files: { relative: string; absolute: string; platform: string }[] = [];
+
+  async function walk(dir: string, platform: string) {
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const e of entries) {
+      const abs = join(dir, e.name);
+      if (e.isDirectory()) {
+        await walk(abs, e.name);
+      } else if (e.name.endsWith('.md')) {
+        files.push({ relative: join(platform, e.name), absolute: abs, platform });
+      }
+    }
+  }
+
+  const topEntries = await readdir(specDir, { withFileTypes: true });
+  for (const e of topEntries) {
+    const abs = join(specDir, e.name);
+    if (e.isDirectory()) {
+      await walk(abs, e.name);
+    } else if (e.name.endsWith('.md')) {
+      files.push({ relative: e.name, absolute: abs, platform: 'root' });
+    }
+  }
+
+  return files;
+}
+
+function checkDirectoryStructure(
+  files: { relative: string; platform: string }[],
+  specDir: string
+): SpecAuditIssue[] {
+  const issues: SpecAuditIssue[] = [];
+  const illegalPatterns = [/^\d+$/, /^\.+$/, /[一-\u9fff]/]; // 纯数字、纯点、含中文
+
+  const platforms = new Set(files.map(f => f.platform));
+  for (const p of platforms) {
+    if (p === 'root') continue;
+    for (const pattern of illegalPatterns) {
+      if (pattern.test(p)) {
+        issues.push({
+          type: 'dir_illegal',
+          severity: '🔴',
+          file: p,
+          description: `非法目录名: "${p}"（不符合端名规范）`,
+          suggestion: '删除该目录，将文档移动到正确的端目录或 global/ 下',
+        });
+        break;
+      }
+    }
+  }
+
+  return issues;
+}
+
+function checkEnumConsistency(contents: Record<string, string>): SpecAuditIssue[] {
+  const issues: SpecAuditIssue[] = [];
+  const enumMap: Record<string, Record<string, string>> = {}; // file -> {enumKey -> definition}
+
+  // 提取所有枚举定义（status=0:空闲, type=1:会议 等格式）
+  const enumRegex = /(\w+)[=：:]\s*(\d+)\s*[=:]?\s*([^,\n；;]+)/g;
+  const enumBlockRegex = /(?:状态|枚举|类型|status|type|enum)[：:]?\s*\n?\s*([\s\S]{0,300}?)(?=\n##|\n###|$)/gi;
+
+  for (const [file, content] of Object.entries(contents)) {
+    enumMap[file] = {};
+    let match;
+    while ((match = enumRegex.exec(content)) !== null) {
+      const key = match[1].toLowerCase();
+      const val = match[2];
+      const desc = match[3].trim();
+      enumMap[file][`${key}=${val}`] = desc;
+    }
+  }
+
+  // 跨文件对比枚举定义
+  const allKeys = new Set<string>();
+  for (const defs of Object.values(enumMap)) {
+    for (const k of Object.keys(defs)) allKeys.add(k);
+  }
+
+  for (const key of allKeys) {
+    const fileDefs: Record<string, string> = {};
+    for (const [file, defs] of Object.entries(enumMap)) {
+      if (key in defs) fileDefs[file] = defs[key];
+    }
+
+    const uniqueDefs = new Set(Object.values(fileDefs));
+    if (uniqueDefs.size > 1) {
+      issues.push({
+        type: 'enum_mismatch',
+        severity: '🔴',
+        file: Object.keys(fileDefs).join(', '),
+        description: `枚举值不一致: ${key} → ${Array.from(uniqueDefs).map((d, i) => `[${Object.keys(fileDefs)[i]}] ${d}`).join(' vs ')}`,
+        suggestion: '统一所有文档中的枚举定义，确保跨文档一致',
+      });
+    }
+  }
+
+  return issues;
+}
+
+function checkApiPathConsistency(contents: Record<string, string>): SpecAuditIssue[] {
+  const issues: SpecAuditIssue[] = [];
+  const apiMap: Record<string, Record<string, string>> = {}; // file -> {path -> method}
+
+  // 提取 API 路径（/api/xxx、/v1/xxx 等）
+  const apiRegex = /(GET|POST|PUT|DELETE|PATCH)\s+([\/\w\-{}]+)/gi;
+  const mdApiRegex = /\|\s*(GET|POST|PUT|DELETE|PATCH)\s*\|\s*([\/\w\-{}]+)\s*\|/gi;
+
+  for (const [file, content] of Object.entries(contents)) {
+    apiMap[file] = {};
+    let match;
+    const combined = content;
+    while ((match = apiRegex.exec(combined)) !== null) {
+      const method = match[1].toUpperCase();
+      const path = normalizeApiPath(match[2]);
+      apiMap[file][path] = method;
+    }
+    while ((match = mdApiRegex.exec(combined)) !== null) {
+      const method = match[1].toUpperCase();
+      const path = normalizeApiPath(match[2]);
+      apiMap[file][path] = method;
+    }
+  }
+
+  // 检查同一端内路径一致性（简化：只检查全局 vs 各端）
+  const globalApis = apiMap['global/REQUIREMENT.md'] || apiMap['REQUIREMENT.md'] || {};
+  for (const [file, apis] of Object.entries(apiMap)) {
+    if (file.includes('global/') || file === 'REQUIREMENT.md') continue;
+    for (const [path, method] of Object.entries(apis)) {
+      const globalMethod = Object.entries(globalApis).find(([p]) => p === path)?.[1];
+      if (globalMethod && globalMethod !== method) {
+        issues.push({
+          type: 'api_mismatch',
+          severity: '🟡',
+          file,
+          description: `接口方法不一致: ${method} ${path} vs 全局 ${globalMethod} ${path}`,
+          suggestion: '统一接口方法，确保与全局需求文档一致',
+        });
+      }
+    }
+  }
+
+  return issues;
+}
+
+function normalizeApiPath(path: string): string {
+  // 归一化：去掉末尾斜杠，统一大小写（路径段）
+  return path.replace(/\/$/, '').toLowerCase();
+}
+
+function checkCoverageGaps(
+  contents: Record<string, string>,
+  files: { relative: string; platform: string }[]
+): SpecAuditIssue[] {
+  const issues: SpecAuditIssue[] = [];
+
+  // 检查 global/REQUIREMENT.md 是否存在
+  const hasReq = files.some(f => f.relative.includes('REQUIREMENT.md'));
+  if (!hasReq) {
+    issues.push({
+      type: 'coverage_gap',
+      severity: '🔴',
+      file: '020-specs/',
+      description: '缺少 global/REQUIREMENT.md（需求规格基线）',
+      suggestion: '执行 speccore analyze 重新生成全局需求文档',
+    });
+  }
+
+  // 检查 API_CONTRACT.md 是否存在（v6.69.0+ 契约先行要求）
+  const hasContract = files.some(f => f.relative.includes('API_CONTRACT.md'));
+  if (!hasContract) {
+    issues.push({
+      type: 'coverage_gap',
+      severity: '🟡',
+      file: '020-specs/',
+      description: '缺少 API_CONTRACT.md（跨端 API 契约）',
+      suggestion: '建议在 analyze Phase 1 后生成 API_CONTRACT.md，作为 Phase 2 的输入',
+    });
+  }
+
+  // 检查各端是否都有 TECH.md
+  const platforms = new Set(files.filter(f => f.platform !== 'root').map(f => f.platform));
+  for (const p of platforms) {
+    const hasTech = files.some(f => f.platform === p && f.relative.endsWith('TECH.md'));
+    if (!hasTech) {
+      issues.push({
+        type: 'coverage_gap',
+        severity: '🟡',
+        file: `${p}/`,
+        description: `端 "${p}" 缺少 TECH.md（技术方案）`,
+        suggestion: '为该端补充技术方案文档',
+      });
+    }
+  }
+
+  return issues;
+}
+
+function outputSpecAuditReport(issues: SpecAuditIssue[], fileCount: number, iteration: string): void {
+  logger.info('');
+  logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  logger.info(`📋 020-specs/ 质量审计报告 — ${iteration}`);
+  logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  logger.info(`   扫描文档数: ${fileCount}`);
+  logger.info(`   发现问题数: ${issues.length}`);
+  logger.info('');
+
+  const groups: Record<string, SpecAuditIssue[]> = {
+    '🔴 严重': issues.filter(i => i.severity === '🔴'),
+    '🟡 警告': issues.filter(i => i.severity === '🟡'),
+    '🟢 提示': issues.filter(i => i.severity === '🟢'),
+  };
+
+  for (const [label, items] of Object.entries(groups)) {
+    if (items.length === 0) continue;
+    logger.info(`${label} (${items.length} 项)`);
+    logger.info('────────────────────────────────────');
+    for (const item of items) {
+      logger.info(`   [${item.type}] ${item.file}`);
+      logger.info(`      ${item.description}`);
+      logger.info(`      💡 ${item.suggestion}`);
+    }
+    logger.info('');
+  }
+
+  if (issues.length === 0) {
+    logger.info('🎉 020-specs/ 质量良好，未发现明显问题！');
+  } else {
+    const critical = issues.filter(i => i.severity === '🔴').length;
+    logger.info(`⚠️ 发现 ${issues.length} 个问题（${critical} 个严重），建议修复后再进入 split/execute 阶段`);
+    logger.info('');
+    logger.info('💡 修复建议:');
+    logger.info('   1. 严重问题：必须修复，否则会影响后续开发');
+    logger.info('   2. 警告：建议修复，提高文档质量');
+    logger.info('   3. 可执行 speccore analyze --prompt -I <迭代名> 重新生成有问题的文档');
+  }
+  logger.info('');
 }

@@ -499,10 +499,25 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
           logger.success(`✅ ${count} 个 Spec 文档已写入 ${options.task}${platformLabel}/（任务级，迭代基线不变）`);
         } else {
           // 迭代级：写 020-specs/（全局文档写入 global/ 子目录，v6.41.0+）
+          // v6.69.2+: 增加端名白名单校验，防止 AI 创建非法目录
           const specDir = join(iterDir, '020-specs');
           await ensureDir(specDir);
           const globalSet = new Set(GLOBAL_SPEC_FILES);
+          const validPlatforms = new Set([GLOBAL_SPECS_DIR, ...(await parsePlatformList())]);
+          let skippedCount = 0;
+
           for (const [filename, content] of Object.entries(docs)) {
+            // 解析目录名（如 "admin-web/TECH.md" → "admin-web"）
+            const platformDir = filename.includes('/') ? filename.split('/')[0] : null;
+
+            // 白名单校验：如果包含目录前缀，必须是合法端名
+            if (platformDir && !validPlatforms.has(platformDir)) {
+              logger.warn(`   ⚠️ 跳过非法端目录: ${platformDir}（文件: ${filename}）`);
+              logger.warn(`      合法端: ${Array.from(validPlatforms).join(', ')}`);
+              skippedCount++;
+              continue;
+            }
+
             // 全局文档写入 global/ 子目录，端专属文档写入 {端}/ 子目录
             const targetDir = globalSet.has(filename)
               ? join(specDir, GLOBAL_SPECS_DIR)
@@ -517,6 +532,9 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
             }
             await writeFile(fp, content);
             count++;
+          }
+          if (skippedCount > 0) {
+            logger.warn(`⚠️ 共跳过 ${skippedCount} 个非法目录的文档，请检查 AI 输出是否包含非端名目录`);
           }
           logger.success(`✅ ${count} 个 Spec 文档已写入 020-specs/`);
         }
@@ -1725,6 +1743,33 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `### ${i + 1}/${taskDocs.length}: ${taskDocs[i][0]}\n\`\`\`markdown\n${taskDocs[i][1]}\n\`\`\`\n\n`;
     }
   }
+
+  // ── v6.69.2+: 强制自检清单（生成所有文档后必须执行）──
+  prompt += `\n## 🔍 强制自检清单（生成完成后必须执行）\n\n`;
+  prompt += `在调用 --apply 写入任何文档**之前**，必须逐条完成以下自检。自检未通过时，**必须修正文档后再写入**。\n\n`;
+  prompt += `### 1. 功能覆盖完整性\n`;
+  prompt += `- [ ] 对比原始需求文档的功能清单，确认每个功能模块都有对应的分析内容\n`;
+  prompt += `- [ ] 确认没有遗漏任何页面、接口、组件或业务规则\n`;
+  prompt += `- [ ] 如果发现有遗漏，先补充完整再写入\n\n`;
+  prompt += `### 2. 枚举值一致性（跨文档必检）\n`;
+  prompt += `- [ ] 检查所有文档中状态/类型枚举的定义是否完全一致\n`;
+  prompt += `- [ ] 示例：如果在 REQUIREMENT.md 中定义 status: 0=可用, 1=维修中，则 TECH.md、UI_SPEC.md 中必须完全使用相同的值和含义\n`;
+  prompt += `- [ ] **禁止**在不同文档中对同一枚举使用不同数值或含义\n\n`;
+  prompt += `### 3. 接口路径统一性\n`;
+  prompt += `- [ ] 检查全局 REQUIREMENT.md 中的接口路径与各端 TECH.md 中的接口路径是否完全一致\n`;
+  prompt += `- [ ] 示例：如果全局文档使用 /checkin，则各端文档不能写成 /check-in 或 /check_in\n`;
+  prompt += `- [ ] 路径、方法、参数名必须跨文档一致\n\n`;
+  prompt += `### 4. 跨文档引用一致性\n`;
+  prompt += `- [ ] 检查 UI_SPEC.md 中的字段映射是否与后端 API 响应字段一一对应\n`;
+  prompt += `- [ ] 检查 TEST.md 中的测试场景是否覆盖了 REQUIREMENT.md 中的所有验收标准\n`;
+  prompt += `- [ ] 检查各端 TECH.md 的技术选型是否与 global/TECH.md 的整体架构一致\n\n`;
+  prompt += `### 5. 目录结构合法性\n`;
+  prompt += `- [ ] 确认 --apply 的 JSON 键名只包含合法文件名或「合法端名/文件名」格式\n`;
+  prompt += `- [ ] **禁止**包含数字编号目录（如 1001/、1002/）、中文目录（如 错误码/）、特殊符号目录（如 .../）\n`;
+  prompt += `- [ ] 合法格式示例：\`global/ANALYSIS.md\`、\`admin-web/TECH.md\`、\`REQUIREMENT.md\`\n\n`;
+  prompt += `### 自检通过标准\n`;
+  prompt += `以上 5 项全部勾选通过后，方可执行 --apply 写入。如果任何一项未通过，先修正问题，重新自检，直到全部通过。\n`;
+
   return prompt;
 }
 

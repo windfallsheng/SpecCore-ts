@@ -2802,6 +2802,50 @@ phase1-prompt → phase1-done → contract-prompt → contract-done
 - 增加 `dependencyChain`: 完整依赖链路
 - 增加 `downstreamTasks`: 依赖于本任务的下游任务（通过反向查找 `depends_on` 关系）
 
+#### 文档质量加固（v6.69.2+）
+
+**问题根因**：AI 生成的 020-specs/ 文档存在以下质量问题：
+1. 非法目录创建（如 `1001/`、`错误码/`、`.../`）
+2. 枚举值跨文档不一致（如 REQUIREMENT.md 定义 `status=0,1`，TECH.md 却使用 `status=2`）
+3. 接口路径不统一（如全局用 `/checkin`，端文档用 `/check-in`）
+4. 功能覆盖不完整（遗漏页面、接口、业务规则）
+
+**三层防护策略**：
+
+| 层级 | 机制 | 实现位置 | 作用时机 |
+|:---|:---|:---|:---|
+| **生成前** | 强制自检清单（5 项必检） | `buildMultiDocPrompt()` 末尾 | AI 生成文档后、--apply 写入前 |
+| **写入时** | 端名白名单校验 | `analyze.ts` apply 阶段 | CLI 接收 --apply JSON 时 |
+| **写入后** | `audit --specs` 自动审计 | `audit.ts` `auditSpecsCommand()` | 用户主动执行或 CI 集成 |
+
+**端名白名单校验逻辑**：
+```
+--apply JSON 键名: "admin-web/TECH.md"
+        ↓
+提取目录前缀: "admin-web"
+        ↓
+比对合法端列表: ["global", "admin-web", "h5-mobile", "booking-service", ...]
+        ↓
+合法 → 正常写入 020-specs/admin-web/TECH.md
+非法 → 跳过写入，输出警告: "⚠️ 跳过非法端目录: 1001（文件: 1001/TECH.md）"
+```
+
+**强制自检清单内容**：
+1. 功能覆盖完整性 — 对比原始需求功能清单
+2. 枚举值一致性 — 跨文档状态/类型枚举必须一致
+3. 接口路径统一性 — 全局与各端路径、方法一致
+4. 跨文档引用一致性 — UI 字段 ↔ API 响应、TEST ↔ 验收标准
+5. 目录结构合法性 — JSON 键名不含非法目录
+
+**`audit --specs` 审计维度**：
+
+| 检查项 | 严重级别 | 说明 |
+|:---|:---|:---|
+| 目录结构合法性 | 🔴 | 检测纯数字、纯点、中文目录名 |
+| 枚举一致性 | 🔴 | 跨文档提取 key=value 枚举，标记不一致 |
+| API 路径一致性 | 🟡 | 全局 REQUIREMENT.md vs 各端 TECH.md |
+| 覆盖完整性 | 🟡 | 检查 REQUIREMENT.md、API_CONTRACT.md、各端 TECH.md |
+
 ---
 
 ### 8.12 spec-ask onboarding 强制展示修复（v6.63.0）
