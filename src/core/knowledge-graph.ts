@@ -1135,6 +1135,44 @@ async function inferRelations(entities: GraphEntity[], iterDir: string): Promise
     }
   }
 
+  // ═══════════════════════════════════════════════
+  // v6.69.0+: 从 IMPACT.md 补充 depends_on 关系（知识图谱链路补全）
+  // ═══════════════════════════════════════════════
+  const impactPath = join(iterDir, 'IMPACT.md');
+  if (await pathExists(impactPath)) {
+    try {
+      const content = await readFile(impactPath, 'utf-8');
+      // 解析 Dependencies 表格：| Consumer | → | Producer | 类型 |
+      // 格式：| Task-002: 订单导出 | → | Task-001: 用户管理 | API: `/api/users` |
+      const lines = content.split('\n');
+      let inDepsSection = false;
+      for (const line of lines) {
+        if (line.includes('## Dependencies')) { inDepsSection = true; continue; }
+        if (inDepsSection && line.startsWith('## ')) break;
+        if (!inDepsSection || !line.includes('|') || !line.includes('→')) continue;
+        // 跳过表头分隔行
+        if (line.match(/^\|[-:\s|]+\|$/)) continue;
+
+        const cells = line.split('|').map(c => c.trim()).filter(Boolean);
+        if (cells.length >= 3) {
+          const consumer = cells[0].split(':')[0].trim();
+          const producer = cells[2].split(':')[0].trim();
+          if (consumer.startsWith('Task-') && producer.startsWith('Task-')) {
+            if (entityMap.has(consumer) && entityMap.has(producer) &&
+                !relations.some(r => r.from === consumer && r.to === producer && r.type === 'depends_on')) {
+              relations.push({
+                from: consumer,
+                to: producer,
+                type: 'depends_on',
+                metadata: { source: 'IMPACT.md', reason: cells[3] || '' }
+              });
+            }
+          }
+        }
+      }
+    } catch { /* 跳过 */ }
+  }
+
   return relations;
 }
 
@@ -1403,4 +1441,109 @@ export async function refreshKnowledgeGraph(
   } catch {
     return null; // 静默失败，不影响主流程
   }
+}
+
+// ═══════════════════════════════════════════════
+// v6.69.0+: 依赖链路追踪（知识图谱链路补全）
+// ═══════════════════════════════════════════════
+
+export interface DependencyChain {
+  taskId: string;
+  taskName: string;
+  depth: number;
+  path: string[];              // 完整路径 [taskId, depId, depDepId, ...]
+  relations: GraphRelation[];  // 路径上的所有关系
+  entities: GraphEntity[];     // 路径上的所有实体
+}
+
+/**
+ * 追踪任务的完整依赖链路（向上追溯）
+ * 递归追踪 implements → references → depends_on 关系
+ */
+export function traceDependencyChain(
+  graph: KnowledgeGraph,
+  taskId: string,
+  maxDepth: number = 5,
+  visited: Set<string> = new Set()
+): DependencyChain[] {
+  const chains: DependencyChain[] = [];
+  if (maxDepth <= 0 || visited.has(taskId)) return chains;
+
+  const entity = graph.entities[taskId];
+  if (!entity) return chains;
+
+  visited.add(taskId);
+
+  // 收集所有上游关系（implements, references, depends_on）
+  const upstreamRels = graph.relations.filter(r =>
+    r.from === taskId &&
+    (r.type === 'implements' || r.type === 'references' || r.type === 'depends_on')
+  );
+
+  for (const rel of upstreamRels) {
+    const depEntity = graph.entities[rel.to];
+    if (!depEntity) continue;
+
+    chains.push({
+      taskId,
+      taskName: entity.title,
+      depth: 1,
+      path: [taskId, rel.to],
+      relations: [rel],
+      entities: [entity, depEntity],
+    });
+
+    // 递归追踪更深层的依赖
+    const subChains = traceDependencyChain(graph, rel.to, maxDepth - 1, new Set(visited));
+    for (const sub of subChains) {
+      chains.push({
+        taskId,
+        taskName: entity.title,
+        depth: sub.depth + 1,
+        path: [taskId, ...sub.path],
+        relations: [rel, ...sub.relations],
+        entities: [entity, ...sub.entities],
+      });
+    }
+  }
+
+  return chains;
+}
+
+/**
+ * 获取任务的完整上下文（扩展版，包含依赖链路）
+ * 在 getTaskContext 基础上增加 dependencyChain 字段
+ */
+export function getFullTaskContext(graph: KnowledgeGraph, taskId: string): {
+  requirement: GraphEntity | null;
+  siblingSubtasks: GraphEntity[];
+  parentTask: GraphEntity | null;
+  relatedSpecs: GraphEntity[];
+  dependsOn: GraphEntity[];
+  dependencyChain: DependencyChain[];
+  downstreamTasks: GraphEntity[];  // 依赖于本任务的任务
+} {
+  const base = getTaskContext(graph, taskId);
+
+  // 追踪完整依赖链路
+  const dependencyChain = traceDependencyChain(graph, taskId);
+
+  // 找下游任务（哪些任务依赖于本任务）
+  const downstreamTasks: GraphEntity[] = [];
+  const seen = new Set<string>();
+  for (const rel of graph.relations) {
+    if (rel.to === taskId && rel.type === 'depends_on') {
+      const downstream = graph.entities[rel.from];
+      if (downstream && !seen.has(downstream.id)) {
+        downstreamTasks.push(downstream);
+        seen.add(downstream.id);
+      }
+    }
+  }
+
+  return {
+    ...base,
+    dependencyChain,
+    downstreamTasks,
+  };
 }

@@ -251,13 +251,44 @@ export class PipelineEngine {
 }
 
 // ── 工厂函数：创建 analyze 流水线 ──
-export async function createAnalyzePipeline(iteration: string, cwd?: string): Promise<{
+// v6.69.0+: 支持契约先行 + 逐端推进（增强策略一 & 三）
+// v6.69.0+: 支持变更感知过滤 + 关键路径优先排序（增强策略二 & 三）
+export async function createAnalyzePipeline(
+  iteration: string,
+  cwd?: string,
+  options?: {
+    /** 变更感知：仅分析受影响的端 */
+    affectedPlatforms?: string[];
+    /** 关键路径优先：端排序优先级（靠前的优先分析） */
+    platformOrder?: string[];
+  }
+): Promise<{
   engine: PipelineEngine;
   steps: PipelineStepDef[];
 }> {
   // 动态导入避免循环依赖
   const { parsePlatformList } = await import('../core/spec-paths');
-  const platforms = await parsePlatformList();
+  let platforms = await parsePlatformList();
+
+  // 变更感知：过滤仅受影响的端
+  if (options?.affectedPlatforms && options.affectedPlatforms.length > 0) {
+    const before = platforms.length;
+    platforms = platforms.filter(p => options.affectedPlatforms!.includes(p));
+    if (platforms.length < before) {
+      logger.info(`🎯 变更感知: 从 ${before} 个端过滤为 ${platforms.length} 个端 (${platforms.join(', ')})`);
+    }
+  }
+
+  // 关键路径优先：按优先级排序端
+  if (options?.platformOrder && options.platformOrder.length > 0) {
+    const orderMap = new Map(options.platformOrder.map((p, i) => [p, i]));
+    platforms.sort((a, b) => {
+      const orderA = orderMap.get(a) ?? Infinity;
+      const orderB = orderMap.get(b) ?? Infinity;
+      return orderA - orderB;
+    });
+    logger.info(`🎯 关键路径优先: 端分析顺序 → ${platforms.join(' → ')}`);
+  }
 
   const steps: PipelineStepDef[] = [
     {
@@ -268,11 +299,91 @@ export async function createAnalyzePipeline(iteration: string, cwd?: string): Pr
     {
       id: 'phase1-done',
       name: 'Phase 1 完成检查',
-      next: platforms.length >= 2 ? 'phase2-prompt' : 'done',
+      next: platforms.length >= 2 ? 'contract-prompt' : 'done',
+    },
+  ];
+
+  // 多端项目：插入契约先行 + 逐端分析步骤
+  if (platforms.length >= 2) {
+    // 契约先行阶段
+    steps.push({
+      id: 'contract-prompt',
+      name: '契约先行: 跨端 API 契约定义',
+      next: 'contract-done',
+    });
+    steps.push({
+      id: 'contract-done',
+      name: '契约定义完成检查',
+      next: platforms.length > 0 ? `platform-${platforms[0]}-prompt` : 'done',
+    });
+
+    // 逐端推进：每个端独立一个步骤
+    for (let i = 0; i < platforms.length; i++) {
+      const platform = platforms[i];
+      const nextId = i < platforms.length - 1
+        ? `platform-${platforms[i + 1]}-prompt`
+        : 'done';
+
+      steps.push({
+        id: `platform-${platform}-prompt`,
+        name: `Phase 2-${i + 1}: ${platform} 端专属文档生成`,
+        next: `platform-${platform}-done`,
+      });
+      steps.push({
+        id: `platform-${platform}-done`,
+        name: `${platform} 端完成检查`,
+        next: nextId,
+      });
+    }
+  }
+
+  steps.push({
+    id: 'done',
+    name: 'Pipeline 完成',
+    next: null,
+  });
+
+  const engine = new PipelineEngine({
+    iteration,
+    name: 'analyze',
+    cwd,
+  });
+
+  // 将平台列表存入引擎状态，供后续步骤使用
+  engine.defineSteps(steps);
+
+  return { engine, steps };
+}
+
+// ── 工厂函数：创建 split 流水线 ──
+export async function createSplitPipeline(iteration: string, cwd?: string): Promise<{
+  engine: PipelineEngine;
+  steps: PipelineStepDef[];
+}> {
+  const steps: PipelineStepDef[] = [
+    {
+      id: 'init',
+      name: '初始化拆分流程',
+      next: 'prompt-analysis',
     },
     {
-      id: 'phase2-prompt',
-      name: `Phase 2: 各端专属文档生成 (${platforms.length} 个端)`,
+      id: 'prompt-analysis',
+      name: 'AI分析需求文档，输出任务拆分建议',
+      next: 'confirmation',
+    },
+    {
+      id: 'confirmation',
+      name: '用户确认拆分方案',
+      next: 'creation',
+    },
+    {
+      id: 'creation',
+      name: '创建任务目录结构',
+      next: 'validation',
+    },
+    {
+      id: 'validation',
+      name: '验证任务结构完整性',
       next: 'done',
     },
     {
@@ -284,7 +395,100 @@ export async function createAnalyzePipeline(iteration: string, cwd?: string): Pr
 
   const engine = new PipelineEngine({
     iteration,
-    name: 'analyze',
+    name: 'split',
+    cwd,
+  });
+
+  engine.defineSteps(steps);
+
+  return { engine, steps };
+}
+
+// ── 工厂函数：创建 execute 流水线 ──
+export async function createExecutePipeline(iteration: string, task?: string, cwd?: string): Promise<{
+  engine: PipelineEngine;
+  steps: PipelineStepDef[];
+}> {
+  const steps: PipelineStepDef[] = [
+    {
+      id: 'init',
+      name: '初始化执行环境',
+      next: 'prompt-analysis',
+    },
+    {
+      id: 'prompt-analysis',
+      name: 'AI分析任务需求，生成代码实现方案',
+      next: 'code-generation',
+    },
+    {
+      id: 'code-generation',
+      name: '生成代码文件',
+      next: 'verification',
+    },
+    {
+      id: 'verification',
+      name: '代码验证与测试',
+      next: 'done',
+    },
+    {
+      id: 'done',
+      name: 'Pipeline 完成',
+      next: null,
+    },
+  ];
+
+  const engine = new PipelineEngine({
+    iteration,
+    name: task ? `execute-${task}` : 'execute',
+    cwd,
+  });
+
+  engine.defineSteps(steps);
+
+  return { engine, steps };
+}
+
+// ── 工厂函数：创建全局分析流水线 ──
+export async function createGlobalAnalyzePipeline(cwd?: string): Promise<{
+  engine: PipelineEngine;
+  steps: PipelineStepDef[];
+}> {
+  const steps: PipelineStepDef[] = [
+    {
+      id: 'init',
+      name: '初始化全局分析环境',
+      next: 'discovery',
+    },
+    {
+      id: 'discovery',
+      name: '发现所有迭代和项目',
+      next: 'global-analysis',
+    },
+    {
+      id: 'global-analysis',
+      name: '分析跨迭代依赖关系',
+      next: 'consistency-check',
+    },
+    {
+      id: 'consistency-check',
+      name: '检查全局一致性',
+      next: 'report-generation',
+    },
+    {
+      id: 'report-generation',
+      name: '生成全局报告',
+      next: 'done',
+    },
+    {
+      id: 'done',
+      name: 'Pipeline 完成',
+      next: null,
+    },
+  ];
+
+  const engine = new PipelineEngine({
+    iteration: 'GLOBAL', // 使用特殊标识表示全局分析
+    name: 'global-analyze',
     cwd,
   });
 

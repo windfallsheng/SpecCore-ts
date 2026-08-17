@@ -1,3 +1,43 @@
+## v6.69.0 (2026-08-17) — 三层分析策略 + 四个增强策略
+
+### 核心功能
+
+- **三层分析策略设计哲学**：全局层（先分后总/归纳法）、迭代层（先总后分/演绎法）、任务层（向上追溯/聚焦法）
+- **四个增强策略**：
+  - **契约先行**（迭代层）：Phase 1 后插入跨端 API 契约定义阶段，隔离各端分析依赖
+  - **变更感知**（全局层）：Git diff 自动检测受影响端，Pipeline 仅分析变更端
+  - **关键路径优先**（迭代层）：按任务优先级自动排序端，核心路径端先分析
+  - **横向关联**（任务层）：执行前检查依赖任务状态和契约对齐
+- **知识图谱链路补全**：
+  - 从 IMPACT.md Dependencies 表格补充 `depends_on` 关系
+  - 新增 `traceDependencyChain()` 递归追踪 `implements → references → depends_on` 完整链路
+  - 新增 `getFullTaskContext()` 扩展版上下文查询（含上下游任务）
+
+### 新增模块
+
+- **change-detection.ts**（变更感知模块）：
+  - `getChangedFiles()` / `getUntrackedFiles()` — Git 变更检测
+  - `loadSourcePathMap()` — 读取 CONSTITUTION.md 源码路径 → 端映射
+  - `detectAffectedPlatforms()` — 核心函数，自动识别受影响端
+  - `detectPlatformPriorityOrder()` — 按任务优先级统计排序端
+
+### Pipeline 引擎增强
+
+- `createAnalyzePipeline()` 新增 `options: { affectedPlatforms?, platformOrder? }` 参数
+  - `affectedPlatforms`：变更感知过滤，仅生成受影响端的步骤
+  - `platformOrder`：关键路径优先排序，按优先级生成步骤顺序
+- `analyze --scope global --pipeline` 接入 `createGlobalAnalyzePipeline`
+- Pipeline 推进逻辑同步支持全局/迭代层双模式
+
+### 任务执行增强
+
+- `execute.ts` 新增 `checkCrossTaskDependencies()` 函数：
+  - 检查依赖任务是否已完成
+  - 检查 API_CONTRACT.yaml 中的 dependsOn 与 TaskState.dependencies 一致性
+  - 检查依赖任务的契约文件是否存在
+
+---
+
 ## v6.68.0 (2026-08-17) — Pipeline 引擎完整实现
 
 ### 核心功能

@@ -11,11 +11,14 @@ import { getDefaultIteration } from '../core/context';
 import { resolveGlobalSpecPath } from '../core/spec-paths';
 import { devAiGuide, DevPhase, DevPipelineState } from '../core/dev-llm';
 import { tryHostAi } from '../core/ask-host-ai';
+import { PipelineEngine } from '../core/pipeline-engine';
 
 interface DevOptions {
   iteration?: string; force?: boolean; auto?: boolean; autoSteps?: string;
   from?: string; to?: string;
   web?: boolean; output?: string; lang?: string;
+  pipeline?: boolean;   // --pipeline: 启用 Pipeline 模式
+  resume?: boolean;     // --resume: 恢复之前的 Pipeline
 }
 
 const I18N: Record<string, Record<string, string>> = {
@@ -32,6 +35,32 @@ async function hasFeatureDirs(iterDir: string): Promise<boolean> {
 }
 
 export async function devCommand(options: DevOptions): Promise<void> {
+  // ── Pipeline 模式 ──
+  if (options.pipeline) {
+    const iteration = await getDefaultIteration(options.iteration);
+    if (!iteration) {
+      logger.error('--pipeline 需要 --iteration');
+      return;
+    }
+    
+    // 检查是否为恢复模式
+    if (options.resume) {
+      const hasPipeline = await PipelineEngine.hasActivePipeline(process.cwd(), iteration);
+      if (hasPipeline) {
+        // 对于 dev 命令，我们直接运行 autoPipeline，因为它已经是 Pipeline 的一部分
+        await autoPipeline(options);
+        return;
+      } else {
+        logger.warn('没有找到活跃的 Dev Pipeline，启动新的 Pipeline...');
+      }
+    }
+    
+    // 初始化新的 Dev Pipeline
+    // 注意：对于 dev 命令，我们使用 autoPipeline 作为主要执行逻辑
+    await autoPipeline(options);
+    return;
+  }
+  
   // 非 TTY 或 AI 上下文 → HTML 页面
   if (isAiContext() || !process.stdout.isTTY || options.web) {
     const html = await renderDevHtml(options);
