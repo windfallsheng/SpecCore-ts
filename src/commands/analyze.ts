@@ -29,7 +29,7 @@ import { warnIfIndexStale } from '../core/index-guard';
 import { GLOBAL_SPECS_DIR, GLOBAL_SPEC_FILES, parsePlatformTypes, parsePlatformList } from '../core/spec-paths';
 import { unifiedSearch, formatUnifiedContext } from '../core/unified-retrieval';
 import { PipelineEngine, createAnalyzePipeline, createGlobalAnalyzePipeline } from '../core/pipeline-engine';
-import { detectAffectedPlatforms, detectPlatformPriorityOrder } from '../core/change-detection';
+import { detectAffectedPlatforms, detectPlatformPriorityOrder, recordAnalysisSnapshot } from '../core/change-detection';
 
 export interface AnalyzeOptions {
   iteration?: string;
@@ -619,6 +619,9 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         const state = await engine.getState();
         if (state?.currentStep === 'done') {
           logger.success('🎉 Pipeline 完成!');
+          // v6.69.1: 记录分析快照，支持下次增量分析
+          const snapshotScope = isGlobalScope ? 'global' : (options.iteration ? `Iteration-${options.iteration}` : 'unknown');
+          await recordAnalysisSnapshot(snapshotScope);
           await engine.reset();
         } else if (state?.currentStep) {
           logger.info('');

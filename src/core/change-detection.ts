@@ -3,9 +3,13 @@
  *
  * 通过 Git diff 识别变更范围，将变更文件映射到受影响的端，
  * 支持 Pipeline 的增量分析（仅分析受影响端）。
+ *
+ * v6.69.1 修复：
+ * - 对比基准从 HEAD 改为 CONSTITUTION.md 配置的默认分支
+ * - 新增分析快照持久化，支持基于上次分析点的增量 diff
  */
 
-import { readFile, pathExists } from 'fs-extra';
+import { readFile, writeFile, pathExists } from 'fs-extra';
 import { join } from 'path';
 import { execSync } from 'child_process';
 import { logger } from '../utils/logger';
@@ -16,14 +20,56 @@ export interface PlatformChangeInfo {
   changeCount: number;
 }
 
+// ═══════════════════════════════════════════════
+// 对比基准：默认分支读取
+// ═══════════════════════════════════════════════
+
+let cachedDefaultBranch: string | null = null;
+
+/**
+ * 获取 CONSTITUTION.md 配置的默认分支（带缓存）
+ * 优先级：CONSTITUTION.md > 硬编码 'main'
+ */
+export function getDefaultBaseRef(): string {
+  if (cachedDefaultBranch) return cachedDefaultBranch;
+  try {
+    const { loadGitConfig } = require('./git-integration');
+    const config = loadGitConfig();
+    cachedDefaultBranch = config.defaultBranch || 'main';
+  } catch {
+    cachedDefaultBranch = 'main';
+  }
+  logger.debug(`变更感知: 默认对比基准分支 = ${cachedDefaultBranch!}`);
+  return cachedDefaultBranch!;
+}
+
 /**
  * 获取 Git 工作区的变更文件列表
- * @param baseRef 对比的基准 ref（默认 HEAD）
+ * @param baseRef 对比的基准 ref（默认使用 CONSTITUTION.md 配置的默认分支）
  * @returns 相对路径列表
  */
-export function getChangedFiles(baseRef: string = 'HEAD'): string[] {
+export function getChangedFiles(baseRef?: string): string[] {
+  const ref = baseRef || getDefaultBaseRef();
   try {
-    const output = execSync(`git diff --name-only ${baseRef}`, {
+    const output = execSync(`git diff --name-only ${ref}`, {
+      encoding: 'utf-8',
+      stdio: 'pipe',
+    }).trim();
+    if (!output) return [];
+    return output.split('\n').filter(f => f.trim().length > 0);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 获取两个 commit/ref 之间的变更文件列表
+ * @param fromRef 起始 ref（如上次分析的 commit）
+ * @param toRef 结束 ref（默认 HEAD）
+ */
+export function getChangedFilesBetween(fromRef: string, toRef: string = 'HEAD'): string[] {
+  try {
+    const output = execSync(`git diff --name-only ${fromRef}..${toRef}`, {
       encoding: 'utf-8',
       stdio: 'pipe',
     }).trim();
@@ -113,15 +159,37 @@ export async function loadSourcePathMap(cwd: string): Promise<Map<string, string
  * 3. 全局配置变更（.speccore/）→ 影响所有端
  * 4. 其他文件变更（CI、文档等）→ 不影响分析
  *
+ * v6.69.1: 支持基于分析快照的增量检测
+ *
  * @param cwd 工作目录
  * @param changedFiles 可选：预计算的变更文件列表（不传则自动检测）
+ * @param options 可选配置
  * @returns 受影响的端名列表（空数组表示无变更或无法检测）
  */
 export async function detectAffectedPlatforms(
   cwd: string,
-  changedFiles?: string[]
+  changedFiles?: string[],
+  options?: {
+    /** 分析范围标识，用于读取快照（如 'global', 'Iteration-Q2', 'Task-001'） */
+    scope?: string;
+    /** 是否使用增量模式（基于上次分析的 commit 做 diff） */
+    incremental?: boolean;
+  }
 ): Promise<string[]> {
-  const files = changedFiles || [...getChangedFiles(), ...getUntrackedFiles()];
+  let files: string[];
+
+  if (changedFiles) {
+    files = changedFiles;
+  } else if (options?.incremental && options?.scope) {
+    // 增量模式：基于上次分析的 commit hash 做 diff
+    files = await getIncrementalChangedFiles(options.scope);
+    if (files.length > 0) {
+      logger.info(`🔄 变更感知(增量): 自上次分析后新增 ${files.length} 个变更文件`);
+    }
+  } else {
+    // 全量模式：与默认分支对比
+    files = [...getChangedFiles(), ...getUntrackedFiles()];
+  }
 
   if (files.length === 0) {
     logger.debug('变更感知: 未检测到变更文件');
@@ -244,4 +312,153 @@ export async function detectPlatformPriorityOrder(iteration: string): Promise<st
     logger.info(`🎯 关键路径优先: 端优先级排序 → ${result.join(' > ')}`);
   }
   return result;
+}
+
+// ═══════════════════════════════════════════════
+// v6.69.1: 分析快照持久化
+// ═══════════════════════════════════════════════
+
+export interface AnalysisSnapshot {
+  lastCommit: string;
+  analyzedAt: string;
+  branch: string;
+}
+
+export interface AnalysisSnapshots {
+  [scope: string]: AnalysisSnapshot;
+}
+
+const SNAPSHOT_FILE = join('.speccore', 'cache', 'analysis-snapshots.json');
+
+/**
+ * 读取分析快照文件
+ */
+export async function readAnalysisSnapshots(): Promise<AnalysisSnapshots> {
+  try {
+    if (await pathExists(SNAPSHOT_FILE)) {
+      const content = await readFile(SNAPSHOT_FILE, 'utf-8');
+      return JSON.parse(content) as AnalysisSnapshots;
+    }
+  } catch (e) {
+    logger.debug('读取分析快照失败:', e);
+  }
+  return {};
+}
+
+/**
+ * 写入分析快照文件
+ */
+export async function writeAnalysisSnapshots(snapshots: AnalysisSnapshots): Promise<void> {
+  try {
+    await writeFile(SNAPSHOT_FILE, JSON.stringify(snapshots, null, 2), 'utf-8');
+  } catch (e) {
+    logger.debug('写入分析快照失败:', e);
+  }
+}
+
+/**
+ * 获取当前 HEAD 的 commit hash
+ */
+export function getCurrentCommitHash(): string | null {
+  try {
+    return execSync('git rev-parse HEAD', {
+      encoding: 'utf-8',
+      stdio: 'pipe',
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 获取当前分支名
+ */
+export function getCurrentBranch(): string | null {
+  try {
+    return execSync('git rev-parse --abbrev-ref HEAD', {
+      encoding: 'utf-8',
+      stdio: 'pipe',
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 基于上次分析的快照获取增量变更文件
+ * @param scope 分析范围标识（如 'global', 'Iteration-Q2', 'Task-001'）
+ * @returns 自上次分析以来的变更文件列表（无快照则 fallback 到默认分支对比）
+ */
+export async function getIncrementalChangedFiles(scope: string): Promise<string[]> {
+  const snapshots = await readAnalysisSnapshots();
+  const snapshot = snapshots[scope];
+
+  if (!snapshot) {
+    logger.debug(`变更感知: 未找到 ${scope} 的历史快照，fallback 到默认分支对比`);
+    return [...getChangedFiles(), ...getUntrackedFiles()];
+  }
+
+  // 检查上次分析的 commit 是否仍存在于当前分支历史中
+  const currentCommit = getCurrentCommitHash();
+  if (!currentCommit) {
+    logger.warn('变更感知: 无法获取当前 commit hash');
+    return [];
+  }
+
+  if (snapshot.lastCommit === currentCommit) {
+    logger.debug(`变更感知: ${scope} 自上次分析(${snapshot.lastCommit.slice(0, 7)})后无新变更`);
+    return [];
+  }
+
+  // 使用 git diff <lastCommit>..HEAD 获取增量变更
+  const files = getChangedFilesBetween(snapshot.lastCommit);
+  logger.info(
+    `🔄 变更感知(增量): ${scope} 自 ${snapshot.analyzedAt.slice(0, 10)} ` +
+    `(${snapshot.lastCommit.slice(0, 7)}..${currentCommit.slice(0, 7)}) ` +
+    `检测到 ${files.length} 个变更文件`
+  );
+  return files;
+}
+
+/**
+ * 记录分析快照（分析完成后调用）
+ * @param scope 分析范围标识（如 'global', 'Iteration-Q2', 'Task-001'）
+ */
+export async function recordAnalysisSnapshot(scope: string): Promise<void> {
+  const commitHash = getCurrentCommitHash();
+  const branch = getCurrentBranch();
+  if (!commitHash) {
+    logger.warn('变更感知: 无法记录快照，当前不是 git 仓库');
+    return;
+  }
+
+  const snapshots = await readAnalysisSnapshots();
+  snapshots[scope] = {
+    lastCommit: commitHash,
+    analyzedAt: new Date().toISOString(),
+    branch: branch || 'unknown',
+  };
+
+  await writeAnalysisSnapshots(snapshots);
+  logger.debug(`变更感知: 已记录 ${scope} 分析快照 → ${commitHash.slice(0, 7)} (${branch})`);
+}
+
+/**
+ * 清除指定范围的分析快照
+ * @param scope 分析范围标识，不传则清除全部
+ */
+export async function clearAnalysisSnapshot(scope?: string): Promise<void> {
+  if (scope) {
+    const snapshots = await readAnalysisSnapshots();
+    delete snapshots[scope];
+    await writeAnalysisSnapshots(snapshots);
+    logger.info(`🗑️ 变更感知: 已清除 ${scope} 的分析快照`);
+  } else {
+    try {
+      await writeFile(SNAPSHOT_FILE, '{}', 'utf-8');
+      logger.info('🗑️ 变更感知: 已清除所有分析快照');
+    } catch (e) {
+      logger.debug('清除分析快照失败:', e);
+    }
+  }
 }
