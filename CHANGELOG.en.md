@@ -2,6 +2,48 @@
 
 ---
 
+## v6.68.0 (2026-08-17) — Complete Pipeline Engine Implementation
+
+### Core Features
+
+- **pipeline-engine.ts**: Complete Pipeline Engine implementation (state machine design)
+  - Supports multi-step pipelines, each step waiting for AI to write back via --apply
+  - Supports conditional branches (e.g., execute Phase 2 only for multi-platform projects)
+  - Supports resume from checkpoint (--resume)
+  - Supports error recovery and retry
+  - State file tracks current step (.speccore/local/.pipeline-{iteration}.json)
+
+- **analyze.ts**: Pipeline Engine integration
+  - New `--pipeline` option: Enable pipeline mode, auto-execute Phase 1 → Phase 2
+  - Prompt mode: Initialize Pipeline state, output Phase 1 prompt + Pipeline continuation instructions
+  - Apply mode: Auto-advance to next step after writing files, output `[SPECCORE_PIPELINE_NEXT]` marker and Phase 2 prompt
+  - AI sees marker and automatically executes next command, no user intervention needed
+
+### Workflow
+
+```bash
+# User executes in Pipeline mode
+speccore analyze --prompt --pipeline -I meeting-upgrade
+
+# CLI initializes Pipeline state → outputs Phase 1 prompt
+# AI generates global docs → --apply
+# CLI writes files → auto-advances to Phase 2 → outputs [SPECCORE_PIPELINE_NEXT] + Phase 2 prompt
+# AI sees marker → auto-executes Phase 2 → generates platform-specific docs → --apply
+# CLI writes files → marks complete → Pipeline finished
+```
+
+### Technical Implementation
+
+- **State Machine Design**: PipelineEngine class manages step states (phase1-prompt → phase1-done → phase2-prompt → done)
+- **Auto-Advance**: Apply mode checks Pipeline state after completion, automatically calls advance() to move to next step
+- **Marker Mechanism**: Outputs `[SPECCORE_PIPELINE_NEXT]` marker, AI recognizes and auto-executes next command
+- **Conditional Branching**: Detects platform count, only executes Phase 2 for multi-platform projects (≥2 platforms)
+
+### Backward Compatibility
+
+- Non-Pipeline mode maintains original behavior (outputs info message, requires user to manually execute Phase 2)
+- Info message now includes suggestion to use `--pipeline` option
+
 ## v6.67.0 (2026-08-16) — Clarify Complete Workflow at Beginning of Prompt
 
 ### Core Fixes

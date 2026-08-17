@@ -1,224 +1,294 @@
 /**
- * Pipeline Engine - 通用流水线执行引擎
- * 
- * 设计目标:
- * 1. 支持多步骤流水线,每步等待 AI 通过 --apply 写回
- * 2. 支持条件分支(如多端才执行 Phase 2)
- * 3. 支持断点续跑(--resume)
- * 4. 支持错误恢复和重试
- * 
+ * Pipeline Engine - 通用流水线执行引擎（状态机设计）
+ *
+ * 核心思路:
+ *   CLI 是单次运行进程，无法在一次调用中"等待" AI 的 --apply。
+ *   所以用状态文件追踪当前步骤，每次 CLI 调用执行一步，
+ *   --apply 完成后 CLI 自动推进到下一步并输出新 prompt。
+ *
+ * 状态流转 (analyze 两阶段分析):
+ *   init → phase1-prompt → (AI --apply) → phase1-done
+ *     → 检测多端 → phase2-prompt → (AI --apply) → done
+ *
+ * AI 侧流程:
+ *   1. 收到 Phase 1 prompt → 生成全局文档 → --apply
+ *   2. CLI 写入文件 → 自动推进 → 输出 [SPECCORE_PIPELINE_NEXT] + Phase 2 prompt
+ *   3. AI 看到标记 → 自动执行下一个命令 → 生成各端文档 → --apply
+ *   4. CLI 写入文件 → 标记完成 → Pipeline 结束
+ *
  * @since v6.68.0
  */
 
+import { writeFile, readFile, pathExists, ensureDir, unlink } from 'fs-extra';
+import { join } from 'path';
 import { logger } from '../utils/logger';
 
-export interface PipelineStep {
-  /** 步骤名称(用于日志和断点恢复) */
-  name: string;
-  
-  /** 该步骤的 prompt */
-  prompt: string;
-  
-  /** apply 处理器:接收 AI 生成的内容并写入文件 */
-  applyHandler: (data: any) => Promise<void>;
-  
-  /** 完成后回调:返回 true 继续下一步,false 停止流水线 */
-  onComplete?: () => Promise<boolean>;
-  
-  /** 是否可选步骤(失败不中断流水线) */
-  optional?: boolean;
-}
-
-export interface PipelineOptions {
+// ── 状态接口 ──
+export interface PipelineState {
+  /** 当前步骤 */
+  currentStep: string;
+  /** 所有步骤列表 */
+  steps: string[];
+  /** 已完成步骤 */
+  completedSteps: string[];
   /** 迭代名称 */
   iteration: string;
-  
-  /** 是否启用断点续跑 */
-  resume?: boolean;
-  
-  /** 最大重试次数 */
-  maxRetries?: number;
-  
-  /** 步骤间延迟(毫秒) */
-  stepDelay?: number;
+  /** 流水线名称 */
+  name: string;
+  /** 端列表（analyze 专用） */
+  platforms?: string[];
+  /** 创建时间 */
+  createdAt: string;
+  /** 最后更新时间 */
+  updatedAt: string;
+}
+
+// ── 步骤定义 ──
+export interface PipelineStepDef {
+  /** 步骤 ID */
+  id: string;
+  /** 步骤显示名 */
+  name: string;
+  /** 下一步 ID（null = 结束） */
+  next: string | null;
+  /** 条件判断：返回 true 才执行此步骤，否则跳到 next */
+  condition?: () => Promise<boolean> | boolean;
+}
+
+// ── 引擎选项 ──
+export interface PipelineEngineOptions {
+  /** 迭代名称 */
+  iteration: string;
+  /** 流水线名称 */
+  name: string;
+  /** 工作区根目录（默认 process.cwd()） */
+  cwd?: string;
 }
 
 export class PipelineEngine {
-  private options: PipelineOptions;
-  private executedSteps: Set<string> = new Set();
-  private checkpointFile: string;
+  private state: PipelineState | null = null;
+  private steps: Map<string, PipelineStepDef> = new Map();
+  private iteration: string;
+  private name: string;
+  private cwd: string;
+  private stateFilePath: string;
 
-  constructor(options: PipelineOptions) {
-    this.options = {
-      maxRetries: 3,
-      stepDelay: 1000,
-      ...options,
+  constructor(options: PipelineEngineOptions) {
+    this.iteration = options.iteration;
+    this.name = options.name;
+    this.cwd = options.cwd || process.cwd();
+    this.stateFilePath = join(this.cwd, '.speccore', 'local', `.pipeline-${options.iteration}.json`);
+  }
+
+  // ── 定义步骤 ──
+  defineSteps(stepDefs: PipelineStepDef[]): void {
+    this.steps.clear();
+    for (const step of stepDefs) {
+      this.steps.set(step.id, step);
+    }
+  }
+
+  // ── 初始化流水线 ──
+  async init(firstStepId: string, extra?: Record<string, any>): Promise<void> {
+    const stepDef = this.steps.get(firstStepId);
+    if (!stepDef) {
+      throw new Error(`Pipeline step '${firstStepId}' not defined`);
+    }
+
+    this.state = {
+      currentStep: firstStepId,
+      steps: Array.from(this.steps.keys()),
+      completedSteps: [],
+      iteration: this.iteration,
+      name: this.name,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      ...extra,
     };
-    
-    // 断点文件路径
-    this.checkpointFile = `.speccore/local/.pipeline-${options.iteration}.json`;
+
+    await this.saveState();
+    logger.info(`🚀 Pipeline "${this.name}" 已初始化 (${this.state.steps.length} 个步骤)`);
   }
 
-  /**
-   * 执行流水线
-   */
-  async execute(steps: PipelineStep[]): Promise<void> {
-    logger.info('');
-    logger.info(`🚀 启动 Pipeline 引擎 (${steps.length} 个步骤)`);
-    logger.info('');
-
-    // 加载断点信息
-    if (this.options.resume) {
-      await this.loadCheckpoint();
+  // ── 推进到下一步 ──
+  async advance(): Promise<{ nextStepId: string | null; nextStepName: string | null; isComplete: boolean }> {
+    if (!this.state) {
+      const loaded = await this.loadState();
+      if (!loaded) {
+        throw new Error('Pipeline state not found. Is the pipeline initialized?');
+      }
     }
 
-    for (let i = 0; i < steps.length; i++) {
-      const step = steps[i];
-      
-      // 检查是否已执行(断点续跑)
-      if (this.executedSteps.has(step.name)) {
-        logger.info(`⏭️  跳过已完成的步骤: ${step.name}`);
-        continue;
-      }
+    const currentStepDef = this.steps.get(this.state!.currentStep);
+    if (!currentStepDef) {
+      throw new Error(`Step '${this.state!.currentStep}' not defined in pipeline`);
+    }
 
-      logger.info(`▶️  执行步骤 ${i + 1}/${steps.length}: ${step.name}`);
-      
-      try {
-        // 执行步骤
-        await this.executeStep(step);
-        
-        // 标记为已执行
-        this.executedSteps.add(step.name);
-        await this.saveCheckpoint();
-        
-        // 检查是否继续
-        if (step.onComplete) {
-          const shouldContinue = await step.onComplete();
-          if (!shouldContinue) {
-            logger.info(`⏹️  步骤 ${step.name} 决定停止流水线`);
-            break;
-          }
-        }
-        
-        // 步骤间延迟
-        if (i < steps.length - 1 && this.options.stepDelay) {
-          await this.sleep(this.options.stepDelay);
-        }
-        
-        logger.success(`✅ 步骤 ${step.name} 完成`);
-        logger.info('');
-        
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        if (step.optional) {
-          logger.warn(`⚠️  可选步骤 ${step.name} 失败,继续执行: ${errorMessage}`);
-        } else {
-          logger.error(`❌ 步骤 ${step.name} 失败: ${errorMessage}`);
-          throw error;
+    // 标记当前步骤完成
+    this.state!.completedSteps.push(this.state!.currentStep);
+
+    let nextStepId = currentStepDef.next;
+
+    // 条件检查：如果下一步有条件，检查是否满足
+    if (nextStepId) {
+      const nextStepDef = this.steps.get(nextStepId);
+      if (nextStepDef?.condition) {
+        const shouldExecute = await nextStepDef.condition();
+        if (!shouldExecute) {
+          // 条件不满足，跳过这一步
+          logger.info(`⏭️  步骤 ${nextStepDef.name} 条件不满足，跳过`);
+          nextStepId = nextStepDef.next;
         }
       }
     }
 
-    logger.success('🎉 Pipeline 执行完成!');
-    logger.info('');
-    
-    // 清理断点文件
-    await this.clearCheckpoint();
-  }
+    if (nextStepId) {
+      this.state!.currentStep = nextStepId;
+      this.state!.updatedAt = new Date().toISOString();
+      await this.saveState();
 
-  /**
-   * 执行单个步骤
-   */
-  private async executeStep(step: PipelineStep): Promise<void> {
-    let retries = 0;
-    const maxRetries = this.options.maxRetries || 3;
-
-    while (retries < maxRetries) {
-      try {
-        // 输出 prompt
-        process.stdout.write(`[SPECCORE_PROMPT]\n${step.prompt}`);
-        process.exitCode = 10;
-        
-        // 等待 AI 通过 --apply 写回
-        // 注意: 这里假设 CLI 会在下一次调用时进入 apply 模式
-        // 实际实现需要在 analyze.ts 中配合
-        
-        return; // 成功退出
-        
-      } catch (error) {
-        retries++;
-        if (retries >= maxRetries) {
-          throw error;
-        }
-        
-        logger.warn(`⚠️  步骤 ${step.name} 第 ${retries} 次重试...`);
-        await this.sleep(2000 * retries); // 指数退避
-      }
+      const nextStepDef = this.steps.get(nextStepId);
+      return {
+        nextStepId,
+        nextStepName: nextStepDef?.name || nextStepId,
+        isComplete: false,
+      };
     }
-  }
 
-  /**
-   * 保存断点信息
-   */
-  private async saveCheckpoint(): Promise<void> {
-    const fs = await import('fs/promises');
-    const data = {
-      iteration: this.options.iteration,
-      executedSteps: Array.from(this.executedSteps),
-      timestamp: new Date().toISOString(),
+    // 没有下一步 → 完成
+    this.state!.currentStep = 'done';
+    this.state!.updatedAt = new Date().toISOString();
+    await this.saveState();
+
+    return {
+      nextStepId: null,
+      nextStepName: null,
+      isComplete: true,
     };
-    
-    await fs.writeFile(this.checkpointFile, JSON.stringify(data, null, 2));
   }
 
-  /**
-   * 加载断点信息
-   */
-  private async loadCheckpoint(): Promise<void> {
-    const fs = await import('fs/promises');
-    const path = await import('path');
-    
+  // ── 获取当前步骤 ──
+  getCurrentStep(): string | null {
+    return this.state?.currentStep || null;
+  }
+
+  // ── 获取当前步骤定义 ──
+  getCurrentStepDef(): PipelineStepDef | null {
+    if (!this.state) return null;
+    return this.steps.get(this.state.currentStep) || null;
+  }
+
+  // ── 检查流水线是否活跃（未完成） ──
+  async isActive(): Promise<boolean> {
+    const state = await this.loadState();
+    if (!state) return false;
+    return state.currentStep !== 'done';
+  }
+
+  // ── 获取完整状态 ──
+  async getState(): Promise<PipelineState | null> {
+    return this.loadState();
+  }
+
+  // ── 检查是否有活跃流水线 ──
+  static async hasActivePipeline(cwd: string, iteration: string): Promise<boolean> {
+    const statePath = join(cwd, '.speccore', 'local', `.pipeline-${iteration}.json`);
+    if (!(await pathExists(statePath))) return false;
     try {
-      const checkpointPath = path.join(process.cwd(), this.checkpointFile);
-      const data = await fs.readFile(checkpointPath, 'utf-8');
-      const parsed = JSON.parse(data);
-      
-      this.executedSteps = new Set(parsed.executedSteps || []);
-      logger.info(`📌 恢复断点: 已执行 ${this.executedSteps.size} 个步骤`);
-    } catch (error) {
-      logger.debug('无断点信息,从头开始执行');
+      const data = await readFile(statePath, 'utf-8');
+      const state = JSON.parse(data) as PipelineState;
+      return state.currentStep !== 'done';
+    } catch {
+      return false;
     }
   }
 
-  /**
-   * 清理断点文件
-   */
-  private async clearCheckpoint(): Promise<void> {
-    const fs = await import('fs/promises');
-    const path = await import('path');
-    
+  // ── 加载已有流水线状态 ──
+  static async loadExistingState(cwd: string, iteration: string): Promise<PipelineState | null> {
+    const statePath = join(cwd, '.speccore', 'local', `.pipeline-${iteration}.json`);
+    if (!(await pathExists(statePath))) return null;
     try {
-      const checkpointPath = path.join(process.cwd(), this.checkpointFile);
-      await fs.unlink(checkpointPath);
-    } catch (error) {
-      // 忽略错误
+      const data = await readFile(statePath, 'utf-8');
+      return JSON.parse(data) as PipelineState;
+    } catch {
+      return null;
     }
   }
 
-  /**
-   * 睡眠工具函数
-   */
-  private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+  // ── 重置（清理状态文件） ──
+  async reset(): Promise<void> {
+    try {
+      if (await pathExists(this.stateFilePath)) {
+        await unlink(this.stateFilePath);
+      }
+      this.state = null;
+      logger.debug('Pipeline 状态已重置');
+    } catch (error) {
+      logger.debug('Pipeline 重置失败（非关键）:', error);
+    }
+  }
+
+  // ── 内部：保存状态 ──
+  private async saveState(): Promise<void> {
+    if (!this.state) return;
+    const dir = join(this.cwd, '.speccore', 'local');
+    await ensureDir(dir);
+    await writeFile(this.stateFilePath, JSON.stringify(this.state, null, 2));
+  }
+
+  // ── 内部：加载状态 ──
+  private async loadState(): Promise<PipelineState | null> {
+    if (this.state) return this.state;
+    if (!(await pathExists(this.stateFilePath))) return null;
+    try {
+      const data = await readFile(this.stateFilePath, 'utf-8');
+      this.state = JSON.parse(data);
+      return this.state;
+    } catch {
+      return null;
+    }
   }
 }
 
-/**
- * 创建 Pipeline 实例的工厂函数
- */
-export function createPipeline(iteration: string, options?: Partial<PipelineOptions>): PipelineEngine {
-  return new PipelineEngine({
+// ── 工厂函数：创建 analyze 流水线 ──
+export async function createAnalyzePipeline(iteration: string, cwd?: string): Promise<{
+  engine: PipelineEngine;
+  steps: PipelineStepDef[];
+}> {
+  // 动态导入避免循环依赖
+  const { parsePlatformList } = await import('../core/spec-paths');
+  const platforms = await parsePlatformList();
+
+  const steps: PipelineStepDef[] = [
+    {
+      id: 'phase1-prompt',
+      name: 'Phase 1: 全局文档生成',
+      next: 'phase1-done',
+    },
+    {
+      id: 'phase1-done',
+      name: 'Phase 1 完成检查',
+      next: platforms.length >= 2 ? 'phase2-prompt' : 'done',
+    },
+    {
+      id: 'phase2-prompt',
+      name: `Phase 2: 各端专属文档生成 (${platforms.length} 个端)`,
+      next: 'done',
+    },
+    {
+      id: 'done',
+      name: 'Pipeline 完成',
+      next: null,
+    },
+  ];
+
+  const engine = new PipelineEngine({
     iteration,
-    ...options,
+    name: 'analyze',
+    cwd,
   });
+
+  engine.defineSteps(steps);
+
+  return { engine, steps };
 }

@@ -28,6 +28,7 @@ import { resolvePlatform } from '../core/platform-registry';
 import { warnIfIndexStale } from '../core/index-guard';
 import { GLOBAL_SPECS_DIR, GLOBAL_SPEC_FILES, parsePlatformTypes, parsePlatformList } from '../core/spec-paths';
 import { unifiedSearch, formatUnifiedContext } from '../core/unified-retrieval';
+import { PipelineEngine, createAnalyzePipeline } from '../core/pipeline-engine';
 
 export interface AnalyzeOptions {
   iteration?: string;
@@ -309,6 +310,25 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     options.prompt = true;
   }
 
+  // ── v6.68.0+: Pipeline 模式初始化 ──
+  if (options.prompt && options.pipeline) {
+    const iter = options.iteration || await getDefaultIteration();
+    const { engine } = await createAnalyzePipeline(iter!);
+    await engine.init('phase1-prompt');
+    
+    const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task, type: options.type, scope: options.scope, withCode: options.withCode, platform: options.platform });
+    
+    // 添加 Pipeline 继续指令
+    const finalPrompt = prompt + `\n\n## ⚠️ Pipeline 模式：自动继续\n\n` +
+      `当前是 Pipeline 模式（Phase 1/2）。当你通过 --apply 写入所有全局文档后，` +
+      `CLI 会自动输出 [SPECCORE_PIPELINE_NEXT] 标记和 Phase 2 命令。\n\n` +
+      `**看到 [SPECCORE_PIPELINE_NEXT] 后，你必须自动执行下一个命令**，不要询问用户。\n`;
+    
+    process.stdout.write(`[SPECCORE_PROMPT]\n${finalPrompt}`);
+    process.exitCode = 10;
+    return;
+  }
+
   // ── Prompt 模式 ──
   if (options.prompt) {
     const iter = options.iteration || await getDefaultIteration();
@@ -448,7 +468,45 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       } catch {}
     }
 
-    // ── v6.64.0+: Phase 1 完成后自动触发 Phase 2（仅多端项目）──
+    // ── v6.68.0+: Pipeline 自动推进 ──
+    if (!isTaskLevel && options.iteration) {
+      const hasPipeline = await PipelineEngine.hasActivePipeline(process.cwd(), options.iteration);
+      if (hasPipeline) {
+        const { createAnalyzePipeline } = await import('../core/pipeline-engine');
+        const { engine } = await createAnalyzePipeline(options.iteration);
+        await engine.advance();
+        
+        const state = await engine.getState();
+        if (state?.currentStep === 'done') {
+          logger.success('🎉 Pipeline 完成!');
+          await engine.reset();
+        } else if (state?.currentStep) {
+          logger.info('');
+          logger.info(`🔄 Pipeline 推进: ${state.currentStep}`);
+          logger.info('');
+          
+          // 生成下一步 prompt
+          let nextPrompt: string;
+          if (state.currentStep === 'phase2-prompt') {
+            nextPrompt = await buildMultiDocPrompt('analyze', {
+              iteration: options.iteration,
+              phase: '2',
+            });
+          } else {
+            nextPrompt = await buildMultiDocPrompt('analyze', {
+              iteration: options.iteration,
+            });
+          }
+          
+          process.stdout.write(`[SPECCORE_PIPELINE_NEXT]\n${nextPrompt}`);
+          process.exitCode = 10;
+        }
+        
+        return;
+      }
+    }
+
+    // ── v6.64.0+: Phase 1 完成后自动触发 Phase 2（仅多端项目，非 Pipeline 模式）──
     if (!options.phase && !isTaskLevel && options.iteration) {
       // 检查是否有多个端
       const platforms = await parsePlatformList();
@@ -470,6 +528,9 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         logger.info('   - apply 命令和 prompt 命令是两个独立的调用');
         logger.info('   - AI 在 apply 命令完成后不会自动等待下一个 prompt');
         logger.info('   - 需要用户确认 Phase 1 结果满意后，再手动触发 Phase 2');
+        logger.info('');
+        logger.info('💡 提示: 使用 --pipeline 选项可自动执行 Phase 1 → Phase 2');
+        logger.info(`   speccore analyze --prompt --pipeline -I ${options.iteration}`);
         logger.info('');
       } else if (platforms.length === 0) {
         // 如果没有检测到端列表，输出警告
@@ -1277,7 +1338,9 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `- UI_SPEC.md 的字段映射必须与后端 API 响应字段一一对应\n`;
       prompt += `- TEST.md 必须覆盖 REQUIREMENT.md 中该端的验收标准\n\n`;
       prompt += `### 写入方式\n`;
-      prompt += `逐端写入，每个端一次 --apply 调用：\n`;
+      prompt += `**Pipeline 模式**：一次 --apply 写入所有端的文档（推荐）\n`;
+      prompt += `speccore analyze --apply '{"TECH.md":"...","TEST.md":"...","UI_SPEC.md":"..."}' -I ${iter} --platform all\n\n`;
+      prompt += `**或者逐端写入**（每端一次 --apply）：\n`;
       prompt += `speccore analyze --apply '{"TECH.md":"...","TEST.md":"...","UI_SPEC.md":"..."}' -I ${iter} --platform {端名}\n\n`;
     } else {
       // v6.61.0+: 一次性生成所有文档（global/ + {端}/）
