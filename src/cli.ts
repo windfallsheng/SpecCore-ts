@@ -752,6 +752,8 @@ program
   .description('AI-powered audit: detect duplicates, ambiguity, and orphaned requirements')
   .option('--fix', 'Auto-fix fixable issues')
   .option('--detail', 'Show detailed analysis')
+  .option('--specs', 'Audit 020-specs/ quality: enum consistency, API path alignment, coverage gaps')
+  .option('-I, --iteration <name>', 'Target iteration for --specs audit')
   .action(auditCommand);
 
 // 重命名
