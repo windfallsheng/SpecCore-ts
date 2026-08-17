@@ -2561,9 +2561,10 @@ if (platforms.length >= 2) {
 #### 适用场景
 
 - `analyze --pipeline`: Phase 1 → Phase 2（已实现）
-- `split --pipeline`: 任务拆分 → 逐个创建任务（规划中）
-- `execute --pipeline`: 逐个任务执行 → PR → 合并（规划中）
-- `dev --pipeline`: init → doc2spec → analyze → split → plan → execute → pr（规划中）
+- `split --pipeline`: 任务拆分 → 逐个创建任务（已实现）
+- `execute --pipeline`: 逐个任务执行 → PR → 合并（已实现）
+- `dev --pipeline`: init → doc2spec → analyze → split → plan → execute → pr（已实现）
+- `analyze --scope global --pipeline`: 全局分析（已实现）
 
 #### 技术优势
 
@@ -2573,6 +2574,216 @@ if (platforms.length >= 2) {
 4. **向后兼容**：非 Pipeline 模式保持原有行为
 
 **当前状态**：✅ Pipeline 引擎已完整实现并集成到 analyze 命令中（v6.68.0）。
+
+---
+
+### 8.11+ 三层分析策略设计哲学（v6.69.0）
+
+> 本章节定义 SpecCore 在**全局层**、**迭代层**、**任务层**采用的不同分析策略，以及四个增强策略。
+
+#### 为什么分层采用不同策略
+
+| 层级 | 分析对象 | 策略 | 思维模型 | 类比 |
+|------|---------|------|---------|------|
+| **全局层** | 已有代码库 | **先分后总**（归纳法） | 从事实提炼规律 | 侦探破案：先收集各端证据，再拼出全貌 |
+| **迭代层** | 需求文档（PRD） | **先总后分**（演绎法） | 从目标分解执行 | 建筑师设计：先画总蓝图，再出各施工图纸 |
+| **任务层** | 单个开发任务 | **向上追溯**（聚焦法） | 从当下追溯根源 | 医生问诊：先看病灶，再查病史 |
+
+三种不同的思维模型对应三种不同的分析策略，这是 SpecCore 规范驱动开发的精髓所在。
+
+#### 全局层 — 先分后总（归纳法）
+
+```
+各端源码事实 → 跨端关系 → 全局架构
+(backend代码)   (API调用)    (ARCHITECTURE.md)
+(frontend代码)  (数据流向)   (TECH_FULL.md)
+(admin代码)     (共享模型)   (INDEX.md)
+```
+
+- 全局分析的对象是**已有代码**（归纳性质）
+- 不先扫描各端，就不知道整体架构长什么样
+- 所以必须先分后总
+- **代码实现**：`synthesize --full` Phase 1→2→3 已完整实现
+
+#### 迭代层 — 先总后分（演绎法）
+
+```
+整体需求 → 业务分析 → 各端技术方案
+(PRD文档)   (ANALYSIS.md)  (backend/TECH.md)
+            (global/)      (h5/UI_SPEC.md)
+                           (admin/TECH.md)
+```
+
+- 迭代分析的对象是**需求文档**（演绎性质）
+- PRD 本身描述的是整体业务，天然是"总"
+- 分析完总体后，再拆给各端做技术实现方案
+- 所以必须先总后分
+- **代码实现**：`analyze --pipeline` Phase 1→2 已实现
+
+#### 任务层 — 向上追溯（聚焦法）
+
+```
+任务自身规格 ← 迭代级上下文 ← 全局级上下文
+Task-001/     020-specs/      .speccore/
+REQ.md        DESIGN.md       CONSTITUTION.md
+TECH.md       global/         GLOBAL/
+API_CONTRACT   platforms/
+```
+
+- 任务执行时需要**精确上下文**，不是越多越好
+- 从自身出发向上追溯，按需加载：
+  - 必须：自己的 REQ/TECH/API_CONTRACT
+  - 需要时：迭代级 DESIGN.md、各端 SPEC.md
+  - 必要时：全局级 CONSTITUTION、GLOBAL INDEX
+- 避免了一次性加载全部迭代文档导致的上下文溢出
+- **代码实现**：`execute` 的 `loadExtraSpecs()` 已实现分层加载
+
+#### 四个增强策略
+
+在三层基础策略之上，引入四个增强策略解决实际工程痛点：
+
+**增强策略一：迭代层引入「契约先行」**
+
+在"总需求"和"各端方案"之间插入契约定义阶段：
+
+```
+需求总纲 → 关键路径识别 → 跨端契约定义(API_CONTRACT) → 各端并行技术方案
+```
+
+- 契约确定后，**各端分析可以并行进行**
+- 契约作为"中间件"，隔离各端分析的细节依赖
+- 执行阶段直接复用契约文件，不再重复推理接口
+
+**增强策略二：全局层引入「变更感知」**
+
+全局层改为增量/差量分析：
+
+```
+Git diff 识别变更范围 → 仅分析受影响端 → 跨端影响评估 → 更新全局索引
+```
+
+- 避免重复分析未变更的端，大幅节省时间
+- 跨端影响评估能发现"改 A 端导致 B 端契约失效"的隐性风险
+- 全局索引始终保持最新，但不需要全量重建
+
+**增强策略三：迭代层引入「关键路径优先」**
+
+在"总需求分析"后增加关键路径识别，然后按优先级分阶段分析：
+
+```
+需求总纲 → 关键路径识别(核心业务流程) → 深度分析核心路径 → 简化分析边缘功能 → 各端方案
+```
+
+- 确保 AI **最大的上下文容量用在最重要的功能上**
+- 核心功能（如支付流程、用户认证）得到充分分析
+- 边缘功能（如帮助页面、关于我们）可以走简化模板
+
+**增强策略四：任务层引入「横向关联」**
+
+任务执行前增加横向依赖检查：
+
+```
+自身规格加载 → 横向检查(依赖任务是否已完成？契约是否对齐？) → 迭代上下文 → 全局规则 → 执行
+```
+
+- 避免执行时才发现依赖任务的接口还没定义
+- 自动检测"契约漂移"（依赖任务的实现和契约不一致）
+- 为分支合并策略提供依据（知道需要 merge 哪些前置分支）
+
+#### 综合最优策略框架
+
+| 层级 | 核心策略 | 增强策略 | 思维模型 |
+|------|---------|---------|---------|
+| **全局层** | 先分后总 | + **变更感知**（差量分析） | 归纳 + 增量 |
+| **迭代层** | 先总后分 | + **契约先行**（并行分析）<br>+ **关键路径优先**（资源聚焦） | 演绎 + 解耦 |
+| **任务层** | 向上追溯 | + **横向关联**（依赖检查） | 聚焦 + 验证 |
+
+#### 代码实现状态（v6.69.0+）
+
+| 层级 | 设计思路 | 代码实现 | 状态 |
+|------|---------|---------|------|
+| **全局层** | 先分后总 | `synthesize --full` Phase 1→2→3；`analyze --scope global --pipeline` 接入 `createGlobalAnalyzePipeline` | ✅ 已完成 |
+| **迭代层** | 先总后分 | `analyze --pipeline` Phase 1→契约先行→逐端推进（每端独立步骤） | ✅ 已完成 |
+| **任务层** | 向上追溯 | `execute` 的 `loadExtraSpecs()` 分层加载；`checkCrossTaskDependencies()` 横向依赖检查 | ✅ 已完成 |
+
+**增强策略实现状态**：
+
+| 增强策略 | 代码实现 | 状态 |
+|---------|---------|------|
+| **契约先行**（迭代层） | `createAnalyzePipeline` 插入 `contract-prompt` 步骤；`buildContractFirstPrompt()` 生成跨端契约 | ✅ 已完成 |
+| **变更感知**（全局层） | `detectAffectedPlatforms()` 通过 Git diff + CONSTITUTION.md 源码路径映射检测受影响端；Pipeline 自动过滤 | ✅ 已完成 |
+| **关键路径优先**（迭代层） | `detectPlatformPriorityOrder()` 按任务优先级统计排序端；Pipeline 按优先级生成步骤 | ✅ 已完成 |
+| **横向关联**（任务层） | `checkCrossTaskDependencies()` 检查依赖任务状态和契约对齐；`traceDependencyChain()` 追踪完整依赖链路 | ✅ 已完成 |
+| **知识图谱链路补全** | `inferRelations()` 从 IMPACT.md 补充 `depends_on`；`getFullTaskContext()` 包含上下游任务和依赖链路 | ✅ 已完成 |
+
+#### 技术架构详解
+
+**变更感知模块（`src/core/change-detection.ts`）**
+
+```
+Git diff --name-only → 变更文件列表
+        ↓
+CONSTITUTION.md「项目信息」表格 → 源码路径 → 端映射
+        ↓
+路径匹配算法：
+  - 010-requirements/、020-specs/、.speccore/CONSTITUTION.md → 全局变更（所有端）
+  - srcPath/*.ts → 匹配对应端
+        ↓
+输出：受影响的端名列表 [backend, h5]
+```
+
+**关键路径优先排序算法**
+
+```
+scanTasks(iteration) → 所有子任务 TaskState[]
+        ↓
+按 platform 分组统计：
+  backend: { high: 3, medium: 2, low: 1 }
+  h5:      { high: 1, medium: 4, low: 2 }
+  admin:   { high: 0, medium: 1, low: 3 }
+        ↓
+排序规则：high 降序 → medium 降序 → low 降序
+输出：['backend', 'h5', 'admin']
+```
+
+**Pipeline 引擎增强（`src/core/pipeline-engine.ts`）**
+
+`createAnalyzePipeline()` 新增 `options` 参数：
+- `affectedPlatforms?: string[]` — 变更感知过滤，在 `parsePlatformList()` 后过滤 platforms
+- `platformOrder?: string[]` — 关键路径优先排序，在过滤后对 platforms 排序
+
+步骤生成逻辑（以 3 个端为例）：
+```
+phase1-prompt → phase1-done → contract-prompt → contract-done
+    → platform-backend-prompt → platform-backend-done
+    → platform-h5-prompt → platform-h5-done
+    → platform-admin-prompt → platform-admin-done
+    → done
+```
+
+如果 `affectedPlatforms = ['backend', 'h5']`，过滤后：
+```
+... contract-done → platform-backend-prompt → ... → platform-h5-prompt → ... → done
+```
+
+如果 `platformOrder = ['h5', 'backend', 'admin']`，排序后：
+```
+... contract-done → platform-h5-prompt → ... → platform-backend-prompt → ... → platform-admin-prompt → ...
+```
+
+**知识图谱链路追踪（`src/core/knowledge-graph.ts`）**
+
+`traceDependencyChain(graph, taskId, maxDepth=5)`：
+- 递归追踪所有上游关系（`implements` / `references` / `depends_on`）
+- 使用 `visited` Set 防止循环依赖
+- 返回每条路径的完整实体列表和关系列表
+
+`getFullTaskContext(graph, taskId)`：
+- 复用 `getTaskContext()` 的基础能力（上游需求、兄弟子任务、父任务、关联规格）
+- 增加 `dependencyChain`: 完整依赖链路
+- 增加 `downstreamTasks`: 依赖于本任务的下游任务（通过反向查找 `depends_on` 关系）
+
+---
 
 ### 8.12 spec-ask onboarding 强制展示修复（v6.63.0）
 

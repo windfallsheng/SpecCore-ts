@@ -38,6 +38,7 @@ import { createTaskBranch, detectDefaultBranch, isProtectedBranch } from '../cor
 import { buildPrompt, formatPrompt, parseAiResponse, outputNeedsInfo } from '../core/prompt-builder';
 import { runVerification, writeVerifyReport, outputFixTag, runQualityGate } from '../core/verify-engine';
 import { loadConfig } from '../core/unified-config';
+import { PipelineEngine } from '../core/pipeline-engine';
 import { checkCodeIndexFreshness } from '../core/code-scanner';
 import { warnIfIndexStale } from '../core/index-guard';
 
@@ -71,6 +72,7 @@ export interface ExecuteOptions {
   verify?: boolean;     // --verify: 执行后自动运行代码验证
   auto?: boolean;       // --auto: 跳过确认，自动选任务，直接执行
   listPending?: boolean; // --list-pending: 列出待执行任务清单（配合 --prompt 使用）
+  pipeline?: boolean;   // --pipeline: 启用 Pipeline 模式
 }
 
 /**
@@ -100,6 +102,52 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
       return;
     }
 
+    // ── Pipeline 模式 ──
+    if (options.pipeline) {
+      if (!iteration) {
+        logger.error('--pipeline 需要 --iteration');
+        return;
+      }
+      
+      // 检查是否为恢复模式
+      if (options.resume) {
+        const hasPipeline = await PipelineEngine.hasActivePipeline(process.cwd(), iteration);
+        if (hasPipeline) {
+          const { createExecutePipeline } = await import('../core/pipeline-engine');
+          const { engine } = await createExecutePipeline(iteration, options.task);
+          
+          const result = await engine.advance();
+          
+          if (result.isComplete) {
+            logger.success('🎉 Execute Pipeline 完成!');
+            await engine.reset();
+            return;
+          } else if (result.nextStepId) {
+            logger.info('');
+            logger.info(`🔄 Execute Pipeline 推进到: ${result.nextStepName || result.nextStepId}`);
+            logger.info('');
+            
+            // 根据当前步骤生成相应提示
+            if (result.nextStepId === 'prompt-analysis') {
+              await runPromptMode(iteration, options);
+              return;
+            }
+          }
+        } else {
+          logger.warn('没有找到活跃的 Execute Pipeline，启动新的 Pipeline...');
+        }
+      }
+      
+      // 初始化新的 Pipeline
+      const { createExecutePipeline } = await import('../core/pipeline-engine');
+      const { engine } = await createExecutePipeline(iteration, options.task);
+      await engine.init('init');
+      
+      // 进入 prompt 模式
+      await runPromptMode(iteration, { ...options, prompt: true });
+      return;
+    }
+    
     // ── Prompt 模式: 输出结构化 Prompt 到 stdout ──
     if (options.prompt) {
       await runPromptMode(iteration, options);
@@ -423,6 +471,9 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
     // Report current batch
     logger.info(`[${String(i + 1).padStart(2, '0')}/${total}] ${bar} ${progress}%`);
     logger.info(`  🔄 ${task.id} ${task.name || ''} (${task.type || 'feature'})`);
+
+    // ── 横向依赖检查（v6.69.0+ 增强策略四）──
+    await checkCrossTaskDependencies(task, iteration, completed.map(c => c.split(' - ')[0]));
 
     // ── 懒创建分支 + 合并依赖 ──
     const branchName = await prepareTaskBranch(task, iteration, defaultBase, createdBranches);
@@ -1330,6 +1381,71 @@ async function preFlightCheck(tasks: TaskState[], iteration: string, options: Ex
 }
 
 /**
+ * 横向依赖检查：执行任务前验证依赖任务状态和契约对齐
+ * 增强策略四：任务层引入横向关联
+ */
+async function checkCrossTaskDependencies(
+  task: TaskState,
+  iteration: string,
+  completedTaskIds: string[]
+): Promise<void> {
+  if (!task.dependencies || task.dependencies.length === 0) return;
+
+  const iterDir = await getIterationDir(iteration);
+
+  // 1. 检查依赖任务是否已完成
+  const pendingDeps = task.dependencies.filter(depId => !completedTaskIds.includes(depId));
+  if (pendingDeps.length > 0) {
+    logger.warn(`  ⚠️ 依赖任务尚未完成: ${pendingDeps.join(', ')}`);
+    logger.warn(`     建议先执行依赖任务，或检查执行顺序是否正确`);
+  }
+
+  // 2. 检查 API_CONTRACT.yaml 中的 dependsOn 标注是否与 TaskState.dependencies 一致
+  const taskDir = await resolveTaskDir(iterDir, task.id);
+  const contractPaths = [
+    join(taskDir, '00-specs', 'API_CONTRACT.yaml'),
+    join(taskDir, '_shared', 'API_CONTRACT.yaml'),
+  ];
+
+  for (const contractPath of contractPaths) {
+    if (await pathExists(contractPath)) {
+      try {
+        const content = await readFile(contractPath, 'utf-8');
+        const depRefs = content.match(/(?:dependsOn|depends on|依赖)\s*[:：]\s*(Task-\S+)/gi);
+        if (depRefs) {
+          for (const raw of depRefs) {
+            const m = raw.match(/(Task-\S+)/i);
+            if (m) {
+              const depTaskId = m[1];
+              if (!task.dependencies?.includes(depTaskId)) {
+                logger.warn(`  ⚠️ API_CONTRACT 声明了未记录的依赖: ${depTaskId}`);
+                logger.warn(`     建议将 ${depTaskId} 加入 ${task.id} 的 dependencies`);
+              }
+              if (!completedTaskIds.includes(depTaskId)) {
+                logger.warn(`  ⚠️ API_CONTRACT 依赖任务 ${depTaskId} 尚未完成`);
+              }
+            }
+          }
+        }
+      } catch { /* 跳过 */ }
+    }
+  }
+
+  // 3. 检查依赖任务的契约是否存在（用于后续分支合并）
+  for (const depId of task.dependencies) {
+    const depTaskDir = await resolveTaskDir(iterDir, depId);
+    if (depTaskDir) {
+      const depContractPath = join(depTaskDir, '_shared', 'API_CONTRACT.yaml');
+      const depContractPath2 = join(depTaskDir, '00-specs', 'API_CONTRACT.yaml');
+      if (!(await pathExists(depContractPath)) && !(await pathExists(depContractPath2))) {
+        logger.warn(`  ⚠️ 依赖任务 ${depId} 缺少 API_CONTRACT.yaml`);
+        logger.warn(`     跨端契约缺失可能导致接口不一致`);
+      }
+    }
+  }
+}
+
+/**
  * 懒创建任务分支 + 合并依赖分支
  * 每个任务的分支在执行前才创建，确保依赖任务的代码已存在
  */
@@ -1858,6 +1974,44 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
 // ═══════════════════════════════════════════════════════════
 
 async function runApplyMode(iteration: string, options: ExecuteOptions): Promise<void> {
+  // 检查是否有活跃的 Pipeline（在 Pipeline 模式下应用响应）
+  if (options.pipeline) {
+    const hasPipeline = await PipelineEngine.hasActivePipeline(process.cwd(), iteration);
+    if (hasPipeline) {
+      const { createExecutePipeline } = await import('../core/pipeline-engine');
+      const { engine } = await createExecutePipeline(iteration, options.task);
+      await engine.advance();
+      
+      const state = await engine.getState();
+      if (state?.currentStep === 'done') {
+        logger.success('🎉 Execute Pipeline 完成!');
+        await engine.reset();
+      } else if (state?.currentStep) {
+        logger.info('');
+        logger.info(`🔄 Execute Pipeline 推进: ${state.currentStep}`);
+        logger.info('');
+        
+        // 生成下一步 prompt
+        const prompt = await buildPrompt('execute', {
+          iteration,
+          task: options.task || '',
+          taskDir: await resolveTaskDir(await getIterationDir(iteration), options.task || ''),
+          platform: options.platform,
+        });
+        
+        const finalPrompt = formatPrompt(prompt) + `\n\n## ⚠️ Pipeline 模式：自动继续\n\n` +
+          `当前是 Execute Pipeline 模式。当你通过 --response 写入代码实现后，` +
+          `CLI 会自动输出 [SPECCORE_PIPELINE_NEXT] 标记和下一步命令。\n\n` +
+          `**看到 [SPECCORE_PIPELINE_NEXT] 后，你必须自动执行下一个命令**，不要询问用户。\n`;
+        
+        process.stdout.write(`[SPECCORE_PIPELINE_NEXT]\n${finalPrompt}`);
+        process.exitCode = 10;
+      }
+      
+      return;
+    }
+  }
+  
   let response = options.response || '';
   // 支持管道: echo '...' | speccore execute --response -
   if (response === '-') {

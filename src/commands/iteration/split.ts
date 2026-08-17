@@ -13,6 +13,7 @@ import { generatePlatformsRegistry } from '../../core/platform-registry';
 import { warnIfIndexStale } from '../../core/index-guard';
 import { resolveGlobalSpecPath, GLOBAL_SPECS_DIR, parsePlatformList } from '../../core/spec-paths';
 import { buildAutoModeInstruction } from '../../core/questions';
+import { PipelineEngine } from '../../core/pipeline-engine';
 
 /** 将名称转为目录安全的短 slug（2-4 词） */
 function slugify(name: string): string {
@@ -101,6 +102,8 @@ export interface IterationSplitOptions {
   response?: string;    // --response: 接收 AI 拆分结果创建 Task 目录
   force?: boolean;
   granularity?: 'macro' | 'module' | 'atomic';  // 拆分粒度
+  pipeline?: boolean;   // --pipeline: 启用 Pipeline 模式
+  resume?: boolean;     // --resume: 恢复之前的 Pipeline
 }
 
 async function detectPlatforms(iterationDir: string, specified?: string): Promise<string[]> {
@@ -125,6 +128,71 @@ async function detectPlatforms(iterationDir: string, specified?: string): Promis
 }
 
 export async function iterationSplitCommand(options: IterationSplitOptions): Promise<void> {
+  // ── Pipeline 模式 ──
+  if (options.pipeline) {
+    const iter = options.iteration || await getDefaultIteration() || '';
+    if (!iter) {
+      logger.error('--pipeline 需要 --iteration');
+      return;
+    }
+    
+    // 检查是否为恢复模式
+    if (options.resume) {
+      const hasPipeline = await PipelineEngine.hasActivePipeline(process.cwd(), iter);
+      if (hasPipeline) {
+        const { createSplitPipeline } = await import('../../core/pipeline-engine');
+        const { engine } = await createSplitPipeline(iter);
+        
+        const result = await engine.advance();
+        
+        if (result.isComplete) {
+          logger.success('🎉 Split Pipeline 完成!');
+          await engine.reset();
+          return;
+        } else if (result.nextStepId) {
+          logger.info('');
+          logger.info(`🔄 Split Pipeline 推进到: ${result.nextStepName || result.nextStepId}`);
+          logger.info('');
+          
+          // 根据当前步骤生成相应提示
+          if (result.nextStepId === 'prompt-analysis') {
+            const prompt = await buildPrompt('split', { iteration: iter });
+            
+            // 添加 Pipeline 继续指令
+            const finalPrompt = prompt + `\n\n## ⚠️ Pipeline 模式：自动继续\n\n` +
+              `当前是 Split Pipeline 模式。当你通过 --response 写入任务拆分结果后，` +
+              `CLI 会自动输出 [SPECCORE_PIPELINE_NEXT] 标记和下一步命令。\n\n` +
+              `**看到 [SPECCORE_PIPELINE_NEXT] 后，你必须自动执行下一个命令**，不要询问用户。\n`;
+            
+            process.stdout.write(`[SPECCORE_PROMPT]\n${finalPrompt}`);
+            process.exitCode = 10;
+            return;
+          }
+        }
+      } else {
+        logger.warn('没有找到活跃的 Split Pipeline，启动新的 Pipeline...');
+      }
+    }
+    
+    // 初始化新的 Pipeline
+    const { createSplitPipeline } = await import('../../core/pipeline-engine');
+    const { engine } = await createSplitPipeline(iter);
+    await engine.init('init');
+    
+    // 生成第一步 prompt
+    const prompt = await buildPrompt('split', { iteration: iter });
+    
+    // 添加 Pipeline 继续指令
+    const finalPrompt = prompt + `\n\n## ⚠️ Pipeline 模式：自动继续\n\n` +
+      `当前是 Split Pipeline 模式。当你通过 --response 写入任务拆分结果后，` +
+      `CLI 会自动输出 [SPECCORE_PIPELINE_NEXT] 标记和下一步命令。\n\n` +
+      `**看到 [SPECCORE_PIPELINE_NEXT] 后，你必须自动执行下一个命令**，不要询问用户。\n`;
+    
+    process.stdout.write(`[SPECCORE_PROMPT]\n${finalPrompt}`);
+    process.exitCode = 10;
+    return;
+  }
+  
   // ── Prompt 模式 ──
   if (options.prompt) {
     const iter = options.iteration || await getDefaultIteration() || '';
@@ -136,8 +204,43 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
 
   // ── Response 模式 ──
   if (options.response) {
+    // 检查是否有活跃的 Pipeline（在 Pipeline 模式下应用响应）
     const iter = options.iteration || await getDefaultIteration() || '';
     if (!iter) { logger.error('--response 需要 --iteration'); return; }
+    
+    const hasPipeline = await PipelineEngine.hasActivePipeline(process.cwd(), iter);
+    if (hasPipeline) {
+      const { createSplitPipeline } = await import('../../core/pipeline-engine');
+      const { engine } = await createSplitPipeline(iter);
+      await engine.advance();
+      
+      const state = await engine.getState();
+      if (state?.currentStep === 'done') {
+        logger.success('🎉 Split Pipeline 完成!');
+        await engine.reset();
+      } else if (state?.currentStep) {
+        logger.info('');
+        logger.info(`🔄 Split Pipeline 推进: ${state.currentStep}`);
+        logger.info('');
+        
+        // 生成下一步 prompt
+        let nextPrompt: string;
+        if (state.currentStep === 'creation') {
+          // 在创建阶段，我们已完成拆分，可以生成创建任务的提示
+          nextPrompt = `任务拆分已完成，正在创建任务目录结构...\n\n请继续执行后续操作。`;
+        } else {
+          const promptResult = await buildPrompt('split', { iteration: iter });
+          nextPrompt = typeof promptResult === 'string' ? promptResult : JSON.stringify(promptResult);
+        }
+        
+        process.stdout.write(`[SPECCORE_PIPELINE_NEXT]\n${nextPrompt}`);
+        process.exitCode = 10;
+      }
+      
+      return;
+    }
+    
+    // 非 Pipeline 模式的 Response 处理
     const iterDir = join('Iteration-' + iter, '030-tasks');
     await ensureDir(iterDir);
     const backups: string[] = [];
@@ -263,7 +366,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
         const MAX_TASKS_PER_UNIT = 3;
         const unitTaskCount: Record<string, number> = {};
         let missingFunctionalUnit = 0;
-                
+        
         // 按 functionalUnit 分组统计（AI 在 JSON 中标注所属功能单元）
         for (let i = 0; i < sections.length; i++) {
           const task = tasks[i];
@@ -275,14 +378,14 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
             unitTaskCount[unitName] = (unitTaskCount[unitName] || 0) + 1;
           }
         }
-
+        
         // functionalUnit 缺失警告
         if (missingFunctionalUnit > sections.length * 0.5) {
           logger.warn(`   ⚠️  ${missingFunctionalUnit}/${sections.length} 个任务缺少 functionalUnit 字段`);
           logger.warn(`      💡 AI 未按约束填写功能单元，校验可能不准确`);
           logger.warn(`      💡 建议重新执行 split，确保 Prompt 包含 functionalUnit 要求`);
         }
-                
+        
         // 检查每个功能单元的任务数
         let hasOverSplit = false;
         for (const [unitName, count] of Object.entries(unitTaskCount)) {
@@ -295,7 +398,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
             logger.error(`      📌 "${displayName}" 拆出了 ${count} 个任务（上限 ${MAX_TASKS_PER_UNIT}）`);
           }
         }
-                
+        
         if (hasOverSplit) {
           logger.error(`   💡 核心原则：一个功能单元默认 1 个任务，最多 3 个`);
           logger.error(`   🔧 建议操作：`);

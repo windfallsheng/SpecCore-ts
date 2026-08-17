@@ -28,7 +28,8 @@ import { resolvePlatform } from '../core/platform-registry';
 import { warnIfIndexStale } from '../core/index-guard';
 import { GLOBAL_SPECS_DIR, GLOBAL_SPEC_FILES, parsePlatformTypes, parsePlatformList } from '../core/spec-paths';
 import { unifiedSearch, formatUnifiedContext } from '../core/unified-retrieval';
-import { PipelineEngine, createAnalyzePipeline } from '../core/pipeline-engine';
+import { PipelineEngine, createAnalyzePipeline, createGlobalAnalyzePipeline } from '../core/pipeline-engine';
+import { detectAffectedPlatforms, detectPlatformPriorityOrder } from '../core/change-detection';
 
 export interface AnalyzeOptions {
   iteration?: string;
@@ -311,19 +312,140 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
   }
 
   // ── v6.68.0+: Pipeline 模式初始化 ──
+  // v6.69.0+: 支持契约先行 + 逐端推进（增强策略一 & 三）
+  // v6.69.0+: 全局层接入 createGlobalAnalyzePipeline（增强策略二）
   if (options.prompt && options.pipeline) {
     const iter = options.iteration || await getDefaultIteration();
-    const { engine } = await createAnalyzePipeline(iter!);
-    await engine.init('phase1-prompt');
-    
-    const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task, type: options.type, scope: options.scope, withCode: options.withCode, platform: options.platform });
-    
+    const isGlobalScope = options.scope === 'global';
+
+    if (!isGlobalScope && !iter) {
+      logger.error('Pipeline 模式需要指定迭代');
+      return;
+    }
+
+    let engine: PipelineEngine;
+    let steps: { id: string; name: string; next: string | null }[];
+    let pipelineKey: string;
+    let initStep: string;
+
+    // v6.69.0+: 变更感知 + 关键路径优先检测
+    let affectedPlatforms: string[] | undefined;
+    let platformOrder: string[] | undefined;
+
+    if (!isGlobalScope && iter) {
+      // 变更感知：检测 Git 变更影响的端
+      affectedPlatforms = await detectAffectedPlatforms(process.cwd());
+      // 关键路径优先：按任务优先级排序端
+      platformOrder = await detectPlatformPriorityOrder(iter);
+    }
+
+    if (isGlobalScope) {
+      // 全局层：使用 createGlobalAnalyzePipeline（增强策略二）
+      const result = await createGlobalAnalyzePipeline();
+      engine = result.engine;
+      steps = result.steps;
+      pipelineKey = 'GLOBAL';
+      initStep = 'init';
+    } else {
+      // 迭代层：使用 createAnalyzePipeline（支持契约先行 + 逐端推进 + 变更感知 + 关键路径优先）
+      const result = await createAnalyzePipeline(iter!, process.cwd(), {
+        affectedPlatforms: affectedPlatforms && affectedPlatforms.length > 0 ? affectedPlatforms : undefined,
+        platformOrder: platformOrder && platformOrder.length > 0 ? platformOrder : undefined,
+      });
+      engine = result.engine;
+      steps = result.steps;
+      pipelineKey = iter!;
+      initStep = 'phase1-prompt';
+    }
+
+    // 检查是否有活跃的 Pipeline（恢复模式）
+    const hasActive = await PipelineEngine.hasActivePipeline(process.cwd(), pipelineKey);
+    let currentStep: string;
+
+    if (hasActive) {
+      const existingState = await PipelineEngine.loadExistingState(process.cwd(), pipelineKey);
+      currentStep = existingState?.currentStep || initStep;
+      logger.info(`🔄 恢复 Pipeline: ${currentStep}`);
+    } else {
+      await engine.init(initStep);
+      currentStep = initStep;
+    }
+
+    // 根据当前步骤生成对应的 prompt
+    let prompt: string;
+    const platformMatch = currentStep.match(/^platform-(.+)-prompt$/);
+
+    if (isGlobalScope) {
+      // 全局层 Pipeline 步骤映射
+      if (currentStep === 'init' || currentStep === 'discovery') {
+        prompt = await buildMultiDocPrompt('analyze', {
+          iteration: iter || 'GLOBAL', task: options.task, type: options.type,
+          scope: 'global', withCode: options.withCode, platform: options.platform,
+        });
+      } else if (currentStep === 'global-analysis') {
+        prompt = await buildMultiDocPrompt('analyze', {
+          iteration: iter || 'GLOBAL', scope: 'global', withCode: options.withCode,
+        });
+      } else if (currentStep === 'consistency-check') {
+        prompt = `\n# 任务: 全局一致性检查\n\n` +
+          `检查各迭代、各端之间的规格是否一致。\n` +
+          `重点检查：接口定义冲突、数据模型不一致、命名规范违规。\n`;
+      } else if (currentStep === 'report-generation') {
+        prompt = `\n# 任务: 生成全局索引报告\n\n` +
+          `汇总所有分析结果，生成 .speccore/GLOBAL/INDEX.md。\n`;
+      } else {
+        prompt = await buildMultiDocPrompt('analyze', {
+          iteration: iter || 'GLOBAL', scope: 'global', withCode: options.withCode,
+        });
+      }
+    } else if (currentStep === 'phase1-prompt') {
+      prompt = await buildMultiDocPrompt('analyze', {
+        iteration: iter!, task: options.task, type: options.type,
+        scope: options.scope, withCode: options.withCode, platform: options.platform,
+      });
+    } else if (currentStep === 'contract-prompt') {
+      // 契约先行阶段：基于 Phase 1 文档生成跨端契约
+      prompt = await buildContractFirstPrompt(iter!);
+    } else if (platformMatch) {
+      // 逐端推进阶段：为指定端生成专属文档
+      const platform = platformMatch[1];
+      prompt = await buildMultiDocPrompt('analyze', {
+        iteration: iter!, phase: '2', platform,
+      });
+    } else {
+      // 回退到默认 prompt
+      prompt = await buildMultiDocPrompt('analyze', {
+        iteration: iter!, task: options.task, type: options.type,
+        scope: options.scope, withCode: options.withCode, platform: options.platform,
+      });
+    }
+
     // 添加 Pipeline 继续指令
-    const finalPrompt = prompt + `\n\n## ⚠️ Pipeline 模式：自动继续\n\n` +
-      `当前是 Pipeline 模式（Phase 1/2）。当你通过 --apply 写入所有全局文档后，` +
-      `CLI 会自动输出 [SPECCORE_PIPELINE_NEXT] 标记和 Phase 2 命令。\n\n` +
+    const totalSteps = steps.filter(s => !s.id.endsWith('-done') && s.id !== 'done').length;
+    const currentStepIndex = steps.findIndex(s => s.id === currentStep);
+    let progressLabel: string;
+    if (isGlobalScope) {
+      progressLabel = currentStep === 'init' ? '全局分析: 初始化'
+        : currentStep === 'discovery' ? '全局分析: 发现'
+        : currentStep === 'global-analysis' ? '全局分析: 跨端分析'
+        : currentStep === 'consistency-check' ? '全局分析: 一致性检查'
+        : currentStep === 'report-generation' ? '全局分析: 报告生成'
+        : '全局 Pipeline';
+    } else {
+      progressLabel = currentStep === 'phase1-prompt'
+        ? 'Phase 1/3: 全局文档'
+        : currentStep === 'contract-prompt'
+          ? 'Phase 2/3: 契约定义'
+          : platformMatch
+            ? `Phase 2/3: ${platformMatch[1]} 端专属文档`
+            : 'Pipeline';
+    }
+
+    const finalPrompt = prompt + `\n\n## ⚠️ Pipeline 模式：自动继续 (${progressLabel})\n\n` +
+      `当前是 Pipeline 模式（步骤 ${currentStepIndex + 1}/${totalSteps}）。` +
+      `当你通过 --apply 写入文档后，CLI 会自动输出 [SPECCORE_PIPELINE_NEXT] 标记和下一步命令。\n\n` +
       `**看到 [SPECCORE_PIPELINE_NEXT] 后，你必须自动执行下一个命令**，不要询问用户。\n`;
-    
+
     process.stdout.write(`[SPECCORE_PROMPT]\n${finalPrompt}`);
     process.exitCode = 10;
     return;
@@ -469,13 +591,31 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     }
 
     // ── v6.68.0+: Pipeline 自动推进 ──
-    if (!isTaskLevel && options.iteration) {
-      const hasPipeline = await PipelineEngine.hasActivePipeline(process.cwd(), options.iteration);
+    // v6.69.0+: 支持全局 Pipeline 推进（增强策略二）
+    if (!isTaskLevel) {
+      const isGlobalScope = options.scope === 'global';
+      const pipelineKey = isGlobalScope ? 'GLOBAL' : options.iteration;
+      if (!pipelineKey) return;
+
+      const hasPipeline = await PipelineEngine.hasActivePipeline(process.cwd(), pipelineKey);
       if (hasPipeline) {
-        const { createAnalyzePipeline } = await import('../core/pipeline-engine');
-        const { engine } = await createAnalyzePipeline(options.iteration);
+        const { createAnalyzePipeline, createGlobalAnalyzePipeline } = await import('../core/pipeline-engine');
+
+        // v6.69.0+: 推进时保持与初始化时相同的过滤和排序条件
+        let engine: PipelineEngine;
+        if (isGlobalScope) {
+          engine = (await createGlobalAnalyzePipeline()).engine;
+        } else {
+          const { detectAffectedPlatforms, detectPlatformPriorityOrder } = await import('../core/change-detection');
+          const affectedPlatforms = await detectAffectedPlatforms(process.cwd());
+          const platformOrder = await detectPlatformPriorityOrder(options.iteration!);
+          engine = (await createAnalyzePipeline(options.iteration!, process.cwd(), {
+            affectedPlatforms: affectedPlatforms.length > 0 ? affectedPlatforms : undefined,
+            platformOrder: platformOrder.length > 0 ? platformOrder : undefined,
+          })).engine;
+        }
         await engine.advance();
-        
+
         const state = await engine.getState();
         if (state?.currentStep === 'done') {
           logger.success('🎉 Pipeline 完成!');
@@ -484,24 +624,54 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
           logger.info('');
           logger.info(`🔄 Pipeline 推进: ${state.currentStep}`);
           logger.info('');
-          
-          // 生成下一步 prompt
+
+          // 生成下一步 prompt（v6.69.0+: 适配全局/迭代层步骤）
           let nextPrompt: string;
-          if (state.currentStep === 'phase2-prompt') {
+          const nextPlatformMatch = state.currentStep.match(/^platform-(.+)-prompt$/);
+
+          if (isGlobalScope) {
+            // 全局层 Pipeline 步骤映射
+            if (state.currentStep === 'global-analysis') {
+              nextPrompt = await buildMultiDocPrompt('analyze', {
+                iteration: options.iteration || 'GLOBAL', scope: 'global', withCode: options.withCode,
+              });
+            } else if (state.currentStep === 'consistency-check') {
+              nextPrompt = `\n# 任务: 全局一致性检查\n\n` +
+                `检查各迭代、各端之间的规格是否一致。\n` +
+                `重点检查：接口定义冲突、数据模型不一致、命名规范违规。\n`;
+            } else if (state.currentStep === 'report-generation') {
+              nextPrompt = `\n# 任务: 生成全局索引报告\n\n` +
+                `汇总所有分析结果，生成 .speccore/GLOBAL/INDEX.md。\n`;
+            } else {
+              nextPrompt = await buildMultiDocPrompt('analyze', {
+                iteration: options.iteration || 'GLOBAL', scope: 'global', withCode: options.withCode,
+              });
+            }
+          } else if (state.currentStep === 'contract-prompt') {
+            nextPrompt = await buildContractFirstPrompt(options.iteration!);
+          } else if (nextPlatformMatch) {
+            const platform = nextPlatformMatch[1];
             nextPrompt = await buildMultiDocPrompt('analyze', {
-              iteration: options.iteration,
+              iteration: options.iteration!,
+              phase: '2',
+              platform,
+            });
+          } else if (state.currentStep === 'phase2-prompt') {
+            // 兼容旧 Pipeline 步骤名
+            nextPrompt = await buildMultiDocPrompt('analyze', {
+              iteration: options.iteration!,
               phase: '2',
             });
           } else {
             nextPrompt = await buildMultiDocPrompt('analyze', {
-              iteration: options.iteration,
+              iteration: options.iteration!,
             });
           }
-          
+
           process.stdout.write(`[SPECCORE_PIPELINE_NEXT]\n${nextPrompt}`);
           process.exitCode = 10;
         }
-        
+
         return;
       }
     }
@@ -1552,6 +1722,51 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `### ${i + 1}/${taskDocs.length}: ${taskDocs[i][0]}\n\`\`\`markdown\n${taskDocs[i][1]}\n\`\`\`\n\n`;
     }
   }
+  return prompt;
+}
+
+// ── v6.69.0+: 契约先行 Prompt 生成（增强策略一）──
+async function buildContractFirstPrompt(iteration: string): Promise<string> {
+  const iterDir = await getIterationDir(iteration);
+  const globalDir = join(iterDir, '020-specs', GLOBAL_SPECS_DIR);
+
+  let prompt = `\n# 任务: 跨端 API 契约定义（契约先行阶段）\n\n`;
+  prompt += `## 背景\n\n`;
+  prompt += `Phase 1 全局分析已完成。现在需要在各端开始专属技术方案分析之前，**先定义跨端 API 契约**。\n\n`;
+  prompt += `## 读取内容\n\n`;
+  prompt += `1. Read .speccore/CONSTITUTION.md → 获取端列表和项目配置\n`;
+  prompt += `2. Read 020-specs/global/REQUIREMENT.md → 全局需求规格\n`;
+  prompt += `3. Read 020-specs/global/ANALYSIS.md → 全局分析报告\n`;
+  prompt += `4. Read 020-specs/global/TECH.md → 整体技术架构\n`;
+  prompt += `5. Read 020-specs/global/DEPS.md → 依赖关系（如存在）\n\n`;
+
+  prompt += `## 输出要求\n\n`;
+  prompt += `基于上述文档，生成一份 **API_CONTRACT.md**，内容必须包括：\n\n`;
+  prompt += `### 1. 跨端接口清单\n`;
+  prompt += `- 所有前后端交互的 API 接口（按模块分组）\n`;
+  prompt += `- 每个接口：路径、方法、请求参数、响应结构、错误码\n`;
+  prompt += `- 标注每个接口的「消费者端」和「提供者端」\n\n`;
+
+  prompt += `### 2. 共享数据模型\n`;
+  prompt += `- 跨端传递的 DTO/VO/Entity 定义\n`;
+  prompt += `- 字段名称、类型、约束、默认值\n`;
+  prompt += `- 枚举值定义（状态码、类型等）\n\n`;
+
+  prompt += `### 3. 事件/消息契约\n`;
+  prompt += `- 如有消息队列或事件驱动，定义 Topic/Event 名称和 Payload 结构\n`;
+  prompt += `- 生产者端和消费者端\n\n`;
+
+  prompt += `### 4. 依赖关系标注\n`;
+  prompt += `- 使用 YAML 格式标注模块间的依赖关系\n`;
+  prompt += `- 格式示例：\`dependsOn: Task-002\`（如当前迭代内已有相关任务）\n\n`;
+
+  prompt += `## 写入方式\n\n`;
+  prompt += `speccore analyze --apply '{"API_CONTRACT.md":"..."}' -I ${iteration}\n\n`;
+  prompt += `⚠️ **注意**：\n`;
+  prompt += `- 契约文件写入 020-specs/global/API_CONTRACT.md（全局共享）\n`;
+  prompt += `- 这是各端技术方案分析的**前置输入**，后续各端分析必须遵循此契约\n`;
+  prompt += `- 契约应**精确且完整**，避免后续各端分析时出现接口不一致\n\n`;
+
   return prompt;
 }
 
