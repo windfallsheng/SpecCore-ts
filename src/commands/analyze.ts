@@ -30,6 +30,15 @@ import { GLOBAL_SPECS_DIR, GLOBAL_SPEC_FILES, parsePlatformTypes, parsePlatformL
 import { unifiedSearch, formatUnifiedContext } from '../core/unified-retrieval';
 import { PipelineEngine, createAnalyzePipeline, createGlobalAnalyzePipeline } from '../core/pipeline-engine';
 import { detectAffectedPlatforms, detectPlatformPriorityOrder, recordAnalysisSnapshot } from '../core/change-detection';
+import {
+  buildPhasePrompt,
+  detectBacktrackingNeeds,
+  runFinalAudit,
+  getPhaseSequence,
+  getPhaseDisplayName,
+  type AnalyzePhase,
+  type PhaseContext,
+} from '../core/streaming-analyzer';
 
 export interface AnalyzeOptions {
   iteration?: string;
@@ -60,6 +69,9 @@ export interface AnalyzeOptions {
   applyPhase?: string;  // --apply-phase N: 指定写入哪个阶段的合成结果
   // Pipeline 选项 (v6.68.0+)
   pipeline?: boolean;   // --pipeline: 启用流水线模式，自动执行 Phase 1 → Phase 2
+  // 流式分析选项 (v6.74.0+)
+  streaming?: boolean;  // --streaming: 启用流式全局分析
+  streamingPhase?: string; // --streaming-phase: 指定流式分析阶段
 }
 
 export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
@@ -381,11 +393,11 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         prompt = await buildMultiDocPrompt('analyze', {
           iteration: iter || 'GLOBAL', task: options.task, type: options.type,
           scope: 'global', withCode: options.withCode, platform: options.platform,
-        });
+        }, options);
       } else if (currentStep === 'global-analysis') {
         prompt = await buildMultiDocPrompt('analyze', {
           iteration: iter || 'GLOBAL', scope: 'global', withCode: options.withCode,
-        });
+        }, options);
       } else if (currentStep === 'consistency-check') {
         prompt = `\n# 任务: 全局一致性检查\n\n` +
           `检查各迭代、各端之间的规格是否一致。\n` +
@@ -396,13 +408,13 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       } else {
         prompt = await buildMultiDocPrompt('analyze', {
           iteration: iter || 'GLOBAL', scope: 'global', withCode: options.withCode,
-        });
+        }, options);
       }
     } else if (currentStep === 'phase1-prompt') {
       prompt = await buildMultiDocPrompt('analyze', {
         iteration: iter!, task: options.task, type: options.type,
         scope: options.scope, withCode: options.withCode, platform: options.platform,
-      });
+      }, options);
     } else if (currentStep === 'contract-prompt') {
       // 契约先行阶段：基于 Phase 1 文档生成跨端契约
       prompt = await buildContractFirstPrompt(iter!);
@@ -411,13 +423,13 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       const platform = platformMatch[1];
       prompt = await buildMultiDocPrompt('analyze', {
         iteration: iter!, phase: '2', platform,
-      });
+      }, options);
     } else {
       // 回退到默认 prompt
       prompt = await buildMultiDocPrompt('analyze', {
         iteration: iter!, task: options.task, type: options.type,
         scope: options.scope, withCode: options.withCode, platform: options.platform,
-      });
+      }, options);
     }
 
     // 添加 Pipeline 继续指令
@@ -454,7 +466,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
   // ── Prompt 模式 ──
   if (options.prompt) {
     const iter = options.iteration || await getDefaultIteration();
-    const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task, type: options.type, scope: options.scope, withCode: options.withCode, platform: options.platform, phase: options.phase, autoMode: options.auto });
+    const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task, type: options.type, scope: options.scope, withCode: options.withCode, platform: options.platform, phase: options.phase, autoMode: options.auto }, options);
     process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
     process.exitCode = 10;
     return;
@@ -782,7 +794,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
   // ── Prompt 模式 ──
   if (options.prompt) {
     const iter = options.iteration || await getDefaultIteration();
-    const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task, type: options.type, scope: options.scope, withCode: options.withCode, platform: options.platform, phase: options.phase, autoMode: options.auto });
+    const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task, type: options.type, scope: options.scope, withCode: options.withCode, platform: options.platform, phase: options.phase, autoMode: options.auto }, options);
     process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
     process.exitCode = 10;
     return;
@@ -1198,7 +1210,7 @@ function validateFunctionMap(content: string, validPlatforms: string[]): Functio
 }
 
 // ── buildMultiDocPrompt: 多文档协议 ──
-async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; task?: string; type?: string; scope?: string; withCode?: boolean; platform?: string; phase?: string; autoMode?: boolean }): Promise<string> {
+async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; task?: string; type?: string; scope?: string; withCode?: boolean; platform?: string; phase?: string; autoMode?: boolean }, options?: AnalyzeOptions): Promise<string> {
   const iter = ctx.iteration || '当前迭代';
   const task = ctx.task ? ` — ${ctx.task}` : '';
   const taskType = ctx.type || 'feature';
@@ -1209,6 +1221,11 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
 
   // global 范围: 从源码反推需求 + 生成技术栈配置
   if (isGlobal) {
+    // v6.74.0+: 流式全局分析模式
+    if (ctx.withCode && (options?.streaming || options?.streamingPhase)) {
+      return buildStreamingGlobalPrompt(command, ctx, options);
+    }
+
     let prompt = `\n# 任务: ${command} (全局分析${ctx.withCode ? '+源码' : ''})\n\n`;
     prompt += `## 要求\n`;
     prompt += `1. **先读宪法**: Read .speccore/CONSTITUTION.md，这是项目配置的唯一权威来源。获取:\n`;
@@ -2104,6 +2121,119 @@ sequenceDiagram
   prompt += `- [ ] 合法格式示例：\`global/ANALYSIS.md\`、\`admin-web/TECH.md\`、\`REQUIREMENT.md\`\n\n`;
   prompt += `### 自检通过标准\n`;
   prompt += `以上 5 项全部勾选通过后，方可执行 --apply 写入。如果任何一项未通过，先修正问题，重新自检，直到全部通过。\n`;
+
+  return prompt;
+}
+
+// ── v6.74.0+: 流式全局分析 Prompt 生成 ──
+async function buildStreamingGlobalPrompt(
+  command: string,
+  ctx: { iteration?: string; withCode?: boolean },
+  options?: AnalyzeOptions
+): Promise<string> {
+  const iter = ctx.iteration || '当前迭代';
+  const platforms = await parsePlatformList();
+  const platformTypes = await parsePlatformTypes();
+
+  // 确定当前 Phase
+  let currentPhase: AnalyzePhase = 'phase0-scan';
+  if (options?.streamingPhase) {
+    currentPhase = options.streamingPhase as AnalyzePhase;
+  }
+
+  const phaseCtx: PhaseContext = {
+    iteration: iter,
+    phase: currentPhase,
+    platforms,
+    platformTypes,
+    completedPhases: [],
+  };
+
+  let prompt = `\n# 任务: ${command} (流式全局分析 — ${getPhaseDisplayName(currentPhase)})\n\n`;
+
+  // 流式分析总览
+  prompt += `## 📋 流式分析架构说明\n\n`;
+  prompt += `本次分析采用 **七阶段流式处理**，每个阶段产出写入文件，作为后续阶段的输入。\n\n`;
+  prompt += `| Phase | 名称 | 目标 | 产出 |\n`;
+  prompt += `| :--- | :--- | :--- | :--- |\n`;
+  prompt += `| Phase 0 | 快速全局扫描 | 所有端并行索引 | platforms/{端}/_INDEX.md |\n`;
+  prompt += `| Phase 1 | 后端深度分析 | 拓扑排序，从依赖源头开始 | platforms/{后端端}/API_INVENTORY.md, DATA_MODEL.md, ... |\n`;
+  prompt += `| Phase 2 | 全局实时更新 | 后端完成后更新全局文档 | global/API_CONTRACT.yaml, ARCHITECTURE.md, ... |\n`;
+  prompt += `| Phase 3 | 前端深度分析 | 对齐后端契约 | platforms/{前端端}/FEATURES.md, UI_SPEC.md, ... |\n`;
+  prompt += `| Phase 4 | 横向关联检查 | 前后端字段/接口一致性 | global/CROSS_CHECK.md |\n`;
+  prompt += `| Phase 5 | 纵向关联检查 | 功能模块跨端完整性 | global/VERTICAL_CHECK.md |\n`;
+  prompt += `| Phase 6 | 最终核对检查 | 完整性+一致性+遗漏检测 | global/FINAL_AUDIT.md |\n\n`;
+
+  prompt += `## ⚠️ 实时关联调整机制\n\n`;
+  prompt += `分析过程中，如果当前阶段发现与前期文档冲突或不一致：\n`;
+  prompt += `1. **在当前阶段文档中标注冲突点**\n`;
+  prompt += `2. **输出需要回退修正的前期文档列表**\n`;
+  prompt += `3. **执行修正**：用 \`speccore analyze --apply\` 更新需要修正的文档\n`;
+  prompt += `4. **修正后重新执行当前阶段**，确保一致性\n\n`;
+
+  prompt += `## 🎯 当前阶段: ${getPhaseDisplayName(currentPhase)}\n\n`;
+
+  // 生成当前 Phase 的详细 Prompt
+  const phasePrompt = await buildPhasePrompt(phaseCtx);
+  prompt += phasePrompt;
+
+  // 后续阶段提示
+  const allPhases = getPhaseSequence();
+  const currentIndex = allPhases.indexOf(currentPhase);
+  const nextPhases = allPhases.slice(currentIndex + 1);
+
+  if (nextPhases.length > 0) {
+    prompt += `\n## ⏭️ 后续阶段\n\n`;
+    prompt += `完成当前阶段后，继续执行以下阶段（按顺序）：\n\n`;
+    for (const np of nextPhases) {
+      prompt += `- ${getPhaseDisplayName(np)}\n`;
+    }
+    prompt += `\n每个阶段使用命令：\n`;
+    prompt += `\`\`\`bash\n`;
+    for (const np of nextPhases) {
+      prompt += `speccore analyze --prompt -I ${iter} --global --with-code --streaming-phase ${np}\n`;
+    }
+    prompt += `\`\`\`\n`;
+  }
+
+  // 端类型针对性总结
+  prompt += `\n## 🏗️ 端类型针对性要求\n\n`;
+  prompt += `本项目共有 ${platforms.length} 个端，各端类型如下：\n\n`;
+  prompt += `| 端名 | 类型 | 分析侧重点 |\n`;
+  prompt += `| :--- | :--- | :--- |\n`;
+  for (const p of platforms) {
+    const t = platformTypes.get(p) || 'unknown';
+    const isBackend = t.includes('service') || t.includes('Java') || t.includes('Node') || t.includes('Go') || t.includes('Python') || t.includes('后端');
+    if (isBackend) {
+      prompt += `| ${p} | ${t} | API设计+数据模型+业务规则+性能+安全 |\n`;
+    } else if (t.includes('微信') || t.includes('公众号')) {
+      prompt += `| ${p} | ${t} | 微信JS-SDK+OAuth+分享+支付+模板消息 |\n`;
+    } else if (t.includes('小程序')) {
+      prompt += `| ${p} | ${t} | 包体积+平台API+setData优化+页面栈 |\n`;
+    } else if (t.includes('H5')) {
+      prompt += `| ${p} | ${t} | 响应式+触摸交互+弱网优化+首屏性能 |\n`;
+    } else if (t.includes('Web') || t.includes('管理')) {
+      prompt += `| ${p} | ${t} | 复杂表单+数据表格+权限UI+状态管理 |\n`;
+    } else if (t.includes('Android')) {
+      prompt += `| ${p} | ${t} | 生命周期+权限+推送+适配+内存优化 |\n`;
+    } else if (t.includes('iOS')) {
+      prompt += `| ${p} | ${t} | Swift/SwiftUI+App Store规范+推送+性能 |\n`;
+    } else if (t.includes('桌面')) {
+      prompt += `| ${p} | ${t} | 本地存储+系统API+自动更新+离线支持 |\n`;
+    } else {
+      prompt += `| ${p} | ${t} | 前端框架+状态管理+路由+组件库 |\n`;
+    }
+  }
+  prompt += `\n`;
+
+  // 全局分析指令
+  prompt += `## 📝 通用指令\n\n`;
+  prompt += `1. **先读宪法**: Read .speccore/CONSTITUTION.md，获取端列表和源码路径\n`;
+  prompt += `2. **严格按阶段执行**: 不要跳过阶段，每个阶段的产出是后续阶段的输入\n`;
+  prompt += `3. **实时更新全局**: 后端分析完成后必须更新全局文档，前端分析完成后必须更新前端文档\n`;
+  prompt += `4. **冲突时回退修正**: 发现不一致时，优先修正源头文档，再推进当前阶段\n`;
+  prompt += `5. **写入方式**: 所有文档通过 \`speccore analyze --apply '{"文件路径":"内容"}' -I ${iter} --global\` 写入\n`;
+  prompt += `6. **知识图谱**: 每阶段完成后自动刷新知识图谱\n`;
 
   return prompt;
 }
