@@ -756,6 +756,11 @@ program
   .option('--apply-phase <n>', '配合 --apply 使用，指定写入哪个阶段的合成结果')
   .option('--streaming', 'v6.74.0+: 启用流式全局分析（Phase 0→6，后端优先，实时关联调整）')
   .option('--streaming-phase <phase>', '流式分析指定阶段: phase0-scan|phase1-backend|phase2-global-update|phase3-frontend|phase4-cross-check|phase5-vertical-check|phase6-final-audit')
+  .option('--incremental', 'v6.75.0+: 增量分析模式（基于上次分析，只分析变更/遗漏）')
+  .option('--reanalyze', 'v6.75.0+: 重新分析（同 --incremental，检查遗漏+更新）')
+  .option('--add-platform <platform>', 'v6.75.0+: 新增端分析（单独分析新端，更新全局文档）')
+  .option('--context-guard', 'v6.75.0+: 启用上下文爆炸防护（预估大小+智能分段）')
+  .option('--estimate-only', 'v6.75.0+: 只输出上下文预估报告，不执行分析')
   .action(analyzeCommand);
 
 program
