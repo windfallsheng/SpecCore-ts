@@ -2098,6 +2098,10 @@ function outputPostSummary(iteration: string, task: string, fileCount: number, f
   if (filePaths.length > 5) logger.info(`    ... 等 ${filePaths.length} 个文件`);
   logger.info('');
 
+  // 检测是否涉及接口/实体变更（简单启发式）
+  const hasApiChange = filePaths.some(fp => /(controller|api|route|router|handler|endpoint)/i.test(fp));
+  const hasModelChange = filePaths.some(fp => /(entity|model|dto|vo|schema|domain)/i.test(fp));
+
   // 推荐下一步
   const nextSteps = [
     { cmd: `speccore pr --task ${task}`, desc: '创建 Pull Request' },
@@ -2108,6 +2112,14 @@ function outputPostSummary(iteration: string, task: string, fileCount: number, f
   logger.info('💡 推荐下一步:');
   for (const ns of nextSteps) {
     logger.info(`   → ${ns.cmd}  # ${ns.desc}`);
+  }
+
+  // v6.72.0+: 全局层刷新提示
+  if (hasApiChange || hasModelChange) {
+    logger.info('');
+    logger.warn('🔄 检测到接口/实体变更，建议刷新全局层:');
+    logger.info(`   → speccore analyze --global --withCode  # 刷新全局 FUNCTION_MAP.md / API_CONTRACT.yaml`);
+    logger.info(`   → speccore refresh                    # 刷新检索索引`);
   }
   logger.info('━'.repeat(40));
 }

@@ -231,6 +231,7 @@ iterationCmd
   .option('--prompt', '输出结构化 Prompt 到 stdout（Skill 协作模式）')
   .option('--response <response>', '接收 AI 拆分结果创建 Task（配合 --prompt）')
   .option('--force', '已有任务时强制覆盖')
+  .option('--prune', '清理与当前 FUNCTION_MAP.md 不匹配的旧任务（移动到 archive）')
   .option('-g, --granularity <level>', '拆分粒度: macro(粗) | module(中,默认) | atomic(细)')
   .action(iterationSplitCommand);
 

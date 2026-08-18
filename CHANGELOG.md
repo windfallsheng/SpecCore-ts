@@ -1,3 +1,38 @@
+## v6.72.0 (2026-08-18) — 流水线链路全面优化
+
+### P0: 全局层自动刷新 + FUNCTION_MAP 自检
+
+- **全局层刷新提示** (`execute.ts`): 执行完成后检测接口/实体变更，自动提示 `speccore analyze --global --withCode` 刷新全局层
+- **FUNCTION_MAP.md 自检** (`analyze.ts`): apply 阶段自动校验 FUNCTION_MAP.md
+  - 校验表头完整性（功能单元、涉及端、全局对比）
+  - 校验涉及端是否在已知端列表中
+  - 校验全局对比是否为标准值（新增/扩展/重构/复用）
+  - 校验依赖任务格式（Task-NNN）
+
+### P1: 一致性校验消费 + 变更状态重评估
+
+- **CONSISTENCY_CHECK.md 注入执行** (`prompt-builder.ts`): execute 时自动读取并注入迭代级/全局级 CONSISTENCY_CHECK.md，让 AI 在编码时知晓前后端不一致项
+- **变更后任务状态自动重评估** (`change.ts`):
+  - 直接受影响任务：状态统一标记为 `needs-rework`，TASK.md 状态同步更新
+  - 间接影响任务（done 状态）：自动回退为 `needs-rework`，TASK.md 追加回归验证记录
+  - 支持 `.meta/status` 和 `.task-status` 双格式
+- **Prompt 文档长度自适应** (`analyze.ts`): 需求文档超过 5000 字时，AI 先扫描目录再深入关键章节
+
+### P2: 相邻任务强制 + 智能清理 + 模式自动提取
+
+- **相邻任务读取强制化** (`prompt-builder.ts`): execute 指令增加强制要求
+  - 必须先 Read 相邻任务文档再编码
+  - 找不到时必须在代码注释中标注「未验证：相邻任务文档缺失」
+- **split --prune 智能清理** (`iteration/split.ts` + `cli.ts`):
+  - `--prune` 选项：只清理与当前 FUNCTION_MAP.md 功能单元不匹配的旧任务
+  - 旧任务移动到 `030-tasks/.archive/YYYY-MM-DD/`（安全归档，不直接删除）
+  - 与 `--force`（全部删除）形成互补
+- **PATTERNS/ 自动提取支持** (`analyze.ts`): apply 阶段支持 `PATTERNS/*.md` 文件
+  - AI 返回 `PATTERNS/{分类}-{模式名}.md` 时，自动追加到 `.speccore/PATTERNS/`
+  - 采用追加模式（不覆盖，合并内容）
+
+---
+
 ## v6.71.3 (2026-08-18) — 四层模式统一映射到迭代分析和任务执行
 
 ### 迭代分析增强（`analyze.ts`）

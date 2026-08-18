@@ -180,6 +180,7 @@ export interface IterationSplitOptions {
   granularity?: 'macro' | 'module' | 'atomic';  // 拆分粒度
   pipeline?: boolean;   // --pipeline: 启用 Pipeline 模式
   resume?: boolean;     // --resume: 恢复之前的 Pipeline
+  prune?: boolean;      // --prune: 清理不匹配的旧任务
 }
 
 async function detectPlatforms(iterationDir: string, specified?: string): Promise<string[]> {
@@ -3405,23 +3406,54 @@ async function tryModuleDrivenSplit(
 
   // 检测已有任务
   const existingTasks = await detectExistingTasks(iterationDir);
-  if (existingTasks.length > 0 && !options.force) {
+  if (existingTasks.length > 0 && !options.force && !options.prune) {
     logger.warn(`   ⚠️  已有 ${existingTasks.length} 个任务: ${existingTasks.slice(0, 5).join(', ')}...`);
-    logger.info('   使用 --force 强制覆盖');
+    logger.info('   使用 --force 强制覆盖 或 --prune 智能清理不匹配任务');
     return true; // 已处理，不继续传统流程
   }
 
-  // --force 清理旧任务
+  // --force 清理所有旧任务
   if (options.force) {
     const tasksRoot = join(iterationDir, '030-tasks');
     if (await pathExists(tasksRoot)) {
       const entries = await readdir(tasksRoot, { withFileTypes: true });
       for (const entry of entries) {
-        if (entry.isDirectory()) {
+        if (entry.isDirectory() && !entry.name.startsWith('.')) {
           await remove(join(tasksRoot, entry.name));
         }
       }
       logger.info(`   🗑️  已清理旧任务目录`);
+    }
+  }
+
+  // v6.72.0+: --prune 智能清理不匹配的旧任务
+  if (options.prune && !options.force && existingTasks.length > 0) {
+    const tasksRoot = join(iterationDir, '030-tasks');
+    const validFeatureNames = new Set(modules.map(m => m.name));
+    const archiveDir = join(tasksRoot, '.archive', new Date().toISOString().split('T')[0]);
+    let prunedCount = 0;
+
+    for (const taskName of existingTasks) {
+      const taskDir = join(tasksRoot, taskName);
+      const featurePath = join(taskDir, '.meta', 'feature');
+      let featureName = '';
+      if (await pathExists(featurePath)) {
+        featureName = (await readFile(featurePath, 'utf-8')).trim();
+      }
+      // 如果功能单元不在当前 FUNCTION_MAP.md 中，移动到 archive
+      if (featureName && !validFeatureNames.has(featureName)) {
+        await ensureDir(archiveDir);
+        const { rename } = await import('fs-extra');
+        await rename(taskDir, join(archiveDir, taskName));
+        prunedCount++;
+        logger.info(`   🗑️  已归档旧任务: ${taskName} (功能单元: ${featureName})`);
+      }
+    }
+
+    if (prunedCount > 0) {
+      logger.info(`   📦 共归档 ${prunedCount} 个不匹配任务到 ${archiveDir.replace(tasksRoot + '/', '')}`);
+    } else {
+      logger.info(`   ✅ 无需要清理的旧任务（所有任务功能单元均匹配）`);
     }
   }
 

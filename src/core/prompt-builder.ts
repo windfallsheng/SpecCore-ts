@@ -7,7 +7,7 @@
  * 架构: CLI(确定性) → stdout(Prompt) → AI(生成) → CLI(确定性写入)
  */
 import { readFile, pathExists, readdir, stat } from 'fs-extra';
-import { join } from 'path';
+import { join, dirname } from 'path';
 import { isTimestampBackup } from '../utils/task-utils';
 import { logger } from '../utils/logger';
 import { loadKnowledgeGraph, getTaskContext, isGraphStale, refreshKnowledgeGraph, KnowledgeGraph } from './knowledge-graph';
@@ -1108,6 +1108,10 @@ function getInstruction(command: PromptCommand, context: { taskName?: string; ap
         '   - 本任务的数据模型是否与并行任务的数据模型一致？',
         '   - 本任务的状态枚举是否与全局 API_CONTRACT.yaml 一致？',
         '   - 标注不一致项，在代码注释中说明处理方案',
+        '4. **强制要求**：',
+        '   - 如果存在前置任务或并行任务，必须先 Read 其文档后再开始编码',
+        '   - 如果因找不到相邻任务文档而无法验证契约，在代码注释中明确标注「未验证：相邻任务文档缺失」',
+        '   - 不允许在完全不了解相邻任务的情况下直接生成接口/模型代码',
         '',
         '## 后端实现要求（Layer 3）',
         `1. 严格遵循上面的技术栈选型`,
@@ -1250,6 +1254,31 @@ export async function buildPrompt(
         logger?.info?.(`   📚 全量兜底: ${fullContext.length} 个文件 (检索内容不足 ${currentChars} < ${SPARSE_THRESHOLD})`);
       }
     }
+  }
+
+  // v6.72.0+: execute 时注入 CONSISTENCY_CHECK.md（前后端一致性校验）
+  if (command === 'execute' && taskDir) {
+    try {
+      const iterDir = dirname(dirname(taskDir)); // Task-NNN/ → 030-tasks/ → Iteration-XXX/
+      const ccPaths = [
+        join(iterDir, '020-specs', 'global', 'CONSISTENCY_CHECK.md'),
+        join(cwd, '.speccore', 'GLOBAL', 'CONSISTENCY_CHECK.md'),
+      ];
+      for (const ccPath of ccPaths) {
+        if (await pathExists(ccPath)) {
+          const ccContent = await readFile(ccPath, 'utf-8');
+          if (ccContent.trim().length > 0) {
+            extraSpecs.push({
+              name: 'CONSISTENCY_CHECK.md',
+              path: ccPath,
+              content: `## 前后端一致性校验报告\n\n${ccContent}`,
+            });
+            logger?.info?.(`   📋 已注入一致性校验报告: ${ccPath.replace(cwd + '/', '')}`);
+            break;
+          }
+        }
+      }
+    } catch { /* 忽略读取失败 */ }
   }
 
   // 加载全局上下文（智能注入）

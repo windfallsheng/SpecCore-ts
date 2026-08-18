@@ -549,7 +549,44 @@ export async function changeCommand(options: ChangeOptions): Promise<void> {
       await applyTaskChange(taskOpts, iteration);
       affectedIds.push(m.id);
     }
-  
+
+    // v6.72.0+: 对间接影响任务标记为 needs-rework（需回归验证）
+    for (const m of impactReport.indirectTasks) {
+      const indirectTaskDir = join(taskBase, m.id);
+      const metaStatusPath = join(indirectTaskDir, '.meta', 'status');
+      const legacyStatusPath = join(indirectTaskDir, '.task-status');
+      const taskMdPath = join(indirectTaskDir, '00-specs', 'TASK.md');
+      const now = new Date().toISOString().split('T')[0];
+
+      try {
+        if (await pathExists(metaStatusPath)) {
+          const currentStatus = (await readFile(metaStatusPath, 'utf-8')).trim();
+          if (currentStatus === 'done') {
+            await writeFile(metaStatusPath, 'needs-rework');
+            logger.info(`   📌 ${m.id} 状态从 done 回退为 needs-rework（间接影响）`);
+          }
+        } else if (await pathExists(legacyStatusPath)) {
+          const currentStatus = (await readFile(legacyStatusPath, 'utf-8')).trim();
+          if (currentStatus === 'done') {
+            await writeFile(legacyStatusPath, 'needs-rework');
+            logger.info(`   📌 ${m.id} 状态从 done 回退为 needs-rework（间接影响）`);
+          }
+        }
+        // 在 TASK.md 追加间接影响说明
+        if (await pathExists(taskMdPath)) {
+          let content = await readFile(taskMdPath, 'utf-8');
+          const indirectNote = `| ${now} | 间接影响 | 上游任务变更，需回归验证 | SpecCore |\n`;
+          if (!content.includes('间接影响')) {
+            content = content.replace(
+              /(\| :--- \| :--- \| :--- \| :--- \|)/,
+              `$1\n${indirectNote}`
+            );
+            await writeFile(taskMdPath, content);
+          }
+        }
+      } catch { /* 忽略失败 */ }
+    }
+
     // 标记 inbox 文件已处理
     if (allFiles.length > 0) {
       await markProcessed(allFiles, 'change', affectedIds);
@@ -804,14 +841,28 @@ async function applyTaskChange(options: ChangeOptions, iteration: string): Promi
     }
   }
 
-  // 更新任务状态为 needs-rework
+  // v6.72.0+: 更新任务状态为 needs-rework（无论当前状态，变更后都需重新评估）
   const metaStatusPath = join(taskDir, '.meta', 'status');
+  const legacyStatusPath = join(taskDir, '.task-status');
   if (await pathExists(metaStatusPath)) {
-    const currentStatus = await readFile(metaStatusPath, 'utf-8');
-    if (currentStatus.trim() === 'done') {
+    const currentStatus = (await readFile(metaStatusPath, 'utf-8')).trim();
+    if (currentStatus !== 'needs-rework') {
       tx.write(metaStatusPath, 'needs-rework');
-      logger.info(`   📌 任务状态从 done 回退为 needs-rework`);
+      logger.info(`   📌 任务状态从 ${currentStatus} 变更为 needs-rework`);
     }
+  } else if (await pathExists(legacyStatusPath)) {
+    const currentStatus = (await readFile(legacyStatusPath, 'utf-8')).trim();
+    if (currentStatus !== 'needs-rework') {
+      tx.write(legacyStatusPath, 'needs-rework');
+      logger.info(`   📌 任务状态从 ${currentStatus} 变更为 needs-rework`);
+    }
+  }
+
+  // 更新 TASK.md 状态标记
+  if (await pathExists(taskMdPath)) {
+    let content = await readFile(taskMdPath, 'utf-8');
+    content = content.replace(/^- 状态:.*$/m, '- 状态: needs-rework（需求变更后需重新评估）');
+    tx.write(taskMdPath, content);
   }
 
   // 提交事务 — 原子写入，失败回滚
