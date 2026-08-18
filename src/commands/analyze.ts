@@ -507,6 +507,24 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
           let skippedCount = 0;
 
           for (const [filename, content] of Object.entries(docs)) {
+            // v6.72.0+: PATTERNS/ 文件特殊处理 → 写入 .speccore/PATTERNS/
+            if (filename.startsWith('PATTERNS/')) {
+              const patternsDir = join(process.cwd(), '.speccore', 'PATTERNS');
+              await ensureDir(patternsDir);
+              const patternFile = filename.slice('PATTERNS/'.length);
+              const fp = join(patternsDir, patternFile);
+              // PATTERNS 文件：追加模式（不覆盖，合并内容）
+              let existing = '';
+              if (await pathExists(fp)) {
+                existing = await readFile(fp, 'utf-8');
+              }
+              const merged = existing ? `${existing}\n\n---\n\n${content}` : content;
+              await writeFile(fp, merged);
+              logger.info(`   🧩 PATTERN 已追加: ${patternFile}`);
+              count++;
+              continue;
+            }
+
             // 解析目录名（如 "admin-web/TECH.md" → "admin-web"）
             const platformDir = filename.includes('/') ? filename.split('/')[0] : null;
 
@@ -537,6 +555,28 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
             logger.warn(`⚠️ 共跳过 ${skippedCount} 个非法目录的文档，请检查 AI 输出是否包含非端名目录`);
           }
           logger.success(`✅ ${count} 个 Spec 文档已写入 020-specs/`);
+
+          // v6.72.0+: FUNCTION_MAP.md 自检
+          const fmContent = docs['FUNCTION_MAP.md'] || docs['global/FUNCTION_MAP.md'];
+          if (fmContent) {
+            const platforms = Array.from(validPlatforms);
+            const fmResult = validateFunctionMap(fmContent, platforms);
+            if (!fmResult.valid || fmResult.warnings.length > 0) {
+              logger.info('');
+              logger.info('📋 FUNCTION_MAP.md 自检结果:');
+              for (const err of fmResult.errors) {
+                logger.error(`   ❌ ${err}`);
+              }
+              for (const warn of fmResult.warnings) {
+                logger.warn(`   ⚠️ ${warn}`);
+              }
+              if (fmResult.valid && fmResult.warnings.length > 0) {
+                logger.info('   💡 警告不影响写入，但建议修正后重新分析');
+              }
+            } else {
+              logger.info('   ✅ FUNCTION_MAP.md 自检通过');
+            }
+          }
         }
         printBackupSummary();
         return;
@@ -1074,6 +1114,87 @@ async function loadUserTemplates(
   }
 
   return result;
+}
+
+// ── v6.72.0+: FUNCTION_MAP.md 自检 ──
+interface FunctionMapValidationResult {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+function validateFunctionMap(content: string, validPlatforms: string[]): FunctionMapValidationResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const lines = content.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+  // 1. 查找表格
+  const tableLines = lines.filter(l => l.startsWith('|'));
+  if (tableLines.length < 2) {
+    errors.push('FUNCTION_MAP.md 未找到有效表格');
+    return { valid: false, errors, warnings };
+  }
+
+  // 2. 校验表头
+  const headerLine = tableLines[0];
+  const requiredColumns = ['功能单元', '涉及端', '全局对比'];
+  for (const col of requiredColumns) {
+    if (!headerLine.includes(col)) {
+      errors.push(`表头缺少必填列: ${col}`);
+    }
+  }
+
+  // 3. 解析数据行（跳过分隔行 ---|---）
+  const dataRows = tableLines.slice(1).filter(l => l.replace(/[\s|:-]/g, '').length > 0);
+  const platformSet = new Set(validPlatforms.map(p => p.toLowerCase()));
+  const validComparisonTypes = new Set(['新增', '扩展', '重构', '复用']);
+
+  for (let i = 0; i < dataRows.length; i++) {
+    const row = dataRows[i];
+    const cells = row.split('|').map(c => c.trim()).filter(c => c.length > 0);
+    if (cells.length < 3) continue; // 跳过格式异常行
+
+    const funcUnit = cells[1] || '';
+    const platforms = (cells[2] || '').split(/[,，]/).map(p => p.trim()).filter(Boolean);
+    const comparison = cells[3] || '';
+    const deps = cells[5] || '';
+
+    // 功能单元非空
+    if (!funcUnit || funcUnit === '功能单元') continue;
+    if (!funcUnit || /^[-—]+$/.test(funcUnit)) {
+      errors.push(`第 ${i + 1} 行: 功能单元名称不能为空`);
+    }
+
+    // 涉及端校验
+    for (const plat of platforms) {
+      const platLower = plat.toLowerCase();
+      if (platLower === '无' || platLower === '-' || platLower === '—') continue;
+      if (!platformSet.has(platLower)) {
+        warnings.push(`第 ${i + 1} 行("${funcUnit}"): 涉及端 "${plat}" 不在已知端列表中 [${validPlatforms.join(', ')}]`);
+      }
+    }
+
+    // 全局对比校验
+    if (comparison && !validComparisonTypes.has(comparison) && !/^[-—]+$/.test(comparison)) {
+      warnings.push(`第 ${i + 1} 行("${funcUnit}"): 全局对比 "${comparison}" 不是标准值（新增/扩展/重构/复用）`);
+    }
+
+    // 依赖任务格式校验
+    if (deps && deps !== '无' && deps !== '-' && deps !== '—') {
+      const depList = deps.split(/[,，]/).map(d => d.trim()).filter(Boolean);
+      for (const dep of depList) {
+        if (!/^Task-\d{3,}$/i.test(dep)) {
+          warnings.push(`第 ${i + 1} 行("${funcUnit}"): 依赖任务格式异常 "${dep}"（应为 Task-NNN）`);
+        }
+      }
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings,
+  };
 }
 
 // ── buildMultiDocPrompt: 多文档协议 ──
@@ -1713,6 +1834,7 @@ sequenceDiagram
     prompt += `   d. 读取 010-requirements/prototypes/ — 原型文件（HTML/图片/链接均读取）\n`;
     prompt += `      ⚠️ 需求文档中链接到原型的（如 \`![原型](../prototypes/xxx.png)\` 或 \`详见 prototypes/xxx.html\`），必须主动 Read 该原型文件\n`;
     prompt += `   e. 如用户指定了特定文档，优先读取指定文件；如要求全部，再读 sources/ 原始文档\n`;
+    prompt += `   f. **文档长度自适应**：如果单个需求文档超过 5000 字，先快速扫描目录和章节标题，标记关键章节，再深入阅读。不要在非关键章节上花费过多 tokens\n`;
     prompt += `4. 读懂需求文档后，按专业模板标准自由撰写每个文档（不是填空表）\n`;
     prompt += `5. 每个文档都要具体内容（禁止"待填充"）\n`;
     prompt += `6. **端发现（重要）**：先确定项目有哪些端，再按端组织文档\n`;
