@@ -754,6 +754,8 @@ program
   .option('--full', '全自动三阶段合成：逐端分析 → 跨端综合 → 功能单元需求合成（原 synthesize）')
   .option('--phase <n>', '单阶段合成执行: 1=逐端分析, 2=跨端综合, 3=功能单元合成')
   .option('--apply-phase <n>', '配合 --apply 使用，指定写入哪个阶段的合成结果')
+  .option('--streaming', 'v6.74.0+: 启用流式全局分析（Phase 0→6，后端优先，实时关联调整）')
+  .option('--streaming-phase <phase>', '流式分析指定阶段: phase0-scan|phase1-backend|phase2-global-update|phase3-frontend|phase4-cross-check|phase5-vertical-check|phase6-final-audit')
   .action(analyzeCommand);
 
 program

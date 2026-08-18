@@ -1,3 +1,51 @@
+## v6.74.0 (2026-08-18) — 流式全局分析：Phase 0→6 + 实时关联调整 + 端针对性 + 核对检查
+
+### 核心架构：从"四层批处理"升级为"七阶段流处理"
+
+- **Phase 0: 快速全局扫描** — 所有端并行索引，产出 `platforms/{端}/_INDEX.md`
+- **Phase 1: 后端深度分析** — 拓扑排序，从依赖源头服务开始逐个深入分析
+  - 产出：API_INVENTORY.md / DATA_MODEL.md / BUSINESS_RULES.md / TECH_STACK.md
+  - 端类型针对性：Java→Spring Boot/JPA/缓存/消息队列；Node→NestJS/TypeORM/异步处理；Go→Gin/GORM/协程；Python→FastAPI/SQLAlchemy/Celery
+- **Phase 2: 全局实时更新** — 后端完成后立即更新全局文档
+  - 产出：API_CONTRACT.yaml / ARCHITECTURE.md / FUNCTION_MAP.md / CONSISTENCY_CHECK.md
+- **Phase 3: 前端深度分析** — 对齐后端契约，逐个前端端分析
+  - 产出：FEATURES.md / UI_FLOW.md / API_CALL_MAP.md / UI_SPEC.md / TECH_STACK.md
+  - 端类型针对性：微信→JS-SDK/OAuth/支付；H5→响应式/触摸/弱网；小程序→包体积/setData；Web→表单/表格/权限UI；Android→生命周期/权限/推送；iOS→Swift/App Store规范
+- **Phase 4: 横向关联检查** — 前后端字段/接口/状态一致性
+  - 产出：global/CROSS_CHECK.md
+- **Phase 5: 纵向关联检查** — 功能模块跨端完整性
+  - 产出：global/VERTICAL_CHECK.md
+- **Phase 6: 最终核对检查** — 完整性+一致性+遗漏检测
+  - 产出：global/FINAL_AUDIT.md
+
+### 实时关联调整机制
+
+- **后端分析中发现冲突**：当前端数据模型与已分析端冲突 → 回退修正已分析端
+- **前端分析中发现缺失**：前端需要的接口在后端不存在 → 回退补充后端 API
+- **自动检测**：`detectBacktrackingNeeds()` 自动扫描前后端文档的不一致
+- **修正流程**：标注冲突点 → 输出修正列表 → `speccore analyze --apply` 更新 → 重新验证
+
+### 端类型针对性分析
+
+- 后端端按技术栈生成专属分析维度（Java/Node/Go/Python 各有不同侧重点）
+- 前端端按平台类型生成专属分析维度（微信/H5/小程序/Web/Android/iOS/桌面各有不同）
+- 在 Prompt 中自动注入端类型 → 分析侧重点映射表
+
+### 新增模块
+
+| 文件 | 职责 |
+|:---|:---|
+| `src/core/streaming-analyzer.ts` | 流式分析引擎：Phase Prompt 生成、实时关联调整检测、最终核对检查 |
+
+### CLI 新增参数
+
+| 参数 | 说明 |
+|:---|:---|
+| `--streaming` | 启用流式全局分析（替代传统 Layer 1-4） |
+| `--streaming-phase <phase>` | 指定流式分析阶段（phase0-scan ~ phase6-final-audit） |
+
+---
+
 ## v6.73.0 (2026-08-18) — 变更驱动工作流 v2：语义检索 + AI 影响分析 + 变更收件箱
 
 ### 核心架构：分层 AI + 知识图谱联动
