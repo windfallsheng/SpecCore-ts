@@ -149,6 +149,7 @@ speccore analyze --full              # 全量分析（原 synthesize）
 speccore analyze --auto              # 全自动分析（经过 AI，不交互）
 speccore analyze --auto --platform admin  # 只分析指定端
 speccore analyze --task Task-001     # 任务级深度分析（split 后执行）
+speccore analyze --global --withCode # 全局代码分析（四层扫描+功能模块驱动）
 ```
 别名: `al`
 
@@ -158,6 +159,25 @@ speccore analyze --task Task-001     # 任务级深度分析（split 后执行�
 - **Phase 1**: 生成全局文档(global/REQUIREMENT.md、ANALYSIS.md、DEPS.md 等)，建立跨端统一视角
 - **Phase 2**: 生成各端专属文档({端}/TECH.md、TEST.md、UI_SPEC.md 等)，参考全局上下文后注入端专属专业维度
 - **自动触发**: CLI 在 Phase 1 完成后,检测到 ≥2 个端时自动输出 Phase 2 prompt,无需用户手动执行两次命令
+- **自动模式(v6.71.0+)**: `--auto` 下 AI 直接推断执行 Phase 2，无需用户确认
+
+**全局代码分析 — 四层扫描架构(v6.71.2+)**:
+```bash
+speccore analyze --global --withCode
+```
+- **Layer 1**: 快速扫描所有端 → 各端 `_INDEX.md`（只提取索引，不深入代码）
+- **Layer 2**: 跨端关联分析 → `_ASSOCIATION.md` + `_MODULES.md`（匹配前后端接口、识别公共服务、归纳功能模块）
+- **Layer 3**: 按功能模块深入分析（不是按端）→ 逐个功能模块读取涉及端的详细源码
+- **Layer 4**: 全局汇总 → `REQUIREMENT.md` / `FUNCTION_MAP.md` / `INTERACTION_MAP.md` / `API_CONTRACT.yaml` / `ARCHITECTURE.md` / `CONSISTENCY_CHECK.md`
+
+**前后端分析视角分离(v6.71.1+)**:
+- **后端端（*service）**: 纯技术视角 — API 设计、数据库、缓存、并发、安全、性能
+- **前端端（h5/admin/miniapp）**: 产品+技术双视角 — 用户旅程、页面清单、交互设计、字段展示、API 调用清单
+
+**迭代分析全局关联(v6.71.3+)**:
+- 迭代分析前自动读取全局层产物（`GLOBAL/REQUIREMENT.md`、`GLOBAL/FUNCTION_MAP.md`、`GLOBAL/API_CONTRACT.yaml` 等）
+- 功能模块清单新增「全局对比」列：新增 / 扩展 / 重构 / 复用
+- 自动识别迭代需求与全局层的冲突和依赖
 
 **图谱 RAG 智能检索**:
 - Phase 1/Phase 2 执行前均调用 `unifiedSearch()` 从知识图谱和 RAG 索引中检索项目关联内容

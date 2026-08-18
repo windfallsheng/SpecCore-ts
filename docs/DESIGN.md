@@ -920,6 +920,147 @@ speccore retro --task Task-001        ← 单个
 speccore retro --all                  ← 全部
 speccore retro --all --owner 张三     ← 按人
 speccore retro --all --type bugfix    ← 按类型
+---
+
+### 2026-08-18 analyze→split→execute 四层模式统一架构（v6.71.0 → v6.71.3）
+
+#### 背景
+随着 SpecCore 在多端项目中的深度使用，发现分析流程存在三个结构性问题：
+1. **全局分析按端顺序扫描** → 后端改完前端改，AI 无法建立跨端关联认知
+2. **迭代分析与全局层脱节** → 每个迭代"从零开始"分析，不利用全局层已有产物
+3. **任务执行是孤岛** → 执行单个任务时不读相邻任务，导致接口不一致、状态枚举冲突
+
+#### v6.71.0: 跨端交互图谱 + 自动模式
+
+**跨端交互图谱（INTERACTION_MAP.md）**
+- **位置**: `src/commands/analyze.ts` → 迭代分析 prompt
+- **生成时机**: REQUIREMENT.md 和 FUNCTION_MAP.md 完成后
+- **内容**: 按功能单元组织，每个功能单元一个 Mermaid sequenceDiagram
+  - 用户操作 → 前端处理 → 后端调用 → 数据返回
+  - 箭头标注接口路径，标注 `[contract]` 表示接口在 API_CONTRACT.yaml 中有定义
+  - 附「接口契约索引」表格和「状态流转」表格
+- **用途**: 补全产品文档中隐含的技术交互，是前后端开发者的共同参考
+
+**自动模式（--auto）**
+- **位置**: `src/commands/analyze.ts`
+- **行为**: Phase 1 完成后不询问用户确认，AI 直接推断执行 Phase 2
+- **Prompt 指令**: `请在生成全局文档后，直接继续生成各端专属文档（Phase 2）`
+
+#### v6.71.1: 前后端分析视角分离
+
+**问题**: 原来所有端的 TECH.md 都用同一套模板，后端写了用户旅程（不该写的），前端没写页面清单（该写的）。
+
+**后端端（*service）— 纯技术视角**
+- API 接口定义（路径/方法/参数/响应/状态码/错误码）
+- 数据库表结构（字段/类型/索引/约束）
+- 业务规则（含边界条件和异常流）
+- 缓存/并发/消息队列/安全/性能
+- **禁止**写用户旅程、业务场景（这些在 global/REQUIREMENT.md 中）
+
+**前端端（h5 / admin-web / miniapp）— 产品+技术双视角**
+- **产品视角（主要）**: 用户旅程、页面清单、交互设计、字段展示、权限控制
+- **技术视角（辅助）**: 页面路由表、API 调用清单、状态管理、适配/性能/安全
+
+**新增全局层前端文档**
+- `FEATURES.md`: 产品视角功能清单（页面+交互+API调用链）
+- `UI_FLOW.md`: 页面流转图、用户操作流程
+- `API_CALL_MAP.md`: 页面 → 接口 → 后端服务 映射表
+
+#### v6.71.2: 全局分析架构重构 — 双层扫描 → 四层扫描 + 功能模块驱动
+
+**旧模式（问题）**
+```
+按端顺序分析:
+  → 先分析 backend-service（读全部代码，写 API_INVENTORY.md）
+  → 再分析 admin-web（读全部代码，写 FEATURES.md）
+  → 最后全局汇总
+问题: AI 分析 backend 时不知道 frontend 需要什么接口；分析 frontend 时 backend 已经"写死"了
+```
+
+**新模式（四层扫描）**
+```
+Layer 1: 快速扫描所有端（并行，只提取索引）
+  ├── 后端: Controller/Entity/Service 目录列表 → _INDEX.md
+  ├── 前端: router/pages/store 目录列表 → _INDEX.md
+  └── 依赖: pom.xml/package.json → 公共服务候选
+
+Layer 2: 跨端关联分析（基于 Layer 1 的索引）
+  ├── 匹配前后端接口（前端 API 调用路径 vs 后端接口路径）
+  │   ├── 匹配上 → 建立「页面 → API 调用 → 后端接口 → 服务」链路
+  │   ├── 前端有、后端没有 → 「接口缺口」
+  │   └── 后端有、前端没调 → 「未使用接口」
+  ├── 识别公共服务（被 2+ 端调用的服务）
+  └── 归纳功能模块（页面聚类 vs 接口聚类 → 交叉验证）
+  └── 输出: _ASSOCIATION.md + _MODULES.md
+
+Layer 3: 按功能模块深入分析（不是按端）
+  ├── 基于 _MODULES.md，逐个功能模块深入
+  ├── 「会议预订」功能模块:
+  │   ├── 涉及端: h5-mobile, booking-service, room-service
+  │   ├── 读取 h5-mobile: BookingForm.vue, BookingList.vue（详细逻辑）
+  │   ├── 读取 booking-service: BookingController, BookingService（详细逻辑）
+  │   └── 关联验证: 前端字段 vs 后端 DTO 字段是否一致
+
+Layer 4: 全局汇总（所有功能模块分析完成后）
+  ├── 一致性校验 → CONSISTENCY_CHECK.md
+  ├── 生成全局文档: REQUIREMENT.md / FUNCTION_MAP.md / INTERACTION_MAP.md / API_CONTRACT.yaml / ARCHITECTURE.md
+  └── 生成各端详细文档:
+      ├── 后端: API_INVENTORY.md / DATA_MODEL.md / BUSINESS_RULES.md
+      └── 前端: FEATURES.md / UI_FLOW.md / API_CALL_MAP.md
+```
+
+**关键变化**
+- 分析单位从"端"变为"功能模块"
+- AI 在 Layer 2 就建立了跨端关联认知，Layer 3 验证一致性
+- 输出从"各端独立文档"变为"功能模块驱动 + 全局汇总"
+
+#### v6.71.3: 四层模式统一映射 — 全局→迭代→任务
+
+**核心洞察**: 全局分析的四层模式可以映射到迭代分析和任务执行，形成统一的心理模型。
+
+| 层级 | 全局分析（--global --withCode） | 迭代分析（analyze -I xxx） | 任务执行（execute -t xxx） |
+|:---|:---|:---|:---|
+| **Layer 1** | 快速扫描所有端 → `_INDEX.md` | 读取全局层产物 → 建立全局视角 | 上下文扫描 → 任务概览 |
+| **Layer 2** | 跨端关联分析 → `_ASSOCIATION.md` + `_MODULES.md` | 需求 vs 全局层关联 → 标注新增/扩展/重构/复用 | 相邻任务关联 → 契约验证 |
+| **Layer 3** | 按功能模块深入 → 详细技术文档 | 按功能单元深入 → 迭代级文档 | 深入实现 → 代码生成 |
+| **Layer 4** | 全局汇总 → `ARCHITECTURE.md` 等 | 迭代汇总 → `020-specs/` + `030-tasks/` | 验证汇总 → 测试 + 状态更新 |
+
+**迭代分析增强（Layer 1 + Layer 2）**
+- **Layer 1**: 读取全局层产物（REQUIREMENT.md / FUNCTION_MAP.md / API_CONTRACT.yaml / ARCHITECTURE.md / platforms/_INDEX.md）
+- **Layer 2**: 迭代需求 vs 全局层关联分析
+  - 功能模块清单新增「全局对比」列: 新增 / 扩展 / 重构 / 复用
+  - 识别冲突: 迭代需求修改了全局层已有接口 → RISK.md 标注
+  - 识别依赖: 新功能依赖全局层功能 → FUNCTION_MAP.md「依赖任务」标注
+
+**任务执行增强（Layer 2）**
+- **相邻任务关联**:
+  - 读取前置任务: `_shared/CONTEXT.md` + `00-specs/REQ.md` + `_shared/API_CONTRACT.yaml`
+  - 读取并行任务: `_shared/CONTEXT.md`
+- **契约验证**:
+  - 本任务接口定义 vs 前置任务输出是否一致？
+  - 本任务数据模型 vs 并行任务数据模型是否一致？
+  - 本任务状态枚举 vs 全局 API_CONTRACT.yaml 是否一致？
+
+#### 完整数据流（v6.71.3）
+
+```
+全局层（analyze --global --withCode）
+  ├── Layer 1: 扫描 → .speccore/GLOBAL/platforms/{端}/_INDEX.md
+  ├── Layer 2: 关联 → .speccore/GLOBAL/platforms/_shared/_ASSOCIATION.md + _MODULES.md
+  ├── Layer 3: 深入 → 功能模块级详细分析
+  └── Layer 4: 汇总 → REQUIREMENT.md + FUNCTION_MAP.md + INTERACTION_MAP.md + API_CONTRACT.yaml
+
+迭代层（analyze -I xxx）
+  ├── Layer 1: 读全局层 → 了解系统已有功能
+  ├── Layer 2: 关联 → 标注「新增/扩展/重构/复用」
+  ├── Layer 3: 深入 → 020-specs/global/ + 020-specs/{端}/
+  └── Layer 4: 汇总 → 030-tasks/（split 按 FUNCTION_MAP.md 拆分）
+
+任务层（execute -t xxx）
+  ├── Layer 1: 读任务上下文 + 全局层
+  ├── Layer 2: 读相邻任务 + 契约验证
+  ├── Layer 3: 深入实现 → 代码生成
+  └── Layer 4: 验证 → 测试 + 文档更新
 ```
 
 ---

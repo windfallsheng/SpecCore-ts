@@ -454,7 +454,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
   // ── Prompt 模式 ──
   if (options.prompt) {
     const iter = options.iteration || await getDefaultIteration();
-    const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task, type: options.type, scope: options.scope, withCode: options.withCode, platform: options.platform, phase: options.phase });
+    const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task, type: options.type, scope: options.scope, withCode: options.withCode, platform: options.platform, phase: options.phase, autoMode: options.auto });
     process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
     process.exitCode = 10;
     return;
@@ -742,7 +742,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
   // ── Prompt 模式 ──
   if (options.prompt) {
     const iter = options.iteration || await getDefaultIteration();
-    const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task, type: options.type, scope: options.scope, withCode: options.withCode, platform: options.platform, phase: options.phase });
+    const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task, type: options.type, scope: options.scope, withCode: options.withCode, platform: options.platform, phase: options.phase, autoMode: options.auto });
     process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
     process.exitCode = 10;
     return;
@@ -1077,13 +1077,14 @@ async function loadUserTemplates(
 }
 
 // ── buildMultiDocPrompt: 多文档协议 ──
-async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; task?: string; type?: string; scope?: string; withCode?: boolean; platform?: string; phase?: string }): Promise<string> {
+async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; task?: string; type?: string; scope?: string; withCode?: boolean; platform?: string; phase?: string; autoMode?: boolean }): Promise<string> {
   const iter = ctx.iteration || '当前迭代';
   const task = ctx.task ? ` — ${ctx.task}` : '';
   const taskType = ctx.type || 'feature';
   const now = new Date().toISOString().split('T')[0];
   const isTask = ctx.scope === 'task' || !!ctx.task;
   const isGlobal = ctx.scope === 'global';
+  const autoMode = ctx.autoMode || false;
 
   // global 范围: 从源码反推需求 + 生成技术栈配置
   if (isGlobal) {
@@ -1096,52 +1097,113 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     prompt += `   - 每个工程独立分析，文档输出到: .speccore/GLOBAL/platforms/{端名}/\n`;
     prompt += `2. Read .speccore/GLOBAL/ 下所有文档了解跨项目需求\n`;
     if (ctx.withCode) {
-      prompt += `3. 从 CONSTITUTION.md 的「源码路径」列读取各工程目录，逐个 Read 源码\n`;
-      prompt += `4. **按端和语言分别分析**，先识别每个工程的平台和语言，再针对性提取:\n`;
-      prompt += `   > 识别规则: 扫 package.json → Node/Vue/React；扫 pom.xml → Java/SpringBoot；扫 go.mod → Go；扫 requirements.txt → Python\n`;
-      prompt += `   > 端分类: admin(Web管理端)、h5(移动H5)、miniapp(小程序)、app(后端服务)、android、ios\n`;
-      prompt += `   - TECH_STACK.md: 按端分表列出语言、框架、构建工具、UI库、运行时版本\n`;
-      prompt += `   - API_INVENTORY.md: Controller/Route/handler → 完整接口清单（标记所属端和语言）\n`;
-      prompt += `   - DATA_MODEL.md: Entity/Schema/Model → 数据模型（Java JPA / Node Sequelize / Go GORM 分别标注）\n`;
-      prompt += `   - BUSINESS_RULES.md: validator/middleware/guard → 业务规则（标注实现语言和框架）\n`;
-      prompt += `   - CONFIG_MAP.md: .env/yml/json → 环境变量和配置（标记所属端）\n`;
-      prompt += `   - ERROR_CODES.md: Exception/enum → 错误码清单（Java/Node/Go 分别列出）\n`;
-      prompt += `   - DEPENDENCY_GRAPH.md: import/require → 模块依赖拓扑（按端分图）\n`;
-      prompt += `   - CODE_INDEX.md: 各端目录结构、关键文件、语言和框架标注\n`;
-      prompt += `5. **知识沉淀（按工程+端区分）**: 从各端源码识别可复用模式，写入 .speccore/PATTERNS/:\n`;
+      // v6.71.2+: 双层扫描 + 功能模块驱动（替代原来的按端顺序分析）
+      prompt += `3. 从 CONSTITUTION.md 的「源码路径」列读取所有工程目录\n`;
+      prompt += `\n## 📊 Layer 1: 快速扫描所有端（并行，只提取索引）\n\n`;
+      prompt += `对每个端，只读取关键索引文件（不深入代码逻辑）：\n\n`;
+      prompt += `**后端端**：\n`;
+      prompt += `- 读取 Controller/Handler/Resource 目录文件列表 → 提取：接口类名、接口路径（从注解/装饰器推断）\n`;
+      prompt += `- 读取 Entity/Model/Schema/Domain 目录文件列表 → 提取：实体名称、表名\n`;
+      prompt += `- 读取 Service/UseCase/Application 目录文件列表 → 提取：服务类名\n`;
+      prompt += `- 读取 pom.xml/package.json/go.mod/requirements.txt → 提取：依赖项列表（识别公共服务候选）\n\n`;
+      prompt += `**前端端**：\n`;
+      prompt += `- 读取 router/routes 配置文件 → 提取：页面路径、页面名称、组件名\n`;
+      prompt += `- 读取 pages/views/screens 目录文件列表 → 提取：页面名称、主要功能（从文件名推断）\n`;
+      prompt += `- 搜索 API 调用模式（axios/fetch/$.ajax/uni.request）→ 提取：调用的接口路径列表\n`;
+      prompt += `- 读取 store/pinia/vuex/redux 目录 → 提取：全局状态名称、actions 名称\n\n`;
+      prompt += `**输出**：每个端一个 \`_INDEX.md\`，只含名称和路径列表，不含详细逻辑\n`;
+      prompt += `**存放**：\`.speccore/GLOBAL/platforms/{端名}/_INDEX.md\`\n\n`;
+      prompt += `## 🔗 Layer 2: 跨端关联分析（基于 Layer 1 的索引）\n\n`;
+      prompt += `1. **匹配前后端接口**：\n`;
+      prompt += `   - 前端 \`_INDEX.md\` 中的 API 调用路径 vs 后端 \`_INDEX.md\` 中的接口路径\n`;
+      prompt += `   - **匹配上** → 建立「前端页面 → 前端 API 调用 → 后端接口 → 后端服务」链路\n`;
+      prompt += `   - **前端有、后端没有** → 标注为「接口缺口」（可能调了第三方/遗留/错误接口）\n`;
+      prompt += `   - **后端有、前端没调** → 标注为「未使用接口」（可能后台管理/内部调度用）\n\n`;
+      prompt += `2. **识别公共服务**：\n`;
+      prompt += `   - 被 2+ 个前端端调用的后端服务 → 公共服务候选\n`;
+      prompt += `   - 被 2+ 个后端端调用的后端服务 → 公共服务候选\n`;
+      prompt += `   - 依赖项中独立部署的服务（如 notification-service、file-service）→ 公共服务候选\n\n`;
+      prompt += `3. **归纳功能模块**（从索引聚类，不是从代码反推）：\n`;
+      prompt += `   - **从页面聚类**：哪些页面经常一起出现（如 RoomList + RoomDetail + RoomEdit）\n`;
+      prompt += `   - **从接口聚类**：哪些接口共享同一实体前缀（如 /api/rooms/*）\n`;
+      prompt += `   - **交叉验证**：页面聚类 vs 接口聚类 → 确定功能模块边界\n`;
+      prompt += `   - 每个功能模块标注：涉及端、核心页面、核心接口、实体名称\n\n`;
+      prompt += `**输出**：\n`;
+      prompt += `- \`_ASSOCIATION.md\`：前后端关联矩阵 + 接口缺口/未使用接口清单\n`;
+      prompt += `- \`_MODULES.md\`：功能模块候选清单（从源码聚类，供 Layer 3 验证）\n`;
+      prompt += `**存放**：\`.speccore/GLOBAL/platforms/_shared/\`\n\n`;
+      prompt += `## 🔍 Layer 3: 按功能模块深入分析（不是按端）\n\n`;
+      prompt += `基于 Layer 2 的 \`_MODULES.md\`，逐个功能模块深入分析。\n`;
+      prompt += `**每个功能模块涉及哪些端，就读取那些端的详细源码**：\n\n`;
+      prompt += `**示例：「会议预订」功能模块**\n`;
+      prompt += `- 涉及端：h5-mobile, booking-service, room-service\n`;
+      prompt += `- 读取 h5-mobile: BookingForm.vue, BookingList.vue, BookingDetail.vue 的详细逻辑\n`;
+      prompt += `- 读取 booking-service: BookingController, BookingService, BookingEntity 的详细逻辑\n`;
+      prompt += `- 读取 room-service: RoomController#getAvailability, RoomService 的详细逻辑\n`;
+      prompt += `- 关联验证：前端提交的数据字段 vs 后端接收的 DTO 字段是否一致\n`;
+      prompt += `- 关联验证：前端展示的状态 vs 后端实体的状态枚举是否一致\n\n`;
+      prompt += `**每个功能模块输出**：\n`;
+      prompt += `- 后端端：该功能模块相关的 API 详细设计、数据模型、业务规则\n`;
+      prompt += `- 前端端：该功能模块相关的页面详细设计、交互流程、字段映射\n`;
+      prompt += `- 跨端：该功能模块的交互时序图（供 Layer 4 汇总到 INTERACTION_MAP.md）\n\n`;
+      prompt += `## 🌍 Layer 4: 全局汇总（所有功能模块分析完成后）\n\n`;
+      prompt += `1. **一致性校验**：\n`;
+      prompt += `   - 前端字段 vs 后端字段是否一致（名称、类型、必填性）\n`;
+      prompt += `   - 前端状态 vs 后端状态枚举是否一致\n`;
+      prompt += `   - 接口缺口清单（前端调了但后端没有的接口）\n`;
+      prompt += `   - 未使用接口清单（后端有但前端没调的接口）\n`;
+      prompt += `   → 输出 \`CONSISTENCY_CHECK.md\`\n\n`;
+      prompt += `2. **生成全局文档**（产品视角，从功能模块汇总）：\n`;
+      prompt += `   - \`REQUIREMENT.md\`：现有功能清单（按业务场景组织，产品视角）\n`;
+      prompt += `   - \`FUNCTION_MAP.md\`：功能单元 × 端映射表\n`;
+      prompt += `   - \`INTERACTION_MAP.md\`：跨端交互时序图（从 Layer 3 的时序汇总）\n`;
+      prompt += `   - \`API_CONTRACT.yaml\`：全局接口契约（汇总所有后端 API_INVENTORY）\n`;
+      prompt += `   - \`ARCHITECTURE.md\`：全局架构文档（服务拓扑、数据流、部署关系）\n\n`;
+      prompt += `3. **生成各端详细文档**（技术视角，从 Layer 3 汇总）：\n`;
+      prompt += `   - 后端端：API_INVENTORY.md、DATA_MODEL.md、BUSINESS_RULES.md、TECH_STACK.md\n`;
+      prompt += `   - 前端端：FEATURES.md、UI_FLOW.md、API_CALL_MAP.md、TECH_STACK.md\n\n`;
+      prompt += `4. **知识沉淀（按工程+端区分）**: 从各端源码识别可复用模式，写入 .speccore/PATTERNS/:\n`;
       prompt += `   - 命名规则: **{CONSTITUTION中的工程名}-{端}-{分类}-{模式名}.md**\n`;
-      prompt += `   - 工程名从 CONSTITUTION.md 的「工程」列读取\n`;
-      prompt += `   - 端从 CONSTITUTION.md 的「## 端列表」章节读取（如: admin/h5/miniapp/backend）\n`;
-      prompt += `   - 示例: meeting-system-admin-auth-jwt.md | booking-service-app-data-repo.md | meeting-system-h5-comp-table.md\n`;
       prompt += `   - 后台分类: auth(鉴权)、api(接口设计)、data(数据访问)、error(异常)、log(日志)、util(工具)、arch(架构)\n`;
       prompt += `   - 前端分类: comp(组件)、state(状态管理)、router(路由)、request(请求)、form(表单)、style(样式)、build(构建)\n`;
-      prompt += `   - 每个文件含: 工程名/端/分类 + 适用场景 + 核心代码片段 + 注意事项 + 反例\n`;
-      prompt += `6. 以上文档输出到 .speccore/GLOBAL/ 和 .speccore/PATTERNS/，使用 Write 工具写入\n`;
+      prompt += `   - 每个文件含: 工程名/端/分类 + 适用场景 + 核心代码片段 + 注意事项 + 反例\n\n`;
+      prompt += `5. 以上文档输出到 .speccore/GLOBAL/ 和 .speccore/PATTERNS/，使用 Write 工具写入\n`;
     } else {
       prompt += `3. 读取 .speccore/GLOBAL/ 下各项目需求文档，生成跨项目索引和需求目录\n`;
     }
-    prompt += `\n## 输出文档 (12 个/工程 + 1 个全局)\n`;
+    prompt += `\n## 输出文档\n`;
     if (ctx.withCode) {
-      prompt += `> 以下文档按端分目录存放: .speccore/GLOBAL/platforms/{端名}/\n`;
-      prompt += `> 端名从 CONSTITUTION 的「## 端列表」章节读取（backend/h5/admin 等）\n\n`;
-      prompt += `| 文档 | 存放位置 | 从源码提取内容 |\n`;
+      prompt += `\n### Layer 中间产物（分析过程中生成）\n`;
+      prompt += `> 存放: .speccore/GLOBAL/platforms/\n\n`;
+      prompt += `| 文档 | 层级 | 存放位置 | 内容 |\n`;
+      prompt += `| :--- | :--- | :--- | :--- |\n`;
+      prompt += `| _INDEX.md | Layer 1 | platforms/{端}/ | 各端目录索引（页面/接口/实体/依赖列表） |\n`;
+      prompt += `| _ASSOCIATION.md | Layer 2 | platforms/_shared/ | 前后端关联矩阵 + 接口缺口/未使用接口 |\n`;
+      prompt += `| _MODULES.md | Layer 2 | platforms/_shared/ | 功能模块候选清单（从源码聚类） |\n`;
+      prompt += `\n### 全局最终产物（Layer 4 汇总生成）\n`;
+      prompt += `> 存放: .speccore/GLOBAL/\n\n`;
+      prompt += `| 文档 | 视角 | 内容 |\n`;
       prompt += `| :--- | :--- | :--- |\n`;
-      prompt += `| TECH_STACK.md | platforms/{端}/ | 语言、框架、构建工具、UI库 |\n`;
-      prompt += `| API_INVENTORY.md | platforms/{端}/ | 接口路径、方法、参数、响应、鉴权 |\n`;
-      prompt += `| DATA_MODEL.md | platforms/{端}/ | 表结构+字段+关系（后台）+ Store/State（前端） |\n`;
-      prompt += `| BUSINESS_RULES.md | platforms/{端}/ | 校验规则+业务约束+状态机 |\n`;
-      prompt += `| CONFIG_MAP.md | platforms/{端}/ | 环境变量+开关+密钥（脱敏） |\n`;
-      prompt += `| ERROR_CODES.md | platforms/{端}/ | 错误码清单+含义 |\n`;
-      prompt += `| DEPENDENCY_GRAPH.md | platforms/{端}/ | 模块依赖拓扑 |\n`;
-      prompt += `| CODE_INDEX.md | platforms/{端}/ | 目录结构+关键文件+模块职责 |\n`;
-      prompt += `| TEST.md | platforms/{端}/ | 测试计划（用例矩阵+边界+集成） |\n`;
-      prompt += `| REVIEW.md | platforms/{端}/ | 评审清单（安全+质量+性能） |\n`;
-      prompt += `| RISK.md | platforms/{端}/ | 风险评估（矩阵+缓解+预案） |\n`;
-      prompt += `| DEPS.md | platforms/{端}/ | 依赖清单（服务+中间件+库） |\n`;
-      prompt += `| MONITOR.md | platforms/{端}/ | 监控方案（指标+告警+追踪） |\n`;
-      prompt += `| PATTERNS/*.md | 可复用设计模式，前后端分别提取： | PATTERNS/ |\n`;
-      prompt += `  - 后台: 架构(mvc/ddd)、鉴权(jwt/oauth)、API(pagination/restful)、数据(repository)、异常(handler)、日志(aop)\n`;
-      prompt += `  - 前端: 组件(composable/hook)、状态管理(pinia/redux)、路由(guard/layout)、请求(interceptor)、表单(validation)、UI(theme/layout)\n`;
+      prompt += `| REQUIREMENT.md | 产品视角 | 现有功能清单（按业务场景组织，从功能模块汇总） |\n`;
+      prompt += `| FUNCTION_MAP.md | 架构视角 | 功能单元 × 端映射表 |\n`;
+      prompt += `| INTERACTION_MAP.md | 架构视角 | 跨端交互时序图（从 Layer 3 汇总） |\n`;
+      prompt += `| API_CONTRACT.yaml | 技术视角 | 全局接口契约（汇总所有后端 API） |\n`;
+      prompt += `| ARCHITECTURE.md | 技术视角 | 全局架构文档（服务拓扑、数据流、部署关系） |\n`;
+      prompt += `| CONSISTENCY_CHECK.md | 质量视角 | 一致性校验报告（前后端字段/状态/接口缺口） |\n`;
+      prompt += `\n### 各端最终产物（Layer 3/4 汇总生成）\n`;
+      prompt += `> 存放: .speccore/GLOBAL/platforms/{端名}/\n\n`;
+      prompt += `| 文档 | 适用端 | 内容 |\n`;
+      prompt += `| :--- | :--- | :--- |\n`;
+      prompt += `| FEATURES.md | **前端端** | 产品视角功能清单（页面+交互+API调用链） |\n`;
+      prompt += `| UI_FLOW.md | **前端端** | 页面流转图、用户操作流程 |\n`;
+      prompt += `| API_CALL_MAP.md | **前端端** | 页面 → 接口 → 后端服务 映射表 |\n`;
+      prompt += `| API_INVENTORY.md | **后端端** | 完整接口清单（路径/方法/参数/响应/鉴权） |\n`;
+      prompt += `| DATA_MODEL.md | **后端端** | 表结构+字段+关系+索引 |\n`;
+      prompt += `| BUSINESS_RULES.md | **后端端** | 校验规则+业务约束+状态机 |\n`;
+      prompt += `| TECH_STACK.md | 通用 | 语言、框架、构建工具、UI库 |\n`;
+      prompt += `| DEPENDENCY_GRAPH.md | 通用 | 模块依赖拓扑 |\n`;
+      prompt += `| CODE_INDEX.md | 通用 | 目录结构+关键文件+模块职责 |\n`;
+      prompt += `| PATTERNS/*.md | 通用 | 可复用设计模式 |\n`;
     } else {
       prompt += `- REQUIREMENT.md — 合并各迭代需求，生成跨项目需求索引\n`;
     }
@@ -1213,13 +1275,31 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
 > ${iter}
 
 ## 写作要求
-根据 REQUIREMENT.md 中的功能模块，**逐端**撰写技术方案：
-- 整体架构和分层设计（含各端交互关系）
-- **后端服务**：每个微服务的模块划分、职责说明、核心接口设计
-- **前端各端**：每个前端（如 H5移动端、后台管理端）的页面路由结构、组件拆分方案、状态管理设计
-- 数据存储方案（表结构或 DDL）
-- 核心业务流程的技术实现路径（跨端时序图）
-- 外部依赖和中间件选型建议
+根据 REQUIREMENT.md 中的功能模块，**逐端**撰写技术方案。
+**注意：后端端和前端端的 TECH.md 内容要求不同，请按端类型选择对应模板：**
+
+### 后端端（*service）— 纯技术视角
+- 整体架构和分层设计
+- 模块划分、职责说明、核心接口设计（路径/方法/参数/响应/状态码/错误码）
+- 数据库表结构（字段/类型/索引/约束/DDL）
+- 业务规则实现（含边界条件和异常流）
+- 缓存策略/并发与事务/消息队列（如涉及）
+- 安全：SQL注入防护/接口鉴权/数据脱敏
+- 性能：QPS预估/慢查询优化/连接池配置
+- **不要写**用户旅程、业务场景、页面清单（这些在 global/REQUIREMENT.md 中）
+
+### 前端端（h5 / admin-web / miniapp）— 产品+技术双视角
+- **产品视角（主要）**：
+  - 用户旅程：该端用户如何完成核心任务（步骤流程图）
+  - 页面清单：所有页面名称、路径、核心功能、入口位置
+  - 交互设计：关键操作流程、状态变化、异常提示方式
+  - 字段展示：每个页面展示哪些字段、字段来源（后端哪个接口）
+  - 权限控制：哪些页面/按钮需要权限、权限粒度
+- **技术视角（辅助）**：
+  - 页面路由结构、组件拆分方案
+  - API 调用清单：前端调用了哪些后端接口（路径+方法+用途）
+  - 状态管理设计（全局状态、与后端数据同步策略）
+  - 适配/性能/安全等前端专项（按端类型选择）
 
 ⚠️ 不要只写后端不写前端 — REQUIREMENT.md 中标注了涉及端的模块，每个端都要有对应的技术设计
 `],
@@ -1323,11 +1403,82 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
 
 ⚠️ 这是前后端契约的关键桥梁 — 字段映射必须与后端 API 响应字段一一对应
 `],
+
+    ['FUNCTION_MAP.md',
+`# 跨端功能映射表
+
+> ${iter} | ${now}
+
+## 写作要求
+基于 REQUIREMENT.md 中的功能模块清单，生成本迭代所有功能单元的跨端映射表：
+
+### 映射表格式
+| # | 功能单元 | 涉及端 | 共享能力 | 依赖任务 | 说明 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+
+### 列定义
+- 「功能单元」：业务功能的最小可交付单元，与 REQUIREMENT.md 功能模块清单一一对应
+- 「涉及端」：该功能单元需要新开发工作的所有端（标准端名，逗号分隔）。只标注需要写新接口/新页面/新逻辑的端
+- 「共享能力」：如果该功能单元依赖或被其他功能单元共享的通用能力（如"审批引擎"、"消息通知"）
+- 「依赖任务」：当前迭代内，该功能单元依赖的其他功能单元编号（如 M-03）
+- 「说明」：跨端交互说明（如"admin-web 调用 booking-service 的 /api/rooms 接口"）
+
+### 重要规则
+- 每个功能单元一行，不允许合并多个功能单元到一行
+- 「涉及端」必须与 CONSTITUTION.md「端列表」中的标准端名完全匹配
+- 如果某功能单元只涉及一个端，也要列出（如纯前端优化）
+- 共享能力标注为"无"表示该功能单元没有跨任务共享的通用组件
+`],
+
+    ['INTERACTION_MAP.md',
+`# 跨端交互图谱
+
+> ${iter} | ${now}
+
+## 写作要求
+基于 REQUIREMENT.md 中的业务场景和 FUNCTION_MAP.md 中的跨端映射，为每个功能单元生成交互时序图：
+
+### 格式要求
+- 使用 Mermaid sequenceDiagram 语法
+- 每个功能单元一个独立的序列图
+- actor 为用户角色（如"用户"、"Admin"）
+- participant 为涉及的端（使用标准端名）
+- 箭头标注调用的接口路径（如 \`POST /api/bookings\`）
+- 标注 \`[contract]\` 表示该接口在 API_CONTRACT.yaml 中有定义
+- 用 Note 标注业务规则（如边界条件、状态流转）
+- 用 alt/else/end 标注分支逻辑
+
+### 内容要求
+- 展示完整的业务交互时序：用户操作 → 前端处理 → 后端调用 → 数据返回
+- 明确标出后端服务之间的内部调用（产品文档中写"系统处理"的地方）
+- 标注异步调用（虚线箭头）和同步调用（实线箭头）
+- 在序列图后附上「接口契约索引」表格：步骤号、接口、消费者、提供者
+- 在序列图后附上「状态流转」表格（如涉及状态变更）
+
+### 示例结构
+\`\`\`mermaid
+sequenceDiagram
+    actor U as 用户
+    participant H5 as h5-mobile
+    participant BS as booking-service
+    participant RS as room-service
+    U->>H5: 选择会议室/时间
+    H5->>BS: POST /api/bookings [contract]
+    BS->>RS: GET /api/rooms/{id}/availability [contract]
+    RS-->>BS: 可用性状态
+    alt 可用
+        BS->>BS: 创建预订记录
+        BS-->>H5: 201 Created
+    else 不可用
+        BS-->>H5: 409 Conflict
+    end
+\`\`\`
+`],
   ];
 
   // 任务类型 × 文档矩阵: 每种类型生成哪些文档
   const DOC_MATRIX: Record<string, string[]> = {
-    feature:    ['REQUIREMENT.md','ANALYSIS.md','TECH.md','TEST.md','REVIEW.md','RISK.md','DEPS.md','MONITOR.md','UI_SPEC.md'],
+    feature:    ['REQUIREMENT.md','ANALYSIS.md','TECH.md','TEST.md','REVIEW.md','RISK.md','DEPS.md','MONITOR.md','UI_SPEC.md','FUNCTION_MAP.md','INTERACTION_MAP.md'],
     refactor:   ['ANALYSIS.md','TECH.md','TEST.md','REVIEW.md','RISK.md'],
     bugfix:     ['ANALYSIS.md','TECH.md','TEST.md'],
     research:   ['ANALYSIS.md'],
@@ -1343,7 +1494,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
   // ── v6.61.0+: 恢复 Phase 1/Phase 2 分步逻辑，但 CLI 自动触发 Phase 2 ──
   // Phase 1: 生成全局文档(global/REQUIREMENT.md、ANALYSIS.md、DEPS.md 等)
   // Phase 2: 生成各端专属文档({端}/TECH.md、TEST.md、UI_SPEC.md 等)
-  const GLOBAL_DOCS = ['REQUIREMENT.md', 'ANALYSIS.md', 'TECH.md', 'RISK.md', 'DEPS.md', 'REVIEW.md', 'MONITOR.md'];
+  const GLOBAL_DOCS = ['REQUIREMENT.md', 'ANALYSIS.md', 'TECH.md', 'RISK.md', 'DEPS.md', 'REVIEW.md', 'MONITOR.md', 'FUNCTION_MAP.md', 'INTERACTION_MAP.md'];
   const PLATFORM_DOCS = ['TECH.md', 'TEST.md', 'UI_SPEC.md'];
   let taskDocs = docs.filter(([n]) => includeDocs.includes(n));
   if (ctx.phase === '1') {
@@ -1545,39 +1696,93 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       const tpl = templateMap[doc[0]] || '';
       prompt += `   - ${doc[0]} → 参考 ${tpl}\n`;
     }
-    prompt += `2. 读取需求文档（按优先级顺序）：\n`;
+    prompt += `2. 读取全局层产物（建立全局视角，重要）\n`;
+    prompt += `   在读取迭代需求之前，先 Read 全局层已有产物，了解系统当前状态：\n`;
+    prompt += `   a. Read .speccore/GLOBAL/REQUIREMENT.md → 系统已有功能清单\n`;
+    prompt += `   b. Read .speccore/GLOBAL/FUNCTION_MAP.md → 已有功能单元和涉及端\n`;
+    prompt += `   c. Read .speccore/GLOBAL/API_CONTRACT.yaml → 已有接口契约\n`;
+    prompt += `   d. Read .speccore/GLOBAL/ARCHITECTURE.md → 全局架构（如有）\n`;
+    prompt += `   e. Read .speccore/GLOBAL/platforms/{相关端}/_INDEX.md → 各端已有页面和接口索引\n`;
+    prompt += `   f. Read .speccore/GLOBAL/platforms/_shared/_ASSOCIATION.md → 前后端关联矩阵（如有）\n`;
+    prompt += `   g. Read .speccore/GLOBAL/platforms/_shared/_MODULES.md → 功能模块候选（如有）\n`;
+    prompt += `   ⚠️ 如果全局层产物不存在，跳过该项，继续后续分析\n\n`;
+    prompt += `3. 读取迭代需求文档（按优先级顺序）：\n`;
     prompt += `   a. 先读 010-requirements/INDEX.md — 了解需求全貌和文件清单\n`;
     prompt += `   b. 再读 010-requirements/converted/*.md — doc2spec 转换后的核心规格（主要依据）\n`;
     prompt += `   c. 再读 010-requirements/features/*/README.md — 功能级补充需求\n`;
     prompt += `   d. 读取 010-requirements/prototypes/ — 原型文件（HTML/图片/链接均读取）\n`;
     prompt += `      ⚠️ 需求文档中链接到原型的（如 \`![原型](../prototypes/xxx.png)\` 或 \`详见 prototypes/xxx.html\`），必须主动 Read 该原型文件\n`;
     prompt += `   e. 如用户指定了特定文档，优先读取指定文件；如要求全部，再读 sources/ 原始文档\n`;
-    prompt += `3. 读懂需求文档后，按专业模板标准自由撰写每个文档（不是填空表）\n`;
-    prompt += `4. 每个文档都要具体内容（禁止"待填充"）\n`;
-    prompt += `5. **端发现（重要）**：先确定项目有哪些端，再按端组织文档\n`;
+    prompt += `4. 读懂需求文档后，按专业模板标准自由撰写每个文档（不是填空表）\n`;
+    prompt += `5. 每个文档都要具体内容（禁止"待填充"）\n`;
+    prompt += `6. **端发现（重要）**：先确定项目有哪些端，再按端组织文档\n`;
     prompt += `   - 第 1 步：Read .speccore/CONSTITUTION.md\n`;
     prompt += `   - 第 2 步：从「## 端列表」章节提取端名（这是全局权威来源）\n`;
     prompt += `   - 第 3 步：如果没有「端列表」章节，从「对应端」列提取\n`;
     prompt += `   - 第 4 步：如果以上都无法确定，根据需求文档内容判断\n`;
     prompt += `   - 第 5 步：将发现的端列表写入 020-specs/PLATFORMS.md\n`;
+    // v6.70.0+: REQUIREMENT.md 以产品视角撰写（不按端分章节）
+    prompt += `6b. **REQUIREMENT.md 写作风格（重要）**：全局需求文档必须以产品/用户视角撰写\n`;
+    prompt += `   - **按业务场景/用户旅程组织章节**，不按端分章节（如"H5端需求"、"后端需求"）\n`;
+    prompt += `   - 每个场景描述：用户操作 → 系统响应 → 业务规则 → 边界条件\n`;
+    prompt += `   - 系统响应中自然包含前后端交互，但不刻意标注技术实现细节\n`;
+    prompt += `   - 示例正确写法：「用户选择时间段后点击预订，系统检查会议室可用性，如可用则锁定会议室并创建待支付订单」\n`;
+    prompt += `   - 示例错误写法：「后端 booking-service 需要新增 /api/bookings 接口，接收 roomId 参数」\n`;
+    prompt += `   - 技术实现细节留在 TECH.md 和各端专属文档中，不在 REQUIREMENT.md 展开\n`;
+    prompt += `   - 端的信息只在「功能模块清单」表格中标注，正文不区分端\n`;
     // v6.49.14+: 功能模块清单必须含涉及端列 + 来源链接
-    prompt += `6. **功能模块清单（重要）**：写入 global/REQUIREMENT.md 时，功能模块清单表格必须包含以下列\n`;
-    prompt += `   - 表格格式：| # | 功能模块 | 涉及端 | 来源 | 说明 |\n`;
+    // v6.71.3+: 增加「与全局层对比」列
+    prompt += `7. **功能模块清单（重要）**：写入 global/REQUIREMENT.md 时，功能模块清单表格必须包含以下列\n`;
+    prompt += `   - 表格格式：| # | 功能模块 | 涉及端 | 全局对比 | 来源 | 说明 |\n`;
     prompt += `   - 「涉及端」：每个模块标注需要**新开发工作**的端（标准端名，逗号分隔）\n`;
     prompt += `     - 「涉及」= 该端需要写新接口/新页面/新逻辑\n`;
     prompt += `     - 「不涉及」= 只是提到、调用已有接口、纯展示 → 不标注\n`;
     prompt += `     - 端名必须与 CONSTITUTION.md「端列表」中的标准端名完全匹配\n`;
+    prompt += `   - 「全局对比」：该功能模块与全局层已有功能的关系（必须标注）\n`;
+    prompt += `     - 「新增」：全局层不存在，本迭代全新开发\n`;
+    prompt += `     - 「扩展」：全局层已有基础功能，本迭代增加新字段/新接口/新页面\n`;
+    prompt += `     - 「重构」：全局层已有，本迭代修改实现方式（不新增功能）\n`;
+    prompt += `     - 「复用」：全局层已有，本迭代直接使用（无需开发）\n`;
+    prompt += `     - 示例：「扩展：增加会议室设备管理」或「新增」\n`;
     prompt += `   - 「来源」：该功能模块在需求文档中的具体位置，用 Markdown 链接格式\n`;
     prompt += `     - 格式：[文档名](相对路径#章节锚点)，如 [PRD v2.0](../010-requirements/sources/PRD-v2.0.md#3-2-会议室管理)\n`;
     prompt += `     - 如果模块来自 converted 文档：[xxx需求](../010-requirements/converted/xxx.md#相关章节)\n`;
     prompt += `     - 如果来自 features 目录：[xxx功能](../010-requirements/features/xxx/README.md)\n`;
     prompt += `     - 目的是让阅读者能直接点击跳转到原始需求位置\n`;
-    prompt += `   - 示例：| M-01 | 会议室档案管理 | room-service, admin-web | [PRD v2.0](../010-requirements/sources/PRD-v2.0.md#2-1) | 会议室 CRUD、设备管理 |\n`;
+    prompt += `   - 示例：| M-01 | 会议室档案管理 | room-service, admin-web | 扩展：增加设备管理 | [PRD v2.0](../010-requirements/sources/PRD-v2.0.md#2-1) | 会议室 CRUD、设备管理 |\n`;
     prompt += `   - split 命令将读取「涉及端」列来决定创建哪些端的子任务目录\n`;
+    // v6.70.0+: 跨端功能映射表（FUNCTION_MAP.md）
+    // v6.71.3+: 增加与全局层关联分析
+    prompt += `7a. **迭代需求与全局层关联分析（重要）**：在生成功能模块清单时，必须对比全局层产物\n`;
+    prompt += `   - 对比迭代需求中的功能模块 vs .speccore/GLOBAL/FUNCTION_MAP.md 中的功能单元\n`;
+    prompt += `   - 标注每个功能模块的「全局对比」类型（新增/扩展/重构/复用）\n`;
+    prompt += `   - 识别冲突：如迭代需求修改了全局层已有接口的字段/路径 → 在 RISK.md 中标注\n`;
+    prompt += `   - 识别依赖：如迭代的新功能依赖全局层的某个功能 → 在 FUNCTION_MAP.md「依赖任务」中标注\n\n`;
+    prompt += `7b. **跨端功能映射表（重要）**：在 REQUIREMENT.md 完成后，必须生成 global/FUNCTION_MAP.md\n`;
+    prompt += `   - 这是 split 阶段的核心输入，决定任务如何按功能单元拆分\n`;
+    prompt += `   - 表格格式：| # | 功能单元 | 涉及端 | 全局对比 | 共享能力 | 依赖任务 | 说明 |\n`;
+    prompt += `   - 「功能单元」必须与 REQUIREMENT.md 功能模块清单一一对应，不允许合并\n`;
+    prompt += `   - 「涉及端」标注所有需要新开发工作的端（标准端名，逗号分隔）\n`;
+    prompt += `   - 「全局对比」标注与全局层的关系（新增/扩展/重构/复用）\n`;
+    prompt += `   - 「共享能力」标注跨任务共享的通用组件（如"审批引擎"、"消息通知"），无则填"无"\n`;
+    prompt += `   - 「依赖任务」标注当前迭代内该功能单元依赖的其他功能单元编号\n`;
+    prompt += `   - 「说明」描述跨端交互关系（如"admin-web 调用 booking-service 的 /api/rooms 接口"）\n`;
+    prompt += `   - **示例**：| M-01 | 会议室档案管理 | room-service, admin-web | 扩展 | 无 | 无 | admin-web 调用 room-service CRUD 接口 |\n`;
+    prompt += `   - **错误示例**（禁止）：将"审批流程"和"定时任务"合并为一行\n`;
+    prompt += `   - FUNCTION_MAP.md 生成后，split 将**严格按此表**创建任务目录，不再由 AI 推断\n`;
+    // v6.70.0+: 跨端交互图谱（INTERACTION_MAP.md）
+    prompt += `7c. **跨端交互图谱（重要）**：在 FUNCTION_MAP.md 完成后，必须生成 global/INTERACTION_MAP.md\n`;
+    prompt += `   - 按功能单元组织，每个功能单元一个 Mermaid sequenceDiagram\n`;
+    prompt += `   - 展示完整的业务交互时序：用户操作 → 前端处理 → 后端调用 → 数据返回\n`;
+    prompt += `   - 明确标出后端服务之间的内部调用（产品文档写"系统处理"的地方）\n`;
+    prompt += `   - 箭头标注接口路径，标注 [contract] 表示接口在 API_CONTRACT.yaml 中有定义\n`;
+    prompt += `   - 序列图后附「接口契约索引」表格：步骤号、接口、消费者端、提供者端\n`;
+    prompt += `   - 如涉及状态变更，附「状态流转」表格\n`;
+    prompt += `   - INTERACTION_MAP.md 是前后端开发者的共同参考，补全产品文档中隐含的技术交互\n`;
     // 注入工程类型信息（v6.49.0+）
     const platformTypes = await parsePlatformTypes();
     if (platformTypes.size > 0) {
-      prompt += `7. **工程类型识别**：CONSTITUTION.md 已配置各端的工程类型，请据此生成针对性内容\n`;
+      prompt += `8. **工程类型识别**：CONSTITUTION.md 已配置各端的工程类型，请据此生成针对性内容\n`;
       prompt += `   | 工程标识 | 工程类型 |\n`;
       prompt += `   | :--- | :--- |\n`;
       for (const [name, type] of platformTypes) {
@@ -1596,7 +1801,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `   - Web管理后台 → 复杂表单、数据表格、权限UI、状态管理\n`;
       prompt += `   - 桌面应用 → 本地存储、系统API、自动更新、离线支持\n`;
     }
-    const dirStepNum = platformTypes.size > 0 ? 8 : 7;
+    const dirStepNum = platformTypes.size > 0 ? 9 : 8;
     prompt += `${dirStepNum}. **目录结构（严格遵循，禁止自创目录）**：\n`;
     prompt += `   - **全局文档**（跨端通用）→ 通过 --apply 写入，CLI 自动路由到 \`020-specs/global/{文件名}\`\n`;
     prompt += `     - REQUIREMENT.md（需求文档，含功能模块清单+涉及端列）\n`;
@@ -1617,39 +1822,40 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `\n## ⚠️ 端专业性约束\n`;
       prompt += `CONSTITUTION.md 中配置了多个端，每个端的文档必须有该端专属内容。\n`;
       prompt += `**先识别端类型，再应用对应的专业维度**：\n\n`;
-      prompt += `### 后端服务必含内容\n`;
+      // v6.71.0+: 前后端文档差异化
+      prompt += `### 后端服务（*service）必含内容 — 技术视角\n`;
       prompt += `- API 接口定义（路径/方法/参数/响应字段/状态码/错误码）\n`;
       prompt += `- 数据库表结构（字段/类型/索引/约束）\n`;
       prompt += `- 业务规则（含边界条件和异常流）\n`;
       prompt += `- 缓存策略/并发与事务/消息队列（如涉及）\n`;
       prompt += `- 安全：SQL 注入防护/接口鉴权/数据脱敏\n`;
-      prompt += `- 性能：QPS 预估/慢查询优化/连接池配置\n\n`;
-      prompt += `### Web 管理端（Admin）必含内容\n`;
-      prompt += `- 页面路由表 + 组件清单 + 字段→UI 映射\n`;
-      prompt += `- 复杂组件：大数据表格/复杂表单联动/树形结构\n`;
-      prompt += `- 权限 UI：菜单权限/按钮权限/数据权限\n`;
-      prompt += `- 状态枚举（与后端一致）+ 交互设计\n`;
-      prompt += `- 安全：XSS 防护/CSRF Token/Token 安全存储\n\n`;
-      prompt += `### 移动 H5 必含内容\n`;
-      prompt += `- 页面路由表 + 组件清单 + 字段→UI 映射\n`;
-      prompt += `- 适配方案：viewport/rem/vw/刘海屏/底部安全区\n`;
-      prompt += `- 触摸交互：手势识别/滑动冲突/触摸反馈\n`;
-      prompt += `- 首屏性能：骨架屏/资源预加载/关键 CSS\n`;
-      prompt += `- 弱网优化：离线缓存/请求合并/图片懒加载\n\n`;
-      prompt += `### 小程序必含内容\n`;
-      prompt += `- 页面路由表 + 组件清单 + 字段→UI 映射\n`;
-      prompt += `- 包体积约束：主包 2MB 限制/分包策略\n`;
-      prompt += `- 平台 API 约束：微信/支付宝差异/权限申请\n`;
-      prompt += `- 渲染限制：无 DOM 操作/setData 性能优化\n`;
-      prompt += `- 导航：页面栈限制(10层)/TabBar/分享扫码\n\n`;
+      prompt += `- 性能：QPS 预估/慢查询优化/连接池配置\n`;
+      prompt += `- **不需要**产品视角的需求描述（用户故事、业务场景已在 global/REQUIREMENT.md 中）\n\n`;
+      prompt += `### 前端端（h5 / admin-web / miniapp）必含内容 — 产品+技术双视角\n`;
+      prompt += `- **产品视角（主要）**：\n`;
+      prompt += `  - 用户旅程：该端用户如何完成核心任务（步骤流程图）\n`;
+      prompt += `  - 页面清单：所有页面名称、路径、核心功能、入口位置\n`;
+      prompt += `  - 交互设计：关键操作流程、状态变化、异常提示方式\n`;
+      prompt += `  - 字段展示：每个页面展示哪些字段、字段来源（后端哪个接口）\n`;
+      prompt += `  - 权限控制：哪些页面/按钮需要权限、权限粒度\n`;
+      prompt += `- **技术视角（辅助）**：\n`;
+      prompt += `  - 页面路由表 + 组件清单\n`;
+      prompt += `  - API 调用清单：前端调用了哪些后端接口（路径+方法+用途）\n`;
+      prompt += `  - 状态管理：全局状态设计、与后端数据同步策略\n`;
+      prompt += `  - 适配/性能/安全等前端专项（按端类型选择）\n\n`;
     }
   }
   // v6.60.0+: 文档与端的对应关系（不再分 Phase）
+  // v6.71.0+: 前后端文档差异化
   prompt += `### 文档与端的对应关系\n`;
-  prompt += `- **global/REQUIREMENT.md**：整体需求（功能模块清单+涉及端列）\n`;
+  prompt += `- **global/REQUIREMENT.md**：整体需求（产品视角，按业务场景组织）\n`;
   prompt += `- **global/ANALYSIS.md**：整体需求分析\n`;
   prompt += `- **global/DEPS.md**：整体依赖清单\n`;
-  prompt += `- **{端}/TECH.md**：该端专属技术方案（后端：接口设计+数据模型；前端：页面结构+组件设计）\n`;
+  prompt += `- **global/FUNCTION_MAP.md**：功能单元 × 端映射表\n`;
+  prompt += `- **global/INTERACTION_MAP.md**：跨端交互时序图\n`;
+  prompt += `- **后端端（*service）/{端}/TECH.md**：纯技术视角 — 接口设计+数据模型+架构+性能\n`;
+  prompt += `- **前端端（h5/admin/miniapp）/{端}/TECH.md**：产品+技术双视角 — 用户旅程+页面清单+交互流程+API调用链\n`;
+  prompt += `- **前端端/{端}/UI_SPEC.md**：UI 规格（字段映射、组件设计、交互细节）\n`;
     prompt += `  - ⚠️ **必须包含「业务-代码映射」章节**：在 TECH.md 末尾添加一个表格，列出本端涉及的业务模块及其对应的代码实体（文件/表/API/组件等），关系类型由你根据技术栈自主决定（如 api_controller、uses_table、page、component、route、middleware、interceptor、gateway 等）\n`;
     prompt += `  - 表格格式：| 业务模块 | 代码实体 | 关系类型 | 说明 |\n`;
     prompt += `  - 示例：| 会议室档案 | backend/RoomController.java | api_controller | REST 控制器 |\n`;
@@ -1672,7 +1878,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     // 定义生成顺序
     const chainOrder = isTask
       ? ['REQ.md', 'TECH.md', 'SCHEMA.md', 'TASK.md']
-      : ['REQUIREMENT.md', 'ANALYSIS.md', 'TECH.md', 'TEST.md', 'REVIEW.md', 'RISK.md', 'DEPS.md', 'MONITOR.md', 'UI_SPEC.md'];
+      : ['REQUIREMENT.md', 'FUNCTION_MAP.md', 'INTERACTION_MAP.md', 'API_CONTRACT.yaml', 'ANALYSIS.md', 'TECH.md', 'TEST.md', 'REVIEW.md', 'RISK.md', 'DEPS.md', 'MONITOR.md', 'UI_SPEC.md'];
     const orderedDocs = taskDocs.filter(([n]) => chainOrder.includes(n));
     const customDocs = taskDocs.filter(([n]) => !chainOrder.includes(n));
     const ordered = [...orderedDocs.sort((a, b) => chainOrder.indexOf(a[0]) - chainOrder.indexOf(b[0])), ...customDocs];
@@ -1697,7 +1903,8 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
   prompt += '\n' + buildAutoModeInstruction('analyze', iter) + '\n';
 
   // ── v6.65.0+: Phase 1 完成后主动询问用户是否继续 Phase 2 ──
-  if (!ctx.phase && !isTask) {
+  // v6.70.0+: 自动模式下跳过确认，AI 直接推断执行
+  if (!ctx.phase && !isTask && !autoMode) {
     prompt += `\n## ⚠️ 重要：Phase 1 完成后的下一步\n\n`;
     prompt += `当你通过 --apply 写入所有全局文档后，CLI 会检测到项目有多个端（≥2 个端）。\n`;
     prompt += `**此时你需要主动询问用户**：\n\n`;
@@ -1707,6 +1914,12 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     prompt += `**如果用户确认继续**，你需要执行：\n`;
     prompt += `\`speccore analyze --prompt -I ${iter} --phase 2\`\n\n`;
     prompt += `**不要等待 CLI 的提示信息**，CLI 的输出你可能看不到。你需要主动询问用户。\n\n`;
+  }
+  if (autoMode && !ctx.phase && !isTask) {
+    prompt += `\n## 🤖 自动模式说明\n\n`;
+    prompt += `当前处于自动模式（--auto），不需要人工确认。\n`;
+    prompt += `请在生成全局文档后，**直接继续**生成各端专属文档（Phase 2）。\n`;
+    prompt += `执行命令：\`speccore analyze --prompt -I ${iter} --phase 2\`\n\n`;
   }
 
   // ── v6.52.0+: 图谱 RAG 上下文注入（analyze 阶段也检索项目关联内容）──
@@ -1789,29 +2002,68 @@ async function buildContractFirstPrompt(iteration: string): Promise<string> {
   prompt += `5. Read 020-specs/global/DEPS.md → 依赖关系（如存在）\n\n`;
 
   prompt += `## 输出要求\n\n`;
-  prompt += `基于上述文档，生成一份 **API_CONTRACT.md**，内容必须包括：\n\n`;
-  prompt += `### 1. 跨端接口清单\n`;
-  prompt += `- 所有前后端交互的 API 接口（按模块分组）\n`;
-  prompt += `- 每个接口：路径、方法、请求参数、响应结构、错误码\n`;
-  prompt += `- 标注每个接口的「消费者端」和「提供者端」\n\n`;
-
-  prompt += `### 2. 共享数据模型\n`;
-  prompt += `- 跨端传递的 DTO/VO/Entity 定义\n`;
-  prompt += `- 字段名称、类型、约束、默认值\n`;
-  prompt += `- 枚举值定义（状态码、类型等）\n\n`;
-
-  prompt += `### 3. 事件/消息契约\n`;
-  prompt += `- 如有消息队列或事件驱动，定义 Topic/Event 名称和 Payload 结构\n`;
-  prompt += `- 生产者端和消费者端\n\n`;
-
-  prompt += `### 4. 依赖关系标注\n`;
-  prompt += `- 使用 YAML 格式标注模块间的依赖关系\n`;
-  prompt += `- 格式示例：\`dependsOn: Task-002\`（如当前迭代内已有相关任务）\n\n`;
-
+  prompt += `基于上述文档，生成一份 **API_CONTRACT.yaml**，使用标准 YAML 格式：\n\n`;
+  prompt += `### 格式要求\n`;
+  prompt += `- 使用 YAML 格式（不是 Markdown）\n`;
+  prompt += `- 文件内容必须是合法 YAML，可被解析器直接读取\n`;
+  prompt += `- 不要包含 Markdown 标题、代码块标记或解释性文字\n\n`;
+  prompt += `### 内容结构\n`;
+  prompt += `\`\`\`yaml\n`;
+  prompt += `openapi: "3.0.0"\n`;
+  prompt += `info:\n`;
+  prompt += `  title: "跨端 API 契约"\n`;
+  prompt += `  version: "1.0.0"\n`;
+  prompt += `  description: "本迭代所有前后端交互接口的统一契约"\n\n`;
+  prompt += `# 接口按模块分组\n`;
+  prompt += `paths:\n`;
+  prompt += `  /api/example:\n`;
+  prompt += `    get:\n`;
+  prompt += `      tags: [module-name]\n`;
+  prompt += `      summary: "接口说明"\n`;
+  prompt += `      consumers: [admin-web, h5-mobile]  # 消费者端列表\n`;
+  prompt += `      provider: booking-service         # 提供者端\n`;
+  prompt += `      parameters:\n`;
+  prompt += `        - name: param1\n`;
+  prompt += `          in: query\n`;
+  prompt += `          type: string\n`;
+  prompt += `      responses:\n`;
+  prompt += `        "200":\n`;
+  prompt += `          description: Success\n`;
+  prompt += `          schema:\n`;
+  prompt += `            type: object\n`;
+  prompt += `            properties:\n`;
+  prompt += `              field1: { type: string }\n`;
+  prompt += `        "400": { description: Bad Request }\n\n`;
+  prompt += `# 共享数据模型\n`;
+  prompt += `components:\n`;
+  prompt += `  schemas:\n`;
+  prompt += `    ExampleDTO:\n`;
+  prompt += `      type: object\n`;
+  prompt += `      properties:\n`;
+  prompt += `        field1: { type: string, description: "字段说明" }\n\n`;
+  prompt += `# 枚举定义（前后端共享）\n`;
+  prompt += `enums:\n`;
+  prompt += `  StatusEnum:\n`;
+  prompt += `    0: { label: "空闲", desc: "可用状态" }\n`;
+  prompt += `    1: { label: "使用中", desc: "已被预约" }\n\n`;
+  prompt += `# 事件/消息契约（如有）\n`;
+  prompt += `events:\n`;
+  prompt += `  - name: OrderCreated\n`;
+  prompt += `    topic: order.events\n`;
+  prompt += `    producer: booking-service\n`;
+  prompt += `    consumers: [notification-service]\n`;
+  prompt += `    payload: OrderDTO\n\n`;
+  prompt += `# 模块依赖关系\n`;
+  prompt += `dependencies:\n`;
+  prompt += `  - module: 会议室档案\n`;
+  prompt += `    dependsOn: []\n`;
+  prompt += `  - module: 审批流程\n`;
+  prompt += `    dependsOn: [会议室档案]\n`;
+  prompt += `\`\`\`\n\n`;
   prompt += `## 写入方式\n\n`;
-  prompt += `speccore analyze --apply '{"API_CONTRACT.md":"..."}' -I ${iteration}\n\n`;
+  prompt += `speccore analyze --apply '{"API_CONTRACT.yaml":"..."}' -I ${iteration}\n\n`;
   prompt += `⚠️ **注意**：\n`;
-  prompt += `- 契约文件写入 020-specs/global/API_CONTRACT.md（全局共享）\n`;
+  prompt += `- 契约文件写入 020-specs/global/API_CONTRACT.yaml（全局共享）\n`;
   prompt += `- 这是各端技术方案分析的**前置输入**，后续各端分析必须遵循此契约\n`;
   prompt += `- 契约应**精确且完整**，避免后续各端分析时出现接口不一致\n\n`;
 
