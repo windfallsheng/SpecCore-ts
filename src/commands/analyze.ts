@@ -72,6 +72,12 @@ export interface AnalyzeOptions {
   // 流式分析选项 (v6.74.0+)
   streaming?: boolean;  // --streaming: 启用流式全局分析
   streamingPhase?: string; // --streaming-phase: 指定流式分析阶段
+  // 增量分析选项 (v6.75.0+)
+  incremental?: boolean;  // --incremental: 增量分析
+  reanalyze?: boolean;    // --reanalyze: 重新分析
+  addPlatform?: string;   // --add-platform: 新增端分析
+  contextGuard?: boolean; // --context-guard: 上下文爆炸防护
+  estimateOnly?: boolean; // --estimate-only: 只预估不分析
 }
 
 export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
@@ -113,6 +119,128 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     prompt += `5. 写入: speccore analyze --apply '{...}' -I ${iter}\n`;
     process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
     process.exitCode = 10;
+    return;
+  }
+
+  // ── v6.75.0+: 上下文爆炸防护（--context-guard / --estimate-only）──
+  if (options.contextGuard || options.estimateOnly) {
+    const iter = options.iteration || await getDefaultIteration();
+    if (!iter) { logger.error('请指定迭代: -I <iteration>'); return; }
+    const iterDir = await getIterationDir(iter);
+
+    const { estimateContextSize, buildSegmentationPlan, buildContextGuardPrompt } = await import('../core/analyze-context-guard');
+    const estimate = await estimateContextSize(iterDir, { withCode: options.withCode });
+    const plan = await buildSegmentationPlan(estimate, iterDir, { withCode: options.withCode });
+
+    logger.info('');
+    logger.info('📊 上下文大小预估报告');
+    logger.info(`预估 Tokens: ~${estimate.estimatedTokens.toLocaleString()} (${estimate.level})`);
+    logger.info(`推荐策略: ${estimate.recommendedStrategy}`);
+    logger.info(`分段数: ${plan.segments.length}`);
+
+    if (options.estimateOnly) {
+      // 只输出预估报告到 prompt
+      const prompt = buildContextGuardPrompt(estimate, plan);
+      process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
+      process.exitCode = 10;
+      return;
+    }
+
+    // context-guard 模式下，将预估信息注入后续 prompt
+    // 通过全局变量或 options 传递（简化处理：直接输出报告后继续）
+    logger.info('');
+    logger.info('💡 继续执行分析，建议按上述分段策略进行');
+    logger.info('');
+  }
+
+  // ── v6.75.0+: 增量分析模式（--incremental / --reanalyze）──
+  if (options.incremental || options.reanalyze) {
+    const iter = options.iteration || await getDefaultIteration();
+    if (!iter) { logger.error('请指定迭代: -I <iteration>'); return; }
+    const iterDir = await getIterationDir(iter);
+
+    const { runIncrementalAnalysis, buildIncrementalPrompt } = await import('../core/incremental-analyzer');
+    const analysis = await runIncrementalAnalysis(iterDir, { withCode: options.withCode });
+
+    if (!analysis.hasChanges && analysis.potentialGaps.length === 0) {
+      logger.success('✅ 未检测到变更，所有分析产出均为最新');
+      logger.info('   如需强制重新分析，去掉 --incremental 参数');
+      return;
+    }
+
+    logger.info('');
+    logger.info(`📊 增量分析结果: ${analysis.recommendation}`);
+    logger.info('');
+
+    if (options.prompt) {
+      const prompt = buildIncrementalPrompt(iterDir, analysis, iter);
+      process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
+      process.exitCode = 10;
+      return;
+    }
+
+    // 非 prompt 模式，输出摘要
+    const changedReqs = analysis.requirementChanges.filter(c => c.changeType !== 'unchanged');
+    if (changedReqs.length > 0) {
+      logger.info(`✏️ 需求文档变更: ${changedReqs.length} 个`);
+    }
+    const changedCode = analysis.codeChanges.filter(c => c.changeType !== 'unchanged');
+    if (changedCode.length > 0) {
+      logger.info(`✏️ 源码文件变更: ${changedCode.length} 个`);
+    }
+    if (analysis.addedPlatforms.length > 0) {
+      logger.info(`🆕 新增端: ${analysis.addedPlatforms.join(', ')}`);
+    }
+    if (analysis.potentialGaps.length > 0) {
+      logger.info(`⚠️ 潜在遗漏: ${analysis.potentialGaps.length} 项`);
+      for (const gap of analysis.potentialGaps) {
+        logger.info(`   • ${gap}`);
+      }
+    }
+
+    logger.info('');
+    logger.info('📋 下一步:');
+    logger.info(`   speccore analyze --prompt -I ${iter} --incremental`);
+    return;
+  }
+
+  // ── v6.75.0+: 新增端分析模式（--add-platform）──
+  if (options.addPlatform) {
+    const iter = options.iteration || await getDefaultIteration();
+    if (!iter) { logger.error('请指定迭代: -I <iteration>'); return; }
+    const iterDir = await getIterationDir(iter);
+    const newPlatform = options.addPlatform;
+
+    const { analyzeNewPlatform, buildNewPlatformPrompt } = await import('../core/platform-addition');
+    const analysis = await analyzeNewPlatform(iterDir, newPlatform);
+
+    logger.info('');
+    logger.info(`🆕 新增端分析: ${newPlatform} (${analysis.platformType})`);
+    logger.info(`   后端端: ${analysis.isBackend ? '是' : '否'}`);
+    logger.info(`   已有端: ${analysis.existingPlatforms.join(', ')}`);
+    logger.info(`   跨端关系: ${analysis.crossPlatformRelations.length} 个`);
+    logger.info(`   全局更新: ${analysis.globalUpdates.length} 项`);
+    logger.info('');
+
+    if (options.prompt) {
+      const prompt = buildNewPlatformPrompt(iterDir, analysis, iter);
+      process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
+      process.exitCode = 10;
+      return;
+    }
+
+    logger.info('📋 新端产出:');
+    for (const out of analysis.newPlatformOutputs) {
+      logger.info(`   • ${out}`);
+    }
+    logger.info('');
+    logger.info('📋 全局文档更新:');
+    for (const up of analysis.globalUpdates) {
+      logger.info(`   • ${up.action}: ${up.file}`);
+    }
+    logger.info('');
+    logger.info('📋 下一步:');
+    logger.info(`   speccore analyze --prompt -I ${iter} --add-platform ${newPlatform}`);
     return;
   }
 
