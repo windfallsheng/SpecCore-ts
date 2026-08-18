@@ -1,3 +1,186 @@
+## v6.71.3 (2026-08-18) — 四层模式统一映射到迭代分析和任务执行
+
+### 迭代分析增强（`analyze.ts`）
+
+- **增加全局层产物读取**：迭代分析在读取需求文档之前，先读取全局层产物
+  - `.speccore/GLOBAL/REQUIREMENT.md` → 系统已有功能清单
+  - `.speccore/GLOBAL/FUNCTION_MAP.md` → 已有功能单元和涉及端
+  - `.speccore/GLOBAL/API_CONTRACT.yaml` → 已有接口契约
+  - `.speccore/GLOBAL/ARCHITECTURE.md` → 全局架构
+  - `.speccore/GLOBAL/platforms/{端}/_INDEX.md` → 各端已有页面和接口索引
+  - `.speccore/GLOBAL/platforms/_shared/_ASSOCIATION.md` → 前后端关联矩阵
+  - `.speccore/GLOBAL/platforms/_shared/_MODULES.md` → 功能模块候选
+
+- **增加「全局对比」列**：功能模块清单和 FUNCTION_MAP.md 增加「全局对比」列
+  - 「新增」：全局层不存在，本迭代全新开发
+  - 「扩展」：全局层已有基础功能，本迭代增加新字段/新接口/新页面
+  - 「重构」：全局层已有，本迭代修改实现方式
+  - 「复用」：全局层已有，本迭代直接使用
+
+- **增加迭代需求与全局层关联分析**：
+  - 对比迭代需求中的功能模块 vs 全局层 FUNCTION_MAP.md 中的功能单元
+  - 识别冲突：如迭代需求修改了全局层已有接口的字段/路径 → 在 RISK.md 中标注
+  - 识别依赖：如迭代的新功能依赖全局层的某个功能 → 在 FUNCTION_MAP.md「依赖任务」中标注
+
+### 任务执行增强（`prompt-builder.ts`）
+
+- **增加相邻任务关联（Layer 2）**：execute 指令增加相邻任务读取步骤
+  - 读取前置任务（本任务依赖的任务）：_shared/CONTEXT.md + 00-specs/REQ.md + _shared/API_CONTRACT.yaml
+  - 读取并行任务（同一功能单元的其他端任务）：_shared/CONTEXT.md
+  - 契约验证：接口定义一致性、数据模型一致性、状态枚举一致性
+
+### 架构统一
+
+- **全局→迭代→任务 四层模式映射统一**：
+  - 全局分析：Layer 1 快速扫描 → Layer 2 关联分析 → Layer 3 功能模块深入 → Layer 4 全局汇总
+  - 迭代分析：Layer 1 全局层读取 → Layer 2 需求 vs 全局关联 → Layer 3 功能单元深入 → Layer 4 迭代汇总
+  - 任务执行：Layer 1 上下文扫描 → Layer 2 相邻任务关联 → Layer 3 深入实现 → Layer 4 验证汇总
+
+## v6.71.2 (2026-08-18) — 双层扫描 + 功能模块驱动（全局分析架构重构）
+
+### 架构重构
+
+- **全局分析从「按端顺序」重构为「双层扫描 + 功能模块驱动」**（`analyze.ts`）：
+  - **Layer 1: 快速扫描所有端（并行）** — 只提取索引，不深入代码逻辑
+    - 后端端：扫描 Controller/Entity/Service 目录文件列表 + 依赖项列表
+    - 前端端：扫描路由配置 + 页面目录 + API 调用模式 + 状态管理目录
+    - 输出：每个端一个 `_INDEX.md`（只含名称和路径列表）
+  - **Layer 2: 跨端关联分析** — 基于 Layer 1 的索引建立关联
+    - 匹配前后端接口：前端 API 调用 vs 后端接口路径 → 建立完整链路
+    - 识别「接口缺口」（前端有、后端没有）和「未使用接口」（后端有、前端没调）
+    - 识别公共服务：被 2+ 个端调用的服务 → 公共服务候选
+    - 归纳功能模块：从页面聚类 + 从接口聚类 → 交叉验证确定功能模块边界
+    - 输出：`_ASSOCIATION.md`（关联矩阵）+ `_MODULES.md`（功能模块候选清单）
+  - **Layer 3: 按功能模块深入分析** — 不是按端，而是按功能模块
+    - 每个功能模块涉及哪些端，就读取那些端的详细源码
+    - 示例：「会议预订」功能 → 同时深入分析 h5 + booking-service + room-service
+    - 关联验证：前端字段 vs 后端 DTO、前端状态 vs 后端枚举
+    - 输出：功能模块级别的详细文档（后端 API/数据模型 + 前端页面/交互 + 跨端时序图）
+  - **Layer 4: 全局汇总** — 所有功能模块分析完成后统一汇总
+    - 一致性校验：字段一致性、状态一致性、接口缺口/未使用接口清单
+    - 生成全局文档：REQUIREMENT.md + FUNCTION_MAP.md + INTERACTION_MAP.md + API_CONTRACT.yaml + ARCHITECTURE.md + CONSISTENCY_CHECK.md
+    - 生成各端文档：前端端（FEATURES.md + UI_FLOW.md + API_CALL_MAP.md）+ 后端端（API_INVENTORY.md + DATA_MODEL.md + BUSINESS_RULES.md）
+
+### 新增产物
+
+- `ARCHITECTURE.md`：全局架构文档（服务拓扑、数据流、部署关系）
+- `CONSISTENCY_CHECK.md`：一致性校验报告（前后端字段/状态/接口缺口）
+- `_INDEX.md`：各端目录索引（Layer 1 中间产物）
+- `_ASSOCIATION.md`：前后端关联矩阵（Layer 2 中间产物）
+- `_MODULES.md`：功能模块候选清单（Layer 2 中间产物）
+- `API_CALL_MAP.md`：前端端专属 — 页面 → 接口 → 后端服务 映射表
+
+### 优化
+
+- 文档输出列表重新组织：分为「Layer 中间产物」「全局最终产物」「各端最终产物」三类
+- 全局分析产物从 12 个/端技术文档 → 精简为各端核心文档 + 全局产品视角文档
+
+## v6.71.1 (2026-08-18) — 前后端分析差异化 + 前端代码扫描 + 产品视角功能清单
+
+### 新增
+
+- **前端代码扫描指令**（`analyze.ts` `--global --withCode`）：
+  - 路由配置扫描：提取所有页面路径、页面名称、组件名
+  - API 调用扫描：搜索 axios/fetch/$.ajax/uni.request，提取接口路径、HTTP 方法、调用位置
+  - 状态管理扫描：提取全局状态、actions
+  - 页面组件扫描：提取页面名称、主要功能
+
+- **前后端关联分析**（`analyze.ts`）：
+  - 将前端扫描到的 API 调用路径与后端 API_INVENTORY.md 中的接口路径匹配
+  - 建立「前端页面 → 前端 API 调用 → 后端接口 → 后端服务」的完整链路
+  - 输出关联矩阵表，作为 FEATURES.md 的基础
+
+- **前端端专属文档**（`analyze.ts`）：
+  - `FEATURES.md`：产品视角功能清单（页面+交互+API调用链），仅前端端生成
+  - `UI_FLOW.md`：页面流转图、用户操作流程、状态变化，仅前端端生成
+  - 后端端不需要 FEATURES.md（功能清单在全局 REQUIREMENT.md 中）
+
+### 改进
+
+- **前后端文档差异化**（`analyze.ts`）：
+  - 后端端（*service）TECH.md：纯技术视角 — 接口设计+数据模型+架构+性能
+  - 前端端（h5/admin-web/miniapp）TECH.md：产品+技术双视角 — 用户旅程+页面清单+交互流程+API调用链
+  - 端专业性约束重新组织：合并 Web/H5/小程序为统一的「前端端」模板，突出产品视角
+
+- **TECH.md 模板差异化**（`analyze.ts`）：
+  - 后端端模板：API、数据库、缓存、安全、性能，明确标注「不要写用户旅程、业务场景」
+  - 前端端模板：用户旅程、页面清单、交互设计、字段展示、权限控制、API调用清单
+
+## v6.71.0 (2026-08-18) — 产品视角需求文档 + 跨端交互图谱 + 自动模式推断
+
+### 新增
+
+- **跨端交互图谱 INTERACTION_MAP.md**（`analyze.ts`、`spec-paths.ts`）：
+  - analyze 阶段新增 `INTERACTION_MAP.md` 作为全局分析产物
+  - 按功能单元组织，每个功能单元一个 Mermaid `sequenceDiagram`
+  - 展示完整业务交互时序：用户操作 → 前端处理 → 后端调用 → 数据返回
+  - 明确标出后端服务之间的内部调用（产品文档写"系统处理"的地方）
+  - 箭头标注接口路径，标注 `[contract]` 表示接口在 `API_CONTRACT.yaml` 中有定义
+  - 序列图后附「接口契约索引」表格和「状态流转」表格
+  - 补全产品文档中隐含的技术交互，作为前后端开发者的共同参考
+
+### 改进
+
+- **REQUIREMENT.md 产品视角化**（`analyze.ts`）：
+  - 全局需求文档要求以产品/用户视角撰写，按业务场景/用户旅程组织章节
+  - 不再按端分章节（如"H5端需求"、"后端需求"）
+  - 每个场景描述：用户操作 → 系统响应 → 业务规则 → 边界条件
+  - 技术实现细节留在 `TECH.md` 和各端专属文档中
+  - 端的信息只在「功能模块清单」表格中标注
+
+- **自动模式跳过人工确认**（`analyze.ts`）：
+  - `--auto` 模式下，AI 直接推断执行 Phase 2，无需等待用户确认
+  - 提示中增加「自动模式说明」，引导 AI 直接继续生成各端专属文档
+
+### 架构
+
+- **文档生成顺序调整**：链式生成顺序改为 `REQUIREMENT.md` → `FUNCTION_MAP.md` → `INTERACTION_MAP.md` → `API_CONTRACT.yaml` → `ANALYSIS.md` → ...
+- **GLOBAL_SPEC_FILES 扩展**：注册 `INTERACTION_MAP.md` 到全局文档白名单
+
+## v6.70.0 (2026-08-18) — 跨端功能映射表 + 全局契约先行 + 确定性拆分
+
+### 新增
+
+- **跨端功能映射表 FUNCTION_MAP.md**（`analyze.ts`）：
+  - analyze 阶段新增 `FUNCTION_MAP.md` 作为分析产物之一
+  - 表格格式：`# | 功能单元 | 涉及端 | 共享能力 | 依赖任务 | 说明`
+  - 功能单元与 REQUIREMENT.md 功能模块清单一一对应，不允许合并
+  - 明确标注每个功能单元涉及哪些端、是否依赖共享能力、依赖哪些其他任务
+  - 作为 split 阶段的核心输入，替代 AI 推断跨端关系
+
+- **全局 API 契约 YAML 化**（`analyze.ts`、`spec-paths.ts`）：
+  - `buildContractFirstPrompt` 输出从 Markdown 改为标准 YAML 格式（`API_CONTRACT.yaml`）
+  - YAML 结构：`paths`、`components/schemas`、`enums`、`events`、`dependencies`
+  - 每个接口标注 `consumers`（消费者端列表）和 `provider`（提供者端）
+  - 全局契约作为单一真相源，split 时复制到每个任务的 `_shared/API_CONTRACT.yaml`
+
+- **确定性拆分架构**（`split.ts`）：
+  - 新增 `parseFunctionMap()` 函数解析 `FUNCTION_MAP.md`
+  - `tryModuleDrivenSplit()` 优先读取 `FUNCTION_MAP.md`，严格按表创建任务
+  - 回退链：`FUNCTION_MAP.md` → `REQUIREMENT.md` 功能模块清单 → `features/*/README.md`
+  - 解决 AI "智能合并"导致的错误（如审批流程 + 定时任务被合并）
+
+### 改进
+
+- **子任务 TASK.md 内容增强**（`split.ts`）：
+  - 添加「跨端关联」章节：共享能力、依赖任务、跨端说明
+  - 添加「工作清单」四阶段模板：需求确认 → 技术方案 → 开发实施 → 验收交付
+  - 后端端显示「接口清单」，前端端显示「页面清单」（从 section content 提取）
+  - 共享规格引用增加 `API_CONTRACT.yaml` 和 `CONTEXT.md`
+
+- **CONTEXT.md 丰富化**（`split.ts`）：
+  - 新增「跨端关联」章节，显示 FUNCTION_MAP.md 中的共享能力、依赖任务、说明
+
+- **全局 Spec 文件列表扩展**（`spec-paths.ts`）：
+  - `GLOBAL_SPEC_FILES` 新增 `FUNCTION_MAP.md` 和 `API_CONTRACT.yaml`
+  - 确保 apply 路由将这两个文件正确写入 `020-specs/global/`
+
+### 修复
+
+- **子任务命名回归项目约定**：使用 `generateSubtaskId()` 生成 `Task-{num}-{platform}` 格式
+
+---
+
 ## v6.69.3 (2026-08-17) — Split 命令修复：端名映射 + 子任务命名 + 内容质量
 
 ### 修复

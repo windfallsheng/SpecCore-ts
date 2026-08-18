@@ -15,6 +15,7 @@ export const GLOBAL_SPECS_DIR = 'global';
  */
 export const GLOBAL_SPEC_FILES = [
   'REQUIREMENT.md', 'ANALYSIS.md', 'DEPS.md',
+  'FUNCTION_MAP.md', 'INTERACTION_MAP.md', 'API_CONTRACT.yaml',
 ];
 
 /**

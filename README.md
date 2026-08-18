@@ -182,7 +182,7 @@ Iteration-001-meeting/
 
 ```bash
 npm install -g speccore
-speccore --version   # v6.52.0
+speccore --version   # v6.71.3
 ```
 
 ## 命令列表

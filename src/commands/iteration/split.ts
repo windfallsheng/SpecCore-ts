@@ -1270,9 +1270,17 @@ ${taskPlatforms.map((p: string) => `| ${subtaskIdMap.get(p)} | ${p} | ${owner} |
 
   await ensureDir(join(taskDir, '_shared'));
   await ensureDir(join(taskDir, '00-specs'));
-  const contractYaml = generateApiContract(section);
-  if (contractYaml) {
-    await writeFile(join(taskDir, '_shared', 'API_CONTRACT.yaml'), contractYaml);
+  // v6.70.0+: 优先复制全局 API_CONTRACT.yaml（全局契约是单一真相源）
+  const globalContractPath = join(iterationDir, '020-specs', GLOBAL_SPECS_DIR, 'API_CONTRACT.yaml');
+  if (await pathExists(globalContractPath)) {
+    const globalContract = await readFile(globalContractPath, 'utf-8');
+    await writeFile(join(taskDir, '_shared', 'API_CONTRACT.yaml'), globalContract);
+  } else {
+    // 回退：从 section content 提取 API 生成任务级契约
+    const contractYaml = generateApiContract(section);
+    if (contractYaml) {
+      await writeFile(join(taskDir, '_shared', 'API_CONTRACT.yaml'), contractYaml);
+    }
   }
 
   // ── 4. 核心规格写入 00-specs/（REQ/TECH/SCHEMA/CHANGELOG） ──
@@ -1485,6 +1493,21 @@ ${section.content}
 `
       );
 
+      // v6.70.0+: 从 section 提取接口/页面清单用于 TASK.md
+      const apiLines = section.content.split('\n').filter(l => l.includes('| GET') || l.includes('| POST') || l.includes('| PUT') || l.includes('| DELETE') || l.includes('| PATCH'));
+      const apiList = apiLines.length > 0
+        ? apiLines.map(l => `- ${l.trim()}`).join('\n')
+        : '- 待补充（从 00-specs/REQ.md 和 TECH.md 提取）';
+      // 前端页面清单（如果是前端端）
+      const pageLines = !isBk ? section.content.split('\n').filter(l => /页面[：:]|路由[：:]|path[：:]|\/\w+/.test(l)) : [];
+      const pageList = pageLines.length > 0
+        ? pageLines.map(l => `- ${l.trim()}`).join('\n')
+        : '- 待补充（从 00-specs/REQ.md 和 TECH.md 提取）';
+      // 依赖信息
+      const dependsOn = ((section as any)._dependsOn || []).join(', ') || '无';
+      const sharedCap = (section as any)._sharedCapability || '无';
+      const crossDesc = (section as any)._description || '—';
+
       // TASK.md
       await writeFile(
         join(subtaskDir, 'TASK.md'),
@@ -1502,6 +1525,38 @@ ${section.content}
 ## 共享规格引用
 - REQ.md → ../../../00-specs/REQ.md
 - TECH.md → ../../../00-specs/TECH.md
+- API_CONTRACT.yaml → ../../../_shared/API_CONTRACT.yaml
+- CONTEXT.md → ../../../_shared/CONTEXT.md
+
+## 跨端关联
+- **共享能力**: ${sharedCap}
+- **依赖任务**: ${dependsOn}
+- **跨端说明**: ${crossDesc}
+
+## 工作清单
+
+### 第一阶段：需求确认
+- [ ] 阅读 00-specs/REQ.md 确认本任务需求范围
+- [ ] 阅读 _shared/API_CONTRACT.yaml 确认接口契约
+- [ ] 阅读 _shared/CONTEXT.md 确认跨端关联
+
+### 第二阶段：技术方案
+- [ ] 阅读 00-specs/TECH.md 确认技术方案
+- [ ] 确认本端涉及的接口/页面清单
+- [ ] 确认数据模型和字段映射
+
+### 第三阶段：开发实施
+- [ ] 按 TECH.md 实施开发
+- [ ] 编写单元测试/集成测试
+- [ ] 自测通过
+
+### 第四阶段：验收交付
+- [ ] 更新 TASK.md 进度
+- [ ] 提交代码并关联本任务
+- [ ] 通知相关端联调
+
+## ${isBk ? '接口清单' : '页面清单'}
+${isBk ? apiList : pageList}
 
 ## 产出物
 | 产出物 | 状态 | 路径 |
@@ -1546,17 +1601,12 @@ ${section.content}
 
     // ── 所有端平铺：{端名}/{子任务}/ （v6.49.2+ 统一架构）──
     // 不再区分前后端，所有端平铺在任务目录下
-    // v6.69.3+: 子任务目录命名使用功能单元+端名，避免无意义的 "impl"
-    const featureSlug = slugify((section as any).functionalUnit || section.name);
-    const rawNameSlug = slugify(section.name);
-    const baseSlug = featureSlug || rawNameSlug || 'task';
+    // 子任务目录名使用 generateSubtaskId 生成的全局唯一 ID：Task-{num}-{platform}
     for (const platform of taskPlatforms) {
       const platformDir = join(taskDir, platform);
       const subtaskId = subtaskIdMap.get(platform)!;
-      // 子任务目录名：{baseSlug}-{platform}，如 "approval-flow-booking-service"
-      const subtaskSlug = `${baseSlug}-${slugify(platform) || platform}`;
-      const subtaskDirName = subtaskSlug;
-      const subtaskDir = join(platformDir, subtaskDirName);
+      // 子任务目录名 = subtaskId（如 Task-001-booking-service）
+      const subtaskDir = join(platformDir, subtaskId);
       const subtaskHours = (section as any)._hoursByPlatform?.[platform] || Math.ceil(complexity.estimatedHours / taskPlatforms.length);
       // 判断是否后端（用于生成不同的文档内容）
       const isBk = platform === 'backend' || platform.startsWith('后台') || /-(service|api|server|backend)$/i.test(platform);
@@ -1575,8 +1625,8 @@ ${section.content}
     const fallbackBackend = allPlatforms.find(p =>
       p === 'backend' || p.startsWith('后台') || /-(service|api|server|backend)$/i.test(p)
     ) || 'backend';
-    const fallbackSlug = slugify((section as any).functionalUnit || section.name) || 'task';
-    const autoSubtaskDir = join(taskDir, fallbackBackend, `${fallbackSlug}-${fallbackBackend}`);
+    const fallbackSubtaskId = subtaskIdMap.get(fallbackBackend) || generateSubtaskId(taskNum, fallbackBackend);
+    const autoSubtaskDir = join(taskDir, fallbackBackend, fallbackSubtaskId);
     await ensureDir(join(autoSubtaskDir, '.meta'));
     await writeFile(join(autoSubtaskDir, '.meta', 'type'), taskType);
     await writeFile(join(autoSubtaskDir, '.meta', 'status'), 'todo');
@@ -1677,6 +1727,16 @@ ${originalDesc || '> 待补充（执行 analyze 后自动生成）'}
 ## 关联任务
 
 ${relatedTasks.length > 0 ? relatedTasks.join('\n') : '> 暂无关联任务（split 时自动填充）'}
+
+## 跨端关联
+
+> 来自 FUNCTION_MAP.md
+
+| 属性 | 值 |
+|:---|:---|
+| 共享能力 | ${(section as any)._sharedCapability || '无'} |
+| 依赖任务 | ${((section as any)._dependsOn || []).join(', ') || '无'} |
+| 跨端说明 | ${(section as any)._description || '—'} |
 
 ## 影响范围
 
@@ -3126,6 +3186,109 @@ function parseModulePlatforms(content: string, allPlatforms: string[]): { name: 
 }
 
 /**
+ * v6.70.0+: 解析 FUNCTION_MAP.md 跨端功能映射表
+ * 返回功能单元列表，含涉及端、共享能力、依赖关系
+ */
+function parseFunctionMap(content: string, allPlatforms: string[]): {
+  name: string;
+  platforms: string[];
+  sharedCapability: string;
+  dependsOn: string[];
+  description: string;
+}[] {
+  const units: {
+    name: string;
+    platforms: string[];
+    sharedCapability: string;
+    dependsOn: string[];
+    description: string;
+  }[] = [];
+  const lines = content.split('\n');
+  let inTable = false;
+  let platformColIdx = -1;
+  let sharedCapColIdx = -1;
+  let dependsOnColIdx = -1;
+  let descColIdx = -1;
+
+  for (const line of lines) {
+    // 检测映射表开始（通过表头特征）
+    if (line.includes('功能单元') && line.includes('涉及端')) {
+      inTable = true;
+      // 解析表头，找到各列索引
+      const headerCells = line.split('|').map(c => c.trim()).filter(Boolean);
+      platformColIdx = headerCells.findIndex(c => c.includes('涉及端'));
+      sharedCapColIdx = headerCells.findIndex(c => c.includes('共享能力'));
+      dependsOnColIdx = headerCells.findIndex(c => c.includes('依赖任务'));
+      descColIdx = headerCells.findIndex(c => c.includes('说明'));
+      continue;
+    }
+    if (!inTable) continue;
+
+    // 检测下一个 ## 标题 → 表格结束
+    if (line.startsWith('## ') && !line.includes('功能映射')) {
+      break;
+    }
+
+    const cells = line.split('|').map(c => c.trim()).filter(Boolean);
+    if (cells.length < 3) continue;
+
+    // 分隔行跳过
+    if (cells.every(c => /^[-:]+$/.test(c))) continue;
+
+    // 表头行（已经处理过，跳过）
+    if (cells.some(c => c.includes('功能单元')) || cells.some(c => c.includes('涉及端'))) {
+      continue;
+    }
+
+    // 数据行：第2列是功能单元名
+    const unitName = cells[1];
+    if (!unitName || unitName === '#' || unitName === '功能单元') continue;
+
+    // 解析涉及端
+    let platforms: string[] = [];
+    if (platformColIdx >= 0 && platformColIdx < cells.length) {
+      const raw = cells[platformColIdx];
+      if (raw && raw !== '无' && raw !== '—' && raw !== '-') {
+        platforms = raw.split(/[,，]/)
+          .map(p => p.trim())
+          .filter(p => p && allPlatforms.includes(p));
+      }
+    }
+    // 涉及端为空 → 回退全端（但保留空列表表示纯文档/无开发）
+    if (platforms.length === 0) {
+      platforms = [...allPlatforms];
+    }
+
+    // 解析共享能力
+    let sharedCapability = '无';
+    if (sharedCapColIdx >= 0 && sharedCapColIdx < cells.length) {
+      const raw = cells[sharedCapColIdx];
+      if (raw && raw !== '无' && raw !== '—' && raw !== '-') {
+        sharedCapability = raw;
+      }
+    }
+
+    // 解析依赖任务
+    let dependsOn: string[] = [];
+    if (dependsOnColIdx >= 0 && dependsOnColIdx < cells.length) {
+      const raw = cells[dependsOnColIdx];
+      if (raw && raw !== '无' && raw !== '—' && raw !== '-') {
+        dependsOn = raw.split(/[,，]/).map(p => p.trim()).filter(Boolean);
+      }
+    }
+
+    // 解析说明
+    let description = '';
+    if (descColIdx >= 0 && descColIdx < cells.length) {
+      description = cells[descColIdx];
+    }
+
+    units.push({ name: unitName, platforms, sharedCapability, dependsOn, description });
+  }
+  return units;
+}
+
+/**
  * 尝试模块驱动拆分：从功能模块创建任务目录结构
  * 成功返回 true，无功能模块时返回 false（回退到传统流程）
  */
@@ -3136,50 +3299,83 @@ async function tryModuleDrivenSplit(
   const allPlatforms = await detectPlatforms(iterationDir);
 
   // 收集功能模块（含涉及端信息）
-  const modules: { name: string; slug: string; type: string; sourceFile: string; platforms: string[] }[] = [];
+  const modules: {
+    name: string; slug: string; type: string; sourceFile: string;
+    platforms: string[]; sharedCapability?: string; dependsOn?: string[]; description?: string;
+  }[] = [];
 
-  // 1. 优先从 global/REQUIREMENT.md 读取功能模块清单（含涉及端）
-  const globalReqPath = join(iterationDir, '020-specs', GLOBAL_SPECS_DIR, 'REQUIREMENT.md');
-  let modulePlatformsParsed = false;
-  if (await pathExists(globalReqPath)) {
+  // v6.70.0+: 1. 优先从 global/FUNCTION_MAP.md 读取跨端功能映射表
+  const functionMapPath = join(iterationDir, '020-specs', GLOBAL_SPECS_DIR, 'FUNCTION_MAP.md');
+  let functionMapParsed = false;
+  if (await pathExists(functionMapPath)) {
     try {
-      const content = await readFile(globalReqPath, 'utf-8');
-      const parsed = parseModulePlatforms(content, allPlatforms);
+      const content = await readFile(functionMapPath, 'utf-8');
+      const parsed = parseFunctionMap(content, allPlatforms);
       if (parsed.length > 0) {
-        for (const m of parsed) {
+        for (const u of parsed) {
           modules.push({
-            name: m.name,
-            slug: slugify(m.name),
+            name: u.name,
+            slug: slugify(u.name),
             type: 'feature',
-            sourceFile: 'global/REQUIREMENT.md',
-            platforms: m.platforms,
+            sourceFile: 'global/FUNCTION_MAP.md',
+            platforms: u.platforms,
+            sharedCapability: u.sharedCapability,
+            dependsOn: u.dependsOn,
+            description: u.description,
           });
         }
-        modulePlatformsParsed = true;
-        logger.info(`   📋 从 global/REQUIREMENT.md 读取到 ${parsed.length} 个功能模块（含涉及端）`);
+        functionMapParsed = true;
+        logger.info(`   📋 从 global/FUNCTION_MAP.md 读取到 ${parsed.length} 个功能单元（严格按映射表拆分）`);
       }
-    } catch {}
+    } catch (e) {
+      logger.debug('解析 FUNCTION_MAP.md 失败:', e);
+    }
   }
 
-  // 2. 回退：读取 features/*/README.md（无涉及端信息，使用全端）
-  if (!modulePlatformsParsed) {
-    const featuresDir = join(reqDir, 'features');
-    if (await pathExists(featuresDir)) {
+  // 2. 回退：从 global/REQUIREMENT.md 读取功能模块清单（含涉及端）
+  if (!functionMapParsed) {
+    const globalReqPath = join(iterationDir, '020-specs', GLOBAL_SPECS_DIR, 'REQUIREMENT.md');
+    let modulePlatformsParsed = false;
+    if (await pathExists(globalReqPath)) {
       try {
-        const entries = await readdir(featuresDir, { withFileTypes: true });
-        for (const entry of entries) {
-          if (entry.isDirectory() && !entry.name.startsWith('.')) {
-            const readmePath = join(featuresDir, entry.name, 'README.md');
-            if (await pathExists(readmePath)) {
-              modules.push({
-                name: entry.name, slug: slugify(entry.name), type: 'feature',
-                sourceFile: `features/${entry.name}/README.md`,
-                platforms: [...allPlatforms],
-              });
-            }
+        const content = await readFile(globalReqPath, 'utf-8');
+        const parsed = parseModulePlatforms(content, allPlatforms);
+        if (parsed.length > 0) {
+          for (const m of parsed) {
+            modules.push({
+              name: m.name,
+              slug: slugify(m.name),
+              type: 'feature',
+              sourceFile: 'global/REQUIREMENT.md',
+              platforms: m.platforms,
+            });
           }
+          modulePlatformsParsed = true;
+          logger.info(`   📋 从 global/REQUIREMENT.md 读取到 ${parsed.length} 个功能模块（含涉及端）`);
         }
       } catch {}
+    }
+
+    // 3. 回退：读取 features/*/README.md（无涉及端信息，使用全端）
+    if (!modulePlatformsParsed) {
+      const featuresDir = join(reqDir, 'features');
+      if (await pathExists(featuresDir)) {
+        try {
+          const entries = await readdir(featuresDir, { withFileTypes: true });
+          for (const entry of entries) {
+            if (entry.isDirectory() && !entry.name.startsWith('.')) {
+              const readmePath = join(featuresDir, entry.name, 'README.md');
+              if (await pathExists(readmePath)) {
+                modules.push({
+                  name: entry.name, slug: slugify(entry.name), type: 'feature',
+                  sourceFile: `features/${entry.name}/README.md`,
+                  platforms: [...allPlatforms],
+                });
+              }
+            }
+          }
+        } catch {}
+      }
     }
   }
 
@@ -3260,6 +3456,10 @@ async function tryModuleDrivenSplit(
     (section as any)._owner = '未分配';
     (section as any)._taskId = taskId;
     (section as any).functionalUnit = mod.name;
+    // v6.70.0+: 传递 FUNCTION_MAP.md 中的扩展信息
+    if (mod.sharedCapability) (section as any)._sharedCapability = mod.sharedCapability;
+    if (mod.dependsOn) (section as any)._dependsOn = mod.dependsOn;
+    if (mod.description) (section as any)._description = mod.description;
 
     await createTaskFromSection(iterationDir, taskId, section, modPlatforms, mod.type, []);
     createdSections.push(section);
