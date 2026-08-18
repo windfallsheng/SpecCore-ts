@@ -1,3 +1,42 @@
+## v6.73.0 (2026-08-18) — 变更驱动工作流 v2：语义检索 + AI 影响分析 + 变更收件箱
+
+### 核心架构：分层 AI + 知识图谱联动
+
+- **语义检索替代关键词匹配** (`ai-impact-analyzer.ts`): 变更影响分析从关键词计数升级为 `unifiedSearch` 语义检索
+  - 文档 RAG 检索：按相关度排序的任务文档 chunk
+  - 代码切片检索：`--with-code` 启用时自动检索相关代码
+  - 知识图谱联动：查询匹配任务的上下游依赖关系
+- **AI 单次调用生成影响分析 + 实施计划**：
+  - LLM 推理层：基于检索结果判断直接影响/间接影响/代码级变更/全局层刷新
+  - LLM 生成层：自动生成 `CHANGE_TODO.md`（代码变更清单 + 回归验证 + 实施步骤）
+  - 降级策略：LLM 不可用时自动回退到语义相关度阈值分级
+
+### 二级意图分类
+
+- **变更类别细分** (`change-parser.ts`): `field-change` / `api-change` / `flow-change` / `ui-change` / `logic-change` / `config-change`
+- **新增类别细分**: `feature` / `endpoint` / `integration`
+- **规则层快速分类** + **精确层 AI 澄清**（模糊描述时触发）
+
+### 变更收件箱（Change Inbox）
+
+- **独立目录**: `.speccore/changes/pending/`（与 `.speccore/inbox/` 需求收件箱分离）
+- **多种输入方式**:
+  - `speccore change "描述"` — 直接描述
+  - `speccore change --file change.md` — 指定文件
+  - `speccore change --dir ./changes/` — 指定目录（批量）
+  - `speccore change --inbox` — 读取默认变更收件箱
+  - `speccore change`（无参数）— 自动检查变更收件箱
+- **文件格式支持**: `.md` / `.txt` / `.json` / `.yaml` / `.xlsx`
+- **处理后清理**: 默认归档到 `processed/YYYY-MM-DD/`，可选 `--delete-after-process` 直接删除
+- **清单追踪**: `manifest.json` 记录每个文件的处理状态、关联任务、变更 ID
+
+### 新增需求增强
+
+- **结构化解析**: JSON/YAML 格式的变更需求自动解析为 `ChangeRequest`
+- **增强版 handleNewRequirementV2**: 支持从结构化数据创建任务（标题/优先级/验收标准）
+
+---
+
 ## v6.72.0 (2026-08-18) — 流水线链路全面优化
 
 ### P0: 全局层自动刷新 + FUNCTION_MAP 自检

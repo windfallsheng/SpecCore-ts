@@ -365,7 +365,7 @@ program
 program
   .command('change')
   .alias('ch')
-  .description('需求变更：联动更新所有关联 Spec → 支持口语')
+  .description('需求变更：联动更新所有关联 Spec → 支持口语 (v6.73.0+ AI 驱动)')
   .option('-t, --task <task>', 'Target task')
   .option('-r, --req <req>', 'Requirement ID')
   .option('-d, --desc <desc>', 'Change description')
@@ -379,6 +379,15 @@ program
   .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
   .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
   .option('--interactive', 'Interactive: preview → adjust → confirm → apply')
+  // v6.73.0+ 变更驱动工作流 v2
+  .option('--file <file>', '指定变更需求文件（逗号分隔多个）')
+  .option('--dir <dir>', '指定变更需求目录（批量处理）')
+  .option('--inbox', '读取默认变更收件箱 .speccore/changes/pending/')
+  .option('--new', '显式指定为新增需求（默认自动检测）')
+  .option('--with-code', '启用代码级影响分析（需要代码索引）')
+  .option('--keep', '保留原始文件（不移动/不删除）')
+  .option('--delete-after-process', '处理后删除原始文件（默认归档）')
+  .option('--batch-size <n>', '批量处理数量', '1')
   .action(changeCommand);
 
 program
