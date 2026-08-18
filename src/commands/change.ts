@@ -15,6 +15,32 @@ import { nextTaskId } from '../core/global-counters';
 import { scanInbox, markProcessed, logInboxScan, buildClarifyPrompt, parseClarifyResponse, logClarifyResult, ensureInboxDir, logImpactReport, InboxFileEntry, ImpactReport, TaskImpact } from '../core/inbox';
 import { warnIfIndexStale } from '../core/index-guard';
 
+// v6.73.0+ 变更驱动工作流 v2
+import {
+  ChangeInboxFileEntry,
+  scanChangeInbox,
+  loadChangeFile,
+  loadChangeFilesFromDir,
+  markChangeProcessed,
+  markChangeFailed,
+  archiveProcessedFiles,
+  logChangeInboxScan,
+  ensureChangeInboxDir,
+  ArchiveStrategy,
+} from '../core/change-inbox';
+import {
+  ChangeRequest,
+  parseChangeFile,
+  inferCategoryFromDescription,
+  ChangeCategory,
+} from '../core/change-parser';
+import {
+  aiImpactAnalysis,
+  semanticImpactAnalysis,
+  generateChangeTodo,
+  AiImpactAnalysis,
+} from '../core/ai-impact-analyzer';
+
 /**
  * 解析任务目录基础路径：优先 030-tasks/，兼容旧布局
  */
@@ -381,10 +407,19 @@ export interface ChangeOptions {
   force?: boolean;
   interactive?: boolean;
   file?: string;         // --file 指定附件（逗号分隔多个）
+  dir?: string;          // v6.73.0+: --dir 指定变更需求目录
+  inbox?: boolean;       // v6.73.0+: --inbox 读取默认变更收件箱
+  newFlag?: boolean;     // v6.73.0+: --new 显式指定新增需求
+  withCode?: boolean;    // v6.73.0+: --with-code 启用代码级影响分析
+  auto?: boolean;        // v6.73.0+: --auto 全自动模式
+  keep?: boolean;        // v6.73.0+: --keep 保留原始文件
+  deleteAfterProcess?: boolean; // v6.73.0+: --delete-after-process 处理后删除
+  archiveStrategy?: ArchiveStrategy; // v6.73.0+: 归档策略
   noInbox?: boolean;     // --no-inbox 跳过默认 inbox
   reprocess?: boolean;   // --reprocess 强制重新处理所有 inbox 文件
   prompt?: boolean;      // --prompt 输出澄清 Prompt 到 stdout
   response?: string;     // --response 接收 AI 澄清结果
+  batchSize?: number;    // v6.73.0+: --batch-size 批量处理数量
 }
 
 export async function changeCommand(options: ChangeOptions): Promise<void> {
@@ -397,220 +432,14 @@ export async function changeCommand(options: ChangeOptions): Promise<void> {
   }
 
   if (!options.task && !options.global) {
-    // ── 智能匹配 / 新增需求（含 inbox + 附件 + 澄清）──
-    if (!options.desc && !options.file && options.noInbox) {
-      logger.error('请提供变更描述或附件。用法: speccore change "描述" --file=xxx.md');
+    // v6.73.0+ 变更驱动工作流 v2
+    // --prompt/--response 模式保持向后兼容
+    if (options.prompt || options.response) {
+      await processChangeLegacy(options);
       return;
-    }
-  
-    const iteration = await getDefaultIteration(options.iteration);
-    if (!iteration) {
-      logger.error('未找到活跃迭代。请先运行: speccore iteration create --name <名称>');
-      return;
-    }
-  
-    // ── 1. 加载附件 ──
-    const allFiles: InboxFileEntry[] = [];
-  
-    // 1a. 扫描 inbox（默认启用）
-    if (!options.noInbox) {
-      await ensureInboxDir();
-      const inboxResult = await scanInbox({ reprocess: options.reprocess });
-      logInboxScan(inboxResult);
-      const actionable = [...inboxResult.newFiles, ...inboxResult.modifiedFiles];
-      allFiles.push(...actionable);
-    }
-  
-    // 1b. 加载 --file 指定的文件
-    if (options.file) {
-      const { readFile: rf, stat: st } = await import('fs-extra');
-      const filePaths = options.file.split(',').map(f => f.trim());
-      for (const fp of filePaths) {
-        const absPath = join(process.cwd(), fp);
-        if (!await pathExists(absPath)) {
-          logger.warn(`⚠️ 文件不存在: ${fp}`);
-          continue;
-        }
-        const fileStat = await st(absPath);
-        const name = fp.split('/').pop() || fp;
-        const ext = name.split('.').pop()?.toLowerCase() || '';
-        let type: InboxFileEntry['type'] = 'other';
-        if (['md', 'txt', 'markdown', 'json', 'yaml', 'yml', 'csv'].includes(ext)) type = 'text';
-        else if (['xlsx', 'xls'].includes(ext)) type = 'excel';
-        else if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) type = 'image';
-  
-        let content = '';
-        if (type === 'text') {
-          content = await rf(absPath, 'utf-8');
-        } else if (type === 'excel') {
-          try {
-            const XLSX = require('xlsx');
-            const wb = XLSX.readFile(absPath);
-            const sheets: string[] = [];
-            for (const sn of wb.SheetNames) {
-              sheets.push(`## Sheet: ${sn}\n${XLSX.utils.sheet_to_csv(wb.Sheets[sn])}`);
-            }
-            content = sheets.join('\n\n');
-          } catch { content = `[Excel 解析失败]`; }
-        } else if (type === 'image') {
-          content = `[图片文件: ${absPath}]`;
-        } else {
-          try { content = await rf(absPath, 'utf-8'); } catch { content = `[无法读取]`; }
-        }
-  
-        allFiles.push({ name, path: absPath, size: fileStat.size, mtime: fileStat.mtime.toISOString(), type, content });
-        logger.info(`   📎 ${name} (${fileStat.size > 1024 ? (fileStat.size / 1024).toFixed(1) + 'KB' : fileStat.size + 'B'})`);
-      }
-    }
-  
-    // ── 2. 构建澄清上下文 ──
-    const desc = options.desc ? normalizeDescription(options.desc) : '';
-    const iterDir = await getIterationDir(iteration);
-    const taskBase = await resolveTaskBase(iterDir);
-    const allTasks = await scanTasks(iteration);
-    const taskDetails = await buildTaskDetails(taskBase);
-  
-    // ── 3. Prompt 模式：输出澄清 Prompt 到 stdout ──
-    if (options.prompt) {
-      const promptText = buildClarifyPrompt(desc || '(从附件分析需求)', allFiles, taskDetails);
-      logger.info('[SPECCORE_PROMPT]');
-      process.stdout.write(promptText);
-      return;
-    }
-  
-    // ── 4. Response 模式：解析 AI 澄清结果 ──
-    let clarifiedIntent: 'new' | 'change' | undefined;
-    let clarifiedDesc = desc;
-    let clarifiedTasks: string[] = [];
-  
-    if (options.response) {
-      const parsed = parseClarifyResponse(options.response);
-      if (parsed) {
-        clarifiedIntent = parsed.intent;
-        clarifiedDesc = parsed.structuredDesc || desc;
-        // 从 impactReport 中提取直接影响的任务 ID
-        clarifiedTasks = parsed.impactReport?.directTasks?.map(t => t.id) || [];
-        logClarifyResult(parsed);
-      } else {
-        logger.warn('⚠️ AI 澄清结果解析失败，使用本地分析');
-      }
-    }
-  
-    // ── 5. 本地意图检测（无 AI 澄清时） ──
-    const intent = clarifiedIntent || detectIntent(desc || allFiles.map(f => f.content).join(' '));
-  
-    // ── 6. 新增需求 ──
-    if (intent === 'new') {
-      logger.info('🆕 检测到新增需求意图');
-      const newDesc = clarifiedDesc || allFiles.map(f => f.name + ': ' + f.content.slice(0, 200)).join('\n');
-      // 传递澄清结果给 handleNewRequirement，持久化到 REQ.md
-      const parsed = options.response ? parseClarifyResponse(options.response) : null;
-      const clarifyOutput = parsed ? { structuredDesc: parsed.structuredDesc, keyPoints: parsed.keyPoints, acceptanceCriteria: parsed.acceptanceCriteria } : undefined;
-      await handleNewRequirement(newDesc, iteration, clarifyOutput);
-      // 标记 inbox 文件已处理
-      if (allFiles.length > 0) {
-        await markProcessed(allFiles, 'new', []);
-      }
-      return;
-    }
-  
-    // ── 7. 变更：全量影响分析 ──
-    let impactReport: ImpactReport;
-  
-    if (clarifiedTasks.length > 0) {
-      // 使用 AI 澄清结果中的匹配任务构造影响报告
-      const directTasks: TaskImpact[] = clarifiedTasks.map(tid => {
-        const task = allTasks.find(t => t.id === tid);
-        return { id: tid, name: task?.name || tid, status: 'unknown', level: 'direct' as const, reason: 'AI 澄清匹配', affectedFiles: [], needReExecute: true, needRegression: false };
-      }).filter(m => allTasks.some(t => t.id === m.id));
-      impactReport = { directTasks, indirectTasks: [], unaffectedTasks: [] };
-    } else {
-      // 本地全量影响分析
-      const matchDesc = desc || allFiles.map(f => f.content).join(' ');
-      impactReport = await analyzeImpact(matchDesc, iterDir, taskBase);
-    }
-  
-    const hasImpact = impactReport.directTasks.length > 0 || impactReport.indirectTasks.length > 0;
-    if (!hasImpact) {
-      logger.warn('未匹配到受影响任务。请指定 --task 或检查变更描述/附件。');
-      logger.info('💡 如果是新增需求，请确保描述以"新增/加/创建"开头');
-      return;
-    }
-  
-    // 展示影响分析报告
-    logImpactReport(impactReport);
-    logger.info('');
-  
-    // 对所有直接影响任务应用变更
-    const changeDesc = clarifiedDesc || desc;
-    const affectedIds: string[] = [];
-    for (const m of impactReport.directTasks) {
-      const taskOpts = { ...options, task: m.id, desc: changeDesc };
-      await applyTaskChange(taskOpts, iteration);
-      affectedIds.push(m.id);
     }
 
-    // v6.72.0+: 对间接影响任务标记为 needs-rework（需回归验证）
-    for (const m of impactReport.indirectTasks) {
-      const indirectTaskDir = join(taskBase, m.id);
-      const metaStatusPath = join(indirectTaskDir, '.meta', 'status');
-      const legacyStatusPath = join(indirectTaskDir, '.task-status');
-      const taskMdPath = join(indirectTaskDir, '00-specs', 'TASK.md');
-      const now = new Date().toISOString().split('T')[0];
-
-      try {
-        if (await pathExists(metaStatusPath)) {
-          const currentStatus = (await readFile(metaStatusPath, 'utf-8')).trim();
-          if (currentStatus === 'done') {
-            await writeFile(metaStatusPath, 'needs-rework');
-            logger.info(`   📌 ${m.id} 状态从 done 回退为 needs-rework（间接影响）`);
-          }
-        } else if (await pathExists(legacyStatusPath)) {
-          const currentStatus = (await readFile(legacyStatusPath, 'utf-8')).trim();
-          if (currentStatus === 'done') {
-            await writeFile(legacyStatusPath, 'needs-rework');
-            logger.info(`   📌 ${m.id} 状态从 done 回退为 needs-rework（间接影响）`);
-          }
-        }
-        // 在 TASK.md 追加间接影响说明
-        if (await pathExists(taskMdPath)) {
-          let content = await readFile(taskMdPath, 'utf-8');
-          const indirectNote = `| ${now} | 间接影响 | 上游任务变更，需回归验证 | SpecCore |\n`;
-          if (!content.includes('间接影响')) {
-            content = content.replace(
-              /(\| :--- \| :--- \| :--- \| :--- \|)/,
-              `$1\n${indirectNote}`
-            );
-            await writeFile(taskMdPath, content);
-          }
-        }
-      } catch { /* 忽略失败 */ }
-    }
-
-    // 标记 inbox 文件已处理
-    if (allFiles.length > 0) {
-      await markProcessed(allFiles, 'change', affectedIds);
-    }
-  
-    // ── 8. 持久化澄清结果：迭代级 CHANGE_SUMMARY.md ──
-    await writeChangeSummary(iterDir, changeDesc, impactReport, affectedIds);
-  
-    logger.info('');
-    logger.success(`✅ 变更已应用到 ${affectedIds.length} 个任务`);
-    logger.info(`   📄 变更摘要: 020-specs/CHANGE_SUMMARY.md`);
-    logger.info('');
-    logger.info('💡 下一步:');
-    for (const id of affectedIds) {
-      logger.info(`   speccore analyze --task=${id} --sync  # 局部回写受影响的 specs`);
-    }
-    logger.info(`   speccore execute --task=${affectedIds.join(',')} --force  # 重新执行`);
-
-    // 自动刷新知识图谱（v6.49.10+）
-    try {
-      const { refreshKnowledgeGraph } = await import('../core/knowledge-graph');
-      await refreshKnowledgeGraph(process.cwd(), iteration);
-      logger.info('🧠 知识图谱已刷新');
-    } catch {}
+    await processChangeV2(options);
     return;
   }
 
@@ -1077,4 +906,591 @@ async function syncToAnalysis(iteration: string, taskId: string, desc: string): 
   }
   
   logger.info(`   → 已同步到 ANALYSIS.md`);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// v6.73.0+ 变更驱动工作流 v2
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * v6.72.0 及之前版本的变更处理流程（向后兼容）
+ * 用于 --prompt / --response 模式
+ */
+async function processChangeLegacy(options: ChangeOptions): Promise<void> {
+  if (!options.desc && !options.file && options.noInbox) {
+    logger.error('请提供变更描述或附件。用法: speccore change "描述" --file=xxx.md');
+    return;
+  }
+
+  const iteration = await getDefaultIteration(options.iteration);
+  if (!iteration) {
+    logger.error('未找到活跃迭代。请先运行: speccore iteration create --name <名称>');
+    return;
+  }
+
+  // ── 1. 加载附件 ──
+  const allFiles: InboxFileEntry[] = [];
+
+  // 1a. 扫描 inbox（默认启用）
+  if (!options.noInbox) {
+    await ensureInboxDir();
+    const inboxResult = await scanInbox({ reprocess: options.reprocess });
+    logInboxScan(inboxResult);
+    const actionable = [...inboxResult.newFiles, ...inboxResult.modifiedFiles];
+    allFiles.push(...actionable);
+  }
+
+  // 1b. 加载 --file 指定的文件
+  if (options.file) {
+    const { readFile: rf, stat: st } = await import('fs-extra');
+    const filePaths = options.file.split(',').map(f => f.trim());
+    for (const fp of filePaths) {
+      const absPath = join(process.cwd(), fp);
+      if (!await pathExists(absPath)) {
+        logger.warn(`⚠️ 文件不存在: ${fp}`);
+        continue;
+      }
+      const fileStat = await st(absPath);
+      const name = fp.split('/').pop() || fp;
+      const ext = name.split('.').pop()?.toLowerCase() || '';
+      let type: InboxFileEntry['type'] = 'other';
+      if (['md', 'txt', 'markdown', 'json', 'yaml', 'yml', 'csv'].includes(ext)) type = 'text';
+      else if (['xlsx', 'xls'].includes(ext)) type = 'excel';
+      else if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) type = 'image';
+
+      let content = '';
+      if (type === 'text') {
+        content = await rf(absPath, 'utf-8');
+      } else if (type === 'excel') {
+        try {
+          const XLSX = require('xlsx');
+          const wb = XLSX.readFile(absPath);
+          const sheets: string[] = [];
+          for (const sn of wb.SheetNames) {
+            sheets.push(`## Sheet: ${sn}\n${XLSX.utils.sheet_to_csv(wb.Sheets[sn])}`);
+          }
+          content = sheets.join('\n\n');
+        } catch { content = `[Excel 解析失败]`; }
+      } else if (type === 'image') {
+        content = `[图片文件: ${absPath}]`;
+      } else {
+        try { content = await rf(absPath, 'utf-8'); } catch { content = `[无法读取]`; }
+      }
+
+      allFiles.push({ name, path: absPath, size: fileStat.size, mtime: fileStat.mtime.toISOString(), type, content });
+      logger.info(`   📎 ${name} (${fileStat.size > 1024 ? (fileStat.size / 1024).toFixed(1) + 'KB' : fileStat.size + 'B'})`);
+    }
+  }
+
+  // ── 2. 构建澄清上下文 ──
+  const desc = options.desc ? normalizeDescription(options.desc) : '';
+  const iterDir = await getIterationDir(iteration);
+  const taskBase = await resolveTaskBase(iterDir);
+  const allTasks = await scanTasks(iteration);
+  const taskDetails = await buildTaskDetails(taskBase);
+
+  // ── 3. Prompt 模式 ──
+  if (options.prompt) {
+    const promptText = buildClarifyPrompt(desc || '(从附件分析需求)', allFiles, taskDetails);
+    logger.info('[SPECCORE_PROMPT]');
+    process.stdout.write(promptText);
+    return;
+  }
+
+  // ── 4. Response 模式 ──
+  let clarifiedIntent: 'new' | 'change' | undefined;
+  let clarifiedDesc = desc;
+  let clarifiedTasks: string[] = [];
+
+  if (options.response) {
+    const parsed = parseClarifyResponse(options.response);
+    if (parsed) {
+      clarifiedIntent = parsed.intent;
+      clarifiedDesc = parsed.structuredDesc || desc;
+      clarifiedTasks = parsed.impactReport?.directTasks?.map(t => t.id) || [];
+      logClarifyResult(parsed);
+    } else {
+      logger.warn('⚠️ AI 澄清结果解析失败，使用本地分析');
+    }
+  }
+
+  // ── 5. 本地意图检测 ──
+  const intent = clarifiedIntent || detectIntent(desc || allFiles.map(f => f.content).join(' '));
+
+  // ── 6. 新增需求 ──
+  if (intent === 'new') {
+    logger.info('🆕 检测到新增需求意图');
+    const newDesc = clarifiedDesc || allFiles.map(f => f.name + ': ' + f.content.slice(0, 200)).join('\n');
+    const parsed = options.response ? parseClarifyResponse(options.response) : null;
+    const clarifyOutput = parsed ? { structuredDesc: parsed.structuredDesc, keyPoints: parsed.keyPoints, acceptanceCriteria: parsed.acceptanceCriteria } : undefined;
+    await handleNewRequirement(newDesc, iteration, clarifyOutput);
+    if (allFiles.length > 0) {
+      await markProcessed(allFiles, 'new', []);
+    }
+    return;
+  }
+
+  // ── 7. 变更：全量影响分析 ──
+  let impactReport: ImpactReport;
+
+  if (clarifiedTasks.length > 0) {
+    const directTasks: TaskImpact[] = clarifiedTasks.map(tid => {
+      const task = allTasks.find(t => t.id === tid);
+      return { id: tid, name: task?.name || tid, status: 'unknown', level: 'direct' as const, reason: 'AI 澄清匹配', affectedFiles: [], needReExecute: true, needRegression: false };
+    }).filter(m => allTasks.some(t => t.id === m.id));
+    impactReport = { directTasks, indirectTasks: [], unaffectedTasks: [] };
+  } else {
+    const matchDesc = desc || allFiles.map(f => f.content).join(' ');
+    impactReport = await analyzeImpact(matchDesc, iterDir, taskBase);
+  }
+
+  const hasImpact = impactReport.directTasks.length > 0 || impactReport.indirectTasks.length > 0;
+  if (!hasImpact) {
+    logger.warn('未匹配到受影响任务。请指定 --task 或检查变更描述/附件。');
+    logger.info('💡 如果是新增需求，请确保描述以"新增/加/创建"开头');
+    return;
+  }
+
+  logImpactReport(impactReport);
+  logger.info('');
+
+  const changeDesc = clarifiedDesc || desc;
+  const affectedIds: string[] = [];
+  for (const m of impactReport.directTasks) {
+    const taskOpts = { ...options, task: m.id, desc: changeDesc };
+    await applyTaskChange(taskOpts, iteration);
+    affectedIds.push(m.id);
+  }
+
+  // 间接影响任务
+  for (const m of impactReport.indirectTasks) {
+    const indirectTaskDir = join(taskBase, m.id);
+    const metaStatusPath = join(indirectTaskDir, '.meta', 'status');
+    const legacyStatusPath = join(indirectTaskDir, '.task-status');
+    const taskMdPath = join(indirectTaskDir, '00-specs', 'TASK.md');
+    const now = new Date().toISOString().split('T')[0];
+
+    try {
+      if (await pathExists(metaStatusPath)) {
+        const currentStatus = (await readFile(metaStatusPath, 'utf-8')).trim();
+        if (currentStatus === 'done') {
+          await writeFile(metaStatusPath, 'needs-rework');
+          logger.info(`   📌 ${m.id} 状态从 done 回退为 needs-rework（间接影响）`);
+        }
+      } else if (await pathExists(legacyStatusPath)) {
+        const currentStatus = (await readFile(legacyStatusPath, 'utf-8')).trim();
+        if (currentStatus === 'done') {
+          await writeFile(legacyStatusPath, 'needs-rework');
+          logger.info(`   📌 ${m.id} 状态从 done 回退为 needs-rework（间接影响）`);
+        }
+      }
+      if (await pathExists(taskMdPath)) {
+        let content = await readFile(taskMdPath, 'utf-8');
+        const indirectNote = `| ${now} | 间接影响 | 上游任务变更，需回归验证 | SpecCore |\n`;
+        if (!content.includes('间接影响')) {
+          content = content.replace(/(\| :--- \| :--- \| :--- \| :--- \|)/, `$1\n${indirectNote}`);
+          await writeFile(taskMdPath, content);
+        }
+      }
+    } catch { /* 忽略 */ }
+  }
+
+  if (allFiles.length > 0) {
+    await markProcessed(allFiles, 'change', affectedIds);
+  }
+
+  await writeChangeSummary(iterDir, changeDesc, impactReport, affectedIds);
+
+  logger.info('');
+  logger.success(`✅ 变更已应用到 ${affectedIds.length} 个任务`);
+  logger.info(`   📄 变更摘要: 020-specs/CHANGE_SUMMARY.md`);
+  logger.info('');
+  logger.info('💡 下一步:');
+  for (const id of affectedIds) {
+    logger.info(`   speccore analyze --task=${id} --sync`);
+  }
+  logger.info(`   speccore execute --task=${affectedIds.join(',')} --force`);
+
+  try {
+    const { refreshKnowledgeGraph } = await import('../core/knowledge-graph');
+    await refreshKnowledgeGraph(process.cwd(), iteration);
+    logger.info('🧠 知识图谱已刷新');
+  } catch {}
+}
+
+/**
+ * 收集变更输入来源
+ * 优先级: --desc > --file > --dir > --inbox > 默认变更收件箱
+ */
+async function collectChangeInputs(options: ChangeOptions): Promise<{ entries: ChangeInboxFileEntry[]; fromInbox: boolean }> {
+  const entries: ChangeInboxFileEntry[] = [];
+  let fromInbox = false;
+
+  // 1. 直接描述 → 包装为虚拟文件条目
+  if (options.desc) {
+    entries.push({
+      name: 'inline-desc.md',
+      path: '<inline>',
+      size: options.desc.length,
+      mtime: new Date().toISOString(),
+      type: 'text',
+      content: options.desc,
+    });
+  }
+
+  // 2. --file 指定文件
+  if (options.file) {
+    const filePaths = options.file.split(',').map(f => f.trim());
+    for (const fp of filePaths) {
+      const entry = await loadChangeFile(fp);
+      if (entry) entries.push(entry);
+    }
+  }
+
+  // 3. --dir 指定目录
+  if (options.dir) {
+    const dirEntries = await loadChangeFilesFromDir(options.dir);
+    entries.push(...dirEntries);
+  }
+
+  // 4. --inbox 或默认扫描变更收件箱
+  if (options.inbox || (!options.desc && !options.file && !options.dir)) {
+    await ensureChangeInboxDir();
+    const inboxResult = await scanChangeInbox({ reprocess: options.reprocess });
+    logChangeInboxScan(inboxResult);
+    const actionable = [...inboxResult.newFiles, ...inboxResult.modifiedFiles];
+    if (actionable.length > 0) {
+      entries.push(...actionable);
+      fromInbox = true;
+    }
+  }
+
+  return { entries, fromInbox };
+}
+
+/**
+ * 变更驱动工作流 v2 主流程
+ */
+async function processChangeV2(options: ChangeOptions): Promise<void> {
+  const { entries, fromInbox } = await collectChangeInputs(options);
+
+  if (entries.length === 0) {
+    logger.error('请提供变更描述、文件或放入 .speccore/changes/pending/');
+    logger.info('用法: speccore change "描述"');
+    logger.info('      speccore change --file change.md');
+    logger.info('      speccore change --inbox');
+    return;
+  }
+
+  const iteration = await getDefaultIteration(options.iteration);
+  if (!iteration) {
+    logger.error('未找到活跃迭代。请先运行: speccore iteration create --name <名称>');
+    return;
+  }
+
+  const iterDir = await getIterationDir(iteration);
+  const taskBase = await resolveTaskBase(iterDir);
+  const allTasks = await scanTasks(iteration);
+
+  logger.info(`📋 共 ${entries.length} 个变更项待处理`);
+  logger.info('');
+
+  const processedEntries: ChangeInboxFileEntry[] = [];
+  const allAffectedIds: string[] = [];
+  let changeCounter = 0;
+
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    changeCounter++;
+    const changeId = `Change-${String(changeCounter).padStart(3, '0')}`;
+
+    logger.info(`⏳ 处理 [${i + 1}/${entries.length}] ${entry.name}`);
+
+    try {
+      // Step 1: 解析变更文件
+      const changeRequest = parseChangeFile(entry.name, entry.content);
+
+      // Step 2: 意图分类（如果未从文件中解析出）
+      if (changeRequest.type === 'unknown' || changeRequest.category === 'unknown') {
+        const inferred = inferCategoryFromDescription(changeRequest.description);
+        changeRequest.type = options.newFlag ? 'new' : inferred.type;
+        changeRequest.category = inferred.category;
+      }
+      if (options.newFlag) {
+        changeRequest.type = 'new';
+      }
+
+      logger.info(`   🔍 意图: ${changeRequest.type === 'new' ? '🆕 新增' : '🔄 变更'} / ${changeRequest.category}`);
+
+      // Step 3: 新增需求 → 走新增流程
+      if (changeRequest.type === 'new') {
+        await handleNewRequirementV2(changeRequest, iteration);
+        processedEntries.push(entry);
+        continue;
+      }
+
+      // Step 4: 变更 → AI 影响分析
+      const spinner = new Spinner('语义检索 + 影响分析...');
+      spinner.start();
+
+      const analysis = await aiImpactAnalysis(
+        changeRequest.description,
+        changeRequest.category,
+        iteration,
+        allTasks.map(t => ({ id: t.id, name: t.name, status: t.status })),
+        { withCode: options.withCode, useLlm: !options.auto }
+      );
+
+      spinner.stop('影响分析完成');
+
+      // Step 5: 展示分析结果
+      logAiImpactReport(analysis);
+
+      // Step 6: 应用变更到任务
+      const affectedIds = await applyAiImpactToTasks(analysis, changeRequest, options, iteration, taskBase);
+      allAffectedIds.push(...affectedIds);
+
+      // Step 7: 生成 CHANGE_TODO.md
+      if (analysis.taskImpacts.direct.length > 0 || analysis.globalImpacts.length > 0) {
+        const todoContent = generateChangeTodo(changeRequest.description, changeRequest.category, analysis, changeId);
+        const todoPath = join(iterDir, '020-specs', `${changeId}-TODO.md`);
+        await ensureDir(join(iterDir, '020-specs'));
+        await writeFile(todoPath, todoContent);
+        logger.info(`   📝 已生成: 020-specs/${changeId}-TODO.md`);
+      }
+
+      // Step 8: 更新 CHANGE_SUMMARY.md
+      const impactReport: ImpactReport = {
+        directTasks: analysis.taskImpacts.direct.map(t => ({
+          id: t.taskId,
+          name: t.taskName,
+          status: t.status,
+          level: 'direct',
+          reason: t.matchedContext,
+          affectedFiles: t.files,
+          needReExecute: true,
+          needRegression: false,
+        })),
+        indirectTasks: analysis.taskImpacts.indirect.map(t => ({
+          id: t.taskId,
+          name: t.taskName,
+          status: t.status,
+          level: 'indirect',
+          reason: t.matchedContext,
+          affectedFiles: t.files,
+          needReExecute: false,
+          needRegression: true,
+        })),
+        unaffectedTasks: [],
+      };
+      await writeChangeSummary(iterDir, changeRequest.description, impactReport, affectedIds);
+
+      // Step 9: 标记已处理
+      processedEntries.push(entry);
+      if (fromInbox) {
+        await markChangeProcessed([entry], 'change', affectedIds, changeId);
+      }
+
+      logger.info(`   ✅ ${changeId} 处理完成`);
+      logger.info('');
+    } catch (e: any) {
+      logger.error(`   ❌ ${entry.name} 处理失败: ${e.message}`);
+      if (fromInbox) {
+        await markChangeFailed(entry.name, e.message);
+      }
+    }
+  }
+
+  // Step 10: 归档/清理原始文件
+  if (fromInbox && processedEntries.length > 0) {
+    let strategy: ArchiveStrategy = 'archive';
+    if (options.keep) strategy = 'keep';
+    if (options.deleteAfterProcess) strategy = 'delete';
+    if (options.archiveStrategy) strategy = options.archiveStrategy;
+
+    await archiveProcessedFiles(processedEntries, strategy);
+  }
+
+  // 输出总结
+  logger.info('');
+  logger.success(`✅ 变更处理完成: ${processedEntries.length}/${entries.length}`);
+  if (allAffectedIds.length > 0) {
+    logger.info(`   📌 影响任务: ${[...new Set(allAffectedIds)].join(', ')}`);
+  }
+  logger.info('');
+  logger.info('💡 下一步:');
+  logger.info('   speccore status                              # 查看当前迭代状态');
+  logger.info('   speccore analyze --global --withCode         # 刷新全局层');
+  logger.info('   speccore execute --task <Task-XXX> --force   # 重新执行受影响任务');
+
+  // 自动刷新知识图谱
+  try {
+    const { refreshKnowledgeGraph } = await import('../core/knowledge-graph');
+    await refreshKnowledgeGraph(process.cwd(), iteration);
+    logger.info('🧠 知识图谱已刷新');
+  } catch {}
+}
+
+/**
+ * 展示 AI 影响分析报告
+ */
+function logAiImpactReport(analysis: AiImpactAnalysis): void {
+  logger.info('');
+  logger.info('📊 AI 影响分析:');
+  logger.info('┌─────────────────────────────────────┐');
+
+  if (analysis.taskImpacts.direct.length > 0) {
+    logger.info('│ 🔴 直接影响:');
+    for (const t of analysis.taskImpacts.direct) {
+      logger.info(`│   ${t.taskId} ${t.taskName} [${(t.score * 100).toFixed(0)}%]`);
+    }
+  }
+
+  if (analysis.taskImpacts.indirect.length > 0) {
+    logger.info('│ 🟡 间接影响:');
+    for (const t of analysis.taskImpacts.indirect) {
+      logger.info(`│   ${t.taskId} ${t.taskName} [${(t.score * 100).toFixed(0)}%]`);
+    }
+  }
+
+  if (analysis.codeImpacts.length > 0) {
+    logger.info('│ 💻 代码级变更:');
+    for (const c of analysis.codeImpacts.slice(0, 3)) {
+      logger.info(`│   ${c.file}`);
+    }
+    if (analysis.codeImpacts.length > 3) {
+      logger.info(`│   ... 等 ${analysis.codeImpacts.length} 个文件`);
+    }
+  }
+
+  if (analysis.globalImpacts.length > 0) {
+    logger.info('│ 🌍 全局层建议:');
+    for (const g of analysis.globalImpacts) {
+      logger.info(`│   ${g.artifact}`);
+    }
+  }
+
+  logger.info('└─────────────────────────────────────┘');
+}
+
+/**
+ * 将 AI 影响分析结果应用到任务
+ */
+async function applyAiImpactToTasks(
+  analysis: AiImpactAnalysis,
+  changeRequest: ChangeRequest,
+  options: ChangeOptions,
+  iteration: string,
+  taskBase: string
+): Promise<string[]> {
+  const affectedIds: string[] = [];
+
+  // 处理直接影响任务
+  for (const task of analysis.taskImpacts.direct) {
+    const taskOpts: ChangeOptions = { ...options, task: task.taskId, desc: changeRequest.description };
+    await applyTaskChange(taskOpts, iteration);
+    affectedIds.push(task.taskId);
+  }
+
+  // 处理间接影响任务（标记为 need-review）
+  for (const task of analysis.taskImpacts.indirect) {
+    const indirectTaskDir = join(taskBase, task.taskId);
+    const metaStatusPath = join(indirectTaskDir, '.meta', 'status');
+    const legacyStatusPath = join(indirectTaskDir, '.task-status');
+    const taskMdPath = join(indirectTaskDir, '00-specs', 'TASK.md');
+    const now = new Date().toISOString().split('T')[0];
+
+    try {
+      if (await pathExists(metaStatusPath)) {
+        const currentStatus = (await readFile(metaStatusPath, 'utf-8')).trim();
+        if (currentStatus === 'done') {
+          await writeFile(metaStatusPath, 'needs-rework');
+          logger.info(`   📌 ${task.taskId} 状态从 done 回退为 needs-rework（间接影响）`);
+        }
+      } else if (await pathExists(legacyStatusPath)) {
+        const currentStatus = (await readFile(legacyStatusPath, 'utf-8')).trim();
+        if (currentStatus === 'done') {
+          await writeFile(legacyStatusPath, 'needs-rework');
+          logger.info(`   📌 ${task.taskId} 状态从 done 回退为 needs-rework（间接影响）`);
+        }
+      }
+      if (await pathExists(taskMdPath)) {
+        let content = await readFile(taskMdPath, 'utf-8');
+        const indirectNote = `| ${now} | 间接影响 | 上游任务变更，需回归验证 | SpecCore |\n`;
+        if (!content.includes('间接影响')) {
+          content = content.replace(/(\| :--- \| :--- \| :--- \| :--- \|)/, `$1\n${indirectNote}`);
+          await writeFile(taskMdPath, content);
+        }
+      }
+    } catch { /* 忽略 */ }
+  }
+
+  return affectedIds;
+}
+
+/**
+ * 新增需求处理 v2（增强版）
+ */
+async function handleNewRequirementV2(changeRequest: ChangeRequest, iteration: string): Promise<void> {
+  const iterDir = await getIterationDir(iteration);
+  const taskBase = await resolveTaskBase(iterDir);
+  await ensureDir(taskBase);
+
+  const { id: taskId } = await nextTaskId();
+  const taskName = changeRequest.title || changeRequest.description.replace(/^(新增?|加|创建|实现|做)/, '').replace(/[:：]/g, '').trim() || taskId;
+  const taskDir = join(taskBase, taskId);
+  const specsDir = join(taskDir, '00-specs');
+  await ensureDir(specsDir);
+
+  const now = new Date().toISOString().split('T')[0];
+  const tx = new FileTransaction();
+
+  // 构建 REQ.md
+  let reqContent = `# ${taskName}\n\n`;
+  reqContent += `## 需求描述\n\n${changeRequest.description}\n\n`;
+
+  if (changeRequest.acceptanceCriteria.length > 0) {
+    reqContent += `## 验收标准\n\n`;
+    for (const c of changeRequest.acceptanceCriteria) {
+      reqContent += `- [ ] ${c}\n`;
+    }
+    reqContent += '\n';
+  } else {
+    reqContent += `## 验收标准\n\n- [ ] 功能正常\n`;
+  }
+
+  reqContent += `## 分析记录\n\n- 分析时间: ${now}\n- 分析方式: AI 变更驱动工作流 v2\n`;
+
+  tx.write(join(specsDir, 'REQ.md'), reqContent);
+
+  tx.write(join(specsDir, 'CHANGELOG.md'), `# 变更记录\n\n| 时间 | 版本 | 变更内容 | 变更人 |\n| :--- | :--- | :--- | :--- |\n| ${now} | v1.0 | 初始创建 | SpecCore |\n`);
+
+  tx.write(join(specsDir, 'TASK.md'), `# ${taskName}\n\n- 状态: 待开发\n- 优先级: ${changeRequest.priority}\n- 类型: feature\n\n## 变更履历\n\n| 时间 | 版本 | 变更内容 | 变更人 |\n| :--- | :--- | :--- | :--- |\n| ${now} | v1.0 | 创建任务 | SpecCore |\n`);
+
+  await tx.commit();
+
+  // 追加到 REQUIREMENT.md
+  const reqPath = join(iterDir, '020-specs', 'REQUIREMENT.md');
+  if (await pathExists(reqPath)) {
+    let content = await readFile(reqPath, 'utf-8');
+    content += `\n\n## ${taskName}\n\n${changeRequest.description}\n`;
+    await writeFile(reqPath, content);
+  }
+
+  // 更新 PROJECT_GRAPH.md
+  const graphPath = join(iterDir, '000-overview', 'PROJECT_GRAPH.md');
+  if (await pathExists(graphPath)) {
+    let content = await readFile(graphPath, 'utf-8');
+    content += `| ${taskId} | ${taskName} | feature | pending |\n`;
+    await writeFile(graphPath, content);
+  }
+
+  logger.success(`   ✅ 新任务已创建: ${taskId}`);
+  logger.info(`      📄 ${taskId}/00-specs/REQ.md`);
+
+  // 刷新知识图谱
+  try {
+    const { refreshKnowledgeGraph } = await import('../core/knowledge-graph');
+    await refreshKnowledgeGraph(process.cwd(), iteration);
+  } catch {}
 }
