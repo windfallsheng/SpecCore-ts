@@ -451,6 +451,7 @@ async function handleMatch(input: string): Promise<AskResult> {
     if (params.tool) { fullCommand += ` --tool="${params.tool}"`; paramNotes.push(`🔧 平台: ${params.tool}`); }
     if (params.name) { fullCommand += ` -n "${params.name}"`; paramNotes.push(`📛 名称: ${params.name}`); }
     if (params.iteration) { fullCommand += ` --iter "${params.iteration}"`; paramNotes.push(`🔄 迭代: ${params.iteration}`); }
+    if (params.scope) { fullCommand += ` --scope ${params.scope}`; paramNotes.push(`🌐 范围: ${params.scope}`); }
 
     // 补充分析意图已在 askEngine 顶层检测，此处不再重复
     
@@ -531,6 +532,10 @@ async function handleMatch(input: string): Promise<AskResult> {
     fullCommand = `speccore ${best.command}`;
     if (params.name) fullCommand += ` -n "${params.name}"`;
     if (params.iteration) fullCommand += ` --iter "${params.iteration}"`;
+    if (params.scope) {
+      fullCommand += ` --scope ${params.scope}`;
+      paramNotes.push(`🌐 范围: ${params.scope}`);
+    }
     if (params.tool) {
       fullCommand += ` --tool="${params.tool}"`;
       paramNotes.push(`🔧 工具/平台: ${params.tool}`);
