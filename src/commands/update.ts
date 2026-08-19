@@ -5,37 +5,13 @@
 import { writeFile, pathExists, readFile, readdir, ensureDir } from 'fs-extra';
 import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
-import { safeWriteWithBackup, safeCopyDirWithBackup, _updateConflicts, generateSettingsContent, generateAIRulesContent } from './init';
+import { safeWriteWithBackup, safeCopyDirWithBackup, _updateConflicts, generateSettingsContent, generateAIRulesContent, TOOL_COMMANDS } from './init';
 
 const CURRENT_VERSION = require('../../package.json').version;
 
-// ── 当前版本的命令列表 ──
-const ALL_COMMANDS: [string, string, string][] = [
-  ['spec-ask', 'AI万能入口', 'speccore ask --web "${1:查看进度}"'],
-  ['spec-welcome', '项目名片', 'speccore welcome --web'],
-  ['spec-dashboard', '全局仪表盘', 'speccore dashboard --scope global --web'],
-  ['spec-init', '初始化项目', 'speccore init'],
-  ['spec-doc2spec', '导入需求文档', 'speccore doc2spec -f ${1:PRD.docx} --iter ${2:Q1}'],
-  ['spec-analyze', 'AI需求分析', 'speccore analyze -I ${1:Q1}'],
-  ['spec-split', '智能拆分任务', 'speccore iteration split -i ${1:Q1} --interactive'],
-  ['spec-execute', '执行开发任务', 'speccore execute -t ${1:Task-001} --force'],
-  ['spec-plan', '生成执行计划', 'speccore plan -I ${1:Q1}'],
-  ['spec-pr', '创建PR', 'speccore pr --task=${1:Task-001}'],
-  ['spec-done', '完成任务归档', 'speccore done --task=${1:Task-001}'],
-  ['spec-spec2doc', '导出文档', 'speccore spec2doc -i ${1:Q1} -o ${2:需求.docx}'],
-
-  ['spec-change', '需求变更', 'speccore change "${1:变更描述}" --task=${2:Task-001}'],
-  ['spec-validate', '合规验证', 'speccore validate --iteration=${1:Q1}'],
-  ['spec-search', '全文搜索', 'speccore search "${1:关键词}"'],
-  ['spec-track', '全链路追踪', 'speccore track --req=${1:REQ-001}'],
-  ['spec-sync', '双向同步', 'speccore sync --global'],
-  ['spec-rename', '重命名', 'speccore rename --iteration ${1:Q1} ${2:Q2}'],
-  ['spec-create-iteration', '创建迭代', 'speccore iteration create -n ${1:Q2} --owner=${2:张三}'],
-  ['spec-retro', '任务回顾报告', 'speccore retro --task ${1:Task-001}'],
-  ['spec-context', '查看/切换上下文', 'speccore context --set --iteration ${1:Q1}'],
-  ['spec-ops', '操作历史', 'speccore ops'],
-  ['spec-help', '帮助中心', 'speccore help --web'],
-];
+// ── 当前版本的命令列表统一从 init.ts 导入（单一事实来源）──
+// 避免 init.ts 与 update.ts 的命令列表不一致导致清理误删
+const ALL_COMMANDS = TOOL_COMMANDS;
 
 // ── 旧命令文件名（需要清理的）──
 const LEGACY_NAMES = new Set(['spec-status', 'spec-status-panel', 'spec-global-status']);

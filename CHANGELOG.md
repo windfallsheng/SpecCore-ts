@@ -1,3 +1,17 @@
+## v6.77.2 (2026-08-19) — init/update 命令列表修复
+
+### 修复
+
+- **`spec-create-iteration` → `spec-iteration-create`** — 统一命令名与 Skill 目录名，避免 init 生成 `spec-create-iteration.md` 但 Skill 目录为 `spec-iteration-create/` 的混乱
+- **`init.ts` / `update.ts` 命令列表统一** — `update.ts` 不再单独维护 `ALL_COMMANDS`，改为从 `init.ts` 导入 `TOOL_COMMANDS`，消除两套列表不一致导致的清理误删问题
+- **添加 `spec-task-create`** — commands 数组和 Skill 部署列表中补充此前缺失的 `spec-task-create`
+- **扩展 `isDynamicRouting`** — 所有有 SKILL.md 的命令（spec-ask/spec-change/spec-doc2spec/spec-done/spec-execute/spec-iteration-create/spec-plan/spec-pr/spec-spec2doc/spec-split/spec-task-create）在非 Qoder 工具中也使用动态路由格式
+
+### 架构改进
+
+- `init.ts` 的 `commands` 数组改为模块级导出的 `TOOL_COMMANDS`，成为单一事实来源
+- `update.ts` 直接导入 `TOOL_COMMANDS`，消除重复定义
+
 ## v6.77.1 (2026-08-19) — 流水线 Skill 补齐：pr + done
 
 ### 新增 Skill
