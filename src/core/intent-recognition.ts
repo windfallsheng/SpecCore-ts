@@ -671,6 +671,19 @@ function extractParams(input: string, mapping: CommandMapping): Record<string, s
     params.iteration = iterMatch[1];
   }
 
+  // 检测 scope 参数（全局分析 vs 迭代分析）
+  const scopeKeywords: Record<string, string> = {
+    '全局': 'global', '所有工程': 'global', '全部工程': 'global',
+    '所有项目': 'global', '全部项目': 'global', '整个项目': 'global',
+    '全量': 'global', '整体': 'global', '全部': 'global',
+  };
+  for (const [keyword, scopeValue] of Object.entries(scopeKeywords)) {
+    if (input.includes(keyword)) {
+      params.scope = scopeValue;
+      break;
+    }
+  }
+
   // 检测工具/平台名称（--tool 参数）
   const toolKeywords: Record<string, string> = {
     'trae': 'trae', 'tree': 'trae',

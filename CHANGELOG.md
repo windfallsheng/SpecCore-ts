@@ -1,3 +1,16 @@
+## v6.77.4 (2026-08-19) — 修复 ask 引擎全局分析 scope 参数丢失
+
+### Bug 修复
+
+- **intent-recognition.ts**: `extractParams` 新增 `scope` 参数提取
+  - 支持关键词：全局、所有工程、全部工程、所有项目、全部项目、整个项目、全量、整体、全部
+  - 识别后设置 `params.scope = 'global'`
+
+- **ask-engine.ts**: `handleMatch` 新增 `scope` 参数拼接
+  - KB 匹配分支：输出 `--scope global`
+  - 意图匹配分支：输出 `--scope global`
+  - 修复 "全局分析所有工程源码" 被错误路由到迭代分析的问题
+
 ## v6.77.3 (2026-08-19) — 高频命令 Skill 补齐
 
 ### 新增 Skill
