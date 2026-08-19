@@ -1,3 +1,24 @@
+## v6.77.1 (2026-08-19) — 流水线 Skill 补齐：pr + done
+
+### 新增 Skill
+
+- **`spec-pr`** — 代码提交与 PR 专属 Skill
+  - 前置校验：分支安全检查（阻止 main/master 直接提交）、未提交变更检测、ANALYSIS.md 路径校验、冲突检测
+  - 参数提取：task, iteration, base, draft, title, commit, force, confirm, prompt, response
+  - 交互式提示：当前分支、保护分支、未提交文件数
+
+- **`spec-done`** — 任务归档收尾专属 Skill
+  - 前置校验：Task 存在性、依赖任务完成性、feature 分支合并状态、代码提交状态
+  - 参数提取：task, iteration, all, skipValidate, skipSync, interactive, prompt, response
+  - 交互式提示：已完成任务数、待归档任务数、执行流程（validate→archive→merge→sync→audit）
+
+### 清理
+
+- 删除 `.agents/skills/spec-dev/` 和 `.agents/skills/spec-synthesize/` 空目录
+- `init.ts` Skill 部署列表添加 `spec-pr` 和 `spec-done`
+
+---
+
 ## v6.77.0 (2026-08-19) — Skill 专属逻辑架构 + 需求澄清 + 变更检测
 
 ### Skill 专属逻辑架构（重大改进）

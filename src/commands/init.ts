@@ -973,6 +973,8 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
     'spec-change',
     'spec-doc2spec',
     'spec-spec2doc',
+    'spec-pr',
+    'spec-done',
   ];
   
   let skillsCopied = 0;
