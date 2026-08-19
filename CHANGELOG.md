@@ -1,3 +1,21 @@
+## v6.76.1 (2026-08-19) — 验证修复：路径统一 + async filter + 检测函数调用
+
+### 修复内容
+
+- **streaming-analyzer.ts 全局文档路径统一**：
+  - `detectBacktrackingNeeds()` 和 `runFinalAudit()` 原使用 `.speccore/GLOBAL/`（项目级）
+  - 修正为优先检查 `020-specs/global/`（迭代级），回退 `.speccore/GLOBAL/`
+  - 新增 `resolveGlobalDir()` 辅助函数统一路径解析
+- **`--apply` 模式集成自动检查**：
+  - 当 `--streaming-phase phase1-backend` / `phase3-frontend` 时，自动调用 `detectBacktrackingNeeds()` 检测回退需求
+  - 当 `--streaming-phase phase6-final-audit` 时，自动调用 `runFinalAudit()` 执行最终核对
+- **修复 `Array.prototype.filter(async)` 运行时 bug**：
+  - `streaming-analyzer.ts` line 583：`platforms.filter(async p => ...)` → 提前 `await parsePlatformTypes()`，filter 内改为同步 predicate
+  - `analyze-context-guard.ts` line 286：同样修复
+  - 影响：原 bug 导致所有平台被误认为后端平台（Promise 永远 truthy）
+
+---
+
 ## v6.76.0 (2026-08-18) — 功能模块级全局分析（--module）
 
 ### 与 --feature 的区别

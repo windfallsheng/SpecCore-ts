@@ -16,7 +16,7 @@
  * - 知识图谱实时刷新：每 Phase 完成后刷新图谱
  */
 
-import { join } from 'path';
+import { join, dirname } from 'path';
 import { pathExists, readFile, readdir } from 'fs-extra';
 import { logger } from '../utils/logger';
 import { parsePlatformList, parsePlatformTypes } from './spec-paths';
@@ -546,7 +546,7 @@ export async function detectBacktrackingNeeds(
   const targets: string[] = [];
   const reasons: string[] = [];
 
-  const globalDir = join(iterDir, '.speccore', 'GLOBAL');
+  const globalDir = await resolveGlobalDir(iterDir);
   const platformsDir = join(globalDir, 'platforms');
 
   // Phase 1 (后端分析) 完成后，检查是否需要调整 Phase 0 的 _INDEX.md
@@ -579,8 +579,8 @@ export async function detectBacktrackingNeeds(
   if (currentPhase === 'phase3-frontend') {
     try {
       const platforms = await parsePlatformList();
-      const backendPlatforms = platforms.filter(async p => {
-        const types = await parsePlatformTypes();
+      const types = await parsePlatformTypes();
+      const backendPlatforms = platforms.filter(p => {
         const t = types.get(p) || '';
         return t.includes('service') || t.includes('后端');
       });
@@ -623,7 +623,7 @@ export async function detectBacktrackingNeeds(
  */
 export async function runFinalAudit(iterDir: string): Promise<AuditIssue[]> {
   const issues: AuditIssue[] = [];
-  const globalDir = join(iterDir, '.speccore', 'GLOBAL');
+  const globalDir = await resolveGlobalDir(iterDir);
   const platformsDir = join(globalDir, 'platforms');
 
   // 1. 检查全局文档完整性
@@ -718,6 +718,18 @@ async function findAllMarkdownFiles(dir: string): Promise<string[]> {
 }
 
 // ── 辅助函数 ──
+
+/**
+ * 获取全局文档根目录（优先迭代级 020-specs/global/，回退项目级 .speccore/GLOBAL/）
+ */
+async function resolveGlobalDir(iterDir: string): Promise<string> {
+  const iterGlobal = join(iterDir, '020-specs', 'global');
+  if (await pathExists(iterGlobal)) return iterGlobal;
+  const projectRoot = dirname(iterDir);
+  const projectGlobal = join(projectRoot, '.speccore', 'GLOBAL');
+  if (await pathExists(projectGlobal)) return projectGlobal;
+  return iterGlobal; // 默认返回迭代级路径（即使不存在，后续操作会创建）
+}
 
 /**
  * 获取 Phase 顺序

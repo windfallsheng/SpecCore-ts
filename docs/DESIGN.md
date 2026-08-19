@@ -3059,3 +3059,224 @@ rm .speccore/local/.ask-onboarded
 # 3. 测试
 speccore ask "测试"
 ```
+
+---
+
+## 9. 流式分析与增量分析架构（v6.74.0 - v6.76.0）
+
+### 9.1 流式全局分析（Streaming Global Analysis，v6.74.0）
+
+将传统的"四层批处理"（Layer 1→4）升级为"七阶段流处理"（Phase 0→6），每个阶段产出写入文件，作为后续阶段的输入。
+
+#### 七阶段架构
+
+| Phase | 名称 | 目标 | 产出 |
+| :--- | :--- | :--- | :--- |
+| Phase 0 | 快速全局扫描 | 所有端并行索引 | `platforms/{端}/_INDEX.md` |
+| Phase 1 | 后端深度分析 | 拓扑排序，从依赖源头开始 | `platforms/{后端端}/API_INVENTORY.md`, `DATA_MODEL.md`, ... |
+| Phase 2 | 全局实时更新 | 后端完成后更新全局文档 | `global/API_CONTRACT.yaml`, `ARCHITECTURE.md`, ... |
+| Phase 3 | 前端深度分析 | 对齐后端契约 | `platforms/{前端端}/FEATURES.md`, `UI_SPEC.md`, ... |
+| Phase 4 | 横向关联检查 | 前后端字段/接口一致性 | `global/CROSS_CHECK.md` |
+| Phase 5 | 纵向关联检查 | 功能模块跨端完整性 | `global/VERTICAL_CHECK.md` |
+| Phase 6 | 最终核对检查 | 完整性+一致性+遗漏检测 | `global/FINAL_AUDIT.md` |
+
+#### 核心机制
+
+**后端优先分析**：
+- 读取 `CONSTITUTION.md` 获取端类型
+- 后端端按依赖拓扑排序（从被依赖到依赖者）
+- 先分析底层服务（如 user-service），再分析上层服务（如 order-service）
+
+**实时关联调整（Backtracking）**：
+- Phase 1 完成后：检测后端深入分析发现的接口/实体是否在 Phase 0 的 `_INDEX.md` 中缺失
+- Phase 3 完成后：检测前端调用的接口是否在所有后端端中都找不到定义
+- 发现问题时，在日志中输出需要回退修正的文档列表
+
+**端类型针对性分析**：
+- **Java 后端**：Spring Boot + JPA/Hibernate + 缓存策略 + 事务边界
+- **Node 后端**：NestJS + TypeORM/Prisma + 中间件链 + 异常过滤
+- **Go 后端**：Gin + GORM + 并发模式 + 错误处理
+- **Python 后端**：FastAPI + SQLAlchemy + 异步 + 类型注解
+- **微信端**：JS-SDK + OAuth + 分享 + 支付 + 模板消息
+- **小程序端**：包体积 + 平台 API + setData 优化 + 页面栈
+- **H5 端**：响应式 + 触摸交互 + 弱网优化 + 首屏性能
+- **Web/管理端**：复杂表单 + 数据表格 + 权限 UI + 状态管理
+
+**最终核对检查（Final Audit）**：
+- 检查全局文档完整性（`API_CONTRACT.yaml`, `ARCHITECTURE.md`, `FUNCTION_MAP.md`）
+- 检查端文档完整性（后端：`API_INVENTORY.md`, `DATA_MODEL.md`, `BUSINESS_RULES.md`；前端：`FEATURES.md`, `UI_FLOW.md`, `API_CALL_MAP.md`, `UI_SPEC.md`）
+- 检查内容占位符（`待填充`, `_待定_`, `TBD`, `TODO`, `FIXME`）
+
+#### CLI 使用
+
+```bash
+# 完整流式分析（Phase 0→6）
+speccore analyze --prompt -I <迭代> --global --with-code --streaming
+
+# 指定阶段分析
+speccore analyze --prompt -I <迭代> --global --with-code --streaming-phase phase1-backend
+```
+
+#### 代码实现
+
+- `src/core/streaming-analyzer.ts`：流式分析引擎（Phase Prompt 生成 + 回退检测 + 最终核对）
+- `src/commands/analyze.ts`：`--streaming` / `--streaming-phase` 集成
+
+### 9.2 增量分析（Incremental Analysis，v6.75.0）
+
+解决"上次分析不满意，或需求有变更，不需要全部重读"的场景。
+
+#### 核心能力
+
+**变更检测**：
+- 对比 `.speccore/cache/last-analysis-snapshot.json` 检测：
+  - 需求文档变更（mtime + content hash）
+  - 源码文件变更（如果 `--with-code`）
+  - 新增/删除端
+
+**智能复用**：
+- 未变更的内容在 prompt 中标注为「已有内容，请复用/校验」
+- 只重新分析变更部分
+
+**遗漏检查**：
+- 自动检测上次分析的功能模块遗漏
+- 检查文档缺失、占位符残留
+
+#### CLI 使用
+
+```bash
+# 增量分析模式
+speccore analyze --prompt -I <迭代> --incremental
+
+# 同义词
+speccore analyze --prompt -I <迭代> --reanalyze
+```
+
+#### 代码实现
+
+- `src/core/incremental-analyzer.ts`：增量分析引擎（变更检测 + 快照管理 + 遗漏检查）
+
+### 9.3 新增端分析（New Platform Addition，v6.75.0）
+
+解决"迭代中新增了一个端"的场景。
+
+#### 核心能力
+
+**单独分析新端**：
+- 读取新端源码，建立索引
+- 按端类型生成针对性分析产出
+
+**跨端关系自动识别**：
+- 检测新端与已有端的 API 调用关系
+- 检测数据依赖、认证依赖
+
+**全局文档自动更新**：
+- 自动规划 `FUNCTION_MAP` / `API_CONTRACT` / `ARCHITECTURE` / `INTERACTION_MAP` 的更新内容
+
+#### CLI 使用
+
+```bash
+speccore analyze --prompt -I <迭代> --add-platform admin-web
+```
+
+#### 代码实现
+
+- `src/core/platform-addition.ts`：新增端分析引擎
+
+### 9.4 上下文爆炸防护（Context Guard，v6.75.0）
+
+解决"分析内容过多，上下文容易爆炸"的问题。
+
+#### 预估模型
+
+| 维度 | 预估 Tokens |
+|------|------------|
+| 基础 overhead | 每个 prompt 模板 ~2K |
+| 每端 overhead | 读取索引 + 分析指令 ~3K |
+| 每模块 overhead | 需求文档 + 关联代码 ~5K |
+| 每功能单元 overhead | 详细设计 ~8K |
+| 全局文档 overhead | FUNCTION_MAP + API_CONTRACT ~4K |
+
+#### 四级分段策略
+
+| 级别 | 预估 Tokens | 推荐策略 |
+|------|------------|---------|
+| small | < 8K | 一次性分析 |
+| medium | 8K - 15K | 按端分批 |
+| large | 15K - 25K | 按模块分批 |
+| xlarge | > 25K | 按功能单元分批 + 强制交互确认 |
+
+#### CLI 使用
+
+```bash
+# 只输出预估报告
+speccore analyze --prompt -I <迭代> --estimate-only
+
+# 启用上下文防护（交互模式下提示确认）
+speccore analyze --prompt -I <迭代> --context-guard
+```
+
+#### 代码实现
+
+- `src/core/analyze-context-guard.ts`：上下文防护引擎（大小预估 + 分段策略 + 交互确认）
+
+### 9.5 功能模块级全局分析（Module Analysis，v6.76.0）
+
+解决"在全局层对单个功能模块进行再次/新增分析"的需求。
+
+#### 与 `--feature` 的区别
+
+| 维度 | `--feature` (局部分析) | `--module` (全局模块分析) |
+|------|----------------------|-------------------------|
+| 分析范围 | 单个功能模块的需求 → 规格 | 模块 + 跨端关联 + 全局影响 |
+| 全局文档 | 不更新 | **更新** FUNCTION_MAP / INTERACTION_MAP / API_CONTRACT |
+| 各端文档 | 不更新 | **更新** 各端 TECH.md / API_INVENTORY / FEATURES |
+| 适用场景 | 新增功能模块的初次规格定义 | 已有模块重新分析、跨端一致性校验 |
+
+#### 三种处理场景
+
+**模块已存在**：
+1. 读取 `FUNCTION_MAP` / `INTERACTION_MAP` 中的当前定义
+2. 对比最新需求识别变更点
+3. 生成 3-phase 精准更新 prompt（只更新该模块相关内容）
+
+**模块不存在但在需求文档中**：
+1. 从 `010-requirements/features/` 提取该模块需求
+2. 按全局标准分析（缩小版的全局分析）
+3. 生成插入 prompt（指导 AI 在全局文档中新增该模块）
+
+**模块完全不存在**：
+- 提示用户先提供需求文档或先用 `--feature` 分析
+
+#### 3-Phase 分析流程
+
+```
+Phase 1: 需求层提取/校验
+  → 读取已有模块定义或从需求文档提取
+  → 识别变更点或缺失内容
+
+Phase 2: 各端关联分析
+  → 识别模块涉及的端
+  → 分析各端当前实现与需求的差异
+  → 输出各端文档更新指令
+
+Phase 3: 全局文档更新
+  → 更新 FUNCTION_MAP（增删改功能单元）
+  → 更新 INTERACTION_MAP（调整时序图）
+  → 更新 API_CONTRACT（增删改接口）
+  → 更新 REQUIREMENT（补充模块需求）
+```
+
+#### CLI 使用
+
+```bash
+# 模块已存在 → 重新分析
+speccore analyze --prompt -I <迭代> --module "订单管理"
+
+# 模块不存在 → 从需求提取并分析
+speccore analyze --prompt -I <迭代> --module "消息推送"
+```
+
+#### 代码实现
+
+- `src/core/module-analyzer.ts`：模块级分析引擎（模块检测 + 更新计划 + Prompt 生成）
