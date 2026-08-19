@@ -835,33 +835,36 @@ async function askUser(prompt: string): Promise<string> {
   return new Promise(resolve => rl.question(prompt, (ans: string) => { rl.close(); resolve(ans); }));
 }
 
-export async function createToolIntegrations(projectRoot: string, toolFilter?: string): Promise<void> {
-  const commands: [string, string, string][] = [
-    ['spec-ask', 'SpecCore AI Router', '##  核心铁律\n1. 用户说"重新/再/重跑"禁止用"未变/已完成"拒绝\n2. 分析结果必须落盘 020-specs/，禁止只输出聊天文字\n3. 全流程（analyze→split→plan→execute）必须自动继续\n4. 复杂流程先展示执行计划页面再执行\n5. 用户说"自主/全自动"，展示计划后直接执行，禁止每步确认\n\n## 🎯 HTML 页面强制展示\n\n执行任何 `speccore` 命令后，检查 stdout 中的标记，**立即执行** `present_files(<path>)`：\n- `[SPECCORE_ONBOARD: <path>]` → 引导页（🚨 最先处理，禁止跳过）\n- `[SPECCORE_SETUP_GUIDE: <path>]` → 配置引导页\n- `[SPECCORE_ABOUT: <path>]` → 版本信息页\n- `[SPECCORE_HELP: <path>]` → 帮助中心页\n- `[SPECCORE_WELCOME: <path>]` → 项目名片页\n- `[SPECCORE_DEV: <path>]` → 开发流程页\n- `[SPECCORE_KNOWLEDGE: <path>]` → 知识图谱页\n- `[SPECCORE_PLAN: <path>]` → 执行计划页\n- `[SPECCORE_RETRO: <path>]` → 回顾报告页\n- `[SPECCORE_DASHBOARD: <path>]` → 仪表盘页\n\n❌ 禁止只说"检测到"而不执行展示\n❌ 禁止用文字描述代替实际展示\n\n## 执行\n1. Read CONITUTION.md + context.json\n2. 识别意图，展示执行计划\n3. speccore ask "${1:描述你的需求}"'],
-    ['spec-welcome', '显示项目名片（HTML页面）', 'speccore welcome'],
-    ['spec-help', '显示命令帮助中心（HTML页面）', 'speccore help'],
-    ['spec-dashboard', '显示全局仪表盘（HTML页面）', 'speccore dashboard --scope global'],
-    ['spec-init', '初始化项目 或 升级命令文件: --update', 'speccore init'],
-    ['spec-doc2spec', '导入需求文档: 文件=${1:PRD.docx} 迭代=${2:Q1}', 'speccore doc2spec -f ${1:PRD.docx} --iter ${2:Q1}'],
-    ['spec-analyze', 'SpecCore Analysis', '直接执行: execute_command("speccore ask \'用户原话\'")\n\n不要输出命令文本，不要分析意图，一切交给 speccore ask。'],
-    ['spec-split', 'SpecCore Task Split', '## ⛔ 铁律: 分析完成后必须拆分，禁止跳过\n1. Read 020-specs/ for analysis docs\n2. Dry-run split and show preview\n3. Execute: speccore iteration split -i ${1:Q1} --owner ${2|张三,李四,王五|}'],
-    ['spec-execute', 'SpecCore Execute', '## ⛔ 铁律: 有任务就执行，禁止说"已完成"跳过\n1. Read Task REQ.md + TECH.md\n2. Show plan then execute: speccore execute -i ${1:Q1} -t ${2:Task-001} --force'],
-    ['spec-plan', '生成并展示执行计划可视化页面', '1. 仅生成并展示计划页面，不执行代码修复\n2. speccore plan -I ${1:Q1} --owner ${2|张三,李四,王五|} --html\n3. 打开 speccore-plan.html'],
-    ['spec-pr', '创建PR: 任务=${1:Task-001}', 'speccore pr --task=${1:Task-001}'],
-    ['spec-done', '任务归档: 任务=${1:Task-001}', 'speccore done --task=${1:Task-001}'],
-    ['spec-spec2doc', '导出文档: 迭代=${1:Q1} 格式=${2|需求.docx,方案.pdf|}', 'speccore spec2doc -i ${1:Q1} -o ${2|需求.docx,方案.pdf|}'],
+export const TOOL_COMMANDS: [string, string, string][] = [
+  ['spec-ask', 'SpecCore AI Router', '##  核心铁律\n1. 用户说"重新/再/重跑"禁止用"未变/已完成"拒绝\n2. 分析结果必须落盘 020-specs/，禁止只输出聊天文字\n3. 全流程（analyze→split→plan→execute）必须自动继续\n4. 复杂流程先展示执行计划页面再执行\n5. 用户说"自主/全自动"，展示计划后直接执行，禁止每步确认\n\n## 🎯 HTML 页面强制展示\n\n执行任何 `speccore` 命令后，检查 stdout 中的标记，**立即执行** `present_files(<path>)`：\n- `[SPECCORE_ONBOARD: <path>]` → 引导页（🚨 最先处理，禁止跳过）\n- `[SPECCORE_SETUP_GUIDE: <path>]` → 配置引导页\n- `[SPECCORE_ABOUT: <path>]` → 版本信息页\n- `[SPECCORE_HELP: <path>]` → 帮助中心页\n- `[SPECCORE_WELCOME: <path>]` → 项目名片页\n- `[SPECCORE_DEV: <path>]` → 开发流程页\n- `[SPECCORE_KNOWLEDGE: <path>]` → 知识图谱页\n- `[SPECCORE_PLAN: <path>]` → 执行计划页\n- `[SPECCORE_RETRO: <path>]` → 回顾报告页\n- `[SPECCORE_DASHBOARD: <path>]` → 仪表盘页\n\n❌ 禁止只说"检测到"而不执行展示\n❌ 禁止用文字描述代替实际展示\n\n## 执行\n1. Read CONITUTION.md + context.json\n2. 识别意图，展示执行计划\n3. speccore ask "${1:描述你的需求}"'],
+  ['spec-welcome', '显示项目名片（HTML页面）', 'speccore welcome'],
+  ['spec-help', '显示命令帮助中心（HTML页面）', 'speccore help'],
+  ['spec-dashboard', '显示全局仪表盘（HTML页面）', 'speccore dashboard --scope global'],
+  ['spec-init', '初始化项目 或 升级命令文件: --update', 'speccore init'],
+  ['spec-doc2spec', '导入需求文档: 文件=${1:PRD.docx} 迭代=${2:Q1}', 'speccore doc2spec -f ${1:PRD.docx} --iter ${2:Q1}'],
+  ['spec-analyze', 'SpecCore Analysis', '直接执行: execute_command("speccore ask \'用户原话\'")\n\n不要输出命令文本，不要分析意图，一切交给 speccore ask。'],
+  ['spec-split', 'SpecCore Task Split', '## ⛔ 铁律: 分析完成后必须拆分，禁止跳过\n1. Read 020-specs/ for analysis docs\n2. Dry-run split and show preview\n3. Execute: speccore iteration split -i ${1:Q1} --owner ${2|张三,李四,王五|}'],
+  ['spec-execute', 'SpecCore Execute', '## ⛔ 铁律: 有任务就执行，禁止说"已完成"跳过\n1. Read Task REQ.md + TECH.md\n2. Show plan then execute: speccore execute -i ${1:Q1} -t ${2:Task-001} --force'],
+  ['spec-plan', '生成并展示执行计划可视化页面', '1. 仅生成并展示计划页面，不执行代码修复\n2. speccore plan -I ${1:Q1} --owner ${2|张三,李四,王五|} --html\n3. 打开 speccore-plan.html'],
+  ['spec-pr', '创建PR: 任务=${1:Task-001}', 'speccore pr --task=${1:Task-001}'],
+  ['spec-done', '任务归档: 任务=${1:Task-001}', 'speccore done --task=${1:Task-001}'],
+  ['spec-spec2doc', '导出文档: 迭代=${1:Q1} 格式=${2|需求.docx,方案.pdf|}', 'speccore spec2doc -i ${1:Q1} -o ${2|需求.docx,方案.pdf|}'],
 
-    ['spec-change', '需求变更: 描述=${1:变更描述} 任务=${2:Task-001}', 'speccore change "${1:变更描述}" --task=${2:Task-001} --type ${3|feature,bugfix|}'],
-    ['spec-validate', '合规验证: 迭代=${1:Q1}', 'speccore validate --iteration=${1:Q1}'],
-    ['spec-search', '全文搜索: ${1:关键词}', 'speccore search ${1:关键词}'],
-    ['spec-track', '全链路追踪: 需求=${1:REQ-001}', 'speccore track --req=${1:REQ-001}'],
-    ['spec-sync', '双向同步全局', 'speccore sync --global'],
-    ['spec-rename', '重命名: 旧名=${1:Q1} 新名=${2:Q2}', 'speccore rename --iteration ${1:Q1} ${2:Q2}'],
-    ['spec-create-iteration', '创建迭代: 名称=${1:Q2} 负责人=${2|张三,李四,王五|}', 'speccore iteration create -n ${1:Q2} --owner=${2|张三,李四,王五|}'],
-    ['spec-retro', '回顾报告: 任务=${1:Task-001} 可批量 --all', 'speccore retro --task ${1:Task-001}'],
-    ['spec-context', '切换上下文: 迭代=${1:Q1}', 'speccore context --set --iteration ${1:Q1}'],
-    ['spec-ops', '操作历史', 'speccore ops'],
-  ];
+  ['spec-change', '需求变更: 描述=${1:变更描述} 任务=${2:Task-001}', 'speccore change "${1:变更描述}" --task=${2:Task-001} --type ${3|feature,bugfix|}'],
+  ['spec-validate', '合规验证: 迭代=${1:Q1}', 'speccore validate --iteration=${1:Q1}'],
+  ['spec-search', '全文搜索: ${1:关键词}', 'speccore search ${1:关键词}'],
+  ['spec-track', '全链路追踪: 需求=${1:REQ-001}', 'speccore track --req=${1:REQ-001}'],
+  ['spec-sync', '双向同步全局', 'speccore sync --global'],
+  ['spec-rename', '重命名: 旧名=${1:Q1} 新名=${2:Q2}', 'speccore rename --iteration ${1:Q1} ${2:Q2}'],
+  ['spec-iteration-create', '创建迭代: 名称=${1:Q2} 负责人=${2|张三,李四,王五|}', 'speccore iteration create -n ${1:Q2} --owner=${2|张三,李四,王五|}'],
+  ['spec-task-create', '创建任务: 交互式需求澄清 → 生成 REQUIREMENT.md', 'speccore task new --name ${1:任务名称}'],
+  ['spec-retro', '回顾报告: 任务=${1:Task-001} 可批量 --all', 'speccore retro --task ${1:Task-001}'],
+  ['spec-context', '切换上下文: 迭代=${1:Q1}', 'speccore context --set --iteration ${1:Q1}'],
+  ['spec-ops', '操作历史', 'speccore ops'],
+];
+
+export async function createToolIntegrations(projectRoot: string, toolFilter?: string): Promise<void> {
+  const commands = TOOL_COMMANDS;
 
   const allTools = ['claude', 'codebuddy', 'cursor', 'trae', 'trae-cn', 'windsurf'];
   const filter = toolFilter ? toolFilter.split(',').map(t => t.trim()) : null;
@@ -878,8 +881,8 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
     } catch {}
     await ensureDir(toolDir);
     for (const [name, desc, cmd] of commands) {
-      // v6.55.0+: spec-analyze/spec-execute/spec-split 使用动态路由格式，其他命令保持静态
-      const isDynamicRouting = ['spec-analyze', 'spec-execute', 'spec-split'].includes(name);
+      // v6.77.2+: 所有有 SKILL.md 的命令使用动态路由格式（走 speccore ask 引擎）
+      const isDynamicRouting = ['spec-analyze', 'spec-ask', 'spec-change', 'spec-doc2spec', 'spec-done', 'spec-execute', 'spec-iteration-create', 'spec-plan', 'spec-pr', 'spec-spec2doc', 'spec-split', 'spec-task-create'].includes(name);
       const content = isDynamicRouting
         ? '---\nname: ' + name + '\ndescription: ' + desc + '\n---\n\n' + cmd
         : '---\nname: ' + name + '\ndescription: ' + desc + '\n---\n' + cmd;
