@@ -761,6 +761,7 @@ program
   .option('--add-platform <platform>', 'v6.75.0+: 新增端分析（单独分析新端，更新全局文档）')
   .option('--context-guard', 'v6.75.0+: 启用上下文爆炸防护（预估大小+智能分段）')
   .option('--estimate-only', 'v6.75.0+: 只输出上下文预估报告，不执行分析')
+  .option('--module <name>', 'v6.76.0+: 功能模块级全局分析（更新全局层+各端文档，区别于 --feature 局部分析）')
   .action(analyzeCommand);
 
 program
