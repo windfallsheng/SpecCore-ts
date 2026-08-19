@@ -118,45 +118,11 @@ function generateSubtaskId(parentTaskId: string, platform: string): string {
   return `Task-${parentTaskId}-${platform}`;
 }
 
-/** 粒度约束常量 */
-const GRANULARITY_RULES = {
-  macro:  { label: '粗粒度 (macro)', minHours: 20, maxHours: 80, maxApis: 15, maxTables: 5, maxPages: 5, desc: '每个任务 1-2 周，按业务方向合并' },
-  module: { label: '中粒度 (module)', minHours: 12, maxHours: 40, maxApis: 8,  maxTables: 3, maxPages: 3, desc: '每个任务 3-5 天，按功能/端拆分' },
-  atomic: { label: '细粒度 (atomic)', minHours: 4,  maxHours: 24, maxApis: 3,  maxTables: 2, maxPages: 1, desc: '每个任务 1-3 天，按接口/表拆分' },
+/** 拆分约束常量（简化版：每个功能单元按涉及的端拆分，每端1个子任务） */
+const SPLIT_RULES = {
+  maxTasksPerIteration: 20,     // 单次迭代总任务数上限
+  maxTasksPerUnit: 3,           // 每个功能单元最多任务数
 } as const;
-type Granularity = keyof typeof GRANULARITY_RULES;
-
-/** 校验任务工时是否在粒度范围内（按单人 max 工时计算） */
-function validateGranularity(gran: Granularity, hoursByPlatform: Record<string, number>, apiCount: number, tableCount: number) {
-  const rule = GRANULARITY_RULES[gran];
-  const warnings: string[] = [];
-  const platformEntries = Object.entries(hoursByPlatform);
-  const maxPerPerson = platformEntries.length > 0 ? Math.max(...platformEntries.map(([, h]) => h)) : 0;
-  const totalHours = platformEntries.reduce((sum, [, h]) => sum + h, 0);
-  const maxPlatform = platformEntries.length > 0 ? platformEntries.reduce((a, b) => (b[1] > a[1] ? b : a))[0] : '';
-
-  if (maxPerPerson > rule.maxHours) {
-    warnings.push(`⚠️  单人最大工时 ${maxPerPerson}h（${maxPlatform}）超出上限 ${rule.maxHours}h → 建议再拆`);
-  } else if (maxPerPerson < rule.minHours) {
-    warnings.push(`⚠️  单人最大工时 ${maxPerPerson}h（${maxPlatform}）低于下限 ${rule.minHours}h → 建议合并到关联任务`);
-  }
-  if (apiCount > rule.maxApis) warnings.push(`⚠️  接口 ${apiCount} 个超出上限 ${rule.maxApis} → 建议按业务领域拆分`);
-  if (tableCount > rule.maxTables) warnings.push(`⚠️  数据表 ${tableCount} 张超出上限 ${rule.maxTables} → 建议按数据层拆分`);
-
-  // 返回额外信息供展示
-  if (platformEntries.length > 1) {
-    const breakdown = platformEntries.map(([p, h]) => `${p}:${h}h`).join(' + ');
-    warnings.unshift(`ℹ️  工时分布: ${breakdown} = ${totalHours}h（max per person: ${maxPerPerson}h）`);
-  }
-  return warnings;
-}
-
-/** 根据团队规模推荐粒度 */
-function recommendGranularity(teamSize: number): Granularity {
-  if (teamSize <= 3) return 'macro';
-  if (teamSize <= 8) return 'module';
-  return 'atomic';
-}
 
 function promptUser(question: string): Promise<string> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -177,10 +143,16 @@ export interface IterationSplitOptions {
   prompt?: boolean;     // --prompt: 输出拆分 Prompt
   response?: string;    // --response: 接收 AI 拆分结果创建 Task 目录
   force?: boolean;
-  granularity?: 'macro' | 'module' | 'atomic';  // 拆分粒度
+  // granularity removed: 简化拆分，按功能单元×端自动拆分，每端1个子任务
   pipeline?: boolean;   // --pipeline: 启用 Pipeline 模式
   resume?: boolean;     // --resume: 恢复之前的 Pipeline
   prune?: boolean;      // --prune: 清理不匹配的旧任务
+  // v6.76.0+: 支持按功能模块和端过滤拆分
+  modules?: string;     // --modules: 逗号分隔的功能模块名，只拆分匹配的模块
+  // v6.76.0+: 变更检测选项
+  ignoreSpecsUpdate?: boolean; // --ignore-specs-update: 跳过 spec 变更检测
+  // v6.76.0+: 开发者实现指南
+  devGuide?: boolean;           // --dev-guide: 生成任务级 DEV_GUIDE.md
 }
 
 async function detectPlatforms(iterationDir: string, specified?: string): Promise<string[]> {
@@ -372,16 +344,10 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           };
           (section as any)._complexity = {
             estimatedHours: task.estimatedHours || 8,
-            hoursByPlatform: (task.hoursByPlatform && typeof task.hoursByPlatform === 'object') ? task.hoursByPlatform : {},
             priority: task.priority || 'medium',
-            complexity: task.risk === 'high' ? 'high' : task.risk === 'low' ? 'low' : 'medium',
-            apiCount: (task.apis || []).length,
-            dbCount: (task.tables || []).length,
-            pageCount: 0,
-            wordCount: content.length,
           };
           (section as any)._owner = task.owner || '未分配';
-          (section as any)._taskType = (task.type && ['feature', 'bugfix', 'refactor', 'research'].includes(task.type)) ? task.type : 'feature';
+          (section as any)._taskType = (task.type && ['feature', 'bugfix', 'refactor', 'research', 'security', 'performance'].includes(task.type)) ? task.type : 'feature';
           // 保存 topic slug，用于生成任务目录名
           (section as any)._topic = task.topic || slugify(task.name || `Task ${i + 1}`);
           // 保存 AI 生成的实际内容（用于写入 REQ.md / TECH.md）
@@ -416,14 +382,8 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           }
         }
 
-        // 确定粒度
-        const staffing2 = readStaffing(iterDirFull);
-        const teamSize2 = staffing2 ? staffing2.length : 0;
-        const granularity: Granularity = (options.granularity as Granularity) || recommendGranularity(teamSize2);
-        const granRule = GRANULARITY_RULES[granularity];
-                
         // 🚨 全局任务数硬限制（安全网：防止 AI 输出爆炸）
-        const MAX_TASKS_HARD = 20;
+        const MAX_TASKS_HARD = SPLIT_RULES.maxTasksPerIteration;
         if (sections.length > MAX_TASKS_HARD && !options.force) {
           logger.error(`\n   ❌ 任务数爆炸！AI 输出了 ${sections.length} 个任务（上限 ${MAX_TASKS_HARD}）`);
           logger.error(`   💡 这说明拆分粒度过细，必须合并。请告诉 AI："任务太多，请合并相关功能，总数控制在 ${MAX_TASKS_HARD} 以内"`);
@@ -487,7 +447,6 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
 
         // 交互模式判断：显式 --interactive 或 stdin 是 TTY（--force 时跳过交互，直接执行）
         const isInteractive = (options.interactive || process.stdin.isTTY) && !options.force;
-        logger.info(`   📏 粒度: ${granRule.label}${options.granularity ? ' (用户指定)' : ` (${teamSize2} 人团队自动推荐)`}`);
 
         // 非交互模式：显示任务总览摘要
         if (!isInteractive) {
@@ -518,30 +477,11 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           logger.info(`\n   ━━━━ 任务 ${i + 1}/${sections.length} ━━━━`);
           logger.info(`   📌 ${sec.name}`);
           logger.info(`   🏷  类型: ${taskType} | 🎯 优先级: ${complexity.priority || 'medium'}`);
-          // 按端展示工时分布
-          const hbp = complexity.hoursByPlatform || {};
-          const hbpEntries = Object.entries(hbp);
-          if (hbpEntries.length > 0) {
-            const breakdown = hbpEntries.map(([p, h]) => `${p}:${h}h`).join(' + ');
-            const maxPerPerson = Math.max(...hbpEntries.map(([, h]) => h as number));
-            logger.info(`   ⏱ 工时: ${breakdown} = ${complexity.estimatedHours}h（max per person: ${maxPerPerson}h）`);
-          } else {
-            logger.info(`   ⏱ 预估: ${complexity.estimatedHours}h`);
-          }
-          if (complexity.apiCount) logger.info(`   🔌 接口: ${complexity.apiCount} 个 | 🗄 数据表: ${complexity.dbCount || 0} 张`);
+          if (complexity.estimatedHours) logger.info(`   ⏱ 预估: ${complexity.estimatedHours}h`);
           if (deps.length > 0) logger.info(`   🔗 依赖: ${deps.join(', ')}`);
           if (acs.length > 0) {
             logger.info(`   ✅ 验收标准:`);
             for (const ac of acs.slice(0, 5)) logger.info(`      ${ac}`);
-          }
-
-          // 粒度校验（按单人 max 工时）
-          const warnings = validateGranularity(granularity, hbp, complexity.apiCount || 0, complexity.dbCount || 0);
-          if (warnings.length > 0) {
-            for (const w of warnings) {
-              if (w.startsWith('ℹ️')) logger.info(`   ${w}`);
-              else logger.warn(`   ${w}`);
-            }
           }
 
           // 交互确认（仅确认，调整应回到 AI 对话重新生成方案）
@@ -633,6 +573,13 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     }
 
     const iterationDir = await getIterationDir(iteration);
+
+    // v6.76.0+: 变更检测 — 检查 020-specs/ 是否比 Task/ 更新
+    if (!options.ignoreSpecsUpdate && !options.prompt && !options.response) {
+      const { detectSpecChangesBeforeSplit, printChangeDetection } = await import('../../core/change-detector');
+      const changeResult = await detectSpecChangesBeforeSplit(iterationDir);
+      printChangeDetection(changeResult, '拆分前检测');
+    }
 
     // ── v6.49.13+: 模块驱动拆分 — CLI 按功能模块×端创建任务目录，AI 只填充内容 ──
     if (!options.prompt && !options.response) {
@@ -772,17 +719,15 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
         }
       }
       
-      // 粒度推荐（基于 STAFFING 人数）
-      const staffing = readStaffing(iterationDir);
-      const teamSize = staffing ? staffing.length : 0;
-      const recommendedGranularity: Granularity = (options.granularity as Granularity) || recommendGranularity(teamSize);
-      const granularityLabel = GRANULARITY_RULES[recommendedGranularity].label;
-      const granularityHint = GRANULARITY_RULES[recommendedGranularity].desc;
-      
       // 获取标准端名列表（用于 prompt 注入和 scope 规范化）
       const allPlatforms = await detectPlatforms(iterationDir);
+      // v6.76.0+: 扫描已有 Task 结构（增量拆分）
+      const existingTaskStructure = await scanExistingTaskStructure(iterationDir);
       // 构建完整 prompt（v6.69.3+: 传入标准端名列表，确保 AI 使用正确的端名）
-      let splitPrompt = buildSplitPrompt(iteration, constitutionContent, reqContent2, specContents, staffing, teamSize, granularityLabel, granularityHint, allPlatforms);
+      // v6.76.0+: 传入过滤条件，限制拆分范围；传入已有 Task 结构，支持增量拆分
+      const modulesFilter = options.modules ? options.modules.split(',').map(m => m.trim()).filter(Boolean) : undefined;
+      const platformsFilter = options.platforms ? options.platforms.split(',').map(p => p.trim()).filter(Boolean) : undefined;
+      let splitPrompt = buildSplitPrompt(iteration, constitutionContent, reqContent2, specContents, allPlatforms, modulesFilter, platformsFilter, existingTaskStructure, options.devGuide);
 
       // 注入全局上下文（INDEX + TOC 目录，AI 自主读取）
       const { loadGlobalContext, formatGlobalContext } = await import('../../core/prompt-builder');
@@ -793,7 +738,6 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       
       await writeFile(join(promptsDir, `split-suggestion-${iteration}.md`), splitPrompt);
       logger.info(`   🤖 AI 拆分建议 → .speccore/prompts/split-suggestion-${iteration}.md`);
-      logger.info(`   📏 推荐粒度: ${granularityLabel}${options.granularity ? ' (用户指定)' : ` (基于 ${teamSize} 人团队自动推荐)`}`);
       logger.info(`   📜 上下文: CONSTITUTION + REQUIREMENT + ${specContents.length} 个 Spec 文档`);
     } else {
       logger.info('   ℹ️ 未找到 ANALYSIS.md，建议先运行 speccore analyze');
@@ -807,11 +751,22 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     }
 
     const content = await readFile(reqFile, 'utf-8');
-    const sections = extractSections(content, options.sections);
+    let sections = extractSections(content, options.sections);
 
-    if (sections.length === 0) {
-      spinner.fail('No sections found to split');
-      return;
+    // v6.76.0+: 按功能模块过滤
+    if (options.modules) {
+      const moduleFilters = options.modules.split(',').map(m => m.trim()).filter(Boolean);
+      const beforeCount = sections.length;
+      sections = sections.filter(s =>
+        moduleFilters.some(f => s.name.includes(f))
+      );
+      if (sections.length < beforeCount) {
+        logger.info(`   🎯 模块过滤: ${beforeCount} → ${sections.length}（只拆分: ${moduleFilters.join(', ')}）`);
+      }
+      if (sections.length === 0) {
+        spinner.fail(`没有匹配 "${options.modules}" 的功能模块，请检查模块名称`);
+        return;
+      }
     }
 
     const platforms = await detectPlatforms(iterationDir, options.platforms);
@@ -910,7 +865,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
         
         logger.info(`  ${taskId} → ${sections[i].name}`);
         if (contentPreview) logger.info(`       ${contentPreview}`);
-        logger.info(`       优先级: ${c.priority} | 工时: ${c.estimatedHours}h | 复杂度: ${c.complexity} | 👤 ${owner}`);
+        logger.info(`       优先级: ${c.priority} | 工时: ${c.estimatedHours}h | 👤 ${owner}`);
         if (deps) logger.info(`       🔗 依赖: ${deps.join(', ')}`);
         logger.info(`       平台: ${platforms.join(', ')}`);
         logger.info('');
@@ -1169,7 +1124,7 @@ async function createTaskFromSection(iterationDir: string, taskId: string, secti
     }
   }
   
-  const complexity = (section as any)._complexity as SectionComplexity || { estimatedHours: 2, priority: 'medium' as const, complexity: 'medium' as const, apiCount: 0, dbCount: 0, pageCount: 0, wordCount: 0 };
+  const complexity = (section as any)._complexity as SectionComplexity || { estimatedHours: 8, priority: 'medium' as const };
   const owner = (section as any)._owner || '未分配';
   const today = new Date().toISOString().split('T')[0];
 
@@ -1608,7 +1563,7 @@ ${isBk ? apiList : pageList}
       const subtaskId = subtaskIdMap.get(platform)!;
       // 子任务目录名 = subtaskId（如 Task-001-booking-service）
       const subtaskDir = join(platformDir, subtaskId);
-      const subtaskHours = (section as any)._hoursByPlatform?.[platform] || Math.ceil(complexity.estimatedHours / taskPlatforms.length);
+      const subtaskHours = complexity.estimatedHours || 8;
       // 判断是否后端（用于生成不同的文档内容）
       const isBk = platform === 'backend' || platform.startsWith('后台') || /-(service|api|server|backend)$/i.test(platform);
       await createSubtask(subtaskDir, subtaskId, platform, isBk ? '后端' : platform, isBk, subtaskHours);
@@ -1683,7 +1638,7 @@ ${isBk ? apiList : pageList}
     ? `020-specs/${sourceFile}`
     : `020-specs/${taskType === 'feature' ? 'features' : taskType === 'bugfix' ? 'bugs' : taskType === 'refactor' ? 'refactors' : 'research'}/${topic}.md`;
   // 任务类型中文标签
-  const typeLabels: Record<string, string> = { feature: '功能开发', bugfix: '缺陷修复', refactor: '重构优化', research: '技术调研' };
+  const typeLabels: Record<string, string> = { feature: '功能开发', bugfix: '缺陷修复', refactor: '重构优化', research: '技术调研', security: '安全修复', performance: '性能优化' };
   const typeLabel = typeLabels[taskType] || taskType;
 
   // 收集同迭代的其它任务（用于关联关系）
@@ -2631,11 +2586,6 @@ interface StaffMember {
 }
 
 interface SectionComplexity {
-  apiCount: number;
-  dbCount: number;
-  pageCount: number;
-  wordCount: number;
-  complexity: 'low' | 'medium' | 'high';
   estimatedHours: number;
   priority: 'high' | 'medium' | 'low';
 }
@@ -2648,14 +2598,45 @@ function buildSplitPrompt(
   constitutionContent: string,
   reqContent: string,
   specContents: { name: string; content: string }[],
-  staffing: StaffMember[] | null,
-  teamSize: number,
-  granularityLabel: string,
-  granularityHint: string,
   standardPlatforms: string[],
+  modulesFilter?: string[],
+  platformsFilter?: string[],
+  existingTasks?: Map<string, string[]>,
+  devGuide?: boolean,
 ): string {
   let p = `# SpecCore AI 智能拆分\n\n`;
-  p += `> 迭代: ${iteration} | 粒度: ${granularityLabel} | 生成: ${new Date().toISOString().split('T')[0]}\n\n`;
+  p += `> 迭代: ${iteration} | 生成: ${new Date().toISOString().split('T')[0]}\n\n`;
+
+  // v6.76.0+: 拆分范围限制
+  if (modulesFilter?.length || platformsFilter?.length) {
+    p += `## 🎯 拆分范围限制（用户指定）\n\n`;
+    if (modulesFilter?.length) {
+      p += `- **只拆分以下功能模块**: ${modulesFilter.join('、')}\n`;
+      p += `- 如果需求文档中有其他功能模块，**完全忽略**，不要拆分\n`;
+    }
+    if (platformsFilter?.length) {
+      p += `- **只拆分涉及以下端的功能模块**: ${platformsFilter.join('、')}\n`;
+      p += `- 如果某个功能模块不涉及这些端，**跳过不拆**\n`;
+      p += `- 每个任务的 scope 只能包含这些端，不要引入其他端\n`;
+    }
+    p += `\n`;
+  }
+
+  // v6.76.0+: 增量拆分 — 已有 Task 结构
+  if (existingTasks && existingTasks.size > 0) {
+    p += `## 📂 已有 Task 结构（增量拆分模式）\n\n`;
+    p += `本次拆分为**增量模式**：以下 Task 已存在，如果新拆分的功能单元与已有 Task 匹配，**复用该 Task ID，只追加新端**。\n\n`;
+    for (const [taskName, platforms] of existingTasks.entries()) {
+      p += `- **${taskName}**: 已有端 [${platforms.join(', ')}]\n`;
+    }
+    p += `\n`;
+    p += `### 增量拆分规则\n`;
+    p += `- 如果功能单元与已有 Task 的 functionalUnit 相同 → **复用该 Task ID**，scope 追加新端\n`;
+    p += `- 如果功能单元是全新的 → 生成新的 Task ID（延续现有编号）\n`;
+    p += `- 已有端不要重复拆分，只拆分**新增的端**\n`;
+    p += `- 已有 Task 的 _shared/ 目录保持不变，新端目录追加到 10-backend/ 或 20-frontend/ 下\n`;
+    p += `- API 契约（_shared/API_CONTRACT.yaml）需要补充新端涉及的接口\n\n`;
+  }
 
   // 技术宪法
   if (constitutionContent) {
@@ -2670,35 +2651,20 @@ function buildSplitPrompt(
     p += `## 📜 ${spec.name}\n\n${spec.content.slice(0, 3000)}\n\n---\n\n`;
   }
 
-  // 团队配置
-  if (staffing && staffing.length > 0) {
-    p += `## 👥 团队配置 (STAFFING.md)\n\n`;
-    p += `| 人员 | 擅长端 | 负荷 |\n| :--- | :--- | :--- |\n`;
-    for (const m of staffing) {
-      p += `| ${m.name} | ${m.platforms.join(', ')} | ${m.capacity}% |\n`;
-    }
-    p += `\n检测到 ${teamSize} 人团队，推荐粒度: ${granularityLabel}\n\n---\n\n`;
+  // v6.69.3+: 注入标准端名列表
+  if (standardPlatforms.length > 0) {
+    p += `## 🖥️ 项目端列表（标准端名）\n\n`;
+    p += `本项目已配置以下端，所有 scope 必须使用这些**标准端名**，禁止使用简写或中文：\n\n`;
+    p += `\`${standardPlatforms.join('`, `')}\`\n\n`;
+    p += `- 后端端名示例: \`booking-service\`, \`room-service\`（不是 "后端"、"backend"）\n`;
+    p += `- 前端端名示例: \`admin-web\`, \`h5-mobile\`（不是 "web"、"admin"、"h5"）\n`;
+    p += `- **scope 数组必须使用上述标准端名**，否则会导致目录结构错误\n\n`;
   }
-
-  // 粒度说明（含硬约束）
-  p += `## 🎯 拆分粒度: ${granularityLabel}\n\n`;
-  p += `${granularityHint}\n\n`;
-  p += `### 当前粒度硬约束（必须严格遵守）\n`;
-  p += `> ⚠️ 工时约束按 **max(各端工时)** 计算，即单个开发人员的实际工作量，不是所有端的总和\n\n`;
-  if (granularityLabel.includes('粗')) {
-    p += `- 每人工时: 20-80h（1-2 周）\n- 接口上限: 15 个/任务\n- 数据表上限: 5 张/任务\n- 页面上限: 5 个/任务\n`;
-  } else if (granularityLabel.includes('中')) {
-    p += `- 每人工时: 12-40h（3-5 天）\n- 接口上限: 8 个/任务\n- 数据表上限: 3 张/任务\n- 页面上限: 3 个/任务\n`;
-  } else {
-    p += `- 每人工时: 4-24h（1-3 天）\n- 接口上限: 3 个/任务\n- 数据表上限: 2 张/任务\n- 页面上限: 1 个/任务\n`;
-  }
-  p += `\n**超出上限必须再拆，低于下限必须合并。**\n\n`;
-  p += `用户可通过 --granularity macro|module|atomic 调整全局粒度。\n\n`;
 
   // v6.69.3+: 注入标准端名列表
   if (standardPlatforms.length > 0) {
     p += `## 🖥️ 项目端列表（标准端名）\n\n`;
-    p += `本项目已配置以下端，所有 scope、hoursByPlatform 必须使用这些**标准端名**，禁止使用简写或中文：\n\n`;
+    p += `本项目已配置以下端，所有 scope 必须使用这些**标准端名**，禁止使用简写或中文：\n\n`;
     p += `\`${standardPlatforms.join('`, `')}\`\n\n`;
     p += `- 后端端名示例: \`booking-service\`, \`room-service\`（不是 "后端"、"backend"）\n`;
     p += `- 前端端名示例: \`admin-web\`, \`h5-mobile\`（不是 "web"、"admin"、"h5"）\n`;
@@ -2789,13 +2755,9 @@ function buildSplitPrompt(
   p += `    "functionalUnit": "所属功能单元/影响域（必填！见下方类型规则）",\n`;
   p += `    "name": "任务名称（中文）",\n`;
   p += `    "topic": "english-slug-for-directory",\n`;
-  p += `    "type": "feature|bugfix|refactor|research",\n`;
+  p += `    "type": "feature|bugfix|refactor|research|security|performance",\n`;
   p += `    "reason": "为什么这样拆分",\n`;
   p += `    "scope": ["booking-service", "admin-web"],\n`;
-  p += `    "apis": ["POST /api/auth/login"],\n`;
-  p += `    "tables": ["users"],\n`;
-  p += `    "hoursByPlatform": { "booking-service": 8, "admin-web": 8 },\n`;
-  p += `    "estimatedHours": 16,\n`;
   p += `    "priority": "high|medium|low",\n`;
   p += `    "dependencies": [],\n`;
   p += `    "acceptanceCriteria": ["AC1: ..."],\n`;
@@ -2803,13 +2765,15 @@ function buildSplitPrompt(
   p += `    "owner": "建议负责人",\n`;
   p += `    "sourceFile": "来源文档路径（如 bugs/login-timeout.md、features/user-auth.md）",\n`;
   p += `    "reqContent": "需求描述内容（Markdown 格式，写入 REQ.md）",\n`;
-  p += `    "techContent": "技术方案内容（Markdown 格式，写入 TECH.md）"\n`;
+  p += `    "techContent": "技术方案内容（Markdown 格式，写入 TECH.md）"${devGuide ? `,\n    "devGuideContent": "开发者实现指南（Markdown 格式，写入 DEV_GUIDE.md）：实现步骤、关键代码示例、与存量功能集成、注意事项"` : ''}\n`;
   p += `  }\n]\n`;
   p += '```\n\n';
   p += `> **functionalUnit 必须填写**：根据任务类型语义不同：\n`;
   p += `>   - feature → 功能模块名（如：用户管理、订单系统、支付模块）\n`;
   p += `>   - bugfix → 受影响组件/流程（如：登录流程、支付回调、数据同步）\n`;
   p += `>   - refactor → 重构目标范围（如：数据库层、API网关、状态管理）\n`;
+  p += `>   - security → 安全修复范围（如：SQL注入防护、XSS修复、鉴权加固）\n`;
+  p += `>   - performance → 性能优化目标（如：查询优化、缓存策略、并发提升）\n`;
   p += `>   - research → 研究主题（如：WebSocket方案、缓存策略）\n`;
   p += `> 同一模块/领域的任务填相同的值，用于粒度校验和任务分组\n`;
   p += `> **topic** 必须是英文短横线格式（如 \`user-authentication\`、\`product-crud\`），用于生成任务目录名 Task-NNN-{topic}\n`;
@@ -2826,17 +2790,16 @@ function buildSplitPrompt(
   p += `>   - 直接写入 00-specs/TECH.md，执行时 AI 据此直接开发\n`;
   p += `> **质量红线**：如果 reqContent/techContent 只有标题和占位符（如 "<!-- AI-FILL -->"），视为不合格，必须重新生成\n\n`;
 
-  p += `### ⚠️ 工时估算规则（重要）\n\n`;
-  p += `- **hoursByPlatform**: 按端分别估算工时，key 对应 scope 中的端名称\n`;
-  p += `- **estimatedHours**: 各端工时总和（仅用于展示，不参与粒度校验）\n`;
-  p += `- **粒度校验用 max(各端工时)**：衡量「一个开发人员实际干多少」，不是总和\n`;
-  p += `- 例：后端 8h + admin 8h = total 16h，但 per-person max = 8h，按 8h 判断粒度\n`;
-  p += `- 同一功能的前后端各端工作必须在一个原子任务里，不要按端拆分任务\n\n`;
+  p += `### ⚠️ 拆分规则（重要）\n\n`;
+  p += `- **一个功能单元默认 1 个任务**，最多拆成 3 个\n`;
+  p += `- **按 scope 涉及的端创建子任务**：每个端 1 个子任务目录\n`;
+  p += `- **不要按端拆分任务**：同一功能的前后端各端工作在一个任务里，按端拆分子任务\n`;
+  p += `- **用户不满意时可手动拆分**：CLI 提供简单的默认拆分，复杂拆分由用户手动调整\n\n`;
 
   // 质量自检
   p += `## ✅ 质量自检（必须全部通过）\n\n`;
   p += `□ 每个任务都满足原子任务定义？\n`;
-  p += `□ 每个任务的 estimatedHours 在当前粒度范围内？（不满足 → 合并或再拆）\n`;
+  p += `□ 每个任务的 scope 只包含必要的端？\n`;
   p += `□ 没有循环依赖？\n`;
   p += `□ 基础模块排在前面？\n`;
   p += `□ 同功能单元内的任务没被过度拆分？（每个功能单元 ≤ 3 个任务）\n`;
@@ -2927,37 +2890,26 @@ function autoAssign(section: Section, platforms: string[], staffing: StaffMember
 }
 
 /**
- * 分析章节复杂度，决定优先级和工时
+ * 分析章节复杂度，决定优先级和工时（简化版）
  */
 function estimateSectionComplexity(section: Section): SectionComplexity {
   const content = section.content || '';
   const name = section.name || '';
   const full = `${name}\n${content}`;
   
-  // 统计复杂度指标
-  const apiCount = (full.match(/\/api\/|API|接口|endpoint|POST|GET|PUT|DELETE/gi) || []).length;
-  const dbCount = (full.match(/数据库|表|DDL|schema|model|entity|索引|字段/gi) || []).length;
-  const pageCount = (full.match(/页面|表单|列表|详情|弹窗|modal|dialog/gi) || []).length;
+  // 粗略估算工时（仅用于展示）
   const wordCount = full.length;
-  
-  // 判断复杂度
-  let complexity: 'low' | 'medium' | 'high' = 'medium';
-  let score = apiCount * 3 + dbCount * 2 + pageCount;
-  if (score <= 3 && wordCount < 200) complexity = 'low';
-  else if (score >= 10 || wordCount > 800) complexity = 'high';
-  
-  // 工时预估
-  const estimatedHours = complexity === 'high' ? 16 : complexity === 'medium' ? 8 : 4;
+  const estimatedHours = wordCount > 800 ? 16 : wordCount > 300 ? 8 : 4;
   
   // 优先级
   let priority: 'high' | 'medium' | 'low' = 'medium';
-  if (dbCount >= 3 || apiCount >= 5 || full.includes('核心') || full.includes('基础')) {
+  if (full.includes('核心') || full.includes('基础') || full.includes('安全')) {
     priority = 'high';
-  } else if (apiCount === 0 && dbCount === 0 && pageCount <= 1) {
+  } else if (wordCount < 200) {
     priority = 'low';
   }
   
-  return { apiCount, dbCount, pageCount, wordCount, complexity, estimatedHours, priority };
+  return { estimatedHours, priority };
 }
 
 /**
@@ -3028,6 +2980,41 @@ async function detectExistingTasks(iterDir: string): Promise<string[]> {
   };
   await scanRecursive(targetDir);
   return tasks;
+}
+
+/**
+ * v6.76.0+: 扫描已有 Task 的端结构
+ * 返回每个 Task 已有的端目录（10-backend/{端}, 20-frontend/{端}）
+ */
+async function scanExistingTaskStructure(iterDir: string): Promise<Map<string, string[]>> {
+  const result = new Map<string, string[]>();
+  const tasks = await detectExistingTasks(iterDir);
+
+  for (const taskName of tasks) {
+    const taskDir = join(iterDir, '030-tasks', taskName);
+    if (!(await pathExists(taskDir))) continue;
+
+    const platforms: string[] = [];
+    // 扫描 10-backend/ 和 20-frontend/ 子目录
+    for (const category of ['10-backend', '20-frontend']) {
+      const catDir = join(taskDir, category);
+      if (!(await pathExists(catDir))) continue;
+      try {
+        const entries = await readdir(catDir, { withFileTypes: true });
+        for (const e of entries) {
+          if (e.isDirectory() && !e.name.startsWith('.')) {
+            platforms.push(`${category}/${e.name}`);
+          }
+        }
+      } catch {}
+    }
+
+    if (platforms.length > 0) {
+      result.set(taskName, platforms);
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -3477,13 +3464,7 @@ async function tryModuleDrivenSplit(
     (section as any)._scopePlatforms = modPlatforms;
     (section as any)._complexity = {
       estimatedHours: 8,
-      hoursByPlatform: {},
       priority: 'medium',
-      complexity: 'medium',
-      apiCount: 0,
-      dbCount: 0,
-      pageCount: 0,
-      wordCount: 0,
     };
     (section as any)._owner = '未分配';
     (section as any)._taskId = taskId;

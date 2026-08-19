@@ -4,7 +4,7 @@ description: >
   智能意图路由器。从自然语言识别意图 → 匹配 Skill → execute_command 执行。
   核心原则：必须直接执行，决不输出命令文本。唯一下例外："只看不跑"。
   Use when user input is ambiguous or doesn't match any specific Skill trigger.
-allow-tools: ["Bash", "Read", "Write", "Edit"]
+allowed-tools: ["Bash", "Read", "Write", "Edit"]
 ---
 
 # Speccore Router — 意图识别 & 执行
@@ -125,6 +125,15 @@ allow-tools: ["Bash", "Read", "Write", "Edit"]
 | 打包技术文档 | iter? | **激活 spec-spec2doc Skill** |
 | 导出全部 Spec | iter? | `speccore spec2doc -i {iter} --all -o {name}.docx` |
 
+### 需求澄清（v6.76.0+ — 需求专业化）
+| 用户说法 | 提取参数 | CLI 命令 / 行为 |
+| :--- | :--- | :--- |
+| 整理需求/专业化需求 | desc?, iter? | **激活 spec-clarify Skill → AI 整理 PRD → 用户确认 → 写入 converted/** |
+| 帮我写个 PRD/整理成 PRD | desc?, iter? | `speccore clarify --from {file} --to {iter} --prompt` |
+| 这个需求太口语化了 | file, iter? | `speccore clarify --check {file}` |
+| 需求写得不专业 | file, iter? | `speccore clarify --from {file} --to {iter}` |
+| 优化需求描述 | desc?, iter? | `speccore clarify "{desc}" --to {iter} --prompt` |
+
 ### 需求分析
 | 用户说法 | 提取参数 | AI 上下文（需宿主AI交互） |
 | :--- | :--- | :--- |
@@ -133,6 +142,16 @@ allow-tools: ["Bash", "Read", "Write", "Edit"]
 | 分析 {task} | iter?, task | `speccore analyze -I {iter} --task {task}` |
 | 做需求分析 | iter? | `speccore analyze -I {iter}` |
 | 评审需求 | iter? | `speccore analyze -I {iter}` |
+| 分析需求（检测并澄清） | iter? | `speccore analyze -I {iter} --clarify` |
+
+### 全局层分析（项目级，非迭代级）
+| 用户说法 | 提取参数 | CLI 命令 |
+| :--- | :--- | :--- |
+| 全局分析所有工程源码 | - | `speccore analyze --scope global --with-code --prompt` |
+| 全局层分析所有端 | - | `speccore analyze --scope global --with-code --prompt` |
+| 分析所有端源码 | - | `speccore analyze --scope global --with-code --prompt` |
+| 全局分析/全量分析 | - | `speccore analyze --scope global --prompt` |
+| 分析项目整体架构 | - | `speccore analyze --scope global --with-code --prompt` |
 
 ### 任务拆分
 | 用户说法 | 提取参数 | AI 上下文（需宿主AI交互） |
@@ -347,6 +366,7 @@ allow-tools: ["Bash", "Read", "Write", "Edit"]
 | 生成计划 {iter} | `speccore plan --prompt -I {iter}` | `--response '...'` |
 | 执行/开发 {task} | `speccore execute --prompt -t {task}` | `--response '...'` |
 | 需求变更/新增 {desc} | `speccore change --prompt "{desc}"` | AI澄清→**用户确认**→`--response '{JSON}'` |
+| 整理需求/专业化 {desc} | `speccore clarify "{desc}" --to {iter} --prompt` | `--apply '{PRD内容}'` |
 | 创建 PR {task} | `speccore pr --prompt -t {task}` | `--response '...'` |
 | 完成/归档 {task} | `speccore done --prompt -t {task}` | `--response '...'` |
 | 导出文档 {iter} | `speccore spec2doc --prompt -I {iter}` | `--apply '...' -o {file}` |

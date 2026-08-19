@@ -43,6 +43,7 @@ import { impactCommand } from './commands/impact';
 import { baselineCommand } from './commands/baseline';
 import { auditCommand } from './commands/audit';
 import { analyzeCommand } from './commands/analyze';
+import { clarifyCommand } from './commands/clarify';
 import { prCommand } from './commands/pr';
 import { buildConstitution } from './core/constitution-builder';
 import { contextCommand } from './commands/context-output';
@@ -223,6 +224,7 @@ iterationCmd
   .option('--sections <sections>', 'Specific sections to split')
   .option('--target <target>', 'Merge into existing task')
   .option('-p, --platforms <platforms>', 'Comma-separated platforms (auto-detected if omitted)')
+  .option('--modules <modules>', 'Comma-separated module names to split (e.g. "购物车,订单")')
   .option('--dry-run', 'Preview without creating')
   .option('--interactive', 'Preview → adjust → confirm before creating')
   .option('--strict', 'Review each section before creating tasks')
@@ -232,6 +234,8 @@ iterationCmd
   .option('--response <response>', '接收 AI 拆分结果创建 Task（配合 --prompt）')
   .option('--force', '已有任务时强制覆盖')
   .option('--prune', '清理与当前 FUNCTION_MAP.md 不匹配的旧任务（移动到 archive）')
+  .option('--ignore-specs-update', '跳过 020-specs/ 变更检测')
+  .option('--dev-guide', '生成任务级 DEV_GUIDE.md 开发者实现指南')
   .option('-g, --granularity <level>', '拆分粒度: macro(粗) | module(中,默认) | atomic(细)')
   .action(iterationSplitCommand);
 
@@ -353,6 +357,7 @@ program
   .option('--prompt', '输出结构化 Prompt 到 stdout，等待宿主 AI 生成代码（Skill 协作模式）')
   .option('--response <response>', '接收宿主 AI 返回的代码内容并写入文件（配合 --prompt 使用）')
   .option('--list-pending', '列出待执行任务清单（拓扑排序 + 批次分组，JSON 格式）')
+  .option('--ignore-upstream-update', '跳过上游 020-specs/ 变更检测')
   .action(executeCommand);
 
 // ================================================================
@@ -762,7 +767,25 @@ program
   .option('--context-guard', 'v6.75.0+: 启用上下文爆炸防护（预估大小+智能分段）')
   .option('--estimate-only', 'v6.75.0+: 只输出上下文预估报告，不执行分析')
   .option('--module <name>', 'v6.76.0+: 功能模块级全局分析（更新全局层+各端文档，区别于 --feature 局部分析）')
+  .option('--clarify', 'v6.76.0+: 检测到非专业需求文档时，先进入澄清流程整理为 PRD')
+  .option('--dev-guide', 'v6.76.0+: 生成 DEV_GUIDE.md 开发者实现指南')
   .action(analyzeCommand);
+
+// v6.76.0+: 需求专业化命令
+program
+  .command('clarify')
+  .alias('cl')
+  .description('需求专业化：将口语化/非专业需求整理为 PRD 级文档')
+  .argument('[input]', '需求描述（口语化）')
+  .option('--from <file>', '从文件读取原始需求')
+  .option('--to <iteration>', '目标迭代（决定写入位置）')
+  .option('--prompt', '输出整理 Prompt 到 stdout（Skill 协作模式）')
+  .option('--apply <content>', '接收 AI 整理结果写入文件（配合 --prompt）')
+  .option('--check <file>', '检测指定文件的专业度，不整理')
+  .option('--force', '强制整理（即使文档已足够专业）')
+  .action((input: string | undefined, opts: any) => {
+    clarifyCommand({ ...opts, input });
+  });
 
 program
   .command('audit')

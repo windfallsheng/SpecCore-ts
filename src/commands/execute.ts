@@ -74,6 +74,8 @@ export interface ExecuteOptions {
   auto?: boolean;       // --auto: 跳过确认，自动选任务，直接执行
   listPending?: boolean; // --list-pending: 列出待执行任务清单（配合 --prompt 使用）
   pipeline?: boolean;   // --pipeline: 启用 Pipeline 模式
+  // v6.76.0+: 变更检测选项
+  ignoreUpstreamUpdate?: boolean; // --ignore-upstream-update: 跳过上游变更检测
 }
 
 /**
@@ -215,6 +217,22 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
     if (tasks.length === 0) {
       logger.warn('No tasks match the specified filters');
       return;
+    }
+
+    // v6.76.0+: 变更检测 — 检查上游 spec 是否比任务目录更新
+    if (!options.ignoreUpstreamUpdate && !options.prompt && !options.response) {
+      const { detectUpstreamChangesBeforeExecute, printChangeDetection } = await import('../core/change-detector');
+      const iterDir = await getIterationDir(iteration);
+      for (const task of tasks.slice(0, 3)) { // 最多检测前3个任务
+        const taskDir = await resolveTaskDir(iterDir, task.id);
+        const changeResult = await detectUpstreamChangesBeforeExecute(iterDir, taskDir);
+        if (changeResult.hasChange) {
+          printChangeDetection(changeResult, `任务 ${task.id}`);
+        }
+      }
+      if (tasks.length > 3) {
+        logger.info(`   ... 还有 ${tasks.length - 3} 个任务未检测`);
+      }
     }
 
     // ── --auto: 未指定任务时自动选择第一个待执行任务 ──

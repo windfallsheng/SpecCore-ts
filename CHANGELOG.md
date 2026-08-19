@@ -1,3 +1,73 @@
+## v6.77.0 (2026-08-19) — Skill 专属逻辑架构 + 需求澄清 + 变更检测
+
+### Skill 专属逻辑架构（重大改进）
+
+**核心理念**：Skill 从"纯路由"升级为"参数校验 + 上下文准备 + 交互提示"的专属预处理层。
+
+- **9 个 Skill 全面增强**：
+  - `spec-analyze`: 需求专业度检测、端列表读取、apply 文件校验
+  - `spec-split`: 增量拆分上下文、变更检测、已有 Task 扫描
+  - `spec-plan`: 任务依赖检测、拓扑排序、执行顺序优化
+  - `spec-execute`: 任务状态检查、代码模式读取、上游变更检测
+  - `spec-change`: 变更类型判断、影响范围扫描、附件检测
+  - `spec-doc2spec`: 文件格式检测、迭代存在性校验
+  - `spec-spec2doc`: 输出格式校验、Task/迭代存在性检查
+  - `spec-task-create`: 英文主题词提取、命名冲突检测、批量模式
+  - `spec-iteration-create`: 迭代名冲突检测、主题词提取、owner 补全
+
+- **统一 Skill 结构**：所有 Skill 遵循"参数提取 → 交互提示 → 前置校验 → 调用 ask"四步流程
+- **交互式提示规范**：参数缺失时输出"当前环境 + 参数说明 + 使用示例"，不直接报错
+- **三层架构明确**：专属预处理层（Skill）→ 意图执行层（ask）→ 底层操作层（CLI）
+
+### 新增命令
+
+- **`speccore clarify`** — 需求澄清命令：将口语化需求整理为 PRD 级专业文档
+  - `speccore clarify --to <iteration> --prompt` — 生成整理 Prompt
+  - `speccore clarify --to <iteration> --apply <json>` — 应用 AI 整理结果
+  - 输出位置：`010-requirements/converted/clarified-{feature}.md`
+  - 专业度检测指标：口语化表达、结构化标题、验收标准、技术约束、错误处理、数据模型
+
+### 新增参数
+
+- **`speccore analyze --clarify`** — 检测需求文档专业度，口语化时自动触发澄清流程
+- **`speccore analyze --dev-guide`** — 分析同时生成 DEV_GUIDE.md 三级开发者实现指南（全局级/端级/任务级）
+- **`speccore iteration split --modules <names>`** — 只拆分指定功能模块（如 `"购物车,订单"`）
+- **`speccore iteration split --platforms <list>`** — 只拆分指定端（如 `api,h5`）
+- **`speccore iteration split --prune`** — 清理不匹配的旧任务
+- **`speccore iteration split --dev-guide`** — 生成任务级 DEV_GUIDE.md
+- **`speccore iteration split --ignore-specs-update`** — 跳过 020-specs/ 变更检测
+- **`speccore execute --ignore-upstream-update`** — 跳过上游 020-specs/ 变更检测
+- **`--apply @file.json`** — Windows 兼容方式，从文件读取 JSON 避免 shell 转义问题
+
+### 新增核心模块
+
+- **`src/core/change-detector.ts`** — 变更检测引擎
+  - `detectSpecChangesBeforeSplit()` — 拆分前检测 020-specs/ 是否有更新
+  - `detectUpstreamChangesBeforeExecute()` — 执行前检测上游文档是否更新
+  - 基于文件 mtime 比较，轻量高效
+
+- **`src/core/requirement-clarifier.ts`** — 需求专业化引擎
+  - `detectProfessionalLevel()` — 六维专业度检测（口语化、结构、验收标准、技术约束、错误处理、数据模型）
+  - `buildClarifyPrompt()` — 生成整理 Prompt
+
+### 增量拆分支持
+
+- `scanExistingTaskStructure()` — 扫描已有 Task 的端结构
+- 增量拆分规则：功能单元匹配已有 Task → 复用 Task ID，只追加新端
+- API 契约在增量拆分中保持完整
+
+### 删除的 Skill
+
+- ~~`spec-dev`~~ — 纯路由型，功能已合并到 ask
+- ~~`spec-synthesize`~~ — 纯路由型，功能已合并到 `analyze --full`
+
+### 文档更新
+
+- `docs/DESIGN.md` — 新增第 12 章"Skill 专属逻辑架构"
+- `docs/command-reference.md` — 新增 clarify 命令、所有新参数说明
+
+---
+
 ## v6.76.1 (2026-08-19) — 验证修复：路径统一 + async filter + 检测函数调用
 
 ### 修复内容

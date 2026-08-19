@@ -150,10 +150,17 @@ speccore analyze --auto              # 全自动分析（经过 AI，不交互�
 speccore analyze --auto --platform admin  # 只分析指定端
 speccore analyze --task Task-001     # 任务级深度分析（split 后执行）
 speccore analyze --global --withCode # 全局代码分析（四层扫描+功能模块驱动）
+speccore analyze --clarify           # 需求专业度检测，口语化时自动澄清
+speccore analyze --dev-guide         # 分析同时生成 DEV_GUIDE.md 开发者实现指南
 ```
 别名: `al`
 
 > 💡 `--auto` 模式会自动生成 prompt 交给宿主 AI 执行专业分析，产出全套 Spec 文件。支持 `--platform` 指定端过滤。
+>
+> **v6.77.0+ 新增参数：**
+> - `--clarify`: 检测需求文档专业度，若过于口语化（"我要/我想/能不能"），自动进入 clarify 流程整理为 PRD 级文档
+> - `--dev-guide`: 同时生成 DEV_GUIDE.md 三级开发者实现指南（全局级/端级/任务级）
+> - `--apply @file.json`: Windows 兼容方式，从文件读取 JSON 避免 shell 转义问题
 
 **分阶段分析架构(v6.64.0)**:
 - **Phase 1**: 生成全局文档(global/REQUIREMENT.md、ANALYSIS.md、DEPS.md 等)，建立跨端统一视角
@@ -197,6 +204,40 @@ split 后，每个 Task 的 00-specs/ 已有基础内容（机械提取）。执
 
 analyze 从 CONSTITUTION.md「## 端列表」章节读取全局权威端名列表，不再动态推断。
 
+### 📝 clarify — 需求澄清 🔒 AI 命令
+
+```bash
+speccore clarify [--to <iteration>] [--prompt] [--apply <json|@file>]
+```
+
+**v6.77.0+ 新增命令。** 将口语化需求描述整理为 PRD 级专业文档。
+
+**使用场景：**
+- 用户输入 "我要加个购物车功能" → 触发 clarify → 输出结构化需求文档
+- 用户输入 "能不能帮忙改下登录页" → 触发 clarify → 补充验收标准、技术约束
+
+**专业度检测指标：**
+- 口语化表达（"我要/我想/能不能"）
+- 缺少结构化标题（## / ###）
+- 缺少验收标准（AC）
+- 缺少技术约束
+- 缺少错误处理说明
+- 缺少数据模型
+
+**工作流程：**
+```bash
+# 1. Prompt 模式：生成整理 Prompt
+speccore clarify --to Iteration-001 --prompt
+
+# 2. Apply 模式：应用 AI 整理结果
+speccore clarify --to Iteration-001 --apply '{...json...}'
+
+# 3. Windows 兼容：从文件读取
+speccore clarify --to Iteration-001 --apply @result.json
+```
+
+输出位置：`010-requirements/converted/clarified-{feature}.md`
+
 ### 📦 split — 任务拆分 🔒 AI 命令
 ```bash
 speccore iteration split [-i <iteration>] [-f <file>] [-g <level>] [--force] [--interactive]
@@ -210,6 +251,11 @@ speccore iteration split [-i <iteration>] [-f <file>] [-g <level>] [--force] [--
 | `-i, --iteration <name>` | 目标迭代名称（短名，如 `Q1`） |
 | `-f, --file <file>` | 需求文件路径（默认 `REQUIREMENT.md`） |
 | `-g, --granularity <level>` | 拆分粒度: `macro`(粗) / `module`(中,默认) / `atomic`(细) |
+| `--modules <names>` | 只拆分指定功能模块（逗号分隔，如 `"购物车,订单"`） |
+| `--platforms <list>` | 只拆分指定端（逗号分隔，如 `api,h5`） |
+| `--prune` | 清理不匹配的旧任务 |
+| `--dev-guide` | 生成任务级 DEV_GUIDE.md 开发者实现指南 |
+| `--ignore-specs-update` | 跳过 020-specs/ 变更检测 |
 | `--interactive` | 逐任务交互确认（默认开启） |
 | `--force` | 已有任务时强制覆盖（清理旧任务后重建） |
 | `--prompt` | 输出结构化 Prompt（Skill 协作模式） |
@@ -282,6 +328,7 @@ speccore plan [--all] [--task <id>] [--interactive]
 ### ⚡ execute — 开发执行 🔒 AI 命令
 ```bash
 speccore execute [--task <id>] [--batch-size <n>] [--auto]
+speccore execute --ignore-upstream-update  # 跳过上游 020-specs/ 变更检测
 ```
 别名: `ex`
 
