@@ -23,7 +23,7 @@ const ALL_COMMANDS: [string, string, string][] = [
   ['spec-pr', '创建PR', 'speccore pr --task=${1:Task-001}'],
   ['spec-done', '完成任务归档', 'speccore done --task=${1:Task-001}'],
   ['spec-spec2doc', '导出文档', 'speccore spec2doc -i ${1:Q1} -o ${2:需求.docx}'],
-  ['spec-dev', '智能级联', 'speccore dev --auto --web'],
+
   ['spec-change', '需求变更', 'speccore change "${1:变更描述}" --task=${2:Task-001}'],
   ['spec-validate', '合规验证', 'speccore validate --iteration=${1:Q1}'],
   ['spec-search', '全文搜索', 'speccore search "${1:关键词}"'],

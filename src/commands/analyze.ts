@@ -80,6 +80,10 @@ export interface AnalyzeOptions {
   estimateOnly?: boolean; // --estimate-only: 只预估不分析
   // 功能模块级全局分析 (v6.76.0+)
   module?: string;        // --module: 功能模块级全局分析
+  // 需求澄清 (v6.76.0+)
+  clarify?: boolean;      // --clarify: 检测到非专业文档时提示澄清
+  // 开发者实现指南 (v6.76.0+)
+  devGuide?: boolean;     // --dev-guide: 生成 DEV_GUIDE.md 实现指南
 }
 
 export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
@@ -488,6 +492,29 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       return;
     }
 
+    // v6.76.0+: --clarify 模式下检测需求文档专业度
+    if (options.clarify) {
+      const { detectProfessionalLevel } = await import('../core/requirement-clarifier');
+      let lowQualityCount = 0;
+      for (const reqPath of requirements) {
+        const reqContent = await readFile(reqPath, 'utf-8');
+        const level = detectProfessionalLevel(reqContent);
+        if (level !== 'high') {
+          lowQualityCount++;
+          logger.warn(`   ⚠️  需求文档质量${level.toUpperCase()}: ${reqPath.replace(iterDir + '/', '')}`);
+          logger.info(`      💡 建议: speccore clarify --from "${reqPath}" --to ${iter}`);
+        }
+      }
+      if (lowQualityCount > 0) {
+        logger.info('');
+        logger.info(`📋 ${lowQualityCount}/${requirements.length} 个需求文档需要澄清整理`);
+        logger.info('   选项 1: 先执行 clarify 整理需求，再重新 analyze');
+        logger.info('   选项 2: 继续使用当前文档分析（加 --force 跳过检测）');
+        logger.info('');
+        // 不阻断，但在 prompt 中注入澄清指令
+      }
+    }
+
     // 【v6.40.2 修复】--auto 不再跳过 AI，而是自动生成 prompt 让宿主 AI 执行专业分析
     logger.info(` Auto 分析: ${iter} (${requirements.length} 个需求文档 → AI 专业分析)`);
     // 设置 prompt 模式，fall through 到下面的 prompt 生成逻辑
@@ -496,9 +523,17 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 
   // ── v6.49.13+: 预创建 020-specs/ 目录结构（CLI 控制目录，AI 只填内容）──
   if (options.prompt) {
-    const iterForDirs = options.iteration || await getDefaultIteration();
-    if (iterForDirs) {
-      await preCreateSpecDirectories(iterForDirs);
+    if (options.scope === 'global') {
+      // 全局分析：预创建 .speccore/GLOBAL/ 目录结构，不写迭代目录
+      const globalDir = join(process.cwd(), '.speccore', 'GLOBAL');
+      await ensureDir(globalDir);
+      await ensureDir(join(globalDir, 'platforms'));
+      logger.info(`📁 已预创建 .speccore/GLOBAL/ 目录结构`);
+    } else {
+      const iterForDirs = options.iteration || await getDefaultIteration();
+      if (iterForDirs) {
+        await preCreateSpecDirectories(iterForDirs);
+      }
     }
   }
 
@@ -649,7 +684,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 
   // ── Prompt 模式 ──
   if (options.prompt) {
-    const iter = options.iteration || await getDefaultIteration();
+    const iter = options.scope === 'global' ? 'GLOBAL' : (options.iteration || await getDefaultIteration());
     const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task, type: options.type, scope: options.scope, withCode: options.withCode, platform: options.platform, phase: options.phase, autoMode: options.auto }, options);
     process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
     process.exitCode = 10;
@@ -659,13 +694,27 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
   // ── Apply 模式 ──
   // 两层解耦：迭代级分析写 020-specs/，任务级分析只写 Task 目录（不覆盖迭代级基线）
   if (options.apply) {
-    if (!options.iteration) { logger.error('--apply 需要 --iteration'); return; }
-    const iterDir = await getIterationDir(options.iteration);
-    const isTaskLevel = !!options.task;
+    // v6.76.0+: 支持 --apply @file.json 从文件读取（解决 Windows 下 JSON 转义问题）
+    if (options.apply.startsWith('@')) {
+      const filePath = options.apply.slice(1).trim();
+      try {
+        const fileContent = await readFile(filePath, 'utf-8');
+        options.apply = fileContent;
+        logger.info(`   📄 已从文件读取 apply 内容: ${filePath}`);
+      } catch (e) {
+        logger.error(`无法读取 apply 文件: ${filePath}`);
+        return;
+      }
+    }
+
+    const isGlobalScope = options.scope === 'global';
+    if (!isGlobalScope && !options.iteration) { logger.error('--apply 需要 --iteration'); return; }
+    const iterDir = isGlobalScope ? undefined : await getIterationDir(options.iteration!);
+    const isTaskLevel = !isGlobalScope && !!options.task;
     let taskDir: string | null = null;
     if (isTaskLevel) {
       const taskId = options.task!.startsWith('Task-') ? options.task! : `Task-${options.task!}`;
-      taskDir = await findTaskDir(join(iterDir, '030-tasks'), taskId);
+      taskDir = await findTaskDir(join(iterDir!, '030-tasks'), taskId);
       if (!taskDir) { logger.error(`未找到任务: ${taskId}`); return; }
     }
 
@@ -693,10 +742,67 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
           }
           const platformLabel = options.platform ? `/${options.platform}` : '';
           logger.success(`✅ ${count} 个 Spec 文档已写入 ${options.task}${platformLabel}/（任务级，迭代基线不变）`);
+        } else if (isGlobalScope) {
+          // 全局级：写入 .speccore/GLOBAL/（与 platforms/ 同级，非迭代目录）
+          const globalBaseDir = join(process.cwd(), '.speccore', 'GLOBAL');
+          await ensureDir(globalBaseDir);
+          const globalSet = new Set(GLOBAL_SPEC_FILES);
+
+          for (const [filename, content] of Object.entries(docs)) {
+            // PATTERNS/ 文件特殊处理 → 写入 .speccore/PATTERNS/
+            if (filename.startsWith('PATTERNS/')) {
+              const patternsDir = join(process.cwd(), '.speccore', 'PATTERNS');
+              await ensureDir(patternsDir);
+              const patternFile = filename.slice('PATTERNS/'.length);
+              const fp = join(patternsDir, patternFile);
+              let existing = '';
+              if (await pathExists(fp)) existing = await readFile(fp, 'utf-8');
+              const merged = existing ? `${existing}\n\n---\n\n${content}` : content;
+              await writeFile(fp, merged);
+              logger.info(`   🧩 PATTERN 已追加: ${patternFile}`);
+              count++;
+              continue;
+            }
+
+            let targetDir: string;
+            let targetFilename: string;
+
+            if (filename.includes('/')) {
+              const parts = filename.split('/');
+              if (parts[0] === 'platforms') {
+                // platforms/admin-web/_INDEX.md → .speccore/GLOBAL/platforms/admin-web/
+                targetDir = join(globalBaseDir, ...parts.slice(0, -1));
+                targetFilename = parts[parts.length - 1];
+              } else {
+                // admin-web/FEATURES.md → .speccore/GLOBAL/platforms/admin-web/
+                targetDir = join(globalBaseDir, 'platforms', parts[0]);
+                targetFilename = parts[parts.length - 1];
+              }
+            } else if (globalSet.has(filename)) {
+              targetDir = globalBaseDir;
+              targetFilename = filename;
+            } else {
+              targetDir = globalBaseDir;
+              targetFilename = filename;
+            }
+
+            await ensureDir(targetDir);
+            const fp = join(targetDir, targetFilename);
+            if (!(await shouldOverwrite(fp, !!options.interactive))) { logger.info(`   ⏭️  跳过: ${filename}`); continue; }
+            const bk = await backupWithTimestamp(fp);
+            if (bk) {
+              backups.push(bk);
+              logger.info(`   📦 ${filename} 旧版已备份: ${bk.split('/').pop()}`);
+            }
+            await writeFile(fp, content);
+            count++;
+          }
+
+          logger.success(`✅ ${count} 个全局文档已写入 .speccore/GLOBAL/`);
         } else {
           // 迭代级：写 020-specs/（全局文档写入 global/ 子目录，v6.41.0+）
           // v6.69.2+: 增加端名白名单校验，防止 AI 创建非法目录
-          const specDir = join(iterDir, '020-specs');
+          const specDir = join(iterDir!, '020-specs');
           await ensureDir(specDir);
           const globalSet = new Set(GLOBAL_SPEC_FILES);
           const validPlatforms = new Set([GLOBAL_SPECS_DIR, ...(await parsePlatformList())]);
@@ -758,7 +864,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
             if (phase === 'phase1-backend' || phase === 'phase3-frontend') {
               logger.info('');
               logger.info('🔍 流式分析回退检测...');
-              const bt = await detectBacktrackingNeeds(iterDir, phase);
+              const bt = await detectBacktrackingNeeds(iterDir!, phase);
               if (bt.needed) {
                 logger.warn(`   ⚠️ 检测到 ${bt.targets.length} 个文档需要回退修正:`);
                 for (let i = 0; i < bt.targets.length; i++) {
@@ -772,7 +878,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
             if (phase === 'phase6-final-audit') {
               logger.info('');
               logger.info('🔍 执行最终核对检查...');
-              const auditIssues = await runFinalAudit(iterDir);
+              const auditIssues = await runFinalAudit(iterDir!);
               if (auditIssues.length > 0) {
                 const errors = auditIssues.filter(i => i.severity === 'error');
                 const warnings = auditIssues.filter(i => i.severity === 'warning');
@@ -840,9 +946,23 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         const platformLabel = options.platform ? `/${options.platform}` : '';
         logger.success(`✅ ANALYSIS.md 已写入 ${options.task}${platformLabel}/`);
       } else { logger.info(`   ⏭️  用户取消覆盖`); }
+    } else if (isGlobalScope) {
+      // 全局级：写 .speccore/GLOBAL/ANALYSIS.md
+      const globalDir = join(process.cwd(), '.speccore', 'GLOBAL');
+      await ensureDir(globalDir);
+      const globalAnalysisPath = join(globalDir, 'ANALYSIS.md');
+      if (await shouldOverwrite(globalAnalysisPath, !!options.interactive)) {
+        const globalBackup = await backupWithTimestamp(globalAnalysisPath);
+        if (globalBackup) {
+          backups.push(globalBackup);
+          logger.info(`   📦 旧版已备份: ${globalBackup.split('/').pop()}`);
+        }
+        await writeFile(globalAnalysisPath, options.apply);
+        logger.success(`✅ ANALYSIS.md 已写入 .speccore/GLOBAL/`);
+      } else { logger.info(`   ⏭️  用户取消覆盖`); }
     } else {
       // 迭代级：写 020-specs/global/（全局文档，v6.41.0+）
-      const specDir = join(iterDir, '020-specs');
+      const specDir = join(iterDir!, '020-specs');
       const globalDir = join(specDir, GLOBAL_SPECS_DIR);
       await ensureDir(globalDir);
       const iterAnalysisPath = join(globalDir, 'ANALYSIS.md');
@@ -862,7 +982,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       logger.info('🔄 局部回写: 将任务分析结果同步到 020-specs/ ...');
       try {
         const { syncTaskToSpecs } = await import('../core/spec-merger');
-        const iterDirPath = iterDir;
+        const iterDirPath = iterDir!;
         const taskName = options.task || '';
         const mergeResult = await syncTaskToSpecs(iterDirPath, taskDir, taskName);
         if (mergeResult.filesUpdated > 0) {
@@ -1460,9 +1580,10 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     prompt += `   - 「## 端列表」章节 → 全局权威端名列表（如 backend/h5/admin）\n`;
     prompt += `   - 每个工程独立分析，文档输出到: .speccore/GLOBAL/platforms/{端名}/\n`;
     prompt += `2. Read .speccore/GLOBAL/ 下所有文档了解跨项目需求\n`;
+    prompt += `3. **禁止行为（重要）**: 不要打开浏览器、不要模拟用户操作、不要访问 URL。所有分析必须基于直接 Read 源码文件完成。如果文件不存在，跳过即可，不要尝试其他方式获取。\n`;
     if (ctx.withCode) {
       // v6.71.2+: 双层扫描 + 功能模块驱动（替代原来的按端顺序分析）
-      prompt += `3. 从 CONSTITUTION.md 的「源码路径」列读取所有工程目录\n`;
+      prompt += `4. 从 CONSTITUTION.md 的「源码路径」列读取所有工程目录\n`;
       prompt += `\n## 📊 Layer 1: 快速扫描所有端（并行，只提取索引）\n\n`;
       prompt += `对每个端，只读取关键索引文件（不深入代码逻辑）：\n\n`;
       prompt += `**后端端**：\n`;
@@ -1533,7 +1654,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `   - 每个文件含: 工程名/端/分类 + 适用场景 + 核心代码片段 + 注意事项 + 反例\n\n`;
       prompt += `5. 以上文档输出到 .speccore/GLOBAL/ 和 .speccore/PATTERNS/，使用 Write 工具写入\n`;
     } else {
-      prompt += `3. 读取 .speccore/GLOBAL/ 下各项目需求文档，生成跨项目索引和需求目录\n`;
+      prompt += `4. 读取 .speccore/GLOBAL/ 下各项目需求文档，生成跨项目索引和需求目录\n`;
     }
     prompt += `\n## 输出文档\n`;
     if (ctx.withCode) {
@@ -1598,6 +1719,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
 `# 需求规格说明书
 
 > ${iter} | ${now}
+> ⚠️ 迭代名称仅为目录标识，不代表需求内容。以下分析严格基于需求文档，严禁臆造文档中未提及的功能。
 
 ## 写作要求
 将原始需求文档综合整理为一份结构化的需求规格说明书，不是简单复制原文，而是：
@@ -1619,6 +1741,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
 `# 需求分析报告
 
 > ${iter} | ${now}
+> ⚠️ 迭代名称仅为目录标识，不代表需求内容。以下分析严格基于需求文档，严禁臆造文档中未提及的功能。
 
 ## 写作要求
 这是一份完整的需求分析报告，不是填空表。请根据 READ 的需求文档，用自然段落、表格、列表自由组织内容，涵盖以下要点：
@@ -1838,6 +1961,47 @@ sequenceDiagram
     end
 \`\`\`
 `],
+
+    ['DEV_GUIDE.md',
+`# 开发者实现指南
+
+> ${iter} | ${now}
+> 本文档面向开发者，提供具体实现步骤、代码模式和最佳实践。
+
+## 写作要求
+
+### 全局级 DEV_GUIDE.md（020-specs/global/）
+- **技术栈与选型决策**：每个技术点的选型理由、替代方案对比
+- **代码分层规范**：目录结构、各层职责、代码组织方式
+- **通用设计模式**：Repository 模式、Service 模式、策略模式等具体实现
+- **跨端数据流**：请求从入口到数据库的完整链路、数据转换规则
+- **错误处理策略**：全局错误码、异常分类、降级策略
+- **性能优化基线**：缓存策略、数据库优化、并发控制
+- **安全基线**：鉴权流程、数据校验、敏感信息处理
+
+### 端级 DEV_GUIDE.md（020-specs/{端}/）
+- **端技术栈**：框架、库、工具链及选型理由
+- **目录结构规范**：该端的代码组织方式
+- **核心流程实现**：关键业务流程的伪代码/示例代码
+- **API 调用模式**：请求封装、错误处理、重试策略
+- **状态管理**：全局状态设计、与后端同步策略
+- **端特定最佳实践**：该端特有的性能优化、安全策略
+
+### 任务级 DEV_GUIDE.md（Task/00-specs/）
+- **任务概述**：该任务在整体功能中的位置和职责
+- **实现步骤**：Step-by-step 的开发步骤
+- **关键代码示例**：核心逻辑的伪代码或代码片段
+- **与存量功能的集成**：如何与已有代码交互、复用哪些模块
+- **测试策略**：单元测试、集成测试的具体写法
+- **注意事项**：常见坑点、边界条件、调试技巧
+
+## 质量要求
+- 必须是**可执行的实现指导**，不是抽象概念
+- 包含具体的代码示例（伪代码或关键代码片段）
+- 基于 020-specs/ 中已有的分析文档，不做重复分析
+- 补充技术文档中未涉及的实现细节
+- 如果涉及存量功能，说明复用方式和集成点
+`],
   ];
 
   // 任务类型 × 文档矩阵: 每种类型生成哪些文档
@@ -1853,7 +2017,11 @@ sequenceDiagram
     security:   ['ANALYSIS.md','TEST.md','REVIEW.md','RISK.md'],
     performance:['ANALYSIS.md','TECH.md','TEST.md','MONITOR.md'],
   };
-  const includeDocs = isTask ? (DOC_MATRIX[taskType] || DOC_MATRIX['feature']) : DOC_MATRIX['feature'];
+  let includeDocs = isTask ? (DOC_MATRIX[taskType] || DOC_MATRIX['feature']) : DOC_MATRIX['feature'];
+  // v6.76.0+: --dev-guide 模式下增加 DEV_GUIDE.md
+  if (options?.devGuide) {
+    includeDocs = [...includeDocs, 'DEV_GUIDE.md'];
+  }
 
   // ── v6.61.0+: 恢复 Phase 1/Phase 2 分步逻辑，但 CLI 自动触发 Phase 2 ──
   // Phase 1: 生成全局文档(global/REQUIREMENT.md、ANALYSIS.md、DEPS.md 等)
@@ -1956,6 +2124,7 @@ sequenceDiagram
   prompt += `###  绝对禁止直接用 Write 工具写文件\n`;
   prompt += `- ❌ **错误行为**：Write("020-specs/global/ANALYSIS.md", content) 或直接 Write 到任何路径\n`;
   prompt += `- ✅ **正确行为**：必须通过 \`speccore analyze --apply '{"global/ANALYSIS.md":"...","admin-web/TECH.md":"..."}' -I ${iter}\` 写入\n`;
+  prompt += `- 💡 **Windows 兼容**：如果 JSON 在命令行中转义困难，先将 JSON 写入文件（如 result.json），然后执行 \`speccore analyze --apply @result.json -I ${iter}\`\n`;
   prompt += `- ⚠️ **原因**：--apply 会让 CLI 自动路由文件到正确的子目录，直接 Write 会绕过这个机制，导致所有文件扁平在根目录\n\n`;
   prompt += `### ✅ 正确的目录结构\n`;
   prompt += `\`\`\`\n`;
@@ -1968,6 +2137,13 @@ sequenceDiagram
   prompt += `\`\`\`\n`;
   prompt += `- 每个端目录下只有该端的专属文档，不要混放\n`;
   prompt += `- 不要创建上述之外的任何子目录\n\n`;
+  prompt += `## ⚠️ 迭代名称仅为目录标识（重要）\n\n`;
+  prompt += `- 迭代名称（"${iter}"）仅为目录标识符，**不代表需求内容**\n`;
+  prompt += `- **需求文档是唯一事实来源**：所有分析必须 100% 基于 010-requirements/ 下的文档内容\n`;
+  prompt += `- 如果迭代名称与文档内容不一致（如迭代名叫"功能A"但文档描述"功能B"），**严格以文档内容为准**，完全忽略迭代名称\n`;
+  prompt += `- **严禁基于迭代名称臆造功能**：不要补充文档中未提及的功能、接口、页面、字段、业务规则\n`;
+  prompt += `- 如果文档内容不完整，标注"文档未提及"，不要自行脑补\n`;
+  prompt += `- 分析过程中，始终把迭代名称当作透明信息处理，不做任何功能推断\n\n`;
   prompt += `## 分析范围说明\n`;
   if (isTask) {
     prompt += `- 当前是**任务级分析**，类型为 \`${taskType}\`，只需产出 ${taskDocs.length} 个文档：${taskDocs.map(([n]) => n).join('、')}\n`;
@@ -2079,15 +2255,21 @@ sequenceDiagram
     prompt += `   e. 如用户指定了特定文档，优先读取指定文件；如要求全部，再读 sources/ 原始文档\n`;
     prompt += `   f. **文档长度自适应**：如果单个需求文档超过 5000 字，先快速扫描目录和章节标题，标记关键章节，再深入阅读。不要在非关键章节上花费过多 tokens\n`;
     prompt += `4. 读懂需求文档后，按专业模板标准自由撰写每个文档（不是填空表）\n`;
-    prompt += `5. 每个文档都要具体内容（禁止"待填充"）\n`;
-    prompt += `6. **端发现（重要）**：先确定项目有哪些端，再按端组织文档\n`;
+    prompt += `5. **文档忠实度约束（最高优先级）**：\n`;
+    prompt += `   - **严禁臆造**：只能写需求文档中明确提及的功能、接口、页面、字段、业务规则\n`;
+    prompt += `   - **严禁扩展**：不要基于迭代名称或你的知识补充文档中未提及的内容\n`;
+    prompt += `   - **严禁推断**：不要从一句话推断出整个功能模块，只写文档中明确描述的内容\n`;
+    prompt += `   - **边界处理**：如果文档对某功能描述不完整，标注"文档未充分描述"，不要自行脑补完整方案\n`;
+    prompt += `   - **交叉验证**：每写一个功能点，回头检查需求文档中是否有对应描述，没有则删除\n`;
+    prompt += `6. 每个文档都要具体内容（禁止"待填充"）\n`;
+    prompt += `7. **端发现（重要）**：先确定项目有哪些端，再按端组织文档\n`;
     prompt += `   - 第 1 步：Read .speccore/CONSTITUTION.md\n`;
     prompt += `   - 第 2 步：从「## 端列表」章节提取端名（这是全局权威来源）\n`;
     prompt += `   - 第 3 步：如果没有「端列表」章节，从「对应端」列提取\n`;
     prompt += `   - 第 4 步：如果以上都无法确定，根据需求文档内容判断\n`;
     prompt += `   - 第 5 步：将发现的端列表写入 020-specs/PLATFORMS.md\n`;
     // v6.70.0+: REQUIREMENT.md 以产品视角撰写（不按端分章节）
-    prompt += `6b. **REQUIREMENT.md 写作风格（重要）**：全局需求文档必须以产品/用户视角撰写\n`;
+    prompt += `8. **REQUIREMENT.md 写作风格（重要）**：全局需求文档必须以产品/用户视角撰写\n`;
     prompt += `   - **按业务场景/用户旅程组织章节**，不按端分章节（如"H5端需求"、"后端需求"）\n`;
     prompt += `   - 每个场景描述：用户操作 → 系统响应 → 业务规则 → 边界条件\n`;
     prompt += `   - 系统响应中自然包含前后端交互，但不刻意标注技术实现细节\n`;
@@ -2097,7 +2279,7 @@ sequenceDiagram
     prompt += `   - 端的信息只在「功能模块清单」表格中标注，正文不区分端\n`;
     // v6.49.14+: 功能模块清单必须含涉及端列 + 来源链接
     // v6.71.3+: 增加「与全局层对比」列
-    prompt += `7. **功能模块清单（重要）**：写入 global/REQUIREMENT.md 时，功能模块清单表格必须包含以下列\n`;
+    prompt += `9. **功能模块清单（重要）**：写入 global/REQUIREMENT.md 时，功能模块清单表格必须包含以下列\n`;
     prompt += `   - 表格格式：| # | 功能模块 | 涉及端 | 全局对比 | 来源 | 说明 |\n`;
     prompt += `   - 「涉及端」：每个模块标注需要**新开发工作**的端（标准端名，逗号分隔）\n`;
     prompt += `     - 「涉及」= 该端需要写新接口/新页面/新逻辑\n`;

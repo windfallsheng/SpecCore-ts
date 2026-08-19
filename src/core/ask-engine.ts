@@ -69,7 +69,7 @@ const COMMAND_KB: CommandKnowledge[] = [
   { name: 'spec2doc', aliases: ['s2d'], description: 'SpecCore MD 导出为 Word/PDF/HTML/PPTX',
     usage: 'speccore spec2doc [-i <iteration>] [-t <task>] [-f <format>] [-o <output>]', examples: ['speccore spec2doc -i Q3 -o 需求.docx', 'speccore spec2doc -t T-01 -f html'], related: ['doc2spec'], triggers: ['导出', 'spec2doc', '生成文档', '导出word', '导出pdf'] },
   { name: 'dashboard', aliases: ['db', 'sp'], description: '项目仪表盘：迭代状态/进度/健康度，--scope global 全量视图',
-    usage: 'speccore dashboard [--scope global|iteration] [--export html] [--health] [--lifecycle]', examples: ['speccore dashboard', 'speccore dashboard --scope global --export html'], related: ['analyze', 'health'], triggers: ['看板', '仪表盘', 'dashboard', '进度', '状态', '全局', '全量'] },
+    usage: 'speccore dashboard [--scope global|iteration] [--export html] [--health] [--lifecycle]', examples: ['speccore dashboard', 'speccore dashboard --scope global --export html'], related: ['analyze', 'health'], triggers: ['看板', '仪表盘', 'dashboard', '进度', '状态'] },
   { name: 'analyze', aliases: ['al'], description: '统一分析：需求文档+源码→分析报告。支持 --full 三阶段合成（原 synthesize），--phase 单阶段合成，--feature 局部分析功能模块，--doc 局部分析类型文档，--sync 任务分析后局部回写 020-specs/，--no-source 跳过源码，--supplement 追加源码',
     usage: 'speccore analyze [--task <id>] [--iteration <name>] [--full] [--phase <n>] [--feature <module>] [--doc <type/slug>] [--with-code] [--no-source] [--source-scope <dirs>] [--supplement] [--sync] [--scope global]', examples: ['speccore analyze', 'speccore analyze --full -i Q2', 'speccore analyze --phase 1 -i Q2', 'speccore analyze --feature 支付模块', 'speccore analyze --doc bugs/login-timeout', 'speccore analyze --with-code', 'speccore analyze --supplement --source-scope src/core', 'speccore analyze --task Task-001 --apply "..." --sync'], related: ['dashboard', 'validate', 'code-index', 'refresh', 'synthesize'], triggers: ['分析', 'analyze', '审计', 'audit', '检查', '结合源码', '连代码', '带代码', '源码分析', '全局分析', '分析全局', '倒推需求', '反推', '从代码生成', '分析代码', '不读源码', '不读代码', '跳过源码', '指定目录分析', '只扫描', '补充分析', '追加分析', '补充源码', '追加源码', '遗漏', '没分析到', '没覆盖', '漏掉', '再分析', '多读几个', '局部分析', '单个模块', '单独分析', 'bug分析', '重构分析', '局部回写', '回写spec', '同步spec', '合成需求', '合并需求', '需求合成', '智能合成', '需求合并', '多端合成', '全量分析', '跨端综合', '全量合成'] },
   { name: 'code-index', aliases: ['ci', 'idx'], description: '源码索引：扫描项目代码，自动识别多端/模块/依赖，生成 Markdown 索引',
@@ -132,8 +132,9 @@ const COMMAND_KB: CommandKnowledge[] = [
 const SYNONYM_MAP: Record<string, string> = {
   // ── dashboard ──
   '看板': 'dashboard', '面板': 'dashboard', '概览': 'dashboard',
-  '总览': 'dashboard', '全局': 'dashboard', '全量': 'dashboard',
+  '总览': 'dashboard',
   '项目状态': 'dashboard', '健康度': 'dashboard',
+  // 注意: '全局'/'全量' 不直接映射到 dashboard，避免与 analyze --scope global 冲突
   // ── analyze ──
   '审计': 'analyze', '代码审计': 'analyze', '代码检查': 'analyze',
   '质量检查': 'analyze', '风险评估': 'analyze',

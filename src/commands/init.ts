@@ -850,7 +850,7 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
     ['spec-pr', '创建PR: 任务=${1:Task-001}', 'speccore pr --task=${1:Task-001}'],
     ['spec-done', '任务归档: 任务=${1:Task-001}', 'speccore done --task=${1:Task-001}'],
     ['spec-spec2doc', '导出文档: 迭代=${1:Q1} 格式=${2|需求.docx,方案.pdf|}', 'speccore spec2doc -i ${1:Q1} -o ${2|需求.docx,方案.pdf|}'],
-    ['spec-dev', 'SpecCore Smart Pipeline', '## ⛔ 铁律: 全流程自动 analyze→split→plan→execute\n1. Read context.json + PROJECT_GRAPH.md\n2. Present phase + recommend next step\n3. Execute: speccore dev -i ${1:Q1} --auto'],
+
     ['spec-change', '需求变更: 描述=${1:变更描述} 任务=${2:Task-001}', 'speccore change "${1:变更描述}" --task=${2:Task-001} --type ${3|feature,bugfix|}'],
     ['spec-validate', '合规验证: 迭代=${1:Q1}', 'speccore validate --iteration=${1:Q1}'],
     ['spec-search', '全文搜索: ${1:关键词}', 'speccore search ${1:关键词}'],
@@ -878,8 +878,8 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
     } catch {}
     await ensureDir(toolDir);
     for (const [name, desc, cmd] of commands) {
-      // v6.55.0+: spec-analyze/spec-dev/spec-execute/spec-split 使用动态路由格式，其他命令保持静态
-      const isDynamicRouting = ['spec-analyze', 'spec-dev', 'spec-execute', 'spec-split'].includes(name);
+      // v6.55.0+: spec-analyze/spec-execute/spec-split 使用动态路由格式，其他命令保持静态
+      const isDynamicRouting = ['spec-analyze', 'spec-execute', 'spec-split'].includes(name);
       const content = isDynamicRouting
         ? '---\nname: ' + name + '\ndescription: ' + desc + '\n---\n\n' + cmd
         : '---\nname: ' + name + '\ndescription: ' + desc + '\n---\n' + cmd;
@@ -970,11 +970,9 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
     'spec-split', 
     'spec-execute',
     'spec-plan',
-    'spec-dev',
     'spec-change',
     'spec-doc2spec',
     'spec-spec2doc',
-    'spec-synthesize',
   ];
   
   let skillsCopied = 0;
@@ -1569,7 +1567,7 @@ export function generateAIRulesContent(): string {
     '| spec-split | 智能任务拆分（分组→分配→依赖） | "拆分任务" |',
     '| spec-execute | 代码生成+编译+测试+修复循环 | "开发Task-001" |',
     '| spec-plan | 排程+里程碑+并行策略 | "生成计划" |',
-    '| spec-dev | 阶段检测+状态展示+推荐下一步 | "推进项目" |',
+
     '| spec-change | 变更记录+影响分析+代码更新 | "需求变更" |',
     '| spec-ask | 自然语言引擎（四大模式） | "怎么做"/"流程是什么" |',
     '',
@@ -1873,12 +1871,12 @@ Iteration-xxx/<br>
 <div style="padding:10px;border-radius:6px;border:1px solid rgba(249,115,22,.2);background:rgba(249,115,22,.04)">
 <div style="font-size:10px;font-weight:700;color:var(--orange);margin-bottom:4px">⚡ 半自动</div>
 <div class="step-desc" style="font-size:9px">分析和拆分自动完成，执行开发前暂停。适合日常开发。</div>
-<div class="method-cmd" style="font-size:9px">/spec-dev -i my-iter --auto-steps analyze,split</div>
+<div class="method-cmd" style="font-size:9px">/spec-ask "分析 my-iter 并拆分任务"</div>
 </div>
 <div style="padding:10px;border-radius:6px;border:1px solid rgba(99,102,241,.2);background:rgba(99,102,241,.04)">
 <div style="font-size:10px;font-weight:700;color:var(--purple);margin-bottom:4px">🚀 全自动</div>
 <div class="step-desc" style="font-size:9px">一键跑完整个流水线，不中途暂停。适合熟悉后批量推进。</div>
-<div class="method-cmd" style="font-size:9px">/spec-dev -i my-iter --auto</div>
+<div class="method-cmd" style="font-size:9px">/spec-ask "全自动推进 my-iter"</div>
 </div>
 </div>
 <div class="step-desc" style="margin-top:8px;font-size:10px">💡 <code>speccore dev</code> 是流水线控制器：自动检测当前阶段 → 推荐下一步 → 执行。还可用 <code>--from analyze --to execute</code> 指定范围。</div>
