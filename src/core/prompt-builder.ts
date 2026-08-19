@@ -773,8 +773,8 @@ async function buildGlobalTOC(globalDir: string): Promise<TOCEntry[]> {
     toc.push(buildTOCEntry(`GLOBAL:${f}`, FILE_DESC[f] || f.replace('.md', ''), content));
   }
 
-  // 5. PATTERNS/TEMPLATES/ 写作模板
-  const patternsDir = join(speccoreDir, 'PATTERNS', 'TEMPLATES');
+  // 5. PATTERNS/ 可复用模式（含 TEMPLATES/ 写作模板）
+  const patternsDir = join(speccoreDir, 'PATTERNS');
   if (await pathExists(patternsDir)) {
     const scanPatterns = async (dir: string, prefix: string) => {
       const entries = await readdir(dir, { withFileTypes: true });
@@ -783,7 +783,11 @@ async function buildGlobalTOC(globalDir: string): Promise<TOCEntry[]> {
           await scanPatterns(join(dir, entry.name), `${prefix}${entry.name}/`);
         } else if (entry.name.endsWith('.md')) {
           const content = await readFile(join(dir, entry.name), 'utf-8');
-          toc.push(buildTOCEntry(`PATTERNS:${prefix}${entry.name}`, entry.name.replace('-template.md', '').toUpperCase() + ' 写作模板', content, 6));
+          const isTemplate = prefix.startsWith('TEMPLATES/');
+          const label = isTemplate
+            ? entry.name.replace('-template.md', '').toUpperCase() + ' 写作模板'
+            : (prefix ? prefix.slice(0, -1).replace(/\//g, ' › ') + ' › ' : '') + entry.name.replace('.md', '');
+          toc.push(buildTOCEntry(`PATTERNS:${prefix}${entry.name}`, label, content, isTemplate ? 6 : 4));
         }
       }
     };
@@ -897,7 +901,7 @@ export function formatGlobalContext(ctx: GlobalContext, platform?: string): stri
       { label: '**📚 跨端综合文档**', prefix: 'synthesis/', basePath: '.speccore/GLOBAL/synthesis/' },
       { label: '**📱 各端分析文档**', prefix: 'platforms/', basePath: '.speccore/GLOBAL/platforms/' },
       { label: '**📖 参考文档**', prefix: 'GLOBAL:', basePath: '.speccore/GLOBAL/' },
-      { label: '**✏️ 写作模板**', prefix: 'PATTERNS:', basePath: '.speccore/PATTERNS/' },
+      { label: '**🧩 可复用模式与模板**', prefix: 'PATTERNS:', basePath: '.speccore/PATTERNS/' },
       { label: '**📏 规则与检查清单**', prefix: 'RULES:', basePath: '.speccore/RULES/' },
     ];
 
@@ -909,14 +913,17 @@ export function formatGlobalContext(ctx: GlobalContext, platform?: string): stri
 
       // 特殊提示
       if (group.prefix === 'PATTERNS:') {
-        lines.push('> 写 Spec 文档时可参考模板格式\n');
+        lines.push('> 全局分析时沉淀的可复用模式 + 写作模板\n');
       }
 
-      // 需要按子目录分组的（platforms, PROJECTS）
-      if (group.prefix === 'platforms/' || group.prefix === 'PROJECTS/') {
+      // 需要按子目录分组的（platforms, PROJECTS, PATTERNS）
+      if (group.prefix === 'platforms/' || group.prefix === 'PROJECTS/' || group.prefix === 'PATTERNS:') {
         const bySub = new Map<string, TOCEntry[]>();
         for (const e of entries) {
-          const sub = e.path.split('/')[1];
+          // PATTERNS:architecture/x.md → architecture; platforms/admin/x.md → admin
+          const sub = group.prefix === 'PATTERNS:'
+            ? e.path.replace('PATTERNS:', '').split('/')[0]
+            : e.path.split('/')[1];
           if (!bySub.has(sub)) bySub.set(sub, []);
           bySub.get(sub)!.push(e);
         }
