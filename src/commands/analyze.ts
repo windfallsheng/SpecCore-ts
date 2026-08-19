@@ -664,7 +664,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         : '全局 Pipeline';
     } else {
       progressLabel = currentStep === 'phase1-prompt'
-        ? 'Phase 1/3: 全局文档'
+        ? 'Phase 1/3: 迭代综合文档'
         : currentStep === 'contract-prompt'
           ? 'Phase 2/3: 契约定义'
           : platformMatch
@@ -800,7 +800,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 
           logger.success(`✅ ${count} 个全局文档已写入 .speccore/GLOBAL/`);
         } else {
-          // 迭代级：写 020-specs/（全局文档写入 global/ 子目录，v6.41.0+）
+          // 迭代级：写 020-specs/（综合文档写入 global/ 子目录，v6.41.0+）
           // v6.69.2+: 增加端名白名单校验，防止 AI 创建非法目录
           const specDir = join(iterDir!, '020-specs');
           await ensureDir(specDir);
@@ -838,7 +838,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
               continue;
             }
 
-            // 全局文档写入 global/ 子目录，端专属文档写入 {端}/ 子目录
+            // 综合文档写入 global/ 子目录，端专属文档写入 {端}/ 子目录
             const targetDir = globalSet.has(filename)
               ? join(specDir, GLOBAL_SPECS_DIR)
               : options.platform ? join(specDir, options.platform) : specDir;
@@ -961,7 +961,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         logger.success(`✅ ANALYSIS.md 已写入 .speccore/GLOBAL/`);
       } else { logger.info(`   ⏭️  用户取消覆盖`); }
     } else {
-      // 迭代级：写 020-specs/global/（全局文档，v6.41.0+）
+      // 迭代级：写 020-specs/global/（综合文档，v6.41.0+）
       const specDir = join(iterDir!, '020-specs');
       const globalDir = join(specDir, GLOBAL_SPECS_DIR);
       await ensureDir(globalDir);
@@ -1101,7 +1101,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       const platforms = await parsePlatformList();
       
       // 只有多端项目(≥2 个端)才需要分两阶段:
-      // - Phase 1: 生成全局文档(global/REQUIREMENT.md、ANALYSIS.md、DEPS.md)
+      // - Phase 1: 生成综合文档(global/REQUIREMENT.md、ANALYSIS.md、DEPS.md)
       // - Phase 2: 生成各端专属文档({端}/TECH.md、TEST.md、UI_SPEC.md)
       // 
       // 单端项目(=1 个端)不需要分阶段:
@@ -1183,7 +1183,7 @@ async function generateIterationSpecDocs(iteration: string): Promise<void> {
   await ensureDir(globalDir);
 
   const now = new Date().toISOString().split('T')[0];
-  // 全局文档模板 → 写入 global/ 子目录（v6.41.0+）
+  // 综合文档模板 → 写入 global/ 子目录（v6.41.0+）
   const globalTemplates: [string, string][] = [
     ['REQUIREMENT.md',
       `# 本期需求文档\n\n> 迭代：${iteration}\n> 时间范围：${new Date().toISOString().split('T')[0]}\n\n`
@@ -1226,7 +1226,7 @@ async function generateIterationSpecDocs(iteration: string): Promise<void> {
 
   let created = 0;
   let skipped = 0;
-  // 写入全局文档到 global/
+  // 写入综合文档到 global/
   for (const [filename, content] of globalTemplates) {
     const filePath = join(globalDir, filename);
     if (!(await pathExists(filePath))) {
@@ -2079,7 +2079,7 @@ sequenceDiagram
   }
 
   // ── v6.61.0+: 恢复 Phase 1/Phase 2 分步逻辑，但 CLI 自动触发 Phase 2 ──
-  // Phase 1: 生成全局文档(global/REQUIREMENT.md、ANALYSIS.md、DEPS.md 等)
+  // Phase 1: 生成综合文档(global/REQUIREMENT.md、ANALYSIS.md、DEPS.md 等)
   // Phase 2: 生成各端专属文档({端}/TECH.md、TEST.md、UI_SPEC.md 等)
   const GLOBAL_DOCS = ['REQUIREMENT.md', 'ANALYSIS.md', 'TECH.md', 'RISK.md', 'DEPS.md', 'REVIEW.md', 'MONITOR.md', 'FUNCTION_MAP.md', 'INTERACTION_MAP.md'];
   const PLATFORM_DOCS = ['TECH.md', 'TEST.md', 'UI_SPEC.md'];
@@ -2159,10 +2159,10 @@ sequenceDiagram
     if (platforms.length >= 2) {
       prompt += `## 📋 完整工作流程（两阶段分析）\n\n`;
       prompt += `本项目检测到有 ${platforms.length} 个端(${platforms.join('、')})，需要分两阶段执行：\n\n`;
-      prompt += `**Phase 1（当前阶段）**: 生成全局文档(global/REQUIREMENT.md、ANALYSIS.md、DEPS.md 等)\n`;
+      prompt += `**Phase 1（当前阶段）**: 生成综合文档(global/REQUIREMENT.md、ANALYSIS.md、DEPS.md 等)\n`;
       prompt += `**Phase 2（下一阶段）**: 生成各端专属文档({端}/TECH.md、TEST.md、UI_SPEC.md 等)\n\n`;
       prompt += `## ⚠️ 强制要求：Phase 1 完成后立即执行 Phase 2\n\n`;
-      prompt += `当你通过 --apply 写入所有全局文档后，**必须立即执行**以下命令进入 Phase 2：\n\n`;
+      prompt += `当你通过 --apply 写入所有综合文档后，**必须立即执行**以下命令进入 Phase 2：\n\n`;
       prompt += `\`\`\`bash\n`;
       prompt += `speccore analyze --prompt -I ${ctx.iteration} --phase 2\n`;
       prompt += `\`\`\`\n\n`;
@@ -2405,7 +2405,7 @@ sequenceDiagram
     }
     const dirStepNum = platformTypes.size > 0 ? 9 : 8;
     prompt += `${dirStepNum}. **目录结构（严格遵循，禁止自创目录）**：\n`;
-    prompt += `   - **全局文档**（跨端通用）→ 通过 --apply 写入，CLI 自动路由到 \`020-specs/global/{文件名}\`\n`;
+    prompt += `   - **综合文档**（跨端通用）→ 通过 --apply 写入，CLI 自动路由到 \`020-specs/global/{文件名}\`\n`;
     prompt += `     - REQUIREMENT.md（需求文档，含功能模块清单+涉及端列）\n`;
     prompt += `     - ANALYSIS.md（需求分析）\n`;
     prompt += `     - DEPS.md（依赖清单）\n`;
@@ -2508,9 +2508,9 @@ sequenceDiagram
   // v6.70.0+: 自动模式下跳过确认，AI 直接推断执行
   if (!ctx.phase && !isTask && !autoMode) {
     prompt += `\n## ⚠️ 重要：Phase 1 完成后的下一步\n\n`;
-    prompt += `当你通过 --apply 写入所有全局文档后，CLI 会检测到项目有多个端（≥2 个端）。\n`;
+    prompt += `当你通过 --apply 写入所有综合文档后，CLI 会检测到项目有多个端（≥2 个端）。\n`;
     prompt += `**此时你需要主动询问用户**：\n\n`;
-    prompt += `"✅ Phase 1 已完成，生成了 global/ 的全局文档。\n`;
+    prompt += `"✅ Phase 1 已完成，生成了 global/ 的综合文档。\n`;
     prompt += `检测到项目有 ${'{'}端列表{'}'} 个端，需要继续执行 Phase 2 生成各端专属文档吗？\n`;
     prompt += `请确认：输入 '继续' 或 'yes' 以执行 Phase 2"\n\n`;
     prompt += `**如果用户确认继续**，你需要执行：\n`;
@@ -2520,7 +2520,7 @@ sequenceDiagram
   if (autoMode && !ctx.phase && !isTask) {
     prompt += `\n## 🤖 自动模式说明\n\n`;
     prompt += `当前处于自动模式（--auto），不需要人工确认。\n`;
-    prompt += `请在生成全局文档后，**直接继续**生成各端专属文档（Phase 2）。\n`;
+    prompt += `请在生成综合文档后，**直接继续**生成各端专属文档（Phase 2）。\n`;
     prompt += `执行命令：\`speccore analyze --prompt -I ${iter} --phase 2\`\n\n`;
   }
 
@@ -2693,7 +2693,7 @@ async function buildStreamingGlobalPrompt(
   prompt += `## 📝 通用指令\n\n`;
   prompt += `1. **先读宪法**: Read .speccore/CONSTITUTION.md，获取端列表和源码路径\n`;
   prompt += `2. **严格按阶段执行**: 不要跳过阶段，每个阶段的产出是后续阶段的输入\n`;
-  prompt += `3. **实时更新全局**: 后端分析完成后必须更新全局文档，前端分析完成后必须更新前端文档\n`;
+  prompt += `3. **实时更新综合文档**: 后端分析完成后必须更新综合文档，前端分析完成后必须更新前端文档\n`;
   prompt += `4. **冲突时回退修正**: 发现不一致时，优先修正源头文档，再推进当前阶段\n`;
   prompt += `5. **写入方式**: 所有文档通过 \`speccore analyze --apply '{"文件路径":"内容"}' -I ${iter} --global\` 写入\n`;
   prompt += `6. **知识图谱**: 每阶段完成后自动刷新知识图谱\n`;
@@ -2708,7 +2708,7 @@ async function buildContractFirstPrompt(iteration: string): Promise<string> {
 
   let prompt = `\n# 任务: 跨端 API 契约定义（契约先行阶段）\n\n`;
   prompt += `## 背景\n\n`;
-  prompt += `Phase 1 全局分析已完成。现在需要在各端开始专属技术方案分析之前，**先定义跨端 API 契约**。\n\n`;
+  prompt += `Phase 1 迭代分析已完成。现在需要在各端开始专属技术方案分析之前，**先定义跨端 API 契约**。\n\n`;
   prompt += `## 读取内容\n\n`;
   prompt += `1. Read .speccore/CONSTITUTION.md → 获取端列表和项目配置\n`;
   prompt += `2. Read 020-specs/global/REQUIREMENT.md → 全局需求规格\n`;
