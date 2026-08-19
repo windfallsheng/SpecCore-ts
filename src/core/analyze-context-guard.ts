@@ -283,8 +283,8 @@ export async function buildSegmentationPlan(
       });
 
       // 后端端先分析
-      const backendPlatforms = platforms.filter(async p => {
-        const types = await import('./spec-paths').then(m => m.parsePlatformTypes());
+      const types = await import('./spec-paths').then(m => m.parsePlatformTypes());
+      const backendPlatforms = platforms.filter(p => {
         const t = types.get(p) || '';
         return t.includes('service') || t.includes('后端');
       });

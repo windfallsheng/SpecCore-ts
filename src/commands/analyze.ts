@@ -752,6 +752,48 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
           }
           logger.success(`✅ ${count} 个 Spec 文档已写入 020-specs/`);
 
+          // v6.74.0+: 流式分析自动检查（回退检测 + 最终核对）
+          if (options.streamingPhase) {
+            const phase = options.streamingPhase as import('../core/streaming-analyzer').AnalyzePhase;
+            if (phase === 'phase1-backend' || phase === 'phase3-frontend') {
+              logger.info('');
+              logger.info('🔍 流式分析回退检测...');
+              const bt = await detectBacktrackingNeeds(iterDir, phase);
+              if (bt.needed) {
+                logger.warn(`   ⚠️ 检测到 ${bt.targets.length} 个文档需要回退修正:`);
+                for (let i = 0; i < bt.targets.length; i++) {
+                  logger.warn(`      - ${bt.targets[i]}: ${bt.reasons[i]}`);
+                }
+                logger.info('   💡 请在下一 Phase 前先修正上述文档');
+              } else {
+                logger.info('   ✅ 无回退需求，继续下一 Phase');
+              }
+            }
+            if (phase === 'phase6-final-audit') {
+              logger.info('');
+              logger.info('🔍 执行最终核对检查...');
+              const auditIssues = await runFinalAudit(iterDir);
+              if (auditIssues.length > 0) {
+                const errors = auditIssues.filter(i => i.severity === 'error');
+                const warnings = auditIssues.filter(i => i.severity === 'warning');
+                if (errors.length > 0) {
+                  logger.error(`   ❌ 发现 ${errors.length} 个错误:`);
+                  for (const e of errors) {
+                    logger.error(`      - ${e.description}`);
+                  }
+                }
+                if (warnings.length > 0) {
+                  logger.warn(`   ⚠️ 发现 ${warnings.length} 个警告:`);
+                  for (const w of warnings) {
+                    logger.warn(`      - ${w.description}`);
+                  }
+                }
+              } else {
+                logger.info('   ✅ 最终核对通过，所有文档完整一致');
+              }
+            }
+          }
+
           // v6.72.0+: FUNCTION_MAP.md 自检
           const fmContent = docs['FUNCTION_MAP.md'] || docs['global/FUNCTION_MAP.md'];
           if (fmContent) {
