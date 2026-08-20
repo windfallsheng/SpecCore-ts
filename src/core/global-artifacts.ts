@@ -43,8 +43,12 @@ export async function generateGlobalArtifacts(sources: string[], depth: string):
     ...sources.map(s => '| `' + s + '` | _待分析_ | _待分析_ | -- |'),
   ].join('\n'));
 
-  // REQUIREMENT.md
-  await safeWrite(join(globalDir, 'REQUIREMENT.md'), [
+  // REQUIREMENT.md — v6.81.0+: 放到 requirements/ 目录下
+  const reqDir = join(globalDir, 'requirements');
+  await ensureDir(reqDir);
+  await ensureDir(join(reqDir, 'images'));
+  await ensureDir(join(reqDir, 'prototypes'));
+  await safeWrite(join(reqDir, 'REQUIREMENT.md'), [
     '# 全局需求概览',
     '> 从源码反推 | ' + now,
     '',
@@ -55,7 +59,7 @@ export async function generateGlobalArtifacts(sources: string[], depth: string):
     '> 请 AI 读取代码后补充各工程的核心功能模块',
   ].join('\n'));
 
-  logger.info('   📄 全局配置: TECH_STACK.md + CODE_INDEX.md + REQUIREMENT.md');
+  logger.info('   📄 全局配置: TECH_STACK.md + CODE_INDEX.md + requirements/REQUIREMENT.md');
 }
 
 async function detectTechStack(sources: string[]): Promise<string> {

@@ -14,6 +14,11 @@ import { resolveTask, resolveIteration, formatResolveResult } from '../core/reso
 import { nextTaskId } from '../core/global-counters';
 import { scanInbox, markProcessed, logInboxScan, buildClarifyPrompt, parseClarifyResponse, logClarifyResult, ensureInboxDir, logImpactReport, InboxFileEntry, ImpactReport, TaskImpact } from '../core/inbox';
 import { warnIfIndexStale } from '../core/index-guard';
+// v6.86.0+: AGENTS 全阶段扩展
+import { resolveAgentsForPhase } from '../core/agents';
+import type { AgentContext } from '../core/agents';
+// v6.87.0+: COMMANDS 命令模板
+import { loadCommandTemplate, renderTemplate } from '../core/command-loader';
 
 // v6.73.0+ 变更驱动工作流 v2
 import {
@@ -991,7 +996,42 @@ async function processChangeLegacy(options: ChangeOptions): Promise<void> {
 
   // ── 3. Prompt 模式 ──
   if (options.prompt) {
-    const promptText = buildClarifyPrompt(desc || '(从附件分析需求)', allFiles, taskDetails);
+    let promptText = buildClarifyPrompt(desc || '(从附件分析需求)', allFiles, taskDetails);
+
+    // v6.86.0+: 注入 change/impact 阶段 AGENTS
+    const projectRoot = process.cwd();
+    const agentContext: AgentContext = {
+      iteration,
+    };
+    try {
+      const agents = await resolveAgentsForPhase('change', 'impact', agentContext, projectRoot);
+      if (agents.length > 0) {
+        promptText += '\n\n## 专业角色指引\n\n';
+        for (const ra of agents) {
+          promptText += ra.definition.rolePrompt;
+          promptText += '\n\n';
+        }
+      }
+    } catch {
+      // AGENTS 加载失败静默跳过
+    }
+
+    // v6.87.0+: 追加命令模板流程指引
+    try {
+      const template = await loadCommandTemplate('change-impact', projectRoot);
+      if (template) {
+        const rendered = renderTemplate(template.content, {
+          description: desc || '(从附件分析需求)',
+          attachments: allFiles.map(f => f.name).join(', ') || '无',
+          tasks: taskDetails.map(t => `${t.id}: ${t.name}`).join('\n') || '无',
+        });
+        promptText += '\n\n';
+        promptText += rendered;
+      }
+    } catch {
+      // 模板加载失败静默跳过
+    }
+
     logger.info('[SPECCORE_PROMPT]');
     process.stdout.write(promptText);
     return;

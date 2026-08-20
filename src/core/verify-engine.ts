@@ -10,6 +10,12 @@ import { execSync } from 'child_process';
 import { join } from 'path';
 import { pathExists, readFile, writeFile, ensureDir, readdir } from 'fs-extra';
 import { logger } from '../utils/logger';
+// v6.84.0+: AGENTS 引擎集成
+import {
+  resolveAgentsForPhase,
+  buildAgentPrompt,
+  type AgentContext,
+} from './agents';
 
 // ============================================================
 // 类型定义
@@ -792,11 +798,17 @@ async function checkSpecConsistency(codePath: string, taskDir: string): Promise<
 // 质量门禁：execute 后强制执行
 // ============================================================
 
+export interface AgentQualityCheck {
+  agent: string;
+  prompt: string;
+}
+
 export interface QualityGateResult {
   passed: boolean;
   blockingFailed: CheckResult[];
   warnings: CheckResult[];
   report: VerifyReport;
+  agentChecks?: AgentQualityCheck[]; // v6.84.0+: AGENTS 扩展检查
 }
 
 /**
@@ -808,7 +820,7 @@ export async function runQualityGate(
   taskId: string,
   codePath: string,
   taskDir: string,
-  options?: { timeout?: number }
+  options?: { timeout?: number; withAgents?: boolean; projectRoot?: string }
 ): Promise<QualityGateResult> {
   const projectType = await detectProjectType(codePath);
   const commands = getCommands(projectType, codePath);
@@ -888,6 +900,30 @@ export async function runQualityGate(
     logger.info(`   ${icon} ${c.name}${block}: ${c.details}`);
   }
 
+  // v6.84.0+: AGENTS 扩展检查（可选）
+  let agentChecks: AgentQualityCheck[] | undefined;
+  if (options?.withAgents && options?.projectRoot) {
+    try {
+      const agentContext: AgentContext = {
+        iteration: taskId.split('/')[0],
+        taskDir,
+        codePath,
+      };
+      const agents = await resolveAgentsForPhase('execute', 'quality-gate', agentContext, options.projectRoot);
+      if (agents.length > 0) {
+        agentChecks = [];
+        logger.info(`   🤖 AGENTS 扩展检查 (${agents.length} 个角色)...`);
+        for (const ra of agents) {
+          const prompt = buildAgentPrompt(ra.definition, agentContext);
+          agentChecks.push({ agent: ra.name, prompt });
+          logger.info(`      - ${ra.name} (优先级: ${ra.priority})`);
+        }
+      }
+    } catch {
+      // AGENTS 扩展检查失败不影响主流程
+    }
+  }
+
   const passed = blockingFailed.length === 0;
   if (passed) {
     logger.info(`   ✅ 编译通过，质量门禁放行`);
@@ -899,5 +935,64 @@ export async function runQualityGate(
     logger.info(`   💡 修复编译错误后自动重新检查`);
   }
 
-  return { passed, blockingFailed, warnings, report };
+  return { passed, blockingFailed, warnings, report, agentChecks };
+}
+
+// ============================================================
+// v6.79.0+: 文档同步 — 根据实际测试结果更新 TEST.md
+// ============================================================
+
+/**
+ * 根据单元测试结果同步更新 TEST.md 勾选状态
+ * - 测试全部通过 → 所有 `[ ]` 改为 `[x]`
+ * - 测试有失败 → 保持 `[ ]` 不变（等待修复后重试）
+ * - 无 TEST.md → 跳过
+ */
+export async function syncTestDocFromResults(
+  taskDir: string,
+  testPassed: boolean
+): Promise<void> {
+  const testPaths: string[] = [
+    join(taskDir, 'TEST.md'),
+    join(taskDir, '99-artifacts', 'TEST.md'),
+  ];
+  // 扫描子任务目录下的 TEST.md（新结构）
+  for (const catDir of ['10-backend', '20-frontend']) {
+    const catPath = join(taskDir, catDir);
+    if (await pathExists(catPath)) {
+      try {
+        const services = await readdir(catPath, { withFileTypes: true });
+        for (const svc of services) {
+          if (!svc.isDirectory()) continue;
+          const subs = await readdir(join(catPath, svc.name), { withFileTypes: true });
+          for (const sub of subs) {
+            if (!sub.isDirectory()) continue;
+            testPaths.push(join(catPath, svc.name, sub.name, 'TEST.md'));
+          }
+        }
+      } catch { /* 跳过 */ }
+    }
+  }
+
+  for (const testPath of testPaths) {
+    if (!(await pathExists(testPath))) continue;
+    let content = await readFile(testPath, 'utf-8');
+    const original = content;
+
+    if (testPassed) {
+      // 全部通过：把所有 `[ ]` 改为 `[x]`
+      content = content.replace(/- \[ \]/g, '- [x]');
+      content += `\n\n> ✅ 单元测试已通过，自动勾选（v6.79.0+）\n`;
+    } else {
+      // 有失败：保持 `[ ]` 不变，但添加备注
+      if (!content.includes('> ⏳ 单元测试未通过')) {
+        content += `\n\n> ⏳ 单元测试未通过，待修复后重试（v6.79.0+）\n`;
+      }
+    }
+
+    if (content !== original) {
+      await writeFile(testPath, content);
+      logger.info(`   📝 TEST.md 已同步: ${testPath.replace(taskDir + '/', '')}`);
+    }
+  }
 }

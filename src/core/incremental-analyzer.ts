@@ -231,9 +231,9 @@ export function buildIncrementalPrompt(
   prompt += `## 执行步骤\n\n`;
   prompt += `### Step 1: 读取上次分析产出\n`;
   prompt += `Read 以下文件了解已有分析结果：\n`;
-  prompt += `- \`020-specs/global/REQUIREMENT.md\`\n`;
-  prompt += `- \`020-specs/global/FUNCTION_MAP.md\`\n`;
-  prompt += `- \`020-specs/global/ANALYSIS.md\`\n`;
+  prompt += `- \`020-specs/overview/REQUIREMENT.md\`\n`;
+  prompt += `- \`020-specs/overview/FUNCTION_MAP.md\`\n`;
+  prompt += `- \`020-specs/overview/ANALYSIS.md\`\n`;
   prompt += `- 各端的 TECH.md、TEST.md 等\n\n`;
 
   prompt += `### Step 2: 读取变更后的需求文档\n`;
@@ -250,7 +250,7 @@ export function buildIncrementalPrompt(
 
   prompt += `## 写入方式\n`;
   prompt += `\`\`\`bash\n`;
-  prompt += `speccore analyze --apply '{"global/REQUIREMENT.md":"...",...}' -I ${iteration}\n`;
+  prompt += `speccore analyze --apply '{"overview/REQUIREMENT.md":"...",...}' -I ${iteration}\n`;
   prompt += `\`\`\`\n`;
 
   return prompt;
@@ -403,8 +403,8 @@ async function identifyStaleOutputs(
 
   // 如果新增端，全局文档需要更新
   if (analysis.addedPlatforms.length > 0) {
-    stale.push('020-specs/global/FUNCTION_MAP.md');
-    stale.push('020-specs/global/INTERACTION_MAP.md');
+    stale.push('020-specs/overview/FUNCTION_MAP.md');
+    stale.push('020-specs/overview/INTERACTION_MAP.md');
     stale.push('.speccore/GLOBAL/ARCHITECTURE.md');
   }
 

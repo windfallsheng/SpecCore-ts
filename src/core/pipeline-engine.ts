@@ -253,6 +253,7 @@ export class PipelineEngine {
 // ── 工厂函数：创建 analyze 流水线 ──
 // v6.69.0+: 支持契约先行 + 逐端推进（增强策略一 & 三）
 // v6.69.0+: 支持变更感知过滤 + 关键路径优先排序（增强策略二 & 三）
+// v6.80.0+: 增加需求澄清前置步骤（clarify-prompt → clarify-done → confirm-check）
 export async function createAnalyzePipeline(
   iteration: string,
   cwd?: string,
@@ -261,6 +262,8 @@ export async function createAnalyzePipeline(
     affectedPlatforms?: string[];
     /** 关键路径优先：端排序优先级（靠前的优先分析） */
     platformOrder?: string[];
+    /** 是否跳过需求澄清 */
+    skipClarify?: boolean;
   }
 ): Promise<{
   engine: PipelineEngine;
@@ -290,7 +293,27 @@ export async function createAnalyzePipeline(
     logger.info(`🎯 关键路径优先: 端分析顺序 → ${platforms.join(' → ')}`);
   }
 
+  // v6.80.0+: 条件判断是否需要需求澄清
+  const needsClarify = options?.skipClarify !== true;
+
   const steps: PipelineStepDef[] = [
+    {
+      id: 'clarify-prompt',
+      name: 'Phase 0: 需求澄清',
+      next: 'clarify-done',
+      condition: needsClarify ? undefined : () => false, // skipClarify 时跳过
+    },
+    {
+      id: 'clarify-done',
+      name: '需求澄清完成检查',
+      next: 'confirm-check',
+    },
+    {
+      id: 'confirm-check',
+      name: '需求确认检查',
+      next: 'phase1-prompt',
+      // 非自动模式下可在此暂停等待用户确认，自动模式直接通过
+    },
     {
       id: 'phase1-prompt',
       name: 'Phase 1: 全局文档生成',

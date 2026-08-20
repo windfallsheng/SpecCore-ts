@@ -1377,6 +1377,8 @@ ${apiDesc}
 
   // 预加载执行产出模板材料（每个子任务都需要）
   const testMaterial = extractRelevantSection(specContents['TEST.md'] || '', section.name);
+  const reviewMaterial = extractRelevantSection(specContents['REVIEW.md'] || '', section.name);
+  const deployMaterial = extractRelevantSection(specContents['DEPLOY.md'] || '', section.name);
   const riskMaterial = extractRelevantSection(specContents['RISK.md'] || '', section.name);
   const depsMaterial = extractRelevantSection(specContents['DEPS.md'] || '', section.name);
   const monitorMaterial = extractRelevantSection(specContents['MONITOR.md'] || '', section.name);
@@ -1433,6 +1435,10 @@ ${section.content}
       // 功能单元标识（v6.49.2+）：默认取 section 的 functionalUnit 或 section.name
       const featureName = (section as any).functionalUnit || section.name || '未分类';
       await writeFile(join(subtaskDir, '.meta', 'feature'), featureName);
+
+      // src/ + tests/ 目录（AI 执行时代码输出位置）
+      await ensureDir(join(subtaskDir, 'src'));
+      await ensureDir(join(subtaskDir, 'tests'));
 
       // git-config
       await writeFile(
@@ -1498,13 +1504,23 @@ ${section.content}
 
 ### 第二阶段：技术方案
 - [ ] 阅读 00-specs/TECH.md 确认技术方案
-- [ ] 确认本端涉及的接口/页面清单
-- [ ] 确认数据模型和字段映射
+${isBk ? `- [ ] 设计本端负责的接口（路径/方法/参数/响应/错误码）
+- [ ] 设计数据模型（Entity/DTO/VO/表结构）
+- [ ] 设计业务逻辑流程和边界条件` : `- [ ] 设计本端负责的页面（路由/组件/状态）
+- [ ] 确认 API 调用链（调哪些后端接口）
+- [ ] 设计字段映射和表单校验规则`}
 
 ### 第三阶段：开发实施
-- [ ] 按 TECH.md 实施开发
-- [ ] 编写单元测试/集成测试
-- [ ] 自测通过
+${isBk ? `- [ ] 实现 Controller/Handler 层（接口入口）
+- [ ] 实现 Service/UseCase 层（业务逻辑）
+- [ ] 实现 Repository/Data 层（数据访问）
+- [ ] 实现单元测试（覆盖核心逻辑和边界条件）
+- [ ] 自测通过（接口通、数据对、边界覆盖）` : `- [ ] 实现页面组件和路由配置
+- [ ] 实现状态管理（全局状态 + 本地状态）
+- [ ] 实现 API 调用封装（请求/错误处理/重试）
+- [ ] 实现表单校验和字段映射
+- [ ] 实现 UI 测试（关键流程覆盖）
+- [ ] 自测通过（页面渲染、交互响应、API 连通）`}
 
 ### 第四阶段：验收交付
 - [ ] 更新 TASK.md 进度
@@ -1515,12 +1531,16 @@ ${section.content}
 ${isBk ? apiList : pageList}
 
 ## 产出物
-| 产出物 | 状态 | 路径 |
-| :--- | :--- | :--- |
-| TASK.md | ✅ | ./TASK.md |
-| TEST.md | ⏳ | ./TEST.md |
-| RISK.md | ⏳ | ./RISK.md |
-| 代码 | ⏳ | CONSTITUTION.md 中定义的工程路径 |
+| 产出物 | 状态 | 路径 | 说明 |
+| :--- | :--- | :--- | :--- |
+| TASK.md | ✅ | ./TASK.md | 本文件 |
+| TEST.md | ⏳ | ./TEST.md | ${isBk ? '单元测试 + 接口测试' : 'UI 测试 + 组件测试'} |
+| RISK.md | ⏳ | ./RISK.md | 风险评估 |
+| REVIEW.md | ⏳ | ./REVIEW.md | 评审清单 |
+| DEPLOY.md | ⏳ | ./DEPLOY.md | 部署检查 |
+| ERROR_CODES.md | ⏳ | ./ERROR_CODES.md | 错误码定义 |
+| src/ | ⏳ | ./src/ | ${isBk ? '后端代码（Controller/Service/Repository/Entity）' : '前端代码（页面/组件/状态/API）'} |
+| tests/ | ⏳ | ./tests/ | ${isBk ? '单元测试代码' : 'UI/组件测试代码'} |
 
 > 💡 代码输出位置：execute 命令会读取 CONSTITUTION.md 中的「源码路径」列，将代码写入实际工程目录。
 
@@ -1542,8 +1562,8 @@ ${isBk ? apiList : pageList}
 
       // 执行产出文档
       await writeFile(join(subtaskDir, 'TEST.md'), generateTestOutline(section, testMaterial));
-      await writeFile(join(subtaskDir, 'REVIEW.md'), generateReviewChecklist(section));
-      await writeFile(join(subtaskDir, 'DEPLOY.md'), generateDeployChecklist(section));
+      await writeFile(join(subtaskDir, 'REVIEW.md'), generateReviewChecklist(section, reviewMaterial));
+      await writeFile(join(subtaskDir, 'DEPLOY.md'), generateDeployChecklist(section, deployMaterial));
       await writeFile(join(subtaskDir, 'ERROR_CODES.md'), generateErrorCodes(section));
       await writeFile(join(subtaskDir, 'RISK.md'), generateRiskTemplate(section, riskMaterial));
       await writeFile(join(subtaskDir, 'DEPS.md'), generateDepsTemplate(section, depsMaterial));
@@ -1616,8 +1636,8 @@ ${isBk ? apiList : pageList}
     );
     // 自动补充的后端也需要执行产出文档
     await writeFile(join(autoSubtaskDir, 'TEST.md'), generateTestOutline(section, testMaterial));
-    await writeFile(join(autoSubtaskDir, 'REVIEW.md'), generateReviewChecklist(section));
-    await writeFile(join(autoSubtaskDir, 'DEPLOY.md'), generateDeployChecklist(section));
+    await writeFile(join(autoSubtaskDir, 'REVIEW.md'), generateReviewChecklist(section, reviewMaterial));
+    await writeFile(join(autoSubtaskDir, 'DEPLOY.md'), generateDeployChecklist(section, deployMaterial));
     await writeFile(join(autoSubtaskDir, 'ERROR_CODES.md'), generateErrorCodes(section));
     await writeFile(join(autoSubtaskDir, 'RISK.md'), generateRiskTemplate(section, riskMaterial));
     await writeFile(join(autoSubtaskDir, 'DEPS.md'), generateDepsTemplate(section, depsMaterial));
@@ -1736,21 +1756,32 @@ async function updateProjectGraph(iterationDir: string, sections: Section[]): Pr
  * 根据需求内容自动生成测试用例框架
  */
 function generateTestOutline(section: Section, material?: string): string {
-  if (material && material.trim().length > 30) {
+  // v6.79.0+: 降低阈值，让更多 analyze 内容被使用
+  if (material && material.trim().length > 10) {
     return `# ${section.name} — 测试用例\n\n> 来源: analyze → TEST.md（自动提取）\n\n${material.trim()}\n`;
   }
   const name = section.name;
   const content = section.content || '';
-  
+
   const isBackend = section.platform?.startsWith('后台') || false;
   const hasApi = content.includes('/api/') || content.includes('接口');
   const hasDb = content.includes('数据表') || content.includes('数据库') || content.includes('表');
-  
+
+  // v6.79.0+: 从 content 提取 API 表格生成针对性测试用例
+  const apiRows = extractApiRowsFromContent(content);
+
   let outline = `# ${name} — 测试用例\n\n`;
   outline += `> 自动生成于 split，请在编码后补充具体用例\n\n`;
   outline += `## 1. 单元测试\n\n`;
 
-  if (isBackend && hasApi) {
+  if (isBackend && hasApi && apiRows.length > 0) {
+    outline += `| 用例 | 接口 | 输入 | 预期 | 状态 |\n`;
+    outline += `| :--- | :--- | :--- | :--- | :--- |\n`;
+    for (const row of apiRows.slice(0, 6)) {
+      outline += `| ${row.method} ${row.path} | ${row.path} | 正常参数 | 200 | ⬜ |\n`;
+      outline += `| ${row.method} ${row.path} 异常 | ${row.path} | 非法参数 | 400/500 | ⬜ |\n`;
+    }
+  } else if (isBackend && hasApi) {
     outline += `| 用例 | 接口 | 输入 | 预期 | 状态 |\n`;
     outline += `| :--- | :--- | :--- | :--- | :--- |\n`;
     outline += `| 正常请求 | | | 200 | ⬜ |\n`;
@@ -1788,10 +1819,26 @@ function generateTestOutline(section: Section, material?: string): string {
   return outline;
 }
 
+/** v6.79.0+: 从任务内容中提取 API 表格行 */
+function extractApiRowsFromContent(content: string): Array<{ method: string; path: string; desc: string }> {
+  const rows: Array<{ method: string; path: string; desc: string }> = [];
+  const lines = content.split('\n');
+  for (const line of lines) {
+    const m = line.match(/\|\s*(GET|POST|PUT|DELETE|PATCH)\s*\|\s*([^|]+)\|/i);
+    if (m) {
+      rows.push({ method: m[1].toUpperCase(), path: m[2].trim(), desc: '' });
+    }
+  }
+  return rows;
+}
+
 /**
  * 根据需求内容自动生成代码审查清单
  */
-function generateReviewChecklist(section: Section): string {
+function generateReviewChecklist(section: Section, material?: string): string {
+  if (material && material.trim().length > 10) {
+    return `# ${section.name} — Code Review Checklist\n\n> 来源: analyze → REVIEW.md（自动提取）\n\n${material.trim()}\n`;
+  }
   const name = section.name;
   const content = section.content || '';
   
@@ -2053,7 +2100,10 @@ function generateSchemaTemplate(section: Section, material?: string): string {
 `;
 }
 
-function generateDeployChecklist(section: Section): string {
+function generateDeployChecklist(section: Section, material?: string): string {
+  if (material && material.trim().length > 10) {
+    return `# ${section.name} — 部署检查清单\n\n> 来源: analyze → DEPLOY.md（自动提取）\n\n${material.trim()}\n`;
+  }
   const name = section.name;
   const hasDb = section.content.match(/数据库|数据表|DDL|ALTER/) !== null;
   return `# ${name} — Deployment Checklist
@@ -2719,9 +2769,9 @@ function buildSplitPrompt(
   p += `- 但仍需检查隐含跨端依赖（如 admin 页面需要 backend 提供新接口）\n`;
   p += `- 如有隐含依赖，在 dependencies 中标注，或在 scope 中加入对应端\n\n`;
   p += `**判断流程**：\n`;
-  p += `1. 读 global/REQUIREMENT.md 的功能模块清单 → 查看「涉及端」列\n`;
-  p += `2. 读 global/ANALYSIS.md → 确认跨端关联和数据流向\n`;
-  p += `3. 读 global/TECH.md → 了解整体架构中的端交互\n`;
+  p += `1. 读 overview/REQUIREMENT.md 的功能模块清单 → 查看「涉及端」列\n`;
+  p += `2. 读 overview/ANALYSIS.md → 确认跨端关联和数据流向\n`;
+  p += `3. 读 overview/TECH.md → 了解整体架构中的端交互\n`;
   p += `4. 对每个功能模块判定聚合度，决定拆分策略\n\n`;
 
   // 类型文档 1:1 映射规则
@@ -2781,12 +2831,12 @@ function buildSplitPrompt(
   p += `> **reqContent 质量要求（必填，禁止模板化）**：\n`;
   p += `>   - 必须是**具体的、可执行的需求描述**，不是"待补充"或"参考全局文档"\n`;
   p += `>   - 包含：业务规则（含边界条件）、数据模型（字段/类型/约束）、接口清单（方法/路径/参数/响应）\n`;
-  p += `>   - 从 020-specs/global/REQUIREMENT.md 和对应端 TECH.md 中提取本任务相关的具体内容\n`;
+  p += `>   - 从 020-specs/overview/REQUIREMENT.md 和对应端 TECH.md 中提取本任务相关的具体内容\n`;
   p += `>   - 直接写入 00-specs/REQ.md，执行时 AI 不再重新分析需求\n`;
   p += `> **techContent 质量要求（必填，禁止模板化）**：\n`;
   p += `>   - 必须是**具体的技术实现方案**，不是框架模板\n`;
   p += `>   - 包含：架构设计、核心逻辑伪代码/流程、数据库设计（表结构/索引）、API 详细定义、测试策略\n`;
-  p += `>   - 从 020-specs/global/TECH.md 和对应端 TECH.md 中提取本任务相关的技术细节\n`;
+  p += `>   - 从 020-specs/overview/TECH.md 和对应端 TECH.md 中提取本任务相关的技术细节\n`;
   p += `>   - 直接写入 00-specs/TECH.md，执行时 AI 据此直接开发\n`;
   p += `> **质量红线**：如果 reqContent/techContent 只有标题和占位符（如 "<!-- AI-FILL -->"），视为不合格，必须重新生成\n\n`;
 
@@ -3115,10 +3165,10 @@ speccore analyze --task ${taskId}${iterFlag}
   process.stdout.write('\n[/SPECCORE_NEXT_STEPS]\n');
 }
 
-// ── v6.49.14+: 模块驱动拆分 — 从 global/REQUIREMENT.md 读取涉及端 ──
+// ── v6.49.14+: 模块驱动拆分 — 从 overview/REQUIREMENT.md 读取涉及端 ──
 
 /**
- * 从 global/REQUIREMENT.md 解析功能模块清单的「涉及端」列
+ * 从 overview/REQUIREMENT.md 解析功能模块清单的「涉及端」列
  * 返回模块列表及其涉及的标准端名
  */
 function parseModulePlatforms(content: string, allPlatforms: string[]): { name: string; platforms: string[] }[] {
@@ -3292,7 +3342,7 @@ async function tryModuleDrivenSplit(
     platforms: string[]; sharedCapability?: string; dependsOn?: string[]; description?: string;
   }[] = [];
 
-  // v6.70.0+: 1. 优先从 global/FUNCTION_MAP.md 读取跨端功能映射表
+  // v6.70.0+: 1. 优先从 overview/FUNCTION_MAP.md 读取跨端功能映射表
   const functionMapPath = join(iterationDir, '020-specs', GLOBAL_SPECS_DIR, 'FUNCTION_MAP.md');
   let functionMapParsed = false;
   if (await pathExists(functionMapPath)) {
@@ -3305,7 +3355,7 @@ async function tryModuleDrivenSplit(
             name: u.name,
             slug: slugify(u.name),
             type: 'feature',
-            sourceFile: 'global/FUNCTION_MAP.md',
+            sourceFile: 'overview/FUNCTION_MAP.md',
             platforms: u.platforms,
             sharedCapability: u.sharedCapability,
             dependsOn: u.dependsOn,
@@ -3313,14 +3363,14 @@ async function tryModuleDrivenSplit(
           });
         }
         functionMapParsed = true;
-        logger.info(`   📋 从 global/FUNCTION_MAP.md 读取到 ${parsed.length} 个功能单元（严格按映射表拆分）`);
+        logger.info(`   📋 从 overview/FUNCTION_MAP.md 读取到 ${parsed.length} 个功能单元（严格按映射表拆分）`);
       }
     } catch (e) {
       logger.debug('解析 FUNCTION_MAP.md 失败:', e);
     }
   }
 
-  // 2. 回退：从 global/REQUIREMENT.md 读取功能模块清单（含涉及端）
+  // 2. 回退：从 overview/REQUIREMENT.md 读取功能模块清单（含涉及端）
   if (!functionMapParsed) {
     const globalReqPath = join(iterationDir, '020-specs', GLOBAL_SPECS_DIR, 'REQUIREMENT.md');
     let modulePlatformsParsed = false;
@@ -3334,12 +3384,12 @@ async function tryModuleDrivenSplit(
               name: m.name,
               slug: slugify(m.name),
               type: 'feature',
-              sourceFile: 'global/REQUIREMENT.md',
+              sourceFile: 'overview/REQUIREMENT.md',
               platforms: m.platforms,
             });
           }
           modulePlatformsParsed = true;
-          logger.info(`   📋 从 global/REQUIREMENT.md 读取到 ${parsed.length} 个功能模块（含涉及端）`);
+          logger.info(`   📋 从 overview/REQUIREMENT.md 读取到 ${parsed.length} 个功能模块（含涉及端）`);
         }
       } catch {}
     }
@@ -3522,9 +3572,9 @@ function buildContentFillingPrompt(
 
   p += `## 上下文\n\n`;
   p += `1. Read .speccore/CONSTITUTION.md — 项目配置\n`;
-  p += `2. Read 020-specs/global/REQUIREMENT.md — 全局需求规格\n`;
-  p += `3. Read 020-specs/global/ANALYSIS.md — 全局分析报告\n`;
-  p += `4. Read 020-specs/global/TECH.md — 整体技术架构\n`;
+  p += `2. Read 020-specs/overview/REQUIREMENT.md — 迭代综合需求规格\n`;
+  p += `3. Read 020-specs/overview/ANALYSIS.md — 迭代综合分析报告\n`;
+  p += `4. Read 020-specs/overview/TECH.md — 迭代综合技术架构\n`;
   p += `5. Read 020-specs/{端}/TECH.md — 各端专属技术方案\n\n`;
 
   p += `## 任务清单\n\n`;

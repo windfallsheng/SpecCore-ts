@@ -42,7 +42,7 @@ function getHints(stage: string, ctx: Record<string, string>): StepHint[] {
     case 'doc2spec':
       return [
         { action: `speccore analyze${iter ? ` --iteration=${iter}` : ''}`, desc: '分析需求：完整性 + 源码对标 + 架构影响 → ANALYSIS.md', args: '--auto 跳过交互直接生成报告' },
-        { action: 'cat Iteration-' + (iter || 'X') + '/020-specs/global/ANALYSIS.md', desc: '查看分析报告，填写技术方案部分' },
+        { action: 'cat Iteration-' + (iter || 'X') + '/020-specs/overview/ANALYSIS.md', desc: '查看分析报告，填写技术方案部分' },
       ];
 
     case 'analyze':

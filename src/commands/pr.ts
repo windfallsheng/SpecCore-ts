@@ -9,6 +9,11 @@ import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
 import { buildPrompt, formatPrompt } from '../core/prompt-builder';
 import { isProtectedBranch } from '../core/git-integration';
+// v6.86.0+: AGENTS 全阶段扩展
+import { resolveAgentsForPhase } from '../core/agents';
+import type { AgentContext } from '../core/agents';
+// v6.87.0+: COMMANDS 命令模板
+import { loadCommandTemplate, renderTemplate } from '../core/command-loader';
 
 import { createInterface } from 'readline';
 
@@ -60,45 +65,78 @@ export async function prCommand(options: PrOptions): Promise<void> {
       } catch {}
     }
 
-    // 构建 Prompt
-    const prompt = [
-      '# SpecCore PR — 变更分析 + 安全检查',
-      '',
-      '## 你的任务',
-      '1. 分析下面的 git 变更，用中文生成一条简洁的 commit 信息（< 72 字）',
-      '2. 对照 ANALYSIS.md 中的需求/分析内容，判断当前变更是否对齐分析范围',
-      '3. 返回 JSON 格式结果',
-      '',
-      '## 变更文件',
-      changedFiles || '（无变更文件）',
-      '',
-      '## 暂存文件',
-      stagedFiles || '（无暂存文件）',
-      '',
-      '## 变更差异 (diff)',
-      diff ? `\`\`\`\n${diff.slice(0, 8000)}\n\`\`\`` : '（无差异）',
-      '',
-      '## 分析文档 (ANALYSIS.md)',
-      analysis ? `\`\`\`\n${analysis.slice(0, 3000)}\n\`\`\`` : '（无可用分析文档，跳过对照检查）',
-      '',
-      '## 输出格式',
-      '请返回如下 JSON：',
-      '```json',
-      '{',
-      '  "commitMsg": "提交信息（中文，<72字）",',
-      '  "analysisMatch": true|false,',
-      '  "mismatchReason": "不匹配原因（仅 analysisMatch=false 时填写）",',
-      '  "recommendation": "建议：auto-commit 或 confirm-first"',
-      '}',
-      '```',
-      '',
-      '## 规则',
-      '- analysisMatch=true：变更内容符合分析范围，可以直接提交',
-      '- analysisMatch=false：变更超出分析范围，建议用户先确认',
-      '- 若无分析文档，analysisMatch 填 true，但 recommend 填 "confirm-first"',
-    ].join('\n');
+    // v6.87.0+: 尝试加载命令模板
+    const projectRoot = process.cwd();
+    const template = await loadCommandTemplate('pr-review', projectRoot);
 
-    process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}\n[/SPECCORE_PROMPT]`);
+    let prompt: string;
+    if (template) {
+      // 使用模板 + 变量替换
+      prompt = renderTemplate(template.content, {
+        changedFiles: changedFiles || '（无变更文件）',
+        stagedFiles: stagedFiles || '（无暂存文件）',
+        diff: diff ? diff.slice(0, 8000) : '（无差异）',
+        analysis: analysis ? analysis.slice(0, 3000) : '（无可用分析文档，跳过对照检查）',
+      });
+    } else {
+      // 回退到硬编码 prompt
+      prompt = [
+        '# SpecCore PR — 变更分析 + 安全检查',
+        '',
+        '## 你的任务',
+        '1. 分析下面的 git 变更，用中文生成一条简洁的 commit 信息（< 72 字）',
+        '2. 对照 ANALYSIS.md 中的需求/分析内容，判断当前变更是否对齐分析范围',
+        '3. 返回 JSON 格式结果',
+        '',
+        '## 变更文件',
+        changedFiles || '（无变更文件）',
+        '',
+        '## 暂存文件',
+        stagedFiles || '（无暂存文件）',
+        '',
+        '## 变更差异 (diff)',
+        diff ? `\`\`\`\n${diff.slice(0, 8000)}\n\`\`\`` : '（无差异）',
+        '',
+        '## 分析文档 (ANALYSIS.md)',
+        analysis ? `\`\`\`\n${analysis.slice(0, 3000)}\n\`\`\`` : '（无可用分析文档，跳过对照检查）',
+        '',
+        '## 输出格式',
+        '请返回如下 JSON：',
+        '```json',
+        '{',
+        '  "commitMsg": "提交信息（中文，<72字）",',
+        '  "analysisMatch": true|false,',
+        '  "mismatchReason": "不匹配原因（仅 analysisMatch=false 时填写）",',
+        '  "recommendation": "建议：auto-commit 或 confirm-first"',
+        '}',
+        '```',
+        '',
+        '## 规则',
+        '- analysisMatch=true：变更内容符合分析范围，可以直接提交',
+        '- analysisMatch=false：变更超出分析范围，建议用户先确认',
+        '- 若无分析文档，analysisMatch 填 true，但 recommend 填 "confirm-first"',
+      ].join('\n');
+    }
+
+    // v6.86.0+: 注入 pr/review 阶段 AGENTS
+    let finalPrompt = prompt;
+    const agentContext: AgentContext = {
+      iteration: iter,
+    };
+    try {
+      const agents = await resolveAgentsForPhase('pr', 'review', agentContext, projectRoot);
+      if (agents.length > 0) {
+        finalPrompt += '\n\n## 专业角色指引\n\n';
+        for (const ra of agents) {
+          finalPrompt += ra.definition.rolePrompt;
+          finalPrompt += '\n\n';
+        }
+      }
+    } catch {
+      // AGENTS 加载失败静默跳过
+    }
+
+    process.stdout.write(`[SPECCORE_PROMPT]\n${finalPrompt}\n[/SPECCORE_PROMPT]`);
     process.exitCode = 10;
     return;
   }

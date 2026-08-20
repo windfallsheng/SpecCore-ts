@@ -240,7 +240,7 @@ export function buildNewPlatformPrompt(
     prompt += `speccore analyze --apply '{"${analysis.platform}/FEATURES.md":"...","${analysis.platform}/UI_FLOW.md":"...","${analysis.platform}/API_CALL_MAP.md":"...","${analysis.platform}/UI_SPEC.md":"...","${analysis.platform}/TECH_STACK.md":"..."}' -I ${iteration} --global\n`;
   }
   prompt += `\n# 全局文档更新\n`;
-  prompt += `speccore analyze --apply '{"global/FUNCTION_MAP.md":"更新后的内容","global/API_CONTRACT.yaml":"更新后的内容","global/ARCHITECTURE.md":"更新后的内容","global/INTERACTION_MAP.md":"更新后的内容"}' -I ${iteration} --global\n`;
+  prompt += `speccore analyze --apply '{"overview/FUNCTION_MAP.md":"更新后的内容","overview/API_CONTRACT.yaml":"更新后的内容","overview/ARCHITECTURE.md":"更新后的内容","overview/INTERACTION_MAP.md":"更新后的内容"}' -I ${iteration} --global\n`;
   prompt += `\`\`\`\n`;
 
   return prompt;
@@ -316,28 +316,28 @@ async function buildGlobalUpdates(
   const updates: GlobalUpdate[] = [];
 
   updates.push({
-    file: 'global/FUNCTION_MAP.md',
+    file: 'overview/FUNCTION_MAP.md',
     action: 'modify',
     description: `追加 ${newPlatform} 涉及的功能单元和涉及端列`,
     content: `在 FUNCTION_MAP.md 表格中，为每个涉及 ${newPlatform} 的功能单元追加「${newPlatform}」到「涉及端」列`,
   });
 
   updates.push({
-    file: 'global/API_CONTRACT.yaml',
+    file: 'overview/API_CONTRACT.yaml',
     action: 'modify',
     description: `追加 ${newPlatform} 相关的接口契约定义`,
     content: `在 API_CONTRACT.yaml 中追加 ${newPlatform} 提供或消费的接口`,
   });
 
   updates.push({
-    file: 'global/ARCHITECTURE.md',
+    file: 'overview/ARCHITECTURE.md',
     action: 'modify',
     description: `更新服务拓扑图，加入 ${newPlatform}`,
     content: `在 ARCHITECTURE.md 的服务拓扑和数据流图中加入 ${newPlatform}`,
   });
 
   updates.push({
-    file: 'global/INTERACTION_MAP.md',
+    file: 'overview/INTERACTION_MAP.md',
     action: 'append',
     description: `追加涉及 ${newPlatform} 的交互时序图`,
     content: `为涉及 ${newPlatform} 的功能单元追加 Mermaid sequenceDiagram`,
@@ -390,7 +390,7 @@ async function runConsistencyChecks(
     checks.push({
       category: 'enum-value',
       status: 'warning',
-      description: `新端使用的枚举值必须与 global/API_CONTRACT.yaml 中定义的一致`,
+      description: `新端使用的枚举值必须与 overview/API_CONTRACT.yaml 中定义的一致`,
       suggestion: '对比新端的枚举定义与全局契约',
     });
   }

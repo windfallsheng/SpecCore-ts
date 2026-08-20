@@ -18,6 +18,11 @@ import {
   assembleChunksForPrompt, indexTaskDocuments,
 } from './rag-engine';
 import { unifiedSearch, assembleUnifiedContext } from './unified-retrieval';
+// v6.85.0+: RULES 规范库注入
+import { resolveRulesForTechStack, formatRulesPrompt } from './rule-loader';
+// v6.86.0+: AGENTS 全阶段扩展
+import { resolveAgentsForPhase } from './agents';
+import type { AgentContext } from './agents';
 
 // ═══════════════════════════════════════════════════════════
 // 进程级缓存（避免重复 I/O + 重复解析）
@@ -142,6 +147,7 @@ export interface SpecCorePrompt {
   globalContext?: GlobalContext;
   taskContext?: string;  // 知识图谱：当前任务的关联链
   projectPaths?: string; // v6.49.6+：工程路径信息（用于 execute 命令）
+  rulesContent?: string; // v6.85.0+: 编码规范注入
   instruction: string;
   outputHint: string;
 }
@@ -517,7 +523,7 @@ async function loadAllTaskContext(
           const globalItems = await readdir(globalDir, { withFileTypes: true });
           for (const item of globalItems) {
             if (!item.name.endsWith('.md') || isTimestampBackup(item.name)) continue;
-            await addFile(join(globalDir, item.name), `迭代全局规格: ${item.name}`, `020-specs/global/${item.name}`);
+            await addFile(join(globalDir, item.name), `迭代综合规格: ${item.name}`, `020-specs/overview/${item.name}`);
           }
         }
         // 各端规格（新路径 020-specs/{端}/，兼容旧路径 020-specs/platforms/{端}/）
@@ -965,6 +971,27 @@ function buildSplitInstruction(): string {
     '',
     'SpecCore 核心理念: "Code by Spec, Not by Vibe" — 每个任务必须有对应的 Spec，AI 在 Spec 约束下工作。',
     '',
+    '### 前置读取（拆分前必须执行）',
+    '',
+    '拆分前，必须先读取以下分析文档，确保拆分基于已有的分析结果而非凭空想象：',
+    '',
+    '1. **Read `020-specs/overview/FUNCTION_MAP.md`** → 了解功能单元与端的映射关系',
+    '   - 每个功能单元涉及哪些端？',
+    '   - 功能单元之间的依赖关系？',
+    '   - **必须按 FUNCTION_MAP.md 中的功能单元来拆分任务**，不要自己重新定义功能单元',
+    '',
+    '2. **Read `020-specs/overview/REQUIREMENT.md`** → 了解整体需求范围',
+    '   - 功能模块清单、涉及端、验收标准',
+    '',
+    '3. **Read `020-specs/overview/INTERACTION_MAP.md`** → 了解跨端交互时序',
+    '   - 哪些功能需要跨端协作？',
+    '   - 数据如何在端之间流转？',
+    '',
+    '4. **Read `020-specs/{端名}/TECH.md`**（每个端都要读）→ 了解各端技术方案',
+    '   - 各端有哪些接口/页面？',
+    '   - 各端技术栈和架构约束？',
+    '   - **据此确定每个任务涉及哪些端**',
+    '',
     '### 原子任务定义',
     '一个原子任务 = 一个开发者在指定粒度内可独立完成的、有明确验收标准的最小工作单元。',
     '判定标准（全部满足）:',
@@ -987,9 +1014,24 @@ function buildSplitInstruction(): string {
     '- 接口 > 8 个 → 按业务领域拆',
     '- 涉及 > 3 张新表 → 按数据层拆',
     '- 超出粒度时间上限 → 必须再拆',
-    '- 跨端功能（后端 + Admin + H5）→ 按端拆',
+    '- **跨端功能 → 按端拆**：参考 FUNCTION_MAP.md 中每个功能单元涉及的端，为每个端生成独立的子任务',
+    '  - 例：FUNCTION_MAP.md 中「订单系统」涉及 booking-service + admin-web + h5-mobile → 拆成 3 个子任务（每端 1 个）',
+    '  - 例：FUNCTION_MAP.md 中「用户管理」只涉及 booking-service → 只拆 1 个子任务',
     '- 独立第三方集成（支付/短信/OSS）→ 有独立文档和调试流程',
     '- 数据迁移/脚本 → 独立执行窗口',
+    '',
+    '### 按端拆分原则（关键）',
+    '',
+    '1. **读取 FUNCTION_MAP.md**：确定每个功能单元涉及哪些端',
+    '2. **一个功能单元 × 一个端 = 一个子任务**：',
+    '   - 如果功能单元涉及 N 个端，就拆成 N 个子任务（每端一个）',
+    '   - 每个子任务的 `scope` 只包含一个端',
+    '3. **子任务命名规则**：`{功能单元} — {端名}`',
+    '   - 例：`用户管理 — booking-service`、`用户管理 — admin-web`、`用户管理 — h5-mobile`',
+    '4. **子任务内容差异化**：',
+    '   - 后端子任务：聚焦接口设计、数据模型、业务逻辑、单元测试',
+    '   - 前端子任务：聚焦页面设计、组件实现、状态管理、API 调用链、UI 测试',
+    '   - `reqContent` 和 `techContent` 必须按端裁剪，只包含该端负责的内容',
     '',
     '### 依赖关系规则',
     '- 数据依赖: Task-B 需要 Task-A 创建的表 → B 依赖 A',
@@ -1007,7 +1049,7 @@ function buildSplitInstruction(): string {
     '    "name": "任务名称",',
     '    "type": "feature|bugfix|refactor|research",',
     '    "reason": "为什么这样拆分（语义解释）",',
-    '    "scope": ["后端", "admin"],',
+    '    "scope": ["booking-service", "admin-web", "h5-mobile"],',
     '    "apis": ["POST /api/auth/login", "GET /api/auth/me"],',
     '    "tables": ["users", "sessions"],',
     '    "estimatedHours": 8,',
@@ -1021,11 +1063,17 @@ function buildSplitInstruction(): string {
     ']',
     '```',
     '',
+    '**重要：`scope` 字段必须使用标准端名**',
+    '- `scope` 必须是 CONSTITUTION.md「## 端列表」中声明的标准端名',
+    '- **禁止**使用中文简写（如"后端"、"前端"、"管理端"），必须使用标准端名（如 `booking-service`、`admin-web`、`h5-mobile`）',
+    '- 跨端功能必须列出所有涉及的端，不要遗漏',
+    '- 单端功能只列一个端',
+    '',
     '**重要：`functionalUnit` 字段必须填写**',
     '- 填写该任务所属的**功能单元**名称（不是需求文档的章节名）',
-    '- 功能单元 = 一个独立的功能模块，由 AI 根据语义判断',
-    '- 例如：用户 CRUD + 头像上传 → 都属于“用户管理”功能单元',
-    '- 例如：订单创建 + 订单支付 + 订单退款 → 都属于“订单系统”功能单元',
+    '- **功能单元必须来自 FUNCTION_MAP.md**，不要自己重新定义',
+    '- 例如：用户 CRUD + 头像上传 → 都属于"用户管理"功能单元',
+    '- 例如：订单创建 + 订单支付 + 订单退款 → 都属于"订单系统"功能单元',
     '- 用于校验每个功能单元的拆分数量是否合理（默认 1 个，最多 3 个）',
     '',
     '**重要：`reqContent` 和 `techContent` 必须填写**',
@@ -1330,6 +1378,50 @@ export async function buildPrompt(
     }
   }
 
+  // v6.85.0+: 根据技术栈加载编码规范
+  let rulesContent: string | undefined;
+  if (command === 'execute') {
+    const identifiers: string[] = [];
+    if (techStack.language) identifiers.push(techStack.language.toLowerCase());
+    if (techStack.framework) identifiers.push(techStack.framework.toLowerCase());
+    if (techStack.database) identifiers.push(techStack.database.toLowerCase());
+    if (techStack.frontend) identifiers.push(techStack.frontend.toLowerCase());
+    if (techStack.cache) identifiers.push(techStack.cache.toLowerCase());
+    if (options.platform) identifiers.push(options.platform.toLowerCase());
+
+    if (identifiers.length > 0) {
+      try {
+        const rules = await resolveRulesForTechStack(identifiers, cwd);
+        if (rules.length > 0) {
+          rulesContent = formatRulesPrompt(rules);
+        }
+      } catch {
+        // RULES 加载失败静默跳过，不影响主流程
+      }
+    }
+  }
+
+  // v6.86.0+: 为 split/plan 命令注入 AGENTS
+  let instruction = getInstruction(command, context);
+  if (command === 'split' || command === 'plan') {
+    const phase = 'default';
+    const agentContext: AgentContext = {
+      iteration: options.iteration || '',
+    };
+    try {
+      const agents = await resolveAgentsForPhase(command, phase, agentContext, cwd);
+      if (agents.length > 0) {
+        instruction += '\n\n## 专业角色指引\n\n';
+        for (const ra of agents) {
+          instruction += ra.definition.rolePrompt;
+          instruction += '\n\n';
+        }
+      }
+    } catch {
+      // AGENTS 加载失败静默跳过
+    }
+  }
+
   return {
     marker: '[SPECCORE_PROMPT]',
     version: '1.0',
@@ -1345,7 +1437,8 @@ export async function buildPrompt(
     globalContext: (globalContext.indexSummary || globalContext.toc.length > 0) ? globalContext : undefined,
     taskContext: taskContextStr,
     projectPaths: projectPathsInfo,
-    instruction: getInstruction(command, context),
+    rulesContent,
+    instruction,
     outputHint: command === 'execute'
       ? '请返回格式: {"files": [{"path": "工程标识/相对路径", "content": "代码内容"}]}'
       : command === 'split'
@@ -1446,6 +1539,12 @@ function buildPromptText(prompt: SpecCorePrompt): string {
     if (prompt.techStack.database) lines.push(`- 数据库: ${prompt.techStack.database}`);
     if (prompt.techStack.cache) lines.push(`- 缓存: ${prompt.techStack.cache}`);
     if (prompt.techStack.frontend) lines.push(`- 前端: ${prompt.techStack.frontend}`);
+    lines.push('');
+  }
+
+  // v6.85.0+: 编码规范注入
+  if (prompt.rulesContent) {
+    lines.push(prompt.rulesContent);
     lines.push('');
   }
 

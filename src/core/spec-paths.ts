@@ -1,17 +1,18 @@
 /**
  * spec-paths — 020-specs/ 目录路径辅助函数
  * 
- * v6.41.0+ 全局文档迁移到 020-specs/global/ 子目录。
+ * v6.41.0+ 迭代综合文档迁移到 020-specs/overview/ 子目录（原 global/，v6.78.0+ 改名）。
+ * 「overview」表示迭代层总览 spec，避免与「全局层 (--scope global)」概念混淆。
  * 本模块提供统一的路径解析和写入路径生成，支持向后兼容。
  */
 import { join } from 'path';
 import { pathExists, ensureDir, readFile } from 'fs-extra';
 
-/** 全局文档子目录名 */
-export const GLOBAL_SPECS_DIR = 'global';
+/** 迭代综合文档子目录名（v6.78.0+ 从 'global' 改为 'overview'） */
+export const GLOBAL_SPECS_DIR = 'overview';
 
-/** 全局文档文件名列表（仅纯全局文档，不含可分端的文档）
- * v6.48.0+：TECH/RISK/REVIEW/MONITOR 支持按端分目录，不再强制写入 global/
+/** 迭代综合文档文件名列表（仅纯综合文档，不含可分端的文档）
+ * v6.48.0+：TECH/RISK/REVIEW/MONITOR 支持按端分目录，不再强制写入 overview/
  */
 export const GLOBAL_SPEC_FILES = [
   'REQUIREMENT.md', 'ANALYSIS.md', 'DEPS.md',
@@ -19,20 +20,23 @@ export const GLOBAL_SPEC_FILES = [
 ];
 
 /**
- * 解析全局 spec 文件路径（优先 global/，回退根目录）
- * 用于读取侧：兼容新旧两种路径
+ * 解析迭代综合 spec 文件路径（优先 overview/，回退旧版 global/，再回退根目录）
+ * 用于读取侧：兼容新旧三种路径
  */
 export async function resolveGlobalSpecPath(specDir: string, filename: string): Promise<string | null> {
   const newPath = join(specDir, GLOBAL_SPECS_DIR, filename);
   if (await pathExists(newPath)) return newPath;
+  // v6.78.0+ 向后兼容：旧版 global/ 目录
+  const legacyPath = join(specDir, 'global', filename);
+  if (await pathExists(legacyPath)) return legacyPath;
   const oldPath = join(specDir, filename);
   if (await pathExists(oldPath)) return oldPath;
   return null;
 }
 
 /**
- * 获取全局 spec 文件的写入路径（始终使用新路径 global/）
- * 自动确保 global/ 目录存在
+ * 获取迭代综合 spec 文件的写入路径（始终使用新路径 overview/）
+ * 自动确保 overview/ 目录存在
  */
 export async function globalSpecWritePath(specDir: string, filename: string): Promise<string> {
   const dir = join(specDir, GLOBAL_SPECS_DIR);

@@ -1,3 +1,113 @@
+## v6.89.0 (2026-08-20) — 统一注入框架 ContextInjector
+
+### 新增
+
+- **统一注入框架** `src/core/context-injector.ts`
+  - 将 RULES / AGENTS / COMMANDS / SKILLS / HOOKS 五层注入统一到一个 API：`injectAll()`
+  - 支持按需组合注入：技术栈 → 规范，命令/阶段 → 角色，任务关键词 → 技能
+  - 提供简化版 `injectAgents()`、`injectRules()` 供快速调用
+  - 未来新命令无需重复实现注入逻辑
+
+### 构建
+
+- **post-build 脚本** `build-post.js`
+  - TypeScript 编译后自动复制 `.md` 资源到 `dist/`
+  - 确保内置默认的 AGENTS / RULES / COMMANDS / SKILLS / HOOKS 文件在发布包中存在
+
+---
+
+## v6.88.0 (2026-08-20) — SKILLS 可复用技能库 + HOOKS 生命周期钩子
+
+### 新增
+
+- **SKILLS 技能库** `src/core/skill-loader.ts`
+  - 扫描 `.speccore/SKILLS/` 目录，按任务关键词（tags）匹配技能
+  - 内置 4 个技能：deployment、db-migration、caching、logging
+  - execute 阶段可按任务内容选择性注入
+
+- **HOOKS 钩子系统** `src/core/hook-runner.ts`
+  - 支持 `pre-{command}` 和 `post-{command}` 两种钩子
+  - 命名约定驱动的钩子发现：`pre-execute.md`、`post-execute.md`
+  - 支持 `BLOCK:` 标记拦截命令执行
+  - 内置 2 个钩子：pre-execute（分支检查）、post-execute（质量门禁）
+
+- **初始化集成**
+  - `speccore init` 自动创建 `.speccore/SKILLS/` 和 `.speccore/HOOKS/`
+
+---
+
+## v6.87.0 (2026-08-20) — COMMANDS 命令模板系统
+
+### 新增
+
+- **命令模板加载器** `src/core/command-loader.ts`
+  - 扫描 `.speccore/COMMANDS/` 目录加载模板
+  - 支持 `{{变量}}` 替换
+  - 用户自定义模板覆盖内置默认
+
+- **内置模板**
+  - `pr-review.md` — PR 审查流程（commit 信息生成、分析对齐检查）
+  - `change-impact.md` — 变更影响分析流程
+  - `refactor.md` — 重构标准流程
+
+### 修改
+
+- **`pr.ts`**：`--prompt` 模式优先加载 `pr-review` 模板，不存在时回退到硬编码
+- **`change.ts`**：`--prompt` 模式追加 `change-impact` 模板
+- **`init.ts`**：初始化时自动创建 `.speccore/COMMANDS/`
+
+---
+
+## v6.86.0 (2026-08-20) — AGENTS 调度器扩展到全阶段
+
+### 新增
+
+- **11 个角色定义文件**
+  - task-decomposer、dependency-analyst、effort-estimator（split 阶段）
+  - schedule-planner、risk-assessor（plan 阶段）
+  - impact-analyst、regression-tester（change 阶段）
+  - code-reviewer、test-reviewer（pr 阶段）
+  - compiler、test-engineer、performance-expert、doc-sync-agent（execute quality-gate）
+  - compliance-checker（audit 阶段，finance 行业条件激活）
+
+- **AGENTS 注册表更新** `_INDEX.md`
+  - 新增 `split / default`、`plan / default` 阶段配置
+
+### 修改
+
+- **`prompt-builder.ts`**：split / plan 命令构建 prompt 时自动注入对应角色
+- **`change.ts`**：change/impact 阶段注入 impact-analyst、regression-tester
+- **`pr.ts`**：pr/review 阶段注入 code-reviewer、security-reviewer、test-reviewer
+
+---
+
+## v6.85.0 (2026-08-20) — RULES 编码规范库 + 按技术栈自动注入
+
+### 新增
+
+- **规范库加载器** `src/core/rule-loader.ts`
+  - 扫描 `.speccore/RULES/` 目录
+  - 从 frontmatter 解析 `appliesTo` 和 `priority`
+  - 按技术栈标识符匹配适用规范
+
+- **8 个内置编码规范**
+  - `typescript.md` — 类型安全、命名规范、模块组织
+  - `react.md` — 组件设计、Hooks 规范、状态管理
+  - `vue.md` — 组合式 API、响应式规范
+  - `nodejs.md` — RESTful API、错误处理、依赖注入
+  - `api-design.md` — 幂等性、版本控制、分页
+  - `testing.md` — 测试金字塔、覆盖率目标
+  - `security.md` — 输入验证、认证授权、OWASP 防护
+  - `database.md` — 命名规范、表设计、查询优化
+  - `frontend-common.md` — 响应式、a11y、i18n、性能
+
+### 修改
+
+- **`prompt-builder.ts`**：execute 阶段从 `CONSTITUTION.md` 解析技术栈，自动注入匹配规范到 prompt
+- **`init.ts`**：初始化时自动创建 `.speccore/RULES/`，复制默认规范（不覆盖用户自定义）
+
+---
+
 ## v6.77.6 (2026-08-19) — 修复"全局"概念混淆：迭代层 vs 全局层
 
 ### Bug 修复
