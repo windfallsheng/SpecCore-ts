@@ -2,6 +2,26 @@
 
 ---
 
+## v6.91.2 (2026-08-20) — Documentation Sync and Architecture Design Updates
+
+### Documentation
+
+- **README.md**
+  - Version sync: v6.71.3 → v6.91.1
+  - `knowledge` command description updated with code knowledge graph features
+  - Added code knowledge graph usage examples (code-index --graph / knowledge-explain / knowledge-path / knowledge-query)
+
+- **docs/DESIGN.md**
+  - Section 1.5 title updated: v6.84.0+ — v6.91.0+
+  - Added 1.5.8 "Code Knowledge Graph (v6.90.0+)": architecture, core mechanisms, output artifacts, CLI integration
+  - Added 1.5.9 "Graph Deep Integration (v6.91.0+)": analyze injection, PATTERNS confidence, MODULE_MAP, multimodal
+  - Version history supplemented with v6.84.0–v6.91.1 complete records
+
+- **docs/command-reference.md**
+  - `knowledge` command docs updated with code knowledge graph query examples
+
+---
+
 ## v6.91.1 (2026-08-20) — Flow Fixes and Stability Improvements
 
 ### Fixes

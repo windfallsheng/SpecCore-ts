@@ -1,3 +1,23 @@
+## v6.91.2 (2026-08-20) — 文档同步与架构设计补充
+
+### 文档
+
+- **README.md**
+  - 版本号同步：v6.71.3 → v6.91.1
+  - `knowledge` 命令描述更新：加入代码知识图谱功能说明
+  - 新增代码知识图谱使用示例（code-index --graph / knowledge-explain / knowledge-path / knowledge-query）
+
+- **docs/DESIGN.md**
+  - 1.5 节标题更新：v6.84.0+ — v6.91.0+
+  - 新增 1.5.8「代码知识图谱（v6.90.0+）」：架构设计、核心机制、输出产物、CLI 集成
+  - 新增 1.5.9「图谱深度整合（v6.91.0+）」：analyze 注入、PATTERNS 置信度、MODULE_MAP、多模态
+  - 版本历史补充 v6.84.0–v6.91.1 完整记录
+
+- **docs/command-reference.md**
+  - `knowledge` 命令说明更新，加入代码知识图谱查询示例
+
+---
+
 ## v6.91.1 (2026-08-20) — 流程修复与稳定性改进
 
 ### 修复
