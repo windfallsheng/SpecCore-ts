@@ -1,3 +1,31 @@
+## v6.90.0 (2026-08-20) — 代码知识图谱 Code Knowledge Graph
+
+### 新增
+
+- **代码知识图谱模块** `src/core/code-graph/`
+  - `parser.ts`: 基于 TypeScript 编译器 API 的本地 AST 解析（零 Token，代码不出本机）
+  - `builder.ts`: 图谱构建 + 社区检测（Union-Find + 目录结构启发式）+ God nodes 识别
+  - `query.ts`: 支持 explain（节点解释）、path（最短路径 BFS）、query（关键词匹配）
+  - `reporter.ts`: 自动生成 `GRAPH_REPORT.md`（God nodes、社区、跨社区桥梁、建议问题）
+  - `visualizer.ts`: 生成 `graph.html`（vis-network 力导向图，社区着色，EXTRACTED/INFERRED 线型区分）
+  - `index.ts`: 一键构建 API `buildCodeKnowledgeGraph()`，输出三产物
+
+- **CLI 命令增强**
+  - `speccore code-index --graph`: 构建代码知识图谱
+  - `speccore knowledge-explain <node>`: 解释节点及其连接
+  - `speccore knowledge-path <from> <to>`: 查找最短路径
+  - `speccore knowledge-query <question>`: 自然语言查询图谱
+
+### 借鉴 Graphify 的核心设计
+
+- 本地 AST 解析替代 RAG 向量索引（零 LLM Token）
+- EXTRACTED / INFERRED 边置信度标签
+- 社区检测自动划分子系统
+- 三产物输出：graph.json + GRAPH_REPORT.md + graph.html
+- 持久化图谱：一次构建，多次查询
+
+---
+
 ## v6.89.0 (2026-08-20) — 统一注入框架 ContextInjector
 
 ### 新增

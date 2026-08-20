@@ -12,6 +12,7 @@ import { buildKnowledgeGraph } from '../core/knowledge-graph';
 import { detectDecay } from '../core/decay-detector';
 import { buildContextMarkdown } from '../core/context-builder';
 import { buildKnowledgeHtml } from '../core/knowledge-visualizer';
+import { loadCodeGraph, explainNode, findPath, queryGraph } from '../core/code-graph';
 
 export interface KnowledgeOptions {
   iteration?: string;
@@ -98,4 +99,90 @@ export async function knowledgeCommand(options: KnowledgeOptions): Promise<void>
   await writeFile(outPath, html, 'utf-8');
   logger.success(`\n✅ 知识图谱可视化页面已生成: ${outPath}`);
   logger.info(`\n[SPECCORE_KNOWLEDGE: ${outPath}]`);
+}
+
+/**
+ * knowledge explain — 解释代码图谱中的节点
+ */
+export async function knowledgeExplainCommand(nodeName: string): Promise<void> {
+  const graph = await loadCodeGraph();
+  if (!graph) {
+    logger.error('代码知识图谱不存在，请先运行: speccore code-index --graph');
+    return;
+  }
+
+  const result = explainNode(graph, nodeName);
+  if (result.nodes.length === 0) {
+    logger.error(`未找到节点: ${nodeName}`);
+    return;
+  }
+
+  const target = result.nodes.find(n => n.name === nodeName || n.id === nodeName);
+  logger.info(`\n📍 ${target?.name} (${target?.type})`);
+  logger.info(`   file: ${target?.filePath}:${target?.line}`);
+  logger.info(`   degree: ${target?.degree} | community: ${target?.community}`);
+  logger.info(`   snippet: ${target?.snippet?.slice(0, 120)}...`);
+  logger.info('\n🔗 Connections:');
+  for (const e of result.edges.slice(0, 20)) {
+    const other = e.source === target?.id
+      ? result.nodes.find(n => n.id === e.target)
+      : result.nodes.find(n => n.id === e.source);
+    const otherLabel = other?.name || (e.source === target?.id ? e.target : e.source);
+    const dir = e.source === target?.id ? '-->' : '<--';
+    logger.info(`   ${dir} ${otherLabel} [${e.type}] (${e.confidence})`);
+  }
+}
+
+/**
+ * knowledge path — 查找两个节点之间的最短路径
+ */
+export async function knowledgePathCommand(source: string, target: string): Promise<void> {
+  const graph = await loadCodeGraph();
+  if (!graph) {
+    logger.error('代码知识图谱不存在，请先运行: speccore code-index --graph');
+    return;
+  }
+
+  const result = findPath(graph, source, target);
+  if (!result.path || result.path.length === 0) {
+    logger.error(`未找到从 ${source} 到 ${target} 的路径`);
+    return;
+  }
+
+  logger.info(`\n🛤️  Shortest path (${result.path.length} hops):`);
+  for (let i = 0; i < result.path.length; i++) {
+    const node = result.nodes.find(n => n.id === result.path![i]);
+    logger.info(`   ${i + 1}. ${node?.name} (${node?.type})`);
+    if (i < result.path.length - 1) {
+      const edge = result.edges[i];
+      logger.info(`      [${edge.type}] (${edge.confidence})`);
+    }
+  }
+}
+
+/**
+ * knowledge query — 自然语言查询代码图谱
+ */
+export async function knowledgeQueryCommand(question: string): Promise<void> {
+  const graph = await loadCodeGraph();
+  if (!graph) {
+    logger.error('代码知识图谱不存在，请先运行: speccore code-index --graph');
+    return;
+  }
+
+  const result = queryGraph(graph, question);
+  if (result.nodes.length === 0) {
+    logger.info('未找到匹配结果，尝试更具体的关键词');
+    return;
+  }
+
+  logger.info(`\n🔍 Query: "${question}"`);
+  logger.info(`   匹配 ${result.nodes.length} 个节点, ${result.edges.length} 条边\n`);
+
+  for (const n of result.nodes.slice(0, 15)) {
+    logger.info(`   • ${n.name} (${n.type}) — ${n.filePath}:${n.line}`);
+  }
+  if (result.nodes.length > 15) {
+    logger.info(`   ... 及其他 ${result.nodes.length - 15} 个节点`);
+  }
 }
