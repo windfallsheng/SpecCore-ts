@@ -4,6 +4,19 @@ import { logger, Spinner } from '../utils/logger';
 import { createInterface } from 'readline';
 import { updateContext } from '../core/context';
 import { SVG_ONBOARD } from './ask';
+// v6.84.0+: AGENTS 规范数据库
+import {
+  getBuiltinAgentContents,
+  getBuiltinRegistryContent,
+  getBuiltinTemplateContent,
+} from '../core/agents';
+// v6.85.0+: RULES 规范库
+import { getBuiltinRuleContents } from '../core/rule-loader';
+// v6.87.0+: COMMANDS 命令模板
+import { getBuiltinCommandContents } from '../core/command-loader';
+// v6.88.0+: SKILLS + HOOKS
+import { getBuiltinSkillContents } from '../core/skill-loader';
+import { getBuiltinHookContents } from '../core/hook-runner';
 
 // ── 升级冲突追踪 ── 覆盖前旧文件重命名为时间戳格式，汇总提示用户对比
 export const _updateConflicts: { file: string; backup: string }[] = [];
@@ -266,6 +279,21 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
     await writeAgentsMd(projectRoot);
     // CLAUDE.md 指向 AGENTS.md
     await writeFile(join(projectRoot, 'CLAUDE.md'), `<!-- 规则请参考 AGENTS.md -->\n\n@AGENTS.md\n`);
+
+    // v6.84.0+: AGENTS 规范数据库 — 初始化默认角色
+    await initAgentsDir(projectRoot);
+
+    // v6.85.0+: RULES 规范库 — 初始化默认编码规范
+    await initRulesDir(projectRoot);
+
+    // v6.87.0+: COMMANDS 命令模板 — 初始化默认模板
+    await initCommandsDir(projectRoot);
+
+    // v6.88.0+: SKILLS 可复用技能库
+    await initSkillsDir(projectRoot);
+
+    // v6.88.0+: HOOKS 生命周期钩子
+    await initHooksDir(projectRoot);
 
     // Update context
     await updateContext({ lastUpdated: new Date().toISOString() });
@@ -1203,6 +1231,121 @@ speccore execute -I <迭代名> --all       # 执行所有任务
   await wf(require('path').join(projectRoot, 'AGENTS.md'), content);
 }
 
+/**
+ * v6.84.0+: 初始化 AGENTS 规范数据库
+ * 将内置默认角色复制到 .speccore/AGENTS/ 目录
+ * 用户可在此目录下自定义角色或新增角色
+ */
+async function initAgentsDir(projectRoot: string): Promise<void> {
+  const agentsDir = join(projectRoot, '.speccore', 'AGENTS');
+  await ensureDir(agentsDir);
+
+  // 复制内置默认角色（不覆盖用户已自定义的）
+  const agents = await getBuiltinAgentContents();
+  for (const agent of agents) {
+    const destPath = join(agentsDir, `${agent.name}.md`);
+    if (!(await pathExists(destPath))) {
+      await writeFile(destPath, agent.content);
+    }
+  }
+
+  // 复制注册表（不覆盖用户已自定义的）
+  const registryContent = await getBuiltinRegistryContent();
+  if (registryContent) {
+    const registryPath = join(agentsDir, '_INDEX.md');
+    if (!(await pathExists(registryPath))) {
+      await writeFile(registryPath, registryContent);
+    }
+  }
+
+  // 复制模板（不覆盖用户已自定义的）
+  const templateContent = await getBuiltinTemplateContent();
+  if (templateContent) {
+    const templatePath = join(agentsDir, '_TEMPLATE.md');
+    if (!(await pathExists(templatePath))) {
+      await writeFile(templatePath, templateContent);
+    }
+  }
+
+  logger.info('   🤖 已初始化 AGENTS 规范数据库: .speccore/AGENTS/');
+}
+
+/**
+ * v6.85.0+: 初始化 RULES 规范库
+ * 将内置默认编码规范复制到 .speccore/RULES/ 目录
+ */
+async function initRulesDir(projectRoot: string): Promise<void> {
+  const rulesDir = join(projectRoot, '.speccore', 'RULES');
+  await ensureDir(rulesDir);
+
+  // 复制内置默认规范（不覆盖用户已自定义的）
+  const rules = await getBuiltinRuleContents();
+  for (const rule of rules) {
+    const destPath = join(rulesDir, `${rule.name}.md`);
+    if (!(await pathExists(destPath))) {
+      await writeFile(destPath, rule.content);
+    }
+  }
+
+  logger.info('   📋 已初始化 RULES 规范库: .speccore/RULES/');
+}
+
+/**
+ * v6.87.0+: 初始化 COMMANDS 命令模板
+ * 将内置默认命令模板复制到 .speccore/COMMANDS/ 目录
+ */
+async function initCommandsDir(projectRoot: string): Promise<void> {
+  const commandsDir = join(projectRoot, '.speccore', 'COMMANDS');
+  await ensureDir(commandsDir);
+
+  // 复制内置默认模板（不覆盖用户已自定义的）
+  const commands = await getBuiltinCommandContents();
+  for (const cmd of commands) {
+    const destPath = join(commandsDir, `${cmd.name}.md`);
+    if (!(await pathExists(destPath))) {
+      await writeFile(destPath, cmd.content);
+    }
+  }
+
+  logger.info('   📜 已初始化 COMMANDS 命令模板: .speccore/COMMANDS/');
+}
+
+/**
+ * v6.88.0+: 初始化 SKILLS 可复用技能库
+ */
+async function initSkillsDir(projectRoot: string): Promise<void> {
+  const skillsDir = join(projectRoot, '.speccore', 'SKILLS');
+  await ensureDir(skillsDir);
+
+  const skills = await getBuiltinSkillContents();
+  for (const skill of skills) {
+    const destPath = join(skillsDir, `${skill.name}.md`);
+    if (!(await pathExists(destPath))) {
+      await writeFile(destPath, skill.content);
+    }
+  }
+
+  logger.info('   🛠️  已初始化 SKILLS 技能库: .speccore/SKILLS/');
+}
+
+/**
+ * v6.88.0+: 初始化 HOOKS 生命周期钩子
+ */
+async function initHooksDir(projectRoot: string): Promise<void> {
+  const hooksDir = join(projectRoot, '.speccore', 'HOOKS');
+  await ensureDir(hooksDir);
+
+  const hooks = await getBuiltinHookContents();
+  for (const hook of hooks) {
+    const destPath = join(hooksDir, `${hook.name}.md`);
+    if (!(await pathExists(destPath))) {
+      await writeFile(destPath, hook.content);
+    }
+  }
+
+  logger.info('   🔗 已初始化 HOOKS 钩子: .speccore/HOOKS/');
+}
+
 async function createSampleIteration(projectRoot: string): Promise<void> {
   const iterDir = join(projectRoot, 'Iteration-sample');
   await ensureDir(iterDir);
@@ -1467,6 +1610,7 @@ export async function checkUpgradeHints(projectRoot: string, speccoreDir: string
     logger.info(`📋 已自动更新的文件 (${lastVersion} → ${version}):`);
     logger.info('   ✅ AI-RULES.md — 命令参考表');
     logger.info('   ✅ AGENTS.md — 项目规则');
+    logger.info('   ✅ .speccore/AGENTS/ — 规范数据库（v6.84.0+）');
     logger.info('   ✅ SETTINGS.md — 框架配置');
     logger.info('   ✅ .agents/skills/ — Skill 全量更新');
     logger.info('   ✅ .claude/ / .codebuddy/ 等 — 命令模板');

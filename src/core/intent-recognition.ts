@@ -707,6 +707,16 @@ function extractParams(input: string, mapping: CommandMapping): Record<string, s
     params.tool = matchedTools.join(',');
   }
 
+  // 检测开发指南参数
+  if (input.includes('开发指南') || input.includes('生成开发指南') || input.includes('带开发指南')) {
+    params.devGuide = 'true';
+  }
+
+  // 检测是否要求传统拆分模式（不走 AI 增强路径）
+  if (input.includes('直接拆分') || input.includes('按章节') || input.includes('传统拆分') || input.includes('不用ai拆分')) {
+    params.splitDirect = 'true';
+  }
+
   return params;
 }
 

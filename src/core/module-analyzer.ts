@@ -184,13 +184,13 @@ export function buildModuleAnalysisPrompt(
 
   prompt += `### Step 1: 读取当前全局文档\n`;
   if (exists) {
-    prompt += `- Read \`020-specs/global/FUNCTION_MAP.md\` → 找到 "${moduleName}" 当前定义\n`;
-    prompt += `- Read \`020-specs/global/INTERACTION_MAP.md\` → 找到 "${moduleName}" 当前时序图\n`;
-    prompt += `- Read \`020-specs/global/API_CONTRACT.yaml\` → 找到 "${moduleName}" 相关接口\n`;
-    prompt += `- Read \`020-specs/global/REQUIREMENT.md\` → 找到 "${moduleName}" 当前章节\n`;
+    prompt += `- Read \`020-specs/overview/FUNCTION_MAP.md\` → 找到 "${moduleName}" 当前定义\n`;
+    prompt += `- Read \`020-specs/overview/INTERACTION_MAP.md\` → 找到 "${moduleName}" 当前时序图\n`;
+    prompt += `- Read \`020-specs/overview/API_CONTRACT.yaml\` → 找到 "${moduleName}" 相关接口\n`;
+    prompt += `- Read \`020-specs/overview/REQUIREMENT.md\` → 找到 "${moduleName}" 当前章节\n`;
   } else {
-    prompt += `- Read \`020-specs/global/FUNCTION_MAP.md\` → 了解现有功能单元格式\n`;
-    prompt += `- Read \`020-specs/global/REQUIREMENT.md\` → 了解需求文档格式\n`;
+    prompt += `- Read \`020-specs/overview/FUNCTION_MAP.md\` → 了解现有功能单元格式\n`;
+    prompt += `- Read \`020-specs/overview/REQUIREMENT.md\` → 了解需求文档格式\n`;
   }
   prompt += `\n`;
 
@@ -231,7 +231,7 @@ export function buildModuleAnalysisPrompt(
   prompt += `## 写入方式\n`;
   prompt += `\`\`\`bash\n`;
   prompt += `# 全局文档\n`;
-  prompt += `speccore analyze --apply '{"global/FUNCTION_MAP.md":"更新后的内容","global/INTERACTION_MAP.md":"更新后的内容","global/API_CONTRACT.yaml":"更新后的内容","global/REQUIREMENT.md":"更新后的内容"}' -I ${iteration}\n`;
+  prompt += `speccore analyze --apply '{"overview/FUNCTION_MAP.md":"更新后的内容","overview/INTERACTION_MAP.md":"更新后的内容","overview/API_CONTRACT.yaml":"更新后的内容","overview/REQUIREMENT.md":"更新后的内容"}' -I ${iteration}\n`;
   prompt += `\n# 各端文档（示例）\n`;
   for (const p of involvedPlatforms) {
     prompt += `speccore analyze --apply '{"${p}/TECH.md":"更新后的内容"}' -I ${iteration}\n`;
@@ -360,43 +360,43 @@ function buildGlobalUpdatePlan(moduleName: string, exists: boolean): ModuleGloba
 
   if (exists) {
     updates.push({
-      file: 'global/FUNCTION_MAP.md',
+      file: 'overview/FUNCTION_MAP.md',
       action: 'append-row',
       description: `更新 "${moduleName}" 行的涉及端、共享能力、依赖关系`,
     });
     updates.push({
-      file: 'global/INTERACTION_MAP.md',
+      file: 'overview/INTERACTION_MAP.md',
       action: 'replace-sequence',
       description: `替换 "${moduleName}" 的 Mermaid 时序图`,
     });
     updates.push({
-      file: 'global/API_CONTRACT.yaml',
+      file: 'overview/API_CONTRACT.yaml',
       action: 'update-contract',
       description: `更新 "${moduleName}" 相关的接口契约`,
     });
     updates.push({
-      file: 'global/REQUIREMENT.md',
+      file: 'overview/REQUIREMENT.md',
       action: 'update-section',
       description: `更新 "${moduleName}" 章节的详细需求`,
     });
   } else {
     updates.push({
-      file: 'global/FUNCTION_MAP.md',
+      file: 'overview/FUNCTION_MAP.md',
       action: 'append-row',
       description: `追加 "${moduleName}" 功能单元到表格`,
     });
     updates.push({
-      file: 'global/INTERACTION_MAP.md',
+      file: 'overview/INTERACTION_MAP.md',
       action: 'append-row',
       description: `追加 "${moduleName}" 的 Mermaid 时序图`,
     });
     updates.push({
-      file: 'global/API_CONTRACT.yaml',
+      file: 'overview/API_CONTRACT.yaml',
       action: 'update-contract',
       description: `追加 "${moduleName}" 相关的接口契约`,
     });
     updates.push({
-      file: 'global/REQUIREMENT.md',
+      file: 'overview/REQUIREMENT.md',
       action: 'update-section',
       description: `追加 "${moduleName}" 章节到需求文档`,
     });

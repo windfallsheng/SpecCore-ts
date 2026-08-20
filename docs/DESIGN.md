@@ -138,6 +138,105 @@ PATTERNS/
 
 ---
 
+## 1.5 规范数据库分层架构（v6.84.0+ — v6.89.0+）
+
+`.speccore/` 目录不仅是配置存储，更是 **AI 可读的规范数据库**。从 v6.84.0 开始，建立了与 Codex `.codex/` 对齐的五层规范结构，所有层均在初始化时自动创建，支持用户自定义覆盖。
+
+### 1.5.1 五层结构对照
+
+| 层级 | 目录 | 用途 | 对应 Codex | 版本 |
+|------|------|------|-----------|------|
+| **AGENTS** | `.speccore/AGENTS/` | 专业角色定义（产品分析师、安全审查员等） | `.codex/agents/` | v6.84.0 |
+| **RULES** | `.speccore/RULES/` | 编码规范（TypeScript、React、API 设计等） | `.codex/rules/` | v6.85.0 |
+| **COMMANDS** | `.speccore/COMMANDS/` | 命令模板（PR 审查、变更影响分析等） | `.codex/commands/` | v6.87.0 |
+| **SKILLS** | `.speccore/SKILLS/` | 可复用技能（部署、数据库迁移、缓存等） | `.codex/skills/` | v6.88.0 |
+| **HOOKS** | `.speccore/HOOKS/` | 生命周期钩子（pre-execute、post-execute） | `.codex/hooks/` | v6.88.0 |
+
+### 1.5.2 AGENTS 层（v6.84.0+）
+
+**职责**：定义各命令/阶段下激活的专业 AI 角色。
+
+**核心机制**：
+- **规范数据库**：每个角色是一个 Markdown 文件，含 `activations` frontmatter 定义激活规则
+- **混合调度器**：注册表（`_INDEX.md` 显式配置）+ 自描述（`.md` 文件自含激活规则）双轨合并
+- **特化版本解析**：`product-analyst` → `product-analyst-backend`（platform）→ `product-analyst-finance`（industry）的回退链
+- **条件过滤**：支持简单表达式（`project.securityLevel > 2`、`project.industry == 'finance'`）
+
+**已覆盖阶段**：
+| 命令 | 阶段 | 角色 |
+|------|------|------|
+| `analyze` | clarify | product-analyst、interaction-designer、security-reviewer |
+| `analyze` | confirm-check | product-analyst |
+| `split` | default | task-decomposer、dependency-analyst、effort-estimator |
+| `plan` | default | schedule-planner、risk-assessor |
+| `execute` | quality-gate | compiler、test-engineer、security-reviewer、performance-expert、doc-sync-agent |
+| `change` | impact | impact-analyst、regression-tester |
+| `pr` | review | code-reviewer、security-reviewer、test-reviewer |
+| `audit` | default | security-reviewer、compliance-checker、performance-expert |
+
+### 1.5.3 RULES 层（v6.85.0+）
+
+**职责**：按语言/框架分层的编码规范，在 `execute` 阶段按技术栈自动注入 prompt。
+
+**核心机制**：
+- **技术栈匹配**：从 `CONSTITUTION.md` 解析 `language`、`framework`、`database`、`cache`、`frontend`，匹配对应规范文件
+- **优先级排序**：高优先级规范先注入（如 security=100 > typescript=100 > react=90）
+- **用户自定义覆盖**：`.speccore/RULES/` 下的同名文件覆盖内置默认
+
+**内置规范**：
+- `typescript.md` — 类型安全、命名规范、模块组织
+- `react.md` / `vue.md` — 组件设计、Hooks 规范、状态管理
+- `nodejs.md` — RESTful API、错误处理、依赖注入、数据访问
+- `api-design.md` — 幂等性、版本控制、分页、统一响应格式
+- `testing.md` — 测试金字塔、单元/集成测试规范
+- `security.md` — 输入验证、认证授权、数据保护、OWASP 防护
+- `database.md` — 命名规范、表设计、查询规范、迁移规范
+- `frontend-common.md` — 响应式、a11y、i18n、性能
+
+### 1.5.4 COMMANDS 层（v6.87.0+）
+
+**职责**：为 CLI 命令提供可配置的 prompt 模板，替换硬编码流程。
+
+**核心机制**：
+- **模板变量替换**：支持 `{{key}}` 格式变量注入
+- **命令级加载**：`pr.ts` 加载 `pr-review` 模板，`change.ts` 加载 `change-impact` 模板
+- **回退策略**：模板不存在时自动回退到硬编码 prompt
+
+### 1.5.5 SKILLS 层（v6.88.0+）
+
+**职责**：按任务关键词匹配的可复用技能指南。
+
+**核心机制**：
+- **标签匹配**：每个技能文件含 `tags` frontmatter，与任务关键词模糊匹配
+- **按需注入**：execute 阶段根据任务内容选择性注入相关技能
+
+### 1.5.6 HOOKS 层（v6.88.0+）
+
+**职责**：命令执行前后的生命周期检查。
+
+**核心机制**：
+- **命名约定**：`pre-{command}.md` / `post-{command}.md`
+- **拦截能力**：钩子内容含 `BLOCK:` 标记时可拦截命令执行
+- **执行结果**：返回 `{ blocked, reason, messages }`
+
+### 1.5.7 统一注入框架（v6.89.0+）
+
+**`ContextInjector`** 将五层注入统一到一个入口：
+
+```typescript
+const injected = await injectAll(basePrompt, {
+  projectRoot,
+  command: 'execute',
+  phase: 'code-gen',
+  techStack: { language: 'typescript', framework: 'react' },
+  agentContext: { iteration: 'Iteration-001' },
+  taskKeywords: ['deploy', 'api'],
+  commandTemplate: { name: 'pr-review', vars: { changedFiles: '...' } },
+});
+```
+
+---
+
 ## 2. CONSTITUTION.md 设计
 
 ### 2.1 端列表（全局权威，v6.46.0+）

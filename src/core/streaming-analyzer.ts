@@ -247,21 +247,21 @@ function buildPhase2Prompt(ctx: PhaseContext): string {
   prompt += `3. Read 已有的全局层文档（如有）\n\n`;
 
   prompt += `## 更新内容\n`;
-  prompt += `### 1. 更新 global/API_CONTRACT.yaml\n`;
+  prompt += `### 1. 更新 overview/API_CONTRACT.yaml\n`;
   prompt += `汇总所有后端端的接口，生成统一契约：\n`;
   prompt += `- 接口路径、方法、消费者端、提供者端\n`;
   prompt += `- 请求/响应参数定义\n`;
   prompt += `- 枚举定义（前后端共享）\n`;
   prompt += `- 事件/消息契约\n\n`;
 
-  prompt += `### 2. 更新 global/ARCHITECTURE.md\n`;
+  prompt += `### 2. 更新 overview/ARCHITECTURE.md\n`;
   prompt += `基于后端分析结果，更新全局架构：\n`;
   prompt += `- 服务拓扑图（哪些服务依赖哪些服务）\n`;
   prompt += `- 数据流图（请求从入口到各服务的流转）\n`;
   prompt += `- 数据库分布（每个服务对应哪些表）\n`;
   prompt += `- 中间件使用（缓存、消息队列、网关等）\n\n`;
 
-  prompt += `### 3. 更新 global/FUNCTION_MAP.md\n`;
+  prompt += `### 3. 更新 overview/FUNCTION_MAP.md\n`;
   prompt += `基于后端分析的功能模块，更新功能映射表：\n`;
   prompt += `- 功能单元 × 后端端映射\n`;
   prompt += `- 标注每个功能的数据模型依赖\n`;
@@ -275,7 +275,7 @@ function buildPhase2Prompt(ctx: PhaseContext): string {
 
   prompt += `## 回写命令\n`;
   prompt += `\`\`\`bash\n`;
-  prompt += `speccore analyze --apply '{"global/API_CONTRACT.yaml":"...","global/ARCHITECTURE.md":"...","global/FUNCTION_MAP.md":"...","global/CONSISTENCY_CHECK.md":"..."}' -I ${iteration} --global\n`;
+  prompt += `speccore analyze --apply '{"overview/API_CONTRACT.yaml":"...","overview/ARCHITECTURE.md":"...","overview/FUNCTION_MAP.md":"...","overview/CONSISTENCY_CHECK.md":"..."}' -I ${iteration} --global\n`;
   prompt += `\`\`\`\n`;
 
   return prompt;
@@ -306,8 +306,8 @@ function buildPhase3Prompt(ctx: PhaseContext): string {
 
   prompt += `## 分析前提（必须读取）\n`;
   prompt += `在开始前端分析前，必须先读取：\n`;
-  prompt += `1. \`global/API_CONTRACT.yaml\` → 后端接口契约（字段名、类型、枚举值）\n`;
-  prompt += `2. \`global/ARCHITECTURE.md\` → 全局架构（服务拓扑）\n`;
+  prompt += `1. \`overview/API_CONTRACT.yaml\` → 后端接口契约（字段名、类型、枚举值）\n`;
+  prompt += `2. \`overview/ARCHITECTURE.md\` → 迭代综合架构（服务拓扑）\n`;
   prompt += `3. 相关后端端的 \`API_INVENTORY.md\` → 该前端调用的后端接口详情\n`;
   prompt += `4. Phase 0 的该前端端 \`_INDEX.md\` → 页面和组件索引\n\n`;
 
@@ -400,7 +400,7 @@ function buildPhase4Prompt(ctx: PhaseContext): string {
   prompt += `## 读取输入\n`;
   prompt += `1. 所有后端端的 \`API_INVENTORY.md\` 和 \`DATA_MODEL.md\`\n`;
   prompt += `2. 所有前端端的 \`UI_SPEC.md\` 和 \`API_CALL_MAP.md\`\n`;
-  prompt += `3. \`global/API_CONTRACT.yaml\`\n\n`;
+  prompt += `3. \`overview/API_CONTRACT.yaml\`\n\n`;
 
   prompt += `## 检查项\n`;
   prompt += `### 1. 字段一致性\n`;
@@ -420,14 +420,14 @@ function buildPhase4Prompt(ctx: PhaseContext): string {
   prompt += `- [ ] 状态流转逻辑一致（前端展示的状态变化 = 后端实体的状态变化）\n\n`;
 
   prompt += `## 输出\n`;
-  prompt += `- \`global/CROSS_CHECK.md\`：横向关联检查报告\n`;
+  prompt += `- \`overview/CROSS_CHECK.md\`：横向关联检查报告\n`;
   prompt += `  - 列出所有不一致项（字段/接口/状态）\n`;
   prompt += `  - 标注严重程度（致命/严重/警告）\n`;
   prompt += `  - 给出修正建议\n\n`;
 
   prompt += `## 回写命令\n`;
   prompt += `\`\`\`bash\n`;
-  prompt += `speccore analyze --apply '{"global/CROSS_CHECK.md":"..."}' -I ${iteration} --global\n`;
+  prompt += `speccore analyze --apply '{"overview/CROSS_CHECK.md":"..."}' -I ${iteration} --global\n`;
   prompt += `\`\`\`\n`;
 
   return prompt;
@@ -441,9 +441,9 @@ function buildPhase5Prompt(ctx: PhaseContext): string {
   prompt += `按功能模块维度检查跨端完整性，确保每个功能在各端的实现都齐全。\n\n`;
 
   prompt += `## 读取输入\n`;
-  prompt += `1. \`global/FUNCTION_MAP.md\` → 功能单元列表\n`;
+  prompt += `1. \`overview/FUNCTION_MAP.md\` → 功能单元列表\n`;
   prompt += `2. 各端的 \`FEATURES.md\` 或 \`API_INVENTORY.md\`\n`;
-  prompt += `3. \`global/INTERACTION_MAP.md\`（如有）\n\n`;
+  prompt += `3. \`overview/INTERACTION_MAP.md\`（如有）\n\n`;
 
   prompt += `## 检查项\n`;
   prompt += `### 1. 功能覆盖完整性\n`;
@@ -465,14 +465,14 @@ function buildPhase5Prompt(ctx: PhaseContext): string {
   prompt += `- [ ] 跨服务调用的数据传递格式一致\n\n`;
 
   prompt += `## 输出\n`;
-  prompt += `- \`global/VERTICAL_CHECK.md\`：纵向关联检查报告\n`;
+  prompt += `- \`overview/VERTICAL_CHECK.md\`：纵向关联检查报告\n`;
   prompt += `  - 列出功能覆盖缺口（哪些功能在哪些端缺失）\n`;
   prompt += `  - 列出交互链路断裂点\n`;
   prompt += `  - 列出数据流不一致点\n\n`;
 
   prompt += `## 回写命令\n`;
   prompt += `\`\`\`bash\n`;
-  prompt += `speccore analyze --apply '{"global/VERTICAL_CHECK.md":"..."}' -I ${iteration} --global\n`;
+  prompt += `speccore analyze --apply '{"overview/VERTICAL_CHECK.md":"..."}' -I ${iteration} --global\n`;
   prompt += `\`\`\`\n`;
 
   return prompt;
@@ -486,9 +486,9 @@ function buildPhase6Prompt(ctx: PhaseContext): string {
   prompt += `全面检查所有分析产出，确保没有遗漏和不一致。\n\n`;
 
   prompt += `## 读取输入\n`;
-  prompt += `1. 所有全局文档（global/ 下的所有 .md 和 .yaml）\n`;
+  prompt += `1. 所有迭代综合文档（overview/ 下的所有 .md 和 .yaml）\n`;
   prompt += `2. 所有端专属文档（platforms/{端名}/ 下的所有 .md）\n`;
-  prompt += `3. \`global/CROSS_CHECK.md\` 和 \`global/VERTICAL_CHECK.md\`\n\n`;
+  prompt += `3. \`overview/CROSS_CHECK.md\` 和 \`overview/VERTICAL_CHECK.md\`\n\n`;
 
   prompt += `## 核对清单（必须逐条检查）\n\n`;
 
@@ -509,7 +509,7 @@ function buildPhase6Prompt(ctx: PhaseContext): string {
   prompt += `- [ ] API_CONTRACT.yaml 中的接口与后端 API_INVENTORY.md 完全一致\n`;
   prompt += `- [ ] API_CONTRACT.yaml 中的枚举与前端 UI_SPEC.md 完全一致\n`;
   prompt += `- [ ] FUNCTION_MAP.md 中的功能单元与 REQUIREMENT.md 的功能模块一一对应\n`;
-  prompt += `- [ ] 各端 TECH_STACK.md 的技术选型与 global/ARCHITECTURE.md 一致\n\n`;
+  prompt += `- [ ] 各端 TECH_STACK.md 的技术选型与 overview/ARCHITECTURE.md 一致\n\n`;
 
   prompt += `### D. 遗漏检测\n`;
   prompt += `- [ ] 需求文档中的每个功能模块都有对应的分析文档\n`;
@@ -519,14 +519,14 @@ function buildPhase6Prompt(ctx: PhaseContext): string {
   prompt += `- [ ] 没有"孤儿代码"（后端有接口但前端没调用，或前端有页面但后端没接口）\n\n`;
 
   prompt += `## 输出\n`;
-  prompt += `- \`global/FINAL_AUDIT.md\`：最终核对报告\n`;
+  prompt += `- \`overview/FINAL_AUDIT.md\`：最终核对报告\n`;
   prompt += `  - 检查项总数、通过数、失败数\n`;
   prompt += `  - 每个失败项的详细说明、影响、修正建议\n`;
   prompt += `  - 按严重程度排序（致命 > 严重 > 警告）\n\n`;
 
   prompt += `## 回写命令\n`;
   prompt += `\`\`\`bash\n`;
-  prompt += `speccore analyze --apply '{"global/FINAL_AUDIT.md":"..."}' -I ${iteration} --global\n`;
+  prompt += `speccore analyze --apply '{"overview/FINAL_AUDIT.md":"..."}' -I ${iteration} --global\n`;
   prompt += `\`\`\`\n`;
 
   prompt += `> ⚠️ 如果 FINAL_AUDIT.md 中有"致命"或"严重"级别的问题，必须回退到对应 Phase 修正后再重新执行 Phase 6。\n`;
@@ -720,9 +720,11 @@ async function findAllMarkdownFiles(dir: string): Promise<string[]> {
 // ── 辅助函数 ──
 
 /**
- * 获取全局文档根目录（优先迭代级 020-specs/global/，回退项目级 .speccore/GLOBAL/）
+ * 获取全局文档根目录（优先迭代级 020-specs/overview/，回退旧版 global/，再回退项目级 .speccore/GLOBAL/）
  */
 async function resolveGlobalDir(iterDir: string): Promise<string> {
+  const iterOverview = join(iterDir, '020-specs', 'overview');
+  if (await pathExists(iterOverview)) return iterOverview;
   const iterGlobal = join(iterDir, '020-specs', 'global');
   if (await pathExists(iterGlobal)) return iterGlobal;
   const projectRoot = dirname(iterDir);

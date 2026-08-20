@@ -526,9 +526,9 @@ function checkApiPathConsistency(contents: Record<string, string>): SpecAuditIss
   }
 
   // 检查同一端内路径一致性（简化：只检查全局 vs 各端）
-  const globalApis = apiMap['global/REQUIREMENT.md'] || apiMap['REQUIREMENT.md'] || {};
+  const globalApis = apiMap['overview/REQUIREMENT.md'] || apiMap['global/REQUIREMENT.md'] || apiMap['REQUIREMENT.md'] || {};
   for (const [file, apis] of Object.entries(apiMap)) {
-    if (file.includes('global/') || file === 'REQUIREMENT.md') continue;
+    if (file.includes('overview/') || file.includes('global/') || file === 'REQUIREMENT.md') continue;
     for (const [path, method] of Object.entries(apis)) {
       const globalMethod = Object.entries(globalApis).find(([p]) => p === path)?.[1];
       if (globalMethod && globalMethod !== method) {
@@ -557,15 +557,15 @@ function checkCoverageGaps(
 ): SpecAuditIssue[] {
   const issues: SpecAuditIssue[] = [];
 
-  // 检查 global/REQUIREMENT.md 是否存在
+  // 检查 overview/REQUIREMENT.md 是否存在
   const hasReq = files.some(f => f.relative.includes('REQUIREMENT.md'));
   if (!hasReq) {
     issues.push({
       type: 'coverage_gap',
       severity: '🔴',
       file: '020-specs/',
-      description: '缺少 global/REQUIREMENT.md（需求规格基线）',
-      suggestion: '执行 speccore analyze 重新生成全局需求文档',
+      description: '缺少 overview/REQUIREMENT.md（需求规格基线）',
+      suggestion: '执行 speccore analyze 重新生成迭代综合需求文档',
     });
   }
 

@@ -1,6 +1,6 @@
 {
   "name": "speccore",
-  "version": "6.77.6",
+  "version": "6.89.0",
   "description": "SpecCore - Code by Spec, Not by Vibe.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -8,7 +8,7 @@
     "speccore": "./bin/speccore"
   },
   "scripts": {
-    "build": "node sync-version.js && tsc",
+    "build": "node sync-version.js && tsc && node build-post.js",
     "sync-version": "node sync-version.js",
     "watch": "tsc --watch",
     "prepublish": "npm run build",

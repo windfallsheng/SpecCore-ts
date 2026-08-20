@@ -36,12 +36,13 @@ import {
 } from '../core/execution-state';
 import { createTaskBranch, detectDefaultBranch, isProtectedBranch } from '../core/git-integration';
 import { buildPrompt, formatPrompt, parseAiResponse, outputNeedsInfo } from '../core/prompt-builder';
-import { runVerification, writeVerifyReport, outputFixTag, runQualityGate } from '../core/verify-engine';
+import { runVerification, writeVerifyReport, outputFixTag, runQualityGate, syncTestDocFromResults } from '../core/verify-engine';
 import { loadConfig } from '../core/unified-config';
 import { PipelineEngine } from '../core/pipeline-engine';
 import { checkCodeIndexFreshness } from '../core/code-scanner';
 import { warnIfIndexStale } from '../core/index-guard';
 import { recordAnalysisSnapshot } from '../core/change-detection';
+import { logIssue } from '../core/issue-tracker';
 
 export interface ExecuteOptions {
   all?: boolean;
@@ -543,62 +544,7 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
     } catch {}
   }
 
-  // ── 强制质量门禁：execute 后自动运行，不可跳过 ──
-  // 设计：编译失败时输出 [SPECCORE_EXEC] 标签，由外部 Skill 编排重新执行（最多 3 轮）
-  // 每轮独立运行门禁，轮次状态通过 .verify-state.json 持久化
-  {
-    const config = await loadConfig();
-    const codePath = config.code_scope?.[0] || process.cwd();
-    const absCodePath = codePath.startsWith('/') ? codePath : join(process.cwd(), codePath);
-
-    for (const task of tasks) {
-      const taskDir = join(iterDirForRetro, '030-tasks', task.id);
-      const taskCodePath = (await pathExists(join(taskDir, 'code'))) ? join(taskDir, 'code') : absCodePath;
-
-      // 读取上一轮修复状态（如果有）
-      const statePath = join(taskDir, '.verify-state.json');
-      let currentRound = 1;
-      if (await pathExists(statePath)) {
-        try {
-          const state = JSON.parse(await readFile(statePath, 'utf-8'));
-          currentRound = (state.round || 0) + 1;
-        } catch {}
-      }
-
-      const gate = await runQualityGate(task.id, taskCodePath, taskDir);
-
-      if (gate.passed) {
-        if (currentRound > 1) logger.info(`  ✅ ${task.id}: 第 ${currentRound} 轮修复后通过`);
-        // 清除轮次状态
-        if (await pathExists(statePath)) {
-          const { unlink } = await import('fs/promises');
-          try { await unlink(statePath); } catch {}
-        }
-      } else {
-        // 有阻塞性失败
-        logger.warn(`  ❌ ${task.id}: 第 ${currentRound} 轮质量门禁未通过`);
-        for (const f of gate.blockingFailed) {
-          logger.warn(`     ❌ ${f.name}: ${f.details}`);
-        }
-
-        const MAX_ROUNDS = 3;
-        if (currentRound < MAX_ROUNDS) {
-          // 保存轮次状态 + 输出 [SPECCORE_EXEC] 让 AI 修复
-          await writeFile(statePath, JSON.stringify({ round: currentRound, taskId: task.id, timestamp: new Date().toISOString() }));
-          logger.info(`     🤖 请求 AI 修复（第 ${currentRound}/${MAX_ROUNDS} 轮）...`);
-          outputFixTag(gate.report, taskDir, currentRound);
-        } else {
-          // 3 轮都失败
-          logger.error(`  💀 ${task.id}: ${MAX_ROUNDS} 轮修复后质量门禁仍未通过`);
-          logger.info(`     📄 报告: ${join(taskDir, 'VERIFY_REPORT.md')}`);
-          logger.info(`     💡 请人工检查并修复`);
-        }
-      }
-
-      // 输出非阻塞警告
-      // （质量门禁内部已经打印了，这里不需要重复）
-    }
-  }
+  // 质量门禁已移至 executionVerifyLoop（v6.79.0+ Pipeline 化）
   
   // 自动刷新知识图谱（v6.49.10+）
   try {
@@ -1358,24 +1304,19 @@ async function preFlightCheck(tasks: TaskState[], iteration: string, options: Ex
       logger.info(`  9. 契约: ⏭️ 跳过（缺 API_CONTRACT 或 UI_SPEC）`);
     }
 
-    // 写入问题文件，供 AI 辅助修复
+    // 写入问题文件，供 AI 辅助修复（v6.79.0+: 统一使用 ISSUES.md）
     if (issues.length > 0) {
-      const issuesMd = ['# 执行问题清单', '', `## ${task.id}`, ''];
       for (const issue of issues) {
-        issuesMd.push(`- [ ] ${issue}`);
+        const isReq = issue.includes('REQ') || issue.includes('需求') || issue.includes('契约');
+        const isTech = issue.includes('TECH') || issue.includes('方案') || issue.includes('UI_SPEC');
+        await logIssue(taskDir, {
+          type: isReq ? 'requirement' : isTech ? 'technical' : 'other',
+          severity: 'warning',
+          summary: issue,
+          detail: `迭代: ${iteration || ''}，任务: ${task.id}`,
+        });
       }
-      issuesMd.push('', '---', '');
-      issuesMd.push('## AI 辅助修复', '');
-      issuesMd.push('在 AI 对话中粘贴以下内容让 AI 帮你修复：', '');
-      issuesMd.push('> 请根据以上问题清单，帮我修复 Task-' + task.id + ' 的执行问题。');
-      const iterDirPath = await getIterationDir(iteration || '');
-      issuesMd.push(`> 迭代: ${iteration || ''}，任务目录: ${iterDirPath}/${task.id}`);
-      issuesMd.push('', '## 修复记录', '');
-      issuesMd.push('| 时间 | 问题 | 决策 | 修改文件 |');
-      issuesMd.push('| :--- | :--- | :--- | :--- |');
-      issuesMd.push('| | | | |');
-      await writeFile(join(taskDir, '.issues.md'), issuesMd.join('\n'));
-      logger.info(`  💡 问题已记录到 ${task.id}/.issues.md`);
+      logger.info(`  💡 问题已记录到 ${task.id}/ISSUES.md`);
       logger.info(`  💡 AI 对话: "帮我修复迭代 ${iteration || ''} 的 ${task.id} 问题"`);
     }
 
@@ -1627,49 +1568,54 @@ function buildAgentContext(tasks: TaskState[], agent: string): string {
 // ============================================================
 // 自动验证闭环：检查 → 修复 → 重试（最多 3 轮）
 // ============================================================
+// v6.79.0+: 统一执行验证 Pipeline（质量门禁 + 文档同步）
+// ============================================================
 async function executionVerifyLoop(
   tasks: TaskState[], iteration: string, options: ExecuteOptions
 ): Promise<void> {
   const maxRounds = 3;
   const iterDir = await getIterationDir(iteration);
+  const config = await loadConfig();
+  const codePath = config.code_scope?.[0] || process.cwd();
+  const absCodePath = codePath.startsWith('/') ? codePath : join(process.cwd(), codePath);
 
   for (const task of tasks) {
     logger.info(`\n🔍 验证 ${task.id}...`);
 
     const taskDir = await resolveTaskDir(iterDir, task.id);
+    const taskCodePath = (await pathExists(join(taskDir, 'code'))) ? join(taskDir, 'code') : absCodePath;
     let allPassed = true;
 
     for (let round = 1; round <= maxRounds; round++) {
       if (round > 1) logger.info(`   🔄 第 ${round} 轮修复...`);
       allPassed = true;
 
-      // 1. 检查 TEST.md（v6.49.9+: 扫描平铺的端目录）
-      const testFiles: string[] = [];
-      const platDirsRound = await getPlatformSubtaskDirs(taskDir);
-      for (const { fullPath } of platDirsRound) {
-        const fp = join(fullPath, 'TEST.md');
-        if (await pathExists(fp)) testFiles.push(fp);
-      }
-      if (testFiles.length === 0) {
-        // 旧结构回退
-        const legacy = join(taskDir, '99-artifacts', 'TEST.md');
-        if (await pathExists(legacy)) testFiles.push(legacy);
-      }
-      for (const testPath of testFiles) {
-        const testContent = await readFile(testPath, 'utf-8');
-        const total = (testContent.match(/\[[ x]\]/g) || []).length;
-        const done = (testContent.match(/\[x\]/g) || []).length;
-        const label = testPath.replace(taskDir + '/', '');
-        if (done < total) {
-          logger.info(`   🧪 ${label}: ${done}/${total} 通过`);
-          if (round === maxRounds) logger.warn(`   ⚠️ 仍有 ${total - done} 项未通过`);
-          allPassed = false;
-        } else {
-          logger.info(`   🧪 ${label}: ${done}/${total} ✅`);
+      // ── Step 1: 质量门禁（编译→Lint→测试→依赖→安全→Spec一致性）──
+      const gate = await runQualityGate(task.id, taskCodePath, taskDir);
+
+      if (!gate.passed) {
+        allPassed = false;
+        logger.warn(`   ❌ 质量门禁未通过`);
+        for (const f of gate.blockingFailed) {
+          logger.warn(`      ❌ ${f.name}: ${f.details}`);
+          await logIssue(taskDir, {
+            type: f.name.includes('编译') || f.name.includes('测试') ? 'error' : 'technical',
+            severity: 'critical',
+            summary: `${f.name}: ${f.details}`,
+            detail: `任务: ${task.id}，轮次: ${round}/3`,
+          });
         }
+      } else {
+        logger.info(`   ✅ 质量门禁通过`);
       }
 
-      // 2. 检查 REVIEW.md（v6.49.9+: 扫描平铺的端目录）
+      // ── Step 2: 文档同步 — 根据单元测试结果更新 TEST.md ──
+      const testCheck = gate.report.checks.find(c => c.name === '单元测试');
+      const testPassed = testCheck?.status === 'pass';
+      await syncTestDocFromResults(taskDir, testPassed);
+
+      // ── Step 3: 检查 REVIEW.md（人工审查清单）──
+      const platDirsRound = await getPlatformSubtaskDirs(taskDir);
       const reviewFiles: string[] = [];
       for (const { fullPath } of platDirsRound) {
         const fp = join(fullPath, 'REVIEW.md');
@@ -1693,7 +1639,7 @@ async function executionVerifyLoop(
         }
       }
 
-      // 3. 检查 DEPLOY.md（v6.49.9+: 扫描平铺的端目录）
+      // ── Step 4: 检查 DEPLOY.md ──
       const deployFiles: string[] = [];
       for (const { fullPath } of platDirsRound) {
         const fp = join(fullPath, 'DEPLOY.md');
@@ -1718,15 +1664,18 @@ async function executionVerifyLoop(
 
       if (allPassed) break;
 
-      // 4. 自动修复提示
+      // 自动修复提示
       if (round < maxRounds) {
         logger.info(`   💡 AI 将修复未通过项。使用 speccore execute --task=${task.id} --force 重新执行代码生成`);
-        // 标记为需要重试
         await writeFile(join(taskDir, '.needs-retry'), String(round));
+        // 输出 [SPECCORE_EXEC] 让 AI 修复
+        if (!gate.passed) {
+          outputFixTag(gate.report, taskDir, round);
+        }
       }
     }
 
-    // 5. 最终判定
+    // 最终判定
     if (allPassed) {
       await writeFile(join(taskDir, '.verification'), 'passed');
       logger.info(`   ✅ ${task.id} 全部检查通过，可以 speccore done`);

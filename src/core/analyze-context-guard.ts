@@ -263,7 +263,7 @@ export async function buildSegmentationPlan(
         estimatedTokens: estimate.estimatedTokens,
         dependencies: [],
         inputs: ['CONSTITUTION.md', '010-requirements/'],
-        outputs: ['020-specs/global/', '020-specs/{端}/'],
+        outputs: ['020-specs/overview/', '020-specs/{端}/'],
       });
       break;
     }
@@ -296,7 +296,7 @@ export async function buildSegmentationPlan(
           target: p,
           estimatedTokens: Math.round(estimate.estimatedTokens / platforms.length),
           dependencies: ['global-scan'],
-          inputs: [`platforms/${p}/_INDEX.md`, 'global/ARCHITECTURE.md'],
+          inputs: [`platforms/${p}/_INDEX.md`, 'overview/ARCHITECTURE.md'],
           outputs: [`platforms/${p}/API_INVENTORY.md`, `platforms/${p}/DATA_MODEL.md`],
         });
       }
@@ -311,7 +311,7 @@ export async function buildSegmentationPlan(
           target: p,
           estimatedTokens: Math.round(estimate.estimatedTokens / platforms.length),
           dependencies: backendPlatforms.map(bp => `backend-${bp}`),
-          inputs: [`platforms/${p}/_INDEX.md`, 'global/API_CONTRACT.yaml'],
+          inputs: [`platforms/${p}/_INDEX.md`, 'overview/API_CONTRACT.yaml'],
           outputs: [`platforms/${p}/FEATURES.md`, `platforms/${p}/UI_SPEC.md`],
         });
       }
@@ -356,7 +356,7 @@ export async function buildSegmentationPlan(
           target: mod,
           estimatedTokens: Math.round(estimate.estimatedTokens / modules.length),
           dependencies: ['global-scan'],
-          inputs: [`010-requirements/features/${mod}/README.md`, 'global/API_CONTRACT.yaml'],
+          inputs: [`010-requirements/features/${mod}/README.md`, 'overview/API_CONTRACT.yaml'],
           outputs: [`020-specs/features/${mod}.md`],
         });
       }
@@ -409,7 +409,7 @@ export async function buildSegmentationPlan(
           target: unit,
           estimatedTokens: Math.round(estimate.estimatedTokens / Math.min(units.length, 20)),
           dependencies: ['global-scan'],
-          inputs: ['global/FUNCTION_MAP.md', 'global/API_CONTRACT.yaml'],
+          inputs: ['overview/FUNCTION_MAP.md', 'overview/API_CONTRACT.yaml'],
           outputs: [`020-specs/units/${unit}.md`],
         });
       }

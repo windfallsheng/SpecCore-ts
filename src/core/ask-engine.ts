@@ -71,15 +71,15 @@ const COMMAND_KB: CommandKnowledge[] = [
   { name: 'dashboard', aliases: ['db', 'sp'], description: '项目仪表盘：迭代状态/进度/健康度，--scope global 全量视图',
     usage: 'speccore dashboard [--scope global|iteration] [--export html] [--health] [--lifecycle]', examples: ['speccore dashboard', 'speccore dashboard --scope global --export html'], related: ['analyze', 'health'], triggers: ['看板', '仪表盘', 'dashboard', '进度', '状态'] },
   { name: 'analyze', aliases: ['al'], description: '统一分析：需求文档+源码→分析报告。支持 --full 三阶段合成（原 synthesize），--phase 单阶段合成，--feature 局部分析功能模块，--doc 局部分析类型文档，--sync 任务分析后局部回写 020-specs/，--no-source 跳过源码，--supplement 追加源码',
-    usage: 'speccore analyze [--task <id>] [--iteration <name>] [--full] [--phase <n>] [--feature <module>] [--doc <type/slug>] [--with-code] [--no-source] [--source-scope <dirs>] [--supplement] [--sync] [--scope global]', examples: ['speccore analyze', 'speccore analyze --full -i Q2', 'speccore analyze --phase 1 -i Q2', 'speccore analyze --feature 支付模块', 'speccore analyze --doc bugs/login-timeout', 'speccore analyze --with-code', 'speccore analyze --supplement --source-scope src/core', 'speccore analyze --task Task-001 --apply "..." --sync'], related: ['dashboard', 'validate', 'code-index', 'refresh', 'synthesize'], triggers: ['分析', 'analyze', '审计', 'audit', '检查', '结合源码', '连代码', '带代码', '源码分析', '迭代分析', '分析迭代', '倒推需求', '反推', '从代码生成', '分析代码', '不读源码', '不读代码', '跳过源码', '指定目录分析', '只扫描', '补充分析', '追加分析', '补充源码', '追加源码', '遗漏', '没分析到', '没覆盖', '漏掉', '再分析', '多读几个', '局部分析', '单个模块', '单独分析', 'bug分析', '重构分析', '局部回写', '回写spec', '同步spec', '合成需求', '合并需求', '需求合成', '智能合成', '需求合并', '多端合成', '全量分析', '跨端综合', '全量合成'] },
+    usage: 'speccore analyze [--task <id>] [--iteration <name>] [--full] [--phase <n>] [--feature <module>] [--doc <type/slug>] [--with-code] [--no-source] [--source-scope <dirs>] [--supplement] [--sync] [--scope global] [--dev-guide]', examples: ['speccore analyze', 'speccore analyze --full -i Q2', 'speccore analyze --phase 1 -i Q2', 'speccore analyze --feature 支付模块', 'speccore analyze --doc bugs/login-timeout', 'speccore analyze --with-code', 'speccore analyze --supplement --source-scope src/core', 'speccore analyze --task Task-001 --apply "..." --sync'], related: ['dashboard', 'validate', 'code-index', 'refresh', 'synthesize'], triggers: ['分析', 'analyze', '审计', 'audit', '检查', '结合源码', '连代码', '带代码', '源码分析', '迭代分析', '分析迭代', '倒推需求', '反推', '从代码生成', '分析代码', '不读源码', '不读代码', '跳过源码', '指定目录分析', '只扫描', '补充分析', '追加分析', '补充源码', '追加源码', '遗漏', '没分析到', '没覆盖', '漏掉', '再分析', '多读几个', '局部分析', '单个模块', '单独分析', 'bug分析', '重构分析', '局部回写', '回写spec', '同步spec', '合成需求', '合并需求', '需求合成', '智能合成', '需求合并', '多端合成', '全量分析', '跨端综合', '全量合成', '开发指南', '生成开发指南', '带开发指南'] },
   { name: 'code-index', aliases: ['ci', 'idx'], description: '源码索引：扫描项目代码，自动识别多端/模块/依赖，生成 Markdown 索引',
     usage: 'speccore code-index [--full] [--scope <dirs>] [--show]', examples: ['speccore code-index', 'speccore code-index --full', 'speccore code-index --scope src/commands,src/core', 'speccore code-index --show'], related: ['analyze', 'dev'], triggers: ['代码索引', '源码索引', 'code-index', '索引', '建索引', '更新索引', '扫描代码', '代码结构', '模块索引', '项目结构'] },
   { name: 'execute', aliases: ['ex'], description: '执行开发任务：依赖排序+分批+交互引导+计划联动',
     usage: 'speccore execute [--task <id>] [--batch-size <n>] [--auto]', examples: ['speccore execute', 'speccore execute --batch-size 3'], related: ['plan', 'done'], triggers: ['执行', 'execute', '开发', '开始做', '干活'] },
   { name: 'plan', aliases: ['pl'], description: '生成执行计划+管理历史：创建/交互/列表/详情/取消',
     usage: 'speccore plan [--all] [--task <id>] [--interactive]', examples: ['speccore plan --all', 'speccore plan --interactive'], related: ['execute'], triggers: ['计划', 'plan', '安排', '规划'] },
-  { name: 'split', aliases: ['sp'], description: '拆分需求为独立 Task：预览→逐一确认/一键创建',
-    usage: 'speccore split [-f <file>] [--preview]', examples: ['speccore split -f REQUIREMENT.md', 'speccore split --preview'], related: ['task', 'plan'], triggers: ['拆分', 'split', '分解', '划分', '拆'] },
+  { name: 'split', aliases: ['sp'], description: '拆分需求为独立 Task：默认 AI 智能分析（--prompt）→ AI 输出 JSON → 自动创建；也可传统模式按 REQUIREMENT.md 章节拆分',
+    usage: 'speccore split [--prompt] [--response <json>] [-f <file>] [--preview] [--iteration <name>]', examples: ['speccore split --prompt', 'speccore split --response "<ai_json>"', 'speccore split -f REQUIREMENT.md', 'speccore split --preview'], related: ['task', 'plan'], triggers: ['拆分', 'split', '分解', '划分', '拆', '拆需求', '拆任务', '任务拆分', '需求拆分'] },
   { name: 'pr', aliases: ['mr'], description: '创建 Pull Request：提交预览+文件选择+交互确认',
     usage: 'speccore pr [--task <id>] [--auto]', examples: ['speccore pr', 'speccore pr --task T-01 --auto'], related: ['done', 'execute'], triggers: ['pr', 'pull request', '提交', '合并', 'MR'] },
   { name: 'validate', aliases: ['vl'], description: '合规验证：检查 Spec 完整性与一致性',
@@ -539,6 +539,15 @@ async function handleMatch(input: string): Promise<AskResult> {
     if (params.tool) {
       fullCommand += ` --tool="${params.tool}"`;
       paramNotes.push(`🔧 工具/平台: ${params.tool}`);
+    }
+    if (params.devGuide) {
+      fullCommand += ` --dev-guide`;
+      paramNotes.push(`📘 开发指南: 生成 DEV_GUIDE.md`);
+    }
+    // split 默认走 AI 增强路径（--prompt），除非用户明确要求传统模式
+    if (best.command === 'split' && !params.splitDirect) {
+      fullCommand += ` --prompt`;
+      paramNotes.push(`🧠 模式: AI 智能拆分（输出 Prompt 供 AI 分析）`);
     }
     if (params.desc) {
       fullCommand += ` "${params.desc}"`;

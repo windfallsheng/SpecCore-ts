@@ -769,6 +769,7 @@ program
   .option('--module <name>', 'v6.76.0+: 功能模块级全局分析（更新全局层+各端文档，区别于 --feature 局部分析）')
   .option('--clarify', 'v6.76.0+: 检测到非专业需求文档时，先进入澄清流程整理为 PRD')
   .option('--dev-guide', 'v6.76.0+: 生成 DEV_GUIDE.md 开发者实现指南')
+  .option('--skip-clarify', 'v6.80.0+: 跳过需求澄清阶段（默认会先做需求质量检测和澄清）')
   .action(analyzeCommand);
 
 // v6.76.0+: 需求专业化命令
