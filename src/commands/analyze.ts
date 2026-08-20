@@ -57,6 +57,8 @@ import {
   buildAgentPrompt,
   type AgentContext,
 } from '../core/agents';
+// v6.91.0+: 代码知识图谱摘要注入
+import { loadCodeGraph } from '../core/code-graph';
 
 export interface AnalyzeOptions {
   iteration?: string;
@@ -1634,6 +1636,65 @@ function validateFunctionMap(content: string, validPlatforms: string[]): Functio
   };
 }
 
+// v6.91.1: 代码知识图谱摘要注入辅助函数
+let _graphSummaryCache: string | undefined;
+let _graphSummaryCacheTime = 0;
+const GRAPH_SUMMARY_TTL = 300000; // 5 分钟缓存
+
+async function injectGraphSummary(prompt: string): Promise<string> {
+  try {
+    if (_graphSummaryCache && Date.now() - _graphSummaryCacheTime < GRAPH_SUMMARY_TTL) {
+      return prompt + _graphSummaryCache;
+    }
+    const cg = await loadCodeGraph(process.cwd());
+    if (!cg) return prompt;
+
+    const lines: string[] = [];
+    lines.push('\n\n## 📊 代码知识图谱摘要（v6.91.0+ 自动注入）');
+    lines.push(`> 基于本地 AST 解析（${cg.metadata.scannedFiles} 文件, ${cg.metadata.totalNodes} 节点, ${cg.metadata.totalEdges} 边）`);
+    lines.push('');
+    lines.push('### 子系统（自动检测）');
+    for (const comm of cg.communities.slice(0, 8)) {
+      const sample = comm.nodes
+        .map(id => cg.nodes.find(n => n.id === id))
+        .filter(Boolean)
+        .slice(0, 5)
+        .map(n => n!.name);
+      lines.push(`- **${comm.label}** (${comm.nodes.length} 节点, 密度 ${(comm.density * 100).toFixed(0)}%): ${sample.join(', ')}`);
+    }
+    lines.push('');
+    lines.push('### 核心枢纽（God Nodes）');
+    const godNodeDetails = cg.godNodes
+      .map(id => cg.nodes.find(n => n.id === id))
+      .filter(Boolean)
+      .slice(0, 10);
+    for (const n of godNodeDetails) {
+      lines.push(`- **${n!.name}** (${n!.type}) — degree: ${n!.degree}, file: \`${n!.filePath}\``);
+    }
+    lines.push('');
+    lines.push('### 跨子系统连接');
+    const crossEdges = cg.edges.filter(e => {
+      const s = cg.nodes.find(n => n.id === e.source);
+      const t = cg.nodes.find(n => n.id === e.target);
+      return s && t && s.community !== t.community;
+    }).slice(0, 8);
+    for (const e of crossEdges) {
+      const s = cg.nodes.find(n => n.id === e.source);
+      const t = cg.nodes.find(n => n.id === e.target);
+      lines.push(`- \`${s?.name}\` [${e.type}] \`${t?.name}\` (${e.confidence})`);
+    }
+    lines.push('');
+    lines.push('> 提示：如需深入查看完整图谱，运行 `speccore code-index --graph` 后打开 `.speccore/code-graph/graph.html`');
+
+    const summary = lines.join('\n');
+    _graphSummaryCache = summary;
+    _graphSummaryCacheTime = Date.now();
+    return prompt + summary;
+  } catch {
+    return prompt;
+  }
+}
+
 // ── buildMultiDocPrompt: 多文档协议 ──
 async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; task?: string; type?: string; scope?: string; withCode?: boolean; platform?: string; phase?: string; autoMode?: boolean }, options?: AnalyzeOptions): Promise<string> {
   const iter = ctx.iteration || '当前迭代';
@@ -1949,7 +2010,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     prompt += `\n⚠️ 如 CONSTITUTION.md 中「源码路径」为空或路径不存在: 提示用户先配置，给出三个选项：\n`;
     prompt += `   [1] 停止分析 → 配置后重来 | [2] 跳过源码 → 只用文档分析 | [3] 手动指定路径后继续\n`;
     prompt += '\n' + buildAutoModeInstruction('analyze', iter) + '\n';
-    return prompt;
+    return await injectGraphSummary(prompt);
   }
 
   const docs: [string, string][] = [
@@ -2795,7 +2856,7 @@ sequenceDiagram
   prompt += `### 自检通过标准\n`;
   prompt += `以上 5 项全部勾选通过后，方可执行 --apply 写入。如果任何一项未通过，先修正问题，重新自检，直到全部通过。\n`;
 
-  return prompt;
+  return await injectGraphSummary(prompt);
 }
 
 // ── v6.74.0+: 流式全局分析 Prompt 生成 ──
@@ -2908,7 +2969,7 @@ async function buildStreamingGlobalPrompt(
   prompt += `5. **写入方式**: 所有文档通过 \`speccore analyze --apply '{"文件路径":"内容"}' -I ${iter} --global\` 写入\n`;
   prompt += `6. **知识图谱**: 每阶段完成后自动刷新知识图谱\n`;
 
-  return prompt;
+  return await injectGraphSummary(prompt);
 }
 
 // ── v6.69.0+: 契约先行 Prompt 生成（增强策略一）──
@@ -2992,7 +3053,7 @@ async function buildContractFirstPrompt(iteration: string): Promise<string> {
   prompt += `- 这是各端技术方案分析的**前置输入**，后续各端分析必须遵循此契约\n`;
   prompt += `- 契约应**精确且完整**，避免后续各端分析时出现接口不一致\n\n`;
 
-  return prompt;
+  return await injectGraphSummary(prompt);
 }
 
 // ── v6.49.9+: 扫描平铺的端目录，返回所有子任务目录路径 ──
@@ -3239,7 +3300,7 @@ async function buildClarifyPhasePrompt(iteration: string): Promise<string> {
   prompt += `\`\`\`\n\n`;
   prompt += `> 注意：写入后 CLI 会自动推进到需求确认阶段。\n`;
 
-  return prompt;
+  return await injectGraphSummary(prompt);
 }
 
 async function buildConfirmCheckPrompt(iteration: string): Promise<string> {
@@ -3302,5 +3363,5 @@ async function buildConfirmCheckPrompt(iteration: string): Promise<string> {
   prompt += `speccore analyze --prompt -I ${iteration} --pipeline --skip-clarify\n`;
   prompt += `\`\`\`\n`;
 
-  return prompt;
+  return await injectGraphSummary(prompt);
 }

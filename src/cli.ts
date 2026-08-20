@@ -635,8 +635,6 @@ program
   .option('--reqs <reqs>', 'Requirement IDs (comma-separated, required)')
   .option('--name <name>', 'Iteration name (required)')
   .option('--force', 'Force overwrite existing iteration')
-  .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
-  .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
   .action(iterationFromGlobalCommand);
 
 program
@@ -684,8 +682,6 @@ program
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('--confidence <confidence>', 'Confidence level: EXTRACTED | INFERRED (v6.91.0+)')
   .option('--force', 'Overwrite existing pattern')
-  .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
-  .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
   .action(patternCommand);
 
 // ================================================================
@@ -762,7 +758,7 @@ program
   .option('--req, --requirements <files>', '需求文档 (逗号分隔: --req docs/a.md,docs/b.md)')
   .option('-o, --output <file>', '输出文件名 (覆盖默认)')
   .option('--depth <depth>', '分析深度: quick | normal(默认) | deep')
-  .option('--auto', '非交互: 直接生成报告 (默认)')
+  .option('--auto', '非交互: 生成结构化分析 Prompt，由 AI 执行分析 (默认)')
   .option('--interactive', '交互: AI 提问 → 回答 → 优化')
   .option('--prompt', '输出结构化 Prompt 到 stdout（Skill 协作模式）')
   .option('--with-code', '结合 CONSTITUTION.md 配置的工程源码一起分析')
@@ -828,8 +824,6 @@ program
   .option('--pattern <pattern>', 'Batch pattern to match')
   .option('--replacement <replacement>', 'Batch replacement string')
   .option('--force', 'Skip preview and execute')
-  .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
-  .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
   .action(renameCommand);
 
 program
@@ -950,8 +944,6 @@ program
   .option('--task <id>', 'Task ID to delete')
   .option('--iteration <name>', 'Iteration name to delete')
   .option('--force', 'Skip confirmation prompt')
-  .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
-  .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
   .action(deleteCommand);
 
 // v5.6.0 新增命令
