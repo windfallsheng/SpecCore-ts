@@ -2,6 +2,31 @@
 
 ---
 
+## v6.92.0 (2026-08-20) — Stability: Test Coverage + Doctor Diagnostics
+
+### New Features
+
+- **Project health diagnostic command** `speccore doctor`
+  - Checks `.speccore/` core directory structure integrity
+  - Checks `CONSTITUTION.md` format (platform list, tech stack sections)
+  - Checks `local/context.json` validity and current iteration setting
+  - Checks specification database five layers (AGENTS/RULES/COMMANDS/SKILLS/HOOKS) initialization
+  - Checks `graph.json` freshness (compares with source code modification time)
+  - Checks iteration directory health (presence of 030-tasks/)
+  - Checks PATTERNS/README.md confidence specification
+  - Summary output: passed/pending items with fix suggestions
+
+- **code-graph/ module unit tests**
+  - `builder.test.ts`: 7 test cases (metadata, degrees, God nodes, bare name fix, community detection, empty graph, isolated nodes)
+  - `query.test.ts`: 11 test cases (explainNode, findPath BFS, queryGraph keyword matching)
+  - `reporter.test.ts`: 6 test cases (report header, metadata, God nodes, communities, bridges, suggested questions)
+
+### Engineering
+
+- `package.json`: added `vitest` as devDependency
+
+---
+
 ## v6.91.2 (2026-08-20) — Documentation Sync and Architecture Design Updates
 
 ### Documentation

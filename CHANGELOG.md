@@ -1,3 +1,28 @@
+## v6.92.0 (2026-08-20) — 稳定性：测试覆盖 + Doctor 诊断
+
+### 新增
+
+- **项目健康度诊断命令** `speccore doctor`
+  - 检查 `.speccore/` 核心目录结构完整性
+  - 检查 `CONSTITUTION.md` 格式（端列表、技术栈章节）
+  - 检查 `local/context.json` 有效性和当前迭代设置
+  - 检查规范数据库五层（AGENTS/RULES/COMMANDS/SKILLS/HOOKS）初始化状态
+  - 检查 `graph.json` 时效性（对比源码修改时间）
+  - 检查迭代目录健康度（是否存在 030-tasks/）
+  - 检查 PATTERNS/README.md 置信度规范
+  - 汇总输出：通过/待修复项，附带修复建议
+
+- **code-graph/ 模块单元测试**
+  - `builder.test.ts`: 7 个测试用例（元数据、度数、God nodes、裸名修复、社区检测、空图、孤立节点）
+  - `query.test.ts`: 11 个测试用例（explainNode、findPath BFS、queryGraph 关键词匹配）
+  - `reporter.test.ts`: 6 个测试用例（报告头、元数据、God nodes、社区、桥梁、建议问题）
+
+### 工程
+
+- `package.json` 添加 `vitest` 为 devDependency
+
+---
+
 ## v6.91.2 (2026-08-20) — 文档同步与架构设计补充
 
 ### 文档

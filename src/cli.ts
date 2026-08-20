@@ -19,6 +19,7 @@ import { executeCommand } from './commands/execute';
 // 新增命令
 import { askCommand } from './commands/ask';
 import { aboutCommand } from './commands/about';
+import { doctorCommand } from './commands/doctor';
 import { changeCommand } from './commands/change';
 import { syncCommand } from './commands/sync';
 import { opsCommand } from './commands/history';
@@ -90,6 +91,13 @@ program
   .command('ask [input...]')
   .description('Natural language intent recognition (previously "spec")')
   .action((input: string[]) => askCommand(input.join(' '), {}));
+
+program
+  .command('doctor')
+  .alias('dr')
+  .description('🏥 项目健康度诊断：检查配置完整性、图谱时效性、迭代健康度')
+  .option('--fix', '自动修复可修复的问题')
+  .action(doctorCommand);
 
 program
   .command('about')

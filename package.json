@@ -1,6 +1,6 @@
 {
   "name": "speccore",
-  "version": "6.91.2",
+  "version": "6.92.0",
   "description": "SpecCore - Code by Spec, Not by Vibe.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -44,7 +44,8 @@
     "@types/fs-extra": "^11.0.4",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.10.5",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vitest": "^1.6.0"
   },
   "engines": {
     "node": ">=18.0.0"
