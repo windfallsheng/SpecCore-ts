@@ -1,3 +1,29 @@
+## v6.91.1 (2026-08-20) — 流程修复与稳定性改进
+
+### 修复
+
+- **【严重】analyze 阶段 graph.json 注入不生效**
+  - `analyze.ts`: 修复 `buildMultiDocPrompt` 缺少 `codeGraphSummary` 参数，注入的图谱摘要未实际传入 prompt
+  - `prompt-builder.ts`: `codeGraphSummary` 参数现为可选字符串，兼容旧调用
+
+- **【中】PipelineEngine 与 autoPipeline 状态不同步**
+  - `pipeline-engine.ts`: 新增 `saveProgress()` 每阶段保存 `pipeline-progress.json`
+  - `ask.ts`: 修复 `--resume` 后 PipelineEngine 状态未恢复，导致从已完成的阶段重新执行
+
+- **【中】dev.ts plan 阶段无条件执行，缺少跳过检查**
+  - `dev.ts`: 修复 plan 阶段未检查 `plan.json` 是否已存在，每次 --auto 都重新执行 plan
+
+- **【中】僵尸 --auto 选项**
+  - `cli.ts`: 移除 `pattern`、`rename`、`delete`、`iteration-from-global` 命令上未使用的 `--auto` 选项
+
+- **【轻】ask.ts spawnSync 超时过短**
+  - 超时从 60s 延长至 300s（5分钟），避免 execute/split 等长命令被中断
+
+- **【轻】analyze --auto 描述不准确**
+  - CLI help 描述从 "直接生成报告" 改为 "生成结构化分析 Prompt，由 AI 执行分析"
+
+---
+
 ## v6.91.0 (2026-08-20) — 图谱深度整合：analyze 注入 + 多模态 + MODULE_MAP
 
 ### 新增

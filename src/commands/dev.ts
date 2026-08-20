@@ -47,7 +47,12 @@ export async function devCommand(options: DevOptions): Promise<void> {
     if (options.resume) {
       const hasPipeline = await PipelineEngine.hasActivePipeline(process.cwd(), iteration);
       if (hasPipeline) {
-        // 对于 dev 命令，我们直接运行 autoPipeline，因为它已经是 Pipeline 的一部分
+        // v6.91.1+: 检测到 analyze pipeline 未结束，从 analyze 阶段继续
+        const engineState = await new PipelineEngine({ iteration, name: 'analyze', cwd: process.cwd() }).getState();
+        if (engineState && !options.from) {
+          logger.info(`🔄 检测到 analyze pipeline 未结束（当前步骤: ${engineState.currentStep}），从 analyze 阶段继续`);
+          options.from = 'analyze';
+        }
         await autoPipeline(options);
         return;
       } else {
@@ -239,19 +244,61 @@ async function autoPipeline(options: DevOptions): Promise<void> {
         break;
       }
       case 'plan': {
-        execSync(`speccore plan -i ${iteration} --force`, { stdio: 'inherit' });
+        // v6.91.1+: 检查是否已有计划，避免重复生成
+        const plansDir = join(iterDir, '000-overview', 'plans');
+        let hasPlan = false;
+        try {
+          const { readdir: rd2, pathExists: pe2 } = require('fs-extra');
+          if (await pe2(plansDir)) {
+            const entries = await rd2(plansDir);
+            hasPlan = entries.some((e: string) => e.endsWith('.md'));
+          }
+        } catch {}
+        if (hasPlan) {
+          logger.info('  ✅ 执行计划已存在，跳过');
+        } else {
+          execSync(`speccore plan -i ${iteration} --force`, { stdio: 'inherit' });
+        }
         break;
       }
       case 'execute': {
-        execSync(`speccore execute --auto -i ${iteration}`, { stdio: 'inherit' });
+        // v6.91.1+: 检查是否还有 pending 任务
+        let hasPending = false;
+        try {
+          const { scanTasks } = await import('../core/state');
+          const tasks = await scanTasks(iteration);
+          hasPending = tasks.some(t => t.status === 'pending');
+        } catch {}
+        if (!hasPending) {
+          logger.info('  ✅ 所有任务已完成，跳过 execute');
+        } else {
+          execSync(`speccore execute --auto -i ${iteration}`, { stdio: 'inherit' });
+        }
         break;
       }
       case 'pr': {
-        execSync(`speccore pr -i ${iteration} --force`, { stdio: 'inherit' });
+        // v6.91.1+: 检查是否有未提交的代码变更
+        let hasChanges = false;
+        try {
+          const { execSync: es2 } = await import('child_process');
+          const gitStatus = es2('git status --short', { encoding: 'utf-8', cwd: process.cwd() });
+          hasChanges = gitStatus.trim().length > 0;
+        } catch {}
+        if (!hasChanges) {
+          logger.info('  ✅ 没有未提交的变更，跳过 pr');
+        } else {
+          execSync(`speccore pr -i ${iteration} --force`, { stdio: 'inherit' });
+        }
         break;
       }
       case 'done': {
-        execSync(`speccore done --all -i ${iteration}`, { stdio: 'inherit' });
+        // v6.91.1+: 检查是否已归档
+        const retroPath = join(iterDir, '000-overview', 'RETRO.md');
+        if (await pathExists(retroPath)) {
+          logger.info('  ✅ 已生成复盘报告，跳过 done');
+        } else {
+          execSync(`speccore done --all -i ${iteration}`, { stdio: 'inherit' });
+        }
         break;
       }
       case 'spec2doc': {

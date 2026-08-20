@@ -2,6 +2,32 @@
 
 ---
 
+## v6.91.1 (2026-08-20) — Flow Fixes and Stability Improvements
+
+### Fixes
+
+- **[Critical] analyze phase graph.json injection not effective**
+  - `analyze.ts`: Fixed `buildMultiDocPrompt` missing `codeGraphSummary` parameter, graph summary not actually passed to prompt
+  - `prompt-builder.ts`: `codeGraphSummary` parameter now optional string, backward compatible
+
+- **[Medium] PipelineEngine out of sync with autoPipeline state**
+  - `pipeline-engine.ts`: Added `saveProgress()` to save `pipeline-progress.json` after each phase
+  - `ask.ts`: Fixed `--resume` not restoring PipelineEngine state, causing re-execution from completed phases
+
+- **[Medium] dev.ts plan phase executes unconditionally without skip check**
+  - `dev.ts`: Fixed plan phase not checking if `plan.json` already exists, re-executing plan on every --auto
+
+- **[Medium] Unused --auto options (zombie flags)**
+  - `cli.ts`: Removed unused `--auto` option from `pattern`, `rename`, `delete`, `iteration-from-global` commands
+
+- **[Minor] ask.ts spawnSync timeout too short**
+  - Timeout extended from 60s to 300s (5 minutes), preventing long commands (execute/split) from being killed
+
+- **[Minor] analyze --auto description inaccurate**
+  - CLI help description changed from "directly generate report" to "generate structured analysis Prompt for AI execution"
+
+---
+
 ## v6.91.0 (2026-08-20) — Graph Deep Integration: Analyze Injection + Multimodal + MODULE_MAP
 
 ### New Features

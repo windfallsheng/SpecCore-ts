@@ -221,7 +221,7 @@ export async function askCommand(input: string, _options: any): Promise<void> {
       try {
         const r = spawnSync('speccore', [command, ...argList], {
           encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'], cwd: process.cwd(),
-          timeout: 60000,
+          timeout: 300000, // 5min: execute/split 等长命令需要足够时间
         });
         const output = ((r.stdout || '') + (r.stderr || '')).trim();
         const ok = r.status === 0;
