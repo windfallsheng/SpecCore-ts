@@ -138,7 +138,7 @@ PATTERNS/
 
 ---
 
-## 1.5 规范数据库分层架构（v6.84.0+ — v6.89.0+）
+## 1.5 规范数据库分层架构（v6.84.0+ — v6.91.0+）
 
 `.speccore/` 目录不仅是配置存储，更是 **AI 可读的规范数据库**。从 v6.84.0 开始，建立了与 Codex `.codex/` 对齐的五层规范结构，所有层均在初始化时自动创建，支持用户自定义覆盖。
 
@@ -234,6 +234,42 @@ const injected = await injectAll(basePrompt, {
   commandTemplate: { name: 'pr-review', vars: { changedFiles: '...' } },
 });
 ```
+
+### 1.5.8 代码知识图谱（v6.90.0+）
+
+**借鉴 Graphify 核心设计**，将项目代码结构化为可查询的知识图谱，替代传统的 RAG 向量索引。
+
+**核心机制**：
+- **本地 AST 解析**：基于 TypeScript 编译器 API，零 LLM Token 消耗，代码不出本机
+- **真正的图结构**：节点（函数/类/模块/接口/变量/枚举/属性/方法）+ 边（调用/导入/导出/继承/实现/引用/包含/类型）
+- **边置信度标签**：`EXTRACTED` = 源码明确写出；`INFERRED` = 分析推断得出
+- **社区检测**：Union-Find + 目录结构启发式，自动划分子系统
+- **God nodes 识别**：按度数排序，前 10% 标记为核心节点
+
+**输出产物**：
+| 文件 | 说明 |
+|------|------|
+| `graph.json` | 完整图谱数据（节点+边+社区+元数据） |
+| `GRAPH_REPORT.md` | 自动报告：God nodes、社区分布、跨社区桥梁、建议问题 |
+| `graph.html` | vis-network 力导向图可视化（社区着色、EXTRACTED/INFERRED 线型区分） |
+
+**CLI 集成**：
+```bash
+speccore code-index --graph --scope src     # 构建图谱
+speccore knowledge-explain <node>            # 解释节点
+speccore knowledge-path <from> <to>          # 最短路径 BFS
+speccore knowledge-query <question>          # 关键词匹配查询
+```
+
+### 1.5.9 图谱深度整合（v6.91.0+）
+
+**analyze 阶段注入**：`prompt-builder.ts` 在 analyze 命令时自动读取 `graph.json`，将子系统列表、God nodes、跨社区桥梁注入 prompt，使 AI 分析需求时优先理解现有代码结构。
+
+**PATTERNS 置信度标签**：引入 `EXTRACTED` / `INFERRED` 标签，区分从源码明确提取的模式和分析推断得出的模式。
+
+**MODULE_MAP 自动生成**：社区检测结果自动写入 `MODULE_MAP.json`，包含每个社区的文件路径、God nodes、桥梁节点、跨社区边。
+
+**多模态图谱**：API Contract（OpenAPI/YAML）和 SQL Schema 纳入图谱，生成 `api_endpoint` / `db_table` 节点，自动关联代码中的 handler/controller/entity/repository。
 
 ---
 
@@ -1730,8 +1766,17 @@ speccore schedule cancel --id <id>
 | v6.50.1–v6.50.2 | 08-16 | CONTEXT.md 业务映射按端隔离 + 知识图谱可视化 business_module 过滤按钮 |
 | v6.50.3 | 08-16 | 正则 m 标志 bug 修复 + prompt 缩进统一 + Phase 2 关系类型示例补充 |
 | v6.51.0 | 08-16 | HTML 页面 present_files 全量覆盖：10 个标记 + 7 平台 command + Skill + init 模板同步 |
+| v6.84.0 | 08-20 | AGENTS 规范数据库：`.speccore/AGENTS/` 目录 + 混合调度器（注册表+自描述）+ 端/领域特化 |
+| v6.85.0 | 08-20 | RULES 编码规范库：8 个内置规范 + 按技术栈自动注入 + 用户自定义覆盖 |
+| v6.86.0 | 08-20 | AGENTS 全阶段扩展：11 个新角色 + split/plan/change/pr 全阶段覆盖 |
+| v6.87.0 | 08-20 | COMMANDS 命令模板系统：3 个内置模板 + `{{变量}}` 替换 + 回退策略 |
+| v6.88.0 | 08-20 | SKILLS 可复用技能库 + HOOKS 生命周期钩子：4 技能 + 2 钩子 |
+| v6.89.0 | 08-20 | 统一注入框架 ContextInjector：`injectAll()` 统一五层注入 API |
+| v6.90.0 | 08-20 | 代码知识图谱 Code Knowledge Graph：本地 AST 解析 + 社区检测 + God nodes + 可视化 |
+| v6.91.0 | 08-20 | 图谱深度整合：analyze 阶段注入 + PATTERNS 置信度标签 + MODULE_MAP + 多模态图谱 |
+| v6.91.1 | 08-20 | 流程修复：analyze 图谱注入修复 + PipelineEngine 状态同步 + dev.ts plan 跳过检查 + 僵尸选项清理 |
 
-> **最后更新**: 2026-08-16 (v6.51.0) — HTML 页面标记系统全量覆盖 + 业务-代码关联图谱 + 端隔离检索
+> **最后更新**: 2026-08-20 (v6.91.1) — 代码知识图谱 + 图谱深度整合 + 流程稳定性修复
 
 ---
 ## 10. 可执行编排引擎（spec-ask v4）

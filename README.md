@@ -134,13 +134,25 @@ Iteration-001-meeting/
 
 ![Ask Pipeline](docs/screenshots/ask-pipeline.png)
 
-### 🧠 knowledge — 知识图谱可视化
+### 🧠 knowledge — 知识图谱可视化与代码图谱查询
 `speccore knowledge` 生成交互式 HTML 知识图谱：
 - vis-network 力导向图：9 种形状区分实体类型（需求◆ 规格🛢 功能模块■ 任务▲ 全局★ 业务模块⭐ 源码）
 - 业务-代码关联图谱：从 TECH.md 提取业务模块→代码实体映射，支持开放关系类型
 - 衰减检测：自动发现内容变更、下游过期、文件丢失、代码超前等风险
 - RAG 上下文预览：查看 AI 检索时会注入的完整上下文
 - 9 套主题 / 3 种字体 / 4 档字号 / 全屏模式 / 实体搜索 / 类型过滤
+
+**v6.90.0+ 代码知识图谱** — 本地 AST 解析，零 LLM Token：
+```bash
+speccore code-index --graph --scope src           # 构建代码知识图谱
+speccore knowledge-explain "buildCodeGraph"       # 解释节点及其连接
+speccore knowledge-path "AuthModule" "UserDB"     # 查找最短依赖路径
+speccore knowledge-query "how does payment work"  # 自然语言查询
+```
+- 基于 TypeScript 编译器 API 本地解析（代码不出本机）
+- 自动生成 `graph.json` + `GRAPH_REPORT.md` + `graph.html`
+- 社区检测自动划分子系统，识别 God nodes 和跨社区桥梁
+- v6.91.0+ 支持 API Contract / SQL Schema 多模态纳入图谱
 
 ![Knowledge Graph](docs/screenshots/knowledge-graph-full.png)
 
@@ -182,7 +194,7 @@ Iteration-001-meeting/
 
 ```bash
 npm install -g speccore
-speccore --version   # v6.71.3
+speccore --version   # v6.91.1
 ```
 
 ## 命令列表
@@ -205,7 +217,7 @@ speccore --version   # v6.71.3
 | `change` | `ch` | 🔄 🔒 需求变更 |
 | `sync` | `sy` | 🔄 🔒 双向同步 |
 | `validate` | `vl` | ✅ 合规验证 |
-| `knowledge` | `kg` |  知识图谱可视化 + 衰减检测 |
+| `knowledge` | `kg` |  🌐 知识图谱可视化 + 衰减检测 + 代码图谱查询 |
 | `track` | `trk` | 🔗 🔒 REQ→Task→Code 全链路 |
 | `search` | `sh` | 🔍 跨 Spec 全文搜索 |
 | `retro` | `rt` | 📝 🔒 任务回顾复盘 + 评分 |

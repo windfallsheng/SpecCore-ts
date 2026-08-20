@@ -365,7 +365,7 @@ speccore validate [--iteration <name>]
 ```
 别名: `vl`
 
-### 🧠 knowledge — 知识图谱可视化
+### 🧠 knowledge — 知识图谱可视化与代码图谱查询
 ```bash
 speccore knowledge [-i <iteration>] [--export html] [--scope global|iteration|task]
 ```
@@ -376,6 +376,14 @@ speccore knowledge [-i <iteration>] [--export html] [--scope global|iteration|ta
 - **衰减检测**：自动发现内容变更、下游过期、文件丢失、代码超前等风险
 - **RAG 上下文预览**：查看 AI 检索时会注入的完整上下文
 - **9 套主题 / 3 种字体 / 4 档字号 / 全屏模式 / 实体搜索**
+
+**v6.90.0+ 代码知识图谱**（本地 AST 解析，零 LLM Token）：
+```bash
+speccore code-index --graph --scope src           # 构建代码知识图谱
+speccore knowledge-explain "buildCodeGraph"       # 解释节点及其连接
+speccore knowledge-path "AuthModule" "UserDB"     # 查找最短依赖路径
+speccore knowledge-query "how does payment work"  # 自然语言查询
+```
 
 ![Knowledge Graph](screenshots/knowledge-graph-full.png)
 
