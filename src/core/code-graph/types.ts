@@ -12,7 +12,10 @@ export type NodeType =
   | 'module'
   | 'method'
   | 'property'
-  | 'enum';
+  | 'enum'
+  // v6.91.0+: 多模态节点
+  | 'api_endpoint'
+  | 'db_table';
 
 export type EdgeType =
   | 'calls'

@@ -2,6 +2,36 @@
 
 ---
 
+## v6.91.0 (2026-08-20) — Graph Deep Integration: Analyze Injection + Multimodal + MODULE_MAP
+
+### New Features
+
+- **Code knowledge graph summary injection in analyze phase**
+  - `prompt-builder.ts`: analyze command automatically reads `.speccore/code-graph/graph.json`
+  - Injected content: subsystem list (community detection), God nodes, cross-community bridges, suggested questions
+  - AI analyzes requirements with existing code structure awareness, avoiding conflicts with current design
+
+- **EXTRACTED/INFERRED confidence labels in PATTERNS/**
+  - `.speccore/PATTERNS/README.md`: file format spec adds `> Confidence: EXTRACTED | INFERRED`
+  - `pattern.ts`: `PatternOptions` adds `confidence` field, defaults to `EXTRACTED`
+  - `cli.ts`: `speccore pattern` adds `--confidence` option
+  - EXTRACTED = explicitly extracted from source code, INFERRED = analysis inference (needs human review)
+
+- **Auto-write community detection results to MODULE_MAP**
+  - `code-graph/index.ts`: outputs `MODULE_MAP.json` after graph construction
+  - Contains: each community's ID/label/node count/file paths/density/God nodes/bridge nodes
+  - Cross-community edge list (max 50), for identifying subsystem coupling points
+
+- **Multimodal: API_CONTRACT + SQL Schema into the graph**
+  - New `code-graph/multimodal.ts`: multimodal parser
+  - Scans `API_CONTRACT.yaml` / `openapi.yaml` / iteration `_shared/API_CONTRACT.yaml`
+  - Scans `.sql` files, regex parses `CREATE TABLE` statements
+  - API endpoints → `api_endpoint` nodes, DB tables → `db_table` nodes
+  - Auto-linking: API to handler/controller (path/name matching), DB tables to entity/repository (name matching)
+  - Link edges marked with `INFERRED` confidence
+
+---
+
 ## v6.90.0 (2026-08-20) — Code Knowledge Graph
 
 ### New Features

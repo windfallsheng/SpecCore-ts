@@ -17,6 +17,7 @@ import { parseProject } from './parser';
 import { buildCodeGraph } from './builder';
 import { generateGraphReport } from './reporter';
 import { buildCodeGraphHtml } from './visualizer';
+import { extractMultimodalNodes } from './multimodal';
 import type { CodeGraph } from './types';
 
 const GRAPH_DIR = '.speccore/code-graph';
@@ -48,6 +49,15 @@ export async function buildCodeKnowledgeGraph(options: BuildGraphOptions = {}): 
   const { nodes, edges, fileCount } = await parseProject(files, projectRoot);
   logger.info(`   提取 ${nodes.length} 个节点, ${edges.length} 条边`);
 
+  // 2.5. v6.91.0+: 多模态节点（API Contract + SQL Schema）
+  logger.info(`🌐 扫描 API Contract & SQL Schema...`);
+  const { nodes: mmNodes, edges: mmEdges } = await extractMultimodalNodes(projectRoot, nodes);
+  if (mmNodes.length > 0) {
+    logger.info(`   发现 ${mmNodes.length} 个多模态节点, ${mmEdges.length} 条关联边`);
+    nodes.push(...mmNodes);
+    edges.push(...mmEdges);
+  }
+
   // 3. 构建图谱
   const graph = buildCodeGraph(nodes, edges, projectName, projectRoot, fileCount);
   logger.info(`   社区: ${graph.communities.length} 个 | God nodes: ${graph.godNodes.length} 个`);
@@ -71,11 +81,76 @@ export async function buildCodeKnowledgeGraph(options: BuildGraphOptions = {}): 
   await writeFile(htmlPath, buildCodeGraphHtml(graph));
   logger.info(`   ✅ graph.html`);
 
+  // v6.91.0+: MODULE_MAP.json — 社区检测结果映射
+  const moduleMapPath = join(outDir, 'MODULE_MAP.json');
+  const moduleMap = buildModuleMap(graph);
+  await writeFile(moduleMapPath, JSON.stringify(moduleMap, null, 2));
+  logger.info(`   ✅ MODULE_MAP.json`);
+
   logger.info('');
   logger.info(`📊 代码知识图谱已生成: ${outDir}`);
   logger.info(`   打开 ${join(GRAPH_DIR, 'graph.html')} 查看可视化`);
 
   return graph;
+}
+
+/**
+ * 从社区检测结果构建 MODULE_MAP
+ * v6.91.0+
+ */
+function buildModuleMap(graph: CodeGraph) {
+  const communities = graph.communities.map(comm => {
+    const nodeDetails = comm.nodes
+      .map(id => graph.nodes.find(n => n.id === id))
+      .filter(Boolean);
+    const filePaths = [...new Set(nodeDetails.map(n => n!.filePath))];
+    // 该社区内的 god nodes
+    const commGodNodes = comm.nodes.filter(id => graph.godNodes.includes(id));
+    // 该社区的桥梁节点（连接到其他社区的节点）
+    const bridgeNodes = new Set<string>();
+    for (const e of graph.edges) {
+      if (e.source === e.target) continue;
+      const s = graph.nodes.find(n => n.id === e.source);
+      const t = graph.nodes.find(n => n.id === e.target);
+      if (s && t && s.community !== t.community) {
+        if (s.community === comm.id) bridgeNodes.add(s.id);
+        if (t.community === comm.id) bridgeNodes.add(t.id);
+      }
+    }
+    return {
+      id: comm.id,
+      label: comm.label,
+      nodeCount: comm.nodes.length,
+      filePaths,
+      density: Math.round(comm.density * 100) / 100,
+      godNodes: commGodNodes,
+      bridges: [...bridgeNodes],
+    };
+  });
+
+  const crossCommunityEdges = graph.edges.filter(e => {
+    const s = graph.nodes.find(n => n.id === e.source);
+    const t = graph.nodes.find(n => n.id === e.target);
+    return s && t && s.community !== t.community;
+  }).map(e => ({
+    source: e.source,
+    target: e.target,
+    type: e.type,
+    confidence: e.confidence,
+  }));
+
+  return {
+    generatedAt: new Date().toISOString(),
+    projectName: graph.metadata.projectName,
+    summary: {
+      totalCommunities: communities.length,
+      totalNodes: graph.metadata.totalNodes,
+      totalEdges: graph.metadata.totalEdges,
+      crossCommunityEdges: crossCommunityEdges.length,
+    },
+    communities,
+    crossCommunityEdges: crossCommunityEdges.slice(0, 50),
+  };
 }
 
 /**

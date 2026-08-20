@@ -1,3 +1,33 @@
+## v6.91.0 (2026-08-20) — 图谱深度整合：analyze 注入 + 多模态 + MODULE_MAP
+
+### 新增
+
+- **analyze 阶段代码知识图谱摘要注入**
+  - `prompt-builder.ts`: analyze 命令自动读取 `.speccore/code-graph/graph.json`
+  - 注入内容：子系统列表（社区检测）、God nodes、跨社区桥梁边、建议问题
+  - AI 分析需求时优先理解现有代码结构，避免与已有设计冲突
+
+- **PATTERNS/ 目录引入 EXTRACTED/INFERRED 置信度标签**
+  - `.speccore/PATTERNS/README.md`: 文件格式规范新增 `> 置信度: EXTRACTED | INFERRED`
+  - `pattern.ts`: `PatternOptions` 新增 `confidence` 字段，默认 `EXTRACTED`
+  - `cli.ts`: `speccore pattern` 新增 `--confidence` 选项
+  - EXTRACTED = 从源码明确提取，INFERRED = 分析推断（需人工复核）
+
+- **社区检测结果自动写入 MODULE_MAP**
+  - `code-graph/index.ts`: 构建图谱后额外输出 `MODULE_MAP.json`
+  - 包含：每个社区的 ID/标签/节点数/文件路径/密度/God nodes/桥梁节点
+  - 跨社区边列表（最多 50 条），用于识别子系统耦合点
+
+- **多模态：API_CONTRACT + SQL Schema 纳入图谱**
+  - 新增 `code-graph/multimodal.ts`: 多模态解析器
+  - 扫描 `API_CONTRACT.yaml` / `openapi.yaml` / 迭代目录 `_shared/API_CONTRACT.yaml`
+  - 扫描 `.sql` 文件，正则解析 `CREATE TABLE` 语句
+  - API 端点 → `api_endpoint` 节点，数据库表 → `db_table` 节点
+  - 自动关联：API 与 handler/controller（路径/命名匹配），DB 表与 entity/repository（命名匹配）
+  - 关联边标记为 `INFERRED` 置信度
+
+---
+
 ## v6.90.0 (2026-08-20) — 代码知识图谱 Code Knowledge Graph
 
 ### 新增

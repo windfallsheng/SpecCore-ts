@@ -23,6 +23,8 @@ import { resolveRulesForTechStack, formatRulesPrompt } from './rule-loader';
 // v6.86.0+: AGENTS 全阶段扩展
 import { resolveAgentsForPhase } from './agents';
 import type { AgentContext } from './agents';
+// v6.91.0+: 代码知识图谱摘要注入
+import { loadCodeGraph } from './code-graph';
 
 // ═══════════════════════════════════════════════════════════
 // 进程级缓存（避免重复 I/O + 重复解析）
@@ -148,6 +150,7 @@ export interface SpecCorePrompt {
   taskContext?: string;  // 知识图谱：当前任务的关联链
   projectPaths?: string; // v6.49.6+：工程路径信息（用于 execute 命令）
   rulesContent?: string; // v6.85.0+: 编码规范注入
+  codeGraphSummary?: string; // v6.91.0+: 代码知识图谱摘要（analyze 阶段注入）
   instruction: string;
   outputHint: string;
 }
@@ -1401,6 +1404,40 @@ export async function buildPrompt(
     }
   }
 
+  // v6.91.0+: analyze 阶段注入代码知识图谱摘要
+  let codeGraphSummary: string | undefined;
+  if (command === 'analyze') {
+    try {
+      const cg = await loadCodeGraph(cwd);
+      if (cg) {
+        const lines: string[] = [];
+        lines.push('## 📊 代码知识图谱摘要');
+        lines.push(`> 基于本地 AST 解析（${cg.metadata.scannedFiles} 文件, ${cg.metadata.totalNodes} 节点, ${cg.metadata.totalEdges} 边）`);
+        lines.push('');
+        lines.push('### 子系统（自动检测）');
+        for (const comm of cg.communities.slice(0, 8)) {
+          const sample = comm.nodes
+            .map(id => cg.nodes.find(n => n.id === id))
+            .filter(Boolean)
+            .slice(0, 5)
+            .map(n => n!.name);
+          lines.push(`- **${comm.label}** (${comm.nodes.length} 节点, 密度 ${(comm.density * 100).toFixed(0)}%): ${sample.join(', ')}`);
+        }
+        lines.push('');
+        lines.push('### 核心节点（God Nodes）');
+        for (const id of cg.godNodes.slice(0, 10)) {
+          const n = cg.nodes.find(node => node.id === id);
+          if (n) lines.push(`- ${n.name} (${n.type}, degree=${n.degree})`);
+        }
+        lines.push('');
+        lines.push('> 提示：如需深入查看完整图谱，运行 `speccore code-index --graph` 后打开 `.speccore/code-graph/graph.html`');
+        codeGraphSummary = lines.join('\n');
+      }
+    } catch {
+      // 图谱不存在时静默跳过
+    }
+  }
+
   // v6.86.0+: 为 split/plan 命令注入 AGENTS
   let instruction = getInstruction(command, context);
   if (command === 'split' || command === 'plan') {
@@ -1438,6 +1475,7 @@ export async function buildPrompt(
     taskContext: taskContextStr,
     projectPaths: projectPathsInfo,
     rulesContent,
+    codeGraphSummary,
     instruction,
     outputHint: command === 'execute'
       ? '请返回格式: {"files": [{"path": "工程标识/相对路径", "content": "代码内容"}]}'
@@ -1545,6 +1583,12 @@ function buildPromptText(prompt: SpecCorePrompt): string {
   // v6.85.0+: 编码规范注入
   if (prompt.rulesContent) {
     lines.push(prompt.rulesContent);
+    lines.push('');
+  }
+
+  // v6.91.0+: 代码知识图谱摘要注入
+  if (prompt.codeGraphSummary) {
+    lines.push(prompt.codeGraphSummary);
     lines.push('');
   }
 
