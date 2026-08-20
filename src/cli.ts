@@ -682,6 +682,7 @@ program
   .option('-f, --file <file>', 'Read from file path')
   .option('-d, --desc <desc>', 'Pattern description')
   .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('--confidence <confidence>', 'Confidence level: EXTRACTED | INFERRED (v6.91.0+)')
   .option('--force', 'Overwrite existing pattern')
   .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
   .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')

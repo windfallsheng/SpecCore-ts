@@ -16,6 +16,8 @@ export interface PatternOptions {
   desc?: string;
   iteration?: string;
   force?: boolean;
+  /** v6.91.0+: 置信度 EXTRACTED | INFERRED */
+  confidence?: 'EXTRACTED' | 'INFERRED';
 }
 
 export async function patternCommand(options: PatternOptions): Promise<void> {
@@ -127,9 +129,11 @@ async function saveFromFile(options: PatternOptions, targetDir: string): Promise
 
 function generatePatternMeta(options: PatternOptions): string {
   const source = options.task ? `Task-${options.task}` : options.file ? options.file : '--content';
+  const confidence = options.confidence || 'EXTRACTED';
   return `# ${options.name}
 
 > 类型: pattern | 来源: ${source} | 保存时间: ${new Date().toISOString()}
+> 置信度: ${confidence}
 
 ## 描述
 ${options.desc || '无描述'}
