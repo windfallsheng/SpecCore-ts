@@ -2,6 +2,116 @@
 
 ---
 
+## v6.89.0 (2026-08-20) — Unified Injection Framework: ContextInjector
+
+### New Features
+
+- **Unified Injection Framework** `src/core/context-injector.ts`
+  - Unifies RULES / AGENTS / COMMANDS / SKILLS / HOOKS injection into a single API: `injectAll()`
+  - Supports on-demand composition: tech stack → rules, command/phase → agents, task keywords → skills
+  - Provides simplified `injectAgents()` and `injectRules()` for quick access
+  - Future commands no longer need to re-implement injection logic
+
+### Build
+
+- **Post-build script** `build-post.js`
+  - Automatically copies `.md` assets to `dist/` after TypeScript compilation
+  - Ensures built-in AGENTS / RULES / COMMANDS / SKILLS / HOOKS files exist in the published package
+
+---
+
+## v6.88.0 (2026-08-20) — SKILLS Reusable Skill Library + HOOKS Lifecycle Hooks
+
+### New Features
+
+- **SKILLS Library** `src/core/skill-loader.ts`
+  - Scans `.speccore/SKILLS/` directory, matches skills by task keywords (tags)
+  - 4 built-in skills: deployment, db-migration, caching, logging
+  - Selectively injects skills during execute phase based on task content
+
+- **HOOKS System** `src/core/hook-runner.ts`
+  - Supports `pre-{command}` and `post-{command}` hooks
+  - Naming convention-driven discovery: `pre-execute.md`, `post-execute.md`
+  - Supports `BLOCK:` marker to intercept command execution
+  - 2 built-in hooks: pre-execute (branch check), post-execute (quality gate)
+
+- **Init Integration**
+  - `speccore init` automatically creates `.speccore/SKILLS/` and `.speccore/HOOKS/`
+
+---
+
+## v6.87.0 (2026-08-20) — COMMANDS Command Template System
+
+### New Features
+
+- **Command Template Loader** `src/core/command-loader.ts`
+  - Scans `.speccore/COMMANDS/` directory for templates
+  - Supports `{{variable}}` substitution
+  - User custom templates override built-in defaults
+
+- **Built-in Templates**
+  - `pr-review.md` — PR review flow (commit message generation, analysis alignment check)
+  - `change-impact.md` — Change impact analysis flow
+  - `refactor.md` — Refactoring standard flow
+
+### Changes
+
+- **`pr.ts`**: `--prompt` mode prefers `pr-review` template, falls back to hard-coded prompt
+- **`change.ts`**: `--prompt` mode appends `change-impact` template
+- **`init.ts`**: Creates `.speccore/COMMANDS/` during initialization
+
+---
+
+## v6.86.0 (2026-08-20) — AGENTS Scheduler Extended to All Phases
+
+### New Features
+
+- **11 new role definition files**
+  - task-decomposer, dependency-analyst, effort-estimator (split phase)
+  - schedule-planner, risk-assessor (plan phase)
+  - impact-analyst, regression-tester (change phase)
+  - code-reviewer, test-reviewer (pr phase)
+  - compiler, test-engineer, performance-expert, doc-sync-agent (execute quality-gate)
+  - compliance-checker (audit phase, conditionally activated for finance industry)
+
+- **AGENTS Registry Update** `_INDEX.md`
+  - Adds `split / default` and `plan / default` phase configurations
+
+### Changes
+
+- **`prompt-builder.ts`**: Automatically injects corresponding roles when building prompts for split / plan commands
+- **`change.ts`**: Injects impact-analyst, regression-tester for change/impact phase
+- **`pr.ts`**: Injects code-reviewer, security-reviewer, test-reviewer for pr/review phase
+
+---
+
+## v6.85.0 (2026-08-20) — RULES Coding Standards Library + Auto-Injection by Tech Stack
+
+### New Features
+
+- **Standards Library Loader** `src/core/rule-loader.ts`
+  - Scans `.speccore/RULES/` directory
+  - Parses `appliesTo` and `priority` from frontmatter
+  - Matches applicable rules by tech stack identifiers
+
+- **8 Built-in Coding Standards**
+  - `typescript.md` — Type safety, naming conventions, module organization
+  - `react.md` — Component design, Hooks conventions, state management
+  - `vue.md` — Composition API, reactivity conventions
+  - `nodejs.md` — RESTful API, error handling, dependency injection
+  - `api-design.md` — Idempotency, versioning, pagination
+  - `testing.md` — Testing pyramid, coverage targets
+  - `security.md` — Input validation, auth/authz, OWASP protection
+  - `database.md` — Naming conventions, table design, query optimization
+  - `frontend-common.md` — Responsive, a11y, i18n, performance
+
+### Changes
+
+- **`prompt-builder.ts`**: Parses tech stack from `CONSTITUTION.md` during execute phase, auto-injects matching rules into prompt
+- **`init.ts`**: Creates `.speccore/RULES/` during initialization, copies default rules (does not overwrite user customizations)
+
+---
+
 ## v6.68.0 (2026-08-17) — Complete Pipeline Engine Implementation
 
 ### Core Features
