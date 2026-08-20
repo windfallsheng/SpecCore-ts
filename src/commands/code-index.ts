@@ -12,16 +12,26 @@ import { join } from 'path';
 import { readFile, pathExists } from 'fs-extra';
 import { buildCodeIndex, loadFullIndex } from '../core/code-scanner';
 import { generateMarkdownIndex } from '../core/code-index-markdown';
+import { buildCodeKnowledgeGraph } from '../core/code-graph';
 import { logger, Spinner } from '../utils/logger';
 
 export interface CodeIndexOptions {
   full?: boolean;
   scope?: string;
   show?: boolean;
+  graph?: boolean;
 }
 
 export async function codeIndexCommand(options: CodeIndexOptions): Promise<void> {
   const cachePath = join('.speccore', 'cache', 'code-structure.json');
+
+  // --graph: 构建代码知识图谱
+  if (options.graph) {
+    await buildCodeKnowledgeGraph({
+      scope: options.scope || 'src',
+    });
+    return;
+  }
 
   // --show: 只显示当前索引
   if (options.show) {
@@ -126,12 +136,14 @@ export function registerCodeIndexCommand(program: Command): void {
     .description('扫描源码生成代码索引（多端识别 + 模块分组 + git 联动）')
     .option('--full', '全量重新扫描（默认增量更新）')
     .option('--scope <dirs>', '指定扫描目录（逗号分隔）')
+    .option('--graph', '构建代码知识图谱（graph.html + graph.json + GRAPH_REPORT.md）')
     .option('--show', '只显示当前索引摘要，不更新')
     .addHelpText('after', `
 \x1b[36m使用场景:\x1b[0m
   \x1b[33m首次使用\x1b[0m        speccore code-index --full
   \x1b[33m日常更新\x1b[0m        speccore code-index (增量，只扫变化文件)
   \x1b[33m查看摘要\x1b[0m        speccore code-index --show
+  \x1b[33m构建图谱\x1b[0m        speccore code-index --graph
   \x1b[33m指定范围\x1b[0m        speccore code-index --scope src/commands,src/core
 
 \x1b[36m索引价值:\x1b[0m

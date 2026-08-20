@@ -2,6 +2,34 @@
 
 ---
 
+## v6.90.0 (2026-08-20) — Code Knowledge Graph
+
+### New Features
+
+- **Code Knowledge Graph module** `src/core/code-graph/`
+  - `parser.ts`: Local AST parsing based on TypeScript compiler API (zero Token, code never leaves your machine)
+  - `builder.ts`: Graph construction + community detection (Union-Find + directory heuristic) + God node identification
+  - `query.ts`: Supports explain (node explanation), path (shortest path BFS), query (keyword matching)
+  - `reporter.ts`: Auto-generates `GRAPH_REPORT.md` (God nodes, communities, cross-community bridges, suggested questions)
+  - `visualizer.ts`: Generates `graph.html` (vis-network force-directed graph, community colors, EXTRACTED/INFERRED line style distinction)
+  - `index.ts`: One-click build API `buildCodeKnowledgeGraph()`, outputs three artifacts
+
+- **CLI Command Enhancements**
+  - `speccore code-index --graph`: Build code knowledge graph
+  - `speccore knowledge-explain <node>`: Explain a node and its connections
+  - `speccore knowledge-path <from> <to>`: Find shortest path between two nodes
+  - `speccore knowledge-query <question>`: Natural language query against the graph
+
+### Design Inspired by Graphify
+
+- Local AST parsing replaces RAG vector indexing (zero LLM Token)
+- EXTRACTED / INFERRED edge confidence labels
+- Community detection auto-partitions subsystems
+- Three-artifact output: graph.json + GRAPH_REPORT.md + graph.html
+- Persistent graph: build once, query many times
+
+---
+
 ## v6.89.0 (2026-08-20) — Unified Injection Framework: ContextInjector
 
 ### New Features
