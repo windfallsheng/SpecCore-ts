@@ -1,16 +1,90 @@
 [
   {
-    "id": "execute-batch",
-    "name": "批量执行任务",
+    "id": "dev-auto-full",
+    "name": "全自动流水线",
     "category": "execute",
-    "icon": "⏩",
-    "description": "批量执行迭代中所有待开始的任务",
-    "prompt": "执行 {迭代名} 中所有待开始的任务",
+    "icon": "🤖",
+    "description": "analyze→split→plan→execute→pr→done 全自动",
+    "prompt": "全自动完成 {迭代名} 的开发",
+    "command": "speccore dev -i {迭代名} --auto",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
     "builtin": true,
     "sort": 1
+  },
+  {
+    "id": "dev-from-stage",
+    "name": "从指定阶段继续",
+    "category": "execute",
+    "icon": "⏭️",
+    "description": "从 split/plan/execute 等指定阶段继续 dev",
+    "prompt": "从 {阶段} 阶段继续开发 {迭代名}",
+    "command": "speccore dev -i {迭代名} --from {阶段}",
+    "params": [
+      { "key": "迭代名", "placeholder": "Q2", "required": true },
+      { "key": "阶段", "placeholder": "split", "required": true }
+    ],
+    "builtin": true,
+    "sort": 2
+  },
+  {
+    "id": "execute-batch",
+    "name": "分批执行任务",
+    "category": "execute",
+    "icon": "📦",
+    "description": "每批 N 个任务分批执行，降低风险",
+    "prompt": "分批执行 {迭代名}，每批 {数量} 个",
+    "command": "speccore execute -I {迭代名} --batch-size {数量} --auto",
+    "params": [
+      { "key": "迭代名", "placeholder": "Q2", "required": true },
+      { "key": "数量", "placeholder": "3", "required": false }
+    ],
+    "builtin": true,
+    "sort": 3
+  },
+  {
+    "id": "execute-resume",
+    "name": "断点续传",
+    "category": "execute",
+    "icon": "▶️",
+    "description": "上次中断后继续执行失败的任务",
+    "prompt": "继续上次 {迭代名} 的执行",
+    "command": "speccore execute -I {迭代名} --resume",
+    "params": [
+      { "key": "迭代名", "placeholder": "Q2", "required": true }
+    ],
+    "builtin": true,
+    "sort": 4
+  },
+  {
+    "id": "split-feature",
+    "name": "按功能模块拆分",
+    "category": "execute",
+    "icon": "🧩",
+    "description": "只拆分指定功能模块的任务",
+    "prompt": "按 {功能模块} 拆分 {迭代名} 的任务",
+    "command": "speccore split -I {迭代名} --feature \"{功能模块}\"",
+    "params": [
+      { "key": "迭代名", "placeholder": "Q2", "required": true },
+      { "key": "功能模块", "placeholder": "用户认证", "required": true }
+    ],
+    "builtin": true,
+    "sort": 5
+  },
+  {
+    "id": "split-append",
+    "name": "追加拆分",
+    "category": "execute",
+    "icon": "➕",
+    "description": "已有任务后追加新任务，不覆盖",
+    "prompt": "追加拆分 {迭代名}",
+    "command": "speccore split -I {迭代名} --append",
+    "params": [
+      { "key": "迭代名", "placeholder": "Q2", "required": true }
+    ],
+    "builtin": true,
+    "sort": 6
   },
   {
     "id": "create-pr",
@@ -24,7 +98,7 @@
       { "key": "任务ID", "placeholder": "Task-001", "required": true }
     ],
     "builtin": true,
-    "sort": 2
+    "sort": 7
   },
   {
     "id": "mark-done",
@@ -38,7 +112,7 @@
       { "key": "任务ID", "placeholder": "Task-001", "required": true }
     ],
     "builtin": true,
-    "sort": 3
+    "sort": 8
   },
   {
     "id": "requirement-change",
@@ -52,6 +126,6 @@
       { "key": "变更内容", "placeholder": "用户管理模块要加批量导入功能", "required": true }
     ],
     "builtin": true,
-    "sort": 4
+    "sort": 9
   }
 ]
