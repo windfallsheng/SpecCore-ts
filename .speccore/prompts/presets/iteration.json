@@ -21,7 +21,7 @@
     "name": "创建迭代并导入需求",
     "category": "iteration",
     "icon": "📥",
-    "description": "创建迭代并导入需求文档",
+    "description": "创建迭代并导入需求文档（需 AI 参与）",
     "prompt": "创建迭代 {迭代名}，主题是 {主题}，然后把 {需求文档路径} 导入进去",
     "params": [
       { "key": "迭代名", "placeholder": "Q3", "required": true },
@@ -52,9 +52,8 @@
     "name": "迭代回顾",
     "category": "iteration",
     "icon": "📝",
-    "description": "生成迭代回顾报告",
+    "description": "生成迭代回顾报告（需 AI 参与）",
     "prompt": "生成 {迭代名} 的迭代回顾",
-    "command": "speccore retro -I {迭代名}",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],

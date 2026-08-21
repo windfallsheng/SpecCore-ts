@@ -4,9 +4,8 @@
     "name": "全自动流水线",
     "category": "execute",
     "icon": "🤖",
-    "description": "analyze→split→plan→execute→pr→done 全自动",
+    "description": "analyze→split→plan→execute→pr→done 全自动（需 AI 参与）",
     "prompt": "全自动完成 {迭代名} 的开发",
-    "command": "speccore dev -i {迭代名} --auto",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
@@ -19,9 +18,8 @@
     "name": "从指定阶段继续",
     "category": "execute",
     "icon": "⏭️",
-    "description": "从 split/plan/execute 等指定阶段继续 dev",
+    "description": "从 split/plan/execute 等指定阶段继续 dev（需 AI 参与）",
     "prompt": "从 {阶段} 阶段继续开发 {迭代名}",
-    "command": "speccore dev -i {迭代名} --from {阶段}",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true },
       { "key": "阶段", "placeholder": "split", "required": true }
@@ -66,9 +64,8 @@
     "name": "按功能模块拆分",
     "category": "execute",
     "icon": "🧩",
-    "description": "只拆分指定功能模块的任务",
+    "description": "只拆分指定功能模块的任务（需 AI 参与）",
     "prompt": "按 {功能模块} 拆分 {迭代名} 的任务",
-    "command": "speccore split -I {迭代名} --feature \"{功能模块}\"",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true },
       { "key": "功能模块", "placeholder": "用户认证", "required": true }
@@ -82,9 +79,8 @@
     "name": "追加拆分",
     "category": "execute",
     "icon": "➕",
-    "description": "已有任务后追加新任务，不覆盖",
+    "description": "已有任务后追加新任务，不覆盖（需 AI 参与）",
     "prompt": "追加拆分 {迭代名}",
-    "command": "speccore split -I {迭代名} --append",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
@@ -129,9 +125,8 @@
     "name": "需求变更",
     "category": "execute",
     "icon": "🔧",
-    "description": "对已有迭代进行需求变更",
+    "description": "对已有迭代进行需求变更（需 AI 参与）",
     "prompt": "{迭代名} 需要变更：{变更内容}",
-    "command": "speccore change -I {迭代名} --prompt \"{变更内容}\"",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true },
       { "key": "变更内容", "placeholder": "用户管理模块要加批量导入功能", "required": true }
