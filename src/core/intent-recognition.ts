@@ -120,15 +120,46 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     description: '创建新迭代 — 生成 STAFFING + 产品需求 + 需求文档目录',
     args: '--name=<name> --owner=<owner>',
   },
-  // 需求分析
+  // 需求分析（全局级 + 迭代级 + 任务级 + 重新/补充分析）
   {
     id: 'analyze',
     intent: 'analyze',
     priority: 90,
-    triggers: ['分析需求', '需求分析', 'AI分析', '代码分析', '分析代码', '迭代分析', '分析迭代', '本迭代分析', '当前迭代分析'],
-    patterns: ['分析(.+)需求', '分析(.+)代码', '迭代(.+)分析', '本迭代(.+)分析'],
-    description: 'AI 分析 — 需求完整性 + 改动范围 + 风险矩阵',
-    args: '-I <iteration> 或 --scope global --src <dirs>',
+    triggers: [
+      // 迭代级
+      '分析需求', '需求分析', 'AI分析', '代码分析', '分析代码',
+      '迭代分析', '分析迭代', '本迭代分析', '当前迭代分析',
+      // 全局级（v6.97.0+ 修复：避免全局分析 fallback 到迭代层）
+      '全局分析', '全局层分析', '分析全局层', '分析全局',
+      '全量分析', '全量层分析', '分析全量层', '分析全量',
+      '项目分析', '分析项目', '分析整体架构',
+      '分析所有端', '分析所有工程', '跨端分析', '全局架构分析',
+      '整体分析', '全项目分析', '项目架构分析',
+      '分析整个系统', '分析整个项目', '分析所有源码',
+      // 任务级（v6.97.0+ 新增：子任务/单任务分析）
+      '任务分析', '分析任务', '子任务分析', '分析子任务',
+      'Task分析', '分析Task', '当前任务分析', '单任务分析',
+      // 重新/补充分析（v6.97.0+ 新增：覆盖 --supplement / --sync）
+      '重新分析', '再分析', '重新生成分析', '重新跑分析',
+      '补充分析', '追加分析', '更新分析', '修正分析',
+      '完善分析', '刷新分析', '重新评估', '重新审查',
+    ],
+    patterns: [
+      '分析(.+)需求', '分析(.+)代码',
+      '迭代(.+)分析', '本迭代(.+)分析',
+      // 全局级匹配模式
+      '全局分析(.+)', '全量分析(.+)', '分析所有(.+)',
+      '分析项目(.+)', '项目(.+)分析', '整体(.+)分析',
+      '跨端(.+)分析', '架构(.+)分析',
+      // 任务级匹配模式
+      '任务(.+)分析', '分析任务(.+)', '子任务(.+)分析',
+      'Task(.+)分析', '分析Task(.+)',
+      // 重新/补充分析匹配模式
+      '重新(.+)分析', '再(.+)分析', '补充(.+)分析',
+      '更新(.+)分析', '修正(.+)分析', '完善(.+)分析',
+    ],
+    description: 'AI 分析 — 需求完整性 + 改动范围 + 风险矩阵（支持全局级/迭代级/任务级/重新分析）',
+    args: '-I <iteration> 或 --scope global|task --with-code --supplement --sync',
   },
   // 任务拆分
   {
@@ -569,10 +600,15 @@ export async function recognizeIntent(input: string): Promise<IntentResult[]> {
       let contextAware = false;
       const contextRule = CONTEXT_RULES[mapping.id];
       if (contextRule) {
-        if (activeIteration) {
+        // v6.97.0+ 修复：用户明确说全局分析时，不因活跃迭代给迭代级意图加分
+        const hasGlobalScope = /全局|全量|所有项目|所有工程|整体架构|跨端|整个系统/.test(input);
+        if (activeIteration && !hasGlobalScope) {
           totalScore += 15;
           contextAware = true;
           matched.push('上下文感知: 有活跃迭代');
+        } else if (activeIteration && hasGlobalScope && mapping.intent === 'analyze') {
+          // 全局分析时，analyze 意图不因活跃迭代加分（避免全局被迭代上下文拉高）
+          matched.push('上下文感知: 有活跃迭代，但用户明确全局分析，不加分');
         } else if (
           mapping.intent === 'execute' ||
           mapping.intent === 'query_progress'
@@ -671,17 +707,55 @@ function extractParams(input: string, mapping: CommandMapping): Record<string, s
     params.iteration = iterMatch[1];
   }
 
-  // 检测 scope 参数（全局分析 vs 迭代分析）
+  // 检测 scope 参数（全局分析 vs 迭代分析 vs 任务分析）
+  // v6.97.0+ 新增：任务级 scope 映射，优先级高于全局（先匹配先命中）
   const scopeKeywords: Record<string, string> = {
-    '全局': 'global', '所有工程': 'global', '全部工程': 'global',
-    '所有项目': 'global', '全部项目': 'global', '整个项目': 'global',
-    '全量': 'global', '整体': 'global', '全部': 'global',
+    // 任务级（优先匹配，避免"任务"被误判为迭代级）
+    '子任务': 'task', '单任务': 'task',
+    '任务级': 'task', '任务层': 'task',
+    // 全局级
+    '全局': 'global', '全局层': 'global', '全局范围': 'global',
+    '全量': 'global', '全量层': 'global', '全量范围': 'global',
+    '所有工程': 'global', '全部工程': 'global',
+    '所有项目': 'global', '全部项目': 'global', '全项目': 'global',
+    '整个项目': 'global', '整个系统': 'global',
+    '所有端': 'global', '全部端': 'global',
+    '所有源码': 'global', '全部源码': 'global',
+    '整体': 'global', '全部': 'global',
   };
   for (const [keyword, scopeValue] of Object.entries(scopeKeywords)) {
     if (input.includes(keyword)) {
       params.scope = scopeValue;
       break;
     }
+  }
+
+  // 检测任务名（--task 参数）
+  // v6.97.0+ 新增：从输入中提取 Task-XXX 或子任务名
+  const taskIdMatch = input.match(/Task[\-\s]*(\w+)/i);
+  if (taskIdMatch) {
+    params.task = `Task-${taskIdMatch[1]}`;
+  }
+  const taskNameMatch = input.match(/(?:子任务|任务)[：:\s]*([^，,。\s]+)/);
+  if (taskNameMatch && !params.task) {
+    params.task = taskNameMatch[1];
+  }
+
+  // 检测 --with-code 参数（源码扫描）
+  const codeKeywords = ['源码', '代码', '结合源码', '扫描代码', '读代码', '看代码', 'with-code', 'with code'];
+  if (codeKeywords.some(k => input.includes(k))) {
+    params.withCode = 'true';
+  }
+
+  // 检测重新/补充分析参数（--supplement / --sync）
+  // v6.97.0+ 新增：覆盖"重新分析""补充分析""更新分析"等场景
+  const supplementKeywords = ['重新', '再', '补充', '追加', '更新', '修正', '完善', '刷新'];
+  if (supplementKeywords.some(k => input.includes(k)) && input.includes('分析')) {
+    params.supplement = 'true';
+  }
+  const syncKeywords = ['回写', '同步到', '写回', '局部更新'];
+  if (syncKeywords.some(k => input.includes(k))) {
+    params.sync = 'true';
   }
 
   // 检测工具/平台名称（--tool 参数）
@@ -748,4 +822,42 @@ export function getCommandMapping(commandId: string): CommandMapping | undefined
  */
 export function getCommandsByIntent(intent: IntentType): CommandMapping[] {
   return COMMAND_MAPPINGS.filter((m) => m.intent === intent);
+}
+
+// ═══════════════════════════════════════════════════════════
+// 意图域检测 — 区分 speccore CLI 操作 vs 普通 AI 对话
+// ═══════════════════════════════════════════════════════════
+
+/** 明确表明用户在使用 speccore 的上下文关键词 */
+const SPECCORE_CONTEXT_KEYWORDS = [
+  // 工具名
+  'speccore', 'spec-core', 'spec_ask', 'spec-ask',
+  // 迭代/项目管理
+  '迭代', 'iteration', 'sprint', 'STAFFING',
+  // 全局分析（speccore 专有概念）
+  '全局', '全局层', '全量', '全量层', '跨端',
+  // 任务/拆分
+  '拆分', 'split', '子任务', 'Task-', 'task-',
+  // 文档/规格
+  'PRD', 'doc2spec', 'spec2doc', 'ANALYSIS', '020-specs', '030-tasks',
+  // 执行相关（明确 speccore 语境）
+  'execute', 'dev --', 'done', 'reindex',
+  // 端（speccore 专有概念）
+  'backend', 'frontend', 'h5', 'admin', 'with-code', 'with code',
+  // 变更
+  '变更', 'change --',
+];
+
+/** 容易与"普通 AI 对话"混淆的意图 */
+export const AMBIGUOUS_INTENTS = new Set<IntentType>([
+  'analyze', 'split', 'execute', 'plan', 'review',
+]);
+
+/**
+ * 判断用户输入是否明确与 speccore CLI 操作相关
+ * v6.97.0+ 新增：避免"分析代码""讨论需求"等普通聊天被误判为 speccore 操作
+ */
+export function isSpeccoreOperation(input: string): boolean {
+  const lower = input.toLowerCase();
+  return SPECCORE_CONTEXT_KEYWORDS.some(kw => lower.includes(kw.toLowerCase()));
 }

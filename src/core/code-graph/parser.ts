@@ -45,6 +45,23 @@ function getSnippet(node: ts.Node, sourceFile: ts.SourceFile): string {
   return text.slice(0, 200).replace(/\s+/g, ' ').trim();
 }
 
+/** v7.0.0+: 提取 JSDoc/TSDoc 注释 */
+function getJSDocComment(node: ts.Node, sourceFile: ts.SourceFile): string {
+  const jsDocs = (node as any).jsDoc;
+  if (!jsDocs || !Array.isArray(jsDocs) || jsDocs.length === 0) return '';
+
+  const doc = jsDocs[0];
+  const text = doc.getText(sourceFile);
+  // 清理注释标记，保留内容
+  const cleaned = text
+    .replace(/\/\*\*/g, '')
+    .replace(/\*\//g, '')
+    .replace(/^\s*\*\s?/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned.slice(0, 150);
+}
+
 /**
  * 解析单个文件，提取节点和边
  */
@@ -86,6 +103,10 @@ function parseSingleFile(filePath: string, projectRoot: string): ParsedFile | nu
   function addNode(name: string, type: CodeNode['type'], node: ts.Node): CodeNode {
     const pos = getNodePosition(node, sourceFile);
     const id = makeNodeId(relPath, name);
+    // v7.0.0+: 提取 JSDoc 注释，与代码片段拼接
+    const jsdoc = getJSDocComment(node, sourceFile);
+    const codeSnippet = getSnippet(node, sourceFile);
+    const snippet = jsdoc ? `${jsdoc} | ${codeSnippet}` : codeSnippet;
     const n: CodeNode = {
       id,
       name,
@@ -93,7 +114,7 @@ function parseSingleFile(filePath: string, projectRoot: string): ParsedFile | nu
       filePath: relPath,
       line: pos.line,
       column: pos.column,
-      snippet: getSnippet(node, sourceFile),
+      snippet,
     };
     nodes.push(n);
     localNames.add(name);

@@ -1025,3 +1025,113 @@ export async function readChunksPrecise(chunks: DocumentChunk[]): Promise<
   }
   return results;
 }
+
+// ═══════════════════════════════════════════════════════════════
+// v7.0.0+: 知识图谱增强的 RAG 检索
+// ═══════════════════════════════════════════════════════════════
+
+/** 知识图谱实体引用（轻量接口，避免循环依赖） */
+interface KGLiteEntity {
+  id: string;
+  title: string;
+  type: string;
+  semanticTags?: string[];
+  description?: string;
+  businessRole?: string;
+  file?: string;
+}
+
+interface KGLiteRelation {
+  from: string;
+  to: string;
+  type: string;
+}
+
+interface KGLiteGraph {
+  entities: Record<string, KGLiteEntity>;
+  relations: KGLiteRelation[];
+}
+
+/**
+ * 利用知识图谱增强 RAG 检索
+ *
+ * 流程：
+ * 1. 用查询关键词在知识图谱中搜索相关实体
+ * 2. 收集这些实体关联的邻居实体（扩展上下文）
+ * 3. 在 RAG 索引中优先检索与这些实体相关的 chunk
+ * 4. 将检索结果与知识图谱的关联信息一起返回
+ */
+export function retrieveWithGraphContext(
+  index: RagIndex,
+  graph: KGLiteGraph,
+  options: RetrievalOptions,
+): DocumentChunk[] {
+  const { query, topK = 5 } = options;
+  const queryKeywords = extractKeywords(query);
+
+  // Step 1: 在知识图谱中搜索相关实体
+  const matchedEntityIds = new Set<string>();
+  const entityScores = new Map<string, number>();
+
+  for (const entity of Object.values(graph.entities)) {
+    const text = `${entity.title} ${entity.type} ${entity.semanticTags?.join(' ') || ''} ${entity.description || ''} ${entity.businessRole || ''}`.toLowerCase();
+    let score = 0;
+
+    for (const kw of queryKeywords) {
+      const lowerKw = kw.toLowerCase();
+      if (entity.title.toLowerCase().includes(lowerKw)) score += 5;
+      else if (entity.id.toLowerCase().includes(lowerKw)) score += 4;
+      else if (entity.semanticTags?.some((t: string) => t.toLowerCase().includes(lowerKw))) score += 3;
+      else if (entity.businessRole?.toLowerCase().includes(lowerKw)) score += 3;
+      else if (text.includes(lowerKw)) score += 1;
+    }
+
+    if (score > 0) {
+      matchedEntityIds.add(entity.id);
+      entityScores.set(entity.id, score);
+    }
+  }
+
+  // Step 2: 收集邻居实体（一阶扩展）
+  const neighborIds = new Set<string>(matchedEntityIds);
+  for (const rel of graph.relations) {
+    if (matchedEntityIds.has(rel.from)) neighborIds.add(rel.to);
+    if (matchedEntityIds.has(rel.to)) neighborIds.add(rel.from);
+  }
+
+  // Step 3: 在 RAG 中检索，优先匹配知识图谱中的实体
+  const baseResults = retrieveRelevantChunks(index, { ...options, topK: topK * 2 });
+
+  // Step 4: 对结果重新评分（知识图谱匹配的 chunk 获得加分）
+  const scored = baseResults.map(chunk => {
+    let bonus = 0;
+
+    // 检查 chunk 是否与知识图谱实体相关
+    for (const entityId of neighborIds) {
+      const entity = graph.entities[entityId];
+      if (!entity) continue;
+
+      // chunk 标题/内容包含实体名
+      const entityName = entity.title.toLowerCase();
+      if (chunk.title.toLowerCase().includes(entityName)) bonus += 2;
+      if (chunk.content.toLowerCase().includes(entityName)) bonus += 1;
+
+      // chunk 路径匹配实体文件
+      if (entity.file && chunk.filePath.includes(entity.file)) bonus += 3;
+
+      // chunk 路径匹配实体 ID（对于 kg:// 协议的文档）
+      if (chunk.filePath.includes(entityId)) bonus += 3;
+    }
+
+    // 原始分数 + 知识图谱加分
+    const originalScore = chunk.relevanceScore || 0;
+    const boostedScore = Math.min(originalScore + bonus / 10, 1);
+
+    return { ...chunk, relevanceScore: boostedScore };
+  });
+
+  // 按 boosted 分数排序，取 topK
+  return scored
+    .sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0))
+    .slice(0, topK);
+}

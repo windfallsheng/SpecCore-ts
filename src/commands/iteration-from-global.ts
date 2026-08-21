@@ -226,11 +226,11 @@ function generateIterationArchitecture(
   content += `
 ## 技术栈
 
-（从全量层 GLOBAL/TECH_STACK.md 继承）
+（从全量层 GLOBAL/global/TECH_STACK.md 继承）
 
 ## 架构决策
 
-（继承全量层架构，详见 GLOBAL/ARCHITECTURE.md）
+（继承全量层架构，详见 GLOBAL/global/ARCHITECTURE.md）
 
 ## 变更记录
 

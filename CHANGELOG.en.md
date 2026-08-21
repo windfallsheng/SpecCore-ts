@@ -2,6 +2,290 @@
 
 ---
 
+## v7.1.0 (2026-08-21) — LLM Semantic Query + Diagram Enrichment + Ask Intent Improvement
+
+### Added
+
+- **LLM semantic-enhanced query** `speccore graph query` `src/core/graph-semantic.ts`
+  - `graph query` enables LLM semantic enhancement by default (`--smart`), expanding "order-related code" to ["order", "booking", "purchase", "交易", "下单", ...]
+  - Results re-ranked by "local score * 0.4 + LLM semantic score * 0.6" for more accurate matching
+  - LLM provides matching reasons (e.g., "This file handles order state transitions, highly relevant")
+  - `--fast` mode skips LLM (zero Token, falls back to local rule expansion)
+  - Local rule expansion covers 15+ business domains (order/user/payment/content/message/data/search/config/monitor/security/performance/test/deploy)
+
+- **Mermaid diagram rendering command** `speccore graph render` `src/utils/mermaid-render.ts`
+  - `graph render <file.mmd>` — Render single Mermaid file to HTML
+  - `graph render --all` — Batch render all .mmd in `.speccore/GLOBAL/diagrams/`
+  - `graph render --extract <file.md>` — Extract Mermaid blocks from Markdown and render
+  - Generated HTML uses CDN-loaded Mermaid.js, supports printing and responsive layout
+  - Supports batch extraction of all `\`\`\`mermaid` code blocks from Markdown
+
+- **Global analysis artifact enrichment (diagrams)** `src/commands/analyze.ts`
+  - Pre-create `.speccore/GLOBAL/diagrams/` directory for standalone diagram files
+  - Layer 2 `_ASSOCIATION.md` requires module relationship + API dependency diagrams (Mermaid graph)
+  - Layer 2 `_MODULES.md` requires module panorama diagram (Mermaid graph)
+  - Layer 3 module docs require sequence diagram (sequenceDiagram) + flowchart (flowchart) + state diagram (stateDiagram)
+  - Layer 4 `INTERACTION_MAP.md` requires cross-end interaction sequence diagram
+  - Layer 4 `ARCHITECTURE.md` requires architecture topology + dependency diagrams
+  - Layer 4 `DATA_FLOW.md` requires data flow diagram
+  - Layer 4 `DEPLOYMENT.md` requires CI/CD pipeline diagram
+  - New "Diagram Generation Specification" chapter: Mermaid syntax requirements, per-layer mandatory diagrams, quality standards, standalone .mmd file spec
+
+### Improved
+
+- **Ask intent recognition** `src/core/ask-engine.ts`
+  - Added `graph` command KB entry (description/triggers/synonyms/examples)
+  - Synonym map expanded: knowledge graph, code graph, query graph, find relations, find path, entity query, graph stats
+  - Explain mode regex expanded: supports `graph` command usage queries
+
+## v7.0.0 (2026-08-21) — Knowledge Graph Enhancement + Unified Query + RAG Integration
+
+### Added
+
+- **Unified graph query command** `speccore graph` `src/commands/graph.ts`
+  - `graph query <question>` — Natural language unified query across Knowledge Graph + Code Graph
+  - `graph entity <id>` — Query specific entity details (semantic tags, business role, related entities)
+  - `graph related <id>` — Query first-order neighbors grouped by relation type
+  - `graph path <from> <to>` — Find shortest path between two entities (Knowledge Graph BFS + Code Graph fallback)
+  - `graph stats` — Output statistics for both graphs (including semantic tag coverage)
+  - Results fuse both graphs: Knowledge Graph matches semantic tags/business roles/descriptions, Code Graph matches node names/snippets
+
+- **Semantic-level node tagging** `src/core/knowledge-graph.ts` `src/core/code-graph/parser.ts`
+  - `GraphEntity` adds `semanticTags`, `description`, `businessRole` fields
+  - Zero-Token local semantic extraction: `extractSemanticFromCode()` extracts from source files
+    - JSDoc/TSDoc comments → description
+    - File header comments → description fallback
+    - Filename/path keyword mapping → semanticTags (25+ business domain rules)
+    - Export name suffix inference → businessRole (12 categories: Controller/Service/Repository/Hook/etc.)
+  - Code Graph AST parser also extracts JSDoc comments into `snippet` field
+  - Global analysis Prompt adds semantic tag extraction requirements (Layer 1 + Layer 3)
+
+- **Knowledge Graph ↔ RAG index synchronization** `src/core/knowledge-graph.ts` `src/core/rag-engine.ts`
+  - `buildKnowledgeGraph()` auto-synchronizes to build `kg-rag-index.json` after completion
+  - Each Knowledge Graph entity converted to RAG document chunk (title, type, tags, semantics, related entities)
+  - `retrieveWithGraphContext()` — Knowledge Graph-enhanced RAG retrieval
+    - Step 1: Search relevant entities in Knowledge Graph using query keywords
+    - Step 2: Collect first-order neighbor entities to expand context
+    - Step 3: Retrieve base results from RAG index
+    - Step 4: Re-score results (chunks matching Knowledge Graph entities get bonus points)
+    - Implements "graph-first positioning → RAG-deep-dive" linked retrieval pattern
+
+## v6.99.0 (2026-08-21) — Global Analysis Output Structure Improvement
+
+### Improved
+
+- **GLOBAL directory structure adjustment** `src/commands/analyze.ts`
+  - Global technical docs unified under `.speccore/GLOBAL/global/` subdirectory, not at same level as `platforms/`/`requirements/`
+  - Apply routing: both `globalSet.has(filename)` and unknown files route to `global/` subdirectory
+  - Pre-create `global/` subdirectory during directory initialization
+  - All global doc paths in Prompt updated to `global/` prefix
+  - Backward compatibility: `config.ts` `resolveTechStackPath()` checks new path first, falls back to legacy path
+
+- **PATTERNS extraction enhancement** `src/commands/analyze.ts`
+  - Layer 1 adds "extract reusable patterns" task: identify design patterns while scanning each platform
+  - Backend 6 pattern types: architecture, data model, API contract, security, performance, utilities/middleware
+  - Frontend 6 pattern types: components, hooks, state management, routing/navigation, request/interception, layout/styling
+  - Layer 3 adds "feature module-level pattern extraction": cross-platform interaction, business rules, data flow, UI interaction, error handling
+  - Cross-platform patterns go to generic category first, platform differences noted in paragraphs
+
+- **Requirements document enhancement** `src/commands/analyze.ts`
+  - Global REQUIREMENT.md: adds product vision, target user personas, core scenario map, feature panorama, priority matrix, release milestones, risk assessment
+  - Frontend REQUIREMENT.md: adds information architecture, user journey, page inventory, interaction design, state/feedback, permissions/roles, responsive/adaptive strategy, accessibility
+  - Iteration analysis Prompt updated with enriched REQUIREMENT.md writing style requirements
+
+- **Agent role system** `.agents/agents/`
+  - Added 11 dedicated Agent role definition files covering SpecCore full lifecycle
+  - P0 core roles: spec-clarifier, spec-global-analyzer, spec-analyzer, spec-executor
+  - P1 quality assurance: spec-gatekeeper, spec-tester, spec-reviewer
+  - P2 operations enhancement: spec-knowledge-curator, spec-change-detector, spec-security-auditor
+  - P3 architecture governance: spec-architect
+  - Each Agent includes scope, principles, constraints, triggers, inputs/outputs
+  - Core Agents enriched with professional methodologies: 5W2H clarification, 4-layer global analysis, P0/P1/P2 gatekeeper checklist, equivalence partitioning + boundary value analysis
+
+- **Agent role projection to AGENTS.md** `src/commands/init.ts`
+  - `syncAgentsMd()` now scans `.agents/agents/` directory
+  - Auto-extracts Agent name, description, duties to generate role quick-reference table
+  - Dual-track: `.agents/agents/` for Agent-aware tools, `AGENTS.md` for all other tools
+  - `speccore init` auto-creates `.agents/agents/` directory
+
+## v6.98.0 (2026-08-21) — AGENTS.md Spec Database Projection
+
+### Added
+
+- **AGENTS.md spec database projection** `src/commands/init.ts`
+  - New `syncAgentsMd()` function projects `.speccore/AGENTS/` and `.speccore/RULES/` contents into `AGENTS.md`
+  - File name convention:
+    - `*.inline.md` → content inlined into AGENTS.md (external AI tools read directly)
+    - `*.md` → generates index link only (external AI tools follow links)
+  - Auto section wrapped in `<!-- SPECCORE_AUTO_INDEX_START/END -->` markers, safely isolated from manual section
+  - Auto-sync on `speccore init` and `speccore update`
+
+- **RULES spec library adds .inline.md templates** `src/commands/init.ts`
+  - `01-PROJECT_STRUCTURE.inline.md` — project structure (inlined into AGENTS.md)
+  - `02-OUTPUT_MARKERS.inline.md` — SpecCore output markers (inlined into AGENTS.md)
+  - `03-COMMAND_CHEATSHEET.inline.md` — command cheat sheet (inlined into AGENTS.md)
+
+### Improved
+
+- **AGENTS.md structure optimization**
+  - Manual section keeps only core rules (project type, working principles, prohibitions, behavior constraints)
+  - Non-core specs (project structure, output markers, command cheat sheet) migrated to `.speccore/RULES/*.inline.md`
+  - External AI tools still see complete specs in AGENTS.md, but specs are atomically maintained in `.speccore/`
+
+## v6.97.0 (2026-08-20) — Intent Recognition Fix: Global Analysis + Confirm Mechanism + Spec DB Upgrade
+
+### Fixes
+
+- **Global analysis fallback to iteration layer** `src/commands/analyze.ts`
+  - Set `options.iteration = 'GLOBAL'` at `analyzeCommand` entry when `scope === 'global'`
+  - Fix all 12 occurrences of `options.iteration || await getDefaultIteration()` fallback
+  - Both Prompt mode and non-Prompt mode fixed
+
+- **Intent domain detection: speccore operation vs normal AI chat** `src/core/ask-engine.ts` + `src/core/intent-recognition.ts`
+  - Add `isSpeccoreOperation()` to detect speccore context keywords in input
+  - Ambiguous intents (analyze/split/execute/plan/review) return `ambiguous` when no speccore context
+  - Prevent "analyze code" / "discuss requirements" from being misclassified as speccore operations
+
+- **Explicit call support (/spec-ask Skill)** `src/cli.ts` + `src/core/ask-engine.ts`
+  - Add `--explicit` option to `speccore ask`
+  - `/spec-ask` Skill calls automatically include `--explicit`, skipping intent domain confirmation
+  - Normal natural language input still goes through confirmation flow
+
+- **Threshold adjustment** `src/core/ask-config.ts`
+  - `highThreshold`: 70 → 85 (only very clear intents execute directly)
+  - `lowThreshold`: 45 → 40 (more intents enter confirmation mode)
+
+- **Mandatory confirm command list** `src/core/ask-engine.ts`
+  - Write commands (analyze/split/plan/execute/dev/pr/done/change/reindex) require confirm even with confidence ≥ 85
+  - Commands with `confirm` in AI context no longer execute directly; output `[SPECCORE_INTENT]` for user confirmation
+
+- **Context-aware enhancement fix** `src/core/intent-recognition.ts`
+  - When user explicitly says "global/full/all projects", analyze intent no longer gets extra points from active iteration
+  - Prevent global analysis from being boosted by iteration context
+
+- **Analyze triggers supplement** `src/core/intent-recognition.ts`
+  - Global: 20+ keywords (global analysis, full analysis, project analysis, etc.)
+  - Task-level: 8 keywords (task analysis, subtask analysis, etc.)
+  - Re/supplement analysis: 12 keywords (reanalyze, supplement analysis, etc.)
+  - scopeKeywords and extractParams synchronized
+
+- **Skill file fix** `.agents/skills/spec-ask/SKILL.md`
+  - Clearly distinguish iteration-level (`-I <iter>`) and global-level (`--scope global --with-code`) analysis
+  - Global analysis must read `CONSTITUTION.md` for source paths, **never read iteration directories**
+  - `speccore ask` calls in execution flow include `--explicit` flag
+
+- **Update command supplements spec DB directories** `src/commands/update.ts`
+  - Create `.speccore/AGENTS/`, `.speccore/RULES/`, `.speccore/COMMANDS/`, `.speccore/SKILLS/`, `.speccore/HOOKS/` during upgrade
+  - Previously only created in `init`, completely missing in `update`
+
+## v6.96.0 (2026-08-20) — Intelligence: Error Diagnosis + Usage Analytics + Smart Recommendations
+
+### New Features
+
+- **Auto Error Diagnosis** `src/core/error-diagnosis.ts`
+  - 8 common error pattern recognitions: iteration not found, task not found, lock conflict, graph missing, Git error, dependency missing, prompt build failure, network timeout
+  - `diagnoseError()`: analyzes error string, returns category + severity + fix suggestions
+  - `diagnoseAndPrint()`: one-click diagnosis with formatted output
+  - `speccore recommend --diagnose "<error message>"`: manual diagnosis of specific errors
+
+- **Usage Pattern Analytics** `src/core/usage-analytics.ts`
+  - Event recording system: command execution, task start/complete/fail, iteration creation
+  - `recordCommand()`: records command usage (supports duration tracking)
+  - `generateUsageReport()`: generates usage report (command frequency, task completion rate, avg duration, active iterations)
+  - `speccore recommend --analytics`: view usage pattern report
+  - Auto-recommendations: suggest re-analysis on high failure rate, suggest archiving on many active iterations
+
+- **Smart Recommendation System** `src/core/smart-recommend.ts` + `speccore recommend`
+  - 6-dimension state scanning: code graph freshness, unread notifications, active locks, req↔code linkage, CONSTITUTION age, usage patterns
+  - Priority classification: high/medium/low, sorted by priority
+  - `speccore status` automatically displays smart recommendations at the bottom
+  - `speccore recommend` view full recommendation list
+  - `speccore recommend --diagnose <error>` diagnose errors
+  - `speccore recommend --analytics` view usage report
+
+- **Doctor Enhancement**
+  - Added concurrency lock status check (checkLocks)
+  - Added notification backlog check (checkNotificationBacklog)
+  - Expired locks (>30 min) marked as fixable items
+
+---
+
+## v6.95.0 (2026-08-20) — Collaboration Enhancement: Multi-User + Concurrency Protection + Change Notifications
+
+### New Features
+
+- **Multi-User Support** `src/core/user-context.ts`
+  - Auto-detects current operator: `git config user.name` → `SPECCORE_USER` env → system username
+  - `getUserSlug()`: generates file-safe short user identifier
+  - Supports `setCurrentUser()` to override cache
+
+- **Concurrency Protection** `src/core/lock-manager.ts`
+  - File-based lightweight lock mechanism (`.speccore/local/locks/`)
+  - `acquireLock()`: acquires lock, supports force override, 30-min auto-expiration for dead locks
+  - `releaseLock()`: releases lock
+  - `checkLock()`: queries lock status
+  - `clearAllLocks()`: admin cleanup of all locks
+  - execute command auto-acquires `iteration` lock, auto-releases on failure/completion
+
+- **Change Notification System** `src/core/notification.ts` + `speccore notify`
+  - 7 notification types: task_status_changed / task_created / requirement_updated / spec_generated / code_executed / plan_generated / iteration_created
+  - Unread/read separation (based on `.read` marker files)
+  - `speccore status` displays unread count and lock status
+  - `speccore notify`: lists notification center
+  - `speccore notify --all`: marks all as read
+  - `speccore notify --read <id>`: marks single item as read
+  - `speccore notify --clear`: cleans up notifications older than 30 days
+  - Auto-sends failure notification on execute error
+
+---
+
+## v6.94.0 (2026-08-20) — Graph Enhancement: Incremental Update + Requirement Linkage + Execute Awareness
+
+### New Features
+
+- **Incremental Graph Update** `speccore code-index --graph --incremental`
+  - File change detection based on mtime + hash, only re-parses changed files
+  - Preserves nodes and edges from unchanged files, recalculates communities/degree/godNodes after merge
+  - Saves `.graph-state.json` to track build state
+  - `--watch` mode: uses `fs.watch` to monitor source directory, auto-triggers incremental updates
+  - Deleted file detection: automatically removes nodes and edges for deleted files
+
+- **Requirement ↔ Code Graph Linkage** `src/core/code-graph/requirement-linker.ts`
+  - Auto-scans Markdown files in iteration's `010-requirements/` and `020-specs/`
+  - Extracts English identifiers from requirement docs as keywords
+  - Fuzzy matching with code graph nodes (node name 3pts / file path 1pt / snippet 0.5pt)
+  - Outputs `REQ_CODE_LINK.json`: requirement ↔ code node mapping + coverage statistics
+
+- **Execute Phase Graph Awareness** `execute-graph-plugin.ts`
+  - Injects code graph context for execute command (priority 65)
+  - Smart-matches relevant code nodes based on Task name keywords (supports camelCase/snake_case splitting)
+  - Injected content: related subsystems, key nodes (with God node markers), linked requirements
+  - Helps AI understand existing code structure, avoiding duplicate definitions or interface contract violations
+
+---
+
+## v6.93.0 (2026-08-20) — Architecture Refactor: Prompt Build Pluginization
+
+### New Features
+
+- **Prompt Plugin System** `src/core/prompt-plugins/`
+  - Unified plugin interface `PromptPlugin`: command matching + priority + enhance method
+  - Plugin registry: auto-sorted by priority, supports command filtering
+  - Three default plugins:
+    - `execute-rules-plugin`: RULES coding standard injection for execute command (priority 80)
+    - `analyze-graph-plugin`: Code knowledge graph summary injection for analyze command (priority 70)
+    - `agents-plugin`: AGENTS role injection for split/plan commands (priority 60)
+  - Backward compatible: plugin failures silently skipped, no impact on main flow
+
+### Refactoring
+
+- `prompt-builder.ts` decoupled command-specific logic
+  - Removed 79 lines of hardcoded execute/analyze/split/plan conditional branches
+  - Unified plugin execution via `getPluginsForCommand()` with sequential processing
+  - Supports multiple plugin stacking (e.g., future execute may need RULES + graph + AGENTS)
+
+---
+
 ## v6.92.0 (2026-08-20) — Stability: Test Coverage + Doctor Diagnostics
 
 ### New Features

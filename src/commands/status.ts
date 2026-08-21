@@ -1,7 +1,10 @@
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration } from "../core/context";
-import { TaskState } from "../core/state";;
+import { TaskState } from "../core/state";
 import { readProjectGraph, scanTasks } from '../core/state';
+import { checkLock } from '../core/lock-manager';
+import { getNotifications, formatNotification } from '../core/notification';
+import { generateRecommendations, printRecommendations } from '../core/smart-recommend';
 
 export interface StatusOptions {
   iteration?: string;
@@ -25,6 +28,13 @@ export async function statusCommand(options: StatusOptions): Promise<void> {
 
     spinner.stop('Status loaded');
     printStatus(iteration, tasks, options);
+    await printLockAndNotifications();
+
+    // v6.96.0+: 智能推荐
+    const recommendations = await generateRecommendations(process.cwd());
+    if (recommendations.length > 0) {
+      printRecommendations(recommendations);
+    }
   } catch (error) {
     spinner.fail(`Status check failed: ${error}`);
     throw error;
@@ -54,5 +64,31 @@ function printStatus(iteration: string, tasks: TaskState[], options: StatusOptio
   if (options.type) {
     const filtered = tasks.filter(t => t.type === options.type);
     logger.info(`${options.type} tasks: ${filtered.length}`);
+  }
+}
+
+async function printLockAndNotifications(): Promise<void> {
+  // 锁状态
+  const lock = await checkLock(process.cwd(), 'iteration');
+  if (lock) {
+    logger.info('🔒 并发锁状态');
+    logger.info(`   持有者: ${lock.holder}`);
+    logger.info(`   任务: ${lock.task || 'unknown'}`);
+    logger.info(`   获取时间: ${new Date(lock.acquiredAt).toLocaleString('zh-CN')}`);
+    logger.info('');
+  }
+
+  // 未读通知
+  const unread = await getNotifications(process.cwd(), { unreadOnly: true });
+  if (unread.length > 0) {
+    logger.info(`🔔 未读通知 (${unread.length})`);
+    for (const n of unread.slice(0, 5)) {
+      logger.info(`   ${formatNotification(n)}`);
+    }
+    if (unread.length > 5) {
+      logger.info(`   ... 及其他 ${unread.length - 5} 条`);
+    }
+    logger.info('   💡 运行 speccore notify 查看全部通知');
+    logger.info('');
   }
 }

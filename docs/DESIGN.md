@@ -271,6 +271,111 @@ speccore knowledge-query <question>          # 关键词匹配查询
 
 **多模态图谱**：API Contract（OpenAPI/YAML）和 SQL Schema 纳入图谱，生成 `api_endpoint` / `db_table` 节点，自动关联代码中的 handler/controller/entity/repository。
 
+### 1.5.10 统一图谱查询（v7.0.0+）
+
+**融合知识图谱 + 代码图谱的统一查询入口**：
+
+```bash
+speccore graph query "订单相关代码"     # 自然语言查询两种图谱
+speccore graph entity SRC:auth-AuthCtrl  # 查询特定实体详情
+speccore graph related Task-001          # 查询一阶邻居
+speccore graph path Task-001 Task-002    # 查找最短路径
+speccore graph stats                     # 统计信息
+```
+
+**查询机制**：
+- 知识图谱匹配：语义标签 / 业务角色 / 描述 / 标题 / ID
+- 代码图谱匹配：节点名 / 代码片段 / JSDoc 注释
+- 结果融合展示，按综合得分排序
+
+### 1.5.11 语义级节点标签（v7.0.0+）
+
+**让图谱理解代码意图，而不只是记录结构**：
+
+**本地零 Token 提取**（`extractSemanticFromCode()`）：
+- JSDoc/TSDoc 注释 → `description`（函数/类的用途说明）
+- 文件名/路径关键词映射 → `semanticTags`（25+ 业务域规则：auth→认证授权, order→订单交易）
+- 导出名称后缀推断 → `businessRole`（Controller/Service/Repository/Hook 等 12 类）
+
+**AI 增强标注**（全局分析 Prompt 要求）：
+- Layer 1 扫描时提取每个源码文件的语义标签
+- Layer 3 功能模块分析后补充模块级语义标注
+- 输出到 `.speccore/cache/semantic-tags.json`
+
+### 1.5.12 知识图谱 ↔ RAG 索引联动（v7.0.0+）
+
+**双向增强的检索架构**：
+
+```
+知识图谱构建完成
+    │
+    ▼
+自动同步 → kg-rag-index.json（每个实体转为 RAG 文档块）
+    │
+    ▼
+RAG 检索时注入图谱上下文
+    │
+    ▼
+retrieveWithGraphContext()：
+  Step 1: 关键词搜索知识图谱相关实体
+  Step 2: 收集一阶邻居扩展上下文
+  Step 3: RAG 索引检索基础结果
+  Step 4: 图谱匹配 chunk 获得加分
+```
+
+### 1.5.13 LLM 语义增强查询（v7.1.0+）
+
+**从"关键词匹配"升级为"语义理解"**：
+
+**查询词语义扩展**：
+- LLM 理解 "订单相关代码" → 扩展为 ["order", "booking", "purchase", "交易", "下单", "订单号"]
+- 覆盖 15+ 业务域同义词（订单/用户/支付/内容/消息/数据/搜索/配置/监控/安全/性能/测试/部署）
+- `--fast` 模式零 Token，降级到本地规则扩展
+
+**候选结果语义排序**：
+- 本地关键词匹配后取 Top 20 候选
+- LLM 对候选做语义相关性评分（0-100）
+- 综合得分 = 本地得分 × 0.4 + 语义得分 × 0.6
+- LLM 给出匹配理由（如"该文件处理订单状态流转，与查询高度相关"）
+
+### 1.5.14 Mermaid 图表渲染（v7.1.0+）
+
+**将分析产物中的 Mermaid 图表渲染为可视化 HTML**：
+
+```bash
+speccore graph render diagrams/arch.mmd      # 渲染单个 .mmd
+speccore graph render --all                   # 批量渲染 diagrams/ 目录
+speccore graph render --extract ARCHITECTURE.md  # 从 Markdown 提取
+```
+
+**技术实现**：
+- HTML 模板使用 CDN 加载 Mermaid.js（支持离线缓存）
+- 响应式布局 + 打印优化
+- 自动推断图表类型（时序图/流程图/状态图/类图/ER 图）
+- 元信息展示：来源文件、图表类型、生成时间
+
+### 1.5.15 全局分析产物图表化（v7.1.0+）
+
+**分析文档从纯文本升级为"文本 + 图表"双模态**：
+
+**各层级强制图表要求**：
+
+| 层级 | 文档 | 图表类型 | Mermaid 语法 |
+|------|------|----------|-------------|
+| Layer 2 | `_ASSOCIATION.md` | 模块关系图 + 接口依赖图 | `graph LR/TD` |
+| Layer 2 | `_MODULES.md` | 模块全景图 | `graph LR` |
+| Layer 3 | 功能模块文档 | 时序图 + 流程图 + 状态图 | `sequenceDiagram/flowchart/stateDiagram` |
+| Layer 4 | `INTERACTION_MAP.md` | 跨端交互时序图 | `sequenceDiagram` |
+| Layer 4 | `ARCHITECTURE.md` | 架构拓扑图 + 依赖关系图 | `graph TB/LR` |
+| Layer 4 | `DATA_FLOW.md` | 数据流图 | `flowchart LR` |
+| Layer 4 | `DEPLOYMENT.md` | CI/CD 流程图 | `flowchart LR` |
+
+**图表质量规范**：
+- 节点命名用中文业务术语，不用文件名/类名
+- 边标注调用关系（调用/依赖/推送/订阅）
+- 颜色区分端（前端=blue, 后端=green, 数据库=gray, 第三方=orange）
+- 独立 `.mmd` 文件输出到 `diagrams/` 目录，便于批量渲染
+
 ---
 
 ## 2. CONSTITUTION.md 设计
@@ -1775,8 +1880,10 @@ speccore schedule cancel --id <id>
 | v6.90.0 | 08-20 | 代码知识图谱 Code Knowledge Graph：本地 AST 解析 + 社区检测 + God nodes + 可视化 |
 | v6.91.0 | 08-20 | 图谱深度整合：analyze 阶段注入 + PATTERNS 置信度标签 + MODULE_MAP + 多模态图谱 |
 | v6.91.1 | 08-20 | 流程修复：analyze 图谱注入修复 + PipelineEngine 状态同步 + dev.ts plan 跳过检查 + 僵尸选项清理 |
+| v7.0.0 | 08-21 | 统一图谱查询 `speccore graph` + 语义级节点标签提取 + 知识图谱↔RAG 索引联动 |
+| v7.1.0 | 08-21 | LLM 语义增强查询（语义扩展+语义排序）+ Mermaid 图表渲染 `graph render` + 全局分析产物图表化（Layer 2/3/4 强制图表要求）+ Ask 意图完善 |
 
-> **最后更新**: 2026-08-20 (v6.91.1) — 代码知识图谱 + 图谱深度整合 + 流程稳定性修复
+> **最后更新**: 2026-08-21 (v7.1.0) — LLM 语义查询 + 图表丰富化 + 统一图谱查询
 
 ---
 ## 10. 可执行编排引擎（spec-ask v4）

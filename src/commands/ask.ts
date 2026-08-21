@@ -199,7 +199,7 @@ export async function askCommand(input: string, _options: any): Promise<void> {
     logger.info(`👋 ${lastVersion ? `v${lastVersion} → v${ver} 升级` : '首次使用'} — 已生成引导页: ${outPath}`);
   }
 
-  const result = await askEngine(input);
+  const result = await askEngine(input, { explicit: !!_options?.explicit });
   // 始终输出模式标记到 stdout，供 Skill/编排器解析
   process.stdout.write(`[SPECCORE_MODE: ${result.mode}]\n`);
 
@@ -276,7 +276,18 @@ export async function askCommand(input: string, _options: any): Promise<void> {
 
     // 2. 有 autoExec → 单命令执行
     if (result.autoExec) {
-      await autoExecute(result.autoExec.command, result.autoExec.args, !!result.autoExec.confirm);
+      // v6.97.0+ 修复：需要确认的命令不直接执行，输出确认提示让用户选择
+      // 避免"直接就乱搞" — 产生副作用的命令（analyze/execute/split 等）必须先确认
+      if (result.autoExec.confirm) {
+        process.stdout.write(`[SPECCORE_INTENT]\n`);
+        process.stdout.write(`我识别到你的意图是执行以下命令，请确认:\n\n`);
+        process.stdout.write(`  ${COLORS.bold}speccore ${result.autoExec.command} ${result.autoExec.args}${COLORS.reset}\n\n`);
+        process.stdout.write(`输入 y/回车 确认执行，或重新描述你的需求。\n`);
+        await askHtml(input);
+        return;
+      }
+      // 非强制确认命令（如 dashboard、status）且置信度 >= 85，直接执行
+      await autoExecute(result.autoExec.command, result.autoExec.args, false);
       await askHtml(input);
       return;
     }

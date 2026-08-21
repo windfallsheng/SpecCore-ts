@@ -18,13 +18,8 @@ import {
   assembleChunksForPrompt, indexTaskDocuments,
 } from './rag-engine';
 import { unifiedSearch, assembleUnifiedContext } from './unified-retrieval';
-// v6.85.0+: RULES 规范库注入
-import { resolveRulesForTechStack, formatRulesPrompt } from './rule-loader';
-// v6.86.0+: AGENTS 全阶段扩展
-import { resolveAgentsForPhase } from './agents';
-import type { AgentContext } from './agents';
-// v6.91.0+: 代码知识图谱摘要注入
-import { loadCodeGraph } from './code-graph';
+// v6.93.0+: Prompt 插件系统
+import { getPluginsForCommand } from './prompt-plugins';
 
 // ═══════════════════════════════════════════════════════════
 // 进程级缓存（避免重复 I/O + 重复解析）
@@ -1381,82 +1376,31 @@ export async function buildPrompt(
     }
   }
 
-  // v6.85.0+: 根据技术栈加载编码规范
+  // v6.93.0+: Prompt 插件系统 — 命令特定的增强逻辑由插件提供
   let rulesContent: string | undefined;
-  if (command === 'execute') {
-    const identifiers: string[] = [];
-    if (techStack.language) identifiers.push(techStack.language.toLowerCase());
-    if (techStack.framework) identifiers.push(techStack.framework.toLowerCase());
-    if (techStack.database) identifiers.push(techStack.database.toLowerCase());
-    if (techStack.frontend) identifiers.push(techStack.frontend.toLowerCase());
-    if (techStack.cache) identifiers.push(techStack.cache.toLowerCase());
-    if (options.platform) identifiers.push(options.platform.toLowerCase());
-
-    if (identifiers.length > 0) {
-      try {
-        const rules = await resolveRulesForTechStack(identifiers, cwd);
-        if (rules.length > 0) {
-          rulesContent = formatRulesPrompt(rules);
-        }
-      } catch {
-        // RULES 加载失败静默跳过，不影响主流程
-      }
-    }
-  }
-
-  // v6.91.0+: analyze 阶段注入代码知识图谱摘要
   let codeGraphSummary: string | undefined;
-  if (command === 'analyze') {
-    try {
-      const cg = await loadCodeGraph(cwd);
-      if (cg) {
-        const lines: string[] = [];
-        lines.push('## 📊 代码知识图谱摘要');
-        lines.push(`> 基于本地 AST 解析（${cg.metadata.scannedFiles} 文件, ${cg.metadata.totalNodes} 节点, ${cg.metadata.totalEdges} 边）`);
-        lines.push('');
-        lines.push('### 子系统（自动检测）');
-        for (const comm of cg.communities.slice(0, 8)) {
-          const sample = comm.nodes
-            .map(id => cg.nodes.find(n => n.id === id))
-            .filter(Boolean)
-            .slice(0, 5)
-            .map(n => n!.name);
-          lines.push(`- **${comm.label}** (${comm.nodes.length} 节点, 密度 ${(comm.density * 100).toFixed(0)}%): ${sample.join(', ')}`);
-        }
-        lines.push('');
-        lines.push('### 核心节点（God Nodes）');
-        for (const id of cg.godNodes.slice(0, 10)) {
-          const n = cg.nodes.find(node => node.id === id);
-          if (n) lines.push(`- ${n.name} (${n.type}, degree=${n.degree})`);
-        }
-        lines.push('');
-        lines.push('> 提示：如需深入查看完整图谱，运行 `speccore code-index --graph` 后打开 `.speccore/code-graph/graph.html`');
-        codeGraphSummary = lines.join('\n');
-      }
-    } catch {
-      // 图谱不存在时静默跳过
-    }
-  }
-
-  // v6.86.0+: 为 split/plan 命令注入 AGENTS
   let instruction = getInstruction(command, context);
-  if (command === 'split' || command === 'plan') {
-    const phase = 'default';
-    const agentContext: AgentContext = {
-      iteration: options.iteration || '',
+
+  try {
+    const pluginCtx = {
+      cwd,
+      command,
+      iteration: options.iteration,
+      task: options.task,
+      taskDir: options.taskDir,
+      platform: options.platform,
+      techStack,
     };
-    try {
-      const agents = await resolveAgentsForPhase(command, phase, agentContext, cwd);
-      if (agents.length > 0) {
-        instruction += '\n\n## 专业角色指引\n\n';
-        for (const ra of agents) {
-          instruction += ra.definition.rolePrompt;
-          instruction += '\n\n';
-        }
-      }
-    } catch {
-      // AGENTS 加载失败静默跳过
+    const plugins = getPluginsForCommand(command);
+    for (const plugin of plugins) {
+      const enhancement = await plugin.enhance(pluginCtx);
+      if (enhancement.rulesContent) rulesContent = enhancement.rulesContent;
+      if (enhancement.codeGraphSummary) codeGraphSummary = enhancement.codeGraphSummary;
+      if (enhancement.instruction) instruction += enhancement.instruction;
+      if (enhancement.projectPaths) projectPathsInfo = enhancement.projectPaths;
     }
+  } catch {
+    // 插件执行失败静默跳过，不影响主流程
   }
 
   return {

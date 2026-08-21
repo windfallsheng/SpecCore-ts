@@ -10,9 +10,10 @@
 import { Command } from 'commander';
 import { join } from 'path';
 import { readFile, pathExists } from 'fs-extra';
+import { watch } from 'fs';
 import { buildCodeIndex, loadFullIndex } from '../core/code-scanner';
 import { generateMarkdownIndex } from '../core/code-index-markdown';
-import { buildCodeKnowledgeGraph } from '../core/code-graph';
+import { buildCodeKnowledgeGraph, buildCodeKnowledgeGraphIncremental } from '../core/code-graph';
 import { logger, Spinner } from '../utils/logger';
 
 export interface CodeIndexOptions {
@@ -20,16 +21,60 @@ export interface CodeIndexOptions {
   scope?: string;
   show?: boolean;
   graph?: boolean;
+  incremental?: boolean;
+  watch?: boolean;
 }
 
 export async function codeIndexCommand(options: CodeIndexOptions): Promise<void> {
   const cachePath = join('.speccore', 'cache', 'code-structure.json');
 
+  // --watch: 监视源码变化自动增量更新图谱（优先级最高）
+  if (options.watch) {
+    const scope = options.scope || 'src';
+    logger.info(`👁️  启动图谱监视模式: ${scope}`);
+    logger.info('   按 Ctrl+C 停止');
+
+    // 首次构建（有 --graph 则构建图谱，否则构建代码索引）
+    if (options.graph) {
+      await buildCodeKnowledgeGraphIncremental({ scope });
+    } else {
+      await buildCodeIndex(scope, !options.full);
+    }
+
+    // 监视变化
+    const watcher = watch(scope, { recursive: true }, async (_event, filename) => {
+      if (filename && /\.(ts|tsx|js|jsx|mts|cts|mjs|cjs)$/.test(filename)) {
+        logger.info(`   📝 文件变化: ${filename}`);
+        try {
+          if (options.graph) {
+            await buildCodeKnowledgeGraphIncremental({ scope });
+          } else {
+            await buildCodeIndex(scope, true);
+          }
+          logger.info('   ✅ 增量更新完成');
+        } catch (e: any) {
+          logger.error(`   ❌ 更新失败: ${e.message}`);
+        }
+      }
+    });
+
+    // 保持进程运行
+    await new Promise(() => {});
+    watcher.close();
+    return;
+  }
+
   // --graph: 构建代码知识图谱
   if (options.graph) {
-    await buildCodeKnowledgeGraph({
-      scope: options.scope || 'src',
-    });
+    if (options.incremental) {
+      await buildCodeKnowledgeGraphIncremental({
+        scope: options.scope || 'src',
+      });
+    } else {
+      await buildCodeKnowledgeGraph({
+        scope: options.scope || 'src',
+      });
+    }
     return;
   }
 
@@ -137,6 +182,8 @@ export function registerCodeIndexCommand(program: Command): void {
     .option('--full', '全量重新扫描（默认增量更新）')
     .option('--scope <dirs>', '指定扫描目录（逗号分隔）')
     .option('--graph', '构建代码知识图谱（graph.html + graph.json + GRAPH_REPORT.md）')
+    .option('--incremental', '增量更新图谱（只扫变化文件，配合 --graph）')
+    .option('--watch', '监视源码变化自动增量更新图谱（配合 --graph）')
     .option('--show', '只显示当前索引摘要，不更新')
     .addHelpText('after', `
 \x1b[36m使用场景:\x1b[0m

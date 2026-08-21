@@ -8,6 +8,10 @@ export { buildCodeGraph } from './builder';
 export { explainNode, findPath, queryGraph } from './query';
 export { generateGraphReport } from './reporter';
 export { buildCodeGraphHtml } from './visualizer';
+// v6.94.0+: 增量构建
+export { buildCodeKnowledgeGraphIncremental } from './incremental-build';
+// v6.94.0+: 需求↔代码联动
+export { linkRequirementsToCode } from './requirement-linker';
 
 import { join } from 'path';
 import { ensureDir, writeFile, pathExists } from 'fs-extra';
