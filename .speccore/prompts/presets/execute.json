@@ -7,6 +7,7 @@
     "description": "analyze→split→plan→execute→pr→done 全自动",
     "prompt": "全自动完成 {迭代名} 的开发",
     "env": "ai",
+    "skill": "spec-dev",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
@@ -22,6 +23,7 @@
     "description": "从 split/plan/execute 等指定阶段继续 dev",
     "prompt": "从 {阶段} 阶段继续开发 {迭代名}",
     "env": "ai",
+    "skill": "spec-dev",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true },
       { "key": "阶段", "placeholder": "split", "required": true }
@@ -39,6 +41,7 @@
     "prompt": "分批执行 {迭代名}，每批 {数量} 个",
     "command": "speccore execute -I {迭代名} --batch-size {数量} --auto",
     "env": "both",
+    "skill": "spec-execute",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true },
       { "key": "数量", "placeholder": "3", "required": false }
@@ -56,6 +59,7 @@
     "prompt": "继续上次 {迭代名} 的执行",
     "command": "speccore execute -I {迭代名} --resume",
     "env": "both",
+    "skill": "spec-execute",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
@@ -71,6 +75,7 @@
     "description": "只拆分指定功能模块的任务",
     "prompt": "按 {功能模块} 拆分 {迭代名} 的任务",
     "env": "ai",
+    "skill": "spec-split",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true },
       { "key": "功能模块", "placeholder": "用户认证", "required": true }
@@ -87,6 +92,7 @@
     "description": "已有任务后追加新任务，不覆盖",
     "prompt": "追加拆分 {迭代名}",
     "env": "ai",
+    "skill": "spec-split",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
@@ -103,6 +109,7 @@
     "prompt": "为 {迭代名} 中 {任务ID} 创建 PR",
     "command": "speccore pr -I {迭代名} --task {任务ID}",
     "env": "both",
+    "skill": "spec-pr",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true },
       { "key": "任务ID", "placeholder": "Task-001", "required": true }
@@ -136,6 +143,7 @@
     "description": "对已有迭代进行需求变更",
     "prompt": "{迭代名} 需要变更：{变更内容}",
     "env": "ai",
+    "skill": "spec-change",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true },
       { "key": "变更内容", "placeholder": "用户管理模块要加批量导入功能", "required": true }
