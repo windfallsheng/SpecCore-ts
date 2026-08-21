@@ -354,6 +354,20 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
       background: #fff3bf;
       color: #e67700;
     }
+    .env-hint {
+      font-size: 11px;
+      color: #868e96;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .env-hint.cli {
+      color: #2b8a3e;
+    }
+    .env-hint.ai {
+      color: #1971c2;
+    }
     .empty-state {
       text-align: center;
       padding: 60px 20px;
@@ -784,6 +798,10 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
         ? \`<div class="prompt-tags">\${p.tags.map(t => \`<span class="prompt-tag">\${t}</span>\`).join('')}</div>\`
         : '';
 
+      const envHint = hasCommand
+        ? \`<div class="env-hint cli">💡 可在终端直接执行，也可对 AI 说</div>\`
+        : \`<div class="env-hint ai">💡 建议在 AI 对话框中使用，需 AI 参与生成</div>\`;
+
       return \`
         <div class="prompt-card">
           <div class="prompt-header">
@@ -794,6 +812,7 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
             </div>
           </div>
           \${tagsHtml}
+          \${envHint}
           <div class="prompt-section">💬 AI 说法</div>
           <div class="prompt-say">\${escapeHtml(p.prompt)}</div>
           \${cmdBlock}

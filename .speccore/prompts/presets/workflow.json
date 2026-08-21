@@ -17,9 +17,8 @@
     "name": "分析需求",
     "category": "workflow",
     "icon": "🔍",
-    "description": "分析迭代需求，生成规格说明",
+    "description": "分析迭代需求，生成规格说明（需 AI 参与）",
     "prompt": "分析 {迭代名} 迭代的需求文档，生成完整的规格说明",
-    "command": "speccore analyze -I {迭代名}",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
@@ -32,9 +31,8 @@
     "name": "拆分任务",
     "category": "workflow",
     "icon": "🧩",
-    "description": "将迭代需求拆分为可执行的开发任务",
+    "description": "将迭代需求拆分为可执行的开发任务（需 AI 参与）",
     "prompt": "把 {迭代名} 迭代的需求拆分成开发任务",
-    "command": "speccore split -I {迭代名}",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
@@ -78,9 +76,8 @@
     "name": "智能级联开发",
     "category": "workflow",
     "icon": "🤖",
-    "description": "全自动 analyze→split→plan→execute→pr→done",
+    "description": "全自动 analyze→split→plan→execute→pr→done（需 AI 参与）",
     "prompt": "全自动完成 {迭代名} 的开发",
-    "command": "speccore dev -i {迭代名} --auto",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],

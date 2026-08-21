@@ -37,9 +37,8 @@
     "name": "标准迭代分析",
     "category": "analysis",
     "icon": "🔍",
-    "description": "对迭代需求进行全面分析，生成标准规格文档",
+    "description": "对迭代需求进行全面分析，生成标准规格文档（需 AI 参与）",
     "prompt": "分析 {迭代名} 迭代的需求文档，生成完整的规格说明",
-    "command": "speccore analyze -I {迭代名}",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
@@ -52,9 +51,8 @@
     "name": "全局架构分析",
     "category": "analysis",
     "icon": "🌐",
-    "description": "全局层分析，跨端梳理项目架构",
+    "description": "全局层分析，跨端梳理项目架构（需 AI 参与）",
     "prompt": "全局分析这个项目，带上源码一起看",
-    "command": "speccore analyze --scope global --with-code",
     "params": [],
     "tags": ["分析阶段", "全局模式", "v7.2.0"],
     "builtin": true,
@@ -65,9 +63,8 @@
     "name": "单文档深度分析",
     "category": "analysis",
     "icon": "🔬",
-    "description": "对指定文档深度分析（字数/图表翻倍）",
+    "description": "对指定文档深度分析，字数/图表翻倍（需 AI 参与）",
     "prompt": "深度分析 {文档名}，先出大纲确认后再逐节深入",
-    "command": "speccore analyze --scope global --deep {文档名} --iterative",
     "params": [
       { "key": "文档名", "placeholder": "ARCHITECTURE.md", "required": true }
     ],
@@ -80,9 +77,8 @@
     "name": "迭代式生成分析",
     "category": "analysis",
     "icon": "📝",
-    "description": "先输出大纲确认，再逐节深入填充",
+    "description": "先输出大纲确认，再逐节深入填充（需 AI 参与）",
     "prompt": "迭代分析 {迭代名}，先出大纲确认后再深入",
-    "command": "speccore analyze -I {迭代名} --iterative",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
@@ -95,9 +91,8 @@
     "name": "按需分析指定模块",
     "category": "analysis",
     "icon": "🎯",
-    "description": "只分析与指定关键词相关的功能模块",
+    "description": "只分析与指定关键词相关的功能模块（需 AI 参与）",
     "prompt": "只分析 {模块关键词} 模块，结合源码",
-    "command": "speccore analyze --scope global --filter \"{模块关键词}\" --with-code",
     "params": [
       { "key": "模块关键词", "placeholder": "订单,支付", "required": true }
     ],
@@ -110,9 +105,8 @@
     "name": "细粒度功能单元分析",
     "category": "analysis",
     "icon": "🔎",
-    "description": "分析某文档中的特定功能单元，自动关联代码",
+    "description": "分析某文档中的特定功能单元，自动关联代码（需 AI 参与）",
     "prompt": "分析 {文档名} 中的 {功能名} 模块，带上代码",
-    "command": "speccore analyze -I {迭代名} --doc {文档名} --feature \"{功能名}\" --with-code",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": false },
       { "key": "文档名", "placeholder": "TECH.md", "required": true },
@@ -127,9 +121,8 @@
     "name": "补充/重新分析",
     "category": "analysis",
     "icon": "🔄",
-    "description": "代码变更后补充分析或重新分析",
+    "description": "代码变更后补充分析或重新分析（需 AI 参与）",
     "prompt": "补充分析 {迭代名}，代码有变动",
-    "command": "speccore analyze -I {迭代名} --supplement --with-code",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
@@ -142,7 +135,7 @@
     "name": "规格合规校验",
     "category": "analysis",
     "icon": "🛡️",
-    "description": "校验迭代规格是否符合宪法规范",
+    "description": "校验迭代规格是否符合宪法规范（需 AI 参与）",
     "prompt": "校验 {迭代名} 的规格是否合规",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
