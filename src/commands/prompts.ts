@@ -131,7 +131,32 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
       padding: 30px;
       text-align: center;
     }
-    .header h1 { font-size: 28px; margin-bottom: 8px; }
+    .header h1 {
+      font-size: 28px;
+      margin-bottom: 8px;
+      text-shadow:
+        0 0 10px rgba(255,255,255,0.6),
+        0 0 20px rgba(255,255,255,0.4),
+        0 0 40px rgba(102,126,234,0.6),
+        0 0 80px rgba(118,75,162,0.4);
+      animation: glowPulse 2s ease-in-out infinite alternate;
+    }
+    @keyframes glowPulse {
+      from {
+        text-shadow:
+          0 0 10px rgba(255,255,255,0.5),
+          0 0 20px rgba(255,255,255,0.3),
+          0 0 40px rgba(102,126,234,0.5),
+          0 0 80px rgba(118,75,162,0.3);
+      }
+      to {
+        text-shadow:
+          0 0 15px rgba(255,255,255,0.9),
+          0 0 30px rgba(255,255,255,0.7),
+          0 0 60px rgba(102,126,234,0.9),
+          0 0 100px rgba(118,75,162,0.7);
+      }
+    }
     .header p { opacity: 0.9; font-size: 14px; }
     .toolbar {
       padding: 20px 30px;
@@ -222,6 +247,30 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
       height: 100%;
       display: flex;
       flex-direction: column;
+      position: relative;
+    }
+    .prompt-card::before {
+      content: '';
+      position: absolute;
+      top: -2px;
+      left: -2px;
+      right: -2px;
+      bottom: -2px;
+      border-radius: 14px;
+      background: linear-gradient(90deg, #667eea, #764ba2, #667eea);
+      background-size: 300% 300%;
+      z-index: -1;
+      opacity: 0;
+      animation: borderPulse 3s ease infinite;
+      filter: blur(4px);
+    }
+    .prompt-card:hover::before {
+      opacity: 0.6;
+    }
+    @keyframes borderPulse {
+      0% { background-position: 0% 50%; opacity: 0.3; }
+      50% { background-position: 100% 50%; opacity: 0.7; }
+      100% { background-position: 0% 50%; opacity: 0.3; }
     }
     .prompt-card:hover {
       border-color: #667eea;
