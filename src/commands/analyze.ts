@@ -1247,6 +1247,15 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     const iter = options.scope === 'global' ? 'GLOBAL' : (options.iteration || await getDefaultIteration());
     const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task, type: options.type, scope: options.scope, withCode: options.withCode, platform: options.platform, phase: options.phase, autoMode: options.auto }, options);
     process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
+
+    // v7.2.0+: 全局分析完成后输出下一步引导
+    if (options.scope === 'global') {
+      const guide = await buildGlobalAnalysisGuide(options);
+      if (guide) {
+        process.stdout.write(`\n[SPECCORE_GUIDE]\n${guide}`);
+      }
+    }
+
     process.exitCode = 10;
     return;
   }
@@ -1805,6 +1814,71 @@ async function detectGlobalLayerProgress(): Promise<{
   }
 
   return { completedLayer, nextLayer: Math.min(completedLayer + 1, 4), missing, subLayer };
+}
+
+// ── v7.2.0+: 全局分析下一步引导 ──
+async function buildGlobalAnalysisGuide(options?: AnalyzeOptions): Promise<string | null> {
+  const progress = await detectGlobalLayerProgress();
+  const { completedLayer, nextLayer, subLayer } = progress;
+  const deepDoc = options?.deep;
+
+  let guide = '';
+
+  // 进度条
+  const layers = ['Layer 1 索引扫描', 'Layer 2 跨端关联', 'Layer 3 模块深入', 'Layer 4 全局汇总'];
+  guide += `\n📊 全局分析进度: ${completedLayer}/4 层完成\n`;
+  guide += layers.map((l, i) => {
+    const status = i < completedLayer ? '✅' : i === completedLayer ? '▶️' : '⬜';
+    return `   ${status} ${l}`;
+  }).join('\n');
+  guide += '\n';
+
+  if (completedLayer === 4 && (!subLayer || subLayer.completed.length === 4)) {
+    guide += '\n🎉 全局分析全部完成！\n';
+    guide += '   所有文档已生成在 .speccore/GLOBAL/ 目录\n';
+    guide += '   如需补充某份文档: speccore analyze --scope global --layer 4 --deep <文档名>\n';
+    return guide;
+  }
+
+  // 下一步命令
+  guide += '\n➡️  下一步:\n';
+
+  if (deepDoc && options?.iterative) {
+    const outlinePath = join(process.cwd(), '.speccore', 'cache', `deep-outline-${deepDoc.replace(/\//g, '-')}.md`);
+    const hasOutline = await pathExists(outlinePath);
+    if (!hasOutline) {
+      guide += `   1. 将 AI 输出的大纲保存到: ${outlinePath}\n`;
+      guide += `   2. 审核/修改大纲\n`;
+      guide += `   3. 再次执行: speccore analyze --scope global --layer 4 --deep ${deepDoc} --iterative\n`;
+    } else {
+      guide += `   1. 将 AI 输出的本节内容追加到文档\n`;
+      guide += `   2. 继续下一节: speccore analyze --scope global --layer 4 --deep ${deepDoc} --iterative\n`;
+    }
+  } else if (deepDoc) {
+    guide += `   speccore analyze --scope global --layer 4 --deep ${deepDoc}\n`;
+    guide += `   （如需迭代式补全: 加 --iterative 参数）\n`;
+  } else if (nextLayer === 4 && subLayer) {
+    const subNames: Record<string, string> = {
+      '4a': '产品视角文档（requirements/）',
+      '4b': '全局技术核心文档（overview/）',
+      '4c': '全局技术扩展文档（overview/）',
+      '4d': '各端技术文档（platforms/）',
+    };
+    guide += `   speccore analyze --scope global --layer 4\n`;
+    guide += `   （即将生成: ${subNames[subLayer.next] || subLayer.next}）\n`;
+  } else {
+    guide += `   speccore analyze --scope global --layer ${nextLayer}\n`;
+  }
+
+  // 快捷命令提示
+  guide += '\n💡 快捷命令:\n';
+  guide += `   查看进度: speccore status\n`;
+  if (completedLayer >= 3) {
+    guide += `   深度分析单文档: speccore analyze --scope global --layer 4 --deep ARCHITECTURE.md\n`;
+  }
+  guide += `   全量重新分析: speccore analyze --scope global --with-code\n`;
+
+  return guide;
 }
 
 // ── buildMultiDocPrompt: 多文档协议 ──
