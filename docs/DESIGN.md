@@ -914,9 +914,10 @@ v6.40.2 及之前版本，`020-specs/` 根目录混合存放全局文档和端�
 #### 向后兼容策略
 
 所有读取路径统一采用三级回退：
-1. 优先读 `020-specs/global/{filename}`（新路径）
-2. 回退读 `020-specs/{filename}`（旧路径）
-3. 不存在则返回 null
+1. 优先读 `020-specs/overview/{filename}`（新路径，v6.78.0+）
+2. 回退读 `020-specs/global/{filename}`（v6.41.0-v6.77.0 路径）
+3. 回退读 `020-specs/{filename}`（旧路径）
+4. 不存在则返回 null
 
 已有迭代（旧结构）不受影响，新迭代使用新结构。
 
@@ -942,24 +943,23 @@ Iteration-NNN-name/
 │   ├── research/{topic}.md       ← 扁平调研文档（1 文件 = 1 research 任务）
 │   └── assets/{prd,prototypes,designs}/
 ├── 020-specs/                     ← 迭代级 analyze 输出（全局基线，双层架构）
-│   ├── REQUIREMENT.md            ← 全局：需求规格汇总（含「涉及端」列）
-│   ├── ANALYSIS.md               ← 全局：全量需求分析
-│   ├── TECH.md                   ← 全局：技术方案（跨端通用）
-│   ├── TEST.md                   ← 全局：测试计划（跨端通用）
-│   ├── REVIEW.md                 ← 全局：评审清单
-│   ├── RISK.md                   ← 全局：风险评估
-│   ├── DEPS.md                   ← 全局：依赖清单
-│   ├── MONITOR.md                ← 全局：监控方案
-│   ├── {端名}/                    ← 各端专属文档（新路径，如 admin/h5/backend）
-│   │   ├── TECH.md               ← 该端技术方案（页面路由/组件/接口设计）
-│   │   ├── TEST.md               ← 该端测试计划
-│   │   └── UI_SPEC.md            ← 该端 UI 规格（仅前端）
-│   ├── features/                  ← 功能类规格（旧路径，兼容）
-│   │   ├── ANALYSIS.md / TECH.md / TEST.md / ...  ← 按功能模块拆分
-│   │   └── REQUIREMENT.md
-│   ├── bugs/                      ← 缺陷修复规格
-│   ├── refactors/                 ← 重构规格
-│   └── research/                  ← 调研规格
+│   ├── overview/                  ← 综合文档（v6.78.0+ 从 global/ 改名）
+│   │   ├── REQUIREMENT.md         ← 需求规格汇总（含「涉及端」列）
+│   │   ├── ANALYSIS.md            ← 全量需求分析
+│   │   ├── DEPS.md                ← 依赖清单
+│   │   ├── FUNCTION_MAP.md        ← 功能地图
+│   │   ├── INTERACTION_MAP.md     ← 交互地图
+│   │   ├── API_CONTRACT.yaml      ← API 契约
+│   │   ├── TECH.md                ← 技术方案（跨端通用）
+│   │   ├── TEST.md                ← 测试计划
+│   │   ├── REVIEW.md              ← 评审清单
+│   │   ├── RISK.md                ← 风险评估
+│   │   └── MONITOR.md             ← 监控方案
+│   ├── {端名}/                    ← 各端专属文档（如 admin-web/h5-mobile/booking-service）
+│   │   ├── TECH.md                ← 该端技术方案
+│   │   ├── TEST.md                ← 该端测试计划
+│   │   └── UI_SPEC.md             ← 该端 UI 规格（仅前端）
+│   └── PLATFORMS.md               ← 端列表元数据
 ├── 030-tasks/                     ← 所有开发任务（按类型分层）
 │   ├── feature/                   ← 功能类任务
 │   │   └── Task-NNN-slug/
@@ -1472,7 +1472,7 @@ Layer 4: 全局汇总（所有功能模块分析完成后）
 迭代层（analyze -I xxx）
   ├── Layer 1: 读全局层 → 了解系统已有功能
   ├── Layer 2: 关联 → 标注「新增/扩展/重构/复用」
-  ├── Layer 3: 深入 → 020-specs/global/ + 020-specs/{端}/
+  ├── Layer 3: 深入 → 020-specs/overview/ + 020-specs/{端}/
   └── Layer 4: 汇总 → 030-tasks/（split 按 FUNCTION_MAP.md 拆分）
 
 任务层（execute -t xxx）
@@ -2710,7 +2710,7 @@ split 已在 00-specs/ 中生成了基础内容（机械提取），`analyze --t
 
 **深度分析上下文**：
 - Read Task/00-specs/ → 本任务的需求切片（split 产出）
-- Read global/REQUIREMENT.md + global/TECH.md → 全局上下文
+- Read overview/REQUIREMENT.md + overview/TECH.md → 全局上下文
 - Read {端}/TECH.md → 该端专属技术方案
 
 ### 8.3 用户自定义模板（v6.45.0+）
@@ -2775,12 +2775,12 @@ TASK.md (图谱 RAG 检索前三者相关内容 → 制定实施步骤)
 **核心原则**：CLI 控制所有目录创建（确定性操作），AI 只负责内容生成（智能操作）。
 
 #### analyze 命令
-- CLI 执行前自动读 CONSTITUTION.md 端列表，预创建 `020-specs/global/` + `020-specs/{端}/` 目录
-- prompt 新增第 6 步：功能模块涉及端必填，AI 必须在 `global/REQUIREMENT.md` 功能模块清单表填写「涉及端」列
+- CLI 执行前自动读 CONSTITUTION.md 端列表，预创建 `020-specs/overview/` + `020-specs/{端}/` 目录
+- prompt 新增第 6 步：功能模块涉及端必填，AI 必须在 `overview/REQUIREMENT.md` 功能模块清单表填写「涉及端」列
 - 关键函数：`preCreateSpecDirectories()` in `analyze.ts`
 
 #### split 命令（v6.49.14+）
-- `tryModuleDrivenSplit()` 优先从 `020-specs/global/REQUIREMENT.md` 解析功能模块清单的「涉及端」列
+- `tryModuleDrivenSplit()` 优先从 `020-specs/overview/REQUIREMENT.md` 解析功能模块清单的「涉及端」列
 - 新增 `parseModulePlatforms()` 函数：解析 Markdown 表格，提取每个模块的涉及端
 - 每个模块只创建涉及的端目录（不是全端）
 - 回退机制：REQUIREMENT.md 无表时回退到 `010-requirements/features/`（使用全端）
@@ -2793,7 +2793,7 @@ TASK.md (图谱 RAG 检索前三者相关内容 → 制定实施步骤)
 
 #### 数据流
 ```
-analyze AI → global/REQUIREMENT.md 功能模块清单（含涉及端列）
+analyze AI → overview/REQUIREMENT.md 功能模块清单（含涉及端列）
     ↓ split CLI 读取
 每个模块 → 只创建涉及的端目录
     ↓ AI 填充
@@ -2940,7 +2940,7 @@ present_files(<path>) → 用户在预览面板看到 HTML 页面
 #### 设计原则
 
 **为什么必须分阶段？**
-- **Phase 1**：生成全局文档（global/REQUIREMENT.md、ANALYSIS.md、DEPS.md 等），建立跨端统一视角
+- **Phase 1**：生成全局文档（overview/REQUIREMENT.md、ANALYSIS.md、DEPS.md 等），建立跨端统一视角
 - **Phase 2**：生成各端专属文档（{端}/TECH.md、TEST.md、UI_SPEC.md 等），参考全局上下文后注入端专属专业维度
   - 后端服务 → API 设计、数据库、缓存、消息队列
   - Web 管理端 → 页面路由、组件拆分、权限控制
@@ -3060,11 +3060,11 @@ speccore analyze --prompt --pipeline -I meeting-upgrade
    - 输出 `[SPECCORE_PROMPT]` + prompt
 
 2. **AI 生成全局文档**：
-   - AI 读取 prompt，生成 global/REQUIREMENT.md、ANALYSIS.md 等
+   - AI 读取 prompt，生成 overview/REQUIREMENT.md、ANALYSIS.md 等
    - 执行 `speccore analyze --apply '{...}' -I meeting-upgrade`
 
 3. **Apply 模式自动推进**（line 471-508）：
-   - 写入文件到 020-specs/global/
+   - 写入文件到 020-specs/overview/
    - 刷新知识图谱
    - 检测 Pipeline 状态：`PipelineEngine.hasActivePipeline()`
    - 调用 `engine.advance()` 推进到下一步
@@ -3833,3 +3833,75 @@ disable-model-invocation: false
 
 请补充参数后重新调用，或直接调用 /xxx 使用默认设置。
 ```
+
+## 13. AI 文件写入防护与目录校验机制（v7.2.1+）
+
+### 13.1 问题背景
+
+SpecCore 采用「CLI 控制流程 + AI 生成内容」架构。AI 通过 `--apply` 将内容交给 CLI 写入文件，CLI 负责路由到正确目录。但实际运行中发现：
+
+1. **Prompt 路径过时**：`GLOBAL_SPECS_DIR` 从 `global` 改为 `overview` 后，prompt 中 5 处仍写 `global/`，AI 忠实执行了错误指令
+2. **AI 绕过 --apply**：AI 直接用 Write 工具写文件，跳过 CLI 的白名单校验和路由逻辑，导致非法目录（`1001/`、`工程标识/`）和文件散落
+3. **跨 AI 工具不一致**：不同 AI 工具（WorkBuddy、Qoder、Cursor）对同一指令的执行行为不同
+
+### 13.2 三层防护架构
+
+```
+┌─────────────────────────────────────────┐
+│  Layer 1: AGENTS.md 全局约束        │
+│  所有 AI 工具启动时读取，硬性禁止        │
+│  直接用 Write 写 020-specs/ 下的文件    │
+├─────────────────────────────────────────┤
+│  Layer 2: Prompt 指令引导            │
+│  analyze --prompt 输出明确的目录结构    │
+│  和写入方式指导（--apply 用法）          │
+├─────────────────────────────────────────┤
+│  Layer 3: CLI 事后校验（兜底）        │
+│  sanitizeSpecDirectories() 自动检测    │
+│  并修复非法目录、遗留文件、路径过时      │
+└─────────────────────────────────────────┘
+```
+
+### 13.3 sanitizeSpecDirectories() 设计
+
+**触发时机**：`speccore analyze --apply` 完成后自动执行。
+
+**校验规则**：
+
+| 检测项 | 处理方式 | 示例 |
+|:---|:---|:---|
+| 遗留 `global/` 目录 | 文件迁移到 `overview/`，空目录归档 | `global/ANALYSIS.md` → `overview/ANALYSIS.md` |
+| 非法子目录 | 重命名为 `{name}.invalid-{timestamp}` 归档 | `1001/` → `1001.invalid-1724.../` |
+| 根目录散落 `.md` 文件 | 移入 `overview/`，重复的归档 | `020-specs/TECH.md` → `overview/TECH.md` |
+
+**白名单来源**：
+- `GLOBAL_SPECS_DIR`（常量 `'overview'`）
+- `parsePlatformList()`（从 CONSTITUTION.md 端列表解析）
+- `GLOBAL_SPEC_FILES`（综合文档文件名列表）
+
+**设计原则**：不删除任何文件，只重命名归档。用户可随时恢复。
+
+### 13.4 路径常量统一规范
+
+所有引用 `020-specs/` 综合文档目录的位置，必须使用 `GLOBAL_SPECS_DIR` 常量而非硬编码字符串：
+
+```typescript
+// ✅ 正确
+logger.info(`📁 已预创建: ${GLOBAL_SPECS_DIR}/`);
+prompt += `写入 ${GLOBAL_SPECS_DIR}/ 子目录`;
+
+// ❌ 错误
+logger.info(`📁 已预创建: global/`);
+prompt += `写入 global/ 子目录`;
+```
+
+### 13.5 跨 AI 工具一致性策略
+
+| 策略 | 实现方式 | 可靠性 |
+|:---|:---|:---|
+| AGENTS.md 硬约束 | 所有 AI 工具启动时读取，明确禁止项 | 高（工具层面强制执行） |
+| Prompt 路径引导 | `--prompt` 输出正确路径和示例 | 中（AI 可能忽略） |
+| CLI 事后校验 | `sanitizeSpecDirectories()` 自动修复 | 高（不依赖 AI 行为） |
+| `--apply` 白名单 | 拒绝非法端名目录写入 | 高（仅对走 --apply 的生效） |
+
+**核心思路**：不追求 100% 阻止 AI 犯错（不可能），而是确保犯错后能自动恢复（可做到）。

@@ -125,7 +125,7 @@ speccore doc2spec --classify --response <json> -I <iteration>
 2. `speccore doc2spec --classify --prompt -I <iter>` → AI 理解文档意图（nature）+ 映射类型（type）
 3. `speccore doc2spec --classify --response <json> -I <iter>` → 写入 `staging/`
 4. `speccore analyze -I <iter>` → 按类型路由到 `020-specs/{features,bugs,refactors,research}/`
-5. `speccore split -I <iter>` → 模块驱动拆分：从 `global/REQUIREMENT.md` 读取功能模块清单及「涉及端」列，每个模块创建一个 Task，按涉及端创建子任务目录
+5. `speccore split -I <iter>` → 模块驱动拆分：从 `overview/REQUIREMENT.md` 读取功能模块清单及「涉及端」列，每个模块创建一个 Task，按涉及端创建子任务目录
 
 **AI 意图理解：**
 
@@ -163,7 +163,7 @@ speccore analyze --dev-guide         # 分析同时生成 DEV_GUIDE.md 开发者
 > - `--apply @file.json`: Windows 兼容方式，从文件读取 JSON 避免 shell 转义问题
 
 **分阶段分析架构(v6.64.0)**:
-- **Phase 1**: 生成全局文档(global/REQUIREMENT.md、ANALYSIS.md、DEPS.md 等)，建立跨端统一视角
+- **Phase 1**: 生成全局文档(overview/REQUIREMENT.md、ANALYSIS.md、DEPS.md 等)，建立跨端统一视角
 - **Phase 2**: 生成各端专属文档({端}/TECH.md、TEST.md、UI_SPEC.md 等)，参考全局上下文后注入端专属专业维度
 - **自动触发**: CLI 在 Phase 1 完成后,检测到 ≥2 个端时自动输出 Phase 2 prompt,无需用户手动执行两次命令
 - **自动模式(v6.71.0+)**: `--auto` 下 AI 直接推断执行 Phase 2，无需用户确认
