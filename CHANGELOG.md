@@ -1,3 +1,30 @@
+## v7.4.0 (2026-08-21) — Pipeline 疑问收集 + 开发指南默认生成 + 目录路由修复
+
+### 新增功能
+
+- **Pipeline 疑问收集**: `writeQuestions()` 激活——analyze/split 命令在 `--apply`/`--response` 后从 AI 输出中提取疑问并持久化到 `.speccore/questions/`
+- **Pipeline 总结报告**: autoPipeline 完成后自动生成 `000-overview/PIPELINE_REPORT.md`，包含每个阶段的状态、耗时、疑问、失败项
+- **CLARIFY_REPORT 质量门禁**: Pipeline analyze 阶段后检查 CLARIFY_REPORT.md 质量评分，低于 60 分输出警告并记录到报告
+- **DEV_GUIDE.md 默认生成**: split 命令默认生成任务级 DEV_GUIDE.md（`--no-dev-guide` 可禁用），AI 未生成时自动创建引用 overview 指南的模板
+- **子任务关联开发指南**: TASK.md 模板新增 DEV_GUIDE.md 和全局开发指南引用
+
+### Bug 修复
+
+- **迭代级 analyze 文件路由修复**: AI 输出文件名含 `overview/` 前缀时不再创建嵌套目录，自动剥离前缀路由到正确位置
+- **非法目录前缀剥离**: AI 携带非端名目录前缀的文件名自动剥离，只保留文件名
+- **新增 `extractQuestionsFromText()`**: 从 AI 输出文本中解析疑问条目（匹配 `## 疑问 N — 分类` 格式）
+- **新增 `collectQuestionFiles()`**: 收集 `.speccore/questions/` 目录下所有疑问清单文件
+
+### 技术实现
+
+- `src/core/questions.ts`: 新增 `extractQuestionsFromText()`、`collectQuestionFiles()` 函数
+- `src/commands/analyze.ts`: 迭代级 apply 路由增加文件名归一化；apply 完成后调用 `writeQuestions()` 提取疑问
+- `src/commands/dev.ts`: autoPipeline 增加阶段追踪、疑问收集、CLARIFY_REPORT 检查、PIPELINE_REPORT.md 生成
+- `src/commands/iteration/split.ts`: `devGuide` 默认开启；DEV_GUIDE.md 写入逻辑；TASK.md 模板新增引用
+- `src/cli.ts`: split 命令 `--dev-guide` → `--no-dev-guide`
+
+---
+
 ## v7.3.1 (2026-08-21) — 全局分析 Prompt 分层注入修复
 
 ### Bug 修复

@@ -12,7 +12,7 @@ import { buildPrompt, formatPrompt } from '../../core/prompt-builder';
 import { generatePlatformsRegistry } from '../../core/platform-registry';
 import { warnIfIndexStale } from '../../core/index-guard';
 import { resolveGlobalSpecPath, GLOBAL_SPECS_DIR, parsePlatformList } from '../../core/spec-paths';
-import { buildAutoModeInstruction } from '../../core/questions';
+import { buildAutoModeInstruction, writeQuestions, extractQuestionsFromText } from '../../core/questions';
 import { PipelineEngine } from '../../core/pipeline-engine';
 
 /**
@@ -353,6 +353,8 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           // 保存 AI 生成的实际内容（用于写入 REQ.md / TECH.md）
           if (task.reqContent) (section as any)._reqContent = task.reqContent;
           if (task.techContent) (section as any)._techContent = task.techContent;
+          // v7.4.0+: 保存 AI 生成的 DEV_GUIDE 内容
+          if ((task as any).devGuideContent) (section as any)._devGuideContent = (task as any).devGuideContent;
           if (task.sourceFile) (section as any)._sourceFile = task.sourceFile;
           if (task.functionalUnit) (section as any).functionalUnit = task.functionalUnit;
           if (task.reason) (section as any)._reason = task.reason;
@@ -538,6 +540,15 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       }
       await writeFile(reqPath, options.response);
     }
+    // v7.4.0+: 从 AI 输出中提取疑问并持久化
+    const extractedQs = extractQuestionsFromText(options.response);
+    if (extractedQs.length > 0) {
+      await writeQuestions(
+        { command: 'split', scope: iter },
+        extractedQs,
+      );
+    }
+
     logger.success('✅ 任务已创建');
     
     // 备份汇总
@@ -727,7 +738,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       // v6.76.0+: 传入过滤条件，限制拆分范围；传入已有 Task 结构，支持增量拆分
       const modulesFilter = options.modules ? options.modules.split(',').map(m => m.trim()).filter(Boolean) : undefined;
       const platformsFilter = options.platforms ? options.platforms.split(',').map(p => p.trim()).filter(Boolean) : undefined;
-      let splitPrompt = buildSplitPrompt(iteration, constitutionContent, reqContent2, specContents, allPlatforms, modulesFilter, platformsFilter, existingTaskStructure, options.devGuide);
+      let splitPrompt = buildSplitPrompt(iteration, constitutionContent, reqContent2, specContents, allPlatforms, modulesFilter, platformsFilter, existingTaskStructure, options.devGuide !== false);
 
       // 注入全局上下文（INDEX + TOC 目录，AI 自主读取）
       const { loadGlobalContext, formatGlobalContext } = await import('../../core/prompt-builder');
@@ -1316,6 +1327,21 @@ ${apiDesc}
     );
   }
 
+  // v7.4.0+: DEV_GUIDE.md 写入（优先 AI 生成，回退到引用 overview 指南）
+  const aiDevGuideContent = (section as any)._devGuideContent;
+  if (aiDevGuideContent && aiDevGuideContent.length > 50) {
+    await writeFile(
+      join(taskDir, '00-specs', 'DEV_GUIDE.md'),
+      `# ${section.name} - 开发者实现指南\n\n${aiDevGuideContent}\n`
+    );
+  } else {
+    // 生成引用 overview DEV_GUIDE.md 的任务级指南
+    await writeFile(
+      join(taskDir, '00-specs', 'DEV_GUIDE.md'),
+      `# ${section.name} - 开发者实现指南\n\n> 任务: ${taskId} | ${section.name}\n> 本任务的实现指南，结合全局开发指南使用。\n\n## 全局开发指南引用\n- DEV_GUIDE.md → ../../../overview/DEV_GUIDE.md\n\n## 本任务实现步骤\n\n<!-- AI-FILL: execute 阶段根据 REQ.md 和 TECH.md 生成具体实现步骤 -->\n\n## 关键代码示例\n\n<!-- AI-FILL: 核心逻辑的伪代码或代码片段 -->\n\n## 与存量功能的集成\n\n<!-- AI-FILL: 如何与已有代码交互、复用哪些模块 -->\n\n## 测试策略\n\n<!-- AI-FILL: 单元测试、集成测试的具体写法 -->\n\n## 注意事项\n\n<!-- AI-FILL: 常见坑点、边界条件、调试技巧 -->\n`
+    );
+  }
+
   if (section.content.match(/数据库|数据表|表结构|DDL|ALTER|建表|索引/)) {
     const schemaMaterial = extractRelevantSection(specContents['TECH.md'] || '', section.name, 'DDL 建表 表结构 索引 CREATE TABLE');
     await writeFile(join(taskDir, '00-specs', 'SCHEMA.md'), generateSchemaTemplate(section, schemaMaterial));
@@ -1487,8 +1513,10 @@ ${section.content}
 ## 共享规格引用
 - REQ.md → ../../../00-specs/REQ.md
 - TECH.md → ../../../00-specs/TECH.md
+- DEV_GUIDE.md → ../../../00-specs/DEV_GUIDE.md
 - API_CONTRACT.yaml → ../../../_shared/API_CONTRACT.yaml
 - CONTEXT.md → ../../../_shared/CONTEXT.md
+- 全局开发指南 → ../../../overview/DEV_GUIDE.md
 
 ## 跨端关联
 - **共享能力**: ${sharedCap}

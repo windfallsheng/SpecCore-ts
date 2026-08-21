@@ -23,7 +23,7 @@ import { runAnalysis, AnalyzeInput, supplementAnalysis, analyzeSingleFeature, ge
 import { readFile, readdir, readdirSync } from 'fs-extra';
 import { generateGlobalArtifacts } from '../core/global-artifacts';
 import { buildPrompt, formatPrompt } from '../core/prompt-builder';
-import { buildAutoModeInstruction } from '../core/questions';
+import { buildAutoModeInstruction, writeQuestions, extractQuestionsFromText, type QuestionItem } from '../core/questions';
 import { resolvePlatform } from '../core/platform-registry';
 import { warnIfIndexStale } from '../core/index-guard';
 import { GLOBAL_SPECS_DIR, GLOBAL_SPEC_FILES, parsePlatformTypes, parsePlatformList } from '../core/spec-paths';
@@ -940,23 +940,37 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
               continue;
             }
 
+            // v7.4.0+: 文件名归一化——剥离 AI 可能携带的 overview/ 前缀，防止嵌套目录
+            let cleanFilename = filename;
+            if (cleanFilename.startsWith(`${GLOBAL_SPECS_DIR}/`)) {
+              cleanFilename = cleanFilename.slice(`${GLOBAL_SPECS_DIR}/`.length);
+            }
+            // v7.4.0+: 如果 AI 携带了其他未知目录前缀（非端名），剥离前缀只保留文件名
+            if (cleanFilename.includes('/')) {
+              const prefix = cleanFilename.split('/')[0];
+              if (!validPlatforms.has(prefix)) {
+                logger.warn(`   ⚠️ 文件名含未知目录前缀 "${prefix}/"，已自动剥离: ${cleanFilename}`);
+                cleanFilename = cleanFilename.split('/').pop()!;
+              }
+            }
+
             // 解析目录名（如 "admin-web/TECH.md" → "admin-web"）
-            const platformDir = filename.includes('/') ? filename.split('/')[0] : null;
+            const platformDir = cleanFilename.includes('/') ? cleanFilename.split('/')[0] : null;
 
             // 白名单校验：如果包含目录前缀，必须是合法端名
             if (platformDir && !validPlatforms.has(platformDir)) {
-              logger.warn(`   ⚠️ 跳过非法端目录: ${platformDir}（文件: ${filename}）`);
+              logger.warn(`   ⚠️ 跳过非法端目录: ${platformDir}（文件: ${cleanFilename}）`);
               logger.warn(`      合法端: ${Array.from(validPlatforms).join(', ')}`);
               skippedCount++;
               continue;
             }
 
-            // 综合文档写入 global/ 子目录，端专属文档写入 {端}/ 子目录
-            const targetDir = globalSet.has(filename)
+            // 综合文档写入 overview/ 子目录，端专属文档写入 {端}/ 子目录
+            const targetDir = globalSet.has(cleanFilename)
               ? join(specDir, GLOBAL_SPECS_DIR)
               : options.platform ? join(specDir, options.platform) : specDir;
             await ensureDir(targetDir);
-            const fp = join(targetDir, filename);
+            const fp = join(targetDir, cleanFilename);
             if (!(await shouldOverwrite(fp, !!options.interactive))) { logger.info(`   ⏭️  跳过: ${filename}`); continue; }
             const bk = await backupWithTimestamp(fp);
             if (bk) {
@@ -973,6 +987,15 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 
           // v6.90.0+: 事后校验——检测并清理 AI 绕过 --apply 创建的非法目录/文件
           await sanitizeSpecDirectories(iterDir!);
+
+          // v7.4.0+: 从 AI 输出中提取疑问并持久化
+          const extractedQs = extractQuestionsFromText(options.apply);
+          if (extractedQs.length > 0) {
+            await writeQuestions(
+              { command: 'analyze', scope: options.iteration || 'unknown' },
+              extractedQs,
+            );
+          }
 
           // v6.74.0+: 流式分析自动检查（回退检测 + 最终核对）
           if (options.streamingPhase) {
