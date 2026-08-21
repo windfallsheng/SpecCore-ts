@@ -2049,12 +2049,12 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       }
     }
 
-    // Layer 角色定义
+    // Layer 角色定义（v7.3.1+: 产出物明确列出关键文件，防止 AI 遗漏）
     const LAYER_ROLES: Record<number, { role: string; focus: string; output: string }> = {
-      1: { role: '代码索引专家', focus: '全面扫描各端源码结构，提取目录/接口/实体/配置等索引信息', output: '各端 _INDEX.md + PATTERNS 模式提取 + semantic-tags.json' },
-      2: { role: '系统架构师', focus: '基于 Layer 1 索引进行跨端关联分析、接口匹配、模块聚类', output: '_ASSOCIATION.md + _MODULES.md' },
-      3: { role: '业务分析师', focus: '按功能模块深入分析业务逻辑、数据流、规则、时序', output: '各端功能模块深入文档 + 模块级 PATTERNS' },
-      4: { role: '产品总监 + 技术负责人', focus: '全局汇总，分 4 个子层执行（4a产品→4b技术核心→4c技术扩展→4d各端）', output: 'requirements/ + overview/ + platforms/' },
+      1: { role: '代码索引专家', focus: '全面扫描各端源码结构，提取目录/接口/实体/配置等索引信息', output: 'platforms/{端}/_INDEX.md（每端一个）+ PATTERNS/{端名}/{分类}/*.md（按端分目录）+ semantic-tags.json' },
+      2: { role: '系统架构师', focus: '基于 Layer 1 索引进行跨端关联分析、接口匹配、模块聚类', output: 'platforms/_shared/_ASSOCIATION.md + _MODULES.md' },
+      3: { role: '业务分析师', focus: '按功能模块深入分析业务逻辑、数据流、规则、时序', output: '各端功能模块深入文档 + PATTERNS/{端名}/{分类}/*.md' },
+      4: { role: '产品总监 + 技术负责人', focus: '全局汇总，分 4 个子层执行（4a产品→4b技术核心→4c技术扩展→4d各端）', output: 'requirements/REQUIREMENT.md（必须）+ requirements/{前端端}/REQUIREMENT.md + overview/* + platforms/{端}/* + PATTERNS/*' },
     };
     const layerMeta = LAYER_ROLES[targetLayer];
 
@@ -2066,10 +2066,10 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     prompt += `> 每层完成后通过 \`speccore analyze --scope global --layer ${targetLayer + 1 <= 4 ? targetLayer + 1 : 4}\` 进入下一层。\n\n`;
     prompt += `| 层级 | 角色 | 核心任务 | 产出物 |\n`;
     prompt += `| :--- | :--- | :--- | :--- |\n`;
-    prompt += `| 1 | 代码索引专家 | 扫描源码结构，提取索引 | platforms/{端}/_INDEX.md |\n`;
+    prompt += `| 1 | 代码索引专家 | 扫描源码结构，提取索引 | platforms/{端}/_INDEX.md + PATTERNS/{端名}/*.md |\n`;
     prompt += `| 2 | 系统架构师 | 跨端关联、接口匹配、模块聚类 | platforms/_shared/_ASSOCIATION.md + _MODULES.md |\n`;
-    prompt += `| 3 | 业务分析师 | 功能模块深入分析 | 各端功能模块文档 |\n`;
-    prompt += `| 4 | 产品总监+技术负责人 | 全局汇总、需求总纲、一致性校验 | overview/ + requirements/ |\n\n`;
+    prompt += `| 3 | 业务分析师 | 功能模块深入分析 | 各端功能模块文档 + PATTERNS |\n`;
+    prompt += `| 4 | 产品总监+技术负责人 | 全局汇总、需求总纲、一致性校验 | requirements/REQUIREMENT.md + overview/* + platforms/* |\n\n`;
 
     if (progress.completedLayer > 0) {
       prompt += `📊 检测进度: 已完成 Layer ${progress.completedLayer}/4`;
@@ -2173,6 +2173,10 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `  }\n`;
       prompt += `]\n`;
       prompt += `\`\`\`\n\n`;
+    } // end if (targetLayer === 1)
+
+    // ── Layer 2 指令（仅 targetLayer === 2 时注入）──
+    if (targetLayer === 2) {
       prompt += `## 🔗 Layer 2: 跨端关联分析（基于 Layer 1 索引 + structured-data.json）\n\n`;
       prompt += `> 📊 **结构化数据**: Read \`.speccore/cache/structured-data.json\` 获取 API/Entity 清单，与 Layer 1 索引交叉验证\n\n`;
       prompt += `1. **匹配前后端接口**：\n`;
@@ -2213,6 +2217,10 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `- \`_MODULES.md\`：功能模块候选清单（从源码聚类，含消息/定时任务维度，供 Layer 3 验证）\n`;
       prompt += `  - 此文档中必须包含 **模块全景 Mermaid 图**（graph LR），展示所有功能模块及其所属端\n`;
       prompt += `**存放**：\`.speccore/GLOBAL/platforms/_shared/\`\n\n`;
+    } // end if (targetLayer === 2)
+
+    // ── Layer 3 指令（仅 targetLayer === 3 时注入）──
+    if (targetLayer === 3) {
       prompt += `## 🔍 Layer 3: 按功能模块深入分析（不是按端）\n\n`;
       prompt += `基于 Layer 2 的 \`_MODULES.md\`，逐个功能模块深入分析。\n`;
       prompt += `**每个功能模块涉及哪些端，就读取那些端的详细源码**：\n\n`;
@@ -2250,6 +2258,10 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `- **交互角色标签**：该文件在跨端交互中扮演什么角色（如「请求发起者」、「事件生产者」、「状态同步者」）\n`;
       prompt += `- **数据流标签**：该文件处理的数据类型（如「用户输入数据」、「配置数据」、「缓存数据」、「消息事件」）\n`;
       prompt += `- **质量标签**：该文件的代码特征（如「高复用」、「核心业务」、「边界处理」、「性能敏感」）\n\n`;
+    } // end if (targetLayer === 3)
+
+    // ── Layer 4 指令（仅 targetLayer === 4 时注入）──
+    if (targetLayer === 4) {
       prompt += `## 🌍 Layer 4: 全局汇总（所有功能模块分析完成后）\n\n`;
       prompt += `1. **一致性校验**：\n`;
       prompt += `   - 前端字段 vs 后端字段是否一致（名称、类型、必填性、校验规则）\n`;
@@ -2381,6 +2393,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `   - 文件已存在 → 读取旧内容 → 在末尾追加新发现的变体（用 \`---\` 分隔）\n`;
       prompt += `   - 文件不存在 → 直接 Write 新文件\n\n`;
       prompt += `5. 以上文档输出到 .speccore/GLOBAL/ 和 .speccore/PATTERNS/，使用 Write 工具写入\n`;
+
       prompt += `\n`;
       prompt += `## 📊 图表生成规范（v7.0.0+）\n`;
       prompt += `全局分析必须生成丰富的可视化图表，帮助开发者直观理解系统结构和数据流。\n\n`;
@@ -2518,7 +2531,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     if (targetLayer === 1) {
       prompt += `- [ ] Read CONSTITUTION.md 获取所有端和源码路径\n`;
       prompt += `- [ ] 对每个端扫描 10 个维度，生成 _INDEX.md\n`;
-      prompt += `- [ ] 提取可复用模式写入 PATTERNS/\n`;
+      prompt += `- [ ] 提取可复用模式写入 PATTERNS/{端名}/{分类}/（必须按端分目录，不要写成一个合并文件）\n`;
       prompt += `- [ ] 提取语义标签写入 semantic-tags.json\n`;
       prompt += `- [ ] 写入完成后执行: \`speccore analyze --scope global --layer 2\`\n`;
     } else if (targetLayer === 2) {
@@ -2621,7 +2634,8 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
 
         if (subLayerTarget === '4a') {
           prompt += `**子层 4a: 产品视角文档（2-3 份）**\n`;
-          prompt += `1. \`requirements/REQUIREMENT.md\` — 全局需求总纲\n`;
+          prompt += `> ⚠️ **REQUIREMENT.md 是必须生成的核心文档**，不可跳过！\n\n`;
+          prompt += `1. \`requirements/REQUIREMENT.md\` — 全局需求总纲（**必须生成**）\n`;
           prompt += `   - 产品愿景、目标用户画像、核心场景地图\n`;
           prompt += `   - 按业务场景组织：用户故事 → 操作流程 → 业务规则 → 边界条件 → 验收标准\n`;
           prompt += `   - 功能优先级矩阵（P0/P1/P2）\n`;

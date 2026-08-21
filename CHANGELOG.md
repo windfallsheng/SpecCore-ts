@@ -1,3 +1,18 @@
+## v7.3.1 (2026-08-21) — 全局分析 Prompt 分层注入修复
+
+### Bug 修复
+
+- **全局分析 Layer 1-4 指令按层条件注入**：修复 prompt 将 4 层指令全部塞入同一个 prompt 导致 AI 分心、遗漏关键产出的问题
+  - Layer 1 的 PATTERNS 未按端分目录（AI 合并成一个 `_shared/PATTERNS.md`）
+  - Layer 4 的 `requirements/REQUIREMENT.md` 被 AI 跳过未生成
+- **LAYER_ROLES 产出物描述更新**：明确列出关键文件名（如 `requirements/REQUIREMENT.md（必须）`、`PATTERNS/{端名}/{分类}/*.md`）
+- **完成清单增强**：Layer 1 PATTERNS 项明确「必须按端分目录」；Layer 4a 增加「REQUIREMENT.md 不可跳过」警告
+
+### 技术实现
+
+- `buildMultiDocPrompt()` 中 Layer 1-4 指令按 `targetLayer` 条件注入，每层只看到自己的指令
+- 图表规范、输出文档表、冲突处理、写入方式等通用内容保持所有层可见
+
 ## v7.3.0 (2026-08-21) — 文档架构全面更新 + AI 防护体系完善
 
 ### 文档更新
