@@ -59,6 +59,8 @@ import {
 } from '../core/agents';
 // v6.91.0+: 代码知识图谱摘要注入
 import { loadCodeGraph } from '../core/code-graph';
+// v7.2.0+: 结构化代码数据提取
+import { extractStructuredData, loadStructuredData } from '../core/structured-extractor';
 
 export interface AnalyzeOptions {
   iteration?: string;
@@ -110,6 +112,8 @@ export interface AnalyzeOptions {
   layer?: number;         // --layer N: 全局分析指定层级（1-4）
   // v7.2.0+: 单文档深度分析
   deep?: string;          // --deep <文档名>: 对指定文档进行深度分析（如 ARCHITECTURE.md）
+  // v7.2.0+: 迭代式补全（大纲→逐节填充）
+  iterative?: boolean;    // --iterative: 先输出大纲，再逐节深入（配合 --deep 使用）
 }
 
 export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
@@ -1825,6 +1829,27 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     const targetLayer = options?.layer || progress.nextLayer;
     const isLayered = !!options?.layer || progress.completedLayer < 4;
 
+    // v7.2.0+: 结构化代码数据提取 — Layer 1 之前自动执行
+    let structuredDataHint = '';
+    if (targetLayer === 1 && ctx.withCode) {
+      try {
+        // 读取 CONSTITUTION.md 获取源码路径
+        const constitutionPath = join(process.cwd(), '.speccore', 'CONSTITUTION.md');
+        let sourcePaths: string[] = ['src'];
+        if (await pathExists(constitutionPath)) {
+          const content = await readFile(constitutionPath, 'utf-8');
+          const match = content.match(/源码路径[\s\S]*?\n\s*-\s*`?([^`\n]+)`?/g);
+          if (match) {
+            sourcePaths = match.map(m => m.replace(/.*-\s*`?/, '').replace(/`?$/, '').trim()).filter(Boolean);
+          }
+        }
+        await extractStructuredData(process.cwd(), sourcePaths);
+        structuredDataHint = '\n> 📊 **结构化数据**: 已提取到 `.speccore/cache/structured-data.json`，包含 API/Entity/Route/Component 清单\n';
+      } catch (e: any) {
+        logger.warn(`   ⚠️ 结构化数据提取失败: ${e.message}`);
+      }
+    }
+
     // Layer 角色定义
     const LAYER_ROLES: Record<number, { role: string; focus: string; output: string }> = {
       1: { role: '代码索引专家', focus: '全面扫描各端源码结构，提取目录/接口/实体/配置等索引信息', output: '各端 _INDEX.md + PATTERNS 模式提取 + semantic-tags.json' },
@@ -1870,9 +1895,14 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
 
     // 根据 targetLayer 注入对应的专注内容
     if (targetLayer === 1) {
-      prompt += `\n## 📊 Layer 1: 快速扫描所有端（并行，只提取索引）\n\n`;
-      prompt += `对每个端，读取关键索引文件和配置，提取全面索引（不深入代码逻辑）：\n\n`;
-      prompt += `**后端端扫描维度（10项）**：\n`;
+      prompt += `\n## 📊 Layer 1: 快速扫描所有端（基于结构化数据生成索引）\n\n`;
+      prompt += `${structuredDataHint}`;
+      prompt += `**重要**: 不要直接扫描源码文件。已使用代码扫描工具提取了结构化数据，你只需要读取这些数据并整理成 _INDEX.md。\n\n`;
+      prompt += `**步骤**: \n`;
+      prompt += `1. Read \`.speccore/cache/structured-data.json\` — 获取所有端的 API/Entity/Route/Component 清单\n`;
+      prompt += `2. 对每个端，基于结构化数据生成 \`_INDEX.md\`（补充扫描工具未覆盖的内容）\n`;
+      prompt += `3. 扫描工具未覆盖的维度（消息队列、定时任务、配置、外部集成、日志监控、错误处理），需要 Read 相关配置文件补充\n\n`;
+      prompt += `**后端端 _INDEX.md 维度（基于 structured-data.json + 补充扫描）**：\n`;
       prompt += `| 扫描项 | 读取位置 | 提取内容 |\n`;
       prompt += `| :--- | :--- | :--- |\n`;
       prompt += `| 接口层 | Controller/Handler/Resource 目录 | 接口类名、接口路径（从注解/装饰器推断）、鉴权注解 |\n`;
@@ -1944,7 +1974,8 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `  }\n`;
       prompt += `]\n`;
       prompt += `\`\`\`\n\n`;
-      prompt += `## 🔗 Layer 2: 跨端关联分析（基于 Layer 1 的索引）\n\n`;
+      prompt += `## 🔗 Layer 2: 跨端关联分析（基于 Layer 1 索引 + structured-data.json）\n\n`;
+      prompt += `> 📊 **结构化数据**: Read \`.speccore/cache/structured-data.json\` 获取 API/Entity 清单，与 Layer 1 索引交叉验证\n\n`;
       prompt += `1. **匹配前后端接口**：\n`;
       prompt += `   - 前端 \`_INDEX.md\` 中的 API 调用路径 vs 后端 \`_INDEX.md\` 中的接口路径\n`;
       prompt += `   - **匹配上** → 建立「前端页面 → 前端 API 调用 → 后端接口 → 后端服务」链路\n`;
@@ -2312,21 +2343,68 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
 
       if (deepDoc) {
         // --deep 模式：单文档深度分析
-        prompt += `## 🎯 Layer 4 — 单文档深度分析: ${deepDoc}\n\n`;
-        prompt += `> ⚠️ **专注约束**: 你只生成 **${deepDoc}** 这一份文档，不要生成其他文档。\n`;
-        prompt += `> 你必须深入分析，不要写框架/占位符。每节必须有实质性内容。\n\n`;
-        prompt += `**强制输入**: \n`;
-        prompt += `- Read Layer 1 的所有 _INDEX.md（获取源码结构索引）\n`;
-        prompt += `- Read Layer 2 的 _ASSOCIATION.md + _MODULES.md（获取跨端关联）\n`;
-        prompt += `- Read Layer 3 的功能模块深入文档（获取详细分析结果）\n`;
-        prompt += `- 如果涉及代码细节，直接 Read 相关源码文件，引用具体代码片段\n\n`;
-        prompt += `**深度要求**: \n`;
-        prompt += `- 不要写"待导入"、"待补充"、"示例"等占位内容\n`;
-        prompt += `- 每个表格必须有真实数据（从 Layer 1-3 提取）\n`;
-        prompt += `- 每个结论必须有证据（引用具体文件名/类名/方法名）\n`;
-        prompt += `- 如果信息不足，明确标注"信息不足: 需要读取 xxx 文件"\n`;
-        prompt += `- 必须包含 Mermaid 图表（如适用）\n\n`;
-        prompt += `**输出**: 只输出 \`${deepDoc}\` 的完整内容\n`;
+        const outlinePath = join(process.cwd(), '.speccore', 'cache', `deep-outline-${deepDoc.replace(/\//g, '-')}.md`);
+        const hasOutline = await pathExists(outlinePath);
+
+        if (options?.iterative && !hasOutline) {
+          // 迭代模式第一步：输出大纲
+          prompt += `## 🎯 Layer 4 — 单文档深度分析: ${deepDoc}（大纲阶段）\n\n`;
+          prompt += `> ⚠️ **当前阶段**: 你只需要输出 **${deepDoc} 的文档大纲**。\n`;
+          prompt += `> 不要写详细内容，只输出章节结构 + 每个章节的一句话说明。\n\n`;
+          prompt += `**强制输入**: \n`;
+          prompt += `- Read Layer 1 的所有 _INDEX.md\n`;
+          prompt += `- Read Layer 2 的 _ASSOCIATION.md + _MODULES.md\n`;
+          prompt += `- Read Layer 3 的功能模块深入文档\n`;
+          prompt += `- Read \`.speccore/cache/structured-data.json\`（API/Entity 结构化数据）\n\n`;
+          prompt += `**输出格式**: \n`;
+          prompt += `\`\`\`markdown\n`;
+          prompt += `# ${deepDoc.replace('.md', '')}\n`;
+          prompt += `\n`;
+          prompt += `## 1. 章节标题\n`;
+          prompt += `> 一句话说明该章节内容\n`;
+          prompt += `\n`;
+          prompt += `## 2. 章节标题\n`;
+          prompt += `> 一句话说明该章节内容\n`;
+          prompt += `\`\`\`\n\n`;
+          prompt += `**下一步**: 大纲输出后，用户会审核修改，然后执行 \`speccore analyze --scope global --layer 4 --deep ${deepDoc} --iterative\` 进入逐节填充阶段。\n`;
+        } else if (options?.iterative && hasOutline) {
+          // 迭代模式第二步：根据大纲逐节填充
+          const outlineContent = await readFile(outlinePath, 'utf-8');
+          prompt += `## 🎯 Layer 4 — 单文档深度分析: ${deepDoc}（逐节填充阶段）\n\n`;
+          prompt += `> ⚠️ **当前阶段**: 根据已确认的大纲，逐节填充详细内容。\n`;
+          prompt += `> 每次只填充 **一节**，确保深度和质量。\n\n`;
+          prompt += `**已确认大纲**: \n`;
+          prompt += outlineContent.slice(0, 2000); // 限制长度
+          prompt += `\n\n`;
+          prompt += `**强制输入**: \n`;
+          prompt += `- Read Layer 1-3 的所有产物\n`;
+          prompt += `- Read \`.speccore/cache/structured-data.json\`\n`;
+          prompt += `- 如涉及代码细节，Read 相关源码文件\n\n`;
+          prompt += `**深度要求**: \n`;
+          prompt += `- 不要写"待导入"、"待补充"等占位内容\n`;
+          prompt += `- 每个表格必须有真实数据\n`;
+          prompt += `- 每个结论必须有证据（引用文件名/类名/方法名）\n`;
+          prompt += `- 必须包含 Mermaid 图表（如适用）\n\n`;
+          prompt += `**输出**: 只输出当前节的完整内容（不是整份文档）\n`;
+        } else {
+          // 非迭代模式：一次性输出完整文档
+          prompt += `## 🎯 Layer 4 — 单文档深度分析: ${deepDoc}\n\n`;
+          prompt += `> ⚠️ **专注约束**: 你只生成 **${deepDoc}** 这一份文档，不要生成其他文档。\n`;
+          prompt += `> 你必须深入分析，不要写框架/占位符。每节必须有实质性内容。\n\n`;
+          prompt += `**强制输入**: \n`;
+          prompt += `- Read Layer 1 的所有 _INDEX.md（获取源码结构索引）\n`;
+          prompt += `- Read Layer 2 的 _ASSOCIATION.md + _MODULES.md（获取跨端关联）\n`;
+          prompt += `- Read Layer 3 的功能模块深入文档（获取详细分析结果）\n`;
+          prompt += `- Read \`.speccore/cache/structured-data.json\`（API/Entity 结构化数据）\n`;
+          prompt += `- 如果涉及代码细节，直接 Read 相关源码文件，引用具体代码片段\n\n`;
+          prompt += `**深度要求**: \n`;
+          prompt += `- 不要写"待导入"、"待补充"、"示例"等占位内容\n`;
+          prompt += `- 每个表格必须有真实数据（从 Layer 1-3 提取）\n`;
+          prompt += `- 每个结论必须有证据（引用具体文件名/类名/方法名）\n`;
+          prompt += `- 如果信息不足，明确标注"信息不足: 需要读取 xxx 文件"\n`;
+          prompt += `- 必须包含 Mermaid 图表（如适用）\n\n`;
+          prompt += `**输出**: 只输出 \`${deepDoc}\` 的完整内容\n`;
+        }
       } else {
         // 子层模式：每次只生成一个子层
         prompt += `## 🌍 Layer 4: 全局汇总 — 子层 ${subLayerTarget}/4\n\n`;
