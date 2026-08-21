@@ -114,6 +114,8 @@ export interface AnalyzeOptions {
   deep?: string;          // --deep <文档名>: 对指定文档进行深度分析（如 ARCHITECTURE.md）
   // v7.2.0+: 迭代式补全（大纲→逐节填充）
   iterative?: boolean;    // --iterative: 先输出大纲，再逐节深入（配合 --deep 使用）
+  // v7.2.0+: 按需分析（只分析指定模块）
+  filter?: string;        // --filter <关键词>: 只分析与关键词匹配的模块（如 "auth|login"）
 }
 
 export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
@@ -881,6 +883,15 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
           }
 
           logger.success(`✅ ${count} 个全局文档已写入 .speccore/GLOBAL/`);
+
+          // v7.2.0+: 全局文档质量门禁
+          const { runGlobalQualityGate, printQualityReport } = await import('../core/doc-quality-gate');
+          const reports = await runGlobalQualityGate();
+          printQualityReport(reports);
+
+          // v7.2.0+: 自动生成文档间交叉引用
+          const { generateCrossReferences } = await import('../core/doc-cross-reference');
+          await generateCrossReferences();
         } else {
           // 迭代级：写 020-specs/（综合文档写入 global/ 子目录，v6.41.0+）
           // v6.69.2+: 增加端名白名单校验，防止 AI 创建非法目录
@@ -2404,12 +2415,17 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `- [ ] 写入 _ASSOCIATION.md + _MODULES.md\n`;
       prompt += `- [ ] 写入完成后执行: \`speccore analyze --scope global --layer 3\`\n`;
     } else if (targetLayer === 3) {
+      const filter = options?.filter;
       prompt += `- [ ] Read Layer 2 的 _MODULES.md 获取功能模块清单\n`;
-      prompt += `- [ ] 逐个功能模块深入分析（读详细源码）\n`;
+      if (filter) {
+        prompt += `> 🔍 **按需分析**: 只分析与 "${filter}" 匹配的模块\n`;
+        prompt += `> 从 _MODULES.md 中筛选涉及 ${filter} 的功能模块，其他模块跳过\n`;
+      }
+      prompt += `- [ ] ${filter ? '筛选匹配的模块，逐个' : '逐个功能模块'}深入分析（读详细源码）\n`;
       prompt += `- [ ] 每个模块生成：API 设计、数据模型、业务规则、交互时序\n`;
       prompt += `- [ ] 时序图/流程图/状态图用 Mermaid 嵌入\n`;
       prompt += `- [ ] 提取模块级模式补充到 PATTERNS/\n`;
-      prompt += `- [ ] 写入完成后执行: \`speccore analyze --scope global --layer 4\`\n`;
+      prompt += `- [ ] 写入完成后执行: \`speccore analyze --scope global --layer 4${filter ? ' --filter ' + filter : ''}\`\n`;
     } else if (targetLayer === 4) {
       // v7.2.0+: Layer 4 拆分子层或单文档深度分析
       const deepDoc = options?.deep;
