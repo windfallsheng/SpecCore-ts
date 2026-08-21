@@ -15,6 +15,7 @@ description: SpecCore AI Router
 ## v7.2.0+ 典型 ask 场景
 
 ### 全局分析场景
+
 | 用户说法 | 触发的命令 |
 |----------|-----------|
 | "全局分析一下这个项目" | `speccore analyze --scope global` |
@@ -24,6 +25,7 @@ description: SpecCore AI Router
 | "全局分析，但只看后端" | `speccore analyze --scope global --filter "backend"` |
 
 ### 迭代分析场景
+
 | 用户说法 | 触发的命令 |
 |----------|-----------|
 | "分析当前迭代需求" | `speccore analyze -I <current>` |
@@ -33,6 +35,7 @@ description: SpecCore AI Router
 | "分析 TECH.md 中的订单模块" | `speccore analyze -I <current> --doc TECH.md --feature "订单模块" --with-code` |
 
 ### 任务级分析场景
+
 | 用户说法 | 触发的命令 |
 |----------|-----------|
 | "分析 Task-001" | `speccore analyze --task Task-001` |
@@ -40,13 +43,42 @@ description: SpecCore AI Router
 | "补充分析，代码有变动" | `speccore analyze -I <current> --supplement --with-code` |
 
 ### Pipeline 场景（全自动）
+
 | 用户说法 | 触发的命令链 |
 |----------|-------------|
 | "全自动完成登录功能" | `analyze → split → plan → execute → pr → done` |
 | "分析完自动拆分和计划" | `analyze → split → plan` |
 | "深度分析订单模块然后开发" | `analyze --deep --filter "订单" → split → plan → execute` |
 
+### Dev 场景
+
+| 用户说法 | 触发的命令 |
+|----------|-----------|
+| "全自动开发" | `speccore dev -i Q2 --auto` |
+| "从拆分开始继续" | `speccore dev -i Q2 --from split` |
+| "断点续传" | `speccore dev -i Q2 --resume` |
+| "先深度分析再开发" | `analyze --deep → dev --from split --auto` |
+
+### Split 场景
+
+| 用户说法 | 触发的命令 |
+|----------|-----------|
+| "拆分任务" | `speccore split -i Q2` |
+| "按订单模块拆分" | `speccore split -i Q2 --feature "订单"` |
+| "追加拆分" | `speccore split -i Q2 --append` |
+| "拆分时指定负责人" | `speccore split -i Q2 --owner 张三 --backend-owner 李四` |
+
+### Execute 场景
+
+| 用户说法 | 触发的命令 |
+|----------|-----------|
+| "执行所有任务" | `speccore execute -i Q2 --auto` |
+| "分批执行" | `speccore execute -i Q2 --batch-size 3 --auto` |
+| "继续上次执行" | `speccore execute -i Q2 --resume` |
+| "强制重跑 Task-001" | `speccore execute -i Q2 -t Task-001 --force` |
+
 ### 其他常用场景
+
 | 用户说法 | 触发的命令 |
 |----------|-----------|
 | "查看项目状态" | `speccore dashboard` |
