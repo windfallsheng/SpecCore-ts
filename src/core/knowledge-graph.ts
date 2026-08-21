@@ -58,6 +58,10 @@ export interface GraphEntity {
   // business_module 专属
   codeEntities?: string[];  // 关联的代码实体（文件/表/API/组件等）
   businessModule?: string;  // 所属业务模块名
+  // v7.0.0+: 语义级标签（让图谱理解代码意图）
+  semanticTags?: string[];  // 语义标签（如 "认证", "订单处理", "缓存"）
+  description?: string;     // 人类可读的描述（从 JSDoc/注释提取）
+  businessRole?: string;    // 业务角色（如 "用户认证入口", "订单状态机"）
 }
 
 export interface GraphRelation {
@@ -731,6 +735,132 @@ async function scanUserFiles(iterDir: string): Promise<GraphEntity[]> {
 }
 
 // ═══════════════════════════════════════════════
+// v7.0.0+: 从代码内容提取语义信息（本地解析，零 Token）
+// ═══════════════════════════════════════════════
+
+interface SemanticExtraction {
+  description: string;
+  semanticTags: string[];
+  businessRole: string;
+}
+
+/** 从代码文件提取语义标签、描述、业务角色（纯本地规则，不调用 LLM） */
+function extractSemanticFromCode(content: string, filePath: string, exports: string[]): SemanticExtraction {
+  const result: SemanticExtraction = { description: '', semanticTags: [], businessRole: '' };
+
+  // 1. 提取 JSDoc / TSDoc 注释（文件顶部或第一个导出项前）
+  const jsdocPattern = /\/\*\*[\s\S]*?\*\//g;
+  const jsdocs = content.match(jsdocPattern) || [];
+  if (jsdocs.length > 0) {
+    // 取第一个 JSDoc 的 @description 或第一行文本
+    const firstDoc = jsdocs[0]!;
+    const descMatch = firstDoc.match(/@description\s+(.+)/);
+    const firstLine = firstDoc.replace(/\/\*\*|\*\/|\s*\*\s?/g, ' ').trim();
+    result.description = descMatch?.[1]?.trim() || firstLine.slice(0, 200);
+  }
+
+  // 2. 提取文件头注释（# / // 开头的多行注释，在代码之前）
+  if (!result.description) {
+    const headerMatch = content.match(/^(?:\/\/.*\n|\/\*[\s\S]*?\*\/\n|\#.*\n)+/);
+    if (headerMatch) {
+      const header = headerMatch[0]
+        .replace(/\/\/|\/\*|\*\/|\*/g, '')
+        .replace(/\n+/g, ' ')
+        .trim();
+      if (header.length > 10 && header.length < 300) {
+        result.description = header.slice(0, 200);
+      }
+    }
+  }
+
+  // 3. 从文件名推断语义标签
+  const fileName = filePath.split('/').pop() || '';
+  const nameLower = fileName.toLowerCase();
+  const pathLower = filePath.toLowerCase();
+
+  const tagRules: { patterns: RegExp[]; tag: string }[] = [
+    { patterns: [/auth/, /login/, /logout/, /token/, /jwt/, /session/, /oauth/, /sso/], tag: '认证授权' },
+    { patterns: [/user/, /account/, /profile/, /member/], tag: '用户管理' },
+    { patterns: [/order/, /purchase/, /checkout/, /cart/, /payment/, /pay/], tag: '订单交易' },
+    { patterns: [/product/, /item/, /goods/, /sku/, /spu/], tag: '商品管理' },
+    { patterns: [/inventory/, /stock/, /warehouse/, /storage/], tag: '库存仓储' },
+    { patterns: [/notification/, /message/, /sms/, /email/, /push/], tag: '消息通知' },
+    { patterns: [/search/, /filter/, /query/, /index/], tag: '搜索查询' },
+    { patterns: [/report/, /analytics/, /dashboard/, /chart/, /stat/], tag: '数据分析' },
+    { patterns: [/config/, /setting/, /preference/], tag: '配置管理' },
+    { patterns: [/cache/, /redis/, /memo/], tag: '缓存' },
+    { patterns: [/queue/, /job/, /task/, /worker/, /cron/, /schedule/], tag: '任务调度' },
+    { patterns: [/log/, /trace/, /monitor/, /metric/], tag: '日志监控' },
+    { patterns: [/error/, /exception/, /handler/, /boundary/], tag: '错误处理' },
+    { patterns: [/upload/, /download/, /file/, /oss/, /storage/], tag: '文件存储' },
+    { patterns: [/router/, /route/, /navigation/, /nav/], tag: '路由导航' },
+    { patterns: [/component/, /widget/, /ui/], tag: 'UI组件' },
+    { patterns: [/hook/, /composable/, /mixin/], tag: '逻辑复用' },
+    { patterns: [/store/, /state/, /pinia/, /redux/, /vuex/], tag: '状态管理' },
+    { patterns: [/api/, /client/, /request/, /http/, /fetch/, /axios/], tag: 'API调用' },
+    { patterns: [/test/, /spec/, /mock/, /jest/, /vitest/], tag: '测试' },
+    { patterns: [/util/, /helper/, /tool/, /common/], tag: '工具函数' },
+    { patterns: [/middleware/, /interceptor/, /filter/, /guard/], tag: '中间件' },
+    { patterns: [/validator/, /validate/, /schema/, /dto/], tag: '数据校验' },
+    { patterns: [/encrypt/, /hash/, /security/, /permission/, /rbac/], tag: '安全' },
+    { patterns: [/i18n/, /locale/, /lang/, /translate/], tag: '国际化' },
+  ];
+
+  for (const rule of tagRules) {
+    if (rule.patterns.some(p => p.test(nameLower) || p.test(pathLower))) {
+      if (!result.semanticTags.includes(rule.tag)) {
+        result.semanticTags.push(rule.tag);
+      }
+    }
+  }
+
+  // 4. 从导出名称推断业务角色
+  if (exports.length > 0) {
+    const mainExport = exports[0];
+    const exportLower = mainExport.toLowerCase();
+
+    // 识别常见模式
+    if (/controller$/.test(exportLower)) {
+      result.businessRole = '接口控制器';
+    } else if (/service$/.test(exportLower)) {
+      result.businessRole = '业务服务';
+    } else if (/repository$/.test(exportLower) || /dao$/.test(exportLower)) {
+      result.businessRole = '数据访问层';
+    } else if (/entity$/.test(exportLower) || /model$/.test(exportLower)) {
+      result.businessRole = '数据模型';
+    } else if (/component$/.test(exportLower) || /^[A-Z]/.test(mainExport)) {
+      result.businessRole = 'UI组件';
+    } else if (/hook$/.test(exportLower) || /use[A-Z]/.test(mainExport)) {
+      result.businessRole = '可复用逻辑';
+    } else if (/middleware$/.test(exportLower) || /interceptor$/.test(exportLower)) {
+      result.businessRole = '请求拦截器';
+    } else if (/validator$/.test(exportLower) || /schema$/.test(exportLower)) {
+      result.businessRole = '数据校验';
+    } else if (/util$/.test(exportLower) || /helper$/.test(exportLower)) {
+      result.businessRole = '工具函数';
+    } else if (/config$/.test(exportLower)) {
+      result.businessRole = '配置定义';
+    } else if (/type$/.test(exportLower) || /interface$/.test(exportLower)) {
+      result.businessRole = '类型定义';
+    }
+
+    // 从导出名补充语义标签
+    for (const rule of tagRules) {
+      if (rule.patterns.some(p => p.test(exportLower))) {
+        if (!result.semanticTags.includes(rule.tag)) {
+          result.semanticTags.push(rule.tag);
+        }
+      }
+    }
+  }
+
+  // 5. 限制数量
+  result.semanticTags = result.semanticTags.slice(0, 5);
+
+  return result;
+}
+
+// ═══════════════════════════════════════════════
 // 源码文件扫描（从 code-index 缓存读取）
 // ═══════════════════════════════════════════════
 
@@ -766,6 +896,22 @@ async function scanSourceFiles(cwd: string): Promise<{ entities: GraphEntity[]; 
 
     for (const f of selectedFiles) {
       const id = `SRC:${f.path.replace(/\//g, '-').replace(/\.[^.]+$/, '')}`;
+
+      // v7.0.0+: 从源文件提取语义信息（JSDoc/文件头注释/命名推断）
+      let description = '';
+      let semanticTags: string[] = [];
+      let businessRole = '';
+      try {
+        const srcPath = join(cwd, f.path);
+        if (await pathExists(srcPath)) {
+          const srcContent = await readFile(srcPath, 'utf-8');
+          const extracted = extractSemanticFromCode(srcContent, f.path, f.exports || []);
+          description = extracted.description;
+          semanticTags = extracted.semanticTags;
+          businessRole = extracted.businessRole;
+        }
+      } catch { /* 忽略读取失败 */ }
+
       entities.push({
         id,
         type: 'source-file',
@@ -780,6 +926,10 @@ async function scanSourceFiles(cwd: string): Promise<{ entities: GraphEntity[]; 
         imports: (f.imports || []).slice(0, 15),
         apis: f.apis || [],
         tags: ['source', f.endpoint || 'common', f.module || 'root'],
+        // v7.0.0+
+        semanticTags: semanticTags.length > 0 ? semanticTags : undefined,
+        description: description || undefined,
+        businessRole: businessRole || undefined,
       });
     }
 
@@ -1177,6 +1327,55 @@ async function inferRelations(entities: GraphEntity[], iterDir: string): Promise
 }
 
 // ═══════════════════════════════════════════════
+// v7.0.0+: 知识图谱 → RAG 索引同步
+// ═══════════════════════════════════════════════
+
+import { buildRagIndex, saveRagIndex } from './rag-engine';
+
+/** 将知识图谱同步为 RAG 索引，实现图谱 → 检索的联动 */
+async function syncGraphToRagIndex(cwd: string, graph: KnowledgeGraph): Promise<void> {
+  // 将每个实体转换为文档块
+  const documents: { filePath: string; content: string; mtime: number }[] = [];
+
+  for (const entity of Object.values(graph.entities)) {
+    const lines: string[] = [`# ${entity.title}`, ''];
+    lines.push(`**ID**: ${entity.id}`);
+    lines.push(`**类型**: ${entity.type}`);
+    if (entity.status) lines.push(`**状态**: ${entity.status}`);
+    if (entity.platform) lines.push(`**端**: ${entity.platform}`);
+    if (entity.tags?.length) lines.push(`**标签**: ${entity.tags.join(', ')}`);
+    if (entity.semanticTags?.length) lines.push(`**语义标签**: ${entity.semanticTags.join(', ')}`);
+    if (entity.businessRole) lines.push(`**业务角色**: ${entity.businessRole}`);
+    if (entity.description) lines.push(`**描述**: ${entity.description}`);
+    if (entity.file) lines.push(`**文件**: ${entity.file}`);
+
+    // 查找关联实体
+    const related = graph.relations.filter(r => r.from === entity.id || r.to === entity.id);
+    if (related.length > 0) {
+      lines.push('');
+      lines.push('## 关联实体');
+      for (const rel of related.slice(0, 10)) {
+        const otherId = rel.from === entity.id ? rel.to : rel.from;
+        const other = graph.entities[otherId];
+        if (other) {
+          lines.push(`- ${rel.type}: ${other.id} (${other.title})`);
+        }
+      }
+    }
+
+    documents.push({
+      filePath: `kg://${entity.id}`,
+      content: lines.join('\n'),
+      mtime: new Date(entity.mtime || graph.generated).getTime(),
+    });
+  }
+
+  // 构建并保存 RAG 索引
+  const index = await buildRagIndex(documents, `kg_${graph.iteration}`);
+  await saveRagIndex(cwd, index, 'kg-rag-index.json');
+}
+
+// ═══════════════════════════════════════════════
 // 主入口
 // ═══════════════════════════════════════════════
 
@@ -1262,6 +1461,13 @@ export async function buildKnowledgeGraph(
     businessModules: bizMappingResult.entities.filter(e => e.type === 'business_module').length,
     relations: graph.relations.length,
   };
+
+  // v7.0.0+: 同步构建 RAG 索引（知识图谱 → RAG）
+  try {
+    await syncGraphToRagIndex(cwd, graph);
+  } catch (e) {
+    logger.debug('知识图谱 → RAG 索引同步失败（非关键）:', e);
+  }
 
   return graph;
 }

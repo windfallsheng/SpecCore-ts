@@ -1,9 +1,15 @@
 ---
 name: speccore-router
 description: >
-  智能意图路由器。从自然语言识别意图 → 匹配 Skill → execute_command 执行。
+  SpecCore CLI 命令路由器。仅在用户明确要求通过 speccore 命令行工具执行操作，
+  且意图涉及以下概念时使用：迭代管理、需求文档导入（doc2spec）、
+  Spec 分析生成（analyze --prompt）、任务拆分（split）、执行计划（plan --prompt）、
+  代码执行（execute --prompt）、任务归档（done）、PR 提交（pr）、
+  状态查看（status/dashboard/doctor）、智能级联（dev）。
+  将用户意图映射为 speccore CLI 命令，通过 execute_command 执行。
   核心原则：必须直接执行，决不输出命令文本。唯一下例外："只看不跑"。
-  Use when user input is ambiguous or doesn't match any specific Skill trigger.
+  以下情况明确不处理：解释代码逻辑、审查代码片段、讨论需求合理性、
+  排查具体 bug、一般性技术咨询、算法实现、架构讨论。
 allowed-tools: ["Bash", "Read", "Write", "Edit"]
 ---
 

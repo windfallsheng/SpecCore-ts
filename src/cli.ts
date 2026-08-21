@@ -20,6 +20,8 @@ import { executeCommand } from './commands/execute';
 import { askCommand } from './commands/ask';
 import { aboutCommand } from './commands/about';
 import { doctorCommand } from './commands/doctor';
+import { registerNotifyCommand } from './commands/notify';
+import { registerRecommendCommand } from './commands/recommend';
 import { changeCommand } from './commands/change';
 import { syncCommand } from './commands/sync';
 import { opsCommand } from './commands/history';
@@ -31,6 +33,7 @@ import { devCommand } from './commands/dev';
 import { welcomeCommand } from './commands/welcome';
 import { statusPanelCommand } from './commands/status-panel';
 import { knowledgeCommand, knowledgeExplainCommand, knowledgePathCommand, knowledgeQueryCommand } from './commands/knowledge';
+import { graphQueryCommand, graphEntityCommand, graphRelatedCommand, graphStatsCommand, graphPathCommand, graphRenderCommand } from './commands/graph';
 import { doc2specCommand } from './commands/doc2spec';
 import { spec2docCommand } from './commands/spec2doc';
 import { registerCodeIndexCommand } from './commands/code-index';
@@ -90,7 +93,8 @@ program
 program
   .command('ask [input...]')
   .description('Natural language intent recognition (previously "spec")')
-  .action((input: string[]) => askCommand(input.join(' '), {}));
+  .option('--explicit', '显式 speccore 调用（来自 /spec-ask Skill），跳过意图域确认')
+  .action((input: string[], options: any) => askCommand(input.join(' '), options));
 
 program
   .command('doctor')
@@ -152,6 +156,67 @@ program
   .alias('kg-query')
   .description('自然语言查询代码知识图谱')
   .action(knowledgeQueryCommand);
+
+// v7.0.0+: 统一图谱查询命令（融合知识图谱 + 代码图谱）
+const graphCmd = program
+  .command('graph')
+  .alias('g')
+  .description('统一图谱查询：融合知识图谱 + 代码图谱');
+
+graphCmd
+  .command('query <question>')
+  .alias('q')
+  .description('自然语言查询两种图谱（默认启用 LLM 语义增强）')
+  .option('-t, --type <type>', '查询范围: all | knowledge | code', 'all')
+  .option('-l, --limit <n>', '最多返回结果数', '10')
+  .option('--smart', '启用 LLM 语义增强（默认开启）', true)
+  .option('--fast', '快速模式，跳过 LLM 语义增强')
+  .action((question: string, opts: any) => graphQueryCommand(question, {
+    type: opts.type,
+    limit: parseInt(opts.limit, 10),
+    smart: opts.fast ? false : opts.smart !== false,
+  }));
+
+graphCmd
+  .command('entity <id>')
+  .alias('e')
+  .description('查询特定实体详情')
+  .option('-t, --type <type>', '查询范围: all | knowledge | code', 'all')
+  .action((id: string, opts: any) => graphEntityCommand(id, { type: opts.type }));
+
+graphCmd
+  .command('related <id>')
+  .alias('r')
+  .description('查询实体的关联实体（一阶邻居）')
+  .action((id: string) => graphRelatedCommand(id, {}));
+
+graphCmd
+  .command('path <from> <to>')
+  .alias('p')
+  .description('查找两实体间的最短路径')
+  .option('-t, --type <type>', '查询范围: all | knowledge | code', 'all')
+  .action((from: string, to: string, opts: any) => graphPathCommand(from, to, { type: opts.type }));
+
+graphCmd
+  .command('stats')
+  .alias('s')
+  .description('输出两种图谱的统计信息')
+  .option('-t, --type <type>', '统计范围: all | knowledge | code', 'all')
+  .action((opts: any) => graphStatsCommand({ type: opts.type }));
+
+// v7.0.0+: Mermaid 图表渲染
+graphCmd
+  .command('render [file]')
+  .alias('r')
+  .description('渲染 Mermaid 图表为 HTML（支持 .mmd 文件或从 Markdown 提取）')
+  .option('--all', '批量渲染 diagrams/ 目录下所有 .mmd')
+  .option('--extract', '从 Markdown 文件提取 Mermaid 代码块')
+  .option('-o, --output <dir>', '输出目录')
+  .action((file: string | undefined, opts: any) => graphRenderCommand(file, {
+    all: opts.all,
+    extract: opts.extract,
+    output: opts.output,
+  }));
 
 program
   .command('dev')
@@ -483,6 +548,12 @@ registerRagIndexCommand(program);
 
 // 统一刷新所有检索层
 registerRefreshCommand(program);
+
+// v6.95.0+: 通知管理
+registerNotifyCommand(program);
+
+// v6.96.0+: 智能推荐
+registerRecommendCommand(program);
 
 // 全量索引重建与一致性检查
 program

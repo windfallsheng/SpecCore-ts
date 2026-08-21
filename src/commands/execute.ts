@@ -6,6 +6,8 @@ import { execSync } from 'child_process';
 import { logger } from '../utils/logger';
 import { getDefaultIteration, updateContext, recordHistory, startHotfix, getIterationDir } from '../core/context';
 import { scanTasks, topologicalSort, TaskState } from '../core/state';
+import { acquireLock, releaseLock } from '../core/lock-manager';
+import { sendNotification } from '../core/notification';
 import { resolveTask, formatResolveResult } from '../core/resolver';
 import { FileTransaction } from '../core/transaction';
 import { loadSpecRules, generateImports, SpecRules, loadTechStack } from '../core/spec-rules';
@@ -93,12 +95,26 @@ async function resolveTaskDir(iterDir: string, taskId?: string): Promise<string>
 }
 
 export async function executeCommand(options: ExecuteOptions): Promise<void> {
+  let lockAcquired = false;
   try {
     const iteration = await getDefaultIteration(options.iteration);
     if (!iteration) {
       logger.error('No active iteration found.');
       return;
     }
+
+    // v6.95.0+: 并发保护 — 获取迭代锁
+    const lockResult = await acquireLock(process.cwd(), 'iteration', {
+      iteration,
+      task: options.task,
+      force: options.force,
+    });
+    if (!lockResult.success) {
+      logger.error(`🔒 ${lockResult.message}`);
+      logger.info('   使用 --force 强制获取锁，或等待其他操作完成');
+      return;
+    }
+    lockAcquired = true;
 
     // ── --list-pending: 列出待执行任务清单（拓扑排序）──
     if (options.listPending) {
@@ -361,7 +377,22 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
     }
   } catch (error) {
     logger.error(`Execution failed: ${error}`);
+    // 发送失败通知
+    if (lockAcquired) {
+      await sendNotification(process.cwd(), {
+        type: 'code_executed',
+        title: 'Execute 执行失败',
+        message: String(error),
+        iteration: await getDefaultIteration(options.iteration) || undefined,
+        task: options.task,
+      }).catch(() => {});
+    }
     throw error;
+  } finally {
+    // v6.95.0+: 释放迭代锁
+    if (lockAcquired) {
+      await releaseLock(process.cwd(), 'iteration');
+    }
   }
 }
 
@@ -552,6 +583,17 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
     await refreshKnowledgeGraph(process.cwd(), iteration);
     logger.info('🧠 知识图谱已刷新');
   } catch {}
+
+  // v6.95.0+: 发送成功通知
+  try {
+    await sendNotification(process.cwd(), {
+      type: 'code_executed',
+      title: `Execute 完成: ${total} 个任务`,
+      message: `耗时 ${totalElapsed}s`,
+      iteration,
+      task: tasks.map(t => t.id).join(', '),
+    });
+  } catch { /* 忽略通知失败 */ }
 
   logOperation('speccore execute done', `completed ${total} tasks in ${totalElapsed}s`);
 }

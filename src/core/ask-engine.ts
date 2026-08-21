@@ -4,7 +4,7 @@
  */
 
 import { logger } from '../utils/logger';
-import { recognizeIntent, IntentResult } from './intent-recognition';
+import { recognizeIntent, IntentResult, isSpeccoreOperation, AMBIGUOUS_INTENTS } from './intent-recognition';
 import { askWithLlm } from './ask-llm';
 import { tryHostAi } from './ask-host-ai';
 import { loadAskConfig } from './ask-config';
@@ -55,6 +55,12 @@ export interface AskResult {
   pipeline?: PipelinePlan;
   /** AI 模式下可直接执行的命令（自动而非打印给人） */
   autoExec?: { command: string; args: string; confirm?: boolean };
+}
+
+/** Ask 引擎选项 */
+export interface AskEngineOptions {
+  /** 显式 speccore 调用（来自 /spec-ask Skill），跳过意图域确认 */
+  explicit?: boolean;
 }
 
 // ============================================================
@@ -122,6 +128,10 @@ const COMMAND_KB: CommandKnowledge[] = [
     usage: 'speccore refresh [--code] [--rag] [--graph] [--task <id>]', examples: ['speccore refresh', 'speccore refresh --code', 'speccore refresh --rag --graph'], related: ['reindex', 'analyze', 'code-index'], triggers: ['刷新', 'refresh', '更新索引', '刷新索引', '索引过期', '索引过时', '重建索引'] },
   { name: 'reindex', aliases: ['ri'], description: '全量重建所有层级索引 + 知识图谱 + 衰减检测。--check 只检查不修复',
     usage: 'speccore reindex [--check]', examples: ['speccore reindex', 'speccore reindex --check'], related: ['refresh', 'validate'], triggers: ['重建', 'reindex', '全量重建', '重建图谱', '重建索引', '索引不一致', '死链'] },
+  // v7.0.0+: 统一图谱查询
+  { name: 'graph', aliases: ['g'], description: '统一图谱查询：融合知识图谱 + 代码图谱。支持 query/entity/related/path/stats 子命令',
+    usage: 'speccore graph query <question> | speccore graph entity <id> | speccore graph related <id> | speccore graph path <from> <to> | speccore graph stats',
+    examples: ['speccore graph query "订单相关代码"', 'speccore graph entity SRC:auth-AuthController', 'speccore graph related Task-001', 'speccore graph path Task-001 Task-002', 'speccore graph stats'], related: ['knowledge', 'code-index', 'search', 'track'], triggers: ['图谱', 'graph', '知识图谱', '代码图谱', '查询图谱', '图谱查询', '查图谱', '找关联', '找路径', '实体查询', '图谱统计'] },
 ];
 
 // ============================================================
@@ -186,6 +196,9 @@ const SYNONYM_MAP: Record<string, string> = {
   '刷新': 'refresh', '更新索引': 'refresh', '刷新索引': 'refresh', '索引过期': 'refresh',
   // ── reindex ──
   '重建': 'reindex', '全量重建': 'reindex', '重建图谱': 'reindex', '死链': 'reindex',
+  // ── graph ──
+  '知识图谱': 'graph', '代码图谱': 'graph', '查询图谱': 'graph', '图谱查询': 'graph',
+  '查图谱': 'graph', '找关联': 'graph', '找路径': 'graph', '实体查询': 'graph', '图谱统计': 'graph',
 };
 
 // ============================================================
@@ -232,11 +245,11 @@ export function classifyMode(input: string): AskMode {
 
   // 模式1: 命令解释 — 询问特定命令用法
   const explainPatterns = [
-    /(dashboard|dev|init|execute|plan|pr|sync|validate|analyze|split|search|track|rename|doc2spec|spec2doc|ask|code-index)\s*(命令|用法|怎么用|是什么|功能|参数|选项)/,
-    /怎么用\s*(dashboard|dev|init|execute|plan|pr|sync|validate|analyze|split|search|track|code-index)/,
-    /(dashboard|dev|init|execute|plan|pr|sync|validate|analyze|split|search|track|code-index)\s*有哪些/,
-    /解释[一下]?\s*(dashboard|dev|init|execute|plan|pr|sync|validate|analyze|split|search|track|code-index)/,
-    /(what|how).*use.*(dashboard|dev|init|execute|plan|pr|sync|code-index)/i,
+    /(dashboard|dev|init|execute|plan|pr|sync|validate|analyze|split|search|track|rename|doc2spec|spec2doc|ask|code-index|graph)\s*(命令|用法|怎么用|是什么|功能|参数|选项)/,
+    /怎么用\s*(dashboard|dev|init|execute|plan|pr|sync|validate|analyze|split|search|track|code-index|graph)/,
+    /(dashboard|dev|init|execute|plan|pr|sync|validate|analyze|split|search|track|code-index|graph)\s*有哪些/,
+    /解释[一下]?\s*(dashboard|dev|init|execute|plan|pr|sync|validate|analyze|split|search|track|code-index|graph)/,
+    /(what|how).*use.*(dashboard|dev|init|execute|plan|pr|sync|code-index|graph)/i,
   ];
   if (explainPatterns.some(p => p.test(lower))) return 'explain';
 
@@ -433,7 +446,7 @@ const SUPPLEMENT_INTENT = /补充分析|追加分析|补充源码|追加源码|�
 const SUPPLEMENT_EXCLUDE = /补充测试|补充用例|补充文档|补.*文档|补充.*报告/;
 
 /** 模式3: 意图匹配（当前 ask 逻辑） */
-async function handleMatch(input: string): Promise<AskResult> {
+async function handleMatch(input: string, isExplicit = false): Promise<AskResult> {
   // 补充分析意图已在 askEngine 顶层检测（第零层），此处不再重复
 
   // 优先用 KB 精确匹配
@@ -496,6 +509,37 @@ async function handleMatch(input: string): Promise<AskResult> {
       commands: candidates.map(c => c.command),
     };
   }
+
+  // ── 意图域检测: 区分 speccore 操作 vs 普通 AI 对话 ──
+  // v6.97.0+ 新增：如果匹配到容易混淆的意图（analyze/split/execute/plan），
+  // 但输入中没有 speccore 上下文词（如"迭代""全局""speccore"等），
+  // 可能是用户在普通聊天（如"分析代码""讨论需求"），应返回确认而非直接执行
+  // v6.97.0+ 修复：显式调用（/spec-ask Skill）时跳过此检测，直接执行
+  if (!isExplicit && AMBIGUOUS_INTENTS.has(best.intent) && !isSpeccoreOperation(input)) {
+    const lines = [
+      '🤔 我识别到你可能想执行 speccore 命令，但不确定这是调用 CLI 还是普通技术讨论：',
+      '',
+      `  你的输入: "${input}"`,
+      `  匹配意图: ${best.intent} → speccore ${best.command}`,
+      '',
+      '如果是 speccore 操作，请补充明确的上下文词，例如：',
+      '  • "用 speccore 分析本迭代需求"',
+      '  • "全局分析项目架构"',
+      '  • "拆分 Task-001 的开发任务"',
+      '  • "执行迭代 Iteration-001 的计划"',
+      '',
+      '如果是普通技术讨论（解释代码、审查片段、讨论需求），请直接描述你的问题。',
+      '',
+      '或输入 y 确认执行: speccore ' + best.command,
+    ];
+    return {
+      mode: 'ambiguous',
+      summary: `待确认: ${best.intent} — 是 speccore 操作还是普通对话?`,
+      detail: lines.join('\n'),
+      commands: [best.command],
+    };
+  }
+
   // ── 中置信度确认: 匹配到了但不确定，询问用户 ──
   if (best.confidence < config.routing.highThreshold && best.confidence >= config.routing.lowThreshold) {
     const lines = ['🤔 我理解你想做这个，但不太确定，请确认:', ''];
@@ -535,6 +579,28 @@ async function handleMatch(input: string): Promise<AskResult> {
     if (params.scope) {
       fullCommand += ` --scope ${params.scope}`;
       paramNotes.push(`🌐 范围: ${params.scope}`);
+      // v6.97.0+: 全局分析默认结合源码扫描，确保不 fallback 到迭代层文档
+      if (params.scope === 'global' && !params.withCode) {
+        params.withCode = 'true';
+      }
+    }
+    // v6.97.0+: 任务级分析时自动附加 --task 参数
+    if (params.task) {
+      fullCommand += ` --task "${params.task}"`;
+      paramNotes.push(`📋 任务: ${params.task}`);
+    }
+    if (params.withCode) {
+      fullCommand += ` --with-code`;
+      paramNotes.push(`🔍 源码扫描: 结合工程源码分析`);
+    }
+    // v6.97.0+: 重新/补充分析模式
+    if (params.supplement) {
+      fullCommand += ` --supplement`;
+      paramNotes.push(`🔄 补充模式: 追加到现有报告`);
+    }
+    if (params.sync) {
+      fullCommand += ` --sync`;
+      paramNotes.push(`💾 同步模式: 局部回写到 020-specs/`);
     }
     if (params.tool) {
       fullCommand += ` --tool="${params.tool}"`;
@@ -591,15 +657,29 @@ async function handleMatch(input: string): Promise<AskResult> {
 
   const detail = `[SPECCORE_MODE: match]\n${detailLines.join('\n')}`;
 
+  // v6.97.0+ 修复：强制确认命令列表 — 即使置信度高也需要用户确认
+  // 这些命令会产生文件/副作用，不能误执行
+  const FORCE_CONFIRM_COMMANDS = new Set([
+    'analyze', 'split', 'plan', 'execute', 'dev',
+    'doc2spec', 'spec2doc', 'iteration', 'task',
+    'pr', 'done', 'change', 'reindex',
+  ]);
+  const needsConfirm = FORCE_CONFIRM_COMMANDS.has(best.command);
+
+  // autoExec 仅在置信度 >= highThreshold 时启用
+  // 但强制确认命令始终带 confirm 标记，AI 上下文不会直接执行
+  const shouldAutoExec = best.confidence >= config.routing.highThreshold;
+
   return {
     mode: 'match',
     summary: `匹配到: ${best.intent} (${best.confidence}%) → ${fullCommand}`,
     detail,
     commands: [best.command],
-    autoExec: best.confidence >= config.routing.highThreshold ? {
+    autoExec: shouldAutoExec ? {
       command: fullCommand.replace(/^speccore /, '').split(' ')[0],  // 主命令
       args: fullCommand.replace(/^speccore [a-z-]+ /, ''),           // 子命令 + 参数
-      confirm: true,
+      // v6.97.0+ 修复：强制确认命令始终要求确认，避免"直接就乱搞"
+      confirm: needsConfirm || best.confidence < 95,
     } : undefined,
   };
 }
@@ -1052,7 +1132,8 @@ export async function synthesizeIntent(input: string): Promise<SynthesizedIntent
   };
 }
 
-export async function askEngine(input: string): Promise<AskResult> {
+export async function askEngine(input: string, options?: AskEngineOptions): Promise<AskResult> {
+  const isExplicit = options?.explicit || false;
   // ═══════════════════════════════════════════════════════════
   // 第零层: 确定性操作直接路由（零成本，最高优先级）
   // ═══════════════════════════════════════════════════════════
@@ -1117,7 +1198,7 @@ export async function askEngine(input: string): Promise<AskResult> {
       break;
     case 'guide': {
       const guide = handleGuide(input);
-      localResult = guide || await handleMatch(input);
+      localResult = guide || await handleMatch(input, isExplicit);
       break;
     }
     case 'pipeline':
@@ -1125,7 +1206,7 @@ export async function askEngine(input: string): Promise<AskResult> {
       break;
     default:
       localCandidates = await recognizeIntent(input);
-      localResult = await handleMatch(input);
+      localResult = await handleMatch(input, isExplicit);
   }
 
   // 知识图谱语义增强：如果本地引擎匹配到需要 task 的命令但缺少参数，尝试从图谱补全

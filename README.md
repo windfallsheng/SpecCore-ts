@@ -154,6 +154,29 @@ speccore knowledge-query "how does payment work"  # 自然语言查询
 - 社区检测自动划分子系统，识别 God nodes 和跨社区桥梁
 - v6.91.0+ 支持 API Contract / SQL Schema 多模态纳入图谱
 
+**v7.0.0+ 统一图谱查询** — 融合知识图谱 + 代码图谱：
+```bash
+speccore graph query "订单相关代码"              # 自然语言统一查询（默认 LLM 语义增强）
+speccore graph query "订单相关代码" --fast        # 快速模式（零 Token）
+speccore graph entity SRC:auth-AuthController      # 查询实体详情（含语义标签）
+speccore graph related Task-001                    # 查询关联实体
+speccore graph path Task-001 Task-002              # 查找最短路径
+speccore graph stats                               # 统计信息（含语义标签覆盖率）
+```
+- 语义标签匹配：查询 "订单" 也能匹配到 `booking`、`purchase`、`交易` 相关代码
+- LLM 语义排序：综合得分 = 本地匹配 × 0.4 + LLM 语义 × 0.6
+- 查询结果融合：同时搜索知识图谱（需求/任务）和代码图谱（类/方法）
+
+**v7.1.0+ Mermaid 图表渲染** — 将分析产物可视化：
+```bash
+speccore graph render diagrams/architecture.mmd    # 渲染单个图表
+speccore graph render --all                         # 批量渲染所有 .mmd
+speccore graph render --extract ARCHITECTURE.md     # 从 Markdown 提取图表
+```
+- 全局分析自动在文档中嵌入 Mermaid 图表（模块关系图、时序图、流程图、状态图）
+- 独立 `.mmd` 文件输出到 `.speccore/GLOBAL/diagrams/`
+- 生成响应式 HTML 页面，支持打印和主题切换
+
 ![Knowledge Graph](docs/screenshots/knowledge-graph-full.png)
 
 ![Knowledge Graph Zoom](docs/screenshots/knowledge-graph-zoom.png)
@@ -194,7 +217,7 @@ speccore knowledge-query "how does payment work"  # 自然语言查询
 
 ```bash
 npm install -g speccore
-speccore --version   # v6.91.1
+speccore --version   # v7.1.0
 ```
 
 ## 命令列表
@@ -217,6 +240,7 @@ speccore --version   # v6.91.1
 | `change` | `ch` | 🔄 🔒 需求变更 |
 | `sync` | `sy` | 🔄 🔒 双向同步 |
 | `validate` | `vl` | ✅ 合规验证 |
+| `graph` | `g` | 🕸️ 统一图谱查询（知识+代码）+ Mermaid 渲染 |
 | `knowledge` | `kg` |  🌐 知识图谱可视化 + 衰减检测 + 代码图谱查询 |
 | `track` | `trk` | 🔗 🔒 REQ→Task→Code 全链路 |
 | `search` | `sh` | 🔍 跨 Spec 全文搜索 |

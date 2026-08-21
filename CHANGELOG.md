@@ -1,3 +1,287 @@
+## v7.1.0 (2026-08-21) — LLM 语义查询 + 图表丰富化 + Ask 意图完善
+
+### 新增
+
+- **LLM 语义增强查询** `speccore graph query` `src/core/graph-semantic.ts`
+  - `graph query` 默认启用 LLM 语义增强（`--smart`），查询 "订单相关代码" 时自动扩展为 ["order", "booking", "purchase", "交易", "下单", ...]
+  - 查询结果按「本地得分 * 0.4 + LLM 语义得分 * 0.6」重新排序，匹配更精准
+  - LLM 给出匹配理由（如 "该文件处理订单状态流转，与查询高度相关"）
+  - 支持 `--fast` 模式跳过 LLM（零 Token，降级到本地规则扩展）
+  - 本地规则扩展覆盖 15+ 业务域（订单/用户/支付/内容/消息/数据/搜索/配置/监控/安全/性能/测试/部署）
+
+- **Mermaid 图表渲染命令** `speccore graph render` `src/utils/mermaid-render.ts`
+  - `graph render <file.mmd>` — 渲染单个 Mermaid 文件为 HTML
+  - `graph render --all` — 批量渲染 `.speccore/GLOBAL/diagrams/` 下所有 .mmd
+  - `graph render --extract <file.md>` — 从 Markdown 提取 Mermaid 代码块并渲染
+  - 生成的 HTML 使用 CDN 加载 Mermaid.js，支持打印、响应式布局
+  - 支持从 Markdown 批量提取所有 `\`\`\`mermaid` 代码块
+
+- **全局分析产物丰富化（图表）** `src/commands/analyze.ts`
+  - 预创建 `.speccore/GLOBAL/diagrams/` 目录存放独立图表文件
+  - Layer 2 `_ASSOCIATION.md` 要求包含模块关系图 + 接口依赖图（Mermaid graph）
+  - Layer 2 `_MODULES.md` 要求包含模块全景图（Mermaid graph）
+  - Layer 3 功能模块文档要求包含时序图（sequenceDiagram）+ 流程图（flowchart）+ 状态图（stateDiagram）
+  - Layer 4 `INTERACTION_MAP.md` 要求包含跨端交互时序图
+  - Layer 4 `ARCHITECTURE.md` 要求包含架构拓扑图 + 依赖关系图
+  - Layer 4 `DATA_FLOW.md` 要求包含数据流图
+  - Layer 4 `DEPLOYMENT.md` 要求包含 CI/CD 流程图
+  - 新增「图表生成规范」章节：Mermaid 语法要求、各层级必须生成的图表清单、图表质量要求、独立 .mmd 文件规范
+
+### 改进
+
+- **Ask 意图识别完善** `src/core/ask-engine.ts`
+  - 新增 `graph` 命令知识库条目（命令解释/触发词/同义词/用法示例）
+  - 同义词表扩展：知识图谱、代码图谱、查询图谱、查图谱、找关联、找路径、实体查询、图谱统计
+  - 命令解释模式正则扩展：支持 `graph` 命令的用法询问
+
+## v7.0.0 (2026-08-21) — 知识图谱增强 + 统一查询 + RAG 联动
+
+### 新增
+
+- **统一图谱查询命令** `speccore graph` `src/commands/graph.ts`
+  - `graph query <question>` — 自然语言统一查询知识图谱 + 代码图谱
+  - `graph entity <id>` — 查询特定实体详情（含语义标签、业务角色、关联实体）
+  - `graph related <id>` — 查询实体的一阶邻居（按关系类型分组）
+  - `graph path <from> <to>` — 查找两实体间最短路径（支持知识图谱 BFS + 代码图谱回退）
+  - `graph stats` — 输出两种图谱的统计信息（含语义标签覆盖率）
+  - 查询结果融合两种图谱，知识图谱匹配语义标签/业务角色/描述，代码图谱匹配节点名/片段
+
+- **语义级节点标签提取** `src/core/knowledge-graph.ts` `src/core/code-graph/parser.ts`
+  - `GraphEntity` 新增 `semanticTags`、`description`、`businessRole` 字段
+  - 本地零 Token 提取语义信息：`extractSemanticFromCode()` 从代码文件提取
+    - JSDoc/TSDoc 注释 → description
+    - 文件头注释 → description 回退
+    - 文件名/路径关键词映射 → semanticTags（25+ 业务域规则）
+    - 导出名称后缀推断 → businessRole（Controller/Service/Repository/Hook 等 12 类）
+  - 代码图谱 AST 解析器同步提取 JSDoc 注释到 `snippet` 字段
+  - 全局分析 Prompt 增加语义标签提取要求（Layer 1 + Layer 3）
+
+- **知识图谱 ↔ RAG 索引同步** `src/core/knowledge-graph.ts` `src/core/rag-engine.ts`
+  - `buildKnowledgeGraph()` 完成后自动同步构建 `kg-rag-index.json`
+  - 每个知识图谱实体转换为 RAG 文档块（含标题、类型、标签、语义、关联实体）
+  - `retrieveWithGraphContext()` — 知识图谱增强的 RAG 检索
+    - Step 1: 用查询关键词在知识图谱中搜索相关实体
+    - Step 2: 收集一阶邻居实体扩展上下文
+    - Step 3: 在 RAG 索引中检索基础结果
+    - Step 4: 对结果重新评分（知识图谱匹配 chunk 获得加分）
+    - 实现「先图谱定位 → 再 RAG 深入」的联动检索模式
+
+## v6.99.0 (2026-08-21) — 全局分析产物结构改进
+
+### 改进
+
+- **GLOBAL 目录结构调整** `src/commands/analyze.ts`
+  - 全局技术文档统一放入 `.speccore/GLOBAL/global/` 子目录，不与 `platforms/`、`requirements/` 平级
+  - apply 路由逻辑：`globalSet.has(filename)` 和未知文件均路由到 `global/` 子目录
+  - 预创建目录时新增 `global/` 子目录
+  - Prompt 中所有全局文档存放路径更新为 `global/` 前缀
+  - 向后兼容：`config.ts` 中 `resolveTechStackPath()` 先检查新路径再回退旧路径
+
+- **PATTERNS 提取强化** `src/commands/analyze.ts`
+  - Layer 1 新增「提取可复用模式」任务：扫描每个端时同时识别设计模式
+  - 后端端 6 类模式：架构、数据模型、API 契约、安全、性能、工具/中间件
+  - 前端端 6 类模式：组件、Hooks、状态管理、路由/导航、请求/拦截、布局/样式
+  - Layer 3 新增「功能模块级模式提取」：跨端交互、业务规则、数据流、UI 交互、错误处理
+  - 跨端通用模式优先写入通用分类，端差异用段落标注
+
+- **需求文档增强** `src/commands/analyze.ts`
+  - 全局 REQUIREMENT.md：新增产品愿景、目标用户画像、核心场景地图、功能全景图、功能优先级矩阵、发布里程碑、风险预判等章节要求
+  - 前端端 REQUIREMENT.md：新增信息架构、用户旅程、页面清单、交互设计、状态与反馈、权限与角色、响应式/适配策略、无障碍要求等维度
+  - 迭代分析 Prompt 同步更新 REQUIREMENT.md 写作风格要求
+
+- **Agent 角色体系** `.agents/agents/`
+  - 新增 11 个专用 Agent 角色定义文件，覆盖 SpecCore 完整生命周期
+  - P0 核心角色：spec-clarifier（需求澄清）、spec-global-analyzer（全局分析）、spec-analyzer（迭代分析）、spec-executor（开发执行）
+  - P1 质量保障：spec-gatekeeper（质量门禁）、spec-tester（测试专项）、spec-reviewer（代码审查）
+  - P2 运维增强：spec-knowledge-curator（知识沉淀）、spec-change-detector（变更感知）、spec-security-auditor（安全审计）
+  - P3 架构治理：spec-architect（架构守护）
+  - 每个 Agent 含职责范围、工作原则、约束条件、触发时机、输入输出定义
+  - 核心 Agent 补充专业方法论：需求澄清 5W2H + 边界检查清单、全局分析四层架构详解、质量门禁 P0/P1/P2 检查清单、测试等价类划分 + 边界值分析
+
+- **Agent 角色投影到 AGENTS.md** `src/commands/init.ts`
+  - `syncAgentsMd()` 新增扫描 `.agents/agents/` 目录逻辑
+  - 自动提取 Agent 的 name、description、职责范围，生成角色速查表格
+  - 双轨制：`.agents/agents/` 给支持 Agent 的工具用，`AGENTS.md` 给不支持 Agent 的工具用
+  - `speccore init` 时自动创建 `.agents/agents/` 目录
+
+## v6.98.0 (2026-08-21) — AGENTS.md 规范数据库投影
+
+### 新增
+
+- **AGENTS.md 规范数据库投影** `src/commands/init.ts`
+  - 新增 `syncAgentsMd()` 函数，将 `.speccore/AGENTS/` 和 `.speccore/RULES/` 下的规范自动投影到 `AGENTS.md`
+  - 文件名约定：
+    - `*.inline.md` → 内容内联到 AGENTS.md（外部 AI 工具直接读取）
+    - `*.md` → 只生成索引链接（外部 AI 工具可追踪链接读取）
+  - 自动区用 `<!-- SPECCORE_AUTO_INDEX_START/END -->` 标记，与手动区安全隔离
+  - `speccore init` 和 `speccore update` 时自动同步
+
+- **RULES 规范库新增 .inline.md 模板** `src/commands/init.ts`
+  - `01-PROJECT_STRUCTURE.inline.md` — 项目结构（内联到 AGENTS.md）
+  - `02-OUTPUT_MARKERS.inline.md` — SpecCore 输出标记（内联到 AGENTS.md）
+  - `03-COMMAND_CHEATSHEET.inline.md` — 常用命令速查（内联到 AGENTS.md）
+
+### 改进
+
+- **AGENTS.md 结构优化**
+  - 手动区只保留最核心的规则（项目类型、核心工作方式、绝对禁止、行为约束）
+  - 项目结构、输出标记、命令速查等非核心规范迁移到 `.speccore/RULES/*.inline.md`
+  - 外部 AI 工具仍能在 AGENTS.md 中读取完整规范，但规范原子化维护在 `.speccore/` 下
+
+## v6.97.0 (2026-08-20) — 意图识别修复：全局分析 + 确认机制 + 规范库升级
+
+### 修复
+
+- **全局分析 fallback 到迭代层** `src/commands/analyze.ts`
+  - 在 `analyzeCommand` 入口处统一设置 `options.iteration = 'GLOBAL'`（当 `scope === 'global'`）
+  - 根治所有 12 处 `options.iteration || await getDefaultIteration()` 的 fallback 问题
+  - Prompt 模式和非 Prompt 模式全部修复
+
+- **意图域检测：区分 speccore 操作 vs 普通 AI 对话** `src/core/ask-engine.ts` + `src/core/intent-recognition.ts`
+  - 新增 `isSpeccoreOperation()` 函数，检测输入是否包含 speccore 上下文词
+  - 容易混淆的意图（analyze/split/execute/plan/review）无 speccore 上下文时返回 ambiguous
+  - 避免"分析代码""讨论需求"等普通聊天被误判为 speccore 操作
+
+- **显式调用支持（/spec-ask Skill）** `src/cli.ts` + `src/core/ask-engine.ts`
+  - `speccore ask` 新增 `--explicit` 选项
+  - 通过 `/spec-ask` Skill 调用时自动带 `--explicit`，跳过意图域确认
+  - 普通自然语言输入仍走确认流程
+
+- **阈值调整** `src/core/ask-config.ts`
+  - `highThreshold`: 70 → 85（只有非常明确的意图才直接执行）
+  - `lowThreshold`: 45 → 40（让更多意图进入确认模式而非直接拒绝）
+
+- **强制确认命令列表** `src/core/ask-engine.ts`
+  - analyze/split/plan/execute/dev/pr/done/change/reindex 等写命令即使 confidence ≥ 85 也要求确认
+  - AI 上下文中带 confirm 的命令不再直接执行，输出 `[SPECCORE_INTENT]` 让用户确认
+
+- **上下文感知增强修复** `src/core/intent-recognition.ts`
+  - 用户明确说"全局/全量/所有项目"时，analyze 意图不再因活跃迭代额外加分
+  - 避免全局分析被迭代上下文拉高优先级
+
+- **analyze triggers 补充** `src/core/intent-recognition.ts`
+  - 全局级：全局分析、全局层分析、全量分析、项目分析、整体架构分析等 20+ 关键词
+  - 任务级：任务分析、子任务分析、Task 分析等 8 个关键词
+  - 重新/补充分析：重新分析、补充分析、更新分析、修正分析等 12 个关键词
+  - scopeKeywords 和 extractParams 同步补充
+
+- **Skill 文件修复** `.agents/skills/spec-ask/SKILL.md`
+  - 明确区分迭代级分析（`-I <iter>`）和全局级分析（`--scope global --with-code`）
+  - 全局级分析时禁止读迭代目录，必须读 CONSTITUTION.md 获取工程源码路径
+  - 执行流程中 `speccore ask` 调用加上 `--explicit` 标记
+
+- **update 命令补充规范数据库目录** `src/commands/update.ts`
+  - 升级时补充创建 `.speccore/AGENTS/`、`.speccore/RULES/`、`.speccore/COMMANDS/`、`.speccore/SKILLS/`、`.speccore/HOOKS/`
+  - 之前只在 `init` 中创建，`update` 完全遗漏
+
+## v6.96.0 (2026-08-20) — 智能诊断：错误诊断 + 使用分析 + 智能推荐
+
+### 新增
+
+- **错误自动诊断** `src/core/error-diagnosis.ts`
+  - 8 种常见错误模式识别：迭代不存在、任务未找到、锁冲突、图谱缺失、Git 错误、依赖缺失、Prompt 构建失败、网络超时
+  - `diagnoseError()`: 分析错误字符串，返回分类 + 严重级别 + 修复建议
+  - `diagnoseAndPrint()`: 一键诊断并打印格式化建议
+  - `speccore recommend --diagnose "<错误信息>"`: 手动诊断指定错误
+
+- **使用模式分析** `src/core/usage-analytics.ts`
+  - 事件记录系统：命令执行、任务开始/完成/失败、迭代创建等
+  - `recordCommand()`: 记录命令使用（支持耗时统计）
+  - `generateUsageReport()`: 生成使用报告（命令频率、任务完成率、平均耗时、活跃迭代）
+  - `speccore recommend --analytics`: 查看使用模式报告
+  - 自动推荐：高失败率时建议重新分析、多迭代时建议归档等
+
+- **智能推荐系统** `src/core/smart-recommend.ts` + `speccore recommend`
+  - 6 维度状态扫描：代码图谱时效性、未读通知、活跃锁、需求↔代码关联、CONSTITUTION 更新、使用模式
+  - 优先级分级：高/中/低，按优先级排序展示
+  - `speccore status` 自动在底部显示智能推荐
+  - `speccore recommend` 查看完整推荐列表
+  - `speccore recommend --diagnose <error>` 诊断错误
+  - `speccore recommend --analytics` 查看使用报告
+
+- **doctor 增强**
+  - 新增并发锁状态检查（checkLocks）
+  - 新增通知积压检查（checkNotificationBacklog）
+  - 过期锁（>30 分钟）标记为待修复项
+
+---
+
+## v6.95.0 (2026-08-20) — 协作增强：多用户 + 并发保护 + 变更通知
+
+### 新增
+
+- **多用户支持** `src/core/user-context.ts`
+  - 自动识别当前操作者：`git config user.name` → `SPECCORE_USER` 环境变量 → 系统用户名
+  - `getUserSlug()`: 生成用户标识的简短形式（文件名安全）
+  - 支持 `setCurrentUser()` 覆盖缓存
+
+- **并发保护** `src/core/lock-manager.ts`
+  - 基于文件的轻量级锁机制（`.speccore/local/locks/`）
+  - `acquireLock()`: 获取锁，支持 force 强制覆盖、30 分钟过期自动清理死锁
+  - `releaseLock()`: 释放锁
+  - `checkLock()`: 查询锁状态
+  - `clearAllLocks()`: 管理员清理所有锁
+  - execute 命令自动获取 `iteration` 锁，失败/完成时自动释放
+
+- **变更通知系统** `src/core/notification.ts` + `speccore notify`
+  - 7 种通知类型：task_status_changed / task_created / requirement_updated / spec_generated / code_executed / plan_generated / iteration_created
+  - 未读/已读分离（基于 `.read` marker 文件）
+  - `speccore status` 显示未读通知数和锁状态
+  - `speccore notify`: 列出通知中心
+  - `speccore notify --all`: 标记全部已读
+  - `speccore notify --read <id>`: 标记单条已读
+  - `speccore notify --clear`: 清理 30 天前的过期通知
+  - execute 失败时自动发送失败通知
+
+---
+
+## v6.94.0 (2026-08-20) — 图谱增强：增量更新 + 需求联动 + Execute 感知
+
+### 新增
+
+- **增量图谱更新** `speccore code-index --graph --incremental`
+  - 基于文件 mtime + hash 检测变化，只重新解析变化文件
+  - 保留未变化文件的节点和边，合并后重新计算 communities/degree/godNodes
+  - 保存 `.graph-state.json` 追踪构建状态
+  - `--watch` 模式：使用 `fs.watch` 监视源码目录，自动触发增量更新
+  - 删除文件检测：自动移除已删除文件对应的节点和边
+
+- **需求↔代码图谱联动** `src/core/code-graph/requirement-linker.ts`
+  - 自动扫描迭代目录的 `010-requirements/` 和 `020-specs/` 中的 Markdown
+  - 提取需求文档中的英文标识符作为关键词
+  - 与代码图谱节点做模糊匹配（节点名 3 分 / 文件名 1 分 / snippet 0.5 分）
+  - 输出 `REQ_CODE_LINK.json`：需求 ↔ 代码节点映射 + 覆盖率统计
+
+- **Execute 阶段图谱感知** `execute-graph-plugin.ts`
+  - 为 execute 命令注入代码图谱上下文（priority 65）
+  - 基于 Task 名称关键词智能匹配相关代码节点（支持 camelCase/snake_case 拆分）
+  - 注入内容：相关子系统、关键节点（含 God node 标记）、关联需求
+  - 帮助 AI 理解已有代码结构，避免重复定义或破坏接口契约
+
+---
+
+## v6.93.0 (2026-08-20) — 架构重构：Prompt 构建插件化
+
+### 新增
+
+- **Prompt 插件系统** `src/core/prompt-plugins/`
+  - 统一插件接口 `PromptPlugin`：命令匹配 + 优先级 + enhance 方法
+  - 插件注册表：自动按优先级排序，支持命令过滤
+  - 三个默认插件：
+    - `execute-rules-plugin`: execute 命令的 RULES 编码规范注入（priority 80）
+    - `analyze-graph-plugin`: analyze 命令的代码知识图谱摘要注入（priority 70）
+    - `agents-plugin`: split/plan 命令的 AGENTS 角色注入（priority 60）
+  - 向后兼容：插件失败静默跳过，不影响主流程
+
+### 重构
+
+- `prompt-builder.ts` 解耦命令特定逻辑
+  - 移除 79 行硬编码的 execute/analyze/split/plan 条件分支
+  - 统一通过 `getPluginsForCommand()` 获取插件并顺序执行
+  - 支持多插件叠加（如未来 execute 同时需要 RULES + 图谱 + AGENTS）
+
+---
+
 ## v6.92.0 (2026-08-20) — 稳定性：测试覆盖 + Doctor 诊断
 
 ### 新增

@@ -5,9 +5,8 @@
 import { writeFile, pathExists, readFile, readdir, ensureDir } from 'fs-extra';
 import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
-import { safeWriteWithBackup, safeCopyDirWithBackup, _updateConflicts, generateSettingsContent, generateAIRulesContent, TOOL_COMMANDS } from './init';
-
-const CURRENT_VERSION = require('../../package.json').version;
+import { version as CURRENT_VERSION } from '../../package.json';
+import { safeWriteWithBackup, safeCopyDirWithBackup, _updateConflicts, generateSettingsContent, generateAIRulesContent, TOOL_COMMANDS, initAgentsDir, initRulesDir, initCommandsDir, initSkillsDir, initHooksDir, syncAgentsMd } from './init';
 
 // ── 当前版本的命令列表统一从 init.ts 导入（单一事实来源）──
 // 避免 init.ts 与 update.ts 的命令列表不一致导致清理误删
@@ -90,8 +89,11 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
     }
   }
 
-  // ── 2. 更新版本号 ──
+  // ── 2. 更新版本号 + 确保新目录存在 ──
   await ensureDir(join(speccoreDir, 'local'));
+  await ensureDir(join(speccoreDir, 'local', 'locks'));
+  await ensureDir(join(speccoreDir, 'local', 'notifications'));
+  await ensureDir(join(speccoreDir, 'code-graph'));
   await writeFile(verFile, JSON.stringify({ version: CURRENT_VERSION, updatedAt: new Date().toISOString() }, null, 2));
 
   // ── 3. 检查升级提示（CONSTITUTION 模板变化等）──
@@ -133,6 +135,16 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   const skillNames = (await require('fs-extra').readdir(skillsSrc)).filter((f: string) => !f.startsWith('.'));
   await cleanupStaleFiles(projectRoot, ALL_COMMANDS, skillNames);
 
+  // v6.97.0+ 修复：update 时补充创建规范数据库目录（之前只在 init 中创建）
+  await initAgentsDir(projectRoot);
+  await initRulesDir(projectRoot);
+  await initCommandsDir(projectRoot);
+  await initSkillsDir(projectRoot);
+  await initHooksDir(projectRoot);
+
+  // v6.98.0+: 同步 AGENTS.md — 将 .speccore/ 规范数据库投影到 AGENTS.md
+  await syncAgentsMd(projectRoot);
+
   const verLabel = isSameVersion ? `v${CURRENT_VERSION}` : `v${oldVersion} → v${CURRENT_VERSION}`;
   spinner.stop(`升级完成: ${verLabel}`);
   logger.info('');
@@ -144,6 +156,11 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   logger.info('     ✅ AGENTS.md — 项目规则');
   logger.info('     ✅ SETTINGS.md — 框架配置');
   logger.info('     ✅ AI-RULES.md — AI 参考手册');
+  logger.info('     ✅ .speccore/AGENTS/ — 角色定义规范库');
+  logger.info('     ✅ .speccore/RULES/ — 编码规范库');
+  logger.info('     ✅ .speccore/COMMANDS/ — 命令模板库');
+  logger.info('     ✅ .speccore/SKILLS/ — 可复用技能库');
+  logger.info('     ✅ .speccore/HOOKS/ — 生命周期钩子库');
   logger.info('');
   // 冲突文件汇总
   if (_updateConflicts.length > 0) {

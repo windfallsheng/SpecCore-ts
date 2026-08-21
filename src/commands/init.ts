@@ -1,6 +1,7 @@
 import { ensureDir, writeFile, pathExists, readFile, readdir, copy, unlink, rename } from 'fs-extra';
 import { join, basename } from 'path';
 import { logger, Spinner } from '../utils/logger';
+import { version as PKG_VERSION } from '../../package.json';
 import { createInterface } from 'readline';
 import { updateContext } from '../core/context';
 import { SVG_ONBOARD } from './ask';
@@ -147,14 +148,13 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
 
         // 更新版本号（last-init-version.txt 同步）
         const lastInitFile = join(speccoreDir, 'local', 'last-init-version.txt');
-        const { version } = require('../../package.json');
-        await writeFile(lastInitFile, version);
+        await writeFile(lastInitFile, PKG_VERSION);
 
         // 重置 onboard 标记，确保升级后首次 ask 展示引导页
         try { await unlink(join(speccoreDir, 'local', '.ask-onboarded')); } catch {}
 
         // 生成升级欢迎页
-        await writeUpgradePage(projectRoot, version, speccoreDir);
+        await writeUpgradePage(projectRoot, PKG_VERSION, speccoreDir);
 
         logger.info('');
         logger.info('📋 init 额外更新:');
@@ -169,7 +169,7 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
         try {
           const { execSync } = require('child_process');
           const globalVer = execSync('speccore --version 2>/dev/null || echo "0.0.0"', { encoding: 'utf-8', timeout: 3000 }).trim();
-          const projectVer = version;
+          const projectVer = PKG_VERSION;
           if (globalVer !== projectVer && globalVer !== '0.0.0') {
             logger.warn(`⚠️  全局 speccore CLI 版本: ${globalVer}，项目要求: ${projectVer}`);
             logger.warn(`   👉 请执行: npm update -g speccore`);
@@ -209,6 +209,8 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
     await ensureDir(join(speccoreDir, 'ITERATIONS'));
     await ensureDir(join(speccoreDir, 'RULES'));
     await ensureDir(join(speccoreDir, 'local'));
+    await ensureDir(join(speccoreDir, 'local', 'locks'));
+    await ensureDir(join(speccoreDir, 'local', 'notifications'));
     await ensureDir(join(speccoreDir, 'config'));
     await ensureDir(join(speccoreDir, 'GLOBAL'));
     await ensureDir(join(speccoreDir, 'GLOBAL', 'PROJECTS'));
@@ -220,6 +222,8 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
     await ensureDir(join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'specs'));
     await ensureDir(join(speccoreDir, 'inbox'));
     await ensureDir(join(speccoreDir, 'questions'));
+    // v6.94.0+: 代码知识图谱目录
+    await ensureDir(join(speccoreDir, 'code-graph'));
 
     // Create default files
     await createDefaultFiles(projectRoot, speccoreDir);
@@ -262,10 +266,9 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
     } // if context.json 不存在
 
     // 写入版本号追踪
-    const { version } = require('../../package.json');
     await writeFile(
       join(speccoreDir, 'local', 'version.json'),
-      JSON.stringify({ version, createdAt: new Date().toISOString() }, null, 2)
+      JSON.stringify({ version: PKG_VERSION, createdAt: new Date().toISOString() }, null, 2)
     );
 
     // Create .gitignore entry
@@ -294,6 +297,12 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
 
     // v6.88.0+: HOOKS 生命周期钩子
     await initHooksDir(projectRoot);
+
+    // v6.99.0+: AGENTS 专用角色定义目录
+    await ensureDir(join(projectRoot, '.agents', 'agents'));
+
+    // v6.98.0+: 同步 AGENTS.md — 将 .speccore/ 规范数据库投影到 AGENTS.md
+    await syncAgentsMd(projectRoot);
 
     // Update context
     await updateContext({ lastUpdated: new Date().toISOString() });
@@ -1236,7 +1245,7 @@ speccore execute -I <迭代名> --all       # 执行所有任务
  * 将内置默认角色复制到 .speccore/AGENTS/ 目录
  * 用户可在此目录下自定义角色或新增角色
  */
-async function initAgentsDir(projectRoot: string): Promise<void> {
+export async function initAgentsDir(projectRoot: string): Promise<void> {
   const agentsDir = join(projectRoot, '.speccore', 'AGENTS');
   await ensureDir(agentsDir);
 
@@ -1274,7 +1283,7 @@ async function initAgentsDir(projectRoot: string): Promise<void> {
  * v6.85.0+: 初始化 RULES 规范库
  * 将内置默认编码规范复制到 .speccore/RULES/ 目录
  */
-async function initRulesDir(projectRoot: string): Promise<void> {
+export async function initRulesDir(projectRoot: string): Promise<void> {
   const rulesDir = join(projectRoot, '.speccore', 'RULES');
   await ensureDir(rulesDir);
 
@@ -1287,6 +1296,93 @@ async function initRulesDir(projectRoot: string): Promise<void> {
     }
   }
 
+  // v6.98.0+: 创建 AGENTS.md 投影用的 .inline.md 文件（不覆盖用户已自定义的）
+  const inlineTemplates = [
+    {
+      name: '01-PROJECT_STRUCTURE.inline.md',
+      content: `## 项目结构
+
+\`\`\`
+Iteration-NNN-name/            ← 迭代目录
+├── 000-overview/              ← 进度总览
+├── 010-requirements/          ← 需求文档（按功能组织）
+│   ├── README.md              ← 目录规范说明
+│   ├── INDEX.md               ← 需求文档索引
+│   ├── sources/               ← [只读] 原始 PRD
+│   ├── converted/             ← [自动生成] doc2spec 转换后的 MD
+│   ├── features/              ← [手动维护] 按功能模块组织
+│   │   └── {feature}/README.md
+│   ├── prototypes/            ← 原型（HTML/图片/链接，内容不限）
+│   └── assets/                ← doc2spec 提取的图片
+├── 020-specs/                 ← 需求分析
+├── 030-tasks/                 ← 开发任务
+│   └── Task-*/                ← 功能模块分组（聚合相关子任务）
+│       ├── _shared/           ← 共享契约（API_CONTRACT.yaml + CONTEXT.md）
+│       ├── 00-specs/          ← 模块级核心规格（REQ/TECH/SCHEMA/CHANGELOG）
+│       ├── 10-backend/        ← 后端（大类）
+│       │   └── {服务名}/      ← 端（如 api）
+│       │       └── {子任务}/  ← 执行单元
+│       ├── 20-frontend/       ← 前端（大类）
+│       │   └── {端名}/        ← 端（如 h5/admin）
+│       │       └── {子任务}/  ← 执行单元
+│       └── .issues.md         ← 问题追踪
+│
+│   子任务目录结构（10-backend/{端}/{子任务}/ 或 20-frontend/{端}/{子任务}/）：
+│       ├── .meta/             ← 子任务元信息（type/status/owner/created-at）
+│       ├── git-config         ← 子任务级 Git 配置
+│       ├── TASK.md            ← 子任务追踪
+│       ├── src/               ← AI 输出代码
+│       ├── tests/             ← AI 输出测试
+│       ├── TEST.md            ← 测试用例
+│       ├── RISK.md            ← 风险评估
+│       ├── DEPS.md            ← 依赖分析
+│       ├── MONITOR.md         ← 监控方案
+│       ├── REVIEW.md          ← 评审清单
+│       ├── DEPLOY.md          ← 部署清单
+│       ├── ERROR_CODES.md     ← 错误码
+│       └── COMPONENT_TREE.md  ← 组件树（仅前端）
+│
+│   research 类型任务目录结构（无前后端分层）：
+│       ├── _shared/           ← 共享上下文
+│       ├── 00-specs/          ← 核心规格（REQ.md/TECH.md）
+│       ├── RESEARCH.md        ← 调研报告
+│       ├── COMPARISON.md      ← 方案对比
+│       └── .issues.md         ← 问题追踪
+└── STAFFING.md                ← 人员排期
+\`\`\``,},
+    {
+      name: '02-OUTPUT_MARKERS.inline.md',
+      content: `## SpecCore 输出标记
+
+当执行 \`speccore ask\` 或 \`speccore about\` 时，会输出以下标记，按优先级处理：
+
+| 标记 | 含义 | 动作 |
+|:---|:---|:---|
+| \`[SPECCORE_ONBOARD: <path>]\` | 首次/升级引导页 | **最先处理**，用 present_files 展示 HTML |
+| \`[SPECCORE_SETUP_GUIDE: <path>]\` | 项目配置引导页 | init 后用 present_files 展示，指导用户配置 |
+| \`[SPECCORE_ABOUT: <path>]\` | 版本信息页 | 用 present_files 展示 |
+| \`[SPECCORE_MODE: <mode>]\` | 意图模式 | 识别模式后进入对应流程 |
+| \`[SPECCORE_EXEC: <cmd>]\` | 自动执行命令 | 直接 execute_command |
+| \`[SPECCORE_INTENT]\` | 意图确认块 | 展示给用户确认 |
+| \`[SPECCORE_CONTINUE: <path>]\` | 批次执行完成，需续批 | **必须开始新对话**，先读取 \`<path>\` 恢复上下文，再按提示命令继续下一批次 |`,},
+    {
+      name: '03-COMMAND_CHEATSHEET.inline.md',
+      content: `## 常用命令速查
+
+\`\`\`bash
+speccore status                          # 当前迭代状态面板
+speccore analyze -I <迭代名> --auto      # 全量分析
+speccore split -I <迭代名>               # 自动拆分任务
+speccore execute -I <迭代名> --all       # 执行所有任务
+\`\`\``,},
+  ];
+  for (const tpl of inlineTemplates) {
+    const destPath = join(rulesDir, tpl.name);
+    if (!(await pathExists(destPath))) {
+      await writeFile(destPath, tpl.content);
+    }
+  }
+
   logger.info('   📋 已初始化 RULES 规范库: .speccore/RULES/');
 }
 
@@ -1294,7 +1390,7 @@ async function initRulesDir(projectRoot: string): Promise<void> {
  * v6.87.0+: 初始化 COMMANDS 命令模板
  * 将内置默认命令模板复制到 .speccore/COMMANDS/ 目录
  */
-async function initCommandsDir(projectRoot: string): Promise<void> {
+export async function initCommandsDir(projectRoot: string): Promise<void> {
   const commandsDir = join(projectRoot, '.speccore', 'COMMANDS');
   await ensureDir(commandsDir);
 
@@ -1313,7 +1409,7 @@ async function initCommandsDir(projectRoot: string): Promise<void> {
 /**
  * v6.88.0+: 初始化 SKILLS 可复用技能库
  */
-async function initSkillsDir(projectRoot: string): Promise<void> {
+export async function initSkillsDir(projectRoot: string): Promise<void> {
   const skillsDir = join(projectRoot, '.speccore', 'SKILLS');
   await ensureDir(skillsDir);
 
@@ -1331,7 +1427,7 @@ async function initSkillsDir(projectRoot: string): Promise<void> {
 /**
  * v6.88.0+: 初始化 HOOKS 生命周期钩子
  */
-async function initHooksDir(projectRoot: string): Promise<void> {
+export async function initHooksDir(projectRoot: string): Promise<void> {
   const hooksDir = join(projectRoot, '.speccore', 'HOOKS');
   await ensureDir(hooksDir);
 
@@ -1344,6 +1440,144 @@ async function initHooksDir(projectRoot: string): Promise<void> {
   }
 
   logger.info('   🔗 已初始化 HOOKS 钩子: .speccore/HOOKS/');
+}
+
+// ── v6.98.0+: AGENTS.md 规范数据库投影 ──
+
+const AUTO_START = '<!-- SPECCORE_AUTO_INDEX_START -->';
+const AUTO_END = '<!-- SPECCORE_AUTO_INDEX_END -->';
+
+/**
+ * 同步 AGENTS.md — 将 .speccore/AGENTS/ 和 .speccore/RULES/ 下的规范投影到 AGENTS.md
+ *
+ * 文件名约定：
+ * - `*.inline.md` → 内容内联到 AGENTS.md
+ * - `*.md` → 只生成索引链接
+ */
+export async function syncAgentsMd(projectRoot: string): Promise<void> {
+  const agentsMdPath = join(projectRoot, 'AGENTS.md');
+
+  // 1. 读取现有 AGENTS.md，提取手动区（AUTO_START 之前的部分）
+  let manualPart = '';
+  if (await pathExists(agentsMdPath)) {
+    const content = await readFile(agentsMdPath, 'utf-8');
+    const startIdx = content.indexOf(AUTO_START);
+    if (startIdx >= 0) {
+      manualPart = content.slice(0, startIdx).trimEnd();
+    } else {
+      manualPart = content.trimEnd();
+    }
+  }
+
+  // 2. 收集自动区内容
+  const sections: string[] = [];
+
+  // 2a. 扫描 .speccore/AGENTS/
+  const agentsDir = join(projectRoot, '.speccore', 'AGENTS');
+  const agentInlines: string[] = [];
+  const agentLinks: string[] = [];
+  if (await pathExists(agentsDir)) {
+    const files = (await readdir(agentsDir))
+      .filter(f => f.endsWith('.md') && !f.startsWith('_') && !f.startsWith('.'))
+      .sort();
+    for (const f of files) {
+      if (f.endsWith('.inline.md')) {
+        const content = await readFile(join(agentsDir, f), 'utf-8');
+        agentInlines.push(content.trim());
+      } else {
+        const name = f.replace(/\.md$/, '').replace(/[-_]/g, ' ');
+        agentLinks.push(`- [${name}](.speccore/AGENTS/${f})`);
+      }
+    }
+  }
+  const agentParts: string[] = [];
+  if (agentInlines.length > 0) agentParts.push(...agentInlines);
+  if (agentLinks.length > 0) agentParts.push('### 更多角色\n' + agentLinks.join('\n'));
+  if (agentParts.length > 0) {
+    sections.push('## 角色与职责\n\n' + agentParts.join('\n\n'));
+  }
+
+  // 2b. 扫描 .speccore/RULES/
+  const rulesDir = join(projectRoot, '.speccore', 'RULES');
+  const ruleInlines: string[] = [];
+  const ruleLinks: string[] = [];
+  if (await pathExists(rulesDir)) {
+    const files = (await readdir(rulesDir))
+      .filter(f => f.endsWith('.md') && !f.startsWith('_') && !f.startsWith('.'))
+      .sort();
+    for (const f of files) {
+      if (f.endsWith('.inline.md')) {
+        const content = await readFile(join(rulesDir, f), 'utf-8');
+        ruleInlines.push(content.trim());
+      } else {
+        const name = f.replace(/\.md$/, '').replace(/[-_]/g, ' ');
+        ruleLinks.push(`- [${name}](.speccore/RULES/${f})`);
+      }
+    }
+  }
+  const ruleParts: string[] = [];
+  if (ruleInlines.length > 0) ruleParts.push(...ruleInlines);
+  if (ruleLinks.length > 0) ruleParts.push('### 更多规范\n' + ruleLinks.join('\n'));
+  if (ruleParts.length > 0) {
+    sections.push('## 编码规范与规则\n\n' + ruleParts.join('\n\n'));
+  }
+
+  // 2c. 扫描 .agents/agents/（v6.99.0+: Agent 角色定义投影）
+  const projectAgentsDir = join(projectRoot, '.agents', 'agents');
+  const agentRoles: { name: string; description: string; duties: string[] }[] = [];
+  if (await pathExists(projectAgentsDir)) {
+    const files = (await readdir(projectAgentsDir))
+      .filter(f => f.endsWith('.md') && !f.startsWith('_') && !f.startsWith('.') && f !== 'README.md')
+      .sort();
+    for (const f of files) {
+      const content = await readFile(join(projectAgentsDir, f), 'utf-8');
+      // 提取 YAML frontmatter 中的 name 和 description
+      const nameMatch = content.match(/^name:\s*(.+)$/m);
+      const descMatch = content.match(/^description:\s*(.+)$/m);
+      // 提取职责范围（前3条）
+      const duties: string[] = [];
+      const dutiesMatch = content.match(/## 职责范围\s*\n([\s\S]*?)(?=## |\n## |\n---|$)/);
+      if (dutiesMatch) {
+        const dutyLines = dutiesMatch[1].match(/^\d+\.\s*\*\*(.+?)\*\*/gm);
+        if (dutyLines) {
+          duties.push(...dutyLines.slice(0, 3).map(l => l.replace(/^\d+\.\s*\*\*(.+?)\*\*/, '$1')));
+        }
+      }
+      agentRoles.push({
+        name: nameMatch ? nameMatch[1].trim() : f.replace(/\.md$/, ''),
+        description: descMatch ? descMatch[1].trim() : '',
+        duties,
+      });
+    }
+  }
+  if (agentRoles.length > 0) {
+    let agentSection = '## Agent 角色定义（v6.99.0+）\n\n';
+    agentSection += '> 来源：`.agents/agents/`，项目级专用 Agent 角色定义\n\n';
+    agentSection += '| Agent | 职责 | 核心能力 |\n';
+    agentSection += '| :--- | :--- | :--- |\n';
+    for (const agent of agentRoles) {
+      const dutyStr = agent.duties.slice(0, 2).join('、') || agent.description;
+      agentSection += `| ${agent.name} | ${agent.description} | ${dutyStr} |\n`;
+    }
+    agentSection += '\n### 所有 Agent 共用的核心约束\n\n';
+    agentSection += '- 不要自己创建目录 — 使用 `speccore` CLI\n';
+    agentSection += '- 不要写脚本绕过 CLI — 所有操作通过 `speccore` 命令完成\n';
+    agentSection += '- 代码写到 CONSTITUTION.md 指定的源码路径，不写到迭代目录内\n';
+    agentSection += '- 迭代内写 Spec，迭代外写代码\n';
+    sections.push(agentSection);
+  }
+
+  // 3. 组合新内容
+  let newContent = manualPart;
+  if (sections.length > 0) {
+    newContent += '\n\n' + AUTO_START + '\n';
+    newContent += '> 以下内容由 `.speccore/` 规范数据库自动生成，请勿手动编辑此区域\n\n';
+    newContent += sections.join('\n\n');
+    newContent += '\n\n' + AUTO_END;
+  }
+  newContent += '\n';
+
+  await writeFile(agentsMdPath, newContent);
 }
 
 async function createSampleIteration(projectRoot: string): Promise<void> {
@@ -1484,7 +1718,6 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
  * 文件已存在时不覆盖，但告诉用户模板有什么新变化。
  */
 export async function checkUpgradeHints(projectRoot: string, speccoreDir: string): Promise<void> {
-  const { version } = require('../../package.json');
   const versionFile = join(speccoreDir, 'local', 'last-init-version.txt');
   let lastVersion = '';
   try { lastVersion = await readFile(versionFile, 'utf-8').then(v => v.trim()); } catch {}
@@ -1606,8 +1839,8 @@ export async function checkUpgradeHints(projectRoot: string, speccoreDir: string
   }
 
   // 版本跳跃提示 — 列出自动更新了的文件
-  if (lastVersion && lastVersion !== version) {
-    logger.info(`📋 已自动更新的文件 (${lastVersion} → ${version}):`);
+  if (lastVersion && lastVersion !== PKG_VERSION) {
+    logger.info(`📋 已自动更新的文件 (${lastVersion} → ${PKG_VERSION}):`);
     logger.info('   ✅ AI-RULES.md — 命令参考表');
     logger.info('   ✅ AGENTS.md — 项目规则');
     logger.info('   ✅ .speccore/AGENTS/ — 规范数据库（v6.84.0+）');
@@ -1617,7 +1850,7 @@ export async function checkUpgradeHints(projectRoot: string, speccoreDir: string
     logger.info('');
   }
 
-  await writeFile(versionFile, version);
+  await writeFile(versionFile, PKG_VERSION);
 }
 
 

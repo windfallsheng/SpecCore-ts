@@ -56,8 +56,11 @@ export interface LlmProviderConfig {
 export const DEFAULT_ASK_CONFIG: AskConfig = {
   routing: {
     mode: 'hybrid',
-    highThreshold: 70,
-    lowThreshold: 45,
+    // v6.97.0+ 修复：提高 highThreshold 到 85，避免模糊意图直接执行
+    // 只有非常明确的意图（如"查看dashboard"）才直接执行
+    highThreshold: 85,
+    // v6.97.0+ 修复：降低 lowThreshold 到 40，让更多意图进入确认模式而非直接拒绝
+    lowThreshold: 40,
     autoHostAi: true,
     cacheEnabled: true,
     cacheMinHits: 3,

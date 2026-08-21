@@ -221,15 +221,24 @@ function normalizeRuleValue(ruleName: string, value: string): string {
 // ============================================================
 // TECH_STACK.md 技术栈写入
 // ============================================================
-const TECH_STACK_PATH = '.speccore/GLOBAL/TECH_STACK.md';
+// v6.98.0+: 全局技术文档统一放在 global/ 子目录下
+const TECH_STACK_PATH_NEW = '.speccore/GLOBAL/global/TECH_STACK.md';
+const TECH_STACK_PATH_LEGACY = '.speccore/GLOBAL/TECH_STACK.md';
+
+async function resolveTechStackPath(): Promise<string | null> {
+  if (await pathExists(TECH_STACK_PATH_NEW)) return TECH_STACK_PATH_NEW;
+  if (await pathExists(TECH_STACK_PATH_LEGACY)) return TECH_STACK_PATH_LEGACY;
+  return null;
+}
 
 async function setTechStack(target: string, value: string): Promise<void> {
-  if (!(await pathExists(TECH_STACK_PATH))) {
+  const techStackPath = await resolveTechStackPath();
+  if (!techStackPath) {
     logger.error('TECH_STACK.md 不存在，请先运行 speccore init');
     return;
   }
 
-  let content = await readFile(TECH_STACK_PATH, 'utf-8');
+  let content = await readFile(techStackPath, 'utf-8');
   const tag = `tech-stack: ${target}`;
   const entry = `<!-- ${tag} -->\n- ${value}\n<!-- /tech-stack -->`;
   const regex = new RegExp(`<!--\\s*${tag}\\s*-->[\\s\\S]*?<!--\\s*/tech-stack\\s*-->`, 'i');
@@ -241,7 +250,8 @@ async function setTechStack(target: string, value: string): Promise<void> {
     logger.warn(`未找到 tech-stack: ${target} 区块，请在 TECH_STACK.md 中手动添加`);
   }
 
-  await writeFile(TECH_STACK_PATH, content);
+  // 始终写入新路径
+  await writeFile(TECH_STACK_PATH_NEW, content);
   logger.info(`  ${target}: ${value}`);
   logger.info('  💡 下次 speccore execute 将显示此技术栈');
 }

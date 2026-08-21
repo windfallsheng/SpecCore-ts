@@ -109,6 +109,12 @@ export interface AnalyzeOptions {
 }
 
 export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
+  // v6.97.0+ 修复：全局分析时统一设置 iteration 为 'GLOBAL'，避免任何 fallback 到 getDefaultIteration()
+  // 这是根治方案：后面所有 "options.iteration || await getDefaultIteration()" 都会命中 options.iteration
+  if (options.scope === 'global' && !options.iteration) {
+    options.iteration = 'GLOBAL';
+  }
+
   // ── --full / --phase 模式: 委托给 synthesizeCommand（原 synthesize 命令） ──
   if (options.full || options.phase) {
     const { synthesizeCommand } = await import('./synthesize');
@@ -409,7 +415,10 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
   }
 
   // 命令前索引新鲜度检查（非阻塞）
-  await warnIfIndexStale(process.cwd(), 'analyze', options.iteration);
+  // v6.97.0+ 修复：全局分析时不检查迭代级索引，避免误导用户
+  if (options.scope !== 'global') {
+    await warnIfIndexStale(process.cwd(), 'analyze', options.iteration);
+  }
 
   // 备份追踪
   const backups: string[] = [];
@@ -548,13 +557,17 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     if (options.scope === 'global') {
       // 全局分析：预创建 .speccore/GLOBAL/ 目录结构，不写迭代目录
       // v6.81.0+: 需求文档单独放在 requirements/ 下，技术文档放在 platforms/ 下
+      // v6.98.0+: 全局技术文档统一放在 global/ 子目录下，不与 platforms/requirements 平级
       const globalDir = join(process.cwd(), '.speccore', 'GLOBAL');
       await ensureDir(globalDir);
+      await ensureDir(join(globalDir, 'global'));
       await ensureDir(join(globalDir, 'platforms'));
       await ensureDir(join(globalDir, 'requirements'));
       await ensureDir(join(globalDir, 'requirements', 'images'));
       await ensureDir(join(globalDir, 'requirements', 'prototypes'));
-      logger.info(`📁 已预创建 .speccore/GLOBAL/ 目录结构（requirements/ + platforms/）`);
+      // v7.0.0+: 图表可视化目录
+      await ensureDir(join(globalDir, 'diagrams'));
+      logger.info(`📁 已预创建 .speccore/GLOBAL/ 目录结构（global/ + platforms/ + requirements/ + diagrams/）`);
     } else {
       const iterForDirs = options.iteration || await getDefaultIteration();
       if (iterForDirs) {
@@ -838,10 +851,12 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
               targetDir = join(globalBaseDir, 'requirements');
               targetFilename = filename;
             } else if (globalSet.has(filename)) {
-              targetDir = globalBaseDir;
+              // v6.98.0+: 全局技术文档统一放入 global/ 子目录
+              targetDir = join(globalBaseDir, 'global');
               targetFilename = filename;
             } else {
-              targetDir = globalBaseDir;
+              // v6.98.0+: 未知文件也归入 global/ 子目录，避免与 platforms/requirements 平级
+              targetDir = join(globalBaseDir, 'global');
               targetFilename = filename;
             }
 
@@ -1220,7 +1235,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 
   // ── Prompt 模式 ──
   if (options.prompt) {
-    const iter = options.iteration || await getDefaultIteration();
+    // v6.97.0+ 修复：全局分析时不应 fallback 到当前迭代
+    const iter = options.scope === 'global' ? 'GLOBAL' : (options.iteration || await getDefaultIteration());
     const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task, type: options.type, scope: options.scope, withCode: options.withCode, platform: options.platform, phase: options.phase, autoMode: options.auto }, options);
     process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
     process.exitCode = 10;
@@ -1755,6 +1771,49 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `| 性能 | 搜索性能相关代码（懒加载/虚拟滚动/缓存/预加载） | 优化手段、适用场景 |\n\n`;
       prompt += `**输出**：每个端一个 \`_INDEX.md\`，按上述维度组织，只含名称和路径列表，不含详细逻辑\n`;
       prompt += `**存放**：\`.speccore/GLOBAL/platforms/{端名}/_INDEX.md\`\n\n`;
+      prompt += `### Layer 1 附加任务：提取可复用模式（PATTERNS）\n`;
+      prompt += `在扫描每个端时，同时识别该端的可复用设计模式，写入 \`.speccore/PATTERNS/\`。这是跨迭代复用的核心资产。\n\n`;
+      prompt += `**后端端模式提取维度（6类）**：\n`;
+      prompt += `| 模式类型 | 扫描位置 | 提取内容 | 存放路径 |\n`;
+      prompt += `| :--- | :--- | :--- | :--- |\n`;
+      prompt += `| 架构模式 | 项目结构、模块划分 | 分层架构、目录约定、模块组织方式 | \`PATTERNS/{端名}/architecture/\` |\n`;
+      prompt += `| 数据模型模式 | Entity/Model/Schema | 通用字段设计（软删除、多租户、审计字段）、关联模式 | \`PATTERNS/{端名}/data-model/\` |\n`;
+      prompt += `| API 契约模式 | Controller/Handler | 统一响应格式、分页模式、错误包装、鉴权装饰器 | \`PATTERNS/{端名}/api-contract/\` |\n`;
+      prompt += `| 安全模式 | 鉴权/校验/加密代码 | JWT/RBAC 实现、输入校验策略、敏感数据处理 | \`PATTERNS/{端名}/security/\` |\n`;
+      prompt += `| 性能模式 | 缓存/批量/异步代码 | 缓存策略、批量查询、异步处理、连接池配置 | \`PATTERNS/{端名}/performance/\` |\n`;
+      prompt += `| 工具/中间件 | utils/middleware 目录 | 可复用的工具函数、通用中间件、拦截器 | \`PATTERNS/{端名}/utils/\` |\n`;
+      prompt += `**前端端模式提取维度（6类）**：\n`;
+      prompt += `| 模式类型 | 扫描位置 | 提取内容 | 存放路径 |\n`;
+      prompt += `| :--- | :--- | :--- | :--- |\n`;
+      prompt += `| 组件模式 | components/ui 目录 | 高复用组件、复合组件、设计 token 使用 | \`PATTERNS/{端名}/components/\` |\n`;
+      prompt += `| Hooks 模式 | hooks/composables 目录 | 可复用逻辑抽离、状态封装、生命周期管理 | \`PATTERNS/{端名}/hooks/\` |\n`;
+      prompt += `| 状态管理模式 | store/pinia/vuex/redux | 状态切片设计、actions 组织、持久化策略 | \`PATTERNS/{端名}/state/\` |\n`;
+      prompt += `| 路由/导航模式 | router/routes 配置 | 路由守卫、权限路由、动态路由、面包屑 | \`PATTERNS/{端名}/routing/\` |\n`;
+      prompt += `| 请求/拦截模式 | API 调用封装 | 请求封装、错误处理、重试策略、缓存策略 | \`PATTERNS/{端名}/api-client/\` |\n`;
+      prompt += `| 布局/样式模式 | layouts/themes 目录 | 布局组件、响应式策略、主题切换、CSS 架构 | \`PATTERNS/{端名}/layout/\` |\n`;
+      prompt += `**跨端通用模式**：如果某模式在 2+ 端出现，优先写入通用分类（如 \`PATTERNS/architecture/\`），端差异用段落标注。\n`;
+      prompt += `**写入方式**：使用 \`PATTERNS/{端名}/{分类}/{kebab-case模式名}.md\` 作为文件名。\n\n`;
+      prompt += `### Layer 1 附加任务：提取语义级节点标签（SEMANTIC TAGS）\n`;
+      prompt += `在扫描每个端时，同时提取语义标签，写入 \`.speccore/cache/semantic-tags.json\`。这是知识图谱理解代码意图的关键资产。\n\n`;
+      prompt += `**提取规则（本地解析，零 Token 消耗）**：\n`;
+      prompt += `| 提取源 | 提取内容 | 示例 |\n`;
+      prompt += `| :--- | :--- | :--- |\n`;
+      prompt += `| JSDoc/TSDoc 注释 | 函数/类的 @description、@summary | \`用户认证入口，处理登录/注册/登出\` |\n`;
+      prompt += `| 文件头注释 | 文件顶部的多行注释 | \`会议室预订服务的核心业务逻辑层\` |\n`;
+      prompt += `| 文件名推断 | 文件名关键词映射到业务域 | auth → 认证授权, order → 订单交易 |\n`;
+      prompt += `| 导出名称推断 | 类名后缀推断角色 | XxxController → 接口控制器, XxxService → 业务服务 |\n`;
+      prompt += `| 目录结构推断 | 文件所在目录映射到模块 | src/user/ → 用户管理, src/order/ → 订单交易 |\n\n`;
+      prompt += `**输出格式**：JSON 数组，每个文件一条记录\n`;
+      prompt += `\`\`\`json\n`;
+      prompt += `[\n`;
+      prompt += `  {\n`;
+      prompt += `    "file": "backend/src/auth/AuthController.ts",\n`;
+      prompt += `    "semanticTags": ["认证授权", "用户管理"],\n`;
+      prompt += `    "description": "用户认证控制器，处理登录/注册/Token刷新",\n`;
+      prompt += `    "businessRole": "接口控制器"\n`;
+      prompt += `  }\n`;
+      prompt += `]\n`;
+      prompt += `\`\`\`\n\n`;
       prompt += `## 🔗 Layer 2: 跨端关联分析（基于 Layer 1 的索引）\n\n`;
       prompt += `1. **匹配前后端接口**：\n`;
       prompt += `   - 前端 \`_INDEX.md\` 中的 API 调用路径 vs 后端 \`_INDEX.md\` 中的接口路径\n`;
@@ -1789,7 +1848,10 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `   - 每个功能模块标注：涉及端、核心页面、核心接口、实体名称、消息队列\n\n`;
       prompt += `**输出**：\n`;
       prompt += `- \`_ASSOCIATION.md\`：前后端关联矩阵 + 接口缺口/未使用接口清单 + 消息流链路 + 定时任务影响 + 外部集成分布 + 配置一致性风险\n`;
+      prompt += `  - 此文档中必须包含 **模块关系 Mermaid 图**（graph LR），展示各功能模块间的依赖关系\n`;
+      prompt += `  - 此文档中必须包含 **接口依赖 Mermaid 图**（graph TD），展示前端页面 → 后端接口的调用关系\n`;
       prompt += `- \`_MODULES.md\`：功能模块候选清单（从源码聚类，含消息/定时任务维度，供 Layer 3 验证）\n`;
+      prompt += `  - 此文档中必须包含 **模块全景 Mermaid 图**（graph LR），展示所有功能模块及其所属端\n`;
       prompt += `**存放**：\`.speccore/GLOBAL/platforms/_shared/\`\n\n`;
       prompt += `## 🔍 Layer 3: 按功能模块深入分析（不是按端）\n\n`;
       prompt += `基于 Layer 2 的 \`_MODULES.md\`，逐个功能模块深入分析。\n`;
@@ -1805,7 +1867,29 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `- 后端端：该功能模块相关的 API 详细设计、数据模型、业务规则、安全策略\n`;
       prompt += `- 前端端：该功能模块相关的页面详细设计、交互流程、字段映射、错误处理\n`;
       prompt += `- 跨端：该功能模块的交互时序图（含异步消息链路，供 Layer 4 汇总到 INTERACTION_MAP.md）\n`;
+      prompt += `  - 时序图用 **Mermaid sequenceDiagram** 语法嵌入到分析文档中\n`;
+      prompt += `  - 关键操作流程用 **Mermaid flowchart** 语法嵌入到分析文档中\n`;
+      prompt += `  - 状态流转用 **Mermaid stateDiagram** 语法嵌入到分析文档中\n`;
       prompt += `- 跨端：该功能模块涉及的外部集成清单（第三方 API、消息队列、定时任务）\n\n`;
+      prompt += `### Layer 3 附加任务：功能模块级模式提取（PATTERNS）\n`;
+      prompt += `每个功能模块分析完成后，提取该模块的可复用模式，补充到 \`.speccore/PATTERNS/\`。\n\n`;
+      prompt += `**提取维度**：\n`;
+      prompt += `- **跨端交互模式**：该模块的前后端交互方式是否有代表性（如表单提交+乐观更新、轮询刷新、WebSocket 实时推送）\n`;
+      prompt += `- **业务规则模式**：该模块的业务规则是否有通用性（如审批流程、库存扣减、权限校验）\n`;
+      prompt += `- **数据流模式**：该模块的数据流转是否有代表性（如缓存更新策略、数据同步机制、离线优先）\n`;
+      prompt += `- **UI 交互模式**：该模块的页面交互是否有复用价值（如列表筛选、表单校验、弹窗确认、拖拽排序）\n`;
+      prompt += `- **错误处理模式**：该模块的错误场景处理是否有代表性（如网络失败重试、权限不足提示、数据冲突解决）\n\n`;
+      prompt += `**存放规则**：\n`;
+      prompt += `- 单端模式 → \`PATTERNS/{端名}/{分类}/{模块名}-{模式类型}.md\`\n`;
+      prompt += `- 跨端模式 → \`PATTERNS/{分类}/{模块名}-{模式类型}.md\`（不绑定端）\n`;
+      prompt += `- 示例：\`PATTERNS/h5-mobile/components/booking-form-validation.md\`、\`PATTERNS/architecture/optimistic-update-pattern.md\`\n\n`;
+      prompt += `### Layer 3 附加任务：功能模块语义标注\n`;
+      prompt += `每个功能模块分析完成后，为该模块涉及的核心代码文件生成语义标注，追加到 \`semantic-tags.json\`。\n\n`;
+      prompt += `**标注维度**：\n`;
+      prompt += `- **业务功能标签**：该文件在功能模块中承担什么职责（如「表单提交校验」、「状态机驱动」、「数据持久化」）\n`;
+      prompt += `- **交互角色标签**：该文件在跨端交互中扮演什么角色（如「请求发起者」、「事件生产者」、「状态同步者」）\n`;
+      prompt += `- **数据流标签**：该文件处理的数据类型（如「用户输入数据」、「配置数据」、「缓存数据」、「消息事件」）\n`;
+      prompt += `- **质量标签**：该文件的代码特征（如「高复用」、「核心业务」、「边界处理」、「性能敏感」）\n\n`;
       prompt += `## 🌍 Layer 4: 全局汇总（所有功能模块分析完成后）\n\n`;
       prompt += `1. **一致性校验**：\n`;
       prompt += `   - 前端字段 vs 后端字段是否一致（名称、类型、必填性、校验规则）\n`;
@@ -1815,23 +1899,42 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `   - 消息孤儿清单（无消费者/无生产者的队列）\n`;
       prompt += `   - 配置不一致清单（超时/重试/限流各端差异）\n`;
       prompt += `   → 输出 \`CONSISTENCY_CHECK.md\`\n\n`;
-      prompt += `2. **生成全局文档**（按视角分离存放，v6.81.0+）：\n`;
-      prompt += `   **产品视角 → 存放到 .speccore/GLOBAL/requirements/：**\n`;
-      prompt += `   - \`requirements/REQUIREMENT.md\`：全局功能清单（按业务场景组织，产品视角）\n`;
-      prompt += `   - \`requirements/{前端端}/REQUIREMENT.md\`：各前端端的产品视角需求（页面+交互+用户旅程）\n`;
+      prompt += `2. **生成全局文档**（按视角分离存放，v6.98.0+）：\n`;
+      prompt += `   **产品视角 → 存放到 .speccore/GLOBAL/requirements/（以专业产品角色撰写，v6.99.0+）：**\n`;
+      prompt += `   - \`requirements/REQUIREMENT.md\`：全局需求总纲（产品总监视角，按业务场景/用户旅程组织）\n`;
+      prompt += `     - 必须包含：产品愿景、目标用户画像、核心场景地图、功能全景图\n`;
+      prompt += `     - 按业务场景组织章节，每个场景：用户故事 → 操作流程 → 业务规则 → 边界条件 → 验收标准\n`;
+      prompt += `     - 包含功能优先级矩阵（P0/P1/P2）、发布里程碑、风险预判\n`;
+      prompt += `     - 包含与竞品的差异化分析（如有）、数据埋点需求、运营需求\n`;
+      prompt += `     - 不要写技术实现细节，不要按端分章节\n`;
+      prompt += `   - \`requirements/{前端端}/REQUIREMENT.md\`：各前端端的产品视角需求（前端产品经理视角）\n`;
       prompt += `     - 前端端示例: requirements/admin-web/REQUIREMENT.md, requirements/h5-mobile/REQUIREMENT.md\n`;
-      prompt += `     - 每个前端端需求目录下可放 images/（截图/流程图）和 prototypes/（原型文件）\n`;
-      prompt += `   **技术视角 → 存放到 .speccore/GLOBAL/ 根目录：**\n`;
-      prompt += `   - \`FUNCTION_MAP.md\`：功能单元 × 端映射表\n`;
-      prompt += `   - \`INTERACTION_MAP.md\`：跨端交互时序图（含同步 API + 异步消息，从 Layer 3 汇总）\n`;
-      prompt += `   - \`API_CONTRACT.yaml\`：全局接口契约（汇总所有后端 API_INVENTORY，含 rate limit、幂等性、版本策略）\n`;
-      prompt += `   - \`ARCHITECTURE.md\`：全局架构文档（服务拓扑、数据流、部署关系、容错设计、降级策略、扩容方案）\n`;
-      prompt += `   - \`SECURITY_AUDIT.md\`：全局安全审计（鉴权策略矩阵、敏感数据流、攻击面分析、CVE 清单、合规检查）\n`;
-      prompt += `   - \`PERFORMANCE_BASELINE.md\`：性能基线（慢查询清单、缓存策略矩阵、并发承载评估、关键路径耗时）\n`;
-      prompt += `   - \`DATA_FLOW.md\`：数据流与隐私分析（PII 识别与追踪、数据生命周期、存储/传输/归档策略、GDPR 合规检查）\n`;
-      prompt += `   - \`EXTERNAL_INTEGRATIONS.md\`：外部集成审计（第三方服务清单、SDK 版本与风险、Webhook 接收分布、重复集成识别）\n`;
-      prompt += `   - \`DEPLOYMENT.md\`：部署运维分析（容器化状态、CI/CD 流水线、健康检查端点、环境配置差异、日志聚合方案）\n`;
-      prompt += `   - \`OBSERVABILITY.md\`：可观测性分析（日志链路追踪、错误码体系、监控埋点清单、告警策略、SLA 定义）\n\n`;
+      prompt += `     - **信息架构**：页面层级结构、导航关系、面包屑、路由映射\n`;
+      prompt += `     - **用户旅程**：从入口到完成目标的完整流程，标注关键决策点、情绪曲线\n`;
+      prompt += `     - **页面清单**：每页含页面名称、URL/路由、核心功能、进入条件、离开条件\n`;
+      prompt += `     - **交互设计**：表单填写流程、列表操作、搜索筛选、分页/无限滚动、弹窗/抽屉\n`;
+      prompt += `     - **状态与反馈**：加载状态、空状态、错误状态、成功反馈、操作确认\n`;
+      prompt += `     - **权限与角色**：各角色可见页面/可操作按钮/数据范围\n`;
+      prompt += `     - **响应式/适配策略**：不同设备尺寸下的布局变化、断点设计\n`;
+      prompt += `     - **无障碍要求**：键盘导航、屏幕阅读器、色彩对比度（如有要求）\n`;
+      prompt += `     - 每个前端端需求目录下可放 images/（截图/流程图/原型图）和 prototypes/（可交互原型文件）\n`;
+      prompt += `   **技术视角 → 存放到 .speccore/GLOBAL/global/（不与 platforms/requirements 平级）：**\n`;
+      prompt += `   - \`global/FUNCTION_MAP.md\`：功能单元 × 端映射表\n`;
+      prompt += `   - \`global/INTERACTION_MAP.md\`：跨端交互时序图（含同步 API + 异步消息，从 Layer 3 汇总）\n`;
+      prompt += `     - 必须包含 **Mermaid sequenceDiagram**，展示各端之间的核心交互时序\n`;
+      prompt += `   - \`global/API_CONTRACT.yaml\`：全局接口契约（汇总所有后端 API_INVENTORY，含 rate limit、幂等性、版本策略）\n`;
+      prompt += `   - \`global/ARCHITECTURE.md\`：全局架构文档（服务拓扑、数据流、部署关系、容错设计、降级策略、扩容方案）\n`;
+      prompt += `     - 必须包含 **Mermaid architecture diagram**（graph TB），展示服务拓扑和部署关系\n`;
+      prompt += `     - 必须包含 **Mermaid graph LR**，展示模块间的依赖关系\n`;
+      prompt += `   - \`global/SECURITY_AUDIT.md\`：全局安全审计（鉴权策略矩阵、敏感数据流、攻击面分析、CVE 清单、合规检查）\n`;
+      prompt += `   - \`global/PERFORMANCE_BASELINE.md\`：性能基线（慢查询清单、缓存策略矩阵、并发承载评估、关键路径耗时）\n`;
+      prompt += `   - \`global/DATA_FLOW.md\`：数据流与隐私分析（PII 识别与追踪、数据生命周期、存储/传输/归档策略、GDPR 合规检查）\n`;
+      prompt += `     - 必须包含 **Mermaid flowchart**，展示数据从产生到销毁的完整生命周期\n`;
+      prompt += `   - \`global/EXTERNAL_INTEGRATIONS.md\`：外部集成审计（第三方服务清单、SDK 版本与风险、Webhook 接收分布、重复集成识别）\n`;
+      prompt += `   - \`global/DEPLOYMENT.md\`：部署运维分析（容器化状态、CI/CD 流水线、健康检查端点、环境配置差异、日志聚合方案）\n`;
+      prompt += `     - 必须包含 **Mermaid flowchart**，展示 CI/CD 流水线流程\n`;
+      prompt += `   - \`global/OBSERVABILITY.md\`：可观测性分析（日志链路追踪、错误码体系、监控埋点清单、告警策略、SLA 定义）\n`;
+      prompt += `   - \`global/CONSISTENCY_CHECK.md\`：一致性校验报告（字段/状态/接口/消息/配置）\n\n`;
       prompt += `3. **生成各端详细文档**（技术视角，从 Layer 3 汇总）：\n`;
       prompt += `   > 存放: .speccore/GLOBAL/platforms/{端名}/\n`;
       prompt += `   **后端端（9项）**：\n`;
@@ -1918,6 +2021,43 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `   - 文件已存在 → 读取旧内容 → 在末尾追加新发现的变体（用 \`---\` 分隔）\n`;
       prompt += `   - 文件不存在 → 直接 Write 新文件\n\n`;
       prompt += `5. 以上文档输出到 .speccore/GLOBAL/ 和 .speccore/PATTERNS/，使用 Write 工具写入\n`;
+      prompt += `\n`;
+      prompt += `## 📊 图表生成规范（v7.0.0+）\n`;
+      prompt += `全局分析必须生成丰富的可视化图表，帮助开发者直观理解系统结构和数据流。\n\n`;
+      prompt += `### Mermaid 图表语法要求\n`;
+      prompt += `所有图表使用标准 Mermaid 语法，嵌入到对应 Markdown 文档的代码块中：\n`;
+      prompt += `\`\`\`mermaid\n`;
+      prompt += `graph LR\n`;
+      prompt += `    A[前端页面] -->|调用| B[后端接口]\n`;
+      prompt += `    B --> C[数据库]\n`;
+      prompt += `\`\`\`\n\n`;
+      prompt += `### 各层级必须生成的图表\n`;
+      prompt += `| 层级 | 文档 | 图表类型 | Mermaid 语法 | 内容 |\n`;
+      prompt += `| :--- | :--- | :--- | :--- | :--- |\n`;
+      prompt += `| Layer 2 | _ASSOCIATION.md | 模块关系图 | graph LR / graph TD | 功能模块间的依赖关系、接口调用链路 |\n`;
+      prompt += `| Layer 2 | _MODULES.md | 模块全景图 | graph LR | 所有功能模块及所属端 |\n`;
+      prompt += `| Layer 3 | 功能模块文档 | 时序图 | sequenceDiagram | 跨端交互时序（请求→处理→响应→推送） |\n`;
+      prompt += `| Layer 3 | 功能模块文档 | 流程图 | flowchart TD | 关键业务流程（如下单、审批、支付） |\n`;
+      prompt += `| Layer 3 | 功能模块文档 | 状态图 | stateDiagram-v2 | 实体状态流转（如订单状态机） |\n`;
+      prompt += `| Layer 4 | INTERACTION_MAP.md | 交互时序图 | sequenceDiagram | 全系统核心跨端交互时序 |\n`;
+      prompt += `| Layer 4 | ARCHITECTURE.md | 架构拓扑图 | graph TB | 服务拓扑、部署关系 |\n`;
+      prompt += `| Layer 4 | ARCHITECTURE.md | 依赖关系图 | graph LR | 模块间依赖关系 |\n`;
+      prompt += `| Layer 4 | DATA_FLOW.md | 数据流图 | flowchart LR | 数据生命周期（产生→传输→存储→归档→销毁） |\n`;
+      prompt += `| Layer 4 | DEPLOYMENT.md | CI/CD 流程图 | flowchart LR | 从代码提交到部署的完整流水线 |\n\n`;
+      prompt += `### 图表质量要求\n`;
+      prompt += `- **节点命名**：使用中文或业务术语，不要使用文件名或类名\n`;
+      prompt += `- **边标注**：标注调用关系（如「调用」、「依赖」、「推送」、「订阅」）\n`;
+      prompt += `- **颜色区分**：用不同颜色区分端（前端=blue, 后端=green, 数据库=gray, 第三方=orange）\n`;
+      prompt += `- **层次清晰**：从上到下或从左到右按逻辑层次排列，避免交叉线过多\n`;
+      prompt += `- **聚焦核心**：不要试图把所有细节放进一张图，核心业务路径优先\n\n`;
+      prompt += `### 独立图表文件（可选但推荐）\n`;
+      prompt += `对于特别复杂的图表，除了嵌入文档外，还可以生成独立的 .mmd 文件到 \`diagrams/\` 目录：\n`;
+      prompt += `- \`diagrams/module-relationship.mmd\`：模块关系图（从 _ASSOCIATION.md 提取）\n`;
+      prompt += `- \`diagrams/architecture.mmd\`：架构拓扑图（从 ARCHITECTURE.md 提取）\n`;
+      prompt += `- \`diagrams/data-flow.mmd\`：数据流图（从 DATA_FLOW.md 提取）\n`;
+      prompt += `- \`diagrams/{模块名}-sequence.mmd\`：核心模块时序图\n`;
+      prompt += `- \`diagrams/{模块名}-flow.mmd\`：核心模块流程图\n`;
+      prompt += `独立 .mmd 文件只包含 Mermaid 代码（无 Markdown 包装），便于后续渲染为 HTML/PNG。\n`;
     } else {
       prompt += `4. 读取 .speccore/GLOBAL/ 下各项目需求文档，生成跨项目索引和需求目录\n`;
     }
@@ -1930,27 +2070,27 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `| _INDEX.md | Layer 1 | platforms/{端}/ | 各端全面索引（10维度扫描：接口/数据/业务/中间件/消息/定时/配置/外部/日志/错误） |\n`;
       prompt += `| _ASSOCIATION.md | Layer 2 | platforms/_shared/ | 前后端关联矩阵 + 接口缺口 + 消息流链路 + 定时任务影响 + 外部集成分布 + 配置一致性风险 |\n`;
       prompt += `| _MODULES.md | Layer 2 | platforms/_shared/ | 功能模块候选清单（含页面/接口/消息三维聚类） |\n`;
-      prompt += `\n### 需求文档（产品视角，v6.81.0+）\n`;
+      prompt += `\n### 需求文档（产品视角，v6.99.0+）\n`;
       prompt += `> 存放: .speccore/GLOBAL/requirements/（含 images/ prototypes/ 子目录）\n\n`;
       prompt += `| 文档 | 视角 | 内容 |\n`;
       prompt += `| :--- | :--- | :--- |\n`;
-      prompt += `| requirements/REQUIREMENT.md | 全局产品视角 | 全局功能清单（按业务场景组织，从功能模块汇总） |\n`;
-      prompt += `| requirements/{前端端}/REQUIREMENT.md | 前端产品视角 | 各前端端的需求（页面+交互+用户旅程+原型占位） |\n`;
-      prompt += `\n### 全局技术性文档（Layer 4 汇总生成，v6.82.0+）\n`;
-      prompt += `> 存放: .speccore/GLOBAL/ 根目录\n\n`;
+      prompt += `| requirements/REQUIREMENT.md | 产品总监视角 | 需求总纲：愿景、用户画像、场景地图、功能全景、优先级矩阵、里程碑、风险预判 |\n`;
+      prompt += `| requirements/{前端端}/REQUIREMENT.md | 前端产品经理视角 | 信息架构、用户旅程、页面清单、交互设计、状态反馈、权限角色、响应式策略 |\n`;
+      prompt += `\n### 全局技术性文档（Layer 4 汇总生成，v6.98.0+）\n`;
+      prompt += `> 存放: .speccore/GLOBAL/global/（不与 platforms/requirements 平级）\n\n`;
       prompt += `| 文档 | 视角 | 内容 |\n`;
       prompt += `| :--- | :--- | :--- |\n`;
-      prompt += `| FUNCTION_MAP.md | 架构视角 | 功能单元 × 端映射表 |\n`;
-      prompt += `| INTERACTION_MAP.md | 架构视角 | 跨端交互时序图（同步 API + 异步消息） |\n`;
-      prompt += `| API_CONTRACT.yaml | 技术视角 | 全局接口契约（含 rate limit、幂等性、版本策略、废弃标记） |\n`;
-      prompt += `| ARCHITECTURE.md | 技术视角 | 全局架构（服务拓扑、数据流、部署关系、容错、降级、扩容） |\n`;
-      prompt += `| SECURITY_AUDIT.md | 安全视角 | 鉴权矩阵、敏感数据流、攻击面、CVE 清单、合规检查 |\n`;
-      prompt += `| PERFORMANCE_BASELINE.md | 性能视角 | 慢查询清单、缓存策略矩阵、并发承载、关键路径耗时 |\n`;
-      prompt += `| DATA_FLOW.md | 数据视角 | PII 识别追踪、数据生命周期、存储/传输/归档、GDPR 合规 |\n`;
-      prompt += `| EXTERNAL_INTEGRATIONS.md | 集成视角 | 第三方服务清单、SDK 风险、Webhook 分布、重复集成识别 |\n`;
-      prompt += `| DEPLOYMENT.md | 运维视角 | 容器化、CI/CD、健康检查、环境差异、日志聚合 |\n`;
-      prompt += `| OBSERVABILITY.md | 可观测视角 | 日志链路、错误码体系、监控埋点、告警策略、SLA |\n`;
-      prompt += `| CONSISTENCY_CHECK.md | 质量视角 | 一致性校验报告（字段/状态/接口/消息/配置） |\n`;
+      prompt += `| global/FUNCTION_MAP.md | 架构视角 | 功能单元 × 端映射表 |\n`;
+      prompt += `| global/INTERACTION_MAP.md | 架构视角 | 跨端交互时序图（同步 API + 异步消息） |\n`;
+      prompt += `| global/API_CONTRACT.yaml | 技术视角 | 全局接口契约（含 rate limit、幂等性、版本策略、废弃标记） |\n`;
+      prompt += `| global/ARCHITECTURE.md | 技术视角 | 全局架构（服务拓扑、数据流、部署关系、容错、降级、扩容） |\n`;
+      prompt += `| global/SECURITY_AUDIT.md | 安全视角 | 鉴权矩阵、敏感数据流、攻击面、CVE 清单、合规检查 |\n`;
+      prompt += `| global/PERFORMANCE_BASELINE.md | 性能视角 | 慢查询清单、缓存策略矩阵、并发承载、关键路径耗时 |\n`;
+      prompt += `| global/DATA_FLOW.md | 数据视角 | PII 识别追踪、数据生命周期、存储/传输/归档、GDPR 合规 |\n`;
+      prompt += `| global/EXTERNAL_INTEGRATIONS.md | 集成视角 | 第三方服务清单、SDK 风险、Webhook 分布、重复集成识别 |\n`;
+      prompt += `| global/DEPLOYMENT.md | 运维视角 | 容器化、CI/CD、健康检查、环境差异、日志聚合 |\n`;
+      prompt += `| global/OBSERVABILITY.md | 可观测视角 | 日志链路、错误码体系、监控埋点、告警策略、SLA |\n`;
+      prompt += `| global/CONSISTENCY_CHECK.md | 质量视角 | 一致性校验报告（字段/状态/接口/消息/配置） |\n`;
       prompt += `\n### 后端端技术性文档（9项，Layer 3/4 汇总）\n`;
       prompt += `> 存放: .speccore/GLOBAL/platforms/{后端端名}/\n\n`;
       prompt += `| 文档 | 内容 |\n`;
@@ -2565,9 +2705,9 @@ sequenceDiagram
     prompt += `2. 读取全局层产物（建立全局视角，重要）\n`;
     prompt += `   在读取迭代需求之前，先 Read 全局层已有产物，了解系统当前状态：\n`;
     prompt += `   a. Read .speccore/GLOBAL/requirements/REQUIREMENT.md → 系统已有功能清单\n`;
-    prompt += `   b. Read .speccore/GLOBAL/FUNCTION_MAP.md → 已有功能单元和涉及端\n`;
-    prompt += `   c. Read .speccore/GLOBAL/API_CONTRACT.yaml → 已有接口契约\n`;
-    prompt += `   d. Read .speccore/GLOBAL/ARCHITECTURE.md → 全局架构（如有）\n`;
+    prompt += `   b. Read .speccore/GLOBAL/global/FUNCTION_MAP.md → 已有功能单元和涉及端\n`;
+    prompt += `   c. Read .speccore/GLOBAL/global/API_CONTRACT.yaml → 已有接口契约\n`;
+    prompt += `   d. Read .speccore/GLOBAL/global/ARCHITECTURE.md → 全局架构（如有）\n`;
     prompt += `   e. Read .speccore/GLOBAL/platforms/{相关端}/_INDEX.md → 各端已有页面和接口索引\n`;
     prompt += `   f. Read .speccore/GLOBAL/platforms/_shared/_ASSOCIATION.md → 前后端关联矩阵（如有）\n`;
     prompt += `   g. Read .speccore/GLOBAL/platforms/_shared/_MODULES.md → 功能模块候选（如有）\n`;
@@ -2595,9 +2735,18 @@ sequenceDiagram
     prompt += `   - 第 4 步：如果以上都无法确定，根据需求文档内容判断\n`;
     prompt += `   - 第 5 步：将发现的端列表写入 020-specs/PLATFORMS.md\n`;
     // v6.70.0+: REQUIREMENT.md 以产品视角撰写（不按端分章节）
+    // v6.99.0+: 丰富需求文档章节要求
     prompt += `8. **REQUIREMENT.md 写作风格（重要）**：全局需求文档必须以产品/用户视角撰写\n`;
     prompt += `   - **按业务场景/用户旅程组织章节**，不按端分章节（如"H5端需求"、"后端需求"）\n`;
-    prompt += `   - 每个场景描述：用户操作 → 系统响应 → 业务规则 → 边界条件\n`;
+    prompt += `   - 文档结构必须包含（如需求文档中有相关信息）：\n`;
+    prompt += `     - **产品愿景**：本迭代要解决的核心问题和目标价值（1-2段）\n`;
+    prompt += `     - **目标用户画像**：主要用户角色、使用场景、痛点（如有）\n`;
+    prompt += `     - **核心场景地图**：按业务流程组织的场景列表，每个场景标注优先级\n`;
+    prompt += `     - **功能全景图**：所有功能模块的可视化列表（表格或脑图描述）\n`;
+    prompt += `     - **功能优先级矩阵**：P0（必须）/ P1（重要）/ P2（可选）标注\n`;
+    prompt += `     - **发布里程碑**：如有分期计划，标注各阶段交付内容\n`;
+    prompt += `     - **风险预判**：技术风险、业务风险、依赖风险（如有）\n`;
+    prompt += `   - 每个场景描述：用户操作 → 系统响应 → 业务规则 → 边界条件 → 验收标准\n`;
     prompt += `   - 系统响应中自然包含前后端交互，但不刻意标注技术实现细节\n`;
     prompt += `   - 示例正确写法：「用户选择时间段后点击预订，系统检查会议室可用性，如可用则锁定会议室并创建待支付订单」\n`;
     prompt += `   - 示例错误写法：「后端 booking-service 需要新增 /api/bookings 接口，接收 roomId 参数」\n`;
@@ -2627,7 +2776,7 @@ sequenceDiagram
     // v6.70.0+: 跨端功能映射表（FUNCTION_MAP.md）
     // v6.71.3+: 增加与全局层关联分析
     prompt += `7a. **迭代需求与全局层关联分析（重要）**：在生成功能模块清单时，必须对比全局层产物\n`;
-    prompt += `   - 对比迭代需求中的功能模块 vs .speccore/GLOBAL/FUNCTION_MAP.md 中的功能单元\n`;
+    prompt += `   - 对比迭代需求中的功能模块 vs .speccore/GLOBAL/global/FUNCTION_MAP.md 中的功能单元\n`;
     prompt += `   - 标注每个功能模块的「全局对比」类型（新增/扩展/重构/复用）\n`;
     prompt += `   - 识别冲突：如迭代需求修改了全局层已有接口的字段/路径 → 在 RISK.md 中标注\n`;
     prompt += `   - 识别依赖：如迭代的新功能依赖全局层的某个功能 → 在 FUNCTION_MAP.md「依赖任务」中标注\n\n`;

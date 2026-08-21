@@ -6,6 +6,8 @@ import { join } from 'path';
 import { pathExists, readFile, readdir, stat } from 'fs-extra';
 import { logger } from '../utils/logger';
 import { findProjectRoot } from '../utils/task-utils';
+import { checkLock } from '../core/lock-manager';
+import { getNotifications } from '../core/notification';
 
 interface DiagnosisResult {
   ok: boolean;
@@ -50,6 +52,12 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<void> 
 
   // 7. PATTERNS 格式规范
   results.push(...(await checkPatterns(projectRoot)));
+
+  // 8. v6.95.0+: 并发锁状态
+  results.push(...(await checkLocks(projectRoot)));
+
+  // 9. v6.96.0+: 通知积压
+  results.push(...(await checkNotificationBacklog(projectRoot)));
 
   // 汇总输出
   printSummary(results);
@@ -303,4 +311,47 @@ function printSummary(results: DiagnosisResult[]) {
 
 function formatTime(date: Date): string {
   return date.toISOString().slice(0, 10);
+}
+
+// v6.95.0+: 检查并发锁状态
+async function checkLocks(projectRoot: string): Promise<DiagnosisResult[]> {
+  const results: DiagnosisResult[] = [];
+  const lock = await checkLock(projectRoot, 'iteration');
+  if (lock) {
+    const ageMin = Math.round((Date.now() - new Date(lock.acquiredAt).getTime()) / 60000);
+    results.push({
+      ok: ageMin < 30,
+      category: '并发锁',
+      message: `迭代被 ${lock.holder} 锁定 (${ageMin} 分钟)`,
+      fix: ageMin >= 30 ? '锁已过期，运行 speccore doctor --fix 清理' : '等待锁持有者完成操作',
+    });
+  } else {
+    results.push({
+      ok: true,
+      category: '并发锁',
+      message: '无活跃锁',
+    });
+  }
+  return results;
+}
+
+// v6.96.0+: 检查通知积压
+async function checkNotificationBacklog(projectRoot: string): Promise<DiagnosisResult[]> {
+  const results: DiagnosisResult[] = [];
+  const unread = await getNotifications(projectRoot, { unreadOnly: true });
+  if (unread.length > 10) {
+    results.push({
+      ok: false,
+      category: '通知',
+      message: `未读通知积压: ${unread.length} 条`,
+      fix: '运行 speccore notify --all 标记已读，或逐条处理',
+    });
+  } else {
+    results.push({
+      ok: true,
+      category: '通知',
+      message: `未读通知: ${unread.length} 条`,
+    });
+  }
+  return results;
 }
