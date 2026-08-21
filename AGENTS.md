@@ -31,6 +31,7 @@ SpecCore 规范驱动开发项目。
 2. **禁止写脚本绕过 CLI** — 不要写 build-xxx.js / run-xxx.py 等脚本
 3. **禁止在迭代目录下创建 10-backend/ 20-frontend/** — 任务目录是端平铺结构
 4. **禁止把代码写到迭代目录内** — 代码写到 CONSTITUTION.md 中各工程的「源码路径」
+5. **禁止直接用 Write 写 020-specs/ 下的文件** — 必须通过 `speccore analyze --apply` 写入，CLI 会自动路由到正确子目录（overview/ 或 {端名}/），直接 Write 会绕过路由导致目录结构混乱
 
 ## 行为约束
 - **不要自己创建目录** — 用 `speccore iteration create`
