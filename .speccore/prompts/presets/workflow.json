@@ -21,6 +21,7 @@
     "description": "分析迭代需求，生成规格说明",
     "prompt": "分析 {迭代名} 迭代的需求文档，生成完整的规格说明",
     "env": "ai",
+    "skill": "spec-analyze",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
@@ -36,6 +37,7 @@
     "description": "将迭代需求拆分为可执行的开发任务",
     "prompt": "把 {迭代名} 迭代的需求拆分成开发任务",
     "env": "ai",
+    "skill": "spec-split",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
@@ -52,6 +54,7 @@
     "prompt": "执行 {迭代名} 中的 {任务ID} 任务",
     "command": "speccore execute --task {任务ID} -I {迭代名}",
     "env": "both",
+    "skill": "spec-execute",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true },
       { "key": "任务ID", "placeholder": "Task-001", "required": true }
@@ -84,6 +87,7 @@
     "description": "全自动 analyze→split→plan→execute→pr→done",
     "prompt": "全自动完成 {迭代名} 的开发",
     "env": "ai",
+    "skill": "spec-dev",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],

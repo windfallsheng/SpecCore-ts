@@ -8,6 +8,7 @@
     "prompt": "帮我创建一个新迭代 {迭代名}，主题是 {主题}，负责人是 {负责人}",
     "command": "speccore iteration create {迭代名} --theme \"{主题}\"",
     "env": "cli",
+    "skill": "spec-iteration-create",
     "params": [
       { "key": "迭代名", "placeholder": "Q3", "required": true },
       { "key": "主题", "placeholder": "用户系统重构", "required": true },
@@ -25,6 +26,7 @@
     "description": "创建迭代并导入需求文档",
     "prompt": "创建迭代 {迭代名}，主题是 {主题}，然后把 {需求文档路径} 导入进去",
     "env": "ai",
+    "skill": "spec-iteration-create",
     "params": [
       { "key": "迭代名", "placeholder": "Q3", "required": true },
       { "key": "主题", "placeholder": "订单系统", "required": true },

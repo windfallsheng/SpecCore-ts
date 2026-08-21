@@ -20,6 +20,7 @@ export interface PromptTemplate {
   description: string;
   prompt: string;
   command?: string;
+  skill?: string;
   env?: 'cli' | 'both' | 'ai';
   tags?: string[];
   params: PromptParam[];
@@ -418,6 +419,36 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
     .env-hint.ai {
       color: #1971c2;
     }
+    .prompt-skill {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px dashed rgba(51, 154, 240, 0.3);
+      font-size: 12px;
+      color: #1864ab;
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .prompt-skill-tag {
+      display: inline-block;
+      padding: 2px 8px;
+      background: rgba(51, 154, 240, 0.15);
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .prompt-skill-tag:hover {
+      background: rgba(51, 154, 240, 0.3);
+    }
+    .btn-skill {
+      background: #f3f0ff;
+      color: #7048e8;
+      border: 1px solid #d0bfff;
+    }
+    .btn-skill:hover { background: #e5dbff; }
     .empty-state {
       text-align: center;
       padding: 60px 20px;
@@ -894,6 +925,10 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
         ? \`<button class="btn btn-cmd" onclick="copyCommand('\${p.id}')">⌨️ 复制命令</button>\`
         : '';
 
+      const copySkillBtn = p.skill
+        ? \`<button class="btn btn-skill" onclick="copySkill('\${p.id}')">⚡ 复制 Skill</button>\`
+        : '';
+
       const tagsHtml = (p.tags || []).length > 0
         ? \`<div class="prompt-tags">\${p.tags.map(t => \`<span class="prompt-tag">\${t}</span>\`).join('')}</div>\`
         : '';
@@ -918,10 +953,14 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
           \${tagsHtml}
           \${envHint}
           <div class="prompt-section">💬 AI 说法</div>
-          <div class="prompt-say">\${escapeHtml(p.prompt)}</div>
+          <div class="prompt-say">
+            \${escapeHtml(p.prompt)}
+            \${p.skill ? \`<div class="prompt-skill">快捷：<span class="prompt-skill-tag" onclick="copySkill('\${p.id}')">/\${p.skill}</span></div>\` : ''}
+          </div>
           \${cmdBlock}
           <div class="prompt-actions">
             <button class="btn btn-say" onclick="copyPrompt('\${p.id}')">💬 复制说法</button>
+            \${copySkillBtn}
             \${copyCmdBtn}
             \${!p.builtin ? \`
               <button class="btn btn-secondary" onclick="editPrompt('\${p.id}')">编辑</button>
@@ -959,6 +998,12 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
       } else {
         copyToClipboard(p.command, '⌨️ 命令已复制');
       }
+    }
+
+    function copySkill(id) {
+      const p = prompts.find(x => x.id === id);
+      if (!p || !p.skill) return;
+      copyToClipboard('/' + p.skill, '⚡ Skill 命令已复制');
     }
 
     function showParamModal(p, mode) {
