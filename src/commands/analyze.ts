@@ -108,6 +108,8 @@ export interface AnalyzeOptions {
   skipClarify?: boolean;  // --skip-clarify: 跳过需求澄清阶段
   // v7.2.0+: 全局分析分层执行
   layer?: number;         // --layer N: 全局分析指定层级（1-4）
+  // v7.2.0+: 单文档深度分析
+  deep?: string;          // --deep <文档名>: 对指定文档进行深度分析（如 ARCHITECTURE.md）
 }
 
 export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
@@ -1714,7 +1716,13 @@ async function injectGraphSummary(prompt: string): Promise<string> {
 }
 
 // ── v7.2.0+: 检测全局分析当前进度 ──
-async function detectGlobalLayerProgress(): Promise<{ completedLayer: number; nextLayer: number; missing: string[] }> {
+// Layer 4 拆分为子层: 4a=产品文档, 4b=全局技术核心, 4c=全局技术扩展, 4d=各端技术
+async function detectGlobalLayerProgress(): Promise<{
+  completedLayer: number;
+  nextLayer: number;
+  missing: string[];
+  subLayer?: { completed: string[]; next: string };
+}> {
   const globalDir = join(process.cwd(), '.speccore', 'GLOBAL');
   let completedLayer = 0;
   const missing: string[] = [];
@@ -1740,7 +1748,7 @@ async function detectGlobalLayerProgress(): Promise<{ completedLayer: number; ne
     }
   }
 
-  // Layer 3: 检查 _MODULES.md（功能模块深入分析的前提）
+  // Layer 3: 检查 _MODULES.md
   if (completedLayer >= 2) {
     if (await pathExists(join(globalDir, 'platforms', '_shared', '_MODULES.md'))) {
       completedLayer = 3;
@@ -1749,17 +1757,50 @@ async function detectGlobalLayerProgress(): Promise<{ completedLayer: number; ne
     }
   }
 
-  // Layer 4: 检查 overview/ 下的全局汇总文档
+  // Layer 4 子层检测
+  let subLayer: { completed: string[]; next: string } | undefined;
   if (completedLayer >= 3) {
     const overviewDir = join(globalDir, 'overview');
-    const hasOverviewDoc = await pathExists(join(overviewDir, 'ARCHITECTURE.md'))
-      || await pathExists(join(overviewDir, 'FUNCTION_MAP.md'))
-      || await pathExists(join(overviewDir, 'REQUIREMENT.md'));
-    if (hasOverviewDoc) completedLayer = 4;
-    else missing.push('Layer 4: overview/ARCHITECTURE.md 等全局汇总文档');
+    const requirementsDir = join(globalDir, 'requirements');
+    const completedSubLayers: string[] = [];
+
+    // 4a: 产品文档
+    const hasReq = await pathExists(join(requirementsDir, 'REQUIREMENT.md'));
+    if (hasReq) completedSubLayers.push('4a');
+
+    // 4b: 全局技术核心文档
+    const hasCoreTech = await pathExists(join(overviewDir, 'ARCHITECTURE.md'))
+      && await pathExists(join(overviewDir, 'FUNCTION_MAP.md'));
+    if (hasCoreTech) completedSubLayers.push('4b');
+
+    // 4c: 全局技术扩展文档
+    const hasExtTech = await pathExists(join(overviewDir, 'SECURITY_AUDIT.md'))
+      || await pathExists(join(overviewDir, 'DATA_FLOW.md'));
+    if (hasExtTech) completedSubLayers.push('4c');
+
+    // 4d: 各端技术文档
+    try {
+      const platformsDir = join(globalDir, 'platforms');
+      const entries = await readdir(platformsDir, { withFileTypes: true });
+      const platformDirs = entries.filter(e => e.isDirectory() && e.name !== '_shared').map(e => e.name);
+      const hasPlatformDoc = platformDirs.length > 0 && (await Promise.all(
+        platformDirs.map(async d => pathExists(join(platformsDir, d, 'API_INVENTORY.md'))
+          || pathExists(join(platformsDir, d, 'UI_FLOW.md')))
+      )).some(Boolean);
+      if (hasPlatformDoc) completedSubLayers.push('4d');
+    } catch { /* ignore */ }
+
+    if (completedSubLayers.length === 4) {
+      completedLayer = 4;
+    } else {
+      const subLayerOrder = ['4a', '4b', '4c', '4d'];
+      const nextSub = subLayerOrder.find(s => !completedSubLayers.includes(s)) || '4d';
+      missing.push(`Layer 4${nextSub}: 全局汇总文档子层`);
+      subLayer = { completed: completedSubLayers, next: nextSub };
+    }
   }
 
-  return { completedLayer, nextLayer: Math.min(completedLayer + 1, 4), missing };
+  return { completedLayer, nextLayer: Math.min(completedLayer + 1, 4), missing, subLayer };
 }
 
 // ── buildMultiDocPrompt: 多文档协议 ──
@@ -1789,7 +1830,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       1: { role: '代码索引专家', focus: '全面扫描各端源码结构，提取目录/接口/实体/配置等索引信息', output: '各端 _INDEX.md + PATTERNS 模式提取 + semantic-tags.json' },
       2: { role: '系统架构师', focus: '基于 Layer 1 索引进行跨端关联分析、接口匹配、模块聚类', output: '_ASSOCIATION.md + _MODULES.md' },
       3: { role: '业务分析师', focus: '按功能模块深入分析业务逻辑、数据流、规则、时序', output: '各端功能模块深入文档 + 模块级 PATTERNS' },
-      4: { role: '产品总监 + 技术负责人', focus: '全局汇总、一致性校验、生成需求总纲和全局架构文档', output: 'overview/ 全局汇总文档 + requirements/ 需求文档' },
+      4: { role: '产品总监 + 技术负责人', focus: '全局汇总，分 4 个子层执行（4a产品→4b技术核心→4c技术扩展→4d各端）', output: 'requirements/ + overview/ + platforms/' },
     };
     const layerMeta = LAYER_ROLES[targetLayer];
 
@@ -2265,12 +2306,88 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `- [ ] 提取模块级模式补充到 PATTERNS/\n`;
       prompt += `- [ ] 写入完成后执行: \`speccore analyze --scope global --layer 4\`\n`;
     } else if (targetLayer === 4) {
-      prompt += `- [ ] Read Layer 3 的所有功能模块文档\n`;
-      prompt += `- [ ] 执行一致性校验（字段/状态/接口/消息/配置）\n`;
-      prompt += `- [ ] 生成全局汇总文档到 overview/（11 份技术文档）\n`;
-      prompt += `- [ ] 生成需求总纲到 requirements/REQUIREMENT.md\n`;
-      prompt += `- [ ] 生成各前端端需求到 requirements/{端}/REQUIREMENT.md\n`;
-      prompt += `- [ ] 所有文档必须包含 Mermaid 图表\n`;
+      // v7.2.0+: Layer 4 拆分子层或单文档深度分析
+      const deepDoc = options?.deep;
+      const subLayerTarget = progress.subLayer?.next || '4a';
+
+      if (deepDoc) {
+        // --deep 模式：单文档深度分析
+        prompt += `## 🎯 Layer 4 — 单文档深度分析: ${deepDoc}\n\n`;
+        prompt += `> ⚠️ **专注约束**: 你只生成 **${deepDoc}** 这一份文档，不要生成其他文档。\n`;
+        prompt += `> 你必须深入分析，不要写框架/占位符。每节必须有实质性内容。\n\n`;
+        prompt += `**强制输入**: \n`;
+        prompt += `- Read Layer 1 的所有 _INDEX.md（获取源码结构索引）\n`;
+        prompt += `- Read Layer 2 的 _ASSOCIATION.md + _MODULES.md（获取跨端关联）\n`;
+        prompt += `- Read Layer 3 的功能模块深入文档（获取详细分析结果）\n`;
+        prompt += `- 如果涉及代码细节，直接 Read 相关源码文件，引用具体代码片段\n\n`;
+        prompt += `**深度要求**: \n`;
+        prompt += `- 不要写"待导入"、"待补充"、"示例"等占位内容\n`;
+        prompt += `- 每个表格必须有真实数据（从 Layer 1-3 提取）\n`;
+        prompt += `- 每个结论必须有证据（引用具体文件名/类名/方法名）\n`;
+        prompt += `- 如果信息不足，明确标注"信息不足: 需要读取 xxx 文件"\n`;
+        prompt += `- 必须包含 Mermaid 图表（如适用）\n\n`;
+        prompt += `**输出**: 只输出 \`${deepDoc}\` 的完整内容\n`;
+      } else {
+        // 子层模式：每次只生成一个子层
+        prompt += `## 🌍 Layer 4: 全局汇总 — 子层 ${subLayerTarget}/4\n\n`;
+        prompt += `> ⚠️ **专注约束**: 你当前只执行 **子层 ${subLayerTarget}**，不要生成其他子层的文档。\n`;
+        prompt += `> 子层完成后执行: \`speccore analyze --scope global --layer 4\` 进入下一子层。\n\n`;
+        prompt += `**强制输入**: \n`;
+        prompt += `- Read Layer 1 的所有 _INDEX.md\n`;
+        prompt += `- Read Layer 2 的 _ASSOCIATION.md + _MODULES.md\n`;
+        prompt += `- Read Layer 3 的功能模块深入文档\n\n`;
+
+        if (subLayerTarget === '4a') {
+          prompt += `**子层 4a: 产品视角文档（2-3 份）**\n`;
+          prompt += `1. \`requirements/REQUIREMENT.md\` — 全局需求总纲\n`;
+          prompt += `   - 产品愿景、目标用户画像、核心场景地图\n`;
+          prompt += `   - 按业务场景组织：用户故事 → 操作流程 → 业务规则 → 边界条件 → 验收标准\n`;
+          prompt += `   - 功能优先级矩阵（P0/P1/P2）\n`;
+          prompt += `   - 必须从 Layer 3 的功能模块分析中提取真实内容，不要臆造\n`;
+          prompt += `2. 各前端端 \`requirements/{端}/REQUIREMENT.md\` — 只生成已有前端端的需求\n`;
+          prompt += `   - 信息架构、用户旅程、页面清单、交互设计\n`;
+          prompt += `   - 从 Layer 1 的前端 _INDEX.md 提取页面/路由信息\n`;
+          prompt += `   - 从 Layer 3 的模块分析提取交互流程\n`;
+        } else if (subLayerTarget === '4b') {
+          prompt += `**子层 4b: 全局技术核心文档（3-4 份）**\n`;
+          prompt += `1. \`overview/FUNCTION_MAP.md\` — 功能单元 × 端映射表\n`;
+          prompt += `   - 从 Layer 2 的 _MODULES.md 提取功能模块\n`;
+          prompt += `   - 每个功能单元标注：涉及端、核心页面、核心接口、状态枚举\n`;
+          prompt += `2. \`overview/ARCHITECTURE.md\` — 全局架构\n`;
+          prompt += `   - 服务拓扑（从 Layer 1 的后端 _INDEX.md 提取服务名和依赖）\n`;
+          prompt += `   - 数据流（从 Layer 3 的模块分析提取）\n`;
+          prompt += `   - 必须包含 Mermaid architecture diagram\n`;
+          prompt += `3. \`overview/API_CONTRACT.yaml\` — 全局接口契约\n`;
+          prompt += `   - 汇总所有后端端的 API_INVENTORY（从 Layer 1 提取）\n`;
+          prompt += `   - 标注 rate limit、幂等性、版本策略\n`;
+          prompt += `4. \`overview/INTERACTION_MAP.md\` — 跨端交互时序图\n`;
+          prompt += `   - 从 Layer 3 的模块时序图汇总\n`;
+          prompt += `   - 必须包含 Mermaid sequenceDiagram\n`;
+        } else if (subLayerTarget === '4c') {
+          prompt += `**子层 4c: 全局技术扩展文档（4-5 份）**\n`;
+          prompt += `1. \`overview/SECURITY_AUDIT.md\` — 安全审计\n`;
+          prompt += `2. \`overview/PERFORMANCE_BASELINE.md\` — 性能基线\n`;
+          prompt += `3. \`overview/DATA_FLOW.md\` — 数据流与隐私\n`;
+          prompt += `4. \`overview/DEPLOYMENT.md\` — 部署运维\n`;
+          prompt += `5. \`overview/CONSISTENCY_CHECK.md\` — 一致性校验\n`;
+          prompt += `   - 从 Layer 2 的关联分析提取不一致项\n`;
+        } else if (subLayerTarget === '4d') {
+          prompt += `**子层 4d: 各端技术文档**\n`;
+          prompt += `后端端（每端 9 项，但本次只生成核心 3 项，其余后续补充）:\n`;
+          prompt += `1. \`API_INVENTORY.md\` — 从 Layer 1 的 _INDEX.md 提取完整接口清单\n`;
+          prompt += `2. \`DATA_MODEL.md\` — 从 Layer 1 的 Entity 目录 + Layer 3 的模块分析提取\n`;
+          prompt += `3. \`BUSINESS_RULES.md\` — 从 Layer 3 的模块分析提取业务规则\n`;
+          prompt += `前端端（每端 9 项，但本次只生成核心 3 项）:\n`;
+          prompt += `1. \`UI_FLOW.md\` — 从 Layer 1 的路由 + Layer 3 的模块分析提取\n`;
+          prompt += `2. \`API_CALL_MAP.md\` — 从 Layer 1 的 API 调用提取\n`;
+          prompt += `3. \`STATE_MANAGEMENT.md\` — 从 Layer 1 的 store 目录提取\n`;
+        }
+
+        prompt += `\n**质量要求**: \n`;
+        prompt += `- 禁止写"待导入"、"待补充"等占位符\n`;
+        prompt += `- 每个表格必须有真实数据（从 Layer 1-3 提取）\n`;
+        prompt += `- 如果信息不足，明确标注"信息不足: 需要读取 xxx"\n`;
+      }
     }
 
     prompt += `\n## 📝 写入方式\n`;

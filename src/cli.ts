@@ -865,6 +865,7 @@ program
   .option('--dev-guide', 'v6.76.0+: 生成 DEV_GUIDE.md 开发者实现指南')
   .option('--skip-clarify', 'v6.80.0+: 跳过需求澄清阶段（默认会先做需求质量检测和澄清）')
   .option('--layer <n>', 'v7.2.0+: 全局分析指定层级: 1=索引扫描, 2=跨端关联, 3=模块深入, 4=全局汇总')
+  .option('--deep <doc>', 'v7.2.0+: 全局分析时对指定文档进行深度分析（如 ARCHITECTURE.md），只生成该文档')
   .action(analyzeCommand);
 
 // v6.76.0+: 需求专业化命令
