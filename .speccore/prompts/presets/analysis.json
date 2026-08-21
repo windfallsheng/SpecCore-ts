@@ -6,7 +6,7 @@
     "icon": "📄",
     "description": "将 Word/PDF 需求文档转换为 Markdown 规格",
     "prompt": "把 {文件路径} 导入到 {迭代名} 迭代，端是 {平台}",
-    "command": "speccore doc2spec {文件路径} -I {迭代名}",
+    "command": "speccore doc2spec -f {文件路径} --iter {迭代名} -p {平台}",
     "env": "both",
     "skill": "spec-doc2spec",
     "params": [
@@ -44,7 +44,7 @@
     "icon": "📤",
     "description": "将迭代规格说明导出为 Word/PDF",
     "prompt": "把 {迭代名} 迭代的规格文档导出为 {输出文件名}",
-    "command": "speccore spec2doc -I {迭代名} -o {输出文件名}",
+    "command": "speccore spec2doc -i {迭代名} -o {输出文件名}",
     "env": "cli",
     "skill": "spec-spec2doc",
     "params": [
@@ -77,6 +77,7 @@
     "icon": "🔍",
     "description": "对迭代需求进行全面分析，生成标准规格文档",
     "prompt": "分析 {迭代名} 迭代的需求文档，生成完整的规格说明",
+    "command": "speccore analyze -I {迭代名}",
     "env": "ai",
     "skill": "spec-analyze",
     "params": [
@@ -104,13 +105,13 @@
     "icon": "🌐",
     "description": "全局层分析，跨端梳理项目架构",
     "prompt": "全局分析这个项目，带上源码一起看",
+    "command": "speccore analyze --scope global --with-code",
     "env": "ai",
     "skill": "spec-analyze",
     "params": [],
     "tags": [
       "分析阶段",
-      "全局模式",
-      "v7.2.0"
+      "全局模式"
     ],
     "builtin": true,
     "sort": 10,
@@ -120,12 +121,91 @@
     ]
   },
   {
+    "id": "analyze-deep-global",
+    "name": "深度分析（全局层）",
+    "category": "analysis",
+    "icon": "🌐",
+    "description": "全局层深度分析，跨端梳理架构并逐层深入",
+    "prompt": "深度分析全局架构，带上源码一起看",
+    "command": "speccore analyze --scope global --depth deep --with-code",
+    "env": "ai",
+    "skill": "spec-analyze",
+    "params": [],
+    "tags": [
+      "分析阶段",
+      "深度模式"
+    ],
+    "builtin": true,
+    "sort": 11,
+    "examples": [
+      "新项目启动时深度梳理整体架构",
+      "跨端架构需要更高深度分析"
+    ]
+  },
+  {
+    "id": "analyze-deep-iteration",
+    "name": "深度分析（迭代）",
+    "category": "analysis",
+    "icon": "🔍",
+    "description": "迭代级深度分析，深度挖掘需求与设计",
+    "prompt": "深度分析 {迭代名} 迭代",
+    "command": "speccore analyze -I {迭代名} --depth deep",
+    "env": "ai",
+    "skill": "spec-analyze",
+    "params": [
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": true
+      }
+    ],
+    "tags": [
+      "分析阶段",
+      "深度模式"
+    ],
+    "builtin": true,
+    "sort": 12,
+    "examples": [
+      "核心迭代需要更深入的分析",
+      "交付前深度把关需求设计"
+    ]
+  },
+  {
+    "id": "analyze-deep-task",
+    "name": "深度分析（任务）",
+    "category": "analysis",
+    "icon": "🎯",
+    "description": "任务级深度分析，聚焦单个任务深入",
+    "prompt": "深度分析 {任务ID} 任务",
+    "command": "speccore analyze --task {任务ID} --depth deep",
+    "env": "ai",
+    "skill": "spec-analyze",
+    "params": [
+      {
+        "key": "任务ID",
+        "placeholder": "Task-001",
+        "required": true
+      }
+    ],
+    "tags": [
+      "分析阶段",
+      "深度模式"
+    ],
+    "builtin": true,
+    "sort": 13,
+    "examples": [
+      "复杂任务需要单独深入分析",
+      "关键任务交付前深度把关"
+    ]
+  },
+  {
     "id": "analyze-deep-doc",
     "name": "单文档深度分析",
     "category": "analysis",
     "icon": "🔬",
     "description": "对指定文档深度分析，字数/图表翻倍",
     "prompt": "深度分析 {文档名}，先出大纲确认后再逐节深入",
+    "command": "speccore analyze --scope global --deep {文档名} --iterative",
     "env": "ai",
     "skill": "spec-analyze",
     "params": [
@@ -137,11 +217,10 @@
     ],
     "tags": [
       "分析阶段",
-      "深度模式",
-      "v7.2.0"
+      "深度模式"
     ],
     "builtin": true,
-    "sort": 11,
+    "sort": 14,
     "examples": [
       "ARCHITECTURE.md 需要高质量产出",
       "TECH.md 需要详细技术方案"
@@ -154,6 +233,7 @@
     "icon": "📝",
     "description": "先输出大纲确认，再逐节深入填充",
     "prompt": "迭代分析 {迭代名}，先出大纲确认后再深入",
+    "command": "speccore analyze -I {迭代名} --iterative",
     "env": "ai",
     "skill": "spec-analyze",
     "params": [
@@ -165,11 +245,10 @@
     ],
     "tags": [
       "分析阶段",
-      "迭代模式",
-      "v7.2.0"
+      "迭代模式"
     ],
     "builtin": true,
-    "sort": 12,
+    "sort": 15,
     "examples": [
       "复杂文档需要大纲确认后再深入",
       "避免一次性生成质量不稳定"
@@ -182,6 +261,7 @@
     "icon": "🎯",
     "description": "只分析与指定关键词相关的功能模块",
     "prompt": "只分析 {模块关键词} 模块，结合源码",
+    "command": "speccore analyze --filter {模块关键词} --with-code",
     "env": "ai",
     "skill": "spec-analyze",
     "params": [
@@ -193,11 +273,10 @@
     ],
     "tags": [
       "分析阶段",
-      "按需模式",
-      "v7.2.0"
+      "按需模式"
     ],
     "builtin": true,
-    "sort": 13,
+    "sort": 16,
     "examples": [
       "只需关注订单和支付模块",
       "过滤无关内容减少 token 消耗"
@@ -205,11 +284,12 @@
   },
   {
     "id": "analyze-feature-in-doc",
-    "name": "细粒度功能单元分析",
+    "name": "功能单元分析",
     "category": "analysis",
     "icon": "🔎",
     "description": "分析某文档中的特定功能单元，自动关联代码",
     "prompt": "分析 {文档名} 中的 {功能名} 模块，带上代码",
+    "command": "speccore analyze --feature {功能名} --with-code",
     "env": "ai",
     "skill": "spec-analyze",
     "params": [
@@ -231,11 +311,10 @@
     ],
     "tags": [
       "分析阶段",
-      "细粒度",
-      "v7.2.0"
+      "按需模式"
     ],
     "builtin": true,
-    "sort": 14,
+    "sort": 17,
     "examples": [
       "只分析用户认证模块的技术实现",
       "聚焦特定功能减少认知负担"
@@ -248,6 +327,7 @@
     "icon": "🔄",
     "description": "代码变更后补充分析或重新分析",
     "prompt": "补充分析 {迭代名}，代码有变动",
+    "command": "speccore analyze -I {迭代名} --supplement --with-code",
     "env": "ai",
     "skill": "spec-analyze",
     "params": [
@@ -262,7 +342,7 @@
       "变更驱动"
     ],
     "builtin": true,
-    "sort": 15,
+    "sort": 18,
     "examples": [
       "代码变更后规格需要同步更新",
       "新需求加入后补充分析"
@@ -275,6 +355,7 @@
     "icon": "🛡️",
     "description": "校验迭代规格是否符合宪法规范",
     "prompt": "校验 {迭代名} 的规格是否合规",
+    "command": "speccore validate -i {迭代名}",
     "env": "ai",
     "params": [
       {
@@ -292,6 +373,126 @@
     "examples": [
       "交付前检查规格是否符合宪法规范",
       "迭代收尾前质量把关"
+    ]
+  },
+  {
+    "id": "clarify-requirement",
+    "name": "需求澄清/专业化",
+    "category": "analysis",
+    "icon": "✨",
+    "description": "将口语化需求整理为专业 PRD 级文档",
+    "prompt": "帮我整理需求：{需求描述}",
+    "command": "speccore clarify \"{需求描述}\" --to {迭代名}",
+    "env": "ai",
+    "params": [
+      {
+        "key": "需求描述",
+        "placeholder": "用户要能登录和注册",
+        "required": true
+      },
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": false
+      }
+    ],
+    "tags": [
+      "分析阶段",
+      "文档处理"
+    ],
+    "builtin": true,
+    "sort": 21,
+    "examples": [
+      "需求太口语化需要专业化",
+      "从原始描述整理成 PRD 级文档"
+    ]
+  },
+  {
+    "id": "doc2spec-classify",
+    "name": "智能分类需求文档",
+    "category": "analysis",
+    "icon": "🗂️",
+    "description": "AI 智能分类 sources/ 文档到 staging/",
+    "prompt": "智能分类 {迭代名} 的需求文档",
+    "command": "speccore doc2spec --classify --prompt --iter {迭代名}",
+    "env": "ai",
+    "skill": "spec-doc2spec",
+    "params": [
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": true
+      }
+    ],
+    "tags": [
+      "分析阶段",
+      "文档处理"
+    ],
+    "builtin": true,
+    "sort": 22,
+    "examples": [
+      "批量文档按类型自动分类",
+      "导入前先整理 sources/ 目录"
+    ]
+  },
+  {
+    "id": "doc2spec-batch",
+    "name": "批量导入需求文档",
+    "category": "analysis",
+    "icon": "📚",
+    "description": "批量导入多个 PRD/文档（按平台映射）",
+    "prompt": "批量导入这些需求文档：{文件列表}",
+    "command": "speccore doc2spec --files \"{文件列表}\"",
+    "env": "cli",
+    "params": [
+      {
+        "key": "文件列表",
+        "placeholder": "a.docx=backend,b.pdf=frontend-h5",
+        "required": true
+      }
+    ],
+    "tags": [
+      "分析阶段",
+      "文档处理"
+    ],
+    "builtin": true,
+    "sort": 23,
+    "examples": [
+      "一次导入多个平台的文档",
+      "批量导入减少重复操作"
+    ]
+  },
+  {
+    "id": "spec2doc-all",
+    "name": "导出全部规格文档",
+    "category": "analysis",
+    "icon": "📦",
+    "description": "导出迭代全部文档（合并）",
+    "prompt": "导出 {迭代名} 的全部规格文档",
+    "command": "speccore spec2doc -i {迭代名} --all -o {输出文件名}",
+    "env": "cli",
+    "skill": "spec-spec2doc",
+    "params": [
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": true
+      },
+      {
+        "key": "输出文件名",
+        "placeholder": "全部规格.docx",
+        "required": true
+      }
+    ],
+    "tags": [
+      "分析阶段",
+      "文档处理"
+    ],
+    "builtin": true,
+    "sort": 24,
+    "examples": [
+      "交付前导出完整文档包",
+      "合并导出所有规格文档"
     ]
   }
 ]

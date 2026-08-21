@@ -35,6 +35,8 @@ export interface PromptParam {
   key: string;
   placeholder: string;
   required: boolean;
+  /** CLI flag（如 --task / -I），用于「复制 Skill」生成 flag 风格参数；为空表示位置参数 */
+  flag?: string;
 }
 
 export async function promptsCommand(options: PromptsOptions): Promise<void> {
@@ -45,7 +47,8 @@ export async function promptsCommand(options: PromptsOptions): Promise<void> {
     const allPrompts = [...presets, ...userPrompts];
 
     // 生成 HTML 页面
-    const html = generatePromptsHtml(allPrompts);
+    const ctx = await readCurrentContext();
+    const html = generatePromptsHtml(attachParamFlags(applyDynamicDefaults(allPrompts, ctx)));
     const outputPath = options.output || join(process.cwd(), 'outputs', 'speccore-prompts.html');
     await ensureDir(join(process.cwd(), 'outputs'));
     await writeFile(outputPath, html);
@@ -95,6 +98,87 @@ async function loadUserPrompts(): Promise<PromptTemplate[]> {
   return prompts.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
 }
 
+interface RuntimeContext {
+  iteration?: string;
+  task?: string;
+}
+
+/** 读取当前运行时上下文（.speccore/local/context.json 的 currentIteration/currentTask） */
+async function readCurrentContext(): Promise<RuntimeContext> {
+  try {
+    const ctxPath = join(process.cwd(), '.speccore', 'local', 'context.json');
+    if (!(await pathExists(ctxPath))) return {};
+    const data = JSON.parse(await readFile(ctxPath, 'utf-8'));
+    return {
+      iteration: data.currentIteration || '',
+      task: data.currentTask || '',
+    };
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * 动态填充默认值：迭代名/任务ID 参数的占位符优先取当前运行时上下文，
+ * 取不到时保持原 placeholder（如 Q2 / Task-001）。
+ */
+function applyDynamicDefaults(prompts: PromptTemplate[], ctx: RuntimeContext): PromptTemplate[] {
+  if (!ctx.iteration && !ctx.task) return prompts;
+  return prompts.map(p => ({
+    ...p,
+    params: (p.params || []).map(pr => {
+      if (ctx.iteration && pr.key === '迭代名' && pr.placeholder === 'Q2') {
+        return { ...pr, placeholder: ctx.iteration };
+      }
+      if (ctx.task && pr.key === '任务ID' && pr.placeholder === 'Task-001') {
+        return { ...pr, placeholder: ctx.task };
+      }
+      return pr;
+    }),
+  }));
+}
+
+/**
+ * 为每个参数推断 CLI flag，用于「复制 Skill」生成 flag 风格参数（如 `--task X -I Y`）。
+ * 优先从 command 字段解析（`--task {任务ID}` → 任务ID 对应 `--task`），
+ * 缺失时回退到 skill 名称的预置映射；两者都没有则视为位置参数（flag 为空）。
+ */
+function attachParamFlags(prompts: PromptTemplate[]): PromptTemplate[] {
+  const SKILL_FLAGS: Record<string, Record<string, string>> = {
+    'spec-dev': { '迭代名': '-i', '阶段': '--from' },
+    'spec-analyze': { '迭代名': '-I', '文档名': '--deep', '功能名': '--feature', '模块关键词': '--filter' },
+    'spec-split': { '迭代名': '-i', '功能模块': '--filter' },
+    'spec-change': { '迭代名': '-i' },
+    'spec-iteration-create': { '迭代名': '-n', '主题': '--topic', '负责人': '--owner', '需求文档路径': '-f' },
+    'spec-execute': { '迭代名': '-i', '任务ID': '--task', '数量': '--batch-size' },
+    'spec-pr': { '迭代名': '-i', '任务ID': '--task' },
+    'spec-done': { '迭代名': '-i', '任务ID': '--task' },
+    'spec-doc2spec': { '文件路径': '-f', '迭代名': '--iter', '平台': '-p' },
+    'spec-spec2doc': { '迭代名': '-i', '输出文件名': '-o' },
+  };
+
+  return prompts.map(p => {
+    if (!p.params || p.params.length === 0) return p;
+
+    // 从 command 字段解析 flag → 参数 key 映射（单点事实来源）
+    const cmdFlags: Record<string, string> = {};
+    if (p.command) {
+      const re = /(--?[A-Za-z][\w-]*)\s+["']?\{([^}]+)\}["']?/g;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(p.command)) !== null) {
+        cmdFlags[m[2]] = m[1];
+      }
+    }
+
+    const skillFlags = (p.skill && SKILL_FLAGS[p.skill]) || {};
+    const params = p.params.map(pr => ({
+      ...pr,
+      flag: cmdFlags[pr.key] || skillFlags[pr.key] || '',
+    }));
+    return { ...p, params };
+  });
+}
+
 function generatePromptsHtml(prompts: PromptTemplate[]): string {
   const categories = [...new Set(prompts.map(p => p.category))];
   const categoryLabels: Record<string, string> = {
@@ -102,6 +186,7 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
     iteration: '迭代管理',
     analysis: '分析文档',
     execute: '开发执行',
+    governance: '治理运维',
     custom: '我的'
   };
 
@@ -225,6 +310,9 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
     .btn-secondary:hover { background: #dee2e6; }
     .content {
       padding: 30px;
+      min-height: 520px;
+      max-height: 80vh;
+      overflow-y: auto;
     }
     .section-title {
       font-size: 18px;
@@ -799,6 +887,16 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
       change: ['变更阶段', '需求调整']
     };
 
+    // 标签优先级：必要步骤 + 常用命令在前，不常用（收尾、断点等）在后
+    const TAG_PRIORITY = [
+      '首次使用', '初始化', '分析阶段', '开发阶段', '标准流程',
+      '迭代管理', '文档处理', '全局模式', '深度模式', '全自动',
+      '日常', '治理', '进度追踪', '变更阶段',
+      '收尾阶段', '断点续传', '批量执行', '迭代模式', '按需模式',
+      '定向拆分', '增量拆分', '代码提交', '任务管理', '需求调整',
+      '变更驱动', '质量门禁'
+    ];
+
     // 收集所有标签
     function collectTags() {
       const counts = {};
@@ -807,7 +905,14 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
           counts[tag] = (counts[tag] || 0) + 1;
         });
       });
-      return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+      return Object.entries(counts).sort((a, b) => {
+        const pa = TAG_PRIORITY.indexOf(a[0]);
+        const pb = TAG_PRIORITY.indexOf(b[0]);
+        const ra = pa === -1 ? TAG_PRIORITY.length : pa;
+        const rb = pb === -1 ? TAG_PRIORITY.length : pb;
+        if (ra !== rb) return ra - rb;
+        return b[1] - a[1];
+      });
     }
 
     // 渲染标签云
@@ -915,6 +1020,15 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
       document.getElementById('content').innerHTML = html;
     }
 
+    // 生成带参数的 Skill 命令预览（如 /spec-execute --task {任务ID} -i {迭代名}）
+    function skillCmdPreview(p) {
+      if (!p.skill) return '';
+      const args = (p.params || []).map(param => {
+        return param.flag ? (param.flag + ' {' + param.key + '}') : ('{' + param.key + '}');
+      });
+      return '/' + p.skill + (args.length ? ' ' + args.join(' ') : '');
+    }
+
     function renderCard(p) {
       const badge = p.builtin
         ? '<span class="badge badge-builtin">预置</span>'
@@ -939,9 +1053,9 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
 
       const env = p.env || (hasCommand ? 'both' : 'ai');
       const envHintMap = {
-        cli: \`<div class="env-hint cli">💡 纯终端命令，即时生效（无 AI 参与）</div>\`,
-        both: \`<div class="env-hint cli">💡 终端触发，AI 自动执行</div>\`,
-        ai: \`<div class="env-hint ai">💡 建议在 AI 对话框中使用</div>\`
+        cli: \`<div class="env-hint cli">💡 纯 CLI 命令（终端直接执行，无 AI 参与）</div>\`,
+        both: \`<div class="env-hint cli">💡 终端 / AI 均可用（AI 中使用有 AI 参与，终端中直接执行）</div>\`,
+        ai: \`<div class="env-hint ai">💡 仅 AI 使用（在 AI 对话框输入，需 AI 参与）</div>\`
       };
       const envHint = envHintMap[env] || envHintMap.ai;
 
@@ -964,7 +1078,7 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
           <div class="prompt-section">💬 AI 说法</div>
           <div class="prompt-say">
             \${escapeHtml(p.prompt)}
-            \${p.skill ? \`<div class="prompt-skill">快捷：<span class="prompt-skill-tag" onclick="copySkill('\${p.id}')">/\${p.skill}</span></div>\` : ''}
+            \${p.skill ? \`<div class="prompt-skill">快捷：<span class="prompt-skill-tag" onclick="copySkill('\${p.id}')">\${skillCmdPreview(p)}</span></div>\` : ''}
           </div>
           \${cmdBlock}
           <div class="prompt-actions">
@@ -1016,7 +1130,8 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
       if (p.params && p.params.length > 0) {
         showParamModal(p, 'skill');
       } else {
-        copyToClipboard('/' + p.skill, '⚡ Skill 命令已复制');
+        const text = p.prompt ? '/' + p.skill + ' ' + p.prompt : '/' + p.skill;
+        copyToClipboard(text, '⚡ Skill 命令已复制');
       }
     }
 
@@ -1048,7 +1163,7 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
                 ? 'background: #f3f0ff; border-radius: 8px; padding: 12px; font-size: 13px; color: #7048e8; line-height: 1.6; min-height: 60px; border: 1px solid #d0bfff; font-family: monospace;'
                 : 'background: #212529; border-radius: 8px; padding: 12px; font-size: 12px; color: #69db7c; line-height: 1.6; min-height: 60px; border: 1px solid #495057; font-family: monospace;'
               }">
-                \${escapeHtml(isSay ? p.prompt : isSkill ? ('/' + p.skill) : (p.command || ''))}
+                \${escapeHtml(isSay ? p.prompt : isSkill ? skillCmdPreview(p) : (p.command || ''))}
               </div>
             </div>
           </div>
@@ -1061,6 +1176,7 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
       document.body.appendChild(modal);
       
       setTimeout(() => {
+        updatePreview(p.id, mode);
         const firstInput = modal.querySelector('input');
         if (firstInput) firstInput.focus();
       }, 100);
@@ -1075,13 +1191,13 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
       let text = isSay ? p.prompt : isSkill ? ('/' + p.skill) : (p.command || '');
       
       if (isSkill) {
-        const values = [];
+        const args = [];
         p.params.forEach(param => {
           const input = document.getElementById('param-' + param.key);
           const value = input ? input.value.trim() : '';
-          if (value) values.push(value);
+          if (value) args.push(param.flag ? (param.flag + ' ' + value) : value);
         });
-        if (values.length > 0) text += ' ' + values.join(' ');
+        if (args.length > 0) text += ' ' + args.join(' ');
       } else {
         p.params.forEach(param => {
           const input = document.getElementById('param-' + param.key);
@@ -1112,7 +1228,7 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
       let allFilled = true;
       
       if (isSkill) {
-        const values = [];
+        const args = [];
         p.params.forEach(param => {
           const input = document.getElementById('param-' + param.key);
           const value = input ? input.value.trim() : '';
@@ -1122,10 +1238,10 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
             input.style.borderColor = '#e03131';
           } else {
             input.style.borderColor = '#e9ecef';
-            if (value) values.push(value);
+            if (value) args.push(param.flag ? (param.flag + ' ' + value) : value);
           }
         });
-        if (values.length > 0) text += ' ' + values.join(' ');
+        if (args.length > 0) text += ' ' + args.join(' ');
       } else {
         p.params.forEach(param => {
           const input = document.getElementById('param-' + param.key);

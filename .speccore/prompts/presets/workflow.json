@@ -4,11 +4,17 @@
     "name": "初始化项目",
     "category": "workflow",
     "icon": "🏗️",
-    "description": "在当前项目中初始化 SpecCore",
+    "description": "初始化 SpecCore，可指定工具适配，或升级命令文件",
     "prompt": "初始化 SpecCore 项目",
-    "command": "speccore init",
+    "command": "speccore init --tools {工具}",
     "env": "cli",
-    "params": [],
+    "params": [
+      {
+        "key": "工具",
+        "placeholder": "cursor,claude",
+        "required": false
+      }
+    ],
     "tags": [
       "首次使用",
       "初始化"
@@ -16,8 +22,32 @@
     "builtin": true,
     "sort": 1,
     "examples": [
-      "首次在新项目中使用 SpecCore",
-      "重新初始化已损坏的 .speccore 目录"
+      "初始化（适配全部工具）：speccore init",
+      "只适配 Cursor 和 Claude：speccore init --tools cursor,claude",
+      "升级命令文件（不重置配置）：speccore update",
+      "强制重新初始化：speccore init --force",
+      "引导式初始化：speccore init --interactive"
+    ]
+  },
+  {
+    "id": "init-update",
+    "name": "升级命令文件",
+    "category": "workflow",
+    "icon": "🔄",
+    "description": "增量升级项目命令文件（不重置配置）",
+    "prompt": "升级 SpecCore 命令文件",
+    "command": "speccore init --update",
+    "env": "cli",
+    "params": [],
+    "tags": [
+      "首次使用",
+      "初始化"
+    ],
+    "builtin": true,
+    "sort": 2,
+    "examples": [
+      "SpecCore 升级后同步命令文件",
+      "只更新命令，不重置项目配置"
     ]
   },
   {
@@ -41,7 +71,7 @@
       "标准流程"
     ],
     "builtin": true,
-    "sort": 2,
+    "sort": 3,
     "examples": [
       "新迭代开始前分析 PRD 文档",
       "需求文档更新后重新分析"
@@ -68,7 +98,7 @@
       "标准流程"
     ],
     "builtin": true,
-    "sort": 3,
+    "sort": 4,
     "examples": [
       "分析完成后拆分为可执行任务",
       "新增功能模块时追加拆分"
@@ -81,7 +111,7 @@
     "icon": "▶️",
     "description": "执行指定的开发任务",
     "prompt": "执行 {迭代名} 中的 {任务ID} 任务",
-    "command": "speccore execute --task {任务ID} -I {迭代名}",
+    "command": "speccore execute --task {任务ID} -i {迭代名}",
     "env": "both",
     "skill": "spec-execute",
     "params": [
@@ -101,7 +131,7 @@
       "标准流程"
     ],
     "builtin": true,
-    "sort": 4,
+    "sort": 5,
     "examples": [
       "执行 Task-001 的开发工作",
       "修复指定任务的 bug"
@@ -114,7 +144,7 @@
     "icon": "📊",
     "description": "查看迭代进度仪表盘",
     "prompt": "查看 {迭代名} 的进度",
-    "command": "speccore dashboard -I {迭代名}",
+    "command": "speccore dashboard",
     "env": "cli",
     "params": [
       {
@@ -128,7 +158,7 @@
       "进度追踪"
     ],
     "builtin": true,
-    "sort": 5,
+    "sort": 6,
     "examples": [
       "每日站会前查看当前迭代进度",
       "检查是否有阻塞任务"
@@ -155,10 +185,108 @@
       "全自动"
     ],
     "builtin": true,
-    "sort": 6,
+    "sort": 7,
     "examples": [
       "一键全自动完成整个迭代",
       "analyze→split→plan→execute→pr→done"
+    ]
+  },
+  {
+    "id": "plan-execution",
+    "name": "制定执行计划",
+    "category": "workflow",
+    "icon": "📋",
+    "description": "生成执行计划，管理任务分配与排期",
+    "prompt": "为 {迭代名} 制定执行计划",
+    "command": "speccore plan -i {迭代名} --topic {主题}",
+    "env": "ai",
+    "skill": "spec-plan",
+    "params": [
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": true
+      },
+      {
+        "key": "主题",
+        "placeholder": "meeting-system",
+        "required": false
+      }
+    ],
+    "tags": [
+      "开发阶段",
+      "标准流程"
+    ],
+    "builtin": true,
+    "sort": 8,
+    "examples": [
+      "拆分后制定任务执行顺序",
+      "生成 speccore-plan.html 可视化计划"
+    ]
+  },
+  {
+    "id": "task-create",
+    "name": "创建任务",
+    "category": "workflow",
+    "icon": "📝",
+    "description": "手动创建单个开发任务",
+    "prompt": "创建任务 {任务名称}",
+    "command": "speccore task new -n {任务名称} --topic {主题} -i {迭代名}",
+    "env": "both",
+    "skill": "spec-task-create",
+    "params": [
+      {
+        "key": "任务名称",
+        "placeholder": "用户登录",
+        "required": true
+      },
+      {
+        "key": "主题",
+        "placeholder": "user-login",
+        "required": false
+      },
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": false
+      }
+    ],
+    "tags": [
+      "开发阶段",
+      "任务管理"
+    ],
+    "builtin": true,
+    "sort": 9,
+    "examples": [
+      "补充遗漏的单个任务",
+      "手动创建一个独立任务"
+    ]
+  },
+  {
+    "id": "task-list",
+    "name": "列出任务",
+    "category": "workflow",
+    "icon": "📃",
+    "description": "列出当前迭代的所有任务",
+    "prompt": "列出 {迭代名} 的所有任务",
+    "command": "speccore task list -i {迭代名}",
+    "env": "cli",
+    "params": [
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": false
+      }
+    ],
+    "tags": [
+      "日常",
+      "任务管理"
+    ],
+    "builtin": true,
+    "sort": 10,
+    "examples": [
+      "查看当前迭代有哪些任务",
+      "执行前先看任务清单"
     ]
   }
 ]

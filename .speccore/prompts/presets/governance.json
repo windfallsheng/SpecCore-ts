@@ -1,0 +1,317 @@
+[
+  {
+    "id": "search-spec",
+    "name": "全文搜索",
+    "category": "governance",
+    "icon": "🔎",
+    "description": "跨所有 Spec 文件关键词检索",
+    "prompt": "搜索 {关键词}",
+    "command": "speccore search \"{关键词}\"",
+    "env": "cli",
+    "params": [
+      {
+        "key": "关键词",
+        "placeholder": "登录",
+        "required": true
+      }
+    ],
+    "tags": [
+      "治理"
+    ],
+    "builtin": true,
+    "sort": 1,
+    "examples": [
+      "快速定位某个功能在哪些 Spec 里",
+      "跨迭代检索关键词"
+    ]
+  },
+  {
+    "id": "track-req",
+    "name": "全链路追踪",
+    "category": "governance",
+    "icon": "🔗",
+    "description": "REQ→Task→Code 全链路追踪",
+    "prompt": "追踪 {需求ID} 的全链路",
+    "command": "speccore track --req {需求ID}",
+    "env": "cli",
+    "params": [
+      {
+        "key": "需求ID",
+        "placeholder": "REQ-001",
+        "required": true
+      }
+    ],
+    "tags": [
+      "治理"
+    ],
+    "builtin": true,
+    "sort": 2,
+    "examples": [
+      "追溯需求对应哪些任务和代码",
+      "检查需求是否完整落地"
+    ]
+  },
+  {
+    "id": "impact-analysis",
+    "name": "影响分析",
+    "category": "governance",
+    "icon": "💥",
+    "description": "分析变更的上下游影响",
+    "prompt": "分析 {需求ID} 的影响范围",
+    "command": "speccore impact --req {需求ID}",
+    "env": "cli",
+    "params": [
+      {
+        "key": "需求ID",
+        "placeholder": "REQ-001",
+        "required": true
+      }
+    ],
+    "tags": [
+      "治理"
+    ],
+    "builtin": true,
+    "sort": 3,
+    "examples": [
+      "改动前评估影响范围",
+      "分析需求变更的波及面"
+    ]
+  },
+  {
+    "id": "reindex",
+    "name": "重建索引",
+    "category": "governance",
+    "icon": "🔄",
+    "description": "全量索引重建与一致性检查",
+    "prompt": "重建索引",
+    "command": "speccore reindex",
+    "env": "cli",
+    "params": [],
+    "tags": [
+      "治理"
+    ],
+    "builtin": true,
+    "sort": 4,
+    "examples": [
+      "知识库/代码索引过期后重建",
+      "检索不准时重建索引"
+    ]
+  },
+  {
+    "id": "status-panel",
+    "name": "状态面板",
+    "category": "governance",
+    "icon": "📊",
+    "description": "查看项目状态面板",
+    "prompt": "查看项目状态",
+    "command": "speccore status",
+    "env": "cli",
+    "params": [],
+    "tags": [
+      "日常",
+      "进度追踪"
+    ],
+    "builtin": true,
+    "sort": 5,
+    "examples": [
+      "查看迭代任务状态",
+      "快速了解项目整体情况"
+    ]
+  },
+  {
+    "id": "progress",
+    "name": "查看进度",
+    "category": "governance",
+    "icon": "📈",
+    "description": "任务完成率 + 各阶段统计",
+    "prompt": "查看 {迭代名} 的进度统计",
+    "command": "speccore progress -i {迭代名}",
+    "env": "cli",
+    "params": [
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": false
+      }
+    ],
+    "tags": [
+      "日常",
+      "进度追踪"
+    ],
+    "builtin": true,
+    "sort": 6,
+    "examples": [
+      "查看任务完成率",
+      "各阶段进度统计"
+    ]
+  },
+  {
+    "id": "doctor",
+    "name": "健康度诊断",
+    "category": "governance",
+    "icon": "🏥",
+    "description": "检查配置完整性、图谱时效性、迭代健康度",
+    "prompt": "诊断项目健康度",
+    "command": "speccore doctor",
+    "env": "cli",
+    "params": [],
+    "tags": [
+      "治理",
+      "质量门禁"
+    ],
+    "builtin": true,
+    "sort": 7,
+    "examples": [
+      "排查项目配置问题",
+      "检查迭代健康度"
+    ]
+  },
+  {
+    "id": "sync-global",
+    "name": "同步到全局层",
+    "category": "governance",
+    "icon": "🌐",
+    "description": "迭代 ↔ 全量层双向同步",
+    "prompt": "把 {迭代名} 同步到全局层",
+    "command": "speccore sync --global --iteration {迭代名}",
+    "env": "cli",
+    "params": [
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": true
+      }
+    ],
+    "tags": [
+      "治理",
+      "全局模式"
+    ],
+    "builtin": true,
+    "sort": 8,
+    "examples": [
+      "把迭代结果沉淀到全局层",
+      "全局层规范同步到迭代"
+    ]
+  },
+  {
+    "id": "global-status",
+    "name": "全局状态",
+    "category": "governance",
+    "icon": "🌍",
+    "description": "查看全量层整体状态",
+    "prompt": "查看全局状态",
+    "command": "speccore global-status",
+    "env": "cli",
+    "params": [],
+    "tags": [
+      "日常",
+      "全局模式"
+    ],
+    "builtin": true,
+    "sort": 9,
+    "examples": [
+      "查看全量层项目概况",
+      "跨迭代整体视图"
+    ]
+  },
+  {
+    "id": "iteration-from-global",
+    "name": "从全局创建迭代",
+    "category": "governance",
+    "icon": "🧬",
+    "description": "从全局层需求生成新迭代",
+    "prompt": "从全局需求 {需求ID} 创建迭代 {迭代名}",
+    "command": "speccore iteration-from-global --reqs {需求ID} --name {迭代名}",
+    "env": "cli",
+    "params": [
+      {
+        "key": "需求ID",
+        "placeholder": "REQ-001,REQ-002",
+        "required": true
+      },
+      {
+        "key": "迭代名",
+        "placeholder": "Q3",
+        "required": true
+      }
+    ],
+    "tags": [
+      "初始化",
+      "全局模式"
+    ],
+    "builtin": true,
+    "sort": 10,
+    "examples": [
+      "从全局需求库拉取需求创建迭代",
+      "复用全局层已有需求"
+    ]
+  },
+  {
+    "id": "config-manage",
+    "name": "配置管理",
+    "category": "governance",
+    "icon": "⚙️",
+    "description": "管理 SpecCore 配置与代码规则",
+    "prompt": "查看配置 {配置项}",
+    "command": "speccore config --get {配置项}",
+    "env": "cli",
+    "params": [
+      {
+        "key": "配置项",
+        "placeholder": "端列表",
+        "required": true
+      }
+    ],
+    "tags": [
+      "初始化"
+    ],
+    "builtin": true,
+    "sort": 11,
+    "examples": [
+      "查看/修改项目配置",
+      "管理代码规则"
+    ]
+  },
+  {
+    "id": "welcome-panel",
+    "name": "项目名片",
+    "category": "governance",
+    "icon": "👋",
+    "description": "显示欢迎面板（项目名片）",
+    "prompt": "显示项目名片",
+    "command": "speccore welcome",
+    "env": "cli",
+    "skill": "spec-welcome",
+    "params": [],
+    "tags": [
+      "日常"
+    ],
+    "builtin": true,
+    "sort": 12,
+    "examples": [
+      "查看项目概览",
+      "新成员了解项目"
+    ]
+  },
+  {
+    "id": "help-center",
+    "name": "帮助中心",
+    "category": "governance",
+    "icon": "❓",
+    "description": "命令帮助与搜索",
+    "prompt": "查看帮助",
+    "command": "speccore help",
+    "env": "cli",
+    "skill": "spec-help",
+    "params": [],
+    "tags": [
+      "日常"
+    ],
+    "builtin": true,
+    "sort": 13,
+    "examples": [
+      "查找命令用法",
+      "查看完整场景示例"
+    ]
+  }
+]

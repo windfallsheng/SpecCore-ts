@@ -65,7 +65,7 @@
     "icon": "📦",
     "description": "每批 N 个任务分批执行，降低风险",
     "prompt": "分批执行 {迭代名}，每批 {数量} 个",
-    "command": "speccore execute -I {迭代名} --batch-size {数量} --auto",
+    "command": "speccore execute -i {迭代名} --batch-size {数量} --auto",
     "env": "both",
     "skill": "spec-execute",
     "params": [
@@ -82,8 +82,7 @@
     ],
     "tags": [
       "开发阶段",
-      "批量执行",
-      "v7.2.0"
+      "批量执行"
     ],
     "builtin": true,
     "sort": 3,
@@ -99,7 +98,7 @@
     "icon": "▶️",
     "description": "上次中断后继续执行失败的任务",
     "prompt": "继续上次 {迭代名} 的执行",
-    "command": "speccore execute -I {迭代名} --resume",
+    "command": "speccore execute -i {迭代名} --resume",
     "env": "both",
     "skill": "spec-execute",
     "params": [
@@ -111,8 +110,7 @@
     ],
     "tags": [
       "开发阶段",
-      "批量执行",
-      "v7.2.0"
+      "批量执行"
     ],
     "builtin": true,
     "sort": 4,
@@ -187,7 +185,7 @@
     "icon": "🔀",
     "description": "为已完成的任务创建 Pull Request",
     "prompt": "为 {迭代名} 中 {任务ID} 创建 PR",
-    "command": "speccore pr -I {迭代名} --task {任务ID}",
+    "command": "speccore pr -i {迭代名} --task {任务ID}",
     "env": "both",
     "skill": "spec-pr",
     "params": [
@@ -220,7 +218,7 @@
     "icon": "✅",
     "description": "标记任务为已完成状态",
     "prompt": "标记 {迭代名} 的 {任务ID} 为完成",
-    "command": "speccore done -I {迭代名} --task {任务ID}",
+    "command": "speccore done -i {迭代名} --task {任务ID}",
     "env": "both",
     "params": [
       {
@@ -275,6 +273,121 @@
     "examples": [
       "用户管理模块要加批量导入",
       "订单流程需要支持退款"
+    ]
+  },
+  {
+    "id": "execute-all",
+    "name": "执行全部任务",
+    "category": "execute",
+    "icon": "🚀",
+    "description": "一次执行迭代内全部待执行任务",
+    "prompt": "执行 {迭代名} 的全部任务",
+    "command": "speccore execute -i {迭代名} --all --force",
+    "env": "both",
+    "skill": "spec-execute",
+    "params": [
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": true
+      }
+    ],
+    "tags": [
+      "开发阶段",
+      "全自动"
+    ],
+    "builtin": true,
+    "sort": 10,
+    "examples": [
+      "任务已拆分完毕，一次性全部执行",
+      "信任 AI 全自动开发"
+    ]
+  },
+  {
+    "id": "execute-type",
+    "name": "按类型执行任务",
+    "category": "execute",
+    "icon": "🎯",
+    "description": "只执行指定类型的任务（bugfix/feature 等）",
+    "prompt": "执行 {迭代名} 中 {任务类型} 类型的任务",
+    "command": "speccore execute -i {迭代名} --type {任务类型} --auto",
+    "env": "both",
+    "skill": "spec-execute",
+    "params": [
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": true
+      },
+      {
+        "key": "任务类型",
+        "placeholder": "bugfix",
+        "required": true
+      }
+    ],
+    "tags": [
+      "开发阶段",
+      "定向拆分"
+    ],
+    "builtin": true,
+    "sort": 11,
+    "examples": [
+      "优先处理 bugfix 类型任务",
+      "只做 feature 类型开发"
+    ]
+  },
+  {
+    "id": "done-all",
+    "name": "批量归档完成",
+    "category": "execute",
+    "icon": "✅",
+    "description": "批量归档迭代内所有已完成任务",
+    "prompt": "批量归档 {迭代名} 的所有完成任务",
+    "command": "speccore done --all -i {迭代名}",
+    "env": "cli",
+    "params": [
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": true
+      }
+    ],
+    "tags": [
+      "收尾阶段",
+      "任务管理"
+    ],
+    "builtin": true,
+    "sort": 12,
+    "examples": [
+      "迭代收尾时批量归档",
+      "一次归档所有已完成任务"
+    ]
+  },
+  {
+    "id": "verify-code",
+    "name": "代码验证",
+    "category": "execute",
+    "icon": "🧪",
+    "description": "编译检查 + Lint + 单元测试",
+    "prompt": "验证 {迭代名} 的代码",
+    "command": "speccore verify -i {迭代名} --type all",
+    "env": "cli",
+    "params": [
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": true
+      }
+    ],
+    "tags": [
+      "收尾阶段",
+      "质量门禁"
+    ],
+    "builtin": true,
+    "sort": 13,
+    "examples": [
+      "执行后跑一遍编译和测试",
+      "交付前质量门禁"
     ]
   }
 ]
