@@ -208,9 +208,9 @@ export function buildNewPlatformPrompt(
   // 执行步骤
   prompt += `## 执行步骤\n\n`;
   prompt += `### Step 1: 读取已有全局文档\n`;
-  prompt += `- Read \`.speccore/GLOBAL/global/FUNCTION_MAP.md\` → 了解已有功能单元\n`;
-  prompt += `- Read \`.speccore/GLOBAL/global/API_CONTRACT.yaml\` → 了解已有接口契约\n`;
-  prompt += `- Read \`.speccore/GLOBAL/global/ARCHITECTURE.md\` → 了解全局架构\n`;
+  prompt += `- Read \`.speccore/GLOBAL/overview/FUNCTION_MAP.md\` → 了解已有功能单元\n`;
+  prompt += `- Read \`.speccore/GLOBAL/overview/API_CONTRACT.yaml\` → 了解已有接口契约\n`;
+  prompt += `- Read \`.speccore/GLOBAL/overview/ARCHITECTURE.md\` → 了解全局架构\n`;
   prompt += `- Read 已有端的 \`platforms/{端}/_INDEX.md\` → 了解已有端的能力\n\n`;
 
   prompt += `### Step 2: 读取新端源码\n`;

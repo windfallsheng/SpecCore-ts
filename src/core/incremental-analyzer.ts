@@ -405,7 +405,7 @@ async function identifyStaleOutputs(
   if (analysis.addedPlatforms.length > 0) {
     stale.push('020-specs/overview/FUNCTION_MAP.md');
     stale.push('020-specs/overview/INTERACTION_MAP.md');
-    stale.push('.speccore/GLOBAL/global/ARCHITECTURE.md');
+    stale.push('.speccore/GLOBAL/overview/ARCHITECTURE.md');
   }
 
   // 如果源码变更，对应的端分析可能过期
