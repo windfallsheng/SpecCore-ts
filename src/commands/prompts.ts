@@ -19,6 +19,7 @@ export interface PromptTemplate {
   icon: string;
   description: string;
   prompt: string;
+  command?: string;
   params: PromptParam[];
   builtin: boolean;
   sort: number;
@@ -277,6 +278,45 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
       height: 30px;
       background: linear-gradient(transparent, #f8f9fa);
     }
+    .prompt-section {
+      font-size: 11px;
+      font-weight: 600;
+      color: #868e96;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .prompt-say {
+      background: #e7f5ff;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 13px;
+      color: #1864ab;
+      margin-bottom: 12px;
+      line-height: 1.5;
+      border-left: 3px solid #339af0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    .prompt-cmd {
+      background: #212529;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 12px;
+      color: #69db7c;
+      margin-bottom: 12px;
+      line-height: 1.6;
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .prompt-cmd code {
+      color: #69db7c;
+      font-family: inherit;
+    }
     .prompt-actions {
       display: flex;
       gap: 8px;
@@ -286,6 +326,18 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
       padding: 8px 12px;
       font-size: 13px;
     }
+    .btn-say {
+      background: #e7f5ff;
+      color: #1864ab;
+      border: 1px solid #74c0fc;
+    }
+    .btn-say:hover { background: #d0ebff; }
+    .btn-cmd {
+      background: #212529;
+      color: #69db7c;
+      border: 1px solid #495057;
+    }
+    .btn-cmd:hover { background: #343a40; }
     .badge {
       display: inline-block;
       padding: 2px 8px;
@@ -522,6 +574,15 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
         ? '<span class="badge badge-builtin">预置</span>'
         : '<span class="badge badge-custom">自定义</span>';
       
+      const hasCommand = p.command && p.command.trim();
+      const cmdBlock = hasCommand
+        ? \`<div class="prompt-section">⌨️ 触发命令</div><div class="prompt-cmd">\${escapeHtml(p.command)}</div>\`
+        : '';
+      
+      const copyCmdBtn = hasCommand
+        ? \`<button class="btn btn-cmd" onclick="copyCommand('\${p.id}')">⌨️ 复制命令</button>\`
+        : '';
+      
       return \`
         <div class="prompt-card">
           <div class="prompt-header">
@@ -531,9 +592,12 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
               <p>\${p.description || ''}</p>
             </div>
           </div>
-          <div class="prompt-preview">\${escapeHtml(p.prompt)}</div>
+          <div class="prompt-section">💬 AI 说法</div>
+          <div class="prompt-say">\${escapeHtml(p.prompt)}</div>
+          \${cmdBlock}
           <div class="prompt-actions">
-            <button class="btn btn-primary" onclick="copyPrompt('\${p.id}')">📋 复制</button>
+            <button class="btn btn-say" onclick="copyPrompt('\${p.id}')">💬 复制说法</button>
+            \${copyCmdBtn}
             \${!p.builtin ? \`
               <button class="btn btn-secondary" onclick="editPrompt('\${p.id}')">编辑</button>
               <button class="btn btn-secondary" onclick="deletePrompt('\${p.id}')">删除</button>
@@ -553,20 +617,30 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
       const p = prompts.find(x => x.id === id);
       if (!p) return;
       
-      // 如果有参数，显示自定义弹框
       if (p.params && p.params.length > 0) {
-        showParamModal(p);
+        showParamModal(p, 'say');
       } else {
-        // 无参数，直接复制
         const text = '/spec-ask "' + p.prompt + '"';
-        copyToClipboard(text);
+        copyToClipboard(text, '💬 AI 说法已复制');
       }
     }
 
-    function showParamModal(p) {
-      // 创建参数输入弹框
+    function copyCommand(id) {
+      const p = prompts.find(x => x.id === id);
+      if (!p || !p.command) return;
+      
+      if (p.params && p.params.length > 0) {
+        showParamModal(p, 'cmd');
+      } else {
+        copyToClipboard(p.command, '⌨️ 命令已复制');
+      }
+    }
+
+    function showParamModal(p, mode) {
+      const isSay = mode === 'say';
       const modal = document.createElement('div');
       modal.className = 'modal active';
+      modal.dataset.mode = mode;
       modal.innerHTML = \`
         <div class="modal-content" style="max-width: 600px;">
           <div class="modal-header">
@@ -578,36 +652,40 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
             \${p.params.map(param => \`
               <div class="form-group">
                 <label>\${param.key} \${param.required ? '<span style="color: #e03131;">*</span>' : ''}</label>
-                <input type="text" id="param-\${param.key}" placeholder="\${param.placeholder || ''}" value="\${param.placeholder || ''}" oninput="updatePreview('\${p.id}')">
+                <input type="text" id="param-\${param.key}" placeholder="\${param.placeholder || ''}" value="\${param.placeholder || ''}" oninput="updatePreview('\${p.id}', '\${mode}')">
               </div>
             \`).join('')}
             <div class="form-group" style="margin-top: 20px;">
-              <label style="font-weight: 600; color: #495057;"> 预览</label>
-              <div id="preview-box" style="background: #f8f9fa; border-radius: 8px; padding: 12px; font-size: 13px; color: #495057; line-height: 1.6; min-height: 60px; border: 1px solid #e9ecef;">
-                \${escapeHtml(p.prompt)}
+              <label style="font-weight: 600; color: #495057;">\${isSay ? '💬 预览（AI 说法）' : '⌨️ 预览（触发命令）'}</label>
+              <div id="preview-box" style="\${isSay
+                ? 'background: #e7f5ff; border-radius: 8px; padding: 12px; font-size: 13px; color: #1864ab; line-height: 1.6; min-height: 60px; border: 1px solid #74c0fc;'
+                : 'background: #212529; border-radius: 8px; padding: 12px; font-size: 12px; color: #69db7c; line-height: 1.6; min-height: 60px; border: 1px solid #495057; font-family: monospace;'
+              }">
+                \${escapeHtml(isSay ? p.prompt : (p.command || ''))}
               </div>
             </div>
           </div>
           <div class="modal-footer">
             <button class="btn btn-secondary" onclick="this.closest('.modal').remove()">取消</button>
-            <button class="btn btn-primary" onclick="submitParams('\${p.id}')">📋 复制</button>
+            <button class="btn \${isSay ? 'btn-say' : 'btn-cmd'}" onclick="submitParams('\${p.id}', '\${mode}')">\${isSay ? '💬 复制说法' : '⌨️ 复制命令'}</button>
           </div>
         </div>
       \`;
       document.body.appendChild(modal);
       
-      // 聚焦第一个输入框
       setTimeout(() => {
         const firstInput = modal.querySelector('input');
         if (firstInput) firstInput.focus();
       }, 100);
     }
 
-    function updatePreview(id) {
+    function updatePreview(id, mode) {
       const p = prompts.find(x => x.id === id);
       if (!p) return;
       
-      let text = p.prompt;
+      const isSay = mode === 'say';
+      let text = isSay ? p.prompt : (p.command || '');
+      
       p.params.forEach(param => {
         const input = document.getElementById('param-' + param.key);
         const value = input ? input.value.trim() : '';
@@ -618,15 +696,20 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
       
       const previewBox = document.getElementById('preview-box');
       if (previewBox) {
-        previewBox.innerHTML = '<strong>/spec-ask "</strong>' + escapeHtml(text) + '<strong>"</strong>';
+        if (isSay) {
+          previewBox.innerHTML = '<strong>/spec-ask "</strong>' + escapeHtml(text) + '<strong>"</strong>';
+        } else {
+          previewBox.textContent = text;
+        }
       }
     }
 
-    function submitParams(id) {
+    function submitParams(id, mode) {
       const p = prompts.find(x => x.id === id);
       if (!p) return;
       
-      let text = p.prompt;
+      const isSay = mode === 'say';
+      let text = isSay ? p.prompt : (p.command || '');
       let allFilled = true;
       
       p.params.forEach(param => {
@@ -647,27 +730,24 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
         return;
       }
       
-      // 关闭弹框
       const modal = document.querySelector('.modal.active');
       if (modal) modal.remove();
       
-      // 复制
-      const finalText = '/spec-ask "' + text + '"';
-      copyToClipboard(finalText);
+      const finalText = isSay ? ('/spec-ask "' + text + '"') : text;
+      copyToClipboard(finalText, isSay ? '💬 AI 说法已复制' : '⌨️ 命令已复制');
     }
 
-    function copyToClipboard(text) {
+    function copyToClipboard(text, msg) {
       navigator.clipboard.writeText(text).then(() => {
-        showToast('✅ 已复制到剪贴板');
+        showToast(msg || '✅ 已复制到剪贴板');
       }).catch(() => {
-        // 降级方案
         const textarea = document.createElement('textarea');
         textarea.value = text;
         document.body.appendChild(textarea);
         textarea.select();
         document.execCommand('copy');
         document.body.removeChild(textarea);
-        showToast('✅ 已复制到剪贴板');
+        showToast(msg || '✅ 已复制到剪贴板');
       });
     }
 
