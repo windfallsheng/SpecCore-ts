@@ -18,6 +18,16 @@ export interface DevPhase {
   done: boolean;
   description: string;
   args: string;
+  /** 详细说明：该阶段做什么、为什么 */
+  detail?: string;
+  /** 前置条件 */
+  prerequisites?: string[];
+  /** 产出物清单 */
+  outputs?: string[];
+  /** 使用技巧和注意事项 */
+  tips?: string;
+  /** 常用命令示例 */
+  examples?: string[];
 }
 
 export interface DevPipelineState {
