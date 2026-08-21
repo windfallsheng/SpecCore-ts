@@ -499,6 +499,37 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
       gap: 8px;
       align-items: center;
       flex-wrap: wrap;
+      transition: max-height 0.3s ease;
+      overflow: hidden;
+    }
+    .tag-cloud.collapsed {
+      max-height: 48px;
+    }
+    .tag-cloud.expanded {
+      max-height: 500px;
+    }
+    .tag-toggle-bar {
+      text-align: center;
+      padding: 0 30px 10px;
+      background: #f8f9fa;
+      border-bottom: 1px solid #e9ecef;
+    }
+    .tag-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 5px 14px;
+      background: #e9ecef;
+      border: 1px solid #dee2e6;
+      border-radius: 20px;
+      font-size: 12px;
+      color: #495057;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .tag-toggle:hover {
+      background: #dee2e6;
     }
     .tag-cloud-label {
       font-size: 12px;
@@ -612,9 +643,10 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
     </div>
 
     <!-- 标签云 -->
-    <div class="tag-cloud" id="tagCloud">
+    <div class="tag-cloud collapsed" id="tagCloud">
       <span class="tag-cloud-label">🏷️ 标签</span>
     </div>
+    <div class="tag-toggle-bar" id="tagToggleBar"></div>
 
     <div class="content" id="content">
       <!-- 动态渲染 -->
@@ -670,6 +702,7 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
     let editingId = null;
     let currentScene = null;
     let activeTag = null;
+    let tagCloudExpanded = false;
 
     // 场景 → 标签映射
     const sceneMap = {
@@ -696,7 +729,12 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
     function renderTagCloud() {
       const tags = collectTags();
       const container = document.getElementById('tagCloud');
+      const toggleBar = document.getElementById('tagToggleBar');
       if (!container) return;
+
+      const needsToggle = tags.length > 6;
+      container.className = 'tag-cloud ' + (tagCloudExpanded || !needsToggle ? 'expanded' : 'collapsed');
+
       let html = '<span class="tag-cloud-label">🏷️ 标签</span>';
       html += '<span class="tag' + (activeTag ? '' : ' active') + '" onclick="filterByTag(null)">全部</span>';
       tags.forEach(([tag, count]) => {
@@ -704,6 +742,18 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
         html += \`<span class="tag \${isActive ? 'active' : ''}" onclick="filterByTag('\${tag}')">\${tag}<span class="tag-count">\${count}</span></span>\`;
       });
       container.innerHTML = html;
+
+      if (toggleBar) {
+        toggleBar.innerHTML = needsToggle
+          ? \`<span class="tag-toggle" onclick="toggleTagCloud()">\${tagCloudExpanded ? '▲ 收起' : '▼ 展开更多标签'}</span>\`
+          : '';
+        toggleBar.style.display = needsToggle ? 'block' : 'none';
+      }
+    }
+
+    function toggleTagCloud() {
+      tagCloudExpanded = !tagCloudExpanded;
+      renderTagCloud();
     }
 
     // 初始化
