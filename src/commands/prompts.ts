@@ -250,29 +250,6 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
       flex-direction: column;
       position: relative;
     }
-    .prompt-card::before {
-      content: '';
-      position: absolute;
-      top: -2px;
-      left: -2px;
-      right: -2px;
-      bottom: -2px;
-      border-radius: 14px;
-      background: linear-gradient(90deg, #667eea, #764ba2, #667eea);
-      background-size: 300% 300%;
-      z-index: -1;
-      opacity: 0;
-      animation: borderPulse 3s ease infinite;
-      filter: blur(4px);
-    }
-    .prompt-card:hover::before {
-      opacity: 0.6;
-    }
-    @keyframes borderPulse {
-      0% { background-position: 0% 50%; opacity: 0.3; }
-      50% { background-position: 100% 50%; opacity: 0.7; }
-      100% { background-position: 0% 50%; opacity: 0.3; }
-    }
     .prompt-card:hover {
       border-color: #667eea;
       box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
