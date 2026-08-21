@@ -6,6 +6,7 @@
     "icon": "🏗️",
     "description": "在当前项目中初始化 SpecCore",
     "prompt": "初始化 SpecCore 项目",
+    "command": "speccore init",
     "params": [],
     "builtin": true,
     "sort": 1
@@ -17,6 +18,7 @@
     "icon": "🔍",
     "description": "分析迭代需求，生成规格说明",
     "prompt": "分析 {迭代名} 迭代的需求文档，生成完整的规格说明",
+    "command": "speccore analyze -I {迭代名}",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
@@ -30,6 +32,7 @@
     "icon": "🧩",
     "description": "将迭代需求拆分为可执行的开发任务",
     "prompt": "把 {迭代名} 迭代的需求拆分成开发任务",
+    "command": "speccore split -I {迭代名}",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
@@ -43,6 +46,7 @@
     "icon": "▶️",
     "description": "执行指定的开发任务",
     "prompt": "执行 {迭代名} 中的 {任务ID} 任务",
+    "command": "speccore execute --task {任务ID} -I {迭代名}",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true },
       { "key": "任务ID", "placeholder": "Task-001", "required": true }
@@ -57,10 +61,25 @@
     "icon": "📊",
     "description": "查看迭代进度仪表盘",
     "prompt": "查看 {迭代名} 的进度",
+    "command": "speccore dashboard -I {迭代名}",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": false }
     ],
     "builtin": true,
     "sort": 5
+  },
+  {
+    "id": "dev-auto",
+    "name": "智能级联开发",
+    "category": "workflow",
+    "icon": "🤖",
+    "description": "全自动 analyze→split→plan→execute→pr→done",
+    "prompt": "全自动完成 {迭代名} 的开发",
+    "command": "speccore dev -i {迭代名} --auto",
+    "params": [
+      { "key": "迭代名", "placeholder": "Q2", "required": true }
+    ],
+    "builtin": true,
+    "sort": 6
   }
 ]
