@@ -11,7 +11,7 @@
  *   - iteration → Iteration-XX/020-specs/         迭代级基线（默认）
  *   - task      → Iteration-XX/030-tasks/Task-NN/_shared/  任务级独立（不覆盖基线）
  */
-import { writeFile, pathExists, ensureDir } from 'fs-extra';
+import { writeFile, pathExists, ensureDir, rename, stat } from 'fs-extra';
 import { join, dirname } from 'path';
 import { backupWithTimestamp, isTimestampBackup, shouldOverwrite, findProjectRoot } from '../utils/task-utils';
 import { logger, Spinner } from '../utils/logger';
@@ -971,6 +971,9 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
           }
           logger.success(`✅ ${count} 个 Spec 文档已写入 020-specs/`);
 
+          // v6.90.0+: 事后校验——检测并清理 AI 绕过 --apply 创建的非法目录/文件
+          await sanitizeSpecDirectories(iterDir!);
+
           // v6.74.0+: 流式分析自动检查（回退检测 + 最终核对）
           if (options.streamingPhase) {
             const phase = options.streamingPhase as import('../core/streaming-analyzer').AnalyzePhase;
@@ -1299,7 +1302,7 @@ async function preCreateSpecDirectories(iteration: string): Promise<void> {
   const specDir = join(iterDir, '020-specs');
   await ensureDir(specDir);
 
-  // 预创建 global/ 子目录
+  // 预创建 overview/ 子目录（v6.78.0+ 从 global/ 改名）
   const globalDir = join(specDir, GLOBAL_SPECS_DIR);
   await ensureDir(globalDir);
 
@@ -1310,9 +1313,102 @@ async function preCreateSpecDirectories(iteration: string): Promise<void> {
   }
 
   if (platforms.length > 0) {
-    logger.info(`📁 已预创建 020-specs/ 目录结构: global/ + ${platforms.length} 个端目录 (${platforms.join(', ')})`);
+    logger.info(`📁 已预创建 020-specs/ 目录结构: ${GLOBAL_SPECS_DIR}/ + ${platforms.length} 个端目录 (${platforms.join(', ')})`);
   } else {
-    logger.info(`📁 已预创建 020-specs/ 目录结构: global/`);
+    logger.info(`📁 已预创建 020-specs/ 目录结构: ${GLOBAL_SPECS_DIR}/`);
+  }
+}
+
+/**
+ * v6.90.0+: 事后校验——检测并清理 020-specs/ 下 AI 绕过 --apply 创建的非法目录和文件
+ * 
+ * 解决的问题：AI 用 Write 工具直接写文件，绕过 CLI --apply，导致：
+ * - 非法子目录（如 1001/、工程标识/、错误码/）
+ * - 遗留的 global/ 旧目录（应迁移到 overview/）
+ * - 根目录散落的 .md 文件（应在 overview/ 内）
+ */
+async function sanitizeSpecDirectories(iterDir: string): Promise<void> {
+  const specDir = join(iterDir, '020-specs');
+  if (!await pathExists(specDir)) return;
+
+  const platforms = await parsePlatformList();
+  const validDirs = new Set([GLOBAL_SPECS_DIR, ...platforms]);
+  const globalSet = new Set(GLOBAL_SPEC_FILES);
+
+  const entries = await readdir(specDir);
+  let illegalDirCount = 0;
+  let orphanFileCount = 0;
+  let legacyGlobalMigrated = false;
+
+  for (const entry of entries) {
+    const entryPath = join(specDir, entry);
+    const entryStat = await stat(entryPath);
+
+    if (entryStat.isDirectory()) {
+      // 检测遗留的 global/ 目录（v6.78.0+ 已改名为 overview/）
+      if (entry === 'global') {
+        logger.warn(`⚠️ 检测到遗留 global/ 目录（v6.78.0+ 已改名为 ${GLOBAL_SPECS_DIR}/）`);
+        // 将 global/ 中的文件迁移到 overview/
+        const globalFiles = await readdir(entryPath);
+        const overviewDir = join(specDir, GLOBAL_SPECS_DIR);
+        await ensureDir(overviewDir);
+        for (const f of globalFiles) {
+          const src = join(entryPath, f);
+          const dest = join(overviewDir, f);
+          if (!await pathExists(dest)) {
+            await rename(src, dest);
+            logger.info(`   📦 迁移: global/${f} → ${GLOBAL_SPECS_DIR}/${f}`);
+          }
+        }
+        // 删除空的 global/ 目录
+        const remaining = await readdir(entryPath);
+        if (remaining.length === 0) {
+          await rename(entryPath, join(specDir, `global.migrated-${Date.now()}`));
+          logger.info(`   🗑️ global/ 已迁移并归档`);
+        } else {
+          logger.warn(`   ⚠️ global/ 仍有 ${remaining.length} 个文件未迁移，已重命名归档`);
+          await rename(entryPath, join(specDir, `global.archived-${Date.now()}`));
+        }
+        legacyGlobalMigrated = true;
+        continue;
+      }
+
+      // 白名单校验：非 overview/ 且非端名的目录 → 非法
+      if (!validDirs.has(entry)) {
+        const archivedName = `${entry}.invalid-${Date.now()}`;
+        await rename(entryPath, join(specDir, archivedName));
+        logger.warn(`⚠️ 非法目录已归档: 020-specs/${entry}/ → ${archivedName}/`);
+        illegalDirCount++;
+      }
+    } else if (entryStat.isFile()) {
+      // 根目录散落的 .md 文件 → 检查是否应归入 overview/
+      if (entry.endsWith('.md') && globalSet.has(entry)) {
+        const overviewDir = join(specDir, GLOBAL_SPECS_DIR);
+        await ensureDir(overviewDir);
+        const dest = join(overviewDir, entry);
+        if (!await pathExists(dest)) {
+          await rename(entryPath, dest);
+          logger.warn(`⚠️ 散落文件已归位: 020-specs/${entry} → ${GLOBAL_SPECS_DIR}/${entry}`);
+          orphanFileCount++;
+        } else {
+          // overview/ 中已有同名文件，归档根目录版本
+          const archivedName = `${entry}.orphan-${Date.now()}`;
+          await rename(entryPath, join(specDir, archivedName));
+          logger.warn(`⚠️ 重复散落文件已归档: 020-specs/${entry} → ${archivedName}`);
+          orphanFileCount++;
+        }
+      }
+    }
+  }
+
+  // 汇总报告
+  if (illegalDirCount > 0 || orphanFileCount > 0 || legacyGlobalMigrated) {
+    logger.info('');
+    logger.info(`🔍 020-specs/ 目录校验报告:`);
+    if (illegalDirCount > 0) logger.warn(`   ⚠️ ${illegalDirCount} 个非法目录已归档（AI 绕过 --apply 创建）`);
+    if (orphanFileCount > 0) logger.warn(`   ⚠️ ${orphanFileCount} 个散落文件已归位到 ${GLOBAL_SPECS_DIR}/`);
+    if (legacyGlobalMigrated) logger.info(`   📦 遗留 global/ 已迁移到 ${GLOBAL_SPECS_DIR}/`);
+    logger.info(`   ✅ 当前合法目录: ${Array.from(validDirs).join(', ')}`);
   }
 }
 
@@ -3076,7 +3172,7 @@ sequenceDiagram
   prompt += `## 🚨 最高优先级警告（违反将导致分析失败）\n\n`;
   prompt += `### ⛔ 绝对禁止创建任何额外目录\n`;
   prompt += `- ❌ **错误行为**：创建 020-specs/1001/、020-specs/1002/、020-specs/错误码/、020-specs/工程标识/ 等垃圾目录\n`;
-  prompt += `- ✅ **正确行为**：只使用 CLI 预创建的 global/ 和 {端名}/ 目录，不要手动 mkdir 或 Write 到不存在的目录\n`;
+  prompt += `- ✅ **正确行为**：只使用 CLI 预创建的 overview/ 和 {端名}/ 目录，不要手动 mkdir 或 Write 到不存在的目录\n`;
   prompt += `- ⚠️ **后果**：如果创建额外目录，会导致后续 split/execute 命令找不到文件，整个工作流失败\n\n`;
   prompt += `###  绝对禁止直接用 Write 工具写文件\n`;
   prompt += `- ❌ **错误行为**：Write("020-specs/overview/ANALYSIS.md", content) 或直接 Write 到任何路径\n`;
@@ -3086,7 +3182,7 @@ sequenceDiagram
   prompt += `### ✅ 正确的目录结构\n`;
   prompt += `\`\`\`\n`;
   prompt += `020-specs/\n`;
-  prompt += `├── global/          ← REQUIREMENT.md, ANALYSIS.md, DEPS.md（跨端通用）\n`;
+  prompt += `├── overview/        ← REQUIREMENT.md, ANALYSIS.md, DEPS.md（跨端通用）\n`;
   prompt += `├── admin-web/       ← TECH.md, TEST.md, UI_SPEC.md（Admin 端专属）\n`;
   prompt += `├── booking-service/ ← TECH.md, TEST.md（后端服务专属）\n`;
   prompt += `├── h5-mobile/       ← TECH.md, TEST.md, UI_SPEC.md（H5 端专属）\n`;
@@ -3329,7 +3425,7 @@ sequenceDiagram
     prompt += `     - MONITOR.md（监控指标）\n`;
     prompt += `   - **禁止**：不要创建 020-specs/ 下的任何额外子目录（如数字编号、中文名称等）\n`;
     prompt += `   - **禁止直接用 Write 工具写文件到 020-specs/**：必须通过 \`speccore analyze --apply '{"文件名":"内容"}' -I ${iter}\` 写入\n`;
-    prompt += `   - ⚠️ 直接 Write 会导致目录结构错误（所有文件扁平在根目录），必须走 --apply 让 CLI 自动路由到 global/ 或 {端名}/ 子目录\n`;
+    prompt += `   - ⚠️ 直接 Write 会导致目录结构错误（所有文件扁平在根目录），必须走 --apply 让 CLI 自动路由到 overview/ 或 {端名}/ 子目录\n`;
     if (ctx.phase !== '1') {
       // 端专业性约束只在默认模式（全量）中输出
       prompt += `\n## ⚠️ 端专业性约束\n`;
@@ -3421,7 +3517,7 @@ sequenceDiagram
     prompt += `\n## ⚠️ 重要：Phase 1 完成后的下一步\n\n`;
     prompt += `当你通过 --apply 写入所有综合文档后，CLI 会检测到项目有多个端（≥2 个端）。\n`;
     prompt += `**此时你需要主动询问用户**：\n\n`;
-    prompt += `"✅ Phase 1 已完成，生成了 global/ 的综合文档。\n`;
+    prompt += `"✅ Phase 1 已完成，生成了 overview/ 的综合文档。\n`;
     prompt += `检测到项目有 ${'{'}端列表{'}'} 个端，需要继续执行 Phase 2 生成各端专属文档吗？\n`;
     prompt += `请确认：输入 '继续' 或 'yes' 以执行 Phase 2"\n\n`;
     prompt += `**如果用户确认继续**，你需要执行：\n`;

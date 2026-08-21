@@ -332,7 +332,7 @@ async function renderDevHtml(options: DevOptions): Promise<string> {
       tips: '如果文档格式复杂，可以先放到 .speccore/inbox/ 目录，AI 会自动识别并转换。', examples: ['/spec-ask "新增用户登录功能"', 'speccore doc2spec -f PRD.docx -i my-iter'] },
     { name: lang === 'en' ? I18N.en.stepAnalyze : I18N.zh.stepAnalyze, key: 'analyze', done: false,          icon: '🧠', cmd: 'analyze',  description: 'AI 分析需求文档，生成审计报告', args: iterName ? '--iteration=' + iterName : '',
       detail: 'AI 深度分析需求文档，生成分端技术规格（ANALYSIS.md、TECH.md、UI_SPEC.md、TEST.md 等 7+ 份文档），并输出风险评估和依赖分析。',
-      prerequisites: ['需求文档已导入（REQUIREMENT.md 或 features/ 存在）'], outputs: ['Iteration-xxx/020-specs/global/ANALYSIS.md', 'Iteration-xxx/020-specs/{platform}/TECH.md', 'Iteration-xxx/020-specs/{platform}/UI_SPEC.md'],
+      prerequisites: ['需求文档已导入（REQUIREMENT.md 或 features/ 存在）'], outputs: ['Iteration-xxx/020-specs/overview/ANALYSIS.md', 'Iteration-xxx/020-specs/{platform}/TECH.md', 'Iteration-xxx/020-specs/{platform}/UI_SPEC.md'],
       tips: '分析时 AI 会读取 CONSTITUTION.md 中的技术栈配置，确保输出符合项目规范。分析产物包含 Mermaid 图表。', examples: ['/spec-ask "分析 my-iter 的需求"', 'speccore analyze --auto -I my-iter'] },
     { name: lang === 'en' ? I18N.en.stepSplit : I18N.zh.stepSplit, key: 'split',   done: false,          icon: '📦', cmd: 'split',    description: '将需求拆分为独立开发任务',         args: '-f REQUIREMENT.md',
       detail: '基于 ANALYSIS.md 中的技术规格，AI 将需求拆分为独立的开发任务（Task-001 / Task-002 ...），每个任务包含 REQ/TECH/SCHEMA 规格和跨端依赖分析。',

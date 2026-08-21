@@ -1,3 +1,22 @@
+## v7.2.1 (2026-08-21) — analyze 目录结构校验 + prompt 路径修复
+
+### 修复
+
+- **Prompt 目录路径修复** `src/commands/analyze.ts` `src/commands/dev.ts`
+  - v6.78.0+ 已将 `GLOBAL_SPECS_DIR` 从 `global` 改为 `overview`，但 prompt 中 5 处仍写 `global/`
+  - AI 按 prompt 指令写入 `global/` 导致目录结构错误（根因：CLI 给了错误指令）
+  - 修复位置：警告区块、目录结构示例、Phase 完成提示、dev 步骤描述
+
+- **事后目录校验** `src/commands/analyze.ts`
+  - 新增 `sanitizeSpecDirectories()` 函数，在 `--apply` 完成后自动执行
+  - 检测并处理三类问题：① 遗留 `global/` 目录自动迁移到 `overview/`；② 非法子目录（如 `1001/`、`工程标识/`）重命名归档；③ 根目录散落的 `.md` 文件自动归位到 `overview/`
+  - 解决 AI 绕过 `--apply` 直接用 Write 工具写文件导致的目录结构混乱
+
+- **preCreateSpecDirectories 日志修复** `src/commands/analyze.ts`
+  - 日志从硬编码 `global/` 改为使用 `${GLOBAL_SPECS_DIR}` 变量
+
+---
+
 ## v7.2.0 (2026-08-21) — 全局分析深度增强 + 迭代分析细粒度 + 自动引导
 
 ### 新增

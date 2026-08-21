@@ -75,13 +75,18 @@ disable-model-invocation: false
      - 步骤3-5: 同下
    - **全局级分析**（用户明确说"全局""全量""项目分析""所有端"等）：
      - 步骤1: `speccore analyze --prompt --scope global --with-code` → 获取 SPECCORE_PROMPT
-     - 步骤2: **Read .speccore/CONSTITUTION.md 获取工程源码路径**，从源码路径读取各端代码，**禁止读迭代目录**
-     - 步骤3: 先 Read .speccore/PATTERNS/TEMPLATES/specs/ 中的专业模板，参考其格式和结构
-     - 步骤4: 对每个文档用专业格式自由撰写，禁止写"待填充"或复制模板空壳
-     - 步骤5: `speccore analyze --apply '{"ANALYSIS.md":"...",...}' --scope global` 写入 `.speccore/GLOBAL/`
+     - 步骤2: **Read .speccore/CONSTITUTION.md 获取工程源码路径**，从源码路径读各端代码，**禁止读/写迭代目录**
+     - 步骤3: **严格按 prompt 中「当前执行层级 Layer N/4」执行，只做当前层**（v7.2.0+ 分层机制，禁止一次写全部）：
+       - Layer 1 代码索引 → `platforms/{端}/_INDEX.md` + PATTERNS
+       - Layer 2 架构关联 → `platforms/_shared/_ASSOCIATION.md` + `_MODULES.md`
+       - Layer 3 业务深入 → 各端功能模块文档
+       - Layer 4 全局汇总 → `overview/`(REQUIREMENT/ANALYSIS/DEPS/FUNCTION_MAP/INTERACTION_MAP/API_CONTRACT) + `requirements/` + `platforms/`
+     - 步骤4: 每层产物用 `speccore analyze --apply '{"<相对路径>":"...",...}' --scope global` 写入 `.speccore/GLOBAL/`
+     - 步骤5: 看到 [SPECCORE_PIPELINE_NEXT] 或 prompt 提示的下一层命令时**自动继续，不询问用户**，直到 Layer 4 完成
    - 步骤6: **用户提供参考文档时**: 如果用户附带了格式参考文档（如PDF/Word/截图），先按标准 Spec 模板生成默认文档，再按用户参考格式生成一份，**两边都要**
    - ❌ 禁止: 跳过文档填充直接写代码、生成重复空壳、用 "API=0" 跳过
-   - ❌ 禁止: 全局分析时 fallback 到迭代目录读取需求文档
+   - ❌ 禁止: 全局分析时 fallback 到迭代目录读取需求文档，或把全局产物写到迭代目录
+   - ❌ 禁止: 只生成单个 ANALYSIS.md 就收尾、用 outputs/ 临时报告代替落盘 —— 必须按层级完成全部文档并写入 `.speccore/GLOBAL/`
    - ⚠️ 如果模板目录不存在或为空: 用你的专业知识自由撰写，绝不允许产出一行垃圾。你是一个专业的技术架构师和分析师，即使没有参考模板，也能产出高质量文档
 6. **交互式文档编辑**: 分析完成后用户可以对任意文档的任意部分进行修改。支持:
    - "修改 ANALYSIS.md 的接口清单部分，加上签到接口" → 只改指定章节，不改其他部分

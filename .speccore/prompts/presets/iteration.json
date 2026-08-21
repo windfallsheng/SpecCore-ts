@@ -6,7 +6,7 @@
     "icon": "🚀",
     "description": "快速创建一个新的开发迭代",
     "prompt": "帮我创建一个新迭代 {迭代名}，主题是 {主题}，负责人是 {负责人}",
-    "command": "speccore iteration create {迭代名} --theme \"{主题}\"",
+    "command": "speccore iteration create -n {迭代名} --topic \"{主题}\" --owner {负责人}",
     "env": "cli",
     "skill": "spec-iteration-create",
     "params": [
@@ -81,7 +81,7 @@
     "icon": "🔄",
     "description": "切换到另一个迭代作为当前工作上下文",
     "prompt": "切换到 {迭代名} 迭代",
-    "command": "speccore current -I {迭代名}",
+    "command": "speccore context --set --iteration {迭代名}",
     "env": "cli",
     "params": [
       {
@@ -166,7 +166,7 @@
     "icon": "📦",
     "description": "归档已完成的迭代",
     "prompt": "归档 {迭代名} 迭代",
-    "command": "speccore archive -I {迭代名}",
+    "command": "speccore archive -i {迭代名}",
     "env": "cli",
     "params": [
       {
@@ -184,6 +184,75 @@
     "examples": [
       "Q1 已交付需要归档",
       "清理已完成迭代释放空间"
+    ]
+  },
+  {
+    "id": "iteration-list",
+    "name": "查看迭代列表",
+    "category": "iteration",
+    "icon": "📋",
+    "description": "列出所有迭代",
+    "prompt": "列出所有迭代",
+    "command": "speccore iteration list",
+    "env": "cli",
+    "params": [],
+    "tags": [
+      "日常",
+      "迭代管理"
+    ],
+    "builtin": true,
+    "sort": 7,
+    "examples": [
+      "查看项目有哪些迭代",
+      "切换前先看迭代清单"
+    ]
+  },
+  {
+    "id": "context-show",
+    "name": "查看当前上下文",
+    "category": "iteration",
+    "icon": "🔍",
+    "description": "查看当前迭代与任务上下文",
+    "prompt": "查看当前上下文",
+    "command": "speccore context",
+    "env": "cli",
+    "params": [],
+    "tags": [
+      "日常",
+      "迭代管理"
+    ],
+    "builtin": true,
+    "sort": 8,
+    "examples": [
+      "确认当前在哪个迭代",
+      "查看当前任务上下文"
+    ]
+  },
+  {
+    "id": "delete-iteration",
+    "name": "删除迭代/任务",
+    "category": "iteration",
+    "icon": "🗑️",
+    "description": "删除迭代或任务（移入回收站）",
+    "prompt": "删除 {迭代名} 迭代",
+    "command": "speccore delete --iteration {迭代名} --force",
+    "env": "cli",
+    "params": [
+      {
+        "key": "迭代名",
+        "placeholder": "Q1",
+        "required": true
+      }
+    ],
+    "tags": [
+      "收尾阶段",
+      "迭代管理"
+    ],
+    "builtin": true,
+    "sort": 9,
+    "examples": [
+      "清理废弃的迭代",
+      "删除错误创建的任务"
     ]
   }
 ]

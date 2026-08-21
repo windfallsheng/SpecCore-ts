@@ -2,6 +2,25 @@
 
 ---
 
+## v7.2.1 (2026-08-21) — Analyze Directory Sanitization + Prompt Path Fix
+
+### Fixed
+
+- **Prompt directory path fix** `src/commands/analyze.ts` `src/commands/dev.ts`
+  - `GLOBAL_SPECS_DIR` was renamed from `global` to `overview` in v6.78.0+, but 5 prompt references still used `global/`
+  - AI wrote to `global/` following incorrect prompt instructions (root cause: CLI gave wrong instructions)
+  - Fixed in: warning block, directory structure example, Phase completion prompt, dev step description
+
+- **Post-analysis directory validation** `src/commands/analyze.ts`
+  - New `sanitizeSpecDirectories()` function runs automatically after `--apply` completes
+  - Detects and fixes 3 issues: ① Legacy `global/` directory auto-migrated to `overview/`; ② Illegal subdirectories (e.g. `1001/`, Chinese names) renamed with `.invalid` suffix; ③ Orphaned `.md` files at root auto-moved to `overview/`
+  - Solves directory structure corruption when AI bypasses `--apply` and writes files directly via Write tool
+
+- **preCreateSpecDirectories log fix** `src/commands/analyze.ts`
+  - Log messages changed from hardcoded `global/` to `${GLOBAL_SPECS_DIR}` variable
+
+---
+
 ## v7.1.0 (2026-08-21) — LLM Semantic Query + Diagram Enrichment + Ask Intent Improvement
 
 ### Added
