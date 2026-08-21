@@ -4,8 +4,9 @@
     "name": "全自动流水线",
     "category": "execute",
     "icon": "🤖",
-    "description": "analyze→split→plan→execute→pr→done 全自动（需 AI 参与）",
+    "description": "analyze→split→plan→execute→pr→done 全自动",
     "prompt": "全自动完成 {迭代名} 的开发",
+    "env": "ai",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
@@ -18,8 +19,9 @@
     "name": "从指定阶段继续",
     "category": "execute",
     "icon": "⏭️",
-    "description": "从 split/plan/execute 等指定阶段继续 dev（需 AI 参与）",
+    "description": "从 split/plan/execute 等指定阶段继续 dev",
     "prompt": "从 {阶段} 阶段继续开发 {迭代名}",
+    "env": "ai",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true },
       { "key": "阶段", "placeholder": "split", "required": true }
@@ -36,6 +38,7 @@
     "description": "每批 N 个任务分批执行，降低风险",
     "prompt": "分批执行 {迭代名}，每批 {数量} 个",
     "command": "speccore execute -I {迭代名} --batch-size {数量} --auto",
+    "env": "both",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true },
       { "key": "数量", "placeholder": "3", "required": false }
@@ -52,6 +55,7 @@
     "description": "上次中断后继续执行失败的任务",
     "prompt": "继续上次 {迭代名} 的执行",
     "command": "speccore execute -I {迭代名} --resume",
+    "env": "both",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
@@ -64,8 +68,9 @@
     "name": "按功能模块拆分",
     "category": "execute",
     "icon": "🧩",
-    "description": "只拆分指定功能模块的任务（需 AI 参与）",
+    "description": "只拆分指定功能模块的任务",
     "prompt": "按 {功能模块} 拆分 {迭代名} 的任务",
+    "env": "ai",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true },
       { "key": "功能模块", "placeholder": "用户认证", "required": true }
@@ -79,8 +84,9 @@
     "name": "追加拆分",
     "category": "execute",
     "icon": "➕",
-    "description": "已有任务后追加新任务，不覆盖（需 AI 参与）",
+    "description": "已有任务后追加新任务，不覆盖",
     "prompt": "追加拆分 {迭代名}",
+    "env": "ai",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
@@ -96,6 +102,7 @@
     "description": "为已完成的任务创建 Pull Request",
     "prompt": "为 {迭代名} 中 {任务ID} 创建 PR",
     "command": "speccore pr -I {迭代名} --task {任务ID}",
+    "env": "both",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true },
       { "key": "任务ID", "placeholder": "Task-001", "required": true }
@@ -112,6 +119,7 @@
     "description": "标记任务为已完成状态",
     "prompt": "标记 {迭代名} 的 {任务ID} 为完成",
     "command": "speccore done -I {迭代名} --task {任务ID}",
+    "env": "both",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true },
       { "key": "任务ID", "placeholder": "Task-001", "required": true }
@@ -125,8 +133,9 @@
     "name": "需求变更",
     "category": "execute",
     "icon": "🔧",
-    "description": "对已有迭代进行需求变更（需 AI 参与）",
+    "description": "对已有迭代进行需求变更",
     "prompt": "{迭代名} 需要变更：{变更内容}",
+    "env": "ai",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true },
       { "key": "变更内容", "placeholder": "用户管理模块要加批量导入功能", "required": true }

@@ -20,6 +20,7 @@ export interface PromptTemplate {
   description: string;
   prompt: string;
   command?: string;
+  env?: 'cli' | 'both' | 'ai';
   tags?: string[];
   params: PromptParam[];
   builtin: boolean;
@@ -848,9 +849,13 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
         ? \`<div class="prompt-tags">\${p.tags.map(t => \`<span class="prompt-tag">\${t}</span>\`).join('')}</div>\`
         : '';
 
-      const envHint = hasCommand
-        ? \`<div class="env-hint cli">💡 可在终端直接执行，也可对 AI 说</div>\`
-        : \`<div class="env-hint ai">💡 建议在 AI 对话框中使用，需 AI 参与生成</div>\`;
+      const env = p.env || (hasCommand ? 'both' : 'ai');
+      const envHintMap = {
+        cli: \`<div class="env-hint cli">💡 纯终端命令，即时生效（无 AI 参与）</div>\`,
+        both: \`<div class="env-hint cli">💡 终端触发，AI 自动执行</div>\`,
+        ai: \`<div class="env-hint ai">💡 建议在 AI 对话框中使用</div>\`
+      };
+      const envHint = envHintMap[env] || envHintMap.ai;
 
       return \`
         <div class="prompt-card">

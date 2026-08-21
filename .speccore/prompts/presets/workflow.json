@@ -7,6 +7,7 @@
     "description": "在当前项目中初始化 SpecCore",
     "prompt": "初始化 SpecCore 项目",
     "command": "speccore init",
+    "env": "cli",
     "params": [],
     "tags": ["首次使用", "初始化"],
     "builtin": true,
@@ -17,8 +18,9 @@
     "name": "分析需求",
     "category": "workflow",
     "icon": "🔍",
-    "description": "分析迭代需求，生成规格说明（需 AI 参与）",
+    "description": "分析迭代需求，生成规格说明",
     "prompt": "分析 {迭代名} 迭代的需求文档，生成完整的规格说明",
+    "env": "ai",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
@@ -31,8 +33,9 @@
     "name": "拆分任务",
     "category": "workflow",
     "icon": "🧩",
-    "description": "将迭代需求拆分为可执行的开发任务（需 AI 参与）",
+    "description": "将迭代需求拆分为可执行的开发任务",
     "prompt": "把 {迭代名} 迭代的需求拆分成开发任务",
+    "env": "ai",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
@@ -48,6 +51,7 @@
     "description": "执行指定的开发任务",
     "prompt": "执行 {迭代名} 中的 {任务ID} 任务",
     "command": "speccore execute --task {任务ID} -I {迭代名}",
+    "env": "both",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true },
       { "key": "任务ID", "placeholder": "Task-001", "required": true }
@@ -64,6 +68,7 @@
     "description": "查看迭代进度仪表盘",
     "prompt": "查看 {迭代名} 的进度",
     "command": "speccore dashboard -I {迭代名}",
+    "env": "cli",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": false }
     ],
@@ -76,8 +81,9 @@
     "name": "智能级联开发",
     "category": "workflow",
     "icon": "🤖",
-    "description": "全自动 analyze→split→plan→execute→pr→done（需 AI 参与）",
+    "description": "全自动 analyze→split→plan→execute→pr→done",
     "prompt": "全自动完成 {迭代名} 的开发",
+    "env": "ai",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
