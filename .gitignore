@@ -7,6 +7,7 @@ build/
 # Generated HTML outputs
 html.html
 speccore-*.html
+!templates/html/speccore-*.html
 demo-test.html
 outputs/speccore-*.html
 outputs/dashboard-*.html
