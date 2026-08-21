@@ -2,6 +2,26 @@
 
 ---
 
+## v7.3.0 (2026-08-21) — Documentation Overhaul + AI Prevention Framework
+
+### Documentation
+
+- **DESIGN.md new Section 13**: AI file-write prevention & directory sanitization
+  - Three-layer defense: AGENTS.md constraints → Prompt guidance → CLI post-validation
+  - `sanitizeSpecDirectories()` design documentation
+  - Path constant unification standard
+  - Cross-AI-tool consistency strategy
+
+- **DESIGN.md Section 3 fix**: `020-specs/` structure aligned with `overview/` subdirectory
+
+- **DESIGN.md global path fix**: 9 references `global/` → `overview/` (current architecture)
+
+- **command-reference.md fix**: 2 references `global/` → `overview/`
+
+- **AGENTS.md new rule #5**: Prohibit direct Write to 020-specs/ files
+
+---
+
 ## v7.2.1 (2026-08-21) — Analyze Directory Sanitization + Prompt Path Fix
 
 ### Fixed

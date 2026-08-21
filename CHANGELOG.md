@@ -1,3 +1,23 @@
+## v7.3.0 (2026-08-21) — 文档架构全面更新 + AI 防护体系完善
+
+### 文档更新
+
+- **DESIGN.md 新增第 13 节**：AI 文件写入防护与目录校验机制
+  - 三层防护架构（AGENTS.md 约束 → Prompt 引导 → CLI 事后校验）
+  - `sanitizeSpecDirectories()` 设计说明
+  - 路径常量统一规范
+  - 跨 AI 工具一致性策略
+
+- **DESIGN.md 第 3 节修正**：`020-specs/` 目录结构对齐 `overview/` 子目录
+
+- **DESIGN.md 全文路径修正**：9 处 `global/` → `overview/`（当前架构描述）
+
+- **command-reference.md 修正**：2 处 `global/` → `overview/`
+
+- **AGENTS.md 新增第 5 条禁止**：禁止直接用 Write 写 020-specs/ 下的文件
+
+---
+
 ## v7.2.1 (2026-08-21) — analyze 目录结构校验 + prompt 路径修复
 
 ### 修复
