@@ -2,6 +2,21 @@
 
 ---
 
+## v7.3.1 (2026-08-21) — Global Analysis Prompt Layer Isolation Fix
+
+### Bug Fixes
+
+- **Layer 1-4 instructions conditionally injected**: Fixed prompt dumping all 4 layers of instructions into a single prompt, causing AI to lose focus and skip key outputs
+  - Layer 1 PATTERNS not organized per-platform (AI merged into single `_shared/PATTERNS.md`)
+  - Layer 4 `requirements/REQUIREMENT.md` skipped by AI
+- **LAYER_ROLES output descriptions updated**: Explicitly list key filenames (e.g. `requirements/REQUIREMENT.md (required)`, `PATTERNS/{platform}/{category}/*.md`)
+- **Completion checklist enhanced**: Layer 1 PATTERNS item now says "must organize per-platform"; Layer 4a adds "REQUIREMENT.md must not be skipped" warning
+
+### Implementation
+
+- Layer 1-4 instructions in `buildMultiDocPrompt()` now conditionally injected based on `targetLayer`
+- Diagram standards, output doc tables, conflict handling, and write instructions remain visible to all layers
+
 ## v7.3.0 (2026-08-21) — Documentation Overhaul + AI Prevention Framework
 
 ### Documentation
