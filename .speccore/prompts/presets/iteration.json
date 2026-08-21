@@ -7,6 +7,7 @@
     "description": "快速创建一个新的开发迭代",
     "prompt": "帮我创建一个新迭代 {迭代名}，主题是 {主题}，负责人是 {负责人}",
     "command": "speccore iteration create {迭代名} --theme \"{主题}\"",
+    "env": "cli",
     "params": [
       { "key": "迭代名", "placeholder": "Q3", "required": true },
       { "key": "主题", "placeholder": "用户系统重构", "required": true },
@@ -21,8 +22,9 @@
     "name": "创建迭代并导入需求",
     "category": "iteration",
     "icon": "📥",
-    "description": "创建迭代并导入需求文档（需 AI 参与）",
+    "description": "创建迭代并导入需求文档",
     "prompt": "创建迭代 {迭代名}，主题是 {主题}，然后把 {需求文档路径} 导入进去",
+    "env": "ai",
     "params": [
       { "key": "迭代名", "placeholder": "Q3", "required": true },
       { "key": "主题", "placeholder": "订单系统", "required": true },
@@ -40,6 +42,7 @@
     "description": "切换到另一个迭代作为当前工作上下文",
     "prompt": "切换到 {迭代名} 迭代",
     "command": "speccore current -I {迭代名}",
+    "env": "cli",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
@@ -52,8 +55,9 @@
     "name": "迭代回顾",
     "category": "iteration",
     "icon": "📝",
-    "description": "生成迭代回顾报告（需 AI 参与）",
+    "description": "生成迭代回顾报告",
     "prompt": "生成 {迭代名} 的迭代回顾",
+    "env": "ai",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
@@ -69,6 +73,7 @@
     "description": "重命名已有迭代",
     "prompt": "把迭代 {旧名} 重命名为 {新名}",
     "command": "speccore rename {旧名} {新名}",
+    "env": "cli",
     "params": [
       { "key": "旧名", "placeholder": "Q1", "required": true },
       { "key": "新名", "placeholder": "Q1-user-system", "required": true }
@@ -85,6 +90,7 @@
     "description": "归档已完成的迭代",
     "prompt": "归档 {迭代名} 迭代",
     "command": "speccore archive -I {迭代名}",
+    "env": "cli",
     "params": [
       { "key": "迭代名", "placeholder": "Q1", "required": true }
     ],
