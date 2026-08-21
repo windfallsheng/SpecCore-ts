@@ -23,6 +23,7 @@ export interface PromptTemplate {
   skill?: string;
   env?: 'cli' | 'both' | 'ai';
   tags?: string[];
+  examples?: string[];
   params: PromptParam[];
   builtin: boolean;
   sort: number;
@@ -426,6 +427,32 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
       border: 1px solid #d0bfff;
     }
     .btn-skill:hover { background: #e5dbff; }
+    .prompt-examples {
+      margin-top: 10px;
+      padding: 10px 12px;
+      background: #fff9db;
+      border-radius: 8px;
+      border-left: 3px solid #fcc419;
+    }
+    .prompt-examples-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: #e67700;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .prompt-examples ul {
+      margin: 0;
+      padding-left: 16px;
+      font-size: 12px;
+      color: #495057;
+      line-height: 1.6;
+    }
+    .prompt-examples li {
+      margin-bottom: 2px;
+    }
     .empty-state {
       text-align: center;
       padding: 60px 20px;
@@ -918,6 +945,10 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
       };
       const envHint = envHintMap[env] || envHintMap.ai;
 
+      const examplesHtml = (p.examples || []).length > 0
+        ? \`<div class="prompt-examples"><div class="prompt-examples-title">💡 典型场景</div><ul>\${p.examples.map(e => \`<li>\${escapeHtml(e)}</li>\`).join('')}</ul></div>\`
+        : '';
+
       return \`
         <div class="prompt-card">
           <div class="prompt-header">
@@ -929,6 +960,7 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
           </div>
           \${tagsHtml}
           \${envHint}
+          \${examplesHtml}
           <div class="prompt-section">💬 AI 说法</div>
           <div class="prompt-say">
             \${escapeHtml(p.prompt)}

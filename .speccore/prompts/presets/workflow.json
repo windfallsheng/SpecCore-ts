@@ -9,9 +9,16 @@
     "command": "speccore init",
     "env": "cli",
     "params": [],
-    "tags": ["首次使用", "初始化"],
+    "tags": [
+      "首次使用",
+      "初始化"
+    ],
     "builtin": true,
-    "sort": 1
+    "sort": 1,
+    "examples": [
+      "首次在新项目中使用 SpecCore",
+      "重新初始化已损坏的 .speccore 目录"
+    ]
   },
   {
     "id": "analyze-iteration",
@@ -23,11 +30,22 @@
     "env": "ai",
     "skill": "spec-analyze",
     "params": [
-      { "key": "迭代名", "placeholder": "Q2", "required": true }
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": true
+      }
     ],
-    "tags": ["分析阶段", "标准流程"],
+    "tags": [
+      "分析阶段",
+      "标准流程"
+    ],
     "builtin": true,
-    "sort": 2
+    "sort": 2,
+    "examples": [
+      "新迭代开始前分析 PRD 文档",
+      "需求文档更新后重新分析"
+    ]
   },
   {
     "id": "split-tasks",
@@ -39,11 +57,22 @@
     "env": "ai",
     "skill": "spec-split",
     "params": [
-      { "key": "迭代名", "placeholder": "Q2", "required": true }
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": true
+      }
     ],
-    "tags": ["开发阶段", "标准流程"],
+    "tags": [
+      "开发阶段",
+      "标准流程"
+    ],
     "builtin": true,
-    "sort": 3
+    "sort": 3,
+    "examples": [
+      "分析完成后拆分为可执行任务",
+      "新增功能模块时追加拆分"
+    ]
   },
   {
     "id": "execute-task",
@@ -56,12 +85,27 @@
     "env": "both",
     "skill": "spec-execute",
     "params": [
-      { "key": "迭代名", "placeholder": "Q2", "required": true },
-      { "key": "任务ID", "placeholder": "Task-001", "required": true }
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": true
+      },
+      {
+        "key": "任务ID",
+        "placeholder": "Task-001",
+        "required": true
+      }
     ],
-    "tags": ["开发阶段", "标准流程"],
+    "tags": [
+      "开发阶段",
+      "标准流程"
+    ],
     "builtin": true,
-    "sort": 4
+    "sort": 4,
+    "examples": [
+      "执行 Task-001 的开发工作",
+      "修复指定任务的 bug"
+    ]
   },
   {
     "id": "view-dashboard",
@@ -73,11 +117,22 @@
     "command": "speccore dashboard -I {迭代名}",
     "env": "cli",
     "params": [
-      { "key": "迭代名", "placeholder": "Q2", "required": false }
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": false
+      }
     ],
-    "tags": ["日常", "进度追踪"],
+    "tags": [
+      "日常",
+      "进度追踪"
+    ],
     "builtin": true,
-    "sort": 5
+    "sort": 5,
+    "examples": [
+      "每日站会前查看当前迭代进度",
+      "检查是否有阻塞任务"
+    ]
   },
   {
     "id": "dev-auto",
@@ -89,10 +144,21 @@
     "env": "ai",
     "skill": "spec-dev",
     "params": [
-      { "key": "迭代名", "placeholder": "Q2", "required": true }
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": true
+      }
     ],
-    "tags": ["开发阶段", "全自动"],
+    "tags": [
+      "开发阶段",
+      "全自动"
+    ],
     "builtin": true,
-    "sort": 6
+    "sort": 6,
+    "examples": [
+      "一键全自动完成整个迭代",
+      "analyze→split→plan→execute→pr→done"
+    ]
   }
 ]

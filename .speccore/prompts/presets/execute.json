@@ -9,11 +9,22 @@
     "env": "ai",
     "skill": "spec-dev",
     "params": [
-      { "key": "迭代名", "placeholder": "Q2", "required": true }
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": true
+      }
     ],
-    "tags": ["开发阶段", "全自动"],
+    "tags": [
+      "开发阶段",
+      "全自动"
+    ],
     "builtin": true,
-    "sort": 1
+    "sort": 1,
+    "examples": [
+      "从零开始全自动完成迭代开发",
+      "不想手动执行 analyze→split→plan→execute"
+    ]
   },
   {
     "id": "dev-from-stage",
@@ -25,12 +36,27 @@
     "env": "ai",
     "skill": "spec-dev",
     "params": [
-      { "key": "迭代名", "placeholder": "Q2", "required": true },
-      { "key": "阶段", "placeholder": "split", "required": true }
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": true
+      },
+      {
+        "key": "阶段",
+        "placeholder": "split",
+        "required": true
+      }
     ],
-    "tags": ["开发阶段", "断点续传"],
+    "tags": [
+      "开发阶段",
+      "断点续传"
+    ],
     "builtin": true,
-    "sort": 2
+    "sort": 2,
+    "examples": [
+      "上次执行到 plan 阶段中断了",
+      "跳过已完成的分析阶段直接执行"
+    ]
   },
   {
     "id": "execute-batch",
@@ -43,12 +69,28 @@
     "env": "both",
     "skill": "spec-execute",
     "params": [
-      { "key": "迭代名", "placeholder": "Q2", "required": true },
-      { "key": "数量", "placeholder": "3", "required": false }
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": true
+      },
+      {
+        "key": "数量",
+        "placeholder": "3",
+        "required": false
+      }
     ],
-    "tags": ["开发阶段", "批量执行", "v7.2.0"],
+    "tags": [
+      "开发阶段",
+      "批量执行",
+      "v7.2.0"
+    ],
     "builtin": true,
-    "sort": 3
+    "sort": 3,
+    "examples": [
+      "一次执行 10 个任务风险太高",
+      "晚上分批执行避免占用白天时间"
+    ]
   },
   {
     "id": "execute-resume",
@@ -61,11 +103,23 @@
     "env": "both",
     "skill": "spec-execute",
     "params": [
-      { "key": "迭代名", "placeholder": "Q2", "required": true }
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": true
+      }
     ],
-    "tags": ["开发阶段", "批量执行", "v7.2.0"],
+    "tags": [
+      "开发阶段",
+      "批量执行",
+      "v7.2.0"
+    ],
     "builtin": true,
-    "sort": 4
+    "sort": 4,
+    "examples": [
+      "上次执行到一半失败了",
+      "网络中断后恢复执行"
+    ]
   },
   {
     "id": "split-feature",
@@ -77,12 +131,27 @@
     "env": "ai",
     "skill": "spec-split",
     "params": [
-      { "key": "迭代名", "placeholder": "Q2", "required": true },
-      { "key": "功能模块", "placeholder": "用户认证", "required": true }
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": true
+      },
+      {
+        "key": "功能模块",
+        "placeholder": "用户认证",
+        "required": true
+      }
     ],
-    "tags": ["开发阶段", "定向拆分"],
+    "tags": [
+      "开发阶段",
+      "定向拆分"
+    ],
     "builtin": true,
-    "sort": 5
+    "sort": 5,
+    "examples": [
+      "只想拆分用户认证相关任务",
+      "新增模块不需要重新拆分全部"
+    ]
   },
   {
     "id": "split-append",
@@ -94,11 +163,22 @@
     "env": "ai",
     "skill": "spec-split",
     "params": [
-      { "key": "迭代名", "placeholder": "Q2", "required": true }
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": true
+      }
     ],
-    "tags": ["开发阶段", "增量拆分"],
+    "tags": [
+      "开发阶段",
+      "增量拆分"
+    ],
     "builtin": true,
-    "sort": 6
+    "sort": 6,
+    "examples": [
+      "已有任务基础上追加新功能",
+      "不覆盖已存在的任务"
+    ]
   },
   {
     "id": "create-pr",
@@ -111,12 +191,27 @@
     "env": "both",
     "skill": "spec-pr",
     "params": [
-      { "key": "迭代名", "placeholder": "Q2", "required": true },
-      { "key": "任务ID", "placeholder": "Task-001", "required": true }
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": true
+      },
+      {
+        "key": "任务ID",
+        "placeholder": "Task-001",
+        "required": true
+      }
     ],
-    "tags": ["收尾阶段", "代码提交"],
+    "tags": [
+      "收尾阶段",
+      "代码提交"
+    ],
     "builtin": true,
-    "sort": 7
+    "sort": 7,
+    "examples": [
+      "Task-001 完成后提交代码",
+      "代码审查前创建 Pull Request"
+    ]
   },
   {
     "id": "mark-done",
@@ -128,12 +223,27 @@
     "command": "speccore done -I {迭代名} --task {任务ID}",
     "env": "both",
     "params": [
-      { "key": "迭代名", "placeholder": "Q2", "required": true },
-      { "key": "任务ID", "placeholder": "Task-001", "required": true }
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": true
+      },
+      {
+        "key": "任务ID",
+        "placeholder": "Task-001",
+        "required": true
+      }
     ],
-    "tags": ["收尾阶段", "任务管理"],
+    "tags": [
+      "收尾阶段",
+      "任务管理"
+    ],
     "builtin": true,
-    "sort": 8
+    "sort": 8,
+    "examples": [
+      "Task-001 开发测试都通过了",
+      "验收后标记任务为完成"
+    ]
   },
   {
     "id": "requirement-change",
@@ -145,11 +255,26 @@
     "env": "ai",
     "skill": "spec-change",
     "params": [
-      { "key": "迭代名", "placeholder": "Q2", "required": true },
-      { "key": "变更内容", "placeholder": "用户管理模块要加批量导入功能", "required": true }
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": true
+      },
+      {
+        "key": "变更内容",
+        "placeholder": "用户管理模块要加批量导入功能",
+        "required": true
+      }
     ],
-    "tags": ["变更阶段", "需求调整"],
+    "tags": [
+      "变更阶段",
+      "需求调整"
+    ],
     "builtin": true,
-    "sort": 9
+    "sort": 9,
+    "examples": [
+      "用户管理模块要加批量导入",
+      "订单流程需要支持退款"
+    ]
   }
 ]
