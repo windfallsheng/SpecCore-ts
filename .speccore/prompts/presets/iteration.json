@@ -6,11 +6,13 @@
     "icon": "🚀",
     "description": "快速创建一个新的开发迭代",
     "prompt": "帮我创建一个新迭代 {迭代名}，主题是 {主题}，负责人是 {负责人}",
+    "command": "speccore iteration create {迭代名} --theme \"{主题}\"",
     "params": [
       { "key": "迭代名", "placeholder": "Q3", "required": true },
       { "key": "主题", "placeholder": "用户系统重构", "required": true },
       { "key": "负责人", "placeholder": "张三", "required": false }
     ],
+    "tags": ["初始化", "迭代管理"],
     "builtin": true,
     "sort": 1
   },
@@ -26,6 +28,7 @@
       { "key": "主题", "placeholder": "订单系统", "required": true },
       { "key": "需求文档路径", "placeholder": "docs/PRD.docx", "required": true }
     ],
+    "tags": ["初始化", "迭代管理"],
     "builtin": true,
     "sort": 2
   },
@@ -36,9 +39,11 @@
     "icon": "🔄",
     "description": "切换到另一个迭代作为当前工作上下文",
     "prompt": "切换到 {迭代名} 迭代",
+    "command": "speccore current -I {迭代名}",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
+    "tags": ["日常", "迭代管理"],
     "builtin": true,
     "sort": 3
   },
@@ -49,9 +54,11 @@
     "icon": "📝",
     "description": "生成迭代回顾报告",
     "prompt": "生成 {迭代名} 的迭代回顾",
+    "command": "speccore retro -I {迭代名}",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
+    "tags": ["收尾阶段", "迭代管理"],
     "builtin": true,
     "sort": 4
   },
@@ -62,10 +69,12 @@
     "icon": "✏️",
     "description": "重命名已有迭代",
     "prompt": "把迭代 {旧名} 重命名为 {新名}",
+    "command": "speccore rename {旧名} {新名}",
     "params": [
       { "key": "旧名", "placeholder": "Q1", "required": true },
       { "key": "新名", "placeholder": "Q1-user-system", "required": true }
     ],
+    "tags": ["日常", "迭代管理"],
     "builtin": true,
     "sort": 5
   },
@@ -76,9 +85,11 @@
     "icon": "📦",
     "description": "归档已完成的迭代",
     "prompt": "归档 {迭代名} 迭代",
+    "command": "speccore archive -I {迭代名}",
     "params": [
       { "key": "迭代名", "placeholder": "Q1", "required": true }
     ],
+    "tags": ["收尾阶段", "迭代管理"],
     "builtin": true,
     "sort": 6
   }

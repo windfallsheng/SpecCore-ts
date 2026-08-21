@@ -10,6 +10,7 @@
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
+    "tags": ["开发阶段", "全自动"],
     "builtin": true,
     "sort": 1
   },
@@ -25,6 +26,7 @@
       { "key": "迭代名", "placeholder": "Q2", "required": true },
       { "key": "阶段", "placeholder": "split", "required": true }
     ],
+    "tags": ["开发阶段", "断点续传"],
     "builtin": true,
     "sort": 2
   },
@@ -40,6 +42,7 @@
       { "key": "迭代名", "placeholder": "Q2", "required": true },
       { "key": "数量", "placeholder": "3", "required": false }
     ],
+    "tags": ["开发阶段", "批量执行", "v7.2.0"],
     "builtin": true,
     "sort": 3
   },
@@ -54,6 +57,7 @@
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
+    "tags": ["开发阶段", "批量执行", "v7.2.0"],
     "builtin": true,
     "sort": 4
   },
@@ -69,6 +73,7 @@
       { "key": "迭代名", "placeholder": "Q2", "required": true },
       { "key": "功能模块", "placeholder": "用户认证", "required": true }
     ],
+    "tags": ["开发阶段", "定向拆分"],
     "builtin": true,
     "sort": 5
   },
@@ -83,6 +88,7 @@
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
+    "tags": ["开发阶段", "增量拆分"],
     "builtin": true,
     "sort": 6
   },
@@ -93,10 +99,12 @@
     "icon": "🔀",
     "description": "为已完成的任务创建 Pull Request",
     "prompt": "为 {迭代名} 中 {任务ID} 创建 PR",
+    "command": "speccore pr -I {迭代名} --task {任务ID}",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true },
       { "key": "任务ID", "placeholder": "Task-001", "required": true }
     ],
+    "tags": ["收尾阶段", "代码提交"],
     "builtin": true,
     "sort": 7
   },
@@ -107,10 +115,12 @@
     "icon": "✅",
     "description": "标记任务为已完成状态",
     "prompt": "标记 {迭代名} 的 {任务ID} 为完成",
+    "command": "speccore done -I {迭代名} --task {任务ID}",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true },
       { "key": "任务ID", "placeholder": "Task-001", "required": true }
     ],
+    "tags": ["收尾阶段", "任务管理"],
     "builtin": true,
     "sort": 8
   },
@@ -121,10 +131,12 @@
     "icon": "🔧",
     "description": "对已有迭代进行需求变更",
     "prompt": "{迭代名} 需要变更：{变更内容}",
+    "command": "speccore change -I {迭代名} --prompt \"{变更内容}\"",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true },
       { "key": "变更内容", "placeholder": "用户管理模块要加批量导入功能", "required": true }
     ],
+    "tags": ["变更阶段", "需求调整"],
     "builtin": true,
     "sort": 9
   }

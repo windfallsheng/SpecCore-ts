@@ -6,11 +6,13 @@
     "icon": "📄",
     "description": "将 Word/PDF 需求文档转换为 Markdown 规格",
     "prompt": "把 {文件路径} 导入到 {迭代名} 迭代，端是 {平台}",
+    "command": "speccore doc2spec {文件路径} -I {迭代名}",
     "params": [
       { "key": "文件路径", "placeholder": "docs/PRD.docx", "required": true },
       { "key": "迭代名", "placeholder": "Q2", "required": true },
       { "key": "平台", "placeholder": "admin", "required": false }
     ],
+    "tags": ["分析阶段", "文档处理"],
     "builtin": true,
     "sort": 1
   },
@@ -21,10 +23,12 @@
     "icon": "📤",
     "description": "将迭代规格说明导出为 Word/PDF",
     "prompt": "把 {迭代名} 迭代的规格文档导出为 {输出文件名}",
+    "command": "speccore spec2doc -I {迭代名} -o {输出文件名}",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true },
       { "key": "输出文件名", "placeholder": "需求规格.docx", "required": true }
     ],
+    "tags": ["分析阶段", "文档处理"],
     "builtin": true,
     "sort": 2
   },
@@ -35,9 +39,11 @@
     "icon": "🔍",
     "description": "对迭代需求进行全面分析，生成标准规格文档",
     "prompt": "分析 {迭代名} 迭代的需求文档，生成完整的规格说明",
+    "command": "speccore analyze -I {迭代名}",
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
+    "tags": ["分析阶段", "标准流程"],
     "builtin": true,
     "sort": 3
   },
@@ -50,6 +56,7 @@
     "prompt": "全局分析这个项目，带上源码一起看",
     "command": "speccore analyze --scope global --with-code",
     "params": [],
+    "tags": ["分析阶段", "全局模式", "v7.2.0"],
     "builtin": true,
     "sort": 10
   },
@@ -64,6 +71,7 @@
     "params": [
       { "key": "文档名", "placeholder": "ARCHITECTURE.md", "required": true }
     ],
+    "tags": ["分析阶段", "深度模式", "v7.2.0"],
     "builtin": true,
     "sort": 11
   },
@@ -78,6 +86,7 @@
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
+    "tags": ["分析阶段", "迭代模式", "v7.2.0"],
     "builtin": true,
     "sort": 12
   },
@@ -92,6 +101,7 @@
     "params": [
       { "key": "模块关键词", "placeholder": "订单,支付", "required": true }
     ],
+    "tags": ["分析阶段", "按需模式", "v7.2.0"],
     "builtin": true,
     "sort": 13
   },
@@ -108,6 +118,7 @@
       { "key": "文档名", "placeholder": "TECH.md", "required": true },
       { "key": "功能名", "placeholder": "订单模块", "required": true }
     ],
+    "tags": ["分析阶段", "细粒度", "v7.2.0"],
     "builtin": true,
     "sort": 14
   },
@@ -122,6 +133,7 @@
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
+    "tags": ["分析阶段", "变更驱动"],
     "builtin": true,
     "sort": 15
   },
@@ -135,6 +147,7 @@
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
+    "tags": ["分析阶段", "质量门禁"],
     "builtin": true,
     "sort": 20
   }
