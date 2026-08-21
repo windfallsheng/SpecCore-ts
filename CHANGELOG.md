@@ -1,3 +1,11 @@
+## v7.4.1 (2026-08-21) — DEV_GUIDE.md 强制生成，移除参数控制
+
+### 变更
+
+- **DEV_GUIDE.md 成为标准必选文档**: 移除 `--dev-guide` / `--no-dev-guide` 参数控制，所有分析/拆分操作无条件生成 DEV_GUIDE.md
+- **清理残留参数**: 移除 `analyze.ts` 的 `devGuide` 选项字段、`intent-recognition.ts` 的「开发指南」关键词检测、`ask-engine.ts` 的 `--dev-guide` 命令拼接
+- DOC_MATRIX 所有任务类型（feature/refactor/bugfix/research/review/test/docs/deploy/security/performance）均包含 DEV_GUIDE.md
+
 ## v7.4.0 (2026-08-21) — Pipeline 疑问收集 + 开发指南默认生成 + 目录路由修复
 
 ### 新增功能

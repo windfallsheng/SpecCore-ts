@@ -606,10 +606,7 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
       fullCommand += ` --tool="${params.tool}"`;
       paramNotes.push(`🔧 工具/平台: ${params.tool}`);
     }
-    if (params.devGuide) {
-      fullCommand += ` --dev-guide`;
-      paramNotes.push(`📘 开发指南: 生成 DEV_GUIDE.md`);
-    }
+    // v7.4.0+: DEV_GUIDE.md 是标准文档，始终生成，无需参数控制
     // split 默认走 AI 增强路径（--prompt），除非用户明确要求传统模式
     if (best.command === 'split' && !params.splitDirect) {
       fullCommand += ` --prompt`;
