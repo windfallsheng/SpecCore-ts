@@ -106,6 +106,8 @@ export interface AnalyzeOptions {
   devGuide?: boolean;     // --dev-guide: 生成 DEV_GUIDE.md 实现指南
   // v6.80.0+: 需求澄清控制
   skipClarify?: boolean;  // --skip-clarify: 跳过需求澄清阶段
+  // v7.2.0+: 全局分析分层执行
+  layer?: number;         // --layer N: 全局分析指定层级（1-4）
 }
 
 export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
@@ -557,17 +559,17 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     if (options.scope === 'global') {
       // 全局分析：预创建 .speccore/GLOBAL/ 目录结构，不写迭代目录
       // v6.81.0+: 需求文档单独放在 requirements/ 下，技术文档放在 platforms/ 下
-      // v6.98.0+: 全局技术文档统一放在 global/ 子目录下，不与 platforms/requirements 平级
+      // v7.2.0+: 全局技术文档统一放在 overview/ 子目录下，与迭代层 020-specs/overview/ 命名一致
       const globalDir = join(process.cwd(), '.speccore', 'GLOBAL');
       await ensureDir(globalDir);
-      await ensureDir(join(globalDir, 'global'));
+      await ensureDir(join(globalDir, 'overview'));
       await ensureDir(join(globalDir, 'platforms'));
       await ensureDir(join(globalDir, 'requirements'));
       await ensureDir(join(globalDir, 'requirements', 'images'));
       await ensureDir(join(globalDir, 'requirements', 'prototypes'));
       // v7.0.0+: 图表可视化目录
       await ensureDir(join(globalDir, 'diagrams'));
-      logger.info(`📁 已预创建 .speccore/GLOBAL/ 目录结构（global/ + platforms/ + requirements/ + diagrams/）`);
+      logger.info(`📁 已预创建 .speccore/GLOBAL/ 目录结构（overview/ + platforms/ + requirements/ + diagrams/）`);
     } else {
       const iterForDirs = options.iteration || await getDefaultIteration();
       if (iterForDirs) {
@@ -851,12 +853,12 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
               targetDir = join(globalBaseDir, 'requirements');
               targetFilename = filename;
             } else if (globalSet.has(filename)) {
-              // v6.98.0+: 全局技术文档统一放入 global/ 子目录
-              targetDir = join(globalBaseDir, 'global');
+              // v7.2.0+: 全局技术文档统一放入 overview/ 子目录，与迭代层命名一致
+              targetDir = join(globalBaseDir, 'overview');
               targetFilename = filename;
             } else {
-              // v6.98.0+: 未知文件也归入 global/ 子目录，避免与 platforms/requirements 平级
-              targetDir = join(globalBaseDir, 'global');
+              // v7.2.0+: 未知文件也归入 overview/ 子目录
+              targetDir = join(globalBaseDir, 'overview');
               targetFilename = filename;
             }
 
@@ -1711,6 +1713,55 @@ async function injectGraphSummary(prompt: string): Promise<string> {
   }
 }
 
+// ── v7.2.0+: 检测全局分析当前进度 ──
+async function detectGlobalLayerProgress(): Promise<{ completedLayer: number; nextLayer: number; missing: string[] }> {
+  const globalDir = join(process.cwd(), '.speccore', 'GLOBAL');
+  let completedLayer = 0;
+  const missing: string[] = [];
+
+  // Layer 1: 检查各端 _INDEX.md
+  try {
+    const platformsDir = join(globalDir, 'platforms');
+    const entries = await readdir(platformsDir, { withFileTypes: true });
+    const platformDirs = entries.filter(e => e.isDirectory() && e.name !== '_shared').map(e => e.name);
+    const hasIndex = platformDirs.length > 0 && (await Promise.all(
+      platformDirs.map(async d => pathExists(join(platformsDir, d, '_INDEX.md')))
+    )).some(Boolean);
+    if (hasIndex) completedLayer = 1;
+    else missing.push('Layer 1: platforms/{端}/_INDEX.md');
+  } catch { missing.push('Layer 1: platforms/{端}/_INDEX.md'); }
+
+  // Layer 2: 检查 _ASSOCIATION.md
+  if (completedLayer >= 1) {
+    if (await pathExists(join(globalDir, 'platforms', '_shared', '_ASSOCIATION.md'))) {
+      completedLayer = 2;
+    } else {
+      missing.push('Layer 2: platforms/_shared/_ASSOCIATION.md + _MODULES.md');
+    }
+  }
+
+  // Layer 3: 检查 _MODULES.md（功能模块深入分析的前提）
+  if (completedLayer >= 2) {
+    if (await pathExists(join(globalDir, 'platforms', '_shared', '_MODULES.md'))) {
+      completedLayer = 3;
+    } else {
+      missing.push('Layer 3: platforms/_shared/_MODULES.md（功能模块候选清单）');
+    }
+  }
+
+  // Layer 4: 检查 overview/ 下的全局汇总文档
+  if (completedLayer >= 3) {
+    const overviewDir = join(globalDir, 'overview');
+    const hasOverviewDoc = await pathExists(join(overviewDir, 'ARCHITECTURE.md'))
+      || await pathExists(join(overviewDir, 'FUNCTION_MAP.md'))
+      || await pathExists(join(overviewDir, 'REQUIREMENT.md'));
+    if (hasOverviewDoc) completedLayer = 4;
+    else missing.push('Layer 4: overview/ARCHITECTURE.md 等全局汇总文档');
+  }
+
+  return { completedLayer, nextLayer: Math.min(completedLayer + 1, 4), missing };
+}
+
 // ── buildMultiDocPrompt: 多文档协议 ──
 async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; task?: string; type?: string; scope?: string; withCode?: boolean; platform?: string; phase?: string; autoMode?: boolean }, options?: AnalyzeOptions): Promise<string> {
   const iter = ctx.iteration || '当前迭代';
@@ -1728,18 +1779,56 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       return buildStreamingGlobalPrompt(command, ctx, options);
     }
 
+    // v7.2.0+: 全局分析分层执行 — 检测当前进度，自动分配 layer
+    const progress = await detectGlobalLayerProgress();
+    const targetLayer = options?.layer || progress.nextLayer;
+    const isLayered = !!options?.layer || progress.completedLayer < 4;
+
+    // Layer 角色定义
+    const LAYER_ROLES: Record<number, { role: string; focus: string; output: string }> = {
+      1: { role: '代码索引专家', focus: '全面扫描各端源码结构，提取目录/接口/实体/配置等索引信息', output: '各端 _INDEX.md + PATTERNS 模式提取 + semantic-tags.json' },
+      2: { role: '系统架构师', focus: '基于 Layer 1 索引进行跨端关联分析、接口匹配、模块聚类', output: '_ASSOCIATION.md + _MODULES.md' },
+      3: { role: '业务分析师', focus: '按功能模块深入分析业务逻辑、数据流、规则、时序', output: '各端功能模块深入文档 + 模块级 PATTERNS' },
+      4: { role: '产品总监 + 技术负责人', focus: '全局汇总、一致性校验、生成需求总纲和全局架构文档', output: 'overview/ 全局汇总文档 + requirements/ 需求文档' },
+    };
+    const layerMeta = LAYER_ROLES[targetLayer];
+
     let prompt = `\n# 任务: ${command} (全局分析${ctx.withCode ? '+源码' : ''})\n\n`;
+
+    // v7.2.0+: 分层专注指令 — 强烈约束 AI 只执行当前 layer
+    prompt += `## 🎯 当前执行层级: Layer ${targetLayer}/4 — ${layerMeta.role}\n\n`;
+    prompt += `> ⚠️ **重要约束**: 你当前只需要完成 **Layer ${targetLayer}** 的工作。不要提前做后续层的内容。\n`;
+    prompt += `> 每层完成后通过 \`speccore analyze --scope global --layer ${targetLayer + 1 <= 4 ? targetLayer + 1 : 4}\` 进入下一层。\n\n`;
+    prompt += `| 层级 | 角色 | 核心任务 | 产出物 |\n`;
+    prompt += `| :--- | :--- | :--- | :--- |\n`;
+    prompt += `| 1 | 代码索引专家 | 扫描源码结构，提取索引 | platforms/{端}/_INDEX.md |\n`;
+    prompt += `| 2 | 系统架构师 | 跨端关联、接口匹配、模块聚类 | platforms/_shared/_ASSOCIATION.md + _MODULES.md |\n`;
+    prompt += `| 3 | 业务分析师 | 功能模块深入分析 | 各端功能模块文档 |\n`;
+    prompt += `| 4 | 产品总监+技术负责人 | 全局汇总、需求总纲、一致性校验 | overview/ + requirements/ |\n\n`;
+
+    if (progress.completedLayer > 0) {
+      prompt += `📊 检测进度: 已完成 Layer ${progress.completedLayer}/4`;
+      if (progress.missing.length > 0) {
+        prompt += `，待补齐: ${progress.missing.join('; ')}`;
+      }
+      prompt += `\n\n`;
+    }
+
+    prompt += `## 你的专注任务（Layer ${targetLayer}）\n`;
+    prompt += `- **角色**: ${layerMeta.role}\n`;
+    prompt += `- **核心任务**: ${layerMeta.focus}\n`;
+    prompt += `- **预期产出**: ${layerMeta.output}\n\n`;
+
     prompt += `## 要求\n`;
-    prompt += `1. **先读宪法**: Read .speccore/CONSTITUTION.md，这是项目配置的唯一权威来源。获取:\n`;
-    prompt += `   - 「工程」列 → 所有工程名（如 meeting-system, booking-service）\n`;
-    prompt += `   - 「源码路径」列 → 各工程的代码目录（用于 Read 源码）\n`;
-    prompt += `   - 「## 端列表」章节 → 全局权威端名列表（如 backend/h5/admin）\n`;
-    prompt += `   - 每个工程独立分析，文档输出到: .speccore/GLOBAL/platforms/{端名}/\n`;
-    prompt += `2. Read .speccore/GLOBAL/ 下所有文档了解跨项目需求\n`;
-    prompt += `3. **禁止行为（重要）**: 不要打开浏览器、不要模拟用户操作、不要访问 URL。所有分析必须基于直接 Read 源码文件完成。如果文件不存在，跳过即可，不要尝试其他方式获取。\n`;
+    prompt += `1. **先读宪法**: Read .speccore/CONSTITUTION.md，获取工程名、源码路径、端列表。\n`;
+    prompt += `2. Read .speccore/GLOBAL/ 下已有文档（特别是前一层的产物）作为输入。\n`;
+    prompt += `3. **禁止行为**: 不要打开浏览器、不要模拟用户操作、不要访问 URL。所有分析基于直接 Read 源码。\n`;
     if (ctx.withCode) {
-      // v6.71.2+: 双层扫描 + 功能模块驱动（替代原来的按端顺序分析）
-      prompt += `4. 从 CONSTITUTION.md 的「源码路径」列读取所有工程目录\n`;
+      prompt += `4. 从 CONSTITUTION.md 的「源码路径」列读取所有工程目录。\n`;
+    }
+
+    // 根据 targetLayer 注入对应的专注内容
+    if (targetLayer === 1) {
       prompt += `\n## 📊 Layer 1: 快速扫描所有端（并行，只提取索引）\n\n`;
       prompt += `对每个端，读取关键索引文件和配置，提取全面索引（不深入代码逻辑）：\n\n`;
       prompt += `**后端端扫描维度（10项）**：\n`;
@@ -1918,7 +2007,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `     - **响应式/适配策略**：不同设备尺寸下的布局变化、断点设计\n`;
       prompt += `     - **无障碍要求**：键盘导航、屏幕阅读器、色彩对比度（如有要求）\n`;
       prompt += `     - 每个前端端需求目录下可放 images/（截图/流程图/原型图）和 prototypes/（可交互原型文件）\n`;
-      prompt += `   **技术视角 → 存放到 .speccore/GLOBAL/global/（不与 platforms/requirements 平级）：**\n`;
+      prompt += `   **技术视角 → 存放到 .speccore/GLOBAL/overview/（不与 platforms/requirements 平级）：**\n`;
       prompt += `   - \`global/FUNCTION_MAP.md\`：功能单元 × 端映射表\n`;
       prompt += `   - \`global/INTERACTION_MAP.md\`：跨端交互时序图（含同步 API + 异步消息，从 Layer 3 汇总）\n`;
       prompt += `     - 必须包含 **Mermaid sequenceDiagram**，展示各端之间的核心交互时序\n`;
@@ -2076,21 +2165,21 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `| :--- | :--- | :--- |\n`;
       prompt += `| requirements/REQUIREMENT.md | 产品总监视角 | 需求总纲：愿景、用户画像、场景地图、功能全景、优先级矩阵、里程碑、风险预判 |\n`;
       prompt += `| requirements/{前端端}/REQUIREMENT.md | 前端产品经理视角 | 信息架构、用户旅程、页面清单、交互设计、状态反馈、权限角色、响应式策略 |\n`;
-      prompt += `\n### 全局技术性文档（Layer 4 汇总生成，v6.98.0+）\n`;
-      prompt += `> 存放: .speccore/GLOBAL/global/（不与 platforms/requirements 平级）\n\n`;
+      prompt += `\n### 全局技术性文档（Layer 4 汇总生成，v7.2.0+）\n`;
+      prompt += `> 存放: .speccore/GLOBAL/overview/（不与 platforms/requirements 平级）\n\n`;
       prompt += `| 文档 | 视角 | 内容 |\n`;
       prompt += `| :--- | :--- | :--- |\n`;
-      prompt += `| global/FUNCTION_MAP.md | 架构视角 | 功能单元 × 端映射表 |\n`;
-      prompt += `| global/INTERACTION_MAP.md | 架构视角 | 跨端交互时序图（同步 API + 异步消息） |\n`;
-      prompt += `| global/API_CONTRACT.yaml | 技术视角 | 全局接口契约（含 rate limit、幂等性、版本策略、废弃标记） |\n`;
-      prompt += `| global/ARCHITECTURE.md | 技术视角 | 全局架构（服务拓扑、数据流、部署关系、容错、降级、扩容） |\n`;
-      prompt += `| global/SECURITY_AUDIT.md | 安全视角 | 鉴权矩阵、敏感数据流、攻击面、CVE 清单、合规检查 |\n`;
-      prompt += `| global/PERFORMANCE_BASELINE.md | 性能视角 | 慢查询清单、缓存策略矩阵、并发承载、关键路径耗时 |\n`;
-      prompt += `| global/DATA_FLOW.md | 数据视角 | PII 识别追踪、数据生命周期、存储/传输/归档、GDPR 合规 |\n`;
-      prompt += `| global/EXTERNAL_INTEGRATIONS.md | 集成视角 | 第三方服务清单、SDK 风险、Webhook 分布、重复集成识别 |\n`;
-      prompt += `| global/DEPLOYMENT.md | 运维视角 | 容器化、CI/CD、健康检查、环境差异、日志聚合 |\n`;
-      prompt += `| global/OBSERVABILITY.md | 可观测视角 | 日志链路、错误码体系、监控埋点、告警策略、SLA |\n`;
-      prompt += `| global/CONSISTENCY_CHECK.md | 质量视角 | 一致性校验报告（字段/状态/接口/消息/配置） |\n`;
+      prompt += `| overview/FUNCTION_MAP.md | 架构视角 | 功能单元 × 端映射表 |\n`;
+      prompt += `| overview/INTERACTION_MAP.md | 架构视角 | 跨端交互时序图（同步 API + 异步消息） |\n`;
+      prompt += `| overview/API_CONTRACT.yaml | 技术视角 | 全局接口契约（含 rate limit、幂等性、版本策略、废弃标记） |\n`;
+      prompt += `| overview/ARCHITECTURE.md | 技术视角 | 全局架构（服务拓扑、数据流、部署关系、容错、降级、扩容） |\n`;
+      prompt += `| overview/SECURITY_AUDIT.md | 安全视角 | 鉴权矩阵、敏感数据流、攻击面、CVE 清单、合规检查 |\n`;
+      prompt += `| overview/PERFORMANCE_BASELINE.md | 性能视角 | 慢查询清单、缓存策略矩阵、并发承载、关键路径耗时 |\n`;
+      prompt += `| overview/DATA_FLOW.md | 数据视角 | PII 识别追踪、数据生命周期、存储/传输/归档、GDPR 合规 |\n`;
+      prompt += `| overview/EXTERNAL_INTEGRATIONS.md | 集成视角 | 第三方服务清单、SDK 风险、Webhook 分布、重复集成识别 |\n`;
+      prompt += `| overview/DEPLOYMENT.md | 运维视角 | 容器化、CI/CD、健康检查、环境差异、日志聚合 |\n`;
+      prompt += `| overview/OBSERVABILITY.md | 可观测视角 | 日志链路、错误码体系、监控埋点、告警策略、SLA |\n`;
+      prompt += `| overview/CONSISTENCY_CHECK.md | 质量视角 | 一致性校验报告（字段/状态/接口/消息/配置） |\n`;
       prompt += `\n### 后端端技术性文档（9项，Layer 3/4 汇总）\n`;
       prompt += `> 存放: .speccore/GLOBAL/platforms/{后端端名}/\n\n`;
       prompt += `| 文档 | 内容 |\n`;
@@ -2150,6 +2239,46 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     prompt += `\n⚠️ 如 CONSTITUTION.md 中「源码路径」为空或路径不存在: 提示用户先配置，给出三个选项：\n`;
     prompt += `   [1] 停止分析 → 配置后重来 | [2] 跳过源码 → 只用文档分析 | [3] 手动指定路径后继续\n`;
     prompt += '\n' + buildAutoModeInstruction('analyze', iter) + '\n';
+
+    // v7.2.0+: Layer 专注指令 — 在 Prompt 末尾再次强化约束
+    prompt += `\n## 🎯 Layer ${targetLayer} 执行清单（必须逐项完成）\n\n`;
+    prompt += `> ⚠️ **再次强调**: 你只执行 Layer ${targetLayer}，不要提前做其他层。\n\n`;
+
+    if (targetLayer === 1) {
+      prompt += `- [ ] Read CONSTITUTION.md 获取所有端和源码路径\n`;
+      prompt += `- [ ] 对每个端扫描 10 个维度，生成 _INDEX.md\n`;
+      prompt += `- [ ] 提取可复用模式写入 PATTERNS/\n`;
+      prompt += `- [ ] 提取语义标签写入 semantic-tags.json\n`;
+      prompt += `- [ ] 写入完成后执行: \`speccore analyze --scope global --layer 2\`\n`;
+    } else if (targetLayer === 2) {
+      prompt += `- [ ] Read 所有 Layer 1 生成的 _INDEX.md\n`;
+      prompt += `- [ ] 匹配前后端接口，生成关联矩阵\n`;
+      prompt += `- [ ] 识别公共服务、消息流、定时任务影响\n`;
+      prompt += `- [ ] 归纳功能模块，生成 _MODULES.md\n`;
+      prompt += `- [ ] 写入 _ASSOCIATION.md + _MODULES.md\n`;
+      prompt += `- [ ] 写入完成后执行: \`speccore analyze --scope global --layer 3\`\n`;
+    } else if (targetLayer === 3) {
+      prompt += `- [ ] Read Layer 2 的 _MODULES.md 获取功能模块清单\n`;
+      prompt += `- [ ] 逐个功能模块深入分析（读详细源码）\n`;
+      prompt += `- [ ] 每个模块生成：API 设计、数据模型、业务规则、交互时序\n`;
+      prompt += `- [ ] 时序图/流程图/状态图用 Mermaid 嵌入\n`;
+      prompt += `- [ ] 提取模块级模式补充到 PATTERNS/\n`;
+      prompt += `- [ ] 写入完成后执行: \`speccore analyze --scope global --layer 4\`\n`;
+    } else if (targetLayer === 4) {
+      prompt += `- [ ] Read Layer 3 的所有功能模块文档\n`;
+      prompt += `- [ ] 执行一致性校验（字段/状态/接口/消息/配置）\n`;
+      prompt += `- [ ] 生成全局汇总文档到 overview/（11 份技术文档）\n`;
+      prompt += `- [ ] 生成需求总纲到 requirements/REQUIREMENT.md\n`;
+      prompt += `- [ ] 生成各前端端需求到 requirements/{端}/REQUIREMENT.md\n`;
+      prompt += `- [ ] 所有文档必须包含 Mermaid 图表\n`;
+    }
+
+    prompt += `\n## 📝 写入方式\n`;
+    prompt += `使用 \`speccore analyze --apply '{"文件路径":"内容"}' --scope global\` 写入。\n`;
+    prompt += `- platforms/ 和 requirements/ 下的文件按原路径写（如 \`platforms/backend/_INDEX.md\`）\n`;
+    prompt += `- overview/ 下的文件写纯文件名即可（如 \`ARCHITECTURE.md\` 自动路由到 overview/）\n`;
+    prompt += `- PATTERNS/ 下的文件写 \`PATTERNS/{分类}/{模式名}.md\`\n`;
+
     return await injectGraphSummary(prompt);
   }
 
@@ -2705,9 +2834,9 @@ sequenceDiagram
     prompt += `2. 读取全局层产物（建立全局视角，重要）\n`;
     prompt += `   在读取迭代需求之前，先 Read 全局层已有产物，了解系统当前状态：\n`;
     prompt += `   a. Read .speccore/GLOBAL/requirements/REQUIREMENT.md → 系统已有功能清单\n`;
-    prompt += `   b. Read .speccore/GLOBAL/global/FUNCTION_MAP.md → 已有功能单元和涉及端\n`;
-    prompt += `   c. Read .speccore/GLOBAL/global/API_CONTRACT.yaml → 已有接口契约\n`;
-    prompt += `   d. Read .speccore/GLOBAL/global/ARCHITECTURE.md → 全局架构（如有）\n`;
+    prompt += `   b. Read .speccore/GLOBAL/overview/FUNCTION_MAP.md → 已有功能单元和涉及端\n`;
+    prompt += `   c. Read .speccore/GLOBAL/overview/API_CONTRACT.yaml → 已有接口契约\n`;
+    prompt += `   d. Read .speccore/GLOBAL/overview/ARCHITECTURE.md → 全局架构（如有）\n`;
     prompt += `   e. Read .speccore/GLOBAL/platforms/{相关端}/_INDEX.md → 各端已有页面和接口索引\n`;
     prompt += `   f. Read .speccore/GLOBAL/platforms/_shared/_ASSOCIATION.md → 前后端关联矩阵（如有）\n`;
     prompt += `   g. Read .speccore/GLOBAL/platforms/_shared/_MODULES.md → 功能模块候选（如有）\n`;
@@ -2776,7 +2905,7 @@ sequenceDiagram
     // v6.70.0+: 跨端功能映射表（FUNCTION_MAP.md）
     // v6.71.3+: 增加与全局层关联分析
     prompt += `7a. **迭代需求与全局层关联分析（重要）**：在生成功能模块清单时，必须对比全局层产物\n`;
-    prompt += `   - 对比迭代需求中的功能模块 vs .speccore/GLOBAL/global/FUNCTION_MAP.md 中的功能单元\n`;
+    prompt += `   - 对比迭代需求中的功能模块 vs .speccore/GLOBAL/overview/FUNCTION_MAP.md 中的功能单元\n`;
     prompt += `   - 标注每个功能模块的「全局对比」类型（新增/扩展/重构/复用）\n`;
     prompt += `   - 识别冲突：如迭代需求修改了全局层已有接口的字段/路径 → 在 RISK.md 中标注\n`;
     prompt += `   - 识别依赖：如迭代的新功能依赖全局层的某个功能 → 在 FUNCTION_MAP.md「依赖任务」中标注\n\n`;

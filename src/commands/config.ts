@@ -221,8 +221,8 @@ function normalizeRuleValue(ruleName: string, value: string): string {
 // ============================================================
 // TECH_STACK.md 技术栈写入
 // ============================================================
-// v6.98.0+: 全局技术文档统一放在 global/ 子目录下
-const TECH_STACK_PATH_NEW = '.speccore/GLOBAL/global/TECH_STACK.md';
+// v7.2.0+: 全局技术文档统一放在 overview/ 子目录下
+const TECH_STACK_PATH_NEW = '.speccore/GLOBAL/overview/TECH_STACK.md';
 const TECH_STACK_PATH_LEGACY = '.speccore/GLOBAL/TECH_STACK.md';
 
 async function resolveTechStackPath(): Promise<string | null> {
