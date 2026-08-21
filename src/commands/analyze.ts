@@ -104,8 +104,6 @@ export interface AnalyzeOptions {
   module?: string;        // --module: 功能模块级全局分析
   // 需求澄清 (v6.76.0+)
   clarify?: boolean;      // --clarify: 检测到非专业文档时提示澄清
-  // 开发者实现指南 (v6.76.0+)
-  devGuide?: boolean;     // --dev-guide: 生成 DEV_GUIDE.md 实现指南
   // v6.80.0+: 需求澄清控制
   skipClarify?: boolean;  // --skip-clarify: 跳过需求澄清阶段
   // v7.2.0+: 全局分析分层执行
@@ -3009,23 +3007,20 @@ sequenceDiagram
   ];
 
   // 任务类型 × 文档矩阵: 每种类型生成哪些文档
+  // v7.4.0+: DEV_GUIDE.md 是所有任务类型的标准文档，必须生成
   const DOC_MATRIX: Record<string, string[]> = {
     feature:    ['REQUIREMENT.md','ANALYSIS.md','TECH.md','TEST.md','REVIEW.md','RISK.md','DEPS.md','MONITOR.md','UI_SPEC.md','FUNCTION_MAP.md','INTERACTION_MAP.md','DEV_GUIDE.md'],
-    refactor:   ['ANALYSIS.md','TECH.md','TEST.md','REVIEW.md','RISK.md'],
-    bugfix:     ['ANALYSIS.md','TECH.md','TEST.md'],
-    research:   ['ANALYSIS.md'],
-    review:     ['REVIEW.md','RISK.md'],
-    test:       ['TEST.md','RISK.md'],
-    docs:       ['ANALYSIS.md'],
-    deploy:     ['ANALYSIS.md','TECH.md','RISK.md','DEPS.md','MONITOR.md'],
-    security:   ['ANALYSIS.md','TEST.md','REVIEW.md','RISK.md'],
-    performance:['ANALYSIS.md','TECH.md','TEST.md','MONITOR.md'],
+    refactor:   ['ANALYSIS.md','TECH.md','TEST.md','REVIEW.md','RISK.md','DEV_GUIDE.md'],
+    bugfix:     ['ANALYSIS.md','TECH.md','TEST.md','DEV_GUIDE.md'],
+    research:   ['ANALYSIS.md','DEV_GUIDE.md'],
+    review:     ['REVIEW.md','RISK.md','DEV_GUIDE.md'],
+    test:       ['TEST.md','RISK.md','DEV_GUIDE.md'],
+    docs:       ['ANALYSIS.md','DEV_GUIDE.md'],
+    deploy:     ['ANALYSIS.md','TECH.md','RISK.md','DEPS.md','MONITOR.md','DEV_GUIDE.md'],
+    security:   ['ANALYSIS.md','TEST.md','REVIEW.md','RISK.md','DEV_GUIDE.md'],
+    performance:['ANALYSIS.md','TECH.md','TEST.md','MONITOR.md','DEV_GUIDE.md'],
   };
-  let includeDocs = isTask ? (DOC_MATRIX[taskType] || DOC_MATRIX['feature']) : DOC_MATRIX['feature'];
-  // v6.78.0+: DEV_GUIDE.md 默认生成（--dev-guide 向后兼容，--no-dev-guide 可禁用）
-  if (options?.devGuide === false) {
-    includeDocs = includeDocs.filter(d => d !== 'DEV_GUIDE.md');
-  }
+  const includeDocs = isTask ? (DOC_MATRIX[taskType] || DOC_MATRIX['feature']) : DOC_MATRIX['feature'];
 
   // ── v6.61.0+: 恢复 Phase 1/Phase 2 分步逻辑，但 CLI 自动触发 Phase 2 ──
   // Phase 1: 生成综合文档(overview/REQUIREMENT.md、ANALYSIS.md、DEPS.md 等)

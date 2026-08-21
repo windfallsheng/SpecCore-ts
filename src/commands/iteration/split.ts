@@ -151,8 +151,6 @@ export interface IterationSplitOptions {
   modules?: string;     // --modules: 逗号分隔的功能模块名，只拆分匹配的模块
   // v6.76.0+: 变更检测选项
   ignoreSpecsUpdate?: boolean; // --ignore-specs-update: 跳过 spec 变更检测
-  // v6.76.0+: 开发者实现指南
-  devGuide?: boolean;           // --dev-guide: 生成任务级 DEV_GUIDE.md
 }
 
 async function detectPlatforms(iterationDir: string, specified?: string): Promise<string[]> {
@@ -738,7 +736,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       // v6.76.0+: 传入过滤条件，限制拆分范围；传入已有 Task 结构，支持增量拆分
       const modulesFilter = options.modules ? options.modules.split(',').map(m => m.trim()).filter(Boolean) : undefined;
       const platformsFilter = options.platforms ? options.platforms.split(',').map(p => p.trim()).filter(Boolean) : undefined;
-      let splitPrompt = buildSplitPrompt(iteration, constitutionContent, reqContent2, specContents, allPlatforms, modulesFilter, platformsFilter, existingTaskStructure, options.devGuide !== false);
+      let splitPrompt = buildSplitPrompt(iteration, constitutionContent, reqContent2, specContents, allPlatforms, modulesFilter, platformsFilter, existingTaskStructure);
 
       // 注入全局上下文（INDEX + TOC 目录，AI 自主读取）
       const { loadGlobalContext, formatGlobalContext } = await import('../../core/prompt-builder');
@@ -2680,7 +2678,6 @@ function buildSplitPrompt(
   modulesFilter?: string[],
   platformsFilter?: string[],
   existingTasks?: Map<string, string[]>,
-  devGuide?: boolean,
 ): string {
   let p = `# SpecCore AI 智能拆分\n\n`;
   p += `> 迭代: ${iteration} | 生成: ${new Date().toISOString().split('T')[0]}\n\n`;
@@ -2843,7 +2840,8 @@ function buildSplitPrompt(
   p += `    "owner": "建议负责人",\n`;
   p += `    "sourceFile": "来源文档路径（如 bugs/login-timeout.md、features/user-auth.md）",\n`;
   p += `    "reqContent": "需求描述内容（Markdown 格式，写入 REQ.md）",\n`;
-  p += `    "techContent": "技术方案内容（Markdown 格式，写入 TECH.md）"${devGuide ? `,\n    "devGuideContent": "开发者实现指南（Markdown 格式，写入 DEV_GUIDE.md）：实现步骤、关键代码示例、与存量功能集成、注意事项"` : ''}\n`;
+  p += `    "techContent": "技术方案内容（Markdown 格式，写入 TECH.md）",\n`;
+  p += `    "devGuideContent": "开发者实现指南（Markdown 格式，写入 DEV_GUIDE.md）：实现步骤、关键代码示例、与存量功能集成、注意事项"\n`;
   p += `  }\n]\n`;
   p += '```\n\n';
   p += `> **functionalUnit 必须填写**：根据任务类型语义不同：\n`;
