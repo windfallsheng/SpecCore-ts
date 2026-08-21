@@ -177,6 +177,30 @@ speccore graph render --extract ARCHITECTURE.md     # 从 Markdown 提取图表
 - 独立 `.mmd` 文件输出到 `.speccore/GLOBAL/diagrams/`
 - 生成响应式 HTML 页面，支持打印和主题切换
 
+**v7.2.0+ 全局分析深度增强** — 解决「文档只有框架没有实质内容」：
+```bash
+speccore analyze --scope global --iterative         # 大纲→逐节填充，深度生成
+speccore analyze --scope global --deep              # 单文档深度模式，字数翻倍
+speccore analyze --scope global --filter "订单,支付" # 只分析指定功能模块
+speccore analyze --scope global --with-code         # 注入代码结构化数据（零 Token）
+```
+- 结构化数据提取：TypeScript AST 本地解析 API/Entity/Route/Component
+- 自动引导：分 4 层渐进执行，每步显示进度和下一步命令
+- 质量门禁：自动生成质量评分，检测占位符/空表格/缺失图表
+- 交叉引用：自动生成文档间关联链接
+- 变更感知：Git diff 检测代码变更，标记受影响文档
+
+**v7.2.0+ 迭代分析细粒度增强** — 支持「分析订单模块在 TECH.md 中的实现」：
+```bash
+@spec-ask "分析 TECH.md 中的订单模块"               # 自然语言细粒度分析
+@spec-ask "深入分析 REQUIREMENT.md 的支付流程"       # 单功能单元深度分析
+speccore status                                       # 查看分析进度和过期文档
+```
+- 语义定位引擎：关键词同义词扩展，跨文档/跨代码自动定位
+- 代码自动关联：分析时自动注入源码中的接口定义和组件信息
+- 意图识别增强：自动提取 docName + featureName，精准定位分析目标
+- 临时缓存：`.speccore/cache/iterations/{name}/` 存储分析中间产物
+
 ![Knowledge Graph](docs/screenshots/knowledge-graph-full.png)
 
 ![Knowledge Graph Zoom](docs/screenshots/knowledge-graph-zoom.png)

@@ -376,6 +376,108 @@ speccore graph render --extract ARCHITECTURE.md  # 从 Markdown 提取
 - 颜色区分端（前端=blue, 后端=green, 数据库=gray, 第三方=orange）
 - 独立 `.mmd` 文件输出到 `diagrams/` 目录，便于批量渲染
 
+### 1.5.16 分析引擎深度增强体系（v7.2.0+）
+
+**核心问题**：AI 生成的分析文档往往只有框架（标题 + 空表格 + 占位符），缺乏实质内容。
+**解决方案**：结构化提取 → 上下文注入 → 迭代生成 → 质量门禁 → 交叉引用 → 变更感知的六维增强体系。
+
+#### 结构化数据提取（零 Token）
+
+`src/core/structured-extractor.ts` 基于 TypeScript 编译器 API 本地解析源码，无需 LLM：
+
+| 数据类型 | 提取内容 | 用途 |
+|----------|----------|------|
+| API 端点 | HTTP 方法、路径、Handler 函数 | 注入分析 Prompt，确保不遗漏接口 |
+| Entity 定义 | 类名、字段、类型、关系 | 生成数据模型文档时引用 |
+| 路由表 | 路由路径 → 组件/页面 映射 | 前端架构分析 |
+| React 组件 | 组件名、Props、Hooks 使用 | 前端组件分析 |
+| SQL/Prisma | 表名、字段、索引、外键 | 数据层分析 |
+
+提取结果保存为 `.speccore/structured-data.json`，分析时自动注入 Prompt。
+
+#### 迭代式生成（--iterative）
+
+两阶段生成解决「内容空洞」问题：
+
+```
+Phase 1: 生成大纲（章节结构 + 每节核心论点）
+Phase 2: 逐节填充（每节独立调用 LLM，携带前文上下文）
+```
+
+- 每节有独立的字数目标和内容深度要求
+- 前文摘要自动注入，保证跨节一致性
+- 支持中断续写（保存 outline + 已填充章节）
+
+#### 单文档深度模式（--deep）
+
+针对单个目标文档的深度分析：
+- 字数要求翻倍（标准 2000 字 → 深度 4000 字）
+- 图表要求翻倍（标准 2 个 → 深度 4 个）
+- 结构化数据全量注入（不采样，不截断）
+- 要求包含实现细节（代码片段、配置示例、边界条件）
+
+#### 文档质量门禁
+
+`src/core/doc-quality-gate.ts` 自动生成质量报告：
+
+| 检查项 | 规则 | 权重 |
+|--------|------|------|
+| 占位符检测 | `待导入|待补充|待填写|TODO|FIXME|XXX` | 25% |
+| 字数检查 | <200 字 error，<500 字 warning | 20% |
+| 空表格检测 | `\|.*\|.*\|` 行但无数据 | 20% |
+| 图表检查 | 必须含 Mermaid 代码块 | 20% |
+| 章节检查 | 标准章节缺失 | 15% |
+
+评分 <60 为不合格，需重新生成；60-80 为警告，建议补充；≥80 为优秀。
+
+#### 语义定位引擎
+
+`src/core/semantic-locator.ts` 支持自然语言定位功能单元：
+
+```
+用户输入: "分析 TECH.md 中的订单模块"
+↓
+意图识别: docName=TECH.md, featureName=订单
+↓
+关键词扩展: 订单 → [order, booking, purchase, 交易, 下单, 订单管理, ...]
+↓
+文档定位: 在 TECH.md 中搜索含关键词的章节
+↓
+代码关联: 在 structured-data.json 中搜索匹配的 API/Entity/Component
+↓
+全局扫描: 在 GLOBAL/ 文档中搜索相关背景信息
+↓
+上下文构建: 整合所有定位结果生成注入 Prompt
+```
+
+#### 变更驱动的增量更新
+
+`src/core/change-impact-global.ts` 基于 Git diff 检测文档 freshness：
+
+```
+1. 读取文档头部的 `last-analyzed: <commit>`
+2. git diff <commit>..HEAD --stat
+3. 映射变更文件 → 受影响的端/模块/文档
+4. 在文档头部添加 stale 标记和重新分析建议
+```
+
+#### 迭代分析临时缓存
+
+`.speccore/cache/iterations/{name}/` 目录结构：
+
+```
+cache/iterations/Q2/
+├── context/          # 每次分析的上下文摘要（JSON）
+├── locations/        # 语义定位结果（Markdown）
+├── snapshots/        # 代码结构化数据快照
+└── outlines/         # 迭代生成的大纲和中间产物
+```
+
+缓存策略：
+- 自动写入：每次分析自动保存上下文和定位结果
+- 手动清理：`speccore analyze --clear-cache`
+- 过期清理：超过 30 天的缓存自动删除
+
 ---
 
 ## 2. CONSTITUTION.md 设计

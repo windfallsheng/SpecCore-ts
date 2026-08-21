@@ -1,3 +1,68 @@
+## v7.2.0 (2026-08-21) — 全局分析深度增强 + 迭代分析细粒度 + 自动引导
+
+### 新增
+
+- **全局分析自动引导** `src/commands/analyze.ts`
+  - `[SPECCORE_GUIDE]` 标记输出：进度条 + 下一步命令 + 快捷操作
+  - 分 4 层（Layer 1-4）+ 子层（4a/4b/4c/4d）渐进式执行
+  - 每次分析后自动生成进度报告，显示已完成/待完成层级
+  - 自动推荐下一个最佳执行的命令
+
+- **全局分析进度可视化** `src/commands/status.ts`
+  - `speccore status` 显示全局分析 Layer 1-4 完成状态
+  - 展示各子层进度条、文档数量、下一推荐命令
+  - 集成变更检测，自动标记可能过期的文档
+
+- **按需分析（--filter）** `src/commands/analyze.ts` `src/cli.ts`
+  - `speccore analyze --filter "订单,支付"` 只分析与指定关键词相关的功能模块
+  - 自动将过滤条件注入 Layer 3 Prompt，减少无关输出
+  - 支持逗号分隔多关键词
+
+- **文档质量门禁** `src/core/doc-quality-gate.ts`
+  - 5 类质量检查：占位符检测、空表格检测、字数不足、缺失图表、缺失章节
+  - 0-100 分评分体系，<60 分 error，<80 分 warning
+  - 检测模式：`待导入|待补充|待填写|TODO|FIXME|XXX`
+  - 图表强制要求：ARCHITECTURE.md / INTERACTION_MAP.md / DATA_FLOW.md 等必须包含 Mermaid 图表
+
+- **文档交叉引用** `src/core/doc-cross-reference.ts`
+  - 自动生成「Related Documents」章节，包含相对路径链接
+  - 自动检测文档间关联（同 Layer、同端、关键词重叠）
+  - 新增文档时自动更新已有文档的引用
+
+- **变更驱动的增量更新** `src/core/change-impact-global.ts`
+  - Git diff 检测自上次分析以来的代码变更
+  - 标记受影响的文档为「可能过期」，建议重新分析
+  - 支持变更范围分析（影响端 / 影响模块 / 影响文档）
+
+- **迭代分析细粒度增强** `src/core/intent-recognition.ts` `src/core/semantic-locator.ts`
+  - 自然语言意图识别增强：支持「分析 TECH.md 中的订单模块」等细粒度指令
+  - 语义定位引擎：关键词同义词扩展（订单→order/booking/交易/下单），跨文档定位
+  - 代码自动关联：分析迭代文档时自动注入 structured-data.json 中的 API/Entity/Route/Component 信息
+  - 单文档深度分析：指定 `docName` + `featureName` 时只分析目标文档的指定功能单元
+
+- **迭代分析临时缓存** `src/core/iteration-cache.ts`
+  - `.speccore/cache/iterations/{name}/` 存储分析过程中的临时产物
+  - 子目录：context/（上下文摘要）、locations/（语义定位结果）、snapshots/（代码快照）、outlines/（大纲草稿）
+  - 支持 --clear-cache 清理历史缓存
+
+### 改进
+
+- **全局分析结构化提取** `src/core/structured-extractor.ts`
+  - TypeScript AST 零 Token 提取：API 端点、Entity 定义、路由表、React 组件
+  - 提取结果保存为 `structured-data.json`，供后续分析注入上下文
+  - 自动检测缺失的提取结果并触发重新提取
+
+- **全局分析迭代式生成** `--iterative`
+  - 大纲 → 逐节填充的两阶段生成模式
+  - 解决「生成文档只有框架没有实质内容」的问题
+  - 每节填充时携带前文上下文，保证一致性
+
+- **全局分析单文档深度模式** `--deep`
+  - 针对单个文档启用深度分析（字数要求翻倍、图表要求翻倍）
+  - 结构化数据全量注入，不遗漏任何接口/实体/组件
+
+---
+
 ## v7.1.0 (2026-08-21) — LLM 语义查询 + 图表丰富化 + Ask 意图完善
 
 ### 新增
