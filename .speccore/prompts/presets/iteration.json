@@ -10,13 +10,32 @@
     "env": "cli",
     "skill": "spec-iteration-create",
     "params": [
-      { "key": "迭代名", "placeholder": "Q3", "required": true },
-      { "key": "主题", "placeholder": "用户系统重构", "required": true },
-      { "key": "负责人", "placeholder": "张三", "required": false }
+      {
+        "key": "迭代名",
+        "placeholder": "Q3",
+        "required": true
+      },
+      {
+        "key": "主题",
+        "placeholder": "用户系统重构",
+        "required": true
+      },
+      {
+        "key": "负责人",
+        "placeholder": "张三",
+        "required": false
+      }
     ],
-    "tags": ["初始化", "迭代管理"],
+    "tags": [
+      "初始化",
+      "迭代管理"
+    ],
     "builtin": true,
-    "sort": 1
+    "sort": 1,
+    "examples": [
+      "开始 Q3 迭代的开发工作",
+      "为紧急补丁创建临时迭代"
+    ]
   },
   {
     "id": "create-iteration-with-req",
@@ -28,13 +47,32 @@
     "env": "ai",
     "skill": "spec-iteration-create",
     "params": [
-      { "key": "迭代名", "placeholder": "Q3", "required": true },
-      { "key": "主题", "placeholder": "订单系统", "required": true },
-      { "key": "需求文档路径", "placeholder": "docs/PRD.docx", "required": true }
+      {
+        "key": "迭代名",
+        "placeholder": "Q3",
+        "required": true
+      },
+      {
+        "key": "主题",
+        "placeholder": "订单系统",
+        "required": true
+      },
+      {
+        "key": "需求文档路径",
+        "placeholder": "docs/PRD.docx",
+        "required": true
+      }
     ],
-    "tags": ["初始化", "迭代管理"],
+    "tags": [
+      "初始化",
+      "迭代管理"
+    ],
     "builtin": true,
-    "sort": 2
+    "sort": 2,
+    "examples": [
+      "新项目一键创建迭代并导入 PRD",
+      "快速启动减少操作步骤"
+    ]
   },
   {
     "id": "switch-iteration",
@@ -46,11 +84,22 @@
     "command": "speccore current -I {迭代名}",
     "env": "cli",
     "params": [
-      { "key": "迭代名", "placeholder": "Q2", "required": true }
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": true
+      }
     ],
-    "tags": ["日常", "迭代管理"],
+    "tags": [
+      "日常",
+      "迭代管理"
+    ],
     "builtin": true,
-    "sort": 3
+    "sort": 3,
+    "examples": [
+      "从 Q2 切换到 Q3 继续开发",
+      "查看其他迭代的上下文"
+    ]
   },
   {
     "id": "retro-iteration",
@@ -61,11 +110,22 @@
     "prompt": "生成 {迭代名} 的迭代回顾",
     "env": "ai",
     "params": [
-      { "key": "迭代名", "placeholder": "Q2", "required": true }
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": true
+      }
     ],
-    "tags": ["收尾阶段", "迭代管理"],
+    "tags": [
+      "收尾阶段",
+      "迭代管理"
+    ],
     "builtin": true,
-    "sort": 4
+    "sort": 4,
+    "examples": [
+      "Q2 结束后总结经验教训",
+      "生成回顾报告给团队分享"
+    ]
   },
   {
     "id": "rename-iteration",
@@ -77,12 +137,27 @@
     "command": "speccore rename {旧名} {新名}",
     "env": "cli",
     "params": [
-      { "key": "旧名", "placeholder": "Q1", "required": true },
-      { "key": "新名", "placeholder": "Q1-user-system", "required": true }
+      {
+        "key": "旧名",
+        "placeholder": "Q1",
+        "required": true
+      },
+      {
+        "key": "新名",
+        "placeholder": "Q1-user-system",
+        "required": true
+      }
     ],
-    "tags": ["日常", "迭代管理"],
+    "tags": [
+      "日常",
+      "迭代管理"
+    ],
     "builtin": true,
-    "sort": 5
+    "sort": 5,
+    "examples": [
+      "Q1 改名为 Q1-user-system 更清晰",
+      "迭代主题变更后同步名称"
+    ]
   },
   {
     "id": "archive-iteration",
@@ -94,10 +169,21 @@
     "command": "speccore archive -I {迭代名}",
     "env": "cli",
     "params": [
-      { "key": "迭代名", "placeholder": "Q1", "required": true }
+      {
+        "key": "迭代名",
+        "placeholder": "Q1",
+        "required": true
+      }
     ],
-    "tags": ["收尾阶段", "迭代管理"],
+    "tags": [
+      "收尾阶段",
+      "迭代管理"
+    ],
     "builtin": true,
-    "sort": 6
+    "sort": 6,
+    "examples": [
+      "Q1 已交付需要归档",
+      "清理已完成迭代释放空间"
+    ]
   }
 ]

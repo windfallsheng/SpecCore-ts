@@ -10,13 +10,32 @@
     "env": "both",
     "skill": "spec-doc2spec",
     "params": [
-      { "key": "文件路径", "placeholder": "docs/PRD.docx", "required": true },
-      { "key": "迭代名", "placeholder": "Q2", "required": true },
-      { "key": "平台", "placeholder": "admin", "required": false }
+      {
+        "key": "文件路径",
+        "placeholder": "docs/PRD.docx",
+        "required": true
+      },
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": true
+      },
+      {
+        "key": "平台",
+        "placeholder": "admin",
+        "required": false
+      }
     ],
-    "tags": ["分析阶段", "文档处理"],
+    "tags": [
+      "分析阶段",
+      "文档处理"
+    ],
     "builtin": true,
-    "sort": 1
+    "sort": 1,
+    "examples": [
+      "新项目中首次导入 PRD 文档",
+      "客户发来 Word 版需求需要转为规格"
+    ]
   },
   {
     "id": "export-doc",
@@ -29,12 +48,27 @@
     "env": "cli",
     "skill": "spec-spec2doc",
     "params": [
-      { "key": "迭代名", "placeholder": "Q2", "required": true },
-      { "key": "输出文件名", "placeholder": "需求规格.docx", "required": true }
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": true
+      },
+      {
+        "key": "输出文件名",
+        "placeholder": "需求规格.docx",
+        "required": true
+      }
     ],
-    "tags": ["分析阶段", "文档处理"],
+    "tags": [
+      "分析阶段",
+      "文档处理"
+    ],
     "builtin": true,
-    "sort": 2
+    "sort": 2,
+    "examples": [
+      "把迭代规格导出给产品经理审阅",
+      "生成 PDF 交付给客户或归档"
+    ]
   },
   {
     "id": "analyze-iteration",
@@ -46,11 +80,22 @@
     "env": "ai",
     "skill": "spec-analyze",
     "params": [
-      { "key": "迭代名", "placeholder": "Q2", "required": true }
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": true
+      }
     ],
-    "tags": ["分析阶段", "标准流程"],
+    "tags": [
+      "分析阶段",
+      "标准流程"
+    ],
     "builtin": true,
-    "sort": 3
+    "sort": 3,
+    "examples": [
+      "新迭代开始前全面分析需求",
+      "代码大幅变更后重新分析补充规格"
+    ]
   },
   {
     "id": "analyze-global",
@@ -62,9 +107,17 @@
     "env": "ai",
     "skill": "spec-analyze",
     "params": [],
-    "tags": ["分析阶段", "全局模式", "v7.2.0"],
+    "tags": [
+      "分析阶段",
+      "全局模式",
+      "v7.2.0"
+    ],
     "builtin": true,
-    "sort": 10
+    "sort": 10,
+    "examples": [
+      "新项目启动时梳理整体架构",
+      "跨端交互关系需要全局视角梳理"
+    ]
   },
   {
     "id": "analyze-deep-doc",
@@ -76,11 +129,23 @@
     "env": "ai",
     "skill": "spec-analyze",
     "params": [
-      { "key": "文档名", "placeholder": "ARCHITECTURE.md", "required": true }
+      {
+        "key": "文档名",
+        "placeholder": "ARCHITECTURE.md",
+        "required": true
+      }
     ],
-    "tags": ["分析阶段", "深度模式", "v7.2.0"],
+    "tags": [
+      "分析阶段",
+      "深度模式",
+      "v7.2.0"
+    ],
     "builtin": true,
-    "sort": 11
+    "sort": 11,
+    "examples": [
+      "ARCHITECTURE.md 需要高质量产出",
+      "TECH.md 需要详细技术方案"
+    ]
   },
   {
     "id": "analyze-iterative",
@@ -92,11 +157,23 @@
     "env": "ai",
     "skill": "spec-analyze",
     "params": [
-      { "key": "迭代名", "placeholder": "Q2", "required": true }
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": true
+      }
     ],
-    "tags": ["分析阶段", "迭代模式", "v7.2.0"],
+    "tags": [
+      "分析阶段",
+      "迭代模式",
+      "v7.2.0"
+    ],
     "builtin": true,
-    "sort": 12
+    "sort": 12,
+    "examples": [
+      "复杂文档需要大纲确认后再深入",
+      "避免一次性生成质量不稳定"
+    ]
   },
   {
     "id": "analyze-filter",
@@ -108,11 +185,23 @@
     "env": "ai",
     "skill": "spec-analyze",
     "params": [
-      { "key": "模块关键词", "placeholder": "订单,支付", "required": true }
+      {
+        "key": "模块关键词",
+        "placeholder": "订单,支付",
+        "required": true
+      }
     ],
-    "tags": ["分析阶段", "按需模式", "v7.2.0"],
+    "tags": [
+      "分析阶段",
+      "按需模式",
+      "v7.2.0"
+    ],
     "builtin": true,
-    "sort": 13
+    "sort": 13,
+    "examples": [
+      "只需关注订单和支付模块",
+      "过滤无关内容减少 token 消耗"
+    ]
   },
   {
     "id": "analyze-feature-in-doc",
@@ -124,13 +213,33 @@
     "env": "ai",
     "skill": "spec-analyze",
     "params": [
-      { "key": "迭代名", "placeholder": "Q2", "required": false },
-      { "key": "文档名", "placeholder": "TECH.md", "required": true },
-      { "key": "功能名", "placeholder": "订单模块", "required": true }
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": false
+      },
+      {
+        "key": "文档名",
+        "placeholder": "TECH.md",
+        "required": true
+      },
+      {
+        "key": "功能名",
+        "placeholder": "订单模块",
+        "required": true
+      }
     ],
-    "tags": ["分析阶段", "细粒度", "v7.2.0"],
+    "tags": [
+      "分析阶段",
+      "细粒度",
+      "v7.2.0"
+    ],
     "builtin": true,
-    "sort": 14
+    "sort": 14,
+    "examples": [
+      "只分析用户认证模块的技术实现",
+      "聚焦特定功能减少认知负担"
+    ]
   },
   {
     "id": "analyze-supplement",
@@ -142,11 +251,22 @@
     "env": "ai",
     "skill": "spec-analyze",
     "params": [
-      { "key": "迭代名", "placeholder": "Q2", "required": true }
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": true
+      }
     ],
-    "tags": ["分析阶段", "变更驱动"],
+    "tags": [
+      "分析阶段",
+      "变更驱动"
+    ],
     "builtin": true,
-    "sort": 15
+    "sort": 15,
+    "examples": [
+      "代码变更后规格需要同步更新",
+      "新需求加入后补充分析"
+    ]
   },
   {
     "id": "validate-spec",
@@ -157,10 +277,21 @@
     "prompt": "校验 {迭代名} 的规格是否合规",
     "env": "ai",
     "params": [
-      { "key": "迭代名", "placeholder": "Q2", "required": true }
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": true
+      }
     ],
-    "tags": ["分析阶段", "质量门禁"],
+    "tags": [
+      "分析阶段",
+      "质量门禁"
+    ],
     "builtin": true,
-    "sort": 20
+    "sort": 20,
+    "examples": [
+      "交付前检查规格是否符合宪法规范",
+      "迭代收尾前质量把关"
+    ]
   }
 ]
