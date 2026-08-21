@@ -8,6 +8,7 @@
     "prompt": "初始化 SpecCore 项目",
     "command": "speccore init",
     "params": [],
+    "tags": ["首次使用", "初始化"],
     "builtin": true,
     "sort": 1
   },
@@ -22,6 +23,7 @@
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
+    "tags": ["分析阶段", "标准流程"],
     "builtin": true,
     "sort": 2
   },
@@ -36,6 +38,7 @@
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
+    "tags": ["开发阶段", "标准流程"],
     "builtin": true,
     "sort": 3
   },
@@ -51,6 +54,7 @@
       { "key": "迭代名", "placeholder": "Q2", "required": true },
       { "key": "任务ID", "placeholder": "Task-001", "required": true }
     ],
+    "tags": ["开发阶段", "标准流程"],
     "builtin": true,
     "sort": 4
   },
@@ -65,6 +69,7 @@
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": false }
     ],
+    "tags": ["日常", "进度追踪"],
     "builtin": true,
     "sort": 5
   },
@@ -79,6 +84,7 @@
     "params": [
       { "key": "迭代名", "placeholder": "Q2", "required": true }
     ],
+    "tags": ["开发阶段", "全自动"],
     "builtin": true,
     "sort": 6
   }

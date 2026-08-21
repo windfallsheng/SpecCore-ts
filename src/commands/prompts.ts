@@ -20,6 +20,7 @@ export interface PromptTemplate {
   description: string;
   prompt: string;
   command?: string;
+  tags?: string[];
   params: PromptParam[];
   builtin: boolean;
   sort: number;
@@ -429,6 +430,116 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
       gap: 8px;
       justify-content: flex-end;
     }
+    /* ═══ 场景快捷入口 ═══ */
+    .scene-bar {
+      padding: 16px 30px;
+      background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+      border-bottom: 1px solid #dee2e6;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .scene-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #868e96;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-right: 4px;
+    }
+    .scene-card {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      background: white;
+      border: 1px solid #e9ecef;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      color: #495057;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .scene-card:hover {
+      border-color: #667eea;
+      box-shadow: 0 2px 8px rgba(102, 126, 234, 0.12);
+      transform: translateY(-1px);
+    }
+    .scene-card.active {
+      background: #667eea;
+      color: white;
+      border-color: #667eea;
+    }
+    .scene-card .scene-icon {
+      font-size: 16px;
+    }
+    /* ═══ 标签云 ═══ */
+    .tag-cloud {
+      padding: 12px 30px;
+      background: #f8f9fa;
+      border-bottom: 1px solid #e9ecef;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .tag-cloud-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #868e96;
+      margin-right: 4px;
+    }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      background: white;
+      border: 1px solid #e9ecef;
+      border-radius: 20px;
+      font-size: 12px;
+      color: #495057;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tag:hover {
+      border-color: #667eea;
+      color: #667eea;
+    }
+    .tag.active {
+      background: #667eea;
+      color: white;
+      border-color: #667eea;
+    }
+    .tag .tag-count {
+      font-size: 10px;
+      background: #f1f3f5;
+      color: #868e96;
+      padding: 1px 5px;
+      border-radius: 10px;
+    }
+    .tag.active .tag-count {
+      background: rgba(255,255,255,0.25);
+      color: white;
+    }
+    /* ═══ 卡片标签 ═══ */
+    .prompt-tags {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    .prompt-tag {
+      display: inline-block;
+      padding: 2px 8px;
+      background: #f1f3f5;
+      border-radius: 4px;
+      font-size: 11px;
+      color: #868e96;
+    }
     .toast {
       position: fixed;
       bottom: 20px;
@@ -454,6 +565,29 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
       <p>预置模板 + 自定义提示词，一键复制，高效开发</p>
     </div>
 
+    <!-- 常用场景快捷入口 -->
+    <div class="scene-bar" id="sceneBar">
+      <span class="scene-label">常用场景</span>
+      <div class="scene-card" data-scene="init" onclick="filterByScene('init')">
+        <span class="scene-icon">🆕</span><span>首次使用</span>
+      </div>
+      <div class="scene-card" data-scene="analyze" onclick="filterByScene('analyze')">
+        <span class="scene-icon">🔍</span><span>开始分析</span>
+      </div>
+      <div class="scene-card" data-scene="dev" onclick="filterByScene('dev')">
+        <span class="scene-icon">▶️</span><span>开始开发</span>
+      </div>
+      <div class="scene-card" data-scene="finish" onclick="filterByScene('finish')">
+        <span class="scene-icon">✅</span><span>任务收尾</span>
+      </div>
+      <div class="scene-card" data-scene="daily" onclick="filterByScene('daily')">
+        <span class="scene-icon">📅</span><span>日常运维</span>
+      </div>
+      <div class="scene-card" data-scene="change" onclick="filterByScene('change')">
+        <span class="scene-icon">🔧</span><span>需求变更</span>
+      </div>
+    </div>
+
     <div class="toolbar">
       <input type="text" class="search-box" id="searchBox" placeholder="搜索提示词名称或内容...">
       <div class="category-tabs">
@@ -461,6 +595,11 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
         ${categories.map(c => `<div class="tab" data-category="${c}">${categoryLabels[c] || c}</div>`).join('')}
       </div>
       <button class="btn btn-primary" onclick="openCreateModal()">+ 新建</button>
+    </div>
+
+    <!-- 标签云 -->
+    <div class="tag-cloud" id="tagCloud">
+      <span class="tag-cloud-label">🏷️ 标签</span>
     </div>
 
     <div class="content" id="content">
@@ -515,9 +654,47 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
     let currentCategory = 'all';
     let searchQuery = '';
     let editingId = null;
+    let currentScene = null;
+    let activeTag = null;
+
+    // 场景 → 标签映射
+    const sceneMap = {
+      init: ['首次使用', '初始化'],
+      analyze: ['分析阶段'],
+      dev: ['开发阶段'],
+      finish: ['收尾阶段'],
+      daily: ['日常', '进度追踪'],
+      change: ['变更阶段', '需求调整']
+    };
+
+    // 收集所有标签
+    function collectTags() {
+      const counts = {};
+      prompts.forEach(p => {
+        (p.tags || []).forEach(tag => {
+          counts[tag] = (counts[tag] || 0) + 1;
+        });
+      });
+      return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    }
+
+    // 渲染标签云
+    function renderTagCloud() {
+      const tags = collectTags();
+      const container = document.getElementById('tagCloud');
+      if (!container) return;
+      let html = '<span class="tag-cloud-label">🏷️ 标签</span>';
+      html += '<span class="tag' + (activeTag ? '' : ' active') + '" onclick="filterByTag(null)">全部</span>';
+      tags.forEach(([tag, count]) => {
+        const isActive = activeTag === tag;
+        html += \`<span class="tag \${isActive ? 'active' : ''}" onclick="filterByTag('\${tag}')">\${tag}<span class="tag-count">\${count}</span></span>\`;
+      });
+      container.innerHTML = html;
+    }
 
     // 初始化
     document.addEventListener('DOMContentLoaded', () => {
+      renderTagCloud();
       render();
       document.getElementById('searchBox').addEventListener('input', (e) => {
         searchQuery = e.target.value.toLowerCase();
@@ -533,14 +710,34 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
       });
     });
 
+    function filterByScene(scene) {
+      if (currentScene === scene) {
+        currentScene = null;
+      } else {
+        currentScene = scene;
+      }
+      document.querySelectorAll('.scene-card').forEach(c => {
+        c.classList.toggle('active', c.dataset.scene === currentScene);
+      });
+      render();
+    }
+
+    function filterByTag(tag) {
+      activeTag = tag;
+      renderTagCloud();
+      render();
+    }
+
     function render() {
       const filtered = prompts.filter(p => {
         const matchCategory = currentCategory === 'all' || p.category === currentCategory;
-        const matchSearch = !searchQuery || 
+        const matchSearch = !searchQuery ||
           p.name.toLowerCase().includes(searchQuery) ||
           p.description.toLowerCase().includes(searchQuery) ||
           p.prompt.toLowerCase().includes(searchQuery);
-        return matchCategory && matchSearch;
+        const matchScene = !currentScene || (p.tags || []).some(t => sceneMap[currentScene].includes(t));
+        const matchTag = !activeTag || (p.tags || []).includes(activeTag);
+        return matchCategory && matchSearch && matchScene && matchTag;
       });
 
       const builtin = filtered.filter(p => p.builtin);
@@ -570,19 +767,23 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
     }
 
     function renderCard(p) {
-      const badge = p.builtin 
+      const badge = p.builtin
         ? '<span class="badge badge-builtin">预置</span>'
         : '<span class="badge badge-custom">自定义</span>';
-      
+
       const hasCommand = p.command && p.command.trim();
       const cmdBlock = hasCommand
         ? \`<div class="prompt-section">⌨️ 触发命令</div><div class="prompt-cmd">\${escapeHtml(p.command)}</div>\`
         : '';
-      
+
       const copyCmdBtn = hasCommand
         ? \`<button class="btn btn-cmd" onclick="copyCommand('\${p.id}')">⌨️ 复制命令</button>\`
         : '';
-      
+
+      const tagsHtml = (p.tags || []).length > 0
+        ? \`<div class="prompt-tags">\${p.tags.map(t => \`<span class="prompt-tag">\${t}</span>\`).join('')}</div>\`
+        : '';
+
       return \`
         <div class="prompt-card">
           <div class="prompt-header">
@@ -592,6 +793,7 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
               <p>\${p.description || ''}</p>
             </div>
           </div>
+          \${tagsHtml}
           <div class="prompt-section">💬 AI 说法</div>
           <div class="prompt-say">\${escapeHtml(p.prompt)}</div>
           \${cmdBlock}
