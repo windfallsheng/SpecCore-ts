@@ -116,6 +116,9 @@ export interface AnalyzeOptions {
   iterative?: boolean;    // --iterative: 先输出大纲，再逐节深入（配合 --deep 使用）
   // v7.2.0+: 按需分析（只分析指定模块）
   filter?: string;        // --filter <关键词>: 只分析与关键词匹配的模块（如 "auth|login"）
+  // v7.2.0+: 细粒度分析参数（由意图识别自动提取）
+  docName?: string;       // 目标文档名（如 TECH.md）
+  featureName?: string;   // 目标功能名（如 "订单模块"）
 }
 
 export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
@@ -1256,6 +1259,21 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
   if (options.prompt) {
     // v6.97.0+ 修复：全局分析时不应 fallback 到当前迭代
     const iter = options.scope === 'global' ? 'GLOBAL' : (options.iteration || await getDefaultIteration());
+
+    // v7.2.0+: 保存分析上下文到临时目录
+    if (iter && iter !== 'GLOBAL') {
+      try {
+        const { saveAnalysisContext } = await import('../core/iteration-cache');
+        await saveAnalysisContext({
+          iteration: iter,
+          docName: options.docName,
+          featureName: options.featureName,
+          withCode: options.withCode,
+          timestamp: new Date().toISOString(),
+        });
+      } catch { /* ignore */ }
+    }
+
     const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task, type: options.type, scope: options.scope, withCode: options.withCode, platform: options.platform, phase: options.phase, autoMode: options.auto }, options);
     process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
 
@@ -2924,6 +2942,18 @@ sequenceDiagram
     }
   }
 
+  // v7.2.0+: 细粒度分析 — 只生成指定文档的指定功能
+  if (options?.docName && options?.featureName && !isGlobal) {
+    const targetDoc = options.docName.endsWith('.md') ? options.docName : `${options.docName}.md`;
+    const filtered = taskDocs.filter(([n]) => n === targetDoc || n === options.docName);
+    if (filtered.length > 0) {
+      taskDocs = filtered;
+    } else {
+      // 不在默认文档列表中，创建单文档分析任务
+      taskDocs = [[targetDoc, `# ${targetDoc.replace('.md', '')} — ${options.featureName}\n\n> ${iter} | ${now}\n> 分析范围: 仅「${options.featureName}」功能单元\n\n## 写作要求\n针对「${options.featureName}」进行深入分析，基于需求文档和代码上下文补充详细内容。\n`]];
+    }
+  }
+
   // ── 用户自定义模板集成（v6.45.0+）──
   const templateLevel = isGlobal ? 'global' : (isTask ? 'task' : 'iteration');
   const userTemplates = await loadUserTemplates(templateLevel, isTask ? taskType : undefined, ctx.platform);
@@ -2951,6 +2981,53 @@ sequenceDiagram
   }
 
   let prompt = `\n# 任务: ${command}${task} (${taskDocs.length}个文档 · ${isTask ? `类型:${taskType}` : '迭代全量'}${ctx.phase ? ` · Phase ${ctx.phase}` : ''})\n\n`;
+
+  // v7.2.0+: 迭代分析代码关联 — 注入结构化数据和语义定位上下文
+  if (!isGlobal && ctx.withCode && ctx.iteration && ctx.iteration !== 'GLOBAL') {
+    try {
+      // 1. 提取结构化数据（如果还没有）
+      const structuredDataPath = join(process.cwd(), '.speccore', 'cache', 'structured-data.json');
+      if (!(await pathExists(structuredDataPath))) {
+        const constitutionPath = join(process.cwd(), '.speccore', 'CONSTITUTION.md');
+        let sourcePaths: string[] = ['src'];
+        if (await pathExists(constitutionPath)) {
+          const content = await readFile(constitutionPath, 'utf-8');
+          const match = content.match(/源码路径[\s\S]*?\n\s*-\s*`?([^`\n]+)`?/g);
+          if (match) {
+            sourcePaths = match.map(m => m.replace(/.*-\s*`?/, '').replace(/`?$/, '').trim()).filter(Boolean);
+          }
+        }
+        const { extractStructuredData } = await import('../core/structured-extractor');
+        await extractStructuredData(process.cwd(), sourcePaths);
+      }
+
+      // 2. 注入结构化数据摘要到 Prompt
+      if (await pathExists(structuredDataPath)) {
+        const data = await readFile(structuredDataPath, 'utf-8');
+        const structured = JSON.parse(data);
+        const stats = structured.stats || {};
+        prompt += `## 📊 代码结构化数据（自动提取）\n\n`;
+        prompt += `> 已扫描项目源码，提取以下结构化信息供分析参考：\n\n`;
+        prompt += `- API 接口: ${stats.totalApis || 0} 个\n`;
+        prompt += `- 数据实体: ${stats.totalEntities || 0} 个\n`;
+        prompt += `- 页面路由: ${stats.totalRoutes || 0} 个\n`;
+        prompt += `- 前端组件: ${stats.totalComponents || 0} 个\n`;
+        prompt += `- 扫描文件: ${stats.totalFiles || 0} 个\n\n`;
+        prompt += `> 💡 分析技术方案时，可参考 \`.speccore/cache/structured-data.json\` 中的 API/Entity/Route/Component 清单\n`;
+        prompt += `> 如需了解具体实现，直接 Read 对应源码文件\n\n`;
+      }
+
+      // 3. 语义定位：如果指定了功能名，自动关联上下文
+      if (options?.featureName) {
+        const { buildFeatureContext, buildFeatureContextPrompt } = await import('../core/semantic-locator');
+        const iterDir = await getIterationDir(ctx.iteration);
+        const featureCtx = await buildFeatureContext(process.cwd(), iterDir, options.featureName, options.docName);
+        prompt += buildFeatureContextPrompt(featureCtx);
+      }
+    } catch (e: any) {
+      logger.warn(`   ⚠️ 代码关联注入失败: ${e.message}`);
+    }
+  }
 
   // v6.80.0+: 注入需求质量上下文（迭代级分析时）
   if (!isGlobal && !isTask && ctx.iteration && ctx.iteration !== 'GLOBAL') {

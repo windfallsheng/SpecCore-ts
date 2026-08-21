@@ -157,6 +157,9 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
       // 重新/补充分析匹配模式
       '重新(.+)分析', '再(.+)分析', '补充(.+)分析',
       '更新(.+)分析', '修正(.+)分析', '完善(.+)分析',
+      // v7.2.0+: 细粒度分析 — 分析某文档的某功能
+      '分析(.+)中的(.+)', '分析(.+)的(.+)', '深入(.+)的(.+)',
+      '查看(.+)中的(.+)', '查看(.+)的(.+)',
     ],
     description: 'AI 分析 — 需求完整性 + 改动范围 + 风险矩阵（支持全局级/迭代级/任务级/重新分析）',
     args: '-I <iteration> 或 --scope global|task --with-code --supplement --sync',
@@ -789,6 +792,45 @@ function extractParams(input: string, mapping: CommandMapping): Record<string, s
   // 检测是否要求传统拆分模式（不走 AI 增强路径）
   if (input.includes('直接拆分') || input.includes('按章节') || input.includes('传统拆分') || input.includes('不用ai拆分')) {
     params.splitDirect = 'true';
+  }
+
+  // v7.2.0+: 细粒度分析参数提取 — 文档名 + 功能名
+  const knownDocs = /TECH|ANALYSIS|REQUIREMENT|SCHEMA|TEST|ARCHITECTURE|FUNCTION_MAP|API_CONTRACT|DATA_FLOW|SECURITY|DEPLOYMENT/i;
+  const docFeaturePatterns = [
+    /分析(.+?)中的(.+)/,
+    /分析(.+?)的(.+)/,
+    /深入(.+?)的(.+)/,
+    /查看(.+?)中的(.+)/,
+    /查看(.+?)的(.+)/,
+  ];
+  for (const pattern of docFeaturePatterns) {
+    const match = input.match(pattern);
+    if (match && match[1] && match[2]) {
+      const docName = match[1].trim();
+      const featureName = match[2].trim();
+      // 如果第一部分是文档名（含 .md 或已知文档名），则提取
+      if (docName.endsWith('.md') || docName.endsWith('.yaml') || knownDocs.test(docName)) {
+        params.docName = docName;
+        params.featureName = featureName;
+      }
+      break;
+    }
+  }
+
+  // v7.2.0+: 检测单文档深度分析意图
+  const deepDocPatterns = [
+    /深度分析(.+)/, /深入分析(.+)/, /详细分析(.+)/,
+    /分析(.+?)文档/, /分析(.+?)的详细/,
+  ];
+  for (const pattern of deepDocPatterns) {
+    const match = input.match(pattern);
+    if (match && match[1]) {
+      const name = match[1].trim();
+      if (name.endsWith('.md') || name.endsWith('.yaml') || knownDocs.test(name)) {
+        params.deepDoc = name;
+        break;
+      }
+    }
   }
 
   return params;
