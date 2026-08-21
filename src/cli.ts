@@ -326,7 +326,7 @@ iterationCmd
   .option('--force', '已有任务时强制覆盖')
   .option('--prune', '清理与当前 FUNCTION_MAP.md 不匹配的旧任务（移动到 archive）')
   .option('--ignore-specs-update', '跳过 020-specs/ 变更检测')
-  .option('--dev-guide', '生成任务级 DEV_GUIDE.md 开发者实现指南')
+  .option('--no-dev-guide', 'v7.4.0+: 禁用任务级 DEV_GUIDE.md 开发者实现指南（默认生成）')
   .option('-g, --granularity <level>', '拆分粒度: macro(粗) | module(中,默认) | atomic(细)')
   .action(iterationSplitCommand);
 

@@ -2,16 +2,17 @@
  * dev — 智能开发入口（AI 引导）
  * TTY → 终端框线，非 TTY → LLM 引导 HTML 页面
  */
-import { pathExists, readdir, writeFile, ensureDir } from 'fs-extra';
+import { pathExists, readdir, writeFile, ensureDir, readFile } from 'fs-extra';
 import { join } from 'path';
 import { execSync } from 'child_process';
 import { logger, Spinner } from '../utils/logger';
 import { isAiContext, detectHostAi } from '../core/ask-host-ai';
 import { getDefaultIteration } from '../core/context';
-import { resolveGlobalSpecPath } from '../core/spec-paths';
+import { resolveGlobalSpecPath, GLOBAL_SPECS_DIR } from '../core/spec-paths';
 import { devAiGuide, DevPhase, DevPipelineState } from '../core/dev-llm';
 import { tryHostAi } from '../core/ask-host-ai';
 import { PipelineEngine } from '../core/pipeline-engine';
+import { collectQuestionFiles } from '../core/questions';
 
 interface DevOptions {
   iteration?: string; force?: boolean; auto?: boolean; autoSteps?: string;
@@ -135,6 +136,17 @@ async function autoPipeline(options: DevOptions): Promise<void> {
   const iterDir = `Iteration-${iteration}`;
   logger.info(`\n🤖 Auto-pipeline: ${iteration}\n`);
 
+  // v7.4.0+: Pipeline 阶段结果追踪
+  interface PhaseResult {
+    key: string;
+    status: 'success' | 'skipped' | 'failed' | 'warning';
+    message: string;
+    questions: string[];
+    duration: number;
+  }
+  const phaseResults: PhaseResult[] = [];
+  const pipelineStart = Date.now();
+
   // ── 解析 auto-steps 范围 ──
   let startIdx = 0;
   let endIdx = PIPELINE_PHASES.length - 1;
@@ -178,8 +190,13 @@ async function autoPipeline(options: DevOptions): Promise<void> {
   for (let i = startIdx; i <= endIdx; i++) {
     const phase = PIPELINE_PHASES[i];
     logger.info(`━━━ [${i + 1}/${endIdx - startIdx + 1}] ${phase.key} ━━━`);
+    const phaseStart = Date.now();
+    let phaseStatus: PhaseResult['status'] = 'success';
+    let phaseMessage = '完成';
+    let phaseQuestions: string[] = [];
 
-    switch (phase.key) {
+    try {
+      switch (phase.key) {
       case 'init': {
         if (!(await pathExists('.speccore'))) {
           execSync('speccore init', { stdio: 'inherit' });
@@ -211,8 +228,7 @@ async function autoPipeline(options: DevOptions): Promise<void> {
       }
       case 'analyze': {
         const analysis = await resolveGlobalSpecPath(join(iterDir, '020-specs'), 'ANALYSIS.md') || join(iterDir, '020-specs', 'ANALYSIS.md');
-        const techSpec = join(iterDir, '020-specs', 'TECH.md');
-        // 检查 ANALYSIS.md 存在且 TECH.md 有实质内容（不只是空模板）
+        const techSpec = join(iterDir, '020-specs', 'ANALYSIS.md');
         let needsAnalysis = !(await pathExists(analysis));
         let needsSpecs = false;
         if (!needsAnalysis) {
@@ -227,6 +243,26 @@ async function autoPipeline(options: DevOptions): Promise<void> {
           execSync(`speccore analyze --auto -I ${iteration}`, { stdio: 'inherit' });
         } else {
           logger.info('  ✅ 分析已完成，跳过');
+          phaseStatus = 'skipped';
+          phaseMessage = '分析已完成，跳过';
+        }
+        // v7.4.0+: CLARIFY_REPORT 质量检查
+        const clarifyPath = join(iterDir, '010-requirements', 'CLARIFY_REPORT.md');
+        if (await pathExists(clarifyPath)) {
+          try {
+            const clarifyContent = await readFile(clarifyPath, 'utf-8');
+            const lowScoreMatch = clarifyContent.match(/总分[：:]\s*(\d+)/);
+            if (lowScoreMatch) {
+              const score = parseInt(lowScoreMatch[1]);
+              if (score < 60) {
+                logger.warn(`  ⚠️ CLARIFY_REPORT 质量评分偏低: ${score}/100`);
+                logger.warn(`     建议重新澄清需求或手动补充后再继续`);
+                phaseStatus = 'warning';
+                phaseMessage = `CLARIFY_REPORT 质量评分 ${score}/100，建议重新澄清`;
+                phaseQuestions.push(`需求澄清质量评分 ${score}/100，低于 60 分基线`);
+              }
+            }
+          } catch {}
         }
         break;
       }
@@ -305,11 +341,76 @@ async function autoPipeline(options: DevOptions): Promise<void> {
         execSync(`speccore spec2doc -i ${iteration}`, { stdio: 'inherit' });
         break;
       }
+      } // end switch
+    } catch (err: any) {
+      phaseStatus = 'failed';
+      phaseMessage = err?.message?.slice(0, 100) || '执行失败';
+      logger.error(`  ❌ ${phase.key} 失败: ${phaseMessage}`);
     }
+
+    // v7.4.0+: 每个阶段执行后收集疑问
+    try {
+      const qFiles = await collectQuestionFiles();
+      for (const qf of qFiles) {
+        if (qf.includes(`-${phase.key}-`)) {
+          phaseQuestions.push(qf.split('/').pop() || qf);
+        }
+      }
+    } catch {}
+
+    phaseResults.push({
+      key: phase.key,
+      status: phaseStatus,
+      message: phaseMessage,
+      questions: phaseQuestions,
+      duration: Math.round((Date.now() - phaseStart) / 1000),
+    });
     logger.info('');
   }
 
-  logger.success(`\n✅ Pipeline 完成: ${PIPELINE_PHASES.slice(startIdx, endIdx + 1).map(p => p.key).join(' → ')}\n`);
+  // v7.4.0+: 生成 Pipeline 总结报告
+  const totalDuration = Math.round((Date.now() - pipelineStart) / 1000);
+  const reportDir = join(iterDir, '000-overview');
+  await ensureDir(reportDir);
+  const reportPath = join(reportDir, 'PIPELINE_REPORT.md');
+  const now = new Date().toLocaleString('zh-CN');
+
+  let report = `# Pipeline 执行报告\n\n`;
+  report += `> 迭代: ${iteration} | 执行时间: ${now} | 总耗时: ${totalDuration}s\n`;
+  report += `> 执行范围: ${PIPELINE_PHASES.slice(startIdx, endIdx + 1).map(p => p.key).join(' → ')}\n\n`;
+  report += `## 阶段执行结果\n\n`;
+  report += `| 阶段 | 状态 | 耗时 | 说明 |\n`;
+  report += `| :--- | :--- | :--- | :--- |\n`;
+  for (const pr of phaseResults) {
+    const icon = pr.status === 'success' ? '✅' : pr.status === 'skipped' ? '⏭️' : pr.status === 'warning' ? '⚠️' : '❌';
+    report += `| ${pr.key} | ${icon} ${pr.status} | ${pr.duration}s | ${pr.message} |\n`;
+  }
+
+  // 汇总所有疑问
+  const allQuestions = phaseResults.filter(pr => pr.questions.length > 0);
+  if (allQuestions.length > 0) {
+    report += `\n## 疑问清单\n\n`;
+    for (const pr of allQuestions) {
+      report += `### ${pr.key} 阶段\n\n`;
+      for (const q of pr.questions) {
+        report += `- ${q}\n`;
+      }
+    }
+  }
+
+  // 失败项汇总
+  const failedPhases = phaseResults.filter(pr => pr.status === 'failed');
+  if (failedPhases.length > 0) {
+    report += `\n## 失败项需要处理\n\n`;
+    for (const fp of failedPhases) {
+      report += `- **${fp.key}**: ${fp.message}\n`;
+    }
+  }
+
+  report += `\n---\n> 报告自动生成 by speccore dev auto-pipeline\n`;
+  await writeFile(reportPath, report, 'utf-8');
+  logger.success(`\n✅ Pipeline 完成: ${PIPELINE_PHASES.slice(startIdx, endIdx + 1).map(p => p.key).join(' → ')}`);
+  logger.info(`📊 执行报告 → ${reportPath}\n`);
 }
 
 async function renderDevHtml(options: DevOptions): Promise<string> {

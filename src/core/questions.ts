@@ -4,7 +4,7 @@
  * 自动模式下 AI 不询问用户，有疑问时写入 .speccore/questions/ 目录。
  * 文件命名: {命令}-{迭代或任务名}-{日期}-{时间}.md
  */
-import { writeFile, ensureDir, pathExists, readFile } from 'fs-extra';
+import { writeFile, ensureDir, pathExists, readFile, readdir } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
 
@@ -105,6 +105,58 @@ export async function appendQuestions(
 
   await writeFile(existingFilePath, existing + addition, 'utf-8');
   logger.info(`   📝 追加 ${questions.length} 项疑问 → ${existingFilePath}`);
+}
+
+/**
+ * 从 AI 输出文本中提取疑问条目
+ * 
+ * 匹配格式:
+ * ## 疑问 N — 分类标签
+ * - **问题**: ...
+ * - **判断**: ...
+ * - **建议**: ...
+ */
+export function extractQuestionsFromText(text: string): QuestionItem[] {
+  const questions: QuestionItem[] = [];
+  // 匹配 "## 疑问 N — 分类" 或 "## 疑问 N - 分类"
+  const questionBlocks = text.split(/(?=^## \s*疑问\s+\d+)/m);
+  
+  for (const block of questionBlocks) {
+    if (!block.match(/^## \s*疑问\s+\d+/)) continue;
+    
+    // 提取分类标签
+    const categoryMatch = block.match(/^## \s*疑问\s+\d+\s*[—\-–]\s*(.+)$/m);
+    const category = categoryMatch ? categoryMatch[1].trim() : '未分类';
+    
+    // 提取问题/判断/建议
+    const questionMatch = block.match(/\*\*问题\*\*[：:]\s*(.+)/);
+    const decisionMatch = block.match(/\*\*判断\*\*[：:]\s*(.+)/);
+    const suggestionMatch = block.match(/\*\*建议\*\*[：:]\s*(.+)/);
+    
+    if (questionMatch && decisionMatch) {
+      questions.push({
+        category,
+        question: questionMatch[1].trim(),
+        decision: decisionMatch[1].trim(),
+        suggestion: suggestionMatch ? suggestionMatch[1].trim() : undefined,
+      });
+    }
+  }
+  return questions;
+}
+
+/**
+ * 收集 .speccore/questions/ 目录下所有疑问清单文件
+ * 返回按时间排序的文件路径列表
+ */
+export async function collectQuestionFiles(): Promise<string[]> {
+  const questionsDir = join('.speccore', 'questions');
+  if (!(await pathExists(questionsDir))) return [];
+  const files = await readdir(questionsDir);
+  return files
+    .filter(f => f.endsWith('.md'))
+    .sort()
+    .map(f => join(questionsDir, f));
 }
 
 /**
