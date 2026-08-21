@@ -76,8 +76,8 @@ const COMMAND_KB: CommandKnowledge[] = [
     usage: 'speccore spec2doc [-i <iteration>] [-t <task>] [-f <format>] [-o <output>]', examples: ['speccore spec2doc -i Q3 -o 需求.docx', 'speccore spec2doc -t T-01 -f html'], related: ['doc2spec'], triggers: ['导出', 'spec2doc', '生成文档', '导出word', '导出pdf'] },
   { name: 'dashboard', aliases: ['db', 'sp'], description: '项目仪表盘：迭代状态/进度/健康度，--scope global 全量视图',
     usage: 'speccore dashboard [--scope global|iteration] [--export html] [--health] [--lifecycle]', examples: ['speccore dashboard', 'speccore dashboard --scope global --export html'], related: ['analyze', 'health'], triggers: ['看板', '仪表盘', 'dashboard', '进度', '状态'] },
-  { name: 'analyze', aliases: ['al'], description: '统一分析：需求文档+源码→分析报告。支持 --full 三阶段合成（原 synthesize），--phase 单阶段合成，--feature 局部分析功能模块，--doc 局部分析类型文档，--sync 任务分析后局部回写 020-specs/，--no-source 跳过源码，--supplement 追加源码',
-    usage: 'speccore analyze [--task <id>] [--iteration <name>] [--full] [--phase <n>] [--feature <module>] [--doc <type/slug>] [--with-code] [--no-source] [--source-scope <dirs>] [--supplement] [--sync] [--scope global] [--dev-guide]', examples: ['speccore analyze', 'speccore analyze --full -i Q2', 'speccore analyze --phase 1 -i Q2', 'speccore analyze --feature 支付模块', 'speccore analyze --doc bugs/login-timeout', 'speccore analyze --with-code', 'speccore analyze --supplement --source-scope src/core', 'speccore analyze --task Task-001 --apply "..." --sync'], related: ['dashboard', 'validate', 'code-index', 'refresh', 'synthesize'], triggers: ['分析', 'analyze', '审计', 'audit', '检查', '结合源码', '连代码', '带代码', '源码分析', '迭代分析', '分析迭代', '倒推需求', '反推', '从代码生成', '分析代码', '不读源码', '不读代码', '跳过源码', '指定目录分析', '只扫描', '补充分析', '追加分析', '补充源码', '追加源码', '遗漏', '没分析到', '没覆盖', '漏掉', '再分析', '多读几个', '局部分析', '单个模块', '单独分析', 'bug分析', '重构分析', '局部回写', '回写spec', '同步spec', '合成需求', '合并需求', '需求合成', '智能合成', '需求合并', '多端合成', '全量分析', '跨端综合', '全量合成', '开发指南', '生成开发指南', '带开发指南'] },
+  { name: 'analyze', aliases: ['al'], description: '统一分析：需求文档+源码→分析报告。支持 --full 三阶段合成，--deep 单文档深度分析（字数/图表翻倍），--iterative 迭代式生成（大纲→逐节填充），--filter 按需分析指定模块，--with-code 注入代码结构化数据，--phase 单阶段合成，--feature 局部分析功能模块，--doc 局部分析类型文档，--sync 任务分析后局部回写 020-specs/，--no-source 跳过源码，--supplement 追加源码',
+    usage: 'speccore analyze [--task <id>] [--iteration <name>] [--full] [--deep <doc>] [--iterative] [--filter <keywords>] [--with-code] [--phase <n>] [--feature <module>] [--doc <type/slug>] [--no-source] [--source-scope <dirs>] [--supplement] [--sync] [--scope global] [--dev-guide]', examples: ['speccore analyze', 'speccore analyze --full -i Q2', 'speccore analyze --deep ARCHITECTURE.md --iterative', 'speccore analyze --filter "订单,支付" --with-code', 'speccore analyze --phase 1 -i Q2', 'speccore analyze --feature 支付模块', 'speccore analyze --doc bugs/login-timeout', 'speccore analyze --with-code', 'speccore analyze --supplement --source-scope src/core', 'speccore analyze --task Task-001 --apply "..." --sync'], related: ['dashboard', 'validate', 'code-index', 'refresh', 'synthesize'], triggers: ['分析', 'analyze', '审计', 'audit', '检查', '结合源码', '连代码', '带代码', '源码分析', '迭代分析', '分析迭代', '倒推需求', '反推', '从代码生成', '分析代码', '不读源码', '不读代码', '跳过源码', '指定目录分析', '只扫描', '补充分析', '追加分析', '补充源码', '追加源码', '遗漏', '没分析到', '没覆盖', '漏掉', '再分析', '多读几个', '局部分析', '单个模块', '单独分析', 'bug分析', '重构分析', '局部回写', '回写spec', '同步spec', '合成需求', '合并需求', '需求合成', '智能合成', '需求合并', '多端合成', '全量分析', '跨端综合', '全量合成', '开发指南', '生成开发指南', '带开发指南', '深度分析', '深入分析', '详细分析', '迭代生成', '逐节分析', '大纲分析', '按需分析', '只分析', '过滤分析', '聚焦分析'] },
   { name: 'code-index', aliases: ['ci', 'idx'], description: '源码索引：扫描项目代码，自动识别多端/模块/依赖，生成 Markdown 索引',
     usage: 'speccore code-index [--full] [--scope <dirs>] [--show]', examples: ['speccore code-index', 'speccore code-index --full', 'speccore code-index --scope src/commands,src/core', 'speccore code-index --show'], related: ['analyze', 'dev'], triggers: ['代码索引', '源码索引', 'code-index', '索引', '建索引', '更新索引', '扫描代码', '代码结构', '模块索引', '项目结构'] },
   { name: 'execute', aliases: ['ex'], description: '执行开发任务：依赖排序+分批+交互引导+计划联动',
@@ -1017,6 +1017,36 @@ export async function synthesizeIntent(input: string): Promise<SynthesizedIntent
     if (alt) parsed.name = alt[1];
   } else parsed.name = nameMatch[1];
 
+  // v7.2.0+: 分析深度参数提取
+  // --deep: 深度分析（指定文档名或泛化表述）
+  const deepDocMatch = input.match(/(?:深度分析|深入分析|详细分析|深度生成)\s*(?:文档?)?\s*([A-Z_\-]+\.md|[A-Z_\-]+)/i);
+  if (deepDocMatch) {
+    parsed.deep = deepDocMatch[1];
+  } else if (/深度|深入|详细|逐节|慢慢|一步一步/.test(input)) {
+    parsed.deep = 'auto'; // 用户表达了深度意愿但未指定文档，后续由 analyze 逻辑决定
+  }
+  // --iterative: 迭代式生成
+  if (/迭代|逐节|分节|分段|大纲|先大纲|确认后再|一步一步/.test(input)) {
+    parsed.iterative = 'true';
+  }
+  // --filter: 按需分析关键词
+  const filterMatch = input.match(/(?:只分析|仅分析|过滤|只看|限定|聚焦|针对)\s*(?:模块?)?\s*["""]?([^"""，,;；]+)["""]?/);
+  if (filterMatch) {
+    parsed.filter = filterMatch[1].replace(/[\s|]+/g, ',').trim();
+  } else if (/只[看要]?(?:订单|支付|用户|登录|认证|权限|消息|通知|搜索|配置|监控|日志|统计|报表|报表|导入|导出|审批|工作流|定时|调度|缓存|队列|文件|图片|视频|音频|地图|定位|推送|邮件|短信|微信|支付宝|银行卡|优惠券|积分|会员|商品|库存|购物车|结算|退款|售后|客服|评价|收藏|关注|订阅|分享|邀请|注册|注销|修改密码|重置密码|绑定|解绑|实名|认证|授权|委托|代理|分销|团购|秒杀|预售|拍卖|抽奖|签到|打卡|排行|等级|勋章|成就|任务|活动|运营|广告|banner|弹窗|引导|教程|帮助|反馈|投诉|举报|禁言|封号|解封|白名单|黑名单|灰度|AB测试|埋点|性能|安全|备份|恢复|迁移|升级|降级|回滚|扩容|缩容|集群|负载均衡|网关|代理|CDN|DNS|SSL|HTTPS|OAuth|JWT|SSO|LDAP|AD|RBAC|ACL|审计|加密|解密|签名|验签|哈希|压缩|解压|编码|解码|序列化|反序列化|模板|引擎|解析器|编译器|解释器|虚拟机|容器|镜像|编排|调度|服务发现|配置中心|注册中心|熔断|限流|降级|重试|超时|幂等|事务|锁|并发|并行|异步|同步|阻塞|非阻塞|轮询|长连接|WebSocket|SSE|MQTT|gRPC|GraphQL|REST|RPC|SOAP|消息队列|事件总线|发布订阅|观察者|责任链|策略|工厂|单例|代理|装饰器|适配器|桥接|组合|享元|外观|模板方法|访问者|中介者|备忘录|迭代器|命令|解释器|状态|备忘录|访问者|中介者|迭代器|命令|解释器|状态)/i.test(input)) {
+    // 如果输入中包含明显的业务模块关键词但没有显式"只分析"，也尝试提取作为 filter
+    const bizMatch = input.match(/(?:订单|支付|用户|登录|认证|权限|消息|通知|搜索|配置|监控|日志|统计|报表|导入|导出|审批|工作流|定时|调度|缓存|队列|文件|图片|视频|音频|地图|定位|推送|邮件|短信|微信|支付宝|银行卡|优惠券|积分|会员|商品|库存|购物车|结算|退款|售后|客服|评价|收藏|关注|订阅|分享|邀请|注册|注销|修改密码|重置密码|绑定|解绑|实名|授权|委托|代理|分销|团购|秒杀|预售|拍卖|抽奖|签到|打卡|排行|等级|勋章|成就|任务|活动|运营|广告|banner|弹窗|引导|教程|帮助|反馈|投诉|举报|禁言|封号|解封|白名单|黑名单|灰度|AB测试|埋点|性能|安全|备份|恢复|迁移|升级|降级|回滚|扩容|缩容|集群|负载均衡|网关|代理|CDN|DNS|SSL|HTTPS|OAuth|JWT|SSO|LDAP|AD|RBAC|ACL|审计|加密|解密|签名|验签|哈希|压缩|解压|编码|解码|序列化|反序列化|模板|引擎|解析器|编译器|解释器|虚拟机|容器|镜像|编排|调度|服务发现|配置中心|注册中心|熔断|限流|降级|重试|超时|幂等|事务|锁|并发|并行|异步|同步|阻塞|非阻塞|轮询|长连接|WebSocket|SSE|MQTT|gRPC|GraphQL|REST|RPC|SOAP|消息队列|事件总线|发布订阅|观察者|责任链|策略|工厂|单例|代理|装饰器|适配器|桥接|组合|享元|外观|模板方法|访问者|中介者|备忘录|迭代器|命令|解释器|状态)/i);
+    if (bizMatch) parsed.filter = bizMatch[0];
+  }
+  // --with-code: 关联代码分析
+  if (/代码|源码|结构化|AST|接口|实体|组件|路由|带代码|连代码/.test(input)) {
+    parsed.withCode = 'true';
+  }
+  // --scope global: 全局分析
+  if (/全局|全量|整体|项目级|架构级|跨端/.test(input) && !parsed.iteration) {
+    parsed.scope = 'global';
+  }
+
   // ═══ 2. 上下文补全 ═══
   try {
     const { getDefaultIteration } = await import('./context');
@@ -1068,8 +1098,28 @@ export async function synthesizeIntent(input: string): Promise<SynthesizedIntent
         break;
       case 'analyze':
         args = parsed.iteration ? `-I ${parsed.iteration}` : '';
+        if (parsed.scope === 'global') { args += ' --scope global'; }
+        if (parsed.deep && parsed.deep !== 'auto') {
+          args += ` --deep ${parsed.deep}`;
+          autoFilled.push({ field: 'deep', value: parsed.deep, reason: '从输入中识别深度分析目标文档' });
+        } else if (parsed.deep === 'auto') {
+          args += ' --deep';
+          autoFilled.push({ field: 'deep', value: 'true', reason: '用户表达深度分析意愿' });
+        }
+        if (parsed.iterative) {
+          args += ' --iterative';
+          autoFilled.push({ field: 'iterative', value: 'true', reason: '用户要求迭代式生成' });
+        }
+        if (parsed.filter) {
+          args += ` --filter "${parsed.filter}"`;
+          autoFilled.push({ field: 'filter', value: parsed.filter, reason: '从输入中提取过滤关键词' });
+        }
+        if (parsed.withCode) {
+          args += ' --with-code';
+          autoFilled.push({ field: 'withCode', value: 'true', reason: '用户要求关联代码分析' });
+        }
         if (parsed.type) args += ` --type ${parsed.type}`;
-        explanation = parsed.type ? `深度分析(${parsed.type})` : '深度分析';
+        explanation = parsed.deep ? `深度分析(${parsed.deep === 'auto' ? '全文档' : parsed.deep})` : (parsed.filter ? `按需分析(${parsed.filter})` : '分析');
         break;
       case 'validate':
         args = parsed.iteration ? `--iteration=${parsed.iteration}` : '';
