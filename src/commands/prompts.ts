@@ -980,11 +980,17 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
     function copySkill(id) {
       const p = prompts.find(x => x.id === id);
       if (!p || !p.skill) return;
-      copyToClipboard('/' + p.skill, '⚡ Skill 命令已复制');
+      
+      if (p.params && p.params.length > 0) {
+        showParamModal(p, 'skill');
+      } else {
+        copyToClipboard('/' + p.skill, '⚡ Skill 命令已复制');
+      }
     }
 
     function showParamModal(p, mode) {
       const isSay = mode === 'say';
+      const isSkill = mode === 'skill';
       const modal = document.createElement('div');
       modal.className = 'modal active';
       modal.dataset.mode = mode;
@@ -1003,18 +1009,20 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
               </div>
             \`).join('')}
             <div class="form-group" style="margin-top: 20px;">
-              <label style="font-weight: 600; color: #495057;">\${isSay ? '💬 预览（AI 说法）' : '⌨️ 预览（触发命令）'}</label>
+              <label style="font-weight: 600; color: #495057;">\${isSay ? '💬 预览（AI 说法）' : isSkill ? '⚡ 预览（Skill 命令）' : '⌨️ 预览（触发命令）'}</label>
               <div id="preview-box" style="\${isSay
                 ? 'background: #e7f5ff; border-radius: 8px; padding: 12px; font-size: 13px; color: #1864ab; line-height: 1.6; min-height: 60px; border: 1px solid #74c0fc;'
+                : isSkill
+                ? 'background: #f3f0ff; border-radius: 8px; padding: 12px; font-size: 13px; color: #7048e8; line-height: 1.6; min-height: 60px; border: 1px solid #d0bfff; font-family: monospace;'
                 : 'background: #212529; border-radius: 8px; padding: 12px; font-size: 12px; color: #69db7c; line-height: 1.6; min-height: 60px; border: 1px solid #495057; font-family: monospace;'
               }">
-                \${escapeHtml(isSay ? p.prompt : (p.command || ''))}
+                \${escapeHtml(isSay ? p.prompt : isSkill ? ('/' + p.skill) : (p.command || ''))}
               </div>
             </div>
           </div>
           <div class="modal-footer">
             <button class="btn btn-secondary" onclick="this.closest('.modal').remove()">取消</button>
-            <button class="btn \${isSay ? 'btn-say' : 'btn-cmd'}" onclick="submitParams('\${p.id}', '\${mode}')">\${isSay ? '💬 复制说法' : '⌨️ 复制命令'}</button>
+            <button class="btn \${isSay ? 'btn-say' : isSkill ? 'btn-skill' : 'btn-cmd'}" onclick="submitParams('\${p.id}', '\${mode}')">\${isSay ? '💬 复制说法' : isSkill ? '⚡ 复制 Skill' : '⌨️ 复制命令'}</button>
           </div>
         </div>
       \`;
@@ -1031,15 +1039,26 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
       if (!p) return;
       
       const isSay = mode === 'say';
-      let text = isSay ? p.prompt : (p.command || '');
+      const isSkill = mode === 'skill';
+      let text = isSay ? p.prompt : isSkill ? ('/' + p.skill) : (p.command || '');
       
-      p.params.forEach(param => {
-        const input = document.getElementById('param-' + param.key);
-        const value = input ? input.value.trim() : '';
-        if (value) {
-          text = text.replace(new RegExp('\\{' + param.key + '\\}', 'g'), value);
-        }
-      });
+      if (isSkill) {
+        const values = [];
+        p.params.forEach(param => {
+          const input = document.getElementById('param-' + param.key);
+          const value = input ? input.value.trim() : '';
+          if (value) values.push(value);
+        });
+        if (values.length > 0) text += ' ' + values.join(' ');
+      } else {
+        p.params.forEach(param => {
+          const input = document.getElementById('param-' + param.key);
+          const value = input ? input.value.trim() : '';
+          if (value) {
+            text = text.replace(new RegExp('\\{' + param.key + '\\}', 'g'), value);
+          }
+        });
+      }
       
       const previewBox = document.getElementById('preview-box');
       if (previewBox) {
@@ -1056,21 +1075,39 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
       if (!p) return;
       
       const isSay = mode === 'say';
-      let text = isSay ? p.prompt : (p.command || '');
+      const isSkill = mode === 'skill';
+      let text = isSay ? p.prompt : isSkill ? ('/' + p.skill) : (p.command || '');
       let allFilled = true;
       
-      p.params.forEach(param => {
-        const input = document.getElementById('param-' + param.key);
-        const value = input ? input.value.trim() : '';
-        
-        if (param.required && !value) {
-          allFilled = false;
-          input.style.borderColor = '#e03131';
-        } else {
-          input.style.borderColor = '#e9ecef';
-          text = text.replace(new RegExp('\\{' + param.key + '\\}', 'g'), value);
-        }
-      });
+      if (isSkill) {
+        const values = [];
+        p.params.forEach(param => {
+          const input = document.getElementById('param-' + param.key);
+          const value = input ? input.value.trim() : '';
+          
+          if (param.required && !value) {
+            allFilled = false;
+            input.style.borderColor = '#e03131';
+          } else {
+            input.style.borderColor = '#e9ecef';
+            if (value) values.push(value);
+          }
+        });
+        if (values.length > 0) text += ' ' + values.join(' ');
+      } else {
+        p.params.forEach(param => {
+          const input = document.getElementById('param-' + param.key);
+          const value = input ? input.value.trim() : '';
+          
+          if (param.required && !value) {
+            allFilled = false;
+            input.style.borderColor = '#e03131';
+          } else {
+            input.style.borderColor = '#e9ecef';
+            text = text.replace(new RegExp('\\{' + param.key + '\\}', 'g'), value);
+          }
+        });
+      }
       
       if (!allFilled) {
         showToast('⚠️ 请填写必填参数');
@@ -1081,7 +1118,7 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
       if (modal) modal.remove();
       
       const finalText = isSay ? ('/spec-ask "' + text + '"') : text;
-      copyToClipboard(finalText, isSay ? '💬 AI 说法已复制' : '⌨️ 命令已复制');
+      copyToClipboard(finalText, isSay ? '💬 AI 说法已复制' : isSkill ? '⚡ Skill 命令已复制' : '⌨️ 命令已复制');
     }
 
     function copyToClipboard(text, msg) {
