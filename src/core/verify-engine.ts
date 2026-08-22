@@ -16,6 +16,7 @@ import {
   buildAgentPrompt,
   type AgentContext,
 } from './agents';
+import { validateContentQuality } from './spec-skeleton';
 
 // ============================================================
 // 类型定义
@@ -870,6 +871,14 @@ export async function runQualityGate(
   logger.info('   🔢 错误码一致性...');
   checks.push(await checkArtifactConsistency(codePath, taskDir, 'ERROR_CODES.md', '错误码一致性'));
 
+  // 11. 规格文档质量校验（v8.1.0+，检查 REQ.md/TECH.md 是否有实质内容）
+  logger.info('   📋 规格文档质量...');
+  checks.push(await checkSpecDocQuality(taskDir));
+
+  // 12. 代码文件非空检查（v8.1.0+，确保 src/ 下有实际代码）
+  logger.info('   📁 代码文件检查...');
+  checks.push(await checkCodeFilesExist(codePath));
+
   // 汇总
   const report: VerifyReport = {
     taskId,
@@ -936,6 +945,128 @@ export async function runQualityGate(
   }
 
   return { passed, blockingFailed, warnings, report, agentChecks };
+}
+
+// ============================================================
+// v8.1.0+: 规格文档质量校验 — 检查 REQ.md/TECH.md 是否有实质内容
+// ============================================================
+
+async function checkSpecDocQuality(taskDir: string): Promise<CheckResult> {
+  const start = Date.now();
+  const issues: string[] = [];
+  let totalScore = 0;
+  let checkedCount = 0;
+
+  // 扫描子任务目录下的 REQ.md 和 TECH.md
+  const specFiles: { path: string; docName: string }[] = [];
+  const candidates = ['REQ.md', 'TECH.md'];
+
+  // 直接子目录（00-specs/）
+  for (const doc of candidates) {
+    const p = join(taskDir, '00-specs', doc);
+    if (await pathExists(p)) specFiles.push({ path: p, docName: doc });
+  }
+
+  // 端子任务目录（10-backend/*/subtask/, 20-frontend/*/subtask/）
+  for (const catDir of ['10-backend', '20-frontend']) {
+    const catPath = join(taskDir, catDir);
+    if (!(await pathExists(catPath))) continue;
+    try {
+      const services = await readdir(catPath, { withFileTypes: true });
+      for (const svc of services) {
+        if (!svc.isDirectory()) continue;
+        const subs = await readdir(join(catPath, svc.name), { withFileTypes: true });
+        for (const sub of subs) {
+          if (!sub.isDirectory()) continue;
+          for (const doc of candidates) {
+            const p = join(catPath, svc.name, sub.name, doc);
+            if (await pathExists(p)) specFiles.push({ path: p, docName: doc });
+          }
+        }
+      }
+    } catch { /* 跳过 */ }
+  }
+
+  if (specFiles.length === 0) {
+    return {
+      name: '规格文档质量',
+      status: 'skip',
+      duration: Date.now() - start,
+      output: '未找到 REQ.md/TECH.md',
+      details: '未找到规格文档',
+      blocking: false,
+    };
+  }
+
+  for (const sf of specFiles) {
+    try {
+      const content = await readFile(sf.path, 'utf-8');
+      const result = await validateContentQuality(sf.docName, content);
+      totalScore += result.score;
+      checkedCount++;
+      if (result.score < 60) {
+        issues.push(`${sf.path.replace(taskDir + '/', '')}: ${result.score}/100 — ${result.issues.join('；')}`);
+      }
+    } catch { /* skip */ }
+  }
+
+  const avgScore = checkedCount > 0 ? Math.round(totalScore / checkedCount) : 0;
+  const details = checkedCount > 0
+    ? `${checkedCount} 个文档平均 ${avgScore}/100${issues.length > 0 ? `，${issues.length} 个不达标` : ''}`
+    : '无文档可检查';
+
+  return {
+    name: '规格文档质量',
+    status: issues.length > 0 ? 'warn' : 'pass',
+    duration: Date.now() - start,
+    output: issues.join('\n'),
+    details,
+    blocking: false,
+  };
+}
+
+// ============================================================
+// v8.1.0+: 代码文件非空检查 — 确保 src/ 下有实际代码
+// ============================================================
+
+async function checkCodeFilesExist(codePath: string): Promise<CheckResult> {
+  const start = Date.now();
+  const srcDir = join(codePath, 'src');
+  const codeExts = ['.ts', '.js', '.java', '.go', '.py', '.vue', '.jsx', '.tsx'];
+  let codeFileCount = 0;
+
+  async function countCodeFiles(dir: string): Promise<void> {
+    if (!(await pathExists(dir))) return;
+    try {
+      const entries = await readdir(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          await countCodeFiles(join(dir, entry.name));
+        } else if (codeExts.some(ext => entry.name.endsWith(ext))) {
+          codeFileCount++;
+        }
+      }
+    } catch { /* skip */ }
+  }
+
+  await countCodeFiles(srcDir);
+
+  // 也检查 tests/ 目录
+  let testFileCount = 0;
+  const testDir = join(codePath, 'tests');
+  await countCodeFiles(testDir).then(() => {
+    testFileCount = codeFileCount - testFileCount;
+    // 重新计算：只统计 tests/
+  });
+
+  return {
+    name: '代码文件检查',
+    status: codeFileCount === 0 ? 'warn' : 'pass',
+    duration: Date.now() - start,
+    output: codeFileCount === 0 ? 'src/ 目录无代码文件' : `发现 ${codeFileCount} 个代码文件`,
+    details: codeFileCount === 0 ? 'src/ 无代码文件' : `${codeFileCount} 个代码文件`,
+    blocking: false,
+  };
 }
 
 // ============================================================

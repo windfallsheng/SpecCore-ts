@@ -12,7 +12,7 @@ import { buildPrompt, formatPrompt } from '../../core/prompt-builder';
 import { generatePlatformsRegistry } from '../../core/platform-registry';
 import { warnIfIndexStale } from '../../core/index-guard';
 import { resolveGlobalSpecPath, GLOBAL_SPECS_DIR, parsePlatformList } from '../../core/spec-paths';
-import { SKELETON_MARKER } from '../../core/spec-skeleton';
+import { SKELETON_MARKER, buildQualityRubRIC } from '../../core/spec-skeleton';
 import { buildAutoModeInstruction, writeQuestions, extractQuestionsFromText } from '../../core/questions';
 import { PipelineEngine } from '../../core/pipeline-engine';
 
@@ -4077,13 +4077,22 @@ async function buildContentFillingPrompt(
 
   p += `## 填充规则\n\n`;
   p += `1. 先 Read 子任务目录下的 TASK.md（已有基本信息）和 .meta/feature（功能单元名）\n`;
-  p += `2. REQ.md 和 TECH.md 已由 CLI 预创建（含骨架标记），请用 Write 工具直接覆盖为专业内容\n`;
-  p += `3. REQ.md: 基于上方提供的「功能单元相关上下文」，撰写本子任务的需求规格（验收标准、业务规则、边界条件）\n`;
+  p += `2. REQ.md 和 TECH.md 已由 CLI 预创建（含骨架标记 + 质量标准），请用 Write 工具直接覆盖为专业内容\n`;
+  p += `3. REQ.md: 基于上方提供的「功能单元相关上下文」，撰写本子任务的需求规格\n`;
   p += `4. TECH.md: 基于上下文中的接口定义和数据模型，细化本子任务的技术方案\n`;
   p += `5. 同一功能模块的各端子任务要保持 API 契约一致（前后端接口签名必须匹配）\n`;
-  p += `6. 禁止产出垃圾内容——每个文件必须有实质性专业内容\n`;
-  p += `7. REQ.md 必须包含：功能描述、验收标准（Given/When/Then）、业务规则、边界条件、异常场景\n`;
-  p += `8. TECH.md 必须包含：接口定义（请求/响应结构体）、数据模型（字段/类型/约束）、核心算法/逻辑、依赖说明\n\n`;
+  p += `6. 每个文件必须有实质性专业内容（最低 200 字符），禁止占位符残留\n\n`;
+
+  // v8.1.0+: 注入子任务文档质量标准
+  p += `## 📋 子任务文档质量标准\n\n`;
+  p += `### REQ.md 必含内容\n`;
+  p += buildQualityRubRIC('REQ.md');
+  p += `\n### TECH.md 必含内容\n`;
+  p += buildQualityRubRIC('TECH.md');
+  p += `\n### 前后端契约一致性（关键）\n\n`;
+  p += `- 后端 TECH.md 的接口签名（路径/方法/参数/响应）必须与前端 TECH.md 的 API 调用清单完全匹配\n`;
+  p += `- 数据模型字段名、类型、必填性必须前后端一致\n`;
+  p += `- 状态枚举值必须前后端对齐\n\n`;
 
   p += `## ⚠️ 绝对禁止\n\n`;
   p += `- 不要创建新目录 — 目录已由 CLI 创建\n`;

@@ -27,7 +27,7 @@ import { buildAutoModeInstruction, writeQuestions, extractQuestionsFromText, typ
 import { resolvePlatform } from '../core/platform-registry';
 import { warnIfIndexStale } from '../core/index-guard';
 import { GLOBAL_SPECS_DIR, GLOBAL_SPEC_FILES, parsePlatformTypes, parsePlatformList } from '../core/spec-paths';
-import { computeAnalyzeManifest, generateSkeleton, detectSkeletonProgress, buildSkeletonFileList } from '../core/spec-skeleton';
+import { computeAnalyzeManifest, generateSkeleton, detectSkeletonProgress, buildSkeletonFileList, validateContentQuality } from '../core/spec-skeleton';
 import { unifiedSearch, formatUnifiedContext } from '../core/unified-retrieval';
 import { PipelineEngine, createAnalyzePipeline, createGlobalAnalyzePipeline } from '../core/pipeline-engine';
 import { detectAffectedPlatforms, detectPlatformPriorityOrder, recordAnalysisSnapshot } from '../core/change-detection';
@@ -3356,6 +3356,7 @@ sequenceDiagram
   // v8.0.0+: 骨架进度检测 — 每次只生成下一个未填充的文档
   // 替代 v7.5.0 的 detectIterationDocsStatus（基于文件是否存在）
   let perDocStatus: Awaited<ReturnType<typeof detectSkeletonProgress>> | null = null;
+  let lastDocQuality: { docName: string; score: number; issues: string[] } | null = null;
   if (!isGlobal && !isTask && !ctx.phase && ctx.iteration && ctx.iteration !== 'GLOBAL') {
     try {
       const iterDir = await getIterationDir(ctx.iteration);
@@ -3377,6 +3378,25 @@ sequenceDiagram
             taskDocs = taskDocs.filter(([n]) => n === nextDocName);
           }
           logger.info(`🦴 骨架进度: ${perDocStatus.filledCount}/${perDocStatus.totalCount} 已填充，下一个: ${perDocStatus.nextUnfilled.relPath}`);
+          // v8.1.0+: 校验上一个已填充文档的质量
+          if (perDocStatus.filled.length > 0) {
+            const lastFilled = perDocStatus.filled[perDocStatus.filled.length - 1];
+            const lastFilledPath = join(specDir, lastFilled);
+            if (await pathExists(lastFilledPath)) {
+              try {
+                const lastContent = await readFile(lastFilledPath, 'utf-8');
+                const lastDocName = lastFilled.includes('/') ? lastFilled.split('/').pop()! : lastFilled;
+                const lastPlatform = lastFilled.includes('/') ? lastFilled.split('/')[0] : undefined;
+                const quality = await validateContentQuality(lastDocName, lastContent, lastPlatform !== lastDocName ? lastPlatform : undefined);
+                lastDocQuality = { docName: lastFilled, score: quality.score, issues: quality.issues };
+                if (quality.score < 60) {
+                  logger.warn(`⚠️ ${lastFilled} 质量评分: ${quality.score}/100 — ${quality.issues.join('；')}`);
+                } else if (quality.score < 80) {
+                  logger.info(`📝 ${lastFilled} 质量评分: ${quality.score}/100 — ${quality.issues.length > 0 ? quality.issues.join('；') : '良好'}`);
+                }
+              } catch { /* skip */ }
+            }
+          }
         } else if (perDocStatus.filledCount === perDocStatus.totalCount) {
           logger.info(`🎉 所有 ${perDocStatus.totalCount} 个骨架文件均已填充`);
         }
@@ -3574,6 +3594,54 @@ sequenceDiagram
   prompt += `- 只覆盖上述已存在的文件，不要创建新文件或新目录\n`;
   prompt += `- 每个文件写入正确路径（如 \`overview/ANALYSIS.md\`，不是根目录的 \`ANALYSIS.md\`）\n`;
   prompt += `- 写完后用 Read 验证文件内容已替换占位内容\n\n`;
+
+  // ── v8.1.0+: 逐文档模式自动注入 PRD 内容 + 前序文档摘要 ──
+  if (perDocStatus?.nextUnfilled) {
+    try {
+      const iterDirForCtx = await getIterationDir(iter);
+      if (iterDirForCtx) {
+        // 1. 注入 PRD 内容（010-requirements/ 下的需求文档）
+        const reqDir = join(iterDirForCtx, '010-requirements');
+        let prdContent = '';
+        const prdSources = join(reqDir, 'sources');
+        const prdConverted = join(reqDir, 'converted');
+        const prdFeatures = join(reqDir, 'features');
+        for (const dir of [prdSources, prdConverted, prdFeatures]) {
+          if (await pathExists(dir)) {
+            const files = (await import('fs-extra')).readdirSync(dir).filter((f: string) => f.endsWith('.md')).slice(0, 5);
+            for (const f of files) {
+              const content = await (await import('fs-extra')).readFile(join(dir, f), 'utf-8');
+              prdContent += `\n### ${f}\n${content.slice(0, 2000)}\n`;
+            }
+          }
+        }
+        if (prdContent.length > 0) {
+          prompt += `\n## 📎 需求文档原文（PRD，写作核心输入）\n\n`;
+          prompt += `> 以下是 010-requirements/ 下的需求文档，这是你撰写专业分析文档的核心输入。所有分析必须基于这些内容，不要臆造。\n`;
+          prompt += prdContent.slice(0, 5000);
+          prompt += `\n\n`;
+        }
+
+        // 2. 注入前序已填充文档摘要
+        const specDir = join(iterDirForCtx, '020-specs');
+        if (perDocStatus.filled.length > 0) {
+          prompt += `## 📎 前序已填充文档摘要（当前文档必须与之保持一致）\n\n`;
+          prompt += `> 以下文档已生成，当前文档必须与之保持一致（字段名、接口路径、状态枚举等不能冲突）。\n\n`;
+          for (const filledPath of perDocStatus.filled) {
+            const fullPath = join(specDir, filledPath);
+            try {
+              const content = await (await import('fs-extra')).readFile(fullPath, 'utf-8');
+              const summary = content.slice(0, 1500);
+              prompt += `### ${filledPath}\n\`\`\`\n${summary}${content.length > 1500 ? '\n... (截断)' : ''}\n\`\`\`\n\n`;
+            } catch { /* skip unreadable */ }
+          }
+        }
+      }
+    } catch (e: any) {
+      logger.debug?.(`PRD/前序文档注入失败（非关键）: ${e.message}`);
+    }
+  }
+
   prompt += `## ⚠️ 迭代名称仅为目录标识（重要）\n\n`;
   prompt += `- 迭代名称（"${iter}"）仅为目录标识符，**不代表需求内容**\n`;
   prompt += `- **需求文档是唯一事实来源**：所有分析必须 100% 基于 010-requirements/ 下的文档内容\n`;
@@ -3923,6 +3991,12 @@ sequenceDiagram
     prompt += `> 当前为**单文档模式**：本次只生成 1 个文档，写入后立即推进下一个。\n`;
     prompt += `> 骨架进度: ${perDocStatus.filledCount}/${perDocStatus.totalCount} 已填充，剩余 ${perDocStatus.unfilled.length} 个\n`;
     prompt += `> 待填充: ${perDocStatus.unfilled.slice(0, 5).join('、')}${perDocStatus.unfilled.length > 5 ? '...' : ''}\n\n`;
+    // v8.1.0+: 注入上一文档质量警告
+    if (lastDocQuality && lastDocQuality.score < 80) {
+      prompt += `> ⚠️ **上一文档 ${lastDocQuality.docName} 质量评分仅 ${lastDocQuality.score}/100**\n`;
+      prompt += `> 问题: ${lastDocQuality.issues.join('；')}\n`;
+      prompt += `> 请确保当前文档达到专业标准——内容充实、章节完整、无占位符残留\n\n`;
+    }
     if (remainingAfterThis > 0) {
       prompt += `**当前文档写入完成后，立即输出以下标记推进下一个文档**：\n\n`;
       prompt += `[SPECCORE_EXEC: speccore analyze --prompt -I ${iter}${options?.auto ? ' --auto' : ''}${options?.withCode ? ' --with-code' : ''}]\n\n`;
