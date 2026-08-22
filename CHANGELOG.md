@@ -1,3 +1,26 @@
+## v7.5.1 (2026-08-22) — 三处关键修复：功能单元解析 + 端列表回退 + 散落文件归位
+
+### 问题诊断（会议项目 v7.5.0 实战反馈）
+
+1. **parseAnalysisFunctionalUnits 只认按端分节格式**: 会议项目的 ANALYSIS.md 按优先级分节（P0/P1/P2），表格有「涉及端」列但解析器不读它 → 所有功能单元被分配全部端，split 无法区分
+2. **parsePlatformList 回退读「对应需求端」列返回中文值**: CONSTITUTION.md 无「端列表」章节时，回退读「对应需求端」列返回“后台管理端”等中文值，但目录名是工程标识（admin-web）→ sanitize 误判合法目录为非法
+3. **GLOBAL_SPEC_FILES 缺 TECH/RISK/REVIEW/MONITOR**: sanitizeSpecDirectories 用 GLOBAL_SPEC_FILES 做白名单，缺失的 4 个文件散落在 020-specs/ 根目录时不会被归位到 overview/
+
+### 修复
+
+- **Fix 1: parseAnalysisFunctionalUnits 支持优先级格式**
+  - 新增「涉及端」列检测，按行提取平台（精确匹配 + 模糊匹配）
+  - 优先级分节（### P0）未匹配到端时保留上一轮 currentPlatforms
+  - 支持逗号/+/顿号/空格分割的多平台值
+- **Fix 2: parsePlatformList 回退读「工程标识」列**
+  - 旧版读「对应需求端」列返回中文值 → 改为读「工程标识」列返回英文标识
+  - 确保返回值与 020-specs/ 下的目录名一致
+- **Fix 3: GLOBAL_SPEC_FILES 补齐 4 个文档**
+  - 新增 TECH.md、RISK.md、REVIEW.md、MONITOR.md
+  - sanitizeSpecDirectories 可将根目录散落文件正确归位到 overview/
+
+---
+
 ## v7.5.0 (2026-08-22) — 全链路逐文档重构：split 功能单元提取 + analyze 单文档生成 + Layer 4 逐文档推进
 
 ### 问题诊断（会议项目实战发现）

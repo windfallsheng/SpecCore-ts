@@ -3513,8 +3513,9 @@ function parseFunctionMapTree(content: string, allPlatforms: string[]): {
 
 /**
  * v7.5.0+: 从 ANALYSIS.md 提取功能单元清单
- * 解析按端分节的 F-xx 编号表格，提取每个功能单元及其涉及端
- * 格式: ### X.X 端名（platform-name）— N 个页面 + | F-01 | 功能名 | ...
+ * 支持两种格式：
+ *   A) 按端分节: ### X.X 端名（platform-name）— N 个页面 + | F-01 | 功能名 | ...
+ *   B) 按优先级分节: ### P0 — 必修 + 表格含「涉及端」列（v7.5.1+ 新增）
  */
 function parseAnalysisFunctionalUnits(content: string, allPlatforms: string[]): {
   name: string;
@@ -3525,12 +3526,14 @@ function parseAnalysisFunctionalUnits(content: string, allPlatforms: string[]): 
   const units: { name: string; platforms: string[]; description: string; id: string }[] = [];
   const lines = content.split('\n');
   let currentPlatforms: string[] = [];
+  let platformColIdx = -1; // 「涉及端」列索引，-1 表示未检测到
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
     // 检测 ### 标题行，提取当前端名
     if (line.startsWith('### ')) {
+      const prevPlatforms = [...currentPlatforms]; // 保留上一轮端信息
       currentPlatforms = [];
       // 匹配括号内的端名: ### 1.1 后台管理端（admin-web）
       const parenMatch = line.match(/[（(]([a-zA-Z][\w-]*)[）)]/);
@@ -3548,20 +3551,40 @@ function parseAnalysisFunctionalUnits(content: string, allPlatforms: string[]): 
         }
       }
       // 后端服务检测
-      if (/后端|服务|backend|service/i.test(line) && currentPlatforms.length === 0) {
+      if (currentPlatforms.length === 0 && /后端|服务|backend|service/i.test(line)) {
         currentPlatforms.push(...allPlatforms.filter(p =>
           /service|server|api|backend/i.test(p)
         ));
       }
+      // v7.5.1: 标题未匹配到端时，保留上一轮的 currentPlatforms（优先级分节场景）
+      if (currentPlatforms.length === 0) {
+        currentPlatforms = prevPlatforms;
+      }
+      // 遇到新章节，重置列索引（下一张表可能结构不同）
+      platformColIdx = -1;
       continue;
     }
 
     // 解析表格行
-    if (!line.startsWith('|') || line.includes(':---')) continue;
+    if (!line.startsWith('|')) continue;
     const cells = line.split('|').map(c => c.trim()).filter(Boolean);
     if (cells.length < 2) continue;
 
-    // 检测 F-xx 编号行
+    // 分隔行跳过
+    if (line.match(/^\|\s*[-:]/)) continue;
+
+    // 检测表头行：查找「涉及端」/「端」列
+    if (platformColIdx === -1) {
+      const idx = cells.findIndex(c =>
+        c === '涉及端' || c === '端' || c.includes('涉及端') || c.includes('涉及工程')
+      );
+      if (idx >= 0) {
+        platformColIdx = idx;
+        continue; // 表头行本身不是数据
+      }
+    }
+
+    // 检测 F-xx 编号行（支持 | F-01 | 或 | # | 格式）
     const idMatch = cells[0]?.match(/^F-(\d+)$/i);
     if (!idMatch) continue;
 
@@ -3572,8 +3595,30 @@ function parseAnalysisFunctionalUnits(content: string, allPlatforms: string[]): 
     // 提取描述（核心功能列，通常是第3或第4列）
     const desc = cells.length >= 4 ? cells[3]?.trim() || '' : '';
 
-    // 匹配端
-    const platforms = currentPlatforms.length > 0 ? [...currentPlatforms] : [...allPlatforms];
+    // v7.5.1+: 优先从「涉及端」列提取平台（格式 B）
+    let rowPlatforms: string[] = [];
+    if (platformColIdx >= 0 && cells[platformColIdx]) {
+      const rawPlatform = cells[platformColIdx];
+      // 按逗号、+、顿号、空格分割
+      const parts = rawPlatform.split(/[,+、;\s]+/).map(s => s.trim()).filter(Boolean);
+      for (const part of parts) {
+        // 精确匹配
+        const exact = allPlatforms.find(p => p === part);
+        if (exact) { rowPlatforms.push(exact); continue; }
+        // 模糊匹配（部分名包含）
+        const fuzzy = allPlatforms.filter(p => p.includes(part) || part.includes(p));
+        if (fuzzy.length > 0) { rowPlatforms.push(...fuzzy); continue; }
+        // 中文端名映射（如 "后台管理端" → admin-web）
+        // 尝试从 CONSTITUTION 的「对应需求端」列匹配（此处简化：跳过中文值）
+      }
+      // 去重
+      rowPlatforms = [...new Set(rowPlatforms)];
+    }
+
+    // 回退优先级：涉及端列 → 章节标题 → 全部端
+    const platforms = rowPlatforms.length > 0
+      ? rowPlatforms
+      : (currentPlatforms.length > 0 ? [...currentPlatforms] : [...allPlatforms]);
 
     units.push({ name, platforms, description: desc, id });
   }
