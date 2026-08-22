@@ -34,7 +34,7 @@ function normalizeScopePlatforms(scopeArr: string[], standardPlatforms: string[]
     }
 
     // 2. 后端类简写 → 匹配第一个后端端名
-    if (/后端|backend|服务端|server/i.test(s)) {
+    if (/后端|backend|服务端|server|api/i.test(s)) {
       const backendPlatform = standardPlatforms.find(p =>
         /-(service|api|server|backend)$/i.test(p) || p.startsWith('后台')
       );
@@ -65,6 +65,7 @@ function normalizeScopePlatforms(scopeArr: string[], standardPlatforms: string[]
       '小程序': ['miniapp', 'mini-app', '小程序'],
       'admin': ['admin-web', 'admin', '后台管理'],
       'web': ['admin-web', 'web', 'h5-mobile'],
+      'frontend': ['admin-web', 'h5-mobile', 'frontend'],
       'app': ['app', 'android', 'ios'],
       '安卓': ['android'],
       'ios': ['ios'],
@@ -81,11 +82,9 @@ function normalizeScopePlatforms(scopeArr: string[], standardPlatforms: string[]
       }
     }
 
-    // 5. 无法匹配时保留原始值（后续可能创建非法目录，但至少不丢失信息）
-    if (!used.has(s)) {
-      result.push(s);
-      used.add(s);
-    }
+    // 5. v7.4.2+: 无法匹配时警告并跳过，不保留非标准端名
+    logger.warn(`   ⚠️  非标准端名 "${s}"，无法映射到 CONSTITUTION.md 标准端名 ${standardPlatforms.join('/')}`);
+    logger.warn(`      已跳过该端，请检查 AI 输出的 scope 字段`);
   }
 
   return result.length > 0 ? result : standardPlatforms;
@@ -2728,22 +2727,12 @@ function buildSplitPrompt(
 
   // v6.69.3+: 注入标准端名列表
   if (standardPlatforms.length > 0) {
-    p += `## 🖥️ 项目端列表（标准端名）\n\n`;
+    p += `## 🖥️ 项目端列表（标准端名 — 权威来源）\n\n`;
     p += `本项目已配置以下端，所有 scope 必须使用这些**标准端名**，禁止使用简写或中文：\n\n`;
     p += `\`${standardPlatforms.join('`, `')}\`\n\n`;
-    p += `- 后端端名示例: \`booking-service\`, \`room-service\`（不是 "后端"、"backend"）\n`;
-    p += `- 前端端名示例: \`admin-web\`, \`h5-mobile\`（不是 "web"、"admin"、"h5"）\n`;
-    p += `- **scope 数组必须使用上述标准端名**，否则会导致目录结构错误\n\n`;
-  }
-
-  // v6.69.3+: 注入标准端名列表
-  if (standardPlatforms.length > 0) {
-    p += `## 🖥️ 项目端列表（标准端名）\n\n`;
-    p += `本项目已配置以下端，所有 scope 必须使用这些**标准端名**，禁止使用简写或中文：\n\n`;
-    p += `\`${standardPlatforms.join('`, `')}\`\n\n`;
-    p += `- 后端端名示例: \`booking-service\`, \`room-service\`（不是 "后端"、"backend"）\n`;
-    p += `- 前端端名示例: \`admin-web\`, \`h5-mobile\`（不是 "web"、"admin"、"h5"）\n`;
-    p += `- **scope 数组必须使用上述标准端名**，否则会导致目录结构错误\n\n`;
+    p += `- ⛔ **禁止使用以下非标准端名**: \`api\`、\`web\`、\`backend\`、\`frontend\`、\`admin\`、\`h5\`、\"后端\"、\"前端\"\n`;
+    p += `- ✅ **必须使用 CONSTITUTION.md 中的标准端名**作为子任务目录名\n`;
+    p += `- scope 数组和子任务目录名必须完全匹配上述标准端名\n\n`;
   }
 
   // SpecCore 拆分原则
@@ -2867,15 +2856,20 @@ function buildSplitPrompt(
   p += `> **质量红线**：如果 reqContent/techContent 只有标题和占位符（如 "<!-- AI-FILL -->"），视为不合格，必须重新生成\n\n`;
 
   p += `### ⚠️ 拆分规则（重要）\n\n`;
+  p += `- **按功能单元拆分，不按技术层拆分**：每个任务必须对应一个业务功能（如「预订管理」「签到」「审批」），不要按技术层分组（如「后端改进」「前端修复」）\n`;
+  p += `- ❌ 错误示例：Task-129-backend-improve、Task-130-admin-fix（按技术层分组）\n`;
+  p += `- ✅ 正确示例：Task-129-booking-crud、Task-130-checkin-flow、Task-131-approval-management（按功能单元分组）\n`;
+  p += `- **topic 必须反映功能单元**：每个任务的 topic（目录名后缀）必须唯一且反映业务功能，禁止所有任务都用同一个后缀（如 -impl）\n`;
+  p += `- **scope 必须使用标准端名**：禁止使用 api/web/backend/frontend 等非标准名称\n`;
   p += `- **一个功能单元默认 1 个任务**，最多拆成 3 个\n`;
-  p += `- **按 scope 涉及的端创建子任务**：每个端 1 个子任务目录\n`;
-  p += `- **不要按端拆分任务**：同一功能的前后端各端工作在一个任务里，按端拆分子任务\n`;
-  p += `- **用户不满意时可手动拆分**：CLI 提供简单的默认拆分，复杂拆分由用户手动调整\n\n`;
+  p += `- **按 scope 涉及的端创建子任务**：每个端 1 个子任务目录\n\n`;
 
   // 质量自检
   p += `## ✅ 质量自检（必须全部通过）\n\n`;
   p += `□ 每个任务都满足原子任务定义？\n`;
-  p += `□ 每个任务的 scope 只包含必要的端？\n`;
+  p += `□ **每个任务按功能单元命名，不是按技术层**？（禁止 backend-improve/admin-fix 这类名称）\n`;
+  p += `□ **每个 topic 唯一且反映业务功能**？（禁止全部用 -impl）\n`;
+  p += `□ **scope 只包含 CONSTITUTION.md 标准端名**？（禁止 api/web/backend/frontend）\n`;
   p += `□ 没有循环依赖？\n`;
   p += `□ 基础模块排在前面？\n`;
   p += `□ 同功能单元内的任务没被过度拆分？（每个功能单元 ≤ 3 个任务）\n`;
@@ -3195,40 +3189,45 @@ speccore analyze --task ${taskId}${iterFlag}
 
 /**
  * 从 overview/REQUIREMENT.md 解析功能模块清单的「涉及端」列
+ * 支持两种格式：
+ *   1. 单表格含「涉及端」列（功能模块 | 涉及端 | ...）
+ *   2. 按端分节（### X.X ... — {platform} 后跟表格）
  * 返回模块列表及其涉及的标准端名
  */
 function parseModulePlatforms(content: string, allPlatforms: string[]): { name: string; platforms: string[] }[] {
+  // v7.4.2+: 先尝试原始格式（单表格含「涉及端」列）
+  const tableResult = parseModulePlatformsTable(content, allPlatforms);
+  if (tableResult.length > 0) return tableResult;
+  // v7.4.2+: 回退到按端分节格式
+  return parseModulePlatformsBySection(content, allPlatforms);
+}
+
+/**
+ * v7.4.2+: 解析单表格含「涉及端」列的格式
+ */
+function parseModulePlatformsTable(content: string, allPlatforms: string[]): { name: string; platforms: string[] }[] {
   const modules: { name: string; platforms: string[] }[] = [];
   const lines = content.split('\n');
   let inFeatureTable = false;
   let platformColIdx = -1;
 
   for (const line of lines) {
-    // 检测功能模块清单表格开始
     if (line.includes('功能模块清单')) {
       inFeatureTable = true;
       continue;
     }
     if (!inFeatureTable) continue;
-
-    // 检测下一个 ## 标题 → 表格结束
-    if (line.startsWith('## ') && !line.includes('功能模块清单')) {
-      break;
-    }
+    if (line.startsWith('## ') && !line.includes('功能模块清单')) break;
 
     const cells = line.split('|').map(c => c.trim()).filter(Boolean);
     if (cells.length < 2) continue;
-
-    // 表头行 → 找到「涉及端」列索引
     if (cells.some(c => c.includes('涉及端'))) {
       platformColIdx = cells.findIndex(c => c.includes('涉及端'));
       continue;
     }
-    // 分隔行跳过
     if (cells.every(c => /^[-:]+$/.test(c))) continue;
 
-    // 数据行
-    const moduleName = cells[1]; // 第2列通常是模块名
+    const moduleName = cells[1];
     if (!moduleName || moduleName === '#' || moduleName === '模块') continue;
 
     if (platformColIdx >= 0 && platformColIdx < cells.length) {
@@ -3243,14 +3242,82 @@ function parseModulePlatforms(content: string, allPlatforms: string[]): { name: 
         }
       }
     }
-    // 涉及端为空或无法解析 → 回退全端
     modules.push({ name: moduleName, platforms: [...allPlatforms] });
   }
   return modules;
 }
 
 /**
+ * v7.4.2+: 解析按端分节的 REQUIREMENT.md 格式
+ * 匹配: ### 2.1 后端 — booking-service 或 ### 2.1 前端 — admin-web
+ * 从标题提取端名，从后续表格提取模块名，建立模块→端的映射
+ */
+function parseModulePlatformsBySection(content: string, allPlatforms: string[]): { name: string; platforms: string[] }[] {
+  const lines = content.split('\n');
+  // 模块名 → 涉及端列表 的映射
+  const modulePlatformMap = new Map<string, string[]>();
+  let currentPlatform = '';
+  let inTable = false;
+
+  for (const line of lines) {
+    // 检测按端分节标题: ### 2.1 后端 — booking-service
+    const sectionMatch = line.match(/^###\s+[\d.]+\s+.*[—\-–]\s*(.+)$/);
+    if (sectionMatch) {
+      const rawPlatform = sectionMatch[1].trim();
+      // 匹配标准端名
+      currentPlatform = allPlatforms.find(p => rawPlatform.includes(p)) || '';
+      inTable = false;
+      continue;
+    }
+
+    // 非当前端标题下的 ## 标题 → 重置
+    if (line.startsWith('## ') && !line.startsWith('### ')) {
+      currentPlatform = '';
+      inTable = false;
+      continue;
+    }
+
+    if (!currentPlatform) continue;
+
+    // 检测表格开始（表头行含「功能模块」）
+    const cells = line.split('|').map(c => c.trim()).filter(Boolean);
+    if (cells.length >= 2 && cells.some(c => c.includes('功能模块'))) {
+      inTable = true;
+      continue;
+    }
+    if (!inTable) continue;
+    // 分隔行跳过
+    if (cells.every(c => /^[-:]+$/.test(c))) continue;
+    // 表头行跳过
+    if (cells.some(c => c === '功能模块' || c === '模块')) continue;
+
+    // 数据行：第1列或第2列是模块名
+    const moduleName = cells[0] && cells[0] !== '功能模块' ? cells[0] : (cells[1] || '');
+    if (!moduleName || moduleName.length < 2) continue;
+    // 跳过状态标记行
+    if (moduleName.startsWith('#')) continue;
+
+    // 添加到映射
+    const existing = modulePlatformMap.get(moduleName) || [];
+    if (!existing.includes(currentPlatform)) {
+      existing.push(currentPlatform);
+    }
+    modulePlatformMap.set(moduleName, existing);
+  }
+
+  // 转换为结果数组
+  const modules: { name: string; platforms: string[] }[] = [];
+  for (const [name, platforms] of modulePlatformMap) {
+    modules.push({ name, platforms: platforms.length > 0 ? platforms : [...allPlatforms] });
+  }
+  return modules;
+}
+
+/**
  * v6.70.0+: 解析 FUNCTION_MAP.md 跨端功能映射表
+ * 支持两种格式：
+ *   1. Markdown 表格（功能单元 | 涉及端 | ...）
+ *   2. 树形格式（├── 模块名 ... platform1 ✅ | platform2 ✅）
  * 返回功能单元列表，含涉及端、共享能力、依赖关系
  */
 function parseFunctionMap(content: string, allPlatforms: string[]): {
@@ -3260,12 +3327,21 @@ function parseFunctionMap(content: string, allPlatforms: string[]): {
   dependsOn: string[];
   description: string;
 }[] {
+  // v7.4.2+: 先尝试表格格式
+  const tableResult = parseFunctionMapTable(content, allPlatforms);
+  if (tableResult.length > 0) return tableResult;
+  // v7.4.2+: 回退到树形格式解析
+  return parseFunctionMapTree(content, allPlatforms);
+}
+
+/**
+ * v7.4.2+: 解析 FUNCTION_MAP.md 表格格式
+ */
+function parseFunctionMapTable(content: string, allPlatforms: string[]): {
+  name: string; platforms: string[]; sharedCapability: string; dependsOn: string[]; description: string;
+}[] {
   const units: {
-    name: string;
-    platforms: string[];
-    sharedCapability: string;
-    dependsOn: string[];
-    description: string;
+    name: string; platforms: string[]; sharedCapability: string; dependsOn: string[]; description: string;
   }[] = [];
   const lines = content.split('\n');
   let inTable = false;
@@ -3275,10 +3351,8 @@ function parseFunctionMap(content: string, allPlatforms: string[]): {
   let descColIdx = -1;
 
   for (const line of lines) {
-    // 检测映射表开始（通过表头特征）
     if (line.includes('功能单元') && line.includes('涉及端')) {
       inTable = true;
-      // 解析表头，找到各列索引
       const headerCells = line.split('|').map(c => c.trim()).filter(Boolean);
       platformColIdx = headerCells.findIndex(c => c.includes('涉及端'));
       sharedCapColIdx = headerCells.findIndex(c => c.includes('共享能力'));
@@ -3287,52 +3361,31 @@ function parseFunctionMap(content: string, allPlatforms: string[]): {
       continue;
     }
     if (!inTable) continue;
-
-    // 检测下一个 ## 标题 → 表格结束
-    if (line.startsWith('## ') && !line.includes('功能映射')) {
-      break;
-    }
+    if (line.startsWith('## ') && !line.includes('功能映射')) break;
 
     const cells = line.split('|').map(c => c.trim()).filter(Boolean);
     if (cells.length < 3) continue;
-
-    // 分隔行跳过
     if (cells.every(c => /^[-:]+$/.test(c))) continue;
+    if (cells.some(c => c.includes('功能单元')) || cells.some(c => c.includes('涉及端'))) continue;
 
-    // 表头行（已经处理过，跳过）
-    if (cells.some(c => c.includes('功能单元')) || cells.some(c => c.includes('涉及端'))) {
-      continue;
-    }
-
-    // 数据行：第2列是功能单元名
     const unitName = cells[1];
     if (!unitName || unitName === '#' || unitName === '功能单元') continue;
 
-    // 解析涉及端
     let platforms: string[] = [];
     if (platformColIdx >= 0 && platformColIdx < cells.length) {
       const raw = cells[platformColIdx];
       if (raw && raw !== '无' && raw !== '—' && raw !== '-') {
-        platforms = raw.split(/[,，]/)
-          .map(p => p.trim())
-          .filter(p => p && allPlatforms.includes(p));
+        platforms = raw.split(/[,，]/).map(p => p.trim()).filter(p => p && allPlatforms.includes(p));
       }
     }
-    // 涉及端为空 → 回退全端（但保留空列表表示纯文档/无开发）
-    if (platforms.length === 0) {
-      platforms = [...allPlatforms];
-    }
+    if (platforms.length === 0) platforms = [...allPlatforms];
 
-    // 解析共享能力
     let sharedCapability = '无';
     if (sharedCapColIdx >= 0 && sharedCapColIdx < cells.length) {
       const raw = cells[sharedCapColIdx];
-      if (raw && raw !== '无' && raw !== '—' && raw !== '-') {
-        sharedCapability = raw;
-      }
+      if (raw && raw !== '无' && raw !== '—' && raw !== '-') sharedCapability = raw;
     }
 
-    // 解析依赖任务
     let dependsOn: string[] = [];
     if (dependsOnColIdx >= 0 && dependsOnColIdx < cells.length) {
       const raw = cells[dependsOnColIdx];
@@ -3341,13 +3394,67 @@ function parseFunctionMap(content: string, allPlatforms: string[]): {
       }
     }
 
-    // 解析说明
     let description = '';
-    if (descColIdx >= 0 && descColIdx < cells.length) {
-      description = cells[descColIdx];
-    }
+    if (descColIdx >= 0 && descColIdx < cells.length) description = cells[descColIdx];
 
     units.push({ name: unitName, platforms, sharedCapability, dependsOn, description });
+  }
+  return units;
+}
+
+/**
+ * v7.4.2+: 解析 FUNCTION_MAP.md 树形格式
+ * 匹配: ├── 会议室 CRUD .............. room-service ✅ | admin-web ✅
+ * 提取: 模块名="会议室 CRUD", 涉及端=[room-service, admin-web]
+ */
+function parseFunctionMapTree(content: string, allPlatforms: string[]): {
+  name: string; platforms: string[]; sharedCapability: string; dependsOn: string[]; description: string;
+}[] {
+  const units: {
+    name: string; platforms: string[]; sharedCapability: string; dependsOn: string[]; description: string;
+  }[] = [];
+  const lines = content.split('\n');
+  // 树形节点正则：匹配 ├── 或 └── 开头的行
+  const treeNodeRe = /[├└]──\s*/;
+  // 分隔点正则：匹配连续 .... 或 ———
+  const separatorRe = /\s*[.·]{3,}\s*/;
+
+  for (const line of lines) {
+    if (!treeNodeRe.test(line)) continue;
+
+    // 提取树节点后的文本
+    const afterTree = line.replace(/.*[├└]──\s*/, '').trim();
+    if (!afterTree) continue;
+
+    // 跳过分类型节点（如 ├── 🏢 会议室管理），这些是父级分类
+    // 父级节点通常没有 ... 分隔符和平台标记
+    if (!separatorRe.test(afterTree) && !afterTree.includes('✅') && !afterTree.includes('❌') && !afterTree.includes('⚠️')) {
+      continue; // 这是分类父节点，跳过
+    }
+
+    // 分割模块名和平台部分
+    const parts = afterTree.split(separatorRe);
+    if (parts.length < 2) continue;
+
+    // 模块名：去除 emoji 和空格
+    let unitName = parts[0].replace(/[🏢📅✅💰🔔👥📊⚙️🔑🛡️]/g, '').trim();
+    if (!unitName || unitName.length < 2) continue;
+
+    // 平台部分：提取所有标准端名
+    const platformPart = parts.slice(1).join(' ');
+    const platforms: string[] = [];
+    for (const p of allPlatforms) {
+      if (platformPart.includes(p)) {
+        platforms.push(p);
+      }
+    }
+    // 如果没匹配到标准端名，尝试匹配常见缩写
+    if (platforms.length === 0) {
+      // 回退全端
+      platforms.push(...allPlatforms);
+    }
+
+    units.push({ name: unitName, platforms, sharedCapability: '无', dependsOn: [], description: '' });
   }
   return units;
 }
