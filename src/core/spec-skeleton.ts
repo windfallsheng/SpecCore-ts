@@ -288,6 +288,313 @@ const TASK_DOCS: { name: string; buildPlaceholder: (taskName: string, platform: 
 ];
 
 // ================================================================
+// 质量标准（Quality Rubrics）— v8.1.0+
+// 每种文档类型的专业质量检查清单，自动注入骨架文件和 prompt
+// ================================================================
+
+export const QUALITY_RUBRICS: Record<string, { checklist: string[]; antiPatterns: string[] }> = {
+  'REQUIREMENT.md': {
+    checklist: [
+      '产品愿景与目标用户画像',
+      '核心场景地图（按业务场景分章节组织）',
+      '每个场景：用户故事 → 操作流程 → 业务规则 → 边界条件',
+      '验收标准（Given/When/Then 格式）',
+      '功能优先级矩阵（P0/P1/P2）',
+      '功能模块清单表（含「涉及端」列，标准端名）',
+      '发布里程碑与风险预判',
+    ],
+    antiPatterns: [
+      '按端分章节（应按业务场景组织）',
+      '写技术实现细节（应纯产品视角）',
+      '功能模块缺少「涉及端」标注',
+      '验收标准用模糊描述（如「正常使用」「合理范围」）',
+    ],
+  },
+  'ANALYSIS.md': {
+    checklist: [
+      '按优先级分节（P0 必修 / P1 应修 / P2 建议）',
+      '每个功能点有唯一编号（F-01, F-02...）',
+      '每个功能点标注涉及端',
+      '接口变更清单（路径/方法/参数变化）',
+      '数据库变更清单（新增表/字段/索引）',
+      '风险点与缓解策略',
+    ],
+    antiPatterns: [
+      '功能点无编号或无涉及端标注',
+      '只列功能名不描述具体行为',
+      '缺少接口变更和数据库变更清单',
+    ],
+  },
+  'TECH.md': {
+    checklist: [
+      '整体架构图（Mermaid graph/flowchart）',
+      '跨端交互说明（调用方 → 被调方、协议、接口路径）',
+      '中间件选型及理由',
+      '数据库设计（表名/字段/类型/索引/约束）',
+      '安全方案（鉴权/加密/脱敏/SQL注入防护）',
+      '性能指标（QPS预估/缓存策略/慢查询优化）',
+      'API 契约（统一响应格式/错误码/分页规范）',
+    ],
+    antiPatterns: [
+      '只列技术栈不解释选型理由',
+      '接口定义缺少字段级说明',
+      '无安全方案或性能考量',
+      '架构图与文字描述不一致',
+    ],
+  },
+  'DEPS.md': {
+    checklist: [
+      '内部服务依赖清单（服务名/用途/接口/SLA）',
+      '第三方依赖清单（包名/版本/用途/许可证）',
+      '集成方式说明（SDK/API/消息队列）',
+      '版本兼容性风险',
+    ],
+    antiPatterns: [
+      '只列名称不说明用途',
+      '缺少版本号',
+      '遗漏关键依赖',
+    ],
+  },
+  'RISK.md': {
+    checklist: [
+      '至少 3 个风险项',
+      '每项标注可能性（高/中/低）和影响（高/中/低）',
+      '每项有具体缓解措施',
+      '回滚方案（触发条件 + 具体步骤）',
+      '数据恢复方案（如涉及数据变更）',
+    ],
+    antiPatterns: [
+      '风险描述笼统（如「可能出问题」）',
+      '缓解措施为空或「待定」',
+      '无回滚方案',
+    ],
+  },
+  'REVIEW.md': {
+    checklist: [
+      '参数校验完整性',
+      '幂等性处理',
+      '索引覆盖',
+      '迁移脚本可回滚',
+      '鉴权配置',
+      '日志规范',
+      '错误处理',
+      '并发安全',
+      '至少 8 项检查，每项有具体检查方法',
+    ],
+    antiPatterns: [
+      '检查项过于笼统（如「代码质量」）',
+      '缺少具体检查方法',
+      '遗漏安全相关检查项',
+    ],
+  },
+  'MONITOR.md': {
+    checklist: [
+      '业务指标（成功率/响应时间/错误率，含阈值）',
+      '系统指标（CPU/内存/连接池/磁盘）',
+      '告警规则（条件/级别/通知渠道）',
+      '监控大盘（必备指标列表）',
+      '至少 3 个业务指标 + 2 条告警规则',
+    ],
+    antiPatterns: [
+      '指标无阈值',
+      '告警规则无通知渠道',
+      '只有系统指标没有业务指标',
+    ],
+  },
+  'FUNCTION_MAP.md': {
+    checklist: [
+      '表格含所有列：功能单元/涉及端/优先级/全局对比/共享能力/依赖任务/说明',
+      '功能单元与 REQUIREMENT.md 一一对应（不允许合并）',
+      '涉及端使用标准端名（逗号分隔）',
+      '全局对比标注（新增/扩展/重构/复用）',
+      '依赖任务标注正确',
+      '每行有跨端交互说明',
+    ],
+    antiPatterns: [
+      '将多个功能模块合并为一行',
+      '涉及端为空或使用非标准端名',
+      '缺少全局对比列',
+      '功能单元与 REQUIREMENT.md 不对应',
+    ],
+  },
+  'TEST.md': {
+    checklist: [
+      '单元测试覆盖（核心函数/方法）',
+      '集成测试（API 端到端）',
+      '边界测试（异常参数/超时/并发/空值）',
+      '性能测试方案（基准/目标/工具）',
+      '测试用例含前置条件+操作步骤+预期结果',
+      '覆盖所有核心功能的正常流+异常流',
+    ],
+    antiPatterns: [
+      '只列「需要测试」不写具体用例',
+      '缺少异常场景测试',
+      '无性能测试基准',
+      '测试用例缺少预期结果',
+    ],
+  },
+  'UI_SPEC.md': {
+    checklist: [
+      '页面清单（页面名/路由/核心功能/入口）',
+      '组件拆分（组件名/职责/复用级别）',
+      '交互流程（关键操作流程+状态变化）',
+      '状态管理（全局状态/本地状态/同步策略）',
+      '字段映射（前端字段 ↔ 后端 API 响应字段一一对应）',
+      '异常状态 UI（空状态/加载态/错误态/骨架屏）',
+    ],
+    antiPatterns: [
+      '字段映射与后端 API 不一致',
+      '缺少异常状态 UI 设计',
+      '只画正常流程不处理边界',
+      '组件拆分粒度过粗或过细',
+    ],
+  },
+  'REQ.md': {
+    checklist: [
+      '功能描述（本任务的核心职责）',
+      '验收标准（Given/When/Then 格式，具体可测试）',
+      '业务规则（具体到可执行逻辑）',
+      '边界条件（参数范围/时间窗口/并发限制）',
+      '异常场景（至少 3 种异常 + 处理方式）',
+      '与其他 Task 的依赖关系',
+    ],
+    antiPatterns: [
+      '验收标准不可测试（如「功能正常」）',
+      '业务规则模糊（如「合理处理」）',
+      '缺少异常场景',
+      '未标注依赖关系',
+    ],
+  },
+  'TASK.md': {
+    checklist: [
+      '按开发顺序列出实施步骤',
+      '每步有明确的完成标准（可验证）',
+      '标注步骤间依赖关系',
+      '估算每步工作量',
+    ],
+    antiPatterns: [
+      '步骤过于笼统（如「实现功能」）',
+      '无完成标准',
+      '缺少依赖关系',
+    ],
+  },
+};
+
+/**
+ * 根据文档名获取质量标准文本
+ * 自动区分 overview 和 platform 文档（TECH.md 后端/前端差异化）
+ */
+export function buildQualityRubRIC(docName: string, platform?: string): string {
+  const rubric = QUALITY_RUBRICS[docName];
+  if (!rubric) return '';
+
+  let text = `\n## 📋 质量标准（${docName}）\n\n`;
+
+  // 端特定提示
+  if (platform && docName === 'TECH.md') {
+    const isBackend = /service|api|server|backend/i.test(platform);
+    if (isBackend) {
+      text += `> 🎯 **${platform} 是后端服务**，TECH.md 必须包含：接口签名（路径/方法/参数/响应）、数据模型（表/字段/索引）、业务逻辑、安全方案\n\n`;
+    } else {
+      text += `> 🎯 **${platform} 是前端端**，TECH.md 必须包含：用户旅程、页面清单与路由、API 调用清单、组件设计、状态管理\n\n`;
+    }
+  }
+
+  text += `**必含内容**：\n`;
+  for (const item of rubric.checklist) {
+    text += `- [ ] ${item}\n`;
+  }
+  text += `\n**禁止**：\n`;
+  for (const item of rubric.antiPatterns) {
+    text += `- ❌ ${item}\n`;
+  }
+
+  return text;
+}
+
+/**
+ * 校验已填充文档的内容质量
+ * 检查：最低字数、必含章节、表格是否有真实数据
+ */
+export async function validateContentQuality(
+  docName: string,
+  content: string,
+  platform?: string,
+): Promise<{ pass: boolean; score: number; issues: string[] }> {
+  const issues: string[] = [];
+  let score = 100;
+
+  // 1. 最低字数检查（排除标记和空白）
+  const cleanContent = content
+    .replace(/<!--.*?-->/gs, '')
+    .replace(/^#+\s/gm, '')
+    .replace(/^>\s/gm, '')
+    .trim();
+  if (cleanContent.length < 200) {
+    issues.push(`内容过薄（${cleanContent.length} 字符，最低 200）`);
+    score -= 30;
+  } else if (cleanContent.length < 500) {
+    issues.push(`内容偏少（${cleanContent.length} 字符，建议 500+）`);
+    score -= 10;
+  }
+
+  // 2. 必含章节检查
+  const rubric = QUALITY_RUBRICS[docName];
+  if (rubric) {
+    const sectionMarkers: Record<string, string[]> = {
+      'REQUIREMENT.md': ['验收标准', '优先级', '涉及端'],
+      'ANALYSIS.md': ['P0', 'F-'],
+      'TECH.md': ['接口', '数据模型'],
+      'TEST.md': ['单元测试', '边界'],
+      'UI_SPEC.md': ['页面', '组件'],
+      'RISK.md': ['回滚'],
+      'MONITOR.md': ['告警'],
+      'FUNCTION_MAP.md': ['功能单元', '涉及端'],
+      'REQ.md': ['验收标准', '异常'],
+      'TASK.md': ['步骤'],
+    };
+    const markers = sectionMarkers[docName] || [];
+    for (const marker of markers) {
+      if (!content.includes(marker)) {
+        issues.push(`缺少关键内容：「${marker}」`);
+        score -= 10;
+      }
+    }
+  }
+
+  // 3. 占位符残留检查
+  const placeholders = ['待填充', 'TODO', 'TBD', '_待定_', 'AI-FILL'];
+  for (const ph of placeholders) {
+    if (content.includes(ph)) {
+      issues.push(`含占位符残留：「${ph}」`);
+      score -= 5;
+    }
+  }
+
+  // 4. 表格数据检查（有表头但无数据行）
+  const tableHeaders = content.match(/^\|.+\|$/gm);
+  if (tableHeaders && tableHeaders.length > 0) {
+    const lines = content.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      if (/^\|.+\|$/.test(lines[i]) && lines[i].includes('---')) {
+        const nextLine = lines[i + 1] || '';
+        if (!/^\|.+\|$/.test(nextLine) || /^\|\s*\|$/.test(nextLine)) {
+          issues.push('表格有表头但无数据行');
+          score -= 10;
+          break;
+        }
+      }
+    }
+  }
+
+  return {
+    pass: score >= 60 && issues.filter(i => i.includes('过薄')).length === 0,
+    score: Math.max(0, score),
+    issues,
+  };
+}
+
+// ================================================================
 // Manifest 计算函数
 // ================================================================
 
@@ -386,8 +693,11 @@ export async function generateSkeleton(
     }
 
     // 文件不存在 → 创建骨架
+    // v8.1.0+: 自动追加质量标准（AI 填充时可见质量要求）
     await ensureDir(dirname(fullPath));
-    await writeFile(fullPath, entry.placeholder, 'utf-8');
+    const rubricSection = buildQualityRubRIC(entry.docName, entry.platform);
+    const fullContent = entry.placeholder + rubricSection;
+    await writeFile(fullPath, fullContent, 'utf-8');
     result.created.push(entry.relPath);
   }
 
