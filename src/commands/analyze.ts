@@ -1334,9 +1334,10 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 }
 
 /**
- * v6.49.13+: 预创建 020-specs/ 目录结构
- * CLI 控制目录创建（确定性操作），AI 只负责内容生成
+ * @deprecated v8.0.0+ 已被 computeAnalyzeManifest + generateSkeleton 替代
+ * 保留用于旧项目迁移参考，新流程不再调用。
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function preCreateSpecDirectories(iteration: string): Promise<void> {
   const iterDir = await getIterationDir(iteration);
   const specDir = join(iterDir, '020-specs');
@@ -1893,8 +1894,9 @@ async function injectGraphSummary(prompt: string): Promise<string> {
   }
 }
 
-// ── v7.5.0+: 检测迭代级文档生成进度 ──
-// 检查 020-specs/overview/ 和 020-specs/{platform}/ 下哪些文档已存在
+// ── @deprecated v8.0.0+ 已被 detectSkeletonProgress 替代 ──
+// 保留用于旧项目迁移参考，新流程不再调用。
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function detectIterationDocsStatus(iterDir: string): Promise<{
   existing: string[];
   missing: string[];

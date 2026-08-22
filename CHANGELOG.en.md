@@ -2,6 +2,40 @@
 
 ---
 
+## v8.0.0 (2026-08-22) — Skeleton-First Architecture: CLI Pre-creates Files, AI Only Overwrites Content
+
+### Architecture Change (Breaking Change)
+
+**Core principle change**:
+```
+Old: CLI → prompt → AI decides content+path → sanitize cleanup (never complete)
+New: CLI → pre-create skeleton files → AI overwrites content → files already in correct location (no cleanup needed)
+```
+
+**Key insight**: File paths are deterministic decisions that should not be left to AI. Mature frameworks (Rails/Django/Yeoman/OpenAPI Generator) all use a deterministic layer to control structure, with content layers only filling in content.
+
+### New Module
+
+- **`src/core/spec-skeleton.ts`**: Core skeleton module
+  - `SpecFileEntry` type + `computeAnalyzeManifest()` computation
+  - `generateSkeleton()` skeleton generator
+  - `validateFilled()` content validator
+  - `detectSkeletonProgress()` progress detection (replaces `detectIterationDocsStatus`)
+  - `buildSkeletonFileList()` for prompt injection
+
+### Changes
+
+- **`analyze.ts`**: Replaced preCreate+sanitize with skeleton generation; simplified prompt from ~20 lines of warnings to ~5 lines of file list; chain progression uses `detectSkeletonProgress()`
+- **`split.ts`**: Subtask directories pre-create REQ.md and TECH.md skeletons; prompt tells AI to overwrite existing files
+
+### Backward Compatibility
+
+- Old projects: skeleton generator detects existing files → skips, does not overwrite
+- Scattered files: `sanitizeSpecDirectories()` retained as one-time migration tool
+- `--apply` mode: retained but simplified
+
+---
+
 ## v7.3.1 (2026-08-21) — Global Analysis Prompt Layer Isolation Fix
 
 ### Bug Fixes
