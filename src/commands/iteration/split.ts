@@ -12,6 +12,7 @@ import { buildPrompt, formatPrompt } from '../../core/prompt-builder';
 import { generatePlatformsRegistry } from '../../core/platform-registry';
 import { warnIfIndexStale } from '../../core/index-guard';
 import { resolveGlobalSpecPath, GLOBAL_SPECS_DIR, parsePlatformList } from '../../core/spec-paths';
+import { SKELETON_MARKER } from '../../core/spec-skeleton';
 import { buildAutoModeInstruction, writeQuestions, extractQuestionsFromText } from '../../core/questions';
 import { PipelineEngine } from '../../core/pipeline-engine';
 
@@ -1593,6 +1594,17 @@ ${isBk ? apiList : pageList}
       await writeFile(join(subtaskDir, 'RISK.md'), generateRiskTemplate(section, riskMaterial));
       await writeFile(join(subtaskDir, 'DEPS.md'), generateDepsTemplate(section, depsMaterial));
       await writeFile(join(subtaskDir, 'MONITOR.md'), generateMonitorTemplate(section, monitorMaterial));
+
+      // v8.0.0+: 预创建 REQ.md 和 TECH.md 骨架文件
+      // AI 用 Write 覆盖这些文件，不再自行创建路径（消除路径错误）
+      await writeFile(
+        join(subtaskDir, 'REQ.md'),
+        `${SKELETON_MARKER}\n# ${section.name} — ${platformLabel}\n\n> 本文件由 CLI 预创建，请用 Write 工具覆盖为专业需求规格。\n\n## 功能描述\n<!-- AI-FILL: 本端的需求描述 -->\n\n## 验收标准\n<!-- AI-FILL: Given/When/Then 格式 -->\n\n## 业务规则\n<!-- AI-FILL -->\n\n## 边界条件\n<!-- AI-FILL -->\n\n## 异常场景\n<!-- AI-FILL -->\n`
+      );
+      await writeFile(
+        join(subtaskDir, 'TECH.md'),
+        `${SKELETON_MARKER}\n# ${section.name} — ${platformLabel} 技术方案\n\n> 本文件由 CLI 预创建，请用 Write 工具覆盖为专业技术方案。\n\n## 接口定义\n<!-- AI-FILL: 请求/响应结构体 -->\n\n## 数据模型\n<!-- AI-FILL: 字段/类型/约束 -->\n\n## 核心逻辑\n<!-- AI-FILL -->\n\n## 依赖说明\n<!-- AI-FILL -->\n`
+      );
 
       const adr = generateAdr(section);
       if (adr) {
@@ -4065,9 +4077,9 @@ async function buildContentFillingPrompt(
 
   p += `## 填充规则\n\n`;
   p += `1. 先 Read 子任务目录下的 TASK.md（已有基本信息）和 .meta/feature（功能单元名）\n`;
-  p += `2. REQ.md: 基于上方提供的「功能单元相关上下文」，撰写本子任务的需求规格（验收标准、业务规则、边界条件）\n`;
-  p += `3. TECH.md: 基于上下文中的接口定义和数据模型，细化本子任务的技术方案\n`;
-  p += `4. 用 Write 工具直接写入对应路径\n`;
+  p += `2. REQ.md 和 TECH.md 已由 CLI 预创建（含骨架标记），请用 Write 工具直接覆盖为专业内容\n`;
+  p += `3. REQ.md: 基于上方提供的「功能单元相关上下文」，撰写本子任务的需求规格（验收标准、业务规则、边界条件）\n`;
+  p += `4. TECH.md: 基于上下文中的接口定义和数据模型，细化本子任务的技术方案\n`;
   p += `5. 同一功能模块的各端子任务要保持 API 契约一致（前后端接口签名必须匹配）\n`;
   p += `6. 禁止产出垃圾内容——每个文件必须有实质性专业内容\n`;
   p += `7. REQ.md 必须包含：功能描述、验收标准（Given/When/Then）、业务规则、边界条件、异常场景\n`;
@@ -4077,7 +4089,7 @@ async function buildContentFillingPrompt(
   p += `- 不要创建新目录 — 目录已由 CLI 创建\n`;
   p += `- 不要修改 .meta/ 下的文件\n`;
   p += `- 不要修改 TASK.md（已由 CLI 生成）\n`;
-  p += `- 只写 REQ.md 和 TECH.md\n`;
+  p += `- 只覆盖已存在的 REQ.md 和 TECH.md，不要创建新文件\n`;
 
   p += '\n' + buildAutoModeInstruction('split', iteration) + '\n';
 

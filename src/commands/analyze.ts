@@ -27,6 +27,7 @@ import { buildAutoModeInstruction, writeQuestions, extractQuestionsFromText, typ
 import { resolvePlatform } from '../core/platform-registry';
 import { warnIfIndexStale } from '../core/index-guard';
 import { GLOBAL_SPECS_DIR, GLOBAL_SPEC_FILES, parsePlatformTypes, parsePlatformList } from '../core/spec-paths';
+import { computeAnalyzeManifest, generateSkeleton, detectSkeletonProgress, buildSkeletonFileList } from '../core/spec-skeleton';
 import { unifiedSearch, formatUnifiedContext } from '../core/unified-retrieval';
 import { PipelineEngine, createAnalyzePipeline, createGlobalAnalyzePipeline } from '../core/pipeline-engine';
 import { detectAffectedPlatforms, detectPlatformPriorityOrder, recordAnalysisSnapshot } from '../core/change-detection';
@@ -582,10 +583,25 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     } else {
       const iterForDirs = options.iteration || await getDefaultIteration();
       if (iterForDirs) {
-        // v7.4.3+: 先清理上一轮 AI 留下的垃圾目录（1001/、错误码/、工程标识/ 等）
-        const iterDirForSanitize = await getIterationDir(iterForDirs);
-        await sanitizeSpecDirectories(iterDirForSanitize);
-        await preCreateSpecDirectories(iterForDirs);
+        // v8.0.0+: 骨架优先架构 — CLI 预创建所有文件，AI 只覆盖内容
+        const iterDirForSkeleton = await getIterationDir(iterForDirs);
+        const specDir = join(iterDirForSkeleton, '020-specs');
+        const platforms = await parsePlatformList();
+        const iterName = iterForDirs;
+
+        // v7.4.3+ 兼容：先运行一次旧版 sanitize 迁移遗留文件（一次性）
+        await sanitizeSpecDirectories(iterDirForSkeleton);
+
+        // v8.0.0+: 计算 manifest 并生成骨架
+        const phase = options.phase as '1' | '2' | undefined;
+        const manifest = computeAnalyzeManifest(platforms, phase, iterName);
+        const skeletonResult = await generateSkeleton(specDir, manifest);
+        if (skeletonResult.created.length > 0) {
+          logger.info(`🦴 已创建 ${skeletonResult.created.length} 个文件骨架: ${skeletonResult.created.join(', ')}`);
+        }
+        if (skeletonResult.skipped.length > 0) {
+          logger.info(`✅ 已有 ${skeletonResult.skipped.length} 个文件保留原内容`);
+        }
       }
     }
   }
@@ -3335,19 +3351,22 @@ sequenceDiagram
     taskDocs = taskDocs.filter(([n]) => PLATFORM_DOCS.includes(n));
   }
 
-  // v7.5.0+: 逐文档生成模式 — 检测已有文档，每次只生成下一个缺失的
-  // 避免一次性生成 9+ 文档导致 AI 跳过或写错目录
-  let perDocStatus: Awaited<ReturnType<typeof detectIterationDocsStatus>> | null = null;
+  // v8.0.0+: 骨架进度检测 — 每次只生成下一个未填充的文档
+  // 替代 v7.5.0 的 detectIterationDocsStatus（基于文件是否存在）
+  let perDocStatus: Awaited<ReturnType<typeof detectSkeletonProgress>> | null = null;
   if (!isGlobal && !isTask && !ctx.phase && ctx.iteration && ctx.iteration !== 'GLOBAL') {
     try {
       const iterDir = await getIterationDir(ctx.iteration);
       if (iterDir) {
-        perDocStatus = await detectIterationDocsStatus(iterDir);
-        if (perDocStatus.missing.length > 0 && perDocStatus.nextDoc) {
-          const nextDocName = perDocStatus.nextDoc.split('/').pop()!;
-          const nextDocPlatform = perDocStatus.nextDoc.includes('/') ? perDocStatus.nextDoc.split('/')[0] : null;
-          // 过滤 taskDocs 只保留下一个缺失的文档
-          if (nextDocPlatform && nextDocPlatform !== GLOBAL_SPECS_DIR) {
+        const specDir = join(iterDir, '020-specs');
+        const platforms = await parsePlatformList();
+        const manifest = computeAnalyzeManifest(platforms, undefined, ctx.iteration);
+        perDocStatus = await detectSkeletonProgress(specDir, manifest);
+        if (perDocStatus.nextUnfilled) {
+          const nextDocName = perDocStatus.nextUnfilled.docName;
+          const nextDocPlatform = perDocStatus.nextUnfilled.platform || null;
+          // 过滤 taskDocs 只保留下一个未填充的文档
+          if (nextDocPlatform && perDocStatus.nextUnfilled.category === 'platform') {
             // Phase 2 文档（端专属）
             taskDocs = taskDocs.filter(([n]) => n === nextDocName);
             ctx.platform = nextDocPlatform;
@@ -3355,10 +3374,13 @@ sequenceDiagram
             // Phase 1 文档（overview）
             taskDocs = taskDocs.filter(([n]) => n === nextDocName);
           }
+          logger.info(`🦴 骨架进度: ${perDocStatus.filledCount}/${perDocStatus.totalCount} 已填充，下一个: ${perDocStatus.nextUnfilled.relPath}`);
+        } else if (perDocStatus.filledCount === perDocStatus.totalCount) {
+          logger.info(`🎉 所有 ${perDocStatus.totalCount} 个骨架文件均已填充`);
         }
       }
     } catch (e: any) {
-      logger.debug(`逐文档检测失败（非关键）: ${e.message}`);
+      logger.debug(`骨架进度检测失败（非关键）: ${e.message}`);
     }
   }
 
@@ -3528,28 +3550,28 @@ sequenceDiagram
       prompt += `---\n\n`;
     }
   }
-  // ── v6.59.0+: 最强警告：禁止自创目录，必须走 --apply ──
-  prompt += `## 🚨 最高优先级警告（违反将导致分析失败）\n\n`;
-  prompt += `### ⛔ 绝对禁止创建任何额外目录\n`;
-  prompt += `- ❌ **错误行为**：创建 020-specs/1001/、020-specs/1002/、020-specs/错误码/、020-specs/工程标识/ 等垃圾目录\n`;
-  prompt += `- ✅ **正确行为**：只使用 CLI 预创建的 overview/ 和 {端名}/ 目录，不要手动 mkdir 或 Write 到不存在的目录\n`;
-  prompt += `- ⚠️ **后果**：如果创建额外目录，会导致后续 split/execute 命令找不到文件，整个工作流失败\n\n`;
-  prompt += `###  绝对禁止直接用 Write 工具写文件\n`;
-  prompt += `- ❌ **错误行为**：Write("020-specs/overview/ANALYSIS.md", content) 或直接 Write 到任何路径\n`;
-  prompt += `- ✅ **正确行为**：必须通过 \`speccore analyze --apply '{"overview/ANALYSIS.md":"...","admin-web/TECH.md":"..."}' -I ${iter}\` 写入\n`;
-  prompt += `- 💡 **Windows 兼容**：如果 JSON 在命令行中转义困难，先将 JSON 写入文件（如 result.json），然后执行 \`speccore analyze --apply @result.json -I ${iter}\`\n`;
-  prompt += `- ⚠️ **原因**：--apply 会让 CLI 自动路由文件到正确的子目录，直接 Write 会绕过这个机制，导致所有文件扁平在根目录\n\n`;
-  prompt += `### ✅ 正确的目录结构\n`;
-  prompt += `\`\`\`\n`;
-  prompt += `020-specs/\n`;
-  prompt += `├── overview/        ← REQUIREMENT.md, ANALYSIS.md, DEPS.md（跨端通用）\n`;
-  prompt += `├── admin-web/       ← TECH.md, TEST.md, UI_SPEC.md（Admin 端专属）\n`;
-  prompt += `├── booking-service/ ← TECH.md, TEST.md（后端服务专属）\n`;
-  prompt += `├── h5-mobile/       ← TECH.md, TEST.md, UI_SPEC.md（H5 端专属）\n`;
-  prompt += `└── room-service/    ← TECH.md, TEST.md（后端服务专属）\n`;
-  prompt += `\`\`\`\n`;
-  prompt += `- 每个端目录下只有该端的专属文档，不要混放\n`;
-  prompt += `- 不要创建上述之外的任何子目录\n\n`;
+  // ── v8.0.0+: 骨架优先架构 — 简洁的文件写入指令 ──
+  prompt += `## 📝 文件写入方式（v8.0.0+ 骨架模式）\n\n`;
+  prompt += `CLI 已预创建所有文件骨架（含占位内容）。请逐个用 Write 工具覆盖为专业分析内容：\n\n`;
+  // 动态生成骨架文件列表
+  try {
+    const iterDir = await getIterationDir(iter);
+    if (iterDir) {
+      const platforms = await parsePlatformList();
+      const phase = options?.phase as '1' | '2' | undefined;
+      const manifest = computeAnalyzeManifest(platforms, phase, iter);
+      const specDir = join(iterDir, '020-specs');
+      prompt += buildSkeletonFileList(manifest, specDir);
+    }
+  } catch {
+    // 回退：静态列表
+    prompt += `- \`020-specs/overview/\` 下的 REQUIREMENT.md, ANALYSIS.md, TECH.md, DEPS.md, RISK.md, REVIEW.md, MONITOR.md, FUNCTION_MAP.md\n`;
+    prompt += `- \`020-specs/{端名}/\` 下的 TECH.md, TEST.md, UI_SPEC.md\n\n`;
+  }
+  prompt += `\n**注意**：\n`;
+  prompt += `- 只覆盖上述已存在的文件，不要创建新文件或新目录\n`;
+  prompt += `- 每个文件写入正确路径（如 \`overview/ANALYSIS.md\`，不是根目录的 \`ANALYSIS.md\`）\n`;
+  prompt += `- 写完后用 Read 验证文件内容已替换占位内容\n\n`;
   prompt += `## ⚠️ 迭代名称仅为目录标识（重要）\n\n`;
   prompt += `- 迭代名称（"${iter}"）仅为目录标识符，**不代表需求内容**\n`;
   prompt += `- **需求文档是唯一事实来源**：所有分析必须 100% 基于 010-requirements/ 下的文档内容\n`;
@@ -3892,20 +3914,22 @@ sequenceDiagram
     prompt += `执行命令：\`speccore analyze --prompt -I ${iter} --phase 2\`\n\n`;
   }
 
-  // v7.5.0+: 逐文档自动链式推进
-  if (perDocStatus && perDocStatus.missing.length > 0) {
-    const remainingAfterThis = perDocStatus.missing.length - 1;
-    prompt += `\n## 🔗 逐文档自动链式推进（v7.5.0+）\n\n`;
+  // v8.0.0+: 逐文档自动链式推进（基于骨架进度）
+  if (perDocStatus && perDocStatus.filledCount < perDocStatus.totalCount) {
+    const remainingAfterThis = perDocStatus.unfilled.length - 1;
+    prompt += `\n## 🔗 逐文档自动链式推进（v8.0.0+ 骨架模式）\n\n`;
     prompt += `> 当前为**单文档模式**：本次只生成 1 个文档，写入后立即推进下一个。\n`;
-    prompt += `> 剩余缺失文档: ${perDocStatus.missing.length} 个（${perDocStatus.missing.slice(0, 5).join('、')}${perDocStatus.missing.length > 5 ? '...' : ''}）\n\n`;
+    prompt += `> 骨架进度: ${perDocStatus.filledCount}/${perDocStatus.totalCount} 已填充，剩余 ${perDocStatus.unfilled.length} 个\n`;
+    prompt += `> 待填充: ${perDocStatus.unfilled.slice(0, 5).join('、')}${perDocStatus.unfilled.length > 5 ? '...' : ''}\n\n`;
     if (remainingAfterThis > 0) {
       prompt += `**当前文档写入完成后，立即输出以下标记推进下一个文档**：\n\n`;
       prompt += `[SPECCORE_EXEC: speccore analyze --prompt -I ${iter}${options?.auto ? ' --auto' : ''}${options?.withCode ? ' --with-code' : ''}]\n\n`;
-      prompt += `> 💡 CLI 会自动检测下一个缺失的文档并生成对应的 prompt。重复执行直到所有文档生成完毕。\n`;
+      prompt += `> 💡 CLI 会自动检测下一个未填充的骨架文件并生成对应的 prompt。重复执行直到所有文件填充完毕。\n`;
     } else {
-      prompt += `> 🎉 这是最后一个缺失文档！写入后所有迭代级分析文档将完整。\n`;
+      prompt += `> 🎉 这是最后一个骨架文件！填充后所有迭代级分析文档将完整。\n`;
       const platforms = await parsePlatformList();
-      if (platforms.length >= 2 && perDocStatus.phase2Complete === false) {
+      const hasPlatformUnfilled = perDocStatus.unfilled.some(p => p.includes('/') && !p.startsWith('overview/'));
+      if (platforms.length >= 2 && hasPlatformUnfilled) {
         prompt += `> 下一步: 生成各端专属文档 → \`speccore analyze --prompt -I ${iter} --phase 2\`\n`;
       } else {
         prompt += `> 下一步: 运行 \`speccore split -I ${iter}\` 进行任务拆分\n`;
