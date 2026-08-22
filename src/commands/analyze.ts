@@ -2828,16 +2828,30 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       }
     }
 
-    // v7.4.5+: 量化深度标准 — 每层最低质量要求
-    prompt += `\n## 📏 深度标准（v7.4.5+ 强制）\n\n`;
-    prompt += `> ⚠️ 每个 Layer 的产出必须满足以下最低量化要求，不达标视为未完成。\n\n`;
-    prompt += `| Layer | 最低深度要求 |\n`;
-    prompt += `| :--- | :--- |\n`;
-    prompt += `| Layer 1 | 每个维度至少 3 个具体条目（接口名/路径/实体名），每个条目标注源文件路径 |\n`;
-    prompt += `| Layer 2 | 关联矩阵必须覆盖所有前后端组合，接口缺口/未使用接口至少列出已知项，Mermaid 图节点数 ≥ 5 |\n`;
-    prompt += `| Layer 3 | 每个功能模块至少 Read 5 个源文件，必须包含代码片段引用（至少 2 段），状态图/时序图至少 1 个 |\n`;
-    prompt += `| Layer 4 | 每份文档至少 3 个章节有实质内容，每个表格至少 3 行真实数据，Mermaid 图至少 1 个 |\n\n`;
-    prompt += `**禁止行为**: 写“待补充”、“TODO”、“示例”等占位内容。信息不足时标注“信息不足: 需要读取 xxx 文件”并说明原因。\n\n`;
+    // v7.4.5+: 用户模板接入 + 深度标准（引用模板而非笼统数字）
+    const globalUserTemplates = await loadUserTemplates('global');
+    if (globalUserTemplates.size > 0) {
+      prompt += `\n## 📄 用户自定义模板（v7.4.5+ 优先使用）\n\n`;
+      prompt += `> 检测到 \`.speccore/templates/global/\` 下有用户自定义模板，**必须按这些模板的章节结构和风格生成文档**。\n\n`;
+      for (const [docName, docContent] of globalUserTemplates) {
+        prompt += `### ${docName}\n\`\`\`markdown\n${docContent.slice(0, 1500)}\n\`\`\`\n\n`;
+      }
+      prompt += `> 💡 以上模板定义了文档的章节结构和写作风格，请严格遵循。模板未覆盖的文档按下方默认格式生成。\n\n`;
+    }
+
+    prompt += `\n## 📏 深度标准\n\n`;
+    prompt += `> ⚠️ 每份文档的格式和章节结构由**模板**定义（用户模板优先，否则按上方各 Layer 的文档格式说明）。\n\n`;
+    prompt += `**通用质量要求**：\n`;
+    prompt += `- 禁止写“待补充”、“TODO”、“示例”等占位内容\n`;
+    prompt += `- 每个表格必须有真实数据（从代码/前序 Layer 提取）\n`;
+    prompt += `- 每个结论必须引用证据（文件名/类名/方法名）\n`;
+    prompt += `- 信息不足时标注「信息不足: 需要读取 xxx 文件」并说明原因\n`;
+    prompt += `- 必须包含 Mermaid 图表（如适用）\n\n`;
+    prompt += `**Layer 专项要求**：\n`;
+    prompt += `- Layer 1: 每个扫描维度的每个条目必须标注源文件路径\n`;
+    prompt += `- Layer 2: 关联矩阵必须覆盖所有前后端组合，不能只列匹配成功的\n`;
+    prompt += `- Layer 3: 每个功能模块必须引用实际代码（文件路径 + 关键代码片段），不能只写名称\n`;
+    prompt += `- Layer 4: 每份文档必须填满模板定义的所有章节，空章节标注原因\n\n`;
 
     prompt += `\n## 📝 写入方式\n`;
     prompt += `使用 \`speccore analyze --apply '{"文件路径":"内容"}' --scope global\` 写入。\n`;
