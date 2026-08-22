@@ -3905,3 +3905,127 @@ prompt += `写入 global/ 子目录`;
 | `--apply` 白名单 | 拒绝非法端名目录写入 | 高（仅对走 --apply 的生效） |
 
 **核心思路**：不追求 100% 阻止 AI 犯错（不可能），而是确保犯错后能自动恢复（可做到）。
+
+## 14. 骨架优先架构（Skeleton-First Architecture，v8.0.0+）
+
+### 14.1 问题背景
+
+v6.33 至 v7.5.1 期间，同类问题反复出现 5+ 轮：
+
+| 版本 | 问题表现 | 修复方式 |
+|:---|:---|:---|
+| v6.33 | analyze 文档全部扁平放在根目录 | 加 prompt 路径指令 |
+| v6.49.16 | AI 创建 `1001/`、`错误码/` 等垃圾目录 | 加「禁止自创目录」指令 |
+| v7.2.1 | TECH/RISK 等散落根目录 | 加 sanitize 白名单 |
+| v7.5.0 | 各端目录为空、split 未按功能单元拆分 | 加 detectIterationDocsStatus + parseAnalysisFunctionalUnits |
+| v7.5.1 | sanitize 误删合法目录、白名单不全 | 改 parsePlatformList + 补齐 GLOBAL_SPEC_FILES |
+
+**根因**：SpecCore 让 AI 同时决定「内容」和「文件路径」。AI 擅长内容生成，但不擅长确定性路径决策。
+
+### 14.2 核心原则变更
+
+```
+旧架构: CLI → prompt → AI 决定内容+路径 → 文件落盘 → sanitize 清理（永远不完整）
+新架构: CLI → 预创建文件骨架 → AI 只覆盖内容 → 文件已在正确位置（不需要清理）
+```
+
+**关键洞察**：文件路径是确定性决策，不该让 AI 做。业界成熟框架（Rails Generators / Django startapp / Yeoman / OpenAPI Generator）统一用确定性层控制结构，内容层只填充内容。
+
+### 14.3 核心模块：`src/core/spec-skeleton.ts`
+
+所有骨架逻辑集中在此模块，analyze/split 共用。
+
+#### 类型定义
+
+```typescript
+interface SpecFileEntry {
+  relPath: string;       // 相对 020-specs/ 的路径，如 "overview/ANALYSIS.md"
+  category: 'overview' | 'platform';
+  platform?: string;     // 端名（仅 platform 类）
+  docName: string;       // 文件名
+  placeholder: string;   // 占位内容（含写作指引）
+}
+
+interface SkeletonResult {
+  created: string[];     // 新创建的骨架文件
+  skipped: string[];     // 已存在（保留原内容）
+}
+
+interface ProgressResult {
+  filled: string[];      // 已填充（非骨架）
+  unfilled: string[];    // 仍为骨架
+  nextUnfilled: SpecFileEntry | null;
+  filledCount: number;
+  totalCount: number;
+}
+```
+
+#### 核心函数
+
+| 函数 | 职责 |
+|:---|:---|
+| `computeAnalyzeManifest(platforms, phase, iteration)` | 计算 analyze 命令的文件清单（Phase 1: 8 个全局文档，Phase 2: 各端 3 个文档） |
+| `computeTaskManifest(taskName, platforms)` | 计算 split 命令的任务文件清单（每端 3 个文档） |
+| `generateSkeleton(specDir, entries)` | 预创建文件骨架（文件不存在→创建，已存在→跳过） |
+| `validateFilled(specDir, entries)` | 检测哪些骨架已被 AI 填充（不含 `<!-- SPEC-SKELETON -->` 标记 = 已填充） |
+| `detectSkeletonProgress(specDir, entries)` | 检测骨架填充进度，返回下一个需要生成的文件 |
+| `buildSkeletonFileList(entries, specDir)` | 生成注入 prompt 的骨架文件列表 |
+
+#### 骨架标记机制
+
+```typescript
+export const SKELETON_MARKER = '<!-- SPEC-SKELETON -->';
+```
+
+- 骨架文件第一行包含此标记
+- `validateFilled()` 通过检测此标记判断文件是否已被 AI 覆盖
+- AI 用 Write 工具覆盖文件时，标记自然被替换
+
+### 14.4 analyze 命令改造
+
+**替换关系**：
+
+| 旧函数 | 新函数 | 差异 |
+|:---|:---|:---|
+| `preCreateSpecDirectories()` | `computeAnalyzeManifest()` + `generateSkeleton()` | 旧版只建目录，新版建目录+文件骨架 |
+| `sanitizeSpecDirectories()` | 不再需要（保留为旧项目迁移辅助） | 骨架确保路径正确，不需要事后清理 |
+| `detectIterationDocsStatus()` | `detectSkeletonProgress()` | 旧版检测文件是否存在，新版检测骨架是否被填充 |
+
+**Prompt 简化**：
+
+```
+旧 prompt（~20 行警告）:
+  "不要创建目录" / "不要直接用 Write" / "必须走 --apply" / ...
+
+新 prompt（~5 行文件列表）:
+  "以下文件已创建（含占位内容），请逐个用 Write 工具覆盖："
+  {动态生成骨架文件列表}
+  "只覆盖已存在的文件，不要创建新文件"
+```
+
+### 14.5 split 命令改造
+
+**新增**：子任务目录预创建 REQ.md 和 TECH.md 骨架文件。
+
+```
+旧流程: CLI 建目录 → AI 自行创建 REQ.md/TECH.md（路径不确定）
+新流程: CLI 建目录 + 预创建骨架 → AI 只覆盖已有文件（路径确定）
+```
+
+### 14.6 向后兼容策略
+
+1. **旧项目首次运行**：骨架生成器检测到已有文件 → 跳过，不覆盖
+2. **旧项目散落文件**：`sanitizeSpecDirectories()` 仍作为一次性迁移工具保留
+3. **`--apply` 模式**：保留但简化，不再作为唯一正确路径
+4. **死代码标注**：`preCreateSpecDirectories()` 和 `detectIterationDocsStatus()` 标注 `@deprecated`
+
+### 14.7 设计哲学：CLI 做计算，AI 做内容
+
+| 决策类型 | 谁来做 | 为什么 |
+|:---|:---|:---|
+| 文件路径 | CLI（确定性） | 路径是结构决策，不需要智能 |
+| 目录结构 | CLI（确定性） | 目录结构由 manifest 定义 |
+| 文件内容 | AI（智能性） | 内容需要专业分析和创造 |
+| 进度追踪 | CLI（确定性） | 通过骨架标记检测，不依赖 AI 报告 |
+
+**核心原则**：对于结构性决策，应尽可能用 CLI 读取预定义字段或执行确定性操作，而不是让 AI 判断。AI 适合做「内容生成」，不适合做「结构决策」。

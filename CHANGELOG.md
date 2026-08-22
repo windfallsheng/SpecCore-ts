@@ -1,3 +1,23 @@
+## v8.0.1 (2026-08-22) — 文档更新 + 死代码标注
+
+### 设计文档
+
+- **DESIGN.md** 新增第 14 章：骨架优先架构设计（Skeleton-First Architecture）
+  - 问题背景（v6.33~v7.5.1 反复修复历史）
+  - 核心模块 spec-skeleton.ts 类型定义与函数清单
+  - analyze/split 命令改造详情
+  - 向后兼容策略
+  - 设计哲学：CLI 做计算，AI 做内容
+- **command-reference.md** 版本号更新至 v8.0.0
+- **CHANGELOG.en.md** 补充 v8.0.0 英文变更说明
+
+### 代码清理
+
+- `preCreateSpecDirectories()` 标注 `@deprecated`（已被 `computeAnalyzeManifest` + `generateSkeleton` 替代）
+- `detectIterationDocsStatus()` 标注 `@deprecated`（已被 `detectSkeletonProgress` 替代）
+
+---
+
 ## v8.0.0 (2026-08-22) — 骨架优先架构：CLI 预创建文件，AI 只覆盖内容
 
 ### 架构变更（Breaking Change）
