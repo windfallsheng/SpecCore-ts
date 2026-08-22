@@ -1,3 +1,25 @@
+## v7.4.3 (2026-08-22) — 功能单元精准上下文组装
+
+### 核心改进: CLI 做提取，AI 做内容
+
+- **新增 `assembleUnitContext()`**: 按功能单元从各分析文档中精准提取相关上下文
+  - 从 `overview/REQUIREMENT.md` 提取该单元相关的需求章节
+  - 从 `platforms/_shared/_MODULES.md` 提取相关的功能模块信息
+  - 从各端 `platforms/{端}/_INDEX.md` 提取相关的接口/页面清单
+  - 从 `overview/FUNCTION_MAP.md` 提取该单元的功能映射行
+  - 从 `overview/TECH.md` 提取相关的技术架构信息
+  - 关键词匹配: 中文单字拆分 + 英文 slug 拆分，确保中英文功能单元都能匹配
+
+- **改造 `buildContentFillingPrompt()`**: 每个功能单元注入精准上下文
+  - 原: 只给 AI 一句「Read 这 5 个文件」，让 AI 自己从几千行文档中找相关内容
+  - 现: CLI 按功能单元从各文档中提取相关片段，直接喂给 AI
+  - REQ.md/TECH.md 填充规则强化: 必须包含具体内容（验收标准、接口定义、数据模型）
+
+- **改造 `buildSplitPrompt()`**: 新增「功能单元上下文」章节
+  - 解析 FUNCTION_MAP.md 获取功能单元列表
+  - 为每个功能单元调用 `assembleUnitContext()` 提取精准上下文
+  - AI 拆分时直接看到每个功能单元的相关信息，而非全量文档
+
 ## v7.4.2 (2026-08-22) — 功能单元拆分修复 + 端名强制校验 + DEV_GUIDE prompt 补全
 
 ### 拆分逻辑修复
