@@ -582,6 +582,9 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     } else {
       const iterForDirs = options.iteration || await getDefaultIteration();
       if (iterForDirs) {
+        // v7.4.3+: 先清理上一轮 AI 留下的垃圾目录（1001/、错误码/、工程标识/ 等）
+        const iterDirForSanitize = await getIterationDir(iterForDirs);
+        await sanitizeSpecDirectories(iterDirForSanitize);
         await preCreateSpecDirectories(iterForDirs);
       }
     }

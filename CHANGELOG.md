@@ -1,3 +1,23 @@
+## v7.4.4 (2026-08-22) — 020-specs/ 垃圾目录防护 + 端名合法性校验
+
+### 根因分析
+
+AI 用 Write 工具直接写文件到 `020-specs/1001/xxx.md`、`020-specs/错误码/xxx.md` 等路径，文件系统自动创建这些垃圾目录。虽然 prompt 里有警告，但 AI 不遵守。
+
+### 修复
+
+- **`parsePlatformList()` 返回值合法性校验**: 新增 `isValidPlatformName()` + `getValidPlatformIdentifiers()`
+  - 过滤纯数字（如 1001、1002）
+  - 过滤特殊符号（如 ...、---）
+  - 过滤表格列名（如 工程标识、错误码、端名）
+  - 与 CONSTITUTION.md 首表「工程标识」列交叉验证，只保留合法端名
+  - 防止 AI 篡改 CONSTITUTION.md 或格式异常导致 `preCreateSpecDirectories` 创建垃圾目录
+
+- **`sanitizeSpecDirectories` 提前到 prompt 模式入口**: 在 `preCreateSpecDirectories` 之前调用
+  - 原: 只在 `--apply` 流程结束后调用，`--prompt` 模式不调用
+  - 现: `--prompt` 模式开始时先清理上一轮 AI 留下的垃圾目录，再预创建正确目录
+  - 覆盖场景: 用户重新运行 `speccore analyze --prompt` 或 `--auto` 时自动清理
+
 ## v7.4.3 (2026-08-22) — 功能单元精准上下文组装
 
 ### 核心改进: CLI 做提取，AI 做内容
