@@ -1877,6 +1877,64 @@ async function injectGraphSummary(prompt: string): Promise<string> {
   }
 }
 
+// ── v7.5.0+: 检测迭代级文档生成进度 ──
+// 检查 020-specs/overview/ 和 020-specs/{platform}/ 下哪些文档已存在
+async function detectIterationDocsStatus(iterDir: string): Promise<{
+  existing: string[];
+  missing: string[];
+  nextDoc: string | null;
+  phase1Complete: boolean;
+  phase2Complete: boolean;
+}> {
+  const specsDir = join(iterDir, '020-specs');
+  const overviewDir = join(specsDir, GLOBAL_SPECS_DIR);
+
+  const PHASE1_DOCS = ['REQUIREMENT.md', 'ANALYSIS.md', 'TECH.md', 'DEPS.md', 'RISK.md', 'REVIEW.md', 'MONITOR.md', 'FUNCTION_MAP.md'];
+  const PLATFORM_DOCS = ['TECH.md', 'TEST.md', 'UI_SPEC.md'];
+
+  const existing: string[] = [];
+  const missing: string[] = [];
+
+  // Phase 1: 检查 overview/ 下的文档
+  for (const doc of PHASE1_DOCS) {
+    const fp = join(overviewDir, doc);
+    if (await pathExists(fp)) {
+      existing.push(`overview/${doc}`);
+    } else {
+      missing.push(`overview/${doc}`);
+    }
+  }
+
+  const phase1Complete = missing.filter(m => m.startsWith('overview/')).length === 0;
+
+  // Phase 2: 检查各端目录下的文档
+  const platforms = await parsePlatformList();
+  for (const platform of platforms) {
+    const platformDir = join(specsDir, platform);
+    if (await pathExists(platformDir)) {
+      for (const doc of PLATFORM_DOCS) {
+        const fp = join(platformDir, doc);
+        if (await pathExists(fp)) {
+          existing.push(`${platform}/${doc}`);
+        } else {
+          missing.push(`${platform}/${doc}`);
+        }
+      }
+    } else {
+      for (const doc of PLATFORM_DOCS) {
+        missing.push(`${platform}/${doc}`);
+      }
+    }
+  }
+
+  const phase2Complete = missing.filter(m => !m.startsWith('overview/')).length === 0;
+
+  // 下一个缺失的文档（Phase 1 优先）
+  const nextDoc = missing.length > 0 ? missing[0] : null;
+
+  return { existing, missing, nextDoc, phase1Complete, phase2Complete };
+}
+
 // ── v7.2.0+: 检测全局分析当前进度 ──
 // Layer 4 拆分为子层: 4a=产品文档, 4b=全局技术核心, 4c=全局技术扩展, 4d=各端技术
 async function detectGlobalLayerProgress(): Promise<{
@@ -2762,69 +2820,145 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
           prompt += `**输出**: 只输出 \`${deepDoc}\` 的完整内容\n`;
         }
       } else {
-        // 子层模式：每次只生成一个子层
-        prompt += `## 🌍 Layer 4: 全局汇总 — 子层 ${subLayerTarget}/4\n\n`;
-        prompt += `> ⚠️ **专注约束**: 你当前只执行 **子层 ${subLayerTarget}**，不要生成其他子层的文档。\n`;
-        prompt += `> 子层完成后执行: \`speccore analyze --scope global --layer 4\` 进入下一子层。\n\n`;
+        // v7.5.0+: 子层内逐文档生成 — 检测当前子层中哪些文档已存在，每次只生成下一个缺失的
+        const globalDir = join(process.cwd(), '.speccore', 'GLOBAL');
+        const overviewDir = join(globalDir, 'overview');
+        const requirementsDir = join(globalDir, 'requirements');
+        const platformsDir = join(globalDir, 'platforms');
+      
+        // 定义每个子层的预期文档清单（按优先级排序）
+        const SUB_LAYER_DOCS: Record<string, string[]> = {
+          '4a': ['requirements/REQUIREMENT.md'],
+          '4b': ['overview/FUNCTION_MAP.md', 'overview/ARCHITECTURE.md', 'overview/API_CONTRACT.yaml', 'overview/INTERACTION_MAP.md'],
+          '4c': ['overview/SECURITY_AUDIT.md', 'overview/PERFORMANCE_BASELINE.md', 'overview/DATA_FLOW.md', 'overview/DEPLOYMENT.md', 'overview/CONSISTENCY_CHECK.md'],
+          '4d': [],
+        };
+      
+        // 4a: 追加各前端端的需求文档
+        if (subLayerTarget === '4a') {
+          const allPlatforms = await parsePlatformList();
+          const frontendPlatforms = allPlatforms.filter(p => {
+            const pt = (async () => { try { const m = await parsePlatformTypes(); return m.get(p); } catch { return ''; } })();
+            return true; // 保守策略：所有非后端端都可能需要 REQUIREMENT.md
+          });
+          for (const p of allPlatforms) {
+            SUB_LAYER_DOCS['4a'].push(`requirements/${p}/REQUIREMENT.md`);
+          }
+        }
+      
+        // 4d: 动态构建各端文档清单
+        if (subLayerTarget === '4d') {
+          try {
+            const entries = await readdir(platformsDir, { withFileTypes: true });
+            const platformNames = entries.filter(e => e.isDirectory() && e.name !== '_shared').map(e => e.name);
+            for (const p of platformNames) {
+              const isBackend = /service|server|api|backend/i.test(p);
+              if (isBackend) {
+                SUB_LAYER_DOCS['4d'].push(`platforms/${p}/API_INVENTORY.md`);
+                SUB_LAYER_DOCS['4d'].push(`platforms/${p}/DATA_MODEL.md`);
+                SUB_LAYER_DOCS['4d'].push(`platforms/${p}/BUSINESS_RULES.md`);
+              } else {
+                SUB_LAYER_DOCS['4d'].push(`platforms/${p}/UI_FLOW.md`);
+                SUB_LAYER_DOCS['4d'].push(`platforms/${p}/API_CALL_MAP.md`);
+                SUB_LAYER_DOCS['4d'].push(`platforms/${p}/STATE_MANAGEMENT.md`);
+              }
+            }
+          } catch {}
+        }
+      
+        // 检测当前子层中哪些文档已存在
+        const expectedDocs = SUB_LAYER_DOCS[subLayerTarget] || [];
+        const existingDocs: string[] = [];
+        const missingDocs: string[] = [];
+        for (const doc of expectedDocs) {
+          const fullPath = join(process.cwd(), '.speccore', 'GLOBAL', doc);
+          if (await pathExists(fullPath)) {
+            existingDocs.push(doc);
+          } else {
+            missingDocs.push(doc);
+          }
+        }
+      
+        const nextDoc = missingDocs.length > 0 ? missingDocs[0] : null;
+      
+        prompt += `## 🌍 Layer 4: 全局汇总 — 子层 ${subLayerTarget}/4（v7.5.0+ 逐文档模式）\n\n`;
+        prompt += `> ⚠️ **专注约束**: 你当前只执行 **子层 ${subLayerTarget}** 中的 **下一个缺失文档**。\n`;
+        prompt += `> 已存在: ${existingDocs.length}/${expectedDocs.length} 份文档\n`;
+        if (missingDocs.length > 0) {
+          prompt += `> 缺失: ${missingDocs.slice(0, 5).join('、')}${missingDocs.length > 5 ? '...' : ''}\n`;
+        }
+        prompt += `\n`;
+      
         prompt += `**强制输入**: \n`;
         prompt += `- Read Layer 1 的所有 _INDEX.md\n`;
         prompt += `- Read Layer 2 的 _ASSOCIATION.md + _MODULES.md\n`;
         prompt += `- Read Layer 3 的功能模块深入文档\n\n`;
-
-        if (subLayerTarget === '4a') {
-          prompt += `**子层 4a: 产品视角文档（2-3 份）**\n`;
-          prompt += `> ⚠️ **REQUIREMENT.md 是必须生成的核心文档**，不可跳过！\n\n`;
-          prompt += `1. \`requirements/REQUIREMENT.md\` — 全局需求总纲（**必须生成**）\n`;
-          prompt += `   - 产品愿景、目标用户画像、核心场景地图\n`;
-          prompt += `   - 按业务场景组织：用户故事 → 操作流程 → 业务规则 → 边界条件 → 验收标准\n`;
-          prompt += `   - 功能优先级矩阵（P0/P1/P2）\n`;
-          prompt += `   - 必须从 Layer 3 的功能模块分析中提取真实内容，不要臆造\n`;
-          prompt += `2. 各前端端 \`requirements/{端}/REQUIREMENT.md\` — 只生成已有前端端的需求\n`;
-          prompt += `   - 信息架构、用户旅程、页面清单、交互设计\n`;
-          prompt += `   - 从 Layer 1 的前端 _INDEX.md 提取页面/路由信息\n`;
-          prompt += `   - 从 Layer 3 的模块分析提取交互流程\n`;
-        } else if (subLayerTarget === '4b') {
-          prompt += `**子层 4b: 全局技术核心文档（3-4 份）**\n`;
-          prompt += `1. \`overview/FUNCTION_MAP.md\` — 功能单元 × 端映射表\n`;
-          prompt += `   - 从 Layer 2 的 _MODULES.md 提取功能模块\n`;
-          prompt += `   - 每个功能单元标注：涉及端、核心页面、核心接口、状态枚举\n`;
-          prompt += `   - ⚠️ **必须使用 Markdown 表格格式**，表头：| # | 功能单元 | 涉及端 | 全局对比 | 共享能力 | 依赖任务 | 说明 |\n`;
-          prompt += `   - ⛔ **禁止使用树形格式**（├── ...），split 无法解析树形格式\n`;
-          prompt += `   - 「涉及端」必须使用 CONSTITUTION.md 标准端名\n`;
-          prompt += `2. \`overview/ARCHITECTURE.md\` — 全局架构\n`;
-          prompt += `   - 服务拓扑（从 Layer 1 的后端 _INDEX.md 提取服务名和依赖）\n`;
-          prompt += `   - 数据流（从 Layer 3 的模块分析提取）\n`;
-          prompt += `   - 必须包含 Mermaid architecture diagram\n`;
-          prompt += `3. \`overview/API_CONTRACT.yaml\` — 全局接口契约\n`;
-          prompt += `   - 汇总所有后端端的 API_INVENTORY（从 Layer 1 提取）\n`;
-          prompt += `   - 标注 rate limit、幂等性、版本策略\n`;
-          prompt += `4. \`overview/INTERACTION_MAP.md\` — 跨端交互时序图\n`;
-          prompt += `   - 从 Layer 3 的模块时序图汇总\n`;
-          prompt += `   - 必须包含 Mermaid sequenceDiagram\n`;
-        } else if (subLayerTarget === '4c') {
-          prompt += `**子层 4c: 全局技术扩展文档（4-5 份）**\n`;
-          prompt += `1. \`overview/SECURITY_AUDIT.md\` — 安全审计\n`;
-          prompt += `2. \`overview/PERFORMANCE_BASELINE.md\` — 性能基线\n`;
-          prompt += `3. \`overview/DATA_FLOW.md\` — 数据流与隐私\n`;
-          prompt += `4. \`overview/DEPLOYMENT.md\` — 部署运维\n`;
-          prompt += `5. \`overview/CONSISTENCY_CHECK.md\` — 一致性校验\n`;
-          prompt += `   - 从 Layer 2 的关联分析提取不一致项\n`;
-        } else if (subLayerTarget === '4d') {
-          prompt += `**子层 4d: 各端技术文档**\n`;
-          prompt += `后端端（每端 9 项，但本次只生成核心 3 项，其余后续补充）:\n`;
-          prompt += `1. \`API_INVENTORY.md\` — 从 Layer 1 的 _INDEX.md 提取完整接口清单\n`;
-          prompt += `2. \`DATA_MODEL.md\` — 从 Layer 1 的 Entity 目录 + Layer 3 的模块分析提取\n`;
-          prompt += `3. \`BUSINESS_RULES.md\` — 从 Layer 3 的模块分析提取业务规则\n`;
-          prompt += `前端端（每端 9 项，但本次只生成核心 3 项）:\n`;
-          prompt += `1. \`UI_FLOW.md\` — 从 Layer 1 的路由 + Layer 3 的模块分析提取\n`;
-          prompt += `2. \`API_CALL_MAP.md\` — 从 Layer 1 的 API 调用提取\n`;
-          prompt += `3. \`STATE_MANAGEMENT.md\` — 从 Layer 1 的 store 目录提取\n`;
+      
+        if (nextDoc) {
+          prompt += `## 🎯 本次只生成: \`${nextDoc}\`\n\n`;
+      
+          // 根据文档路径生成专属指令
+          const docName = nextDoc.split('/').pop()!;
+          const docDir = nextDoc.includes('/') ? nextDoc.split('/')[0] : '';
+      
+          if (docName === 'REQUIREMENT.md' && docDir === 'requirements') {
+            prompt += `**全局需求总纲（产品视角）**\n`;
+            prompt += `- 产品愿景、目标用户画像、核心场景地图\n`;
+            prompt += `- 按业务场景组织：用户故事 → 操作流程 → 业务规则 → 边界条件 → 验收标准\n`;
+            prompt += `- 功能优先级矩阵（P0/P1/P2）\n`;
+            prompt += `- 功能模块清单表（含涉及端列）\n`;
+            prompt += `- ⚠️ **以产品/用户视角撰写**，不写技术实现细节\n`;
+            prompt += `- ⚠️ **必须从 Layer 3 的功能模块分析中提取真实内容，不要臆造**\n`;
+          } else if (docName === 'REQUIREMENT.md') {
+            prompt += `**${docDir} 端需求文档**\n`;
+            prompt += `- 信息架构、用户旅程、页面清单、交互设计\n`;
+            prompt += `- 从 Layer 1 的前端 _INDEX.md 提取页面/路由信息\n`;
+          } else if (docName === 'FUNCTION_MAP.md') {
+            prompt += `**功能单元 × 端映射表**\n`;
+            prompt += `- 从 Layer 2 的 _MODULES.md 提取功能模块\n`;
+            prompt += `- ⚠️ **必须使用 Markdown 表格格式**，表头：| # | 功能单元 | 涉及端 | 全局对比 | 共享能力 | 依赖任务 | 说明 |\n`;
+            prompt += `- ⛔ **禁止使用树形格式**（├── ...），split 无法解析\n`;
+            prompt += `- 「涉及端」必须使用 CONSTITUTION.md 标准端名\n`;
+          } else if (docName === 'ARCHITECTURE.md') {
+            prompt += `**全局架构文档**\n`;
+            prompt += `- 服务拓扑、数据流、技术栈选型\n`;
+            prompt += `- 必须包含 Mermaid architecture diagram\n`;
+          } else if (docName === 'API_CONTRACT.yaml') {
+            prompt += `**全局接口契约**\n`;
+            prompt += `- 汇总所有后端端的 API 清单\n`;
+            prompt += `- 标注 rate limit、幂等性、版本策略\n`;
+          } else if (docName === 'INTERACTION_MAP.md') {
+            prompt += `**跨端交互时序图**\n`;
+            prompt += `- 每个核心场景一个 Mermaid sequenceDiagram\n`;
+            prompt += `- 标注接口路径和契约引用\n`;
+          } else if (['SECURITY_AUDIT.md', 'PERFORMANCE_BASELINE.md', 'DATA_FLOW.md', 'DEPLOYMENT.md', 'CONSISTENCY_CHECK.md'].includes(docName)) {
+            prompt += `**${docName.replace('.md', '')}**\n`;
+            prompt += `- 从 Layer 1-3 的产出中提取相关内容\n`;
+            prompt += `- 必须包含真实数据，禁止占位符\n`;
+          } else if (['API_INVENTORY.md', 'DATA_MODEL.md', 'BUSINESS_RULES.md', 'UI_FLOW.md', 'API_CALL_MAP.md', 'STATE_MANAGEMENT.md'].includes(docName)) {
+            prompt += `**${docDir} 端 ${docName.replace('.md', '')}**\n`;
+            prompt += `- 从 Layer 1 的 _INDEX.md 和 Layer 3 的模块分析提取\n`;
+            prompt += `- 必须包含真实数据，禁止占位符\n`;
+          }
+      
+          // 自动链式推进
+          if (missingDocs.length > 1) {
+            prompt += `\n## 🔗 自动链式推进\n\n`;
+            prompt += `> 当前文档写入完成后，**立即输出以下标记**推进下一个文档：\n\n`;
+            prompt += `[SPECCORE_EXEC: speccore analyze --scope global --layer 4${options?.withCode ? ' --with-code' : ''}]\n\n`;
+            prompt += `> 💡 CLI 会自动检测下一个缺失文档并聚焦生成。重复直到子层 ${subLayerTarget} 完成，然后进入下一子层。\n`;
+          } else {
+            prompt += `\n> 🎉 这是子层 ${subLayerTarget} 的最后一份文档！写入后将自动进入下一子层。\n`;
+          }
+        } else {
+          prompt += `> ✅ 子层 ${subLayerTarget} 所有文档已存在，请执行下一子层。\n`;
+          prompt += `\`speccore analyze --scope global --layer 4\`\n`;
         }
-
+      
         prompt += `\n**质量要求**: \n`;
-        prompt += `- 禁止写"待导入"、"待补充"等占位符\n`;
+        prompt += `- 禁止写“待导入”、“待补充”等占位符\n`;
         prompt += `- 每个表格必须有真实数据（从 Layer 1-3 提取）\n`;
-        prompt += `- 如果信息不足，明确标注"信息不足: 需要读取 xxx"\n`;
+        prompt += `- 如果信息不足，明确标注“信息不足: 需要读取 xxx”\n`;
       }
     }
 
@@ -3199,6 +3333,33 @@ sequenceDiagram
     taskDocs = taskDocs.filter(([n]) => GLOBAL_DOCS.includes(n));
   } else if (ctx.phase === '2') {
     taskDocs = taskDocs.filter(([n]) => PLATFORM_DOCS.includes(n));
+  }
+
+  // v7.5.0+: 逐文档生成模式 — 检测已有文档，每次只生成下一个缺失的
+  // 避免一次性生成 9+ 文档导致 AI 跳过或写错目录
+  let perDocStatus: Awaited<ReturnType<typeof detectIterationDocsStatus>> | null = null;
+  if (!isGlobal && !isTask && !ctx.phase && ctx.iteration && ctx.iteration !== 'GLOBAL') {
+    try {
+      const iterDir = await getIterationDir(ctx.iteration);
+      if (iterDir) {
+        perDocStatus = await detectIterationDocsStatus(iterDir);
+        if (perDocStatus.missing.length > 0 && perDocStatus.nextDoc) {
+          const nextDocName = perDocStatus.nextDoc.split('/').pop()!;
+          const nextDocPlatform = perDocStatus.nextDoc.includes('/') ? perDocStatus.nextDoc.split('/')[0] : null;
+          // 过滤 taskDocs 只保留下一个缺失的文档
+          if (nextDocPlatform && nextDocPlatform !== GLOBAL_SPECS_DIR) {
+            // Phase 2 文档（端专属）
+            taskDocs = taskDocs.filter(([n]) => n === nextDocName);
+            ctx.platform = nextDocPlatform;
+          } else {
+            // Phase 1 文档（overview）
+            taskDocs = taskDocs.filter(([n]) => n === nextDocName);
+          }
+        }
+      }
+    } catch (e: any) {
+      logger.debug(`逐文档检测失败（非关键）: ${e.message}`);
+    }
   }
 
   // ── 任务级文档覆盖：00-specs/ 使用任务级文档集（v6.44.0+） ──
@@ -3729,6 +3890,27 @@ sequenceDiagram
     prompt += `当前处于自动模式（--auto），不需要人工确认。\n`;
     prompt += `请在生成综合文档后，**直接继续**生成各端专属文档（Phase 2）。\n`;
     prompt += `执行命令：\`speccore analyze --prompt -I ${iter} --phase 2\`\n\n`;
+  }
+
+  // v7.5.0+: 逐文档自动链式推进
+  if (perDocStatus && perDocStatus.missing.length > 0) {
+    const remainingAfterThis = perDocStatus.missing.length - 1;
+    prompt += `\n## 🔗 逐文档自动链式推进（v7.5.0+）\n\n`;
+    prompt += `> 当前为**单文档模式**：本次只生成 1 个文档，写入后立即推进下一个。\n`;
+    prompt += `> 剩余缺失文档: ${perDocStatus.missing.length} 个（${perDocStatus.missing.slice(0, 5).join('、')}${perDocStatus.missing.length > 5 ? '...' : ''}）\n\n`;
+    if (remainingAfterThis > 0) {
+      prompt += `**当前文档写入完成后，立即输出以下标记推进下一个文档**：\n\n`;
+      prompt += `[SPECCORE_EXEC: speccore analyze --prompt -I ${iter}${options?.auto ? ' --auto' : ''}${options?.withCode ? ' --with-code' : ''}]\n\n`;
+      prompt += `> 💡 CLI 会自动检测下一个缺失的文档并生成对应的 prompt。重复执行直到所有文档生成完毕。\n`;
+    } else {
+      prompt += `> 🎉 这是最后一个缺失文档！写入后所有迭代级分析文档将完整。\n`;
+      const platforms = await parsePlatformList();
+      if (platforms.length >= 2 && perDocStatus.phase2Complete === false) {
+        prompt += `> 下一步: 生成各端专属文档 → \`speccore analyze --prompt -I ${iter} --phase 2\`\n`;
+      } else {
+        prompt += `> 下一步: 运行 \`speccore split -I ${iter}\` 进行任务拆分\n`;
+      }
+    }
   }
 
   // ── v6.52.0+: 图谱 RAG 上下文注入（analyze 阶段也检索项目关联内容）──
