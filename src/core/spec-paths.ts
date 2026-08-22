@@ -11,11 +11,13 @@ import { pathExists, ensureDir, readFile } from 'fs-extra';
 /** 迭代综合文档子目录名（v6.78.0+ 从 'global' 改为 'overview'） */
 export const GLOBAL_SPECS_DIR = 'overview';
 
-/** 迭代综合文档文件名列表（仅纯综合文档，不含可分端的文档）
- * v6.48.0+：TECH/RISK/REVIEW/MONITOR 支持按端分目录，不再强制写入 overview/
+/** 迭代综合文档文件名列表（用于散落文件归位、路径解析等）
+ * v7.5.1+：TECH/RISK/REVIEW/MONITOR 重新纳入，确保 sanitizeSpecDirectories 能将根目录散落文件归位到 overview/
+ * 这些文件在 Phase 1 写入 overview/，Phase 2 可生成各端专属版本写入 {端}/
  */
 export const GLOBAL_SPEC_FILES = [
-  'REQUIREMENT.md', 'ANALYSIS.md', 'DEPS.md',
+  'REQUIREMENT.md', 'ANALYSIS.md', 'TECH.md', 'RISK.md',
+  'DEPS.md', 'REVIEW.md', 'MONITOR.md',
   'FUNCTION_MAP.md', 'INTERACTION_MAP.md', 'API_CONTRACT.yaml',
 ];
 
@@ -171,30 +173,30 @@ export async function parsePlatformList(): Promise<string[]> {
   }
   if (platforms.size > 0) return [...platforms];
 
-  // 2. 回退：解析「对应需求端」/「对应端」列（旧版格式）
+  // 2. 回退：解析「工程标识」列（第一列）—— v7.5.1+ 修复
+  // 旧版读「对应需求端」列返回中文值（如"后台管理端"），但目录名用的是工程标识（如 admin-web）
+  // 现在改为读「工程标识」列，确保返回值与目录名一致
   let headerIdx = -1;
   for (let i = 0; i < lines.length; i++) {
-    if (lines[i].includes('对应需求端') || lines[i].includes('对应端')) {
+    if (lines[i].includes('工程标识') || lines[i].includes('工程ID')) {
       headerIdx = i;
       break;
     }
   }
   if (headerIdx >= 0) {
     const headers = lines[headerIdx].split('|').map(h => h.trim()).filter(Boolean);
-    const colIdx = headers.findIndex(h => h.includes('对应需求端') || h.includes('对应端'));
-    if (colIdx >= 0) {
-      for (let i = headerIdx + 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line.startsWith('|') || line.match(/^\|\s*[-:]/)) continue;
-        const cells = line.split('|').map(c => c.trim()).filter(Boolean);
-        if (cells[colIdx]) {
-          cells[colIdx].split(',').forEach((p: string) => {
-            const trimmed = p.trim();
-            // v7.4.3+: 合法性校验
-            if (trimmed && !trimmed.startsWith('>') && isValidPlatformName(trimmed, validIdentifiers)) {
-              platforms.add(trimmed);
-            }
-          });
+    // 优先找「工程标识」列，回退到第一列
+    let colIdx = headers.findIndex(h => h.includes('工程标识') || h.includes('工程ID'));
+    if (colIdx < 0) colIdx = 0;
+    for (let i = headerIdx + 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line.startsWith('|') || line.match(/^\|\s*[-:]/)) continue;
+      const cells = line.split('|').map(c => c.trim()).filter(Boolean);
+      if (cells[colIdx]) {
+        const trimmed = cells[colIdx].trim();
+        // v7.4.3+: 合法性校验
+        if (trimmed && !trimmed.startsWith('>') && isValidPlatformName(trimmed, validIdentifiers)) {
+          platforms.add(trimmed);
         }
       }
     }
