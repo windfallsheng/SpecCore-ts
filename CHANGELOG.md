@@ -1,3 +1,51 @@
+## v8.0.0 (2026-08-22) — 骨架优先架构：CLI 预创建文件，AI 只覆盖内容
+
+### 架构变更（Breaking Change）
+
+**核心原则变更**：
+```
+旧架构: CLI → prompt → AI 决定内容+路径 → 文件落盘 → sanitize 清理（永远不完整）
+新架构: CLI → 预创建文件骨架 → AI 只覆盖内容 → 文件已在正确位置（不需要清理）
+```
+
+**关键洞察**：文件路径是确定性决策，不该让 AI 做。业界成熟框架（Rails/Django/Yeoman）无一例外地用确定性层控制结构，内容层只填充内容。
+
+### 新增模块
+
+- **`src/core/spec-skeleton.ts`**：骨架优先架构核心模块
+  - `SpecFileEntry` 类型 + `computeAnalyzeManifest()` 计算函数
+  - `generateSkeleton()` 骨架生成器（创建目录 + 写入占位内容）
+  - `validateFilled()` 内容验证器（检测骨架是否被填充）
+  - `detectSkeletonProgress()` 进度检测（替代 `detectIterationDocsStatus`）
+  - `buildSkeletonFileList()` 生成骨架文件列表（用于 prompt）
+
+### 修改
+
+- **`analyze.ts`**：
+  - 替换 `preCreateSpecDirectories()` + `sanitizeSpecDirectories()` 为骨架生成
+  - 简化 prompt 指令：从 ~20 行路径警告改为 ~5 行骨架文件列表
+  - 逐文档链式推进改用 `detectSkeletonProgress()` 检测骨架进度
+- **`split.ts`**：
+  - 子任务目录预创建 REQ.md 和 TECH.md 骨架文件
+  - 更新 prompt 告诉 AI 覆盖已存在的文件，而非自行创建
+
+### 预期效果
+
+| 问题 | 旧架构 | 新架构 |
+|:---|:---|:---|
+| 文件写错位置 | 加 sanitize 白名单（永远漏） | 不可能发生（路径已预创建） |
+| AI 创建垃圾目录 | 加 prompt 禁止指令（AI 不听） | 不可能发生（AI 只覆盖已有文件） |
+| 新增文件类型 | 改 3 处常量 + prompt + sanitize | 只改 manifest 1 处 |
+| prompt 复杂度 | ~20 行路径警告 | ~5 行文件列表 |
+
+### 向后兼容
+
+- 旧项目首次运行新命令时：骨架生成器检测到已有文件 → 跳过，不覆盖
+- 旧项目的散落文件：`sanitizeSpecDirectories()` 仍作为一次性迁移工具保留
+- `--apply` 模式：保留但简化，不再作为唯一正确路径
+
+---
+
 ## v7.5.1 (2026-08-22) — 三处关键修复：功能单元解析 + 端列表回退 + 散落文件归位
 
 ### 问题诊断（会议项目 v7.5.0 实战反馈）
