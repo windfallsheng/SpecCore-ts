@@ -1,3 +1,37 @@
+## v7.5.0 (2026-08-22) — 全链路逐文档重构：split 功能单元提取 + analyze 单文档生成 + Layer 4 逐文档推进
+
+### 问题诊断（会议项目实战发现）
+
+1. **split 拆分不完整**: FUNCTION_MAP.md 不存在时，split 回退到 AI 自由拆分，AI 合并太多功能点（17 个功能点只拆出 5 个任务），甚至用平台名当任务名（Task-005 "h5-mobile"）
+2. **analyze 文档缺失**: 迭代级分析一次性生成 9+ 文档，AI 跳过 REQUIREMENT.md、FUNCTION_MAP.md，所有文档写在根目录而非各端子目录
+3. **全局 Layer 4 文档缺失**: Layer 4 每个子层有多份文档，AI 一次性生成时跳过关键文档（如 REQUIREMENT.md）
+
+### 修复
+
+- **Fix 1: split 从 ANALYSIS.md 确定性提取功能单元**
+  - 新增 `parseAnalysisFunctionalUnits()` 函数，解析 ANALYSIS.md 中按端分节的 F-xx 编号表格
+  - `tryModuleDrivenSplit` 回退链新增 ANALYSIS.md 环节（FUNCTION_MAP.md → REQUIREMENT.md → **ANALYSIS.md** → features/）
+  - `buildSplitPrompt` 在 FUNCTION_MAP.md 不存在时，从 ANALYSIS.md 提取完整功能单元清单注入 prompt
+  - 强制要求 AI 为每个功能单元创建至少 1 个任务，不允许遗漏
+
+- **Fix 2: analyze 迭代级逐文档生成**
+  - 新增 `detectIterationDocsStatus()` 函数，检测 020-specs/overview/ 和各端子目录中哪些文档已存在
+  - `buildMultiDocPrompt` 内部自动检测缺失文档，过滤 taskDocs 只保留下一个缺失的文档
+  - 单文档模式 + [SPECCORE_EXEC:] 自动链式推进，每次只生成 1 个文档后立即推进下一个
+  - 避免一次性生成 9+ 文档导致 AI 跳过或写错目录
+
+- **Fix 3: 全局分析 Layer 4 逐文档推进**
+  - Layer 4 每个子层（4a/4b/4c/4d）内部增加文档级检测
+  - 定义每个子层的预期文档清单（4a: REQUIREMENT.md, 4b: FUNCTION_MAP.md + ARCHITECTURE.md + ..., 4c: 5 份扩展文档, 4d: 各端技术文档）
+  - 检测当前子层中哪些文档已存在，每次只生成下一个缺失的文档
+  - 自动链式推进直到子层完成，然后进入下一子层
+
+### 核心原则
+
+**CLI 做计算，AI 做内容**。功能单元识别、文档进度检测、链式推进全部由 CLI 控制（确定性），AI 只负责单个文档的内容生成（智能性）。
+
+---
+
 ## v7.4.6 (2026-08-22) — 全局分析深度标准重构：引用模板系统 + 用户模板接入
 
 ### 问题

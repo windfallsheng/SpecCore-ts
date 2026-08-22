@@ -2740,12 +2740,13 @@ async function buildSplitPrompt(
   if (iterationDir) {
     try {
       const funcMapPath = join(iterationDir, '020-specs', GLOBAL_SPECS_DIR, 'FUNCTION_MAP.md');
+      let funcUnitsInjected = false;
       if (await pathExists(funcMapPath)) {
         const funcMapContent = await readFile(funcMapPath, 'utf-8');
         const funcUnits = parseFunctionMap(funcMapContent, standardPlatforms);
         if (funcUnits.length > 0) {
-          p += `## 🧩 功能单元上下文（CLI 从分析文档精准提取）\n\n`;
-          p += `> 以下是从 FUNCTION_MAP.md / REQUIREMENT.md / _INDEX.md / _MODULES.md 中为每个功能单元提取的相关上下文。\n`;
+          p += `## 🧩 功能单元上下文（CLI 从 FUNCTION_MAP.md 精准提取）\n\n`;
+          p += `> 以下是从 FUNCTION_MAP.md 中为每个功能单元提取的相关上下文。\n`;
           p += `> 拆分时必须基于这些功能单元，每个功能单元对应 1~3 个任务。\n\n`;
           for (const unit of funcUnits) {
             const unitCtx = await assembleUnitContext(iterationDir, unit.name, unit.platforms);
@@ -2755,6 +2756,31 @@ async function buildSplitPrompt(
             if (unit.dependsOn && unit.dependsOn.length > 0) p += `- 依赖: ${unit.dependsOn.join(', ')}\n`;
             if (unit.description) p += `- 说明: ${unit.description}\n`;
             p += `\n${unitCtx}\n\n---\n\n`;
+          }
+          funcUnitsInjected = true;
+        }
+      }
+
+      // v7.5.0+: FUNCTION_MAP.md 不存在时，从 ANALYSIS.md 提取功能单元清单
+      if (!funcUnitsInjected) {
+        const analysisPath = join(iterationDir, '020-specs', 'ANALYSIS.md');
+        if (await pathExists(analysisPath)) {
+          const analysisContent = await readFile(analysisPath, 'utf-8');
+          const analysisUnits = parseAnalysisFunctionalUnits(analysisContent, standardPlatforms);
+          if (analysisUnits.length > 0) {
+            p += `## 🧩 功能单元清单（CLI 从 ANALYSIS.md 提取，v7.5.0+）\n\n`;
+            p += `> 以下是从 ANALYSIS.md 功能点清单表中提取的 **全部功能单元**（F-xx 编号）。\n`;
+            p += `> ⚠️ **你必须为每个功能单元创建至少 1 个任务，不允许遗漏任何功能单元。**\n`;
+            p += `> 可以按合并规则将相关功能单元合并为同一个任务，但必须确保所有功能单元都被覆盖。\n\n`;
+            p += `| 编号 | 功能单元 | 涉及端 | 核心功能 |\n`;
+            p += `|:---|:---|:---|:---|\n`;
+            for (const u of analysisUnits) {
+              p += `| ${u.id} | ${u.name} | ${u.platforms.join(', ')} | ${u.description || '-'} |\n`;
+            }
+            p += `\n**拆分要求**：\n`;
+            p += `- 每个功能单元必须在某个任务的 \`functionalUnit\` 字段中被引用\n`;
+            p += `- 合并时，在任务描述中列出所有合并的功能单元编号（如 F-02, F-03）\n`;
+            p += `- 不允许将不同端的功能单元合并到同一个任务\n\n`;
           }
         }
       }
@@ -3486,6 +3512,82 @@ function parseFunctionMapTree(content: string, allPlatforms: string[]): {
 }
 
 /**
+ * v7.5.0+: 从 ANALYSIS.md 提取功能单元清单
+ * 解析按端分节的 F-xx 编号表格，提取每个功能单元及其涉及端
+ * 格式: ### X.X 端名（platform-name）— N 个页面 + | F-01 | 功能名 | ...
+ */
+function parseAnalysisFunctionalUnits(content: string, allPlatforms: string[]): {
+  name: string;
+  platforms: string[];
+  description: string;
+  id: string;
+}[] {
+  const units: { name: string; platforms: string[]; description: string; id: string }[] = [];
+  const lines = content.split('\n');
+  let currentPlatforms: string[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // 检测 ### 标题行，提取当前端名
+    if (line.startsWith('### ')) {
+      currentPlatforms = [];
+      // 匹配括号内的端名: ### 1.1 后台管理端（admin-web）
+      const parenMatch = line.match(/[（(]([a-zA-Z][\w-]*)[）)]/);
+      if (parenMatch) {
+        const name = parenMatch[1];
+        const matched = allPlatforms.filter(p => p === name || p.includes(name) || name.includes(p));
+        if (matched.length > 0) currentPlatforms.push(...matched);
+      }
+      // 回退：从标题文本匹配端名
+      if (currentPlatforms.length === 0) {
+        for (const p of allPlatforms) {
+          if (line.includes(p)) {
+            currentPlatforms.push(p);
+          }
+        }
+      }
+      // 后端服务检测
+      if (/后端|服务|backend|service/i.test(line) && currentPlatforms.length === 0) {
+        currentPlatforms.push(...allPlatforms.filter(p =>
+          /service|server|api|backend/i.test(p)
+        ));
+      }
+      continue;
+    }
+
+    // 解析表格行
+    if (!line.startsWith('|') || line.includes(':---')) continue;
+    const cells = line.split('|').map(c => c.trim()).filter(Boolean);
+    if (cells.length < 2) continue;
+
+    // 检测 F-xx 编号行
+    const idMatch = cells[0]?.match(/^F-(\d+)$/i);
+    if (!idMatch) continue;
+
+    const id = `F-${idMatch[1]}`;
+    const name = cells[1]?.replace(/[*_`]/g, '').trim();
+    if (!name || name.length < 2) continue;
+
+    // 提取描述（核心功能列，通常是第3或第4列）
+    const desc = cells.length >= 4 ? cells[3]?.trim() || '' : '';
+
+    // 匹配端
+    const platforms = currentPlatforms.length > 0 ? [...currentPlatforms] : [...allPlatforms];
+
+    units.push({ name, platforms, description: desc, id });
+  }
+
+  // 去重（按名称）
+  const seen = new Set<string>();
+  return units.filter(u => {
+    if (seen.has(u.name)) return false;
+    seen.add(u.name);
+    return true;
+  });
+}
+
+/**
  * 尝试模块驱动拆分：从功能模块创建任务目录结构
  * 成功返回 true，无功能模块时返回 false（回退到传统流程）
  */
@@ -3551,6 +3653,31 @@ async function tryModuleDrivenSplit(
           logger.info(`   📋 从 overview/REQUIREMENT.md 读取到 ${parsed.length} 个功能模块（含涉及端）`);
         }
       } catch {}
+    }
+
+    // 2.5 v7.5.0+: 回退：从 ANALYSIS.md 提取功能单元清单（按端分节的 F-xx 表格）
+    if (!modulePlatformsParsed) {
+      const analysisPath = join(iterationDir, '020-specs', 'ANALYSIS.md');
+      if (await pathExists(analysisPath)) {
+        try {
+          const content = await readFile(analysisPath, 'utf-8');
+          const parsed = parseAnalysisFunctionalUnits(content, allPlatforms);
+          if (parsed.length > 0) {
+            for (const u of parsed) {
+              modules.push({
+                name: u.name,
+                slug: slugify(u.name),
+                type: 'feature',
+                sourceFile: 'ANALYSIS.md',
+                platforms: u.platforms,
+                description: u.description,
+              });
+            }
+            modulePlatformsParsed = true;
+            logger.info(`   📋 从 ANALYSIS.md 提取到 ${parsed.length} 个功能单元（F-xx 编号表）`);
+          }
+        } catch {}
+      }
     }
 
     // 3. 回退：读取 features/*/README.md（无涉及端信息，使用全端）
