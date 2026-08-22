@@ -3399,6 +3399,55 @@ sequenceDiagram
           }
         } else if (perDocStatus.filledCount === perDocStatus.totalCount) {
           logger.info(`🎉 所有 ${perDocStatus.totalCount} 个骨架文件均已填充`);
+          // v8.1.1+: DOC_MATRIX 交叉校验 — 检查骨架清单之外是否有遗漏的文档
+          const expectedGlobalDocs = GLOBAL_DOCS.filter(d => includeDocs.includes(d));
+          const missingDocs: string[] = [];
+          for (const doc of expectedGlobalDocs) {
+            const docPath = join(specDir, GLOBAL_SPECS_DIR, doc);
+            if (!await pathExists(docPath)) {
+              missingDocs.push(doc);
+            }
+          }
+          if (missingDocs.length > 0) {
+            logger.warn(`⚠️ DOC_MATRIX 交叉校验发现 ${missingDocs.length} 个全局文档缺失（不在骨架清单中但应该存在）: ${missingDocs.join(', ')}`);
+            logger.info(`🔧 自动补建骨架文件...`);
+            // 为缺失文档补建骨架
+            const missingEntries = computeAnalyzeManifest(platforms, '1', ctx.iteration)
+              .filter(e => missingDocs.includes(e.docName));
+            if (missingEntries.length > 0) {
+              await generateSkeleton(specDir, missingEntries);
+              logger.info(`✅ 已补建 ${missingEntries.length} 个骨架文件，请继续填充`);
+              // 重新检测进度（现在有了新骨架）
+              const newManifest = computeAnalyzeManifest(platforms, undefined, ctx.iteration);
+              perDocStatus = await detectSkeletonProgress(specDir, newManifest);
+            }
+          }
+          // v8.1.1+: Phase 2 平台文档交叉校验
+          const expectedPlatformDocs = PLATFORM_DOCS.filter(d => includeDocs.includes(d));
+          const missingPlatformDocs: string[] = [];
+          for (const platform of platforms) {
+            for (const doc of expectedPlatformDocs) {
+              const docPath = join(specDir, platform, doc);
+              if (!await pathExists(docPath)) {
+                missingPlatformDocs.push(`${platform}/${doc}`);
+              }
+            }
+          }
+          if (missingPlatformDocs.length > 0) {
+            logger.warn(`⚠️ DOC_MATRIX 交叉校验发现 ${missingPlatformDocs.length} 个平台文档缺失: ${missingPlatformDocs.slice(0, 5).join(', ')}${missingPlatformDocs.length > 5 ? '...' : ''}`);
+            logger.info(`🔧 自动补建平台骨架文件...`);
+            const missingPlatformEntries = computeAnalyzeManifest(platforms, '2', ctx.iteration)
+              .filter(e => {
+                const relName = e.relPath; // e.g. "overview/TECH.md" relative to specDir
+                return missingPlatformDocs.some(mp => relName.endsWith(mp) || mp.endsWith(relName));
+              });
+            if (missingPlatformEntries.length > 0) {
+              await generateSkeleton(specDir, missingPlatformEntries);
+              logger.info(`✅ 已补建 ${missingPlatformEntries.length} 个平台骨架文件，请继续填充`);
+              const newManifest = computeAnalyzeManifest(platforms, undefined, ctx.iteration);
+              perDocStatus = await detectSkeletonProgress(specDir, newManifest);
+            }
+          }
         }
       }
     } catch (e: any) {
