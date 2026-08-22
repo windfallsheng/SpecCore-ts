@@ -1,3 +1,20 @@
+## v8.1.1 (2026-08-22) — 修复骨架清单遗漏 DEV_GUIDE.md / INTERACTION_MAP.md
+
+### Bug 修复
+
+**问题**：`analyze` 命令的 DOC_MATRIX 和 prompt 中列出了 DEV_GUIDE.md 和 INTERACTION_MAP.md 为必生成文档，但骨架清单（`spec-skeleton.ts` 的 PHASE1_DOCS/PHASE2_DOCS）中未包含这两个文档，导致骨架永远不会创建它们，AI 也永远不会生成。
+
+**修复**：
+- `spec-skeleton.ts`: PHASE1_DOCS 新增 INTERACTION_MAP.md + DEV_GUIDE.md
+- `spec-skeleton.ts`: PHASE2_DOCS 新增端级 DEV_GUIDE.md
+- `spec-skeleton.ts`: QUALITY_RUBRICS 新增 INTERACTION_MAP.md + DEV_GUIDE.md 质量标准
+- `spec-skeleton.ts`: sectionMarkers 新增两个文档的内容标记
+- `analyze.ts`: 同步更新 4 处硬编码文档列表（detectIterationDocsStatus、GLOBAL_DOCS、PLATFORM_DOCS、chainOrder、回退 prompt）
+
+**影响**：重新运行 `speccore analyze -I <迭代名> --auto` 时，骨架将自动创建 DEV_GUIDE.md 和 INTERACTION_MAP.md。
+
+---
+
 ## v8.1.0 (2026-08-22) — 全链路质量提升：AI 产出更专业、更准确、更完善
 
 ### 核心改进：6 层质量体系
