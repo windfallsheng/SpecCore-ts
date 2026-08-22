@@ -2030,6 +2030,108 @@ async function buildGlobalAnalysisGuide(options?: AnalyzeOptions): Promise<strin
   return guide;
 }
 
+// ── v7.4.5+: Layer 3 功能模块代码上下文预提取 ──
+// 从 _MODULES.md 解析功能模块名，从 structured-data.json 交叉匹配相关 API/Entity/Component/Route
+async function buildLayer3ModuleContext(projectRoot: string): Promise<string | null> {
+  const modulesPath = join(projectRoot, '.speccore', 'GLOBAL', 'platforms', '_shared', '_MODULES.md');
+  const structDataPath = join(projectRoot, '.speccore', 'cache', 'structured-data.json');
+
+  if (!(await pathExists(modulesPath))) return null;
+  const modulesContent = await readFile(modulesPath, 'utf-8');
+
+  // 解析功能模块名：匹配 ## 标题行或表格中的模块名
+  const moduleNames: string[] = [];
+  const h2Matches = modulesContent.matchAll(/^##\s+(.+)$/gm);
+  for (const m of h2Matches) {
+    const name = m[1].trim().replace(/[*_`]/g, '');
+    if (name && name.length >= 2 && !name.startsWith('附录') && !name.startsWith('参考')) {
+      moduleNames.push(name);
+    }
+  }
+  // 回退：从表格中提取（第二列通常是模块名）
+  if (moduleNames.length === 0) {
+    const tableRows = modulesContent.matchAll(/^\|\s*\d+\s*\|\s*([^|]+)\|/gm);
+    for (const m of tableRows) {
+      const name = m[1].trim().replace(/[*_`]/g, '');
+      if (name && name.length >= 2) moduleNames.push(name);
+    }
+  }
+  if (moduleNames.length === 0) return null;
+
+  // 读取结构化数据
+  let structData: any = null;
+  if (await pathExists(structDataPath)) {
+    try {
+      structData = JSON.parse(await readFile(structDataPath, 'utf-8'));
+    } catch { return null; }
+  }
+
+  const ctx: string[] = [];
+
+  for (const modName of moduleNames.slice(0, 15)) { // 限制最多 15 个模块，防止 prompt 过大
+    const parts: string[] = [];
+    // 关键词拆分：中文单字 + 英文分词
+    const zhKeywords = modName.split(/(?<=[\u4e00-\u9fff])(?=[\u4e00-\u9fff])/).filter(k => k.length >= 1);
+    const enKeywords = modName.toLowerCase().split(/[\s\-_]+/).filter(k => k.length >= 3);
+    const allKeywords = [...zhKeywords, ...enKeywords];
+    const matchKeyword = (text: string) => allKeywords.some(k => text.toLowerCase().includes(k.toLowerCase()));
+
+    if (structData?.endpoints) {
+      const matchedApis: string[] = [];
+      const matchedEntities: string[] = [];
+      const matchedRoutes: string[] = [];
+      const matchedComponents: string[] = [];
+
+      for (const [platform, data] of Object.entries(structData.endpoints) as [string, any][]) {
+        // API 匹配
+        if (data.apis && Array.isArray(data.apis)) {
+          for (const api of data.apis) {
+            if (matchKeyword(api.name || '') || matchKeyword(api.path || '') || matchKeyword(api.description || '')) {
+              matchedApis.push(`  - [${platform}] ${api.method || 'GET'} ${api.path || ''} — ${api.name || ''} (${api.filePath || ''}:${api.line || ''})`);
+            }
+          }
+        }
+        // Entity 匹配
+        if (data.entities && Array.isArray(data.entities)) {
+          for (const entity of data.entities) {
+            if (matchKeyword(entity.name || '') || matchKeyword(entity.tableName || '')) {
+              matchedEntities.push(`  - [${platform}] ${entity.name} (表: ${entity.tableName || 'N/A'}, 文件: ${entity.filePath || ''})`);
+            }
+          }
+        }
+        // Route 匹配
+        if (data.routes && Array.isArray(data.routes)) {
+          for (const route of data.routes) {
+            if (matchKeyword(route.name || '') || matchKeyword(route.path || '') || matchKeyword(route.component || '')) {
+              matchedRoutes.push(`  - [${platform}] ${route.path} → ${route.component || route.name || ''} (${route.filePath || ''})`);
+            }
+          }
+        }
+        // Component 匹配
+        if (data.components && Array.isArray(data.components)) {
+          for (const comp of data.components) {
+            if (matchKeyword(comp.name || '') || matchKeyword(comp.description || '')) {
+              matchedComponents.push(`  - [${platform}] ${comp.name} (${comp.filePath || ''})`);
+            }
+          }
+        }
+      }
+
+      if (matchedApis.length > 0) parts.push(`**相关 API** (${matchedApis.length}):\n${matchedApis.slice(0, 10).join('\n')}`);
+      if (matchedEntities.length > 0) parts.push(`**相关实体** (${matchedEntities.length}):\n${matchedEntities.slice(0, 8).join('\n')}`);
+      if (matchedRoutes.length > 0) parts.push(`**相关路由** (${matchedRoutes.length}):\n${matchedRoutes.slice(0, 8).join('\n')}`);
+      if (matchedComponents.length > 0) parts.push(`**相关组件** (${matchedComponents.length}):\n${matchedComponents.slice(0, 8).join('\n')}`);
+    }
+
+    if (parts.length > 0) {
+      ctx.push(`### 📌 功能模块: ${modName}\n\n${parts.join('\n\n')}`);
+    }
+  }
+
+  if (ctx.length === 0) return null;
+  return ctx.join('\n\n---\n\n');
+}
+
 // ── buildMultiDocPrompt: 多文档协议 ──
 async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; task?: string; type?: string; scope?: string; withCode?: boolean; platform?: string; phase?: string; autoMode?: boolean }, options?: AnalyzeOptions): Promise<string> {
   const iter = ctx.iteration || '当前迭代';
@@ -2248,6 +2350,21 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `## 🔍 Layer 3: 按功能模块深入分析（不是按端）\n\n`;
       prompt += `基于 Layer 2 的 \`_MODULES.md\`，逐个功能模块深入分析。\n`;
       prompt += `**每个功能模块涉及哪些端，就读取那些端的详细源码**：\n\n`;
+
+      // v7.4.5+: CLI 预提取每个功能模块的代码上下文
+      try {
+        const modulesCtx = await buildLayer3ModuleContext(process.cwd());
+        if (modulesCtx) {
+          prompt += `## 📎 CLI 预提取的功能模块代码上下文（v7.4.5+）\n\n`;
+          prompt += `> 以下内容由 CLI 从 structured-data.json 和 _MODULES.md 自动提取，你不需要自己搜索。\n`;
+          prompt += `> 分析每个模块时，直接参考下面的 API/Entity/Component 清单，然后 Read 对应的源文件获取详细实现。\n\n`;
+          prompt += modulesCtx;
+          prompt += `\n\n`;
+        }
+      } catch (e: any) {
+        logger.debug(`Layer 3 模块上下文提取失败（非关键）: ${e.message}`);
+      }
+
       prompt += `**示例：「会议预订」功能模块**\n`;
       prompt += `- 涉及端：h5-mobile, booking-service, room-service\n`;
       prompt += `- 读取 h5-mobile: BookingForm.vue, BookingList.vue, BookingDetail.vue 的详细逻辑\n`;
@@ -2558,14 +2675,12 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `- [ ] 对每个端扫描 10 个维度，生成 _INDEX.md\n`;
       prompt += `- [ ] 提取可复用模式写入 PATTERNS/{端名}/{分类}/（必须按端分目录，不要写成一个合并文件）\n`;
       prompt += `- [ ] 提取语义标签写入 semantic-tags.json\n`;
-      prompt += `- [ ] 写入完成后执行: \`speccore analyze --scope global --layer 2\`\n`;
     } else if (targetLayer === 2) {
       prompt += `- [ ] Read 所有 Layer 1 生成的 _INDEX.md\n`;
       prompt += `- [ ] 匹配前后端接口，生成关联矩阵\n`;
       prompt += `- [ ] 识别公共服务、消息流、定时任务影响\n`;
       prompt += `- [ ] 归纳功能模块，生成 _MODULES.md\n`;
       prompt += `- [ ] 写入 _ASSOCIATION.md + _MODULES.md\n`;
-      prompt += `- [ ] 写入完成后执行: \`speccore analyze --scope global --layer 3\`\n`;
     } else if (targetLayer === 3) {
       const filter = options?.filter;
       prompt += `- [ ] Read Layer 2 的 _MODULES.md 获取功能模块清单\n`;
@@ -2577,7 +2692,6 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `- [ ] 每个模块生成：API 设计、数据模型、业务规则、交互时序\n`;
       prompt += `- [ ] 时序图/流程图/状态图用 Mermaid 嵌入\n`;
       prompt += `- [ ] 提取模块级模式补充到 PATTERNS/\n`;
-      prompt += `- [ ] 写入完成后执行: \`speccore analyze --scope global --layer 4${filter ? ' --filter ' + filter : ''}\`\n`;
     } else if (targetLayer === 4) {
       // v7.2.0+: Layer 4 拆分子层或单文档深度分析
       const deepDoc = options?.deep;
@@ -2590,7 +2704,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
 
         if (options?.iterative && !hasOutline) {
           // 迭代模式第一步：输出大纲
-          prompt += `## 🎯 Layer 4 — 单文档深度分析: ${deepDoc}（大纲阶段）\n\n`;
+          prompt += `##  Layer 4 — 单文档深度分析: ${deepDoc}（大纲阶段）\n\n`;
           prompt += `> ⚠️ **当前阶段**: 你只需要输出 **${deepDoc} 的文档大纲**。\n`;
           prompt += `> 不要写详细内容，只输出章节结构 + 每个章节的一句话说明。\n\n`;
           prompt += `**强制输入**: \n`;
@@ -2714,11 +2828,43 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       }
     }
 
+    // v7.4.5+: 量化深度标准 — 每层最低质量要求
+    prompt += `\n## 📏 深度标准（v7.4.5+ 强制）\n\n`;
+    prompt += `> ⚠️ 每个 Layer 的产出必须满足以下最低量化要求，不达标视为未完成。\n\n`;
+    prompt += `| Layer | 最低深度要求 |\n`;
+    prompt += `| :--- | :--- |\n`;
+    prompt += `| Layer 1 | 每个维度至少 3 个具体条目（接口名/路径/实体名），每个条目标注源文件路径 |\n`;
+    prompt += `| Layer 2 | 关联矩阵必须覆盖所有前后端组合，接口缺口/未使用接口至少列出已知项，Mermaid 图节点数 ≥ 5 |\n`;
+    prompt += `| Layer 3 | 每个功能模块至少 Read 5 个源文件，必须包含代码片段引用（至少 2 段），状态图/时序图至少 1 个 |\n`;
+    prompt += `| Layer 4 | 每份文档至少 3 个章节有实质内容，每个表格至少 3 行真实数据，Mermaid 图至少 1 个 |\n\n`;
+    prompt += `**禁止行为**: 写“待补充”、“TODO”、“示例”等占位内容。信息不足时标注“信息不足: 需要读取 xxx 文件”并说明原因。\n\n`;
+
     prompt += `\n## 📝 写入方式\n`;
     prompt += `使用 \`speccore analyze --apply '{"文件路径":"内容"}' --scope global\` 写入。\n`;
     prompt += `- platforms/ 和 requirements/ 下的文件按原路径写（如 \`platforms/backend/_INDEX.md\`）\n`;
     prompt += `- overview/ 下的文件写纯文件名即可（如 \`ARCHITECTURE.md\` 自动路由到 overview/）\n`;
     prompt += `- PATTERNS/ 下的文件写 \`PATTERNS/{分类}/{模式名}.md\`\n`;
+
+    // v7.4.5+: 自动链式推进 — 用 [SPECCORE_EXEC:] 标记触发下一层
+    const nextLayerCmd = targetLayer < 4
+      ? `speccore analyze --scope global --layer ${targetLayer + 1}${ctx.withCode ? ' --with-code' : ''}`
+      : `speccore analyze --scope global --layer 4${ctx.withCode ? ' --with-code' : ''}`;
+    const isLastSubLayer = targetLayer === 4 && (
+      !progress.subLayer || progress.subLayer.next === '4d' ||
+      (progress.subLayer.completed.length >= 3)
+    );
+
+    prompt += `\n## 🔗 自动链式推进\n\n`;
+    if (targetLayer < 4) {
+      prompt += `> 当前 Layer ${targetLayer} 所有文件写入完成后，**立即输出以下标记**触发下一层（不要等待用户指令）：\n\n`;
+      prompt += `[SPECCORE_EXEC: ${nextLayerCmd}]\n`;
+    } else if (targetLayer === 4 && !isLastSubLayer) {
+      prompt += `> 当前子层完成后，**立即输出以下标记**进入下一子层：\n\n`;
+      prompt += `[SPECCORE_EXEC: ${nextLayerCmd}]\n`;
+    } else {
+      prompt += `> 🎉 全局分析全部完成！所有 Layer 和子层的文档已生成。\n`;
+      prompt += `> 下一步: 运行 \`speccore split -I <迭代名>\` 进行任务拆分。\n`;
+    }
 
     return await injectGraphSummary(prompt);
   }

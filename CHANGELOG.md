@@ -1,3 +1,40 @@
+## v7.4.5 (2026-08-22) — 全局分析深度强化：自动链式推进 + Layer 3 代码上下文注入 + 量化深度标准
+
+### 问题诊断
+
+全局分析 4 层（Layer 1-4）虽然设计了分层推进机制，但实际效果不佳：
+1. **Layer 链式推进断裂**: 每层 prompt 末尾让 AI 输出 `speccore analyze --layer N+1`，但 AI 无法执行终端命令，命令只作为文本输出，链式推进形同虚设
+2. **Layer 3 深度不够**: prompt 说“逐个功能模块深入分析”，但 AI 面对几十个模块、几百个文件，context window 装不下，只能生成表面摘要
+3. **没有量化深度标准**: prompt 列了维度但没有量化要求（至少 N 项、必须代码片段等）
+
+### 修复
+
+- **自动链式推进**: 每层 prompt 末尾用 `[SPECCORE_EXEC: speccore analyze --scope global --layer N+1]` 标记触发下一层
+  - 替代原来弱效的「写入完成后执行: `speccore analyze ...`」指令
+  - `[SPECCORE_EXEC:]` 标记会被宿主 AI 的 SpecCore 路由器拦截并自动执行
+  - Layer 4 子层之间也支持链式推进（4a→4b→4c→4d）
+  - 全部完成后提示用户运行 `speccore split`
+
+- **Layer 3 代码上下文注入**: 新增 `buildLayer3ModuleContext()` 函数
+  - 从 `_MODULES.md` 解析功能模块名（支持 ## 标题和表格两种格式）
+  - 从 `structured-data.json` 交叉匹配每个模块相关的 API/Entity/Route/Component
+  - 关键词匹配策略：中文单字拆分 + 英文分词，与 split.ts 的 `assembleUnitContext` 一致
+  - 注入到 Layer 3 prompt 中，AI 不再需要自己搜索代码，直接参考 CLI 预提取的清单 Read 源文件
+  - 限制最多 15 个模块，防止 prompt 过大
+
+- **量化深度标准**: 每层增加最低质量要求表格
+  - Layer 1: 每个维度至少 3 个具体条目，每个条目标注源文件路径
+  - Layer 2: 关联矩阵覆盖所有前后端组合，Mermaid 图节点数 ≥ 5
+  - Layer 3: 每个功能模块至少 Read 5 个源文件，必须包含代码片段引用（至少 2 段）
+  - Layer 4: 每份文档至少 3 个章节有实质内容，每个表格至少 3 行真实数据
+  - 明确禁止写“待补充”、“TODO”、“示例”等占位内容
+
+### 涉及文件
+
+- `src/commands/analyze.ts` — 新增 `buildLayer3ModuleContext()` 函数；Layer 3 注入代码上下文；添加深度标准表格；添加 `[SPECCORE_EXEC:]` 自动链式推进
+
+---
+
 ## v7.4.4 (2026-08-22) — 020-specs/ 垃圾目录防护 + 端名合法性校验
 
 ### 根因分析
