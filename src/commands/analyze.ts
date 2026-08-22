@@ -2485,6 +2485,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `| overview/DEPLOYMENT.md | 运维视角 | 容器化、CI/CD、健康检查、环境差异、日志聚合 |\n`;
       prompt += `| overview/OBSERVABILITY.md | 可观测视角 | 日志链路、错误码体系、监控埋点、告警策略、SLA |\n`;
       prompt += `| overview/CONSISTENCY_CHECK.md | 质量视角 | 一致性校验报告（字段/状态/接口/消息/配置） |\n`;
+      prompt += `| overview/DEV_GUIDE.md | 开发视角 | 全局开发指南（编码规范、集成指南、环境搭建、常见问题、开发流程） |\n`;
       prompt += `\n### 后端端技术性文档（9项，Layer 3/4 汇总）\n`;
       prompt += `> 存放: .speccore/GLOBAL/platforms/{后端端名}/\n\n`;
       prompt += `| 文档 | 内容 |\n`;
@@ -2670,6 +2671,9 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
           prompt += `1. \`overview/FUNCTION_MAP.md\` — 功能单元 × 端映射表\n`;
           prompt += `   - 从 Layer 2 的 _MODULES.md 提取功能模块\n`;
           prompt += `   - 每个功能单元标注：涉及端、核心页面、核心接口、状态枚举\n`;
+          prompt += `   - ⚠️ **必须使用 Markdown 表格格式**，表头：| # | 功能单元 | 涉及端 | 全局对比 | 共享能力 | 依赖任务 | 说明 |\n`;
+          prompt += `   - ⛔ **禁止使用树形格式**（├── ...），split 无法解析树形格式\n`;
+          prompt += `   - 「涉及端」必须使用 CONSTITUTION.md 标准端名\n`;
           prompt += `2. \`overview/ARCHITECTURE.md\` — 全局架构\n`;
           prompt += `   - 服务拓扑（从 Layer 1 的后端 _INDEX.md 提取服务名和依赖）\n`;
           prompt += `   - 数据流（从 Layer 3 的模块分析提取）\n`;
@@ -3494,6 +3498,7 @@ sequenceDiagram
   prompt += `- **overview/DEPS.md**：整体依赖清单\n`;
   prompt += `- **overview/FUNCTION_MAP.md**：功能单元 × 端映射表\n`;
   prompt += `- **overview/INTERACTION_MAP.md**：跨端交互时序图\n`;
+  prompt += `- **overview/DEV_GUIDE.md**：开发者实现指南（实现步骤、关键代码示例、集成指南、注意事项）\n`;
   prompt += `- **后端端（*service）/{端}/TECH.md**：纯技术视角 — 接口设计+数据模型+架构+性能\n`;
   prompt += `- **前端端（h5/admin/miniapp）/{端}/TECH.md**：产品+技术双视角 — 用户旅程+页面清单+交互流程+API调用链\n`;
   prompt += `- **前端端/{端}/UI_SPEC.md**：UI 规格（字段映射、组件设计、交互细节）\n`;

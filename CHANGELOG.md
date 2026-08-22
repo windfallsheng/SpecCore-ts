@@ -1,3 +1,25 @@
+## v7.4.2 (2026-08-22) — 功能单元拆分修复 + 端名强制校验 + DEV_GUIDE prompt 补全
+
+### 拆分逻辑修复
+
+- **parseFunctionMap 支持树形格式**: 新增 `parseFunctionMapTree()`，解析 FUNCTION_MAP.md 的树形格式（├── 模块名 ... platform ✅），不再只支持表格格式
+- **parseModulePlatforms 支持按端分节**: 新增 `parseModulePlatformsBySection()`，解析 REQUIREMENT.md 的 `### X.X ... — {platform}` 按端分节格式，自动建立模块→端映射
+- **normalizeScopePlatforms 增强**: `api` 加入后端类简写正则；新增 `frontend` 关键词；无法匹配的非标准端名不再保留原值，而是警告并跳过
+
+### Split Prompt 增强
+
+- **功能单元拆分强制**: 明确禁止按技术层分组（如 backend-improve），要求按业务功能拆分（如 booking-crud）
+- **标准端名强制**: 明确禁止 `api/web/backend/frontend` 等非标准端名，必须使用 CONSTITUTION.md 标准端名
+- **topic 唯一性**: 禁止所有任务都用同一个后缀（如 -impl），每个 topic 必须反映业务功能
+- **质量自检强化**: 新增 3 条检查项（功能单元命名、topic 唯一性、标准端名校验）
+- **重复注入修复**: 移除端名列表的重复注入（原代码注入了两次相同内容）
+
+### Analyze Prompt 增强
+
+- **FUNCTION_MAP.md 表格格式强制**: Layer 4b 明确指令必须使用 Markdown 表格格式，禁止树形格式
+- **DEV_GUIDE.md 全局层**: 输出文档表新增 `overview/DEV_GUIDE.md`（开发视角：编码规范、集成指南、环境搭建）
+- **DEV_GUIDE.md 迭代级**: 「文档与端的对应关系」新增 `overview/DEV_GUIDE.md` 条目
+
 ## v7.4.1 (2026-08-21) — DEV_GUIDE.md 强制生成，移除参数控制
 
 ### 变更
