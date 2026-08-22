@@ -182,6 +182,36 @@ const PHASE1_DOCS: { name: string; buildPlaceholder: (iter: string) => string }[
 | | | | |
 `,
   },
+  {
+    name: 'INTERACTION_MAP.md',
+    buildPlaceholder: (iter) => `${SKELETON_MARKER}
+# 跨端交互图谱
+
+> 迭代: ${iter} | 生成: 待填充
+
+## 写作要求
+按功能单元组织，展示完整的跨端交互时序。
+- 每个功能单元一个 Mermaid sequenceDiagram
+- 标注接口路径和调用关系
+- 附接口契约索引表
+`,
+  },
+  {
+    name: 'DEV_GUIDE.md',
+    buildPlaceholder: (iter) => `${SKELETON_MARKER}
+# 开发指南
+
+> 迭代: ${iter} | 生成: 待填充
+
+## 写作要求
+为开发者提供本迭代的实现指南。
+- 环境搭建步骤
+- 编码规范与约定
+- 集成指南（各端如何联调）
+- 关键实现步骤与代码示例
+- 常见问题与注意事项
+`,
+  },
 ];
 
 // ================================================================
@@ -230,6 +260,21 @@ const PHASE2_DOCS: { name: string; buildPlaceholder: (iter: string, platform: st
 - 组件拆分
 - 交互流程
 - 状态管理
+`,
+  },
+  {
+    name: 'DEV_GUIDE.md',
+    buildPlaceholder: (iter, platform) => `${SKELETON_MARKER}
+# ${platform} 开发指南
+
+> 迭代: ${iter} | 端: ${platform} | 生成: 待填充
+
+## 写作要求
+本端专属的开发者实现指南：
+- 本端实现步骤（按功能模块组织）
+- 关键代码示例
+- 与后端联调指南
+- 本端注意事项
 `,
   },
 ];
@@ -478,6 +523,37 @@ export const QUALITY_RUBRICS: Record<string, { checklist: string[]; antiPatterns
       '缺少依赖关系',
     ],
   },
+  'INTERACTION_MAP.md': {
+    checklist: [
+      '每个功能单元一个 Mermaid sequenceDiagram',
+      '时序图包含：参与方（各端+服务）、消息路径、接口路径',
+      '接口契约索引表（接口路径 → 对应文档）',
+      '跨端数据流向说明',
+      '异常交互流程（超时/重试/降级）',
+    ],
+    antiPatterns: [
+      '时序图缺少参与方标注',
+      '只有正常流没有异常流',
+      '接口路径与 TECH.md 不一致',
+      '缺少接口契约索引表',
+    ],
+  },
+  'DEV_GUIDE.md': {
+    checklist: [
+      '环境搭建步骤（可执行的命令序列）',
+      '编码规范与约定（命名/目录/注释）',
+      '集成指南（各端如何联调、Mock 方案）',
+      '关键实现步骤（按功能模块组织）',
+      '代码示例（核心逻辑片段）',
+      '常见问题与注意事项',
+    ],
+    antiPatterns: [
+      '环境搭建步骤不可执行（缺少具体命令）',
+      '编码规范过于笼统（如「写好代码」）',
+      '缺少联调指南',
+      '没有代码示例',
+    ],
+  },
 };
 
 /**
@@ -552,6 +628,8 @@ export async function validateContentQuality(
       'FUNCTION_MAP.md': ['功能单元', '涉及端'],
       'REQ.md': ['验收标准', '异常'],
       'TASK.md': ['步骤'],
+      'INTERACTION_MAP.md': ['sequenceDiagram', '接口'],
+      'DEV_GUIDE.md': ['环境', '编码规范'],
     };
     const markers = sectionMarkers[docName] || [];
     for (const marker of markers) {

@@ -1907,8 +1907,8 @@ async function detectIterationDocsStatus(iterDir: string): Promise<{
   const specsDir = join(iterDir, '020-specs');
   const overviewDir = join(specsDir, GLOBAL_SPECS_DIR);
 
-  const PHASE1_DOCS = ['REQUIREMENT.md', 'ANALYSIS.md', 'TECH.md', 'DEPS.md', 'RISK.md', 'REVIEW.md', 'MONITOR.md', 'FUNCTION_MAP.md'];
-  const PLATFORM_DOCS = ['TECH.md', 'TEST.md', 'UI_SPEC.md'];
+  const PHASE1_DOCS = ['REQUIREMENT.md', 'ANALYSIS.md', 'TECH.md', 'DEPS.md', 'RISK.md', 'REVIEW.md', 'MONITOR.md', 'FUNCTION_MAP.md', 'INTERACTION_MAP.md', 'DEV_GUIDE.md'];
+  const PLATFORM_DOCS = ['TECH.md', 'TEST.md', 'UI_SPEC.md', 'DEV_GUIDE.md'];
 
   const existing: string[] = [];
   const missing: string[] = [];
@@ -3344,8 +3344,8 @@ sequenceDiagram
   // ── v6.61.0+: 恢复 Phase 1/Phase 2 分步逻辑，但 CLI 自动触发 Phase 2 ──
   // Phase 1: 生成综合文档(overview/REQUIREMENT.md、ANALYSIS.md、DEPS.md 等)
   // Phase 2: 生成各端专属文档({端}/TECH.md、TEST.md、UI_SPEC.md 等)
-  const GLOBAL_DOCS = ['REQUIREMENT.md', 'ANALYSIS.md', 'TECH.md', 'RISK.md', 'DEPS.md', 'REVIEW.md', 'MONITOR.md', 'FUNCTION_MAP.md', 'INTERACTION_MAP.md'];
-  const PLATFORM_DOCS = ['TECH.md', 'TEST.md', 'UI_SPEC.md'];
+  const GLOBAL_DOCS = ['REQUIREMENT.md', 'ANALYSIS.md', 'TECH.md', 'RISK.md', 'DEPS.md', 'REVIEW.md', 'MONITOR.md', 'FUNCTION_MAP.md', 'INTERACTION_MAP.md', 'DEV_GUIDE.md'];
+  const PLATFORM_DOCS = ['TECH.md', 'TEST.md', 'UI_SPEC.md', 'DEV_GUIDE.md'];
   let taskDocs = docs.filter(([n]) => includeDocs.includes(n));
   if (ctx.phase === '1') {
     taskDocs = taskDocs.filter(([n]) => GLOBAL_DOCS.includes(n));
@@ -3587,8 +3587,8 @@ sequenceDiagram
     }
   } catch {
     // 回退：静态列表
-    prompt += `- \`020-specs/overview/\` 下的 REQUIREMENT.md, ANALYSIS.md, TECH.md, DEPS.md, RISK.md, REVIEW.md, MONITOR.md, FUNCTION_MAP.md\n`;
-    prompt += `- \`020-specs/{端名}/\` 下的 TECH.md, TEST.md, UI_SPEC.md\n\n`;
+    prompt += `- \`020-specs/overview/\` 下的 REQUIREMENT.md, ANALYSIS.md, TECH.md, DEPS.md, RISK.md, REVIEW.md, MONITOR.md, FUNCTION_MAP.md, INTERACTION_MAP.md, DEV_GUIDE.md\n`;
+    prompt += `- \`020-specs/{端名}/\` 下的 TECH.md, TEST.md, UI_SPEC.md, DEV_GUIDE.md\n\n`;
   }
   prompt += `\n**注意**：\n`;
   prompt += `- 只覆盖上述已存在的文件，不要创建新文件或新目录\n`;
@@ -3940,7 +3940,7 @@ sequenceDiagram
     // 定义生成顺序
     const chainOrder = isTask
       ? ['REQ.md', 'TECH.md', 'SCHEMA.md', 'TASK.md']
-      : ['REQUIREMENT.md', 'FUNCTION_MAP.md', 'INTERACTION_MAP.md', 'API_CONTRACT.yaml', 'ANALYSIS.md', 'TECH.md', 'TEST.md', 'REVIEW.md', 'RISK.md', 'DEPS.md', 'MONITOR.md', 'UI_SPEC.md'];
+      : ['REQUIREMENT.md', 'FUNCTION_MAP.md', 'INTERACTION_MAP.md', 'API_CONTRACT.yaml', 'ANALYSIS.md', 'TECH.md', 'TEST.md', 'REVIEW.md', 'RISK.md', 'DEPS.md', 'MONITOR.md', 'UI_SPEC.md', 'DEV_GUIDE.md'];
     const orderedDocs = taskDocs.filter(([n]) => chainOrder.includes(n));
     const customDocs = taskDocs.filter(([n]) => !chainOrder.includes(n));
     const ordered = [...orderedDocs.sort((a, b) => chainOrder.indexOf(a[0]) - chainOrder.indexOf(b[0])), ...customDocs];
