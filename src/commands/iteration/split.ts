@@ -1254,11 +1254,17 @@ ${taskPlatforms.map((p: string) => `| ${subtaskIdMap.get(p)} | ${p} | ${owner} |
 
   const acItems = generateAcceptanceCriteria(section);
   const aiReqContent = (section as any)._reqContent;
-  // REQ.md: 优先用 AI 生成的实际内容，回退到模板
+  // v8.3.0+: REQ.md 三级回退 — AI split 生成 → analyze REQUIREMENT.md 提取 → section.content
+  const analyzeReqContent = extractRelevantSection(specContents['REQUIREMENT.md'] || '', section.name, '需求 功能 业务规则 异常场景 验收标准');
   if (aiReqContent && aiReqContent.length > 50) {
     await writeFile(
       join(taskDir, '00-specs', 'REQ.md'),
       `# ${section.name}\n\n${aiReqContent}\n\n## 验收标准\n\n${acItems}\n`
+    );
+  } else if (analyzeReqContent && analyzeReqContent.length > 100) {
+    await writeFile(
+      join(taskDir, '00-specs', 'REQ.md'),
+      `# ${section.name}\n\n> 来源: analyze → REQUIREMENT.md（自动提取）\n\n${analyzeReqContent}\n\n## 验收标准\n\n${acItems}\n`
     );
   } else {
     await writeFile(
@@ -1272,6 +1278,8 @@ ${taskPlatforms.map((p: string) => `| ${subtaskIdMap.get(p)} | ${p} | ${owner} |
   const aiTechContent = (section as any)._techContent;
   // 从 analyze TECH.md 提取本任务相关内容
   const specTechContent = extractTaskTechContent(specContents, section);
+  // v8.3.0+: 从 analyze ANALYSIS.md 补充功能分析内容
+  const analyzeAnalysisContent = extractRelevantSection(specContents['ANALYSIS.md'] || '', section.name, '功能分析 业务流程 数据流 决策逻辑 业务规则');
   // TECH.md: 优先 AI 生成 → 回退 analyze 提取 → 回退模板
   if (aiTechContent && aiTechContent.length > 50) {
     await writeFile(
@@ -1279,9 +1287,14 @@ ${taskPlatforms.map((p: string) => `| ${subtaskIdMap.get(p)} | ${p} | ${owner} |
       `# ${section.name} - 技术方案\n\n${aiTechContent}\n`
     );
   } else if (specTechContent && specTechContent.length > 30) {
+    let techBody = `> 来源: analyze → TECH.md（自动提取）\n\n${specTechContent}`;
+    // 追加 ANALYSIS.md 功能分析（如有）
+    if (analyzeAnalysisContent && analyzeAnalysisContent.length > 50) {
+      techBody += `\n\n---\n\n## 功能分析补充\n\n> 来源: analyze → ANALYSIS.md（自动提取）\n\n${analyzeAnalysisContent}`;
+    }
     await writeFile(
       join(taskDir, '00-specs', 'TECH.md'),
-      `# ${section.name} - 技术方案\n\n> 来源: analyze → TECH.md（自动提取）\n\n${specTechContent}\n`
+      `# ${section.name} - 技术方案\n\n${techBody}\n`
     );
   } else {
     await writeFile(

@@ -74,6 +74,14 @@
 - 修复前：analyze 生成的开发指南被 split 完全忽略，任务级 DEV_GUIDE.md 几乎为空
 - 修复后：analyze 的开发指南被自动拆分到各任务，execute 阶段有内容可参考
 
+**split 阶段精准提取 analyze 需求与分析文档** (`split.ts`)
+- `REQUIREMENT.md` 修复：任务级 `REQ.md` 增加三级回退 — AI split 生成 → analyze REQUIREMENT.md 精准提取 → section.content
+  - 使用 `extractRelevantSection()` 按任务名从全局 REQUIREMENT.md 提取「需求/功能/业务规则/异常场景/验收标准」
+- `ANALYSIS.md` 修复：任务级 `TECH.md` 在 analyze 提取模式下追加「功能分析补充」章节
+  - 从全局 ANALYSIS.md 提取「功能分析/业务流程/数据流/决策逻辑/业务规则」并追加到 TECH.md
+- 修复前：REQUIREMENT.md 和 ANALYSIS.md 被 `loadSpecContents()` 读取但 nowhere 使用，完全浪费
+- 修复后：所有 analyze 生成的文档都被精准提取到对应任务
+
 ### Bug 修复：全局分析进度检测
 
 **修复 `detectGlobalLayerProgress()` 三处缺陷** (`analyze.ts`):
