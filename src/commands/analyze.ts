@@ -12,7 +12,7 @@
  *   - task      → Iteration-XX/030-tasks/Task-NN/_shared/  任务级独立（不覆盖基线）
  */
 import { writeFile, pathExists, ensureDir, rename, stat } from 'fs-extra';
-import { join, dirname, relative } from 'path';
+import { join, dirname, basename, relative } from 'path';
 import { backupWithTimestamp, isTimestampBackup, shouldOverwrite, findProjectRoot } from '../utils/task-utils';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration, getIterationDir } from '../core/context';
@@ -540,6 +540,10 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     await warnIfIndexStale(process.cwd(), 'analyze', options.iteration);
   }
 
+  // v8.3.0+: 需求澄清检测状态（跨代码块共享）
+  let needsClarify = false;
+  const clarifyTargets: { path: string; level: string }[] = [];
+
   // 备份追踪
   const backups: string[] = [];
   const printBackupSummary = () => {
@@ -661,26 +665,24 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       return;
     }
 
-    // v6.76.0+: --clarify 模式下检测需求文档专业度
-    if (options.clarify) {
+    // v8.3.0+: 需求澄清作为必须过程（除非 --skip-clarify）
+    if (!options.skipClarify) {
       const { detectProfessionalLevel } = await import('../core/requirement-clarifier');
-      let lowQualityCount = 0;
       for (const reqPath of requirements) {
         const reqContent = await readFile(reqPath, 'utf-8');
         const level = detectProfessionalLevel(reqContent);
         if (level !== 'high') {
-          lowQualityCount++;
+          needsClarify = true;
+          clarifyTargets.push({ path: reqPath, level });
           logger.warn(`   ⚠️  需求文档质量${level.toUpperCase()}: ${reqPath.replace(iterDir + '/', '')}`);
-          logger.info(`      💡 建议: speccore clarify --from "${reqPath}" --to ${iter}`);
         }
       }
-      if (lowQualityCount > 0) {
+      if (needsClarify) {
         logger.info('');
-        logger.info(`📋 ${lowQualityCount}/${requirements.length} 个需求文档需要澄清整理`);
-        logger.info('   选项 1: 先执行 clarify 整理需求，再重新 analyze');
-        logger.info('   选项 2: 继续使用当前文档分析（加 --force 跳过检测）');
+        logger.info(`📋 ${clarifyTargets.length}/${requirements.length} 个需求文档需要澄清整理`);
+        logger.info('   将在分析流程中自动注入需求澄清阶段（Phase 0）');
+        logger.info('   如需跳过: speccore analyze -I ${iter} --skip-clarify');
         logger.info('');
-        // 不阻断，但在 prompt 中注入澄清指令
       }
     }
 
@@ -937,6 +939,62 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       const taskId = options.task!.startsWith('Task-') ? options.task! : `Task-${options.task!}`;
       taskDir = await findTaskDir(join(iterDir!, '030-tasks'), taskId);
       if (!taskDir) { logger.error(`未找到任务: ${taskId}`); return; }
+    }
+
+    // v8.3.0+: 解析 [CLARIFY:xxx] 标记 — 需求澄清是强制前置步骤
+    const clarifyBlocks = parseClarifyMarkers(options.apply);
+    if (clarifyBlocks.size > 0 && !isGlobalScope) {
+      logger.info(`📋 检测到 ${clarifyBlocks.size} 个澄清文档，先写入黄金需求目录...`);
+      const goldenDir = join(iterDir!, '020-specs', 'requirements');
+      await ensureDir(goldenDir);
+      for (const [filename, content] of clarifyBlocks) {
+        const { parseClarifiedRequirement, buildClarifiedHeader } = await import('../core/requirement-clarifier');
+        const { content: cleaned } = parseClarifiedRequirement(content);
+        const header = buildClarifiedHeader(filename);
+        const finalContent = header + cleaned;
+        const fp = join(goldenDir, basename(filename));
+        await ensureDir(dirname(fp));
+        await writeFile(fp, finalContent);
+        logger.info(`   ✅ 澄清文档已写入: ${fp.replace(process.cwd() + '/', '')}`);
+      }
+      logger.info('');
+    }
+
+    // v8.3.0+: 需求澄清验证 — 如果需求质量不足但未澄清，拒绝写入
+    if (!isGlobalScope && !isTaskLevel && !options.skipClarify) {
+      const goldenDir = join(iterDir!, '020-specs', 'requirements');
+      const hasClarifiedDocs = await pathExists(goldenDir) && (await readdir(goldenDir)).some((f: string) => f.endsWith('.md'));
+      if (!hasClarifiedDocs && clarifyBlocks.size === 0) {
+        // 重新检测需求质量
+        const { detectProfessionalLevel } = await import('../core/requirement-clarifier');
+        const reqDir = join(iterDir!, '010-requirements');
+        const requirements: string[] = [];
+        const reqIndex = join(reqDir, 'INDEX.md');
+        if (await pathExists(reqIndex)) requirements.push(reqIndex);
+        const convDir = join(reqDir, 'converted');
+        if (await pathExists(convDir)) {
+          const files = await readdir(convDir);
+          for (const f of files.filter((f: string) => f.endsWith('.md'))) requirements.push(join(convDir, f));
+        }
+        let lowQualityCount = 0;
+        for (const reqPath of requirements) {
+          const reqContent = await readFile(reqPath, 'utf-8');
+          const level = detectProfessionalLevel(reqContent);
+          if (level !== 'high') lowQualityCount++;
+        }
+        if (lowQualityCount > 0) {
+          logger.error('❌ 需求澄清未完成，拒绝写入分析结果');
+          logger.error(`   ${lowQualityCount} 个需求文档质量不足，必须先澄清为 PRD`);
+          logger.info('');
+          logger.info('解决方式：');
+          logger.info('   1. 在 AI 输出中先包含 [CLARIFY:requirements/xxx.md] 标记的澄清文档');
+          logger.info('   2. 或先手动运行: speccore clarify --from "<需求文件>" --to ' + options.iteration + ' --prompt');
+          logger.info('');
+          logger.info('   如需跳过澄清（不推荐）:');
+          logger.info(`   speccore analyze --apply ... -I ${options.iteration} --skip-clarify`);
+          return;
+        }
+      }
     }
 
     // 支持 JSON 多文档写入
@@ -1653,7 +1711,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       } catch { /* ignore */ }
     }
 
-    const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task, type: options.type, scope: options.scope, withCode: options.withCode, platform: options.platform, phase: options.phase, autoMode: options.auto }, options);
+    const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task, type: options.type, scope: options.scope, withCode: options.withCode, platform: options.platform, phase: options.phase, autoMode: options.auto }, options, needsClarify ? { needsClarify, clarifyTargets } : undefined);
     process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
 
     // v7.2.0+: 全局分析完成后输出下一步引导
@@ -2609,7 +2667,7 @@ async function buildLayer3ModuleContext(projectRoot: string): Promise<string | n
 }
 
 // ── buildMultiDocPrompt: 多文档协议 ──
-async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; task?: string; type?: string; scope?: string; withCode?: boolean; platform?: string; phase?: string; autoMode?: boolean }, options?: AnalyzeOptions): Promise<string> {
+async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; task?: string; type?: string; scope?: string; withCode?: boolean; platform?: string; phase?: string; autoMode?: boolean }, options?: AnalyzeOptions, clarifyCtx?: { needsClarify: boolean; clarifyTargets: { path: string; level: string }[] }): Promise<string> {
   const iter = ctx.iteration || '当前迭代';
   const task = ctx.task ? ` — ${ctx.task}` : '';
   const taskType = ctx.type || 'feature';
@@ -2617,6 +2675,10 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
   const isTask = ctx.scope === 'task' || !!ctx.task;
   const isGlobal = ctx.scope === 'global';
   const autoMode = ctx.autoMode || false;
+
+  // v8.3.0+: 从 clarifyCtx 提取需求澄清状态
+  const needsClarify = clarifyCtx?.needsClarify ?? false;
+  const clarifyTargets = clarifyCtx?.clarifyTargets ?? [];
 
   // global 范围: 从源码反推需求 + 生成技术栈配置
   if (isGlobal) {
@@ -3935,6 +3997,58 @@ sequenceDiagram
 
   let prompt = `\n# 任务: ${command}${task} (${taskDocs.length}个文档 · ${isTask ? `类型:${taskType}` : '迭代全量'}${ctx.phase ? ` · Phase ${ctx.phase}` : ''})\n\n`;
 
+  // v8.3.0+: 如果检测到需求质量不足，在 prompt 开头注入强制澄清阶段
+  if (needsClarify && !isGlobal && !isTask && !ctx.phase) {
+    const now = new Date().toISOString();
+    prompt += `## 🚨 Phase 0: 需求澄清（强制前置 — 未完成则禁止进入 Phase 1）\n\n`;
+    prompt += `检测到以下需求文档质量不足，**必须先完成专业化整理，才能继续技术分析**：\n\n`;
+    for (const t of clarifyTargets) {
+      prompt += `- \`${t.path.split('/').slice(-2).join('/')}\`（质量: ${t.level.toUpperCase()}）\n`;
+    }
+    prompt += `\n### 澄清执行步骤（必须按顺序完成）\n\n`;
+    prompt += `**Step 1**: 读取上述每个需求文档的原始内容\n`;
+    prompt += `**Step 2**: 将口语化/非专业描述整理为 PRD 级专业文档\n`;
+    prompt += `**Step 3**: 补充：验收标准(AC)、功能边界、业务规则、异常处理、数据模型\n`;
+    prompt += `**Step 4**: 输出澄清后的文档，使用以下标记格式：\n`;
+    prompt += `\`\`\`
+[CLARIFY:requirements/clarified-{feature-name}.md]
+---
+source: "原始文档路径"
+clarified-at: "${now}"
+status: "clarified"
+---
+
+# {功能名称}
+
+## 背景与目标
+...
+
+## 用户故事
+...
+
+## 功能规格
+...
+
+## 验收标准（AC）
+- [ ] ...
+
+## 非功能需求
+...
+
+## 依赖与约束
+...
+\`\`\`
+`;
+    prompt += `**Step 5**: 用 Read 工具验证文件已正确写入 \`{迭代}/020-specs/requirements/clarified-{feature-name}.md\`\n`;
+    prompt += `**Step 6**: 基于澄清后的需求继续 Phase 1 分析\n\n`;
+    prompt += `### ⚠️ 重要提醒\n\n`;
+    prompt += `- **如果输出中没有 [CLARIFY:xxx] 标记的澄清文档，--apply 阶段将拒绝写入所有分析结果**\n`;
+    prompt += `- CLI 会在接收 --apply 时先解析 [CLARIFY:xxx] 标记，写入 020-specs/requirements/，然后才处理 [DOC:xxx] 标记\n`;
+    prompt += `- 不要跳过此步骤，不要假设需求已经够清晰\n`;
+    prompt += `- 如果原始描述不完整，在澄清文档中标注「待补充」而不是自行编造\n\n`;
+    prompt += `---\n\n`;
+  }
+
   // v7.2.0+: 迭代分析代码关联 — 注入结构化数据和语义定位上下文
   if (!isGlobal && ctx.withCode && ctx.iteration && ctx.iteration !== 'GLOBAL') {
     try {
@@ -5104,6 +5218,27 @@ function parseDocMarkers(text: string): Map<string, string> {
 
   for (let i = 0; i < positions.length; i++) {
     const start = positions[i].index + `[DOC:${positions[i].name}]`.length;
+    const end = i < positions.length - 1 ? positions[i + 1].index : text.length;
+    const content = text.slice(start, end).trim();
+    result.set(positions[i].name, content);
+  }
+
+  return result;
+}
+
+/** 解析 [CLARIFY:filename] 标记，提取需求澄清文档 Map — v8.3.0+ */
+function parseClarifyMarkers(text: string): Map<string, string> {
+  const result = new Map<string, string>();
+  const markerRegex = /\[CLARIFY:([^\]]+)\]/g;
+  let match: RegExpExecArray | null;
+  const positions: { name: string; index: number }[] = [];
+
+  while ((match = markerRegex.exec(text)) !== null) {
+    positions.push({ name: match[1].trim(), index: match.index });
+  }
+
+  for (let i = 0; i < positions.length; i++) {
+    const start = positions[i].index + `[CLARIFY:${positions[i].name}]`.length;
     const end = i < positions.length - 1 ? positions[i + 1].index : text.length;
     const content = text.slice(start, end).trim();
     result.set(positions[i].name, content);

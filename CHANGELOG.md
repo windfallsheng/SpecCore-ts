@@ -1,4 +1,4 @@
-## v8.3.0 (2026-08-24) — 模式提取按端分组 + 临时工作区 + Ask 引擎澄清意图
+## v8.3.0 (2026-08-24) — 模式提取按端分组 + 临时工作区 + Ask 引擎澄清意图 + 需求澄清强制前置
 
 ### 核心改进
 
@@ -33,6 +33,20 @@
 - `AMBIGUOUS_INTENTS` 增加 `clarify`、`research` — 缺少 speccore 上下文时强制确认
 - `isSpeccoreOperation()` 新增文件路径 + 操作词联合检测
 - `COMMAND_KB` 新增 clarify 条目
+
+**需求澄清强制前置** (`analyze.ts` + `spec-skeleton.ts`)
+- analyze `--auto` 默认执行需求质量检测（`--skip-clarify` 跳过）
+- 检测到口语化/非专业需求时，prompt 中注入 **Phase 0: 需求澄清（强制前置）**
+- Phase 0 prompt 明确要求 AI 先输出 `[CLARIFY:requirements/xxx.md]` 标记的澄清文档
+- `--apply` 阶段自动解析 `[CLARIFY:xxx]` 标记，写入 `020-specs/requirements/` 黄金需求目录
+- 如果需求质量不足且未提供澄清文档，`--apply` 阶段**拒绝写入**分析结果
+- `buildMultiDocPrompt` 新增 `clarifyCtx` 可选参数，将澄清状态从 `analyzeCommand` 传递到 prompt 构建
+
+**骨架质量检测增强** (`spec-skeleton.ts`)
+- 质量门槛已提升至 80 分（`score >= 80`）
+- 新增**重复段落检测**：内容重复度 > 50% 时扣分
+- 新增**章节空洞检测**：有标题但实质内容 < 30 字符的章节被标记为空洞
+- 新增**无意义填充词检测**：大量「待补充/待定/TBD/TODO」等填充词触发扣分
 
 ### Bug 修复：全局分析进度检测
 

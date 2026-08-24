@@ -665,8 +665,51 @@ export async function validateContentQuality(
     }
   }
 
+  // 5. 空洞内容检测（v8.3.0+）
+  // 5a. 重复段落检测
+  const paragraphs = cleanContent.split(/\n\s*\n/).filter(p => p.trim().length > 20);
+  const paragraphSet = new Set(paragraphs);
+  if (paragraphs.length > 5 && paragraphSet.size / paragraphs.length < 0.5) {
+    issues.push('内容重复度过高（可能为无意义填充）');
+    score -= 20;
+  }
+
+  // 5b. 章节空洞检测（有标题但无实质内容）
+  const headingRegex = /^#{2,3}\s+(.+)$/gm;
+  const headings: string[] = [];
+  let hm: RegExpExecArray | null;
+  while ((hm = headingRegex.exec(content)) !== null) {
+    headings.push(hm[1]);
+  }
+  let emptySections = 0;
+  for (let i = 0; i < headings.length; i++) {
+    const headingIndex = content.indexOf(headings[i]);
+    const nextHeadingIndex = i < headings.length - 1 ? content.indexOf(headings[i + 1], headingIndex + headings[i].length) : content.length;
+    const sectionContent = content.slice(headingIndex + headings[i].length, nextHeadingIndex).trim();
+    const sectionText = sectionContent.replace(/[#*`>\-|]/g, '').trim();
+    if (sectionText.length < 30) {
+      emptySections++;
+    }
+  }
+  if (emptySections > 2) {
+    issues.push(`${emptySections} 个章节内容空洞（有标题但无实质内容）`);
+    score -= emptySections * 5;
+  }
+
+  // 5c. 大量无意义填充词检测
+  const fillerPatterns = ['待补充', '待确认', '待定', 'TBD', 'TODO', '待完善', '待细化'];
+  let fillerCount = 0;
+  for (const fp of fillerPatterns) {
+    const matches = content.match(new RegExp(fp, 'g'));
+    if (matches) fillerCount += matches.length;
+  }
+  if (fillerCount > 5) {
+    issues.push(`含 ${fillerCount} 处无意义填充词（待补充/待定/TBD 等）`);
+    score -= Math.min(20, fillerCount * 3);
+  }
+
   return {
-    pass: score >= 60 && issues.filter(i => i.includes('过薄')).length === 0,
+    pass: score >= 80 && issues.filter(i => i.includes('过薄')).length === 0,
     score: Math.max(0, score),
     issues,
   };
