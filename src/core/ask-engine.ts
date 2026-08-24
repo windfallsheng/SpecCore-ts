@@ -132,6 +132,10 @@ const COMMAND_KB: CommandKnowledge[] = [
   { name: 'graph', aliases: ['g'], description: '统一图谱查询：融合知识图谱 + 代码图谱。支持 query/entity/related/path/stats 子命令',
     usage: 'speccore graph query <question> | speccore graph entity <id> | speccore graph related <id> | speccore graph path <from> <to> | speccore graph stats',
     examples: ['speccore graph query "订单相关代码"', 'speccore graph entity SRC:auth-AuthController', 'speccore graph related Task-001', 'speccore graph path Task-001 Task-002', 'speccore graph stats'], related: ['knowledge', 'code-index', 'search', 'track'], triggers: ['图谱', 'graph', '知识图谱', '代码图谱', '查询图谱', '图谱查询', '查图谱', '找关联', '找路径', '实体查询', '图谱统计'] },
+  // v8.3.0+: 需求澄清
+  { name: 'clarify', aliases: ['cl'], description: '需求专业化：将口语化/非专业需求整理为 PRD 级文档。支持 --local 临时工作区模式',
+    usage: 'speccore clarify "<描述>" | clarify --from <file> [--to <iteration> | --local]',
+    examples: ['speccore clarify "我要加个购物车"', 'speccore clarify --from notes.md --local', 'speccore clarify --promote <entryId> --to <iteration>'], related: ['analyze', 'doc2spec'], triggers: ['澄清', '整理需求', '专业化', '规范化', '整理一下', '写成PRD', '润色需求', '需求整理', '整理成文档'] },
 ];
 
 // ============================================================
@@ -1121,6 +1125,19 @@ export async function synthesizeIntent(input: string): Promise<SynthesizedIntent
       case 'validate':
         args = parsed.iteration ? `--iteration=${parsed.iteration}` : '';
         explanation = '合规检查';
+        break;
+      case 'clarify':
+        // v8.3.0+: 需求澄清
+        if (parsed.name || parsed.desc) {
+          args += ` "${parsed.name || parsed.desc}"`;
+        }
+        if (parsed.iteration) {
+          args += ` --to ${parsed.iteration}`;
+        } else {
+          args += ' --local';
+          autoFilled.push({ field: 'local', value: 'true', reason: '未指定迭代，默认使用临时工作区' });
+        }
+        explanation = '需求专业化整理';
         break;
       default:
         explanation = '执行命令';

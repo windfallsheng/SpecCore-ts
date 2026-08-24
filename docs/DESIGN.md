@@ -72,6 +72,7 @@ PATTERNS/
 ├── api-contract/          ← 跨端通用 API 契约模式
 ├── security/              ← 跨端通用安全模式
 ├── performance/           ← 跨端通用性能模式
+├── shared/                ← 跨端共享模式（v8.3.0+：前后端同名组件自动识别）
 ├── {端名}/                ← 端专属模式（如 backend/ h5/ admin/）
 │   ├── architecture/
 │   ├── data-model/
@@ -90,6 +91,7 @@ PATTERNS/
 | **api-contract** | 接口规范、错误码体系、响应格式、版本策略 | Layer 2 发现跨端通用契约格式 | 统一分页响应、标准错误包装 |
 | **security** | 鉴权、授权、输入校验、敏感数据处理 | Layer 3 发现可复用安全组件 | JWT 鉴权中间件、RBAC 权限模型 |
 | **performance** | 缓存策略、批量处理、异步化、限流降级 | Layer 3 发现性能优化手段 | 多级缓存设计、接口批量查询 |
+| **shared** | 跨端共享组件（前后端同名导出） | `pattern-detector.ts` 跨端同名检测 | DTO/VO 映射、统一错误处理 |
 
 #### 文件命名规则
 
@@ -135,6 +137,7 @@ PATTERNS/
 2. **手动编辑允许**: 支持人工补充、修正、合并
 3. **自动发现**: 全局分析时自动从源码中识别并生成
 4. **端差异处理**: 同一模式在多个端出现时，优先写入通用分类，端差异用段落标注
+5. **跨端共享自动识别** (v8.3.0+): `pattern-detector.ts` 在检测阶段自动识别同名模式跨端出现的情况，将 `platform` 从 `backend`/`frontend` 提升为 `shared`，并存入 `shared/` 分类
 
 ---
 
@@ -477,6 +480,84 @@ cache/iterations/Q2/
 - 自动写入：每次分析自动保存上下文和定位结果
 - 手动清理：`speccore analyze --clear-cache`
 - 过期清理：超过 30 天的缓存自动删除
+
+---
+
+## 1.6 临时工作区架构（v8.3.0+）
+
+**解决场景**：用户需要澄清/调研与当前迭代无关的内容，或尚未创建迭代时就需要处理需求。
+
+**传统问题**：`clarify` 命令强制绑定迭代，独立内容没有存放位置。
+
+### 1.6.1 目录结构
+
+```
+.speccore/local/workspace/
+├── inbox/                    ← 原始输入暂存
+│   └── {YYYY-MM-DD-HHMMSS-xxxx}/
+│       ├── source.md         ← 用户原始输入
+│       └── meta.json         ← 条目元信息
+├── clarify/                  ← clarify 产出
+│   └── {id}/
+│       └── PRD.md
+├── research/                 ← research 产出
+│   └── {id}/
+│       └── REPORT.md
+└── index.json                ← 条目索引
+```
+
+### 1.6.2 核心流程
+
+```
+用户输入内容
+    │
+    ▼
+stageContent() ──→ inbox/{id}/source.md
+    │
+    ▼
+AI 处理（宿主 AI 直接处理，或 speccore clarify --apply）
+    │
+    ▼
+writeWorkspaceOutput() ──→ clarify/{id}/PRD.md
+    │
+    ▼
+确认无误后
+    │
+    ▼
+promoteToIteration() ──→ Iteration-xxx/020-specs/requirements/
+```
+
+### 1.6.3 CLI 命令
+
+```bash
+# 创建临时条目（clarify --local 自动调用）
+speccore clarify "需求描述" --local
+speccore clarify --from notes.md --local --prompt
+
+# 管理临时工作区
+speccore workspace list                    # 列出所有条目
+speccore workspace list --type clarify     # 按类型过滤
+speccore workspace show <entryId>          # 查看详情和原始输入
+speccore workspace clean --days 30         # 清理旧条目
+
+# 提升到迭代层
+speccore clarify --promote <entryId> --to <iteration>
+```
+
+### 1.6.4 与 Ask 引擎的集成
+
+当 Ask 引擎识别到 `clarify` / `research` 意图但缺少迭代上下文时：
+
+1. **确认提示**：展示两种处理方式（speccore 流程 vs 普通 AI 对话）
+2. **默认本地模式**：用户选择 speccore 流程但未指定迭代时，自动附加 `--local`
+3. **闭环提示**：`--prompt` 模式下输出 Prompt 的同时创建工作区条目，提示后续 `--apply --local` 命令
+
+### 1.6.5 设计原则
+
+- **不污染迭代目录**：临时内容完全隔离在 `.speccore/local/workspace/`
+- **可提升**：确认有价值的临时产出可以通过 `--promote` 提升到迭代层
+- **自清理**：`workspace clean` 自动清理过期条目，避免无限膨胀
+- **索引化**：`index.json` 跟踪所有条目状态（pending/done/promoted）
 
 ---
 

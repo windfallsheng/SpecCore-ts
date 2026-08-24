@@ -10,6 +10,7 @@ import { ensureDir, writeFile, pathExists, readFile, readdir, stat } from 'fs-ex
 import { join, basename } from 'path';
 import { logger } from '../utils/logger';
 import { backupWithTimestamp } from '../utils/task-utils';
+import { assembleUnitContext } from './unit-context-assembler';
 
 /**
  * 检测文档专业度
@@ -138,15 +139,17 @@ export function parseClarifiedRequirement(response: string): {
 
 /**
  * 写入澄清后的需求文档
- * 位置: 010-requirements/converted/clarified-{slug}.md
+ * v8.2.0+: 改为写入 020-specs/requirements/ 作为黄金需求目录
+ * 原始需求保留在 010-requirements/ 不变
  */
 export async function writeClarifiedDoc(
   content: string,
   iterDir: string,
   sourceName: string
 ): Promise<string> {
-  const convertedDir = join(iterDir, '010-requirements', 'converted');
-  await ensureDir(convertedDir);
+  // v8.2.0+: 黄金需求目录 — 澄清后的专业需求作为唯一分析依据
+  const goldenDir = join(iterDir, '020-specs', 'requirements');
+  await ensureDir(goldenDir);
 
   // 生成文件名：基于来源名 + 时间戳
   const baseName = basename(sourceName, '.md')
@@ -158,7 +161,7 @@ export async function writeClarifiedDoc(
   const now = new Date();
   const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
   const filename = `clarified-${baseName}-${timestamp}.md`;
-  const filepath = join(convertedDir, filename);
+  const filepath = join(goldenDir, filename);
 
   // 备份已有文件
   const backup = await backupWithTimestamp(filepath);
@@ -580,13 +583,13 @@ export async function writeClarifyReport(
 
 /**
  * 检测迭代是否已有有效的 clarified 文档
- * v6.80.0+: 用于判断是否需要重新执行 clarify
+ * v8.2.0+: 改为检查 020-specs/requirements/ 目录
  */
 export async function hasValidClarifiedDocs(iterDir: string): Promise<boolean> {
-  const convertedDir = join(iterDir, '010-requirements', 'converted');
-  if (!(await pathExists(convertedDir))) return false;
+  const goldenDir = join(iterDir, '020-specs', 'requirements');
+  if (!(await pathExists(goldenDir))) return false;
 
-  const files = await readdir(convertedDir);
+  const files = await readdir(goldenDir);
   const clarifiedFiles = files.filter(f => f.startsWith('clarified-') && f.endsWith('.md'));
   if (clarifiedFiles.length === 0) return false;
 
@@ -612,10 +615,241 @@ export async function hasValidClarifiedDocs(iterDir: string): Promise<boolean> {
   // 如果 source 比 clarify 新，需要重新 clarify
   let latestClarifyTime = 0;
   for (const f of clarifiedFiles) {
-    const st = await stat(join(convertedDir, f));
+    const st = await stat(join(goldenDir, f));
     if (st.mtimeMs > latestClarifyTime) latestClarifyTime = st.mtimeMs;
   }
 
   return latestClarifyTime >= latestSourceTime;
+}
+
+// ═══════════════════════════════════════════════════════════
+// v8.2.0+: 功能单元聚焦澄清（解决注意力漂移）
+// ═══════════════════════════════════════════════════════════
+
+export interface ClarifyUnit {
+  id: string;
+  name: string;
+  content: string; // 该单元的原始内容
+}
+
+export interface ClarifiedUnit {
+  id: string;
+  name: string;
+  clarifiedContent: string; // AI 澄清后的内容
+  timestamp: string;
+}
+
+/** 从 Markdown 内容中提取功能单元（基于 ##/### 标题） */
+export function extractUnitsFromText(content: string): ClarifyUnit[] {
+  const units: ClarifyUnit[] = [];
+  const lines = content.split('\n');
+  let idCounter = 1;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const headingMatch = line.match(/^#{2,3}\s+(.+)$/);
+    if (!headingMatch) continue;
+    const name = headingMatch[1].trim();
+
+    // 跳过通用标题
+    const skipKeywords = ['需求概述', '术语表', '附录', '测试策略', '参考资料', '目录', '引言', '背景', '总结', '结论'];
+    if (skipKeywords.some(k => name.includes(k))) continue;
+
+    // 收集该单元的完整内容（直到下一个同级或更高级标题）
+    const unitLines: string[] = [line];
+    for (let j = i + 1; j < lines.length; j++) {
+      const nextLine = lines[j];
+      if (nextLine.match(/^#{1,3}\s+/)) break;
+      unitLines.push(nextLine);
+    }
+
+    units.push({
+      id: `M-${String(idCounter++).padStart(2, '0')}`,
+      name,
+      content: unitLines.join('\n').trim(),
+    });
+    if (idCounter > 30) break;
+  }
+
+  return units;
+}
+
+/** 构建单个功能单元的澄清 Prompt（v8.2.0+ 智能上下文组装） */
+export async function buildUnitClarifyPrompt(
+  unit: ClarifyUnit,
+  fullContent: string,
+  context?: { iteration?: string; sourceFile?: string; iterDir?: string; allUnits?: ClarifyUnit[] }
+): Promise<string> {
+  const sections: string[] = [];
+
+  sections.push('# 需求专业化 — 功能单元澄清');
+  sections.push('');
+  sections.push('## 你的角色');
+  sections.push('你是资深产品经理 + 领域专家。请将以下功能单元整理为专业的需求规格。');
+  sections.push('');
+
+  sections.push('## 迭代信息');
+  if (context?.iteration) sections.push(`- 迭代: ${context.iteration}`);
+  if (context?.sourceFile) sections.push(`- 来源: ${context.sourceFile}`);
+  sections.push(`- 单元ID: ${unit.id}`);
+  sections.push('');
+
+  // 使用智能上下文组装引擎（如果提供了迭代目录和单元列表）
+  let unitContext = '';
+  if (context?.iterDir && context?.allUnits && context?.iteration) {
+    const unitRef = { id: unit.id, name: unit.name, content: unit.content };
+    const allUnitRefs = context.allUnits.map(u => ({ id: u.id, name: u.name, content: u.content }));
+    const ctxResult = await assembleUnitContext(context.iterDir, context.iteration, unitRef, allUnitRefs, {
+      maxTokens: 5000,
+      maxRelatedUnits: 3,
+      maxCodeFiles: 3,
+      useKnowledgeGraph: true,
+    });
+    unitContext = ctxResult.context;
+    sections.push(`## 需求上下文（智能组装: ${ctxResult.stats.estimatedTokens} tokens）`);
+  } else {
+    sections.push('## 功能单元原文');
+    sections.push('```markdown');
+    sections.push(unit.content);
+    sections.push('```');
+  }
+  sections.push('');
+  if (unitContext) {
+    sections.push(unitContext);
+    sections.push('');
+  }
+
+  sections.push('## 整理要求');
+  sections.push('');
+  sections.push('请对「' + unit.name + '」进行专业化整理，输出以下内容：');
+  sections.push('');
+  sections.push('### 1. 功能描述（用户故事格式）');
+  sections.push('- 作为 [角色]，我希望 [目标]，以便 [价值]');
+  sections.push('- 输入/输出定义');
+  sections.push('- 前置条件与后置条件');
+  sections.push('');
+  sections.push('### 2. 业务规则（R-XX 编号）');
+  sections.push('- 每个规则必须有唯一编号（如 R-01, R-02）');
+  sections.push('- 规则必须包含：条件、动作、异常处理');
+  sections.push('');
+  sections.push('### 3. 业务流程');
+  sections.push('- 正常流程（主路径）');
+  sections.push('- 异常分支（所有可能的错误路径）');
+  sections.push('- 状态流转图（文字描述即可）');
+  sections.push('');
+  sections.push('### 4. 页面交互逻辑');
+  sections.push('- 页面结构');
+  sections.push('- 用户操作 → 系统反馈');
+  sections.push('- Loading / Empty / Error 状态');
+  sections.push('- 权限控制');
+  sections.push('');
+  sections.push('### 5. 验收标准（AC）');
+  sections.push('- 可测试、可量化');
+  sections.push('- 每条用 `[ ]` 标记');
+  sections.push('');
+  sections.push('### 6. 异常场景和边界条件');
+  sections.push('- 网络失败、权限不足、数据为空、超时等');
+  sections.push('');
+  sections.push('### 7. 待确认事项');
+  sections.push('- 如果原始描述不完整，标注「待确认」而不是编造');
+  sections.push('');
+
+  sections.push('## 输出格式');
+  sections.push('使用 [UNIT:xxx] 标记输出：');
+  sections.push('');
+  sections.push('```');
+  sections.push(`[UNIT:${unit.id}]`);
+  sections.push('（澄清后的专业内容...）');
+  sections.push('```');
+  sections.push('');
+
+  sections.push('## 重要提示');
+  sections.push(`- 只分析当前功能单元「${unit.name}」，不要涉及其他模块`);
+  sections.push('- 统一术语，建立术语表（如果是第一个单元）');
+  sections.push('- 验收标准必须量化（如响应时间<200ms）');
+  sections.push('- 如果原始描述不完整，标注「待确认」而不是编造');
+  sections.push('- 不要添加文档中未提及的功能');
+  sections.push('');
+
+  return sections.join('\n');
+}
+
+/** 汇总所有澄清单元为统一 PRD */
+export function consolidateClarifiedUnits(
+  units: ClarifiedUnit[],
+  originalSource: string,
+): string {
+  const lines: string[] = [];
+  lines.push('---');
+  lines.push(`source: "${originalSource}"`);
+  lines.push(`clarified-at: "${new Date().toISOString()}"`);
+  lines.push('status: "clarified"');
+  lines.push('version: "1.0"');
+  lines.push('---');
+  lines.push('');
+  lines.push('# 需求规格说明书（PRD）');
+  lines.push('');
+  lines.push('> 本文档由 AI 自动澄清生成，基于原始需求文档的专业化整理。');
+  lines.push('');
+
+  // 术语表（从第一个单元提取，如果有）
+  lines.push('## 术语表');
+  lines.push('| 术语 | 定义 |');
+  lines.push('| :--- | :--- |');
+  lines.push('| （请根据实际内容补充）| |');
+  lines.push('');
+
+  // 功能模块清单
+  lines.push('## 功能模块清单');
+  lines.push('| 单元ID | 模块名称 | 状态 |');
+  lines.push('| :--- | :--- | :--- |');
+  for (const u of units) {
+    lines.push(`| ${u.id} | ${u.name} | ✅ 已澄清 |`);
+  }
+  lines.push('');
+
+  // 各单元详细内容
+  for (const u of units) {
+    lines.push(`---`);
+    lines.push('');
+    lines.push(`## ${u.id} ${u.name}`);
+    lines.push('');
+    lines.push(u.clarifiedContent);
+    lines.push('');
+  }
+
+  // 全局验收标准汇总
+  lines.push('---');
+  lines.push('');
+  lines.push('## 全局验收标准');
+  lines.push('');
+  lines.push('（各单元验收标准的汇总，去重后整合）');
+  lines.push('');
+
+  // 非功能需求
+  lines.push('## 非功能需求');
+  lines.push('- 性能: （待补充）');
+  lines.push('- 安全: （待补充）');
+  lines.push('- 兼容性: （待补充）');
+  lines.push('- 可访问性: （待补充）');
+  lines.push('');
+
+  // 依赖与约束
+  lines.push('## 依赖与约束');
+  lines.push('- （待补充）');
+  lines.push('');
+
+  // 功能边界
+  lines.push('## 功能边界');
+  lines.push('- **包含**: （明确做什么）');
+  lines.push('- **不包含**: （明确不做什么）');
+  lines.push('');
+
+  // 待确认事项
+  lines.push('## 待确认事项');
+  lines.push('- [ ] （从各单元收集中汇总）');
+  lines.push('');
+
+  return lines.join('\n');
 }
 

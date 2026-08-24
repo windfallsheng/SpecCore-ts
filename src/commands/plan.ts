@@ -1,5 +1,5 @@
 import { join, dirname } from 'path';
-import { writeFile, ensureDir, readdir, stat } from 'fs-extra';
+import { writeFile, ensureDir, readdir, stat, pathExists, readFile } from 'fs-extra';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration, getIterationDir } from '../core/context';
 import { readProjectGraph, topologicalSort, scanTasks, TaskState } from '../core/state';
@@ -8,6 +8,9 @@ import { savePlan, listPlans, getPlan, deletePlan, cancelPlan, ExecutionPlan } f
 import { createInterface } from 'readline';
 import { buildPrompt, formatPrompt } from '../core/prompt-builder';
 import { generatePlanHtml } from '../core/plan-html';
+import { unifiedSearch, formatUnifiedContext } from '../core/unified-retrieval';
+import { loadKnowledgeGraph } from '../core/knowledge-graph';
+import { buildCompactContext } from '../core/context-builder';
 import { version } from '../../package.json';
 import { nextPlanId } from '../core/global-counters';
 
@@ -45,7 +48,61 @@ export async function planCommand(options: PlanOptions): Promise<void> {
     const taskList = await scanTasks(iter);
     const taskNames = taskList.map(t => t.id.replace(/^Task-/, '')).join(',');
     const prompt = await buildPrompt('plan', { iteration: iter, task: taskNames || undefined });
-    process.stdout.write(formatPrompt(prompt));
+    let promptText = formatPrompt(prompt);
+
+    // v8.2.0+: 注入任务详细上下文（依赖关系 + REQ/TECH 摘要）
+    try {
+      const iterDir = await getIterationDir(iter);
+      const taskDetails: string[] = [];
+      for (const t of taskList.slice(0, 15)) { // 最多 15 个任务
+        const tDir = join(iterDir, '030-tasks', t.id);
+        const reqPath = join(tDir, '00-specs', 'REQ.md');
+        const techPath = join(tDir, '00-specs', 'TECH.md');
+        const depsPath = join(tDir, 'DEPS.md');
+        let summary = `### ${t.id}: ${t.name || t.id}\n`;
+        if (t.status) summary += `- 状态: ${t.status}\n`;
+        if (t.dependencies?.length) summary += `- 依赖: ${t.dependencies.join(', ')}\n`;
+        if (await pathExists(reqPath)) {
+          const req = await readFile(reqPath, 'utf-8');
+          summary += `- REQ: ${req.slice(0, 200).replace(/\n+/g, ' ')}\n`;
+        }
+        if (await pathExists(techPath)) {
+          const tech = await readFile(techPath, 'utf-8');
+          summary += `- TECH: ${tech.slice(0, 200).replace(/\n+/g, ' ')}\n`;
+        }
+        if (await pathExists(depsPath)) {
+          const deps = await readFile(depsPath, 'utf-8');
+          summary += `- DEPS: ${deps.slice(0, 200).replace(/\n+/g, ' ')}\n`;
+        }
+        taskDetails.push(summary);
+      }
+      if (taskDetails.length > 0) {
+        promptText += `\n\n## 📋 任务详细上下文\n\n`;
+        promptText += taskDetails.join('\n');
+      }
+    } catch { /* ignore */ }
+
+    // v8.2.0+: 注入统一检索 + 知识图谱
+    try {
+      const unifiedResult = await unifiedSearch(process.cwd(), { query: `plan ${iter}`, iteration: iter });
+      if (unifiedResult.documentChunks.length > 0 || unifiedResult.codeSlices.length > 0) {
+        promptText += '\n\n## 🔍 相关上下文（自动检索）\n';
+        promptText += formatUnifiedContext(unifiedResult);
+      }
+    } catch { /* ignore */ }
+
+    try {
+      const graph = await loadKnowledgeGraph(process.cwd());
+      if (graph) {
+        const graphCtx = buildCompactContext(graph, {});
+        if (graphCtx) {
+          promptText += '\n\n## 🧠 知识图谱关联\n';
+          promptText += graphCtx.slice(0, 2000);
+        }
+      }
+    } catch { /* ignore */ }
+
+    process.stdout.write(promptText);
     process.exitCode = 10;
     return;
   }

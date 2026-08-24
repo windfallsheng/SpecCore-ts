@@ -15,6 +15,8 @@ import { resolveGlobalSpecPath, GLOBAL_SPECS_DIR, parsePlatformList } from '../.
 import { SKELETON_MARKER, buildQualityRubRIC } from '../../core/spec-skeleton';
 import { buildAutoModeInstruction, writeQuestions, extractQuestionsFromText } from '../../core/questions';
 import { PipelineEngine } from '../../core/pipeline-engine';
+import { findRelevantCode } from '../../core/code-scanner';
+import { loadKnowledgeGraph } from '../../core/knowledge-graph';
 
 /**
  * 将 AI 返回的 scope 简写映射到 CONSTITUTION.md 标准端名
@@ -4025,6 +4027,48 @@ async function assembleUnitContext(
       }
     } catch {}
   }
+
+  // v8.2.0+: 知识图谱 + 源码关联增强
+  try {
+    const graph = await loadKnowledgeGraph(process.cwd());
+    if (graph) {
+      const unitNameLower = unitName.toLowerCase();
+      const matchedReqIds = new Set<string>();
+      const codeFiles: string[] = [];
+
+      // 找匹配当前功能单元的 requirement 实体
+      for (const entity of Object.values(graph.entities)) {
+        if (entity.type !== 'requirement') continue;
+        const titleLower = entity.title.toLowerCase();
+        if (titleLower.includes(unitNameLower) || unitNameLower.includes(titleLower)) {
+          matchedReqIds.add(entity.id);
+        }
+      }
+
+      // 通过关系链找关联的 source-file 实体
+      for (const rel of graph.relations) {
+        if (!matchedReqIds.has(rel.from) && !matchedReqIds.has(rel.to)) continue;
+        const neighborId = matchedReqIds.has(rel.from) ? rel.to : rel.from;
+        const neighbor = graph.entities[neighborId];
+        if (neighbor && neighbor.type === 'source-file' && neighbor.file) {
+          codeFiles.push(neighbor.file);
+        }
+      }
+
+      if (codeFiles.length > 0) {
+        ctx.push(`### 💻 相关源码文件（知识图谱关联）\n${codeFiles.slice(0, 5).map(f => `- \`${f}\``).join('\n')}`);
+      }
+    }
+  } catch { /* ignore */ }
+
+  // v8.2.0+: findRelevantCode 语义关联补充
+  try {
+    const matches = await findRelevantCode(unitName, 5);
+    if (matches.length > 0) {
+      const files = matches.map(m => `- \`${m.file}\` (相关度: ${m.score.toFixed(2)})`);
+      ctx.push(`### 🔍 语义关联源码文件\n${files.join('\n')}`);
+    }
+  } catch { /* ignore */ }
 
   if (ctx.length === 0) {
     return `> 功能单元「${unitName}」未在分析文档中找到直接相关内容，请根据全局文档推断。`;

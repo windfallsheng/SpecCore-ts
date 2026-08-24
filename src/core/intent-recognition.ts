@@ -33,6 +33,7 @@ export type IntentType =
   | 'welcome'             // 引导
   | 'init'                // 初始化
   | 'bugfix'              // Bug 修复
+  | 'clarify'             // 需求澄清
   | 'research'            // 调研
   | 'sync'                // 同步
   | 'retro'               // 回顾
@@ -246,9 +247,18 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     id: 'research',
     intent: 'research',
     priority: 80,
-    triggers: ['调研', '评估', '选型', '对比'],
-    patterns: ['调研(.+)方案', '调研(.+)技术', '评估(.+)技术', '对比(.+)'],
+    triggers: ['调研', '评估', '选型', '对比', '分析怎么实现', '有什么方案', '技术方案', '实现方案'],
+    patterns: ['调研(.+)方案', '调研(.+)技术', '评估(.+)技术', '对比(.+)', '(.+)怎么实现', '(.+)有什么方案'],
     description: '技术调研 — 评估技术方案、对比工具选项',
+  },
+  // 需求澄清
+  {
+    id: 'clarify',
+    intent: 'clarify',
+    priority: 82,
+    triggers: ['澄清', '整理需求', '专业化', '规范化', '整理一下', '写成PRD', '润色需求', '需求整理', '整理成文档'],
+    patterns: ['澄清(.+)', '整理(.+)需求', '把(.+)整理成PRD', '润色(.+)'],
+    description: '需求专业化 — 将口语化/非专业需求整理为 PRD 级文档',
   },
   // 计划层
   {
@@ -902,18 +912,39 @@ const SPECCORE_CONTEXT_KEYWORDS = [
   'backend', 'frontend', 'h5', 'admin', 'with-code', 'with code',
   // 变更
   '变更', 'change --',
+  // 澄清/调研（v8.3.0+）
+  '澄清', '整理需求', '专业化', '写成PRD', '调研',
 ];
 
 /** 容易与"普通 AI 对话"混淆的意图 */
 export const AMBIGUOUS_INTENTS = new Set<IntentType>([
   'analyze', 'split', 'execute', 'plan', 'review',
+  'clarify', 'research', // v8.3.0+: 澄清/调研也容易和普通AI对话混淆
 ]);
 
 /**
  * 判断用户输入是否明确与 speccore CLI 操作相关
  * v6.97.0+ 新增：避免"分析代码""讨论需求"等普通聊天被误判为 speccore 操作
+ * v8.3.0+ 新增：文件路径 + 操作词联合检测
  */
 export function isSpeccoreOperation(input: string): boolean {
   const lower = input.toLowerCase();
-  return SPECCORE_CONTEXT_KEYWORDS.some(kw => lower.includes(kw.toLowerCase()));
+  if (SPECCORE_CONTEXT_KEYWORDS.some(kw => lower.includes(kw.toLowerCase()))) {
+    return true;
+  }
+  // v8.3.0+: 文件路径 + 操作词 → 高概率是 speccore 操作
+  if (hasFileOperationIntent(input)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * v8.3.0+: 检测文件操作意图
+ * 含文件路径 + 操作词时，即使缺少 speccore 上下文，也判定为 speccore 操作
+ */
+export function hasFileOperationIntent(input: string): boolean {
+  const hasFilePath = /[\w\-./\\]+\.(md|txt|doc|docx|pdf)/i.test(input);
+  const operationWords = ['澄清', '整理', '分析', '调研', '专业化', '规范化', '写成PRD', '导入', '转换'];
+  return hasFilePath && operationWords.some(w => input.includes(w));
 }

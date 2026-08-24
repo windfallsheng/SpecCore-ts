@@ -207,10 +207,11 @@ analyze 从 CONSTITUTION.md「## 端列表」章节读取全局权威端名列�
 ### 📝 clarify — 需求澄清 🔒 AI 命令
 
 ```bash
-speccore clarify [--to <iteration>] [--prompt] [--apply <json|@file>]
+speccore clarify [--to <iteration>] [--prompt] [--apply <json|@file>] [--local] [--promote <entryId>]
 ```
 
 **v6.77.0+ 新增命令。** 将口语化需求描述整理为 PRD 级专业文档。
+**v8.3.0+ 新增 `--local` 模式**：不绑定迭代，输出到临时工作区。
 
 **使用场景：**
 - 用户输入 "我要加个购物车功能" → 触发 clarify → 输出结构化需求文档
@@ -234,9 +235,39 @@ speccore clarify --to Iteration-001 --apply '{...json...}'
 
 # 3. Windows 兼容：从文件读取
 speccore clarify --to Iteration-001 --apply @result.json
+
+# 4. v8.3.0+ 临时工作区模式（不绑定迭代）
+speccore clarify --from notes.md --local --prompt   # 生成 Prompt + 创建工作区条目
+speccore clarify --apply '<PRD>' --local             # 写入临时工作区
+speccore clarify --promote <entryId> --to <iteration> # 提升到迭代层
 ```
 
-输出位置：`010-requirements/converted/clarified-{feature}.md`
+输出位置：
+- 正常模式：`010-requirements/converted/clarified-{feature}.md`
+- `--local` 模式：`.speccore/local/workspace/clarify/{id}/PRD.md`
+
+### 🗃️ workspace — 临时工作区管理
+
+```bash
+speccore workspace [--list] [--show <entryId>] [--clean] [--days <n>] [--type <clarify|research>]
+```
+别名: `ws`
+
+**v8.3.0+ 新增命令。** 管理独立内容处理的临时产出（不绑定迭代/任务）。
+
+**使用场景：**
+- 查看已沉淀到临时工作区的澄清/调研产出
+- 清理过期的临时条目
+- 查看条目的原始输入摘要
+
+**子命令：**
+
+```bash
+speccore workspace list                    # 列出所有条目
+speccore workspace list --type clarify     # 按类型过滤
+speccore workspace show <entryId>          # 查看详情 + 原始输入摘要
+speccore workspace clean --days 30         # 清理 30 天前的未提升条目
+```
 
 ### 📦 split — 任务拆分 🔒 AI 命令
 ```bash

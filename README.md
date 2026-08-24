@@ -64,6 +64,7 @@ init → doc2spec → analyze → split → plan → execute → pr → done →
 | CLI 入口 | `init` `welcome` `help` |
 | CLI 管理 | `iteration` `task` `context` ✅ |
 | CLI 查看 | `dashboard` `validate` `about` `config` `archive` |
+| CLI 工具 | `workspace` `clarify` `pattern` `code-index` `graph` |
 | 🔒 AI 入口 | `ask` |
 | 🔒 AI 流水线 | `doc2spec` `analyze` `split` `plan` `execute` `pr` `done` `spec2doc` |
 | 🔒 AI 智能 | `dev` |

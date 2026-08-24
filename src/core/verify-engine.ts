@@ -345,10 +345,11 @@ export async function writeVerifyReport(report: VerifyReport, outputDir: string)
 }
 
 /**
- * 生成 AI 修复 Prompt
+ * 生成 AI 修复 Prompt（v8.2.0+ 增强版）
  * 当验证失败时，生成结构化 Prompt 让 AI 定位并修复问题
+ * 注入任务规格上下文、知识图谱依赖链、API 契约等
  */
-export function generateFixPrompt(report: VerifyReport, taskDir: string): string {
+export async function generateFixPrompt(report: VerifyReport, taskDir: string): Promise<string> {
   const failedChecks = report.checks.filter(c => c.status === 'fail');
   const warningChecks = report.checks.filter(c => c.status === 'warn');
 
@@ -358,6 +359,53 @@ export function generateFixPrompt(report: VerifyReport, taskDir: string): string
   prompt += `- 代码路径: \`${report.codePath}\`\n`;
   prompt += `- 项目类型: ${report.projectType}\n`;
   prompt += `- 验证轮次: ${report.checks.length} 项检查\n\n`;
+
+  // ── v8.2.0+: 注入任务规格上下文 ──
+  const specCtx = await loadFixSpecContext(taskDir);
+  if (specCtx.reqSummary) {
+    prompt += `## 需求规格摘要 (REQ.md)\n\n`;
+    prompt += `${specCtx.reqSummary}\n\n`;
+  }
+  if (specCtx.techSummary) {
+    prompt += `## 技术规格摘要 (TECH.md)\n\n`;
+    prompt += `${specCtx.techSummary}\n\n`;
+  }
+
+  // ── v8.2.0+: 注入知识图谱上下文（依赖链 + 相邻任务） ──
+  try {
+    const { loadKnowledgeGraph, traceDependencyChain } = await import('./knowledge-graph');
+    const graph = await loadKnowledgeGraph(process.cwd());
+    if (graph && report.taskId) {
+      const chains = traceDependencyChain(graph, report.taskId, 2);
+      if (chains.length > 0) {
+        prompt += `## 依赖链路（知识图谱）\n\n`;
+        prompt += `修复时请注意以下依赖任务的影响:\n`;
+        for (const chain of chains.slice(0, 5)) {
+          const depEntity = graph.entities[chain.path[chain.path.length - 1]];
+          if (depEntity) {
+            prompt += `- **${depEntity.title}** (${depEntity.type}) — 深度 ${chain.depth}\n`;
+          }
+        }
+        prompt += '\n';
+      }
+    }
+  } catch { /* 知识图谱不可用则跳过 */ }
+
+  // ── v8.2.0+: 注入 API 契约 ──
+  try {
+    const contractPath = join(taskDir, '_shared', 'API_CONTRACT.yaml');
+    if (await pathExists(contractPath)) {
+      const content = await readFile(contractPath, 'utf-8');
+      if (content.trim().length > 0) {
+        prompt += `## API 契约 (_shared/API_CONTRACT.yaml)\n\n`;
+        prompt += `\`\`\`yaml
+${content.slice(0, 1200)}
+\`\`\`
+
+`;
+      }
+    }
+  } catch { /* 跳过 */ }
 
   prompt += `## 失败项\n\n`;
   for (const check of failedChecks) {
@@ -377,13 +425,14 @@ export function generateFixPrompt(report: VerifyReport, taskDir: string): string
 
   prompt += `## 要求\n\n`;
   prompt += `1. 读取上述错误信息，定位问题根因\n`;
-  prompt += `2. 修复代码，确保:\n`;
+  prompt += `2. **注意依赖影响**：修复时不要破坏 API 契约中定义的接口契约\n`;
+  prompt += `3. 修复代码，确保:\n`;
   prompt += `   - 编译通过（无类型错误、语法错误）\n`;
   prompt += `   - Lint 通过（无代码风格问题）\n`;
   prompt += `   - 测试通过（所有测试用例绿灯）\n`;
   prompt += `   - 测试用例覆盖：检查子任务目录下的 \`TEST.md\` 中的未覆盖用例，补充实现\n`;
   prompt += `   - 评审项合规：检查子任务目录下的 \`REVIEW.md\` 中的未合规项，补充实现\n`;
-  prompt += `3. 修复后在下方「修复记录」表格中记录:\n`;
+  prompt += `4. 修复后在下方「修复记录」表格中记录:\n`;
   prompt += `   - 问题描述\n`;
   prompt += `   - 修复方案\n`;
   prompt += `   - 修改的文件\n\n`;
@@ -399,10 +448,58 @@ export function generateFixPrompt(report: VerifyReport, taskDir: string): string
 }
 
 /**
+ * 加载修复 Prompt 所需的规格上下文
+ */
+async function loadFixSpecContext(taskDir: string): Promise<{ reqSummary: string; techSummary: string }> {
+  const result = { reqSummary: '', techSummary: '' };
+  try {
+    const reqPaths = [join(taskDir, '00-specs', 'REQ.md'), join(taskDir, 'REQ.md')];
+    for (const p of reqPaths) {
+      if (await pathExists(p)) {
+        const content = await readFile(p, 'utf-8');
+        result.reqSummary = extractFixSummary(content, 1200);
+        break;
+      }
+    }
+    const techPaths = [join(taskDir, '00-specs', 'TECH.md'), join(taskDir, 'TECH.md')];
+    for (const p of techPaths) {
+      if (await pathExists(p)) {
+        const content = await readFile(p, 'utf-8');
+        result.techSummary = extractFixSummary(content, 800);
+        break;
+      }
+    }
+  } catch { /* 静默失败 */ }
+  return result;
+}
+
+/** 从文档提取修复所需摘要（保留标题 + 关键段落） */
+function extractFixSummary(content: string, maxChars: number): string {
+  if (content.length <= maxChars) return content;
+  const lines = content.split('\n');
+  const result: string[] = [];
+  let chars = 0;
+  let inCodeBlock = false;
+  for (const line of lines) {
+    if (line.startsWith('```')) inCodeBlock = !inCodeBlock;
+    // 优先保留标题行和列表项
+    const isImportant = line.startsWith('#') || line.startsWith('- ') || line.startsWith('|');
+    if (chars + line.length > maxChars && !isImportant) break;
+    result.push(line);
+    chars += line.length + 1;
+    if (chars >= maxChars && !inCodeBlock) break;
+  }
+  if (result.length < lines.length) {
+    result.push('\n> ...（内容已截断）');
+  }
+  return result.join('\n');
+}
+
+/**
  * 生成 SPECCORE_EXEC 标签，触发 AI 修复
  */
-export function outputFixTag(report: VerifyReport, taskDir: string, round: number): void {
-  const prompt = generateFixPrompt(report, taskDir);
+export async function outputFixTag(report: VerifyReport, taskDir: string, round: number): Promise<void> {
+  const prompt = await generateFixPrompt(report, taskDir);
   console.log('');
   console.log(`[SPECCORE_EXEC: verify-fix round=${round} task=${report.taskId}]`);
   console.log('');
