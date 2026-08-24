@@ -347,6 +347,7 @@ async function loadExtraSpecs(
   let totalChars = 0;
 
   const files = [
+    { name: '开发指南', path: '00-specs/DEV_GUIDE.md' },
     { name: '任务上下文', path: '_shared/CONTEXT.md' },
     { name: '技术方案', path: '00-specs/TECH.md' },
     { name: '技术方案(旧)', path: '_shared/TECH.md' },
@@ -502,6 +503,10 @@ async function loadAllTaskContext(
     } catch { /* 跳过 */ }
   };
   await scanTaskDir(taskDir, '');
+
+  // 1b. 单独读取 00-specs/DEV_GUIDE.md（被 CODEGEN_EXCLUDE_DIRS 排除，但开发指南是 execute 的核心输入）
+  const devGuidePath = join(taskDir, '00-specs', 'DEV_GUIDE.md');
+  await addFile(devGuidePath, '开发指南', '00-specs/DEV_GUIDE.md');
 
   // 2. 迭代规格 020-specs/ 所有 .md（含 global/ 子目录）
   if (iteration) {

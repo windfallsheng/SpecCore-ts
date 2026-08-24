@@ -56,6 +56,11 @@
 - **split 子任务 TASK.md**：新增「本任务改造范围（代码级）」表格 + 开发阶段按依赖排序
 - **analyze prompt**：DEV_GUIDE.md 写作要求完全重写，强调「具体文件路径、依赖关系、代码级指引、可执行验证」
 
+**execute 阶段读取 DEV_GUIDE.md 修复** (`prompt-builder.ts` + `execute.ts`)
+- `loadExtraSpecs()` 文件列表新增 `00-specs/DEV_GUIDE.md` — 传统模式下开发指南被注入 prompt
+- `loadAllTaskContext()` 单独读取 `00-specs/DEV_GUIDE.md` — 全量兜底模式下不被 `CODEGEN_EXCLUDE_DIRS` 排除
+- `execute.ts` 日志输出列表新增 `DEV_GUIDE.md` — 执行前能看到开发指南内容摘要
+
 ### Bug 修复：全局分析进度检测
 
 **修复 `detectGlobalLayerProgress()` 三处缺陷** (`analyze.ts`):
