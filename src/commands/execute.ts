@@ -773,7 +773,7 @@ async function processBatch(tasks: TaskState[], state: ExecutionState, iteration
   for (const task of tasks) {
     logger.info(`   ${task.id}:`);
     const tDir = await resolveTaskDir(iterDir, task.id);
-    for (const specPath of ['00-specs/REQ.md', '00-specs/TECH.md', '00-specs/CONTEXT.md', '_shared/REQ.md', '_shared/TECH.md']) {
+    for (const specPath of ['00-specs/REQ.md', '00-specs/TECH.md', '00-specs/DEV_GUIDE.md', '00-specs/CONTEXT.md', '_shared/REQ.md', '_shared/TECH.md']) {
       const p = join(tDir, specPath);
       if (await pathExists(p)) {
         const content = await readFile(p, 'utf-8');
