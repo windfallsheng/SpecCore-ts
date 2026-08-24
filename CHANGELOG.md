@@ -61,6 +61,11 @@
 - `loadAllTaskContext()` 单独读取 `00-specs/DEV_GUIDE.md` — 全量兜底模式下不被 `CODEGEN_EXCLUDE_DIRS` 排除
 - `execute.ts` 日志输出列表新增 `DEV_GUIDE.md` — 执行前能看到开发指南内容摘要
 
+**plan 命令读取 DEV_GUIDE.md 修复** (`plan.ts` + `prompt-builder.ts`)
+- plan `--prompt` 注入任务详细上下文时新增 `00-specs/DEV_GUIDE.md` — 提取改造范围和实施步骤摘要
+- plan `--prompt` 新增「迭代全局上下文」区块 — 注入 `020-specs/RISK.md`、`020-specs/DEPS.md`、`020-specs/overview/DEV_GUIDE.md`
+- buildPrompt('plan') 指令增强 — 明确要求「参考 DEV_GUIDE.md 改造顺序」排计划、「参考 RISK.md 和 .issues.md」评估风险
+
 ### Bug 修复：全局分析进度检测
 
 **修复 `detectGlobalLayerProgress()` 三处缺陷** (`analyze.ts`):

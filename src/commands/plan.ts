@@ -50,7 +50,8 @@ export async function planCommand(options: PlanOptions): Promise<void> {
     const prompt = await buildPrompt('plan', { iteration: iter, task: taskNames || undefined });
     let promptText = formatPrompt(prompt);
 
-    // v8.2.0+: 注入任务详细上下文（依赖关系 + REQ/TECH 摘要）
+    // v8.2.0+: 注入任务详细上下文（依赖关系 + REQ/TECH/DEV_GUIDE 摘要）
+    // v8.3.0+: 新增 DEV_GUIDE.md、.issues.md — 计划必须参考改造范围和已知风险
     try {
       const iterDir = await getIterationDir(iter);
       const taskDetails: string[] = [];
@@ -58,7 +59,8 @@ export async function planCommand(options: PlanOptions): Promise<void> {
         const tDir = join(iterDir, '030-tasks', t.id);
         const reqPath = join(tDir, '00-specs', 'REQ.md');
         const techPath = join(tDir, '00-specs', 'TECH.md');
-        const depsPath = join(tDir, 'DEPS.md');
+        const devGuidePath = join(tDir, '00-specs', 'DEV_GUIDE.md');
+        const issuesPath = join(tDir, '.issues.md');
         let summary = `### ${t.id}: ${t.name || t.id}\n`;
         if (t.status) summary += `- 状态: ${t.status}\n`;
         if (t.dependencies?.length) summary += `- 依赖: ${t.dependencies.join(', ')}\n`;
@@ -70,15 +72,53 @@ export async function planCommand(options: PlanOptions): Promise<void> {
           const tech = await readFile(techPath, 'utf-8');
           summary += `- TECH: ${tech.slice(0, 200).replace(/\n+/g, ' ')}\n`;
         }
-        if (await pathExists(depsPath)) {
-          const deps = await readFile(depsPath, 'utf-8');
-          summary += `- DEPS: ${deps.slice(0, 200).replace(/\n+/g, ' ')}\n`;
+        if (await pathExists(devGuidePath)) {
+          const devGuide = await readFile(devGuidePath, 'utf-8');
+          // 提取改造范围和实施步骤（对计划最关键）
+          const scopeMatch = devGuide.match(/## 1\.?[\s\S]*?(?=## 2\.?|$)/);
+          const stepsMatch = devGuide.match(/## 2\.?[\s\S]*?(?=## 3\.?|$)/);
+          const scope = scopeMatch ? scopeMatch[0].slice(0, 150).replace(/\n+/g, ' ') : devGuide.slice(0, 150).replace(/\n+/g, ' ');
+          summary += `- DEV_GUIDE(改造范围): ${scope}...\n`;
+          if (stepsMatch) {
+            summary += `- DEV_GUIDE(实施步骤): ${stepsMatch[0].slice(0, 150).replace(/\n+/g, ' ')}...\n`;
+          }
+        }
+        if (await pathExists(issuesPath)) {
+          const issues = await readFile(issuesPath, 'utf-8');
+          summary += `- ISSUES: ${issues.slice(0, 150).replace(/\n+/g, ' ')}\n`;
         }
         taskDetails.push(summary);
       }
       if (taskDetails.length > 0) {
         promptText += `\n\n## 📋 任务详细上下文\n\n`;
         promptText += taskDetails.join('\n');
+      }
+    } catch { /* ignore */ }
+
+    // v8.3.0+: 注入迭代级全局风险（020-specs/RISK.md）和依赖分析（020-specs/DEPS.md）
+    try {
+      const iterDir = await getIterationDir(iter);
+      const globalRiskPath = join(iterDir, '020-specs', 'RISK.md');
+      const globalDepsPath = join(iterDir, '020-specs', 'DEPS.md');
+      const globalDevGuidePath = join(iterDir, '020-specs', 'overview', 'DEV_GUIDE.md');
+      const globalExtras: string[] = [];
+      if (await pathExists(globalRiskPath)) {
+        const risk = await readFile(globalRiskPath, 'utf-8');
+        globalExtras.push(`### 全局风险\n${risk.slice(0, 300).replace(/\n+/g, ' ')}...\n`);
+      }
+      if (await pathExists(globalDepsPath)) {
+        const deps = await readFile(globalDepsPath, 'utf-8');
+        globalExtras.push(`### 全局依赖\n${deps.slice(0, 300).replace(/\n+/g, ' ')}...\n`);
+      }
+      if (await pathExists(globalDevGuidePath)) {
+        const devGuide = await readFile(globalDevGuidePath, 'utf-8');
+        const scopeMatch = devGuide.match(/### 1\.?[\s\S]*?(?=### 2\.?|$)/);
+        const scope = scopeMatch ? scopeMatch[0].slice(0, 200).replace(/\n+/g, ' ') : devGuide.slice(0, 200).replace(/\n+/g, ' ');
+        globalExtras.push(`### 全局改造范围\n${scope}...\n`);
+      }
+      if (globalExtras.length > 0) {
+        promptText += `\n\n## 🌍 迭代全局上下文\n\n`;
+        promptText += globalExtras.join('\n');
       }
     } catch { /* ignore */ }
 
