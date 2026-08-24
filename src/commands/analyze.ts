@@ -2322,12 +2322,35 @@ async function detectGlobalLayerProgress(): Promise<{
     }
   }
 
-  // Layer 3: 检查 _MODULES.md
+  // Layer 3: 检查各端功能模块深入文档（v8.3.0+ 修复：不再把 _MODULES.md 当 Layer 3 产物）
   if (completedLayer >= 2) {
-    if (await pathExists(join(globalDir, 'platforms', '_shared', '_MODULES.md'))) {
-      completedLayer = 3;
-    } else {
-      missing.push('Layer 3: platforms/_shared/_MODULES.md（功能模块候选清单）');
+    try {
+      const platformsDir = join(globalDir, 'platforms');
+      const entries = await readdir(platformsDir, { withFileTypes: true });
+      const platformDirs = entries.filter(e => e.isDirectory() && e.name !== '_shared').map(e => e.name);
+
+      if (platformDirs.length === 0) {
+        missing.push('Layer 3: platforms/{端}/modules/*.md（功能模块深入文档）');
+      } else {
+        const moduleDocChecks = await Promise.all(platformDirs.map(async d => {
+          const modulesDir = join(platformsDir, d, 'modules');
+          if (!await pathExists(modulesDir)) return false;
+          const files = await readdir(modulesDir).catch(() => []);
+          return files.some(f => f.endsWith('.md'));
+        }));
+
+        if (moduleDocChecks.every(Boolean)) {
+          completedLayer = 3;
+        } else {
+          for (const [i, d] of platformDirs.entries()) {
+            if (!moduleDocChecks[i]) {
+              missing.push(`Layer 3: platforms/${d}/modules/*.md（功能模块深入文档）`);
+            }
+          }
+        }
+      }
+    } catch {
+      missing.push('Layer 3: platforms/{端}/modules/*.md（功能模块深入文档）');
     }
   }
 
@@ -2338,9 +2361,29 @@ async function detectGlobalLayerProgress(): Promise<{
     const requirementsDir = join(globalDir, 'requirements');
     const completedSubLayers: string[] = [];
 
-    // 4a: 产品文档
+    // 4a: 产品文档（全局 + 各端，v8.3.0+ 修复：检查各端 REQUIREMENT.md）
     const hasReq = await pathExists(join(requirementsDir, 'REQUIREMENT.md'));
-    if (hasReq) completedSubLayers.push('4a');
+    let allPlatformReqsExist = true;
+    try {
+      const platformsDir = join(globalDir, 'platforms');
+      const entries = await readdir(platformsDir, { withFileTypes: true });
+      const platformDirs = entries.filter(e => e.isDirectory() && e.name !== '_shared').map(e => e.name);
+      const platformReqChecks = await Promise.all(
+        platformDirs.map(p => pathExists(join(requirementsDir, p, 'REQUIREMENT.md')))
+      );
+      allPlatformReqsExist = platformReqChecks.every(Boolean);
+      for (const [i, p] of platformDirs.entries()) {
+        if (!platformReqChecks[i]) {
+          missing.push(`Layer 4a: requirements/${p}/REQUIREMENT.md（${p} 产品视角需求）`);
+        }
+      }
+    } catch { /* ignore */ }
+
+    if (hasReq && allPlatformReqsExist) {
+      completedSubLayers.push('4a');
+    } else if (!hasReq) {
+      missing.push('Layer 4a: requirements/REQUIREMENT.md（全局需求总纲）');
+    }
 
     // 4b: 全局技术核心文档
     const hasCoreTech = await pathExists(join(overviewDir, 'ARCHITECTURE.md'))
@@ -2352,16 +2395,37 @@ async function detectGlobalLayerProgress(): Promise<{
       || await pathExists(join(overviewDir, 'DATA_FLOW.md'));
     if (hasExtTech) completedSubLayers.push('4c');
 
-    // 4d: 各端技术文档
+    // 4d: 各端技术文档（v8.3.0+ 修复：每个端都要有，不再用 some(Boolean)）
     try {
       const platformsDir = join(globalDir, 'platforms');
       const entries = await readdir(platformsDir, { withFileTypes: true });
       const platformDirs = entries.filter(e => e.isDirectory() && e.name !== '_shared').map(e => e.name);
-      const hasPlatformDoc = platformDirs.length > 0 && (await Promise.all(
-        platformDirs.map(async d => pathExists(join(platformsDir, d, 'API_INVENTORY.md'))
-          || pathExists(join(platformsDir, d, 'UI_FLOW.md')))
-      )).some(Boolean);
-      if (hasPlatformDoc) completedSubLayers.push('4d');
+      const missingPlatformDocs: string[] = [];
+
+      for (const d of platformDirs) {
+        const isBackend = /service|server|api|backend/i.test(d);
+        if (isBackend) {
+          const hasApi = await pathExists(join(platformsDir, d, 'API_INVENTORY.md'));
+          const hasData = await pathExists(join(platformsDir, d, 'DATA_MODEL.md'));
+          if (!hasApi) missingPlatformDocs.push(`platforms/${d}/API_INVENTORY.md`);
+          if (!hasData) missingPlatformDocs.push(`platforms/${d}/DATA_MODEL.md`);
+        } else {
+          const hasUi = await pathExists(join(platformsDir, d, 'UI_FLOW.md'));
+          const hasApiMap = await pathExists(join(platformsDir, d, 'API_CALL_MAP.md'));
+          const hasState = await pathExists(join(platformsDir, d, 'STATE_MANAGEMENT.md'));
+          if (!hasUi) missingPlatformDocs.push(`platforms/${d}/UI_FLOW.md`);
+          if (!hasApiMap) missingPlatformDocs.push(`platforms/${d}/API_CALL_MAP.md`);
+          if (!hasState) missingPlatformDocs.push(`platforms/${d}/STATE_MANAGEMENT.md`);
+        }
+      }
+
+      if (missingPlatformDocs.length === 0 && platformDirs.length > 0) {
+        completedSubLayers.push('4d');
+      } else {
+        for (const doc of missingPlatformDocs) {
+          missing.push(`Layer 4d: ${doc}`);
+        }
+      }
     } catch { /* ignore */ }
 
     if (completedSubLayers.length === 4) {

@@ -34,6 +34,16 @@
 - `isSpeccoreOperation()` 新增文件路径 + 操作词联合检测
 - `COMMAND_KB` 新增 clarify 条目
 
+### Bug 修复：全局分析进度检测
+
+**修复 `detectGlobalLayerProgress()` 三处缺陷** (`analyze.ts`):
+
+1. **Layer 3 被误判完成**：原逻辑把 `_MODULES.md`（Layer 2 产物）当成 Layer 3 完成标志，导致功能模块深入文档完全跳过。修复后检测 `platforms/{端}/modules/*.md`。
+
+2. **各端需求文档被忽略**：4a 检测只看 `requirements/REQUIREMENT.md`，不看 `requirements/{端}/REQUIREMENT.md`。修复后逐端检查。
+
+3. **4d 检测过于宽松**：原逻辑用 `.some(Boolean)`，只要一个端有文档就认为完成。修复后每个端都必须有对应技术文档（后端: API_INVENTORY + DATA_MODEL；前端: UI_FLOW + API_CALL_MAP + STATE_MANAGEMENT）。
+
 ---
 
 ## v8.1.2 (2026-08-22) — DOC_MATRIX 交叉校验：骨架完成后自动检测并补建遗漏文档
