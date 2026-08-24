@@ -66,6 +66,14 @@
 - plan `--prompt` 新增「迭代全局上下文」区块 — 注入 `020-specs/RISK.md`、`020-specs/DEPS.md`、`020-specs/overview/DEV_GUIDE.md`
 - buildPrompt('plan') 指令增强 — 明确要求「参考 DEV_GUIDE.md 改造顺序」排计划、「参考 RISK.md 和 .issues.md」评估风险
 
+**split 阶段利用 analyze DEV_GUIDE.md 修复** (`split.ts`)
+- `loadSpecContents()` 全局文档读取列表新增 `DEV_GUIDE.md`
+- `loadSpecContents()` 各端子目录读取列表新增 `DEV_GUIDE.md`
+- 新增 `extractTaskDevGuideContent()` 函数 — 从 analyze 生成的 `020-specs/{端}/DEV_GUIDE.md` 或 `020-specs/DEV_GUIDE.md` 提取本任务相关内容
+- 任务级 `DEV_GUIDE.md` 写入改为**三级回退**：AI split 生成 → analyze DEV_GUIDE.md 提取 → 结构化模板
+- 修复前：analyze 生成的开发指南被 split 完全忽略，任务级 DEV_GUIDE.md 几乎为空
+- 修复后：analyze 的开发指南被自动拆分到各任务，execute 阶段有内容可参考
+
 ### Bug 修复：全局分析进度检测
 
 **修复 `detectGlobalLayerProgress()` 三处缺陷** (`analyze.ts`):

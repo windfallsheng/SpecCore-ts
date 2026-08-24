@@ -1327,15 +1327,23 @@ ${apiDesc}
     );
   }
 
-  // v7.4.0+: DEV_GUIDE.md 写入（优先 AI 生成，回退到结构化模板）
+  // v7.4.0+: DEV_GUIDE.md 写入
+  // v8.3.0+: 三级回退 — AI split 生成 → analyze DEV_GUIDE.md 提取 → 结构化模板
   const aiDevGuideContent = (section as any)._devGuideContent;
+  const analyzeDevGuideContent = extractTaskDevGuideContent(specContents, section, taskPlatforms);
   if (aiDevGuideContent && aiDevGuideContent.length > 50) {
     await writeFile(
       join(taskDir, '00-specs', 'DEV_GUIDE.md'),
       `# ${section.name} - 开发者实现指南\n\n${aiDevGuideContent}\n`
     );
+  } else if (analyzeDevGuideContent && analyzeDevGuideContent.length > 100) {
+    // v8.3.0+: 从 analyze DEV_GUIDE.md 提取本任务相关内容
+    await writeFile(
+      join(taskDir, '00-specs', 'DEV_GUIDE.md'),
+      `# ${section.name} - 开发者实现指南\n\n> 任务: ${taskId} | ${section.name}\n> 本文档面向开发者，提供可执行的实现指导。\n> 来源: analyze → DEV_GUIDE.md（自动提取）\n\n${analyzeDevGuideContent}\n\n## 全局开发指南引用\n- 环境/规范/联调 → ../../../overview/DEV_GUIDE.md\n`
+    );
   } else {
-    // v8.3.0+: 生成结构化任务级开发指南（不再是空引用）
+    // 回退：结构化骨架模板（AI execute 阶段填充）
     await writeFile(
       join(taskDir, '00-specs', 'DEV_GUIDE.md'),
       `# ${section.name} - 开发者实现指南\n\n> 任务: ${taskId} | ${section.name}\n> 本文档面向开发者，提供可执行的实现指导。\n\n## 1. 本任务改造范围\n\n<!-- AI-FILL: execute 阶段根据 REQ.md 和 TECH.md 填充 -->\n| 类型 | 文件/目录 | 说明 |\n| :--- | :--- | :--- |\n| 新增 | | |\n| 修改 | | |\n| 删除 | | |\n\n## 2. 实施步骤（按依赖排序）\n\n<!-- AI-FILL: Step-by-step 开发步骤，具体到文件/函数级 -->\n- **Step 1**: ...（为什么先做，依赖什么）\n- **Step 2**: ...（依赖 Step 1 的什么产出）\n- ...\n\n## 3. 关键代码指引\n\n<!-- AI-FILL: 核心逻辑的伪代码或改造前后对比 -->\n\n### 3.1 核心改造点 A\n- **文件**: \`xxx.ts\`\n- **改造**: ...\n- **代码示例**:\n  \`\`\`typescript\n  // 改造后\n  \`\`\`\n\n## 4. 接口契约\n\n<!-- AI-FILL: 本任务涉及的前后接口对照 -->\n| 接口 | 路径 | 后端实现 | 前端调用 | 状态 |\n| :--- | :--- | :--- | :--- | :--- |\n\n## 5. 每步验证\n\n<!-- AI-FILL: 每步改完怎么验证 -->\n| 步骤 | 验证命令/操作 | 通过标准 |\n| :--- | :--- | :--- |\n\n## 6. 回滚方案\n\n<!-- AI-FILL: 改坏了怎么回退 -->\n- 数据库: ...\n- 代码: ...\n\n## 7. 已知坑点\n\n<!-- AI-FILL: 常见坑点及解决方式 -->\n- ⚠️ **坑 1**: ...（解决方式）\n- ⚠️ **坑 2**: ...（解决方式）\n\n## 全局开发指南引用\n- 环境/规范/联调 → ../../../overview/DEV_GUIDE.md\n`
@@ -2444,7 +2452,8 @@ async function loadSpecContents(iterationDir: string): Promise<Record<string, st
   if (!(await pathExists(specDir))) return specs;
 
   // 1. 读取全局文档（优先 global/ 子目录，回退根目录 — v6.41.0+ 向后兼容）
-  for (const f of ['REQUIREMENT.md', 'ANALYSIS.md', 'TECH.md', 'RISK.md', 'DEPS.md', 'REVIEW.md', 'MONITOR.md']) {
+  // v8.3.0+: 新增 DEV_GUIDE.md — analyze 生成的开发指南是 split 填充任务级文档的关键输入
+  for (const f of ['REQUIREMENT.md', 'ANALYSIS.md', 'TECH.md', 'DEV_GUIDE.md', 'RISK.md', 'DEPS.md', 'REVIEW.md', 'MONITOR.md']) {
     const resolved = await resolveGlobalSpecPath(specDir, f);
     if (resolved) {
       const content = await readFile(resolved, 'utf-8');
@@ -2471,8 +2480,8 @@ async function loadSpecContents(iterationDir: string): Promise<Record<string, st
     if (e.isDirectory() && !e.name.startsWith('_') && !e.name.startsWith('.') && !knownNonPlatformDirs.has(e.name)) {
       const platform = e.name;
       const platformDir = join(specDir, platform);
-      // 读取该端下的 TECH.md、TEST.md、UI_SPEC.md
-      for (const f of ['TECH.md', 'TEST.md', 'UI_SPEC.md']) {
+      // 读取该端下的 TECH.md、TEST.md、UI_SPEC.md、DEV_GUIDE.md
+      for (const f of ['TECH.md', 'TEST.md', 'UI_SPEC.md', 'DEV_GUIDE.md']) {
         const fp = join(platformDir, f);
         if (await pathExists(fp)) {
           const content = await readFile(fp, 'utf-8');
@@ -2576,6 +2585,38 @@ function extractTaskTechContent(specContents: Record<string, string>, section: S
   // 后端/共享：提取技术方案、架构、接口设计、数据模型等
   const techSection = extractRelevantSection(techMd, section.name, '技术方案 架构 接口设计 数据模型 模块设计');
   return techSection;
+}
+
+/** v8.3.0+: 从 analyze DEV_GUIDE.md 提取任务级开发指南内容 */
+function extractTaskDevGuideContent(
+  specContents: Record<string, string>,
+  section: Section,
+  taskPlatforms: string[]
+): string {
+  const results: string[] = [];
+
+  // 1. 优先从各端 DEV_GUIDE.md 提取
+  for (const platform of taskPlatforms) {
+    const platformDevGuideKey = `${platform}/DEV_GUIDE.md`;
+    const platformDevGuide = specContents[platformDevGuideKey];
+    if (platformDevGuide) {
+      const extracted = extractRelevantSection(platformDevGuide, section.name);
+      if (extracted && extracted.trim().length > 50) {
+        results.push(`## ${platform} 端开发指南\n\n${extracted.trim()}`);
+      }
+    }
+  }
+
+  // 2. 回退：从全局 DEV_GUIDE.md 提取
+  const globalDevGuide = specContents['DEV_GUIDE.md'];
+  if (globalDevGuide) {
+    const extracted = extractRelevantSection(globalDevGuide, section.name, '改造范围 实施步骤 接口契约 验证方式 回滚 坑点');
+    if (extracted && extracted.trim().length > 50) {
+      results.push(`## 全局开发指南（本任务相关）\n\n${extracted.trim()}`);
+    }
+  }
+
+  return results.join('\n\n');
 }
 
 // 前端专属：组件树
