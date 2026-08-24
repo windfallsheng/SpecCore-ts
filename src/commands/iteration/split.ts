@@ -1327,7 +1327,7 @@ ${apiDesc}
     );
   }
 
-  // v7.4.0+: DEV_GUIDE.md 写入（优先 AI 生成，回退到引用 overview 指南）
+  // v7.4.0+: DEV_GUIDE.md 写入（优先 AI 生成，回退到结构化模板）
   const aiDevGuideContent = (section as any)._devGuideContent;
   if (aiDevGuideContent && aiDevGuideContent.length > 50) {
     await writeFile(
@@ -1335,10 +1335,10 @@ ${apiDesc}
       `# ${section.name} - 开发者实现指南\n\n${aiDevGuideContent}\n`
     );
   } else {
-    // 生成引用 overview DEV_GUIDE.md 的任务级指南
+    // v8.3.0+: 生成结构化任务级开发指南（不再是空引用）
     await writeFile(
       join(taskDir, '00-specs', 'DEV_GUIDE.md'),
-      `# ${section.name} - 开发者实现指南\n\n> 任务: ${taskId} | ${section.name}\n> 本任务的实现指南，结合全局开发指南使用。\n\n## 全局开发指南引用\n- DEV_GUIDE.md → ../../../overview/DEV_GUIDE.md\n\n## 本任务实现步骤\n\n<!-- AI-FILL: execute 阶段根据 REQ.md 和 TECH.md 生成具体实现步骤 -->\n\n## 关键代码示例\n\n<!-- AI-FILL: 核心逻辑的伪代码或代码片段 -->\n\n## 与存量功能的集成\n\n<!-- AI-FILL: 如何与已有代码交互、复用哪些模块 -->\n\n## 测试策略\n\n<!-- AI-FILL: 单元测试、集成测试的具体写法 -->\n\n## 注意事项\n\n<!-- AI-FILL: 常见坑点、边界条件、调试技巧 -->\n`
+      `# ${section.name} - 开发者实现指南\n\n> 任务: ${taskId} | ${section.name}\n> 本文档面向开发者，提供可执行的实现指导。\n\n## 1. 本任务改造范围\n\n<!-- AI-FILL: execute 阶段根据 REQ.md 和 TECH.md 填充 -->\n| 类型 | 文件/目录 | 说明 |\n| :--- | :--- | :--- |\n| 新增 | | |\n| 修改 | | |\n| 删除 | | |\n\n## 2. 实施步骤（按依赖排序）\n\n<!-- AI-FILL: Step-by-step 开发步骤，具体到文件/函数级 -->\n- **Step 1**: ...（为什么先做，依赖什么）\n- **Step 2**: ...（依赖 Step 1 的什么产出）\n- ...\n\n## 3. 关键代码指引\n\n<!-- AI-FILL: 核心逻辑的伪代码或改造前后对比 -->\n\n### 3.1 核心改造点 A\n- **文件**: \`xxx.ts\`\n- **改造**: ...\n- **代码示例**:\n  \`\`\`typescript\n  // 改造后\n  \`\`\`\n\n## 4. 接口契约\n\n<!-- AI-FILL: 本任务涉及的前后接口对照 -->\n| 接口 | 路径 | 后端实现 | 前端调用 | 状态 |\n| :--- | :--- | :--- | :--- | :--- |\n\n## 5. 每步验证\n\n<!-- AI-FILL: 每步改完怎么验证 -->\n| 步骤 | 验证命令/操作 | 通过标准 |\n| :--- | :--- | :--- |\n\n## 6. 回滚方案\n\n<!-- AI-FILL: 改坏了怎么回退 -->\n- 数据库: ...\n- 代码: ...\n\n## 7. 已知坑点\n\n<!-- AI-FILL: 常见坑点及解决方式 -->\n- ⚠️ **坑 1**: ...（解决方式）\n- ⚠️ **坑 2**: ...（解决方式）\n\n## 全局开发指南引用\n- 环境/规范/联调 → ../../../overview/DEV_GUIDE.md\n`
     );
   }
 
@@ -1523,10 +1523,20 @@ ${section.content}
 - **依赖任务**: ${dependsOn}
 - **跨端说明**: ${crossDesc}
 
+## 本任务改造范围（代码级）
+
+<!-- AI-FILL: execute 阶段根据 DEV_GUIDE.md 和 TECH.md 填充具体文件 -->
+| 类型 | 文件/目录 | 说明 |
+| :--- | :--- | :--- |
+| 新增 | | |
+| 修改 | | |
+| 删除 | | |
+
 ## 工作清单
 
 ### 第一阶段：需求确认
 - [ ] 阅读 00-specs/REQ.md 确认本任务需求范围
+- [ ] 阅读 00-specs/DEV_GUIDE.md 确认改造范围和顺序
 - [ ] 阅读 _shared/API_CONTRACT.yaml 确认接口契约
 - [ ] 阅读 _shared/CONTEXT.md 确认跨端关联
 
@@ -1538,14 +1548,16 @@ ${isBk ? `- [ ] 设计本端负责的接口（路径/方法/参数/响应/错误
 - [ ] 确认 API 调用链（调哪些后端接口）
 - [ ] 设计字段映射和表单校验规则`}
 
-### 第三阶段：开发实施
-${isBk ? `- [ ] 实现 Controller/Handler 层（接口入口）
-- [ ] 实现 Service/UseCase 层（业务逻辑）
-- [ ] 实现 Repository/Data 层（数据访问）
+### 第三阶段：开发实施（按依赖排序）
+${isBk ? `- [ ] 实现数据库变更（如有）— 先改表结构
+- [ ] 实现 Entity/Repository 层 — 依赖表结构
+- [ ] 实现 Service/UseCase 层 — 依赖 Repository
+- [ ] 实现 Controller/Handler 层 — 依赖 Service
 - [ ] 实现单元测试（覆盖核心逻辑和边界条件）
-- [ ] 自测通过（接口通、数据对、边界覆盖）` : `- [ ] 实现页面组件和路由配置
-- [ ] 实现状态管理（全局状态 + 本地状态）
+- [ ] 自测通过（接口通、数据对、边界覆盖）` : `- [ ] 确认后端接口已就绪（依赖后端先完成）
 - [ ] 实现 API 调用封装（请求/错误处理/重试）
+- [ ] 实现状态管理（全局状态 + 本地状态）
+- [ ] 实现页面组件和路由配置
 - [ ] 实现表单校验和字段映射
 - [ ] 实现 UI 测试（关键流程覆盖）
 - [ ] 自测通过（页面渲染、交互响应、API 连通）`}
