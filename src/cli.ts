@@ -52,6 +52,7 @@ import { prCommand } from './commands/pr';
 import { buildConstitution } from './core/constitution-builder';
 import { contextCommand } from './commands/context-output';
 import { doneCommand } from './commands/done';
+import { workspaceCommand } from './commands/workspace';
 // rename 命令
 import { renameCommand } from './commands/rename';
 import { retroCommand } from './commands/retro';
@@ -759,6 +760,7 @@ program
   .option('-d, --desc <desc>', 'Pattern description')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('--confidence <confidence>', 'Confidence level: EXTRACTED | INFERRED (v6.91.0+)')
+  .option('--auto-detect [dir]', 'Auto scan directory for reusable pattern candidates (v8.2.0+)')
   .option('--force', 'Overwrite existing pattern')
   .action(patternCommand);
 
@@ -866,6 +868,10 @@ program
   .option('--deep <doc>', 'v7.2.0+: 全局分析时对指定文档进行深度分析（如 ARCHITECTURE.md），只生成该文档')
   .option('--iterative', 'v7.2.0+: 迭代式补全模式 — 先输出大纲，确认后再逐节深入（配合 --deep 使用）')
   .option('--filter <keywords>', 'v7.2.0+: 按需分析 — 只分析与关键词匹配的模块（如 "auth|login|session"）')
+  .option('--extract-units', 'v8.2.0+: 自动提取功能单元清单（从需求文档）')
+  .option('--unit <id>', 'v8.2.0+: 分析单个功能单元（如 M-01，配合 --prompt）')
+  .option('--consolidate', 'v8.2.0+: 汇总所有单元分析为统一报告（配合 --prompt/--apply）')
+  .option('--resume-units', 'v8.2.0+: 断点续跑未完成的单元分析')
   .action(analyzeCommand);
 
 // v6.76.0+: 需求专业化命令
@@ -880,9 +886,27 @@ program
   .option('--apply <content>', '接收 AI 整理结果写入文件（配合 --prompt）')
   .option('--check <file>', '检测指定文件的专业度，不整理')
   .option('--force', '强制整理（即使文档已足够专业）')
+  .option('--extract-units', 'v8.2.0+: 从原始需求提取功能单元清单')
+  .option('--unit <id>', 'v8.2.0+: 澄清单个功能单元（如 M-01，配合 --prompt/--apply）')
+  .option('--consolidate', 'v8.2.0+: 汇总所有单元澄清为统一 PRD（配合 --apply）')
+  .option('--resume-units', 'v8.2.0+: 断点续跑未完成的单元澄清')
+  .option('--local', 'v8.3.0+: 临时工作区模式（不绑定迭代，输出到 .speccore/local/workspace/）')
+  .option('--promote <entryId>', 'v8.3.0+: 将工作区条目提升到迭代层（配合 --to）')
   .action((input: string | undefined, opts: any) => {
     clarifyCommand({ ...opts, input });
   });
+
+// v8.3.0+: 临时工作区管理
+program
+  .command('workspace')
+  .alias('ws')
+  .description('管理临时工作区（list/show/clean）')
+  .option('--list', '列出所有条目（默认）')
+  .option('--show <entryId>', '查看条目详情')
+  .option('--clean', '清理旧条目')
+  .option('--days <n>', '清理天数阈值（默认 30）')
+  .option('--type <type>', '过滤类型: clarify | research')
+  .action(workspaceCommand);
 
 program
   .command('audit')

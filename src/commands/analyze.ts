@@ -12,7 +12,7 @@
  *   - task      → Iteration-XX/030-tasks/Task-NN/_shared/  任务级独立（不覆盖基线）
  */
 import { writeFile, pathExists, ensureDir, rename, stat } from 'fs-extra';
-import { join, dirname } from 'path';
+import { join, dirname, relative } from 'path';
 import { backupWithTimestamp, isTimestampBackup, shouldOverwrite, findProjectRoot } from '../utils/task-utils';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration, getIterationDir } from '../core/context';
@@ -29,6 +29,7 @@ import { warnIfIndexStale } from '../core/index-guard';
 import { GLOBAL_SPECS_DIR, GLOBAL_SPEC_FILES, parsePlatformTypes, parsePlatformList } from '../core/spec-paths';
 import { computeAnalyzeManifest, generateSkeleton, detectSkeletonProgress, buildSkeletonFileList, validateContentQuality } from '../core/spec-skeleton';
 import { unifiedSearch, formatUnifiedContext } from '../core/unified-retrieval';
+import { assembleUnitContext } from '../core/unit-context-assembler';
 import { PipelineEngine, createAnalyzePipeline, createGlobalAnalyzePipeline } from '../core/pipeline-engine';
 import { detectAffectedPlatforms, detectPlatformPriorityOrder, recordAnalysisSnapshot } from '../core/change-detection';
 import {
@@ -46,6 +47,7 @@ import {
   writeClarifyReport,
   hasValidClarifiedDocs,
   buildClarifiedHeader,
+  extractUnitsFromText,
   type RequirementQualityReport,
 } from '../core/requirement-clarifier';
 // v6.83.0+: 专业 AI 角色定义
@@ -118,6 +120,11 @@ export interface AnalyzeOptions {
   // v7.2.0+: 细粒度分析参数（由意图识别自动提取）
   docName?: string;       // 目标文档名（如 TECH.md）
   featureName?: string;   // 目标功能名（如 "订单模块"）
+  // v8.2.0+: 功能单元聚焦分析（解决注意力漂移+空模板问题）
+  extractUnits?: boolean; // --extract-units: 自动提取功能单元清单
+  unit?: string;          // --unit <ID>: 分析单个功能单元（如 M-01）
+  consolidate?: boolean;  // --consolidate: 汇总所有单元分析为统一报告
+  resumeUnits?: boolean;  // --resume-units: 断点续跑未完成的单元分析
 }
 
 export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
@@ -413,6 +420,107 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     return;
   }
 
+  // ── v8.2.0+: 功能单元聚焦分析模式（--extract-units / --unit / --consolidate / --resume-units）──
+  if (options.extractUnits || options.unit || options.consolidate || options.resumeUnits) {
+    const iter = options.iteration || await getDefaultIteration();
+    if (!iter) { logger.error('请指定迭代: -I <iteration>'); return; }
+    const iterDir = await getIterationDir(iter);
+
+    // Step 1: 提取功能单元清单
+    let units: IterationUnit[] = [];
+    const unitsCachePath = join(process.cwd(), UNITS_CACHE_DIR, iter, 'units.json');
+    if (await pathExists(unitsCachePath)) {
+      try {
+        units = JSON.parse(await readFile(unitsCachePath, 'utf-8'));
+        logger.info(`📋 已加载功能单元清单: ${units.length} 个`);
+      } catch { /* fall through to re-extract */ }
+    }
+    if (units.length === 0 || options.extractUnits) {
+      units = await extractIterationUnits(iterDir);
+      await ensureDir(dirname(unitsCachePath));
+      await writeFile(unitsCachePath, JSON.stringify(units, null, 2));
+      logger.info(`📋 功能单元清单已提取: ${units.length} 个`);
+      for (const u of units) {
+        logger.info(`   ${u.id}: ${u.name} (${u.source}#L${u.sourceRange.startLine})`);
+      }
+      if (options.extractUnits) {
+        logger.info('');
+        logger.info('📋 下一步: 逐个分析功能单元');
+        logger.info(`   speccore analyze --prompt -I ${iter} --unit M-01`);
+        return;
+      }
+    }
+
+    // Step 2: 汇总模式（--consolidate）
+    if (options.consolidate) {
+      const analyses = await loadUnitAnalyses(iter);
+      if (analyses.length === 0) {
+        logger.warn('⚠️ 尚未完成任何单元分析，请先运行 --unit 模式');
+        logger.info(`   speccore analyze --prompt -I ${iter} --unit M-01`);
+        return;
+      }
+      const report = await consolidateUnitAnalyses(iter, units, analyses);
+      if (options.prompt) {
+        process.stdout.write(`[SPECCORE_PROMPT]\n${report}\n\n## 操作选项\n\n**选项 A：确认通过，写入所有文档**\n\`\`\`bash\nspeccore analyze --apply '[DOC:...]' -I ${iter}\n\`\`\`\n`);
+        process.exitCode = 10;
+        return;
+      }
+      if (options.apply) {
+        // 直接通过 --apply 的 [DOC:xxx] 处理逻辑写入
+        logger.info(`📋 汇总报告已生成，共 ${analyses.length}/${units.length} 个单元`);
+        return;
+      }
+      logger.info(`📋 汇总报告（${analyses.length}/${units.length} 个单元）`);
+      logger.info('   使用 --prompt 查看完整报告，或 --apply 直接写入');
+      return;
+    }
+
+    // Step 3: 断点续跑（--resume-units）
+    let targetUnit: IterationUnit | undefined;
+    if (options.resumeUnits) {
+      const pending = await detectPendingUnits(iter, units);
+      if (pending.length === 0) {
+        logger.success('🎉 所有功能单元分析已完成！');
+        logger.info('   运行 --consolidate 汇总为统一报告');
+        logger.info(`   speccore analyze --prompt -I ${iter} --consolidate`);
+        return;
+      }
+      targetUnit = pending[0];
+      logger.info(`🔄 断点续跑: ${targetUnit.id} ${targetUnit.name}（剩余 ${pending.length} 个）`);
+    }
+
+    // Step 4: 分析单个单元（--unit M-01）
+    if (options.unit) {
+      targetUnit = units.find(u => u.id === options.unit);
+      if (!targetUnit) {
+        logger.error(`未找到功能单元: ${options.unit}`);
+        logger.info(`   可用单元: ${units.map(u => u.id).join(', ')}`);
+        return;
+      }
+    }
+
+    if (targetUnit && options.prompt) {
+      const prompt = await buildUnitAnalysisPrompt(iterDir, iter, targetUnit, units);
+      process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
+      process.exitCode = 10;
+      return;
+    }
+
+    if (targetUnit && options.apply) {
+      // AI 输出的是 [DOC:xxx] 格式，由 --apply 的 parseDocMarkers 处理
+      logger.info(`✅ 功能单元 ${targetUnit.id} 分析结果已接收`);
+      logger.info('   结果已通过 --apply 的 [DOC:xxx] 解析写入');
+      return;
+    }
+
+    if (targetUnit) {
+      logger.info(`📋 功能单元: ${targetUnit.id} ${targetUnit.name}`);
+      logger.info(`   来源: ${targetUnit.source}#L${targetUnit.sourceRange.startLine}`);
+      logger.info('   使用 --prompt 生成分析 Prompt，或 --apply 写入分析结果');
+      return;
+    }
+  }
+
   // 模糊匹配端名
   if (options.platform) {
     const resolved = await resolvePlatform(options.platform);
@@ -479,55 +587,73 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     const specDir = join(iterDir, '020-specs');
     await ensureDir(specDir);
 
-    // 收集需求文档
+    // v8.2.0+: 需求收集优先从黄金需求目录 020-specs/requirements/ 读取
+    // 该目录存放经过 clarify 后的专业需求，作为分析和后续步骤的唯一依据
     const requirements: string[] = [];
-    const reqIndex = join(reqDir, 'INDEX.md');
-    if (await pathExists(reqIndex)) requirements.push(reqIndex);
-    const convDir = join(reqDir, 'converted');
-    if (await pathExists(convDir)) {
+    const goldenReqDir = join(specDir, 'requirements');
+    const hasGoldenDocs = await pathExists(goldenReqDir);
+
+    if (hasGoldenDocs) {
       try {
-        const files = await readdir(convDir);
-        for (const f of files.filter((f: string) => f.endsWith('.md') && !isTimestampBackup(f))) requirements.push(join(convDir, f));
+        const goldenFiles = await readdir(goldenReqDir);
+        for (const f of goldenFiles.filter((f: string) => f.endsWith('.md') && !isTimestampBackup(f))) {
+          requirements.push(join(goldenReqDir, f));
+        }
       } catch {}
     }
-    const reqRoot = join(reqDir, 'REQUIREMENT.md');
-    if (await pathExists(reqRoot)) requirements.push(reqRoot);
 
-    // 收集 features/*/README.md
-    const featuresDir = join(reqDir, 'features');
-    if (await pathExists(featuresDir)) {
-      try {
-        const featureEntries = await readdir(featuresDir, { withFileTypes: true });
-        for (const fe of featureEntries) {
-          if (fe.isDirectory() && !fe.name.startsWith('.')) {
-            const readmePath = join(featuresDir, fe.name, 'README.md');
-            if (await pathExists(readmePath)) requirements.push(readmePath);
+    // 如果黄金需求目录为空，回退到原始需求目录 010-requirements/
+    if (requirements.length === 0) {
+      const reqIndex = join(reqDir, 'INDEX.md');
+      if (await pathExists(reqIndex)) requirements.push(reqIndex);
+      const convDir = join(reqDir, 'converted');
+      if (await pathExists(convDir)) {
+        try {
+          const files = await readdir(convDir);
+          for (const f of files.filter((f: string) => f.endsWith('.md') && !isTimestampBackup(f))) requirements.push(join(convDir, f));
+        } catch {}
+      }
+      const reqRoot = join(reqDir, 'REQUIREMENT.md');
+      if (await pathExists(reqRoot)) requirements.push(reqRoot);
+
+      // 收集 features/*/README.md
+      const featuresDir = join(reqDir, 'features');
+      if (await pathExists(featuresDir)) {
+        try {
+          const featureEntries = await readdir(featuresDir, { withFileTypes: true });
+          for (const fe of featureEntries) {
+            if (fe.isDirectory() && !fe.name.startsWith('.')) {
+              const readmePath = join(featuresDir, fe.name, 'README.md');
+              if (await pathExists(readmePath)) requirements.push(readmePath);
+            }
           }
-        }
-      } catch {}
-    }
+        } catch {}
+      }
 
-    // 收集 staging/ 下的分类文档（doc2spec --classify 产物，带 type frontmatter）
-    const stagingDir = join(reqDir, 'staging');
-    if (await pathExists(stagingDir)) {
-      try {
-        const stagingFiles = await readdir(stagingDir);
-        for (const f of stagingFiles.filter((f: string) => f.endsWith('.md') && !isTimestampBackup(f))) {
-          requirements.push(join(stagingDir, f));
-        }
-      } catch {}
-    }
+      // 收集 staging/ 下的分类文档
+      const stagingDir = join(reqDir, 'staging');
+      if (await pathExists(stagingDir)) {
+        try {
+          const stagingFiles = await readdir(stagingDir);
+          for (const f of stagingFiles.filter((f: string) => f.endsWith('.md') && !isTimestampBackup(f))) {
+            requirements.push(join(stagingDir, f));
+          }
+        } catch {}
+      }
 
-    // 收集类型目录下的文档（bugs/, refactors/, research/ — 扁平 .md 文件）
-    for (const typeDir of ['bugs', 'refactors', 'research']) {
-      const typeDirPath = join(reqDir, typeDir);
-      if (!(await pathExists(typeDirPath))) continue;
-      try {
-        const typeFiles = await readdir(typeDirPath);
-        for (const f of typeFiles.filter((f: string) => f.endsWith('.md') && !isTimestampBackup(f))) {
-          requirements.push(join(typeDirPath, f));
-        }
-      } catch {}
+      // 收集类型目录下的文档
+      for (const typeDir of ['bugs', 'refactors', 'research']) {
+        const typeDirPath = join(reqDir, typeDir);
+        if (!(await pathExists(typeDirPath))) continue;
+        try {
+          const typeFiles = await readdir(typeDirPath);
+          for (const f of typeFiles.filter((f: string) => f.endsWith('.md') && !isTimestampBackup(f))) {
+            requirements.push(join(typeDirPath, f));
+          }
+        } catch {}
+      }
+    } else {
+      logger.info(`   📋 使用黄金需求目录: 020-specs/requirements/ (${requirements.length} 个文档)`);
     }
 
     if (requirements.length === 0) {
@@ -922,19 +1048,35 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
           let skippedCount = 0;
 
           for (const [filename, content] of Object.entries(docs)) {
-            // v6.80.0+: 010-requirements/ 路径处理（clarify 结果写入）
+            // v8.2.0+: 需求文档写入黄金需求目录 020-specs/requirements/
+            // 支持 010-requirements/ 路径（向后兼容，自动重定向）
+            if (filename.startsWith('020-specs/requirements/')) {
+              const reqFilePath = filename.slice('020-specs/requirements/'.length);
+              const goldenDir = join(iterDir!, '020-specs', 'requirements');
+              const fp = join(goldenDir, reqFilePath);
+              await ensureDir(dirname(fp));
+              let finalContent = content;
+              if (reqFilePath.startsWith('clarified-') && !content.startsWith('---')) {
+                finalContent = buildClarifiedHeader(reqFilePath) + content;
+              }
+              await writeFile(fp, finalContent);
+              logger.info(`   📝 黄金需求已写入: 020-specs/requirements/${reqFilePath}`);
+              count++;
+              continue;
+            }
+            // v6.80.0+: 向后兼容 — 010-requirements/ 路径自动重定向到黄金需求目录
             if (filename.startsWith('010-requirements/')) {
               const reqFilePath = filename.slice('010-requirements/'.length);
-              const reqDir = join(iterDir!, '010-requirements');
-              const fp = join(reqDir, reqFilePath);
+              // v8.2.0+: clarify 结果写入 020-specs/requirements/ 而非 010-requirements/converted/
+              const goldenDir = join(iterDir!, '020-specs', 'requirements');
+              const fp = join(goldenDir, reqFilePath.replace(/^converted\//, ''));
               await ensureDir(dirname(fp));
-              // 为 clarified 文件添加头部元信息
               let finalContent = content;
               if (reqFilePath.startsWith('converted/clarified-') && !content.startsWith('---')) {
                 finalContent = buildClarifiedHeader(reqFilePath) + content;
               }
               await writeFile(fp, finalContent);
-              logger.info(`   📝 需求文档已写入: ${reqFilePath}`);
+              logger.info(`   📝 黄金需求已写入: 020-specs/requirements/${reqFilePath.replace(/^converted\//, '')}`);
               count++;
               continue;
             }
@@ -1082,6 +1224,200 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         return;
       } catch {
         // fallback to single-file mode
+      }
+    }
+
+    // v8.2.0+: [DOC:xxx] 标记解析 —— 统一报告自动拆分
+    // AI 输出格式: [DOC:REQUIREMENT.md]...内容...[DOC:TECH.md]...内容...
+    const docBlocks = parseDocMarkers(options.apply);
+    if (docBlocks.size > 1) {
+      // 将 [DOC:xxx] 格式转换为 JSON 格式复用现有写入逻辑
+      const docs: Record<string, string> = {};
+      for (const [docName, content] of docBlocks) {
+        docs[docName] = content;
+      }
+      // 构造一个 faux JSON 字符串让后面的 JSON 解析逻辑处理
+      options.apply = JSON.stringify(docs);
+      // 重新进入 JSON 处理分支（递归一次）
+      try {
+        const docs: Record<string, string> = JSON.parse(options.apply);
+        let count = 0;
+        if (isTaskLevel && taskDir) {
+          const targetSubDir = options.platform && !isTaskLevel ? options.platform : '00-specs';
+          const taskSpecDir = join(taskDir, targetSubDir);
+          await ensureDir(taskSpecDir);
+          for (const [filename, content] of Object.entries(docs)) {
+            const fp = join(taskSpecDir, filename);
+            if (!(await shouldOverwrite(fp, !!options.interactive))) { logger.info(`   ⏭️  跳过: ${filename}`); continue; }
+            const bk = await backupWithTimestamp(fp);
+            if (bk) { backups.push(bk); logger.info(`   📦 ${filename} 旧版已备份: ${bk.split('/').pop()}`); }
+            await writeFile(fp, content);
+            count++;
+          }
+          const platformLabel = options.platform ? `/${options.platform}` : '';
+          logger.success(`✅ ${count} 个 Spec 文档已写入 ${options.task}${platformLabel}/（任务级，迭代基线不变）`);
+        } else if (isGlobalScope) {
+          const globalBaseDir = join(process.cwd(), '.speccore', 'GLOBAL');
+          await ensureDir(globalBaseDir);
+          const globalSet = new Set(GLOBAL_SPEC_FILES);
+          for (const [filename, content] of Object.entries(docs)) {
+            if (filename.startsWith('PATTERNS/')) {
+              const patternsDir = join(process.cwd(), '.speccore', 'PATTERNS');
+              await ensureDir(patternsDir);
+              const patternFile = filename.slice('PATTERNS/'.length);
+              const fp = join(patternsDir, patternFile);
+              let existing = '';
+              if (await pathExists(fp)) existing = await readFile(fp, 'utf-8');
+              const merged = existing ? `${existing}\n\n---\n\n${content}` : content;
+              await writeFile(fp, merged);
+              logger.info(`   🧩 PATTERN 已追加: ${patternFile}`);
+              count++;
+              continue;
+            }
+            let targetDir: string;
+            let targetFilename: string;
+            if (filename.includes('/')) {
+              const parts = filename.split('/');
+              if (parts[0] === 'platforms' || parts[0] === 'requirements') {
+                targetDir = join(globalBaseDir, ...parts.slice(0, -1));
+                targetFilename = parts[parts.length - 1];
+              } else {
+                targetDir = join(globalBaseDir, 'platforms', parts[0]);
+                targetFilename = parts[parts.length - 1];
+              }
+            } else if (filename === 'REQUIREMENT.md') {
+              targetDir = join(globalBaseDir, 'requirements');
+              targetFilename = filename;
+            } else if (globalSet.has(filename)) {
+              targetDir = join(globalBaseDir, 'overview');
+              targetFilename = filename;
+            } else {
+              targetDir = join(globalBaseDir, 'overview');
+              targetFilename = filename;
+            }
+            await ensureDir(targetDir);
+            const fp = join(targetDir, targetFilename);
+            if (!(await shouldOverwrite(fp, !!options.interactive))) { logger.info(`   ⏭️  跳过: ${filename}`); continue; }
+            const bk = await backupWithTimestamp(fp);
+            if (bk) { backups.push(bk); logger.info(`   📦 ${filename} 旧版已备份: ${bk.split('/').pop()}`); }
+            await writeFile(fp, content);
+            count++;
+          }
+          logger.success(`✅ ${count} 个全局文档已写入 .speccore/GLOBAL/`);
+        } else {
+          const specDir = join(iterDir!, '020-specs');
+          await ensureDir(specDir);
+          const globalSet = new Set(GLOBAL_SPEC_FILES);
+          const validPlatforms = new Set([GLOBAL_SPECS_DIR, ...(await parsePlatformList())]);
+          let skippedCount = 0;
+          for (const [filename, content] of Object.entries(docs)) {
+            // v8.2.0+: 黄金需求目录支持
+            if (filename.startsWith('020-specs/requirements/')) {
+              const reqFilePath = filename.slice('020-specs/requirements/'.length);
+              const goldenDir = join(iterDir!, '020-specs', 'requirements');
+              const fp = join(goldenDir, reqFilePath);
+              await ensureDir(dirname(fp));
+              let finalContent = content;
+              if (reqFilePath.startsWith('clarified-') && !content.startsWith('---')) {
+                finalContent = buildClarifiedHeader(reqFilePath) + content;
+              }
+              await writeFile(fp, finalContent);
+              logger.info(`   📝 黄金需求已写入: 020-specs/requirements/${reqFilePath}`);
+              count++;
+              continue;
+            }
+            // 向后兼容：010-requirements/ 自动重定向到黄金需求目录
+            if (filename.startsWith('010-requirements/')) {
+              const reqFilePath = filename.slice('010-requirements/'.length);
+              const goldenDir = join(iterDir!, '020-specs', 'requirements');
+              const fp = join(goldenDir, reqFilePath.replace(/^converted\//, ''));
+              await ensureDir(dirname(fp));
+              let finalContent = content;
+              if (reqFilePath.startsWith('converted/clarified-') && !content.startsWith('---')) {
+                finalContent = buildClarifiedHeader(reqFilePath) + content;
+              }
+              await writeFile(fp, finalContent);
+              logger.info(`   📝 黄金需求已写入: 020-specs/requirements/${reqFilePath.replace(/^converted\//, '')}`);
+              count++;
+              continue;
+            }
+            if (filename.startsWith('PATTERNS/')) {
+              const patternsDir = join(process.cwd(), '.speccore', 'PATTERNS');
+              await ensureDir(patternsDir);
+              const patternFile = filename.slice('PATTERNS/'.length);
+              const fp = join(patternsDir, patternFile);
+              let existing = '';
+              if (await pathExists(fp)) existing = await readFile(fp, 'utf-8');
+              const merged = existing ? `${existing}\n\n---\n\n${content}` : content;
+              await writeFile(fp, merged);
+              logger.info(`   🧩 PATTERN 已追加: ${patternFile}`);
+              count++;
+              continue;
+            }
+            let cleanFilename = filename;
+            if (cleanFilename.startsWith(`${GLOBAL_SPECS_DIR}/`)) {
+              cleanFilename = cleanFilename.slice(`${GLOBAL_SPECS_DIR}/`.length);
+            }
+            if (cleanFilename.includes('/')) {
+              const prefix = cleanFilename.split('/')[0];
+              if (!validPlatforms.has(prefix)) {
+                logger.warn(`   ⚠️ 文件名含未知目录前缀 "${prefix}/"，已自动剥离: ${cleanFilename}`);
+                cleanFilename = cleanFilename.split('/').pop()!;
+              }
+            }
+            const platformDir = cleanFilename.includes('/') ? cleanFilename.split('/')[0] : null;
+            if (platformDir && !validPlatforms.has(platformDir)) {
+              logger.warn(`   ⚠️ 跳过非法端目录: ${platformDir}（文件: ${cleanFilename}）`);
+              skippedCount++;
+              continue;
+            }
+            const targetDir = globalSet.has(cleanFilename)
+              ? join(specDir, GLOBAL_SPECS_DIR)
+              : options.platform ? join(specDir, options.platform) : specDir;
+            await ensureDir(targetDir);
+            const fp = join(targetDir, cleanFilename);
+            if (!(await shouldOverwrite(fp, !!options.interactive))) { logger.info(`   ⏭️  跳过: ${filename}`); continue; }
+            const bk = await backupWithTimestamp(fp);
+            if (bk) { backups.push(bk); logger.info(`   📦 ${filename} 旧版已备份: ${bk.split('/').pop()}`); }
+            await writeFile(fp, content);
+            count++;
+          }
+          if (skippedCount > 0) {
+            logger.warn(`⚠️ 共跳过 ${skippedCount} 个非法目录的文档，请检查 AI 输出是否包含非端名目录`);
+          }
+          logger.success(`✅ ${count} 个 Spec 文档已写入 020-specs/`);
+          await sanitizeSpecDirectories(iterDir!);
+        }
+        // v8.2.0+: 单元分析结果保存到缓存（供 --consolidate 汇总使用）
+        if (options.unit && options.iteration) {
+          try {
+            const unitsCachePath = join(process.cwd(), UNITS_CACHE_DIR, options.iteration, 'units.json');
+            let unitName = options.unit;
+            if (await pathExists(unitsCachePath)) {
+              const allUnits: IterationUnit[] = JSON.parse(await readFile(unitsCachePath, 'utf-8'));
+              const matched = allUnits.find(u => u.id === options.unit);
+              if (matched) unitName = matched.name;
+            }
+            const unitAnalysis: UnitAnalysis = {
+              id: options.unit,
+              name: unitName,
+              req: docs['REQ.md'] || docs['REQUIREMENT.md'] || '',
+              tech: docs['TECH.md'] || docs['ANALYSIS.md'] || '',
+              test: docs['TEST.md'] || '',
+              risk: docs['RISK.md'] || '',
+              timestamp: new Date().toISOString(),
+            };
+            await saveUnitAnalysis(options.iteration, unitAnalysis);
+            logger.info(`💾 单元分析 ${options.unit} 已缓存（供 --consolidate 使用）`);
+          } catch (e) {
+            logger.debug('单元分析缓存失败（非关键）:', e);
+          }
+        }
+
+        printBackupSummary();
+        return;
+      } catch (e) {
+        logger.warn('⚠️ [DOC:xxx] 解析后写入失败，回退到单文件模式');
       }
     }
 
@@ -3368,14 +3704,18 @@ sequenceDiagram
         if (perDocStatus.nextUnfilled) {
           const nextDocName = perDocStatus.nextUnfilled.docName;
           const nextDocPlatform = perDocStatus.nextUnfilled.platform || null;
-          // 过滤 taskDocs 只保留下一个未填充的文档
-          if (nextDocPlatform && perDocStatus.nextUnfilled.category === 'platform') {
-            // Phase 2 文档（端专属）
-            taskDocs = taskDocs.filter(([n]) => n === nextDocName);
-            ctx.platform = nextDocPlatform;
-          } else {
-            // Phase 1 文档（overview）
-            taskDocs = taskDocs.filter(([n]) => n === nextDocName);
+          // v8.2.0+: 功能单元聚焦模式不强制单文档过滤，让 AI 一次输出完整单元分析
+          const isUnitMode = !!(options?.unit || options?.consolidate || options?.extractUnits);
+          if (!isUnitMode) {
+            // 过滤 taskDocs 只保留下一个未填充的文档（默认逐文档推进模式）
+            if (nextDocPlatform && perDocStatus.nextUnfilled.category === 'platform') {
+              // Phase 2 文档（端专属）
+              taskDocs = taskDocs.filter(([n]) => n === nextDocName);
+              ctx.platform = nextDocPlatform;
+            } else {
+              // Phase 1 文档（overview）
+              taskDocs = taskDocs.filter(([n]) => n === nextDocName);
+            }
           }
           logger.info(`🦴 骨架进度: ${perDocStatus.filledCount}/${perDocStatus.totalCount} 已填充，下一个: ${perDocStatus.nextUnfilled.relPath}`);
           // v8.1.0+: 校验上一个已填充文档的质量
@@ -3649,24 +3989,36 @@ sequenceDiagram
     try {
       const iterDirForCtx = await getIterationDir(iter);
       if (iterDirForCtx) {
-        // 1. 注入 PRD 内容（010-requirements/ 下的需求文档）
-        const reqDir = join(iterDirForCtx, '010-requirements');
+        // v8.2.0+: 注入 PRD 内容（优先从黄金需求目录 020-specs/requirements/ 读取）
         let prdContent = '';
-        const prdSources = join(reqDir, 'sources');
-        const prdConverted = join(reqDir, 'converted');
-        const prdFeatures = join(reqDir, 'features');
-        for (const dir of [prdSources, prdConverted, prdFeatures]) {
-          if (await pathExists(dir)) {
-            const files = (await import('fs-extra')).readdirSync(dir).filter((f: string) => f.endsWith('.md')).slice(0, 5);
-            for (const f of files) {
-              const content = await (await import('fs-extra')).readFile(join(dir, f), 'utf-8');
-              prdContent += `\n### ${f}\n${content.slice(0, 2000)}\n`;
+        const goldenReqDir = join(iterDirForCtx, '020-specs', 'requirements');
+        if (await pathExists(goldenReqDir)) {
+          // 黄金需求目录存在，只读这里（唯一依据）
+          const files = (await import('fs-extra')).readdirSync(goldenReqDir).filter((f: string) => f.endsWith('.md')).slice(0, 10);
+          for (const f of files) {
+            const content = await (await import('fs-extra')).readFile(join(goldenReqDir, f), 'utf-8');
+            prdContent += `\n### ${f}\n${content.slice(0, 2000)}\n`;
+          }
+        } else {
+          // 回退：从 010-requirements/ 读取原始需求
+          const reqDir = join(iterDirForCtx, '010-requirements');
+          const prdSources = join(reqDir, 'sources');
+          const prdConverted = join(reqDir, 'converted');
+          const prdFeatures = join(reqDir, 'features');
+          for (const dir of [prdSources, prdConverted, prdFeatures]) {
+            if (await pathExists(dir)) {
+              const files = (await import('fs-extra')).readdirSync(dir).filter((f: string) => f.endsWith('.md')).slice(0, 5);
+              for (const f of files) {
+                const content = await (await import('fs-extra')).readFile(join(dir, f), 'utf-8');
+                prdContent += `\n### ${f}\n${content.slice(0, 2000)}\n`;
+              }
             }
           }
         }
         if (prdContent.length > 0) {
           prompt += `\n## 📎 需求文档原文（PRD，写作核心输入）\n\n`;
-          prompt += `> 以下是 010-requirements/ 下的需求文档，这是你撰写专业分析文档的核心输入。所有分析必须基于这些内容，不要臆造。\n`;
+          const sourceLabel = await pathExists(goldenReqDir) ? '020-specs/requirements/（黄金需求，已澄清）' : '010-requirements/（原始需求）';
+          prompt += `> 以下是 ${sourceLabel} 下的需求文档，这是你撰写专业分析文档的核心输入。所有分析必须基于这些内容，不要臆造。\n`;
           prompt += prdContent.slice(0, 5000);
           prompt += `\n\n`;
         }
@@ -4403,6 +4755,16 @@ async function buildClarifyPhasePrompt(iteration: string): Promise<string> {
     await writeClarifyReport(iterDir, qualityReports);
   }
 
+  // v8.2.0+: 提取功能单元，支持单元化澄清（解决注意力漂移）
+  let allDocContent = '';
+  for (const p of docPaths) {
+    try {
+      allDocContent += await readFile(p, 'utf-8') + '\n\n';
+    } catch { /* ignore */ }
+  }
+  const extractedUnits = extractUnitsFromText(allDocContent);
+  const hasMultipleUnits = extractedUnits.length >= 2;
+
   // v6.84.0+: 从 AGENTS 规范数据库动态加载角色
   let prompt = `\n# 任务: 需求专业化（Phase 0: 需求澄清，v6.84.0+)\n\n`;
 
@@ -4465,6 +4827,34 @@ async function buildClarifyPhasePrompt(iteration: string): Promise<string> {
   prompt += `3. \`010-requirements/converted/*.md\` — 已转换文档\n`;
   prompt += `4. \`010-requirements/features/*/README.md\` — 功能级补充\n`;
   prompt += `5. \`010-requirements/prototypes/\` — 原型文件\n\n`;
+
+  // v8.2.0+: 如果检测到多个功能单元，启用单元化澄清模式
+  if (hasMultipleUnits) {
+    prompt += `## ⚠️ 功能单元拆分澄清模式（v8.2.0+）\n\n`;
+    prompt += `检测到需求文档包含 ${extractedUnits.length} 个功能单元。为避免注意力漂移，请**按单元逐个澄清**：\n\n`;
+    prompt += `### 功能单元清单\n\n`;
+    for (const u of extractedUnits) {
+      prompt += `- **${u.id}**: ${u.name}\n`;
+    }
+    prompt += `\n`;
+    prompt += `### 单元化澄清规则\n\n`;
+    prompt += `1. **逐单元处理**：每次只深入分析一个功能单元，不要跨单元混合\n`;
+    prompt += `2. **使用 [UNIT:xxx] 标记**：每个单元的澄清结果用 \`[UNIT:单元ID]\` 开头分隔\n`;
+    prompt += `3. **关联上下文**：分析当前单元时，参考相关单元的摘要（保持逻辑一致性）\n`;
+    prompt += `4. **全局约束共享**：术语表、接口契约在所有单元间统一\n`;
+    prompt += `5. **优先核心单元**：如果单元过多（>5），先处理核心功能单元\n\n`;
+    prompt += `### 输出格式示例\n\n`;
+    prompt += `\`\`\`\n`;
+    for (const u of extractedUnits.slice(0, 2)) {
+      prompt += `[UNIT:${u.id}]\n`;
+      prompt += `## ${u.name}\n`;
+      prompt += `（该单元的专业化澄清内容...）\n\n`;
+    }
+    if (extractedUnits.length > 2) {
+      prompt += `...（其余 ${extractedUnits.length - 2} 个单元依此类推）\n`;
+    }
+    prompt += `\`\`\`\n\n`;
+  }
 
   prompt += `---\n\n`;
   prompt += `# 📋 五步迭代澄清流程\n\n`;
@@ -4559,11 +4949,11 @@ async function buildClarifyPhasePrompt(iteration: string): Promise<string> {
 
   prompt += `## Step 5: 确认写入\n\n`;
   prompt += `当用户确认 "满意，可以写入" 后：\n\n`;
-  prompt += `1. 将最终版 PRD 写入 \`010-requirements/converted/clarified-{源文件名}-{日期}.md\`\n`;
-  prompt += `2. 同时生成 \`010-requirements/converted/clarified-{源文件名}-{日期}-diff.md\` 保存最终对比报告\n`;
+  prompt += `1. 将最终版 PRD 写入 \`020-specs/requirements/clarified-{源文件名}-{日期}.md\`（黄金需求目录）\n`;
+  prompt += `2. 同时生成 \`020-specs/requirements/clarified-{源文件名}-{日期}-diff.md\` 保存最终对比报告\n`;
   prompt += `3. 使用以下命令写入：\n\n`;
   prompt += `\`\`\`bash\n`;
-  prompt += `speccore analyze --apply '{"010-requirements/converted/clarified-xxx.md":"...","010-requirements/converted/clarified-xxx-diff.md":"..."}' -I ${iteration}\n`;
+  prompt += `speccore analyze --apply '{"020-specs/requirements/clarified-xxx.md":"...","020-specs/requirements/clarified-xxx-diff.md":"..."}' -I ${iteration}\n`;
   prompt += `\`\`\`\n\n`;
   prompt += `> 注意：写入后 CLI 会自动推进到需求确认阶段。\n`;
 
@@ -4573,7 +4963,7 @@ async function buildClarifyPhasePrompt(iteration: string): Promise<string> {
 async function buildConfirmCheckPrompt(iteration: string): Promise<string> {
   const iterDir = await getIterationDir(iteration);
   const reportPath = join(iterDir, '010-requirements', 'CLARIFY_REPORT.md');
-  const convertedDir = join(iterDir, '010-requirements', 'converted');
+  const goldenDir = join(iterDir, '020-specs', 'requirements');
 
   let prompt = `\n# 任务: 需求确认（Phase 0: 确认检查，v6.83.0+）\n\n`;
 
@@ -4586,25 +4976,25 @@ async function buildConfirmCheckPrompt(iteration: string): Promise<string> {
     }
   }
 
-  // v6.83.0+: 检查是否有 diff 文件
+  // v8.2.0+: 检查黄金需求目录是否有 diff 文件
   let diffFiles: string[] = [];
-  if (await pathExists(convertedDir)) {
+  if (await pathExists(goldenDir)) {
     try {
-      const entries = await readdir(convertedDir);
+      const entries = await readdir(goldenDir);
       diffFiles = entries.filter(f => f.includes('-diff.md'));
     } catch { /* ignore */ }
   }
   if (diffFiles.length > 0) {
     prompt += `\n## 已生成的对比报告\n\n`;
     for (const f of diffFiles) {
-      prompt += `- \`converted/${f}\` — 需求澄清对比记录\n`;
+      prompt += `- \`020-specs/requirements/${f}\` — 需求澄清对比记录\n`;
     }
     prompt += '\n';
   }
 
   prompt += `## 确认检查清单\n\n`;
   prompt += `请逐项确认：\n\n`;
-  prompt += `- [ ] clarified-*.md 已写入 \`010-requirements/converted/\`\n`;
+  prompt += `- [ ] clarified-*.md 已写入 \`020-specs/requirements/\`（黄金需求目录）\n`;
   prompt += `- [ ] 验收标准可测试、可量化\n`;
   prompt += `- [ ] 功能边界明确（不做什么）\n`;
   prompt += `- [ ] 业务流程完整（含异常分支）\n`;
@@ -4631,4 +5021,305 @@ async function buildConfirmCheckPrompt(iteration: string): Promise<string> {
   prompt += `\`\`\`\n`;
 
   return await injectGraphSummary(prompt);
+}
+
+// ================================================================
+// v8.2.0+: 功能单元聚焦分析辅助函数（解决注意力漂移+空模板问题）
+// ================================================================
+
+/** 解析 [DOC:filename] 标记，将统一报告拆分为多文档 Map */
+function parseDocMarkers(text: string): Map<string, string> {
+  const result = new Map<string, string>();
+  const markerRegex = /\[DOC:([^\]]+)\]/g;
+  let match: RegExpExecArray | null;
+  const positions: { name: string; index: number }[] = [];
+
+  while ((match = markerRegex.exec(text)) !== null) {
+    positions.push({ name: match[1].trim(), index: match.index });
+  }
+
+  for (let i = 0; i < positions.length; i++) {
+    const start = positions[i].index + `[DOC:${positions[i].name}]`.length;
+    const end = i < positions.length - 1 ? positions[i + 1].index : text.length;
+    const content = text.slice(start, end).trim();
+    result.set(positions[i].name, content);
+  }
+
+  return result;
+}
+
+export interface IterationUnit {
+  id: string;
+  name: string;
+  source: string;
+  sourceRange: { startLine: number; endLine: number };
+  content: string;
+  platforms?: string[];
+}
+
+export interface UnitAnalysis {
+  id: string;
+  name: string;
+  req: string;
+  tech: string;
+  test: string;
+  ui?: string;
+  risk?: string;
+  timestamp: string;
+}
+
+export const UNITS_CACHE_DIR = '.speccore/cache/unit-analysis';
+
+/** 从需求文档提取功能单元清单 */
+export async function extractIterationUnits(iterDir: string): Promise<IterationUnit[]> {
+  const reqDir = join(iterDir, '010-requirements');
+  const units: IterationUnit[] = [];
+  let idCounter = 1;
+
+  if (!await pathExists(reqDir)) return units;
+
+  const reqFiles: string[] = [];
+  async function scanDir(dir: string) {
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = join(dir, entry.name);
+      if (entry.isDirectory()) await scanDir(fullPath);
+      else if (entry.name.endsWith('.md')) reqFiles.push(fullPath);
+    }
+  }
+  await scanDir(reqDir);
+
+  for (const file of reqFiles) {
+    const content = await readFile(file, 'utf-8');
+    const lines = content.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const headingMatch = line.match(/^#{2,3}\s+(.+)$/);
+      if (!headingMatch) continue;
+      const name = headingMatch[1].trim();
+      // 跳过通用标题
+      const skipKeywords = ['需求概述', '术语表', '附录', '测试策略', '参考资料', '目录', '引言', '背景'];
+      if (skipKeywords.some(k => name.includes(k))) continue;
+
+      // 收集后续 1-15 行作为内容摘要
+      let descLines: string[] = [];
+      for (let j = i + 1; j < Math.min(i + 16, lines.length); j++) {
+        const l = lines[j];
+        if (l.match(/^#{1,3}\s+/)) break;
+        if (l.trim()) descLines.push(l.trim());
+      }
+
+      units.push({
+        id: `M-${String(idCounter++).padStart(2, '0')}`,
+        name,
+        source: relative(reqDir, file),
+        sourceRange: { startLine: i + 1, endLine: i + 1 + descLines.length },
+        content: descLines.join('\n').slice(0, 500),
+      });
+      if (idCounter > 30) break; // 最多识别 30 个功能单元
+    }
+    if (idCounter > 30) break;
+  }
+
+  return units;
+}
+
+/** 保存单元分析结果到缓存 */
+export async function saveUnitAnalysis(iteration: string, analysis: UnitAnalysis): Promise<void> {
+  const cacheDir = join(process.cwd(), UNITS_CACHE_DIR, iteration);
+  await ensureDir(cacheDir);
+  const fp = join(cacheDir, `${analysis.id}.json`);
+  await writeFile(fp, JSON.stringify(analysis, null, 2));
+}
+
+/** 读取已完成的单元分析 */
+export async function loadUnitAnalyses(iteration: string): Promise<UnitAnalysis[]> {
+  const cacheDir = join(process.cwd(), UNITS_CACHE_DIR, iteration);
+  if (!await pathExists(cacheDir)) return [];
+  const files = (await readdir(cacheDir)).filter(f => f.endsWith('.json'));
+  const results: UnitAnalysis[] = [];
+  for (const f of files) {
+    try {
+      const content = await readFile(join(cacheDir, f), 'utf-8');
+      results.push(JSON.parse(content));
+    } catch { /* skip */ }
+  }
+  return results.sort((a, b) => a.id.localeCompare(b.id));
+}
+
+/** 检测未完成的单元分析 */
+export async function detectPendingUnits(iteration: string, allUnits: IterationUnit[]): Promise<IterationUnit[]> {
+  const completed = await loadUnitAnalyses(iteration);
+  const completedIds = new Set(completed.map(a => a.id));
+  return allUnits.filter(u => !completedIds.has(u.id));
+}
+
+/** 汇总所有单元分析为统一报告（带 [DOC:xxx] 标记） */
+export async function consolidateUnitAnalyses(
+  iteration: string,
+  units: IterationUnit[],
+  analyses: UnitAnalysis[],
+): Promise<string> {
+  const lines: string[] = [];
+  lines.push(`# ${iteration} 迭代 Spec 统一报告`);
+  lines.push(`> 生成时间: ${new Date().toISOString()}`);
+  lines.push(`> 共 ${analyses.length}/${units.length} 个功能单元已完成分析`);
+  lines.push('');
+
+  // 汇总 REQUIREMENT.md
+  lines.push('[DOC:REQUIREMENT.md]');
+  lines.push(`# ${iteration} 需求规格`);
+  lines.push('');
+  lines.push('## 功能模块清单');
+  lines.push('| 单元ID | 模块名称 | 需求来源 |');
+  lines.push('|:---|:---|:---|');
+  for (const u of units) {
+    lines.push(`| ${u.id} | ${u.name} | ${u.source}#L${u.sourceRange.startLine} |`);
+  }
+  lines.push('');
+  for (const a of analyses) {
+    lines.push(`### ${a.id} ${a.name}`);
+    lines.push(a.req.split('\n').slice(0, 5).join('\n'));
+    lines.push('');
+  }
+  lines.push('');
+
+  // 汇总 ANALYSIS.md
+  lines.push('[DOC:ANALYSIS.md]');
+  lines.push(`# ${iteration} 架构分析`);
+  lines.push('');
+  for (const a of analyses) {
+    lines.push(`## ${a.id} ${a.name}`);
+    lines.push(a.tech);
+    lines.push('');
+  }
+  lines.push('');
+
+  // 汇总 FUNCTION_MAP.md
+  lines.push('[DOC:FUNCTION_MAP.md]');
+  lines.push(`# ${iteration} 功能映射`);
+  lines.push('');
+  lines.push('| 单元ID | 功能模块 | 涉及端 | 优先级 |');
+  lines.push('|:---|:---|:---|:---|');
+  for (const a of analyses) {
+    lines.push(`| ${a.id} | ${a.name} | ${(a.tech.match(/端[:：]\s*(.+)/)?.[1] || '待定')} | P1 |`);
+  }
+  lines.push('');
+
+  // 汇总 TECH.md
+  lines.push('[DOC:TECH.md]');
+  lines.push(`# ${iteration} 技术方案`);
+  lines.push('');
+  for (const a of analyses) {
+    lines.push(`## ${a.id} ${a.name}`);
+    lines.push(a.tech);
+    lines.push('');
+  }
+  lines.push('');
+
+  // 汇总 TEST.md
+  lines.push('[DOC:TEST.md]');
+  lines.push(`# ${iteration} 测试方案`);
+  lines.push('');
+  for (const a of analyses) {
+    lines.push(`## ${a.id} ${a.name}`);
+    lines.push(a.test);
+    lines.push('');
+  }
+  lines.push('');
+
+  // 汇总 RISK.md
+  lines.push('[DOC:RISK.md]');
+  lines.push(`# ${iteration} 风险评估`);
+  lines.push('');
+  for (const a of analyses) {
+    if (a.risk) {
+      lines.push(`## ${a.id} ${a.name}`);
+      lines.push(a.risk);
+      lines.push('');
+    }
+  }
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+/** 构建单个功能单元的深度分析 Prompt */
+export async function buildUnitAnalysisPrompt(
+  iterDir: string,
+  iteration: string,
+  unit: IterationUnit,
+  allUnits: IterationUnit[],
+): Promise<string> {
+  // 使用智能上下文组装引擎（三层上下文模型）
+  const unitRef = { id: unit.id, name: unit.name, content: unit.content };
+  const allUnitRefs = allUnits.map(u => ({ id: u.id, name: u.name, content: u.content }));
+  const ctxResult = await assembleUnitContext(iterDir, iteration, unitRef, allUnitRefs, {
+    maxTokens: 6000,
+    maxRelatedUnits: 3,
+    maxCodeFiles: 5,
+    useKnowledgeGraph: true,
+  });
+
+  const prompt = `
+# 功能单元深度分析: ${unit.id} ${unit.name}
+
+## 迭代信息
+- 迭代: ${iteration}
+- 单元ID: ${unit.id}
+- 来源: ${unit.source}#L${unit.sourceRange.startLine}
+- 全迭代共 ${allUnits.length} 个功能单元
+- 上下文预算: ${ctxResult.stats.estimatedTokens} tokens (核心${ctxResult.stats.coreChars}字符 + 关联${ctxResult.stats.relatedUnitChars + ctxResult.stats.codeChars}字符 + 全局${ctxResult.stats.globalChars}字符)
+
+## 需求上下文
+${ctxResult.context}
+
+## 分析要求
+
+请对「${unit.name}」进行深度分析，输出以下文档（使用 [DOC:xxx] 标记分隔）：
+
+### [DOC:REQ.md] 需求规格
+- 功能描述（用户故事格式）
+- 输入/输出定义
+- 业务规则（R-XX 编号）
+- 异常场景
+
+### [DOC:TECH.md] 技术方案
+- 数据模型/接口设计
+- 核心算法/逻辑
+- 端分工（backend/web/admin 等）
+- 依赖服务
+
+### [DOC:TEST.md] 测试方案
+- 验收标准（Given-When-Then）
+- 边界值
+- 异常路径
+
+### [DOC:RISK.md] 风险评估（如适用）
+- 技术风险
+- 业务风险
+- 缓解方案
+
+## 输出格式
+\`\`\`
+[DOC:REQ.md]
+（内容...）
+
+[DOC:TECH.md]
+（内容...）
+
+[DOC:TEST.md]
+（内容...）
+
+[DOC:RISK.md]
+（内容...）
+\`\`\`
+
+## 重要提示
+- 只分析当前功能单元「${unit.name}」，不要涉及其他模块
+- 每个文档必须有实质内容，不能是空模板
+- 使用具体的技术术语，避免泛泛而谈
+`;
+
+  return prompt.trim();
 }

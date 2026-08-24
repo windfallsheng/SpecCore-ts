@@ -923,17 +923,38 @@ export function formatGlobalContext(ctx: GlobalContext, platform?: string): stri
       // 需要按子目录分组的（platforms, PROJECTS, PATTERNS）
       if (group.prefix === 'platforms/' || group.prefix === 'PROJECTS/' || group.prefix === 'PATTERNS:') {
         const bySub = new Map<string, TOCEntry[]>();
+        // v8.2.0+: PATTERNS 通用分类（始终保留）
+        // v8.3.0+: 增加 shared（跨端共享模式）
+        const PATTERN_COMMON_CATEGORIES = new Set(['architecture', 'data-model', 'api-contract', 'security', 'performance', 'shared', 'TEMPLATES', 'README']);
+
         for (const e of entries) {
           // PATTERNS:architecture/x.md → architecture; platforms/admin/x.md → admin
           const sub = group.prefix === 'PATTERNS:'
             ? e.path.replace('PATTERNS:', '').split('/')[0]
             : e.path.split('/')[1];
+
+          // v8.2.0+: PATTERNS 按端过滤 — 只保留通用分类 + 当前端相关模式
+          if (group.prefix === 'PATTERNS:' && platform) {
+            const isCommon = PATTERN_COMMON_CATEGORIES.has(sub);
+            const isCurrentPlatform = sub === platform;
+            if (!isCommon && !isCurrentPlatform) continue; // 跳过不相关的端专属模式
+          }
+
           if (!bySub.has(sub)) bySub.set(sub, []);
           bySub.get(sub)!.push(e);
         }
+
+        // 如果没有匹配到任何条目，跳过该组
+        if (bySub.size === 0) {
+          lines.pop(); // 移除 group.label
+          continue;
+        }
+
         for (const [sub, subEntries] of bySub) {
-          const marker = group.prefix === 'platforms/' && sub === platform ? ' ⬅ 当前端' : '';
-          lines.push(`📂 ${sub}/${marker}`);
+          const isCurrent = (group.prefix === 'platforms/' || group.prefix === 'PATTERNS:') && sub === platform;
+          const marker = isCurrent ? ' ⬅ 当前端' : '';
+          const commonMarker = group.prefix === 'PATTERNS:' && PATTERN_COMMON_CATEGORIES.has(sub) ? ' 🌐 通用' : '';
+          lines.push(`📂 ${sub}/${marker}${commonMarker}`);
           for (const e of subEntries) {
             lines.push(formatTOCEntry(e, 2));
           }
@@ -1259,8 +1280,15 @@ export async function buildPrompt(
   let extraSpecs: TaskExtraSpec[] = [];
   if (taskDir) {
     try {
+      // v8.2.0+: 从 REQ.md 提取标题作为更精准的查询词
+      let searchQuery = options.task || options.iteration || '';
+      if (reqContent) {
+        const titleMatch = reqContent.match(/^#\s+(.+)$/m);
+        if (titleMatch) searchQuery = titleMatch[1].trim();
+      }
+
       const unifiedResult = await unifiedSearch(cwd, {
-        query: options.task || options.iteration || '',
+        query: searchQuery,
         iteration: options.iteration,
         taskId: options.task,
         platform: options.platform,

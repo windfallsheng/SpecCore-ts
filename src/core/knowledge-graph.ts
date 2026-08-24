@@ -1323,6 +1323,46 @@ async function inferRelations(entities: GraphEntity[], iterDir: string): Promise
     } catch { /* 跳过 */ }
   }
 
+  // ═══════════════════════════════════════════════
+  // v8.2.0+: 需求 ↔ 源码直接关联（语义标签匹配）
+  // ═══════════════════════════════════════════════
+  const sourceFiles = entities.filter(e => e.type === 'source-file');
+  const matchedPairs2 = new Set(relations.map(r => `${r.from}:${r.to}`));
+
+  for (const req of reqs) {
+    // 从需求标题提取特征关键词（≥2字符）
+    const reqKeywords = req.title
+      .split(/[-_\s]+/)
+      .filter(w => w.length >= 2)
+      .map(w => w.toLowerCase());
+    if (reqKeywords.length === 0) continue;
+
+    for (const sf of sourceFiles) {
+      // 构建源码的语义文本（标题 + 业务角色 + 语义标签 + 描述）
+      const sfText = [
+        sf.title,
+        sf.businessRole || '',
+        ...(sf.semanticTags || []),
+        sf.description || '',
+      ].join(' ').toLowerCase();
+
+      let score = 0;
+      for (const kw of reqKeywords) {
+        if (sfText.includes(kw)) score += 1;
+      }
+
+      // 标题精确包含匹配（权重更高）
+      const titleMatch = req.title.toLowerCase().includes(sf.title.toLowerCase().replace(/\.[a-z]+$/, '')) ||
+                         sf.title.toLowerCase().includes(req.title.toLowerCase());
+
+      // 阈值：至少匹配 2 个关键词，或标题精确包含
+      if ((score >= 2 || titleMatch) && !matchedPairs2.has(`${req.id}:${sf.id}`)) {
+        relations.push({ from: req.id, to: sf.id, type: 'relates_to' });
+        matchedPairs2.add(`${req.id}:${sf.id}`);
+      }
+    }
+  }
+
   return relations;
 }
 
@@ -1634,19 +1674,286 @@ export async function isGraphStale(cwd: string, iteration?: string): Promise<boo
   return false;
 }
 
-/** 刷新知识图谱（重建 + 保存）—— 供命令完成后调用 */
-export async function refreshKnowledgeGraph(
+// ═══════════════════════════════════════════════════════════
+// v8.2.0+: 知识图谱增量更新机制
+// ═══════════════════════════════════════════════════════════
+
+interface GraphSourceIndex {
+  version: string;
+  iteration: string;
+  sources: Record<string, number>; // sourceName -> mtime
+}
+
+function getGraphIndexPath(cwd: string): string {
+  return join(cwd, '.speccore', 'cache', 'graph-index.json');
+}
+
+async function loadGraphIndex(cwd: string): Promise<GraphSourceIndex | null> {
+  try {
+    const path = getGraphIndexPath(cwd);
+    if (!(await pathExists(path))) return null;
+    const content = await readFile(path, 'utf-8');
+    return JSON.parse(content) as GraphSourceIndex;
+  } catch {
+    return null;
+  }
+}
+
+async function saveGraphIndex(cwd: string, index: GraphSourceIndex): Promise<void> {
+  const path = getGraphIndexPath(cwd);
+  await writeFile(path, JSON.stringify(index, null, 2), 'utf-8');
+}
+
+/** 获取各扫描源的最新 mtime */
+async function getSourceMtimes(
+  cwd: string,
+  iterDir: string
+): Promise<Record<string, number>> {
+  const sources: Record<string, number> = {};
+
+  // iteration 组：取 iterDir 下各子目录的最新 mtime
+  const iterSubDirs = ['010-requirements', '020-specs', '030-tasks'];
+  let iterLatest = 0;
+  for (const sub of iterSubDirs) {
+    const subDir = join(iterDir, sub);
+    if (await pathExists(subDir)) {
+      const mtime = await getLatestMtime(subDir);
+      if (mtime > iterLatest) iterLatest = mtime;
+    }
+  }
+  sources['iteration'] = iterLatest;
+
+  // source 组：取源码目录最新 mtime（限制扫描范围）
+  // 优先扫描 CONSTITUTION.md 中定义的源码路径
+  let sourceLatest = 0;
+  try {
+    const constPath = join(cwd, '.speccore', 'CONSTITUTION.md');
+    if (await pathExists(constPath)) {
+      const constContent = await readFile(constPath, 'utf-8');
+      // 提取源码路径
+      const srcMatches = constContent.matchAll(/源码路径[：:]\s*`?([^`\n]+)`?/g);
+      for (const m of srcMatches) {
+        const srcPath = m[1].trim();
+        const absPath = srcPath.startsWith('/') ? srcPath : join(cwd, srcPath);
+        if (await pathExists(absPath)) {
+          const mtime = await getLatestMtime(absPath);
+          if (mtime > sourceLatest) sourceLatest = mtime;
+        }
+      }
+    }
+  } catch { /* 静默失败 */ }
+  // 如果没有找到源码路径，回退到 cwd/src
+  if (sourceLatest === 0) {
+    const fallbackSrc = join(cwd, 'src');
+    if (await pathExists(fallbackSrc)) {
+      sourceLatest = await getLatestMtime(fallbackSrc);
+    }
+  }
+  sources['source'] = sourceLatest;
+
+  // global 组
+  const globalDir = join(cwd, '.speccore', 'GLOBAL');
+  sources['global'] = await pathExists(globalDir) ? await getLatestMtime(globalDir) : 0;
+
+  return sources;
+}
+
+/**
+ * 判断实体属于哪个扫描源
+ */
+function getEntitySource(entity: GraphEntity, iterDir: string): string | null {
+  if (entity.type === 'source-file') return 'source';
+  if (entity.file && entity.file.includes('.speccore/GLOBAL/')) return 'global';
+  if (entity.file && entity.file.startsWith(iterDir + '/')) return 'iteration';
+  // 兜底：如果 file 以迭代名开头也视为 iteration
+  const iterName = basename(iterDir);
+  if (entity.file && entity.file.startsWith(iterName + '/')) return 'iteration';
+  return null;
+}
+
+/** 从 basename 导入 */
+function basename(p: string): string {
+  return p.split(/[\\/]/).pop() || p;
+}
+
+/**
+ * 增量更新知识图谱（v8.2.0+）
+ * 只重新扫描变更的扫描源，保留未变更部分，大幅提升大项目性能
+ */
+export async function incrementalUpdateKnowledgeGraph(
   cwd: string,
   iteration?: string
 ): Promise<KnowledgeGraph | null> {
   try {
     const iterName = iteration || await getDefaultIteration();
-    const graph = await buildKnowledgeGraph(cwd, iterName);
-    await saveKnowledgeGraph(cwd, graph);
-    return graph;
-  } catch {
-    return null; // 静默失败，不影响主流程
+    const iterDir = await getIterationDir(iterName);
+    if (!iterDir) return null;
+
+    // 1. 加载现有图谱和索引
+    let graph = await loadKnowledgeGraph(cwd);
+    const index = await loadGraphIndex(cwd);
+    const currentMtimes = await getSourceMtimes(cwd, iterDir);
+
+    // 2. 如果图谱不存在或索引不存在或迭代不匹配 → 全量重建
+    if (!graph || !index || index.iteration !== iterName) {
+      logger.info('🧠 知识图谱: 首次构建或迭代变更，执行全量重建');
+      graph = await buildKnowledgeGraph(cwd, iterName);
+      await saveKnowledgeGraph(cwd, graph);
+      await saveGraphIndex(cwd, { version: '1', iteration: iterName, sources: currentMtimes });
+      return graph;
+    }
+
+    // 3. 确定哪些扫描源过期
+    const staleSources: string[] = [];
+    for (const [source, mtime] of Object.entries(currentMtimes)) {
+      if (mtime > (index.sources[source] || 0)) {
+        staleSources.push(source);
+      }
+    }
+
+    // 4. 全部未过期 → 直接返回
+    if (staleSources.length === 0) {
+      logger.debug('🧠 知识图谱: 所有扫描源未变更，跳过更新');
+      return graph;
+    }
+
+    logger.info(`🧠 知识图谱增量更新: ${staleSources.join(', ')} 扫描源已变更`);
+
+    // 5. 移除过期扫描源产生的实体和关系
+    const entitiesToKeep: Record<string, GraphEntity> = {};
+    for (const [id, entity] of Object.entries(graph.entities)) {
+      const source = getEntitySource(entity, iterDir);
+      if (source && staleSources.includes(source)) {
+        // 过期源：跳过（不保留）
+        continue;
+      }
+      entitiesToKeep[id] = entity;
+    }
+
+    // 清理关系：移除涉及已删除实体的关系
+    const keptIds = new Set(Object.keys(entitiesToKeep));
+    const keptRelations = graph.relations.filter(r => keptIds.has(r.from) && keptIds.has(r.to));
+
+    // 6. 重新扫描过期的源
+    let newEntities: GraphEntity[] = [];
+    let newRelations: GraphRelation[] = [];
+
+    for (const source of staleSources) {
+      if (source === 'iteration') {
+        const reqResult = await scanRequirements(iterDir, iterName);
+        const specResult = await scanSpecs(iterDir);
+        const taskResult = await scanTasks(iterDir);
+        const userFiles = await scanUserFiles(iterDir);
+        const taskSpecResult = await scanTaskSpecs(iterDir);
+        const bizMappingResult = await scanBusinessCodeMappings(iterDir);
+
+        newEntities.push(
+          ...reqResult.entities,
+          ...specResult.entities,
+          ...taskResult.entities,
+          ...userFiles,
+          ...taskSpecResult.entities,
+          ...bizMappingResult.entities,
+        );
+        newRelations.push(
+          ...reqResult.relations,
+          ...specResult.relations,
+          ...taskResult.relations,
+          ...taskSpecResult.relations,
+          ...bizMappingResult.relations,
+        );
+      } else if (source === 'source') {
+        const sourceResult = await scanSourceFiles(cwd);
+        newEntities.push(...sourceResult.entities);
+        newRelations.push(...sourceResult.relations);
+      } else if (source === 'global') {
+        const globalResult = await scanGlobalDocs(cwd);
+        newEntities.push(...globalResult.entities);
+        newRelations.push(...globalResult.relations);
+      }
+    }
+
+    // 7. 处理 ID 冲突（同 buildKnowledgeGraph）
+    const idRemap = new Map<string, string>();
+    for (const e of newEntities) {
+      let finalId = e.id;
+      if (entitiesToKeep[e.id]) {
+        finalId = `${e.id}@${e.file.replace(/\//g, '-')}`;
+        idRemap.set(e.id, finalId);
+      }
+      e.id = finalId;
+      entitiesToKeep[e.id] = e;
+    }
+    const remapId = (id: string) => idRemap.get(id) || id;
+    for (const r of newRelations) {
+      r.from = remapId(r.from);
+      r.to = remapId(r.to);
+    }
+
+    // 8. 合并关系
+    const allEntities = Object.values(entitiesToKeep);
+    const allRelations = [
+      ...keptRelations,
+      ...newRelations,
+      ...(await inferRelations(allEntities, iterDir)),
+    ];
+
+    // 9. 重建图谱
+    const updatedGraph: KnowledgeGraph = {
+      version: '1.0',
+      generated: new Date().toISOString(),
+      iteration: iterName,
+      entities: entitiesToKeep,
+      relations: allRelations,
+      stats: {
+        requirements: allEntities.filter(e => e.type === 'requirement').length,
+        specs: allEntities.filter(e => e.type === 'spec').length,
+        tasks: allEntities.filter(e => e.type === 'task').length,
+        subtasks: allEntities.filter(e => e.type === 'subtask').length,
+        userFiles: allEntities.filter(e => e.type === 'user-file').length,
+        sourceFiles: allEntities.filter(e => e.type === 'source-file').length,
+        globalDocs: allEntities.filter(e => e.type === 'global-doc').length,
+        taskSpecs: allEntities.filter(e => e.type === 'task-spec').length,
+        businessModules: allEntities.filter(e => e.type === 'business_module').length,
+        relations: allRelations.length,
+      },
+    };
+
+    // 10. 同步 RAG 索引（知识图谱 → RAG）
+    try {
+      await syncGraphToRagIndex(cwd, updatedGraph);
+    } catch (e) {
+      logger.debug('知识图谱 → RAG 索引同步失败（非关键）:', e);
+    }
+
+    // 11. 保存
+    await saveKnowledgeGraph(cwd, updatedGraph);
+    await saveGraphIndex(cwd, { version: '1', iteration: iterName, sources: currentMtimes });
+
+    const keptCount = Object.keys(entitiesToKeep).length - newEntities.length;
+    logger.info(`🧠 知识图谱增量更新完成: 保留 ${keptCount} 个实体，新增/更新 ${newEntities.length} 个实体，${allRelations.length} 条关系`);
+
+    return updatedGraph;
+  } catch (e) {
+    logger.debug('知识图谱增量更新失败，回退到全量重建:', e);
+    // 回退到全量重建
+    try {
+      const iterName = iteration || await getDefaultIteration();
+      const graph = await buildKnowledgeGraph(cwd, iterName);
+      await saveKnowledgeGraph(cwd, graph);
+      return graph;
+    } catch {
+      return null;
+    }
   }
+}
+
+/** 刷新知识图谱（v8.2.0+ 优先增量更新） */
+export async function refreshKnowledgeGraph(
+  cwd: string,
+  iteration?: string
+): Promise<KnowledgeGraph | null> {
+  return incrementalUpdateKnowledgeGraph(cwd, iteration);
 }
 
 // ═══════════════════════════════════════════════

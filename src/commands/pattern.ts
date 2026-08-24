@@ -7,6 +7,7 @@ import { scanTasks } from '../core/state';
 import { readFile, writeFile, pathExists, ensureDir } from 'fs-extra';
 import { join } from 'path';
 import { backupDirWithTimestamp } from '../utils/task-utils';
+import { detectPatternCandidates, PatternCandidate, groupCandidatesByPlatform } from '../core/pattern-detector';
 
 export interface PatternOptions {
   name: string;
@@ -18,9 +19,17 @@ export interface PatternOptions {
   force?: boolean;
   /** v6.91.0+: 置信度 EXTRACTED | INFERRED */
   confidence?: 'EXTRACTED' | 'INFERRED';
+  /** v8.2.0+: 自动扫描目录中的可复用模式候选 */
+  autoDetect?: string | true;
 }
 
 export async function patternCommand(options: PatternOptions): Promise<void> {
+  // v8.2.0+: --auto-detect 模式
+  if (options.autoDetect) {
+    await runAutoDetect(options.autoDetect);
+    return;
+  }
+
   if (!options.name) {
     logger.error('请指定模式名称: speccore pattern save --name=<名称>');
     return;
@@ -157,4 +166,48 @@ function generalizeContent(content: string, taskName: string): string {
   return content
     .split(taskName).join('{{Entity}}')
     .split(taskName.toLowerCase()).join('{{entity}}');
+}
+
+/**
+ * v8.2.0+: 自动扫描目录并输出可复用模式候选
+ */
+async function runAutoDetect(autoDetect: string | true): Promise<void> {
+  const scanDir = typeof autoDetect === 'string' ? autoDetect : join(process.cwd(), 'src');
+
+  if (!(await pathExists(scanDir))) {
+    logger.error(`扫描目录不存在: ${scanDir}`);
+    logger.info('提示: speccore pattern --auto-detect [dir]  或  speccore pattern --auto-detect');
+    return;
+  }
+
+  logger.info(`🔍 正在扫描目录: ${scanDir}`);
+  const candidates = await detectPatternCandidates([scanDir], `auto-detect:${scanDir}`);
+
+  if (candidates.length === 0) {
+    logger.info('未检测到可复用模式候选。');
+    return;
+  }
+
+  logger.info('');
+  logger.info(`🧩 检测到 ${candidates.length} 个可复用模式候选:`);
+  logger.info('');
+
+  const byPlatform = groupCandidatesByPlatform(candidates);
+  for (const [plat, list] of Object.entries(byPlatform)) {
+    const platLabel = plat === 'shared' ? '🌐 跨端共享' : plat === 'backend' ? '⚙️ 后端' : plat === 'frontend' ? '🎨 前端' : '📦 其他';
+    logger.info(`  ${platLabel}:`);
+    for (const c of list) {
+      logger.info(`    • [${c.category}] ${c.name}`);
+      logger.info(`      文件: ${c.file}`);
+      logger.info(`      原因: ${c.reason}`);
+    }
+    logger.info('');
+  }
+
+  logger.info('💡 使用以下命令保存候选为模式:');
+  candidates.forEach((c, i) => {
+    logger.info(`   speccore pattern --name=${c.name} --file=${join(scanDir, c.file)} --desc="${c.reason}"`);
+  });
+  logger.info('');
+  logger.info('   或批量保存（复制所需命令执行）');
 }

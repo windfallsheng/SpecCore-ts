@@ -19,6 +19,9 @@ import { resolveAgentsForPhase } from '../core/agents';
 import type { AgentContext } from '../core/agents';
 // v6.87.0+: COMMANDS 命令模板
 import { loadCommandTemplate, renderTemplate } from '../core/command-loader';
+import { unifiedSearch, formatUnifiedContext } from '../core/unified-retrieval';
+import { loadKnowledgeGraph } from '../core/knowledge-graph';
+import { buildCompactContext } from '../core/context-builder';
 
 // v6.73.0+ 变更驱动工作流 v2
 import {
@@ -1031,6 +1034,31 @@ async function processChangeLegacy(options: ChangeOptions): Promise<void> {
     } catch {
       // 模板加载失败静默跳过
     }
+
+    // v8.2.0+: 注入统一检索上下文（相关文档 + 代码 + 知识图谱）
+    try {
+      const searchQuery = desc || iteration;
+      const unifiedResult = await unifiedSearch(process.cwd(), {
+        query: searchQuery,
+        iteration,
+      });
+      if (unifiedResult.documentChunks.length > 0 || unifiedResult.codeSlices.length > 0) {
+        promptText += '\n\n## 🔍 相关上下文（自动检索）\n';
+        promptText += formatUnifiedContext(unifiedResult);
+      }
+    } catch { /* ignore */ }
+
+    // v8.2.0+: 注入知识图谱摘要
+    try {
+      const graph = await loadKnowledgeGraph(process.cwd());
+      if (graph) {
+        const graphCtx = buildCompactContext(graph, { taskId: taskDetails[0]?.id });
+        if (graphCtx) {
+          promptText += '\n\n## 🧠 知识图谱关联\n';
+          promptText += graphCtx.slice(0, 2000);
+        }
+      }
+    } catch { /* ignore */ }
 
     logger.info('[SPECCORE_PROMPT]');
     process.stdout.write(promptText);

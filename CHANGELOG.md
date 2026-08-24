@@ -1,3 +1,41 @@
+## v8.3.0 (2026-08-24) — 模式提取按端分组 + 临时工作区 + Ask 引擎澄清意图
+
+### 核心改进
+
+**PATTERNS 模式提取按端分组** (`pattern-detector.ts`)
+- `PatternCandidate` 新增 `platform` 字段（backend | frontend | shared | unknown）
+- 新增 `inferPlatform()` 路径推断：从文件路径自动判断所属端
+- 新增 `groupCandidatesByPlatform()` 按端分组展示（shared → backend → frontend → unknown）
+- 新增跨端同名模式检测：同一 `name` 同时出现在 backend 和 frontend 时自动标记为 `shared`
+- `prompt-builder.ts` 的 `PATTERN_COMMON_CATEGORIES` 增加 `'shared'` — 跨端共享模式始终注入 Prompt
+- `done.ts` / `execute.ts` / `pattern.ts` 的模式检测输出全部改为按端分组展示
+
+**临时工作区机制** (`workspace-manager.ts` + `workspace.ts`)
+- 新增 `.speccore/local/workspace/` 目录结构管理独立内容处理产出
+- `stageContent()` — 将原始内容存入 inbox，生成带时间戳的条目 ID
+- `writeWorkspaceOutput()` — 写入处理后的产出文件
+- `promoteToIteration()` — 将工作区内容提升到迭代层（`020-specs/requirements/` 或 `research/`）
+- 新增 `speccore workspace` 命令：
+  - `speccore workspace list [--type clarify|research]` — 列出所有条目
+  - `speccore workspace show <entryId>` — 查看详情 + 原始输入摘要
+  - `speccore workspace clean --days 30` — 清理旧条目（保留已提升的）
+
+**Clarify 命令增强** (`clarify.ts`)
+- 新增 `--local` 模式：不绑定迭代，输出到临时工作区
+- 新增 `--promote <entryId>`：将工作区条目提升到迭代层（配合 `--to`）
+- `--prompt` + `--local` 模式下自动创建工作区条目并提示闭环命令
+- `--apply` + `--local` 模式下写入 `.speccore/local/workspace/clarify/{id}/PRD.md`
+
+**Ask 引擎接入 clarify/research 意图** (`ask-engine.ts` + `intent-recognition.ts`)
+- `IntentType` 新增 `'clarify'` 意图类型
+- `COMMAND_MAPPINGS` 新增 clarify 映射（triggers: 澄清、整理需求、专业化、写成PRD 等）
+- research triggers 扩展：增加"分析怎么实现"、"有什么方案"、"技术方案"等
+- `AMBIGUOUS_INTENTS` 增加 `clarify`、`research` — 缺少 speccore 上下文时强制确认
+- `isSpeccoreOperation()` 新增文件路径 + 操作词联合检测
+- `COMMAND_KB` 新增 clarify 条目
+
+---
+
 ## v8.1.2 (2026-08-22) — DOC_MATRIX 交叉校验：骨架完成后自动检测并补建遗漏文档
 
 ### 核心改进

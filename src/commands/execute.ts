@@ -45,6 +45,7 @@ import { checkCodeIndexFreshness } from '../core/code-scanner';
 import { warnIfIndexStale } from '../core/index-guard';
 import { recordAnalysisSnapshot } from '../core/change-detection';
 import { logIssue } from '../core/issue-tracker';
+import { detectPatternCandidates, groupCandidatesByPlatform } from '../core/pattern-detector';
 
 export interface ExecuteOptions {
   all?: boolean;
@@ -609,6 +610,54 @@ async function executeResume(iteration: string): Promise<void> {
 
   let state = loadExecutionState()!;
   logger.info(`⏳ Resuming from Batch ${state.currentBatch}/${state.totalBatches}`);
+
+  // v8.3.0+: 续跑时输出完整的执行上下文摘要
+  logger.info('');
+  logger.info('📋 执行上下文恢复:');
+  logger.info(`   迭代: ${state.iteration}`);
+  logger.info(`   总任务: ${state.totalTasks} | 已完成: ${state.completedTasks.length} | 失败: ${state.failedTasks.length} | 待执行: ${state.pendingTasks.length}`);
+
+  if (state.completedTasks.length > 0) {
+    logger.info('');
+    logger.info('   ✅ 已完成任务:');
+    for (const taskId of state.completedTasks.slice(-5)) {
+      const summary = state.taskSummaries[taskId];
+      if (summary) {
+        logger.info(`      • ${taskId}: ${summary.summary || '无摘要'}`);
+      } else {
+        logger.info(`      • ${taskId}`);
+      }
+    }
+    if (state.completedTasks.length > 5) {
+      logger.info(`      ... 还有 ${state.completedTasks.length - 5} 个已完成任务`);
+    }
+  }
+
+  if (state.failedTasks.length > 0) {
+    logger.info('');
+    logger.info('   ❌ 失败/跳过任务:');
+    for (const taskId of state.failedTasks) {
+      const summary = state.taskSummaries[taskId];
+      logger.info(`      • ${taskId}${summary ? `: ${summary.summary}` : ''}`);
+    }
+  }
+
+  if (state.contextSummary) {
+    logger.info('');
+    logger.info('   📝 上下文摘要:');
+    logger.info(`      ${state.contextSummary}`);
+  }
+
+  const currentBatchTasks = getCurrentBatchTasks(state);
+  if (currentBatchTasks.length > 0) {
+    logger.info('');
+    logger.info(`   🔄 当前批次 (${state.currentBatch}/${state.totalBatches}) 待执行任务:`);
+    for (const taskId of currentBatchTasks) {
+      logger.info(`      • ${taskId}`);
+    }
+  }
+
+  logger.info('');
 
   // Continue from current batch
   while (state.currentBatch <= state.totalBatches) {
@@ -1712,7 +1761,7 @@ async function executionVerifyLoop(
         await writeFile(join(taskDir, '.needs-retry'), String(round));
         // 输出 [SPECCORE_EXEC] 让 AI 修复
         if (!gate.passed) {
-          outputFixTag(gate.report, taskDir, round);
+          await outputFixTag(gate.report, taskDir, round);
         }
       }
     }
@@ -1721,6 +1770,32 @@ async function executionVerifyLoop(
     if (allPassed) {
       await writeFile(join(taskDir, '.verification'), 'passed');
       logger.info(`   ✅ ${task.id} 全部检查通过，可以 speccore done`);
+
+      // v8.2.0+: 执行通过后检测可复用模式候选
+      try {
+        const codeDirs = [
+          join(taskDir, '10-backend'),
+          join(taskDir, '20-frontend'),
+          join(taskDir, 'src'),
+        ];
+        const candidates = await detectPatternCandidates(codeDirs, `task:${task.id}`);
+        if (candidates.length > 0) {
+          logger.info('');
+          logger.info('🧩 执行完成，检测到以下可复用模式候选:');
+          const byPlatform = groupCandidatesByPlatform(candidates);
+          for (const [plat, list] of Object.entries(byPlatform)) {
+            const platLabel = plat === 'shared' ? '🌐 跨端共享' : plat === 'backend' ? '⚙️ 后端' : plat === 'frontend' ? '🎨 前端' : '📦 其他';
+            logger.info(`   ${platLabel}:`);
+            for (const c of list.slice(0, 2)) {
+              logger.info(`     • ${c.name} [${c.category}] — ${c.reason}`);
+            }
+            if (list.length > 2) {
+              logger.info(`       ... 还有 ${list.length - 2} 个`);
+            }
+          }
+          logger.info(`   💡 有价值？执行 speccore pattern save --name=<模式名> --file=<文件路径>`);
+        }
+      } catch { /* 静默失败 */ }
     } else {
       logger.info(`   ⚠️ ${task.id} 仍有未通过项，请审查后手动 done`);
       logger.info(`   💡 修复后重试: speccore execute --resume`);
@@ -1934,6 +2009,45 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
     promptText += `当前已切换到任务分支: \`${branchName}\`\n`;
     promptText += `请在此分支上编写代码。\n`;
   }
+
+  // v8.2.0+: 注入相邻任务上下文（同一 Task 的其他端 + 契约）
+  try {
+    const taskBaseDir = dirname(taskDir);
+    const siblingContexts: string[] = [];
+
+    // 1. 同一 Task 下的其他端子任务
+    try {
+      const entries = await readdir(taskBaseDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name === '00-specs' || entry.name === '_shared') continue;
+        const siblingDir = join(taskBaseDir, entry.name);
+        if (siblingDir === taskDir) continue;
+        const siblingReq = join(siblingDir, 'REQ.md');
+        const siblingTech = join(siblingDir, 'TECH.md');
+        if (await pathExists(siblingReq)) {
+          const content = await readFile(siblingReq, 'utf-8');
+          siblingContexts.push(`### ${entry.name} 端 REQ.md\n${content.slice(0, 400)}`);
+        } else if (await pathExists(siblingTech)) {
+          const content = await readFile(siblingTech, 'utf-8');
+          siblingContexts.push(`### ${entry.name} 端 TECH.md\n${content.slice(0, 400)}`);
+        }
+      }
+    } catch { /* ignore */ }
+
+    // 2. API 契约
+    const contractPath = join(taskBaseDir, '_shared', 'API_CONTRACT.yaml');
+    if (await pathExists(contractPath)) {
+      const contract = await readFile(contractPath, 'utf-8');
+      siblingContexts.push(`### API 契约\n\`\`\`yaml\n${contract.slice(0, 600)}\n\`\`\``);
+    }
+
+    if (siblingContexts.length > 0) {
+      promptText += `\n\n## 🔗 相邻任务上下文（同一功能单元的其他端 + 契约）\n`;
+      promptText += `> 以下是与当前任务相关的其他端实现和接口契约，编写代码时请保持一致性。\n\n`;
+      promptText += siblingContexts.join('\n\n');
+      promptText += '\n';
+    }
+  } catch { /* ignore */ }
 
   // ── 批次元数据（多任务时默认输出，指导宿主 AI 分批执行）──
   const allTasksForBatch = await scanTasks(iteration);

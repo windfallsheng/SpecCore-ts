@@ -1,16 +1,18 @@
 /**
  * done — 一键收尾：validate → archive → sync-global
  */
-import { readFile, pathExists } from 'fs-extra';
-import { join } from 'path';
+import { readFile, pathExists, readdir } from 'fs-extra';
+import { join, dirname } from 'path';
 import { execSync } from 'child_process';
 import { logger, Spinner } from '../utils/logger';
-import { getDefaultIteration } from '../core/context';
+import { getDefaultIteration, getIterationDir } from '../core/context';
 import { warnIfIndexStale } from '../core/index-guard';
 import { showNextSteps } from '../core/next-steps';
 import { extractQuestions, showQuestionChecklist } from '../core/question-checklist';
 import { saveSession, clearSession, tryResume } from '../core/session-state';
 import { retroCommand } from './retro';
+import { loadKnowledgeGraph, traceDependencyChain, type KnowledgeGraph } from '../core/knowledge-graph';
+import { detectPatternCandidates, groupCandidatesByPlatform } from '../core/pattern-detector';
 
 export interface DoneOptions {
   task?: string;
@@ -26,10 +28,9 @@ export interface DoneOptions {
 export async function doneCommand(options: DoneOptions): Promise<void> {
   // ── Prompt 模式 ──
   if (options.prompt) {
-    const { buildPrompt, formatPrompt } = await import('../core/prompt-builder');
     const iter = options.iteration || await getDefaultIteration();
-    const prompt = await buildPrompt('analyze', { iteration: iter, task: options.task });
-    process.stdout.write(formatPrompt(prompt));
+    const prompt = await buildDoneArchivePrompt(iter, options.task);
+    process.stdout.write(prompt);
     process.exitCode = 10;
     return;
   }
@@ -219,6 +220,34 @@ async function doDone(
     await refreshKnowledgeGraph(process.cwd(), iteration);
     logger.info('🧠 知识图谱已刷新');
   } catch {}
+
+  // v8.2.0+: 归档时自动检测可复用模式候选
+  try {
+    const taskDir = join(iterDir, '030-tasks', taskId);
+    const codeDirs = [
+      join(taskDir, '10-backend'),
+      join(taskDir, '20-frontend'),
+      join(taskDir, 'src'),
+    ];
+    const candidates = await detectPatternCandidates(codeDirs, `task:${taskId}`);
+    if (candidates.length > 0) {
+      logger.info('');
+      logger.info('🧩 检测到以下可复用模式候选（建议沉淀到 .speccore/PATTERNS/）:');
+      const byPlatform = groupCandidatesByPlatform(candidates);
+      for (const [plat, list] of Object.entries(byPlatform)) {
+        const platLabel = plat === 'shared' ? '🌐 跨端共享' : plat === 'backend' ? '⚙️ 后端' : plat === 'frontend' ? '🎨 前端' : '📦 其他';
+        logger.info(`   ${platLabel} (${list.length}个):`);
+        for (const c of list.slice(0, 3)) {
+          logger.info(`     • ${c.name} [${c.category}] — ${c.reason}`);
+          logger.info(`       文件: ${c.file}`);
+        }
+        if (list.length > 3) {
+          logger.info(`       ... 还有 ${list.length - 3} 个`);
+        }
+      }
+      logger.info(`   💡 使用 speccore pattern save --name=<模式名> --file=<文件路径> 保存`);
+    }
+  } catch { /* 静默失败 */ }
 }
 
 /** 扫描迭代下所有已完成但未归档的任务 */
@@ -299,4 +328,287 @@ async function evolveRules(iterDir: string, taskId: string, iteration: string): 
     }
   }
   await writeFile(capPath, caps);
+}
+
+// ═══════════════════════════════════════════════════════════
+// v8.2.0+: Done 归档上下文组装 — 为验收总结构建完整上下文
+// ═══════════════════════════════════════════════════════════
+
+interface DoneArchiveSection {
+  title: string;
+  priority: number;
+  content: string;
+}
+
+const DEFAULT_TOKEN_BUDGET = 10000;
+
+async function buildDoneArchivePrompt(iteration: string, taskId?: string): Promise<string> {
+  const iterDir = await getIterationDir(iteration);
+  const sections: DoneArchiveSection[] = [];
+
+  let prompt = `# 任务归档验收总结 — ${taskId || iteration}\n\n`;
+  prompt += `> 迭代: ${iteration}\n`;
+  prompt += `> 时间: ${new Date().toISOString().slice(0, 19)}\n`;
+  prompt += `> 模式: 归档上下文组装（v8.2.0+）\n\n`;
+
+  prompt += `## 指令\n\n`;
+  prompt += `请基于以下任务完整生命周期上下文，生成本任务的**验收总结报告**。\n\n`;
+  prompt += `报告应包含:\n`;
+  prompt += `1. **功能实现概述** — 本任务实现了哪些核心功能\n`;
+  prompt += `2. **规格符合度** — 代码实现与 REQ.md/TECH.md 的符合情况\n`;
+  prompt += `3. **测试覆盖度** — 测试用例执行情况与覆盖分析\n`;
+  prompt += `4. **风险与问题** — 遗留问题、已知风险、待办事项\n`;
+  prompt += `5. **依赖影响** — 对上下游任务的影响说明\n`;
+  prompt += `6. **归档建议** — 是否满足归档条件，补充建议\n\n`;
+
+  if (taskId) {
+    const taskDirCandidates = [
+      join(iterDir, '030-tasks', taskId),
+      join(iterDir, '030-tasks', 'feature', taskId),
+      join(iterDir, '030-tasks', 'backend', taskId),
+      join(iterDir, '030-tasks', 'frontend', taskId),
+    ];
+    let taskDir: string | null = null;
+    for (const c of taskDirCandidates) {
+      if (await pathExists(c)) { taskDir = c; break; }
+    }
+
+    if (taskDir) {
+      const reqPath = join(taskDir, '00-specs', 'REQ.md');
+      if (await pathExists(reqPath)) {
+        const content = await readFile(reqPath, 'utf-8');
+        sections.push({ title: '## 需求规格 (REQ.md)', priority: 1, content: truncateDoc(content, 2000) });
+      }
+      const techPath = join(taskDir, '00-specs', 'TECH.md');
+      if (await pathExists(techPath)) {
+        const content = await readFile(techPath, 'utf-8');
+        sections.push({ title: '## 技术规格 (TECH.md)', priority: 2, content: truncateDoc(content, 1500) });
+      }
+      const depsPath = join(taskDir, 'DEPS.md');
+      if (await pathExists(depsPath)) {
+        const content = await readFile(depsPath, 'utf-8');
+        sections.push({ title: '## 依赖分析 (DEPS.md)', priority: 3, content: truncateDoc(content, 800) });
+      }
+      const chgPath = join(taskDir, 'CHANGELOG.md');
+      if (await pathExists(chgPath)) {
+        const content = await readFile(chgPath, 'utf-8');
+        sections.push({ title: '## 变更日志 (CHANGELOG.md)', priority: 4, content: truncateDoc(content, 800) });
+      }
+      const riskPath = join(taskDir, 'RISK.md');
+      if (await pathExists(riskPath)) {
+        const content = await readFile(riskPath, 'utf-8');
+        sections.push({ title: '## 风险评估 (RISK.md)', priority: 5, content: truncateDoc(content, 600) });
+      }
+      const monPath = join(taskDir, 'MONITOR.md');
+      if (await pathExists(monPath)) {
+        const content = await readFile(monPath, 'utf-8');
+        sections.push({ title: '## 监控方案 (MONITOR.md)', priority: 6, content: truncateDoc(content, 600) });
+      }
+      const testPaths: string[] = [
+        join(taskDir, 'TEST.md'),
+        join(taskDir, '99-artifacts', 'TEST.md'),
+      ];
+      for (const catDir of ['10-backend', '20-frontend']) {
+        const catPath = join(taskDir, catDir);
+        if (await pathExists(catPath)) {
+          try {
+            const services = await readdir(catPath, { withFileTypes: true });
+            for (const svc of services) {
+              if (!svc.isDirectory()) continue;
+              const subs = await readdir(join(catPath, svc.name), { withFileTypes: true });
+              for (const sub of subs) {
+                if (!sub.isDirectory()) continue;
+                testPaths.push(join(catPath, svc.name, sub.name, 'TEST.md'));
+              }
+            }
+          } catch { /* skip */ }
+        }
+      }
+      let testContent = '';
+      for (const p of testPaths) {
+        if (await pathExists(p)) { testContent = await readFile(p, 'utf-8'); break; }
+      }
+      if (testContent) {
+        sections.push({ title: '## 测试用例 (TEST.md)', priority: 7, content: truncateDoc(testContent, 1000) });
+      }
+      const verifyPath = join(taskDir, 'VERIFY_REPORT.md');
+      if (await pathExists(verifyPath)) {
+        const content = await readFile(verifyPath, 'utf-8');
+        sections.push({ title: '## 验证报告 (VERIFY_REPORT.md)', priority: 8, content: truncateDoc(content, 1000) });
+      }
+      const issuesPath = join(taskDir, '.issues.md');
+      if (await pathExists(issuesPath)) {
+        const content = await readFile(issuesPath, 'utf-8');
+        sections.push({ title: '## 问题追踪 (.issues.md)', priority: 9, content: truncateDoc(content, 800) });
+      }
+      const codeSummary = await summarizeCodeOutput(taskDir);
+      if (codeSummary) {
+        sections.push({ title: '## 代码产出摘要', priority: 10, content: codeSummary });
+      }
+      const contractPath = join(taskDir, '_shared', 'API_CONTRACT.yaml');
+      if (await pathExists(contractPath)) {
+        const content = await readFile(contractPath, 'utf-8');
+        sections.push({ title: '## API 契约 (API_CONTRACT.yaml)', priority: 11, content: truncateDoc(content, 800) });
+      }
+
+      try {
+        const graph = await loadKnowledgeGraph(process.cwd());
+        if (graph && taskId) {
+          const { traceDependencyChain } = await import('../core/knowledge-graph');
+          const chains = traceDependencyChain(graph, taskId, 3);
+          if (chains.length > 0) {
+            const depLines: string[] = [''];
+            for (const chain of chains.slice(0, 5)) {
+              const depEntity = graph.entities[chain.path[chain.path.length - 1]];
+              if (depEntity) {
+                depLines.push(`- **${depEntity.title}** (${depEntity.type}) — 深度 ${chain.depth}`);
+              }
+            }
+            if (depLines.length > 1) {
+              sections.push({ title: '## 依赖链路（知识图谱）', priority: 3, content: depLines.join('\n') });
+            }
+          }
+          const taskCtx = getTaskContext(graph, taskId);
+          if (taskCtx.siblingSubtasks.length > 0) {
+            const siblingLines = taskCtx.siblingSubtasks
+              .filter(s => s.id !== taskId)
+              .slice(0, 5)
+              .map(s => `- **${s.title}** (${s.platform || '-'})`);
+            if (siblingLines.length > 0) {
+              sections.push({ title: '## 相邻任务', priority: 4, content: '\n' + siblingLines.join('\n') });
+            }
+          }
+        }
+      } catch { /* 知识图谱不可用则跳过 */ }
+    }
+  }
+
+  const indexPath = join(iterDir, '000-overview', 'INDEX.md');
+  if (await pathExists(indexPath)) {
+    const content = await readFile(indexPath, 'utf-8');
+    sections.push({ title: '## 迭代总览 (INDEX.md)', priority: 12, content: truncateDoc(content, 600) });
+  }
+
+  sections.sort((a, b) => a.priority - b.priority);
+
+  let totalTokens = estimateTokens(prompt);
+  for (const sec of sections) {
+    const secTokens = estimateTokens(sec.title + '\n' + sec.content);
+    if (totalTokens + secTokens > DEFAULT_TOKEN_BUDGET) {
+      prompt += `\n\n> ⚠️ 上下文已截断（Token 预算 ${DEFAULT_TOKEN_BUDGET}）。剩余 ${sections.length - sections.indexOf(sec)} 个章节未包含。\n`;
+      break;
+    }
+    prompt += `\n\n${sec.title}\n\n${sec.content}`;
+    totalTokens += secTokens;
+  }
+
+  prompt += '\n\n---\n\n';
+  prompt += '## 输出格式\n\n';
+  prompt += '请按以下结构返回 Markdown 格式的验收总结报告:\n\n';
+  prompt += '```markdown\n';
+  prompt += '# 验收总结 — {任务名}\n\n';
+  prompt += '## 1. 功能实现概述\n...\n\n';
+  prompt += '## 2. 规格符合度\n...\n\n';
+  prompt += '## 3. 测试覆盖度\n...\n\n';
+  prompt += '## 4. 风险与问题\n...\n\n';
+  prompt += '## 5. 依赖影响\n...\n\n';
+  prompt += '## 6. 归档建议\n...\n\n';
+  prompt += '```\n';
+
+  return prompt;
+}
+
+function estimateTokens(text: string): number {
+  let tokens = 0;
+  for (const ch of text) {
+    tokens += ch.charCodeAt(0) > 127 ? 1.5 : 0.25;
+  }
+  return Math.ceil(tokens);
+}
+
+function truncateDoc(content: string, maxChars: number): string {
+  if (content.length <= maxChars) return content;
+  const truncated = content.slice(0, maxChars);
+  const lastBreak = truncated.lastIndexOf('\n\n');
+  if (lastBreak > maxChars * 0.7) {
+    return truncated.slice(0, lastBreak) + '\n\n> ...（内容已截断）';
+  }
+  return truncated.slice(0, maxChars - 20) + '\n\n> ...（内容已截断）';
+}
+
+async function summarizeCodeOutput(taskDir: string): Promise<string> {
+  const lines: string[] = [];
+  for (const catDir of ['10-backend', '20-frontend']) {
+    const catPath = join(taskDir, catDir);
+    if (!(await pathExists(catPath))) continue;
+    try {
+      const services = await readdir(catPath, { withFileTypes: true });
+      for (const svc of services) {
+        if (!svc.isDirectory()) continue;
+        const srcPath = join(catPath, svc.name, 'src');
+        const testPath = join(catPath, svc.name, 'tests');
+        let fileCount = 0;
+        let testCount = 0;
+        if (await pathExists(srcPath)) {
+          fileCount = await countFiles(srcPath, ['.ts', '.js', '.tsx', '.jsx', '.java', '.go', '.py', '.vue']);
+        }
+        if (await pathExists(testPath)) {
+          testCount = await countFiles(testPath, ['.test.ts', '.test.js', '.spec.ts', '.spec.js', '.py']);
+        }
+        if (fileCount > 0) {
+          lines.push(`- **${svc.name}** (${catDir.replace(/^\d+-/, '')}): ${fileCount} 个代码文件${testCount > 0 ? `, ${testCount} 个测试文件` : ''}`);
+        }
+      }
+    } catch { /* skip */ }
+  }
+  const rootSrc = join(taskDir, 'src');
+  if (await pathExists(rootSrc)) {
+    const count = await countFiles(rootSrc, ['.ts', '.js', '.tsx', '.jsx', '.java', '.go', '.py', '.vue']);
+    if (count > 0) lines.push(`- **根级 src/**: ${count} 个代码文件`);
+  }
+  if (lines.length === 0) return '';
+  return lines.join('\n');
+}
+
+async function countFiles(dir: string, exts: string[]): Promise<number> {
+  let count = 0;
+  try {
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const e of entries) {
+      if (e.isDirectory()) {
+        count += await countFiles(join(dir, e.name), exts);
+      } else if (exts.some(ext => e.name.endsWith(ext))) {
+        count++;
+      }
+    }
+  } catch { /* skip */ }
+  return count;
+}
+
+function getTaskContext(graph: KnowledgeGraph, taskId: string) {
+  const entity = graph.entities[taskId];
+  if (!entity) {
+    return { requirement: null, siblingSubtasks: [], parentTask: null, relatedSpecs: [], dependsOn: [] };
+  }
+  let parentTask: typeof entity | null = null;
+  const siblingSubtasks: typeof entity[] = [];
+  const parentIndex = new Map<string, typeof entity[]>();
+  for (const e of Object.values(graph.entities)) {
+    if (e.type === 'subtask' && e.parentTaskId) {
+      const list = parentIndex.get(e.parentTaskId) || [];
+      list.push(e);
+      parentIndex.set(e.parentTaskId, list);
+    }
+  }
+  for (const rel of graph.relations) {
+    if (rel.from === taskId && rel.type === 'subtask_of') {
+      parentTask = graph.entities[rel.to] || null;
+    }
+  }
+  const parentId = entity.parentTaskId || parentTask?.id;
+  if (parentId) {
+    const siblings = parentIndex.get(parentId);
+    if (siblings) siblingSubtasks.push(...siblings);
+  }
+  return { requirement: null, siblingSubtasks, parentTask, relatedSpecs: [], dependsOn: [] };
 }
