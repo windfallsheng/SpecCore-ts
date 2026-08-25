@@ -638,8 +638,8 @@ function extractCodeStructure(allCode: string): {
   const classes: string[] = [];
   const routes: Array<{ method: string; path: string }> = [];
 
-  // 提取函数名：function xxx( / const xxx = / async function xxx(
-  for (const m of allCode.match(/(?:function|async\s+function)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(/g) || []) {
+  // 提取函数名：async function xxx( / function xxx( / const xxx =
+  for (const m of allCode.match(/(?:async\s+function|function)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(/g) || []) {
     const name = m.replace(/(?:function|async\s+function)\s+/, '').replace(/\s*\($/, '');
     if (name && !['if', 'while', 'for', 'switch', 'catch'].includes(name)) functions.push(name);
   }
@@ -1011,7 +1011,7 @@ async function checkDevGuideCompliance(codePath: string, taskDir: string): Promi
           if (!cleanPath) continue;
           const fullPath = join(codePath, cleanPath);
           const exists = require('fs').existsSync(fullPath);
-          if (type.includes('新增') || type.includes('新增') || type.toLowerCase().includes('add')) {
+          if (type.includes('新增') || type.toLowerCase().includes('add') || type.toLowerCase().includes('new')) {
             if (!exists) issues.push(`改造范围: 应新增文件不存在: ${cleanPath}`);
           } else if (type.includes('修改') || type.toLowerCase().includes('modify') || type.toLowerCase().includes('update')) {
             if (!exists) issues.push(`改造范围: 应修改文件不存在: ${cleanPath}`);
@@ -1179,10 +1179,15 @@ async function checkSchemaConsistency(codePath: string, taskDir: string): Promis
         // 检查代码中是否有该字段名（作为类属性、变量、数据库列名）
         const snakeField = cleanField.replace(/([A-Z])/g, '_$1').toLowerCase();
         const camelField = cleanField.replace(/_([a-z])/g, (_, g) => g.toUpperCase());
-        const found = codeStruct.classes.some(c => allCode.includes(`${c}`)) &&
-          (allCode.includes(` ${cleanField}`) || allCode.includes(`'${cleanField}'`) ||
-           allCode.includes(`"${cleanField}"`) || allCode.includes(` ${snakeField}`) ||
-           allCode.includes(` ${camelField}`));
+        // v8.3.0+: 增强字段匹配 — 支持多种代码中的出现形式
+        const fieldPatterns = [
+          ` ${cleanField}:`, ` ${cleanField} =`, ` ${cleanField};`,
+          ` ${cleanField}?:`, `.${cleanField}`, `'${cleanField}'`, `"${cleanField}"`,
+          ` ${snakeField}:`, ` ${snakeField} =`, ` ${snakeField};`, `.${snakeField}`,
+          ` ${camelField}:`, ` ${camelField} =`, ` ${camelField};`, `.${camelField}`,
+          `column\s*:\s*['"\`]${cleanField}['"\`]`,
+        ];
+        const found = entityMatch && fieldPatterns.some(p => allCode.includes(p));
 
         if (!found && entityMatch) {
           issues.push(`字段未找到: ${cleanField} (表: ${heading})`);
