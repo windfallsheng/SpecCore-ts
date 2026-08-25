@@ -30,18 +30,19 @@ export function getTaskRelativePath(taskId: string): string {
 }
 
 /**
- * 在 030-tasks/ 下递归查找 Task 目录（兼容新旧布局）
- * 新布局: 030-tasks/feature/Task-001-slug/
+ * 在 030-tasks/ 下递归查找 Task 目录（兼容新旧布局 + 子任务目录）
  * 旧布局: 030-tasks/Task-001/
+ * 新布局: 030-tasks/feature/Task-001-slug/
+ * 子任务: 030-tasks/feature/Task-001/{platform}/Task-001-platform/
  */
 export async function findTaskDir(tasksRoot: string, taskId: string): Promise<string | null> {
   if (!(await pathExists(tasksRoot))) return null;
 
-  // 先查旧布局: 030-tasks/Task-NNN/
+  // 1. 先查旧布局: 030-tasks/Task-NNN/
   const legacyPath = join(tasksRoot, taskId);
   if (await pathExists(legacyPath)) return legacyPath;
 
-  // 查新布局: 030-tasks/{type}/Task-NNN*/
+  // 2. 查新布局: 030-tasks/{type}/Task-NNN*/
   for (const type of TASK_TYPES) {
     const typeDir = join(tasksRoot, type);
     if (await pathExists(typeDir)) {
@@ -53,5 +54,30 @@ export async function findTaskDir(tasksRoot: string, taskId: string): Promise<st
       }
     }
   }
+
+  // 3. v8.3.8+: 查子任务目录（如 Task-001-booking-service）
+  // 提取父任务 ID：Task-001-booking-service → Task-001
+  if (taskId.startsWith('Task-')) {
+    const parts = taskId.split('-');
+    if (parts.length >= 3) {
+      const parentTaskId = `${parts[0]}-${parts[1]}`;
+      for (const type of TASK_TYPES) {
+        const typeDir = join(tasksRoot, type);
+        if (!(await pathExists(typeDir))) continue;
+
+        const parentPath = join(typeDir, parentTaskId);
+        if (await pathExists(parentPath)) {
+          // 在父任务目录下的端目录中查找子任务
+          const platformEntries = await readdir(parentPath, { withFileTypes: true }).catch(() => []);
+          for (const pe of platformEntries) {
+            if (!pe.isDirectory() || pe.name.startsWith('.') || pe.name.startsWith('_') || pe.name.startsWith('0')) continue;
+            const subtaskPath = join(parentPath, pe.name, taskId);
+            if (await pathExists(subtaskPath)) return subtaskPath;
+          }
+        }
+      }
+    }
+  }
+
   return null;
 }

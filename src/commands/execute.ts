@@ -1984,11 +1984,27 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
     return;
   }
 
+  // ── 读取任务真实名字（v8.3.8+: 从 .meta/name 或 TASK.md 读取，不再用 task ID 当名字）──
+  let taskName = task;
+  try {
+    const namePath = join(taskDir, '.meta', 'name');
+    if (await pathExists(namePath)) {
+      taskName = (await readFile(namePath, 'utf-8')).trim();
+    } else {
+      const taskMdPath = join(taskDir, 'TASK.md');
+      if (await pathExists(taskMdPath)) {
+        const taskMd = await readFile(taskMdPath, 'utf-8');
+        const nameMatch = taskMd.match(/#\s+(.+)/);
+        if (nameMatch) taskName = nameMatch[1].trim();
+      }
+    }
+  } catch {}
+
   // ── 懒创建任务分支 + 合并依赖（与直接执行模式保持一致）──
   const createdBranches = new Map<string, string>();
   const taskState: TaskState = {
     id: task,
-    name: task,
+    name: taskName,
     status: 'pending',
     type: 'feature',
     assignee: '',

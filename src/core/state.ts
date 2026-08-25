@@ -106,10 +106,26 @@ function parseStatus(status: string): TaskState['status'] {
 /** 排除的目录名前缀（不是端目录） */
 const NON_PLATFORM_DIRS = new Set(['.', '_', '9', '.meta', '_shared', '99-artifacts', '00-specs']);
 
-/** 判断某个目录是否为端子任务目录（含 TASK.md 且不是特殊目录） */
+/** 判断某个目录是否为端子任务目录（含 TASK.md 且不是特殊目录）
+ * v8.3.8+: 支持两种结构
+ *   旧结构: {platform}/TASK.md
+ *   新结构: {platform}/{subtaskId}/TASK.md（split.ts 生成的平铺架构）
+ */
 async function isPlatformDir(dirPath: string): Promise<boolean> {
+  // 1. 旧结构：目录下直接有 TASK.md
   const taskMd = join(dirPath, 'TASK.md');
-  return await pathExists(taskMd);
+  if (await pathExists(taskMd)) return true;
+
+  // 2. 新结构：目录下有子目录，且子目录下有 TASK.md
+  try {
+    const entries = await readdir(dirPath, { withFileTypes: true });
+    for (const e of entries) {
+      if (e.isDirectory() && !e.name.startsWith('.')) {
+        if (await pathExists(join(dirPath, e.name, 'TASK.md'))) return true;
+      }
+    }
+  } catch {}
+  return false;
 }
 
 export async function scanTasks(iteration: string): Promise<TaskState[]> {
@@ -195,70 +211,97 @@ export async function scanTasks(iteration: string): Promise<TaskState[]> {
       if (ownerMatch && !parentAssignee) parentAssignee = ownerMatch[1].trim();
     }
     
-    // 扫描各端子任务目录（新结构: {platform}/TASK.md）
+    // 扫描各端子任务目录（v8.3.8+: 兼容两种结构）
+    //   旧结构: {platform}/TASK.md
+    //   新结构: {platform}/{subtaskId}/TASK.md（split.ts 平铺架构）
     let hasSubTasks = false;
     const subTasks: TaskState[] = [];
     const dirEntries = await readdir(taskPath, { withFileTypes: true }).catch(() => []);
-    
+
     for (const de of dirEntries) {
       if (!de.isDirectory()) continue;
       if (NON_PLATFORM_DIRS.has(de.name)) continue;
       if (de.name.startsWith('.') || de.name.startsWith('0')) continue;
-      
+
       const platformDirPath = join(taskPath, de.name);
       if (await isPlatformDir(platformDirPath)) {
         hasSubTasks = true;
         const platform = de.name;
-        const subTaskMd = await readFile(join(platformDirPath, 'TASK.md'), 'utf-8');
-        
-        // 提取子任务负责人、状态、子任务 ID
-        let subAssignee = parentAssignee;
-        const subOwnerMatch = subTaskMd.match(/\*\*负责人\*\*[:\s]*([^\n]+)/);
-        if (subOwnerMatch) subAssignee = subOwnerMatch[1].trim();
-        
-        let subStatus: TaskState['status'] = 'pending';
-        const subStatusMatch = subTaskMd.match(/\*\*状态\*\*[:\s]*(.+)/);
-        if (subStatusMatch) {
-          const raw = subStatusMatch[1].trim();
-          if (raw.includes('已完成') || raw.includes('completed')) subStatus = 'completed';
-          else if (raw.includes('进行中') || raw.includes('in_progress')) subStatus = 'in_progress';
-        }
-        
-        // 提取子任务 ID
-        let subTaskId = `${taskId}-${platform}`;
-        const subIdMatch = subTaskMd.match(/子任务 ID\*\*[:\s]*`(Task-[^`]+)`/);
-        if (subIdMatch) subTaskId = subIdMatch[1];
-        
-        // 提取子任务名称
-        let subName = `${name} - ${platform}`;
-        const subNameMatch = subTaskMd.match(/#\s+(.+)/);
-        if (subNameMatch) subName = subNameMatch[1].trim();
-        
-        // 子任务工时：优先从子任务 .meta/estimated-hours 读取，回退父任务工时
-        let subHours = estimatedHours;
-        const subMetaDir = join(platformDirPath, '.meta');
-        if (await pathExists(subMetaDir)) {
-          const subHoursPath = join(subMetaDir, 'estimated-hours');
-          if (await pathExists(subHoursPath)) {
-            const subHoursRaw = (await readFile(subHoursPath, 'utf-8')).trim();
-            const subHoursNum = parseInt(subHoursRaw, 10);
-            if (!isNaN(subHoursNum) && subHoursNum > 0) subHours = subHoursNum;
-          }
+
+        // 收集所有包含 TASK.md 的执行单元路径
+        const subtaskPaths: string[] = [];
+
+        // 1. 旧结构：端目录下直接有 TASK.md
+        if (await pathExists(join(platformDirPath, 'TASK.md'))) {
+          subtaskPaths.push(platformDirPath);
         }
 
-        subTasks.push({
-          id: subTaskId,
-          name: subName,
-          type,
-          status: subStatus,
-          assignee: subAssignee,
-          dependencies: [],
-          priority,
-          progress: subStatus === 'completed' ? 100 : 0,
-          estimatedHours: subHours,
-          platform,
-          parentTaskId: taskId,
-        });
+        // 2. 新结构：端目录下有子任务目录（如 booking-service/Task-001-booking-service/）
+        try {
+          const subEntries = await readdir(platformDirPath, { withFileTypes: true });
+          for (const subDe of subEntries) {
+            if (subDe.isDirectory() && !subDe.name.startsWith('.')) {
+              const subPath = join(platformDirPath, subDe.name);
+              if (await pathExists(join(subPath, 'TASK.md'))) {
+                subtaskPaths.push(subPath);
+              }
+            }
+          }
+        } catch {}
+
+        for (const subtaskPath of subtaskPaths) {
+          const subTaskMd = await readFile(join(subtaskPath, 'TASK.md'), 'utf-8');
+
+          // 提取子任务负责人、状态
+          let subAssignee = parentAssignee;
+          const subOwnerMatch = subTaskMd.match(/\*\*负责人\*\*[:\s]*([^\n]+)/);
+          if (subOwnerMatch) subAssignee = subOwnerMatch[1].trim();
+
+          let subStatus: TaskState['status'] = 'pending';
+          const subStatusMatch = subTaskMd.match(/\*\*状态\*\*[:\s]*(.+)/);
+          if (subStatusMatch) {
+            const raw = subStatusMatch[1].trim();
+            if (raw.includes('已完成') || raw.includes('completed')) subStatus = 'completed';
+            else if (raw.includes('进行中') || raw.includes('in_progress')) subStatus = 'in_progress';
+          }
+
+          // 提取子任务 ID：新结构下目录名即 subtaskId（如 Task-001-booking-service）
+          const dirName = subtaskPath.split('/').pop() || '';
+          let subTaskId = dirName.startsWith('Task-') ? dirName : `${taskId}-${platform}`;
+          const subIdMatch = subTaskMd.match(/子任务 ID\*\*[:\s]*`(Task-[^`]+)`/);
+          if (subIdMatch) subTaskId = subIdMatch[1];
+
+          // 提取子任务名称
+          let subName = `${name} — ${platform}`;
+          const subNameMatch = subTaskMd.match(/#\s+(.+)/);
+          if (subNameMatch) subName = subNameMatch[1].trim();
+
+          // 子任务工时：优先从子任务 .meta/estimated-hours 读取，回退父任务工时
+          let subHours = estimatedHours;
+          const subMetaDir = join(subtaskPath, '.meta');
+          if (await pathExists(subMetaDir)) {
+            const subHoursPath = join(subMetaDir, 'estimated-hours');
+            if (await pathExists(subHoursPath)) {
+              const subHoursRaw = (await readFile(subHoursPath, 'utf-8')).trim();
+              const subHoursNum = parseInt(subHoursRaw, 10);
+              if (!isNaN(subHoursNum) && subHoursNum > 0) subHours = subHoursNum;
+            }
+          }
+
+          subTasks.push({
+            id: subTaskId,
+            name: subName,
+            type,
+            status: subStatus,
+            assignee: subAssignee,
+            dependencies: [],
+            priority,
+            progress: subStatus === 'completed' ? 100 : 0,
+            estimatedHours: subHours,
+            platform,
+            parentTaskId: taskId,
+          });
+        }
       }
     }
     
