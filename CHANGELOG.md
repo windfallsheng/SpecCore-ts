@@ -1,3 +1,17 @@
+## v8.3.9 (2026-08-25) — 子任务扫描与分支名修复
+
+### 修复
+
+**子任务根本不被扫描到** (`state.ts` + `task-paths.ts`):
+- `isPlatformDir`: 支持新结构 `{platform}/{subtaskId}/TASK.md`（split.ts 生成的平铺架构），不再只检查 `{platform}/TASK.md`
+- `scanTasks`: 子任务扫描逻辑扩展为遍历 `{platform}/{subtaskId}/` 目录，每个子任务独立生成 `TaskState`
+- `findTaskDir`: 新增子任务目录查找（如 `Task-001-booking-service`），提取父任务 ID 后在 `{type}/Task-001/{platform}/` 下递归查找
+- **根因**：split.ts 生成的是 `booking-service/Task-001-booking-service/TASK.md` 结构，但 `scanTasks` 和 `findTaskDir` 只支持 `booking-service/TASK.md` 旧结构，导致子任务完全不被识别，批量执行 `--all` 时只执行父任务
+
+**单任务执行分支名只有 Task ID** (`execute.ts`):
+- `executeSingleTask`: 从 `.meta/name` 或 `TASK.md` 读取真实任务名，不再把 `task ID` 直接当 `taskState.name`
+- **根因**：`taskState.name = task` 导致分支名变成 `feature/Task-001-a1b2`，没有体现任务真实名字（如"用户管理"）
+
 ## v8.3.8 (2026-08-25) — 依赖分支自动合并修复
 
 ### 修复
