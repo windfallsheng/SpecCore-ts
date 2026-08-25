@@ -1,3 +1,20 @@
+## v8.3.5 (2026-08-25) — execute 上下文补全 + git-config 自动填充
+
+### 修复
+
+**execute 上下文增加 overview/ 扫描** (`prompt-builder.ts`):
+- `loadAllTaskContext`: 将 `global/` 硬编码路径改为 `GLOBAL_SPECS_DIR`（`overview/`），与 analyze 写入路径一致
+- 向后兼容：保留旧版 `global/` 目录扫描
+- `loadExtraSpecs`: 增加 `overview/` 核心文档扫描（REQUIREMENT.md、ANALYSIS.md、TECH.md、DEV_GUIDE.md），单文件 ≤2000 字符、总计 ≤8000 字符，防止注意力漂移
+- **根因**：`loadAllTaskContext` 扫描的是旧路径 `020-specs/global/`，但 analyze 产物写入 `020-specs/overview/`，导致 execute 时 AI 看不到迭代级分析文档
+
+**git-config 自动填充** (`split.ts` + `git-integration.ts`):
+- split 时调用 `loadGitConfig(iteration)` 读取迭代级/全局级实际配置值
+- 将实际值写入子任务 `.meta/git-config`，替代原来的全注释空模板
+- 配置内容包括：源分支、分支前缀、分支格式、自动拉取、远程名称、保护分支列表
+- 附带分支命名示例和自定义配置区，用户可直接使用或按需修改
+- **根因**：原 git-config 全是注释和"继承迭代配置"占位符，`git-integration.ts` 读取时过滤掉注释行，导致子任务级配置永远不生效，全部回退到迭代/全局级
+
 ## v8.3.4 (2026-08-25) — split 端名/模块/文档三重修复
 
 ### 修复
