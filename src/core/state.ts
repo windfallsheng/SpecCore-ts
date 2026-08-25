@@ -12,6 +12,8 @@ export interface TaskState {
   progress: number;
   startDate?: string;
   endDate?: string;
+  /** 预估工时（从 .meta/estimated-hours 读取） */
+  estimatedHours?: number;
   /** 所属端（子任务级别） */
   platform?: string;
   /** 父任务 ID（子任务才有） */
@@ -153,6 +155,7 @@ export async function scanTasks(iteration: string): Promise<TaskState[]> {
     let parentAssignee = '';
     let priority: TaskState['priority'] = 'medium';
     
+    let estimatedHours: number | undefined;
     const metaDir = join(taskPath, '.meta');
     if (await pathExists(metaDir)) {
       const typePath = join(metaDir, 'type');
@@ -161,6 +164,12 @@ export async function scanTasks(iteration: string): Promise<TaskState[]> {
       if (await pathExists(statusPath)) parentStatus = parseStatus((await readFile(statusPath, 'utf-8')).trim());
       const ownerPath = join(metaDir, 'owner');
       if (await pathExists(ownerPath)) parentAssignee = (await readFile(ownerPath, 'utf-8')).trim();
+      const hoursPath = join(metaDir, 'estimated-hours');
+      if (await pathExists(hoursPath)) {
+        const hoursRaw = (await readFile(hoursPath, 'utf-8')).trim();
+        const hoursNum = parseInt(hoursRaw, 10);
+        if (!isNaN(hoursNum) && hoursNum > 0) estimatedHours = hoursNum;
+      }
     } else {
       const typePath = join(taskPath, '.task-type');
       if (await pathExists(typePath)) type = (await readFile(typePath, 'utf-8')).trim();
@@ -225,6 +234,18 @@ export async function scanTasks(iteration: string): Promise<TaskState[]> {
         const subNameMatch = subTaskMd.match(/#\s+(.+)/);
         if (subNameMatch) subName = subNameMatch[1].trim();
         
+        // 子任务工时：优先从子任务 .meta/estimated-hours 读取，回退父任务工时
+        let subHours = estimatedHours;
+        const subMetaDir = join(platformDirPath, '.meta');
+        if (await pathExists(subMetaDir)) {
+          const subHoursPath = join(subMetaDir, 'estimated-hours');
+          if (await pathExists(subHoursPath)) {
+            const subHoursRaw = (await readFile(subHoursPath, 'utf-8')).trim();
+            const subHoursNum = parseInt(subHoursRaw, 10);
+            if (!isNaN(subHoursNum) && subHoursNum > 0) subHours = subHoursNum;
+          }
+        }
+
         subTasks.push({
           id: subTaskId,
           name: subName,
@@ -234,6 +255,7 @@ export async function scanTasks(iteration: string): Promise<TaskState[]> {
           dependencies: [],
           priority,
           progress: subStatus === 'completed' ? 100 : 0,
+          estimatedHours: subHours,
           platform,
           parentTaskId: taskId,
         });
@@ -253,7 +275,8 @@ export async function scanTasks(iteration: string): Promise<TaskState[]> {
         assignee: parentAssignee,
         dependencies: [],
         priority,
-        progress: parentStatus === 'completed' ? 100 : 0
+        progress: parentStatus === 'completed' ? 100 : 0,
+        estimatedHours,
       });
     }
   }
