@@ -36,7 +36,7 @@ import {
   ExecutionState,
   TaskSummary,
 } from '../core/execution-state';
-import { createTaskBranch, detectDefaultBranch, isProtectedBranch } from '../core/git-integration';
+import { createTaskBranch, detectDefaultBranch, findBranchByTaskId, isProtectedBranch } from '../core/git-integration';
 import { buildPrompt, formatPrompt, parseAiResponse, outputNeedsInfo } from '../core/prompt-builder';
 import { runVerification, writeVerifyReport, outputFixTag, runQualityGate, syncTestDocFromResults } from '../core/verify-engine';
 import { loadConfig } from '../core/unified-config';
@@ -1533,35 +1533,55 @@ async function prepareTaskBranch(
   if (!branch) return null;
   createdBranches.set(task.id, branch);
 
-  // 4. 检测依赖并合并
-  // 同步方式检测 IMPACT.md 中的依赖
+  // 4. 检测依赖并合并（v8.3.7+）
+  // 4a. 优先从 task.dependencies 读取，回退 IMPACT.md
   let depTaskIds: string[] = [];
-  const impactPath = join(`Iteration-${iteration}`, 'IMPACT.md');
-  try {
-    if (require('fs').existsSync(impactPath)) {
-      const impact = require('fs').readFileSync(impactPath, 'utf-8');
-      for (const line of impact.split('\n')) {
-        if (line.includes('→') && line.includes(task.id)) {
-          const match = line.match(/→\s*\|\s*([^|]+)/);
-          if (match) {
-            const depId = match[1].trim().split(':')[0].trim();
-            depTaskIds.push(depId);
+  if (task.dependencies && task.dependencies.length > 0) {
+    depTaskIds = [...task.dependencies];
+    logger.debug(`  📋 从 task.dependencies 读取依赖: ${depTaskIds.join(', ')}`);
+  } else {
+    // 回退：从 IMPACT.md 解析
+    const impactPath = join(`Iteration-${iteration}`, 'IMPACT.md');
+    try {
+      if (require('fs').existsSync(impactPath)) {
+        const impact = require('fs').readFileSync(impactPath, 'utf-8');
+        for (const line of impact.split('\n')) {
+          if (line.includes('→') && line.includes(task.id)) {
+            const match = line.match(/→\s*\|\s*([^|]+)/);
+            if (match) {
+              const depId = match[1].trim().split(':')[0].trim();
+              depTaskIds.push(depId);
+            }
           }
         }
       }
+    } catch {}
+    if (depTaskIds.length > 0) {
+      logger.debug(`  📋 从 IMPACT.md 读取依赖: ${depTaskIds.join(', ')}`);
     }
-  } catch {}
+  }
 
-  // 合并已完成的依赖任务分支
+  // 4b. 合并依赖任务分支
+  // 查找顺序：1. 当前会话 createdBranches  2. git-mapping.json  3. git branch 列表
   for (const depId of depTaskIds) {
-    const depBranch = createdBranches.get(depId);
+    let depBranch = createdBranches.get(depId);
+    let source = '当前会话';
+
+    if (!depBranch) {
+      depBranch = findBranchByTaskId(depId) || undefined;
+      source = 'git-mapping / branch 列表';
+    }
+
     if (depBranch) {
       try {
         execSync(`git merge "${depBranch}" --no-edit --no-ff`, { stdio: 'pipe' });
-        logger.info(`  🔗 合并依赖分支: ${depBranch}`);
+        logger.info(`  🔗 合并依赖分支 [${source}]: ${depBranch}`);
       } catch (e: any) {
         logger.warn(`  ⚠️ 合并 ${depBranch} 冲突，需要手动解决`);
       }
+    } else {
+      logger.warn(`  ⚠️ 找不到依赖任务 ${depId} 的分支，跳过合并`);
+      logger.warn(`     可能原因：1) 依赖任务尚未执行  2) 分支在另一会话创建  3) 分支已被删除`);
     }
   }
 

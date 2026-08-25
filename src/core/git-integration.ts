@@ -552,6 +552,32 @@ function saveMapping(mapping: GitMapping): void {
   writeFileSync(GIT_MAPPING_PATH, JSON.stringify(mapping, null, 2));
 }
 
+/**
+ * v8.3.7+: 根据 taskId 查找已创建的分支名
+ * 查找顺序：1. git-mapping.json  2. git branch 列表
+ */
+export function findBranchByTaskId(taskId: string): string | null {
+  // 1. 从 git-mapping.json 查找
+  const mapping = loadMapping();
+  for (const [branch, info] of Object.entries(mapping)) {
+    if (info.taskId === taskId) return branch;
+  }
+
+  // 2. 从 git branch 列表查找（匹配 feature/{taskId}-* 或 */{taskId}-*）
+  try {
+    const branches = execSync('git branch -a', { encoding: 'utf-8', stdio: 'pipe' });
+    for (const line of branches.split('\n')) {
+      const b = line.trim().replace(/^\*?\s*/, '');
+      // 匹配本地分支：feature/Task-001-xxx / bugfix/Task-001-xxx
+      if (new RegExp(`(?:^|/)${taskId}[-_]`).test(b)) {
+        return b;
+      }
+    }
+  } catch {}
+
+  return null;
+}
+
 function getChangedFiles(): string[] {
   try {
     const output = execSync('git diff --name-only HEAD', { encoding: 'utf-8', stdio: 'pipe' });
