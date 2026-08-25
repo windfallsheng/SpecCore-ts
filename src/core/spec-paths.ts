@@ -13,11 +13,13 @@ export const GLOBAL_SPECS_DIR = 'overview';
 
 /** 迭代综合文档文件名列表（用于散落文件归位、路径解析等）
  * v7.5.1+：TECH/RISK/REVIEW/MONITOR 重新纳入，确保 sanitizeSpecDirectories 能将根目录散落文件归位到 overview/
+ * v8.3.11+：补充 DEV_GUIDE.md / CHANGELOG.md / SCHEMA.md，防止 analyze 产物散落在 020-specs/ 根目录
  * 这些文件在 Phase 1 写入 overview/，Phase 2 可生成各端专属版本写入 {端}/
  */
 export const GLOBAL_SPEC_FILES = [
   'REQUIREMENT.md', 'ANALYSIS.md', 'TECH.md', 'RISK.md',
   'DEPS.md', 'REVIEW.md', 'MONITOR.md',
+  'DEV_GUIDE.md', 'CHANGELOG.md', 'SCHEMA.md',
   'FUNCTION_MAP.md', 'INTERACTION_MAP.md', 'API_CONTRACT.yaml',
 ];
 

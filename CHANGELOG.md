@@ -1,3 +1,12 @@
+## v8.3.12 (2026-08-25) — 020-specs/ 根目录散落文件归位修复
+
+### 修复
+
+**analyze 产物散落在 020-specs/ 根目录** (`spec-paths.ts` + `analyze.ts`):
+- `GLOBAL_SPEC_FILES` 补充 `DEV_GUIDE.md`、`CHANGELOG.md`、`SCHEMA.md`，确保这些 analyze 常见产物能被识别为全局文档
+- `sanitizeSpecDirectories` 散落文件归位逻辑不再限制 `.md` 后缀，`API_CONTRACT.yaml` 等非 md 文件出现在根目录时也能正确归位到 `overview/`
+- **根因**：`GLOBAL_SPEC_FILES` 只包含 10 个文件名，缺少 `DEV_GUIDE.md` 等常见产物。analyze 在 `options.platform` 为空且文件名不在列表中时，会直接把文件写入 `020-specs/` 根目录，`sanitizeSpecDirectories` 无法识别并归位
+
 ## v8.3.11 (2026-08-25) — 文档同步与代码注释修复
 
 ### 改进
