@@ -114,6 +114,22 @@
 - **修复**：条件改为 `if (options.full)`，只在 `--full` 时委托给 synthesize；`--phase` 由 analyze 自己处理
 - **影响**：这是导致用户多次执行 analyze --phase 2 却无法生成端级 DEV_GUIDE.md 的**根本原因**
 
+**修复自动模式 AI 跳过空文档** (`questions.ts`):
+- **根因**：`buildAutoModeInstruction` 中「遇阻断就跳过」允许 AI 在信息不足时跳过文档
+- **后果**：AI 遇到不熟悉的部分直接跳过，生成空模板或省略整个文档
+- **修复**：改为「禁止跳过任何文档」— 信息不足时必须基于已有信息填充，标注「基于现有信息推断」而非留空
+
+**增强 Phase 2 prompt 强制力** (`analyze.ts`):
+- 新增「⛔ 强制约束」专节：禁止省略任何文档、禁止空表格、禁止占位符
+- DEV_GUIDE.md 最低标准：改造范围 ≥3 行、实施步骤 ≥3 步、验证方式 ≥3 行、坑点 ≥2 条
+- Token 不足时优先保证 DEV_GUIDE.md 完整
+
+**--apply 落盘后空模板检测** (`analyze.ts`):
+- 写入完成后立即扫描 020-specs/ 下所有 .md 文件
+- 检测 `<!-- SPEC-SKELETON -->` 标记 → 列出仍为骨架的文档
+- 检测空表格（只有表头无数据行）→ 列出含空表格的文档
+- 输出警告并提示重新执行 analyze 补充
+
 **修复 Phase 1 辅助文档被 AI 敷衍** (`analyze.ts`):
 - **根因**：Phase 1 prompt 对 `FUNCTION_MAP.md`、`INTERACTION_MAP.md`、`DEV_GUIDE.md` 等辅助文档要求不够突出，AI 优先填充核心文档后 token 不足/注意力分散
 - **后果**：这些文档虽然文件存在，但内容只有空骨架，质量门禁无法读取到结构化信息
