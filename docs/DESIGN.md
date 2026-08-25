@@ -647,7 +647,8 @@ Layer 3: 默认 ['web']
 
 ```markdown
 - 默认分支: main
-- 任务分支: feature/{Task-ID}
+- 父任务分支: feature/{Task-ID}
+- 子任务分支: feature/{Task-ID}-{platform}（v8.3.10+，与任务 ID 保持一致，无随机 hash）
 - 发布分支: release/{version}
 - 保护分支: main, master, release/*, production
 ```
@@ -658,17 +659,20 @@ Layer 3: 默认 ['web']
 - 通过 pre-commit 和 pre-push git hook 自动拦截
 - 允许从保护分支创建任务分支，但不允许直接在其上工作
 
-**分支创建策略（懒创建 + 依赖合并）：**
-- 每个任务的分支在执行前才创建，确保依赖任务的代码已存在
-- 有依赖的任务会 merge 依赖分支，拿到前序任务的代码
-- 多依赖时可合并多个分支
+**分支创建策略（懒创建 + 依赖合并，v8.3.8+）：**
+- 每个子任务的分支在执行前才创建，确保依赖任务的代码已存在
+- 依赖来源优先从 `task.dependencies` 读取，回退 IMPACT.md
+- 依赖分支查找三层回退：1) 当前会话已创建分支  2) `.git-mapping.json` 历史记录  3) `git branch -a` 列表
+- 多依赖时依次合并多个分支，冲突提示手动解决
+- 分支名默认格式：`{type}/{prefix}{taskId}`，支持自定义 `branchFormat`
 
 ```
-Task-001 执行前:
-  checkout main → 创建 feature/Task-001 → 执行
+Task-001-booking-service 执行前:
+  checkout main → 创建 feature/Task-001-booking-service → 执行
 
-Task-002 执行前（依赖 Task-001）:
-  checkout main → 创建 feature/Task-002 → merge feature/Task-001 → 执行
+Task-002-h5-mobile 执行前（依赖 Task-001-booking-service）:
+  checkout main → 创建 feature/Task-002-h5-mobile
+  → merge feature/Task-001-booking-service（三层查找）→ 执行
 ```
 
 **计划自动生成策略：**
@@ -858,19 +862,34 @@ Task-001-feature-login/
 3. **确定性命名**：`{taskId}-{subtaskSlug}` 确保全项目唯一
 4. **子任务 ID 确定性**：`Task-{taskId}-{platform}` 格式，不使用随机 hash
 5. **工程路径感知**：execute 命令写入 CONSTITUTION.md 指定的实际工程路径
-6. **子任务目录清理**：移除无用的 `src/` 和 `tests/` 目录
+
+**v8.3.9+ 子任务扫描与分支名改进**：
+1. **子任务目录扫描修复**：`scanTasks` 和 `findTaskDir` 支持 `Task-001/{platform}/{subtaskId}/` 新结构（split.ts 生成的平铺架构），子任务不再被遗漏
+2. **分支名与 taskId 对齐**：默认 `branchFormat` 从 `'{type}/{prefix}{name}-{hash4}'` 改为 `'{type}/{prefix}{taskId}'`，分支名直接对应子任务全局唯一 ID，无需随机 hash
+3. **单任务执行名字修复**：`executeSingleTask` 从 `.meta/name` 或 `TASK.md` 读取真实任务名，不再用 Task ID 当分支名
+4. **工时数据链路打通**：`TaskState.estimatedHours` + `.meta/estimated-hours` + `buildTaskPlan` 联动，计划和状态面板显示真实工时
+5. **git-config 自动填充**：split 时自动写入迭代级/全局级实际配置值，不再生成全注释空模板
+6. **依赖分支合并修复**：`prepareTaskBranch` 优先从 `task.dependencies` 读取依赖，依赖分支查找扩展为三层回退（当前会话 → git-mapping → git branch）
 
 **实现位置**：
 - `/ts-cli/src/commands/iteration/split.ts`:
   - `createTaskFromSection()`：创建任务级 `.meta/`
-  - `createSubtask()`：创建子任务级 `.meta/` + 文档
+  - `createSubtask()`：创建子任务级 `.meta/` + 文档 + git-config
   - 所有端统一循环，不再区分前后端
 - `/ts-cli/src/core/spec-paths.ts`:
   - `parseProjectInfo()`：解析 CONSTITUTION.md 项目信息表
   - `getProjectPathForPlatform()`：获取实际工程路径
+- `/ts-cli/src/core/state.ts`:
+  - `scanTasks()`：扫描任务和子任务，支持 `{platform}/{subtaskId}/` 新结构
+- `/ts-cli/src/core/task-paths.ts`:
+  - `findTaskDir()`：递归查找子任务目录
+- `/ts-cli/src/core/git-integration.ts`:
+  - `createTaskBranch()`：按配置格式生成分支名，默认 `{type}/{prefix}{taskId}`
+  - `loadGitConfig()`：三级回退（子任务 → 迭代 → 全局 → 默认）
+  - `findBranchByTaskId()`：三层查找已创建分支
 - `/ts-cli/src/commands/execute.ts`:
-  - `getPlatformSubtaskDirs()`：扫描平铺端目录
-  - `--response` 模式：检查文件路径写入实际工程路径
+  - `prepareTaskBranch()`：懒创建 + 依赖合并
+  - `executeSingleTask()`：单任务执行，读取真实任务名
 
 ### 2.6 端发现机制重构与 --auto 模式 AI 化（v6.40.2）
 

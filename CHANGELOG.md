@@ -1,3 +1,19 @@
+## v8.3.11 (2026-08-25) — 文档同步与代码注释修复
+
+### 改进
+
+**设计文档同步** (`DESIGN.md`):
+- Git 分支策略章节更新：补充子任务分支格式 `feature/{Task-ID}-{platform}`、依赖查找三层回退、分支名默认格式 `{type}/{prefix}{taskId}`
+- v6.49.x 关键改进补充 v8.3.9+ 子任务扫描、分支名对齐、工时链路、git-config 自动填充、依赖合并修复
+- 实现位置列表扩展：新增 `state.ts` `scanTasks()`、`task-paths.ts` `findTaskDir()`、`git-integration.ts` `createTaskBranch()`/`findBranchByTaskId()`
+
+**说明文档更新** (`README.md`):
+- 版本号示例从 `v7.1.0` 更新为 `v8.3.10`
+
+**代码注释修复** (`split.ts` + `git-integration.ts`):
+- `generateSubtaskId` 注释修正：移除不存在的 `{hash4}`，示例改为 `Task-001-booking-service`
+- `loadSubtaskGitConfig` 注释更新：默认格式改为 `{type}/{prefix}{taskId}`
+
 ## v8.3.10 (2026-08-25) — 分支名默认格式改为 taskId，去掉随机 hash
 
 ### 改进
