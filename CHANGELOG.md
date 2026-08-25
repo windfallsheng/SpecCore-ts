@@ -1,3 +1,25 @@
+## v8.3.4 (2026-08-25) — split 端名/模块/文档三重修复
+
+### 修复
+
+**端名修复** (`split.ts` `detectPlatforms` + Response 处理模式):
+- `knownNonPlatformDirs` 增加常见 AI 简写过滤：`api`、`web`、`backend`、`frontend`、`server`、`mobile`、`admin`、`h5`、`pc`、`app`
+- 二次过滤：用 `normalizeScopePlatforms` 将残留非标准端名映射到标准端名
+- Response 处理模式增加 `invalidScopes` 拦截：发现非标准端名时拒绝拆分并提示用户
+- **根因**：AI 常输出 `api`/`web` 简写，与 CONSTITUTION.md 定义的 `booking-service`/`room-service`/`h5-mobile`/`admin-web` 不匹配
+
+**模块补全** (`split.ts` FUNCTION_MAP.md 覆盖校验):
+- Response 处理模式增加功能点覆盖校验：对比 AI 生成的任务与 FUNCTION_MAP.md 中的功能单元
+- 模糊匹配：任务名与功能单元名互相包含即视为匹配
+- 遗漏时给出警告并提示补充命令
+- **根因**：AI 拆分可能遗漏 FUNCTION_MAP.md 中定义的功能单元
+
+**文档填充增强** (`split.ts` prompt + `loadSpecContents`):
+- split prompt 新增「⛔ 强制约束」专节：禁止跳过模块、禁止空内容（≥200 字符）、禁止省略字段、内容必须从 analyze 产物提取
+- split prompt 自动模式指令：「遇阻断就跳过」→「禁止跳过任何模块」
+- `loadSpecContents` 的 `knownNonPlatformDirs` 增加 `overview` 和 `global`，防止 analyze 全局文档目录被误当成端目录扫描
+- **根因**：AI 遇信息不足时跳过模块或留空 reqContent/techContent，导致任务级 00-specs/ 文档为空模板
+
 ## v8.3.0 (2026-08-24) — 模式提取按端分组 + 临时工作区 + Ask 引擎澄清意图 + 需求澄清强制前置
 
 ### 核心改进

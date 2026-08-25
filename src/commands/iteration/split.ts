@@ -162,15 +162,28 @@ async function detectPlatforms(iterationDir: string, specified?: string): Promis
   const platforms = await parsePlatformList();
   if (platforms.length > 0) return platforms;
 
-  // 2. 回退：扫描 020-specs/ 子目录（排除 global/ 等非端目录）
+  // 2. 回退：扫描 020-specs/ 子目录（排除 global/ 等非端目录 + 常见 AI 简写垃圾目录）
   const specsDir = join(iterationDir, '020-specs');
   if (await pathExists(specsDir)) {
     const entries = await readdir(specsDir, { withFileTypes: true });
-    const knownNonPlatformDirs = new Set(['sources', 'assets', 'prototypes', 'converted', 'features', 'bugs', 'refactors', 'research', 'staging', 'platforms', 'snapshots', GLOBAL_SPECS_DIR]);
-    const platforms = entries
+    // v8.3.4+: 增加常见 AI 简写过滤，避免 api/web 等错误目录被当成端名
+    const knownNonPlatformDirs = new Set([
+      'sources', 'assets', 'prototypes', 'converted', 'features', 'bugs', 'refactors', 'research',
+      'staging', 'platforms', 'snapshots', 'overview', 'global', GLOBAL_SPECS_DIR,
+      // 常见 AI 简写垃圾目录（必须从标准端名映射，不能直接用）
+      'api', 'web', 'backend', 'frontend', 'server', 'mobile', 'admin', 'h5', 'pc', 'app',
+    ]);
+    const rawPlatforms = entries
       .filter((e: any) => e.isDirectory() && !e.name.startsWith('_') && !e.name.startsWith('.') && !knownNonPlatformDirs.has(e.name))
       .map((e: any) => e.name);
-    if (platforms.length > 0) return platforms;
+    // 二次过滤：用 normalizeScopePlatforms 排除任何残留的非标准端名
+    if (rawPlatforms.length > 0) {
+      const standardPlatforms = await parsePlatformList();
+      if (standardPlatforms.length > 0) {
+        return normalizeScopePlatforms(rawPlatforms, standardPlatforms);
+      }
+      return rawPlatforms;
+    }
   }
   
   return ['web']; // 默认
@@ -290,15 +303,15 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     }
     
     // 非 Pipeline 模式的 Response 处理
-    const iterDir = join('Iteration-' + iter, '030-tasks');
+    // v8.3.4+ 修复：使用 getIterationDir 解析正确路径，避免 Iteration- 前缀重复
+    const iterDirFull = await getIterationDir(iter);
+    const iterDir = join(iterDirFull, '030-tasks');
     await ensureDir(iterDir);
     const backups: string[] = [];
     // 尝试解析 AI 返回的 JSON Task 列表
     try {
       const tasks = JSON.parse(options.response);
       if (Array.isArray(tasks)) {
-        // 获取迭代根目录（createTaskFromSection 需要迭代根路径）
-        const iterDirFull = await getIterationDir(iter);
         const allPlatforms = await detectPlatforms(iterDirFull);
         const sections: Section[] = [];
 
@@ -360,6 +373,54 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           if (task.reason) (section as any)._reason = task.reason;
           if (taskScopePlatforms.length > 0) (section as any)._scopePlatforms = taskScopePlatforms;
           sections.push(section);
+        }
+
+        // v8.3.4+: 校验所有任务的 scope 是否只含标准端名
+        const invalidScopes: string[] = [];
+        for (const sec of sections) {
+          const scopes = (sec as any)._scopePlatforms as string[] || [];
+          for (const s of scopes) {
+            if (!allPlatforms.includes(s)) invalidScopes.push(`任务 "${sec.name}" 的 scope "${s}"`);
+          }
+        }
+        if (invalidScopes.length > 0) {
+          logger.error(`❌ 发现 ${invalidScopes.length} 个非标准端名，拆分被拒绝：`);
+          for (const msg of invalidScopes) logger.error(`   ${msg}`);
+          logger.error(`   标准端名: ${allPlatforms.join(', ')}`);
+          logger.info(`   💡 请告诉 AI：scope 必须使用 CONSTITUTION.md 标准端名，禁止 api/web/backend 等简写`);
+          return;
+        }
+
+        // v8.3.4+: 功能点覆盖校验 — 对比 FUNCTION_MAP.md 检查是否有遗漏
+        const funcMapPath = join(iterDirFull, '020-specs', GLOBAL_SPECS_DIR, 'FUNCTION_MAP.md');
+        if (await pathExists(funcMapPath)) {
+          try {
+            const fmContent = await readFile(funcMapPath, 'utf-8');
+            const funcUnits = parseFunctionMap(fmContent, allPlatforms);
+            if (funcUnits.length > 0) {
+              const aiUnits = new Set<string>();
+              for (const t of tasks) {
+                const unit = (t as any).functionalUnit || t.name;
+                if (unit) aiUnits.add(unit.trim());
+              }
+              const missingUnits: string[] = [];
+              for (const u of funcUnits) {
+                // 模糊匹配：如果 AI 任务中没有功能单元名包含或被包含于 FUNCTION_MAP 中的名称
+                const matched = [...aiUnits].some(aiu =>
+                  aiu.toLowerCase().includes(u.name.toLowerCase()) ||
+                  u.name.toLowerCase().includes(aiu.toLowerCase())
+                );
+                if (!matched) missingUnits.push(u.name);
+              }
+              if (missingUnits.length > 0) {
+                logger.warn(`\n   ⚠️  功能点覆盖警告：${missingUnits.length} 个功能单元可能被遗漏`);
+                for (const mu of missingUnits.slice(0, 5)) logger.warn(`      📌 ${mu}`);
+                if (missingUnits.length > 5) logger.warn(`      ... 还有 ${missingUnits.length - 5} 个`);
+                logger.warn(`   💡 建议检查：这些功能点是否已合并到其他任务中？`);
+                logger.warn(`   💡 如确需补充，重新执行 split 并告诉 AI："补充以下功能点: ${missingUnits.slice(0, 3).join(', ')}"`);
+              }
+            }
+          } catch {}
         }
 
         // 检测已有任务 + 冲突处理
@@ -2488,7 +2549,8 @@ async function loadSpecContents(iterationDir: string): Promise<Record<string, st
 
   // 2. 读取各端子目录文档（如 admin/TECH.md、h5/TECH.md 等）
   const entries = await readdir(specDir, { withFileTypes: true });
-  const knownNonPlatformDirs = new Set(['sources', 'assets', 'prototypes', 'converted', 'features', 'bugs', 'refactors', 'research', 'staging', 'platforms', 'snapshots', GLOBAL_SPECS_DIR]);
+  // v8.3.4+: 增加 overview 过滤，防止 analyze 全局文档目录被误当成端目录
+  const knownNonPlatformDirs = new Set(['sources', 'assets', 'prototypes', 'converted', 'features', 'bugs', 'refactors', 'research', 'staging', 'platforms', 'snapshots', 'overview', 'global', GLOBAL_SPECS_DIR]);
   for (const e of entries) {
     if (e.isDirectory() && !e.name.startsWith('_') && !e.name.startsWith('.') && !knownNonPlatformDirs.has(e.name)) {
       const platform = e.name;
@@ -2975,6 +3037,12 @@ async function buildSplitPrompt(
   p += `> 同一模块/领域的任务填相同的值，用于粒度校验和任务分组\n`;
   p += `> **topic** 必须是英文短横线格式（如 \`user-authentication\`、\`product-crud\`），用于生成任务目录名 Task-NNN-{topic}\n`;
   p += `> **sourceFile** 必须填写：该任务对应的 020-specs 源文档路径（如 \`bugs/login-timeout.md\`、\`features/user-auth.md\`、\`refactors/db-pool.md\`），用于在 CONTEXT.md 中生成来源追溯\n`;
+  p += `> **scope 强制约束（违反则拆分无效）**：\n`;
+  p += `>   - scope 数组中的每个值必须是上面「项目端列表」中的标准端名之一\n`;
+  p += `>   - ⛔ 禁止出现 api、web、backend、frontend、server、admin、h5、mobile、pc、app 等非标准名称\n`;
+  p += `>   - ⛔ 禁止出现中文端名（如"后端"、"前端"、"移动端"）\n`;
+  p += `>   - 每个任务按 scope 中的端创建子任务目录，目录名 = 标准端名\n`;
+  p += `>   - 如果 scope 含非标准端名，整个 JSON 视为不合格，必须重新生成\n`;
   p += `> **reqContent 质量要求（必填，禁止模板化）**：\n`;
   p += `>   - 必须是**具体的、可执行的需求描述**，不是"待补充"或"参考全局文档"\n`;
   p += `>   - 包含：业务规则（含边界条件）、数据模型（字段/类型/约束）、接口清单（方法/路径/参数/响应）\n`;
@@ -2986,6 +3054,14 @@ async function buildSplitPrompt(
   p += `>   - 从 020-specs/overview/TECH.md 和对应端 TECH.md 中提取本任务相关的技术细节\n`;
   p += `>   - 直接写入 00-specs/TECH.md，执行时 AI 据此直接开发\n`;
   p += `> **质量红线**：如果 reqContent/techContent 只有标题和占位符（如 "<!-- AI-FILL -->"），视为不合格，必须重新生成\n\n`;
+
+  // v8.3.4+: 强制约束专节（类似 analyze Phase 2）
+  p += `### ⛔ 强制约束（违反则拆分无效）\n\n`;
+  p += `- **禁止跳过任何功能模块** — 即使某个模块信息不足，也必须基于已有信息拆分并填充 reqContent/techContent，标注「基于现有信息推断」而非留空\n`;
+  p += `- **禁止输出空内容** — reqContent、techContent、devGuideContent 每个字段长度必须 ≥200 字符，不允许写「待补充」「TODO」「参考全局文档」\n`;
+  p += `- **禁止省略字段** — JSON 中必须包含 reqContent、techContent、devGuideContent 三个字段，缺一不可\n`;
+  p += `- **内容必须从 analyze 产物提取** — reqContent 从 REQUIREMENT.md 提取，techContent 从 TECH.md 提取，devGuideContent 从 DEV_GUIDE.md 提取\n`;
+  p += `- **如果 token 不足**：优先保证 reqContent 完整，其次是 techContent，最后是 devGuideContent\n\n`;
 
   p += `### ⚠️ 拆分规则（重要）\n\n`;
   p += `- **按功能单元拆分，不按技术层拆分**：每个任务必须对应一个业务功能（如「预订管理」「签到」「审批」），不要按技术层分组（如「后端改进」「前端修复」）\n`;
@@ -3022,7 +3098,7 @@ async function buildSplitPrompt(
 - 你的判断
 - 建议后续动作\`
 `;
-  p += `3. **遇阻断就跳过** — 如果某个功能模块信息不足无法拆分，跳过它并在疑问清单中记录\n`;
+  p += `3. **禁止跳过任何模块** — 即使某个功能模块信息不足，也必须基于已有信息拆分并填充内容，宁可标注「基于现有信息推断：需要补充 xxx」也不许留空或省略\n`;
   p += `4. **输出 JSON** — 直接输出拆分结果的 JSON 数组，不要输出其他内容\n`;
 
   // 持久指令（用户调整时 AI 可回读此文件）
