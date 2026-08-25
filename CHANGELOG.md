@@ -108,6 +108,12 @@
 - **新增自检步骤**：生成完成后检查每个文档，如仍含 `<!-- SPEC-SKELETON -->` 或空表格 → 必须重新填充
 - **写入方式示例更新**：`--apply` JSON 中新增 `"DEV_GUIDE.md":"..."`
 
+**修复 analyze --phase 被错误路由到 synthesize** (`analyze.ts`):
+- **根因**：`analyzeCommand` 入口处 `if (options.full || options.phase)` 把任何带 `--phase` 的 analyze 命令委托给 `synthesizeCommand`
+- **后果**：用户执行 `speccore analyze --phase 2` 时，实际执行的是 `synthesize --phase 2`（跨端关系提取），永远无法触达 analyze 自己的 Phase 2（端级文档生成）
+- **修复**：条件改为 `if (options.full)`，只在 `--full` 时委托给 synthesize；`--phase` 由 analyze 自己处理
+- **影响**：这是导致用户多次执行 analyze --phase 2 却无法生成端级 DEV_GUIDE.md 的**根本原因**
+
 **修复 Phase 1 辅助文档被 AI 敷衍** (`analyze.ts`):
 - **根因**：Phase 1 prompt 对 `FUNCTION_MAP.md`、`INTERACTION_MAP.md`、`DEV_GUIDE.md` 等辅助文档要求不够突出，AI 优先填充核心文档后 token 不足/注意力分散
 - **后果**：这些文档虽然文件存在，但内容只有空骨架，质量门禁无法读取到结构化信息

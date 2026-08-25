@@ -134,8 +134,12 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     options.iteration = 'GLOBAL';
   }
 
-  // ── --full / --phase 模式: 委托给 synthesizeCommand（原 synthesize 命令） ──
-  if (options.full || options.phase) {
+  // ── --full 模式: 委托给 synthesizeCommand（原 synthesize 命令） ──
+  // v8.3.1+ 修复：--phase 不再委托给 synthesize，analyze 的 Phase 1/2 由 analyze 自己处理
+  // 原因：analyze --phase 2 应该生成端级文档（{端}/TECH.md/DEV_GUIDE.md），
+  //       而 synthesize --phase 2 是跨端关系提取（CROSS_PLATFORM.md/ARCHITECTURE.md），
+  //       两者完全不同，委托会导致用户永远无法执行 analyze 的 Phase 2
+  if (options.full) {
     const { synthesizeCommand } = await import('./synthesize');
     return synthesizeCommand({
       iteration: options.iteration,
