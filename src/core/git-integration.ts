@@ -183,7 +183,7 @@ function formatBranchName(
  * 从任务 .meta/git-config 文件读取，格式（每行 key-value）：
  *   分支前缀: 2060708
  *   源分支: develop
- *   分支格式: {type}/{prefix}{name}-{hash4}
+ *   分支格式: {type}/{prefix}{taskId}（v8.3.10+ 默认，支持 {name}/{hash4} 自定义）
  *   自动拉取: true
  */
 export function loadSubtaskGitConfig(taskDir: string): Partial<GitConfig> {

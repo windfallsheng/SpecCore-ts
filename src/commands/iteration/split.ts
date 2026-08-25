@@ -112,11 +112,11 @@ function slugify(name: string): string {
 
 /**
  * 生成子任务全局唯一 ID
- * 格式: Task-{父任务完整名}-{端名}-{hash4}
- * 例: Task-001-user-login-backend-a3f2, Task-001-user-login-web-b7c1
+ * 格式: Task-{父任务ID}-{端名}
+ * 例: Task-001-booking-service, Task-001-h5-mobile
  */
 function generateSubtaskId(parentTaskId: string, platform: string): string {
-  // v6.49.5+：确定性格式 {taskId}-{platform}，保证全项目唯一
+  // v6.49.5+ / v8.3.10+：确定性格式 {taskId}-{platform}，保证全项目唯一
   // 因为每个任务每个端只有一个子任务，所以 {taskId}-{platform} 已经唯一
   return `Task-${parentTaskId}-${platform}`;
 }
