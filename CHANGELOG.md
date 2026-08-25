@@ -1,3 +1,13 @@
+## v8.3.8 (2026-08-25) — 依赖分支自动合并修复
+
+### 修复
+
+**依赖任务分支合并找不到** (`execute.ts` + `git-integration.ts`):
+- `prepareTaskBranch`: 优先从 `task.dependencies` 读取依赖列表，回退 `IMPACT.md` 解析
+- `prepareTaskBranch`: 合并依赖分支时，查找顺序扩展为：1) 当前会话 `createdBranches`  2) `.git-mapping.json`  3) `git branch -a` 列表（通过 `findBranchByTaskId`）
+- `prepareTaskBranch`: 找不到依赖分支时输出明确提示和可能原因，不再静默跳过
+- **根因**：原逻辑只从 `IMPACT.md` 读取依赖（很多项目没有这个文件），且合并时只在 `createdBranches` 内存 Map 中查找——跨会话执行的依赖任务分支根本找不到，导致依赖代码从未被合并
+
 ## v8.3.7 (2026-08-25) — 分支创建规则修复
 
 ### 修复
