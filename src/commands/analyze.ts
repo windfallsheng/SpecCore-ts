@@ -4298,24 +4298,48 @@ status: "clarified"
       prompt += `- Read 020-specs/overview/ANALYSIS.md → 分析报告\n`;
       prompt += `- Read 020-specs/overview/TECH.md → 整体技术架构\n`;
       prompt += `- Read 020-specs/overview/RISK.md、DEPS.md、REVIEW.md、MONITOR.md（如存在）\n\n`;
-      prompt += `### Step 2: 为每个端撰写专属文档\n`;
-      prompt += `根据全局上下文，为 PLATFORMS.md 中的**每个端**分别撰写：\n`;
-      prompt += `- **{端}/TECH.md**：该端专属技术方案（必须对齐 overview/TECH.md 架构）\n`;
+      prompt += `### Step 2: 为每个端撰写专属文档（v8.3.1+ 强制四文档）\n`;
+      prompt += `根据全局上下文，为 PLATFORMS.md 中的**每个端**分别撰写以下 **4 份文档**，缺一不可：\n\n`;
+      prompt += `**1. {端}/TECH.md — 该端专属技术方案（必须对齐 overview/TECH.md 架构）**\n`;
+      prompt += `  - 该端的分层架构、模块划分、核心接口设计（路径/方法/参数/响应/状态码）\n`;
+      prompt += `  - 数据库表结构（字段/类型/索引/约束，如适用）\n`;
+      prompt += `  - 业务规则实现（含边界条件和异常流）\n`;
       prompt += `  - ⚠️ **必须包含「业务-代码映射」章节**：在 TECH.md 末尾添加表格，列出本端涉及的业务模块及其对应的代码实体（文件/表/API/组件等），关系类型由你根据技术栈自主决定（如 api_controller、uses_table、page、component、route、middleware、interceptor、gateway 等）\n`;
       prompt += `  - 表格格式：| 业务模块 | 代码实体 | 关系类型 | 说明 |\n`;
       prompt += `  - 示例：| 会议室档案 | backend/RoomController.java | api_controller | REST 控制器 |\n`;
-      prompt += `  - 示例：| 会议室档案 | admin-web/src/pages/RoomList.vue | page | 列表页 |\n`;
-      prompt += `- **{端}/TEST.md**：该端专属测试计划\n`;
-      prompt += `- **{端}/UI_SPEC.md**：该端专属 UI 规格（仅前端端需要）\n\n`;
+      prompt += `  - 示例：| 会议室档案 | admin-web/src/pages/RoomList.vue | page | 列表页 |\n\n`;
+      prompt += `**2. {端}/TEST.md — 该端专属测试计划**\n`;
+      prompt += `  - 覆盖该端所有功能模块的测试用例（含前置条件、步骤、预期结果）\n`;
+      prompt += `  - 边界值和异常输入测试\n`;
+      prompt += `  - 必须覆盖 REQUIREMENT.md 中该端的验收标准\n\n`;
+      prompt += `**3. {端}/UI_SPEC.md — 该端专属 UI 规格（仅前端端需要）**\n`;
+      prompt += `  - 页面结构与路由（每个页面的路径、入口、权限）\n`;
+      prompt += `  - 组件清单和字段→UI 映射\n`;
+      prompt += `  - 状态枚举和错误处理策略\n\n`;
+      prompt += `**4. {端}/DEV_GUIDE.md — 该端开发者实现指南（v8.3.1+ 新增强制要求）**\n`;
+      prompt += `  - ⛔ **禁止只写框架/占位符** — 必须是可执行的实现指导\n`;
+      prompt += `  - **本端改造范围清单**：列出本端所有需要新增/修改/删除的文件（相对项目根目录的具体路径）\n`;
+      prompt += `  - **本端实施步骤（按依赖排序）**：Step-by-step，具体到文件/函数级，说明每步为什么先做\n`;
+      prompt += `  - **代码级指引**：改哪几行、改什么、改造后的关键代码片段\n`;
+      prompt += `  - **与后端联调**：接口状态、联调顺序、Mock 方案（表格格式）\n`;
+      prompt += `  - **验证方式**：本端特有的验证命令/操作和通过标准（表格格式）\n`;
+      prompt += `  - **本端坑点**：已知陷阱及解决方式\n`;
+      prompt += `  - **回滚方案**：代码回滚方式、配置回滚方式\n\n`;
       prompt += `### Step 3: 一致性检查\n`;
       prompt += `- 各端 TECH.md 的技术选型必须与 overview/TECH.md 一致\n`;
       prompt += `- UI_SPEC.md 的字段映射必须与后端 API 响应字段一一对应\n`;
       prompt += `- TEST.md 必须覆盖 REQUIREMENT.md 中该端的验收标准\n\n`;
+      prompt += `### Step 3: 自检 — 确保所有文档已实质填充\n`;
+      prompt += `生成完成后，逐个检查每个文档：\n`;
+      prompt += `- 如果文档中仍含有 \`<!-- SPEC-SKELETON -->\` 标记或空表格 → **必须重新填充**\n`;
+      prompt += `- 如果「改造范围」表格只有表头没有数据行 → **必须补充具体文件路径**\n`;
+      prompt += `- 如果「验证方式」表格只有表头 → **必须补充可执行的命令/操作**\n`;
+      prompt += `- DEV_GUIDE.md 必须有至少 3 个具体文件路径和 3 个可执行验证步骤\n\n`;
       prompt += `### 写入方式\n`;
       prompt += `**Pipeline 模式**：一次 --apply 写入所有端的文档（推荐）\n`;
-      prompt += `speccore analyze --apply '{"TECH.md":"...","TEST.md":"...","UI_SPEC.md":"..."}' -I ${iter} --platform all\n\n`;
+      prompt += `speccore analyze --apply '{"TECH.md":"...","TEST.md":"...","UI_SPEC.md":"...","DEV_GUIDE.md":"..."}' -I ${iter} --platform all\n\n`;
       prompt += `**或者逐端写入**（每端一次 --apply）：\n`;
-      prompt += `speccore analyze --apply '{"TECH.md":"...","TEST.md":"...","UI_SPEC.md":"..."}' -I ${iter} --platform {端名}\n\n`;
+      prompt += `speccore analyze --apply '{"TECH.md":"...","TEST.md":"...","UI_SPEC.md":"...","DEV_GUIDE.md":"..."}' -I ${iter} --platform {端名}\n\n`;
     } else {
       // v6.61.0+: 一次性生成所有文档（global/ + {端}/）
       prompt += `## 要求\n1. Read .speccore/PATTERNS/TEMPLATES/specs/ 下的专业模板（如目录不存在或为空，用你的专业知识自由撰写，绝不允许产出一行垃圾）\n`;
@@ -4354,7 +4378,14 @@ status: "clarified"
     prompt += `   - **边界处理**：如果文档对某功能描述不完整，标注"文档未充分描述"，不要自行脑补完整方案\n`;
     prompt += `   - **交叉验证**：每写一个功能点，回头检查需求文档中是否有对应描述，没有则删除\n`;
     prompt += `6. 每个文档都要具体内容（禁止"待填充"）\n`;
-    prompt += `7. **端发现（重要）**：先确定项目有哪些端，再按端组织文档\n`;
+    prompt += `7. **辅助文档强制要求（v8.3.1+ 修复空模板问题）**：以下文档常被 AI 遗漏或敷衍，必须同等重视：\n`;
+    prompt += `   - **FUNCTION_MAP.md**：功能单元 × 端映射表，必须用 Markdown 表格，每行一个功能单元，不允许合并。表头：| # | 功能单元 | 涉及端 | 全局对比 | 共享能力 | 依赖任务 | 说明 |\n`;
+    prompt += `   - **INTERACTION_MAP.md**：每个功能单元一个 Mermaid sequenceDiagram，展示跨端交互时序，箭头标注接口路径\n`;
+    prompt += `   - **DEV_GUIDE.md（迭代级）**：全局实施指导，必须包含：分支策略、改造范围清单（具体到文件路径）、改造顺序与依赖、代码级指引（含改造前后对比）、接口契约对照表、每步验证方式、回滚方案、常见坑点\n`;
+    prompt += `   - **MONITOR.md**：必须按 Fatal/Critical/Warning/Info 四级定义告警规则，不能只列指标名称\n`;
+    prompt += `   - **REVIEW.md**：安全检查必须逐接口列出鉴权需求，不能笼统写"需要鉴权"\n`;
+    prompt += `   ⛔ **自检规则**：生成完成后检查每个文档，如果仍含 \`<!-- SPEC-SKELETON -->\` 或空表格只有表头 → 必须重新填充\n`;
+    prompt += `8. **端发现（重要）**：先确定项目有哪些端，再按端组织文档\n`;
     prompt += `   - 第 1 步：Read .speccore/CONSTITUTION.md\n`;
     prompt += `   - 第 2 步：从「## 端列表」章节提取端名（这是全局权威来源）\n`;
     prompt += `   - 第 3 步：如果没有「端列表」章节，从「对应端」列提取\n`;
@@ -4362,7 +4393,7 @@ status: "clarified"
     prompt += `   - 第 5 步：将发现的端列表写入 020-specs/PLATFORMS.md\n`;
     // v6.70.0+: REQUIREMENT.md 以产品视角撰写（不按端分章节）
     // v6.99.0+: 丰富需求文档章节要求
-    prompt += `8. **REQUIREMENT.md 写作风格（重要）**：全局需求文档必须以产品/用户视角撰写\n`;
+    prompt += `9. **REQUIREMENT.md 写作风格（重要）**：全局需求文档必须以产品/用户视角撰写\n`;
     prompt += `   - **按业务场景/用户旅程组织章节**，不按端分章节（如"H5端需求"、"后端需求"）\n`;
     prompt += `   - 文档结构必须包含（如需求文档中有相关信息）：\n`;
     prompt += `     - **产品愿景**：本迭代要解决的核心问题和目标价值（1-2段）\n`;
@@ -4380,7 +4411,7 @@ status: "clarified"
     prompt += `   - 端的信息只在「功能模块清单」表格中标注，正文不区分端\n`;
     // v6.49.14+: 功能模块清单必须含涉及端列 + 来源链接
     // v6.71.3+: 增加「与全局层对比」列
-    prompt += `9. **功能模块清单（重要）**：写入 overview/REQUIREMENT.md 时，功能模块清单表格必须包含以下列\n`;
+    prompt += `10. **功能模块清单（重要）**：写入 overview/REQUIREMENT.md 时，功能模块清单表格必须包含以下列\n`;
     prompt += `   - 表格格式：| # | 功能模块 | 涉及端 | 全局对比 | 来源 | 说明 |\n`;
     prompt += `   - 「涉及端」：每个模块标注需要**新开发工作**的端（标准端名，逗号分隔）\n`;
     prompt += `     - 「涉及」= 该端需要写新接口/新页面/新逻辑\n`;

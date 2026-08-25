@@ -98,7 +98,21 @@
 - **质量门禁从 12 项扩展到 16 项**，新增检查全部利用 analyze/split 阶段已精准拆分的文档
 - **核心修复**：质量门禁不再只做粗糙的关键词匹配，而是真正解析文档中的结构化信息做精确验证
 
-### Bug 修复：全局分析进度检测
+### Bug 修复：analyze 空模板问题 + 全局分析进度检测
+
+**修复 Phase 2 prompt 遗漏端级 DEV_GUIDE.md** (`analyze.ts`):
+- **根因**：Phase 2 的 prompt 只要求生成 `{端}/TECH.md`、`{端}/TEST.md`、`{端}/UI_SPEC.md`，未提及 `DEV_GUIDE.md`
+- **后果**：AI 不生成端级 DEV_GUIDE.md 实质内容，文件永远只有空骨架（`<!-- SPEC-SKELETON -->` + 空表格）
+- **修复**：Phase 2 prompt 强制要求 **4 份文档**（TECH.md + TEST.md + UI_SPEC.md + DEV_GUIDE.md），缺一不可
+- **DEV_GUIDE.md 详细要求**：改造范围清单（具体文件路径）、实施步骤（按依赖排序）、代码级指引（改哪几行）、联调方案、验证方式、坑点、回滚方案
+- **新增自检步骤**：生成完成后检查每个文档，如仍含 `<!-- SPEC-SKELETON -->` 或空表格 → 必须重新填充
+- **写入方式示例更新**：`--apply` JSON 中新增 `"DEV_GUIDE.md":"..."`
+
+**修复 Phase 1 辅助文档被 AI 敷衍** (`analyze.ts`):
+- **根因**：Phase 1 prompt 对 `FUNCTION_MAP.md`、`INTERACTION_MAP.md`、`DEV_GUIDE.md` 等辅助文档要求不够突出，AI 优先填充核心文档后 token 不足/注意力分散
+- **后果**：这些文档虽然文件存在，但内容只有空骨架，质量门禁无法读取到结构化信息
+- **修复**：Phase 1 prompt 新增「辅助文档强制要求」专节，对每个易遗漏文档列出具体产出标准
+- **新增自检规则**：生成完成后检查每个文档，如果仍含 `<!-- SPEC-SKELETON -->` 或空表格只有表头 → 必须重新填充
 
 **修复 `detectGlobalLayerProgress()` 三处缺陷** (`analyze.ts`):
 
