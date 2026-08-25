@@ -1206,6 +1206,57 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
           }
           logger.success(`✅ ${count} 个 Spec 文档已写入 020-specs/`);
 
+          // v8.3.1+: 空模板检测 — 写入后立即检查是否有文档仍为骨架状态
+          const emptySkeletonDocs: string[] = [];
+          const emptyTableDocs: string[] = [];
+          try {
+            const { readdir, readFile } = await import('fs-extra');
+            const specDir = join(iterDir!, '020-specs');
+            const checkDir = async (dir: string, prefix: string = '') => {
+              const entries = await readdir(dir, { withFileTypes: true });
+              for (const entry of entries) {
+                const relPath = prefix ? `${prefix}/${entry.name}` : entry.name;
+                const fullPath = join(dir, entry.name);
+                if (entry.isDirectory()) {
+                  await checkDir(fullPath, relPath);
+                } else if (entry.name.endsWith('.md')) {
+                  const content = await readFile(fullPath, 'utf-8');
+                  if (content.includes('<!-- SPEC-SKELETON -->')) {
+                    emptySkeletonDocs.push(relPath);
+                  }
+                  // 检测空表格：| 表头 | 表头 | 后没有数据行
+                  const tableMatches = content.match(/\|[^\n]+\|\n\|[-:\s|]+\|/g);
+                  if (tableMatches) {
+                    for (const table of tableMatches) {
+                      const tableEnd = content.indexOf(table) + table.length;
+                      const afterTable = content.slice(tableEnd, tableEnd + 200);
+                      // 如果表格后面紧跟空行或另一个表格/标题，说明没有数据行
+                      if (!afterTable.trim().startsWith('|')) {
+                        emptyTableDocs.push(relPath);
+                        break;
+                      }
+                    }
+                  }
+                }
+              }
+            };
+            await checkDir(specDir);
+            if (emptySkeletonDocs.length > 0) {
+              logger.warn('');
+              logger.warn(`⚠️ 检测到 ${emptySkeletonDocs.length} 个文档仍为骨架状态（含 <!-- SPEC-SKELETON -->）:`);
+              for (const d of emptySkeletonDocs) logger.warn(`   ❌ ${d}`);
+              logger.info('   💡 建议重新执行 analyze 补充这些文档');
+            }
+            if (emptyTableDocs.length > 0) {
+              logger.warn('');
+              logger.warn(`⚠️ 检测到 ${emptyTableDocs.length} 个文档含空表格（只有表头无数据）:`);
+              for (const d of emptyTableDocs) logger.warn(`   ❌ ${d}`);
+              logger.info('   💡 建议重新执行 analyze 补充表格数据');
+            }
+          } catch (e: any) {
+            logger.debug(`空模板检测失败（非关键）: ${e.message}`);
+          }
+
           // v6.90.0+: 事后校验——检测并清理 AI 绕过 --apply 创建的非法目录/文件
           await sanitizeSpecDirectories(iterDir!);
 
@@ -4344,6 +4395,13 @@ status: "clarified"
       prompt += `speccore analyze --apply '{"TECH.md":"...","TEST.md":"...","UI_SPEC.md":"...","DEV_GUIDE.md":"..."}' -I ${iter} --platform all\n\n`;
       prompt += `**或者逐端写入**（每端一次 --apply）：\n`;
       prompt += `speccore analyze --apply '{"TECH.md":"...","TEST.md":"...","UI_SPEC.md":"...","DEV_GUIDE.md":"..."}' -I ${iter} --platform {端名}\n\n`;
+      prompt += `### ⛔ 强制约束（违反则分析无效）\n`;
+      prompt += `- **禁止省略任何一份文档** — 4 份文档（TECH.md + TEST.md + UI_SPEC.md + DEV_GUIDE.md）缺一不可\n`;
+      prompt += `- **禁止输出空表格** — 每个 Markdown 表格必须有至少 1 行数据，只有表头的表格视为未完成\n`;
+      prompt += `- **禁止输出占位符** — 不允许写「待填充」、「TODO」、「...」、「xxx」等占位内容\n`;
+      prompt += `- **DEV_GUIDE.md 最低标准**：改造范围表格 ≥3 行、实施步骤 ≥3 步、验证方式表格 ≥3 行、坑点 ≥2 条\n`;
+      prompt += `- **如果 token 不足**：优先保证 DEV_GUIDE.md 完整，其他文档可精简但不可空\n`;
+      prompt += `- **自检必做**：写入前用 Read 工具检查每个文档，确认不含 \`<!-- SPEC-SKELETON -->\` 且所有表格有数据行\n\n`;
     } else {
       // v6.61.0+: 一次性生成所有文档（global/ + {端}/）
       prompt += `## 要求\n1. Read .speccore/PATTERNS/TEMPLATES/specs/ 下的专业模板（如目录不存在或为空，用你的专业知识自由撰写，绝不允许产出一行垃圾）\n`;
