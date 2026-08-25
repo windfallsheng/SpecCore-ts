@@ -58,7 +58,8 @@ const DEFAULT_GIT_CONFIG: GitConfig = {
   defaultBranch: 'main',
   branchType: 'feature',
   branchPrefix: '',
-  branchFormat: '{type}/{prefix}{name}-{hash4}',
+  // v8.3.9+: 默认用 taskId 作为分支名主体（全局唯一，可读，无需随机 hash）
+  branchFormat: '{type}/{prefix}{taskId}',
   autoPull: false,
   remoteName: 'origin',
   protectedBranches: ['main', 'master'],

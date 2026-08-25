@@ -1168,8 +1168,8 @@ function extractIterationName(iterationDir: string): string {
 /** 生成带实际配置值的 git-config 内容 */
 function buildGitConfigContent(config: GitConfig, platformLabel: string, taskType?: string): string {
   const branchType = taskType === 'bugfix' ? 'bugfix' : taskType === 'refactor' ? 'refactor' : taskType === 'research' ? 'research' : 'feature';
-  const exampleName = 'example-task';
-  const exampleHash = 'a1b2';
+  // v8.3.9+: 示例使用 taskId（全局唯一，可读，无需 hash）
+  const exampleTaskId = 'Task-001-booking-service';
   const prefix = config.branchPrefix ? `${config.branchPrefix}-` : '';
   // v8.3.6+: 空值用注释表示，避免 loadSubtaskGitConfig 误把 "(空)" 当实际值
   const fmt = (key: string, val: string | boolean, def: string) => val !== undefined && val !== '' && String(val) !== 'false'
@@ -1182,7 +1182,7 @@ function buildGitConfigContent(config: GitConfig, platformLabel: string, taskTyp
 # === 当前生效配置 ===
 ${fmt('源分支', config.defaultBranch, 'main')}
 ${fmt('分支前缀', config.branchPrefix, '无')}
-${fmt('分支格式', config.branchFormat, '{type}/{prefix}{name}-{hash4}')}
+${fmt('分支格式', config.branchFormat, '{type}/{prefix}{taskId}')}
 ${fmt('自动拉取', config.autoPull ? 'true' : '', 'false')}
 ${fmt('远程名称', config.remoteName, 'origin')}
 
@@ -1192,14 +1192,14 @@ ${config.protectedBranches.map(b => `- ${b}`).join('\n')}
 # === 分支命名示例 ===
 # 当前任务类型: ${branchType}
 # 命名格式: ${config.branchFormat}
-# 示例分支: ${branchType}/${prefix}${exampleName}-${exampleHash}
-# （{hash4} 为自动生成的 4 位随机字符）
+# 示例分支: ${branchType}/${prefix}${exampleTaskId}
+# （{taskId} 为子任务全局唯一 ID，如 Task-001-booking-service）
 
 # === 自定义配置区 ===
 # 如需覆盖上述值，取消下方注释并修改：
 # 源分支: ${config.defaultBranch || 'main'}
 # 分支前缀: 
-# 分支格式: {type}/{prefix}{name}-{hash4}
+# 分支格式: {type}/{prefix}{taskId}
 # 自动拉取: false
 # 远程名称: origin
 `;
