@@ -130,6 +130,12 @@
 - 检测空表格（只有表头无数据行）→ 列出含空表格的文档
 - 输出警告并提示重新执行 analyze 补充
 
+**修复 PRD 注入只在逐文档模式生效** (`analyze.ts`):
+- **根因**：需求文档内容（PRD）注入被包裹在 `if (perDocStatus?.nextUnfilled)` 中，只有逐文档推进模式才注入
+- **后果**：用户执行 `--phase 1` 或 `--phase 2` 时，prompt 中完全没有需求文档内容，AI 只能凭空编造空洞模板
+- **修复**：将 PRD 注入条件改为 `if (!isGlobal && !isTask && ctx.iteration)`，确保所有迭代级分析都注入需求内容
+- **影响**：这是导致 overview 和各端文档内容空洞的**根本原因**
+
 **修复 Phase 1 辅助文档被 AI 敷衍** (`analyze.ts`):
 - **根因**：Phase 1 prompt 对 `FUNCTION_MAP.md`、`INTERACTION_MAP.md`、`DEV_GUIDE.md` 等辅助文档要求不够突出，AI 优先填充核心文档后 token 不足/注意力分散
 - **后果**：这些文档虽然文件存在，但内容只有空骨架，质量门禁无法读取到结构化信息
