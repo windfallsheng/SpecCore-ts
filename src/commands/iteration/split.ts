@@ -1171,16 +1171,20 @@ function buildGitConfigContent(config: GitConfig, platformLabel: string, taskTyp
   const exampleName = 'example-task';
   const exampleHash = 'a1b2';
   const prefix = config.branchPrefix ? `${config.branchPrefix}-` : '';
+  // v8.3.6+: 空值用注释表示，避免 loadSubtaskGitConfig 误把 "(空)" 当实际值
+  const fmt = (key: string, val: string | boolean, def: string) => val !== undefined && val !== '' && String(val) !== 'false'
+    ? `${key}: ${val}`
+    : `# ${key}: ${def}`;
   return `# 子任务级 Git 配置（${platformLabel}）
 # 以下配置覆盖迭代级 PROJECT_GRAPH.md，未配置项自动继承上一级。
 # 当前值已从迭代级/全局级配置自动填充，可直接使用或按需修改。
 
 # === 当前生效配置 ===
-源分支: ${config.defaultBranch}
-分支前缀: ${config.branchPrefix || '(空)'}
-分支格式: ${config.branchFormat}
-自动拉取: ${config.autoPull ? 'true' : 'false'}
-远程名称: ${config.remoteName}
+${fmt('源分支', config.defaultBranch, 'main')}
+${fmt('分支前缀', config.branchPrefix, '无')}
+${fmt('分支格式', config.branchFormat, '{type}/{prefix}{name}-{hash4}')}
+${fmt('自动拉取', config.autoPull ? 'true' : '', 'false')}
+${fmt('远程名称', config.remoteName, 'origin')}
 
 # === 保护分支（禁止直接推送）===
 ${config.protectedBranches.map(b => `- ${b}`).join('\n')}
@@ -1193,7 +1197,7 @@ ${config.protectedBranches.map(b => `- ${b}`).join('\n')}
 
 # === 自定义配置区 ===
 # 如需覆盖上述值，取消下方注释并修改：
-# 源分支: ${config.defaultBranch}
+# 源分支: ${config.defaultBranch || 'main'}
 # 分支前缀: 
 # 分支格式: {type}/{prefix}{name}-{hash4}
 # 自动拉取: false

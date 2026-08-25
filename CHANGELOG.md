@@ -1,3 +1,16 @@
+## v8.3.7 (2026-08-25) — 分支创建规则修复
+
+### 修复
+
+**git-config 占位符被误认为实际值** (`split.ts` + `git-integration.ts`):
+- `buildGitConfigContent`: 空值（如 branchPrefix 未配置）不再写 `分支前缀: (空)`，改为 `# 分支前缀: 无`（注释行）
+- `loadSubtaskGitConfig`: `extractValue` 增加过滤集合，跳过 `(空)`、`无`、`—`、`-`、`undefined`、`null` 等占位符
+- **根因**：`loadSubtaskGitConfig` 把 `(空)` 当成实际分支前缀提取，导致分支名变成 `feature/(空)booking-crud-a1b2`，`git checkout -b` 执行失败（含空格和括号非法字符）
+
+**分支创建异常静默吞掉** (`git-integration.ts`):
+- `createTaskBranch` catch 块增加 `console.error` 输出具体错误信息和 stderr
+- **根因**：`execSync` 使用 `stdio: 'pipe'` 隐藏了错误输出，分支创建失败时用户完全无感知
+
 ## v8.3.6 (2026-08-25) — estimatedHours 从任务元信息读取
 
 ### 改进

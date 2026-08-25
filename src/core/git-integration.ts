@@ -134,7 +134,7 @@ export function createTaskBranch(
 
     return branchName;
   } catch (e: any) {
-    // 分支已存在等非致命错误
+    // v8.3.6+: 分支创建失败时输出错误信息，不要静默吞掉
     if (e.message?.includes('already exists')) {
       const cfg = loadGitConfig(iteration, taskDir);
       const bt = taskType ? (TASK_TYPE_TO_BRANCH_TYPE[taskType] || taskType) : cfg.branchType;
@@ -148,6 +148,9 @@ export function createTaskBranch(
         hash4: '',
       }).replace(/-{2,}/g, '-').replace(/-$/, '');
     }
+    // 输出具体错误，帮助用户定位问题（如不在 git 仓库中、base 分支不存在等）
+    console.error(`[speccore] Git 分支创建失败: ${e.message || e}`);
+    if (e.stderr) console.error(`[speccore] stderr: ${e.stderr.toString()}`);
     return null;
   }
 }
@@ -193,11 +196,15 @@ export function loadSubtaskGitConfig(taskDir: string): Partial<GitConfig> {
       .filter(line => !line.trim().startsWith('#') && line.trim().length > 0)
       .join('\n');
 
-    // 辅助函数：提取值，跳过占位符
+    // v8.3.6+: 辅助函数：提取值，跳过占位符和无意义值
     const extractValue = (key: string): string | null => {
-      const match = content.match(new RegExp(`${key}[：:]\\s*(\\S+)`));
-      if (match && match[1] !== '继承迭代配置' && match[1] !== '继承全局配置') return match[1];
-      return null;
+      const match = content.match(new RegExp(`${key}[：:]\s*(\\S+)`));
+      if (!match) return null;
+      const val = match[1].trim();
+      // 过滤占位符和无效值
+      const INVALID_VALUES = new Set(['继承迭代配置', '继承全局配置', '(空)', '无', '—', '-', 'undefined', 'null', '']);
+      if (INVALID_VALUES.has(val)) return null;
+      return val;
     };
 
     // 分支前缀
