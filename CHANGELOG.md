@@ -1,3 +1,13 @@
+## v8.3.10 (2026-08-25) — 分支名默认格式改为 taskId，去掉随机 hash
+
+### 改进
+
+**分支名与子任务名字保持一致** (`git-integration.ts` + `split.ts`):
+- 默认 `branchFormat` 从 `'{type}/{prefix}{name}-{hash4}'` 改为 `'{type}/{prefix}{taskId}'`
+- 分支名示例：`feature/Task-001-booking-service`、`bugfix/Task-003-login-h5-mobile`
+- `buildGitConfigContent` 同步更新示例和注释
+- **理由**：子任务 ID 本身就是全局唯一的（如 `Task-001-booking-service`），不需要额外的 4 位随机 hash 来防冲突。且 taskId 清晰标识了父任务和端，比中文名字更适合做 Git 分支名
+
 ## v8.3.9 (2026-08-25) — 子任务扫描与分支名修复
 
 ### 修复
