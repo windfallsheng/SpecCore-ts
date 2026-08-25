@@ -82,6 +82,22 @@
 - 修复前：REQUIREMENT.md 和 ANALYSIS.md 被 `loadSpecContents()` 读取但 nowhere 使用，完全浪费
 - 修复后：所有 analyze 生成的文档都被精准提取到对应任务
 
+**质量门禁全面重构 — L1 结构化检查 + L2 语义匹配 + 知识图谱验证** (`verify-engine.ts`)
+
+- **L1 结构化检查层（新增 3 项）**：
+  - `checkDevGuideCompliance()` — 解析 DEV_GUIDE.md「改造范围清单」表格 → 检查新增/修改文件是否存在；解析「接口契约」表格 → 检查路由是否实现
+  - `checkApiContractCompliance()` — 解析 API_CONTRACT.yaml → 检查每个 `paths` 中的接口是否在代码中有对应路由（Express/Fastify/Koa/装饰器风格）
+  - `checkSchemaConsistency()` — 解析 SCHEMA.md 表结构 → 检查实体类字段是否与表结构对应
+- **L2 语义匹配层（增强 Spec 一致性）**：
+  - `checkSpecConsistency()` 升级：保留关键词匹配，新增**语义匹配**
+  - 提取验收标准中的「动词+名词」组合（如「用户登录」→ `loginUser` / `handleLoginUser`）
+  - 与代码中的函数名做模糊匹配，大幅降低假阴性
+- **知识图谱验证（新增 1 项）**：
+  - `checkDependencyGraphConsistency()` — 加载知识图谱，追踪上游依赖链
+  - 检查本任务代码中是否正确引用了上游依赖任务的接口（import/require/调用）
+- **质量门禁从 12 项扩展到 16 项**，新增检查全部利用 analyze/split 阶段已精准拆分的文档
+- **核心修复**：质量门禁不再只做粗糙的关键词匹配，而是真正解析文档中的结构化信息做精确验证
+
 ### Bug 修复：全局分析进度检测
 
 **修复 `detectGlobalLayerProgress()` 三处缺陷** (`analyze.ts`):

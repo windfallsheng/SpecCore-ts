@@ -595,6 +595,142 @@ function scanCodeFiles(codePath: string): string {
   return srcFiles.map(f => { try { return require('fs').readFileSync(f, 'utf-8'); } catch { return ''; } }).join('\n');
 }
 
+// ═══════════════════════════════════════════════════════════
+// v8.3.0+: 结构化文档解析工具（用于质量门禁 L1 精确检查）
+// ═══════════════════════════════════════════════════════════
+
+/** 解析 Markdown 表格，返回表头 + 数据行 */
+function parseMarkdownTable(content: string, sectionHeading: string): { headers: string[]; rows: string[][] } | null {
+  const headingRegex = new RegExp(`^(#{2,4}\\s+.*${sectionHeading}.*)$`, 'im');
+  const headingMatch = content.match(headingRegex);
+  if (!headingMatch) return null;
+  const startIdx = content.indexOf(headingMatch[1]);
+  const sectionText = content.slice(startIdx, startIdx + 5000);
+  const lines = sectionText.split('\n');
+  let tableStart = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].trim().startsWith('|')) { tableStart = i; break; }
+  }
+  if (tableStart === -1) return null;
+  const tableLines: string[] = [];
+  for (let i = tableStart; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line.startsWith('|')) break;
+    tableLines.push(line);
+  }
+  if (tableLines.length < 3) return null; // 需要表头 + 分隔符 + 至少一行数据
+  const headers = tableLines[0].split('|').map(c => c.trim()).filter(Boolean);
+  const rows: string[][] = [];
+  for (let i = 2; i < tableLines.length; i++) {
+    const cells = tableLines[i].split('|').map(c => c.trim()).filter(Boolean);
+    if (cells.length >= headers.length) rows.push(cells);
+  }
+  return { headers, rows };
+}
+
+/** 从代码中提取结构信息：函数名、类名、路由路径 */
+function extractCodeStructure(allCode: string): {
+  functions: string[];
+  classes: string[];
+  routes: Array<{ method: string; path: string }>;
+} {
+  const functions: string[] = [];
+  const classes: string[] = [];
+  const routes: Array<{ method: string; path: string }> = [];
+
+  // 提取函数名：function xxx( / const xxx = / async function xxx(
+  for (const m of allCode.match(/(?:function|async\s+function)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(/g) || []) {
+    const name = m.replace(/(?:function|async\s+function)\s+/, '').replace(/\s*\($/, '');
+    if (name && !['if', 'while', 'for', 'switch', 'catch'].includes(name)) functions.push(name);
+  }
+  for (const m of allCode.match(/(?:const|let|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*[=:]\s*(?:async\s*)?\(/g) || []) {
+    const name = m.replace(/(?:const|let|var)\s+/, '').replace(/\s*[=:].*$/, '');
+    if (name) functions.push(name);
+  }
+
+  // 提取类名：class Xxx / interface Xxx
+  for (const m of allCode.match(/(?:class|interface)\s+([a-zA-Z_$][a-zA-Z0-9_$]+)/g) || []) {
+    const name = m.replace(/(?:class|interface)\s+/, '');
+    if (name) classes.push(name);
+  }
+
+  // 提取路由：Express/Fastify/Koa 风格
+  const routePatterns = [
+    /\.(get|post|put|delete|patch)\s*\(\s*['"`]([^'"`]+)['"`]/gi,
+    /\.(Get|Post|Put|Delete|Patch)\s*\(\s*['"`]([^'"`]+)['"`]/gi,
+    /@(Get|Post|Put|Delete|Patch)\s*\(['"`]([^'"`]+)['"`]/gi,
+  ];
+  for (const pattern of routePatterns) {
+    let match;
+    while ((match = pattern.exec(allCode)) !== null) {
+      routes.push({ method: match[1].toUpperCase(), path: match[2] });
+    }
+  }
+
+  return {
+    functions: [...new Set(functions)],
+    classes: [...new Set(classes)],
+    routes: [...new Map(routes.map(r => [`${r.method} ${r.path}`, r])).values()],
+  };
+}
+
+/** 简单 YAML 解析器（只处理 key: value 和 - list 结构） */
+function simpleYamlParse(content: string): Record<string, any> {
+  const result: Record<string, any> = {};
+  const lines = content.split('\n');
+  const stack: Array<{ obj: Record<string, any>; indent: number }> = [{ obj: result, indent: -1 }];
+  let currentList: any[] | null = null;
+
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/\r$/, '');
+    if (!line.trim() || line.trim().startsWith('#')) continue;
+    const indent = line.length - line.trimStart().length;
+
+    // 弹出比当前更深的层级
+    while (stack.length > 1 && stack[stack.length - 1].indent >= indent) {
+      stack.pop();
+    }
+    const parent = stack[stack.length - 1].obj;
+
+    if (line.trim().startsWith('- ')) {
+      const item = line.trim().slice(2).trim();
+      if (!currentList) {
+        currentList = [];
+        // 找到父对象中最后一个值，把它变成列表
+        const keys = Object.keys(parent);
+        if (keys.length > 0) {
+          const lastKey = keys[keys.length - 1];
+          if (!Array.isArray(parent[lastKey])) {
+            parent[lastKey] = [];
+          }
+          currentList = parent[lastKey];
+        }
+      }
+      if (currentList) {
+        if (item.includes(':')) {
+          const [k, ...v] = item.split(':');
+          currentList.push({ [k.trim()]: v.join(':').trim() });
+        } else {
+          currentList.push(item);
+        }
+      }
+    } else if (line.includes(':')) {
+      currentList = null;
+      const [key, ...valueParts] = line.trim().split(':');
+      const keyStr = key.trim();
+      const valueStr = valueParts.join(':').trim();
+      if (!valueStr) {
+        const newObj: Record<string, any> = {};
+        parent[keyStr] = newObj;
+        stack.push({ obj: newObj, indent });
+      } else {
+        parent[keyStr] = valueStr.replace(/^['"]|['"]$/g, '');
+      }
+    }
+  }
+  return result;
+}
+
 /**
  * 从 Markdown 中提取检查项（- [ ] / - [x] / ⬜ / ✅ / ❌ / | 行）
  */
@@ -833,24 +969,321 @@ async function checkArtifactConsistency(codePath: string, taskDir: string, filen
   }
 }
 
+// ═══════════════════════════════════════════════════════════
+// v8.3.0+: L1 结构化检查 — 解析文档表格/YAML 做精确验证
+// ═══════════════════════════════════════════════════════════
+
 /**
- * Spec-代码一致性检查（基础启发式）
+ * DEV_GUIDE.md 合规检查
+ * 解析改造范围清单表格 → 检查文件是否存在
+ * 解析接口契约表格 → 检查路由是否实现
+ */
+async function checkDevGuideCompliance(codePath: string, taskDir: string): Promise<CheckResult> {
+  const start = Date.now();
+  try {
+    const devGuidePaths = [join(taskDir, '00-specs', 'DEV_GUIDE.md'), join(taskDir, 'DEV_GUIDE.md')];
+    let content = '';
+    for (const p of devGuidePaths) {
+      if (await pathExists(p)) { content = await readFile(p, 'utf-8'); break; }
+    }
+    if (!content) {
+      return { name: 'DEV_GUIDE 合规', status: 'skip', duration: Date.now() - start, output: '', details: '未找到 DEV_GUIDE.md', blocking: false };
+    }
+
+    const allCode = scanCodeFiles(codePath);
+    const codeStruct = extractCodeStructure(allCode);
+    const issues: string[] = [];
+    let checkCount = 0;
+
+    // 1. 检查改造范围清单
+    const scopeTable = parseMarkdownTable(content, '改造范围');
+    if (scopeTable) {
+      const typeIdx = scopeTable.headers.findIndex(h => h.includes('类型') || h.toLowerCase().includes('type'));
+      const fileIdx = scopeTable.headers.findIndex(h => h.includes('文件') || h.includes('目录') || h.toLowerCase().includes('file') || h.toLowerCase().includes('path'));
+      if (fileIdx >= 0) {
+        for (const row of scopeTable.rows) {
+          const type = typeIdx >= 0 ? row[typeIdx] : '';
+          const filePath = row[fileIdx];
+          if (!filePath || filePath === '文件/目录' || filePath === '') continue;
+          checkCount++;
+          // 提取路径（去除反引号）
+          const cleanPath = filePath.replace(/`/g, '').trim();
+          if (!cleanPath) continue;
+          const fullPath = join(codePath, cleanPath);
+          const exists = require('fs').existsSync(fullPath);
+          if (type.includes('新增') || type.includes('新增') || type.toLowerCase().includes('add')) {
+            if (!exists) issues.push(`改造范围: 应新增文件不存在: ${cleanPath}`);
+          } else if (type.includes('修改') || type.toLowerCase().includes('modify') || type.toLowerCase().includes('update')) {
+            if (!exists) issues.push(`改造范围: 应修改文件不存在: ${cleanPath}`);
+          }
+        }
+      }
+    }
+
+    // 2. 检查接口契约表
+    const contractTable = parseMarkdownTable(content, '接口契约');
+    if (contractTable) {
+      const pathIdx = contractTable.headers.findIndex(h => h.includes('路径') || h.toLowerCase().includes('path'));
+      const methodIdx = contractTable.headers.findIndex(h => h.includes('方法') || h.toLowerCase().includes('method'));
+      if (pathIdx >= 0) {
+        for (const row of contractTable.rows) {
+          const apiPath = row[pathIdx];
+          if (!apiPath || apiPath === '路径' || apiPath === '接口' || apiPath === '') continue;
+          checkCount++;
+          const cleanPath = apiPath.replace(/`/g, '').trim();
+          const method = methodIdx >= 0 ? row[methodIdx].replace(/`/g, '').trim().toUpperCase() : '';
+          // 检查代码中是否有匹配的路由
+          const hasRoute = codeStruct.routes.some(r => {
+            const routeMatch = cleanPath.includes(r.path) || r.path.includes(cleanPath);
+            const methodMatch = !method || r.method === method || r.method === 'USE';
+            return routeMatch && methodMatch;
+          });
+          if (!hasRoute) {
+            issues.push(`接口契约: 未找到路由实现 ${method ? method + ' ' : ''}${cleanPath}`);
+          }
+        }
+      }
+    }
+
+    if (checkCount === 0) {
+      return { name: 'DEV_GUIDE 合规', status: 'skip', duration: Date.now() - start, output: '', details: 'DEV_GUIDE.md 无结构化改造范围/接口契约', blocking: false };
+    }
+    if (issues.length === 0) {
+      return { name: 'DEV_GUIDE 合规', status: 'pass', duration: Date.now() - start, output: '', details: `${checkCount} 项全部合规`, blocking: false };
+    }
+    return {
+      name: 'DEV_GUIDE 合规',
+      status: issues.length > checkCount / 2 ? 'fail' : 'warn',
+      duration: Date.now() - start,
+      output: issues.slice(0, 8).map(i => `  - ${i}`).join('\n'),
+      details: `${checkCount - issues.length}/${checkCount} 合规, ${issues.length} 项缺失`,
+      blocking: false,
+    };
+  } catch {
+    return { name: 'DEV_GUIDE 合规', status: 'skip', duration: Date.now() - start, output: '', details: '检查失败', blocking: false };
+  }
+}
+
+/**
+ * API_CONTRACT.yaml 合规检查
+ * 解析 YAML 中的 paths → 检查代码中是否有对应路由实现
+ */
+async function checkApiContractCompliance(codePath: string, taskDir: string): Promise<CheckResult> {
+  const start = Date.now();
+  try {
+    const contractPaths = [
+      join(taskDir, '_shared', 'API_CONTRACT.yaml'),
+      join(taskDir, 'API_CONTRACT.yaml'),
+    ];
+    let content = '';
+    for (const p of contractPaths) {
+      if (await pathExists(p)) { content = await readFile(p, 'utf-8'); break; }
+    }
+    if (!content) {
+      return { name: 'API 契约合规', status: 'skip', duration: Date.now() - start, output: '', details: '未找到 API_CONTRACT.yaml', blocking: false };
+    }
+
+    const allCode = scanCodeFiles(codePath);
+    const codeStruct = extractCodeStructure(allCode);
+    const issues: string[] = [];
+    let checkCount = 0;
+
+    // 解析 YAML 中的 paths
+    const yamlDoc = simpleYamlParse(content);
+    const paths = yamlDoc.paths || {};
+    for (const [apiPath, methods] of Object.entries(paths)) {
+      if (typeof methods !== 'object' || methods === null) continue;
+      for (const [method, _spec] of Object.entries(methods as Record<string, any>)) {
+        if (method === 'parameters' || method === 'summary' || method === 'description') continue;
+        checkCount++;
+        const httpMethod = method.toUpperCase();
+        const hasRoute = codeStruct.routes.some(r => {
+          const routeMatch = apiPath.includes(r.path) || r.path.includes(apiPath);
+          const methodMatch = r.method === httpMethod || r.method === 'USE';
+          return routeMatch && methodMatch;
+        });
+        if (!hasRoute) {
+          issues.push(`未找到路由实现: ${httpMethod} ${apiPath}`);
+        }
+      }
+    }
+
+    if (checkCount === 0) {
+      return { name: 'API 契约合规', status: 'skip', duration: Date.now() - start, output: '', details: 'API_CONTRACT.yaml 无接口定义', blocking: false };
+    }
+    if (issues.length === 0) {
+      return { name: 'API 契约合规', status: 'pass', duration: Date.now() - start, output: '', details: `${checkCount} 个接口全部有代码实现`, blocking: false };
+    }
+    return {
+      name: 'API 契约合规',
+      status: issues.length > checkCount / 2 ? 'fail' : 'warn',
+      duration: Date.now() - start,
+      output: issues.slice(0, 8).map(i => `  - ${i}`).join('\n'),
+      details: `${checkCount - issues.length}/${checkCount} 个接口有实现, ${issues.length} 个缺失`,
+      blocking: false,
+    };
+  } catch {
+    return { name: 'API 契约合规', status: 'skip', duration: Date.now() - start, output: '', details: '检查失败', blocking: false };
+  }
+}
+
+/**
+ * SCHEMA.md 一致性检查
+ * 解析表结构定义 → 检查代码中是否有对应实体类/字段
+ */
+async function checkSchemaConsistency(codePath: string, taskDir: string): Promise<CheckResult> {
+  const start = Date.now();
+  try {
+    const schemaPaths = [join(taskDir, '00-specs', 'SCHEMA.md'), join(taskDir, 'SCHEMA.md')];
+    let content = '';
+    for (const p of schemaPaths) {
+      if (await pathExists(p)) { content = await readFile(p, 'utf-8'); break; }
+    }
+    if (!content) {
+      return { name: 'Schema 一致性', status: 'skip', duration: Date.now() - start, output: '', details: '未找到 SCHEMA.md', blocking: false };
+    }
+
+    const allCode = scanCodeFiles(codePath);
+    const codeStruct = extractCodeStructure(allCode);
+    const issues: string[] = [];
+    let fieldCount = 0;
+
+    // 解析所有表格（每个表格是一个表）
+    const tableRegex = /^#{2,4}\s+(.+)$/gm;
+    let m;
+    while ((m = tableRegex.exec(content)) !== null) {
+      const heading = m[1];
+      const sectionStart = content.indexOf(m[0]);
+      const sectionText = content.slice(sectionStart, sectionStart + 3000);
+      const table = parseMarkdownTable(sectionText, heading);
+      if (!table) continue;
+
+      const fieldIdx = table.headers.findIndex(h =>
+        h.includes('字段') || h.includes('列') || h.toLowerCase().includes('field') || h.toLowerCase().includes('column')
+      );
+      if (fieldIdx < 0) continue;
+
+      // 尝试从表名/heading 推断实体类名
+      const possibleEntityNames = heading.split(/[^a-zA-Z0-9_]/).filter(w => w.length > 1);
+      const entityMatch = codeStruct.classes.some(c =>
+        possibleEntityNames.some(n => c.toLowerCase().includes(n.toLowerCase()) || n.toLowerCase().includes(c.toLowerCase()))
+      );
+
+      for (const row of table.rows) {
+        const fieldName = row[fieldIdx];
+        if (!fieldName || fieldName === '字段' || fieldName === '列名') continue;
+        fieldCount++;
+        const cleanField = fieldName.replace(/`/g, '').trim();
+        if (!cleanField) continue;
+
+        // 检查代码中是否有该字段名（作为类属性、变量、数据库列名）
+        const snakeField = cleanField.replace(/([A-Z])/g, '_$1').toLowerCase();
+        const camelField = cleanField.replace(/_([a-z])/g, (_, g) => g.toUpperCase());
+        const found = codeStruct.classes.some(c => allCode.includes(`${c}`)) &&
+          (allCode.includes(` ${cleanField}`) || allCode.includes(`'${cleanField}'`) ||
+           allCode.includes(`"${cleanField}"`) || allCode.includes(` ${snakeField}`) ||
+           allCode.includes(` ${camelField}`));
+
+        if (!found && entityMatch) {
+          issues.push(`字段未找到: ${cleanField} (表: ${heading})`);
+        }
+      }
+    }
+
+    if (fieldCount === 0) {
+      return { name: 'Schema 一致性', status: 'skip', duration: Date.now() - start, output: '', details: 'SCHEMA.md 无表结构定义', blocking: false };
+    }
+    if (issues.length === 0) {
+      return { name: 'Schema 一致性', status: 'pass', duration: Date.now() - start, output: '', details: `${fieldCount} 个字段全部有对应`, blocking: false };
+    }
+    return {
+      name: 'Schema 一致性',
+      status: issues.length > fieldCount / 3 ? 'warn' : 'pass',
+      duration: Date.now() - start,
+      output: issues.slice(0, 8).map(i => `  - ${i}`).join('\n'),
+      details: `${fieldCount - issues.length}/${fieldCount} 个字段有对应, ${issues.length} 个缺失`,
+      blocking: false,
+    };
+  } catch {
+    return { name: 'Schema 一致性', status: 'skip', duration: Date.now() - start, output: '', details: '检查失败', blocking: false };
+  }
+}
+
+/**
+ * 知识图谱依赖一致性检查（v8.3.0+）
+ * 加载知识图谱，检查上游依赖任务的接口是否在本任务代码中被正确引用
+ */
+async function checkDependencyGraphConsistency(codePath: string, taskDir: string, taskId: string): Promise<CheckResult> {
+  const start = Date.now();
+  try {
+    const { loadKnowledgeGraph, traceDependencyChain } = await import('./knowledge-graph');
+    const graph = await loadKnowledgeGraph(process.cwd());
+    if (!graph) {
+      return { name: '依赖一致性', status: 'skip', duration: Date.now() - start, output: '', details: '知识图谱未加载', blocking: false };
+    }
+
+    // 提取本任务的 platform（从 taskId 或 taskDir 推断）
+    const allCode = scanCodeFiles(codePath);
+    const issues: string[] = [];
+    let depCount = 0;
+
+    // 追踪上游依赖（深度 1）
+    const upstreamDeps = traceDependencyChain(graph, taskId, 1).filter(c => c.depth === 1);
+    for (const dep of upstreamDeps) {
+      const depEntity = graph.entities[dep.path[dep.path.length - 1]];
+      if (!depEntity) continue;
+      depCount++;
+
+      // 检查代码中是否有对该依赖任务的引用（import、调用等）
+      const depKeywords = depEntity.title.split(/[^a-zA-Z0-9_]/).filter(w => w.length > 2);
+      const hasReference = depKeywords.some(kw =>
+        allCode.toLowerCase().includes(kw.toLowerCase())
+      );
+
+      // 更精确：检查是否有 import/require 引用
+      const importPatterns = [
+        new RegExp(`from\\s+['"\`].*${depEntity.title.toLowerCase().replace(/\s+/g, '[-_]')}['"\`]`),
+        new RegExp(`import\\s+.*\\b${depKeywords[0]}\\b`),
+        new RegExp(`require\\s*\\(\\s*['"\`].*${depKeywords[0]}['"\`]\\s*\\)`),
+      ];
+      const hasImport = importPatterns.some(p => p.test(allCode));
+
+      if (!hasReference && !hasImport) {
+        issues.push(`未引用上游依赖: ${depEntity.title} (${depEntity.type})`);
+      }
+    }
+
+    if (depCount === 0) {
+      return { name: '依赖一致性', status: 'skip', duration: Date.now() - start, output: '', details: '无上游依赖任务', blocking: false };
+    }
+    if (issues.length === 0) {
+      return { name: '依赖一致性', status: 'pass', duration: Date.now() - start, output: '', details: `${depCount} 个上游依赖全部有引用`, blocking: false };
+    }
+    return {
+      name: '依赖一致性',
+      status: 'warn',
+      duration: Date.now() - start,
+      output: issues.slice(0, 8).map(i => `  - ${i}`).join('\n'),
+      details: `${depCount - issues.length}/${depCount} 个依赖有引用, ${issues.length} 个缺失`,
+      blocking: false,
+    };
+  } catch {
+    return { name: '依赖一致性', status: 'skip', duration: Date.now() - start, output: '', details: '检查失败', blocking: false };
+  }
+}
+
+/**
+ * Spec-代码一致性检查（v8.3.0+ 增强版）
+ * L1: 关键词匹配（保留）+ L2: 语义匹配（新增）
  * 检查 REQ.md 中的验收标准是否在代码中有对应实现
  */
 async function checkSpecConsistency(codePath: string, taskDir: string): Promise<CheckResult> {
   const start = Date.now();
   try {
-    // 读取 REQ.md 的验收标准
-    const reqPaths = [
-      join(taskDir, '00-specs', 'REQ.md'),
-      join(taskDir, 'REQ.md'),
-    ];
+    const reqPaths = [join(taskDir, '00-specs', 'REQ.md'), join(taskDir, 'REQ.md')];
     let reqContent = '';
     for (const p of reqPaths) {
-      if (await pathExists(p)) {
-        reqContent = await readFile(p, 'utf-8');
-        break;
-      }
+      if (await pathExists(p)) { reqContent = await readFile(p, 'utf-8'); break; }
     }
     if (!reqContent) {
       return { name: 'Spec 一致性', status: 'skip', duration: Date.now() - start, output: '', details: '未找到 REQ.md', blocking: false };
@@ -862,18 +1295,47 @@ async function checkSpecConsistency(codePath: string, taskDir: string): Promise<
     }
 
     const allCode = scanCodeFiles(codePath);
-
-    // 检查每个验收标准的关键词是否在代码中出现
+    const codeStruct = extractCodeStructure(allCode);
     const matched: string[] = [];
     const unmatched: string[] = [];
+
     for (const c of criteria) {
+      // L1: 关键词匹配（保留）
       const keywords = [
         ...(c.match(/[\u4e00-\u9fa5]{2,}/g) || []),
         ...(c.match(/[a-zA-Z]{3,}/g) || []),
       ];
-      const found = keywords.some(kw => allCode.toLowerCase().includes(kw.toLowerCase()));
-      if (found) matched.push(c);
-      else unmatched.push(c);
+      const keywordMatch = keywords.some(kw => allCode.toLowerCase().includes(kw.toLowerCase()));
+
+      // L2: 语义匹配（v8.3.0+ 新增）
+      // 提取验收标准中的动词+名词组合，与代码中的函数名做匹配
+      let semanticMatch = false;
+      const actionNouns = c.match(/(?:创建|删除|更新|查询|获取|发送|验证|检查|生成|导入|导出|登录|注册|注销|锁定|解锁|禁用|启用|审批|拒绝|提交|取消|支付|退款|分配|合并|拆分|复制|移动|排序|过滤|搜索|导入|导出|create|delete|update|get|fetch|send|verify|check|generate|import|export|login|register|logout|lock|unlock|disable|enable|approve|reject|submit|cancel|pay|refund|assign|merge|split|copy|move|sort|filter|search)/gi);
+      if (actionNouns && actionNouns.length > 0) {
+        const targetNouns = c.match(/(?:用户|订单|商品|账户|角色|权限|日志|配置|模板|通知|消息|文件|图片|视频|报表|统计|备份|恢复|任务|流程|节点|表单|字段|页面|菜单|按钮|列表|详情|搜索|筛选|排序|分页|缓存|索引|队列|定时|推送|Webhook|user|order|product|account|role|permission|log|config|template|notification|message|file|image|video|report|stat|backup|restore|task|flow|node|form|field|page|menu|button|list|detail|search|filter|sort|page|cache|index|queue|schedule|push|webhook)/gi);
+        const possibleFnNames: string[] = [];
+        for (const action of actionNouns) {
+          const act = action.toLowerCase();
+          for (const target of (targetNouns || [])) {
+            const tgt = target.toLowerCase();
+            // 生成可能的函数名组合
+            possibleFnNames.push(
+              `${act}${tgt}`, `${tgt}${act}`,
+              `${act}_${tgt}`, `${tgt}_${act}`,
+              `handle${act.charAt(0).toUpperCase() + act.slice(1)}${tgt.charAt(0).toUpperCase() + tgt.slice(1)}`,
+            );
+          }
+        }
+        semanticMatch = codeStruct.functions.some(fn =>
+          possibleFnNames.some(p => fn.toLowerCase().includes(p.toLowerCase()) || p.toLowerCase().includes(fn.toLowerCase()))
+        );
+      }
+
+      if (keywordMatch || semanticMatch) {
+        matched.push(c);
+      } else {
+        unmatched.push(c);
+      }
     }
 
     if (unmatched.length === 0) {
@@ -884,7 +1346,7 @@ async function checkSpecConsistency(codePath: string, taskDir: string): Promise<
       status: unmatched.length > matched.length ? 'fail' : 'warn',
       duration: Date.now() - start,
       output: `未匹配:\n${unmatched.slice(0, 8).map(u => `  - ${u}`).join('\n')}`,
-      details: `${matched.length}/${criteria.length} 项匹配`,
+      details: `${matched.length}/${criteria.length} 项匹配（含语义匹配）`,
       blocking: false,
     };
   } catch {
@@ -948,31 +1410,47 @@ export async function runQualityGate(
   logger.info('   🔒 安全扫描...');
   checks.push(checkSecurity(codePath, projectType));
 
-  // 6. Spec 一致性（非阻塞）
+  // 6. Spec 一致性（非阻塞，L1 关键词 + L2 语义匹配）
   logger.info('   📐 Spec 一致性...');
   checks.push(await checkSpecConsistency(codePath, taskDir));
 
-  // 7. 测试用例覆盖率（非阻塞，读取 TEST.md）
+  // 7. DEV_GUIDE 合规（v8.3.0+，结构化检查：改造范围清单 + 接口契约）
+  logger.info('   📋 DEV_GUIDE 合规...');
+  checks.push(await checkDevGuideCompliance(codePath, taskDir));
+
+  // 8. API 契约合规（v8.3.0+，解析 API_CONTRACT.yaml 检查接口实现）
+  logger.info('   🔌 API 契约合规...');
+  checks.push(await checkApiContractCompliance(codePath, taskDir));
+
+  // 9. Schema 一致性（v8.3.0+，解析 SCHEMA.md 检查实体字段）
+  logger.info('   🗄️  Schema 一致性...');
+  checks.push(await checkSchemaConsistency(codePath, taskDir));
+
+  // 10. 测试用例覆盖率（非阻塞，读取 TEST.md）
   logger.info('   🧪 测试用例覆盖...');
   checks.push(await checkTestCoverage(codePath, taskDir));
 
-  // 8. 评审项合规（非阻塞，读取 REVIEW.md）
+  // 11. 评审项合规（非阻塞，读取 REVIEW.md）
   logger.info('   📝 评审项合规...');
   checks.push(await checkReviewCompliance(codePath, taskDir));
 
-  // 9. 部署清单检查（非阻塞，读取 DEPLOY.md）
+  // 12. 部署清单检查（非阻塞，读取 DEPLOY.md）
   logger.info('   🚀 部署清单...');
   checks.push(await checkArtifactConsistency(codePath, taskDir, 'DEPLOY.md', '部署项检查'));
 
-  // 10. 错误码一致性（非阻塞，读取 ERROR_CODES.md）
+  // 13. 错误码一致性（非阻塞，读取 ERROR_CODES.md）
   logger.info('   🔢 错误码一致性...');
   checks.push(await checkArtifactConsistency(codePath, taskDir, 'ERROR_CODES.md', '错误码一致性'));
 
-  // 11. 规格文档质量校验（v8.1.0+，检查 REQ.md/TECH.md 是否有实质内容）
+  // 14. 知识图谱依赖一致性（v8.3.0+，检查上游依赖接口是否已可用）
+  logger.info('   🔗 依赖一致性...');
+  checks.push(await checkDependencyGraphConsistency(codePath, taskDir, taskId));
+
+  // 15. 规格文档质量校验（v8.1.0+，检查 REQ.md/TECH.md 是否有实质内容）
   logger.info('   📋 规格文档质量...');
   checks.push(await checkSpecDocQuality(taskDir));
 
-  // 12. 代码文件非空检查（v8.1.0+，确保 src/ 下有实际代码）
+  // 16. 代码文件非空检查（v8.1.0+，确保 src/ 下有实际代码）
   logger.info('   📁 代码文件检查...');
   checks.push(await checkCodeFilesExist(codePath));
 
