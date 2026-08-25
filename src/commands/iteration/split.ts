@@ -17,6 +17,7 @@ import { buildAutoModeInstruction, writeQuestions, extractQuestionsFromText } fr
 import { PipelineEngine } from '../../core/pipeline-engine';
 import { findRelevantCode } from '../../core/code-scanner';
 import { loadKnowledgeGraph } from '../../core/knowledge-graph';
+import { loadGitConfig, GitConfig } from '../../core/git-integration';
 
 /**
  * 将 AI 返回的 scope 简写映射到 CONSTITUTION.md 标准端名
@@ -1158,9 +1159,52 @@ function filterTemplateNoise(sections: Section[]): Section[] {
   });
 }
 
+// v8.3.4+: 从迭代目录路径提取迭代名（如 Iteration-011-meeting-upgrade → 011-meeting-upgrade）
+function extractIterationName(iterationDir: string): string {
+  const base = iterationDir.split('/').pop() || '';
+  return base.replace(/^Iteration-/, '');
+}
+
+/** 生成带实际配置值的 git-config 内容 */
+function buildGitConfigContent(config: GitConfig, platformLabel: string, taskType?: string): string {
+  const branchType = taskType === 'bugfix' ? 'bugfix' : taskType === 'refactor' ? 'refactor' : taskType === 'research' ? 'research' : 'feature';
+  const exampleName = 'example-task';
+  const exampleHash = 'a1b2';
+  const prefix = config.branchPrefix ? `${config.branchPrefix}-` : '';
+  return `# 子任务级 Git 配置（${platformLabel}）
+# 以下配置覆盖迭代级 PROJECT_GRAPH.md，未配置项自动继承上一级。
+# 当前值已从迭代级/全局级配置自动填充，可直接使用或按需修改。
+
+# === 当前生效配置 ===
+源分支: ${config.defaultBranch}
+分支前缀: ${config.branchPrefix || '(空)'}
+分支格式: ${config.branchFormat}
+自动拉取: ${config.autoPull ? 'true' : 'false'}
+远程名称: ${config.remoteName}
+
+# === 保护分支（禁止直接推送）===
+${config.protectedBranches.map(b => `- ${b}`).join('\n')}
+
+# === 分支命名示例 ===
+# 当前任务类型: ${branchType}
+# 命名格式: ${config.branchFormat}
+# 示例分支: ${branchType}/${prefix}${exampleName}-${exampleHash}
+# （{hash4} 为自动生成的 4 位随机字符）
+
+# === 自定义配置区 ===
+# 如需覆盖上述值，取消下方注释并修改：
+# 源分支: ${config.defaultBranch}
+# 分支前缀: 
+# 分支格式: {type}/{prefix}{name}-{hash4}
+# 自动拉取: false
+# 远程名称: origin
+`;
+}
+
 async function createTaskFromSection(iterationDir: string, taskId: string, section: Section, allPlatforms: string[], taskType: string = 'feature', allSections?: Section[]): Promise<void> {
   // taskId 已含 slug（nextTaskId 返回 Task-NNN-slug），直接用
   const taskDir = join(iterationDir, '030-tasks', taskType, taskId);
+  const iterationName = extractIterationName(iterationDir);
   
   // 确定任务涉及的端：优先使用 AI 标注的 _scopePlatforms，否则从 020-specs/{端}/TECH.md 是否存在且有内容来推断
   let taskPlatforms: string[];
@@ -1548,19 +1592,11 @@ ${section.content}
       await ensureDir(join(subtaskDir, 'src'));
       await ensureDir(join(subtaskDir, 'tests'));
 
-      // git-config
+      // v8.3.4+: git-config 自动填充 — 读取迭代级/全局级实际配置值写入
+      const gitConfig = loadGitConfig(iterationName);
       await writeFile(
         join(subtaskDir, '.meta', 'git-config'),
-        `# 子任务级 Git 配置（${platformLabel}）
-# 以下配置覆盖迭代级 PROJECT_GRAPH.md，未配置项自动继承上一级。
-# 修改时去掉注释符 #，填入具体值即可。
-
-# 源分支: 继承迭代配置
-# 分支前缀: 继承迭代配置
-# 分支格式: 继承迭代配置
-# 自动拉取: 继承迭代配置
-# 远程名称: 继承迭代配置
-`
+        buildGitConfigContent(gitConfig, platformLabel, (section as any).type)
       );
 
       // v6.70.0+: 从 section 提取接口/页面清单用于 TASK.md
@@ -1744,11 +1780,11 @@ ${isBk ? apiList : pageList}
     // 功能单元标识（v6.49.2+）
     const featureName = (section as any).functionalUnit || section.name || '未分类';
     await writeFile(join(autoSubtaskDir, '.meta', 'feature'), featureName);
+    // v8.3.4+: git-config 自动填充
+    const gitConfig = loadGitConfig(iterationName);
     await writeFile(
       join(autoSubtaskDir, '.meta', 'git-config'),
-      `# 子任务级 Git 配置（后端）
-# 以下配置覆盖迭代级 PROJECT_GRAPH.md，未配置项自动继承上一级。
-`
+      buildGitConfigContent(gitConfig, '后端', (section as any).type)
     );
     await writeFile(
       join(autoSubtaskDir, 'TASK.md'),

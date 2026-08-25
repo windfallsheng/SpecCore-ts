@@ -12,7 +12,7 @@ import { isTimestampBackup } from '../utils/task-utils';
 import { logger } from '../utils/logger';
 import { loadKnowledgeGraph, getTaskContext, isGraphStale, refreshKnowledgeGraph, KnowledgeGraph } from './knowledge-graph';
 import { buildCompactContext } from './context-builder';
-import { parseProjectInfo } from './spec-paths';
+import { parseProjectInfo, GLOBAL_SPECS_DIR } from './spec-paths';
 import {
   loadRagIndex, isRagIndexStale, retrieveRelevantChunks,
   assembleChunksForPrompt, indexTaskDocuments,
@@ -365,6 +365,11 @@ async function loadExtraSpecs(
     files.push(
       { name: '迭代设计文档', path: join(iterDir, '020-specs', 'DESIGN.md') },
     );
+    // v8.3.4+: 读取 overview/ 核心文档（analyze 产物），控制长度防漂移
+    const overviewDir = join(iterDir, '020-specs', GLOBAL_SPECS_DIR);
+    for (const f of ['REQUIREMENT.md', 'ANALYSIS.md', 'TECH.md', 'DEV_GUIDE.md']) {
+      files.push({ name: `迭代overview/${f}`, path: join(overviewDir, f) });
+    }
     if (platform) {
       // 迭代级各端规格文档
       const platSpecDir = join(iterDir, '020-specs', 'platforms', platform);
@@ -520,13 +525,22 @@ async function loadAllTaskContext(
           if (!item.name.endsWith('.md') || isTimestampBackup(item.name)) continue;
           await addFile(join(specsDir, item.name), `迭代规格: ${item.name}`, `020-specs/${item.name}`);
         }
-        // 2b. global/ 子目录下的全局文档（v6.41.0+）
+        // 2b. overview/ 子目录下的全局文档（v6.78.0+ 新路径，兼容旧版 global/）
+        const overviewDir = join(specsDir, GLOBAL_SPECS_DIR);
+        if (await pathExists(overviewDir)) {
+          const overviewItems = await readdir(overviewDir, { withFileTypes: true });
+          for (const item of overviewItems) {
+            if (!item.name.endsWith('.md') || isTimestampBackup(item.name)) continue;
+            await addFile(join(overviewDir, item.name), `迭代综合规格: ${item.name}`, `020-specs/${GLOBAL_SPECS_DIR}/${item.name}`);
+          }
+        }
+        // 向后兼容：旧版 global/ 目录
         const globalDir = join(specsDir, 'global');
         if (await pathExists(globalDir)) {
           const globalItems = await readdir(globalDir, { withFileTypes: true });
           for (const item of globalItems) {
             if (!item.name.endsWith('.md') || isTimestampBackup(item.name)) continue;
-            await addFile(join(globalDir, item.name), `迭代综合规格: ${item.name}`, `020-specs/overview/${item.name}`);
+            await addFile(join(globalDir, item.name), `迭代综合规格(旧): ${item.name}`, `020-specs/global/${item.name}`);
           }
         }
         // 各端规格（新路径 020-specs/{端}/，兼容旧路径 020-specs/platforms/{端}/）
