@@ -4226,7 +4226,8 @@ status: "clarified"
   prompt += `- 写完后用 Read 验证文件内容已替换占位内容\n\n`;
 
   // ── v8.1.0+: 逐文档模式自动注入 PRD 内容 + 前序文档摘要 ──
-  if (perDocStatus?.nextUnfilled) {
+  // v8.3.2+ 修复：PRD 注入不再仅限逐文档模式，Phase 1/2 模式下也必须注入需求内容
+  if (!isGlobal && !isTask && ctx.iteration && ctx.iteration !== 'GLOBAL') {
     try {
       const iterDirForCtx = await getIterationDir(iter);
       if (iterDirForCtx) {
@@ -4264,9 +4265,9 @@ status: "clarified"
           prompt += `\n\n`;
         }
 
-        // 2. 注入前序已填充文档摘要
-        const specDir = join(iterDirForCtx, '020-specs');
-        if (perDocStatus.filled.length > 0) {
+        // 2. 注入前序已填充文档摘要（仅在逐文档模式下）
+        if (perDocStatus?.filled.length && perDocStatus.filled.length > 0) {
+          const specDir = join(iterDirForCtx, '020-specs');
           prompt += `## 📎 前序已填充文档摘要（当前文档必须与之保持一致）\n\n`;
           prompt += `> 以下文档已生成，当前文档必须与之保持一致（字段名、接口路径、状态枚举等不能冲突）。\n\n`;
           for (const filledPath of perDocStatus.filled) {
