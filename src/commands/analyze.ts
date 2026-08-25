@@ -1871,8 +1871,8 @@ async function sanitizeSpecDirectories(iterDir: string): Promise<void> {
         illegalDirCount++;
       }
     } else if (entryStat.isFile()) {
-      // 根目录散落的 .md 文件 → 检查是否应归入 overview/
-      if (entry.endsWith('.md') && globalSet.has(entry)) {
+      // v8.3.11+: 根目录散落的文件 → 检查是否应归入 overview/（不限于 .md）
+      if (globalSet.has(entry)) {
         const overviewDir = join(specDir, GLOBAL_SPECS_DIR);
         await ensureDir(overviewDir);
         const dest = join(overviewDir, entry);
