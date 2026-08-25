@@ -1,3 +1,14 @@
+## v8.3.6 (2026-08-25) — estimatedHours 从任务元信息读取
+
+### 改进
+
+**工时数据链路打通** (`state.ts` + `split.ts` + `plan.ts`):
+- `TaskState` 接口新增 `estimatedHours?: number` 字段
+- `scanTasks` 从 `.meta/estimated-hours` 读取工时，子任务优先读自身 `.meta/`，回退父任务工时
+- `split.ts` 创建任务/子任务时写入 `.meta/estimated-hours`（来自 AI 拆分输出的 `estimatedHours` 或 `estimateSectionComplexity` 估算值）
+- `buildTaskPlan` 改用 `t.estimatedHours ?? (bugfix ? 2 : 8)`，有真实值用真实值，无则按类型回退
+- **根因**：原 `buildTaskPlan` 硬编码 `bugfix=1, 其他=2`，与实际拆分估算完全脱节，计划和状态面板显示的工时不准
+
 ## v8.3.5 (2026-08-25) — execute 上下文补全 + git-config 自动填充
 
 ### 修复

@@ -1339,6 +1339,9 @@ ${taskPlatforms.map((p: string) => `| ${subtaskIdMap.get(p)} | ${p} | ${owner} |
   await writeFile(join(taskDir, '.meta', 'status'), 'todo');
   await writeFile(join(taskDir, '.meta', 'owner'), owner);
   await writeFile(join(taskDir, '.meta', 'created-at'), today);
+  // v8.3.5+: 写入预估工时到 .meta/estimated-hours，供 plan/状态面板读取
+  const taskHours = (section as any)._complexity?.estimatedHours || complexity.estimatedHours || 8;
+  await writeFile(join(taskDir, '.meta', 'estimated-hours'), String(taskHours));
 
   await ensureDir(join(taskDir, '_shared'));
   await ensureDir(join(taskDir, '00-specs'));
@@ -1584,6 +1587,9 @@ ${section.content}
       await writeFile(join(subtaskDir, '.meta', 'status'), 'todo');
       await writeFile(join(subtaskDir, '.meta', 'owner'), owner);
       await writeFile(join(subtaskDir, '.meta', 'created-at'), today);
+      // v8.3.5+: 子任务工时（按端均分或保持父任务工时）
+      const subHours = complexity.estimatedHours || 8;
+      await writeFile(join(subtaskDir, '.meta', 'estimated-hours'), String(subHours));
       // 功能单元标识（v6.49.2+）：默认取 section 的 functionalUnit 或 section.name
       const featureName = (section as any).functionalUnit || section.name || '未分类';
       await writeFile(join(subtaskDir, '.meta', 'feature'), featureName);
@@ -1777,6 +1783,9 @@ ${isBk ? apiList : pageList}
     await writeFile(join(autoSubtaskDir, '.meta', 'status'), 'todo');
     await writeFile(join(autoSubtaskDir, '.meta', 'owner'), owner);
     await writeFile(join(autoSubtaskDir, '.meta', 'created-at'), today);
+    // v8.3.5+: 子任务工时
+    const autoHours = complexity.estimatedHours || 8;
+    await writeFile(join(autoSubtaskDir, '.meta', 'estimated-hours'), String(autoHours));
     // 功能单元标识（v6.49.2+）
     const featureName = (section as any).functionalUnit || section.name || '未分类';
     await writeFile(join(autoSubtaskDir, '.meta', 'feature'), featureName);

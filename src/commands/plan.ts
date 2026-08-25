@@ -440,7 +440,7 @@ export function buildTaskPlan(t: TaskState): TaskPlan {
     status: t.status || 'pending',
     assignee: t.assignee || 'TBD',
     progress: t.progress || 0,
-    estimatedHours: t.type === 'bugfix' ? 1 : 2,
+    estimatedHours: t.estimatedHours ?? (t.type === 'bugfix' ? 2 : 8),
   };
 }
 
