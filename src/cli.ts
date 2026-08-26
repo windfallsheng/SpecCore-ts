@@ -75,6 +75,7 @@ import { deleteCommand } from './commands/delete';
 import { searchCommand } from './commands/search';
 import { watchCommand } from './commands/watch';
 import { promptsCommand } from './commands/prompts';
+import { cleanupCommand } from './commands/cleanup';
 // v5.21.0 任务调度
 import { HELP_PANEL } from './core/help-panel';
 import { i18n } from './i18n';
@@ -1049,6 +1050,20 @@ program
   .option('--iteration <name>', 'Iteration name to delete')
   .option('--force', 'Skip confirmation prompt')
   .action(deleteCommand);
+
+// v8.3.12+: 本地临时缓存清理
+program
+  .command('cleanup')
+  .alias('cl')
+  .description('清理本地临时缓存：时间戳备份、归档文件、.bak、临时文件')
+  .option('--days <n>', '清理 N 天前的文件（默认 7）', '7')
+  .option('--all', '清理所有可清理的，不限制天数')
+  .option('--dry-run', '预览模式，只列出不删除')
+  .action((opts: any) => cleanupCommand({
+    days: opts.all ? 0 : parseInt(opts.days, 10),
+    all: opts.all,
+    dryRun: opts.dryRun,
+  }));
 
 // v5.6.0 新增命令
 program
