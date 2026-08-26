@@ -335,6 +335,7 @@ async function loadBusinessRules(cwd: string, taskDir?: string, reqContent?: str
 
 /**
  * 读取任务目录中的额外上下文文件（TECH.md / TASK.md / SCHEMA.md / .issues.md 等）
+ * v8.3.15+: 自动扫描子任务目录和 00-specs/ 下用户自定义的文档
  * 带大小限制，防止 prompt 爆炸
  */
 async function loadExtraSpecs(
@@ -345,6 +346,7 @@ async function loadExtraSpecs(
   const MAX_PER_FILE = options?.maxCharsPerFile ?? 2000;
   const MAX_TOTAL = options?.maxTotalChars ?? 8000;
   let totalChars = 0;
+  const seenPaths = new Set<string>();
 
   const files = [
     { name: '开发指南', path: '00-specs/DEV_GUIDE.md' },
@@ -428,6 +430,7 @@ async function loadExtraSpecs(
 
   for (const f of files) {
     const fullPath = join(cwd, taskDir, f.path);
+    seenPaths.add(fullPath);
     if (await pathExists(fullPath)) {
       let content = await readFile(fullPath, 'utf-8');
       // 跳过空文件或纯占位符文件
@@ -452,7 +455,118 @@ async function loadExtraSpecs(
     }
   }
 
+  // v8.3.15+: 自动扫描用户自定义文档（00-specs/ 和子任务目录）
+  // 只要用户放了文件，AI 就应该读到
+  const userCustomFiles = await scanUserCustomFiles(cwd, taskDir, platform, seenPaths);
+  for (const uf of userCustomFiles) {
+    const fullPath = join(cwd, taskDir, uf.path);
+    if (seenPaths.has(fullPath)) continue;
+    seenPaths.add(fullPath);
+
+    try {
+      let content = await readFile(fullPath, 'utf-8');
+      if (content.trim().length <= 50 || content.trim().match(/^#+\s*待填充|^<!--\s*AI-FILL\s*-->$/m)) {
+        continue;
+      }
+      if (content.length > MAX_PER_FILE) {
+        content = content.slice(0, MAX_PER_FILE) + `\n\n> ... (已截断，原文件 ${content.length} 字)`;
+      }
+      if (totalChars + content.length > MAX_TOTAL) {
+        const remain = MAX_TOTAL - totalChars;
+        if (remain > 200) {
+          content = content.slice(0, remain) + `\n\n> ... (已达总上限 ${MAX_TOTAL} 字)`;
+          extras.push({ name: uf.name, path: uf.path, content });
+        }
+        break;
+      }
+      totalChars += content.length;
+      extras.push({ name: uf.name, path: uf.path, content });
+    } catch { /* 忽略读取失败的文件 */ }
+  }
+
   return extras;
+}
+
+/**
+ * v8.3.15+: 扫描用户自定义文档
+ * 扫描 00-specs/ 和子任务目录下所有 .md/.yaml/.yml/.json 文件
+ * 排除白名单已覆盖的文件和系统目录
+ */
+async function scanUserCustomFiles(
+  cwd: string,
+  taskDir: string,
+  platform: string | undefined,
+  seenPaths: Set<string>,
+): Promise<{ name: string; path: string }[]> {
+  const results: { name: string; path: string }[] = [];
+  const validExts = ['.md', '.yaml', '.yml', '.json'];
+  const skipDirs = new Set(['.meta', '.git', 'node_modules', 'tests', 'src', 'dist', 'build']);
+
+  // 1. 扫描 00-specs/ 下所有文件（排除已在白名单中的）
+  const specsDir = join(cwd, taskDir, '00-specs');
+  try {
+    if (await pathExists(specsDir)) {
+      const entries = await readdir(specsDir, { withFileTypes: true });
+      for (const e of entries) {
+        if (e.isDirectory()) continue;
+        const ext = e.name.slice(e.name.lastIndexOf('.'));
+        if (!validExts.includes(ext)) continue;
+        const relPath = join('00-specs', e.name);
+        const fullPath = join(cwd, taskDir, relPath);
+        if (!seenPaths.has(fullPath)) {
+          results.push({ name: `用户补充/${e.name}`, path: relPath });
+        }
+      }
+    }
+  } catch { /* 忽略 */ }
+
+  // 2. 扫描子任务目录下所有文件（递归）
+  if (platform) {
+    const platformBase = join(cwd, taskDir, platform);
+    try {
+      if (await pathExists(platformBase)) {
+        const subtaskEntries = await readdir(platformBase, { withFileTypes: true });
+        for (const subE of subtaskEntries) {
+          if (!subE.isDirectory() || subE.name.startsWith('.')) continue;
+          const subtaskDir = join(platformBase, subE.name);
+          await scanDirRecursive(subtaskDir, join(platform, subE.name), results, seenPaths, skipDirs, validExts, cwd, taskDir);
+        }
+      }
+    } catch { /* 忽略 */ }
+  }
+
+  return results;
+}
+
+/** 递归扫描目录，收集用户自定义文档 */
+async function scanDirRecursive(
+  dir: string,
+  relPrefix: string,
+  results: { name: string; path: string }[],
+  seenPaths: Set<string>,
+  skipDirs: Set<string>,
+  validExts: string[],
+  cwd: string,
+  taskDir: string,
+): Promise<void> {
+  try {
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const e of entries) {
+      const relPath = join(relPrefix, e.name);
+      const fullPath = join(cwd, taskDir, relPath);
+
+      if (e.isDirectory()) {
+        if (skipDirs.has(e.name) || e.name.startsWith('.')) continue;
+        await scanDirRecursive(join(dir, e.name), relPath, results, seenPaths, skipDirs, validExts, cwd, taskDir);
+      } else if (e.isFile()) {
+        const ext = e.name.slice(e.name.lastIndexOf('.'));
+        if (!validExts.includes(ext)) continue;
+        if (!seenPaths.has(fullPath)) {
+          results.push({ name: `用户补充/${relPath}`, path: relPath });
+        }
+      }
+    }
+  } catch { /* 忽略读取失败的目录 */ }
 }
 
 // ═══════════════════════════════════════════════════════════
