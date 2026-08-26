@@ -526,17 +526,38 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     }
   }
 
-  // 模糊匹配端名
+  // v8.3.16+: 模糊匹配端名，支持多段指定（逗号分隔）
   if (options.platform) {
-    const resolved = await resolvePlatform(options.platform);
-    if (resolved.error) {
-      logger.error(`❌ ${resolved.error}`);
+    const allPlatforms = await parsePlatformList();
+    const inputPlatforms = options.platform.split(',').map(p => p.trim()).filter(Boolean);
+    const resolvedPlatforms: string[] = [];
+
+    for (const input of inputPlatforms) {
+      const resolved = await resolvePlatform(input);
+      if (resolved.error) {
+        logger.error(`❌ ${resolved.error}`);
+        return;
+      }
+      if (!resolved.exact) {
+        logger.info(`📍 --platform ${input} → 匹配 ${resolved.resolved}`);
+      }
+      if (resolved.resolved) {
+        resolvedPlatforms.push(resolved.resolved);
+      }
+    }
+
+    // 过滤只保留在 CONSTITUTION.md 端列表中的端
+    const validPlatforms = resolvedPlatforms.filter(p => allPlatforms.includes(p));
+    if (validPlatforms.length === 0) {
+      logger.error(`❌ 指定的端均不在 CONSTITUTION.md 端列表中。可用端: ${allPlatforms.join(', ')}`);
       return;
     }
-    if (!resolved.exact) {
-      logger.info(`📍 --platform ${options.platform} → 匹配 ${resolved.resolved}`);
+    if (validPlatforms.length < resolvedPlatforms.length) {
+      const skipped = resolvedPlatforms.filter(p => !allPlatforms.includes(p));
+      logger.warn(`⚠️ 跳过不在端列表中的端: ${skipped.join(', ')}`);
     }
-    options.platform = resolved.resolved!;
+
+    options.platform = validPlatforms.join(',');
   }
 
   // 命令前索引新鲜度检查（非阻塞）
@@ -719,8 +740,20 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         // v8.0.0+: 骨架优先架构 — CLI 预创建所有文件，AI 只覆盖内容
         const iterDirForSkeleton = await getIterationDir(iterForDirs);
         const specDir = join(iterDirForSkeleton, '020-specs');
-        const platforms = await parsePlatformList();
+        let platforms = await parsePlatformList();
         const iterName = iterForDirs;
+
+        // v8.3.16+: 如果指定了 --platform，只创建指定端的骨架
+        if (options.platform) {
+          const specifiedPlatforms = options.platform.split(',').map(p => p.trim()).filter(Boolean);
+          const filtered = platforms.filter(p => specifiedPlatforms.includes(p));
+          if (filtered.length > 0) {
+            platforms = filtered;
+            logger.info(`📍 按 --platform 过滤: 只为 ${platforms.join(', ')} 端创建骨架`);
+          } else {
+            logger.warn(`⚠️ --platform 指定的端不在 CONSTITUTION.md 列表中，将使用全部端`);
+          }
+        }
 
         // v7.4.3+ 兼容：先运行一次旧版 sanitize 迁移遗留文件（一次性）
         await sanitizeSpecDirectories(iterDirForSkeleton);
@@ -1188,9 +1221,10 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
             }
 
             // 综合文档写入 overview/ 子目录，端专属文档写入 {端}/ 子目录
+            // v8.3.16+: 多段指定时（如 api,web），不额外加目录前缀，由 AI 返回的路径决定
             const targetDir = globalSet.has(cleanFilename)
               ? join(specDir, GLOBAL_SPECS_DIR)
-              : options.platform ? join(specDir, options.platform) : specDir;
+              : (options.platform && !options.platform.includes(',')) ? join(specDir, options.platform) : specDir;
             await ensureDir(targetDir);
             const fp = join(targetDir, cleanFilename);
             if (!(await shouldOverwrite(fp, !!options.interactive))) { logger.info(`   ⏭️  跳过: ${filename}`); continue; }
@@ -1493,9 +1527,10 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
               skippedCount++;
               continue;
             }
+            // v8.3.16+: 多段指定时（如 api,web），不额外加目录前缀，由 AI 返回的路径决定
             const targetDir = globalSet.has(cleanFilename)
               ? join(specDir, GLOBAL_SPECS_DIR)
-              : options.platform ? join(specDir, options.platform) : specDir;
+              : (options.platform && !options.platform.includes(',')) ? join(specDir, options.platform) : specDir;
             await ensureDir(targetDir);
             const fp = join(targetDir, cleanFilename);
             if (!(await shouldOverwrite(fp, !!options.interactive))) { logger.info(`   ⏭️  跳过: ${filename}`); continue; }
