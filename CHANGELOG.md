@@ -1,3 +1,13 @@
+## v8.3.13 (2026-08-25) — 新增 cleanup 本地临时缓存清理命令
+
+### 新增
+
+**`speccore cleanup` 命令** (`cleanup.ts`):
+- 清理 analyze/execute/split 等命令产生的临时文件和备份
+- 支持 `--days N`（默认 7 天）、`--all`（不限天数）、`--dry-run`（预览）
+- 清理范围：时间戳备份文件（`-YYYYMMDDhhmmss.` 模式）、`.bak` 文件、归档文件/目录（`.invalid-`、`.orphan-`、`.migrated-`、`.archived-`）、临时文件（`.tmp_*`）、过期缓存（`last-analysis-snapshot.json`、`semantic-tags.json`、`structured-data.json`、`code-structure.json`）
+- 安全策略：跳过 `.speccore/` 根目录下的配置文件备份、跳过 `backups/` 完整备份、跳过 `outputs/` 产物、跳过活跃缓存（`knowledge-graph.json`、`rag-index.json`）
+
 ## v8.3.12 (2026-08-25) — 020-specs/ 根目录散落文件归位修复
 
 ### 修复
