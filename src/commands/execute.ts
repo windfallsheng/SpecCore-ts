@@ -15,6 +15,7 @@ import { loadSpecRules, generateImports, SpecRules, loadTechStack } from '../cor
 import { getProjectPathForPlatform, parsePlatformList } from '../core/spec-paths';
 import { logOperation } from '../core/operation-log';
 import { showNextSteps } from '../core/next-steps';
+import { cleanupByType } from './cleanup';
 import { extractQuestions, showQuestionChecklist } from '../core/question-checklist';
 import { resolvePlatform } from '../core/platform-registry';
 import { findTaskDir } from '../core/task-paths';
@@ -2243,6 +2244,14 @@ async function runApplyMode(iteration: string, options: ExecuteOptions): Promise
 
   // ── 执行后总结 ──
   outputPostSummary(iteration, task, writtenCount, parsed.files.map(f => f.path));
+
+  // v8.3.14+: execute 后自动清理 .bak 文件
+  await cleanupByType({
+    cwd: process.cwd(),
+    types: ['bakFiles'],
+    days: 0, // 不限天数，清理所有 .bak
+    silent: true,
+  });
 
   logger.info(`   📋 下一步: speccore pr --task ${task}`);
 }
