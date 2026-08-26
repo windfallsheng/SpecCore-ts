@@ -14,6 +14,7 @@
 import { writeFile, pathExists, ensureDir, rename, stat } from 'fs-extra';
 import { join, dirname, basename, relative } from 'path';
 import { backupWithTimestamp, isTimestampBackup, shouldOverwrite, findProjectRoot } from '../utils/task-utils';
+import { cleanupByType } from './cleanup';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration, getIterationDir } from '../core/context';
 import { findTaskDir } from '../core/task-paths';
@@ -1260,6 +1261,14 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
           // v6.90.0+: 事后校验——检测并清理 AI 绕过 --apply 创建的非法目录/文件
           await sanitizeSpecDirectories(iterDir!);
 
+          // v8.3.14+: analyze --apply 后自动清理归档文件和临时文件
+          await cleanupByType({
+            cwd: process.cwd(),
+            types: ['archiveFiles', 'archiveDirs', 'tempFiles'],
+            days: 0, // 不限天数，清理所有归档和临时文件
+            silent: true,
+          });
+
           // v7.4.0+: 从 AI 输出中提取疑问并持久化
           const extractedQs = extractQuestionsFromText(options.apply);
           if (extractedQs.length > 0) {
@@ -1500,6 +1509,14 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
           }
           logger.success(`✅ ${count} 个 Spec 文档已写入 020-specs/`);
           await sanitizeSpecDirectories(iterDir!);
+
+          // v8.3.14+: analyze --apply 后自动清理归档文件和临时文件
+          await cleanupByType({
+            cwd: process.cwd(),
+            types: ['archiveFiles', 'archiveDirs', 'tempFiles'],
+            days: 0,
+            silent: true,
+          });
         }
         // v8.2.0+: 单元分析结果保存到缓存（供 --consolidate 汇总使用）
         if (options.unit && options.iteration) {

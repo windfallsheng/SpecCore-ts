@@ -18,6 +18,7 @@ import { PipelineEngine } from '../../core/pipeline-engine';
 import { findRelevantCode } from '../../core/code-scanner';
 import { loadKnowledgeGraph } from '../../core/knowledge-graph';
 import { loadGitConfig, GitConfig } from '../../core/git-integration';
+import { cleanupByType } from '../cleanup';
 
 /**
  * 将 AI 返回的 scope 简写映射到 CONSTITUTION.md 标准端名
@@ -995,6 +996,15 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       await updateProjectGraph(iterationDir, sections);
       spinner.stop(`✅ 创建了 ${sections.length} 个任务`);
       showNextSteps('split');
+
+      // v8.3.14+: split 后自动清理旧的时间戳备份（保留 7 天内的）
+      await cleanupByType({
+        cwd: process.cwd(),
+        types: ['timestampBackups'],
+        days: 7,
+        silent: true,
+      });
+
       // 自动刷新知识图谱（v6.49.10+）
       try {
         const { refreshKnowledgeGraph } = await import('../../core/knowledge-graph');
@@ -1024,8 +1034,16 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     logger.info(`📊 任务总览 → 000-overview/task-summaries/`);
 
     spinner.stop(`Created ${sections.length} tasks from requirements`);
-    
+
     showNextSteps('split');
+
+    // v8.3.14+: split 后自动清理旧的时间戳备份（保留 7 天内的）
+    await cleanupByType({
+      cwd: process.cwd(),
+      types: ['timestampBackups'],
+      days: 7,
+      silent: true,
+    });
 
     // 自动刷新知识图谱（v6.49.10+）
     try {

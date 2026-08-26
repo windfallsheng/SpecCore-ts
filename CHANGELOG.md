@@ -1,3 +1,14 @@
+## v8.3.14 (2026-08-25) — analyze/split/execute 后自动清理临时文件
+
+### 新增
+
+**命令后自动清理机制** (`cleanup.ts` + `analyze.ts` + `split.ts` + `execute.ts`):
+- `analyze --apply` 完成后 → 自动清理归档文件（`.invalid-`、`.orphan-`、`.migrated-`、`.archived-`）和临时文件（`.tmp_*`），不限天数
+- `split` 完成后 → 自动清理超过 7 天的时间戳备份文件（保留 7 天内的，给用户回滚机会）
+- `execute` 完成后 → 自动清理 `.bak` 备份文件，不限天数
+- 所有自动清理均为**静默执行**（debug 日志级别），不影响命令输出
+- 新增 `cleanupByType()` 内部 API，支持按类型定向清理，供其他命令调用
+
 ## v8.3.13 (2026-08-25) — 新增 cleanup 本地临时缓存清理命令
 
 ### 新增

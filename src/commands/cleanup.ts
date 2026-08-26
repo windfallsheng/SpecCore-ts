@@ -22,6 +22,21 @@ export interface CleanupOptions {
   dryRun?: boolean;
 }
 
+export type CleanupType =
+  | 'timestampBackups'
+  | 'bakFiles'
+  | 'archiveFiles'
+  | 'archiveDirs'
+  | 'tempFiles'
+  | 'staleCacheFiles';
+
+export interface AutoCleanupOptions {
+  cwd: string;
+  types: CleanupType[];
+  days?: number;
+  silent?: boolean;
+}
+
 interface CleanupResult {
   timestampBackups: string[];
   bakFiles: string[];
@@ -356,4 +371,57 @@ export async function cleanupCommand(options: CleanupOptions): Promise<void> {
   logger.info('   • 活跃缓存（knowledge-graph.json、rag-index.json）不会被清理');
   logger.info('   • 使用 --dry-run 可预览清理内容');
   logger.info('   • 使用 --all 可清理所有可清理的（不限天数）');
+}
+
+/**
+ * v8.3.14+: 按类型自动清理（供 analyze/split/execute 等命令调用）
+ * 只清理指定的类型，静默执行，不影响用户体验
+ */
+export async function cleanupByType(options: AutoCleanupOptions): Promise<void> {
+  const { cwd, types, days = 7, silent = true } = options;
+  const cutoffTime = Date.now() - days * 24 * 60 * 60 * 1000;
+
+  const results: CleanupResult = {
+    timestampBackups: [],
+    bakFiles: [],
+    archiveFiles: [],
+    archiveDirs: [],
+    tempFiles: [],
+    staleCacheFiles: [],
+  };
+
+  // 扫描项目根目录和 .speccore/ 目录
+  await scanForCleanup(cwd, cutoffTime, results);
+  await scanForCleanup(join(cwd, '.speccore'), cutoffTime, results);
+
+  // 过滤只保留指定类型
+  const filteredResults: CleanupResult = {
+    timestampBackups: types.includes('timestampBackups') ? results.timestampBackups : [],
+    bakFiles: types.includes('bakFiles') ? results.bakFiles : [],
+    archiveFiles: types.includes('archiveFiles') ? results.archiveFiles : [],
+    archiveDirs: types.includes('archiveDirs') ? results.archiveDirs : [],
+    tempFiles: types.includes('tempFiles') ? results.tempFiles : [],
+    staleCacheFiles: types.includes('staleCacheFiles') ? results.staleCacheFiles : [],
+  };
+
+  const totalItems =
+    filteredResults.timestampBackups.length +
+    filteredResults.bakFiles.length +
+    filteredResults.archiveFiles.length +
+    filteredResults.archiveDirs.length +
+    filteredResults.tempFiles.length +
+    filteredResults.staleCacheFiles.length;
+
+  if (totalItems === 0) return;
+
+  const { deleted, skipped, totalSize } = await performCleanup(filteredResults, false);
+
+  if (!silent) {
+    logger.info(`🧹 自动清理: ${deleted} 个临时文件/目录已清理`);
+    if (skipped > 0) {
+      logger.warn(`   ⚠️ ${skipped} 个文件删除失败`);
+    }
+  } else {
+    logger.debug(`🧹 自动清理完成: ${deleted} 个文件/目录，释放 ${formatSize(totalSize)}`);
+  }
 }
