@@ -613,6 +613,11 @@ async function helpHtml(options: HelpOptions): Promise<void> {
         icon: '🛠️',
         desc: '自动化开发流程编排'
       },
+      '🔧 维护与升级': {
+        cmds: ['update', 'doctor', 'config'],
+        icon: '🔧',
+        desc: '项目升级、健康检查、配置管理'
+      },
     };
 
     const catBody = Object.entries(categories).map(([cat, { cmds, icon, desc }]) => 

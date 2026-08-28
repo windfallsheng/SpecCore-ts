@@ -458,6 +458,52 @@ Phase 2: 逐节填充（每节独立调用 LLM，携带前文上下文）
 
 **核心设计原则**：质量门禁必须利用 analyze/split 阶段已精准拆分的文档，而不是重新做全局搜索。每个检查只读本任务目录下的文档（`00-specs/REQ.md`、`DEV_GUIDE.md` 等），确保验证粒度与文档粒度对齐。
 
+#### 契约冲突裁决模型（v8.3.24+）
+
+质量门禁的升级形态。将 16 项检查按影响维度重新组织为三层契约体系，每层对应不同的裁决机制：
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    契约冲突裁决架构                           │
+├─────────────────────────────────────────────────────────────┤
+│  L1 机器契约          L2 规范契约           L3 架构契约      │
+│  (3 项)               (9 项)                (4 项)           │
+│                                                             │
+│  ⚙️ 编译通过            🤖 Spec 一致性        👤 安全合规    │
+│  ⚙️ 单元测试通过        🤖 API 契约合规       👤 依赖完整性  │
+│  ⚙️ 代码文件存在        🤖 Schema 一致性      👤 知识图谱一致│
+│                        🤖 Lint 合规          👤 部署清单检查 │
+│                        🤖 DEV_GUIDE 合规                     │
+│                        🤖 测试用例覆盖                       │
+│                        🤖 评审项合规                         │
+│                        🤖 错误码一致性                       │
+│                        🤖 规格文档质量                       │
+├─────────────────────────────────────────────────────────────┤
+│  裁决机制                                                   │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
+│  │ L1-Auto     │  │ L2-AI       │  │ L3-Human            │ │
+│  │ 自动裁决    │  │ 辅助裁决    │  │ 最终裁决            │ │
+│  │ fatal→reject│  │ pending-fix │  │ pending-review      │ │
+│  │ warn→pass   │  │ 生成修复建议│  │ 执行 verdict 命令   │ │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**三档配置模式**（`.speccore.yml`）：
+
+| 模式 | L1 | L2 | L3 | 阻断执行？ | 适用场景 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `full` | 自动裁决 + 阻断 | AI 辅助 + 等待确认 | 人工最终 + 阻断 | L1 fatal / L3 pending | 标准开发 |
+| `l1-only` | 自动裁决 + 阻断 | 仅报告，不阻塞 | 仅报告，不阻塞 | 仅 L1 fatal | 快速迭代 |
+| `report-only` | 仅报告 | 仅报告 | 仅报告 | 永不阻断 | CI 试点 |
+
+**裁决书**：每个任务执行后自动生成 `ARBITRATION_REPORT.md`，含三层契约的完整裁决记录、汇总统计、人工裁决入口。
+
+**`speccore verdict` 命令**：
+- `--list`：列出所有待裁决冲突（L2 pending-fix + L3 pending-review）
+- `--conflict <id> --decide <outcome> --reason <说明>`：进行人工裁决
+- `--report <Task-ID>`：查看指定任务的裁决书
+
 #### 语义定位引擎
 
 `src/core/semantic-locator.ts` 支持自然语言定位功能单元：
@@ -605,14 +651,14 @@ CONSTITUTION.md 的「## 端列表」章节是全项目唯一的端名来源：
 **核心原则：端名 = 工程名，一一对应。**
 
 - 端名是全项目唯一的标识符
-- 所有命令（analyze/split/execute）、目录名（020-specs/{端}/）、模板目录（templates/{level}/{端}/）均使用此处声明的端名
+- 所有命令（analyze/split/execute）、目录名（020-specs/{feature}/{端}/）、模板目录（templates/{level}/{端}/）均使用此处声明的端名
 - 「项目信息」表格的「对应端」列引用此列表中的端名，每行只填一个
 
 **端发现优先级（统一）**：
 ```
 Layer 0: CONSTITUTION.md「## 端列表」章节 ← v6.46.0+ 全局权威
-Layer 1: CONSTITUTION.md「对应端」列 ← 旧版回退
-Layer 2: 020-specs/ 子目录扫描 ← 目录回退
+Layer 1: CONSTITUTION.md「对应端」列
+Layer 2: 020-specs/{feature}/ 下的子目录扫描 ← 从功能模块目录中收集端名
 Layer 3: 默认 ['web']
 ```
 
@@ -735,15 +781,20 @@ requirement-admin.md                     → admin 端
                  NO  → 警告 + 占位符
 ```
 
-#### 2.4.3 双层架构生成规则
+#### 2.4.3 三层架构生成规则（v8.3.17+）
 
-**全局文档（020-specs/ 根目录）**
+**全局文档（020-specs/overview/）**
 - 来源：所有跨端通用文档的内容
-- 包含：ANALYSIS.md, DEPS.md, RISK.md, MONITOR.md, REVIEW.md
+- 包含：ANALYSIS.md, DEPS.md, RISK.md, MONITOR.md, REVIEW.md, FUNCTION_MAP.md
 - 用途：建立迭代级基线，供所有端共享
 
-**端专属文档（020-specs/{端}/ 子目录）**
-- 来源：该端的专属文档内容 + 全局内容中按端分割的片段
+**功能模块文档（020-specs/{feature}/overview/）**
+- 来源：该功能模块的综合分析内容
+- 包含：REQUIREMENT.md, ANALYSIS.md, TECH.md, TEST.md, UI_SPEC.md
+- 用途：按功能模块组织规格，便于按需查阅和后续变更定位
+
+**端专属文档（020-specs/{feature}/{端}/ 子目录）**
+- 来源：该端在该功能模块下的专属文档内容
 - 包含：TECH.md, TEST.md, UI_SPEC.md
 - 用途：指导各端差异化实现
 
@@ -1052,6 +1103,67 @@ v6.40.2 及之前版本，`020-specs/` 根目录混合存放全局文档和端�
 - **读取侧**（10 个文件）：split.ts、prompt-builder.ts、dev.ts、status-panel.ts、cli.ts、iteration-from-global.ts、ai-context-generator.ts、next-steps.ts、quality-audit.ts
 - **Prompt 侧**：buildMultiDocPrompt() 更新 AI 写入指令
 
+### 2.8 020-specs/ 功能模块级目录重构（v8.3.17+）
+
+#### 背景
+
+v6.41.0-v8.3.16 期间，`020-specs/` 采用「端平铺」结构：全局文档放在 `overview/`，各端专属文档直接放在 `020-specs/{端}/`。这种结构在需求复杂、功能模块多的项目中存在两个问题：
+
+1. **难以按功能查阅**：当项目有 10+ 个功能模块时，所有端的文档混在一起，无法快速定位「订单模块」相关的所有规格
+2. **变更影响域不清晰**：需求变更时，需要遍历所有端目录才能确定受影响范围
+
+#### 新结构
+
+`020-specs/` 按需求文档名（即功能模块名）组织，每个功能模块目录下包含 `overview/` 综合文档和各端专属子目录：
+
+```
+020-specs/
+├── overview/                        ← 迭代级全局文档
+│   ├── REQUIREMENT.md
+│   ├── ANALYSIS.md
+│   ├── FUNCTION_MAP.md
+│   ├── RISK.md
+│   ├── DEPS.md
+│   └── MONITOR.md
+├── 用户认证/                        ← 功能模块 1
+│   ├── overview/                    ← 功能模块综合文档
+│   │   ├── REQUIREMENT.md
+│   │   ├── ANALYSIS.md
+│   │   └── TECH.md
+│   ├── api/                         ← 后端服务端
+│   │   ├── TECH.md
+│   │   └── TEST.md
+│   └── h5/                          ← 前端端
+│       ├── TECH.md
+│       ├── TEST.md
+│       └── UI_SPEC.md
+├── 订单管理/                        ← 功能模块 2
+│   ├── overview/
+│   └── ...
+└── PLATFORMS.md                     ← 端发现元数据
+```
+
+**关键决策**：
+- **功能模块 = 需求文档名**：从 `010-requirements/features/` 或 `010-requirements/` 根目录扫描 `.md` 文件提取功能模块列表
+- **三层架构**：`overview/`（全局）→ `{feature}/overview/`（模块综合）→ `{feature}/{platform}/`（端专属）
+- **骨架生成按功能模块**：`computeFeatureBasedAnalyzeManifest()` 为每个功能模块 + 每个端生成 TECH.md/TEST.md/UI_SPEC.md 骨架
+- **sanitizeSpecDirectories() 允许功能模块目录存在**：清理逻辑只归档纯数字或特殊符号目录
+
+#### 移除向后兼容（v8.3.21+）
+
+由于项目暂无外部用户，v8.3.21 彻底移除了所有旧结构兼容逻辑：
+- 不再检测 `020-specs/` 是否为旧结构（移除 `isLegacySpecDir()` 调用）
+- 所有命令统一按功能模块级结构处理
+- `resolveGlobalSpecPath()` 中的根目录回退已移除，统一从 `overview/` 读取
+
+**适配的文件**：
+- `analyze.ts`：骨架创建、apply 模式路由、sanitize 逻辑
+- `split.ts`：detectPlatforms、上下文加载、loadSpecContents、preSplitGate
+- `prompt-builder.ts`：loadExtraSpecs、execute 分支扫描
+- `execute.ts`：UI_SPEC 检查、任务过滤、子任务扫描
+- `plan.ts`：RISK.md/DEPS.md 路径
+- `dev.ts`、`status-panel.ts`、`quality-audit.ts`：全局文档路径
+
 ---
 
 ## 3. 迭代目录结构
@@ -1067,8 +1179,8 @@ Iteration-NNN-name/
 │   ├── refactors/{refactor}.md   ← 扁平重构文档（1 文件 = 1 refactor 任务）
 │   ├── research/{topic}.md       ← 扁平调研文档（1 文件 = 1 research 任务）
 │   └── assets/{prd,prototypes,designs}/
-├── 020-specs/                     ← 迭代级 analyze 输出（全局基线，双层架构）
-│   ├── overview/                  ← 综合文档（v6.78.0+ 从 global/ 改名）
+├── 020-specs/                     ← 迭代级 analyze 输出（全局基线，三层架构 v8.3.17+）
+│   ├── overview/                  ← 迭代级全局文档
 │   │   ├── REQUIREMENT.md         ← 需求规格汇总（含「涉及端」列）
 │   │   ├── ANALYSIS.md            ← 全量需求分析
 │   │   ├── DEPS.md                ← 依赖清单
@@ -1080,10 +1192,15 @@ Iteration-NNN-name/
 │   │   ├── REVIEW.md              ← 评审清单
 │   │   ├── RISK.md                ← 风险评估
 │   │   └── MONITOR.md             ← 监控方案
-│   ├── {端名}/                    ← 各端专属文档（如 admin-web/h5-mobile/booking-service）
-│   │   ├── TECH.md                ← 该端技术方案
-│   │   ├── TEST.md                ← 该端测试计划
-│   │   └── UI_SPEC.md             ← 该端 UI 规格（仅前端）
+│   ├── {feature}/                 ← 功能模块目录（如 用户认证/订单管理）
+│   │   ├── overview/              ← 功能模块综合文档
+│   │   │   ├── REQUIREMENT.md
+│   │   │   ├── ANALYSIS.md
+│   │   │   └── TECH.md
+│   │   └── {端名}/                ← 各端专属文档（如 api/h5/admin）
+│   │       ├── TECH.md            ← 该端在该模块下的技术方案
+│   │       ├── TEST.md            ← 该端测试计划
+│   │       └── UI_SPEC.md         ← 该端 UI 规格（仅前端）
 │   └── PLATFORMS.md               ← 端列表元数据
 ├── 030-tasks/                     ← 所有开发任务（按类型分层）
 │   ├── feature/                   ← 功能类任务
@@ -1358,7 +1475,7 @@ init → doc2spec → analyze → split → plan → execute → pr → done →
 |------|------|------|
 | init | - | `.speccore/` + `Iteration-sample/` + AGENTS.md |
 | doc2spec | Word/MD PRD | `010-requirements/{feature}/README.md`；`--classify` 模式：sources/ → staging/ → 020-specs/{type}/ |
-| analyze | 010-requirements/ 所有 .md → CONSTITUTION 映射 | `020-specs/` 双层架构（全局文档放根目录 + 各端专属文档放 `{端名}/` 子目录） |
+| analyze | 010-requirements/ 所有 .md → CONSTITUTION 映射 | `020-specs/` 三层架构（overview/ 全局 + `{feature}/overview/` 模块综合 + `{feature}/{端}/` 端专属） |
 | split | 020-specs/ + CONSTITUTION.md 端配置 | `030-tasks/{type}/Task-NNN-slug/`，按端智能推断涉及的端并拆分子任务 |
 | plan | 任务列表 + STAFFING | `PLAN.md` + `speccore-plan.html` + `plan.json` |
 | execute | REQ.md + TECH.md → AI 生成代码 | 源码 + .issues.md + 多任务时自动生成 `PLAN.md` |
@@ -2162,6 +2279,59 @@ cat /tmp/speccore-resp.json | speccore execute --response - -t Task-001
 2. 输出自动更新文件清单
 3. AI 模式：用户说"升级" → AI 智能合并
 4. 手动模式：对照 UPGRADE.md 自行修改
+
+#### 11.2.1 `speccore update` 全面升级检查框架（v8.3.25+）
+
+`update` 命令从仅对比版本号 + 更新命令文件，升级为**覆盖所有必要文件的全面健康检查**：
+
+**检查范围**：
+
+| 文件/目录 | 检查内容 | 问题类型 | 自动修复 |
+|:---|:---|:---|:---:|
+| `.speccore.yml` | 与默认配置的结构差异 | `structural-diff` | ❌ |
+| `.speccore/PROJECT.yaml` | 与默认配置的结构差异 | `structural-diff` | ❌ |
+| `.speccore/local/context.json` | 必填字段完整性 | `missing-field` | ❌ |
+| `.speccore/AI-RULES.md` | 文件存在性 | `missing-file` | ✅ |
+| `.speccore/{AGENTS,RULES,COMMANDS,SKILLS,HOOKS}/` | 目录完整性 | `missing-dir` | ✅ |
+| `Iteration-*/` | 旧版 Task-NNN 平铺结构 | `format-deprecated` | ✅ |
+| `.speccore/CONSTITUTION.md` | 格式自动迁移 + 章节对比 | `format-deprecated` | 部分 |
+
+**架构设计**：
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  checkAllUpgradeIssues(projectRoot)                         │
+│  ├── 系统配置检查 (.speccore.yml)                           │
+│  ├── 项目配置检查 (PROJECT.yaml)                            │
+│  ├── 上下文配置检查 (context.json)                          │
+│  ├── 规范数据库完整性检查 (AGENTS/RULES/...)               │
+│  ├── AI 参考手册存在性检查 (AI-RULES.md)                    │
+│  └── 迭代结构 deprecated 检测 (Iteration-*/Task-NNN)        │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  UpgradeCheckResult                                         │
+│  ├── hasIssues: boolean                                     │
+│  ├── issues: UpgradeIssue[]  (5 种类型)                     │
+│  └── reports: {file, path}[]  (差异报告文件路径)            │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  update.ts 报告输出                                          │
+│  ├── 过滤 auto-fix 类型 (missing-dir / missing-file)        │
+│  ├── 按文件分组展示                                          │
+│  ├── 附处理建议 (💡)                                         │
+│  └── 结构性差异 → 自动生成 .speccore/config/upgrade-diff.md │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**关键设计决策**：
+- **单一检查函数**：`checkAllUpgradeIssues()` 可被 `update`、`doctor`、`status` 等命令复用，避免检查逻辑分散
+- **类型化问题**：`UpgradeIssue.type` 支持 5 种类型，调用方可按需过滤（如 update 过滤 auto-fix 类型）
+- **报告与修复分离**：检查只发现问题，不修改文件；修复由调用方根据场景决定（update 自动修复部分问题，doctor 只报告不修复）
+- **差异报告持久化**：结构性差异自动生成 Markdown 报告到 `.speccore/config/upgrade-diff-*.md`，供用户离线查阅
 
 ### 11.3 低置信拒绝与歧义检测
 
@@ -4154,3 +4324,248 @@ export const SKELETON_MARKER = '<!-- SPEC-SKELETON -->';
 | 进度追踪 | CLI（确定性） | 通过骨架标记检测，不依赖 AI 报告 |
 
 **核心原则**：对于结构性决策，应尽可能用 CLI 读取预定义字段或执行确定性操作，而不是让 AI 判断。AI 适合做「内容生成」，不适合做「结构决策」。
+
+---
+
+## 15. 统一配置版本化（v8.3.25+）
+
+### 15.1 问题背景
+
+在 v8.3.24 之前，项目配置分散在多个文件中：
+- `.speccore/CONSTITUTION.md` — 端列表、技术栈、命名规范（Markdown 表格，机器解析脆弱）
+- `.speccore/SETTINGS.md`（已废弃）— 运行时行为配置（键值对表格，无结构校验）
+- `.speccore/config/ask.json` — Ask 引擎路由和 LLM Provider（JSON，与 CLI 风格不一致）
+- `.speccore.yml`（早期设计）— 仅包含项目信息、Git、质量门禁，配置域不完整
+
+**问题**：
+1. 配置分散，新用户不知道去哪里修改
+2. 无结构校验，拼写错误或类型错误导致运行时异常
+3. CLI 升级新增配置项时，旧项目静默缺失新功能
+4. Markdown/JSON/YAML 三种格式并存，维护成本高
+
+### 15.2 设计目标
+
+1. **单一配置入口**：`.speccore.yml` 成为唯一配置文件
+2. **版本化**：`schema_version` 字段标记配置结构版本，CLI 升级时自动检测
+3. **结构校验**：加载时自动校验字段类型和枚举值，错误即时报告
+4. **自动补全**：缺失字段自动填充默认值，不因配置不完整而阻塞
+5. **自动升级**：`speccore config --upgrade` 一键补全新字段、更新版本号
+
+### 15.3 配置结构
+
+```yaml
+schema_version: 1
+
+project:
+  name: spec-core-ts-cli
+  description: ...
+  version: 8.3.25
+
+tech_stack:
+  backend: TypeScript / NestJS
+  frontend: Vue / React
+
+team:
+  members:
+    - name: luzhaosheng
+      role: lead
+
+platforms:
+  - name: app
+    type: frontend
+    code_path: ./packages/app
+    git_repo: git@xxx/app.git
+
+git:
+  default_base: main
+  branch_prefix: feature/
+  protected_branches: [main, master]
+
+code_scope: [src/]
+
+conventions:
+  commit: conventional-commits
+  naming:
+    interface: /api/v1/{module}/{operation}
+    database: snake_case
+
+error_codes:
+  - code: 1001
+    meaning: 用户不存在
+
+quality_gates:
+  enforce_testing: true
+  enforce_review: true
+  require_pr: true
+
+arbitration:
+  enabled: true
+  mode: full
+
+settings:
+  assignee: { enabled: true, mode: loose }
+  trace: { enabled: true, auto_annotate: true }
+  archive: { auto_cleanup: false }
+  plan: { parallel_suggest: true }
+  validation: { strict_mode: false }
+  sync: { auto_check: true }
+  patterns: { auto_save: smart }
+  review: { check_assignee: false }
+
+ask:
+  routing:
+    mode: hybrid
+    high_threshold: 70
+    low_threshold: 45
+    auto_host_ai: true
+    cache_enabled: true
+  llm_providers: []
+
+config_history:
+  - date: 2026-08-28
+    change: 升级到 schema_version=1
+```
+
+### 15.4 版本化机制
+
+**Schema 版本号**：
+- `CURRENT_SCHEMA_VERSION = 1`（代码常量，随 CLI 版本递增）
+- `.speccore.yml` 中 `schema_version` 字段标记项目配置版本
+
+**加载时检测**：
+```typescript
+if (config.schema_version < CURRENT_SCHEMA_VERSION) {
+  warn('配置结构已过期，建议运行: speccore config --upgrade');
+} else if (config.schema_version > CURRENT_SCHEMA_VERSION) {
+  warn('CLI 版本可能过旧，建议升级 CLI');
+}
+```
+
+**自动补全**：
+```typescript
+const merged = deepMerge(DEFAULT_CONFIG, parsed);
+// DEFAULT_CONFIG 包含所有字段的默认值
+// 用户配置缺失的字段自动使用默认值
+```
+
+**升级命令**：
+```bash
+speccore config --upgrade
+```
+- 补全缺失字段（deepMerge）
+- 更新 `schema_version = CURRENT_SCHEMA_VERSION`
+- 追加升级记录到 `config_history`
+- 重写 `.speccore.yml`
+
+### 15.5 配置差异检测与交互式升级
+
+**五类差异检测**：
+
+| 差异类型 | 检测逻辑 | 自动/手动 |
+|----------|----------|-----------|
+| **新增字段** | 目标 schema 有，当前配置没有 | 自动补全默认值 |
+| **删除字段** | 当前配置有，目标 schema 没有 | **需用户确认** |
+| **类型变更** | 同路径字段类型不同（`typeof`） | **需用户确认** |
+| **枚举值非法** | 字符串值不在 `ENUM_CONSTRAINTS` 合法列表中 | **需用户确认** |
+| **结构变更** | 对象↔数组、数组元素类型变化 | **需用户确认** |
+
+**枚举约束定义**（`ENUM_CONSTRAINTS`）：
+```typescript
+const ENUM_CONSTRAINTS = {
+  'platforms.*.type': ['frontend', 'backend', 'infra'],
+  'arbitration.mode': ['full', 'l1-only', 'report-only'],
+  'settings.assignee.mode': ['strict', 'loose', 'off'],
+  'settings.patterns.auto_save': ['off', 'smart', 'aggressive'],
+  'ask.routing.mode': ['hybrid', 'cli-only', 'host-ai-only'],
+  'ask.llm_providers.*.type': ['ollama', 'openai', 'anthropic', 'custom'],
+};
+```
+
+支持通配符 `*` 的路径遍历（`getValuesAtPath`），如 `platforms.*.type` 自动匹配 `platforms[0].type`、`platforms[1].type` 等。
+
+**交互式升级流程**：
+```
+speccore config --upgrade
+    ↓
+detectConfigDiff(current, DEFAULT_CONFIG)
+    ↓
+requiresUserConfirmation(diff)?
+    ├── 是 → 生成 .speccore/config/upgrade-diff.md
+    │         输出差异报告到终端
+    │         中止升级，提示用户手动处理
+    │         用户修改后重新运行 --upgrade
+    └── 否 → 执行迁移（MIGRATIONS）
+              补全缺失字段（deepMerge）
+              更新 schema_version
+              记录升级历史
+              重写 .speccore.yml
+```
+
+**差异报告文件**（`.speccore/config/upgrade-diff.md`）：
+- 生成时间、当前/目标 schema_version
+- 五类差异的详细列表
+- 每项差异的处理建议
+- 修改完成后重新运行的命令
+
+**全链路检测**：
+- `speccore config --upgrade` — 升级前强制检测
+- `speccore doctor` — 健康诊断时检测（即使 schema_version 匹配也检测结构性差异）
+- `speccore status` — 状态面板中显示差异警告
+
+### 15.6 结构校验
+
+自定义校验器覆盖：
+- `schema_version` 必须是数字
+- `platforms[].type` 必须是 `frontend/backend/infra`
+- `arbitration.mode` 必须是 `full/l1-only/report-only`
+- `settings.patterns.auto_save` 必须是 `off/smart/aggressive`
+- `quality_gates.*` 必须是布尔值
+- `git.protected_branches` 必须是数组
+
+校验失败时：
+1. 报告具体错误（字段路径 + 期望类型）
+2. 用默认值兜底，尽量继续运行
+3. 在 `speccore doctor` 中显示配置健康度
+
+### 15.7 健康检查集成
+
+**doctor 命令**：
+- `.speccore.yml` 是否存在
+- `schema_version` 是否匹配当前 CLI
+- `platforms` 是否非空
+- 校验警告数量
+- 是否发生过自动补全
+- **配置差异检测**（v8.3.25+）：即使版本匹配，也检测删除/类型/枚举/结构差异
+
+**status 命令**：
+- 面板末尾显示配置版本状态
+- 过期时提示升级命令
+- **配置差异警告**（v8.3.25+）：版本匹配时检测结构性差异
+
+### 15.8 不迁移的内容
+
+以下文件保持独立，不纳入 `.speccore.yml`：
+
+| 文件 | 原因 |
+|------|------|
+| `.speccore/local/context.json` | 运行时状态，非配置 |
+| `.speccore/PATTERNS/` | 自动沉淀的资产，非配置 |
+| `.speccore/GLOBAL/` | 自动生成的全局索引 |
+| `.speccore/cache/` | 缓存，不应手动维护 |
+| `.speccore/ITERATIONS/` | 迭代数据，随业务变化 |
+
+### 15.9 向后兼容策略（项目内）
+
+`loadConfig()` 保持返回 `SpecConfig`（兼容所有现有调用者）：
+```typescript
+// 旧代码
+const config = await loadConfig();
+config.project.name; // 直接访问
+
+// 新代码
+const { config, warnings, migrated } = await loadConfigWithMeta();
+// warnings: 配置警告列表
+// migrated: 是否发生过自动补全或版本迁移
+```
+
+`getConfig()` 作为 `loadConfig()` 的别名保留，供旧代码使用。

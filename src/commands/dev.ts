@@ -8,7 +8,7 @@ import { execSync } from 'child_process';
 import { logger, Spinner } from '../utils/logger';
 import { isAiContext, detectHostAi } from '../core/ask-host-ai';
 import { getDefaultIteration } from '../core/context';
-import { resolveGlobalSpecPath, GLOBAL_SPECS_DIR } from '../core/spec-paths';
+import { GLOBAL_SPECS_DIR } from '../core/spec-paths';
 import { devAiGuide, DevPhase, DevPipelineState } from '../core/dev-llm';
 import { tryHostAi } from '../core/ask-host-ai';
 import { PipelineEngine } from '../core/pipeline-engine';
@@ -98,7 +98,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
 
   const iterDir = `Iteration-${iteration}`;
   const legacyReq = join(iterDir, '010-requirements', 'REQUIREMENT.md');
-  const analysis = await resolveGlobalSpecPath(join(iterDir, '020-specs'), 'ANALYSIS.md') || join(iterDir, '020-specs', 'ANALYSIS.md');
+  const analysis = join(iterDir, '020-specs', 'overview', 'ANALYSIS.md');
   if (!(await pathExists(legacyReq))) {
     showPhase('导入需求', ['speccore doc2spec -f PRD.docx -i ' + iteration]);
   } else if (!(await pathExists(analysis))) {
@@ -227,8 +227,8 @@ async function autoPipeline(options: DevOptions): Promise<void> {
         break;
       }
       case 'analyze': {
-        const analysis = await resolveGlobalSpecPath(join(iterDir, '020-specs'), 'ANALYSIS.md') || join(iterDir, '020-specs', 'ANALYSIS.md');
-        const techSpec = join(iterDir, '020-specs', 'ANALYSIS.md');
+        const analysis = join(iterDir, '020-specs', 'overview', 'ANALYSIS.md');
+        const techSpec = join(iterDir, '020-specs', 'overview', 'ANALYSIS.md');
         let needsAnalysis = !(await pathExists(analysis));
         let needsSpecs = false;
         if (!needsAnalysis) {
@@ -424,8 +424,8 @@ async function renderDevHtml(options: DevOptions): Promise<string> {
   const isInit = await pathExists('.speccore');
   const phases: DevPhase[] = [
     { name: lang === 'en' ? I18N.en.stepInit : I18N.zh.stepInit,   key: 'init',    done: !!isInit,      icon: '🏗️', cmd: 'init',     description: '初始化 SpecCore 项目结构',        args: '',
-      detail: '创建 .speccore/ 目录及配置文件（CONSTITUTION.md、SETTINGS.md 等），奠定项目规范基础。',
-      prerequisites: ['空目录或已有代码仓库'], outputs: ['.speccore/CONSTITUTION.md', '.speccore/SETTINGS.md', '.speccore/local/context.json'],
+      detail: '创建 .speccore/ 目录及配置文件（CONSTITUTION.md、.speccore.yml 等），奠定项目规范基础。',
+      prerequisites: ['空目录或已有代码仓库'], outputs: ['.speccore/CONSTITUTION.md', '.speccore.yml', '.speccore/local/context.json'],
       tips: '如果已有项目，init 会扫描现有工程结构自动填写技术栈。', examples: ['speccore init'] },
     { name: lang === 'en' ? I18N.en.stepDoc : I18N.zh.stepDoc, key: 'doc',     done: false,          icon: '📝', cmd: 'doc2spec', description: '导入 PRD 文档，AI 转换需求规格', args: '-f PRD.docx' + (iterName ? ' --iteration ' + iterName : ''),
       detail: '将产品需求文档（Word / PDF / Markdown）导入迭代，AI 自动提取并转换为标准需求规格。也支持自然语言直接描述需求。',
@@ -456,7 +456,7 @@ async function renderDevHtml(options: DevOptions): Promise<string> {
   if (iterDir) {
     const reqDoc = join(iterDir, '010-requirements', 'REQUIREMENT.md');
     const hasReqFeature = await hasFeatureDirs(iterDir);  // 新结构: 010-requirements/{feature}/
-    const analysis = await resolveGlobalSpecPath(join(iterDir, '020-specs'), 'ANALYSIS.md') || join(iterDir, '020-specs', 'ANALYSIS.md');
+    const analysis = join(iterDir, '020-specs', 'overview', 'ANALYSIS.md');
     if ((await pathExists(reqDoc)) || hasReqFeature) phases[1].done = true;
     if (await pathExists(analysis)) phases[2].done = true;
     try {

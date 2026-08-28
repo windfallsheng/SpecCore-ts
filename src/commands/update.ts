@@ -6,7 +6,18 @@ import { writeFile, pathExists, readFile, readdir, ensureDir } from 'fs-extra';
 import { join } from 'path';
 import { logger, Spinner } from '../utils/logger';
 import { version as CURRENT_VERSION } from '../../package.json';
-import { safeWriteWithBackup, safeCopyDirWithBackup, _updateConflicts, generateSettingsContent, generateAIRulesContent, TOOL_COMMANDS, initAgentsDir, initRulesDir, initCommandsDir, initSkillsDir, initHooksDir, syncAgentsMd } from './init';
+import { safeWriteWithBackup, safeCopyDirWithBackup, _updateConflicts, generateAIRulesContent, TOOL_COMMANDS, initAgentsDir, initRulesDir, initCommandsDir, initSkillsDir, initHooksDir, syncAgentsMd } from './init';
+import {
+  initConfig,
+  initProjectConfig,
+  loadConfigWithMeta,
+  loadProjectConfigWithMeta,
+  detectConfigDiff,
+  requiresUserConfirmation,
+  DEFAULT_CONFIG,
+  DEFAULT_PROJECT_CONFIG,
+  formatConfigDiff,
+} from '../core/unified-config';
 
 // ── 当前版本的命令列表统一从 init.ts 导入（单一事实来源）──
 // 避免 init.ts 与 update.ts 的命令列表不一致导致清理误删
@@ -124,11 +135,24 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
     }
   } catch {}
 
-  // 4c-2. 更新 SETTINGS.md（用户可能自定义，旧文件重命名时间戳提示迁移）
+  // 4c-2. 全面升级检查（v8.3.25+）
+  //        自动检查所有必要文件的升级问题
+  const upgradeResult = await checkAllUpgradeIssues(projectRoot);
+
+  // 4c-3. 更新 .speccore.yml（系统配置）
   //       AI-RULES.md 是纯生成物（AI 参考手册），直接覆盖
   try {
-    await safeWriteWithBackup(join(speccoreDir, 'SETTINGS.md'), generateSettingsContent());
+    await initConfig();
     await writeFile(join(speccoreDir, 'AI-RULES.md'), generateAIRulesContent());
+  } catch {}
+
+  // 4c-4. 生成 .speccore/PROJECT.yaml（如不存在）
+  try {
+    const projectYamlPath = join(projectRoot, '.speccore', 'PROJECT.yaml');
+    if (!(await pathExists(projectYamlPath))) {
+      const projectName = require('path').basename(projectRoot);
+      await initProjectConfig(projectName);
+    }
   } catch {}
 
   // 4d. 清理旧版本残留的命令文件和 Skill 目录
@@ -154,7 +178,8 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   logger.info('  📦 以下文件已同步到最新版本:');
   logger.info('     ✅ .agents/skills/ — Skill 全量更新');
   logger.info('     ✅ AGENTS.md — 项目规则');
-  logger.info('     ✅ SETTINGS.md — 框架配置');
+  logger.info('     ✅ .speccore.yml — 系统配置');
+  logger.info('     ✅ .speccore/PROJECT.yaml — 项目配置');
   logger.info('     ✅ AI-RULES.md — AI 参考手册');
   logger.info('     ✅ .speccore/AGENTS/ — 角色定义规范库');
   logger.info('     ✅ .speccore/RULES/ — 编码规范库');
@@ -162,6 +187,48 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   logger.info('     ✅ .speccore/SKILLS/ — 可复用技能库');
   logger.info('     ✅ .speccore/HOOKS/ — 生命周期钩子库');
   logger.info('');
+
+  // 全面升级问题报告（过滤 update 自动修复的问题）
+  // missing-dir / missing-file 由 update 流程自动创建，不在报告中重复提示
+  const manualIssues = upgradeResult.issues.filter(
+    i => i.type !== 'missing-dir' && i.type !== 'missing-file'
+  );
+  if (manualIssues.length > 0) {
+    logger.info('━'.repeat(50));
+    logger.info('');
+    logger.info('  ⚠️  检测到以下升级问题，需要手动处理:');
+    logger.info('');
+
+    // 按文件分组展示
+    const byFile = new Map<string, UpgradeIssue[]>();
+    for (const issue of manualIssues) {
+      const list = byFile.get(issue.file) || [];
+      list.push(issue);
+      byFile.set(issue.file, list);
+    }
+
+    for (const [file, issues] of byFile) {
+      logger.info(`  📄 ${file}:`);
+      for (const issue of issues) {
+        logger.info(`     • ${issue.message}`);
+        if (issue.suggestion) {
+          logger.info(`       💡 ${issue.suggestion}`);
+        }
+      }
+      logger.info('');
+    }
+
+    if (upgradeResult.reports.length > 0) {
+      logger.info('  📝 详细报告见:');
+      for (const report of upgradeResult.reports) {
+        logger.info(`     ${report.path}`);
+      }
+      logger.info('');
+    }
+
+    logger.info('━'.repeat(50));
+    logger.info('');
+  }
   // 冲突文件汇总
   if (_updateConflicts.length > 0) {
     logger.info(`  ⚠️  ${_updateConflicts.length} 个文件有内容冲突，旧版已重命名为时间戳格式`);
@@ -203,11 +270,177 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
     logger.warn(`⚠️  自动迁移跳过: ${err}`);
   }
 
-  // ── 6. CONSTITUTION.md 格式升级检查 ──
+}
+
+// ── 全面升级检查（v8.3.25+）──
+// speccore update 时自动检查所有必要文件的升级问题
+interface UpgradeIssue {
+  file: string;
+  type: 'structural-diff' | 'missing-field' | 'missing-file' | 'missing-dir' | 'format-deprecated';
+  message: string;
+  suggestion?: string;
+}
+
+interface UpgradeCheckResult {
+  hasIssues: boolean;
+  issues: UpgradeIssue[];
+  reports: Array<{ file: string; path: string }>;
+}
+
+async function checkAllUpgradeIssues(projectRoot: string): Promise<UpgradeCheckResult> {
+  const result: UpgradeCheckResult = { hasIssues: false, issues: [], reports: [] };
+  const speccoreDir = join(projectRoot, '.speccore');
+
+  // ── 1. 系统配置 .speccore.yml ──
   try {
-    const { checkUpgradeHints } = await import('./init');
-    await checkUpgradeHints(projectRoot, speccoreDir);
-  } catch {
-    // 检查失败不影响主流程
+    const systemConfigPath = join(projectRoot, '.speccore.yml');
+    if (await pathExists(systemConfigPath)) {
+      const { config } = await loadConfigWithMeta();
+      const diff = detectConfigDiff(config, DEFAULT_CONFIG);
+      if (requiresUserConfirmation(diff)) {
+        result.hasIssues = true;
+        const lines = formatConfigDiff(diff);
+        for (const line of lines) {
+          result.issues.push({
+            file: '.speccore.yml',
+            type: 'structural-diff',
+            message: line,
+            suggestion: '运行: speccore config --upgrade',
+          });
+        }
+        try {
+          const reportPath = join(speccoreDir, 'config', 'upgrade-diff-system.md');
+          await ensureDir(join(speccoreDir, 'config'));
+          const reportLines = [
+            '# .speccore.yml 升级差异报告',
+            '',
+            `生成时间: ${new Date().toLocaleString('zh-CN')}`,
+            `当前 schema_version: ${config.schema_version}`,
+            '',
+            '## 检测到的变更',
+            '',
+            ...lines,
+            '',
+            '## 处理建议',
+            '',
+            '运行: speccore config --upgrade',
+          ];
+          await writeFile(reportPath, reportLines.join('\n'), 'utf-8');
+          result.reports.push({ file: '.speccore.yml', path: reportPath });
+        } catch { /* 静默失败 */ }
+      }
+    }
+  } catch { /* 静默失败 */ }
+
+  // ── 2. 项目配置 .speccore/PROJECT.yaml ──
+  try {
+    const projectConfigPath = join(speccoreDir, 'PROJECT.yaml');
+    if (await pathExists(projectConfigPath)) {
+      const { config } = await loadProjectConfigWithMeta();
+      const diff = detectConfigDiff(config, DEFAULT_PROJECT_CONFIG);
+      if (requiresUserConfirmation(diff)) {
+        result.hasIssues = true;
+        const lines = formatConfigDiff(diff);
+        for (const line of lines) {
+          result.issues.push({
+            file: '.speccore/PROJECT.yaml',
+            type: 'structural-diff',
+            message: line,
+            suggestion: '运行: speccore config --upgrade --project',
+          });
+        }
+        try {
+          const reportPath = join(speccoreDir, 'config', 'upgrade-diff-project.md');
+          await ensureDir(join(speccoreDir, 'config'));
+          const reportLines = [
+            '# .speccore/PROJECT.yaml 升级差异报告',
+            '',
+            `生成时间: ${new Date().toLocaleString('zh-CN')}`,
+            `当前 schema_version: ${config.schema_version}`,
+            '',
+            '## 检测到的变更',
+            '',
+            ...lines,
+            '',
+            '## 处理建议',
+            '',
+            '运行: speccore config --upgrade --project',
+          ];
+          await writeFile(reportPath, reportLines.join('\n'), 'utf-8');
+          result.reports.push({ file: '.speccore/PROJECT.yaml', path: reportPath });
+        } catch { /* 静默失败 */ }
+      }
+    }
+  } catch { /* 静默失败 */ }
+
+  // ── 3. context.json 格式检查 ──
+  try {
+    const contextPath = join(speccoreDir, 'local', 'context.json');
+    if (await pathExists(contextPath)) {
+      const ctx = JSON.parse(await readFile(contextPath, 'utf-8'));
+      const expectedFields = ['currentIteration', 'history'];
+      const missingFields = expectedFields.filter(f => !(f in ctx));
+      if (missingFields.length > 0) {
+        result.hasIssues = true;
+        result.issues.push({
+          file: '.speccore/local/context.json',
+          type: 'missing-field',
+          message: `缺少字段: ${missingFields.join(', ')}`,
+          suggestion: '建议备份后重新初始化，或手动补充缺失字段',
+        });
+      }
+    }
+  } catch { /* 静默失败 */ }
+
+  // ── 4. 规范数据库目录完整性检查 ──
+  const requiredDbDirs = ['AGENTS', 'RULES', 'COMMANDS', 'SKILLS', 'HOOKS'];
+  for (const dir of requiredDbDirs) {
+    const dirPath = join(speccoreDir, dir);
+    if (!(await pathExists(dirPath))) {
+      result.hasIssues = true;
+      result.issues.push({
+        file: `.speccore/${dir}/`,
+        type: 'missing-dir',
+        message: `规范数据库目录缺失`,
+        suggestion: '运行: speccore init --update 可自动创建',
+      });
+    }
   }
+
+  // ── 5. AI-RULES.md 存在性检查 ──
+  try {
+    const aiRulesPath = join(speccoreDir, 'AI-RULES.md');
+    if (!(await pathExists(aiRulesPath))) {
+      result.hasIssues = true;
+      result.issues.push({
+        file: '.speccore/AI-RULES.md',
+        type: 'missing-file',
+        message: 'AI 参考手册缺失',
+        suggestion: '运行: speccore init --update 可自动生成',
+      });
+    }
+  } catch { /* 静默失败 */ }
+
+  // ── 6. 迭代目录旧结构检测 ──
+  try {
+    const entries = await require('fs-extra').readdir(projectRoot, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory() && entry.name.startsWith('Iteration-')) {
+        const iterDir = join(projectRoot, entry.name);
+        const files = await require('fs-extra').readdir(iterDir);
+        if (files.some((f: string) => f.match(/^Task-\d+$/))) {
+          result.hasIssues = true;
+          result.issues.push({
+            file: `${entry.name}/`,
+            type: 'format-deprecated',
+            message: '检测到旧版任务目录结构（Task-NNN 平铺）',
+            suggestion: '运行: speccore migrate --iter ' + entry.name,
+          });
+          break;
+        }
+      }
+    }
+  } catch { /* 静默失败 */ }
+
+  return result;
 }

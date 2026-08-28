@@ -53,7 +53,8 @@ export type IntentType =
   | 'index_update'        // 更新索引
   | 'context'            // 查看上下文
   | 'doc2spec'           // Word 需求文档导入
-  | 'synthesize';        // 需求文档智能合成
+  | 'synthesize'         // 需求文档智能合成
+  | 'verdict';           // v8.3.24+: 契约冲突裁决
 
 /** 意图匹配结果 */
 export interface IntentResult {
@@ -537,6 +538,16 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     triggers: ['合成需求', '合并需求', '需求合成', 'synthesize', '智能合成', '需求合并', '多端合成', '全量分析', '跨端综合', '全量合成'],
     patterns: ['合成.*需求', '合并.*需求', '需求.*合成', '多端.*合并', '.*综合需求', '全量.*分析', '跨端.*综合', '.*功能单元.*合成'],
     description: '需求文档智能合成 — 已整合到 analyze --full（多端全量分析 → 跨端综合 → 功能单元合成）',
+  },
+  // v8.3.24+: 契约冲突裁决
+  {
+    id: 'verdict',
+    intent: 'verdict',
+    priority: 82,
+    triggers: ['裁决', '仲裁', '冲突裁决', '契约裁决', 'verdict', '查看冲突', '待裁决', '人工裁决', '裁决书', '解决冲突'],
+    patterns: ['裁决(.+)', '仲裁(.+)', '查看(.+)冲突', '解决(.+)冲突', '(.+)裁决'],
+    description: '契约冲突裁决 — 查看待裁决冲突、进行人工裁决、查看裁决书',
+    args: '--list | --conflict <id> --decide <outcome> | --report',
   },
 ];
 

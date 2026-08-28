@@ -52,6 +52,7 @@ import { prCommand } from './commands/pr';
 import { buildConstitution } from './core/constitution-builder';
 import { contextCommand } from './commands/context-output';
 import { doneCommand } from './commands/done';
+import { verdictCommand } from './commands/verdict';
 import { workspaceCommand } from './commands/workspace';
 // rename 命令
 import { renameCommand } from './commands/rename';
@@ -681,9 +682,11 @@ program
 program
   .command('config')
   .alias('cf')
-  .description('Manage SpecCore configuration and code rules')
-  .option('--get <key>', 'Get configuration value')
-  .option('--set <key=value>', 'Set configuration value (SETTINGS.md)')
+  .description('Manage SpecCore configuration (.speccore.yml)')
+  .option('--list', 'List all configuration values')
+  .option('--get <key>', 'Get configuration value by path (e.g., arbitration.mode)')
+  .option('--set <key=value>', 'Set configuration value (e.g., arbitration.mode=l1-only)')
+  .option('--upgrade', 'Upgrade config structure to latest schema_version')
   .option('-r, --rule <name>', 'Target spec-rule (CONSTITUTION.md)')
   .option('-t, --tech <target>', 'Target tech-stack (TECH_STACK.md): backend | frontend')
   .option('--reset', 'Reset to default configuration')
@@ -974,6 +977,20 @@ program
     .option("--prompt", "输出验收总结 Prompt 到 stdout（Skill 协作模式）")
   .option("--response <response>", "接收 AI 验收总结")
   .action(doneCommand);
+
+// v8.3.24+: 契约冲突裁决
+program
+  .command('verdict')
+  .alias('vd')
+  .description('契约冲突裁决：查看冲突、人工裁决、查看裁决书')
+  .option('--list', '列出待裁决冲突')
+  .option('--conflict <id>', '指定冲突 ID 进行裁决')
+  .option('--decide <outcome>', '裁决结果: pass | pass-with-conditions | reject | defer')
+  .option('--reason <reason>', '裁决理由')
+  .option('--report <task>', '查看指定任务的裁决书')
+  .option('-t, --task <task>', '指定任务')
+  .option('-i, --iteration <iteration>', '指定迭代')
+  .action(verdictCommand);
 
 program
   .command('completion [shell]')

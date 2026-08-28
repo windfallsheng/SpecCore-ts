@@ -839,7 +839,7 @@ speccore execute --task=Task-002 --force
 
 **Result**: Task-002 inherits Task-001's entities. Merge produces incremental changes only.
 
-**Custom base branch** in `.speccore/SETTINGS.md`:
+**Custom base branch** in `.speccore.yml`:
 ```yaml
 git:
   default_base: develop

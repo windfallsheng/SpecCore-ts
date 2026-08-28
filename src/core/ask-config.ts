@@ -37,13 +37,13 @@ export interface AskConfig {
 export interface LlmProviderConfig {
   name: string;
   enabled: boolean;
-  /** provider 类型：openai / ollama / custom */
-  type: 'openai' | 'ollama' | 'custom';
+  /** provider 类型：openai / ollama / anthropic / custom */
+  type: 'openai' | 'ollama' | 'anthropic' | 'custom';
   /** API endpoint（OpenAI兼容格式或Ollama本地地址） */
   endpoint?: string;
   /** 模型名称 */
   model?: string;
-  /** API Key（优先读取环境变量 SPECCORE_LLM_KEY） */
+  /** API Key（支持环境变量引用：${SPECCORE_LLM_KEY}） */
   apiKey?: string;
   /** 优先级：数字越小越优先 */
   priority: number;
@@ -100,6 +100,7 @@ const CONFIG_TTL = 5000; // 5秒内复用缓存
 
 /**
  * 加载 Ask 引擎配置（带缓存）
+ * v8.3.25+: 优先从 .speccore.yml 读取，回退到 ask.json
  */
 export async function loadAskConfig(): Promise<AskConfig> {
   const now = Date.now();
@@ -108,10 +109,27 @@ export async function loadAskConfig(): Promise<AskConfig> {
   }
 
   let fileConfig: Partial<AskConfig> = {};
+  let source = 'default';
 
-  if (await pathExists(CONFIG_PATH)) {
+  // v8.3.25+: 优先从 .speccore.yml 统一配置读取
+  try {
+    const { loadConfig } = await import('./unified-config');
+    const unified = await loadConfig();
+    if (unified.ask && (unified.ask.llm_providers.length > 0 || unified.ask.routing.mode)) {
+      fileConfig = mapUnifiedToAskConfig(unified.ask);
+      source = '.speccore.yml';
+    }
+  } catch { /* 静默回退到 ask.json */ }
+
+  // 回退到 ask.json（旧的独立配置）
+  if (source === 'default' && (await pathExists(CONFIG_PATH))) {
     try {
       fileConfig = (await readJson(CONFIG_PATH)) as Partial<AskConfig>;
+      // v8.3.25+: 解析环境变量引用（如 apiKey: "${SPECCORE_LLM_KEY}"）
+      const { resolveEnvVars } = await import('./unified-config');
+      const envResult = resolveEnvVars(fileConfig);
+      fileConfig = envResult.value as Partial<AskConfig>;
+      source = 'ask.json';
     } catch (e: any) {
       logger.warn(`ask-config 读取失败，使用默认值: ${e.message}`);
     }
@@ -123,6 +141,53 @@ export async function loadAskConfig(): Promise<AskConfig> {
   cachedConfig = deepMerge(DEFAULT_ASK_CONFIG, fileConfig, envOverrides);
   configLoadTime = now;
   return cachedConfig;
+}
+
+/**
+ * 将 .speccore.yml 的 ask 配置映射为 AskConfig（snake_case → camelCase）
+ */
+function mapUnifiedToAskConfig(ask: {
+  routing: {
+    mode: string;
+    high_threshold: number;
+    low_threshold: number;
+    auto_host_ai: boolean;
+    cache_enabled: boolean;
+    cache_min_hits: number;
+  };
+  rules: { force_host_ai: boolean };
+  llm_providers: {
+    name: string;
+    enabled: boolean;
+    type: string;
+    endpoint: string;
+    model: string;
+    apiKey?: string;
+    priority: number;
+  }[];
+}): Partial<AskConfig> {
+  return {
+    routing: {
+      mode: ask.routing.mode as AskConfig['routing']['mode'],
+      highThreshold: ask.routing.high_threshold,
+      lowThreshold: ask.routing.low_threshold,
+      autoHostAi: ask.routing.auto_host_ai,
+      cacheEnabled: ask.routing.cache_enabled,
+      cacheMinHits: ask.routing.cache_min_hits,
+    },
+    rules: {
+      forceHostAi: ask.rules.force_host_ai,
+    },
+    llmProviders: ask.llm_providers.map((p) => ({
+      name: p.name,
+      enabled: p.enabled,
+      type: p.type as LlmProviderConfig['type'],
+      endpoint: p.endpoint,
+      model: p.model,
+      apiKey: p.apiKey,
+      priority: p.priority,
+    })),
+  };
 }
 
 /**

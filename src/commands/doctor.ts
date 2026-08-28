@@ -8,6 +8,16 @@ import { logger } from '../utils/logger';
 import { findProjectRoot } from '../utils/task-utils';
 import { checkLock } from '../core/lock-manager';
 import { getNotifications } from '../core/notification';
+import {
+  loadConfigWithMeta,
+  loadProjectConfigWithMeta,
+  CURRENT_SCHEMA_VERSION,
+  PROJECT_CURRENT_SCHEMA_VERSION,
+  detectConfigDiff,
+  requiresUserConfirmation,
+  DEFAULT_CONFIG,
+  DEFAULT_PROJECT_CONFIG,
+} from '../core/unified-config';
 
 interface DiagnosisResult {
   ok: boolean;
@@ -58,6 +68,12 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<void> 
 
   // 9. v6.96.0+: 通知积压
   results.push(...(await checkNotificationBacklog(projectRoot)));
+
+  // 10. v8.3.25+: 系统配置健康度
+  results.push(...(await checkConfigFile(projectRoot)));
+
+  // 11. v8.3.25+: 项目配置健康度
+  results.push(...(await checkProjectConfigFile(projectRoot)));
 
   // 汇总输出
   printSummary(results);
@@ -353,5 +369,155 @@ async function checkNotificationBacklog(projectRoot: string): Promise<DiagnosisR
       message: `未读通知: ${unread.length} 条`,
     });
   }
+  return results;
+}
+
+// v8.3.25+: 检查系统配置 .speccore.yml
+async function checkConfigFile(_projectRoot: string): Promise<DiagnosisResult[]> {
+  const results: DiagnosisResult[] = [];
+  const configPath = join(process.cwd(), '.speccore.yml');
+  const exists = await pathExists(configPath);
+
+  results.push({
+    ok: exists,
+    category: '系统配置',
+    message: exists ? '.speccore.yml 存在' : '.speccore.yml 不存在（将使用默认配置）',
+    fix: exists ? undefined : '运行 speccore init 或 speccore config --upgrade 生成',
+  });
+
+  if (exists) {
+    try {
+      const { config, warnings, migrated } = await loadConfigWithMeta();
+
+      // schema_version
+      results.push({
+        ok: config.schema_version === CURRENT_SCHEMA_VERSION,
+        category: '系统配置',
+        message: `schema_version: ${config.schema_version} (当前 CLI 要求: ${CURRENT_SCHEMA_VERSION})`,
+        fix: config.schema_version !== CURRENT_SCHEMA_VERSION ? '运行 speccore config --upgrade' : undefined,
+      });
+
+      // 校验警告
+      if (warnings.length > 0) {
+        results.push({
+          ok: false,
+          category: '系统配置',
+          message: `发现 ${warnings.length} 个配置警告`,
+          fix: '运行 speccore doctor 查看详情，或 speccore config --upgrade 修复',
+        });
+      }
+
+      // 是否发生过迁移
+      if (migrated) {
+        results.push({
+          ok: true,
+          category: '系统配置',
+          message: '配置已自动补全缺失字段',
+        });
+      }
+
+      // v8.3.25+: 配置差异检测（即使版本匹配，也可能存在结构差异）
+      if (config.schema_version === CURRENT_SCHEMA_VERSION) {
+        const diff = detectConfigDiff(config, DEFAULT_CONFIG);
+        if (requiresUserConfirmation(diff)) {
+          const totalIssues = diff.removed.length + diff.typeChanged.length + diff.enumChanged.length + diff.structureChanged.length;
+          results.push({
+            ok: false,
+            category: '系统配置',
+            message: `检测到 ${totalIssues} 项配置结构性差异（删除/类型/枚举/结构）`,
+            fix: '查看 .speccore/config/upgrade-diff.md 或运行 speccore config --upgrade',
+          });
+        }
+      }
+    } catch (e: any) {
+      results.push({
+        ok: false,
+        category: '系统配置',
+        message: `.speccore.yml 解析失败: ${e.message}`,
+        fix: '检查 YAML 语法，或删除后重新生成',
+      });
+    }
+  }
+
+  return results;
+}
+
+// v8.3.25+: 检查项目配置 .speccore/PROJECT.yaml
+async function checkProjectConfigFile(_projectRoot: string): Promise<DiagnosisResult[]> {
+  const results: DiagnosisResult[] = [];
+  const configPath = join(process.cwd(), '.speccore', 'PROJECT.yaml');
+  const exists = await pathExists(configPath);
+
+  results.push({
+    ok: exists,
+    category: '项目配置',
+    message: exists ? '.speccore/PROJECT.yaml 存在' : '.speccore/PROJECT.yaml 不存在（将使用默认配置）',
+    fix: exists ? undefined : '运行 speccore init 或 speccore config --upgrade --project 生成',
+  });
+
+  if (exists) {
+    try {
+      const { config, warnings, migrated } = await loadProjectConfigWithMeta();
+
+      // schema_version
+      results.push({
+        ok: config.schema_version === PROJECT_CURRENT_SCHEMA_VERSION,
+        category: '项目配置',
+        message: `schema_version: ${config.schema_version} (当前 CLI 要求: ${PROJECT_CURRENT_SCHEMA_VERSION})`,
+        fix: config.schema_version !== PROJECT_CURRENT_SCHEMA_VERSION ? '运行 speccore config --upgrade --project' : undefined,
+      });
+
+      // 端列表
+      results.push({
+        ok: config.platforms.length > 0,
+        category: '项目配置',
+        message: config.platforms.length > 0
+          ? `端列表: ${config.platforms.map(p => p.name).join(', ')}`
+          : '端列表为空',
+        fix: config.platforms.length === 0 ? '在 .speccore/PROJECT.yaml 中配置 platforms' : undefined,
+      });
+
+      // 校验警告
+      if (warnings.length > 0) {
+        results.push({
+          ok: false,
+          category: '项目配置',
+          message: `发现 ${warnings.length} 个配置警告`,
+          fix: '运行 speccore doctor 查看详情，或 speccore config --upgrade --project 修复',
+        });
+      }
+
+      // 是否发生过迁移
+      if (migrated) {
+        results.push({
+          ok: true,
+          category: '项目配置',
+          message: '配置已自动补全缺失字段',
+        });
+      }
+
+      // 配置差异检测
+      if (config.schema_version === PROJECT_CURRENT_SCHEMA_VERSION) {
+        const diff = detectConfigDiff(config, DEFAULT_PROJECT_CONFIG);
+        if (requiresUserConfirmation(diff)) {
+          const totalIssues = diff.removed.length + diff.typeChanged.length + diff.enumChanged.length + diff.structureChanged.length;
+          results.push({
+            ok: false,
+            category: '项目配置',
+            message: `检测到 ${totalIssues} 项配置结构性差异（删除/类型/枚举/结构）`,
+            fix: '查看 .speccore/config/upgrade-diff-project.md 或运行 speccore config --upgrade --project',
+          });
+        }
+      }
+    } catch (e: any) {
+      results.push({
+        ok: false,
+        category: '项目配置',
+        message: `.speccore/PROJECT.yaml 解析失败: ${e.message}`,
+        fix: '检查 YAML 语法，或删除后重新生成',
+      });
+    }
+  }
+
   return results;
 }

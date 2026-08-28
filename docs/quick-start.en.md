@@ -207,7 +207,7 @@ speccore handover --iteration=2026-07-UserSystem      # ✅ CLI
 my-project/
 ├── .speccore/                     # Project Layer
 │   ├── CONSTITUTION.md            # Tech constitution
-│   ├── SETTINGS.md                # Framework config
+│   ├── .speccore.yml              # Unified configuration
 │   ├── GLOBAL/                    # Global Layer (multi-project management)
 │   │   ├── INDEX.md               # Requirement index
 │   │   ├── OVERVIEW.md            # Project panorama

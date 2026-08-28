@@ -5,6 +5,7 @@ import { readProjectGraph, scanTasks } from '../core/state';
 import { checkLock } from '../core/lock-manager';
 import { getNotifications, formatNotification } from '../core/notification';
 import { generateRecommendations, printRecommendations } from '../core/smart-recommend';
+import { loadConfigWithMeta, CURRENT_SCHEMA_VERSION, detectConfigDiff, requiresUserConfirmation, DEFAULT_CONFIG } from '../core/unified-config';
 import { pathExists, readdir } from 'fs-extra';
 import { join } from 'path';
 
@@ -42,6 +43,9 @@ export async function statusCommand(options: StatusOptions): Promise<void> {
     } catch { /* ignore */ }
 
     await printLockAndNotifications();
+
+    // v8.3.25+: 配置版本提示
+    await printConfigVersion();
 
     // v6.96.0+: 智能推荐
     const recommendations = await generateRecommendations(process.cwd());
@@ -215,5 +219,39 @@ async function printLockAndNotifications(): Promise<void> {
     }
     logger.info('   💡 运行 speccore notify 查看全部通知');
     logger.info('');
+  }
+}
+
+// v8.3.25+: 打印配置版本信息
+async function printConfigVersion(): Promise<void> {
+  try {
+    const { config, warnings, migrated } = await loadConfigWithMeta();
+    const isCurrent = config.schema_version === CURRENT_SCHEMA_VERSION;
+
+    logger.info('');
+    logger.info('⚙️  配置状态');
+    logger.info('');
+    logger.info(`   .speccore.yml: schema_version=${config.schema_version} (CLI 要求: ${CURRENT_SCHEMA_VERSION}) ${isCurrent ? '✅' : '⚠️'}`);
+
+    if (migrated && warnings.length > 0) {
+      logger.info(`   自动补全: ${warnings.length} 个字段已使用默认值`);
+    }
+
+    if (!isCurrent) {
+      logger.info(`   💡 运行 speccore config --upgrade 升级配置`);
+    }
+
+    // v8.3.25+: 配置差异警告（即使版本匹配，也可能存在结构差异）
+    if (isCurrent) {
+      const diff = detectConfigDiff(config, DEFAULT_CONFIG);
+      if (requiresUserConfirmation(diff)) {
+        const totalIssues = diff.removed.length + diff.typeChanged.length + diff.enumChanged.length + diff.structureChanged.length;
+        logger.info(`   ⚠️  检测到 ${totalIssues} 项配置结构性差异，建议运行 speccore config --upgrade`);
+      }
+    }
+
+    logger.info('');
+  } catch {
+    // 静默失败，配置检查不是核心功能
   }
 }

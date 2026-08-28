@@ -27,8 +27,8 @@ import { buildPrompt, formatPrompt } from '../core/prompt-builder';
 import { buildAutoModeInstruction, writeQuestions, extractQuestionsFromText, type QuestionItem } from '../core/questions';
 import { resolvePlatform } from '../core/platform-registry';
 import { warnIfIndexStale } from '../core/index-guard';
-import { GLOBAL_SPECS_DIR, GLOBAL_SPEC_FILES, parsePlatformTypes, parsePlatformList } from '../core/spec-paths';
-import { computeAnalyzeManifest, generateSkeleton, detectSkeletonProgress, buildSkeletonFileList, validateContentQuality } from '../core/spec-skeleton';
+import { GLOBAL_SPECS_DIR, GLOBAL_SPEC_FILES, parsePlatformTypes, parsePlatformList, parseFeatureList } from '../core/spec-paths';
+import { computeAnalyzeManifest, computeFeatureBasedAnalyzeManifest, generateSkeleton, detectSkeletonProgress, buildSkeletonFileList, validateContentQuality } from '../core/spec-skeleton';
 import { unifiedSearch, formatUnifiedContext } from '../core/unified-retrieval';
 import { assembleUnitContext } from '../core/unit-context-assembler';
 import { PipelineEngine, createAnalyzePipeline, createGlobalAnalyzePipeline } from '../core/pipeline-engine';
@@ -758,9 +758,17 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         // v7.4.3+ 兼容：先运行一次旧版 sanitize 迁移遗留文件（一次性）
         await sanitizeSpecDirectories(iterDirForSkeleton);
 
-        // v8.0.0+: 计算 manifest 并生成骨架
+        // v8.3.21+: 按需求文档名组织（020-specs/{需求名}/）
         const phase = options.phase as '1' | '2' | undefined;
-        const manifest = computeAnalyzeManifest(platforms, phase, iterName);
+        const features = await parseFeatureList(iterDirForSkeleton);
+        let manifest: import('../core/spec-skeleton').SpecFileEntry[];
+        if (features.length > 0) {
+          manifest = computeFeatureBasedAnalyzeManifest(features, platforms, phase, iterName);
+          logger.info(`📂 按需求文档组织: ${features.length} 个功能模块`);
+        } else {
+          manifest = computeFeatureBasedAnalyzeManifest([], platforms, phase, iterName);
+          logger.info(`📂 未检测到需求文档，仅创建全局 overview/`);
+        }
         const skeletonResult = await generateSkeleton(specDir, manifest);
         if (skeletonResult.created.length > 0) {
           logger.info(`🦴 已创建 ${skeletonResult.created.length} 个文件骨架: ${skeletonResult.created.join(', ')}`);
@@ -1141,6 +1149,11 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
           await ensureDir(specDir);
           const globalSet = new Set(GLOBAL_SPEC_FILES);
           const validPlatforms = new Set([GLOBAL_SPECS_DIR, ...(await parsePlatformList())]);
+          // v8.3.21+: 按需求文档名组织
+          const features = await parseFeatureList(iterDir!);
+          if (features.length > 0) {
+            logger.info(`   📂 检测到 ${features.length} 个功能模块，按需求文档名路由文档`);
+          }
           let skippedCount = 0;
 
           for (const [filename, content] of Object.entries(docs)) {
@@ -1200,6 +1213,40 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
             if (cleanFilename.startsWith(`${GLOBAL_SPECS_DIR}/`)) {
               cleanFilename = cleanFilename.slice(`${GLOBAL_SPECS_DIR}/`.length);
             }
+
+            // v8.3.21+: 按需求文档名组织的目录结构路由
+            if (cleanFilename.includes('/')) {
+              const parts = cleanFilename.split('/');
+              const firstPart = parts[0];
+              // 全局文档：overview/xxx → 写入 020-specs/overview/
+              if (firstPart === GLOBAL_SPECS_DIR) {
+                const targetDir = join(specDir, GLOBAL_SPECS_DIR);
+                await ensureDir(targetDir);
+                const fp = join(targetDir, parts.slice(1).join('/'));
+                if (!(await shouldOverwrite(fp, !!options.interactive))) { logger.info(`   ⏭️  跳过: ${filename}`); continue; }
+                const bk = await backupWithTimestamp(fp);
+                if (bk) { backups.push(bk); logger.info(`   📦 ${filename} 旧版已备份: ${bk.split('/').pop()}`); }
+                await writeFile(fp, content);
+                count++;
+                continue;
+              }
+              // 功能模块路径：验证第二级是 overview/ 或合法端名
+              if (!validPlatforms.has(firstPart) && parts.length >= 2) {
+                const secondPart = parts[1];
+                if (secondPart === 'overview' || validPlatforms.has(secondPart)) {
+                  const targetDir = join(specDir, ...parts.slice(0, -1));
+                  await ensureDir(targetDir);
+                  const fp = join(targetDir, parts[parts.length - 1]);
+                  if (!(await shouldOverwrite(fp, !!options.interactive))) { logger.info(`   ⏭️  跳过: ${filename}`); continue; }
+                  const bk = await backupWithTimestamp(fp);
+                  if (bk) { backups.push(bk); logger.info(`   📦 ${filename} 旧版已备份: ${bk.split('/').pop()}`); }
+                  await writeFile(fp, content);
+                  count++;
+                  continue;
+                }
+              }
+            }
+
             // v7.4.0+: 如果 AI 携带了其他未知目录前缀（非端名），剥离前缀只保留文件名
             if (cleanFilename.includes('/')) {
               const prefix = cleanFilename.split('/')[0];
@@ -1221,10 +1268,16 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
             }
 
             // 综合文档写入 overview/ 子目录，端专属文档写入 {端}/ 子目录
-            // v8.3.16+: 多段指定时（如 api,web），不额外加目录前缀，由 AI 返回的路径决定
-            const targetDir = globalSet.has(cleanFilename)
-              ? join(specDir, GLOBAL_SPECS_DIR)
-              : (options.platform && !options.platform.includes(',')) ? join(specDir, options.platform) : specDir;
+            // v8.3.24+: 按文件名前缀路由，支持多段指定
+            // 若 cleanFilename 含合法端名前缀（如 api/TECH.md），写入对应端目录
+            let targetDir: string;
+            if (globalSet.has(cleanFilename)) {
+              targetDir = join(specDir, GLOBAL_SPECS_DIR);
+            } else if (platformDir && validPlatforms.has(platformDir)) {
+              targetDir = join(specDir, platformDir);
+            } else {
+              targetDir = specDir;
+            }
             await ensureDir(targetDir);
             const fp = join(targetDir, cleanFilename);
             if (!(await shouldOverwrite(fp, !!options.interactive))) { logger.info(`   ⏭️  跳过: ${filename}`); continue; }
@@ -1527,10 +1580,16 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
               skippedCount++;
               continue;
             }
-            // v8.3.16+: 多段指定时（如 api,web），不额外加目录前缀，由 AI 返回的路径决定
-            const targetDir = globalSet.has(cleanFilename)
-              ? join(specDir, GLOBAL_SPECS_DIR)
-              : (options.platform && !options.platform.includes(',')) ? join(specDir, options.platform) : specDir;
+            // v8.3.24+: 按文件名前缀路由，支持多段指定
+            // 若 cleanFilename 含合法端名前缀（如 api/TECH.md），写入对应端目录
+            let targetDir: string;
+            if (globalSet.has(cleanFilename)) {
+              targetDir = join(specDir, GLOBAL_SPECS_DIR);
+            } else if (platformDir && validPlatforms.has(platformDir)) {
+              targetDir = join(specDir, platformDir);
+            } else {
+              targetDir = specDir;
+            }
             await ensureDir(targetDir);
             const fp = join(targetDir, cleanFilename);
             if (!(await shouldOverwrite(fp, !!options.interactive))) { logger.info(`   ⏭️  跳过: ${filename}`); continue; }
@@ -1915,12 +1974,17 @@ async function sanitizeSpecDirectories(iterDir: string): Promise<void> {
         continue;
       }
 
-      // 白名单校验：非 overview/ 且非端名的目录 → 非法
+      // 白名单校验：非 overview/ 且非端名的目录 → 检查是否合法功能模块名
       if (!validDirs.has(entry)) {
-        const archivedName = `${entry}.invalid-${Date.now()}`;
-        await rename(entryPath, join(specDir, archivedName));
-        logger.warn(`⚠️ 非法目录已归档: 020-specs/${entry}/ → ${archivedName}/`);
-        illegalDirCount++;
+        // v8.3.21+: 只归档明显非法的目录名（纯数字、特殊符号等），其他目录视为功能模块
+        if (/^\d+$/.test(entry) || /^[\.\-\*_\s]+$/.test(entry)) {
+          const archivedName = `${entry}.invalid-${Date.now()}`;
+          await rename(entryPath, join(specDir, archivedName));
+          logger.warn(`⚠️ 非法目录已归档: 020-specs/${entry}/ → ${archivedName}/`);
+          illegalDirCount++;
+        }
+        // 其他目录允许存在（功能模块目录）
+        continue;
       }
     } else if (entryStat.isFile()) {
       // v8.3.11+: 根目录散落的文件 → 检查是否应归入 overview/（不限于 .md）

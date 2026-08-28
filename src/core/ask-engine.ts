@@ -136,6 +136,10 @@ const COMMAND_KB: CommandKnowledge[] = [
   { name: 'clarify', aliases: ['cl'], description: '需求专业化：将口语化/非专业需求整理为 PRD 级文档。支持 --local 临时工作区模式',
     usage: 'speccore clarify "<描述>" | clarify --from <file> [--to <iteration> | --local]',
     examples: ['speccore clarify "我要加个购物车"', 'speccore clarify --from notes.md --local', 'speccore clarify --promote <entryId> --to <iteration>'], related: ['analyze', 'doc2spec'], triggers: ['澄清', '整理需求', '专业化', '规范化', '整理一下', '写成PRD', '润色需求', '需求整理', '整理成文档'] },
+  // v8.3.24+: 契约冲突裁决
+  { name: 'verdict', aliases: ['vd'], description: '契约冲突裁决：查看待裁决冲突、进行人工裁决、查看裁决书',
+    usage: 'speccore verdict [--list] [--conflict <id> --decide <pass|reject|defer> --reason <reason>] [--report] [--task <id>]',
+    examples: ['speccore verdict --list', 'speccore verdict --conflict C-001 --decide pass --reason "风险可控"', 'speccore verdict --report --task Task-001'], related: ['execute', 'done'], triggers: ['裁决', '仲裁', '冲突裁决', '契约裁决', 'verdict', '查看冲突', '待裁决', '人工裁决', '裁决书', '解决冲突'] },
 ];
 
 // ============================================================
@@ -203,6 +207,9 @@ const SYNONYM_MAP: Record<string, string> = {
   // ── graph ──
   '知识图谱': 'graph', '代码图谱': 'graph', '查询图谱': 'graph', '图谱查询': 'graph',
   '查图谱': 'graph', '找关联': 'graph', '找路径': 'graph', '实体查询': 'graph', '图谱统计': 'graph',
+  // ── verdict ──
+  '裁决': 'verdict', '仲裁': 'verdict', '冲突裁决': 'verdict', '契约裁决': 'verdict',
+  '查看冲突': 'verdict', '待裁决': 'verdict', '人工裁决': 'verdict', '裁决书': 'verdict', '解决冲突': 'verdict',
 };
 
 // ============================================================

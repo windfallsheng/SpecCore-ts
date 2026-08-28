@@ -12,7 +12,7 @@ import { resolveTask, formatResolveResult } from '../core/resolver';
 import { FileTransaction } from '../core/transaction';
 import { loadSpecRules, generateImports, SpecRules, loadTechStack } from '../core/spec-rules';
 
-import { getProjectPathForPlatform, parsePlatformList } from '../core/spec-paths';
+import { getProjectPathForPlatform, parsePlatformList, parseFeatureList } from '../core/spec-paths';
 import { logOperation } from '../core/operation-log';
 import { showNextSteps } from '../core/next-steps';
 import { cleanupByType } from './cleanup';
@@ -40,13 +40,15 @@ import {
 import { createTaskBranch, detectDefaultBranch, findBranchByTaskId, isProtectedBranch } from '../core/git-integration';
 import { buildPrompt, formatPrompt, parseAiResponse, outputNeedsInfo } from '../core/prompt-builder';
 import { runVerification, writeVerifyReport, outputFixTag, runQualityGate, syncTestDocFromResults } from '../core/verify-engine';
-import { loadConfig } from '../core/unified-config';
+import { runArbitration, type ArbitrationEngineResult, getArbitrationConfig } from '../core/arbitration/arbitration-engine';
+import { writeArbitrationReport } from '../core/arbitration/verdict-generator';
+import { loadConfig, loadProjectConfig } from '../core/unified-config';
 import { PipelineEngine } from '../core/pipeline-engine';
 import { checkCodeIndexFreshness } from '../core/code-scanner';
 import { warnIfIndexStale } from '../core/index-guard';
 import { recordAnalysisSnapshot } from '../core/change-detection';
 import { logIssue } from '../core/issue-tracker';
-import { detectPatternCandidates, groupCandidatesByPlatform } from '../core/pattern-detector';
+import { detectPatternCandidates, groupCandidatesByPlatform, resolveCodeDirsFromTask, getPatternAutoSaveMode, autoSavePattern, isHighConfidenceCandidate } from '../core/pattern-detector';
 
 export interface ExecuteOptions {
   all?: boolean;
@@ -906,25 +908,7 @@ async function generateTaskSkeleton(task: TaskState, iteration: string): Promise
         }
       }
     }
-    // 回退: 旧结构 10-backend/ 和 20-frontend/
-    if (backendSubtaskDirs.length === 0 && frontendSubtaskDirs.length === 0) {
-      for (const catName of ['10-backend', '20-frontend']) {
-        const catDir = join(taskDir, catName);
-        if (await pathExists(catDir)) {
-          const svcEntries = await rd(catDir, { withFileTypes: true });
-          for (const svc of svcEntries) {
-            if (!svc.isDirectory()) continue;
-            const subEntries = await rd(join(catDir, svc.name), { withFileTypes: true });
-            for (const st of subEntries) {
-              if (st.isDirectory() && !st.name.startsWith('.')) {
-                if (catName === '10-backend') backendSubtaskDirs.push(join(catDir, svc.name, st.name));
-                else frontendSubtaskDirs.push(join(catDir, svc.name, st.name));
-              }
-            }
-          }
-        }
-      }
-    }
+
 
     for (const backendDir of backendSubtaskDirs) {
       const reqPath = join(taskDir, '00-specs', 'REQ.md');
@@ -1195,28 +1179,12 @@ async function filterByPlatform(tasks: TaskState[], iteration: string, platform:
       filtered.push(task);
       continue;
     }
-    // v6.49.9+: 新结构 — 所有端平铺在任务目录下
+    // v8.3.21+: 端平铺在任务目录下
     const taskDir = await resolveTaskDir(iterDir, task.id);
     const platformDir = join(taskDir, platform);
     if (await pathExists(platformDir)) {
       filtered.push(task);
-      continue;
     }
-    // 回退: 旧结构 10-backend/{端}/ 或 20-frontend/{端}/
-    const isBackend = platform === 'backend' || platform.startsWith('后台');
-    const categoryDir = isBackend ? join(taskDir, '10-backend') : join(taskDir, '20-frontend');
-    const serviceName = isBackend && platform === 'backend' ? 'api' : platform;
-    const legacyPlatformDir = join(categoryDir, serviceName);
-    if (await pathExists(legacyPlatformDir)) {
-      filtered.push(task);
-      continue;
-    }
-    // 更旧结构回退: backend/ 或 frontend/{platform}/
-    const subtaskPrefix = isBackend ? '10-' : '20-';
-    const legacyDir = join(taskDir, `${subtaskPrefix}${serviceName}`);
-    if (await pathExists(legacyDir)) { filtered.push(task); continue; }
-    const legacyDir2 = join(taskDir, 'frontend', platform);
-    if (await pathExists(legacyDir2)) filtered.push(task);
   }
   return filtered;
 }
@@ -1303,13 +1271,7 @@ async function preFlightCheck(tasks: TaskState[], iteration: string, options: Ex
       }
     }
     if (!testFound) {
-      // 旧结构回退
-      const testPath = join(taskDir, '99-artifacts', 'TEST.md');
-      if (await pathExists(testPath)) {
-        const test = await readFile(testPath, 'utf-8');
-        const n = (test.match(/⬜|✅|❌/g) || []).length;
-        logger.info(`  3. 测试: ${n} 用例`);
-      }
+      logger.info(`  3. 测试: 未找到`);
     }
 
     // 4. Review（v6.49.9+: 扫描平铺的端目录）
@@ -1321,36 +1283,15 @@ async function preFlightCheck(tasks: TaskState[], iteration: string, options: Ex
       }
     }
     if (!reviewFound) {
-      logger.info(`  4. 审查: ${await pathExists(join(taskDir, '99-artifacts', 'REVIEW.md')) ? '✅' : '❌'}`);
+      logger.info(`  4. 审查: ❌`);
     }
 
     // 5. API（00-specs/ 优先，_shared/ 回退）
     const hasApiContract = await pathExists(join(taskDir, '00-specs', 'API_CONTRACT.yaml')) || await pathExists(join(taskDir, '_shared', 'API_CONTRACT.yaml'));
     logger.info(`  5. 契约: ${hasApiContract ? '✅' : '⚠️'}`);
 
-    // 6. Platform（v6.49.9+: 扫描平铺的端目录）
+    // 6. Platform（扫描平铺的端目录）
     const subtaskDirs: string[] = platDirs3.map(p => `${p.platform}/${p.subtask}`);
-    // 回退: 旧结构 10-backend/ 和 20-frontend/
-    if (subtaskDirs.length === 0) {
-      for (const catDir of ['10-backend', '20-frontend']) {
-        const catPath = join(taskDir, catDir);
-        if (await pathExists(catPath)) {
-          try {
-            const platEntries = readdirSync(catPath, { withFileTypes: true });
-            for (const pe of platEntries) {
-              if (pe.isDirectory()) {
-                const stEntries = readdirSync(join(catPath, pe.name), { withFileTypes: true });
-                for (const st of stEntries) {
-                  if (st.isDirectory() && !st.name.startsWith('.')) {
-                    subtaskDirs.push(`${catDir}/${pe.name}/${st.name}`);
-                  }
-                }
-              }
-            }
-          } catch { /* ignore */ }
-        }
-      }
-    }
     if (subtaskDirs.length > 0) {
       logger.info(`  6. 子任务: ${subtaskDirs.join(', ')}`);
     }
@@ -1358,16 +1299,31 @@ async function preFlightCheck(tasks: TaskState[], iteration: string, options: Ex
     // 7. Constitution
     logger.info(`  7. 合规: 待 validate ${issues.length > 0 ? '⚠️  ' + issues.join(', ') : ''}`);
 
-    // 8. UI 规格检查（00-specs/ 优先，_shared/ 回退）
+    // 8. UI 规格检查（00-specs/ 优先，_shared/ 回退，迭代级最后）
     const uiSpecPath = join(taskDir, '00-specs', 'UI_SPEC.md');
     const uiSpecFallback = join(taskDir, '_shared', 'UI_SPEC.md');
-    const iterUiSpec = join(iterDir, '020-specs', 'UI_SPEC.md');
+    // v8.3.21+: 在功能模块的端目录下查找 UI_SPEC.md
+    let iterUiSpec = '';
+    try {
+      const specsDir = join(iterDir, '020-specs');
+      const features = await parseFeatureList(iterDir);
+      for (const feature of features) {
+        for (const plat of ['web', 'h5', 'admin', 'mobile', 'pc', 'frontend']) {
+          const candidate = join(specsDir, feature, plat, 'UI_SPEC.md');
+          if (await pathExists(candidate)) {
+            iterUiSpec = candidate;
+            break;
+          }
+        }
+        if (iterUiSpec) break;
+      }
+    } catch { /* ignore */ }
     let uiSpecContent = '';
     if (await pathExists(uiSpecPath)) {
       uiSpecContent = await readFile(uiSpecPath, 'utf-8');
     } else if (await pathExists(uiSpecFallback)) {
       uiSpecContent = await readFile(uiSpecFallback, 'utf-8');
-    } else if (await pathExists(iterUiSpec)) {
+    } else if (iterUiSpec && await pathExists(iterUiSpec)) {
       uiSpecContent = await readFile(iterUiSpec, 'utf-8');
     }
     if (uiSpecContent) {
@@ -1688,7 +1644,8 @@ async function executionVerifyLoop(
   const maxRounds = 3;
   const iterDir = await getIterationDir(iteration);
   const config = await loadConfig();
-  const codePath = config.code_scope?.[0] || process.cwd();
+  const projectConfig = await loadProjectConfig();
+  const codePath = projectConfig.code_scope?.[0] || process.cwd();
   const absCodePath = codePath.startsWith('/') ? codePath : join(process.cwd(), codePath);
 
   for (const task of tasks) {
@@ -1702,28 +1659,101 @@ async function executionVerifyLoop(
       if (round > 1) logger.info(`   🔄 第 ${round} 轮修复...`);
       allPassed = true;
 
-      // ── Step 1: 质量门禁（编译→Lint→测试→依赖→安全→Spec一致性）──
-      const gate = await runQualityGate(task.id, taskCodePath, taskDir);
+      // ── Step 1: 契约冲突裁决 / 传统质量门禁 ──
+      const arbConfig = await getArbitrationConfig();
+      let testPassed = true;
 
-      if (!gate.passed) {
-        allPassed = false;
-        logger.warn(`   ❌ 质量门禁未通过`);
-        for (const f of gate.blockingFailed) {
-          logger.warn(`      ❌ ${f.name}: ${f.details}`);
-          await logIssue(taskDir, {
-            type: f.name.includes('编译') || f.name.includes('测试') ? 'error' : 'technical',
-            severity: 'critical',
-            summary: `${f.name}: ${f.details}`,
-            detail: `任务: ${task.id}，轮次: ${round}/3`,
-          });
+      if (!arbConfig.enabled) {
+        // 仲裁已禁用：回退到传统质量门禁
+        const gate = await runQualityGate(task.id, taskCodePath, taskDir);
+        await writeVerifyReport(gate.report, taskDir);
+        if (options.auto) {
+          logger.info(`   🚧 质量门禁: ${gate.passed ? '✅ 通过' : '❌ 失败'} (arbitration=off)`);
+        } else {
+          logger.info('');
+          logger.info(`🚧 传统质量门禁 — ${task.id}`);
+          logger.info(`   ${gate.passed ? '✅ 全部通过' : `❌ ${gate.blockingFailed.length} 项阻塞性检查失败`}`);
         }
+        if (!gate.passed) {
+          allPassed = false;
+        }
+        const testCheck = gate.report.checks.find(c => c.name === '单元测试');
+        testPassed = !testCheck || testCheck.status !== 'fail';
       } else {
-        logger.info(`   ✅ 质量门禁通过`);
+        // 仲裁已启用：执行三级裁决
+        const arbResult = await runArbitration(task.id, taskCodePath, taskDir, { mode: arbConfig.mode });
+        await writeArbitrationReport(arbResult.report, taskDir);
+
+        if (options.auto) {
+          // auto 模式：极简输出
+          const totalFailed = arbResult.report.L1.failed + arbResult.report.L2.failed + arbResult.report.L3.failed;
+          const modeLabel = arbConfig.mode === 'full' ? '' : ` [${arbConfig.mode}]`;
+          if (totalFailed === 0) {
+            logger.info(`   ⚖️ 契约裁决${modeLabel}: ✅ 全部通过`);
+          } else {
+            logger.info(`   ⚖️ 契约裁决${modeLabel}: ❌ L1=${arbResult.report.L1.failed} L2=${arbResult.report.L2.pending} L3=${arbResult.report.L3.pending}`);
+          }
+        } else {
+          // 正常模式：完整输出
+          logger.info('');
+          logger.info(`⚖️  契约冲突裁决 — ${task.id}${arbConfig.mode !== 'full' ? ` [mode=${arbConfig.mode}]` : ''}`);
+
+          // L1 机器契约
+          if (arbResult.report.L1.total > 0) {
+            logger.info(`   ⚙️ L1 机器契约: ${arbResult.report.L1.passed}/${arbResult.report.L1.total} 通过`);
+            if (arbResult.report.L1.failed > 0) {
+              logger.warn(`      ❌ ${arbResult.report.L1.failed} 项致命错误，已自动裁决驳回`);
+              allPassed = false;
+            }
+          } else {
+            logger.info(`   ⚙️ L1 机器契约: ✅ 全部通过`);
+          }
+
+          // L2 规范契约
+          if (arbResult.report.L2.total > 0) {
+            logger.info(`   🤖 L2 规范契约: ${arbResult.report.L2.passed}/${arbResult.report.L2.total} 通过, ${arbResult.report.L2.pending} 待确认`);
+            if (arbResult.report.L2.pending > 0) {
+              logger.info(`      💡 ${arbResult.report.L2.pending} 项需确认修复方案（见 ARBITRATION_REPORT.md）`);
+            }
+            if (arbResult.report.L2.failed > 0) {
+              allPassed = false;
+            }
+          } else {
+            logger.info(`   🤖 L2 规范契约: ✅ 全部通过`);
+          }
+
+          // L3 架构契约
+          if (arbResult.report.L3.total > 0) {
+            logger.info(`   👤 L3 架构契约: ${arbResult.report.L3.passed}/${arbResult.report.L3.total} 通过, ${arbResult.report.L3.pending} 待裁决`);
+            if (arbResult.report.L3.pending > 0) {
+              logger.warn(`      ⚠️ ${arbResult.report.L3.pending} 项需人工裁决`);
+              logger.info(`         执行: speccore verdict --list --task ${task.id}`);
+              allPassed = false;
+            }
+          } else {
+            logger.info(`   👤 L3 架构契约: ✅ 全部通过`);
+          }
+        }
+
+        if (!arbResult.canProceed) {
+          allPassed = false;
+          if (!options.auto) {
+            for (const c of arbResult.report.conflicts.filter(c => c.level === 'L1' && c.status === 'resolved')) {
+              await logIssue(taskDir, {
+                type: 'error',
+                severity: 'critical',
+                summary: `L1 契约违反: ${c.contractName}`,
+                detail: `任务: ${task.id}，轮次: ${round}/3，${c.message}`,
+              });
+            }
+          }
+        }
+
+        const testConflict = arbResult.report.conflicts.find(c => c.contractName === '单元测试通过');
+        testPassed = !testConflict || testConflict.status !== 'resolved';
       }
 
       // ── Step 2: 文档同步 — 根据单元测试结果更新 TEST.md ──
-      const testCheck = gate.report.checks.find(c => c.name === '单元测试');
-      const testPassed = testCheck?.status === 'pass';
       await syncTestDocFromResults(taskDir, testPassed);
 
       // ── Step 3: 检查 REVIEW.md（人工审查清单）──
@@ -1780,7 +1810,8 @@ async function executionVerifyLoop(
       if (round < maxRounds) {
         logger.info(`   💡 AI 将修复未通过项。使用 speccore execute --task=${task.id} --force 重新执行代码生成`);
         await writeFile(join(taskDir, '.needs-retry'), String(round));
-        // 输出 [SPECCORE_EXEC] 让 AI 修复
+        // 输出 [SPECCORE_EXEC] 让 AI 修复（回退到质量门禁报告）
+        const gate = await runQualityGate(task.id, taskCodePath, taskDir);
         if (!gate.passed) {
           await outputFixTag(gate.report, taskDir, round);
         }
@@ -1792,29 +1823,62 @@ async function executionVerifyLoop(
       await writeFile(join(taskDir, '.verification'), 'passed');
       logger.info(`   ✅ ${task.id} 全部检查通过，可以 speccore done`);
 
-      // v8.2.0+: 执行通过后检测可复用模式候选
+      // v8.3.23+: 执行通过后检测可复用模式候选（适配端平铺结构 + 自动写入）
       try {
-        const codeDirs = [
-          join(taskDir, '10-backend'),
-          join(taskDir, '20-frontend'),
-          join(taskDir, 'src'),
-        ];
+        const codeDirs = await resolveCodeDirsFromTask(taskDir);
+        if (codeDirs.length === 0) {
+          // 无代码目录时静默跳过（代码可能在外部工程）
+          return;
+        }
         const candidates = await detectPatternCandidates(codeDirs, `task:${task.id}`);
-        if (candidates.length > 0) {
-          logger.info('');
-          logger.info('🧩 执行完成，检测到以下可复用模式候选:');
-          const byPlatform = groupCandidatesByPlatform(candidates);
-          for (const [plat, list] of Object.entries(byPlatform)) {
-            const platLabel = plat === 'shared' ? '🌐 跨端共享' : plat === 'backend' ? '⚙️ 后端' : plat === 'frontend' ? '🎨 前端' : '📦 其他';
-            logger.info(`   ${platLabel}:`);
-            for (const c of list.slice(0, 2)) {
-              logger.info(`     • ${c.name} [${c.category}] — ${c.reason}`);
-            }
-            if (list.length > 2) {
-              logger.info(`       ... 还有 ${list.length - 2} 个`);
-            }
+        if (candidates.length === 0) return;
+
+        const mode = await getPatternAutoSaveMode();
+        const autoSaved: string[] = [];
+        const manual: string[] = [];
+
+        for (const c of candidates) {
+          const result = await autoSavePattern(c, `task:${task.id}`, mode);
+          if (result.saved && result.path) {
+            autoSaved.push(`${c.name} [${result.confidence}]`);
+          } else if (!isHighConfidenceCandidate(c) && mode === 'smart') {
+            manual.push(`${c.name} [${c.category}]`);
           }
-          logger.info(`   💡 有价值？执行 speccore pattern save --name=<模式名> --file=<文件路径>`);
+        }
+
+        logger.info('');
+        logger.info('🧩 执行完成，检测到以下可复用模式候选:');
+        const byPlatform = groupCandidatesByPlatform(candidates);
+        for (const [plat, list] of Object.entries(byPlatform)) {
+          const platLabel = plat === 'shared' ? '🌐 跨端共享' : plat === 'backend' ? '⚙️ 后端' : plat === 'frontend' ? '🎨 前端' : '📦 其他';
+          logger.info(`   ${platLabel}:`);
+          for (const c of list.slice(0, 2)) {
+            logger.info(`     • ${c.name} [${c.category}] — ${c.reason}`);
+          }
+          if (list.length > 2) {
+            logger.info(`       ... 还有 ${list.length - 2} 个`);
+          }
+        }
+
+        if (autoSaved.length > 0) {
+          logger.info('');
+          logger.info(`   ✅ 已自动保存 ${autoSaved.length} 个高置信度模式到 .speccore/PATTERNS/`);
+          for (const s of autoSaved.slice(0, 3)) {
+            logger.info(`      • ${s}`);
+          }
+        }
+        if (manual.length > 0 && mode === 'smart') {
+          logger.info('');
+          logger.info(`   💡 以下 ${manual.length} 个候选置信度较低，建议手动确认后保存:`);
+          for (const m of manual.slice(0, 3)) {
+            logger.info(`      • ${m}`);
+          }
+          logger.info('      命令: speccore pattern save --name=<模式名> --file=<文件路径>');
+        }
+        if (mode === 'off') {
+          logger.info('');
+          logger.info('   💡 检测到可复用模式，自动保存已关闭。如需保存请执行:');
+          logger.info('      speccore pattern save --name=<模式名> --file=<文件路径>');
         }
       } catch { /* 静默失败 */ }
     } else {
