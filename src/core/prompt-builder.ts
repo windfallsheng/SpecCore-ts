@@ -12,7 +12,7 @@ import { isTimestampBackup } from '../utils/task-utils';
 import { logger } from '../utils/logger';
 import { loadKnowledgeGraph, getTaskContext, isGraphStale, refreshKnowledgeGraph, KnowledgeGraph } from './knowledge-graph';
 import { buildCompactContext } from './context-builder';
-import { parseProjectInfo, GLOBAL_SPECS_DIR } from './spec-paths';
+import { parseProjectInfo, GLOBAL_SPECS_DIR, parseFeatureList } from './spec-paths';
 import {
   loadRagIndex, isRagIndexStale, retrieveRelevantChunks,
   assembleChunksForPrompt, indexTaskDocuments,
@@ -373,12 +373,25 @@ async function loadExtraSpecs(
       files.push({ name: `迭代overview/${f}`, path: join(overviewDir, f) });
     }
     if (platform) {
-      // 迭代级各端规格文档
-      const platSpecDir = join(iterDir, '020-specs', 'platforms', platform);
-      // 动态扫描该端的 spec 文件（在调用时处理）
-      files.push(
-        { name: `${platform}端迭代规格`, path: join(platSpecDir, 'SPEC.md') },
-      );
+      // v8.3.21+: 扫描 020-specs/{feature}/{platform}/ 下的 .md 文件
+      const specsDir = join(iterDir, '020-specs');
+      try {
+        const features = await parseFeatureList(iterDir);
+        for (const feature of features) {
+          const featurePlatDir = join(specsDir, feature, platform);
+          if (await pathExists(featurePlatDir)) {
+            const entries = await readdir(featurePlatDir, { withFileTypes: true });
+            for (const entry of entries) {
+              if (entry.name.endsWith('.md') && !isTimestampBackup(entry.name)) {
+                files.push({
+                  name: `${feature}-${platform}端规格`,
+                  path: join(featurePlatDir, entry.name),
+                });
+              }
+            }
+          }
+        }
+      } catch { /* ignore */ }
     }
   }
 
@@ -648,37 +661,21 @@ async function loadAllTaskContext(
             await addFile(join(overviewDir, item.name), `迭代综合规格: ${item.name}`, `020-specs/${GLOBAL_SPECS_DIR}/${item.name}`);
           }
         }
-        // 向后兼容：旧版 global/ 目录
-        const globalDir = join(specsDir, 'global');
-        if (await pathExists(globalDir)) {
-          const globalItems = await readdir(globalDir, { withFileTypes: true });
-          for (const item of globalItems) {
-            if (!item.name.endsWith('.md') || isTimestampBackup(item.name)) continue;
-            await addFile(join(globalDir, item.name), `迭代综合规格(旧): ${item.name}`, `020-specs/global/${item.name}`);
-          }
-        }
-        // 各端规格（新路径 020-specs/{端}/，兼容旧路径 020-specs/platforms/{端}/）
+        // v8.3.21+: 各端规格 — 扫描 020-specs/{feature}/{platform}/ 下的文档
         if (platform) {
-          let platDir = join(specsDir, platform);
-          if (!(await pathExists(platDir))) {
-            platDir = join(specsDir, 'platforms', platform);
-          }
-          if (await pathExists(platDir)) {
-            const platItems = await readdir(platDir, { withFileTypes: true });
-            for (const item of platItems) {
-              if (!item.name.endsWith('.md') || isTimestampBackup(item.name)) continue;
-              await addFile(join(platDir, item.name), `${platform}端规格: ${item.name}`, `020-specs/${platform}/${item.name}`);
+          try {
+            const features = await parseFeatureList(iterDir);
+            for (const feature of features) {
+              const featurePlatDir = join(specsDir, feature, platform);
+              if (await pathExists(featurePlatDir)) {
+                const platItems = await readdir(featurePlatDir, { withFileTypes: true });
+                for (const item of platItems) {
+                  if (!item.name.endsWith('.md') || isTimestampBackup(item.name)) continue;
+                  await addFile(join(featurePlatDir, item.name), `${feature}-${platform}端规格: ${item.name}`, `020-specs/${feature}/${platform}/${item.name}`);
+                }
+              }
             }
-          }
-        }
-        // features/ 规格
-        const featuresDir = join(specsDir, 'features');
-        if (await pathExists(featuresDir)) {
-          const featItems = await readdir(featuresDir, { withFileTypes: true });
-          for (const item of featItems) {
-            if (!item.name.endsWith('.md') || isTimestampBackup(item.name)) continue;
-            await addFile(join(featuresDir, item.name), `功能规格: ${item.name}`, `020-specs/features/${item.name}`);
-          }
+          } catch { /* ignore */ }
         }
       } catch { /* 跳过 */ }
     }

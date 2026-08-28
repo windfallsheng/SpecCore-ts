@@ -19,6 +19,11 @@ import { GLOBAL_SPECS_DIR } from './spec-paths';
 /** 骨架标记 — 用于检测文件是否仍为占位状态 */
 export const SKELETON_MARKER = '<!-- SPEC-SKELETON -->';
 
+/** 判断是否为后端平台（用于骨架模板差异化） */
+function isBackendPlatform(platform: string): boolean {
+  return platform === 'backend' || platform.startsWith('后台') || platform.includes('服务') || /-(service|api|server|backend)$/i.test(platform);
+}
+
 // ================================================================
 // 类型定义
 // ================================================================
@@ -254,32 +259,45 @@ const PHASE1_DOCS: { name: string; buildPlaceholder: (iter: string) => string }[
 const PHASE2_DOCS: { name: string; buildPlaceholder: (iter: string, platform: string) => string }[] = [
   {
     name: 'TECH.md',
-    buildPlaceholder: (iter, platform) => `${SKELETON_MARKER}
+    buildPlaceholder: (iter, platform) => {
+      const backend = isBackendPlatform(platform);
+      return `${SKELETON_MARKER}
 # ${platform} 技术架构
 
 > 迭代: ${iter} | 端: ${platform} | 生成: 待填充
 
 ## 写作要求
 基于 overview/TECH.md 的整体架构，细化本端的技术方案：
-- 接口定义（路径/参数/响应）
+${backend ? `- 接口定义（路径/参数/响应）
 - 数据模型（Entity/DTO/VO）
-- 核心业务逻辑
+- 核心业务逻辑与事务约束
+- 异常处理与幂等设计` : `- 页面结构与路由设计
+- 组件拆分与复用策略
+- 状态管理方案
+- 与后端接口的对接方式`}
 - 与 overview/TECH.md 保持一致
-`,
+`;
+    },
   },
   {
     name: 'TEST.md',
-    buildPlaceholder: (iter, platform) => `${SKELETON_MARKER}
+    buildPlaceholder: (iter, platform) => {
+      const backend = isBackendPlatform(platform);
+      return `${SKELETON_MARKER}
 # ${platform} 测试计划
 
 > 迭代: ${iter} | 端: ${platform} | 生成: 待填充
 
 ## 写作要求
-- 单元测试覆盖
+${backend ? `- 单元测试覆盖（Service/DAO 层）
 - API 端到端测试
 - 边界测试（异常参数、超时、并发）
-- 性能测试方案
-`,
+- 性能测试方案（QPS/响应时间）` : `- 页面流转测试（路由跳转/权限拦截）
+- 交互测试（表单校验/按钮状态/弹窗）
+- 视觉与响应式测试
+- 四态测试（空/加载/错误/成功）`}
+`;
+    },
   },
   {
     name: 'UI_SPEC.md',
@@ -356,19 +374,25 @@ const TASK_DOCS: { name: string; buildPlaceholder: (taskName: string, platform: 
   },
   {
     name: 'TECH.md',
-    buildPlaceholder: (taskName, platform) => `${SKELETON_MARKER}
+    buildPlaceholder: (taskName, platform) => {
+      const backend = isBackendPlatform(platform);
+      return `${SKELETON_MARKER}
 # 本任务技术方案
 
 > ${taskName} | 端: ${platform} | 生成: 待填充
 
 ## 写作要求
 基于 overview/TECH.md 的整体架构，细化到函数/接口级别：
-- 具体的接口定义（路径/参数/响应）
+${backend ? `- 具体的接口定义（路径/参数/响应）
 - 数据模型设计（Entity/DTO/VO 字段映射）
 - 核心业务逻辑的伪代码或流程描述
-- 前端组件拆分和状态设计
+- 事务边界与异常处理策略` : `- 页面/组件的具体实现方案
+- 状态管理设计（Pinia/Redux/Context 等）
+- 与后端接口的对接（请求封装/错误处理）
+- 交互流程与动画/过渡效果`}
 - 必须与 overview/TECH.md 的整体架构保持一致
-`,
+`;
+    },
   },
   {
     name: 'TASK.md',
@@ -383,6 +407,56 @@ const TASK_DOCS: { name: string; buildPlaceholder: (taskName: string, platform: 
 - 每个步骤有明确的完成标准
 - 标注步骤间的依赖关系
 - 估算每步的工作量
+`,
+  },
+];
+
+// ================================================================
+// 功能模块级 overview 文档清单（v8.3.17+）
+// 每个需求文档对应的功能模块目录下的综合文档
+// ================================================================
+
+const FEATURE_OVERVIEW_DOCS: { name: string; buildPlaceholder: (iter: string, feature: string) => string }[] = [
+  {
+    name: 'REQUIREMENT.md',
+    buildPlaceholder: (iter, feature) => `${SKELETON_MARKER}
+# ${feature} 需求规格
+
+> 迭代: ${iter} | 功能: ${feature} | 生成: 待填充
+
+## 写作要求
+基于 010-requirements/ 下所有涉及 ${feature} 的需求文档，整理该功能的完整需求。
+- 合并各端视角（web/h5/admin 等）的需求描述
+- 标注跨端一致性和差异点
+- 列出该功能的验收标准
+`,
+  },
+  {
+    name: 'ANALYSIS.md',
+    buildPlaceholder: (iter, feature) => `${SKELETON_MARKER}
+# ${feature} 需求分析
+
+> 迭代: ${iter} | 功能: ${feature} | 生成: 待填充
+
+## 写作要求
+分析 ${feature} 的功能点清单。
+- 按优先级分节（P0 必修 / P1 应修 / P2 建议）
+- 每个功能点标注编号（F-01, F-02...）和涉及端
+- 列出接口变更和数据库变更
+`,
+  },
+  {
+    name: 'INTERACTION.md',
+    buildPlaceholder: (iter, feature) => `${SKELETON_MARKER}
+# ${feature} 跨端交互时序
+
+> 迭代: ${iter} | 功能: ${feature} | 生成: 待填充
+
+## 写作要求
+按功能单元组织，展示 ${feature} 的完整跨端交互时序。
+- Mermaid sequenceDiagram
+- 标注接口路径和调用关系
+- 附接口契约索引表
 `,
   },
 ];
@@ -814,6 +888,66 @@ export function computeAnalyzeManifest(
           docName: doc.name,
           placeholder: doc.buildPlaceholder(iteration, platform),
         });
+      }
+    }
+  }
+
+  return entries;
+}
+
+/**
+ * v8.3.17+: 计算功能模块级 analyze 的文件清单
+ * 按需求文档名组织一级目录，每个目录下有 overview/ + 各端子目录
+ * @param features 功能模块（需求文档名）列表
+ * @param platforms 端列表
+ * @param phase '1' = Phase 1 (overview), '2' = Phase 2 (各端), undefined = 全部
+ * @param iteration 迭代名（用于占位内容）
+ */
+export function computeFeatureBasedAnalyzeManifest(
+  features: string[],
+  platforms: string[],
+  phase?: '1' | '2',
+  iteration: string = '',
+): SpecFileEntry[] {
+  const entries: SpecFileEntry[] = [];
+
+  // Phase 1: 全局 overview/ + 各功能模块 overview/
+  if (!phase || phase === '1') {
+    // 全局 overview 文档（保留现有结构）
+    for (const doc of PHASE1_DOCS) {
+      entries.push({
+        relPath: join(GLOBAL_SPECS_DIR, doc.name),
+        category: 'overview',
+        docName: doc.name,
+        placeholder: doc.buildPlaceholder(iteration),
+      });
+    }
+    // 各功能模块 overview 文档
+    for (const feature of features) {
+      for (const doc of FEATURE_OVERVIEW_DOCS) {
+        entries.push({
+          relPath: join(feature, 'overview', doc.name),
+          category: 'overview',
+          docName: doc.name,
+          placeholder: doc.buildPlaceholder(iteration, feature),
+        });
+      }
+    }
+  }
+
+  // Phase 2: 各功能模块的各端专属文档
+  if (!phase || phase === '2') {
+    for (const feature of features) {
+      for (const platform of platforms) {
+        for (const doc of PHASE2_DOCS) {
+          entries.push({
+            relPath: join(feature, platform, doc.name),
+            category: 'platform',
+            platform,
+            docName: doc.name,
+            placeholder: doc.buildPlaceholder(iteration, platform),
+          });
+        }
       }
     }
   }

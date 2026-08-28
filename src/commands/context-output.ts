@@ -4,7 +4,6 @@
 import { readFile, pathExists, readdir } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
-import { loadConfig } from '../core/unified-config';
 import { loadContext, saveContext, getDefaultIteration } from '../core/context';
 
 export interface ContextOptions {
@@ -58,8 +57,6 @@ export async function contextCommand(options: ContextOptions): Promise<void> {
   const specsDir = join(taskBase, '00-specs');
   const backendDir = (await pathExists(join(specsDir, 'REQ.md'))) ? specsDir : join(taskBase, 'backend');
   const sharedDir = join(taskBase, '_shared');
-  const config = await loadConfig();
-
   // Collect context
   const context: string[] = [];
   
@@ -102,14 +99,6 @@ export async function contextCommand(options: ContextOptions): Promise<void> {
     context.push('\n## 测试要求\n');
     const test = await readFile(testPath, 'utf-8');
     context.push(test.slice(0, 1000));
-  }
-
-  // Tech stack
-  if (config.tech_stack) {
-    context.push('\n## 技术栈\n');
-    for (const [k, v] of Object.entries(config.tech_stack)) {
-      if (v) context.push(`- ${k}: ${v}`);
-    }
   }
 
   const output = context.join('\n');

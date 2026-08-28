@@ -11,7 +11,7 @@ import { createInterface } from 'readline';
 import { buildPrompt, formatPrompt } from '../../core/prompt-builder';
 import { generatePlatformsRegistry } from '../../core/platform-registry';
 import { warnIfIndexStale } from '../../core/index-guard';
-import { resolveGlobalSpecPath, GLOBAL_SPECS_DIR, parsePlatformList } from '../../core/spec-paths';
+import { GLOBAL_SPECS_DIR, parsePlatformList, parseFeatureList } from '../../core/spec-paths';
 import { SKELETON_MARKER, buildQualityRubRIC } from '../../core/spec-skeleton';
 import { buildAutoModeInstruction, writeQuestions, extractQuestionsFromText } from '../../core/questions';
 import { PipelineEngine } from '../../core/pipeline-engine';
@@ -164,31 +164,141 @@ async function detectPlatforms(iterationDir: string, specified?: string): Promis
   const platforms = await parsePlatformList();
   if (platforms.length > 0) return platforms;
 
-  // 2. 回退：扫描 020-specs/ 子目录（排除 global/ 等非端目录 + 常见 AI 简写垃圾目录）
+  // v8.3.21+: 020-specs/ 按功能模块组织，不再扫描子目录猜测端名
   const specsDir = join(iterationDir, '020-specs');
   if (await pathExists(specsDir)) {
-    const entries = await readdir(specsDir, { withFileTypes: true });
-    // v8.3.4+: 增加常见 AI 简写过滤，避免 api/web 等错误目录被当成端名
-    const knownNonPlatformDirs = new Set([
-      'sources', 'assets', 'prototypes', 'converted', 'features', 'bugs', 'refactors', 'research',
-      'staging', 'platforms', 'snapshots', 'overview', 'global', GLOBAL_SPECS_DIR,
-      // 常见 AI 简写垃圾目录（必须从标准端名映射，不能直接用）
-      'api', 'web', 'backend', 'frontend', 'server', 'mobile', 'admin', 'h5', 'pc', 'app',
-    ]);
-    const rawPlatforms = entries
-      .filter((e: any) => e.isDirectory() && !e.name.startsWith('_') && !e.name.startsWith('.') && !knownNonPlatformDirs.has(e.name))
-      .map((e: any) => e.name);
-    // 二次过滤：用 normalizeScopePlatforms 排除任何残留的非标准端名
-    if (rawPlatforms.length > 0) {
-      const standardPlatforms = await parsePlatformList();
-      if (standardPlatforms.length > 0) {
-        return normalizeScopePlatforms(rawPlatforms, standardPlatforms);
+    logger.warn(`⚠️ CONSTITUTION.md 中未找到「端列表」`);
+    logger.warn(`   请先在 CONSTITUTION.md 中配置端列表，否则无法正确拆分任务`);
+  }
+
+  return ['web']; // 默认
+}
+
+// ================================================================
+// v8.3.19+: Split 前置检查（Pre-Split Gate）
+// ================================================================
+
+interface PreSplitCheckItem {
+  path: string;
+  name: string;
+  purpose: string;
+  impact: string;
+  exists: boolean;
+  isSkeleton: boolean;
+  level: 'block' | 'warn';
+}
+
+async function preSplitGate(iterationDir: string): Promise<{
+  pass: boolean;
+  blockers: PreSplitCheckItem[];
+  warnings: PreSplitCheckItem[];
+}> {
+  const items: PreSplitCheckItem[] = [];
+  const specDir = join(iterationDir, '020-specs');
+
+  // 检查全局 FUNCTION_MAP.md（阻塞级）
+  const funcMapPath = join(specDir, GLOBAL_SPECS_DIR, 'FUNCTION_MAP.md');
+  const funcMapExists = await pathExists(funcMapPath);
+  let funcMapIsSkeleton = false;
+  if (funcMapExists) {
+    const content = await readFile(funcMapPath, 'utf-8');
+    funcMapIsSkeleton = content.includes('<!-- SPEC-SKELETON -->') || content.trim().length < 100;
+  }
+  items.push({
+    path: funcMapPath,
+    name: 'FUNCTION_MAP.md',
+    purpose: '列出本迭代所有功能模块及涉及端，是 split 拆分的唯一依据',
+    impact: '缺失或不完整时，split 不知道要拆哪些任务，可能拆出不完整或错误的任务',
+    exists: funcMapExists,
+    isSkeleton: funcMapIsSkeleton,
+    level: 'block',
+  });
+
+  // 检查全局 REQUIREMENT.md（警告级）
+  const reqPath = join(specDir, GLOBAL_SPECS_DIR, 'REQUIREMENT.md');
+  const reqExists = await pathExists(reqPath);
+  let reqIsSkeleton = false;
+  if (reqExists) {
+    const content = await readFile(reqPath, 'utf-8');
+    reqIsSkeleton = content.includes('<!-- SPEC-SKELETON -->') || content.trim().length < 100;
+  }
+  items.push({
+    path: reqPath,
+    name: 'REQUIREMENT.md',
+    purpose: '本迭代的完整需求规格，包含功能模块清单和验收标准',
+    impact: '缺失时，AI 拆分缺少需求上下文，可能遗漏功能点或拆分粒度过粗',
+    exists: reqExists,
+    isSkeleton: reqIsSkeleton,
+    level: 'warn',
+  });
+
+  // 检查功能模块级文档（警告级）
+  const features = await parseFeatureList(iterationDir);
+  for (const feature of features) {
+    const featureReqPath = join(specDir, feature, 'overview', 'REQUIREMENT.md');
+    const featureReqExists = await pathExists(featureReqPath);
+    let featureReqIsSkeleton = false;
+    if (featureReqExists) {
+      const content = await readFile(featureReqPath, 'utf-8');
+      featureReqIsSkeleton = content.includes('<!-- SPEC-SKELETON -->') || content.trim().length < 100;
+    }
+    items.push({
+      path: featureReqPath,
+      name: `${feature}/overview/REQUIREMENT.md`,
+      purpose: `功能模块「${feature}」的完整需求（合并各端视角）`,
+      impact: `缺失时，execute 阶段 AI 读不到「${feature}」的详细需求，可能实现不完整`,
+      exists: featureReqExists,
+      isSkeleton: featureReqIsSkeleton,
+      level: 'warn',
+    });
+  }
+
+  const blockers = items.filter(i => i.level === 'block' && (!i.exists || i.isSkeleton));
+  const warnings = items.filter(i => i.level === 'warn' && (!i.exists || i.isSkeleton));
+
+  return { pass: blockers.length === 0, blockers, warnings };
+}
+
+function printPreSplitReport(iterationDir: string, blockers: PreSplitCheckItem[], warnings: PreSplitCheckItem[]) {
+  logger.info('');
+  logger.info('╔══════════════════════════════════════════════════════════════╗');
+  logger.info('║  Split 前置检查报告                                          ║');
+  logger.info('╚══════════════════════════════════════════════════════════════╝');
+
+  if (blockers.length > 0) {
+    logger.error(`\n🔴 阻塞项 (${blockers.length} 个) — 必须修复后才能拆分：`);
+    for (const b of blockers) {
+      logger.error(`\n   📄 ${b.name}`);
+      logger.error(`      路径: ${b.path.replace(iterationDir + '/', '')}`);
+      logger.error(`      作用: ${b.purpose}`);
+      logger.error(`      影响: ${b.impact}`);
+      if (!b.exists) {
+        logger.error(`      状态: ❌ 文件缺失`);
+      } else if (b.isSkeleton) {
+        logger.error(`      状态: ⚠️  仍为骨架（待 AI 填充）`);
       }
-      return rawPlatforms;
     }
   }
-  
-  return ['web']; // 默认
+
+  if (warnings.length > 0) {
+    logger.warn(`\n🟡 警告项 (${warnings.length} 个) — 建议修复：`);
+    for (const w of warnings) {
+      logger.warn(`\n   📄 ${w.name}`);
+      logger.warn(`      路径: ${w.path.replace(iterationDir + '/', '')}`);
+      logger.warn(`      作用: ${w.purpose}`);
+      logger.warn(`      影响: ${w.impact}`);
+      if (!w.exists) {
+        logger.warn(`      状态: ❌ 文件缺失`);
+      } else if (w.isSkeleton) {
+        logger.warn(`      状态: ⚠️  仍为骨架（待 AI 填充）`);
+      }
+    }
+  }
+
+  logger.info('');
+  logger.info('💡 修复建议：');
+  logger.info('   运行 speccore analyze -I <迭代名> --apply');
+  logger.info('   让 AI 补充缺失的分析产物，然后再执行 split');
 }
 
 export async function iterationSplitCommand(options: IterationSplitOptions): Promise<void> {
@@ -648,6 +758,38 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
 
     const iterationDir = await getIterationDir(iteration);
 
+    // v8.3.19+: Split 前置检查 — 确保分析产物完整后再拆分
+    if (!options.prompt && !options.response) {
+      const { pass, blockers, warnings } = await preSplitGate(iterationDir);
+      if (!pass || warnings.length > 0) {
+        spinner.stop();
+        printPreSplitReport(iterationDir, blockers, warnings);
+
+        if (!pass) {
+          if (!options.interactive && !options.strict) {
+            logger.info('');
+            logger.info('🤖 自动模式：请先补充分析产物后再拆分');
+            logger.info('   命令: speccore analyze -I <迭代名> --apply');
+          } else {
+            logger.error('\n⛔ 拆分被拒绝：存在阻塞项，请先补充分析产物');
+          }
+          return;
+        }
+
+        // 只有警告，没有阻塞
+        if (options.interactive || options.strict) {
+          const proceed = await promptUser('\n仍要继续拆分？[y/N] ');
+          if (!proceed || proceed.toLowerCase() !== 'y') {
+            logger.info('已取消拆分');
+            return;
+          }
+        } else {
+          logger.info('\n🤖 自动模式：跳过警告，继续拆分');
+        }
+        spinner.start();
+      }
+    }
+
     // v6.76.0+: 变更检测 — 检查 020-specs/ 是否比 Task/ 更新
     if (!options.ignoreSpecsUpdate && !options.prompt && !options.response) {
       const { detectSpecChangesBeforeSplit, printChangeDetection } = await import('../../core/change-detector');
@@ -703,81 +845,49 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       
       // 读取 020-specs/ 全部文件（完整上下文）
       const specDir2 = join(iterationDir, '020-specs');
-      // REQUIREMENT.md 优先从 global/ 读取（v6.41.0+），回退根目录
-      const reqPath2 = await resolveGlobalSpecPath(specDir2, 'REQUIREMENT.md') || join(iterationDir, '020-specs', 'REQUIREMENT.md');
+      // REQUIREMENT.md 从 overview/ 读取
+      const reqPath2 = join(specDir2, GLOBAL_SPECS_DIR, 'REQUIREMENT.md');
       let reqContent2 = '';
       if (await pathExists(reqPath2)) {
         reqContent2 = await readFile(reqPath2, 'utf-8');
       }
-            
+      
       const specContents: { name: string; content: string }[] = [];
-      // 读取全局层文档（优先 global/ 子目录，回退根目录 — v6.41.0+ 向后兼容）
-      for (const f of ['ANALYSIS.md', 'TECH.md', 'RISK.md', 'DEPS.md', 'REVIEW.md', 'MONITOR.md', 'REQUIREMENT.md']) {
-        const resolved = await resolveGlobalSpecPath(specDir2, f);
-        if (resolved) {
-          const content = await readFile(resolved, 'utf-8');
-          if (content.trim().length > 50 && !content.trim().match(/^#+\s*待填充|^<!--\s*AI-FILL/m)) {
-            specContents.push({ name: f, content });
-          }
-        }
-      }
-      // 根目录下的 TEST.md、UI_SPEC.md（端无关模板/回退）
-      for (const f of ['TEST.md', 'UI_SPEC.md']) {
-        const fp = join(specDir2, f);
-        if (await pathExists(fp)) {
+      // v8.3.21+: 读取全局层文档（overview/ 下）
+      const overviewDir = join(specDir2, GLOBAL_SPECS_DIR);
+      if (await pathExists(overviewDir)) {
+        const overviewFiles = await readdir(overviewDir, { withFileTypes: true });
+        for (const f of overviewFiles) {
+          if (!f.name.endsWith('.md')) continue;
+          const fp = join(overviewDir, f.name);
           const content = await readFile(fp, 'utf-8');
           if (content.trim().length > 50 && !content.trim().match(/^#+\s*待填充|^<!--\s*AI-FILL/m)) {
-            specContents.push({ name: f, content });
+            specContents.push({ name: f.name, content });
           }
         }
       }
-      // 读取各端详情（020-specs/{端}/，兼容旧路径 020-specs/platforms/{端}/）
-      const platformDirs: string[] = [];
-      // 新路径：020-specs/{端}/
-      const directPlatformEntries = await readdir(specDir2, { withFileTypes: true });
-      for (const e of directPlatformEntries) {
-        if (e.isDirectory() && !e.name.startsWith('_') && !e.name.startsWith('.')
-          && !['sources', 'assets', 'prototypes', 'converted', 'features', 'bugs', 'refactors', 'research', 'staging', 'platforms', 'snapshots', GLOBAL_SPECS_DIR].includes(e.name)) {
-          platformDirs.push(e.name);
-        }
-      }
-      // 旧路径回退：020-specs/platforms/{端}/
-      const iterPlatformsDir = join(specDir2, 'platforms');
-      if (await pathExists(iterPlatformsDir)) {
-        const platformEntries = await readdir(iterPlatformsDir, { withFileTypes: true });
-        for (const pe of platformEntries) {
-          if (pe.isDirectory() && !pe.name.startsWith('.') && !platformDirs.includes(pe.name)) {
-            platformDirs.push(pe.name);
-          }
-        }
-      }
-      // 读取每个端目录下的文件
-      for (const pName of platformDirs) {
-        const pDir = join(specDir2, pName);
-        if (!(await pathExists(pDir))) continue;
-        const pFiles = await readdir(pDir);
-        for (const pf of pFiles.filter((f: string) => f.endsWith('.md'))) {
-          const fp = join(pDir, pf);
-          const content = await readFile(fp, 'utf-8');
-          if (content.trim().length > 50 && !content.trim().match(/^#+\s*\u5f85\u586b\u5145|^<!--\s*AI-FILL/m)) {
-            specContents.push({ name: `${pName}/${pf}`, content });
-          }
-        }
-      }
-      // 读取功能模块分析（020-specs/features/）
-      const iterFeaturesDir = join(specDir2, 'features');
-      if (await pathExists(iterFeaturesDir)) {
-        const featureEntries = await readdir(iterFeaturesDir, { withFileTypes: true });
-        for (const fe of featureEntries) {
-          if (!fe.name.startsWith('.') && fe.name.endsWith('.md')) {
-            const fp = join(iterFeaturesDir, fe.name);
+      
+      // v8.3.21+: 读取各功能模块下的文档（overview/ + 各端/）
+      const features = await parseFeatureList(iterationDir);
+      for (const feature of features) {
+        const featureDir = join(specDir2, feature);
+        if (!await pathExists(featureDir)) continue;
+        const entries = await readdir(featureDir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+          const subDir = join(featureDir, entry.name);
+          const subFiles = await readdir(subDir, { withFileTypes: true });
+          for (const sf of subFiles) {
+            if (!sf.name.endsWith('.md')) continue;
+            const fp = join(subDir, sf.name);
             const content = await readFile(fp, 'utf-8');
-            if (content.trim().length > 50 && !content.trim().match(/^#+\s*\u5f85\u586b\u5145|^<!--\s*AI-FILL/m)) {
-              specContents.push({ name: `features/${fe.name}`, content });
+            if (content.trim().length > 50 && !content.trim().match(/^#+\s*待填充|^<!--\s*AI-FILL/m)) {
+              specContents.push({ name: `${feature}/${entry.name}/${sf.name}`, content });
             }
           }
         }
       }
+      
       // 读取类型文档分析（020-specs/{bugs,refactors,research}/）
       for (const typeDir of ['bugs', 'refactors', 'research']) {
         const typeDirPath = join(specDir2, typeDir);
@@ -787,7 +897,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           if (!te.isFile() || !te.name.endsWith('.md')) continue;
           const fp = join(typeDirPath, te.name);
           const content = await readFile(fp, 'utf-8');
-          if (content.trim().length > 50 && !content.trim().match(/^#+\s*\u5f85\u586b\u5145|^<!--\s*AI-FILL/m)) {
+          if (content.trim().length > 50 && !content.trim().match(/^#+\s*待填充|^<!--\s*AI-FILL/m)) {
             specContents.push({ name: `${typeDir}/${te.name}`, content });
           }
         }
@@ -2133,9 +2243,7 @@ async function strictSplitPreview(
     const taskId = (s as any)._taskId || `Task-${String(i + 1).padStart(3, '0')}`;
     
     // Determine target directory
-    const target = s.platform
-      ? (s.platform.startsWith('后台') ? `backend/${s.platform.replace(/^后台/, '')}` : s.platform)
-      : platforms.join(' + ');
+    const target = s.platform || platforms.join(' + ');
 
     logger.info(`── ${taskId}: ${s.name} ──`);
     logger.info(`   端: ${target}`);
@@ -2592,45 +2700,36 @@ async function loadSpecContents(iterationDir: string): Promise<Record<string, st
   const specDir = join(iterationDir, '020-specs');
   if (!(await pathExists(specDir))) return specs;
 
-  // 1. 读取全局文档（优先 global/ 子目录，回退根目录 — v6.41.0+ 向后兼容）
-  // v8.3.0+: 新增 DEV_GUIDE.md — analyze 生成的开发指南是 split 填充任务级文档的关键输入
-  for (const f of ['REQUIREMENT.md', 'ANALYSIS.md', 'TECH.md', 'DEV_GUIDE.md', 'RISK.md', 'DEPS.md', 'REVIEW.md', 'MONITOR.md']) {
-    const resolved = await resolveGlobalSpecPath(specDir, f);
-    if (resolved) {
-      const content = await readFile(resolved, 'utf-8');
-      if (content.trim().length > 50 && !content.trim().match(/^#+\s*待填充|^<!--\s*AI-FILL/m)) {
-        specs[f] = content;
-      }
-    }
-  }
-  // 根目录下的 TEST.md、UI_SPEC.md（端无关模板/回退）
-  for (const f of ['TEST.md', 'UI_SPEC.md']) {
-    const fp = join(specDir, f);
-    if (await pathExists(fp)) {
+  // v8.3.21+: 读取全局文档（overview/ 下）
+  const overviewDir = join(specDir, GLOBAL_SPECS_DIR);
+  if (await pathExists(overviewDir)) {
+    const overviewFiles = await readdir(overviewDir, { withFileTypes: true });
+    for (const f of overviewFiles) {
+      if (!f.name.endsWith('.md')) continue;
+      const fp = join(overviewDir, f.name);
       const content = await readFile(fp, 'utf-8');
       if (content.trim().length > 50 && !content.trim().match(/^#+\s*待填充|^<!--\s*AI-FILL/m)) {
-        specs[f] = content;
+        specs[f.name] = content;
       }
     }
   }
 
-  // 2. 读取各端子目录文档（如 admin/TECH.md、h5/TECH.md 等）
-  const entries = await readdir(specDir, { withFileTypes: true });
-  // v8.3.4+: 增加 overview 过滤，防止 analyze 全局文档目录被误当成端目录
-  const knownNonPlatformDirs = new Set(['sources', 'assets', 'prototypes', 'converted', 'features', 'bugs', 'refactors', 'research', 'staging', 'platforms', 'snapshots', 'overview', 'global', GLOBAL_SPECS_DIR]);
-  for (const e of entries) {
-    if (e.isDirectory() && !e.name.startsWith('_') && !e.name.startsWith('.') && !knownNonPlatformDirs.has(e.name)) {
-      const platform = e.name;
-      const platformDir = join(specDir, platform);
-      // 读取该端下的 TECH.md、TEST.md、UI_SPEC.md、DEV_GUIDE.md
-      for (const f of ['TECH.md', 'TEST.md', 'UI_SPEC.md', 'DEV_GUIDE.md']) {
-        const fp = join(platformDir, f);
-        if (await pathExists(fp)) {
-          const content = await readFile(fp, 'utf-8');
-          if (content.trim().length > 50 && !content.trim().match(/^#+\s*待填充|^<!--\s*AI-FILL/m)) {
-            // 用平台前缀区分：admin/TECH.md → 'admin/TECH.md'
-            specs[`${platform}/${f}`] = content;
-          }
+  // v8.3.21+: 读取各功能模块下的文档
+  const features = await parseFeatureList(iterationDir);
+  for (const feature of features) {
+    const featureDir = join(specDir, feature);
+    if (!await pathExists(featureDir)) continue;
+    const entries = await readdir(featureDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+      const subDir = join(featureDir, entry.name);
+      const subFiles = await readdir(subDir, { withFileTypes: true });
+      for (const sf of subFiles) {
+        if (!sf.name.endsWith('.md')) continue;
+        const fp = join(subDir, sf.name);
+        const content = await readFile(fp, 'utf-8');
+        if (content.trim().length > 50 && !content.trim().match(/^#+\s*待填充|^<!--\s*AI-FILL/m)) {
+          specs[`${feature}/${entry.name}/${sf.name}`] = content;
         }
       }
     }
@@ -2918,7 +3017,7 @@ async function buildSplitPrompt(
     p += `- 如果功能单元与已有 Task 的 functionalUnit 相同 → **复用该 Task ID**，scope 追加新端\n`;
     p += `- 如果功能单元是全新的 → 生成新的 Task ID（延续现有编号）\n`;
     p += `- 已有端不要重复拆分，只拆分**新增的端**\n`;
-    p += `- 已有 Task 的 _shared/ 目录保持不变，新端目录追加到 10-backend/ 或 20-frontend/ 下\n`;
+    p += `- 已有 Task 的 _shared/ 目录保持不变，新端目录平铺追加到任务根目录下（如 \`{端名}/{taskId}-{端名}/\`）\n`;
     p += `- API 契约（_shared/API_CONTRACT.yaml）需要补充新端涉及的接口\n\n`;
   }
 
@@ -3328,31 +3427,42 @@ async function detectExistingTasks(iterDir: string): Promise<string[]> {
 }
 
 /**
- * v6.76.0+: 扫描已有 Task 的端结构
- * 返回每个 Task 已有的端目录（10-backend/{端}, 20-frontend/{端}）
+ * v8.3.24+: 扫描已有 Task 的端结构
+ * 返回每个 Task 已有的端目录（端平铺结构: {端名}/）
  */
 async function scanExistingTaskStructure(iterDir: string): Promise<Map<string, string[]>> {
   const result = new Map<string, string[]>();
   const tasks = await detectExistingTasks(iterDir);
+  const standardPlatforms = await parsePlatformList();
 
   for (const taskName of tasks) {
-    const taskDir = join(iterDir, '030-tasks', taskName);
-    if (!(await pathExists(taskDir))) continue;
-
-    const platforms: string[] = [];
-    // 扫描 10-backend/ 和 20-frontend/ 子目录
-    for (const category of ['10-backend', '20-frontend']) {
-      const catDir = join(taskDir, category);
-      if (!(await pathExists(catDir))) continue;
+    // 递归查找实际任务目录（支持 030-tasks/{type}/Task-xxx/ 布局）
+    const tasksRoot = join(iterDir, '030-tasks');
+    let taskDir = join(tasksRoot, taskName);
+    if (!(await pathExists(taskDir))) {
+      // 可能在类型子目录下
       try {
-        const entries = await readdir(catDir, { withFileTypes: true });
+        const entries = await readdir(tasksRoot, { withFileTypes: true });
         for (const e of entries) {
           if (e.isDirectory() && !e.name.startsWith('.')) {
-            platforms.push(`${category}/${e.name}`);
+            const candidate = join(tasksRoot, e.name, taskName);
+            if (await pathExists(candidate)) { taskDir = candidate; break; }
           }
         }
       } catch {}
     }
+    if (!(await pathExists(taskDir))) continue;
+
+    const platforms: string[] = [];
+    // v8.3.24+: 扫描端平铺结构 — 任务目录下的合法端名子目录
+    try {
+      const entries = await readdir(taskDir, { withFileTypes: true });
+      for (const e of entries) {
+        if (e.isDirectory() && !e.name.startsWith('.') && !e.name.startsWith('_') && standardPlatforms.includes(e.name)) {
+          platforms.push(e.name);
+        }
+      }
+    } catch {}
 
     if (platforms.length > 0) {
       result.set(taskName, platforms);

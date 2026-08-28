@@ -95,12 +95,13 @@ export async function planCommand(options: PlanOptions): Promise<void> {
       }
     } catch { /* ignore */ }
 
-    // v8.3.0+: 注入迭代级全局风险（020-specs/RISK.md）和依赖分析（020-specs/DEPS.md）
+    // v8.3.21+: 注入迭代级全局风险（020-specs/overview/）和依赖分析
     try {
       const iterDir = await getIterationDir(iter);
-      const globalRiskPath = join(iterDir, '020-specs', 'RISK.md');
-      const globalDepsPath = join(iterDir, '020-specs', 'DEPS.md');
-      const globalDevGuidePath = join(iterDir, '020-specs', 'overview', 'DEV_GUIDE.md');
+      const specsDir = join(iterDir, '020-specs');
+      const globalRiskPath = join(specsDir, 'overview', 'RISK.md');
+      const globalDepsPath = join(specsDir, 'overview', 'DEPS.md');
+      const globalDevGuidePath = join(specsDir, 'overview', 'DEV_GUIDE.md');
       const globalExtras: string[] = [];
       if (await pathExists(globalRiskPath)) {
         const risk = await readFile(globalRiskPath, 'utf-8');

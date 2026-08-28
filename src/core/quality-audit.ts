@@ -14,7 +14,7 @@
 import { readFile, writeFile, pathExists, ensureDir, readdir } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
-import { GLOBAL_SPECS_DIR, GLOBAL_SPEC_FILES, resolveGlobalSpecPath } from './spec-paths';
+import { GLOBAL_SPECS_DIR, GLOBAL_SPEC_FILES, parseFeatureList } from './spec-paths';
 
 // ================================================================
 // 类型定义
@@ -338,36 +338,42 @@ export async function generateQualityAudit(
   platforms: string[],
   maxRounds: number = 2,
 ): Promise<QualityAuditResult | null> {
-  // 全局文档（在 global/ 子目录或根目录）
+  // 全局文档（在 overview/ 下）
   const globalDocTypes = ['REQUIREMENT.md', 'ANALYSIS.md'];
   // 端专属文档（在各端目录中）
   const platformDocTypes = ['TECH.md', 'TEST.md', 'UI_SPEC.md'];
   const allResults: QualityAuditResult[] = [];
 
-  // 1. 审计全局文档（优先 global/，回退根目录）
+  // 1. 审计全局文档（overview/ 下）
+  const overviewDir = join(specDir, GLOBAL_SPECS_DIR);
   for (const docType of globalDocTypes) {
-    const docPath = await resolveGlobalSpecPath(specDir, docType);
-    if (!docPath) continue;
-
+    const docPath = join(overviewDir, docType);
+    if (!await pathExists(docPath)) continue;
     const content = await readFile(docPath, 'utf-8');
     const result = await auditDocument(content, docType, platforms);
     allResults.push(result);
   }
 
-  // 2. 审计各端专属文档（扫描 platform 子目录）
+  // 2. 审计各端专属文档（扫描 020-specs/{feature}/{platform}/ 下的文档）
   try {
     const entries = await readdir(specDir, { withFileTypes: true });
-    const knownNonPlatformDirs = new Set(['sources', 'assets', 'prototypes', 'converted', 'features', 'bugs', 'refactors', 'research', 'staging', 'platforms', 'snapshots', GLOBAL_SPECS_DIR]);
+    const knownSystemDirs = new Set(['sources', 'assets', 'prototypes', 'converted', 'features', 'bugs', 'refactors', 'research', 'staging', 'platforms', 'snapshots', GLOBAL_SPECS_DIR]);
     for (const e of entries) {
-      if (!e.isDirectory() || e.name.startsWith('_') || e.name.startsWith('.') || knownNonPlatformDirs.has(e.name)) continue;
-      const platform = e.name;
-      const platformDir = join(specDir, platform);
-      for (const docType of platformDocTypes) {
-        const docPath = join(platformDir, docType);
-        if (!(await pathExists(docPath))) continue;
-        const content = await readFile(docPath, 'utf-8');
-        const result = await auditDocument(content, `${platform}/${docType}`, [platform]);
-        allResults.push(result);
+      if (!e.isDirectory() || e.name.startsWith('_') || e.name.startsWith('.') || knownSystemDirs.has(e.name)) continue;
+      // e.name 是功能模块名
+      const featureDir = join(specDir, e.name);
+      const subEntries = await readdir(featureDir, { withFileTypes: true });
+      for (const se of subEntries) {
+        if (!se.isDirectory() || se.name.startsWith('.') || se.name === 'overview') continue;
+        const platform = se.name;
+        const platformDir = join(featureDir, platform);
+        for (const docType of platformDocTypes) {
+          const docPath = join(platformDir, docType);
+          if (!(await pathExists(docPath))) continue;
+          const content = await readFile(docPath, 'utf-8');
+          const result = await auditDocument(content, `${e.name}/${platform}/${docType}`, [platform]);
+          allResults.push(result);
+        }
       }
     }
   } catch { /* 目录不存在，跳过 */ }

@@ -13,7 +13,7 @@
 | File | Source | Editable? | After Editing |
 | :--- | :--- | :--- | :--- |
 | `CONSTITUTION.md` | init auto-gen | ✅ Yes | Read by next execute |
-| `SETTINGS.md` | init auto-gen | ✅ Yes | Read by next execute |
+| `.speccore.yml` | init auto-gen | ✅ Yes | Read by next execute |
 | `POST_COMPLETION.md` | init auto-gen | ✅ Yes | Read by next execute |
 | `config/platforms.yaml` | init + platform-add | ⚠️ Use `config --set` | Used by task new |
 | `local/context.json` | Command-maintained | ❌ No | Commands overwrite it |
@@ -52,7 +52,7 @@ Descriptive text, not structural data.
 | `TECH.md` | Technical design, architecture | Documentation for AI and developers |
 | `*.md` comments | Notes, TODOs | No workflow impact |
 | `CONSTITUTION.md` | Tech standards, coding rules | Read at execute time |
-| `SETTINGS.md` | Framework configuration text | Same as above |
+| `.speccore.yml` | Unified configuration | Same as above |
 
 ---
 

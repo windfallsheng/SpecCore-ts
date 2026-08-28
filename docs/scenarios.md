@@ -218,7 +218,7 @@ speccore config --tech frontend --set "Vue 3, Element Plus, Vite"
 **验证**:
 ```bash
 ls .speccore/
-# → CONSTITUTION.md  SETTINGS.md  GLOBAL/  PROJECT/  ITERATIONS/
+# → CONSTITUTION.md  .speccore.yml  GLOBAL/  PROJECT/  ITERATIONS/
 # → .speccore/local/counters.json（全局唯一计数器）
 ```
 
@@ -773,7 +773,7 @@ speccore execute -t Task-002 --force --base=feature/Task-001-用户管理
 **结果**：Task-002 分支上已有 Task-001 的 UserController 等代码，不会重复生成。
 合并时 Task-002 → main 只带来增量变更。
 
-**默认 base 分支**：在 `.speccore/SETTINGS.md` 中配置：
+**默认 base 分支**：在 `.speccore.yml` 中配置：
 ```yaml
 git:
   default_base: develop   # 默认从 develop 分叉（省略则从当前分支）

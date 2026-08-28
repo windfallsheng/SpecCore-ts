@@ -1,4 +1,4 @@
-# 命令参考 (v8.0.0)
+# 命令参考 (v8.3.24)
 
 ---
 title: 命令参考
@@ -35,7 +35,7 @@ speccore ask ←── 万能 AI 入口 ──→ speccore dev
 
 ---
 
-## 核心命令 (19)
+## 核心命令 (21)
 
 ### 🧠 ask — 万能 AI 入口 🔒 AI 命令
 ```bash
@@ -101,6 +101,28 @@ speccore init [--tool <tool>] [--force] [--interactive]
 > 💡 init 完成后自动生成配置引导页 `outputs/speccore-setup-guide.html`，包含 6 步引导（技术宪法 → 团队配置 → 创建迭代 → 导入需求 → 知识库 → 开始开发），可在浏览器中打开查看。
 
 ![Setup Guide](screenshots/setup-guide-top.png)
+
+### ⚙️ config — 配置管理
+```bash
+speccore config --get <key>
+speccore config --set <key> <value>
+speccore config --upgrade
+```
+别名: `cfg`
+
+> v8.3.25: 统一配置管理，`.speccore.yml` 为唯一配置入口。
+
+| 选项 | 说明 |
+| :--- | :--- |
+| `--get <key>` | 读取配置项（支持点号路径，如 `settings.patterns.auto_save`） |
+| `--set <key> <value>` | 设置配置项 |
+| `--upgrade` | 升级配置结构：补全缺失字段、更新 schema_version、追加升级历史 |
+| `--list` | 列出所有配置项和当前值 |
+
+**配置版本化**：
+- `.speccore.yml` 包含 `schema_version` 字段，CLI 升级时自动检测
+- `schema_version` < CLI 要求时，加载时自动警告，建议运行 `--upgrade`
+- 缺失字段自动用默认值补全，不因配置不完整而阻塞
 
 ### 📝 doc2spec — 文档导入 🔒 AI 命令
 ```bash
@@ -374,6 +396,25 @@ speccore pr [--task <id>] [--auto]
 speccore done [--task <id>] [--all] [--interactive]
 ```
 别名: `dn`
+
+### ⚖️ verdict — 契约冲突裁决
+```bash
+speccore verdict --list [--task <id>]
+speccore verdict --conflict <id> --decide <pass|pass-with-conditions|reject|defer> [--reason <说明>]
+speccore verdict --report <Task-ID>
+```
+别名: `vd`
+
+**三级裁决机制**：
+- **L1 机器契约**：编译/测试失败 → 自动裁决驳回（无需人工）
+- **L2 规范契约**：Spec 不一致/Lint 警告 → AI 生成修复建议，开发者确认
+- **L3 架构契约**：安全漏洞/架构冲突 → 需人工最终裁决
+
+**配置控制**（`.speccore.yml`）：
+| 配置项 | 可选值 | 默认 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `arbitration.enabled` | `true`/`false` | `true` | 总开关 |
+| `arbitration.mode` | `full`/`l1-only`/`report-only` | `full` | 裁决深度 |
 
 ### 🔄 change — 需求变更 🔒 AI 命令
 ```bash

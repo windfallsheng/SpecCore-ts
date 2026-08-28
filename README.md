@@ -63,7 +63,7 @@ init → doc2spec → analyze → split → plan → execute → pr → done →
 |------|------|
 | CLI 入口 | `init` `welcome` `help` |
 | CLI 管理 | `iteration` `task` `context` ✅ |
-| CLI 查看 | `dashboard` `validate` `about` `config` `archive` |
+| CLI 查看 | `dashboard` `validate` `about` `config` `archive` `verdict` |
 | CLI 工具 | `workspace` `clarify` `pattern` `code-index` `graph` |
 | 🔒 AI 入口 | `ask` |
 | 🔒 AI 流水线 | `doc2spec` `analyze` `split` `plan` `execute` `pr` `done` `spec2doc` |
@@ -84,9 +84,12 @@ Iteration-001-meeting/
 │   │   └── {feature}/README.md
 │   ├── prototypes/             ← 原型（HTML/图片/链接）
 │   └── assets/                 ← 素材（extracted/）
-├── 020-specs/                  ← analyze 分端输出
-│   ├── global/                 ← 跨端文档（REQUIREMENT/ANALYSIS/RISK/DEPS/REVIEW/MONITOR）
-│   └── {platform}/             ← 各端专属（TECH/TEST/UI_SPEC）
+├── 020-specs/                  ← analyze 输出（三层架构 v8.3.17+）
+│   ├── overview/               ← 迭代级全局文档（REQUIREMENT/ANALYSIS/FUNCTION_MAP/RISK/DEPS）
+│   ├── {feature}/              ← 功能模块目录（如 用户认证/订单管理）
+│   │   ├── overview/           ← 功能模块综合文档
+│   │   └── {platform}/         ← 各端专属（TECH/TEST/UI_SPEC）
+│   └── PLATFORMS.md            ← 端列表元数据
 ├── 030-tasks/                  ← split 开发任务
 │   └── Task-001-*/
 │       ├── .meta/              ← 任务元信息（type/status/owner/feature/created-at）

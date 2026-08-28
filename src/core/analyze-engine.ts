@@ -23,7 +23,7 @@ import { cleanStaleCache } from './git-integration';
 import { refreshRagIndex, checkRagIndexFreshness, indexDirectoryDocuments } from './rag-engine';
 import { refreshKnowledgeGraph } from './knowledge-graph';
 import { generateQualityAudit } from './quality-audit';
-import { GLOBAL_SPECS_DIR, GLOBAL_SPEC_FILES, resolveGlobalSpecPath, globalSpecWritePath, parsePlatformList } from './spec-paths';
+import { GLOBAL_SPECS_DIR, GLOBAL_SPEC_FILES, globalSpecWritePath, parsePlatformList } from './spec-paths';
 
 // ================================================================
 // 类型定义
@@ -2296,11 +2296,10 @@ export async function generateSpecsFromRequirements(
   const globalDir = join(specDir, GLOBAL_SPECS_DIR);
   await ensureDir(globalDir);
   for (const f of files) {
-    // 写入路径：始终使用 global/ 子目录
+    // 写入路径：始终使用 overview/ 子目录
     const filePath = join(globalDir, f.filename);
-    // 覆盖检查：优先检查新路径，回退检查旧路径（根目录）
-    const existingPath = await pathExists(filePath) ? filePath :
-                        await pathExists(join(specDir, f.filename)) ? join(specDir, f.filename) : null;
+    // 覆盖检查
+    const existingPath = await pathExists(filePath) ? filePath : null;
     if (existingPath) {
       const existing = await readFile(existingPath, 'utf-8');
       const meaningful = stripTemplateNoise(existing);

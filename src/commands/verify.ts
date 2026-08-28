@@ -18,7 +18,7 @@ import { join } from 'path';
 import { scanTasks, TaskState } from '../core/state';
 import { resolveTask, formatResolveResult } from '../core/resolver';
 import { runVerification, writeVerifyReport, VerifyReport } from '../core/verify-engine';
-import { loadConfig } from '../core/unified-config';
+import { loadConfig, loadProjectConfig } from '../core/unified-config';
 
 interface VerifyOptions {
   task?: string;
@@ -41,14 +41,15 @@ export async function verifyCommand(options: VerifyOptions): Promise<void> {
 
     const iterDir = await getIterationDir(iteration);
     const config = await loadConfig();
+    const projectConfig = await loadProjectConfig();
 
     // 确定代码路径
     let codePath: string;
     if (options.path) {
       codePath = options.path;
     } else {
-      // 从 code_scope 获取第一个代码路径
-      codePath = config.code_scope?.[0] || process.cwd();
+      // 从 projectConfig.code_scope 获取第一个代码路径
+      codePath = projectConfig.code_scope?.[0] || process.cwd();
       if (!codePath.startsWith('/')) {
         codePath = join(process.cwd(), codePath);
       }

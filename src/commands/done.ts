@@ -12,7 +12,7 @@ import { extractQuestions, showQuestionChecklist } from '../core/question-checkl
 import { saveSession, clearSession, tryResume } from '../core/session-state';
 import { retroCommand } from './retro';
 import { loadKnowledgeGraph, traceDependencyChain, type KnowledgeGraph } from '../core/knowledge-graph';
-import { detectPatternCandidates, groupCandidatesByPlatform } from '../core/pattern-detector';
+import { detectPatternCandidates, groupCandidatesByPlatform, resolveCodeDirsFromTask, getPatternAutoSaveMode, autoSavePattern, isHighConfidenceCandidate } from '../core/pattern-detector';
 
 export interface DoneOptions {
   task?: string;
@@ -221,31 +221,64 @@ async function doDone(
     logger.info('🧠 知识图谱已刷新');
   } catch {}
 
-  // v8.2.0+: 归档时自动检测可复用模式候选
+  // v8.3.23+: 归档时自动检测可复用模式候选（适配端平铺结构 + 自动写入）
   try {
     const taskDir = join(iterDir, '030-tasks', taskId);
-    const codeDirs = [
-      join(taskDir, '10-backend'),
-      join(taskDir, '20-frontend'),
-      join(taskDir, 'src'),
-    ];
+    const codeDirs = await resolveCodeDirsFromTask(taskDir);
+    if (codeDirs.length === 0) {
+      // 无代码目录时静默跳过（代码可能在外部工程）
+      return;
+    }
     const candidates = await detectPatternCandidates(codeDirs, `task:${taskId}`);
-    if (candidates.length > 0) {
-      logger.info('');
-      logger.info('🧩 检测到以下可复用模式候选（建议沉淀到 .speccore/PATTERNS/）:');
-      const byPlatform = groupCandidatesByPlatform(candidates);
-      for (const [plat, list] of Object.entries(byPlatform)) {
-        const platLabel = plat === 'shared' ? '🌐 跨端共享' : plat === 'backend' ? '⚙️ 后端' : plat === 'frontend' ? '🎨 前端' : '📦 其他';
-        logger.info(`   ${platLabel} (${list.length}个):`);
-        for (const c of list.slice(0, 3)) {
-          logger.info(`     • ${c.name} [${c.category}] — ${c.reason}`);
-          logger.info(`       文件: ${c.file}`);
-        }
-        if (list.length > 3) {
-          logger.info(`       ... 还有 ${list.length - 3} 个`);
-        }
+    if (candidates.length === 0) return;
+
+    const mode = await getPatternAutoSaveMode();
+    const autoSaved: string[] = [];
+    const manual: string[] = [];
+
+    for (const c of candidates) {
+      const result = await autoSavePattern(c, `task:${taskId}`, mode);
+      if (result.saved && result.path) {
+        autoSaved.push(`${c.name} [${result.confidence}]`);
+      } else if (!isHighConfidenceCandidate(c) && mode === 'smart') {
+        manual.push(`${c.name} [${c.category}]`);
       }
-      logger.info(`   💡 使用 speccore pattern save --name=<模式名> --file=<文件路径> 保存`);
+    }
+
+    logger.info('');
+    logger.info('🧩 检测到以下可复用模式候选:');
+    const byPlatform = groupCandidatesByPlatform(candidates);
+    for (const [plat, list] of Object.entries(byPlatform)) {
+      const platLabel = plat === 'shared' ? '🌐 跨端共享' : plat === 'backend' ? '⚙️ 后端' : plat === 'frontend' ? '🎨 前端' : '📦 其他';
+      logger.info(`   ${platLabel} (${list.length}个):`);
+      for (const c of list.slice(0, 3)) {
+        logger.info(`     • ${c.name} [${c.category}] — ${c.reason}`);
+        logger.info(`       文件: ${c.file}`);
+      }
+      if (list.length > 3) {
+        logger.info(`       ... 还有 ${list.length - 3} 个`);
+      }
+    }
+
+    if (autoSaved.length > 0) {
+      logger.info('');
+      logger.info(`   ✅ 已自动保存 ${autoSaved.length} 个高置信度模式到 .speccore/PATTERNS/`);
+      for (const s of autoSaved.slice(0, 3)) {
+        logger.info(`      • ${s}`);
+      }
+    }
+    if (manual.length > 0 && mode === 'smart') {
+      logger.info('');
+      logger.info(`   💡 以下 ${manual.length} 个候选置信度较低，建议手动确认后保存:`);
+      for (const m of manual.slice(0, 3)) {
+        logger.info(`      • ${m}`);
+      }
+      logger.info('      命令: speccore pattern save --name=<模式名> --file=<文件路径>');
+    }
+    if (mode === 'off') {
+      logger.info('');
+      logger.info('   💡 检测到可复用模式，自动保存已关闭。如需保存请执行:');
+      logger.info('      speccore pattern save --name=<模式名> --file=<文件路径>');
     }
   } catch { /* 静默失败 */ }
 }

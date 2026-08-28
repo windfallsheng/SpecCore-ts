@@ -191,16 +191,16 @@ function extractNamedExports(content: string): string[] {
 }
 
 /**
- * v8.3.0+: 根据文件路径推断所属端
+ * v8.3.23+: 根据文件路径推断所属端（适配端平铺结构）
  */
 function inferPlatform(filePath: string): string {
   const lower = filePath.toLowerCase();
   // 后端标识
-  if (/[\\/](10-backend|backend|api|server|service|controller|model|dao|repository|entity|dto)[\\/]/i.test(lower)) {
+  if (/[\\/](backend|api|server|service|controller|model|dao|repository|entity|dto|mapper|handler|modules)[\\/]/i.test(lower)) {
     return 'backend';
   }
   // 前端标识
-  if (/[\\/](20-frontend|frontend|h5|admin|web|app|mobile|pages|views|components|ui|widgets)[\\/]/i.test(lower)) {
+  if (/[\\/](frontend|h5|admin|web|app|mobile|pages|views|components|ui|widgets|hooks|composables)[\\/]/i.test(lower)) {
     return 'frontend';
   }
   // 共享标识
@@ -220,6 +220,54 @@ function isGenericName(name: string): boolean {
     if (lower.startsWith(prefix) && name.length > prefix.length + 1) return true;
   }
   return false;
+}
+
+/**
+ * v8.3.23+: 从任务目录动态发现代码目录（适配端平铺结构）
+ * 扫描 taskDir 下的端目录及子任务目录，寻找 src/ 或 code/ 子目录
+ */
+export async function resolveCodeDirsFromTask(taskDir: string): Promise<string[]> {
+  const dirs: string[] = [];
+  if (!(await pathExists(taskDir))) return dirs;
+
+  // 直接检查 taskDir 本身是否有 src/ 或 code/
+  for (const sub of ['src', 'code']) {
+    const d = join(taskDir, sub);
+    if (await pathExists(d)) dirs.push(d);
+  }
+
+  // 扫描 taskDir 下的一级子目录（端目录）
+  try {
+    const entries = await readdir(taskDir, { withFileTypes: true });
+    for (const e of entries) {
+      if (!e.isDirectory()) continue;
+      const name = e.name;
+      // 排除特殊目录: .meta, _shared, 00-specs, node_modules, dist 等
+      if (name.startsWith('.') || name.startsWith('_') || /^\d{2,}-/.test(name) || name === 'node_modules' || name === 'dist') continue;
+
+      const platformDir = join(taskDir, name);
+
+      // 检查端目录本身是否有 src/ 或 code/
+      for (const sub of ['src', 'code']) {
+        const d = join(platformDir, sub);
+        if (await pathExists(d)) dirs.push(d);
+      }
+
+      // 检查端目录下的子任务目录（如 Task-001-api/）是否有 src/ 或 code/
+      try {
+        const subEntries = await readdir(platformDir, { withFileTypes: true });
+        for (const se of subEntries) {
+          if (!se.isDirectory() || se.name.startsWith('.') || se.name === 'node_modules' || se.name === 'dist') continue;
+          for (const sub of ['src', 'code']) {
+            const d = join(platformDir, se.name, sub);
+            if (await pathExists(d)) dirs.push(d);
+          }
+        }
+      } catch { /* skip */ }
+    }
+  } catch { /* skip */ }
+
+  return [...new Set(dirs)];
 }
 
 /**
@@ -250,6 +298,103 @@ export function groupCandidatesByPlatform(
     if (!result[key]) result[key] = value;
   }
   return result;
+}
+
+// ═══════════════════════════════════════════════════════════
+// v8.3.23+: PATTERNS 自动写入三档策略
+// ═══════════════════════════════════════════════════════════
+
+export type PatternAutoSaveMode = 'off' | 'smart' | 'aggressive';
+
+/**
+ * 读取 patterns.auto_save 配置（从 .speccore.yml）
+ * 默认: 'smart'
+ */
+export async function getPatternAutoSaveMode(): Promise<PatternAutoSaveMode> {
+  try {
+    const { loadConfig } = await import('./unified-config');
+    const config = await loadConfig();
+    const v = config.settings?.patterns?.auto_save;
+    if (v === 'off' || v === 'smart' || v === 'aggressive') return v;
+  } catch { /* 静默失败 */ }
+  return 'smart';
+}
+
+/**
+ * 判断是否为高置信度候选（smart 档位自动保存）
+ */
+export function isHighConfidenceCandidate(candidate: PatternCandidate): boolean {
+  // 跨端共享 = 最高置信度
+  if (candidate.platform === 'shared') return true;
+  // 框架级中间件/装饰器/Hook
+  if (['middleware', 'decorator', 'hook', 'interceptor', 'filter'].includes(candidate.category)) return true;
+  // 有 JSDoc 的可复用模块
+  if (candidate.category === 'module' && candidate.reason.includes('JSDoc')) return true;
+  // Base 开头的基础组件
+  if (candidate.category === 'component' && candidate.name.startsWith('Base')) return true;
+  return false;
+}
+
+export interface AutoSaveResult {
+  saved: boolean;
+  path?: string;
+  confidence: 'EXTRACTED' | 'INFERRED';
+}
+
+/**
+ * 自动保存单个模式候选到 .speccore/PATTERNS/
+ */
+export async function autoSavePattern(
+  candidate: PatternCandidate,
+  sourceLabel: string,
+  mode: PatternAutoSaveMode
+): Promise<AutoSaveResult> {
+  if (mode === 'off') return { saved: false, confidence: 'INFERRED' };
+
+  const isHigh = isHighConfidenceCandidate(candidate);
+  if (mode === 'smart' && !isHigh) return { saved: false, confidence: 'INFERRED' };
+
+  const confidence = isHigh ? 'EXTRACTED' : 'INFERRED';
+  const patternsDir = join(process.cwd(), '.speccore', 'PATTERNS');
+  const categoryDir = join(patternsDir, candidate.category);
+
+  try {
+    await import('fs-extra').then(m => m.ensureDir(categoryDir));
+  } catch {
+    return { saved: false, confidence };
+  }
+
+  const fileName = `${candidate.name}.md`;
+  const filePath = join(categoryDir, fileName);
+
+  // 如果已存在，跳过（避免覆盖）
+  if (await pathExists(filePath)) return { saved: false, confidence };
+
+  const content = `# ${candidate.name}
+
+> 类型: pattern | 来源: ${sourceLabel} | 检测时间: ${new Date().toISOString()}
+> 置信度: ${confidence}
+> 所属端: ${candidate.platform}
+
+## 描述
+${candidate.reason}
+
+## 代码参考
+\`${candidate.file}\`
+
+## 使用场景
+- ${candidate.platform === 'shared' ? '跨端复用' : candidate.platform === 'backend' ? '后端复用' : candidate.platform === 'frontend' ? '前端复用' : '通用复用'}
+
+## 自动检测
+此模式由 SpecCore 自动检测到。如需调整，请手动编辑或删除此文件。
+`;
+
+  try {
+    await import('fs-extra').then(m => m.writeFile(filePath, content, 'utf-8'));
+    return { saved: true, path: filePath, confidence };
+  } catch {
+    return { saved: false, confidence };
+  }
 }
 
 /** 加载已有 PATTERNS 中的模式名 */

@@ -6,7 +6,7 @@
  * 本模块提供统一的路径解析和写入路径生成，支持向后兼容。
  */
 import { join } from 'path';
-import { pathExists, ensureDir, readFile } from 'fs-extra';
+import { pathExists, ensureDir, readFile, readdir } from 'fs-extra';
 
 /** 迭代综合文档子目录名（v6.78.0+ 从 'global' 改为 'overview'） */
 export const GLOBAL_SPECS_DIR = 'overview';
@@ -125,6 +125,67 @@ async function getValidPlatformIdentifiers(): Promise<Set<string>> {
  * v7.4.3+: 返回值经过合法性校验，过滤垃圾值
  * 返回去重后的端名数组
  */
+/**
+ * v8.3.17+: 从迭代需求文档提取功能模块（需求文档名）列表
+ * 扫描 010-requirements/ 和 020-specs/requirements/ 下的所有 .md 文件
+ * 提取文件名（不含扩展名）作为功能模块名，去重返回
+ */
+export async function parseFeatureList(iterDir: string): Promise<string[]> {
+  const features = new Set<string>();
+  // 排除非功能文档（系统文件、汇总文件）
+  const excludeNames = new Set([
+    'README', 'INDEX', 'REQUIREMENT', 'CLARIFY_REPORT',
+    'CHANGELOG', 'LICENSE', 'CONTRIBUTING', 'TEMPLATE',
+  ]);
+
+  async function scanDir(dir: string) {
+    if (!await pathExists(dir)) return;
+    try {
+      const entries = await readdir(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.name.startsWith('.')) continue;
+        if (entry.isDirectory()) {
+          // 不递归进入资源目录
+          if (['images', 'prototypes', 'sources', 'assets', 'converted'].includes(entry.name)) continue;
+          await scanDir(join(dir, entry.name));
+        } else if (entry.name.endsWith('.md')) {
+          const basename = entry.name.slice(0, -3);
+          if (!excludeNames.has(basename) && basename.length > 0) {
+            features.add(basename);
+          }
+        }
+      }
+    } catch { /* 跳过不可读目录 */ }
+  }
+
+  // 扫描原始需求目录
+  await scanDir(join(iterDir, '010-requirements'));
+  // 扫描黄金需求目录
+  await scanDir(join(iterDir, '020-specs', 'requirements'));
+
+  return [...features];
+}
+
+/**
+ * v8.3.17+: 检测 020-specs/ 是否为旧结构（端平铺结构）
+ * 旧结构特征：根目录下存在端名目录（如 api/、web/、h5/）
+ * 新结构特征：根目录下是功能模块目录（如 用户管理/、订单系统/）
+ */
+export async function isLegacySpecDir(specDir: string): Promise<boolean> {
+  if (!await pathExists(specDir)) return false;
+  try {
+    const platforms = await parsePlatformList();
+    const platformSet = new Set(platforms);
+    const entries = await readdir(specDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory() && platformSet.has(entry.name)) {
+        return true; // 发现端目录 → 旧结构
+      }
+    }
+  } catch { /* ignore */ }
+  return false;
+}
+
 export async function parsePlatformList(): Promise<string[]> {
   // v7.4.3+: 获取合法工程标识集合，用于交叉验证
   const validIdentifiers = await getValidPlatformIdentifiers();

@@ -1,3 +1,265 @@
+## v8.3.25 (2026-08-28) — 统一配置版本化 + 结构校验 + 自动升级
+
+### 新增
+
+**双文件配置分离：系统配置 + 项目配置（v8.3.25）**：
+- `.speccore.yml` → **系统配置**（CLI 运行时行为）：quality_gates、arbitration、settings、ask、config_history
+- `.speccore/PROJECT.yaml` → **项目配置**（工程映射）：project、platforms、git、code_scope
+- 两个文件各自独立的 `schema_version`，可独立升级，互不影响
+- `speccore config --list --project` 查看项目配置
+- `speccore config --upgrade --project` 升级项目配置结构
+- `init.ts` / `update.ts`：初始化/升级时自动生成 PROJECT.yaml（如不存在）
+- `doctor.ts`：同时检查系统配置和项目配置的健康度，包括 schema_version、端列表、校验警告、结构性差异
+- `status-panel.ts`、`verify.ts`、`execute.ts`：从 PROJECT.yaml 读取 project.name、code_scope、platforms 等项目级信息
+
+**统一配置 `.speccore.yml` 版本化（v8.3.25）**：
+- 扩展 `SpecConfig` 接口，聚焦 CLI 运行时行为：质量门禁、仲裁、运行时行为、Ask 引擎、配置历史
+- 项目元数据、端列表、Git、代码范围等迁移到 `ProjectConfig`（PROJECT.yaml）
+- 新增 `schema_version` 字段（当前 = 1），CLI 升级时自动检测配置结构是否过期
+- 自定义结构校验器 `validateConfig()` / `validateProjectConfig()`：分别校验两个配置文件
+- 深度合并自动补全：加载时自动用对应 DEFAULT 填充缺失字段，确保向后兼容
+- 配置升级命令 `speccore config --upgrade`：补全缺失字段、更新 schema_version、追加升级历史到 `config_history`
+- `loadConfig()` 保持返回 `SpecConfig`（兼容所有现有调用者）；新增 `loadConfigWithMeta()` 返回 `ConfigLoadResult`（含 warnings + migrated 标志）
+
+**配置健康检查集成**：
+- `doctor.ts`：新增 `checkConfigFile()` 检查项，覆盖 `.speccore.yml` 存在性、schema_version 匹配、端列表非空、校验警告、自动补全状态
+- `status.ts`：新增 `printConfigVersion()`，在状态面板末尾输出配置版本信息和升级提示
+
+**配置文档体系**：
+- `.speccore/SETTINGS.md` 废弃删除，速查功能由 `speccore config --list` 命令替代
+- 新建 `docs/config-reference.md` 完整配置参考：7 大章节（目录、示例、详解、枚举值、升级指南、变更历史、FAQ），838 行
+- `command-reference.md`：新增 `config` 命令说明，核心命令数 20 → 21
+
+**配置差异检测与交互式升级（v8.3.25）**：
+- `ENUM_CONSTRAINTS`：定义 6 组枚举约束（`platforms.*.type`、`arbitration.mode`、`settings.assignee.mode`、`settings.patterns.auto_save`、`ask.routing.mode`、`ask.llm_providers.*.type`）
+- `getValuesAtPath()`：支持通配符 `*` 的路径遍历，如 `platforms.*.type` 匹配所有端类型字段
+- `checkEnumConstraints()`：检测配置中的枚举值是否超出合法范围
+- `detectConfigDiff()` 增强：在结构差异检测基础上，自动调用枚举约束检测，覆盖 `added` / `removed` / `typeChanged` / `enumChanged` / `structureChanged` 五类差异
+- `upgradeConfig()` 差异报告：检测到需用户确认的结构性变更时，自动生成 `.speccore/config/upgrade-diff.md`，含变更详情和处理建议
+- `doctor.ts` 集成：即使 `schema_version` 匹配，也调用 `detectConfigDiff` 检测结构性差异，发现问题时提示查看报告
+- `status.ts` 集成：`printConfigVersion()` 在配置版本匹配时，额外检测并报告结构性差异
+
+**配置迁移框架**：
+- `MIGRATIONS` 注册表：`Record<number, MigrationStep[]>`，支持 `rename` / `add` / `remove` / `transform` 四种迁移类型
+- `runMigrations()`：自动从当前 `schema_version` 逐步升级到 `CURRENT_SCHEMA_VERSION`
+- 升级时输出迁移日志，记录到 `config_history`
+
+**环境变量引用支持（v8.3.25）**：
+- `resolveEnvVars()`：递归遍历配置对象，解析所有字符串值中的 `${ENV_VAR}` 和 `${ENV_VAR:-default}` 语法
+- `loadConfigWithMeta()` 集成：解析 YAML 后自动调用环境变量替换，未设置的环境变量输出警告但不阻塞
+- `ask-config.ts` 适配：
+  - `loadAskConfig()` 优先从 `.speccore.yml` 的 `ask` 域读取 LLM Provider 配置，回退到 `ask.json`
+  - 从 `ask.json` 读取时自动调用 `resolveEnvVars()` 解析环境变量引用
+  - 新增 `mapUnifiedToAskConfig()` 将 `snake_case` 的 `.speccore.yml` 配置映射为 `camelCase` 的 `AskConfig`
+  - `LlmProviderConfig.type` 扩展为支持 `anthropic`
+
+**废弃 `.speccore/SETTINGS.md`**：
+- `config.ts` 重写：使用 `unified-config` 模块，支持 `--list` / `--get <path>` / `--set <path=value>` / `--upgrade`
+- `arbitration-engine.ts`：`getArbitrationConfig()` 改为从 `.speccore.yml` 读取（原从 SETTINGS.md 解析表格）
+- `pattern-detector.ts`：`getPatternAutoSaveMode()` 改为从 `.speccore.yml` 读取（原从 SETTINGS.md 正则匹配）
+- `init.ts`：移除 `SETTINGS.md` 生成逻辑，改为调用 `initConfig()` 生成 `.speccore.yml`
+- `update.ts`：同步更新为调用 `initConfig()`
+- `cli.ts`：config 命令添加 `--list` / `--upgrade` 选项，更新描述为 `.speccore.yml`
+- 所有文档中的 `SETTINGS.md` 引用已更新为 `.speccore.yml`（scenarios.md、quick-start.en.md、usage-guide.en.md、scenarios.en.md、DESIGN.md、command-reference.md）
+
+---
+
+## v8.3.26 (2026-08-28) — update 全面升级检查框架 + help 页面补全
+
+### 新增
+
+**`speccore update` 全面升级检查框架**：
+- `checkConfigDiffs()` → `checkAllUpgradeIssues()`：从仅检查 2 个配置文件，扩展为覆盖 6 类必要文件的全面检查
+  - `.speccore.yml` / `.speccore/PROJECT.yaml` — 配置结构性差异（保留原有能力）
+  - `.speccore/local/context.json` — 必填字段完整性检查（`currentIteration`、`history`）
+  - `.speccore/{AGENTS,RULES,COMMANDS,SKILLS,HOOKS}/` — 规范数据库目录完整性
+  - `.speccore/AI-RULES.md` — AI 参考手册存在性
+  - `Iteration-*/` — 旧版任务目录结构检测（Task-NNN 平铺）
+- 统一报告格式：按文件分组展示问题 + 处理建议，结构性差异自动生成 `.speccore/config/upgrade-diff-*.md`
+- 智能过滤：update 流程会自动修复的问题（`missing-dir`、`missing-file`）不加入最终报告，避免用户困惑
+- 消除重复：删除步骤 6 对 `checkUpgradeHints` 的重复调用，CONSTITUTION.md 格式检查只执行一次
+- 扩展接口：`UpgradeIssue` / `UpgradeCheckResult` 支持 5 种问题类型（`structural-diff`、`missing-field`、`missing-file`、`missing-dir`、`format-deprecated`），可被 `doctor` 等其他命令复用
+
+**帮助页面补全**：
+- `help.ts` 动态 HTML / `templates/html/speccore-help.html` 静态模板：新增"🔧 维护与升级"分类，包含 `update`、`doctor`、`config` 命令
+
+### 文档
+
+- `docs/DESIGN.md` §11.2.1：新增 `speccore update` 全面升级检查框架设计章节，含检查范围表、架构流程图、关键设计决策
+
+---
+
+## v8.3.24 (2026-08-27) — 契约冲突裁决模型 + PATTERNS 自动保存 + 意图识别增强
+
+### 新增
+
+**契约冲突裁决模型（v8.3.24）**：
+- 新增 `src/core/arbitration/` 模块（10 个核心文件），实现 L1/L2/L3 三级契约冲突裁决
+  - `contract-types.ts` / `conflict-types.ts` / `verdict-types.ts` — 核心类型定义
+  - `contract-registry.ts` — 16 项契约规则注册表（L1 机器契约 3 项 + L2 规范契约 9 项 + L3 架构契约 4 项）
+  - `conflict-detector.ts` — 包装现有 `verify-engine`，将质量门禁检查结果转换为冲突对象
+  - `l1-auto-arbiter.ts` — L1 机器契约自动裁决器（fatal 自动驳回，warning 自动通过）
+  - `l2-ai-arbiter.ts` — L2 规范契约 AI 辅助裁决器（按契约类型生成针对性修复建议）
+  - `l3-human-arbiter.ts` — L3 架构契约人工裁决器（初始化 pending-review 流程）
+  - `arbitration-engine.ts` — 裁决引擎主入口，支持 `full` / `l1-only` / `report-only` 三档模式
+  - `verdict-generator.ts` — 生成标准化 `ARBITRATION_REPORT.md` 裁决书
+- 新增 `speccore verdict` 命令（别名 `vd`）：查看待裁决冲突、进行人工裁决、查看裁决书
+- `execute.ts` 集成仲裁引擎：Step 1 质量门禁被契约冲突裁决取代，支持通过 `arbitration.enabled` / `arbitration.mode` 配置控制行为
+- `--auto` 模式下输出精简：单行总结裁决结果，避免日志污染
+- 新增 `.speccore.yml` 配置项：`arbitration.enabled`（总开关）和 `arbitration.mode`（裁决深度）
+
+**PATTERNS 自动保存三档策略（v8.3.23）**：
+- `pattern-detector.ts` 适配端平铺结构：`inferPlatform()` 移除旧 `10-backend/20-frontend`，新增 `mapper/handler/modules/hooks/composables`
+- 新增 `resolveCodeDirsFromTask()` 动态发现代码目录（扫描 `src/`、`code/` 及子任务目录）
+- 新增 `getPatternAutoSaveMode()` / `isHighConfidenceCandidate()` / `autoSavePattern()` / `AutoSaveResult`
+- 三档策略：`off`（仅提示）/ `smart`（高置信度自动保存，默认）/ `aggressive`（全部自动保存）
+- 高置信度标准：跨端共享、中间件/装饰器/Hook、JSDoc 模块、Base 开头组件
+- `execute.ts` / `done.ts` 集成自动保存逻辑，执行完成后自动检测并保存可复用模式
+
+**Ask 意图识别增强**：
+- `intent-recognition.ts` 新增 `'verdict'` 意图类型及命令映射
+- `ask-engine.ts` 命令知识库新增 `verdict` 条目及同义词映射
+
+### 修复
+
+**analyze/split 旧结构残留（v8.3.22+）**：
+- `analyze.ts`：修复 `--apply` 多段指定时文档路由错误，按文件名前缀中的合法端名路由到 `020-specs/{端}/`
+- `split.ts`：`strictSplitPreview` 移除 `backend/` 前缀；`buildSplitPrompt` 更新为端平铺结构描述
+- `split.ts`：`scanExistingTaskStructure` 改为扫描端平铺结构，移除旧 `10-backend/20-frontend` 依赖
+
+**仲裁引擎验证修复（v8.3.24）**：
+- `arbitration-engine.ts`：`allPassed` 计算逻辑修正，按 mode 正确判定（`report-only` 始终通过，`l1-only` 仅看 L1 fatal，`full` 看 L1+L2+L3）
+- `verdict-generator.ts`：使用 `resolvedConflicts`（已裁决状态）而非 `detection.conflicts`（原始 detected 状态）生成报告
+- `verdict.ts`：移除未使用的 `writeArbitrationReport` / `makeHumanVerdict` 导入
+- `arbitration/index.ts`：新增 barrel export，统一导出模块公共 API
+
+---
+
+## v8.3.22 (2026-08-26) — 下游命令旧结构残留清理 + 文档更新
+
+### 变更
+
+**下游命令旧结构残留清理**：
+- `dev.ts`：3 处 `resolveGlobalSpecPath` + 根目录回退 → 直接 `overview/ANALYSIS.md`
+- `status-panel.ts`：`detectPhase` 和 `defaultPhase` 中 `resolveGlobalSpecPath` + 根目录回退 → 直接 `overview/`
+- `quality-audit.ts`：全局文档审计路径改为 `overview/`，端文档扫描改为 `020-specs/{feature}/{platform}/` 三级结构
+- `status-panel.ts`：移除任务目录中 `10-backend/20-frontend/` 和 `backend/frontend/` 旧结构回退
+- `status-panel.ts`：`taskHasFile` 移除 `99-artifacts/` 旧结构回退
+- `analyze-engine.ts`：移除未使用的 `resolveGlobalSpecPath` 导入，移除 apply 写入时的根目录回退
+- `execute.ts`：移除 `99-artifacts/TEST.md` 和 `99-artifacts/REVIEW.md` 旧结构回退
+
+**文档更新**：
+- `DESIGN.md`：新增 2.8 节「020-specs/ 功能模块级目录重构（v8.3.17+）」，更新迭代目录结构示例、三层架构生成规则、analyze 输出描述
+- `README.md`：更新目录结构示例中的 020-specs 为三层架构
+
+## v8.3.21 (2026-08-26) — 移除所有向后兼容逻辑（旧结构 020-specs/{platform}/）
+
+### 变更
+
+**`analyze.ts`**:
+- 骨架创建：移除旧结构检测，直接按需求文档名组织（`computeFeatureBasedAnalyzeManifest`）
+- apply 模式：移除 `isLegacySpecDir` 检测，直接按功能模块路由文档
+- `sanitizeSpecDirectories`：移除旧结构归档分支，所有非系统目录视为功能模块
+
+**`split.ts`**:
+- `detectPlatforms`：移除旧结构扫描逻辑，不再从 020-specs/ 子目录猜测端名
+- 上下文加载：移除旧路径 `020-specs/{platform}/`、`020-specs/platforms/{platform}/`、`020-specs/features/` 的扫描
+- `loadSpecContents`：统一从 `overview/` 和各功能模块目录读取
+- `preSplitGate`：移除 `isLegacySpecDir` 检查
+
+**`prompt-builder.ts`**:
+- `loadExtraSpecs`：移除旧结构 `020-specs/platforms/{platform}/SPEC.md` 加载
+- execute 分支：移除旧结构 `020-specs/{platform}/`、`020-specs/platforms/{platform}/`、`020-specs/global/`、`020-specs/features/` 扫描
+
+**`execute.ts`**:
+- UI_SPEC 检查：移除根目录 `020-specs/UI_SPEC.md` 检查，直接在功能模块端目录下查找
+- 任务过滤：移除旧结构 `10-backend/`、`20-frontend/` 回退
+- 子任务扫描：移除旧结构 `10-backend/`、`20-frontend/` 回退
+
+**`plan.ts`**:
+- 全局风险/依赖：移除根目录回退，只从 `overview/` 读取
+
+## v8.3.20 (2026-08-26) — 下游命令适配新结构（020-specs/按需求文档组织）
+
+### 修复
+
+**`prompt-builder.ts` 适配新结构**:
+- `loadExtraSpecs` 加载迭代级端规格时，旧结构走 `020-specs/platforms/{platform}/SPEC.md`，新结构自动扫描 `020-specs/{feature}/{platform}/` 下所有 .md 文件
+- execute 分支扫描 020-specs/ 端规格时，同时支持旧结构（`020-specs/{platform}/`）和新结构（`020-specs/{feature}/{platform}/`）
+- 新结构下每个功能模块的端规格以 `{feature}-{platform}端规格` 命名注入 prompt
+
+**`execute.ts` UI_SPEC 检查适配新结构**:
+- 新结构下自动在 `020-specs/{feature}/{web|h5|admin|mobile|pc|frontend}/UI_SPEC.md` 中查找 UI 规格文档
+- 旧结构保持原有逻辑不变
+
+**`plan.ts` 全局风险/依赖检查适配新结构**:
+- `RISK.md` 和 `DEPS.md` 同时检查根目录（旧结构）和 `overview/` 子目录（新结构）
+- 根目录优先，overview/ 回退
+
+## v8.3.19 (2026-08-26) — Split 前置检查（Pre-Split Gate）
+
+### 新增
+
+**Split 前置检查机制** (`split.ts`):
+- `speccore split` 运行前自动检查分析产物完整性
+- 检查内容：
+  - **阻塞级**：`FUNCTION_MAP.md` 是否存在且非骨架（缺失则拒绝拆分）
+  - **警告级**：`REQUIREMENT.md` 是否完整、各功能模块 `overview/REQUIREMENT.md` 是否完整
+- 检查报告详细说明：
+  - 每个文件的路径、作用、缺失影响
+  - 文件状态（缺失 / 骨架待填充）
+  - 修复建议（`speccore analyze -I <迭代名> --apply`）
+- 处理策略：
+  - 存在阻塞项 → 拒绝拆分，提示用户先补充分析产物
+  - 仅存在警告项 + 交互模式 → 询问用户是否继续
+  - 仅存在警告项 + 自动模式 → 跳过警告继续拆分
+- 避免"分析不全就拆分"导致的任务不合理问题
+
+## v8.3.18 (2026-08-26) — 修复 split 新结构下端名检测问题
+
+### 修复
+
+**`split` 命令 detectPlatforms 适配新结构** (`split.ts`):
+- 新结构下（020-specs/ 按功能模块组织），`detectPlatforms` 不再扫描 020-specs/ 子目录来猜测端名
+- 旧结构下保持原有扫描逻辑不变
+- 新结构下如果 CONSTITUTION.md 缺少端列表，给出明确警告提示用户配置
+
+## v8.3.17 (2026-08-26) — 020-specs/ 按需求文档名组织（功能模块级目录结构）
+
+### 新增
+
+**功能模块级目录结构** (`spec-paths.ts` + `spec-skeleton.ts` + `analyze.ts`):
+- 新结构：`020-specs/{需求文档名}/overview/` + `020-specs/{需求文档名}/{端}/`
+- 全局 overview 保留在 `020-specs/overview/`（跨功能模块总览）
+- 每个功能模块有自己的 overview（REQUIREMENT.md + ANALYSIS.md + INTERACTION.md）
+- 每个功能模块下按端分目录（api/web/h5 等），放置端专属文档
+- 新旧结构自动检测：如果 020-specs/ 下存在端目录 → 旧结构；否则 → 新结构
+- 旧项目保持旧结构不变（不做迁移），新项目自动使用新结构
+
+**`parseFeatureList()`** (`spec-paths.ts`):
+- 自动扫描 `010-requirements/` 和 `020-specs/requirements/` 下的所有 .md 文件
+- 提取文件名（不含扩展名）作为功能模块名
+- 排除系统文件：README、INDEX、REQUIREMENT、CLARIFY_REPORT 等
+- 递归扫描子目录，跳过资源目录（images/、prototypes/、sources/、assets/、converted/）
+
+**`isLegacySpecDir()`** (`spec-paths.ts`):
+- 检测 020-specs/ 是否为旧结构（端平铺）
+- 旧结构特征：根目录下存在端名目录（api/、web/、h5/ 等）
+
+**`computeFeatureBasedAnalyzeManifest()`** (`spec-skeleton.ts`):
+- 按功能模块生成骨架清单
+- Phase 1：全局 overview/ + 各功能模块 overview/
+- Phase 2：各功能模块 × 各端的专属文档
+
+**apply 模式文档路由适配** (`analyze.ts`):
+- 新结构下：AI 返回 `用户管理/overview/REQUIREMENT.md` → 写入 `020-specs/用户管理/overview/REQUIREMENT.md`
+- 新结构下：AI 返回 `用户管理/api/TECH.md` → 写入 `020-specs/用户管理/api/TECH.md`
+- 自动验证功能模块路径的合法性（第二级必须是 overview/ 或合法端名）
+
+**sanitizeSpecDirectories 适配** (`analyze.ts`):
+- 新结构下：允许功能模块目录存在，只归档明显非法的目录（纯数字、特殊符号）
+- 旧结构下：保持原有白名单校验逻辑
+
 ## v8.3.16 (2026-08-25) — analyze --platform 支持多段指定，只创建指定端骨架
 
 ### 改进

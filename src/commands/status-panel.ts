@@ -4,10 +4,10 @@
 import { readFile, pathExists, readdir, writeFile, ensureDir } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
-import { loadConfig } from '../core/unified-config';
+import { loadConfig, loadProjectConfig } from '../core/unified-config';
 import { getDefaultIteration } from '../core/context';
 import { readGlobalIndex } from '../core/global-layer';
-import { resolveGlobalSpecPath } from '../core/spec-paths';
+import { GLOBAL_SPECS_DIR } from '../core/spec-paths';
 
 export interface StatusPanelOptions {
   export?: string;
@@ -31,6 +31,7 @@ export async function statusPanelCommand(options: StatusPanelOptions = {}): Prom
 
   const iteration = options.iteration || await getDefaultIteration();
   const config = await loadConfig();
+  const projectConfig = await loadProjectConfig();
 
   // ── Health/Lifecycle modes (skip if exporting) ──
   if (!options.export) {
@@ -46,7 +47,7 @@ export async function statusPanelCommand(options: StatusPanelOptions = {}): Prom
 
   // ── Export mode ──
   if (options.export) {
-    await exportStatus(config, iteration, options.export, options);
+    await exportStatus(config, projectConfig, iteration, options.export, options);
     return;
   }
 
@@ -60,7 +61,7 @@ export async function statusPanelCommand(options: StatusPanelOptions = {}): Prom
   // Header
   logger.info('');
   logger.info('┌────────────────── SpecCore ──────────────────┐');
-  logger.info(`│ 项目: ${config.project.name.padEnd(37)}│`);
+  logger.info(`│ 项目: ${projectConfig.project.name.padEnd(37)}│`);
   
   if (iteration) {
     logger.info(`│ 迭代: ${iteration.padEnd(37)}│`);
@@ -186,9 +187,9 @@ async function countPlatforms(iterDir: string, tasks: any[]): Promise<{backend:n
 
 async function detectPhase(iterDir: string): Promise<string> {
   const specDir = join(iterDir, '020-specs');
-  const reqDoc = await resolveGlobalSpecPath(specDir, 'REQUIREMENT.md') || join(specDir, 'REQUIREMENT.md');
-  const analysis = await resolveGlobalSpecPath(specDir, 'ANALYSIS.md') || join(specDir, 'ANALYSIS.md');
-  
+  const reqDoc = join(specDir, GLOBAL_SPECS_DIR, 'REQUIREMENT.md');
+  const analysis = join(specDir, GLOBAL_SPECS_DIR, 'ANALYSIS.md');
+
   if (!(await pathExists(reqDoc))) return 'init';
   if (!(await pathExists(analysis))) return 'require';
   
@@ -290,13 +291,13 @@ async function filterByPlatform(iterDir: string, tasks: any[], platform: string)
 }
 
 async function exportStatus(
-  config: any, iteration: string | null, format: string, options: StatusPanelOptions = {}
+  config: any, projectConfig: any, iteration: string | null, format: string, options: StatusPanelOptions = {}
 ): Promise<void> {
 
 
   
   const data: any = {
-    project: config.project.name || 'SPECCORE',
+    project: projectConfig.project.name || 'SPECCORE',
     iteration: iteration || '未设置',
     exportedAt: new Date().toISOString(),
     phases: {} as any,
@@ -494,7 +495,7 @@ async function exportStatus(
     await writeFile(outPath, JSON.stringify(data, null, 2));
     logger.info(`✅ 导出到 ${outPath}`);
   } else if (format === 'md') {
-    let md = `# SpecCore Status — ${config.project.name}\n\n`;
+    let md = `# SpecCore Status — ${projectConfig.project.name}\n\n`;
     md += `- 迭代: ${iteration || '无'}\n- 阶段: ${data.phase || 'N/A'}\n\n`;
     md += '## Tasks\n\n| ID | Status | Type |\n| :--- | :--- | :--- |\n';
     for (const t of data.tasks || []) md += `| ${t.id} | ${t.status} | ${t.type} |\n`;
@@ -515,7 +516,7 @@ async function exportStatus(
     await writeFile(outPath, md);
     logger.info(`✅ 导出到 ${outPath}`);
   } else if (format === 'html') {
-    const outPath = join(process.cwd(), 'outputs', 'dashboard-iteration-' + config.project.name + '.html');
+    const outPath = join(process.cwd(), 'outputs', 'dashboard-iteration-' + projectConfig.project.name + '.html');
     await ensureDir(join(process.cwd(), 'outputs'));
     await writeFile(outPath, buildHtmlDashboard(data));
     logger.info(`✅ 迭代看板已生成: ${outPath}`);
@@ -533,36 +534,12 @@ async function buildPersonPlatforms(iterDir: string, tasks: any[]): Promise<Reco
     try {
       const entries = await readdir(join(iterDir, t.id), { withFileTypes: true });
       const platforms: string[] = [];
-      // v6.49.9+: 新结构 — 所有端平铺在任务目录下
+      // 扫描平铺的端目录
       const { parsePlatformList } = await import('../core/spec-paths');
       const platformList = await parsePlatformList();
       for (const e of entries) {
         if (e.isDirectory() && platformList.includes(e.name)) {
           platforms.push(e.name);
-        }
-      }
-      // 回退: 旧结构 10-backend/ + 20-frontend/
-      if (platforms.length === 0) {
-        if (entries.some((e: any) => e.name === '10-backend')) platforms.push('10-backend');
-        const fe20 = entries.find((e: any) => e.name === '20-frontend');
-        if (fe20 && fe20.isDirectory()) {
-          const subs20 = await readdir(join(iterDir, t.id, '20-frontend'), { withFileTypes: true });
-          for (const s of subs20) {
-            if (s.isDirectory()) platforms.push('20-frontend/' + s.name);
-          }
-          if (subs20.length === 0) platforms.push('20-frontend');
-        }
-      }
-      // 更旧结构回退: backend/ + frontend/
-      if (!platforms.some(p => p.includes('backend')) && entries.some((e: any) => e.name === 'backend')) platforms.push('backend');
-      if (!platforms.some(p => p.includes('frontend'))) {
-        const fe = entries.find((e: any) => e.name === 'frontend');
-        if (fe && fe.isDirectory()) {
-          const subs = await readdir(join(iterDir, t.id, 'frontend'), { withFileTypes: true });
-          for (const s of subs) {
-            if (s.isDirectory()) platforms.push('frontend/' + s.name);
-          }
-          if (subs.length === 0) platforms.push('frontend');
         }
       }
       map[t.assignee] = platforms.join(', ') || '';
@@ -572,11 +549,9 @@ async function buildPersonPlatforms(iterDir: string, tasks: any[]): Promise<Reco
 }
 
 export async function defaultPhase(iterDir: string): Promise<string> {
-
-
   const specDir = join(iterDir, '020-specs');
-  const reqDoc = await resolveGlobalSpecPath(specDir, 'REQUIREMENT.md') || join(specDir, 'REQUIREMENT.md');
-  const analysis = await resolveGlobalSpecPath(specDir, 'ANALYSIS.md') || join(specDir, 'ANALYSIS.md');
+  const reqDoc = join(specDir, GLOBAL_SPECS_DIR, 'REQUIREMENT.md');
+  const analysis = join(specDir, GLOBAL_SPECS_DIR, 'ANALYSIS.md');
   if (!(await pathExists(reqDoc))) return 'init';
   if (!(await pathExists(analysis))) return 'require';
   const tasks = await readdir(iterDir, { withFileTypes: true });
@@ -1488,13 +1463,12 @@ async function showGlobalDashboard(options: StatusPanelOptions): Promise<void> {
   }
 }
 
-// ── v6.49.9+: 扫描任务目录检查文件是否存在（支持平铺结构和旧结构） ──
+// ── 扫描任务目录检查文件是否存在 ──
 async function taskHasFile(iterDir: string, taskId: string, fileName: string): Promise<boolean> {
   const taskDir = join(iterDir, taskId);
   if (!(await pathExists(taskDir))) return false;
   const { parsePlatformList } = await import('../core/spec-paths');
   const platformList = await parsePlatformList();
-  // 新结构: 扫描平铺的端目录下的子任务
   for (const platform of platformList) {
     const platDir = join(taskDir, platform);
     if (!(await pathExists(platDir))) continue;
@@ -1507,8 +1481,5 @@ async function taskHasFile(iterDir: string, taskId: string, fileName: string): P
       }
     } catch { /* ignore */ }
   }
-  // 回退: 旧结构 10-backend/
-  if (await pathExists(join(taskDir, '10-backend', fileName))) return true;
-  if (await pathExists(join(taskDir, '99-artifacts', fileName))) return true;
   return false;
 }
