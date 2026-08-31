@@ -715,7 +715,18 @@ async function writeHtmlPlan(
 function extractPlanSlug(tasks: TaskState[]): string {
   if (tasks.length === 0) return '';
 
-  // 提取所有任务名中的有效英文/拼音词
+  // v8.3.33: 优先使用 functionalUnit / topic，更有意义
+  const units = [...new Set(tasks.map(t => (t as any).functionalUnit).filter(Boolean))];
+  if (units.length > 0) {
+    return units.join('-').slice(0, 40);
+  }
+
+  const topics = [...new Set(tasks.map(t => (t as any)._topic).filter(Boolean))];
+  if (topics.length > 0) {
+    return topics.join('-').slice(0, 40);
+  }
+
+  // 回退：提取所有任务名中的有效英文/拼音词
   const allWords = tasks.flatMap(t => {
     const name = (t.name || t.id).toLowerCase();
     // 提取纯英文词（≥3 字母）和中文转拼音的关键词

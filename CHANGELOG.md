@@ -64,6 +64,22 @@
 
 ---
 
+## v8.3.33 (2026-08-31) — Plan/Task 目录名优先使用 functionalUnit/topic
+
+### 优化
+
+**Plan 目录名更有意义**：
+- `plan.ts` `extractPlanSlug()`：优先使用任务的 `functionalUnit`，其次是 `_topic`，最后回退到现有英文词提取逻辑
+- 修复前：纯中文任务名场景下目录名回退为 `Plan-003-feature`
+- 修复后：若 AI 标注了 `functionalUnit: "user-auth"`，目录名为 `Plan-003-user-auth`
+
+**Task 目录名更有意义**：
+- `split.ts`：生成任务 ID 时，`taskTopic` 优先取 `functionalUnit`，其次是 `_topic`，最后回退到 `slugify(name)`
+- 修复前：`Task-163-a3f2b1`（中文任务名的 hash）
+- 修复后：`Task-163-user-auth`（functionalUnit 优先）
+
+---
+
 ## v8.3.32 (2026-08-31) — 修复迭代路由 + 端名过滤 + 文档缺失警告
 
 ### 修复

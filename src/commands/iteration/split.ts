@@ -669,7 +669,8 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           }
 
           // 使用保存的 topic slug 生成任务ID
-          const taskTopic = (sec as any)._topic || slugify(sec.name);
+          // v8.3.33: 优先使用 functionalUnit 作为 topic，使目录名更有意义
+          const taskTopic = (sec as any).functionalUnit || (sec as any)._topic || slugify(sec.name);
           const { id: taskId } = await nextTaskId(sec.name, taskTopic);
           (sec as any)._taskId = taskId;
           await createTaskFromSection(iterDirFull, taskId, sec, allPlatforms, taskType, sections);
