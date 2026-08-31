@@ -56,6 +56,14 @@ verify-project/
 .speccore/cache/
 .speccore/GLOBAL/*.md
 .speccore-backup-*
+
+# SpecCore user configs (generated per project)
+.speccore.yml
+.speccore/PROJECT.yaml
+.speccore/SETTINGS.md
+AGENTS-*.md
+CLAUDE-*.md
+
 test-trae/
 .trae-cn/
 .trae/

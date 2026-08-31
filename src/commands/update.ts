@@ -65,6 +65,16 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
 
   _updateConflicts.length = 0; // 清空冲突追踪
 
+  // ── 0. 清理废弃文件 ──
+  // v8.3.25+: SETTINGS.md 已废弃，由 .speccore.yml 替代
+  try {
+    const settingsMd = join(speccoreDir, 'SETTINGS.md');
+    if (await pathExists(settingsMd)) {
+      await require('fs-extra').remove(settingsMd);
+      logger.info('  🗑️  清理废弃文件: .speccore/SETTINGS.md');
+    }
+  } catch { /* 静默失败 */ }
+
   // ── 1. 清理旧版命令文件（按工具目录）──
 
   for (const tool of tools) {

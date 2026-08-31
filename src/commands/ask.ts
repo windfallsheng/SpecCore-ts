@@ -258,10 +258,6 @@ export async function askCommand(input: string, _options: any): Promise<void> {
         if (!isAuto) {
           process.stdout.write(`[SPECCORE_CONFIRM_STEP: ${step.order}/${result.pipeline.steps.length}] ${fullCmd} — ${step.explanation}\n`);
           process.stdout.write(`[SPECCORE_CONFIRM_ASK: 执行这一步? (确认=y, 跳过=s, 停止=q)]\n`);
-          // daemon/schedule 步骤可跳过确认（非破坏性）
-          if (step.command === 'schedule' && step.args?.includes('daemon')) {
-            continue; // daemon start 自动执行
-          }
         }
 
         const r = await autoExecute(step.command, argsFilled, false);
