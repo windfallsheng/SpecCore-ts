@@ -64,6 +64,24 @@
 
 ---
 
+## v8.3.28 (2026-08-31) — 消除 skill 重复 + Qoder 命令文件清理
+
+### 修复
+
+**消除 skill 下拉候选重复**：
+- `init.ts`：停止为 Qoder 生成 `.qoder/commands/` 下的 `spec-` 前缀命令文件（与 `.agents/skills/` 重复）
+- `init.ts`：运行 `speccore init/update` 时自动清理 `.qoder/commands/` 下遗留的 `spec-*.md` 文件
+- 删除 `templates/` 下 5 个旧版残留 skill 文件（`spec-ask.md`、`commands/spec-{analyze,dev,execute,split}.md`）
+- `update.ts`：增加自动清理 `templates/` 旧 skill 残留的逻辑
+
+**统一描述文本**：
+- `init.ts` `TOOL_COMMANDS` 中 15 个命令的旧版短描述（如 "SpecCore AI Router"）全部更新为与 `.agents/skills/` 一致的完整描述
+
+**边界情况修复**：
+- `update.ts` / `init.ts` skill 复制逻辑增加 `src !== dest` 判断，避免在 CLI 项目自身运行时出现 "Source and destination must not be the same" 错误
+
+---
+
 ## v8.3.27 (2026-08-31) — 废弃文件清理 + gitignore 补全
 
 ### 修复

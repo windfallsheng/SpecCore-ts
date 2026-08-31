@@ -47,7 +47,6 @@ init → doc2spec → analyze → split → plan → execute → pr → done →
 | spec-split | 智能任务拆分（分组→分配→依赖） | "拆分任务" |
 | spec-execute | 代码生成+编译+测试+修复循环 | "开发Task-001" |
 | spec-plan | 排程+里程碑+并行策略 | "生成计划" |
-| spec-dev | 阶段检测+状态展示+推荐下一步 | "推进项目" |
 | spec-change | 变更记录+影响分析+代码更新 | "需求变更" |
 | spec-ask | 自然语言引擎（四大模式） | "怎么做"/"流程是什么" |
 
@@ -63,15 +62,15 @@ Iteration-xxx/
 │   ├── converted/      ← [自动生成] doc2spec 转换后的 MD
 │   ├── features/       ← [手动维护] 按功能模块组织
 │   │   └── {feature}/README.md
-│   └── assets/         ← 素材（prd/prototypes/designs/screenshots）
+│   ├── prototypes/        ← 原型（HTML/图片/链接，内容不限）
+│   └── assets/            ← doc2spec 提取的图片
 ├── 020-specs/     ← analyze 输出
 ├── 030-tasks/     ← 开发任务
 │   └── Task-*/
 │       ├── .meta/         ← 任务元信息（type/status/owner/created-at）
-│       ├── _shared/       ← 共享规格（REQ/TECH/SCHEMA/CHANGELOG/API_CONTRACT）
-│       ├── backend/       ← 后端子任务（TASK.md + src/tests）
-│       ├── web/           ← Web前端子任务（TASK.md + src/tests）
-│       ├── 99-artifacts/  ← 执行产出（自检门禁 + 参考文档）
+│       ├── 00-specs/      ← 核心规格（REQ/TECH/TASK/SCHEMA/CHANGELOG）
+│       ├── {platform}/    ← 所有端平铺（如 booking-service/h5-mobile）
+│       │   └── {subtask}/ ← 子任务（TASK.md + .meta/）
 │       └── .issues.md     ← 问题追踪
 ├── STAFFING.md      ← 人员排期
 ```

@@ -875,28 +875,28 @@ async function askUser(prompt: string): Promise<string> {
 }
 
 export const TOOL_COMMANDS: [string, string, string][] = [
-  ['spec-ask', 'SpecCore AI Router', '##  核心铁律\n1. 用户说"重新/再/重跑"禁止用"未变/已完成"拒绝\n2. 分析结果必须落盘 020-specs/，禁止只输出聊天文字\n3. 全流程（analyze→split→plan→execute）必须自动继续\n4. 复杂流程先展示执行计划页面再执行\n5. 用户说"自主/全自动"，展示计划后直接执行，禁止每步确认\n\n## 🎯 HTML 页面强制展示\n\n执行任何 `speccore` 命令后，检查 stdout 中的标记，**立即执行** `present_files(<path>)`：\n- `[SPECCORE_ONBOARD: <path>]` → 引导页（🚨 最先处理，禁止跳过）\n- `[SPECCORE_SETUP_GUIDE: <path>]` → 配置引导页\n- `[SPECCORE_ABOUT: <path>]` → 版本信息页\n- `[SPECCORE_HELP: <path>]` → 帮助中心页\n- `[SPECCORE_WELCOME: <path>]` → 项目名片页\n- `[SPECCORE_DEV: <path>]` → 开发流程页\n- `[SPECCORE_KNOWLEDGE: <path>]` → 知识图谱页\n- `[SPECCORE_PLAN: <path>]` → 执行计划页\n- `[SPECCORE_RETRO: <path>]` → 回顾报告页\n- `[SPECCORE_DASHBOARD: <path>]` → 仪表盘页\n\n❌ 禁止只说"检测到"而不执行展示\n❌ 禁止用文字描述代替实际展示\n\n## 执行\n1. Read CONITUTION.md + context.json\n2. 识别意图，展示执行计划\n3. speccore ask "${1:描述你的需求}"'],
-  ['spec-welcome', '显示项目名片（HTML页面）', 'speccore welcome'],
-  ['spec-help', '显示命令帮助中心（HTML页面）', 'speccore help'],
-  ['spec-dashboard', '显示全局仪表盘（HTML页面）', 'speccore dashboard --scope global'],
+  ['spec-ask', 'SpecCore CLI 执行引擎。仅在用户明确要求通过 speccore 命令行工具执行以下操作时触发：analyze --prompt、split、plan --prompt、execute --prompt、doc2spec、spec2doc、iteration create、done、pr、dev、dashboard/status/doctor。以下情况明确不触发此 Skill：解释代码逻辑、审查代码片段、讨论需求合理性、排查具体 bug、一般性技术咨询、算法实现、架构讨论、任何不涉及 speccore CLI 执行的请求。', '##  核心铁律\n1. 用户说"重新/再/重跑"禁止用"未变/已完成"拒绝\n2. 分析结果必须落盘 020-specs/，禁止只输出聊天文字\n3. 全流程（analyze→split→plan→execute）必须自动继续\n4. 复杂流程先展示执行计划页面再执行\n5. 用户说"自主/全自动"，展示计划后直接执行，禁止每步确认\n\n## 🎯 HTML 页面强制展示\n\n执行任何 `speccore` 命令后，检查 stdout 中的标记，**立即执行** `present_files(<path>)`：\n- `[SPECCORE_ONBOARD: <path>]` → 引导页（🚨 最先处理，禁止跳过）\n- `[SPECCORE_SETUP_GUIDE: <path>]` → 配置引导页\n- `[SPECCORE_ABOUT: <path>]` → 版本信息页\n- `[SPECCORE_HELP: <path>]` → 帮助中心页\n- `[SPECCORE_WELCOME: <path>]` → 项目名片页\n- `[SPECCORE_DEV: <path>]` → 开发流程页\n- `[SPECCORE_KNOWLEDGE: <path>]` → 知识图谱页\n- `[SPECCORE_PLAN: <path>]` → 执行计划页\n- `[SPECCORE_RETRO: <path>]` → 回顾报告页\n- `[SPECCORE_DASHBOARD: <path>]` → 仪表盘页\n\n❌ 禁止只说"检测到"而不执行展示\n❌ 禁止用文字描述代替实际展示\n\n## 执行\n1. Read CONITUTION.md + context.json\n2. 识别意图，展示执行计划\n3. speccore ask "${1:描述你的需求}"'],
+  ['spec-welcome', '欢迎页专属 Skill。在调用 speccore ask 之前，检测项目是否已初始化（.speccore/ 目录是否存在），未初始化时引导用户先执行 speccore init。不影响 speccore ask 的意图识别能力。', 'speccore welcome'],
+  ['spec-help', '帮助中心专属 Skill。在调用 speccore ask 之前，检测 CLI 版本是否为最新，发现新版本时提示用户更新。不影响 speccore ask 的意图识别能力。', 'speccore help'],
+  ['spec-dashboard', '仪表盘专属 Skill。在调用 speccore ask 之前，检测当前是否有活跃迭代，无迭代时提示用户先创建迭代。不影响 speccore ask 的意图识别能力。', 'speccore dashboard --scope global'],
   ['spec-init', '初始化项目 或 升级命令文件: --update', 'speccore init'],
-  ['spec-doc2spec', '导入需求文档: 文件=${1:PRD.docx} 迭代=${2:Q1}', 'speccore doc2spec -f ${1:PRD.docx} --iter ${2:Q1}'],
-  ['spec-analyze', 'SpecCore Analysis', '直接执行: execute_command("speccore ask \'用户原话\'")\n\n不要输出命令文本，不要分析意图，一切交给 speccore ask。'],
-  ['spec-split', 'SpecCore Task Split', '## ⛔ 铁律: 分析完成后必须拆分，禁止跳过\n1. Read 020-specs/ for analysis docs\n2. Dry-run split and show preview\n3. Execute: speccore iteration split -i ${1:Q1} --owner ${2|张三,李四,王五|}'],
-  ['spec-execute', 'SpecCore Execute', '## ⛔ 铁律: 有任务就执行，禁止说"已完成"跳过\n1. Read Task REQ.md + TECH.md\n2. Show plan then execute: speccore execute -i ${1:Q1} -t ${2:Task-001} --force'],
-  ['spec-plan', '生成并展示执行计划可视化页面', '1. 仅生成并展示计划页面，不执行代码修复\n2. speccore plan -I ${1:Q1} --owner ${2|张三,李四,王五|} --html\n3. 打开 speccore-plan.html'],
-  ['spec-pr', '创建PR: 任务=${1:Task-001}', 'speccore pr --task=${1:Task-001}'],
-  ['spec-done', '任务归档: 任务=${1:Task-001}', 'speccore done --task=${1:Task-001}'],
-  ['spec-spec2doc', '导出文档: 迭代=${1:Q1} 格式=${2|需求.docx,方案.pdf|}', 'speccore spec2doc -i ${1:Q1} -o ${2|需求.docx,方案.pdf|}'],
+  ['spec-doc2spec', '文档转规格专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（文件存在性、格式检测），参数缺失时输出交互式提示。不影响 speccore ask 的意图识别能力。', 'speccore doc2spec -f ${1:PRD.docx} --iter ${2:Q1}'],
+  ['spec-analyze', '需求分析专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（迭代存在性、需求文档检测、专业度评估、端列表读取），参数缺失时输出交互式提示。不影响 speccore ask 的意图识别能力。', '直接执行: execute_command("speccore ask \'用户原话\'")\n\n不要输出命令文本，不要分析意图，一切交给 speccore ask。'],
+  ['spec-split', '任务拆分专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（analyze 是否完成、端列表提取、变更检测），参数缺失时输出交互式提示（参数说明 + 使用示例）。不影响 speccore ask 的意图识别能力。', '## ⛔ 铁律: 分析完成后必须拆分，禁止跳过\n1. Read 020-specs/ for analysis docs\n2. Dry-run split and show preview\n3. Execute: speccore iteration split -i ${1:Q1} --owner ${2|张三,李四,王五|}'],
+  ['spec-execute', '执行开发专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（任务状态检查、代码模式读取、上下文准备），参数缺失时输出交互式提示（参数说明 + 使用示例）。不影响 speccore ask 的意图识别能力。', '## ⛔ 铁律: 有任务就执行，禁止说"已完成"跳过\n1. Read Task REQ.md + TECH.md\n2. Show plan then execute: speccore execute -i ${1:Q1} -t ${2:Task-001} --force'],
+  ['spec-plan', '执行计划专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（任务是否已拆分、依赖关系检测、执行顺序优化），参数缺失时输出交互式提示（参数说明 + 使用示例）。不影响 speccore ask 的意图识别能力。', '1. 仅生成并展示计划页面，不执行代码修复\n2. speccore plan -I ${1:Q1} --owner ${2|张三,李四,王五|} --html\n3. 打开 speccore-plan.html'],
+  ['spec-pr', '代码提交与 PR 专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（分支安全检查、未提交变更检测、ANALYSIS.md 路径校验、冲突检测），参数缺失时输出交互式提示。不影响 speccore ask 的意图识别能力。', 'speccore pr --task=${1:Task-001}'],
+  ['spec-done', '任务归档收尾专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（Task 状态检查、依赖完成性检查、feature 分支合并检查），参数缺失时输出交互式提示。不影响 speccore ask 的意图识别能力。', 'speccore done --task=${1:Task-001}'],
+  ['spec-spec2doc', '规格转文档专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（迭代/Task 存在性），参数缺失时输出交互式提示。不影响 speccore ask 的意图识别能力。', 'speccore spec2doc -i ${1:Q1} -o ${2|需求.docx,方案.pdf|}'],
 
-  ['spec-change', '需求变更: 描述=${1:变更描述} 任务=${2:Task-001}', 'speccore change "${1:变更描述}" --task=${2:Task-001} --type ${3|feature,bugfix|}'],
+  ['spec-change', '需求变更专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（当前迭代、已有 Task 列表、变更类型判断），参数缺失时输出交互式提示。不影响 speccore ask 的意图识别能力。', 'speccore change "${1:变更描述}" --task=${2:Task-001} --type ${3|feature,bugfix|}'],
   ['spec-validate', '合规验证: 迭代=${1:Q1}', 'speccore validate --iteration=${1:Q1}'],
   ['spec-search', '全文搜索: ${1:关键词}', 'speccore search ${1:关键词}'],
   ['spec-track', '全链路追踪: 需求=${1:REQ-001}', 'speccore track --req=${1:REQ-001}'],
   ['spec-sync', '双向同步全局', 'speccore sync --global'],
   ['spec-rename', '重命名: 旧名=${1:Q1} 新名=${2:Q2}', 'speccore rename --iteration ${1:Q1} ${2:Q2}'],
-  ['spec-iteration-create', '创建迭代: 名称=${1:Q2} 负责人=${2|张三,李四,王五|}', 'speccore iteration create -n ${1:Q2} --owner=${2|张三,李四,王五|}'],
-  ['spec-task-create', '创建任务: 交互式需求澄清 → 生成 REQUIREMENT.md', 'speccore task new --name ${1:任务名称}'],
+  ['spec-iteration-create', '创建迭代专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（迭代名是否已存在、主题词有效性），参数缺失时输出交互式提示。不影响 speccore ask 的意图识别能力。', 'speccore iteration create -n ${1:Q2} --owner=${2|张三,李四,王五|}'],
+  ['spec-task-create', '创建开发任务专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（迭代存在性、主题词有效性、命名冲突检测），参数缺失时输出交互式提示。不影响 speccore ask 的意图识别能力。', 'speccore task new --name ${1:任务名称}'],
   ['spec-retro', '回顾报告: 任务=${1:Task-001} 可批量 --all', 'speccore retro --task ${1:Task-001}'],
   ['spec-context', '切换上下文: 迭代=${1:Q1}', 'speccore context --set --iteration ${1:Q1}'],
   ['spec-ops', '操作历史', 'speccore ops'],
@@ -938,47 +938,27 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
   }
   const hasQoder = !filter || filter.includes("qoder");
   if (hasQoder) {
-  // QCoder: 项目级指令路径 = .qoder/commands/，使用 spec: 前缀扁平命名
+  // v8.3.28+: Qoder 已支持 .agents/skills/ 标准 skill 目录，
+  // .qoder/commands/ 下的 spec- 前缀命令文件与 skill 重复，不再生成。
+  // 保留 .qoder/rules/ 供 AI 读取项目规则。
   const qoderCommandsDir = join(projectRoot, '.qoder', 'commands');
-  // 解析符号链接
+  // 清理遗留的 .qoder/commands/ 下 spec- 前缀文件（已被 .agents/skills/ 替代）
   try {
-    const stat = await require('fs-extra').lstat(qoderCommandsDir);
-    if (stat.isSymbolicLink()) {
-      await require('fs-extra').remove(qoderCommandsDir);
-      await ensureDir(qoderCommandsDir);
+    if (await pathExists(qoderCommandsDir)) {
+      const existing = await readdir(qoderCommandsDir);
+      for (const f of existing) {
+        if (f.startsWith('spec') && f.endsWith('.md')) {
+          await require('fs-extra').unlink(join(qoderCommandsDir, f));
+        }
+      }
+      // 如果目录为空则删除
+      const remaining = await readdir(qoderCommandsDir);
+      if (remaining.length === 0) {
+        await require('fs-extra').remove(qoderCommandsDir);
+      }
     }
-  } catch {}
-  await ensureDir(qoderCommandsDir);
-  for (const [name, desc, cmd] of commands) {
-    // Qoder 统一使用 spec-analyze 格式（跨平台安全，Linux 不支持冒号）
-    // v6.54.0+: 使用动态路由格式，调用 speccore ask 引擎
-    let content = '---\nname: ' + name + '\ndescription: ' + desc + '\n---\n\n直接执行: execute_command("speccore ask \'用户原话\'")\n\n不要输出命令文本，不要分析意图，一切交给 speccore ask。';
-    
-    // v6.62.0+: spec-ask 必须包含引导页强制展示规则
-    if (name === 'spec-ask') {
-      content += '\n\n## 🚨 引导页强制展示规则\n\n';
-      content += '执行 `speccore ask` 后，检查 stdout 中的 `[SPECCORE_ONBOARD: <path>]` 标记：\n';
-      content += '- **如果检测到该标记，必须立即执行** `present_files(<path>)` 展示 HTML 引导页\n';
-      content += '- ❌ **禁止**只说“检测到引导页”而不执行展示动作 — 说了不等于做了\n';
-      content += '- ❌ **禁止**用文字描述引导页内容代替实际展示 — 必须让用户看到 HTML 页面\n';
-      content += '- **展示完成后**，再继续处理其他输出\n';
-    }
-    
-    await writeFile(join(qoderCommandsDir, name + '.md'), content);
-  }
-  // 清理 Qoder 目录：废弃文件 + 旧格式残留
-  const validQoderNames = new Set(commands.map(([n]) => n + '.md'));
-  try {
-    const existing = await readdir(qoderCommandsDir);
-    for (const f of existing) {
-      const fp = join(qoderCommandsDir, f);
-      // 清理旧版 spec: 前缀文件（已改用 spec- 前缀）
-      if (f.startsWith('spec:') && f.endsWith('.md')) { await require('fs-extra').unlink(fp); continue; }
-      // 清理已废弃的命令文件
-      if (f.startsWith('spec') && f.endsWith('.md') && !validQoderNames.has(f)) { await require('fs-extra').unlink(fp); }
-    }
-  } catch {}
-  
+  } catch { /* ignore */ }
+
   // 清理旧的不规范目录 (.qcoder/)
   const legacyQcoderDir = join(projectRoot, '.qcoder');
   try {
@@ -986,7 +966,7 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
       await require('fs-extra').remove(legacyQcoderDir);
     }
   } catch { /* ignore */ }
-  
+
   // Qoder rules — AI 自动读取
   const qoderRulesDir = join(projectRoot, '.qoder', 'rules');
   await ensureDir(qoderRulesDir);
@@ -1027,6 +1007,10 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
     const srcDir = join(cliSkillsDir, name);
     const destDir = join(projectSkillsDir, name);
     try {
+      if (srcDir === destDir) {
+        skillsCopied++; // 当前项目即 CLI 源码，无需复制
+        continue;
+      }
       if (await pathExists(srcDir)) {
         // 复制整个 Skill 目录（包括 SKILL.md + references/ + scripts/）— 直接覆盖
         const { copy } = require('fs-extra');
