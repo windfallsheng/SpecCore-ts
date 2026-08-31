@@ -75,6 +75,23 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
     }
   } catch { /* 静默失败 */ }
 
+  // v8.3.28+: 清理 templates/ 下旧版残留 skill 文件（已被 .agents/skills/ 替代）
+  const legacyTemplateSkills = [
+    join(projectRoot, 'templates', 'spec-ask.md'),
+    join(projectRoot, 'templates', 'commands', 'spec-analyze.md'),
+    join(projectRoot, 'templates', 'commands', 'spec-dev.md'),
+    join(projectRoot, 'templates', 'commands', 'spec-execute.md'),
+    join(projectRoot, 'templates', 'commands', 'spec-split.md'),
+  ];
+  for (const legacySkill of legacyTemplateSkills) {
+    try {
+      if (await pathExists(legacySkill)) {
+        await require('fs-extra').remove(legacySkill);
+        logger.info(`  🗑️  清理废弃模板: ${legacySkill.replace(projectRoot + '/', '')}`);
+      }
+    } catch { /* 静默失败 */ }
+  }
+
   // ── 1. 清理旧版命令文件（按工具目录）──
 
   for (const tool of tools) {
@@ -130,7 +147,7 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   // 4b. 更新 .agents/skills/（直接覆盖，不备份）
   const skillsSrc = join(__dirname, '..', '..', '.agents', 'skills');
   const skillsDest = join(projectRoot, '.agents', 'skills');
-  if (await pathExists(skillsSrc)) {
+  if (await pathExists(skillsSrc) && skillsSrc !== skillsDest) {
     const { copy } = require('fs-extra');
     await copy(skillsSrc, skillsDest, { overwrite: true });
   }

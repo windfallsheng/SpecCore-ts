@@ -43,6 +43,29 @@ SpecCore 规范驱动开发项目。
 <!-- SPECCORE_AUTO_INDEX_START -->
 > 以下内容由 `.speccore/` 规范数据库自动生成，请勿手动编辑此区域
 
+## 角色与职责
+
+### 更多角色
+- [code reviewer](.speccore/AGENTS/code-reviewer.md)
+- [compiler](.speccore/AGENTS/compiler.md)
+- [compliance checker](.speccore/AGENTS/compliance-checker.md)
+- [dependency analyst](.speccore/AGENTS/dependency-analyst.md)
+- [doc sync agent](.speccore/AGENTS/doc-sync-agent.md)
+- [impact analyst](.speccore/AGENTS/impact-analyst.md)
+- [interaction designer](.speccore/AGENTS/interaction-designer.md)
+- [performance expert](.speccore/AGENTS/performance-expert.md)
+- [product analyst backend](.speccore/AGENTS/product-analyst-backend.md)
+- [product analyst frontend](.speccore/AGENTS/product-analyst-frontend.md)
+- [product analyst](.speccore/AGENTS/product-analyst.md)
+- [regression tester](.speccore/AGENTS/regression-tester.md)
+- [risk assessor](.speccore/AGENTS/risk-assessor.md)
+- [schedule planner](.speccore/AGENTS/schedule-planner.md)
+- [security reviewer finance](.speccore/AGENTS/security-reviewer-finance.md)
+- [security reviewer](.speccore/AGENTS/security-reviewer.md)
+- [task decomposer](.speccore/AGENTS/task-decomposer.md)
+- [test engineer](.speccore/AGENTS/test-engineer.md)
+- [test reviewer](.speccore/AGENTS/test-reviewer.md)
+
 ## 编码规范与规则
 
 ## 项目结构
@@ -122,5 +145,39 @@ speccore execute -I <迭代名> --all       # 执行所有任务
 ### 更多规范
 - [CODE REVIEW](.speccore/RULES/CODE_REVIEW.md)
 - [POST COMPLETION](.speccore/RULES/POST_COMPLETION.md)
+- [api design](.speccore/RULES/api-design.md)
+- [database](.speccore/RULES/database.md)
+- [frontend common](.speccore/RULES/frontend-common.md)
+- [nodejs](.speccore/RULES/nodejs.md)
+- [react](.speccore/RULES/react.md)
+- [security](.speccore/RULES/security.md)
+- [testing](.speccore/RULES/testing.md)
+- [typescript](.speccore/RULES/typescript.md)
+
+## Agent 角色定义（v6.99.0+）
+
+> 来源：`.agents/agents/`，项目级专用 Agent 角色定义
+
+| Agent | 职责 | 核心能力 |
+| :--- | :--- | :--- |
+| spec-analyzer | SpecCore 需求分析与任务规划 Agent | 需求分析、功能识别 |
+| spec-architect | SpecCore 架构守护与演进 Agent | 架构一致性检查、技术债务识别 |
+| spec-change-detector | SpecCore 变更感知与影响分析 Agent | 变更监听、影响分析 |
+| spec-clarifier | SpecCore 需求澄清 Agent | 模糊点识别、缺失信息检测 |
+| spec-executor | SpecCore 开发执行与交付 Agent | 读取规格、代码生成 |
+| spec-gatekeeper | SpecCore 质量门禁 Agent | 编译检查、测试检查 |
+| spec-global-analyzer | SpecCore 全局源码分析 Agent | 源码扫描、跨端关联 |
+| spec-knowledge-curator | SpecCore 知识沉淀与维护 Agent | 模式更新、术语维护 |
+| spec-reviewer | SpecCore 代码审查与质量验证 Agent | Spec 符合性检查、代码质量检查 |
+| spec-security-auditor | SpecCore 安全审计 Agent | 代码安全扫描、敏感数据处理 |
+| spec-tester | SpecCore 测试专项 Agent | 测试策略设计、测试用例生成 |
+
+### 所有 Agent 共用的核心约束
+
+- 不要自己创建目录 — 使用 `speccore` CLI
+- 不要写脚本绕过 CLI — 所有操作通过 `speccore` 命令完成
+- 代码写到 CONSTITUTION.md 指定的源码路径，不写到迭代目录内
+- 迭代内写 Spec，迭代外写代码
+
 
 <!-- SPECCORE_AUTO_INDEX_END -->
