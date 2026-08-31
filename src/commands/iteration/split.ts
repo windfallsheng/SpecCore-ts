@@ -159,19 +159,16 @@ export interface IterationSplitOptions {
 
 async function detectPlatforms(iterationDir: string, specified?: string): Promise<string[]> {
   if (specified) return specified.split(',').map(p => p.trim()).filter(Boolean);
-  
+
   // 1. 优先从 CONSTITUTION.md「端列表」章节读取（v6.46.0+ 显式声明）
   const platforms = await parsePlatformList();
   if (platforms.length > 0) return platforms;
 
-  // v8.3.21+: 020-specs/ 按功能模块组织，不再扫描子目录猜测端名
-  const specsDir = join(iterationDir, '020-specs');
-  if (await pathExists(specsDir)) {
-    logger.warn(`⚠️ CONSTITUTION.md 中未找到「端列表」`);
-    logger.warn(`   请先在 CONSTITUTION.md 中配置端列表，否则无法正确拆分任务`);
-  }
-
-  return ['web']; // 默认
+  // v8.3.32 修复：默认不再硬编码 ['web']，返回空数组并提示用户配置
+  logger.warn(`⚠️ CONSTITUTION.md 中未找到「端列表」或工程标识表格`);
+  logger.warn(`   请先在 CONSTITUTION.md 中配置「项目信息」表格（含工程标识列）`);
+  logger.warn(`   或在 .speccore/PROJECT.yaml 中配置 platforms 字段`);
+  return [];
 }
 
 // ================================================================
@@ -1378,6 +1375,13 @@ async function createTaskFromSection(iterationDir: string, taskId: string, secti
 
   // 加载迭代级 analyze 产出（020-specs/），用于填充任务级文件
   const specContents = await loadSpecContents(iterationDir);
+
+  // v8.3.32 修复：020-specs 缺失时给出明确警告
+  const hasSpecContent = Object.keys(specContents).length > 0;
+  if (!hasSpecContent) {
+    logger.warn(`   ⚠️  未找到 020-specs/ 分析文档，任务级 REQ.md/TECH.md 将生成空模板`);
+    logger.warn(`      建议先运行: speccore analyze -I ${iterationName} --auto`);
+  }
 
   // 预生成所有端的子任务 ID（保证同一端在所有文件中 ID 一致）
   const taskNum = taskId.replace(/^Task-/, '');

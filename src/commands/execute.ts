@@ -888,7 +888,7 @@ async function generateTaskSkeleton(task: TaskState, iteration: string): Promise
     const techStack = await loadTechStack();
     logger.info(`   Tech Stack: ${techStack.backendFramework} + ${techStack.frontendFramework}`);
 
-    // v6.49.9+: 扫描平铺的端目录（新结构: {platform}/{subtask}/）
+    // v6.49.9+: 扫描平铺的端目录（新结构: {platform}/{子任务}/）
     const { readdir: rd } = await import('fs-extra');
     const taskEntries = await rd(taskDir, { withFileTypes: true });
     const platformList = await parsePlatformList();
@@ -897,7 +897,10 @@ async function generateTaskSkeleton(task: TaskState, iteration: string): Promise
     // 新结构: 所有端平铺在任务目录下
     for (const entry of taskEntries) {
       if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
-      if (!platformList.includes(entry.name)) continue;
+      // v8.3.32 修复：保留非标准端名目录，只发出警告，避免 execute 跳过历史任务
+      if (platformList.length > 0 && !platformList.includes(entry.name)) {
+        logger.warn(`   ⚠️  任务目录中包含非标准端名 "${entry.name}"，建议将 CONSTITUTION.md 端列表与任务目录对齐`);
+      }
       const platDir = join(taskDir, entry.name);
       const isBk = entry.name === 'backend' || entry.name.startsWith('后台') || /-(service|api|server|backend)$/i.test(entry.name);
       const subEntries = await rd(platDir, { withFileTypes: true });
@@ -931,6 +934,12 @@ async function generateTaskSkeleton(task: TaskState, iteration: string): Promise
       // 生成 Controller 骨架
       if (await pathExists(reqPath)) {
         const req = await readFile(reqPath, 'utf-8');
+        // v8.3.32 修复：REQ.md 内容过短时警告用户
+        const meaningfulContent = req.replace(/^#+\s.*$/gm, '').replace(/^\s*$/gm, '').trim();
+        if (meaningfulContent.length < 50) {
+          logger.warn(`   ⚠️  ${task.id} 的 REQ.md 内容不足（${meaningfulContent.length} 字符），生成的代码将缺少业务上下文`);
+          logger.warn(`      建议先运行 speccore analyze -I <迭代名> 补全需求文档`);
+        }
         const controllerCode = generateJavaController(className, packageName, req, specRules);
         const ctrlPath = join(srcDir, `${className}Controller.java`);
         tx.write(ctrlPath, controllerCode);

@@ -192,24 +192,39 @@ export async function getHotfixStatus(): Promise<{
 /**
  * 根据简短迭代名（如 Q1）查找完整迭代路径
  * 返回项目根目录下的 Iteration-NNN-q1
+ * v8.3.32 修复：优先精确匹配，避免 endsWith 多匹配时返回错误迭代
  */
 export async function getIterationDir(name: string): Promise<string> {
   const { readdir } = await import('fs-extra');
+  const { logger } = await import('../utils/logger');
   const root = process.cwd();
   // 去掉可能的 Iteration- 前缀（AI 可能传完整名如 Iteration-009-xxx）
   const shortName = name.replace(/^Iteration-/, '');
   try {
     const entries = await readdir(root, { withFileTypes: true });
-    for (const e of entries) {
-      const lowerName = e.name.toLowerCase();
-      const lowerShort = shortName.toLowerCase();
-      if (e.isDirectory() && e.name.startsWith('Iteration-') && (
-        e.name === `Iteration-${shortName}` ||
-        lowerName === lowerShort ||
-        lowerName.endsWith(`-${lowerShort}`)
-      )) {
-        return join(root, e.name);
-      }
+    const iterEntries = entries.filter(e => e.isDirectory() && e.name.startsWith('Iteration-'));
+
+    // 1. 精确匹配（完整名或短名完全一致）
+    const exact = iterEntries.find(e =>
+      e.name === `Iteration-${shortName}` ||
+      e.name.toLowerCase() === shortName.toLowerCase()
+    );
+    if (exact) return join(root, exact.name);
+
+    // 2. 后缀匹配（如 "meeting-system" 匹配 "Iteration-xxx-meeting-system"）
+    // 要求唯一匹配，否则发出警告
+    const lowerShort = shortName.toLowerCase();
+    const suffixMatches = iterEntries.filter(e =>
+      e.name.toLowerCase().endsWith(`-${lowerShort}`)
+    );
+    if (suffixMatches.length === 1) {
+      return join(root, suffixMatches[0].name);
+    }
+    if (suffixMatches.length > 1) {
+      logger.warn(`⚠️ 迭代名 "${name}" 匹配到多个目录：${suffixMatches.map(e => e.name).join(', ')}`);
+      logger.warn(`   请使用完整迭代名（如 Iteration-NNN-name）避免歧义`);
+      // 回退：返回第一个（字母序），但警告用户
+      return join(root, suffixMatches[0].name);
     }
   } catch {}
   return join(root, `Iteration-${shortName}`);
