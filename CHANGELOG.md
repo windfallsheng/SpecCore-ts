@@ -64,6 +64,21 @@
 
 ---
 
+## v8.3.27 (2026-08-31) — 废弃文件清理 + gitignore 补全
+
+### 修复
+
+**`speccore update` 自动清理废弃文件**：
+- `update.ts`：升级时自动检测并删除废弃的 `.speccore/SETTINGS.md`（v8.3.25 起由 `.speccore.yml` 替代）
+
+**`.gitignore` 补全**：
+- 新增 `.speccore.yml` — 系统配置（每个项目独立生成）
+- 新增 `.speccore/PROJECT.yaml` — 项目配置（每个项目独立生成）
+- 新增 `.speccore/SETTINGS.md` — 废弃文件（如残留则忽略）
+- 新增 `AGENTS-*.md` / `CLAUDE-*.md` — update 升级时生成的时间戳备份文件
+
+---
+
 ## v8.3.26 (2026-08-28) — update 全面升级检查框架 + help 页面补全
 
 ### 新增

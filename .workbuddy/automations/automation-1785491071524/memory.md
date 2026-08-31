@@ -1,5 +1,21 @@
 # 夜间批量执行 SpecCore Task — 执行历史
 
+## 2026-08-29 02:16 (UTC+8)
+
+**结果**: 全部跳过（默认期次 Q2 下无任务）
+
+**详情**:
+- 默认期次: Q2（context.json `currentIteration`，`currentTask`=Task-001）
+- `speccore execute --all --force --iteration=Q2` → 退出码 0，`[WARN] No tasks found in iteration`
+- `speccore validate --all` → 退出码 0，无错误
+- QUEUE.md: 无匹配文件（GLOBAL/PROJECTS 四个目录均空）
+- 执行报告: `outputs/speccore-batch-execution-report-2026-08-29.md`
+
+**⚠️ 数据不一致提醒（沿用，仍未解决）**:
+- `context.json` 指向 `Q2`，但 `.speccore/ITERATIONS/` 下无 Q2，仅 `Iteration-002-meeting-system`
+- 该迭代下 4 个「待开发」任务（Task-003-user-login frontend/backend、Task-004-payment frontend/backend）仍未被执行
+- 建议修正 `currentIteration` 或显式 `--iteration=Iteration-002-meeting-system`
+
 ## 2026-08-22 00:22 (UTC+8)
 
 **结果**: 全部跳过（默认期次 Q2 下无任务）
