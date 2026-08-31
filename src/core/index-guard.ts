@@ -79,7 +79,7 @@ export async function ensureIndexFresh(
 
   const allFresh = ragStatus.fresh && codeStatus.fresh && graphStatus.fresh;
   const summary = formatChangeSummary(ragStatus, codeStatus, graphStatus, command);
-  const suggestedCommand = `speccore refresh`;
+  const suggestedCommand = buildSuggestedCommand(ragStatus, codeStatus, graphStatus);
 
   return {
     allFresh,
@@ -234,7 +234,67 @@ function formatChangeSummary(
   }
 
   lines.push('');
-  lines.push('💡 建议执行 `speccore refresh` 更新索引');
+  lines.push(formatSuggestion(rag, code, graph));
+
+  return lines.join('\n');
+}
+
+/**
+ * 根据过期层级构建精准的刷新建议
+ */
+function buildSuggestedCommand(
+  rag: LayerStatus,
+  code: LayerStatus,
+  graph: LayerStatus,
+): string {
+  const flags: string[] = [];
+  if (!code.fresh) flags.push('--code');
+  if (!rag.fresh) flags.push('--rag');
+  if (!graph.fresh) flags.push('--graph');
+
+  if (flags.length === 3 || flags.length === 0) {
+    return 'speccore refresh';
+  }
+  return `speccore refresh ${flags.join(' ')}`;
+}
+
+/**
+ * 格式化操作建议（含直接命令 + ask 自然语言方式）
+ */
+function formatSuggestion(
+  rag: LayerStatus,
+  code: LayerStatus,
+  graph: LayerStatus,
+): string {
+  const flags: string[] = [];
+  if (!code.fresh) flags.push('--code');
+  if (!rag.fresh) flags.push('--rag');
+  if (!graph.fresh) flags.push('--graph');
+
+  const lines: string[] = [];
+  lines.push('💡 索引已过期，建议刷新后再执行：');
+  lines.push('');
+
+  // 方式 1: 直接命令
+  if (flags.length === 3 || flags.length === 0) {
+    lines.push('   方式 1 — 直接命令：speccore refresh');
+  } else {
+    lines.push(`   方式 1 — 直接命令：speccore refresh ${flags.join(' ')}`);
+  }
+
+  // 方式 2: ask 自然语言
+  const askPhrases: string[] = [];
+  if (!graph.fresh) askPhrases.push('刷新知识图谱');
+  if (!rag.fresh) askPhrases.push('刷新文档索引');
+  if (!code.fresh) askPhrases.push('刷新代码索引');
+
+  if (askPhrases.length > 0) {
+    const phrase = askPhrases.join('并');
+    lines.push(`   方式 2 — AI 对话：speccore ask "${phrase}"`);
+  }
+
+  lines.push('');
+  lines.push('   ⚠️  继续执行可能基于旧索引，导致分析结果不准确');
 
   return lines.join('\n');
 }
