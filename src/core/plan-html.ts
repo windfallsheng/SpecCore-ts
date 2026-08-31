@@ -38,33 +38,42 @@ export function generatePlanHtml(
   const mermaidLines: string[] = [];
   const hasDeps = tasks.some(t => t.dependsOn.length > 0);
   if (hasDeps || tasks.length > 1) {
-    mermaidLines.push('graph LR');
+    // Build safe ASCII node IDs — Mermaid v11 does not support CJK chars as bare node IDs
+    const idToNode: Map<string, string> = new Map();
+    tasks.forEach((t, i) => idToNode.set(t.id, `N${i}`));
+
+    mermaidLines.push('flowchart LR');
+
+    // 1. Declare all nodes first (avoids duplicate declaration in edges)
     for (const t of tasks) {
       const label = t.name.length > 18 ? t.name.slice(0, 15) + '...' : t.name;
       const escapedLabel = label.replace(/"/g, '\\"');
+      mermaidLines.push(`  ${idToNode.get(t.id)}["${escapedLabel}"]`);
+    }
+
+    // 2. Draw edges
+    for (const t of tasks) {
       if (t.dependsOn.length > 0) {
         for (const d of t.dependsOn) {
-          // Find the dep label
-          const depTask = tasks.find(x => x.id === d);
-          const depLabel = depTask
-            ? (depTask.name.length > 18 ? depTask.name.slice(0, 15) + '...' : depTask.name)
-            : d;
-          mermaidLines.push(`  ${d}["${depLabel.replace(/"/g, '\\"')}"] --> ${t.id}["${escapedLabel}"]`);
+          const depNode = idToNode.get(d);
+          if (depNode) {
+            mermaidLines.push(`  ${depNode} --> ${idToNode.get(t.id)}`);
+          }
         }
-      } else {
-        mermaidLines.push(`  ${t.id}["${escapedLabel}"]`);
       }
     }
-    // Style high-priority or multi-dependency tasks
+
+    // 3. Styles (high-priority or multi-dependency)
     for (const t of tasks) {
       if (t.priority === 'high' || t.dependsOn.length >= 2) {
-        mermaidLines.push(`  style ${t.id} fill:#f97316,stroke:#0ea5e9,stroke-width:2px,color:#fff`);
+        mermaidLines.push(`  style ${idToNode.get(t.id)} fill:#f97316,stroke:#0ea5e9,stroke-width:2px,color:#fff`);
       }
     }
-    // Style completed tasks
+
+    // 4. Styles (completed)
     for (const t of tasks) {
       if (t.status === 'completed') {
-        mermaidLines.push(`  style ${t.id} fill:#14b8a6,stroke:#0ea5e9,stroke-width:1px,color:#fff`);
+        mermaidLines.push(`  style ${idToNode.get(t.id)} fill:#14b8a6,stroke:#0ea5e9,stroke-width:1px,color:#fff`);
       }
     }
   }
