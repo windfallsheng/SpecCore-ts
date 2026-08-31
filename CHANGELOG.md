@@ -64,6 +64,33 @@
 
 ---
 
+## v8.3.32 (2026-08-31) — 修复迭代路由 + 端名过滤 + 文档缺失警告
+
+### 修复
+
+**1. execute 跳过非标准端名任务（严重）**：
+- `execute.ts` 第 900 行移除了 `!platformList.includes(entry.name)` 的硬跳过逻辑
+- 改为保留非标准端名目录并发出警告，避免历史任务（如 `api`/`web`）被静默忽略
+- 修复后：execute 会处理所有存在的端目录，不再因端名不匹配而跳过代码生成
+
+**2. getIterationDir 匹配逻辑宽松（中等）**：
+- `context.ts` 重构匹配逻辑：先精确匹配 → 再唯一后缀匹配 → 多匹配时警告
+- 避免 `getIterationDir("a")` 在有 `Iteration-001-a` 和 `Iteration-002-a` 时返回错误迭代
+- 多匹配时发出警告并提示使用完整迭代名
+
+**3. detectPlatforms 默认返回 ['web']（中等）**：
+- `split.ts` 移除硬编码的 `return ['web']`
+- 改为返回空数组 + 明确提示用户在 CONSTITUTION.md 或 PROJECT.yaml 中配置端列表
+
+**4. split 时 020-specs 缺失无明确警告（轻微）**：
+- `split.ts` 在 `loadSpecContents` 返回空时增加警告：提示用户先运行 `speccore analyze`
+- 避免用户拆分后发现 00-specs 是空模板却不知原因
+
+**5. execute 时空 REQ.md 无警告（轻微）**：
+- `execute.ts` 在读取 REQ.md 后检查有效内容长度，< 50 字符时警告并提示补全 analyze
+
+---
+
 ## v8.3.31 (2026-08-31) — 修复任务依赖关系图 Mermaid 渲染
 
 ### 修复
