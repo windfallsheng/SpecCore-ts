@@ -89,6 +89,19 @@
 
 ---
 
+## v8.3.40 (2026-09-01) — update 增强配置变更检测
+
+### 改进
+
+**update 命令增强配置变更检测** `src/commands/update.ts`
+- 修复前：`speccore update` 只检查 schema_version，新增字段不会提示用户
+- 修复后：update 时用 `detectConfigDiff()` 对比当前配置与最新默认配置
+  - 发现新增字段 → 列出字段路径，提示运行 `speccore config --upgrade` 自动补全
+  - 发现结构性变更（删除/类型变更/枚举变更）→ 提示需人工确认，建议查看差异报告
+- 用户现在能清楚知道 CLI 升级后带来了哪些新配置能力
+
+---
+
 ## v8.3.39 (2026-09-01) — init 生成带注释的配置文件 + setup-guide 补充双配置引导
 
 ### 改进
