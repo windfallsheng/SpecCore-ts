@@ -64,6 +64,26 @@
 
 ---
 
+## v8.3.35 (2026-09-01) — 澄清文档文件名改为 {原需求名}-clarified.md
+
+### 优化
+
+**澄清文档命名规范化**：
+- `requirement-clarifier.ts` `writeClarifiedDoc()`：文件名从 `clarified-{baseName}-{timestamp}.md` 改为 `{baseName}-clarified.md`
+- 多次澄清同一文档时，旧版自动备份为带时间戳的文件（`backupWithTimestamp`），再写入新版
+- 例如：`用户管理-clarified.md`，再次澄清时旧版备份为 `用户管理-clarified.20240901-120000.md`
+
+**parseFeatureList 适配新命名**：
+- `spec-paths.ts`：扫描 `.md` 文件提取功能模块名时，自动去掉 `-clarified` 后缀
+- 排除 `unit-` 前缀的功能单元澄清文件，避免误入功能模块列表
+- 例如：`用户管理-clarified.md` → 功能模块名 `用户管理`
+
+**analyze.ts 统一文件名匹配**：
+- 黄金需求写入路由：检测条件从 `startsWith('clarified-')` 改为 `endsWith('-clarified.md')`
+- prompt 中的文件名示例同步更新为 `{feature-name}-clarified.md` 格式
+
+---
+
 ## v8.3.34 (2026-09-01) — analyze prompt 文件清单适配功能模块目录结构
 
 ### 修复

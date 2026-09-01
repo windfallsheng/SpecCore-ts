@@ -1165,7 +1165,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
               const fp = join(goldenDir, reqFilePath);
               await ensureDir(dirname(fp));
               let finalContent = content;
-              if (reqFilePath.startsWith('clarified-') && !content.startsWith('---')) {
+              // v8.3.35: 新文件名格式 {feature-name}-clarified.md
+              if (reqFilePath.endsWith('-clarified.md') && !content.startsWith('---')) {
                 finalContent = buildClarifiedHeader(reqFilePath) + content;
               }
               await writeFile(fp, finalContent);
@@ -1181,7 +1182,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
               const fp = join(goldenDir, reqFilePath.replace(/^converted\//, ''));
               await ensureDir(dirname(fp));
               let finalContent = content;
-              if (reqFilePath.startsWith('converted/clarified-') && !content.startsWith('---')) {
+              // v8.3.35: 新文件名格式 {feature-name}-clarified.md
+              if (reqFilePath.endsWith('-clarified.md') && !content.startsWith('---')) {
                 finalContent = buildClarifiedHeader(reqFilePath) + content;
               }
               await writeFile(fp, finalContent);
@@ -1527,7 +1529,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
               const fp = join(goldenDir, reqFilePath);
               await ensureDir(dirname(fp));
               let finalContent = content;
-              if (reqFilePath.startsWith('clarified-') && !content.startsWith('---')) {
+              // v8.3.35: 新文件名格式 {feature-name}-clarified.md
+              if (reqFilePath.endsWith('-clarified.md') && !content.startsWith('---')) {
                 finalContent = buildClarifiedHeader(reqFilePath) + content;
               }
               await writeFile(fp, finalContent);
@@ -1542,7 +1545,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
               const fp = join(goldenDir, reqFilePath.replace(/^converted\//, ''));
               await ensureDir(dirname(fp));
               let finalContent = content;
-              if (reqFilePath.startsWith('converted/clarified-') && !content.startsWith('---')) {
+              // v8.3.35: 新文件名格式 {feature-name}-clarified.md
+              if (reqFilePath.endsWith('-clarified.md') && !content.startsWith('---')) {
                 finalContent = buildClarifiedHeader(reqFilePath) + content;
               }
               await writeFile(fp, finalContent);
@@ -4190,7 +4194,7 @@ sequenceDiagram
     prompt += `**Step 3**: 补充：验收标准(AC)、功能边界、业务规则、异常处理、数据模型\n`;
     prompt += `**Step 4**: 输出澄清后的文档，使用以下标记格式：\n`;
     prompt += `\`\`\`
-[CLARIFY:requirements/clarified-{feature-name}.md]
+[CLARIFY:requirements/{feature-name}-clarified.md]
 ---
 source: "原始文档路径"
 clarified-at: "${now}"
@@ -4218,7 +4222,7 @@ status: "clarified"
 ...
 \`\`\`
 `;
-    prompt += `**Step 5**: 用 Read 工具验证文件已正确写入 \`{迭代}/020-specs/requirements/clarified-{feature-name}.md\`\n`;
+    prompt += `**Step 5**: 用 Read 工具验证文件已正确写入 \`{迭代}/020-specs/requirements/{feature-name}-clarified.md\`\n`;
     prompt += `**Step 6**: 基于澄清后的需求继续 Phase 1 分析\n\n`;
     prompt += `### ⚠️ 重要提醒\n\n`;
     prompt += `- **如果输出中没有 [CLARIFY:xxx] 标记的澄清文档，--apply 阶段将拒绝写入所有分析结果**\n`;
@@ -5347,11 +5351,11 @@ async function buildClarifyPhasePrompt(iteration: string): Promise<string> {
 
   prompt += `## Step 5: 确认写入\n\n`;
   prompt += `当用户确认 "满意，可以写入" 后：\n\n`;
-  prompt += `1. 将最终版 PRD 写入 \`020-specs/requirements/clarified-{源文件名}-{日期}.md\`（黄金需求目录）\n`;
-  prompt += `2. 同时生成 \`020-specs/requirements/clarified-{源文件名}-{日期}-diff.md\` 保存最终对比报告\n`;
+  prompt += `1. 将最终版 PRD 写入 \`020-specs/requirements/{源文件名}-clarified.md\`（黄金需求目录）\n`;
+  prompt += `2. 同时生成 \`020-specs/requirements/{源文件名}-clarified-diff.md\` 保存最终对比报告\n`;
   prompt += `3. 使用以下命令写入：\n\n`;
   prompt += `\`\`\`bash\n`;
-  prompt += `speccore analyze --apply '{"020-specs/requirements/clarified-xxx.md":"...","020-specs/requirements/clarified-xxx-diff.md":"..."}' -I ${iteration}\n`;
+  prompt += `speccore analyze --apply '{"020-specs/requirements/xxx-clarified.md":"...","020-specs/requirements/xxx-clarified-diff.md":"..."}' -I ${iteration}\n`;
   prompt += `\`\`\`\n\n`;
   prompt += `> 注意：写入后 CLI 会自动推进到需求确认阶段。\n`;
 
@@ -5392,7 +5396,7 @@ async function buildConfirmCheckPrompt(iteration: string): Promise<string> {
 
   prompt += `## 确认检查清单\n\n`;
   prompt += `请逐项确认：\n\n`;
-  prompt += `- [ ] clarified-*.md 已写入 \`020-specs/requirements/\`（黄金需求目录）\n`;
+  prompt += `- [ ] *-clarified.md 已写入 \`020-specs/requirements/\`（黄金需求目录）\n`;
   prompt += `- [ ] 验收标准可测试、可量化\n`;
   prompt += `- [ ] 功能边界明确（不做什么）\n`;
   prompt += `- [ ] 业务流程完整（含异常分支）\n`;
