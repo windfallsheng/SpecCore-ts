@@ -4340,7 +4340,7 @@ status: "clarified"
   } catch {
     // 回退：静态列表
     prompt += `- \`020-specs/overview/\` 下的 REQUIREMENT.md, ANALYSIS.md, TECH.md, DEPS.md, RISK.md, REVIEW.md, MONITOR.md, FUNCTION_MAP.md, INTERACTION_MAP.md, DEV_GUIDE.md\n`;
-    prompt += `- \`020-specs/{端名}/\` 下的 TECH.md, TEST.md, UI_SPEC.md, DEV_GUIDE.md\n\n`;
+    prompt += `- \`020-specs/{功能模块}/{端名}/\` 下的 TECH.md, TEST.md, UI_SPEC.md, DEV_GUIDE.md\n\n`;
   }
   prompt += `\n**注意**：\n`;
   prompt += `- 只覆盖上述已存在的文件，不要创建新文件或新目录\n`;
@@ -4435,7 +4435,7 @@ status: "clarified"
     prompt += `- Read 020-specs/overview/REQUIREMENT.md → 迭代综合需求规格\n`;
     prompt += `- Read 020-specs/overview/TECH.md → 迭代综合技术架构\n`;
     prompt += `- Read 020-specs/overview/ANALYSIS.md → 迭代综合分析报告\n`;
-    prompt += `- Read 020-specs/{本任务端名}/TECH.md → 该端专属技术方案\n\n`;
+    prompt += `- Read 020-specs/{功能模块}/{本任务端名}/TECH.md → 该端专属技术方案\n\n`;
     prompt += `### Step 3: 撰写任务级深度分析文档\n\n`;
     prompt += `**REQ.md** — 本任务的需求规格（不是 overview/REQUIREMENT.md 的复制）：\n`;
     prompt += `- 明确本任务的验收标准（可测试的、具体的）\n`;
@@ -4461,7 +4461,7 @@ status: "clarified"
     prompt += `- 当前是**迭代级分析**，需产出全部 8 个文档，覆盖需求→技术→测试→评审→风险→依赖→监控→UI规格\n`;
     if (ctx.platform) {
       prompt += `- **只分析 ${ctx.platform} 端**：从 CONSTITUTION.md 读取端列表，但只生成 ${ctx.platform} 端的专属文档\n`;
-      prompt += `- 在 020-specs/${ctx.platform}/ 下写入该端专属文档（ANALYSIS.md、TECH.md、TEST.md 等）\n`;
+      prompt += `- 在 020-specs/{功能模块}/${ctx.platform}/ 下写入该端专属文档（ANALYSIS.md、TECH.md、TEST.md 等）\n`;
       prompt += `- 迭代综合文档写入 020-specs/overview/（REQUIREMENT.md、DEPS.md、RISK.md 等）\n`;
       prompt += `- **不要生成**其他端的子目录和文档\n`;
     }

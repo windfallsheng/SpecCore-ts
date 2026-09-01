@@ -64,6 +64,32 @@
 
 ---
 
+## v8.3.36 (2026-09-01) — split/execute 下游命令适配功能模块目录结构
+
+### 修复
+
+**split.ts 平台推断逻辑适配新结构**：
+- `createTaskFromSection()`：提前调用 `loadSpecContents()`，从已加载的 spec 内容推断任务涉及的端
+- 新结构检测：`specKeys.some(key => key.includes('/{platform}/TECH.md'))` — 在功能模块目录下查找
+- 旧结构兼容：`specKeys.some(key => key === '{platform}/TECH.md')` — 保留旧平铺结构支持
+- 修复前：只查 `020-specs/{platform}/TECH.md`（旧路径），新结构下检测不到任何端，回退为所有端
+- 修复后：正确检测 `020-specs/{feature}/{platform}/TECH.md`，只给任务分配实际涉及的端
+
+**split.ts prompt 路径描述更新**：
+- 提取来源从 `对应端 TECH.md` 改为 `020-specs/{功能模块}/{对应端}/TECH.md`
+
+**analyze.ts prompt 路径描述更新**：
+- 回退静态列表、任务级分析指引、迭代级分析指引中的路径全部更新为 `{功能模块}/{端名}/` 格式
+
+**dev.ts outputs 描述更新**：
+- analyze 步骤的输出路径从 `020-specs/{platform}/TECH.md` 改为 `020-specs/{功能模块}/{platform}/TECH.md`
+
+### 已知问题
+
+- `analyze-engine.ts` 自动分析引擎仍按旧平铺结构写入（`020-specs/{platform}/TECH.md`），在 `--auto` 模式下使用。该引擎将在后续版本适配新结构。
+
+---
+
 ## v8.3.35 (2026-09-01) — 澄清文档文件名改为 {原需求名}-clarified.md
 
 ### 优化
