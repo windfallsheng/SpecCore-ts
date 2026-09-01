@@ -75,3 +75,9 @@ Iteration-Q2/
 outputs/dashboard-*.html
 outputs/speccore-dashboard.html
 
+
+# WorkBuddy AI tool directory
+.workbuddy/
+
+# SpecCore generated iterations
+.speccore/ITERATIONS/
