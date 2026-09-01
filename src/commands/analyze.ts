@@ -1897,32 +1897,6 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
   }
 }
 
-/**
- * @deprecated v8.0.0+ 已被 computeAnalyzeManifest + generateSkeleton 替代
- * 保留用于旧项目迁移参考，新流程不再调用。
- */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-async function preCreateSpecDirectories(iteration: string): Promise<void> {
-  const iterDir = await getIterationDir(iteration);
-  const specDir = join(iterDir, '020-specs');
-  await ensureDir(specDir);
-
-  // 预创建 overview/ 子目录（v6.78.0+ 从 global/ 改名）
-  const globalDir = join(specDir, GLOBAL_SPECS_DIR);
-  await ensureDir(globalDir);
-
-  // 读取端列表并预创建各端目录
-  const platforms = await parsePlatformList();
-  for (const platform of platforms) {
-    await ensureDir(join(specDir, platform));
-  }
-
-  if (platforms.length > 0) {
-    logger.info(`📁 已预创建 020-specs/ 目录结构: ${GLOBAL_SPECS_DIR}/ + ${platforms.length} 个端目录 (${platforms.join(', ')})`);
-  } else {
-    logger.info(`📁 已预创建 020-specs/ 目录结构: ${GLOBAL_SPECS_DIR}/`);
-  }
-}
 
 /**
  * v6.90.0+: 事后校验——检测并清理 020-specs/ 下 AI 绕过 --apply 创建的非法目录和文件
@@ -2463,64 +2437,6 @@ async function injectGraphSummary(prompt: string): Promise<string> {
   }
 }
 
-// ── @deprecated v8.0.0+ 已被 detectSkeletonProgress 替代 ──
-// 保留用于旧项目迁移参考，新流程不再调用。
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-async function detectIterationDocsStatus(iterDir: string): Promise<{
-  existing: string[];
-  missing: string[];
-  nextDoc: string | null;
-  phase1Complete: boolean;
-  phase2Complete: boolean;
-}> {
-  const specsDir = join(iterDir, '020-specs');
-  const overviewDir = join(specsDir, GLOBAL_SPECS_DIR);
-
-  const PHASE1_DOCS = ['REQUIREMENT.md', 'ANALYSIS.md', 'TECH.md', 'DEPS.md', 'RISK.md', 'REVIEW.md', 'MONITOR.md', 'FUNCTION_MAP.md', 'INTERACTION_MAP.md', 'DEV_GUIDE.md'];
-  const PLATFORM_DOCS = ['TECH.md', 'TEST.md', 'UI_SPEC.md', 'DEV_GUIDE.md'];
-
-  const existing: string[] = [];
-  const missing: string[] = [];
-
-  // Phase 1: 检查 overview/ 下的文档
-  for (const doc of PHASE1_DOCS) {
-    const fp = join(overviewDir, doc);
-    if (await pathExists(fp)) {
-      existing.push(`overview/${doc}`);
-    } else {
-      missing.push(`overview/${doc}`);
-    }
-  }
-
-  const phase1Complete = missing.filter(m => m.startsWith('overview/')).length === 0;
-
-  // Phase 2: 检查各端目录下的文档
-  const platforms = await parsePlatformList();
-  for (const platform of platforms) {
-    const platformDir = join(specsDir, platform);
-    if (await pathExists(platformDir)) {
-      for (const doc of PLATFORM_DOCS) {
-        const fp = join(platformDir, doc);
-        if (await pathExists(fp)) {
-          existing.push(`${platform}/${doc}`);
-        } else {
-          missing.push(`${platform}/${doc}`);
-        }
-      }
-    } else {
-      for (const doc of PLATFORM_DOCS) {
-        missing.push(`${platform}/${doc}`);
-      }
-    }
-  }
-
-  const phase2Complete = missing.filter(m => !m.startsWith('overview/')).length === 0;
-
-  // 下一个缺失的文档（Phase 1 优先）
-  const nextDoc = missing.length > 0 ? missing[0] : null;
-
-  return { existing, missing, nextDoc, phase1Complete, phase2Complete };
-}
 
 // ── v7.2.0+: 检测全局分析当前进度 ──
 // Layer 4 拆分为子层: 4a=产品文档, 4b=全局技术核心, 4c=全局技术扩展, 4d=各端技术
