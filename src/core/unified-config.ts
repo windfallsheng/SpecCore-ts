@@ -22,12 +22,20 @@ export const PROJECT_CURRENT_SCHEMA_VERSION = 1;
 // ─────────────────────────────────────────
 
 export interface PlatformConfig {
+  /** 端名/工程标识：全局唯一，用于目录名、命令参数、端识别。如: booking-service, h5-mobile, admin-web */
   name: string;
+  /** 工程类型：frontend(前端) | backend(后端) | infra(基础设施) */
   type: 'frontend' | 'backend' | 'infra';
+  /** 工程描述/工程名：人类可读名称。如: 预订订单服务, H5移动端 */
   description?: string;
+  /** 源码路径：相对于项目根目录的代码位置。如: ./packages/backend/booking-service */
   code_path?: string;
+  /** Git 仓库地址：用于分支管理和 PR 提交 */
   git_repo?: string;
+  /** 默认分支：如 main, master, develop */
   default_branch: string;
+  /** 对应需求端/功能单元：用于 AI 分析时自动对标需求文档中的功能模块名。如: 预订订单服务, 会议室管理 */
+  requirement_unit?: string;
 }
 
 export interface LlmProviderConfig {
@@ -974,39 +982,120 @@ function autoType(v: string): unknown {
 }
 
 function toYaml(config: SpecConfig): string {
-  let yaml = '# SpecCore System Configuration\n';
+  let yaml = '# =============================================================================\n';
+  yaml += '# SpecCore 系统配置 (.speccore.yml)\n';
+  yaml += '# =============================================================================\n';
+  yaml += '# 本文件控制 CLI 的运行时行为与质量门禁策略。\n';
+  yaml += '# 与 .speccore/PROJECT.yaml 的区别：\n';
+  yaml += '#   - .speccore.yml      → 系统级（质量门禁、AI 路由、自动化策略）\n';
+  yaml += '#   - .speccore/PROJECT.yaml → 项目级（工程列表、Git 配置、源码路径）\n';
+  yaml += '# =============================================================================\n';
   yaml += `# schema_version: ${config.schema_version}\n`;
   yaml += `# ${new Date().toISOString().split('T')[0]}\n\n`;
 
-  yaml += '\nquality_gates:\n';
+  yaml += '# ─────────────────────────────────────────────────────────────────────────────\n';
+  yaml += '# 质量门禁（Quality Gates）\n';
+  yaml += '# ─────────────────────────────────────────────────────────────────────────────\n';
+  yaml += 'quality_gates:\n';
+  yaml += '  # enforce_testing: 是否强制要求每个任务包含测试用例\n';
+  yaml += '  #   true  → execute 前检查 TEST.md，缺失则阻断\n';
+  yaml += '  #   false → 仅警告，不阻断\n';
   yaml += `  enforce_testing: ${config.quality_gates.enforce_testing}\n`;
+  yaml += '  # enforce_review: 是否强制代码审查\n';
+  yaml += '  #   true  → 执行完自动进入 review 流程\n';
   yaml += `  enforce_review: ${config.quality_gates.enforce_review}\n`;
+  yaml += '  # require_pr: 是否强制通过 PR 合并代码\n';
+  yaml += '  #   true  → 禁止直接 push 到保护分支，必须通过 speccore pr 提交\n';
   yaml += `  require_pr: ${config.quality_gates.require_pr}\n`;
 
-  yaml += '\narbitration:\n';
+  yaml += '\n# ─────────────────────────────────────────────────────────────────────────────\n';
+  yaml += '# 契约冲突裁决（Arbitration）\n';
+  yaml += '# ─────────────────────────────────────────────────────────────────────────────\n';
+  yaml += 'arbitration:\n';
+  yaml += '  # enabled: 是否启用三级冲突裁决机制\n';
+  yaml += '  #   true  → analyze/split/execute 各阶段自动检测并裁决契约冲突\n';
   yaml += `  enabled: ${config.arbitration.enabled}\n`;
+  yaml += '  # mode: 裁决模式\n';
+  yaml += '  #   full    → 完整三级裁决（Spec 层 → 代码层 → 运行时层）\n';
+  yaml += '  #   simple  → 仅 Spec 层冲突检测\n';
   yaml += `  mode: ${config.arbitration.mode}\n`;
 
-  yaml += '\nsettings:\n';
-  yaml += `  assignee:\n    enabled: ${config.settings.assignee.enabled}\n    mode: ${config.settings.assignee.mode}\n`;
-  yaml += `  trace:\n    enabled: ${config.settings.trace.enabled}\n    auto_annotate: ${config.settings.trace.auto_annotate}\n`;
-  yaml += `  archive:\n    auto_cleanup: ${config.settings.archive.auto_cleanup}\n`;
-  yaml += `  plan:\n    parallel_suggest: ${config.settings.plan.parallel_suggest}\n`;
-  yaml += `  validation:\n    strict_mode: ${config.settings.validation.strict_mode}\n`;
-  yaml += `  sync:\n    auto_check: ${config.settings.sync.auto_check}\n`;
-  yaml += `  patterns:\n    auto_save: ${config.settings.patterns.auto_save}\n`;
-  yaml += `  review:\n    check_assignee: ${config.settings.review.check_assignee}\n`;
+  yaml += '\n# ─────────────────────────────────────────────────────────────────────────────\n';
+  yaml += '# 通用设置（Settings）\n';
+  yaml += '# ─────────────────────────────────────────────────────────────────────────────\n';
+  yaml += 'settings:\n';
+  yaml += '  # ── 指派策略 ──\n';
+  yaml += '  assignee:\n';
+  yaml += '    # enabled: 是否启用自动指派\n';
+  yaml += `    enabled: ${config.settings.assignee.enabled}\n`;
+  yaml += '    # mode: 指派严格度\n';
+  yaml += '    #   strict → 每个子任务必须指定 owner\n';
+  yaml += '    #   loose  → 仅任务级指定 owner，子任务可共享\n';
+  yaml += `    mode: ${config.settings.assignee.mode}\n`;
+  yaml += '  # ── 追踪（Trace）──\n';
+  yaml += '  trace:\n';
+  yaml += '    # enabled: 是否启用全链路追踪\n';
+  yaml += `    enabled: ${config.settings.trace.enabled}\n`;
+  yaml += '    # auto_annotate: 是否自动在代码中插入追踪注解\n';
+  yaml += `    auto_annotate: ${config.settings.trace.auto_annotate}\n`;
+  yaml += '  # ── 归档（Archive）──\n';
+  yaml += '  archive:\n';
+  yaml += '    # auto_cleanup: 迭代完成后是否自动清理临时文件\n';
+  yaml += `    auto_cleanup: ${config.settings.archive.auto_cleanup}\n`;
+  yaml += '  # ── 计划（Plan）──\n';
+  yaml += '  plan:\n';
+  yaml += '    # parallel_suggest: 是否建议并行执行无依赖任务\n';
+  yaml += `    parallel_suggest: ${config.settings.plan.parallel_suggest}\n`;
+  yaml += '  # ── 校验（Validation）──\n';
+  yaml += '  validation:\n';
+  yaml += '    # strict_mode: 是否启用严格校验模式\n';
+  yaml += '    #   true  → 任何格式错误都阻断执行\n';
+  yaml += '    #   false → 仅记录警告，尽量继续\n';
+  yaml += `    strict_mode: ${config.settings.validation.strict_mode}\n`;
+  yaml += '  # ── 同步（Sync）──\n';
+  yaml += '  sync:\n';
+  yaml += '    # auto_check: 执行前是否自动检查配置/规范库是否为最新\n';
+  yaml += `    auto_check: ${config.settings.sync.auto_check}\n`;
+  yaml += '  # ── 模式沉淀（Patterns）──\n';
+  yaml += '  patterns:\n';
+  yaml += '    # auto_save: 是否自动将分析过程中发现的模式保存到 .speccore/PATTERNS/\n';
+  yaml += '    #   smart  → 仅在置信度高时自动保存\n';
+  yaml += '    #   always → 全部自动保存\n';
+  yaml += '    #   false  → 不自动保存，仅手动\n';
+  yaml += `    auto_save: ${config.settings.patterns.auto_save}\n`;
+  yaml += '  # ── 审查（Review）──\n';
+  yaml += '  review:\n';
+  yaml += '    # check_assignee: 审查时是否检查指派人与执行人一致\n';
+  yaml += `    check_assignee: ${config.settings.review.check_assignee}\n`;
 
-  yaml += '\nask:\n';
-  yaml += `  routing:\n    mode: ${config.ask.routing.mode}\n`;
+  yaml += '\n# ─────────────────────────────────────────────────────────────────────────────\n';
+  yaml += '# Ask 引擎路由配置（控制 speccore ask 的行为）\n';
+  yaml += '# ─────────────────────────────────────────────────────────────────────────────\n';
+  yaml += 'ask:\n';
+  yaml += '  # ── 路由策略 ──\n';
+  yaml += '  routing:\n';
+  yaml += '    # mode: 意图识别路由模式\n';
+  yaml += '    #   hybrid → 混合路由（本地规则 + LLM 兜底）\n';
+  yaml += '    #   local  → 仅本地规则匹配\n';
+  yaml += '    #   llm    → 仅 LLM 识别\n';
+  yaml += `    mode: ${config.ask.routing.mode}\n`;
+  yaml += '    # high_threshold: 高置信度阈值（≥此值直接执行，不询问确认）\n';
   yaml += `    high_threshold: ${config.ask.routing.high_threshold}\n`;
+  yaml += '    # low_threshold: 低置信度阈值（<此值进入模糊拦截，询问用户）\n';
   yaml += `    low_threshold: ${config.ask.routing.low_threshold}\n`;
+  yaml += '    # auto_host_ai: 是否在无法识别时自动调用宿主 AI（Qoder/Cursor 等）\n';
   yaml += `    auto_host_ai: ${config.ask.routing.auto_host_ai}\n`;
+  yaml += '    # cache_enabled: 是否缓存意图识别结果\n';
   yaml += `    cache_enabled: ${config.ask.routing.cache_enabled}\n`;
+  yaml += '    # cache_min_hits: 缓存生效最小命中次数（命中 ≥N 次后才走缓存）\n';
   yaml += `    cache_min_hits: ${config.ask.routing.cache_min_hits}\n`;
-  yaml += `  rules:\n    force_host_ai: ${config.ask.rules.force_host_ai}\n`;
+  yaml += '  # ── 规则覆盖 ──\n';
+  yaml += '  rules:\n';
+  yaml += '    # force_host_ai: 是否强制所有请求都走宿主 AI（绕过 CLI 本地处理）\n';
+  yaml += `    force_host_ai: ${config.ask.rules.force_host_ai}\n`;
   if (config.ask.llm_providers.length > 0) {
-    yaml += `  llm_providers:\n`;
+    yaml += '  # ── LLM 提供商（可选）──\n';
+    yaml += '  llm_providers:\n';
     for (const p of config.ask.llm_providers) {
       yaml += `    - name: ${p.name}\n      enabled: ${p.enabled}\n      type: ${p.type}\n      endpoint: ${p.endpoint}\n      model: ${p.model}\n`;
       if (p.apiKey) yaml += `      apiKey: ${p.apiKey}\n`;
@@ -1026,33 +1115,85 @@ function toYaml(config: SpecConfig): string {
 }
 
 function toProjectYaml(config: ProjectConfig): string {
-  let yaml = '# SpecCore Project Configuration\n';
+  let yaml = '# =============================================================================\n';
+  yaml += '# SpecCore 项目配置 (.speccore/PROJECT.yaml)\n';
+  yaml += '# =============================================================================\n';
+  yaml += '# 本文件定义工程列表、源码路径、Git 配置等「项目级」信息。\n';
+  yaml += '# 与 .speccore.yml 的区别：\n';
+  yaml += '#   - .speccore/PROJECT.yaml → 项目级（工程列表、Git 配置、源码路径）\n';
+  yaml += '#   - .speccore.yml          → 系统级（质量门禁、AI 路由、自动化策略）\n';
+  yaml += '# =============================================================================\n';
   yaml += `# schema_version: ${config.schema_version}\n`;
   yaml += `# ${new Date().toISOString().split('T')[0]}\n\n`;
 
-  yaml += `project:\n`;
+  yaml += 'project:\n';
+  yaml += '  # 项目标识名（用于 dashboard、报告文件名等）\n';
   yaml += `  name: ${config.project.name}\n`;
-  if (config.project.description) yaml += `  description: ${config.project.description}\n`;
-  if (config.project.version) yaml += `  version: ${config.project.version}\n`;
+  if (config.project.description) {
+    yaml += '  # 项目描述（可选）\n';
+    yaml += `  description: ${config.project.description}\n`;
+  }
+  if (config.project.version) {
+    yaml += '  # 项目版本（可选）\n';
+    yaml += `  version: ${config.project.version}\n`;
+  }
 
-  yaml += '\nplatforms:\n';
+  yaml += '\n# ─────────────────────────────────────────────────────────────────────────────\n';
+  yaml += '# 工程列表（Platforms）\n';
+  yaml += '# ─────────────────────────────────────────────────────────────────────────────\n';
+  yaml += '# 每个工程对应一个可独立部署的端（后端服务 / 前端应用）。\n';
+  yaml += '# AI 分析时会根据 `requirement_unit` 自动对标需求文档中的功能模块。\n';
+  yaml += '#\n';
+  yaml += '# 必填字段：\n';
+  yaml += '#   name              → 工程标识（全局唯一，用于目录名、命令参数）\n';
+  yaml += '#   type              → frontend(前端) | backend(后端) | infra(基础设施)\n';
+  yaml += '#   default_branch    → 默认分支（如 main, develop）\n';
+  yaml += '#\n';
+  yaml += '# 可选字段：\n';
+  yaml += '#   description       → 工程描述（人类可读名称）\n';
+  yaml += '#   code_path         → 源码路径（相对于项目根目录）\n';
+  yaml += '#   git_repo          → Git 仓库地址（用于分支管理和 PR 提交）\n';
+  yaml += '#   requirement_unit  → 对应需求端/功能单元（AI 分析时自动对标）\n';
+  yaml += 'platforms:\n';
+  if (config.platforms.length === 0) {
+    yaml += '  # 示例：添加你的第一个工程（复制后修改）\n';
+    yaml += '  # - name: api-service\n';
+    yaml += '  #   type: backend\n';
+    yaml += '  #   description: API 服务\n';
+    yaml += '  #   code_path: ./backend/api-service\n';
+    yaml += '  #   git_repo: git@github.com:org/repo.git\n';
+    yaml += '  #   default_branch: main\n';
+    yaml += '  #   requirement_unit: API 服务\n';
+  }
   for (const p of config.platforms) {
-    yaml += `  - name: ${p.name}\n    type: ${p.type}\n`;
+    yaml += `  - name: ${p.name}\n`;
+    yaml += `    type: ${p.type}\n`;
     if (p.description) yaml += `    description: ${p.description}\n`;
     if (p.code_path) yaml += `    code_path: ${p.code_path}\n`;
     if (p.git_repo) yaml += `    git_repo: ${p.git_repo}\n`;
-    if (p.default_branch) yaml += `    default_branch: ${p.default_branch}\n`;
+    yaml += `    default_branch: ${p.default_branch}\n`;
+    if (p.requirement_unit) yaml += `    requirement_unit: ${p.requirement_unit}\n`;
   }
 
-  yaml += `\ngit:\n`;
+  yaml += '\n# ─────────────────────────────────────────────────────────────────────────────\n';
+  yaml += '# Git 配置\n';
+  yaml += '# ─────────────────────────────────────────────────────────────────────────────\n';
+  yaml += 'git:\n';
+  yaml += '  # 默认基础分支（PR 合并目标）\n';
   yaml += `  default_base: ${config.git.default_base}\n`;
+  yaml += '  # 功能分支前缀\n';
   yaml += `  branch_prefix: ${config.git.branch_prefix}\n`;
-  yaml += `  protected_branches:\n`;
+  yaml += '  # 受保护分支（禁止直接 push，只能通过 PR 合并）\n';
+  yaml += '  protected_branches:\n';
   for (const b of config.git.protected_branches) {
     yaml += `    - ${b}\n`;
   }
 
-  yaml += '\ncode_scope:\n';
+  yaml += '\n# ─────────────────────────────────────────────────────────────────────────────\n';
+  yaml += '# 代码扫描范围\n';
+  yaml += '# ─────────────────────────────────────────────────────────────────────────────\n';
+  yaml += '# AI 全局分析时扫描的源码目录\n';
+  yaml += 'code_scope:\n';
   for (const s of config.code_scope) {
     yaml += `  - ${s}\n`;
   }

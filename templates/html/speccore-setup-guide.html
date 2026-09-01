@@ -112,6 +112,15 @@ h1{font-family:'Orbitron',sans-serif;font-size:28px;font-weight:900;background:l
 </div>
 <div class="step-desc" style="margin-top:8px;color:var(--cyan)">💡 作用：AI 生成代码时严格遵循这里的技术栈。例如写了 Spring Boot + MySQL，AI 就不会生成 NestJS + PostgreSQL 的代码。</div>
 </div>
+<div style="margin-top:12px;padding:10px 12px;border-radius:8px;border:1px solid rgba(99,102,241,.15);background:rgba(99,102,241,.04)">
+<div style="font-size:12px;font-weight:700;color:var(--purple);margin-bottom:6px">📋 双配置系统（v8.3.25+）</div>
+<div class="step-desc" style="margin-bottom:8px">除 CONSTITUTION.md 外，init 还自动生成了两个 YAML 配置文件，分别控制系统级和项目级行为：</div>
+<div class="method-grid" style="grid-template-columns:1fr 1fr;margin-bottom:8px">
+<div class="method-card m3"><div class="method-title">⚙️ .speccore.yml — 系统配置</div><div class="step-desc">控制 CLI 运行时行为：质量门禁、AI 路由、自动化策略。所有字段已带中文注释，按需修改即可。</div><div class="method-cmd" style="margin-top:4px">quality_gates / arbitration / settings / ask</div></div>
+<div class="method-card m4"><div class="method-title">🏗️ .speccore/PROJECT.yaml — 项目配置</div><div class="step-desc">定义工程列表、源码路径、Git 配置。init 时 platforms 为空，需手动添加你的后端/前端工程。</div><div class="method-cmd" style="margin-top:4px">platforms / git / code_scope</div></div>
+</div>
+<div class="step-desc" style="font-size:10px">💡 快速配置：用 AI 扫描代码自动填写 — <code>/spec-ask "分析项目，完善所有配置"</code></div>
+</div>
 </div>
 
 <div class="step">

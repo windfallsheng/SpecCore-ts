@@ -17,6 +17,7 @@ import {
   DEFAULT_CONFIG,
   DEFAULT_PROJECT_CONFIG,
   formatConfigDiff,
+  CURRENT_SCHEMA_VERSION,
 } from '../core/unified-config';
 
 // ── 当前版本的命令列表统一从 init.ts 导入（单一事实来源）──
@@ -167,9 +168,24 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   const upgradeResult = await checkAllUpgradeIssues(projectRoot);
 
   // 4c-3. 更新 .speccore.yml（系统配置）
+  //       如不存在则生成默认配置；如已存在则检查 schema_version，过期时提示 upgrade
   //       AI-RULES.md 是纯生成物（AI 参考手册），直接覆盖
   try {
-    await initConfig();
+    const configPath = join(projectRoot, '.speccore.yml');
+    if (!(await pathExists(configPath))) {
+      await initConfig();
+    } else {
+      const { config, warnings } = await loadConfigWithMeta();
+      if (config.schema_version < CURRENT_SCHEMA_VERSION || warnings.length > 0) {
+        logger.info('');
+        logger.info('⚠️  .speccore.yml 配置结构可能需要升级');
+        if (warnings.length > 0) {
+          for (const w of warnings) logger.info(`   ${w}`);
+        }
+        logger.info('   建议运行: speccore config --upgrade');
+        logger.info('');
+      }
+    }
     await writeFile(join(speccoreDir, 'AI-RULES.md'), generateAIRulesContent());
   } catch {}
 
