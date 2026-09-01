@@ -804,7 +804,10 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     }
 
     // ── 1. 检查 ANALYSIS.md + AI 智能拆分建议 ──
-    const analysisPath = join(iterationDir, '020-specs', 'ANALYSIS.md');
+    // v8.3.38: 兼容新旧结构
+    const analysisPathNew = join(iterationDir, '020-specs', GLOBAL_SPECS_DIR, 'ANALYSIS.md');
+    const analysisPathOld = join(iterationDir, '020-specs', 'ANALYSIS.md');
+    const analysisPath = await pathExists(analysisPathNew) ? analysisPathNew : analysisPathOld;
     if (await pathExists(analysisPath)) {
       const analysis = await readFile(analysisPath, 'utf-8');
       const blockerLines = analysis.split('\n').filter(l => 
@@ -925,7 +928,10 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       logger.info('   ℹ️ 未找到 ANALYSIS.md，建议先运行 speccore analyze');
     }
 
-    const reqFile = join(iterationDir, '020-specs', options.file || 'REQUIREMENT.md');
+    // v8.3.38: 兼容新旧结构 — 优先查新路径 020-specs/overview/REQUIREMENT.md，回退旧路径 020-specs/REQUIREMENT.md
+    const reqFileNew = join(iterationDir, '020-specs', GLOBAL_SPECS_DIR, options.file || 'REQUIREMENT.md');
+    const reqFileOld = join(iterationDir, '020-specs', options.file || 'REQUIREMENT.md');
+    const reqFile = await pathExists(reqFileNew) ? reqFileNew : reqFileOld;
 
     if (!(await pathExists(reqFile))) {
       spinner.fail(`Requirement file not found: ${reqFile}`);
@@ -1346,14 +1352,22 @@ async function createTaskFromSection(iterationDir: string, taskId: string, secti
   } else if (section.platform) {
     taskPlatforms = [section.platform];
   } else {
-    // v8.3.36: 从已加载的 specContents 推断平台（兼容新旧结构）
+    // v8.3.38: 从已加载的 specContents 推断平台（兼容新旧结构 + 按功能模块过滤）
     taskPlatforms = [];
     const specKeys = Object.keys(specContents);
+    // 从 section.name 提取功能模块名（去掉 "2.1 " 等前缀）
+    const sectionFeatureName = section.name.replace(/^\d+(\.\d+)*\s*/, '').trim();
     for (const platform of allPlatforms) {
       // 新结构: {feature}/{platform}/TECH.md | 旧结构: {platform}/TECH.md
-      const hasPlatformTech = specKeys.some(key =>
-        key === `${platform}/TECH.md` || key.includes(`/${platform}/TECH.md`)
-      );
+      const hasPlatformTech = specKeys.some(key => {
+        if (key === `${platform}/TECH.md`) return true; // 旧结构
+        if (key.includes(`/${platform}/TECH.md`)) {
+          // 新结构：优先匹配当前功能模块下的端文档
+          const keyFeature = key.split('/')[0];
+          return sectionFeatureName.includes(keyFeature) || keyFeature.includes(sectionFeatureName);
+        }
+        return false;
+      });
       if (hasPlatformTech) {
         taskPlatforms.push(platform);
       }
@@ -1385,6 +1399,7 @@ async function createTaskFromSection(iterationDir: string, taskId: string, secti
 
 
   // ── 1. 任务目录指引（功能模块分组） ──
+  await ensureDir(taskDir);
   const isResearch = taskType === 'research';
   await writeFile(
     join(taskDir, 'README.md'),
@@ -2472,7 +2487,10 @@ async function generateEnvExample(iterationDir: string, sections: Section[]): Pr
 }
 
 async function injectTechFromAnalysis(iterationDir: string, taskDir: string, sectionName: string): Promise<void> {
-  const analysisPath = join(iterationDir, '020-specs', 'ANALYSIS.md');
+  // v8.3.38: 兼容新旧结构
+  const analysisPathNew = join(iterationDir, '020-specs', GLOBAL_SPECS_DIR, 'ANALYSIS.md');
+  const analysisPathOld = join(iterationDir, '020-specs', 'ANALYSIS.md');
+  const analysisPath = await pathExists(analysisPathNew) ? analysisPathNew : analysisPathOld;
   if (!(await pathExists(analysisPath))) return;
 
   const analysis = await readFile(analysisPath, 'utf-8');
