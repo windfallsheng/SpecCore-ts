@@ -64,6 +64,26 @@
 
 ---
 
+## v8.3.37 (2026-09-01) — split 任务级文档提取适配功能模块目录结构
+
+### 修复
+
+**extractTaskTechContent 适配新结构**：
+- 新结构检测：`specKeys.find(k => k.endsWith('/{platform}/TECH.md'))` — 在功能模块目录下查找对应端的技术文档
+- 旧结构兼容：`specContents['{platform}/TECH.md']` — 保留旧平铺结构支持
+- 回退逻辑增强：同时检查 `specContents['TECH.md']` 和 `specContents['overview/TECH.md']`
+- 修复前：只查 `{platform}/TECH.md`（旧路径），新结构下检测不到任何端级技术文档
+- 修复后：正确检测 `020-specs/{feature}/{platform}/TECH.md`，前端 COMPONENT_TREE.md 等子任务文档能正确提取内容
+
+**extractTaskDevGuideContent 适配新结构**：
+- 新结构检测：`specKeys.find(k => k.endsWith('/{platform}/DEV_GUIDE.md'))` — 在功能模块目录下查找对应端的开发指南
+- 旧结构兼容：`specContents['{platform}/DEV_GUIDE.md']` — 保留旧平铺结构支持
+- 回退逻辑增强：同时检查 `specContents['DEV_GUIDE.md']` 和 `specContents['overview/DEV_GUIDE.md']`
+- 修复前：只查 `{platform}/DEV_GUIDE.md`（旧路径），新结构下检测不到任何端级开发指南
+- 修复后：正确检测 `020-specs/{feature}/{platform}/DEV_GUIDE.md`，任务级 DEV_GUIDE.md 能正确提取内容
+
+---
+
 ## v8.3.36 (2026-09-01) — split/execute 下游命令适配功能模块目录结构
 
 ### 修复

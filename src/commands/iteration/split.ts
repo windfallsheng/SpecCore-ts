@@ -2801,20 +2801,27 @@ function extractFrontendContent(techContent: string, taskName: string, platform:
   return extractRelevantSection(techContent, taskName);
 }
 
-/** 从 specContents 提取任务级 TECH 内容（优先读取对应端的文档） */
+/** 从 specContents 提取任务级 TECH 内容（优先读取对应端的文档）
+ * v8.3.37: 兼容新旧结构 — 新结构 key 为 {feature}/{platform}/TECH.md，旧结构为 {platform}/TECH.md
+ */
 function extractTaskTechContent(specContents: Record<string, string>, section: Section, platform?: string): string {
-  // 优先读取对应端的 TECH.md
+  // 优先读取对应端的 TECH.md（新结构 + 旧结构）
   if (platform) {
-    const platformTechKey = `${platform}/TECH.md`;
-    const platformTechMd = specContents[platformTechKey];
-    if (platformTechMd) {
-      // 从该端专属文档中提取
-      return extractRelevantSection(platformTechMd, section.name);
+    const specKeys = Object.keys(specContents);
+    // 新结构：查找任意功能模块下的 {platform}/TECH.md
+    const newKey = specKeys.find(k => k.endsWith(`/${platform}/TECH.md`));
+    if (newKey) {
+      return extractRelevantSection(specContents[newKey], section.name);
+    }
+    // 旧结构：直接查找 {platform}/TECH.md
+    const oldKey = `${platform}/TECH.md`;
+    if (specContents[oldKey]) {
+      return extractRelevantSection(specContents[oldKey], section.name);
     }
   }
 
-  // 回退：尝试从根目录 TECH.md 提取（兼容旧结构或全局文档）
-  const techMd = specContents['TECH.md'];
+  // 回退：尝试从全局 TECH.md 提取（overview/TECH.md 或根目录 TECH.md）
+  const techMd = specContents['TECH.md'] || specContents['overview/TECH.md'];
   if (!techMd) return '';
   if (platform && platform !== 'backend') {
     return extractFrontendContent(techMd, section.name, platform);
@@ -2824,18 +2831,22 @@ function extractTaskTechContent(specContents: Record<string, string>, section: S
   return techSection;
 }
 
-/** v8.3.0+: 从 analyze DEV_GUIDE.md 提取任务级开发指南内容 */
+/** v8.3.0+: 从 analyze DEV_GUIDE.md 提取任务级开发指南内容
+ * v8.3.37: 兼容新旧结构 — 新结构 key 为 {feature}/{platform}/DEV_GUIDE.md
+ */
 function extractTaskDevGuideContent(
   specContents: Record<string, string>,
   section: Section,
   taskPlatforms: string[]
 ): string {
   const results: string[] = [];
+  const specKeys = Object.keys(specContents);
 
-  // 1. 优先从各端 DEV_GUIDE.md 提取
+  // 1. 优先从各端 DEV_GUIDE.md 提取（新结构 + 旧结构）
   for (const platform of taskPlatforms) {
-    const platformDevGuideKey = `${platform}/DEV_GUIDE.md`;
-    const platformDevGuide = specContents[platformDevGuideKey];
+    // 新结构：查找任意功能模块下的 {platform}/DEV_GUIDE.md
+    const newKey = specKeys.find(k => k.endsWith(`/${platform}/DEV_GUIDE.md`));
+    const platformDevGuide = newKey ? specContents[newKey] : specContents[`${platform}/DEV_GUIDE.md`];
     if (platformDevGuide) {
       const extracted = extractRelevantSection(platformDevGuide, section.name);
       if (extracted && extracted.trim().length > 50) {
@@ -2844,8 +2855,8 @@ function extractTaskDevGuideContent(
     }
   }
 
-  // 2. 回退：从全局 DEV_GUIDE.md 提取
-  const globalDevGuide = specContents['DEV_GUIDE.md'];
+  // 2. 回退：从全局 DEV_GUIDE.md 提取（overview/DEV_GUIDE.md 或根目录 DEV_GUIDE.md）
+  const globalDevGuide = specContents['DEV_GUIDE.md'] || specContents['overview/DEV_GUIDE.md'];
   if (globalDevGuide) {
     const extracted = extractRelevantSection(globalDevGuide, section.name, '改造范围 实施步骤 接口契约 验证方式 回滚 坑点');
     if (extracted && extracted.trim().length > 50) {
