@@ -141,6 +141,7 @@ export function parseClarifiedRequirement(response: string): {
  * 写入澄清后的需求文档
  * v8.2.0+: 改为写入 020-specs/requirements/ 作为黄金需求目录
  * 原始需求保留在 010-requirements/ 不变
+ * v8.3.35+: 文件名改为 {原需求名}-clarified.md，多次澄清时自动备份旧版
  */
 export async function writeClarifiedDoc(
   content: string,
@@ -151,19 +152,17 @@ export async function writeClarifiedDoc(
   const goldenDir = join(iterDir, '020-specs', 'requirements');
   await ensureDir(goldenDir);
 
-  // 生成文件名：基于来源名 + 时间戳
+  // v8.3.35: 文件名固定为 {原需求名}-clarified.md，便于 parseFeatureList 识别
   const baseName = basename(sourceName, '.md')
     .replace(/[^\w\u4e00-\u9fa5-]/g, '-')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '')
     || 'clarified';
 
-  const now = new Date();
-  const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-  const filename = `clarified-${baseName}-${timestamp}.md`;
+  const filename = `${baseName}-clarified.md`;
   const filepath = join(goldenDir, filename);
 
-  // 备份已有文件
+  // 已存在则备份旧版（重命名为带时间戳的文件），再写入新版
   const backup = await backupWithTimestamp(filepath);
   if (backup) {
     logger.info(`   📦 旧版已备份: ${basename(backup)}`);
@@ -590,7 +589,8 @@ export async function hasValidClarifiedDocs(iterDir: string): Promise<boolean> {
   if (!(await pathExists(goldenDir))) return false;
 
   const files = await readdir(goldenDir);
-  const clarifiedFiles = files.filter(f => f.startsWith('clarified-') && f.endsWith('.md'));
+  // v8.3.35: 匹配新的文件名格式 {feature-name}-clarified.md
+  const clarifiedFiles = files.filter(f => f.endsWith('-clarified.md'));
   if (clarifiedFiles.length === 0) return false;
 
   // 检查是否有 source 文档比 clarified 更新

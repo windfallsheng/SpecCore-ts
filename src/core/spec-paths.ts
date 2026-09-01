@@ -149,9 +149,15 @@ export async function parseFeatureList(iterDir: string): Promise<string[]> {
           if (['images', 'prototypes', 'sources', 'assets', 'converted'].includes(entry.name)) continue;
           await scanDir(join(dir, entry.name));
         } else if (entry.name.endsWith('.md')) {
-          const basename = entry.name.slice(0, -3);
+          let basename = entry.name.slice(0, -3);
+          // v8.3.35: 排除功能单元澄清文件
+          if (basename.startsWith('unit-')) continue;
           if (!excludeNames.has(basename) && basename.length > 0) {
-            features.add(basename);
+            // v8.3.35: 去掉 -clarified 后缀，提取原需求文档名作为功能模块名
+            basename = basename.replace(/-clarified$/, '');
+            if (basename.length > 0) {
+              features.add(basename);
+            }
           }
         }
       }
