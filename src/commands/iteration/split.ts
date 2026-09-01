@@ -1336,32 +1336,26 @@ async function createTaskFromSection(iterationDir: string, taskId: string, secti
   const taskDir = join(iterationDir, '030-tasks', taskType, taskId);
   const iterationName = extractIterationName(iterationDir);
   
-  // 确定任务涉及的端：优先使用 AI 标注的 _scopePlatforms，否则从 020-specs/{端}/TECH.md 是否存在且有内容来推断
+  // v8.3.36: 提前加载 spec 内容，用于平台推断 + 任务级文件填充
+  const specContents = await loadSpecContents(iterationDir);
+
+  // 确定任务涉及的端：优先使用 AI 标注的 _scopePlatforms，否则从 020-specs 推断
   let taskPlatforms: string[];
   if ((section as any)._scopePlatforms && (section as any)._scopePlatforms.length > 0) {
     taskPlatforms = (section as any)._scopePlatforms;
   } else if (section.platform) {
     taskPlatforms = [section.platform];
   } else {
-    // 从 020-specs/{端}/TECH.md 推断：文件存在且有实质内容才认为涉及该端
-    const specsBase = join(iterationDir, '020-specs');
+    // v8.3.36: 从已加载的 specContents 推断平台（兼容新旧结构）
     taskPlatforms = [];
+    const specKeys = Object.keys(specContents);
     for (const platform of allPlatforms) {
-      const techPath = join(specsBase, platform, 'TECH.md');
-      if (await pathExists(techPath)) {
-        const content = await readFile(techPath, 'utf-8');
-        // 简单判断：移除模板占位符后长度 > 50 认为有实质内容
-        const meaningful = content
-          .replace(/_待填充_|_待补充_|_待 AI 分析_|_待定_|_待导入_/g, '')
-          .replace(/\|\s*:---[\s|:-]*\|/g, '')
-          .replace(/\|\s*\|\s*\|/g, '')
-          .replace(/^#+\s.*$/gm, '')
-          .replace(/^>.*$/gm, '')
-          .replace(/\s/g, '')
-          .trim().length;
-        if (meaningful > 50) {
-          taskPlatforms.push(platform);
-        }
+      // 新结构: {feature}/{platform}/TECH.md | 旧结构: {platform}/TECH.md
+      const hasPlatformTech = specKeys.some(key =>
+        key === `${platform}/TECH.md` || key.includes(`/${platform}/TECH.md`)
+      );
+      if (hasPlatformTech) {
+        taskPlatforms.push(platform);
       }
     }
     // 如果都没检测到，回退到所有端
@@ -1369,13 +1363,10 @@ async function createTaskFromSection(iterationDir: string, taskId: string, secti
       taskPlatforms = allPlatforms;
     }
   }
-  
+
   const complexity = (section as any)._complexity as SectionComplexity || { estimatedHours: 8, priority: 'medium' as const };
   const owner = (section as any)._owner || '未分配';
   const today = new Date().toISOString().split('T')[0];
-
-  // 加载迭代级 analyze 产出（020-specs/），用于填充任务级文件
-  const specContents = await loadSpecContents(iterationDir);
 
   // v8.3.32 修复：020-specs 缺失时给出明确警告
   const hasSpecContent = Object.keys(specContents).length > 0;
@@ -3217,12 +3208,12 @@ async function buildSplitPrompt(
   p += `> **reqContent 质量要求（必填，禁止模板化）**：\n`;
   p += `>   - 必须是**具体的、可执行的需求描述**，不是"待补充"或"参考全局文档"\n`;
   p += `>   - 包含：业务规则（含边界条件）、数据模型（字段/类型/约束）、接口清单（方法/路径/参数/响应）\n`;
-  p += `>   - 从 020-specs/overview/REQUIREMENT.md 和对应端 TECH.md 中提取本任务相关的具体内容\n`;
+  p += `>   - 从 020-specs/overview/REQUIREMENT.md 和 020-specs/{功能模块}/{对应端}/TECH.md 中提取本任务相关的具体内容\n`;
   p += `>   - 直接写入 00-specs/REQ.md，执行时 AI 不再重新分析需求\n`;
   p += `> **techContent 质量要求（必填，禁止模板化）**：\n`;
   p += `>   - 必须是**具体的技术实现方案**，不是框架模板\n`;
   p += `>   - 包含：架构设计、核心逻辑伪代码/流程、数据库设计（表结构/索引）、API 详细定义、测试策略\n`;
-  p += `>   - 从 020-specs/overview/TECH.md 和对应端 TECH.md 中提取本任务相关的技术细节\n`;
+  p += `>   - 从 020-specs/overview/TECH.md 和 020-specs/{功能模块}/{对应端}/TECH.md 中提取本任务相关的技术细节\n`;
   p += `>   - 直接写入 00-specs/TECH.md，执行时 AI 据此直接开发\n`;
   p += `> **质量红线**：如果 reqContent/techContent 只有标题和占位符（如 "<!-- AI-FILL -->"），视为不合格，必须重新生成\n\n`;
 
