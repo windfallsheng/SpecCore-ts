@@ -4327,7 +4327,9 @@ status: "clarified"
     if (iterDir) {
       const platforms = await parsePlatformList();
       const phase = options?.phase as '1' | '2' | undefined;
-      const manifest = computeAnalyzeManifest(platforms, phase, iter);
+      // v8.3.34: 按需求文档名组织，prompt 中的文件清单也要用功能模块结构
+      const features = await parseFeatureList(iterDir);
+      const manifest = computeFeatureBasedAnalyzeManifest(features, platforms, phase, iter);
       const specDir = join(iterDir, '020-specs');
       prompt += buildSkeletonFileList(manifest, specDir);
     }
