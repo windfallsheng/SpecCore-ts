@@ -89,6 +89,33 @@
 
 ---
 
+## v8.3.39 (2026-09-01) — init 生成带注释的配置文件 + setup-guide 补充双配置引导
+
+### 改进
+
+**init 生成带中文注释的 `.speccore.yml`** `src/core/unified-config.ts`
+- `toYaml()` 全面重构：每个字段都附带中文注释，说明作用、可选值和默认值
+- 新增文件头注释，清晰区分 `.speccore.yml`（系统级）与 `PROJECT.yaml`（项目级）的职责边界
+- 分组注释：质量门禁 / 契约冲突裁决 / 通用设置 / Ask 引擎路由，结构清晰
+
+**init 生成带中文注释+示例的 `.speccore/PROJECT.yaml`** `src/core/unified-config.ts`
+- `toProjectYaml()` 全面重构：每个字段都附带中文注释
+- 新增 `platforms` 字段说明：必填/可选字段清单、`requirement_unit` 的作用
+- `platforms` 为空时自动生成注释示例工程，新用户复制即可使用
+- 新增 `requirement_unit` 序列化支持（v8.3.38 添加的字段）
+
+**setup-guide 补充双配置系统引导** `templates/html/speccore-setup-guide.html`
+- 步骤 1「技术宪法」下方新增「双配置系统（v8.3.25+）」说明卡片
+- 分别介绍 `.speccore.yml`（系统配置）和 `.speccore/PROJECT.yaml`（项目配置）的用途
+- 提供快速配置入口：`/spec-ask "分析项目，完善所有配置"`
+
+**修复 update 命令覆盖 `.speccore.yml` 的问题** `src/commands/update.ts`
+- 修复前：`speccore update` 调用 `initConfig()` 直接覆盖 `.speccore.yml`，丢失用户自定义配置
+- 修复后：`.speccore.yml` 已存在时不覆盖，仅检查 schema_version；过期时提示 `speccore config --upgrade`
+- 不存在时才生成默认配置（与 PROJECT.yaml 行为一致）
+
+---
+
 ## v8.3.37 (2026-09-01) — split 任务级文档提取适配功能模块目录结构
 
 ### 修复
