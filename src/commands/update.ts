@@ -176,13 +176,36 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
       await initConfig();
     } else {
       const { config, warnings } = await loadConfigWithMeta();
-      if (config.schema_version < CURRENT_SCHEMA_VERSION || warnings.length > 0) {
+      const diff = detectConfigDiff(config, DEFAULT_CONFIG);
+      const needsConfirm = requiresUserConfirmation(diff);
+      const hasChanges = diff.added.length > 0 || needsConfirm || warnings.length > 0;
+
+      if (hasChanges || config.schema_version < CURRENT_SCHEMA_VERSION) {
         logger.info('');
-        logger.info('⚠️  .speccore.yml 配置结构可能需要升级');
+        logger.info('📋 .speccore.yml 配置检查');
+
+        if (diff.added.length > 0) {
+          logger.info(`   📌 发现 ${diff.added.length} 个新增字段（CLI 新版本支持）：`);
+          for (const p of diff.added) logger.info(`      + ${p}`);
+          logger.info('   运行 speccore config --upgrade 可自动补全（使用默认值）');
+        }
+
+        if (needsConfirm) {
+          logger.info('   ⚠️  检测到结构性变更，需要人工确认：');
+          for (const line of formatConfigDiff(diff)) {
+            if (!line.startsWith('📌')) logger.info(`      ${line}`);
+          }
+          logger.info('   建议查看差异报告后再运行 speccore config --upgrade');
+        }
+
+        if (config.schema_version < CURRENT_SCHEMA_VERSION) {
+          logger.info(`   ⚠️  schema_version 过期: ${config.schema_version} < ${CURRENT_SCHEMA_VERSION}`);
+        }
+
         if (warnings.length > 0) {
           for (const w of warnings) logger.info(`   ${w}`);
         }
-        logger.info('   建议运行: speccore config --upgrade');
+
         logger.info('');
       }
     }
