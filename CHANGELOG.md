@@ -64,6 +64,23 @@
 
 ---
 
+## v8.3.34 (2026-09-01) — analyze prompt 文件清单适配功能模块目录结构
+
+### 修复
+
+**analyze --prompt 文件清单按功能模块组织**：
+- `analyze.ts`：prompt 中注入的文件清单从 `computeAnalyzeManifest`（旧结构）改为 `computeFeatureBasedAnalyzeManifest`（按需求文档名分目录的新结构）
+- 修复前：AI 收到的清单是 `overview/REQUIREMENT.md`、`api/TECH.md`、`web/TECH.md`，导致 --apply 写入 `020-specs/api/TECH.md`（旧平铺结构）
+- 修复后：AI 收到的清单是 `overview/REQUIREMENT.md`、`用户管理/overview/REQUIREMENT.md`、`用户管理/api/TECH.md`，--apply 写入 `020-specs/用户管理/api/TECH.md`（按需求文档名分目录）
+
+**buildSkeletonFileList 支持功能模块分组展示**：
+- `spec-skeleton.ts`：`buildSkeletonFileList()` 增强为按功能模块分组展示骨架文件
+- 全局文档单独列出：`overview/REQUIREMENT.md` 等
+- 各功能模块独立分组：`### 功能模块：用户管理` → `overview/`、`api/`、`web/` 子目录
+- 兼容旧结构：无功能模块前缀的 platform 文档仍按端分组展示
+
+---
+
 ## v8.3.33 (2026-08-31) — Plan/Task 目录名优先使用 functionalUnit/topic
 
 ### 优化

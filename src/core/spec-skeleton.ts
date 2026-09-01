@@ -1092,43 +1092,114 @@ export async function detectSkeletonProgress(
 /**
  * 生成注入 prompt 的骨架文件列表
  * 用于告诉 AI 哪些文件需要覆盖
+ *
+ * v8.3.34+: 支持功能模块分组展示（按需求文档名分目录的新结构）
  */
 export function buildSkeletonFileList(
   entries: SpecFileEntry[],
   specDir: string,
 ): string {
-  const overviewEntries = entries.filter(e => e.category === 'overview');
-  const platformEntries = entries.filter(e => e.category === 'platform');
-
   let text = `## 文件清单（CLI 已预创建骨架，请逐个覆盖内容）\n\n`;
 
-  if (overviewEntries.length > 0) {
-    text += `### 全局文档（overview/）\n`;
-    for (const e of overviewEntries) {
+  // 提取功能模块前缀："用户管理/overview/X.md" → "用户管理", "overview/X.md" → ""
+  function extractFeaturePrefix(relPath: string): string {
+    const parts = relPath.split('/');
+    if (parts.length >= 2 && parts[0] !== GLOBAL_SPECS_DIR) {
+      return parts[0];
+    }
+    return '';
+  }
+
+  const globalOverviewEntries = entries.filter(e => e.category === 'overview' && !e.relPath.includes('/'));
+  const featureOverviewEntries = entries.filter(e => e.category === 'overview' && e.relPath.includes('/') && e.relPath.split('/')[1] === GLOBAL_SPECS_DIR);
+  const platformEntries = entries.filter(e => e.category === 'platform');
+
+  // 1. 全局 overview 文档（overview/ 下，无功能模块前缀）
+  const pureGlobalOverview = entries.filter(e =>
+    e.category === 'overview' &&
+    (e.relPath.startsWith(`${GLOBAL_SPECS_DIR}/`) || !e.relPath.includes('/'))
+  );
+  if (pureGlobalOverview.length > 0) {
+    text += `### 全局文档（${GLOBAL_SPECS_DIR}/）\n`;
+    for (const e of pureGlobalOverview) {
       text += `- \`${e.relPath}\`\n`;
     }
     text += `\n`;
   }
 
-  // 按端分组
-  const platformGroups = new Map<string, SpecFileEntry[]>();
-  for (const e of platformEntries) {
-    const p = e.platform || 'unknown';
-    if (!platformGroups.has(p)) platformGroups.set(p, []);
-    platformGroups.get(p)!.push(e);
+  // 2. 按功能模块分组
+  const featureGroups = new Map<string, { overview: SpecFileEntry[]; platforms: Map<string, SpecFileEntry[]> }>();
+
+  // 收集功能模块 overview 文档
+  for (const e of entries) {
+    if (e.category !== 'overview') continue;
+    const prefix = extractFeaturePrefix(e.relPath);
+    if (!prefix) continue; // 纯全局文档已处理
+    if (!featureGroups.has(prefix)) {
+      featureGroups.set(prefix, { overview: [], platforms: new Map() });
+    }
+    featureGroups.get(prefix)!.overview.push(e);
   }
 
-  if (platformGroups.size > 0) {
+  // 收集功能模块 platform 文档
+  for (const e of entries) {
+    if (e.category !== 'platform') continue;
+    const prefix = extractFeaturePrefix(e.relPath);
+    if (!featureGroups.has(prefix)) {
+      featureGroups.set(prefix, { overview: [], platforms: new Map() });
+    }
+    const group = featureGroups.get(prefix)!;
+    const p = e.platform || 'unknown';
+    if (!group.platforms.has(p)) group.platforms.set(p, []);
+    group.platforms.get(p)!.push(e);
+  }
+
+  // 3. 输出功能模块分组
+  if (featureGroups.size > 0) {
+    for (const [feature, group] of featureGroups) {
+      text += `### 功能模块：${feature}\n`;
+
+      // overview 子目录
+      if (group.overview.length > 0) {
+        text += `\n**${GLOBAL_SPECS_DIR}/**\n`;
+        for (const e of group.overview) {
+          text += `- \`${e.relPath}\`\n`;
+        }
+      }
+
+      // 各端子目录
+      if (group.platforms.size > 0) {
+        for (const [platform, platformEntries] of group.platforms) {
+          text += `\n**${platform}/**\n`;
+          for (const e of platformEntries) {
+            text += `- \`${e.relPath}\`\n`;
+          }
+        }
+      }
+      text += `\n`;
+    }
+  }
+
+  // 4. 兼容旧结构：无功能模块前缀的 platform 文档
+  const legacyPlatformEntries = platformEntries.filter(e => !extractFeaturePrefix(e.relPath));
+  if (legacyPlatformEntries.length > 0) {
+    const legacyGroups = new Map<string, SpecFileEntry[]>();
+    for (const e of legacyPlatformEntries) {
+      const p = e.platform || 'unknown';
+      if (!legacyGroups.has(p)) legacyGroups.set(p, []);
+      legacyGroups.get(p)!.push(e);
+    }
     text += `### 各端专属文档\n`;
-    for (const [platform, platformEntries] of platformGroups) {
+    for (const [platform, platformEntries] of legacyGroups) {
       text += `\n**${platform}/**\n`;
       for (const e of platformEntries) {
         text += `- \`${e.relPath}\`\n`;
       }
     }
+    text += `\n`;
   }
 
-  text += `\n> 完整路径前缀: \`${specDir}/\`\n`;
+  text += `> 完整路径前缀: \`${specDir}/\`\n`;
   text += `> 写入方式: 用 Write 工具直接覆盖上述路径的文件，不要创建新文件\n`;
 
   return text;
