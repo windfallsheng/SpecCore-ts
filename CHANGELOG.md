@@ -64,6 +64,31 @@
 
 ---
 
+## v8.3.38 (2026-09-01) — split 主流程路径适配 + 目录创建修复 + 平台推断过滤
+
+### 修复
+
+**split.ts 主流程 reqFile 路径适配新结构**：
+- 优先查 `020-specs/overview/REQUIREMENT.md`（新路径），回退 `020-specs/REQUIREMENT.md`（旧路径）
+- 修复前：`Requirement file not found: 020-specs/REQUIREMENT.md`，split 无法继续
+- 修复后：正确找到 `020-specs/overview/REQUIREMENT.md`
+
+**split.ts 主流程 analysisPath 路径适配新结构**：
+- 两处 `ANALYSIS.md` 读取（主流程 + `injectTechFromAnalysis`）均兼容新旧结构
+- 优先查 `020-specs/overview/ANALYSIS.md`，回退 `020-specs/ANALYSIS.md`
+
+**createTaskFromSection 目录创建修复**：
+- 在写 `README.md` 之前添加 `await ensureDir(taskDir)`
+- 修复前：`ENOENT: no such file or directory, open '.../030-tasks/feature/Task-xxx/README.md'`
+- 修复后：任务目录正确创建
+
+**平台推断按功能模块过滤**：
+- 从 `section.name` 提取功能模块名，只匹配该模块下的端级 TECH.md
+- 修复前：由于骨架给所有端都创建文件，每个任务分配到所有端
+- 修复后：任务只分配到实际涉及的功能模块下的端
+
+---
+
 ## v8.3.37 (2026-09-01) — split 任务级文档提取适配功能模块目录结构
 
 ### 修复

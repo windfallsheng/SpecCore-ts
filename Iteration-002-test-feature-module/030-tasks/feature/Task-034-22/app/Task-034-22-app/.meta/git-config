@@ -1,0 +1,30 @@
+# 子任务级 Git 配置（app）
+# 以下配置覆盖迭代级 PROJECT_GRAPH.md，未配置项自动继承上一级。
+# 当前值已从迭代级/全局级配置自动填充，可直接使用或按需修改。
+
+# === 当前生效配置 ===
+源分支: main
+分支前缀: feature
+分支格式: {type}/{prefix}{taskId}
+# 自动拉取: false
+远程名称: origin
+
+# === 保护分支（禁止直接推送）===
+- main
+- master
+- release/*
+- production
+
+# === 分支命名示例 ===
+# 当前任务类型: feature
+# 命名格式: {type}/{prefix}{taskId}
+# 示例分支: feature/feature-Task-001-booking-service
+# （{taskId} 为子任务全局唯一 ID，如 Task-001-booking-service）
+
+# === 自定义配置区 ===
+# 如需覆盖上述值，取消下方注释并修改：
+# 源分支: main
+# 分支前缀: 
+# 分支格式: {type}/{prefix}{taskId}
+# 自动拉取: false
+# 远程名称: origin
