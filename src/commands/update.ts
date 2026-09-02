@@ -232,6 +232,12 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   await initSkillsDir(projectRoot);
   await initHooksDir(projectRoot);
 
+  // v8.3.41+: update 时补充创建用户自定义模板目录（之前只在 init 中创建）
+  const templatesDir = join(projectRoot, '.speccore', 'templates');
+  await ensureDir(join(templatesDir, 'global'));
+  await ensureDir(join(templatesDir, 'iteration'));
+  await ensureDir(join(templatesDir, 'task'));
+
   // v6.98.0+: 同步 AGENTS.md — 将 .speccore/ 规范数据库投影到 AGENTS.md
   await syncAgentsMd(projectRoot);
 
