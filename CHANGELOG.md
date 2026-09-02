@@ -91,6 +91,16 @@
 
 ---
 
+## v8.3.42 (2026-09-02) — update 命令补充创建 templates 目录
+
+### 修复
+
+**update 命令遗漏 `.speccore/templates/` 目录创建** `src/commands/update.ts`
+- v8.3.41 仅在 `init` 时创建模板目录，旧项目运行 `update` 无法获得该目录
+- 修复后：`update` 时自动补充创建 `templates/{global,iteration,task}/`
+
+---
+
 ## v8.3.41 (2026-09-02) — init 创建用户自定义模板目录 + 清理冗余文件
 
 ### 新增
