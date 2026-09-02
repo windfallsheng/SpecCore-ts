@@ -91,6 +91,21 @@
 
 ---
 
+## v8.3.44 (2026-09-02) — 修复 AGENTS.md 项目结构：端平铺，删除 10-backend/20-frontend/
+
+### 修复
+
+**AGENTS.md 项目结构描述错误：存在不应有的 10-backend/ 20-frontend/ 层**
+
+`src/commands/init.ts`
+- 项目结构图中删除 `10-backend/` 和 `20-frontend/` 分类层，改为端平铺
+- 修正前：`Task-*/10-backend/{服务名}/{子任务}/`、`Task-*/20-frontend/{端名}/{子任务}/`
+- 修正后：`Task-*/{端名}/{子任务}/`（端直接平铺在 Task 下，如 `booking-service/`、`h5-mobile/`）
+- 与「绝对禁止」第 3 条一致：任务目录是端平铺结构，禁止创建 10-backend/ 20-frontend/
+- 与 split.ts 实际创建的目录结构一致
+
+---
+
 ## v8.3.43 (2026-09-02) — 修复项目结构中错误的代码输出位置描述
 
 ### 修复

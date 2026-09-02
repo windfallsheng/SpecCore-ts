@@ -1367,15 +1367,11 @@ Iteration-NNN-name/            ← 迭代目录
 │   └── Task-*/                ← 功能模块分组（聚合相关子任务）
 │       ├── _shared/           ← 共享契约（API_CONTRACT.yaml + CONTEXT.md）
 │       ├── 00-specs/          ← 模块级核心规格（REQ/TECH/SCHEMA/CHANGELOG）
-│       ├── 10-backend/        ← 后端（大类）
-│       │   └── {服务名}/      ← 端（如 api）
-│       │       └── {子任务}/  ← 执行单元
-│       ├── 20-frontend/       ← 前端（大类）
-│       │   └── {端名}/        ← 端（如 h5/admin）
-│       │       └── {子任务}/  ← 执行单元
+│       ├── {端名}/            ← 端平铺（如 booking-service / h5-mobile / admin-web）
+│       │   └── {子任务}/      ← 执行单元
 │       └── .issues.md         ← 问题追踪
 │
-│   子任务目录结构（10-backend/{端}/{子任务}/ 或 20-frontend/{端}/{子任务}/）：
+│   子任务目录结构（{端名}/{子任务}/）：
 │       ├── .meta/             ← 子任务元信息（type/status/owner/created-at）
 │       ├── git-config         ← 子任务级 Git 配置
 │       ├── TASK.md            ← 子任务追踪
