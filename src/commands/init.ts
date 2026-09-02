@@ -221,6 +221,10 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
     await ensureDir(join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'export'));
     await ensureDir(join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'report'));
     await ensureDir(join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'specs'));
+    // v8.3.41+: 用户自定义分析文档模板目录
+    await ensureDir(join(speccoreDir, 'templates', 'global'));
+    await ensureDir(join(speccoreDir, 'templates', 'iteration'));
+    await ensureDir(join(speccoreDir, 'templates', 'task'));
     await ensureDir(join(speccoreDir, 'inbox'));
     await ensureDir(join(speccoreDir, 'questions'));
     // v6.94.0+: 代码知识图谱目录
@@ -614,6 +618,64 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 若有任何一项为"否"，不得将状态改回 ✅ 已完成。
 `
   );
+
+  // v8.3.41+: 用户自定义分析文档模板说明
+  const templatesReadmePath = join(speccoreDir, 'templates', 'README.md');
+  if (!(await pathExists(templatesReadmePath))) {
+    await writeFile(
+      templatesReadmePath,
+      `# 用户自定义分析文档模板
+
+> 将你自己的文档模板放在本目录下，\`speccore analyze\` 会自动读取并优先使用。
+> AI 会按照你模板的章节结构和风格来生成文档，而不是使用内置默认模板。
+
+## 目录结构
+
+\`\`\`
+.speccore/templates/
+├── global/          ← 全局分析文档模板（REQUIREMENT.md、TECH.md、FUNCTION_MAP.md 等）
+├── iteration/       ← 迭代级文档模板（各端的 TECH.md、TEST.md、UI_SPEC.md 等）
+└── task/            ← 任务级文档模板（RISK.md、DEPS.md、MONITOR.md、REVIEW.md 等）
+\`\`\`
+
+## 查找优先级（task 级别最细）
+
+对于 \`task/\` 下的模板，支持按**任务类型 + 端名**分层：
+
+\`\`\`
+task/
+├── {type}/              ← 如 feature/、bugfix/、refactor/
+│   ├── {platform}/      ← 如 api/、h5/、admin/
+│   ├── _shared/         ← 该类型通用模板
+│   └── *.md
+├── _shared/             ← 所有任务通用模板
+└── *.md                 ← 根目录 fallback
+\`\`\`
+
+查找顺序：**\`type/platform/\` > \`type/\` > \`_shared/\` > 根目录** > 内置模板
+
+## 示例
+
+1. 所有全局分析都用你的 REQUIREMENT.md 模板：
+   \`\`\`bash
+   cp ~/my-template/REQUIREMENT.md .speccore/templates/global/REQUIREMENT.md
+   \`\`\`
+
+2. 仅 API 端的功能任务使用你的 TEST.md 模板：
+   \`\`\`bash
+   mkdir -p .speccore/templates/task/feature/api
+   cp ~/my-template/TEST.md .speccore/templates/task/feature/api/TEST.md
+   \`\`\`
+
+3. 所有任务通用的 RISK.md 模板：
+   \`\`\`bash
+   cp ~/my-template/RISK.md .speccore/templates/task/_shared/RISK.md
+   \`\`\`
+
+> 模板文件名需与目标文档名一致（如 \`TECH.md\`、\`TEST.md\`），AI 会自动匹配注入。
+`
+    );
+  }
 }
 
 async function updateGitignore(projectRoot: string): Promise<void> {

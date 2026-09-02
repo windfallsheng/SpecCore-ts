@@ -89,6 +89,37 @@
 
 ---
 
+---
+
+## v8.3.41 (2026-09-02) — init 创建用户自定义模板目录 + 清理冗余文件
+
+### 新增
+
+**用户自定义分析文档模板目录（v8.3.41+）** `src/commands/init.ts`
+- `speccore init` 自动创建 `.speccore/templates/{global,iteration,task}/` 三个目录
+- 自动生成 `.speccore/templates/README.md` 说明文档，含目录结构、查找优先级、使用示例
+- 同名覆盖：用户模板与系统文档同名时完全替换系统模板（如 `TECH.md`）
+- 异名追加：用户模板为系统未定义文档名时追加到生成列表（如 `MY_CUSTOM.md`）
+- task 级别支持分层查找：`type/platform/` > `type/` > `_shared/` > 根目录 > 内置模板
+- `setup-guide.html` 步骤 5「知识库与规则」中新增 `templates/` 卡片说明
+
+### 改进
+
+**设计文档补充** `docs/DESIGN.md`
+- 新增 1.5.12「用户自定义文档模板层」章节，完整描述目录结构、核心机制、Prompt 注入方式、初始化行为
+
+### 清理
+
+**删除冗余文件** `node_modules/ .workbuddy/ .speccore/ITERATIONS/`
+- 从 git 跟踪中移除 428 个不应提交的文件（依赖包、AI 工具目录、测试迭代数据）
+- 保留 `outputs/`（架构图、知识图谱、SDD 文章、执行报告等项目文档素材）
+
+**删除废弃代码** `src/commands/analyze.ts`
+- 移除 `@deprecated` 的 `preCreateSpecDirectories`（v8.0.0+ 已被替代）
+- 移除 `@deprecated` 的 `detectIterationDocsStatus`（v8.0.0+ 已被替代）
+
+---
+
 ## v8.3.40 (2026-09-01) — update 增强配置变更检测
 
 ### 改进
