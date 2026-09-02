@@ -1441,9 +1441,9 @@ ${taskId}/
 ├── _shared/                   ← 共享契约（API_CONTRACT.yaml + CONTEXT.md）
 ├── 00-specs/                  ← 模块级核心规格（REQ/TECH/SCHEMA/CHANGELOG）
 ├── {服务名}/                  ← 后端服务（如 booking-service，v6.49.3+ 平铺架构）
-│   └── {taskId}-{子任务}/     ← 执行单元（.meta/TASK.md/src/tests + 产出）
+│   └── {taskId}-{子任务}/     ← 执行单元（.meta/TASK.md + 规格文档）
 ├── {端名}/                    ← 前端端（如 h5-mobile/admin-web，v6.49.3+ 平铺架构）
-│   └── {taskId}-{子任务}/     ← 执行单元（.meta/TASK.md/src/tests + 前端设计 + 产出）
+│   └── {taskId}-{子任务}/     ← 执行单元（.meta/TASK.md + 规格文档 + 前端设计）
 \`\`\`
 
 ## 子任务列表
@@ -1468,9 +1468,9 @@ ${taskPlatforms.map((p: string) => `| ${subtaskIdMap.get(p)} | ${p} | ${owner} |
 - \`020-specs/\` 下的迭代全局文档
 - \`.speccore/GLOBAL/\` 下的全局知识库
 
-### 不会被读取
-- \`{子任务}/src/\` 和 \`{子任务}/tests/\` — AI **输出**代码的地方
-- \`{子任务}/TEST.md\` 等执行产出 — 执行完成后自动更新
+### 代码输出位置
+- AI 生成的代码写入 **CONSTITUTION.md/PROJECT.yaml 中声明的源码路径**，不写入迭代目录
+- 子任务目录只存放规格文档（TASK.md/TEST.md/RISK.md 等），不存放代码
 `
   );
 
@@ -1737,10 +1737,6 @@ ${section.content}
       const featureName = (section as any).functionalUnit || section.name || '未分类';
       await writeFile(join(subtaskDir, '.meta', 'feature'), featureName);
 
-      // src/ + tests/ 目录（AI 执行时代码输出位置）
-      await ensureDir(join(subtaskDir, 'src'));
-      await ensureDir(join(subtaskDir, 'tests'));
-
       // v8.3.4+: git-config 自动填充 — 读取迭代级/全局级实际配置值写入
       const gitConfig = loadGitConfig(iterationName);
       await writeFile(
@@ -1846,10 +1842,8 @@ ${isBk ? apiList : pageList}
 | REVIEW.md | ⏳ | ./REVIEW.md | 评审清单 |
 | DEPLOY.md | ⏳ | ./DEPLOY.md | 部署检查 |
 | ERROR_CODES.md | ⏳ | ./ERROR_CODES.md | 错误码定义 |
-| src/ | ⏳ | ./src/ | ${isBk ? '后端代码（Controller/Service/Repository/Entity）' : '前端代码（页面/组件/状态/API）'} |
-| tests/ | ⏳ | ./tests/ | ${isBk ? '单元测试代码' : 'UI/组件测试代码'} |
-
-> 💡 代码输出位置：execute 命令会读取 CONSTITUTION.md 中的「源码路径」列，将代码写入实际工程目录。
+> ⚠️ 代码输出位置：AI 生成的代码写入 CONSTITUTION.md/PROJECT.yaml 中声明的「源码路径」，
+> 不写入迭代目录。子任务目录只存放规格文档。
 
 ## 变更履历
 | 时间 | 变更内容 | 变更人 |

@@ -1379,8 +1379,6 @@ Iteration-NNN-name/            ← 迭代目录
 │       ├── .meta/             ← 子任务元信息（type/status/owner/created-at）
 │       ├── git-config         ← 子任务级 Git 配置
 │       ├── TASK.md            ← 子任务追踪
-│       ├── src/               ← AI 输出代码
-│       ├── tests/             ← AI 输出测试
 │       ├── TEST.md            ← 测试用例
 │       ├── RISK.md            ← 风险评估
 │       ├── DEPS.md            ← 依赖分析
@@ -1389,6 +1387,9 @@ Iteration-NNN-name/            ← 迭代目录
 │       ├── DEPLOY.md          ← 部署清单
 │       ├── ERROR_CODES.md     ← 错误码
 │       └── COMPONENT_TREE.md  ← 组件树（仅前端）
+│
+│   > ⚠️ 代码输出位置：AI 生成的代码写入 CONSTITUTION.md/PROJECT.yaml 中声明的「源码路径」，
+│   > 禁止写入迭代目录内。子任务目录只存放规格文档（TASK.md/TEST.md/RISK.md 等）。
 │
 │   research 类型任务目录结构（无前后端分层）：
 │       ├── _shared/           ← 共享上下文

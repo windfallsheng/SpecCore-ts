@@ -441,7 +441,7 @@ async function renderDevHtml(options: DevOptions): Promise<string> {
       tips: '拆分粒度受 STAFFING.md 团队规模影响。≤3人粗粒度，4-8人中粒度（默认），>8人细粒度。', examples: ['/spec-ask "拆分 my-iter 的任务"', 'speccore iteration split -i my-iter'] },
     { name: lang === 'en' ? I18N.en.stepExec : I18N.zh.stepExec, key: 'execute', done: false,          icon: '⚡', cmd: 'execute',  description: '按计划分批执行开发任务',           args: '--auto',
       detail: '按执行计划（plan 生成）分批开发。AI 读取 Task 的 TECH.md 和 SCHEMA.md，生成代码并写入源码路径。支持断点续传和批量执行。',
-      prerequisites: ['任务已拆分（030-tasks/ 下有 Task-xxx 目录）', '可选：已执行 plan 生成执行计划'], outputs: ['源码路径中的新增/修改代码文件', 'Task 目录下的 src/ tests/ 子目录'],
+      prerequisites: ['任务已拆分（030-tasks/ 下有 Task-xxx 目录）', '可选：已执行 plan 生成执行计划'], outputs: ['源码路径中的新增/修改代码文件（CONSTITUTION.md/PROJECT.yaml 声明的 code_path）', 'Task 目录下的规格文档更新（TEST.md/RISK.md 等）'],
       tips: '推荐用 --batch-size 3 分批执行，每批完成后开新对话继续。失败任务会写入 .issues.md 和 .needs-retry。', examples: ['/spec-ask "开发 Task-001"', 'speccore execute --auto -i my-iter --batch-size 3'] },
     { name: lang === 'en' ? I18N.en.stepPr : I18N.zh.stepPr,  key: 'pr',      done: false,          icon: '🔀', cmd: 'pr',       description: '代码提交后创建 Pull Request',       args: '--auto',
       detail: '自动提交代码变更到 Git，创建 Pull Request 或 Merge Request。包含变更摘要、影响分析、测试建议。',
