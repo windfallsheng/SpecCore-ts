@@ -91,6 +91,27 @@
 
 ---
 
+## v8.3.43 (2026-09-02) — 修复项目结构中错误的代码输出位置描述
+
+### 修复
+
+**子任务目录不应包含 src/ 和 tests/** — 与「绝对禁止」第 4 条矛盾
+
+`src/commands/init.ts`
+- AGENTS.md 自动生成的项目结构中删除子任务的 `src/` 和 `tests/` 条目
+- 新增明确注释：AI 代码写入 CONSTITUTION.md/PROJECT.yaml 声明的源码路径，禁止写入迭代目录
+
+`src/commands/iteration/split.ts`
+- 删除 split 时自动创建子任务 `src/` 和 `tests/` 目录的代码
+- 修复 README.md 模板中的执行单元描述（删除 `src/tests + 产出`）
+- 修复 TASK.md 模板表格（删除 `src/` 和 `tests/` 行）
+- 将「不会被读取」章节改为「代码输出位置」章节，明确说明代码写入源码路径
+
+`src/commands/dev.ts`
+- 修复 execute 步骤的 outputs 描述：删除「Task 目录下的 src/ tests/ 子目录」，改为「源码路径中的代码文件 + Task 目录下的规格文档更新」
+
+---
+
 ## v8.3.42 (2026-09-02) — update 命令补充创建 templates 目录
 
 ### 修复
