@@ -552,6 +552,37 @@ cache/iterations/Q2/
 - 手动清理：`speccore analyze --clear-cache`
 - 过期清理：超过 30 天的缓存自动删除
 
+### 1.5.12 用户自定义文档模板层（v8.3.41+）
+
+**职责**：允许用户用自己的文档模板覆盖或扩展 `analyze` 命令生成的规格文档风格。
+
+**核心机制**：
+- **三级目录**：`.speccore/templates/{global|iteration|task}/` 分别对应全局分析、迭代分析、任务分析
+- **同名覆盖**：用户模板与系统文档同名时，完全替换系统模板内容（如 `TECH.md`）
+- **异名追加**：用户模板为系统未定义的文档名时，追加到生成列表（如 `MY_CUSTOM.md`）
+- **分层查找（task 级别）**：`type/platform/` > `type/` > `_shared/` > 根目录 > 内置模板
+
+**目录结构**：
+
+```
+.speccore/templates/
+├── global/          ← 全局分析文档模板（REQUIREMENT.md、TECH.md、FUNCTION_MAP.md 等）
+├── iteration/       ← 迭代级文档模板（各端的 TECH.md、TEST.md、UI_SPEC.md 等）
+└── task/            ← 任务级文档模板（RISK.md、DEPS.md、MONITOR.md、REVIEW.md 等）
+    ├── feature/
+    │   ├── api/     ← 仅 api 端的功能任务
+    │   └── _shared/ ← 所有 feature 类型任务通用
+    ├── bugfix/
+    └── _shared/     ← 所有任务类型通用
+```
+
+**Prompt 注入方式**：
+`analyze.ts` 在构建 prompt 时调用 `loadUserTemplates()` 读取用户模板，将模板内容注入到 `## 📄 用户自定义模板` 章节，并附加指令：
+> 检测到 `.speccore/templates/{level}/` 下有用户自定义模板，**必须按这些模板的章节结构和风格生成文档**。
+
+**初始化行为**：
+`speccore init` 自动创建 `.speccore/templates/{global,iteration,task}/` 三个空目录，并写入 `README.md` 说明用法。
+
 ---
 
 ## 1.6 临时工作区架构（v8.3.0+）
