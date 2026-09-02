@@ -1217,7 +1217,8 @@ async function writeAgentsMd(projectRoot: string): Promise<void> {
 
 \`\`\`
 Read .speccore/local/context.json    ← 获取当前活跃迭代
-Read .speccore/CONSTITUTION.md       ← 获取项目配置（端名、源码路径等）
+Read .speccore/CONSTITUTION.md       ← 获取技术宪法（技术栈、命名规范）
+Read .speccore/PROJECT.yaml          ← 获取项目配置（端列表、源码路径、Git）
 \`\`\`
 
 - \`context.json\` 中的 \`currentIteration\` 字段就是当前迭代名
@@ -1231,14 +1232,14 @@ SpecCore 规范驱动开发项目。
 - **AI 只拼命令，不执行命令**。识别用户意图后，输出 \`speccore\` CLI 命令给用户在终端执行。
 - **所有确定性操作通过 \`speccore\` CLI 完成**（创建目录、读写文件、校验格式）。
 - **代码生成通过宿主 AI 完成**，CLI 负责准备 Spec 上下文和写入文件。
-- **代码写到 CONSTITUTION.md 指定的源码路径**，不要写到迭代目录里。
+- **代码写到 CONSTITUTION.md / PROJECT.yaml 指定的源码路径**，不要写到迭代目录里。
 
 ## ⛔ 绝对禁止
 
 1. **禁止自己创建迭代目录** — 用 \`speccore iteration create\`（通常迭代已存在）
 2. **禁止写脚本绕过 CLI** — 不要写 build-xxx.js / run-xxx.py 等脚本
-3. **禁止在迭代目录下创建 10-backend/ 20-frontend/** — 任务目录是端平铺结构
-4. **禁止把代码写到迭代目录内** — 代码写到 CONSTITUTION.md 中各工程的「源码路径」
+3. **禁止在任务目录（Task-*/）下创建 10-backend/ 20-frontend/ 分类层** — 任务目录是端平铺结构，端直接平铺在 Task 下
+4. **禁止把代码写到迭代目录内** — 代码写到 CONSTITUTION.md / PROJECT.yaml 中各工程的「源码路径」
 
 ## 项目结构
 \`\`\`
@@ -1275,13 +1276,14 @@ Iteration-NNN-name/            ← 迭代目录（名称从 context.json 获取�
 - **不要自己解析需求** — 用 \`speccore analyze\`
 - **失败时读取 .issues.md** — 看文件里的问题清单
 - **续跑用 --resume** — \`speccore execute --resume\`
+- **配置变更用 --upgrade** — \`speccore config --upgrade\`（\`.speccore.yml\` / \`PROJECT.yaml\` 结构升级）
 
 ## 常用命令速查
 \`\`\`bash
 speccore status                          # 当前迭代状态面板
 speccore analyze -I <迭代名> --auto      # 全量分析
 speccore split -I <迭代名>               # 自动拆分任务
-speccore execute -I <迭代名> --all       # 执行所有任务
+speccore execute -i <迭代名> --all       # 执行所有任务
 \`\`\`
 `;
 
@@ -1418,8 +1420,8 @@ Iteration-NNN-name/            ← 迭代目录
 speccore status                          # 当前迭代状态面板
 speccore analyze -I <迭代名> --auto      # 全量分析
 speccore split -I <迭代名>               # 自动拆分任务
-speccore execute -I <迭代名> --all       # 执行所有任务
-\`\`\``,},
+speccore execute -i <迭代名> --all       # 执行所有任务
+\`\`\``},
   ];
   for (const tpl of inlineTemplates) {
     const destPath = join(rulesDir, tpl.name);

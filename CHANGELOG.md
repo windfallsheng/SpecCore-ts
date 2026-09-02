@@ -91,6 +91,25 @@
 
 ---
 
+## v8.3.45 (2026-09-02) — AGENTS.md 全面修正：命令参数、配置引用、行为约束
+
+### 修复
+
+**AGENTS.md 手动区多处不准确**
+
+`src/commands/init.ts`
+- 命令速查：`speccore execute -I` → `speccore execute -i`（execute 用小写 `-i`，`-I` 是 analyze/split 用的）
+- 新会话第一步：增加 `Read .speccore/PROJECT.yaml`（端列表、源码路径、Git）
+- 核心工作方式：CONSTITUTION.md → CONSTITUTION.md / PROJECT.yaml
+- 绝对禁止第 3 条："迭代目录下创建" → "任务目录（Task-*/）下创建 10-backend/ 20-frontend/ 分类层"
+- 绝对禁止第 4 条：CONSTITUTION.md → CONSTITUTION.md / PROJECT.yaml
+- 行为约束：新增 "配置变更用 --upgrade"（`.speccore.yml` / `PROJECT.yaml` 结构升级）
+
+`src/commands/init.ts` inline 模板
+- `03-COMMAND_CHEATSHEET.inline.md`：同步修正 execute `-I` → `-i`
+
+---
+
 ## v8.3.44 (2026-09-02) — 修复 AGENTS.md 项目结构：端平铺，删除 10-backend/20-frontend/
 
 ### 修复
