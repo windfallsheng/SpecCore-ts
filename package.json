@@ -1,6 +1,6 @@
 {
   "name": "speccore",
-  "version": "8.3.45",
+  "version": "8.3.60",
   "description": "SpecCore - Code by Spec, Not by Vibe.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -38,7 +38,8 @@
     "fs-extra": "^11.2.0",
     "glob": "^10.3.10",
     "js-yaml": "^4.1.0",
-    "jszip": "^3.10.1"
+    "jszip": "^3.10.1",
+    "playwright": "^1.62.1"
   },
   "devDependencies": {
     "@types/fs-extra": "^11.0.4",

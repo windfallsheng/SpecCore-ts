@@ -4,6 +4,7 @@
  */
 import { writeFile, pathExists, readFile, readdir, ensureDir } from 'fs-extra';
 import { join } from 'path';
+import { execSync } from 'child_process';
 import { logger, Spinner } from '../utils/logger';
 import { version as CURRENT_VERSION } from '../../package.json';
 import { safeWriteWithBackup, safeCopyDirWithBackup, _updateConflicts, generateAIRulesContent, TOOL_COMMANDS, initAgentsDir, initRulesDir, initCommandsDir, initSkillsDir, initHooksDir, syncAgentsMd } from './init';
@@ -19,6 +20,7 @@ import {
   formatConfigDiff,
   CURRENT_SCHEMA_VERSION,
 } from '../core/unified-config';
+import { initEnvironmentConfigs } from './update-env-configs';
 
 // ── 当前版本的命令列表统一从 init.ts 导入（单一事实来源）──
 // 避免 init.ts 与 update.ts 的命令列表不一致导致清理误删
@@ -26,6 +28,66 @@ const ALL_COMMANDS = TOOL_COMMANDS;
 
 // ── 旧命令文件名（需要清理的）──
 const LEGACY_NAMES = new Set(['spec-status', 'spec-status-panel', 'spec-global-status']);
+
+/**
+ * 检测并终止遗留的 speccore schedule daemon / watch 进程
+ * v8.3.60+: schedule 和 watch 命令已移除，此函数用于清理旧版本残留的运行中进程
+ */
+function cleanupLegacyDaemons(): { killed: number; pids: number[] } {
+  const result = { killed: 0, pids: [] as number[] };
+  const isWin = process.platform === 'win32';
+
+  try {
+    // 查找进程
+    let pids: number[] = [];
+    if (isWin) {
+      try {
+        const output = execSync(
+          'wmic process where "CommandLine like \'%speccore%schedule%\' or CommandLine like \'%speccore%daemon%\' or CommandLine like \'%speccore%watch%\'" get ProcessId,CommandLine /format:csv',
+          { encoding: 'utf-8', windowsHide: true }
+        );
+        pids = output.split('\n')
+          .map(line => line.trim())
+          .filter(line => line && !line.startsWith('Node'))
+          .map(line => {
+            const parts = line.split(',');
+            const pid = parseInt(parts[parts.length - 1], 10);
+            return isNaN(pid) ? 0 : pid;
+          })
+          .filter(pid => pid > 0);
+      } catch { /* wmic 可能不可用 */ }
+    } else {
+      try {
+        const output = execSync(
+          "ps aux | grep -iE 'speccore.*(schedule|daemon|watch)' | grep -v grep | awk '{print $2}'",
+          { encoding: 'utf-8' }
+        );
+        pids = output.split('\n')
+          .map(s => parseInt(s.trim(), 10))
+          .filter(n => !isNaN(n) && n > 0);
+      } catch { /* 无进程 */ }
+    }
+
+    // 终止进程
+    for (const pid of pids) {
+      try {
+        if (isWin) {
+          execSync(`taskkill /PID ${pid} /F`, { windowsHide: true });
+        } else {
+          process.kill(pid, 'SIGTERM');
+          // 给 500ms  gracefully shutdown，然后强制
+          try {
+            execSync(`sleep 0.5 && kill -0 ${pid} 2>/dev/null && kill -9 ${pid}`);
+          } catch { /* 已经终止 */ }
+        }
+        result.killed++;
+        result.pids.push(pid);
+      } catch { /* 终止失败，继续 */ }
+    }
+  } catch { /* 整体失败不影响 update 流程 */ }
+
+  return result;
+}
 
 export async function updateCommand(options: { force?: boolean; tool?: string }): Promise<void> {
   const projectRoot = process.cwd();
@@ -42,6 +104,12 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   if (!(await pathExists(speccoreDir))) {
     logger.warn('⚠️  项目未初始化，请先运行: speccore init');
     return;
+  }
+
+  // ── 前置清理：终止遗留守护进程（v8.3.60+ schedule/watch 已移除）──
+  const daemonCleanup = cleanupLegacyDaemons();
+  if (daemonCleanup.killed > 0) {
+    logger.info(`  🛑 已终止 ${daemonCleanup.killed} 个遗留守护进程 (PID: ${daemonCleanup.pids.join(', ')})`);
   }
 
   // 读取当前版本
@@ -73,6 +141,15 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
     if (await pathExists(settingsMd)) {
       await require('fs-extra').remove(settingsMd);
       logger.info('  🗑️  清理废弃文件: .speccore/SETTINGS.md');
+    }
+  } catch { /* 静默失败 */ }
+
+  // v8.3.60+: schedule/watch 命令已移除，清理遗留数据文件
+  try {
+    const scheduleJson = join(speccoreDir, 'local', 'schedule.json');
+    if (await pathExists(scheduleJson)) {
+      await require('fs-extra').remove(scheduleJson);
+      logger.info('  🗑️  清理废弃文件: .speccore/local/schedule.json');
     }
   } catch { /* 静默失败 */ }
 
@@ -221,6 +298,12 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
     }
   } catch {}
 
+  // v8.3.60+: 初始化/升级环境配置
+  let envConfigCreated: string[] = [];
+  try {
+    envConfigCreated = await initEnvironmentConfigs(projectRoot);
+  } catch {}
+
   // 4d. 清理旧版本残留的命令文件和 Skill 目录
   const skillNames = (await require('fs-extra').readdir(skillsSrc)).filter((f: string) => !f.startsWith('.'));
   await cleanupStaleFiles(projectRoot, ALL_COMMANDS, skillNames);
@@ -239,7 +322,8 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   await ensureDir(join(templatesDir, 'task'));
 
   // v6.98.0+: 同步 AGENTS.md — 将 .speccore/ 规范数据库投影到 AGENTS.md
-  await syncAgentsMd(projectRoot);
+  // v8.3.46+: force 模式 — 重新生成手动区，不保留旧内容（用户自定义内容需手动备份）
+  await syncAgentsMd(projectRoot, true);
 
   const verLabel = isSameVersion ? `v${CURRENT_VERSION}` : `v${oldVersion} → v${CURRENT_VERSION}`;
   spinner.stop(`升级完成: ${verLabel}`);
@@ -258,6 +342,12 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   logger.info('     ✅ .speccore/COMMANDS/ — 命令模板库');
   logger.info('     ✅ .speccore/SKILLS/ — 可复用技能库');
   logger.info('     ✅ .speccore/HOOKS/ — 生命周期钩子库');
+  if (envConfigCreated.length > 0) {
+    logger.info('     ✅ .speccore/environments/ — 环境配置');
+    for (const f of envConfigCreated) {
+      logger.info(`        + ${f}`);
+    }
+  }
   logger.info('');
 
   // 全面升级问题报告（过滤 update 自动修复的问题）

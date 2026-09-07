@@ -1,0 +1,56 @@
+# =============================================================================
+# SpecCore 环境配置 — local（本地开发）
+# =============================================================================
+# 用途：本地开发调试，不触发真实部署
+# 典型工作流：
+#   speccore build --env local --platform h5
+#   speccore verify --env-file .speccore/environments/local.yaml --config ./tests/smoke.yaml
+# =============================================================================
+
+env: local
+
+# 本地通常直接在 feature 分支开发，不指定合并目标
+# branch 留空表示 pipeline 不在本地执行 merge+deploy
+
+# 全局默认值
+defaults:
+  build_cmd: npm run build:dev
+
+# 按端覆盖配置
+platforms:
+  # 前端示例：H5 移动端
+  h5:
+    build_cmd: npm run dev
+    deploy:
+      type: static
+      output_dir: dist
+      target: ./dist-local/h5/
+
+  # 前端示例：Admin 管理后台
+  admin-web:
+    build_cmd: npm run dev
+    deploy:
+      type: static
+      output_dir: dist
+      target: ./dist-local/admin/
+
+  # 后端示例：Java API 服务
+  order-api:
+    build_cmd: ./mvnw package -DskipTests
+    deploy:
+      type: docker
+      registry: localhost:5000
+      image: order-service
+      tag: local
+
+# 测试相关配置（与 verify --config 联动）
+tests:
+  base_urls:
+    h5: http://localhost:3000
+    admin: http://localhost:3001
+    order-api: http://localhost:8080
+
+  visual_model:
+    provider: qwen-vl
+    model: qwen-vl-max
+    timeout: 30000

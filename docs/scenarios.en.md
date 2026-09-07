@@ -592,49 +592,25 @@ speccore search "API" --iteration=2026-07-Sprint
 
 ---
 
-## Scenario 22: Auto-Validate on Save — `speccore watch`
+## Scenario 22: Auto-Validate on Save — `speccore watch` [已废弃]
 
-### Comparison: Manual vs Watch
+> ⚠️ `speccore watch` 命令已在 v8.3.60 彻底移除。文件变更监听由宿主 IDE（Qoder/Trae/Cursor 等）的原生文件监听功能替代。
 
-| | Manual `validate` | `speccore watch` |
-| :--- | :--- | :--- |
-| **Feedback timing** | Run command after writing | Instant on save |
-| **Error discovery** | After the fact (easy to forget) | Immediately (seconds) |
-| **YAML indentation** | `--fix` batches | 1st save catches Tab issues |
-| **REQ missing sections** | 3-4 errors at once | Each caught separately |
-| **Usage** | Type command every time | Open terminal, hands-off |
+### 替代方案
 
-### Workflow
+使用宿主 IDE 的文件保存钩子或终端手动运行：
 
 ```bash
-# Terminal 1: start watch
-speccore watch
-# → 👀 Watching Spec files... (Ctrl+C to stop)
-
-# Terminal 2: edit Spec files
-vim Task-001/backend/REQ.md
-
-# Every Ctrl+S → Terminal 1 gives instant feedback:
-#   ✅ Task-001/backend/REQ.md
-#   ⚠️ Task-001/_shared/API_CONTRACT.yaml (tab indentation — use 2 spaces)
-#   ⚠️ Task-001/backend/REQ.md (missing: API Definition, Acceptance Criteria)
-
-# Watch specific iteration only
-speccore watch --iteration=2026-07-Sprint
-```
-
-### Without watch (comparison)
-
-```bash
-# Edit Spec... Ctrl+S
-# Edit Spec... Ctrl+S
-# Edit Spec... Ctrl+S
-# (No feedback throughout, no idea if there are issues)
-
-# Run once at the end
+# 手动运行 validate（推荐）
 speccore validate
-# → ❌ 3 errors → fix one by one → run validate again → fix more...
+
+# 批量修复
+speccore validate --fix
 ```
+
+### 历史说明
+
+`watch` 命令在 v8.3.60 之前使用 Node.js `fs.watch` 监听文件变更并自动触发 `validate`。由于跨平台兼容性问题（不同 OS 的 fs.watch 行为不一致）以及与宿主 IDE 功能重复，该命令已移除。
 
 ---
 

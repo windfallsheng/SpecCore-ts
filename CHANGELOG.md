@@ -1,3 +1,399 @@
+## v8.3.60 (2026-09-07) — 环境驱动部署 + 全命令 Skill 覆盖
+
+### 新增
+
+**环境驱动部署流水线（v8.3.60）**：
+- `speccore pipeline --env <环境>`：环境驱动流水线，自动读取环境配置中的 `branch`
+- 执行流程：获取当前分支 → checkout 目标分支 → pull → merge → build → deploy
+- 五层环境模型：`local` → `dev` → `test` → `staging` → `production`
+- 支持任意数量自定义环境：复制 `.speccore/environments/*.yaml` 修改即可
+- `local` 环境不配置 branch，方便任意分支本地部署
+- 失败不阻断：某端失败继续处理其他端，最后统一汇总报告
+- `--dry-run` 预览模式：展示完整流程，不实际执行
+- 分支回退提示：Pipeline 完成后提示用户当前在目标分支
+
+**环境配置系统（v8.3.60）**：
+- `.speccore/environments/*.yaml`：按环境文件夹化管理配置
+- 配置覆盖优先级：环境文件 > PROJECT.yaml > 默认值
+- `branch` 字段：指定该环境对应的 Git 目标分支
+- `defaults.build_cmd`：全局默认构建命令
+- `platforms.{端}.build_cmd`：按端覆盖构建命令
+- `platforms.{端}.deploy`：按端覆盖部署配置
+- `tests.base_urls`：测试基地址（与 verify --config 联动）
+- `tests.visual_model`：视觉模型配置（与 verify --config 联动）
+- `speccore update` 时自动初始化默认环境配置（5 个环境）
+
+**全命令 Skill 覆盖（v8.3.60）**：
+- 26+ 个 CLI 命令全部配备专属 Skill
+- `/命令 + 自然语言` 快捷入口：`/deploy 部署到测试环境`、`/verify 跑冒烟测试`
+- 两层路由架构：精确入口（/命令）+ AI 语义分析（窄域意图识别）
+- 双模式支持：自然语言为主（最友好），显式参数为辅（最精确）
+- 新增 Skill：`spec-init`、`spec-validate`、`spec-search`、`spec-track`、`spec-sync`、`spec-rename`、`spec-retro`、`spec-context`、`spec-ops`、`spec-deploy`、`spec-verify`
+- 不影响 `speccore ask` 的通用意图识别能力
+
+**配置驱动测试增强（v8.3.60）**：
+- `verify --config <path> --env-file <环境>`：测试场景与环境配置联动
+- `loadEnvironmentByNameOrPath()`：支持按环境名或文件路径加载配置
+- `mergeTestConfigWithEnv()`：自动合并测试配置与环境配置
+
+**Pipeline 测试节点（v8.3.60）**：
+- Pipeline 内置测试：build 后 deploy 前/后插入测试节点
+- 五层测试类型：`build-check` / `smoke` / `visual` / `api` / `all`
+- 测试时机可配置：`pre-deploy`（默认）/ `post-deploy` / `both`
+- 严重程度分级：`critical`（阻断 deploy）/ `warning`（先 deploy 后修复）
+- `auto_fix` 默认 `true`，失败时输出 AI 修复标记
+- `fail_on_error` 控制阻断策略
+
+**分层测试策略（v8.3.60）**：
+- `verify --stage <stage>`：四层阶段快捷命令（dev / pr / deploy / release）
+- 环境配置新增 `stages` 域，映射阶段到测试场景文件
+- 预设测试配置模板：`.speccore/tests/smoke.yaml` / `pr.yaml` / `release.yaml`
+
+**测试配置自动生成（v8.3.60）**：
+- Split 阶段为前端子任务自动生成 `VERIFY_SPEC.yaml`
+- 从源码扫描路由，按模块生成测试场景
+- 无配置时 Verify 交互式询问是否自动生成
+- 生成 Data-testid 风格智能 selector
+
+**全局外部项目支持（v8.3.60）**：
+- `--project-dir` 全局选项，所有命令自动继承
+- 测试能力可"走出去"，测试任意外部项目
+
+### 改进
+
+- `pipeline.ts` 重写：从命令驱动（--from/--to）改为环境驱动（--env）
+- `build.ts` / `deploy.ts`：支持 `--env` 和 `--env-file` 读取环境配置
+- `verify.ts`：`--env-file` 支持环境名（如 `test`）或文件路径
+- `environment-config.ts`：新增 `branch` 字段，解析逻辑支持读取 branch
+- `loadProjectConfigWithEnv()`：支持环境配置叠加到项目配置
+- `update-env-configs.ts`：update 时自动初始化/升级环境配置
+- `init.ts`：`TOOL_COMMANDS` 注册 spec-deploy 和 spec-verify
+- `about.ts`：更新功能概览和里程碑，添加环境驱动部署和全命令 Skill
+
+### 文档
+
+- `DESIGN.md`：新增环境驱动部署流水线章节、全命令 Skill 覆盖章节
+- `command-reference.md`：新增部署命令（pipeline/build/deploy）和测试命令（verify）文档
+- `README.md`：新增环境驱动部署章节，更新命令列表（20 → 26+）
+- `testing-guide.md`：新增完整测试体系指南（分层策略、配置详解、Pipeline 测试节点）
+- `config-reference.md`：新增 `tests`、`stages`、`pipeline.test` 配置项说明
+
+---
+
+## v8.3.59 (2026-09-04) — 项目配置持久化路由文件路径
+
+### 新增
+
+- `.speccore/PROJECT.yaml` 支持 `verify.router_file` 配置项
+- 配置优先级：`CLI --router-file` > `PROJECT.yaml verify.router_file` > 自动发现
+- 配置一次后，后续执行 `speccore verify --discover-routes` 自动读取，无需重复指定
+
+### 改进
+
+- `ProjectConfig` 接口扩展 `verify` 字段
+
+---
+
+## v8.3.58 (2026-09-04) — 支持显式指定路由配置文件路径
+
+### 新增
+
+- `--router-file <path>`：显式指定前端路由配置文件路径，覆盖自动发现逻辑
+- 支持相对路径（基于项目根目录）和绝对路径
+- 当指定路径不存在时给出明确警告，提示用户检查路径
+
+### 改进
+
+- `scanRoutes()` 函数签名扩展为 `scanRoutes(projectRoot, options)`，支持 `ScanRoutesOptions`
+
+---
+
+## v8.3.57 (2026-09-04) — 前端路由自动发现 + 模块过滤 + Node.js 20 升级
+
+### 新增
+
+**前端路由自动发现（v8.3.57）**：
+- `--discover-routes`：自动扫描 Vue Router / React Router 配置，提取路由清单
+- `--discover-pages`：自动扫描 `src/views/`、`src/pages/`、`src/screens/` 目录结构
+- `--generate-spec`：基于扫描结果自动生成 `VERIFY_SPEC.yaml`
+- 支持嵌套路由解析、动态路由识别、模块自动推断
+
+**按模块/页面过滤（v8.3.57）**：
+- `--module <modules>`：按模块名过滤（逗号分隔，如 `booking,user`）
+- `--page <pages>`：按页面路径过滤（逗号分隔，如 `/login,/dashboard`）
+- `--scenario <names>`：按场景名称过滤
+- 支持模糊匹配，过滤后自动显示摘要（X/Y 个场景）
+
+### 改进
+
+- **Node.js 版本升级**：推荐 Node.js v18+，已验证 v20.20.2 兼容性
+
+---
+
+## v8.3.56 (2026-09-04) — Prompt 规范修复：PATTERNS 泛滥 + 需求独立成文
+
+### 修复
+
+**全局分析 Prompt 规范修复（v8.3.56）**：
+- **PATTERNS 生成条件收紧**：从"必生成"改为"可选，只有真正独特且可复用的模式才生成"
+- **严禁生成通用模板**：JWT 认证、Redis 缓存、Axios 拦截器、定时任务等框架/库自带的标准用法不再生成 PATTERNS
+- **禁止文档引用 PATTERNS**：所有 platforms/、overview/、requirements/ 下的技术文档严禁在底部添加「相关文档」块链接到 PATTERNS
+- **PATTERNS 独立存放**：写入 `.speccore/PATTERNS/`，不在 `GLOBAL/` 下，不需要被其他文档引用
+
+**多前端需求独立成文规则强化（v8.3.56）**：
+- 增加自检机制：输出前检查 requirements/ 下是否只有总纲而没有 {前端端}/REQUIREMENT.md
+- 明确总纲字数限制：≤ 3000 字，不写任何前端页面/交互/组件细节
+- 明确前端需求文档规模：每份 ≥ 500 行
+
+---
+
+## v8.3.55 (2026-09-04) — 文档同步与架构设计补充
+
+### 改进
+
+**设计文档补充（v8.3.55）**：
+- `docs/DESIGN.md` 新增「全局分析路径路由与文档规范（v8.3.51+）」章节
+- `docs/DESIGN.md` 新增「CLI 启动稳定性：Heavy Dependency 动态导入（v8.3.51+）」章节
+- `docs/DESIGN.md` 新增「CLI 命令命名规范（v8.3.54+）」章节
+- 版本记录更新至 v8.3.54
+
+**说明文档同步（v8.3.55）**：
+- `README.md` 命令列表：`ops` → `history`
+
+---
+
+## v8.3.54 (2026-09-04) — CLI 命令命名规范化
+
+### 改进
+
+**命令命名规范化（v8.3.54）**：
+- `ops` / `op` 命令更名为 `history` / `hi`，更符合"全拼 + 缩写"规范
+- `history` 默认显示操作日志（原 `ops` 功能）
+- `history --req <REQ-XXX>` 查看需求变更历史
+- 两个历史相关功能合并到同一命令下，语义更清晰
+
+---
+
+## v8.3.53 (2026-09-04) — 健壮性综合修复包
+
+### 修复
+
+**analyze.ts 路径路由修复（v8.3.51）**：
+- `[DOC:xxx]` 标记解析分支遗漏 `overview/` 前缀支持，导致 `overview/ARCHITECTURE.md` 被错误路由到 `platforms/overview/`
+- 两处全局文档写入逻辑统一：JSON 多文档写入 + `[DOC:xxx]` 标记解析都支持 `platforms/` / `requirements/` / `overview/` 三种前缀
+
+**CLI 启动稳定性（v8.3.51）**：
+- `verifyCommand` 改为动态导入，避免 Playwright 在 CLI 初始化时加载
+- 修复 Node.js 16 等环境下，`analyze`/`status`/`dashboard` 等不依赖 Playwright 的命令崩溃问题
+
+### 改进
+
+**全局分析 Prompt 规范增强（v8.3.52）**：
+- Layer 4 汇总 prompt 增加强制规则：多前端项目时必须为每个前端独立生成需求文档
+- 明确区分：总纲只保留全局业务视角，严禁写入前端页面/交互细节
+
+---
+
+## v8.3.52 (2026-09-04) — Prompt 规范增强：多前端项目需求独立成文
+
+### 改进
+
+**全局分析 Prompt 规范增强（v8.3.52）**：
+- 在 Layer 4 全局汇总 prompt 中增加强制规则：如果系统包含多个前端项目（如 h5-mobile + admin-web），**必须**为每个前端项目独立生成一份需求文档
+- 明确区分：`requirements/REQUIREMENT.md` 总纲只保留全局业务视角（愿景/场景/优先级），**严禁**写入任何前端项目的页面/交互细节
+- 前端项目需求独立存放为 `requirements/{前端端}/REQUIREMENT.md`，确保产品视角不被压缩合并
+
+---
+
+## v8.3.51 (2026-09-04) — 健壮性修复
+
+### 修复
+
+**analyze.ts 路径路由修复（v8.3.51）**：
+- `[DOC:xxx]` 标记解析分支遗漏 `overview/` 前缀支持，导致 `overview/ARCHITECTURE.md` 被错误路由到 `platforms/overview/`
+- 两处全局文档写入逻辑统一：`JSON 多文档写入` 和 `[DOC:xxx] 标记解析` 都支持 `platforms/` / `requirements/` / `overview/` 三种前缀
+
+**CLI 启动稳定性（v8.3.51）**：
+- `verifyCommand` 改为动态导入（`await import('./commands/verify')`），避免 Playwright 在 CLI 初始化时加载
+- 修复 Node.js 16 等环境下，`analyze`/`status`/`dashboard` 等不依赖 Playwright 的命令也会崩溃的问题
+
+---
+
+## v8.3.50 (2026-09-04) — 视觉模型可配置切换
+
+### 新增
+
+**视觉模型配置体系（v8.3.50）**：
+- `quality_gates.verify_ui.visual_model` 配置：支持在 `.speccore.yml` 中声明视觉模型
+- 四层配置优先级：命令行 `--visual-model` → 任务级 `quality-gate.yaml` → 项目级 `.speccore.yml` → 默认 `qwen-vl`
+- 默认提供商：**Qwen-VL**（阿里云 DashScope，国内直接访问）
+- 支持提供商：`qwen-vl` | `openai` | `anthropic` | `local`
+- 配置项：`provider` / `model` / `apiKey` / `endpoint` / `timeout`
+
+**CLI 参数扩展**：
+- `--visual-model <model>`：命令行指定视觉模型
+  - 简写字符串：`--visual-model=qwen-vl` / `--visual-model=local`
+  - JSON 配置对象：`--visual-model='{"provider":"local","endpoint":"http://localhost:8000/v1"}'`
+
+### 配置示例
+
+```yaml
+# .speccore.yml
+quality_gates:
+  verify_ui:
+    enabled: true
+    visual_model:
+      provider: qwen-vl      # 默认，国内直接访问
+      model: qwen-vl-max
+      # apiKey: ${DASHSCOPE_API_KEY}  # 可选，默认读环境变量
+```
+
+```yaml
+# 切换到本地模型（零成本，隐私好）
+quality_gates:
+  verify_ui:
+    visual_model:
+      provider: local
+      endpoint: http://localhost:8000/v1/chat/completions
+      model: local-vision-model
+```
+
+---
+
+## v8.3.49 (2026-09-04) — 质量门禁 + API 契约测试 + 性能基线
+
+### 新增
+
+**质量门禁配置体系（v8.3.49）**：
+- 三层配置合并：项目级（`.speccore.yml`）→ 任务级（`Task/.meta/quality-gate.yaml`）→ 命令行（CLI flags）
+- `quality_gates.verify_ui` 配置：控制 UI 验证的启用/禁用、阈值、设备、浏览器
+- 默认配置：`verify_ui.enabled=false`，新项目不会意外触发
+
+**execute/pr 命令集成（v8.3.49）**：
+- `speccore execute` 任务执行后自动运行 UI 验证（如果 quality gate 启用）
+- `speccore pr` 提交前检查 UI 验证状态，strict 模式阻断提交
+- 交互模式下提示用户确认，force/response 模式下返回错误码 12
+
+**API 契约测试（v8.3.49）**：
+- `speccore verify -t Task-001 --api-contract` 执行 API 契约测试
+- 读取任务目录下的 `API_CONTRACT.yaml`，支持多端点、多断言
+- 断言类型：status、jsonPath、header、body（contains/exists/equals/gt/lt/regex 等）
+- 报告保存为 `99-artifacts/api-verify-report.json`
+
+**性能基线测试（v8.3.49）**：
+- `speccore verify -t Task-001 --perf` 执行性能基线测试
+- 读取 `PERF_SPEC.yaml`，支持 command（执行时间）和 size（产物体积）指标
+- 基线自动保存/更新，支持退化百分比阈值（`regression: 10` 表示允许比基线慢 10%）
+- `--update-perf-baseline` 强制更新基线
+
+### CLI 参数扩展
+
+- `--api-contract`：执行 API 契约测试
+- `--perf`：执行性能基线测试
+- `--update-perf-baseline`：更新性能基线
+
+---
+
+## v8.3.48 (2026-09-04) — 三层使用模式 + 单图质量扫描
+
+### 新增
+
+**三层使用模式（v8.3.48）**：
+
+| 模式 | 命令示例 | 场景 |
+|:---|:---|:---|
+| **独立模式** | `speccore verify --ui --url=https://example.com --spec=./test.yaml` | 任意系统验收，零门槛 |
+| **项目内独立** | `speccore verify --ui`（在项目根目录，自动找 `tests/VERIFY_SPEC.yaml`） | 项目级回归测试，不绑任务 |
+| **任务绑定** | `speccore verify -t Task-001 --ui` | 规范驱动开发，测试是任务验收标准 |
+
+**单图通用质量扫描（v8.3.48）**：
+- 无基准图时，视觉模型对单张截图做通用质量检查
+- 检测能力：白屏/灰屏、布局崩坏、文字重叠截断、图片加载失败、UI 异常（弹窗报错、乱码）
+- 首次运行不再只是"保存基准图"，而是"保存基准图 + 扫描质量问题"
+
+**CLI 参数扩展**：
+- `--url <url>`：目标系统地址（独立模式）
+- `--spec <path>`：测试规格文件路径（独立模式）
+- `--output <path>`：报告输出目录，默认 `./reports`（独立模式）
+
+---
+
+## v8.3.47 (2026-09-04) — UI 冒烟测试 + 视觉检查（verify --ui）
+
+### 新增
+
+**UI 验证引擎（v8.3.47）**：
+- `speccore verify -t Task-001 --ui` 启用 UI 冒烟测试 + 视觉检查
+- `--smoke-only`：仅执行结构化流程测试（Playwright）
+- `--visual-only`：仅执行视觉模型对比分析
+- `--device`：支持 desktop / mobile / tablet 设备模拟
+- `--browser`：支持 chromium / firefox / webkit
+- `--update-baseline`：手动更新视觉基准图
+
+**冒烟测试引擎**（`src/core/ui-verify/smoke-engine.ts`）：
+- 按 VERIFY_SPEC.yaml 执行结构化操作流程（fill / click / select / hover / press / wait 等）
+- 支持断言：visible、hidden、text、value、url、count、attribute
+- 自动截图保存到 `99-artifacts/screenshots/`
+- 设备模拟：桌面端 1280×720、移动端 375×812、平板 768×1024
+
+**视觉检查引擎**（`src/core/ui-verify/visual-engine.ts`）：
+- 基准图管理：首次运行自动保存基准图，后续对比差异
+- 支持 `--update-baseline` 强制更新基准图
+- 视觉模型分析接口（预留 GPT-4o / Claude 3.5 Sonnet / Qwen-VL 接入点）
+- 分析结果：布局一致性、颜色偏离、UI 异常检测
+
+**HTML 报告生成器**（`src/core/ui-verify/report-generator.ts`）：
+- 生成 `ui-verify-{taskId}.html` 可视化报告
+- 包含：通过率统计、场景详情、步骤执行记录、截图对比、视觉问题列表
+- 左右对比展示（基准图 vs 当前截图）
+
+**模板 README 完善**：
+- `.speccore/templates/README.md` 补充 global 级别按端分层说明
+- 三个级别（global / iteration / task）均支持按端分层查找
+- 增加 global 级别按端示例
+
+### 技术细节
+
+- 新增依赖：`playwright`（无头浏览器自动化）
+- 新增模块：`src/core/ui-verify/`（types、smoke-engine、visual-engine、report-generator）
+- `loadUserTemplates` 支持 global 级别按 `platform` 查找
+- `verify` 命令扩展 `--ui` 系列参数
+
+---
+
+## v8.3.46 (2026-09-02) — AGENTS.md 智能修复 + 项目结构一致性 + 输出标记补全
+
+### 新增
+
+**update 时 AGENTS.md 全量重建（v8.3.46）**：
+- `syncAgentsMd()` 新增 `force` 参数，`update` 命令传 `true`
+- 升级时不再保留旧的手动区内容，直接采用最新内置模板重新生成
+- 用户自定义内容需手动备份，update 不保护手动区
+
+**智能过时检测（v8.3.46）**：
+- `initRulesDir()` 新增 `OBSOLETE_MARKERS` 数组，扫描已知的 6 类过时内容标记
+- 检测到过时内容时自动覆盖 inline 模板，并输出日志提示
+- 覆盖场景：旧端分类层（10-backend/20-frontend/）、子任务含 src/ 或 tests/、execute -I（应为 -i）、缺少 PROJECT.yaml 引用、旧表述等
+
+**SpecCore 输出标记表格补全**：
+- 补充 7 个 ask.ts 实际输出但文档未记录的标记：`SPECCORE_CONFIRM`、`SPECCORE_EXEC_STATUS`、`SPECCORE_EXEC_ERROR`、`SPECCORE_CONFIRM_STEP`、`SPECCORE_CONFIRM_ASK`、`SPECCORE_STEP_FAIL`、`SPECCORE_AMBIGUOUS`
+- 同步更新 AGENTS.md 自动区、init.ts 手动区、02-OUTPUT_MARKERS.inline.md
+
+### 修复
+
+**AGENTS.md 项目结构一致性（10 处）**：
+- `000-overview/`：删除虚设 `PROGRESS.md`，补充 `PROJECT_GRAPH.md`、`task-summaries/`、`plans/`、`RETRO.md`、`PIPELINE_REPORT.md`
+- `010-requirements/`：补充 `assets/` 子目录（prototypes/、designs/、screenshots/）、可选目录（bugs/、refactors/、research/、REQUIREMENT.md、CLARIFY_REPORT.md）
+- `020-specs/`：补充 `{功能模块}/{端名}/` 层级、`requirements/`、`PLATFORMS.md`、`QUALITY_AUDIT.md`
+- `030-tasks/`：子任务 `.meta/` 补充 `estimated-hours`、`feature`；`git-config` 移入 `.meta/`；前端补充 `ROUTES.md`、`STATE.md`
+- `00-specs/`：标注「analyze 阶段写入」，补充 `[兼容] CONTEXT.md`
+
+**标题修正**：
+- `## 编码规范与规则` → `## 规范与参考`（手动区 + syncAgentsMd 自动区）
+
+**模板同步**：
+- `010-requirements/README.md` 初始化模板补充 assets/ 子目录和可选目录说明
+
 ## v8.3.25 (2026-08-28) — 统一配置版本化 + 结构校验 + 自动升级
 
 ### 新增

@@ -19,6 +19,8 @@ import { findRelevantCode } from '../../core/code-scanner';
 import { loadKnowledgeGraph } from '../../core/knowledge-graph';
 import { loadGitConfig, GitConfig } from '../../core/git-integration';
 import { cleanupByType } from '../cleanup';
+import { loadProjectConfig } from '../../core/unified-config';
+import { scanRoutes, generateSpecFromRoutes, writeVerifySpec } from '../../core/ui-verify';
 
 /**
  * 将 AI 返回的 scope 简写映射到 CONSTITUTION.md 标准端名
@@ -1859,6 +1861,33 @@ ${isBk ? apiList : pageList}
         await writeFile(join(subtaskDir, 'ROUTES.md'), generateRoutesDoc(section, platformName, feContent));
         await writeFile(join(subtaskDir, 'STATE.md'), generateStateDoc(section, platformName, feContent));
         await writeFile(join(subtaskDir, 'STYLE_GUIDE.md'), generateStyleGuide(section, platformName, feContent));
+
+        // v8.3.60+: 自动生成 VERIFY_SPEC.yaml（从源码路由扫描）
+        try {
+          const projectConfig = await loadProjectConfig();
+          const platformConfig = projectConfig.platforms.find(p => p.name === platformName);
+          const codePath = platformConfig?.code_path
+            ? (platformConfig.code_path.startsWith('/')
+                ? platformConfig.code_path
+                : join(process.cwd(), platformConfig.code_path))
+            : null;
+
+          if (codePath && await pathExists(codePath)) {
+            const routeResult = await scanRoutes(codePath);
+            if (routeResult.routes.length > 0) {
+              const baseUrl = 'http://localhost:3000'; // 默认值，开发时调整
+              const spec = generateSpecFromRoutes(routeResult.routes, {
+                baseUrl,
+                platform: platformName,
+                name: `${section.name} - ${platformName} UI 验证`,
+              });
+              await writeVerifySpec(spec, join(subtaskDir, 'VERIFY_SPEC.yaml'));
+              logger.info(`   📄 VERIFY_SPEC.yaml 已自动生成（${routeResult.routes.length} 个场景）`);
+            }
+          }
+        } catch {
+          // 静默失败：源码不可用或扫描失败时不阻断 split 流程
+        }
       }
 
       // 执行产出文档

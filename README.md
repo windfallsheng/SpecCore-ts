@@ -1,6 +1,6 @@
 # SpecCore — Code by Spec, Not by Vibe
 
-🖥️ 规范驱动开发 CLI · 20 命令 · 人机协同闭环 · 多层 AI 架构
+🖥️ 规范驱动开发 CLI · 26+ 命令 · 环境驱动部署 · 全命令 Skill 覆盖 · 多层 AI 架构
 
 ```bash
 @spec-ask "分析会议预订系统的需求文档，拆分为独立开发任务，按依赖顺序执行"
@@ -69,6 +69,7 @@ init → doc2spec → analyze → split → plan → execute → pr → done →
 | 🔒 AI 流水线 | `doc2spec` `analyze` `split` `plan` `execute` `pr` `done` `spec2doc` |
 | 🔒 AI 智能 | `dev` |
 | 🔒 AI 变更 | `change` `retro` |
+| ✅ 质量验证 | `verify` `verify --ui` `verify --stage` `verify --api-contract` `verify --perf` `verify --project-dir` |
 
 ## 目录结构（全英文）
 
@@ -98,6 +99,89 @@ Iteration-001-meeting/
 │       ├── {platform}/         ← 各端实现（平铺，如 booking-service/ h5-mobile/ admin-web/）
 │       └── .issues.md          ← 问题追踪
 └── STAFFING.md                 ← 人员排期
+```
+
+## 环境驱动部署（v8.3.60+）
+
+```bash
+# 一键流水线：merge → build → deploy
+speccore pipeline --env staging --all              # 部署到预发布环境
+speccore pipeline --env test --platforms h5,api    # 只部署 H5 和 API
+speccore pipeline --env dev --all --dry-run        # 预览模式
+
+# Pipeline 内置测试节点（v8.3.60+）
+speccore pipeline --env staging --all --test-enabled --test-type smoke
+
+# 独立构建/部署
+speccore build --env staging --platform h5         # 构建 H5 端
+speccore deploy --env production --all             # 部署到生产环境
+```
+
+**五层环境模型**：`local` → `dev` → `test` → `staging` → `production`
+
+**环境配置**（`.speccore/environments/staging.yaml`）：
+```yaml
+env: staging
+branch: staging
+defaults:
+  build_cmd: npm run build:staging
+platforms:
+  h5:
+    build_cmd: npm run build:h5:staging
+    deploy:
+      type: static
+      output_dir: dist
+      target: s3://mybucket-staging/h5/
+```
+
+**特性**：
+- `--env` 读取环境配置中的 `branch`，自动 merge 当前分支
+- 配置覆盖：环境文件 > PROJECT.yaml > 默认值
+- 失败不阻断：某端失败继续处理其他端
+- 支持任意数量自定义环境
+
+## 质量验证（v8.3.47+）
+
+```bash
+# UI 验证：冒烟测试 + 视觉检查
+speccore verify -t Task-001 --ui                          # 任务绑定模式
+speccore verify --ui --url=https://example.com --spec=./test.yaml  # 独立模式
+
+# 配置驱动测试（v8.3.60+）
+speccore verify --config ./tests/smoke.yaml --env-file test  # 加载测试场景 + 合并环境配置
+
+# API 契约测试（v8.3.49+）
+speccore verify -t Task-001 --api-contract
+
+# 性能基线测试（v8.3.49+）
+speccore verify -t Task-001 --perf
+
+# 分层测试策略（v8.3.60+）
+speccore verify --stage dev                  # 开发阶段：编译 + Lint + 单元测试
+speccore verify --stage pr                   # PR 阶段：代码质量 + 冒烟 + API 契约
+speccore verify --stage deploy               # 部署阶段：仅冒烟测试
+speccore verify --stage release              # 发布阶段：全量 UI + API + 性能回归
+
+# 测试外部项目（v8.3.60+）
+speccore verify --project-dir ~/projects/other-app --stage deploy
+
+# 视觉模型切换（v8.3.50+）
+speccore verify --ui --visual-model=qwen-vl               # 阿里云 DashScope（默认）
+speccore verify --ui --visual-model=local                 # 本地模型
+speccore verify --ui --visual-model='{"provider":"openai","model":"gpt-4o"}'
+```
+
+**三层使用模式**：独立模式（零门槛）→ 项目内独立（不绑任务）→ 任务绑定（规范驱动）。
+
+**配置示例**（`.speccore.yml`）：
+```yaml
+quality_gates:
+  verify_ui:
+    enabled: true
+    threshold: normal
+    visual_model:
+      provider: qwen-vl
+      model: qwen-vl-max
 ```
 
 ## 断点重试 🔒 AI 命令
@@ -274,7 +358,13 @@ speccore --version   # v8.3.10
 | `search` | `sh` | 🔍 跨 Spec 全文搜索 |
 | `retro` | `rt` | 📝 🔒 任务回顾复盘 + 评分 |
 | `rename` | `rn` | ✏️ 🔒 重命名 |
-| `ops` | `op` | 📜 操作历史 |
+| `history` | `hi` | 📜 历史记录（操作日志 / 需求变更） |
+| `pipeline` | `pln` | 🚀 环境驱动流水线（merge → build → deploy） |
+| `build` | `bd` | 🔨 按端构建 |
+| `deploy` | `dp` | 🚀 按端部署 |
+| `verify` | `vf` | 🧪 代码验证 + UI 测试 |
+
+> 💡 **全命令 Skill**：所有命令均支持 `/命令 + 自然语言` 快捷入口，如 `/deploy 部署到测试环境`、`/verify 跑冒烟测试`。详见 [DESIGN.md](docs/DESIGN.md#58-全命令-skill-覆盖v8360)。
 
 ## TTY 智能适配
 
@@ -298,7 +388,7 @@ speccore --version   # v8.3.10
 | 中文 | English | 说明 |
 |------|---------|------|
 | [快速开始](docs/quick-start.md) | [Quick Start](docs/quick-start.en.md) | 5 分钟上手，安装 → 完整流程 |
-| [命令参考](docs/command-reference.md) | [Commands](docs/commands.en.md) | 全部 20 命令 + 子命令 + 示例 |
+| [命令参考](docs/command-reference.md) | [Commands](docs/commands.en.md) | 全部 26+ 命令 + 子命令 + 示例 |
 | [总览](docs/overview.md) | — | 核心概念 + 工作流 + 三种使用方式 |
 | [场景实战](docs/scenarios.md) | [Scenarios](docs/scenarios.en.md) | 35 个真实开发场景 |
 | [SDD 方法论](docs/sdd-methodology.md) | [SDD](docs/sdd-methodology.en.md) | 规范驱动开发理念 |

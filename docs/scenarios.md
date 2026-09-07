@@ -132,8 +132,8 @@ speccore execute -t Task-001 --dry-run  # 只预览，不执行
 # 模式 6: 严格模式
 speccore execute -t Task-001 --strict   # 前置检查 req/tech/test 后才生成代码
 
-# 夜间调度
-speccore execute --all --scheduled          # 只执行标记为队列的任务
+# 按状态筛选执行
+speccore execute --all --status=todo        # 只执行 todo 状态的任务
 ```
 
 ### 七、提交 PR — 两种方式
@@ -163,8 +163,8 @@ speccore change "把手机号改成国际格式" -t Task-001
 speccore change -t Task-001 --interactive   # 交互确认
 
 # Bug 批量处理
-speccore task new --batch-file=bugs.xlsx --type=bugfix --schedule=night --interactive
-# 预览 → 编辑/跳过 → 确认创建 → 标记夜间执行
+speccore task new --batch-file=bugs.xlsx --type=bugfix --interactive
+# 预览 → 编辑/跳过 → 确认创建
 
 # 检查合规
 speccore validate -I Q1
@@ -326,29 +326,17 @@ speccore execute --all -a 张三 --type=bugfix        # 按条件筛选
 speccore execute --all --priority=high --backend    # 后端高优先级
 ```
 
-### 指定时间自动执行
+### 批量任务管理
 
-`schedule create --at` 直接指定时间，守护进程到时自动执行，不需要先放队列。
-
-```bash
-speccore schedule create --at "2026-08-10 02:00:00" --all -i Q1 -a 张三 --batch-size=3
-speccore schedule create --at "2026-08-10 21:00:00" -t Task-001
-speccore schedule list && speccore schedule detail --id=sch-xxx
-speccore schedule daemon start          # 启动守护进程
-speccore schedule cancel --id=sch-xxx   # 取消
-```
-
-### 轻量标记 + 批量手动触发
-
-`--schedule=night` 标记为 queue，之后 `execute --scheduled` 手动触发。
+创建多个任务后统一执行：
 
 ```bash
-speccore task new -n "修复登录超时" --type=bugfix --schedule=night
-speccore task new --batch-file=bugs.xlsx --type=bugfix --schedule=night
-speccore execute --all --scheduled       # 手动触发所有 queue
+speccore task new -n "修复登录超时" --type=bugfix
+speccore task new --batch-file=bugs.xlsx --type=bugfix
+speccore execute --all --batch-size=3     # 分批执行所有待办任务
 ```
 
-> `execute --all` 跑 todo，`execute --scheduled` 跑 queue，互不干扰。<a name="schedule"></a>
+> `execute --all` 跑 todo 状态任务，分批执行互不干扰。
 
 ---
 
@@ -638,11 +626,13 @@ speccore search "authentication" -t Task-001
 
 ---
 
-## 场景二十一：文件保存即校验 — `speccore watch`
+## 场景二十一：文件保存即校验 — `speccore watch` [已废弃]
+
+> ⚠️ `speccore watch` 命令已在 v8.3.60 彻底移除。请使用 `speccore validate` 手动校验，或利用宿主 IDE 的文件保存钩子。
 
 ```bash
-speccore watch
-# 每次保存 Spec 文件自动校验
+speccore validate              # 手动校验
+speccore validate --fix        # 自动修复
 ```
 
 ---

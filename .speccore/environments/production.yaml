@@ -1,0 +1,59 @@
+# =============================================================================
+# SpecCore 环境配置 — production（生产环境）
+# =============================================================================
+# 用途：线上正式部署
+# ⚠️ 生产环境部署建议配合 --dry-run 先预览
+# 典型工作流：
+#   speccore pipeline --env production --platforms h5 --dry-run   # 先预览
+#   speccore pipeline --env production --all                      # 确认后执行
+# =============================================================================
+
+env: production
+
+# 该环境对应的 Git 分支
+# pipeline 执行时会将当前分支合并到此分支，然后 build+deploy
+branch: main
+
+# 全局默认值
+defaults:
+  build_cmd: npm run build:prod
+
+# 按端覆盖配置
+platforms:
+  # 前端示例：H5 移动端
+  h5:
+    build_cmd: npm run build:prod
+    deploy:
+      type: static
+      output_dir: dist
+      target: s3://mybucket-prod/h5/
+
+  # 前端示例：Admin 管理后台
+  admin-web:
+    build_cmd: npm run build:prod
+    deploy:
+      type: static
+      output_dir: dist
+      target: s3://mybucket-prod/admin/
+
+  # 后端示例：Java API 服务
+  order-api:
+    build_cmd: ./mvnw package -DskipTests -Pprod
+    deploy:
+      type: docker
+      registry: registry.example.com/myapp-prod
+      image: order-service
+      tag: prod
+
+# 测试相关配置（与 verify --config 联动）
+# 生产环境通常执行线上冒烟测试
+tests:
+  base_urls:
+    h5: https://www.example.com/h5
+    admin: https://www.example.com/admin
+    order-api: https://api.example.com
+
+  visual_model:
+    provider: qwen-vl
+    model: qwen-vl-max
+    timeout: 60000

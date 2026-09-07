@@ -261,7 +261,7 @@ export async function askCommand(input: string, _options: any): Promise<void> {
         }
 
         const r = await autoExecute(step.command, argsFilled, false);
-        if (!r.ok && step.command !== 'schedule') {
+        if (!r.ok) {
           process.stdout.write(`[SPECCORE_STEP_FAIL: ${step.command}] 用户决定: [重试/跳过/停止]\n`);
           break;
         }

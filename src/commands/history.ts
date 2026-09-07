@@ -1,16 +1,43 @@
 /**
- * history - 查看需求变更历史命令
- * 输出指定需求（REQ-XXX）的完整变更历史，包括来源、版本演进、关联迭代
+ * history - 操作历史 + 需求变更历史
+ * 默认查看命令执行日志，带 --req 参数时查看需求变更历史
  */
 
 import { logger, Spinner } from '../utils/logger';
 import { readGlobalIndex, readRequirementDetail } from '../core/global-layer';
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
 
 export interface HistoryOptions {
   req?: string;
 }
 
-export async function historyCommand(options: HistoryOptions): Promise<void> {
+async function showOpsHistory(): Promise<void> {
+  const logPath = join(process.cwd(), '.speccore', 'logs', 'operations.log');
+
+  if (!existsSync(logPath)) {
+    logger.info('\n  📭 尚无操作记录');
+    logger.info('  💡 执行任意 speccore 命令后自动记录');
+    return;
+  }
+
+  const lines = readFileSync(logPath, 'utf-8').trim().split('\n');
+  const recent = lines.slice(-20);  // Last 20 operations
+
+  logger.info(`\n📋 最近 ${recent.length} 次操作:\n`);
+  for (const line of recent) {
+    try {
+      const entry = JSON.parse(line);
+      const time = new Date(entry.timestamp).toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      logger.info(`  ${time}  ${entry.command}  ${entry.detail || ''}`);
+    } catch {
+      logger.info(`  ${line.slice(0, 100)}`);
+    }
+  }
+  logger.info(`\n  📄 完整日志: ${logPath}`);
+}
+
+async function showReqHistory(options: HistoryOptions): Promise<void> {
   if (!options.req) {
     logger.error('请提供需求 ID。用法: speccore history --req=<REQ-XXX>');
     logger.info('提示: 使用 speccore global-status 查看可用需求列表');
@@ -80,7 +107,6 @@ export async function historyCommand(options: HistoryOptions): Promise<void> {
       logger.info('📦 元数据');
       logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-      const metaLines = detail.split('\n').filter((l) => l.includes('|') && l.includes(':---'));
       for (let i = 0; i < detail.split('\n').length; i++) {
         const line = detail.split('\n')[i];
         if (line.includes('来源') || line.includes('当前版本') || line.includes('状态') || line.includes('最后修改')) {
@@ -98,32 +124,9 @@ export async function historyCommand(options: HistoryOptions): Promise<void> {
   }
 }
 
-
-import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
-
-export async function opsCommand(): Promise<void> {
-  const logPath = join(process.cwd(), '.speccore', 'logs', 'operations.log');
-  
-  if (!existsSync(logPath)) {
-    logger.info('\n  📭 尚无操作记录');
-    logger.info('  💡 执行任意 specore 命令后自动记录');
-    return;
+export async function historyCommand(options: HistoryOptions): Promise<void> {
+  if (options.req) {
+    return showReqHistory(options);
   }
-
-  const lines = readFileSync(logPath, 'utf-8').trim().split('\n');
-  const recent = lines.slice(-20);  // Last 20 operations
-  
-  logger.info(`\n📋 最近 ${recent.length} 次操作:\n`);
-  for (const line of recent) {
-    try {
-      const entry = JSON.parse(line);
-      const time = new Date(entry.timestamp).toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      logger.info(`  ${time}  ${entry.command}  ${entry.detail || ''}`);
-    } catch {
-      // fallback: raw line
-      logger.info(`  ${line.slice(0, 100)}`);
-    }
-  }
-  logger.info(`\n  📄 完整日志: ${logPath}`);
+  return showOpsHistory();
 }

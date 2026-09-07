@@ -1,0 +1,58 @@
+# =============================================================================
+# SpecCore 环境配置 — dev（开发联调环境）
+# =============================================================================
+# 用途：开发团队日常联调、前后端接口对接、日常集成
+# 与 test 的区别：dev 用于开发过程验证，test 用于 QA 正式测试
+# 典型工作流：
+#   speccore pipeline --env dev --all
+#   （将当前 feature 分支合并到 develop → build → deploy）
+# =============================================================================
+
+env: dev
+
+# 该环境对应的 Git 分支
+# pipeline 执行时会将当前分支合并到此分支，然后 build+deploy
+branch: develop
+
+# 全局默认值
+defaults:
+  build_cmd: npm run build:dev
+
+# 按端覆盖配置
+platforms:
+  # 前端示例：H5 移动端
+  h5:
+    build_cmd: npm run build:dev
+    deploy:
+      type: static
+      output_dir: dist
+      target: s3://mybucket-dev/h5/
+
+  # 前端示例：Admin 管理后台
+  admin-web:
+    build_cmd: npm run build:dev
+    deploy:
+      type: static
+      output_dir: dist
+      target: s3://mybucket-dev/admin/
+
+  # 后端示例：Java API 服务
+  order-api:
+    build_cmd: ./mvnw package -DskipTests -Pdev
+    deploy:
+      type: docker
+      registry: registry.example.com/myapp-dev
+      image: order-service
+      tag: dev
+
+# 测试相关配置（与 verify --config 联动）
+tests:
+  base_urls:
+    h5: https://dev.example.com/h5
+    admin: https://dev.example.com/admin
+    order-api: https://api-dev.example.com
+
+  visual_model:
+    provider: qwen-vl
+    model: qwen-vl-max
+    timeout: 60000

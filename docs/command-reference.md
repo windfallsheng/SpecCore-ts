@@ -1,4 +1,4 @@
-# 命令参考 (v8.3.24)
+# 命令参考 (v8.3.60)
 
 ---
 title: 命令参考
@@ -10,6 +10,8 @@ title: 命令参考
 |:---|:---|:---|
 | 🔒 **AI 命令** | 需在 AI IDE（WorkBuddy/Cursor/Trae）中通过 `@spec-ask` 使用 | `doc2spec`, `analyze`, `plan`, `execute`, `pr`, `done` |
 | ✅ **CLI 命令** | 可在终端直接输入 `speccore xxx` 执行 | `init`, `dashboard`, `validate`, `iteration create` |
+| ⚡ **部署命令** | 支持环境驱动，通过 `--env` 读取环境配置 | `pipeline`, `build`, `deploy` |
+| 🧪 **测试命令** | 支持配置驱动测试，通过 `--config` 加载测试场景 | `verify` |
 
 > 💡 AI 命令在 AI IDE 中也可通过 `/spec-xxx` 快捷命令或 `@spec-ask "描述"` 自然语言方式使用。
 
@@ -437,6 +439,95 @@ speccore validate [--iteration <name>]
 ```
 别名: `vl`
 
+---
+
+## 部署命令（v8.3.60+）
+
+### 🚀 pipeline — 环境驱动流水线
+```bash
+speccore pipeline --env <环境> --all           # 全端部署
+speccore pipeline --env staging --platforms h5,api  # 指定端
+speccore pipeline --env test --all --dry-run   # 预览模式
+speccore pipeline --env dev --all --skip-build # 跳过构建
+```
+别名: `pln`
+
+**环境驱动**：自动读取 `.speccore/environments/{env}.yaml` 中的 `branch`，将当前分支合并到目标分支，然后执行 build → deploy。
+
+**五层环境模型**：
+
+| 环境 | 分支 | 用途 |
+|:---|:---|:---|
+| `local` | — | 本地开发，不 merge |
+| `dev` | `develop` | 开发联调 |
+| `test` | `release/test` | 测试/QA/SIT |
+| `staging` | `staging` | 预发布/准生产 |
+| `production` | `main` | 线上生产 |
+
+**执行流程**：
+1. 读取环境配置获取目标分支
+2. 获取当前 Git 分支作为源分支
+3. checkout 目标分支 → pull → merge 源分支
+4. 构建（叠加环境配置中的 build_cmd）
+5. 部署（叠加环境配置中的 deploy 参数）
+6. 汇总报告（成功/失败 + 各步骤状态）
+
+### 🔨 build — 按端构建
+```bash
+speccore build --env <环境> --platform <端名>
+speccore build --env staging --all
+speccore build --env dev --platform h5 --branch feature/login
+```
+别名: `bd`
+
+**说明**：按 PROJECT.yaml + 环境配置叠加后的参数执行构建。支持 `--branch` 先 checkout 到指定分支再构建。
+
+### 🚀 deploy — 按端部署
+```bash
+speccore deploy --env <环境> --platform <端名>
+speccore deploy --env staging --all
+speccore deploy --env production --platform h5 --dry-run
+```
+别名: `dp`
+
+**说明**：部署端到指定环境。支持 `--dry-run` 预览、`--skip-build` 跳过构建、`--branch` 切换分支。
+
+---
+
+## 测试命令（v8.3.60+）
+
+### 🧪 verify — 代码验证与 UI 测试
+```bash
+speccore verify --ui                                    # 启用 UI 验证
+speccore verify --ui --smoke-only                       # 仅冒烟测试
+speccore verify --ui --visual-only                      # 仅视觉检查
+speccore verify --config ./tests/smoke.yaml             # 配置驱动测试
+speccore verify --config ./tests/smoke.yaml --env-file test   # 合并环境配置
+speccore verify --api-contract                          # API 契约测试
+speccore verify --perf                                  # 性能基线测试
+
+# 分层测试策略（v8.3.60+）
+speccore verify --stage dev                             # 开发阶段：编译 + Lint + 单元测试
+speccore verify --stage pr                              # PR 阶段：代码质量 + 冒烟 + API 契约
+speccore verify --stage deploy                          # 部署阶段：仅冒烟测试
+speccore verify --stage release                         # 发布阶段：全量 UI + API + 性能回归
+
+# 测试外部项目（v8.3.60+）
+speccore verify --project-dir ~/projects/other-app --stage deploy
+speccore verify --project-dir ~/projects/other-app --config ./tests/smoke.yaml
+```
+别名: `vf`
+
+**说明**：执行代码质量检查 + UI 冒烟测试 + 视觉检查 + API 契约测试 + 性能基线测试。
+
+**配置驱动测试**：通过 `--config` 指定 YAML 测试场景文件，支持多环境、多页面、多设备批量测试。
+
+**环境配置联动**：`--env-file` 支持环境名（如 `test`）或文件路径，自动合并环境配置中的 `base_urls` 和 `visual_model`。
+
+**分层测试策略**：`--stage` 一键执行对应层级的测试组合，无需记忆复杂参数。
+
+**外部项目测试**：`--project-dir` 全局选项，所有命令自动继承，测试能力可用于任意外部项目。
+
 ### 🧠 knowledge — 知识图谱可视化与代码图谱查询
 ```bash
 speccore knowledge [-i <iteration>] [--export html] [--scope global|iteration|task]
@@ -504,9 +595,3 @@ speccore task list
 speccore task status
 ```
 别名: `tk`
-
-### ⏰ schedule — 定时调度 [已废弃]
-```bash
-speccore schedule
-```
-> ℹ️️ 定时调度已由 WorkBuddy Automations 替代，此命令已废弃。

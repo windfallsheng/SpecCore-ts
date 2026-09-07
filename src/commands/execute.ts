@@ -41,6 +41,8 @@ import { createTaskBranch, detectDefaultBranch, findBranchByTaskId, isProtectedB
 import { buildPrompt, formatPrompt, parseAiResponse, outputNeedsInfo } from '../core/prompt-builder';
 import { runVerification, writeVerifyReport, outputFixTag, runQualityGate, syncTestDocFromResults } from '../core/verify-engine';
 import { runArbitration, type ArbitrationEngineResult, getArbitrationConfig } from '../core/arbitration/arbitration-engine';
+import { loadTaskQualityGate, mergeQualityGate, shouldRunUIVerify, type ResolvedQualityGate } from '../core/quality-gate';
+import { runUIVerification, logUIReport } from './verify';
 import { writeArbitrationReport } from '../core/arbitration/verdict-generator';
 import { loadConfig, loadProjectConfig } from '../core/unified-config';
 import { PipelineEngine } from '../core/pipeline-engine';
@@ -68,7 +70,6 @@ export interface ExecuteOptions {
   force?: boolean;
   batchSize?: string;
   hotfix?: boolean;
-  scheduled?: boolean;  // 夜间调度模式
   strict?: boolean;
   base?: string;       // base branch for task branching
   skip?: string;       // comma-separated task IDs to skip
@@ -1826,6 +1827,13 @@ async function executionVerifyLoop(
         }
       }
     }
+
+    // ── Step 5: UI 验证（v8.3.49+ 移到 verify 命令执行）──
+    // UI 验证是端到端测试，需要 Task 下所有子任务完成后才跑。
+    // execute 执行的是单个子任务，此时前端/后端可能还没全做完，
+    // 自动跑 UI 测试必然失败。UI 验证统一走：
+    //   speccore verify -t Task-001 --ui
+    // 或在全部子任务 done 后由 done 命令触发。
 
     // 最终判定
     if (allPassed) {

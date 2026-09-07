@@ -100,10 +100,6 @@ const COMMAND_KB: CommandKnowledge[] = [
     usage: 'speccore dev [--auto] [--from <phase>] [--to <phase>]', examples: ['speccore dev --auto', 'speccore dev --from analyze --to execute'], related: ['execute', 'plan'], triggers: ['dev', '流水线', '自动', '级联'] },
   { name: 'task', aliases: ['tk'], description: '任务管理：创建/列表/状态。子命令: new, list, status',
     usage: 'speccore task new --name <name> [--id <id>] | speccore task list | speccore task status', examples: ['speccore task new --name "用户登录"', 'speccore task list'], related: ['plan', 'execute'], triggers: ['task', '任务列表', '查看任务', '列出任务'] },
-  { name: 'schedule', aliases: ['sc'], description: '[已废弃] 定时调度功能已废弃，由 WorkBuddy Automations 替代',
-    usage: '',
-    examples: [],
-    related: ['plan', 'execute', 'task'], triggers: [] },
   { name: 'iteration', aliases: ['it'], description: '迭代管理：创建时自动生成唯一编码（Iteration-001-功能名），支持拆分/列表',
     usage: 'speccore iteration create -n <name> | speccore iteration split | speccore iteration list', examples: ['speccore iteration create -n Q3 → Iteration-001-Q3', 'speccore iteration list'], related: ['task', 'plan'], triggers: ['迭代', 'iteration', '迭代', 'sprint'] },
   { name: 'context', aliases: ['ctx'], description: '查看/设置当前上下文：迭代、任务、阶段',
@@ -267,8 +263,8 @@ export function classifyMode(input: string): AskMode {
   // 模式4: 复杂编排 — 包含多个动作词 + 时序/数量词
   const pipelineKeywords = ['然后', '再', '接着', '最后', '同时', '之后',
     'then', 'after', 'finally', '同时执行', 'pipeline'];
-  const actionWords = ['计划', '执行', '分批', '定时', '安排', '调度',
-    'plan', 'execute', 'schedule', 'batch'];
+  const actionWords = ['计划', '执行', '分批', '安排',
+    'plan', 'execute', 'batch'];
   const hasTiming = /晚.*点|早上.*点|明天|今天|后天|下周|周[一到日]|(\d+)[点时]/i.test(lower);
   const hasBatch = /分批|批次|batch|一批|一组/i.test(lower);
   const hasBugfix = /bug|修复|fix|defect/i.test(lower);
@@ -1084,13 +1080,6 @@ export async function synthesizeIntent(input: string): Promise<SynthesizedIntent
         args = parsed.iteration ? `-I ${parsed.iteration}` : '--all';
         explanation = '生成执行计划';
         break;
-      case 'schedule':
-        if (commands.length > 1) {
-          args = parsed.time ? `create --at "${parsed.time}"` : 'create';
-          if (parsed.batch) args += ` --batch-size ${parsed.batch}`;
-          explanation = parsed.time ? `创建定时调度 @ ${parsed.time}` : '创建调度';
-        }
-        break;
       case 'task':
         args = 'new';
         if (parsed.name) args += ` -n "${parsed.name}"`;
@@ -1154,11 +1143,6 @@ export async function synthesizeIntent(input: string): Promise<SynthesizedIntent
   }
 
   // ═══ 4. 自检：补全后还有遗漏吗？ ═══
-  // 有执行但没有 schedule → 不需要定时
-  if (commands.includes('execute') && !commands.includes('schedule')) {
-    // 这是直接执行，用户没说定时，不补 schedule
-  }
-  
   // 有任务名但没 type → 可继续（类型默认 feature）
   if (parsed.name && !parsed.type) {
     // 不追问，类型默认即可
@@ -1175,9 +1159,6 @@ export async function synthesizeIntent(input: string): Promise<SynthesizedIntent
   // 关键参数缺失 → 提问
   if (commands.includes('task') && !parsed.name && !parsed.type) {
     questions.push('请描述你要创建的任务类型和名称（如：创建一个登录功能的bug修复任务）');
-  }
-  if (commands.includes('schedule') && !parsed.time) {
-    questions.push('请指定执行时间（如：晚上10点）');
   }
 
   const finalConf = confidence + autoFilled.length * 5; // 自动补全加分

@@ -183,7 +183,8 @@ Iteration-xxx/<br>
 <span class="flow-node n2">需求分析</span><span class="flow-arrow">→</span>
 <span class="flow-node n3">任务拆分</span><span class="flow-arrow">→</span>
 <span class="flow-node n2">执行开发</span><span class="flow-arrow">→</span>
-<span class="flow-node n1">验证交付</span>
+<span class="flow-node n1">验证交付</span><span class="flow-arrow">→</span>
+<span class="flow-node n2">质量验证</span>
 </div>
 <div style="margin:12px 0;padding:12px;border-radius:8px;border:1px solid rgba(20,184,166,.2);background:rgba(20,184,166,.04)">
 <div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:8px">📋 完整示例流程</div>
@@ -194,7 +195,11 @@ Iteration-xxx/<br>
 <div class="method-cmd" style="margin-bottom:4px"># 3. 拆分任务（AI 对话框）</div>
 <div class="method-cmd" style="margin-bottom:8px">/spec-ask "拆分 login 的任务"</div>
 <div class="method-cmd" style="margin-bottom:4px"># 4. 执行开发（AI 对话框）</div>
-<div class="method-cmd">/spec-ask "开发 Task-001"</div>
+<div class="method-cmd" style="margin-bottom:8px">/spec-ask "开发 Task-001"</div>
+<div class="method-cmd" style="margin-bottom:4px"># 5. 质量验证（终端执行）</div>
+<div class="method-cmd" style="margin-bottom:8px">speccore verify -t Task-001 --ui</div>
+<div class="method-cmd" style="margin-bottom:4px"># 6. 提交归档（AI 对话框）</div>
+<div class="method-cmd">/spec-ask "完成 Task-001"</div>
 </div>
 <div class="method-grid" style="grid-template-columns:1fr 1fr;margin-top:12px">
 <div class="method-card m1"><div class="method-title">🤖 方式 A：意图式（推荐）</div><div class="step-desc">用自然语言告诉 AI，每步自动判断：</div><div class="method-cmd" style="margin-top:4px">/spec-ask "分析 my-iter 的需求"</div><div class="method-cmd">/spec-ask "拆分任务"</div><div class="method-cmd">/spec-ask "开发 Task-001"</div><div class="method-cmd">/spec-ask "完成 Task-001"</div></div>

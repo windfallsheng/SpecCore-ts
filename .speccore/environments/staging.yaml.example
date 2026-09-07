@@ -1,0 +1,175 @@
+# =============================================================================
+# SpecCore 环境配置 — test（测试环境 / QA / SIT）
+# =============================================================================
+# 支持任意数量的环境，复制本文件修改 env 和 branch 即可新建环境。
+# 典型工作流：
+#   speccore build --env test --platform h5
+#   speccore deploy --env test --platform h5
+#   speccore pipeline --env test --all
+# =============================================================================
+
+env: test
+
+# 该环境对应的 Git 目标分支
+# pipeline 执行时会自动将当前分支合并到此分支，然后 build+deploy
+branch: release/test
+
+# 全局默认值
+defaults:
+  build_cmd: npm run build:test
+
+# 按端覆盖配置
+platforms:
+  # 前端示例：H5 移动端 → S3/CDN
+  h5:
+    build_cmd: npm run build:test
+    deploy:
+      type: static
+      output_dir: dist
+      target: s3://mybucket-test/h5/
+
+  # 前端示例：Admin 管理后台 → Nginx 服务器
+  admin-web:
+    build_cmd: npm run build:test
+    deploy:
+      type: ssh
+      output_dir: dist
+      host: deploy@test-server.example.com:22
+      remote_dir: /usr/share/nginx/html/admin/
+      key: ~/.ssh/deploy_key
+      post_deploy:
+        - ssh deploy@test-server.example.com "sudo nginx -s reload"
+
+  # 后端示例：Java API 服务 → Docker
+  order-api:
+    build_cmd: ./mvnw package -DskipTests -Ptest
+    deploy:
+      type: docker
+      registry: registry.example.com/myapp-test
+      image: order-service
+      tag: test
+
+  # 后端示例：Node.js 服务 → PM2
+  notification-service:
+    build_cmd: npm run build
+    deploy:
+      type: pm2
+      output_dir: .
+      pm2_config: ecosystem.config.js
+      # 如需远程部署，取消注释:
+      # host: deploy@server.example.com
+      # remote_dir: /opt/services/notification
+
+  # 后端示例：Go 网关 → K8s
+  gateway:
+    build_cmd: go build -o bin/gateway ./cmd/gateway
+    deploy:
+      type: k8s
+      target: test
+      script: k8s/gateway-deployment.yaml
+
+  # 后端示例：Python 处理 → 脚本部署
+  data-processor:
+    build_cmd: pip install -r requirements.txt -t dist/
+    deploy:
+      type: script
+      script: ./scripts/deploy-processor.sh
+
+  # 后端示例：用户服务 → Helm
+  user-service:
+    build_cmd: ./mvnw package -DskipTests -Ptest
+    deploy:
+      type: helm
+      target: test
+      script: ./helm/user-service
+      output_dir: values-test.yaml
+
+  # 后端示例：定时任务 → SFTP 到服务器
+  scheduler:
+    build_cmd: go build -o bin/scheduler ./cmd/scheduler
+    deploy:
+      type: sftp
+      output_dir: bin
+      host: deploy@server.example.com
+      remote_dir: /opt/services/scheduler/
+      key: ~/.ssh/deploy_key
+
+  # 后端示例：WebSocket 服务 → 函数计算
+  ws-handler:
+    build_cmd: npm run build
+    deploy:
+      type: serverless
+      provider: aliyun-fc
+      target: ws-handler-test
+
+# 测试相关配置（与 verify --config 联动）
+tests:
+  base_urls:
+    h5: https://test.example.com/h5
+    admin: https://test.example.com/admin
+    order-api: https://api-test.example.com
+
+  visual_model:
+    provider: qwen-vl
+    model: qwen-vl-max
+    timeout: 60000
+
+# 分层测试配置（v8.3.60+）
+# 与 speccore verify --stage <stage> 联动，不同阶段自动加载对应测试场景。
+# 也可直接运行: speccore verify --config .speccore/tests/smoke.yaml --env-file test
+stages:
+  # 开发阶段：编译 + Lint + 单元测试（无需外部服务）
+  dev:
+    config: null                           # 使用内置代码质量验证
+  # PR 阶段：代码质量 + 关键页面冒烟 + API 契约
+  pr:
+    config: .speccore/tests/pr.yaml
+  # 部署阶段：仅冒烟测试（快速门禁）
+  deploy:
+    config: .speccore/tests/smoke.yaml
+  # 发布阶段：全量回归
+  release:
+    config: .speccore/tests/release.yaml
+
+# Pipeline 测试配置（v8.3.60+）
+# 在 build 之后、deploy 之前/之后执行测试，失败按严重程度决定是否阻断部署。
+#
+# 推荐的分层 Pipeline 测试策略：
+#   ┌─────────────────────────────────────────────────────────────┐
+#   │  pre-deploy (build 后 deploy 前)                            │
+#   │    • build-check: 构建产物检查（快速、必做）                  │
+#   │    • smoke:       HTTP 可达性（推荐，验证服务已启动）         │
+#   │    • type=smoke + stage=pre-deploy → 部署前快速门禁         │
+#   ├─────────────────────────────────────────────────────────────┤
+#   │  post-deploy (deploy 后)                                    │
+#   │    • visual: 视觉回归（已上线，只报告不阻断）                 │
+#   │    • api:    API 契约验证                                   │
+#   │    • type=all + stage=post-deploy → 部署后验收              │
+#   ├─────────────────────────────────────────────────────────────┤
+#   │  both (前后都测)                                            │
+#   │    • pre:  build-check + smoke                              │
+#   │    • post: visual + api                                     │
+#   │    → 最完整的质量闭环，但耗时较长                            │
+#   └─────────────────────────────────────────────────────────────┘
+#
+# 严重程度分级：
+#   - critical（严重）: build-check 失败、HTTP 5xx/连接失败 → 必须阻断
+#   - warning（警告）: visual 差异、api 契约差异、HTTP 404 → 自动修复模式下先部署后修复
+pipeline:
+  test:
+    # 是否启用 pipeline 内置测试（默认 false）
+    enabled: false
+    # 测试类型: build-check / smoke / visual / api / all
+    type: build-check
+    # 测试时机: pre-deploy(部署前,默认) / post-deploy(部署后) / both(前后都测)
+    stage: pre-deploy
+    # 自定义测试场景配置文件路径（可选）
+    # config: ./tests/pipeline-test.yaml
+    # 测试失败是否阻断 deploy（默认 true，仅对 critical 生效）
+    fail_on_error: true
+    # 测试失败时是否输出 AI 自动修复标记（默认 true）
+    auto_fix: true
+    # 自动修复最大重试次数
+    max_retries: 3
+
+# 本文件为示例，可复制为 staging.yaml 后修改使用
