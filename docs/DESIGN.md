@@ -504,6 +504,163 @@ Phase 2: 逐节填充（每节独立调用 LLM，携带前文上下文）
 - `--conflict <id> --decide <outcome> --reason <说明>`：进行人工裁决
 - `--report <Task-ID>`：查看指定任务的裁决书
 
+#### UI 质量门禁（v8.3.47+）
+
+在代码质量门禁之外，SpecCore 提供独立的 UI 验证体系，覆盖端到端冒烟测试、视觉回归检查和 API 契约测试。
+
+**三层使用模式**：
+
+| 模式 | 命令 | 场景 |
+|:---|:---|:---|
+| 独立模式 | `speccore verify --ui --url=https://example.com --spec=./test.yaml` | 任意系统验收，零门槛 |
+| 项目内独立 | `speccore verify --ui` | 项目级回归，不绑任务 |
+| 任务绑定 | `speccore verify -t Task-001 --ui` | 规范驱动，测试是验收标准 |
+
+**四层验证能力**：
+
+1. **冒烟测试（Smoke Test）**：基于 Playwright 无头浏览器执行结构化操作流程（fill/click/navigate/screenshot 等），断言 DOM 状态（visible/text/url 等）。
+2. **视觉检查（Visual Check）**：调用视觉模型对比基准图与当前截图，检测布局偏移、元素缺失、颜色变化、文字变动等。支持多模型切换（Qwen-VL/OpenAI/Anthropic/本地模型）。
+3. **单图质量扫描（First-run）**：无基准图时，视觉模型对单张截图做通用 UI 质量检查（白屏/布局崩坏/文字重叠/裂图/弹窗报错等）。
+4. **API 契约测试（v8.3.49+）**：读取 `API_CONTRACT.yaml`，批量发送 HTTP 请求并校验 status/jsonPath/header/body 断言。
+
+**视觉模型配置体系（v8.3.50+）**：
+
+```yaml
+# .speccore.yml
+quality_gates:
+  verify_ui:
+    enabled: true
+    threshold: normal          # strict | normal | loose
+    devices: [desktop]         # desktop | mobile | tablet
+    browsers: [chromium]       # chromium | firefox | webkit
+    visual_model:
+      provider: qwen-vl        # qwen-vl(默认) | openai | anthropic | local
+      model: qwen-vl-max
+      # apiKey: ${DASHSCOPE_API_KEY}
+      # endpoint: https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
+      # timeout: 60000
+```
+
+四层配置优先级：命令行 `--visual-model` → 任务级 `quality-gate.yaml` → 项目级 `.speccore.yml` → 默认 `qwen-vl`。
+
+**报告输出**：
+- 任务级：`Task-001/99-artifacts/ui-verify-report.html`（含截图对比、执行步骤、问题列表）
+- 迭代级：`000-overview/quality-report.html`（全局汇总 + 按功能模块 + 按端 + 任务明细）
+
+#### Pipeline 内置测试节点（v8.3.60+）
+
+在环境驱动部署流水线中，测试作为独立节点嵌入 build 和 deploy 之间，按严重程度决定是否阻断部署。
+
+**五层测试类型**：
+
+| 类型 | 说明 | 阻断 deploy？ |
+|:---|:---|:---:|
+| `build-check` | 编译检查 + Lint + 单元测试 | critical |
+| `smoke` | Playwright 无头浏览器页面可达性 | critical |
+| `visual` | AI 视觉模型截图对比分析 | warning |
+| `api` | API_CONTRACT.yaml 结构验证 | warning |
+| `all` | 全部测试类型依次执行 | 按子类型 |
+
+**测试时机**：
+
+| stage | 执行时机 | 阻断 deploy？ | 适用场景 |
+|:---|:---|:---:|:---|
+| `pre-deploy`（默认） | build 后、deploy 前 | critical 阻断 | 构建产物检查、基础门禁 |
+| `post-deploy` | deploy 后 | 不阻断，只报告 | 端到端验收、线上监控 |
+| `both` | 前后都测 | pre 阻断 / post 不阻断 | 完整质量闭环 |
+
+**严重程度分级**：
+
+| 严重程度 | 触发条件 | 行为 |
+|:---|:---|:---|
+| **critical** | build-check 失败、HTTP 5xx、连接失败 | 阻断 deploy，输出 `[SPECCORE_PIPELINE_TEST_FAIL]` |
+| **warning** | visual 差异、api 契约差异、HTTP 404 | 不阻断，先 deploy，输出 `[SPECCORE_PIPELINE_TEST_DEFERRED]` |
+
+**配置示例**：
+
+```yaml
+# .speccore/environments/staging.yaml
+pipeline:
+  test:
+    enabled: true
+    type: smoke
+    stage: pre-deploy
+    fail_on_error: true
+    auto_fix: true
+    max_retries: 3
+```
+
+**执行流程**：
+
+```
+pipeline --env staging --all
+    │
+    ▼
+Step 1: checkout → pull → merge
+    │
+    ▼
+Step 2: build（各端并行）
+    │
+    ▼
+Step 3: test（Pipeline 内置测试节点）
+    │    ├─ 测试类型：smoke/visual/api/build-check/all
+    │    ├─ 测试时机：pre-deploy / post-deploy / both
+    │    ├─ 严重程度：critical（阻断）/ warning（不阻断）
+    │    └─ auto_fix：失败时输出 AI 自动修复标记
+    │
+    ▼
+Step 4: deploy（测试通过或 warning 级别时继续）
+```
+
+#### 分层测试策略（v8.3.60+）
+
+四层阶段映射，一键执行对应层级的测试组合：
+
+```
+开发阶段                PR 阶段                部署阶段                发布阶段
+    │                     │                     │                     │
+    ▼                     ▼                     ▼                     ▼
+┌─────────┐         ┌─────────┐         ┌─────────┐         ┌─────────┐
+│ 编译检查 │         │ 代码质量 │         │ 构建检查 │         │ 全量回归 │
+│  Lint   │   →    │ 冒烟测试 │   →    │ 冒烟测试 │   →    │ 视觉回归 │
+│ 单元测试 │         │ API契约 │         │         │         │ API契约 │
+└─────────┘         └─────────┘         └─────────┘         │ 性能基线 │
+                                                            └─────────┘
+```
+
+**阶段映射**：
+
+| stage | 自动参数 | 覆盖范围 | 推荐耗时 |
+|:---|:---|:---|:---:|
+| `dev` | `--type all` | 编译 + Lint + 单元测试 | 2-3m |
+| `pr` | `--type all --ui --smoke-only --api-contract` | 代码质量 + 关键页面冒烟 + API 契约 | 5-10m |
+| `deploy` | `--ui --smoke-only` | 仅 UI 冒烟测试 | 2-5m |
+| `release` | `--ui --api-contract --perf` | 全量 UI + API + 性能 | 15-30m |
+
+**配置驱动**：
+
+```yaml
+# .speccore/environments/staging.yaml
+stages:
+  dev:
+    config: null                        # 使用内置代码质量验证
+  pr:
+    config: .speccore/tests/pr.yaml     # PR 阶段测试场景
+  deploy:
+    config: .speccore/tests/smoke.yaml  # 冒烟测试场景
+  release:
+    config: .speccore/tests/release.yaml # 全量回归场景
+```
+
+**快捷命令**：
+
+```bash
+speccore verify --stage dev      # 开发阶段
+speccore verify --stage pr       # PR 阶段
+speccore verify --stage deploy   # 部署阶段
+speccore verify --stage release  # 发布阶段
+```
+
 #### 语义定位引擎
 
 `src/core/semantic-locator.ts` 支持自然语言定位功能单元：
@@ -1266,7 +1423,7 @@ Iteration-NNN-name/
 | 020 | 分析层（规约） |
 | 030 | 任务层（开发） |
 | 050 | 导出层（dashboard/spec2doc/retro 产出）预留 |
-| 060 | 日志层（plan/schedule/execute 记录）预留 |
+| 060 | 日志层（plan/execute 记录）预留 |
 
 ### 核心原则
 
@@ -1598,6 +1755,83 @@ speccore synthesize -I <迭代名>             # 只做需求合成（无全量�
   → 完成 ✅
 ```
 
+### 环境驱动部署流水线（v8.3.60+）
+
+> **设计理念**：环境（env）是部署的第一公民，分支从环境配置中读取，而非手动指定。
+
+#### 五层环境模型
+
+| 环境 | 分支示例 | 用途 | pipeline 行为 |
+|:---|:---|:---|:---|
+| `local` | — | 本地开发调试 | 不执行 merge，直接 build+deploy |
+| `dev` | `develop` | 开发联调 | merge 当前分支 → develop |
+| `test` | `release/test` | 测试 / QA / SIT | merge 当前分支 → release/test |
+| `staging` | `staging` | 预发布 / 准生产 | merge 当前分支 → staging |
+| `production` | `main` | 线上生产 | merge 当前分支 → main |
+
+> 支持任意数量的自定义环境：复制 `.speccore/environments/staging.yaml` 修改 `env` 和 `branch` 即可。
+
+#### 配置覆盖优先级
+
+```
+环境文件 (.speccore/environments/{env}.yaml)
+  > PROJECT.yaml 中的 deploy/build 配置
+  > 内置默认值
+```
+
+#### Pipeline 执行流程
+
+```
+speccore pipeline --env staging --all
+  → 读取 .speccore/environments/staging.yaml
+  → 获取 branch = "staging"
+  → 获取当前 Git 分支（如 feature/login-optimization）
+  → 对每个端：
+      1. checkout staging
+      2. pull origin staging
+      3. git merge feature/login-optimization --no-edit
+      4. build（叠加环境配置中的 build_cmd）
+      5. deploy（叠加环境配置中的 deploy 参数）
+  → 汇总报告（成功/失败 + 各步骤状态）
+```
+
+#### 核心设计决策
+
+| 决策 | 说明 |
+|:---|:---|
+| **环境驱动** | `--env` 替代 `--from`/`--to`，降低认知负担 |
+| **自动 merge** | 当前分支自动合并到环境分支，避免手动操作 |
+| **单端/多端** | `--platforms h5,api` 或 `--all` 灵活选择 |
+| **dry-run** | `--dry-run` 预览完整流程，不实际执行 |
+| **失败不阻断** | 某端失败继续处理其他端，最后统一汇总 |
+| **分支回退提示** | Pipeline 完成后提示用户当前在目标分支，可手动切回 |
+
+#### 配置文件示例
+
+```yaml
+# .speccore/environments/staging.yaml
+env: staging
+branch: staging
+
+defaults:
+  build_cmd: npm run build:staging
+
+platforms:
+  h5:
+    build_cmd: npm run build:h5:staging
+    deploy:
+      type: static
+      output_dir: dist
+      target: s3://mybucket-staging/h5/
+
+tests:
+  base_urls:
+    h5: https://staging.example.com/h5
+  visual_model:
+    provider: qwen-vl
+    timeout: 60000
+```
+
 ### 错误处理
 
 ```
@@ -1755,6 +1989,31 @@ Layer 4: 全局汇总（所有功能模块分析完成后）
   └── Layer 4: 验证 → 测试 + 文档更新
 ```
 
+#### 全局分析路径路由与文档规范（v8.3.51+）
+
+**路径路由三层前缀支持**：
+
+全局分析生成的文档通过 `analyze --scope global --apply` 写入 `.speccore/GLOBAL/` 时，支持三种路径前缀：
+
+| 前缀 | 存放内容 | 示例 |
+|:---|:---|:---|
+| `platforms/{端}/` | 各端技术文档 | `platforms/admin-web/_INDEX.md` |
+| `requirements/` | 产品需求文档 | `requirements/REQUIREMENT.md`、`requirements/h5-mobile/REQUIREMENT.md` |
+| `overview/` | 全局技术文档 | `overview/ARCHITECTURE.md`、`overview/FUNCTION_MAP.md` |
+
+**路由规则**：
+- JSON 多文档写入和 `[DOC:xxx]` 标记解析两种输入格式，统一按前缀路由
+- `overview/` 前缀的文件直接写入 `GLOBAL/overview/`，不再被错误路由到 `platforms/overview/`
+- 无前缀的文件按白名单判断：全局技术文档入 `overview/`，需求文档入 `requirements/`
+
+**多前端项目需求独立成文规范（v8.3.52+）**：
+
+Layer 4 汇总 prompt 强制规则：
+- 系统包含多个前端项目（如 h5-mobile + admin-web）时，**必须**为每个前端项目独立生成需求文档
+- `requirements/REQUIREMENT.md` 总纲只保留全局业务视角（愿景/用户画像/场景地图/优先级矩阵）
+- **严禁**将前端项目的页面布局、交互流程、业务规则合并到总纲中
+- 前端需求独立存放：`requirements/h5-mobile/REQUIREMENT.md`、`requirements/admin-web/REQUIREMENT.md`
+
 ---
 
 ## 5. Skill + CLI 架构
@@ -1778,10 +2037,36 @@ Layer 4: 全局汇总（所有功能模块分析完成后）
 | 类型 | 示例 | 执行方式 |
 |:---|:---|:---|
 | **🔒 需 AI 参与** | `analyze --prompt`、`plan --prompt`、`execute --prompt` | 必须走 `[SPECCORE_EXEC]` 标签，AI 用 `execute_command` 执行 |
-| **✅ 纯 CLI** | `schedule`、`daemon`、`context`、`dashboard` | AI 执行或终端跑都行 |
+| **✅ 纯 CLI** | `context`、`dashboard` | AI 执行或终端跑都行 |
 | **✅ 查看/展示** | `about`、`welcome`、`ask` | AI 执行，用 `file://` 或 `present_files` 展示结果 |
 
 **🚫 绝不输出命令文本让用户复制**——那等于把 AI 踢出循环。
+
+#### CLI 启动稳定性：Heavy Dependency 动态导入（v8.3.51+）
+
+**问题**：`verify` 命令依赖 Playwright（含 native binary），`cli.ts` 顶部静态导入 `verifyCommand` 导致：
+- 即使执行 `analyze`、`status`、`dashboard` 等不依赖 Playwright 的命令，也会在 Node.js 16 环境下崩溃
+- Playwright 的 native binary 与部分 Node.js 版本不兼容
+
+**修复**：`verifyCommand` 改为动态导入：
+
+```typescript
+// cli.ts: 移除顶部静态导入
+// import { verifyCommand } from './commands/verify';  // ❌ 删除
+
+// 命令注册时使用动态导入
+program
+  .command('verify')
+  .action(async (options: any) => {
+    const { verifyCommand } = await import('./commands/verify');  // ✅ 按需加载
+    return verifyCommand(options);
+  });
+```
+
+**设计原则**：
+- 含 heavy native dependency 的命令，一律使用动态导入
+- CLI 初始化时只加载轻量级命令，确保启动速度和兼容性
+- 命令首次执行时才加载对应依赖，实现按需初始化
 
 ### 5.2 路由器 Skill
 
@@ -1802,7 +2087,7 @@ Layer 4: 全局汇总（所有功能模块分析完成后）
 | **explain** | 解释命令 | 知识库匹配 |
 | **guide** | 流程指引 | 工作流生成 |
 | **match** | 意图匹配 | 直接映射命令 |
-| **pipeline** | 复杂编排 | plan + schedule + execute |
+| **pipeline** | 复杂编排 | plan + execute |
 
 ### 5.4 意图合成（synthesizeIntent）
 
@@ -2016,6 +2301,76 @@ Layer 4: 全局汇总（所有功能模块分析完成后）
 | `cacheMinHits` | 缓存固化阈值 |
 | `forceHostAi` | 等价于命令行 `--rules` |
 
+### 5.8 全命令 Skill 覆盖（v8.3.60+）
+
+> **设计目标**：每个 CLI 命令都有对应的 `/命令 + 自然语言` 快捷入口，AI 窗口中一键触发。
+
+#### 两层路由架构
+
+```
+用户输入：/deploy 把当前功能发布到测试环境，只看 H5
+           │        └────────────────────────────────┘
+           │                      │
+           ▼                      ▼
+      精确匹配                 AI 语义分析
+     （触发 Skill）         （窄域意图识别）
+```
+
+**第一层：精确入口** — `/deploy`、`/verify`、`/build` 等斜杠命令精确匹配到对应 Skill，零误判。
+
+**第二层：语义分析** — Skill 内部由 AI 理解自然语言，提取参数：
+
+| 用户说法 | AI 理解 | 生成的命令 |
+|:---|:---|:---|
+| "部署到测试环境" | `pipeline --env test --all` | `speccore pipeline --env test --all` |
+| "发布到测试环境" | "发布"≈"部署" | `speccore pipeline --env test --all` |
+| "只看 H5" | `--platforms h5` | `speccore pipeline --env test --platforms h5` |
+| "预览一下" | `--dry-run` | `speccore pipeline --env test --all --dry-run` |
+
+#### Skill 清单（v8.3.60+）
+
+| Skill | 命令 | 自然语言示例 |
+|:---|:---|:---|
+| `spec-init` | `speccore init` | `/init 初始化项目` |
+| `spec-welcome` | `speccore welcome` | `/welcome 查看欢迎页` |
+| `spec-help` | `speccore help` | `/help 有哪些命令` |
+| `spec-dashboard` | `speccore dashboard` | `/dashboard 查看进度` |
+| `spec-doc2spec` | `speccore doc2spec` | `/doc2spec 导入需求文档` |
+| `spec-analyze` | `speccore analyze` | `/analyze 分析 Q1 迭代` |
+| `spec-split` | `speccore split` | `/split 拆分任务` |
+| `spec-plan` | `speccore plan` | `/plan 制定执行计划` |
+| `spec-execute` | `speccore execute` | `/execute 开发 Task-001` |
+| `spec-pr` | `speccore pr` | `/pr 提交代码` |
+| `spec-done` | `speccore done` | `/done 归档任务` |
+| `spec-spec2doc` | `speccore spec2doc` | `/spec2doc 导出规格` |
+| `spec-change` | `speccore change` | `/change 需求变更` |
+| `spec-validate` | `speccore validate` | `/validate 验证合规性` |
+| `spec-search` | `speccore search` | `/search 登录相关文档` |
+| `spec-track` | `speccore track` | `/track 追踪 REQ-001` |
+| `spec-sync` | `speccore sync` | `/sync 同步代码和 Spec` |
+| `spec-rename` | `speccore rename` | `/rename 把 Q1 改成 Q2` |
+| `spec-retro` | `speccore retro` | `/retro 复盘 Task-001` |
+| `spec-context` | `speccore context` | `/context 切换到 Q1` |
+| `spec-ops` | `speccore ops` | `/ops 查看操作历史` |
+| `spec-deploy` | `speccore pipeline` | `/deploy 部署到测试环境` |
+| `spec-verify` | `speccore verify` | `/verify 跑冒烟测试` |
+
+#### 与 `speccore ask` 的区别
+
+| 特性 | `/命令 + 自然语言` | `speccore ask` |
+|:---|:---|:---|
+| 入口 | `/deploy`、`/verify` 等精确命令 | 通用自然语言 |
+| 意图域 | 窄域（仅限该命令的参数） | 全命令域 |
+| 触发速度 | 立即（精确匹配） | 需意图识别 |
+| 适用场景 | 明确知道要做什么，但懒得打字 | 不确定该用哪个命令 |
+
+#### 设计原则
+
+1. **精确入口 + 语义理解**：`/命令` 精确路由到 Skill，后续自然语言由 AI 在窄域内解析
+2. **不影响 ask 能力**：Skill 只预处理参数，最终仍调用 `speccore ask` 执行
+3. **全命令覆盖**：26+ 个命令全部有 Skill，无一遗漏
+4. **双模式支持**：自然语言为主（最友好），显式参数为辅（最精确）
+
 ---
 
 ## 6. 全平台 AI 适配矩阵
@@ -2031,21 +2386,37 @@ Layer 4: 全局汇总（所有功能模块分析完成后）
 ├── .qoder/rules/          ← Qoder 规则
 │   └── speccore.md
 ├── .qoder/commands/       ← Qoder 斜杠命令（spec-*.md 格式）
-├── .agents/skills/        ← Skills 技能（14 个）
+├── .agents/skills/        ← Skills 技能（26+ 个，v8.3.60+ 全命令覆盖）
 │   ├── speccore-router/SKILL.md   ← 智能路由器
 │   ├── spec-ask/SKILL.md          ← Ask 引擎入口
 │   ├── spec-analyze/SKILL.md      ← 需求分析
 │   ├── spec-change/SKILL.md       ← 需求变更
+│   ├── spec-context/SKILL.md      ← 上下文切换
+│   ├── spec-dashboard/SKILL.md    ← 仪表盘
+│   ├── spec-deploy/SKILL.md       ← 部署流水线（build/deploy/pipeline）
 │   ├── spec-dev/SKILL.md          ← 开发流水线
 │   ├── spec-doc2spec/SKILL.md     ← 文档导入
+│   ├── spec-done/SKILL.md         ← 任务归档
 │   ├── spec-execute/SKILL.md      ← 任务执行
+│   ├── spec-help/SKILL.md         ← 帮助中心
+│   ├── spec-init/SKILL.md         ← 项目初始化
 │   ├── spec-iteration-create/SKILL.md ← 迭代创建
+│   ├── spec-ops/SKILL.md          ← 操作历史
 │   ├── spec-plan/SKILL.md         ← 计划生成
+│   ├── spec-pr/SKILL.md           ← PR 提交
 │   ├── spec-reindex/SKILL.md      ← 索引重建
+│   ├── spec-rename/SKILL.md       ← 重命名
+│   ├── spec-retro/SKILL.md        ← 回顾复盘
+│   ├── spec-search/SKILL.md       ← 全文搜索
 │   ├── spec-spec2doc/SKILL.md     ← 规格导出
 │   ├── spec-split/SKILL.md        ← 任务拆分
+│   ├── spec-sync/SKILL.md         ← 双向同步
 │   ├── spec-synthesize/SKILL.md   ← 多端综合
-│   └── spec-task-create/SKILL.md  ← 任务创建
+│   ├── spec-task-create/SKILL.md  ← 任务创建
+│   ├── spec-track/SKILL.md        ← 全链路追踪
+│   ├── spec-validate/SKILL.md     ← 合规验证
+│   ├── spec-verify/SKILL.md       ← 测试验证
+│   └── spec-welcome/SKILL.md      ← 欢迎页
 ├── .claude/commands/      ← Claude Code 斜杠命令
 ├── .codebuddy/commands/   ← CodeBuddy 斜杠命令
 ├── .trae/commands/        ← TRAE 斜杠命令
@@ -2137,46 +2508,50 @@ h1, h2 {
 
 ---
 
-## 7. 调度与守护进程
+## 7. 守护进程清理（v8.3.60+）
 
-调度和守护是 SpecCore CLI 自身的 TypeScript 功能，与宿主 AI 无关。
+> ⚠️ `schedule` 和 `watch` 命令已在 v8.3.60 彻底移除。定时调度由 WorkBuddy Automations 替代，文件监听由宿主 IDE 原生支持替代。
 
-### 7.1 调度生命周期
+### 7.1 自动清理机制
+
+`speccore update` 升级时自动检测并终止遗留守护进程：
 
 ```
-speccore schedule create --at "20:00" --all
-  → 写入 .speccore/local/schedule.json
-  → 自动安装系统守护 + 启动 daemon（懒启动）
-
-speccore schedule daemon start
-  → 启动 Node.js 守护进程（幂等，已运行则跳过）
-
-speccore schedule retry --id <id> [--at "新时间"]
-  → 重新调度失败/未触发的任务
-
-speccore schedule cancel --id <id>
-  → 取消调度；pending=0 → 自动停 daemon（懒停止）
-
-到点: daemon → speccore execute → CLI 执行（🔒 AI 命令，通过 Prompt/Apply 循环触发）
+speccore update
+  → 检测 speccore.*schedule / speccore.*daemon / speccore.*watch 进程
+  → macOS/Linux: SIGTERM → 500ms → SIGKILL
+  → Windows: taskkill /F
+  → 清理 .speccore/local/schedule.json
+  → 继续升级流程
 ```
 
-### 7.2 跨平台守护
+### 7.2 跨平台残留检测
 
-| 平台 | 机制 | 触发 |
+| 平台 | 检测方式 | 终止方式 |
 |:---|:---|:---|
-| macOS | LaunchAgent (`~/Library/LaunchAgents/`) | RunAtLoad + KeepAlive |
-| Linux | crontab | 每 5 分钟 |
-| Windows | Task Scheduler (`schtasks`) | 每 5 分钟 |
+| macOS | `ps aux` + `grep` | `kill` → `kill -9` |
+| Linux | `ps aux` + `grep` | `kill` → `kill -9` |
+| Windows | `wmic process` | `taskkill /F /PID` |
 
-- `init` / `init --update` 自动安装
-- `schedule create` 自动重装到当前项目目录
-- daemon 用 `daemonPid` 记录防多开
+### 7.3 手动清理
 
-### 7.3 懒启动/懒停止
+如 `speccore update` 无法清理（如 speccore 本身损坏）：
 
-- 创建调度 → 自动启动 daemon
-- daemon 每 30s 轮询 → 无 pending 任务 → 自动 exit(0)
-- 零空闲资源消耗
+**macOS/Linux：**
+```bash
+pkill -f "speccore.*schedule"
+pkill -f "speccore.*daemon"
+pkill -f "speccore.*watch"
+```
+
+**Windows（PowerShell 管理员）：**
+```powershell
+Get-WmiObject Win32_Process | Where-Object {
+  $_.CommandLine -like "*speccore*schedule*" -or
+  $_.CommandLine -like "*speccore*daemon*" -or
+  $_.CommandLine -like "*speccore*watch*"
+} | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+```
 
 ---
 
@@ -2189,6 +2564,23 @@ speccore schedule cancel --id <id>
 | 目录 | 3位数字步长10英文 | `000-overview` `010-requirements` |
 | 需求端 | 小写英文 | `app` `h5` `miniapp` `admin` |
 | 分支 | `feature/Task-{ID}` | CONSTITUTION 定义 |
+
+#### CLI 命令命名规范（v8.3.54+）
+
+**命令名**：全拼英文单词，语义清晰
+**别名**：2-3 字母缩写，便于快速输入
+
+| 命令 | 别名 | 说明 |
+|:---|:---|:---|
+| `doctor` | `dr` | 项目健康度诊断 |
+| `dashboard` | `db` | 项目仪表盘 |
+| `history` | `hi` | 历史记录（操作日志 + 需求变更） |
+| `status` | `st` | 状态面板 |
+
+**命名原则**：
+- 主命令使用完整英文单词，避免缩写（如 `history` 而非 `ops`）
+- 别名使用业界通用缩写（`dr`、`db`、`hi`、`st`）
+- 同一命令的多个功能通过参数区分（如 `history` 默认显示操作日志，`--req` 查看需求历史）
 
 ---
 
@@ -2257,8 +2649,15 @@ speccore schedule cancel --id <id>
 | v6.91.1 | 08-20 | 流程修复：analyze 图谱注入修复 + PipelineEngine 状态同步 + dev.ts plan 跳过检查 + 僵尸选项清理 |
 | v7.0.0 | 08-21 | 统一图谱查询 `speccore graph` + 语义级节点标签提取 + 知识图谱↔RAG 索引联动 |
 | v7.1.0 | 08-21 | LLM 语义增强查询（语义扩展+语义排序）+ Mermaid 图表渲染 `graph render` + 全局分析产物图表化（Layer 2/3/4 强制图表要求）+ Ask 意图完善 |
+| v8.3.47 | 09-04 | UI 质量门禁：三层使用模式、四层验证能力、Playwright 冒烟测试 |
+| v8.3.50 | 09-04 | 视觉模型可配置切换：Qwen-VL(默认)/OpenAI/Anthropic/本地模型，四层配置优先级 |
+| v8.3.51 | 09-04 | 健壮性修复：analyze.ts overview 路径路由错误修复 + Playwright 动态导入避免 CLI 启动崩溃 |
+| v8.3.52 | 09-04 | Prompt 规范增强：Layer 4 强制规则，多前端项目需求必须独立成文 |
+| v8.3.53 | 09-04 | 健壮性综合修复包：汇总 v8.3.51 + v8.3.52 全部修复 |
+| v8.3.54 | 09-04 | CLI 命令命名规范化：`ops` → `history`，统一全拼+缩写规范；history 合并操作日志+需求变更历史 |
+| v8.3.60 | 09-07 | 环境驱动部署流水线：`pipeline --env` 自动读取环境配置 branch，自动 merge 当前分支 → build → deploy；五层环境模型（local/dev/test/staging/production）；全命令 Skill 覆盖（26+ 个 `/命令 + 自然语言` 快捷入口）；`verify --env-file` 支持环境配置合并测试参数 |
 
-> **最后更新**: 2026-08-21 (v7.1.0) — LLM 语义查询 + 图表丰富化 + 统一图谱查询
+> **最后更新**: 2026-09-07 (v8.3.60) — 环境驱动部署 + 全命令 Skill 覆盖
 
 ---
 ## 10. 可执行编排引擎（spec-ask v4）
@@ -2469,7 +2868,9 @@ CLI 只做确定性操作，不做内容生成。
 
 ## 13. 定时调度机制
 
-### 13.1 两层调度架构
+### 13.1 自动化调度架构（v8.3.60+）
+
+> ⚠️ `speccore schedule` 和 `speccore watch` 命令已在 v8.3.60 彻底移除。定时调度由 WorkBuddy Automations 替代，文件监听由宿主 IDE 原生支持替代。
 
 ```
 ┌──────────────────────────────────────────┐
@@ -2480,14 +2881,7 @@ CLI 只做确定性操作，不做内容生成。
                │ 触发
                ▼
 ┌──────────────────────────────────────────┐
-│  Layer 2: SpecCore schedule CLI (项目)   │
-│  speccore schedule create/list/daemon     │
-│  例: 创建"夜间批量执行"计划               │
-└──────────────┬───────────────────────────┘
-               │ 调度
-               ▼
-┌──────────────────────────────────────────┐
-│  Layer 3: spec-dev Skill                 │
+│  Layer 2: spec-dev Skill                 │
 │  检测当前阶段 → 拼命令 → 执行              │
 └──────────────────────────────────────────┘
 ```
@@ -2508,13 +2902,14 @@ CLI 只做确定性操作，不做内容生成。
 5. CLI 走 Prompt/Apply 协作循环完成开发
 ```
 
-### 13.3 CLI schedule 命令
+### 13.3 历史说明
 
-```
-speccore schedule create --name "夜间批量" --at "20:00" --batch-size 3
-speccore schedule list
-speccore schedule daemon  # 持续运行，等待时间触发
-```
+`schedule` 和 `watch` 命令在 v8.3.60 之前存在，用于：
+- `schedule create` — 创建定时执行计划
+- `schedule daemon` — 启动 Node.js 守护进程轮询触发
+- `watch` — 监听文件变更自动执行 validate
+
+由于守护进程模式在跨平台环境（尤其是 Windows）下存在稳定性问题，且与宿主 IDE 的文件监听功能重复，v8.3.60 彻底移除。遗留守护进程会在 `speccore update` 时自动检测并终止。
 
 ---
 

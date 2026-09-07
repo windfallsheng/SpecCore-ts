@@ -18,7 +18,6 @@ export interface TaskNewOptions {
   batch?: string;
   batchFile?: string;
   interactive?: boolean;
-  schedule?: string;
 }
 
 export async function taskNewCommand(options: TaskNewOptions): Promise<void> {
@@ -91,7 +90,6 @@ async function batchCreateTasks(options: TaskNewOptions): Promise<void> {
   }
 
   const type = options.type || 'bugfix';
-  const schedule = options.schedule || 'now';
   let created = 0;
 
   for (const item of items) {
@@ -103,7 +101,6 @@ async function batchCreateTasks(options: TaskNewOptions): Promise<void> {
         name: trimmed.slice(0, 60),
         desc: trimmed,
         type,
-        schedule,
       });
       created++;
     } catch (e: any) {
@@ -146,7 +143,7 @@ async function createSingleTask(options: TaskNewOptions): Promise<void> {
 
     // Create directories — 三级嵌套目录结构
     const today = new Date().toISOString().split('T')[0];
-    const status = options.schedule === 'night' ? 'queue' : 'todo';
+    const status = 'todo';
     await ensureDir(join(taskDir, '.meta'));
     await ensureDir(join(taskDir, '00-specs'));
     await ensureDir(join(taskDir, '_shared'));  // 共享契约（API_CONTRACT.yaml 等）

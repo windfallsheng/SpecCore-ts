@@ -12,11 +12,17 @@ export async function aboutCommand(): Promise<void> {
     { icon: '🔍', title: '统一检索层', desc: '文档 RAG + 代码切片 + 知识图谱三源合一' },
     { icon: '🔄', title: '文档驱动', desc: 'Word/Excel/CSV → Spec 双向转换' },
     { icon: '📚', title: '全局知识沉淀', desc: 'sync --global 自动聚合 specs 到全局索引' },
-    { icon: '🤖', title: 'Skill 体系', desc: 'OpenSpec 标准，AI 自动路由' },
+    { icon: '🤖', title: 'Skill 体系', desc: '26+ 命令全 Skill 覆盖，/命令 + 自然语言' },
+    { icon: '🚀', title: '环境驱动部署', desc: 'pipeline --env 自动 merge → build → deploy' },
+    { icon: '🧪', title: '配置驱动测试', desc: 'verify --config 多环境/多页面批量测试' },
   ];
 
   // 近期亮点
   const highlights = [
+    '环境驱动部署 — pipeline --env 自动读取环境配置 branch，merge → build → deploy',
+    '五层环境模型 — local / dev / test / staging / production，支持任意数量自定义环境',
+    '全命令 Skill 覆盖 — 26+ 命令均有 /命令 + 自然语言 快捷入口',
+    '配置驱动测试 — verify --config 加载测试场景，--env-file 合并环境配置',
     '统一检索层 — 文档 RAG + 代码切片 + 知识图谱，一次查询三源合并',
     'RAG 轻量级检索 — 按标题分块 + 结构化摘要 + 关键词标签，无向量数据库',
     '全局知识沉淀 — sync --global 后自动聚合 specs，生成 GLOBAL/SUMMARY.md',
@@ -31,6 +37,7 @@ export async function aboutCommand(): Promise<void> {
 
   // 重要里程碑版本
   const milestones = [
+    { v: '8.3', date: '2026-09', desc: '环境驱动部署 + 全命令 Skill 覆盖 + 配置驱动测试' },
     { v: '6.8', date: '2026-08', desc: '统一检索层 + RAG 检索 + 全局知识沉淀' },
     { v: '6.5', date: '2026-08', desc: '知识图谱 + 衰减检测 + AI 关联链注入' },
     { v: '5.27', date: '2026-07', desc: 'Ask 四模式 + Skill 体系' },
@@ -123,7 +130,7 @@ ${milestonesHtml}
 <h2>📚 文档 & 指南</h2>
 <a class="link" href="https://github.com/windfallsheng/SpecCore-ts/blob/main/README.md" target="_blank"><strong>📖 README</strong><span>项目说明 · 安装 · 核心概念 · 工作流</span></a>
 <a class="link" href="https://github.com/windfallsheng/SpecCore-ts/blob/main/docs/总览.md" target="_blank"><strong>🔭 总览</strong><span>核心概念 · 工作流 · 三种使用方式</span></a>
-<a class="link" href="https://github.com/windfallsheng/SpecCore-ts/blob/main/docs/命令参考.md" target="_blank"><strong>📋 命令参考</strong><span>全部 20 命令 · 子命令 · 示例</span></a>
+<a class="link" href="https://github.com/windfallsheng/SpecCore-ts/blob/main/docs/命令参考.md" target="_blank"><strong>📋 命令参考</strong><span>全部 26+ 命令 · 子命令 · 示例</span></a>
 <a class="link" href="https://github.com/windfallsheng/SpecCore-ts/blob/main/docs/场景实战.md" target="_blank"><strong>🎯 场景实战</strong><span>35 个真实开发场景</span></a>
 <a class="link" href="https://github.com/windfallsheng/SpecCore-ts/blob/main/docs/SDD方法论.md" target="_blank"><strong>💡 SDD 方法论</strong><span>规范驱动开发理念</span></a>
 <a class="link" href="https://github.com/windfallsheng/SpecCore-ts/blob/main/docs/工作空间组织.md" target="_blank"><strong>📁 工作空间</strong><span>目录结构与文件规范</span></a>

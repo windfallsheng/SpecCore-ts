@@ -1,0 +1,49 @@
+# PR 阶段测试配置（v8.3.60+）
+# 目标：验证"代码质量 + 核心功能 + API 契约"
+# 适用：合并请求前、Code Review 后
+# 执行：speccore verify --config .speccore/tests/pr.yaml --env-file staging
+
+name: PR 阶段测试
+
+target:
+  base_url: https://staging.example.com
+
+# 端点映射（会被环境配置中的 base_urls 合并覆盖）
+endpoints:
+  h5: https://staging.example.com/h5
+  admin: https://admin-staging.example.com
+  api: https://api-staging.example.com
+
+# 测试场景：关键页面 + API 契约
+tests:
+  - name: 关键页面冒烟
+    type: smoke
+    routes:
+      - /
+      - /login
+      - /dashboard
+      - /orders
+    devices: [desktop, mobile]
+    threshold: normal
+
+  - name: 登录流程-视觉检查
+    type: visual
+    routes: [/login]
+    threshold: normal
+
+  - name: API 契约验证
+    type: api
+    scenarios:
+      - 用户登录
+      - 获取订单列表
+      - 创建订单
+    threshold: normal
+
+# 视觉模型配置
+visual_model:
+  provider: qwen-vl
+  model: qwen-vl-max
+  timeout: 30000
+
+# 输出配置
+output: ./reports/pr-test-report.html

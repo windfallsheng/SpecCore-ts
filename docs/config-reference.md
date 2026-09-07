@@ -20,6 +20,9 @@
    - 4.8 [settings](#48-settings)
    - 4.9 [ask](#49-ask)
    - 4.10 [config_history](#410-config_history)
+   - 4.11 [tests](#411-tests)
+   - 4.12 [stages](#412-stages)
+   - 4.13 [pipeline.test](#413-pipelinetest)
 5. [枚举值参考](#5-枚举值参考)
 6. [配置升级指南](#6-配置升级指南)
 7. [版本变更历史](#7-版本变更历史)
@@ -648,6 +651,95 @@ ask:
 | `changed_by` | `string` | 变更人（可选） |
 
 > 此字段无需手动编辑，运行 `speccore config --upgrade` 时自动追加记录。
+
+---
+
+### 3.15 tests
+
+**类型**：`object`
+
+**说明**：测试基础设施配置，与 `speccore verify` 和 `speccore pipeline` 联动。定义测试基地址和视觉模型参数。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `base_urls` | `object` | 各端测试基地址，键为端名，值为 URL |
+| `visual_model` | `object` | 视觉模型配置（provider, model, apiKey, endpoint, timeout） |
+
+**示例**：
+```yaml
+tests:
+  base_urls:
+    h5: https://staging.example.com/h5
+    admin: https://admin-staging.example.com
+    api: https://api-staging.example.com
+  visual_model:
+    provider: qwen-vl
+    model: qwen-vl-max
+    timeout: 60000
+```
+
+---
+
+### 3.16 stages
+
+**类型**：`object`
+
+**说明**：分层测试阶段配置，与 `speccore verify --stage <stage>` 联动。不同阶段自动加载对应的测试场景配置文件。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `dev` | `object` | 开发阶段配置 |
+| `pr` | `object` | PR 阶段配置 |
+| `deploy` | `object` | 部署阶段配置 |
+| `release` | `object` | 发布阶段配置 |
+
+每个阶段支持：
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `config` | `string \| null` | 测试场景配置文件路径，`null` 表示使用内置代码质量验证 |
+
+**示例**：
+```yaml
+stages:
+  dev:
+    config: null
+  pr:
+    config: .speccore/tests/pr.yaml
+  deploy:
+    config: .speccore/tests/smoke.yaml
+  release:
+    config: .speccore/tests/release.yaml
+```
+
+---
+
+### 3.17 pipeline.test
+
+**类型**：`object`
+
+**说明**：Pipeline 内置测试节点配置。在 build 之后、deploy 之前/之后执行测试，失败按严重程度决定是否阻断部署。
+
+| 字段 | 类型 | 默认值 | 可选值 | 说明 |
+|------|------|--------|--------|------|
+| `enabled` | `boolean` | `false` | — | 是否启用 Pipeline 内置测试 |
+| `type` | `enum` | `build-check` | `build-check` / `smoke` / `visual` / `api` / `all` | 测试类型 |
+| `stage` | `enum` | `pre-deploy` | `pre-deploy` / `post-deploy` / `both` | 测试时机 |
+| `config` | `string` | — | — | 自定义测试场景配置文件路径 |
+| `fail_on_error` | `boolean` | `true` | — | 测试失败是否阻断 deploy |
+| `auto_fix` | `boolean` | `true` | — | 测试失败时是否输出 AI 自动修复标记 |
+| `max_retries` | `number` | `3` | — | 自动修复最大重试次数 |
+
+**示例**：
+```yaml
+pipeline:
+  test:
+    enabled: true
+    type: smoke
+    stage: pre-deploy
+    fail_on_error: true
+    auto_fix: true
+    max_retries: 3
+```
 
 ---
 

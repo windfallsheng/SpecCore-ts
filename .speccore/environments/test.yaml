@@ -1,0 +1,55 @@
+# =============================================================================
+# SpecCore 环境配置 — test（测试环境 / QA / SIT）
+# =============================================================================
+# 用途：QA 测试、自动化测试、Bug 回归验证
+# 与 staging 的区别：test 用于功能验证，staging 用于上线前最终验收
+# 典型工作流：
+#   speccore pipeline --env test --all
+#   speccore verify --env test --config ./tests/regression.yaml
+# =============================================================================
+
+env: test
+
+# 该环境对应的 Git 分支
+# 通常由 develop 合并而来，或专门维护一个 test/release 分支
+branch: release/test
+
+# 全局默认值
+defaults:
+  build_cmd: npm run build:test
+
+# 按端覆盖配置
+platforms:
+  h5:
+    build_cmd: npm run build:test
+    deploy:
+      type: static
+      output_dir: dist
+      target: s3://mybucket-test/h5/
+
+  admin-web:
+    build_cmd: npm run build:test
+    deploy:
+      type: static
+      output_dir: dist
+      target: s3://mybucket-test/admin/
+
+  order-api:
+    build_cmd: ./mvnw package -DskipTests -Ptest
+    deploy:
+      type: docker
+      registry: registry.example.com/myapp-test
+      image: order-service
+      tag: test
+
+# 测试相关配置（与 verify --config 联动）
+tests:
+  base_urls:
+    h5: https://test.example.com/h5
+    admin: https://test.example.com/admin
+    order-api: https://api-test.example.com
+
+  visual_model:
+    provider: qwen-vl
+    model: qwen-vl-max
+    timeout: 60000

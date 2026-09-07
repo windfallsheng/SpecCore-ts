@@ -121,7 +121,7 @@ speccore validate --iteration=Q1               # 检查合规
 speccore rename --target=Task-001 --new-name=用户认证
 speccore ops                                    # 操作历史
 speccore dashboard                              # 可视化看板
-speccore task new --batch-file=bugs.xlsx --type=bugfix --schedule=night --interactive
+speccore task new --batch-file=bugs.xlsx --type=bugfix --interactive
 
 # ── 🔒 AI 命令（在 AI IDE 中使用 @spec-ask）──
 @spec-ask "把手机号改成国际格式"              # 需求变更
@@ -144,7 +144,6 @@ speccore init                          # 初始化
 speccore iteration create -n Q1        # 创建迭代
 speccore task new -n 用户登录           # 手动创建 Task
 speccore task new --batch-file=bugs.xlsx --type=bugfix --interactive  # 批量Bug
-speccore task new --batch-file=bugs.xlsx --type=bugfix --schedule=night # 夜间执行
 
 # ── 查看 ──
 speccore dashboard                  # 终端状态面板
@@ -192,21 +191,6 @@ speccore help --examples               # 完整场景示例
 │       ├── 00-specs/        # 核心规格
 │       ├── 10-backend/{服务}/{子任务}/
 │       └── 20-frontend/{平台}/{子任务}/
-```
-
-## ⏰️ 调度执行 [已废弃]
-
-> ℹ️️ 定时调度已由 WorkBuddy Automations 替代。请使用 WorkBuddy 的自动化工作流实现定时任务。
-
-### 批量标记 + 手动触发（轻量方式）
-
-`--schedule=night` 标记任务，通过 AI 命令或手动触发执行。
-
-```bash
-speccore task new -n "修复登录超时" --type=bugfix --schedule=night
-speccore task new --batch-file=bugs.xlsx --type=bugfix --schedule=night
-
-# 🔒 AI: @spec-ask "执行所有 scheduled 任务"
 ```
 
 ## 下一步

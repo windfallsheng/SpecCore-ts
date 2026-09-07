@@ -2,6 +2,369 @@
 
 ---
 
+## v8.3.60 (2026-09-07) — Environment-Driven Deployment + Full Command Skill Coverage
+
+### Added
+
+**Environment-Driven Deployment Pipeline (v8.3.60)**:
+- `speccore pipeline --env <env>`: Environment-driven pipeline, auto-reads `branch` from env config
+- Execution flow: get current branch → checkout target → pull → merge → build → deploy
+- Five-tier environment model: `local` → `dev` → `test` → `staging` → `production`
+- Support arbitrary custom environments: copy `.speccore/environments/*.yaml` and modify
+- `local` environment has no branch config, allowing any branch for local deployment
+- Failures don't block: failed platform continues with others, unified report at the end
+- `--dry-run` preview mode: shows full flow without actual execution
+- Branch rollback hint: after pipeline, prompts user about current branch
+
+**Environment Config System (v8.3.60)**:
+- `.speccore/environments/*.yaml`: Folder-based environment configuration management
+- Config override priority: env file > PROJECT.yaml > defaults
+- `branch` field: specifies the Git target branch for this environment
+- `defaults.build_cmd`: global default build command
+- `platforms.{platform}.build_cmd`: per-platform build command override
+- `platforms.{platform}.deploy`: per-platform deploy config override
+- `tests.base_urls`: test base URLs (linked with verify --config)
+- `tests.visual_model`: visual model config (linked with verify --config)
+- `speccore update` auto-initializes default environment configs (5 environments)
+
+**Full Command Skill Coverage (v8.3.60)**:
+- 26+ CLI commands all equipped with dedicated Skills
+- `/command + natural language` quick entry: `/deploy to test env`, `/verify run smoke test`
+- Two-layer routing: precise entry (/command) + AI semantic analysis (narrow-domain intent)
+- Dual-mode support: natural language (friendliest), explicit params (most precise)
+- New Skills: `spec-init`, `spec-validate`, `spec-search`, `spec-track`, `spec-sync`, `spec-rename`, `spec-retro`, `spec-context`, `spec-ops`, `spec-deploy`, `spec-verify`
+- Does not affect `speccore ask` general intent recognition
+
+**Config-Driven Test Enhancement (v8.3.60)**:
+- `verify --config <path> --env-file <env>`: test scenarios linked with environment config
+- `loadEnvironmentByNameOrPath()`: supports loading by env name or file path
+- `mergeTestConfigWithEnv()`: auto-merges test config with environment config
+
+### Improved
+
+- `pipeline.ts` rewrite: from command-driven (--from/--to) to environment-driven (--env)
+- `build.ts` / `deploy.ts`: support `--env` and `--env-file` to read environment config
+- `verify.ts`: `--env-file` supports env name (e.g. `test`) or file path
+- `environment-config.ts`: added `branch` field, parser supports reading branch
+- `loadProjectConfigWithEnv()`: supports overlaying environment config onto project config
+- `update-env-configs.ts`: auto-initializes/upgrades environment configs on update
+- `init.ts`: `TOOL_COMMANDS` registers spec-deploy and spec-verify
+- `about.ts`: updated features and milestones, added env-driven deployment and full Skill coverage
+
+### Documentation
+
+- `DESIGN.md`: added environment-driven deployment pipeline chapter, full command Skill coverage chapter
+- `command-reference.md`: added deployment commands (pipeline/build/deploy) and test command (verify) docs
+- `README.md`: added environment-driven deployment section, updated command list (20 → 26+)
+
+---
+
+## v8.3.59 (2026-09-04) — Project Config for Persistent Router File Path
+
+### Added
+
+- `.speccore/PROJECT.yaml` now supports `verify.router_file` config
+- Config priority: `CLI --router-file` > `PROJECT.yaml verify.router_file` > auto-discovery
+- Once configured, `speccore verify --discover-routes` automatically reads it without repeated specification
+
+### Improved
+
+- `ProjectConfig` interface extended with `verify` field
+
+---
+
+## v8.3.58 (2026-09-04) — Explicit Router File Path Support
+
+### Added
+
+- `--router-file <path>`: Explicitly specify the frontend router config file path, overriding auto-discovery
+- Supports relative paths (based on project root) and absolute paths
+- Shows clear warning when the specified path does not exist
+
+### Improved
+
+- `scanRoutes()` signature extended to `scanRoutes(projectRoot, options)` with `ScanRoutesOptions` support
+
+---
+
+## v8.3.57 (2026-09-04) — Frontend Route Auto-Discovery + Module Filter + Node.js 20 Upgrade
+
+### Added
+
+**Frontend Route Auto-Discovery (v8.3.57)**:
+- `--discover-routes`: Auto-scan Vue Router / React Router config, extract route list
+- `--discover-pages`: Auto-scan `src/views/`, `src/pages/`, `src/screens/` directory structure
+- `--generate-spec`: Auto-generate `VERIFY_SPEC.yaml` from scan results
+- Supports nested route parsing, dynamic route recognition, module auto-inference
+
+**Module/Page Filter (v8.3.57)**:
+- `--module <modules>`: Filter by module name (comma-separated, e.g. `booking,user`)
+- `--page <pages>`: Filter by page path (comma-separated, e.g. `/login,/dashboard`)
+- `--scenario <names>`: Filter by scenario name
+- Supports fuzzy matching, shows summary after filter (X/Y scenarios)
+
+### Improved
+
+- **Node.js version upgrade**: Recommend Node.js v18+, verified v20.20.2 compatibility
+
+---
+
+## v8.3.56 (2026-09-04) — Prompt Fix: PATTERNS Proliferation + Requirement Doc Separation
+
+### Fixed
+
+**Global Analysis Prompt Fix (v8.3.56)**:
+- **PATTERNS generation tightened**: changed from "must generate" to "optional, only generate when truly unique and reusable patterns are found"
+- **Forbidden generic templates**: JWT auth, Redis cache, Axios interceptors, scheduled tasks and other framework/library standard usages no longer generate PATTERNS
+- **Forbidden document references to PATTERNS**: all platforms/, overview/, requirements/ technical documents strictly prohibited from adding "Related Documents" blocks linking to PATTERNS
+- **PATTERNS stored independently**: written to `.speccore/PATTERNS/`, not under `GLOBAL/`, no need to be referenced by other documents
+
+**Multi-Frontend Requirement Independent Document Rule Strengthened (v8.3.56)**:
+- Added self-check mechanism: before output, verify requirements/ only has overview but missing {frontend}/REQUIREMENT.md
+- Clear overview word limit: ≤ 3000 words, no frontend page/interaction/component details
+- Clear frontend requirement document size: each ≥ 500 lines
+
+---
+
+## v8.3.55 (2026-09-04) — Documentation Sync & Architecture Design Updates
+
+### Improved
+
+**Design Documentation (v8.3.55)**:
+- `docs/DESIGN.md`: Added "Global Analysis Path Routing & Document Spec (v8.3.51+)" section
+- `docs/DESIGN.md`: Added "CLI Startup Stability: Heavy Dependency Dynamic Import (v8.3.51+)" section
+- `docs/DESIGN.md`: Added "CLI Command Naming Convention (v8.3.54+)" section
+- Version history updated to v8.3.54
+
+**Documentation Sync (v8.3.55)**:
+- `README.md` command list: `ops` → `history`
+
+---
+
+## v8.3.54 (2026-09-04) — CLI Command Naming Standardization
+
+### Improved
+
+**Command Naming Standardization (v8.3.54)**:
+- Renamed `ops` / `op` command to `history` / `hi`, aligning with "full-name + abbreviation" convention
+- `history` displays operation logs by default (formerly `ops`)
+- `history --req <REQ-XXX>` views requirement change history
+- Merged both history-related functions under a single command for clearer semantics
+
+---
+
+## v8.3.53 (2026-09-04) — Robustness Comprehensive Fix Pack
+
+### Fixed
+
+**analyze.ts Path Routing Fix (v8.3.51)**:
+- `[DOC:xxx]` marker parsing branch missed `overview/` prefix support, causing `overview/ARCHITECTURE.md` to be incorrectly routed to `platforms/overview/`
+- Unified both global document write paths: JSON multi-doc write + `[DOC:xxx]` marker parsing now support `platforms/` / `requirements/` / `overview/` prefixes
+
+**CLI Startup Stability (v8.3.51)**:
+- `verifyCommand` changed to dynamic import, preventing Playwright from loading during CLI initialization
+- Fixed crash on Node.js 16 where commands like `analyze`/`status`/`dashboard` would fail
+
+### Improved
+
+**Global Analysis Prompt Enhancement (v8.3.52)**:
+- Added mandatory rule in Layer 4 prompt: must generate independent requirement documents for each frontend project when multiple exist
+- Clear separation: overview only keeps global business perspective, strictly forbidden to include frontend page/interaction details
+
+---
+
+## v8.3.52 (2026-09-04) — Prompt Spec Enhancement: Multi-Frontend Requirement Docs
+
+### Improved
+
+**Global Analysis Prompt Enhancement (v8.3.52)**:
+- Added mandatory rule in Layer 4 prompt: if system contains multiple frontend projects (e.g., h5-mobile + admin-web), **must** generate independent requirement documents for each frontend project
+- Clear separation: `requirements/REQUIREMENT.md` overview only keeps global business perspective (vision/scenarios/priorities), **strictly forbidden** to include any frontend page/interaction details
+- Frontend project requirements stored independently as `requirements/{frontend}/REQUIREMENT.md`, ensuring product perspective is not compressed/merged
+
+---
+
+## v8.3.51 (2026-09-04) — Robustness Fixes
+
+### Fixed
+
+**analyze.ts Path Routing Fix (v8.3.51)**:
+- `[DOC:xxx]` marker parsing branch missed `overview/` prefix support, causing `overview/ARCHITECTURE.md` to be incorrectly routed to `platforms/overview/`
+- Unified both global document write paths: `JSON multi-doc write` and `[DOC:xxx] marker parsing` now support `platforms/` / `requirements/` / `overview/` prefixes
+
+**CLI Startup Stability (v8.3.51)**:
+- `verifyCommand` changed to dynamic import (`await import('./commands/verify')`), preventing Playwright from loading during CLI initialization
+- Fixed crash on Node.js 16 where commands like `analyze`/`status`/`dashboard` (which don't need Playwright) would fail
+
+---
+
+## v8.3.50 (2026-09-04) — Visual Model Configurable Switching
+
+### New
+
+**Visual Model Configuration System (v8.3.50)**:
+- `quality_gates.verify_ui.visual_model` config: declare visual model in `.speccore.yml`
+- Four-layer config priority: CLI `--visual-model` → task-level `quality-gate.yaml` → project-level `.speccore.yml` → default `qwen-vl`
+- Default provider: **Qwen-VL** (Alibaba Cloud DashScope, direct access in China)
+- Supported providers: `qwen-vl` | `openai` | `anthropic` | `local`
+- Config fields: `provider` / `model` / `apiKey` / `endpoint` / `timeout`
+
+**CLI Parameter Extension**:
+- `--visual-model <model>`: specify visual model via CLI
+  - Short string: `--visual-model=qwen-vl` / `--visual-model=local`
+  - JSON config object: `--visual-model='{"provider":"local","endpoint":"http://localhost:8000/v1"}'`
+
+### Configuration Example
+
+```yaml
+# .speccore.yml
+quality_gates:
+  verify_ui:
+    enabled: true
+    visual_model:
+      provider: qwen-vl      # default, direct access in China
+      model: qwen-vl-max
+      # apiKey: ${DASHSCOPE_API_KEY}  # optional, reads env var by default
+```
+
+---
+
+## v8.3.49 (2026-09-04) — Quality Gates + API Contract Test + Performance Baseline
+
+### New
+
+**Quality Gate Configuration System (v8.3.49)**:
+- Three-layer config merge: project-level (`.speccore.yml`) → task-level (`Task/.meta/quality-gate.yaml`) → CLI flags
+- `quality_gates.verify_ui` config: controls UI verification enable/disable, threshold, devices, browsers
+- Default: `verify_ui.enabled=false`, new projects won't accidentally trigger
+
+**execute/pr Command Integration (v8.3.49)**:
+- `speccore execute`: auto-runs UI verification after task execution (if quality gate enabled)
+- `speccore pr`: checks UI verification status before commit, strict mode blocks submission
+- Interactive mode prompts user confirmation; force/response mode returns error code 12
+
+**API Contract Testing (v8.3.49)**:
+- `speccore verify -t Task-001 --api-contract` executes API contract tests
+- Reads `API_CONTRACT.yaml`, supports multi-endpoint, multi-assertion
+- Assertion types: status, jsonPath, header, body (contains/exists/equals/gt/lt/regex)
+- Report saved as `99-artifacts/api-verify-report.json`
+
+**Performance Baseline Testing (v8.3.49)**:
+- `speccore verify -t Task-001 --perf` executes performance baseline tests
+- Reads `PERF_SPEC.yaml`, supports `command` (execution time) and `size` (bundle size) metrics
+- Auto-save/update baselines, supports regression percentage threshold (`regression: 10` = 10% slower allowed)
+- `--update-perf-baseline` to force baseline update
+
+### CLI Parameter Extension
+
+- `--api-contract`: execute API contract test
+- `--perf`: execute performance baseline test
+- `--update-perf-baseline`: update performance baseline
+
+---
+
+## v8.3.48 (2026-09-04) — Three-Tier Usage Model + Single-Image Quality Scan
+
+### New
+
+**Three-Tier Usage Model (v8.3.48)**:
+
+| Mode | Command Example | Scenario |
+|:---|:---|:---|
+| **Independent** | `speccore verify --ui --url=https://example.com --spec=./test.yaml` | Any system acceptance, zero barrier |
+| **Project-Independent** | `speccore verify --ui` (in project root, auto-finds `tests/VERIFY_SPEC.yaml`) | Project-level regression, no task binding |
+| **Task-Bound** | `speccore verify -t Task-001 --ui` | Spec-driven dev, tests as acceptance criteria |
+
+**Single-Image Quality Scan (v8.3.48)**:
+- When no baseline exists, visual model performs generic UI quality check on single screenshot
+- Detection capabilities: white/gray screen, layout breakage, text overlap/truncation, image load failure, UI anomalies (popup errors, garbled text)
+- First run: no longer just "save baseline", but "save baseline + scan quality issues"
+
+**CLI Parameter Extension**:
+- `--url <url>`: target system URL (independent mode)
+- `--spec <path>`: test spec file path (independent mode)
+- `--output <path>`: report output directory, default `./reports` (independent mode)
+
+---
+
+## v8.3.47 (2026-09-04) — UI Smoke Test + Visual Check (verify --ui)
+
+### New
+
+**UI Verify Engine (v8.3.47)**:
+- `speccore verify -t Task-001 --ui` enables UI smoke test + visual check
+- `--smoke-only`: run structured flow test only (Playwright)
+- `--visual-only`: run visual model comparison only
+- `--device`: support desktop / mobile / tablet device emulation
+- `--browser`: support chromium / firefox / webkit
+- `--update-baseline`: manually update visual baseline images
+
+**Smoke Test Engine** (`src/core/ui-verify/smoke-engine.ts`):
+- Execute structured operation flows per VERIFY_SPEC.yaml (fill / click / select / hover / press / wait etc.)
+- Assertions: visible, hidden, text, value, url, count, attribute
+- Auto-screenshot saved to `99-artifacts/screenshots/`
+- Device emulation: desktop 1280×720, mobile 375×812, tablet 768×1024
+
+**Visual Check Engine** (`src/core/ui-verify/visual-engine.ts`):
+- Baseline management: auto-save baseline on first run, compare diff on subsequent runs
+- Support `--update-baseline` to force update baseline images
+- Visual model analysis interface (reserved for GPT-4o / Claude 3.5 Sonnet / Qwen-VL integration)
+- Analysis results: layout consistency, color deviation, UI anomaly detection
+
+**HTML Report Generator** (`src/core/ui-verify/report-generator.ts`):
+- Generate `ui-verify-{taskId}.html` visual report
+- Includes: pass rate stats, scenario details, step execution records, screenshot comparison, visual issue list
+- Side-by-side comparison (baseline vs current screenshot)
+
+**Template README Enhancement**:
+- `.speccore/templates/README.md` adds global-level platform-specific layer description
+- All three levels (global / iteration / task) support platform-specific template lookup
+- Added global-level platform-specific examples
+
+### Technical Details
+
+- New dependency: `playwright` (headless browser automation)
+- New module: `src/core/ui-verify/` (types, smoke-engine, visual-engine, report-generator)
+- `loadUserTemplates` supports global-level `platform` lookup
+- `verify` command extended with `--ui` parameter series
+
+---
+
+## v8.3.46 (2026-09-02) — AGENTS.md Smart Repair + Project Structure Consistency + Output Markers Completion
+
+### New
+
+**AGENTS.md Full Rebuild on Update (v8.3.46)**:
+- `syncAgentsMd()` adds `force` parameter, `update` command passes `true`
+- Upgrade no longer preserves old manual section content, directly adopts latest built-in template
+- User custom content needs manual backup, update does not protect manual section
+
+**Smart Obsolescence Detection (v8.3.46)**:
+- `initRulesDir()` adds `OBSOLETE_MARKERS` array to scan 6 known types of outdated content markers
+- Auto-overwrites inline templates when obsolete content is detected, with log prompts
+- Coverage: old platform layers (10-backend/20-frontend/), subtasks containing src/ or tests/, execute -I (should be -i), missing PROJECT.yaml reference, outdated expressions, etc.
+
+**SpecCore Output Markers Completion**:
+- Adds 7 markers actually output by ask.ts but missing from docs: `SPECCORE_CONFIRM`, `SPECCORE_EXEC_STATUS`, `SPECCORE_EXEC_ERROR`, `SPECCORE_CONFIRM_STEP`, `SPECCORE_CONFIRM_ASK`, `SPECCORE_STEP_FAIL`, `SPECCORE_AMBIGUOUS`
+- Synchronized updates to AGENTS.md auto section, init.ts manual section, 02-OUTPUT_MARKERS.inline.md
+
+### Fixed
+
+**AGENTS.md Project Structure Consistency (10 items)**:
+- `000-overview/`: Removes phantom `PROGRESS.md`, adds `PROJECT_GRAPH.md`, `task-summaries/`, `plans/`, `RETRO.md`, `PIPELINE_REPORT.md`
+- `010-requirements/`: Adds `assets/` subdirectories (prototypes/, designs/, screenshots/), optional directories (bugs/, refactors/, research/, REQUIREMENT.md, CLARIFY_REPORT.md)
+- `020-specs/`: Adds `{feature}/{platform}/` hierarchy, `requirements/`, `PLATFORMS.md`, `QUALITY_AUDIT.md`
+- `030-tasks/`: Subtask `.meta/` adds `estimated-hours`, `feature`; `git-config` moved into `.meta/`; frontend adds `ROUTES.md`, `STATE.md`
+- `00-specs/`: Annotated as "written during analyze phase", adds `[compat] CONTEXT.md`
+
+**Title Fix**:
+- `## Coding Standards and Rules` → `## Standards and Reference` (manual section + syncAgentsMd auto section)
+
+**Template Sync**:
+- `010-requirements/README.md` init template adds assets/ subdirectories and optional directory descriptions
+
+---
+
 ## v8.0.0 (2026-08-22) — Skeleton-First Architecture: CLI Pre-creates Files, AI Only Overwrites Content
 
 ### Architecture Change (Breaking Change)

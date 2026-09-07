@@ -21,6 +21,42 @@ export const PROJECT_CURRENT_SCHEMA_VERSION = 1;
 // 类型定义
 // ─────────────────────────────────────────
 
+/** 单个环境的部署配置 */
+export interface DeployEnvConfig {
+  /** 部署类型 */
+  type: 'docker' | 'static' | 'script' | 'vercel' | 'k8s' | 'ssh' | 'helm' | 'pm2' | 'serverless' | 'sftp';
+  /** 构建命令（如 npm run build） */
+  build_cmd?: string;
+  /** 构建输出目录（static / sftp / ssh 类型用） */
+  output_dir?: string;
+  /** Dockerfile 路径（docker 类型用，默认 ./Dockerfile） */
+  dockerfile?: string;
+  /** 镜像仓库地址（docker 类型用） */
+  registry?: string;
+  /** 镜像名（docker 类型用） */
+  image?: string;
+  /** 镜像标签（docker 类型用，默认 latest） */
+  tag?: string;
+  /** 部署目标路径 / CDN 配置 / 服务器地址 / namespace / 函数名 */
+  target?: string;
+  /** 自定义部署脚本路径或命令（script / k8s / helm 类型用） */
+  script?: string;
+  /** SSH 服务器地址（ssh 类型用，格式 user@host:port） */
+  host?: string;
+  /** SSH 私钥路径（ssh / sftp 类型用，默认 ~/.ssh/id_rsa） */
+  key?: string;
+  /** 远程服务器部署目录（ssh / sftp / pm2 类型用） */
+  remote_dir?: string;
+  /** PM2 配置文件路径（pm2 类型用，默认 ecosystem.config.js） */
+  pm2_config?: string;
+  /** Serverless 提供商（serverless 类型用: aliyun-fc / aws-lambda / tencent-scf） */
+  provider?: string;
+  /** 部署前执行的命令 */
+  pre_deploy?: string[];
+  /** 部署后执行的命令 */
+  post_deploy?: string[];
+}
+
 export interface PlatformConfig {
   /** 端名/工程标识：全局唯一，用于目录名、命令参数、端识别。如: booking-service, h5-mobile, admin-web */
   name: string;
@@ -36,6 +72,15 @@ export interface PlatformConfig {
   default_branch: string;
   /** 对应需求端/功能单元：用于 AI 分析时自动对标需求文档中的功能模块名。如: 预订订单服务, 会议室管理 */
   requirement_unit?: string;
+  /** v8.3.60+: 按环境部署配置 */
+  deploy?: {
+    /** 测试环境 */
+    staging?: DeployEnvConfig;
+    /** 生产环境 */
+    production?: DeployEnvConfig;
+    /** 自定义环境（如 preview, qa） */
+    [env: string]: DeployEnvConfig | undefined;
+  };
 }
 
 export interface LlmProviderConfig {
@@ -55,6 +100,28 @@ export interface SpecConfig {
     enforce_testing: boolean;
     enforce_review: boolean;
     require_pr: boolean;
+    verify_ui?: {
+      enabled: boolean;
+      smoke_test: boolean;
+      visual_check: boolean;
+      threshold: 'strict' | 'normal' | 'loose';
+      devices: string[];
+      browsers: string[];
+      timeout: number;
+      /** 视觉模型配置 */
+      visual_model?: {
+        /** 提供商: qwen-vl(默认) | openai | anthropic | local */
+        provider: 'qwen-vl' | 'openai' | 'anthropic' | 'local';
+        /** 模型名称 */
+        model?: string;
+        /** API Key（可选，默认从环境变量读取） */
+        apiKey?: string;
+        /** 自定义端点（可选） */
+        endpoint?: string;
+        /** 请求超时（毫秒，默认 60000） */
+        timeout?: number;
+      };
+    };
   };
   arbitration: {
     enabled: boolean;
@@ -100,6 +167,11 @@ export interface ProjectConfig {
     protected_branches: string[];
   };
   code_scope: string[];
+  /** v8.3.58+: 验证相关配置 */
+  verify?: {
+    /** 显式指定前端路由配置文件路径（覆盖自动发现） */
+    router_file?: string;
+  };
 }
 
 // ─────────────────────────────────────────
@@ -108,7 +180,24 @@ export interface ProjectConfig {
 
 export const DEFAULT_CONFIG: SpecConfig = {
   schema_version: CURRENT_SCHEMA_VERSION,
-  quality_gates: { enforce_testing: true, enforce_review: true, require_pr: true },
+  quality_gates: {
+    enforce_testing: true,
+    enforce_review: true,
+    require_pr: true,
+    verify_ui: {
+      enabled: false,
+      smoke_test: true,
+      visual_check: true,
+      threshold: 'normal',
+      devices: ['desktop'],
+      browsers: ['chromium'],
+      timeout: 30000,
+      visual_model: {
+        provider: 'qwen-vl',
+        model: 'qwen-vl-max',
+      },
+    },
+  },
   arbitration: { enabled: true, mode: 'full' },
   settings: {
     assignee: { enabled: true, mode: 'loose' },
@@ -286,6 +375,66 @@ export async function loadProjectConfigWithMeta(): Promise<ProjectConfigLoadResu
     warnings.push(`⚠️ .speccore/PROJECT.yaml 解析失败: ${e.message}，使用默认配置`);
     return { config: { ...DEFAULT_PROJECT_CONFIG }, warnings, migrated: false };
   }
+}
+
+/**
+ * 加载项目配置并叠加环境配置覆盖
+ * v8.3.60+: 支持 .speccore/environments/*.yaml 覆盖
+ */
+export async function loadProjectConfigWithEnv(envFileOrName?: string): Promise<ProjectConfig> {
+  const projectConfig = await loadProjectConfig();
+
+  if (!envFileOrName) {
+    return projectConfig;
+  }
+
+  // 动态导入避免循环依赖
+  const { loadEnvironmentByNameOrPath } = await import('./environment-config');
+  const envConfig = await loadEnvironmentByNameOrPath(envFileOrName);
+
+  if (!envConfig) {
+    return projectConfig;
+  }
+
+  // 深拷贝项目配置，避免修改原对象
+  const merged = JSON.parse(JSON.stringify(projectConfig)) as ProjectConfig;
+
+  // 叠加环境配置到各端
+  for (const platform of merged.platforms) {
+    const envPlatform = envConfig.platforms[platform.name];
+    if (!envPlatform) continue;
+
+    // 叠加 build_cmd（写入 deploy 配置中对应环境）
+    const buildCmd = envPlatform.build_cmd || envConfig.defaults?.build_cmd;
+    if (buildCmd) {
+      if (!platform.deploy) platform.deploy = {};
+      // 为所有已配置的环境添加 build_cmd，或为 staging 创建默认
+      for (const envKey of Object.keys(platform.deploy)) {
+        const existing = platform.deploy[envKey];
+        if (existing) {
+          existing.build_cmd = buildCmd;
+        }
+      }
+      // 若没有任何环境配置，默认写入 staging
+      if (Object.keys(platform.deploy).length === 0) {
+        platform.deploy.staging = { type: 'script', build_cmd: buildCmd };
+      }
+    }
+
+    // 叠加 deploy 配置（环境文件中的 deploy 覆盖对应 env 的配置）
+    if (envPlatform.deploy) {
+      if (!platform.deploy) platform.deploy = {};
+      const targetEnv = envConfig.env;
+      const existing = platform.deploy[targetEnv];
+      if (existing) {
+        Object.assign(existing, envPlatform.deploy);
+      } else {
+        platform.deploy[targetEnv] = { ...envPlatform.deploy };
+      }
+    }
+  }
+
+  return merged;
 }
 
 /** 兼容旧代码：getConfig = loadConfig */
@@ -839,6 +988,43 @@ function validateConfig(obj: Record<string, unknown>): ValidationResult {
         issues.push(`quality_gates.${key} 必须是布尔值`);
       }
     }
+
+    // verify_ui 校验
+    if (isObject(obj.quality_gates.verify_ui)) {
+      const vui = obj.quality_gates.verify_ui;
+      for (const key of ['enabled', 'smoke_test', 'visual_check']) {
+        if (vui[key] !== undefined && typeof vui[key] !== 'boolean') {
+          issues.push(`quality_gates.verify_ui.${key} 必须是布尔值`);
+        }
+      }
+      if (vui.threshold && !['strict', 'normal', 'loose'].includes(vui.threshold as string)) {
+        issues.push('quality_gates.verify_ui.threshold 必须是 strict/normal/loose 之一');
+      }
+      if (vui.devices !== undefined && !Array.isArray(vui.devices)) {
+        issues.push('quality_gates.verify_ui.devices 必须是数组');
+      }
+      if (vui.browsers !== undefined && !Array.isArray(vui.browsers)) {
+        issues.push('quality_gates.verify_ui.browsers 必须是数组');
+      }
+      if (vui.timeout !== undefined && typeof vui.timeout !== 'number') {
+        issues.push('quality_gates.verify_ui.timeout 必须是数字');
+      }
+      // visual_model 校验
+      if (vui.visual_model !== undefined) {
+        if (!isObject(vui.visual_model)) {
+          issues.push('quality_gates.verify_ui.visual_model 必须是对象');
+        } else {
+          const vm = vui.visual_model;
+          const providers = ['qwen-vl', 'openai', 'anthropic', 'local'];
+          if (vm.provider && !providers.includes(vm.provider as string)) {
+            issues.push(`quality_gates.verify_ui.visual_model.provider 必须是 ${providers.join('/')} 之一`);
+          }
+          if (vm.timeout !== undefined && typeof vm.timeout !== 'number') {
+            issues.push('quality_gates.verify_ui.visual_model.timeout 必须是数字');
+          }
+        }
+      }
+    }
   }
 
   // arbitration
@@ -1007,6 +1193,44 @@ function toYaml(config: SpecConfig): string {
   yaml += '  # require_pr: 是否强制通过 PR 合并代码\n';
   yaml += '  #   true  → 禁止直接 push 到保护分支，必须通过 speccore pr 提交\n';
   yaml += `  require_pr: ${config.quality_gates.require_pr}\n`;
+
+  // verify_ui 配置
+  const vui = config.quality_gates.verify_ui;
+  if (vui) {
+    yaml += '\n  # ── UI 验证（v8.3.47+）──\n';
+    yaml += '  verify_ui:\n';
+    yaml += '    # enabled: 是否启用 UI 验证（冒烟测试 + 视觉检查）\n';
+    yaml += `    enabled: ${vui.enabled}\n`;
+    yaml += '    # smoke_test: 是否执行冒烟测试\n';
+    yaml += `    smoke_test: ${vui.smoke_test}\n`;
+    yaml += '    # visual_check: 是否执行视觉检查\n';
+    yaml += `    visual_check: ${vui.visual_check}\n`;
+    yaml += '    # threshold: 检测严格度\n';
+    yaml += '    #   strict → 任何微小差异都视为问题\n';
+    yaml += '    #   normal → 明显差异视为问题\n';
+    yaml += '    #   loose  → 仅严重问题\n';
+    yaml += `    threshold: ${vui.threshold}\n`;
+    yaml += '    # devices: 测试设备列表\n';
+    yaml += `    devices: [${vui.devices.map((d) => `'${d}'`).join(', ')}]\n`;
+    yaml += '    # browsers: 测试浏览器列表\n';
+    yaml += `    browsers: [${vui.browsers.map((b) => `'${b}'`).join(', ')}]\n`;
+    yaml += '    # timeout: 单场景超时（毫秒）\n';
+    yaml += `    timeout: ${vui.timeout}\n`;
+    if (vui.visual_model) {
+      yaml += '    # visual_model: 视觉模型配置（v8.3.50+）\n';
+      yaml += '    #   provider: qwen-vl(默认) | openai | anthropic | local\n';
+      yaml += '    #   model: 模型名称（可选）\n';
+      yaml += '    #   apiKey: API Key（可选，默认从环境变量读取）\n';
+      yaml += '    #   endpoint: 自定义端点（可选）\n';
+      yaml += '    #   timeout: 请求超时（毫秒，可选）\n';
+      yaml += '    visual_model:\n';
+      yaml += `      provider: ${vui.visual_model.provider}\n`;
+      if (vui.visual_model.model) yaml += `      model: ${vui.visual_model.model}\n`;
+      if (vui.visual_model.apiKey) yaml += `      apiKey: ${vui.visual_model.apiKey}\n`;
+      if (vui.visual_model.endpoint) yaml += `      endpoint: ${vui.visual_model.endpoint}\n`;
+      if (vui.visual_model.timeout) yaml += `      timeout: ${vui.visual_model.timeout}\n`;
+    }
+  }
 
   yaml += '\n# ─────────────────────────────────────────────────────────────────────────────\n';
   yaml += '# 契约冲突裁决（Arbitration）\n';

@@ -1,0 +1,79 @@
+# 发布前全量回归测试配置（v8.3.60+）
+# 目标：验证"全量功能 + 视觉一致性 + 性能基线 + API 完整性"
+# 适用：发布前、重大重构后、周末全量回归
+# 执行：speccore verify --config .speccore/tests/release.yaml --env-file production
+
+name: 发布前全量回归测试
+
+target:
+  base_url: https://production.example.com
+
+# 端点映射
+endpoints:
+  h5: https://example.com/h5
+  admin: https://admin.example.com
+  api: https://api.example.com
+
+# 全量测试场景
+tests:
+  - name: 全站页面冒烟
+    type: smoke
+    routes:
+      - /
+      - /login
+      - /register
+      - /dashboard
+      - /orders
+      - /order/:id
+      - /products
+      - /product/:id
+      - /profile
+      - /settings
+    devices: [desktop, mobile, tablet]
+    browsers: [chromium, firefox, webkit]
+    threshold: normal
+
+  - name: 核心业务流-视觉回归
+    type: visual
+    routes:
+      - /login
+      - /dashboard
+      - /orders
+      - /order/confirm
+      - /product/123
+    devices: [desktop, mobile]
+    threshold: strict
+
+  - name: 全量 API 契约验证
+    type: api
+    scenarios:
+      - 用户注册
+      - 用户登录
+      - 获取用户信息
+      - 获取订单列表
+      - 创建订单
+      - 取消订单
+      - 获取商品列表
+      - 获取商品详情
+    threshold: strict
+
+  - name: 性能基线检查
+    type: smoke
+    routes:
+      - /
+      - /dashboard
+      - /products
+    config:
+      perf_check: true
+      lcp_budget: 2500
+      fid_budget: 100
+      cls_budget: 0.1
+
+# 视觉模型配置
+visual_model:
+  provider: qwen-vl
+  model: qwen-vl-max
+  timeout: 60000
+
+# 输出配置
+output: ./reports/release-test-report.html

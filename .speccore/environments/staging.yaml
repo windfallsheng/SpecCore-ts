@@ -1,0 +1,58 @@
+# =============================================================================
+# SpecCore 环境配置 — staging（预发布 / 准生产环境）
+# =============================================================================
+# 用途：上线前最终验收、灰度验证、生产数据模拟
+# 与 test 的区别：staging 环境与生产高度一致，用于最终上线前检查
+# 典型工作流：
+#   speccore pipeline --env staging --all
+#   （将当前分支合并到 staging → build → deploy）
+# =============================================================================
+
+env: staging
+
+# 该环境对应的 Git 分支
+# pipeline 执行时会将当前分支合并到此分支，然后 build+deploy
+branch: staging
+
+# 全局默认值
+defaults:
+  build_cmd: npm run build:staging
+
+# 按端覆盖配置
+platforms:
+  # 前端示例：H5 移动端
+  h5:
+    build_cmd: npm run build:staging
+    deploy:
+      type: static
+      output_dir: dist
+      target: s3://mybucket-staging/h5/
+
+  # 前端示例：Admin 管理后台
+  admin-web:
+    build_cmd: npm run build:staging
+    deploy:
+      type: static
+      output_dir: dist
+      target: s3://mybucket-staging/admin/
+
+  # 后端示例：Java API 服务
+  order-api:
+    build_cmd: ./mvnw package -DskipTests -Pstaging
+    deploy:
+      type: docker
+      registry: registry.example.com/myapp-staging
+      image: order-service
+      tag: staging
+
+# 测试相关配置（与 verify --config 联动）
+tests:
+  base_urls:
+    h5: https://staging.example.com/h5
+    admin: https://staging.example.com/admin
+    order-api: https://api-staging.example.com
+
+  visual_model:
+    provider: qwen-vl
+    model: qwen-vl-max
+    timeout: 60000

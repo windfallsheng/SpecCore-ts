@@ -1094,11 +1094,13 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 
             if (filename.includes('/')) {
               const parts = filename.split('/');
-              if (parts[0] === 'platforms' || parts[0] === 'requirements') {
+              if (parts[0] === 'platforms' || parts[0] === 'requirements' || parts[0] === 'overview') {
                 // v6.81.0+: platforms/ 和 requirements/ 都按原路径写入 GLOBAL/
+                // v8.3.51+: 增加 overview/ 前缀支持，修复被错误路由到 platforms/overview/ 的问题
                 // platforms/admin-web/_INDEX.md → .speccore/GLOBAL/platforms/admin-web/
                 // requirements/REQUIREMENT.md → .speccore/GLOBAL/requirements/
                 // requirements/admin-web/REQUIREMENT.md → .speccore/GLOBAL/requirements/admin-web/
+                // overview/ARCHITECTURE.md → .speccore/GLOBAL/overview/ (之前错误写入 platforms/overview/)
                 targetDir = join(globalBaseDir, ...parts.slice(0, -1));
                 targetFilename = parts[parts.length - 1];
               } else {
@@ -1489,7 +1491,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
             let targetFilename: string;
             if (filename.includes('/')) {
               const parts = filename.split('/');
-              if (parts[0] === 'platforms' || parts[0] === 'requirements') {
+              if (parts[0] === 'platforms' || parts[0] === 'requirements' || parts[0] === 'overview') {
+                // v8.3.51+: 增加 overview/ 前缀支持，修复被错误路由到 platforms/overview/ 的问题
                 targetDir = join(globalBaseDir, ...parts.slice(0, -1));
                 targetFilename = parts[parts.length - 1];
               } else {
@@ -2269,6 +2272,9 @@ async function loadUserTemplates(
   } else if (level === 'iteration') {
     if (platform) candidates.push(join(templateBase, platform));
     candidates.push(templateBase);
+  } else if (level === 'global') {
+    if (platform) candidates.push(join(templateBase, platform));
+    candidates.push(templateBase);
   } else {
     candidates.push(templateBase);
   }
@@ -2806,10 +2812,10 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
 
     // Layer 角色定义（v7.3.1+: 产出物明确列出关键文件，防止 AI 遗漏）
     const LAYER_ROLES: Record<number, { role: string; focus: string; output: string }> = {
-      1: { role: '代码索引专家', focus: '全面扫描各端源码结构，提取目录/接口/实体/配置等索引信息', output: 'platforms/{端}/_INDEX.md（每端一个）+ PATTERNS/{端名}/{分类}/*.md（按端分目录）+ semantic-tags.json' },
+      1: { role: '代码索引专家', focus: '全面扫描各端源码结构，提取目录/接口/实体/配置等索引信息', output: 'platforms/{端}/_INDEX.md（每端一个）+ semantic-tags.json' },
       2: { role: '系统架构师', focus: '基于 Layer 1 索引进行跨端关联分析、接口匹配、模块聚类', output: 'platforms/_shared/_ASSOCIATION.md + _MODULES.md' },
-      3: { role: '业务分析师', focus: '按功能模块深入分析业务逻辑、数据流、规则、时序', output: '各端功能模块深入文档 + PATTERNS/{端名}/{分类}/*.md' },
-      4: { role: '产品总监 + 技术负责人', focus: '全局汇总，分 4 个子层执行（4a产品→4b技术核心→4c技术扩展→4d各端）', output: 'requirements/REQUIREMENT.md（必须）+ requirements/{前端端}/REQUIREMENT.md + overview/* + platforms/{端}/* + PATTERNS/*' },
+      3: { role: '业务分析师', focus: '按功能模块深入分析业务逻辑、数据流、规则、时序', output: '各端功能模块深入文档' },
+      4: { role: '产品总监 + 技术负责人', focus: '全局汇总，分 4 个子层执行（4a产品→4b技术核心→4c技术扩展→4d各端）', output: 'requirements/REQUIREMENT.md（必须）+ requirements/{前端端}/REQUIREMENT.md + overview/* + platforms/{端}/*' },
     };
     const layerMeta = LAYER_ROLES[targetLayer];
 
@@ -2821,10 +2827,10 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     prompt += `> 每层完成后通过 \`speccore analyze --scope global --layer ${targetLayer + 1 <= 4 ? targetLayer + 1 : 4}\` 进入下一层。\n\n`;
     prompt += `| 层级 | 角色 | 核心任务 | 产出物 |\n`;
     prompt += `| :--- | :--- | :--- | :--- |\n`;
-    prompt += `| 1 | 代码索引专家 | 扫描源码结构，提取索引 | platforms/{端}/_INDEX.md + PATTERNS/{端名}/*.md |\n`;
+    prompt += `| 1 | 代码索引专家 | 扫描源码结构，提取索引 | platforms/{端}/_INDEX.md |\n`;
     prompt += `| 2 | 系统架构师 | 跨端关联、接口匹配、模块聚类 | platforms/_shared/_ASSOCIATION.md + _MODULES.md |\n`;
-    prompt += `| 3 | 业务分析师 | 功能模块深入分析 | 各端功能模块文档 + PATTERNS |\n`;
-    prompt += `| 4 | 产品总监+技术负责人 | 全局汇总、需求总纲、一致性校验 | requirements/REQUIREMENT.md + overview/* + platforms/* |\n\n`;
+    prompt += `| 3 | 业务分析师 | 功能模块深入分析 | 各端功能模块文档 |\n`;
+    prompt += `| 4 | 产品总监+技术负责人 | 全局汇总、需求总纲、一致性校验 | requirements/REQUIREMENT.md + requirements/{前端端}/REQUIREMENT.md + overview/* + platforms/* |\n\n`;
 
     if (progress.completedLayer > 0) {
       prompt += `📊 检测进度: 已完成 Layer ${progress.completedLayer}/4`;
@@ -2885,28 +2891,17 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `| 性能 | 搜索性能相关代码（懒加载/虚拟滚动/缓存/预加载） | 优化手段、适用场景 |\n\n`;
       prompt += `**输出**：每个端一个 \`_INDEX.md\`，按上述维度组织，只含名称和路径列表，不含详细逻辑\n`;
       prompt += `**存放**：\`.speccore/GLOBAL/platforms/{端名}/_INDEX.md\`\n\n`;
-      prompt += `### Layer 1 附加任务：提取可复用模式（PATTERNS）\n`;
-      prompt += `在扫描每个端时，同时识别该端的可复用设计模式，写入 \`.speccore/PATTERNS/\`。这是跨迭代复用的核心资产。\n\n`;
-      prompt += `**后端端模式提取维度（6类）**：\n`;
-      prompt += `| 模式类型 | 扫描位置 | 提取内容 | 存放路径 |\n`;
-      prompt += `| :--- | :--- | :--- | :--- |\n`;
-      prompt += `| 架构模式 | 项目结构、模块划分 | 分层架构、目录约定、模块组织方式 | \`PATTERNS/{端名}/architecture/\` |\n`;
-      prompt += `| 数据模型模式 | Entity/Model/Schema | 通用字段设计（软删除、多租户、审计字段）、关联模式 | \`PATTERNS/{端名}/data-model/\` |\n`;
-      prompt += `| API 契约模式 | Controller/Handler | 统一响应格式、分页模式、错误包装、鉴权装饰器 | \`PATTERNS/{端名}/api-contract/\` |\n`;
-      prompt += `| 安全模式 | 鉴权/校验/加密代码 | JWT/RBAC 实现、输入校验策略、敏感数据处理 | \`PATTERNS/{端名}/security/\` |\n`;
-      prompt += `| 性能模式 | 缓存/批量/异步代码 | 缓存策略、批量查询、异步处理、连接池配置 | \`PATTERNS/{端名}/performance/\` |\n`;
-      prompt += `| 工具/中间件 | utils/middleware 目录 | 可复用的工具函数、通用中间件、拦截器 | \`PATTERNS/{端名}/utils/\` |\n`;
-      prompt += `**前端端模式提取维度（6类）**：\n`;
-      prompt += `| 模式类型 | 扫描位置 | 提取内容 | 存放路径 |\n`;
-      prompt += `| :--- | :--- | :--- | :--- |\n`;
-      prompt += `| 组件模式 | components/ui 目录 | 高复用组件、复合组件、设计 token 使用 | \`PATTERNS/{端名}/components/\` |\n`;
-      prompt += `| Hooks 模式 | hooks/composables 目录 | 可复用逻辑抽离、状态封装、生命周期管理 | \`PATTERNS/{端名}/hooks/\` |\n`;
-      prompt += `| 状态管理模式 | store/pinia/vuex/redux | 状态切片设计、actions 组织、持久化策略 | \`PATTERNS/{端名}/state/\` |\n`;
-      prompt += `| 路由/导航模式 | router/routes 配置 | 路由守卫、权限路由、动态路由、面包屑 | \`PATTERNS/{端名}/routing/\` |\n`;
-      prompt += `| 请求/拦截模式 | API 调用封装 | 请求封装、错误处理、重试策略、缓存策略 | \`PATTERNS/{端名}/api-client/\` |\n`;
-      prompt += `| 布局/样式模式 | layouts/themes 目录 | 布局组件、响应式策略、主题切换、CSS 架构 | \`PATTERNS/{端名}/layout/\` |\n`;
-      prompt += `**跨端通用模式**：如果某模式在 2+ 端出现，优先写入通用分类（如 \`PATTERNS/architecture/\`），端差异用段落标注。\n`;
-      prompt += `**写入方式**：使用 \`PATTERNS/{端名}/{分类}/{kebab-case模式名}.md\` 作为文件名。\n\n`;
+      prompt += `### Layer 1 附加任务：提取可复用模式（PATTERNS，可选）\n`;
+      prompt += `> ⚠️ **重要规则（v8.3.56+）**：PATTERNS 只在发现**真正独特且可复用**的设计模式时才生成，严禁为每个项目都生成 JWT/Redis/拦截器等通用模板。\n\n`;
+      prompt += `**生成条件**：\n`;
+      prompt += `- 项目中存在**自定义的、非框架内置**的可复用设计（如独创的分页封装、特定的权限注解、定制化的请求拦截链）\n`;
+      prompt += `- 同一模式在**2+ 个模块/端**中被重复使用，且实现一致\n`;
+      prompt += `- **严禁**生成：JWT 认证、Redis 缓存、Axios 拦截器、定时任务等框架/库自带的标准用法说明\n\n`;
+      prompt += `**存放路径**：\`PATTERNS/{端名}/{kebab-case模式名}.md\`（写入 .speccore/PATTERNS/，不在 GLOBAL/ 下）\n\n`;
+      prompt += `**文档规范**：\n`;
+      prompt += `- 所有 platforms/、overview/、requirements/ 下的技术文档**严禁**在底部添加「相关文档」块链接到 PATTERNS\n`;
+      prompt += `- PATTERNS 是独立资产，通过目录结构自组织，不需要被其他文档引用\n`;
+      prompt += `- 如果未发现值得提取的模式，**不生成任何 PATTERNS 文件**\n\n`;
       prompt += `### Layer 1 附加任务：提取语义级节点标签（SEMANTIC TAGS）\n`;
       prompt += `在扫描每个端时，同时提取语义标签，写入 \`.speccore/cache/semantic-tags.json\`。这是知识图谱理解代码意图的关键资产。\n\n`;
       prompt += `**提取规则（本地解析，零 Token 消耗）**：\n`;
@@ -3051,6 +3046,13 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `     - 不要写技术实现细节，不要按端分章节\n`;
       prompt += `   - \`requirements/{前端端}/REQUIREMENT.md\`：各前端端的产品视角需求（前端产品经理视角）\n`;
       prompt += `     - 前端端示例: requirements/admin-web/REQUIREMENT.md, requirements/h5-mobile/REQUIREMENT.md\n`;
+      prompt += `     - **强制规则（v8.3.56+）**：如果系统包含多个前端项目（如 h5-mobile + admin-web），**必须**为每个前端项目独立生成一份需求文档\n`;
+      prompt += `       - 输出文件清单中必须包含：\`requirements/h5-mobile/REQUIREMENT.md\`、\`requirements/admin-web/REQUIREMENT.md\`\n`;
+      prompt += `       - 每份前端需求文档 ≥ 500 行，包含：用户画像、信息架构、用户旅程、页面清单、交互设计、状态反馈、权限角色、响应式策略\n`;
+      prompt += `       - **检查机制**：输出前自检——如果 requirements/ 下只有 REQUIRMENT.md 而没有 {前端端}/REQUIREMENT.md，分析失败，必须重新生成\n`;
+      prompt += `     - **严禁**将多个前端项目的需求合并到 \`requirements/REQUIREMENT.md\` 总纲中\n`;
+      prompt += `       - 总纲只保留全局业务视角（愿景/用户画像/场景地图/优先级矩阵/里程碑/风险预判）\n`;
+      prompt += `       - 总纲字数 ≤ 3000 字，不写任何前端项目的页面/交互/组件细节\n`;
       prompt += `     - **信息架构**：页面层级结构、导航关系、面包屑、路由映射\n`;
       prompt += `     - **用户旅程**：从入口到完成目标的完整流程，标注关键决策点、情绪曲线\n`;
       prompt += `     - **页面清单**：每页含页面名称、URL/路由、核心功能、进入条件、离开条件\n`;
@@ -3534,7 +3536,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     }
 
     // v7.4.5+: 用户模板接入 + 深度标准（引用模板而非笼统数字）
-    const globalUserTemplates = await loadUserTemplates('global');
+    const globalUserTemplates = await loadUserTemplates('global', undefined, ctx.platform);
     if (globalUserTemplates.size > 0) {
       prompt += `\n## 📄 用户自定义模板（v7.4.5+ 优先使用）\n\n`;
       prompt += `> 检测到 \`.speccore/templates/global/\` 下有用户自定义模板，**必须按这些模板的章节结构和风格生成文档**。\n\n`;

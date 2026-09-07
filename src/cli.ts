@@ -1,10 +1,10 @@
 import { program } from 'commander';
 import { version } from '../package.json';
 import { readFileSync, existsSync } from 'fs';
-import { join } from 'path';
+import { join, resolve } from 'path';
+import { logger } from './utils/logger';
 import { initCommand } from './commands/init';
 import { validateCommand } from './commands/validate';
-import { verifyCommand } from './commands/verify';
 import { archiveCommand } from './commands/archive';
 import { progressCommand } from './commands/progress';
 import { reportCommand } from './commands/report';
@@ -24,7 +24,7 @@ import { registerNotifyCommand } from './commands/notify';
 import { registerRecommendCommand } from './commands/recommend';
 import { changeCommand } from './commands/change';
 import { syncCommand } from './commands/sync';
-import { opsCommand } from './commands/history';
+import { historyCommand } from './commands/history';
 import { patternCommand } from './commands/pattern';
 import { rollbackCommand } from './commands/rollback';
 import { handoverCommand } from './commands/handover';
@@ -49,6 +49,9 @@ import { auditCommand } from './commands/audit';
 import { analyzeCommand } from './commands/analyze';
 import { clarifyCommand } from './commands/clarify';
 import { prCommand } from './commands/pr';
+import { buildCommand } from './commands/build';
+import { deployCommand } from './commands/deploy';
+import { pipelineCommand } from './commands/pipeline';
 import { buildConstitution } from './core/constitution-builder';
 import { contextCommand } from './commands/context-output';
 import { doneCommand } from './commands/done';
@@ -74,10 +77,8 @@ import { trackerCommand } from './commands/tracker';
 import { deleteCommand } from './commands/delete';
 // v5.6.0 新增
 import { searchCommand } from './commands/search';
-import { watchCommand } from './commands/watch';
 import { promptsCommand } from './commands/prompts';
 import { cleanupCommand } from './commands/cleanup';
-// v5.21.0 任务调度
 import { HELP_PANEL } from './core/help-panel';
 import { i18n } from './i18n';
 
@@ -86,10 +87,16 @@ program
   .description('SpecCore - Code by Spec, Not by Vibe.')
   .version(version, '-v, --version', 'Display current version')
   .option('--lang <locale>', 'Language: zh-CN (default) or en-US', 'zh-CN')
+  .option('--project-dir <path>', '指定外部项目目录（所有配置从该目录读取）')
   .hook('preAction', (thisCommand) => {
     const opts = thisCommand.opts();
     if (opts.lang && (opts.lang === 'zh-CN' || opts.lang === 'en-US')) {
       i18n.setLocale(opts.lang);
+    }
+    if (opts.projectDir) {
+      const targetDir = resolve(opts.projectDir);
+      process.chdir(targetDir);
+      logger.info(`📂 切换到项目目录: ${targetDir}`);
     }
   });
 
@@ -322,7 +329,6 @@ iterationCmd
   .option('--dry-run', 'Preview without creating')
   .option('--interactive', 'Preview → adjust → confirm before creating')
   .option('--strict', 'Review each section before creating tasks')
-  .option('--scheduled', '夜间调度：只执行标记为 queue 的任务')
   .option('--verify', '生成代码后自动检查 TEST/REVIEW/DEPLOY → 最多3轮自动修复')
   .option('--prompt', '输出结构化 Prompt 到 stdout（Skill 协作模式）')
   .option('--response <response>', '接收 AI 拆分结果创建 Task（配合 --prompt）')
@@ -362,7 +368,6 @@ taskCmd
   .option('--batch-file <path>', '从文件批量导入')
   .option('--interactive', '交互式创建')
   .option('--id <id>', '手动指定任务 ID（如 Task-005），计数器仍会递增')
-  .option('--schedule <mode>', '调度模式: night|now', 'now')
   .action(taskNewCommand);
 
 taskCmd
@@ -389,9 +394,48 @@ program
   .option('--draft', 'Create as draft PR')
   .option('--interactive', '分步：预览变更 → 选文件 → commit → 推送 → 创建PR')
   .option('--title <title>', 'Custom PR title')
+  .option('--create-pr', '推送后自动创建 Pull Request')
+  .option('--merge', '合并当前 PR 到 base 分支')
+  .option('--auto-merge', '创建 PR 后自动合并')
     .option("--prompt", "输出 PR 描述 Prompt 到 stdout（Skill 协作模式）")
   .option("--response <response>", "接收 AI 生成的 PR 描述")
   .action(prCommand);
+
+program
+  .command('pipeline')
+  .alias('pln')
+  .description('流水线：合并当前分支 → 构建 → 部署（环境驱动）')
+  .option('-p, --platforms <list>', '逗号分隔端列表')
+  .option('--all', '所有端')
+  .option('-e, --env <env>', '目标环境（读取环境配置中的 branch）', 'staging')
+  .option('--env-file <path>', '环境配置文件路径')
+  .option('--skip-build', '跳过构建')
+  .option('--dry-run', '预览模式')
+  .action(pipelineCommand);
+
+program
+  .command('build')
+  .alias('bd')
+  .description('按端构建工程')
+  .option('-p, --platform <platform>', '指定端名')
+  .option('-e, --env <env>', '读取哪个环境的 build_cmd', 'staging')
+  .option('--env-file <path>', '指定环境配置文件')
+  .option('--branch <branch>', '先 checkout 到指定分支再执行')
+  .option('--all', '构建所有端')
+  .action(buildCommand);
+
+program
+  .command('deploy')
+  .alias('dp')
+  .description('部署端到指定环境')
+  .option('-p, --platform <platform>', '指定端名')
+  .option('-e, --env <env>', '目标环境', 'staging')
+  .option('--env-file <path>', '环境配置文件')
+  .option('--branch <branch>', '先 checkout 到指定分支再执行')
+  .option('--dry-run', '仅预览，不实际执行')
+  .option('--skip-build', '跳过构建阶段')
+  .option('--all', '部署所有端')
+  .action(deployCommand);
 
 program
   .command('plan')
@@ -440,7 +484,6 @@ program
   .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
   .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
   .option('--strict', 'Pre-flight check: review req/tech/test before code gen')
-  .option('--scheduled', '夜间调度：只执行标记为 queue 的任务')
   .option('--verify', '生成代码后自动检查 TEST/REVIEW/DEPLOY → 最多3轮自动修复')
   .option('--base <branch>', 'Base branch for task branching (default: current)')
   .option('--skip <tasks>', 'Comma-separated task IDs to skip')
@@ -526,7 +569,6 @@ program
   .option('--type <type>', 'Filter by task type')
   .option('--fix', 'Auto-fix issues where possible')
   .option('--strict', 'Strict validation mode')
-  .option('--scheduled', '夜间调度：只执行标记为 queue 的任务')
   .option('--verify', '生成代码后自动检查 TEST/REVIEW/DEPLOY → 最多3轮自动修复')
   .option('--format <format>', 'Output format: text, json', 'text')
   .action(validateCommand);
@@ -534,13 +576,43 @@ program
 program
   .command('verify')
   .alias('vf')
-  .description('代码验证：编译检查 + Lint + 单元测试（执行后质量门禁）')
+  .description('代码验证：编译检查 + Lint + 单元测试 + UI 冒烟测试（执行后质量门禁）')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('-t, --task <task>', 'Verify specific task')
   .option('--type <type>', 'Check type: compile, lint, test, all', 'all')
   .option('--path <path>', 'Code path to verify')
   .option('--timeout <ms>', 'Check timeout in ms', '120000')
-  .action(verifyCommand);
+  // v8.3.60+: 分层测试阶段（快捷方式，自动设置一组推荐参数）
+  .option('--stage <stage>', '测试阶段: dev(编译+单元) | pr(全量代码+关键UI+API) | deploy(冒烟) | release(全量回归)', '')
+  .option('--ui', '启用 UI 验证（冒烟测试 + 视觉检查）')
+  .option('--smoke-only', '仅执行冒烟测试（不执行视觉检查）')
+  .option('--visual-only', '仅执行视觉检查（不执行冒烟测试）')
+  .option('--visual-model <model>', '视觉模型: qwen-vl, openai, anthropic, local 或 JSON 配置')
+  .option('--device <device>', '测试设备: desktop, mobile, tablet', 'desktop')
+  .option('--update-baseline', '更新视觉基准图')
+  .option('--browser <browser>', '浏览器: chromium, firefox, webkit', 'chromium')
+  .option('--url <url>', '目标系统地址（独立模式）')
+  .option('--spec <path>', '测试规格文件路径（独立模式）')
+  .option('--output <path>', '报告输出目录（独立模式）', './reports')
+  .option('--api-contract', '执行 API 契约测试（需要 API_CONTRACT.yaml）')
+  .option('--perf', '执行性能基线测试（需要 PERF_SPEC.yaml）')
+  .option('--update-perf-baseline', '更新性能基线')
+  // v8.3.57+: 路由/页面自动发现 + 模块过滤
+  .option('--discover-routes', '自动发现前端路由配置并测试')
+  .option('--discover-pages', '自动扫描页面目录结构并测试')
+  .option('--generate-spec', '自动生成 VERIFY_SPEC.yaml（不执行测试）')
+  .option('--router-file <path>', '显式指定路由配置文件路径（覆盖自动发现）')
+  .option('--module <modules>', '按模块过滤（逗号分隔，如 booking,user）')
+  .option('--page <pages>', '按页面路径过滤（逗号分隔，如 /login,/dashboard）')
+  .option('--scenario <names>', '按场景名称过滤（逗号分隔）')
+  .option('--base-url <url>', '自动发现时使用的基地址', 'http://localhost:8080')
+  // v8.3.60+: 测试场景配置驱动
+  .option('--config <path>', '测试场景配置文件路径')
+  .option('--env-file <path>', '环境配置文件（与 --config 联动）')
+  .action(async (options: any) => {
+    const { verifyCommand } = await import('./commands/verify');
+    return verifyCommand(options);
+  });
 
 // 源码索引
 registerCodeIndexCommand(program);
@@ -799,10 +871,11 @@ program
   .action((opts: any) => syncGlobalCommand(opts));
 
 program
-  .command('ops')
-  .alias('op')
-  .description('操作历史：查看命令执行日志')
-  .action(opsCommand);
+  .command('history')
+  .alias('hi')
+  .description('📜 历史记录：默认显示操作日志，--req 查看需求变更历史')
+  .option('--req <reqId>', '需求 ID，查看指定需求的变更历史')
+  .action(historyCommand);
 
 program
 
@@ -1090,25 +1163,6 @@ program
   .option('--task <id>', 'Limit search to a task')
   .option('--iteration <name>', 'Limit search to an iteration')
   .action((query: string, opts: any) => searchCommand({ ...opts, query }));
-
-program
-  .command('watch')
-  .alias('wch')
-  .description('Watch Spec files and auto-validate on save (v5.6)')
-  .option('--task <id>', 'Watch a specific task')
-  .option('--iteration <name>', 'Watch a specific iteration')
-  .action(watchCommand);
-
-// ⚠️ schedule 命令已由 WorkBuddy Automations 替代
-// 保留命令注册但标记为废弃，不再注册子命令
-program
-  .command('schedule')
-  .alias('sc')
-  .description('[已废弃] 定时调度已由 WorkBuddy Automations 替代')
-  .action(() => {
-    console.warn('⚠️  schedule 命令已废弃，定时调度功能由 WorkBuddy Automations 替代');
-    console.log('   参考: https://github.com/windfallsheng/SpecCore-ts');
-  });
 
 program
   .command('welcome')

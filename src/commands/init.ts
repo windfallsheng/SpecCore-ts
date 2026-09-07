@@ -634,25 +634,63 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 \`\`\`
 .speccore/templates/
 ├── global/          ← 全局分析文档模板（REQUIREMENT.md、TECH.md、FUNCTION_MAP.md 等）
+│   ├── {platform}/  ← 按端名分层，如 h5-mobile/、admin-web/、booking-service/
+│   └── *.md         ← 通用模板（所有端共用）
 ├── iteration/       ← 迭代级文档模板（各端的 TECH.md、TEST.md、UI_SPEC.md 等）
+│   ├── {platform}/  ← 按端名分层，如 h5-mobile/、admin-web/、booking-service/
+│   └── *.md         ← 通用模板（所有端共用）
 └── task/            ← 任务级文档模板（RISK.md、DEPS.md、MONITOR.md、REVIEW.md 等）
+    ├── {type}/      ← 按任务类型分层，如 feature/、bugfix/、refactor/
+    │   ├── {platform}/  ← 按端名分层，如 api/、h5/、admin/
+    │   ├── _shared/     ← 该类型通用模板
+    │   └── *.md
+    ├── _shared/     ← 所有任务通用模板
+    └── *.md         ← 根目录 fallback
 \`\`\`
 
-## 查找优先级（task 级别最细）
+## 查找优先级
 
-对于 \`task/\` 下的模板，支持按**任务类型 + 端名**分层：
+### global 级别
+
+查找顺序：**\`[platform]/\` > 根目录** > 内置模板
+
+\`\`\`
+global/
+├── h5-mobile/       ← 仅 H5 端全局分析使用
+│   └── REQUIREMENT.md
+├── admin-web/       ← 仅 Admin 端全局分析使用
+│   └── FUNCTION_MAP.md
+└── TECH.md          ← 所有端通用
+\`\`\`
+
+### iteration 级别
+
+查找顺序：**\`[platform]/\` > 根目录** > 内置模板
+
+\`\`\`
+iteration/
+├── h5-mobile/       ← 仅 H5 端使用
+│   └── TECH.md
+├── admin-web/       ← 仅 Admin 端使用
+│   └── UI_SPEC.md
+└── TEST.md          ← 所有端通用
+\`\`\`
+
+### task 级别
+
+查找顺序：**\`[type]/[platform]/\` > \`[type]/\` > \`_shared/\` > 根目录** > 内置模板
 
 \`\`\`
 task/
-├── {type}/              ← 如 feature/、bugfix/、refactor/
-│   ├── {platform}/      ← 如 api/、h5/、admin/
-│   ├── _shared/         ← 该类型通用模板
-│   └── *.md
-├── _shared/             ← 所有任务通用模板
-└── *.md                 ← 根目录 fallback
+├── feature/
+│   ├── api/         ← feature 任务 + API 端
+│   ├── h5-mobile/   ← feature 任务 + H5 端
+│   └── _shared/     ← 所有 feature 任务通用
+├── bugfix/
+│   └── _shared/     ← 所有 bugfix 任务通用
+├── _shared/         ← 所有任务通用
+└── *.md             ← 根目录 fallback
 \`\`\`
-
-查找顺序：**\`type/platform/\` > \`type/\` > \`_shared/\` > 根目录** > 内置模板
 
 ## 示例
 
@@ -661,13 +699,25 @@ task/
    cp ~/my-template/REQUIREMENT.md .speccore/templates/global/REQUIREMENT.md
    \`\`\`
 
-2. 仅 API 端的功能任务使用你的 TEST.md 模板：
+2. H5 端全局分析专用的 REQUIREMENT.md 模板：
+   \`\`\`bash
+   mkdir -p .speccore/templates/global/h5-mobile
+   cp ~/my-template/REQUIREMENT.md .speccore/templates/global/h5-mobile/REQUIREMENT.md
+   \`\`\`
+
+3. H5 端迭代专用的 UI_SPEC.md 模板：
+   \`\`\`bash
+   mkdir -p .speccore/templates/iteration/h5-mobile
+   cp ~/my-template/UI_SPEC.md .speccore/templates/iteration/h5-mobile/UI_SPEC.md
+   \`\`\`
+
+4. 仅 API 端的功能任务使用你的 TEST.md 模板：
    \`\`\`bash
    mkdir -p .speccore/templates/task/feature/api
    cp ~/my-template/TEST.md .speccore/templates/task/feature/api/TEST.md
    \`\`\`
 
-3. 所有任务通用的 RISK.md 模板：
+5. 所有任务通用的 RISK.md 模板：
    \`\`\`bash
    cp ~/my-template/RISK.md .speccore/templates/task/_shared/RISK.md
    \`\`\`
@@ -962,6 +1012,9 @@ export const TOOL_COMMANDS: [string, string, string][] = [
   ['spec-retro', '回顾报告: 任务=${1:Task-001} 可批量 --all', 'speccore retro --task ${1:Task-001}'],
   ['spec-context', '切换上下文: 迭代=${1:Q1}', 'speccore context --set --iteration ${1:Q1}'],
   ['spec-ops', '操作历史', 'speccore ops'],
+
+  ['spec-deploy', '部署专属 Skill。覆盖 build / deploy / pipeline 命令的意图识别与参数提取。支持自然语言（"部署到测试环境"）和显式参数（--env test --all）。参数缺失时交互式提示，前置校验环境配置与平台有效性。不影响 speccore ask 的意图识别能力。', 'speccore pipeline --env ${1|local,dev,test,staging,production|} --all'],
+  ['spec-verify', '测试验证专属 Skill。覆盖 verify 命令的测试意图识别与参数提取。支持自然语言（"跑一下冒烟测试"）和显式参数（--config ./tests/smoke.yaml）。参数缺失时交互式提示，自动发现测试配置文件。不影响 speccore ask 的意图识别能力。', 'speccore verify --ui --env ${1|local,dev,test,staging,production|}'],
 ];
 
 export async function createToolIntegrations(projectRoot: string, toolFilter?: string): Promise<void> {
@@ -1204,7 +1257,7 @@ export async function cleanupStaleFiles(
  * 生成 AGENTS.md — 跨工具通用上下文文件。
  * Cursor / Copilot / Windsurf / Codex 原生支持，Claude Code 通过 CLAUDE.md 引用。
  */
-async function writeAgentsMd(projectRoot: string): Promise<void> {
+export async function writeAgentsMd(projectRoot: string): Promise<void> {
   const { writeFile: wf, pathExists } = require('fs-extra');
   const content = `# AGENTS.md — SpecCore 项目规则
 
@@ -1244,17 +1297,41 @@ SpecCore 规范驱动开发项目。
 ## 项目结构
 \`\`\`
 Iteration-NNN-name/            ← 迭代目录（名称从 context.json 获取）
-├── 000-overview/              ← 进度总览
+├── 000-overview/              ← 进度总览与报告
+│   ├── PROJECT_GRAPH.md       ← 项目任务图谱
+│   ├── task-summaries/        ← 任务总览报告
+│   ├── plans/                 ← 执行计划
+│   ├── RETRO.md               ← 迭代复盘
+│   └── PIPELINE_REPORT.md     ← Pipeline 报告
 ├── 010-requirements/          ← 需求文档（按功能组织）
+│   ├── README.md              ← 目录规范说明
 │   ├── INDEX.md               ← 需求文档索引
 │   ├── sources/               ← [只读] 原始 PRD
-│   └── features/              ← [手动维护] 按功能模块组织
-├── 020-specs/                 ← 需求分析（全局文档在 global/ 子目录）
+│   ├── converted/             ← [自动生成] doc2spec 转换
+│   ├── features/              ← [手动维护] 按功能模块组织
+│   ├── prototypes/            ← 原型素材
+│   ├── assets/                ← 素材资源（extracted/prototypes/designs/screenshots）
+│   └── [bugs/refactors/research/REQUIREMENT.md/CLARIFY_REPORT.md] ← 可选
+├── 020-specs/                 ← 需求分析（analyze 输出）
+│   ├── overview/              ← 全局规格
+│   ├── {功能模块}/{端名}/      ← 端级规格
+│   ├── requirements/          ← 黄金需求
+│   ├── PLATFORMS.md           ← 端列表
+│   └── QUALITY_AUDIT.md       ← 质量审计
 ├── 030-tasks/                 ← 开发任务
 │   └── Task-NNN-name/         ← 功能模块任务
 │       ├── .meta/             ← 任务元信息
-│       ├── {platform}/        ← 所有端平铺（如 booking-service/h5-mobile）
-│       │   └── {subtask}/     ← 子任务（代码写到 CONSTITUTION 源码路径）
+│       │   ├── feature        ← 功能单元名
+│       │   ├── type           ← 任务类型
+│       │   ├── status         ← 状态
+│       │   ├── owner          ← 负责人
+│       │   ├── created-at     ← 创建时间
+│       │   └── estimated-hours ← 预估工时
+│       ├── _shared/           ← 共享契约（API_CONTRACT.yaml + CONTEXT.md）
+│       ├── 00-specs/          ← 模块级核心规格（analyze 写入）
+│       ├── {platform}/        ← 端平铺
+│       │   └── {subtask}/     ← 执行单元（.meta/ + 规格文档）
+│       │       └── [ROUTES.md/STATE.md] ← 仅前端
 │       └── .issues.md         ← 问题追踪
 └── STAFFING.md                ← 人员排期
 \`\`\`
@@ -1268,7 +1345,14 @@ Iteration-NNN-name/            ← 迭代目录（名称从 context.json 获取�
 | \`[SPECCORE_ABOUT: <path>]\` | 版本信息页 | 用 present_files 展示 |
 | \`[SPECCORE_MODE: <mode>]\` | 意图模式 | 识别模式后进入对应流程 |
 | \`[SPECCORE_EXEC: <cmd>]\` | 自动执行命令 | 直接 execute_command |
+| \`[SPECCORE_CONFIRM]\` | 执行前确认 | 需用户确认后再执行（副作用命令） |
+| \`[SPECCORE_EXEC_STATUS: ok\\|fail(<code>)]\` | 命令执行结果 | 检查执行是否成功 |
+| \`[SPECCORE_EXEC_ERROR: <msg>]\` | 命令执行异常 | 查看错误详情 |
 | \`[SPECCORE_INTENT]\` | 意图确认块 | 展示给用户确认 |
+| \`[SPECCORE_CONFIRM_STEP: <order>/<total>] <cmd>\` | Pipeline 步骤信息 | 展示当前步骤详情 |
+| \`[SPECCORE_CONFIRM_ASK: ...]\` | Pipeline 步骤询问 | 等待用户输入 y（确认）/ s（跳过）/ q（停止） |
+| \`[SPECCORE_STEP_FAIL: <cmd>]\` | Pipeline 步骤失败 | 提示用户选择重试/跳过/停止 |
+| \`[SPECCORE_AMBIGUOUS: <cmd1> \\| <cmd2>]\` | 意图模糊 | 展示匹配选项让用户选择 |
 | \`[SPECCORE_CONTINUE: <path>]\` | 批次执行完成，需续批 | **必须开始新对话**，先读取 \`<path>\` 恢复上下文，再按提示命令继续下一批次 |
 
 ## 行为约束
@@ -1329,9 +1413,32 @@ export async function initAgentsDir(projectRoot: string): Promise<void> {
   logger.info('   🤖 已初始化 AGENTS 规范数据库: .speccore/AGENTS/');
 }
 
+// ── v8.3.46+: 智能过时检测 ──
+
+/** 已知过时标记：正则 + 描述 */
+const OBSOLETE_MARKERS: { pattern: RegExp; desc: string }[] = [
+  { pattern: /^\s*[│├└].*10-backend\/|^\s*[│├└].*20-frontend\//m, desc: '旧端分类层（10-backend/20-frontend/）' },
+  { pattern: /^\s*[│|]\s+.*src\/\s+←\s+AI\s+输出代码\s*$/m, desc: '子任务目录含 src/' },
+  { pattern: /^\s*[│|]\s+.*tests\/\s+←\s+AI\s+输出测试\s*$/m, desc: '子任务目录含 tests/' },
+  { pattern: /execute\s+-I\s+/, desc: 'execute -I（应为 -i）' },
+  { pattern: /CONSTITUTION\.md\s+指定的源码路径(?!\s*\/\s*PROJECT\.yaml)/, desc: '缺少 PROJECT.yaml 引用' },
+  { pattern: /禁止在迭代目录下创建\s+10-backend/, desc: '旧表述：迭代目录（应为任务目录）' },
+];
+
+function detectObsoleteContent(content: string): { hasObsolete: boolean; markers: string[] } {
+  const markers: string[] = [];
+  for (const marker of OBSOLETE_MARKERS) {
+    if (marker.pattern.test(content)) {
+      markers.push(marker.desc);
+    }
+  }
+  return { hasObsolete: markers.length > 0, markers };
+}
+
 /**
  * v6.85.0+: 初始化 RULES 规范库
  * 将内置默认编码规范复制到 .speccore/RULES/ 目录
+ * v8.3.46+: 增加智能过时检测，自动修复已知的过时 inline 模板
  */
 export async function initRulesDir(projectRoot: string): Promise<void> {
   const rulesDir = join(projectRoot, '.speccore', 'RULES');
@@ -1346,7 +1453,8 @@ export async function initRulesDir(projectRoot: string): Promise<void> {
     }
   }
 
-  // v6.98.0+: 创建 AGENTS.md 投影用的 .inline.md 文件（不覆盖用户已自定义的）
+  // v6.98.0+: 创建 AGENTS.md 投影用的 .inline.md 文件
+  // v8.3.46+: 智能过时检测 — 发现已知过时标记时自动覆盖
   const inlineTemplates = [
     {
       name: '01-PROJECT_STRUCTURE.inline.md',
@@ -1354,44 +1462,90 @@ export async function initRulesDir(projectRoot: string): Promise<void> {
 
 \`\`\`
 Iteration-NNN-name/            ← 迭代目录
-├── 000-overview/              ← 进度总览
+├── 000-overview/              ← 进度总览与报告
+│   ├── PROJECT_GRAPH.md       ← 项目任务图谱（split 后生成）
+│   ├── task-summaries/        ← 任务总览报告（TASK_SUMMARY-*.md）
+│   ├── plans/                 ← 执行计划（PLAN.md + HTML 可视化）
+│   ├── RETRO.md               ← 迭代复盘报告（done 后生成）
+│   └── PIPELINE_REPORT.md     ← Pipeline 执行报告（dev 后生成）
 ├── 010-requirements/          ← 需求文档（按功能组织）
 │   ├── README.md              ← 目录规范说明
 │   ├── INDEX.md               ← 需求文档索引
-│   ├── sources/               ← [只读] 原始 PRD
+│   ├── sources/               ← [只读] 原始 PRD（.docx/.pdf/.md）
 │   ├── converted/             ← [自动生成] doc2spec 转换后的 MD
 │   ├── features/              ← [手动维护] 按功能模块组织
-│   │   └── {feature}/README.md
+│   │   └── {feature}/
+│   │       └── README.md
 │   ├── prototypes/            ← 原型（HTML/图片/链接，内容不限）
-│   └── assets/                ← doc2spec 提取的图片
-├── 020-specs/                 ← 需求分析
+│   ├── assets/                ← 素材资源
+│   │   ├── extracted/         ← doc2spec 提取的图片/媒体
+│   │   ├── prototypes/        ← 产品原型
+│   │   ├── designs/           ← UI 设计稿
+│   │   └── screenshots/       ← 参考截图
+│   ├── bugs/                  ← [可选] bug 需求文档
+│   ├── refactors/             ← [可选] 重构需求文档
+│   ├── research/              ← [可选] 调研需求文档
+│   ├── REQUIREMENT.md         ← [可选] 主需求文档
+│   └── CLARIFY_REPORT.md      ← [可选] 需求澄清报告
+├── 020-specs/                 ← 需求分析（analyze 输出）
+│   ├── overview/              ← 全局规格（跨端共享）
+│   │   └── REQUIREMENT.md / ANALYSIS.md / TECH.md / DEV_GUIDE.md ...
+│   ├── {功能模块}/            ← 按功能模块组织
+│   │   └── {端名}/            ← 端级规格
+│   │       └── TECH.md / TEST.md / UI_SPEC.md / DEV_GUIDE.md ...
+│   ├── requirements/          ← 黄金需求（clarify 输出，analyze 读取）
+│   ├── PLATFORMS.md           ← 端列表
+│   └── QUALITY_AUDIT.md       ← 质量审计报告
 ├── 030-tasks/                 ← 开发任务
 │   └── Task-*/                ← 功能模块分组（聚合相关子任务）
-│       ├── _shared/           ← 共享契约（API_CONTRACT.yaml + CONTEXT.md）
-│       ├── 00-specs/          ← 模块级核心规格（REQ/TECH/SCHEMA/CHANGELOG）
+│       ├── .meta/             ← 任务元信息
+│       │   ├── feature        ← 功能单元名
+│       │   ├── type           ← 任务类型（feature/bugfix/refactor/research）
+│       │   ├── status         ← 状态（todo/doing/done）
+│       │   ├── owner          ← 负责人
+│       │   ├── created-at     ← 创建时间
+│       │   └── estimated-hours ← 预估工时
+│       ├── _shared/           ← 共享契约
+│       │   ├── API_CONTRACT.yaml
+│       │   └── CONTEXT.md
+│       ├── 00-specs/          ← 模块级核心规格（analyze 阶段写入）
+│       │   ├── REQ.md         ← 需求规格
+│       │   ├── TECH.md        ← 技术规格
+│       │   ├── SCHEMA.md      ← 数据模型（条件创建）
+│       │   ├── CHANGELOG.md   ← 变更记录
+│       │   └── CONTEXT.md     ← [兼容] 任务上下文副本
 │       ├── {端名}/            ← 端平铺（如 booking-service / h5-mobile / admin-web）
 │       │   └── {子任务}/      ← 执行单元
+│       │       ├── .meta/     ← 子任务元信息
+│       │       │   ├── type
+│       │       │   ├── status
+│       │       │   ├── owner
+│       │       │   ├── created-at
+│       │       │   ├── estimated-hours ← 预估工时
+│       │       │   ├── feature       ← 功能单元名
+│       │       │   └── git-config    ← 子任务级 Git 配置
+│       │       ├── TASK.md    ← 子任务追踪
+│       │       ├── TEST.md    ← 测试用例
+│       │       ├── RISK.md    ← 风险评估
+│       │       ├── DEPS.md    ← 依赖分析
+│       │       ├── MONITOR.md ← 监控方案
+│       │       ├── REVIEW.md  ← 评审清单
+│       │       ├── DEPLOY.md  ← 部署清单
+│       │       ├── ERROR_CODES.md
+│       │       ├── COMPONENT_TREE.md  ← 组件树（仅前端）
+│       │       ├── ROUTES.md          ← 路由设计（仅前端）
+│       │       └── STATE.md           ← 状态管理（仅前端）
 │       └── .issues.md         ← 问题追踪
-│
-│   子任务目录结构（{端名}/{子任务}/）：
-│       ├── .meta/             ← 子任务元信息（type/status/owner/created-at）
-│       ├── git-config         ← 子任务级 Git 配置
-│       ├── TASK.md            ← 子任务追踪
-│       ├── TEST.md            ← 测试用例
-│       ├── RISK.md            ← 风险评估
-│       ├── DEPS.md            ← 依赖分析
-│       ├── MONITOR.md         ← 监控方案
-│       ├── REVIEW.md          ← 评审清单
-│       ├── DEPLOY.md          ← 部署清单
-│       ├── ERROR_CODES.md     ← 错误码
-│       └── COMPONENT_TREE.md  ← 组件树（仅前端）
 │
 │   > ⚠️ 代码输出位置：AI 生成的代码写入 CONSTITUTION.md/PROJECT.yaml 中声明的「源码路径」，
 │   > 禁止写入迭代目录内。子任务目录只存放规格文档（TASK.md/TEST.md/RISK.md 等）。
 │
 │   research 类型任务目录结构（无前后端分层）：
-│       ├── _shared/           ← 共享上下文
-│       ├── 00-specs/          ← 核心规格（REQ.md/TECH.md）
+│       ├── _shared/
+│       │   └── CONTEXT.md
+│       ├── 00-specs/
+│       │   ├── REQ.md
+│       │   └── TECH.md
 │       ├── RESEARCH.md        ← 调研报告
 │       ├── COMPARISON.md      ← 方案对比
 │       └── .issues.md         ← 问题追踪
@@ -1410,8 +1564,16 @@ Iteration-NNN-name/            ← 迭代目录
 | \`[SPECCORE_ABOUT: <path>]\` | 版本信息页 | 用 present_files 展示 |
 | \`[SPECCORE_MODE: <mode>]\` | 意图模式 | 识别模式后进入对应流程 |
 | \`[SPECCORE_EXEC: <cmd>]\` | 自动执行命令 | 直接 execute_command |
+| \`[SPECCORE_CONFIRM]\` | 执行前确认 | 需用户确认后再执行（副作用命令） |
+| \`[SPECCORE_EXEC_STATUS: ok\\|fail(<code>)]\` | 命令执行结果 | 检查执行是否成功 |
+| \`[SPECCORE_EXEC_ERROR: <msg>]\` | 命令执行异常 | 查看错误详情 |
 | \`[SPECCORE_INTENT]\` | 意图确认块 | 展示给用户确认 |
-| \`[SPECCORE_CONTINUE: <path>]\` | 批次执行完成，需续批 | **必须开始新对话**，先读取 \`<path>\` 恢复上下文，再按提示命令继续下一批次 |`,},
+| \`[SPECCORE_CONFIRM_STEP: <order>/<total>] <cmd>\` | Pipeline 步骤信息 | 展示当前步骤详情 |
+| \`[SPECCORE_CONFIRM_ASK: ...]\` | Pipeline 步骤询问 | 等待用户输入 y（确认）/ s（跳过）/ q（停止） |
+| \`[SPECCORE_STEP_FAIL: <cmd>]\` | Pipeline 步骤失败 | 提示用户选择重试/跳过/停止 |
+| \`[SPECCORE_AMBIGUOUS: <cmd1> \\| <cmd2>]\` | 意图模糊 | 展示匹配选项让用户选择 |
+| \`[SPECCORE_CONTINUE: <path>]\` | 批次执行完成，需续批 | **必须开始新对话**，先读取 \`<path>\` 恢复上下文，再按提示命令继续下一批次 |`,
+    },
     {
       name: '03-COMMAND_CHEATSHEET.inline.md',
       content: `## 常用命令速查
@@ -1425,8 +1587,17 @@ speccore execute -i <迭代名> --all       # 执行所有任务
   ];
   for (const tpl of inlineTemplates) {
     const destPath = join(rulesDir, tpl.name);
-    if (!(await pathExists(destPath))) {
+    const exists = await pathExists(destPath);
+    if (!exists) {
       await writeFile(destPath, tpl.content);
+    } else if (tpl.name.endsWith('.inline.md')) {
+      // v8.3.46+: 智能过时检测 — 发现已知过时标记时自动覆盖
+      const existingContent = await readFile(destPath, 'utf-8');
+      const { hasObsolete, markers } = detectObsoleteContent(existingContent);
+      if (hasObsolete) {
+        logger.info(`   🔄 检测到过时内容 [${tpl.name}]: ${markers.join('、')}，已自动更新`);
+        await writeFile(destPath, tpl.content);
+      }
     }
   }
 
@@ -1501,8 +1672,14 @@ const AUTO_END = '<!-- SPECCORE_AUTO_INDEX_END -->';
  * - `*.inline.md` → 内容内联到 AGENTS.md
  * - `*.md` → 只生成索引链接
  */
-export async function syncAgentsMd(projectRoot: string): Promise<void> {
+export async function syncAgentsMd(projectRoot: string, force = false): Promise<void> {
   const agentsMdPath = join(projectRoot, 'AGENTS.md');
+
+  // v8.3.46+: force 模式 — 重新生成手动区，不保留旧内容
+  // 用户自定义内容需手动备份，update 时直接采用最新内置模板
+  if (force) {
+    await writeAgentsMd(projectRoot);
+  }
 
   // 1. 读取现有 AGENTS.md，提取手动区（AUTO_START 之前的部分）
   let manualPart = '';
@@ -1566,7 +1743,7 @@ export async function syncAgentsMd(projectRoot: string): Promise<void> {
   if (ruleInlines.length > 0) ruleParts.push(...ruleInlines);
   if (ruleLinks.length > 0) ruleParts.push('### 更多规范\n' + ruleLinks.join('\n'));
   if (ruleParts.length > 0) {
-    sections.push('## 编码规范与规则\n\n' + ruleParts.join('\n\n'));
+    sections.push('## 规范与参考\n\n' + ruleParts.join('\n\n'));
   }
 
   // 2c. 扫描 .agents/agents/（v6.99.0+: Agent 角色定义投影）
@@ -1676,8 +1853,16 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
     '│   └── {feature}/',
     '│       └── README.md',
     '├── prototypes/            ← 原型（HTML/图片/链接，内容不限）',
-    '└── assets/',
-    '    └── extracted/         ← doc2spec 提取的图片/媒体文件',
+    '├── assets/                ← 素材资源',
+    '│   ├── extracted/         ← doc2spec 提取的图片/媒体文件',
+    '│   ├── prototypes/        ← 产品原型',
+    '│   ├── designs/           ← UI 设计稿',
+    '│   └── screenshots/       ← 参考截图',
+    '├── bugs/                  ← [可选] bug 需求文档',
+    '├── refactors/             ← [可选] 重构需求文档',
+    '├── research/              ← [可选] 调研需求文档',
+    '├── REQUIREMENT.md         ← [可选] 主需求文档',
+    '└── CLARIFY_REPORT.md      ← [可选] 需求澄清报告',
     '```',
     '',
     '## 使用规范',
@@ -1686,7 +1871,9 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
     '2. **converted/** — doc2spec 命令自动输出转换后的 MD，人工不修改',
     '3. **features/** — 按功能模块手动补充需求细节，每个模块一个子目录',
     '4. **prototypes/** — 原型文件，HTML/图片/链接均可，需求文档中链接到原型的会被主动读取',
-    '5. **assets/extracted/** — doc2spec 自动提取的图片，人工不修改',
+    '5. **assets/** — 素材资源目录，包含 extracted（doc2spec 自动提取）、prototypes（产品原型）、designs（UI 设计稿）、screenshots（参考截图）',
+    '6. **bugs/refactors/research/** — 可选目录，按类型组织补充需求',
+    '7. **REQUIREMENT.md / CLARIFY_REPORT.md** — 可选的主需求文档和澄清报告',
   ].join('\n'));
 
   // 010-requirements/INDEX.md — 需求文档索引

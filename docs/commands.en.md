@@ -131,37 +131,6 @@ speccore execute --all --interactive                # Interactive selection
 
 ---
 
-## ⏰ Scheduled Execution
-
-| Command | Alias | Description | Options |
-| :--- | :--- | :--- | :--- |
-| `speccore schedule create` | — | Create scheduled execution | `--at <datetime>` `--task <id>` `--all` `--iteration <name>` |
-| `speccore schedule list` | — | View schedule queue | — |
-| `speccore schedule cancel` | — | Cancel a schedule | `--id <sch-id>` |
-| `speccore schedule daemon start` | — | Start daemon process | — |
-| `speccore schedule daemon status` | — | Check daemon status | — |
-
-```bash
-# Method 1: Mark tasks for nightly queue, trigger via AI
-speccore task new -n "Fix login timeout" --type=bugfix --schedule=night   # Mark as queue
-# 🔒 AI: @spec-ask "run all scheduled tasks"
-
-# Method 2: Precise time scheduling
-speccore schedule create --at "2026-08-10 21:00:00" -t Task-001           # Schedule single task
-speccore schedule create --at "2026-08-10 02:00:00" --all -i Q1           # Schedule all tasks
-speccore schedule list                                                      # View schedule queue
-speccore schedule cancel --id=sch-xxx                                       # Cancel
-speccore schedule daemon start                                              # Start daemon (auto-execute)
-speccore schedule daemon status                                             # Check daemon status
-```
-
-| Method | Use Case | Granularity |
-|:---|:---|:---|
-| `--schedule=night` | Queue during day, batch at night | Manual trigger |
-| `schedule create --at` | Precise auto-execution | Second-level (requires daemon) |
-
----
-
 ## 🔄 Change & Sync 🔒 AI Commands
 
 | Command | Alias | Description | Options |
@@ -283,7 +252,6 @@ speccore context --task=Task-001
 | `speccore help` | `hp` | Categorized command help | `--category <name>` |
 | `speccore welcome` | `wc` | First-use interactive guide | — |
 | `speccore search` | `sh` | Search across all Spec files | `<query>` `--task=<id>` `--iteration=<name>` |
-| `speccore watch` | `wch` | Watch files + auto-validate on save | `--task=<id>` `--iteration=<name>` |
 | `speccore delete` | `dl` | Delete task/iteration (trash + auto-clean) | `--task=<id>` `--iteration=<name>` `--force` |
 
 ```bash

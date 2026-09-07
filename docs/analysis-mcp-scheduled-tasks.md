@@ -1,6 +1,7 @@
-# MCP scheduled_tasks 方案分析
+# MCP scheduled_tasks 方案分析 [历史归档]
 
 > 日期: 2026-08-08 | 版本: v5.67.30
+> 状态: **已归档** | `speccore schedule` 和 `speccore watch` 命令已在 v8.3.60 彻底移除
 > 目的: 对比现有 daemon 方案与 MCP Sampling 方案，确定 SpecCore 调度能力的升级路径。
 
 > 💡 **命令类型**: 本文档中的 `speccore execute` 为 🔒 AI 命令，需在 AI IDE 中通过 `@spec-ask` 使用。

@@ -18,7 +18,7 @@ speccore diff --source=A --target=B   # Compare iterations
 speccore trace --req=REQ-001          # Trace chain
 speccore delete -t Task-005           # Safe delete (trash + clean refs)
 speccore search "payment"             # Cross-spec search
-speccore watch                        # Auto-validate on save
+speccore validate                     # Compliance check
 ```
 
 ## 🔒 AI Commands (use @spec-ask in AI IDE: WorkBuddy/Cursor/Trae)
