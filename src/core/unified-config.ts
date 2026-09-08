@@ -150,6 +150,13 @@ export interface SpecConfig {
     llm_providers: LlmProviderConfig[];
   };
   config_history: { date: string; change: string; changed_by?: string }[];
+  /** v8.3.70+: 外部工具自定义路径 */
+  tools?: {
+    /** pandoc 可执行文件路径（用于 doc2spec / spec2doc） */
+    pandoc?: string;
+    /** LibreOffice 可执行文件路径（用于 .doc 旧格式转换） */
+    libreoffice?: string;
+  };
 }
 
 /** 项目配置 — .speccore/PROJECT.yaml（工程映射） */
@@ -215,6 +222,7 @@ export const DEFAULT_CONFIG: SpecConfig = {
     llm_providers: [],
   },
   config_history: [],
+  tools: { pandoc: '', libreoffice: '' },
 };
 
 // ─────────────────────────────────────────
@@ -1326,6 +1334,19 @@ function toYaml(config: SpecConfig): string {
       yaml += `      priority: ${p.priority}\n`;
     }
   }
+
+  // tools 配置
+  yaml += '\n# ─────────────────────────────────────────────────────────────────────────────\n';
+  yaml += '# 外部工具路径（v8.3.71+）\n';
+  yaml += '# ─────────────────────────────────────────────────────────────────────────────\n';
+  yaml += '# 当 which/where 命令无法找到 pandoc/libreoffice 时（如非标准安装路径），\n';
+  yaml += '# 可在此手动指定可执行文件的绝对路径。\n';
+  yaml += '# 配置优先级：配置路径 > 系统 PATH 查找 > 常见安装位置兜底\n';
+  yaml += 'tools:\n';
+  yaml += '  # pandoc: 用于 doc2spec（Word→Markdown）和 spec2doc（Markdown→Word/PDF）\n';
+  yaml += `  pandoc: ${config.tools?.pandoc || '""'}\n`;
+  yaml += '  # libreoffice: 用于 .doc 旧格式转换（可选）\n';
+  yaml += `  libreoffice: ${config.tools?.libreoffice || '""'}\n`;
 
   if (config.config_history.length > 0) {
     yaml += '\nconfig_history:\n';
