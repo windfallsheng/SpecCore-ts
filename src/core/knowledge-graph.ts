@@ -129,22 +129,20 @@ async function scanRequirements(iterDir: string, iterName: string): Promise<{
 }> {
   const entities: GraphEntity[] = [];
   const relations: GraphRelation[] = [];
-  const reqDir = join(iterDir, '010-requirements');
 
-  if (!(await pathExists(reqDir))) return { entities, relations };
-
-  // 递归扫描所有 .md 文件
-  const scanDir = async (dir: string, prefix: string) => {
-    const items = await readdir(dir, { withFileTypes: true });
+  // 递归扫描需求目录的通用函数
+  const scanReqDir = async (baseDir: string, basePrefix: string, isGolden: boolean) => {
+    if (!(await pathExists(baseDir))) return;
+    const items = await readdir(baseDir, { withFileTypes: true });
     for (const item of items) {
       if (item.name.startsWith('.') || isTimestampBackup(item.name)) continue;
-      const fullPath = join(dir, item.name);
-      const relPath = `${prefix}${item.name}`;
+      const fullPath = join(baseDir, item.name);
+      const relPath = `${item.name}`;
 
       if (item.isDirectory()) {
         // sources/ 由 scanUserFiles() 单独处理，避免双重注册
         if (item.name === 'sources') continue;
-        await scanDir(fullPath, `${relPath}/`);
+        await scanReqDir(join(baseDir, item.name), `${basePrefix}${relPath}/`, isGolden);
       } else if (item.name.endsWith('.md') && item.name !== 'INDEX.md' && !isTimestampBackup(item.name)) {
         const { hash, mtime } = await fileHash(fullPath);
         const title = await extractTitle(fullPath);
@@ -153,26 +151,32 @@ async function scanRequirements(iterDir: string, iterName: string): Promise<{
         const pathPrefix = relPath.replace(/\.md$/, '').replace(/\//g, '-');
         const reqId = extractReqId(content, pathPrefix);
 
+        const prefix = basePrefix; // 如 'features/' 或 ''
+        const tags: string[] = [isGolden ? 'golden' : 'requirement'];
+        if (prefix.includes('features/')) tags.push('feature');
+        else if (prefix.includes('bugs/')) tags.push('bug');
+        else if (prefix.includes('refactors/')) tags.push('refactor');
+        else if (prefix.includes('research/')) tags.push('research');
+
         entities.push({
           id: reqId,
           type: 'requirement',
           title: title || item.name.replace('.md', ''),
-          file: `010-requirements/${relPath}`,
+          file: `${basePrefix}${relPath}`,
           hash,
           mtime,
-          tags: [
-            prefix.includes('features/') ? 'feature'
-            : prefix.includes('bugs/') ? 'bug'
-            : prefix.includes('refactors/') ? 'refactor'
-            : prefix.includes('research/') ? 'research'
-            : 'requirement'
-          ],
+          tags,
         });
       }
     }
   };
 
-  await scanDir(reqDir, '');
+  // 1. 扫描原始需求目录
+  await scanReqDir(join(iterDir, '010-requirements'), '010-requirements/', false);
+
+  // 2. 扫描黄金需求目录（v8.3.65+ clarify 后的专业需求）
+  await scanReqDir(join(iterDir, '020-specs', 'requirements'), '020-specs/requirements/', true);
+
   return { entities, relations };
 }
 
@@ -210,7 +214,8 @@ async function scanSpecs(iterDir: string): Promise<{
   }
 
   // 扫描各端子目录（新路径 020-specs/{端}/，兼容旧路径 020-specs/platforms/{端}/）
-  const knownNonPlatformDirs = new Set(['sources', 'assets', 'prototypes', 'converted', 'features', 'bugs', 'refactors', 'research', 'staging', 'platforms', 'snapshots']);
+  // v8.3.65+: 加入 requirements（黄金需求目录，由 scanRequirements 单独扫描）
+  const knownNonPlatformDirs = new Set(['sources', 'assets', 'prototypes', 'converted', 'features', 'bugs', 'refactors', 'research', 'staging', 'platforms', 'snapshots', 'requirements']);
   const platformDirs: string[] = [];
   const specsEntries = await readdir(specsDir, { withFileTypes: true });
   for (const e of specsEntries) {
