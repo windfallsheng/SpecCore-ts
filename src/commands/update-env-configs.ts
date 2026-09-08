@@ -115,7 +115,7 @@ platforms:
     deploy:
       type: pm2
       output_dir: .
-      pm2_config: ecosystem.config.js
+      pm2_config: .speccore/environments/scripts/ecosystem.config.js
       # 如需远程部署，取消注释:
       # host: deploy@server.example.com
       # remote_dir: /opt/services/notification
@@ -126,14 +126,14 @@ platforms:
     deploy:
       type: k8s
       target: ${t.name}
-      script: k8s/gateway-deployment.yaml
+      script: .speccore/environments/scripts/k8s-deployment.yaml
 
   # 后端示例：Python 处理 → 脚本部署
   data-processor:
     build_cmd: pip install -r requirements.txt -t dist/
     deploy:
       type: script
-      script: ./scripts/deploy-processor.sh
+      script: .speccore/environments/scripts/deploy.sh
 
   # 后端示例：用户服务 → Helm
   user-service:
@@ -142,7 +142,7 @@ platforms:
       type: helm
       target: ${t.name}
       script: ./helm/user-service
-      output_dir: values-${t.name}.yaml
+      output_dir: .speccore/environments/scripts/values-${t.name}.yaml
 
   # 后端示例：定时任务 → SFTP 到服务器
   scheduler:
@@ -234,6 +234,205 @@ pipeline:
 `;
 }
 
+// ── 部署脚本模板 ──
+
+const SCRIPT_TEMPLATES: { name: string; content: string }[] = [
+  {
+    name: 'deploy.sh',
+    content: `#!/bin/bash
+# =============================================================================
+# SpecCore 通用部署脚本模板
+# =============================================================================
+# 用途：自定义部署逻辑（script 类型部署时调用）
+# 位置：.speccore/environments/scripts/deploy.sh
+# 执行：speccore deploy --env <env> --platform <platform>
+#
+# 环境变量（由 deploy engine 自动注入）：
+#   $PLATFORM    当前端名（如 notification-service）
+#   $ENV         当前环境（如 staging, production）
+#   $CWD         端代码路径（code_path 或项目根目录）
+# =============================================================================
+
+set -e
+
+echo "🚀 开始部署: $PLATFORM → $ENV"
+echo "📂 工作目录: $CWD"
+
+# TODO: 在此添加自定义部署逻辑
+# 示例：
+# cd "$CWD"
+# tar -czf dist.tar.gz dist/
+# scp dist.tar.gz deploy@server:/opt/services/$PLATFORM/
+# ssh deploy@server "cd /opt/services/$PLATFORM && tar -xzf dist.tar.gz && sudo systemctl restart $PLATFORM"
+
+echo "✅ 部署完成: $PLATFORM → $ENV"
+`,
+  },
+  {
+    name: 'ecosystem.config.js',
+    content: `// =============================================================================
+// PM2 生态配置模板
+// =============================================================================
+// 用途：PM2 进程管理配置（pm2 类型部署时调用）
+// 位置：.speccore/environments/scripts/ecosystem.config.js
+// 执行：speccore deploy --env <env> --platform <platform>
+//
+// 请根据实际项目修改 app 名称、脚本路径、环境变量等。
+// =============================================================================
+
+module.exports = {
+  apps: [
+    {
+      name: 'notification-service',
+      script: './dist/index.js',
+      instances: 'max',
+      exec_mode: 'cluster',
+      env: {
+        NODE_ENV: 'development',
+        PORT: 3000,
+      },
+      env_dev: {
+        NODE_ENV: 'development',
+        PORT: 3000,
+      },
+      env_test: {
+        NODE_ENV: 'test',
+        PORT: 3000,
+      },
+      env_staging: {
+        NODE_ENV: 'staging',
+        PORT: 3000,
+      },
+      env_production: {
+        NODE_ENV: 'production',
+        PORT: 3000,
+      },
+      log_file: './logs/combined.log',
+      out_file: './logs/out.log',
+      error_file: './logs/error.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      max_memory_restart: '500M',
+      restart_delay: 3000,
+    },
+  ],
+};
+`,
+  },
+  {
+    name: 'k8s-deployment.yaml',
+    content: `# =============================================================================
+# K8s Deployment + Service 模板
+# =============================================================================
+# 用途：Kubernetes 部署配置（k8s 类型部署时调用）
+# 位置：.speccore/environments/scripts/k8s-deployment.yaml
+# 执行：speccore deploy --env <env> --platform <platform>
+#
+# 请根据实际项目修改镜像名、端口、资源限制等。
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  labels:
+    app: gateway
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: gateway
+  template:
+    metadata:
+      labels:
+        app: gateway
+    spec:
+      containers:
+        - name: gateway
+          image: registry.example.com/gateway:latest
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              memory: '128Mi'
+              cpu: '100m'
+            limits:
+              memory: '512Mi'
+              cpu: '500m'
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+spec:
+  selector:
+    app: gateway
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+  type: ClusterIP
+`,
+  },
+];
+
+function generateHelmValuesContent(envName: string): string {
+  return `# =============================================================================
+# Helm Values 模板 — ${envName} 环境
+# =============================================================================
+# 用途：Helm chart 的 values 覆盖文件（helm 类型部署时调用）
+# 位置：.speccore/environments/scripts/values-${envName}.yaml
+# 执行：speccore deploy --env ${envName} --platform <platform>
+#
+# 请根据实际项目修改镜像、副本数、资源限制等。
+# =============================================================================
+
+replicaCount: 2
+
+image:
+  repository: registry.example.com/user-service
+  pullPolicy: IfNotPresent
+  tag: '${envName}'
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+`;
+}
+
 /** update 时初始化环境配置目录 */
 export async function initEnvironmentConfigs(projectRoot: string): Promise<string[]> {
   const envDir = join(projectRoot, '.speccore', 'environments');
@@ -244,19 +443,49 @@ export async function initEnvironmentConfigs(projectRoot: string): Promise<strin
 
   const created: string[] = [];
 
+  // v8.3.69+: 脚本模板和 Helm values 在新建/升级时都创建（已有项目升级时补全缺失的脚本）
+  const scriptsDir = join(envDir, 'scripts');
+  await ensureDir(scriptsDir);
+
+  // 创建通用脚本模板（缺失才创建）
+  for (const st of SCRIPT_TEMPLATES) {
+    const scriptPath = join(scriptsDir, st.name);
+    if (!(await pathExists(scriptPath))) {
+      await writeFile(scriptPath, st.content, 'utf-8');
+      created.push(`.speccore/environments/scripts/${st.name}`);
+    }
+  }
+
   if (!hasYaml) {
     logger.info('  📦 初始化默认环境配置...');
+
     for (const t of ENV_TEMPLATES) {
       const filePath = join(envDir, `${t.name}.yaml`);
       await writeFile(filePath, generateEnvContent(t), 'utf-8');
       created.push(`.speccore/environments/${t.name}.yaml`);
+
+      // 为每个环境创建 Helm values 模板
+      const valuesPath = join(scriptsDir, `values-${t.name}.yaml`);
+      if (!(await pathExists(valuesPath))) {
+        await writeFile(valuesPath, generateHelmValuesContent(t.name), 'utf-8');
+        created.push(`.speccore/environments/scripts/values-${t.name}.yaml`);
+      }
     }
   } else {
-    // 已有环境配置，仅更新示例文件
+    // 已有环境配置，仅更新示例文件 + 补全缺失的 Helm values
     const examplePath = join(envDir, 'staging.yaml.example');
     const exampleContent = generateEnvContent(ENV_TEMPLATES[2]) + '\n# 本文件为示例，可复制为 staging.yaml 后修改使用\n';
     await writeFile(examplePath, exampleContent, 'utf-8');
     created.push('.speccore/environments/staging.yaml.example');
+
+    // v8.3.69+: 已有环境配置时，补全可能缺失的 Helm values 模板
+    for (const t of ENV_TEMPLATES) {
+      const valuesPath = join(scriptsDir, `values-${t.name}.yaml`);
+      if (!(await pathExists(valuesPath))) {
+        await writeFile(valuesPath, generateHelmValuesContent(t.name), 'utf-8');
+        created.push(`.speccore/environments/scripts/values-${t.name}.yaml`);
+      }
+    }
   }
 
   return created;
