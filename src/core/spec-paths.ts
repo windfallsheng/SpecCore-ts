@@ -133,8 +133,9 @@ async function getValidPlatformIdentifiers(): Promise<Set<string>> {
 export async function parseFeatureList(iterDir: string): Promise<string[]> {
   const features = new Set<string>();
   // 排除非功能文档（系统文件、汇总文件）
+  // v8.3.81+: 移除 'REQUIREMENT'，用户命名自由，REQUIREMENT.md 也可作为功能模块名
   const excludeNames = new Set([
-    'README', 'INDEX', 'REQUIREMENT', 'CLARIFY_REPORT',
+    'README', 'INDEX', 'CLARIFY_REPORT',
     'CHANGELOG', 'LICENSE', 'CONTRIBUTING', 'TEMPLATE',
   ]);
 

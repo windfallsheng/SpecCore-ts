@@ -273,16 +273,20 @@ export async function askCommand(input: string, _options: any): Promise<void> {
     // 2. 有 autoExec → 单命令执行
     if (result.autoExec) {
       // v6.97.0+ 修复：需要确认的命令不直接执行，输出确认提示让用户选择
-      // 避免"直接就乱搞" — 产生副作用的命令（analyze/execute/split 等）必须先确认
+      // v8.3.83+: AI/非 TTY 上下文中采用通知式确认（无法交互等待），输出提示后继续执行
       if (result.autoExec.confirm) {
         process.stdout.write(`[SPECCORE_INTENT]\n`);
-        process.stdout.write(`我识别到你的意图是执行以下命令，请确认:\n\n`);
+        process.stdout.write(`我识别到你的意图是执行以下命令:\n\n`);
         process.stdout.write(`  ${COLORS.bold}speccore ${result.autoExec.command} ${result.autoExec.args}${COLORS.reset}\n\n`);
-        process.stdout.write(`输入 y/回车 确认执行，或重新描述你的需求。\n`);
-        await askHtml(input);
-        return;
+        if (process.stdout.isTTY && !isAiContext()) {
+          // 纯终端交互环境：等待用户确认
+          process.stdout.write(`输入 y/回车 确认执行，或重新描述你的需求。\n`);
+          await askHtml(input);
+          return;
+        }
+        // AI 上下文 / 非 TTY：通知式确认，不阻断执行
+        process.stdout.write(`[SPECCORE_CONFIRM: 确认执行]\n`);
       }
-      // 非强制确认命令（如 dashboard、status）且置信度 >= 85，直接执行
       await autoExecute(result.autoExec.command, result.autoExec.args, false);
       await askHtml(input);
       return;

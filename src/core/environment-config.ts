@@ -16,6 +16,8 @@ export interface EnvironmentPlatformConfig {
   build_cmd?: string;
   /** 部署配置（覆盖 PROJECT.yaml 中的 deploy） */
   deploy?: DeployEnvConfig;
+  /** Git 目标分支（覆盖环境全局 branch，pipeline 时使用） */
+  branch?: string;
 }
 
 export interface EnvironmentConfig {
@@ -160,6 +162,7 @@ export async function loadEnvironmentConfig(filePath: string): Promise<Environme
         if (pcfg && typeof pcfg === 'object') {
           const pc = pcfg as any;
           if (pc.build_cmd) platformConfig.build_cmd = String(pc.build_cmd);
+          if (pc.branch) platformConfig.branch = String(pc.branch);
           if (pc.deploy && typeof pc.deploy === 'object') {
             platformConfig.deploy = pc.deploy as DeployEnvConfig;
           }
