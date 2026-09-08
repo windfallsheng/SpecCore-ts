@@ -28,6 +28,7 @@ export interface QualityReport {
   file: string;
   issues: QualityIssue[];
   wordCount: number;
+  lineCount: number;
   hasMermaid: boolean;
   score: number; // 0-100
 }
@@ -52,6 +53,29 @@ const REQUIRED_SECTIONS: Record<string, string[]> = {
   'ARCHITECTURE.md': ['服务拓扑', '数据流', '部署关系', '容错设计'],
   'API_CONTRACT.yaml': ['接口定义', '鉴权', '限流', '版本策略'],
   'REQUIREMENT.md': ['产品愿景', '用户故事', '验收标准'],
+};
+
+// v8.3.61+: 最小行数标准（与 analyze Prompt 中的要求对齐）
+const MIN_LINE_STANDARDS: Record<string, number> = {
+  '_INDEX.md': 80,
+  '_ASSOCIATION.md': 100,
+  '_MODULES.md': 50,
+  'REQUIREMENT.md': 500,
+  'ARCHITECTURE.md': 200,
+  'DATA_FLOW.md': 150,
+  'DEPLOYMENT.md': 100,
+  'SECURITY_AUDIT.md': 80,
+  'PERFORMANCE_BASELINE.md': 80,
+  'OBSERVABILITY.md': 80,
+  'FUNCTION_MAP.md': 50,
+  'INTERACTION_MAP.md': 50,
+  'CONSISTENCY_CHECK.md': 50,
+  'EXTERNAL_INTEGRATIONS.md': 50,
+  'API_INVENTORY.md': 150,
+  'DATA_MODEL.md': 100,
+  'UI_FLOW.md': 100,
+  'API_CALL_MAP.md': 80,
+  'STATE_MANAGEMENT.md': 80,
 };
 
 /**
@@ -83,7 +107,20 @@ export async function checkDocumentQuality(filePath: string): Promise<QualityRep
     }
   }
 
-  // 2. 检测字数
+  // 2. 检测行数（v8.3.61+）
+  const lineCount = lines.length;
+  const minLines = MIN_LINE_STANDARDS[basename_];
+  if (minLines && lineCount < minLines) {
+    issues.push({
+      file: filePath,
+      type: 'too-short',
+      severity: 'error',
+      message: `文档行数不足: ${lineCount} 行（要求 ≥ ${minLines} 行）`,
+      suggestion: `补充详细内容，达到最小内容标准`,
+    });
+  }
+
+  // 3. 检测字数
   const wordCount = content.replace(/\s+/g, '').length;
   if (wordCount < 200) {
     issues.push({
@@ -103,7 +140,7 @@ export async function checkDocumentQuality(filePath: string): Promise<QualityRep
     });
   }
 
-  // 3. 检测 Mermaid 图表
+  // 4. 检测 Mermaid 图表
   const hasMermaid = /```mermaid|:::mermaid/.test(content);
   if (CHART_REQUIRED_DOCS.includes(basename_) && !hasMermaid) {
     issues.push({
@@ -115,7 +152,7 @@ export async function checkDocumentQuality(filePath: string): Promise<QualityRep
     });
   }
 
-  // 4. 检测关键章节
+  // 5. 检测关键章节
   const required = REQUIRED_SECTIONS[basename_];
   if (required) {
     for (const section of required) {
@@ -131,12 +168,71 @@ export async function checkDocumentQuality(filePath: string): Promise<QualityRep
     }
   }
 
-  // 5. 计算质量分
+  // 6. Mermaid 语法校验（v8.3.61+）
+  const mermaidBlocks = content.match(/```mermaid\n([\s\S]*?)```/g) || [];
+  for (const block of mermaidBlocks) {
+    const mermaidContent = block.replace(/```mermaid\n/, '').replace(/```$/, '').trim();
+    const mermaidLines = mermaidContent.split('\n').filter(l => l.trim());
+    if (mermaidLines.length === 0) continue;
+
+    const firstLine = mermaidLines[0].toLowerCase();
+
+    // graph/flowchart 必须有方向
+    if (firstLine.startsWith('graph ') || firstLine.startsWith('flowchart ')) {
+      if (!/\b(tb|td|lr|rl|bt)\b/.test(firstLine)) {
+        issues.push({
+          file: filePath,
+          type: 'missing-chart',
+          severity: 'warning',
+          message: `Mermaid graph 缺少方向声明（如 TB/LR/RL/BT）`,
+          suggestion: `在第一行添加方向，如 \`graph TB\` 或 \`flowchart LR\``,
+        });
+      }
+      // 必须包含连接符
+      if (!mermaidLines.some(l => /[-=~]+>/.test(l) || /--/.test(l))) {
+        issues.push({
+          file: filePath,
+          type: 'missing-chart',
+          severity: 'warning',
+          message: `Mermaid graph 缺少节点连接（如 A --> B）`,
+          suggestion: `添加节点间的连接关系`,
+        });
+      }
+    }
+
+    // sequenceDiagram 必须有 participant
+    if (firstLine.startsWith('sequencediagram')) {
+      if (!mermaidLines.some(l => l.trim().toLowerCase().startsWith('participant'))) {
+        issues.push({
+          file: filePath,
+          type: 'missing-chart',
+          severity: 'warning',
+          message: `Mermaid sequenceDiagram 缺少 participant 声明`,
+          suggestion: `添加 participant 定义，如 \`participant A as 前端\``,
+        });
+      }
+    }
+
+    // 检查未闭合括号
+    const openParen = (mermaidContent.match(/\(/g) || []).length;
+    const closeParen = (mermaidContent.match(/\)/g) || []).length;
+    if (openParen !== closeParen) {
+      issues.push({
+        file: filePath,
+        type: 'missing-chart',
+        severity: 'warning',
+        message: `Mermaid 代码括号不匹配（开:${openParen} 闭:${closeParen}）`,
+        suggestion: `检查括号是否成对闭合`,
+      });
+    }
+  }
+
+  // 7. 计算质量分
   const errorCount = issues.filter(i => i.severity === 'error').length;
   const warningCount = issues.filter(i => i.severity === 'warning').length;
   const score = Math.max(0, 100 - errorCount * 20 - warningCount * 5);
 
-  return { file: filePath, issues, wordCount, hasMermaid, score };
+  return { file: filePath, issues, wordCount, lineCount, hasMermaid, score };
 }
 
 /**
@@ -211,12 +307,12 @@ export function printQualityReport(reports: QualityReport[]): void {
     const warnings = report.issues.filter(i => i.severity === 'warning');
 
     if (errors.length === 0 && warnings.length === 0) {
-      logger.info(`   ✅ ${fileName} (${report.wordCount}字, ${report.score}分)`);
+      logger.info(`   ✅ ${fileName} (${report.lineCount}行, ${report.wordCount}字, ${report.score}分)`);
       continue;
     }
 
     const icon = errors.length > 0 ? '❌' : '⚠️';
-    logger.info(`   ${icon} ${fileName} (${report.wordCount}字, ${report.score}分) — ${errors.length} 错误, ${warnings.length} 警告`);
+    logger.info(`   ${icon} ${fileName} (${report.lineCount}行, ${report.wordCount}字, ${report.score}分) — ${errors.length} 错误, ${warnings.length} 警告`);
 
     for (const issue of report.issues.slice(0, 3)) {
       const lineInfo = issue.line ? `L${issue.line}` : '';
