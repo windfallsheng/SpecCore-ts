@@ -589,8 +589,8 @@ export async function hasValidClarifiedDocs(iterDir: string): Promise<boolean> {
   if (!(await pathExists(goldenDir))) return false;
 
   const files = await readdir(goldenDir);
-  // v8.3.35: 匹配新的文件名格式 {feature-name}-clarified.md
-  const clarifiedFiles = files.filter(f => f.endsWith('-clarified.md'));
+  // v8.3.67+ 修复：检查所有 .md 文件（不仅是 -clarified.md），排除 diff 记录文件
+  const clarifiedFiles = files.filter(f => f.endsWith('.md') && !f.endsWith('-diff.md'));
   if (clarifiedFiles.length === 0) return false;
 
   // 检查是否有 source 文档比 clarified 更新
