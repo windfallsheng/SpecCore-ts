@@ -91,14 +91,16 @@ async function scanMaxIds(): Promise<Counters> {
   return { iterations, tasks, plans };
 }
 
-/** 中英文名称转 slug（保留英文/数字，中文转拼音首字母缩写） */
+/** 中英文名称转 slug（保留英文/数字，纯中文时 hash fallback） */
 function toSlug(name: string): string {
   // 去掉 Iteration- 前缀
   const clean = name.replace(/^Iteration-/, '');
-  // 提取英文/数字部分
-  const latin = clean.replace(/[^a-zA-Z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-  if (latin.length > 0) return latin.toLowerCase().slice(0, 30);
-  // 纯中文 → hash 回退（如 iter-56g7），有英文 topic 时优先用 topic
+  // 优先提取连续的英文/数字片段（如 "User管理" → "User"）
+  const latinMatches = clean.match(/[a-zA-Z0-9]+/g);
+  if (latinMatches && latinMatches.length > 0) {
+    return latinMatches.join('-').toLowerCase().slice(0, 30);
+  }
+  // 纯中文且无英文 → hash 回退
   if (/[\u4e00-\u9fff]/.test(clean)) {
     const hash = Math.abs(clean.split('').reduce((a, c) => a + c.charCodeAt(0), 0)).toString(36).slice(0, 4);
     return 'iter-' + hash;
