@@ -97,20 +97,46 @@ function normalizeScopePlatforms(scopeArr: string[], standardPlatforms: string[]
   return result.length > 0 ? result : standardPlatforms;
 }
 
-/** 将名称转为目录安全的短 slug（2-4 词） */
+/** 将名称转为目录安全的短 slug（2-4 词）
+ * v8.3.77+: 优先提取英文/数字片段，不再直接去掉中文
+ */
 function slugify(name: string): string {
-  const cleaned = name
-    .replace(/[\u4e00-\u9fff]/g, '') // 去掉中文
-    .replace(/[^a-zA-Z0-9\s-]/g, '')  // 去特殊字符
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 3)                       // 最多 3 词
-    .join('-')
-    .toLowerCase();
-  if (cleaned.length > 0) return cleaned;
-  // 纯中文/空名称 → 生成短 hash 作为 slug（如 a3f2）
+  // 优先提取连续的英文/数字片段（如 "User管理" → "User"）
+  const latinMatches = name.match(/[a-zA-Z0-9]+/g);
+  if (latinMatches && latinMatches.length > 0) {
+    return latinMatches.slice(0, 3).join('-').toLowerCase();
+  }
+
+  // 完全没有英文/数字 → 生成短 hash 作为 fallback
   const hash = Math.abs(name.split('').reduce((a, c) => a * 31 + c.charCodeAt(0), 7)).toString(36);
   return hash.slice(0, 6);
+}
+
+/** 从 AI 返回的任务中提取 topic，多层 fallback（v8.3.77+） */
+function extractTopic(task: any): string {
+  // 1. 优先使用 AI 提供的合法 topic（英文短横线格式）
+  if (task.topic && /^[a-z0-9-]+$/.test(task.topic)) {
+    return task.topic;
+  }
+
+  // 2. 尝试从 functionalUnit 提取英文片段
+  if (task.functionalUnit) {
+    const latin = task.functionalUnit.match(/[a-zA-Z0-9]+/g);
+    if (latin && latin.length > 0) {
+      return latin.slice(0, 3).join('-').toLowerCase();
+    }
+  }
+
+  // 3. 尝试从 name 提取英文片段
+  if (task.name) {
+    const latin = task.name.match(/[a-zA-Z0-9]+/g);
+    if (latin && latin.length > 0) {
+      return latin.slice(0, 3).join('-').toLowerCase();
+    }
+  }
+
+  // 4. fallback 到 hash
+  return slugify(task.name || task.functionalUnit || 'task');
 }
 
 /**
@@ -472,8 +498,8 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           };
           (section as any)._owner = task.owner || '未分配';
           (section as any)._taskType = (task.type && ['feature', 'bugfix', 'refactor', 'research', 'security', 'performance'].includes(task.type)) ? task.type : 'feature';
-          // 保存 topic slug，用于生成任务目录名
-          (section as any)._topic = task.topic || slugify(task.name || `Task ${i + 1}`);
+          // 保存 topic slug，用于生成任务目录名（v8.3.77+: 多层提取）
+          (section as any)._topic = extractTopic(task);
           // 保存 AI 生成的实际内容（用于写入 REQ.md / TECH.md）
           if (task.reqContent) (section as any)._reqContent = task.reqContent;
           if (task.techContent) (section as any)._techContent = task.techContent;
@@ -3249,7 +3275,15 @@ async function buildSplitPrompt(
   p += `>   - performance → 性能优化目标（如：查询优化、缓存策略、并发提升）\n`;
   p += `>   - research → 研究主题（如：WebSocket方案、缓存策略）\n`;
   p += `> 同一模块/领域的任务填相同的值，用于粒度校验和任务分组\n`;
-  p += `> **topic** 必须是英文短横线格式（如 \`user-authentication\`、\`product-crud\`），用于生成任务目录名 Task-NNN-{topic}\n`;
+  p += `> **topic 必填且必须是英文短横线格式**：\n`;
+  p += `>   - 用于生成任务目录名 \`Task-NNN-{topic}\`，如 \`Task-001-user-auth\`\n`;
+  p += `>   - 从功能单元名提取英文关键词拼接，如：\n`;
+  p += `>     - "用户认证" → \`user-authentication\`\n`;
+  p += `>     - "订单CRUD" → \`order-crud\`\n`;
+  p += `>     - "支付模块" → \`payment-module\`\n`;
+  p += `>   - 格式：全小写、短横线连接，如 \`user-auth\`、\`order-list\`\n`;
+  p += `>   - ⛔ 禁止纯中文、禁止空值、禁止驼峰命名、禁止下划线\n`;
+  p += `>   - 如果功能单元名完全没有英文可提取，用简写英文意译（如"会议室预订" → \`room-booking\`）\n`;
   p += `> **sourceFile** 必须填写：该任务对应的 020-specs 源文档路径（如 \`bugs/login-timeout.md\`、\`features/user-auth.md\`、\`refactors/db-pool.md\`），用于在 CONTEXT.md 中生成来源追溯\n`;
   p += `> **scope 强制约束（违反则拆分无效）**：\n`;
   p += `>   - scope 数组中的每个值必须是上面「项目端列表」中的标准端名之一\n`;
@@ -4492,7 +4526,9 @@ async function buildContentFillingPrompt(
   p += `3. REQ.md: 基于上方提供的「功能单元相关上下文」，撰写本子任务的需求规格\n`;
   p += `4. TECH.md: 基于上下文中的接口定义和数据模型，细化本子任务的技术方案\n`;
   p += `5. 同一功能模块的各端子任务要保持 API 契约一致（前后端接口签名必须匹配）\n`;
-  p += `6. 每个文件必须有实质性专业内容（最低 200 字符），禁止占位符残留\n\n`;
+  p += `6. 每个文件必须有实质性专业内容（最低 500 字符 / 30 行），禁止占位符残留\n`;
+  p += `7. REQ.md 必须 ≥ 50 行，TECH.md 必须 ≥ 80 行\n`;
+  p += `8. 自检：写入完成后检查行数和内容完整性，不达标需补全\n\n`;
 
   // v8.1.0+: 注入子任务文档质量标准
   p += `## 📋 子任务文档质量标准\n\n`;
