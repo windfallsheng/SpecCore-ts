@@ -498,7 +498,22 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
   // ── 分支策略：懒创建 + 依赖合并 ──
   // 每个任务的分支在执行前才创建，确保依赖任务的代码已存在
   // 有依赖的任务会 merge 依赖分支，拿到前序任务的代码
-  const defaultBase = base || detectDefaultBranch(iteration);
+  // v8.3.87+: 检测默认分支时使用 PROJECT.yaml 中的 code_path（支持 speccore 与工程分离）
+  let defaultGitCwd = process.cwd();
+  try {
+    const pc = await loadProjectConfig();
+    const firstPlatformWithPath = pc.platforms.find((p) => p.code_path);
+    if (firstPlatformWithPath?.code_path) {
+      defaultGitCwd = firstPlatformWithPath.code_path.startsWith('/')
+        ? firstPlatformWithPath.code_path
+        : join(process.cwd(), firstPlatformWithPath.code_path);
+    } else if (pc.code_scope?.[0]) {
+      defaultGitCwd = pc.code_scope[0].startsWith('/')
+        ? pc.code_scope[0]
+        : join(process.cwd(), pc.code_scope[0]);
+    }
+  } catch {}
+  const defaultBase = base || detectDefaultBranch(iteration, defaultGitCwd);
   const createdBranches: Map<string, string> = new Map(); // taskId → branchName
 
   // ── Agent mode: output optimized context for external AI ──
@@ -1466,6 +1481,8 @@ async function checkCrossTaskDependencies(
 /**
  * 懒创建任务分支 + 合并依赖分支
  * 每个任务的分支在执行前才创建，确保依赖任务的代码已存在
+ *
+ * v8.3.87+: 支持 speccore 与工程代码分离，自动读取 PROJECT.yaml code_path 作为 git cwd
  */
 async function prepareTaskBranch(
   task: TaskState,
@@ -1473,15 +1490,52 @@ async function prepareTaskBranch(
   defaultBase: string | undefined,
   createdBranches: Map<string, string>
 ): Promise<string | null> {
+  // ── 0. 确定工程代码目录（从 PROJECT.yaml 读取对应 platform 的 code_path） ──
+  const projectConfig = await loadProjectConfig();
+  let gitCwd = process.cwd();
+  try {
+    const iterDir = await getIterationDir(iteration);
+    const taskDir = await resolveTaskDir(iterDir, task.id);
+    // 从 taskDir 子目录推断 platform（排除系统目录）
+    const entries = require('fs').readdirSync(taskDir, { withFileTypes: true });
+    const platformNames = entries
+      .filter((e: any) => e.isDirectory() && !e.name.startsWith('.') && e.name !== '00-specs' && e.name !== '_shared')
+      .map((e: any) => e.name);
+    if (platformNames.length === 1) {
+      const platform = projectConfig.platforms.find((p) => p.name === platformNames[0]);
+      if (platform?.code_path) {
+        gitCwd = platform.code_path.startsWith('/') ? platform.code_path : join(process.cwd(), platform.code_path);
+      }
+    } else if (platformNames.length > 1) {
+      // 多平台任务：优先找有 code_path 的 platform
+      for (const pn of platformNames) {
+        const platform = projectConfig.platforms.find((p) => p.name === pn);
+        if (platform?.code_path) {
+          gitCwd = platform.code_path.startsWith('/') ? platform.code_path : join(process.cwd(), platform.code_path);
+          logger.info(`  ℹ️ 多平台任务，使用第一个有 code_path 的平台 (${pn}): ${gitCwd}`);
+          break;
+        }
+      }
+    }
+    // 回退：code_scope 第一个路径
+    if (gitCwd === process.cwd() && projectConfig.code_scope?.[0]) {
+      gitCwd = projectConfig.code_scope[0].startsWith('/')
+        ? projectConfig.code_scope[0]
+        : join(process.cwd(), projectConfig.code_scope[0]);
+    }
+  } catch {
+    // 推断失败时使用 process.cwd()
+  }
+
   const base = defaultBase || 'HEAD';
 
   // 1. 切回 base 分支（允许从保护分支拉分支，但 hook 会阻止直接 commit）
   if (defaultBase && isProtectedBranch(defaultBase)) {
     logger.info(`  ℹ️ base 分支 '${defaultBase}' 受保护，任务分支将独立工作`);
   }
-  try { execSync(`git checkout "${base}"`, { stdio: 'pipe' }); } catch {
+  try { execSync(`git checkout "${base}"`, { cwd: gitCwd, stdio: 'pipe' }); } catch {
     // base 分支不存在时从 HEAD 创建
-    try { execSync('git checkout -', { stdio: 'pipe' }); } catch {}
+    try { execSync('git checkout -', { cwd: gitCwd, stdio: 'pipe' }); } catch {}
   }
 
   // 2. 查找任务目录 + 读取任务类型（用于子任务级 git 配置 + 分支类型映射）
@@ -1495,8 +1549,8 @@ async function prepareTaskBranch(
     }
   } catch {}
 
-  // 3. 创建任务分支（传入 taskDir + taskType 支持子任务级 git 配置）
-  const branch = createTaskBranch(task.id, task.name || task.id, undefined, iteration, taskDir, taskType);
+  // 3. 创建任务分支（传入 taskDir + taskType + cwd 支持子任务级 git 配置 + 工程目录分离）
+  const branch = createTaskBranch(task.id, task.name || task.id, undefined, iteration, taskDir, taskType, gitCwd);
   if (!branch) return null;
   createdBranches.set(task.id, branch);
 
@@ -1541,7 +1595,7 @@ async function prepareTaskBranch(
 
     if (depBranch) {
       try {
-        execSync(`git merge "${depBranch}" --no-edit --no-ff`, { stdio: 'pipe' });
+        execSync(`git merge "${depBranch}" --no-edit --no-ff`, { cwd: gitCwd, stdio: 'pipe' });
         logger.info(`  🔗 合并依赖分支 [${source}]: ${depBranch}`);
       } catch (e: any) {
         logger.warn(`  ⚠️ 合并 ${depBranch} 冲突，需要手动解决`);
@@ -1632,11 +1686,25 @@ function buildAgentContext(tasks: TaskState[], agent: string): string {
     ctx += `- {platform}/COMPONENT_TREE.md | ROUTES.md | STATE.md | STYLE_GUIDE.md\n\n`;
   }
 
+  // 2.5. 执行规范（v8.3.61+）
+  ctx += `\n### Step 2.5: 执行规范（必须遵守）\n\n`;
+  ctx += `**执行前必读清单**：\n`;
+  ctx += `- [ ] 已阅读子任务 TASK.md，了解任务范围和状态\n`;
+  ctx += `- [ ] 已阅读 00-specs/REQ.md，理解需求和验收标准\n`;
+  ctx += `- [ ] 已阅读 00-specs/TECH.md，理解技术方案\n`;
+  ctx += `- [ ] 代码实现严格遵循 REQ.md 的验收标准和 TECH.md 的技术方案\n`;
+  ctx += `- [ ] 如涉及 API 变更，确保前后端接口签名一致\n`;
+  ctx += `- [ ] 完成后更新 TASK.md 状态（doing → done）\n\n`;
+  ctx += `**禁止**：\n`;
+  ctx += `- 不要偏离 REQ.md/TECH.md 的要求自由发挥\n`;
+  ctx += `- 不要生成与规格文档不一致的代码\n`;
+  ctx += `- 不要遗漏 REQ.md 中列出的验收标准\n\n`;
+
   // 3. Global rules (load last, only if needed)
   ctx += `### Step N: Global rules (load last)\n`;
   ctx += `File: .speccore/CONSTITUTION.md\n`;
   ctx += `File: .speccore/RULES/CODE_REVIEW.md\n`;
-  
+
   ctx += format.suffix;
   return ctx;
 }
