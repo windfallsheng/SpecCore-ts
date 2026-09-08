@@ -5,6 +5,7 @@ import { version as PKG_VERSION } from '../../package.json';
 import { createInterface } from 'readline';
 import { updateContext } from '../core/context';
 import { initConfig, initProjectConfig } from '../core/unified-config';
+import { initEnvironmentConfigs, initTestConfigs } from './update-env-configs';
 import { SVG_ONBOARD } from './ask';
 // v6.84.0+: AGENTS 规范数据库
 import {
@@ -241,6 +242,10 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
 
     // Create tool integration files (Claude, CodeBuddy, Cursor, Trae, WindSurf, QCoder)
     await createToolIntegrations(projectRoot, options.tools);
+
+    // v8.3.60+: 初始化环境配置和测试配置
+    try { await initEnvironmentConfigs(projectRoot); } catch {}
+    try { await initTestConfigs(projectRoot); } catch {}
 
     // Create sample iteration（已存在则跳过）
     if (!await pathExists(join(projectRoot, 'Iteration-sample'))) {

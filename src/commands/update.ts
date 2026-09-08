@@ -20,7 +20,7 @@ import {
   formatConfigDiff,
   CURRENT_SCHEMA_VERSION,
 } from '../core/unified-config';
-import { initEnvironmentConfigs } from './update-env-configs';
+import { initEnvironmentConfigs, initTestConfigs } from './update-env-configs';
 
 // ── 当前版本的命令列表统一从 init.ts 导入（单一事实来源）──
 // 避免 init.ts 与 update.ts 的命令列表不一致导致清理误删
@@ -304,6 +304,12 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
     envConfigCreated = await initEnvironmentConfigs(projectRoot);
   } catch {}
 
+  // v8.3.60+: 初始化/升级测试配置
+  let testConfigCreated: string[] = [];
+  try {
+    testConfigCreated = await initTestConfigs(projectRoot);
+  } catch {}
+
   // 4d. 清理旧版本残留的命令文件和 Skill 目录
   const skillNames = (await require('fs-extra').readdir(skillsSrc)).filter((f: string) => !f.startsWith('.'));
   await cleanupStaleFiles(projectRoot, ALL_COMMANDS, skillNames);
@@ -345,6 +351,12 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   if (envConfigCreated.length > 0) {
     logger.info('     ✅ .speccore/environments/ — 环境配置');
     for (const f of envConfigCreated) {
+      logger.info(`        + ${f}`);
+    }
+  }
+  if (testConfigCreated.length > 0) {
+    logger.info('     ✅ .speccore/tests/ — 测试配置');
+    for (const f of testConfigCreated) {
       logger.info(`        + ${f}`);
     }
   }
