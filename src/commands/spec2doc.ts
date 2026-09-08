@@ -14,6 +14,7 @@ import { join, basename, extname } from 'path';
 import { isTimestampBackup } from '../utils/task-utils';
 import { findTaskDir } from '../core/task-paths';
 import { validateContent, generateReport } from '../core/doc-validator';
+import { loadConfig } from '../core/unified-config';
 
 function detectPlatform(): 'macos' | 'linux' | 'win' {
   if (process.platform === 'darwin') return 'macos';
@@ -172,11 +173,32 @@ export async function spec2docCommand(options: Spec2DocOptions): Promise<void> {
   }
 
   // ── pandoc 检测 ──
+  // v8.3.70+: 加载配置，支持自定义工具路径
+  const config = await loadConfig();
+  const customPandoc = config.tools?.pandoc;
+
   let hasPandoc = true;
-  try { execSync('which pandoc', { stdio: 'pipe' }); } catch { hasPandoc = false; }
+  if (customPandoc && customPandoc.trim()) {
+    // 配置了自定义路径，直接检查文件是否存在
+    try { require('fs').accessSync(customPandoc); } catch { hasPandoc = false; }
+  } else {
+    try {
+      // v8.3.69+: Windows 使用 where 代替 which
+      const isWin = process.platform === 'win32';
+      const findCmd = isWin ? 'where pandoc' : 'which pandoc';
+      execSync(findCmd, { stdio: 'pipe' });
+    } catch { hasPandoc = false; }
+  }
   if (!hasPandoc) {
     logger.warn(`⚠️ 未检测到 pandoc。安装: ${getInstallCmd('pandoc')}`);
     logger.info('   pandoc 是 spec2doc 的核心依赖（Markdown → 文档转换）');
+    if (customPandoc) {
+      logger.info(`   📄 配置路径: ${customPandoc}（文件不存在或不可访问）`);
+    } else {
+      logger.info('   🔧 自定义路径: 若已安装但不在 PATH 中，可在 .speccore.yml 中配置');
+      logger.info('      tools:');
+      logger.info('        pandoc: "/path/to/pandoc"');
+    }
     return;
   }
 
@@ -187,12 +209,15 @@ export async function spec2docCommand(options: Spec2DocOptions): Promise<void> {
   const spinner = new Spinner(`导出 SpecCore → ${format.toUpperCase()}`);
   spinner.start();
 
+  // v8.3.70+: 使用配置中的自定义 pandoc 路径，或默认 'pandoc'
+  const pandocBin = customPandoc || 'pandoc';
+
   try {
     if (sourceFiles.length === 1) {
       // 单文件直接转
       const src = sourceFiles[0];
-      const cmd = `LANG=zh_CN.UTF-8 pandoc "${src.path}" -f gfm -t ${WRITER_MAP[format]} --wrap=none -o "${outputPath}"`;
-      execSync(cmd, { stdio: 'pipe' });
+      const cmd = `"${pandocBin}" "${src.path}" -f gfm -t ${WRITER_MAP[format]} --wrap=none -o "${outputPath}"`;
+      execSync(cmd, { stdio: 'pipe', env: { ...process.env, LANG: 'zh_CN.UTF-8' } });
     } else {
       // 多文件合并：先拼成临时文件
       let merged = '';
@@ -203,8 +228,8 @@ export async function spec2docCommand(options: Spec2DocOptions): Promise<void> {
       const tmpPath = join(process.cwd(), '.speccore', '.tmp_export.md');
       await ensureDir(join(process.cwd(), '.speccore'));
       await writeFile(tmpPath, merged);
-      const cmd = `LANG=zh_CN.UTF-8 pandoc "${tmpPath}" -f gfm -t ${WRITER_MAP[format]} --wrap=none -o "${outputPath}"`;
-      execSync(cmd, { stdio: 'pipe' });
+      const cmd = `"${pandocBin}" "${tmpPath}" -f gfm -t ${WRITER_MAP[format]} --wrap=none -o "${outputPath}"`;
+      execSync(cmd, { stdio: 'pipe', env: { ...process.env, LANG: 'zh_CN.UTF-8' } });
     }
 
     spinner.stop('导出完成');

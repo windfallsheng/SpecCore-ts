@@ -87,25 +87,29 @@ export async function ragIndexCommand(options: RagIndexOptions): Promise<void> {
       refreshedFiles.push('task');
     }
 
-    // 2. iteration 级索引
+    // 2. iteration 级索引（v8.3.65+ 扩展：同时索引 010-requirements/）
     if (iteration) {
       const iterFileName = `rag-index-${iteration}.json`;
       const iterSpecsDir = join(`Iteration-${iteration}`, '020-specs');
-      if (await pathExists(iterSpecsDir)) {
+      const iterReqDir = join(`Iteration-${iteration}`, '010-requirements');
+      const dirs: string[] = [];
+      if (await pathExists(iterSpecsDir)) dirs.push(iterSpecsDir);
+      if (await pathExists(iterReqDir)) dirs.push(iterReqDir);
+      if (dirs.length > 0) {
         if (isFull) {
           const indexPath = join(cwd, '.speccore', 'cache', iterFileName);
           if (await pathExists(indexPath)) await remove(indexPath);
-          await indexDirectoryDocuments(cwd, iterSpecsDir, `${iteration}_020-specs_iteration_all`, iterFileName);
+          await indexDirectoryDocuments(cwd, dirs, `${iteration}_iteration_all`, iterFileName);
         }
         refreshedFiles.push(`iteration-${iteration}`);
       }
     }
 
-    // 3. 全局索引
+    // 3. 全局索引（v8.3.63+ 修复：从 GLOBAL/020-specs 改为 GLOBAL/ 根目录）
     const globalFileName = 'rag-index-global.json';
-    const globalSpecsDir = join(cwd, '.speccore', 'GLOBAL', '020-specs');
+    const globalDir = join(cwd, '.speccore', 'GLOBAL');
     const fallbackDir = join(cwd, '.speccore');
-    const targetDir = await pathExists(globalSpecsDir) ? globalSpecsDir : fallbackDir;
+    const targetDir = await pathExists(globalDir) ? globalDir : fallbackDir;
     if (await pathExists(targetDir)) {
       if (isFull) {
         const indexPath = join(cwd, '.speccore', 'cache', globalFileName);

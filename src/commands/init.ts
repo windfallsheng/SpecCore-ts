@@ -1833,6 +1833,9 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
   await ensureDir(join(prdDir, 'sources'));
   await ensureDir(join(prdDir, 'converted'));
   await ensureDir(join(prdDir, 'features'));
+  await ensureDir(join(prdDir, 'bugs'));
+  await ensureDir(join(prdDir, 'refactors'));
+  await ensureDir(join(prdDir, 'research'));
   await ensureDir(join(prdDir, 'assets', 'extracted'));     // PRD 提取的图片
   await ensureDir(join(prdDir, 'assets', 'prototypes'));    // 产品原型
   await ensureDir(join(prdDir, 'assets', 'designs'));       // UI 设计稿
@@ -2185,7 +2188,7 @@ export function generateAIRulesContent(): string {
   ].join('\n');
 }
 
-async function writeUpgradePage(projectRoot: string, version: string, speccoreDir: string): Promise<void> {
+export async function writeUpgradePage(projectRoot: string, version: string, speccoreDir: string): Promise<void> {
   const name = basename(projectRoot);
   const html = `<!DOCTYPE html><html lang="zh"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>SpecCore ${version} — 升级完成</title>
 <style>

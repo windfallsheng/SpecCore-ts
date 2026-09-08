@@ -739,11 +739,12 @@ export async function validateContentQuality(
     .replace(/^#+\s/gm, '')
     .replace(/^>\s/gm, '')
     .trim();
-  if (cleanContent.length < 200) {
-    issues.push(`内容过薄（${cleanContent.length} 字符，最低 200）`);
+  // v8.3.61+: 提高最低字数标准
+  if (cleanContent.length < 500) {
+    issues.push(`内容过薄（${cleanContent.length} 字符，最低 500）`);
     score -= 30;
-  } else if (cleanContent.length < 500) {
-    issues.push(`内容偏少（${cleanContent.length} 字符，建议 500+）`);
+  } else if (cleanContent.length < 1000) {
+    issues.push(`内容偏少（${cleanContent.length} 字符，建议 1000+）`);
     score -= 10;
   }
 
