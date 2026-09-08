@@ -1632,11 +1632,25 @@ function buildAgentContext(tasks: TaskState[], agent: string): string {
     ctx += `- {platform}/COMPONENT_TREE.md | ROUTES.md | STATE.md | STYLE_GUIDE.md\n\n`;
   }
 
+  // 2.5. 执行规范（v8.3.61+）
+  ctx += `\n### Step 2.5: 执行规范（必须遵守）\n\n`;
+  ctx += `**执行前必读清单**：\n`;
+  ctx += `- [ ] 已阅读子任务 TASK.md，了解任务范围和状态\n`;
+  ctx += `- [ ] 已阅读 00-specs/REQ.md，理解需求和验收标准\n`;
+  ctx += `- [ ] 已阅读 00-specs/TECH.md，理解技术方案\n`;
+  ctx += `- [ ] 代码实现严格遵循 REQ.md 的验收标准和 TECH.md 的技术方案\n`;
+  ctx += `- [ ] 如涉及 API 变更，确保前后端接口签名一致\n`;
+  ctx += `- [ ] 完成后更新 TASK.md 状态（doing → done）\n\n`;
+  ctx += `**禁止**：\n`;
+  ctx += `- 不要偏离 REQ.md/TECH.md 的要求自由发挥\n`;
+  ctx += `- 不要生成与规格文档不一致的代码\n`;
+  ctx += `- 不要遗漏 REQ.md 中列出的验收标准\n\n`;
+
   // 3. Global rules (load last, only if needed)
   ctx += `### Step N: Global rules (load last)\n`;
   ctx += `File: .speccore/CONSTITUTION.md\n`;
   ctx += `File: .speccore/RULES/CODE_REVIEW.md\n`;
-  
+
   ctx += format.suffix;
   return ctx;
 }

@@ -60,10 +60,10 @@ export async function syncGlobalKnowledge(options: GlobalKnowledgeOptions = {}):
     }
   }
 
-  // 1.2 同时扫描全局层的现有 specs
-  const globalSpecsDir = join(cwd, '.speccore', 'GLOBAL', '020-specs');
-  if (await pathExists(globalSpecsDir)) {
-    specsDirs.push(globalSpecsDir);
+  // 1.2 同时扫描全局层的现有 specs（v8.3.63+ 修复：从 GLOBAL/020-specs 改为 GLOBAL/ 根目录）
+  const globalDir = join(cwd, '.speccore', 'GLOBAL');
+  if (await pathExists(globalDir)) {
+    specsDirs.push(globalDir);
   }
 
   if (specsDirs.length === 0) {
