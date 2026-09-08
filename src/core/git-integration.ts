@@ -70,6 +70,8 @@ const DEFAULT_GIT_CONFIG: GitConfig = {
  *
  * 分支名按子任务级/迭代级/全局配置生成，支持自定义前缀和格式模板
  * 三级回退：子任务 .meta/git-config > 迭代 PROJECT_GRAPH.md > 全局 CONSTITUTION.md
+ *
+ * v8.3.87+: 增加 cwd 参数，支持 speccore 与工程代码分离的目录结构
  */
 export function createTaskBranch(
   taskId: string,
@@ -78,7 +80,9 @@ export function createTaskBranch(
   iteration?: string,
   taskDir?: string,
   taskType?: string,
+  cwd?: string,
 ): string | null {
+  const gitCwd = cwd || process.cwd();
   try {
     // 读取 Git 配置（子任务级 > 迭代级 > 全局 > 默认）
     const gitConfig = loadGitConfig(iteration, taskDir);
@@ -116,17 +120,17 @@ export function createTaskBranch(
     // 自动拉取（如果配置开启）
     if (gitConfig.autoPull && effectiveBase) {
       try {
-        execSync(`git pull ${gitConfig.remoteName} "${effectiveBase}"`, { stdio: 'pipe' });
+        execSync(`git pull ${gitConfig.remoteName} "${effectiveBase}"`, { cwd: gitCwd, stdio: 'pipe' });
       } catch {
         // pull 失败不阻断，继续创建分支
       }
     }
 
     if (effectiveBase) {
-      execSync(`git checkout "${effectiveBase}"`, { stdio: 'pipe' });
+      execSync(`git checkout "${effectiveBase}"`, { cwd: gitCwd, stdio: 'pipe' });
     }
 
-    execSync(`git checkout -b "${branchName}"`, { stdio: 'pipe' });
+    execSync(`git checkout -b "${branchName}"`, { cwd: gitCwd, stdio: 'pipe' });
 
     // 记录关联
     const mapping = loadMapping();
@@ -339,21 +343,25 @@ export function loadGitConfig(iteration?: string, taskDir?: string): GitConfig {
   };
 }
 
-/** 检测默认分支 — 兼容旧接口，内部调用 loadGitConfig */
-export function detectDefaultBranch(iteration?: string): string | undefined {
+/** 检测默认分支 — 兼容旧接口，内部调用 loadGitConfig
+ * v8.3.87+: 增加 cwd 参数，支持 speccore 与工程代码分离
+ */
+export function detectDefaultBranch(iteration?: string, cwd?: string): string | undefined {
   const cfg = loadGitConfig(iteration);
   if (cfg.defaultBranch) return cfg.defaultBranch;
 
+  const gitCwd = cwd || process.cwd();
+
   // 回退：git remote HEAD
   try {
-    const remote = execSync('git remote show origin 2>/dev/null', { encoding: 'utf-8' });
+    const remote = execSync('git remote show origin 2>/dev/null', { cwd: gitCwd, encoding: 'utf-8' });
     const headMatch = remote.match(/HEAD branch:\s*(\S+)/);
     if (headMatch) return headMatch[1];
   } catch {}
 
   // 回退：本地分支
   try {
-    const branches = execSync('git branch', { encoding: 'utf-8' });
+    const branches = execSync('git branch', { cwd: gitCwd, encoding: 'utf-8' });
     if (branches.includes('main') || branches.includes(' main')) return 'main';
     if (branches.includes('master') || branches.includes(' master')) return 'master';
   } catch {}
