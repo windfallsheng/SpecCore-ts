@@ -39,6 +39,7 @@ npm install -g speccore
 speccore init                                                    # 初始化项目（CLI）
 speccore iteration create -n Q1 --topic meeting-system --owner luzhaosheng  # 创建迭代（CLI）
 speccore task new -n "用户登录" --topic user-login -i meeting-system         # 创建任务（CLI）
+# 只提供 --name 时也会自动提取 slug（v8.3.78+）："User管理" → Task-001-user，"用户登录" → Task-001-xxx（hash）
 speccore context --set --iteration Iteration-001-meeting-system              # 切换上下文（CLI）
 speccore dashboard                                                             # 查看仪表盘（CLI）
 ```
@@ -222,6 +223,13 @@ quality_gates:
 
 ![Ask Pipeline](docs/screenshots/ask-pipeline.png)
 
+**🔍 深度分析单文档**（v8.3.79+ 支持路径前缀）：
+```bash
+@spec-ask "全局深度分析 ARCHITECTURE.md"
+@spec-ask "详细分析 overview/TECH.md"
+@spec-ask "深入分析 020-specs/overview/SECURITY_AUDIT.md"
+```
+
 ### 🧠 knowledge — 知识图谱可视化与代码图谱查询
 `speccore knowledge` 生成交互式 HTML 知识图谱：
 - vis-network 力导向图：9 种形状区分实体类型（需求◆ 规格🛢 功能模块■ 任务▲ 全局★ 业务模块⭐ 源码）
@@ -329,7 +337,7 @@ speccore status                                       # 查看分析进度和过
 
 ```bash
 npm install -g speccore
-speccore --version   # v8.3.10
+speccore --version   # v8.3.75
 ```
 
 ## 命令列表
