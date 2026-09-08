@@ -387,11 +387,25 @@ async function handleNewRequirement(desc: string, iteration: string, clarifyResu
   logger.info(`   speccore execute --task=${taskId} --force  # 执行任务`);
   logger.info(`   speccore done --all                      # 归档时自动合并新增需求到原文档`);
 
-  // 自动刷新知识图谱（v6.49.10+）
+  // 自动刷新知识图谱和 RAG 索引（v8.3.65+）
   try {
     const { refreshKnowledgeGraph } = await import('../core/knowledge-graph');
     await refreshKnowledgeGraph(process.cwd(), iteration);
     logger.info('🧠 知识图谱已刷新');
+  } catch {}
+  try {
+    const { indexDirectoryDocuments } = await import('../core/rag-engine');
+    const { join } = await import('path');
+    const iterDir = `Iteration-${iteration}`;
+    const specsDir = join(iterDir, '020-specs');
+    const reqDir = join(iterDir, '010-requirements');
+    const dirs: string[] = [];
+    if (await pathExists(specsDir)) dirs.push(specsDir);
+    if (await pathExists(reqDir)) dirs.push(reqDir);
+    if (dirs.length > 0) {
+      await indexDirectoryDocuments(process.cwd(), dirs, `${iteration}_iteration_all`, `rag-index-${iteration}.json`);
+      logger.info('🔍 迭代 RAG 索引已刷新');
+    }
   } catch {}
 }
 
@@ -1179,10 +1193,25 @@ async function processChangeLegacy(options: ChangeOptions): Promise<void> {
   }
   logger.info(`   speccore execute --task=${affectedIds.join(',')} --force`);
 
+  // 自动刷新知识图谱和 RAG 索引（v8.3.65+）
   try {
     const { refreshKnowledgeGraph } = await import('../core/knowledge-graph');
     await refreshKnowledgeGraph(process.cwd(), iteration);
     logger.info('🧠 知识图谱已刷新');
+  } catch {}
+  try {
+    const { indexDirectoryDocuments } = await import('../core/rag-engine');
+    const { join } = await import('path');
+    const iterDir = `Iteration-${iteration}`;
+    const specsDir = join(iterDir, '020-specs');
+    const reqDir = join(iterDir, '010-requirements');
+    const dirs: string[] = [];
+    if (await pathExists(specsDir)) dirs.push(specsDir);
+    if (await pathExists(reqDir)) dirs.push(reqDir);
+    if (dirs.length > 0) {
+      await indexDirectoryDocuments(process.cwd(), dirs, `${iteration}_iteration_all`, `rag-index-${iteration}.json`);
+      logger.info('🔍 迭代 RAG 索引已刷新');
+    }
   } catch {}
 }
 
@@ -1391,11 +1420,25 @@ async function processChangeV2(options: ChangeOptions): Promise<void> {
   logger.info('   speccore analyze --global --withCode         # 刷新全局层');
   logger.info('   speccore execute --task <Task-XXX> --force   # 重新执行受影响任务');
 
-  // 自动刷新知识图谱
+  // 自动刷新知识图谱和 RAG 索引（v8.3.65+）
   try {
     const { refreshKnowledgeGraph } = await import('../core/knowledge-graph');
     await refreshKnowledgeGraph(process.cwd(), iteration);
     logger.info('🧠 知识图谱已刷新');
+  } catch {}
+  try {
+    const { indexDirectoryDocuments } = await import('../core/rag-engine');
+    const { join } = await import('path');
+    const iterDir = `Iteration-${iteration}`;
+    const specsDir = join(iterDir, '020-specs');
+    const reqDir = join(iterDir, '010-requirements');
+    const dirs: string[] = [];
+    if (await pathExists(specsDir)) dirs.push(specsDir);
+    if (await pathExists(reqDir)) dirs.push(reqDir);
+    if (dirs.length > 0) {
+      await indexDirectoryDocuments(process.cwd(), dirs, `${iteration}_iteration_all`, `rag-index-${iteration}.json`);
+      logger.info('🔍 迭代 RAG 索引已刷新');
+    }
   } catch {}
 }
 
@@ -1556,9 +1599,24 @@ async function handleNewRequirementV2(changeRequest: ChangeRequest, iteration: s
   logger.success(`   ✅ 新任务已创建: ${taskId}`);
   logger.info(`      📄 ${taskId}/00-specs/REQ.md`);
 
-  // 刷新知识图谱
+  // 刷新知识图谱和 RAG 索引（v8.3.65+）
   try {
     const { refreshKnowledgeGraph } = await import('../core/knowledge-graph');
     await refreshKnowledgeGraph(process.cwd(), iteration);
+    logger.info('🧠 知识图谱已刷新');
+  } catch {}
+  try {
+    const { indexDirectoryDocuments } = await import('../core/rag-engine');
+    const { join } = await import('path');
+    const iterDir = `Iteration-${iteration}`;
+    const specsDir = join(iterDir, '020-specs');
+    const reqDir = join(iterDir, '010-requirements');
+    const dirs: string[] = [];
+    if (await pathExists(specsDir)) dirs.push(specsDir);
+    if (await pathExists(reqDir)) dirs.push(reqDir);
+    if (dirs.length > 0) {
+      await indexDirectoryDocuments(process.cwd(), dirs, `${iteration}_iteration_all`, `rag-index-${iteration}.json`);
+      logger.info('🔍 迭代 RAG 索引已刷新');
+    }
   } catch {}
 }
