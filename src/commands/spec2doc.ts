@@ -173,7 +173,12 @@ export async function spec2docCommand(options: Spec2DocOptions): Promise<void> {
 
   // ── pandoc 检测 ──
   let hasPandoc = true;
-  try { execSync('which pandoc', { stdio: 'pipe' }); } catch { hasPandoc = false; }
+  try {
+    // v8.3.69+: Windows 使用 where 代替 which
+    const isWin = process.platform === 'win32';
+    const findCmd = isWin ? 'where pandoc' : 'which pandoc';
+    execSync(findCmd, { stdio: 'pipe' });
+  } catch { hasPandoc = false; }
   if (!hasPandoc) {
     logger.warn(`⚠️ 未检测到 pandoc。安装: ${getInstallCmd('pandoc')}`);
     logger.info('   pandoc 是 spec2doc 的核心依赖（Markdown → 文档转换）');
@@ -191,8 +196,8 @@ export async function spec2docCommand(options: Spec2DocOptions): Promise<void> {
     if (sourceFiles.length === 1) {
       // 单文件直接转
       const src = sourceFiles[0];
-      const cmd = `LANG=zh_CN.UTF-8 pandoc "${src.path}" -f gfm -t ${WRITER_MAP[format]} --wrap=none -o "${outputPath}"`;
-      execSync(cmd, { stdio: 'pipe' });
+      const cmd = `pandoc "${src.path}" -f gfm -t ${WRITER_MAP[format]} --wrap=none -o "${outputPath}"`;
+      execSync(cmd, { stdio: 'pipe', env: { ...process.env, LANG: 'zh_CN.UTF-8' } });
     } else {
       // 多文件合并：先拼成临时文件
       let merged = '';
@@ -203,8 +208,8 @@ export async function spec2docCommand(options: Spec2DocOptions): Promise<void> {
       const tmpPath = join(process.cwd(), '.speccore', '.tmp_export.md');
       await ensureDir(join(process.cwd(), '.speccore'));
       await writeFile(tmpPath, merged);
-      const cmd = `LANG=zh_CN.UTF-8 pandoc "${tmpPath}" -f gfm -t ${WRITER_MAP[format]} --wrap=none -o "${outputPath}"`;
-      execSync(cmd, { stdio: 'pipe' });
+      const cmd = `pandoc "${tmpPath}" -f gfm -t ${WRITER_MAP[format]} --wrap=none -o "${outputPath}"`;
+      execSync(cmd, { stdio: 'pipe', env: { ...process.env, LANG: 'zh_CN.UTF-8' } });
     }
 
     spinner.stop('导出完成');
