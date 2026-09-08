@@ -126,9 +126,10 @@ async function createSingleTask(options: TaskNewOptions): Promise<void> {
 
     const iterationDir = await getIterationDir(iteration);
     
-    // Determine task ID (使用 --topic 英文主题词)
+    // Determine task ID (使用 --topic 英文主题词，fallback 到 --name)
+    // v8.3.77+: 修复只传 topic 导致 name 被忽略的问题
     // 始终递增计数器，即使手动指定 --id 也如此，避免后续自动编号冲突
-    const { id: counterId } = await nextTaskId(options.topic);
+    const { id: counterId } = await nextTaskId(options.name, options.topic);
     const taskId = options.id
       ? options.id.replace(/^Task-/, '')
       : counterId.replace(/^Task-/, '');

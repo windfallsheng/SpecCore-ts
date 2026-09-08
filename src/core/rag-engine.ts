@@ -745,43 +745,30 @@ export async function indexTaskDocuments(
     join(cwd, taskDir, 'COMPARISON.md'),
   ];
 
-  // 新结构: 扫描 10-backend/{服务}/*/ 和 20-frontend/{端}/*/ 下的子任务文档
-  for (const catDir of ['10-backend', '20-frontend']) {
-    const catPath = join(cwd, taskDir, catDir);
-    if (await pathExists(catPath)) {
-      try {
-        const platEntries = await readdir(catPath, { withFileTypes: true });
-        for (const pe of platEntries) {
-          if (!pe.isDirectory()) continue;
-          const platPath = join(catPath, pe.name);
-          const stEntries = await readdir(platPath, { withFileTypes: true });
-          for (const st of stEntries) {
-            if (!st.isDirectory() || st.name.startsWith('.')) continue;
-            const stDir = join(platPath, st.name);
-            candidates.push(
-              join(stDir, 'TASK.md'),
-              join(stDir, 'TEST.md'),
-              join(stDir, 'RISK.md'),
-              join(stDir, 'REVIEW.md'),
-              join(stDir, 'COMPONENT_TREE.md'),
-              join(stDir, 'ROUTES.md'),
-              join(stDir, 'STATE.md'),
-            );
-          }
-        }
-      } catch { /* ignore */ }
+  // 端平铺结构: 扫描 {platform}/ 下的子任务文档（v8.3.65+ 移除 10-backend/20-frontend 旧结构）
+  const taskDirEntries = await readdir(join(cwd, taskDir), { withFileTypes: true }).catch(() => [] as any[]);
+  for (const entry of taskDirEntries) {
+    if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name === 'node_modules') continue;
+    // 排除已知非端目录
+    const nonPlatformDirs = new Set(['00-specs', '_shared', '99-artifacts', '.meta', 'features', 'bugs', 'refactors', 'research']);
+    if (nonPlatformDirs.has(entry.name)) continue;
+    const platDir = join(cwd, taskDir, entry.name);
+    const stEntries = await readdir(platDir, { withFileTypes: true }).catch(() => [] as any[]);
+    for (const st of stEntries) {
+      if (!st.isDirectory() || st.name.startsWith('.')) continue;
+      const stDir = join(platDir, st.name);
+      candidates.push(
+        join(stDir, 'TASK.md'),
+        join(stDir, 'TEST.md'),
+        join(stDir, 'RISK.md'),
+        join(stDir, 'REVIEW.md'),
+        join(stDir, 'COMPONENT_TREE.md'),
+        join(stDir, 'ROUTES.md'),
+        join(stDir, 'STATE.md'),
+      );
     }
   }
 
-  // 回退: 旧结构 {platform}/ 直接在任务根目录
-  if (platform) {
-    candidates.push(
-      join(cwd, taskDir, `${platform}`, 'TASK.md'),
-      join(cwd, taskDir, `${platform}`, 'COMPONENT_TREE.md'),
-      join(cwd, taskDir, `${platform}`, 'ROUTES.md'),
-      join(cwd, taskDir, `${platform}`, 'STATE.md'),
-    );
-  }
   // 回退: 旧结构 99-artifacts/
   candidates.push(
     join(cwd, taskDir, '99-artifacts', 'TEST.md'),
@@ -790,7 +777,7 @@ export async function indexTaskDocuments(
   );
 
   if (iteration) {
-    candidates.push(join(cwd, `Iteration-${iteration}`, '020-specs', 'DESIGN.md'));
+    // v8.3.65+ 移除 DESIGN.md（DESIGN.md 只在全局层 .speccore/GLOBAL/overview/ 存在）
     if (platform) {
       candidates.push(join(cwd, `Iteration-${iteration}`, '020-specs', 'platforms', platform, 'SPEC.md'));
     }
@@ -883,7 +870,7 @@ async function scanForNewFiles(
  */
 export async function indexDirectoryDocuments(
   cwd: string,
-  dirPath: string,
+  dirPath: string | string[],
   scope: string,
   fileName?: string,
 ): Promise<RagIndex> {
@@ -908,7 +895,10 @@ export async function indexDirectoryDocuments(
     }
   }
 
-  await scanDir(dirPath);
+  const dirs = Array.isArray(dirPath) ? dirPath : [dirPath];
+  for (const d of dirs) {
+    await scanDir(d);
+  }
 
   const index = await buildRagIndex(filesToIndex, scope);
   await saveRagIndex(cwd, index, fileName);
