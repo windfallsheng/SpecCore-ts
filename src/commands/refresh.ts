@@ -85,14 +85,18 @@ export async function refreshCommand(options: RefreshOptions): Promise<void> {
         }
       }
 
-      // 2.2 刷新 iteration 级索引
+      // 2.2 刷新 iteration 级索引（v8.3.65+ 扩展：同时索引 010-requirements/）
       if (iteration) {
         const iterFileName = `rag-index-${iteration}.json`;
         const iterSpecsDir = join(`Iteration-${iteration}`, '020-specs');
-        if (await pathExists(iterSpecsDir)) {
+        const iterReqDir = join(`Iteration-${iteration}`, '010-requirements');
+        const dirs: string[] = [];
+        if (await pathExists(iterSpecsDir)) dirs.push(iterSpecsDir);
+        if (await pathExists(iterReqDir)) dirs.push(iterReqDir);
+        if (dirs.length > 0) {
           const before = await loadRagIndex(cwd, iterFileName);
-          const scope = `${iteration}_020-specs_iteration_all`;
-          await indexDirectoryDocuments(cwd, iterSpecsDir, scope, iterFileName);
+          const scope = `${iteration}_iteration_all`;
+          await indexDirectoryDocuments(cwd, dirs, scope, iterFileName);
           const after = await loadRagIndex(cwd, iterFileName);
           if (!before || before.updatedAt !== after?.updatedAt) {
             refreshedFiles.push(`iteration-${iteration}`);
@@ -100,12 +104,12 @@ export async function refreshCommand(options: RefreshOptions): Promise<void> {
         }
       }
 
-      // 2.3 刷新全局索引
+      // 2.3 刷新全局索引（v8.3.63+ 修复：从 GLOBAL/020-specs 改为 GLOBAL/ 根目录）
       const globalFileName = 'rag-index-global.json';
       const beforeGlobal = await loadRagIndex(cwd, globalFileName);
-      const globalSpecsDir = join(cwd, '.speccore', 'GLOBAL', '020-specs');
+      const globalDir = join(cwd, '.speccore', 'GLOBAL');
       const fallbackDir = join(cwd, '.speccore');
-      const targetDir = await pathExists(globalSpecsDir) ? globalSpecsDir : fallbackDir;
+      const targetDir = await pathExists(globalDir) ? globalDir : fallbackDir;
       if (await pathExists(targetDir)) {
         await indexDirectoryDocuments(cwd, targetDir, 'GLOBAL_all_all_aggregated', globalFileName);
         const afterGlobal = await loadRagIndex(cwd, globalFileName);

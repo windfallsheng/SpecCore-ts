@@ -2,12 +2,12 @@
  * update — 项目升级命令
  * 只增量更新工具命令文件 + 配置模板，不覆盖用户数据
  */
-import { writeFile, pathExists, readFile, readdir, ensureDir } from 'fs-extra';
+import { writeFile, pathExists, readFile, readdir, ensureDir, unlink } from 'fs-extra';
 import { join } from 'path';
 import { execSync } from 'child_process';
 import { logger, Spinner } from '../utils/logger';
 import { version as CURRENT_VERSION } from '../../package.json';
-import { safeWriteWithBackup, safeCopyDirWithBackup, _updateConflicts, generateAIRulesContent, TOOL_COMMANDS, initAgentsDir, initRulesDir, initCommandsDir, initSkillsDir, initHooksDir, syncAgentsMd } from './init';
+import { safeWriteWithBackup, safeCopyDirWithBackup, _updateConflicts, generateAIRulesContent, TOOL_COMMANDS, initAgentsDir, initRulesDir, initCommandsDir, initSkillsDir, initHooksDir, syncAgentsMd, writeUpgradePage } from './init';
 import {
   initConfig,
   initProjectConfig,
@@ -212,6 +212,16 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   await ensureDir(join(speccoreDir, 'code-graph'));
   await writeFile(verFile, JSON.stringify({ version: CURRENT_VERSION, updatedAt: new Date().toISOString() }, null, 2));
 
+  // v8.3.62+: 同步写入 last-init-version.txt（checkUpgradeHints 读取此文件）
+  const lastInitFile = join(speccoreDir, 'local', 'last-init-version.txt');
+  await writeFile(lastInitFile, CURRENT_VERSION);
+
+  // v8.3.62+: 重置 onboard 标记，确保升级后首次 ask 展示引导页
+  try { await unlink(join(speccoreDir, 'local', '.ask-onboarded')); } catch {}
+
+  // v8.3.62+: 生成升级欢迎页（与 init 保持一致）
+  await writeUpgradePage(projectRoot, CURRENT_VERSION, speccoreDir);
+
   // ── 3. 检查升级提示（CONSTITUTION 模板变化等）──
   const { checkUpgradeHints } = await import('./init');
   await checkUpgradeHints(projectRoot, speccoreDir);
@@ -330,6 +340,16 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   // v6.98.0+: 同步 AGENTS.md — 将 .speccore/ 规范数据库投影到 AGENTS.md
   // v8.3.46+: force 模式 — 重新生成手动区，不保留旧内容（用户自定义内容需手动备份）
   await syncAgentsMd(projectRoot, true);
+
+  // v8.3.62+: 检查全局 CLI 是否需要更新（与 init 保持一致）
+  try {
+    const globalVer = execSync('speccore --version 2>/dev/null || echo "0.0.0"', { encoding: 'utf-8', timeout: 3000 }).trim();
+    if (globalVer !== CURRENT_VERSION && globalVer !== '0.0.0') {
+      logger.warn(`⚠️  全局 speccore CLI 版本: ${globalVer}，项目要求: ${CURRENT_VERSION}`);
+      logger.warn(`   👉 请执行: npm update -g speccore`);
+      logger.warn(`   否则 AI 运行的 analyze/split/plan 等命令会使用旧版本，导致结果异常`);
+    }
+  } catch { /* non-critical */ }
 
   const verLabel = isSameVersion ? `v${CURRENT_VERSION}` : `v${oldVersion} → v${CURRENT_VERSION}`;
   spinner.stop(`升级完成: ${verLabel}`);

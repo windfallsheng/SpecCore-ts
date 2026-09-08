@@ -345,9 +345,43 @@ function handleExplain(input: string): AskResult {
 
 /** 模式2: 任务指引 */
 function handleGuide(input: string): AskResult | null {
+  // v8.3.83+: 提取环境名和平台名（用于 deploy/verify 自动执行）
+  const envMap: Record<string, string> = {
+    '预发布': 'staging', '预发': 'staging', '线上': 'production', 'prod': 'production',
+    '测试': 'test', '开发': 'dev', 'develop': 'dev', '本地': 'local',
+  };
+  const envMatch = input.match(/(?:环境|env|到|部署到|发布到|上线到)\s*(local|dev|develop|test|staging|production|prod|预发布|预发|线上|测试|开发)/i);
+  const parsedEnv = envMatch ? (envMap[envMatch[1].toLowerCase()] || envMatch[1].toLowerCase()) : '';
+  const platformMatch = input.match(/(?:平台|端|platform)\s*[:=]?\s*([a-zA-Z0-9\-_]+)/i);
+  const parsedPlatform = platformMatch ? platformMatch[1] : '';
+  const isAll = /所有端|全部平台|所有平台|--all|\ball\b/.test(input);
+
   // 匹配工作流
   let matchedWorkflow: PipelineStep[] | null = null;
   let workflowName = '';
+
+  // v8.3.83+: 组合意图 — 部署 + 测试/验证
+  if (/(?:部署|deploy|发布|上线).*(?:测试|test|冒烟|smoke|验证|verify)/i.test(input) ||
+      /(?:测试|test|冒烟|smoke|验证|verify).*(?:部署|deploy|发布|上线)/i.test(input)) {
+    const env = parsedEnv || 'staging';
+    const platformArg = isAll || !parsedPlatform ? '--all' : `--platform ${parsedPlatform}`;
+    const deployArgs = `--env ${env} ${platformArg}`;
+    return {
+      mode: 'pipeline',
+      summary: `部署并验证（${env} 环境）`,
+      detail: `🚀 步骤 1: speccore deploy ${deployArgs}\n🧪 步骤 2: speccore verify --type all\n\n确认后自动执行部署+验证`,
+      commands: ['deploy', 'verify'],
+      pipeline: {
+        steps: [
+          { order: 1, command: 'deploy', args: deployArgs, explanation: `部署到 ${env} 环境`, dependsOn: undefined },
+          { order: 2, command: 'verify', args: '--type all', explanation: '部署后验证', dependsOn: 1 },
+        ],
+        input,
+        confirm: true,
+      },
+      autoExec: { command: 'deploy', args: deployArgs, confirm: true },
+    };
+  }
 
   if (/bug|修复|fix|defect/i.test(input)) {
     matchedWorkflow = WORKFLOWS['bugfix'];
@@ -355,12 +389,19 @@ function handleGuide(input: string): AskResult | null {
   } else if (/审查|review|代码检查|code review|检查.*代码/i.test(input)) {
     matchedWorkflow = WORKFLOWS['code review'];
     workflowName = '代码审查流程';
-  } else if (/测试|test|写.*用例|补充.*测试/i.test(input)) {
+  } else if (/测试|test|写.*用例|补充.*测试|冒烟|smoke|验证|verify/i.test(input)) {
+    const env = parsedEnv || 'staging';
+    let testType = 'all';
+    if (/冒烟|smoke/.test(input)) testType = 'smoke';
+    else if (/api|接口/.test(input)) testType = 'api';
+    else if (/视觉|visual|ui|页面/.test(input)) testType = 'visual';
+    const args = `--type ${testType}`;
     return {
       mode: 'match',
-      summary: '建议创建测试任务',
-      detail: '📋 建议: speccore ask "创建一个测试任务" 来生成测试计划',
-      commands: ['task-create'],
+      summary: `运行 ${testType} 测试（${env} 环境）`,
+      detail: `🧪 即将执行: speccore verify ${args}\n\n确认后自动执行测试`,
+      commands: ['verify'],
+      autoExec: { command: 'verify', args, confirm: true },
     };
   } else if (/文档|docs|写.*文档|补.*文档/i.test(input)) {
     return {
@@ -377,11 +418,15 @@ function handleGuide(input: string): AskResult | null {
       commands: ['task-create'],
     };
   } else if (/部署|deploy|发布|上线/i.test(input)) {
+    const env = parsedEnv || 'staging';
+    const platformArg = isAll || !parsedPlatform ? '--all' : `--platform ${parsedPlatform}`;
+    const args = `--env ${env} ${platformArg}`;
     return {
       mode: 'match',
-      summary: '建议创建部署任务',
-      detail: '📋 建议: speccore ask "创建一个部署任务" 来准备发布',
-      commands: ['task-create'],
+      summary: `部署到 ${env} 环境`,
+      detail: `🚀 即将执行: speccore deploy ${args}\n\n确认后自动执行部署`,
+      commands: ['deploy'],
+      autoExec: { command: 'deploy', args, confirm: true },
     };
   } else if (/安全|security|漏洞|审计/i.test(input)) {
     return {
@@ -1023,7 +1068,8 @@ export async function synthesizeIntent(input: string): Promise<SynthesizedIntent
 
   // v7.2.0+: 分析深度参数提取
   // --deep: 深度分析（指定文档名或泛化表述）
-  const deepDocMatch = input.match(/(?:深度分析|深入分析|详细分析|深度生成)\s*(?:文档?)?\s*([A-Z_\-]+\.md|[A-Z_\-]+)/i);
+  // v8.3.79+: 支持路径前缀，如 overview/ARCHITECTURE.md 或 020-specs/overview/ARCHITECTURE.md
+  const deepDocMatch = input.match(/(?:深度分析|深入分析|详细分析|深度生成)\s*(?:文档?)?\s*([a-zA-Z0-9_\-\/]+\.md|[A-Z_\-]+)/i);
   if (deepDocMatch) {
     parsed.deep = deepDocMatch[1];
   } else if (/深度|深入|详细|逐节|慢慢|一步一步/.test(input)) {
