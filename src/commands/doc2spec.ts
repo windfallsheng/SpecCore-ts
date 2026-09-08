@@ -19,6 +19,7 @@ import { logger, Spinner } from '../utils/logger';
 import { execSync } from 'child_process';
 import { pathExists, ensureDir, readFile, writeFile, readdir, stat, unlink, copy } from 'fs-extra';
 import { join, basename } from 'path';
+import { tmpdir } from 'os';
 import { backupWithTimestamp } from '../utils/task-utils';
 import { nextTaskId } from '../core/global-counters';
 
@@ -27,7 +28,12 @@ import { validateContent, generateReport } from '../core/doc-validator';
 import { buildPrompt, formatPrompt } from '../core/prompt-builder';
 function findCommand(cmd: string): string | null {
   try {
-    return execSync(`which ${cmd}`, { stdio: 'pipe', encoding: 'utf-8' }).trim();
+    // v8.3.69+: Windows 使用 where 代替 which
+    const isWin = process.platform === 'win32';
+    const findCmd = isWin ? `where ${cmd}` : `which ${cmd}`;
+    const result = execSync(findCmd, { stdio: 'pipe', encoding: 'utf-8' }).trim();
+    // where 可能返回多行（每个 PATH 匹配一行），取第一行
+    return result.split('\n')[0].trim();
   } catch {
     // PATH 找不到时，检查常见安装位置
     const commonPaths: Record<string, string[]> = {
@@ -279,9 +285,10 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     } else if (ext === 'doc') {
       // .doc 旧格式 → LibreOffice 转 .docx
       try {
-        execSync(`soffice --headless --convert-to docx "${sourceFile}" --outdir /tmp/`, { stdio: 'pipe' });
+        const tmpDir = tmpdir();
+        execSync(`soffice --headless --convert-to docx "${sourceFile}" --outdir "${tmpDir}"`, { stdio: 'pipe' });
         const name = basename(sourceFile, '.doc');
-        sourceFile = `/tmp/${name}.docx`;
+        sourceFile = join(tmpDir, `${name}.docx`);
         if (!(await pathExists(sourceFile))) {
           throw new Error('LibreOffice conversion failed');
         }
@@ -304,8 +311,8 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
       const inputFormat = getPandocInputFormat(ext);
       try {
         execSync(
-          `LANG=zh_CN.UTF-8 "${pandocBin}" "${sourceFile}" -f ${inputFormat} -t gfm --wrap=none --extract-media="${imageDir}" -o "${outputPath}"`,
-          { stdio: 'pipe', encoding: 'utf-8' }
+          `"${pandocBin}" "${sourceFile}" -f ${inputFormat} -t gfm --wrap=none --extract-media="${imageDir}" -o "${outputPath}"`,
+          { stdio: 'pipe', encoding: 'utf-8', env: { ...process.env, LANG: 'zh_CN.UTF-8' } }
         );
         spinner.stop(`✅ 转换完成 → ${outputPath}`);
       } catch (e: any) {
@@ -530,8 +537,8 @@ async function classifySources(options: Word2SpecOptions): Promise<void> {
         try {
           const tmpOut = join(sourcesDir, `.${entry.name}.tmp.md`);
           execSync(
-            `LANG=zh_CN.UTF-8 "${pandocBin}" "${filePath}" -f ${PANDOC_FORMAT_MAP[ext]} -t gfm --wrap=none -o "${tmpOut}"`,
-            { stdio: 'pipe', encoding: 'utf-8' }
+            `"${pandocBin}" "${filePath}" -f ${PANDOC_FORMAT_MAP[ext]} -t gfm --wrap=none -o "${tmpOut}"`,
+            { stdio: 'pipe', encoding: 'utf-8', env: { ...process.env, LANG: 'zh_CN.UTF-8' } }
           );
           content = await readFile(tmpOut, 'utf-8');
           await unlink(tmpOut);
