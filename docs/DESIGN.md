@@ -1110,6 +1110,22 @@ Task-001-feature-login/
 5. **git-config 自动填充**：split 时自动写入迭代级/全局级实际配置值，不再生成全注释空模板
 6. **依赖分支合并修复**：`prepareTaskBranch` 优先从 `task.dependencies` 读取依赖，依赖分支查找扩展为三层回退（当前会话 → git-mapping → git branch）
 
+**v8.3.77+ 任务命名策略改进（中文任务名支持）**：
+
+问题：原 `slugify()` 实现先 `.replace(/[\u4e00-\u9fff]/g, '')` 去掉所有中文，纯中文任务名变成空字符串后 fallback 到 hash，导致目录名无意义（如 `Task-001-a3f2b1`）。
+
+修复方案：
+1. **slugify() 英文优先提取**：不再直接去掉中文，而是优先提取连续的英文/数字片段（`/[a-zA-Z0-9]+/g`），如 `"User管理"` → `"user"`，`"API网关"` → `"api"`
+2. **extractTopic() 四层 fallback**：① AI 提供的合法 topic（`^[a-z0-9-]+$`）② `functionalUnit` 中的英文 ③ `name` 中的英文 ④ hash fallback（确保不重复）
+3. **toSlug() 同步修复**：迭代目录命名采用同样策略，`"我的项目"` → `"iter-3f2a"`（hash），`"My项目"` → `"my"`
+4. **task new name 参与 slug**：修复 `nextTaskId(options.topic)` 只传 topic 的 bug，改为 `nextTaskId(options.name, options.topic)`，让 `--name` 作为 `--topic` 的 fallback
+
+**v8.3.79+ ask 引擎路径识别**：
+
+`ask-engine.ts` 中 `deepDocMatch` 正则从 `[A-Z_\-]+\.md` 扩展为 `[a-zA-Z0-9_\-/]+\.md`，支持用户自然语言描述中带路径的文档名：
+- `"全局深度分析 overview/ARCHITECTURE.md"` → `--deep overview/ARCHITECTURE.md`
+- `"详细分析 020-specs/overview/TECH.md"` → `--deep 020-specs/overview/TECH.md`
+
 **实现位置**：
 - `/ts-cli/src/commands/iteration/split.ts`:
   - `createTaskFromSection()`：创建任务级 `.meta/`
@@ -2013,6 +2029,77 @@ Layer 4 汇总 prompt 强制规则：
 - `requirements/REQUIREMENT.md` 总纲只保留全局业务视角（愿景/用户画像/场景地图/优先级矩阵）
 - **严禁**将前端项目的页面布局、交互流程、业务规则合并到总纲中
 - 前端需求独立存放：`requirements/h5-mobile/REQUIREMENT.md`、`requirements/admin-web/REQUIREMENT.md`
+
+#### 全局分析质量保障体系重构（v8.3.62+）
+
+**背景**：全局分析在实际运行中出现三个系统性质量问题：
+1. **Layer 4 缺失**：Layer 3 完成后 AI 不知道要继续执行 Layer 4，导致只生成 modules/ 内容
+2. **内容空洞**：AI 生成的文档只有标题和空表格，缺乏实质内容
+3. **全局 vs 迭代层混淆**：AI 补充全局需求文档时误用迭代层命令
+
+**解决方案**：子层拆分 + 自动链式推进 + 质量门禁拦截 + 分层约束策略
+
+##### Layer 4 子层拆分（4a/4b/4c/4d）
+
+将原来的单层 Layer 4 汇总拆分为 4 个子步骤，逐层递进：
+
+| 子层 | 产出位置 | 产出文档 | 最小行数 |
+|:---|:---|:---|:---|
+| **4a** | `requirements/` | 全局需求总纲 + 各前端端需求 | 500 行 |
+| **4b** | `overview/` | ARCHITECTURE.md + FUNCTION_MAP.md + API_CONTRACT.yaml + INTERACTION_MAP.md | 200/50/-/- 行 |
+| **4c** | `overview/` | SECURITY_AUDIT.md + PERFORMANCE_BASELINE.md + DATA_FLOW.md + DEPLOYMENT.md + CONSISTENCY_CHECK.md | 80/80/150/100/50 行 |
+| **4d** | `platforms/{端}/` | 后端: API_INVENTORY.md + DATA_MODEL.md + BUSINESS_RULES.md；前端: UI_FLOW.md + API_CALL_MAP.md + STATE_MANAGEMENT.md | 150/100/-/100/80/80 行 |
+
+每个子层完成后才进入下一子层，子层内部通过 `SUB_LAYER_DOCS` 动态检测缺失文档，一次只聚焦生成一份缺失文档。
+
+##### 自动链式推进机制
+
+**问题**：Prompt 中虽然写了 `[SPECCORE_EXEC]`，但 AI 经常不输出，导致流程中断。
+
+**方案**：CLI 层面兜底，在 `--apply` 处理完后主动输出 `[SPECCORE_EXEC]`：
+
+```
+Layer N --apply 写入完成
+  → CLI 检测进度（detectGlobalLayerProgress）
+  → 如果 completedLayer < 4
+    → 输出 [SPECCORE_EXEC: speccore analyze --scope global --layer N+1]
+    → AI 收到后自动执行下一层
+```
+
+双重保险：Prompt 中要求 AI 输出 `[SPECCORE_EXEC]` + CLI 层面主动输出 `[SPECCORE_EXEC]`。
+
+##### 质量门禁拦截机制
+
+**问题**：`doc-quality-gate.ts` 只打印报告，不阻止不合格文档进入下一层。
+
+**方案**：`--apply` 写入后，质量门禁检测到 `error` 时自动拦截：
+
+```
+--apply 写入完成
+  → runGlobalQualityGate() 运行质量检查
+  → 如果有 criticalErrors
+    → 不输出 [SPECCORE_EXEC]（不推进）
+    → 输出 [SPECCORE_PROMPT] 修复任务
+    → AI 修复后重新 --apply
+  → 如果无 error
+    → 输出 [SPECCORE_EXEC] 推进下一层
+```
+
+质量门禁检查项：占位符、行数达标、空表格、Mermaid 语法、关键章节缺失。
+
+##### AGENTS.md 与 Prompt 的分层约束策略
+
+**设计决策**：框架级约束放 AGENTS.md，执行级约束放 Prompt。
+
+| 约束层级 | 载体 | 覆盖范围 | 约束力 |
+|:---|:---|:---|:---|
+| **框架级** | AGENTS.md | 所有 AI 工具可见 | 广而浅 |
+| **执行级** | analyze Prompt | 执行时注入 | 深而强 |
+
+AGENTS.md 负责：目录结构、禁止事项、工作方式、产出清单
+Prompt 负责：当前 Layer 的具体任务、行数要求、自检 Checklist、写入方式
+
+两者互补不重复，Prompt 的约束更具体、更难被遗忘。
 
 ---
 
