@@ -1,3 +1,380 @@
+## v8.3.81 (2026-09-08) — 需求文档命名自由化（REQUIREMENT.md 不再被排除）
+
+### 修复
+
+**parseFeatureList 排除 REQUIREMENT.md 导致功能模块分组失效（v8.3.81）**:
+- `spec-paths.ts` 中 `excludeNames` 包含 `'REQUIREMENT'`，导致 `REQUIREMENT.md` 被排除在功能模块列表外
+- 当用户只有一个 `REQUIREMENT.md` 时，`parseFeatureList()` 返回空数组，`computeFeatureBasedAnalyzeManifest()` 不生成功能模块目录骨架
+- Phase 2 骨架为空 → AI 只能输出平铺的 `api/TECH.md`、`web/TECH.md`，而非 `{feature}/api/TECH.md`
+- **修复方案**：从 `excludeNames` 中移除 `'REQUIREMENT'`，用户命名自由化，中文/英文/REQUIREMENT 都作为合法功能模块名
+- **影响文件**：`src/core/spec-paths.ts`
+
+## v8.3.80 (2026-09-08) — change 命令任务名参与 slug + 文档更新
+
+### 修复
+
+**change 命令创建任务时 name 被忽略（v8.3.80）**:
+- `change.ts` 中两处 `handleNewRequirement` / `handleNewRequirementV2` 调用 `nextTaskId()` 未传任何参数
+- 导致变更任务生成纯数字 ID（如 `Task-001`），任务名未参与 slug 生成
+- **修复方案**：先提取 `taskName`，再调用 `nextTaskId(taskName)`，让名称参与 slug 生成
+- **影响文件**：`src/commands/change.ts`
+
+### 文档
+
+- **DESIGN.md**：补充 v8.3.77+ 任务命名策略改进（slugify / extractTopic / toSlug）和 v8.3.79+ ask 引擎路径识别
+- **README.md**：补充 task new 只提供 `--name` 时的自动 slug 行为，补充 ask 深度分析单文档的路径前缀示例
+
+## v8.3.79 (2026-09-08) — ask 深度分析支持路径前缀识别
+
+### 修复
+
+**ask 引擎深度分析文档路径识别（v8.3.79）**:
+- `ask-engine.ts` 中 `deepDocMatch` 正则 `[A-Z_\-]+\.md` 只能匹配纯文档名，无法识别路径前缀
+- 用户说"深度分析 overview/ARCHITECTURE.md" 时匹配失败，导致 `--deep` 参数未设置
+- **修复方案**：正则改为 `[a-zA-Z0-9_\-\/]+\.md`，支持 `overview/ARCHITECTURE.md`、`020-specs/overview/ARCHITECTURE.md` 等路径格式
+- `analyze.ts` 中 `deepDoc.replace(/\//g, '-')` 已支持路径中的 `/`，无需额外修改
+- **影响文件**：`src/core/ask-engine.ts`
+
+## v8.3.78 (2026-09-08) — 修复 task new 时 name 被忽略导致纯数字 ID
+
+### 修复
+
+**task new 手动创建任务时 name 被忽略（v8.3.78）**:
+- `task/new.ts` 中 `nextTaskId(options.topic)` 只传了一个参数，被当作 `name` 而非 `topic`
+- 当用户只提供 `--name` 没提供 `--topic` 时，`options.topic` 为 `undefined`
+- 导致 `nextTaskId()` 的 `keyword` 为 `undefined`，suffix 为空，生成纯数字 ID（如 `Task-001`）
+- 用户描述的任务功能（`--name`）完全没有被用来生成 slug
+- **修复方案**：改为 `nextTaskId(options.name, options.topic)`，让 `name` 作为 topic 的 fallback
+- **影响文件**：`src/commands/task/new.ts`
+
+## v8.3.77 (2026-09-08) — 修复 split 中文任务名生成 hash 问题
+
+### 修复
+
+**split 任务 topic 提取逻辑改进（v8.3.77）**:
+- `slugify()` 原实现先 `.replace(/[\u4e00-\u9fff]/g, '')` 去掉所有中文，纯中文任务名变成空字符串后 fallback 到 hash
+- 导致任务目录名变成无意义的 hash（如 `Task-001-a3f2b1`）
+- **修复方案**：
+  - `slugify()` 改为优先提取连续的英文/数字片段（`/[a-zA-Z0-9]+/g`），不再直接去掉中文
+  - 新增 `extractTopic()` 四层 fallback：① AI 提供的合法 topic ② functionalUnit 中的英文 ③ name 中的英文 ④ hash
+  - 强化 prompt 中 topic 的必填要求，给出从中文功能单元提取英文 topic 的示例
+  - 同步修复 `global-counters.ts` 中的 `toSlug()`，采用同样的英文优先提取策略
+- **影响文件**：`src/commands/iteration/split.ts`、`src/core/global-counters.ts`
+
+## v8.3.76 (2026-09-08) — 修复 doc2spec 图片路径硬编码错误 + 引用路径注释
+
+### 修复
+
+**doc2spec `.md` 直接导入时图片路径硬编码错误（v8.3.76）**:
+- `.md` 文件直接导入时，代码使用硬编码 `../../assets/extracted/` 修正 `media/` 路径
+- 但 Markdown 文件输出到 `010-requirements/converted/requirements.md`
+- 从 `converted/` 到 `assets/extracted/` 的正确相对路径应为 `../assets/extracted/`
+- 硬编码的 `../../` 多了一层，导致图片引用路径指向不存在的 `Iteration-xxx/assets/extracted/`
+- **修复方案**：改用 `path.relative` 动态计算相对路径（与 pandoc 转换逻辑保持一致）
+- **影响文件**：`src/commands/doc2spec.ts`
+
+**doc2spec 注释中 Task 引用图片路径提示错误（v8.3.76）**:
+- 生成的注释提示 Task 引用方式为 `![原型](../assets/extracted/xxx.png)`
+- 但 Task 文档位于 `030-tasks/Task-NNN/00-specs/`，到 `010-requirements/assets/extracted/` 需要 `../../../010-requirements/assets/extracted/`
+- **修复方案**：补充 `converted/` 引用方式（`../assets/extracted/`）和正确的 Task 引用方式（`../../../010-requirements/assets/extracted/`）
+- **影响文件**：`src/commands/doc2spec.ts`
+
+## v8.3.75 (2026-09-08) — 修复迭代目录结构遗漏 + README 版本号同步
+
+### 修复
+
+**`speccore iteration create` 和 `speccore init` 遗漏 `prototypes/` 目录（v8.3.75）**:
+- `create.ts` 和 `createSampleIteration`（`init.ts`）在创建 `010-requirements/` 时
+- 创建了 `assets/prototypes/`（素材资源下的原型），但遗漏了同级的 `prototypes/` 目录
+- AGENTS.md 和 README.md 的目录规范中明确要求 `010-requirements/prototypes/`
+- 导致需求文档中的原型文件无处存放，与规范不一致
+- **修复方案**：在 `create.ts` 和 `init.ts` 中补充创建 `010-requirements/prototypes/` 目录
+- **影响文件**：`src/commands/iteration/create.ts`、`src/commands/init.ts`
+
+**`createSampleIteration` 的 INDEX.md 缺少 bugs/refactors/research 条目（v8.3.75）**:
+- 示例迭代的 `010-requirements/INDEX.md` 中只列出了 sources/、converted/、features/、prototypes/
+- 遗漏了 bugs/、refactors/、research/ 三个需求类型目录的索引条目
+- 与 README.md 中的目录规范说明不一致
+- **修复方案**：在示例 INDEX.md 中补充三个条目的表格行
+- **影响文件**：`src/commands/init.ts`
+
+**README.md 硬编码版本号未同步（v8.3.75）**:
+- README.md 第 332 行的 `speccore --version # v8.3.68` 停留在旧版本
+- 用户参考 README 时看到的版本号与实际最新版本不一致
+- **修复方案**：更新为当前版本 `v8.3.75`
+- **影响文件**：`README.md`
+
+## v8.3.74 (2026-09-08) — 修复 ask 引擎创建迭代时意图识别 pattern 错误
+
+### 修复
+
+**`speccore ask` 创建迭代时参数提取失败导致创建出奇怪名字的迭代（v8.3.74）**:
+- `intent-recognition.ts` 中 `iteration_create` 的 `patterns` 写成了 `'创建(.+)迭代创建(.+)迭代'`
+- 这个 pattern 期望匹配"创建xxx迭代创建yyy迭代"这种不存在的说法
+- 用户正常说"创建一个叫用户管理的迭代"或"创建迭代用户管理"都无法匹配
+- 导致 `params.name` 提取失败，`ask-engine.ts` fallback 到 `input.slice(0, 20)`
+- 结果创建出如 `Iteration-003-帮我创建一个叫用户管` 这种奇怪名字的迭代
+- 用户可能因此重复尝试，最终出现两个迭代目录
+- **修复方案**：
+  - 修正 `patterns` 为正常中文说法：`创建(.+)迭代`、`新建(.+)迭代`、`创建一个叫(.+)的迭代`、`迭代叫(.+)` 等
+  - 补充 `triggers`：`创建sprint`、`新建sprint`、`开新迭代`、`新开迭代`
+- **影响文件**：`src/core/intent-recognition.ts`
+
+## v8.3.73 (2026-09-08) — 修复 init 示例迭代缺少 bugs/refactors/research 目录
+
+### 修复
+
+**`speccore init` 创建的示例迭代缺少需求类型目录（v8.3.73）**:
+- `createSampleIteration`（`init.ts`）在创建 `Iteration-sample` 的 `010-requirements/` 时
+- 只创建了 `features/` 目录，遗漏了 `bugs/`、`refactors/`、`research/` 三个目录
+- 导致 `speccore init` 后，示例迭代的 README.md 中提到了这些目录，但实际不存在
+- 与 `speccore iteration create` 的行为不一致（后者会创建全部四个目录）
+- **修复方案**：在 `createSampleIteration` 中补充创建 `bugs/`、`refactors/`、`research/` 目录
+- **影响文件**：`src/commands/init.ts`
+
+## v8.3.72 (2026-09-08) — pandoc 缺失提示完善 + 配置文件自动生成 tools 字段
+
+### 修复
+
+**pandoc 未找到时缺少配置自定义路径的引导提示（v8.3.72）**:
+- `doc2spec` / `spec2doc` 检测到 pandoc 缺失时，只提示了安装命令和替代方案
+- 缺少引导用户去 `.speccore.yml` 配置自定义路径的说明
+- 导致已安装但不在 PATH 中的用户不知道可以通过配置解决
+- **修复方案**：在"未检测到 pandoc"的提示信息中追加配置引导：
+  ```
+  🔧 自定义路径: 若已安装但不在 PATH 中，可在 .speccore.yml 中配置
+     tools:
+       pandoc: "/path/to/pandoc"
+  ```
+- **影响文件**：`src/commands/doc2spec.ts`、`src/commands/spec2doc.ts`
+
+**`.speccore.yml` 默认生成缺少 `tools` 字段说明（v8.3.72）**:
+- `initConfig` / `saveConfig` 生成的 `.speccore.yml` 中没有 `tools` 字段的注释和默认值
+- 用户不知道可以在哪里配置自定义工具路径
+- **修复方案**：`toYaml` 函数新增 `tools` 区块，包含：
+  - 功能说明注释（何时需要配置、优先级策略）
+  - `pandoc` 和 `libreoffice` 两个空字符串默认值
+- **影响文件**：`src/core/unified-config.ts`
+
+## v8.3.71 (2026-09-08) — 支持配置自定义 pandoc/libreoffice 安装路径
+
+### 新增
+
+**`.speccore.yml` 新增 `tools` 配置字段（v8.3.71）**:
+- 支持在 `.speccore.yml` 中自定义 pandoc 和 libreoffice 的可执行文件路径
+- 当 `which`/`where` 命令无法找到工具时（如 Windows 非标准安装路径），用户可手动指定路径
+- 配置优先级：**配置路径 > 系统 PATH 查找 > 常见安装位置兜底**
+- **使用方式**：在 `.speccore.yml` 中添加：
+  ```yaml
+  tools:
+    pandoc: "C:\\Program Files\\Pandoc\\pandoc.exe"
+    libreoffice: "C:\\Program Files\\LibreOffice\\program\\soffice.exe"
+  ```
+- **影响文件**：`src/core/unified-config.ts`、`src/commands/doc2spec.ts`、`src/commands/spec2doc.ts`
+
+## v8.3.70 (2026-09-08) — Windows 下 pandoc 检测与命令兼容性修复
+
+### 修复
+
+**Windows 下 `which` 命令不存在导致 pandoc 检测失败（v8.3.70）**:
+- `doc2spec.ts` 和 `spec2doc.ts` 中使用 `which pandoc` 检测 pandoc 是否安装
+- Windows 上没有 `which` 命令，导致检测始终失败，即使用户已安装 pandoc
+- **修复方案**：根据平台选择命令，Windows 用 `where`，Unix/Mac 用 `which`
+- `where` 可能返回多行（每个 PATH 匹配一行），取第一行作为结果
+- **影响文件**：`src/commands/doc2spec.ts`、`src/commands/spec2doc.ts`
+
+**Windows 下 `LANG=zh_CN.UTF-8` 环境变量前缀语法不兼容（v8.3.70）**:
+- doc2spec/spec2doc 中使用 Unix shell 语法 `LANG=zh_CN.UTF-8 pandoc ...` 设置环境变量
+- Windows 命令行不支持这种前缀语法，导致 pandoc 执行失败
+- **修复方案**：移除命令前缀，改用 `execSync` 的 `env` 选项传递 `LANG` 环境变量
+- **影响文件**：`src/commands/doc2spec.ts`、`src/commands/spec2doc.ts`
+
+**Windows 下 `/tmp/` 硬编码临时目录路径（v8.3.70）**:
+- `.doc` 旧格式转换时使用 `--outdir /tmp/` 硬编码路径
+- Windows 没有 `/tmp/` 目录，导致 LibreOffice 转换失败
+- **修复方案**：使用 Node.js `os.tmpdir()` 获取跨平台临时目录路径
+- **影响文件**：`src/commands/doc2spec.ts`
+
+## v8.3.69 (2026-09-08) — update 命令脚本模板升级补全修复
+
+### 修复
+
+**update 时已有环境配置的项目不创建脚本模板（v8.3.69）**:
+- `initEnvironmentConfigs` 的逻辑缺陷：当 `.speccore/environments/` 下已有 `.yaml` 文件时，`hasYaml = true`，脚本模板创建逻辑**完全被跳过**
+- 导致已有项目执行 `speccore update` 时，`.speccore/environments/scripts/` 目录和脚本模板**不会被创建**
+- 只有全新项目（无环境配置）才能享受到 v8.3.68 的脚本模板功能
+- **修复方案**：将脚本模板（`deploy.sh`/`ecosystem.config.js`/`k8s-deployment.yaml`）和 Helm values 的创建逻辑提取到 `if/else` 分支之外，在新建和升级两种场景下都检查并补全缺失的脚本
+- **影响文件**：`src/commands/update-env-configs.ts`
+
+## v8.3.68 (2026-09-08) — 环境配置脚本模板缺失修复
+
+### 修复
+
+**环境配置脚本模板未默认创建（v8.3.68）**:
+- `speccore init` / `speccore update` 创建环境配置 YAML 时，YAML 中引用了多个脚本文件，但这些脚本模板**没有被创建**
+- 缺失的脚本包括：`ecosystem.config.js`（PM2 配置）、`k8s-deployment.yaml`（K8s 部署配置）、`deploy.sh`（通用部署脚本）、`values-{env}.yaml`（Helm values）
+- 导致用户首次使用 `speccore deploy` / `speccore pipeline` 时，脚本类型/k8s/pm2/helm 部署找不到对应的脚本文件
+- **修复方案**：
+  - `initEnvironmentConfigs` 新增 `.speccore/environments/scripts/` 目录创建
+  - 默认创建 3 个通用脚本模板：`deploy.sh`、`ecosystem.config.js`、`k8s-deployment.yaml`
+  - 为每个环境（local/dev/test/staging/production）创建对应的 Helm values 模板 `values-{env}.yaml`
+  - 修改环境配置 YAML 中的脚本路径，统一指向 `.speccore/environments/scripts/` 下的模板
+- **影响文件**：`src/commands/update-env-configs.ts`
+
+## v8.3.67 (2026-09-08) — 需求分析澄清流程修复
+
+### 修复
+
+**analyze --apply 后 RAG 索引未刷新（v8.3.67）**：
+- `speccore analyze --apply` 写入分析文档后，只刷新了知识图谱，**没有刷新 RAG 索引**
+- 导致新写入的规格文档无法通过语义检索找到
+- **修复方案**：`analyze.ts` `--apply` 模式写入后同步刷新迭代层 RAG 索引
+- **影响文件**：`src/commands/analyze.ts`
+
+**buildClarifyPhasePrompt 遗漏需求文档（v8.3.67）**：
+- `buildClarifyPhasePrompt` 只扫描 `010-requirements/` 下的 `sources/`、`converted/`、`features/` 三个固定子目录
+- 遗漏：根目录下的 `.md` 文件（如 `REQUIREMENT.md`）、`bugs/`、`refactors/`、`research/`、`staging/` 等类型目录
+- 导致这些需求文档在澄清阶段被忽略，AI 看不到完整需求
+- **修复方案**：改为递归扫描整个 `010-requirements/` 目录
+- **影响文件**：`src/commands/analyze.ts`
+
+**hasValidClarifiedDocs 只识别 -clarified.md 后缀（v8.3.67）**：
+- `hasValidClarifiedDocs` 只检查 `-clarified.md` 后缀的文件
+- 如果用户将需求文档直接放入 `020-specs/requirements/` 但不使用 `-clarified.md` 后缀，则不会被识别为有效澄清文档
+- 导致 analyze 反复要求澄清，即使用户已经提供了专业需求
+- **修复方案**：检查所有 `.md` 文件（排除 `-diff.md` 对比记录）
+- **影响文件**：`src/core/requirement-clarifier.ts`
+
+## v8.3.66 (2026-09-08) — 需求澄清/变更后的知识图谱与 RAG 刷新修复
+
+### 修复
+
+**需求澄清后知识图谱和 RAG 未刷新（v8.3.66）**：
+- `speccore clarify` 写入黄金需求到 `020-specs/requirements/` 后，**没有刷新知识图谱和 RAG 索引**
+- 导致新澄清的需求文档无法被检索，AI 后续分析时看不到最新需求
+- **修复方案**：`clarify.ts` 写入后自动刷新知识图谱和迭代层 RAG 索引
+- **影响文件**：`src/commands/clarify.ts`
+
+**需求变更后 RAG 索引未刷新（v8.3.66）**：
+- `speccore change` 创建/修改任务后，只刷新了知识图谱，**没有刷新 RAG 索引**
+- 导致变更后的规格文档无法通过语义检索找到
+- **修复方案**：`change.ts` 4 处知识图谱刷新后，同步刷新迭代层 RAG 索引
+- **影响文件**：`src/commands/change.ts`
+
+**黄金需求目录未被知识图谱扫描（v8.3.66）**：
+- `scanRequirements` 只扫描 `010-requirements/`，**不扫描 `020-specs/requirements/`**（黄金需求目录）
+- `scanSpecs` 把 `requirements/` 当作端目录，赋予错误的 `platform: 'requirements'` 属性
+- 导致 clarify 后的专业需求完全被知识图谱忽略
+- **修复方案**：
+  - `scanRequirements` 扩展扫描 `020-specs/requirements/`，标记 `golden` tag
+  - `scanSpecs` 将 `requirements` 加入 `knownNonPlatformDirs`
+- **影响文件**：`src/core/knowledge-graph.ts`
+
+## v8.3.65 (2026-09-08) — 迭代层 RAG 索引扩展与任务层结构修复
+
+### 修复
+
+**迭代层 RAG 索引遗漏需求文档（v8.3.65）**：
+- 迭代层 RAG 索引 (`rag-index-{iteration}.json`) 只扫描 `020-specs/`，不扫描 `010-requirements/`
+- 导致 RAG 语义检索时遗漏原始需求文档内容
+- **修复方案**：迭代层索引同时扫描 `010-requirements/` + `020-specs/`
+- **影响文件**：`src/core/analyze-engine.ts`、`src/commands/refresh.ts`、`src/commands/rag-index.ts`
+
+**任务层 RAG 索引引用错误（v8.3.65）**：
+- `indexTaskDocuments` 引用了迭代层不存在的 `DESIGN.md`（DESIGN.md 只在全局层 `.speccore/GLOBAL/overview/` 中存在）
+- `indexTaskDocuments` 仍扫描已禁止的旧结构 `10-backend/` 和 `20-frontend/`（AGENTS.md 已明确禁止任务目录下创建分类层）
+- **修复方案**：移除 DESIGN.md 引用；改为扫描端平铺结构 `{platform}/`
+- **影响文件**：`src/core/rag-engine.ts`
+
+**`indexDirectoryDocuments` 支持多目录（v8.3.65）**：
+- 参数从 `dirPath: string` 扩展为 `dirPath: string | string[]`
+- 支持一次索引多个目录（如同时索引 `010-requirements/` + `020-specs/`）
+
+## v8.3.64 (2026-09-08) — 全局 RAG 索引目录修复
+
+### 修复
+
+**全局 RAG 索引指向错误目录（v8.3.64）**：
+- 全局分析产出位于 `.speccore/GLOBAL/`（`platforms/`、`requirements/`、`overview/`）
+- 但 RAG 索引代码指向 `.speccore/GLOBAL/020-specs/`（迭代层目录结构，全局层不存在）
+- 导致全局分析文档未被索引，RAG 检索时遗漏全局产出
+
+**影响文件**：
+- `src/core/analyze-engine.ts` — 全局分析后 RAG 索引构建
+- `src/commands/refresh.ts` — `speccore refresh` 全局索引刷新
+- `src/commands/rag-index.ts` — `speccore rag-index` 全局索引构建
+- `src/core/global-knowledge.ts` — 全局知识沉淀扫描
+
+**修复方案**：全部改为索引 `.speccore/GLOBAL/` 根目录
+
+## v8.3.63 (2026-09-08) — update 命令升级体验修复
+
+### 修复
+
+**update 命令遗漏 init 升级仪式（v8.3.63）**：
+- `update` 后首次 `ask` 不弹出 HTML 引导页 — 根因：`update` 没有重置 `.ask-onboarded`
+- `checkUpgradeHints` 版本检测失效 — 根因：`update` 只写 `version.json`，没写 `last-init-version.txt`
+- `update` 后无升级欢迎页 — 根因：`update` 没调用 `writeUpgradePage`
+- `update` 后无全局 CLI 版本警告 — 根因：`update` 没检查全局 CLI 版本
+
+**修复方案**：`update.ts` 补全 4 项 init 升级仪式：
+- 写入 `last-init-version.txt`
+- 重置 `.ask-onboarded`
+- 生成 `speccore-upgrade.html`
+- 检查全局 CLI 版本
+
+### 改进
+
+**Layer 4b 完成检测严格化（v8.3.63）**：
+- `detectGlobalLayerProgress()` 中 4b 从检查 2 个文档扩展到检查全部 4 个
+- 与 `SUB_LAYER_DOCS['4b']` 和 AGENTS.md 产出清单完全对齐
+
+## v8.3.62 (2026-09-08) — 全局分析质量保障体系重构
+
+### 新增
+
+**全局分析自动链式推进（v8.3.61）**：
+- `--apply` 写入完成后，CLI 主动输出 `[SPECCORE_EXEC]` 触发下一层执行
+- 解决 Layer 1/2/3 完成后 AI 不知道继续执行 Layer 4 的问题
+- 双重保险：Prompt 要求 AI 输出 + CLI 层面主动兜底
+
+**质量门禁拦截机制（v8.3.61）**：
+- 全局分析 `--apply` 写入后自动运行质量门禁
+- 检测到 `error` 时自动拦截，不推进到下一层
+- 输出 `[SPECCORE_PROMPT]` 修复任务，AI 修复后重新写入
+- 检查项：占位符、行数达标、空表格、Mermaid 语法、关键章节缺失
+
+**Layer 4 子层拆分增强（v8.3.61）**：
+- 4a（产品文档）→ 4b（技术核心）→ 4c（技术扩展）→ 4d（各端技术）逐层递进
+- 子层内通过 `SUB_LAYER_DOCS` 动态检测缺失文档，一次聚焦一份
+- 各子层产出文档和最小行数要求明确写入 AGENTS.md
+
+**按端类型差异化需求文档（v8.3.61）**：
+- 5 类前端端类型（Web管理端、移动H5、小程序、原生App、PC客户端）差异化需求
+- 每类前端有专属产品场景语言和技术关注点
+- 防误生成：只输出与当前端类型匹配的内容
+
+### 改进
+
+**AGENTS.md 全面重构（v8.3.61）**：
+- 新增分析模式边界（全局 vs 迭代层）
+- 新增全局分析产出目录结构与完整文档清单
+- 新增迭代层分析产出文档清单
+- 新增执行阶段强制约束（必读清单 + 代码规范 + 完成规范）
+- 新增任务拆分强制约束（粒度控制 + 字段完整性）
+- 新增质量门禁拦截说明
+- 绝对禁止扩充至 6 条，行为约束扩充至 13 条
+
+**设计文档更新（v8.3.61）**：
+- `docs/DESIGN.md` 新增「全局分析质量保障体系重构」章节
+- 详细描述子层拆分、自动链式推进、质量门禁拦截、分层约束策略
+
+### 修复
+
+- Layer 1 检测逻辑：`.some(Boolean)` 修正为 `.every(Boolean)`
+- Layer 2 缺失消息：移除对 `_MODULES.md` 的误导性引用
+- 质量门禁最小行数标准从 200 字符提升至 500 字符
+
 ## v8.3.60 (2026-09-07) — 环境驱动部署 + 全命令 Skill 覆盖
 
 ### 新增
