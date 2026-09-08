@@ -77,19 +77,25 @@ export async function pipelineCommand(options: PipelineOptions): Promise<void> {
 
   // 读取环境配置，获取目标分支
   const envConfig = await loadEnvironmentByNameOrPath(options.envFile || env);
-  const targetBranch = envConfig?.branch;
+  const globalBranch = envConfig?.branch;
 
-  if (!targetBranch) {
-    logger.error(`❌ 环境 "${env}" 未配置 branch 字段`);
-    logger.info('   请在环境配置文件中添加 branch，例如：');
-    logger.info(`   .speccore/environments/${env}.yaml`);
-    logger.info('   ──');
-    logger.info(`   env: ${env}`);
-    logger.info(`   branch: ${env === 'staging' ? 'develop' : env === 'production' ? 'main' : 'your-branch'}`);
-    logger.info('   ──');
-    logger.info('   然后重试: speccore pipeline --env ' + env + ' --all');
-    process.exitCode = 1;
-    return;
+  if (!globalBranch) {
+    // v8.3.82+: 允许全局不配置 branch，只要各平台单独配置即可
+    const hasPlatformBranch = envConfig?.platforms
+      ? Object.values(envConfig.platforms).some((p: any) => p?.branch)
+      : false;
+    if (!hasPlatformBranch) {
+      logger.error(`❌ 环境 "${env}" 未配置 branch 字段`);
+      logger.info('   请在环境配置文件中添加 branch，例如：');
+      logger.info(`   .speccore/environments/${env}.yaml`);
+      logger.info('   ──');
+      logger.info(`   env: ${env}`);
+      logger.info(`   branch: ${env === 'staging' ? 'develop' : env === 'production' ? 'main' : 'your-branch'}`);
+      logger.info('   ──');
+      logger.info('   然后重试: speccore pipeline --env ' + env + ' --all');
+      process.exitCode = 1;
+      return;
+    }
   }
 
   // 加载项目配置（含环境覆盖）
@@ -129,8 +135,13 @@ export async function pipelineCommand(options: PipelineOptions): Promise<void> {
     return;
   }
 
-  if (sourceBranch === targetBranch) {
-    logger.warn(`⚠️ 当前分支 (${sourceBranch}) 与目标分支 (${targetBranch}) 相同，跳过 merge`);
+  // v8.3.82+: 收集各平台目标分支（支持平台级 branch 覆盖全局）
+  const platformBranches = new Map<string, string>();
+  for (const platform of targets) {
+    const platformBranch = envConfig?.platforms?.[platform.name]?.branch || globalBranch;
+    if (platformBranch) {
+      platformBranches.set(platform.name, platformBranch);
+    }
   }
 
   logger.info('');
@@ -138,7 +149,12 @@ export async function pipelineCommand(options: PipelineOptions): Promise<void> {
   logger.info('│           Pipeline 执行计划              │');
   logger.info('├──────────────────────────────────────────┤');
   logger.info(`│ 源分支: ${sourceBranch.padEnd(32)}│`);
-  logger.info(`│ 目标分支: ${targetBranch.padEnd(30)}│`);
+  if (platformBranches.size === 1) {
+    const onlyBranch = platformBranches.values().next().value!;
+    logger.info(`│ 目标分支: ${onlyBranch.padEnd(30)}│`);
+  } else {
+    logger.info(`│ 目标分支: ${'(各平台不同，见详情)'.padEnd(30)}│`);
+  }
   logger.info(`│ 部署环境: ${env.padEnd(30)}│`);
   logger.info(`│ 平台数: ${String(targets.length).padEnd(31)}│`);
   logger.info(`│ 模式: ${(dryRun ? '预览' : '执行').padEnd(33)}│`);
@@ -148,7 +164,8 @@ export async function pipelineCommand(options: PipelineOptions): Promise<void> {
   if (dryRun) {
     logger.info('📋 涉及平台:');
     for (const p of targets) {
-      logger.info(`   • ${p.name} (${p.type})`);
+      const pb = platformBranches.get(p.name) || globalBranch || '未配置';
+      logger.info(`   • ${p.name} (${p.type}) → ${pb}`);
     }
     logger.info('');
   }
@@ -157,6 +174,18 @@ export async function pipelineCommand(options: PipelineOptions): Promise<void> {
 
   for (const platform of targets) {
     const cwd = platform.code_path || process.cwd();
+    const platformBranch = platformBranches.get(platform.name);
+    if (!platformBranch) {
+      logger.warn(`   ⚠️ [${platform.name}] 未配置 branch，跳过`);
+      results.push({
+        platform: platform.name,
+        success: false,
+        steps: { checkout: false, merge: false, build: false, test: false, deploy: false },
+        message: '未配置 branch',
+      });
+      continue;
+    }
+
     logger.info(`🔹 [${platform.name}] 开始处理...`);
 
     const result: PipelineResult = {
@@ -166,8 +195,8 @@ export async function pipelineCommand(options: PipelineOptions): Promise<void> {
     };
 
     // Step 1: checkout to target branch
-    logger.info(`   1. 切换到 ${targetBranch}...`);
-    result.steps.checkout = execGit(cwd, `git checkout "${targetBranch}"`, dryRun);
+    logger.info(`   1. 切换到 ${platformBranch}...`);
+    result.steps.checkout = execGit(cwd, `git checkout "${platformBranch}"`, dryRun);
     if (!result.steps.checkout) {
       result.success = false;
       result.message = 'checkout 失败';
@@ -176,7 +205,7 @@ export async function pipelineCommand(options: PipelineOptions): Promise<void> {
     }
 
     if (!dryRun) {
-      result.steps.checkout = execGit(cwd, `git pull origin "${targetBranch}"`, dryRun);
+      result.steps.checkout = execGit(cwd, `git pull origin "${platformBranch}"`, dryRun);
       if (!result.steps.checkout) {
         result.success = false;
         result.message = 'pull 失败';
@@ -186,8 +215,8 @@ export async function pipelineCommand(options: PipelineOptions): Promise<void> {
     }
 
     // Step 2: merge source branch into target
-    if (sourceBranch !== targetBranch) {
-      logger.info(`   2. 合并 ${sourceBranch} → ${targetBranch}...`);
+    if (sourceBranch !== platformBranch) {
+      logger.info(`   2. 合并 ${sourceBranch} → ${platformBranch}...`);
       result.steps.merge = execGit(cwd, `git merge "${sourceBranch}" --no-edit`, dryRun);
       if (!result.steps.merge) {
         result.success = false;
@@ -399,10 +428,23 @@ export async function pipelineCommand(options: PipelineOptions): Promise<void> {
   logger.info('└──────────────────────────────────────────┘');
 
   // 分支状态提示
-  if (sourceBranch !== targetBranch && !dryRun) {
-    logger.info('');
-    logger.info(`💡 Pipeline 已完成，当前在 ${targetBranch} 分支`);
-    logger.info(`   如需回到原分支: git checkout ${sourceBranch}`);
+  if (!dryRun) {
+    const uniqueBranches = new Set(platformBranches.values());
+    if (uniqueBranches.size === 1) {
+      const onlyBranch = uniqueBranches.values().next().value;
+      if (sourceBranch !== onlyBranch) {
+        logger.info('');
+        logger.info(`💡 Pipeline 已完成，当前在 ${onlyBranch} 分支`);
+        logger.info(`   如需回到原分支: git checkout ${sourceBranch}`);
+      }
+    } else {
+      logger.info('');
+      logger.info(`💡 Pipeline 已完成，各平台所在分支:`);
+      for (const [name, branch] of platformBranches) {
+        logger.info(`   ${name}: ${branch}`);
+      }
+      logger.info(`   如需回到原分支: git checkout ${sourceBranch}`);
+    }
   }
 
   if (failCount > 0) {

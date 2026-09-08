@@ -1023,7 +1023,8 @@ export async function synthesizeIntent(input: string): Promise<SynthesizedIntent
 
   // v7.2.0+: 分析深度参数提取
   // --deep: 深度分析（指定文档名或泛化表述）
-  const deepDocMatch = input.match(/(?:深度分析|深入分析|详细分析|深度生成)\s*(?:文档?)?\s*([A-Z_\-]+\.md|[A-Z_\-]+)/i);
+  // v8.3.79+: 支持路径前缀，如 overview/ARCHITECTURE.md 或 020-specs/overview/ARCHITECTURE.md
+  const deepDocMatch = input.match(/(?:深度分析|深入分析|详细分析|深度生成)\s*(?:文档?)?\s*([a-zA-Z0-9_\-\/]+\.md|[A-Z_\-]+)/i);
   if (deepDocMatch) {
     parsed.deep = deepDocMatch[1];
   } else if (/深度|深入|详细|逐节|慢慢|一步一步/.test(input)) {
