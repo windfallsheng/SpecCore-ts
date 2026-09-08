@@ -1141,6 +1141,27 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
           const reports = await runGlobalQualityGate();
           printQualityReport(reports);
 
+          // v8.3.61+: 质量门禁拦截 — 有严重错误时不推进，要求 AI 修复
+          const criticalErrors = reports.filter(r => r.issues.some(i => i.severity === 'error'));
+          if (criticalErrors.length > 0) {
+            const errorFiles = criticalErrors.map(r => r.file.split('/').slice(-2).join('/')).join(', ');
+            logger.error(`\n🚫 质量门禁拦截: ${criticalErrors.length} 个文档存在严重错误，必须修复后才能继续`);
+            logger.error(`   问题文档: ${errorFiles}`);
+            logger.info(`\n💡 AI 请按以下步骤修复：`);
+            logger.info(`   1. 读取上述问题文档的当前内容`);
+            logger.info(`   2. 根据质量报告中的错误信息补充/修正内容`);
+            logger.info(`   3. 用 speccore analyze --apply '{"文件路径":"修正后内容"}' --scope global 重新写入`);
+            process.stdout.write(`\n[SPECCORE_PROMPT]\n# 质量门禁修复任务\n\n以下全局分析文档未通过质量校验，请修复后重新写入：\n\n`);
+            for (const r of criticalErrors.slice(0, 5)) {
+              const fname = r.file.split('/').slice(-2).join('/');
+              const errs = r.issues.filter(i => i.severity === 'error').map(i => `- ${i.message}`).join('\n');
+              process.stdout.write(`## ${fname}\n${errs}\n\n`);
+            }
+            process.stdout.write(`修复完成后重新执行：speccore analyze --scope global --layer 4\n`);
+            process.exitCode = 10;
+            return;
+          }
+
           // v7.2.0+: 自动生成文档间交叉引用
           const { generateCrossReferences } = await import('../core/doc-cross-reference');
           await generateCrossReferences();
@@ -1720,12 +1741,25 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 
     printBackupSummary();
 
-    // 自动刷新知识图谱（v6.49.10+）
+    // 自动刷新知识图谱和 RAG 索引（v8.3.67+）
     if (options.iteration) {
       try {
         const { refreshKnowledgeGraph } = await import('../core/knowledge-graph');
         await refreshKnowledgeGraph(process.cwd(), options.iteration);
         logger.info('🧠 知识图谱已刷新');
+      } catch {}
+      try {
+        const { indexDirectoryDocuments } = await import('../core/rag-engine');
+        const iterDir = `Iteration-${options.iteration}`;
+        const specsDir = join(iterDir, '020-specs');
+        const reqDir = join(iterDir, '010-requirements');
+        const dirs: string[] = [];
+        if (await pathExists(specsDir)) dirs.push(specsDir);
+        if (await pathExists(reqDir)) dirs.push(reqDir);
+        if (dirs.length > 0) {
+          await indexDirectoryDocuments(process.cwd(), dirs, `${options.iteration}_iteration_all`, `rag-index-${options.iteration}.json`);
+          logger.info('🔍 迭代 RAG 索引已刷新');
+        }
       } catch {}
     }
 
@@ -1855,6 +1889,21 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         logger.warn('   建议：在 CONSTITUTION.md 中添加端列表，或手动执行 speccore analyze --phase 2 -I <迭代名>');
       }
       // platforms.length === 1: 单端项目，Phase 1 已完成，无需 Phase 2
+    }
+
+    // v8.3.61+: 全局分析非 Pipeline 模式下，--apply 完成后自动推进下一层
+    // 解决：Layer 1/2/3 完成后 AI 不知道要继续执行 Layer 4 的问题
+    if (options.scope === 'global' && !options.pipeline) {
+      const progress = await detectGlobalLayerProgress();
+      if (progress.completedLayer < 4) {
+        const nextCmd = progress.nextLayer === 4 && progress.subLayer
+          ? `speccore analyze --scope global --layer 4${options.withCode ? ' --with-code' : ''}`
+          : `speccore analyze --scope global --layer ${progress.nextLayer}${options.withCode ? ' --with-code' : ''}`;
+        process.stdout.write(`\n[SPECCORE_EXEC: ${nextCmd}]\n`);
+        process.stdout.write(`> 全局分析 ${progress.completedLayer}/4 层完成，自动推进到下一层...\n`);
+        process.exitCode = 10;
+        return;
+      }
     }
 
     return;
@@ -2461,11 +2510,19 @@ async function detectGlobalLayerProgress(): Promise<{
     const platformsDir = join(globalDir, 'platforms');
     const entries = await readdir(platformsDir, { withFileTypes: true });
     const platformDirs = entries.filter(e => e.isDirectory() && e.name !== '_shared').map(e => e.name);
-    const hasIndex = platformDirs.length > 0 && (await Promise.all(
+    const indexChecks = await Promise.all(
       platformDirs.map(async d => pathExists(join(platformsDir, d, '_INDEX.md')))
-    )).some(Boolean);
-    if (hasIndex) completedLayer = 1;
-    else missing.push('Layer 1: platforms/{端}/_INDEX.md');
+    );
+    const hasIndex = platformDirs.length > 0 && indexChecks.every(Boolean);
+    if (hasIndex) {
+      completedLayer = 1;
+    } else {
+      for (const [i, d] of platformDirs.entries()) {
+        if (!indexChecks[i]) {
+          missing.push(`Layer 1: platforms/${d}/_INDEX.md`);
+        }
+      }
+    }
   } catch { missing.push('Layer 1: platforms/{端}/_INDEX.md'); }
 
   // Layer 2: 检查 _ASSOCIATION.md
@@ -2473,7 +2530,7 @@ async function detectGlobalLayerProgress(): Promise<{
     if (await pathExists(join(globalDir, 'platforms', '_shared', '_ASSOCIATION.md'))) {
       completedLayer = 2;
     } else {
-      missing.push('Layer 2: platforms/_shared/_ASSOCIATION.md + _MODULES.md');
+      missing.push('Layer 2: platforms/_shared/_ASSOCIATION.md');
     }
   }
 
@@ -2540,15 +2597,42 @@ async function detectGlobalLayerProgress(): Promise<{
       missing.push('Layer 4a: requirements/REQUIREMENT.md（全局需求总纲）');
     }
 
-    // 4b: 全局技术核心文档
-    const hasCoreTech = await pathExists(join(overviewDir, 'ARCHITECTURE.md'))
-      && await pathExists(join(overviewDir, 'FUNCTION_MAP.md'));
-    if (hasCoreTech) completedSubLayers.push('4b');
+    // 4b: 全局技术核心文档（v8.3.62+ 修复：与 SUB_LAYER_DOCS['4b'] 对齐，检查全部 4 个文档）
+    const CORE_TECH_DOCS = ['ARCHITECTURE.md', 'FUNCTION_MAP.md', 'API_CONTRACT.yaml', 'INTERACTION_MAP.md'];
+    const coreTechChecks = await Promise.all(
+      CORE_TECH_DOCS.map(f => pathExists(join(overviewDir, f)))
+    );
+    const coreTechMissing = CORE_TECH_DOCS.filter((_, i) => !coreTechChecks[i]);
+    if (coreTechMissing.length === 0) {
+      completedSubLayers.push('4b');
+    } else {
+      for (const f of coreTechMissing) {
+        missing.push(`Layer 4b: overview/${f}`);
+      }
+    }
 
-    // 4c: 全局技术扩展文档
-    const hasExtTech = await pathExists(join(overviewDir, 'SECURITY_AUDIT.md'))
-      || await pathExists(join(overviewDir, 'DATA_FLOW.md'));
-    if (hasExtTech) completedSubLayers.push('4c');
+    // 4c: 全局技术扩展文档（v8.3.61+ 修复：之前用 '或' 条件导致只要一个存在就认为完成，
+    // 现在检查 SUB_LAYER_DOCS 中定义的所有文档， majority 存在才算完成）
+    const EXT_TECH_DOCS = [
+      'SECURITY_AUDIT.md',
+      'PERFORMANCE_BASELINE.md',
+      'DATA_FLOW.md',
+      'DEPLOYMENT.md',
+      'CONSISTENCY_CHECK.md',
+    ];
+    const extTechChecks = await Promise.all(
+      EXT_TECH_DOCS.map(f => pathExists(join(overviewDir, f)))
+    );
+    const extTechExists = extTechChecks.filter(Boolean).length;
+    const extTechMissing = EXT_TECH_DOCS.filter((_, i) => !extTechChecks[i]);
+    // majority（>=60%）存在才算 Layer 4c 完成
+    if (extTechExists / EXT_TECH_DOCS.length >= 0.6) {
+      completedSubLayers.push('4c');
+    } else {
+      for (const f of extTechMissing) {
+        missing.push(`Layer 4c: overview/${f}`);
+      }
+    }
 
     // 4d: 各端技术文档（v8.3.0+ 修复：每个端都要有，不再用 some(Boolean)）
     try {
@@ -2890,6 +2974,10 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `| 错误处理 | 错误边界/全局错误处理器 | 错误捕获范围、降级策略、上报机制 |\n`;
       prompt += `| 性能 | 搜索性能相关代码（懒加载/虚拟滚动/缓存/预加载） | 优化手段、适用场景 |\n\n`;
       prompt += `**输出**：每个端一个 \`_INDEX.md\`，按上述维度组织，只含名称和路径列表，不含详细逻辑\n`;
+      prompt += `**最小内容标准（v8.3.61+）**：\n`;
+      prompt += `- 每个 \_INDEX.md ≥ 80 行（维度少可接受 50+，但严禁 < 30 行）\n`;
+      prompt += `- 必须包含：端名、技术栈、目录结构概览、各维度清单表格\n`;
+      prompt += `- 严禁只写标题和空列表\n`;
       prompt += `**存放**：\`.speccore/GLOBAL/platforms/{端名}/_INDEX.md\`\n\n`;
       prompt += `### Layer 1 附加任务：提取可复用模式（PATTERNS，可选）\n`;
       prompt += `> ⚠️ **重要规则（v8.3.56+）**：PATTERNS 只在发现**真正独特且可复用**的设计模式时才生成，严禁为每个项目都生成 JWT/Redis/拦截器等通用模板。\n\n`;
@@ -2966,6 +3054,10 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `  - 此文档中必须包含 **接口依赖 Mermaid 图**（graph TD），展示前端页面 → 后端接口的调用关系\n`;
       prompt += `- \`_MODULES.md\`：功能模块候选清单（从源码聚类，含消息/定时任务维度，供 Layer 3 验证）\n`;
       prompt += `  - 此文档中必须包含 **模块全景 Mermaid 图**（graph LR），展示所有功能模块及其所属端\n`;
+      prompt += `**最小内容标准（v8.3.61+）**：\n`;
+      prompt += `- \_ASSOCIATION.md ≥ 100 行，必须包含前后端关联矩阵 + 至少 1 个 Mermaid 图\n`;
+      prompt += `- \_MODULES.md ≥ 50 行，必须包含功能模块清单 + 模块全景 Mermaid 图\n`;
+      prompt += `- 严禁生成空壳文档（只有标题和几行描述）\n`;
       prompt += `**存放**：\`.speccore/GLOBAL/platforms/_shared/\`\n\n`;
     } // end if (targetLayer === 2)
 
@@ -3003,7 +3095,11 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `  - 时序图用 **Mermaid sequenceDiagram** 语法嵌入到分析文档中\n`;
       prompt += `  - 关键操作流程用 **Mermaid flowchart** 语法嵌入到分析文档中\n`;
       prompt += `  - 状态流转用 **Mermaid stateDiagram** 语法嵌入到分析文档中\n`;
-      prompt += `- 跨端：该功能模块涉及的外部集成清单（第三方 API、消息队列、定时任务）\n\n`;
+      prompt += `- 跨端：该功能模块涉及的外部集成清单（第三方 API、消息队列、定时任务）\n`;
+      prompt += `**最小内容标准（v8.3.61+）**：\n`;
+      prompt += `- 每个功能模块分析文档 ≥ 100 行\n`;
+      prompt += `- 必须包含：模块概述、涉及端清单、核心流程 Mermaid 图（sequenceDiagram/flowchart/stateDiagram 至少一个）\n`;
+      prompt += `- 严禁只写标题和空列表\n\n`;
       prompt += `### Layer 3 附加任务：功能模块级模式提取（PATTERNS）\n`;
       prompt += `每个功能模块分析完成后，提取该模块的可复用模式，补充到 \`.speccore/PATTERNS/\`。\n\n`;
       prompt += `**提取维度**：\n`;
@@ -3062,6 +3158,62 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `     - **响应式/适配策略**：不同设备尺寸下的布局变化、断点设计\n`;
       prompt += `     - **无障碍要求**：键盘导航、屏幕阅读器、色彩对比度（如有要求）\n`;
       prompt += `     - 每个前端端需求目录下可放 images/（截图/流程图/原型图）和 prototypes/（可交互原型文件）\n`;
+      prompt += `     - **按端类型差异化要求（v8.3.61+）**：根据端名自动识别类型，在通用要求基础上补充专项内容\n`;
+      prompt += `       **识别规则**：端名包含以下关键词时匹配对应类型\n`;
+      prompt += `       **防误生成原则**：只生成与当前端类型匹配的专项内容，严禁输出其他端类型的专项\n`;
+      prompt += `       **未知类型兜底**：端名不匹配任何类型时，按"通用前端"处理，只输出通用要求，不写任何端类型专项，并在文档开头注明【端类型识别：本端未匹配到特定类型，按通用前端处理】\n`;
+      prompt += `       **admin-web / management-web / operator-web / dashboard-web / console-web / ops-web / back-office（后台管理端）**：\n`;
+      prompt += `       从产品视角描述以下场景需求，不写技术实现细节：\n`;
+      prompt += `       - 数据表格场景：海量数据的浏览、排序、筛选、分页、导出、批量操作、列自定义、行内编辑\n`;
+      prompt += `       - 权限控制场景：菜单级/按钮级/数据范围级权限，不同角色可见内容和可操作范围的差异\n`;
+      prompt += `       - 表单填写场景：复杂表单的联动校验、异步校验、分步填写、草稿保存与恢复\n`;
+      prompt += `       - 操作审计场景：关键操作的记录、追溯、回滚，谁/什么时候/做了什么/结果如何\n`;
+      prompt += `       - 审批协作场景：提交→审批人分配→审批状态流转→通过/驳回/转交的全流程\n`;
+      prompt += `       - 数据洞察场景：图表看板的数据源、刷新策略、下钻分析、异常预警\n`;
+      prompt += `       - 数据迁移场景：批量导入/导出的模板下载、数据校验、错误报告、处理进度\n`;
+      prompt += `       **h5-mobile / mobile-web / m-site / m-web / wap / consumer-mobile（移动端 Web）**：\n`;
+      prompt += `       从产品视角描述以下场景需求，不写技术实现细节：\n`;
+      prompt += `       - 触屏交互场景：单击/双击/长按/滑动/捏合/拖拽的手势定义和用户反馈\n`;
+      prompt += `       - 底部操作场景：固定/浮动/展开收起的操作栏设计，与键盘弹起的冲突处理\n`;
+      prompt += `       - 内容加载场景：上拉加载更多、下拉刷新、骨架屏、预加载的用户等待体验\n`;
+      prompt += `       - 社交传播场景：分享标题/描述/缩略图配置，分享后回流路径和裂变激励\n`;
+      prompt += `       - 弱网体验场景：网络中断/弱网环境下的用户提示、降级展示、内容可访问性\n`;
+      prompt += `       - 设备能力场景：定位、相机、扫码、摇一摇、横竖屏切换的触发条件和用户授权引导\n`;
+      prompt += `       - 安装引导场景：添加到桌面、浏览器唤醒 App、应用跳转的引导策略\n`;
+      prompt += `       **小程序 / miniprogram / wechat-app / wx-mp / mp-weixin / mini-prog / mini-app（微信小程序）**：\n`;
+      prompt += `       从产品视角描述以下场景需求，不写技术实现细节：\n`;
+      prompt += `       - 微信授权场景：静默登录/主动授权的策略，用户身份获取时机和引导方式\n`;
+      prompt += `       - 支付交易场景：微信支付唤起、支付结果反馈、异常重试、退款流程的用户体验\n`;
+      prompt += `       - 社交分享场景：分享卡片的标题/图片/路径自定义，分享后打开特定页面的体验\n`;
+      prompt += `       - 消息触达场景：一次性订阅/长期订阅的用户授权引导，消息模板的使用策略\n`;
+      prompt += `       - 客服支持场景：微信客服接入、消息卡片、历史记录的连续性体验\n`;
+      prompt += `       - 扫码入口场景：扫描普通码/小程序码进入后的参数解析、场景值处理、页面跳转\n`;
+      prompt += `       - 合规审核场景：用户隐私保护指引、内容安全审核、敏感词过滤的产品策略\n`;
+      prompt += `       **App / rn / react-native / flutter / android / ios / native-app（移动端 App）**：\n`;
+      prompt += `       从产品视角描述以下场景需求，不写技术实现细节：\n`;
+      prompt += `       - 消息推送场景：通知推送/静默推送/本地通知的触发时机，用户分级推送策略\n`;
+      prompt += `       - 离线使用场景：网络中断时用户仍可浏览已加载内容，缓存数据的访问策略\n`;
+      prompt += `       - 原生导航场景：底部 Tab、侧滑返回、页面栈管理、深度链接的用户体验\n`;
+      prompt += `       - 生物识别场景：指纹/面容识别的触发时机、失败后的降级方案（密码/PIN）\n`;
+      prompt += `       - 系统权限场景：相机/相册/定位/通讯录/麦克风权限的申请时机和用户引导\n`;
+      prompt += `       - 版本升级场景：强制升级/推荐升级/热更新的用户提示策略和升级流程\n`;
+      prompt += `       **PC 客户端 / electron / tauri / desktop / pc-client（桌面端）**：\n`;
+      prompt += `       从产品视角描述以下场景需求，不写技术实现细节：\n`;
+      prompt += `       - 多窗口场景：主窗口/子窗口/弹窗的切换，窗口状态恢复\n`;
+      prompt += `       - 文件操作场景：打开/保存/拖拽文件，文件关联，最近打开列表\n`;
+      prompt += `       - 快捷操作场景：全局快捷键/局部快捷键的定义，快捷键冲突处理\n`;
+      prompt += `       - 离线工作场景：无网络时的本地数据访问，网络恢复后的同步策略\n`;
+      prompt += `       - 自动更新场景：后台下载、更新提示、版本回滚的用户体验\n`;
+      prompt += `       - 系统集成场景：托盘图标、开机启动、系统通知、深色模式跟随\n`;
+      prompt += `       **跨端一致性要求（v8.3.61+，多端项目适用）**：\n`;
+      prompt += `       如果系统包含 2+ 个前端端，每份前端需求文档中必须明确：\n`;
+      prompt += `       - 功能一致性：哪些功能各端必须保持一致（如商品信息、价格、库存）\n`;
+      prompt += `       - 体验差异化：哪些功能允许差异化（如分享方式、支付渠道、导航方式）\n`;
+      prompt += `       - 跨端衔接：用户从一端跳转到另一端的体验连续性（如 h5→App 的唤起、登录态同步）\n`;
+      prompt += `   **4a 最小内容标准（v8.3.61+）**：\n`;
+      prompt += `   - 全局 REQUIRMENT.md ≥ 80 行（总纲，只写业务视角，不写技术细节）\n`;
+      prompt += `   - 每个前端端 REQUIREMENT.md ≥ 500 行，必须包含 8 个通用章节 + 端类型专项\n`;
+      prompt += `   - 严禁生成空壳文档（只有标题和几行描述）\n`;
       prompt += `   **技术视角 → 存放到 .speccore/GLOBAL/overview/（不与 platforms/requirements 平级）：**\n`;
       prompt += `   - \`overview/FUNCTION_MAP.md\`：功能单元 × 端映射表\n`;
       prompt += `   - \`overview/INTERACTION_MAP.md\`：跨端交互时序图（含同步 API + 异步消息，从 Layer 3 汇总）\n`;
@@ -3078,7 +3230,14 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `   - \`overview/DEPLOYMENT.md\`：部署运维分析（容器化状态、CI/CD 流水线、健康检查端点、环境配置差异、日志聚合方案）\n`;
       prompt += `     - 必须包含 **Mermaid flowchart**，展示 CI/CD 流水线流程\n`;
       prompt += `   - \`overview/OBSERVABILITY.md\`：可观测性分析（日志链路追踪、错误码体系、监控埋点清单、告警策略、SLA 定义）\n`;
-      prompt += `   - \`overview/CONSISTENCY_CHECK.md\`：一致性校验报告（字段/状态/接口/消息/配置）\n\n`;
+      prompt += `   - \`overview/CONSISTENCY_CHECK.md\`：一致性校验报告（字段/状态/接口/消息/配置）\n`;
+      prompt += `   **4b+4c 最小内容标准（v8.3.61+）**：\n`;
+      prompt += `   - ARCHITECTURE.md ≥ 200 行，必须包含 2+ 个 Mermaid 图（服务拓扑 + 模块依赖）\n`;
+      prompt += `   - DATA_FLOW.md ≥ 150 行，必须包含 1+ 个 Mermaid flowchart（数据生命周期）\n`;
+      prompt += `   - DEPLOYMENT.md ≥ 100 行，必须包含 1+ 个 Mermaid flowchart（CI/CD 流水线）\n`;
+      prompt += `   - SECURITY_AUDIT.md / PERFORMANCE_BASELINE.md / OBSERVABILITY.md 各 ≥ 80 行\n`;
+      prompt += `   - FUNCTION_MAP.md / INTERACTION_MAP.md / CONSISTENCY_CHECK.md / EXTERNAL_INTEGRATIONS.md 各 ≥ 50 行\n`;
+      prompt += `   - 严禁生成空壳文档（只有标题和几行描述）\n\n`;
       prompt += `3. **生成各端详细文档**（技术视角，从 Layer 3 汇总）：\n`;
       prompt += `   > 存放: .speccore/GLOBAL/platforms/{端名}/\n`;
       prompt += `   **后端端（9项）**：\n`;
@@ -3103,7 +3262,11 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `   - \`TECH_STACK.md\`：框架版本、构建配置、UI 库、工具链、浏览器兼容性\n`;
       prompt += `   **通用（2项）**：\n`;
       prompt += `   - \`DEPENDENCY_GRAPH.md\`：模块依赖拓扑（含循环依赖检测、依赖深度分析）\n`;
-      prompt += `   - \`CODE_INDEX.md\`：目录结构+关键文件+模块职责+代码统计（行数/文件数/复杂度）\n\n`;
+      prompt += `   - \`CODE_INDEX.md\`：目录结构+关键文件+模块职责+代码统计（行数/文件数/复杂度）\n`;
+      prompt += `   **4d 最小内容标准（v8.3.61+）**：\n`;
+      prompt += `   - 后端端：API_INVENTORY.md ≥ 150 行，DATA_MODEL.md ≥ 100 行，其他各 ≥ 50 行\n`;
+      prompt += `   - 前端端：UI_FLOW.md ≥ 100 行，API_CALL_MAP.md ≥ 80 行，STATE_MANAGEMENT.md ≥ 80 行，其他各 ≥ 50 行\n`;
+      prompt += `   - 严禁生成空壳文档（只有标题和几行描述）\n\n`;
       prompt += `4. **知识沉淀（PATTERNS 目录）**: 从各端源码识别可复用模式，写入 .speccore/PATTERNS/。这是跨迭代、跨工程复用的核心资产。\n`;
       prompt += `\n`;
       prompt += `   **目录结构（分类 × 端 双层组织）**:\n`;
@@ -3456,6 +3619,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       
         prompt += `## 🌍 Layer 4: 全局汇总 — 子层 ${subLayerTarget}/4（v7.5.0+ 逐文档模式）\n\n`;
         prompt += `> ⚠️ **专注约束**: 你当前只执行 **子层 ${subLayerTarget}** 中的 **下一个缺失文档**。\n`;
+        prompt += `> 忽略前面关于其他子层文档的要求，只关注当前要生成的文档。\n`;
         prompt += `> 已存在: ${existingDocs.length}/${expectedDocs.length} 份文档\n`;
         if (missingDocs.length > 0) {
           prompt += `> 缺失: ${missingDocs.slice(0, 5).join('、')}${missingDocs.length > 5 ? '...' : ''}\n`;
@@ -3586,6 +3750,30 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `> 🎉 全局分析全部完成！所有 Layer 和子层的文档已生成。\n`;
       prompt += `> 下一步: 运行 \`speccore split -I <迭代名>\` 进行任务拆分。\n`;
     }
+
+    // v8.3.61+: 质量自检 Checklist
+    prompt += `\n## ✅ 质量自检 Checklist（v8.3.61+ 必须执行）\n\n`;
+    prompt += `> 所有文件写入完成后，必须逐项检查，不通过需补全后再进入下一步。\n\n`;
+    if (targetLayer === 1) {
+      prompt += `- [ ] 每个 _INDEX.md 行数 ≥ 80（维度少可接受 50+，严禁 < 30）\n`;
+      prompt += `- [ ] 每个 _INDEX.md 包含端名、技术栈、目录概览、各维度清单\n`;
+      prompt += `- [ ] 没有空壳文档（只有标题和空列表）\n`;
+    } else if (targetLayer === 2) {
+      prompt += `- [ ] _ASSOCIATION.md 行数 ≥ 100，包含前后端关联矩阵 + Mermaid 图\n`;
+      prompt += `- [ ] _MODULES.md 行数 ≥ 50，包含功能模块清单 + Mermaid 图\n`;
+      prompt += `- [ ] 没有空壳文档\n`;
+    } else if (targetLayer === 3) {
+      prompt += `- [ ] 每个功能模块分析文档行数 ≥ 100\n`;
+      prompt += `- [ ] 每个文档包含模块概述、涉及端清单、至少 1 个 Mermaid 图\n`;
+      prompt += `- [ ] 没有空壳文档\n`;
+    } else if (targetLayer === 4) {
+      prompt += `- [ ] 当前子层文档行数达到最小内容标准（见上文）\n`;
+      prompt += `- [ ] 技术文档包含要求的 Mermaid 图且语法正确\n`;
+      prompt += `- [ ] 需求文档按端类型写了差异化专项内容\n`;
+      prompt += `- [ ] 没有空壳文档\n`;
+    }
+    prompt += `- [ ] 所有文件已写入磁盘（不只是输出到对话）\n`;
+    prompt += `- [ ] 自检通过后，在文档末尾标注【自检通过：v8.3.61+】\n\n`;
 
     return await injectGraphSummary(prompt);
   }
@@ -5039,26 +5227,24 @@ async function buildClarifyPhasePrompt(iteration: string): Promise<string> {
   const iterDir = await getIterationDir(iteration);
   const reqDir = join(iterDir, '010-requirements');
 
-  // 收集所有需求文档
+  // 收集所有需求文档（v8.3.67+ 修复：递归扫描整个 010-requirements/，不再限于固定子目录）
   const docPaths: string[] = [];
-  for (const sub of ['sources', 'converted', 'features']) {
-    const subDir = join(reqDir, sub);
-    if (await pathExists(subDir)) {
-      try {
-        const entries = await readdir(subDir, { withFileTypes: true });
-        for (const e of entries) {
-          if (e.isFile() && e.name.endsWith('.md') && !e.name.startsWith('.')) {
-            docPaths.push(join(subDir, e.name));
-          } else if (e.isDirectory()) {
-            const files = await readdir(join(subDir, e.name));
-            for (const f of files) {
-              if (f.endsWith('.md') && !f.startsWith('.')) docPaths.push(join(subDir, e.name, f));
-            }
-          }
+  const scanReqDir = async (dir: string) => {
+    if (!(await pathExists(dir))) return;
+    try {
+      const entries = await readdir(dir, { withFileTypes: true });
+      for (const e of entries) {
+        if (e.name.startsWith('.') || e.name === 'INDEX.md') continue;
+        const fullPath = join(dir, e.name);
+        if (e.isDirectory()) {
+          await scanReqDir(fullPath);
+        } else if (e.isFile() && e.name.endsWith('.md')) {
+          docPaths.push(fullPath);
         }
-      } catch { /* ignore */ }
-    }
-  }
+      }
+    } catch { /* ignore */ }
+  };
+  await scanReqDir(reqDir);
 
   // 读取并评估每个文档
   const qualityReports: RequirementQualityReport[] = [];

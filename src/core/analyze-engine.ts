@@ -162,20 +162,24 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalysisResult> 
         }
       }
     } else if (effectiveInput.scope === 'iteration' && effectiveInput.iteration) {
-      // iteration 模式：索引 020-specs/ 目录（独立文件名）
+      // iteration 模式：索引 020-specs/ + 010-requirements/ 目录（v8.3.65+ 扩展需求文档）
       const specsDir = join(`Iteration-${effectiveInput.iteration}`, '020-specs');
-      if (await pathExists(specsDir)) {
-        const scope = `${effectiveInput.iteration}_020-specs_iteration_all`;
+      const reqDir = join(`Iteration-${effectiveInput.iteration}`, '010-requirements');
+      const dirs: string[] = [];
+      if (await pathExists(specsDir)) dirs.push(specsDir);
+      if (await pathExists(reqDir)) dirs.push(reqDir);
+      if (dirs.length > 0) {
+        const scope = `${effectiveInput.iteration}_iteration_all`;
         const fileName = `rag-index-${effectiveInput.iteration}.json`;
-        await indexDirectoryDocuments(cwd, specsDir, scope, fileName);
-        logger.info(`   🔍 迭代 RAG 索引已生成: ${specsDir} → ${fileName}`);
+        await indexDirectoryDocuments(cwd, dirs, scope, fileName);
+        logger.info(`   🔍 迭代 RAG 索引已生成: ${dirs.join(', ')} → ${fileName}`);
       }
     } else if (effectiveInput.scope === 'global') {
-      // global 模式：索引全局 specs 目录（独立文件名）
-      const globalSpecsDir = join(cwd, '.speccore', 'GLOBAL', '020-specs');
+      // global 模式：索引全局产出目录（v8.3.63+ 修复：从 GLOBAL/020-specs 改为 GLOBAL/ 根目录）
+      const globalDir = join(cwd, '.speccore', 'GLOBAL');
       const fallbackDir = join(cwd, '.speccore');
-      const targetDir = await pathExists(globalSpecsDir) ? globalSpecsDir : fallbackDir;
-      const scope = 'GLOBAL_020-specs_global_all';
+      const targetDir = await pathExists(globalDir) ? globalDir : fallbackDir;
+      const scope = 'GLOBAL_all_global_all';
       await indexDirectoryDocuments(cwd, targetDir, scope, 'rag-index-global.json');
       logger.info(`   🔍 全局 RAG 索引已生成: ${targetDir} → rag-index-global.json`);
     }
