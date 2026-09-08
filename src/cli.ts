@@ -1273,10 +1273,19 @@ if (process.argv.length <= 2) {
 }
 
 // ── Natural language intent (e.g. speccore "帮我分析需求") ──
-program.exitOverride().configureOutput({ outputError: () => {} });
+// v8.3.61+: 保留 stderr 错误输出，参数错误时额外输出到 stdout 便于 AI 识别
+program.exitOverride().configureOutput({ outputError: (str) => process.stderr.write(str) });
 try {
   program.parse();
 } catch (err: any) {
+  // 参数错误（未知选项、缺少必填值等）→ 输出到 stdout 让 AI 能识别并纠正
+  if (err.code === 'commander.unknownOption' || err.code === 'commander.missingMandatoryOptionValue') {
+    logger.error(`❌ 参数错误: ${err.message}`);
+    logger.info('💡 使用 speccore help 查看可用参数');
+    process.exit(1);
+  }
+
+  // 未知命令 → 尝试自然语言意图识别
   const input = (process.argv.slice(2)).filter((a: string) => !a.startsWith('-')).join(' ');
   if (input) {
     askCommand(input, {}).then(() => process.exit(0));

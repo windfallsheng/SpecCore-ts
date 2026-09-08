@@ -261,3 +261,208 @@ export async function initEnvironmentConfigs(projectRoot: string): Promise<strin
 
   return created;
 }
+
+// ── 测试配置模板 ──
+
+const TEST_TEMPLATES: { name: string; content: string }[] = [
+  {
+    name: 'smoke',
+    content: `# 标准冒烟测试配置（v8.3.60+）
+# 目标：验证"系统能启动、核心页面能打开、不白屏"
+# 适用：每次构建后、部署前快速门禁
+# 执行：speccore verify --config .speccore/tests/smoke.yaml --env-file staging
+
+name: 标准冒烟测试
+
+target:
+  base_url: https://staging.example.com
+
+# 测试场景：只覆盖核心页面，不做复杂交互
+tests:
+  - name: 首页-加载检查
+    type: smoke
+    routes: [/]
+    threshold: normal
+
+  - name: 登录页-加载检查
+    type: smoke
+    routes: [/login]
+    threshold: normal
+
+  - name: 核心模块页面
+    type: smoke
+    routes:
+      - /dashboard
+      - /orders
+      - /products
+    threshold: normal
+
+# 视觉模型配置（可选，用于单图质量扫描）
+visual_model:
+  provider: qwen-vl
+  model: qwen-vl-max
+  timeout: 30000
+
+# 输出配置
+output: ./reports/smoke-test-report.html
+`,
+  },
+  {
+    name: 'pr',
+    content: `# PR 阶段测试配置（v8.3.60+）
+# 目标：验证"代码质量 + 核心功能 + API 契约"
+# 适用：合并请求前、Code Review 后
+# 执行：speccore verify --config .speccore/tests/pr.yaml --env-file staging
+
+name: PR 阶段测试
+
+target:
+  base_url: https://staging.example.com
+
+# 端点映射（会被环境配置中的 base_urls 合并覆盖）
+endpoints:
+  h5: https://staging.example.com/h5
+  admin: https://admin-staging.example.com
+  api: https://api-staging.example.com
+
+# 测试场景：关键页面 + API 契约
+tests:
+  - name: 关键页面冒烟
+    type: smoke
+    routes:
+      - /
+      - /login
+      - /dashboard
+      - /orders
+    devices: [desktop, mobile]
+    threshold: normal
+
+  - name: 登录流程-视觉检查
+    type: visual
+    routes: [/login]
+    threshold: normal
+
+  - name: API 契约验证
+    type: api
+    scenarios:
+      - 用户登录
+      - 获取订单列表
+      - 创建订单
+    threshold: normal
+
+# 视觉模型配置
+visual_model:
+  provider: qwen-vl
+  model: qwen-vl-max
+  timeout: 30000
+
+# 输出配置
+output: ./reports/pr-test-report.html
+`,
+  },
+  {
+    name: 'release',
+    content: `# 发布前全量回归测试配置（v8.3.60+）
+# 目标：验证"全量功能 + 视觉一致性 + 性能基线 + API 完整性"
+# 适用：发布前、重大重构后、周末全量回归
+# 执行：speccore verify --config .speccore/tests/release.yaml --env-file production
+
+name: 发布前全量回归测试
+
+target:
+  base_url: https://production.example.com
+
+# 端点映射
+endpoints:
+  h5: https://example.com/h5
+  admin: https://admin.example.com
+  api: https://api.example.com
+
+# 全量测试场景
+tests:
+  - name: 全站页面冒烟
+    type: smoke
+    routes:
+      - /
+      - /login
+      - /register
+      - /dashboard
+      - /orders
+      - /order/:id
+      - /products
+      - /product/:id
+      - /profile
+      - /settings
+    devices: [desktop, mobile, tablet]
+    browsers: [chromium, firefox, webkit]
+    threshold: normal
+
+  - name: 核心业务流-视觉回归
+    type: visual
+    routes:
+      - /login
+      - /dashboard
+      - /orders
+      - /order/confirm
+      - /product/123
+    devices: [desktop, mobile]
+    threshold: strict
+
+  - name: 全量 API 契约验证
+    type: api
+    scenarios:
+      - 用户注册
+      - 用户登录
+      - 获取用户信息
+      - 获取订单列表
+      - 创建订单
+      - 取消订单
+      - 获取商品列表
+      - 获取商品详情
+    threshold: strict
+
+  - name: 性能基线检查
+    type: smoke
+    routes:
+      - /
+      - /dashboard
+      - /products
+    config:
+      perf_check: true
+      lcp_budget: 2500
+      fid_budget: 100
+      cls_budget: 0.1
+
+# 视觉模型配置
+visual_model:
+  provider: qwen-vl
+  model: qwen-vl-max
+  timeout: 60000
+
+# 输出配置
+output: ./reports/release-test-report.html
+`,
+  },
+];
+
+/** update 时初始化测试配置目录 */
+export async function initTestConfigs(projectRoot: string): Promise<string[]> {
+  const testsDir = join(projectRoot, '.speccore', 'tests');
+  await ensureDir(testsDir);
+
+  const files = await readdir(testsDir);
+  const hasYaml = files.some((f: string) => f.endsWith('.yaml') || f.endsWith('.yml'));
+
+  const created: string[] = [];
+
+  if (!hasYaml) {
+    logger.info('  📦 初始化默认测试配置...');
+    for (const t of TEST_TEMPLATES) {
+      const filePath = join(testsDir, `${t.name}.yaml`);
+      await writeFile(filePath, t.content, 'utf-8');
+      created.push(`.speccore/tests/${t.name}.yaml`);
+    }
+  }
+
+  return created;
+}
