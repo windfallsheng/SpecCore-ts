@@ -1833,6 +1833,10 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
   await ensureDir(join(prdDir, 'sources'));
   await ensureDir(join(prdDir, 'converted'));
   await ensureDir(join(prdDir, 'features'));
+  await ensureDir(join(prdDir, 'bugs'));
+  await ensureDir(join(prdDir, 'refactors'));
+  await ensureDir(join(prdDir, 'research'));
+  await ensureDir(join(prdDir, 'prototypes'));              // 原型（HTML/图片/链接）
   await ensureDir(join(prdDir, 'assets', 'extracted'));     // PRD 提取的图片
   await ensureDir(join(prdDir, 'assets', 'prototypes'));    // 产品原型
   await ensureDir(join(prdDir, 'assets', 'designs'));       // UI 设计稿
@@ -1895,6 +1899,9 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
     '| 原始文档 | sources/ | 待补充 | 放 PRD/Word/PDF |',
     '| 转换规格 | converted/ | 待生成 | doc2spec 输出 |',
     '| 功能补充 | features/ | 已示例 | user-auth/ 为示例 |',
+    '| Bug 描述 | bugs/ | 待补充 | bugfix 型：扁平 MD 文件 |',
+    '| 重构目标 | refactors/ | 待补充 | refactor 型：扁平 MD 文件 |',
+    '| 研究主题 | research/ | 待补充 | research 型：扁平 MD 文件 |',
     '| 原型素材 | prototypes/ | 待补充 | 原型（HTML/图片/链接） |',
     '',
     '## 分析配置',
@@ -2185,7 +2192,7 @@ export function generateAIRulesContent(): string {
   ].join('\n');
 }
 
-async function writeUpgradePage(projectRoot: string, version: string, speccoreDir: string): Promise<void> {
+export async function writeUpgradePage(projectRoot: string, version: string, speccoreDir: string): Promise<void> {
   const name = basename(projectRoot);
   const html = `<!DOCTYPE html><html lang="zh"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>SpecCore ${version} — 升级完成</title>
 <style>
