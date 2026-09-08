@@ -305,6 +305,26 @@ export async function clarifyCommand(options: ClarifyOptions): Promise<void> {
         logger.info(`📄 文件: ${writtenPath.replace(process.cwd() + '/', '')}`);
         logger.info(`📁 位置: ${iteration}/020-specs/requirements/（黄金需求目录）`);
         logger.info('');
+
+        // v8.3.65+: 自动刷新知识图谱和 RAG 索引
+        try {
+          const { refreshKnowledgeGraph } = await import('../core/knowledge-graph');
+          await refreshKnowledgeGraph(process.cwd(), iteration);
+          logger.info('🧠 知识图谱已刷新');
+        } catch {}
+        try {
+          const { indexDirectoryDocuments } = await import('../core/rag-engine');
+          const specsDir = join(iterDir, '020-specs');
+          const reqDir = join(iterDir, '010-requirements');
+          const dirs: string[] = [];
+          if (await pathExists(specsDir)) dirs.push(specsDir);
+          if (await pathExists(reqDir)) dirs.push(reqDir);
+          if (dirs.length > 0) {
+            await indexDirectoryDocuments(process.cwd(), dirs, `${iteration}_iteration_all`, `rag-index-${iteration}.json`);
+            logger.info('🔍 迭代 RAG 索引已刷新');
+          }
+        } catch {}
+
         logger.info('下一步:');
         logger.info(`  1. 查看并确认文档内容`);
         logger.info(`  2. 如需调整，手动编辑或重新执行 clarify`);
