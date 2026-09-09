@@ -90,7 +90,9 @@ export async function deployCommand(options: DeployCliOptions): Promise<void> {
       spinner.stop();
       results.push(result);
 
-      if (result.success) {
+      if (result.skipped) {
+        logger.info(`⏭️  [${result.platform}] ${result.message}`);
+      } else if (result.success) {
         logger.success(`✅ [${result.platform}] ${result.message}`);
       } else {
         logger.error(`❌ [${result.platform}] ${result.message}`);

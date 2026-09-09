@@ -1,3 +1,20 @@
+## v8.3.98 (2026-09-09) — Deploy 无配置自动跳过 + 文档精简
+
+### 优化
+
+**Deploy 无配置时自动跳过（v8.3.98）**:
+- `speccore deploy` 未配置部署参数时，提示"已跳过"，不再报错
+- `speccore pipeline` 未配置部署参数时，跳过部署步骤，继续执行测试
+- `DeployResult` 新增 `skipped` 字段区分"跳过"与"失败"
+- **影响文件**：`src/core/deploy/engine.ts`、`src/commands/deploy.ts`、`src/commands/pipeline.ts`
+
+**文档精简（v8.3.98）**:
+- `docs/command-reference.md` deploy 章节从 ~150 行精简到 ~20 行
+- 详细示例移入 `templates/deploy-java/README.md`、`templates/deploy-docker/README.md`、`templates/deploy-examples.yaml`
+- 新增提示："部署为可选功能，如未配置 speccore 会自动跳过"
+
+---
+
 ## v8.3.97 (2026-09-09) — 文档链接读取 + Update 交互式确认 + 部署增强
 
 ### 新增

@@ -27,6 +27,7 @@ export interface DeployResult {
   type: string;
   duration: number;
   message: string;
+  skipped?: boolean;  // v8.3.97+: 未配置时跳过，非失败
 }
 
 // ── 主入口 ──
@@ -40,12 +41,13 @@ export async function deployPlatform(
 
   if (!deployConfig) {
     return {
-      success: false,
+      success: true,
       platform: platform.name,
       env,
       type: 'none',
       duration: 0,
-      message: `端 "${platform.name}" 未配置 ${env} 环境的部署参数`,
+      message: `端 "${platform.name}" 未配置 ${env} 环境的部署参数，已跳过`,
+      skipped: true,
     };
   }
 

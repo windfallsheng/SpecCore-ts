@@ -525,87 +525,12 @@ speccore deploy --env production --platform h5 --dry-run
 | `pre_deploy` | string[] | 否 | 部署前执行的命令列表 |
 | `post_deploy` | string[] | 否 | 部署后执行的命令列表 |
 
-**配置示例文件**：`templates/deploy-examples.yaml`（包含 12 种部署场景的完整示例，含 Java + systemd + Docker）
-
-**Java 后端部署**（Spring Boot）：
-
-Java 项目使用 `ssh` 或 `docker` 类型部署。推荐测试环境用 `ssh` + systemd，生产环境用 `docker`。
-
-```yaml
-# 测试环境：systemd + SSH
-staging:
-  type: ssh
-  build_cmd: mvn clean package -DskipTests -P staging
-  output_dir: target
-  host: deployer@staging-server.example.com:22
-  key: ~/.ssh/id_rsa
-  remote_dir: /opt/services/order-service
-  script: sudo systemctl restart order-service
-
-# 生产环境：Docker
-production:
-  type: docker
-  dockerfile: ./Dockerfile
-  registry: registry.example.com
-  image: my-project/order-service
-  tag: production
-```
-
-**服务器端准备**（systemd 方式，只需一次）：
-1. 复制 `templates/deploy-java/spring-boot.service` 到服务器 `/etc/systemd/system/{platform.name}.service`
-2. 创建目录：`mkdir -p /opt/services/{name} /var/log/{name}`
-3. 执行：`sudo systemctl daemon-reload && sudo systemctl enable {name}`
-
-**数据库 / Redis 配置切换**：
-- 通过 Spring Boot profiles（`application-staging.yml` / `application-production.yml`）
-- 或通过 systemd service 文件中的 `Environment=` 注入环境变量
-
-完整指南见 `templates/deploy-java/README.md`。
-
-**Docker 远程部署**（v8.3.96+）：
-
-配置 `host` 后，speccore 会自动 SSH 到远程服务器执行 `docker pull && run`。
-
-```yaml
-# 前端 Nginx + 远程部署
-staging:
-  type: docker
-  build_cmd: npm run build:staging
-  dockerfile: ./Dockerfile
-  registry: registry.example.com
-  image: my-project/admin-web
-  tag: staging
-  host: deployer@staging-server.example.com
-  key: ~/.ssh/id_rsa
-
-# 后端 Java + 远程部署
-production:
-  type: docker
-  dockerfile: ./Dockerfile
-  registry: registry.example.com
-  image: my-project/order-service
-  tag: production
-  host: deployer@prod-server.example.com
-  key: ~/.ssh/id_rsa_production
-```
-
-**Docker 部署流程**：
-1. 本地 `docker build`
-2. 本地 `docker push` 到 registry（远程部署必填）
-3. SSH 远程执行 `docker pull → stop → rm → run`
-4. 支持 `script` 字段自定义远程命令（如端口映射、环境变量、卷挂载）
-
-**注意事项**：
-- 远程 Docker 部署**必须配置 registry**，否则远程服务器无法获取镜像
-- 如需端口映射，通过 `script` 字段自定义：`docker run -d -p 8080:8080 ...`
-- 完整模板见 `templates/deploy-docker/`（含前端 Dockerfile、Nginx 配置、Compose 编排）
-
-**SSH 密码认证**（v8.3.91+）：
-- 优先使用密钥认证（更安全）
-- 如需密码认证，先安装 `sshpass`：
-  - macOS: `brew install sshpass`
-  - Ubuntu/Debian: `apt-get install sshpass`
-- 然后配置 `password` 字段即可
+> 💡 **部署为可选功能**：如未配置部署参数，speccore 会自动跳过部署步骤，继续执行测试。详见 `templates/deploy-examples.yaml`。
+>
+> 详细示例：
+> - `templates/deploy-java/README.md` — Java + systemd / Docker 部署
+> - `templates/deploy-docker/README.md` — Docker 前后端远程部署
+> - `templates/deploy-examples.yaml` — 12 种部署场景配置示例
 
 ---
 

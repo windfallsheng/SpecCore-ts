@@ -448,10 +448,14 @@ export async function pipelineCommand(options: PipelineOptions): Promise<void> {
       continue;
     }
 
-    // Step 5: deploy
+    // Step 5: deploy（未配置则跳过，继续测试）
     logger.info(`   5. 部署 ${platform.name} → ${env}...`);
     if (dryRun) {
       logger.info('   [DRY-RUN] 将执行部署');
+      result.steps.deploy = true;
+    } else if (!platform.deploy?.[env]) {
+      // v8.3.97+: 未配置部署参数时跳过，不阻断流水线
+      logger.info(`   ⏭️  未配置部署参数，已跳过`);
       result.steps.deploy = true;
     } else {
       try {
