@@ -360,6 +360,7 @@ export async function pipelineCommand(options: PipelineOptions): Promise<void> {
         type: testType as any,
         envConfig: envConfig || undefined,
         dryRun: false,
+        stage,  // v8.3.98+: 传入 stage，pre-deploy 用 local_urls
       });
 
       result.steps.test = testResult.passed;

@@ -1,3 +1,17 @@
+## v8.3.99 (2026-09-09) — Pipeline 测试区分 Pre/Post Deploy URL
+
+### 优化
+
+**Pipeline 测试 baseUrl 阶段区分（v8.3.99）**:
+- Pre-deploy 测试（build 后 deploy 前）使用 `tests.local_urls`（本地服务地址）
+- Post-deploy 测试（deploy 后）使用 `tests.base_urls`（服务器地址）
+- 环境配置新增 `tests.local_urls` 字段，解析逻辑同步更新
+- 未配置时提示信息自动区分阶段，告知应配 `local_urls` 还是 `base_urls`
+- Pre-deploy 无 `local_urls` 时跳过网络测试，保留 `build-check`
+- **影响文件**：`src/core/pipeline-test.ts`、`src/core/environment-config.ts`、`src/commands/pipeline.ts`
+
+---
+
 ## v8.3.98 (2026-09-09) — Deploy 无配置自动跳过 + 文档精简
 
 ### 优化

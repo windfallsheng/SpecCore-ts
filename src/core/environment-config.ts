@@ -33,8 +33,10 @@ export interface EnvironmentConfig {
   platforms: Record<string, EnvironmentPlatformConfig>;
   /** 测试相关配置（与 verify --config 联动） */
   tests?: {
-    /** 各端的基础 URL */
+    /** 各端的基础 URL（部署后测试使用） */
     base_urls?: Record<string, string>;
+    /** 各端本地测试 URL（pre-deploy 测试使用，如 http://localhost:3000） */
+    local_urls?: Record<string, string>;
     /** 视觉模型配置 */
     visual_model?: {
       provider: 'qwen-vl' | 'openai' | 'anthropic' | 'local';
@@ -176,6 +178,10 @@ export async function loadEnvironmentConfig(filePath: string): Promise<Environme
       config.tests = {};
       if (t.base_urls && typeof t.base_urls === 'object') {
         config.tests.base_urls = t.base_urls as Record<string, string>;
+      }
+      // v8.3.98+: pre-deploy 测试使用本地 URL
+      if (t.local_urls && typeof t.local_urls === 'object') {
+        config.tests.local_urls = t.local_urls as Record<string, string>;
       }
       if (t.visual_model && typeof t.visual_model === 'object') {
         config.tests.visual_model = t.visual_model as any;

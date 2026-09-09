@@ -30,7 +30,7 @@ export interface PipelineTestOptions {
   env: string;
   /** 测试类型 */
   type: 'build-check' | 'smoke' | 'visual' | 'api' | 'all';
-  /** 环境配置（用于读取 tests.base_urls 等） */
+  /** 环境配置（用于读取 tests.base_urls / local_urls 等） */
   envConfig?: EnvironmentConfig;
   /** 是否预览模式 */
   dryRun?: boolean;
@@ -38,6 +38,8 @@ export interface PipelineTestOptions {
   outputDir?: string;
   /** 超时时间（毫秒） */
   timeout?: number;
+  /** 测试阶段（v8.3.98+）：pre-deploy 用 local_urls，post-deploy 用 base_urls */
+  stage?: 'pre-deploy' | 'post-deploy';
 }
 
 export interface PipelineTestResult {
@@ -99,7 +101,13 @@ export async function runPipelineTest(
   };
 
   const typesToRun = resolveTestTypes(type);
-  const baseUrl = envConfig?.tests?.base_urls?.[platform.name];
+  // v8.3.98+: 根据 stage 选择 baseUrl
+  //   pre-deploy → 必须用 local_urls（代码未部署，base_urls 指向的服务器不可用）
+  //   post-deploy → 用 base_urls（代码已部署到服务器）
+  const isPreDeploy = options.stage === 'pre-deploy';
+  const baseUrl = isPreDeploy
+    ? envConfig?.tests?.local_urls?.[platform.name]
+    : envConfig?.tests?.base_urls?.[platform.name];
 
   for (const testType of typesToRun) {
     if (dryRun) {
@@ -124,8 +132,9 @@ export async function runPipelineTest(
 
       case 'smoke': {
         if (!baseUrl) {
-          logger.warn(`   ⚠️ 未配置 ${platform.name} 的 base_url，跳过 smoke 测试`);
-          logger.info(`   💡 在环境配置中添加: tests.base_urls.${platform.name}: https://...`);
+          const urlKey = isPreDeploy ? 'local_urls' : 'base_urls';
+          logger.warn(`   ⚠️ 未配置 ${platform.name} 的 ${urlKey}，跳过 smoke 测试`);
+          logger.info(`   💡 在环境配置中添加: tests.${urlKey}.${platform.name}: ${isPreDeploy ? 'http://localhost:3000' : 'https://...'}`);
           continue;
         }
         const smoke = await runHttpSmokeTest(baseUrl, platform.name, options.timeout);
@@ -148,7 +157,8 @@ export async function runPipelineTest(
 
       case 'visual': {
         if (!baseUrl) {
-          logger.warn(`   ⚠️ 未配置 ${platform.name} 的 base_url，跳过 visual 测试`);
+          const urlKey = isPreDeploy ? 'local_urls' : 'base_urls';
+          logger.warn(`   ⚠️ 未配置 ${platform.name} 的 ${urlKey}，跳过 visual 测试`);
           continue;
         }
         const visual = await runPipelineVisualTest(
@@ -173,7 +183,8 @@ export async function runPipelineTest(
 
       case 'api': {
         if (!baseUrl) {
-          logger.warn(`   ⚠️ 未配置 ${platform.name} 的 base_url，跳过 api 测试`);
+          const urlKey = isPreDeploy ? 'local_urls' : 'base_urls';
+          logger.warn(`   ⚠️ 未配置 ${platform.name} 的 ${urlKey}，跳过 api 测试`);
           continue;
         }
         const api = await runPipelineApiTest(baseUrl, platform.name);
