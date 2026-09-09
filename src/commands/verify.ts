@@ -57,6 +57,7 @@ import {
 import { loadTestConfig, mergeTestConfigWithEnv } from '../core/test-config';
 import type { TestConfig, TestCase } from '../core/test-config';
 import { collectTaskReports, generateQualityReport } from '../core/verify-report-aggregator';
+import { findProjectRoot } from '../utils/task-utils';
 
 interface VerifyOptions {
   task?: string;
@@ -94,6 +95,9 @@ interface VerifyOptions {
 }
 
 export async function verifyCommand(options: VerifyOptions): Promise<void> {
+  // v8.3.101+: 向上查找项目根目录（支持在子目录执行）
+  const projectRoot = findProjectRoot() || process.cwd();
+
   // v8.3.60+: 分层测试阶段映射
   if (options.stage) {
     applyStageDefaults(options);
@@ -150,14 +154,14 @@ export async function verifyCommand(options: VerifyOptions): Promise<void> {
     const config = await loadConfig();
     const projectConfig = await loadProjectConfig();
 
-    // 确定代码路径
+    // 确定代码路径（v8.3.101+: 基于项目根目录解析）
     let codePath: string;
     if (options.path) {
       codePath = options.path;
     } else {
-      codePath = projectConfig.code_scope?.[0] || process.cwd();
+      codePath = projectConfig.code_scope?.[0] || projectRoot;
       if (!isAbsolute(codePath)) {
-        codePath = join(process.cwd(), codePath);
+        codePath = join(projectRoot, codePath);
       }
     }
 
@@ -406,7 +410,7 @@ export async function runUIVerification(
       const codePath = platformConfig?.code_path
         ? (isAbsolute(platformConfig.code_path)
             ? platformConfig.code_path
-            : join(process.cwd(), platformConfig.code_path))
+            : join(findProjectRoot() || process.cwd(), platformConfig.code_path))
         : null;
 
       if (codePath && await pathExists(codePath)) {
@@ -623,7 +627,7 @@ async function runTestConfigMode(options: VerifyOptions): Promise<void> {
     }
   }
 
-  const outputDir = options.output || mergedConfig.output || join(process.cwd(), 'reports');
+  const outputDir = options.output || mergedConfig.output || join(findProjectRoot() || process.cwd(), 'reports');
   const screenshotDir = join(outputDir, 'screenshots');
   const baselineDir = join(outputDir, 'baselines');
   const diffDir = join(outputDir, 'diffs');
@@ -700,7 +704,7 @@ async function runTestConfigMode(options: VerifyOptions): Promise<void> {
     if (testCase.type === 'api') {
       logger.info(`   API 测试: ${targetUrl}`);
       // API 测试需要 API_CONTRACT.yaml，尝试从测试配置目录查找
-      const apiSpecPath = options.spec || join(process.cwd(), 'API_CONTRACT.yaml');
+      const apiSpecPath = options.spec || join(findProjectRoot() || process.cwd(), 'API_CONTRACT.yaml');
       if (await pathExists(apiSpecPath)) {
         const parseResult = await parseYamlFile(apiSpecPath);
         if (parseResult.success && parseResult.data) {
@@ -806,7 +810,7 @@ async function runUIVerificationIndependent(options: VerifyOptions): Promise<UIV
     spec.url = url;
   }
 
-  const outputDir = options.output || join(process.cwd(), 'reports');
+  const outputDir = options.output || join(findProjectRoot() || process.cwd(), 'reports');
   const screenshotDir = join(outputDir, 'screenshots');
   const baselineDir = join(outputDir, 'baselines');
   const diffDir = join(outputDir, 'diffs');
@@ -901,8 +905,9 @@ async function runUIVerificationProject(
   }
 
   // 2. 查找项目 tests/ 目录下的 VERIFY_SPEC.yaml
-  const testsDir = join(process.cwd(), 'tests');
-  const projectTestsDir = join(process.cwd(), '.speccore', 'tests');
+  const projectRoot = findProjectRoot() || process.cwd();
+  const testsDir = join(projectRoot, 'tests');
+  const projectTestsDir = join(projectRoot, '.speccore', 'tests');
 
   const specPaths = [
     join(testsDir, 'VERIFY_SPEC.yaml'),
@@ -1057,7 +1062,7 @@ async function runPerfVerification(
 // ============================================================
 
 async function handleDiscoveryMode(options: VerifyOptions): Promise<void> {
-  const projectRoot = options.path || process.cwd();
+  const projectRoot = options.path || findProjectRoot() || process.cwd();
 
   // ── 路由发现 ──
   if (options.discoverRoutes) {
@@ -1216,7 +1221,7 @@ async function runDiscoveredSpec(spec: VerifySpec, options: VerifyOptions): Prom
     return;
   }
 
-  const outputDir = options.output || join(process.cwd(), 'reports');
+  const outputDir = options.output || join(findProjectRoot() || process.cwd(), 'reports');
   const screenshotDir = join(outputDir, 'screenshots');
   const baselineDir = join(outputDir, 'baselines');
   const diffDir = join(outputDir, 'diffs');

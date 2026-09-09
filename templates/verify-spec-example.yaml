@@ -1,0 +1,128 @@
+# VERIFY_SPEC.yaml — UI 冒烟测试规格
+# 用法: speccore verify --ui --config ./tests/smoke.yaml
+# 或:   speccore verify --ui --module=login (按模块过滤)
+#
+# v8.3.95+ 支持: cookie / localStorage / script / scroll / upload / iframe / waitForRequest / waitForResponse
+
+name: 示例项目冒烟测试
+platform: h5-mobile
+url: /
+
+scenarios:
+  # ── 场景1: 登录流程 ──
+  - name: 登录-账号密码登录
+    description: 模块:auth 页面:/login
+    actions:
+      - type: navigate
+        value: /login
+      - type: fill
+        selector: 'input[name="username"]'
+        value: test_user
+      - type: fill
+        selector: 'input[name="password"]'
+        value: test_password
+      - type: click
+        selector: 'button[type="submit"]'
+        waitFor: '.dashboard-container'
+    assertions:
+      - type: url
+        contains: /dashboard
+      - type: visible
+        selector: '.dashboard-container'
+
+  # ── 场景2: Cookie 注入免登录 ──
+  # 适用于: 已有登录态 Cookie，跳过登录页直接测试业务模块
+  - name: 预订列表-免登录(cookie注入)
+    description: 模块:booking 页面:/booking/list
+    actions:
+      # 注入登录 Cookie（跳过登录页）
+      - type: cookie
+        selector: session_token
+        value: eyJhbGciOiJIUzI1NiIs...
+        domain: example.com
+        path: /
+        secure: true
+        httpOnly: true
+      - type: navigate
+        value: /booking/list
+      - type: wait
+        delay: 1000
+    assertions:
+      - type: visible
+        selector: '.booking-list'
+      - type: count
+        selector: '.booking-item'
+        count: 5
+
+  # ── 场景3: localStorage 注入 Token ──
+  # 适用于: JWT Token 存储在 localStorage 的前端项目
+  - name: 个人中心-Token注入
+    description: 模块:user 页面:/profile
+    actions:
+      - type: localStorage
+        selector: accessToken
+        value: Bearer eyJhbGciOiJIUzI1NiIs...
+      - type: navigate
+        value: /profile
+      - type: wait
+        delay: 500
+    assertions:
+      - type: visible
+        selector: '.profile-header'
+      - type: text
+        selector: '.username'
+        contains: test_user
+
+  # ── 场景4: 按模块测试示例 (booking 模块) ──
+  # 运行: speccore verify --ui --config ./tests/smoke.yaml --module=booking
+  - name: 预订表单-提交预订
+    description: 模块:booking 页面:/booking/create
+    actions:
+      - type: navigate
+        value: /booking/create
+      - type: fill
+        selector: 'input[name="checkIn"]'
+        value: '2026-10-01'
+      - type: fill
+        selector: 'input[name="checkOut"]'
+        value: '2026-10-05'
+      - type: click
+        selector: '.search-btn'
+        waitFor: '.room-list'
+      - type: click
+        selector: '.room-item:first-child .select-btn'
+      - type: click
+        selector: '.submit-booking-btn'
+        waitFor: '.booking-success'
+    assertions:
+      - type: visible
+        selector: '.booking-success'
+      - type: text
+        selector: '.booking-success'
+        contains: 预订成功
+
+  # ── 场景5: 滚动 + 元素存在性检查 ──
+  - name: 首页-滚动加载
+    description: 模块:home 页面:/
+    actions:
+      - type: navigate
+        value: /
+      - type: scroll
+        selector: bottom
+      - type: wait
+        delay: 1000
+    assertions:
+      - type: visible
+        selector: '.footer'
+
+  # ── 场景6: 样式断言 ──
+  - name: 按钮-样式检查
+    description: 模块:ui 页面:/
+    actions:
+      - type: navigate
+        value: /
+    assertions:
+      - type: style
+        selector: '.primary-btn'
+        style: background-color
+        value: rgb(24, 144, 255)

@@ -166,9 +166,12 @@ function buildPrompt(params: {
 
 ${constitutionInfo ? `## 🏗 项目工程配置 (CONSTITUTION.md)
 
-${constitutionInfo.split('\n').filter(l => l.trim() && !l.startsWith('# ') && !l.startsWith('> ')).join('\n').slice(0, 2000)}
+${extractConstitutionForAI(constitutionInfo)}
 
-> 以上为项目配置信息。AI 应据此处配置判断各需求端（APP/H5/小程序/admin）对应哪个工程源码。
+> **重要**：
+> 1. **「端列表」章节是权威技术端列表** — 工程标识列的值（如 app/h5/admin）才是项目管理的端名
+> 2. **「项目信息」表格的「对应需求端」列只是需求映射参考** — 表示工程对应哪些需求模块，不是技术端列表
+> 3. AI 判断项目范围时，以「端列表」中的工程标识为准
 
 ---
 
@@ -177,7 +180,8 @@ ${platformSourceMap ? `## 🔗 端 ↔ 工程对应关系
 
 ${platformSourceMap}
 
-> 以上为"产品需求端目录"与"工程源码路径"的对应关系。分析时请按此映射对标。
+> 以上为"需求模块"与"工程源码"的映射关系（如"用户管理→app"），**不是技术端列表**。
+> 技术端列表（app/h5/admin 等）以 CONSTITUTION.md「## 端列表」章节中的「工程标识」为准。
 
 ---
 
@@ -320,11 +324,12 @@ function groupByModule(files: CodeFile[]): Record<string, CodeFile[]> {
  * 构建产品需求端目录与工程源码路径的对应关系。
  *
  * 从两个来源推断（优先级从高到低）：
- * 1. CONSTITUTION.md 中「项目信息」表格的「对应端」列 → N:M 映射
+ * 1. CONSTITUTION.md 中「项目信息」表格的「对应需求端」列 → N:M 映射
  * 2. 01-产品需求/ 下的子目录名 + 源码目录名 → 1:1 简单推断
  *
- * 用户可随时编辑 CONSTITUTION.md 中的「对应端」列来调整映射。
+ * 用户可随时编辑 CONSTITUTION.md 中的「对应需求端」列来调整映射。
  * 格式: "app, admin" 表示该工程同时对应 app 和 admin 的需求。
+ * ⚠️ 「对应需求端」是需求模块映射，不是技术端列表。技术端列表见「端列表」章节的「工程标识」列。
  */
 function buildPlatformSourceMap(input: AIContextInput): string {
   const lines: string[] = [];
@@ -355,9 +360,10 @@ function buildPlatformSourceMap(input: AIContextInput): string {
 
   if (hasConstitution) {
     // — 使用 CONSTITUTION 中的 N:M 映射 —
-    lines.push('> 以下映射来自 CONSTITUTION.md「项目信息」表格的「对应端」列');
+    lines.push('> 以下映射来自 CONSTITUTION.md「项目信息」表格的「对应需求端」列');
+    lines.push('> ⚠️ 这是「需求模块→工程」的映射，不是技术端列表。技术端列表见上文「端列表」章节。');
     lines.push('');
-    lines.push('| 工程源码 | 默认分支 | 对应端 |');
+    lines.push('| 工程源码 | 默认分支 | 对应需求端 |');
     lines.push('| :--- | :--- | :--- |');
 
     // 先写出 CONSTITUTION 中明确配置的
@@ -371,12 +377,12 @@ function buildPlatformSourceMap(input: AIContextInput): string {
     const configured = new Set(Object.keys(constitutionMapping));
     for (const src of sourceNames) {
       if (!configured.has(src) && !configured.has(input.sources[sourceNames.indexOf(src)])) {
-        lines.push(`| \`${src}\` | — | ⚠️ 未配置，请补充 CONSTITUTION.md |`);
+        lines.push(`| \`${src}\` | — | ⚠️ 未配置对应需求端，请补充 CONSTITUTION.md「项目信息」表格 |`);
       }
     }
   } else {
     // — 无 CONSTITUTION 时用简单推断 —
-    lines.push('> ⚠️️ CONSTITUTION.md 未配置「对应端」，以下为自动推断。请编辑 CONSTITUTION 完善映射。');
+    lines.push('> ⚠️️ CONSTITUTION.md 未配置「对应需求端」，以下为自动推断。请编辑 CONSTITUTION 完善映射。');
     lines.push('');
     lines.push('| 产品需求端 | 工程源码 | 说明 |');
     lines.push('| :--- | :--- | :--- |');
@@ -389,7 +395,7 @@ function buildPlatformSourceMap(input: AIContextInput): string {
         ? `${p}需求 → 对应 \`${s}\` 工程` 
         : p !== '—' 
           ? `⚠️ ${p}需求（待指定工程）`
-          : `\`${s}\` 工程（待指定需求端）`;
+          : `\`${s}\` 工程（待指定对应需求端）`;
       lines.push(`| ${p} | \`${s}\` | ${note} |`);
     }
   }
@@ -397,14 +403,15 @@ function buildPlatformSourceMap(input: AIContextInput): string {
   // 标注跨端共用
   lines.push('');
   lines.push('> **跨端需求**: `_shared/` 或标记为多端共用的需求，AI 分析时应覆盖所有相关工程。');
-  lines.push('> **调整方式**: 编辑 CONSTITUTION.md → 「项目信息」表格的「对应端」列，用逗号分隔多个端。');
+  lines.push('> **调整方式**: 编辑 CONSTITUTION.md → 「项目信息」表格的「对应需求端」列，用逗号分隔多个需求模块。');
 
   return lines.join('\n');
 }
 
 /** 
- * 解析 CONSTITUTION.md 中的项目信息表格，提取 N:M 工程↔需求端映射。
- * 返回: { 工程源码路径: { platforms: ['app','h5'], branches: ['main'] } }
+ * 解析 CONSTITUTION.md 中的项目信息表格，提取 N:M 工程↔需求模块映射。
+ * 返回: { 工程源码路径: { platforms: ['用户管理','订单系统'], branches: ['main'] } }
+ * ⚠️ 返回的 platforms 是「对应需求端」列的值（需求模块名），不是技术端名。
  */
 function readConstitutionPlatformMapping(): Record<string, { platforms: string[]; branches: string[] }> {
   const result: Record<string, { platforms: string[]; branches: string[] }> = {};
@@ -460,4 +467,61 @@ function readConstitutionPlatformMapping(): Record<string, { platforms: string[]
     }
   } catch {}
   return result;
+}
+
+/**
+ * v8.3.101+: 智能提取 CONSTITUTION.md 内容传给 AI
+ * 优先保留「端列表」章节（技术端名的权威来源），其次「项目信息」章节
+ * 避免 .slice(0, 2000) 截断导致 AI 看不到端列表
+ */
+function extractConstitutionForAI(content: string): string {
+  const lines = content.split('\n');
+  const result: string[] = [];
+  let inPlatformSection = false;
+  let inProjectInfoSection = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // 检测「端列表」章节开始
+    if (trimmed.match(/^##\s+.*端列表/)) {
+      inPlatformSection = true;
+      inProjectInfoSection = false;
+      result.push(line);
+      continue;
+    }
+    // 检测「项目信息」章节开始
+    if (trimmed.match(/^##\s+.*项目信息/)) {
+      inPlatformSection = false;
+      inProjectInfoSection = true;
+      result.push(line);
+      continue;
+    }
+    // 其他 ## 章节开始，停止当前提取
+    if (trimmed.match(/^##\s+/)) {
+      inPlatformSection = false;
+      inProjectInfoSection = false;
+      continue;
+    }
+
+    // 在目标章节内，过滤掉注释引用行（> 开头）和一级标题（# 开头）
+    if (inPlatformSection || inProjectInfoSection) {
+      if (trimmed && !trimmed.startsWith('# ') && !trimmed.startsWith('> ')) {
+        result.push(line);
+      } else if (trimmed) {
+        // 保留章节内的注释和标题（用于结构完整性）
+        result.push(line);
+      }
+    }
+  }
+
+  // 如果没能提取到任何章节，回退到原始过滤逻辑（兼容旧格式）
+  if (result.length === 0) {
+    return content.split('\n')
+      .filter(l => l.trim() && !l.trim().startsWith('# ') && !l.trim().startsWith('> '))
+      .join('\n')
+      .slice(0, 3000);
+  }
+
+  return result.join('\n').slice(0, 3000);
 }

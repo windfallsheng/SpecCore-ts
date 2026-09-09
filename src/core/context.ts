@@ -1,5 +1,6 @@
 import { ensureDir, readJson, writeJson, pathExists } from 'fs-extra';
 import { join } from "path";
+import { findProjectRoot } from '../utils/task-utils';
 
 export interface Context {
   currentIteration: string;
@@ -197,7 +198,8 @@ export async function getHotfixStatus(): Promise<{
 export async function getIterationDir(name: string): Promise<string> {
   const { readdir } = await import('fs-extra');
   const { logger } = await import('../utils/logger');
-  const root = process.cwd();
+  // v8.3.101+: 向上查找项目根目录（支持在子目录执行）
+  const root = findProjectRoot() || process.cwd();
   // 去掉可能的 Iteration- 前缀（AI 可能传完整名如 Iteration-009-xxx）
   const shortName = name.replace(/^Iteration-/, '');
   try {

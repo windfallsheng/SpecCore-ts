@@ -590,52 +590,126 @@ export async function initEnvironmentConfigs(projectRoot: string): Promise<strin
 const TEST_TEMPLATES: { name: string; content: string }[] = [
   {
     name: 'smoke',
-    content: `# 标准冒烟测试配置（v8.3.60+）
-# 目标：验证"系统能启动、核心页面能打开、不白屏"
-# 适用：每次构建后、部署前快速门禁
-# 执行：speccore verify --config .speccore/tests/smoke.yaml --env-file staging
+    content: `# VERIFY_SPEC.yaml — UI 冒烟测试规格（v8.3.95+）
+# 执行: speccore verify --ui --config .speccore/tests/smoke.yaml
+# 按模块: speccore verify --ui --config .speccore/tests/smoke.yaml --module=booking
+# 有头模式(调试): speccore verify --ui --config .speccore/tests/smoke.yaml --headed
+#
+# 按模块过滤原理: scenario 的 name 或 description 包含模块名即可匹配
+#   如 --module=booking 会匹配 description 包含 "模块:booking" 的 scenario
 
-name: 标准冒烟测试
+name: 示例项目冒烟测试
+platform: h5-mobile
+url: /
 
-target:
-  base_url: https://staging.example.com
+scenarios:
+  # ── 场景1: 登录流程（账号密码） ──
+  - name: 登录-账号密码登录
+    description: 模块:auth 页面:/login
+    actions:
+      - type: navigate
+        value: /login
+      - type: fill
+        selector: 'input[name="username"]'
+        value: test_user
+      - type: fill
+        selector: 'input[name="password"]'
+        value: test_password
+      - type: click
+        selector: 'button[type="submit"]'
+        waitFor: '.dashboard-container'
+    assertions:
+      - type: url
+        contains: /dashboard
+      - type: visible
+        selector: '.dashboard-container'
 
-# 测试场景：只覆盖核心页面，不做复杂交互
-tests:
-  - name: 首页-加载检查
-    type: smoke
-    routes: [/]
-    threshold: normal
+  # ── 场景2: Cookie 注入免登录 ──
+  # 适用: 已有登录态 Cookie，跳过登录页直接测试业务模块
+  - name: 预订列表-免登录(cookie注入)
+    description: 模块:booking 页面:/booking/list
+    actions:
+      - type: cookie
+        selector: session_token
+        value: eyJhbGciOiJIUzI1NiIs...
+        domain: example.com
+        path: /
+        secure: true
+        httpOnly: true
+      - type: navigate
+        value: /booking/list
+      - type: wait
+        delay: 1000
+    assertions:
+      - type: visible
+        selector: '.booking-list'
 
-  - name: 登录页-加载检查
-    type: smoke
-    routes: [/login]
-    threshold: normal
+  # ── 场景3: localStorage 注入 Token ──
+  # 适用: JWT Token 存储在 localStorage 的前端项目
+  - name: 个人中心-Token注入
+    description: 模块:user 页面:/profile
+    actions:
+      - type: localStorage
+        selector: accessToken
+        value: Bearer eyJhbGciOiJIUzI1NiIs...
+      - type: navigate
+        value: /profile
+      - type: wait
+        delay: 500
+    assertions:
+      - type: visible
+        selector: '.profile-header'
+      - type: text
+        selector: '.username'
+        contains: test_user
 
-  - name: 核心模块页面
-    type: smoke
-    routes:
-      - /dashboard
-      - /orders
-      - /products
-    threshold: normal
+  # ── 场景4: 按模块测试示例 (booking 模块) ──
+  # 运行: speccore verify --ui --config .speccore/tests/smoke.yaml --module=booking
+  - name: 预订表单-提交预订
+    description: 模块:booking 页面:/booking/create
+    actions:
+      - type: navigate
+        value: /booking/create
+      - type: fill
+        selector: 'input[name="checkIn"]'
+        value: '2026-10-01'
+      - type: fill
+        selector: 'input[name="checkOut"]'
+        value: '2026-10-05'
+      - type: click
+        selector: '.search-btn'
+        waitFor: '.room-list'
+      - type: click
+        selector: '.room-item:first-child .select-btn'
+      - type: click
+        selector: '.submit-booking-btn'
+        waitFor: '.booking-success'
+    assertions:
+      - type: visible
+        selector: '.booking-success'
+      - type: text
+        selector: '.booking-success'
+        contains: 预订成功
 
-# 视觉模型配置（可选，用于单图质量扫描）
-visual_model:
-  provider: qwen-vl
-  model: qwen-vl-max
-  timeout: 30000
-
-# 输出配置
-output: ./reports/smoke-test-report.html
+  # ── 场景5: 样式断言 ──
+  - name: 按钮-样式检查
+    description: 模块:ui 页面:/
+    actions:
+      - type: navigate
+        value: /
+    assertions:
+      - type: style
+        selector: '.primary-btn'
+        style: background-color
+        value: rgb(24, 144, 255)
 `,
   },
   {
     name: 'pr',
     content: `# PR 阶段测试配置（v8.3.60+）
-# 目标：验证"代码质量 + 核心功能 + API 契约"
-# 适用：合并请求前、Code Review 后
-# 执行：speccore verify --config .speccore/tests/pr.yaml --env-file staging
+# 目标: 验证"代码质量 + 核心功能 + API 契约"
+# 适用: 合并请求前、Code Review 后
+# 执行: speccore verify --config .speccore/tests/pr.yaml --env-file staging
 
 name: PR 阶段测试
 
@@ -686,9 +760,9 @@ output: ./reports/pr-test-report.html
   {
     name: 'release',
     content: `# 发布前全量回归测试配置（v8.3.60+）
-# 目标：验证"全量功能 + 视觉一致性 + 性能基线 + API 完整性"
-# 适用：发布前、重大重构后、周末全量回归
-# 执行：speccore verify --config .speccore/tests/release.yaml --env-file production
+# 目标: 验证"全量功能 + 视觉一致性 + 性能基线 + API 完整性"
+# 适用: 发布前、重大重构后、周末全量回归
+# 执行: speccore verify --config .speccore/tests/release.yaml --env-file production
 
 name: 发布前全量回归测试
 
