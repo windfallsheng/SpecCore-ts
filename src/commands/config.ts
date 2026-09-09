@@ -27,11 +27,30 @@ export interface ConfigOptions {
 
 /**
  * Install Git hooks (pre-commit + pre-push)
+ * v8.3.88+: 支持 speccore 与工程代码分离，自动读取 PROJECT.yaml code_path
  */
-export function installHooks(): void {
+export async function installHooks(): Promise<void> {
   try {
     const { installGitHooks } = require('../core/git-integration');
-    const result = installGitHooks();
+    const { loadProjectConfig } = require('../core/unified-config');
+    const { join, isAbsolute } = require('path');
+
+    let gitCwd = process.cwd();
+    try {
+      const pc = await loadProjectConfig();
+      const firstPlatformWithPath = pc.platforms.find((p: any) => p.code_path);
+      if (firstPlatformWithPath?.code_path) {
+        gitCwd = isAbsolute(firstPlatformWithPath.code_path)
+          ? firstPlatformWithPath.code_path
+          : join(process.cwd(), firstPlatformWithPath.code_path);
+      } else if (pc.code_scope?.[0]) {
+        gitCwd = isAbsolute(pc.code_scope[0])
+          ? pc.code_scope[0]
+          : join(process.cwd(), pc.code_scope[0]);
+      }
+    } catch {}
+
+    const result = installGitHooks(gitCwd);
     logger.success('Git hooks installed:');
     if (result.preCommit) logger.info('  .git/hooks/pre-commit  (check @spec annotations)');
     if (result.prePush) logger.info('  .git/hooks/pre-push    (run speccore validate)');

@@ -858,7 +858,7 @@ async function scanForNewFiles(
     const fullPath = join(dir, item.name);
     if (item.isDirectory() && !item.name.startsWith('.') && item.name !== 'node_modules') {
       await scanForNewFiles(fullPath, indexedPaths, newFiles);
-    } else if (item.isFile() && item.name.endsWith('.md') && !indexedPaths.has(fullPath)) {
+    } else if (item.isFile() && (item.name.endsWith('.md') || item.name.endsWith('.html') || item.name.endsWith('.htm')) && !indexedPaths.has(fullPath)) {
       newFiles.push(fullPath);
     }
   }
@@ -883,11 +883,15 @@ export async function indexDirectoryDocuments(
       const fullPath = join(dir, item.name);
       if (item.isDirectory() && !item.name.startsWith('.') && item.name !== 'node_modules') {
         await scanDir(fullPath);
-      } else if (item.isFile() && item.name.endsWith('.md') && !item.name.startsWith('README')) {
-        const [content, st] = await Promise.all([
+      } else if (item.isFile()) {
+        const isMd = item.name.endsWith('.md') && !item.name.startsWith('README');
+        const isHtml = item.name.endsWith('.html') || item.name.endsWith('.htm');
+        if (!isMd && !isHtml) continue;
+        const [rawContent, st] = await Promise.all([
           readFile(fullPath, 'utf-8'),
           stat(fullPath),
         ]);
+        const content = isHtml ? extractHtmlText(rawContent) : rawContent;
         if (content.trim().length > 50 && !content.trim().match(/^#+\s*待填充|^<!--\s*AI-FILL\s*-->$/m)) {
           filesToIndex.push({ filePath: fullPath, content, mtime: st.mtimeMs });
         }
@@ -1124,4 +1128,38 @@ export function retrieveWithGraphContext(
   return scored
     .sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0))
     .slice(0, topK);
+}
+
+// ═══════════════════════════════════════════════════════════
+// HTML 文本提取（v8.3.92+）
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * 从 HTML 内容中提取纯文本，保留语义信息
+ * - 去掉 script/style 标签及其内容
+ * - 保留 alt/title/placeholder 属性值（包含图片描述和交互提示）
+ * - 去掉所有 HTML 标签
+ * - 压缩多余空白
+ */
+export function extractHtmlText(html: string): string {
+  return html
+    // 去掉 script 标签及其内容
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    // 去掉 style 标签及其内容
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    // 去掉 HTML 注释
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    // 保留 alt/title/placeholder 属性值（语义信息）
+    .replace(/\s(alt|title|placeholder)=["']([^"']+)["']/gi, ' [$1: $2] ')
+    // 去掉所有 HTML 标签
+    .replace(/<[^>]+>/g, ' ')
+    // 将 HTML 实体转换为文本
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    // 压缩空白
+    .replace(/\s+/g, ' ')
+    .trim();
 }

@@ -45,6 +45,8 @@ export interface DeployEnvConfig {
   host?: string;
   /** SSH 私钥路径（ssh / sftp 类型用，默认 ~/.ssh/id_rsa） */
   key?: string;
+  /** SSH/SFTP 密码（ssh / sftp 类型用，优先使用密钥认证，密码认证需安装 sshpass） */
+  password?: string;
   /** 远程服务器部署目录（ssh / sftp / pm2 类型用） */
   remote_dir?: string;
   /** PM2 配置文件路径（pm2 类型用，默认 ecosystem.config.js） */
@@ -108,6 +110,8 @@ export interface SpecConfig {
       devices: string[];
       browsers: string[];
       timeout: number;
+      /** 有头模式：显示浏览器窗口（调试用，默认 false） */
+      headed?: boolean;
       /** 视觉模型配置 */
       visual_model?: {
         /** 提供商: qwen-vl(默认) | openai | anthropic | local */
@@ -136,6 +140,19 @@ export interface SpecConfig {
     sync: { auto_check: boolean };
     patterns: { auto_save: 'off' | 'smart' | 'aggressive' };
     review: { check_assignee: boolean };
+    /** v8.3.94+: 视觉模型配置（用于 specs 图片理解、UI 验证截图分析） */
+    vision?: {
+      enabled: boolean;
+      provider: 'qwen-vl' | 'openai' | 'anthropic' | 'local';
+      model?: string;
+      apiKey?: string;
+      endpoint?: string;
+      timeout?: number;
+      /** 每个 prompt 最多处理多少张图片（默认 10） */
+      maxImagesPerPrompt?: number;
+      /** 图片最大尺寸（KB），超过则跳过（默认 2048） */
+      imageMaxSizeKb?: number;
+    };
   };
   ask: {
     routing: {
@@ -1000,7 +1017,7 @@ function validateConfig(obj: Record<string, unknown>): ValidationResult {
     // verify_ui 校验
     if (isObject(obj.quality_gates.verify_ui)) {
       const vui = obj.quality_gates.verify_ui;
-      for (const key of ['enabled', 'smoke_test', 'visual_check']) {
+      for (const key of ['enabled', 'smoke_test', 'visual_check', 'headed']) {
         if (vui[key] !== undefined && typeof vui[key] !== 'boolean') {
           issues.push(`quality_gates.verify_ui.${key} 必须是布尔值`);
         }
@@ -1112,7 +1129,8 @@ function parseYaml(content: string): unknown {
   const lines = content.split('\n');
   let stack: { obj: any; indent: number }[] = [{ obj: result, indent: -1 }];
 
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     if (!line.trim() || line.trim().startsWith('#')) continue;
 
     const indent = line.length - line.trimStart().length;
@@ -1139,14 +1157,29 @@ function parseYaml(content: string): unknown {
       }
     } else if (trimmed.endsWith(':')) {
       const key = trimmed.slice(0, -1).trim();
+      // v8.3.89+: 前瞻性检测数组 — 查看后续同层级缩进的行是否以 - 开头
+      const currentIndent = indent;
+      let isArray = false;
+      for (let j = i + 1; j < lines.length; j++) {
+        const nextLine = lines[j];
+        if (!nextLine.trim() || nextLine.trim().startsWith('#')) continue;
+        const nextIndent = nextLine.length - nextLine.trimStart().length;
+        if (nextIndent <= currentIndent) break; // 层级回退
+        if (nextLine.trim().startsWith('- ')) {
+          isArray = true;
+          break;
+        }
+        if (nextIndent > currentIndent) break; // 有内容但不是数组
+      }
+      const newObj = isArray ? [] : {};
       if (Array.isArray(parent)) {
         const last = parent[parent.length - 1];
         if (last && typeof last === 'object' && !Array.isArray(last)) {
-          last[key] = {};
+          last[key] = newObj;
           stack.push({ obj: last[key], indent });
         }
       } else {
-        if (!parent[key]) parent[key] = {};
+        if (!parent[key]) parent[key] = newObj;
         stack.push({ obj: parent[key], indent });
       }
     } else if (trimmed.includes(':')) {

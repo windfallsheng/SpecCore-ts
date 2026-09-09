@@ -39,7 +39,7 @@ function findCommand(cmd: string, customPath?: string): string | null {
     const findCmd = isWin ? `where ${cmd}` : `which ${cmd}`;
     const result = execSync(findCmd, { stdio: 'pipe', encoding: 'utf-8' }).trim();
     // where 可能返回多行（每个 PATH 匹配一行），取第一行
-    return result.split('\n')[0].trim();
+    return result.split(/\r?\n/)[0].trim();
   } catch {
     // PATH 找不到时，检查常见安装位置
     const commonPaths: Record<string, string[]> = {
@@ -687,7 +687,7 @@ async function importExcelBugList(file: string, iteration: string): Promise<void
 
   if (/\.csv$/i.test(file)) {
     const csv = await readFile(file, 'utf-8');
-    const lines = csv.trim().split('\n');
+    const lines = csv.trim().split(/\r?\n/);
     const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
     for (const line of lines.slice(1)) {
       if (!line.trim()) continue;
@@ -776,7 +776,7 @@ async function importExcelBugList(file: string, iteration: string): Promise<void
     const bk = await backupWithTimestamp(taskReqPath);
     if (bk) {
       backups.push(bk);
-      logger.info(`   📦 旧版已备份: ${bk.split('/').pop()}`);
+      logger.info(`   📦 旧版已备份: ${basename(bk)}`);
     }
     await writeFile(taskReqPath, reqLines.join('\n'));
     created++;

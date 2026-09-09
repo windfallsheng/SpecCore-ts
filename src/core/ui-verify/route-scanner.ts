@@ -8,7 +8,7 @@
  */
 
 import { readFile, pathExists, readdir } from 'fs-extra';
-import { join, dirname, basename } from 'path';
+import { join, dirname, basename, isAbsolute } from 'path';
 import { logger } from '../../utils/logger';
 
 export interface DiscoveredRoute {
@@ -82,7 +82,7 @@ export async function scanRoutes(
 ): Promise<RouteScanResult> {
   // 如果用户显式指定了路由文件，直接用它
   if (options.routerFile) {
-    const explicitPath = options.routerFile.startsWith('/')
+    const explicitPath = isAbsolute(options.routerFile)
       ? options.routerFile
       : join(projectRoot, options.routerFile);
     if (await pathExists(explicitPath)) {

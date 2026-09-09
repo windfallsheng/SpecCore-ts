@@ -25,6 +25,8 @@ export interface TaskQualityGateConfig {
     devices?: string[];
     browsers?: string[];
     timeout?: number;
+    /** 有头模式：显示浏览器窗口（调试用，默认 false） */
+    headed?: boolean;
     visual_model?: VisualModelConfig;
   };
 }
@@ -38,6 +40,8 @@ export interface ResolvedQualityGate {
     devices: string[];
     browsers: string[];
     timeout: number;
+    /** 有头模式：显示浏览器窗口（调试用，默认 false） */
+    headed: boolean;
     visual_model?: VisualModelConfig;
   };
 }
@@ -84,6 +88,7 @@ export interface QualityGateMergeInput {
     device?: string;
     browser?: string;
     timeout?: number;
+    headed?: boolean;
   };
 }
 
@@ -97,6 +102,7 @@ export function mergeQualityGate(input: QualityGateMergeInput): ResolvedQualityG
     devices: ['desktop'],
     browsers: ['chromium'],
     timeout: 30000,
+    headed: false,
     visual_model: {
       provider: 'qwen-vl',
       model: 'qwen-vl-max',
@@ -127,6 +133,7 @@ export function mergeQualityGate(input: QualityGateMergeInput): ResolvedQualityG
     devices: cli?.device ? [cli.device] : taskMerged.devices,
     browsers: cli?.browser ? [cli.browser] : taskMerged.browsers,
     timeout: cli?.timeout || taskMerged.timeout,
+    headed: cli?.headed ?? taskMerged.headed ?? false,
   };
 
   return { verify_ui: final };

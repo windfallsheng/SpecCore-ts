@@ -2,18 +2,35 @@
  * merge-check — 合并冲突预测 + 回滚
  */
 import { readFile, pathExists } from 'fs-extra';
-import { join } from 'path';
+import { join, isAbsolute } from 'path';
 import { execSync } from 'child_process';
 import { logger } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
+import { loadProjectConfig } from '../core/unified-config';
 
 export async function mergeCheck(iteration: string): Promise<void> {
   const iterDir = `Iteration-${iteration}`;
   const fs = require('fs');
-  
+
+  // v8.3.88+: 确定工程代码目录
+  let gitCwd = process.cwd();
+  try {
+    const pc = await loadProjectConfig();
+    const firstPlatformWithPath = pc.platforms.find((p) => p.code_path);
+    if (firstPlatformWithPath?.code_path) {
+      gitCwd = isAbsolute(firstPlatformWithPath.code_path)
+        ? firstPlatformWithPath.code_path
+        : join(process.cwd(), firstPlatformWithPath.code_path);
+    } else if (pc.code_scope?.[0]) {
+      gitCwd = isAbsolute(pc.code_scope[0])
+        ? pc.code_scope[0]
+        : join(process.cwd(), pc.code_scope[0]);
+    }
+  } catch {}
+
   // Find all feature branches
-  const branches = execSync('git branch', { encoding: 'utf-8' })
-    .split('\n')
+  const branches = execSync('git branch', { cwd: gitCwd, encoding: 'utf-8' })
+    .split(/\r?\n/)
     .map(b => b.replace(/^\*?\s*/, '').trim())
     .filter(b => b.startsWith(`feature/Task-`) && b !== 'main');
 
@@ -26,8 +43,8 @@ export async function mergeCheck(iteration: string): Promise<void> {
   const branchFiles: Record<string, string[]> = {};
   for (const branch of branches) {
     try {
-      const diff = execSync(`git diff main...${branch} --name-only`, { encoding: 'utf-8' });
-      branchFiles[branch] = diff.split('\n').filter(Boolean);
+      const diff = execSync(`git diff main...${branch} --name-only`, { cwd: gitCwd, encoding: 'utf-8' });
+      branchFiles[branch] = diff.split(/\r?\n/).filter(Boolean);
     } catch {
       branchFiles[branch] = [];
     }
@@ -66,7 +83,23 @@ export async function mergeCheck(iteration: string): Promise<void> {
 export async function rollbackTask(taskId: string, iteration: string, reason?: string): Promise<void> {
   const iterDir = `Iteration-${iteration}`;
   const fs = require('fs');
-  
+
+  // v8.3.88+: 确定工程代码目录
+  let gitCwd = process.cwd();
+  try {
+    const pc = await loadProjectConfig();
+    const firstPlatformWithPath = pc.platforms.find((p) => p.code_path);
+    if (firstPlatformWithPath?.code_path) {
+      gitCwd = isAbsolute(firstPlatformWithPath.code_path)
+        ? firstPlatformWithPath.code_path
+        : join(process.cwd(), firstPlatformWithPath.code_path);
+    } else if (pc.code_scope?.[0]) {
+      gitCwd = isAbsolute(pc.code_scope[0])
+        ? pc.code_scope[0]
+        : join(process.cwd(), pc.code_scope[0]);
+    }
+  } catch {}
+
   // Find task directory
   const entries = fs.readdirSync(iterDir, { withFileTypes: true });
   const taskEntry = entries.find((e: any) => e.isDirectory() && e.name.startsWith(taskId));
@@ -93,8 +126,8 @@ export async function rollbackTask(taskId: string, iteration: string, reason?: s
 
   // 2. Delete the branch
   try {
-    execSync('git checkout main 2>/dev/null', { stdio: 'pipe' });
-    execSync(`git branch -D "${branchName}" 2>/dev/null`, { stdio: 'pipe' });
+    execSync('git checkout main', { cwd: gitCwd, stdio: 'pipe' });
+    execSync(`git branch -D "${branchName}"`, { cwd: gitCwd, stdio: 'pipe' });
     logger.info(`  🗑️  已删除分支: ${branchName}`);
   } catch {
     logger.info(`  ⚠️ 分支 ${branchName} 可能已删除`);

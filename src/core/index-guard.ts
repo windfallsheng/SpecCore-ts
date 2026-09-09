@@ -11,6 +11,7 @@
  *   - 非阻塞：只 warn 不阻止执行，但明确提示需要刷新
  */
 
+import { relative } from 'path';
 import { logger } from '../utils/logger';
 import { checkRagIndexFreshness, loadRagIndex } from './rag-engine';
 import { checkCodeIndexFreshness, loadCodeIndex } from './code-scanner';
@@ -113,7 +114,7 @@ async function checkRagLayer(cwd: string, iteration?: string): Promise<LayerStat
       name: '文档 RAG',
       fresh,
       changedCount: changed.length,
-      changedFiles: changed.slice(0, 5).map(f => f.replace(cwd + '/', '')),
+      changedFiles: changed.slice(0, 5).map(f => relative(cwd, f)),
       message: fresh
         ? '文档索引已同步'
         : `${staleFiles.length} 个文件已变更，${newFiles.length} 个新文件待索引`,

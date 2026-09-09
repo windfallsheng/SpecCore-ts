@@ -458,6 +458,41 @@ error_codes:
 | `enforce_review` | `boolean` | `true` | 是否强制要求审查（检查 REVIEW.md 存在性） |
 | `require_pr` | `boolean` | `true` | 是否要求通过 PR 合并（保护分支检查） |
 
+#### 3.10.1 verify_ui（v8.3.95+）
+
+**类型**：`object`
+
+**说明**：UI 验证配置，控制 `speccore verify --ui` 的默认行为。
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `enabled` | `boolean` | `false` | 是否启用 UI 验证 |
+| `smoke_test` | `boolean` | `true` | 是否启用冒烟测试 |
+| `visual_check` | `boolean` | `true` | 是否启用视觉检查 |
+| `threshold` | `string` | `normal` | 视觉对比阈值：`strict` / `normal` / `loose` |
+| `devices` | `string[]` | `['desktop']` | 测试设备：`desktop` / `mobile` / `tablet` |
+| `browsers` | `string[]` | `['chromium']` | 浏览器：`chromium` / `firefox` / `webkit` |
+| `timeout` | `number` | `30000` | 操作超时（毫秒） |
+| `headed` | `boolean` | `false` | 有头模式：显示浏览器窗口（调试用） |
+| `visual_model` | `object` | — | 视觉模型配置（provider, model, apiKey, endpoint, timeout） |
+
+**示例**：
+```yaml
+quality_gates:
+  verify_ui:
+    enabled: true
+    smoke_test: true
+    visual_check: true
+    threshold: normal
+    devices: [desktop, mobile]
+    browsers: [chromium]
+    timeout: 30000
+    headed: false
+    visual_model:
+      provider: qwen-vl
+      model: qwen-vl-max
+```
+
 ---
 
 ### 3.11 arbitration
@@ -567,6 +602,49 @@ arbitration:
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `check_assignee` | `boolean` | `false` | 审查时是否检查执行人签名 |
+
+#### 3.12.9 vision（v8.3.94+）
+
+**类型**：`object`
+
+**说明**：视觉模型配置，用于 specs 文档中的图片理解（PNG/JPG/GIF/WebP 等位图自动转换为文本描述注入 AI prompt）。默认关闭。
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `enabled` | `boolean` | `false` | 是否启用视觉模型 |
+| `provider` | `string` | — | 提供商：`qwen-vl` / `openai` / `anthropic` / `local` |
+| `model` | `string` | — | 模型名称（如 `qwen-vl-plus`、`gpt-4o`） |
+| `apiKey` | `string` | — | API Key，支持 `${ENV_VAR}` 环境变量引用 |
+| `endpoint` | `string` | — | 自定义端点（可选，默认使用各提供商官方端点） |
+| `timeout` | `number` | `60000` | 请求超时（毫秒） |
+| `maxImagesPerPrompt` | `number` | `10` | 每个 prompt 最多处理的图片数量 |
+| `imageMaxSizeKb` | `number` | `2048` | 图片大小限制（KB），超过则跳过 |
+
+**配置示例**：
+```yaml
+settings:
+  vision:
+    enabled: true
+    provider: qwen-vl
+    model: qwen-vl-plus
+    apiKey: ${DASHSCOPE_API_KEY}
+    maxImagesPerPrompt: 10
+    imageMaxSizeKb: 2048
+```
+
+**支持的 Provider**：
+
+| Provider | 环境变量 | 默认端点 |
+|----------|----------|----------|
+| `qwen-vl` | `DASHSCOPE_API_KEY` | dashscope.aliyuncs.com |
+| `openai` | `OPENAI_API_KEY` | api.openai.com |
+| `anthropic` | `ANTHROPIC_API_KEY` | api.anthropic.com |
+| `local` | 无 | localhost:11434 |
+
+**成本提示**：
+- 视觉模型调用按图片数量计费，建议合理设置 `maxImagesPerPrompt`
+- SVG 图片无需视觉模型，直接 inline XML 文本（零成本）
+- 未配置时完全跳过视觉模型调用（零成本）
 
 ---
 

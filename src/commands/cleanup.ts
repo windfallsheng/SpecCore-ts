@@ -12,7 +12,7 @@
  */
 
 import { readdir, pathExists, stat, unlink, remove } from 'fs-extra';
-import { join, dirname } from 'path';
+import { join, dirname, relative } from 'path';
 import { logger, Spinner } from '../utils/logger';
 import { isTimestampBackup } from '../utils/task-utils';
 
@@ -283,7 +283,7 @@ export async function cleanupCommand(options: CleanupOptions): Promise<void> {
   if (results.timestampBackups.length > 0) {
     logger.info(`📦 时间戳备份文件: ${results.timestampBackups.length} 个`);
     for (const p of results.timestampBackups.slice(0, 5)) {
-      logger.info(`   ${p.replace(cwd + '/', '')}`);
+      logger.info(`   ${relative(cwd, p)}`);
     }
     if (results.timestampBackups.length > 5) {
       logger.info(`   ... 还有 ${results.timestampBackups.length - 5} 个`);
@@ -293,7 +293,7 @@ export async function cleanupCommand(options: CleanupOptions): Promise<void> {
   if (results.bakFiles.length > 0) {
     logger.info(`📦 .bak 备份文件: ${results.bakFiles.length} 个`);
     for (const p of results.bakFiles.slice(0, 5)) {
-      logger.info(`   ${p.replace(cwd + '/', '')}`);
+      logger.info(`   ${relative(cwd, p)}`);
     }
     if (results.bakFiles.length > 5) {
       logger.info(`   ... 还有 ${results.bakFiles.length - 5} 个`);
@@ -303,7 +303,7 @@ export async function cleanupCommand(options: CleanupOptions): Promise<void> {
   if (results.archiveFiles.length > 0) {
     logger.info(`📦 散落归档文件: ${results.archiveFiles.length} 个`);
     for (const p of results.archiveFiles.slice(0, 5)) {
-      logger.info(`   ${p.replace(cwd + '/', '')}`);
+      logger.info(`   ${relative(cwd, p)}`);
     }
     if (results.archiveFiles.length > 5) {
       logger.info(`   ... 还有 ${results.archiveFiles.length - 5} 个`);
@@ -313,7 +313,7 @@ export async function cleanupCommand(options: CleanupOptions): Promise<void> {
   if (results.archiveDirs.length > 0) {
     logger.info(`📁 归档目录: ${results.archiveDirs.length} 个`);
     for (const p of results.archiveDirs.slice(0, 5)) {
-      logger.info(`   ${p.replace(cwd + '/', '')}/`);
+      logger.info(`   ${relative(cwd, p)}/`);
     }
     if (results.archiveDirs.length > 5) {
       logger.info(`   ... 还有 ${results.archiveDirs.length - 5} 个`);
@@ -323,7 +323,7 @@ export async function cleanupCommand(options: CleanupOptions): Promise<void> {
   if (results.tempFiles.length > 0) {
     logger.info(`📝 临时文件: ${results.tempFiles.length} 个`);
     for (const p of results.tempFiles.slice(0, 5)) {
-      logger.info(`   ${p.replace(cwd + '/', '')}`);
+      logger.info(`   ${relative(cwd, p)}`);
     }
     if (results.tempFiles.length > 5) {
       logger.info(`   ... 还有 ${results.tempFiles.length - 5} 个`);
@@ -333,7 +333,7 @@ export async function cleanupCommand(options: CleanupOptions): Promise<void> {
   if (results.staleCacheFiles.length > 0) {
     logger.info(`💾 过期缓存: ${results.staleCacheFiles.length} 个`);
     for (const p of results.staleCacheFiles.slice(0, 5)) {
-      logger.info(`   ${p.replace(cwd + '/', '')}`);
+      logger.info(`   ${relative(cwd, p)}`);
     }
     if (results.staleCacheFiles.length > 5) {
       logger.info(`   ... 还有 ${results.staleCacheFiles.length - 5} 个`);

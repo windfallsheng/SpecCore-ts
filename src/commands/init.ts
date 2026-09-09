@@ -170,9 +170,9 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
         // 检查全局 CLI 是否需要更新
         try {
           const { execSync } = require('child_process');
-          const globalVer = execSync('speccore --version 2>/dev/null || echo "0.0.0"', { encoding: 'utf-8', timeout: 3000 }).trim();
+          const globalVer = execSync('speccore --version', { encoding: 'utf-8', timeout: 3000, stdio: 'pipe' }).trim();
           const projectVer = PKG_VERSION;
-          if (globalVer !== projectVer && globalVer !== '0.0.0') {
+          if (globalVer !== projectVer) {
             logger.warn(`⚠️  全局 speccore CLI 版本: ${globalVer}，项目要求: ${projectVer}`);
             logger.warn(`   👉 请执行: npm update -g speccore`);
             logger.warn(`   否则 AI 运行的 analyze/split/plan 等命令会使用旧版本，导致结果异常`);
@@ -2238,7 +2238,7 @@ h1,h2{text-shadow:0 0 20px rgba(14,165,233,.4),0 0 60px rgba(14,165,233,.15);ani
 
 function detectGitUrl(root: string): string | undefined {
   try {
-    const url = require('child_process').execSync('git remote get-url origin 2>/dev/null', { encoding: 'utf-8', cwd: root }).trim();
+    const url = require('child_process').execSync('git remote get-url origin', { encoding: 'utf-8', cwd: root, stdio: 'pipe' }).trim();
     return url || undefined;
   } catch { return undefined; }
 }

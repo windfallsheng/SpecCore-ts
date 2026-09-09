@@ -1,0 +1,296 @@
+# ═══════════════════════════════════════════════════════════
+# SpecCore 部署配置示例（v8.3.91+）
+# ═══════════════════════════════════════════════════════════
+#
+# 使用方式：
+#   1. 复制你需要的配置块到 PROJECT.yaml 的 platform.deploy 段
+#   2. 或复制到 .speccore/environments/{env}.yaml 的 platform 段
+#
+# 部署命令：
+#   speccore deploy --env staging --platform <端名>
+#   speccore deploy --env staging --all
+#   speccore deploy --env production --platform h5 --dry-run   # 预览模式
+#
+# ═══════════════════════════════════════════════════════════
+
+# ─────────────────────────────────────────
+# 1. SSH 部署（推荐：有独立服务器的场景）
+# ─────────────────────────────────────────
+#
+# 适用场景：前端构建后上传到 Nginx/Apache 静态目录，或后端上传到服务器重启
+#
+# 认证方式：
+#   方式 A — 密钥认证（推荐，更安全）：
+#     1) 本地生成密钥：ssh-keygen -t rsa -b 4096
+#     2) 上传公钥到服务器：ssh-copy-id -i ~/.ssh/id_rsa.pub user@host
+#     3) 配置 key 字段指向私钥路径
+#
+#   方式 B — 密码认证（v8.3.91+）：
+#     1) 安装 sshpass：
+#        macOS: brew install sshpass
+#        Ubuntu/Debian: apt-get install sshpass
+#     2) 配置 password 字段
+#
+ssh_key_example:
+  type: ssh
+  build_cmd: npm run build:staging
+  output_dir: dist
+  host: deployer@192.168.1.100:22
+  key: ~/.ssh/id_rsa
+  remote_dir: /var/www/html/h5
+  script: sudo nginx -s reload
+  pre_deploy:
+    - echo "开始部署到 staging..."
+  post_deploy:
+    - echo "部署完成"
+
+# SSH 密码认证示例
+ssh_password_example:
+  type: ssh
+  build_cmd: npm run build:staging
+  output_dir: dist
+  host: deployer@192.168.1.100:22
+  password: your-password-here          # SSH 密码（v8.3.91+，需安装 sshpass）
+  remote_dir: /var/www/html/h5
+  script: sudo nginx -s reload
+
+# ─────────────────────────────────────────
+# 2. SFTP 部署（无 SSH 权限，只有 SFTP）
+# ─────────────────────────────────────────
+#
+# 适用场景：共享主机、虚拟主机，只有 SFTP 权限无 SSH 登录权限
+#
+sftp_example:
+  type: sftp
+  build_cmd: npm run build
+  output_dir: dist
+  host: deployer@192.168.1.100           # SFTP 地址（格式 user@host）
+  key: ~/.ssh/id_rsa                     # SSH 私钥路径
+  remote_dir: /var/www/html/h5           # 远程目录（SFTP 必须有写权限）
+
+# ─────────────────────────────────────────
+# 3. 静态资源部署（local / S3 / rsync）
+# ─────────────────────────────────────────
+#
+# 适用场景：CDN、对象存储、共享文件系统、本地目录
+#
+# target 格式：
+#   - 本地路径：/var/www/html/h5
+#   - S3 桶：s3://my-bucket/h5/
+#   - rsync 远程：rsync://user@host:/var/www/html/h5
+#   - rsync 远程（简写）：user@host:/var/www/html/h5
+#
+static_local_example:
+  type: static
+  build_cmd: npm run build
+  output_dir: dist
+  target: /var/www/html/h5               # 本地或挂载的共享目录
+
+static_s3_example:
+  type: static
+  build_cmd: npm run build
+  output_dir: dist
+  target: s3://my-cdn-bucket/h5-staging/  # AWS S3（需安装 AWS CLI）
+
+static_rsync_example:
+  type: static
+  build_cmd: npm run build
+  output_dir: dist
+  target: deployer@cdn-server:/var/www/html/h5   # rsync 远程同步
+
+# ─────────────────────────────────────────
+# 4. 自定义脚本部署（最灵活）
+# ─────────────────────────────────────────
+#
+# 适用场景：Jenkins 触发、FTP 上传、复杂部署流程
+#
+# script 字段可以是：
+#   - 脚本文件路径（相对于 code_path）：./scripts/deploy-staging.sh
+#   - 直接命令：curl -X POST http://jenkins/job/build/build
+#
+script_jenkins_example:
+  type: script
+  build_cmd: npm run build
+  script: ./scripts/trigger-jenkins.sh   # 脚本文件（存在则执行 bash）
+  # 或直接写命令：
+  # script: "curl -X POST -u user:token http://jenkins.example.com/job/my-job/build"
+
+script_ftp_example:
+  type: script
+  build_cmd: npm run build
+  output_dir: dist
+  script: ./scripts/deploy-ftp.sh        # 脚本内容示例见下文
+
+# ─────────────────────────────────────────
+# 5. Docker 部署
+# ─────────────────────────────────────────
+#
+# 适用场景：容器化部署，推送到镜像仓库
+#
+docker_example:
+  type: docker
+  dockerfile: ./Dockerfile               # Dockerfile 路径（默认 ./Dockerfile）
+  registry: registry.example.com         # 镜像仓库（可选，不配置则本地构建）
+  image: my-project/h5                   # 镜像名（默认使用端名）
+  tag: staging                           # 镜像标签（默认使用环境名）
+
+# ─────────────────────────────────────────
+# 6. PM2 部署（Node.js 后端）
+# ─────────────────────────────────────────
+#
+# 适用场景：Node.js 服务，本地或远程 PM2 进程管理
+#
+pm2_local_example:
+  type: pm2
+  build_cmd: npm run build
+  output_dir: .
+  pm2_config: ecosystem.config.js        # PM2 配置文件（默认 ecosystem.config.js）
+
+pm2_remote_example:
+  type: pm2
+  build_cmd: npm run build
+  pm2_config: ecosystem.config.js
+  host: deployer@192.168.1.100           # 远程服务器（可选，配置则 SSH 远程重启）
+  key: ~/.ssh/id_rsa
+  remote_dir: /opt/services/api
+
+# ─────────────────────────────────────────
+# 7. Kubernetes 部署
+# ─────────────────────────────────────────
+#
+# 适用场景：K8s 集群
+#
+k8s_example:
+  type: k8s
+  target: staging                        # namespace（默认 default）
+  script: k8s/deployment.yaml            # K8s manifest 文件路径（默认 k8s-deployment.yaml）
+
+# ─────────────────────────────────────────
+# 8. Helm 部署
+# ─────────────────────────────────────────
+#
+# 适用场景：使用 Helm 管理 K8s 应用
+#
+helm_example:
+  type: helm
+  target: staging                        # namespace（默认环境名）
+  script: ./helm/h5                      # Chart 路径（默认 ./helm/<端名>）
+  output_dir: values-staging.yaml        # values 文件路径（默认 values-<env>.yaml）
+
+# ─────────────────────────────────────────
+# 9. Vercel 部署
+# ─────────────────────────────────────────
+#
+# 适用场景：前端项目快速部署到 Vercel
+#
+vercel_example:
+  type: vercel
+  # 无需额外配置，执行 npx vercel --prod（production）或 npx vercel（preview）
+  # 需提前安装 Vercel CLI 并登录：npm i -g vercel && vercel login
+
+# ─────────────────────────────────────────
+# 10. Serverless 部署（函数计算）
+# ─────────────────────────────────────────
+#
+# 适用场景：函数计算、无服务器架构
+#
+serverless_aliyun_example:
+  type: serverless
+  provider: aliyun-fc                    # 阿里云函数计算
+  target: my-func-name                   # 函数名（默认使用端名）
+
+serverless_aws_example:
+  type: serverless
+  provider: aws-lambda                   # AWS Lambda
+  target: my-lambda-func
+
+serverless_tencent_example:
+  type: serverless
+  provider: tencent-scf                  # 腾讯云云函数
+  target: my-scf-func
+
+# ═══════════════════════════════════════════════════════════
+# 完整 PROJECT.yaml 示例（含部署配置）
+# ═══════════════════════════════════════════════════════════
+
+platforms:
+  - name: sr-web-operation
+    type: frontend
+    description: 运营管理前端
+    code_path: ./sr-web-operation
+    default_branch: main
+    requirement_unit: 运营管理
+    deploy:
+      staging:
+        type: ssh
+        build_cmd: npm run build:staging
+        output_dir: dist
+        host: deployer@staging-server.example.com
+        key: ~/.ssh/id_rsa
+        remote_dir: /var/www/html/sr-web-operation
+        script: sudo nginx -s reload
+      production:
+        type: ssh
+        build_cmd: npm run build:prod
+        output_dir: dist
+        host: deployer@prod-server.example.com
+        key: ~/.ssh/id_rsa_production
+        remote_dir: /var/www/html/sr-web-operation
+        script: sudo nginx -s reload
+
+  - name: api-service
+    type: backend
+    description: API 服务
+    code_path: ./api-service
+    default_branch: main
+    deploy:
+      staging:
+        type: pm2
+        build_cmd: npm run build
+        pm2_config: ecosystem.config.js
+        host: deployer@staging-server.example.com
+        key: ~/.ssh/id_rsa
+        remote_dir: /opt/services/api-service
+
+# ═══════════════════════════════════════════════════════════
+# 环境配置文件示例（.speccore/environments/staging.yaml）
+# ═══════════════════════════════════════════════════════════
+#
+# 环境配置会与 PROJECT.yaml 的 deploy 段合并，优先级：环境配置 > PROJECT.yaml
+#
+
+branch: develop                          # pipeline 命令的目标分支
+build_cmd: npm run build:staging         # 覆盖 PROJECT.yaml 的构建命令
+
+deploy:
+  type: ssh
+  host: deployer@staging-server.example.com:22
+  key: ~/.ssh/id_rsa
+  remote_dir: /var/www/html/sr-web-operation
+
+# ═══════════════════════════════════════════════════════════
+# 常用脚本示例
+# ═══════════════════════════════════════════════════════════
+
+# --- scripts/trigger-jenkins.sh ---
+# #!/bin/bash
+# curl -X POST \
+#   -u "$JENKINS_USER:$JENKINS_TOKEN" \
+#   "http://jenkins.example.com/job/my-project-$1/build"
+
+# --- scripts/deploy-ftp.sh ---
+# #!/bin/bash
+# # 使用 lftp 进行 FTP 上传（支持密码）
+# lftp -u "$FTP_USER,$FTP_PASS" "$FTP_HOST" <<EOF
+# set ssl:verify-certificate no
+# mirror -R dist /public_html/h5
+# bye
+# EOF
+
+# --- scripts/deploy-password-ssh.sh ---
+# #!/bin/bash
+# # 使用 sshpass 进行密码认证的 SSH 部署（需安装 sshpass）
+# # macOS: brew install sshpass
+# # Ubuntu: apt-get install sshpass
+# sshpass -p "$SSH_PASSWORD" scp -r dist/* "$SSH_USER@$SSH_HOST:$REMOTE_DIR/"
+# sshpass -p "$SSH_PASSWORD" ssh "$SSH_USER@$SSH_HOST" "sudo nginx -s reload"

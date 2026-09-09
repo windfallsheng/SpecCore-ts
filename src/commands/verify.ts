@@ -14,7 +14,7 @@
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration, getIterationDir } from '../core/context';
 import { pathExists, readFile, writeFile, ensureDir } from 'fs-extra';
-import { join, basename } from 'path';
+import { join, basename, isAbsolute } from 'path';
 import { scanTasks, TaskState } from '../core/state';
 import { resolveTask, formatResolveResult } from '../core/resolver';
 import { runVerification, writeVerifyReport, VerifyReport } from '../core/verify-engine';
@@ -71,6 +71,7 @@ interface VerifyOptions {
   visualOnly?: boolean;
   device?: string;
   updateBaseline?: boolean;
+  headed?: boolean;
   browser?: string;
   visualModel?: string;
   url?: string;
@@ -155,7 +156,7 @@ export async function verifyCommand(options: VerifyOptions): Promise<void> {
       codePath = options.path;
     } else {
       codePath = projectConfig.code_scope?.[0] || process.cwd();
-      if (!codePath.startsWith('/')) {
+      if (!isAbsolute(codePath)) {
         codePath = join(process.cwd(), codePath);
       }
     }
@@ -403,7 +404,7 @@ export async function runUIVerification(
         p => p.name === platformHint || taskDir.includes(p.name)
       );
       const codePath = platformConfig?.code_path
-        ? (platformConfig.code_path.startsWith('/')
+        ? (isAbsolute(platformConfig.code_path)
             ? platformConfig.code_path
             : join(process.cwd(), platformConfig.code_path))
         : null;
@@ -480,6 +481,7 @@ export async function runUIVerification(
     visualModel: options.visualModel
       ? parseVisualModelCli(options.visualModel)
       : qgConfig?.verify_ui.visual_model,
+    headed: options.headed ?? qgConfig?.verify_ui?.headed ?? false,
   };
 
   const startTime = Date.now();
@@ -494,6 +496,8 @@ export async function runUIVerification(
       browser: uiOptions.browsers?.[0] as 'chromium' | 'firefox' | 'webkit',
       device: uiOptions.devices?.[0],
       timeout: uiOptions.timeout,
+      executablePath: process.env.SPECCORE_BROWSER_PATH,
+      headless: !options.headed,
     });
   }
 
@@ -650,6 +654,8 @@ async function runTestConfigMode(options: VerifyOptions): Promise<void> {
         browser,
         device,
         timeout,
+        executablePath: process.env.SPECCORE_BROWSER_PATH,
+        headless: !options.headed,
       });
 
       let visualResults: import('../core/ui-verify').VisualResult[] = [];
@@ -818,6 +824,7 @@ async function runUIVerificationIndependent(options: VerifyOptions): Promise<UIV
     threshold: 'normal',
     timeout: options.timeout || 30000,
     visualModel: options.visualModel ? parseVisualModelCli(options.visualModel) : undefined,
+    headed: options.headed ?? false,
   };
 
   const startTime = Date.now();
@@ -831,6 +838,8 @@ async function runUIVerificationIndependent(options: VerifyOptions): Promise<UIV
       browser: uiOptions.browsers?.[0] as 'chromium' | 'firefox' | 'webkit',
       device: uiOptions.devices?.[0],
       timeout: uiOptions.timeout,
+      executablePath: process.env.SPECCORE_BROWSER_PATH,
+      headless: !options.headed,
     });
   }
 
@@ -1225,6 +1234,7 @@ async function runDiscoveredSpec(spec: VerifySpec, options: VerifyOptions): Prom
     threshold: 'normal',
     timeout: options.timeout || 30000,
     visualModel: options.visualModel ? parseVisualModelCli(options.visualModel) : undefined,
+    headed: options.headed ?? false,
   };
 
   logger.info('🔥 执行冒烟测试...');
@@ -1235,6 +1245,8 @@ async function runDiscoveredSpec(spec: VerifySpec, options: VerifyOptions): Prom
         browser: uiOptions.browsers?.[0] as 'chromium' | 'firefox' | 'webkit',
         device: uiOptions.devices?.[0],
         timeout: uiOptions.timeout,
+        executablePath: process.env.SPECCORE_BROWSER_PATH,
+        headless: !options.headed,
       });
 
   let visualResults: import('../core/ui-verify').VisualResult[] = [];

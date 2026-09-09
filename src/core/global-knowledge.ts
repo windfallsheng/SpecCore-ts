@@ -15,7 +15,7 @@
  */
 
 import { readFile, pathExists, readdir, writeFile, ensureDir, stat } from 'fs-extra';
-import { join } from 'path';
+import { join, basename, relative } from 'path';
 import { logger } from '../utils/logger';
 import { indexDirectoryDocuments, loadRagIndex, buildRagIndex, saveRagIndex } from './rag-engine';
 import { refreshKnowledgeGraph } from './knowledge-graph';
@@ -155,7 +155,7 @@ async function generateGlobalSummary(
   const issues: string[] = [];
 
   for (const { filePath, content } of files) {
-    const fileName = filePath.split('/').pop() || '';
+    const fileName = basename(filePath) || '';
 
     // 提取功能点（REQ.md / REQUIREMENT.md 中的 ### 标题）
     if (fileName.includes('REQ') || fileName.includes('REQUIREMENT')) {
@@ -244,8 +244,8 @@ ${uniqueIssues.length > 0
 
 ${files.length > 0
     ? files.map(f => {
-        const relPath = f.filePath.replace(cwd + '/', '');
-        return `- [${relPath.split('/').pop()}](${relPath})`;
+        const relPath = relative(cwd, f.filePath);
+        return `- [${basename(relPath)}](${relPath})`;
       }).join('\n')
     : '_暂无文档_'}
 

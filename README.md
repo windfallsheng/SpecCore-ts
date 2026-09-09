@@ -337,7 +337,7 @@ speccore status                                       # 查看分析进度和过
 
 ```bash
 npm install -g speccore
-speccore --version   # v8.3.75
+speccore --version   # v8.3.95
 ```
 
 ## 命令列表

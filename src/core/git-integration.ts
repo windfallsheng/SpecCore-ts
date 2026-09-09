@@ -197,7 +197,7 @@ export function loadSubtaskGitConfig(taskDir: string): Partial<GitConfig> {
     if (!existsSync(configPath)) return config;
     const rawContent = readFileSync(configPath, 'utf-8');
     // 过滤注释行和空行，只保留有效配置行
-    const content = rawContent.split('\n')
+    const content = rawContent.split(/\r?\n/)
       .filter(line => !line.trim().startsWith('#') && line.trim().length > 0)
       .join('\n');
 
@@ -354,7 +354,7 @@ export function detectDefaultBranch(iteration?: string, cwd?: string): string | 
 
   // 回退：git remote HEAD
   try {
-    const remote = execSync('git remote show origin 2>/dev/null', { cwd: gitCwd, encoding: 'utf-8' });
+    const remote = execSync('git remote show origin', { cwd: gitCwd, encoding: 'utf-8', stdio: 'pipe' });
     const headMatch = remote.match(/HEAD branch:\s*(\S+)/);
     if (headMatch) return headMatch[1];
   } catch {}
@@ -371,10 +371,12 @@ export function detectDefaultBranch(iteration?: string, cwd?: string): string | 
 
 /**
  * 获取当前分支关联的任务
+ * v8.3.88+: 支持 cwd 参数，工程目录分离场景下使用正确的 git 仓库
  */
-export function getCurrentTaskMapping(): { taskId: string; taskName: string } | null {
+export function getCurrentTaskMapping(cwd?: string): { taskId: string; taskName: string } | null {
+  const gitCwd = cwd || process.cwd();
   try {
-    const branch = execSync('git branch --show-current', { encoding: 'utf-8', stdio: 'pipe' }).trim();
+    const branch = execSync('git branch --show-current', { cwd: gitCwd, encoding: 'utf-8', stdio: 'pipe' }).trim();
     const mapping = loadMapping();
     return mapping[branch] || null;
   } catch {
@@ -384,11 +386,12 @@ export function getCurrentTaskMapping(): { taskId: string; taskName: string } | 
 
 /**
  * 生成 Commit 消息
+ * v8.3.88+: 支持 cwd 参数
  */
-export function generateCommitMessage(taskId: string, taskName: string, specs?: string[]): string {
+export function generateCommitMessage(taskId: string, taskName: string, specs?: string[], cwd?: string): string {
   const lines = [`feat(${taskId}): ${taskName}`, ''];
 
-  const changed = getChangedFiles();
+  const changed = getChangedFiles(cwd);
   if (changed.length > 0) {
     lines.push('变更文件:');
     for (const f of changed.slice(0, 10)) {
@@ -403,15 +406,15 @@ export function generateCommitMessage(taskId: string, taskName: string, specs?: 
 
 /**
  * 生成 PR 描述
+ * v8.3.88+: 支持 cwd 参数
  */
-export function generatePRDescription(taskId: string, taskName: string): string {
-  const taskDir = join(process.cwd(), `.speccore`);
+export function generatePRDescription(taskId: string, taskName: string, cwd?: string): string {
   const lines = [
     `## 关联任务`,
     `- ${taskId} ${taskName}`,
     '',
     '## 变更内容',
-    ...getChangedFiles().map((f) => `- [ ] ${f}`),
+    ...getChangedFiles(cwd).map((f) => `- [ ] ${f}`),
     '',
     '## 验收标准',
     '- [ ] AC-01: 功能正常',
@@ -465,9 +468,11 @@ export function isProtectedBranch(branchName: string): boolean {
 
 /**
  * 安装 Git Hooks
+ * v8.3.88+: 支持 cwd 参数，工程目录分离场景下在正确的 git 仓库安装
  */
-export function installGitHooks(): { preCommit: boolean; prePush: boolean } {
-  const gitDir = join(process.cwd(), '.git');
+export function installGitHooks(cwd?: string): { preCommit: boolean; prePush: boolean } {
+  const gitCwd = cwd || process.cwd();
+  const gitDir = join(gitCwd, '.git');
   if (!existsSync(gitDir)) {
     throw new Error('Not a Git repository');
   }
@@ -564,8 +569,10 @@ function saveMapping(mapping: GitMapping): void {
 /**
  * v8.3.7+: 根据 taskId 查找已创建的分支名
  * 查找顺序：1. git-mapping.json  2. git branch 列表
+ * v8.3.88+: 支持 cwd 参数，工程目录分离场景下使用正确的 git 仓库
  */
-export function findBranchByTaskId(taskId: string): string | null {
+export function findBranchByTaskId(taskId: string, cwd?: string): string | null {
+  const gitCwd = cwd || process.cwd();
   // 1. 从 git-mapping.json 查找
   const mapping = loadMapping();
   for (const [branch, info] of Object.entries(mapping)) {
@@ -574,8 +581,8 @@ export function findBranchByTaskId(taskId: string): string | null {
 
   // 2. 从 git branch 列表查找（匹配 feature/{taskId}-* 或 */{taskId}-*）
   try {
-    const branches = execSync('git branch -a', { encoding: 'utf-8', stdio: 'pipe' });
-    for (const line of branches.split('\n')) {
+    const branches = execSync('git branch -a', { cwd: gitCwd, encoding: 'utf-8', stdio: 'pipe' });
+    for (const line of branches.split(/\r?\n/)) {
       const b = line.trim().replace(/^\*?\s*/, '');
       // 匹配本地分支：feature/Task-001-xxx / bugfix/Task-001-xxx
       if (new RegExp(`(?:^|/)${taskId}[-_]`).test(b)) {
@@ -587,10 +594,11 @@ export function findBranchByTaskId(taskId: string): string | null {
   return null;
 }
 
-function getChangedFiles(): string[] {
+function getChangedFiles(cwd?: string): string[] {
+  const gitCwd = cwd || process.cwd();
   try {
-    const output = execSync('git diff --name-only HEAD', { encoding: 'utf-8', stdio: 'pipe' });
-    return output.trim().split('\n').filter(Boolean);
+    const output = execSync('git diff --name-only HEAD', { cwd: gitCwd, encoding: 'utf-8', stdio: 'pipe' });
+    return output.trim().split(/\r?\n/).filter(Boolean);
   } catch {
     return [];
   }

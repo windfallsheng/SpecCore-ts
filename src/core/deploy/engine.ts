@@ -312,6 +312,22 @@ async function deploySsh(
   const [, user, hostname, port] = hostMatch;
   const portOpt = port ? `-P ${port}` : '';
 
+  // 密码认证支持：检测 sshpass 是否可用
+  let passOpt = '';
+  if (config.password) {
+    try {
+      execSync('sshpass -V', { stdio: 'pipe' });
+      passOpt = `sshpass -p '${config.password.replace(/'/g, "'\"'\"'")}' `;
+    } catch {
+      throw new Error(
+        '密码认证需要安装 sshpass\n' +
+        '  macOS: brew install sshpass\n' +
+        '  Ubuntu/Debian: apt-get install sshpass\n' +
+        '  或使用密钥认证：配置 key 字段指向私钥路径'
+      );
+    }
+  }
+
   // 1. 构建
   if (!skipBuild && config.build_cmd) {
     logger.info(`  🔨 构建: ${config.build_cmd}`);
@@ -321,7 +337,7 @@ async function deploySsh(
   // 2. SCP 上传
   const outputDir = config.output_dir || 'dist';
   logger.info(`  📤 SCP 上传: ${outputDir} → ${host}:${remoteDir}`);
-  execSync(`scp -r ${portOpt} ${keyOpt} ${outputDir}/* ${user}@${hostname}:${remoteDir}/`, {
+  execSync(`${passOpt}scp -r ${portOpt} ${keyOpt} ${outputDir}/* ${user}@${hostname}:${remoteDir}/`, {
     stdio: 'inherit',
     cwd,
   });
@@ -329,7 +345,7 @@ async function deploySsh(
   // 3. SSH 执行重启命令
   const restartCmd = config.script || `sudo systemctl restart ${platform.name}`;
   logger.info(`  🔄 SSH 执行: ${restartCmd}`);
-  execSync(`ssh ${keyOpt} ${portOpt} ${user}@${hostname} "cd ${remoteDir} && ${restartCmd}"`, {
+  execSync(`${passOpt}ssh ${keyOpt} ${portOpt} ${user}@${hostname} "cd ${remoteDir} && ${restartCmd}"`, {
     stdio: 'inherit',
     cwd,
   });
@@ -450,6 +466,22 @@ async function deploySftp(
   const keyOpt = config.key ? `-i ${config.key}` : '';
   const remoteDir = config.remote_dir;
 
+  // 密码认证支持：检测 sshpass 是否可用
+  let passOpt = '';
+  if (config.password) {
+    try {
+      execSync('sshpass -V', { stdio: 'pipe' });
+      passOpt = `sshpass -p '${config.password.replace(/'/g, "'\"'\"'")}' `;
+    } catch {
+      throw new Error(
+        '密码认证需要安装 sshpass\n' +
+        '  macOS: brew install sshpass\n' +
+        '  Ubuntu/Debian: apt-get install sshpass\n' +
+        '  或使用密钥认证：配置 key 字段指向私钥路径'
+      );
+    }
+  }
+
   // 1. 构建
   if (!skipBuild && config.build_cmd) {
     logger.info(`  🔨 构建: ${config.build_cmd}`);
@@ -461,5 +493,5 @@ async function deploySftp(
   // 2. SFTP 上传（使用 sftp 命令）
   logger.info(`  📤 SFTP 上传: ${outputDir} → ${host}:${remoteDir}`);
   const sftpScript = `put -r ${outputDir}/* ${remoteDir}/`;
-  execSync(`echo "${sftpScript}" | sftp ${keyOpt} ${host}`, { stdio: 'inherit', cwd });
+  execSync(`${passOpt}echo "${sftpScript}" | sftp ${keyOpt} ${host}`, { stdio: 'inherit', cwd });
 }

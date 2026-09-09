@@ -351,7 +351,7 @@ async function analyzeCombined(input: AnalyzeInput): Promise<AnalysisResult> {
   for (const reqPath of input.requirements) {
     if (await pathExists(reqPath)) {
       const raw = await readFile(reqPath, 'utf-8');
-      const fname = reqPath.split('/').pop() || reqPath;
+      const fname = basename(reqPath) || reqPath;
       // 将原文档 ##/### 标题下推一级 (##→###, ###→####)，源文件名作为 ## 标题
       const normalized = raw.replace(/^(#{2,3})\s/gm, '#$1 ');
       const sourced = `## 📄 ${fname}\n\n${normalized}`;
@@ -479,7 +479,7 @@ async function scanSourceDirs(sources: string[], depth: string): Promise<SourceS
       try {
         const content = await readFile(filePath, 'utf-8');
         const lines = content.split('\n').length;
-        const dir = srcDir.split('/').pop() || srcDir;
+        const dir = basename(srcDir) || srcDir;
 
         stats.totalFiles++;
         stats.totalLines += lines;

@@ -700,7 +700,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         if (level !== 'high') {
           needsClarify = true;
           clarifyTargets.push({ path: reqPath, level });
-          logger.warn(`   ⚠️  需求文档质量${level.toUpperCase()}: ${reqPath.replace(iterDir + '/', '')}`);
+          logger.warn(`   ⚠️  需求文档质量${level.toUpperCase()}: ${relative(iterDir!, reqPath)}`);
         }
       }
       if (needsClarify) {
@@ -954,6 +954,29 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       }
     }
 
+    // v8.3.94+: 多子任务分析支持
+    const targetTasks = await resolveTargetTasks(options);
+    if (targetTasks.length > 1) {
+      logger.info(`🔄 批量分析 ${targetTasks.length} 个子任务: ${targetTasks.join(', ')}`);
+      const prompts: string[] = [];
+      for (let i = 0; i < targetTasks.length; i++) {
+        const taskId = targetTasks[i];
+        const singlePrompt = await buildMultiDocPrompt('analyze', {
+          iteration: iter, task: taskId, type: options.type,
+          scope: options.scope, withCode: options.withCode,
+          platform: options.platform, phase: options.phase, autoMode: options.auto,
+        }, options);
+        prompts.push(`<!-- ═══════════════════════════════════════════ -->
+<!-- 任务 ${i + 1}/${targetTasks.length}: ${taskId} -->
+<!-- ═══════════════════════════════════════════ -->
+${singlePrompt}`);
+      }
+      const mergedPrompt = `# 批量分析 ${targetTasks.length} 个子任务\n\n请分别为以下每个任务生成分析文档。每个任务之间用分隔线隔开。\n\n${prompts.join('\n\n---\n\n')}`;
+      process.stdout.write(`[SPECCORE_PROMPT]\n${mergedPrompt}`);
+      process.exitCode = 10;
+      return;
+    }
+
     const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task, type: options.type, scope: options.scope, withCode: options.withCode, platform: options.platform, phase: options.phase, autoMode: options.auto }, options);
     process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
     process.exitCode = 10;
@@ -979,6 +1002,18 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     const isGlobalScope = options.scope === 'global';
     if (!isGlobalScope && !options.iteration) { logger.error('--apply 需要 --iteration'); return; }
     const iterDir = isGlobalScope ? undefined : await getIterationDir(options.iteration!);
+
+    // v8.3.94+: 多子任务 apply 检测
+    if (options.task && options.task.includes(',')) {
+      logger.error('❌ --apply 模式下暂不支持多任务批量写入');
+      logger.info('   请逐个任务执行 apply：');
+      const taskIds = parseTaskIds(options.task);
+      for (const taskId of taskIds) {
+        logger.info(`      speccore analyze --apply '<JSON>' -I ${options.iteration} --task ${taskId}`);
+      }
+      return;
+    }
+
     const isTaskLevel = !isGlobalScope && !!options.task;
     let taskDir: string | null = null;
     if (isTaskLevel) {
@@ -1001,7 +1036,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         const fp = join(goldenDir, basename(filename));
         await ensureDir(dirname(fp));
         await writeFile(fp, finalContent);
-        logger.info(`   ✅ 澄清文档已写入: ${fp.replace(process.cwd() + '/', '')}`);
+        logger.info(`   ✅ 澄清文档已写入: ${relative(process.cwd(), fp)}`);
       }
       logger.info('');
     }
@@ -1060,7 +1095,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
             const bk = await backupWithTimestamp(fp);
             if (bk) {
               backups.push(bk);
-              logger.info(`   📦 ${filename} 旧版已备份: ${bk.split('/').pop()}`);
+              logger.info(`   📦 ${filename} 旧版已备份: ${basename(bk)}`);
             }
             await writeFile(fp, content);
             count++;
@@ -1128,7 +1163,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
             const bk = await backupWithTimestamp(fp);
             if (bk) {
               backups.push(bk);
-              logger.info(`   📦 ${filename} 旧版已备份: ${bk.split('/').pop()}`);
+              logger.info(`   📦 ${filename} 旧版已备份: ${basename(bk)}`);
             }
             await writeFile(fp, content);
             count++;
@@ -1250,7 +1285,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
                 const fp = join(targetDir, parts.slice(1).join('/'));
                 if (!(await shouldOverwrite(fp, !!options.interactive))) { logger.info(`   ⏭️  跳过: ${filename}`); continue; }
                 const bk = await backupWithTimestamp(fp);
-                if (bk) { backups.push(bk); logger.info(`   📦 ${filename} 旧版已备份: ${bk.split('/').pop()}`); }
+                if (bk) { backups.push(bk); logger.info(`   📦 ${filename} 旧版已备份: ${basename(bk)}`); }
                 await writeFile(fp, content);
                 count++;
                 continue;
@@ -1264,7 +1299,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
                   const fp = join(targetDir, parts[parts.length - 1]);
                   if (!(await shouldOverwrite(fp, !!options.interactive))) { logger.info(`   ⏭️  跳过: ${filename}`); continue; }
                   const bk = await backupWithTimestamp(fp);
-                  if (bk) { backups.push(bk); logger.info(`   📦 ${filename} 旧版已备份: ${bk.split('/').pop()}`); }
+                  if (bk) { backups.push(bk); logger.info(`   📦 ${filename} 旧版已备份: ${basename(bk)}`); }
                   await writeFile(fp, content);
                   count++;
                   continue;
@@ -1309,7 +1344,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
             const bk = await backupWithTimestamp(fp);
             if (bk) {
               backups.push(bk);
-              logger.info(`   📦 ${filename} 旧版已备份: ${bk.split('/').pop()}`);
+              logger.info(`   📦 ${filename} 旧版已备份: ${basename(bk)}`);
             }
             await writeFile(fp, content);
             count++;
@@ -1484,7 +1519,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
             const fp = join(taskSpecDir, filename);
             if (!(await shouldOverwrite(fp, !!options.interactive))) { logger.info(`   ⏭️  跳过: ${filename}`); continue; }
             const bk = await backupWithTimestamp(fp);
-            if (bk) { backups.push(bk); logger.info(`   📦 ${filename} 旧版已备份: ${bk.split('/').pop()}`); }
+            if (bk) { backups.push(bk); logger.info(`   📦 ${filename} 旧版已备份: ${basename(bk)}`); }
             await writeFile(fp, content);
             count++;
           }
@@ -1534,7 +1569,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
             const fp = join(targetDir, targetFilename);
             if (!(await shouldOverwrite(fp, !!options.interactive))) { logger.info(`   ⏭️  跳过: ${filename}`); continue; }
             const bk = await backupWithTimestamp(fp);
-            if (bk) { backups.push(bk); logger.info(`   📦 ${filename} 旧版已备份: ${bk.split('/').pop()}`); }
+            if (bk) { backups.push(bk); logger.info(`   📦 ${filename} 旧版已备份: ${basename(bk)}`); }
             await writeFile(fp, content);
             count++;
           }
@@ -1622,7 +1657,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
             const fp = join(targetDir, cleanFilename);
             if (!(await shouldOverwrite(fp, !!options.interactive))) { logger.info(`   ⏭️  跳过: ${filename}`); continue; }
             const bk = await backupWithTimestamp(fp);
-            if (bk) { backups.push(bk); logger.info(`   📦 ${filename} 旧版已备份: ${bk.split('/').pop()}`); }
+            if (bk) { backups.push(bk); logger.info(`   📦 ${filename} 旧版已备份: ${basename(bk)}`); }
             await writeFile(fp, content);
             count++;
           }
@@ -2210,7 +2245,7 @@ async function enrichTaskDocs(iteration: string, taskId: string, reqFiles: strin
       if (items.length > 0) {
         testContent += `\n\n---\n\n## 补充分析\n${items.join('\n')}\n`;
         await writeFile(testPath, testContent);
-        logger.info(`   📄 更新 ${testPath.replace(fullTaskDir + '/', '')}`);
+        logger.info(`   📄 更新 ${relative(fullTaskDir, testPath)}`);
       }
     }
   }
@@ -2235,7 +2270,7 @@ async function enrichTaskDocs(iteration: string, taskId: string, reqFiles: strin
       if (items.length > 0) {
         reviewContent += `\n\n---\n\n## 本任务专项检查\n${items.join('\n')}\n`;
         await writeFile(reviewPath, reviewContent);
-        logger.info(`   📄 更新 ${reviewPath.replace(fullTaskDir + '/', '')}`);
+        logger.info(`   📄 更新 ${relative(fullTaskDir, reviewPath)}`);
       }
     }
   }
@@ -2260,7 +2295,7 @@ async function enrichTaskDocs(iteration: string, taskId: string, reqFiles: strin
       const fp = join(subtaskDir, filename);
       if (!(await pathExists(fp))) {
         await writeFile(fp, content);
-        logger.info(`   📄 创建 ${fp.replace(fullTaskDir + '/', '')}`);
+        logger.info(`   📄 创建 ${relative(fullTaskDir, fp)}`);
       }
     }
   }
@@ -2362,7 +2397,7 @@ interface FunctionMapValidationResult {
 function validateFunctionMap(content: string, validPlatforms: string[]): FunctionMapValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
-  const lines = content.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const lines = content.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
 
   // 1. 查找表格
   const tableLines = lines.filter(l => l.startsWith('|'));
@@ -4397,7 +4432,7 @@ status: "clarified"
         if (summaryMatch) {
           prompt += `## 📋 需求文档质量声明\n\n`;
           prompt += `> 以下评价基于 Phase 0 需求澄清结果\n\n`;
-          prompt += summaryMatch[0].split('\n').slice(0, 12).join('\n'); // 取汇总表前12行
+          prompt += summaryMatch[0].split(/\r?\n/).slice(0, 12).join('\n'); // 取汇总表前12行
           prompt += `\n\n`;
           // 检测是否有遗留问题
           const hasIssues = report.includes('待澄清') || report.includes('❌');
@@ -5618,7 +5653,7 @@ export async function extractIterationUnits(iterDir: string): Promise<IterationU
 
   for (const file of reqFiles) {
     const content = await readFile(file, 'utf-8');
-    const lines = content.split('\n');
+    const lines = content.split(/\r?\n/);
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const headingMatch = line.match(/^#{2,3}\s+(.+)$/);
@@ -5706,7 +5741,7 @@ export async function consolidateUnitAnalyses(
   lines.push('');
   for (const a of analyses) {
     lines.push(`### ${a.id} ${a.name}`);
-    lines.push(a.req.split('\n').slice(0, 5).join('\n'));
+    lines.push(a.req.split(/\r?\n/).slice(0, 5).join('\n'));
     lines.push('');
   }
   lines.push('');
@@ -5849,4 +5884,140 @@ ${ctxResult.context}
 `;
 
   return prompt.trim();
+}
+
+// ═══════════════════════════════════════════════════════════
+// 多子任务分析支持（v8.3.94+）
+// ═══════════════════════════════════════════════════════════
+
+/** 解析逗号分隔的任务 ID */
+function parseTaskIds(taskOpt: string): string[] {
+  return taskOpt
+    .split(',')
+    .map(t => t.trim())
+    .filter(Boolean)
+    .map(t => t.startsWith('Task-') ? t : `Task-${t}`);
+}
+
+/**
+ * 根据过滤条件扫描迭代目录下的任务
+ * 支持: status:doing | owner:张三 | type:feature | platform:web | keyword:auth
+ */
+async function filterTasks(iterDir: string, filter: string): Promise<string[]> {
+  const tasksDir = join(iterDir, '030-tasks');
+  if (!await pathExists(tasksDir)) return [];
+
+  const entries = await readdir(tasksDir, { withFileTypes: true });
+  const taskDirs = entries.filter(e => e.isDirectory() && e.name.startsWith('Task-')).map(e => e.name);
+  if (taskDirs.length === 0) return [];
+
+  const matched: string[] = [];
+
+  for (const taskId of taskDirs) {
+    const taskDir = join(tasksDir, taskId);
+    const metaDir = join(taskDir, '.meta');
+
+    // 解析过滤条件
+    const filterLower = filter.toLowerCase();
+
+    // 1. 状态过滤: status:doing
+    if (filterLower.startsWith('status:')) {
+      const statusFile = join(metaDir, 'status');
+      if (await pathExists(statusFile)) {
+        const status = (await readFile(statusFile, 'utf-8')).trim().toLowerCase();
+        if (status === filterLower.slice(7).trim()) matched.push(taskId);
+      }
+      continue;
+    }
+
+    // 2. 负责人过滤: owner:张三
+    if (filterLower.startsWith('owner:')) {
+      const ownerFile = join(metaDir, 'owner');
+      if (await pathExists(ownerFile)) {
+        const owner = (await readFile(ownerFile, 'utf-8')).trim();
+        if (owner.includes(filter.slice(6).trim())) matched.push(taskId);
+      }
+      continue;
+    }
+
+    // 3. 类型过滤: type:feature
+    if (filterLower.startsWith('type:')) {
+      const typeFile = join(metaDir, 'type');
+      if (await pathExists(typeFile)) {
+        const type = (await readFile(typeFile, 'utf-8')).trim().toLowerCase();
+        if (type === filterLower.slice(5).trim()) matched.push(taskId);
+      }
+      continue;
+    }
+
+    // 4. 端过滤: platform:web
+    if (filterLower.startsWith('platform:')) {
+      const targetPlat = filterLower.slice(9).trim();
+      try {
+        const subEntries = await readdir(taskDir, { withFileTypes: true });
+        const hasPlatform = subEntries.some(e =>
+          e.isDirectory() &&
+          !e.name.startsWith('.') &&
+          e.name !== '_shared' &&
+          e.name !== '00-specs' &&
+          e.name.toLowerCase().includes(targetPlat)
+        );
+        if (hasPlatform) matched.push(taskId);
+      } catch { /* ignore */ }
+      continue;
+    }
+
+    // 5. 关键词过滤: keyword:auth（或无前缀的默认行为）
+    const keyword = filterLower.startsWith('keyword:') ? filterLower.slice(8).trim() : filterLower;
+    // 检查任务目录名、feature 名、TASK.md 内容
+    let hasKeyword = taskId.toLowerCase().includes(keyword);
+    if (!hasKeyword) {
+      const featureFile = join(metaDir, 'feature');
+      if (await pathExists(featureFile)) {
+        const feature = (await readFile(featureFile, 'utf-8')).trim().toLowerCase();
+        if (feature.includes(keyword)) hasKeyword = true;
+      }
+    }
+    if (!hasKeyword) {
+      const taskMd = join(taskDir, '00-specs', 'REQ.md');
+      if (await pathExists(taskMd)) {
+        const content = (await readFile(taskMd, 'utf-8')).toLowerCase();
+        if (content.includes(keyword)) hasKeyword = true;
+      }
+    }
+    if (hasKeyword) matched.push(taskId);
+  }
+
+  return matched;
+}
+
+/**
+ * 综合解析目标任务列表
+ * - 优先使用 options.task（支持逗号分隔）
+ * - 其次使用 options.filter 自动发现
+ */
+async function resolveTargetTasks(options: AnalyzeOptions): Promise<string[]> {
+  // 1. 直接指定多个任务
+  if (options.task && options.task.includes(',')) {
+    return parseTaskIds(options.task);
+  }
+
+  // 2. 单任务
+  if (options.task) {
+    const taskId = options.task.startsWith('Task-') ? options.task : `Task-${options.task}`;
+    return [taskId];
+  }
+
+  // 3. 通过 filter 自动发现
+  if (options.filter && options.iteration) {
+    const iterDir = await getIterationDir(options.iteration);
+    const matched = await filterTasks(iterDir, options.filter);
+    if (matched.length > 0) {
+      logger.info(`🔍 filter "${options.filter}" 匹配到 ${matched.length} 个任务: ${matched.join(', ')}`);
+      return matched;
+    }
+    logger.warn(`⚠️ filter "${options.filter}" 未匹配到任何任务`);
+  }
+
+  return [];
 }

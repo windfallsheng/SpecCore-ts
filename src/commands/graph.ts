@@ -11,7 +11,7 @@
  */
 import { logger } from '../utils/logger';
 import { writeFile } from 'fs-extra';
-import { join, basename, extname, dirname } from 'path';
+import { join, basename, extname, dirname, isAbsolute } from 'path';
 import {
   loadKnowledgeGraph,
   type KnowledgeGraph,
@@ -316,7 +316,7 @@ export async function graphRenderCommand(
 
   // 模式2: 从 Markdown 提取并渲染
   if (options.extract && filePath) {
-    const fullPath = filePath.startsWith('/') ? filePath : join(cwd, filePath);
+    const fullPath = isAbsolute(filePath) ? filePath : join(cwd, filePath);
     logger.info(`\n🎨 从 Markdown 提取 Mermaid: ${fullPath}\n`);
 
     const html = await renderFromMarkdown(fullPath, { outputDir });
@@ -331,7 +331,7 @@ export async function graphRenderCommand(
 
   // 模式3: 渲染单个 .mmd 文件
   if (filePath) {
-    const fullPath = filePath.startsWith('/') ? filePath : join(cwd, filePath);
+    const fullPath = isAbsolute(filePath) ? filePath : join(cwd, filePath);
     logger.info(`\n🎨 渲染 Mermaid: ${fullPath}\n`);
 
     const html = await renderMmdFile(fullPath, { outputDir });

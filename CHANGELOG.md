@@ -1,3 +1,222 @@
+## v8.3.95 (2026-09-09) — 冒烟测试引擎全面增强
+
+### 新增
+
+**Playwright 浏览器内网兼容（v8.3.95）**:
+- 自动探测本机系统浏览器（Chrome/Edge），无需 `npx playwright install` 即可在内网运行
+- 支持 `SPECCORE_BROWSER_PATH` 环境变量手动指定浏览器路径
+- 浏览器未安装时给出三种清晰方案（在线安装 / 系统浏览器 / 离线搬运）
+- **影响文件**：`src/core/ui-verify/smoke-engine.ts`
+
+**有头模式 `--headed`（v8.3.95）**:
+- `speccore verify --ui --headed` 弹出真实浏览器窗口，方便调试
+- **影响文件**：`src/cli.ts`、`src/commands/verify.ts`、`src/core/ui-verify/smoke-engine.ts`
+
+**登录态注入操作（v8.3.95）**:
+- `cookie` 操作：注入 Cookie 跳过登录页（支持 name/value/domain/path/secure/httpOnly）
+- `localStorage` 操作：注入 Token 等前端存储
+- `script` 操作：执行自定义 JS（处理万能验证码、特殊交互等）
+- **影响文件**：`src/core/ui-verify/types.ts`、`src/core/ui-verify/smoke-engine.ts`
+
+**滚动与上传操作（v8.3.95）**:
+- `scroll` 操作：滚动到元素、滚动到页面底部、滚动到指定像素位置
+- `upload` 操作：文件上传（`input[type=file]`）
+- **影响文件**：`src/core/ui-verify/types.ts`、`src/core/ui-verify/smoke-engine.ts`
+
+**样式断言 `style`（v8.3.95）**:
+- 验证元素 CSS 样式（如 `background-color`、`display`、`cursor`）
+- 支持 `value` 精确匹配和 `contains` 包含匹配
+- **影响文件**：`src/core/ui-verify/smoke-engine.ts`
+
+**iframe 上下文切换（v8.3.95）**:
+- `iframe` 操作：切换进入 iframe（CSS 选择器 / frame name / URL 片段）
+- `value: main` 切回主文档
+- 切换后所有操作和断言自动在 iframe 内执行
+- **影响文件**：`src/core/ui-verify/smoke-engine.ts`、`src/core/ui-verify/types.ts`
+
+**网络请求等待（v8.3.95）**:
+- `waitForRequest`：等待指定 URL 模式的请求发出
+- `waitForResponse`：等待指定 URL 模式的请求响应完成
+- 支持 glob 匹配（如 `**/api/login`）
+- **影响文件**：`src/core/ui-verify/smoke-engine.ts`、`src/core/ui-verify/types.ts`
+
+**拖拽操作 `drag`（v8.3.95）**:
+- `drag` 操作：源元素 `selector` → 目标元素 `toSelector`
+- 底层使用 Playwright `locator.dragTo()`
+- **影响文件**：`src/core/ui-verify/smoke-engine.ts`、`src/core/ui-verify/types.ts`
+
+**键盘组合键（v8.3.95）**:
+- `press` 操作支持组合键：`Control+a`、`Control+Shift+A`、`Enter` 等
+- 有 `selector` 时在元素上按键，无 `selector` 时在全局键盘按键
+- **影响文件**：`src/core/ui-verify/smoke-engine.ts`
+
+** headed 配置项（v8.3.95）**:
+- `.speccore.yml` 中 `quality_gates.verify_ui.headed` 支持配置级有头模式
+- 命令行 `--headed` 优先于配置
+- **影响文件**：`src/core/unified-config.ts`、`src/core/quality-gate.ts`、`src/core/ui-verify/types.ts`、`src/commands/verify.ts`
+
+**Ask 引擎补充 verify 命令（v8.3.95）**:
+- `COMMAND_KB` 新增 `verify` 条目，支持 `vf` 别名
+- 同义词表扩展：`冒烟`、`smoke`、`跑测试`、`测一下` 等 → `verify`
+- explain 模式支持 verify 命令解释
+- **影响文件**：`src/core/ask-engine.ts`
+
+---
+
+## v8.3.94 (2026-09-09) — 视觉模型图片理解 + 多子任务批量分析
+
+### 新增
+
+**视觉模型图片理解（v8.3.94）**:
+- 问题：specs 文档中的 `![alt](path)` 图片信息无法被 AI 理解，AI 只能看到 alt 文本和路径
+- 解决方案：
+  - 新增 `src/core/vision-engine.ts` — 视觉模型调用引擎，支持 qwen-vl / openai (gpt-4o) / anthropic (claude-3) / local (ollama/lmstudio)
+  - `inlineMarkdownImages()` 在启用视觉模型时，对 PNG/JPG/GIF/WebP 等位图调用视觉模型 API 生成文本描述并注入 prompt
+  - SVG 图片仍直接 inline XML 文本（无需视觉模型）
+  - 成本控制：每个 prompt 默认最多处理 10 张图片，超过则回退到 alt+路径信息
+  - 配置入口：`.speccore.yml` 中 `settings.vision` 或 `quality_gates.verify_ui.visual_model`
+  - 默认关闭，需显式启用：
+    ```yaml
+    settings:
+      vision:
+        enabled: true
+        provider: qwen-vl
+        model: qwen-vl-plus
+        apiKey: ${DASHSCOPE_API_KEY}
+        maxImagesPerPrompt: 10
+        imageMaxSizeKb: 2048
+    ```
+  - API Key 支持环境变量：`DASHSCOPE_API_KEY`、`OPENAI_API_KEY`、`ANTHROPIC_API_KEY`
+- **影响文件**：`src/core/vision-engine.ts`、`src/core/prompt-builder.ts`、`src/core/unified-config.ts`
+
+**多子任务批量分析（v8.3.94）**:
+- 问题：`speccore analyze --task` 只支持单个子任务，无法一次性分析多个任务
+- 解决方案：
+  - `--task` 参数支持逗号分隔多个任务：`--task Task-001,Task-002,Task-003`
+  - `--filter` 参数增强，支持按元信息自动发现并批量分析任务：
+    - `status:doing` — 按 .meta/status 过滤（todo/doing/done）
+    - `owner:张三` — 按 .meta/owner 过滤
+    - `type:feature` — 按 .meta/type 过滤（feature/bugfix/refactor/research）
+    - `platform:web` — 按端目录过滤
+    - `keyword:auth` 或 `auth` — 按关键词过滤（任务名、feature、REQ.md 内容）
+  - `--prompt` 模式下，多任务生成合并 prompt，AI 可一次性分析所有任务
+  - `--apply` 模式保持单任务（提示用户逐个执行）
+- **影响文件**：`src/commands/analyze.ts`
+
+## v8.3.93 (2026-09-09) — Markdown 链接自动展开 + 图片提取
+
+### 新增
+
+**Markdown 链接自动展开（v8.3.93）**:
+- 问题：specs 文档中的 `[文本](路径)` 链接指向的文件不会被自动读取，AI 只能看到路径文本，无法获取链接内容
+- 解决方案：
+  - 新增 `extractMarkdownLinks()` / `expandMarkdownLinks()` 函数（`src/core/prompt-builder.ts`）
+  - 读取 .md 文件后自动扫描其中所有本地链接，读取链接指向的文件内容并 inline 到 prompt 中
+  - 支持递归展开（最多 2 层深度），防循环检测（通过 `seenPaths` Set）
+  - 支持 HTML 链接文件（自动调用 `extractHtmlText()` 提取文本）
+  - 外部链接（http://、mailto: 等）和锚点（#）自动过滤
+
+**Markdown 图片提取（v8.3.93）**:
+- 问题：specs 文档中的 `![alt](路径)` 图片信息完全丢失，AI 不知道页面有什么图
+- 解决方案：
+  - 新增 `extractMarkdownImages()` / `inlineMarkdownImages()` 函数
+  - SVG 图片直接 inline 其 XML 文本内容（AI 可理解矢量图形结构）
+  - PNG/JPG/GIF/WebP 等位图提取 alt 文本、路径、文件大小信息注入 prompt
+  - 外部图片 URL 记录 alt + URL
+
+**统一处理入口 `processMarkdownContent()`**：
+- 在 `loadExtraSpecs`（白名单文件 + 用户自定义文件）和 `loadAllTaskContext`（addFile）中集成
+- 所有加载到 prompt 中的 .md 文件都会自动经过链接展开和图片提取
+- **影响文件**：`src/core/prompt-builder.ts`
+
+## v8.3.92 (2026-09-09) — HTML 原型文件文本提取支持
+
+### 新增
+
+**HTML 原型文件直接读取（v8.3.92）**:
+- 问题：`010-requirements/prototypes/` 下的 HTML 原型文件之前被完全排除，AI 无法获取其中的页面结构、交互元素、样式信息
+- 解决方案：
+  - 新增 `extractHtmlText()` 函数（`src/core/rag-engine.ts`）— 从 HTML 提取纯文本，保留语义信息
+  - 提取策略：去掉 script/style 标签 → 保留 alt/title/placeholder 属性值 → 去掉 HTML 标签 → 转换 HTML 实体 → 压缩空白
+  - RAG 索引构建 `indexDirectoryDocuments` 支持扫描 `.html` 和 `.htm` 文件
+  - prompt-builder 的 `loadExtraSpecs` / `loadAllTaskContext` / `scanUserCustomFiles` 均支持加载 HTML 文件
+- **影响文件**：`src/core/rag-engine.ts`、`src/core/prompt-builder.ts`
+
+## v8.3.91 (2026-09-09) — 部署配置示例 + SSH/SFTP 密码认证支持
+
+### 新增
+
+**部署配置示例文件（v8.3.91）**:
+- 新增 `templates/deploy-examples.yaml` — 包含 10 种部署类型的完整配置示例
+- 覆盖场景：SSH（密钥/密码）、SFTP、静态资源（local/S3/rsync）、自定义脚本（Jenkins/FTP）、Docker、PM2、K8s、Helm、Vercel、Serverless
+- 每种类型均标注适用场景、必填字段、认证方式说明
+
+**SSH/SFTP 密码认证支持（v8.3.91）**:
+- `DeployEnvConfig` 新增 `password` 字段
+- `deploySsh` 和 `deploySftp` 函数支持密码认证，通过 `sshpass` 工具实现
+- 未安装 `sshpass` 时给出清晰的安装指引（macOS/Ubuntu/Debian）
+- **影响文件**：`src/core/unified-config.ts`、`src/core/deploy/engine.ts`
+
+## v8.3.90 (2026-09-09) — 全项目跨平台兼容性修复（Windows/macOS/Linux）
+
+### 修复
+
+**硬编码路径分隔符 `split('/')`（v8.3.90）**:
+- 根因：全项目 40+ 处使用 `path.split('/').pop()` 获取文件名、`path.replace(dir + '/', '')` 生成相对路径，在 Windows 下路径分隔符为 `\`，这些操作全部失效
+- 修复方案：
+  - 文件名提取：统一替换为 Node.js 跨平台的 `path.basename()`
+  - 相对路径生成：统一替换为 `path.relative(from, to)`
+  - 路径段分割（构造路径）：保留 `split('/')`，文件系统路径改为 `split(/[\\/]/)`
+- **影响文件**（20+ 个）：`src/commands/{execute,iteration/split,analyze,merge-check,init,update,change,clarify,cleanup,doc2spec,pr}.ts`、`src/core/{knowledge-graph,semantic-locator,prompt-builder,code-scanner,requirement-clarifier,global-knowledge,index-guard,pattern-detector,git-integration,perf-verify/engine}.ts`
+
+**换行符处理 `split('\n')`（v8.3.90）**:
+- 根因：Windows 使用 `\r\n`（CRLF）作为换行符，全项目 60+ 处 `.split('\n')` 在 Windows 上会留下 `\r` 残差，导致字符串匹配失败
+- 修复方案：所有文本内容分割统一替换为 `.split(/\r?\n/)`，兼容 LF 和 CRLF
+- **影响文件**（同上 20+ 个）
+
+**Shell 重定向 `2>/dev/null`（v8.3.90）**:
+- 根因：Unix shell 重定向语法 `2>/dev/null` 在 Windows cmd.exe/PowerShell 中不支持，导致 `execSync` 抛出异常
+- 修复方案：移除所有 `2>/dev/null`，改用 `stdio: 'pipe'` + `try/catch` 包裹
+- **影响文件**：`src/commands/{merge-check,init,update}.ts`、`src/core/{git-integration,code-scanner}.ts`
+
+**Unix 专用命令兼容性（v8.3.90）**:
+- `speccore --version 2>/dev/null || echo "0.0.0"` → 移除管道符，改为纯命令 + try/catch（`init.ts`、`update.ts`）
+- `execSync(metric.command)` → 增加 `shell` 选项，支持 Windows 管道和重定向（`perf-verify/engine.ts`）
+
+## v8.3.89 (2026-09-09) — Windows 兼容修复 + YAML 数组解析修复
+
+### 修复
+
+**Windows 路径重复拼接（v8.3.89）**:
+- 根因：全项目使用 `startsWith('/')` 判断绝对路径，在 Windows 下 `D:\project\src` 被误判为相对路径，与 `process.cwd()` 拼接后产生 `D:\cwd\D:\project\src`
+- 修复方案：所有文件路径绝对性判断统一替换为 Node.js 跨平台的 `path.isAbsolute()`
+- **影响文件**：`src/commands/{config,current,execute,graph,merge-check,pr,verify}.ts`、`src/commands/iteration/split.ts`、`src/core/{knowledge-graph,perf-verify/engine,semantic-locator,ui-verify/route-scanner}.ts`
+
+**YAML 数组解析失败（v8.3.89）**:
+- 根因：手写 `parseYaml` 解析器遇到 `protected_branches:` 时创建空对象 `{}` 而非空数组 `[]`，后续 `- main` 元素因 `parent` 非数组被 `continue` 跳过
+- 修复方案：`parseYaml` 增加前瞻性检测 — 遇到 `key:` 时查看后续同层级行是否以 `- ` 开头，是则创建数组 `[]`
+- **影响文件**：`src/core/unified-config.ts`
+
+## v8.3.88 (2026-09-09) — 全量 git 操作 cwd 修复（工程目录分离兼容）
+
+### 修复
+
+**全量 git 操作支持工程目录分离（v8.3.88）**:
+- 系统性修复所有 `execSync('git ...')` 未传 `cwd` 的问题，确保 speccore 与工程代码分目录时，git 操作在正确工程目录执行
+- **核心模块修复**：
+  - `src/core/git-integration.ts`：所有函数新增 `cwd?: string` 参数（`createTaskBranch`、`detectDefaultBranch`、`getCurrentTaskMapping`、`findBranchByTaskId`、`generateCommitMessage`、`generatePRDescription`、`installGitHooks`）
+  - `src/core/change-detection.ts`：所有函数新增 `cwd?: string` 参数（`getChangedFiles`、`getChangedFilesBetween`、`getUntrackedFiles`、`getCurrentCommitHash`、`getCurrentBranch`、`recordAnalysisSnapshot`、`getIncrementalChangedFiles`、`detectAffectedPlatforms`）
+- **命令层修复**：
+  - `src/commands/pr.ts`：response / force / CLI 默认三种模式的所有 git 命令（`diff`、`add`、`commit`、`branch`、`push`、`checkout`）及 `createPullRequest` / `mergePullRequest` 调用均传递 `gitCwd`
+  - `src/commands/current.ts`：`currentCommand` 改为 async，计算 `gitCwd` 后传给内部 git 函数
+  - `src/commands/execute.ts`：`prepareTaskBranch` 计算 `gitCwd` 传给 `createTaskBranch` 和 `findBranchByTaskId`；`detectDependencyBase` 新增 `cwd` 参数
+  - `src/commands/config.ts`：`installHooks` 计算 `gitCwd` 传给 `installGitHooks`
+  - `src/commands/merge-check.ts`：`mergeCheck`、`rollbackTask` 计算 `gitCwd`，所有 git 命令传 cwd
+- **工程目录推断逻辑（统一四级回退）**：
+  1. `PROJECT.yaml` 中第一个有 `code_path` 的平台目录
+  2. `PROJECT.yaml` 中 `code_scope[0]`
+  3. `process.cwd()`
+
 ## v8.3.87 (2026-09-09) — execute 分支创建支持工程目录分离（git cwd 修复）
 
 ### 修复

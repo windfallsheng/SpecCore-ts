@@ -1,5 +1,5 @@
 import { pathExists, readFile, writeFile, ensureDir, readdir } from 'fs-extra';
-import { join, dirname } from 'path';
+import { join, dirname, isAbsolute, relative } from 'path';
 import { createInterface } from 'readline';
 import { readdirSync } from 'fs';
 import { execSync } from 'child_process';
@@ -504,11 +504,11 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
     const pc = await loadProjectConfig();
     const firstPlatformWithPath = pc.platforms.find((p) => p.code_path);
     if (firstPlatformWithPath?.code_path) {
-      defaultGitCwd = firstPlatformWithPath.code_path.startsWith('/')
+      defaultGitCwd = isAbsolute(firstPlatformWithPath.code_path)
         ? firstPlatformWithPath.code_path
         : join(process.cwd(), firstPlatformWithPath.code_path);
     } else if (pc.code_scope?.[0]) {
-      defaultGitCwd = pc.code_scope[0].startsWith('/')
+      defaultGitCwd = isAbsolute(pc.code_scope[0])
         ? pc.code_scope[0]
         : join(process.cwd(), pc.code_scope[0]);
     }
@@ -1244,7 +1244,7 @@ async function preFlightCheck(tasks: TaskState[], iteration: string, options: Ex
       process.stdin.resume();
       process.stdin.once('data', (data: Buffer) => {
         process.stdin.pause();
-        resolve(data.toString().split('\n')[0].trim());
+        resolve(data.toString().split(/\r?\n/)[0].trim());
       });
     });
   };
@@ -1504,14 +1504,14 @@ async function prepareTaskBranch(
     if (platformNames.length === 1) {
       const platform = projectConfig.platforms.find((p) => p.name === platformNames[0]);
       if (platform?.code_path) {
-        gitCwd = platform.code_path.startsWith('/') ? platform.code_path : join(process.cwd(), platform.code_path);
+        gitCwd = isAbsolute(platform.code_path) ? platform.code_path : join(process.cwd(), platform.code_path);
       }
     } else if (platformNames.length > 1) {
       // 多平台任务：优先找有 code_path 的 platform
       for (const pn of platformNames) {
         const platform = projectConfig.platforms.find((p) => p.name === pn);
         if (platform?.code_path) {
-          gitCwd = platform.code_path.startsWith('/') ? platform.code_path : join(process.cwd(), platform.code_path);
+          gitCwd = isAbsolute(platform.code_path) ? platform.code_path : join(process.cwd(), platform.code_path);
           logger.info(`  ℹ️ 多平台任务，使用第一个有 code_path 的平台 (${pn}): ${gitCwd}`);
           break;
         }
@@ -1519,7 +1519,7 @@ async function prepareTaskBranch(
     }
     // 回退：code_scope 第一个路径
     if (gitCwd === process.cwd() && projectConfig.code_scope?.[0]) {
-      gitCwd = projectConfig.code_scope[0].startsWith('/')
+      gitCwd = isAbsolute(projectConfig.code_scope[0])
         ? projectConfig.code_scope[0]
         : join(process.cwd(), projectConfig.code_scope[0]);
     }
@@ -1566,7 +1566,7 @@ async function prepareTaskBranch(
     try {
       if (require('fs').existsSync(impactPath)) {
         const impact = require('fs').readFileSync(impactPath, 'utf-8');
-        for (const line of impact.split('\n')) {
+        for (const line of impact.split(/\r?\n/)) {
           if (line.includes('→') && line.includes(task.id)) {
             const match = line.match(/→\s*\|\s*([^|]+)/);
             if (match) {
@@ -1589,7 +1589,7 @@ async function prepareTaskBranch(
     let source = '当前会话';
 
     if (!depBranch) {
-      depBranch = findBranchByTaskId(depId) || undefined;
+      depBranch = findBranchByTaskId(depId, gitCwd) || undefined;
       source = 'git-mapping / branch 列表';
     }
 
@@ -1612,13 +1612,14 @@ async function prepareTaskBranch(
 /**
  * 从 IMPACT.md 检测任务依赖，返回应作为 base 的依赖任务 ID
  */
-async function detectDependencyBase(iteration: string, taskId: string): Promise<string | undefined> {
+async function detectDependencyBase(iteration: string, taskId: string, cwd?: string): Promise<string | undefined> {
   const impactPath = join(await getIterationDir(iteration), 'IMPACT.md');
   if (!(await pathExists(impactPath))) return undefined;
 
   const impact = await readFile(impactPath, 'utf-8');
-  const lines = impact.split('\n');
-  
+  const lines = impact.split(/\r?\n/);
+  const gitCwd = cwd || process.cwd();
+
   // Parse: | Task-002: 订单导出 | → | Task-001: 用户管理 | `/api/users` |
   for (const line of lines) {
     if (line.includes('→') && line.includes(taskId)) {
@@ -1629,8 +1630,8 @@ async function detectDependencyBase(iteration: string, taskId: string): Promise<
         logger.info(`   🎯 自动从分支 feature/${depTaskId}-* 创建（避免实体重复）`);
         // Find actual branch name matching this task
       try {
-        const branches = execSync('git branch', { encoding: 'utf-8' });
-        const branchMatch = branches.split('\n').find((b: string) => b.trim().startsWith(`feature/${depTaskId}-`));
+        const branches = execSync('git branch', { cwd: gitCwd, encoding: 'utf-8' });
+        const branchMatch = branches.split(/\r?\n/).find((b: string) => b.trim().startsWith(`feature/${depTaskId}-`));
         if (branchMatch) {
           const actualBranch = branchMatch.trim().replace(/^\*?\s*/, '');
           return actualBranch || `feature/${depTaskId}`;
@@ -1724,7 +1725,7 @@ async function executionVerifyLoop(
   const config = await loadConfig();
   const projectConfig = await loadProjectConfig();
   const codePath = projectConfig.code_scope?.[0] || process.cwd();
-  const absCodePath = codePath.startsWith('/') ? codePath : join(process.cwd(), codePath);
+  const absCodePath = isAbsolute(codePath) ? codePath : join(process.cwd(), codePath);
 
   for (const task of tasks) {
     logger.info(`\n🔍 验证 ${task.id}...`);
@@ -1849,7 +1850,7 @@ async function executionVerifyLoop(
         const reviewContent = await readFile(reviewPath, 'utf-8');
         const total = (reviewContent.match(/\[[ x]\]/g) || []).length;
         const doneR = (reviewContent.match(/\[x\]/gi) || []).length;
-        const label = reviewPath.replace(taskDir + '/', '');
+        const label = relative(taskDir, reviewPath);
         if (doneR < total) {
           logger.info(`   📋 ${label}: ${doneR}/${total} 通过`);
           if (round === maxRounds) logger.warn(`   ⚠️ 仍有 ${total - doneR} 项未审查`);
@@ -1873,7 +1874,7 @@ async function executionVerifyLoop(
         const depContent = await readFile(deployPath, 'utf-8');
         const total = (depContent.match(/\[[ x]\]/g) || []).length;
         const doneD = (depContent.match(/\[x\]/g) || []).length;
-        const label = deployPath.replace(taskDir + '/', '');
+        const label = relative(taskDir, deployPath);
         if (doneD < total) {
           logger.info(`   🚀 ${label}: ${doneD}/${total} 通过`);
           allPassed = false;
@@ -2284,6 +2285,22 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
 // ═══════════════════════════════════════════════════════════
 
 async function runApplyMode(iteration: string, options: ExecuteOptions): Promise<void> {
+  // v8.3.88+: 确定工程代码目录
+  let gitCwd = process.cwd();
+  try {
+    const pc = await loadProjectConfig();
+    const firstPlatformWithPath = pc.platforms.find((p) => p.code_path);
+    if (firstPlatformWithPath?.code_path) {
+      gitCwd = isAbsolute(firstPlatformWithPath.code_path)
+        ? firstPlatformWithPath.code_path
+        : join(process.cwd(), firstPlatformWithPath.code_path);
+    } else if (pc.code_scope?.[0]) {
+      gitCwd = isAbsolute(pc.code_scope[0])
+        ? pc.code_scope[0]
+        : join(process.cwd(), pc.code_scope[0]);
+    }
+  } catch {}
+
   // 检查是否有活跃的 Pipeline（在 Pipeline 模式下应用响应）
   if (options.pipeline) {
     const hasPipeline = await PipelineEngine.hasActivePipeline(process.cwd(), iteration);
@@ -2389,7 +2406,7 @@ async function runApplyMode(iteration: string, options: ExecuteOptions): Promise
   logger.info(`   📂 位置: ${iterDir}/`);
 
   // v6.69.1: 记录任务执行快照，支持下次增量检测
-  await recordAnalysisSnapshot(`Task-${task}`);
+  await recordAnalysisSnapshot(`Task-${task}`, gitCwd);
 
   // ── 执行后总结 ──
   outputPostSummary(iteration, task, writtenCount, parsed.files.map(f => f.path));

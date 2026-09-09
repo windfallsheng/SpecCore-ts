@@ -174,6 +174,7 @@ function specToYaml(spec: VerifySpec): string {
       lines.push(`      - type: ${a.type}`);
       if (a.selector) lines.push(`        selector: ${a.selector}`);
       if (a.value) lines.push(`        value: ${a.value}`);
+      if (a.toSelector) lines.push(`        toSelector: ${a.toSelector}`);
       if (a.delay) lines.push(`        delay: ${a.delay}`);
       if (a.key) lines.push(`        key: ${a.key}`);
       if (a.waitFor) lines.push(`        waitFor: ${a.waitFor}`);

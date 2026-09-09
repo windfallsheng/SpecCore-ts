@@ -5082,3 +5082,178 @@ const { config, warnings, migrated } = await loadConfigWithMeta();
 ```
 
 `getConfig()` 作为 `loadConfig()` 的别名保留，供旧代码使用。
+
+---
+
+## 附录：v8.3.93+ Prompt 构建层增强设计
+
+### A.1 Markdown 链接自动展开（v8.3.93）
+
+**问题**：specs 文档中 `[文本](路径)` 链接指向的上下文文件不会被 AI 读取，AI 只能看到路径文本，无法获取链接内容。
+
+**设计原则**：
+- 在 prompt 构建阶段（`prompt-builder.ts`）而非文件写入阶段处理
+- 递归展开，但严格限深（默认 2 层），防止内容爆炸
+- 防循环检测（`seenPaths` Set），避免 A→B→A 死循环
+- 单个链接内容截断（默认 1500 字符），防止单链接占用过多 token
+
+**技术实现**：
+```
+loadExtraSpecs / loadAllTaskContext
+    ↓
+processMarkdownContent(content, filePath, seenPaths, visionConfig, options)
+    ↓
+expandMarkdownLinks(content, baseDir, seenPaths, maxDepth=2, currentDepth=0, maxChars=1500)
+    ↓
+逐链接读取 → HTML 提取文本 → 截断 → inline 到 prompt
+```
+
+**Edge Case 处理**：
+- 外部链接（http/mailto/#）自动跳过
+- 文件不存在或读取失败静默忽略
+- 循环引用（已访问路径）自动跳过
+- 内容过短（≤30 字符）不展开
+
+### A.2 图片理解与视觉模型（v8.3.94）
+
+**问题**：`![alt](path)` 图片对 AI 不可见（纯文本 prompt），设计稿截图等信息丢失。
+
+**分层策略**：
+
+| 图片类型 | 处理方式 | 成本 |
+|----------|----------|------|
+| SVG | 直接 inline XML 文本 | 零 |
+| PNG/JPG/GIF/WebP | 视觉模型生成描述文本 | 按次计费 |
+
+**视觉模型引擎设计**（`vision-engine.ts`）：
+- **Provider 抽象**：qwen-vl / openai (gpt-4o) / anthropic (claude-3) / local (ollama)
+- **成本控制**：每个 prompt 默认最多处理 10 张图片，超过自动回退到 alt+路径信息
+- **大小限制**：默认 2048 KB，超过则跳过
+- **配置入口**：`.speccore.yml` 中 `settings.vision`（优先）或 `quality_gates.verify_ui.visual_model`（兼容回退）
+- **默认关闭**：未配置时完全跳过，零成本
+
+**Prompt 集成**：
+```
+inlineMarkdownImages(content, baseDir, seenPaths, visionConfig)
+    ↓
+对于每张位图图片：
+    if visionConfig.enabled && visionCallCount < maxImagesPerPrompt
+        → 调用 describeImage() → 注入 "[图片内容] 描述文本"
+    else
+        → 注入 "图片: alt | 路径: path | 大小: xKB"
+```
+
+### A.3 多子任务批量分析（v8.3.94）
+
+**问题**：`speccore analyze --task` 只支持单个子任务，无法一次性分析多个相关任务。
+
+**设计决策**：
+- `--prompt` 模式支持批量：生成合并 prompt，AI 可一次性分析所有任务
+- `--apply` 模式保持单任务：批量写入涉及文件路由和覆盖逻辑，暂不支持
+
+**过滤系统**：
+```
+--filter status:doing     → 扫描 .meta/status 文件
+--filter owner:张三        → 扫描 .meta/owner 文件
+--filter type:feature     → 扫描 .meta/type 文件
+--filter platform:web     → 扫描端目录名
+--filter keyword:auth     → 扫描任务名/feature/REQ.md 内容
+```
+
+**实现要点**：
+- 过滤基于文件系统扫描（`.meta/` 目录），不依赖外部数据库
+- 多个过滤条件可以组合（逻辑 AND）
+- 未匹配到任务时优雅降级为迭代级分析
+
+### A.4 Playwright 浏览器检测（v8.3.94）
+
+**问题**：`playwright` npm 包安装后，浏览器二进制文件需额外 `npx playwright install` 下载。用户直接运行冒烟测试时遇到晦涩的原生错误。
+
+**设计**：在 `launchBrowser()` 中先调用 `browserType.executablePath()` 检测浏览器是否存在，不存在时抛出带安装指引的友好错误：
+```
+Playwright 浏览器 "chromium" 未安装。
+
+请执行以下命令安装（一次性）：
+  npx playwright install chromium
+
+或安装所有浏览器：
+  npx playwright install
+```
+
+**原则**：在错误发生点给出可操作的修复指引，而非让原生错误层层上抛。
+
+---
+
+## 附录：v8.3.95 冒烟测试引擎设计
+
+### A.5 Playwright 内网兼容与浏览器自动探测
+
+**问题**：内网环境无法连接 Playwright CDN 下载浏览器二进制，`npx playwright install` 永远超时。
+
+**设计决策**：
+- 三层探测策略（优先级递减）：
+  1. `SPECCORE_BROWSER_PATH` 环境变量（用户手动指定）
+  2. Playwright 自带浏览器（已执行 `npx playwright install`）
+  3. 本机系统浏览器（自动探测 Chrome/Edge）
+- 按平台维护候选路径列表（Windows/macOS/Linux）
+- 探测失败时给出三种可操作的修复方案（在线安装 / 系统浏览器 / 离线搬运）
+
+**实现**：`launchBrowser()` 中先调用 `browserType.executablePath()` 检测自带浏览器，失败则调用 `findSystemBrowser()` 扫描候选路径。
+
+### A.6 有头模式 `--headed`
+
+**问题**：无头模式下调试困难，用户看不到浏览器实际执行过程。
+
+**设计**：CLI 新增 `--headed` 选项，通过 `headless: !options.headed` 传入 `launchBrowser()`。默认保持无头（CI 友好）。
+
+### A.7 声明式操作扩展（cookie / localStorage / script / scroll / upload）
+
+**设计原则**：所有操作保持声明式 YAML 配置，无需用户编写 JS。
+
+| 操作 | 用途 | 关键字段 |
+|------|------|----------|
+| `cookie` | 注入登录态 Cookie | selector=name, value, domain, path, secure, httpOnly |
+| `localStorage` | 注入 Token | selector=key, value |
+| `script` | 执行自定义 JS（验证码绕过等） | value=JS 代码 |
+| `scroll` | 滚动到元素/位置 | selector 或 value（像素/bottom） |
+| `upload` | 文件上传 | selector=input[type=file], value=文件路径 |
+
+**实现要点**：
+- `cookie` → `page.context().addCookies()`
+- `localStorage` → `page.evaluate()` 注入 `window.localStorage.setItem()`
+- `script` → `page.evaluate()` 执行 `eval(code)`
+- `scroll` → `page.evaluate()` 调用 `scrollIntoView()` 或 `window.scrollTo()`
+- `upload` → `page.locator().setInputFiles()`
+
+### A.8 样式断言 `style`
+
+**问题**：需要验证按钮禁用状态、错误提示颜色等 CSS 样式变化，原有断言无法覆盖。
+
+**设计**：新增 `style` 断言类型，通过 `window.getComputedStyle()` 获取实际计算样式，支持 `value` 精确匹配和 `contains` 包含匹配。
+
+**示例**：
+```yaml
+- type: style
+  selector: '.submit-btn'
+  style: background-color
+  contains: 'rgb(255, 0, 0)'
+```
+
+### A.9 能力矩阵
+
+| 场景 | 操作/断言 | 状态 |
+|------|----------|------|
+| 页面加载 | navigate + wait + visible | ✅ |
+| 表单交互 | fill / click / select / check | ✅ |
+| 登录态注入 | cookie / localStorage | ✅ |
+| 验证码绕过 | script | ✅ |
+| 长列表滚动 | scroll | ✅ |
+| 文件上传 | upload | ✅ |
+| 样式验证 | style | ✅ |
+| 视觉回归 | visual | ✅ |
+| iframe 内操作 | iframe | ✅ |
+| 网络请求等待 | waitForRequest / waitForResponse | ✅ |
+| 拖拽排序 | drag | ✅ |
+| 键盘组合键 | press (Control+a 等) | ✅ |
+
+**覆盖结论**：后台管理系统（缴费/表单/列表/上传/弹窗/iframe/拖拽）的常规功能已全部覆盖。

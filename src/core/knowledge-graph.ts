@@ -6,7 +6,7 @@
  */
 
 import { readFile, writeFile, pathExists, readdir, ensureDir, stat } from 'fs-extra';
-import { join, relative } from 'path';
+import { join, relative, isAbsolute, basename } from 'path';
 import { createHash } from 'crypto';
 import { getIterationDir, getDefaultIteration } from './context';
 import { findTaskDir, TASK_TYPES } from './task-paths';
@@ -378,7 +378,7 @@ async function scanBusinessCodeMappings(iterDir: string): Promise<{
     const sectionContent = mappingSectionMatch[0];
 
     // 解析表格
-    const lines = sectionContent.split('\n');
+    const lines = sectionContent.split(/\r?\n/);
     let inTable = false;
     let headerParsed = false;
     let colIndices = { module: -1, entity: -1, relation: -1, desc: -1 };
@@ -779,7 +779,7 @@ function extractSemanticFromCode(content: string, filePath: string, exports: str
   }
 
   // 3. 从文件名推断语义标签
-  const fileName = filePath.split('/').pop() || '';
+  const fileName = basename(filePath) || '';
   const nameLower = fileName.toLowerCase();
   const pathLower = filePath.toLowerCase();
 
@@ -920,7 +920,7 @@ async function scanSourceFiles(cwd: string): Promise<{ entities: GraphEntity[]; 
       entities.push({
         id,
         type: 'source-file',
-        title: f.path.split('/').pop() || f.path,
+        title: basename(f.path) || f.path,
         file: f.path,
         hash: '',
         mtime: new Date(f.lastModified || 0).toISOString(),
@@ -1089,7 +1089,7 @@ async function scanTaskSpecs(iterDir: string): Promise<{ entities: GraphEntity[]
   const taskDirs = await findTaskDirs(tasksDir);
 
   for (const taskDir of taskDirs) {
-    const taskId = taskDir.split('/').pop() || '';
+    const taskId = basename(taskDir) || '';
     const subDirs: string[] = ['_shared', '00-specs'];
     // 新结构: 10-backend/{service}/{subtask}/ + 20-frontend/{platform}/{subtask}/
     const nestedSubDirs: string[] = [];
@@ -1299,7 +1299,7 @@ async function inferRelations(entities: GraphEntity[], iterDir: string): Promise
       const content = await readFile(impactPath, 'utf-8');
       // 解析 Dependencies 表格：| Consumer | → | Producer | 类型 |
       // 格式：| Task-002: 订单导出 | → | Task-001: 用户管理 | API: `/api/users` |
-      const lines = content.split('\n');
+      const lines = content.split(/\r?\n/);
       let inDepsSection = false;
       for (const line of lines) {
         if (line.includes('## Dependencies')) { inDepsSection = true; continue; }
@@ -1739,7 +1739,7 @@ async function getSourceMtimes(
       const srcMatches = constContent.matchAll(/源码路径[：:]\s*`?([^`\n]+)`?/g);
       for (const m of srcMatches) {
         const srcPath = m[1].trim();
-        const absPath = srcPath.startsWith('/') ? srcPath : join(cwd, srcPath);
+        const absPath = isAbsolute(srcPath) ? srcPath : join(cwd, srcPath);
         if (await pathExists(absPath)) {
           const mtime = await getLatestMtime(absPath);
           if (mtime > sourceLatest) sourceLatest = mtime;
@@ -1776,10 +1776,7 @@ function getEntitySource(entity: GraphEntity, iterDir: string): string | null {
   return null;
 }
 
-/** 从 basename 导入 */
-function basename(p: string): string {
-  return p.split(/[\\/]/).pop() || p;
-}
+
 
 /**
  * 增量更新知识图谱（v8.2.0+）

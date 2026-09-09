@@ -173,6 +173,8 @@ speccore analyze --full              # 全量分析（原 synthesize）
 speccore analyze --auto              # 全自动分析（经过 AI，不交互）
 speccore analyze --auto --platform admin  # 只分析指定端
 speccore analyze --task Task-001     # 任务级深度分析（split 后执行）
+speccore analyze --task Task-001,Task-002,Task-003  # 批量分析多个子任务（v8.3.94+）
+speccore analyze --filter status:doing               # 按状态自动发现并批量分析（v8.3.94+）
 speccore analyze --global --withCode # 全局代码分析（四层扫描+功能模块驱动）
 speccore analyze --clarify           # 需求专业度检测，口语化时自动澄清
 speccore analyze --dev-guide         # 分析同时生成 DEV_GUIDE.md 开发者实现指南
@@ -218,6 +220,15 @@ speccore analyze --global --withCode
 **任务级深度分析（v6.44.0+）**：
 
 split 后，每个 Task 的 00-specs/ 已有基础内容（机械提取）。执行 `analyze --task` 时，AI Read 这些内容 + global/ 全局上下文 + {端}/ 专属上下文，重新生成任务级深度分析。
+
+**多子任务批量分析（v8.3.94+）**：
+- `--task Task-001,Task-002,Task-003`：同时分析多个子任务，生成合并 prompt
+- `--filter status:doing`：按 .meta/status 自动发现并批量分析（支持 todo/doing/done）
+- `--filter owner:张三`：按 .meta/owner 自动发现并批量分析
+- `--filter type:feature`：按 .meta/type 自动发现并批量分析（feature/bugfix/refactor/research）
+- `--filter platform:web`：按端目录自动发现并批量分析
+- `--filter keyword:auth`：按关键词（任务名/feature/REQ.md 内容）自动发现并批量分析
+- `--apply` 模式暂不支持多任务批量写入，需逐个任务执行
 
 - 文档集按任务类型区分：feature → REQ/TECH/TASK/SCHEMA，bugfix → REQ/TECH
 - 链式生成：文档按依赖顺序逐个生成，通过图谱 RAG 智能检索相关内容（不是无脑全读）
@@ -492,6 +503,37 @@ speccore deploy --env production --platform h5 --dry-run
 
 **说明**：部署端到指定环境。支持 `--dry-run` 预览、`--skip-build` 跳过构建、`--branch` 切换分支。
 
+**部署配置参考**（PROJECT.yaml / .speccore/environments/{env}.yaml）：
+
+| 字段 | 类型 | 必填 | 说明 |
+|:---|:---|:---|:---|
+| `type` | string | 是 | 部署类型：`ssh` `sftp` `static` `script` `docker` `pm2` `k8s` `helm` `vercel` `serverless` |
+| `build_cmd` | string | 否 | 构建命令，如 `npm run build` |
+| `output_dir` | string | 否 | 构建输出目录，默认 `dist` |
+| `host` | string | ssh/sftp/pm2 远程时 | 服务器地址，格式 `user@host:port`（port 可选） |
+| `key` | string | 否 | SSH 私钥路径，默认 `~/.ssh/id_rsa` |
+| `password` | string | 否 | SSH/SFTP 密码（v8.3.91+，需安装 `sshpass`） |
+| `remote_dir` | string | ssh/sftp 时 | 服务器上的部署目录 |
+| `script` | string | 否 | 部署后执行的命令或脚本路径 |
+| `target` | string | static/k8s/helm/serverless 时 | 目标路径/namespace/函数名 |
+| `dockerfile` | string | docker 时否 | Dockerfile 路径，默认 `./Dockerfile` |
+| `registry` | string | docker 时否 | 镜像仓库地址 |
+| `image` | string | docker 时否 | 镜像名，默认使用端名 |
+| `tag` | string | docker 时否 | 镜像标签，默认使用环境名 |
+| `pm2_config` | string | pm2 时否 | PM2 配置文件，默认 `ecosystem.config.js` |
+| `provider` | string | serverless 时否 | 提供商：`aliyun-fc` `aws-lambda` `tencent-scf` |
+| `pre_deploy` | string[] | 否 | 部署前执行的命令列表 |
+| `post_deploy` | string[] | 否 | 部署后执行的命令列表 |
+
+**配置示例文件**：`templates/deploy-examples.yaml`（包含 10 种部署类型的完整示例）
+
+**SSH 密码认证**（v8.3.91+）：
+- 优先使用密钥认证（更安全）
+- 如需密码认证，先安装 `sshpass`：
+  - macOS: `brew install sshpass`
+  - Ubuntu/Debian: `apt-get install sshpass`
+- 然后配置 `password` 字段即可
+
 ---
 
 ## 测试命令（v8.3.60+）
@@ -501,6 +543,7 @@ speccore deploy --env production --platform h5 --dry-run
 speccore verify --ui                                    # 启用 UI 验证
 speccore verify --ui --smoke-only                       # 仅冒烟测试
 speccore verify --ui --visual-only                      # 仅视觉检查
+speccore verify --ui --headed                           # 有头模式（显示浏览器窗口，v8.3.95+）
 speccore verify --config ./tests/smoke.yaml             # 配置驱动测试
 speccore verify --config ./tests/smoke.yaml --env-file test   # 合并环境配置
 speccore verify --api-contract                          # API 契约测试
@@ -527,6 +570,35 @@ speccore verify --project-dir ~/projects/other-app --config ./tests/smoke.yaml
 **分层测试策略**：`--stage` 一键执行对应层级的测试组合，无需记忆复杂参数。
 
 **外部项目测试**：`--project-dir` 全局选项，所有命令自动继承，测试能力可用于任意外部项目。
+
+**浏览器内网兼容（v8.3.95+）**：
+- 内网环境无需 `npx playwright install`，自动探测本机 Chrome/Edge
+- 手动指定：`SPECCORE_BROWSER_PATH=/usr/bin/google-chrome speccore verify --ui`
+- 未检测到浏览器时给出三种方案：在线安装 / 系统浏览器 / 离线搬运
+
+**VERIFY_SPEC.yaml 操作与断言（v8.3.95+）**：
+
+| 操作 | 说明 | 示例 |
+|------|------|------|
+| `fill` / `click` / `select` / `check` | 表单交互 | `type: fill, selector: '#name', value: admin` |
+| `navigate` / `wait` / `screenshot` | 页面控制 | `type: navigate, value: /login` |
+| `cookie` | 注入 Cookie（跳过登录） | `type: cookie, selector: sessionId, value: xxx, domain: 172.16.10.189` |
+| `localStorage` | 注入 Token | `type: localStorage, selector: token, value: eyJhbG...` |
+| `script` | 执行自定义 JS | `type: script, value: "document.querySelector('#captcha').value='888888'"` |
+| `scroll` | 滚动（元素/底部/像素） | `type: scroll, selector: '.btn'` 或 `value: bottom` |
+| `upload` | 文件上传 | `type: upload, selector: 'input[type=file]', value: /path/file.pdf` |
+| `iframe` | 切换 iframe 上下文（v8.3.95+） | `type: iframe, selector: '#frame'` 或 `value: main`（切回） |
+| `waitForRequest` | 等待网络请求发出（v8.3.95+） | `type: waitForRequest, value: '**/api/login'` |
+| `waitForResponse` | 等待网络请求响应（v8.3.95+） | `type: waitForResponse, value: '**/api/login'` |
+| `drag` | 拖拽排序（v8.3.95+） | `type: drag, selector: '.item-1', toSelector: '.item-3'` |
+| `press` | 按键（支持组合键） | `type: press, selector: '#input', key: Control+a` |
+
+| 断言 | 说明 | 示例 |
+|------|------|------|
+| `visible` / `hidden` | 元素显示状态 | `type: visible, selector: '#app'` |
+| `text` / `value` / `url` / `count` / `attribute` | 内容验证 | `type: text, selector: 'h1', contains: 员工缴费` |
+| `style` | CSS 样式验证（v8.3.95+） | `type: style, selector: '.btn', style: background-color, contains: 'rgb(255,0,0)'` |
+| `visual` | 视觉对比（需配置视觉模型） | `type: visual, threshold: normal` |
 
 ### 🧠 knowledge — 知识图谱可视化与代码图谱查询
 ```bash

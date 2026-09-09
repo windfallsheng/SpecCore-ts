@@ -3,13 +3,13 @@
  * 🔒 AI 命令，通过 --prompt/--response 协作
  */
 import { readFile, pathExists, writeFile } from 'fs-extra';
-import { join } from 'path';
+import { join, isAbsolute } from 'path';
 import { execSync } from 'child_process';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration, getIterationDir } from '../core/context';
 import { buildPrompt, formatPrompt } from '../core/prompt-builder';
 import { isProtectedBranch } from '../core/git-integration';
-import { loadConfig } from '../core/unified-config';
+import { loadConfig, loadProjectConfig } from '../core/unified-config';
 import { loadTaskQualityGate, mergeQualityGate, shouldRunUIVerify } from '../core/quality-gate';
 // v6.86.0+: AGENTS 全阶段扩展
 import { resolveAgentsForPhase } from '../core/agents';
@@ -137,9 +137,10 @@ function detectGitPlatformCLI(): { platform: GitPlatform; cli: string | null } {
 }
 
 /** 从 git remote url 判断平台 */
-function detectPlatformFromRemote(): GitPlatform {
+function detectPlatformFromRemote(cwd?: string): GitPlatform {
+  const gitCwd = cwd || process.cwd();
   try {
-    const remote = execSync('git remote get-url origin', { encoding: 'utf-8', stdio: 'pipe' }).trim();
+    const remote = execSync('git remote get-url origin', { cwd: gitCwd, encoding: 'utf-8', stdio: 'pipe' }).trim();
     if (remote.includes('github.com')) return 'github';
     if (remote.includes('gitlab')) return 'gitlab';
     if (remote.includes('gitee.com')) return 'github'; // gitee 兼容 gh 的部分操作
@@ -150,9 +151,10 @@ function detectPlatformFromRemote(): GitPlatform {
 }
 
 /** 创建 Pull Request */
-async function createPullRequest(base: string, title: string, draft?: boolean): Promise<{ success: boolean; url?: string; message: string }> {
+async function createPullRequest(base: string, title: string, draft?: boolean, cwd?: string): Promise<{ success: boolean; url?: string; message: string }> {
+  const gitCwd = cwd || process.cwd();
   const { platform, cli } = detectGitPlatformCLI();
-  const detected = platform || detectPlatformFromRemote();
+  const detected = platform || detectPlatformFromRemote(gitCwd);
 
   if (!cli) {
     return {
@@ -172,6 +174,7 @@ async function createPullRequest(base: string, title: string, draft?: boolean): 
       ];
       if (draft) args.push('--draft');
       const result = execSync(`gh ${args.map((a) => `"${a.replace(/"/g, '\\"')}"`).join(' ')}`, {
+        cwd: gitCwd,
         encoding: 'utf-8',
         stdio: 'pipe',
       });
@@ -189,6 +192,7 @@ async function createPullRequest(base: string, title: string, draft?: boolean): 
       ];
       if (draft) args.push('--draft');
       const result = execSync(`glab ${args.map((a) => `"${a.replace(/"/g, '\\"')}"`).join(' ')}`, {
+        cwd: gitCwd,
         encoding: 'utf-8',
         stdio: 'pipe',
       });
@@ -203,7 +207,8 @@ async function createPullRequest(base: string, title: string, draft?: boolean): 
 }
 
 /** 合并 Pull Request */
-async function mergePullRequest(auto?: boolean): Promise<{ success: boolean; message: string }> {
+async function mergePullRequest(auto?: boolean, cwd?: string): Promise<{ success: boolean; message: string }> {
+  const gitCwd = cwd || process.cwd();
   const { platform, cli } = detectGitPlatformCLI();
 
   if (!cli) {
@@ -217,12 +222,12 @@ async function mergePullRequest(auto?: boolean): Promise<{ success: boolean; mes
     if (cli === 'gh') {
       const args = ['pr', 'merge', '--squash', '--delete-branch'];
       if (auto) args.push('--auto');
-      execSync(`gh ${args.join(' ')}`, { stdio: 'pipe' });
+      execSync(`gh ${args.join(' ')}`, { cwd: gitCwd, stdio: 'pipe' });
       return { success: true, message: auto ? '已启用自动合并' : 'PR 已合并' };
     }
 
     if (cli === 'glab') {
-      execSync('glab mr merge --squash --remove-source-branch', { stdio: 'pipe' });
+      execSync('glab mr merge --squash --remove-source-branch', { cwd: gitCwd, stdio: 'pipe' });
       return { success: true, message: 'MR 已合并' };
     }
 
@@ -233,9 +238,25 @@ async function mergePullRequest(auto?: boolean): Promise<{ success: boolean; mes
 }
 
 export async function prCommand(options: PrOptions): Promise<void> {
+  // v8.3.88+: 确定工程代码目录
+  let gitCwd = process.cwd();
+  try {
+    const pc = await loadProjectConfig();
+    const firstPlatformWithPath = pc.platforms.find((p) => p.code_path);
+    if (firstPlatformWithPath?.code_path) {
+      gitCwd = isAbsolute(firstPlatformWithPath.code_path)
+        ? firstPlatformWithPath.code_path
+        : join(process.cwd(), firstPlatformWithPath.code_path);
+    } else if (pc.code_scope?.[0]) {
+      gitCwd = isAbsolute(pc.code_scope[0])
+        ? pc.code_scope[0]
+        : join(process.cwd(), pc.code_scope[0]);
+    }
+  } catch {}
+
   // ── 独立合并模式 ──
   if (options.merge && !options.force && !options.response && !options.prompt) {
-    const result = await mergePullRequest(options.autoMerge);
+    const result = await mergePullRequest(options.autoMerge, gitCwd);
     if (result.success) {
       logger.success(`✅ ${result.message}`);
     } else {
@@ -252,9 +273,9 @@ export async function prCommand(options: PrOptions): Promise<void> {
     const taskId = options.task || 'current';
 
     // 收集变更信息
-    const changedFiles = execSync('git diff --name-only HEAD', { encoding: 'utf-8' }).trim();
-    const stagedFiles = execSync('git diff --cached --name-only', { encoding: 'utf-8' }).trim();
-    const diff = execSync('git diff HEAD', { encoding: 'utf-8', maxBuffer: 50 * 1024 * 1024 }).trim();
+    const changedFiles = execSync('git diff --name-only HEAD', { cwd: gitCwd, encoding: 'utf-8' }).trim();
+    const stagedFiles = execSync('git diff --cached --name-only', { cwd: gitCwd, encoding: 'utf-8' }).trim();
+    const diff = execSync('git diff HEAD', { cwd: gitCwd, encoding: 'utf-8', maxBuffer: 50 * 1024 * 1024 }).trim();
 
     // 读取分析文档
     let analysis = '';
@@ -375,20 +396,20 @@ export async function prCommand(options: PrOptions): Promise<void> {
       }
 
       // 安全提交
-      const staged = execSync('git diff --cached --name-only', { encoding: 'utf-8' }).trim();
+      const staged = execSync('git diff --cached --name-only', { cwd: gitCwd, encoding: 'utf-8' }).trim();
       if (!staged) {
-        execSync('git add -A', { stdio: 'pipe' });
+        execSync('git add -A', { cwd: gitCwd, stdio: 'pipe' });
         logger.info('✅ 已暂存全部变更');
       }
 
-      execSync(`git commit -m "${commitMsg.replace(/"/g, '\\"')}"`, { stdio: 'pipe' });
+      execSync(`git commit -m "${commitMsg.replace(/"/g, '\\"')}"`, { cwd: gitCwd, stdio: 'pipe' });
       logger.success(`✅ 已提交: ${commitMsg}`);
 
       // 推送
-      const branch = execSync('git branch --show-current', { encoding: 'utf-8' }).trim();
+      const branch = execSync('git branch --show-current', { cwd: gitCwd, encoding: 'utf-8' }).trim();
       let pushed = false;
       if (!isProtectedBranch(branch)) {
-        execSync(`git push -u origin "${branch}"`, { stdio: 'pipe' });
+        execSync(`git push -u origin "${branch}"`, { cwd: gitCwd, stdio: 'pipe' });
         logger.success(`✅ 已推送: ${branch}`);
         pushed = true;
       } else {
@@ -397,11 +418,11 @@ export async function prCommand(options: PrOptions): Promise<void> {
 
       // 自动创建 PR
       if ((options.createPr || options.autoMerge) && pushed) {
-        const prResult = await createPullRequest(options.base || 'main', options.title || commitMsg, options.draft);
+        const prResult = await createPullRequest(options.base || 'main', options.title || commitMsg, options.draft, gitCwd);
         if (prResult.success) {
           logger.success(`✅ ${prResult.message}${prResult.url ? ': ' + prResult.url : ''}`);
           if (options.autoMerge) {
-            const mergeResult = await mergePullRequest(true);
+            const mergeResult = await mergePullRequest(true, gitCwd);
             if (mergeResult.success) {
               logger.success(`✅ ${mergeResult.message}`);
             } else {
@@ -415,7 +436,7 @@ export async function prCommand(options: PrOptions): Promise<void> {
 
       // 独立合并（仅 merge，不创建 PR）
       if (options.merge && !options.createPr && !options.autoMerge) {
-        const mergeResult = await mergePullRequest(false);
+        const mergeResult = await mergePullRequest(false, gitCwd);
         if (mergeResult.success) {
           logger.success(`✅ ${mergeResult.message}`);
         } else {
@@ -435,7 +456,7 @@ export async function prCommand(options: PrOptions): Promise<void> {
 
   // ── --force: 非交互自动提交（流水线用）──
   if (options.force) {
-    const status = execSync('git status --short', { encoding: 'utf-8' }).trim();
+    const status = execSync('git status --short', { cwd: gitCwd, encoding: 'utf-8' }).trim();
     if (!status) {
       logger.info('📋 无待提交变更');
       return;
@@ -452,19 +473,19 @@ export async function prCommand(options: PrOptions): Promise<void> {
     }
 
     const msg = options.title || `SpecCore auto commit${iter ? ` (${iter})` : ''}`;
-    execSync('git add -A', { stdio: 'pipe' });
+    execSync('git add -A', { cwd: gitCwd, stdio: 'pipe' });
     try {
-      execSync(`git commit -m "${msg.replace(/"/g, '\\"')}"`, { stdio: 'pipe' });
+      execSync(`git commit -m "${msg.replace(/"/g, '\\"')}"`, { cwd: gitCwd, stdio: 'pipe' });
       logger.success(`✅ 已提交: ${msg}`);
     } catch {
       logger.info('ℹ️ 无变更可提交');
       return;
     }
-    const branch = execSync('git branch --show-current', { encoding: 'utf-8' }).trim();
+    const branch = execSync('git branch --show-current', { cwd: gitCwd, encoding: 'utf-8' }).trim();
     let pushed = false;
     if (!isProtectedBranch(branch)) {
       try {
-        execSync(`git push -u origin "${branch}"`, { stdio: 'pipe' });
+        execSync(`git push -u origin "${branch}"`, { cwd: gitCwd, stdio: 'pipe' });
         logger.success(`✅ 已推送: ${branch}`);
         pushed = true;
       } catch {
@@ -478,11 +499,11 @@ export async function prCommand(options: PrOptions): Promise<void> {
     if ((options.createPr || options.autoMerge) && pushed) {
       const base = options.base || 'main';
       const title = options.title || msg;
-      const prResult = await createPullRequest(base, title, options.draft);
+      const prResult = await createPullRequest(base, title, options.draft, gitCwd);
       if (prResult.success) {
         logger.success(`✅ ${prResult.message}${prResult.url ? ': ' + prResult.url : ''}`);
         if (options.autoMerge) {
-          const mergeResult = await mergePullRequest(true);
+          const mergeResult = await mergePullRequest(true, gitCwd);
           if (mergeResult.success) {
             logger.success(`✅ ${mergeResult.message}`);
           } else {
@@ -495,7 +516,7 @@ export async function prCommand(options: PrOptions): Promise<void> {
     }
 
     if (options.merge && !options.createPr && !options.autoMerge) {
-      const mergeResult = await mergePullRequest(false);
+      const mergeResult = await mergePullRequest(false, gitCwd);
       if (mergeResult.success) {
         logger.success(`✅ ${mergeResult.message}`);
       } else {
@@ -507,12 +528,12 @@ export async function prCommand(options: PrOptions): Promise<void> {
   }
 
   // ── CLI 默认模式：交互式提交 ──
-  const branch = execSync('git branch --show-current', { encoding: 'utf-8' }).trim();
+  const branch = execSync('git branch --show-current', { cwd: gitCwd, encoding: 'utf-8' }).trim();
   const iter = options.iteration || await getDefaultIteration();
 
   // 展示变更
-  const status = execSync('git status --short', { encoding: 'utf-8' }).trim();
-  const diff = execSync('git diff --stat', { encoding: 'utf-8' }).trim();
+  const status = execSync('git status --short', { cwd: gitCwd, encoding: 'utf-8' }).trim();
+  const diff = execSync('git diff --stat', { cwd: gitCwd, encoding: 'utf-8' }).trim();
 
   logger.info(`🌿 当前分支: ${branch}`);
   if (iter) logger.info(`📂 当前迭代: ${iter}`);
@@ -527,7 +548,7 @@ export async function prCommand(options: PrOptions): Promise<void> {
   logger.info('');
 
   if (diff) {
-    logger.info('📊 变更统计:\n' + diff.split('\n').slice(0, 5).join('\n'));
+    logger.info('📊 变更统计:\n' + diff.split(/\r?\n/).slice(0, 5).join('\n'));
     logger.info('');
   }
 
@@ -544,11 +565,11 @@ export async function prCommand(options: PrOptions): Promise<void> {
 
   if (addAns === 'q') { logger.info('已取消'); return; }
   if (addAns === 'a') {
-    execSync('git add -A', { stdio: 'pipe' });
+    execSync('git add -A', { cwd: gitCwd, stdio: 'pipe' });
     logger.info('✅ 已暂存全部变更');
   }
 
-  const staged = execSync('git diff --cached --name-only', { encoding: 'utf-8' }).trim();
+  const staged = execSync('git diff --cached --name-only', { cwd: gitCwd, encoding: 'utf-8' }).trim();
   if (!staged) {
     logger.info('⚠️  无暂存文件，跳过提交');
     return;
@@ -572,10 +593,10 @@ export async function prCommand(options: PrOptions): Promise<void> {
       const newBranch = await promptUser('输入目标分支名: ');
       if (newBranch) {
         try {
-          execSync(`git checkout "${newBranch}"`, { stdio: 'pipe' });
+          execSync(`git checkout "${newBranch}"`, { cwd: gitCwd, stdio: 'pipe' });
           logger.info(`✅ 已切换到: ${newBranch}`);
         } catch {
-          execSync(`git checkout -b "${newBranch}"`, { stdio: 'pipe' });
+          execSync(`git checkout -b "${newBranch}"`, { cwd: gitCwd, stdio: 'pipe' });
           logger.info(`✅ 已创建并切换到: ${newBranch}`);
         }
       }
@@ -587,14 +608,14 @@ export async function prCommand(options: PrOptions): Promise<void> {
   if (pushAns === 'q') { logger.info('已取消'); return; }
 
   try {
-    execSync(`git commit -m "${msg.replace(/"/g, '\\"')}"`, { stdio: 'pipe' });
+    execSync(`git commit -m "${msg.replace(/"/g, '\\"')}"`, { cwd: gitCwd, stdio: 'pipe' });
     logger.success(`✅ 已提交: ${msg}`);
 
     if (pushAns === 'y') {
-      const currentBranch = execSync('git branch --show-current', { encoding: 'utf-8' }).trim();
+      const currentBranch = execSync('git branch --show-current', { cwd: gitCwd, encoding: 'utf-8' }).trim();
       let pushed = false;
       if (!isProtectedBranch(currentBranch)) {
-        execSync(`git push -u origin "${currentBranch}"`, { stdio: 'pipe' });
+        execSync(`git push -u origin "${currentBranch}"`, { cwd: gitCwd, stdio: 'pipe' });
         logger.success(`✅ 已推送: ${currentBranch}`);
         pushed = true;
       } else {
@@ -605,11 +626,11 @@ export async function prCommand(options: PrOptions): Promise<void> {
       if ((options.createPr || options.autoMerge) && pushed) {
         const base = options.base || 'main';
         const title = options.title || msg;
-        const prResult = await createPullRequest(base, title, options.draft);
+        const prResult = await createPullRequest(base, title, options.draft, gitCwd);
         if (prResult.success) {
           logger.success(`✅ ${prResult.message}${prResult.url ? ': ' + prResult.url : ''}`);
           if (options.autoMerge) {
-            const mergeResult = await mergePullRequest(true);
+            const mergeResult = await mergePullRequest(true, gitCwd);
             if (mergeResult.success) {
               logger.success(`✅ ${mergeResult.message}`);
             } else {
@@ -622,7 +643,7 @@ export async function prCommand(options: PrOptions): Promise<void> {
       }
 
       if (options.merge && !options.createPr && !options.autoMerge) {
-        const mergeResult = await mergePullRequest(false);
+        const mergeResult = await mergePullRequest(false, gitCwd);
         if (mergeResult.success) {
           logger.success(`✅ ${mergeResult.message}`);
         } else {

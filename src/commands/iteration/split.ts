@@ -1,5 +1,5 @@
 import { ensureDir, writeFile, pathExists, readFile, readdir, remove } from 'fs-extra';
-import { join } from 'path';
+import { join, isAbsolute, basename, relative } from 'path';
 import { logger, Spinner } from '../../utils/logger';
 import { getDefaultIteration, getIterationDir } from '../../core/context';
 import { scoreRisk, generateRiskReport } from '../../core/risk-scorer';
@@ -294,7 +294,7 @@ function printPreSplitReport(iterationDir: string, blockers: PreSplitCheckItem[]
     logger.error(`\n🔴 阻塞项 (${blockers.length} 个) — 必须修复后才能拆分：`);
     for (const b of blockers) {
       logger.error(`\n   📄 ${b.name}`);
-      logger.error(`      路径: ${b.path.replace(iterationDir + '/', '')}`);
+      logger.error(`      路径: ${relative(iterationDir, b.path)}`);
       logger.error(`      作用: ${b.purpose}`);
       logger.error(`      影响: ${b.impact}`);
       if (!b.exists) {
@@ -309,7 +309,7 @@ function printPreSplitReport(iterationDir: string, blockers: PreSplitCheckItem[]
     logger.warn(`\n🟡 警告项 (${warnings.length} 个) — 建议修复：`);
     for (const w of warnings) {
       logger.warn(`\n   📄 ${w.name}`);
-      logger.warn(`      路径: ${w.path.replace(iterationDir + '/', '')}`);
+      logger.warn(`      路径: ${relative(iterationDir, w.path)}`);
       logger.warn(`      作用: ${w.purpose}`);
       logger.warn(`      影响: ${w.impact}`);
       if (!w.exists) {
@@ -726,7 +726,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
         const bk = await backupWithTimestamp(reqPath);
         if (bk) {
           backups.push(bk);
-          logger.info(`   📦 旧版已备份: ${bk.split('/').pop()}`);
+          logger.info(`   📦 旧版已备份: ${basename(bk)}`);
         }
         await writeFile(reqPath, options.response);
       }
@@ -838,7 +838,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     const analysisPath = await pathExists(analysisPathNew) ? analysisPathNew : analysisPathOld;
     if (await pathExists(analysisPath)) {
       const analysis = await readFile(analysisPath, 'utf-8');
-      const blockerLines = analysis.split('\n').filter(l => 
+      const blockerLines = analysis.split(/\r?\n/).filter(l => 
         l.includes('🔴') || l.includes('🚫') || l.toLowerCase().includes('blocker')
       );
       
@@ -1074,7 +1074,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
 
       for (let i = 0; i < sections.length; i++) {
         const taskId = (sections[i] as any)._taskId;
-        const contentPreview = sections[i].content?.split('\n')[0]?.slice(0, 60) || '';
+        const contentPreview = sections[i].content?.split(/\r?\n/)[0]?.slice(0, 60) || '';
         const c = complexities[i];
         const owner = (sections[i] as any)._owner || '未分配';
         const deps = semanticDeps.get(taskId);
@@ -1209,7 +1209,7 @@ interface Section {
 function extractSections(content: string, sectionFilter?: string): Section[] {
   const sections: Section[] = [];
   let currentPlatform: string | undefined;
-  const lines = content.split('\n');
+  const lines = content.split(/\r?\n/);
   
   let currentSection: Section | null = null;
   let currentContent: string[] = [];
@@ -1321,7 +1321,7 @@ function filterTemplateNoise(sections: Section[]): Section[] {
 
 // v8.3.4+: 从迭代目录路径提取迭代名（如 Iteration-011-meeting-upgrade → 011-meeting-upgrade）
 function extractIterationName(iterationDir: string): string {
-  const base = iterationDir.split('/').pop() || '';
+  const base = basename(iterationDir) || '';
   return base.replace(/^Iteration-/, '');
 }
 
@@ -1552,7 +1552,7 @@ ${taskPlatforms.map((p: string) => `| ${subtaskIdMap.get(p)} | ${p} | ${owner} |
     );
   }
 
-  const apiLines = section.content.split('\n').filter(l => l.includes('| GET') || l.includes('| POST') || l.includes('| PUT') || l.includes('| DELETE') || l.includes('| PATCH'));
+  const apiLines = section.content.split(/\r?\n/).filter(l => l.includes('| GET') || l.includes('| POST') || l.includes('| PUT') || l.includes('| DELETE') || l.includes('| PATCH'));
   const apiDesc = apiLines.length > 0 ? apiLines.map(l => `- ${l.trim()}`).join('\n') : '- 待补充（从 REQ.md 提取接口列表）';
   const aiTechContent = (section as any)._techContent;
   // 从 analyze TECH.md 提取本任务相关内容
@@ -1773,12 +1773,12 @@ ${section.content}
       );
 
       // v6.70.0+: 从 section 提取接口/页面清单用于 TASK.md
-      const apiLines = section.content.split('\n').filter(l => l.includes('| GET') || l.includes('| POST') || l.includes('| PUT') || l.includes('| DELETE') || l.includes('| PATCH'));
+      const apiLines = section.content.split(/\r?\n/).filter(l => l.includes('| GET') || l.includes('| POST') || l.includes('| PUT') || l.includes('| DELETE') || l.includes('| PATCH'));
       const apiList = apiLines.length > 0
         ? apiLines.map(l => `- ${l.trim()}`).join('\n')
         : '- 待补充（从 00-specs/REQ.md 和 TECH.md 提取）';
       // 前端页面清单（如果是前端端）
-      const pageLines = !isBk ? section.content.split('\n').filter(l => /页面[：:]|路由[：:]|path[：:]|\/\w+/.test(l)) : [];
+      const pageLines = !isBk ? section.content.split(/\r?\n/).filter(l => /页面[：:]|路由[：:]|path[：:]|\/\w+/.test(l)) : [];
       const pageList = pageLines.length > 0
         ? pageLines.map(l => `- ${l.trim()}`).join('\n')
         : '- 待补充（从 00-specs/REQ.md 和 TECH.md 提取）';
@@ -1893,7 +1893,7 @@ ${isBk ? apiList : pageList}
           const projectConfig = await loadProjectConfig();
           const platformConfig = projectConfig.platforms.find(p => p.name === platformName);
           const codePath = platformConfig?.code_path
-            ? (platformConfig.code_path.startsWith('/')
+            ? (isAbsolute(platformConfig.code_path)
                 ? platformConfig.code_path
                 : join(process.cwd(), platformConfig.code_path))
             : null;
@@ -2192,7 +2192,7 @@ function generateTestOutline(section: Section, material?: string): string {
 /** v6.79.0+: 从任务内容中提取 API 表格行 */
 function extractApiRowsFromContent(content: string): Array<{ method: string; path: string; desc: string }> {
   const rows: Array<{ method: string; path: string; desc: string }> = [];
-  const lines = content.split('\n');
+  const lines = content.split(/\r?\n/);
   for (const line of lines) {
     const m = line.match(/\|\s*(GET|POST|PUT|DELETE|PATCH)\s*\|\s*([^|]+)\|/i);
     if (m) {
@@ -2285,7 +2285,7 @@ async function strictSplitPreview(
       process.stdin.resume();
       process.stdin.once('data', (data: Buffer) => {
         process.stdin.pause();
-        resolve(data.toString().split('\n')[0].trim());
+        resolve(data.toString().split(/\r?\n/)[0].trim());
       });
     });
   };
@@ -2572,7 +2572,7 @@ async function injectTechFromAnalysis(iterationDir: string, taskDir: string, sec
 }
 
 function generateApiContract(section: Section): string {
-  const lines = (section.content || '').split('\n');
+  const lines = (section.content || '').split(/\r?\n/);
   const apis: { method: string; path: string; desc: string }[] = [];
   
   for (const line of lines) {
@@ -2700,7 +2700,7 @@ function generateAdr(section: Section): string {
 
 // ── AC 自动生成 ──
 function generateAcceptanceCriteria(section: Section): string {
-  const lines = section.content.split('\n');
+  const lines = section.content.split(/\r?\n/);
   let acs = '';
   let acNum = 1;
 
@@ -2804,7 +2804,7 @@ async function loadSpecContents(iterationDir: string): Promise<Record<string, st
 /** 从完整文档中提取与任务名相关的段落 */
 function extractRelevantSection(fullContent: string, taskName: string, sectionHint?: string): string {
   if (!fullContent || !taskName) return '';
-  const lines = fullContent.split('\n');
+  const lines = fullContent.split(/\r?\n/);
   const nameKeywords = new Set<string>();
   for (const m of taskName.matchAll(/[a-zA-Z]+/g)) { if (m[0].length > 1) nameKeywords.add(m[0].toLowerCase()); }
   for (const m of taskName.matchAll(/[\u4e00-\u9fff]+/g)) { if (m[0].length >= 2) nameKeywords.add(m[0]); }
@@ -3372,7 +3372,7 @@ function readStaffing(iterationDir: string): StaffMember[] | null {
     const members: StaffMember[] = [];
     
     // 解析表格: | 张三 | 后台 | 70% |
-    const lines = content.split('\n');
+    const lines = content.split(/\r?\n/);
     for (const line of lines) {
       if (!line.startsWith('|') || line.includes(':---')) continue;
       const cols = line.split('|').map((c: string) => c.trim()).filter(Boolean);
@@ -3674,7 +3674,7 @@ function parseModulePlatforms(content: string, allPlatforms: string[]): { name: 
  */
 function parseModulePlatformsTable(content: string, allPlatforms: string[]): { name: string; platforms: string[] }[] {
   const modules: { name: string; platforms: string[] }[] = [];
-  const lines = content.split('\n');
+  const lines = content.split(/\r?\n/);
   let inFeatureTable = false;
   let platformColIdx = -1;
 
@@ -3720,7 +3720,7 @@ function parseModulePlatformsTable(content: string, allPlatforms: string[]): { n
  * 从标题提取端名，从后续表格提取模块名，建立模块→端的映射
  */
 function parseModulePlatformsBySection(content: string, allPlatforms: string[]): { name: string; platforms: string[] }[] {
-  const lines = content.split('\n');
+  const lines = content.split(/\r?\n/);
   // 模块名 → 涉及端列表 的映射
   const modulePlatformMap = new Map<string, string[]>();
   let currentPlatform = '';
@@ -3810,7 +3810,7 @@ function parseFunctionMapTable(content: string, allPlatforms: string[]): {
   const units: {
     name: string; platforms: string[]; sharedCapability: string; dependsOn: string[]; description: string;
   }[] = [];
-  const lines = content.split('\n');
+  const lines = content.split(/\r?\n/);
   let inTable = false;
   let platformColIdx = -1;
   let sharedCapColIdx = -1;
@@ -3880,7 +3880,7 @@ function parseFunctionMapTree(content: string, allPlatforms: string[]): {
   const units: {
     name: string; platforms: string[]; sharedCapability: string; dependsOn: string[]; description: string;
   }[] = [];
-  const lines = content.split('\n');
+  const lines = content.split(/\r?\n/);
   // 树形节点正则：匹配 ├── 或 └── 开头的行
   const treeNodeRe = /[├└]──\s*/;
   // 分隔点正则：匹配连续 .... 或 ———
@@ -3939,7 +3939,7 @@ function parseAnalysisFunctionalUnits(content: string, allPlatforms: string[]): 
   id: string;
 }[] {
   const units: { name: string; platforms: string[]; description: string; id: string }[] = [];
-  const lines = content.split('\n');
+  const lines = content.split(/\r?\n/);
   let currentPlatforms: string[] = [];
   let platformColIdx = -1; // 「涉及端」列索引，-1 表示未检测到
 
@@ -4234,7 +4234,7 @@ async function tryModuleDrivenSplit(
     }
 
     if (prunedCount > 0) {
-      logger.info(`   📦 共归档 ${prunedCount} 个不匹配任务到 ${archiveDir.replace(tasksRoot + '/', '')}`);
+      logger.info(`   📦 共归档 ${prunedCount} 个不匹配任务到 ${relative(tasksRoot, archiveDir)}`);
     } else {
       logger.info(`   ✅ 无需要清理的旧任务（所有任务功能单元均匹配）`);
     }
@@ -4325,7 +4325,7 @@ async function assembleUnitContext(
   if (await pathExists(reqPath)) {
     try {
       const content = await readFile(reqPath, 'utf-8');
-      const lines = content.split('\n');
+      const lines = content.split(/\r?\n/);
       const relevant: string[] = [];
       let inRelevantSection = false;
       for (const line of lines) {
@@ -4347,7 +4347,7 @@ async function assembleUnitContext(
   if (await pathExists(modulesPath)) {
     try {
       const content = await readFile(modulesPath, 'utf-8');
-      const lines = content.split('\n');
+      const lines = content.split(/\r?\n/);
       const relevant: string[] = [];
       let inRelevantBlock = false;
       let blockLines: string[] = [];
@@ -4378,7 +4378,7 @@ async function assembleUnitContext(
     if (await pathExists(indexPath)) {
       try {
         const content = await readFile(indexPath, 'utf-8');
-        const lines = content.split('\n');
+        const lines = content.split(/\r?\n/);
         const relevant: string[] = [];
         let inRelevantSection = false;
         for (const line of lines) {
@@ -4401,7 +4401,7 @@ async function assembleUnitContext(
   if (await pathExists(funcMapPath)) {
     try {
       const content = await readFile(funcMapPath, 'utf-8');
-      const lines = content.split('\n');
+      const lines = content.split(/\r?\n/);
       const matchedRows = lines.filter(l => l.startsWith('|') && matchLine(l));
       if (matchedRows.length > 0) {
         ctx.push(`### 🗺️ 功能映射（FUNCTION_MAP.md）\n\`\`\`\n${matchedRows.join('\n')}\n\`\`\``);
@@ -4414,7 +4414,7 @@ async function assembleUnitContext(
   if (await pathExists(techPath)) {
     try {
       const content = await readFile(techPath, 'utf-8');
-      const lines = content.split('\n');
+      const lines = content.split(/\r?\n/);
       const relevant: string[] = [];
       let inRelevantSection = false;
       for (const line of lines) {

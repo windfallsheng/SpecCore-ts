@@ -7,7 +7,7 @@
  * 架构: CLI(确定性) → stdout(Prompt) → AI(生成) → CLI(确定性写入)
  */
 import { readFile, pathExists, readdir, stat } from 'fs-extra';
-import { join, dirname } from 'path';
+import { join, dirname, relative } from 'path';
 import { isTimestampBackup } from '../utils/task-utils';
 import { logger } from '../utils/logger';
 import { loadKnowledgeGraph, getTaskContext, isGraphStale, refreshKnowledgeGraph, KnowledgeGraph } from './knowledge-graph';
@@ -15,9 +15,11 @@ import { buildCompactContext } from './context-builder';
 import { parseProjectInfo, GLOBAL_SPECS_DIR, parseFeatureList } from './spec-paths';
 import {
   loadRagIndex, isRagIndexStale, retrieveRelevantChunks,
-  assembleChunksForPrompt, indexTaskDocuments,
+  assembleChunksForPrompt, indexTaskDocuments, extractHtmlText,
 } from './rag-engine';
 import { unifiedSearch, assembleUnifiedContext } from './unified-retrieval';
+// v8.3.94+: 视觉模型引擎（ specs 图片理解）
+import { loadVisionConfig, describeImage, isVisionEnabled, VisionModelConfig } from './vision-engine';
 // v6.93.0+: Prompt 插件系统
 import { getPluginsForCommand } from './prompt-plugins';
 
@@ -225,7 +227,7 @@ async function loadApiSpecs(cwd: string, taskDir: string, reqContent?: string): 
   if (tableMatch) {
     const startIdx = content.indexOf(tableMatch[0]);
     const afterTable = content.substring(startIdx);
-    const lines = afterTable.split('\n');
+    const lines = afterTable.split(/\r?\n/);
     for (let i = 2; i < lines.length; i++) { // 跳过表头和分隔线
       const line = lines[i].trim();
       if (!line.startsWith('|')) break;
@@ -261,7 +263,7 @@ async function loadDataModels(cwd: string, taskDir: string, reqContent?: string)
     let match;
     let currentModel: DataModel | null = null;
 
-    const lines = section.split('\n');
+    const lines = section.split(/\r?\n/);
     for (let i = 0; i < lines.length; i++) {
       // 检测模型名称（### 标题 或 **粗体**）
       const headingMatch = lines[i].match(/^#{2,4}\s*(.+)/);
@@ -306,7 +308,7 @@ async function loadBusinessRules(cwd: string, taskDir?: string, reqContent?: str
     const content = await cachedRead(constitutionCache, constitutionPath, async () => await readFile(constitutionPath, 'utf-8'));
     const namingSection = content.match(/##\s*命名规范[\s\S]*?(?=## |$)/i);
     if (namingSection) {
-      const lines = namingSection[0].split('\n');
+      const lines = namingSection[0].split(/\r?\n/);
       for (const line of lines) {
         if (line.match(/^[-*]\s+(.+)/)) {
           rules.push({ rule: RegExp.$1.trim() });
@@ -320,7 +322,7 @@ async function loadBusinessRules(cwd: string, taskDir?: string, reqContent?: str
     if (content) {
       const ruleSection = content.match(/(?:业务规则|约束条件|Constraint)[\s\S]*?(?=## |\n##|$)/i);
       if (ruleSection) {
-        const lines = ruleSection[0].split('\n');
+        const lines = ruleSection[0].split(/\r?\n/);
         for (const line of lines) {
           if (line.match(/^[-*]\s+(.+)/)) {
             rules.push({ rule: RegExp.$1.trim() });
@@ -347,6 +349,8 @@ async function loadExtraSpecs(
   const MAX_TOTAL = options?.maxTotalChars ?? 8000;
   let totalChars = 0;
   const seenPaths = new Set<string>();
+  // v8.3.94+: 读取视觉模型配置（用于 specs 图片理解）
+  const visionConfig = await loadVisionConfig(cwd);
 
   const files = [
     { name: '开发指南', path: '00-specs/DEV_GUIDE.md' },
@@ -382,7 +386,9 @@ async function loadExtraSpecs(
           if (await pathExists(featurePlatDir)) {
             const entries = await readdir(featurePlatDir, { withFileTypes: true });
             for (const entry of entries) {
-              if (entry.name.endsWith('.md') && !isTimestampBackup(entry.name)) {
+              const isMd = entry.name.endsWith('.md') && !isTimestampBackup(entry.name);
+              const isHtml = (entry.name.endsWith('.html') || entry.name.endsWith('.htm')) && !isTimestampBackup(entry.name);
+              if (isMd || isHtml) {
                 files.push({
                   name: `${feature}-${platform}端规格`,
                   path: join(featurePlatDir, entry.name),
@@ -445,14 +451,23 @@ async function loadExtraSpecs(
     const fullPath = join(cwd, taskDir, f.path);
     seenPaths.add(fullPath);
     if (await pathExists(fullPath)) {
-      let content = await readFile(fullPath, 'utf-8');
+      let rawContent = await readFile(fullPath, 'utf-8');
+      // v8.3.92+: HTML 原型文件提取文本内容
+      const isHtml = fullPath.endsWith('.html') || fullPath.endsWith('.htm');
+      let content = isHtml ? extractHtmlText(rawContent) : rawContent;
+      // v8.3.93+: Markdown 链接自动展开 + 图片提取
+      if (fullPath.endsWith('.md')) {
+        content = await processMarkdownContent(content, fullPath, seenPaths, visionConfig, {
+          maxLinkDepth: 2, maxLinkChars: 1200, maxSvgChars: 1500,
+        });
+      }
       // 跳过空文件或纯占位符文件
       if (content.trim().length <= 50 || content.trim().match(/^#+\s*待填充|^<!--\s*AI-FILL\s*-->$/m)) {
         continue;
       }
       // 单文件大小限制
       if (content.length > MAX_PER_FILE) {
-        content = content.slice(0, MAX_PER_FILE) + `\n\n> ... (已截断，原文件 ${content.length} 字)`;
+        content = content.slice(0, MAX_PER_FILE) + `\n\n> ... (已截断，原文件 ${rawContent.length} 字)`;
       }
       // 总大小限制
       if (totalChars + content.length > MAX_TOTAL) {
@@ -477,7 +492,16 @@ async function loadExtraSpecs(
     seenPaths.add(fullPath);
 
     try {
-      let content = await readFile(fullPath, 'utf-8');
+      let rawContent = await readFile(fullPath, 'utf-8');
+      // v8.3.92+: HTML 原型文件提取文本内容
+      const isHtml = fullPath.endsWith('.html') || fullPath.endsWith('.htm');
+      let content = isHtml ? extractHtmlText(rawContent) : rawContent;
+      // v8.3.93+: Markdown 链接自动展开 + 图片提取
+      if (fullPath.endsWith('.md')) {
+        content = await processMarkdownContent(content, fullPath, seenPaths, visionConfig, {
+          maxLinkDepth: 2, maxLinkChars: 1200, maxSvgChars: 1500,
+        });
+      }
       if (content.trim().length <= 50 || content.trim().match(/^#+\s*待填充|^<!--\s*AI-FILL\s*-->$/m)) {
         continue;
       }
@@ -512,7 +536,7 @@ async function scanUserCustomFiles(
   seenPaths: Set<string>,
 ): Promise<{ name: string; path: string }[]> {
   const results: { name: string; path: string }[] = [];
-  const validExts = ['.md', '.yaml', '.yml', '.json'];
+  const validExts = ['.md', '.yaml', '.yml', '.json', '.html', '.htm'];
   const skipDirs = new Set(['.meta', '.git', 'node_modules', 'tests', 'src', 'dist', 'build']);
 
   // 1. 扫描 00-specs/ 下所有文件（排除已在白名单中的）
@@ -596,15 +620,26 @@ async function loadAllTaskContext(
   const MAX_TOTAL = 20000;
   let totalChars = 0;
   const seen = new Set<string>();
+  // v8.3.94+: 读取视觉模型配置（用于 specs 图片理解）
+  const visionConfig = await loadVisionConfig(cwd);
 
   const addFile = async (fullPath: string, name: string, relPath: string) => {
     if (seen.has(fullPath)) return;
     seen.add(fullPath);
     if (!(await pathExists(fullPath))) return;
-    let content = await readFile(fullPath, 'utf-8');
+    let rawContent = await readFile(fullPath, 'utf-8');
+    // v8.3.92+: HTML 原型文件提取文本内容
+    const isHtml = fullPath.endsWith('.html') || fullPath.endsWith('.htm');
+    let content = isHtml ? extractHtmlText(rawContent) : rawContent;
+    // v8.3.93+: Markdown 链接自动展开 + 图片提取
+    if (fullPath.endsWith('.md')) {
+      content = await processMarkdownContent(content, fullPath, seen, visionConfig, {
+        maxLinkDepth: 2, maxLinkChars: 1500, maxSvgChars: 2000,
+      });
+    }
     if (content.trim().length <= 50 || content.trim().match(/^#+\s*待填充|^<!--\s*AI-FILL\s*-->$/m)) return;
     if (content.length > MAX_PER_FILE) {
-      content = content.slice(0, MAX_PER_FILE) + `\n\n> ... (已截断，原文件 ${content.length} 字)`;
+      content = content.slice(0, MAX_PER_FILE) + `\n\n> ... (已截断，原文件 ${rawContent.length} 字)`;
     }
     if (totalChars + content.length > MAX_TOTAL) return;
     totalChars += content.length;
@@ -626,7 +661,7 @@ async function loadAllTaskContext(
         if (item.isDirectory()) {
           if (CODEGEN_EXCLUDE_DIRS.has(item.name)) continue;
           await scanTaskDir(fullPath, `${prefix}${item.name}/`);
-        } else if (/\.(md|yaml|yml)$/i.test(item.name)) {
+        } else if (/\.(md|yaml|yml|html|htm)$/i.test(item.name)) {
           // 排除自检阶段文件（TEST.md / SCHEMA.md / REVIEW.md 等）
           if (CODEGEN_EXCLUDE_FILES.has(item.name.toLowerCase())) continue;
           await addFile(fullPath, `${prefix}${item.name}`, `${prefix}${item.name}`);
@@ -734,7 +769,7 @@ const RULES_DESC: Record<string, string> = {
  */
 function extractHeadings(content: string): string[] {
   const headings: string[] = [];
-  for (const line of content.split('\n')) {
+  for (const line of content.split(/\r?\n/)) {
     if (line.startsWith('## ')) {
       headings.push(line.replace(/^##\s+/, '').trim());
     }
@@ -746,7 +781,7 @@ function extractHeadings(content: string): string[] {
  * 提取首段摘要：# 标题后的第一段非空内容，≤ 200 字
  */
 function extractSummary(content: string): string {
-  const lines = content.split('\n');
+  const lines = content.split(/\r?\n/);
   let foundTitle = false;
   let summaryLines: string[] = [];
   let totalLen = 0;
@@ -843,7 +878,7 @@ function buildTOCEntry(path: string, description: string, content: string, maxSe
     sections: maxSections ? sections.slice(0, maxSections) : sections,
     summary: extractSummary(content) || undefined,
     platforms: extractPlatforms(path, content) || undefined,
-    lineCount: content.split('\n').length,
+    lineCount: content.split(/\r?\n/).length,
     tags: extractTags(sections) || undefined,
   };
 }
@@ -1060,8 +1095,8 @@ export function formatGlobalContext(ctx: GlobalContext, platform?: string): stri
         for (const e of entries) {
           // PATTERNS:architecture/x.md → architecture; platforms/admin/x.md → admin
           const sub = group.prefix === 'PATTERNS:'
-            ? e.path.replace('PATTERNS:', '').split('/')[0]
-            : e.path.split('/')[1];
+            ? e.path.replace('PATTERNS:', '').split(/[\\/]/)[0]
+            : e.path.split(/[\\/]/)[1];
 
           // v8.2.0+: PATTERNS 按端过滤 — 只保留通用分类 + 当前端相关模式
           if (group.prefix === 'PATTERNS:' && platform) {
@@ -1489,7 +1524,7 @@ export async function buildPrompt(
               path: ccPath,
               content: `## 前后端一致性校验报告\n\n${ccContent}`,
             });
-            logger?.info?.(`   📋 已注入一致性校验报告: ${ccPath.replace(cwd + '/', '')}`);
+            logger?.info?.(`   📋 已注入一致性校验报告: ${relative(cwd, ccPath)}`);
             break;
           }
         }
@@ -1961,6 +1996,194 @@ export function outputNeedsInfo(req: Omit<NeedsInfoRequest, 'marker'>): void {
 
   process.stdout.write(lines.join('\n'));
   process.exitCode = 11;
+}
+
+// ═══════════════════════════════════════════════════════════
+// Markdown 链接自动展开 + 图片提取（v8.3.93+）
+// ═══════════════════════════════════════════════════════════
+
+/** 提取 Markdown 文本链接 [text](path)，排除图片链接 */
+function extractMarkdownLinks(content: string): Array<{ text: string; path: string }> {
+  const links: Array<{ text: string; path: string }> = [];
+  const regex = /\[([^\]]+)\]\(([^)]+)\)/g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(content)) !== null) {
+    const text = match[1];
+    const path = match[2].trim();
+    // 跳过图片链接 ![alt](path) — 检查前一个字符
+    if (match.index > 0 && content.charAt(match.index - 1) === '!') continue;
+    // 跳过外部链接、锚点、协议链接
+    if (/^(https?:|mailto:|ftp:|#|javascript:)/i.test(path)) continue;
+    links.push({ text, path });
+  }
+  return links;
+}
+
+/** 提取 Markdown 图片链接 ![alt](path) */
+function extractMarkdownImages(content: string): Array<{ alt: string; path: string }> {
+  const images: Array<{ alt: string; path: string }> = [];
+  const regex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(content)) !== null) {
+    images.push({ alt: match[1], path: match[2].trim() });
+  }
+  return images;
+}
+
+/** 判断是否为外部链接 */
+function isExternalLink(path: string): boolean {
+  return /^(https?:|mailto:|ftp:|javascript:)/i.test(path);
+}
+
+/** 解析链接相对路径 */
+function resolveLinkPath(baseDir: string, linkPath: string): string {
+  if (linkPath.startsWith('/')) return linkPath;
+  return join(baseDir, linkPath);
+}
+
+/** 递归展开 Markdown 链接指向的文件内容（防循环，限深度） */
+async function expandMarkdownLinks(
+  content: string,
+  baseDir: string,
+  seenPaths: Set<string>,
+  maxDepth: number = 2,
+  currentDepth: number = 0,
+  maxChars: number = 1500,
+): Promise<string> {
+  if (currentDepth >= maxDepth) return content;
+
+  const links = extractMarkdownLinks(content);
+  if (links.length === 0) return content;
+
+  const expansions: string[] = [];
+  for (const link of links) {
+    if (isExternalLink(link.path)) continue;
+    const resolved = resolveLinkPath(baseDir, link.path);
+    if (seenPaths.has(resolved)) continue;
+    seenPaths.add(resolved);
+
+    try {
+      if (!await pathExists(resolved)) continue;
+      const st = await stat(resolved);
+      if (!st.isFile()) continue;
+
+      let linkContent = await readFile(resolved, 'utf-8');
+      // HTML 文件提取文本
+      if (resolved.endsWith('.html') || resolved.endsWith('.htm')) {
+        linkContent = extractHtmlText(linkContent);
+      }
+      if (linkContent.trim().length <= 30) continue;
+      if (linkContent.length > maxChars) {
+        linkContent = linkContent.slice(0, maxChars) + '\n\n> ... (已截断)';
+      }
+      expansions.push(
+        `\n\n<!-- 展开链接: ${link.path} -->\n**[链接展开] ${link.text}** (${link.path}):\n\n${linkContent}`
+      );
+    } catch { /* 忽略读取失败的链接文件 */ }
+  }
+
+  const expanded = content + expansions.join('');
+  // 递归展开新内容中的链接（深度 + 1）
+  if (currentDepth + 1 < maxDepth) {
+    return expandMarkdownLinks(expanded, baseDir, seenPaths, maxDepth, currentDepth + 1, maxChars);
+  }
+  return expanded;
+}
+
+/** inline Markdown 图片信息（SVG 直接读取，启用视觉模型时描述位图，其他记录元信息） */
+async function inlineMarkdownImages(
+  content: string,
+  baseDir: string,
+  seenPaths: Set<string>,
+  visionConfig?: VisionModelConfig,
+  maxSvgChars: number = 2000,
+): Promise<string> {
+  const images = extractMarkdownImages(content);
+  if (images.length === 0) return content;
+
+  const inlines: string[] = [];
+  let visionCallCount = 0;
+  const maxVisionCalls = visionConfig?.maxImagesPerPrompt ?? 10;
+
+  for (const img of images) {
+    if (isExternalLink(img.path)) {
+      inlines.push(`\n<!-- 图片: ${img.alt || '无描述'} | URL: ${img.path} -->`);
+      continue;
+    }
+    const resolved = resolveLinkPath(baseDir, img.path);
+    if (seenPaths.has(resolved)) continue;
+    seenPaths.add(resolved);
+
+    // SVG 直接 inline 其文本内容
+    if (resolved.endsWith('.svg')) {
+      try {
+        if (await pathExists(resolved)) {
+          const svgContent = await readFile(resolved, 'utf-8');
+          if (svgContent.length <= maxSvgChars) {
+            inlines.push(`\n<!-- SVG 图片: ${img.path} -->\n${svgContent}`);
+          } else {
+            inlines.push(`\n<!-- SVG 图片: ${img.path} (内容过长已省略，大小: ${svgContent.length} 字符) -->`);
+          }
+        }
+      } catch { /* ignore */ }
+    } else if (isVisionEnabled(visionConfig) && visionCallCount < maxVisionCalls) {
+      // v8.3.94+: 调用视觉模型描述图片
+      visionCallCount++;
+      try {
+        const result = await describeImage(resolved, visionConfig!);
+        if (result.success) {
+          inlines.push(
+            `\n<!-- 图片描述 (视觉模型: ${visionConfig!.provider}): ${img.path} -->\n**[图片内容]** ${img.alt || '无描述'}\n\n${result.description}`
+          );
+        } else {
+          inlines.push(`\n<!-- 图片: ${img.alt || '无描述'} | 路径: ${img.path} | 描述失败: ${result.error} -->`);
+        }
+      } catch (e: any) {
+        inlines.push(`\n<!-- 图片: ${img.alt || '无描述'} | 路径: ${img.path} | 描述失败: ${e.message || e} -->`);
+      }
+    } else {
+      // 其他图片（PNG/JPG/GIF/WebP 等）：提取 alt + 路径 + 文件大小信息
+      inlines.push(`\n<!-- 图片: ${img.alt || '无描述'} | 路径: ${img.path} -->`);
+      try {
+        if (await pathExists(resolved)) {
+          const st = await stat(resolved);
+          inlines.push(`<!-- 图片大小: ${(st.size / 1024).toFixed(1)} KB | 完整路径: ${resolved} -->`);
+        }
+      } catch { /* ignore */ }
+    }
+  }
+  return content + inlines.join('');
+}
+
+/**
+ * 统一处理 Markdown 内容：展开链接 + 提取图片
+ * 在 loadExtraSpecs / loadAllTaskContext 的文件加载后调用
+ */
+async function processMarkdownContent(
+  content: string,
+  filePath: string,
+  seenPaths: Set<string>,
+  visionConfig?: VisionModelConfig,
+  options?: {
+    maxLinkDepth?: number;
+    maxLinkChars?: number;
+    maxSvgChars?: number;
+  },
+): Promise<string> {
+  const baseDir = dirname(filePath);
+  let processed = content;
+  processed = await expandMarkdownLinks(
+    processed, baseDir, seenPaths,
+    options?.maxLinkDepth ?? 2,
+    0,
+    options?.maxLinkChars ?? 1500,
+  );
+  processed = await inlineMarkdownImages(
+    processed, baseDir, seenPaths,
+    visionConfig,
+    options?.maxSvgChars ?? 2000,
+  );
+  return processed;
 }
 
 function generateExamples(command: string, req: Omit<NeedsInfoRequest, 'marker'>): string[] {

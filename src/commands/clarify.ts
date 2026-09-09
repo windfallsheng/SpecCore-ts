@@ -15,7 +15,7 @@
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration, getIterationDir } from '../core/context';
 import { readFile, pathExists, ensureDir, writeFile } from 'fs-extra';
-import { join, basename } from 'path';
+import { join, basename, relative } from 'path';
 import {
   detectProfessionalLevel,
   buildClarifyPrompt,
@@ -62,7 +62,7 @@ export async function clarifyCommand(options: ClarifyOptions): Promise<void> {
       const written = await promoteToIteration(process.cwd(), options.promote, iteration, iterDir);
       logger.success(`✅ 已提升到迭代 ${iteration}:`);
       for (const p of written) {
-        logger.info(`   ${p.replace(process.cwd() + '/', '')}`);
+        logger.info(`   ${relative(process.cwd(), p)}`);
       }
     } catch (e: any) {
       logger.error(`提升失败: ${e.message}`);
@@ -154,7 +154,7 @@ export async function clarifyCommand(options: ClarifyOptions): Promise<void> {
       const prd = consolidateClarifiedUnits(clarifiedUnits, sourceName);
       if (options.apply) {
         const writtenPath = await writeClarifiedDoc(prd, iterDir, sourceName);
-        logger.success(`✅ 统一 PRD 已写入: ${writtenPath.replace(process.cwd() + '/', '')}`);
+        logger.success(`✅ 统一 PRD 已写入: ${relative(process.cwd(), writtenPath)}`);
         return;
       }
       if (options.prompt) {
@@ -302,7 +302,7 @@ export async function clarifyCommand(options: ClarifyOptions): Promise<void> {
         const writtenPath = await writeClarifiedDoc(finalContent, iterDir, sourceName);
         spinner.stop('✅ 需求文档已整理并写入');
         logger.info('');
-        logger.info(`📄 文件: ${writtenPath.replace(process.cwd() + '/', '')}`);
+        logger.info(`📄 文件: ${relative(process.cwd(), writtenPath)}`);
         logger.info(`📁 位置: ${iteration}/020-specs/requirements/（黄金需求目录）`);
         logger.info('');
 

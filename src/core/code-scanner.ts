@@ -192,7 +192,7 @@ async function scanDirectory(
           const exports = extractExports(content, lang);
           const apis = extractApis(content, lang);
           const imports = extractImports(content, lang);
-          const lines = content.split('\n').length;
+          const lines = content.split(/\r?\n/).length;
           const endpoint = await detectEndpoint(relPath);
           const module = detectModule(relPath);
 
@@ -910,14 +910,14 @@ async function analyzeGitCorrelations(files: CodeFile[]): Promise<{
   try {
     // 取最近 100 次提交的变更文件
     const gitLog = execSync(
-      'git log --name-only --pretty=format:"---COMMIT---" -100 2>/dev/null',
+      'git log --name-only --pretty=format:"---COMMIT---" -100',
       { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024, timeout: 15000 }
     );
 
     // 解析每个 commit 的文件列表
     const commitFiles: string[][] = [];
     let current: string[] = [];
-    for (const line of gitLog.split('\n')) {
+    for (const line of gitLog.split(/\r?\n/)) {
       if (line === '---COMMIT---') {
         if (current.length > 0) commitFiles.push(current);
         current = [];

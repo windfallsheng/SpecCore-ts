@@ -591,6 +591,7 @@ program
   .option('--device <device>', '测试设备: desktop, mobile, tablet', 'desktop')
   .option('--update-baseline', '更新视觉基准图')
   .option('--browser <browser>', '浏览器: chromium, firefox, webkit', 'chromium')
+  .option('--headed', '有头模式：显示浏览器窗口（调试用）')
   .option('--url <url>', '目标系统地址（独立模式）')
   .option('--spec <path>', '测试规格文件路径（独立模式）')
   .option('--output <path>', '报告输出目录（独立模式）', './reports')

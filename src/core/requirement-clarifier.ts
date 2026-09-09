@@ -503,7 +503,7 @@ function detectConceptVariations(content: string): string[] {
 function detectContradictions(content: string): string[] {
   const contradictions: string[] = [];
   // 检测 "必须" 和 "可选" 同时描述同一事物
-  const lines = content.split('\n');
+  const lines = content.split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (/必须.*可选|可选.*必须/.test(line)) {
@@ -535,7 +535,7 @@ export async function writeClarifyReport(
   md += `| 文档 | 综合评分 | 等级 | 问题数 | 状态 |\n`;
   md += `| :--- | :--- | :--- | :--- | :--- |\n`;
   for (const r of reports) {
-    const name = r.filePath.split('/').pop() || '-';
+    const name = basename(r.filePath) || '-';
     const badge = r.level === 'high' ? '✅' : r.level === 'medium' ? '⚠️' : '❌';
     const status = r.clarified ? '已澄清' : r.level === 'high' ? '无需澄清' : '待澄清';
     md += `| ${name} | ${r.overallScore} | ${badge} ${r.level.toUpperCase()} | ${r.dimensions.reduce((s, d) => s + d.issues.length, 0)} | ${status} |\n`;
@@ -543,7 +543,7 @@ export async function writeClarifyReport(
 
   // 详细报告
   for (const r of reports) {
-    const name = r.filePath.split('/').pop() || '-';
+    const name = basename(r.filePath) || '-';
     md += `\n## ${name}\n\n`;
     md += `**综合评分**: ${r.overallScore}/100 | **等级**: ${r.level.toUpperCase()}\n\n`;
 
@@ -642,7 +642,7 @@ export interface ClarifiedUnit {
 /** 从 Markdown 内容中提取功能单元（基于 ##/### 标题） */
 export function extractUnitsFromText(content: string): ClarifyUnit[] {
   const units: ClarifyUnit[] = [];
-  const lines = content.split('\n');
+  const lines = content.split(/\r?\n/);
   let idCounter = 1;
 
   for (let i = 0; i < lines.length; i++) {

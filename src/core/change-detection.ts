@@ -46,12 +46,15 @@ export function getDefaultBaseRef(): string {
 /**
  * 获取 Git 工作区的变更文件列表
  * @param baseRef 对比的基准 ref（默认使用 CONSTITUTION.md 配置的默认分支）
+ * @param cwd Git 仓库目录（默认 process.cwd()）
  * @returns 相对路径列表
  */
-export function getChangedFiles(baseRef?: string): string[] {
+export function getChangedFiles(baseRef?: string, cwd?: string): string[] {
   const ref = baseRef || getDefaultBaseRef();
+  const gitCwd = cwd || process.cwd();
   try {
     const output = execSync(`git diff --name-only ${ref}`, {
+      cwd: gitCwd,
       encoding: 'utf-8',
       stdio: 'pipe',
     }).trim();
@@ -66,10 +69,13 @@ export function getChangedFiles(baseRef?: string): string[] {
  * 获取两个 commit/ref 之间的变更文件列表
  * @param fromRef 起始 ref（如上次分析的 commit）
  * @param toRef 结束 ref（默认 HEAD）
+ * @param cwd Git 仓库目录（默认 process.cwd()）
  */
-export function getChangedFilesBetween(fromRef: string, toRef: string = 'HEAD'): string[] {
+export function getChangedFilesBetween(fromRef: string, toRef: string = 'HEAD', cwd?: string): string[] {
+  const gitCwd = cwd || process.cwd();
   try {
     const output = execSync(`git diff --name-only ${fromRef}..${toRef}`, {
+      cwd: gitCwd,
       encoding: 'utf-8',
       stdio: 'pipe',
     }).trim();
@@ -82,10 +88,13 @@ export function getChangedFilesBetween(fromRef: string, toRef: string = 'HEAD'):
 
 /**
  * 获取工作区中未跟踪的新文件
+ * @param cwd Git 仓库目录（默认 process.cwd()）
  */
-export function getUntrackedFiles(): string[] {
+export function getUntrackedFiles(cwd?: string): string[] {
+  const gitCwd = cwd || process.cwd();
   try {
     const output = execSync('git ls-files --others --exclude-standard', {
+      cwd: gitCwd,
       encoding: 'utf-8',
       stdio: 'pipe',
     }).trim();
@@ -182,13 +191,13 @@ export async function detectAffectedPlatforms(
     files = changedFiles;
   } else if (options?.incremental && options?.scope) {
     // 增量模式：基于上次分析的 commit hash 做 diff
-    files = await getIncrementalChangedFiles(options.scope);
+    files = await getIncrementalChangedFiles(options.scope, cwd);
     if (files.length > 0) {
       logger.info(`🔄 变更感知(增量): 自上次分析后新增 ${files.length} 个变更文件`);
     }
   } else {
     // 全量模式：与默认分支对比
-    files = [...getChangedFiles(), ...getUntrackedFiles()];
+    files = [...getChangedFiles(undefined, cwd), ...getUntrackedFiles(cwd)];
   }
 
   if (files.length === 0) {
@@ -243,7 +252,7 @@ export async function getPlatformChangeDetails(
   cwd: string,
   changedFiles?: string[]
 ): Promise<PlatformChangeInfo[]> {
-  const files = changedFiles || [...getChangedFiles(), ...getUntrackedFiles()];
+  const files = changedFiles || [...getChangedFiles(undefined, cwd), ...getUntrackedFiles(cwd)];
   const pathMap = await loadSourcePathMap(cwd);
   const platformFiles = new Map<string, string[]>();
 
@@ -358,10 +367,13 @@ export async function writeAnalysisSnapshots(snapshots: AnalysisSnapshots): Prom
 
 /**
  * 获取当前 HEAD 的 commit hash
+ * @param cwd Git 仓库目录（默认 process.cwd()）
  */
-export function getCurrentCommitHash(): string | null {
+export function getCurrentCommitHash(cwd?: string): string | null {
+  const gitCwd = cwd || process.cwd();
   try {
     return execSync('git rev-parse HEAD', {
+      cwd: gitCwd,
       encoding: 'utf-8',
       stdio: 'pipe',
     }).trim();
@@ -372,10 +384,13 @@ export function getCurrentCommitHash(): string | null {
 
 /**
  * 获取当前分支名
+ * @param cwd Git 仓库目录（默认 process.cwd()）
  */
-export function getCurrentBranch(): string | null {
+export function getCurrentBranch(cwd?: string): string | null {
+  const gitCwd = cwd || process.cwd();
   try {
     return execSync('git rev-parse --abbrev-ref HEAD', {
+      cwd: gitCwd,
       encoding: 'utf-8',
       stdio: 'pipe',
     }).trim();
@@ -387,19 +402,21 @@ export function getCurrentBranch(): string | null {
 /**
  * 基于上次分析的快照获取增量变更文件
  * @param scope 分析范围标识（如 'global', 'Iteration-Q2', 'Task-001'）
+ * @param cwd Git 仓库目录（默认 process.cwd()）
  * @returns 自上次分析以来的变更文件列表（无快照则 fallback 到默认分支对比）
  */
-export async function getIncrementalChangedFiles(scope: string): Promise<string[]> {
+export async function getIncrementalChangedFiles(scope: string, cwd?: string): Promise<string[]> {
+  const gitCwd = cwd || process.cwd();
   const snapshots = await readAnalysisSnapshots();
   const snapshot = snapshots[scope];
 
   if (!snapshot) {
     logger.debug(`变更感知: 未找到 ${scope} 的历史快照，fallback 到默认分支对比`);
-    return [...getChangedFiles(), ...getUntrackedFiles()];
+    return [...getChangedFiles(undefined, gitCwd), ...getUntrackedFiles(gitCwd)];
   }
 
   // 检查上次分析的 commit 是否仍存在于当前分支历史中
-  const currentCommit = getCurrentCommitHash();
+  const currentCommit = getCurrentCommitHash(gitCwd);
   if (!currentCommit) {
     logger.warn('变更感知: 无法获取当前 commit hash');
     return [];
@@ -411,7 +428,7 @@ export async function getIncrementalChangedFiles(scope: string): Promise<string[
   }
 
   // 使用 git diff <lastCommit>..HEAD 获取增量变更
-  const files = getChangedFilesBetween(snapshot.lastCommit);
+  const files = getChangedFilesBetween(snapshot.lastCommit, 'HEAD', gitCwd);
   logger.info(
     `🔄 变更感知(增量): ${scope} 自 ${snapshot.analyzedAt.slice(0, 10)} ` +
     `(${snapshot.lastCommit.slice(0, 7)}..${currentCommit.slice(0, 7)}) ` +
@@ -423,10 +440,12 @@ export async function getIncrementalChangedFiles(scope: string): Promise<string[
 /**
  * 记录分析快照（分析完成后调用）
  * @param scope 分析范围标识（如 'global', 'Iteration-Q2', 'Task-001'）
+ * @param cwd Git 仓库目录（默认 process.cwd()）
  */
-export async function recordAnalysisSnapshot(scope: string): Promise<void> {
-  const commitHash = getCurrentCommitHash();
-  const branch = getCurrentBranch();
+export async function recordAnalysisSnapshot(scope: string, cwd?: string): Promise<void> {
+  const gitCwd = cwd || process.cwd();
+  const commitHash = getCurrentCommitHash(gitCwd);
+  const branch = getCurrentBranch(gitCwd);
   if (!commitHash) {
     logger.warn('变更感知: 无法记录快照，当前不是 git 仓库');
     return;

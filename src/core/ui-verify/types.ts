@@ -19,7 +19,7 @@ export interface Scenario {
   assertions: Assertion[];
 }
 
-export type ActionType = 'fill' | 'click' | 'select' | 'check' | 'uncheck' | 'hover' | 'focus' | 'blur' | 'press' | 'wait' | 'navigate' | 'screenshot';
+export type ActionType = 'fill' | 'click' | 'select' | 'check' | 'uncheck' | 'hover' | 'focus' | 'blur' | 'press' | 'wait' | 'navigate' | 'screenshot' | 'cookie' | 'localStorage' | 'script' | 'scroll' | 'upload' | 'iframe' | 'waitForRequest' | 'waitForResponse' | 'drag';
 
 export interface Action {
   type: ActionType;
@@ -29,6 +29,13 @@ export interface Action {
   delay?: number;
   waitFor?: string;
   timeout?: number;
+  // v8.3.95+: cookie 操作专用字段
+  domain?: string;
+  path?: string;
+  secure?: boolean;
+  httpOnly?: boolean;
+  // v8.3.95+: drag 目标选择器
+  toSelector?: string;
 }
 
 export type AssertionType = 'visible' | 'hidden' | 'text' | 'value' | 'url' | 'count' | 'attribute' | 'style' | 'visual';
@@ -101,6 +108,8 @@ export interface UIVerifyOptions {
   browsers?: string[];
   updateBaseline?: boolean;
   threshold?: 'strict' | 'normal' | 'loose';
+  /** 有头模式：显示浏览器窗口（调试用，默认 false） */
+  headed?: boolean;
   /** 视觉模型配置：可传字符串简写或完整配置对象 */
   visualModel?: string | {
     provider: 'qwen-vl' | 'openai' | 'anthropic' | 'local';

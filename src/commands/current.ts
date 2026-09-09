@@ -1,17 +1,36 @@
 /**
  * current — 查看当前 Git 分支关联的任务
+ * v8.3.88+: 支持 speccore 与工程代码分离，自动读取 PROJECT.yaml code_path
  */
 
 import { logger } from '../utils/logger';
 import { getCurrentTaskMapping, generateCommitMessage, generatePRDescription } from '../core/git-integration';
+import { loadProjectConfig } from '../core/unified-config';
+import { join, isAbsolute } from 'path';
 
 export interface CurrentOptions {
   commit?: boolean;
   pr?: boolean;
 }
 
-export function currentCommand(options: CurrentOptions): void {
-  const mapping = getCurrentTaskMapping();
+export async function currentCommand(options: CurrentOptions): Promise<void> {
+  // 确定工程代码目录
+  let gitCwd = process.cwd();
+  try {
+    const pc = await loadProjectConfig();
+    const firstPlatformWithPath = pc.platforms.find((p) => p.code_path);
+    if (firstPlatformWithPath?.code_path) {
+      gitCwd = isAbsolute(firstPlatformWithPath.code_path)
+        ? firstPlatformWithPath.code_path
+        : join(process.cwd(), firstPlatformWithPath.code_path);
+    } else if (pc.code_scope?.[0]) {
+      gitCwd = isAbsolute(pc.code_scope[0])
+        ? pc.code_scope[0]
+        : join(process.cwd(), pc.code_scope[0]);
+    }
+  } catch {}
+
+  const mapping = getCurrentTaskMapping(gitCwd);
 
   if (!mapping) {
     logger.info('🔗 No task associated with current branch.');
@@ -20,21 +39,21 @@ export function currentCommand(options: CurrentOptions): void {
   }
 
   logger.info('');
-  logger.info(`🔗 Current branch: ${require('child_process').execSync('git branch --show-current', { encoding: 'utf-8', stdio: 'pipe' }).trim()}`);
+  logger.info(`🔗 Current branch: ${require('child_process').execSync('git branch --show-current', { cwd: gitCwd, encoding: 'utf-8', stdio: 'pipe' }).trim()}`);
   logger.info(`📋 Task: ${mapping.taskId} ${mapping.taskName}`);
   logger.info('');
 
   if (options.commit) {
     logger.info('📝 Generated Commit Message:');
     logger.info('---');
-    console.log(generateCommitMessage(mapping.taskId, mapping.taskName));
+    console.log(generateCommitMessage(mapping.taskId, mapping.taskName, undefined, gitCwd));
     logger.info('---');
   }
 
   if (options.pr) {
     logger.info('📝 Generated PR Description:');
     logger.info('---');
-    console.log(generatePRDescription(mapping.taskId, mapping.taskName));
+    console.log(generatePRDescription(mapping.taskId, mapping.taskName, gitCwd));
     logger.info('---');
   }
 }

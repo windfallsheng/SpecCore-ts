@@ -7,7 +7,7 @@
 import { execSync } from 'child_process';
 import { statSync } from 'fs';
 import { pathExists, readFile, writeFile } from 'fs-extra';
-import { join } from 'path';
+import { join, isAbsolute } from 'path';
 import { logger } from '../../utils/logger';
 import type {
   PerfSpec,
@@ -120,6 +120,7 @@ function measureCommand(metric: PerfMetric, baselineValue?: number): PerfMetricR
       cwd: metric.workingDir || process.cwd(),
       stdio: 'pipe',
       timeout: 300000, // 5 分钟上限
+      shell: process.platform === 'win32' ? 'cmd.exe' : '/bin/sh',
     });
   } catch (e: any) {
     return createFailResult(metric, `命令执行失败: ${e.message}`);
@@ -136,7 +137,7 @@ async function measureSize(metric: PerfMetric, baselineValue?: number): Promise<
     return createFailResult(metric, '未指定 path');
   }
 
-  const fullPath = metric.path.startsWith('/')
+  const fullPath = isAbsolute(metric.path)
     ? metric.path
     : join(process.cwd(), metric.path);
 

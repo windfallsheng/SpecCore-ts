@@ -88,6 +88,9 @@ const COMMAND_KB: CommandKnowledge[] = [
     usage: 'speccore split [--prompt] [--response <json>] [-f <file>] [--preview] [--iteration <name>]', examples: ['speccore split --prompt', 'speccore split --response "<ai_json>"', 'speccore split -f REQUIREMENT.md', 'speccore split --preview'], related: ['task', 'plan'], triggers: ['拆分', 'split', '分解', '划分', '拆', '拆需求', '拆任务', '任务拆分', '需求拆分'] },
   { name: 'pr', aliases: ['mr'], description: '创建 Pull Request：提交预览+文件选择+交互确认',
     usage: 'speccore pr [--task <id>] [--auto]', examples: ['speccore pr', 'speccore pr --task T-01 --auto'], related: ['done', 'execute'], triggers: ['pr', 'pull request', '提交', '合并', 'MR'] },
+  // v8.3.95+: verify 命令
+  { name: 'verify', aliases: ['vf'], description: '测试验证：冒烟测试 + 视觉检查 + API 契约 + 性能基线。支持 --headed 有头模式、--browser 多浏览器、--device 多设备',
+    usage: 'speccore verify [--ui] [--smoke-only] [--visual-only] [--headed] [--browser <b>] [--device <d>] [--config <file>]', examples: ['speccore verify --ui', 'speccore verify --ui --headed', 'speccore verify --config ./tests/smoke.yaml'], related: ['deploy', 'execute', 'dashboard'], triggers: ['verify', '测试', '冒烟', 'smoke', '视觉检查', 'ui验证', '验证', '跑测试', '测一下', '检查页面'] },
   { name: 'validate', aliases: ['vl'], description: '合规验证：检查 Spec 完整性与一致性',
     usage: 'speccore validate [--iteration <name>]', examples: ['speccore validate', 'speccore validate --iteration Q2'], related: ['analyze', 'audit'], triggers: ['验证', 'validate', '检查', '合规', '校验'] },
   { name: 'sync', aliases: ['sy'], description: '双向同步：代码↔Spec，--global 同步到全局层（原 sync-global）',
@@ -196,6 +199,8 @@ const SYNONYM_MAP: Record<string, string> = {
   'sprint': 'iteration',
   // ── dev ──
   '流水线': 'dev', '全自动': 'dev',
+  // ── verify ──
+  '冒烟': 'verify', 'smoke': 'verify', '视觉检查': 'verify', 'ui验证': 'verify', '跑测试': 'verify', '测一下': 'verify', '检查页面': 'verify',
   // ── refresh ──
   '刷新': 'refresh', '更新索引': 'refresh', '刷新索引': 'refresh', '索引过期': 'refresh',
   // ── reindex ──
@@ -252,11 +257,11 @@ export function classifyMode(input: string): AskMode {
 
   // 模式1: 命令解释 — 询问特定命令用法
   const explainPatterns = [
-    /(dashboard|dev|init|execute|plan|pr|sync|validate|analyze|split|search|track|rename|doc2spec|spec2doc|ask|code-index|graph)\s*(命令|用法|怎么用|是什么|功能|参数|选项)/,
-    /怎么用\s*(dashboard|dev|init|execute|plan|pr|sync|validate|analyze|split|search|track|code-index|graph)/,
-    /(dashboard|dev|init|execute|plan|pr|sync|validate|analyze|split|search|track|code-index|graph)\s*有哪些/,
-    /解释[一下]?\s*(dashboard|dev|init|execute|plan|pr|sync|validate|analyze|split|search|track|code-index|graph)/,
-    /(what|how).*use.*(dashboard|dev|init|execute|plan|pr|sync|code-index|graph)/i,
+    /(dashboard|dev|init|execute|plan|pr|verify|sync|validate|analyze|split|search|track|rename|doc2spec|spec2doc|ask|code-index|graph)\s*(命令|用法|怎么用|是什么|功能|参数|选项)/,
+    /怎么用\s*(dashboard|dev|init|execute|plan|pr|verify|sync|validate|analyze|split|search|track|code-index|graph)/,
+    /(dashboard|dev|init|execute|plan|pr|verify|sync|validate|analyze|split|search|track|code-index|graph)\s*有哪些/,
+    /解释[一下]?\s*(dashboard|dev|init|execute|plan|pr|verify|sync|validate|analyze|split|search|track|code-index|graph)/,
+    /(what|how).*use.*(dashboard|dev|init|execute|plan|pr|verify|sync|code-index|graph)/i,
   ];
   if (explainPatterns.some(p => p.test(lower))) return 'explain';
 

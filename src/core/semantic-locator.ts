@@ -6,7 +6,7 @@
  * 为细粒度分析提供精确的上下文关联。
  */
 import { readFile, pathExists, readdir } from 'fs-extra';
-import { join } from 'path';
+import { join, isAbsolute, basename } from 'path';
 import { logger } from '../utils/logger';
 
 export interface FeatureLocation {
@@ -91,7 +91,7 @@ export async function locateFeatureInDoc(docPath: string, featureName: string): 
       const titleMatch = section.match(/^#{1,4}\s+(.+)/m);
       bestTitle = titleMatch ? titleMatch[1].trim() : '';
     }
-    lineNum += section.split('\n').length;
+    lineNum += section.split(/\r?\n/).length;
   }
 
   if (bestScore < 20) return null;
@@ -103,7 +103,7 @@ export async function locateFeatureInDoc(docPath: string, featureName: string): 
     content: bestSection.slice(0, 3000), // 限制长度
     relevance: bestScore,
     lineStart: bestLineStart,
-    lineEnd: bestLineStart + bestSection.split('\n').length,
+    lineEnd: bestLineStart + bestSection.split(/\r?\n/).length,
   };
 }
 
@@ -258,7 +258,7 @@ export async function buildFeatureContext(
 
   // 1. 在指定文档中定位
   if (docName) {
-    const docPath = docName.startsWith('/') ? docName : join(iterDir, '020-specs', docName);
+    const docPath = isAbsolute(docName) ? docName : join(iterDir, '020-specs', docName);
     const loc = await locateFeatureInDoc(docPath, featureName);
     if (loc) ctx.docLocations.push(loc);
   }
@@ -296,7 +296,7 @@ export function buildFeatureContextPrompt(ctx: FeatureContext): string {
   if (ctx.reqLocations.length > 0) {
     prompt += `### 需求文档（${ctx.reqLocations.length} 处）\n\n`;
     for (const loc of ctx.reqLocations.slice(0, 2)) {
-      prompt += `**${loc.title || loc.path.split('/').pop()}** (相关度: ${loc.relevance})\n`;
+      prompt += `**${loc.title || basename(loc.path)}** (相关度: ${loc.relevance})\n`;
       prompt += `\`\`\`
 ${loc.content.slice(0, 800)}
 \`\`\`
@@ -316,7 +316,7 @@ ${loc.content.slice(0, 800)}
   if (ctx.globalLocations.length > 0) {
     prompt += `### 全局架构（${ctx.globalLocations.length} 处）\n\n`;
     for (const loc of ctx.globalLocations.slice(0, 2)) {
-      prompt += `- **${loc.title || loc.path.split('/').pop()}**: ${loc.path}\n`;
+      prompt += `- **${loc.title || basename(loc.path)}**: ${loc.path}\n`;
     }
     prompt += `\n`;
   }

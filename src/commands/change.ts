@@ -7,7 +7,7 @@ import { logger, Spinner } from '../utils/logger';
 import { registerRequirement } from '../core/requirement-tracker';
 import { getDefaultIteration, getIterationDir } from '../core/context';
 import { readFile, writeFile, pathExists, ensureDir } from 'fs-extra';
-import { join } from 'path';
+import { join, basename } from 'path';
 import { FileTransaction } from '../core/transaction';
 import { scanTasks } from '../core/state';
 import { resolveTask, resolveIteration, formatResolveResult } from '../core/resolver';
@@ -228,7 +228,7 @@ function findReverseDependencies(graphContent: string, taskId: string): string[]
   const mermaidPattern = new RegExp(`\\[${taskId}\\]\\s*-->\\s*\\[(Task-\\d+)\\]`);
   const reverseMermaidPattern = new RegExp(`\\[(Task-\\d+)\\]\\s*-->\\s*\\[${taskId}\\]`);
   
-  for (const line of graphContent.split('\n')) {
+  for (const line of graphContent.split(/\r?\n/)) {
     // 正向：taskId 指向别人
     const m = line.match(mermaidPattern);
     if (m && m[1] !== taskId && !deps.includes(m[1])) deps.push(m[1]);
@@ -755,7 +755,7 @@ async function applyGlobalChange(options: ChangeOptions): Promise<void> {
 
 function findDependentTasks(graphContent: string, taskName: string): string[] {
   const deps: string[] = [];
-  const lines = graphContent.split('\n');
+  const lines = graphContent.split(/\r?\n/);
   for (const line of lines) {
     // 查找依赖关系：Task 行中包含对目标 Task 的引用
     if (line.includes(taskName) && !line.includes(`| ${taskName} |`)) {
@@ -974,7 +974,7 @@ async function processChangeLegacy(options: ChangeOptions): Promise<void> {
         continue;
       }
       const fileStat = await st(absPath);
-      const name = fp.split('/').pop() || fp;
+      const name = basename(fp) || fp;
       const ext = name.split('.').pop()?.toLowerCase() || '';
       let type: InboxFileEntry['type'] = 'other';
       if (['md', 'txt', 'markdown', 'json', 'yaml', 'yml', 'csv'].includes(ext)) type = 'text';

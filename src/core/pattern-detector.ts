@@ -6,7 +6,7 @@
  */
 
 import { readFile, pathExists, readdir } from 'fs-extra';
-import { join } from 'path';
+import { join, relative } from 'path';
 
 export interface PatternCandidate {
   name: string;
@@ -165,7 +165,7 @@ async function scanCodeDir(
         await scanCodeDir(fullPath, baseDir, results, exts);
       } else if (exts.some(ext => e.name.endsWith(ext))) {
         const content = await readFile(fullPath, 'utf-8');
-        results.push({ path: fullPath, relPath: fullPath.replace(baseDir + '/', ''), content });
+        results.push({ path: fullPath, relPath: relative(baseDir, fullPath), content });
       }
     }
   } catch { /* skip */ }

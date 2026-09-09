@@ -9,7 +9,7 @@
  */
 
 import { Command } from 'commander';
-import { join } from 'path';
+import { join, basename } from 'path';
 import { pathExists, remove, readdir } from 'fs-extra';
 import { logger, Spinner } from '../utils/logger';
 import {
@@ -141,7 +141,7 @@ export async function ragIndexCommand(options: RagIndexOptions): Promise<void> {
         logger.info('');
         logger.info('  已索引文件:');
         for (const [fp, summary] of Object.entries(result.fileSummaries)) {
-          const fileName = fp.split('/').pop() || fp;
+          const fileName = basename(fp) || fp;
           const chunkCount = result.chunks.filter(c => c.filePath === fp).length;
           logger.info(`    📄 ${fileName} (${chunkCount} 块)`);
         }
@@ -257,7 +257,7 @@ async function showRagStatus(cwd: string, taskDir: string, iteration?: string): 
     logger.info('');
     logger.info('  变更文件:');
     for (const fp of staleFiles.slice(0, 5)) {
-      logger.info(`    📝 ${fp.split('/').pop() || fp}`);
+      logger.info(`    📝 ${basename(fp) || fp}`);
     }
     if (staleFiles.length > 5) {
       logger.info(`    ... 及其他 ${staleFiles.length - 5} 个`);
@@ -271,7 +271,7 @@ async function showRagStatus(cwd: string, taskDir: string, iteration?: string): 
   logger.info('');
   logger.info('  已索引文件:');
   for (const [fp, summary] of Object.entries(index.fileSummaries)) {
-    const fileName = fp.split('/').pop() || fp;
+    const fileName = basename(fp) || fp;
     const chunkCount = index.chunks.filter(c => c.filePath === fp).length;
     const isStale = staleFiles.includes(fp);
     const status = isStale ? '⚠️' : '✅';

@@ -3,7 +3,7 @@
  * 只增量更新工具命令文件 + 配置模板，不覆盖用户数据
  */
 import { writeFile, pathExists, readFile, readdir, ensureDir, unlink } from 'fs-extra';
-import { join } from 'path';
+import { join, relative } from 'path';
 import { execSync } from 'child_process';
 import { logger, Spinner } from '../utils/logger';
 import { version as CURRENT_VERSION } from '../../package.json';
@@ -46,7 +46,7 @@ function cleanupLegacyDaemons(): { killed: number; pids: number[] } {
           'wmic process where "CommandLine like \'%speccore%schedule%\' or CommandLine like \'%speccore%daemon%\' or CommandLine like \'%speccore%watch%\'" get ProcessId,CommandLine /format:csv',
           { encoding: 'utf-8', windowsHide: true }
         );
-        pids = output.split('\n')
+        pids = output.split(/\r?\n/)
           .map(line => line.trim())
           .filter(line => line && !line.startsWith('Node'))
           .map(line => {
@@ -62,7 +62,7 @@ function cleanupLegacyDaemons(): { killed: number; pids: number[] } {
           "ps aux | grep -iE 'speccore.*(schedule|daemon|watch)' | grep -v grep | awk '{print $2}'",
           { encoding: 'utf-8' }
         );
-        pids = output.split('\n')
+        pids = output.split(/\r?\n/)
           .map(s => parseInt(s.trim(), 10))
           .filter(n => !isNaN(n) && n > 0);
       } catch { /* 无进程 */ }
@@ -77,7 +77,7 @@ function cleanupLegacyDaemons(): { killed: number; pids: number[] } {
           process.kill(pid, 'SIGTERM');
           // 给 500ms  gracefully shutdown，然后强制
           try {
-            execSync(`sleep 0.5 && kill -0 ${pid} 2>/dev/null && kill -9 ${pid}`);
+            execSync(`sleep 0.5 && kill -0 ${pid} && kill -9 ${pid}`);
           } catch { /* 已经终止 */ }
         }
         result.killed++;
@@ -165,7 +165,7 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
     try {
       if (await pathExists(legacySkill)) {
         await require('fs-extra').remove(legacySkill);
-        logger.info(`  🗑️  清理废弃模板: ${legacySkill.replace(projectRoot + '/', '')}`);
+        logger.info(`  🗑️  清理废弃模板: ${relative(projectRoot, legacySkill)}`);
       }
     } catch { /* 静默失败 */ }
   }
@@ -343,8 +343,8 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
 
   // v8.3.62+: 检查全局 CLI 是否需要更新（与 init 保持一致）
   try {
-    const globalVer = execSync('speccore --version 2>/dev/null || echo "0.0.0"', { encoding: 'utf-8', timeout: 3000 }).trim();
-    if (globalVer !== CURRENT_VERSION && globalVer !== '0.0.0') {
+    const globalVer = execSync('speccore --version', { encoding: 'utf-8', timeout: 3000, stdio: 'pipe' }).trim();
+    if (globalVer !== CURRENT_VERSION) {
       logger.warn(`⚠️  全局 speccore CLI 版本: ${globalVer}，项目要求: ${CURRENT_VERSION}`);
       logger.warn(`   👉 请执行: npm update -g speccore`);
       logger.warn(`   否则 AI 运行的 analyze/split/plan 等命令会使用旧版本，导致结果异常`);
@@ -427,8 +427,8 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   if (_updateConflicts.length > 0) {
     logger.info(`  ⚠️  ${_updateConflicts.length} 个文件有内容冲突，旧版已重命名为时间戳格式`);
     for (const { file, backup } of _updateConflicts) {
-      const rel = file.replace(projectRoot + '/', '');
-      const backupRel = backup.replace(projectRoot + '/', '');
+      const rel = relative(projectRoot, file);
+      const backupRel = relative(projectRoot, backup);
       logger.info(`     📄 ${rel}`);
       logger.info(`        对比: diff ${rel} ${backupRel}`);
     }
