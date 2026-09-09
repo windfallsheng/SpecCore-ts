@@ -7,6 +7,7 @@ import { join, relative } from 'path';
 import { execSync } from 'child_process';
 import { createInterface } from 'readline';
 import { logger, Spinner } from '../utils/logger';
+import { findProjectRoot } from '../utils/task-utils';
 import { version as CURRENT_VERSION } from '../../package.json';
 import { safeWriteWithBackup, safeCopyDirWithBackup, _updateConflicts, generateAIRulesContent, TOOL_COMMANDS, initAgentsDir, initRulesDir, initCommandsDir, initSkillsDir, initHooksDir, syncAgentsMd, writeUpgradePage } from './init';
 import {
@@ -100,7 +101,8 @@ async function askConfirm(prompt: string): Promise<boolean> {
 }
 
 export async function updateCommand(options: { force?: boolean; tool?: string; yes?: boolean }): Promise<void> {
-  const projectRoot = process.cwd();
+  // v8.3.99+: 向上查找项目根目录（支持在子目录执行）
+  const projectRoot = findProjectRoot() || process.cwd();
 
   // 解析工具过滤（含 trae-cn）
   const allTools = ['.claude', '.codebuddy', '.cursor', '.trae', '.trae-cn', '.windsurf'];
@@ -112,7 +114,15 @@ export async function updateCommand(options: { force?: boolean; tool?: string; y
   // 检查是否已初始化
   const speccoreDir = join(projectRoot, '.speccore');
   if (!(await pathExists(speccoreDir))) {
-    logger.warn('⚠️  项目未初始化，请先运行: speccore init');
+    const cwd = process.cwd();
+    if (cwd !== projectRoot) {
+      logger.warn(`⚠️  当前目录 (${relative(projectRoot, cwd) || '.'}) 未检测到 .speccore/`);
+      logger.info(`   已在父目录找到项目根: ${projectRoot}`);
+    } else {
+      logger.warn('⚠️  当前目录未检测到 .speccore/，无法执行升级');
+    }
+    logger.info('   请先运行: speccore init');
+    logger.info('   或切换到已初始化项目的目录');
     return;
   }
 
