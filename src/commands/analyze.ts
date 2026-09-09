@@ -131,6 +131,9 @@ export interface AnalyzeOptions {
 export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
   // v6.97.0+ 修复：全局分析时统一设置 iteration 为 'GLOBAL'，避免任何 fallback 到 getDefaultIteration()
   // 这是根治方案：后面所有 "options.iteration || await getDefaultIteration()" 都会命中 options.iteration
+  // v8.3.102+: 向上查找项目根目录（支持在子目录执行）
+  const _projectRoot = findProjectRoot() || process.cwd();
+
   if (options.scope === 'global' && !options.iteration) {
     options.iteration = 'GLOBAL';
   }
@@ -378,7 +381,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     // 自动刷新知识图谱
     try {
       const { refreshKnowledgeGraph } = await import('../core/knowledge-graph');
-      await refreshKnowledgeGraph(process.cwd(), iter);
+      await refreshKnowledgeGraph(_projectRoot, iter);
       logger.info('🧠 知识图谱已刷新');
     } catch {}
 
@@ -414,7 +417,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     // 自动刷新知识图谱
     try {
       const { refreshKnowledgeGraph } = await import('../core/knowledge-graph');
-      await refreshKnowledgeGraph(process.cwd(), iter);
+      await refreshKnowledgeGraph(_projectRoot, iter);
       logger.info('🧠 知识图谱已刷新');
     } catch {}
 
@@ -433,7 +436,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 
     // Step 1: 提取功能单元清单
     let units: IterationUnit[] = [];
-    const unitsCachePath = join(process.cwd(), UNITS_CACHE_DIR, iter, 'units.json');
+    const unitsCachePath = join(_projectRoot, UNITS_CACHE_DIR, iter, 'units.json');
     if (await pathExists(unitsCachePath)) {
       try {
         units = JSON.parse(await readFile(unitsCachePath, 'utf-8'));
@@ -563,7 +566,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
   // 命令前索引新鲜度检查（非阻塞）
   // v6.97.0+ 修复：全局分析时不检查迭代级索引，避免误导用户
   if (options.scope !== 'global') {
-    await warnIfIndexStale(process.cwd(), 'analyze', options.iteration);
+    await warnIfIndexStale(_projectRoot, 'analyze', options.iteration);
   }
 
   // v8.3.0+: 需求澄清检测状态（跨代码块共享）
@@ -724,7 +727,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       // 全局分析：预创建 .speccore/GLOBAL/ 目录结构，不写迭代目录
       // v6.81.0+: 需求文档单独放在 requirements/ 下，技术文档放在 platforms/ 下
       // v7.2.0+: 全局技术文档统一放在 overview/ 子目录下，与迭代层 020-specs/overview/ 命名一致
-      const globalDir = join(process.cwd(), '.speccore', 'GLOBAL');
+      const globalDir = join(_projectRoot, '.speccore', 'GLOBAL');
       await ensureDir(globalDir);
       await ensureDir(join(globalDir, 'overview'));
       await ensureDir(join(globalDir, 'platforms'));
@@ -808,7 +811,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 
     if (!isGlobalScope && iter) {
       // 变更感知：检测 Git 变更影响的端
-      affectedPlatforms = await detectAffectedPlatforms(process.cwd());
+      affectedPlatforms = await detectAffectedPlatforms(_projectRoot);
       // 关键路径优先：按任务优先级排序端
       platformOrder = await detectPlatformPriorityOrder(iter);
     }
@@ -822,7 +825,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       initStep = 'init';
     } else {
       // 迭代层：使用 createAnalyzePipeline（支持契约先行 + 逐端推进 + 变更感知 + 关键路径优先 + 需求澄清）
-      const result = await createAnalyzePipeline(iter!, process.cwd(), {
+      const result = await createAnalyzePipeline(iter!, _projectRoot, {
         affectedPlatforms: affectedPlatforms && affectedPlatforms.length > 0 ? affectedPlatforms : undefined,
         platformOrder: platformOrder && platformOrder.length > 0 ? platformOrder : undefined,
         skipClarify: options.skipClarify,
@@ -835,11 +838,11 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     }
 
     // 检查是否有活跃的 Pipeline（恢复模式）
-    const hasActive = await PipelineEngine.hasActivePipeline(process.cwd(), pipelineKey);
+    const hasActive = await PipelineEngine.hasActivePipeline(_projectRoot, pipelineKey);
     let currentStep: string;
 
     if (hasActive) {
-      const existingState = await PipelineEngine.loadExistingState(process.cwd(), pipelineKey);
+      const existingState = await PipelineEngine.loadExistingState(_projectRoot, pipelineKey);
       currentStep = existingState?.currentStep || initStep;
       logger.info(`🔄 恢复 Pipeline: ${currentStep}`);
     } else {
@@ -1036,7 +1039,7 @@ ${singlePrompt}`);
         const fp = join(goldenDir, basename(filename));
         await ensureDir(dirname(fp));
         await writeFile(fp, finalContent);
-        logger.info(`   ✅ 澄清文档已写入: ${relative(process.cwd(), fp)}`);
+        logger.info(`   ✅ 澄清文档已写入: ${relative(_projectRoot, fp)}`);
       }
       logger.info('');
     }
@@ -1104,14 +1107,14 @@ ${singlePrompt}`);
           logger.success(`✅ ${count} 个 Spec 文档已写入 ${options.task}${platformLabel}/（任务级，迭代基线不变）`);
         } else if (isGlobalScope) {
           // 全局级：写入 .speccore/GLOBAL/（与 platforms/ 同级，非迭代目录）
-          const globalBaseDir = join(process.cwd(), '.speccore', 'GLOBAL');
+          const globalBaseDir = join(_projectRoot, '.speccore', 'GLOBAL');
           await ensureDir(globalBaseDir);
           const globalSet = new Set(GLOBAL_SPEC_FILES);
 
           for (const [filename, content] of Object.entries(docs)) {
             // PATTERNS/ 文件特殊处理 → 写入 .speccore/PATTERNS/
             if (filename.startsWith('PATTERNS/')) {
-              const patternsDir = join(process.cwd(), '.speccore', 'PATTERNS');
+              const patternsDir = join(_projectRoot, '.speccore', 'PATTERNS');
               await ensureDir(patternsDir);
               const patternFile = filename.slice('PATTERNS/'.length);
               const fp = join(patternsDir, patternFile);
@@ -1252,7 +1255,7 @@ ${singlePrompt}`);
 
             // v6.72.0+: PATTERNS/ 文件特殊处理 → 写入 .speccore/PATTERNS/
             if (filename.startsWith('PATTERNS/')) {
-              const patternsDir = join(process.cwd(), '.speccore', 'PATTERNS');
+              const patternsDir = join(_projectRoot, '.speccore', 'PATTERNS');
               await ensureDir(patternsDir);
               const patternFile = filename.slice('PATTERNS/'.length);
               const fp = join(patternsDir, patternFile);
@@ -1410,7 +1413,7 @@ ${singlePrompt}`);
 
           // v8.3.14+: analyze --apply 后自动清理归档文件和临时文件
           await cleanupByType({
-            cwd: process.cwd(),
+            cwd: _projectRoot,
             types: ['archiveFiles', 'archiveDirs', 'tempFiles'],
             days: 0, // 不限天数，清理所有归档和临时文件
             silent: true,
@@ -1526,12 +1529,12 @@ ${singlePrompt}`);
           const platformLabel = options.platform ? `/${options.platform}` : '';
           logger.success(`✅ ${count} 个 Spec 文档已写入 ${options.task}${platformLabel}/（任务级，迭代基线不变）`);
         } else if (isGlobalScope) {
-          const globalBaseDir = join(process.cwd(), '.speccore', 'GLOBAL');
+          const globalBaseDir = join(_projectRoot, '.speccore', 'GLOBAL');
           await ensureDir(globalBaseDir);
           const globalSet = new Set(GLOBAL_SPEC_FILES);
           for (const [filename, content] of Object.entries(docs)) {
             if (filename.startsWith('PATTERNS/')) {
-              const patternsDir = join(process.cwd(), '.speccore', 'PATTERNS');
+              const patternsDir = join(_projectRoot, '.speccore', 'PATTERNS');
               await ensureDir(patternsDir);
               const patternFile = filename.slice('PATTERNS/'.length);
               const fp = join(patternsDir, patternFile);
@@ -1614,7 +1617,7 @@ ${singlePrompt}`);
               continue;
             }
             if (filename.startsWith('PATTERNS/')) {
-              const patternsDir = join(process.cwd(), '.speccore', 'PATTERNS');
+              const patternsDir = join(_projectRoot, '.speccore', 'PATTERNS');
               await ensureDir(patternsDir);
               const patternFile = filename.slice('PATTERNS/'.length);
               const fp = join(patternsDir, patternFile);
@@ -1669,7 +1672,7 @@ ${singlePrompt}`);
 
           // v8.3.14+: analyze --apply 后自动清理归档文件和临时文件
           await cleanupByType({
-            cwd: process.cwd(),
+            cwd: _projectRoot,
             types: ['archiveFiles', 'archiveDirs', 'tempFiles'],
             days: 0,
             silent: true,
@@ -1678,7 +1681,7 @@ ${singlePrompt}`);
         // v8.2.0+: 单元分析结果保存到缓存（供 --consolidate 汇总使用）
         if (options.unit && options.iteration) {
           try {
-            const unitsCachePath = join(process.cwd(), UNITS_CACHE_DIR, options.iteration, 'units.json');
+            const unitsCachePath = join(_projectRoot, UNITS_CACHE_DIR, options.iteration, 'units.json');
             let unitName = options.unit;
             if (await pathExists(unitsCachePath)) {
               const allUnits: IterationUnit[] = JSON.parse(await readFile(unitsCachePath, 'utf-8'));
@@ -1727,7 +1730,7 @@ ${singlePrompt}`);
       } else { logger.info(`   ⏭️  用户取消覆盖`); }
     } else if (isGlobalScope) {
       // 全局级：写 .speccore/GLOBAL/ANALYSIS.md
-      const globalDir = join(process.cwd(), '.speccore', 'GLOBAL');
+      const globalDir = join(_projectRoot, '.speccore', 'GLOBAL');
       await ensureDir(globalDir);
       const globalAnalysisPath = join(globalDir, 'ANALYSIS.md');
       if (await shouldOverwrite(globalAnalysisPath, !!options.interactive)) {
@@ -1780,7 +1783,7 @@ ${singlePrompt}`);
     if (options.iteration) {
       try {
         const { refreshKnowledgeGraph } = await import('../core/knowledge-graph');
-        await refreshKnowledgeGraph(process.cwd(), options.iteration);
+        await refreshKnowledgeGraph(_projectRoot, options.iteration);
         logger.info('🧠 知识图谱已刷新');
       } catch {}
       try {
@@ -1792,7 +1795,7 @@ ${singlePrompt}`);
         if (await pathExists(specsDir)) dirs.push(specsDir);
         if (await pathExists(reqDir)) dirs.push(reqDir);
         if (dirs.length > 0) {
-          await indexDirectoryDocuments(process.cwd(), dirs, `${options.iteration}_iteration_all`, `rag-index-${options.iteration}.json`);
+          await indexDirectoryDocuments(_projectRoot, dirs, `${options.iteration}_iteration_all`, `rag-index-${options.iteration}.json`);
           logger.info('🔍 迭代 RAG 索引已刷新');
         }
       } catch {}
@@ -1805,7 +1808,7 @@ ${singlePrompt}`);
       const pipelineKey = isGlobalScope ? 'GLOBAL' : options.iteration;
       if (!pipelineKey) return;
 
-      const hasPipeline = await PipelineEngine.hasActivePipeline(process.cwd(), pipelineKey);
+      const hasPipeline = await PipelineEngine.hasActivePipeline(_projectRoot, pipelineKey);
       if (hasPipeline) {
         const { createAnalyzePipeline, createGlobalAnalyzePipeline } = await import('../core/pipeline-engine');
 
@@ -1815,9 +1818,9 @@ ${singlePrompt}`);
           engine = (await createGlobalAnalyzePipeline()).engine;
         } else {
           const { detectAffectedPlatforms, detectPlatformPriorityOrder } = await import('../core/change-detection');
-          const affectedPlatforms = await detectAffectedPlatforms(process.cwd());
+          const affectedPlatforms = await detectAffectedPlatforms(_projectRoot);
           const platformOrder = await detectPlatformPriorityOrder(options.iteration!);
-          engine = (await createAnalyzePipeline(options.iteration!, process.cwd(), {
+          engine = (await createAnalyzePipeline(options.iteration!, _projectRoot, {
             affectedPlatforms: affectedPlatforms.length > 0 ? affectedPlatforms : undefined,
             platformOrder: platformOrder.length > 0 ? platformOrder : undefined,
           })).engine;
@@ -2478,7 +2481,7 @@ async function injectGraphSummary(prompt: string): Promise<string> {
     if (_graphSummaryCache && Date.now() - _graphSummaryCacheTime < GRAPH_SUMMARY_TTL) {
       return prompt + _graphSummaryCache;
     }
-    const cg = await loadCodeGraph(process.cwd());
+    const cg = await loadCodeGraph((findProjectRoot() || process.cwd()));
     if (!cg) return prompt;
 
     const lines: string[] = [];
@@ -2536,7 +2539,7 @@ async function detectGlobalLayerProgress(): Promise<{
   missing: string[];
   subLayer?: { completed: string[]; next: string };
 }> {
-  const globalDir = join(process.cwd(), '.speccore', 'GLOBAL');
+  const globalDir = join((findProjectRoot() || process.cwd()), '.speccore', 'GLOBAL');
   let completedLayer = 0;
   const missing: string[] = [];
 
@@ -2743,7 +2746,7 @@ async function buildGlobalAnalysisGuide(options?: AnalyzeOptions): Promise<strin
   guide += '\n➡️  下一步:\n';
 
   if (deepDoc && options?.iterative) {
-    const outlinePath = join(process.cwd(), '.speccore', 'cache', `deep-outline-${deepDoc.replace(/\//g, '-')}.md`);
+    const outlinePath = join((findProjectRoot() || process.cwd()), '.speccore', 'cache', `deep-outline-${deepDoc.replace(/\//g, '-')}.md`);
     const hasOutline = await pathExists(outlinePath);
     if (!hasOutline) {
       guide += `   1. 将 AI 输出的大纲保存到: ${outlinePath}\n`;
@@ -2913,7 +2916,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     if (targetLayer === 1 && ctx.withCode) {
       try {
         // 读取 CONSTITUTION.md 获取源码路径
-        const constitutionPath = join(process.cwd(), '.speccore', 'CONSTITUTION.md');
+        const constitutionPath = join((findProjectRoot() || process.cwd()), '.speccore', 'CONSTITUTION.md');
         let sourcePaths: string[] = ['src'];
         if (await pathExists(constitutionPath)) {
           const content = await readFile(constitutionPath, 'utf-8');
@@ -2922,7 +2925,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
             sourcePaths = match.map(m => m.replace(/.*-\s*`?/, '').replace(/`?$/, '').trim()).filter(Boolean);
           }
         }
-        await extractStructuredData(process.cwd(), sourcePaths);
+        await extractStructuredData((findProjectRoot() || process.cwd()), sourcePaths);
         structuredDataHint = '\n> 📊 **结构化数据**: 已提取到 `.speccore/cache/structured-data.json`，包含 API/Entity/Route/Component 清单\n';
       } catch (e: any) {
         logger.warn(`   ⚠️ 结构化数据提取失败: ${e.message}`);
@@ -3104,7 +3107,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
 
       // v7.4.5+: CLI 预提取每个功能模块的代码上下文
       try {
-        const modulesCtx = await buildLayer3ModuleContext(process.cwd());
+        const modulesCtx = await buildLayer3ModuleContext((findProjectRoot() || process.cwd()));
         if (modulesCtx) {
           prompt += `## 📎 CLI 预提取的功能模块代码上下文（v7.4.5+）\n\n`;
           prompt += `> 以下内容由 CLI 从 structured-data.json 和 _MODULES.md 自动提取，你不需要自己搜索。\n`;
@@ -3528,7 +3531,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
 
       if (deepDoc) {
         // --deep 模式：单文档深度分析
-        const outlinePath = join(process.cwd(), '.speccore', 'cache', `deep-outline-${deepDoc.replace(/\//g, '-')}.md`);
+        const outlinePath = join((findProjectRoot() || process.cwd()), '.speccore', 'cache', `deep-outline-${deepDoc.replace(/\//g, '-')}.md`);
         const hasOutline = await pathExists(outlinePath);
 
         if (options?.iterative && !hasOutline) {
@@ -3592,7 +3595,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
         }
       } else {
         // v7.5.0+: 子层内逐文档生成 — 检测当前子层中哪些文档已存在，每次只生成下一个缺失的
-        const globalDir = join(process.cwd(), '.speccore', 'GLOBAL');
+        const globalDir = join((findProjectRoot() || process.cwd()), '.speccore', 'GLOBAL');
         const overviewDir = join(globalDir, 'overview');
         const requirementsDir = join(globalDir, 'requirements');
         const platformsDir = join(globalDir, 'platforms');
@@ -3642,7 +3645,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
         const existingDocs: string[] = [];
         const missingDocs: string[] = [];
         for (const doc of expectedDocs) {
-          const fullPath = join(process.cwd(), '.speccore', 'GLOBAL', doc);
+          const fullPath = join((findProjectRoot() || process.cwd()), '.speccore', 'GLOBAL', doc);
           if (await pathExists(fullPath)) {
             existingDocs.push(doc);
           } else {
@@ -4377,9 +4380,9 @@ status: "clarified"
   if (!isGlobal && ctx.withCode && ctx.iteration && ctx.iteration !== 'GLOBAL') {
     try {
       // 1. 提取结构化数据（如果还没有）
-      const structuredDataPath = join(process.cwd(), '.speccore', 'cache', 'structured-data.json');
+      const structuredDataPath = join((findProjectRoot() || process.cwd()), '.speccore', 'cache', 'structured-data.json');
       if (!(await pathExists(structuredDataPath))) {
-        const constitutionPath = join(process.cwd(), '.speccore', 'CONSTITUTION.md');
+        const constitutionPath = join((findProjectRoot() || process.cwd()), '.speccore', 'CONSTITUTION.md');
         let sourcePaths: string[] = ['src'];
         if (await pathExists(constitutionPath)) {
           const content = await readFile(constitutionPath, 'utf-8');
@@ -4389,7 +4392,7 @@ status: "clarified"
           }
         }
         const { extractStructuredData } = await import('../core/structured-extractor');
-        await extractStructuredData(process.cwd(), sourcePaths);
+        await extractStructuredData((findProjectRoot() || process.cwd()), sourcePaths);
       }
 
       // 2. 注入结构化数据摘要到 Prompt
@@ -4412,7 +4415,7 @@ status: "clarified"
       if (options?.featureName) {
         const { buildFeatureContext, buildFeatureContextPrompt } = await import('../core/semantic-locator');
         const iterDir = await getIterationDir(ctx.iteration);
-        const featureCtx = await buildFeatureContext(process.cwd(), iterDir, options.featureName, options.docName);
+        const featureCtx = await buildFeatureContext((findProjectRoot() || process.cwd()), iterDir, options.featureName, options.docName);
         prompt += buildFeatureContextPrompt(featureCtx);
       }
     } catch (e: any) {
@@ -4729,7 +4732,7 @@ status: "clarified"
     prompt += `8. **端发现（重要）**：先确定项目有哪些端，再按端组织文档\n`;
     prompt += `   - 第 1 步：Read .speccore/CONSTITUTION.md\n`;
     prompt += `   - 第 2 步：从「## 端列表」章节提取端名（这是全局权威来源）\n`;
-    prompt += `   - 第 3 步：如果没有「端列表」章节，从「对应端」列提取\n`;
+    prompt += `   - 第 3 步：如果没有「端列表」章节，从「对应需求端」列提取\n`;
     prompt += `   - 第 4 步：如果以上都无法确定，根据需求文档内容判断\n`;
     prompt += `   - 第 5 步：将发现的端列表写入 020-specs/PLATFORMS.md\n`;
     // v6.70.0+: REQUIREMENT.md 以产品视角撰写（不按端分章节）
@@ -4975,7 +4978,7 @@ status: "clarified"
   // ── v6.52.0+: 图谱 RAG 上下文注入（analyze 阶段也检索项目关联内容）──
   if (!isTask && ctx.phase !== '2') {
     try {
-      const ragResult = await unifiedSearch(process.cwd(), {
+      const ragResult = await unifiedSearch((findProjectRoot() || process.cwd()), {
         query: ctx.iteration || '',
         iteration: ctx.iteration,
         platform: ctx.platform,
@@ -5324,7 +5327,7 @@ async function buildClarifyPhasePrompt(iteration: string): Promise<string> {
   // v6.84.0+: 从 AGENTS 规范数据库动态加载角色
   let prompt = `\n# 任务: 需求专业化（Phase 0: 需求澄清，v6.84.0+)\n\n`;
 
-  const projectRoot = findProjectRoot() || process.cwd();
+  const projectRoot = findProjectRoot() || (findProjectRoot() || process.cwd());
   const agentContext: AgentContext = {
     iteration,
     iterationDir: iterDir,
@@ -5703,7 +5706,7 @@ export async function extractIterationUnits(iterDir: string): Promise<IterationU
 
 /** 保存单元分析结果到缓存 */
 export async function saveUnitAnalysis(iteration: string, analysis: UnitAnalysis): Promise<void> {
-  const cacheDir = join(process.cwd(), UNITS_CACHE_DIR, iteration);
+  const cacheDir = join((findProjectRoot() || process.cwd()), UNITS_CACHE_DIR, iteration);
   await ensureDir(cacheDir);
   const fp = join(cacheDir, `${analysis.id}.json`);
   await writeFile(fp, JSON.stringify(analysis, null, 2));
@@ -5711,7 +5714,7 @@ export async function saveUnitAnalysis(iteration: string, analysis: UnitAnalysis
 
 /** 读取已完成的单元分析 */
 export async function loadUnitAnalyses(iteration: string): Promise<UnitAnalysis[]> {
-  const cacheDir = join(process.cwd(), UNITS_CACHE_DIR, iteration);
+  const cacheDir = join((findProjectRoot() || process.cwd()), UNITS_CACHE_DIR, iteration);
   if (!await pathExists(cacheDir)) return [];
   const files = (await readdir(cacheDir)).filter(f => f.endsWith('.json'));
   const results: UnitAnalysis[] = [];

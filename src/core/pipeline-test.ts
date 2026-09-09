@@ -16,6 +16,7 @@
 import { pathExists } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
+import { findProjectRoot } from '../utils/task-utils';
 import type { EnvironmentConfig } from './environment-config';
 import type { PlatformConfig, DeployEnvConfig } from './unified-config';
 import type { VerifySpec, SmokeResult, VisualResult } from './ui-verify';
@@ -409,9 +410,10 @@ async function runPipelineVisualTest(
     ],
   };
 
-  const screenshotDir = join(process.cwd(), 'reports', 'pipeline', env, platformName, 'screenshots');
-  const baselineDir = join(process.cwd(), 'reports', 'pipeline', env, platformName, 'baselines');
-  const diffDir = join(process.cwd(), 'reports', 'pipeline', env, platformName, 'diffs');
+  const projectRoot = findProjectRoot() || process.cwd();
+  const screenshotDir = join(projectRoot, 'reports', 'pipeline', env, platformName, 'screenshots');
+  const baselineDir = join(projectRoot, 'reports', 'pipeline', env, platformName, 'baselines');
+  const diffDir = join(projectRoot, 'reports', 'pipeline', env, platformName, 'diffs');
 
   try {
     const smokeResults = await runSmokeTest(spec, {
@@ -454,7 +456,8 @@ async function runPipelineApiTest(
   platformName: string
 ): Promise<ApiVerifyReport> {
   // 尝试查找 API_CONTRACT.yaml
-  const contractPath = join(process.cwd(), 'API_CONTRACT.yaml');
+  const projectRoot = findProjectRoot() || process.cwd();
+  const contractPath = join(projectRoot, 'API_CONTRACT.yaml');
   const hasContract = await pathExists(contractPath);
 
   if (!hasContract) {

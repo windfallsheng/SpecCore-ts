@@ -8,7 +8,7 @@
  */
 import { readFile, pathExists, readdir, stat } from 'fs-extra';
 import { join, dirname, relative } from 'path';
-import { isTimestampBackup } from '../utils/task-utils';
+import { isTimestampBackup, findProjectRoot } from '../utils/task-utils';
 import { logger } from '../utils/logger';
 import { loadKnowledgeGraph, getTaskContext, isGraphStale, refreshKnowledgeGraph, KnowledgeGraph } from './knowledge-graph';
 import { buildCompactContext } from './context-builder';
@@ -1436,7 +1436,7 @@ export async function buildPrompt(
     platform?: string;
   }
 ): Promise<SpecCorePrompt> {
-  const cwd = options.cwd || process.cwd();
+  const cwd = options.cwd || findProjectRoot() || process.cwd();
   const techStack = await loadTechStack(cwd);
   const taskDir = options.taskDir || '';
 
@@ -1562,7 +1562,7 @@ export async function buildPrompt(
   if (command === 'execute') {
     const projectInfoMap = await parseProjectInfo();
     if (projectInfoMap.size > 0) {
-      const lines = ['## 📂 工程路径（代码输出位置）', '', '| 工程标识 | 工程类型 | 源码路径 | 对应端 |', '| :--- | :--- | :--- | :--- |'];
+      const lines = ['## 📂 工程路径（代码输出位置）', '', '| 工程标识 | 工程类型 | 源码路径 | 对应需求端 |', '| :--- | :--- | :--- | :--- |'];
       for (const [identifier, info] of projectInfoMap) {
         lines.push(`| ${identifier} | ${info.projectType || '-'} | \`${info.srcPath}\` | ${info.platform} |`);
       }

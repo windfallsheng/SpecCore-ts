@@ -421,8 +421,25 @@ function readConstitutionPlatformMapping(): Record<string, { platforms: string[]
     if (!fs.existsSync(path)) return result;
     const content = fs.readFileSync(path, 'utf-8');
     
-    // 找到「项目信息」下的表格
-    const tableStart = content.indexOf('| 工程 |');
+    // 找到「项目信息」下的表格（支持多种表头变体）
+    // 优先匹配「工程」，回退到「工程标识」或包含「项目信息」的表格
+    const tableMarkers = ['| 工程 |', '|工程|', '| 工程标识 |', '|工程标识|'];
+    let tableStart = -1;
+    for (const marker of tableMarkers) {
+      tableStart = content.indexOf(marker);
+      if (tableStart >= 0) break;
+    }
+    // 如果都没找到，尝试从「项目信息」章节后查找第一个表格
+    if (tableStart < 0) {
+      const infoSection = content.indexOf('##');
+      if (infoSection >= 0) {
+        const afterHeader = content.slice(infoSection);
+        const firstTable = afterHeader.search(/\n\|[^\n]+\|\s*\n\s*\|[-:\s|]+\|/);
+        if (firstTable >= 0) {
+          tableStart = infoSection + firstTable;
+        }
+      }
+    }
     if (tableStart < 0) return result;
     
     const lines = content.slice(tableStart).split('\n');
@@ -470,48 +487,45 @@ function readConstitutionPlatformMapping(): Record<string, { platforms: string[]
 }
 
 /**
- * v8.3.101+: 智能提取 CONSTITUTION.md 内容传给 AI
+ * v8.3.102+: 智能提取 CONSTITUTION.md 内容传给 AI
  * 优先保留「端列表」章节（技术端名的权威来源），其次「项目信息」章节
  * 避免 .slice(0, 2000) 截断导致 AI 看不到端列表
+ * 支持多种章节标题变体（端列表/平台列表/工程列表/端名列表）
  */
 function extractConstitutionForAI(content: string): string {
   const lines = content.split('\n');
   const result: string[] = [];
-  let inPlatformSection = false;
-  let inProjectInfoSection = false;
+  let inTargetSection = false;
+
+  // 匹配端列表相关标题：端列表、平台列表、工程列表、端名列表
+  const platformSectionRe = /^##\s+.*(?:端列表|平台列表|工程列表|端名列表)/;
+  // 匹配项目信息相关标题：项目信息、工程信息
+  const projectInfoSectionRe = /^##\s+.*(?:项目信息|工程信息)/;
 
   for (const line of lines) {
     const trimmed = line.trim();
 
     // 检测「端列表」章节开始
-    if (trimmed.match(/^##\s+.*端列表/)) {
-      inPlatformSection = true;
-      inProjectInfoSection = false;
+    if (platformSectionRe.test(trimmed)) {
+      inTargetSection = true;
       result.push(line);
       continue;
     }
     // 检测「项目信息」章节开始
-    if (trimmed.match(/^##\s+.*项目信息/)) {
-      inPlatformSection = false;
-      inProjectInfoSection = true;
+    if (projectInfoSectionRe.test(trimmed)) {
+      inTargetSection = true;
       result.push(line);
       continue;
     }
     // 其他 ## 章节开始，停止当前提取
     if (trimmed.match(/^##\s+/)) {
-      inPlatformSection = false;
-      inProjectInfoSection = false;
+      inTargetSection = false;
       continue;
     }
 
-    // 在目标章节内，过滤掉注释引用行（> 开头）和一级标题（# 开头）
-    if (inPlatformSection || inProjectInfoSection) {
-      if (trimmed && !trimmed.startsWith('# ') && !trimmed.startsWith('> ')) {
-        result.push(line);
-      } else if (trimmed) {
-        // 保留章节内的注释和标题（用于结构完整性）
-        result.push(line);
-      }
+    // 在目标章节内保留所有行（包括空行，维持 Markdown 表格格式）
+    if (inTargetSection) {
+      result.push(line);
     }
   }
 

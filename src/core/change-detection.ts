@@ -120,7 +120,7 @@ export async function loadSourcePathMap(cwd: string): Promise<Map<string, string
   try {
     const content = await readFile(constitutionPath, 'utf-8');
     // 解析「项目信息」表格
-    // 格式：| 工程 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应端 |
+    // 格式：| 工程 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应需求端 |
     const lines = content.split('\n');
     let inProjectSection = false;
 
@@ -144,7 +144,7 @@ export async function loadSourcePathMap(cwd: string): Promise<Map<string, string
       const cells = line.split('|').map(c => c.trim()).filter(Boolean);
       if (cells.length >= 6) {
         const srcPath = cells[2];        // 源码路径列
-        const platform = cells[5];       // 对应端列
+        const platform = cells[5];       // 对应需求端列
         if (srcPath && platform && platform !== '待填写') {
           // 标准化路径（去掉开头的 ./）
           const normalized = srcPath.replace(/^\.\//, '');

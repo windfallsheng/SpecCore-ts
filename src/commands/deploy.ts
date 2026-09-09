@@ -4,11 +4,13 @@
  * 封装 deploy-engine，提供 CLI 入口，支持单端/全量部署。
  */
 import { execSync } from 'child_process';
+import { join, isAbsolute } from 'path';
 import { logger, Spinner } from '../utils/logger';
 import { loadProjectConfigWithEnv } from '../core/unified-config';
 import { deployPlatform } from '../core/deploy/engine';
 import type { DeployOptions as EngineDeployOptions, DeployResult } from '../core/deploy/engine';
 import type { PlatformConfig } from '../core/unified-config';
+import { findProjectRoot } from '../utils/task-utils';
 
 export interface DeployCliOptions {
   platform?: string;
@@ -54,7 +56,10 @@ export async function deployCommand(options: DeployCliOptions): Promise<void> {
   const results: DeployResult[] = [];
 
   for (const platform of targets) {
-    const cwd = platform.code_path || process.cwd();
+    const projectRoot = findProjectRoot() || process.cwd();
+    const cwd = platform.code_path
+      ? (isAbsolute(platform.code_path) ? platform.code_path : join(projectRoot, platform.code_path))
+      : process.cwd();
 
     // 分支切换
     if (options.branch) {

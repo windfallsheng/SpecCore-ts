@@ -374,7 +374,7 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 > - 全小写、无空格、用短横线分隔（如 order-service）
 > - 工程类型：AI 据此生成针对性内容（见下方工程类型枚举）
 > - 此列表是 analyze/split/execute 的唯一端名来源
-> - 「对应端」列引用此列表中的工程标识，每行只填一个
+> - 「对应需求端」列引用此列表中的工程标识，每行只填一个
 
 > **工程类型枚举**（可自定义）：
 > - 后端：Java服务 / Node服务 / Go服务 / Python服务
@@ -384,7 +384,7 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 
 ## 项目信息
 
-| 工程标识 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应端 |
+| 工程标识 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应需求端 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | ${projectName} | 待填写 | ./ | ${gitUrl || '待配置'} | main | 待填写 |
 
@@ -393,7 +393,7 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 
 > 多工程示例（每个端 = 一个独立工程）:
 >
-> | 工程标识 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应端 |
+> | 工程标识 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应需求端 |
 > | :--- | :--- | :--- | :--- | :--- | :--- |
 > | admin-web | 后台管理端 | ./packages/admin | git@xxx/admin.git | main | admin |
 > | h5-app | 移动H5端 | ./packages/h5 | git@xxx/h5.git | main | h5 |
@@ -401,7 +401,7 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 > | backend-service | 后台服务 | ./packages/backend | git@xxx/backend.git | main | backend |
 >
 > **关键规则**：
-> - 「对应端」列的值必须引用「端列表」中已声明的端名
+> - 「对应需求端」列的值必须引用「端列表」中已声明的端名
 > - 一一对应：每行一个工程对应一个端名（不填多个）
 > - 如果一个服务拆成多个工程（如 user-service + order-service 都属于 backend），应在「端列表」中分别声明
 
@@ -2022,7 +2022,7 @@ export async function checkUpgradeHints(projectRoot: string, speccoreDir: string
       // 替换整个"项目标识"章节为"项目信息"（从 ## 项目标识 到下一个 ## 之间）
       updated = updated.replace(
         new RegExp('##\\s*\u9879\u76ee\u6807\u8bc6[\\s\\S]*?(?=##\\s|\\Z)'),
-        `## 项目信息\n\n| 工程 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应端 |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n| ${projShort} | ${projName} | ./ | ${repo} | main | 待填写 |\n`
+        `## 项目信息\n\n| 工程 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应需求端 |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n| ${projShort} | ${projName} | ./ | ${repo} | main | 待填写 |\n`
       );
       migrations.push(`旧版「项目标识」纵向表 → 新版「项目信息」横向表（项目名称: ${projName}）`);
     }

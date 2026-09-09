@@ -24,7 +24,8 @@ import type { PlatformConfig } from '../core/unified-config';
 import { runPipelineTest, formatPipelineTestReport } from '../core/pipeline-test';
 import { loadSubtaskGitConfig } from '../core/git-integration';
 import { existsSync, readdirSync, statSync, readFileSync } from 'fs-extra';
-import { join } from 'path';
+import { join, isAbsolute } from 'path';
+import { findProjectRoot } from '../utils/task-utils';
 
 export interface PipelineOptions {
   platforms?: string;
@@ -85,9 +86,19 @@ function isSpeccoreOwnRepo(cwd: string): boolean {
 }
 
 /** v8.3.86+: 从子任务 git-config 中读取对应平台的源分支 */
+/** v8.3.102+: 解析平台 code_path（支持相对路径基于项目根目录） */
+function resolvePlatformPath(platform?: PlatformConfig): string {
+  const projectRoot = findProjectRoot() || process.cwd();
+  if (platform?.code_path) {
+    return isAbsolute(platform.code_path) ? platform.code_path : join(projectRoot, platform.code_path);
+  }
+  return process.cwd();
+}
+
 function findSubtaskBranchForPlatform(iteration: string, platformName: string): string | null {
   try {
-    const tasksDir = join(process.cwd(), `Iteration-${iteration}`, '030-tasks');
+    const projectRoot = findProjectRoot() || process.cwd();
+    const tasksDir = join(projectRoot, `Iteration-${iteration}`, '030-tasks');
     if (!existsSync(tasksDir)) return null;
 
     for (const taskType of readdirSync(tasksDir)) {
@@ -113,7 +124,8 @@ function findSubtaskBranchForPlatform(iteration: string, platformName: string): 
 /** 读取当前活跃迭代名 */
 function getCurrentIteration(): string | null {
   try {
-    const ctxPath = join(process.cwd(), '.speccore', 'local', 'context.json');
+    const projectRoot = findProjectRoot() || process.cwd();
+    const ctxPath = join(projectRoot, '.speccore', 'local', 'context.json');
     if (!existsSync(ctxPath)) return null;
     const ctx = JSON.parse(readFileSync(ctxPath, 'utf-8'));
     return ctx.currentIteration || null;
@@ -178,7 +190,7 @@ export async function pipelineCommand(options: PipelineOptions): Promise<void> {
   }
 
   // 获取当前分支（作为源分支）
-  const firstCwd = targets[0]?.code_path || process.cwd();
+  const firstCwd = resolvePlatformPath(targets[0]);
   const sourceBranch = getCurrentBranch(firstCwd);
   if (!sourceBranch) {
     logger.error('❌ 无法获取当前 Git 分支');
@@ -248,7 +260,7 @@ export async function pipelineCommand(options: PipelineOptions): Promise<void> {
   const results: PipelineResult[] = [];
 
   for (const platform of targets) {
-    const cwd = platform.code_path || process.cwd();
+    const cwd = resolvePlatformPath(platform);
     const platformBranch = platformBranches.get(platform.name);
     if (!platformBranch) {
       logger.warn(`   ⚠️ [${platform.name}] 未配置 branch，跳过`);

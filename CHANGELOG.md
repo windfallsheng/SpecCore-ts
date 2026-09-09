@@ -1,3 +1,20 @@
+## v8.3.102 (2026-09-09) — 全命令子目录支持 + 术语统一完善
+
+### 修复
+
+**全命令子目录执行支持（v8.3.102）**:
+- `pipeline`、`deploy`、`verify`、`analyze` 等命令统一支持在项目子目录执行
+- 所有 `process.cwd()` 路径解析改为 `findProjectRoot() || process.cwd()`（向上查找 `.speccore/`）
+- `code_path` 相对路径统一基于项目根目录解析（支持 `../project-a/src` 等跨目录配置）
+- **影响文件**：`src/commands/pipeline.ts`、`src/commands/deploy.ts`、`src/core/deploy/engine.ts`、`src/core/pipeline-test.ts`、`src/core/prompt-builder.ts`、`src/commands/analyze.ts`
+
+**术语统一完善（v8.3.102）**:
+- 初始化模板（CONSTITUTION.md）、Prompt 构建器、变更检测等所有「对应端」表头统一为「对应需求端」
+- 明确区分「技术端列表」（端列表章节）和「需求模块映射」（项目信息表格的对应需求端列）
+- **影响文件**：`src/commands/init.ts`、`src/core/prompt-builder.ts`、`src/core/change-detection.ts`、`src/commands/analyze.ts`
+
+---
+
 ## v8.3.101 (2026-09-09) — Verify 子目录支持 + AI 端列表识别修复 + 术语统一
 
 ### 修复

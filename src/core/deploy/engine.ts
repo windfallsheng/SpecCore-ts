@@ -9,9 +9,10 @@
 
 import { execSync } from 'child_process';
 import { pathExists } from 'fs-extra';
-import { join } from 'path';
+import { join, isAbsolute } from 'path';
 import { logger, Spinner } from '../../utils/logger';
 import type { DeployEnvConfig, PlatformConfig } from '../unified-config';
+import { findProjectRoot } from '../../utils/task-utils';
 
 export interface DeployOptions {
   platform: string;      // 端名，如 h5-mobile, api
@@ -61,7 +62,11 @@ export async function deployPlatform(
     if (deployConfig.pre_deploy && !options.dryRun) {
       for (const cmd of deployConfig.pre_deploy) {
         logger.info(`  ▸ pre: ${cmd}`);
-        execSync(cmd, { stdio: 'pipe', cwd: platform.code_path || process.cwd() });
+        const projectRoot = findProjectRoot() || process.cwd();
+        const codePath = platform.code_path
+          ? (isAbsolute(platform.code_path) ? platform.code_path : join(projectRoot, platform.code_path))
+          : process.cwd();
+        execSync(cmd, { stdio: 'pipe', cwd: codePath });
       }
     }
 
@@ -77,7 +82,11 @@ export async function deployPlatform(
     if (deployConfig.post_deploy && !options.dryRun) {
       for (const cmd of deployConfig.post_deploy) {
         logger.info(`  ▸ post: ${cmd}`);
-        execSync(cmd, { stdio: 'pipe', cwd: platform.code_path || process.cwd() });
+        const projectRoot = findProjectRoot() || process.cwd();
+        const codePath = platform.code_path
+          ? (isAbsolute(platform.code_path) ? platform.code_path : join(projectRoot, platform.code_path))
+          : process.cwd();
+        execSync(cmd, { stdio: 'pipe', cwd: codePath });
       }
     }
 
@@ -112,7 +121,10 @@ async function executeDeploy(
   config: DeployEnvConfig,
   skipBuild: boolean = false
 ): Promise<void> {
-  const cwd = platform.code_path || process.cwd();
+  const projectRoot = findProjectRoot() || process.cwd();
+  const cwd = platform.code_path
+    ? (isAbsolute(platform.code_path) ? platform.code_path : join(projectRoot, platform.code_path))
+    : process.cwd();
 
   switch (config.type) {
     case 'docker':
