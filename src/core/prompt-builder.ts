@@ -467,7 +467,7 @@ async function loadExtraSpecs(
       }
       // 单文件大小限制
       if (content.length > MAX_PER_FILE) {
-        content = content.slice(0, MAX_PER_FILE) + `\n\n> ... (已截断，原文件 ${rawContent.length} 字)`;
+        content = content.slice(0, MAX_PER_FILE) + `\n\n> ... (已截断，原文件 ${rawContent.length} 字，完整内容请 Read: ${fullPath})`;
       }
       // 总大小限制
       if (totalChars + content.length > MAX_TOTAL) {
@@ -639,7 +639,7 @@ async function loadAllTaskContext(
     }
     if (content.trim().length <= 50 || content.trim().match(/^#+\s*待填充|^<!--\s*AI-FILL\s*-->$/m)) return;
     if (content.length > MAX_PER_FILE) {
-      content = content.slice(0, MAX_PER_FILE) + `\n\n> ... (已截断，原文件 ${rawContent.length} 字)`;
+      content = content.slice(0, MAX_PER_FILE) + `\n\n> ... (已截断，原文件 ${rawContent.length} 字，完整内容请 Read: ${fullPath})`;
     }
     if (totalChars + content.length > MAX_TOTAL) return;
     totalChars += content.length;
@@ -2073,8 +2073,9 @@ async function expandMarkdownLinks(
         linkContent = extractHtmlText(linkContent);
       }
       if (linkContent.trim().length <= 30) continue;
-      if (linkContent.length > maxChars) {
-        linkContent = linkContent.slice(0, maxChars) + '\n\n> ... (已截断)';
+      const isTruncated = linkContent.length > maxChars;
+      if (isTruncated) {
+        linkContent = linkContent.slice(0, maxChars) + `\n\n> ... (已截断，完整内容请 Read: ${resolved})`;
       }
       expansions.push(
         `\n\n<!-- 展开链接: ${link.path} -->\n**[链接展开] ${link.text}** (${link.path}):\n\n${linkContent}`
@@ -2158,8 +2159,9 @@ async function inlineMarkdownImages(
 /**
  * 统一处理 Markdown 内容：展开链接 + 提取图片
  * 在 loadExtraSpecs / loadAllTaskContext 的文件加载后调用
+ * v8.3.97+: 导出供 analyze-engine / analyze 命令使用
  */
-async function processMarkdownContent(
+export async function processMarkdownContent(
   content: string,
   filePath: string,
   seenPaths: Set<string>,

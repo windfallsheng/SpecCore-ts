@@ -212,6 +212,7 @@ export const DEFAULT_CONFIG: SpecConfig = {
       enabled: false,
       smoke_test: true,
       visual_check: true,
+      headed: false,
       threshold: 'normal',
       devices: ['desktop'],
       browsers: ['chromium'],
@@ -1246,6 +1247,8 @@ function toYaml(config: SpecConfig): string {
     yaml += `    smoke_test: ${vui.smoke_test}\n`;
     yaml += '    # visual_check: 是否执行视觉检查\n';
     yaml += `    visual_check: ${vui.visual_check}\n`;
+    yaml += '    # headed: 是否使用有头浏览器（显示浏览器窗口，便于调试）\n';
+    yaml += `    headed: ${vui.headed}\n`;
     yaml += '    # threshold: 检测严格度\n';
     yaml += '    #   strict → 任何微小差异都视为问题\n';
     yaml += '    #   normal → 明显差异视为问题\n';
@@ -1362,8 +1365,21 @@ function toYaml(config: SpecConfig): string {
     yaml += '  # ── LLM 提供商（可选）──\n';
     yaml += '  llm_providers:\n';
     for (const p of config.ask.llm_providers) {
-      yaml += `    - name: ${p.name}\n      enabled: ${p.enabled}\n      type: ${p.type}\n      endpoint: ${p.endpoint}\n      model: ${p.model}\n`;
-      if (p.apiKey) yaml += `      apiKey: ${p.apiKey}\n`;
+      yaml += `    - # 提供商名称\n`;
+      yaml += `      name: ${p.name}\n`;
+      yaml += `      # 是否启用\n`;
+      yaml += `      enabled: ${p.enabled}\n`;
+      yaml += `      # 类型：ollama | openai | anthropic | custom\n`;
+      yaml += `      type: ${p.type}\n`;
+      yaml += `      # API 端点地址\n`;
+      yaml += `      endpoint: ${p.endpoint}\n`;
+      yaml += `      # 模型名称\n`;
+      yaml += `      model: ${p.model}\n`;
+      if (p.apiKey) {
+        yaml += `      # API Key（可选，默认从环境变量读取）\n`;
+        yaml += `      apiKey: ${p.apiKey}\n`;
+      }
+      yaml += `      # 优先级（数字越小优先级越高）\n`;
       yaml += `      priority: ${p.priority}\n`;
     }
   }
@@ -1382,10 +1398,17 @@ function toYaml(config: SpecConfig): string {
   yaml += `  libreoffice: ${config.tools?.libreoffice || '""'}\n`;
 
   if (config.config_history.length > 0) {
-    yaml += '\nconfig_history:\n';
+    yaml += '\n# ── 配置升级历史（自动生成）──\n';
+    yaml += 'config_history:\n';
     for (const h of config.config_history) {
-      yaml += `  - date: ${h.date}\n    change: ${h.change}\n`;
-      if (h.changed_by) yaml += `    changed_by: ${h.changed_by}\n`;
+      yaml += `  - # 升级日期\n`;
+      yaml += `    date: ${h.date}\n`;
+      yaml += `    # 变更说明\n`;
+      yaml += `    change: ${h.change}\n`;
+      if (h.changed_by) {
+        yaml += `    # 操作人\n`;
+        yaml += `    changed_by: ${h.changed_by}\n`;
+      }
     }
   }
 
@@ -1442,15 +1465,131 @@ function toProjectYaml(config: ProjectConfig): string {
     yaml += '  #   git_repo: git@github.com:org/repo.git\n';
     yaml += '  #   default_branch: main\n';
     yaml += '  #   requirement_unit: API 服务\n';
+    yaml += '  #   # 部署配置（v8.3.60+）\n';
+    yaml += '  #   # 完整示例见 templates/deploy-examples.yaml\n';
+    yaml += '  #   deploy:\n';
+    yaml += '  #     staging:\n';
+    yaml += '  #       type: ssh\n';
+    yaml += '  #       build_cmd: mvn clean package -DskipTests\n';
+    yaml += '  #       output_dir: target\n';
+    yaml += '  #       host: deployer@staging-server.com:22\n';
+    yaml += '  #       key: ~/.ssh/id_rsa\n';
+    yaml += '  #       remote_dir: /opt/services/api-service\n';
+    yaml += '  #       script: sudo systemctl restart api-service\n';
+    yaml += '  #     production:\n';
+    yaml += '  #       type: docker\n';
+    yaml += '  #       dockerfile: ./Dockerfile\n';
+    yaml += '  #       registry: registry.example.com\n';
+    yaml += '  #       image: my-project/api-service\n';
+    yaml += '  #       tag: production\n';
+    yaml += '  #       host: deployer@prod-server.com\n';
+    yaml += '  #       script: docker pull registry.example.com/my-project/api-service:production && docker stop api-service 2>/dev/null; docker rm api-service 2>/dev/null; docker run -d --name api-service --restart always -p 8080:8080 registry.example.com/my-project/api-service:production\n';
   }
   for (const p of config.platforms) {
-    yaml += `  - name: ${p.name}\n`;
+    yaml += `  - # 端名（全局唯一，用于目录名、命令参数）\n`;
+    yaml += `    name: ${p.name}\n`;
+    yaml += `    # 端类型：frontend(前端) | backend(后端) | infra(基础设施)\n`;
     yaml += `    type: ${p.type}\n`;
-    if (p.description) yaml += `    description: ${p.description}\n`;
-    if (p.code_path) yaml += `    code_path: ${p.code_path}\n`;
-    if (p.git_repo) yaml += `    git_repo: ${p.git_repo}\n`;
+    if (p.description) {
+      yaml += `    # 端描述（人类可读名称）\n`;
+      yaml += `    description: ${p.description}\n`;
+    }
+    if (p.code_path) {
+      yaml += `    # 源码路径（相对于项目根目录）\n`;
+      yaml += `    code_path: ${p.code_path}\n`;
+    }
+    if (p.git_repo) {
+      yaml += `    # Git 仓库地址（用于分支管理和 PR 提交）\n`;
+      yaml += `    git_repo: ${p.git_repo}\n`;
+    }
+    yaml += `    # 默认分支（如 main, develop）\n`;
     yaml += `    default_branch: ${p.default_branch}\n`;
-    if (p.requirement_unit) yaml += `    requirement_unit: ${p.requirement_unit}\n`;
+    if (p.requirement_unit) {
+      yaml += `    # 对应需求端/功能单元（AI 分析时自动对标）\n`;
+      yaml += `    requirement_unit: ${p.requirement_unit}\n`;
+    }
+    // deploy 配置输出
+    if (p.deploy && Object.keys(p.deploy).length > 0) {
+      yaml += `    # 部署配置（v8.3.60+）\n`;
+      yaml += `    # 完整示例见 templates/deploy-examples.yaml\n`;
+      yaml += `    deploy:\n`;
+      for (const [envName, envConfig] of Object.entries(p.deploy)) {
+        if (!envConfig) continue;
+        yaml += `      ${envName}:\n`;
+        yaml += `        # 部署类型：ssh | sftp | static | script | docker | pm2 | k8s | helm | vercel | serverless\n`;
+        yaml += `        type: ${envConfig.type}\n`;
+        if (envConfig.build_cmd) {
+          yaml += `        # 构建命令（如 npm run build、mvn clean package）\n`;
+          yaml += `        build_cmd: ${envConfig.build_cmd}\n`;
+        }
+        if (envConfig.output_dir) {
+          yaml += `        # 构建输出目录（默认 dist，Java 项目通常为 target）\n`;
+          yaml += `        output_dir: ${envConfig.output_dir}\n`;
+        }
+        if (envConfig.dockerfile) {
+          yaml += `        # Dockerfile 路径（docker 类型用）\n`;
+          yaml += `        dockerfile: ${envConfig.dockerfile}\n`;
+        }
+        if (envConfig.registry) {
+          yaml += `        # 镜像仓库地址（docker 类型用）\n`;
+          yaml += `        registry: ${envConfig.registry}\n`;
+        }
+        if (envConfig.image) {
+          yaml += `        # 镜像名（docker 类型用，默认使用端名）\n`;
+          yaml += `        image: ${envConfig.image}\n`;
+        }
+        if (envConfig.tag) {
+          yaml += `        # 镜像标签（docker 类型用，默认使用环境名）\n`;
+          yaml += `        tag: ${envConfig.tag}\n`;
+        }
+        if (envConfig.host) {
+          yaml += `        # 服务器地址（ssh/sftp/docker 远程部署用，格式 user@host:port）\n`;
+          yaml += `        host: ${envConfig.host}\n`;
+        }
+        if (envConfig.key) {
+          yaml += `        # SSH 私钥路径（默认 ~/.ssh/id_rsa）\n`;
+          yaml += `        key: ${envConfig.key}\n`;
+        }
+        if (envConfig.password) {
+          yaml += `        # SSH/SFTP 密码（需安装 sshpass，优先使用密钥认证）\n`;
+          yaml += `        password: ${envConfig.password}\n`;
+        }
+        if (envConfig.remote_dir) {
+          yaml += `        # 服务器上的部署目录\n`;
+          yaml += `        remote_dir: ${envConfig.remote_dir}\n`;
+        }
+        if (envConfig.script) {
+          yaml += `        # 部署后执行的命令或脚本路径\n`;
+          yaml += `        script: ${envConfig.script}\n`;
+        }
+        if (envConfig.target) {
+          yaml += `        # 目标路径 / namespace / 函数名（static/k8s/helm/serverless 用）\n`;
+          yaml += `        target: ${envConfig.target}\n`;
+        }
+        if (envConfig.pm2_config) {
+          yaml += `        # PM2 配置文件路径（pm2 类型用，默认 ecosystem.config.js）\n`;
+          yaml += `        pm2_config: ${envConfig.pm2_config}\n`;
+        }
+        if (envConfig.provider) {
+          yaml += `        # Serverless 提供商（aliyun-fc | aws-lambda | tencent-scf）\n`;
+          yaml += `        provider: ${envConfig.provider}\n`;
+        }
+        if (envConfig.pre_deploy && envConfig.pre_deploy.length > 0) {
+          yaml += `        # 部署前执行的命令\n`;
+          yaml += `        pre_deploy:\n`;
+          for (const cmd of envConfig.pre_deploy) {
+            yaml += `          - ${cmd}\n`;
+          }
+        }
+        if (envConfig.post_deploy && envConfig.post_deploy.length > 0) {
+          yaml += `        # 部署后执行的命令\n`;
+          yaml += `        post_deploy:\n`;
+          for (const cmd of envConfig.post_deploy) {
+            yaml += `          - ${cmd}\n`;
+          }
+        }
+      }
+    }
   }
 
   yaml += '\n# ─────────────────────────────────────────────────────────────────────────────\n';

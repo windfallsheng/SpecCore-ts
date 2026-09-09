@@ -23,7 +23,7 @@ import { showNextSteps } from '../core/next-steps';
 import { runAnalysis, AnalyzeInput, supplementAnalysis, analyzeSingleFeature, generateSpecsFromRequirements } from '../core/analyze-engine';
 import { readFile, readdir, readdirSync } from 'fs-extra';
 import { generateGlobalArtifacts } from '../core/global-artifacts';
-import { buildPrompt, formatPrompt } from '../core/prompt-builder';
+import { buildPrompt, formatPrompt, processMarkdownContent } from '../core/prompt-builder';
 import { buildAutoModeInstruction, writeQuestions, extractQuestionsFromText, type QuestionItem } from '../core/questions';
 import { resolvePlatform } from '../core/platform-registry';
 import { warnIfIndexStale } from '../core/index-guard';
@@ -4495,13 +4495,19 @@ status: "clarified"
       const iterDirForCtx = await getIterationDir(iter);
       if (iterDirForCtx) {
         // v8.2.0+: 注入 PRD 内容（优先从黄金需求目录 020-specs/requirements/ 读取）
+        // v8.3.97+: 对 .md 文件自动展开链接 + 提取图片，确保关联内容被读取
         let prdContent = '';
+        const seenPaths = new Set<string>();
         const goldenReqDir = join(iterDirForCtx, '020-specs', 'requirements');
         if (await pathExists(goldenReqDir)) {
           // 黄金需求目录存在，只读这里（唯一依据）
           const files = (await import('fs-extra')).readdirSync(goldenReqDir).filter((f: string) => f.endsWith('.md')).slice(0, 10);
           for (const f of files) {
-            const content = await (await import('fs-extra')).readFile(join(goldenReqDir, f), 'utf-8');
+            const filePath = join(goldenReqDir, f);
+            let content = await (await import('fs-extra')).readFile(filePath, 'utf-8');
+            content = await processMarkdownContent(content, filePath, seenPaths, undefined, {
+              maxLinkDepth: 2, maxLinkChars: 1200, maxSvgChars: 1500,
+            });
             prdContent += `\n### ${f}\n${content.slice(0, 2000)}\n`;
           }
         } else {
@@ -4514,7 +4520,11 @@ status: "clarified"
             if (await pathExists(dir)) {
               const files = (await import('fs-extra')).readdirSync(dir).filter((f: string) => f.endsWith('.md')).slice(0, 5);
               for (const f of files) {
-                const content = await (await import('fs-extra')).readFile(join(dir, f), 'utf-8');
+                const filePath = join(dir, f);
+                let content = await (await import('fs-extra')).readFile(filePath, 'utf-8');
+                content = await processMarkdownContent(content, filePath, seenPaths, undefined, {
+                  maxLinkDepth: 2, maxLinkChars: 1200, maxSvgChars: 1500,
+                });
                 prdContent += `\n### ${f}\n${content.slice(0, 2000)}\n`;
               }
             }
@@ -4536,7 +4546,12 @@ status: "clarified"
           for (const filledPath of perDocStatus.filled) {
             const fullPath = join(specDir, filledPath);
             try {
-              const content = await (await import('fs-extra')).readFile(fullPath, 'utf-8');
+              let content = await (await import('fs-extra')).readFile(fullPath, 'utf-8');
+              if (fullPath.endsWith('.md')) {
+                content = await processMarkdownContent(content, fullPath, seenPaths, undefined, {
+                  maxLinkDepth: 1, maxLinkChars: 800, maxSvgChars: 1000,
+                });
+              }
               const summary = content.slice(0, 1500);
               prompt += `### ${filledPath}\n\`\`\`\n${summary}${content.length > 1500 ? '\n... (截断)' : ''}\n\`\`\`\n\n`;
             } catch { /* skip unreadable */ }

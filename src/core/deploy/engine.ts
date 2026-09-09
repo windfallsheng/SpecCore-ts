@@ -114,7 +114,7 @@ async function executeDeploy(
 
   switch (config.type) {
     case 'docker':
-      await deployDocker(platform, env, config, cwd);
+      await deployDocker(platform, env, config, cwd, skipBuild);
       break;
     case 'static':
       await deployStatic(platform, env, config, cwd, skipBuild);
@@ -181,7 +181,8 @@ async function deployDocker(
   platform: PlatformConfig,
   env: string,
   config: DeployEnvConfig,
-  cwd: string
+  cwd: string,
+  skipBuild: boolean = false
 ): Promise<void> {
   const imageName = config.image || platform.name;
   const tag = config.tag || env;
@@ -190,16 +191,78 @@ async function deployDocker(
     ? `${config.registry}/${imageName}:${tag}`
     : `${imageName}:${tag}`;
 
+  // 1. 前置构建（如生成配置文件、编译静态资源）
+  if (!skipBuild && config.build_cmd) {
+    logger.info(`  🔨 前置构建: ${config.build_cmd}`);
+    execSync(config.build_cmd, { stdio: 'inherit', cwd });
+  }
+
+  // 2. Docker 构建
   logger.info(`  🐳 构建镜像: ${fullImage}`);
   execSync(`docker build -f ${dockerfile} -t ${fullImage} .`, {
     stdio: 'inherit',
     cwd,
   });
 
+  // 3. 推送到仓库
   if (config.registry) {
     logger.info(`  📤 推送到: ${config.registry}`);
     execSync(`docker push ${fullImage}`, { stdio: 'inherit', cwd });
   }
+
+  // 4. 远程服务器部署
+  if (config.host) {
+    await deployDockerRemote(config, cwd, fullImage, imageName);
+  }
+}
+
+/** Docker 远程部署：SSH 执行 pull && run */
+async function deployDockerRemote(
+  config: DeployEnvConfig,
+  cwd: string,
+  fullImage: string,
+  imageName: string
+): Promise<void> {
+  if (!config.registry) {
+    logger.warn(
+      `  ⚠️ 配置了 host 但未配置 registry，远程服务器可能无法获取镜像。\n` +
+      `     建议：配置 registry 字段，或使用 docker save + ssh 传输镜像。`
+    );
+  }
+
+  const host = config.host!;
+  const keyOpt = config.key ? `-i ${config.key}` : '';
+
+  // 密码认证支持
+  let passOpt = '';
+  if (config.password) {
+    try {
+      execSync('sshpass -V', { stdio: 'pipe' });
+      passOpt = `sshpass -p '${config.password.replace(/'/g, "'\"'\"'")}' `;
+    } catch {
+      throw new Error(
+        '密码认证需要安装 sshpass\n' +
+        '  macOS: brew install sshpass\n' +
+        '  Ubuntu/Debian: apt-get install sshpass\n' +
+        '  或使用密钥认证：配置 key 字段指向私钥路径'
+      );
+    }
+  }
+
+  // 远程命令：默认 stop → rm → pull → run
+  const defaultRemoteCmd =
+    `docker pull ${fullImage} && ` +
+    `(docker stop ${imageName} 2>/dev/null || true) && ` +
+    `(docker rm ${imageName} 2>/dev/null || true) && ` +
+    `docker run -d --name ${imageName} --restart always ${fullImage}`;
+
+  const remoteCmd = config.script || defaultRemoteCmd;
+
+  logger.info(`  🔄 远程 Docker 部署: ${host}`);
+  execSync(`${passOpt}ssh ${keyOpt} ${host} "${remoteCmd}"`, {
+    stdio: 'inherit',
+    cwd,
+  });
 }
 
 /** 静态资源部署 */

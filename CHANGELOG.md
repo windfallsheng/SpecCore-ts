@@ -1,3 +1,39 @@
+## v8.3.97 (2026-09-09) — 文档链接读取 + Update 交互式确认 + 部署增强
+
+### 新增
+
+**Update 交互式确认（v8.3.97）**:
+- `speccore update` 检测到结构性变更时，交互式询问用户是否立即升级（`[y/N]`）
+- 支持 `--yes` 参数跳过确认（CI/CD 用）
+- 纯新增字段仍自动补全并提示，无需确认
+- **影响文件**：`src/commands/update.ts`
+
+**Markdown 链接自动展开全面覆盖（v8.3.97）**:
+- analyze 需求分析、联合分析、PRD 注入、前序文档摘要等场景全部支持
+- AI 上下文生成 (`generateAIContext`) 支持链接展开
+- 截断提示中附带绝对路径 (`完整内容请 Read: /absolute/path`)，方便 AI 按需读取
+- **影响文件**：`src/core/analyze-engine.ts`、`src/commands/analyze.ts`、`src/core/ai-context-generator.ts`、`src/core/prompt-builder.ts`
+
+**部署增强（v8.3.96 → v8.3.97）**:
+- Docker 远程部署：本地 `docker build` → `docker push` → SSH 远程 `docker pull → stop → rm → run`
+- Java 后端部署示例：`templates/deploy-java/`（systemd service 模板、deploy.sh、Dockerfile、README）
+- Docker 前后端部署示例：`templates/deploy-docker/`（frontend.Dockerfile、nginx.conf、docker-compose.yml、deploy-remote.sh、README）
+- 部署引擎支持 `skipBuild`、`build_cmd`、`password` 密码认证
+- **影响文件**：`src/core/deploy/engine.ts`、`templates/deploy-examples.yaml`、`templates/deploy-java/*`、`templates/deploy-docker/*`
+
+**配置默认值完善（v8.3.97）**:
+- `verify_ui.headed` 加入 `DEFAULT_CONFIG` 默认值 `false`
+- `PROJECT.yaml` 遍历 platforms 时保留 `deploy` 字段 + 所有字段注释
+- `llm_providers`、`config_history` 字段注释全面补齐
+- **影响文件**：`src/core/unified-config.ts`
+
+### 修复
+
+- `deployDocker` 函数签名缺少 `skipBuild` 参数导致编译错误
+- `toProjectYaml` 遍历 platforms 时遗漏 `deploy` 字段
+
+---
+
 ## v8.3.95 (2026-09-09) — 冒烟测试引擎全面增强
 
 ### 新增

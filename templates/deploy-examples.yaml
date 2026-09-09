@@ -125,14 +125,53 @@ script_ftp_example:
 # 5. Docker 部署
 # ─────────────────────────────────────────
 #
-# 适用场景：容器化部署，推送到镜像仓库
+# 适用场景：容器化部署，支持本地构建 + 镜像仓库推送 + 远程服务器部署
 #
-docker_example:
+# 远程部署说明（v8.3.96+）：
+#   - 配置 host 后，speccore 会自动 SSH 到远程服务器执行 docker pull && run
+#   - 远程部署必须配置 registry（否则远程服务器无法获取镜像）
+#   - 可通过 script 字段自定义远程命令（默认：stop → rm → pull → run）
+#   - 支持密钥认证（key）和密码认证（password + sshpass）
+#
+# 完整模板见 templates/deploy-docker/（含前端 Dockerfile、Nginx 配置、Compose 编排）
+
+# 基础 Docker：仅本地构建并推送到仓库（适合 CI/CD 场景）
+docker_push_only:
   type: docker
-  dockerfile: ./Dockerfile               # Dockerfile 路径（默认 ./Dockerfile）
-  registry: registry.example.com         # 镜像仓库（可选，不配置则本地构建）
-  image: my-project/h5                   # 镜像名（默认使用端名）
-  tag: staging                           # 镜像标签（默认使用环境名）
+  dockerfile: ./Dockerfile
+  registry: registry.example.com
+  image: my-project/h5
+  tag: staging
+
+# 前端 Docker + 远程部署（Nginx 托管）
+docker_frontend_remote:
+  type: docker
+  build_cmd: npm run build:staging              # 前置构建（可选）
+  dockerfile: ./Dockerfile                      # 多阶段构建：Node → Nginx
+  registry: registry.example.com
+  image: my-project/admin-web
+  tag: staging
+  host: deployer@staging-server.example.com     # 远程服务器（v8.3.96+）
+  key: ~/.ssh/id_rsa
+  # script 自定义远程命令（可选，以下为默认值示例）
+  # script: "docker pull registry.example.com/my-project/admin-web:staging && docker stop admin-web 2>/dev/null; docker rm admin-web 2>/dev/null; docker run -d --name admin-web --restart always -p 80:80 registry.example.com/my-project/admin-web:staging"
+
+# 后端 Java Docker + 远程部署
+docker_backend_remote:
+  type: docker
+  dockerfile: ./Dockerfile                      # 多阶段构建：Maven → JRE
+  registry: registry.example.com
+  image: my-project/order-service
+  tag: staging
+  host: deployer@staging-server.example.com
+  key: ~/.ssh/id_rsa
+
+# Docker Compose 统一部署（使用 script 类型调用 compose）
+docker_compose_example:
+  type: script
+  script: ./scripts/deploy-compose.sh
+  # deploy-compose.sh 内容示例：
+  #   cd /opt/deploy && docker-compose pull && docker-compose up -d
 
 # ─────────────────────────────────────────
 # 6. PM2 部署（Node.js 后端）
@@ -208,6 +247,55 @@ serverless_tencent_example:
   type: serverless
   provider: tencent-scf                  # 腾讯云云函数
   target: my-scf-func
+
+# ─────────────────────────────────────────
+# 11. Java 后端部署（Spring Boot + systemd）
+# ─────────────────────────────────────────
+#
+# 适用场景：Java 后端服务，通过 systemd 管理 jar 进程
+#
+# 服务器端准备（只需一次）：
+#   1) 将 templates/deploy-java/spring-boot.service 复制到服务器：
+#      /etc/systemd/system/order-service.service
+#      （文件名必须与 platform.name 一致）
+#   2) 创建部署目录：mkdir -p /opt/services/order-service
+#   3) 创建日志目录：mkdir -p /var/log/order-service
+#   4) 重载 systemd：sudo systemctl daemon-reload
+#   5) 启用开机自启：sudo systemctl enable order-service
+#
+# 数据库 / Redis 配置：
+#   通过 Spring Boot profiles 切换，如 application-staging.yml
+#   部署时激活 profile：script 中传入 --spring.profiles.active=staging
+#
+java_systemd_example:
+  type: ssh
+  build_cmd: mvn clean package -DskipTests -P staging
+  output_dir: target
+  host: deployer@staging-server.example.com:22
+  key: ~/.ssh/id_rsa
+  remote_dir: /opt/services/order-service
+  # 部署后执行：停止服务 → 替换 jar → 启动服务
+  script: sudo systemctl restart order-service
+  pre_deploy:
+    - echo "开始部署 Java 后端..."
+  post_deploy:
+    - echo "部署完成，检查状态..."
+    - ssh deployer@staging-server.example.com "sudo systemctl status order-service --no-pager"
+
+# ─────────────────────────────────────────
+# 12. Java 后端部署（Spring Boot + Docker）
+# ─────────────────────────────────────────
+#
+# 适用场景：Java 服务容器化部署
+#
+# Dockerfile 示例见 templates/deploy-java/Dockerfile
+#
+java_docker_example:
+  type: docker
+  dockerfile: ./Dockerfile
+  registry: registry.example.com
+  image: my-project/order-service
+  tag: staging
 
 # ═══════════════════════════════════════════════════════════
 # 完整 PROJECT.yaml 示例（含部署配置）
@@ -294,3 +382,55 @@ deploy:
 # # Ubuntu: apt-get install sshpass
 # sshpass -p "$SSH_PASSWORD" scp -r dist/* "$SSH_USER@$SSH_HOST:$REMOTE_DIR/"
 # sshpass -p "$SSH_PASSWORD" ssh "$SSH_USER@$SSH_HOST" "sudo nginx -s reload"
+
+# --- scripts/deploy-java.sh（服务器端执行） ---
+# #!/bin/bash
+# # Java 后端部署脚本（放在服务器上，由 SSH 调用或手动执行）
+# APP_NAME="${1:-order-service}"
+# DEPLOY_DIR="/opt/services/$APP_NAME"
+# BACKUP_DIR="/opt/services/$APP_NAME/backups"
+# JAR_FILE="$DEPLOY_DIR/$APP_NAME.jar"
+# NEW_JAR="$DEPLOY_DIR/$APP_NAME-new.jar"
+#
+# # 1. 备份旧版本
+# mkdir -p "$BACKUP_DIR"
+# if [ -f "$JAR_FILE" ]; then
+#   cp "$JAR_FILE" "$BACKUP_DIR/$APP_NAME-$(date +%Y%m%d-%H%M%S).jar"
+#   # 只保留最近 5 个备份
+#   ls -t "$BACKUP_DIR"/*.jar | tail -n +6 | xargs -r rm -f
+# fi
+#
+# # 2. 替换 jar
+# if [ -f "$NEW_JAR" ]; then
+#   mv "$NEW_JAR" "$JAR_FILE"
+# else
+#   echo "错误：未找到新 jar 文件 $NEW_JAR"
+#   exit 1
+# fi
+#
+# # 3. 重启服务
+# sudo systemctl restart "$APP_NAME"
+# sleep 2
+# sudo systemctl status "$APP_NAME" --no-pager
+
+# --- systemd service 文件示例（/etc/systemd/system/order-service.service） ---
+# [Unit]
+# Description=Order Service
+# After=network.target
+#
+# [Service]
+# Type=simple
+# User=deployer
+# Group=deployer
+# WorkingDirectory=/opt/services/order-service
+# Environment="SPRING_PROFILES_ACTIVE=staging"
+# Environment="JAVA_OPTS=-Xms512m -Xmx1024m -Dfile.encoding=UTF-8"
+# ExecStart=/usr/bin/java $JAVA_OPTS -jar order-service.jar
+# ExecStop=/bin/kill -SIGTERM $MAINPID
+# Restart=on-failure
+# RestartSec=10
+# StandardOutput=append:/var/log/order-service/app.log
+# StandardError=append:/var/log/order-service/error.log
+#
+# [Install]
+# WantedBy=multi-user.target

@@ -319,6 +319,7 @@ team:
 | `code_path` | `string` | — | — | 源码相对路径（如 `./packages/app`） |
 | `git_repo` | `string` | — | — | Git 仓库地址 |
 | `default_branch` | `string` | — | — | 默认分支（默认 `main`） |
+| `deploy` | `object` | — | — | 按环境的部署配置（见下方 deploy 字段说明） |
 
 **端名规则**：
 1. 全小写、无空格、短横线分隔
@@ -326,25 +327,63 @@ team:
 3. 「对应端」列必须引用此列表中已声明的端名
 4. 如果一个服务拆成多个工程，应分别声明
 
-**示例**：
+**deploy 字段说明**：
+
+`deploy` 按环境名（如 `staging`、`production`）组织，每个环境是一个 [DeployEnvConfig](command-reference.md#部署命令)。
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|:--:|------|
+| `type` | `string` | ✅ | 部署类型：`ssh` `sftp` `static` `script` `docker` `pm2` `k8s` `helm` `vercel` `serverless` |
+| `build_cmd` | `string` | — | 构建命令，如 `npm run build`、`mvn clean package` |
+| `output_dir` | `string` | — | 构建输出目录，默认 `dist`（Java 项目通常为 `target`） |
+| `host` | `string` | ssh/sftp/docker 远程时 | 服务器地址 `user@host:port` |
+| `key` | `string` | — | SSH 私钥路径 |
+| `password` | `string` | — | SSH/SFTP 密码（需安装 `sshpass`） |
+| `remote_dir` | `string` | ssh/sftp 时 | 服务器部署目录 |
+| `script` | `string` | — | 部署后执行的命令或脚本路径 |
+| `pre_deploy` | `string[]` | — | 部署前执行的命令 |
+| `post_deploy` | `string[]` | — | 部署后执行的命令 |
+
+完整示例见 [`templates/deploy-examples.yaml`](templates/deploy-examples.yaml)。
+
+**示例**（含前端 + Java 后端部署配置）：
 ```yaml
 platforms:
-  - name: app
+  - name: admin-web
     type: frontend
-    description: 移动端 APP
-    code_path: ./packages/app
-    git_repo: git@github.com:my-org/app.git
+    description: 管理后台前端
+    code_path: ./admin-web
     default_branch: main
-  - name: api
+    deploy:
+      staging:
+        type: ssh
+        build_cmd: npm run build:staging
+        output_dir: dist
+        host: deployer@staging-server.example.com:22
+        key: ~/.ssh/id_rsa
+        remote_dir: /var/www/html/admin-web
+        script: sudo nginx -s reload
+
+  - name: order-service
     type: backend
-    description: 后端 API
-    code_path: ./packages/api
-    git_repo: git@github.com:my-org/api.git
+    description: 订单服务（Java）
+    code_path: ./order-service
     default_branch: main
-  - name: nginx
-    type: infra
-    description: 网关配置
-    code_path: ./infra/nginx
+    deploy:
+      staging:
+        type: ssh
+        build_cmd: mvn clean package -DskipTests -P staging
+        output_dir: target
+        host: deployer@staging-server.example.com:22
+        key: ~/.ssh/id_rsa
+        remote_dir: /opt/services/order-service
+        script: sudo systemctl restart order-service
+      production:
+        type: docker
+        dockerfile: ./Dockerfile
+        registry: registry.example.com
+        image: my-project/order-service
+        tag: production
 ```
 
 ---

@@ -9,6 +9,8 @@
 import { readFile, writeFile, pathExists, ensureDir } from 'fs-extra';
 import { join, relative, basename, dirname } from 'path';
 import { logger } from '../utils/logger';
+// v8.3.97+: Markdown 链接展开 + 图片提取
+import { processMarkdownContent } from './prompt-builder';
 
 // ── 类型 ──
 
@@ -66,9 +68,16 @@ export async function generateAIContext(input: AIContextInput): Promise<AIContex
   // 1. 读取需求文档（若调用方已提供则跳过重复读取）
   let reqContents: string[] = input.reqContents || [];
   if (reqContents.length === 0) {
+    const seenPaths = new Set<string>();
     for (const reqPath of input.requirements) {
       if (await pathExists(reqPath)) {
-        const content = await readFile(reqPath, 'utf-8');
+        let content = await readFile(reqPath, 'utf-8');
+        // v8.3.97+: Markdown 链接自动展开 + 图片提取
+        if (reqPath.endsWith('.md')) {
+          content = await processMarkdownContent(content, reqPath, seenPaths, undefined, {
+            maxLinkDepth: 2, maxLinkChars: 1200, maxSvgChars: 1500,
+          });
+        }
         reqContents.push(`## 来源: ${reqPath}\n\n${content}`);
       }
     }

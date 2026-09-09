@@ -510,7 +510,7 @@ speccore deploy --env production --platform h5 --dry-run
 | `type` | string | 是 | 部署类型：`ssh` `sftp` `static` `script` `docker` `pm2` `k8s` `helm` `vercel` `serverless` |
 | `build_cmd` | string | 否 | 构建命令，如 `npm run build` |
 | `output_dir` | string | 否 | 构建输出目录，默认 `dist` |
-| `host` | string | ssh/sftp/pm2 远程时 | 服务器地址，格式 `user@host:port`（port 可选） |
+| `host` | string | ssh/sftp/pm2/docker 远程时 | 服务器地址，格式 `user@host:port`（port 可选） |
 | `key` | string | 否 | SSH 私钥路径，默认 `~/.ssh/id_rsa` |
 | `password` | string | 否 | SSH/SFTP 密码（v8.3.91+，需安装 `sshpass`） |
 | `remote_dir` | string | ssh/sftp 时 | 服务器上的部署目录 |
@@ -525,7 +525,80 @@ speccore deploy --env production --platform h5 --dry-run
 | `pre_deploy` | string[] | 否 | 部署前执行的命令列表 |
 | `post_deploy` | string[] | 否 | 部署后执行的命令列表 |
 
-**配置示例文件**：`templates/deploy-examples.yaml`（包含 10 种部署类型的完整示例）
+**配置示例文件**：`templates/deploy-examples.yaml`（包含 12 种部署场景的完整示例，含 Java + systemd + Docker）
+
+**Java 后端部署**（Spring Boot）：
+
+Java 项目使用 `ssh` 或 `docker` 类型部署。推荐测试环境用 `ssh` + systemd，生产环境用 `docker`。
+
+```yaml
+# 测试环境：systemd + SSH
+staging:
+  type: ssh
+  build_cmd: mvn clean package -DskipTests -P staging
+  output_dir: target
+  host: deployer@staging-server.example.com:22
+  key: ~/.ssh/id_rsa
+  remote_dir: /opt/services/order-service
+  script: sudo systemctl restart order-service
+
+# 生产环境：Docker
+production:
+  type: docker
+  dockerfile: ./Dockerfile
+  registry: registry.example.com
+  image: my-project/order-service
+  tag: production
+```
+
+**服务器端准备**（systemd 方式，只需一次）：
+1. 复制 `templates/deploy-java/spring-boot.service` 到服务器 `/etc/systemd/system/{platform.name}.service`
+2. 创建目录：`mkdir -p /opt/services/{name} /var/log/{name}`
+3. 执行：`sudo systemctl daemon-reload && sudo systemctl enable {name}`
+
+**数据库 / Redis 配置切换**：
+- 通过 Spring Boot profiles（`application-staging.yml` / `application-production.yml`）
+- 或通过 systemd service 文件中的 `Environment=` 注入环境变量
+
+完整指南见 `templates/deploy-java/README.md`。
+
+**Docker 远程部署**（v8.3.96+）：
+
+配置 `host` 后，speccore 会自动 SSH 到远程服务器执行 `docker pull && run`。
+
+```yaml
+# 前端 Nginx + 远程部署
+staging:
+  type: docker
+  build_cmd: npm run build:staging
+  dockerfile: ./Dockerfile
+  registry: registry.example.com
+  image: my-project/admin-web
+  tag: staging
+  host: deployer@staging-server.example.com
+  key: ~/.ssh/id_rsa
+
+# 后端 Java + 远程部署
+production:
+  type: docker
+  dockerfile: ./Dockerfile
+  registry: registry.example.com
+  image: my-project/order-service
+  tag: production
+  host: deployer@prod-server.example.com
+  key: ~/.ssh/id_rsa_production
+```
+
+**Docker 部署流程**：
+1. 本地 `docker build`
+2. 本地 `docker push` 到 registry（远程部署必填）
+3. SSH 远程执行 `docker pull → stop → rm → run`
+4. 支持 `script` 字段自定义远程命令（如端口映射、环境变量、卷挂载）
+
+**注意事项**：
+- 远程 Docker 部署**必须配置 registry**，否则远程服务器无法获取镜像
+- 如需端口映射，通过 `script` 字段自定义：`docker run -d -p 8080:8080 ...`
+- 完整模板见 `templates/deploy-docker/`（含前端 Dockerfile、Nginx 配置、Compose 编排）
 
 **SSH 密码认证**（v8.3.91+）：
 - 优先使用密钥认证（更安全）

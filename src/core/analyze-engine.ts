@@ -24,6 +24,8 @@ import { refreshRagIndex, checkRagIndexFreshness, indexDirectoryDocuments } from
 import { refreshKnowledgeGraph } from './knowledge-graph';
 import { generateQualityAudit } from './quality-audit';
 import { GLOBAL_SPECS_DIR, GLOBAL_SPEC_FILES, globalSpecWritePath, parsePlatformList } from './spec-paths';
+// v8.3.97+: Markdown 链接展开 + 图片提取（需求文档关联内容读取）
+import { processMarkdownContent } from './prompt-builder';
 
 // ================================================================
 // 类型定义
@@ -213,9 +215,16 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalysisResult> 
 
 async function analyzeRequirements(input: AnalyzeInput): Promise<AnalysisResult> {
   const allContent: string[] = [];
+  const seenPaths = new Set<string>();
   for (const reqPath of input.requirements) {
     if (await pathExists(reqPath)) {
-      const content = await readFile(reqPath, 'utf-8');
+      let content = await readFile(reqPath, 'utf-8');
+      // v8.3.97+: Markdown 链接自动展开 + 图片提取
+      if (reqPath.endsWith('.md')) {
+        content = await processMarkdownContent(content, reqPath, seenPaths, undefined, {
+          maxLinkDepth: 2, maxLinkChars: 1200, maxSvgChars: 1500,
+        });
+      }
       allContent.push(`## 来源: ${basename(reqPath)}\n\n${content}`);
     }
   }
@@ -348,9 +357,16 @@ async function analyzeCodebase(input: AnalyzeInput): Promise<AnalysisResult> {
 async function analyzeCombined(input: AnalyzeInput): Promise<AnalysisResult> {
   // 按文档来源结构化合并：每个源文档一级标题，原章节下推一级避免同名冲突
   const allContent: string[] = [];
+  const seenPaths = new Set<string>();
   for (const reqPath of input.requirements) {
     if (await pathExists(reqPath)) {
-      const raw = await readFile(reqPath, 'utf-8');
+      let raw = await readFile(reqPath, 'utf-8');
+      // v8.3.97+: Markdown 链接自动展开 + 图片提取
+      if (reqPath.endsWith('.md')) {
+        raw = await processMarkdownContent(raw, reqPath, seenPaths, undefined, {
+          maxLinkDepth: 2, maxLinkChars: 1200, maxSvgChars: 1500,
+        });
+      }
       const fname = basename(reqPath) || reqPath;
       // 将原文档 ##/### 标题下推一级 (##→###, ###→####)，源文件名作为 ## 标题
       const normalized = raw.replace(/^(#{2,3})\s/gm, '#$1 ');

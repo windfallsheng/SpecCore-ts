@@ -5,6 +5,7 @@
 import { writeFile, pathExists, readFile, readdir, ensureDir, unlink } from 'fs-extra';
 import { join, relative } from 'path';
 import { execSync } from 'child_process';
+import { createInterface } from 'readline';
 import { logger, Spinner } from '../utils/logger';
 import { version as CURRENT_VERSION } from '../../package.json';
 import { safeWriteWithBackup, safeCopyDirWithBackup, _updateConflicts, generateAIRulesContent, TOOL_COMMANDS, initAgentsDir, initRulesDir, initCommandsDir, initSkillsDir, initHooksDir, syncAgentsMd, writeUpgradePage } from './init';
@@ -19,6 +20,8 @@ import {
   DEFAULT_PROJECT_CONFIG,
   formatConfigDiff,
   CURRENT_SCHEMA_VERSION,
+  upgradeConfig,
+  upgradeProjectConfig,
 } from '../core/unified-config';
 import { initEnvironmentConfigs, initTestConfigs } from './update-env-configs';
 
@@ -89,7 +92,14 @@ function cleanupLegacyDaemons(): { killed: number; pids: number[] } {
   return result;
 }
 
-export async function updateCommand(options: { force?: boolean; tool?: string }): Promise<void> {
+// v8.3.97+: 交互式确认辅助函数
+async function askConfirm(prompt: string): Promise<boolean> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const answer = await new Promise<string>(resolve => rl.question(`${prompt} [y/N]: `, (ans: string) => { rl.close(); resolve(ans.trim()); }));
+  return answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes';
+}
+
+export async function updateCommand(options: { force?: boolean; tool?: string; yes?: boolean }): Promise<void> {
   const projectRoot = process.cwd();
 
   // 解析工具过滤（含 trae-cn）
@@ -255,7 +265,9 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
   const upgradeResult = await checkAllUpgradeIssues(projectRoot);
 
   // 4c-3. 更新 .speccore.yml（系统配置）
-  //       如不存在则生成默认配置；如已存在则检查 schema_version，过期时提示 upgrade
+  //       如不存在则生成默认配置；如已存在则：
+  //         - 纯新增字段 → 自动补全（安全，不覆盖用户数据）
+  //         - 结构性变更 → 提示确认（需人工审核）
   //       AI-RULES.md 是纯生成物（AI 参考手册），直接覆盖
   try {
     const configPath = join(projectRoot, '.speccore.yml');
@@ -265,16 +277,25 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
       const { config, warnings } = await loadConfigWithMeta();
       const diff = detectConfigDiff(config, DEFAULT_CONFIG);
       const needsConfirm = requiresUserConfirmation(diff);
-      const hasChanges = diff.added.length > 0 || needsConfirm || warnings.length > 0;
+      const hasSchemaIssue = config.schema_version < CURRENT_SCHEMA_VERSION;
+      const hasAddedOnly = diff.added.length > 0 && !needsConfirm;
+      const hasChanges = hasAddedOnly || needsConfirm || warnings.length > 0 || hasSchemaIssue;
 
-      if (hasChanges || config.schema_version < CURRENT_SCHEMA_VERSION) {
+      if (hasChanges) {
         logger.info('');
         logger.info('📋 .speccore.yml 配置检查');
 
-        if (diff.added.length > 0) {
-          logger.info(`   📌 发现 ${diff.added.length} 个新增字段（CLI 新版本支持）：`);
+        if (hasAddedOnly) {
+          // 纯新增字段：自动补全
+          logger.info(`   📌 发现 ${diff.added.length} 个新增字段，自动补全中...`);
           for (const p of diff.added) logger.info(`      + ${p}`);
-          logger.info('   运行 speccore config --upgrade 可自动补全（使用默认值）');
+          try {
+            await upgradeConfig();
+            logger.info('   ✅ 已自动补全新增字段');
+          } catch (e: any) {
+            logger.warn(`   ⚠️  自动补全失败: ${e.message || e}`);
+            logger.info('   请手动运行: speccore config --upgrade');
+          }
         }
 
         if (needsConfirm) {
@@ -282,11 +303,31 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
           for (const line of formatConfigDiff(diff)) {
             if (!line.startsWith('📌')) logger.info(`      ${line}`);
           }
-          logger.info('   建议查看差异报告后再运行 speccore config --upgrade');
+          // v8.3.97+: 交互式确认（--yes 跳过）
+          const autoYes = options.yes || !process.stdin.isTTY;
+          if (autoYes) {
+            logger.info('   ⏭️  跳过交互确认（--yes 模式或非 TTY）');
+            logger.info('   建议查看差异报告后再运行 speccore config --upgrade');
+          } else {
+            const confirmed = await askConfirm('   是否立即执行配置升级？');
+            if (confirmed) {
+              try {
+                await upgradeConfig();
+                logger.info('   ✅ 配置升级已完成');
+              } catch (e: any) {
+                logger.warn(`   ⚠️  升级失败: ${e.message || e}`);
+                logger.info('   请手动运行: speccore config --upgrade');
+              }
+            } else {
+              logger.info('   ⏭️  已跳过配置升级');
+              logger.info('   稍后手动运行: speccore config --upgrade');
+            }
+          }
         }
 
-        if (config.schema_version < CURRENT_SCHEMA_VERSION) {
+        if (hasSchemaIssue && !hasAddedOnly && !needsConfirm) {
           logger.info(`   ⚠️  schema_version 过期: ${config.schema_version} < ${CURRENT_SCHEMA_VERSION}`);
+          logger.info('   运行 speccore config --upgrade 可升级');
         }
 
         if (warnings.length > 0) {
@@ -299,12 +340,71 @@ export async function updateCommand(options: { force?: boolean; tool?: string })
     await writeFile(join(speccoreDir, 'AI-RULES.md'), generateAIRulesContent());
   } catch {}
 
-  // 4c-4. 生成 .speccore/PROJECT.yaml（如不存在）
+  // 4c-4. 更新 .speccore/PROJECT.yaml（项目配置）
+  //       如不存在则生成默认配置；如已存在则：
+  //         - 纯新增字段 → 自动补全
+  //         - 结构性变更 → 提示确认
   try {
     const projectYamlPath = join(projectRoot, '.speccore', 'PROJECT.yaml');
     if (!(await pathExists(projectYamlPath))) {
       const projectName = require('path').basename(projectRoot);
       await initProjectConfig(projectName);
+    } else {
+      const { config, warnings } = await loadProjectConfigWithMeta();
+      const diff = detectConfigDiff(config, DEFAULT_PROJECT_CONFIG);
+      const needsConfirm = requiresUserConfirmation(diff);
+      const hasAddedOnly = diff.added.length > 0 && !needsConfirm;
+      const hasChanges = hasAddedOnly || needsConfirm || warnings.length > 0;
+
+      if (hasChanges) {
+        logger.info('');
+        logger.info('📋 .speccore/PROJECT.yaml 配置检查');
+
+        if (hasAddedOnly) {
+          logger.info(`   📌 发现 ${diff.added.length} 个新增字段，自动补全中...`);
+          for (const p of diff.added) logger.info(`      + ${p}`);
+          try {
+            await upgradeProjectConfig();
+            logger.info('   ✅ 已自动补全新增字段');
+          } catch (e: any) {
+            logger.warn(`   ⚠️  自动补全失败: ${e.message || e}`);
+            logger.info('   请手动运行: speccore config --upgrade --project');
+          }
+        }
+
+        if (needsConfirm) {
+          logger.info('   ⚠️  检测到结构性变更，需要人工确认：');
+          for (const line of formatConfigDiff(diff)) {
+            if (!line.startsWith('📌')) logger.info(`      ${line}`);
+          }
+          // v8.3.97+: 交互式确认（--yes 跳过）
+          const autoYes = options.yes || !process.stdin.isTTY;
+          if (autoYes) {
+            logger.info('   ⏭️  跳过交互确认（--yes 模式或非 TTY）');
+            logger.info('   建议查看差异报告后再运行 speccore config --upgrade --project');
+          } else {
+            const confirmed = await askConfirm('   是否立即执行配置升级？');
+            if (confirmed) {
+              try {
+                await upgradeProjectConfig();
+                logger.info('   ✅ 配置升级已完成');
+              } catch (e: any) {
+                logger.warn(`   ⚠️  升级失败: ${e.message || e}`);
+                logger.info('   请手动运行: speccore config --upgrade --project');
+              }
+            } else {
+              logger.info('   ⏭️  已跳过配置升级');
+              logger.info('   稍后手动运行: speccore config --upgrade --project');
+            }
+          }
+        }
+
+        if (warnings.length > 0) {
+          for (const w of warnings) logger.info(`   ${w}`);
+        }
+
+        logger.info('');
+      }
     }
   } catch {}
 

@@ -1,0 +1,35 @@
+[Unit]
+Description={{APP_NAME}}
+After=network.target
+
+[Service]
+Type=simple
+User={{DEPLOY_USER}}
+Group={{DEPLOY_USER}}
+WorkingDirectory={{DEPLOY_DIR}}
+
+# Spring Boot Profile（按环境切换：staging / production / test）
+Environment="SPRING_PROFILES_ACTIVE={{PROFILE}}"
+
+# JVM 参数
+Environment="JAVA_OPTS=-Xms{{JVM_XMS}} -Xmx{{JVM_XMX}} -Dfile.encoding=UTF-8 -Djava.security.egd=file:/dev/./urandom"
+
+# 启动命令
+ExecStart=/usr/bin/java $JAVA_OPTS -jar {{APP_NAME}}.jar
+
+# 优雅停止（SIGTERM 触发 Spring Boot 的 shutdown hook）
+ExecStop=/bin/kill -SIGTERM $MAINPID
+
+# 进程管理
+Restart=on-failure
+RestartSec=10
+StartLimitInterval=60s
+StartLimitBurst=3
+
+# 日志输出（systemd 240+ 支持 append 模式）
+# 旧版本 systemd 可改用：StandardOutput=file:/var/log/{{APP_NAME}}/app.log
+StandardOutput=append:/var/log/{{APP_NAME}}/app.log
+StandardError=append:/var/log/{{APP_NAME}}/error.log
+
+[Install]
+WantedBy=multi-user.target
