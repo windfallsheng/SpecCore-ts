@@ -1,3 +1,14 @@
+## v8.3.128 (2026-09-10) — PROJECT-EXAMPLE.yaml 端级 Git 覆盖示例完善
+
+### 改进
+
+**`PROJECT-EXAMPLE.yaml` 端级 Git 覆盖示例完善** (`src/commands/init.ts`)：
+- 端级 Git 覆盖注释从零散字段说明改为完整 platform 条目示例
+- 新增 ❌ 错误写法对比（`git:` 子对象）和 ✅ 正确写法（字段直接平铺）
+- 包含完整字段：`name`、`type`、`description`、`code_path`、`project_name`、`project_desc`、`default_branch`、`branch_prefix`、`protected_branches`、`branch_types`
+
+---
+
 ## v8.3.127 (2026-09-10) — update 同步示例配置
 
 ### 改进

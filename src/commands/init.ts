@@ -2703,16 +2703,33 @@ code_scope:
 # ─────────────────────────────────────────────────────────────────────────────
 # 端级 Git 覆盖示例（如需为某个端单独配置）
 # ─────────────────────────────────────────────────────────────────────────────
-# 在 platforms 对应端下增加以下字段：
-#   default_branch: develop    # 覆盖全局 git.default_base
-#   branch_prefix: hotfix/     # 覆盖全局 git.branch_prefix
-#   protected_branches:        # 覆盖全局 git.protected_branches
-#     - main
-#   branch_types:              # 覆盖/扩展全局 git.branch_types
-#     hotfix:
-#       prefix: api-
-#       suffix: urgent
-#       source: main
+# ⚠️ 端级字段直接平铺在 platform 下，不要包在 git: 子对象里
+#
+#   ❌ 错误写法：
+#     platforms:
+#       - name: booking-service
+#         git:                      ← 不要这样写
+#           default_branch: develop
+#
+#   ✅ 正确写法：
+#     platforms:
+#       - name: booking-service
+#         type: Java服务
+#         description: 预订服务
+#         code_path: ./packages/booking
+#         project_name: 预订与支付
+#         project_desc: 处理订单创建、支付、退款核心逻辑
+#         # 端级 Git 覆盖 — 直接平铺，不要包在 git: 里
+#         default_branch: develop    # 覆盖全局 git.default_base
+#         branch_prefix: hotfix/     # 覆盖全局 git.branch_prefix
+#         protected_branches:        # 覆盖全局 git.protected_branches
+#           - main
+#           - release/*
+#         branch_types:              # 覆盖/扩展全局 git.branch_types
+#           hotfix:
+#             prefix: api-
+#             suffix: urgent
+#             source: main
 # ─────────────────────────────────────────────────────────────────────────────
 `;
 
