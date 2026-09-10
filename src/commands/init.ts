@@ -1647,7 +1647,13 @@ Iteration-NNN-name/            ← 迭代目录
 │       │       │   ├── created-at
 │       │       │   ├── estimated-hours ← 预估工时
 │       │       │   ├── feature       ← 功能单元名
-│       │       │   └── git-config    ← 子任务级 Git 配置
+│       │       │   └── git-config    ← 子任务级 Git 配置（v8.3.114+）
+│       │       │                         格式示例：
+│       │       │                           分支类型: hotfix
+│       │       │                           前缀: api-
+│       │       │                           后缀: urgent
+│       │       │                           源分支: main
+│       │       │                         → 分支名: hotfix/api-子任务名-urgent
 │       │       ├── TASK.md    ← 子任务追踪
 │       │       ├── TEST.md    ← 测试用例
 │       │       ├── RISK.md    ← 风险评估

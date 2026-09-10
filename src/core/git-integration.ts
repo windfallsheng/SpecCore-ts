@@ -32,10 +32,14 @@ interface GitMapping {
 export interface GitConfig {
   /** 默认基础分支（如 main/master） */
   defaultBranch: string;
-  /** 分支类型（feature/bugfix/refactor/research），由任务 type 决定 */
+  /** 分支类型（feature/bugfix/hotfix/release），由任务 type 决定或子任务覆盖 */
   branchType: string;
   /** 分支前缀（如 2060708），三级回退 */
   branchPrefix: string;
+  /** v8.3.114+: 任务名前的前缀（如 api-、backend-），可选 */
+  taskPrefix?: string;
+  /** v8.3.114+: 任务名后的后缀（如 urgent、review），可选 */
+  taskSuffix?: string;
   /** 分支命名格式模板 */
   branchFormat: string;
   /** 创建分支前是否自动 git pull */
@@ -95,21 +99,31 @@ export function createTaskBranch(
     // 任务名安全处理
     const safeName = taskName.replace(/[^a-zA-Z0-9\u4e00-\u9fff_-]/g, '-');
 
-    // 4 位随机 hex hash
-    const hash4 = randomBytes(2).toString('hex');
-
-    // 前缀段：有值时追加连字符，无值时为空
-    const prefixSegment = gitConfig.branchPrefix ? `${gitConfig.branchPrefix}-` : '';
-
-    // 按格式模板生成分支名
-    const branchName = formatBranchName(gitConfig.branchFormat, {
-      type: branchType,
-      prefix: prefixSegment,
-      taskId,
-      name: safeName,
-      date: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
-      hash4,
-    }).substring(0, 250);
+    // v8.3.114+: 优先使用新格式 {类型}/{前缀}-{子任务名}-{后缀}
+    let branchName: string;
+    if (gitConfig.taskPrefix !== undefined || gitConfig.taskSuffix !== undefined) {
+      const prefix = gitConfig.taskPrefix ? `${gitConfig.taskPrefix}-` : '';
+      const suffix = gitConfig.taskSuffix ? `-${gitConfig.taskSuffix}` : '';
+      branchName = `${branchType}/${prefix}${safeName}${suffix}`
+        .replace(/-{2,}/g, '-')    // 清理连续连字符
+        .replace(/\/-/, '/')       // 清理类型后的多余连字符
+        .replace(/-$/, '')         // 清理尾部连字符
+        .substring(0, 250);
+    } else {
+      // 4 位随机 hex hash
+      const hash4 = randomBytes(2).toString('hex');
+      // 前缀段：有值时追加连字符，无值时为空
+      const prefixSegment = gitConfig.branchPrefix ? `${gitConfig.branchPrefix}-` : '';
+      // 按格式模板生成分支名（兼容旧逻辑）
+      branchName = formatBranchName(gitConfig.branchFormat, {
+        type: branchType,
+        prefix: prefixSegment,
+        taskId,
+        name: safeName,
+        date: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
+        hash4,
+      }).substring(0, 250);
+    }
 
     // 确定 base 分支: 显式指定 > 子任务配置 > 迭代配置 > 全局 > git检测
     let effectiveBase = baseBranch;
@@ -143,6 +157,15 @@ export function createTaskBranch(
     if (e.message?.includes('already exists')) {
       const cfg = loadGitConfig(iteration, taskDir);
       const bt = taskType ? (TASK_TYPE_TO_BRANCH_TYPE[taskType] || taskType) : cfg.branchType;
+      // v8.3.114+: 优先使用新格式
+      if (cfg.taskPrefix !== undefined || cfg.taskSuffix !== undefined) {
+        const prefix = cfg.taskPrefix ? `${cfg.taskPrefix}-` : '';
+        const suffix = cfg.taskSuffix ? `-${cfg.taskSuffix}` : '';
+        return `${bt}/${prefix}${taskId}${suffix}`
+          .replace(/-{2,}/g, '-')
+          .replace(/\/-/, '/')
+          .replace(/-$/, '');
+      }
       const ps = cfg.branchPrefix ? `${cfg.branchPrefix}-` : '';
       return formatBranchName(cfg.branchFormat, {
         type: bt,
@@ -212,7 +235,19 @@ export function loadSubtaskGitConfig(taskDir: string): Partial<GitConfig> {
       return val;
     };
 
-    // 分支前缀
+    // v8.3.114+: 分支类型（覆盖默认 feature）
+    const branchType = extractValue('分支类型');
+    if (branchType) config.branchType = branchType;
+
+    // v8.3.114+: 任务名前的前缀（如 api-）
+    const taskPrefix = extractValue('前缀');
+    if (taskPrefix) config.taskPrefix = taskPrefix;
+
+    // v8.3.114+: 任务名后的后缀（如 urgent）
+    const taskSuffix = extractValue('后缀');
+    if (taskSuffix) config.taskSuffix = taskSuffix;
+
+    // 分支前缀（兼容旧语义：如日期编号 2060708）
     const branchPrefix = extractValue('分支前缀');
     if (branchPrefix) config.branchPrefix = branchPrefix;
 
@@ -324,6 +359,9 @@ export function loadGitConfig(iteration?: string, taskDir?: string): GitConfig {
   // ── 3. 子任务级 .meta/git-config 覆盖迭代级（每个字段独立判断） ──
   if (taskDir) {
     const subtaskConfig = loadSubtaskGitConfig(taskDir);
+    if (subtaskConfig.branchType !== undefined) config.branchType = subtaskConfig.branchType;
+    if (subtaskConfig.taskPrefix !== undefined) config.taskPrefix = subtaskConfig.taskPrefix;
+    if (subtaskConfig.taskSuffix !== undefined) config.taskSuffix = subtaskConfig.taskSuffix;
     if (subtaskConfig.branchPrefix !== undefined) config.branchPrefix = subtaskConfig.branchPrefix;
     if (subtaskConfig.defaultBranch !== undefined) config.defaultBranch = subtaskConfig.defaultBranch;
     if (subtaskConfig.branchFormat !== undefined) config.branchFormat = subtaskConfig.branchFormat;
@@ -336,6 +374,8 @@ export function loadGitConfig(iteration?: string, taskDir?: string): GitConfig {
     defaultBranch: config.defaultBranch || DEFAULT_GIT_CONFIG.defaultBranch,
     branchType: config.branchType || DEFAULT_GIT_CONFIG.branchType,
     branchPrefix: config.branchPrefix !== undefined ? config.branchPrefix : DEFAULT_GIT_CONFIG.branchPrefix,
+    taskPrefix: config.taskPrefix,
+    taskSuffix: config.taskSuffix,
     branchFormat: config.branchFormat || DEFAULT_GIT_CONFIG.branchFormat,
     autoPull: config.autoPull !== undefined ? config.autoPull : DEFAULT_GIT_CONFIG.autoPull,
     remoteName: config.remoteName || DEFAULT_GIT_CONFIG.remoteName,

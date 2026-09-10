@@ -1,3 +1,40 @@
+## v8.3.114 (2026-09-10) — 子任务 git-config 支持分支类型/前缀/后缀/源分支
+
+### 新增
+
+**子任务 `.meta/git-config` 格式扩展**：
+```
+分支类型: hotfix      # 覆盖默认 feature
+前缀: api-            # 任务名前的前缀（可选）
+后缀: urgent          # 任务名后的后缀（可选）
+源分支: main          # 从哪个分支创建（可选）
+```
+
+**分支名生成规则**：
+- 如果子任务配置了 `前缀` 或 `后缀`，使用新格式：
+  ```
+  {分支类型}/{前缀}-{子任务名}-{后缀}
+  ```
+  示例：`hotfix/api-Task-001-修复登录-urgent`
+- 如果未配置 `前缀/后缀`，保持原有 `branchFormat` 模板逻辑（向后兼容）
+
+**配置优先级**：
+```
+子任务 .meta/git-config > 迭代级 PROJECT_GRAPH.md > 全局 CONSTITUTION.md > 默认值
+```
+
+**实现文件**：
+- `src/core/git-integration.ts`：
+  - `GitConfig` 接口增加 `taskPrefix`、`taskSuffix` 字段
+  - `loadSubtaskGitConfig` 解析 `分支类型`、`前缀`、`后缀` 字段
+  - `loadGitConfig` 合并新字段（三级回退）
+  - `createTaskBranch` 优先使用 `{type}/{prefix}-{name}-{suffix}` 格式
+
+**目录结构说明更新**：
+- `init.ts` 中子任务目录结构的 `git-config` 注释增加格式示例
+
+---
+
 ## v8.3.113 (2026-09-10) — 分支类型：prefix=任务前前缀, suffix=任务后后缀
 
 ### 重新设计
