@@ -1494,7 +1494,7 @@ function toProjectYaml(config: ProjectConfig): string {
   yaml += '#   git_repo            → Git 仓库地址（用于分支管理和 PR 提交）\n';
   yaml += '#   branch_prefix       → 端级分支前缀（覆盖全局 git.branch_prefix，可选）\n';
   yaml += '#   protected_branches  → 端级受保护分支（覆盖全局 git.protected_branches，可选）\n';
-  yaml += '#   requirement_unit    → 涉及需求端/功能单元（AI 分析时自动对标）\n';
+  yaml += '#   requirement_unit    → 涉及需求端：需求文档名称/标识（如"订单系统PRD"），仅作 AI 参考，不做校验\n';
   yaml += '#   notes               → 备注：额外信息、特殊说明\n';
   yaml += 'platforms:\n';
   if (config.platforms.length === 0) {

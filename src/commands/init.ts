@@ -358,6 +358,40 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 > 本文档是 SpecCore 与 AI 的**最高优先级契约**。analyze/split/execute 均据此执行。
 > AI 读取顺序：CONSTITUTION → context.json → 迭代目录
 
+## 字段对照总表
+
+> **AI 必读**：以下表格明确 CONSTITUTION.md 各字段与 PROJECT.yaml 的对应关系，以及每个字段的准确语义。请勿混淆。
+
+### 项目信息表字段
+
+| CONSTITUTION 列 | PROJECT.yaml 字段 | 语义说明 | 示例 |
+|:---|:---|:---|:---|
+| 工程标识 | \`name\` | 全局唯一技术标识，用于目录名、命令参数 | \`admin-web\`、\`backend-service\` |
+| 工程类型 | \`type\` | AI 据此生成针对性内容 | \`Java服务\`、\`H5移动端\` |
+| 工程名 | \`description\` | 人类可读的业务名称 | \`预订服务\`、\`后台管理\` |
+| 项目名称 | \`project_name\` | 给人和 AI 看的业务名称 | \`食堂后台管理\`、\`商户入驻系统\` |
+| 项目描述 | \`project_desc\` | 工程的详细说明、补充信息 | \`核心业务服务，处理订单全生命周期\` |
+| 工程源码路径 | \`code_path\` | 相对于项目根目录的代码位置 | \`./packages/backend\` |
+| **涉及需求端** | \`requirement_unit\` | **需求文档名称/标识，仅作 AI 参考，不做任何校验** | \`订单系统PRD\`、\`后台管理端需求文档\` |
+| 备注 | \`notes\` | 额外信息、特殊说明、TODO | \`核心业务\`、\`待上架\` |
+
+> ⚠️ **特别提醒 AI**：「涉及需求端」的值是**需求文档名**（如"订单系统PRD"），不是技术端标识（如 app/h5/admin）。技术端列表见下方「端列表」。
+
+### Git 配置表字段
+
+| CONSTITUTION 列 | PROJECT.yaml 字段 | 语义说明 | 示例 |
+|:---|:---|:---|:---|
+| Git 仓库 | \`git_repo\` | 仓库地址 | \`git@github.com:org/repo.git\` |
+| 默认分支 | \`default_branch\` | 默认分支名 | \`main\`、\`develop\` |
+| 保护分支 | \`protected_branches\` | 禁止直接 push 的分支列表 | \`main,release/*\` |
+| 分支前缀 | \`branch_prefix\` | 功能分支前缀 | \`feature/\`、\`feature/api-\` |
+
+### 公共默认值机制
+
+- 「Git 公共配置」章节定义公共默认值
+- 「Git 配置」表中用 \`—\` 表示使用该字段的公共默认值
+- 各工程只写和公共配置不同的字段
+
 ## 端列表（全局权威）
 
 > ⚠️ **工程标识是全项目唯一的端标识符**，所有命令（analyze/split/execute）、目录名（020-specs/{端}/）、模板目录（templates/{level}/{端}/）均使用此处声明的端名。
