@@ -355,7 +355,7 @@ export interface ProjectInfo {
   srcPath: string;          // 工程源码路径
   gitRepo: string;          // Git 仓库（向后兼容旧格式）
   branch: string;           // 默认分支（向后兼容旧格式）
-  platform: string;         // 涉及需求端
+  platform: string;         // 涉及需求端：需求文档名称/标识，仅作 AI 参考
   notes: string;            // 备注
 }
 
@@ -464,6 +464,10 @@ export async function parseProjectInfo(): Promise<Map<string, ProjectInfo>> {
 /**
  * 根据端名获取实际的工程路径（v6.49.6+）
  * 用于 execute 命令确定代码输出位置
+ *
+ * 匹配顺序：
+ * 1. 精确匹配工程标识（name 列）
+ * 2. 回退匹配旧格式「对应端」列（向后兼容，v8.3.107+ 新格式中「涉及需求端」为需求文档名，不参与匹配）
  */
 export async function getProjectPathForPlatform(platform: string): Promise<string | null> {
   const projectInfoMap = await parseProjectInfo();
@@ -471,7 +475,7 @@ export async function getProjectPathForPlatform(platform: string): Promise<strin
   if (projectInfoMap.has(platform)) {
     return projectInfoMap.get(platform)!.srcPath || null;
   }
-  // 再匹配「对应端」列
+  // 再回退匹配旧格式「对应端」列（向后兼容）
   for (const [, info] of projectInfoMap) {
     if (info.platform === platform || info.platform.split(',').map(p => p.trim()).includes(platform)) {
       return info.srcPath || null;

@@ -395,20 +395,20 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 > - **项目名称**：给人和 AI 看的业务名称（如"食堂后台管理"、"商户入驻系统"）
 > - **项目描述**：工程的详细说明、补充信息（如"核心业务服务，处理订单全生命周期"）
 > - **工程源码路径**：相对于项目根目录的代码位置（如 ./packages/backend）
-> - **涉及需求端**：引用「端列表」中已声明的端名，每行只填一个
+> - **涉及需求端**：需求文档名称/标识，仅作参考（如"后台管理端需求文档"、"订单系统PRD"）。说明本工程大概会出现在哪些需求文档中
 > - **备注**：额外信息、特殊说明、TODO 等
 
 > 多工程示例（每个端 = 一个独立工程）:
 >
 > | 工程标识 | 工程类型 | 工程名 | 项目名称 | 项目描述 | 工程源码路径 | 涉及需求端 | 备注 |
 > | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-> | admin-web | Web管理后台 | admin | 后台管理端 | 运营后台管理系统 | ./packages/admin | admin | 核心系统 |
-> | h5-app | H5移动端 | h5 | 移动H5端 | 用户端H5页面 | ./packages/h5 | h5 | 高优先级 |
-> | android-app | Android移动端 | android | Android端 | 原生Android APP | ./packages/android | app | 待上架 |
-> | backend-service | Java服务 | backend | 后台服务 | 订单与支付核心服务 | ./packages/backend | backend | 核心业务 |
+> | admin-web | Web管理后台 | admin | 后台管理端 | 运营后台管理系统 | ./packages/admin | 后台管理端需求文档 | 核心系统 |
+> | h5-app | H5移动端 | h5 | 移动H5端 | 用户端H5页面 | ./packages/h5 | 移动端需求文档 | 高优先级 |
+> | android-app | Android移动端 | android | Android端 | 原生Android APP | ./packages/android | APP端需求文档 | 待上架 |
+> | backend-service | Java服务 | backend | 后台服务 | 订单与支付核心服务 | ./packages/backend | 订单系统PRD | 核心业务 |
 >
 > **关键规则**：
-> - 「涉及需求端」列的值必须引用「端列表」中已声明的端名
+> - 「涉及需求端」仅作为 AI 参考上下文，说明工程与哪些需求文档相关，不做任何校验
 > - 一一对应：每行一个工程对应一个工程标识（不填多个）
 > - 如果一个服务拆成多个工程，应在「端列表」中分别声明
 
