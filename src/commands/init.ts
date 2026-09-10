@@ -320,11 +320,12 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
     spinner.stop('SpecCore initialized successfully!');
     logger.info('');
     logger.info('Next steps:');
-    logger.info('  1. Edit .speccore/CONSTITUTION.md to define your tech stack');
-    logger.info('  2. Edit .speccore/PROJECT/TEAM.md to add team members');
-    logger.info('  3. Run: speccore analyze --scope global to analyze your codebase');
-    logger.info('  4. Run: speccore iteration create --name=Q1 to start an iteration');
-    logger.info('  5. Run: speccore doc2spec -f requirements.docx to import docs');
+    logger.info('  1. 👀 View examples: .speccore/examples/CONSTITUTION-EXAMPLE.md');
+    logger.info('  2. ✏️  Edit .speccore/CONSTITUTION.md to define your tech stack');
+    logger.info('  3. 👥 Edit .speccore/PROJECT/TEAM.md to add team members');
+    logger.info('  4. 🔬 Run: speccore analyze --scope global to analyze your codebase');
+    logger.info('  5. 📁 Run: speccore iteration create --name=Q1 to start an iteration');
+    logger.info('  6. 📄 Run: speccore doc2spec -f requirements.docx to import docs');
     logger.info('');
     logger.info('💡 WorkBuddy Integration: .workbuddy/ files created.');
     logger.info('   Reopen this project in WorkBuddy to enable Speccore commands.');
@@ -607,6 +608,9 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
   // .speccore/PROJECT.yaml — 项目配置（v8.3.25+）
   const projectName = require('path').basename(projectRoot);
   await initProjectConfig(projectName);
+
+  // v8.3.115+: 生成示例配置文件，供用户仿照修改
+  await generateExampleConfigs(projectRoot);
 
   // Ask 引擎配置
   await writeFile(
@@ -2396,4 +2400,314 @@ async function writeSetupGuide(projectRoot: string, _speccoreDir: string): Promi
   await ensureDir(join(projectRoot, 'outputs'));
   await writeFile(outputPath, html);
   return outputPath;
+}
+
+// ─────────────────────────────────────────
+// v8.3.115+: 生成示例配置文件
+// ─────────────────────────────────────────
+
+async function generateExampleConfigs(projectRoot: string): Promise<void> {
+  const examplesDir = join(projectRoot, '.speccore', 'examples');
+  await ensureDir(examplesDir);
+
+  // CONSTITUTION.md 完整示例（多工程）
+  const constitutionExample = `## 字段对照总表
+
+> **AI 必读**：以下表格明确 CONSTITUTION.md 各字段与 PROJECT.yaml 的对应关系。
+> 人类只需填写 CONSTITUTION.md，PROJECT.yaml 由 CLI 自动生成/同步。
+
+### 项目信息表字段
+
+| CONSTITUTION 列 | PROJECT.yaml 字段 | 语义说明 | 示例 |
+|:---|:---|:---|:---|
+| 工程标识 | \`name\` | 全局唯一技术标识 | \`admin-web\` |
+| 工程类型 | \`type\` | AI 据此生成针对性内容 | \`Java服务\` |
+| 工程名 | \`description\` | 人类可读的业务名称 | \`预订服务\` |
+| 项目名称 | \`project_name\` | 给人和 AI 看的业务名称 | \`食堂后台管理\` |
+| 项目描述 | \`project_desc\` | 工程的详细说明 | \`核心业务服务...\` |
+| 工程源码路径 | \`code_path\` | 相对项目根目录 | \`./packages/backend\` |
+| **涉及需求端** | \`requirement_unit\` | **需求文档名称/标识，仅作 AI 参考** | \`订单系统PRD\` |
+| 备注 | \`notes\` | 额外信息 | \`核心业务\` |
+
+### Git 配置表字段
+
+| CONSTITUTION 列 | PROJECT.yaml 字段 | 语义说明 | 示例 |
+|:---|:---|:---|:---|
+| Git 仓库 | \`git_repo\` | 仓库地址 | \`git@github.com:org/repo.git\` |
+| 默认分支 | \`default_branch\` | 默认分支名 | \`main\`、\`develop\` |
+| 保护分支 | \`protected_branches\` | 禁止直接 push 的分支列表 | \`main,release/*\` |
+
+### 公共默认值机制
+
+- 「Git 公共配置」章节定义公共默认值
+- 「Git 配置」表中用 \`—\` 表示使用该字段的公共默认值
+- 各工程只写和公共配置不同的字段
+
+---
+
+## 端列表（全局权威）
+
+> ⚠️ **工程标识是全项目唯一的端标识符**，所有命令（analyze/split/execute）、目录名（020-specs/{端}/）、模板目录（templates/{level}/{端}/）均使用此处声明的端名。
+
+| 工程标识 | 描述 | 工程类型 |
+| :--- | :--- | :--- |
+| admin-web | 后台管理端 | Web管理后台 |
+| h5-mobile | 移动 H5 端 | H5移动端 |
+| miniapp | 小程序端 | 微信小程序 |
+| backend-api | 后台 API 服务 | Java服务 |
+
+> **端名规则**：
+> - 工程标识 ≠ 工程名：工程标识是唯一技术标识（如 admin-web），工程名是业务名称（如 "预订服务"）
+> - 全小写、无空格、用短横线分隔（如 order-service）
+> - 工程类型：AI 据此生成针对性内容（见下方工程类型枚举）
+> - 此列表是 analyze/split/execute 的唯一端名来源
+
+---
+
+## 项目信息
+
+| 工程标识 | 工程类型 | 工程名 | 项目名称 | 项目描述 | 工程源码路径 | 涉及需求端 | 备注 |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| admin-web | Web管理后台 | 后台管理 | 运营后台 | 运营人员使用的后台管理系统 | ./packages/admin | 后台管理端需求文档 | 核心系统 |
+| h5-mobile | H5移动端 | H5商城 | 移动商城 | 用户端H5购物页面 | ./packages/h5 | 移动端需求文档 | 高优先级 |
+| miniapp | 微信小程序 | 小程序 | 微信小程序 | 微信内嵌小程序商城 | ./packages/miniapp | 小程序端需求文档 | 待上架 |
+| backend-api | Java服务 | 订单服务 | 订单与支付 | 订单创建、支付、退款核心服务 | ./packages/backend | 订单系统PRD | 核心业务 |
+
+> **字段说明**：
+> - **工程标识**：全局唯一技术标识（如 admin-web），全小写、无空格、短横线分隔
+> - **工程类型**：AI 据此生成针对性内容（如 Java服务、H5移动端、Web管理后台）
+> - **工程名**：人类可读的业务名称（如 "预订服务"、"后台管理"）
+> - **项目名称**：给人和 AI 看的业务名称（如"食堂后台管理"、"商户入驻系统"）
+> - **项目描述**：工程的详细说明、补充信息（如"核心业务服务，处理订单全生命周期"）
+> - **工程源码路径**：相对于项目根目录的代码位置（如 ./packages/backend）
+> - **涉及需求端**：需求文档名称/标识，仅作 AI 参考（如"后台管理端需求文档"、"订单系统PRD"）。说明本工程大概会出现在哪些需求文档中
+> - **备注**：额外信息、特殊说明、TODO 等
+
+---
+
+## Git 公共配置
+
+> 公共默认值。各工程在「Git 配置」表中只写与公共配置不同的字段，未填写的字段自动使用此处默认值。
+> 用 \`—\` 表示使用公共默认值。
+
+### 默认配置
+
+| 默认分支 | 保护分支 |
+| :--- | :--- |
+| main | main,release/* |
+
+### 分支类型
+
+> 定义各种分支类型及其创建源分支。**分支名格式：\`{类型}/{前缀}-{任务名}-{后缀}\`**
+> - \`{类型}/\` = 类型自带（如 hotfix/、feature/）
+> - \`{前缀}\` = 任务名前的前缀（可选）
+> - \`{任务名}\` = 如 Task-001-修复登录
+> - \`{后缀}\` = 任务名后的后缀（可选）
+>
+> 示例：配置了前缀 \`api-\`、后缀 \`-urgent\`，任务名为 \`Task-001\`，则分支名为 \`hotfix/api-Task-001-urgent\`
+
+| 类型 | 前缀（可选） | 后缀（可选） | 创建源 | 说明 |
+| :--- | :--- | :--- | :--- | :--- |
+| feature | — | — | develop | 新功能开发 |
+| bugfix | — | — | develop | 修复开发环境 Bug |
+| release | — | — | develop | 版本发布准备 |
+| hotfix | — | — | main | 生产环境紧急修复 |
+| support | — | — | main | 长期支持旧版本 |
+
+> **分支类型说明**：
+> - **分支名格式**：\`{类型}/{前缀}-{任务名}-{后缀}\`，前缀和后缀均可选
+> - **前缀列**：任务名前的前缀（如 \`api-\`、\`backend-\`），不填则无
+> - **后缀列**：任务名后的后缀（如 \`-urgent\`、\`-review\`），不填则无
+> - **feature**：日常功能开发，从 develop 创建，完成后合并回 develop
+> - **bugfix**：修复开发中的 Bug，从 develop 创建，完成后合并回 develop
+> - **release**：准备发布版本，从 develop 创建，完成后合并到 main + develop
+> - **hotfix**：生产环境紧急修复，从 main 创建，完成后合并到 main + develop
+> - **support**：长期支持旧版本，从 main 创建，用于维护历史版本
+> - 可自定义添加其他类型（如 refactor、docs、test 等）
+
+---
+
+## Git 配置
+
+> 按工程标识对应。未配置的字段使用「Git 公共配置」中的默认值。
+> 用 \`—\` 表示使用公共默认值。
+
+| 工程标识 | Git 仓库 | 默认分支 | 保护分支 | 分支前缀 | 备注 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| admin-web | git@github.com:myorg/admin-web.git | — | — | — | 核心系统 |
+| h5-mobile | git@github.com:myorg/h5-mobile.git | — | — | — | 高优先级 |
+| miniapp | git@github.com:myorg/miniapp.git | — | — | — | 待上架 |
+| backend-api | git@github.com:myorg/backend.git | — | — | — | 核心业务 |
+
+> **字段说明**：
+> - **工程标识**：引用「项目信息」表中的工程标识，一一对应
+> - **Git 仓库**：仓库地址（如 git@github.com:org/repo.git、https://...）
+> - **默认分支**：如 main、master、develop。填 \`—\` 表示使用公共默认值
+> - **保护分支**：禁止直接 push，只能通过 PR 合并（支持通配符如 release/*）。填 \`—\` 表示使用公共默认值
+> - **分支前缀**：功能分支前缀（如 feature/）。填 \`—\` 表示使用公共默认值
+> - **备注**：额外说明
+
+---
+
+> 📌 **使用说明**：
+> 1. 复制本示例内容到 \`CONSTITUTION.md\`，根据实际项目修改
+> 2. 修改后运行 \`speccore update\` 自动同步到 PROJECT.yaml
+> 3. 子任务目录下的 \`.meta/git-config\` 可覆盖全局配置（见目录结构说明）
+`;
+
+  await writeFile(join(examplesDir, 'CONSTITUTION-EXAMPLE.md'), constitutionExample);
+
+  // PROJECT.yaml 完整示例（多工程）
+  const projectExample = `# PROJECT.yaml — 项目配置（由 CLI 自动生成，不建议手动编辑）
+# 如需修改，请编辑 CONSTITUTION.md 后运行 speccore update
+# ─────────────────────────────────────────────────────────────────────────────
+
+schema_version: 1
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 项目基本信息
+# ─────────────────────────────────────────────────────────────────────────────
+project:
+  # 项目名称（全局标识）
+  name: my-project
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 端列表（每个端 = 一个独立工程）
+# ─────────────────────────────────────────────────────────────────────────────
+# 工程标识：全小写、无空格、短横线分隔，全局唯一
+# 工程类型：AI 据此生成针对性内容（Java服务/H5移动端/Web管理后台等）
+# code_path：相对于项目根目录的源码位置
+# project_name：给人和 AI 看的业务名称
+# project_desc：工程的详细说明
+# requirement_unit：需求文档名称/标识，仅作 AI 参考，不做校验
+# notes：额外信息
+# ─────────────────────────────────────────────────────────────────────────────
+platforms:
+  - name: admin-web
+    type: Web管理后台
+    description: 后台管理
+    code_path: ./packages/admin
+    project_name: 运营后台
+    project_desc: 运营人员使用的后台管理系统
+    requirement_unit: 后台管理端需求文档
+    notes: 核心系统
+
+  - name: h5-mobile
+    type: H5移动端
+    description: H5商城
+    code_path: ./packages/h5
+    project_name: 移动商城
+    project_desc: 用户端H5购物页面
+    requirement_unit: 移动端需求文档
+    notes: 高优先级
+
+  - name: miniapp
+    type: 微信小程序
+    description: 小程序
+    code_path: ./packages/miniapp
+    project_name: 微信小程序
+    project_desc: 微信内嵌小程序商城
+    requirement_unit: 小程序端需求文档
+    notes: 待上架
+
+  - name: backend-api
+    type: Java服务
+    description: 订单服务
+    code_path: ./packages/backend
+    project_name: 订单与支付
+    project_desc: 订单创建、支付、退款核心服务
+    requirement_unit: 订单系统PRD
+    notes: 核心业务
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Git 配置
+# ─────────────────────────────────────────────────────────────────────────────
+# default_base：默认基础分支（PR 合并目标）
+# branch_prefix：功能分支前缀
+# protected_branches：受保护分支（禁止直接 push，只能通过 PR 合并）
+# branch_types：分支类型定义
+#   - 类型名自带前缀（如 hotfix/、feature/）
+#   - prefix：任务名前的前缀（可选），如 api-、backend-
+#   - suffix：任务名后的后缀（可选），如 urgent、review
+#   - source：创建源分支，如 develop、main
+# ─────────────────────────────────────────────────────────────────────────────
+git:
+  # 默认基础分支（PR 合并目标）
+  default_base: main
+  # 功能分支前缀
+  branch_prefix: feature/
+  # 受保护分支（禁止直接 push，只能通过 PR 合并）
+  protected_branches:
+    - main
+    - master
+  # 分支类型定义。prefix=任务前前缀, suffix=任务后后缀, 均可选
+  branch_types:
+    feature:
+      source: develop
+    bugfix:
+      source: develop
+    release:
+      source: develop
+    hotfix:
+      source: main
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 代码扫描范围
+# ─────────────────────────────────────────────────────────────────────────────
+# AI 全局分析时扫描的源码目录
+# ─────────────────────────────────────────────────────────────────────────────
+code_scope:
+  - src/
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 端级 Git 覆盖示例（如需为某个端单独配置）
+# ─────────────────────────────────────────────────────────────────────────────
+# 在 platforms 对应端下增加以下字段：
+#   default_branch: develop    # 覆盖全局 git.default_base
+#   branch_prefix: hotfix/     # 覆盖全局 git.branch_prefix
+#   protected_branches:        # 覆盖全局 git.protected_branches
+#     - main
+#   branch_types:              # 覆盖/扩展全局 git.branch_types
+#     hotfix:
+#       prefix: api-
+#       suffix: urgent
+#       source: main
+# ─────────────────────────────────────────────────────────────────────────────
+`;
+
+  await writeFile(join(examplesDir, 'PROJECT-EXAMPLE.yaml'), projectExample);
+
+  // 子任务 git-config 示例
+  const gitConfigExample = `# 子任务级 Git 配置示例（.meta/git-config）
+# ─────────────────────────────────────────────────────────────────────────────
+# 配置优先级：子任务 > 迭代级 > 全局 CONSTITUTION.md > 默认值
+# 未配置的字段自动从上级继承
+# ─────────────────────────────────────────────────────────────────────────────
+
+# 分支类型：覆盖默认 feature（如 hotfix、bugfix、release）
+分支类型: hotfix
+
+# 前缀：任务名前的前缀（可选），如 api-、backend-
+前缀: api-
+
+# 后缀：任务名后的后缀（可选），如 urgent、review
+后缀: urgent
+
+# 源分支：从哪个分支创建（如 main、develop）
+源分支: main
+
+# 分支格式：自定义分支名模板（可选，一般不配置）
+# 支持变量: {type} {prefix} {taskId} {name} {date} {hash4}
+# 分支格式: {type}/{prefix}{taskId}
+
+# 自动拉取：创建分支前是否自动 git pull（true/false）
+自动拉取: false
+
+# 远程名称：远程仓库名称（默认 origin）
+远程名称: origin
+`;
+
+  await writeFile(join(examplesDir, 'GIT-CONFIG-EXAMPLE.txt'), gitConfigExample);
+
+  logger.info('   📋 已生成示例配置: .speccore/examples/');
 }

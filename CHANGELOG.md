@@ -1,3 +1,35 @@
+## v8.3.115 (2026-09-10) — 新增示例配置文件夹 + 增强注释
+
+### 新增
+
+**`.speccore/examples/` 示例配置文件夹**：
+`speccore init` 后自动生成三个示例文件：
+
+| 文件 | 内容 | 用途 |
+|:---|:---|:---|
+| `CONSTITUTION-EXAMPLE.md` | 完整的多工程 CONSTITUTION.md | 仿照修改项目信息和 Git 配置 |
+| `PROJECT-EXAMPLE.yaml` | 完整的多工程 PROJECT.yaml | 了解 YAML 结构和字段对应关系 |
+| `GIT-CONFIG-EXAMPLE.txt` | 子任务 `.meta/git-config` 示例 | 了解子任务级 Git 配置格式 |
+
+**示例内容包含**：
+- 4 个工程（admin-web、h5-mobile、miniapp、backend-api）的完整配置
+- 字段对照总表（CONSTITUTION 列 → yaml 字段 → 语义 → 示例）
+- Git 公共配置（默认配置 + 分支类型）
+- Git 配置（多工程 + `—` 占位符用法）
+- 端级覆盖示例注释
+- 子任务 git-config 格式（分支类型/前缀/后缀/源分支）
+
+**PROJECT.yaml 注释增强**：
+- Git 配置区增加"修改后运行 speccore update 自动同步"说明
+- 增加端级覆盖和子任务覆盖的说明
+- 分支类型增加完整格式说明和示例
+- 每个字段增加独立注释
+
+**Init 完成后提示更新**：
+- 第一步引导用户查看示例文件：`View examples: .speccore/examples/CONSTITUTION-EXAMPLE.md`
+
+---
+
 ## v8.3.114 (2026-09-10) — 子任务 git-config 支持分支类型/前缀/后缀/源分支
 
 ### 新增

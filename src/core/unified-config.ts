@@ -1707,28 +1707,41 @@ function toProjectYaml(config: ProjectConfig): string {
   yaml += '\n# ─────────────────────────────────────────────────────────────────────────────\n';
   yaml += '# Git 配置\n';
   yaml += '# ─────────────────────────────────────────────────────────────────────────────\n';
+  yaml += '# 说明：\n';
+  yaml += '#   - 修改后运行 speccore update 自动同步到 CONSTITUTION.md\n';
+  yaml += '#   - 端级可覆盖：在 platforms[].default_branch / branch_prefix / protected_branches / branch_types\n';
+  yaml += '#   - 子任务可覆盖：在 Task-*/{端}/{子任务}/.meta/git-config 中配置\n';
   yaml += 'git:\n';
-  yaml += '  # 默认基础分支（PR 合并目标）\n';
+  yaml += '  # 默认基础分支（PR 合并目标、创建分支的默认源分支）\n';
   yaml += `  default_base: ${config.git.default_base}\n`;
-  yaml += '  # 功能分支前缀\n';
+  yaml += '  # 功能分支前缀（旧语义，兼容保留）\n';
   yaml += `  branch_prefix: ${config.git.branch_prefix}\n`;
   yaml += '  # 受保护分支（禁止直接 push，只能通过 PR 合并）\n';
+  yaml += '  # 支持通配符：如 release/* 匹配 release/1.0.0\n';
   yaml += '  protected_branches:\n';
   for (const b of config.git.protected_branches) {
     yaml += `    - ${b}\n`;
   }
-  // v8.3.113+: 分支类型
+  // v8.3.115+: 分支类型注释增强
   if (config.git.branch_types && Object.keys(config.git.branch_types).length > 0) {
-    yaml += '  # 分支类型定义。prefix=任务前前缀, suffix=任务后后缀, 均可选\n';
+    yaml += '  # 分支类型定义。分支名格式: {类型}/{前缀}-{任务名}-{后缀}\n';
+    yaml += '  #   - prefix: 任务名前的前缀（可选），如 api-、backend-\n';
+    yaml += '  #   - suffix: 任务名后的后缀（可选），如 urgent、review\n';
+    yaml += '  #   - source: 创建源分支，如 develop、main\n';
+    yaml += '  # 示例：hotfix 类型 + prefix=api- + suffix=urgent + 任务名=Task-001\n';
+    yaml += '  #       → 分支名: hotfix/api-Task-001-urgent\n';
     yaml += '  branch_types:\n';
     for (const [typeName, typeDef] of Object.entries(config.git.branch_types)) {
       yaml += `    ${typeName}:\n`;
       if (typeDef.prefix) {
+        yaml += `      # 任务前前缀（可选）\n`;
         yaml += `      prefix: ${typeDef.prefix}\n`;
       }
       if (typeDef.suffix) {
+        yaml += `      # 任务后后缀（可选）\n`;
         yaml += `      suffix: ${typeDef.suffix}\n`;
       }
+      yaml += `      # 创建源分支\n`;
       yaml += `      source: ${typeDef.source}\n`;
     }
   }
