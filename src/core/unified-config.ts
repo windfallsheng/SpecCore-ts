@@ -64,8 +64,10 @@ export interface PlatformConfig {
   name: string;
   /** 工程类型：frontend(前端) | backend(后端) | infra(基础设施) */
   type: 'frontend' | 'backend' | 'infra';
-  /** 工程描述/工程名：人类可读名称。如: 预订订单服务, H5移动端 */
+  /** 工程名：人类可读的业务名称。如: 预订订单服务, H5移动端 */
   description?: string;
+  /** 项目名称：给人和 AI 看的业务名称（如"食堂后台管理"）。不同于工程标识 */
+  project_name?: string;
   /** 源码路径：相对于项目根目录的代码位置。如: ./packages/backend/booking-service */
   code_path?: string;
   /** Git 仓库地址：用于分支管理和 PR 提交 */
@@ -1482,6 +1484,7 @@ function toProjectYaml(config: ProjectConfig): string {
   yaml += '#\n';
   yaml += '# 可选字段：\n';
   yaml += '#   description         → 工程名（人类可读的业务名称，如 "预订服务"）\n';
+  yaml += '#   project_name        → 项目名称（给人和 AI 看的业务名称，如"食堂后台管理"）\n';
   yaml += '#   code_path           → 源码路径（相对于项目根目录）\n';
   yaml += '#   git_repo            → Git 仓库地址（用于分支管理和 PR 提交）\n';
   yaml += '#   branch_prefix       → 端级分支前缀（覆盖全局 git.branch_prefix，可选）\n';
@@ -1530,6 +1533,10 @@ function toProjectYaml(config: ProjectConfig): string {
     if (p.description) {
       yaml += `    # 工程名（人类可读的业务名称）\n`;
       yaml += `    description: ${p.description}\n`;
+    }
+    if (p.project_name) {
+      yaml += `    # 项目名称（给人和 AI 看的业务名称，如"食堂后台管理"）\n`;
+      yaml += `    project_name: ${p.project_name}\n`;
     }
     if (p.code_path) {
       yaml += `    # 源码路径（相对于项目根目录）\n`;

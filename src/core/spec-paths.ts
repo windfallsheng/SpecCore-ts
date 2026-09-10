@@ -345,7 +345,8 @@ export async function parsePlatformTypes(): Promise<Map<string, string>> {
 export interface ProjectInfo {
   projectIdentifier: string;
   projectType: string;      // 工程类型（Java服务/H5移动端/Web管理后台等）
-  projectName: string;
+  engineeringName: string;  // 工程名（第3列）
+  projectName: string;      // 项目名称（第4列）
   srcPath: string;
   gitRepo: string;
   branch: string;
@@ -362,7 +363,8 @@ export async function parseProjectInfo(): Promise<Map<string, ProjectInfo>> {
   let headerParsed = false;
   let identifierColIdx = -1;
   let typeColIdx = -1;
-  let nameColIdx = -1;
+  let engNameColIdx = -1;    // 工程名列
+  let projNameColIdx = -1;   // 项目名称列
   let pathColIdx = -1;
   let gitColIdx = -1;
   let branchColIdx = -1;
@@ -393,9 +395,12 @@ export async function parseProjectInfo(): Promise<Map<string, ProjectInfo>> {
       typeColIdx = cells.findIndex(h =>
         h === '工程类型' || h === '类型' || h.includes('工程类型')
       );
-      nameColIdx = cells.findIndex(h =>
-        h === '工程名' || h === '项目名称' || h === '项目名' ||
-        h.includes('工程名') || h.includes('项目名称')
+      // v8.3.106+: 分开查找「工程名」和「项目名称」列
+      engNameColIdx = cells.findIndex(h =>
+        h === '工程名' || h.includes('工程名')
+      );
+      projNameColIdx = cells.findIndex(h =>
+        h === '项目名称' || h === '项目名' || h.includes('项目名称')
       );
       pathColIdx = cells.findIndex(h =>
         h === '源码路径' || h === '工程路径' || h.includes('源码路径') || h.includes('工程路径')
@@ -422,7 +427,8 @@ export async function parseProjectInfo(): Promise<Map<string, ProjectInfo>> {
         const info: ProjectInfo = {
           projectIdentifier,
           projectType: typeColIdx >= 0 && cells.length > typeColIdx ? cells[typeColIdx].trim() : '',
-          projectName: nameColIdx >= 0 && cells.length > nameColIdx ? cells[nameColIdx].trim() : '',
+          engineeringName: engNameColIdx >= 0 && cells.length > engNameColIdx ? cells[engNameColIdx].trim() : '',
+          projectName: projNameColIdx >= 0 && cells.length > projNameColIdx ? cells[projNameColIdx].trim() : '',
           srcPath: pathColIdx >= 0 && cells.length > pathColIdx ? cells[pathColIdx].replace(/`/g, '').trim() : '',
           gitRepo: gitColIdx >= 0 && cells.length > gitColIdx ? cells[gitColIdx].trim() : '',
           branch: branchColIdx >= 0 && cells.length > branchColIdx ? cells[branchColIdx].trim() : 'main',

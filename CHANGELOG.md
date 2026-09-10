@@ -1,3 +1,30 @@
+## v8.3.106 (2026-09-10) — CONSTITUTION ↔ PROJECT.yaml 字段完整对齐
+
+### 修复
+
+**字段完整对齐（v8.3.106）**:
+- `PlatformConfig` 新增 `project_name` 字段，对应 CONSTITUTION.md「项目名称」列
+- `ProjectInfo` 接口拆分：`engineeringName`（工程名，第3列）+ `projectName`（项目名称，第4列）
+- `parseProjectInfo` 独立查找「工程名」列和「项目名称」列，不再混淆
+- `toProjectYaml` 支持 `project_name` 序列化输出
+- `description` 注释明确为「工程名」（不再含混"工程描述/工程名"）
+- **影响文件**：`src/core/unified-config.ts`、`src/core/spec-paths.ts`
+
+**完整对应关系**（已对齐）：
+
+| CONSTITUTION.md 列 | PROJECT.yaml 字段 | 说明 |
+|:---|:---|:---|
+| 工程标识 | `name` | 全局唯一技术标识 |
+| 工程类型 | `type` | `frontend\|backend\|infra` |
+| 工程名 | `description` | 人类可读的业务名称 |
+| 项目名称 | `project_name` | 给人和 AI 看的业务名称（新增） |
+| 源码路径 | `code_path` | 相对项目根目录 |
+| Git 仓库 | `git_repo` | 仓库地址 |
+| 默认分支 | `default_branch` | 如 main、develop |
+| 对应需求端 | `requirement_unit` | 需求模块映射 |
+
+---
+
 ## v8.3.105 (2026-09-10) — 多工程类型 + Windows 兼容 + CONSTITUTION 优先 + 产物检查
 
 ### 新增
