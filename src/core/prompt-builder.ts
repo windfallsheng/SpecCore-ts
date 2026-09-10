@@ -1028,7 +1028,7 @@ async function buildGlobalTOC(globalDir: string): Promise<TOCEntry[]> {
 export async function loadGlobalContext(
   cwd: string,
   _command: PromptCommand,
-  _platform?: string
+  platform?: string
 ): Promise<GlobalContext> {
   const globalDir = join(cwd, '.speccore', 'GLOBAL');
   const ctx: GlobalContext = { toc: [] };
@@ -1042,17 +1042,38 @@ export async function loadGlobalContext(
     ctx.indexSummary = content.slice(0, 1500);
   }
 
-  // v8.3.129+: 关键全局文件自动全文注入
-  const KEY_GLOBAL_FILES = ['BUSINESS_RULES.md'];
-  for (const keyFile of KEY_GLOBAL_FILES) {
-    const keyPath = join(globalDir, keyFile);
-    if (await pathExists(keyPath)) {
-      try {
-        const content = await readFile(keyPath, 'utf-8');
-        if (!ctx.keyFileSummaries) ctx.keyFileSummaries = [];
-        ctx.keyFileSummaries.push({ path: keyFile, content: content.slice(0, 4000) });
-      } catch { /* 读取失败不影响主流程 */ }
-    }
+  // v8.3.132+: 关键全局文件自动全文注入
+  // 支持单文件（兼容旧路径）+ BUSINESS_RULES/ 目录（推荐，支持按 platform 过滤）
+  if (!ctx.keyFileSummaries) ctx.keyFileSummaries = [];
+
+  // 1. 兼容旧路径：GLOBAL/BUSINESS_RULES.md
+  const legacyPath = join(globalDir, 'BUSINESS_RULES.md');
+  if (await pathExists(legacyPath)) {
+    try {
+      const content = await readFile(legacyPath, 'utf-8');
+      ctx.keyFileSummaries.push({ path: 'BUSINESS_RULES.md', content: content.slice(0, 4000) });
+    } catch { /* 忽略 */ }
+  }
+
+  // 2. 新路径：GLOBAL/BUSINESS_RULES/ 目录，按 platform 过滤加载
+  const rulesDir = join(globalDir, 'BUSINESS_RULES');
+  if (await pathExists(rulesDir)) {
+    try {
+      const files = (await readdir(rulesDir))
+        .filter(f => f.endsWith('.md'))
+        .sort();
+      for (const file of files) {
+        // platform 过滤：无 platform 时加载全部；有 platform 时加载 common + 匹配端
+        if (platform) {
+          const base = file.replace(/\.md$/, '');
+          const isCommon = base.includes('-common');
+          const isPlatformMatch = base === platform || base.endsWith(`-${platform}`) || base.includes(`-${platform}-`);
+          if (!isCommon && !isPlatformMatch) continue;
+        }
+        const content = await readFile(join(rulesDir, file), 'utf-8');
+        ctx.keyFileSummaries.push({ path: `BUSINESS_RULES/${file}`, content: content.slice(0, 4000) });
+      }
+    } catch { /* 忽略 */ }
   }
 
   // 其余：只给目录，AI 自己决定读什么（带缓存）

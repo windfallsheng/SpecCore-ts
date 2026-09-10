@@ -1,3 +1,23 @@
+## v8.3.132 (2026-09-10) — BUSINESS_RULES 目录化 + 端级自动过滤
+
+### 改进
+
+**`BUSINESS_RULES` 支持目录化组织** (`src/core/prompt-builder.ts`)：
+- `loadGlobalContext` 新增扫描 `.speccore/GLOBAL/BUSINESS_RULES/` 目录
+- 支持按 `platform` 参数过滤加载：
+  - 文件名包含 `-common` → 所有端都加载
+  - 文件名等于 `{platform}.md` 或包含 `-{platform}` → 仅该端加载
+- 兼容旧路径：`.speccore/GLOBAL/BUSINESS_RULES.md` 单文件仍然有效
+- 每个文件最多注入 4000 字符
+
+**`speccore init` 示例模板目录化** (`src/commands/init.ts`)：
+- `BUSINESS-RULES-EXAMPLE.md` 单文件改为 `BUSINESS-RULES-EXAMPLE/` 目录
+- `01-common.md` — 通用规则示例（角色、状态机、金额、时间、约束、扩展规则）
+- `booking-service.md` — 端级规则示例（预订时间窗口、资源冲突、定价规则）
+- 更新 `examples/README.md` 和 `CONSTITUTION-EXAMPLE.md` 中的指向说明
+
+---
+
 ## v8.3.131 (2026-09-10) — BUSINESS-RULES 模板扩展补充项
 
 ### 改进

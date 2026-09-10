@@ -2430,7 +2430,7 @@ examples/
 │   ├── CONSTITUTION-EXAMPLE.md  ← CONSTITUTION.md 完整示例（多工程）
 │   ├── PROJECT-EXAMPLE.yaml     ← PROJECT.yaml 完整示例（多工程）
 │   ├── GIT-CONFIG-EXAMPLE.txt   ← 子任务 .meta/git-config 格式示例
-│   ├── BUSINESS-RULES-EXAMPLE.md ← 业务规则示例（全局业务规则模板）
+│   ├── BUSINESS-RULES-EXAMPLE/  ← 业务规则示例目录（通用 + 端级规则）
 │   ├── API-DESIGN-EXAMPLE.md    ← API 设计规范示例（RESTful + 鉴权 + 版本）
 │   ├── DATABASE-EXAMPLE.md      ← 数据库设计规范示例（命名 + 索引 + 分表）
 │   ├── SECURITY-EXAMPLE.md      ← 安全规范示例（OWASP + 加密 + 审计）
@@ -2444,7 +2444,7 @@ examples/
 1. 查看 \`config/CONSTITUTION-EXAMPLE.md\`，仿照修改你的 \`.speccore/CONSTITUTION.md\`
 2. 查看 \`config/PROJECT-EXAMPLE.yaml\`，了解 YAML 结构和字段对应关系
 3. 查看 \`config/GIT-CONFIG-EXAMPLE.txt\`，了解子任务级 Git 配置格式
-4. 查看 \`config/BUSINESS-RULES-EXAMPLE.md\`，了解全局业务规则写法，复制到 \`.speccore/GLOBAL/BUSINESS_RULES.md\`
+4. 查看 \`config/BUSINESS-RULES-EXAMPLE/\`，了解业务规则写法。通用规则复制到 \`.speccore/GLOBAL/BUSINESS_RULES/\`，端级规则按端名单文件存放
 5. 查看 \`config/API-DESIGN-EXAMPLE.md\`，了解 API 设计规范，可作为 \`.speccore/RULES/api-design.md\` 素材
 6. 查看 \`config/DATABASE-EXAMPLE.md\`，了解数据库设计规范，可作为 \`.speccore/RULES/database.md\` 素材
 7. 查看 \`config/SECURITY-EXAMPLE.md\`，了解安全规范，可作为 \`.speccore/RULES/security.md\` 素材
@@ -2600,7 +2600,7 @@ examples/
 
 ## 通用业务规则
 
-> 跨功能、跨迭代的通用业务规则。详细规则请维护在 \`.speccore/GLOBAL/BUSINESS_RULES.md\`，AI 会自动读取并注入 Prompt。
+> 跨功能、跨迭代的通用业务规则。详细规则请维护在 \`.speccore/GLOBAL/BUSINESS_RULES/\` 目录下，AI 会自动读取并注入 Prompt（按端过滤）。
 > 此处只放核心规则概述，确保 AI 每次执行都能看到。
 
 ### 角色体系概览
@@ -2617,7 +2617,7 @@ examples/
 - 所有删除必须为软删除（保留 \`deleted_at\` 字段）
 - 所有金额字段使用分存储，禁止 float
 - 所有状态流转必须记录操作人 + 操作时间
-- 详细规则见 \`.speccore/GLOBAL/BUSINESS_RULES.md\`
+- 详细规则见 \`.speccore/GLOBAL/BUSINESS_RULES/\` 目录（通用放 \`*-common.md\`，端级放 \`{端名}.md\`）
 
 ---
 
@@ -2832,11 +2832,14 @@ code_scope:
     }
   } catch { /* 模板文件可选 */ }
 
-  // v8.3.129+: 生成业务规则示例
-  const businessRulesExample = `# 全局业务规则示例
+  // v8.3.132+: 生成业务规则示例目录（支持多端规则拆分）
+  const businessRulesDir = join(configDir, 'BUSINESS-RULES-EXAMPLE');
+  await ensureDir(businessRulesDir);
 
-> 本文件为示例模板，请根据实际项目修改后复制到 \`.speccore/GLOBAL/BUSINESS_RULES.md\`
-> AI 会自动读取该文件并注入到 Prompt 中（最多 4000 字符）
+  const commonRulesExample = `# 通用业务规则（全端共享）
+
+> 本文件为示例模板。实际使用时，将内容复制到 \`.speccore/GLOBAL/BUSINESS_RULES/01-common.md\`
+> 文件名包含 \`-common\` 的会被所有端自动加载（最多 4000 字符/文件）
 
 ---
 
@@ -3018,7 +3021,36 @@ code_scope:
 - 用户同意后可撤回
 - 跨境数据传输需安全评估
 `;
-  await writeFile(join(configDir, 'BUSINESS-RULES-EXAMPLE.md'), businessRulesExample);
+  await writeFile(join(businessRulesDir, '01-common.md'), commonRulesExample);
+
+  const platformRulesExample = `# booking-service 端业务规则
+
+> 端级规则示例。实际使用时，将内容复制到 \`.speccore/GLOBAL/BUSINESS_RULES/booking-service.md\`
+> 文件名匹配当前端的规则会被自动加载（如 \`booking-service.md\` 或 \`xxx-booking-service.md\`）
+
+---
+
+## 1. 预订核心规则
+
+### 1.1 预订时间窗口
+
+- 可预订未来 30 天内的时段
+- 同一用户同一时段最多预订 3 个资源
+- 预订开始前 2 小时允许免费取消，之后收取 20% 违约金
+
+### 1.2 资源冲突检测
+
+- 同一资源同一时段只能被一个订单占用
+- 冲突检测使用数据库唯一索引 \`(resource_id, start_time, end_time)\`
+- 并发冲突时，先下单者优先，后者返回 \`BIZ_003\` 冲突错误
+
+### 1.3 资源定价规则
+
+- 工作日 vs 周末不同价格
+- 高峰期（09:00-18:00）价格上浮 20%
+- 会员享受 8 折优惠，折扣不可叠加
+`;
+  await writeFile(join(businessRulesDir, 'booking-service.md'), platformRulesExample);
 
   logger.info('   📋 已生成示例配置: .speccore/examples/');
 }
