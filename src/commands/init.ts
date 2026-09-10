@@ -2430,6 +2430,7 @@ examples/
 │   ├── CONSTITUTION-EXAMPLE.md  ← CONSTITUTION.md 完整示例（多工程）
 │   ├── PROJECT-EXAMPLE.yaml     ← PROJECT.yaml 完整示例（多工程）
 │   ├── GIT-CONFIG-EXAMPLE.txt   ← 子任务 .meta/git-config 格式示例
+│   ├── BUSINESS-RULES-EXAMPLE.md ← 业务规则示例（全局业务规则模板）
 │   ├── DEPLOY-EXAMPLE.yaml      ← 部署配置示例（speccore deploy 使用）
 │   └── VERIFY-EXAMPLE.yaml      ← 测试验证配置示例（speccore verify 使用）
 └── project/                     ← 完整项目示例（预留，未来扩展）
@@ -2440,9 +2441,10 @@ examples/
 1. 查看 \`config/CONSTITUTION-EXAMPLE.md\`，仿照修改你的 \`.speccore/CONSTITUTION.md\`
 2. 查看 \`config/PROJECT-EXAMPLE.yaml\`，了解 YAML 结构和字段对应关系
 3. 查看 \`config/GIT-CONFIG-EXAMPLE.txt\`，了解子任务级 Git 配置格式
-4. 查看 \`config/DEPLOY-EXAMPLE.yaml\`，了解部署配置格式（用于 \`speccore deploy\`）
-5. 查看 \`config/VERIFY-EXAMPLE.yaml\`，了解测试验证配置格式（用于 \`speccore verify --config\`）
-6. 修改后运行 \`speccore update\` 自动同步到 PROJECT.yaml
+4. 查看 \`config/BUSINESS-RULES-EXAMPLE.md\`，了解全局业务规则写法，复制到 \`.speccore/GLOBAL/BUSINESS_RULES.md\`
+5. 查看 \`config/DEPLOY-EXAMPLE.yaml\`，了解部署配置格式（用于 \`speccore deploy\`）
+6. 查看 \`config/VERIFY-EXAMPLE.yaml\`，了解测试验证配置格式（用于 \`speccore verify --config\`）
+7. 修改后运行 \`speccore update\` 自动同步到 PROJECT.yaml
 
 ## 注意事项
 
@@ -2587,6 +2589,29 @@ examples/
 > - **保护分支**：禁止直接 push，只能通过 PR 合并（支持通配符如 release/*）。填 \`—\` 表示使用公共默认值
 > - **分支前缀**：功能分支前缀（如 feature/）。填 \`—\` 表示使用公共默认值
 > - **备注**：额外说明
+
+---
+
+## 通用业务规则
+
+> 跨功能、跨迭代的通用业务规则。详细规则请维护在 \`.speccore/GLOBAL/BUSINESS_RULES.md\`，AI 会自动读取并注入 Prompt。
+> 此处只放核心规则概述，确保 AI 每次执行都能看到。
+
+### 角色体系概览
+
+| 角色 | 权限级别 | 可访问功能 | 特殊约束 |
+|:---|:---|:---|:---|
+| 超级管理员 | L5 | 全部 | 不可删除自身账号 |
+| 管理员 | L4 | 用户管理、系统配置 | — |
+| 运营人员 | L3 | 订单、商品、内容 | 不可修改价格 |
+| 普通用户 | L1 | 浏览、下单 | 仅自己的数据 |
+
+### 核心约束
+
+- 所有删除必须为软删除（保留 \`deleted_at\` 字段）
+- 所有金额字段使用分存储，禁止 float
+- 所有状态流转必须记录操作人 + 操作时间
+- 详细规则见 \`.speccore/GLOBAL/BUSINESS_RULES.md\`
 
 ---
 
@@ -2781,6 +2806,119 @@ code_scope:
       await writeFile(join(configDir, 'VERIFY-EXAMPLE.yaml'), verifyContent);
     }
   } catch { /* 模板文件可选 */ }
+
+  // v8.3.129+: 生成业务规则示例
+  const businessRulesExample = `# 全局业务规则示例
+
+> 本文件为示例模板，请根据实际项目修改后复制到 \`.speccore/GLOBAL/BUSINESS_RULES.md\`
+> AI 会自动读取该文件并注入到 Prompt 中（最多 4000 字符）
+
+---
+
+## 1. 角色体系与权限矩阵
+
+### 1.1 角色定义
+
+| 角色标识 | 角色名称 | 权限级别 | 数据范围 | 说明 |
+|:---|:---|:---|:---|:---|
+| \`SUPER_ADMIN\` | 超级管理员 | L5 | 全部 | 系统初始化角色，不可删除 |
+| \`ADMIN\` | 管理员 | L4 | 本组织全部 | 可管理用户、配置系统参数 |
+| \`OPERATOR\` | 运营人员 | L3 | 本组织业务数据 | 可操作订单、商品、内容 |
+| \`USER\` | 普通用户 | L1 | 仅自己的数据 | 浏览、下单、查看个人记录 |
+
+### 1.2 权限矩阵
+
+| 功能模块 | SUPER_ADMIN | ADMIN | OPERATOR | USER |
+|:---|:---:|:---:|:---:|:---:|
+| 用户管理 | CRUD | R | - | - |
+| 订单管理 | CRUD | CRUD | CRUD | R（自己的） |
+| 商品管理 | CRUD | CRUD | CRU | R |
+| 系统配置 | CRUD | RU | - | - |
+
+> **规则：** 所有写操作必须记录操作人 ID + 操作时间 + IP 地址
+
+---
+
+## 2. 通用状态机
+
+### 2.1 订单状态机
+
+\`\`\`
+[待支付] --支付成功--> [已支付] --发货--> [已发货] --签收--> [已完成]
+    |                      |                    |
+    |--超时/取消            |--退款申请           |--拒收
+    v                      v                    v
+ [已取消]              [退款中] --> [已退款]   [退货中] --> [已退货]
+\`\`\`
+
+**状态流转规则：**
+- 订单创建后 30 分钟未支付自动取消
+- 已支付订单 7 天内可申请退款
+- 所有状态变更必须记录状态变更日志
+
+---
+
+## 3. 通用业务规则
+
+### 3.1 金额计算规则
+
+- 所有金额字段统一使用**分**存储（整数），禁止用 float/double
+- 前端展示时转换为元，保留 2 位小数
+- 中间计算使用 \`BigDecimal\` 或 \`decimal.js\`，最终四舍五入到分
+
+### 3.2 时间规则
+
+- 统一使用 UTC 时间存储，格式 \`YYYY-MM-DDTHH:mm:ssZ\`
+- 根据用户时区转换后展示
+- 超时计算使用创建时间 + 固定时长
+
+### 3.3 删除规则
+
+- **所有删除必须为软删除**，保留 \`deleted_at\` 和 \`deleted_by\` 字段
+- 软删除数据默认不查询，需显式加 \`includeDeleted=true\`
+
+### 3.4 分页规则
+
+- 默认 \`page = 1\`，\`pageSize = 20\`
+- 最大 \`pageSize = 100\`
+- 默认按创建时间倒序
+
+---
+
+## 4. 通用错误码
+
+| 错误码 | HTTP 状态 | 说明 |
+|:---|:---:|:---|
+| \`BIZ_001\` | 400 | 参数校验失败 |
+| \`BIZ_002\` | 404 | 资源不存在 |
+| \`BIZ_003\` | 409 | 资源冲突（重复提交） |
+| \`BIZ_004\` | 403 | 无权限 |
+| \`BIZ_005\` | 422 | 业务规则冲突（状态不允许） |
+
+---
+
+## 5. 数据库表必备字段
+
+| 字段名 | 类型 | 说明 |
+|:---|:---|:---|
+| \`id\` | BIGINT | 主键（自增或雪花 ID） |
+| \`created_at\` | DATETIME | 创建时间（不可修改） |
+| \`updated_at\` | DATETIME | 更新时间（自动更新） |
+| \`created_by\` | BIGINT | 创建人 ID |
+| \`updated_by\` | BIGINT | 更新人 ID |
+| \`deleted_at\` | DATETIME | 软删除时间 |
+| \`version\` | INT | 乐观锁版本号 |
+
+---
+
+## 6. 约束与禁忌
+
+- ❌ **禁止**在代码中硬编码业务参数，必须走配置中心
+- ❌ **禁止**直接物理删除生产数据
+- ❌ **禁止**在日志中打印密码、Token、身份证号等敏感信息
+- ❌ **禁止**跨服务直接访问数据库，必须通过 API 调用
+`;
+  await writeFile(join(configDir, 'BUSINESS-RULES-EXAMPLE.md'), businessRulesExample);
 
   logger.info('   📋 已生成示例配置: .speccore/examples/');
 }

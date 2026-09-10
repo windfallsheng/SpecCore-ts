@@ -1,3 +1,20 @@
+## v8.3.129 (2026-09-10) — GLOBAL 关键文件自动加载 + 示例模板扩展
+
+### 新增
+
+**GLOBAL 关键文件自动全文注入** (`src/core/prompt-builder.ts`)：
+- `GlobalContext` 接口新增 `keyFileSummaries` 字段
+- `loadGlobalContext` 自动识别并读取 `.speccore/GLOBAL/BUSINESS_RULES.md`，最多注入 4000 字符
+- `formatGlobalContext` 新增「关键全局规则（已注入）」区块，AI 无需手动 Read
+- 关键文件列表可扩展：`KEY_GLOBAL_FILES = ['BUSINESS_RULES.md']`
+
+**`speccore init` 示例模板扩展** (`src/commands/init.ts`)：
+- 新增 `examples/config/BUSINESS-RULES-EXAMPLE.md` — 全局业务规则模板（含角色体系、状态机、通用规则、错误码、字段约定、约束禁忌）
+- `examples/README.md` 更新目录结构和使用说明
+- `CONSTITUTION-EXAMPLE.md` 新增「通用业务规则」章节（角色概览 + 核心约束），并指向 GLOBAL/BUSINESS_RULES.md
+
+---
+
 ## v8.3.128 (2026-09-10) — PROJECT-EXAMPLE.yaml 端级 Git 覆盖示例完善
 
 ### 改进

@@ -131,6 +131,8 @@ export interface TOCEntry {
 export interface GlobalContext {
   /** 全局索引摘要（INDEX.md 全文，必读） */
   indexSummary?: string;
+  /** v8.3.129+: 关键全局文件全文注入（BUSINESS_RULES.md 等） */
+  keyFileSummaries?: { path: string; content: string }[];
   /** 全局知识库目录（AI 按需 Read） */
   toc: TOCEntry[];
 }
@@ -1040,6 +1042,19 @@ export async function loadGlobalContext(
     ctx.indexSummary = content.slice(0, 1500);
   }
 
+  // v8.3.129+: 关键全局文件自动全文注入
+  const KEY_GLOBAL_FILES = ['BUSINESS_RULES.md'];
+  for (const keyFile of KEY_GLOBAL_FILES) {
+    const keyPath = join(globalDir, keyFile);
+    if (await pathExists(keyPath)) {
+      try {
+        const content = await readFile(keyPath, 'utf-8');
+        if (!ctx.keyFileSummaries) ctx.keyFileSummaries = [];
+        ctx.keyFileSummaries.push({ path: keyFile, content: content.slice(0, 4000) });
+      } catch { /* 读取失败不影响主流程 */ }
+    }
+  }
+
   // 其余：只给目录，AI 自己决定读什么（带缓存）
   const cached = tocCache.get(globalDir);
   if (cached) {
@@ -1100,6 +1115,17 @@ export function formatGlobalContext(ctx: GlobalContext, platform?: string): stri
   if (ctx.indexSummary) {
     lines.push('### 📌 必读（已注入）');
     lines.push(ctx.indexSummary);
+    lines.push('');
+  }
+
+  // v8.3.129+: 关键全局文件（BUSINESS_RULES.md 等）自动注入
+  if (ctx.keyFileSummaries && ctx.keyFileSummaries.length > 0) {
+    lines.push('### 📋 关键全局规则（已注入）');
+    for (const kf of ctx.keyFileSummaries) {
+      lines.push(`\n**📄 ${kf.path}**`);
+      lines.push(kf.content);
+      lines.push('');
+    }
     lines.push('');
   }
 
