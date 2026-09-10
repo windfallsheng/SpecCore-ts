@@ -1,3 +1,39 @@
+## v8.3.118 (2026-09-10) — split 时 git-config 自动填充 branch_types 默认值
+
+### 改进
+
+**`split` 生成的子任务 `.meta/git-config` 自动填充全局 `branch_types` 配置**：
+
+全局 PROJECT.yaml 配置：
+```yaml
+git:
+  branch_types:
+    hotfix:
+      prefix: 'api-'
+      suffix: 'urgent'
+      source: 'main'
+```
+
+拆分 hotfix 类型子任务后，`.meta/git-config` 自动生成：
+```
+分支类型: hotfix
+前缀: api-
+后缀: urgent
+源分支: main
+```
+
+**改进点**：
+- `前缀`、`后缀`、`源分支` 如果全局 `branch_types` 中有配置，则**默认写出来**
+- 如果全局未配置，则保持注释形式（用户取消注释即可用）
+- 子任务无需手动填写，直接继承全局配置
+
+**实现**：
+- `buildGitConfigContent` 增加 `branchTypes` 参数
+- `createTaskFromSection` 读取全局 `branch_types` 传入
+- 优先从 `branch_types[branchType]` 读取 prefix/suffix/source
+
+---
+
 ## v8.3.117 (2026-09-10) — examples 目录细分 + README.md
 
 ### 改进

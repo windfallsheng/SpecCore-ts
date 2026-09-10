@@ -1325,23 +1325,35 @@ function extractIterationName(iterationDir: string): string {
   return base.replace(/^Iteration-/, '');
 }
 
-/** 生成带实际配置值的 git-config 内容（v8.3.116+） */
-function buildGitConfigContent(config: GitConfig, platformLabel: string, taskType?: string): string {
+/** 生成带实际配置值的 git-config 内容（v8.3.118+） */
+function buildGitConfigContent(
+  config: GitConfig,
+  platformLabel: string,
+  taskType?: string,
+  branchTypes?: Record<string, { prefix?: string; suffix?: string; source: string }>
+): string {
   const branchType = taskType === 'bugfix' ? 'bugfix' : taskType === 'refactor' ? 'refactor' : taskType === 'research' ? 'research' : 'feature';
-  // v8.3.9+: 示例使用 taskId（全局唯一，可读，无需 hash）
-  const exampleTaskId = 'Task-001-booking-service';
-  const prefix = config.branchPrefix ? `${config.branchPrefix}-` : '';
+  // v8.3.118+: 从全局 branch_types 读取对应类型的前缀/后缀/源分支
+  const typeDef = branchTypes?.[branchType];
+  const hasPrefix = typeDef?.prefix !== undefined && typeDef.prefix !== '';
+  const hasSuffix = typeDef?.suffix !== undefined && typeDef.suffix !== '';
+  const hasSource = typeDef?.source !== undefined && typeDef.source !== '';
+
   // v8.3.6+: 空值用注释表示，避免 loadSubtaskGitConfig 误把 "(空)" 当实际值
   const fmt = (key: string, val: string | boolean, def: string) => val !== undefined && val !== '' && String(val) !== 'false'
     ? `${key}: ${val}`
     : `# ${key}: ${def}`;
+
+  // v8.3.118+: 前缀/后缀/源分支优先从 branch_types 读取，其次从 gitConfig 读取
+  const effectiveSource = hasSource ? typeDef!.source : (config.defaultBranch || '');
+
   return `# 子任务级 Git 配置（${platformLabel}）
 # ─────────────────────────────────────────────────────────────────────────────
 # 配置优先级：子任务 > 迭代级 > 全局 CONSTITUTION.md > 默认值
 # 未配置的字段自动从上级继承，无需全部填写
 # ─────────────────────────────────────────────────────────────────────────────
 
-# === 分支类型与命名（v8.3.116+） ===
+# === 分支类型与命名（v8.3.118+） ===
 # 分支名格式: {类型}/{前缀}-{任务名}-{后缀}
 #   {类型}/  = 类型自带（如 hotfix/、feature/）
 #   {前缀}   = 任务名前的前缀（可选），如 api-、backend-
@@ -1355,14 +1367,14 @@ function buildGitConfigContent(config: GitConfig, platformLabel: string, taskTyp
 分支类型: ${branchType}
 
 # 前缀: 任务名前的前缀（可选），如 api-、backend-
-# 前缀: api-
+${hasPrefix ? `前缀: ${typeDef!.prefix}` : `# 前缀: api-`}
 
 # 后缀: 任务名后的后缀（可选），如 urgent、review
-# 后缀: urgent
+${hasSuffix ? `后缀: ${typeDef!.suffix}` : `# 后缀: urgent`}
 
 # === 源分支（从哪个分支创建）===
 # 默认从全局配置的 default_base 创建，如需覆盖请取消注释：
-${fmt('源分支', config.defaultBranch, 'main')}
+${fmt('源分支', effectiveSource, 'main')}
 
 # === 保护分支（禁止直接推送）===
 ${config.protectedBranches.map(b => `# - ${b}`).join('\n')}
@@ -1386,7 +1398,11 @@ async function createTaskFromSection(iterationDir: string, taskId: string, secti
   // taskId 已含 slug（nextTaskId 返回 Task-NNN-slug），直接用
   const taskDir = join(iterationDir, '030-tasks', taskType, taskId);
   const iterationName = extractIterationName(iterationDir);
-  
+
+  // v8.3.118+: 读取全局 branch_types，用于生成子任务 git-config
+  const projectConfig = await loadProjectConfig();
+  const branchTypes = projectConfig.git.branch_types;
+
   // v8.3.36: 提前加载 spec 内容，用于平台推断 + 任务级文件填充
   const specContents = await loadSpecContents(iterationDir);
 
@@ -1783,10 +1799,11 @@ ${section.content}
       await writeFile(join(subtaskDir, '.meta', 'feature'), featureName);
 
       // v8.3.4+: git-config 自动填充 — 读取迭代级/全局级实际配置值写入
+      // v8.3.118+: 传入全局 branch_types，让子任务 git-config 自动填充前缀/后缀/源分支
       const gitConfig = loadGitConfig(iterationName);
       await writeFile(
         join(subtaskDir, '.meta', 'git-config'),
-        buildGitConfigContent(gitConfig, platformLabel, (section as any).type)
+        buildGitConfigContent(gitConfig, platformLabel, (section as any).type, branchTypes)
       );
 
       // v6.70.0+: 从 section 提取接口/页面清单用于 TASK.md
@@ -1999,10 +2016,11 @@ ${isBk ? apiList : pageList}
     const featureName = (section as any).functionalUnit || section.name || '未分类';
     await writeFile(join(autoSubtaskDir, '.meta', 'feature'), featureName);
     // v8.3.4+: git-config 自动填充
+    // v8.3.118+: 传入全局 branch_types
     const gitConfig = loadGitConfig(iterationName);
     await writeFile(
       join(autoSubtaskDir, '.meta', 'git-config'),
-      buildGitConfigContent(gitConfig, '后端', (section as any).type)
+      buildGitConfigContent(gitConfig, '后端', (section as any).type, branchTypes)
     );
     await writeFile(
       join(autoSubtaskDir, 'TASK.md'),
