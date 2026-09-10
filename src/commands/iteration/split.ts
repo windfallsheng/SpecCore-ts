@@ -1353,24 +1353,27 @@ function buildGitConfigContent(
 # 未配置的字段自动从上级继承，无需全部填写
 # ─────────────────────────────────────────────────────────────────────────────
 
-# === 分支类型与命名（v8.3.118+） ===
-# 分支名格式: {类型}/{前缀}-{任务名}-{后缀}
+# === 分支类型与命名（v8.3.120+） ===
+# 分支名格式: {类型}/{前缀}{任务名}{后缀}
 #   {类型}/  = 类型自带（如 hotfix/、feature/）
-#   {前缀}   = 任务名前的前缀（可选），如 api-、backend-
+#   {前缀}   = 任务名前的前缀（可选，包含分隔符），如 api-、backend_、v2.
 #   {任务名} = 子任务全局唯一 ID，如 Task-001-booking-service
-#   {后缀}   = 任务名后的后缀（可选），如 urgent、review
+#   {后缀}   = 任务名后的后缀（可选，包含分隔符），如 -urgent、_review、.beta
 #
-# 示例: 分支类型=hotfix + 前缀=api- + 后缀=urgent + 任务名=Task-001
-#       → 分支名: hotfix/api-Task-001-urgent
+# ⚠️ 注意：前缀/后缀的值请包含你想用的分隔符，代码不再自动添加任何符号
+#
+# 示例 1（- 分隔）: 前缀=api- 后缀=-urgent → hotfix/api-Task-001-urgent
+# 示例 2（_ 分隔）: 前缀=api_ 后缀=_urgent → hotfix/api_Task-001_urgent
+# 示例 3（无分隔）: 前缀=api  后缀=urgent  → hotfix/apiTask-001urgent
 
 # 分支类型: 覆盖默认 feature（可选值: feature / bugfix / hotfix / release / support）
 分支类型: ${branchType}
 
-# 前缀: 任务名前的前缀（可选），如 api-、backend-
+# 前缀: 任务名前的前缀（可选，包含分隔符），如 api-、backend_、v2.
 ${hasPrefix ? `前缀: ${typeDef!.prefix}` : `# 前缀: api-`}
 
-# 后缀: 任务名后的后缀（可选），如 urgent、review
-${hasSuffix ? `后缀: ${typeDef!.suffix}` : `# 后缀: urgent`}
+# 后缀: 任务名后的后缀（可选，包含分隔符），如 -urgent、_review
+${hasSuffix ? `后缀: ${typeDef!.suffix}` : `# 后缀: -urgent`}
 
 # === 源分支（从哪个分支创建）===
 # 默认从全局配置的 default_base 创建，如需覆盖请取消注释：

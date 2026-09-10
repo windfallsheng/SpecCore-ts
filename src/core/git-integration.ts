@@ -99,16 +99,14 @@ export function createTaskBranch(
     // 任务名安全处理
     const safeName = taskName.replace(/[^a-zA-Z0-9\u4e00-\u9fff_-]/g, '-');
 
-    // v8.3.114+: 优先使用新格式 {类型}/{前缀}-{子任务名}-{后缀}
+    // v8.3.120+: 用户完全控制 prefix/suffix（包含分隔符），代码只负责拼接
+    // 示例: prefix='api-' suffix='-urgent' → hotfix/api-Task-001-urgent
+    //       prefix='api_' suffix='_urgent' → hotfix/api_Task-001_urgent
     let branchName: string;
     if (gitConfig.taskPrefix !== undefined || gitConfig.taskSuffix !== undefined) {
-      const prefix = gitConfig.taskPrefix ? `${gitConfig.taskPrefix}-` : '';
-      const suffix = gitConfig.taskSuffix ? `-${gitConfig.taskSuffix}` : '';
-      branchName = `${branchType}/${prefix}${safeName}${suffix}`
-        .replace(/-{2,}/g, '-')    // 清理连续连字符
-        .replace(/\/-/, '/')       // 清理类型后的多余连字符
-        .replace(/-$/, '')         // 清理尾部连字符
-        .substring(0, 250);
+      const prefix = gitConfig.taskPrefix || '';
+      const suffix = gitConfig.taskSuffix || '';
+      branchName = `${branchType}/${prefix}${safeName}${suffix}`.substring(0, 250);
     } else {
       // 4 位随机 hex hash
       const hash4 = randomBytes(2).toString('hex');
@@ -159,12 +157,9 @@ export function createTaskBranch(
       const bt = taskType ? (TASK_TYPE_TO_BRANCH_TYPE[taskType] || taskType) : cfg.branchType;
       // v8.3.114+: 优先使用新格式
       if (cfg.taskPrefix !== undefined || cfg.taskSuffix !== undefined) {
-        const prefix = cfg.taskPrefix ? `${cfg.taskPrefix}-` : '';
-        const suffix = cfg.taskSuffix ? `-${cfg.taskSuffix}` : '';
-        return `${bt}/${prefix}${taskId}${suffix}`
-          .replace(/-{2,}/g, '-')
-          .replace(/\/-/, '/')
-          .replace(/-$/, '');
+        const prefix = cfg.taskPrefix || '';
+        const suffix = cfg.taskSuffix || '';
+        return `${bt}/${prefix}${taskId}${suffix}`;
       }
       const ps = cfg.branchPrefix ? `${cfg.branchPrefix}-` : '';
       return formatBranchName(cfg.branchFormat, {

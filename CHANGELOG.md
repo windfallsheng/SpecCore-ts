@@ -1,3 +1,28 @@
+## v8.3.120 (2026-09-10) — prefix/suffix 分隔符由用户完全控制
+
+### 改进
+
+**前缀/后缀的分隔符改为由用户完全控制，代码不再自动添加 `-`**：
+
+- 旧行为：`prefix='api'` 自动变成 `api-Task-001`（代码自动加 `-`）
+- 新行为：`prefix='api-'` 直接拼接为 `api-Task-001`（用户自己写分隔符）
+
+**分支名格式**：`{类型}/{前缀}{任务名}{后缀}`
+
+| 前缀值 | 后缀值 | 分支名 |
+|:---|:---|:---|
+| `api-` | `-urgent` | `hotfix/api-Task-001-urgent` |
+| `api_` | `_urgent` | `hotfix/api_Task-001_urgent` |
+| `api` | `urgent` | `hotfix/apiTask-001urgent` |
+| *(空)* | *(空)* | `hotfix/Task-001` |
+
+**修改文件**：
+- `src/core/git-integration.ts`：`createTaskBranch` / `getTaskBranch` 去掉自动加 `-` 逻辑
+- `src/commands/iteration/split.ts`：更新 `.meta/git-config` 模板注释和示例
+- `src/commands/init.ts`：更新示例文件中的说明
+
+---
+
 ## v8.3.119 (2026-09-10) — 兼容性检查修复：platform type 校验 + branch_types 合并
 
 ### 修复
