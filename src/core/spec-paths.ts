@@ -485,9 +485,13 @@ export async function getProjectPathForPlatform(platform: string): Promise<strin
 }
 
 /**
- * 从 CONSTITUTION.md 解析 Git 配置表（v8.3.107+）
- * 解析「Git 配置」章节，返回 Map<工程标识, GitConfigInfo>
+ * 从 CONSTITUTION.md 解析 Git 配置（v8.3.109+）
+ * 先读取「Git 公共配置」章节获取默认值，再读取「Git 配置」章节用各工程覆盖
  * 支持公共默认 + 各工程独有配置
+ *
+ * 覆盖规则：
+ * - 工程配置表中字段为空、为 `—`、为 `-` 时，使用公共默认值
+ * - 工程配置表中字段有值时，覆盖公共默认值
  */
 export interface GitConfigInfo {
   projectIdentifier: string;
@@ -498,12 +502,75 @@ export interface GitConfigInfo {
   notes: string;
 }
 
+/** 判断值是否为空或表示"使用默认值" */
+function isDefaultPlaceholder(value: string): boolean {
+  return !value || value === '—' || value === '-' || value === '待填写' || value === '—';
+}
+
 export async function parseGitConfig(): Promise<Map<string, GitConfigInfo>> {
   const constitutionPath = join('.speccore', 'CONSTITUTION.md');
   if (!(await pathExists(constitutionPath))) return new Map();
   const content = await readFile(constitutionPath, 'utf-8');
   const lines = content.split('\n');
 
+  // ── 第一步：解析「Git 公共配置」章节 ──
+  const defaults: Partial<GitConfigInfo> = {
+    defaultBranch: 'main',
+    protectedBranches: [],
+    branchPrefix: '',
+  };
+
+  let inPublicSection = false;
+  let publicHeaderParsed = false;
+  let pubBranchColIdx = -1;
+  let pubProtectedColIdx = -1;
+  let pubPrefixColIdx = -1;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line.match(/^##\s+.*Git\s*公共\s*配置/)) {
+      inPublicSection = true;
+      continue;
+    }
+    if (inPublicSection && line.match(/^##\s/)) break;
+    if (!inPublicSection) continue;
+    if (!line.startsWith('|')) continue;
+    if (line.match(/^\|\s*[-:]/)) continue;
+
+    const cells = line.split('|').map(c => c.trim()).filter(Boolean);
+
+    if (!publicHeaderParsed && cells.length > 0) {
+      pubBranchColIdx = cells.findIndex(h =>
+        h === '默认分支' || h === '分支' || h.includes('默认分支') || h.includes('分支')
+      );
+      pubProtectedColIdx = cells.findIndex(h =>
+        h === '保护分支' || h.includes('保护分支')
+      );
+      pubPrefixColIdx = cells.findIndex(h =>
+        h === '分支前缀' || h.includes('分支前缀')
+      );
+      publicHeaderParsed = true;
+      continue;
+    }
+
+    if (publicHeaderParsed && cells.length > 0) {
+      const branchVal = pubBranchColIdx >= 0 && cells.length > pubBranchColIdx
+        ? cells[pubBranchColIdx].trim() : '';
+      const protectedVal = pubProtectedColIdx >= 0 && cells.length > pubProtectedColIdx
+        ? cells[pubProtectedColIdx].trim() : '';
+      const prefixVal = pubPrefixColIdx >= 0 && cells.length > pubPrefixColIdx
+        ? cells[pubPrefixColIdx].trim() : '';
+
+      if (branchVal) defaults.defaultBranch = branchVal;
+      if (protectedVal) {
+        defaults.protectedBranches = protectedVal.split(',').map(s => s.trim()).filter(Boolean);
+      }
+      if (prefixVal) defaults.branchPrefix = prefixVal;
+      break; // 公共配置只有一行数据
+    }
+  }
+
+  // ── 第二步：解析「Git 配置」章节，用各工程覆盖默认值 ──
   let inGitSection = false;
   let headerParsed = false;
   let identifierColIdx = -1;
@@ -516,8 +583,8 @@ export async function parseGitConfig(): Promise<Map<string, GitConfigInfo>> {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
-    // 检测「Git 配置」章节开始
-    if (line.match(/^##\s+.*Git\s*配置/)) {
+    // 检测「Git 配置」章节开始（注意：要排除「Git 公共配置」）
+    if (line.match(/^##\s+Git\s*配置\s*$/)) {
       inGitSection = true;
       continue;
     }
@@ -554,18 +621,29 @@ export async function parseGitConfig(): Promise<Map<string, GitConfigInfo>> {
       continue;
     }
 
-    // 数据行：提取 Git 配置
+    // 数据行：提取 Git 配置，空值使用公共默认值
     if (headerParsed && cells.length > identifierColIdx) {
       const projectIdentifier = cells[identifierColIdx]?.trim();
       if (projectIdentifier) {
-        const protectedStr = protectedColIdx >= 0 && cells.length > protectedColIdx
+        const rawBranch = branchColIdx >= 0 && cells.length > branchColIdx
+          ? cells[branchColIdx].trim() : '';
+        const rawProtected = protectedColIdx >= 0 && cells.length > protectedColIdx
           ? cells[protectedColIdx].trim() : '';
+        const rawPrefix = prefixColIdx >= 0 && cells.length > prefixColIdx
+          ? cells[prefixColIdx].trim() : '';
+
+        const branch = isDefaultPlaceholder(rawBranch) ? (defaults.defaultBranch || 'main') : rawBranch;
+        const protectedBranches = isDefaultPlaceholder(rawProtected)
+          ? (defaults.protectedBranches || [])
+          : rawProtected.split(',').map(s => s.trim()).filter(Boolean);
+        const prefix = isDefaultPlaceholder(rawPrefix) ? (defaults.branchPrefix || '') : rawPrefix;
+
         const info: GitConfigInfo = {
           projectIdentifier,
           gitRepo: repoColIdx >= 0 && cells.length > repoColIdx ? cells[repoColIdx].trim() : '',
-          defaultBranch: branchColIdx >= 0 && cells.length > branchColIdx ? cells[branchColIdx].trim() : 'main',
-          protectedBranches: protectedStr ? protectedStr.split(',').map(s => s.trim()).filter(Boolean) : [],
-          branchPrefix: prefixColIdx >= 0 && cells.length > prefixColIdx ? cells[prefixColIdx].trim() : '',
+          defaultBranch: branch,
+          protectedBranches,
+          branchPrefix: prefix,
           notes: notesColIdx >= 0 && cells.length > notesColIdx ? cells[notesColIdx].trim() : '',
         };
         result.set(projectIdentifier, info);

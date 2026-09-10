@@ -1,3 +1,46 @@
+## v8.3.109 (2026-09-10) — Git 公共配置 + 工程覆盖机制
+
+### 新增
+
+**Git 公共配置章节（v8.3.109）**:
+- CONSTITUTION.md 新增「## Git 公共配置」章节
+- 格式：`默认分支 | 保护分支 | 分支前缀`
+- 作用：定义公共默认值，各工程在「Git 配置」表中只写不同的字段
+
+**工程级覆盖机制**:
+- 「Git 配置」表中用 `—`（em dash）表示使用公共默认值
+- `parseGitConfig()` 分两步解析：
+  1. 先读取「Git 公共配置」章节获取默认值
+  2. 再读取「Git 配置」章节，用各工程的非空值覆盖
+- 覆盖规则：空值、`—`、`-`、`待填写` 均使用公共默认值
+
+**示例**：
+
+```markdown
+## Git 公共配置
+| 默认分支 | 保护分支 | 分支前缀 |
+| :--- | :--- | :--- |
+| main | main,release/* | feature/ |
+
+## Git 配置
+| 工程标识 | Git 仓库 | 默认分支 | 保护分支 | 分支前缀 | 备注 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| admin-web | git@xxx/admin.git | — | main,release/* | feature/admin- | 默认分支用公共 main |
+| h5-app | git@xxx/h5.git | — | — | feature/h5- | 默认分支和保护分支用公共 |
+| backend-service | git@xxx/backend.git | develop | develop,release/* | feature/api- | 默认分支覆盖为 develop |
+```
+
+上例解析结果：
+- `admin-web`：defaultBranch=`main`（公共），protectedBranches=`[main,release/*]`（自定义），branchPrefix=`feature/admin-`
+- `h5-app`：defaultBranch=`main`（公共），protectedBranches=`[main,release/*]`（公共），branchPrefix=`feature/h5-`
+- `backend-service`：defaultBranch=`develop`（覆盖），protectedBranches=`[develop,release/*]`（覆盖），branchPrefix=`feature/api-`
+
+### 影响文件
+- `src/commands/init.ts` — 模板新增「Git 公共配置」章节，更新示例和注释
+- `src/core/spec-paths.ts` — `parseGitConfig()` 重写：支持公共默认值 + 工程覆盖
+
+---
+
 ## v8.3.108 (2026-09-10) — 「涉及需求端」语义澄清
 
 ### 修复

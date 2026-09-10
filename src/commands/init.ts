@@ -412,35 +412,48 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 > - 一一对应：每行一个工程对应一个工程标识（不填多个）
 > - 如果一个服务拆成多个工程，应在「端列表」中分别声明
 
+## Git 公共配置
+
+> 公共默认值。各工程在「Git 配置」表中只写与公共配置不同的字段，未填写的字段自动使用此处默认值。
+> 用 \`—\` 表示使用公共默认值。
+
+| 默认分支 | 保护分支 | 分支前缀 |
+| :--- | :--- | :--- |
+| main | main,release/* | feature/ |
+
 ## Git 配置
 
-> Git 配置按工程标识对应，支持公共默认 + 各工程独有配置。
-> CLI 执行 speccore pr / deploy 等命令时读取此配置。
+> 按工程标识对应。未配置的字段使用「Git 公共配置」中的默认值。
 
 | 工程标识 | Git 仓库 | 默认分支 | 保护分支 | 分支前缀 | 备注 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| ${projectName} | ${gitUrl || '待配置'} | main | main | feature/ | 待填写 |
+| ${projectName} | ${gitUrl || '待配置'} | — | — | — | 待填写 |
 
 > **字段说明**：
 > - **工程标识**：引用「项目信息」表中的工程标识，一一对应
 > - **Git 仓库**：仓库地址（如 git@github.com:org/repo.git、https://...）
-> - **默认分支**：如 main、master、develop
-> - **保护分支**：禁止直接 push，只能通过 PR 合并（支持通配符如 release/*）
-> - **分支前缀**：功能分支前缀（如 feature/、bugfix/、hotfix/）
+> - **默认分支**：如 main、master、develop。填 \`—\` 表示使用公共默认值
+> - **保护分支**：禁止直接 push，只能通过 PR 合并（支持通配符如 release/*）。填 \`—\` 表示使用公共默认值
+> - **分支前缀**：功能分支前缀（如 feature/、bugfix/、hotfix/）。填 \`—\` 表示使用公共默认值
 > - **备注**：特殊 Git 策略说明
 
 > 多工程示例：
 >
 > | 工程标识 | Git 仓库 | 默认分支 | 保护分支 | 分支前缀 | 备注 |
 > | :--- | :--- | :--- | :--- | :--- | :--- |
-> | admin-web | git@xxx/admin.git | main | main,release/* | feature/admin- | 前端统一前缀 |
-> | h5-app | git@xxx/h5.git | main | main | feature/h5- | — |
+> | admin-web | git@xxx/admin.git | — | main,release/* | feature/admin- | 前端统一前缀 |
+> | h5-app | git@xxx/h5.git | — | — | feature/h5- | 使用公共默认 |
 > | backend-service | git@xxx/backend.git | develop | develop,release/* | feature/api- | 后端用 develop 分支 |
+>
+> 上例中：
+> - \`admin-web\`：默认分支使用公共 \`main\`，保护分支自定义 \`main,release/*\`
+> - \`h5-app\`：默认分支、保护分支均使用公共默认值，分支前缀自定义 \`feature/h5-\`
+> - \`backend-service\`：默认分支覆盖为 \`develop\`，保护分支覆盖为 \`develop,release/*\`
 >
 > **关键规则**：
 > - 工程标识必须和「项目信息」表中的工程标识完全一致
+> - 用 \`—\`（ em dash ）表示使用该字段的公共默认值
 > - 保护分支支持精确匹配和通配符（如 release/*）
-> - 如果某工程不配置某字段，使用公共默认值（见下方「Git 分支策略」）
 
 ## 技术栈
 
