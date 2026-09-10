@@ -387,14 +387,15 @@ export async function parseProjectInfo(): Promise<Map<string, ProjectInfo>> {
     // 表头行：动态查找列索引
     if (!headerParsed && cells.length > 0) {
       identifierColIdx = cells.findIndex(h =>
-        h === '工程标识' || h === '工程' || h === '工程名' ||
-        h.includes('工程标识') || h.includes('工程名')
+        h === '工程标识' || h === '工程' ||
+        h.includes('工程标识')
       );
       typeColIdx = cells.findIndex(h =>
         h === '工程类型' || h === '类型' || h.includes('工程类型')
       );
       nameColIdx = cells.findIndex(h =>
-        h === '项目名称' || h === '项目名' || h.includes('项目名称')
+        h === '工程名' || h === '项目名称' || h === '项目名' ||
+        h.includes('工程名') || h.includes('项目名称')
       );
       pathColIdx = cells.findIndex(h =>
         h === '源码路径' || h === '工程路径' || h.includes('源码路径') || h.includes('工程路径')

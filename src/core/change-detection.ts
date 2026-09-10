@@ -120,9 +120,12 @@ export async function loadSourcePathMap(cwd: string): Promise<Map<string, string
   try {
     const content = await readFile(constitutionPath, 'utf-8');
     // 解析「项目信息」表格
-    // 格式：| 工程 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应需求端 |
+    // 格式：| 工程标识 | 工程类型 | 工程名 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应需求端 |
     const lines = content.split('\n');
     let inProjectSection = false;
+    let headerParsed = false;
+    let pathColIdx = -1;
+    let platformColIdx = -1;
 
     for (const line of lines) {
       // 检测「项目信息」章节
@@ -139,12 +142,26 @@ export async function loadSourcePathMap(cwd: string): Promise<Map<string, string
       // 跳过表头分隔行
       if (line.match(/^\|[-:\s|]+\|$/)) continue;
       // 跳过空行和提示行
-      if (!line.includes('|') || line.includes('工程 | 项目名称')) continue;
+      if (!line.includes('|')) continue;
 
       const cells = line.split('|').map(c => c.trim()).filter(Boolean);
-      if (cells.length >= 6) {
-        const srcPath = cells[2];        // 源码路径列
-        const platform = cells[5];       // 对应需求端列
+      if (cells.length < 2) continue;
+
+      // 解析表头（按列名查找，兼容不同列数）
+      if (!headerParsed) {
+        pathColIdx = cells.findIndex(c => c.includes('源码路径'));
+        platformColIdx = cells.findIndex(c => c.includes('对应端') || c.includes('需求端'));
+        // 跳过表头行本身
+        if (pathColIdx >= 0 || platformColIdx >= 0 || cells.some(c => c.includes('工程'))) {
+          headerParsed = true;
+        }
+        continue;
+      }
+
+      // 数据行
+      if (pathColIdx >= 0 && platformColIdx >= 0 && cells.length > Math.max(pathColIdx, platformColIdx)) {
+        const srcPath = cells[pathColIdx];
+        const platform = cells[platformColIdx];
         if (srcPath && platform && platform !== '待填写') {
           // 标准化路径（去掉开头的 ./）
           const normalized = srcPath.replace(/^\.\//, '');

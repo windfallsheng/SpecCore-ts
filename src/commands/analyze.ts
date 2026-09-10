@@ -2968,7 +2968,7 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     prompt += `- **预期产出**: ${layerMeta.output}\n\n`;
 
     prompt += `## 要求\n`;
-    prompt += `1. **先读宪法**: Read .speccore/CONSTITUTION.md，获取工程名、源码路径、端列表。\n`;
+    prompt += `1. **先读宪法**: Read .speccore/CONSTITUTION.md，获取工程标识、源码路径、端列表。\n`;
     prompt += `2. Read .speccore/GLOBAL/ 下已有文档（特别是前一层的产物）作为输入。\n`;
     prompt += `3. **禁止行为**: 不要打开浏览器、不要模拟用户操作、不要访问 URL。所有分析基于直接 Read 源码。\n`;
     if (ctx.withCode) {

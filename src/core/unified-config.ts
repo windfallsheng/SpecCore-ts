@@ -1451,7 +1451,7 @@ function toProjectYaml(config: ProjectConfig): string {
   yaml += '#   default_branch    → 默认分支（如 main, develop）\n';
   yaml += '#\n';
   yaml += '# 可选字段：\n';
-  yaml += '#   description       → 工程描述（人类可读名称）\n';
+  yaml += '#   description       → 工程名（人类可读的业务名称，如 "预订服务"）\n';
   yaml += '#   code_path         → 源码路径（相对于项目根目录）\n';
   yaml += '#   git_repo          → Git 仓库地址（用于分支管理和 PR 提交）\n';
   yaml += '#   requirement_unit  → 对应需求端/功能单元（AI 分析时自动对标）\n';
@@ -1486,12 +1486,12 @@ function toProjectYaml(config: ProjectConfig): string {
     yaml += '  #       script: docker pull registry.example.com/my-project/api-service:production && docker stop api-service 2>/dev/null; docker rm api-service 2>/dev/null; docker run -d --name api-service --restart always -p 8080:8080 registry.example.com/my-project/api-service:production\n';
   }
   for (const p of config.platforms) {
-    yaml += `  - # 端名（全局唯一，用于目录名、命令参数）\n`;
+    yaml += `  - # 工程标识（全局唯一，用于目录名、命令参数）\n`;
     yaml += `    name: ${p.name}\n`;
-    yaml += `    # 端类型：frontend(前端) | backend(后端) | infra(基础设施)\n`;
+    yaml += `    # 工程类型：frontend(前端) | backend(后端) | infra(基础设施)\n`;
     yaml += `    type: ${p.type}\n`;
     if (p.description) {
-      yaml += `    # 端描述（人类可读名称）\n`;
+      yaml += `    # 工程名（人类可读的业务名称）\n`;
       yaml += `    description: ${p.description}\n`;
     }
     if (p.code_path) {

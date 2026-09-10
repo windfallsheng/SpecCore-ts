@@ -2,9 +2,14 @@
  * UI Verify Report Generator — HTML 报告生成器
  */
 
-import { join } from 'path';
+import { join, sep } from 'path';
 import { writeFile, ensureDir } from 'fs-extra';
 import { UIVerifyReport } from './types';
+
+/** v8.3.102+: 将本地文件路径转为 HTML 可用的路径（Windows 反斜杠 → 正斜杠） */
+function toHtmlPath(filePath: string): string {
+  return filePath.replace(/\\/g, '/');
+}
 
 export async function generateHtmlReport(
   report: UIVerifyReport,
@@ -169,7 +174,7 @@ function generateSmokeSection(report: UIVerifyReport): string {
       </div>
       <div class="scenario-body">
         <div class="steps">${steps}</div>
-        ${r.screenshot ? `<div style="margin-top:12px;"><img src="${r.screenshot}" style="max-width:100%;border-radius:4px;border:1px solid #ddd;" /></div>` : ''}
+        ${r.screenshot ? `<div style="margin-top:12px;"><img src="${toHtmlPath(r.screenshot)}" style="max-width:100%;border-radius:4px;border:1px solid #ddd;" /></div>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -192,11 +197,11 @@ function generateVisualSection(report: UIVerifyReport): string {
     const comparison = r.baselinePath ? `
     <div class="screenshot-comparison">
       <div class="screenshot-box">
-        <img src="${r.baselinePath}" alt="基准图" />
+        <img src="${toHtmlPath(r.baselinePath)}" alt="基准图" />
         <div class="label">基准图</div>
       </div>
       <div class="screenshot-box">
-        <img src="${r.currentPath}" alt="当前截图" />
+        <img src="${toHtmlPath(r.currentPath)}" alt="当前截图" />
         <div class="label">当前截图</div>
       </div>
     </div>` : '';

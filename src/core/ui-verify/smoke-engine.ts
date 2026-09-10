@@ -113,12 +113,21 @@ async function findSystemBrowser(): Promise<string | null> {
   const platform = process.platform;
 
   if (platform === 'win32') {
+    // 系统级安装
     candidates.push(
       'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
       'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-      'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
       'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+      'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
     );
+    // v8.3.102+: 用户级安装（通过 LOCALAPPDATA）
+    const localAppData = process.env.LOCALAPPDATA || process.env.USERPROFILE;
+    if (localAppData) {
+      candidates.push(
+        `${localAppData}\\Google\\Chrome\\Application\\chrome.exe`,
+        `${localAppData}\\Microsoft\\Edge\\Application\\msedge.exe`,
+      );
+    }
   } else if (platform === 'darwin') {
     candidates.push(
       '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',

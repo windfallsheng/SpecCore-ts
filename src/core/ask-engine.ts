@@ -374,12 +374,12 @@ function handleGuide(input: string): AskResult | null {
     return {
       mode: 'pipeline',
       summary: `部署并验证（${env} 环境）`,
-      detail: `🚀 步骤 1: speccore deploy ${deployArgs}\n🧪 步骤 2: speccore verify --type all\n\n确认后自动执行部署+验证`,
+      detail: `🚀 步骤 1: speccore deploy ${deployArgs}\n🧪 步骤 2: speccore verify --ui --smoke-only\n\n确认后自动执行部署+冒烟验证`,
       commands: ['deploy', 'verify'],
       pipeline: {
         steps: [
           { order: 1, command: 'deploy', args: deployArgs, explanation: `部署到 ${env} 环境`, dependsOn: undefined },
-          { order: 2, command: 'verify', args: '--type all', explanation: '部署后验证', dependsOn: 1 },
+          { order: 2, command: 'verify', args: '--ui --smoke-only', explanation: '部署后冒烟验证', dependsOn: 1 },
         ],
         input,
         confirm: true,
@@ -396,14 +396,31 @@ function handleGuide(input: string): AskResult | null {
     workflowName = '代码审查流程';
   } else if (/测试|test|写.*用例|补充.*测试|冒烟|smoke|验证|verify/i.test(input)) {
     const env = parsedEnv || 'staging';
-    let testType = 'all';
-    if (/冒烟|smoke/.test(input)) testType = 'smoke';
-    else if (/api|接口/.test(input)) testType = 'api';
-    else if (/视觉|visual|ui|页面/.test(input)) testType = 'visual';
-    const args = `--type ${testType}`;
+    // v8.3.102+: 修复参数映射，与 verify.ts 实际支持的参数对齐
+    // verify.ts 支持：--type compile|lint|test|all（代码验证）
+    //                 --ui（UI测试） --smoke-only --visual-only
+    //                 --api-contract（API契约） --perf（性能）
+    let args = '--type all';
+    let testDesc = '全量测试（代码验证 + UI + API）';
+    if (/冒烟|smoke/.test(input)) {
+      args = '--ui --smoke-only';
+      testDesc = 'UI 冒烟测试';
+    } else if (/api|接口/.test(input)) {
+      args = '--api-contract';
+      testDesc = 'API 契约测试';
+    } else if (/视觉|visual|ui|页面/.test(input)) {
+      args = '--ui --visual-only';
+      testDesc = 'UI 视觉回归测试';
+    } else if (/lint|代码检查|规范/.test(input)) {
+      args = '--type lint';
+      testDesc = '代码规范检查';
+    } else if (/单元测试|unit/.test(input)) {
+      args = '--type test';
+      testDesc = '单元测试';
+    }
     return {
       mode: 'match',
-      summary: `运行 ${testType} 测试（${env} 环境）`,
+      summary: `运行 ${testDesc}（${env} 环境）`,
       detail: `🧪 即将执行: speccore verify ${args}\n\n确认后自动执行测试`,
       commands: ['verify'],
       autoExec: { command: 'verify', args, confirm: true },

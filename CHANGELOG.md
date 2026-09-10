@@ -1,3 +1,30 @@
+## v8.3.103 (2026-09-10) — 「工程标识」术语彻底统一
+
+### 修复
+
+**「工程标识」术语彻底统一（v8.3.103）**:
+- `init.ts` 模板：修正「工程标识 = 工程名」错误表述，明确区分两者（工程标识 = 技术唯一标识，工程名 = 业务名称）
+- `spec-paths.ts`：`parseProjectInfo` 中 `identifierColIdx` 不再匹配「工程名」列，避免混淆
+- `spec-paths.ts`：`nameColIdx` 优先查找「工程名」列，其次「项目名称」列
+- `unified-config.ts`：`toProjectYaml` 中注释术语统一（端名 → 工程标识，端类型 → 工程类型，端描述 → 工程名）
+- `analyze.ts` prompt：「获取工程名」→「获取工程标识」
+- **影响文件**：`src/core/spec-paths.ts`、`src/commands/init.ts`、`src/core/unified-config.ts`、`src/commands/analyze.ts`
+
+**CONSTITUTION.md ↔ PROJECT.yaml 字段对应关系**（已对齐）：
+
+| CONSTITUTION.md 列 | PROJECT.yaml 字段 | 说明 |
+|:---|:---|:---|
+| 工程标识 | `name` | 全局唯一技术标识 |
+| 工程类型 | `type` | yaml 值为 `frontend\|backend\|infra`（粗分类），CONSTITUTION 可写具体类型（如 Java服务） |
+| 工程名 | `description` | 人类可读的业务名称 |
+| 项目名称 | — | CONSTITUTION 独有，yaml 无对应（纯业务展示字段） |
+| 源码路径 | `code_path` | 相对项目根目录 |
+| Git 仓库 | `git_repo` | 仓库地址 |
+| 默认分支 | `default_branch` | 如 main、develop |
+| 对应需求端 | `requirement_unit` | AI 分析时的需求模块映射 |
+
+---
+
 ## v8.3.102 (2026-09-09) — 全命令子目录支持 + 术语统一完善
 
 ### 修复

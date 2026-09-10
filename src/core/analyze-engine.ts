@@ -1992,18 +1992,21 @@ async function detectPlatformsFromConstitution(): Promise<string[]> {
       
       // ── Layer 1: 表格「对应端」/「对应需求端」列（旧版回退）──
       let headerRowIndex = -1;
-      let headerCells: string[] = [];
+      let platformColIdx = -1;
+      let identifierColIdx = -1;
       for (let i = 0; i < lines.length; i++) {
         const cells = lines[i].split('|').map((c: string) => c.trim()).filter(Boolean);
-        const platformColIdx = cells.findIndex((c: string) => c.includes('对应端') || c.includes('对应需求端'));
-        if (platformColIdx >= 0) {
+        const pIdx = cells.findIndex((c: string) => c.includes('对应端') || c.includes('对应需求端'));
+        if (pIdx >= 0) {
           headerRowIndex = i;
-          headerCells = cells;
+          platformColIdx = pIdx;
+          identifierColIdx = cells.findIndex((c: string) => c.includes('工程标识') || c.includes('工程'));
+          if (identifierColIdx < 0) identifierColIdx = 0;
           break;
         }
       }
       
-      if (headerRowIndex >= 0) {
+      if (headerRowIndex >= 0 && platformColIdx >= 0) {
         const platforms: string[] = [];
         const backendPlatforms: string[] = [];
         const seen = new Set<string>();
@@ -2018,8 +2021,8 @@ async function detectPlatformsFromConstitution(): Promise<string[]> {
           if (!line.startsWith('|')) break;
           
           const cells = line.split('|').map((c: string) => c.trim()).filter(Boolean);
-          const projectName = cells[0] || '';
-          const platformChinese = cells[5] || cells[cells.length - 1] || '';
+          const projectName = identifierColIdx >= 0 && cells.length > identifierColIdx ? cells[identifierColIdx] : '';
+          const platformChinese = cells.length > platformColIdx ? cells[platformColIdx] : '';
           
           // 跳过空值和占位符（如「待填写」）
           if (!platformChinese || !projectName) continue;
