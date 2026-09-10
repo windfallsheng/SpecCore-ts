@@ -1,3 +1,56 @@
+## v8.3.107 (2026-09-10) — CONSTITUTION 项目信息与 Git 配置分离
+
+### 重新设计
+
+**CONSTITUTION.md 项目信息表（v8.3.107）**:
+- 新格式：`工程标识 | 工程类型 | 工程名 | 项目名称 | 项目描述 | 工程源码路径 | 涉及需求端 | 备注`
+- 去掉「Git 仓库」和「默认分支」列（移至 Git 配置章节）
+- 新增「项目描述」和「备注」列
+- 新增详细的字段说明注释
+- 多工程示例更新为 8 列新格式
+
+**CONSTITUTION.md Git 配置表（v8.3.107）**:
+- 新增独立章节「## Git 配置」
+- 格式：`工程标识 | Git 仓库 | 默认分支 | 保护分支 | 分支前缀 | 备注`
+- 按工程标识对应，支持公共默认 + 各工程独有配置
+- 工程标识必须和「项目信息」表完全一致
+- 各工程可覆盖公共默认值
+
+**PROJECT.yaml 字段扩展**:
+- `PlatformConfig` 新增 `project_desc`（项目描述）和 `notes`（备注）字段
+- `toProjectYaml` 支持 `project_desc` 和 `notes` 序列化输出
+- 注释更新：明确各字段对应 CONSTITUTION.md 的哪一列
+
+**解析器增强**:
+- `parseProjectInfo`：支持「项目描述」、「工程源码路径」、「涉及需求端」、「备注」列名
+- 新增 `parseGitConfig()` + `GitConfigInfo` 接口：解析 CONSTITUTION.md「Git 配置」章节
+- `ProjectInfo` 拆分 `engineeringName`（工程名）+ `projectName`（项目名称）+ `projectDesc`（项目描述）+ `notes`（备注）
+- 向后兼容：仍支持旧格式 8 列表格（含 Git 仓库/默认分支列）
+
+**完整对应关系**：
+
+| CONSTITUTION.md 项目信息 | CONSTITUTION.md Git 配置 | PROJECT.yaml 字段 |
+|:---|:---|:---|
+| 工程标识 | 工程标识 | `name` |
+| 工程类型 | — | `type` |
+| 工程名 | — | `description` |
+| 项目名称 | — | `project_name` |
+| 项目描述 | — | `project_desc`（新增） |
+| 工程源码路径 | — | `code_path` |
+| 涉及需求端 | — | `requirement_unit` |
+| 备注 | 备注 | `notes`（新增） |
+| — | Git 仓库 | `git_repo` |
+| — | 默认分支 | `default_branch` |
+| — | 保护分支 | `protected_branches` |
+| — | 分支前缀 | `branch_prefix` |
+
+### 影响文件
+- `src/commands/init.ts` — CONSTITUTION.md 模板重新设计
+- `src/core/spec-paths.ts` — `parseProjectInfo` 扩展 + 新增 `parseGitConfig`
+- `src/core/unified-config.ts` — `PlatformConfig` 扩展 + `toProjectYaml` 扩展
+
+---
+
 ## v8.3.106 (2026-09-10) — CONSTITUTION ↔ PROJECT.yaml 字段完整对齐
 
 ### 修复

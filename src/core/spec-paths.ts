@@ -338,19 +338,25 @@ export async function parsePlatformTypes(): Promise<Map<string, string>> {
 }
 
 /**
- * 从 CONSTITUTION.md 解析项目信息表（v6.49.6+）
- * 返回 Map<工程标识, { projectType, projectName, srcPath, gitRepo, branch, platform }>
+ * 从 CONSTITUTION.md 解析项目信息表（v8.3.107+）
+ * 返回 Map<工程标识, ProjectInfo>
  * 用于 execute 命令确定代码输出位置
+ *
+ * v8.3.107 新格式：
+ * | 工程标识 | 工程类型 | 工程名 | 项目名称 | 项目描述 | 工程源码路径 | 涉及需求端 | 备注 |
+ * Git 配置移至独立章节「Git 配置」，不再在项目信息表中配置
  */
 export interface ProjectInfo {
   projectIdentifier: string;
   projectType: string;      // 工程类型（Java服务/H5移动端/Web管理后台等）
   engineeringName: string;  // 工程名（第3列）
   projectName: string;      // 项目名称（第4列）
-  srcPath: string;
-  gitRepo: string;
-  branch: string;
-  platform: string;
+  projectDesc: string;      // 项目描述（第5列）
+  srcPath: string;          // 工程源码路径
+  gitRepo: string;          // Git 仓库（向后兼容旧格式）
+  branch: string;           // 默认分支（向后兼容旧格式）
+  platform: string;         // 涉及需求端
+  notes: string;            // 备注
 }
 
 export async function parseProjectInfo(): Promise<Map<string, ProjectInfo>> {
@@ -365,10 +371,12 @@ export async function parseProjectInfo(): Promise<Map<string, ProjectInfo>> {
   let typeColIdx = -1;
   let engNameColIdx = -1;    // 工程名列
   let projNameColIdx = -1;   // 项目名称列
+  let projDescColIdx = -1;   // 项目描述列
   let pathColIdx = -1;
-  let gitColIdx = -1;
-  let branchColIdx = -1;
-  let platformColIdx = -1;
+  let gitColIdx = -1;        // 向后兼容旧格式
+  let branchColIdx = -1;     // 向后兼容旧格式
+  let platformColIdx = -1;   // 涉及需求端列
+  let notesColIdx = -1;      // 备注列
   const result = new Map<string, ProjectInfo>();
 
   for (let i = 0; i < lines.length; i++) {
@@ -395,16 +403,21 @@ export async function parseProjectInfo(): Promise<Map<string, ProjectInfo>> {
       typeColIdx = cells.findIndex(h =>
         h === '工程类型' || h === '类型' || h.includes('工程类型')
       );
-      // v8.3.106+: 分开查找「工程名」和「项目名称」列
+      // 分开查找「工程名」和「项目名称」列
       engNameColIdx = cells.findIndex(h =>
         h === '工程名' || h.includes('工程名')
       );
       projNameColIdx = cells.findIndex(h =>
         h === '项目名称' || h === '项目名' || h.includes('项目名称')
       );
-      pathColIdx = cells.findIndex(h =>
-        h === '源码路径' || h === '工程路径' || h.includes('源码路径') || h.includes('工程路径')
+      projDescColIdx = cells.findIndex(h =>
+        h === '项目描述' || h.includes('项目描述')
       );
+      pathColIdx = cells.findIndex(h =>
+        h === '源码路径' || h === '工程源码路径' || h === '工程路径' ||
+        h.includes('源码路径') || h.includes('工程路径')
+      );
+      // Git 列：向后兼容旧格式（项目信息表中含 Git 列的情况）
       gitColIdx = cells.findIndex(h =>
         h === 'Git 仓库' || h === 'Git' || h.includes('Git')
       );
@@ -412,7 +425,11 @@ export async function parseProjectInfo(): Promise<Map<string, ProjectInfo>> {
         h === '默认分支' || h === '分支' || h.includes('分支')
       );
       platformColIdx = cells.findIndex(h =>
-        h === '对应端' || h === '对应需求端' || h.includes('对应端')
+        h === '涉及需求端' || h === '对应端' || h === '对应需求端' ||
+        h.includes('需求端') || h.includes('对应端')
+      );
+      notesColIdx = cells.findIndex(h =>
+        h === '备注' || h.includes('备注')
       );
       // 兜底：如果没找到工程标识列，取第 1 列
       if (identifierColIdx < 0) identifierColIdx = 0;
@@ -429,10 +446,12 @@ export async function parseProjectInfo(): Promise<Map<string, ProjectInfo>> {
           projectType: typeColIdx >= 0 && cells.length > typeColIdx ? cells[typeColIdx].trim() : '',
           engineeringName: engNameColIdx >= 0 && cells.length > engNameColIdx ? cells[engNameColIdx].trim() : '',
           projectName: projNameColIdx >= 0 && cells.length > projNameColIdx ? cells[projNameColIdx].trim() : '',
+          projectDesc: projDescColIdx >= 0 && cells.length > projDescColIdx ? cells[projDescColIdx].trim() : '',
           srcPath: pathColIdx >= 0 && cells.length > pathColIdx ? cells[pathColIdx].replace(/`/g, '').trim() : '',
           gitRepo: gitColIdx >= 0 && cells.length > gitColIdx ? cells[gitColIdx].trim() : '',
           branch: branchColIdx >= 0 && cells.length > branchColIdx ? cells[branchColIdx].trim() : 'main',
           platform: platformColIdx >= 0 && cells.length > platformColIdx ? cells[platformColIdx].trim() : '',
+          notes: notesColIdx >= 0 && cells.length > notesColIdx ? cells[notesColIdx].trim() : '',
         };
         result.set(projectIdentifier, info);
       }
@@ -459,4 +478,96 @@ export async function getProjectPathForPlatform(platform: string): Promise<strin
     }
   }
   return null;
+}
+
+/**
+ * 从 CONSTITUTION.md 解析 Git 配置表（v8.3.107+）
+ * 解析「Git 配置」章节，返回 Map<工程标识, GitConfigInfo>
+ * 支持公共默认 + 各工程独有配置
+ */
+export interface GitConfigInfo {
+  projectIdentifier: string;
+  gitRepo: string;
+  defaultBranch: string;
+  protectedBranches: string[];
+  branchPrefix: string;
+  notes: string;
+}
+
+export async function parseGitConfig(): Promise<Map<string, GitConfigInfo>> {
+  const constitutionPath = join('.speccore', 'CONSTITUTION.md');
+  if (!(await pathExists(constitutionPath))) return new Map();
+  const content = await readFile(constitutionPath, 'utf-8');
+  const lines = content.split('\n');
+
+  let inGitSection = false;
+  let headerParsed = false;
+  let identifierColIdx = -1;
+  let repoColIdx = -1;
+  let branchColIdx = -1;
+  let protectedColIdx = -1;
+  let prefixColIdx = -1;
+  let notesColIdx = -1;
+  const result = new Map<string, GitConfigInfo>();
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    // 检测「Git 配置」章节开始
+    if (line.match(/^##\s+.*Git\s*配置/)) {
+      inGitSection = true;
+      continue;
+    }
+    // 检测下一个章节开始，退出 Git 配置
+    if (inGitSection && line.match(/^##\s/)) break;
+    if (!inGitSection) continue;
+    if (!line.startsWith('|')) continue;
+    if (line.match(/^\|\s*[-:]/)) continue;
+
+    const cells = line.split('|').map(c => c.trim()).filter(Boolean);
+
+    // 表头行：动态查找列索引
+    if (!headerParsed && cells.length > 0) {
+      identifierColIdx = cells.findIndex(h =>
+        h === '工程标识' || h === '工程' || h.includes('工程标识')
+      );
+      repoColIdx = cells.findIndex(h =>
+        h === 'Git 仓库' || h === '仓库' || h.includes('Git') || h.includes('仓库')
+      );
+      branchColIdx = cells.findIndex(h =>
+        h === '默认分支' || h === '分支' || h.includes('默认分支') || h.includes('分支')
+      );
+      protectedColIdx = cells.findIndex(h =>
+        h === '保护分支' || h.includes('保护分支')
+      );
+      prefixColIdx = cells.findIndex(h =>
+        h === '分支前缀' || h.includes('分支前缀')
+      );
+      notesColIdx = cells.findIndex(h =>
+        h === '备注' || h.includes('备注')
+      );
+      if (identifierColIdx < 0) identifierColIdx = 0;
+      headerParsed = true;
+      continue;
+    }
+
+    // 数据行：提取 Git 配置
+    if (headerParsed && cells.length > identifierColIdx) {
+      const projectIdentifier = cells[identifierColIdx]?.trim();
+      if (projectIdentifier) {
+        const protectedStr = protectedColIdx >= 0 && cells.length > protectedColIdx
+          ? cells[protectedColIdx].trim() : '';
+        const info: GitConfigInfo = {
+          projectIdentifier,
+          gitRepo: repoColIdx >= 0 && cells.length > repoColIdx ? cells[repoColIdx].trim() : '',
+          defaultBranch: branchColIdx >= 0 && cells.length > branchColIdx ? cells[branchColIdx].trim() : 'main',
+          protectedBranches: protectedStr ? protectedStr.split(',').map(s => s.trim()).filter(Boolean) : [],
+          branchPrefix: prefixColIdx >= 0 && cells.length > prefixColIdx ? cells[prefixColIdx].trim() : '',
+          notes: notesColIdx >= 0 && cells.length > notesColIdx ? cells[notesColIdx].trim() : '',
+        };
+        result.set(projectIdentifier, info);
+      }
+    }
+  }
+
+  return result;
 }

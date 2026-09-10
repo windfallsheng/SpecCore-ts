@@ -384,26 +384,63 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 
 ## 项目信息
 
-| 工程标识 | 工程类型 | 工程名 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应需求端 |
+| 工程标识 | 工程类型 | 工程名 | 项目名称 | 项目描述 | 工程源码路径 | 涉及需求端 | 备注 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| ${projectName} | 待填写 | 待填写 | 待填写 | ./ | ${gitUrl || '待配置'} | main | 待填写 |
+| ${projectName} | 待填写 | 待填写 | 待填写 | 待填写 | ./ | 待填写 | 待填写 |
 
-> ⚠️ **项目名称** 是给人和 AI 看的业务名称（如"食堂后台管理"、"商户入驻系统"），不同于技术上的工程标识。
->   AI 会据此理解项目业务范围，在分析/拆分/生成代码时作为上下文参考。
+> **字段说明**：
+> - **工程标识**：全局唯一技术标识（如 app/h5/admin），全小写、无空格、短横线分隔
+> - **工程类型**：AI 据此生成针对性内容（如 Java服务、H5移动端、Web管理后台）
+> - **工程名**：人类可读的业务名称（如 "预订服务"、"后台管理"）
+> - **项目名称**：给人和 AI 看的业务名称（如"食堂后台管理"、"商户入驻系统"）
+> - **项目描述**：工程的详细说明、补充信息（如"核心业务服务，处理订单全生命周期"）
+> - **工程源码路径**：相对于项目根目录的代码位置（如 ./packages/backend）
+> - **涉及需求端**：引用「端列表」中已声明的端名，每行只填一个
+> - **备注**：额外信息、特殊说明、TODO 等
 
 > 多工程示例（每个端 = 一个独立工程）:
 >
-> | 工程标识 | 工程类型 | 工程名 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应需求端 |
+> | 工程标识 | 工程类型 | 工程名 | 项目名称 | 项目描述 | 工程源码路径 | 涉及需求端 | 备注 |
 > | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-> | admin-web | Web管理后台 | admin | 后台管理端 | ./packages/admin | git@xxx/admin.git | main | admin |
-> | h5-app | H5移动端 | h5 | 移动H5端 | ./packages/h5 | git@xxx/h5.git | main | h5 |
-> | android-app | Android移动端 | android | Android端 | ./packages/android | git@xxx/android.git | main | android |
-> | backend-service | Java服务 | backend | 后台服务 | ./packages/backend | git@xxx/backend.git | main | backend |
+> | admin-web | Web管理后台 | admin | 后台管理端 | 运营后台管理系统 | ./packages/admin | admin | 核心系统 |
+> | h5-app | H5移动端 | h5 | 移动H5端 | 用户端H5页面 | ./packages/h5 | h5 | 高优先级 |
+> | android-app | Android移动端 | android | Android端 | 原生Android APP | ./packages/android | app | 待上架 |
+> | backend-service | Java服务 | backend | 后台服务 | 订单与支付核心服务 | ./packages/backend | backend | 核心业务 |
 >
 > **关键规则**：
-> - 「对应需求端」列的值必须引用「端列表」中已声明的端名
+> - 「涉及需求端」列的值必须引用「端列表」中已声明的端名
 > - 一一对应：每行一个工程对应一个工程标识（不填多个）
-> - 如果一个服务拆成多个工程（如 user-service + order-service 都属于 backend），应在「端列表」中分别声明
+> - 如果一个服务拆成多个工程，应在「端列表」中分别声明
+
+## Git 配置
+
+> Git 配置按工程标识对应，支持公共默认 + 各工程独有配置。
+> CLI 执行 speccore pr / deploy 等命令时读取此配置。
+
+| 工程标识 | Git 仓库 | 默认分支 | 保护分支 | 分支前缀 | 备注 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| ${projectName} | ${gitUrl || '待配置'} | main | main | feature/ | 待填写 |
+
+> **字段说明**：
+> - **工程标识**：引用「项目信息」表中的工程标识，一一对应
+> - **Git 仓库**：仓库地址（如 git@github.com:org/repo.git、https://...）
+> - **默认分支**：如 main、master、develop
+> - **保护分支**：禁止直接 push，只能通过 PR 合并（支持通配符如 release/*）
+> - **分支前缀**：功能分支前缀（如 feature/、bugfix/、hotfix/）
+> - **备注**：特殊 Git 策略说明
+
+> 多工程示例：
+>
+> | 工程标识 | Git 仓库 | 默认分支 | 保护分支 | 分支前缀 | 备注 |
+> | :--- | :--- | :--- | :--- | :--- | :--- |
+> | admin-web | git@xxx/admin.git | main | main,release/* | feature/admin- | 前端统一前缀 |
+> | h5-app | git@xxx/h5.git | main | main | feature/h5- | — |
+> | backend-service | git@xxx/backend.git | develop | develop,release/* | feature/api- | 后端用 develop 分支 |
+>
+> **关键规则**：
+> - 工程标识必须和「项目信息」表中的工程标识完全一致
+> - 保护分支支持精确匹配和通配符（如 release/*）
+> - 如果某工程不配置某字段，使用公共默认值（见下方「Git 分支策略」）
 
 ## 技术栈
 
@@ -432,12 +469,16 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 | ... | ... | ... |
 
 ## Git 分支策略
-- 默认分支: main  (可选: master / develop / trunk / release)
-- 任务分支: feature/{Task-ID}
-- 发布分支: release/{version}
-- 保护分支: main, master, release/*, production
-  > 保护分支上禁止直接 commit 和 push，只能通过 PR 合并
-  > 支持精确匹配和通配符（如 release/*）
+
+> 公共默认策略。各工程可在「Git 配置」表中覆盖。
+
+- **默认分支**: main（可选: master / develop / trunk）
+- **任务分支**: {branch_prefix}{Task-ID}（如 feature/Task-001）
+- **发布分支**: release/{version}
+- **热修复分支**: hotfix/{description}
+- **保护分支**: main, master, release/*, production
+  - 保护分支上禁止直接 commit 和 push，只能通过 PR 合并
+  - 支持精确匹配和通配符（如 release/*）
 `
   );
   } // if CONSTITUTION.md 不存在

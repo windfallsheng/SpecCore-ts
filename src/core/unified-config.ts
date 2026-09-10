@@ -66,16 +66,20 @@ export interface PlatformConfig {
   type: 'frontend' | 'backend' | 'infra';
   /** 工程名：人类可读的业务名称。如: 预订订单服务, H5移动端 */
   description?: string;
-  /** 项目名称：给人和 AI 看的业务名称（如"食堂后台管理"）。不同于工程标识 */
+  /** 项目名称：给人和 AI 看的业务名称（如"食堂后台管理"） */
   project_name?: string;
-  /** 源码路径：相对于项目根目录的代码位置。如: ./packages/backend/booking-service */
+  /** 项目描述：工程的详细说明，补充信息 */
+  project_desc?: string;
+  /** 工程源码路径：相对于项目根目录的代码位置。如: ./packages/backend/booking-service */
   code_path?: string;
   /** Git 仓库地址：用于分支管理和 PR 提交 */
   git_repo?: string;
   /** 默认分支：如 main, master, develop */
   default_branch: string;
-  /** 对应需求端/功能单元：用于 AI 分析时自动对标需求文档中的功能模块名。如: 预订订单服务, 会议室管理 */
+  /** 涉及需求端/功能单元：用于 AI 分析时自动对标需求文档中的功能模块名 */
   requirement_unit?: string;
+  /** 备注：额外信息、特殊说明 */
+  notes?: string;
   /** v8.3.104+: 端级 Git 分支前缀（覆盖全局 git.branch_prefix） */
   branch_prefix?: string;
   /** v8.3.104+: 端级受保护分支（覆盖全局 git.protected_branches） */
@@ -1485,11 +1489,13 @@ function toProjectYaml(config: ProjectConfig): string {
   yaml += '# 可选字段：\n';
   yaml += '#   description         → 工程名（人类可读的业务名称，如 "预订服务"）\n';
   yaml += '#   project_name        → 项目名称（给人和 AI 看的业务名称，如"食堂后台管理"）\n';
-  yaml += '#   code_path           → 源码路径（相对于项目根目录）\n';
+  yaml += '#   project_desc        → 项目描述：工程的详细说明，补充信息\n';
+  yaml += '#   code_path           → 工程源码路径（相对于项目根目录）\n';
   yaml += '#   git_repo            → Git 仓库地址（用于分支管理和 PR 提交）\n';
   yaml += '#   branch_prefix       → 端级分支前缀（覆盖全局 git.branch_prefix，可选）\n';
   yaml += '#   protected_branches  → 端级受保护分支（覆盖全局 git.protected_branches，可选）\n';
-  yaml += '#   requirement_unit    → 对应需求端/功能单元（AI 分析时自动对标）\n';
+  yaml += '#   requirement_unit    → 涉及需求端/功能单元（AI 分析时自动对标）\n';
+  yaml += '#   notes               → 备注：额外信息、特殊说明\n';
   yaml += 'platforms:\n';
   if (config.platforms.length === 0) {
     yaml += '  # 示例：添加你的第一个工程（复制后修改）\n';
@@ -1538,6 +1544,10 @@ function toProjectYaml(config: ProjectConfig): string {
       yaml += `    # 项目名称（给人和 AI 看的业务名称，如"食堂后台管理"）\n`;
       yaml += `    project_name: ${p.project_name}\n`;
     }
+    if (p.project_desc) {
+      yaml += `    # 项目描述：工程的详细说明，补充信息\n`;
+      yaml += `    project_desc: ${p.project_desc}\n`;
+    }
     if (p.code_path) {
       yaml += `    # 源码路径（相对于项目根目录）\n`;
       yaml += `    code_path: ${p.code_path}\n`;
@@ -1560,8 +1570,12 @@ function toProjectYaml(config: ProjectConfig): string {
       }
     }
     if (p.requirement_unit) {
-      yaml += `    # 对应需求端/功能单元（AI 分析时自动对标）\n`;
+      yaml += `    # 涉及需求端/功能单元（AI 分析时自动对标）\n`;
       yaml += `    requirement_unit: ${p.requirement_unit}\n`;
+    }
+    if (p.notes) {
+      yaml += `    # 备注：额外信息、特殊说明\n`;
+      yaml += `    notes: ${p.notes}\n`;
     }
     // deploy 配置输出
     if (p.deploy && Object.keys(p.deploy).length > 0) {
