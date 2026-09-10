@@ -84,8 +84,8 @@ export interface PlatformConfig {
   branch_prefix?: string;
   /** v8.3.104+: 端级受保护分支（覆盖全局 git.protected_branches） */
   protected_branches?: string[];
-  /** v8.3.111+: 端级分支类型定义（覆盖全局 git.branch_types） */
-  branch_types?: Record<string, { prefix: string; source: string }>;
+  /** v8.3.112+: 端级分支类型定义（覆盖全局 git.branch_types）。prefix 可选，默认值为 类型名/ */
+  branch_types?: Record<string, { prefix?: string; source: string }>;
   /** v8.3.60+: 按环境部署配置 */
   deploy?: {
     /** 测试环境 */
@@ -201,8 +201,8 @@ export interface ProjectConfig {
     default_base: string;
     branch_prefix: string;
     protected_branches: string[];
-    /** v8.3.111+: 分支类型定义（前缀 + 创建源分支）。如 feature: { prefix: 'feature/', source: 'develop' } */
-    branch_types?: Record<string, { prefix: string; source: string }>;
+    /** v8.3.112+: 分支类型定义（类型名 + 创建源分支）。prefix 可选，默认值为 类型名/。如 feature: { source: 'develop' } */
+    branch_types?: Record<string, { prefix?: string; source: string }>;
   };
   code_scope: string[];
   /** v8.3.58+: 验证相关配置 */
@@ -270,10 +270,10 @@ export const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
     branch_prefix: 'feature/',
     protected_branches: ['main', 'master'],
     branch_types: {
-      feature: { prefix: 'feature/', source: 'develop' },
-      bugfix: { prefix: 'bugfix/', source: 'develop' },
-      release: { prefix: 'release/', source: 'develop' },
-      hotfix: { prefix: 'hotfix/', source: 'main' },
+      feature: { source: 'develop' },
+      bugfix: { source: 'develop' },
+      release: { source: 'develop' },
+      hotfix: { source: 'main' },
     },
   },
   code_scope: ['src/'],
@@ -1146,7 +1146,9 @@ function validateProjectConfig(obj: Record<string, unknown>): ValidationResult {
             issues.push(`git.branch_types.${typeName} 必须是对象`);
             continue;
           }
-          if (typeof typeDef.prefix !== 'string') issues.push(`git.branch_types.${typeName}.prefix 必须是字符串`);
+          if (typeDef.prefix !== undefined && typeof typeDef.prefix !== 'string') {
+            issues.push(`git.branch_types.${typeName}.prefix 必须是字符串`);
+          }
           if (typeof typeDef.source !== 'string') issues.push(`git.branch_types.${typeName}.source 必须是字符串`);
         }
       }
@@ -1169,8 +1171,8 @@ export interface EffectiveGitConfig {
   default_base: string;
   branch_prefix: string;
   protected_branches: string[];
-  /** v8.3.111+: 分支类型定义（前缀 + 创建源） */
-  branch_types: Record<string, { prefix: string; source: string }>;
+  /** v8.3.112+: 分支类型定义（类型名 + 创建源）。prefix 可选，默认值为 类型名/ */
+  branch_types: Record<string, { prefix?: string; source: string }>;
 }
 
 /**
@@ -1712,13 +1714,15 @@ function toProjectYaml(config: ProjectConfig): string {
   for (const b of config.git.protected_branches) {
     yaml += `    - ${b}\n`;
   }
-  // v8.3.111+: 分支类型
+  // v8.3.112+: 分支类型
   if (config.git.branch_types && Object.keys(config.git.branch_types).length > 0) {
-    yaml += '  # 分支类型定义（前缀 + 创建源分支）\n';
+    yaml += '  # 分支类型定义（类型名 + 创建源分支）。prefix 可选，默认值为 类型名/\n';
     yaml += '  branch_types:\n';
     for (const [typeName, typeDef] of Object.entries(config.git.branch_types)) {
       yaml += `    ${typeName}:\n`;
-      yaml += `      prefix: ${typeDef.prefix}\n`;
+      if (typeDef.prefix) {
+        yaml += `      prefix: ${typeDef.prefix}\n`;
+      }
       yaml += `      source: ${typeDef.source}\n`;
     }
   }

@@ -495,7 +495,8 @@ export async function getProjectPathForPlatform(platform: string): Promise<strin
  */
 export interface BranchTypeInfo {
   type: string;
-  prefix: string;
+  /** 前缀，可选。默认值为 类型名/ */
+  prefix?: string;
   source: string;
   description: string;
 }
@@ -507,7 +508,7 @@ export interface GitConfigInfo {
   protectedBranches: string[];
   branchPrefix: string;
   notes: string;
-  /** v8.3.111+: 分支类型定义（从「Git 公共配置」的分支类型表解析） */
+  /** v8.3.112+: 分支类型定义（从「Git 公共配置」的分支类型表解析） */
   branchTypes: BranchTypeInfo[];
 }
 
@@ -576,9 +577,11 @@ export async function parseGitConfig(): Promise<Map<string, GitConfigInfo>> {
     if (branchTypeHeaderParsed && inBranchTypeTable && cells.length > 0) {
       const typeVal = btTypeColIdx >= 0 && cells.length > btTypeColIdx ? cells[btTypeColIdx].trim() : '';
       if (typeVal) {
+        const rawPrefix = btPrefixColIdx >= 0 && cells.length > btPrefixColIdx ? cells[btPrefixColIdx].trim() : '';
         const bt: BranchTypeInfo = {
           type: typeVal,
-          prefix: btPrefixColIdx >= 0 && cells.length > btPrefixColIdx ? cells[btPrefixColIdx].trim() : '',
+          // v8.3.112: prefix 可选，默认值为 类型名/
+          prefix: rawPrefix || `${typeVal}/`,
           source: btSourceColIdx >= 0 && cells.length > btSourceColIdx ? cells[btSourceColIdx].trim() : '',
           description: btDescColIdx >= 0 && cells.length > btDescColIdx ? cells[btDescColIdx].trim() : '',
         };

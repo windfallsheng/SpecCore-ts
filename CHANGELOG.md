@@ -1,3 +1,39 @@
+## v8.3.112 (2026-09-10) — 分支类型：prefix 可选，默认值为 类型名/
+
+### 重新设计
+
+**prefix 改为可选（v8.3.112）**:
+- `branch_types` 中的 `prefix` 字段变为可选
+- 默认值为 `类型名/`，如 `hotfix` 类型 → 前缀自动为 `hotfix/`
+- 仅在需要自定义前缀时才填写（如类型 `feature` 想用 `feat/`）
+
+**PROJECT.yaml 简化**：
+```yaml
+git:
+  branch_types:
+    feature: { source: 'develop' }      # 前缀自动为 feature/
+    bugfix:  { source: 'develop' }      # 前缀自动为 bugfix/
+    hotfix:  { source: 'main' }         # 前缀自动为 hotfix/
+    # 自定义前缀示例：
+    feature: { prefix: 'feat/', source: 'develop' }
+```
+
+**CONSTITUTION.md 模板更新**：
+- 「分支类型」表格的「前缀」列标记为「可选」
+- 示例中用 `—` 表示使用默认前缀（类型名/）
+- 注释明确：类型名即前缀，如 `hotfix` 类型的分支名自动为 `hotfix/xxx`
+
+**类型更新**：
+- `BranchTypeInfo.prefix` → 可选
+- `ProjectConfig.git.branch_types` → `prefix?: string`
+- `PlatformConfig.branch_types` → `prefix?: string`
+- `EffectiveGitConfig.branch_types` → `prefix?: string`
+
+**校验更新**：
+- `prefix` 仅在存在时校验类型为字符串
+
+---
+
 ## v8.3.111 (2026-09-10) — 分支类型定义（前缀 + 创建源）
 
 ### 新增
