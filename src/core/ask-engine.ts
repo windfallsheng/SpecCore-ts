@@ -10,7 +10,7 @@ import { tryHostAi } from './ask-host-ai';
 import { loadAskConfig } from './ask-config';
 import { getCachedIntent, cacheIntent } from './intent-cache';
 import { buildAskContext, formatContextForHostAi } from './ask-context';
-import { loadKnowledgeGraph, GraphEntity } from './knowledge-graph';
+import { loadFreshKnowledgeGraph, GraphEntity } from './knowledge-graph';
 
 // ============================================================
 // 类型定义
@@ -1431,7 +1431,7 @@ async function tryMatchEntityFromKG(
   input: string
 ): Promise<{ id: string; type: string; title: string; score: number } | null> {
   try {
-    const graph = await loadKnowledgeGraph(process.cwd());
+    const graph = await loadFreshKnowledgeGraph(process.cwd());
     if (!graph || Object.keys(graph.entities).length === 0) return null;
 
     // 优先检查是否直接提及了实体 ID（如 Task-001, REQ-001）

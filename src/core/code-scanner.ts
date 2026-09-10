@@ -13,9 +13,11 @@ import { join, relative, dirname, basename } from 'path';
 import { execSync } from 'child_process';
 import { logger } from '../utils/logger';
 import { extractAnnotations, buildModuleGroups, matchModule, discoverProjectRoots } from './spec-annotations';
-import { loadKnowledgeGraph, KnowledgeGraph } from './knowledge-graph';
+import { loadFreshKnowledgeGraph, KnowledgeGraph, getFullTaskContext } from './knowledge-graph';
 import { scanCodeForSpecAnnotations } from './reverse-sync';
 import { parsePlatformList } from './spec-paths';
+// v8.3.125+: 同义词扩展，补充 SEMANTIC_MAP 覆盖范围
+import { expandSynonyms } from '../utils/synonyms';
 
 // ── 端名缓存（v6.48.0+）：从 CONSTITUTION.md 加载，优先于通用模式匹配 ──
 let _constitutionPlatforms: string[] | null = null;
@@ -289,21 +291,86 @@ export async function findRelevantCode(
     ? index.files.filter(f => scopeDirs.some(dir => f.path.startsWith(dir)))
     : index.files;
 
-  // ── P0: 加载知识图谱关联 ──
-  let kgBoostedFiles = new Set<string>();
+  // ── P0: 深度知识图谱关联 + Spec 内容引导 ──
+  // v8.3.122+: 不再只获取 depends_on 任务ID，而是深度利用知识图谱的全部关联信息
   let kgTaskIds = new Set<string>();
+  let specKeywords: string[] = [];              // 从 spec 文件提取的技术关键词（高权重）
+  let kgSourceFilePaths = new Set<string>();    // 知识图谱中的 source-file 实体路径
+  let kgCodeEntities = new Set<string>();       // business_module 的 codeEntities
+
   if (iteration) {
-    const kg = await loadKnowledgeGraph(process.cwd());
+    const kg = await loadFreshKnowledgeGraph(process.cwd(), iteration);
     if (kg && taskId) {
-      // 1. 当前任务直接关联
+      // 1. 当前任务直接关联 + 依赖任务
       kgTaskIds.add(taskId);
-      // 2. 依赖任务也纳入
       for (const rel of kg.relations) {
         if (rel.from === taskId && rel.type === 'depends_on') {
           kgTaskIds.add(rel.to);
         }
       }
+
+      // v8.3.122+: 深度利用知识图谱 — 获取完整任务上下文
+      const fullContext = getFullTaskContext(kg, taskId);
+
+      // 2. 从 relatedSpecs 读取内容，提取精准技术关键词
+      for (const spec of fullContext.relatedSpecs) {
+        if (spec.file && await pathExists(spec.file)) {
+          try {
+            const specContent = await readFile(spec.file, 'utf-8');
+            const techKws = extractTechnicalKeywords(specContent);
+            specKeywords.push(...techKws);
+            logger.debug(`   📄 Spec ${spec.file} 提取 ${techKws.length} 个技术关键词`);
+          } catch { /* 读取失败不阻断 */ }
+        }
+      }
+
+      // 3. 从知识图谱 source-file 实体中查找关联文件
+      const demandKws = extractKeywords(requirements);
+      for (const entity of Object.values(kg.entities)) {
+        if (entity.type === 'source-file' && entity.file) {
+          // 3a. 通过平台匹配：任务的平台与该 source-file 的 endpoint 一致
+          const taskPlatforms = fullContext.siblingSubtasks
+            .map(st => st.platform)
+            .filter(Boolean) as string[];
+          if (entity.endpoint && taskPlatforms.includes(entity.endpoint)) {
+            kgSourceFilePaths.add(entity.file);
+          }
+          // 3b. 通过语义标签匹配：semanticTags 与需求关键词匹配
+          if (entity.semanticTags && entity.semanticTags.length > 0) {
+            for (const tag of entity.semanticTags) {
+              const tagLower = tag.toLowerCase();
+              if (demandKws.some(kw => tagLower.includes(kw.toLowerCase()) || kw.toLowerCase().includes(tagLower))) {
+                kgSourceFilePaths.add(entity.file);
+              }
+            }
+          }
+          // 3c. 通过 exports 匹配：导出的类/函数名出现在 spec 关键词中
+          if (entity.exports && specKeywords.length > 0) {
+            for (const exp of entity.exports) {
+              const expLower = exp.toLowerCase();
+              if (specKeywords.some(kw => expLower.includes(kw.toLowerCase()) || kw.toLowerCase().includes(expLower))) {
+                kgSourceFilePaths.add(entity.file);
+              }
+            }
+          }
+        }
+        // 4. 从 business_module 实体获取 codeEntities
+        if (entity.type === 'business_module' && entity.codeEntities) {
+          const moduleName = (entity.businessModule || entity.title || '').toLowerCase();
+          if (demandKws.some(kw => moduleName.includes(kw.toLowerCase()) || kw.toLowerCase().includes(moduleName))) {
+            for (const ce of entity.codeEntities) {
+              kgCodeEntities.add(ce);
+            }
+          }
+        }
+      }
     }
+  }
+
+  // 去重并限制 spec 关键词数量
+  specKeywords = [...new Set(specKeywords)].slice(0, 50);
+  if (specKeywords.length > 0) {
+    logger.debug(`   🔑 Spec 技术关键词: ${specKeywords.slice(0, 10).join(', ')}${specKeywords.length > 10 ? '...' : ''}`);
   }
 
   // ── P0: 扫描 @spec 注释，找到关联的代码文件 ──
@@ -343,6 +410,19 @@ export async function findRelevantCode(
       score += specBoost;
     }
 
+    // v8.3.122+: 知识图谱 source-file 实体直接关联（平台/语义标签/exports 匹配）
+    if (kgSourceFilePaths.has(f.path)) {
+      score += 40;
+    }
+
+    // v8.3.122+: 知识图谱 business_module codeEntities 关联
+    for (const ce of kgCodeEntities) {
+      if (f.path.includes(ce) || basename(f.path).replace(/\.[^.]+$/, '') === ce) {
+        score += 35;
+        break;
+      }
+    }
+
     // 文件名匹配（精确 + 模糊）
     for (const kw of keywords) {
       if (f.path.toLowerCase().includes(kw.toLowerCase())) {
@@ -358,6 +438,27 @@ export async function findRelevantCode(
         }
       }
     }
+    // v8.3.122+: Spec 技术关键词高权重匹配（从 TECH.md/REQ.md 等提取的精准关键词）
+    for (const kw of specKeywords) {
+      const kwLower = kw.toLowerCase();
+      // 文件名匹配（权重 +25，比普通关键词 +10 更高）
+      if (f.path.toLowerCase().includes(kwLower)) {
+        score += 25;
+      }
+      // 导出名匹配
+      for (const exp of f.exports) {
+        if (exp.toLowerCase().includes(kwLower) || kwLower.includes(exp.toLowerCase())) {
+          score += 20;
+        }
+      }
+      // API 路径匹配
+      for (const api of f.apis) {
+        if (api.toLowerCase().includes(kwLower) || kwLower.includes(api.toLowerCase())) {
+          score += 22;
+        }
+      }
+    }
+
     // API 匹配
     for (const api of f.apis) {
       if (requirements.includes(api)) score += 20;
@@ -454,6 +555,60 @@ export async function findRelevantCode(
     if (bonus) s.score += bonus;
   }
 
+  // v8.3.122+: 反向 Import 传播 — 如果 A 被命中，A 所 import 的公共模块 C 也加分
+  // 解决需求文档不提"拦截器/通用方法/缓存"但代码实际依赖这些模块的问题
+  const SHARED_DIRS = ['shared', 'common', 'utils', 'lib', 'helpers', 'interceptors', 'middleware', 'core', 'base', 'config', 'constants', 'types', 'decorators', 'filters', 'guards', 'pipes'];
+  const isSharedFile = (path: string) => SHARED_DIRS.some(dir => path.toLowerCase().includes(`/${dir}/`));
+
+  const reverseImportBonus = new Map<string, number>();
+  for (const s of scored) {
+    const matchedFile = s.file;
+    for (const imp of matchedFile.imports) {
+      const importedBase = imp.replace(/^\.\.?\//, '').replace(/\.[^.]+$/, '');
+      for (const other of filesToSearch) {
+        if (other.path === matchedFile.path) continue;
+        const otherBase = basename(other.path).replace(/\.[^.]+$/, '');
+        const otherDirBase = basename(dirname(other.path));
+        if (otherBase === importedBase || otherDirBase === importedBase || other.path.includes(imp.replace(/^\.\.?\//, ''))) {
+          const bonus = isSharedFile(other.path) ? 15 : 5;
+          reverseImportBonus.set(other.path, (reverseImportBonus.get(other.path) || 0) + bonus);
+        }
+      }
+    }
+  }
+  for (const s of scored) {
+    const bonus = reverseImportBonus.get(s.file.path);
+    if (bonus) s.score += bonus;
+  }
+
+  // v8.3.122+: 高被引用公共模块主动发现 — shared/common/utils 下被 3+ 模块引用的文件自动入榜
+  const referenceCount = new Map<string, number>();
+  const sharedCandidates = filesToSearch.filter(f => isSharedFile(f.path));
+  for (const f of filesToSearch) {
+    for (const imp of f.imports) {
+      const impBase = imp.replace(/^\.\.?\//, '').replace(/\.[^.]+$/, '');
+      const impDirBase = impBase.includes('/') ? basename(impBase) : impBase;
+      for (const sc of sharedCandidates) {
+        const scBase = basename(sc.path).replace(/\.[^.]+$/, '');
+        const scDirBase = basename(dirname(sc.path));
+        if (scBase === impBase || scBase === impDirBase || scDirBase === impBase || sc.path.includes(imp.replace(/^\.\.?\//, ''))) {
+          referenceCount.set(sc.path, (referenceCount.get(sc.path) || 0) + 1);
+        }
+      }
+    }
+  }
+  for (const [path, count] of referenceCount) {
+    if (count >= 3) {
+      const alreadyScored = scored.some(s => s.file.path === path);
+      if (!alreadyScored) {
+        const fileObj = filesToSearch.find(f => f.path === path);
+        if (fileObj) {
+          scored.push({ file: fileObj, score: 10 + Math.min(count, 10) });
+        }
+      }
+    }
+  }
+
   // P2: 模块邻近度 — 同模块文件加分
   const moduleBonus = new Map<string, number>();
   const scoredModules = new Set(scored.map(s => `${s.file.endpoint}:${s.file.module}`));
@@ -540,15 +695,19 @@ async function loadContractApiPaths(): Promise<string[]> {
 
 /**
  * 读取匹配到的源码文件内容（用于分析注入）
+ * v8.3.122+: 移除 matches.slice(0, 5) 硬限制，改为按 maxBytes 动态控制，
+ * 让 analyze 传入的 limit 和 maxBytes 真正生效。
  */
 export async function readRelevantSource(
   matches: { file: string; score: number }[],
-  maxBytes: number = 50000   // 最多读 50KB
+  maxBytes: number = 50000,   // 最多读 50KB
+  maxFiles?: number           // 最多读多少个文件（不传则不限制，由 maxBytes 控制）
 ): Promise<Record<string, string>> {
   const result: Record<string, string> = {};
   let totalBytes = 0;
 
-  for (const m of matches.slice(0, 5)) {
+  const filesToRead = maxFiles ? matches.slice(0, maxFiles) : matches;
+  for (const m of filesToRead) {
     if (totalBytes >= maxBytes) break;
     try {
       const content = await readFile(m.file, 'utf-8');
@@ -719,6 +878,10 @@ function expandKeywords(keywords: string[]): string[] {
       }
     }
   }
+  // v8.3.125+: 补充 SYNONYM_GROUPS 扩展（覆盖更多中英文同义词，如 "登录" ↔ "auth"）
+  for (const syn of expandSynonyms(keywords)) {
+    expanded.add(syn);
+  }
   return [...expanded];
 }
 
@@ -748,13 +911,127 @@ function extractKeywords(text: string): string[] {
 }
 
 /**
- * 检查索引是否过期 (超过 1 小时)
+ * 从 Spec/Markdown 内容中提取技术关键词（类名、接口名、API路径、表名等）
+ * v8.3.122+: 用于增强 findRelevantCode 的代码匹配精准度
  */
-export async function isIndexStale(): Promise<boolean> {
+function extractTechnicalKeywords(content: string): string[] {
+  const keywords: string[] = [];
+
+  // 1. 类名/接口名/类型别名（代码块内外都找）
+  const classMatches = content.match(/(?:class|interface|type|enum)\s+([A-Z][a-zA-Z0-9_]*)/g) || [];
+  for (const m of classMatches) {
+    const name = m.replace(/^(class|interface|type|enum)\s+/, '').trim();
+    if (name && name.length >= 2) keywords.push(name);
+  }
+
+  // 2. 函数名（从代码块中提取 export function xxx）
+  const funcMatches = content.match(/(?:export\s+)?(?:function|const|let|var)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*[=:]/g) || [];
+  for (const m of funcMatches) {
+    const name = m.replace(/^(?:export\s+)?(?:function|const|let|var)\s+/, '').replace(/\s*[=:]$/, '').trim();
+    if (name && name.length >= 2 && !['if', 'for', 'while', 'return', 'await', 'async'].includes(name)) {
+      keywords.push(name);
+    }
+  }
+
+  // 3. API 路径（/api/xxx, /v1/xxx）
+  const apiMatches = content.match(/['"]\s*(\/[\w/{}.-]+)\s*['"]/g) || [];
+  for (const m of apiMatches) {
+    const path = m.replace(/['"]/g, '').trim();
+    if (path.startsWith('/') && path.length > 2) {
+      keywords.push(path);
+      // 也提取路径中的段
+      const segments = path.split('/').filter(s => s.length >= 2 && !s.match(/^\{.*\}$/));
+      keywords.push(...segments);
+    }
+  }
+
+  // 4. 数据库表名（从 schema 描述中提取）
+  const tableMatches = content.match(/(?:表名|table|TABLE)[:\s]+[`']?([a-zA-Z_][a-zA-Z0-9_]*)[`']?/g) || [];
+  for (const m of tableMatches) {
+    const name = m.replace(/(?:表名|table|TABLE)[:\s]+/, '').replace(/[`']/g, '').trim();
+    if (name) keywords.push(name);
+  }
+
+  // 5. 组件名（前端 <XxxComponent />, <Xxx />）
+  const componentMatches = content.match(/<([A-Z][a-zA-Z0-9]*(?:Component|Page|View|Card|Modal|Form)?)\s*\/?>/g) || [];
+  for (const m of componentMatches) {
+    const name = m.replace(/[<\s/>]/g, '');
+    if (name && name.length >= 2) keywords.push(name);
+  }
+
+  // 6. 驼峰命名/下划线命名的复合词（通常是有意义的标识符）
+  const identifierMatches = content.match(/\b[a-z][a-zA-Z0-9]*[A-Z][a-zA-Z0-9]*\b/g) || [];
+  for (const m of identifierMatches) {
+    if (m.length >= 4) keywords.push(m);
+  }
+
+  return [...new Set(keywords)].slice(0, 50);
+}
+
+/**
+ * 检查索引是否过期
+ * v8.3.125+: 基于实际文件 mtime 判断 + 24h 强制刷新（捕获新增文件）
+ */
+export async function isIndexStale(scope?: string): Promise<boolean> {
   const index = await loadIndex();
   if (!index) return true;
+
+  // 24 小时强制刷新（捕获新增文件）
   const age = Date.now() - new Date(index.updatedAt).getTime();
-  return age > 3600000; // 1 hour
+  if (age > 86400000) return true;
+
+  // 检查已有文件是否被修改或删除（最多检查 300 个，避免大量 stat）
+  const checkLimit = Math.min(index.files.length, 300);
+  for (let i = 0; i < checkLimit; i++) {
+    const file = index.files[i];
+    try {
+      const fullPath = join(process.cwd(), file.path);
+      if (!(await pathExists(fullPath))) return true;
+      const st = await stat(fullPath);
+      if (st.mtimeMs > file.lastModified + 1000) return true;
+    } catch {
+      return true;
+    }
+  }
+
+  // 采样检查是否有新增文件：对比 scope 下文件数
+  const dirs = scope ? scope.split(',').map(s => s.trim()) : DEFAULT_SCOPE;
+  for (const dir of dirs.slice(0, 3)) {
+    if (!(await pathExists(dir))) continue;
+    try {
+      let count = 0;
+      await quickCountSourceFiles(dir, 0, (n: number) => { count = n; });
+      const indexedCount = index.files.filter(f =>
+        f.path.startsWith(dir.replace(/\/$/, ''))
+      ).length;
+      if (count > indexedCount + 5) return true;
+    } catch { /* 跳过 */ }
+  }
+
+  return false;
+}
+
+/** 快速统计目录下源码文件数（不深入解析） */
+async function quickCountSourceFiles(
+  dir: string, depth: number, cb: (n: number) => void
+): Promise<void> {
+  try {
+    const entries = await readdir(dir, { withFileTypes: true });
+    let count = 0;
+    for (const e of entries) {
+      if (e.name.startsWith('.') && e.name !== '.env') continue;
+      if (['node_modules', 'dist', 'build', 'target', '__pycache__', 'outputs', '.speccore', 'templates', 'docs', 'tests', 'examples'].includes(e.name)) continue;
+      if (e.isDirectory() && depth < 4) {
+        await quickCountSourceFiles(join(dir, e.name), depth + 1, (n: number) => { count += n; });
+      } else if (e.isFile()) {
+        const ext = e.name.split('.').pop() || '';
+        if (['ts', 'tsx', 'js', 'jsx', 'py', 'java', 'go', 'rs', 'vue', 'sql', 'yaml', 'yml'].includes(ext)) {
+          count++;
+        }
+      }
+    }
+    cb(count);
+  } catch { /* 跳过 */ }
 }
 
 /**
@@ -762,6 +1039,69 @@ export async function isIndexStale(): Promise<boolean> {
  */
 export async function loadFullIndex(): Promise<CodeIndex | null> {
   return loadIndex();
+}
+
+/**
+ * v8.3.125+: 根据迭代名解析涉及的源码路径 scope
+ * 读取 PLATFORMS.md / 020-specs/ 子目录推断端名，匹配 CONSTITUTION.md 中的源码路径
+ */
+export async function resolveIterationScope(iteration?: string): Promise<string | undefined> {
+  if (!iteration) return undefined;
+
+  try {
+    const { getIterationDir } = await import('../core/context');
+    const { logger: log } = await import('../utils/logger');
+    const iterDir = await getIterationDir(iteration);
+    if (!(await pathExists(iterDir))) return undefined;
+
+    // 读取 CONSTITUTION.md 获取源码路径
+    const constitutionPath = join(process.cwd(), '.speccore', 'CONSTITUTION.md');
+    let sourcePaths: string[] = ['src'];
+    if (await pathExists(constitutionPath)) {
+      const content = await readFile(constitutionPath, 'utf-8');
+      const match = content.match(/源码路径[\s\S]*?\n\s*-\s*`?([^`\n]+)`?/g);
+      if (match) {
+        sourcePaths = match.map(m => m.replace(/.*-\s*`?/, '').replace(/`?$/, '').trim()).filter(Boolean);
+      }
+    }
+    if (sourcePaths.length <= 1) return undefined;
+
+    // 1. 尝试从 PLATFORMS.md 读取端列表
+    let platformNames: string[] = [];
+    const platformsPath = join(iterDir, '020-specs', 'PLATFORMS.md');
+    if (await pathExists(platformsPath)) {
+      const pContent = await readFile(platformsPath, 'utf-8');
+      const pMatch = pContent.match(/-\s*(\w+)/g);
+      if (pMatch) platformNames = pMatch.map(m => m.replace(/^-\s*/, '').trim().toLowerCase());
+    }
+    // 2. fallback：从 020-specs/ 子目录推断端名
+    if (platformNames.length === 0) {
+      const specsDir = join(iterDir, '020-specs');
+      if (await pathExists(specsDir)) {
+        const entries = await readdir(specsDir, { withFileTypes: true });
+        platformNames = entries
+          .filter(e => e.isDirectory() && e.name !== 'overview' && e.name !== 'requirements')
+          .map(e => e.name.toLowerCase());
+      }
+    }
+    // 3. 筛选 sourcePaths
+    if (platformNames.length > 0) {
+      const matched = sourcePaths.filter(sp => {
+        const lower = sp.toLowerCase();
+        return platformNames.some(pn => lower.includes(pn));
+      });
+      // 保留 shared/common/lib 等公共路径
+      const sharedPaths = sourcePaths.filter(sp => /shared|common|lib|utils|pkg/.test(sp.toLowerCase()));
+      const combined = [...new Set([...matched, ...sharedPaths])];
+      if (combined.length > 0) {
+        log?.info?.(`   📂 代码索引按端筛选: ${combined.join(', ')}（涉及端: ${platformNames.join(', ')}）`);
+        return combined.join(',');
+      }
+    }
+  } catch {
+    // 筛选失败不阻断
+  }
+  return undefined;
 }
 
 // ── 端识别 ──

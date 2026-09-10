@@ -1,24 +1,37 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { mkdirSync, rmSync, writeFileSync } from 'fs';
+import { join } from 'path';
 import { resolvePlatform, fuzzyMatchPlatform, parseGlobalPlatforms } from '../../../src/core/platform-registry';
 
+const TEST_CWD = join(process.cwd(), 'tests', '.tmp', 'platform-registry-test');
+
 describe('platform-registry - 端注册表与模糊匹配', () => {
+  beforeEach(() => {
+    rmSync(TEST_CWD, { recursive: true, force: true });
+    mkdirSync(join(TEST_CWD, '.speccore'), { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(TEST_CWD, { recursive: true, force: true });
+  });
+
   describe('fuzzyMatchPlatform', () => {
     it('应该精确匹配端名', () => {
       const platforms = ['admin', 'h5', 'backend'];
       const result = fuzzyMatchPlatform('admin', platforms);
-      expect(result).toBe('admin');
+      expect(result).toEqual({ matched: 'admin', exact: true });
     });
 
     it('应该前缀匹配端名', () => {
       const platforms = ['admin', 'h5', 'backend'];
       const result = fuzzyMatchPlatform('adm', platforms);
-      expect(result).toBe('admin');
+      expect(result).toEqual({ matched: 'admin', exact: false });
     });
 
     it('应该包含匹配端名', () => {
       const platforms = ['miniapp', 'h5', 'backend'];
       const result = fuzzyMatchPlatform('mini', platforms);
-      expect(result).toBe('miniapp');
+      expect(result).toEqual({ matched: 'miniapp', exact: false });
     });
 
     it('无匹配时应该返回 null', () => {
@@ -29,39 +42,52 @@ describe('platform-registry - 端注册表与模糊匹配', () => {
   });
 
   describe('resolvePlatform', () => {
-    it('应该解析有效端名', () => {
-      const platforms = ['admin', 'h5', 'backend'];
-      const result = resolvePlatform('adm', platforms);
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.platform).toBe('admin');
-      }
+    it('应该解析有效端名', async () => {
+      writeFileSync(join(TEST_CWD, '.speccore', 'CONSTITUTION.md'), [
+        '| 工程 | 对应端 |',
+        '| :--- | :--- |',
+        '| backend | backend |',
+        '| web-app | admin, h5 |',
+      ].join('\n'));
+      const result = await resolvePlatform('adm', TEST_CWD);
+      expect(result.resolved).toBe('admin');
+      expect(result.exact).toBe(false);
     });
 
-    it('无效端名应该返回错误并列出可用端', () => {
-      const platforms = ['admin', 'h5', 'backend'];
-      const result = resolvePlatform('xyz', platforms);
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        expect(result.error).toContain('admin');
-        expect(result.error).toContain('h5');
-        expect(result.error).toContain('backend');
-      }
+    it('无效端名应该返回错误并列出可用端', async () => {
+      writeFileSync(join(TEST_CWD, '.speccore', 'CONSTITUTION.md'), [
+        '| 工程 | 对应端 |',
+        '| :--- | :--- |',
+        '| backend | backend |',
+        '| web-app | admin, h5 |',
+      ].join('\n'));
+      const result = await resolvePlatform('xyz', TEST_CWD);
+      expect(result.resolved).toBeNull();
+      expect(result.error).toContain('admin');
+      expect(result.error).toContain('h5');
+      expect(result.error).toContain('backend');
+    });
+
+    it('无全局端配置时应直接返回输入', async () => {
+      // 不创建 CONSTITUTION.md
+      const result = await resolvePlatform('anything', TEST_CWD);
+      expect(result.resolved).toBe('anything');
+      expect(result.exact).toBe(true);
     });
   });
 
   describe('parseGlobalPlatforms', () => {
     it('应该从 CONSTITUTION.md 解析端列表', async () => {
-      // 模拟 CONSTITUTION.md 内容
-      const constitutionContent = `| 工程 | 对应需求端 |
-| :--- | :--- |
-| backend | backend |
-| web-app | admin, h5 |
-`;
-      
-      // 这里需要 mock fs.readFile，暂时跳过实际测试
-      // 实际项目中应该使用 vitest 的 mock 功能
-      expect(true).toBe(true);
+      writeFileSync(join(TEST_CWD, '.speccore', 'CONSTITUTION.md'), [
+        '| 工程 | 对应端 |',
+        '| :--- | :--- |',
+        '| backend | backend |',
+        '| web-app | admin, h5 |',
+      ].join('\n'));
+      const platforms = await parseGlobalPlatforms(TEST_CWD);
+      expect(platforms).toContain('backend');
+      expect(platforms).toContain('admin');
+      expect(platforms).toContain('h5');
     });
   });
 });

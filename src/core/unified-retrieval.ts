@@ -17,7 +17,7 @@ import {
   retrieveRelevantChunks, assembleChunksForPrompt, DocumentChunk,
 } from './rag-engine';
 import { loadFullIndex, CodeIndex, CodeFile, findRelevantCode } from './code-scanner';
-import { loadKnowledgeGraph, KnowledgeGraph } from './knowledge-graph';
+import { loadFreshKnowledgeGraph, KnowledgeGraph } from './knowledge-graph';
 import { buildCompactContext } from './context-builder';
 
 // ═══════════════════════════════════════════════════════════
@@ -215,9 +215,11 @@ function extractCodeKeywords(text: string): string[] {
 // 2. 代码切片相关性评分
 // ═══════════════════════════════════════════════════════════
 
-function scoreCodeSlices(slices: CodeSlice[], query: string): CodeSlice[] {
+function scoreCodeSlices(slices: CodeSlice[], query: string, kgTags?: string[]): CodeSlice[] {
   const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length >= 2);
   if (queryWords.length === 0) return slices.slice(0, 10);
+
+  const tagSet = new Set((kgTags || []).map(t => t.toLowerCase()));
 
   return slices
     .map(slice => {
@@ -232,6 +234,15 @@ function scoreCodeSlices(slices: CodeSlice[], query: string): CodeSlice[] {
       // 文件路径匹配
       for (const qw of queryWords) {
         if (slice.filePath.toLowerCase().includes(qw)) score += 1;
+      }
+
+      // v8.3.123+: 知识图谱语义标签匹配（高权重）
+      if (tagSet.size > 0) {
+        for (const tag of tagSet) {
+          if (slice.name.toLowerCase().includes(tag)) score += 8;
+          if (text.includes(tag)) score += 3;
+          if (slice.comments.toLowerCase().includes(tag)) score += 5;
+        }
       }
 
       return { ...slice, relevanceScore: Math.min(score / 5, 1) };
@@ -271,6 +282,8 @@ export async function unifiedSearch(
       // 全局查询：加载全局级
       indexFiles.push('rag-index-global.json');
     }
+    // v8.3.123+: 追加知识图谱 RAG 索引（实体关系文档化）
+    indexFiles.push('kg-rag-index.json');
 
     // 逐个加载索引，合并结果
     const allChunks: DocumentChunk[] = [];
@@ -304,6 +317,29 @@ export async function unifiedSearch(
   // ── 3.2 代码切片检索 ──
   let codeSlices: CodeSlice[] = [];
   let codeStats = 0;
+
+  // v8.3.123+: 提前加载知识图谱，提取语义标签供代码切片评分使用
+  let kgTags: string[] = [];
+  let graphContext: string | undefined;
+  try {
+    const graph = await loadFreshKnowledgeGraph(cwd, iteration);
+    if (graph) {
+      graphContext = buildCompactContext(graph, { taskId, platform });
+      // 提取与查询相关的 source-file 语义标签
+      const queryWords = queryStr.toLowerCase().split(/\s+/).filter(w => w.length >= 2);
+      const tagSet = new Set<string>();
+      for (const entity of Object.values(graph.entities)) {
+        if (entity.type !== 'source-file') continue;
+        const entityText = `${entity.title} ${entity.description || ''} ${entity.businessRole || ''} ${entity.semanticTags?.join(' ') || ''}`.toLowerCase();
+        const isRelevant = queryWords.some(qw => entityText.includes(qw));
+        if (isRelevant && entity.semanticTags) {
+          for (const tag of entity.semanticTags) tagSet.add(tag);
+        }
+      }
+      kgTags = [...tagSet];
+    }
+  } catch { /* 知识图谱加载失败不阻断 */ }
+
   try {
     // 先用 findRelevantCode 找到相关文件（复用现有能力）
     const codeMatches = await findRelevantCode(queryStr, 12, sourceScope, iteration, taskId);
@@ -319,24 +355,12 @@ export async function unifiedSearch(
       }
     }
 
-    // 评分排序
-    const scored = scoreCodeSlices(allSlices, queryStr);
+    // 评分排序（注入知识图谱语义标签）
+    const scored = scoreCodeSlices(allSlices, queryStr, kgTags);
     codeSlices = scored.slice(0, 8); // 最多取 8 个切片
     codeStats = codeSlices.length;
   } catch (e) {
     logger?.debug?.('代码切片检索失败:', e);
-  }
-
-  // ── 3.3 知识图谱上下文 ──
-  let graphContext: string | undefined;
-  try {
-    const graph = await loadKnowledgeGraph(cwd);
-    if (graph) {
-      // taskId 存在时返回任务关联链；无 taskId 时返回业务模块摘要
-      graphContext = buildCompactContext(graph, { taskId, platform });
-    }
-  } catch (e) {
-    logger?.debug?.('知识图谱加载失败:', e);
   }
 
   // ── 3.4 统计 ──

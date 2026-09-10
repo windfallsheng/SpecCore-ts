@@ -17,6 +17,8 @@ import {
   type AgentContext,
 } from './agents';
 import { validateContentQuality } from './spec-skeleton';
+// v8.3.125+: 同义词扩展，避免 "登录" 与 "auth" 等跨语言/缩写不匹配导致验证漏检
+import { expandSynonyms } from '../utils/synonyms';
 
 // ============================================================
 // 类型定义
@@ -554,8 +556,8 @@ export async function generateFixPrompt(report: VerifyReport, taskDir: string): 
 
   // ── v8.2.0+: 注入知识图谱上下文（依赖链 + 相邻任务） ──
   try {
-    const { loadKnowledgeGraph, traceDependencyChain } = await import('./knowledge-graph');
-    const graph = await loadKnowledgeGraph(process.cwd());
+    const { loadFreshKnowledgeGraph, traceDependencyChain } = await import('./knowledge-graph');
+    const graph = await loadFreshKnowledgeGraph(process.cwd());
     if (graph && report.taskId) {
       const chains = traceDependencyChain(graph, report.taskId, 2);
       if (chains.length > 0) {
@@ -981,7 +983,9 @@ async function checkTestCoverage(codePath: string, taskDir: string): Promise<Che
         ...(c.match(/[\u4e00-\u9fa5]{2,}/g) || []),
         ...(c.match(/[a-zA-Z]{3,}/g) || []),
       ];
-      const found = keywords.some(kw => allCode.toLowerCase().includes(kw.toLowerCase()));
+      // v8.3.125+: 同义词扩展，避免 "登录" 与 "auth" 不匹配导致漏检
+      const expandedKws = [...expandSynonyms(keywords)];
+      const found = expandedKws.some(kw => allCode.toLowerCase().includes(kw.toLowerCase()));
       if (found) covered.push(c);
       else uncovered.push(c);
     }
@@ -1050,7 +1054,9 @@ async function checkReviewCompliance(codePath: string, taskDir: string): Promise
         ...(item.match(/[\u4e00-\u9fa5]{2,}/g) || []),
         ...(item.match(/[a-zA-Z]{3,}/g) || []),
       ];
-      const found = keywords.some(kw => allCode.toLowerCase().includes(kw.toLowerCase()));
+      // v8.3.125+: 同义词扩展
+      const expandedKws = [...expandSynonyms(keywords)];
+      const found = expandedKws.some(kw => allCode.toLowerCase().includes(kw.toLowerCase()));
       if (found) passed.push(item);
       else missed.push(item);
     }
@@ -1119,7 +1125,9 @@ async function checkArtifactConsistency(codePath: string, taskDir: string, filen
         ...(item.match(/[\u4e00-\u9fa5]{2,}/g) || []),
         ...(item.match(/[a-zA-Z]{3,}/g) || []),
       ];
-      const found = keywords.some(kw => allCode.toLowerCase().includes(kw.toLowerCase()));
+      // v8.3.125+: 同义词扩展
+      const expandedKws = [...expandSynonyms(keywords)];
+      const found = expandedKws.some(kw => allCode.toLowerCase().includes(kw.toLowerCase()));
       if (found) matched.push(item);
       else unmatched.push(item);
     }
@@ -1393,8 +1401,8 @@ async function checkSchemaConsistency(codePath: string, taskDir: string): Promis
 async function checkDependencyGraphConsistency(codePath: string, taskDir: string, taskId: string): Promise<CheckResult> {
   const start = Date.now();
   try {
-    const { loadKnowledgeGraph, traceDependencyChain } = await import('./knowledge-graph');
-    const graph = await loadKnowledgeGraph(process.cwd());
+    const { loadFreshKnowledgeGraph, traceDependencyChain } = await import('./knowledge-graph');
+    const graph = await loadFreshKnowledgeGraph(process.cwd());
     if (!graph) {
       return { name: '依赖一致性', status: 'skip', duration: Date.now() - start, output: '', details: '知识图谱未加载', blocking: false };
     }

@@ -591,9 +591,19 @@ const TEST_TEMPLATES: { name: string; content: string }[] = [
   {
     name: 'smoke',
     content: `# VERIFY_SPEC.yaml — UI 冒烟测试规格（v8.3.95+）
-# 执行: speccore verify --ui --config .speccore/tests/smoke.yaml
-# 按模块: speccore verify --ui --config .speccore/tests/smoke.yaml --module=booking
-# 有头模式(调试): speccore verify --ui --config .speccore/tests/smoke.yaml --headed
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 格式类型: VERIFY_SPEC 格式（scenarios/actions/assertions 结构）
+# 适用场景: 精细 UI 交互测试（填写表单、点击按钮、断言元素）
+# 对应命令:
+#   • speccore verify --ui --spec .speccore/tests/smoke.yaml    ← 推荐，原生支持完整交互
+#   • speccore verify --ui --config .speccore/tests/smoke.yaml  ← 兼容，自动转换为批量页面测试
+# 按模块过滤: speccore verify --ui --spec .speccore/tests/smoke.yaml --module=booking
+# 有头模式(调试): speccore verify --ui --spec .speccore/tests/smoke.yaml --headed
+#
+# ⚠️ 注意: 本文件为 VERIFY_SPEC 格式，与 pr.yaml / release.yaml 的 TestConfig 格式不同。
+#   VERIFY_SPEC  格式 = scenarios + actions + assertions（本文件）
+#   TestConfig   格式 = tests + routes + type（见 pr.yaml / release.yaml）
+#   两种格式 speccore verify --config 均可自动识别。
 #
 # 按模块过滤原理: scenario 的 name 或 description 包含模块名即可匹配
 #   如 --module=booking 会匹配 description 包含 "模块:booking" 的 scenario
@@ -707,9 +717,18 @@ scenarios:
   {
     name: 'pr',
     content: `# PR 阶段测试配置（v8.3.60+）
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 格式类型: TestConfig 格式（tests + routes + type 结构）
+# 适用场景: 批量页面冒烟测试 + API 契约验证 + 视觉回归检查
+# 对应命令: speccore verify --config .speccore/tests/pr.yaml --env-file staging
+#
+# ⚠️ 格式说明:
+#   TestConfig  格式 = tests + routes + type（本文件，批量页面/API测试）
+#   VERIFY_SPEC 格式 = scenarios + actions + assertions（用于精细UI交互，见 smoke.yaml）
+#   两种格式 speccore verify --config 均可自动识别。
+#
 # 目标: 验证"代码质量 + 核心功能 + API 契约"
 # 适用: 合并请求前、Code Review 后
-# 执行: speccore verify --config .speccore/tests/pr.yaml --env-file staging
 
 name: PR 阶段测试
 
@@ -760,9 +779,18 @@ output: ./reports/pr-test-report.html
   {
     name: 'release',
     content: `# 发布前全量回归测试配置（v8.3.60+）
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 格式类型: TestConfig 格式（tests + routes + type 结构）
+# 适用场景: 全量页面回归 + 视觉一致性 + 性能基线 + API 完整性
+# 对应命令: speccore verify --config .speccore/tests/release.yaml --env-file production
+#
+# ⚠️ 格式说明:
+#   TestConfig  格式 = tests + routes + type（本文件，批量页面/API测试）
+#   VERIFY_SPEC 格式 = scenarios + actions + assertions（用于精细UI交互，见 smoke.yaml）
+#   两种格式 speccore verify --config 均可自动识别。
+#
 # 目标: 验证"全量功能 + 视觉一致性 + 性能基线 + API 完整性"
 # 适用: 发布前、重大重构后、周末全量回归
-# 执行: speccore verify --config .speccore/tests/release.yaml --env-file production
 
 name: 发布前全量回归测试
 

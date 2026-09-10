@@ -13,7 +13,7 @@ import { join } from 'path';
 import { pathExists, readFile } from 'fs-extra';
 import { logger } from '../utils/logger';
 import { unifiedSearch, UnifiedResult } from './unified-retrieval';
-import { loadKnowledgeGraph, KnowledgeGraph, GraphEntity, GraphRelation } from './knowledge-graph';
+import { loadFreshKnowledgeGraph, KnowledgeGraph, GraphEntity, GraphRelation } from './knowledge-graph';
 import { ChangeCategory } from './change-parser';
 
 // ── 类型定义 ──
@@ -119,7 +119,7 @@ export async function analyzeWithKnowledgeGraph(
   iteration: string,
   matchedTaskIds: string[]
 ): Promise<{ entities: GraphEntity[]; relations: GraphRelation[] }> {
-  const graph = await loadKnowledgeGraph(process.cwd());
+  const graph = await loadFreshKnowledgeGraph(process.cwd());
   if (!graph) {
     logger.debug('知识图谱未构建，跳过图谱分析');
     return { entities: [], relations: [] };

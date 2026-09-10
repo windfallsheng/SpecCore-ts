@@ -126,6 +126,109 @@ export interface AnalyzeOptions {
   unit?: string;          // --unit <ID>: 分析单个功能单元（如 M-01）
   consolidate?: boolean;  // --consolidate: 汇总所有单元分析为统一报告
   resumeUnits?: boolean;  // --resume-units: 断点续跑未完成的单元分析
+  // v8.3.122+: 增量合并模式
+  merge?: boolean;         // --merge: 与现有文档合并（按标题替换/追加），不覆盖
+}
+
+/**
+ * 按 Markdown 标题合并文档内容
+ * v8.3.122+: 新内容中存在的章节替换旧章节，新章节追加，旧文档中未变动的章节保留
+ */
+function mergeDocumentContent(existing: string, newContent: string): string {
+  if (!existing.trim()) return newContent;
+
+  // 解析文档为标题块
+  function parseSections(text: string): Map<string, { heading: string; level: number; body: string }> {
+    const sections = new Map<string, { heading: string; level: number; body: string }>();
+    const lines = text.split('\n');
+    let currentHeading = '';
+    let currentLevel = 0;
+    let currentBody: string[] = [];
+    let headerLines: string[] = []; // 文档开头无标题的内容
+
+    for (const line of lines) {
+      const hm = line.match(/^(#{1,3})\s+(.+)/);
+      if (hm) {
+        if (currentHeading) {
+          sections.set(currentHeading, {
+            heading: currentHeading,
+            level: currentLevel,
+            body: currentBody.join('\n'),
+          });
+        } else if (currentBody.length > 0) {
+          headerLines = [...currentBody];
+        }
+        currentHeading = hm[2].trim();
+        currentLevel = hm[1].length;
+        currentBody = [line];
+      } else {
+        currentBody.push(line);
+      }
+    }
+    if (currentHeading) {
+      sections.set(currentHeading, {
+        heading: currentHeading,
+        level: currentLevel,
+        body: currentBody.join('\n'),
+      });
+    }
+    // 保存文档头部内容（如 frontmatter、标题等）
+    if (headerLines.length > 0) {
+      sections.set('__HEADER__', { heading: '__HEADER__', level: 0, body: headerLines.join('\n') });
+    }
+    return sections;
+  }
+
+  const oldSections = parseSections(existing);
+  const newSections = parseSections(newContent);
+
+  // 构建合并结果：保留旧文档的头部，按旧文档顺序输出
+  // 对于每个旧章节：如果新文档有同名章节，用新内容替换；否则保留旧内容
+  // 新文档中有但旧文档中没有的章节，追加到最后
+  const result: string[] = [];
+
+  // 先输出头部
+  const header = oldSections.get('__HEADER__');
+  if (header) {
+    result.push(header.body);
+    oldSections.delete('__HEADER__');
+  }
+  newSections.delete('__HEADER__');
+
+  // 收集旧文档中存在的章节标题顺序
+  const oldOrder = [...oldSections.keys()];
+  const addedNew = new Set<string>();
+
+  for (const heading of oldOrder) {
+    if (newSections.has(heading)) {
+      result.push(newSections.get(heading)!.body);
+      addedNew.add(heading);
+    } else {
+      result.push(oldSections.get(heading)!.body);
+    }
+  }
+
+  // 追加新文档中旧文档没有的章节
+  for (const [heading, section] of newSections) {
+    if (!addedNew.has(heading)) {
+      result.push(section.body);
+    }
+  }
+
+  return result.join('\n\n');
+}
+
+/** 写入文件，支持 --merge 模式（与现有内容按标题合并） */
+async function writeFileMerged(
+  fp: string,
+  content: string,
+  merge: boolean,
+): Promise<void> {
+  if (merge && await pathExists(fp)) {
+    const existing = await readFile(fp, 'utf-8');
+    content = mergeDocumentContent(existing, content);
+  }
+  await writeFile(fp, content);
 }
 
 export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
@@ -1286,10 +1389,11 @@ ${singlePrompt}`);
                 const targetDir = join(specDir, GLOBAL_SPECS_DIR);
                 await ensureDir(targetDir);
                 const fp = join(targetDir, parts.slice(1).join('/'));
-                if (!(await shouldOverwrite(fp, !!options.interactive))) { logger.info(`   ⏭️  跳过: ${filename}`); continue; }
+                if (!options.merge && !(await shouldOverwrite(fp, !!options.interactive))) { logger.info(`   ⏭️  跳过: ${filename}`); continue; }
                 const bk = await backupWithTimestamp(fp);
                 if (bk) { backups.push(bk); logger.info(`   📦 ${filename} 旧版已备份: ${basename(bk)}`); }
-                await writeFile(fp, content);
+                await writeFileMerged(fp, content, !!options.merge);
+                if (options.merge) logger.info(`   🔀 ${filename} 已合并`);
                 count++;
                 continue;
               }
@@ -1300,10 +1404,11 @@ ${singlePrompt}`);
                   const targetDir = join(specDir, ...parts.slice(0, -1));
                   await ensureDir(targetDir);
                   const fp = join(targetDir, parts[parts.length - 1]);
-                  if (!(await shouldOverwrite(fp, !!options.interactive))) { logger.info(`   ⏭️  跳过: ${filename}`); continue; }
+                  if (!options.merge && !(await shouldOverwrite(fp, !!options.interactive))) { logger.info(`   ⏭️  跳过: ${filename}`); continue; }
                   const bk = await backupWithTimestamp(fp);
                   if (bk) { backups.push(bk); logger.info(`   📦 ${filename} 旧版已备份: ${basename(bk)}`); }
-                  await writeFile(fp, content);
+                  await writeFileMerged(fp, content, !!options.merge);
+                  if (options.merge) logger.info(`   🔀 ${filename} 已合并`);
                   count++;
                   continue;
                 }
@@ -1343,13 +1448,14 @@ ${singlePrompt}`);
             }
             await ensureDir(targetDir);
             const fp = join(targetDir, cleanFilename);
-            if (!(await shouldOverwrite(fp, !!options.interactive))) { logger.info(`   ⏭️  跳过: ${filename}`); continue; }
+            if (!options.merge && !(await shouldOverwrite(fp, !!options.interactive))) { logger.info(`   ⏭️  跳过: ${filename}`); continue; }
             const bk = await backupWithTimestamp(fp);
             if (bk) {
               backups.push(bk);
               logger.info(`   📦 ${filename} 旧版已备份: ${basename(bk)}`);
             }
-            await writeFile(fp, content);
+            await writeFileMerged(fp, content, !!options.merge);
+            if (options.merge) logger.info(`   🔀 ${filename} 已合并`);
             count++;
           }
           if (skippedCount > 0) {
@@ -2912,11 +3018,13 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     const isLayered = !!options?.layer || progress.completedLayer < 4;
 
     // v7.2.0+: 结构化代码数据提取 — Layer 1 之前自动执行
+    // v8.3.125+: 按迭代涉及的端筛选源码路径（避免全量扫描无关端）
     let structuredDataHint = '';
     if (targetLayer === 1 && ctx.withCode) {
       try {
+        const projectRoot = findProjectRoot() || process.cwd();
         // 读取 CONSTITUTION.md 获取源码路径
-        const constitutionPath = join((findProjectRoot() || process.cwd()), '.speccore', 'CONSTITUTION.md');
+        const constitutionPath = join(projectRoot, '.speccore', 'CONSTITUTION.md');
         let sourcePaths: string[] = ['src'];
         if (await pathExists(constitutionPath)) {
           const content = await readFile(constitutionPath, 'utf-8');
@@ -2925,7 +3033,53 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
             sourcePaths = match.map(m => m.replace(/.*-\s*`?/, '').replace(/`?$/, '').trim()).filter(Boolean);
           }
         }
-        await extractStructuredData((findProjectRoot() || process.cwd()), sourcePaths);
+
+        // v8.3.125+: 按迭代端名筛选源码路径（宁可多扫不要漏扫）
+        const iterDir = ctx.iteration ? await getIterationDir(ctx.iteration) : null;
+        let filteredPaths = sourcePaths;
+        if (iterDir && sourcePaths.length > 1) {
+          try {
+            // 1. 尝试从 PLATFORMS.md 读取端列表
+            let platformNames: string[] = [];
+            const platformsPath = join(iterDir, '020-specs', 'PLATFORMS.md');
+            if (await pathExists(platformsPath)) {
+              const pContent = await readFile(platformsPath, 'utf-8');
+              const pMatch = pContent.match(/-\s*(\w+)/g);
+              if (pMatch) platformNames = pMatch.map(m => m.replace(/^-\s*/, '').trim().toLowerCase());
+            }
+            // 2.  fallback：从 020-specs/ 子目录推断端名
+            if (platformNames.length === 0) {
+              const specsDir = join(iterDir, '020-specs');
+              if (await pathExists(specsDir)) {
+                const entries = await readdir(specsDir, { withFileTypes: true });
+                platformNames = entries
+                  .filter(e => e.isDirectory() && e.name !== 'overview' && e.name !== 'requirements')
+                  .map(e => e.name.toLowerCase());
+              }
+            }
+            // 3. 筛选 sourcePaths（路径包含端名则保留）
+            if (platformNames.length > 0) {
+              const matched = sourcePaths.filter(sp => {
+                const lower = sp.toLowerCase();
+                return platformNames.some(pn => lower.includes(pn));
+              });
+              // 同时保留 shared/common/lib 等公共路径
+              const sharedPaths = sourcePaths.filter(sp => /shared|common|lib|utils|pkg/.test(sp.toLowerCase()));
+              const combined = [...new Set([...matched, ...sharedPaths])];
+              // 宁可多扫不要漏扫：如果筛选后为空，回退全量
+              if (combined.length > 0) {
+                filteredPaths = combined;
+                logger.info(`   📂 结构化数据扫描已按端筛选: ${filteredPaths.join(', ')}（涉及端: ${platformNames.join(', ')}）`);
+              } else {
+                logger.info(`   📂 无法按端筛选，回退全量扫描: ${sourcePaths.join(', ')}`);
+              }
+            }
+          } catch {
+            // 筛选失败不阻断，回退全量
+          }
+        }
+
+        await extractStructuredData(projectRoot, filteredPaths);
         structuredDataHint = '\n> 📊 **结构化数据**: 已提取到 `.speccore/cache/structured-data.json`，包含 API/Entity/Route/Component 清单\n';
       } catch (e: any) {
         logger.warn(`   ⚠️ 结构化数据提取失败: ${e.message}`);

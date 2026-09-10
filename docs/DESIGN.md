@@ -396,7 +396,108 @@ speccore graph render --extract ARCHITECTURE.md  # 从 Markdown 提取
 | React 组件 | 组件名、Props、Hooks 使用 | 前端组件分析 |
 | SQL/Prisma | 表名、字段、索引、外键 | 数据层分析 |
 
-提取结果保存为 `.speccore/structured-data.json`，分析时自动注入 Prompt。
+提取结果保存为 `.speccore/cache/structured-data.json`，分析时自动注入 Prompt。
+
+#### DTO/Service 结构化提取深化（v8.3.126+）
+
+在原有 API/Entity/路由/组件提取基础上，新增 **跨文件 DTO 解析** 和 **Service 层独立提取**，解决 AI 执行开发任务时"不知道 DTO 完整字段""不知道 Service 方法签名"的信息缺口问题。
+
+**提取维度扩展**：
+
+| 数据类型 | 提取内容 | 多语言支持 | 用途 |
+|----------|----------|:----------:|------|
+| DTO 定义 | 类名、字段名/类型/必填/校验规则/默认值 | TS AST / Java / Python / Go 正则 | 注入 Prompt 字段表格，AI 无需猜测请求体结构 |
+| Service 方法 | 类名、方法签名、参数、返回类型、注入依赖 | TS AST / Java / Python / Go 正则 | 注入 Prompt 方法清单，AI 了解可用业务能力 |
+| Service 调用链 | 方法体内 `this.xxxService.yyy()` 调用 | TS AST 深度遍历 | 分析业务逻辑流转，识别跨服务依赖 |
+
+**TypeScript AST 精确提取**：
+
+```typescript
+// 从 @Body() dto: CreateUserDto 提取 DTO 引用
+// 从 class UserService { findById(id: string): Promise<User> } 提取方法签名
+// 从 constructor(private repo: UserRepository) 提取注入依赖
+```
+
+**Java/Python/Go 正则提取**：
+
+| 语言 | DTO 匹配模式 | Service 匹配模式 |
+|------|-------------|-----------------|
+| Java | `public class XxxDto { private Type field; }` | `@Service public class XxxService { public Return method(Param p) }` |
+| Python | `class XxxDto(BaseModel): field: Type` | `class XxxService: def method(self, param)` |
+| Go | `type XxxDto struct { Field Type }` | `func (s *XxxService) Method(param) (return, error)` |
+
+提取结果统一归入 `structured-data.json` 的 `dtos[]` 和 `services[]` 数组，跨平台复用。
+
+#### INFO_GAP 信息缺口闭环（v8.3.124+ → v8.3.126+）
+
+**核心问题**：AI 执行开发任务时，可能发现规格文档中缺少必要信息（如 DTO 字段定义、Service 返回类型、枚举取值等），但缺乏反馈机制，只能基于猜测继续编码，导致实现偏差。
+
+**三层闭环设计**：
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    INFO_GAP 闭环架构                         │
+├─────────────────────────────────────────────────────────────┤
+│  1. 自检标注                                                 │
+│     AI 在代码注释中标注 [INFO_GAP: 具体缺什么]                │
+│     例: // [INFO_GAP: 缺少 UserService.findById 返回类型]   │
+├─────────────────────────────────────────────────────────────┤
+│  2. 精确补充（v8.3.126+ 结构化优先）                         │
+│     P0: 从 structured-data.json 精确匹配 DTO/Service/Entity │
+│     P1: 回退到 findRelevantCode 关键词模糊搜索               │
+│     生成 info-gap-supplement-{task}.md 供下一轮注入          │
+├─────────────────────────────────────────────────────────────┤
+│  3. 自动注入                                                 │
+│     下一轮 execute 时，prompt-builder 自动读取补充文件        │
+│     作为 P1 最高优先级上下文注入 Prompt                       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**精确补充 vs 模糊搜索**：
+
+| 策略 | 触发条件 | Token 消耗 | 准确度 |
+|------|----------|-----------|--------|
+| 结构化精确匹配 | gap 描述包含已知 DTO/Service/Entity 名 | ~200-500 字 | 100%（字段级精确） |
+| 源码模糊搜索 | 未匹配到结构化数据 | ~3000-15000 字 | 中（可能含无关内容） |
+
+#### 迭代层端级规格阅读清单化（v8.3.126+）
+
+**核心问题**：`020-specs/{feature}/{platform}/TECH.md` 等端级规格文档动辄数千字，直接拼入 execute Prompt 导致 Token 爆炸，且大量内容与当前任务无关。
+
+**改造方案**：端级规格从"完整内容预加载"改为"阅读清单模式"。
+
+```
+改造前: 直接读取 TECH.md (3000字) + TEST.md (2000字) + UI_SPEC.md (2500字)
+        → 7500字一次性注入，Token 耗尽
+
+改造后: 生成阅读清单 (每个文件 ~100字摘要)
+        → 500字清单 + AI 按需 Read 完整文件
+        → 节省 90%+ Token，AI 自主决定深度
+```
+
+**阅读清单条目结构**：
+
+```markdown
+### feature-name/TECH.md
+- **文件**: `Iteration-001/020-specs/feature-name/backend/TECH.md`
+- **标题**: 用户认证模块技术规格
+- **章节**: 接口设计 | 数据模型 | 业务规则 | 错误处理 | 部署清单
+- **摘要**: 本模块基于 JWT + RBAC 实现用户认证，包含登录/注册/令牌刷新...
+```
+
+任务级核心文档（`00-specs/REQ.md`、`TECH.md`、`SCHEMA.md`）和迭代 overview 文档仍直接读取，确保核心上下文不丢失。
+
+#### 分层预算控制（v8.3.125+）
+
+在上下文加载阶段，按信息价值分三层预算，防止低优先级内容挤占高优先级内容的 Token 空间。
+
+| 优先级 | 预算 | 内容类型 | 超限策略 |
+|:------:|------|----------|----------|
+| P1 | 10000 tokens | 结构化代码事实卡片、关联源码片段、INFO_GAP 补充 | 截断并提示 Read |
+| P2 | 5000 tokens | 知识图谱上下文、任务关联链 | 截断并提示 Read |
+| P3 | 3000 tokens | 全局规范、一致性检查、工程路径信息 | 截断或丢弃 |
+
+预算控制由 `prompt-builder.ts` 在组装 Prompt 时自动执行，无需人工干预。
 
 #### 迭代式生成（--iterative）
 

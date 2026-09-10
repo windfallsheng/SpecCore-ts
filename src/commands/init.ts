@@ -2429,7 +2429,9 @@ examples/
 ├── config/                      ← 配置文件示例
 │   ├── CONSTITUTION-EXAMPLE.md  ← CONSTITUTION.md 完整示例（多工程）
 │   ├── PROJECT-EXAMPLE.yaml     ← PROJECT.yaml 完整示例（多工程）
-│   └── GIT-CONFIG-EXAMPLE.txt   ← 子任务 .meta/git-config 格式示例
+│   ├── GIT-CONFIG-EXAMPLE.txt   ← 子任务 .meta/git-config 格式示例
+│   ├── DEPLOY-EXAMPLE.yaml      ← 部署配置示例（speccore deploy 使用）
+│   └── VERIFY-EXAMPLE.yaml      ← 测试验证配置示例（speccore verify 使用）
 └── project/                     ← 完整项目示例（预留，未来扩展）
 \`\`\`
 
@@ -2438,7 +2440,9 @@ examples/
 1. 查看 \`config/CONSTITUTION-EXAMPLE.md\`，仿照修改你的 \`.speccore/CONSTITUTION.md\`
 2. 查看 \`config/PROJECT-EXAMPLE.yaml\`，了解 YAML 结构和字段对应关系
 3. 查看 \`config/GIT-CONFIG-EXAMPLE.txt\`，了解子任务级 Git 配置格式
-4. 修改后运行 \`speccore update\` 自动同步到 PROJECT.yaml
+4. 查看 \`config/DEPLOY-EXAMPLE.yaml\`，了解部署配置格式（用于 \`speccore deploy\`）
+5. 查看 \`config/VERIFY-EXAMPLE.yaml\`，了解测试验证配置格式（用于 \`speccore verify --config\`）
+6. 修改后运行 \`speccore update\` 自动同步到 PROJECT.yaml
 
 ## 注意事项
 
@@ -2745,6 +2749,21 @@ code_scope:
 `;
 
   await writeFile(join(configDir, 'GIT-CONFIG-EXAMPLE.txt'), gitConfigExample);
+
+  // v8.3.122+: 复制部署和测试示例配置文件
+  const templateDir = join(__dirname, '..', '..', 'templates');
+  const deployExampleSrc = join(templateDir, 'deploy-examples.yaml');
+  const verifyExampleSrc = join(templateDir, 'verify-spec-example.yaml');
+  try {
+    if (await pathExists(deployExampleSrc)) {
+      const deployContent = await readFile(deployExampleSrc, 'utf-8');
+      await writeFile(join(configDir, 'DEPLOY-EXAMPLE.yaml'), deployContent);
+    }
+    if (await pathExists(verifyExampleSrc)) {
+      const verifyContent = await readFile(verifyExampleSrc, 'utf-8');
+      await writeFile(join(configDir, 'VERIFY-EXAMPLE.yaml'), verifyContent);
+    }
+  } catch { /* 模板文件可选 */ }
 
   logger.info('   📋 已生成示例配置: .speccore/examples/');
 }

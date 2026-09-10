@@ -891,7 +891,8 @@ export async function indexDirectoryDocuments(
           readFile(fullPath, 'utf-8'),
           stat(fullPath),
         ]);
-        const content = isHtml ? extractHtmlText(rawContent) : rawContent;
+        // v8.3.122+: HTML 原型文件保留完整内容索引（CSS/JS/结构），不再提取纯文本
+        const content = rawContent;
         if (content.trim().length > 50 && !content.trim().match(/^#+\s*待填充|^<!--\s*AI-FILL\s*-->$/m)) {
           filesToIndex.push({ filePath: fullPath, content, mtime: st.mtimeMs });
         }
@@ -1131,35 +1132,161 @@ export function retrieveWithGraphContext(
 }
 
 // ═══════════════════════════════════════════════════════════
-// HTML 文本提取（v8.3.92+）
+// HTML 文本提取（v8.3.122+: 结构感知提取，保留表格/列表/表单）
 // ═══════════════════════════════════════════════════════════
 
 /**
- * 从 HTML 内容中提取纯文本，保留语义信息
- * - 去掉 script/style 标签及其内容
- * - 保留 alt/title/placeholder 属性值（包含图片描述和交互提示）
- * - 去掉所有 HTML 标签
- * - 压缩多余空白
+ * 提取 HTML 元素的纯文本内容（递归处理嵌套标签）
  */
-export function extractHtmlText(html: string): string {
+function extractTextFromHtml(html: string): string {
   return html
-    // 去掉 script 标签及其内容
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
-    // 去掉 style 标签及其内容
     .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
-    // 去掉 HTML 注释
     .replace(/<!--[\s\S]*?-->/g, ' ')
-    // 保留 alt/title/placeholder 属性值（语义信息）
-    .replace(/\s(alt|title|placeholder)=["']([^"']+)["']/gi, ' [$1: $2] ')
-    // 去掉所有 HTML 标签
     .replace(/<[^>]+>/g, ' ')
-    // 将 HTML 实体转换为文本
     .replace(/&nbsp;/g, ' ')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&amp;/g, '&')
     .replace(/&quot;/g, '"')
-    // 压缩空白
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+/**
+ * 从 HTML 内容中提取结构化文本，保留表格/列表/表单等语义结构
+ * v8.3.122+: 完全重写，不再简单粗暴地删除所有标签
+ *
+ * 保留的结构:
+ * - 表格 → Markdown 表格（保留表头、行列关系）
+ * - 列表 → Markdown 列表（保留层级缩进）
+ * - 表单 → 结构化字段描述（字段名、类型、占位符）
+ * - 标题 → Markdown heading（保留层级）
+ * - 段落/换行 → 保留换行分隔
+ * - alt/title/placeholder → 语义标注
+ */
+export function extractHtmlText(html: string): string {
+  if (!html || typeof html !== 'string') return '';
+
+  let text = html;
+
+  // 1. 先去掉 script/style/注释（这些永远不需要）
+  text = text
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '\n')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '\n')
+    .replace(/<!--[\s\S]*?-->/g, '\n');
+
+  // 2. 处理表格 → Markdown 表格
+  text = text.replace(/<table\b[^>]*>([\s\S]*?)<\/table>/gi, (_match, tableContent: string) => {
+    const rows: string[] = [];
+    const trMatches = tableContent.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi);
+    for (const trMatch of trMatches) {
+      const rowContent = trMatch[1];
+      const cells: string[] = [];
+      const cellMatches = rowContent.matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi);
+      for (const cellMatch of cellMatches) {
+        cells.push(extractTextFromHtml(cellMatch[1]).trim() || ' ');
+      }
+      if (cells.length > 0) rows.push('| ' + cells.join(' | ') + ' |');
+    }
+    if (rows.length === 0) return '\n[表格]\n';
+    // 添加表头分隔行（如果第一行看起来像表头）
+    const colCount = rows[0].split('|').length - 2;
+    const separator = '| ' + Array(colCount).fill('---').join(' | ') + ' |';
+    return '\n' + rows[0] + '\n' + separator + '\n' + rows.slice(1).join('\n') + '\n';
+  });
+
+  // 3. 处理有序列表 → Markdown 编号列表
+  text = text.replace(/<ol\b[^>]*>([\s\S]*?)<\/ol>/gi, (_match, listContent: string) => {
+    const items: string[] = [];
+    const liMatches = listContent.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/gi);
+    let idx = 1;
+    for (const liMatch of liMatches) {
+      const itemText = extractTextFromHtml(liMatch[1]).trim();
+      if (itemText) items.push(`${idx}. ${itemText}`);
+      idx++;
+    }
+    return items.length > 0 ? '\n' + items.join('\n') + '\n' : '\n';
+  });
+
+  // 4. 处理无序列表 → Markdown 项目符号列表
+  text = text.replace(/<ul\b[^>]*>([\s\S]*?)<\/ul>/gi, (_match, listContent: string) => {
+    const items: string[] = [];
+    const liMatches = listContent.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/gi);
+    for (const liMatch of liMatches) {
+      const itemText = extractTextFromHtml(liMatch[1]).trim();
+      if (itemText) items.push(`- ${itemText}`);
+    }
+    return items.length > 0 ? '\n' + items.join('\n') + '\n' : '\n';
+  });
+
+  // 5. 处理表单 → 结构化字段描述
+  text = text.replace(/<form\b[^>]*>([\s\S]*?)<\/form>/gi, (_match, formContent: string) => {
+    const fields: string[] = [];
+    // input 元素
+    const inputMatches = formContent.matchAll(/<input\b([^>]*)>/gi);
+    for (const inputMatch of inputMatches) {
+      const attrs = inputMatch[1];
+      const name = (attrs.match(/\bname=["']([^"']*)["']/) || [])[1] || '';
+      const type = (attrs.match(/\btype=["']([^"']*)["']/) || [])[1] || 'text';
+      const placeholder = (attrs.match(/\bplaceholder=["']([^"']*)["']/) || [])[1] || '';
+      const label = name || placeholder || `[${type}]`;
+      fields.push(`  - 字段: ${label}${type !== 'text' ? ` (${type})` : ''}${placeholder ? `, 提示: ${placeholder}` : ''}`);
+    }
+    // select 元素
+    const selectMatches = formContent.matchAll(/<select\b([^>]*)>([\s\S]*?)<\/select>/gi);
+    for (const selectMatch of selectMatches) {
+      const attrs = selectMatch[1];
+      const name = (attrs.match(/\bname=["']([^"']*)["']/) || [])[1] || '';
+      const options = (selectMatch[2].match(/<option[^>]*>([^<]*)<\/option>/gi) || [])
+        .map((o: string) => extractTextFromHtml(o).trim())
+        .filter((o: string) => o);
+      fields.push(`  - 字段: ${name || '下拉框'} (select)${options.length > 0 ? `, 选项: ${options.join(', ')}` : ''}`);
+    }
+    // textarea 元素
+    const textareaMatches = formContent.matchAll(/<textarea\b([^>]*)>([\s\S]*?)<\/textarea>/gi);
+    for (const textareaMatch of textareaMatches) {
+      const attrs = textareaMatch[1];
+      const name = (attrs.match(/\bname=["']([^"']*)["']/) || [])[1] || '';
+      const placeholder = (attrs.match(/\bplaceholder=["']([^"']*)["']/) || [])[1] || '';
+      fields.push(`  - 字段: ${name || placeholder || '文本区'} (textarea)${placeholder ? `, 提示: ${placeholder}` : ''}`);
+    }
+    return fields.length > 0 ? '\n[表单]\n' + fields.join('\n') + '\n' : '\n[表单]\n';
+  });
+
+  // 6. 处理标题 → Markdown heading
+  text = text.replace(/<h1\b[^>]*>([\s\S]*?)<\/h1>/gi, (_m, c: string) => '\n# ' + extractTextFromHtml(c).trim() + '\n');
+  text = text.replace(/<h2\b[^>]*>([\s\S]*?)<\/h2>/gi, (_m, c: string) => '\n## ' + extractTextFromHtml(c).trim() + '\n');
+  text = text.replace(/<h3\b[^>]*>([\s\S]*?)<\/h3>/gi, (_m, c: string) => '\n### ' + extractTextFromHtml(c).trim() + '\n');
+  text = text.replace(/<h4\b[^>]*>([\s\S]*?)<\/h4>/gi, (_m, c: string) => '\n#### ' + extractTextFromHtml(c).trim() + '\n');
+  text = text.replace(/<h5\b[^>]*>([\s\S]*?)<\/h5>/gi, (_m, c: string) => '\n##### ' + extractTextFromHtml(c).trim() + '\n');
+  text = text.replace(/<h6\b[^>]*>([\s\S]*?)<\/h6>/gi, (_m, c: string) => '\n###### ' + extractTextFromHtml(c).trim() + '\n');
+
+  // 7. 处理段落和换行
+  text = text.replace(/<p\b[^>]*>([\s\S]*?)<\/p>/gi, (_m, c: string) => '\n' + extractTextFromHtml(c).trim() + '\n');
+  text = text.replace(/<br\s*\/?>/gi, '\n');
+  text = text.replace(/<div\b[^>]*>([\s\S]*?)<\/div>/gi, (_m, c: string) => '\n' + extractTextFromHtml(c).trim() + '\n');
+
+  // 8. 保留 alt/title/placeholder 语义标注
+  text = text.replace(/\s(alt|title|placeholder)=["']([^"']+)["']/gi, ' [$1: $2] ');
+
+  // 9. 去掉剩余标签
+  text = text.replace(/<[^>]+>/g, ' ');
+
+  // 10. 解码 HTML 实体
+  text = text
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+
+  // 11. 清理空白但保留有意义的换行
+  text = text
+    .replace(/[ \t]*\n[ \t]*/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  return text;
 }

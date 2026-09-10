@@ -151,15 +151,24 @@ describe('loadSubtaskGitConfig', () => {
 
 describe('loadGitConfig — defaults', () => {
   it('should return defaults when no config files exist', () => {
-    // Without iteration or taskDir, should fall back to defaults
-    const config = loadGitConfig();
-    expect(config.defaultBranch).toBe('main');
-    expect(config.branchType).toBe('feature');
-    expect(config.branchPrefix).toBe('');
-    expect(config.branchFormat).toBe('{type}/{prefix}{name}-{hash4}');
-    expect(config.autoPull).toBe(false);
-    expect(config.remoteName).toBe('origin');
-    expect(config.protectedBranches).toEqual(['main', 'master']);
+    // Ensure TEST_DIR exists
+    rmSync(TEST_DIR, { recursive: true, force: true });
+    mkdirSync(TEST_DIR, { recursive: true });
+    // chdir to empty dir to avoid reading project root CONSTITUTION.md
+    const origCwd = process.cwd();
+    process.chdir(TEST_DIR);
+    try {
+      const config = loadGitConfig();
+      expect(config.defaultBranch).toBe('main');
+      expect(config.branchType).toBe('feature');
+      expect(config.branchPrefix).toBe('');
+      expect(config.branchFormat).toBe('{type}/{prefix}{taskId}');
+      expect(config.autoPull).toBe(false);
+      expect(config.remoteName).toBe('origin');
+      expect(config.protectedBranches).toEqual(['main', 'master']);
+    } finally {
+      process.chdir(origCwd);
+    }
   });
 });
 
@@ -192,10 +201,16 @@ describe('loadGitConfig — subtask-level override', () => {
     const taskDir = join(TEST_DIR, 'Task-001');
     setupTaskDir(taskDir); // no git-config file
 
-    const config = loadGitConfig(undefined, taskDir);
-    expect(config.branchPrefix).toBe('');
-    expect(config.defaultBranch).toBe('main');
-    expect(config.branchFormat).toBe('{type}/{prefix}{name}-{hash4}');
+    const origCwd = process.cwd();
+    process.chdir(TEST_DIR);
+    try {
+      const config = loadGitConfig(undefined, taskDir);
+      expect(config.branchPrefix).toBe('');
+      expect(config.defaultBranch).toBe('main');
+      expect(config.branchFormat).toBe('{type}/{prefix}{taskId}');
+    } finally {
+      process.chdir(origCwd);
+    }
   });
 
   it('should allow partial override — subtask only sets branchPrefix, defaultBranch from default', () => {

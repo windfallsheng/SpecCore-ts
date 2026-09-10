@@ -14,7 +14,7 @@
 import { readFile, pathExists, readdir } from 'fs-extra';
 import { join, basename } from 'path';
 import { findRelevantCode } from './code-scanner';
-import { loadKnowledgeGraph } from './knowledge-graph';
+import { loadFreshKnowledgeGraph } from './knowledge-graph';
 import { unifiedSearch } from './unified-retrieval';
 import { logger } from '../utils/logger';
 
@@ -247,7 +247,7 @@ async function findRelatedUnits(
   // 2. 知识图谱增强（通过 requirement 实体的关系链扩展关联）
   if (useKG) {
     try {
-      const graph = await loadKnowledgeGraph(process.cwd());
+      const graph = await loadFreshKnowledgeGraph(process.cwd());
       if (graph) {
         const unitNameLower = unit.name.toLowerCase();
         const matchedReqIds = new Set<string>();
@@ -324,7 +324,7 @@ async function findRelatedCodeForUnit(
   // 1. 知识图谱直接关联（优先）
   if (useKG) {
     try {
-      const graph = await loadKnowledgeGraph(process.cwd());
+      const graph = await loadFreshKnowledgeGraph(process.cwd());
       if (graph) {
         const unitNameLower = unit.name.toLowerCase();
         const matchedReqIds = new Set<string>();

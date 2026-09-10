@@ -1,6 +1,16 @@
 # VERIFY_SPEC.yaml — UI 冒烟测试规格
-# 用法: speccore verify --ui --config ./tests/smoke.yaml
-# 或:   speccore verify --ui --module=login (按模块过滤)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 格式类型: VERIFY_SPEC 格式（scenarios + actions + assertions 结构）
+# 适用场景: 精细 UI 交互测试（填写表单、点击按钮、断言元素状态）
+# 对应命令:
+#   • speccore verify --ui --spec ./tests/smoke.yaml     ← 推荐，原生支持完整交互逻辑
+#   • speccore verify --ui --config ./tests/smoke.yaml   ← 兼容，自动转换为批量页面测试
+# 按模块过滤: speccore verify --ui --spec ./tests/smoke.yaml --module=login
+#
+# ⚠️ 格式说明:
+#   VERIFY_SPEC 格式 = scenarios + actions + assertions（本文件，支持完整交互）
+#   TestConfig  格式 = tests + routes + type（用于批量页面/API测试，见 pr.yaml/release.yaml）
+#   两种格式 speccore verify --config 均可自动识别。
 #
 # v8.3.95+ 支持: cookie / localStorage / script / scroll / upload / iframe / waitForRequest / waitForResponse
 

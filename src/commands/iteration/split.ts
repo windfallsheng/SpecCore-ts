@@ -16,11 +16,13 @@ import { SKELETON_MARKER, buildQualityRubRIC } from '../../core/spec-skeleton';
 import { buildAutoModeInstruction, writeQuestions, extractQuestionsFromText } from '../../core/questions';
 import { PipelineEngine } from '../../core/pipeline-engine';
 import { findRelevantCode } from '../../core/code-scanner';
-import { loadKnowledgeGraph } from '../../core/knowledge-graph';
+import { loadFreshKnowledgeGraph } from '../../core/knowledge-graph';
 import { loadGitConfig, GitConfig } from '../../core/git-integration';
 import { cleanupByType } from '../cleanup';
 import { loadProjectConfig } from '../../core/unified-config';
 import { scanRoutes, generateSpecFromRoutes, writeVerifySpec } from '../../core/ui-verify';
+// v8.3.125+: 公共同义词扩展模块（从 split.ts 提取，供全链路使用）
+import { extractNormalizedKeywords, expandSynonyms } from '../../utils/synonyms';
 
 /**
  * 将 AI 返回的 scope 简写映射到 CONSTITUTION.md 标准端名
@@ -1416,23 +1418,12 @@ async function createTaskFromSection(iterationDir: string, taskId: string, secti
   } else if (section.platform) {
     taskPlatforms = [section.platform];
   } else {
-    // v8.3.38: 从已加载的 specContents 推断平台（兼容新旧结构 + 按功能模块过滤）
+    // v8.3.125+: 使用三层匹配推断平台（替代脆弱的字符串包含匹配）
     taskPlatforms = [];
-    const specKeys = Object.keys(specContents);
-    // 从 section.name 提取功能模块名（去掉 "2.1 " 等前缀）
     const sectionFeatureName = section.name.replace(/^\d+(\.\d+)*\s*/, '').trim();
     for (const platform of allPlatforms) {
-      // 新结构: {feature}/{platform}/TECH.md | 旧结构: {platform}/TECH.md
-      const hasPlatformTech = specKeys.some(key => {
-        if (key === `${platform}/TECH.md`) return true; // 旧结构
-        if (key.includes(`/${platform}/TECH.md`)) {
-          // 新结构：优先匹配当前功能模块下的端文档
-          const keyFeature = key.split('/')[0];
-          return sectionFeatureName.includes(keyFeature) || keyFeature.includes(sectionFeatureName);
-        }
-        return false;
-      });
-      if (hasPlatformTech) {
+      const bestMatch = findBestSpecMatch(specContents, sectionFeatureName, platform, 'TECH.md');
+      if (bestMatch && bestMatch.score >= 20) {
         taskPlatforms.push(platform);
       }
     }
@@ -2839,6 +2830,97 @@ async function loadSpecContents(iterationDir: string): Promise<Record<string, st
   return specs;
 }
 
+// ═══════════════════════════════════════════════
+// v8.3.125+: 三层匹配 — 精确 + 关键词交集 + 文档标题
+// ═══════════════════════════════════════════════
+
+// v8.3.125+: extractNormalizedKeywords 和 expandSynonyms 已提取到 ../../utils/synonyms
+
+/** 第二层：关键词集合交集得分 */
+function scoreKeywordOverlap(taskName: string, docPath: string): number {
+  const taskKws = expandSynonyms(extractNormalizedKeywords(taskName));
+  const pathKws = expandSynonyms(extractNormalizedKeywords(docPath));
+  let score = 0;
+  for (const tkw of taskKws) {
+    for (const pkw of pathKws) {
+      if (tkw === pkw || tkw.includes(pkw) || pkw.includes(tkw)) {
+        score += 10;
+        break;
+      }
+    }
+  }
+  return score;
+}
+
+/** 第三层：文档标题匹配得分 */
+function scoreHeadingMatch(taskName: string, docContent: string): number {
+  const taskKws = expandSynonyms(extractNormalizedKeywords(taskName));
+  const headingRegex = /^(#{1,3})\s+(.+)$/gm;
+  let score = 0;
+  let match: RegExpExecArray | null;
+  while ((match = headingRegex.exec(docContent)) !== null) {
+    const headingKws = expandSynonyms(extractNormalizedKeywords(match[2]));
+    for (const tkw of taskKws) {
+      for (const hkw of headingKws) {
+        if (tkw === hkw || tkw.includes(hkw) || hkw.includes(tkw)) {
+          score += 8;
+          break;
+        }
+      }
+    }
+  }
+  return score;
+}
+
+/** 三层匹配：找到与任务最匹配的文档 key
+ * @returns 最佳匹配的 {key, score}，无匹配返回 null
+ */
+function findBestSpecMatch(
+  specContents: Record<string, string>,
+  taskName: string,
+  platform?: string,
+  docType?: string
+): { key: string; score: number } | null {
+  const entries = Object.entries(specContents);
+  if (entries.length === 0 || !taskName) return null;
+
+  const candidates: { key: string; score: number }[] = [];
+
+  for (const [key, content] of entries) {
+    // 如果指定了 docType，过滤不匹配的文档类型
+    if (docType && !key.endsWith(docType)) continue;
+
+    let score = 0;
+
+    // 第一层：精确匹配（字符串包含，最高权重）
+    const normalizedTask = taskName.toLowerCase().replace(/\s+/g, '');
+    const normalizedKey = key.toLowerCase().replace(/[\/\-_\.]/g, '');
+    if (normalizedKey.includes(normalizedTask) || normalizedTask.includes(normalizedKey)) {
+      score += 100;
+    }
+
+    // 第二层：关键词集合交集
+    score += scoreKeywordOverlap(taskName, key);
+
+    // 第三层：文档标题匹配
+    score += scoreHeadingMatch(taskName, content);
+
+    // 平台匹配加分（如果指定了 platform）
+    if (platform) {
+      const pLower = platform.toLowerCase();
+      if (key.toLowerCase().includes(`/${pLower}/`) || key.toLowerCase().startsWith(`${pLower}/`)) {
+        score += 20;
+      }
+    }
+
+    if (score > 0) candidates.push({ key, score });
+  }
+
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => b.score - a.score);
+  return candidates[0];
+}
+
 /** 从完整文档中提取与任务名相关的段落 */
 function extractRelevantSection(fullContent: string, taskName: string, sectionHint?: string): string {
   if (!fullContent || !taskName) return '';
@@ -2908,21 +2990,13 @@ function extractFrontendContent(techContent: string, taskName: string, platform:
 
 /** 从 specContents 提取任务级 TECH 内容（优先读取对应端的文档）
  * v8.3.37: 兼容新旧结构 — 新结构 key 为 {feature}/{platform}/TECH.md，旧结构为 {platform}/TECH.md
+ * v8.3.125+: 使用三层匹配（精确+关键词+标题）替代字符串查找
  */
 function extractTaskTechContent(specContents: Record<string, string>, section: Section, platform?: string): string {
-  // 优先读取对应端的 TECH.md（新结构 + 旧结构）
-  if (platform) {
-    const specKeys = Object.keys(specContents);
-    // 新结构：查找任意功能模块下的 {platform}/TECH.md
-    const newKey = specKeys.find(k => k.endsWith(`/${platform}/TECH.md`));
-    if (newKey) {
-      return extractRelevantSection(specContents[newKey], section.name);
-    }
-    // 旧结构：直接查找 {platform}/TECH.md
-    const oldKey = `${platform}/TECH.md`;
-    if (specContents[oldKey]) {
-      return extractRelevantSection(specContents[oldKey], section.name);
-    }
+  // v8.3.125+: 使用三层匹配找到最佳 TECH.md
+  const bestMatch = findBestSpecMatch(specContents, section.name, platform, 'TECH.md');
+  if (bestMatch && bestMatch.score >= 20) {
+    return extractRelevantSection(specContents[bestMatch.key], section.name);
   }
 
   // 回退：尝试从全局 TECH.md 提取（overview/TECH.md 或根目录 TECH.md）
@@ -2938,6 +3012,7 @@ function extractTaskTechContent(specContents: Record<string, string>, section: S
 
 /** v8.3.0+: 从 analyze DEV_GUIDE.md 提取任务级开发指南内容
  * v8.3.37: 兼容新旧结构 — 新结构 key 为 {feature}/{platform}/DEV_GUIDE.md
+ * v8.3.125+: 使用三层匹配替代字符串查找
  */
 function extractTaskDevGuideContent(
   specContents: Record<string, string>,
@@ -2945,27 +3020,26 @@ function extractTaskDevGuideContent(
   taskPlatforms: string[]
 ): string {
   const results: string[] = [];
-  const specKeys = Object.keys(specContents);
 
-  // 1. 优先从各端 DEV_GUIDE.md 提取（新结构 + 旧结构）
+  // v8.3.125+: 对每个端使用三层匹配找最佳 DEV_GUIDE.md
   for (const platform of taskPlatforms) {
-    // 新结构：查找任意功能模块下的 {platform}/DEV_GUIDE.md
-    const newKey = specKeys.find(k => k.endsWith(`/${platform}/DEV_GUIDE.md`));
-    const platformDevGuide = newKey ? specContents[newKey] : specContents[`${platform}/DEV_GUIDE.md`];
-    if (platformDevGuide) {
-      const extracted = extractRelevantSection(platformDevGuide, section.name);
+    const bestMatch = findBestSpecMatch(specContents, section.name, platform, 'DEV_GUIDE.md');
+    if (bestMatch && bestMatch.score >= 20) {
+      const extracted = extractRelevantSection(specContents[bestMatch.key], section.name);
       if (extracted && extracted.trim().length > 50) {
         results.push(`## ${platform} 端开发指南\n\n${extracted.trim()}`);
       }
     }
   }
 
-  // 2. 回退：从全局 DEV_GUIDE.md 提取（overview/DEV_GUIDE.md 或根目录 DEV_GUIDE.md）
-  const globalDevGuide = specContents['DEV_GUIDE.md'] || specContents['overview/DEV_GUIDE.md'];
-  if (globalDevGuide) {
-    const extracted = extractRelevantSection(globalDevGuide, section.name, '改造范围 实施步骤 接口契约 验证方式 回滚 坑点');
-    if (extracted && extracted.trim().length > 50) {
-      results.push(`## 全局开发指南（本任务相关）\n\n${extracted.trim()}`);
+  // 回退：从全局 DEV_GUIDE.md 提取（overview/DEV_GUIDE.md 或根目录 DEV_GUIDE.md）
+  if (results.length === 0) {
+    const globalDevGuide = specContents['DEV_GUIDE.md'] || specContents['overview/DEV_GUIDE.md'];
+    if (globalDevGuide) {
+      const extracted = extractRelevantSection(globalDevGuide, section.name, '改造范围 实施步骤 接口契约 验证方式 回滚 坑点');
+      if (extracted && extracted.trim().length > 50) {
+        results.push(`## 全局开发指南（本任务相关）\n\n${extracted.trim()}`);
+      }
     }
   }
 
@@ -4468,8 +4542,9 @@ async function assembleUnitContext(
   }
 
   // v8.2.0+: 知识图谱 + 源码关联增强
+  // v8.3.125+: 自动检查过期并刷新
   try {
-    const graph = await loadKnowledgeGraph(process.cwd());
+    const graph = await loadFreshKnowledgeGraph(process.cwd());
     if (graph) {
       const unitNameLower = unitName.toLowerCase();
       const matchedReqIds = new Set<string>();

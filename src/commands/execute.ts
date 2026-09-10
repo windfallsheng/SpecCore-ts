@@ -46,7 +46,9 @@ import { runUIVerification, logUIReport } from './verify';
 import { writeArbitrationReport } from '../core/arbitration/verdict-generator';
 import { loadConfig, loadProjectConfig } from '../core/unified-config';
 import { PipelineEngine } from '../core/pipeline-engine';
-import { checkCodeIndexFreshness } from '../core/code-scanner';
+import { checkCodeIndexFreshness, findRelevantCode, readRelevantSource } from '../core/code-scanner';
+// v8.3.126+: 结构化数据精确补充
+import { loadStructuredData, DtoDefinition, ServiceDefinition } from '../core/structured-extractor';
 import { warnIfIndexStale } from '../core/index-guard';
 import { recordAnalysisSnapshot } from '../core/change-detection';
 import { logIssue } from '../core/issue-tracker';
@@ -2391,6 +2393,160 @@ async function runApplyMode(iteration: string, options: ExecuteOptions): Promise
     writtenCount++;
   }
 
+  // v8.3.124+: INFO_GAP 检测与报告
+  // v8.3.125+: 自动补充读取 — 解析缺口 → 查找相关源码 → 生成补充上下文
+  // v8.3.126+: 优先从 structured-data.json 精确匹配 DTO/Service，回退到源码搜索
+  if (parsed.infoGaps && parsed.infoGaps.length > 0) {
+    logger.warn(`\n   ⚠️  检测到 ${parsed.infoGaps.length} 个信息缺口（INFO_GAP）：`);
+    for (const gap of parsed.infoGaps) {
+      logger.warn(`      - ${gap}`);
+    }
+
+    // ── 自动补充读取 ──
+    const supplementStructured: string[] = [];   // v8.3.126+: 结构化精确匹配结果
+    const supplementFiles: string[] = [];
+    const supplementContents: Record<string, string> = {};
+
+    // v8.3.126+: 预加载结构化数据，用于精确匹配
+    let structuredData = null;
+    try {
+      structuredData = await loadStructuredData();
+    } catch { /* 忽略 */ }
+
+    for (const gap of parsed.infoGaps) {
+      let matched = false;
+
+      // === P0: 结构化数据精确匹配（v8.3.126+）===
+      if (structuredData) {
+        // 尝试匹配 DTO: "缺少 CreateUserDto 的字段定义"
+        const dtoNames = extractIdentifiers(gap, 'dto');
+        for (const dtoName of dtoNames) {
+          const dto = (structuredData.dtos || []).find(d => d.name === dtoName);
+          if (dto) {
+            supplementStructured.push(formatDtoSnippet(dto));
+            matched = true;
+            logger.info(`   🔍 结构化精确匹配 DTO: ${dtoName}`);
+          }
+        }
+
+        // 尝试匹配 Service: "缺少 UserService.findById 的返回类型"
+        const svcRefs = extractServiceRefs(gap);
+        for (const { serviceName, methodName } of svcRefs) {
+          const svc = (structuredData.services || []).find(s => s.name === serviceName);
+          if (svc) {
+            if (methodName) {
+              const method = svc.methods.find(m => m.name === methodName);
+              if (method) {
+                supplementStructured.push(formatServiceMethodSnippet(svc, method));
+                matched = true;
+                logger.info(`   🔍 结构化精确匹配 Service: ${serviceName}.${methodName}`);
+              }
+            } else {
+              supplementStructured.push(formatServiceSnippet(svc));
+              matched = true;
+              logger.info(`   🔍 结构化精确匹配 Service: ${serviceName}`);
+            }
+          }
+        }
+
+        // 尝试匹配 Entity（从 endpoints 中聚合）
+        const entityNames = extractIdentifiers(gap, 'entity');
+        for (const entityName of entityNames) {
+          for (const [, platInfo] of Object.entries(structuredData.endpoints || {})) {
+            const entity = (platInfo as any).entities?.find((e: any) => e.name === entityName);
+            if (entity) {
+              supplementStructured.push(formatEntitySnippet(entity));
+              matched = true;
+              logger.info(`   🔍 结构化精确匹配 Entity: ${entityName}`);
+              break;
+            }
+          }
+        }
+      }
+
+      // === P1: 源码模糊搜索回退 ===
+      if (!matched) {
+        const queryWords = gap
+          .replace(/缺少|缺失|未知|未找到|未提供|未定义/g, ' ')
+          .replace(/[^\w\s.]/g, ' ')
+          .split(/\s+/)
+          .filter(w => w.length >= 2 && !/^(the|a|an|is|are|of|in|to|for|and|or|not)$/i.test(w))
+          .slice(0, 4)
+          .join(' ');
+
+        if (queryWords.length >= 3) {
+          try {
+            const matches = await findRelevantCode(queryWords, 5, undefined, iteration, task);
+            if (matches.length > 0) {
+              const contents = await readRelevantSource(matches, 15000, 3);
+              for (const [fp, content] of Object.entries(contents)) {
+                if (!supplementContents[fp]) {
+                  supplementContents[fp] = content;
+                  supplementFiles.push(fp);
+                }
+              }
+            }
+          } catch {
+            // 补充读取失败不阻断
+          }
+        }
+      }
+    }
+
+    // 写入补充上下文文件
+    const hasContent = supplementStructured.length > 0 || supplementFiles.length > 0;
+    if (hasContent) {
+      try {
+        const supplementDir = join(process.cwd(), '.speccore', 'cache');
+        await ensureDir(supplementDir);
+        const supplementPath = join(supplementDir, `info-gap-supplement-${task}.md`);
+        const lines = [`# INFO_GAP 自动补充上下文（${new Date().toISOString().slice(0, 16)}）`, '', `> 基于以下 ${parsed.infoGaps.length} 个信息缺口自动提取的关联内容：`, ...parsed.infoGaps.map(g => `> - ${g}`), ''];
+
+        // v8.3.126+: 先输出结构化精确匹配结果
+        if (supplementStructured.length > 0) {
+          lines.push('## 📦 结构化精确匹配', '');
+          lines.push(...supplementStructured);
+          lines.push('');
+        }
+
+        // 再输出源码回退结果
+        for (const fp of supplementFiles) {
+          lines.push(`## ${fp}`, '');
+          lines.push('```');
+          lines.push(supplementContents[fp].slice(0, 4000));
+          lines.push('```', '');
+        }
+
+        await writeFile(supplementPath, lines.join('\n'));
+        const matchSummary = [];
+        if (supplementStructured.length > 0) matchSummary.push(`${supplementStructured.length} 个结构化匹配`);
+        if (supplementFiles.length > 0) matchSummary.push(`${supplementFiles.length} 个源码文件`);
+        logger.info(`   📎 自动补充上下文已写入: ${supplementPath}（${matchSummary.join(' + ')}）`);
+        logger.info(`   💡 下一轮执行时，此补充内容会自动注入 Prompt`);
+      } catch {
+        // 写入失败不阻断
+      }
+    }
+
+    // 将 INFO_GAP 写入任务目录的 .issues.md，便于跟踪
+    try {
+      const taskDirForIssues = await resolveTaskDir(iterDir, task);
+      const issuesPath = join(taskDirForIssues, '.issues.md');
+      let issuesContent = '';
+      if (await pathExists(issuesPath)) {
+        issuesContent = await readFile(issuesPath, 'utf-8');
+      }
+      const gapSection = `\n## INFO_GAP 自检发现（${new Date().toISOString().slice(0, 10)}）\n\n` +
+        parsed.infoGaps.map(g => `- [ ] ${g}`).join('\n') + '\n';
+      if (!issuesContent.includes('INFO_GAP 自检发现')) {
+        await writeFile(issuesPath, issuesContent + gapSection);
+        logger.info(`   📝 已追加到 .issues.md`);
+      }
+    } catch {
+      // 写入 .issues.md 失败不阻断
+    }
+  }
+
   // 更新 PROJECT_GRAPH
   await updateProjectGraphStatus(iteration, task);
 
@@ -2505,4 +2661,144 @@ async function getPlatformSubtaskDirs(taskDir: string): Promise<PlatformSubtask[
   }
   // v8.3.121+: 已移除 10-backend/20-frontend 旧结构回退
   return result;
+}
+
+// ═══════════════════════════════════════════════════════════
+// v8.3.126+: INFO_GAP 结构化精确匹配辅助函数
+// ═══════════════════════════════════════════════════════════
+
+/** 从 gap 描述中提取标识符（DTO/Entity 类名） */
+function extractIdentifiers(gap: string, type: 'dto' | 'entity'): string[] {
+  const identifiers: string[] = [];
+  // 匹配 PascalCase 单词（如 CreateUserDto, UserEntity）
+  const pascalRegex = /\b[A-Z][a-zA-Z0-9]*(?:Dto|DTO|Entity|Model|Schema|VO)\b/g;
+  let match;
+  while ((match = pascalRegex.exec(gap)) !== null) {
+    identifiers.push(match[0]);
+  }
+
+  // DTO 类型额外匹配：任何 PascalCase 后面跟着 Dto 相关描述
+  if (type === 'dto') {
+    const dtoRegex = /\b([A-Z][a-zA-Z0-9]*Dto)\b/gi;
+    while ((match = dtoRegex.exec(gap)) !== null) {
+      if (!identifiers.includes(match[1])) identifiers.push(match[1]);
+    }
+  }
+
+  // Entity 类型：匹配 PascalCase（可能不以 Entity 结尾）
+  if (type === 'entity') {
+    const generalPascal = /\b([A-Z][a-zA-Z0-9]{2,})\b/g;
+    while ((match = generalPascal.exec(gap)) !== null) {
+      const name = match[1];
+      // 排除常见非实体词
+      if (!/^(String|Number|Boolean|Date|Array|Object|Promise|Error|Logger|Config|Util|Helper|Service|Controller|Module|Component|Router|Middleware|Interceptor|Guard|Filter|Pipe|Decorator|Interface|Type|Enum|Const|Var|Let|Function|Class|Import|Export|Default|Async|Await|New|This|Super|Static|Public|Private|Protected|Readonly|Optional|Nullable|Unknown|Any|Void|Never|Undefined|Null|True|False|If|Else|For|While|Do|Switch|Case|Break|Continue|Return|Throw|Try|Catch|Finally|Yield|Await|Import|Export|From|As|Of|In|Instanceof|Typeof|Delete|Void|Debugger|With|Debugger)$/.test(name)) {
+        if (!identifiers.includes(name)) identifiers.push(name);
+      }
+    }
+  }
+
+  return [...new Set(identifiers)];
+}
+
+/** 从 gap 描述中提取 Service 引用（如 UserService.findById） */
+function extractServiceRefs(gap: string): { serviceName: string; methodName?: string }[] {
+  const refs: { serviceName: string; methodName?: string }[] = [];
+  // 匹配 ServiceName.methodName 模式
+  const methodRegex = /\b([A-Z][a-zA-Z0-9]*Service)\.([a-zA-Z][a-zA-Z0-9]*)\b/g;
+  let match;
+  while ((match = methodRegex.exec(gap)) !== null) {
+    refs.push({ serviceName: match[1], methodName: match[2] });
+  }
+  // 也匹配单独的 Service 类名
+  const svcRegex = /\b([A-Z][a-zA-Z0-9]*Service)\b/g;
+  while ((match = svcRegex.exec(gap)) !== null) {
+    if (!refs.some(r => r.serviceName === match![1])) {
+      refs.push({ serviceName: match[1] });
+    }
+  }
+  return refs;
+}
+
+/** 格式化 DTO 为紧凑 Markdown */
+function formatDtoSnippet(dto: DtoDefinition): string {
+  const lines = [
+    `**DTO: ${dto.name}** (${dto.filePath}:${dto.line})`,
+    '',
+    '| 字段 | 类型 | 必填 | 校验规则 |',
+    '|------|------|------|----------|',
+  ];
+  for (const f of dto.fields.slice(0, 20)) { // 限制字段数
+    const rules = f.validationRules?.join(', ') || f.decorators?.join(', ') || '-';
+    lines.push(`| ${f.name} | ${f.type || '-'} | ${f.required !== false ? '是' : '否'} | ${rules} |`);
+  }
+  if (dto.fields.length > 20) {
+    lines.push(`| ... | | | 共 ${dto.fields.length} 个字段 |`);
+  }
+  lines.push('');
+  return lines.join('\n');
+}
+
+/** 格式化 Service 方法为紧凑 Markdown */
+function formatServiceMethodSnippet(svc: ServiceDefinition, method: any): string {
+  const params = method.parameters?.map((p: any) => `${p.name}${p.type ? `: ${p.type}` : ''}`).join(', ') || '';
+  const returnType = method.returnType ? `: ${method.returnType}` : '';
+  const lines = [
+    `**Service: ${svc.name}.${method.name}** (${svc.filePath}:${method.line})`,
+    '',
+    '```typescript',
+    `${method.name}(${params})${returnType}`,
+    '```',
+    '',
+  ];
+  if (method.description) {
+    lines.push(`> ${method.description}`, '');
+  }
+  return lines.join('\n');
+}
+
+/** 格式化 Service 类为紧凑 Markdown */
+function formatServiceSnippet(svc: ServiceDefinition): string {
+  const lines = [
+    `**Service: ${svc.name}** (${svc.filePath}:${svc.line})`,
+    '',
+    '| 方法 | 参数 | 返回类型 |',
+    '|------|------|----------|',
+  ];
+  for (const m of svc.methods.slice(0, 15)) {
+    const params = m.parameters?.map((p: any) => `${p.name}${p.type ? `: ${p.type}` : ''}`).join(', ') || '';
+    const truncatedParams = params.length > 40 ? params.slice(0, 40) + '...' : params;
+    lines.push(`| ${m.name} | ${truncatedParams} | ${m.returnType || '-'} |`);
+  }
+  if (svc.methods.length > 15) {
+    lines.push(`| ... | | 共 ${svc.methods.length} 个方法 |`);
+  }
+  if (svc.injects && svc.injects.length > 0) {
+    lines.push('', `*注入依赖: ${svc.injects.join(', ')}*`);
+  }
+  lines.push('');
+  return lines.join('\n');
+}
+
+/** 格式化 Entity 为紧凑 Markdown */
+function formatEntitySnippet(entity: any): string {
+  const lines = [
+    `**Entity: ${entity.name}** ${entity.tableName ? `(表: ${entity.tableName})` : ''} (${entity.filePath}:${entity.line})`,
+    '',
+    '| 字段 | 类型 | 可空 | 默认值 |',
+    '|------|------|------|--------|',
+  ];
+  for (const f of (entity.fields || []).slice(0, 20)) {
+    lines.push(`| ${f.name} | ${f.type || '-'} | ${f.nullable ? '是' : '否'} | ${f.defaultValue || '-'} |`);
+  }
+  if ((entity.fields || []).length > 20) {
+    lines.push(`| ... | | | 共 ${entity.fields.length} 个字段 |`);
+  }
+  if (entity.relations && entity.relations.length > 0) {
+    lines.push('', '*关联:*');
+    for (const r of entity.relations) {
+      lines.push(`- ${r.field} → ${r.target} (${r.type})`);
+    }
+  }
+  lines.push('');
+  return lines.join('\n');
 }

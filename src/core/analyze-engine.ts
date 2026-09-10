@@ -17,7 +17,9 @@ import { readFile, writeFile, pathExists, readdir, stat, ensureDir } from 'fs-ex
 import { join, relative, basename } from 'path';
 import { logger } from '../utils/logger';
 import { isTimestampBackup } from '../utils/task-utils';
-import { buildCodeIndex, findRelevantCode, readRelevantSource, isIndexStale, loadFullIndex } from './code-scanner';
+import { buildCodeIndex, findRelevantCode, readRelevantSource, isIndexStale, loadFullIndex, resolveIterationScope } from './code-scanner';
+// v8.3.125+: 同义词扩展，解决中英文/缩写匹配失败问题
+import { expandSynonyms, extractNormalizedKeywords } from '../utils/synonyms';
 import { generateAIContext, AIContextInput, AIContextResult } from './ai-context-generator';
 import { cleanStaleCache } from './git-integration';
 import { refreshRagIndex, checkRagIndexFreshness, indexDirectoryDocuments } from './rag-engine';
@@ -190,9 +192,11 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalysisResult> 
   }
 
   // ── 统一刷新代码索引 + 知识图谱（所有 scope）──
+  // v8.3.125+: 按迭代端名筛选源码路径，减少增量刷新范围
   try {
     logger.info('   🔄 刷新代码索引...');
-    await buildCodeIndex(undefined, true);
+    const codeIndexScope = await resolveIterationScope(effectiveInput.iteration);
+    await buildCodeIndex(codeIndexScope, true);
     logger.info('   ✅ 代码索引已刷新');
   } catch (e) {
     logger.debug('代码索引刷新失败（非关键）:', e);
@@ -238,16 +242,18 @@ async function analyzeRequirements(input: AnalyzeInput): Promise<AnalysisResult>
   const archImpact = await analyzeArchitectureImpact(fullContent);
 
   // ── 需求分析时默认读取关联代码（避免分析不接地气 + 减少重复 token 消耗） ──
+  // v8.3.122+: 增加文件数和字节配额，确保深入阅读业务逻辑
   let sourceContents: Record<string, string> = {};
   const shouldReadSource = input.readSource !== false;
   if (shouldReadSource && (input.iteration || input.taskId)) {
-    const limit = input.depth === 'deep' ? 15 : (input.depth === 'quick' ? 3 : 8);
-    const maxBytes = input.depth === 'deep' ? 80000 : (input.depth === 'quick' ? 20000 : 40000);
+    const limit = input.depth === 'deep' ? 25 : (input.depth === 'quick' ? 5 : 12);
+    const maxBytes = input.depth === 'deep' ? 150000 : (input.depth === 'quick' ? 30000 : 70000);
     const rawMatches = await findRelevantCode(fullContent, limit, input.sourceScope, input.iteration, input.taskId);
-    sourceContents = await readRelevantSource(rawMatches, maxBytes);
+    sourceContents = await readRelevantSource(rawMatches, maxBytes, limit);
     if (Object.keys(sourceContents).length > 0) {
       const scopeHint = input.sourceScope ? ` (范围: ${input.sourceScope})` : '';
-      logger.info(`   📖 需求分析已关联 ${Object.keys(sourceContents).length} 个源码文件${scopeHint}`);
+      const totalChars = Object.values(sourceContents).reduce((a, c) => a + c.length, 0);
+      logger.info(`   📖 需求分析已关联 ${Object.keys(sourceContents).length} 个源码文件 (${Math.round(totalChars / 1000)}K 字符)${scopeHint}`);
     }
   }
 
@@ -382,14 +388,16 @@ async function analyzeCombined(input: AnalyzeInput): Promise<AnalysisResult> {
   const fileStats = await scanSourceDirs(input.sources, input.depth);
   const apiInventory = await buildApiInventory(input.sources);
 
-  // 确保代码索引是最新的（解耦设计：总是全量索引，分析时按 scope 筛选）
-  if (await isIndexStale()) {
-    logger.info('   🔍 索引已过期，自动重建全量代码索引...');
-    await buildCodeIndex();  // 总是全量建，不是按 scope
+  // 确保代码索引是最新的
+  // v8.3.125+: 按迭代端名筛选 scope + 增量刷新 + mtime 精确判断过期
+  const codeIndexScope = await resolveIterationScope(input.iteration);
+  if (await isIndexStale(codeIndexScope)) {
+    logger.info('   🔍 索引已过期，自动重建代码索引...');
+    await buildCodeIndex(codeIndexScope, true);
     logger.info('   ✅ 代码索引已更新（包含多端识别 + 模块分组 + git 联动分析）');
     logger.info('   💡 提示：可手动运行 `speccore code-index --show` 查看索引摘要');
   } else {
-    logger.info('   📚 使用缓存的代码索引（1 小时内已构建）');
+    logger.info('   📚 使用缓存的代码索引（源码未变更）');
   }
 
   // ── AI 上下文生成: 替代关键词匹配（传入已读取的需求内容，避免重复 readFile） ──
@@ -409,13 +417,14 @@ async function analyzeCombined(input: AnalyzeInput): Promise<AnalysisResult> {
 
   // 默认读取相关源码内容注入分析（除非明确关闭）
   // 解耦设计：从完整索引中按 sourceScope 筛选，不是按 scope 建索引
+  // v8.3.122+: 增加配额，确保深入阅读业务逻辑和公共模块
   let sourceContents: Record<string, string> = {};
   const shouldReadSource = input.readSource !== false;
   if (shouldReadSource) {
-    const limit = input.depth === 'deep' ? 20 : (input.depth === 'quick' ? 5 : 10);
-    const maxBytes = input.depth === 'deep' ? 120000 : (input.depth === 'quick' ? 30000 : 60000);
+    const limit = input.depth === 'deep' ? 30 : (input.depth === 'quick' ? 8 : 15);
+    const maxBytes = input.depth === 'deep' ? 200000 : (input.depth === 'quick' ? 40000 : 100000);
     const rawMatches = await findRelevantCode(fullReqContent, limit, input.sourceScope, input.iteration, input.taskId);
-    sourceContents = await readRelevantSource(rawMatches, maxBytes);
+    sourceContents = await readRelevantSource(rawMatches, maxBytes, limit);
     if (Object.keys(sourceContents).length > 0) {
       const scopeHint = input.sourceScope ? ` (范围: ${input.sourceScope})` : '';
       logger.info(`   📖 已读取 ${Object.keys(sourceContents).length} 个源码文件${scopeHint} (${Object.values(sourceContents).reduce((a, c) => a + c.length, 0)} 字符)`);
@@ -972,12 +981,14 @@ function buildIterationReqReport(
   if (archImpact.newDependencies.length > 0) r += `- [ ] 确认新增依赖的引入方案和排期\n`;
 
   // ── 代码关联分析（v6.8.0 新增：需求分析默认关联代码） ──
+  // v8.3.122+: 按深度动态调整代码展示配额，确保业务逻辑可见
   if (sourceContents && Object.keys(sourceContents).length > 0) {
     r += `\n---\n\n## 3.5 关联代码现状\n\n`;
     r += `> 以下源码文件与当前需求相关，供技术方案参考\n\n`;
+    const previewLimit = input.depth === 'deep' ? 3000 : (input.depth === 'quick' ? 800 : 1500);
     for (const [path, content] of Object.entries(sourceContents)) {
-      const preview = content.slice(0, 600).replace(/\n/g, '\n  ');
-      r += `### \`${path}\`\n\n\`\`\`${path.split('.').pop() || 'ts'}\n${preview}${content.length > 600 ? '\n  // ... 截断 ...' : ''}\n\`\`\`\n\n`;
+      const preview = content.slice(0, previewLimit).replace(/\n/g, '\n  ');
+      r += `### \`${path}\`\n\n\`\`\`${path.split('.').pop() || 'ts'}\n${preview}${content.length > previewLimit ? '\n  // ... 截断 ...' : ''}\n\`\`\`\n\n`;
     }
   }
 
@@ -1292,14 +1303,20 @@ async function buildAIEnhancedReport(
       r += `## 📚 源码分析清单\n\n`;
 
       // 已分析文件
+      // v8.3.122+: 增加代码内容预览，确保 AI 能看到业务逻辑
       if (readFiles.length > 0) {
         r += `### ✅ 已分析（${readFiles.length} 个文件）\n\n`;
+        const previewLimit = input.depth === 'deep' ? 3000 : (input.depth === 'quick' ? 800 : 1500);
         for (const [file, content] of Object.entries(sourceContents)) {
           const lines = content.split('\n').length;
           const size = (content.length / 1024).toFixed(1);
           r += `- \`${file}\` (${lines} 行, ${size}KB)\n`;
+          // 展示代码预览
+          if (content.length > 0) {
+            const preview = content.slice(0, previewLimit).replace(/\n/g, '\n  ');
+            r += `\n  \`\`\`${file.split('.').pop() || 'ts'}\n  ${preview}${content.length > previewLimit ? '\n  // ... 截断 ...' : ''}\n  \`\`\`\n\n`;
+          }
         }
-        r += `\n`;
       }
 
       // 未覆盖文件（按目录分组）
@@ -1386,7 +1403,10 @@ function icon(severity: string): string {
   }
 }
 
-/** 按需求功能 × 端 分目录写入分析报告（按端提取差异化内容） */
+/** 按需求功能 × 端 分目录写入分析报告（按端提取差异化内容）
+ * v8.3.122+: 修复路径 — 从 020-specs/{platform}/ 改为 020-specs/{feature}/{platform}/
+ * 与 split 读取路径保持一致，确保端级分析文档能被正确关联
+ */
 async function writePerPlatform(iterDir: string, report: string, filename: string): Promise<void> {
   const reqDir = join(iterDir, '010-requirements');
   const specsBase = join(iterDir, '020-specs');
@@ -1403,18 +1423,14 @@ async function writePerPlatform(iterDir: string, report: string, filename: strin
     // 平台列表从 CONSTITUTION 获取（不再硬编码默认值）
     const platforms = await detectPlatformsFromConstitution();
     
-    for (const platform of platforms) {
-      const platformDir = join(specsBase, platform);
-      await ensureDir(platformDir);
-
-      // 按端提取差异化内容（而非写入同一份报告）
-      const platformReport = extractPlatformContent(report, platform);
-      
-      await writeFile(join(platformDir, filename), platformReport);
-      for (const feature of features) {
-        // 每个 feature 文件也按端提取
+    for (const feature of features) {
+      for (const platform of platforms) {
+        // v8.3.122+: 输出到 020-specs/{feature}/{platform}/ 与 split 读取路径一致
+        // v8.3.125+: 使用增量合并，避免多次分析覆盖丢失
+        const platformDir = join(specsBase, feature, platform);
+        await ensureDir(platformDir);
         const featureContent = extractFeatureForPlatform(report, feature, platform);
-        await writeFile(join(platformDir, `${feature}.md`), featureContent);
+        await writeMergedFile(join(platformDir, filename), featureContent);
       }
     }
   } catch {
@@ -1477,8 +1493,8 @@ function extractPlatformContent(report: string, platform: string): string {
 
 /** 从报告中提取特定功能 × 特定端的内容 */
 function extractFeatureForPlatform(report: string, feature: string, platform: string): string {
-  // 先提取该功能的段落
-  const featureKeywords = [feature, feature.replace(/-/g, ' ')];
+  // v8.3.125+: 使用同义词扩展，解决 "登录" 与 "auth" 等跨语言/缩写不匹配问题
+  const featureKeywords = [...expandSynonyms(extractNormalizedKeywords(feature))];
   const lines = report.split('\n');
   const sections: { heading: string; content: string[] }[] = [];
   let current: { heading: string; content: string[] } = { heading: '', content: [] };
@@ -1498,9 +1514,10 @@ function extractFeatureForPlatform(report: string, feature: string, platform: st
   }
 
   // 先按功能名匹配，再按端关键词过滤
+  // v8.3.125+: 使用同义词扩展后的关键词集合匹配
   const featureSections = sections.filter(s => {
     const text = (s.heading + ' ' + s.content.join(' ')).toLowerCase();
-    return featureKeywords.some(kw => text.includes(kw.toLowerCase()));
+    return featureKeywords.some(kw => text.includes(kw));
   });
 
   if (featureSections.length > 0) {
@@ -1516,9 +1533,44 @@ function extractFeatureForPlatform(report: string, feature: string, platform: st
   return `# ${feature} (${platform})\n\n_该功能在 ${platform} 端暂无独立分析内容，请参考完整报告。_\n`;
 }
 
+/** 从报告中提取特定功能模块的内容（不限制端，用于模块总览） */
+function extractFeatureContent(report: string, feature: string): string {
+  // v8.3.125+: 使用同义词扩展
+  const featureKeywords = [...expandSynonyms(extractNormalizedKeywords(feature))];
+  const lines = report.split('\n');
+  const sections: { heading: string; content: string[] }[] = [];
+  let current: { heading: string; content: string[] } = { heading: '', content: [] };
+  for (const line of lines) {
+    const hm = line.match(/^(#{1,4})\s+(.+)/);
+    if (hm) {
+      if (current.heading || current.content.length > 0) {
+        sections.push({ heading: current.heading, content: current.content });
+      }
+      current = { heading: line, content: [] };
+    } else {
+      current.content.push(line);
+    }
+  }
+  if (current.heading || current.content.length > 0) {
+    sections.push({ heading: current.heading, content: current.content });
+  }
+
+  const matched = sections.filter(s => {
+    const text = (s.heading + ' ' + s.content.join(' ')).toLowerCase();
+    return featureKeywords.some(kw => text.includes(kw));
+  });
+
+  if (matched.length > 0) {
+    return matched.map(s => s.heading + '\n' + s.content.join('\n')).join('\n\n');
+  }
+
+  return '';
+}
+
 /**
- * 局部分析：只分析单个功能模块，写入 020-specs/features/{feature}.md
+ * 局部分析：只分析单个功能模块，写入 020-specs/{feature}/overview/
  * 用于 --feature 模式，避免全量重跑
+ * v8.3.122+: 修复路径与规范一致
  */
 export async function analyzeSingleFeature(
   iterDir: string,
@@ -1568,10 +1620,10 @@ export async function analyzeSingleFeature(
 
   r += `## 3. 需求原文\n\n${content}\n`;
 
-  // 写入 020-specs/features/
-  const featuresDir = join(iterDir, '020-specs', 'features');
-  await ensureDir(featuresDir);
-  const outputPath = join(featuresDir, `${featureName}.md`);
+  // v8.3.122+: 写入 020-specs/{feature}/overview/ 与规范一致
+  const overviewDir = join(iterDir, '020-specs', featureName, 'overview');
+  await ensureDir(overviewDir);
+  const outputPath = join(overviewDir, 'ANALYSIS.md');
   await writeFile(outputPath, r);
 
   return { outputPath, report: r };
@@ -1635,10 +1687,13 @@ export async function analyzeSingleTypedDoc(
   return { outputPath, report: r };
 }
 
-/** 按功能模块写入 020-specs/features/ */
+/** 按功能模块写入模块总览（提取该功能模块在所有端中的内容）
+ * v8.3.122+: 修复路径 — 从 020-specs/features/{feature}.md 改为 020-specs/{feature}/overview/
+ * 与 split 读取路径保持一致，避免整份报告冗余复制
+ */
 async function writePerFeature(iterDir: string, report: string, filename: string): Promise<void> {
   const reqDir = join(iterDir, '010-requirements');
-  const featuresDir = join(iterDir, '020-specs', 'features');
+  const specsBase = join(iterDir, '020-specs');
   // 非 feature 型目录的排除名单
   const EXCLUDED_DIRS = new Set(['sources', 'assets', 'converted', 'staging', 'bugs', 'refactors', 'research', 'prototypes']);
   try {
@@ -1649,16 +1704,18 @@ async function writePerFeature(iterDir: string, report: string, filename: string
       .map(e => e.name);
     if (features.length === 0) return;
 
-    await ensureDir(featuresDir);
     for (const feature of features) {
-      // 读取该 feature 的 README.md 作为头部，拼接完整报告
-      const featureReqPath = join(reqDir, feature, 'README.md');
-      let featureHeader = '';
-      if (await pathExists(featureReqPath)) {
-        featureHeader = `# ${feature} — 需求分析\n\n> 来源: 010-requirements/features/${feature}/README.md\n\n---\n\n`;
+      // 提取该功能模块的专属内容（不限制端）
+      let featureContent = extractFeatureContent(report, feature);
+      if (featureContent.trim().length === 0) {
+        // 无匹配内容时回退：写入提示说明
+        featureContent = `# ${feature} — 模块总览\n\n_未从分析报告中提取到该模块的专属内容，请参考完整报告或检查需求文档命名。_\n`;
       }
-      const featureContent = featureHeader + report;
-      await writeFile(join(featuresDir, `${feature}.md`), featureContent);
+      // v8.3.122+: 输出到 020-specs/{feature}/overview/ 与 split 读取路径一致
+      // v8.3.125+: 使用增量合并，避免多次分析覆盖丢失
+      const overviewDir = join(specsBase, feature, 'overview');
+      await ensureDir(overviewDir);
+      await writeMergedFile(join(overviewDir, filename), featureContent);
     }
   } catch {}
 }
@@ -3495,4 +3552,115 @@ function extractStatusEnumsFromContent(
   }
   
   return enums;
+}
+
+// ═══════════════════════════════════════════════
+// v8.3.125+: 增量合并 — 避免多次分析覆盖丢失
+// ═══════════════════════════════════════════════
+
+/**
+ * 按 Markdown 标题合并文档内容
+ * v8.3.122+: 新内容中存在的章节替换旧章节，新章节追加，旧文档中未变动的章节保留
+ * v8.3.125+: 从 analyze.ts 迁移到 analyze-engine.ts，供 writePerPlatform/writePerFeature 使用
+ */
+function mergeDocumentContent(existing: string, newContent: string): string {
+  if (!existing.trim()) return newContent;
+
+  // 解析文档为标题块
+  function parseSections(text: string): Map<string, { heading: string; level: number; body: string }> {
+    const sections = new Map<string, { heading: string; level: number; body: string }>();
+    const lines = text.split('\n');
+    let currentHeading = '';
+    let currentLevel = 0;
+    let currentBody: string[] = [];
+    let headerLines: string[] = []; // 文档开头无标题的内容
+
+    for (const line of lines) {
+      const hm = line.match(/^(#{1,3})\s+(.+)/);
+      if (hm) {
+        if (currentHeading) {
+          sections.set(currentHeading, {
+            heading: currentHeading,
+            level: currentLevel,
+            body: currentBody.join('\n'),
+          });
+        } else if (currentBody.length > 0) {
+          headerLines = [...currentBody];
+        }
+        currentHeading = hm[2].trim();
+        currentLevel = hm[1].length;
+        currentBody = [line];
+      } else {
+        currentBody.push(line);
+      }
+    }
+    if (currentHeading) {
+      sections.set(currentHeading, {
+        heading: currentHeading,
+        level: currentLevel,
+        body: currentBody.join('\n'),
+      });
+    }
+    // 保存文档头部内容（如 frontmatter、标题等）
+    if (headerLines.length > 0) {
+      sections.set('__HEADER__', { heading: '__HEADER__', level: 0, body: headerLines.join('\n') });
+    }
+    return sections;
+  }
+
+  const oldSections = parseSections(existing);
+  const newSections = parseSections(newContent);
+
+  // 构建合并结果：保留旧文档的头部，按旧文档顺序输出
+  // 对于每个旧章节：如果新文档有同名章节，用新内容替换；否则保留旧内容
+  // 新文档中有但旧文档中没有的章节，追加到最后
+  const result: string[] = [];
+
+  // 先输出头部
+  const header = oldSections.get('__HEADER__');
+  if (header) {
+    result.push(header.body);
+    oldSections.delete('__HEADER__');
+  }
+  newSections.delete('__HEADER__');
+
+  // 收集旧文档中存在的章节标题顺序
+  const oldOrder = [...oldSections.keys()];
+  const addedNew = new Set<string>();
+
+  for (const heading of oldOrder) {
+    if (newSections.has(heading)) {
+      result.push(newSections.get(heading)!.body);
+      addedNew.add(heading);
+    } else {
+      result.push(oldSections.get(heading)!.body);
+    }
+  }
+
+  // 追加新文档中旧文档没有的章节
+  for (const [heading, section] of newSections) {
+    if (!addedNew.has(heading)) {
+      result.push(section.body);
+    }
+  }
+
+  return result.join('\n\n');
+}
+
+/**
+ * 安全写入文件：如果文件已存在，先读取并与新内容按章节合并
+ * v8.3.125+: 替代直接 writeFile，避免多次分析覆盖丢失
+ */
+async function writeMergedFile(filePath: string, newContent: string): Promise<void> {
+  try {
+    if (await pathExists(filePath)) {
+      const existing = await readFile(filePath, 'utf-8');
+      const merged = mergeDocumentContent(existing, newContent);
+      await writeFile(filePath, merged);
+      return;
+    }
+  } catch {
+    // 读取或合并失败，回退到直接写入
+  }
+  await writeFile(filePath, newContent);
 }

@@ -1,3 +1,43 @@
+## v8.3.126 (2026-09-10) — 结构化提取深化 + INFO_GAP 闭环 + 阅读清单化
+
+### 新增
+
+**DTO/Service 结构化提取深化** (`src/core/structured-extractor.ts`)：
+- 新增 `DtoDefinition` / `ServiceDefinition` / `DtoField` / `ServiceMethod` 类型
+- 新增 8 个多语言提取函数：TypeScript AST + Java/Python/Go 正则
+- `extractDtosFromTsFile` / `extractServicesFromTsFile` — TS 编译器 API 精确提取
+- `extractDtosFromJavaFile` / `extractServicesFromJavaFile` — 正则解析
+- `extractDtosFromPythonFile` / `extractServicesFromPythonFile` — 正则解析
+- `extractDtosFromGoFile` / `extractServicesFromGoFile` — 正则解析
+- `StructuredData` 新增 `dtos[]`、`services[]`、`totalDtos`、`totalServices` 统计
+
+**INFO_GAP 信息缺口闭环** (`src/commands/execute.ts`)：
+- 自动补充改为双层策略：P0 结构化精确匹配 + P1 源码模糊搜索回退
+- 从 gap 描述提取 DTO/Service/Entity 标识符，优先从 `structured-data.json` 精确匹配
+- 生成紧凑 Markdown 摘要（字段表格 / 方法签名 / 实体结构）
+- 未精确匹配时回退到 `findRelevantCode` 关键词搜索
+- 补充上下文自动注入下一轮 execute Prompt（P1 最高优先级）
+
+**迭代层端级规格阅读清单化** (`src/core/prompt-builder.ts`)：
+- `020-specs/{feature}/{platform}/` 下的端级规格从"完整内容预加载"改为"阅读清单"
+- 阅读清单包含：文件路径、标题、章节标签（前 5 个 `##`）、首段摘要（120 字）
+- 任务级核心文档（`00-specs/REQ.md`、`TECH.md`、`SCHEMA.md`）和迭代 overview 仍直接读取
+- 预估节省 90%+ Token，AI 按需 Read 完整文件
+
+### 改进
+
+**Prompt 结构化卡片增强** (`src/core/prompt-builder.ts`)：
+- 结构化事实卡片新增 DTO 定义展示（字段名、类型、必填、校验规则）
+- 结构化事实卡片新增 Service 定义展示（注入依赖、方法签名、参数、返回类型）
+
+### 修复
+
+**正则转义 bug** (`src/core/git-integration.ts`)：
+- `loadSubtaskGitConfig` 中 `extractValue` 正则 `\s` / `\S+` 在模板字符串中未正确转义，导致中文键名匹配失败
+- 修复后：`\s*(\S+)` 正确匹配空白 + 非空白值
+
+---
+
 ## v8.3.121 (2026-09-10) — 全面清理 10-backend/20-frontend 旧分类目录
 
 ### 修复

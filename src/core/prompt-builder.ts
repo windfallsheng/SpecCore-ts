@@ -7,17 +7,22 @@
  * 架构: CLI(确定性) → stdout(Prompt) → AI(生成) → CLI(确定性写入)
  */
 import { readFile, pathExists, readdir, stat } from 'fs-extra';
-import { join, dirname, relative } from 'path';
+import { join, dirname, relative, basename } from 'path';
 import { isTimestampBackup, findProjectRoot } from '../utils/task-utils';
 import { logger } from '../utils/logger';
-import { loadKnowledgeGraph, getTaskContext, isGraphStale, refreshKnowledgeGraph, KnowledgeGraph } from './knowledge-graph';
+import { loadKnowledgeGraph, loadFreshKnowledgeGraph, getTaskContext, getFullTaskContext, isGraphStale, refreshKnowledgeGraph, KnowledgeGraph } from './knowledge-graph';
 import { buildCompactContext } from './context-builder';
 import { parseProjectInfo, GLOBAL_SPECS_DIR, parseFeatureList } from './spec-paths';
+import { getIterationDir } from './context';
 import {
   loadRagIndex, isRagIndexStale, retrieveRelevantChunks,
   assembleChunksForPrompt, indexTaskDocuments, extractHtmlText,
 } from './rag-engine';
 import { unifiedSearch, assembleUnifiedContext } from './unified-retrieval';
+// v8.3.122+: execute 时深入读取关联源码
+import { findRelevantCode, readRelevantSource } from './code-scanner';
+// v8.3.125+: 同义词扩展，解决中英文/缩写关键词匹配失败
+import { expandSynonyms, extractNormalizedKeywords } from '../utils/synonyms';
 // v8.3.94+: 视觉模型引擎（ specs 图片理解）
 import { loadVisionConfig, describeImage, isVisionEnabled, VisionModelConfig } from './vision-engine';
 // v6.93.0+: Prompt 插件系统
@@ -366,6 +371,9 @@ async function loadExtraSpecs(
   ];
 
   // 加载迭代级设计文档（020-specs/）—— 填补迭代层上下文断裂
+  // v8.3.126+: feature/platform 端级规格改为阅读清单模式（省 Token + AI 按需 Read）
+  const readingListItems: { path: string; feature: string; name: string }[] = [];
+
   if (iteration) {
     const iterDir = join(cwd, `Iteration-${iteration}`);
     files.push(
@@ -377,7 +385,7 @@ async function loadExtraSpecs(
       files.push({ name: `迭代overview/${f}`, path: join(overviewDir, f) });
     }
     if (platform) {
-      // v8.3.21+: 扫描 020-specs/{feature}/{platform}/ 下的 .md 文件
+      // v8.3.126+: 扫描 020-specs/{feature}/{platform}/ 下的 .md 文件，改为阅读清单
       const specsDir = join(iterDir, '020-specs');
       try {
         const features = await parseFeatureList(iterDir);
@@ -387,11 +395,11 @@ async function loadExtraSpecs(
             const entries = await readdir(featurePlatDir, { withFileTypes: true });
             for (const entry of entries) {
               const isMd = entry.name.endsWith('.md') && !isTimestampBackup(entry.name);
-              const isHtml = (entry.name.endsWith('.html') || entry.name.endsWith('.htm')) && !isTimestampBackup(entry.name);
-              if (isMd || isHtml) {
-                files.push({
-                  name: `${feature}-${platform}端规格`,
+              if (isMd) {
+                readingListItems.push({
                   path: join(featurePlatDir, entry.name),
+                  feature,
+                  name: entry.name,
                 });
               }
             }
@@ -435,9 +443,10 @@ async function loadExtraSpecs(
     seenPaths.add(fullPath);
     if (await pathExists(fullPath)) {
       let rawContent = await readFile(fullPath, 'utf-8');
-      // v8.3.92+: HTML 原型文件提取文本内容
+      // v8.3.122+: HTML 原型文件保留完整内容（CSS/JS/结构），不再提取纯文本
+      // 原型包含视觉效果和交互逻辑，AI 需要完整解析
       const isHtml = fullPath.endsWith('.html') || fullPath.endsWith('.htm');
-      let content = isHtml ? extractHtmlText(rawContent) : rawContent;
+      let content = rawContent;
       // v8.3.93+: Markdown 链接自动展开 + 图片提取
       if (fullPath.endsWith('.md')) {
         content = await processMarkdownContent(content, fullPath, seenPaths, visionConfig, {
@@ -476,9 +485,9 @@ async function loadExtraSpecs(
 
     try {
       let rawContent = await readFile(fullPath, 'utf-8');
-      // v8.3.92+: HTML 原型文件提取文本内容
+      // v8.3.122+: HTML 原型文件保留完整内容（CSS/JS/结构），不再提取纯文本
       const isHtml = fullPath.endsWith('.html') || fullPath.endsWith('.htm');
-      let content = isHtml ? extractHtmlText(rawContent) : rawContent;
+      let content = rawContent;
       // v8.3.93+: Markdown 链接自动展开 + 图片提取
       if (fullPath.endsWith('.md')) {
         content = await processMarkdownContent(content, fullPath, seenPaths, visionConfig, {
@@ -502,6 +511,55 @@ async function loadExtraSpecs(
       totalChars += content.length;
       extras.push({ name: uf.name, path: uf.path, content });
     } catch { /* 忽略读取失败的文件 */ }
+  }
+
+  // v8.3.126+: 将 020-specs/{feature}/{platform}/ 端级规格转为阅读清单
+  if (readingListItems.length > 0) {
+    const listLines: string[] = [
+      '## 📚 迭代层端级规格阅读清单',
+      '> 以下文档与当前任务相关，已改为阅读清单模式（节省 Token）。',
+      '> 如需深入了解某个功能模块的规格，请按需 Read 对应文件。',
+      '',
+    ];
+    for (const item of readingListItems) {
+      try {
+        const raw = await readFile(item.path, 'utf-8');
+        const lines = raw.split(/\r?\n/);
+        // 提取第一个 # 标题
+        const titleLine = lines.find(l => l.startsWith('#')) || '';
+        const title = titleLine.replace(/^#+\s*/, '').trim() || item.name;
+        // 提取 ## 标签（前 5 个二级标题）
+        const sections = lines
+          .filter(l => l.startsWith('## ') && !l.includes('<!--'))
+          .slice(0, 5)
+          .map(l => l.replace(/^##\s*/, '').trim());
+        // 首段摘要（标题后第一个非空段落，最多 120 字）
+        let summary = '';
+        let foundTitle = false;
+        for (const l of lines) {
+          if (l.startsWith('#')) { foundTitle = true; continue; }
+          if (foundTitle && l.trim()) {
+            summary = l.trim().slice(0, 120);
+            if (l.trim().length > 120) summary += '...';
+            break;
+          }
+        }
+        const relPath = relative(cwd, item.path);
+        listLines.push(`### ${item.feature}/${item.name}`);
+        listLines.push(`- **文件**: \`${relPath}\``);
+        listLines.push(`- **标题**: ${title}`);
+        if (sections.length > 0) listLines.push(`- **章节**: ${sections.join(' | ')}`);
+        if (summary) listLines.push(`- **摘要**: ${summary}`);
+        listLines.push('');
+      } catch { /* 忽略读取失败 */ }
+    }
+    listLines.push('---');
+    listLines.push('💡 **使用方式**: 如果预加载的任务规格不足以理解实现细节，请打开对应文件查看完整规格。');
+    extras.push({
+      name: '📚 迭代层端级规格阅读清单',
+      path: 'reading-list.md',
+      content: listLines.join('\n'),
+    });
   }
 
   return extras;
@@ -611,9 +669,9 @@ async function loadAllTaskContext(
     seen.add(fullPath);
     if (!(await pathExists(fullPath))) return;
     let rawContent = await readFile(fullPath, 'utf-8');
-    // v8.3.92+: HTML 原型文件提取文本内容
+    // v8.3.122+: HTML 原型文件保留完整内容（CSS/JS/结构），不再提取纯文本
     const isHtml = fullPath.endsWith('.html') || fullPath.endsWith('.htm');
-    let content = isHtml ? extractHtmlText(rawContent) : rawContent;
+    let content = rawContent;
     // v8.3.93+: Markdown 链接自动展开 + 图片提取
     if (fullPath.endsWith('.md')) {
       content = await processMarkdownContent(content, fullPath, seen, visionConfig, {
@@ -643,6 +701,8 @@ async function loadAllTaskContext(
         const fullPath = join(dir, item.name);
         if (item.isDirectory()) {
           if (CODEGEN_EXCLUDE_DIRS.has(item.name)) continue;
+          // v8.3.125+: 如果有 platform，根目录下只扫描匹配的端 + _shared
+          if (platform && prefix === '' && item.name !== '_shared' && item.name !== platform) continue;
           await scanTaskDir(fullPath, `${prefix}${item.name}/`);
         } else if (/\.(md|yaml|yml|html|htm)$/i.test(item.name)) {
           // 排除自检阶段文件（TEST.md / SCHEMA.md / REVIEW.md 等）
@@ -1154,7 +1214,9 @@ function buildSplitInstruction(): string {
     '   - 哪些功能需要跨端协作？',
     '   - 数据如何在端之间流转？',
     '',
-    '4. **Read `020-specs/{端名}/TECH.md`**（每个端都要读）→ 了解各端技术方案',
+    '4. **Read `020-specs/{功能模块}/{端名}/TECH.md`**（按功能模块×端组合读取）→ 了解各端技术方案',
+    '   - 先读 FUNCTION_MAP.md 获取功能模块清单',
+    '   - 再按 `020-specs/{功能模块}/{端名}/TECH.md` 读取该功能在各端的技术方案',
     '   - 各端有哪些接口/页面？',
     '   - 各端技术栈和架构约束？',
     '   - **据此确定每个任务涉及哪些端**',
@@ -1360,6 +1422,25 @@ function getInstruction(command: PromptCommand, context: { taskName?: string; ap
         '2. **有疑问就记录** — 如果对需求理解、技术选型有疑问，按最佳判断实现，并将疑问写入 `.speccore/questions/execute-{任务名}-{日期}-*.md`',
         '3. **遇阻断就跳过** — 如果某个功能信息不足无法实现，跳过它并在疑问清单中记录',
         '4. **直接输出代码** — 按 JSON 格式输出文件列表，不要输出多余解释',
+        '',
+        '## 🔍 信息充足性自检（v8.3.124+）',
+        '',
+        '生成代码前，必须先评估当前上下文是否充足：',
+        '1. **检查 API 契约**：所有接口的入参、出参、错误码是否都已明确？',
+        '2. **检查数据模型**：Entity 的字段类型、约束、关系是否完整？',
+        '3. **检查依赖服务**：是否需要调用其他 Service/Module，但其接口未提供？',
+        '4. **检查公共模块**：是否需要使用通用工具类、拦截器、中间件，但未提供其签名？',
+        '5. **检查前端映射**：UI 字段→API 字段的映射是否完整？',
+        '',
+        '如果存在信息缺口，在代码文件的注释中标注 `[INFO_GAP: 具体缺什么]`，例如：',
+        '- `// [INFO_GAP: 缺少 UserService.findById 的返回类型定义]`',
+        '- `// [INFO_GAP: 不知道 OrderStatus 枚举的完整取值]`',
+        '- `// [INFO_GAP: 缺少支付回调接口的签名]`',
+        '',
+        '**要求**：',
+        '- 每发现一个缺口就标注一个 `[INFO_GAP: ...]`',
+        '- 不要假设缺失的信息「应该就是这样」，必须标注',
+        '- INFO_GAP 标注不影响代码生成，但为后续补充提供精确目标',
       ].join('\n');
     
     case 'analyze':
@@ -1431,21 +1512,45 @@ export async function buildPrompt(
 
   // 统一检索层：同时查询文档 RAG + 代码切片 + 知识图谱
   let extraSpecs: TaskExtraSpec[] = [];
-  if (taskDir) {
-    try {
-      // v8.2.0+: 从 REQ.md 提取标题作为更精准的查询词
-      let searchQuery = options.task || options.iteration || '';
-      if (reqContent) {
-        const titleMatch = reqContent.match(/^#\s+(.+)$/m);
-        if (titleMatch) searchQuery = titleMatch[1].trim();
-      }
 
+  // v8.3.123+: analyze/split 阶段也需要统一检索，从迭代需求提取查询词
+  let searchQuery = options.task || options.iteration || '';
+  if (reqContent) {
+    const titleMatch = reqContent.match(/^#\s+(.+)$/m);
+    if (titleMatch) searchQuery = titleMatch[1].trim();
+  } else if ((command === 'analyze' || command === 'split') && options.iteration) {
+    try {
+      const iterDir = await getIterationDir(options.iteration);
+      if (iterDir) {
+        const reqIndex = join(iterDir, '010-requirements', 'INDEX.md');
+        if (await pathExists(reqIndex)) {
+          const idxContent = await readFile(reqIndex, 'utf-8');
+          const titleMatch = idxContent.match(/^#\s+(.+)$/m);
+          if (titleMatch) searchQuery = titleMatch[1].trim();
+        } else {
+          // 尝试读取第一个需求文档
+          const reqDir = join(iterDir, '010-requirements');
+          const reqFiles = (await readdir(reqDir).catch(() => [] as string[]))
+            .filter(f => f.endsWith('.md') && !f.startsWith('.'));
+          if (reqFiles.length > 0) {
+            const firstReq = await readFile(join(reqDir, reqFiles[0]), 'utf-8');
+            const titleMatch = firstReq.match(/^#\s+(.+)$/m);
+            if (titleMatch) searchQuery = titleMatch[1].trim();
+          }
+        }
+      }
+    } catch { /* 忽略需求读取失败 */ }
+  }
+
+  const shouldSearchUnified = !!taskDir || command === 'analyze' || command === 'split';
+  if (shouldSearchUnified && options.iteration) {
+    try {
       const unifiedResult = await unifiedSearch(cwd, {
         query: searchQuery,
         iteration: options.iteration,
         taskId: options.task,
         platform: options.platform,
-        taskDir,
+        taskDir: taskDir || undefined,
       });
 
       if (unifiedResult.documentChunks.length > 0 || unifiedResult.codeSlices.length > 0) {
@@ -1458,8 +1563,8 @@ export async function buildPrompt(
       logger?.debug?.('统一检索失败，回退到传统模式:', e);
     }
 
-    // 回退：统一检索失败或结果为空时，用传统截断模式
-    if (extraSpecs.length === 0) {
+    // 回退：统一检索失败或结果为空时，用传统截断模式（仅 taskDir 存在时）
+    if (extraSpecs.length === 0 && taskDir) {
       extraSpecs = await loadExtraSpecs(cwd, taskDir, options.platform, options.iteration, {
         maxCharsPerFile: 2000,
         maxTotalChars: 8000,
@@ -1469,25 +1574,352 @@ export async function buildPrompt(
       }
     }
 
-    // 稀疏检测 + 全量兜底：检索内容不足时，读取所有内容
-    const SPARSE_THRESHOLD = 3000;
-    const currentChars = extraSpecs.reduce((sum, s) => sum + s.content.length, 0);
-    if (currentChars < SPARSE_THRESHOLD) {
-      // 提前加载知识图谱（供全量兜底使用）
-      let fallbackGraph: KnowledgeGraph | null = null;
-      try {
-        fallbackGraph = await loadKnowledgeGraph(cwd);
-        if (fallbackGraph && await isGraphStale(cwd, options.iteration)) {
-          fallbackGraph = await refreshKnowledgeGraph(cwd, options.iteration);
-        }
-      } catch { /* 图谱不可用时跳过 */ }
+    // 稀疏检测 + 全量兜底：检索内容不足时，读取所有内容（仅 taskDir 存在时）
+    if (taskDir) {
+      const SPARSE_THRESHOLD = 3000;
+      const currentChars = extraSpecs.reduce((sum, s) => sum + s.content.length, 0);
+      if (currentChars < SPARSE_THRESHOLD) {
+        let fallbackGraph: KnowledgeGraph | null = null;
+        try {
+          fallbackGraph = await loadFreshKnowledgeGraph(cwd, options.iteration);
+        } catch { /* 图谱不可用时跳过 */ }
 
-      const fullContext = await loadAllTaskContext(cwd, taskDir, options.platform, options.iteration, fallbackGraph || undefined);
-      if (fullContext.length > extraSpecs.length) {
-        extraSpecs = fullContext;
-        logger?.info?.(`   📚 全量兜底: ${fullContext.length} 个文件 (检索内容不足 ${currentChars} < ${SPARSE_THRESHOLD})`);
+        const fullContext = await loadAllTaskContext(cwd, taskDir, options.platform, options.iteration, fallbackGraph || undefined);
+        if (fullContext.length > extraSpecs.length) {
+          extraSpecs = fullContext;
+          logger?.info?.(`   📚 全量兜底: ${fullContext.length} 个文件 (检索内容不足 ${currentChars} < ${SPARSE_THRESHOLD})`);
+        }
       }
     }
+  }
+
+    // v8.3.122+: execute / analyze 时深入读取关联源码（完整文件内容，不只是切片）
+  // v8.3.122++: 同时注入知识图谱任务上下文，帮助 AI 理解代码关联关系
+  if ((command === 'execute' || command === 'analyze') && searchQuery) {
+    try {
+      // v8.3.124+: execute 阶段优先注入结构化事实卡片（structured-data.json）
+      // 这是最高优先级的改进：用结构化卡片替代原始源码，Token 效率提升 10-20 倍
+      const structuredDataPath = join(cwd, '.speccore', 'cache', 'structured-data.json');
+      let structuredCardsInjected = false;
+      if (await pathExists(structuredDataPath)) {
+        try {
+          const sdContent = await readFile(structuredDataPath, 'utf-8');
+          const structured = JSON.parse(sdContent);
+          // v8.3.125+: 使用同义词扩展，解决 "登录" 与 "auth" 等跨语言/缩写不匹配
+          const queryWords = [...expandSynonyms(extractNormalizedKeywords(searchQuery))];
+          const matchedApis: any[] = [];
+          const matchedEntities: any[] = [];
+          const matchedComponents: any[] = [];
+          const matchedRoutes: any[] = [];
+          const matchedDtos: any[] = [];      // v8.3.126+
+          const matchedServices: any[] = [];  // v8.3.126+
+
+          for (const [platform, data] of Object.entries(structured.endpoints || {}) as [string, any][]) {
+            // API 匹配
+            for (const api of data.apis || []) {
+              const text = `${api.path || ''} ${api.handler || ''} ${api.description || ''}`.toLowerCase();
+              if (queryWords.some(qw => text.includes(qw))) matchedApis.push({ ...api, platform });
+            }
+            // Entity 匹配
+            for (const entity of data.entities || []) {
+              const text = `${entity.name || ''} ${entity.tableName || ''} ${entity.description || ''}`.toLowerCase();
+              if (queryWords.some(qw => text.includes(qw))) matchedEntities.push({ ...entity, platform });
+            }
+            // Component 匹配
+            for (const comp of data.components || []) {
+              const text = `${comp.name || ''} ${comp.description || ''}`.toLowerCase();
+              if (queryWords.some(qw => text.includes(qw))) matchedComponents.push({ ...comp, platform });
+            }
+            // Route 匹配
+            for (const route of data.routes || []) {
+              const text = `${route.path || ''} ${route.component || ''}`.toLowerCase();
+              if (queryWords.some(qw => text.includes(qw))) matchedRoutes.push({ ...route, platform });
+            }
+          }
+
+          // v8.3.126+: 全局 DTO 匹配（跨平台）
+          for (const dto of structured.dtos || []) {
+            const text = `${dto.name || ''} ${dto.fields?.map((f: any) => f.name).join(' ') || ''}`.toLowerCase();
+            if (queryWords.some(qw => text.includes(qw))) matchedDtos.push(dto);
+          }
+          // v8.3.126+: 全局 Service 匹配（跨平台）
+          for (const svc of structured.services || []) {
+            const text = `${svc.name || ''} ${svc.methods?.map((m: any) => m.name).join(' ') || ''}`.toLowerCase();
+            if (queryWords.some(qw => text.includes(qw))) matchedServices.push(svc);
+          }
+
+          const cardLines: string[] = ['## 📇 结构化代码事实卡片（自动提取）'];
+          cardLines.push('> 以下信息从代码扫描工具提取的结构化数据生成，信息密度高于原始源码。如需查看具体实现，参考下方源码文件。\n');
+
+          if (matchedApis.length > 0) {
+            cardLines.push(`### API 接口 (${matchedApis.length} 个匹配)`);
+            for (const api of matchedApis.slice(0, 8)) {
+              cardLines.push(`\n**${api.method || 'GET'} ${api.path || '/'}** — \`${api.handler}\``);
+              cardLines.push(`- 📁 文件: \`${api.filePath}\`:${api.line}`);
+              // v8.3.124+: 优先展示详细参数信息（含类型、装饰器、校验规则）
+              if (api.parameterDetails && api.parameterDetails.length > 0) {
+                const paramLines = api.parameterDetails.map((p: any) => {
+                  let s = `  - \`${p.name}\`${p.type ? `:\`${p.type}\`` : ''}${p.required === false ? ' (可选)' : ''}`;
+                  if (p.decorators && p.decorators.length > 0) s += ` 装饰:${p.decorators.map((d: string) => `\`${d}\``).join(',')}`;
+                  if (p.validationRules && p.validationRules.length > 0) s += ` 校验:${p.validationRules.map((v: string) => `\`${v}\``).join(',')}`;
+                  return s;
+                });
+                cardLines.push(`- 📥 参数:`);
+                cardLines.push(...paramLines.slice(0, 6));
+                if (paramLines.length > 6) cardLines.push(`  ...等${paramLines.length}个参数`);
+              } else if (api.parameters && api.parameters.length > 0) {
+                cardLines.push(`- 📥 参数: ${api.parameters.join(', ')}`);
+              }
+              if (api.dtoRef) cardLines.push(`- 📦 DTO: \`${api.dtoRef}\``);
+              if (api.responseType) cardLines.push(`- 📤 返回: \`${api.responseType}\``);
+              if (api.authDecorators && api.authDecorators.length > 0) {
+                cardLines.push(`- 🔐 鉴权: ${api.authDecorators.map((d: string) => `\`${d}\``).join(', ')}`);
+              }
+              if (api.decorators && api.decorators.length > 0) cardLines.push(`- 🏷️ 路由装饰器: ${api.decorators.map((d: string) => `\`${d}\``).join(', ')}`);
+              // v8.3.125+: Service 调用链
+              if (api.serviceCalls && api.serviceCalls.length > 0) {
+                const callStrs = api.serviceCalls.slice(0, 5).map((c: any) => `\`${c.service}.${c.method}\``);
+                cardLines.push(`- 🔗 调用链: ${callStrs.join(' → ')}${api.serviceCalls.length > 5 ? ` ...等${api.serviceCalls.length}个` : ''}`);
+              }
+              if (api.description) cardLines.push(`- 📝 说明: ${api.description}`);
+            }
+          }
+
+          if (matchedEntities.length > 0) {
+            cardLines.push(`\n### 数据实体 (${matchedEntities.length} 个匹配)`);
+            for (const entity of matchedEntities.slice(0, 6)) {
+              cardLines.push(`\n**${entity.name}**${entity.tableName ? ` (表: \`${entity.tableName}\`)` : ''}`);
+              cardLines.push(`- 📁 文件: \`${entity.filePath}\`:${entity.line}`);
+              if (entity.fields && entity.fields.length > 0) {
+                const fieldStrs = entity.fields.slice(0, 8).map((f: any) => {
+                  let s = `\`${f.name}\`: ${f.type}`;
+                  if (f.isPrimaryKey) s += ' [PK]';
+                  if (f.nullable) s += ' ?';
+                  if (f.defaultValue !== undefined) s += ` =${f.defaultValue}`;
+                  // v8.3.124+: 展示列配置和校验规则
+                  if (f.columnOptions && Object.keys(f.columnOptions).length > 0) {
+                    const opts = Object.entries(f.columnOptions).map(([k, v]) => `${k}:${v}`).join(',');
+                    s += ` {${opts}}`;
+                  }
+                  if (f.validationRules && f.validationRules.length > 0) s += ` [${f.validationRules.map((v: string) => `\`${v}\``).join(',')}]`;
+                  return s;
+                });
+                cardLines.push(`- 🏗️ 字段: ${fieldStrs.join(', ')}${entity.fields.length > 8 ? ` ...等${entity.fields.length}个` : ''}`);
+              }
+              if (entity.indexes && entity.indexes.length > 0) {
+                const idxStrs = entity.indexes.map((idx: any) => {
+                  let s = `${idx.fields.join('+')}`;
+                  if (idx.unique) s += '(唯一)';
+                  if (idx.name) s = `${idx.name}:${s}`;
+                  return s;
+                });
+                cardLines.push(`- 📇 索引: ${idxStrs.join('; ')}`);
+              }
+              if (entity.constraints && entity.constraints.length > 0) {
+                cardLines.push(`- ⛓️ 约束: ${entity.constraints.map((c: any) => `${c.type}(${c.fields.join('+')})`).join('; ')}`);
+              }
+              if (entity.relations && entity.relations.length > 0) {
+                cardLines.push(`- 🔗 关系: ${entity.relations.map((r: any) => `${r.type} → ${r.target}`).join(', ')}`);
+              }
+            }
+          }
+
+          if (matchedComponents.length > 0) {
+            cardLines.push(`\n### 前端组件 (${matchedComponents.length} 个匹配)`);
+            for (const comp of matchedComponents.slice(0, 6)) {
+              cardLines.push(`\n**${comp.name}** — \`${comp.filePath}\`:${comp.line}`);
+              if (comp.props && comp.props.length > 0) cardLines.push(`- Props: ${comp.props.join(', ')}`);
+            }
+          }
+
+          if (matchedRoutes.length > 0) {
+            cardLines.push(`\n### 页面路由 (${matchedRoutes.length} 个匹配)`);
+            for (const route of matchedRoutes.slice(0, 6)) {
+              cardLines.push(`- \`${route.path}\` → ${route.component || 'unknown'}${route.lazy ? ' (lazy)' : ''}`);
+            }
+          }
+
+          // v8.3.126+: DTO 定义展示
+          if (matchedDtos.length > 0) {
+            cardLines.push(`\n### DTO 定义 (${matchedDtos.length} 个匹配)`);
+            for (const dto of matchedDtos.slice(0, 6)) {
+              cardLines.push(`\n**${dto.name}** — \`${dto.filePath}\`:${dto.line}`);
+              if (dto.fields && dto.fields.length > 0) {
+                const fieldStrs = dto.fields.slice(0, 10).map((f: any) => {
+                  let s = `\`${f.name}\`: ${f.type}`;
+                  if (f.required === false) s += ' (可选)';
+                  if (f.validationRules && f.validationRules.length > 0) s += ` [${f.validationRules.map((v: string) => `\`${v}\``).join(',')}]`;
+                  return s;
+                });
+                cardLines.push(`- 🏷️ 字段: ${fieldStrs.join(', ')}${dto.fields.length > 10 ? ` ...等${dto.fields.length}个` : ''}`);
+              }
+            }
+          }
+
+          // v8.3.126+: Service 定义展示
+          if (matchedServices.length > 0) {
+            cardLines.push(`\n### Service 定义 (${matchedServices.length} 个匹配)`);
+            for (const svc of matchedServices.slice(0, 6)) {
+              cardLines.push(`\n**${svc.name}** — \`${svc.filePath}\`:${svc.line}`);
+              if (svc.injects && svc.injects.length > 0) {
+                cardLines.push(`- 💉 注入: ${svc.injects.map((i: string) => `\`${i}\``).join(', ')}`);
+              }
+              if (svc.methods && svc.methods.length > 0) {
+                const methodStrs = svc.methods.slice(0, 8).map((m: any) => {
+                  const params = m.parameters?.map((p: any) => `${p.name}${p.type ? `:${p.type}` : ''}`).join(', ') || '';
+                  return `\`${m.name}(${params})${m.returnType ? ": " + m.returnType : ''}\``;
+                });
+                cardLines.push(`- ⚙️ 方法: ${methodStrs.join(', ')}${svc.methods.length > 8 ? ` ...等${svc.methods.length}个` : ''}`);
+              }
+            }
+          }
+
+          if (matchedApis.length > 0 || matchedEntities.length > 0 || matchedComponents.length > 0 || matchedRoutes.length > 0 || matchedDtos.length > 0 || matchedServices.length > 0) {
+            extraSpecs.push({
+              name: '📇 结构化代码事实卡片',
+              path: 'structured-data-cards.md',
+              content: cardLines.join('\n'),
+            });
+            const cardChars = cardLines.join('\n').length;
+            logger?.info?.(`   📇 结构化卡片: ${matchedApis.length} API + ${matchedEntities.length} Entity + ${matchedComponents.length} Component + ${matchedRoutes.length} Route + ${matchedDtos.length} DTO + ${matchedServices.length} Service (${Math.round(cardChars / 1000)}K 字符)`);
+            structuredCardsInjected = true;
+          }
+        } catch { /* 结构化数据解析失败不阻断 */ }
+      }
+
+      const codeMatches = await findRelevantCode(searchQuery, 15, undefined, options.iteration, options.task);
+      if (codeMatches.length > 0) {
+        // v8.3.124+: 如果已注入结构化卡片，减少原始源码的文件数和长度
+        const sourceMaxFiles = structuredCardsInjected ? 8 : 15;
+        const sourceMaxBytes = structuredCardsInjected ? 60000 : 100000;
+        const sourceContents = await readRelevantSource(codeMatches, sourceMaxBytes, sourceMaxFiles);
+        const sourceKeys = Object.keys(sourceContents);
+        if (sourceKeys.length > 0) {
+          // v8.3.122+: execute 时注入知识图谱任务上下文
+          // v8.3.125+: 自动检查过期并刷新
+          if (command === 'execute' && options.iteration && options.task) {
+            try {
+              const kg = await loadFreshKnowledgeGraph(cwd, options.iteration);
+              if (kg) {
+                const ctx = getFullTaskContext(kg, options.task);
+                const ctxLines: string[] = ['## 🔗 任务关联上下文（知识图谱）', ''];
+                if (ctx.requirement) ctxLines.push(`- **上游需求**: ${ctx.requirement.title} (${ctx.requirement.file})`);
+                if (ctx.parentTask) ctxLines.push(`- **父任务**: ${ctx.parentTask.title}`);
+                if (ctx.dependsOn.length > 0) ctxLines.push(`- **依赖任务**（需先完成）: ${ctx.dependsOn.map(d => d.title).join(', ')}`);
+                if (ctx.downstreamTasks.length > 0) ctxLines.push(`- **下游任务**（依赖本任务）: ${ctx.downstreamTasks.map(d => d.title).join(', ')}`);
+                if (ctx.relatedSpecs.length > 0) {
+                  ctxLines.push(`- **关联规格文档**:`);
+                  for (const spec of ctx.relatedSpecs) {
+                    ctxLines.push(`  - ${spec.title}: \`${spec.file}\``);
+                  }
+                }
+                if (ctx.dependencyChain.length > 0) {
+                  ctxLines.push(`- **依赖链路**: ${ctx.dependencyChain.map(c => c.taskName).join(' → ')}`);
+                }
+                extraSpecs.push({
+                  name: '🔗 任务关联上下文',
+                  path: 'kg-context.md',
+                  content: ctxLines.join('\n'),
+                });
+              }
+            } catch { /* 知识图谱加载失败不阻断 */ }
+          }
+
+          // v8.3.123+: analyze 时注入知识图谱迭代级上下文
+          // v8.3.125+: 自动检查过期并刷新
+          if (command === 'analyze' && options.iteration) {
+            try {
+              const kg = await loadFreshKnowledgeGraph(cwd, options.iteration);
+              if (kg) {
+                const compactCtx = buildCompactContext(kg, {});
+                if (compactCtx) {
+                  extraSpecs.push({
+                    name: '🧠 知识图谱摘要',
+                    path: 'kg-summary.md',
+                    content: compactCtx,
+                  });
+                }
+              }
+            } catch { /* 知识图谱加载失败不阻断 */ }
+          }
+
+          // 按匹配得分排序注入源码，并附加匹配原因
+          const sortedMatches = [...codeMatches].sort((a, b) => b.score - a.score);
+          for (const match of sortedMatches.slice(0, sourceMaxFiles)) {
+            const content = sourceContents[match.file];
+            if (!content) continue;
+            const reasons: string[] = [];
+            if (match.score >= 50) reasons.push(`@spec 注释直接关联 (score:${match.score})`);
+            else if (match.score >= 40) reasons.push(`知识图谱 source-file 实体关联 (score:${match.score})`);
+            else if (match.score >= 35) reasons.push(`业务模块 codeEntities 关联 (score:${match.score})`);
+            else if (match.score >= 25) reasons.push(`Spec 技术关键词匹配 (score:${match.score})`);
+            else reasons.push(`关键词匹配 (score:${match.score})`);
+            if (match.exports.length > 0) reasons.push(`导出: ${match.exports.join(', ')}`);
+            if (match.apis.length > 0) reasons.push(`API: ${match.apis.join(', ')}`);
+            extraSpecs.push({
+              name: `🔍 ${basename(match.file)}`,
+              path: match.file,
+              content: `## 关联源码: ${match.file}\n> **匹配原因**: ${reasons.join(' | ')}\n\n\`\`\`${match.file.split('.').pop() || 'ts'}\n${content}\n\`\`\``,
+            });
+          }
+          logger?.info?.(`   💻 深入源码: ${sourceKeys.length} 个完整文件已注入 (${Math.round(Object.values(sourceContents).reduce((a, c) => a + c.length, 0) / 1000)}K 字符)`);
+
+          // v8.3.125+: 可选阅读清单 — 让宿主 AI 按需深入读取未预加载的关联文件
+          // 解决 "8文件/60KB 限制导致大型功能读不全" 的问题
+          const unreadMatches = sortedMatches.slice(sourceMaxFiles);
+          if (unreadMatches.length > 0) {
+            const optionalLines: string[] = [
+              '## 📖 可选阅读清单（宿主 AI 按需读取）',
+              '> 以下文件与当前任务高度相关，但因 Token 预算限制未完整预加载到上下文中。',
+              '> 如果你的 IDE（Cursor / Claude Code / Windsurf）支持文件读取，可按需打开以下文件深入理解业务逻辑：',
+              '',
+            ];
+            for (const match of unreadMatches.slice(0, 15)) {
+              const reasons: string[] = [];
+              if (match.score >= 50) reasons.push('@spec 注释直接关联');
+              else if (match.score >= 40) reasons.push('知识图谱关联');
+              else if (match.score >= 35) reasons.push('业务模块关联');
+              else if (match.score >= 25) reasons.push('技术关键词匹配');
+              else reasons.push('关键词匹配');
+              if (match.exports.length > 0) reasons.push(`导出 ${match.exports.join(', ')}`);
+              if (match.apis.length > 0) reasons.push(`API ${match.apis.join(', ')}`);
+              optionalLines.push(`- \`${match.file}\` — ${reasons.join(' | ')} (score:${match.score})`);
+            }
+            if (unreadMatches.length > 15) {
+              optionalLines.push(`\n... 还有 ${unreadMatches.length - 15} 个关联文件未列出`);
+            }
+            optionalLines.push('\n---');
+            optionalLines.push('💡 **使用方式**: 如果上述预加载源码不足以理解实现细节，请打开对应文件查看完整代码。');
+            extraSpecs.push({
+              name: '📖 可选阅读清单',
+              path: 'optional-reading.md',
+              content: optionalLines.join('\n'),
+            });
+            logger?.info?.(`   📖 可选阅读清单: ${unreadMatches.length} 个关联文件（宿主 AI 可按需读取）`);
+          }
+        }
+      }
+    } catch (e) {
+      logger?.debug?.('深入源码读取失败:', e);
+    }
+  }
+
+  // v8.3.125+: execute 时注入 INFO_GAP 自动补充上下文（如果存在）
+  if (command === 'execute' && options.task) {
+    try {
+      const supplementPath = join(cwd, '.speccore', 'cache', `info-gap-supplement-${options.task}.md`);
+      if (await pathExists(supplementPath)) {
+        const supplementContent = await readFile(supplementPath, 'utf-8');
+        if (supplementContent.trim().length > 0) {
+          extraSpecs.push({
+            name: '📎 INFO_GAP 自动补充上下文',
+            path: supplementPath,
+            content: `## 📎 上一轮执行发现的信息缺口补充\n\n${supplementContent}`,
+          });
+          logger?.info?.(`   📎 已注入 INFO_GAP 补充上下文`);
+        }
+      }
+    } catch { /* 忽略读取失败 */ }
   }
 
   // v6.72.0+: execute 时注入 CONSISTENCY_CHECK.md（前后端一致性校验）
@@ -1521,11 +1953,7 @@ export async function buildPrompt(
   // 加载知识图谱 → 生成任务关联链（< 500 tokens）
   let taskContextStr: string | undefined;
   if (options.task) {
-    let graph = await loadKnowledgeGraph(cwd);
-    const stale = await isGraphStale(cwd, options.iteration);
-    if (stale) {
-      graph = await refreshKnowledgeGraph(cwd, options.iteration);
-    }
+    const graph = await loadFreshKnowledgeGraph(cwd, options.iteration);
     if (graph) {
       taskContextStr = buildCompactContext(graph, {
         taskId: options.task,
@@ -1647,16 +2075,61 @@ export function formatPrompt(prompt: SpecCorePrompt, maxTokens: number = 12000):
     }
   }
 
-  // Level 2: 压缩 extraSpecs（截断到 500 字/文件）
+  // Level 2: 分层预算控制 extraSpecs（v8.3.125+ unit-context-assembler）
+  // 优先级: P1(结构化卡片/源码/INFO_GAP) > P2(KG上下文) > P3(全局规范/一致性检查)
   if (prompt.extraSpecs.length > 0) {
-    const slimExtras = prompt.extraSpecs.map(s => ({
-      ...s,
-      content: s.content.length > 500 ? s.content.slice(0, 500) + '\n> ... (已截断)' : s.content,
-    }));
-    result = buildPromptText({ ...prompt, extraSpecs: slimExtras });
+    const BUDGET_P1 = 10000; // 高优先级: 结构化卡片、关联源码、INFO_GAP补充
+    const BUDGET_P2 = 5000;  // 中优先级: 知识图谱上下文、任务关联链
+    const BUDGET_P3 = 3000;  // 低优先级: 全局规范、一致性检查、项目路径
+
+    function getPriority(spec: { name: string }): number {
+      const n = spec.name;
+      if (n.includes('结构化代码事实') || n.includes('INFO_GAP') || n.includes('关联源码')) return 1;
+      if (n.includes('知识图谱') || n.includes('任务关联上下文')) return 2;
+      return 3; // CONSISTENCY_CHECK、工程路径、全局规范等
+    }
+
+    const sorted = [...prompt.extraSpecs].sort((a, b) => getPriority(a) - getPriority(b));
+    const budgeted: typeof prompt.extraSpecs = [];
+    let usedP1 = 0, usedP2 = 0, usedP3 = 0;
+
+    for (const spec of sorted) {
+      const p = getPriority(spec);
+      const len = spec.content.length;
+      let keep = true;
+      let content = spec.content;
+
+      if (p === 1) {
+        if (usedP1 + len > BUDGET_P1) {
+          const remain = Math.max(0, BUDGET_P1 - usedP1);
+          if (remain < 200) { keep = false; }
+          else { content = content.slice(0, remain) + '\n> ... (P1预算截断)'; }
+        }
+        if (keep) usedP1 += content.length;
+      } else if (p === 2) {
+        if (usedP2 + len > BUDGET_P2) {
+          const remain = Math.max(0, BUDGET_P2 - usedP2);
+          if (remain < 200) { keep = false; }
+          else { content = content.slice(0, remain) + '\n> ... (P2预算截断)'; }
+        }
+        if (keep) usedP2 += content.length;
+      } else {
+        if (usedP3 + len > BUDGET_P3) {
+          const remain = Math.max(0, BUDGET_P3 - usedP3);
+          if (remain < 200) { keep = false; }
+          else { content = content.slice(0, remain) + '\n> ... (P3预算截断)'; }
+        }
+        if (keep) usedP3 += content.length;
+      }
+
+      if (keep) budgeted.push({ ...spec, content });
+    }
+
+    result = buildPromptText({ ...prompt, extraSpecs: budgeted });
     tokens = estimateTokens(result);
     if (tokens <= maxTokens) {
-      logger?.info?.(`   🪶 Prompt 已简化：压缩 extraSpecs 至 500 字/文件`);
+      const removed = prompt.extraSpecs.length - budgeted.length;
+      logger?.info?.(`   🪶 Prompt 已简化：分层预算控制 (P1:${usedP1}/${BUDGET_P1} P2:${usedP2}/${BUDGET_P2} P3:${usedP3}/${BUDGET_P3}${removed > 0 ? ` 移除${removed}项` : ''})`);
       return result;
     }
   }
@@ -1800,15 +2273,33 @@ function buildPromptText(prompt: SpecCorePrompt): string {
 /**
  * 解析 AI 返回的 JSON 文件列表
  */
-export function parseAiResponse(response: string): { files: { path: string; content: string }[] } | null {
+/** v8.3.124+: 解析 AI 响应中的 INFO_GAP 标记 */
+export function extractInfoGaps(response: string): string[] {
+  const gaps: string[] = [];
+  const regex = /\[INFO_GAP:\s*([^\]]+)\]/g;
+  let match;
+  while ((match = regex.exec(response)) !== null) {
+    gaps.push(match[1].trim());
+  }
+  return [...new Set(gaps)]; // 去重
+}
+
+export function parseAiResponse(response: string): { files: { path: string; content: string }[]; infoGaps?: string[] } | null {
+  // 先提取 INFO_GAP（即使 JSON 解析失败也能捕获）
+  const infoGaps = extractInfoGaps(response);
+
   // 尝试从响应中提取 JSON
   const jsonMatch = response.match(/\{[\s\S]*"files"[\s\S]*\}/);
-  if (!jsonMatch) return null;
+  if (!jsonMatch) {
+    // 没有 JSON，但有 INFO_GAP，返回空文件列表 + gaps
+    if (infoGaps.length > 0) return { files: [], infoGaps };
+    return null;
+  }
 
   try {
     const parsed = JSON.parse(jsonMatch[0]);
     if (parsed.files && Array.isArray(parsed.files)) {
-      return parsed;
+      return { files: parsed.files, infoGaps: infoGaps.length > 0 ? infoGaps : undefined };
     }
   } catch {
     // 非 JSON 响应，当作原始代码处理
@@ -2039,8 +2530,14 @@ async function expandMarkdownLinks(
   if (links.length === 0) return content;
 
   const expansions: string[] = [];
+  // v8.3.125+: 收集外链资源，供宿主 AI 按需读取
+  const externalLinks: { text: string; path: string }[] = [];
+
   for (const link of links) {
-    if (isExternalLink(link.path)) continue;
+    if (isExternalLink(link.path)) {
+      externalLinks.push(link);
+      continue;
+    }
     const resolved = resolveLinkPath(baseDir, link.path);
     if (seenPaths.has(resolved)) continue;
     seenPaths.add(resolved);
@@ -2051,9 +2548,9 @@ async function expandMarkdownLinks(
       if (!st.isFile()) continue;
 
       let linkContent = await readFile(resolved, 'utf-8');
-      // HTML 文件提取文本
+      // v8.3.122+: HTML 原型文件保留完整内容，不再提取纯文本
       if (resolved.endsWith('.html') || resolved.endsWith('.htm')) {
-        linkContent = extractHtmlText(linkContent);
+        // 保留原始 HTML（包含 CSS/JS/结构），让 AI 完整解析原型
       }
       if (linkContent.trim().length <= 30) continue;
       const isTruncated = linkContent.length > maxChars;
@@ -2066,7 +2563,18 @@ async function expandMarkdownLinks(
     } catch { /* 忽略读取失败的链接文件 */ }
   }
 
-  const expanded = content + expansions.join('');
+  let expanded = content + expansions.join('');
+
+  // v8.3.125+: 在内容末尾附加外链资源清单，提示宿主 AI 按需读取
+  if (externalLinks.length > 0) {
+    const externalSection = [
+      '\n\n---',
+      '📎 **外链资源清单**（CLI 无法直接获取内容，宿主 AI 可按需访问）：',
+      ...externalLinks.map(l => `- [${l.text || '链接'}](${l.path})`),
+    ].join('\n');
+    expanded += externalSection;
+  }
+
   // 递归展开新内容中的链接（深度 + 1）
   if (currentDepth + 1 < maxDepth) {
     return expandMarkdownLinks(expanded, baseDir, seenPaths, maxDepth, currentDepth + 1, maxChars);
@@ -2088,10 +2596,13 @@ async function inlineMarkdownImages(
   const inlines: string[] = [];
   let visionCallCount = 0;
   const maxVisionCalls = visionConfig?.maxImagesPerPrompt ?? 10;
+  // v8.3.125+: 收集外链图片，供宿主 AI 按需查看
+  const externalImages: { alt: string; path: string }[] = [];
 
   for (const img of images) {
     if (isExternalLink(img.path)) {
-      inlines.push(`\n<!-- 图片: ${img.alt || '无描述'} | URL: ${img.path} -->`);
+      externalImages.push(img);
+      inlines.push(`\n<!-- 外链图片: ${img.alt || '无描述'} | URL: ${img.path} -->`);
       continue;
     }
     const resolved = resolveLinkPath(baseDir, img.path);
@@ -2136,6 +2647,16 @@ async function inlineMarkdownImages(
       } catch { /* ignore */ }
     }
   }
+
+  // v8.3.125+: 在内容末尾附加外链图片清单，提示宿主 AI 按需查看
+  if (externalImages.length > 0) {
+    inlines.push([
+      '\n\n---',
+      '🖼️ **外链图片清单**（CLI 无法直接获取内容，宿主 AI 可按需查看）：',
+      ...externalImages.map(img => `- ${img.alt || '无描述'}: ${img.path}`),
+    ].join('\n'));
+  }
+
   return content + inlines.join('');
 }
 

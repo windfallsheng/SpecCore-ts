@@ -249,24 +249,25 @@ export async function saveContextMarkdown(
 }
 
 /**
- * 为 prompt 注入生成紧凑上下文字符串（< 500 tokens）
+ * 为 prompt 注入生成紧凑上下文字符串
  * 直接嵌入到 AI prompt 中，不需要 AI 额外 Read
+ * v8.3.123+: 深度利用知识图谱，输出关联 source-file、business_module、语义标签等
  */
 export function buildCompactContext(
   graph: KnowledgeGraph,
   options: { taskId?: string; platform?: string }
 ): string {
-  // ── 有 taskId：返回任务关联链 ──
+  // ── 有 taskId：返回任务关联链（深度版）──
   if (options.taskId) {
     const taskContext = getTaskContext(graph, options.taskId);
-    const lines: string[] = [];
+    const lines: string[] = ['## 🔗 任务关联上下文（知识图谱）'];
 
     if (taskContext.requirement) {
-      lines.push(`上游需求: ${taskContext.requirement.id}（${taskContext.requirement.title}）`);
+      lines.push(`- **上游需求**: ${taskContext.requirement.title} (${taskContext.requirement.file})`);
     }
 
     if (taskContext.parentTask) {
-      lines.push(`父任务: ${taskContext.parentTask.id}（${taskContext.parentTask.title}）`);
+      lines.push(`- **父任务**: ${taskContext.parentTask.title}`);
     }
 
     if (taskContext.siblingSubtasks.length > 0) {
@@ -274,38 +275,115 @@ export function buildCompactContext(
         const current = s.platform === options.platform ? ' ⬅当前' : '';
         return `${s.platform}:${statusEmoji(s.status)}${current}`;
       });
-      lines.push(`各端进度: ${parts.join(' · ')}`);
+      lines.push(`- **各端进度**: ${parts.join(' · ')}`);
     }
 
     if (taskContext.relatedSpecs.length > 0) {
-      lines.push(`关联规格: ${taskContext.relatedSpecs.map(s => s.id).join(', ')}`);
+      lines.push(`- **关联规格文档**:`);
+      for (const spec of taskContext.relatedSpecs.slice(0, 5)) {
+        lines.push(`  - ${spec.title}: \`${spec.file}\``);
+      }
     }
 
     if (taskContext.dependsOn.length > 0) {
-      lines.push(`依赖任务: ${taskContext.dependsOn.map(d => d.id).join(', ')}`);
+      lines.push(`- **依赖任务**（需先完成）: ${taskContext.dependsOn.map(d => d.title).join(', ')}`);
     }
 
-    return lines.length > 0 ? lines.join('\n') : '';
+    // v8.3.123+: 关联 source-file 实体（通过 spec -> relates_to -> source-file）
+    const relatedSourceFiles: GraphEntity[] = [];
+    const relatedSpecIds = new Set(taskContext.relatedSpecs.map(s => s.id));
+    for (const rel of graph.relations) {
+      if (rel.type === 'relates_to' && relatedSpecIds.has(rel.from)) {
+        const sf = graph.entities[rel.to];
+        if (sf && sf.type === 'source-file') relatedSourceFiles.push(sf);
+      }
+      if (rel.type === 'relates_to' && relatedSpecIds.has(rel.to)) {
+        const sf = graph.entities[rel.from];
+        if (sf && sf.type === 'source-file') relatedSourceFiles.push(sf);
+      }
+    }
+    const uniqueSf = [...new Map(relatedSourceFiles.map(s => [s.id, s])).values()];
+    if (uniqueSf.length > 0) {
+      lines.push(`- **关联源码文件** (${uniqueSf.length} 个):`);
+      for (const sf of uniqueSf.slice(0, 5)) {
+        const tags = sf.semanticTags?.slice(0, 3).join(', ') || '';
+        const role = sf.businessRole || '';
+        const meta = [sf.endpoint || '', tags, role].filter(Boolean).join(' · ');
+        lines.push(`  - \`${sf.file}\`${meta ? ` (${meta})` : ''}`);
+      }
+      if (uniqueSf.length > 5) lines.push(`  - ... 还有 ${uniqueSf.length - 5} 个`);
+    }
+
+    // v8.3.123+: 关联 business_module
+    const relatedBms: GraphEntity[] = [];
+    const taskKeywords = new Set((graph.entities[options.taskId]?.title || '').toLowerCase().split(/\s+/));
+    for (const bm of Object.values(graph.entities).filter(e => e.type === 'business_module')) {
+      const bmText = `${bm.title} ${bm.description || ''} ${bm.codeEntities?.join(' ') || ''}`.toLowerCase();
+      let matchScore = 0;
+      for (const kw of taskKeywords) {
+        if (kw.length >= 3 && bmText.includes(kw)) matchScore++;
+      }
+      for (const spec of taskContext.relatedSpecs) {
+        if (bm.codeEntities?.some(ce => ce.includes(spec.title.replace(/\.md$/, '')))) matchScore += 2;
+      }
+      if (matchScore >= 2) relatedBms.push(bm);
+    }
+    if (relatedBms.length > 0) {
+      lines.push(`- **关联业务模块**:`);
+      for (const bm of relatedBms.slice(0, 3)) {
+        const entities = bm.codeEntities?.slice(0, 3).join(', ') || '';
+        lines.push(`  - ${bm.title}${entities ? `: ${entities}` : ''}`);
+      }
+    }
+
+    return lines.join('\n');
   }
 
-  // ── 无 taskId（analyze 阶段）：返回业务模块摘要 ─
-  const businessModules = Object.values(graph.entities)
-    .filter(e => e.type === 'business_module');
+  // ── 无 taskId（analyze 阶段）：返回深度业务模块摘要 + 源码统计 ──
+  const lines: string[] = ['## 🧠 知识图谱摘要'];
 
-  if (businessModules.length === 0) return '';
+  const businessModules = Object.values(graph.entities).filter(e => e.type === 'business_module');
+  if (businessModules.length > 0) {
+    lines.push(`\n### 业务-代码映射 (${businessModules.length} 个模块)`);
+    for (const bm of businessModules.slice(0, 8)) {
+      const codeEntities = bm.codeEntities || [];
+      if (codeEntities.length === 0) continue;
+      lines.push(`- **${bm.title}**: ${codeEntities.slice(0, 4).join(', ')}${codeEntities.length > 4 ? ` ...等${codeEntities.length}个` : ''}`);
+    }
+  }
 
-  const lines: string[] = ['## 业务-代码映射图谱'];
-  for (const bm of businessModules.slice(0, 10)) { // 最多展示 10 个业务模块
-    const codeEntities = bm.codeEntities || [];
-    if (codeEntities.length === 0) continue;
-    lines.push(`\n### ${bm.title}`);
-    lines.push(`关联代码实体 (${codeEntities.length} 个):`);
-    for (const ce of codeEntities.slice(0, 5)) { // 每个模块最多展示 5 个代码实体
-      lines.push(`- \`${ce}\``);
+  const sourceFiles = Object.values(graph.entities).filter(e => e.type === 'source-file');
+  if (sourceFiles.length > 0) {
+    const endpointMap = new Map<string, number>();
+    for (const sf of sourceFiles) {
+      const ep = sf.endpoint || sf.platform || 'unknown';
+      endpointMap.set(ep, (endpointMap.get(ep) || 0) + 1);
     }
-    if (codeEntities.length > 5) {
-      lines.push(`- ... 还有 ${codeEntities.length - 5} 个`);
+    lines.push(`\n### 源码分布 (${sourceFiles.length} 个文件)`);
+    const sortedEps = [...endpointMap.entries()].sort((a, b) => b[1] - a[1]);
+    for (const [ep, count] of sortedEps.slice(0, 6)) {
+      lines.push(`- ${ep}: ${count} 个文件`);
     }
+  }
+
+  const reqToCode = graph.relations.filter(r => r.type === 'relates_to');
+  if (reqToCode.length > 0) {
+    const reqCount = new Set(reqToCode.map(r => r.from)).size;
+    const codeCount = new Set(reqToCode.map(r => r.to)).size;
+    lines.push(`\n### 需求-代码关联`);
+    lines.push(`- ${reqCount} 个需求 ↔ ${codeCount} 个源码文件（${reqToCode.length} 条关系）`);
+  }
+
+  const tagCounts = new Map<string, number>();
+  for (const sf of sourceFiles) {
+    for (const tag of sf.semanticTags || []) {
+      tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
+    }
+  }
+  if (tagCounts.size > 0) {
+    const sortedTags = [...tagCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+    lines.push(`\n### 高频语义标签`);
+    lines.push(`- ${sortedTags.map(([t, c]) => `${t}(${c})`).join(' · ')}`);
   }
 
   return lines.join('\n');

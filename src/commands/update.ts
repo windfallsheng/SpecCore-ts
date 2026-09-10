@@ -461,6 +461,35 @@ export async function updateCommand(options: { force?: boolean; tool?: string; y
     }
   } catch { /* non-critical */ }
 
+  // v8.3.122+: 检查 npm 上是否有新版本（每日最多检查一次）
+  try {
+    const checkCachePath = join(speccoreDir, 'local', 'version-check.json');
+    let shouldCheck = true;
+    let cachedLatest = '';
+    if (await pathExists(checkCachePath)) {
+      try {
+        const cache = JSON.parse(await readFile(checkCachePath, 'utf-8'));
+        cachedLatest = cache.latest || '';
+        const lastCheck = new Date(cache.checkedAt || 0);
+        const hoursSince = (Date.now() - lastCheck.getTime()) / 3600000;
+        if (hoursSince < 24) shouldCheck = false;
+      } catch { /* 缓存损坏，重新检查 */ }
+    }
+
+    let latestVersion = cachedLatest;
+    if (shouldCheck) {
+      latestVersion = execSync('npm view speccore version', { encoding: 'utf-8', timeout: 8000, stdio: 'pipe' }).trim();
+      await writeFile(checkCachePath, JSON.stringify({ latest: latestVersion, checkedAt: new Date().toISOString() }, null, 2));
+    }
+
+    if (latestVersion && latestVersion !== CURRENT_VERSION) {
+      logger.info('');
+      logger.info(`🎉 发现新版本: v${latestVersion}（当前: v${CURRENT_VERSION}）`);
+      logger.info(`   👉 升级命令: npm update -g speccore`);
+      logger.info(`   📖 更新日志: https://www.npmjs.com/package/speccore`);
+    }
+  } catch { /* 网络检查失败，静默跳过 */ }
+
   const verLabel = isSameVersion ? `v${CURRENT_VERSION}` : `v${oldVersion} → v${CURRENT_VERSION}`;
   spinner.stop(`升级完成: ${verLabel}`);
   logger.info('');

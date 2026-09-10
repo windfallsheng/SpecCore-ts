@@ -5,9 +5,13 @@
  * 实现测试配置与环境配置的双层分离。
  *
  * v8.3.60+
+ * v8.3.122+: 支持两种配置格式自动识别：
+ *   - TestConfig 格式（tests/routes 结构，用于批量页面测试）
+ *   - VERIFY_SPEC 格式（scenarios/actions 结构，用于精细 UI 交互测试）
  */
 import { readFile, pathExists } from 'fs-extra';
 import { logger } from '../utils/logger';
+import * as yaml from 'js-yaml';
 
 export interface TestConfigTarget {
   url?: string;
@@ -42,74 +46,63 @@ export interface TestConfig {
   output?: string;
 }
 
-/** 解析测试配置 YAML */
+/** 解析测试配置 YAML（v8.3.122+: 使用标准 js-yaml 解析器） */
 function parseTestYaml(content: string): Record<string, unknown> {
-  const result: any = {};
-  const lines = content.split('\n');
-  let stack: { obj: any; indent: number }[] = [{ obj: result, indent: -1 }];
+  return yaml.load(content) as Record<string, unknown> || {};
+}
 
-  for (const line of lines) {
-    if (!line.trim() || line.trim().startsWith('#')) continue;
-
-    const indent = line.length - line.trimStart().length;
-    while (stack.length > 1 && indent <= stack[stack.length - 1].indent) {
-      stack.pop();
-    }
-
-    const trimmed = line.trim();
-    const parent = stack[stack.length - 1].obj;
-
-    if (trimmed.startsWith('- ')) {
-      const value = trimmed.slice(2).trim();
-      if (!Array.isArray(parent)) continue;
-      if (value.includes(':')) {
-        const obj: any = {};
-        const [k, ...rest] = value.split(':');
-        const v = rest.join(':').trim();
-        if (v) obj[k.trim()] = autoType(v);
-        parent.push(obj);
-        stack.push({ obj, indent });
-      } else {
-        parent.push(autoType(value));
-      }
-    } else if (trimmed.endsWith(':')) {
-      const key = trimmed.slice(0, -1).trim();
-      if (Array.isArray(parent)) {
-        const last = parent[parent.length - 1];
-        if (last && typeof last === 'object' && !Array.isArray(last)) {
-          last[key] = {};
-          stack.push({ obj: last[key], indent });
+/** 从 VERIFY_SPEC 格式的 scenario 中提取导航 URL */
+function extractRoutesFromScenarios(scenarios: any[]): string[] {
+  const routes: string[] = [];
+  for (const sc of scenarios) {
+    if (sc && Array.isArray(sc.actions)) {
+      for (const action of sc.actions) {
+        if (action && action.type === 'navigate' && typeof action.value === 'string') {
+          routes.push(action.value);
+          break; // 每个 scenario 只取第一个 navigate
         }
-      } else {
-        if (!parent[key]) parent[key] = {};
-        stack.push({ obj: parent[key], indent });
-      }
-    } else if (trimmed.includes(':')) {
-      const [k, ...rest] = trimmed.split(':');
-      const v = rest.join(':').trim();
-      if (Array.isArray(parent)) {
-        const last = parent[parent.length - 1];
-        if (last && typeof last === 'object') {
-          last[k.trim()] = autoType(v);
-        }
-      } else {
-        parent[k.trim()] = autoType(v);
       }
     }
   }
-
-  return result;
+  return routes.length > 0 ? routes : ['/'];
 }
 
-function autoType(v: string): unknown {
-  if (v === 'true') return true;
-  if (v === 'false') return false;
-  if (/^-?\d+$/.test(v)) return parseInt(v, 10);
-  if (/^-?\d+\.\d+$/.test(v)) return parseFloat(v);
-  return v;
+/** 将 VERIFY_SPEC 格式转换为 TestConfig 格式 */
+function convertVerifySpecToTestConfig(parsed: Record<string, unknown>): TestConfig {
+  const config: TestConfig = { tests: [] };
+
+  if (parsed.name) config.name = String(parsed.name);
+  if (parsed.url) {
+    config.target = { url: String(parsed.url) };
+  }
+
+  const scenarios = Array.isArray(parsed.scenarios) ? parsed.scenarios : [];
+
+  // 每个 scenario 转换为一个 smoke 测试用例
+  for (const sc of scenarios) {
+    if (!sc || typeof sc !== 'object') continue;
+    const s = sc as any;
+    const routes: string[] = [];
+    if (Array.isArray(s.actions)) {
+      for (const action of s.actions) {
+        if (action && action.type === 'navigate' && typeof action.value === 'string') {
+          routes.push(action.value);
+          break;
+        }
+      }
+    }
+    const testCase: TestCase = {
+      name: String(s.name || 'unnamed'),
+      type: 'smoke',
+      routes: routes.length > 0 ? routes : ['/'],
+    };
+    config.tests.push(testCase);
+  }
+
+  return config;
 }
 
-/** 加载测试场景配置文件 */
+/** 加载测试场景配置文件（v8.3.122+: 自动识别两种格式） */
 export async function loadTestConfig(filePath: string): Promise<TestConfig | null> {
   if (!(await pathExists(filePath))) {
     logger.warn(`⚠️ 测试配置文件不存在: ${filePath}`);
@@ -119,6 +112,12 @@ export async function loadTestConfig(filePath: string): Promise<TestConfig | nul
   try {
     const raw = await readFile(filePath, 'utf-8');
     const parsed = parseTestYaml(raw) as Record<string, unknown>;
+
+    // v8.3.122+: 自动识别 VERIFY_SPEC 格式（scenarios/actions 结构）
+    if (Array.isArray(parsed.scenarios) && !Array.isArray(parsed.tests)) {
+      logger.info(`   🔀 检测到 VERIFY_SPEC 格式，自动转换为 TestConfig`);
+      return convertVerifySpecToTestConfig(parsed);
+    }
 
     const config: TestConfig = {
       tests: [],

@@ -1,9 +1,25 @@
 import { join } from 'path';
+import { readFile, pathExists } from 'fs-extra';
 import { logger } from '../utils/logger';
+import { findProjectRoot } from '../utils/task-utils';
 
 export async function aboutCommand(): Promise<void> {
   const pkg = require('../../package.json');
   const ver = pkg.version;
+
+  // v8.3.122+: 显示版本更新提示（如果缓存中有新版本信息）
+  try {
+    const projectRoot = findProjectRoot() || process.cwd();
+    const checkCachePath = join(projectRoot, '.speccore', 'local', 'version-check.json');
+    if (await pathExists(checkCachePath)) {
+      const cache = JSON.parse(await readFile(checkCachePath, 'utf-8'));
+      if (cache.latest && cache.latest !== ver) {
+        logger.info(`🎉 发现新版本: v${cache.latest}（当前: v${ver}）`);
+        logger.info(`   👉 升级命令: npm update -g speccore`);
+        logger.info('');
+      }
+    }
+  } catch { /* 忽略版本检查错误 */ }
 
   // 产品功能概览
   const features = [

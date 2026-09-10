@@ -221,7 +221,7 @@ export function loadSubtaskGitConfig(taskDir: string): Partial<GitConfig> {
 
     // v8.3.6+: 辅助函数：提取值，跳过占位符和无意义值
     const extractValue = (key: string): string | null => {
-      const match = content.match(new RegExp(`${key}[：:]\s*(\\S+)`));
+      const match = content.match(new RegExp(`${key}[：:]\\s*(\\S+)`));
       if (!match) return null;
       const val = match[1].trim();
       // 过滤占位符和无效值

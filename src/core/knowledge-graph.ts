@@ -357,120 +357,148 @@ async function scanBusinessCodeMappings(iterDir: string): Promise<{
 
   if (!(await pathExists(specsDir))) return { entities, relations };
 
-  // 扫描各端子目录
-  const knownNonPlatformDirs = new Set(['sources', 'assets', 'prototypes', 'converted', 'features', 'bugs', 'refactors', 'research', 'staging', 'platforms', 'snapshots', 'global']);
+  // v8.3.122+: 同时兼容新旧两种路径结构
+  // 新结构: 020-specs/{feature}/{platform}/TECH.md
+  // 旧结构: 020-specs/{platform}/TECH.md
+  const knownNonPlatformDirs = new Set(['sources', 'assets', 'prototypes', 'converted', 'features', 'bugs', 'refactors', 'research', 'staging', 'platforms', 'snapshots', 'global', 'overview', 'requirements']);
   const specsEntries = await readdir(specsDir, { withFileTypes: true });
 
-  for (const e of specsEntries) {
-    if (!e.isDirectory() || e.name.startsWith('_') || e.name.startsWith('.') || knownNonPlatformDirs.has(e.name)) continue;
-    const platformName = e.name;
-    const techMdPath = join(specsDir, platformName, 'TECH.md');
+  for (const featureEntry of specsEntries) {
+    if (!featureEntry.isDirectory() || featureEntry.name.startsWith('_') || featureEntry.name.startsWith('.') || knownNonPlatformDirs.has(featureEntry.name)) continue;
 
-    if (!(await pathExists(techMdPath))) continue;
+    const featureName = featureEntry.name;
+    const featureDir = join(specsDir, featureName);
 
-    const content = await readFile(techMdPath, 'utf-8').catch(() => '');
-    if (!content) continue;
+    // 检测是旧结构（直接有 TECH.md）还是新结构（有子目录）
+    const hasTechMdDirectly = await pathExists(join(featureDir, 'TECH.md'));
 
-    // 查找「业务-代码映射」章节（不用 m 标志，$ 仅匹配字符串末尾）
-    const mappingSectionMatch = content.match(/##\s+业务-代码映射[\s\S]*?(?=\n##\s|$)/i);
-    if (!mappingSectionMatch) continue;
-
-    const sectionContent = mappingSectionMatch[0];
-
-    // 解析表格
-    const lines = sectionContent.split(/\r?\n/);
-    let inTable = false;
-    let headerParsed = false;
-    let colIndices = { module: -1, entity: -1, relation: -1, desc: -1 };
-
-    // 用于去重的业务模块集合
-    const seenModules = new Set<string>();
-
-    for (const line of lines) {
-      const cells = line.split('|').map(c => c.trim()).filter(Boolean);
-      if (cells.length < 2) continue;
-
-      // 表头行
-      if (!headerParsed && cells.some(c => c.includes('业务模块') || c.includes('代码实体'))) {
-        colIndices = {
-          module: cells.findIndex(c => c.includes('业务模块')),
-          entity: cells.findIndex(c => c.includes('代码实体')),
-          relation: cells.findIndex(c => c.includes('关系类型')),
-          desc: cells.findIndex(c => c.includes('说明')),
-        };
-        if (colIndices.module < 0) colIndices.module = 0;
-        if (colIndices.entity < 0) colIndices.entity = 1;
-        headerParsed = true;
-        inTable = true;
-        continue;
+    if (hasTechMdDirectly) {
+      // 旧结构: 020-specs/{platform}/TECH.md — 把 featureName 当成 platformName
+      await processTechMdForMappings(featureDir, featureName, '', entities, relations);
+    } else {
+      // 新结构: 020-specs/{feature}/{platform}/TECH.md
+      const platformEntries = await readdir(featureDir, { withFileTypes: true }).catch(() => [] as any[]);
+      for (const platformEntry of platformEntries) {
+        if (!platformEntry.isDirectory() || platformEntry.name.startsWith('.') || knownNonPlatformDirs.has(platformEntry.name)) continue;
+        const platformDir = join(featureDir, platformEntry.name);
+        await processTechMdForMappings(platformDir, platformEntry.name, featureName, entities, relations);
       }
-
-      // 分隔行跳过
-      if (cells.every(c => /^[-:]+$/.test(c))) continue;
-
-      if (!inTable || !headerParsed) continue;
-
-      // 数据行
-      const moduleName = cells[colIndices.module];
-      const codeEntity = cells[colIndices.entity];
-      const relationType = colIndices.relation >= 0 && colIndices.relation < cells.length ? cells[colIndices.relation] : 'maps_to';
-      const desc = colIndices.desc >= 0 && colIndices.desc < cells.length ? cells[colIndices.desc] : '';
-
-      if (!moduleName || !codeEntity) continue;
-      if (moduleName === '业务模块' || moduleName === '#') continue;
-
-      // 创建业务模块实体（去重）
-      const bizModuleId = `biz:${platformName}:${moduleName}`;
-      if (!seenModules.has(bizModuleId)) {
-        seenModules.add(bizModuleId);
-        entities.push({
-          id: bizModuleId,
-          type: 'business_module',
-          title: moduleName,
-          file: `020-specs/${platformName}/TECH.md`,
-          hash: '',
-          mtime: '',
-          platform: platformName,
-          businessModule: moduleName,
-          tags: ['business-mapping'],
-        });
-
-        // 关联到对应的 spec 实体
-        const specId = `SPEC:${platformName}/TECH`;
-        relations.push({
-          from: bizModuleId,
-          to: specId,
-          type: 'elaborates',
-          metadata: { source: 'tech-md-mapping' },
-        });
-      }
-
-      // 创建代码实体（作为 business_module 的关联目标）
-      const codeEntityId = `code:${platformName}:${codeEntity.replace(/[/\\]/g, '-')}`;
-      if (!entities.find(e => e.id === codeEntityId)) {
-        entities.push({
-          id: codeEntityId,
-          type: 'source-file',
-          title: codeEntity,
-          file: codeEntity,
-          hash: '',
-          mtime: '',
-          platform: platformName,
-          tags: ['code-entity', relationType],
-        });
-      }
-
-      // 创建关系
-      relations.push({
-        from: bizModuleId,
-        to: codeEntityId,
-        type: relationType || 'maps_to',
-        metadata: { description: desc, source: 'tech-md-mapping' },
-      });
     }
   }
 
   return { entities, relations };
+}
+
+/** 从单个 TECH.md 中提取业务-代码映射 */
+async function processTechMdForMappings(
+  dir: string,
+  platformName: string,
+  featureName: string,
+  entities: GraphEntity[],
+  relations: GraphRelation[],
+): Promise<void> {
+  const techMdPath = join(dir, 'TECH.md');
+  if (!(await pathExists(techMdPath))) return;
+
+  const content = await readFile(techMdPath, 'utf-8').catch(() => '');
+  if (!content) return;
+
+  // 查找「业务-代码映射」章节
+  const mappingSectionMatch = content.match(/##\s+业务-代码映射[\s\S]*?(?=\n##\s|$)/i);
+  if (!mappingSectionMatch) return;
+
+  const sectionContent = mappingSectionMatch[0];
+  const lines = sectionContent.split(/\r?\n/);
+  let inTable = false;
+  let headerParsed = false;
+  let colIndices = { module: -1, entity: -1, relation: -1, desc: -1 };
+  const seenModules = new Set<string>();
+
+  for (const line of lines) {
+    const cells = line.split('|').map(c => c.trim()).filter(Boolean);
+    if (cells.length < 2) continue;
+
+    if (!headerParsed && cells.some(c => c.includes('业务模块') || c.includes('代码实体'))) {
+      colIndices = {
+        module: cells.findIndex(c => c.includes('业务模块')),
+        entity: cells.findIndex(c => c.includes('代码实体')),
+        relation: cells.findIndex(c => c.includes('关系类型')),
+        desc: cells.findIndex(c => c.includes('说明')),
+      };
+      if (colIndices.module < 0) colIndices.module = 0;
+      if (colIndices.entity < 0) colIndices.entity = 1;
+      headerParsed = true;
+      inTable = true;
+      continue;
+    }
+
+    if (cells.every(c => /^[-:]+$/.test(c))) continue;
+    if (!inTable || !headerParsed) continue;
+
+    const moduleName = cells[colIndices.module];
+    const codeEntity = cells[colIndices.entity];
+    const relationType = colIndices.relation >= 0 && colIndices.relation < cells.length ? cells[colIndices.relation] : 'maps_to';
+    const desc = colIndices.desc >= 0 && colIndices.desc < cells.length ? cells[colIndices.desc] : '';
+
+    if (!moduleName || !codeEntity) continue;
+    if (moduleName === '业务模块' || moduleName === '#') continue;
+
+    // v8.3.122+: bizModuleId 包含 featureName 避免跨模块冲突
+    const bizModuleId = featureName
+      ? `biz:${featureName}:${platformName}:${moduleName}`
+      : `biz:${platformName}:${moduleName}`;
+    const filePath = featureName
+      ? `020-specs/${featureName}/${platformName}/TECH.md`
+      : `020-specs/${platformName}/TECH.md`;
+    const specId = featureName
+      ? `SPEC:${featureName}/${platformName}/TECH`
+      : `SPEC:${platformName}/TECH`;
+
+    if (!seenModules.has(bizModuleId)) {
+      seenModules.add(bizModuleId);
+      entities.push({
+        id: bizModuleId,
+        type: 'business_module',
+        title: moduleName,
+        file: filePath,
+        hash: '',
+        mtime: '',
+        platform: platformName,
+        businessModule: moduleName,
+        tags: ['business-mapping'],
+      });
+
+      relations.push({
+        from: bizModuleId,
+        to: specId,
+        type: 'elaborates',
+        metadata: { source: 'tech-md-mapping' },
+      });
+    }
+
+    const codeEntityId = featureName
+      ? `code:${featureName}:${platformName}:${codeEntity.replace(/[/\\]/g, '-')}`
+      : `code:${platformName}:${codeEntity.replace(/[/\\]/g, '-')}`;
+    if (!entities.find(e => e.id === codeEntityId)) {
+      entities.push({
+        id: codeEntityId,
+        type: 'source-file',
+        title: codeEntity,
+        file: codeEntity,
+        hash: '',
+        mtime: '',
+        platform: platformName,
+        tags: ['code-entity', relationType],
+      });
+    }
+
+    relations.push({
+      from: bizModuleId,
+      to: codeEntityId,
+      type: relationType || 'maps_to',
+      metadata: { description: desc, source: 'tech-md-mapping' },
+    });
+  }
 }
 
 // ═══════════════════════════════════════════════════
@@ -1927,6 +1955,25 @@ export async function refreshKnowledgeGraph(
   iteration?: string
 ): Promise<KnowledgeGraph | null> {
   return incrementalUpdateKnowledgeGraph(cwd, iteration);
+}
+
+/** v8.3.125+: 加载知识图谱（自动检查过期并刷新） */
+export async function loadFreshKnowledgeGraph(
+  cwd: string,
+  iteration?: string
+): Promise<KnowledgeGraph | null> {
+  let graph = await loadKnowledgeGraph(cwd);
+  if (!graph) return null;
+  try {
+    const stale = await isGraphStale(cwd, iteration);
+    if (stale) {
+      graph = await refreshKnowledgeGraph(cwd, iteration);
+      if (graph) logger?.info?.('🧠 知识图谱已自动刷新（检测到变更）');
+    }
+  } catch {
+    // 过期检查失败不阻断，使用现有图谱
+  }
+  return graph;
 }
 
 // ═══════════════════════════════════════════════
