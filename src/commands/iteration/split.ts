@@ -1325,7 +1325,7 @@ function extractIterationName(iterationDir: string): string {
   return base.replace(/^Iteration-/, '');
 }
 
-/** 生成带实际配置值的 git-config 内容 */
+/** 生成带实际配置值的 git-config 内容（v8.3.116+） */
 function buildGitConfigContent(config: GitConfig, platformLabel: string, taskType?: string): string {
   const branchType = taskType === 'bugfix' ? 'bugfix' : taskType === 'refactor' ? 'refactor' : taskType === 'research' ? 'research' : 'feature';
   // v8.3.9+: 示例使用 taskId（全局唯一，可读，无需 hash）
@@ -1336,32 +1336,49 @@ function buildGitConfigContent(config: GitConfig, platformLabel: string, taskTyp
     ? `${key}: ${val}`
     : `# ${key}: ${def}`;
   return `# 子任务级 Git 配置（${platformLabel}）
-# 以下配置覆盖迭代级 PROJECT_GRAPH.md，未配置项自动继承上一级。
-# 当前值已从迭代级/全局级配置自动填充，可直接使用或按需修改。
+# ─────────────────────────────────────────────────────────────────────────────
+# 配置优先级：子任务 > 迭代级 > 全局 CONSTITUTION.md > 默认值
+# 未配置的字段自动从上级继承，无需全部填写
+# ─────────────────────────────────────────────────────────────────────────────
 
-# === 当前生效配置 ===
+# === 分支类型与命名（v8.3.116+） ===
+# 分支名格式: {类型}/{前缀}-{任务名}-{后缀}
+#   {类型}/  = 类型自带（如 hotfix/、feature/）
+#   {前缀}   = 任务名前的前缀（可选），如 api-、backend-
+#   {任务名} = 子任务全局唯一 ID，如 Task-001-booking-service
+#   {后缀}   = 任务名后的后缀（可选），如 urgent、review
+#
+# 示例: 分支类型=hotfix + 前缀=api- + 后缀=urgent + 任务名=Task-001
+#       → 分支名: hotfix/api-Task-001-urgent
+
+# 分支类型: 覆盖默认 feature（可选值: feature / bugfix / hotfix / release / support）
+分支类型: ${branchType}
+
+# 前缀: 任务名前的前缀（可选），如 api-、backend-
+# 前缀: api-
+
+# 后缀: 任务名后的后缀（可选），如 urgent、review
+# 后缀: urgent
+
+# === 源分支（从哪个分支创建）===
+# 默认从全局配置的 default_base 创建，如需覆盖请取消注释：
 ${fmt('源分支', config.defaultBranch, 'main')}
-${fmt('分支前缀', config.branchPrefix, '无')}
-${fmt('分支格式', config.branchFormat, '{type}/{prefix}{taskId}')}
-${fmt('自动拉取', config.autoPull ? 'true' : '', 'false')}
-${fmt('远程名称', config.remoteName, 'origin')}
 
 # === 保护分支（禁止直接推送）===
-${config.protectedBranches.map(b => `- ${b}`).join('\n')}
+${config.protectedBranches.map(b => `# - ${b}`).join('\n')}
 
-# === 分支命名示例 ===
-# 当前任务类型: ${branchType}
-# 命名格式: ${config.branchFormat}
-# 示例分支: ${branchType}/${prefix}${exampleTaskId}
-# （{taskId} 为子任务全局唯一 ID，如 Task-001-booking-service）
+# === 高级配置（一般不修改）===
+# 分支前缀（旧语义，兼容保留）
+${fmt('分支前缀', config.branchPrefix, '无')}
 
-# === 自定义配置区 ===
-# 如需覆盖上述值，取消下方注释并修改：
-# 源分支: ${config.defaultBranch || 'main'}
-# 分支前缀: 
-# 分支格式: {type}/{prefix}{taskId}
-# 自动拉取: false
-# 远程名称: origin
+# 分支格式: 自定义分支名模板（支持变量: {type} {prefix} {taskId} {name} {date} {hash4}）
+${fmt('分支格式', config.branchFormat, '{type}/{prefix}{taskId}')}
+
+# 自动拉取: 创建分支前是否自动 git pull（true / false）
+${fmt('自动拉取', config.autoPull ? 'true' : '', 'false')}
+
+# 远程名称: 远程仓库名称（默认 origin）
+${fmt('远程名称', config.remoteName, 'origin')}
 `;
 }
 
