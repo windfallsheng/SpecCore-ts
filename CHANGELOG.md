@@ -1,3 +1,16 @@
+## v8.3.127 (2026-09-10) — update 同步示例配置
+
+### 改进
+
+**`speccore update` 同步更新 `.speccore/examples/`** (`src/commands/update.ts`)：
+- `update` 命令现在会调用 `generateExampleConfigs()` 同步示例配置文件
+- 老项目缺失 `.speccore/examples/` 时自动补创建
+- 已有示例时直接覆盖（示例文件为 CLI 生成物，不推荐用户修改）
+- 更新失败有 `try/catch` 保护，不阻断主升级流程
+- 最终输出汇总新增：`✅ .speccore/examples/ — 配置示例（直接覆盖）`
+
+---
+
 ## v8.3.126 (2026-09-10) — 结构化提取深化 + INFO_GAP 闭环 + 阅读清单化
 
 ### 新增

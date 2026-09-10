@@ -9,7 +9,7 @@ import { createInterface } from 'readline';
 import { logger, Spinner } from '../utils/logger';
 import { findProjectRoot } from '../utils/task-utils';
 import { version as CURRENT_VERSION } from '../../package.json';
-import { safeWriteWithBackup, safeCopyDirWithBackup, _updateConflicts, generateAIRulesContent, TOOL_COMMANDS, initAgentsDir, initRulesDir, initCommandsDir, initSkillsDir, initHooksDir, syncAgentsMd, writeUpgradePage } from './init';
+import { safeWriteWithBackup, safeCopyDirWithBackup, _updateConflicts, generateAIRulesContent, TOOL_COMMANDS, initAgentsDir, initRulesDir, initCommandsDir, initSkillsDir, initHooksDir, syncAgentsMd, writeUpgradePage, generateExampleConfigs } from './init';
 import {
   initConfig,
   initProjectConfig,
@@ -447,6 +447,11 @@ export async function updateCommand(options: { force?: boolean; tool?: string; y
   await ensureDir(join(templatesDir, 'iteration'));
   await ensureDir(join(templatesDir, 'task'));
 
+  // v8.3.127+: update 时同步更新示例配置文件
+  try {
+    await generateExampleConfigs(projectRoot);
+  } catch { /* 示例更新失败不影响主流程 */ }
+
   // v6.98.0+: 同步 AGENTS.md — 将 .speccore/ 规范数据库投影到 AGENTS.md
   // v8.3.46+: force 模式 — 重新生成手动区，不保留旧内容（用户自定义内容需手动备份）
   await syncAgentsMd(projectRoot, true);
@@ -507,6 +512,7 @@ export async function updateCommand(options: { force?: boolean; tool?: string; y
   logger.info('     ✅ .speccore/COMMANDS/ — 命令模板库');
   logger.info('     ✅ .speccore/SKILLS/ — 可复用技能库');
   logger.info('     ✅ .speccore/HOOKS/ — 生命周期钩子库');
+  logger.info('     ✅ .speccore/examples/ — 配置示例（直接覆盖）');
   if (envConfigCreated.length > 0) {
     logger.info('     ✅ .speccore/environments/ — 环境配置');
     for (const f of envConfigCreated) {

@@ -2410,7 +2410,7 @@ async function writeSetupGuide(projectRoot: string, _speccoreDir: string): Promi
 // v8.3.115+: 生成示例配置文件
 // ─────────────────────────────────────────
 
-async function generateExampleConfigs(projectRoot: string): Promise<void> {
+export async function generateExampleConfigs(projectRoot: string): Promise<void> {
   const examplesDir = join(projectRoot, '.speccore', 'examples');
   const configDir = join(examplesDir, 'config');
   await ensureDir(configDir);
