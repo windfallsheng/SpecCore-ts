@@ -1,3 +1,16 @@
+## v8.3.130 (2026-09-10) — 业内经典规范示例模板
+
+### 新增
+
+**业内经典规范示例模板** (`templates/` + `src/commands/init.ts`)：
+- `templates/api-design-example.md` — API 设计规范（RESTful URL、HTTP 状态码、请求响应格式、分页、鉴权、版本控制、文件上传、幂等性、批量操作、限流熔断、接口文档模板）
+- `templates/database-example.md` — 数据库设计规范（命名规范、字段设计、索引设计、分表分库、软删除与归档、SQL 编写规范、数据库评审清单）
+- `templates/security-example.md` — 安全规范（认证授权、输入校验、输出编码、敏感数据处理、OWASP 防御、安全 Headers、安全开发清单）
+- `speccore init` / `speccore update` 自动将以上模板复制到 `.speccore/examples/config/`
+- `examples/README.md` 更新目录结构和使用说明
+
+---
+
 ## v8.3.129 (2026-09-10) — GLOBAL 关键文件自动加载 + 示例模板扩展
 
 ### 新增

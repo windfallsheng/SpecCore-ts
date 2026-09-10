@@ -2431,6 +2431,9 @@ examples/
 │   ├── PROJECT-EXAMPLE.yaml     ← PROJECT.yaml 完整示例（多工程）
 │   ├── GIT-CONFIG-EXAMPLE.txt   ← 子任务 .meta/git-config 格式示例
 │   ├── BUSINESS-RULES-EXAMPLE.md ← 业务规则示例（全局业务规则模板）
+│   ├── API-DESIGN-EXAMPLE.md    ← API 设计规范示例（RESTful + 鉴权 + 版本）
+│   ├── DATABASE-EXAMPLE.md      ← 数据库设计规范示例（命名 + 索引 + 分表）
+│   ├── SECURITY-EXAMPLE.md      ← 安全规范示例（OWASP + 加密 + 审计）
 │   ├── DEPLOY-EXAMPLE.yaml      ← 部署配置示例（speccore deploy 使用）
 │   └── VERIFY-EXAMPLE.yaml      ← 测试验证配置示例（speccore verify 使用）
 └── project/                     ← 完整项目示例（预留，未来扩展）
@@ -2442,9 +2445,12 @@ examples/
 2. 查看 \`config/PROJECT-EXAMPLE.yaml\`，了解 YAML 结构和字段对应关系
 3. 查看 \`config/GIT-CONFIG-EXAMPLE.txt\`，了解子任务级 Git 配置格式
 4. 查看 \`config/BUSINESS-RULES-EXAMPLE.md\`，了解全局业务规则写法，复制到 \`.speccore/GLOBAL/BUSINESS_RULES.md\`
-5. 查看 \`config/DEPLOY-EXAMPLE.yaml\`，了解部署配置格式（用于 \`speccore deploy\`）
-6. 查看 \`config/VERIFY-EXAMPLE.yaml\`，了解测试验证配置格式（用于 \`speccore verify --config\`）
-7. 修改后运行 \`speccore update\` 自动同步到 PROJECT.yaml
+5. 查看 \`config/API-DESIGN-EXAMPLE.md\`，了解 API 设计规范，可作为 \`.speccore/RULES/api-design.md\` 素材
+6. 查看 \`config/DATABASE-EXAMPLE.md\`，了解数据库设计规范，可作为 \`.speccore/RULES/database.md\` 素材
+7. 查看 \`config/SECURITY-EXAMPLE.md\`，了解安全规范，可作为 \`.speccore/RULES/security.md\` 素材
+8. 查看 \`config/DEPLOY-EXAMPLE.yaml\`，了解部署配置格式（用于 \`speccore deploy\`）
+9. 查看 \`config/VERIFY-EXAMPLE.yaml\`，了解测试验证配置格式（用于 \`speccore verify --config\`）
+10. 修改后运行 \`speccore update\` 自动同步到 PROJECT.yaml
 
 ## 注意事项
 
@@ -2804,6 +2810,25 @@ code_scope:
     if (await pathExists(verifyExampleSrc)) {
       const verifyContent = await readFile(verifyExampleSrc, 'utf-8');
       await writeFile(join(configDir, 'VERIFY-EXAMPLE.yaml'), verifyContent);
+    }
+  } catch { /* 模板文件可选 */ }
+
+  // v8.3.130+: 复制业内经典规范示例（API设计 / 数据库 / 安全）
+  const apiDesignSrc = join(templateDir, 'api-design-example.md');
+  const databaseSrc = join(templateDir, 'database-example.md');
+  const securitySrc = join(templateDir, 'security-example.md');
+  try {
+    if (await pathExists(apiDesignSrc)) {
+      const content = await readFile(apiDesignSrc, 'utf-8');
+      await writeFile(join(configDir, 'API-DESIGN-EXAMPLE.md'), content);
+    }
+    if (await pathExists(databaseSrc)) {
+      const content = await readFile(databaseSrc, 'utf-8');
+      await writeFile(join(configDir, 'DATABASE-EXAMPLE.md'), content);
+    }
+    if (await pathExists(securitySrc)) {
+      const content = await readFile(securitySrc, 'utf-8');
+      await writeFile(join(configDir, 'SECURITY-EXAMPLE.md'), content);
     }
   } catch { /* 模板文件可选 */ }
 
