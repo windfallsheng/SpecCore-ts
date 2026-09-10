@@ -19,6 +19,7 @@ import { scanTasks, TaskState } from '../core/state';
 import { resolveTask, formatResolveResult } from '../core/resolver';
 import { runVerification, writeVerifyReport, VerifyReport } from '../core/verify-engine';
 import { loadConfig, loadProjectConfig } from '../core/unified-config';
+import { parsePlatformList } from '../core/spec-paths';
 import { parseYamlFile } from '../core/yaml-parser';
 import { createInterface } from 'readline';
 import {
@@ -62,7 +63,7 @@ import { findProjectRoot } from '../utils/task-utils';
 interface VerifyOptions {
   task?: string;
   iteration?: string;
-  type?: 'compile' | 'lint' | 'test' | 'all';
+  type?: 'compile' | 'lint' | 'test' | 'artifact' | 'all';
   path?: string;
   timeout?: number;
   // v8.3.60+: 分层测试阶段
@@ -153,6 +154,9 @@ export async function verifyCommand(options: VerifyOptions): Promise<void> {
     const iterDir = await getIterationDir(iteration);
     const config = await loadConfig();
     const projectConfig = await loadProjectConfig();
+    // v8.3.105+: 加载平台列表用于推断平台名
+    const platformList = await parsePlatformList();
+    const platformSet = new Set(platformList);
 
     // 确定代码路径（v8.3.101+: 基于项目根目录解析）
     let codePath: string;
@@ -238,9 +242,11 @@ export async function verifyCommand(options: VerifyOptions): Promise<void> {
 
       // 代码验证
       const taskCodePath = await findTaskCodePath(task, iterDir, codePath);
+      const platformName = taskDir ? inferPlatformName(taskDir, platformSet) : undefined;
       const report = await runVerification(task.id, taskCodePath, {
         type: options.type || 'all',
         timeout: options.timeout,
+        platformName,
       });
 
       const reportDir = taskDir ? join(taskDir, '99-artifacts') : join(iterDir, '020-specs');
@@ -266,9 +272,11 @@ export async function verifyCommand(options: VerifyOptions): Promise<void> {
 
     // 迭代级验证（原有逻辑）
     spinner.stop();
+    const platformName = inferPlatformName(codePath, platformSet) || inferPlatformNameFromCodePath(codePath, projectConfig.platforms);
     const report = await runVerification(`Iteration-${iteration}`, codePath, {
       type: options.type || 'all',
       timeout: options.timeout,
+      platformName,
     });
 
     // v8.3.49+: 迭代级报告输出到 000-overview/，与 plan 同级
@@ -1357,6 +1365,27 @@ function inferPlatformFromTaskDir(taskDir: string): string | undefined {
     // 排除常见非端目录名
     if (parentDir && !['030-tasks', 'feature', 'bugfix', 'refactor', 'research'].includes(parentDir)) {
       return parentDir;
+    }
+  }
+  return undefined;
+}
+
+// v8.3.105+: 从路径中匹配已知平台名
+function inferPlatformName(path: string, platformSet: Set<string>): string | undefined {
+  for (const name of platformSet) {
+    if (path.includes(name)) return name;
+  }
+  return undefined;
+}
+
+// v8.3.105+: 从 codePath 匹配 PROJECT.yaml 中的平台配置
+function inferPlatformNameFromCodePath(
+  codePath: string,
+  platforms: import('../core/unified-config').PlatformConfig[]
+): string | undefined {
+  for (const p of platforms) {
+    if (p.code_path && codePath.includes(p.code_path.replace(/^\.\//, ''))) {
+      return p.name;
     }
   }
   return undefined;

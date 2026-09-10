@@ -1,3 +1,40 @@
+## v8.3.105 (2026-09-10) — 多工程类型 + Windows 兼容 + CONSTITUTION 优先 + 产物检查
+
+### 新增
+
+**支持更多工程类型（v8.3.105）**:
+- 新增 `android`、`ios`、`flutter`、`rust`、`csharp` 工程类型自动检测
+- 检测顺序：Flutter → iOS → Android → Rust → C# → Node → Java → Go → Python（从具体到一般）
+- 每个类型配有对应的编译/Lint/测试命令
+- **影响文件**：`src/core/verify-engine.ts`
+
+**Windows 兼容性修复（v8.3.105）**:
+- `verify-engine.ts`：去掉 `2>&1` 和 `|| true`（`execSync` 已捕获输出和异常）
+- `verify-engine.ts`：`./mvnw` → `mvnw.cmd`（Windows）、`./gradlew` → `gradlew.bat`
+- `verify-engine.ts`：Python `$(find ...)` bash 语法 → `python -m compileall . -q`（跨平台）
+- `deploy/engine.ts`：`cp -r` → `fs-extra.copySync`（跨平台）
+- `deploy/engine.ts`：`bash ${script}` → 直接执行脚本文件（Windows 兼容）
+- **影响文件**：`src/core/verify-engine.ts`、`src/core/deploy/engine.ts`
+
+**优先读取 CONSTITUTION.md 工程类型（v8.3.105）**:
+- `runVerification` 新增 `platformName` 参数
+- 项目类型解析优先级：**显式传入 > CONSTITUTION.md「工程类型」列 > 自动检测**
+- `verify.ts` 自动从任务目录路径或 `codePath` 推断平台名，传给 `runVerification`
+- `inferProjectTypeFromConstitution()` 将中文工程类型（如"Java服务"）映射到代码类型
+- **影响文件**：`src/core/verify-engine.ts`、`src/commands/verify.ts`
+
+**前端产物检查（v8.3.105）**:
+- 新增 `--type artifact` 只检查构建产物
+- `--type all` 时自动包含产物检查
+- 检查内容：
+  - Node: `dist/`、`build/`、`out/` 目录是否存在
+  - Java: `target/`、`build/libs/` 目录是否存在
+  - Android: `app/build/outputs/` 是否存在
+  - Flutter: `build/app/outputs/` 是否存在
+- **影响文件**：`src/core/verify-engine.ts`、`src/commands/verify.ts`
+
+---
+
 ## v8.3.104 (2026-09-10) — 端级 Git 配置覆盖
 
 ### 新增

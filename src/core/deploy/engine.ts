@@ -8,7 +8,7 @@
  */
 
 import { execSync } from 'child_process';
-import { pathExists } from 'fs-extra';
+import { pathExists, copySync, emptyDirSync } from 'fs-extra';
 import { join, isAbsolute } from 'path';
 import { logger, Spinner } from '../../utils/logger';
 import type { DeployEnvConfig, PlatformConfig } from '../unified-config';
@@ -312,8 +312,10 @@ async function deployStatic(
     const remote = target.replace(/^rsync:\/\//, '');
     execSync(`rsync -avz --delete ${outputDir}/ ${remote}`, { stdio: 'inherit', cwd });
   } else {
-    // 本地路径复制
-    execSync(`cp -r ${outputDir}/* ${target}`, { stdio: 'inherit', cwd });
+    // 本地路径复制（v8.3.105+: 跨平台，使用 fs-extra 替代 cp -r）
+    const targetPath = isAbsolute(target) ? target : join(cwd, target);
+    emptyDirSync(targetPath);
+    copySync(join(cwd, outputDir), targetPath);
   }
 }
 
@@ -333,7 +335,8 @@ async function deployScript(
   // 判断是文件路径还是直接命令
   const scriptPath = join(cwd, config.script);
   if (await pathExists(scriptPath)) {
-    execSync(`bash ${scriptPath}`, { stdio: 'inherit', cwd });
+    // v8.3.105+: 跨平台执行脚本（Windows 直接用 execSync 执行文件）
+    execSync(scriptPath, { stdio: 'inherit', cwd });
   } else {
     execSync(config.script, { stdio: 'inherit', cwd });
   }

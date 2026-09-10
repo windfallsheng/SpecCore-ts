@@ -7,8 +7,8 @@
  */
 
 import { execSync } from 'child_process';
-import { join } from 'path';
-import { pathExists, readFile, writeFile, ensureDir, readdir } from 'fs-extra';
+import { join, sep } from 'path';
+import { pathExists, readFile, writeFile, ensureDir, readdir, copySync, existsSync } from 'fs-extra';
 import { logger } from '../utils/logger';
 // v6.84.0+: AGENTS 引擎集成
 import {
@@ -22,7 +22,10 @@ import { validateContentQuality } from './spec-skeleton';
 // 类型定义
 // ============================================================
 
-export type ProjectType = 'node' | 'java' | 'go' | 'python' | 'unknown';
+export type ProjectType =
+  | 'node' | 'java' | 'go' | 'python'
+  | 'android' | 'ios' | 'flutter' | 'rust' | 'csharp'
+  | 'unknown';
 
 export interface CheckResult {
   name: string;
@@ -52,12 +55,50 @@ export interface VerifyReport {
 // 项目类型检测
 // ============================================================
 
+/**
+ * v8.3.105+: 支持更多工程类型，检测顺序从具体到一般
+ */
 export async function detectProjectType(codePath: string): Promise<ProjectType> {
+  // 1. Flutter（有 pubspec.yaml，且通常包含 android/ios 目录）
+  if (await pathExists(join(codePath, 'pubspec.yaml'))) return 'flutter';
+
+  // 2. iOS（Podfile / .xcodeproj / .xcworkspace）
+  if (await pathExists(join(codePath, 'Podfile'))) return 'ios';
+  try {
+    const files = await readdir(codePath);
+    if (files.some(f => f.endsWith('.xcodeproj') || f.endsWith('.xcworkspace'))) return 'ios';
+  } catch { /* ignore */ }
+
+  // 3. Android（AndroidManifest.xml 或 app/build.gradle）
+  if (await pathExists(join(codePath, 'AndroidManifest.xml'))) return 'android';
+  if (await pathExists(join(codePath, 'app', 'build.gradle'))) return 'android';
+
+  // 4. Rust
+  if (await pathExists(join(codePath, 'Cargo.toml'))) return 'rust';
+
+  // 5. C#（.csproj 或 .sln）
+  try {
+    const files = await readdir(codePath);
+    if (files.some(f => f.endsWith('.csproj'))) return 'csharp';
+    if (files.some(f => f.endsWith('.sln'))) return 'csharp';
+  } catch { /* ignore */ }
+
+  // 6. Node.js
   if (await pathExists(join(codePath, 'package.json'))) return 'node';
+
+  // 7. Java（pom.xml / build.gradle，但无 Android 特征）
   if (await pathExists(join(codePath, 'pom.xml'))) return 'java';
-  if (await pathExists(join(codePath, 'build.gradle')) || await pathExists(join(codePath, 'build.gradle.kts'))) return 'java';
+  if (await pathExists(join(codePath, 'build.gradle')) || await pathExists(join(codePath, 'build.gradle.kts'))) {
+    // 再次确认不是 Android（前面已检测过 AndroidManifest.xml 和 app/build.gradle）
+    return 'java';
+  }
+
+  // 8. Go
   if (await pathExists(join(codePath, 'go.mod'))) return 'go';
+
+  // 9. Python
   if (await pathExists(join(codePath, 'requirements.txt')) || await pathExists(join(codePath, 'setup.py')) || await pathExists(join(codePath, 'pyproject.toml'))) return 'python';
+
   return 'unknown';
 }
 
@@ -71,7 +112,13 @@ interface ProjectCommands {
   test: string | null;
 }
 
+/**
+ * v8.3.105+: 获取跨平台的验证命令
+ * 去掉 2>&1 和 || true，因为 runCheck 的 execSync 已捕获输出和异常
+ */
 function getCommands(projectType: ProjectType, codePath: string): ProjectCommands {
+  const isWin = process.platform === 'win32';
+
   switch (projectType) {
     case 'node':
       return {
@@ -79,23 +126,57 @@ function getCommands(projectType: ProjectType, codePath: string): ProjectCommand
         lint: detectNodeLintCommand(codePath),
         test: detectNodeTestCommand(codePath),
       };
-    case 'java':
+    case 'java': {
+      const mvnw = isWin ? 'mvnw.cmd' : './mvnw';
       return {
-        compile: 'mvn compile -q 2>&1 || ./mvnw compile -q 2>&1',
-        lint: 'mvn checkstyle:check -q 2>&1 || true',
-        test: 'mvn test -q 2>&1 || ./mvnw test -q 2>&1',
+        compile: `mvn compile -q || ${mvnw} compile -q`,
+        lint: 'mvn checkstyle:check -q',
+        test: `mvn test -q || ${mvnw} test -q`,
       };
+    }
     case 'go':
       return {
-        compile: 'go build ./... 2>&1',
-        lint: 'golangci-lint run 2>&1 || true',
-        test: 'go test ./... -v 2>&1',
+        compile: 'go build ./...',
+        lint: 'golangci-lint run',
+        test: 'go test ./... -v',
       };
     case 'python':
       return {
-        compile: 'python -m py_compile $(find . -name "*.py") 2>&1 || python3 -m compileall . -q 2>&1',
-        lint: 'flake8 . 2>&1 || pylint . 2>&1 || ruff check . 2>&1 || true',
-        test: 'pytest -v 2>&1 || python -m pytest -v 2>&1 || true',
+        compile: 'python3 -m compileall . -q || python -m compileall . -q',
+        lint: 'flake8 . || pylint . || ruff check .',
+        test: 'pytest -v || python -m pytest -v',
+      };
+    case 'android': {
+      const gradlew = isWin ? 'gradlew.bat' : './gradlew';
+      return {
+        compile: `${gradlew} assembleDebug`,
+        lint: `${gradlew} lint`,
+        test: `${gradlew} test`,
+      };
+    }
+    case 'ios':
+      return {
+        compile: 'xcodebuild build',
+        lint: null, // iOS 无标准 lint 工具
+        test: 'xcodebuild test',
+      };
+    case 'flutter':
+      return {
+        compile: 'flutter build apk',
+        lint: 'flutter analyze',
+        test: 'flutter test',
+      };
+    case 'rust':
+      return {
+        compile: 'cargo build',
+        lint: 'cargo clippy',
+        test: 'cargo test',
+      };
+    case 'csharp':
+      return {
+        compile: 'dotnet build',
+        lint: 'dotnet format --verify-no-changes',
+        test: 'dotnet test',
       };
     default:
       return { compile: null, lint: null, test: null };
@@ -260,10 +341,78 @@ ${check.output.slice(0, 3000)}
 // 主入口
 // ============================================================
 
+/**
+ * v8.3.105+: 从 CONSTITUTION.md 工程类型字符串推断 ProjectType
+ */
+function inferProjectTypeFromConstitution(typeStr: string): ProjectType | null {
+  const t = typeStr.toLowerCase();
+  if (t.includes('java')) return 'java';
+  if (t.includes('node') || t.includes('前端') || t.includes('h5') || t.includes('web') || t.includes('小程序')) return 'node';
+  if (t.includes('go')) return 'go';
+  if (t.includes('python')) return 'python';
+  if (t.includes('android')) return 'android';
+  if (t.includes('ios')) return 'ios';
+  if (t.includes('flutter')) return 'flutter';
+  if (t.includes('rust')) return 'rust';
+  if (t.includes('csharp') || t.includes('c#') || t.includes('.net')) return 'csharp';
+  return null;
+}
+
+/**
+ * v8.3.105+: 检查前端构建产物
+ */
+async function runArtifactCheck(codePath: string, projectType: ProjectType): Promise<CheckResult> {
+  const start = Date.now();
+
+  // 确定期望的产物目录
+  let expectedDirs: string[] = [];
+  switch (projectType) {
+    case 'node':
+      expectedDirs = ['dist', 'build', 'out'];
+      break;
+    case 'java':
+      expectedDirs = ['target', join('build', 'libs')];
+      break;
+    case 'android':
+      expectedDirs = [join('app', 'build', 'outputs')];
+      break;
+    case 'flutter':
+      expectedDirs = [join('build', 'app', 'outputs')];
+      break;
+    default:
+      return { name: '产物检查', status: 'skip', duration: 0, output: '', details: '该类型暂不支持产物检查', blocking: false };
+  }
+
+  for (const dir of expectedDirs) {
+    const fullPath = join(codePath, dir);
+    if (await pathExists(fullPath)) {
+      const duration = Date.now() - start;
+      return { name: '产物检查', status: 'pass', duration, output: '', details: `发现产物目录: ${dir}`, blocking: false };
+    }
+  }
+
+  const duration = Date.now() - start;
+  return {
+    name: '产物检查',
+    status: 'warn',
+    duration,
+    output: `未在以下路径找到产物目录: ${expectedDirs.map(d => join(codePath, d)).join(', ')}`,
+    details: '未找到构建产物（需先执行构建）',
+    blocking: false,
+  };
+}
+
 export async function runVerification(
   taskId: string,
   codePath: string,
-  options?: { type?: 'compile' | 'lint' | 'test' | 'all'; timeout?: number }
+  options?: {
+    type?: 'compile' | 'lint' | 'test' | 'artifact' | 'all';
+    timeout?: number;
+    /** v8.3.105+: 显式指定项目类型（优先于自动检测） */
+    projectType?: ProjectType;
+    /** v8.3.105+: 平台名，用于从 CONSTITUTION.md 读取工程类型 */
+    platformName?: string;
+  }
 ): Promise<VerifyReport> {
   const checkType = options?.type || 'all';
   const timeout = options?.timeout || 120000;
@@ -271,9 +420,33 @@ export async function runVerification(
   logger.info(`🔍 开始验证: ${taskId}`);
   logger.info(`   代码路径: ${codePath}`);
 
-  // 检测项目类型
-  const projectType = await detectProjectType(codePath);
-  logger.info(`   项目类型: ${projectType}`);
+  // v8.3.105+: 项目类型解析优先级：显式传入 > CONSTITUTION.md > 自动检测
+  let projectType: ProjectType = 'unknown';
+
+  if (options?.projectType) {
+    projectType = options.projectType;
+    logger.info(`   项目类型: ${projectType}（显式指定）`);
+  } else if (options?.platformName) {
+    // 尝试从 CONSTITUTION.md 读取工程类型
+    try {
+      const { parsePlatformTypes } = await import('./spec-paths');
+      const typeMap = await parsePlatformTypes();
+      const constitutionType = typeMap.get(options.platformName);
+      if (constitutionType) {
+        const inferred = inferProjectTypeFromConstitution(constitutionType);
+        if (inferred) {
+          projectType = inferred;
+          logger.info(`   项目类型: ${projectType}（来自 CONSTITUTION.md: ${constitutionType}）`);
+        }
+      }
+    } catch { /* ignore */ }
+  }
+
+  // 如果还没确定，自动检测
+  if (projectType === 'unknown') {
+    projectType = await detectProjectType(codePath);
+    logger.info(`   项目类型: ${projectType}（自动检测）`);
+  }
 
   if (projectType === 'unknown') {
     logger.warn('   未识别项目类型，跳过验证');
@@ -310,6 +483,14 @@ export async function runVerification(
   if (checkType === 'all' || checkType === 'test') {
     logger.info('   🧪 单元测试...');
     const result = runCheck('单元测试', commands.test, codePath, timeout);
+    checks.push(result);
+    logger.info(`   ${result.status === 'pass' ? '✅' : result.status === 'fail' ? '❌' : '⏭️'} ${result.details} (${(result.duration / 1000).toFixed(1)}s)`);
+  }
+
+  // v8.3.105+: 产物检查
+  if (checkType === 'all' || checkType === 'artifact') {
+    logger.info('   📦 产物检查...');
+    const result = await runArtifactCheck(codePath, projectType);
     checks.push(result);
     logger.info(`   ${result.status === 'pass' ? '✅' : result.status === 'fail' ? '❌' : '⏭️'} ${result.details} (${(result.duration / 1000).toFixed(1)}s)`);
   }
