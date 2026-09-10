@@ -2503,24 +2503,6 @@ async function getPlatformSubtaskDirs(taskDir: string): Promise<PlatformSubtask[
       }
     } catch { /* ignore */ }
   }
-  // 回退: 旧结构 10-backend/ 和 20-frontend/
-  if (result.length === 0) {
-    for (const catName of ['10-backend', '20-frontend']) {
-      const catDir = join(taskDir, catName);
-      if (!(await pathExists(catDir))) continue;
-      try {
-        const svcEntries = await readdir(catDir, { withFileTypes: true });
-        for (const svc of svcEntries) {
-          if (!svc.isDirectory()) continue;
-          const subEntries = await readdir(join(catDir, svc.name), { withFileTypes: true });
-          for (const st of subEntries) {
-            if (st.isDirectory() && !st.name.startsWith('.')) {
-              result.push({ platform: `${catName}/${svc.name}`, subtask: st.name, fullPath: join(catDir, svc.name, st.name) });
-            }
-          }
-        }
-      } catch { /* ignore */ }
-    }
-  }
+  // v8.3.121+: 已移除 10-backend/20-frontend 旧结构回退
   return result;
 }

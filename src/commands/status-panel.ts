@@ -393,7 +393,7 @@ async function exportStatus(
       filterLabels.push(`类型: ${options.type}`);
     }
     if (options.platform) {
-      // 平台过滤: 检查 Task 目录结构 (backend/ 20-frontend/web/ 20-frontend/h5/ etc)
+      // 平台过滤: 检查 Task 目录结构 ({端名}/{子任务}/ 端平铺结构)
       const platformTasks = await filterByPlatform(iterDir, filtered, options.platform);
       filtered = platformTasks;
       filterLabels.push(`平台: ${options.platform}`);

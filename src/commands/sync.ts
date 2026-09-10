@@ -169,14 +169,18 @@ async function syncTaskSpec(task: string, iteration: string, auto: boolean): Pro
     }
   }
 
-  // 同步前端各平台 TASK.md
-  const frontendDir = join(taskDir, '20-frontend');
-  if (await pathExists(frontendDir)) {
-    const { readdir } = await import('fs-extra');
-    const platformDirs = await readdir(frontendDir, { withFileTypes: true });
-    for (const pd of platformDirs) {
-      if (pd.isDirectory()) {
-        const ftaskPath = join(frontendDir, pd.name, 'TASK.md');
+  // v8.3.121+: 同步各端子任务 TASK.md（端平铺结构）
+  const EXCLUDE_DIRS = new Set(['00-specs', '_shared', '99-artifacts', '.meta']);
+  try {
+    const { readdir: rd } = await import('fs-extra');
+    const platformEntries = await rd(taskDir, { withFileTypes: true });
+    for (const pe of platformEntries) {
+      if (!pe.isDirectory() || pe.name.startsWith('.') || EXCLUDE_DIRS.has(pe.name)) continue;
+      const platformPath = join(taskDir, pe.name);
+      const subtaskEntries = await rd(platformPath, { withFileTypes: true });
+      for (const sub of subtaskEntries) {
+        if (!sub.isDirectory()) continue;
+        const ftaskPath = join(platformPath, sub.name, 'TASK.md');
         if (await pathExists(ftaskPath) && auto) {
           let content = await readFile(ftaskPath, 'utf-8');
           const now = new Date().toISOString().split('T')[0];
@@ -189,7 +193,7 @@ async function syncTaskSpec(task: string, iteration: string, auto: boolean): Pro
         }
       }
     }
-  }
+  } catch { /* 跳过 */ }
 
   // 提交事务 — 原子写入所有变更
   if (tx.length > 0) {

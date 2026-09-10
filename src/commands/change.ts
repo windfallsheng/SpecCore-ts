@@ -672,14 +672,18 @@ async function applyTaskChange(options: ChangeOptions, iteration: string): Promi
     tx.write(taskMdPath, updated);
   }
 
-  // 同步前端各平台 TASK.md（事务保护）
-  const frontendDir = join(taskDir, '20-frontend');
-  if (await pathExists(frontendDir)) {
+  // v8.3.121+: 同步各端子任务 TASK.md（端平铺结构）
+  const EXCLUDE_DIRS = new Set(['00-specs', '_shared', '99-artifacts', '.meta']);
+  try {
     const { readdir: rd } = await import('fs-extra');
-    const platformDirs = await rd(frontendDir, { withFileTypes: true });
-    for (const pd of platformDirs) {
-      if (pd.isDirectory()) {
-        const ftaskPath = join(frontendDir, pd.name, 'TASK.md');
+    const platformEntries = await rd(taskDir, { withFileTypes: true });
+    for (const pe of platformEntries) {
+      if (!pe.isDirectory() || pe.name.startsWith('.') || EXCLUDE_DIRS.has(pe.name)) continue;
+      const platformPath = join(taskDir, pe.name);
+      const subtaskEntries = await rd(platformPath, { withFileTypes: true });
+      for (const sub of subtaskEntries) {
+        if (!sub.isDirectory() || sub.name.startsWith('.')) continue;
+        const ftaskPath = join(platformPath, sub.name, 'TASK.md');
         if (await pathExists(ftaskPath)) {
           let content = await readFile(ftaskPath, 'utf-8');
           const changeEntry = `| ${now} | ${ver} | 需求变更: ${options.desc} | SpecCore |\n`;
@@ -691,7 +695,7 @@ async function applyTaskChange(options: ChangeOptions, iteration: string): Promi
         }
       }
     }
-  }
+  } catch { /* 跳过 */ }
 
   // v6.72.0+: 更新任务状态为 needs-rework（无论当前状态，变更后都需重新评估）
   const metaStatusPath = join(taskDir, '.meta', 'status');

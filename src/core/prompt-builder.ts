@@ -427,24 +427,7 @@ async function loadExtraSpecs(
         );
       }
     }
-    // 回退: 旧结构 10-backend/{服务}/ 或 20-frontend/{端}/
-    const isBk = platform === 'backend' || platform.startsWith('后台');
-    const categoryDir = isBk ? '10-backend' : '20-frontend';
-    const serviceName = isBk && platform === 'backend' ? 'api' : platform;
-    const legacyBase = join(cwd, taskDir, categoryDir, serviceName);
-    if (subtaskDirsList.length === 0) {
-      try {
-        if (await pathExists(legacyBase)) {
-          const entries = await readdir(legacyBase, { withFileTypes: true });
-          const legacySubs = entries.filter(e => e.isDirectory() && !e.name.startsWith('.')).map(e => e.name);
-          if (legacySubs.length > 0) {
-            files.unshift(
-              { name: `${platform}端子任务(旧)`, path: join(categoryDir, serviceName, legacySubs[0], 'TASK.md') },
-            );
-          }
-        }
-      } catch { /* ignore */ }
-    }
+    // v8.3.121+: 已移除 10-backend/20-frontend 旧结构回退，端平铺结构 {platform}/{subtask}/ 为标准
   }
 
   for (const f of files) {
@@ -648,7 +631,7 @@ async function loadAllTaskContext(
 
   // 1. 递归扫描任务目录所有 .md / .yaml 文件
   // 排除自检/审查/产出阶段文件（这些在代码生成后的 verify 阶段才需要）
-  // 排除整个 10-backend/ 和 20-frontend/ 旧大类目录 + 00-specs/ _shared/ 等非代码目录
+  // 排除非代码目录（保留 10-backend/20-frontend 排除项以兼容旧项目数据）
   const CODEGEN_EXCLUDE_DIRS = new Set(['node_modules', '10-backend', '20-frontend', '00-specs', '_shared', '99-artifacts', '.meta']);
   const CODEGEN_EXCLUDE_FILES = new Set(['test.md', 'schema.md', 'review.md', 'changelog.md', 'deploy.md', '.issues.md']);
   const scanTaskDir = async (dir: string, prefix: string) => {

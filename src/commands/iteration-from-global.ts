@@ -299,8 +299,7 @@ async function autoSplitTasks(
   for (let i = 0; i < reqs.length; i++) {
     const { id: taskId } = await nextTaskId(reqs[i].name);
     const taskDir = join(iterationDir, taskId);
-    await ensureDir(join(taskDir, '10-backend'));
-    await ensureDir(join(taskDir, '20-frontend'));
+    // v8.3.121+: 端平铺结构，不再预创建 10-backend/20-frontend 分类目录
 
     // .task-type
     await writeFile(join(taskDir, '.task-type'), 'feature');

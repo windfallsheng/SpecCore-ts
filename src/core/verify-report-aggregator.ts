@@ -196,29 +196,18 @@ function parseFeatureFromTaskId(taskId: string): string {
 
 async function scanPlatforms(taskDir: string): Promise<string[]> {
   const platforms: string[] = [];
-
-  const backendDir = join(taskDir, '10-backend');
-  const frontendDir = join(taskDir, '20-frontend');
-
-  if (await pathExists(backendDir)) {
-    try {
-      const entries = await readdir(backendDir, { withFileTypes: true });
-      for (const e of entries) {
-        if (e.isDirectory()) platforms.push(e.name);
+  // v8.3.121+: 端平铺结构扫描
+  const EXCLUDE_DIRS = new Set(['00-specs', '_shared', '99-artifacts', '.meta']);
+  try {
+    const entries = await readdir(taskDir, { withFileTypes: true });
+    for (const e of entries) {
+      if (e.isDirectory() && !e.name.startsWith('.') && !EXCLUDE_DIRS.has(e.name)) {
+        platforms.push(e.name);
       }
-    } catch { /* 忽略 */ }
-  }
+    }
+  } catch { /* 忽略 */ }
 
-  if (await pathExists(frontendDir)) {
-    try {
-      const entries = await readdir(frontendDir, { withFileTypes: true });
-      for (const e of entries) {
-        if (e.isDirectory()) platforms.push(e.name);
-      }
-    } catch { /* 忽略 */ }
-  }
-
-  // 如果没有前后端分层，标记为通用
+  // 如果没有端目录，标记为通用
   if (platforms.length === 0) platforms.push('general');
 
   return platforms;

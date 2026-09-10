@@ -5,7 +5,7 @@
  * 
  * 输入:
  *   - 纯需求: --req docs/a.md docs/b.md
- *   - 纯代码: --src backend/src 20-frontend/src
+ *   - 纯代码: --src backend/src frontend/src
  *   - 需求+代码: 两者都指定
  * 
  * 输出范围 (scope):
@@ -89,7 +89,7 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalysisResult> 
     if (input.scope === 'iteration' && input.iteration) {
       const productReqDir = join(`Iteration-${input.iteration}`, '010-requirements');
       if (await pathExists(productReqDir)) {
-        // 递归扫描子目录 (backend/ 20-frontend/Web/ 等)
+        // 递归扫描子目录 ({端名}/ 等)
         const scanDir = async (dir: string) => {
           const entries = await readdir(dir, { withFileTypes: true });
           for (const e of entries) {

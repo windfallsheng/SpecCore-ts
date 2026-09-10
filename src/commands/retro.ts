@@ -183,24 +183,29 @@ export async function generateReport(taskId: string, iterDir: string): Promise<R
     const specComponents = (uiSpecText.match(/组件/g) || []).length;
     // 检查前端目录中实际实现的页面文件
     let implementedPages = 0;
-    const frontendDir = join(taskDir, '20-frontend');
-    if (await pathExists(frontendDir)) {
-      try {
-        const platforms = await readdir(frontendDir);
-        for (const p of platforms) {
-          const srcDir = join(frontendDir, p, 'src');
+    // v8.3.121+: 端平铺结构扫描前端页面文件
+    const EXCLUDE_DIRS = new Set(['00-specs', '_shared', '99-artifacts', '.meta']);
+    try {
+      const platformEntries = await readdir(taskDir, { withFileTypes: true });
+      for (const pe of platformEntries) {
+        if (!pe.isDirectory() || pe.name.startsWith('.') || EXCLUDE_DIRS.has(pe.name)) continue;
+        const platformPath = join(taskDir, pe.name);
+        const subtaskEntries = await readdir(platformPath, { withFileTypes: true });
+        for (const sub of subtaskEntries) {
+          if (!sub.isDirectory()) continue;
+          const srcDir = join(platformPath, sub.name, 'src');
           if (await pathExists(srcDir)) {
             const pages = await readdir(srcDir);
             implementedPages += pages.filter((f: string) => f.endsWith('.vue') || f.endsWith('.tsx') || f.endsWith('.jsx')).length;
           }
-          const pagesDir = join(frontendDir, p, 'src', 'pages');
+          const pagesDir = join(platformPath, sub.name, 'src', 'pages');
           if (await pathExists(pagesDir)) {
             const pageFiles = await readdir(pagesDir);
             implementedPages += pageFiles.filter((f: string) => f.endsWith('.vue') || f.endsWith('.tsx') || f.endsWith('.jsx')).length;
           }
         }
-      } catch {}
-    }
+      }
+    } catch {}
     // 检查 API_CONTRACT 是否有字段定义
     let contractAligned = false;
     const contractPath = join(taskDir, '_shared', 'API_CONTRACT.yaml');

@@ -912,7 +912,7 @@ program
   .option('-t, --task <task-id>', '任务 ID (--scope task 快捷方式)')
   .option('--type <type>', '任务类型: feature|bugfix|refactor|research|review|test|docs|deploy|security|performance', 'feature')
   .option('--scope <scope>', '输出范围: global(全局文档) | iteration(迭代, 默认) | task(任务)')
-  .option('--src, --source <dirs>', '源码目录 (逗号分隔: --src backend/src,20-frontend/src)')
+  .option('--src, --source <dirs>', '源码目录 (逗号分隔: --src backend/src,frontend/src)')
   .option('--req, --requirements <files>', '需求文档 (逗号分隔: --req docs/a.md,docs/b.md)')
   .option('-o, --output <file>', '输出文件名 (覆盖默认)')
   .option('--depth <depth>', '分析深度: quick | normal(默认) | deep')

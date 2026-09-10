@@ -137,35 +137,34 @@ function printTraceTree(node: string, depth: number): void {
 }
 
 async function printTaskDetails(taskDir: string, indent: string): Promise<void> {
-  // Show spec files present
-  const backend = join(taskDir, '10-backend');
-  if (await pathExists(backend)) {
-    logger.info(`${indent}├── 🔧 Backend:`);
-    for (const f of ['REQ.md', 'TECH.md', 'TASK.md']) {
-      if (await pathExists(join(backend, f))) {
-        logger.info(`${indent}│   ├── ${f}`);
-      }
-    }
-    // Show generated code
-    for (const f of ['Controller.java', 'Service.java', 'Repository.java']) {
-      const files = await findFiles(backend, f);
-      for (const codeFile of files) {
-        logger.info(`${indent}│   ├── 💻 ${codeFile}`);
-      }
-    }
-  }
-
-  const frontend = join(taskDir, '20-frontend');
-  if (await pathExists(frontend)) {
-    logger.info(`${indent}├── 🎨 Frontend:`);
-    const entries = await readdir(frontend, { withFileTypes: true });
+  // v8.3.121+: 端平铺结构扫描
+  const EXCLUDE_DIRS = new Set(['00-specs', '_shared', '99-artifacts', '.meta']);
+  try {
+    const entries = await readdir(taskDir, { withFileTypes: true });
     for (const e of entries) {
-      if (e.isDirectory()) {
-        const vueFiles = await findFiles(join(frontend, e.name), '.vue');
-        logger.info(`${indent}│   ├── ${e.name}/ (${vueFiles.length} components)`);
+      if (!e.isDirectory() || e.name.startsWith('.') || EXCLUDE_DIRS.has(e.name)) continue;
+      logger.info(`${indent}├── 🔧 ${e.name}:`);
+      const platformPath = join(taskDir, e.name);
+      const subEntries = await readdir(platformPath, { withFileTypes: true });
+      for (const sub of subEntries) {
+        if (!sub.isDirectory()) continue;
+        const subtaskPath = join(platformPath, sub.name);
+        // Show spec files
+        for (const f of ['REQ.md', 'TECH.md', 'TASK.md']) {
+          if (await pathExists(join(subtaskPath, f))) {
+            logger.info(`${indent}│   ├── ${sub.name}/${f}`);
+          }
+        }
+        // Show generated code
+        for (const ext of ['.java', '.ts', '.vue', '.tsx']) {
+          const codeFiles = await findFiles(subtaskPath, ext);
+          for (const codeFile of codeFiles) {
+            logger.info(`${indent}│   ├── 💻 ${sub.name}/${codeFile}`);
+          }
+        }
       }
     }
-  }
+  } catch { /* 跳过 */ }
 }
 
 async function findFiles(dir: string, ext: string): Promise<string[]> {

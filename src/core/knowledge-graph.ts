@@ -569,86 +569,80 @@ async function scanTasks(iterDir: string): Promise<{
       tags: [type],
     });
 
-    // 扫描各端子任务（新结构: 10-backend/{service}/{subtask}/ + 20-frontend/{platform}/{subtask}/）
-    const dirEntries = await readdir(taskPath, { withFileTypes: true }).catch(() => []);
-    const hasNewStructure = dirEntries.some(de => de.isDirectory() && (de.name === '10-backend' || de.name === '20-frontend'));
+    // v8.3.121+: 端平铺结构扫描 — {端名}/{子任务}/
+    const EXCLUDE_DIRS = new Set(['00-specs', '_shared', '99-artifacts', '.meta']);
+    const dirEntries = await readdir(taskPath, { withFileTypes: true }).catch(() => [] as any[]);
 
-    if (hasNewStructure) {
-      // 新结构：三级嵌套
-      for (const catDir of ['10-backend', '20-frontend']) {
-        const catPath = join(taskPath, catDir);
-        if (!(await pathExists(catPath))) continue;
-        const serviceEntries = await readdir(catPath, { withFileTypes: true }).catch(() => []);
-        for (const svc of serviceEntries) {
-          if (!svc.isDirectory()) continue;
-          const subEntries = await readdir(join(catPath, svc.name), { withFileTypes: true }).catch(() => []);
-          for (const sub of subEntries) {
-            if (!sub.isDirectory() || sub.name.startsWith('.')) continue;
-            const subtaskPath = join(catPath, svc.name, sub.name);
-            const platformLabel = `${svc.name}/${sub.name}`;
+    for (const de of dirEntries) {
+      if (!de.isDirectory() || de.name.startsWith('.') || EXCLUDE_DIRS.has(de.name)) continue;
+      if (isTimestampBackup(de.name)) continue;
 
-            const subtaskTaskMd = join(subtaskPath, 'TASK.md');
-            let subTitle = `${title} — ${platformLabel}`;
-            let subStatus = 'pending';
-            let subTaskId = `${taskId}-${svc.name}-${sub.name}`;
+      const platformPath = join(taskPath, de.name);
+      const subtaskEntries = await readdir(platformPath, { withFileTypes: true }).catch(() => [] as any[]);
+      const hasSubtasks = subtaskEntries.some((se: any) => se.isDirectory() && !se.name.startsWith('.') && !isTimestampBackup(se.name));
 
-            if (await pathExists(subtaskTaskMd)) {
-              const subContent = await readFile(subtaskTaskMd, 'utf-8');
-              const titleMatch = subContent.match(/^#\s+(.+)/m);
-              if (titleMatch) subTitle = titleMatch[1].trim().slice(0, 80);
-              const statusMatch = subContent.match(/\*\*状态\*\*[:\s]*(.+)/);
-              if (statusMatch) {
-                const raw = statusMatch[1].trim();
-                if (raw.includes('已完成') || raw.includes('completed')) subStatus = 'completed';
-                else if (raw.includes('进行中') || raw.includes('in_progress')) subStatus = 'in_progress';
-              }
-              const subIdMatch = subContent.match(/子任务 ID\*\*[:\s]*`(Task-[^`]+)`/);
-              if (subIdMatch) subTaskId = subIdMatch[1];
+      if (hasSubtasks) {
+        // 标准端平铺结构：{端名}/{子任务}/
+        for (const sub of subtaskEntries) {
+          if (!sub.isDirectory() || sub.name.startsWith('.') || isTimestampBackup(sub.name)) continue;
+          const subtaskPath = join(platformPath, sub.name);
+          const platformLabel = `${de.name}/${sub.name}`;
+
+          const subtaskTaskMd = join(subtaskPath, 'TASK.md');
+          let subTitle = `${title} — ${platformLabel}`;
+          let subStatus = 'pending';
+          let subTaskId = `${taskId}-${de.name}-${sub.name}`;
+
+          if (await pathExists(subtaskTaskMd)) {
+            const subContent = await readFile(subtaskTaskMd, 'utf-8');
+            const titleMatch = subContent.match(/^#\s+(.+)/m);
+            if (titleMatch) subTitle = titleMatch[1].trim().slice(0, 80);
+            const statusMatch = subContent.match(/\*\*状态\*\*[:\s]*(.+)/);
+            if (statusMatch) {
+              const raw = statusMatch[1].trim();
+              if (raw.includes('已完成') || raw.includes('completed')) subStatus = 'completed';
+              else if (raw.includes('进行中') || raw.includes('in_progress')) subStatus = 'in_progress';
             }
-
-            // hash 回退：TASK.md → .meta/status → src/ → 空
-            let subHash: { hash: string; mtime: string } = { hash: '', mtime: '' };
-            if (await pathExists(subtaskTaskMd)) {
-              subHash = await fileHash(subtaskTaskMd);
-            } else {
-              const metaStatus = join(subtaskPath, '.meta', 'status');
-              if (await pathExists(metaStatus)) {
-                subHash = await fileHash(metaStatus);
-              } else {
-                const srcDir = join(subtaskPath, 'src');
-                if (await pathExists(srcDir)) {
-                  try {
-                    const srcFiles = await readdir(srcDir);
-                    if (srcFiles.length > 0) subHash = await fileHash(join(srcDir, srcFiles[0]));
-                  } catch { /* 忽略 */ }
-                }
-              }
-            }
-
-            entities.push({
-              id: subTaskId,
-              type: 'subtask',
-              title: subTitle,
-              file: `030-tasks/${type === 'feature' ? '' : type + '/'}${taskId}/${catDir}/${svc.name}/${sub.name}`,
-              hash: subHash.hash,
-              mtime: subHash.mtime,
-              status: subStatus,
-              platform: platformLabel,
-              parentTaskId: taskId,
-            });
-
-            relations.push({ from: subTaskId, to: taskId, type: 'subtask_of' });
+            const subIdMatch = subContent.match(/子任务 ID\*\*[:\s]*`(Task-[^`]+)`/);
+            if (subIdMatch) subTaskId = subIdMatch[1];
           }
-        }
-      }
-    } else {
-      // 旧结构：扁平平台目录
-      for (const de of dirEntries) {
-        if (!de.isDirectory()) continue;
-        if (de.name.startsWith('.') || de.name.startsWith('0') || de.name === '_shared' || de.name === '99-artifacts') continue;
-        if (isTimestampBackup(de.name)) continue;
 
-        const platformTaskMd = join(taskPath, de.name, 'TASK.md');
+          // hash 回退：TASK.md → .meta/status → src/ → 空
+          let subHash: { hash: string; mtime: string } = { hash: '', mtime: '' };
+          if (await pathExists(subtaskTaskMd)) {
+            subHash = await fileHash(subtaskTaskMd);
+          } else {
+            const metaStatus = join(subtaskPath, '.meta', 'status');
+            if (await pathExists(metaStatus)) {
+              subHash = await fileHash(metaStatus);
+            } else {
+              const srcDir = join(subtaskPath, 'src');
+              if (await pathExists(srcDir)) {
+                try {
+                  const srcFiles = await readdir(srcDir);
+                  if (srcFiles.length > 0) subHash = await fileHash(join(srcDir, srcFiles[0]));
+                } catch { /* 忽略 */ }
+              }
+            }
+          }
+
+          entities.push({
+            id: subTaskId,
+            type: 'subtask',
+            title: subTitle,
+            file: `030-tasks/${type === 'feature' ? '' : type + '/'}${taskId}/${de.name}/${sub.name}`,
+            hash: subHash.hash,
+            mtime: subHash.mtime,
+            status: subStatus,
+            platform: platformLabel,
+            parentTaskId: taskId,
+          });
+
+          relations.push({ from: subTaskId, to: taskId, type: 'subtask_of' });
+        }
+      } else {
+        // 兼容：端目录下无子任务，端本身作为子任务（如旧数据的单端任务）
+        const platformTaskMd = join(platformPath, 'TASK.md');
         let subTitle = `${title} — ${de.name}`;
         let subStatus = 'pending';
         let subTaskId = `${taskId}-${de.name}`;
@@ -671,7 +665,7 @@ async function scanTasks(iterDir: string): Promise<{
         if (await pathExists(platformTaskMd)) {
           subHash = await fileHash(platformTaskMd);
         } else {
-          const srcDir = join(taskPath, de.name, 'src');
+          const srcDir = join(platformPath, 'src');
           if (await pathExists(srcDir)) {
             try {
               const srcFiles = await readdir(srcDir);
@@ -1090,47 +1084,19 @@ async function scanTaskSpecs(iterDir: string): Promise<{ entities: GraphEntity[]
 
   for (const taskDir of taskDirs) {
     const taskId = basename(taskDir) || '';
-    const subDirs: string[] = ['_shared', '00-specs'];
-    // 新结构: 10-backend/{service}/{subtask}/ + 20-frontend/{platform}/{subtask}/
-    const nestedSubDirs: string[] = [];
-    try {
-      const entries = await readdir(taskDir, { withFileTypes: true });
-      for (const e of entries) {
-        if (!e.isDirectory() || e.name.startsWith('.') || isTimestampBackup(e.name)) continue;
-        if (e.name === '10-backend' || e.name === '20-frontend') {
-          // 新结构：深入两层（service/platform → subtask）
-          const catPath = join(taskDir, e.name);
-          try {
-            const svcEntries = await readdir(catPath, { withFileTypes: true });
-            for (const svc of svcEntries) {
-              if (!svc.isDirectory()) continue;
-              const subEntries = await readdir(join(catPath, svc.name), { withFileTypes: true });
-              for (const sub of subEntries) {
-                if (!sub.isDirectory() || sub.name.startsWith('.')) continue;
-                nestedSubDirs.push(`${e.name}/${svc.name}/${sub.name}`);
-              }
-            }
-          } catch { /* 跳过 */ }
-        } else if (!e.name.startsWith('0') && e.name !== '_shared' && e.name !== '99-artifacts') {
-          // 旧结构：扁平平台目录
-          subDirs.push(e.name);
-        }
-      }
-    } catch { /* 跳过 */ }
+    // v8.3.121+: 端平铺结构扫描 — {端名}/{子任务}/
+    const EXCLUDE_DIRS = new Set(['00-specs', '_shared', '99-artifacts', '.meta']);
 
-    // 扫描任务根下的子目录（_shared/、00-specs/、旧平台目录）
-    for (const subDir of subDirs) {
+    // 扫描任务根下的规格目录（_shared/、00-specs/）
+    for (const subDir of ['_shared', '00-specs']) {
       const specDir = join(taskDir, subDir);
       if (!(await pathExists(specDir))) continue;
-
       for (const specFile of TASK_SPEC_FILES) {
         const specPath = join(specDir, specFile);
         if (!(await pathExists(specPath))) continue;
-
         const { hash, mtime } = await fileHash(specPath);
         const title = await extractTitle(specPath);
         const specType = specFile.replace('.md', '').toLowerCase();
-
         entities.push({
           id: `TSPEC:${taskId}-${subDir}-${specType}`,
           type: 'task-spec',
@@ -1140,38 +1106,43 @@ async function scanTaskSpecs(iterDir: string): Promise<{ entities: GraphEntity[]
           mtime,
           tags: ['task-spec', specType, subDir === '_shared' ? 'shared' : subDir],
         });
-
         relations.push({ from: `TSPEC:${taskId}-${subDir}-${specType}`, to: taskId, type: 'elaborates' });
       }
     }
 
-    // 扫描新结构的子任务目录（10-backend/svc/sub/、20-frontend/plat/sub/）
-    for (const nestedDir of nestedSubDirs) {
-      const specDir = join(taskDir, nestedDir);
-      if (!(await pathExists(specDir))) continue;
-
-      for (const specFile of TASK_SPEC_FILES) {
-        const specPath = join(specDir, specFile);
-        if (!(await pathExists(specPath))) continue;
-
-        const { hash, mtime } = await fileHash(specPath);
-        const title = await extractTitle(specPath);
-        const specType = specFile.replace('.md', '').toLowerCase();
-        const label = nestedDir.replace(/\//g, '-');
-
-        entities.push({
-          id: `TSPEC:${taskId}-${label}-${specType}`,
-          type: 'task-spec',
-          title: title || `${taskId}/${nestedDir}/${specFile}`,
-          file: `030-tasks/**/${taskId}/${nestedDir}/${specFile}`,
-          hash,
-          mtime,
-          tags: ['task-spec', specType, label],
-        });
-
-        relations.push({ from: `TSPEC:${taskId}-${label}-${specType}`, to: taskId, type: 'elaborates' });
+    // 扫描端平铺结构下的子任务规格文件
+    try {
+      const platformEntries = await readdir(taskDir, { withFileTypes: true });
+      for (const pe of platformEntries) {
+        if (!pe.isDirectory() || pe.name.startsWith('.') || EXCLUDE_DIRS.has(pe.name)) continue;
+        if (isTimestampBackup(pe.name)) continue;
+        const platformPath = join(taskDir, pe.name);
+        const subtaskEntries = await readdir(platformPath, { withFileTypes: true });
+        for (const sub of subtaskEntries) {
+          if (!sub.isDirectory() || sub.name.startsWith('.') || isTimestampBackup(sub.name)) continue;
+          const subtaskPath = join(platformPath, sub.name);
+          const nestedDir = `${pe.name}/${sub.name}`;
+          const label = `${pe.name}-${sub.name}`;
+          for (const specFile of TASK_SPEC_FILES) {
+            const specPath = join(subtaskPath, specFile);
+            if (!(await pathExists(specPath))) continue;
+            const { hash, mtime } = await fileHash(specPath);
+            const title = await extractTitle(specPath);
+            const specType = specFile.replace('.md', '').toLowerCase();
+            entities.push({
+              id: `TSPEC:${taskId}-${label}-${specType}`,
+              type: 'task-spec',
+              title: title || `${taskId}/${nestedDir}/${specFile}`,
+              file: `030-tasks/**/${taskId}/${nestedDir}/${specFile}`,
+              hash,
+              mtime,
+              tags: ['task-spec', specType, label],
+            });
+            relations.push({ from: `TSPEC:${taskId}-${label}-${specType}`, to: taskId, type: 'elaborates' });
+          }
+        }
       }
-    }
+    } catch { /* 跳过 */ }
   }
 
   return { entities, relations };

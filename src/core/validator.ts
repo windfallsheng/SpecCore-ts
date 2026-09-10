@@ -86,40 +86,47 @@ async function validateTask(
     return result;
   }
   
-  // Check required files
+  // Check required files (任务根级)
   const requiredFiles = [
     '.task-type',
     '00-specs/REQ.md',
     '00-specs/TASK.md',
     '00-specs/TECH.md',
-    '20-frontend/REQ.md',
-    '20-frontend/TASK.md',
-    '20-frontend/TECH.md'
   ];
-  
+
   for (const file of requiredFiles) {
     const filePath = join(taskPath, file);
     if (!(await pathExists(filePath))) {
-      if (options?.strict) {
-        result.errors.push({
-          file: filePath,
-          issue: `Missing required file: ${file}`,
-          severity: 'error',
-          fixable: true
-        });
-      } else if (file.includes('backend/') || file.includes('20-frontend/')) {
-        // In non-strict mode, only backend OR frontend is required
-        const counterpart = file.replace('backend/', '20-frontend/').replace('20-frontend/', 'backend/');
-        const counterpartPath = join(taskPath, counterpart);
-        if (!(await pathExists(counterpartPath))) {
-          result.errors.push({
-            file: filePath,
-            issue: `Missing required file: ${file} (and ${counterpart})`,
-            severity: 'error'
-          });
-        }
+      result.errors.push({
+        file: filePath,
+        issue: `Missing required file: ${file}`,
+        severity: 'error',
+        fixable: true
+      });
+    }
+  }
+
+  // v8.3.121+: 检查端平铺结构 — 至少有一个端目录和子任务
+  const EXCLUDE_DIRS = new Set(['00-specs', '_shared', '99-artifacts', '.meta']);
+  let hasPlatform = false;
+  try {
+    const entries = await readdir(taskPath, { withFileTypes: true });
+    for (const e of entries) {
+      if (!e.isDirectory() || e.name.startsWith('.') || EXCLUDE_DIRS.has(e.name)) continue;
+      const platformPath = join(taskPath, e.name);
+      const subEntries = await readdir(platformPath, { withFileTypes: true });
+      if (subEntries.some(se => se.isDirectory() && !se.name.startsWith('.'))) {
+        hasPlatform = true;
+        break;
       }
     }
+  } catch { /* 跳过 */ }
+  if (!hasPlatform) {
+    result.warnings.push({
+      file: taskPath,
+      issue: 'No platform subtasks found — 任务目录下缺少端平铺子任务（如 {端名}/{子任务}/）',
+      severity: 'warning',
+    });
   }
   
   // Check YAML files
@@ -147,7 +154,7 @@ async function validateTask(
   }
   
   // Check markdown files for content
-  const mdFiles = ['00-specs/REQ.md', '00-specs/TECH.md', '20-frontend/REQ.md', '20-frontend/TECH.md'];
+  const mdFiles = ['00-specs/REQ.md', '00-specs/TECH.md'];
   for (const file of mdFiles) {
     const filePath = join(taskPath, file);
     if (await pathExists(filePath)) {
@@ -168,51 +175,55 @@ async function validateTask(
       }
 
       // ── 端专业性内容检查 ──
-      // 后端文档检查
-      if (file.includes('backend/') || file === '00-specs/TECH.md' || file === '00-specs/REQ.md') {
+      if (file === '00-specs/TECH.md') {
         const hasApiDef = /\|?\s*(GET|POST|PUT|DELETE)\s+\//i.test(content) || /\/api\//i.test(content);
         const hasDataModel = /(CREATE TABLE|数据表|表结构|字段|entity|schema)/i.test(content);
-        if (file === '00-specs/TECH.md' && !hasApiDef && !hasDataModel) {
+        if (!hasApiDef && !hasDataModel) {
           result.warnings.push({
             file: filePath,
-            issue: 'Backend TECH.md missing API definitions and data model — 后端技术方案应包含接口定义和数据模型',
+            issue: 'TECH.md missing API definitions and data model — 技术方案应包含接口定义和数据模型',
             severity: 'warning'
           });
         }
-      }
-
-      // 前端文档检查
-      if (file.includes('20-frontend/') || file === '00-specs/TECH.md') {
         const hasPageRoute = /(页面|路由|route|path|\/\w+)/i.test(content);
         const hasComponent = /(组件|component|模块|视图)/i.test(content);
-        if (file === '00-specs/TECH.md' && !hasPageRoute && !hasComponent) {
+        if (!hasPageRoute && !hasComponent) {
           result.warnings.push({
             file: filePath,
             issue: 'TECH.md missing frontend page/component definitions — 技术方案应包含前端页面路由和组件设计',
             severity: 'warning'
           });
         }
-        if (file.includes('20-frontend/TECH.md')) {
-          const hasFieldMapping = /(字段.*映射|UI.*字段|来源.*API|响应字段)/i.test(content);
-          const hasStateEnum = /(状态.*枚举|枚举.*状态|待|进行中|已完成)/i.test(content);
-          if (!hasFieldMapping) {
+      }
+    }
+  }
+
+  // v8.3.121+: 扫描端平铺结构下的子任务规格文件
+  const EXCLUDE_DIRS_V = new Set(['00-specs', '_shared', '99-artifacts', '.meta']);
+  try {
+    const entries = await readdir(taskPath, { withFileTypes: true });
+    for (const e of entries) {
+      if (!e.isDirectory() || e.name.startsWith('.') || EXCLUDE_DIRS_V.has(e.name)) continue;
+      const platformPath = join(taskPath, e.name);
+      const subEntries = await readdir(platformPath, { withFileTypes: true });
+      for (const sub of subEntries) {
+        if (!sub.isDirectory()) continue;
+        const subtaskPath = join(platformPath, sub.name);
+        for (const specFile of ['REQ.md', 'TECH.md']) {
+          const filePath = join(subtaskPath, specFile);
+          if (!(await pathExists(filePath))) continue;
+          const content = await readFile(filePath, 'utf-8');
+          if (content.length < 100) {
             result.warnings.push({
               file: filePath,
-              issue: 'Frontend TECH.md missing field→UI mapping — 前端技术方案应包含字段→UI 映射表',
-              severity: 'warning'
-            });
-          }
-          if (!hasStateEnum) {
-            result.warnings.push({
-              file: filePath,
-              issue: 'Frontend TECH.md missing status enums — 前端技术方案应包含状态枚举定义',
+              issue: `Content too short (${content.length} chars), may be incomplete`,
               severity: 'warning'
             });
           }
         }
       }
     }
-  }
+  } catch { /* 跳过 */ }
   
   // Calculate task pass rate
   const total = result.errors.length + result.warnings.length;

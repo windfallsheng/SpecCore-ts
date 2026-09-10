@@ -944,23 +944,20 @@ async function checkTestCoverage(codePath: string, taskDir: string): Promise<Che
     const testPaths: string[] = [
       join(taskDir, 'TEST.md'),
     ];
-    // 扫描子任务目录下的 TEST.md（新结构: 10-backend/svc/sub/ 20-frontend/plat/sub/）
-    for (const catDir of ['10-backend', '20-frontend']) {
-      const catPath = join(taskDir, catDir);
-      if (await pathExists(catPath)) {
-        try {
-          const services = await readdir(catPath, { withFileTypes: true });
-          for (const svc of services) {
-            if (!svc.isDirectory()) continue;
-            const subs = await readdir(join(catPath, svc.name), { withFileTypes: true });
-            for (const sub of subs) {
-              if (!sub.isDirectory()) continue;
-              testPaths.push(join(catPath, svc.name, sub.name, 'TEST.md'));
-            }
-          }
-        } catch { /* 跳过 */ }
+    // v8.3.121+: 端平铺结构，直接扫描 taskDir 下的端目录（排除非端目录）
+    const EXCLUDE_DIRS = new Set(['00-specs', '_shared', '99-artifacts', '.meta']);
+    try {
+      const platformEntries = await readdir(taskDir, { withFileTypes: true });
+      for (const pe of platformEntries) {
+        if (!pe.isDirectory() || EXCLUDE_DIRS.has(pe.name)) continue;
+        const platformPath = join(taskDir, pe.name);
+        const subtaskEntries = await readdir(platformPath, { withFileTypes: true });
+        for (const sub of subtaskEntries) {
+          if (!sub.isDirectory()) continue;
+          testPaths.push(join(platformPath, sub.name, 'TEST.md'));
+        }
       }
-    }
+    } catch { /* 跳过 */ }
     // 旧结构回退
     testPaths.push(join(taskDir, '99-artifacts', 'TEST.md'));
     let testContent = '';
@@ -1016,23 +1013,20 @@ async function checkReviewCompliance(codePath: string, taskDir: string): Promise
     const reviewPaths: string[] = [
       join(taskDir, 'REVIEW.md'),
     ];
-    // 扫描子任务目录下的 REVIEW.md（新结构）
-    for (const catDir of ['10-backend', '20-frontend']) {
-      const catPath = join(taskDir, catDir);
-      if (await pathExists(catPath)) {
-        try {
-          const services = await readdir(catPath, { withFileTypes: true });
-          for (const svc of services) {
-            if (!svc.isDirectory()) continue;
-            const subs = await readdir(join(catPath, svc.name), { withFileTypes: true });
-            for (const sub of subs) {
-              if (!sub.isDirectory()) continue;
-              reviewPaths.push(join(catPath, svc.name, sub.name, 'REVIEW.md'));
-            }
-          }
-        } catch { /* 跳过 */ }
+    // v8.3.121+: 端平铺结构，直接扫描 taskDir 下的端目录
+    const EXCLUDE_DIRS = new Set(['00-specs', '_shared', '99-artifacts', '.meta']);
+    try {
+      const platformEntries = await readdir(taskDir, { withFileTypes: true });
+      for (const pe of platformEntries) {
+        if (!pe.isDirectory() || EXCLUDE_DIRS.has(pe.name)) continue;
+        const platformPath = join(taskDir, pe.name);
+        const subtaskEntries = await readdir(platformPath, { withFileTypes: true });
+        for (const sub of subtaskEntries) {
+          if (!sub.isDirectory()) continue;
+          reviewPaths.push(join(platformPath, sub.name, 'REVIEW.md'));
+        }
       }
-    }
+    } catch { /* 跳过 */ }
     // 旧结构回退
     reviewPaths.push(join(taskDir, '99-artifacts', 'REVIEW.md'));
     let reviewContent = '';
@@ -1088,23 +1082,20 @@ async function checkArtifactConsistency(codePath: string, taskDir: string, filen
     const filePaths: string[] = [
       join(taskDir, filename),
     ];
-    // 扫描子任务目录（新结构）
-    for (const catDir of ['10-backend', '20-frontend']) {
-      const catPath = join(taskDir, catDir);
-      if (await pathExists(catPath)) {
-        try {
-          const services = await readdir(catPath, { withFileTypes: true });
-          for (const svc of services) {
-            if (!svc.isDirectory()) continue;
-            const subs = await readdir(join(catPath, svc.name), { withFileTypes: true });
-            for (const sub of subs) {
-              if (!sub.isDirectory()) continue;
-              filePaths.push(join(catPath, svc.name, sub.name, filename));
-            }
-          }
-        } catch { /* 跳过 */ }
+    // v8.3.121+: 端平铺结构，直接扫描 taskDir 下的端目录
+    const EXCLUDE_DIRS = new Set(['00-specs', '_shared', '99-artifacts', '.meta']);
+    try {
+      const platformEntries = await readdir(taskDir, { withFileTypes: true });
+      for (const pe of platformEntries) {
+        if (!pe.isDirectory() || EXCLUDE_DIRS.has(pe.name)) continue;
+        const platformPath = join(taskDir, pe.name);
+        const subtaskEntries = await readdir(platformPath, { withFileTypes: true });
+        for (const sub of subtaskEntries) {
+          if (!sub.isDirectory()) continue;
+          filePaths.push(join(platformPath, sub.name, filename));
+        }
       }
-    }
+    } catch { /* 跳过 */ }
     // 旧结构回退
     filePaths.push(join(taskDir, '99-artifacts', filename));
     let content = '';
@@ -1728,25 +1719,23 @@ async function checkSpecDocQuality(taskDir: string): Promise<CheckResult> {
     if (await pathExists(p)) specFiles.push({ path: p, docName: doc });
   }
 
-  // 端子任务目录（10-backend/*/subtask/, 20-frontend/*/subtask/）
-  for (const catDir of ['10-backend', '20-frontend']) {
-    const catPath = join(taskDir, catDir);
-    if (!(await pathExists(catPath))) continue;
-    try {
-      const services = await readdir(catPath, { withFileTypes: true });
-      for (const svc of services) {
-        if (!svc.isDirectory()) continue;
-        const subs = await readdir(join(catPath, svc.name), { withFileTypes: true });
-        for (const sub of subs) {
-          if (!sub.isDirectory()) continue;
-          for (const doc of candidates) {
-            const p = join(catPath, svc.name, sub.name, doc);
-            if (await pathExists(p)) specFiles.push({ path: p, docName: doc });
-          }
+  // v8.3.121+: 端平铺结构，直接扫描 taskDir 下的端目录
+  const EXCLUDE_DIRS = new Set(['00-specs', '_shared', '99-artifacts', '.meta']);
+  try {
+    const platformEntries = await readdir(taskDir, { withFileTypes: true });
+    for (const pe of platformEntries) {
+      if (!pe.isDirectory() || EXCLUDE_DIRS.has(pe.name)) continue;
+      const platformPath = join(taskDir, pe.name);
+      const subtaskEntries = await readdir(platformPath, { withFileTypes: true });
+      for (const sub of subtaskEntries) {
+        if (!sub.isDirectory()) continue;
+        for (const doc of candidates) {
+          const p = join(platformPath, sub.name, doc);
+          if (await pathExists(p)) specFiles.push({ path: p, docName: doc });
         }
       }
-    } catch { /* 跳过 */ }
-  }
+    }
+  } catch { /* 跳过 */ }
 
   if (specFiles.length === 0) {
     return {
@@ -1848,23 +1837,20 @@ export async function syncTestDocFromResults(
     join(taskDir, 'TEST.md'),
     join(taskDir, '99-artifacts', 'TEST.md'),
   ];
-  // 扫描子任务目录下的 TEST.md（新结构）
-  for (const catDir of ['10-backend', '20-frontend']) {
-    const catPath = join(taskDir, catDir);
-    if (await pathExists(catPath)) {
-      try {
-        const services = await readdir(catPath, { withFileTypes: true });
-        for (const svc of services) {
-          if (!svc.isDirectory()) continue;
-          const subs = await readdir(join(catPath, svc.name), { withFileTypes: true });
-          for (const sub of subs) {
-            if (!sub.isDirectory()) continue;
-            testPaths.push(join(catPath, svc.name, sub.name, 'TEST.md'));
-          }
-        }
-      } catch { /* 跳过 */ }
+  // v8.3.121+: 端平铺结构，直接扫描 taskDir 下的端目录
+  const EXCLUDE_DIRS = new Set(['00-specs', '_shared', '99-artifacts', '.meta']);
+  try {
+    const platformEntries = await readdir(taskDir, { withFileTypes: true });
+    for (const pe of platformEntries) {
+      if (!pe.isDirectory() || EXCLUDE_DIRS.has(pe.name)) continue;
+      const platformPath = join(taskDir, pe.name);
+      const subtaskEntries = await readdir(platformPath, { withFileTypes: true });
+      for (const sub of subtaskEntries) {
+        if (!sub.isDirectory()) continue;
+        testPaths.push(join(platformPath, sub.name, 'TEST.md'));
+      }
     }
-  }
+  } catch { /* 跳过 */ }
 
   for (const testPath of testPaths) {
     if (!(await pathExists(testPath))) continue;

@@ -141,7 +141,7 @@ async function createIterationFiles(iterationDir: string, fullName: string, opti
 | \`sources/\` | 只存放原始 PRD/Word/PDF，AI 不直接读取 |
 | \`020-specs/\` | analyze 的**输出**目录，存放分析结果 |
 | \`030-tasks/\` | 开发任务目录，execute 阶段使用 |
-| \`030-tasks/*/10-backend/*/\` | 后端子任务目录（execute 阶段使用） |
+| \`030-tasks/*/{端名}/{子任务}/\` | 端平铺子任务目录（execute 阶段使用） |
 
 ### 如何让 AI 读到你手写的文档？
 

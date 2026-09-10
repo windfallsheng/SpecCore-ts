@@ -157,44 +157,35 @@ async function analyzeTaskContext(taskDir: string): Promise<{
     }
   }
 
-  // 检查 backend/
-  const backend = join(taskDir, '10-backend');
-  if (await pathExists(backend)) {
-    const files = await readdir(backend);
-    for (const file of files) {
-      const filePath = join(backend, file);
-      const stats = await readFile(filePath, 'utf-8').then(s => s.length).catch(() => 0);
-      result.specFiles.push({ name: file, type: '后端', exists: true, size: formatSize(stats) });
-
-      // 统计验收标准
-      if (file === 'REQ.md') {
-        const content = await readFile(filePath, 'utf-8').catch(() => '');
-        result.totalAC += (content.match(/- \[[ x]\] AC-/g) || []).length;
-        result.passedAC += (content.match(/- \[x\] AC-/g) || []).length;
-        result.failedAC = result.totalAC - result.passedAC;
-      }
-    }
-  } else {
-    result.specFiles.push({ name: 'backend/', type: '后端', exists: false, size: '-' });
-  }
-
-  // 检查 20-frontend/{platform}/
-  const frontend = join(taskDir, '20-frontend');
-  if (await pathExists(frontend)) {
-    const platformDirs = await readdir(frontend, { withFileTypes: true });
-    for (const pd of platformDirs) {
-      if (pd.isDirectory()) {
-        result.platforms.push(pd.name);
-        const pDir = join(frontend, pd.name);
-        const files = await readdir(pDir);
+  // v8.3.121+: 端平铺结构扫描
+  const EXCLUDE_DIRS = new Set(['00-specs', '_shared', '99-artifacts', '.meta']);
+  try {
+    const platformEntries = await readdir(taskDir, { withFileTypes: true });
+    for (const pe of platformEntries) {
+      if (!pe.isDirectory() || pe.name.startsWith('.') || EXCLUDE_DIRS.has(pe.name)) continue;
+      const platformPath = join(taskDir, pe.name);
+      const subtaskEntries = await readdir(platformPath, { withFileTypes: true });
+      for (const sub of subtaskEntries) {
+        if (!sub.isDirectory()) continue;
+        result.platforms.push(`${pe.name}/${sub.name}`);
+        const subtaskPath = join(platformPath, sub.name);
+        const files = await readdir(subtaskPath);
         for (const file of files) {
-          const filePath = join(pDir, file);
+          const filePath = join(subtaskPath, file);
           const stats = await readFile(filePath, 'utf-8').then(s => s.length).catch(() => 0);
-          result.specFiles.push({ name: file, type: `前端/${pd.name}`, exists: true, size: formatSize(stats) });
+          result.specFiles.push({ name: file, type: `${pe.name}/${sub.name}`, exists: true, size: formatSize(stats) });
+
+          // 统计验收标准
+          if (file === 'REQ.md') {
+            const content = await readFile(filePath, 'utf-8').catch(() => '');
+            result.totalAC += (content.match(/- \[[ x]\] AC-/g) || []).length;
+            result.passedAC += (content.match(/- \[x\] AC-/g) || []).length;
+            result.failedAC = result.totalAC - result.passedAC;
+          }
         }
       }
     }
-  }
+  } catch { /* 跳过 */ }
 
   // 检查跨平台依赖
   if (result.platforms.length > 0) {

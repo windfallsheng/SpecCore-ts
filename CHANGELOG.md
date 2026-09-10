@@ -1,3 +1,41 @@
+## v8.3.121 (2026-09-10) — 全面清理 10-backend/20-frontend 旧分类目录
+
+### 修复
+
+**全面清理代码中遗留的 `10-backend` / `20-frontend` 旧分类目录引用**：
+
+涉及文件（共 17 个文件）：
+
+| 文件 | 修复内容 |
+|:---|:---|
+| `src/core/verify-engine.ts` | 5 处扫描逻辑改为端平铺结构 |
+| `src/core/knowledge-graph.ts` | 3 处扫描逻辑改为端平铺结构 |
+| `src/core/prompt-builder.ts` | 移除旧结构回退，更新排除注释 |
+| `src/core/verify-report-aggregator.ts` | scanPlatforms 改为端平铺扫描 |
+| `src/core/validator.ts` | requiredFiles 和 mdFiles 改为动态扫描 |
+| `src/core/name-validator.ts` | 移除固定 20-frontend 文件路径 |
+| `src/core/ask-engine.ts` | 平台识别正则更新 |
+| `src/core/analyze-engine.ts` | 注释更新 |
+| `src/commands/iteration/split.ts` | git-config 模板注释已更新（v8.3.120） |
+| `src/commands/iteration/create.ts` | 文档示例更新 |
+| `src/commands/iteration-from-global.ts` | 不再预创建旧分类目录 |
+| `src/commands/analyze.ts` | 移除旧结构回退 |
+| `src/commands/change.ts` | 同步逻辑改为端平铺扫描 |
+| `src/commands/execute.ts` | 移除旧结构回退 |
+| `src/commands/done.ts` | 2 处扫描逻辑改为端平铺结构 |
+| `src/commands/sync.ts` | 同步逻辑改为端平铺扫描 |
+| `src/commands/context.ts` | 检查逻辑改为端平铺扫描 |
+| `src/commands/trace.ts` | 详情展示改为端平铺扫描 |
+| `src/commands/retro.ts` | 页面统计改为端平铺扫描 |
+| `src/commands/pattern.ts` | 复制逻辑改为端平铺扫描 |
+| `src/commands/status-panel.ts` | 注释更新 |
+| `src/commands/import.ts` | 类型示例更新 |
+| `src/cli.ts` | 参数示例更新 |
+
+**端平铺结构**：`Task-*/{端名}/{子任务}/`，端直接平铺在 Task 下，不再经过 `10-backend` / `20-frontend` 分类层。
+
+---
+
 ## v8.3.120 (2026-09-10) — prefix/suffix 分隔符由用户完全控制
 
 ### 改进

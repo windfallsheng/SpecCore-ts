@@ -441,22 +441,20 @@ async function buildDoneArchivePrompt(iteration: string, taskId?: string): Promi
         join(taskDir, 'TEST.md'),
         join(taskDir, '99-artifacts', 'TEST.md'),
       ];
-      for (const catDir of ['10-backend', '20-frontend']) {
-        const catPath = join(taskDir, catDir);
-        if (await pathExists(catPath)) {
-          try {
-            const services = await readdir(catPath, { withFileTypes: true });
-            for (const svc of services) {
-              if (!svc.isDirectory()) continue;
-              const subs = await readdir(join(catPath, svc.name), { withFileTypes: true });
-              for (const sub of subs) {
-                if (!sub.isDirectory()) continue;
-                testPaths.push(join(catPath, svc.name, sub.name, 'TEST.md'));
-              }
-            }
-          } catch { /* skip */ }
+      // v8.3.121+: 端平铺结构扫描
+      const EXCLUDE_DIRS = new Set(['00-specs', '_shared', '99-artifacts', '.meta']);
+      try {
+        const platformEntries = await readdir(taskDir, { withFileTypes: true });
+        for (const pe of platformEntries) {
+          if (!pe.isDirectory() || pe.name.startsWith('.') || EXCLUDE_DIRS.has(pe.name)) continue;
+          const platformPath = join(taskDir, pe.name);
+          const subtaskEntries = await readdir(platformPath, { withFileTypes: true });
+          for (const sub of subtaskEntries) {
+            if (!sub.isDirectory()) continue;
+            testPaths.push(join(platformPath, sub.name, 'TEST.md'));
+          }
         }
-      }
+      } catch { /* skip */ }
       let testContent = '';
       for (const p of testPaths) {
         if (await pathExists(p)) { testContent = await readFile(p, 'utf-8'); break; }
@@ -571,15 +569,18 @@ function truncateDoc(content: string, maxChars: number): string {
 
 async function summarizeCodeOutput(taskDir: string): Promise<string> {
   const lines: string[] = [];
-  for (const catDir of ['10-backend', '20-frontend']) {
-    const catPath = join(taskDir, catDir);
-    if (!(await pathExists(catPath))) continue;
-    try {
-      const services = await readdir(catPath, { withFileTypes: true });
-      for (const svc of services) {
-        if (!svc.isDirectory()) continue;
-        const srcPath = join(catPath, svc.name, 'src');
-        const testPath = join(catPath, svc.name, 'tests');
+  // v8.3.121+: 端平铺结构扫描
+  const EXCLUDE_DIRS = new Set(['00-specs', '_shared', '99-artifacts', '.meta']);
+  try {
+    const platformEntries = await readdir(taskDir, { withFileTypes: true });
+    for (const pe of platformEntries) {
+      if (!pe.isDirectory() || pe.name.startsWith('.') || EXCLUDE_DIRS.has(pe.name)) continue;
+      const platformPath = join(taskDir, pe.name);
+      const subtaskEntries = await readdir(platformPath, { withFileTypes: true });
+      for (const sub of subtaskEntries) {
+        if (!sub.isDirectory()) continue;
+        const srcPath = join(platformPath, sub.name, 'src');
+        const testPath = join(platformPath, sub.name, 'tests');
         let fileCount = 0;
         let testCount = 0;
         if (await pathExists(srcPath)) {
@@ -589,11 +590,11 @@ async function summarizeCodeOutput(taskDir: string): Promise<string> {
           testCount = await countFiles(testPath, ['.test.ts', '.test.js', '.spec.ts', '.spec.js', '.py']);
         }
         if (fileCount > 0) {
-          lines.push(`- **${svc.name}** (${catDir.replace(/^\d+-/, '')}): ${fileCount} 个代码文件${testCount > 0 ? `, ${testCount} 个测试文件` : ''}`);
+          lines.push(`- **${sub.name}** (${pe.name}): ${fileCount} 个代码文件${testCount > 0 ? `, ${testCount} 个测试文件` : ''}`);
         }
       }
-    } catch { /* skip */ }
-  }
+    }
+  } catch { /* skip */ }
   const rootSrc = join(taskDir, 'src');
   if (await pathExists(rootSrc)) {
     const count = await countFiles(rootSrc, ['.ts', '.js', '.tsx', '.jsx', '.java', '.go', '.py', '.vue']);

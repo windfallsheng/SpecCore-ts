@@ -5252,23 +5252,7 @@ async function getSubtaskDirs(taskDir: string): Promise<string[]> {
       }
     } catch { /* ignore */ }
   }
-  // 回退: 旧结构 10-backend/ 和 20-frontend/
-  if (result.length === 0) {
-    for (const catDir of ['10-backend', '20-frontend']) {
-      const catPath = join(taskDir, catDir);
-      if (!(await pathExists(catPath))) continue;
-      try {
-        for (const svc of await readdir(catPath, { withFileTypes: true })) {
-          if (!svc.isDirectory()) continue;
-          for (const sub of await readdir(join(catPath, svc.name), { withFileTypes: true })) {
-            if (sub.isDirectory() && !sub.name.startsWith('.')) {
-              result.push(join(catPath, svc.name, sub.name));
-            }
-          }
-        }
-      } catch { /* ignore */ }
-    }
-  }
+  // v8.3.121+: 已移除 10-backend/20-frontend 旧结构回退
   return result;
 }
 

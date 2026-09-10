@@ -4,7 +4,7 @@
 import { logger } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
 import { scanTasks } from '../core/state';
-import { readFile, writeFile, pathExists, ensureDir } from 'fs-extra';
+import { readFile, writeFile, pathExists, ensureDir, readdir } from 'fs-extra';
 import { join } from 'path';
 import { backupDirWithTimestamp } from '../utils/task-utils';
 import { detectPatternCandidates, PatternCandidate, groupCandidatesByPlatform } from '../core/pattern-detector';
@@ -99,25 +99,33 @@ async function saveFromTask(options: PatternOptions, targetDir: string): Promise
   const cwd = process.cwd();
   const iterDir = join(cwd, `Iteration-${iteration}`);
   const taskDir = join(iterDir, task.id);
-  const backendDir = join(taskDir, '10-backend');
-
-  // 复制 Spec 文件，替换占位符
+  // v8.3.121+: 端平铺结构扫描 — 从第一个端目录复制 Spec 文件
   const taskName = task.name || task.id;
-  if (await pathExists(join(backendDir, 'REQ.md'))) {
-    let content = await readFile(join(backendDir, 'REQ.md'), 'utf-8');
-    content = generalizeContent(content, taskName);
-    await writeFile(join(targetDir, 'REQ.tmpl.md'), content);
-  }
-  if (await pathExists(join(backendDir, 'TECH.md'))) {
-    let content = await readFile(join(backendDir, 'TECH.md'), 'utf-8');
-    content = generalizeContent(content, taskName);
-    await writeFile(join(targetDir, 'TECH.tmpl.md'), content);
-  }
-  if (await pathExists(join(backendDir, 'TASK.md'))) {
-    let content = await readFile(join(backendDir, 'TASK.md'), 'utf-8');
-    content = generalizeContent(content, taskName);
-    await writeFile(join(targetDir, 'TASK.tmpl.md'), content);
-  }
+  const EXCLUDE_DIRS = new Set(['00-specs', '_shared', '99-artifacts', '.meta']);
+  let copied = false;
+  try {
+    const entries = await readdir(taskDir, { withFileTypes: true });
+    for (const e of entries) {
+      if (!e.isDirectory() || e.name.startsWith('.') || EXCLUDE_DIRS.has(e.name)) continue;
+      const platformPath = join(taskDir, e.name);
+      const subtaskEntries = await readdir(platformPath, { withFileTypes: true });
+      for (const sub of subtaskEntries) {
+        if (!sub.isDirectory()) continue;
+        const subtaskPath = join(platformPath, sub.name);
+        for (const [fname, tname] of [['REQ.md', 'REQ.tmpl.md'], ['TECH.md', 'TECH.tmpl.md'], ['TASK.md', 'TASK.tmpl.md']]) {
+          const srcPath = join(subtaskPath, fname);
+          if (await pathExists(srcPath)) {
+            let content = await readFile(srcPath, 'utf-8');
+            content = generalizeContent(content, taskName);
+            await writeFile(join(targetDir, tname), content);
+            copied = true;
+          }
+        }
+        if (copied) break;
+      }
+      if (copied) break;
+    }
+  } catch { /* 跳过 */ }
 }
 
 async function saveFromContent(options: PatternOptions, targetDir: string): Promise<void> {
