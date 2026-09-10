@@ -320,7 +320,7 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
     spinner.stop('SpecCore initialized successfully!');
     logger.info('');
     logger.info('Next steps:');
-    logger.info('  1. 👀 View examples: .speccore/examples/CONSTITUTION-EXAMPLE.md');
+    logger.info('  1. 👀 View examples: .speccore/examples/config/CONSTITUTION-EXAMPLE.md');
     logger.info('  2. ✏️  Edit .speccore/CONSTITUTION.md to define your tech stack');
     logger.info('  3. 👥 Edit .speccore/PROJECT/TEAM.md to add team members');
     logger.info('  4. 🔬 Run: speccore analyze --scope global to analyze your codebase');
@@ -2408,7 +2408,40 @@ async function writeSetupGuide(projectRoot: string, _speccoreDir: string): Promi
 
 async function generateExampleConfigs(projectRoot: string): Promise<void> {
   const examplesDir = join(projectRoot, '.speccore', 'examples');
-  await ensureDir(examplesDir);
+  const configDir = join(examplesDir, 'config');
+  await ensureDir(configDir);
+
+  // 示例目录 README
+  const readmeContent = `# SpecCore 示例目录
+
+> 本目录存放各类配置示例，供用户仿照修改。
+> 这些文件仅供人类参考，AI 不会读取。
+
+## 目录结构
+
+\`\`\`
+examples/
+├── README.md                    ← 本文件
+├── config/                      ← 配置文件示例
+│   ├── CONSTITUTION-EXAMPLE.md  ← CONSTITUTION.md 完整示例（多工程）
+│   ├── PROJECT-EXAMPLE.yaml     ← PROJECT.yaml 完整示例（多工程）
+│   └── GIT-CONFIG-EXAMPLE.txt   ← 子任务 .meta/git-config 格式示例
+└── project/                     ← 完整项目示例（预留，未来扩展）
+\`\`\`
+
+## 使用方式
+
+1. 查看 \`config/CONSTITUTION-EXAMPLE.md\`，仿照修改你的 \`.speccore/CONSTITUTION.md\`
+2. 查看 \`config/PROJECT-EXAMPLE.yaml\`，了解 YAML 结构和字段对应关系
+3. 查看 \`config/GIT-CONFIG-EXAMPLE.txt\`，了解子任务级 Git 配置格式
+4. 修改后运行 \`speccore update\` 自动同步到 PROJECT.yaml
+
+## 注意事项
+
+- 示例文件中的值为演示用途，请根据实际项目修改
+- 示例文件更新随 CLI 版本升级，如需最新示例可重新运行 \`speccore init\`
+`;
+  await writeFile(join(examplesDir, 'README.md'), readmeContent);
 
   // CONSTITUTION.md 完整示例（多工程）
   const constitutionExample = `## 字段对照总表
@@ -2555,7 +2588,7 @@ async function generateExampleConfigs(projectRoot: string): Promise<void> {
 > 3. 子任务目录下的 \`.meta/git-config\` 可覆盖全局配置（见目录结构说明）
 `;
 
-  await writeFile(join(examplesDir, 'CONSTITUTION-EXAMPLE.md'), constitutionExample);
+  await writeFile(join(configDir, 'CONSTITUTION-EXAMPLE.md'), constitutionExample);
 
   // PROJECT.yaml 完整示例（多工程）
   const projectExample = `# PROJECT.yaml — 项目配置（由 CLI 自动生成，不建议手动编辑）
@@ -2675,7 +2708,7 @@ code_scope:
 # ─────────────────────────────────────────────────────────────────────────────
 `;
 
-  await writeFile(join(examplesDir, 'PROJECT-EXAMPLE.yaml'), projectExample);
+  await writeFile(join(configDir, 'PROJECT-EXAMPLE.yaml'), projectExample);
 
   // 子任务 git-config 示例
   const gitConfigExample = `# 子任务级 Git 配置示例（.meta/git-config）
@@ -2707,7 +2740,7 @@ code_scope:
 远程名称: origin
 `;
 
-  await writeFile(join(examplesDir, 'GIT-CONFIG-EXAMPLE.txt'), gitConfigExample);
+  await writeFile(join(configDir, 'GIT-CONFIG-EXAMPLE.txt'), gitConfigExample);
 
   logger.info('   📋 已生成示例配置: .speccore/examples/');
 }

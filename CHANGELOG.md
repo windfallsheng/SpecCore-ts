@@ -1,3 +1,31 @@
+## v8.3.117 (2026-09-10) — examples 目录细分 + README.md
+
+### 改进
+
+**`.speccore/examples/` 目录结构重新组织**：
+
+```
+examples/
+├── README.md                    ← 示例目录说明
+├── config/                      ← 配置文件示例
+│   ├── CONSTITUTION-EXAMPLE.md
+│   ├── PROJECT-EXAMPLE.yaml
+│   └── GIT-CONFIG-EXAMPLE.txt
+└── project/                     ← 完整项目示例（预留，未来扩展）
+```
+
+**新增 `README.md`**：
+- 说明各示例文件的用途和使用方式
+- 明确标注"这些文件仅供人类参考，AI 不会读取"
+- 提供目录结构概览
+
+**影响**：
+- 不影响 AI 读取（AI 只读取 `.speccore/CONSTITUTION.md` 和 `.speccore/PROJECT.yaml`）
+- 示例文件独立存放，方便未来扩展（如完整项目示例、模板示例等）
+- Init 提示路径更新为 `.speccore/examples/config/CONSTITUTION-EXAMPLE.md`
+
+---
+
 ## v8.3.116 (2026-09-10) — split 生成的 git-config 包含新字段示例
 
 ### 改进
