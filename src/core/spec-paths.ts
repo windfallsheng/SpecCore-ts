@@ -495,8 +495,10 @@ export async function getProjectPathForPlatform(platform: string): Promise<strin
  */
 export interface BranchTypeInfo {
   type: string;
-  /** 前缀，可选。默认值为 类型名/ */
+  /** 任务名前的前缀，可选。如 'api-' */
   prefix?: string;
+  /** 任务名后的后缀，可选。如 '-urgent' */
+  suffix?: string;
   source: string;
   description: string;
 }
@@ -508,7 +510,7 @@ export interface GitConfigInfo {
   protectedBranches: string[];
   branchPrefix: string;
   notes: string;
-  /** v8.3.112+: 分支类型定义（从「Git 公共配置」的分支类型表解析） */
+  /** v8.3.113+: 分支类型定义（从「Git 公共配置」的分支类型表解析） */
   branchTypes: BranchTypeInfo[];
 }
 
@@ -541,6 +543,7 @@ export async function parseGitConfig(): Promise<Map<string, GitConfigInfo>> {
   let branchTypeHeaderParsed = false;
   let btTypeColIdx = -1;
   let btPrefixColIdx = -1;
+  let btSuffixColIdx = -1;
   let btSourceColIdx = -1;
   let btDescColIdx = -1;
 
@@ -557,14 +560,14 @@ export async function parseGitConfig(): Promise<Map<string, GitConfigInfo>> {
 
     const cells = line.split('|').map(c => c.trim()).filter(Boolean);
 
-    // 检测分支类型表头（类型 | 前缀 | 创建源 | 说明）
+    // 检测分支类型表头（类型 | 前缀 | 后缀 | 创建源 | 说明）
     if (!branchTypeHeaderParsed && cells.length >= 3) {
       const hasType = cells.some(h => h === '类型' || h.includes('类型'));
-      const hasPrefix = cells.some(h => h === '前缀' || h.includes('前缀'));
       const hasSource = cells.some(h => h === '创建源' || h.includes('创建源'));
-      if (hasType && hasPrefix && hasSource) {
+      if (hasType && hasSource) {
         btTypeColIdx = cells.findIndex(h => h === '类型' || h.includes('类型'));
         btPrefixColIdx = cells.findIndex(h => h === '前缀' || h.includes('前缀'));
+        btSuffixColIdx = cells.findIndex(h => h === '后缀' || h.includes('后缀'));
         btSourceColIdx = cells.findIndex(h => h === '创建源' || h.includes('创建源'));
         btDescColIdx = cells.findIndex(h => h === '说明' || h.includes('说明'));
         branchTypeHeaderParsed = true;
@@ -578,10 +581,12 @@ export async function parseGitConfig(): Promise<Map<string, GitConfigInfo>> {
       const typeVal = btTypeColIdx >= 0 && cells.length > btTypeColIdx ? cells[btTypeColIdx].trim() : '';
       if (typeVal) {
         const rawPrefix = btPrefixColIdx >= 0 && cells.length > btPrefixColIdx ? cells[btPrefixColIdx].trim() : '';
+        const rawSuffix = btSuffixColIdx >= 0 && cells.length > btSuffixColIdx ? cells[btSuffixColIdx].trim() : '';
         const bt: BranchTypeInfo = {
           type: typeVal,
-          // v8.3.112: prefix 可选，默认值为 类型名/
-          prefix: rawPrefix || `${typeVal}/`,
+          // v8.3.113: prefix=任务前前缀, suffix=任务后后缀, 均可选
+          prefix: rawPrefix && !isDefaultPlaceholder(rawPrefix) ? rawPrefix : undefined,
+          suffix: rawSuffix && !isDefaultPlaceholder(rawSuffix) ? rawSuffix : undefined,
           source: btSourceColIdx >= 0 && cells.length > btSourceColIdx ? cells[btSourceColIdx].trim() : '',
           description: btDescColIdx >= 0 && cells.length > btDescColIdx ? cells[btDescColIdx].trim() : '',
         };

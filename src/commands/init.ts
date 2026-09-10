@@ -459,26 +459,32 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 
 ### 分支类型
 
-> 定义各种分支类型及其创建源分支。**前缀默认为 类型名/，如需自定义才填写。**
-> 例如：类型为 \`hotfix\` 时，分支名自动为 \`hotfix/xxx\`，无需填写前缀。
+> 定义各种分支类型及其创建源分支。**分支名格式：\`{类型}/{前缀}-{任务名}-{后缀}\`**
+> - \`{类型}/\` = 类型自带（如 hotfix/、feature/）
+> - \`{前缀}\` = 任务名前的前缀（可选）
+> - \`{任务名}\` = 如 Task-001-修复登录
+> - \`{后缀}\` = 任务名后的后缀（可选）
+>
+> 示例：配置了前缀 \`api-\`、后缀 \`-urgent\`，任务名为 \`Task-001\`，则分支名为 \`hotfix/api-Task-001-urgent\`
 
-| 类型 | 前缀（可选） | 创建源 | 说明 |
-| :--- | :--- | :--- | :--- |
-| feature | — | develop | 新功能开发 |
-| bugfix | — | develop | 修复开发环境 Bug |
-| release | — | develop | 版本发布准备 |
-| hotfix | — | main | 生产环境紧急修复 |
-| support | — | main | 长期支持旧版本 |
+| 类型 | 前缀（可选） | 后缀（可选） | 创建源 | 说明 |
+| :--- | :--- | :--- | :--- | :--- |
+| feature | — | — | develop | 新功能开发 |
+| bugfix | — | — | develop | 修复开发环境 Bug |
+| release | — | — | develop | 版本发布准备 |
+| hotfix | — | — | main | 生产环境紧急修复 |
+| support | — | — | main | 长期支持旧版本 |
 
 > **分支类型说明**：
-> - **类型名即前缀**：如 \`hotfix\` 类型的分支名自动为 \`hotfix/xxx\`，\`feature\` 类型自动为 \`feature/xxx\`
-> - **前缀列**：仅在需要自定义前缀时填写（如类型 \`feature\` 想用前缀 \`feat/\`）
+> - **分支名格式**：\`{类型}/{前缀}-{任务名}-{后缀}\`，前缀和后缀均可选
+> - **前缀列**：任务名前的前缀（如 \`api-\`、\`backend-\`），不填则无
+> - **后缀列**：任务名后的后缀（如 \`-urgent\`、\`-review\`），不填则无
 > - **feature**：日常功能开发，从 develop 创建，完成后合并回 develop
 > - **bugfix**：修复开发中的 Bug，从 develop 创建，完成后合并回 develop
 > - **release**：准备发布版本，从 develop 创建，完成后合并到 main + develop
 > - **hotfix**：生产环境紧急修复，从 main 创建，完成后合并到 main + develop
 > - **support**：长期支持旧版本，从 main 创建，用于维护历史版本
-> - 可自定义添加其他类型（如 refactor、docs、test 等），前缀自动为 类型名/
+> - 可自定义添加其他类型（如 refactor、docs、test 等）
 
 ## Git 配置
 

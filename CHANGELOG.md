@@ -1,3 +1,54 @@
+## v8.3.113 (2026-09-10) — 分支类型：prefix=任务前前缀, suffix=任务后后缀
+
+### 重新设计
+
+**分支名格式（v8.3.113）**：
+```
+{类型}/{前缀}-{任务名}-{后缀}
+```
+
+| 部分 | 说明 | 示例 |
+|:---|:---|:---|
+| `{类型}/` | 类型自带，不可配置 | `hotfix/`、`feature/` |
+| `{前缀}` | 任务名前的前缀，可选 | `api-`、`backend-` |
+| `{任务名}` | 任务标识，如 Task-001-修复登录 | `Task-001` |
+| `{后缀}` | 任务名后的后缀，可选 | `-urgent`、`-review` |
+
+**完整示例**：
+- 类型 `hotfix`，前缀 `api-`，后缀 `-urgent`，任务名 `Task-001`
+- 分支名：`hotfix/api-Task-001-urgent`
+
+**PROJECT.yaml 配置**：
+```yaml
+git:
+  branch_types:
+    hotfix:
+      source: 'main'
+      prefix: 'api-'        # 任务前前缀（可选）
+      suffix: '-urgent'     # 任务后后缀（可选）
+    feature:
+      source: 'develop'     # 不配置 prefix/suffix，分支名就是 feature/任务名
+```
+
+**字段语义变更**：
+- `prefix`：从"分支类型前缀"改为"任务名前的前缀"
+- `suffix`：新增字段，"任务名后的后缀"
+- 分支类型前缀（如 `hotfix/`）直接由类型名决定，不再配置
+
+**CONSTITUTION.md 模板更新**：
+- 「分支类型」表格增加「后缀（可选）」列
+- 5 列格式：`类型 | 前缀（可选） | 后缀（可选） | 创建源 | 说明`
+- 注释明确分支名格式：`{类型}/{前缀}-{任务名}-{后缀}`
+
+**类型更新**：
+- `BranchTypeInfo`：`prefix`（任务前前缀，可选）、`suffix`（任务后后缀，可选）
+- `GitConfigInfo`、`ProjectConfig.git`、`PlatformConfig`、`EffectiveGitConfig` 同步更新
+
+**校验更新**：
+- 增加 `suffix` 字段校验（存在时必须是字符串）
+
+---
+
 ## v8.3.112 (2026-09-10) — 分支类型：prefix 可选，默认值为 类型名/
 
 ### 重新设计
