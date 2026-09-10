@@ -451,9 +451,31 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 > 公共默认值。各工程在「Git 配置」表中只写与公共配置不同的字段，未填写的字段自动使用此处默认值。
 > 用 \`—\` 表示使用公共默认值。
 
-| 默认分支 | 保护分支 | 分支前缀 |
-| :--- | :--- | :--- |
-| main | main,release/* | feature/ |
+### 默认配置
+
+| 默认分支 | 保护分支 |
+| :--- | :--- |
+| main | main,release/* |
+
+### 分支类型
+
+> 定义各种分支类型的前缀和创建源分支。支持自定义扩展。
+
+| 类型 | 前缀 | 创建源 | 说明 |
+| :--- | :--- | :--- | :--- |
+| feature | feature/ | develop | 新功能开发 |
+| bugfix | bugfix/ | develop | 修复开发环境 Bug |
+| release | release/ | develop | 版本发布准备 |
+| hotfix | hotfix/ | main | 生产环境紧急修复 |
+| support | support/ | main | 长期支持旧版本 |
+
+> **分支类型说明**：
+> - **feature**：日常功能开发，从 develop 创建，完成后合并回 develop
+> - **bugfix**：修复开发中的 Bug，从 develop 创建，完成后合并回 develop
+> - **release**：准备发布版本，从 develop 创建，完成后合并到 main + develop
+> - **hotfix**：生产环境紧急修复，从 main 创建，完成后合并到 main + develop
+> - **support**：长期支持旧版本，从 main 创建，用于维护历史版本
+> - 可自定义添加其他类型（如 refactor/、docs/、test/ 等）
 
 ## Git 配置
 

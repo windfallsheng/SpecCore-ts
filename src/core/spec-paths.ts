@@ -493,6 +493,13 @@ export async function getProjectPathForPlatform(platform: string): Promise<strin
  * - 工程配置表中字段为空、为 `—`、为 `-` 时，使用公共默认值
  * - 工程配置表中字段有值时，覆盖公共默认值
  */
+export interface BranchTypeInfo {
+  type: string;
+  prefix: string;
+  source: string;
+  description: string;
+}
+
 export interface GitConfigInfo {
   projectIdentifier: string;
   gitRepo: string;
@@ -500,6 +507,8 @@ export interface GitConfigInfo {
   protectedBranches: string[];
   branchPrefix: string;
   notes: string;
+  /** v8.3.111+: 分支类型定义（从「Git 公共配置」的分支类型表解析） */
+  branchTypes: BranchTypeInfo[];
 }
 
 /** 判断值是否为空或表示"使用默认值" */
@@ -518,6 +527,7 @@ export async function parseGitConfig(): Promise<Map<string, GitConfigInfo>> {
     defaultBranch: 'main',
     protectedBranches: [],
     branchPrefix: '',
+    branchTypes: [],
   };
 
   let inPublicSection = false;
@@ -525,6 +535,13 @@ export async function parseGitConfig(): Promise<Map<string, GitConfigInfo>> {
   let pubBranchColIdx = -1;
   let pubProtectedColIdx = -1;
   let pubPrefixColIdx = -1;
+  // v8.3.111+: 分支类型表解析
+  let inBranchTypeTable = false;
+  let branchTypeHeaderParsed = false;
+  let btTypeColIdx = -1;
+  let btPrefixColIdx = -1;
+  let btSourceColIdx = -1;
+  let btDescColIdx = -1;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
@@ -539,6 +556,39 @@ export async function parseGitConfig(): Promise<Map<string, GitConfigInfo>> {
 
     const cells = line.split('|').map(c => c.trim()).filter(Boolean);
 
+    // 检测分支类型表头（类型 | 前缀 | 创建源 | 说明）
+    if (!branchTypeHeaderParsed && cells.length >= 3) {
+      const hasType = cells.some(h => h === '类型' || h.includes('类型'));
+      const hasPrefix = cells.some(h => h === '前缀' || h.includes('前缀'));
+      const hasSource = cells.some(h => h === '创建源' || h.includes('创建源'));
+      if (hasType && hasPrefix && hasSource) {
+        btTypeColIdx = cells.findIndex(h => h === '类型' || h.includes('类型'));
+        btPrefixColIdx = cells.findIndex(h => h === '前缀' || h.includes('前缀'));
+        btSourceColIdx = cells.findIndex(h => h === '创建源' || h.includes('创建源'));
+        btDescColIdx = cells.findIndex(h => h === '说明' || h.includes('说明'));
+        branchTypeHeaderParsed = true;
+        inBranchTypeTable = true;
+        continue;
+      }
+    }
+
+    // 解析分支类型数据行
+    if (branchTypeHeaderParsed && inBranchTypeTable && cells.length > 0) {
+      const typeVal = btTypeColIdx >= 0 && cells.length > btTypeColIdx ? cells[btTypeColIdx].trim() : '';
+      if (typeVal) {
+        const bt: BranchTypeInfo = {
+          type: typeVal,
+          prefix: btPrefixColIdx >= 0 && cells.length > btPrefixColIdx ? cells[btPrefixColIdx].trim() : '',
+          source: btSourceColIdx >= 0 && cells.length > btSourceColIdx ? cells[btSourceColIdx].trim() : '',
+          description: btDescColIdx >= 0 && cells.length > btDescColIdx ? cells[btDescColIdx].trim() : '',
+        };
+        if (!defaults.branchTypes) defaults.branchTypes = [];
+        defaults.branchTypes.push(bt);
+      }
+      continue;
+    }
+
+    // 解析默认配置表头（默认分支 | 保护分支）
     if (!publicHeaderParsed && cells.length > 0) {
       pubBranchColIdx = cells.findIndex(h =>
         h === '默认分支' || h === '分支' || h.includes('默认分支') || h.includes('分支')
@@ -549,11 +599,14 @@ export async function parseGitConfig(): Promise<Map<string, GitConfigInfo>> {
       pubPrefixColIdx = cells.findIndex(h =>
         h === '分支前缀' || h.includes('分支前缀')
       );
-      publicHeaderParsed = true;
-      continue;
+      if (pubBranchColIdx >= 0 || pubProtectedColIdx >= 0 || pubPrefixColIdx >= 0) {
+        publicHeaderParsed = true;
+        continue;
+      }
     }
 
-    if (publicHeaderParsed && cells.length > 0) {
+    // 解析默认配置数据行
+    if (publicHeaderParsed && cells.length > 0 && !inBranchTypeTable) {
       const branchVal = pubBranchColIdx >= 0 && cells.length > pubBranchColIdx
         ? cells[pubBranchColIdx].trim() : '';
       const protectedVal = pubProtectedColIdx >= 0 && cells.length > pubProtectedColIdx
@@ -566,7 +619,7 @@ export async function parseGitConfig(): Promise<Map<string, GitConfigInfo>> {
         defaults.protectedBranches = protectedVal.split(',').map(s => s.trim()).filter(Boolean);
       }
       if (prefixVal) defaults.branchPrefix = prefixVal;
-      break; // 公共配置只有一行数据
+      // 不 break，继续解析后面的分支类型表
     }
   }
 
@@ -645,6 +698,7 @@ export async function parseGitConfig(): Promise<Map<string, GitConfigInfo>> {
           protectedBranches,
           branchPrefix: prefix,
           notes: notesColIdx >= 0 && cells.length > notesColIdx ? cells[notesColIdx].trim() : '',
+          branchTypes: defaults.branchTypes || [],
         };
         result.set(projectIdentifier, info);
       }

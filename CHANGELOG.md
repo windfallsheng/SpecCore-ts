@@ -1,3 +1,46 @@
+## v8.3.111 (2026-09-10) — 分支类型定义（前缀 + 创建源）
+
+### 新增
+
+**分支类型配置（v8.3.111）**:
+- `ProjectConfig.git` 新增 `branch_types` 字段：支持定义各种分支类型的前缀和创建源分支
+- `PlatformConfig` 新增 `branch_types` 字段：支持端级覆盖（合并策略）
+- `EffectiveGitConfig` 新增 `branch_types` 字段
+- `getEffectiveGitConfig` 采用合并策略：端级覆盖同名类型，新增类型追加
+
+**默认分支类型**（Git Flow 模型）：
+```yaml
+git:
+  branch_types:
+    feature:  { prefix: 'feature/', source: 'develop' }
+    bugfix:   { prefix: 'bugfix/',  source: 'develop' }
+    release:  { prefix: 'release/', source: 'develop' }
+    hotfix:   { prefix: 'hotfix/',  source: 'main' }
+```
+
+**CONSTITUTION.md 模板更新**：
+- 「Git 公共配置」拆分为「默认配置」和「分支类型」两个子章节
+- 新增分支类型表格：`类型 | 前缀 | 创建源 | 说明`
+- 内置 5 种类型：feature、bugfix、release、hotfix、support
+- 支持自定义扩展（如 refactor/、docs/、test/ 等）
+
+**parseGitConfig 增强**：
+- 新增 `BranchTypeInfo` 接口：`type`、`prefix`、`source`、`description`
+- 解析「Git 公共配置」章节时，同时解析「分支类型」表格
+- 每个工程的 `GitConfigInfo` 包含 `branchTypes` 数组
+
+**校验增强**：
+- `validateProjectConfig` 增加 `git.branch_types` 校验：
+  - 必须是对象
+  - 每个类型的 `prefix` 和 `source` 必须是字符串
+
+### 影响文件
+- `src/core/unified-config.ts` — ProjectConfig/PlatformConfig 扩展 + 校验 + 序列化
+- `src/core/spec-paths.ts` — parseGitConfig 扩展分支类型解析
+- `src/commands/init.ts` — CONSTITUTION.md 模板新增分支类型表格
+
+---
+
 ## v8.3.110 (2026-09-10) — 字段对照总表 + AI 语义防误解
 
 ### 新增
