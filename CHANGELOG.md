@@ -1,3 +1,26 @@
+## v8.3.133 (2026-09-10) — AGENTS.md 业务规则提示 + 文档补充
+
+### 改进
+
+**AGENTS.md 新会话引导增强**：
+- 「新会话第一步」新增业务规则读取提示：如存在 `.speccore/GLOBAL/BUSINESS_RULES/` 目录，执行 analyze/execute 前需读取其中规则文件
+- 明确文件名必须与 CONSTITUTION.md / PROJECT.yaml 中的工程标识完全一致
+
+**示例模板命名警告** (`src/commands/init.ts`)：
+- `BUSINESS-RULES-EXAMPLE/01-common.md` 和 `booking-service.md` 顶部新增 ⚠️ 命名警告
+- 正确/错误示例对比，防止 AI 创建文件时使用下划线或简写
+
+**设计文档补充** (`docs/DESIGN.md`)：
+- 新增附录「v8.3.129+ 全局业务规则自动注入设计」
+- A.10：关键全局文件自动全文注入（keyFileSummaries 机制、与 loadBusinessRules 互补关系）
+- A.11：BUSINESS_RULES 目录化 + 端级过滤（目录组织、过滤规则、命名约束、三层防护）
+
+**说明文档更新**：
+- `docs/quick-start.md`：init 命令注释中补充 `.speccore/examples/` 示例配置目录说明
+- `docs/workspace-organization.md`：推荐目录结构中补充 `.speccore/` 内部细节（CONSTITUTION.md、PROJECT.yaml、GLOBAL/、BUSINESS_RULES/、examples/）
+
+---
+
 ## v8.3.132 (2026-09-10) — BUSINESS_RULES 目录化 + 端级自动过滤
 
 ### 改进

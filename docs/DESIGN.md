@@ -5358,3 +5358,74 @@ Playwright 浏览器 "chromium" 未安装。
 | 键盘组合键 | press (Control+a 等) | ✅ |
 
 **覆盖结论**：后台管理系统（缴费/表单/列表/上传/弹窗/iframe/拖拽）的常规功能已全部覆盖。
+
+---
+
+## 附录：v8.3.129+ 全局业务规则自动注入设计
+
+### A.10 关键全局文件自动全文注入（v8.3.129）
+
+**问题**：`.speccore/GLOBAL/` 下的文件默认只给 AI 目录（TOC），AI 需要自己决定读什么。但业务规则（角色体系、状态机、通用约束）是高频必读内容，如果 AI 忘记读取，会导致生成的代码违反业务规则。
+
+**设计决策**：
+- 在 `GlobalContext` 接口中新增 `keyFileSummaries` 字段
+- `loadGlobalContext()` 自动识别并读取指定的关键全局文件（当前为 `BUSINESS_RULES.md`）
+- 关键文件列表可扩展：`KEY_GLOBAL_FILES = ['BUSINESS_RULES.md']`
+- 每个文件最多注入 4000 字符，防止爆 Prompt
+
+**注入时机**：所有 AI 命令统一走 `buildPrompt()`，在 Prompt 组装阶段自动注入：
+
+```
+buildPrompt()
+  ├── loadTechStack()          ← CONSTITUTION.md（技术栈）
+  ├── loadBusinessRules()      ← CONSTITUTION.md「命名规范」+ REQ.md「业务规则」
+  ├── loadGlobalContext()      ← INDEX.md + BUSINESS_RULES.md（关键文件）
+  └── formatGlobalContext()    ← Prompt 中展示「关键全局规则（已注入）」区块
+```
+
+**与既有机制的关系**：
+- `loadBusinessRules()` 提取的是结构化规则（命名规范、约束条件），用于代码校验
+- `keyFileSummaries` 注入的是业务规则全文（角色、状态机、流程），用于 AI 上下文理解
+- 两者互补，不重复
+
+### A.11 BUSINESS_RULES 目录化 + 端级过滤（v8.3.132）
+
+**问题**：单文件 `GLOBAL/BUSINESS_RULES.md` 无法表达"通用规则 vs 端级规则"的区分。所有规则堆在一个文件里，AI 容易混淆适用范围；多端项目中端级规则互相干扰。
+
+**设计决策**：
+- 支持 `GLOBAL/BUSINESS_RULES/` 目录，按文件拆分规则
+- 保留旧路径 `GLOBAL/BUSINESS_RULES.md` 兼容
+- 按 `platform` 参数过滤加载，只注入当前端需要的规则
+
+**目录组织约定**：
+
+```
+.speccore/GLOBAL/BUSINESS_RULES/
+├── 01-common.md              ← 文件名含 -common，所有端自动加载
+├── 02-order-state.md         ← 同上
+├── booking-service.md        ← 仅 booking-service 端加载
+├── room-service.md           ← 仅 room-service 端加载
+└── h5-mobile.md              ← 仅 h5-mobile 端加载
+```
+
+**过滤规则**（`loadGlobalContext()` 中实现）：
+
+| 条件 | 加载？ | 示例 |
+|:---|:---:|:---|
+| 无 platform 参数 | 加载全部 .md | — |
+| 文件名含 `-common` | ✅ 加载 | `01-common.md` |
+| 文件名 `===` platform | ✅ 加载 | `booking-service.md` |
+| 文件名 `endsWith('-' + platform)` | ✅ 加载 | `api-booking-service.md` |
+| 文件名 `includes('-' + platform + '-')` | ✅ 加载 | `core-booking-service-rules.md` |
+| 其他 | ❌ 跳过 | `user-guide.md` |
+
+**命名约束**：端级规则文件名必须与 CONSTITUTION.md / PROJECT.yaml 中的工程标识完全一致（短横线连接），下划线、简写、中文均不会匹配。
+
+**示例模板**：`speccore init` 自动生成 `BUSINESS-RULES-EXAMPLE/` 目录：
+- `01-common.md` — 通用规则模板（角色、状态机、金额、时间、约束、扩展规则）
+- `booking-service.md` — 端级规则模板（预订窗口、冲突检测、定价规则）
+
+**三层防护**：
+1. **AGENTS.md** — 新会话强制提醒 AI 读取 BUSINESS_RULES 目录
+2. **示例模板顶部** — 创建文件时第一眼看到命名警告
+3. **代码过滤逻辑** — 写错名字的文件不会被加载（硬性兜底）

@@ -16,6 +16,7 @@ Read .speccore/PROJECT.yaml          ← 获取项目配置（端列表、源码
 - `context.json` 中的 `currentIteration` 字段就是当前迭代名
 - **绝对不要自己创建迭代目录** — 迭代已存在，读 context.json 就知道了
 - **绝对不要写 JS/Python 脚本绕过 CLI** — 所有操作通过 `speccore` CLI 完成
+- **业务规则**：如存在 `.speccore/GLOBAL/BUSINESS_RULES/` 目录，执行 analyze/execute 前需读取其中规则文件（`01-common.md` 通用规则 + `{工程标识}.md` 端级规则，文件名必须与 CONSTITUTION.md 端列表中的工程标识完全一致）
 
 ## 项目类型
 SpecCore 规范驱动开发项目。

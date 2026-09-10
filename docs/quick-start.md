@@ -67,6 +67,12 @@ speccore init
 # 初始化后自动生成配置引导页，包含 6 步引导：
 # 1.技术宪法 → 2.团队配置 → 3.创建迭代 → 4.导入需求 → 5.知识库 → 6.开始开发
 # 引导页保存在 outputs/speccore-setup-guide.html，可随时在浏览器中打开查看
+#
+# init 还会自动生成 .speccore/examples/ 示例配置目录，包含：
+# - CONSTITUTION-EXAMPLE.md / PROJECT-EXAMPLE.yaml — 宪法和项目配置完整示例
+# - BUSINESS-RULES-EXAMPLE/ — 业务规则模板（通用规则 + 端级规则，v8.3.132+）
+# - API-DESIGN-EXAMPLE.md / DATABASE-EXAMPLE.md / SECURITY-EXAMPLE.md — 业内经典规范示例（v8.3.130+）
+# - GIT-CONFIG-EXAMPLE.txt / DEPLOY-EXAMPLE.yaml / VERIFY-EXAMPLE.yaml — Git/部署/验证配置示例
 
 # ② 新建期次（CLI 命令）
 speccore iteration create --name=Q1

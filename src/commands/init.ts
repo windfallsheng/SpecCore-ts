@@ -2840,6 +2840,9 @@ code_scope:
 
 > 本文件为示例模板。实际使用时，将内容复制到 \`.speccore/GLOBAL/BUSINESS_RULES/01-common.md\`
 > 文件名包含 \`-common\` 的会被所有端自动加载（最多 4000 字符/文件）
+>
+> ⚠️ **命名警告**：端级规则文件名必须与 CONSTITUTION.md / PROJECT.yaml 中的工程标识完全一致
+> 正确：\`booking-service.md\`、\`h5-mobile.md\` &nbsp;&nbsp;错误：\`booking_service.md\`、\`h5.md\`、\`mobile.md\`
 
 ---
 
@@ -3027,6 +3030,9 @@ code_scope:
 
 > 端级规则示例。实际使用时，将内容复制到 \`.speccore/GLOBAL/BUSINESS_RULES/booking-service.md\`
 > 文件名匹配当前端的规则会被自动加载（如 \`booking-service.md\` 或 \`xxx-booking-service.md\`）
+>
+> ⚠️ **命名警告**：文件名必须与 CONSTITUTION.md / PROJECT.yaml 中的工程标识完全一致
+> 正确：\`booking-service.md\` &nbsp;&nbsp;错误：\`booking_service.md\`、\`bookingService.md\`、\`h5.md\`
 
 ---
 

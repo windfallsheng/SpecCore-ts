@@ -10,6 +10,26 @@
 workspace/
 ├── spec-project/                 # SpecCore 规范仓库（独立 Git 仓库）
 │   ├── .speccore/
+│   │   ├── CONSTITUTION.md       # 技术宪法（技术栈、命名规范、端列表）
+│   │   ├── PROJECT.yaml          # 项目配置（工程映射、Git、代码路径）
+│   │   ├── GLOBAL/               # 全局分析产出（跨迭代复用）
+│   │   │   ├── INDEX.md          # 全局索引
+│   │   │   ├── platforms/        # 各端技术资产
+│   │   │   │   └── {端名}/
+│   │   │   │       ├── _INDEX.md
+│   │   │   │       └── BUSINESS_RULES.md  # 端级业务规则（可选）
+│   │   │   └── BUSINESS_RULES/   # 通用业务规则目录（v8.3.132+）
+│   │   │       ├── 01-common.md  # 通用规则（所有端自动加载）
+│   │   │       └── {端名}.md     # 端级规则（仅该端加载）
+│   │   ├── examples/             # 配置示例（init 自动生成）
+│   │   │   ├── CONSTITUTION-EXAMPLE.md
+│   │   │   ├── PROJECT-EXAMPLE.yaml
+│   │   │   ├── BUSINESS-RULES-EXAMPLE/     # 业务规则模板（v8.3.132+）
+│   │   │   ├── API-DESIGN-EXAMPLE.md       # API 规范示例（v8.3.130+）
+│   │   │   ├── DATABASE-EXAMPLE.md         # 数据库规范示例（v8.3.130+）
+│   │   │   └── SECURITY-EXAMPLE.md         # 安全规范示例（v8.3.130+）
+│   │   └── local/
+│   │       └── context.json      # 当前活跃迭代
 │   ├── .codebuddy/commands/      # AI 命令（软链接到 speccore 模板）
 │   ├── 期次-2026-07-会议预定/
 │   └── README.md
