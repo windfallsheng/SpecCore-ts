@@ -74,6 +74,10 @@ export interface PlatformConfig {
   default_branch: string;
   /** 对应需求端/功能单元：用于 AI 分析时自动对标需求文档中的功能模块名。如: 预订订单服务, 会议室管理 */
   requirement_unit?: string;
+  /** v8.3.104+: 端级 Git 分支前缀（覆盖全局 git.branch_prefix） */
+  branch_prefix?: string;
+  /** v8.3.104+: 端级受保护分支（覆盖全局 git.protected_branches） */
+  protected_branches?: string[];
   /** v8.3.60+: 按环境部署配置 */
   deploy?: {
     /** 测试环境 */
@@ -1122,6 +1126,32 @@ function isObject(v: unknown): v is Record<string, unknown> {
 }
 
 // ─────────────────────────────────────────
+// v8.3.104+: 端级 Git 配置覆盖
+// ─────────────────────────────────────────
+
+/** 获取生效的 Git 配置（统一配置 + 端级覆盖） */
+export interface EffectiveGitConfig {
+  default_base: string;
+  branch_prefix: string;
+  protected_branches: string[];
+}
+
+/**
+ * 获取指定端的生效 Git 配置。
+ * 优先级：端级配置 > 全局统一配置
+ */
+export async function getEffectiveGitConfig(platformName: string): Promise<EffectiveGitConfig> {
+  const projectConfig = await loadProjectConfigWithEnv();
+  const platform = projectConfig.platforms.find((p: PlatformConfig) => p.name === platformName);
+
+  return {
+    default_base: platform?.default_branch || projectConfig.git.default_base,
+    branch_prefix: platform?.branch_prefix || projectConfig.git.branch_prefix,
+    protected_branches: platform?.protected_branches || projectConfig.git.protected_branches,
+  };
+}
+
+// ─────────────────────────────────────────
 // YAML 解析 / 序列化
 // ─────────────────────────────────────────
 
@@ -1451,10 +1481,12 @@ function toProjectYaml(config: ProjectConfig): string {
   yaml += '#   default_branch    → 默认分支（如 main, develop）\n';
   yaml += '#\n';
   yaml += '# 可选字段：\n';
-  yaml += '#   description       → 工程名（人类可读的业务名称，如 "预订服务"）\n';
-  yaml += '#   code_path         → 源码路径（相对于项目根目录）\n';
-  yaml += '#   git_repo          → Git 仓库地址（用于分支管理和 PR 提交）\n';
-  yaml += '#   requirement_unit  → 对应需求端/功能单元（AI 分析时自动对标）\n';
+  yaml += '#   description         → 工程名（人类可读的业务名称，如 "预订服务"）\n';
+  yaml += '#   code_path           → 源码路径（相对于项目根目录）\n';
+  yaml += '#   git_repo            → Git 仓库地址（用于分支管理和 PR 提交）\n';
+  yaml += '#   branch_prefix       → 端级分支前缀（覆盖全局 git.branch_prefix，可选）\n';
+  yaml += '#   protected_branches  → 端级受保护分支（覆盖全局 git.protected_branches，可选）\n';
+  yaml += '#   requirement_unit    → 对应需求端/功能单元（AI 分析时自动对标）\n';
   yaml += 'platforms:\n';
   if (config.platforms.length === 0) {
     yaml += '  # 示例：添加你的第一个工程（复制后修改）\n';
@@ -1464,6 +1496,11 @@ function toProjectYaml(config: ProjectConfig): string {
     yaml += '  #   code_path: ./backend/api-service\n';
     yaml += '  #   git_repo: git@github.com:org/repo.git\n';
     yaml += '  #   default_branch: main\n';
+    yaml += '  #   # 端级 Git 覆盖（可选，覆盖全局配置）\n';
+    yaml += '  #   branch_prefix: feature/api-\n';
+    yaml += '  #   protected_branches:\n';
+    yaml += '  #     - main\n';
+    yaml += '  #     - release/api-\n';
     yaml += '  #   requirement_unit: API 服务\n';
     yaml += '  #   # 部署配置（v8.3.60+）\n';
     yaml += '  #   # 完整示例见 templates/deploy-examples.yaml\n';
@@ -1504,6 +1541,17 @@ function toProjectYaml(config: ProjectConfig): string {
     }
     yaml += `    # 默认分支（如 main, develop）\n`;
     yaml += `    default_branch: ${p.default_branch}\n`;
+    if (p.branch_prefix) {
+      yaml += `    # 端级分支前缀（覆盖全局 git.branch_prefix）\n`;
+      yaml += `    branch_prefix: ${p.branch_prefix}\n`;
+    }
+    if (p.protected_branches && p.protected_branches.length > 0) {
+      yaml += `    # 端级受保护分支（覆盖全局 git.protected_branches）\n`;
+      yaml += `    protected_branches:\n`;
+      for (const b of p.protected_branches) {
+        yaml += `      - ${b}\n`;
+      }
+    }
     if (p.requirement_unit) {
       yaml += `    # 对应需求端/功能单元（AI 分析时自动对标）\n`;
       yaml += `    requirement_unit: ${p.requirement_unit}\n`;

@@ -1,3 +1,39 @@
+## v8.3.104 (2026-09-10) — 端级 Git 配置覆盖
+
+### 新增
+
+**端级 Git 配置覆盖（v8.3.104）**:
+- `PlatformConfig` 新增可选字段：
+  - `branch_prefix?: string` — 端级分支前缀（覆盖全局 `git.branch_prefix`）
+  - `protected_branches?: string[]` — 端级受保护分支（覆盖全局 `git.protected_branches`）
+- 新增 `getEffectiveGitConfig(platformName)` 工具函数：返回统一配置 + 端级覆盖后的生效配置
+  - 优先级：端级配置 > 全局统一配置
+  - `default_base` 也纳入统一处理（端级 `default_branch` > 全局 `git.default_base`）
+- `toProjectYaml` 序列化支持端级 Git 覆盖字段输出
+- 配置示例和注释同步更新
+- **影响文件**：`src/core/unified-config.ts`
+
+**使用示例**（PROJECT.yaml）:
+```yaml
+git:
+  default_base: main
+  branch_prefix: feature/
+  protected_branches: [main, master]
+
+platforms:
+  - name: legacy-service
+    type: backend
+    default_branch: develop
+    branch_prefix: feature/legacy-
+    protected_branches: [develop, release/legacy-]
+  - name: h5-app
+    type: frontend
+    default_branch: main
+    # 不配置 branch_prefix/protected_branches → 使用全局 git.* 配置
+```
+
+---
+
 ## v8.3.103 (2026-09-10) — 「工程标识」术语彻底统一
 
 ### 修复
