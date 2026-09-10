@@ -1,3 +1,35 @@
+## v8.3.119 (2026-09-10) — 兼容性检查修复：platform type 校验 + branch_types 合并
+
+### 修复
+
+**问题 1：`validateProjectConfig` 中 `platforms[].type` 校验错误**
+- 原校验限制 `type` 必须为 `frontend/backend/infra` 之一
+- 但 `type` 实际语义为"工程类型"（如 `Java服务`、`H5移动端`、`Web管理后台`）
+- **修复**：取消枚举限制，改为仅校验类型为字符串
+
+**问题 2：`getEffectiveGitConfig` 中 `branch_types` 浅拷贝导致字段丢失**
+- 原合并逻辑：`const branch_types = { ...globalTypes, ...platformTypes }`
+- 如果端级只覆盖部分字段（如只写 `prefix`），`source` 会丢失
+- **修复**：改为逐类型深度合并，端级覆盖同名字段，不丢失全局字段
+
+### 兼容性检查结果
+
+| 功能模块 | 状态 | 说明 |
+|:---|:---|:---|
+| `parseProjectInfo()` | ✅ 兼容 | 新增字段有默认值保护，旧格式不影响 |
+| `parseGitConfig()` | ✅ 兼容 | 分支类型表格检测不强制要求后缀列，旧格式不影响 |
+| `toProjectYaml()` | ✅ 兼容 | prefix/suffix 仅在存在时输出，旧配置不影响 |
+| `validateProjectConfig()` | ✅ 已修复 | type 校验取消枚举限制；suffix 仅在存在时校验 |
+| `getEffectiveGitConfig()` | ✅ 已修复 | branch_types 深度合并，不丢失字段 |
+| `createTaskBranch()` | ✅ 兼容 | taskPrefix/taskSuffix 仅在存在时使用新格式 |
+| `buildGitConfigContent()` | ✅ 兼容 | branchTypes 参数可选，未传入时保持注释形式 |
+| `analyze` 命令 | ✅ 兼容 | 不受 Git 配置变更影响 |
+| `split` 命令 | ✅ 兼容 | 传入 branchTypes，无配置时保持注释形式 |
+| `pipeline` 命令 | ✅ 兼容 | 只读取 defaultBranch，不受新字段影响 |
+| `merge-check` 命令 | ✅ 兼容 | 硬编码分支名，不受配置变更影响 |
+
+---
+
 ## v8.3.118 (2026-09-10) — split 时 git-config 自动填充 branch_types 默认值
 
 ### 改进

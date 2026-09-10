@@ -1125,8 +1125,9 @@ function validateProjectConfig(obj: Record<string, unknown>): ValidationResult {
         continue;
       }
       if (typeof p.name !== 'string') issues.push(`platforms[${idx}].name 必须是字符串`);
-      if (p.type && !['frontend', 'backend', 'infra'].includes(p.type as string)) {
-        issues.push(`platforms[${idx}].type 必须是 frontend/backend/infra 之一`);
+      // v8.3.119: type 为工程类型（如 Java服务、H5移动端），不限制枚举值
+      if (p.type && typeof p.type !== 'string') {
+        issues.push(`platforms[${idx}].type 必须是字符串`);
       }
     }
   }
@@ -1189,8 +1190,14 @@ export async function getEffectiveGitConfig(platformName: string): Promise<Effec
 
   const globalTypes = projectConfig.git.branch_types || {};
   const platformTypes = platform?.branch_types || {};
-  // 合并：端级覆盖全局同名类型
-  const branch_types = { ...globalTypes, ...platformTypes };
+  // v8.3.119: 深度合并 branch_types，端级覆盖同名字段，不丢失全局字段
+  const branch_types: Record<string, { prefix?: string; suffix?: string; source: string }> = {};
+  for (const typeName of new Set([...Object.keys(globalTypes), ...Object.keys(platformTypes)])) {
+    branch_types[typeName] = {
+      ...(globalTypes[typeName] || {}),
+      ...(platformTypes[typeName] || {}),
+    };
+  }
 
   return {
     default_base: platform?.default_branch || projectConfig.git.default_base,
