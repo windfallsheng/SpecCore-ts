@@ -1,3 +1,26 @@
+## v8.3.146 (2026-09-11) — 全面清理 backend/frontend 硬编码假设
+
+### 改进
+
+**CLI help 文本全面清理** (`src/cli.ts`, `src/commands/help.ts`):
+- 所有命令的 help 文本中硬编码的 `backend/frontend` 示例改为 `<端名>` 占位符
+- `dashboard --platform`、`task new --platforms/--backend-only/--frontend-only`、`list --backend/--frontend/--platform`、`config --tech`、`import --platform`、`analyze --src/--streaming-phase` 等全部更新
+- 场景示例中的 `backend` 改为 `<端名>`
+
+**task/new 命令重构** (`src/commands/task/new.ts`):
+- 创建子任务时不再硬编码 `api`（后端）和 `web`（前端）
+- 通过 `parsePlatformList()` 读取项目 CONSTITUTION.md 中的实际工程标识
+- `--platforms` 参数正式生效：支持逗号分隔指定要创建的端
+- `--backend-only` / `--frontend-only` 改为根据端名特征自动推断（后端：service/api/server/backend/后台；前端：web/h5/miniapp/app/frontend/前端/ios/android/admin）
+- 未配置端列表时 fallback 到 `['api', 'web']` 兼容旧项目
+
+**execute 过滤逻辑重构** (`src/commands/execute.ts`):
+- `list --backend` / `--frontend` 不再假设任务 ID 包含 "backend"/"frontend"
+- 新增 `filterByPlatformType()` 辅助函数：根据项目端名列表推断端类型，检查任务目录下是否有对应端的子任务
+- 与 `filterByPlatform()` 复用同一套目录检查逻辑
+
+---
+
 ## v8.3.145 (2026-09-11) — prompt-builder 使用项目实际端名（工程标识）
 
 ### 改进

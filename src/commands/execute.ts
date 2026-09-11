@@ -222,8 +222,9 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
     if (options.priority) tasks = tasks.filter(t => t.priority === options.priority);
     if (options.status) tasks = tasks.filter(t => t.status === options.status);
     if (options.assignee) tasks = tasks.filter(t => t.assignee === options.assignee);
-    if (options.backend) tasks = tasks.filter(t => t.id.includes('backend'));
-    if (options.frontend) tasks = tasks.filter(t => t.id.includes('frontend'));
+    // v8.3.145+: 使用项目实际端名过滤，不再硬编码 backend/frontend
+    if (options.backend) tasks = await filterByPlatformType(tasks, iteration, 'backend');
+    if (options.frontend) tasks = await filterByPlatformType(tasks, iteration, 'frontend');
     if (options.platform) {
       // 模糊匹配端名
       const resolved = await resolvePlatform(options.platform);
@@ -1214,6 +1215,31 @@ async function filterByPlatform(tasks: TaskState[], iteration: string, platform:
     }
   }
   return filtered;
+}
+
+/**
+ * v8.3.145+: 按端类型（后端/前端）过滤任务
+ * 根据项目 CONSTITUTION.md 端列表中的工程标识特征推断端类型
+ */
+async function filterByPlatformType(
+  tasks: TaskState[],
+  iteration: string,
+  type: 'backend' | 'frontend'
+): Promise<TaskState[]> {
+  const projectPlatforms = await parsePlatformList();
+  const pattern = type === 'backend'
+    ? /service|api|server|backend|后台/i
+    : /web|h5|miniapp|app|frontend|前端|ios|android|admin/i;
+  const matchedPlatforms = projectPlatforms.length > 0
+    ? projectPlatforms.filter(p => pattern.test(p))
+    : type === 'backend' ? ['api'] : ['web']; // fallback 兼容旧项目
+
+  const matchedIds = new Set<string>();
+  for (const platform of matchedPlatforms) {
+    const filtered = await filterByPlatform(tasks, iteration, platform);
+    for (const t of filtered) matchedIds.add(t.id);
+  }
+  return tasks.filter(t => matchedIds.has(t.id));
 }
 
 // ============================================================

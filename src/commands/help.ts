@@ -85,15 +85,15 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
       { flag: '-n, --name <name>', meaning: 'Task 名称（必填）' },
       { flag: '-t, --type <type>', meaning: '类型：feature | bugfix | research | optimization' },
       { flag: '-d, --desc <desc>', meaning: '详细描述' },
-      { flag: '--platforms <p1,p2>', meaning: '前端平台：web,h5,miniapp' },
-      { flag: '--backend-only', meaning: '只创建后端' },
-      { flag: '--frontend-only', meaning: '只创建前端' },
+      { flag: '--platforms <p1,p2>', meaning: '指定平台列表，逗号分隔（如 <端名1>,<端名2>）' },
+      { flag: '--backend-only', meaning: '只创建后端端（自动识别项目中的后端端名）' },
+      { flag: '--frontend-only', meaning: '只创建前端端（自动识别项目中的前端端名）' },
       { flag: '-i, --iteration <id>', meaning: '目标迭代' },
     ],
     examples: [
       'speccore task new -n 用户登录 -t feature',
-      'speccore task new -n 修复支付bug -t bugfix --backend-only',
-      'speccore task new -n 首页重构 --platforms=web,h5',
+      'speccore task new -n 修复支付bug -t bugfix --platforms=<后端端名>',
+      'speccore task new -n 首页重构 --platforms=<端名1>,<端名2>',
     ],
   },
   import: {
@@ -101,29 +101,29 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     params: [
       { flag: '--project <name>', meaning: '项目名（必填）' },
       { flag: '--path <path>', meaning: '源码路径或文件路径' },
-      { flag: '--type <type>', meaning: '项目类型：backend | frontend（必填）' },
+      { flag: '--type <type>', meaning: '项目类型：<端名>（工程标识，必填）' },
       { flag: '--force', meaning: '强制覆盖已有项目' },
       { flag: '--update', meaning: '增量追加' },
       { flag: '--interactive', meaning: '预览扫描结果后确认' },
       { flag: '--scope <scope>', meaning: '扫描范围：all | core | api' },
     ],
     examples: [
-      'speccore import --project=user-svc --path=./src --type=backend',
+      'speccore import --project=user-svc --path=./src --type=<端名>',
       'speccore import --project=bugs --path=bugs.xlsx',
       'speccore import --project=req --path=requirements.csv',
-      'speccore import --project=user-svc --path=./src --type=backend --interactive',
+      'speccore import --project=user-svc --path=./src --type=<端名> --interactive',
     ],
   },
   doc2spec: {
     desc: '将 Word/PDF/MD 文档转换为 SpecCore 需求，或智能分类 sources/ 文档',
     params: [
       { flag: '-f, --file <path>', meaning: '文档路径' },
-      { flag: '-p, --platform <p>', meaning: '平台：backend | frontend | web | h5 | miniapp' },
+      { flag: '-p, --platform <p>', meaning: '平台：<端名>（工程标识，如 CONSTITUTION.md 端列表中的端名）' },
       { flag: '-i, --iteration <id>', meaning: '目标迭代' },
       { flag: '--classify', meaning: 'AI 智能分类 sources/ 文档 → staging/' },
     ],
     examples: [
-      'speccore doc2spec -f PRD.docx -p backend -i Q1',
+      'speccore doc2spec -f PRD.docx -p <端名> -i Q1',
       'speccore doc2spec --classify --prompt -I Q1          # 智能分类',
       'speccore doc2spec --classify --response <json> -I Q1',
     ],
@@ -387,13 +387,13 @@ function showExamples(): void {
       title: '一、从零开始',
       code: `speccore init                              # 初始化
 speccore iteration create -n Q1 --from=2026-04-01 --to=2026-06-30 --owner=赵六
-speccore doc2spec -f PRD.docx -p backend -i Q1  # 导入需求文档`,
+speccore doc2spec -f PRD.docx -p <端名> -i Q1  # 导入需求文档`,
     },
     {
       title: '二、存量项目导入',
-      code: `speccore import --project=user-svc --path=./src --type=backend     # 源码导入
+      code: `speccore import --project=user-svc --path=./src --type=<端名>     # 源码导入
 speccore import --project=bugs --path=bugs.xlsx                         # Excel 导入
-speccore import --project=user-svc --path=./src --type=backend --interactive  # 交互确认`,
+speccore import --project=user-svc --path=./src --type=<端名> --interactive  # 交互确认`,
     },
     {
       title: '三、分析 + 拆分',

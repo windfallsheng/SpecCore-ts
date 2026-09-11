@@ -3,6 +3,7 @@ import { join } from 'path';
 import { logger, Spinner } from '../../utils/logger';
 import { getDefaultIteration, updateContext, getIterationDir } from '../../core/context';
 import { nextTaskId } from '../../core/global-counters';
+import { parsePlatformList } from '../../core/spec-paths';
 
 export interface TaskNewOptions {
   name?: string;
@@ -14,6 +15,7 @@ export interface TaskNewOptions {
   sections?: string;
   backendOnly?: boolean;
   frontendOnly?: boolean;
+  platforms?: string;
   iteration?: string;
   batch?: string;
   batchFile?: string;
@@ -150,24 +152,36 @@ async function createSingleTask(options: TaskNewOptions): Promise<void> {
     await ensureDir(join(taskDir, '_shared'));  // 共享契约（API_CONTRACT.yaml 等）
 
     // 创建子任务目录（新结构: {端名}/{taskId}-impl/，v6.49.2+ 平铺架构）
+    // v8.3.145+: 使用项目实际端名（工程标识），不再硬编码 api/web
     const isResearch = taskType === 'research';
+    let projectPlatforms = await parsePlatformList();
+    if (projectPlatforms.length === 0) {
+      projectPlatforms = ['api', 'web']; // fallback 兼容旧项目
+    }
+
+    // 根据参数过滤要创建的端
+    let platformsToCreate = projectPlatforms;
+    if (options.platforms) {
+      const specified = options.platforms.split(',').map(p => p.trim()).filter(Boolean);
+      platformsToCreate = projectPlatforms.filter(p => specified.includes(p));
+    } else if (options.backendOnly) {
+      platformsToCreate = projectPlatforms.filter(p =>
+        /service|api|server|backend|后台/i.test(p)
+      );
+    } else if (options.frontendOnly) {
+      platformsToCreate = projectPlatforms.filter(p =>
+        /web|h5|miniapp|app|frontend|前端|ios|android|admin/i.test(p)
+      );
+    }
+
     if (!isResearch) {
-      if (!options.frontendOnly) {
-        const backendSubtaskDir = join(taskDir, 'api', `Task-${taskId}-impl`);
-        await ensureDir(join(backendSubtaskDir, '.meta'));
-        // 子任务元信息
-        await writeFile(join(backendSubtaskDir, '.meta', 'type'), options.type || 'feature');
-        await writeFile(join(backendSubtaskDir, '.meta', 'status'), status);
-        await writeFile(join(backendSubtaskDir, '.meta', 'owner'), '未分配');
-        await writeFile(join(backendSubtaskDir, '.meta', 'created-at'), today);
-      }
-      if (!options.backendOnly) {
-        const frontendSubtaskDir = join(taskDir, 'web', `Task-${taskId}-impl`);
-        await ensureDir(join(frontendSubtaskDir, '.meta'));
-        await writeFile(join(frontendSubtaskDir, '.meta', 'type'), options.type || 'feature');
-        await writeFile(join(frontendSubtaskDir, '.meta', 'status'), status);
-        await writeFile(join(frontendSubtaskDir, '.meta', 'owner'), '未分配');
-        await writeFile(join(frontendSubtaskDir, '.meta', 'created-at'), today);
+      for (const platform of platformsToCreate) {
+        const subtaskDir = join(taskDir, platform, `Task-${taskId}-impl`);
+        await ensureDir(join(subtaskDir, '.meta'));
+        await writeFile(join(subtaskDir, '.meta', 'type'), options.type || 'feature');
+        await writeFile(join(subtaskDir, '.meta', 'status'), status);
+        await writeFile(join(subtaskDir, '.meta', 'owner'), '未分配');
+        await writeFile(join(subtaskDir, '.meta', 'created-at'), today);
       }
     }
 
@@ -189,15 +203,16 @@ async function createSingleTask(options: TaskNewOptions): Promise<void> {
     await writeFile(join(taskDir, '00-specs', 'CHANGELOG.md'), `# ${options.name} - 变更记录\n\n| 时间 | 版本 | 变更内容 | 变更人 |\n| :--- | :--- | :--- | :--- |\n| ${today} | v1.0 | 初始创建 | CLI |\n`);
 
     // Write per-platform TASK.md + 执行产出文档（新结构: {端名}/{taskId}-impl/）
+    // v8.3.145+: 使用项目实际端名，不再硬编码 api/web
     if (!isResearch) {
-      if (!options.frontendOnly) {
-        const backendSub = join(taskDir, 'api', `Task-${taskId}-impl`);
-        await writeFile(join(backendSub, 'TASK.md'), taskContent.task);
-      }
-      if (!options.backendOnly) {
-        const frontendSub = join(taskDir, 'web', `Task-${taskId}-impl`);
-        await writeFile(join(frontendSub, 'TASK.md'), taskContent.task);
-        await writeFile(join(frontendSub, 'README.md'), `# ${options.name}\n\n前端实现目录。\n`);
+      for (const platform of platformsToCreate) {
+        const sub = join(taskDir, platform, `Task-${taskId}-impl`);
+        await writeFile(join(sub, 'TASK.md'), taskContent.task);
+        // 只有前端端才写 README.md（根据端名特征判断）
+        const isFrontend = /web|h5|miniapp|app|frontend|前端|ios|android|admin/i.test(platform);
+        if (isFrontend) {
+          await writeFile(join(sub, 'README.md'), `# ${options.name}\n\n${platform} 端实现目录。\n`);
+        }
       }
     }
 
