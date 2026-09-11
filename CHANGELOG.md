@@ -1,3 +1,16 @@
+## v8.3.142 (2026-09-11) — review 命令支持多端/多文档/全局+端组合
+
+### 改进
+
+**`speccore review` 命令增强** (`src/commands/review.ts`):
+- `--platform` 支持逗号分隔的多端：`--platform backend,frontend`
+- `--doc` 支持逗号分隔的多文件：`--doc 020-specs/a/TECH.md,020-specs/b/TECH.md`
+- `--global` 可与 `--platform` / `--doc` 组合使用（如全局文档 + backend 端一起评审）
+- 自动去重（避免 global 和 platform 的 overview 目录重复）
+- 不存在的端/文档输出警告并跳过，不中断流程
+
+---
+
 ## v8.3.141 (2026-09-11) — Spec 自审命令 review + Ask 引擎 review 意图
 
 ### 新增

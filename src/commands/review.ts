@@ -1,14 +1,16 @@
 /**
  * review — Spec 自审命令
  * v8.3.141+: 支持用户主动触发 AI 自审，检查分析文档质量并输出修订建议
+ * v8.3.142+: 支持多端、多文档、全局+端组合评审
  *
  * 用法:
- *   speccore review -I <迭代名>              # 评审整个迭代的 specs
- *   speccore review -I <迭代名> --platform <端> # 评审某端的所有 specs
- *   speccore review -I <迭代名> --doc <路径>  # 评审单个文档
- *   speccore review --global                  # 评审全局分析文档
+ *   speccore review -I <迭代名>                    # 评审整个迭代的 specs
+ *   speccore review -I <迭代名> --platform <端1,端2> # 评审多个端的所有 specs
+ *   speccore review -I <迭代名> --doc <路径1,路径2>  # 评审多个文档
+ *   speccore review --global                        # 评审全局分析文档
+ *   speccore review --global --platform backend     # 评审全局 + backend 端
  *
- * 输出: 构建 review prompt 到 .speccore/cache/review-prompt-{target}.md
+ * 输出: 构建 review prompt 到 .speccore/cache/reviews/
  *       并输出 [SPECCORE_REVIEW: <path>] 标记供宿主 AI 读取
  */
 
@@ -129,7 +131,7 @@ async function collectReviewTargets(
 ): Promise<ReviewTarget[]> {
   const targets: ReviewTarget[] = [];
 
-  // 全局模式
+  // 全局模式（可与 --platform / --doc 组合）
   if (options.global) {
     const globalSpecsDir = join(projectRoot, '.speccore', 'GLOBAL', '020-specs');
     if (await pathExists(globalSpecsDir)) {
@@ -138,7 +140,8 @@ async function collectReviewTargets(
         targets.push({ filePath: f, docContent: await readFile(f, 'utf-8') });
       }
     }
-    return targets;
+    // 如果同时指定了 platform 或 doc，继续收集，不 return
+    if (!options.platform && !options.doc) return targets;
   }
 
   // 迭代模式
@@ -152,17 +155,24 @@ async function collectReviewTargets(
     throw new Error(`迭代不存在: ${iteration}`);
   }
 
-  // 单文档模式
+  // 多文档模式（逗号分隔）
   if (options.doc) {
-    const docPath = options.doc.startsWith('/')
-      ? options.doc
-      : join(iterDir, options.doc);
-    if (await pathExists(docPath)) {
-      targets.push({ filePath: docPath, docContent: await readFile(docPath, 'utf-8') });
-    } else {
-      throw new Error(`文档不存在: ${docPath}`);
+    const docPaths = options.doc.split(',').map(d => d.trim()).filter(Boolean);
+    for (const doc of docPaths) {
+      const docPath = doc.startsWith('/')
+        ? doc
+        : join(iterDir, doc);
+      if (await pathExists(docPath)) {
+        targets.push({ filePath: docPath, docContent: await readFile(docPath, 'utf-8') });
+      } else {
+        logger.warn(`⚠️  文档不存在，已跳过: ${docPath}`);
+      }
     }
-    return targets;
+    if (targets.length === 0) {
+      throw new Error('所有指定的文档都不存在');
+    }
+    // 去重（避免与 global/platform 重复）
+    return dedupeTargets(targets);
   }
 
   // 按端筛选或全量
@@ -171,16 +181,19 @@ async function collectReviewTargets(
     throw new Error(`迭代 ${iteration} 没有 020-specs/ 目录`);
   }
 
-  // 收集文件
+  // 多端模式（逗号分隔）
   const platforms = options.platform
-    ? [options.platform]
+    ? options.platform.split(',').map(p => p.trim()).filter(Boolean)
     : await detectPlatforms(specsDir);
 
   for (const platform of platforms) {
     const platformDir = join(specsDir, platform);
-    if (!(await pathExists(platformDir))) continue;
+    if (!(await pathExists(platformDir))) {
+      logger.warn(`⚠️  端目录不存在，已跳过: ${platform}`);
+      continue;
+    }
 
-    // 也检查 overview 目录
+    // 也检查 overview 目录（每个平台都包含全局 overview）
     const overviewDir = join(specsDir, 'overview');
     const dirsToScan = [platformDir];
     if (await pathExists(overviewDir)) dirsToScan.push(overviewDir);
@@ -200,7 +213,17 @@ async function collectReviewTargets(
     }
   }
 
-  return targets;
+  return dedupeTargets(targets);
+}
+
+/** 按文件路径去重 */
+function dedupeTargets(targets: ReviewTarget[]): ReviewTarget[] {
+  const seen = new Set<string>();
+  return targets.filter(t => {
+    if (seen.has(t.filePath)) return false;
+    seen.add(t.filePath);
+    return true;
+  });
 }
 
 /** 递归收集 Markdown 文件 */
