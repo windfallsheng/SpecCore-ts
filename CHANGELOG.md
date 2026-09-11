@@ -1,3 +1,22 @@
+## v8.3.147 (2026-09-11) — 文档更新 + about 页面 + 设计文档补充
+
+### 改进
+
+**设计文档补充** (`docs/DESIGN.md`):
+- 新增附录「v8.3.141+ Spec 自审（review）命令设计」：四种评审模式、自动关联发现、Ask 引擎意图识别
+- 新增附录「v8.3.144+ 端名动态化设计（工程标识驱动）」：核心原则、改造范围、端类型推断规则、兼容性策略、遗留问题
+
+**说明文档更新**:
+- `docs/command-reference.md`：新增 `review` 命令完整文档（四种模式、自动关联、Ask 触发、端名说明）
+- `docs/quick-start.md`：backend/frontend 示例改为 `<端名>` 占位符
+
+**about 页面更新** (`src/commands/about.ts`):
+- 新增「Spec 自审」功能卡片
+- highlights 新增 review 命令和端名动态化
+- 里程碑新增 v8.3.146 版本记录
+
+---
+
 ## v8.3.146 (2026-09-11) — 全面清理 backend/frontend 硬编码假设
 
 ### 改进

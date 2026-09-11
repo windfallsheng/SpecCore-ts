@@ -31,6 +31,7 @@ export async function aboutCommand(): Promise<void> {
     { icon: '🤖', title: 'Skill 体系', desc: '26+ 命令全 Skill 覆盖，/命令 + 自然语言' },
     { icon: '🚀', title: '环境驱动部署', desc: 'pipeline --env 自动 merge → build → deploy' },
     { icon: '🧪', title: '配置驱动测试', desc: 'verify --config 多环境/多页面批量测试' },
+    { icon: '🔍', title: 'Spec 自审', desc: 'review 命令让 AI 自检分析文档质量并输出修订建议' },
   ];
 
   // 近期亮点
@@ -49,10 +50,13 @@ export async function aboutCommand(): Promise<void> {
     '自我检查 — 命令验证 + 置信度 + 遗漏检测',
     '多选执行 — plan --select 列出任务编号供用户选择',
     '双模式 — 自主全自动 / 分步确认，不跳过用户检查',
+    'Spec 自审 — review 命令支持迭代/端/文档/全局四种评审模式',
+    '端名动态化 — 所有地方优先使用 CONSTITUTION.md 工程标识，不再硬编码 backend/frontend',
   ];
 
   // 重要里程碑版本
   const milestones = [
+    { v: '8.3.146', date: '2026-09', desc: 'Spec 自审 + 端名动态化 + 全面清理 backend/frontend 硬编码' },
     { v: '8.3', date: '2026-09', desc: '环境驱动部署 + 全命令 Skill 覆盖 + 配置驱动测试' },
     { v: '6.8', date: '2026-08', desc: '统一检索层 + RAG 检索 + 全局知识沉淀' },
     { v: '6.5', date: '2026-08', desc: '知识图谱 + 衰减检测 + AI 关联链注入' },

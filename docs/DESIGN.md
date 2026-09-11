@@ -5641,3 +5641,106 @@ buildPrompt()
 - `extractTaskTechContent`：找任务对应端的 TECH.md
 - `extractTaskDevGuideContent`：找任务对应端的 DEV_GUIDE.md
 - 平台推断：从 specContents 推断任务涉及哪些端
+
+---
+
+## 附录：v8.3.141+ Spec 自审（review）命令设计
+
+### 设计背景
+
+AI 生成的分析文档质量不可控，用户需要一种机制让 AI 自检并完善输出，而不是反复沟通。
+
+### 核心需求
+
+1. **用户可控触发**：用户可以随时让 AI 检查某个/某些文档的质量
+2. **多粒度支持**：全局文档、迭代级文档、端级文档、单文档、多文档组合
+3. **自动关联上下文**：评审时自动发现关联的需求文档和源码，作为评审依据
+4. **自然语言触发**：Ask 引擎识别日常用语中的自审意图
+
+### 四种评审模式
+
+| 模式 | 命令 | 说明 |
+|------|------|------|
+| 迭代全量 | `speccore review -I <迭代>` | 评审迭代下所有端的 specs |
+| 多端 | `speccore review --platform <端1>,<端2>` | 评审指定端的全部 specs |
+| 多文档 | `speccore review --doc <路径1>,<路径2>` | 评审指定文档 |
+| 全局 | `speccore review --global` | 评审全局分析文档（overview/） |
+| 组合 | `speccore review --global --platform <端>` | 全局 + 指定端 |
+
+### 自动关联发现
+
+**关联需求文档（三级回退）**：
+1. 同目录下的 `REQ.md`
+2. 功能模块需求文档（如 `010-requirements/features/{module}/README.md`）
+3. 迭代根目录 `REQUIREMENT.md`
+
+**关联源码（`findRelevantCode`）**：
+- 从文档内容提取关键词
+- 在代码索引中语义匹配，最多返回 5 个文件
+- 读取前 200 行作为评审上下文
+
+### Ask 引擎 review 意图识别
+
+扩展正则覆盖多种自然语言表达：
+- `全局分析不好`、`分析有问题` → `--global`
+- `Task-001 的 spec 需要检查` → `--task Task-001`
+- `重新澄清 Iteration-001 的需求` → `-I Iteration-001`
+- `检查源码和分析是否一致` → review 意图
+- `backend 和 frontend 的文档质量差` → `--platform backend,frontend`
+
+参数提取增强：
+- 迭代名：支持直接出现的 `Iteration-001`（无需"迭代"前缀）
+- 多端：支持中文逗号分隔 `backend，frontend`
+- 文档路径：自动识别 `020-specs/...`、`TECH.md`、`ANALYSIS.md`
+- 全局标志：识别 `全局`、`global`
+- 任务ID：识别 `Task-xxx`
+
+---
+
+## 附录：v8.3.144+ 端名动态化设计（工程标识驱动）
+
+### 设计背景
+
+SpecCore 早期假设项目端名固定为 `backend/frontend/api/web`，但用户的实际项目中端名是自定义的（如 `booking-service`、`h5-mobile`、`admin-web`）。代码中大量硬编码的 `backend/frontend` 导致：
+- Ask 引擎无法识别用户项目中的自定义端名
+- CLI help 文本误导用户以为端名只能是 backend/frontend
+- 任务创建时硬编码 `api/web`，与项目实际端名不符
+- 代码生成时按端名特征判断前后端，不准确
+
+### 核心原则
+
+**端名 = 工程标识**：端名由用户在 `CONSTITUTION.md`「端列表」中定义，CLI 所有地方优先使用 `parsePlatformList()` 读取的实际端名，不再假设任何固定端名。
+
+### 改造范围
+
+| 模块 | 改造前 | 改造后 |
+|------|--------|--------|
+| **Ask 引擎** | 硬编码匹配 `backend/frontend/miniapp` | 正则提取输入中的任意端名 + fallback |
+| **CLI help** | `backend \| frontend` 示例 | `<端名>` 占位符 |
+| **task/new** | 硬编码 `api`（后端）+ `web`（前端） | `parsePlatformList()` 读取项目端名 |
+| **execute/list** | 任务 ID 包含 `backend/frontend` | `filterByPlatformType()` 检查目录结构 |
+| **prompt-builder** | `knownPlatforms = ['backend', 'admin', ...]` | 传入 `projectPlatforms` 从端列表读取 |
+| **review 命令** | `--platform backend` 示例 | `--platform <端名>` |
+
+### 端类型推断规则
+
+对于 `--backend-only`、`--frontend-only` 等需要区分端类型的场景，采用端名特征推断：
+
+- **后端特征**：端名包含 `service`、`api`、`server`、`backend`、`后台`
+- **前端特征**：端名包含 `web`、`h5`、`miniapp`、`app`、`frontend`、`前端`、`ios`、`android`、`admin`
+
+**注意**：这是 fallback 推断，未来应根据 `PROJECT.yaml` 中 `platforms[].type` 字段精确判断。
+
+### 兼容性策略
+
+1. 未配置 `CONSTITUTION.md` 端列表的项目，fallback 到 `['api', 'web']`
+2. `--backend-only` / `--frontend-only` 参数保留，内部逻辑改为动态推断
+3. `--platforms <p1,p2>` 参数正式生效，推荐用户显式指定
+
+### 遗留问题
+
+`execute.ts` 中 `generateTaskSkeleton()` 仍硬编码：
+- 后端端 → 生成 Java Controller/Service/Repository
+- 前端端 → 生成 Vue Component
+
+**后续重构方向**：从 `PROJECT.yaml` 读取每个端的 `type`（如 `Java服务`、`React前端`），根据技术栈类型选择代码生成模板，彻底消除端名与代码类型的绑定。

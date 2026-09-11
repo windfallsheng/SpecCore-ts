@@ -78,12 +78,12 @@ speccore init
 speccore iteration create --name=Q1
 
 # ③ 导入需求文档（🔒 AI 命令 — 在 AI IDE 中使用 @spec-ask）
-@spec-ask "导入 PRD.md 到 Q1 期次的 backend 平台"
+@spec-ask "导入 PRD.md 到 Q1 期次的 <端名> 平台"
 
 # ④ 需求分析（🔒 AI 命令）
 @spec-ask "分析 Q1 期次需求"
 @spec-ask "全局代码健康扫描"
-@spec-ask "联合分析 backend 和 frontend 代码"
+@spec-ask "联合分析 <端名1> 和 <端名2> 代码"
 
 # ⑤ 拆分为原子 Task（🔒 AI 命令）
 @spec-ask "拆分 Q1 期次为开发任务"

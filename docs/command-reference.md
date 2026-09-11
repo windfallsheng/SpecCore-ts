@@ -239,6 +239,42 @@ split 后，每个 Task 的 00-specs/ 已有基础内容（机械提取）。执
 
 analyze 从 CONSTITUTION.md「## 端列表」章节读取全局权威端名列表，不再动态推断。
 
+### 🔍 review — Spec 自审（v8.3.141+）🔒 AI 命令
+
+```bash
+speccore review                          # 评审当前迭代的全部 specs
+speccore review -I <迭代名>              # 评审指定迭代的全部 specs
+speccore review --global                 # 评审全局分析文档
+speccore review --global --platform <端名>  # 评审全局 + 指定端
+speccore review --platform <端1>,<端2>   # 评审多个端的所有 specs
+speccore review --doc <路径1>,<路径2>    # 评审指定文档（相对迭代目录）
+```
+别名: `rv`
+
+**设计目的**：AI 生成的分析文档质量不可控，`review` 让 AI 对照需求文档和源码自检，输出修订建议。
+
+**四种评审模式**：
+
+| 模式 | 命令示例 | 说明 |
+|------|---------|------|
+| 迭代全量 | `speccore review -I Q1` | 评审迭代下所有端的 specs |
+| 多端 | `speccore review --platform booking-service,h5-mobile` | 评审指定端（工程标识） |
+| 多文档 | `speccore review --doc 020-specs/user-auth/TECH.md` | 评审指定文档 |
+| 全局 | `speccore review --global` | 评审全局分析文档 |
+| 组合 | `speccore review --global --platform booking-service` | 全局 + 指定端 |
+
+**自动关联上下文**：
+- **关联需求**：三级回退（同目录 REQ.md → 功能模块需求 → 迭代根目录 REQUIREMENT.md）
+- **关联源码**：`findRelevantCode` 关键词匹配，最多 5 个文件
+
+**Ask 引擎自然语言触发**：
+- `全局分析不好` → `--global`
+- `Task-001 的 spec 需要检查` → `--task Task-001`
+- `重新澄清 Iteration-001 的需求` → `-I Iteration-001`
+- `检查源码和分析是否一致` → review 意图
+
+**端名说明**：`--platform` 接受工程标识（CONSTITUTION.md 端列表中的端名），不再限制为 `backend/frontend`。
+
 ### 📝 clarify — 需求澄清 🔒 AI 命令
 
 ```bash
