@@ -1,3 +1,24 @@
+## v8.3.141 (2026-09-11) — Spec 自审命令 review + Ask 引擎 review 意图
+
+### 新增
+
+**`speccore review` 命令** (`src/commands/review.ts`):
+- `speccore review -I <迭代名>` — 评审整个迭代的 020-specs/ 目录下所有文档
+- `speccore review -I <迭代名> --platform <端>` — 只评审指定端的所有 specs
+- `speccore review -I <迭代名> --doc <路径>` — 评审单个文档
+- `speccore review --global` — 评审全局分析文档（.speccore/GLOBAL/）
+- 自动发现关联需求文档（同目录 REQ.md → 功能模块需求 → 迭代根目录 REQUIREMENT.md）
+- 自动发现关联源码（通过 `findRelevantCode` 按文档关键词匹配）
+- 为每个目标生成 Review Prompt（`.speccore/cache/reviews/review-{name}-{timestamp}.md`）
+- 输出 `[SPECCORE_REVIEW: <path>]` 标记，提示宿主 AI 读取执行
+
+**Ask 引擎 review 意图识别** (`src/core/ask-engine.ts`):
+- 识别关键词：自审、review spec、review 分析、检查文档、评审 tech、文档质量、spec 质量
+- 自动提取迭代名、端名、文档路径参数
+- 输出 `speccore review` 命令建议，支持 `autoExec` 自动执行
+
+---
+
 ## v8.3.140 (2026-09-11) — 升级流程交互确认修复
 
 ### 修复

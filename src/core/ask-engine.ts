@@ -394,6 +394,28 @@ function handleGuide(input: string): AskResult | null {
   } else if (/审查|review|代码检查|code review|检查.*代码/i.test(input)) {
     matchedWorkflow = WORKFLOWS['code review'];
     workflowName = '代码审查流程';
+  } else if (/自审|review.*spec|review.*分析|检查.*(文档|spec|分析)|评审.*(tech|analysis)|文档.*质量|spec.*质量/i.test(input)) {
+    // v8.3.141+: Spec 自审意图
+    const iterationMatch = input.match(/(?:迭代|iteration)\s*[:=]?\s*([a-zA-Z0-9\-_]+)/i);
+    const iteration = iterationMatch ? iterationMatch[1] : '';
+    const platformMatch = input.match(/(?:端|平台|platform)\s*[:=]?\s*([a-zA-Z0-9\-_]+)/i);
+    const platform = platformMatch ? platformMatch[1] : '';
+    const docMatch = input.match(/(?:doc|文档|文件)\s*[:=]?\s*([a-zA-Z0-9_\-\/\.]+)/i);
+    const doc = docMatch ? docMatch[1] : '';
+
+    let args = '';
+    if (iteration) args += ` -I ${iteration}`;
+    if (platform) args += ` --platform ${platform}`;
+    if (doc) args += ` --doc ${doc}`;
+    if (!iteration && !platform && !doc) args += ' -I {iteration}';
+
+    return {
+      mode: 'match',
+      summary: 'Spec 自审：检查分析文档质量',
+      detail: `🔍 即将执行: speccore review${args}\n\nAI 将对照需求文档和源码，检查分析文档的完整性、边界情况、与源码一致性、可执行性。`,
+      commands: ['review'],
+      autoExec: { command: 'review', args: args.trim(), confirm: true },
+    };
   } else if (/测试|test|写.*用例|补充.*测试|冒烟|smoke|验证|verify/i.test(input)) {
     const env = parsedEnv || 'staging';
     // v8.3.102+: 修复参数映射，与 verify.ts 实际支持的参数对齐

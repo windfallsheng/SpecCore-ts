@@ -5,6 +5,7 @@ import { join, resolve } from 'path';
 import { logger } from './utils/logger';
 import { initCommand } from './commands/init';
 import { validateCommand } from './commands/validate';
+import { reviewCommand } from './commands/review';
 import { archiveCommand } from './commands/archive';
 import { progressCommand } from './commands/progress';
 import { reportCommand } from './commands/report';
@@ -572,6 +573,19 @@ program
   .option('--verify', '生成代码后自动检查 TEST/REVIEW/DEPLOY → 最多3轮自动修复')
   .option('--format <format>', 'Output format: text, json', 'text')
   .action(validateCommand);
+
+// v8.3.141+: Spec 自审命令
+program
+  .command('review')
+  .alias('rv')
+  .description('Spec 自审：让 AI 检查分析文档质量并输出修订建议')
+  .option('-I, --iteration <iteration>', '目标迭代（默认当前迭代）')
+  .option('--platform <platform>', '只评审指定端的 specs（如 backend / frontend）')
+  .option('--doc <path>', '评审单个文档（相对迭代目录的路径）')
+  .option('--global', '评审全局分析文档（.speccore/GLOBAL/）')
+  .option('--fix', '评审后输出可直接应用的修订版')
+  .option('-o, --output <file>', '输出文件名（覆盖默认）')
+  .action(reviewCommand);
 
 program
   .command('verify')
