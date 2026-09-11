@@ -1,3 +1,141 @@
+## v8.3.138 (2026-09-11) — 同义词全链路 + 增量合并 + 外链资源清单 + 可选阅读清单
+
+### 改进
+
+**同义词扩展全链路覆盖** (`src/utils/synonyms.ts`, 5 个消费文件):
+- 新建公共模块 `synonyms.ts`，提取 `extractNormalizedKeywords` + `SYNONYM_GROUPS` (24 组) + `expandSynonyms`
+- 覆盖 24 组常见开发领域同义词：登录/认证/鉴权/auth、用户/账号/member、订单/预约/booking、权限/角色/rbac 等
+- `analyze-engine.ts`：`extractFeatureForPlatform` / `extractFeatureContent` 使用同义词扩展，解决 "user-auth" 功能名无法匹配报告中 "登录认证" 章节的问题
+- `prompt-builder.ts`：`structured-data.json` 匹配使用同义词扩展，解决 "登录" 搜索无法匹配 `authService` 的问题
+- `code-scanner.ts`：`findRelevantCode` 的 `expandKeywords` 补充 `SYNONYM_GROUPS`，与既有 `SEMANTIC_MAP` 双扩展
+- `verify-engine.ts`：测试用例覆盖/评审项合规/需求匹配三处检查均使用同义词扩展，避免 "登录" 与 "auth" 不匹配导致漏检
+- `split.ts`：三层匹配使用公共同义词模块，删除 64 行重复代码
+
+**增量合并 ANALYSIS.md** (`src/core/analyze-engine.ts`):
+- 新增 `mergeDocumentContent(existing, newContent)`：按 Markdown H1/H2/H3 标题合并，同名章节替换、新章节追加、旧章节保留
+- 新增 `writeMergedFile(filePath, newContent)`：文件存在则合并，不存在则直接写入
+- `writePerPlatform` 和 `writePerFeature` 从 `writeFile` 替换为 `writeMergedFile`
+- 解决多次分析同一功能模块时，之前分析内容被覆盖丢失的问题
+
+**可选阅读清单** (`src/core/prompt-builder.ts`):
+- execute 阶段：在 `findRelevantCode` 匹配结果中，受 `sourceMaxFiles`（8 个）限制未被读取的文件，自动整理为 "可选阅读清单"
+- 清单包含：文件绝对路径、匹配原因（@spec/知识图谱/业务模块/关键词）、匹配得分
+- 明确提示宿主 AI（Cursor/Claude Code/Windsurf）可以按需打开文件深入理解
+- 解决大型功能因 Token 硬限制（8 文件/60KB）导致读不全的问题
+
+**外链资源清单** (`src/core/prompt-builder.ts`):
+- `expandMarkdownLinks`：收集 Markdown 中的外链 `[text](url)`，在内容末尾附加 📎 **外链资源清单**
+- `inlineMarkdownImages`：收集外链图片 `![alt](url)`，在内容末尾附加 🖼️ **外链图片清单**
+- 修复 `extractMarkdownLinks` 提前过滤外链的 Bug（原代码跳过所有 http/https 链接，导致清单永远无法生成）
+- 使用 `Map` 按 URL 去重，避免递归展开时重复收集
+- 解决需求文档中的 Figma 设计稿、外部原型、图片等外链资源无法被 AI 感知的问题
+
+**三层匹配替代字符串匹配** (`src/commands/iteration/split.ts`):
+- 新增 `scoreKeywordOverlap`（关键词集合交集得分）+ `scoreHeadingMatch`（文档 H1/H2/H3 标题匹配得分）
+- `findBestSpecMatch`：三层匹配入口 — 精确(+100) + 关键词交集(+10/对) + 标题匹配(+8/对) + 平台加分(+20)
+- 替换 `extractTaskTechContent`、`extractTaskDevGuideContent`、平台推断逻辑中的脆弱字符串包含匹配
+- 解决 "登录功能" 任务名无法关联到 "user-auth" 目录下文档的问题
+
+---
+
+## v8.3.137 (2026-09-10) — SPECCORE 标记全覆盖 + init/update 遗漏修复
+
+### 改进
+
+**AGENTS.md 输出标记全覆盖**：
+- 彻底审计代码中所有 `SPECCORE_` 标记输出点，与 AGENTS.md 定义表逐一比对
+- 补充缺失的标记定义（共新增 17 个）：
+  - HTML 页面类：`SPECCORE_WELCOME`、`SPECCORE_DASHBOARD`、`SPECCORE_RETRO`、`SPECCORE_DEV`、`SPECCORE_HELP`、`SPECCORE_PLAN`、`SPECCORE_PROMPTS`
+  - AI Prompt 类：`SPECCORE_PROMPT`、`SPECCORE_NEEDS_INFO`、`SPECCORE_PIPELINE_NEXT`、`SPECCORE_TASK_SUMMARY`、`SPECCORE_NEXT_STEPS`、`SPECCORE_GUIDE`、`SPECCORE_CONFIRM_NEEDED`、`SPECCORE_RESULT`、`SPECCORE_PHASE1`/`PHASE2`、`SPECCORE_AI_CONTEXT`
+- 修复 `init.ts` 中两处 AGENTS.md 生成模板（主模板 + 02-OUTPUT_MARKERS.inline.md）的标记表严重过时问题
+  - 旧模板仅含 13 个基础标记，新模板含 30 个完整标记
+  - 避免新初始化项目的 AGENTS.md 一出生就缺失大量标记定义
+
+**update.ts 升级流程补漏** (`src/commands/update.ts`)：
+- 补充 PATTERNS 目录/模板更新逻辑（`PATTERNS/TEMPLATES/{crud,auth,export,report,specs}`）
+- 补充 GLOBAL/PROJECTS/_template 目录确保（升级后结构完整）
+- 升级完成后输出 RAG 索引刷新提示（四层架构扩展后索引范围变大，建议手动刷新）
+
+---
+
+## v8.3.136 (2026-09-10) — AGENTS.md 标记修复 + 四层架构完善
+
+### 改进
+
+**AGENTS.md 输出标记修复**：
+- 历史版本（v5.87.0 之前）曾定义 `SPECCORE_WELCOME`、`SPECCORE_DASHBOARD`、`SPECCORE_RETRO` 等标记
+- 后续重构中被误删除，但代码中 `welcome.ts`、`status-panel.ts`、`retro.ts` 仍在输出这些标记
+- 在 AGENTS.md 两处输出标记表中恢复缺失的定义：
+  - `SPECCORE_WELCOME` — 项目欢迎页（`/spec-welcome` 触发）
+  - `SPECCORE_DASHBOARD` — 项目/迭代仪表盘
+  - `SPECCORE_RETRO` — 迭代复盘报告
+- 确保 AI 宿主能正确识别并展示对应 HTML 页面
+
+**设计文档补充** (`docs/DESIGN.md`):
+- 附录 A.12 补充「AGENTS.md 标记修复」章节，记录根因和修复范围
+
+---
+
+## v8.3.135 (2026-09-10) — 四层架构知识图谱 + 全局 RAG 全覆盖
+
+### 改进
+
+**知识图谱扩展** (`src/core/knowledge-graph.ts`):
+- `scanGlobalDocs` 从只扫描 `GLOBAL/` 扩展为扫描 `GLOBAL/` + `RULES/` + `SKILLS/` + `PATTERNS/`
+- RULES/ 实体 ID 前缀 `RULES:`，tags `['rules', 'global']`
+- SKILLS/ 实体 ID 前缀 `SKILLS:`，tags `['skills', 'global']`
+- PATTERNS/ 实体 ID 前缀 `PATTERNS:`，tags `['patterns', 'global']`
+- 这些实体通过 `syncGraphToRagIndex` 自动同步到 `kg-rag-index.json`
+- `unifiedSearch` 加载 `kg-rag-index.json`，可通过知识图谱检索全部规范
+
+**全局知识沉淀扩展** (`src/core/global-knowledge.ts`):
+- `syncGlobalKnowledge` 的 `specsDirs` 增加 `RULES/`、`SKILLS/`、`PATTERNS/`
+- 全局 RAG 索引（`rag-index-global.json`）由此覆盖全部规范数据库
+- 与 `indexDirectoryDocuments` 的多目录索引形成双重保障
+
+**设计文档补充** (`docs/DESIGN.md`):
+- 附录 A.12 补充「知识图谱扩展」「全局知识沉淀扩展」「完整覆盖矩阵」
+- 覆盖矩阵：5 个目录 × 5 层机制 = 25 个单元格，全部标清 ✅/❌
+
+---
+
+## v8.3.134 (2026-09-10) — 规范数据库四层覆盖架构
+
+### 改进
+
+**四层覆盖架构**（L1 TOC → L2 注入 → L3 RAG → L4 阅读清单）：
+
+- **L1 TOC 目录扫描** (`src/core/prompt-builder.ts`):
+  - `buildGlobalTOC` 新增扫描 `.speccore/SKILLS/` 目录（v8.3.134+）
+  - `formatGlobalContext` 新增 `SKILLS:` 分组展示
+  - AI 现在能在 Prompt 中完整看到 RULES/、SKILLS/、PATTERNS/、GLOBAL/ 的所有文件
+
+- **L2 自动全文注入** (`src/core/prompt-builder.ts`):
+  - `loadGlobalContext` 新增 `.speccore/RULES/` 规则文件自动注入
+  - 按 frontmatter `priority` 降序排序，高优先级规则优先注入
+  - 每个文件最多 2000 字符，总量上限 8000 字符（保护 token 预算）
+  - 新增 `extractPriority()` 辅助函数提取 frontmatter priority
+
+- **L3 RAG 语义检索** (`analyze-engine.ts`, `rag-index.ts`, `refresh.ts`):
+  - 全局 RAG 索引扩展为扫描 `GLOBAL/` + `RULES/` + `SKILLS/` + `PATTERNS/`
+  - 使用 `indexDirectoryDocuments` 的多目录数组支持，统一索引
+  - AI 可通过语义查询召回所有规范数据库内容，即使忘了文件名
+
+- **L4 阅读清单** (`AGENTS.md` + `formatGlobalContext`):
+  - Prompt 中新增「阅读清单（何时该读什么）」表格
+  - 覆盖 6 大场景：编写代码前、设计 API/数据库、实现复杂功能、全局分析、排查性能、代码审查
+  - `AGENTS.md` 新增「规范数据库四层覆盖架构」章节，新会话即知晓
+
+**设计文档补充** (`docs/DESIGN.md`):
+- 新增附录 A.12「规范数据库四层覆盖架构」
+- 完整描述四层设计决策、实现细节、互补关系
+
+**说明文档更新**:
+- `docs/quick-start.md`：目录结构示例补充 RULES/、SKILLS/、PATTERNS/、GLOBAL/BUSINESS_RULES/
+- `docs/workspace-organization.md`：推荐目录结构补充 RULES/、SKILLS/、PATTERNS/ 及说明
+
+---
+
 ## v8.3.133 (2026-09-10) — AGENTS.md 业务规则提示 + 文档补充
 
 ### 改进

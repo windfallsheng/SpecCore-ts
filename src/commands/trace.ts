@@ -37,7 +37,7 @@ async function traceFromReq(reqId: string): Promise<void> {
   // Find the requirement in INDEX.md
   const indexPath = join(process.cwd(), '.speccore', 'GLOBAL', 'INDEX.md');
   if (!(await pathExists(indexPath))) {
-    logger.warn('INDEX.md not found. Run speccore index-update first.');
+    logger.warn('INDEX.md not found. Run speccore refresh first.');
     return;
   }
 

@@ -18,6 +18,28 @@ Read .speccore/PROJECT.yaml          ← 获取项目配置（端列表、源码
 - **绝对不要写 JS/Python 脚本绕过 CLI** — 所有操作通过 `speccore` CLI 完成
 - **业务规则**：如存在 `.speccore/GLOBAL/BUSINESS_RULES/` 目录，执行 analyze/execute 前需读取其中规则文件（`01-common.md` 通用规则 + `{工程标识}.md` 端级规则，文件名必须与 CONSTITUTION.md 端列表中的工程标识完全一致）
 
+## 规范数据库四层覆盖架构（v8.3.134+）
+
+`.speccore/` 下的知识资产按四层架构确保 AI 可见性，每层解决不同场景：
+
+| 层级 | 机制 | 覆盖目录 | 解决什么问题 |
+|:---|:---|:---|:---|
+| **L1 TOC 目录** | `buildGlobalTOC` 扫描所有 `.md` 文件，生成带摘要/标签/章节的目录 | GLOBAL/、PATTERNS/、RULES/、SKILLS/ | AI **知道有这些文件**，按需 Read |
+| **L2 自动注入** | `loadGlobalContext` 将关键文件全文注入 Prompt | BUSINESS_RULES/（4000 字符/文件）、RULES/（2000 字符/文件，按 priority 排序，总量 ≤8000） | **关键规则必达**，不依赖 AI 主动 Read |
+| **L3 RAG 语义检索** | `indexDirectoryDocuments` 索引所有 `.md`，支持语义召回 | GLOBAL/ + RULES/ + SKILLS/ + PATTERNS/ | AI **忘了文件名也能通过语义找到** |
+| **L4 阅读清单** | Prompt 中附带"何时该读什么"指引 | 全量 | 告诉 AI **什么场景下该读哪个目录** |
+
+### 阅读清单（何时该读什么）
+
+| 场景 | 推荐读取 | 原因 |
+|:---|:---|:---|
+| **编写代码前** | `RULES/` 中 `appliesTo` 匹配当前技术栈的规则 | 确保代码符合项目规范 |
+| **设计 API/数据库** | `RULES/api-design.md` + `RULES/database.md` | 统一接口格式和表设计 |
+| **实现复杂功能** | `SKILLS/` 中 tags 匹配当前场景的技能文档 | 参考最佳实践，避免踩坑 |
+| **全局分析阶段** | `PATTERNS/` 中通用分类 + 当前端专属模式 | 复用已沉淀的架构模式 |
+| **排查性能问题** | `SKILLS/caching.md` + `PATTERNS/performance/` | 缓存策略和性能优化模式 |
+| **代码审查前** | `RULES/CODE_REVIEW.md` | 对照检查清单逐项核对 |
+
 ## 项目类型
 SpecCore 规范驱动开发项目。
 
@@ -139,14 +161,31 @@ Iteration-NNN-name/            ← [CLI生成] 迭代目录（名称从 context.
 | 标记 | 含义 | 动作 |
 |:---|:---|:---|
 | `[SPECCORE_ONBOARD: <path>]` | 首次/升级引导页 | **最先处理**，用 present_files 展示 HTML |
+| `[SPECCORE_WELCOME: <path>]` | 项目欢迎页 | 用 present_files 展示欢迎页 HTML（`/spec-welcome` 触发） |
 | `[SPECCORE_SETUP_GUIDE: <path>]` | 项目配置引导页 | init 后用 present_files 展示，指导用户配置 |
 | `[SPECCORE_ABOUT: <path>]` | 版本信息页 | 用 present_files 展示 |
+| `[SPECCORE_DASHBOARD: <path>]` | 项目/迭代仪表盘 | 用 present_files 展示仪表盘 HTML |
+| `[SPECCORE_RETRO: <path>]` | 迭代复盘报告 | 用 present_files 展示复盘报告 HTML |
+| `[SPECCORE_DEV: <path>]` | dev 级联引导页 | 用 present_files 展示 dev 引导页 HTML |
+| `[SPECCORE_HELP: <path>]` | 帮助页 | 用 present_files 展示帮助页 HTML |
+| `[SPECCORE_PLAN: <path>]` | 计划可视化 | 用 present_files 展示计划可视化 HTML |
+| `[SPECCORE_PROMPTS: <path>]` | 提示词库 | 用 present_files 展示提示词库 HTML |
 | `[SPECCORE_MODE: <mode>]` | 意图模式 | 识别模式后进入对应流程 |
 | `[SPECCORE_EXEC: <cmd>]` | 自动执行命令 | 直接 execute_command |
 | `[SPECCORE_CONFIRM]` | 执行前确认 | 需用户确认后再执行（副作用命令） |
 | `[SPECCORE_EXEC_STATUS: ok\|fail(<code>)]` | 命令执行结果 | 检查执行是否成功 |
 | `[SPECCORE_EXEC_ERROR: <msg>]` | 命令执行异常 | 查看错误详情 |
 | `[SPECCORE_INTENT]` | 意图确认块 | 展示给用户确认 |
+| `[SPECCORE_PROMPT]` | AI Prompt 块 | 将后续内容作为 Prompt 传给宿主 AI |
+| `[SPECCORE_NEEDS_INFO]` | 缺参数提示 | 命令缺少必要参数时输出，引导用户补充 |
+| `[SPECCORE_PIPELINE_NEXT]` | Pipeline 下一步 | 自动执行 Pipeline 下一个步骤 |
+| `[SPECCORE_TASK_SUMMARY]` | 任务总览报告 | 展示任务拆分/执行后的总览报告 |
+| `[SPECCORE_NEXT_STEPS]` | 下一步操作 | 展示建议的后续操作步骤 |
+| `[SPECCORE_GUIDE]` | 分析指南 | 展示分析阶段的引导指南 |
+| `[SPECCORE_CONFIRM_NEEDED]` | 需要确认 | 展示需要用户确认的信息 |
+| `[SPECCORE_RESULT]` | 执行结果 | 展示命令执行的结果数据 |
+| `[SPECCORE_PHASE1]` / `[SPECCORE_PHASE2]` | 综合文档阶段 | synthesize 的 Phase 1/2 Prompt |
+| `[SPECCORE_AI_CONTEXT]` | AI 上下文 | 传递给宿主 AI 的上下文信息 |
 | `[SPECCORE_CONFIRM_STEP: <order>/<total>] <cmd>` | Pipeline 步骤信息 | 展示当前步骤详情 |
 | `[SPECCORE_CONFIRM_ASK: ...]` | Pipeline 步骤询问 | 等待用户输入 y（确认）/ s（跳过）/ q（停止） |
 | `[SPECCORE_STEP_FAIL: <cmd>]` | Pipeline 步骤失败 | 提示用户选择重试/跳过/停止 |
@@ -455,11 +494,27 @@ Iteration-NNN-name/            ← 迭代目录
 | 标记 | 含义 | 动作 |
 |:---|:---|:---|
 | `[SPECCORE_ONBOARD: <path>]` | 首次/升级引导页 | **最先处理**，用 present_files 展示 HTML |
+| `[SPECCORE_WELCOME: <path>]` | 项目欢迎页 | 用 present_files 展示欢迎页 HTML（`/spec-welcome` 触发） |
 | `[SPECCORE_SETUP_GUIDE: <path>]` | 项目配置引导页 | init 后用 present_files 展示，指导用户配置 |
 | `[SPECCORE_ABOUT: <path>]` | 版本信息页 | 用 present_files 展示 |
+| `[SPECCORE_DASHBOARD: <path>]` | 项目/迭代仪表盘 | 用 present_files 展示仪表盘 HTML |
+| `[SPECCORE_RETRO: <path>]` | 迭代复盘报告 | 用 present_files 展示复盘报告 HTML |
+| `[SPECCORE_DEV: <path>]` | dev 级联引导页 | 用 present_files 展示 dev 引导页 HTML |
+| `[SPECCORE_HELP: <path>]` | 帮助页 | 用 present_files 展示帮助页 HTML |
+| `[SPECCORE_PLAN: <path>]` | 计划可视化 | 用 present_files 展示计划可视化 HTML |
+| `[SPECCORE_PROMPTS: <path>]` | 提示词库 | 用 present_files 展示提示词库 HTML |
 | `[SPECCORE_MODE: <mode>]` | 意图模式 | 识别模式后进入对应流程 |
 | `[SPECCORE_EXEC: <cmd>]` | 自动执行命令 | 直接 execute_command |
 | `[SPECCORE_INTENT]` | 意图确认块 | 展示给用户确认 |
+| `[SPECCORE_PROMPT]` | AI Prompt 块 | 将后续内容作为 Prompt 传给宿主 AI |
+| `[SPECCORE_PIPELINE_NEXT]` | Pipeline 下一步 | 自动执行 Pipeline 下一个步骤 |
+| `[SPECCORE_TASK_SUMMARY]` | 任务总览报告 | 展示任务拆分/执行后的总览报告 |
+| `[SPECCORE_NEXT_STEPS]` | 下一步操作 | 展示建议的后续操作步骤 |
+| `[SPECCORE_GUIDE]` | 分析指南 | 展示分析阶段的引导指南 |
+| `[SPECCORE_CONFIRM_NEEDED]` | 需要确认 | 展示需要用户确认的信息 |
+| `[SPECCORE_RESULT]` | 执行结果 | 展示命令执行的结果数据 |
+| `[SPECCORE_PHASE1]` / `[SPECCORE_PHASE2]` | 综合文档阶段 | synthesize 的 Phase 1/2 Prompt |
+| `[SPECCORE_AI_CONTEXT]` | AI 上下文 | 传递给宿主 AI 的上下文信息 |
 | `[SPECCORE_CONTINUE: <path>]` | 批次执行完成，需续批 | **必须开始新对话**，先读取 `<path>` 恢复上下文，再按提示命令继续下一批次 |
 
 ## 常用命令速查

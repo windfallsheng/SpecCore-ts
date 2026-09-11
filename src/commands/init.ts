@@ -1473,14 +1473,31 @@ Iteration-NNN-name/            ← 迭代目录（名称从 context.json 获取�
 | 标记 | 含义 | 动作 |
 |:---|:---|:---|
 | \`[SPECCORE_ONBOARD: <path>]\` | 首次/升级引导页 | **最先处理**，用 present_files 展示 HTML |
+| \`[SPECCORE_WELCOME: <path>]\` | 项目欢迎页 | 用 present_files 展示欢迎页 HTML（\`/spec-welcome\` 触发） |
 | \`[SPECCORE_SETUP_GUIDE: <path>]\` | 项目配置引导页 | init 后用 present_files 展示，指导用户配置 |
 | \`[SPECCORE_ABOUT: <path>]\` | 版本信息页 | 用 present_files 展示 |
+| \`[SPECCORE_DASHBOARD: <path>]\` | 项目/迭代仪表盘 | 用 present_files 展示仪表盘 HTML |
+| \`[SPECCORE_RETRO: <path>]\` | 迭代复盘报告 | 用 present_files 展示复盘报告 HTML |
+| \`[SPECCORE_DEV: <path>]\` | dev 级联引导页 | 用 present_files 展示 dev 引导页 HTML |
+| \`[SPECCORE_HELP: <path>]\` | 帮助页 | 用 present_files 展示帮助页 HTML |
+| \`[SPECCORE_PLAN: <path>]\` | 计划可视化 | 用 present_files 展示计划可视化 HTML |
+| \`[SPECCORE_PROMPTS: <path>]\` | 提示词库 | 用 present_files 展示提示词库 HTML |
 | \`[SPECCORE_MODE: <mode>]\` | 意图模式 | 识别模式后进入对应流程 |
 | \`[SPECCORE_EXEC: <cmd>]\` | 自动执行命令 | 直接 execute_command |
 | \`[SPECCORE_CONFIRM]\` | 执行前确认 | 需用户确认后再执行（副作用命令） |
 | \`[SPECCORE_EXEC_STATUS: ok\\|fail(<code>)]\` | 命令执行结果 | 检查执行是否成功 |
 | \`[SPECCORE_EXEC_ERROR: <msg>]\` | 命令执行异常 | 查看错误详情 |
 | \`[SPECCORE_INTENT]\` | 意图确认块 | 展示给用户确认 |
+| \`[SPECCORE_PROMPT]\` | AI Prompt 块 | 将后续内容作为 Prompt 传给宿主 AI |
+| \`[SPECCORE_NEEDS_INFO]\` | 缺参数提示 | 命令缺少必要参数时输出，引导用户补充 |
+| \`[SPECCORE_PIPELINE_NEXT]\` | Pipeline 下一步 | 自动执行 Pipeline 下一个步骤 |
+| \`[SPECCORE_TASK_SUMMARY]\` | 任务总览报告 | 展示任务拆分/执行后的总览报告 |
+| \`[SPECCORE_NEXT_STEPS]\` | 下一步操作 | 展示建议的后续操作步骤 |
+| \`[SPECCORE_GUIDE]\` | 分析指南 | 展示分析阶段的引导指南 |
+| \`[SPECCORE_CONFIRM_NEEDED]\` | 需要确认 | 展示需要用户确认的信息 |
+| \`[SPECCORE_RESULT]\` | 执行结果 | 展示命令执行的结果数据 |
+| \`[SPECCORE_PHASE1]\` / \`[SPECCORE_PHASE2]\` | 综合文档阶段 | synthesize 的 Phase 1/2 Prompt |
+| \`[SPECCORE_AI_CONTEXT]\` | AI 上下文 | 传递给宿主 AI 的上下文信息 |
 | \`[SPECCORE_CONFIRM_STEP: <order>/<total>] <cmd>\` | Pipeline 步骤信息 | 展示当前步骤详情 |
 | \`[SPECCORE_CONFIRM_ASK: ...]\` | Pipeline 步骤询问 | 等待用户输入 y（确认）/ s（跳过）/ q（停止） |
 | \`[SPECCORE_STEP_FAIL: <cmd>]\` | Pipeline 步骤失败 | 提示用户选择重试/跳过/停止 |
@@ -1698,14 +1715,31 @@ Iteration-NNN-name/            ← 迭代目录
 | 标记 | 含义 | 动作 |
 |:---|:---|:---|
 | \`[SPECCORE_ONBOARD: <path>]\` | 首次/升级引导页 | **最先处理**，用 present_files 展示 HTML |
+| \`[SPECCORE_WELCOME: <path>]\` | 项目欢迎页 | 用 present_files 展示欢迎页 HTML（\`/spec-welcome\` 触发） |
 | \`[SPECCORE_SETUP_GUIDE: <path>]\` | 项目配置引导页 | init 后用 present_files 展示，指导用户配置 |
 | \`[SPECCORE_ABOUT: <path>]\` | 版本信息页 | 用 present_files 展示 |
+| \`[SPECCORE_DASHBOARD: <path>]\` | 项目/迭代仪表盘 | 用 present_files 展示仪表盘 HTML |
+| \`[SPECCORE_RETRO: <path>]\` | 迭代复盘报告 | 用 present_files 展示复盘报告 HTML |
+| \`[SPECCORE_DEV: <path>]\` | dev 级联引导页 | 用 present_files 展示 dev 引导页 HTML |
+| \`[SPECCORE_HELP: <path>]\` | 帮助页 | 用 present_files 展示帮助页 HTML |
+| \`[SPECCORE_PLAN: <path>]\` | 计划可视化 | 用 present_files 展示计划可视化 HTML |
+| \`[SPECCORE_PROMPTS: <path>]\` | 提示词库 | 用 present_files 展示提示词库 HTML |
 | \`[SPECCORE_MODE: <mode>]\` | 意图模式 | 识别模式后进入对应流程 |
 | \`[SPECCORE_EXEC: <cmd>]\` | 自动执行命令 | 直接 execute_command |
 | \`[SPECCORE_CONFIRM]\` | 执行前确认 | 需用户确认后再执行（副作用命令） |
 | \`[SPECCORE_EXEC_STATUS: ok\\|fail(<code>)]\` | 命令执行结果 | 检查执行是否成功 |
 | \`[SPECCORE_EXEC_ERROR: <msg>]\` | 命令执行异常 | 查看错误详情 |
 | \`[SPECCORE_INTENT]\` | 意图确认块 | 展示给用户确认 |
+| \`[SPECCORE_PROMPT]\` | AI Prompt 块 | 将后续内容作为 Prompt 传给宿主 AI |
+| \`[SPECCORE_NEEDS_INFO]\` | 缺参数提示 | 命令缺少必要参数时输出，引导用户补充 |
+| \`[SPECCORE_PIPELINE_NEXT]\` | Pipeline 下一步 | 自动执行 Pipeline 下一个步骤 |
+| \`[SPECCORE_TASK_SUMMARY]\` | 任务总览报告 | 展示任务拆分/执行后的总览报告 |
+| \`[SPECCORE_NEXT_STEPS]\` | 下一步操作 | 展示建议的后续操作步骤 |
+| \`[SPECCORE_GUIDE]\` | 分析指南 | 展示分析阶段的引导指南 |
+| \`[SPECCORE_CONFIRM_NEEDED]\` | 需要确认 | 展示需要用户确认的信息 |
+| \`[SPECCORE_RESULT]\` | 执行结果 | 展示命令执行的结果数据 |
+| \`[SPECCORE_PHASE1]\` / \`[SPECCORE_PHASE2]\` | 综合文档阶段 | synthesize 的 Phase 1/2 Prompt |
+| \`[SPECCORE_AI_CONTEXT]\` | AI 上下文 | 传递给宿主 AI 的上下文信息 |
 | \`[SPECCORE_CONFIRM_STEP: <order>/<total>] <cmd>\` | Pipeline 步骤信息 | 展示当前步骤详情 |
 | \`[SPECCORE_CONFIRM_ASK: ...]\` | Pipeline 步骤询问 | 等待用户输入 y（确认）/ s（跳过）/ q（停止） |
 | \`[SPECCORE_STEP_FAIL: <cmd>]\` | Pipeline 步骤失败 | 提示用户选择重试/跳过/停止 |

@@ -21,6 +21,9 @@ workspace/
 │   │   │   └── BUSINESS_RULES/   # 通用业务规则目录（v8.3.132+）
 │   │   │       ├── 01-common.md  # 通用规则（所有端自动加载）
 │   │   │       └── {端名}.md     # 端级规则（仅该端加载）
+│   │   ├── RULES/                # 项目规范（代码约束，自动注入 Prompt，v8.3.134+）
+│   │   ├── SKILLS/               # 技术能力库（最佳实践，按需查阅，v8.3.134+）
+│   │   ├── PATTERNS/             # 可复用模式（全局分析时参考，v8.3.134+）
 │   │   ├── examples/             # 配置示例（init 自动生成）
 │   │   │   ├── CONSTITUTION-EXAMPLE.md
 │   │   │   ├── PROJECT-EXAMPLE.yaml

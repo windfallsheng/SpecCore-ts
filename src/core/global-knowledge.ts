@@ -66,6 +66,14 @@ export async function syncGlobalKnowledge(options: GlobalKnowledgeOptions = {}):
     specsDirs.push(globalDir);
   }
 
+  // 1.3 v8.3.135+: 扫描规范数据库 RULES/SKILLS/PATTERNS（四层架构 RAG 全覆盖）
+  const rulesDir = join(cwd, '.speccore', 'RULES');
+  const skillsDir = join(cwd, '.speccore', 'SKILLS');
+  const patternsDir = join(cwd, '.speccore', 'PATTERNS');
+  if (await pathExists(rulesDir)) specsDirs.push(rulesDir);
+  if (await pathExists(skillsDir)) specsDirs.push(skillsDir);
+  if (await pathExists(patternsDir)) specsDirs.push(patternsDir);
+
   if (specsDirs.length === 0) {
     logger.info('   ⚠️ 未找到 specs 文档，跳过全局知识沉淀');
     return;

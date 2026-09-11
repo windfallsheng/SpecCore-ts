@@ -179,13 +179,20 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalysisResult> 
         logger.info(`   🔍 迭代 RAG 索引已生成: ${dirs.join(', ')} → ${fileName}`);
       }
     } else if (effectiveInput.scope === 'global') {
-      // global 模式：索引全局产出目录（v8.3.63+ 修复：从 GLOBAL/020-specs 改为 GLOBAL/ 根目录）
+      // global 模式：索引全局产出目录 + RULES/SKILLS/PATTERNS（v8.3.134+ 四层架构：RAG 全覆盖）
       const globalDir = join(cwd, '.speccore', 'GLOBAL');
       const fallbackDir = join(cwd, '.speccore');
       const targetDir = await pathExists(globalDir) ? globalDir : fallbackDir;
+      const dirs: string[] = [targetDir];
+      const rulesDir = join(cwd, '.speccore', 'RULES');
+      const skillsDir = join(cwd, '.speccore', 'SKILLS');
+      const patternsDir = join(cwd, '.speccore', 'PATTERNS');
+      if (await pathExists(rulesDir)) dirs.push(rulesDir);
+      if (await pathExists(skillsDir)) dirs.push(skillsDir);
+      if (await pathExists(patternsDir)) dirs.push(patternsDir);
       const scope = 'GLOBAL_all_global_all';
-      await indexDirectoryDocuments(cwd, targetDir, scope, 'rag-index-global.json');
-      logger.info(`   🔍 全局 RAG 索引已生成: ${targetDir} → rag-index-global.json`);
+      await indexDirectoryDocuments(cwd, dirs, scope, 'rag-index-global.json');
+      logger.info(`   🔍 全局 RAG 索引已生成: ${dirs.join(', ')} → rag-index-global.json`);
     }
   } catch (e) {
     logger.debug('RAG 索引生成失败（非关键）:', e);

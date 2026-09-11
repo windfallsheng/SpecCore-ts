@@ -12,9 +12,9 @@ const COMMANDS = [
   'goal', 'bugfix', 'research', 'change', 'sync', 'handover', 'retro',
   'template-add', 'help', 'demo', 'welcome', 'iteration-from-global',
   'sync-global', 'global-status', 'history', 'impact', 'baseline',
-  'dashboard', 'audit', 'rename', 'new-task', 'platform-add', 'index-update',
+  'dashboard', 'audit', 'rename', 'new-task', 'platform-add',
   'context', 'migrate', 'completion', 'backup', 'hooks', 'current',
-  'update', 'diff', 'trace', 'delete', 'search', 'watch',
+  'update', 'diff', 'trace', 'delete', 'search', 'watch', 'refresh', 'rag-index',
 ];
 
 /**

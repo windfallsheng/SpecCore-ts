@@ -503,14 +503,14 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     patterns: ['添加(.*)平台', '新增(.*)端', '增加(.*)平台'],
     description: '动态添加平台 — 自动同步到 platforms.yaml 和现有 Task',
   },
-  // 更新索引 (v4.0)
+  // 更新索引 (v4.0) → v8.3.138: 映射到 refresh 命令，覆盖四层架构全部目录
   {
-    id: 'index-update',
+    id: 'refresh',
     intent: 'index_update',
     priority: 58,
-    triggers: ['更新索引', '重建索引', '刷新索引'],
-    patterns: ['更新索引', '重建索引', '刷新索引'],
-    description: '索引更新 — 扫描需求文档自动重建 GLOBAL/INDEX.md',
+    triggers: ['更新索引', '重建索引', '刷新索引', '重新扫描', '刷新rag', '刷新知识图谱', '重建rag', 'refresh index', 'reindex'],
+    patterns: ['更新索引', '重建索引', '刷新索引', '重新扫描', '刷新.rag', '重建.rag', 'refresh.*index', 'reindex'],
+    description: '统一刷新所有检索层 — 代码索引 + 文档 RAG（GLOBAL/RULES/SKILLS/PATTERNS）+ 知识图谱',
   },
   // 查看上下文 (v4.0)
   {

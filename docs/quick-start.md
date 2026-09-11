@@ -190,7 +190,11 @@ speccore help --examples               # 完整场景示例
 项目/
 ├── .speccore/               # 全局配置
 │   ├── CONSTITUTION.md      # 技术宪法
-│   └── RULES/               # 编码规则
+│   ├── RULES/               # 编码规则（自动注入 Prompt）
+│   ├── SKILLS/              # 技术能力库（按需查阅）
+│   ├── PATTERNS/            # 可复用模式（全局分析时参考）
+│   └── GLOBAL/              # 全局分析产出 + 业务规则
+│       └── BUSINESS_RULES/  # 业务规则（自动注入 Prompt）
 ├── 期次-Q1/                  # 迭代期次
 │   ├── 00-需求文档/
 │   └── Task-001/            # 原子任务

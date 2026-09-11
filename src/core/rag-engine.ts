@@ -830,11 +830,26 @@ export async function checkRagIndexFreshness(
   // 检测新增文件：扫描索引目录中未记录的文件
   const newFiles: string[] = [];
   try {
-    const scopeDir = index.scope.includes('_030-tasks_')
-      ? join(cwd, index.scope.split('_').slice(1, -1).join('/').replace(/_/g, '/'))
-      : null;
-    if (scopeDir && await pathExists(scopeDir)) {
-      await scanForNewFiles(scopeDir, indexedPaths, newFiles);
+    // v8.3.138+: 全局索引扫描四层架构目录（GLOBAL + RULES + SKILLS + PATTERNS）
+    if (index.scope.includes('GLOBAL') || fileName === 'rag-index-global.json') {
+      const globalDirs = [
+        join(cwd, '.speccore', 'GLOBAL'),
+        join(cwd, '.speccore', 'RULES'),
+        join(cwd, '.speccore', 'SKILLS'),
+        join(cwd, '.speccore', 'PATTERNS'),
+      ];
+      for (const dir of globalDirs) {
+        if (await pathExists(dir)) {
+          await scanForNewFiles(dir, indexedPaths, newFiles);
+        }
+      }
+    } else {
+      const scopeDir = index.scope.includes('_030-tasks_')
+        ? join(cwd, index.scope.split('_').slice(1, -1).join('/').replace(/_/g, '/'))
+        : null;
+      if (scopeDir && await pathExists(scopeDir)) {
+        await scanForNewFiles(scopeDir, indexedPaths, newFiles);
+      }
     }
   } catch {
     // 非关键，忽略
@@ -1289,4 +1304,43 @@ export function extractHtmlText(html: string): string {
     .trim();
 
   return text;
+}
+
+// ═══════════════════════════════════════════════════════════
+// v8.3.138+: 自动刷新 — 关键命令前检测索引新鲜度并自动刷新
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * 自动检测并刷新全局 RAG 索引（如果过期）
+ * 供 analyze / ask / execute 等关键命令执行前调用
+ *
+ * 返回: { refreshed: boolean; staleFiles: string[]; newFiles: string[] }
+ *   - refreshed: 是否执行了刷新
+ *   - staleFiles: 过期的文件列表
+ *   - newFiles: 新增的文件列表
+ */
+export async function autoRefreshIfStale(
+  cwd: string,
+): Promise<{ refreshed: boolean; staleFiles: string[]; newFiles: string[] }> {
+  const { fresh, staleFiles, newFiles } = await checkRagIndexFreshness(cwd, 'rag-index-global.json');
+  if (fresh) {
+    return { refreshed: false, staleFiles: [], newFiles: [] };
+  }
+
+  // 索引过期，执行刷新
+  const globalDir = join(cwd, '.speccore', 'GLOBAL');
+  const fallbackDir = join(cwd, '.speccore');
+  const targetDir = await pathExists(globalDir) ? globalDir : fallbackDir;
+  if (await pathExists(targetDir)) {
+    const dirs: string[] = [targetDir];
+    const rulesDir = join(cwd, '.speccore', 'RULES');
+    const skillsDir = join(cwd, '.speccore', 'SKILLS');
+    const patternsDir = join(cwd, '.speccore', 'PATTERNS');
+    if (await pathExists(rulesDir)) dirs.push(rulesDir);
+    if (await pathExists(skillsDir)) dirs.push(skillsDir);
+    if (await pathExists(patternsDir)) dirs.push(patternsDir);
+    await indexDirectoryDocuments(cwd, dirs, 'GLOBAL_all_all_aggregated', 'rag-index-global.json');
+  }
+
+  return { refreshed: true, staleFiles, newFiles };
 }

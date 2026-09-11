@@ -5429,3 +5429,215 @@ buildPrompt()
 1. **AGENTS.md** — 新会话强制提醒 AI 读取 BUSINESS_RULES 目录
 2. **示例模板顶部** — 创建文件时第一眼看到命名警告
 3. **代码过滤逻辑** — 写错名字的文件不会被加载（硬性兜底）
+
+### A.12 规范数据库四层覆盖架构（v8.3.134）
+
+**问题**：`.speccore/` 下的知识资产（RULES/、SKILLS/、PATTERNS/）虽然对 AI 工作很重要，但存在可见性缺口：
+- `SKILLS/` 完全不在 TOC 中，AI 不知道有这些文件
+- `RULES/` 只进目录，关键规范不会自动注入 Prompt，AI 可能忘记读
+- `PATTERNS/` 也只进目录，全局分析时容易遗漏已沉淀的模式
+- RAG 全局索引只扫描 `GLOBAL/`，不覆盖 RULES/SKILLS/PATTERNS
+
+**设计决策**：建立四层覆盖架构，每层解决不同场景，互相补充：
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  L4 阅读清单（指引）   → 告诉 AI "什么场景下该读什么"          │
+│  L3 RAG 语义检索       → AI 忘了文件名也能语义召回           │
+│  L2 自动全文注入       → 关键规则必达，不依赖 AI 主动 Read   │
+│  L1 TOC 目录扫描       → AI 知道有这些文件，按需 Read         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**L1 — TOC 目录扫描**（`buildGlobalTOC`）：
+- 扫描范围：`GLOBAL/`、`PATTERNS/`、`RULES/`、`SKILLS/` 下所有 `.md`
+- 每个文件提取：标题、摘要、标签、涉及端、章节、行数
+- AI 在 Prompt 中能看到完整的文件清单，按需 Read
+
+**L2 — 自动全文注入**（`loadGlobalContext` → `keyFileSummaries`）：
+
+| 目录 | 注入策略 | 上限 |
+|:---|:---|:---|
+| `GLOBAL/BUSINESS_RULES/` | 按 platform 过滤，全部注入 | 4000 字符/文件 |
+| `RULES/` | 按 frontmatter `priority` 降序排序，高优先级优先 | 2000 字符/文件，总量 ≤8000 |
+| `SKILLS/` | 不自动注入（按需查阅型） | — |
+| `PATTERNS/` | 不自动注入（按需查阅型） | — |
+
+`RULES/` 注入实现：
+1. 读取每个 `.md` 文件，提取 frontmatter 中的 `priority`（默认 50）
+2. 按 priority 降序排序
+3. 逐个注入，每个最多 2000 字符
+4. 累计达到 8000 字符后停止（保护 token 预算）
+
+**L3 — RAG 语义检索**（`indexDirectoryDocuments`）：
+- 全局 RAG 索引扩展为扫描多个目录：`GLOBAL/` + `RULES/` + `SKILLS/` + `PATTERNS/`
+- 修改点：`analyze-engine.ts`、`rag-index.ts`、`refresh.ts` 中的全局索引构建逻辑
+- AI 可以通过语义查询（如"缓存策略""API 分页格式"）召回相关内容，即使忘了文件名
+
+**L4 — 阅读清单**（`formatGlobalContext` + `AGENTS.md`）：
+- Prompt 中输出 Markdown 表格：场景 → 推荐读取 → 原因
+- AGENTS.md 中固化四层架构概念，新会话即知晓
+
+| 场景 | 推荐读取 | 原因 |
+|:---|:---|:---|
+| 编写代码前 | `RULES/` 中 `appliesTo` 匹配当前技术栈的规则 | 确保代码符合项目规范 |
+| 设计 API/数据库 | `RULES/api-design.md` + `RULES/database.md` | 统一接口格式和表设计 |
+| 实现复杂功能 | `SKILLS/` 中 tags 匹配当前场景的技能文档 | 参考最佳实践，避免踩坑 |
+| 全局分析阶段 | `PATTERNS/` 中通用分类 + 当前端专属模式 | 复用已沉淀的架构模式 |
+| 排查性能问题 | `SKILLS/caching.md` + `PATTERNS/performance/` | 缓存策略和性能优化模式 |
+| 代码审查前 | `RULES/CODE_REVIEW.md` | 对照检查清单逐项核对 |
+
+**四层互补关系**：
+- L1 解决"知道有"：AI 看到目录就不会遗漏
+- L2 解决"必读到"：关键规则不依赖 AI 主动性
+- L3 解决"找得到"：语义召回覆盖长尾内容
+- L4 解决"读得对"：指引 AI 在正确场景读正确文档
+
+**知识图谱扩展**（v8.3.135+，`knowledge-graph.ts`）：
+- `scanGlobalDocs` 从只扫描 `GLOBAL/` 扩展为扫描 `GLOBAL/` + `RULES/` + `SKILLS/` + `PATTERNS/`
+- RULES/ 实体 ID 前缀为 `RULES:`，tags 为 `['rules', 'global']`
+- SKILLS/ 实体 ID 前缀为 `SKILLS:`，tags 为 `['skills', 'global']`
+- PATTERNS/ 实体 ID 前缀为 `PATTERNS:`，tags 为 `['patterns', 'global']`
+- 这些实体通过 `syncGraphToRagIndex` 自动同步到 `kg-rag-index.json`
+- `unifiedSearch` 加载 `kg-rag-index.json`，因此也能通过知识图谱检索到这些规范
+
+**全局知识沉淀扩展**（v8.3.135+，`global-knowledge.ts`）：
+- `syncGlobalKnowledge` 的 `specsDirs` 增加 `RULES/`、`SKILLS/`、`PATTERNS/`
+- 全局 RAG 索引（`rag-index-global.json`）由此覆盖全部规范数据库
+- 与 `indexDirectoryDocuments` 的多目录索引形成双重保障
+
+**完整覆盖矩阵**（v8.3.135+）：
+
+| 目录 | TOC (L1) | 自动注入 (L2) | RAG (L3) | 知识图谱 | 阅读清单 (L4) |
+|:---|:---:|:---:|:---:|:---:|:---:|
+| `GLOBAL/BUSINESS_RULES/` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `GLOBAL/其他` | ✅ | ❌ | ✅ | ✅ | ✅ |
+| `RULES/` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SKILLS/` | ✅ | ❌ | ✅ | ✅ | ✅ |
+| `PATTERNS/` | ✅ | ❌ | ✅ | ✅ | ✅ |
+
+**AGENTS.md 标记修复**（v8.3.136+）：
+- 历史版本（v5.87.0 之前）AGENTS.md 曾定义 `SPECCORE_WELCOME`、`SPECCORE_HELP`、`SPECCORE_DEV` 等标记
+- 后续重构中被误删除，但 `welcome.ts`、`status-panel.ts`、`retro.ts` 等文件仍在输出这些标记
+- 修复：在 AGENTS.md 输出标记表中恢复以下标记定义：
+  - `SPECCORE_WELCOME` — 项目欢迎页（`/spec-welcome` 触发）
+  - `SPECCORE_DASHBOARD` — 项目/迭代仪表盘
+  - `SPECCORE_RETRO` — 迭代复盘报告
+- 确保 AI 宿主能正确识别并展示对应 HTML 页面
+
+**与既有机制的关系**：
+- `unifiedSearch`（统一检索层）调用 RAG + 知识图谱，L3 扩展后召回范围更大
+- `keyFileSummaries` 已有 BUSINESS_RULES 注入，L2 扩展后新增 RULES/ 注入
+- `buildGlobalTOC` 已有 RULES/PATTERNS 扫描，L1 扩展后新增 SKILLS/ 扫描
+
+---
+
+## 附录：v8.3.138+ 同义词扩展 + 增量合并 + 外链资源清单 + 可选阅读清单
+
+### 设计背景
+
+在 SpecCore 的实际使用过程中，发现以下四类问题严重影响 AI 执行质量：
+
+1. **跨语言/缩写匹配失败**：中文需求写 "登录认证"，代码中是 `authService`，简单字符串匹配完全失效
+2. **多次分析覆盖丢失**：同一功能模块分析两次，第二次直接覆盖第一次的 `ANALYSIS.md`，之前的内容全部丢失
+3. **Token 限制导致读不全**：execute 阶段只能预加载 8 个文件/60KB，大型功能关联的源码分散在 20+ 个文件中
+4. **外链资源无法感知**：需求文档中的 Figma 设计稿、外部原型图片等，CLI 无法获取，AI 也意识不到要去读
+
+### 同义词扩展全链路设计
+
+**核心原则**：把同义词扩展从 split.ts 的局部优化提升为全链路基础设施。
+
+**公共模块** (`src/utils/synonyms.ts`)：
+- `extractNormalizedKeywords(text)`：支持中英文、驼峰拆分、数字字母组合
+- `SYNONYM_GROUPS`：24 组开发领域同义词，覆盖登录/用户/订单/支付/权限/拦截器等
+- `expandSynonyms(keywords)`：输入关键词 → 输出扩展后的同义词集合
+- `hasSynonymOverlap(a, b)` / `scoreSynonymOverlap(a, b)`：供简单判断和评分使用
+
+**消费点**（5 个文件）：
+
+| 文件 | 原逻辑 | 新逻辑 | 解决的问题 |
+|------|--------|--------|-----------|
+| `analyze-engine.ts` | `featureKeywords = [feature, feature.replace(/-/g, ' ')]`（2 个词） | `expandSynonyms(extractNormalizedKeywords(feature))`（自动扩展中英文） | 功能名 "user-auth" 匹配不到 "登录认证" |
+| `prompt-builder.ts` | `searchQuery.toLowerCase().split(/\s+/)` | `expandSynonyms(extractNormalizedKeywords(searchQuery))` | "登录" 搜索匹配不到 `authService` |
+| `code-scanner.ts` | `SEMANTIC_MAP` 扩展（~20 词） | `SEMANTIC_MAP` + `SYNONYM_GROUPS` 双扩展 | 既有技术关联词 + 新增中英文同义词 |
+| `verify-engine.ts` | 原始关键词直接匹配 | 同义词扩展后再匹配 | "用户登录" 检测不到 `authenticate()` |
+| `split.ts` | 本地定义（64 行） | 从公共模块导入 | 去重，维护统一 |
+
+**与既有 `SEMANTIC_MAP` 的关系**：
+- `SEMANTIC_MAP` 保留，因为它包含一些 `SYNONYM_GROUPS` 没有的技术关联词（如 `jwt`, `oauth`, `redis`, `kafka`）
+- `expandKeywords()` 先执行 `SEMANTIC_MAP` 扩展，再补充 `SYNONYM_GROUPS` 扩展
+- 两套表互补，不冲突
+
+### 增量合并设计
+
+**问题**：`writePerPlatform` 和 `writePerFeature` 使用 `writeFile` 直接覆盖，多次分析同一功能时内容丢失。
+
+**方案**：按 Markdown 标题维度合并，而非全文替换。
+
+**算法** (`mergeDocumentContent`)：
+1. 将旧文档和新文档分别解析为 `Map<标题, {level, body}>`
+2. 保留旧文档的头部（frontmatter、标题等）
+3. 按旧文档的章节顺序输出：
+   - 旧章节存在且新文档有同名章节 → 用新内容替换
+   - 旧章节存在但新文档没有 → 保留旧内容
+4. 新文档中有但旧文档中没有的章节 → 追加到最后
+
+**边界处理**：
+- 旧文件不存在 → 直接写入新内容
+- 旧文件为空 → 直接写入新内容
+- 读取或合并失败 → 回退到直接写入
+
+### 可选阅读清单设计
+
+**问题**：`findRelevantCode` 返回 15 个匹配文件，但受 `sourceMaxFiles`（有结构化卡片时 8 个）和 `sourceMaxBytes`（60KB）限制，只能读取一部分。
+
+**方案**：把未读取的匹配文件整理为清单，让宿主 AI 按需深入读取。
+
+**实现**：
+- `unreadMatches = sortedMatches.slice(sourceMaxFiles)`
+- 每个条目包含：文件绝对路径、匹配原因（@spec 注释/知识图谱/业务模块/关键词）、匹配得分
+- 最多列出 15 个，超出显示 "还有 N 个未列出"
+- 作为 `extraSpecs` 的一部分拼入 Prompt，AI 看到明确的 "可按需读取" 提示
+
+**适用场景**：
+- 大型功能涉及 15+ 个关联文件时，CLI 预读 8 个核心文件，清单给 AI 扩展阅读的指引
+- 宿主 AI（Cursor/Claude Code/Windsurf）支持直接打开文件路径查看内容
+
+### 外链资源清单设计
+
+**问题**：需求文档中的 `![设计稿](https://figma.com/xxx)` 或 `[原型](https://...)`，CLI 无法下载，之前只插入一个 HTML 注释，AI 意识不到要去读。
+
+**方案**：在 `processMarkdownContent` 处理后的内容末尾，统一附加外链资源清单。
+
+**两个收集点**：
+1. `expandMarkdownLinks`：收集 `[text](url)` 外链 → 📎 **外链资源清单**
+2. `inlineMarkdownImages`：收集 `![alt](url)` 外链图片 → 🖼️ **外链图片清单**
+
+**关键修复**：
+- 原 `extractMarkdownLinks` 在正则匹配时就 `continue` 跳过了所有 http/https 链接，导致 `expandMarkdownLinks` 中的收集逻辑永远执行不到
+- 修复后只过滤 `mailto:`/`javascript:`/`#锚点`，保留 http/https/ftp 外链
+- 使用 `Map<string, string>` 按 URL 去重，避免递归展开时重复收集
+
+**覆盖范围**：
+- Figma 设计稿、Axure 原型、外部 API 文档、参考页面 → 📎 外链资源清单
+- 设计稿截图、流程图、架构图（外链托管） → 🖼️ 外链图片清单
+
+### 三层匹配设计
+
+**问题**：split 阶段的文档关联使用字符串包含匹配（`'login'.includes('user-auth')` 为 false），任务名和文档目录名不一致时完全失联。
+
+**方案**：三层匹配替代单层字符串匹配。
+
+| 层级 | 匹配方式 | 得分 | 说明 |
+|------|---------|------|------|
+| L1 精确 | `docPath.includes(taskName)` 或反向 | +100 | 完全包含即命中 |
+| L2 关键词 | `expandSynonyms` 后的关键词集合交集 | +10/对 | 解决 "登录" ↔ "auth" |
+| L3 标题 | 文档 H1/H2/H3 标题与任务名的关键词交集 | +8/对 | 文档内章节也参与匹配 |
+| 平台加分 | 文档路径包含平台名 | +20 | 区分前后端文档 |
+
+**阈值**：总分 >= 20 视为匹配成功。
+
+**应用点**：
+- `extractTaskTechContent`：找任务对应端的 TECH.md
+- `extractTaskDevGuideContent`：找任务对应端的 DEV_GUIDE.md
+- 平台推断：从 specContents 推断任务涉及哪些端

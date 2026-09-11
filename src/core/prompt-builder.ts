@@ -809,6 +809,27 @@ const RULES_DESC: Record<string, string> = {
   'POST_COMPLETION.md': '任务完成检查清单',
 };
 
+/** 技能文件描述 */
+const SKILLS_DESC: Record<string, string> = {
+  'caching.md': '缓存策略与 Redis 最佳实践',
+  'deployment.md': '部署与发布流程',
+  'db-migration.md': '数据库迁移规范',
+  'logging.md': '日志与监控',
+};
+
+/**
+ * 从 Markdown frontmatter 中提取 priority（数值越高越优先）
+ * v8.3.134+: 用于 RULES/ 自动注入排序
+ */
+function extractPriority(content: string): number {
+  const match = content.match(/^---\s*\n([\s\S]*?)\n---/);
+  if (match) {
+    const priorityMatch = match[1].match(/priority:\s*(\d+)/);
+    if (priorityMatch) return parseInt(priorityMatch[1], 10);
+  }
+  return 50; // 默认优先级
+}
+
 /**
  * 从 Markdown 文件中提取 ## 标题行
  */
@@ -1018,6 +1039,16 @@ async function buildGlobalTOC(globalDir: string): Promise<TOCEntry[]> {
     }
   }
 
+  // 7. SKILLS/ 技术能力库（v8.3.134+ 四层架构：TOC 可见性）
+  const skillsDir = join(speccoreDir, 'SKILLS');
+  if (await pathExists(skillsDir)) {
+    const files = await readdir(skillsDir);
+    for (const f of files.filter(f => f.endsWith('.md') && !isTimestampBackup(f))) {
+      const content = await readFile(join(skillsDir, f), 'utf-8');
+      toc.push(buildTOCEntry(`SKILLS:${f}`, SKILLS_DESC[f] || f.replace('.md', ''), content));
+    }
+  }
+
   return toc;
 }
 
@@ -1056,10 +1087,10 @@ export async function loadGlobalContext(
   }
 
   // 2. 新路径：GLOBAL/BUSINESS_RULES/ 目录，按 platform 过滤加载
-  const rulesDir = join(globalDir, 'BUSINESS_RULES');
-  if (await pathExists(rulesDir)) {
+  const businessRulesDir = join(globalDir, 'BUSINESS_RULES');
+  if (await pathExists(businessRulesDir)) {
     try {
-      const files = (await readdir(rulesDir))
+      const files = (await readdir(businessRulesDir))
         .filter(f => f.endsWith('.md'))
         .sort();
       for (const file of files) {
@@ -1070,8 +1101,34 @@ export async function loadGlobalContext(
           const isPlatformMatch = base === platform || base.endsWith(`-${platform}`) || base.includes(`-${platform}-`);
           if (!isCommon && !isPlatformMatch) continue;
         }
-        const content = await readFile(join(rulesDir, file), 'utf-8');
+        const content = await readFile(join(businessRulesDir, file), 'utf-8');
         ctx.keyFileSummaries.push({ path: `BUSINESS_RULES/${file}`, content: content.slice(0, 4000) });
+      }
+    } catch { /* 忽略 */ }
+  }
+
+  // 3. v8.3.134+: RULES/ 规则文件自动注入（四层架构第二层）
+  // 按 frontmatter priority 降序排序，优先加载高优先级规则；总量上限 8000 字符
+  const rulesDir = join(cwd, '.speccore', 'RULES');
+  if (await pathExists(rulesDir)) {
+    try {
+      const files = (await readdir(rulesDir))
+        .filter(f => f.endsWith('.md') && !isTimestampBackup(f));
+      const withPriority = await Promise.all(
+        files.map(async f => {
+          const content = await readFile(join(rulesDir, f), 'utf-8');
+          return { file: f, content, priority: extractPriority(content) };
+        })
+      );
+      withPriority.sort((a, b) => b.priority - a.priority);
+      let injectedChars = 0;
+      const MAX_RULES_CHARS = 8000;
+      const MAX_PER_FILE = 2000;
+      for (const { file, content } of withPriority) {
+        if (injectedChars >= MAX_RULES_CHARS) break;
+        const sliceLen = Math.min(MAX_PER_FILE, MAX_RULES_CHARS - injectedChars, content.length);
+        ctx.keyFileSummaries.push({ path: `RULES/${file}`, content: content.slice(0, sliceLen) });
+        injectedChars += sliceLen;
       }
     } catch { /* 忽略 */ }
   }
@@ -1162,6 +1219,7 @@ export function formatGlobalContext(ctx: GlobalContext, platform?: string): stri
       { label: '**📖 参考文档**', prefix: 'GLOBAL:', basePath: '.speccore/GLOBAL/' },
       { label: '**🧩 可复用模式与模板**', prefix: 'PATTERNS:', basePath: '.speccore/PATTERNS/' },
       { label: '**📏 规则与检查清单**', prefix: 'RULES:', basePath: '.speccore/RULES/' },
+      { label: '**🛠 技术能力库**', prefix: 'SKILLS:', basePath: '.speccore/SKILLS/' },
     ];
 
     for (const group of groups) {
@@ -1226,7 +1284,22 @@ export function formatGlobalContext(ctx: GlobalContext, platform?: string): stri
     lines.push('- GLOBAL/ 下的文件：路径相对于 `.speccore/GLOBAL/`');
     lines.push('- PATTERNS/ 下的文件：路径相对于 `.speccore/PATTERNS/`');
     lines.push('- RULES/ 下的文件：路径相对于 `.speccore/RULES/`');
+    lines.push('- SKILLS/ 下的文件：路径相对于 `.speccore/SKILLS/`');
     lines.push('- 建议根据当前任务需要选择性阅读，不必全部读取');
+    lines.push('');
+
+    // v8.3.134+: 四层架构 — 阅读清单指引
+    lines.push('### 📋 阅读清单（何时该读什么）');
+    lines.push('| 场景 | 推荐读取 | 原因 |');
+    lines.push('|:---|:---|:---|');
+    lines.push('| **编写代码前** | `RULES/` 中标记 `appliesTo` 匹配当前技术栈的规则 | 确保代码符合项目规范 |');
+    lines.push('| **设计 API/数据库** | `RULES/api-design.md` + `RULES/database.md` | 统一接口格式和表设计 |');
+    lines.push('| **实现复杂功能** | `SKILLS/` 中 tags 匹配当前场景的技能文档 | 参考最佳实践，避免踩坑 |');
+    lines.push('| **全局分析阶段** | `PATTERNS/` 中通用分类 + 当前端专属模式 | 复用已沉淀的架构模式 |');
+    lines.push('| **排查性能问题** | `SKILLS/caching.md` + `PATTERNS/performance/` | 缓存策略和性能优化模式 |');
+    lines.push('| **代码审查前** | `RULES/CODE_REVIEW.md` | 对照检查清单逐项核对 |');
+    lines.push('');
+    lines.push('> **四层覆盖策略**：TOC 目录（知道有）→ 自动注入（关键规则必达）→ RAG 检索（语义召回）→ 阅读清单（按需查阅）');
     lines.push('');
   }
 
@@ -2523,7 +2596,9 @@ export function outputNeedsInfo(req: Omit<NeedsInfoRequest, 'marker'>): void {
 // Markdown 链接自动展开 + 图片提取（v8.3.93+）
 // ═══════════════════════════════════════════════════════════
 
-/** 提取 Markdown 文本链接 [text](path)，排除图片链接 */
+/** 提取 Markdown 文本链接 [text](path)，排除图片链接
+ * v8.3.125+: 不再跳过外部链接 — 由调用方决定如何处理（收集到外链清单）
+ */
 function extractMarkdownLinks(content: string): Array<{ text: string; path: string }> {
   const links: Array<{ text: string; path: string }> = [];
   const regex = /\[([^\]]+)\]\(([^)]+)\)/g;
@@ -2533,8 +2608,9 @@ function extractMarkdownLinks(content: string): Array<{ text: string; path: stri
     const path = match[2].trim();
     // 跳过图片链接 ![alt](path) — 检查前一个字符
     if (match.index > 0 && content.charAt(match.index - 1) === '!') continue;
-    // 跳过外部链接、锚点、协议链接
-    if (/^(https?:|mailto:|ftp:|#|javascript:)/i.test(path)) continue;
+    // 跳过锚点和危险协议（保留 http/https/ftp 外链，由调用方处理）
+    if (/^(mailto:|javascript:)/i.test(path)) continue;
+    if (path.startsWith('#')) continue;
     links.push({ text, path });
   }
   return links;
@@ -2577,12 +2653,12 @@ async function expandMarkdownLinks(
   if (links.length === 0) return content;
 
   const expansions: string[] = [];
-  // v8.3.125+: 收集外链资源，供宿主 AI 按需读取
-  const externalLinks: { text: string; path: string }[] = [];
+  // v8.3.125+: 收集外链资源，供宿主 AI 按需读取（用 Map 按 URL 去重）
+  const externalLinks = new Map<string, string>(); // path -> text
 
   for (const link of links) {
     if (isExternalLink(link.path)) {
-      externalLinks.push(link);
+      externalLinks.set(link.path, link.text);
       continue;
     }
     const resolved = resolveLinkPath(baseDir, link.path);
@@ -2613,11 +2689,11 @@ async function expandMarkdownLinks(
   let expanded = content + expansions.join('');
 
   // v8.3.125+: 在内容末尾附加外链资源清单，提示宿主 AI 按需读取
-  if (externalLinks.length > 0) {
+  if (externalLinks.size > 0) {
     const externalSection = [
       '\n\n---',
       '📎 **外链资源清单**（CLI 无法直接获取内容，宿主 AI 可按需访问）：',
-      ...externalLinks.map(l => `- [${l.text || '链接'}](${l.path})`),
+      ...Array.from(externalLinks.entries()).map(([path, text]) => `- [${text || '链接'}](${path})`),
     ].join('\n');
     expanded += externalSection;
   }
@@ -2643,12 +2719,12 @@ async function inlineMarkdownImages(
   const inlines: string[] = [];
   let visionCallCount = 0;
   const maxVisionCalls = visionConfig?.maxImagesPerPrompt ?? 10;
-  // v8.3.125+: 收集外链图片，供宿主 AI 按需查看
-  const externalImages: { alt: string; path: string }[] = [];
+  // v8.3.125+: 收集外链图片，供宿主 AI 按需查看（用 Map 按 URL 去重）
+  const externalImages = new Map<string, string>(); // path -> alt
 
   for (const img of images) {
     if (isExternalLink(img.path)) {
-      externalImages.push(img);
+      externalImages.set(img.path, img.alt);
       inlines.push(`\n<!-- 外链图片: ${img.alt || '无描述'} | URL: ${img.path} -->`);
       continue;
     }
@@ -2696,11 +2772,11 @@ async function inlineMarkdownImages(
   }
 
   // v8.3.125+: 在内容末尾附加外链图片清单，提示宿主 AI 按需查看
-  if (externalImages.length > 0) {
+  if (externalImages.size > 0) {
     inlines.push([
       '\n\n---',
       '🖼️ **外链图片清单**（CLI 无法直接获取内容，宿主 AI 可按需查看）：',
-      ...externalImages.map(img => `- ${img.alt || '无描述'}: ${img.path}`),
+      ...Array.from(externalImages.entries()).map(([path, alt]) => `- ${alt || '无描述'}: ${path}`),
     ].join('\n'));
   }
 

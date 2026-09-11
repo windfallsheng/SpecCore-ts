@@ -1032,49 +1032,120 @@ async function scanSourceFiles(cwd: string): Promise<{ entities: GraphEntity[]; 
 }
 
 // ═══════════════════════════════════════════════
-// 全局层扫描（.speccore/GLOBAL/）
+// 全局层扫描（.speccore/GLOBAL/ + RULES/ + SKILLS/ + PATTERNS/）
+// v8.3.135+: 四层架构 — 知识图谱覆盖全部规范数据库
 // ═══════════════════════════════════════════════
 
 async function scanGlobalDocs(cwd: string): Promise<{ entities: GraphEntity[]; relations: GraphRelation[] }> {
   const entities: GraphEntity[] = [];
   const relations: GraphRelation[] = [];
+
+  // 1. 扫描 GLOBAL/ 目录
   const globalDir = join(cwd, '.speccore', 'GLOBAL');
+  if (await pathExists(globalDir)) {
+    const scanDir = async (dir: string, prefix: string) => {
+      const items = await readdir(dir, { withFileTypes: true });
+      for (const item of items) {
+        if (item.name.startsWith('.') || isTimestampBackup(item.name)) continue;
+        const fullPath = join(dir, item.name);
+        const relPath = `${prefix}${item.name}`;
 
-  if (!(await pathExists(globalDir))) return { entities, relations };
+        if (item.isDirectory()) {
+          if (item.name === '_template' || item.name === 'RULES') continue;
+          await scanDir(fullPath, `${relPath}/`);
+        } else if (item.name.endsWith('.md') && item.name !== 'INDEX.md') {
+          const { hash, mtime } = await fileHash(fullPath);
+          const title = await extractTitle(fullPath);
+          const tags: string[] = ['global'];
+          if (prefix.includes('synthesis/')) tags.push('synthesis');
+          else if (prefix.includes('platforms/')) { tags.push('platform'); tags.push(prefix.split('platforms/')[1]?.split('/')[0] || ''); }
+          else if (prefix.includes('baselines/')) tags.push('baseline');
+          else if (prefix.includes('projects/')) tags.push('project');
 
-  const scanDir = async (dir: string, prefix: string) => {
-    const items = await readdir(dir, { withFileTypes: true });
-    for (const item of items) {
-      if (item.name.startsWith('.') || isTimestampBackup(item.name)) continue;
-      const fullPath = join(dir, item.name);
-      const relPath = `${prefix}${item.name}`;
-
-      if (item.isDirectory()) {
-        if (item.name === '_template' || item.name === 'RULES') continue;
-        await scanDir(fullPath, `${relPath}/`);
-      } else if (item.name.endsWith('.md') && item.name !== 'INDEX.md') {
-        const { hash, mtime } = await fileHash(fullPath);
-        const title = await extractTitle(fullPath);
-        const tags: string[] = ['global'];
-        if (prefix.includes('synthesis/')) tags.push('synthesis');
-        else if (prefix.includes('platforms/')) { tags.push('platform'); tags.push(prefix.split('platforms/')[1]?.split('/')[0] || ''); }
-        else if (prefix.includes('baselines/')) tags.push('baseline');
-        else if (prefix.includes('projects/')) tags.push('project');
-
-        entities.push({
-          id: `GLOBAL:${relPath.replace(/\.md$/, '').replace(/\//g, '-')}`,
-          type: 'global-doc',
-          title: title || item.name.replace('.md', ''),
-          file: `.speccore/GLOBAL/${relPath}`,
-          hash,
-          mtime,
-          tags,
-        });
+          entities.push({
+            id: `GLOBAL:${relPath.replace(/\.md$/, '').replace(/\//g, '-')}`,
+            type: 'global-doc',
+            title: title || item.name.replace('.md', ''),
+            file: `.speccore/GLOBAL/${relPath}`,
+            hash,
+            mtime,
+            tags,
+          });
+        }
       }
-    }
-  };
+    };
+    await scanDir(globalDir, '');
+  }
 
-  await scanDir(globalDir, '');
+  // 2. v8.3.135+: 扫描 RULES/ 规范文件
+  const rulesDir = join(cwd, '.speccore', 'RULES');
+  if (await pathExists(rulesDir)) {
+    const files = await readdir(rulesDir);
+    for (const f of files.filter(f => f.endsWith('.md') && !isTimestampBackup(f))) {
+      const fullPath = join(rulesDir, f);
+      const { hash, mtime } = await fileHash(fullPath);
+      const title = await extractTitle(fullPath);
+      entities.push({
+        id: `RULES:${f.replace(/\.md$/, '')}`,
+        type: 'global-doc',
+        title: title || f.replace('.md', ''),
+        file: `.speccore/RULES/${f}`,
+        hash,
+        mtime,
+        tags: ['rules', 'global'],
+      });
+    }
+  }
+
+  // 3. v8.3.135+: 扫描 SKILLS/ 技术能力库
+  const skillsDir = join(cwd, '.speccore', 'SKILLS');
+  if (await pathExists(skillsDir)) {
+    const files = await readdir(skillsDir);
+    for (const f of files.filter(f => f.endsWith('.md') && !isTimestampBackup(f))) {
+      const fullPath = join(skillsDir, f);
+      const { hash, mtime } = await fileHash(fullPath);
+      const title = await extractTitle(fullPath);
+      entities.push({
+        id: `SKILLS:${f.replace(/\.md$/, '')}`,
+        type: 'global-doc',
+        title: title || f.replace('.md', ''),
+        file: `.speccore/SKILLS/${f}`,
+        hash,
+        mtime,
+        tags: ['skills', 'global'],
+      });
+    }
+  }
+
+  // 4. v8.3.135+: 扫描 PATTERNS/ 可复用模式
+  const patternsDir = join(cwd, '.speccore', 'PATTERNS');
+  if (await pathExists(patternsDir)) {
+    const scanPatterns = async (dir: string, prefix: string) => {
+      const items = await readdir(dir, { withFileTypes: true });
+      for (const item of items) {
+        if (item.name.startsWith('.') || isTimestampBackup(item.name)) continue;
+        const fullPath = join(dir, item.name);
+        if (item.isDirectory()) {
+          await scanPatterns(fullPath, `${prefix}${item.name}/`);
+        } else if (item.name.endsWith('.md')) {
+          const { hash, mtime } = await fileHash(fullPath);
+          const title = await extractTitle(fullPath);
+          const relPath = `${prefix}${item.name}`;
+          entities.push({
+            id: `PATTERNS:${relPath.replace(/\.md$/, '').replace(/\//g, '-')}`,
+            type: 'global-doc',
+            title: title || item.name.replace('.md', ''),
+            file: `.speccore/PATTERNS/${relPath}`,
+            hash,
+            mtime,
+            tags: ['patterns', 'global'],
+          });
+        }
+      }
+    };
+    await scanPatterns(patternsDir, '');
+  }
+
   return { entities, relations };
 }
 

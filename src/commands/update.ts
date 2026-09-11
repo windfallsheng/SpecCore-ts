@@ -441,6 +441,23 @@ export async function updateCommand(options: { force?: boolean; tool?: string; y
   await initSkillsDir(projectRoot);
   await initHooksDir(projectRoot);
 
+  // v8.3.137+: update 时补充创建 PATTERNS 模板目录（之前只在 init 中创建）
+  await ensureDir(join(speccoreDir, 'PATTERNS'));
+  await ensureDir(join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'crud'));
+  await ensureDir(join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'auth'));
+  await ensureDir(join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'export'));
+  await ensureDir(join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'report'));
+  await ensureDir(join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'specs'));
+  // 同步更新内置 spec 模板（有差异则备份旧文件）
+  const specsSrc = join(__dirname, '..', '..', '.speccore', 'PATTERNS', 'TEMPLATES', 'specs');
+  const specsDest = join(speccoreDir, 'PATTERNS', 'TEMPLATES', 'specs');
+  if (await pathExists(specsSrc)) {
+    await safeCopyDirWithBackup(specsSrc, specsDest);
+  }
+
+  // v8.3.137+: update 时确保 GLOBAL 目录结构完整
+  await ensureDir(join(speccoreDir, 'GLOBAL', 'PROJECTS', '_template'));
+
   // v8.3.41+: update 时补充创建用户自定义模板目录（之前只在 init 中创建）
   const templatesDir = join(projectRoot, '.speccore', 'templates');
   await ensureDir(join(templatesDir, 'global'));
@@ -455,6 +472,13 @@ export async function updateCommand(options: { force?: boolean; tool?: string; y
   // v6.98.0+: 同步 AGENTS.md — 将 .speccore/ 规范数据库投影到 AGENTS.md
   // v8.3.46+: force 模式 — 重新生成手动区，不保留旧内容（用户自定义内容需手动备份）
   await syncAgentsMd(projectRoot, true);
+
+  // v8.3.137+: 提示用户刷新 RAG 索引（四层架构扩展后索引范围变大）
+  if (!isSameVersion) {
+    logger.info('');
+    logger.info('  💡 升级提示：建议运行以下命令刷新全局索引，以确保 RULES/SKILLS/PATTERNS 被纳入检索范围');
+    logger.info('     speccore refresh  或  speccore rag-index --scope global');
+  }
 
   // v8.3.62+: 检查全局 CLI 是否需要更新（与 init 保持一致）
   try {

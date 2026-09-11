@@ -104,14 +104,21 @@ export async function refreshCommand(options: RefreshOptions): Promise<void> {
         }
       }
 
-      // 2.3 刷新全局索引（v8.3.63+ 修复：从 GLOBAL/020-specs 改为 GLOBAL/ 根目录）
+      // 2.3 刷新全局索引（v8.3.134+ 四层架构：RAG 全覆盖 RULES/SKILLS/PATTERNS）
       const globalFileName = 'rag-index-global.json';
       const beforeGlobal = await loadRagIndex(cwd, globalFileName);
       const globalDir = join(cwd, '.speccore', 'GLOBAL');
       const fallbackDir = join(cwd, '.speccore');
       const targetDir = await pathExists(globalDir) ? globalDir : fallbackDir;
       if (await pathExists(targetDir)) {
-        await indexDirectoryDocuments(cwd, targetDir, 'GLOBAL_all_all_aggregated', globalFileName);
+        const dirs: string[] = [targetDir];
+        const rulesDir = join(cwd, '.speccore', 'RULES');
+        const skillsDir = join(cwd, '.speccore', 'SKILLS');
+        const patternsDir = join(cwd, '.speccore', 'PATTERNS');
+        if (await pathExists(rulesDir)) dirs.push(rulesDir);
+        if (await pathExists(skillsDir)) dirs.push(skillsDir);
+        if (await pathExists(patternsDir)) dirs.push(patternsDir);
+        await indexDirectoryDocuments(cwd, dirs, 'GLOBAL_all_all_aggregated', globalFileName);
         const afterGlobal = await loadRagIndex(cwd, globalFileName);
         if (!beforeGlobal || beforeGlobal.updatedAt !== afterGlobal?.updatedAt) {
           refreshedFiles.push('global');
