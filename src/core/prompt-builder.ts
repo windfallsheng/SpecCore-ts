@@ -12,7 +12,7 @@ import { isTimestampBackup, findProjectRoot } from '../utils/task-utils';
 import { logger } from '../utils/logger';
 import { loadKnowledgeGraph, loadFreshKnowledgeGraph, getTaskContext, getFullTaskContext, isGraphStale, refreshKnowledgeGraph, KnowledgeGraph } from './knowledge-graph';
 import { buildCompactContext } from './context-builder';
-import { parseProjectInfo, GLOBAL_SPECS_DIR, parseFeatureList } from './spec-paths';
+import { parseProjectInfo, GLOBAL_SPECS_DIR, parseFeatureList, parsePlatformList } from './spec-paths';
 import { getIterationDir } from './context';
 import {
   loadRagIndex, isRagIndexStale, retrieveRelevantChunks,
@@ -876,14 +876,18 @@ function extractSummary(content: string): string {
 
 /**
  * 从路径和内容推断涉及的端
+ * v8.3.144+: 使用项目实际端名（工程标识），不再硬编码 backend/frontend 等
  */
-function extractPlatforms(path: string, content: string): string[] {
+function extractPlatforms(path: string, content: string, projectPlatforms?: string[]): string[] {
   const platforms = new Set<string>();
-  const knownPlatforms = ['backend', 'admin', 'h5', 'miniapp', 'app', 'web', 'ios', 'android'];
+  // 优先使用项目 CONSTITUTION.md 中定义的工程标识，fallback 到常见端名
+  const knownPlatforms = projectPlatforms?.length
+    ? projectPlatforms
+    : ['backend', 'admin', 'h5', 'miniapp', 'app', 'web', 'ios', 'android'];
 
   // 从路径推断
   for (const p of knownPlatforms) {
-    if (path.toLowerCase().includes(p)) {
+    if (path.toLowerCase().includes(p.toLowerCase())) {
       platforms.add(p);
     }
   }
@@ -896,7 +900,7 @@ function extractPlatforms(path: string, content: string): string[] {
   // 从内容中扫描（前 2000 字）
   const head = content.slice(0, 2000).toLowerCase();
   for (const p of knownPlatforms) {
-    if (head.includes(p)) {
+    if (head.includes(p.toLowerCase())) {
       platforms.add(p);
     }
   }
@@ -935,15 +939,16 @@ function extractTags(headings: string[]): string[] {
 
 /**
  * 构建单个 TOC 条目（含摘要/端/行数/标签）
+ * v8.3.144+: 异步化，支持传入项目实际端名（工程标识）
  */
-function buildTOCEntry(path: string, description: string, content: string, maxSections?: number): TOCEntry {
+async function buildTOCEntry(path: string, description: string, content: string, maxSections?: number, projectPlatforms?: string[]): Promise<TOCEntry> {
   const sections = extractHeadings(content);
   return {
     path,
     description,
     sections: maxSections ? sections.slice(0, maxSections) : sections,
     summary: extractSummary(content) || undefined,
-    platforms: extractPlatforms(path, content) || undefined,
+    platforms: extractPlatforms(path, content, projectPlatforms) || undefined,
     lineCount: content.split(/\r?\n/).length,
     tags: extractTags(sections) || undefined,
   };
@@ -957,13 +962,16 @@ async function buildGlobalTOC(globalDir: string): Promise<TOCEntry[]> {
   const toc: TOCEntry[] = [];
   const speccoreDir = join(globalDir, '..'); // .speccore/
 
+  // v8.3.144+: 读取项目实际端名（工程标识），不再硬编码 backend/frontend
+  const projectPlatforms = await parsePlatformList();
+
   // 1. synthesis/ 下的综合文档
   const synthesisDir = join(globalDir, 'synthesis');
   if (await pathExists(synthesisDir)) {
     const files = await readdir(synthesisDir);
     for (const f of files.filter(f => f.endsWith('.md') && !isTimestampBackup(f))) {
       const content = await readFile(join(synthesisDir, f), 'utf-8');
-      toc.push(buildTOCEntry(`synthesis/${f}`, FILE_DESC[f] || f.replace('.md', ''), content));
+      toc.push(await buildTOCEntry(`synthesis/${f}`, FILE_DESC[f] || f.replace('.md', ''), content, undefined, projectPlatforms));
     }
   }
 
@@ -977,7 +985,7 @@ async function buildGlobalTOC(globalDir: string): Promise<TOCEntry[]> {
       const subFiles = await readdir(join(platformsDir, platformName));
       for (const f of subFiles.filter(f => f.endsWith('.md') && !isTimestampBackup(f))) {
         const content = await readFile(join(platformsDir, platformName, f), 'utf-8');
-        toc.push(buildTOCEntry(`platforms/${platformName}/${f}`, `${platformName} 端 — ${f.replace('.md', '')}`, content));
+        toc.push(await buildTOCEntry(`platforms/${platformName}/${f}`, `${platformName} 端 — ${f.replace('.md', '')}`, content, undefined, projectPlatforms));
       }
     }
   }
@@ -992,7 +1000,7 @@ async function buildGlobalTOC(globalDir: string): Promise<TOCEntry[]> {
       const subFiles = await readdir(join(projectsDir, projectName));
       for (const f of subFiles.filter(f => f.endsWith('.md') && !isTimestampBackup(f))) {
         const content = await readFile(join(projectsDir, projectName, f), 'utf-8');
-        toc.push(buildTOCEntry(`PROJECTS/${projectName}/${f}`, `${projectName} — ${f.replace('.md', '')}`, content));
+        toc.push(await buildTOCEntry(`PROJECTS/${projectName}/${f}`, `${projectName} — ${f.replace('.md', '')}`, content, undefined, projectPlatforms));
       }
     }
   }
@@ -1005,7 +1013,7 @@ async function buildGlobalTOC(globalDir: string): Promise<TOCEntry[]> {
     return true;
   })) {
     const content = await readFile(join(globalDir, f), 'utf-8');
-    toc.push(buildTOCEntry(`GLOBAL:${f}`, FILE_DESC[f] || f.replace('.md', ''), content));
+    toc.push(await buildTOCEntry(`GLOBAL:${f}`, FILE_DESC[f] || f.replace('.md', ''), content, undefined, projectPlatforms));
   }
 
   // 5. PATTERNS/ 可复用模式（含 TEMPLATES/ 写作模板）
@@ -1022,7 +1030,7 @@ async function buildGlobalTOC(globalDir: string): Promise<TOCEntry[]> {
           const label = isTemplate
             ? entry.name.replace('-template.md', '').toUpperCase() + ' 写作模板'
             : (prefix ? prefix.slice(0, -1).replace(/\//g, ' › ') + ' › ' : '') + entry.name.replace('.md', '');
-          toc.push(buildTOCEntry(`PATTERNS:${prefix}${entry.name}`, label, content, isTemplate ? 6 : 4));
+          toc.push(await buildTOCEntry(`PATTERNS:${prefix}${entry.name}`, label, content, isTemplate ? 6 : 4, projectPlatforms));
         }
       }
     };
@@ -1035,7 +1043,7 @@ async function buildGlobalTOC(globalDir: string): Promise<TOCEntry[]> {
     const files = await readdir(rulesDir);
     for (const f of files.filter(f => f.endsWith('.md') && !isTimestampBackup(f))) {
       const content = await readFile(join(rulesDir, f), 'utf-8');
-      toc.push(buildTOCEntry(`RULES:${f}`, RULES_DESC[f] || f.replace('.md', ''), content));
+      toc.push(await buildTOCEntry(`RULES:${f}`, RULES_DESC[f] || f.replace('.md', ''), content, undefined, projectPlatforms));
     }
   }
 
@@ -1045,7 +1053,7 @@ async function buildGlobalTOC(globalDir: string): Promise<TOCEntry[]> {
     const files = await readdir(skillsDir);
     for (const f of files.filter(f => f.endsWith('.md') && !isTimestampBackup(f))) {
       const content = await readFile(join(skillsDir, f), 'utf-8');
-      toc.push(buildTOCEntry(`SKILLS:${f}`, SKILLS_DESC[f] || f.replace('.md', ''), content));
+      toc.push(await buildTOCEntry(`SKILLS:${f}`, SKILLS_DESC[f] || f.replace('.md', ''), content, undefined, projectPlatforms));
     }
   }
 

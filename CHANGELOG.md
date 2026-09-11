@@ -1,3 +1,15 @@
+## v8.3.145 (2026-09-11) — prompt-builder 使用项目实际端名（工程标识）
+
+### 改进
+
+**`extractPlatforms` 使用项目实际端名** (`src/core/prompt-builder.ts`):
+- `extractPlatforms` 接收可选的 `projectPlatforms` 参数，优先使用 CONSTITUTION.md「端列表」中定义的工程标识
+- `buildTOCEntry` 异步化，支持传入项目端名列表
+- `buildGlobalTOC` 开头调用 `parsePlatformList()` 读取项目实际端名，传递给所有 TOC 条目构建
+- 未配置端列表时 fallback 到硬编码的常见端名，保持兼容性
+
+---
+
 ## v8.3.144 (2026-09-11) — 移除 review/ask 中的硬编码端名 backend/frontend
 
 ### 改进
