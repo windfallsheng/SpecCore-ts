@@ -394,20 +394,37 @@ function handleGuide(input: string): AskResult | null {
   } else if (/审查|review|代码检查|code review|检查.*代码/i.test(input)) {
     matchedWorkflow = WORKFLOWS['code review'];
     workflowName = '代码审查流程';
-  } else if (/自审|review.*spec|review.*分析|检查.*(文档|spec|分析)|评审.*(tech|analysis)|文档.*质量|spec.*质量/i.test(input)) {
-    // v8.3.141+: Spec 自审意图
-    const iterationMatch = input.match(/(?:迭代|iteration)\s*[:=]?\s*([a-zA-Z0-9\-_]+)/i);
+  } else if (/自审|review.*spec|review.*分析|检查.*(文档|spec|分析|源码|需求)|评审.*(tech|analysis|文档|spec|需求|源码)|文档.*质量|spec.*质量|分析.*不好|分析.*有问题|重新.*(分析|澄清)|完善.*(文档|spec|分析)|任务.*(文档|spec)|全局.*(分析|文档)/i.test(input)) {
+    // v8.3.142+: Spec 自审意图（扩展：支持全局/迭代/任务层/源码/需求澄清等场景）
+
+    // 迭代名提取：支持 "Iteration-001"、"迭代 Iteration-001"、"iteration Iteration-001"
+    const iterationMatch = input.match(/(?:迭代|iteration)?\s*[:=]?\s*(Iteration-[a-zA-Z0-9\-_]+)/i)
+      || input.match(/(?:迭代|iteration)\s*[:=]?\s*([a-zA-Z0-9\-_]+)/i);
     const iteration = iterationMatch ? iterationMatch[1] : '';
-    const platformMatch = input.match(/(?:端|平台|platform)\s*[:=]?\s*([a-zA-Z0-9\-_]+)/i);
-    const platform = platformMatch ? platformMatch[1] : '';
-    const docMatch = input.match(/(?:doc|文档|文件)\s*[:=]?\s*([a-zA-Z0-9_\-\/\.]+)/i);
-    const doc = docMatch ? docMatch[1] : '';
+
+    // 多端提取：支持 "backend,frontend"、"backend 和 frontend"
+    const platformMatch = input.match(/(?:端|平台|platform)\s*[:=]?\s*([a-zA-Z0-9\-_,]+(?:[,，]\s*[a-zA-Z0-9\-_]+)*)/i);
+    const platform = platformMatch ? platformMatch[1].replace(/[，]/g, ',') : '';
+
+    // 文档路径提取：支持多种格式
+    const docMatch = input.match(/(?:doc|文档|文件|spec|TECH|ANALYSIS)\s*[:=]?\s*([a-zA-Z0-9_\-\/\.]+(?:\.md)?)/i)
+      || input.match(/(?:020-specs|030-tasks)\/[a-zA-Z0-9_\-\/\.]+/i);
+    const doc = docMatch ? docMatch[0] : '';
+
+    // 全局标志
+    const isGlobal = /全局|global|GLOBAL/.test(input);
+
+    // 任务ID提取
+    const taskMatch = input.match(/(?:任务|task)\s*[:=]?\s*(Task-[a-zA-Z0-9\-_]+)/i);
+    const taskId = taskMatch ? taskMatch[1] : '';
 
     let args = '';
     if (iteration) args += ` -I ${iteration}`;
+    if (isGlobal) args += ' --global';
     if (platform) args += ` --platform ${platform}`;
     if (doc) args += ` --doc ${doc}`;
-    if (!iteration && !platform && !doc) args += ' -I {iteration}';
+    if (taskId) args += ` --task ${taskId}`;
+    if (!iteration && !isGlobal && !platform && !doc && !taskId) args += ' -I {iteration}';
 
     return {
       mode: 'match',
