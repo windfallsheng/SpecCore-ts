@@ -452,7 +452,7 @@ async function loadExtraSpecs(
       // v8.3.93+: Markdown 链接自动展开 + 图片提取
       if (fullPath.endsWith('.md')) {
         content = await processMarkdownContent(content, fullPath, seenPaths, visionConfig, {
-          maxLinkDepth: 2, maxLinkChars: 1200, maxSvgChars: 1500,
+          maxLinkDepth: 3, maxLinkChars: 2000, maxSvgChars: 1500,
         });
       }
       // 跳过空文件或纯占位符文件
@@ -493,7 +493,7 @@ async function loadExtraSpecs(
       // v8.3.93+: Markdown 链接自动展开 + 图片提取
       if (fullPath.endsWith('.md')) {
         content = await processMarkdownContent(content, fullPath, seenPaths, visionConfig, {
-          maxLinkDepth: 2, maxLinkChars: 1200, maxSvgChars: 1500,
+          maxLinkDepth: 3, maxLinkChars: 2000, maxSvgChars: 1500,
         });
       }
       if (content.trim().length <= 50 || content.trim().match(/^#+\s*待填充|^<!--\s*AI-FILL\s*-->$/m)) {
@@ -677,7 +677,7 @@ async function loadAllTaskContext(
     // v8.3.93+: Markdown 链接自动展开 + 图片提取
     if (fullPath.endsWith('.md')) {
       content = await processMarkdownContent(content, fullPath, seen, visionConfig, {
-        maxLinkDepth: 2, maxLinkChars: 1500, maxSvgChars: 2000,
+        maxLinkDepth: 3, maxLinkChars: 2000, maxSvgChars: 2000,
       });
     }
     if (content.trim().length <= 50 || content.trim().match(/^#+\s*待填充|^<!--\s*AI-FILL\s*-->$/m)) return;
@@ -2638,12 +2638,15 @@ function resolveLinkPath(baseDir: string, linkPath: string): string {
   return join(baseDir, linkPath);
 }
 
-/** 递归展开 Markdown 链接指向的文件内容（防循环，限深度） */
+/** 递归展开 Markdown 链接指向的文件内容（防循环，限深度）
+ * v8.3.138+: HTML 文件独立阈值（8KB），避免原型文件被过度截断
+ * maxDepth 默认 3：支持文档 A → B → C 三级展开
+ */
 async function expandMarkdownLinks(
   content: string,
   baseDir: string,
   seenPaths: Set<string>,
-  maxDepth: number = 2,
+  maxDepth: number = 3,
   currentDepth: number = 0,
   maxChars: number = 1500,
 ): Promise<string> {
@@ -2671,14 +2674,37 @@ async function expandMarkdownLinks(
       if (!st.isFile()) continue;
 
       let linkContent = await readFile(resolved, 'utf-8');
+      if (linkContent.trim().length <= 30) continue;
+
+      // v8.3.138+: HTML/原型文件使用独立阈值（8KB），避免原型文件被过度截断。
+      // 超过阈值不截断 inline（避免结构残缺误导 AI），而是提示宿主 AI 直接打开查看。
+      const isHtml = resolved.endsWith('.html') || resolved.endsWith('.htm');
+      const htmlMaxChars = 8192; // 8KB，足够覆盖大多数 HTML 原型
+      const isLarge = isHtml ? linkContent.length > htmlMaxChars : linkContent.length > maxChars;
+
+      if (isHtml && isLarge) {
+        expansions.push(
+          `\n\n---\n📄 **HTML 原型文件**（内容过大未展开，宿主 AI 请务必直接打开查看）：\n` +
+          `- 文件: ${resolved}\n` +
+          `- 大小: ${(linkContent.length / 1024).toFixed(1)} KB\n` +
+          `- 描述: ${link.text || '无描述'}\n` +
+          `> ⚠️ **请打开此 HTML 文件查看完整内容**。此为页面原型/设计稿，与需求理解高度相关，CLI 因文件过大未完整展开，需要你直接打开文件查看。`
+        );
+        continue;
+      }
+
       // v8.3.122+: HTML 原型文件保留完整内容，不再提取纯文本
-      if (resolved.endsWith('.html') || resolved.endsWith('.htm')) {
+      if (isHtml) {
         // 保留原始 HTML（包含 CSS/JS/结构），让 AI 完整解析原型
       }
-      if (linkContent.trim().length <= 30) continue;
-      const isTruncated = linkContent.length > maxChars;
+
+      const isTruncated = isHtml ? linkContent.length > htmlMaxChars : linkContent.length > maxChars;
       if (isTruncated) {
-        linkContent = linkContent.slice(0, maxChars) + `\n\n> ... (已截断，完整内容请 Read: ${resolved})`;
+        linkContent = linkContent.slice(0, maxChars) +
+          `\n\n---\n📄 **文件内容已截断**（宿主 AI 请务必打开查看完整内容）：\n` +
+          `- 文件: ${resolved}\n` +
+          `- 大小: ${(await stat(resolved)).size} 字节\n` +
+          `> ⚠️ **请打开此文件查看完整内容**。此文件与需求理解高度相关，CLI 因长度限制已截断，需要你直接打开文件查看。`;
       }
       expansions.push(
         `\n\n<!-- 展开链接: ${link.path} -->\n**[链接展开] ${link.text}** (${link.path}):\n\n${linkContent}`
@@ -2692,7 +2718,7 @@ async function expandMarkdownLinks(
   if (externalLinks.size > 0) {
     const externalSection = [
       '\n\n---',
-      '📎 **外链资源清单**（CLI 无法直接获取内容，宿主 AI 可按需访问）：',
+      '📎 **外链资源清单**（CLI 无法直接获取内容，宿主 AI 请务必按需访问）：',
       ...Array.from(externalLinks.entries()).map(([path, text]) => `- [${text || '链接'}](${path})`),
     ].join('\n');
     expanded += externalSection;
@@ -2740,7 +2766,7 @@ async function inlineMarkdownImages(
           if (svgContent.length <= maxSvgChars) {
             inlines.push(`\n<!-- SVG 图片: ${img.path} -->\n${svgContent}`);
           } else {
-            inlines.push(`\n<!-- SVG 图片: ${img.path} (内容过长已省略，大小: ${svgContent.length} 字符) -->`);
+            inlines.push(`\n\n---\n🖼️ **SVG 图片文件**（内容过长已省略，宿主 AI 请务必直接打开查看）：\n- ${img.path}\n- 大小: ${svgContent.length} 字符（超出 ${maxSvgChars} 字符限制）\n> ⚠️ **请打开此 SVG 文件查看完整内容**。此 SVG 与需求理解高度相关，因内容过长被省略，需要你直接打开文件查看。`);
           }
         }
       } catch { /* ignore */ }
@@ -2755,15 +2781,15 @@ async function inlineMarkdownImages(
           );
         } else {
           // v8.3.138+: Vision 描述失败时，明确提示宿主 AI 打开文件查看
-          inlines.push(`\n\n---\n🖼️ **图片文件**（视觉模型描述失败，宿主 AI 请直接打开查看）：\n- ${img.alt || '无描述'}: ${resolved}\n> 请打开此图片文件查看内容，以辅助理解需求。`);
+          inlines.push(`\n\n---\n🖼️ **图片文件**（视觉模型描述失败，宿主 AI 请务必直接打开查看）：\n- ${img.alt || '无描述'}: ${resolved}\n> ⚠️ **请打开此图片文件查看内容**。此图片与需求理解高度相关，视觉模型未能成功描述，需要你直接打开文件查看。`);
         }
       } catch (e: any) {
         // v8.3.138+: 描述异常时，同样提示宿主 AI 打开查看
-        inlines.push(`\n\n---\n🖼️ **图片文件**（视觉模型异常，宿主 AI 请直接打开查看）：\n- ${img.alt || '无描述'}: ${resolved}\n> 请打开此图片文件查看内容，以辅助理解需求。`);
+        inlines.push(`\n\n---\n🖼️ **图片文件**（视觉模型异常，宿主 AI 请务必直接打开查看）：\n- ${img.alt || '无描述'}: ${resolved}\n> ⚠️ **请打开此图片文件查看内容**。此图片与需求理解高度相关，视觉模型异常未能描述，需要你直接打开文件查看。`);
       }
     } else {
       // v8.3.138+: 无视觉模型时，明确提示宿主 AI 打开图片查看（不要用 HTML 注释，AI 会忽略）
-      inlines.push(`\n\n---\n🖼️ **图片文件**（CLI 无法解析图片内容，宿主 AI 请直接打开查看）：`);
+      inlines.push(`\n\n---\n🖼️ **图片文件**（CLI 无法解析图片内容，宿主 AI 请务必直接打开查看）：`);
       inlines.push(`- ${img.alt || '无描述'}: ${resolved}`);
       try {
         if (await pathExists(resolved)) {
@@ -2771,7 +2797,7 @@ async function inlineMarkdownImages(
           inlines.push(`- 文件大小: ${(st.size / 1024).toFixed(1)} KB`);
         }
       } catch { /* ignore */ }
-      inlines.push(`> 请打开此图片文件查看内容，以辅助理解需求。`);
+      inlines.push(`> ⚠️ **请打开此图片文件查看内容**。此图片与需求理解高度相关，CLI 无法自动解析图片内容，需要你直接打开文件查看。`);
     }
   }
 
@@ -2779,7 +2805,7 @@ async function inlineMarkdownImages(
   if (externalImages.size > 0) {
     inlines.push([
       '\n\n---',
-      '🖼️ **外链图片清单**（CLI 无法直接获取内容，宿主 AI 可按需查看）：',
+      '🖼️ **外链图片清单**（CLI 无法直接获取内容，宿主 AI 请务必按需查看）：',
       ...Array.from(externalImages.entries()).map(([path, alt]) => `- ${alt || '无描述'}: ${path}`),
     ].join('\n'));
   }
