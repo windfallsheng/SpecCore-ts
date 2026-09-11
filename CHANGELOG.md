@@ -1,3 +1,56 @@
+## v8.3.158 (2026-09-11) — 骨架结构一致性修复 + 需求读取增强 + Prompt 完善
+
+### 修复（核心）
+
+**骨架生成与进度检测结构不一致** (`src/commands/analyze.ts`):
+- **根因**: 骨架生成使用 `computeFeatureBasedAnalyzeManifest`（按需求文档名组织，如 `020-specs/用户管理/admin/TECH.md`），但 `detectSkeletonProgress` 和补建逻辑仍使用旧结构的 `computeAnalyzeManifest`（端平铺结构，如 `020-specs/admin/TECH.md`）
+- **后果**: 逐文档推进模式检测的是不存在的旧结构文件路径，导致：
+  - `nextUnfilled` 指向错误路径（如 `admin/TECH.md` 而非 `用户管理/admin/TECH.md`）
+  - 逐文档模式被错误触发或完全失效
+  - AI 被迫一次生成所有文档（而非逐个生成），质量严重下降
+  - 交叉校验误判所有平台文档为"缺失"，尝试补建错误的旧结构骨架
+- **修复**:
+  - `detectSkeletonProgress` 根据 `features.length` 自动选择正确的 manifest 函数
+  - 补建骨架和重新检测进度也使用与当前模式一致的 manifest
+  - 功能模块模式下跳过旧结构的平台文档交叉校验
+
+### 修复（其他）
+
+**PRD 注入增加根目录 fallback** (`src/commands/analyze.ts`):
+- 当 `010-requirements/converted/` 为空时，增加对根目录 `.md` 文件的读取作为 fallback
+- 优先读取 converted/，converted/ 为空时才读取根目录
+
+**需求澄清检测增加根目录 fallback** (`src/commands/analyze.ts`):
+- 需求澄清质量检测在 converted/ 为空时，增加对根目录 `.md` 文件的检测
+
+**parseFeatureList 误识别 REQUIREMENT 为功能模块** (`src/core/spec-paths.ts`):
+- v8.3.81+ 从 `excludeNames` 中移除了 `REQUIREMENT`，导致 `REQUIREMENT.md` 被提取为功能模块名
+- **修复**: 将 `REQUIREMENT` 加回 `excludeNames`
+
+**migrate.ts 旧目录清理不彻底** (`src/commands/migrate.ts`):
+- 清理正则 `^Task-\d+$` 无法匹配带端名后缀的旧目录（如 `Task-175-23fxnb-admin-web`）
+- **修复**: 扩展正则为 `^Task-\d+(-[a-z0-9]+)*$`，支持清理带后缀的旧目录
+
+**中文模块名规范化** (`src/core/spec-paths.ts`):
+- 需求文档名为中文时（如 `用户管理.md`），直接提取为中文 feature 名，虽系统支持但空格/特殊字符可能引发问题
+- **修复**: 规范化处理——trim 前后空格、空格转 `-`、去掉非中文/英文/数字/`-` 字符
+
+**Prompt 中需求读取顺序遗漏根目录文档** (`src/commands/analyze.ts`):
+- `buildMultiDocPrompt` 和 `buildClarifyPrompt` 中告诉 AI 的需求读取顺序只有 `converted/`、`features/`、`sources/`，未包含 `010-requirements/` 根目录下的 `.md` 文件
+- **后果**: AI 不知道要读取根目录下的需求文档（如 `用户管理.md`、`订单管理.md`），导致分析基于空需求
+- **修复**: 在 prompt 的需求读取顺序中明确加入「根目录下的 *.md 文件」作为最高优先级
+
+**analyze --apply JSON fallback 静默失败** (`src/commands/analyze.ts`):
+- AI 输出的 JSON 格式不正确时（如换行未转义），`JSON.parse` 抛异常后静默 fallback 到单文件模式
+- **后果**: 用户看到「✅ ANALYSIS.md 已写入」以为成功，实际内容是损坏的 JSON 字符串
+- **修复**: catch 块中输出明确的警告信息，告知用户 JSON 解析失败及修复建议
+
+**测试基础设施修复** (`package.json`):
+- `test` 脚本从 `jest` 修正为 `vitest run`
+- 补充缺失的 `zod` devDependency（`task.schema.ts` 使用）
+
+---
+
 ## v8.3.147 (2026-09-11) — 文档更新 + about 页面 + 设计文档补充
 
 ### 改进

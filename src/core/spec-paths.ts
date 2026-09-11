@@ -134,8 +134,9 @@ export async function parseFeatureList(iterDir: string): Promise<string[]> {
   const features = new Set<string>();
   // 排除非功能文档（系统文件、汇总文件）
   // v8.3.81+: 移除 'REQUIREMENT'，用户命名自由，REQUIREMENT.md 也可作为功能模块名
+  // v8.3.158+: 加回 REQUIREMENT，避免 REQUIREMENT.md 被误识别为功能模块名
   const excludeNames = new Set([
-    'README', 'INDEX', 'CLARIFY_REPORT',
+    'README', 'INDEX', 'CLARIFY_REPORT', 'REQUIREMENT',
     'CHANGELOG', 'LICENSE', 'CONTRIBUTING', 'TEMPLATE',
   ]);
 
@@ -156,6 +157,8 @@ export async function parseFeatureList(iterDir: string): Promise<string[]> {
           if (!excludeNames.has(basename) && basename.length > 0) {
             // v8.3.35: 去掉 -clarified 后缀，提取原需求文档名作为功能模块名
             basename = basename.replace(/-clarified$/, '');
+            // v8.3.158+: 规范化 feature 名（空格转 -，去掉不安全字符，保留中文）
+            basename = basename.trim().replace(/\s+/g, '-').replace(/[^\w\u4e00-\u9fa5\-]/g, '');
             if (basename.length > 0) {
               features.add(basename);
             }

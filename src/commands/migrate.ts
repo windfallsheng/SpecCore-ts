@@ -32,7 +32,7 @@ export async function migrateTasks(projectRoot: string, iterationName: string, o
   const taskDirs: string[] = [];
   
   for (const entry of entries) {
-    if (entry.isDirectory() && entry.name.match(/^Task-\d+$/)) {
+    if (entry.isDirectory() && entry.name.match(/^Task-\d+(-[a-z0-9]+)*$/i)) {
       taskDirs.push(entry.name);
     }
   }
@@ -157,7 +157,7 @@ export async function migrateTasks(projectRoot: string, iterationName: string, o
   if (migrated > 0) {
     const tasksEntries = await readdir(tasksDir, { withFileTypes: true });
     for (const entry of tasksEntries) {
-      if (entry.isDirectory() && entry.name.match(/^Task-\d+$/)) {
+      if (entry.isDirectory() && entry.name.match(/^Task-\d+(-[a-z0-9]+)*$/i)) {
         const oldPath = join(tasksDir, entry.name);
         await remove(oldPath);
         logger.info(`🧹 清理旧版残留: 030-tasks/${entry.name}/`);
