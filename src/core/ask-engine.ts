@@ -1116,10 +1116,17 @@ export async function synthesizeIntent(input: string): Promise<SynthesizedIntent
   // 批次
   const batchMatch = input.match(/(\d+)\s*(?:批次|个|任务)/);
   if (batchMatch) parsed.batch = batchMatch[1];
-  // 平台
-  if (/后端|backend/.test(input)) parsed.platform = 'backend';
-  else if (/前端|frontend/.test(input)) parsed.platform = 'frontend';
-  else if (/小程序|miniapp/.test(input)) parsed.platform = 'miniapp';
+  // 平台：先尝试提取输入中的任意端名（支持自定义端名），再 fallback 到常见硬编码
+  const platformMatch = input.match(/(?:平台|端|platform)\s*[:=]?\s*([a-zA-Z0-9\-_]+)/i);
+  if (platformMatch) {
+    parsed.platform = platformMatch[1];
+  } else if (/后端|backend/.test(input)) {
+    parsed.platform = 'backend';
+  } else if (/前端|frontend/.test(input)) {
+    parsed.platform = 'frontend';
+  } else if (/小程序|miniapp/.test(input)) {
+    parsed.platform = 'miniapp';
+  }
   // 任务名
   const nameMatch = input.match(/(?:创建|新建|做一个?)\s*(?:一个?\s*)?["""]([^"]+)["'']/);
   if (!nameMatch) {

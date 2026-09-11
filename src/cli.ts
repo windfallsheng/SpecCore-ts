@@ -580,7 +580,7 @@ program
   .alias('rv')
   .description('Spec 自审：让 AI 检查分析文档质量并输出修订建议（支持多端、多文档组合）')
   .option('-I, --iteration <iteration>', '目标迭代（默认当前迭代）')
-  .option('--platform <platforms>', '评审指定端，逗号分隔多端（如 backend,frontend）')
+  .option('--platform <platforms>', '评审指定端，逗号分隔多端（如 <端名1>,<端名2>）')
   .option('--doc <paths>', '评审指定文档，逗号分隔多文件（相对迭代目录的路径）')
   .option('--global', '评审全局分析文档（可与 --platform 组合）')
   .option('--fix', '评审后输出可直接应用的修订版')

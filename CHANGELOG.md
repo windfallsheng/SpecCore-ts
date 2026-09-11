@@ -1,3 +1,14 @@
+## v8.3.144 (2026-09-11) — 移除 review/ask 中的硬编码端名 backend/frontend
+
+### 改进
+
+**移除硬编码端名** (`src/core/ask-engine.ts`, `src/commands/review.ts`, `src/cli.ts`):
+- `ask-engine.ts` 平台解析：优先通过正则提取输入中的任意端名（如 `booking-service`、`h5-mobile`），不再强制要求匹配 `backend/frontend/miniapp`
+- `review.ts` 注释示例：`--platform backend` → `--platform <端名>`
+- `cli.ts` review 命令 help：`backend,frontend` → `<端名1>,<端名2>`
+
+---
+
 ## v8.3.143 (2026-09-11) — Ask 引擎 review 意图全面扩展
 
 ### 改进

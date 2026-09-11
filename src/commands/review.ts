@@ -8,7 +8,7 @@
  *   speccore review -I <迭代名> --platform <端1,端2> # 评审多个端的所有 specs
  *   speccore review -I <迭代名> --doc <路径1,路径2>  # 评审多个文档
  *   speccore review --global                        # 评审全局分析文档
- *   speccore review --global --platform backend     # 评审全局 + backend 端
+  *   speccore review --global --platform <端名>      # 评审全局 + 指定端
  *
  * 输出: 构建 review prompt 到 .speccore/cache/reviews/
  *       并输出 [SPECCORE_REVIEW: <path>] 标记供宿主 AI 读取
