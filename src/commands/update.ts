@@ -319,6 +319,8 @@ export async function updateCommand(options: { force?: boolean; tool?: string; y
             logger.info('   ⏭️  跳过交互确认（--yes 模式或非 TTY）');
             logger.info('   建议查看差异报告后再运行 speccore config --upgrade');
           } else {
+            // v8.3.139+: 交互确认前必须停止 spinner，否则旋转动画会覆盖输入提示
+            spinner.stop();
             const confirmed = await askConfirm('   是否立即执行配置升级？');
             if (confirmed) {
               try {
@@ -393,6 +395,8 @@ export async function updateCommand(options: { force?: boolean; tool?: string; y
             logger.info('   ⏭️  跳过交互确认（--yes 模式或非 TTY）');
             logger.info('   建议查看差异报告后再运行 speccore config --upgrade --project');
           } else {
+            // v8.3.139+: 交互确认前必须停止 spinner，否则旋转动画会覆盖输入提示
+            spinner.stop();
             const confirmed = await askConfirm('   是否立即执行配置升级？');
             if (confirmed) {
               try {
