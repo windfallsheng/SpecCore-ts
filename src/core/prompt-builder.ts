@@ -2754,20 +2754,24 @@ async function inlineMarkdownImages(
             `\n<!-- 图片描述 (视觉模型: ${visionConfig!.provider}): ${img.path} -->\n**[图片内容]** ${img.alt || '无描述'}\n\n${result.description}`
           );
         } else {
-          inlines.push(`\n<!-- 图片: ${img.alt || '无描述'} | 路径: ${img.path} | 描述失败: ${result.error} -->`);
+          // v8.3.138+: Vision 描述失败时，明确提示宿主 AI 打开文件查看
+          inlines.push(`\n\n---\n🖼️ **图片文件**（视觉模型描述失败，宿主 AI 请直接打开查看）：\n- ${img.alt || '无描述'}: ${resolved}\n> 请打开此图片文件查看内容，以辅助理解需求。`);
         }
       } catch (e: any) {
-        inlines.push(`\n<!-- 图片: ${img.alt || '无描述'} | 路径: ${img.path} | 描述失败: ${e.message || e} -->`);
+        // v8.3.138+: 描述异常时，同样提示宿主 AI 打开查看
+        inlines.push(`\n\n---\n🖼️ **图片文件**（视觉模型异常，宿主 AI 请直接打开查看）：\n- ${img.alt || '无描述'}: ${resolved}\n> 请打开此图片文件查看内容，以辅助理解需求。`);
       }
     } else {
-      // 其他图片（PNG/JPG/GIF/WebP 等）：提取 alt + 路径 + 文件大小信息
-      inlines.push(`\n<!-- 图片: ${img.alt || '无描述'} | 路径: ${img.path} -->`);
+      // v8.3.138+: 无视觉模型时，明确提示宿主 AI 打开图片查看（不要用 HTML 注释，AI 会忽略）
+      inlines.push(`\n\n---\n🖼️ **图片文件**（CLI 无法解析图片内容，宿主 AI 请直接打开查看）：`);
+      inlines.push(`- ${img.alt || '无描述'}: ${resolved}`);
       try {
         if (await pathExists(resolved)) {
           const st = await stat(resolved);
-          inlines.push(`<!-- 图片大小: ${(st.size / 1024).toFixed(1)} KB | 完整路径: ${resolved} -->`);
+          inlines.push(`- 文件大小: ${(st.size / 1024).toFixed(1)} KB`);
         }
       } catch { /* ignore */ }
+      inlines.push(`> 请打开此图片文件查看内容，以辅助理解需求。`);
     }
   }
 
