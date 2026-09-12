@@ -29,8 +29,6 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# 专利相关文档（不提交到git）
-专利申请*.md
 lerna-debug.log*
 
 .pnpm-debug.log*
