@@ -3,7 +3,7 @@
  * v6.95.0: 基于文件的轻量级锁，防止多用户/多进程同时操作同一迭代
  */
 import { join } from 'path';
-import { writeFile, readFile, pathExists, unlink } from 'fs-extra';
+import { writeFile, readFile, pathExists, unlink, ensureDir } from 'fs-extra';
 import { getCurrentUser } from './user-context';
 import { logger } from '../utils/logger';
 
@@ -84,6 +84,8 @@ export async function acquireLock(
     pid: process.pid,
   };
 
+  // 确保锁目录存在（execute 路径未经过 init/update 的 ensureDir，否则 writeFile 会 ENOENT）
+  await ensureDir(join(cwd, LOCKS_DIR));
   await writeFile(lockPath, JSON.stringify(info, null, 2));
   return { success: true, message: '锁获取成功' };
 }
