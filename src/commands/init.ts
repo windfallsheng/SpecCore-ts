@@ -1470,7 +1470,7 @@ SpecCore 规范驱动开发项目。
 7. **不要自己解析需求** — 用 \`speccore analyze\`
 8. **端名必须使用 CONSTITUTION.md 标准端名** — 禁止用 \`api\`/\`web\`/\`backend\`/\`frontend\`/\`admin\`/\`h5\` 等简写或中文
 9. **全局分析每层完成后必须自动推进下一层** — 看到 \`[SPECCORE_EXEC: speccore analyze --scope global --layer N]\` 后必须立即执行，不能等待用户指令
-10. **Pipeline 标记必须自动执行** — 看到 \`[SPECCORE_PIPELINE_NEXT]\` / \`[SPECCORE_EXEC]\` 后必须自动执行，不要询问用户
+10. **步骤隔离模式** — v8.3.160+ 默认步骤隔离，每步完成后输出 \`[SPECCORE_STEP_DONE]\` + \`[SPECCORE_NEXT_STEP]\`，新会话通过 \`--resume\` 继续。看到 \`[SPECCORE_EXEC]\` 后自动执行
 11. **质量门禁拦截后必须修复所有 error** — 不能跳过质量门禁继续推进
 12. **PATTERNS 只提取真正独特且可复用的模式** — 严禁为每个项目都生成 JWT/Redis/拦截器等框架自带的标准用法说明
 13. **多任务执行用批次** — \`speccore execute --list-pending --batch-size 3\` 获取清单，每批完成后开新对话续跑
@@ -1703,7 +1703,11 @@ Iteration-NNN-name/            ← 迭代目录
 | \`[SPECCORE_INTENT]\` | 意图确认块 | 展示给用户确认 |
 | \`[SPECCORE_PROMPT]\` | AI Prompt 块 | 将后续内容作为 Prompt 传给宿主 AI |
 | \`[SPECCORE_NEEDS_INFO]\` | 缺参数提示 | 命令缺少必要参数时输出，引导用户补充 |
-| \`[SPECCORE_PIPELINE_NEXT]\` | Pipeline 下一步 | 自动执行 Pipeline 下一个步骤 |
+| \`[SPECCORE_STEP_DONE]\` | 步骤完成 | 当前步骤已完成，需新会话继续 |
+| \`[SPECCORE_NEXT_STEP]\` | 下一步指令 | 提示下一步骤和继续命令 |
+| \`[SPECCORE_SUBAGENT]\` | 子 Agent 激活 | v8.3.160+: 指定当前步骤的子 Agent 角色和上下文预算 |
+| \`[SPECCORE_CONTEXT_SNAPSHOT]\` | 上下文快照 | 紧凑上下文，供新会话恢复 |
+| \`[SPECCORE_PIPELINE_NEXT]\` | Pipeline 下一步 | ⚠️ 已弃用（v8.3.160+ 使用 STEP_DONE） |
 | \`[SPECCORE_TASK_SUMMARY]\` | 任务总览报告 | 展示任务拆分/执行后的总览报告 |
 | \`[SPECCORE_NEXT_STEPS]\` | 下一步操作 | 展示建议的后续操作步骤 |
 | \`[SPECCORE_GUIDE]\` | 分析指南 | 展示分析阶段的引导指南 |

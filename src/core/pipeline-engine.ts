@@ -10,10 +10,10 @@
  *   init → phase1-prompt → (AI --apply) → phase1-done
  *     → 检测多端 → phase2-prompt → (AI --apply) → done
  *
- * AI 侧流程:
+ * AI 侧流程 (v8.3.160+ 步骤隔离模式):
  *   1. 收到 Phase 1 prompt → 生成全局文档 → --apply
- *   2. CLI 写入文件 → 自动推进 → 输出 [SPECCORE_PIPELINE_NEXT] + Phase 2 prompt
- *   3. AI 看到标记 → 自动执行下一个命令 → 生成各端文档 → --apply
+ *   2. CLI 写入文件 → 自动推进 → 输出 [SPECCORE_STEP_DONE] + [SPECCORE_NEXT_STEP] + Phase 2 prompt
+ *   3. AI 在新会话中执行提示的命令 → 生成各端文档 → --apply
  *   4. CLI 写入文件 → 标记完成 → Pipeline 结束
  *
  * @since v6.68.0
@@ -22,6 +22,26 @@
 import { writeFile, readFile, pathExists, ensureDir, unlink } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
+
+// ── 上下文快照（步骤间传递的紧凑上下文，替代对话历史） ──
+export interface ContextSnapshot {
+  /** 核心约束摘要（从 CONSTITUTION.md 提取） */
+  keyConstraints: string[];
+  /** 已完成步骤的产出文件路径 */
+  completedOutputs: string[];
+  /** 技术栈摘要 */
+  techStackSummary?: string;
+  /** 当前任务/迭代 */
+  currentTask?: string;
+  /** 当前迭代 */
+  iteration: string;
+  /** 已完成的步骤 ID 列表 */
+  completedSteps: string[];
+  /** 下一步骤 ID */
+  nextStep?: string;
+  /** 生成时间 */
+  generatedAt: string;
+}
 
 // ── 状态接口 ──
 export interface PipelineState {
@@ -37,10 +57,29 @@ export interface PipelineState {
   name: string;
   /** 端列表（analyze 专用） */
   platforms?: string[];
+  /** v8.3.160+: 上下文快照（步骤隔离模式） */
+  contextSnapshot?: ContextSnapshot;
   /** 创建时间 */
   createdAt: string;
   /** 最后更新时间 */
   updatedAt: string;
+}
+
+// ── 步骤推进结果 ──
+export interface StepResult {
+  nextStepId: string | null;
+  nextStepName: string | null;
+  isComplete: boolean;
+  /** v8.3.160+: 是否需要新会话（步骤隔离模式） */
+  requiresNewSession: boolean;
+  /** v8.3.160+: 上下文快照（供新会话恢复） */
+  contextSnapshot?: ContextSnapshot;
+  /** v8.3.160+: 推荐的 Subagent */
+  subagent?: string;
+  /** v8.3.160+: 上下文 Token 预算 */
+  contextBudget?: number;
+  /** v8.3.160+: 上下文加载类型 */
+  contextType?: 'full' | 'incremental' | 'platform-only' | 'contract-only';
 }
 
 // ── 步骤定义 ──
@@ -53,6 +92,12 @@ export interface PipelineStepDef {
   next: string | null;
   /** 条件判断：返回 true 才执行此步骤，否则跳到 next */
   condition?: () => Promise<boolean> | boolean;
+  /** v8.3.160+: 该步骤使用的 Subagent 名称 */
+  subagent?: string;
+  /** v8.3.160+: 该步骤的上下文 Token 预算（默认 12000） */
+  contextBudget?: number;
+  /** v8.3.160+: 该步骤需要加载的上下文类型 */
+  contextType?: 'full' | 'incremental' | 'platform-only' | 'contract-only';
 }
 
 // ── 引擎选项 ──
@@ -111,7 +156,8 @@ export class PipelineEngine {
   }
 
   // ── 推进到下一步 ──
-  async advance(): Promise<{ nextStepId: string | null; nextStepName: string | null; isComplete: boolean }> {
+  // v8.3.160+: 默认步骤隔离模式，每步完成后必须新会话继续
+  async advance(): Promise<StepResult> {
     if (!this.state) {
       const loaded = await this.loadState();
       if (!loaded) {
@@ -145,6 +191,11 @@ export class PipelineEngine {
     if (nextStepId) {
       this.state!.currentStep = nextStepId;
       this.state!.updatedAt = new Date().toISOString();
+
+      // v8.3.160+: 步骤隔离模式下，构建上下文快照
+      this.state!.contextSnapshot = await this.buildSnapshot(nextStepId);
+      await this.saveSnapshot(this.state!.contextSnapshot);
+
       await this.saveState();
 
       const nextStepDef = this.steps.get(nextStepId);
@@ -152,6 +203,11 @@ export class PipelineEngine {
         nextStepId,
         nextStepName: nextStepDef?.name || nextStepId,
         isComplete: false,
+        requiresNewSession: true, // 默认步骤隔离，必须新会话
+        contextSnapshot: this.state!.contextSnapshot,
+        subagent: nextStepDef?.subagent,
+        contextBudget: nextStepDef?.contextBudget,
+        contextType: nextStepDef?.contextType,
       };
     }
 
@@ -164,7 +220,57 @@ export class PipelineEngine {
       nextStepId: null,
       nextStepName: null,
       isComplete: true,
+      requiresNewSession: false,
     };
+  }
+
+  // ── v8.3.160+: 构建上下文快照 ──
+  private async buildSnapshot(nextStepId?: string): Promise<ContextSnapshot> {
+    const completedOutputs: string[] = [];
+    // 根据已完成步骤推断产出文件路径
+    for (const stepId of this.state!.completedSteps) {
+      if (stepId.endsWith('-done') || stepId === 'phase1-prompt') {
+        // 分析类步骤的产出通常写入 020-specs/
+        completedOutputs.push(`Iteration-${this.iteration}/020-specs/`);
+      }
+    }
+
+    return {
+      keyConstraints: [], // 由调用方（PromptBuilder）填充
+      completedOutputs: [...new Set(completedOutputs)],
+      techStackSummary: '', // 由调用方填充
+      iteration: this.iteration,
+      completedSteps: [...this.state!.completedSteps],
+      nextStep: nextStepId,
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
+  // ── v8.3.160+: 保存快照到独立文件 ──
+  private async saveSnapshot(snapshot: ContextSnapshot): Promise<void> {
+    const snapshotPath = join(this.cwd, '.speccore', 'local', `.pipeline-${this.iteration}-snapshot.json`);
+    await ensureDir(join(this.cwd, '.speccore', 'local'));
+    await writeFile(snapshotPath, JSON.stringify(snapshot, null, 2));
+  }
+
+  // ── v8.3.160+: 加载快照 ──
+  static async loadSnapshot(cwd: string, iteration: string): Promise<ContextSnapshot | null> {
+    const snapshotPath = join(cwd, '.speccore', 'local', `.pipeline-${iteration}-snapshot.json`);
+    if (!(await pathExists(snapshotPath))) return null;
+    try {
+      const data = await readFile(snapshotPath, 'utf-8');
+      return JSON.parse(data) as ContextSnapshot;
+    } catch {
+      return null;
+    }
+  }
+
+  // ── v8.3.160+: 更新快照中的关键约束 ──
+  async updateSnapshotConstraints(constraints: string[]): Promise<void> {
+    if (this.state?.contextSnapshot) {
+      this.state.contextSnapshot.keyConstraints = constraints;
+      await this.saveSnapshot(this.state.contextSnapshot);
+    }
   }
 
   // ── 获取当前步骤 ──
@@ -296,35 +402,77 @@ export async function createAnalyzePipeline(
   // v6.80.0+: 条件判断是否需要需求澄清
   const needsClarify = options?.skipClarify !== true;
 
-  const steps: PipelineStepDef[] = [
-    {
-      id: 'clarify-prompt',
-      name: 'Phase 0: 需求澄清',
-      next: 'clarify-done',
-      condition: needsClarify ? undefined : () => false, // skipClarify 时跳过
-    },
-    {
-      id: 'clarify-done',
-      name: '需求澄清完成检查',
+  // v8.3.160+: 以 _INDEX.md 角色定义为准，将多角色步骤拆分为单角色子步骤
+  // clarify 阶段拆分为 product-analyst → interaction-designer → security-reviewer
+  const steps: PipelineStepDef[] = [];
+
+  if (needsClarify) {
+    steps.push({
+      id: 'clarify-product',
+      name: 'Phase 0a: 产品分析（业务流程、遗漏识别、术语统一）',
+      next: 'clarify-interaction',
+      subagent: 'product-analyst',
+      contextType: 'full',
+      contextBudget: 4000,
+    });
+    steps.push({
+      id: 'clarify-interaction',
+      name: 'Phase 0b: 交互设计（信息架构、状态矩阵、前后端一致性）',
+      next: 'clarify-security',
+      subagent: 'interaction-designer',
+      contextType: 'full',
+      contextBudget: 4000,
+    });
+    steps.push({
+      id: 'clarify-security',
+      name: 'Phase 0c: 安全审查（认证授权、输入验证、数据保护）',
       next: 'confirm-check',
-    },
+      // v8.3.160+: 条件判断 securityLevel > 2 时执行，否则跳过
+      condition: async () => {
+        try {
+          const projectPath = join(cwd || process.cwd(), '.speccore', 'PROJECT.yaml');
+          if (!await pathExists(projectPath)) return true; // 默认执行
+          const { readFile } = await import('fs-extra');
+          const content = await readFile(projectPath, 'utf-8');
+          const match = content.match(/securityLevel:\s*(\d+)/);
+          return match ? parseInt(match[1], 10) > 2 : true;
+        } catch {
+          return true;
+        }
+      },
+      subagent: 'security-reviewer',
+      contextType: 'full',
+      contextBudget: 3000,
+    });
+  }
+
+  steps.push(
     {
       id: 'confirm-check',
       name: '需求确认检查',
       next: 'phase1-prompt',
-      // 非自动模式下可在此暂停等待用户确认，自动模式直接通过
+      subagent: 'product-analyst',
+      contextType: 'incremental',
+      contextBudget: 4000,
     },
     {
       id: 'phase1-prompt',
       name: 'Phase 1: 全局文档生成',
       next: 'phase1-done',
+      subagent: 'spec-analyzer',
+      contextType: 'full',
+      // v8.3.160+: 降为 10K（配合按需加载 REQ.md，实际内容在 8K 以内）
+      contextBudget: 10000,
     },
     {
       id: 'phase1-done',
       name: 'Phase 1 完成检查',
       next: platforms.length >= 2 ? 'contract-prompt' : 'done',
+      subagent: 'spec-analyzer',
+      contextType: 'incremental',
+      contextBudget: 4000,
     },
-  ];
+  );
 
   // 多端项目：插入契约先行 + 逐端分析步骤
   if (platforms.length >= 2) {
@@ -333,11 +481,17 @@ export async function createAnalyzePipeline(
       id: 'contract-prompt',
       name: '契约先行: 跨端 API 契约定义',
       next: 'contract-done',
+      subagent: 'spec-analyzer',
+      contextType: 'contract-only',
+      contextBudget: 6000,
     });
     steps.push({
       id: 'contract-done',
       name: '契约定义完成检查',
       next: platforms.length > 0 ? `platform-${platforms[0]}-prompt` : 'done',
+      subagent: 'spec-analyzer',
+      contextType: 'incremental',
+      contextBudget: 4000,
     });
 
     // 逐端推进：每个端独立一个步骤
@@ -351,11 +505,17 @@ export async function createAnalyzePipeline(
         id: `platform-${platform}-prompt`,
         name: `Phase 2-${i + 1}: ${platform} 端专属文档生成`,
         next: `platform-${platform}-done`,
+        subagent: 'spec-analyzer',
+        contextType: 'platform-only',
+        contextBudget: 8000,
       });
       steps.push({
         id: `platform-${platform}-done`,
         name: `${platform} 端完成检查`,
         next: nextId,
+        subagent: 'spec-analyzer',
+        contextType: 'incremental',
+        contextBudget: 4000,
       });
     }
   }
@@ -383,31 +543,63 @@ export async function createSplitPipeline(iteration: string, cwd?: string): Prom
   engine: PipelineEngine;
   steps: PipelineStepDef[];
 }> {
+  // v8.3.160+: 以 _INDEX.md 角色定义为准
   const steps: PipelineStepDef[] = [
     {
       id: 'init',
       name: '初始化拆分流程',
       next: 'prompt-analysis',
+      subagent: 'task-decomposer',
+      contextType: 'incremental',
+      contextBudget: 4000,
     },
     {
       id: 'prompt-analysis',
       name: 'AI分析需求文档，输出任务拆分建议',
+      next: 'dependency-analysis',
+      subagent: 'task-decomposer',
+      contextType: 'full',
+      contextBudget: 8000,
+    },
+    {
+      id: 'dependency-analysis',
+      name: '分析任务间依赖关系',
+      next: 'effort-estimation',
+      subagent: 'dependency-analyst',
+      contextType: 'incremental',
+      contextBudget: 5000,
+    },
+    {
+      id: 'effort-estimation',
+      name: '工时估算',
       next: 'confirmation',
+      subagent: 'effort-estimator',
+      contextType: 'incremental',
+      contextBudget: 4000,
     },
     {
       id: 'confirmation',
       name: '用户确认拆分方案',
       next: 'creation',
+      subagent: 'task-decomposer',
+      contextType: 'incremental',
+      contextBudget: 3000,
     },
     {
       id: 'creation',
       name: '创建任务目录结构',
       next: 'validation',
+      subagent: 'task-decomposer',
+      contextType: 'incremental',
+      contextBudget: 4000,
     },
     {
       id: 'validation',
       name: '验证任务结构完整性',
       next: 'done',
+      subagent: 'task-decomposer',
+      contextType: 'incremental',
+      contextBudget: 4000,
     },
     {
       id: 'done',
@@ -432,26 +624,58 @@ export async function createExecutePipeline(iteration: string, task?: string, cw
   engine: PipelineEngine;
   steps: PipelineStepDef[];
 }> {
+  // v8.3.160+: 以 _INDEX.md 角色定义为准，将 verification 拆分为 5 个专业子步骤
   const steps: PipelineStepDef[] = [
     {
       id: 'init',
       name: '初始化执行环境',
       next: 'prompt-analysis',
+      subagent: 'spec-executor',
+      contextType: 'incremental',
+      contextBudget: 4000,
     },
     {
       id: 'prompt-analysis',
       name: 'AI分析任务需求，生成代码实现方案',
       next: 'code-generation',
+      subagent: 'spec-executor',
+      contextType: 'full',
+      // v8.3.160+: 降为 10K（配合按需加载 REQ.md）
+      contextBudget: 10000,
     },
     {
       id: 'code-generation',
       name: '生成代码文件',
-      next: 'verification',
+      next: 'quality-gate-build',
+      subagent: 'spec-executor',
+      contextType: 'incremental',
+      contextBudget: 10000,
     },
     {
-      id: 'verification',
-      name: '代码验证与测试',
+      id: 'quality-gate-build',
+      name: '质量门禁: 编译与测试',
+      next: 'quality-gate-nfr',
+      // v8.3.160+: 合并 compiler + test-engineer，减少会话切换
+      subagent: 'compiler',
+      contextType: 'incremental',
+      contextBudget: 8000,
+    },
+    {
+      id: 'quality-gate-nfr',
+      name: '质量门禁: 安全与性能',
+      next: 'quality-gate-doc-sync',
+      // v8.3.160+: 合并 security-reviewer + performance-expert
+      subagent: 'security-reviewer',
+      contextType: 'incremental',
+      contextBudget: 6000,
+    },
+    {
+      id: 'quality-gate-doc-sync',
+      name: '质量门禁: 文档同步检查',
       next: 'done',
+      subagent: 'doc-sync-agent',
+      contextType: 'incremental',
+      contextBudget: 3000,
     },
     {
       id: 'done',
@@ -476,31 +700,48 @@ export async function createGlobalAnalyzePipeline(cwd?: string): Promise<{
   engine: PipelineEngine;
   steps: PipelineStepDef[];
 }> {
+  // v8.3.160+: 以 _INDEX.md 角色定义为准
   const steps: PipelineStepDef[] = [
     {
       id: 'init',
       name: '初始化全局分析环境',
       next: 'discovery',
+      subagent: 'spec-global-analyzer',
+      contextType: 'full',
+      contextBudget: 6000,
     },
     {
       id: 'discovery',
       name: '发现所有迭代和项目',
       next: 'global-analysis',
+      subagent: 'spec-global-analyzer',
+      contextType: 'full',
+      contextBudget: 8000,
     },
     {
       id: 'global-analysis',
       name: '分析跨迭代依赖关系',
       next: 'consistency-check',
+      subagent: 'spec-global-analyzer',
+      contextType: 'full',
+      // v8.3.160+: 降为 10K（discovery 已提供迭代摘要，无需全量加载）
+      contextBudget: 10000,
     },
     {
       id: 'consistency-check',
       name: '检查全局一致性',
       next: 'report-generation',
+      subagent: 'spec-global-analyzer',
+      contextType: 'incremental',
+      contextBudget: 8000,
     },
     {
       id: 'report-generation',
       name: '生成全局报告',
       next: 'done',
+      subagent: 'spec-global-analyzer',
+      contextType: 'incremental',
+      contextBudget: 8000,
     },
     {
       id: 'done',

@@ -344,6 +344,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
         const { createSplitPipeline } = await import('../../core/pipeline-engine');
         const { engine } = await createSplitPipeline(iter);
         
+        // v8.3.160+: 默认步骤隔离模式
         const result = await engine.advance();
         
         if (result.isComplete) {
@@ -355,16 +356,50 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           logger.info(`🔄 Split Pipeline 推进到: ${result.nextStepName || result.nextStepId}`);
           logger.info('');
           
+          // v8.3.160+: 步骤隔离模式输出标记 + 子 Agent 激活
+          const nextCmd = `speccore iteration split -I ${iter} --resume --pipeline`;
+          const prompt = await buildPrompt('split', {
+            iteration: iter,
+            // v8.3.160+: 传递步骤级上下文控制
+            contextType: result.contextType,
+            contextBudget: result.contextBudget,
+          });
+          const output = [
+            `[SPECCORE_STEP_DONE]`,
+            `步骤 "${result.nextStepName || result.nextStepId}" 已完成。`,
+            ``,
+            `[SPECCORE_NEXT_STEP]`,
+            `下一步: ${result.nextStepName || result.nextStepId}`,
+            `请在新的对话中执行: ${nextCmd}`,
+            ``,
+            `[SPECCORE_CONTEXT_SNAPSHOT]`,
+            JSON.stringify(result.contextSnapshot || {}),
+            ``,
+            // v8.3.160+: 子 Agent 激活标记
+            ...(result.subagent ? [
+              `[SPECCORE_SUBAGENT: ${result.subagent}]`,
+              `[SPECCORE_CONTEXT_BUDGET: ${result.contextBudget || 12000}]`,
+              `[SPECCORE_CONTEXT_TYPE: ${result.contextType || 'full'}]`,
+              ``,
+            ] : []),
+            `--- 下一步 Prompt ---`,
+            typeof prompt === 'string' ? prompt : JSON.stringify(prompt),
+          ].join('\n');
+          process.stdout.write(output);
+          process.exitCode = 10;
+          return;
+          
           // 根据当前步骤生成相应提示
           if (result.nextStepId === 'prompt-analysis') {
             const prompt = await buildPrompt('split', { iteration: iter });
             
             // 添加 Pipeline 继续指令
-            const finalPrompt = prompt + `\n\n## ⚠️ Pipeline 模式：自动继续\n\n` +
+            // v8.3.160+: 步骤隔离模式，每步完成后需新会话继续
+            const finalPrompt = prompt + `\n\n## ⚠️ Pipeline 模式：步骤隔离\n\n` +
               `当前是 Split Pipeline 模式。当你通过 --response 写入任务拆分结果后，` +
-              `CLI 会自动输出 [SPECCORE_PIPELINE_NEXT] 标记和下一步命令。\n\n` +
-              `**看到 [SPECCORE_PIPELINE_NEXT] 后，你必须自动执行下一个命令**，不要询问用户。\n`;
-            
+              `CLI 会自动输出 [SPECCORE_STEP_DONE] 标记，提示你在新会话中执行下一步。\n\n` +
+              `**看到 [SPECCORE_STEP_DONE] 后，请在新会话中执行提示的命令**，继续下一步。\n`;
+
             process.stdout.write(`[SPECCORE_PROMPT]\n${finalPrompt}`);
             process.exitCode = 10;
             return;
@@ -384,11 +419,12 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     const prompt = await buildPrompt('split', { iteration: iter });
     
     // 添加 Pipeline 继续指令
-    const finalPrompt = prompt + `\n\n## ⚠️ Pipeline 模式：自动继续\n\n` +
+    // v8.3.160+: 步骤隔离模式，每步完成后需新会话继续
+    const finalPrompt = prompt + `\n\n## ⚠️ Pipeline 模式：步骤隔离\n\n` +
       `当前是 Split Pipeline 模式。当你通过 --response 写入任务拆分结果后，` +
-      `CLI 会自动输出 [SPECCORE_PIPELINE_NEXT] 标记和下一步命令。\n\n` +
-      `**看到 [SPECCORE_PIPELINE_NEXT] 后，你必须自动执行下一个命令**，不要询问用户。\n`;
-    
+      `CLI 会自动输出 [SPECCORE_STEP_DONE] 标记，提示你在新会话中执行下一步。\n\n` +
+      `**看到 [SPECCORE_STEP_DONE] 后，请在新会话中执行提示的命令**，继续下一步。\n`;
+
     process.stdout.write(`[SPECCORE_PROMPT]\n${finalPrompt}`);
     process.exitCode = 10;
     return;
@@ -413,7 +449,8 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     if (hasPipeline) {
       const { createSplitPipeline } = await import('../../core/pipeline-engine');
       const { engine } = await createSplitPipeline(iter);
-      await engine.advance();
+      // v8.3.160+: 默认步骤隔离模式
+      const stepResult = await engine.advance();
       
       const state = await engine.getState();
       if (state?.currentStep === 'done') {
@@ -430,11 +467,39 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           // 在创建阶段，我们已完成拆分，可以生成创建任务的提示
           nextPrompt = `任务拆分已完成，正在创建任务目录结构...\n\n请继续执行后续操作。`;
         } else {
-          const promptResult = await buildPrompt('split', { iteration: iter });
+          // v8.3.160+: 传递步骤级上下文控制，确保 Pipeline 配置的 budget/type 生效
+          const promptResult = await buildPrompt('split', {
+            iteration: iter,
+            contextType: stepResult.contextType,
+            contextBudget: stepResult.contextBudget,
+          });
           nextPrompt = typeof promptResult === 'string' ? promptResult : JSON.stringify(promptResult);
         }
         
-        process.stdout.write(`[SPECCORE_PIPELINE_NEXT]\n${nextPrompt}`);
+        // v8.3.160+: 步骤隔离模式输出标记 + 子 Agent 激活
+        const nextCmd = `speccore iteration split -I ${iter} --resume --pipeline`;
+        const output = [
+          `[SPECCORE_STEP_DONE]`,
+          `步骤 "${state.currentStep}" 已完成。`,
+          ``,
+          `[SPECCORE_NEXT_STEP]`,
+          `下一步: ${state.currentStep}`,
+          `请在新的对话中执行: ${nextCmd}`,
+          ``,
+          `[SPECCORE_CONTEXT_SNAPSHOT]`,
+          JSON.stringify(stepResult.contextSnapshot || {}),
+          ``,
+          // v8.3.160+: 子 Agent 激活标记
+          ...(stepResult.subagent ? [
+            `[SPECCORE_SUBAGENT: ${stepResult.subagent}]`,
+            `[SPECCORE_CONTEXT_BUDGET: ${stepResult.contextBudget || 12000}]`,
+            `[SPECCORE_CONTEXT_TYPE: ${stepResult.contextType || 'full'}]`,
+            ``,
+          ] : []),
+          `--- 下一步 Prompt ---`,
+          nextPrompt,
+        ].join('\n');
+        process.stdout.write(output);
         process.exitCode = 10;
       }
       

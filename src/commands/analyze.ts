@@ -936,8 +936,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       engine = result.engine;
       steps = result.steps;
       pipelineKey = iter!;
-      // v6.80.0+: 默认从 clarify 开始，skipClarify 时从 phase1 开始
-      initStep = options.skipClarify ? 'phase1-prompt' : 'clarify-prompt';
+      // v8.3.160+: clarify 拆分为 product → interaction → security 三个子步骤
+      initStep = options.skipClarify ? 'phase1-prompt' : 'clarify-product';
     }
 
     // 检查是否有活跃的 Pipeline（恢复模式）
@@ -980,8 +980,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
           iteration: iter || 'GLOBAL', scope: 'global', withCode: options.withCode,
         }, options);
       }
-    } else if (currentStep === 'clarify-prompt') {
-      // v6.80.0+: Phase 0 需求澄清
+    } else if (currentStep === 'clarify-product' || currentStep === 'clarify-interaction' || currentStep === 'clarify-security') {
+      // v8.3.160+: Phase 0 需求澄清（拆分为 product / interaction / security 三个子步骤）
       prompt = await buildClarifyPhasePrompt(iter!);
     } else if (currentStep === 'confirm-check') {
       // v6.80.0+: 需求确认阶段 — 输出质量报告提示
@@ -1020,23 +1020,28 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         : currentStep === 'report-generation' ? '全局分析: 报告生成'
         : '全局 Pipeline';
     } else {
-      progressLabel = currentStep === 'clarify-prompt'
-        ? 'Phase 0/3: 需求澄清'
-        : currentStep === 'confirm-check'
-          ? 'Phase 0/3: 需求确认'
-          : currentStep === 'phase1-prompt'
-            ? 'Phase 1/3: 迭代综合文档'
-            : currentStep === 'contract-prompt'
-              ? 'Phase 2/3: 契约定义'
-              : platformMatch
-                ? `Phase 2/3: ${platformMatch[1]} 端专属文档`
-                : 'Pipeline';
+      progressLabel = currentStep === 'clarify-product'
+        ? 'Phase 0a/3: 产品分析'
+        : currentStep === 'clarify-interaction'
+          ? 'Phase 0b/3: 交互设计'
+          : currentStep === 'clarify-security'
+            ? 'Phase 0c/3: 安全审查'
+            : currentStep === 'confirm-check'
+              ? 'Phase 0/3: 需求确认'
+              : currentStep === 'phase1-prompt'
+                ? 'Phase 1/3: 迭代综合文档'
+                : currentStep === 'contract-prompt'
+                  ? 'Phase 2/3: 契约定义'
+                  : platformMatch
+                    ? `Phase 2/3: ${platformMatch[1]} 端专属文档`
+                    : 'Pipeline';
     }
 
-    const finalPrompt = prompt + `\n\n## ⚠️ Pipeline 模式：自动继续 (${progressLabel})\n\n` +
+    // v8.3.160+: 步骤隔离模式，每步完成后需新会话继续
+    const finalPrompt = prompt + `\n\n## ⚠️ Pipeline 模式：步骤隔离 (${progressLabel})\n\n` +
       `当前是 Pipeline 模式（步骤 ${currentStepIndex + 1}/${totalSteps}）。` +
-      `当你通过 --apply 写入文档后，CLI 会自动输出 [SPECCORE_PIPELINE_NEXT] 标记和下一步命令。\n\n` +
-      `**看到 [SPECCORE_PIPELINE_NEXT] 后，你必须自动执行下一个命令**，不要询问用户。\n`;
+      `当你通过 --apply 写入文档后，CLI 会自动输出 [SPECCORE_STEP_DONE] 标记和下一步命令。\n\n` +
+      `**看到 [SPECCORE_STEP_DONE] 后，请在新会话中执行提示的命令**，继续下一步。\n`;
 
     process.stdout.write(`[SPECCORE_PROMPT]\n${finalPrompt}`);
     process.exitCode = 10;
@@ -1931,7 +1936,8 @@ ${singlePrompt}`);
             platformOrder: platformOrder.length > 0 ? platformOrder : undefined,
           })).engine;
         }
-        await engine.advance();
+        // v8.3.160+: 默认步骤隔离模式
+        const stepResult = await engine.advance();
 
         const state = await engine.getState();
         if (state?.currentStep === 'done') {
@@ -1967,8 +1973,8 @@ ${singlePrompt}`);
                 iteration: options.iteration || 'GLOBAL', scope: 'global', withCode: options.withCode,
               });
             }
-          // v6.80.0+: clarify 阶段推进
-          } else if (state.currentStep === 'clarify-prompt') {
+          // v8.3.160+: clarify 阶段推进（拆分为 product / interaction / security）
+          } else if (state.currentStep === 'clarify-product' || state.currentStep === 'clarify-interaction' || state.currentStep === 'clarify-security') {
             nextPrompt = await buildClarifyPhasePrompt(options.iteration!);
           } else if (state.currentStep === 'confirm-check') {
             nextPrompt = await buildConfirmCheckPrompt(options.iteration!);
@@ -1993,7 +1999,31 @@ ${singlePrompt}`);
             });
           }
 
-          process.stdout.write(`[SPECCORE_PIPELINE_NEXT]\n${nextPrompt}`);
+          // v8.3.160+: 步骤隔离模式输出标记 + 子 Agent 激活
+          const scopeFlag = isGlobalScope ? '--scope global' : `-I ${options.iteration}`;
+          const nextCmd = `speccore analyze ${scopeFlag} --resume`;
+          const output = [
+            `[SPECCORE_STEP_DONE]`,
+            `步骤 "${state.currentStep}" 已完成。`,
+            ``,
+            `[SPECCORE_NEXT_STEP]`,
+            `下一步: ${state.currentStep}`,
+            `请在新的对话中执行: ${nextCmd}`,
+            ``,
+            `[SPECCORE_CONTEXT_SNAPSHOT]`,
+            JSON.stringify(stepResult.contextSnapshot || {}),
+            ``,
+            // v8.3.160+: 子 Agent 激活标记
+            ...(stepResult.subagent ? [
+              `[SPECCORE_SUBAGENT: ${stepResult.subagent}]`,
+              `[SPECCORE_CONTEXT_BUDGET: ${stepResult.contextBudget || 12000}]`,
+              `[SPECCORE_CONTEXT_TYPE: ${stepResult.contextType || 'full'}]`,
+              ``,
+            ] : []),
+            `--- 下一步 Prompt ---`,
+            nextPrompt,
+          ].join('\n');
+          process.stdout.write(output);
           process.exitCode = 10;
         }
 
@@ -5710,7 +5740,7 @@ async function buildConfirmCheckPrompt(iteration: string): Promise<string> {
   prompt += `\`\`\`bash\n`;
   prompt += `speccore analyze --prompt -I ${iteration} --pipeline --skip-clarify=false\n`;
   prompt += `\`\`\`\n`;
-  prompt += `> 重新进入 clarify-prompt 阶段，AI 会基于已有 draft 继续迭代。\n\n`;
+  prompt += `> 重新进入 clarify-product 阶段，AI 会基于已有 draft 继续迭代。\n\n`;
 
   prompt += `**选项 C：跳过确认，直接进入分析（风险自负）**\n`;
   prompt += `\`\`\`bash\n`;

@@ -77,7 +77,7 @@ SpecCore 规范驱动开发项目。
 7. **不要自己解析需求** — 用 `speccore analyze`
 8. **端名必须使用 CONSTITUTION.md 标准端名** — 禁止用 `api`/`web`/`backend`/`frontend`/`admin`/`h5` 等简写或中文
 9. **全局分析每层完成后必须自动推进下一层** — 看到 `[SPECCORE_EXEC: speccore analyze --scope global --layer N]` 后必须立即执行，不能等待用户指令
-10. **Pipeline 标记必须自动执行** — 看到 `[SPECCORE_PIPELINE_NEXT]` / `[SPECCORE_EXEC]` 后必须自动执行，不要询问用户
+10. **步骤隔离模式** — v8.3.160+ 默认步骤隔离，每步完成后输出 `[SPECCORE_STEP_DONE]` + `[SPECCORE_NEXT_STEP]`，新会话通过 `--resume` 继续。看到 `[SPECCORE_EXEC]` 后自动执行
 11. **质量门禁拦截后必须修复所有 error** — 不能跳过质量门禁继续推进
 12. **PATTERNS 只提取真正独特且可复用的模式** — 严禁为每个项目都生成 JWT/Redis/拦截器等框架自带的标准用法说明
 13. **多任务执行用批次** — `speccore execute --list-pending --batch-size 3` 获取清单，每批完成后开新对话续跑
@@ -240,7 +240,11 @@ Iteration-NNN-name/            ← 迭代目录
 | `[SPECCORE_EXEC: <cmd>]` | 自动执行命令 | 直接 execute_command |
 | `[SPECCORE_INTENT]` | 意图确认块 | 展示给用户确认 |
 | `[SPECCORE_PROMPT]` | AI Prompt 块 | 将后续内容作为 Prompt 传给宿主 AI |
-| `[SPECCORE_PIPELINE_NEXT]` | Pipeline 下一步 | 自动执行 Pipeline 下一个步骤 |
+| `[SPECCORE_STEP_DONE]` | 步骤完成 | 当前步骤已完成，需新会话继续 |
+| `[SPECCORE_NEXT_STEP]` | 下一步指令 | 提示下一步骤和继续命令 |
+| `[SPECCORE_SUBAGENT]` | 子 Agent 激活 | v8.3.160+: 指定当前步骤的子 Agent 角色和上下文预算 |
+| `[SPECCORE_CONTEXT_SNAPSHOT]` | 上下文快照 | 紧凑上下文，供新会话恢复 |
+| `[SPECCORE_PIPELINE_NEXT]` | Pipeline 下一步 | ⚠️ 已弃用（v8.3.160+ 使用 STEP_DONE） |
 | `[SPECCORE_TASK_SUMMARY]` | 任务总览报告 | 展示任务拆分/执行后的总览报告 |
 | `[SPECCORE_NEXT_STEPS]` | 下一步操作 | 展示建议的后续操作步骤 |
 | `[SPECCORE_GUIDE]` | 分析指南 | 展示分析阶段的引导指南 |
@@ -275,19 +279,19 @@ speccore execute -i <迭代名> --all       # 执行所有任务
 
 > 来源：`.agents/agents/`，项目级专用 Agent 角色定义
 
-| Agent | 职责 | 核心能力 |
-| :--- | :--- | :--- |
-| spec-analyzer | SpecCore 需求分析与任务规划 Agent | 需求分析、功能识别 |
-| spec-architect | SpecCore 架构守护与演进 Agent | 架构一致性检查、技术债务识别 |
-| spec-change-detector | SpecCore 变更感知与影响分析 Agent | 变更监听、影响分析 |
-| spec-clarifier | SpecCore 需求澄清 Agent | 模糊点识别、缺失信息检测 |
-| spec-executor | SpecCore 开发执行与交付 Agent | 读取规格、代码生成 |
-| spec-gatekeeper | SpecCore 质量门禁 Agent | 编译检查、测试检查 |
-| spec-global-analyzer | SpecCore 全局源码分析 Agent | 源码扫描、跨端关联 |
-| spec-knowledge-curator | SpecCore 知识沉淀与维护 Agent | 模式更新、术语维护 |
-| spec-reviewer | SpecCore 代码审查与质量验证 Agent | Spec 符合性检查、代码质量检查 |
-| spec-security-auditor | SpecCore 安全审计 Agent | 代码安全扫描、敏感数据处理 |
-| spec-tester | SpecCore 测试专项 Agent | 测试策略设计、测试用例生成 |
+| Agent | 职责 | 核心能力 | 映射到 _INDEX.md 角色 |
+| :--- | :--- | :--- | :--- |
+| spec-analyzer | SpecCore 需求分析与任务规划 Agent | 需求分析、功能识别 | `spec-analyzer`（analyze/phase1, analyze/phase2） |
+| spec-architect | SpecCore 架构守护与演进 Agent | 架构一致性检查、技术债务识别 | 预留，待挂载到全局分析阶段 |
+| spec-change-detector | SpecCore 变更感知与影响分析 Agent | 变更监听、影响分析 | `impact-analyst` + `regression-tester`（change/impact） |
+| spec-clarifier | SpecCore 需求澄清 Agent | 模糊点识别、缺失信息检测 | ⚠️ v8.3.160+ **已拆分**为 `product-analyst` + `interaction-designer` + `security-reviewer` |
+| spec-executor | SpecCore 开发执行与交付 Agent | 读取规格、代码生成 | `spec-executor`（execute/prompt-analysis, execute/code-generation） |
+| spec-gatekeeper | SpecCore 质量门禁 Agent | 编译检查、测试检查 | ⚠️ v8.3.160+ **已合并**为 `quality-gate-build` (compiler 兼测试) → `quality-gate-nfr` (security-reviewer 兼性能) → `quality-gate-doc-sync` |
+| spec-global-analyzer | SpecCore 全局源码分析 Agent | 源码扫描、跨端关联 | `spec-global-analyzer`（global-analyze） |
+| spec-knowledge-curator | SpecCore 知识沉淀与维护 Agent | 模式更新、术语维护 | 预留，待挂载到 done 阶段 |
+| spec-reviewer | SpecCore 代码审查与质量验证 Agent | Spec 符合性检查、代码质量检查 | `code-reviewer` + `test-reviewer`（pr/review） |
+| spec-security-auditor | SpecCore 安全审计 Agent | 代码安全扫描、敏感数据处理 | `security-reviewer`（analyze/clarify, execute/quality-gate, pr/review） |
+| spec-tester | SpecCore 测试专项 Agent | 测试策略设计、测试用例生成 | `test-engineer`（execute/quality-gate） |
 
 ### 所有 Agent 共用的核心约束
 

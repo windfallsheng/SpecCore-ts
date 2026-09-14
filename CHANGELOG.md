@@ -1,3 +1,46 @@
+## v8.3.160 (2026-09-14) — 子 Agent 隔离架构 + 步骤隔离模式 + Token 优化
+
+### 架构改造（核心）
+
+**子 Agent 隔离架构** (`src/core/pipeline-engine.ts`, `src/core/agent-adapter.ts`, `src/core/prompt-builder.ts`):
+- **默认步骤隔离模式**: Pipeline 每步完成后输出 `[SPECCORE_STEP_DONE]` + `[SPECCORE_NEXT_STEP]`，新会话通过 `--resume` 继续
+- **ContextSnapshot**: 紧凑上下文快照（关键约束 + 已完成产出路径 + 技术栈摘要），替代对话历史，解决上下文漂移
+- **关键约束重注入**: `buildPromptText()` 将 CONSTITUTION.md 核心禁令放在 Prompt 最前面，每轮必达
+
+**按需加载 REQ.md** (`src/core/prompt-builder.ts`):
+- **改造前**: `reqContent` 无条件加载 REQ.md 全文，即使 `contextType: 'incremental'` 也不跳过
+- **改造后**: `full` 模式加载全文，`incremental`/`platform-only`/`contract-only` 模式**不加载**
+- **效果**: incremental/platform-only/contract-only 步骤 Prompt 内容减少 3K-8K tokens
+
+**步骤级 Token 预算优化**:
+| 步骤 | 原预算 | 新预算 |
+|:---|:---:|:---:|
+| analyze/phase1-prompt | 12K | **10K** |
+| execute/prompt-analysis | 12K | **10K** |
+| global-analysis | 12K | **10K** |
+
+**Quality Gate 角色合并** (`src/core/pipeline-engine.ts`):
+- `compiler` (6K) + `test-engineer` (5K) → **`quality-gate-build`** (8K)，compiler 兼管编译 + 测试
+- `security-reviewer` (4K) + `performance-expert` (4K) → **`quality-gate-nfr`** (6K)，security-reviewer 兼管安全 + 性能
+- **效果**: execute Pipeline 从 8 步减至 6 步，会话切换次数 -25%
+
+**Agent 角色体系对齐** (`src/core/pipeline-engine.ts`, `src/core/agent-adapter.ts`):
+- 以 `_INDEX.md` 角色定义为准，统一三套命名体系
+- clarify 拆分为 `clarify-product` → `clarify-interaction` → `clarify-security` 三个单角色子步骤
+- 每个步骤配置专属 `subagent` + `contextBudget` + `contextType`
+
+**buildPrompt 调用链修复** (`src/commands/execute.ts`, `src/commands/iteration/split.ts`):
+- 修复 `runApplyMode` 和 split response 模式中 `buildPrompt` 未传递 `contextType`/`contextBudget` 的问题
+- 确保 Pipeline 配置的预算和加载策略在所有执行路径中生效
+
+### 文档更新
+
+- `docs/DESIGN.md`: 新增附录「v8.3.160+ 子 Agent 隔离架构设计」
+- `AGENTS.md`: 更新输出标记体系（`[SPECCORE_STEP_DONE]` / `[SPECCORE_NEXT_STEP]` / `[SPECCORE_SUBAGENT]`）
+- `.speccore/SKILLS/`: 新增 5 个子 Agent 配置模板（clarify / analyze / execute / verify / global-analyze）
+
+---
+
 ## v8.3.158 (2026-09-11) — 骨架结构一致性修复 + 需求读取增强 + Prompt 完善
 
 ### 修复（核心）

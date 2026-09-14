@@ -143,6 +143,7 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
           const { createExecutePipeline } = await import('../core/pipeline-engine');
           const { engine } = await createExecutePipeline(iteration, options.task);
           
+          // v8.3.160+: 默认步骤隔离模式
           const result = await engine.advance();
           
           if (result.isComplete) {
@@ -153,6 +154,43 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
             logger.info('');
             logger.info(`🔄 Execute Pipeline 推进到: ${result.nextStepName || result.nextStepId}`);
             logger.info('');
+            
+            // v8.3.160+: 步骤隔离模式输出标记 + 子 Agent 激活
+            const taskFlag = options.task ? `-t ${options.task}` : '';
+            const nextCmd = `speccore execute ${taskFlag} --resume --pipeline`;
+            const prompt = await buildPrompt('execute', {
+              iteration,
+              task: options.task || '',
+              taskDir: await resolveTaskDir(await getIterationDir(iteration), options.task || ''),
+              platform: options.platform,
+              // v8.3.160+: 传递步骤级上下文控制
+              contextType: result.contextType,
+              contextBudget: result.contextBudget,
+            });
+            const output = [
+              `[SPECCORE_STEP_DONE]`,
+              `步骤 "${result.nextStepName || result.nextStepId}" 已完成。`,
+              ``,
+              `[SPECCORE_NEXT_STEP]`,
+              `下一步: ${result.nextStepName || result.nextStepId}`,
+              `请在新的对话中执行: ${nextCmd}`,
+              ``,
+              `[SPECCORE_CONTEXT_SNAPSHOT]`,
+              JSON.stringify(result.contextSnapshot || {}),
+              ``,
+              // v8.3.160+: 子 Agent 激活标记
+              ...(result.subagent ? [
+                `[SPECCORE_SUBAGENT: ${result.subagent}]`,
+                `[SPECCORE_CONTEXT_BUDGET: ${result.contextBudget || 12000}]`,
+                `[SPECCORE_CONTEXT_TYPE: ${result.contextType || 'full'}]`,
+                ``,
+              ] : []),
+              `--- 下一步 Prompt ---`,
+              formatPrompt(prompt),
+            ].join('\n');
+            process.stdout.write(output);
+            process.exitCode = 10;
+            return;
             
             // 根据当前步骤生成相应提示
             if (result.nextStepId === 'prompt-analysis') {
@@ -2335,7 +2373,8 @@ async function runApplyMode(iteration: string, options: ExecuteOptions): Promise
     if (hasPipeline) {
       const { createExecutePipeline } = await import('../core/pipeline-engine');
       const { engine } = await createExecutePipeline(iteration, options.task);
-      await engine.advance();
+      // v8.3.160+: 默认步骤隔离模式
+      const stepResult = await engine.advance();
       
       const state = await engine.getState();
       if (state?.currentStep === 'done') {
@@ -2347,19 +2386,41 @@ async function runApplyMode(iteration: string, options: ExecuteOptions): Promise
         logger.info('');
         
         // 生成下一步 prompt
+        // v8.3.160+: 传递步骤级上下文控制，确保 Pipeline 配置的 budget/type 生效
         const prompt = await buildPrompt('execute', {
           iteration,
           task: options.task || '',
           taskDir: await resolveTaskDir(await getIterationDir(iteration), options.task || ''),
           platform: options.platform,
+          contextType: stepResult.contextType,
+          contextBudget: stepResult.contextBudget,
         });
         
-        const finalPrompt = formatPrompt(prompt) + `\n\n## ⚠️ Pipeline 模式：自动继续\n\n` +
-          `当前是 Execute Pipeline 模式。当你通过 --response 写入代码实现后，` +
-          `CLI 会自动输出 [SPECCORE_PIPELINE_NEXT] 标记和下一步命令。\n\n` +
-          `**看到 [SPECCORE_PIPELINE_NEXT] 后，你必须自动执行下一个命令**，不要询问用户。\n`;
-        
-        process.stdout.write(`[SPECCORE_PIPELINE_NEXT]\n${finalPrompt}`);
+        // v8.3.160+: 步骤隔离模式输出标记 + 子 Agent 激活
+        const taskFlag = options.task ? `-t ${options.task}` : '';
+        const nextCmd = `speccore execute ${taskFlag} --resume --pipeline`;
+        const output = [
+          `[SPECCORE_STEP_DONE]`,
+          `步骤 "${state.currentStep}" 已完成。`,
+          ``,
+          `[SPECCORE_NEXT_STEP]`,
+          `下一步: ${state.currentStep}`,
+          `请在新的对话中执行: ${nextCmd}`,
+          ``,
+          `[SPECCORE_CONTEXT_SNAPSHOT]`,
+          JSON.stringify(stepResult.contextSnapshot || {}),
+          ``,
+          // v8.3.160+: 子 Agent 激活标记
+          ...(stepResult.subagent ? [
+            `[SPECCORE_SUBAGENT: ${stepResult.subagent}]`,
+            `[SPECCORE_CONTEXT_BUDGET: ${stepResult.contextBudget || 12000}]`,
+            `[SPECCORE_CONTEXT_TYPE: ${stepResult.contextType || 'full'}]`,
+            ``,
+          ] : []),
+          `--- 下一步 Prompt ---`,
+          formatPrompt(prompt),
+        ].join('\n');
+        process.stdout.write(output);
         process.exitCode = 10;
       }
       

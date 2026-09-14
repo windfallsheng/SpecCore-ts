@@ -42,6 +42,8 @@ const techStackCache = new Map<string, CacheEntry<TechStack>>();
 const constitutionCache = new Map<string, CacheEntry<string>>();
 const reqContentCache = new Map<string, CacheEntry<string>>();
 const tocCache = new Map<string, CacheEntry<TOCEntry[]>>();
+// v8.3.160+: 关键约束缓存（解决上下文漂移）
+const keyConstraintsCache = new Map<string, CacheEntry<string[]>>();
 
 /** 通用文件缓存读取 */
 async function cachedRead<T>(
@@ -155,6 +157,10 @@ export interface SpecCorePrompt {
   projectPaths?: string; // v6.49.6+：工程路径信息（用于 execute 命令）
   rulesContent?: string; // v6.85.0+: 编码规范注入
   codeGraphSummary?: string; // v6.91.0+: 代码知识图谱摘要（analyze 阶段注入）
+  // v8.3.160+: 关键约束重注入（解决上下文漂移）
+  keyConstraints?: string[];
+  // v8.3.160+: 步骤级上下文预算
+  contextBudget?: number;
   instruction: string;
   outputHint: string;
 }
@@ -189,6 +195,58 @@ async function loadTechStack(cwd: string): Promise<TechStack> {
     }
 
     return stack;
+  });
+}
+
+/**
+ * v8.3.160+: 从 CONSTITUTION.md 提取关键约束（解决上下文漂移）
+ * 提取命名规范、Git 策略、错误码、核心禁令等不可遗忘的约束
+ */
+async function loadKeyConstraints(cwd: string): Promise<string[]> {
+  const constitutionPath = join(cwd, '.speccore', 'CONSTITUTION.md');
+  if (!await pathExists(constitutionPath)) return [];
+
+  return cachedRead(keyConstraintsCache, constitutionPath, async () => {
+    const content = await readFile(constitutionPath, 'utf-8');
+    const constraints: string[] = [];
+
+    // 提取核心禁令（⛔ 标记）
+    const banMatches = content.matchAll(/⛔\s*(.+)/g);
+    for (const match of banMatches) {
+      constraints.push(`禁止: ${match[1].trim()}`);
+    }
+
+    // 提取命名规范
+    const namingSection = content.match(/##\s*命名规范[\s\S]*?(?=##\s|#{3,}\s|$)/i);
+    if (namingSection) {
+      const lines = namingSection[0].split('\n')
+        .filter(l => l.trim().startsWith('-') || l.trim().startsWith('*'))
+        .map(l => `命名: ${l.trim().replace(/^[-*]\s*/, '')}`)
+        .slice(0, 6);
+      constraints.push(...lines);
+    }
+
+    // 提取 Git 分支策略
+    const gitMatch = content.match(/Git\s*分支[策略]*[：:]\s*(.+)/i) ||
+                     content.match(/分支策略[：:]\s*(.+)/i);
+    if (gitMatch) {
+      constraints.push(`Git: ${gitMatch[1].trim()}`);
+    }
+
+    // 提取错误码体系
+    const errorMatch = content.match(/错误码[体系]*[：:]\s*(.+)/i);
+    if (errorMatch) {
+      constraints.push(`错误码: ${errorMatch[1].trim()}`);
+    }
+
+    // 提取端名规范
+    const platformMatch = content.match(/端名[列表]*[：:]\s*(.+)/i) ||
+                          content.match(/平台[列表]*[：:]\s*(.+)/i);
+    if (platformMatch) {
+      constraints.push(`端名: ${platformMatch[1].trim()}`);
+    }
+
+    return constraints.slice(0, 20); // 最多 20 条，控制 Token 预算
   });
 }
 
@@ -1626,17 +1684,32 @@ export async function buildPrompt(
     task?: string;
     taskDir?: string;
     platform?: string;
+    // v8.3.160+: 步骤级上下文控制
+    contextType?: 'full' | 'incremental' | 'platform-only' | 'contract-only';
+    contextBudget?: number;
   }
 ): Promise<SpecCorePrompt> {
   const cwd = options.cwd || findProjectRoot() || process.cwd();
   const techStack = await loadTechStack(cwd);
   const taskDir = options.taskDir || '';
+  // v8.3.160+: 步骤级上下文预算（默认 12000）
+  const contextBudget = options.contextBudget || 12000;
 
-  // P0-1: 统一读取 REQ.md，避免 loadApiSpecs/loadDataModels/loadBusinessRules 各读一次
-  const reqContent = taskDir ? await loadReqContent(cwd, taskDir) : null;
-  const apiSpecs = await loadApiSpecs(cwd, taskDir, reqContent || undefined);
-  const dataModels = await loadDataModels(cwd, taskDir, reqContent || undefined);
-  const businessRules = await loadBusinessRules(cwd, taskDir, reqContent || undefined);
+  // v8.3.160+: 根据 contextType 控制 REQ.md 加载深度
+  // full: 加载全文 | incremental/platform-only/contract-only: 不加载（依赖前一步摘要或路径引用）
+  const shouldLoadReqContent = !options.contextType || options.contextType === 'full';
+  const reqContent = shouldLoadReqContent && taskDir ? await loadReqContent(cwd, taskDir) : null;
+  // v8.3.160+: 规格加载策略与 REQ.md 保持一致
+  const shouldLoadFullSpecs = shouldLoadReqContent;
+  const apiSpecs = shouldLoadFullSpecs
+    ? await loadApiSpecs(cwd, taskDir, reqContent || undefined)
+    : [];
+  const dataModels = shouldLoadFullSpecs
+    ? await loadDataModels(cwd, taskDir, reqContent || undefined)
+    : [];
+  const businessRules = shouldLoadFullSpecs
+    ? await loadBusinessRules(cwd, taskDir, reqContent || undefined)
+    : [];
 
   // 统一检索层：同时查询文档 RAG + 代码切片 + 知识图谱
   let extraSpecs: TaskExtraSpec[] = [];
@@ -1721,7 +1794,10 @@ export async function buildPrompt(
     }
   }
 
-    // v8.3.122+: execute / analyze 时深入读取关联源码（完整文件内容，不只是切片）
+    // v8.3.160+: 加载关键约束（每轮重注入，防止上下文漂移）
+  const keyConstraints = await loadKeyConstraints(cwd);
+
+  // v8.3.122+: execute / analyze 时深入读取关联源码（完整文件内容，不只是切片）
   // v8.3.122++: 同时注入知识图谱任务上下文，帮助 AI 理解代码关联关系
   if ((command === 'execute' || command === 'analyze') && searchQuery) {
     try {
@@ -2157,6 +2233,8 @@ export async function buildPrompt(
     projectPaths: projectPathsInfo,
     rulesContent,
     codeGraphSummary,
+    keyConstraints,
+    contextBudget,
     instruction,
     outputHint: command === 'execute'
       ? '请返回格式: {"files": [{"path": "工程标识/相对路径", "content": "代码内容"}]}'
@@ -2185,19 +2263,21 @@ function estimateTokens(text: string): number {
  * 将 Prompt 序列化为 AI 可读的文本（输出到 stdout）
  * 带动态裁剪：超出预算时按优先级逐级简化
  */
-export function formatPrompt(prompt: SpecCorePrompt, maxTokens: number = 12000): string {
+export function formatPrompt(prompt: SpecCorePrompt, maxTokens?: number): string {
+  // v8.3.160+: 使用步骤级上下文预算
+  const budget = maxTokens ?? prompt.contextBudget ?? 12000;
   // 尝试完整构建
   let result = buildPromptText(prompt);
   let tokens = estimateTokens(result);
 
-  if (tokens <= maxTokens) return result;
+  if (tokens <= budget) return result;
 
   // Level 1: 简化全局上下文（只保留 INDEX.md，去掉 TOC 目录）
   if (prompt.globalContext) {
     const slimGlobal = { ...prompt.globalContext, toc: [] };
     result = buildPromptText({ ...prompt, globalContext: slimGlobal });
     tokens = estimateTokens(result);
-    if (tokens <= maxTokens) {
+    if (tokens <= budget) {
       logger?.info?.(`   🪶 Prompt 已简化：隐藏全局目录（-${estimateTokens(formatGlobalContext(prompt.globalContext!, prompt.platform))} tokens）`);
       return result;
     }
@@ -2255,7 +2335,7 @@ export function formatPrompt(prompt: SpecCorePrompt, maxTokens: number = 12000):
 
     result = buildPromptText({ ...prompt, extraSpecs: budgeted });
     tokens = estimateTokens(result);
-    if (tokens <= maxTokens) {
+    if (tokens <= budget) {
       const removed = prompt.extraSpecs.length - budgeted.length;
       logger?.info?.(`   🪶 Prompt 已简化：分层预算控制 (P1:${usedP1}/${BUDGET_P1} P2:${usedP2}/${BUDGET_P2} P3:${usedP3}/${BUDGET_P3}${removed > 0 ? ` 移除${removed}项` : ''})`);
       return result;
@@ -2266,7 +2346,7 @@ export function formatPrompt(prompt: SpecCorePrompt, maxTokens: number = 12000):
   if (prompt.taskContext) {
     result = buildPromptText({ ...prompt, taskContext: undefined });
     tokens = estimateTokens(result);
-    if (tokens <= maxTokens) {
+    if (tokens <= budget) {
       logger?.info?.(`   🪶 Prompt 已简化：隐藏任务关联链`);
       return result;
     }
@@ -2294,6 +2374,15 @@ function buildPromptText(prompt: SpecCorePrompt): string {
   lines.push('');
   lines.push(`# 任务: ${prompt.command} — ${prompt.task || prompt.iteration}`);
   lines.push('');
+
+  // v8.3.160+: 关键约束重注入（必须放在最前面，防止上下文漂移）
+  if (prompt.keyConstraints && prompt.keyConstraints.length > 0) {
+    lines.push('## ⚠️ 核心约束（每轮必达）');
+    for (const constraint of prompt.keyConstraints) {
+      lines.push(`- ${constraint}`);
+    }
+    lines.push('');
+  }
 
   // 技术栈
   if (Object.keys(prompt.techStack).length > 0) {

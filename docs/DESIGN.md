@@ -165,17 +165,28 @@ PATTERNS/
 - **特化版本解析**：`product-analyst` → `product-analyst-backend`（platform）→ `product-analyst-finance`（industry）的回退链
 - **条件过滤**：支持简单表达式（`project.securityLevel > 2`、`project.industry == 'finance'`）
 
-**已覆盖阶段**：
-| 命令 | 阶段 | 角色 |
-|------|------|------|
-| `analyze` | clarify | product-analyst、interaction-designer、security-reviewer |
-| `analyze` | confirm-check | product-analyst |
-| `split` | default | task-decomposer、dependency-analyst、effort-estimator |
-| `plan` | default | schedule-planner、risk-assessor |
-| `execute` | quality-gate | compiler、test-engineer、security-reviewer、performance-expert、doc-sync-agent |
-| `change` | impact | impact-analyst、regression-tester |
-| `pr` | review | code-reviewer、security-reviewer、test-reviewer |
-| `audit` | default | security-reviewer、compliance-checker、performance-expert |
+**已覆盖阶段** (v8.3.160+ 子 Agent 隔离架构):
+| 命令 | 阶段 | 角色 | 上下文预算 |
+|------|------|------|:---:|
+| `analyze` | clarify-product | product-analyst | 4K |
+| `analyze` | clarify-interaction | interaction-designer | 4K |
+| `analyze` | clarify-security | security-reviewer (conditional) | 3K |
+| `analyze` | confirm-check | product-analyst | 4K |
+| `analyze` | phase1 | spec-analyzer | 10K |
+| `analyze` | contract | spec-analyzer | 6K |
+| `analyze` | platform-{x} | spec-analyzer | 8K |
+| `split` | prompt-analysis | task-decomposer | 8K |
+| `split` | dependency-analysis | dependency-analyst | 5K |
+| `split` | effort-estimation | effort-estimator | 4K |
+| `plan` | default | schedule-planner、risk-assessor | 6K/4K |
+| `execute` | prompt-analysis | spec-executor | 10K |
+| `execute` | code-generation | spec-executor | 10K |
+| `execute` | quality-gate-build | compiler (兼测试) | 8K |
+| `execute` | quality-gate-nfr | security-reviewer (兼性能) | 6K |
+| `execute` | quality-gate-doc-sync | doc-sync-agent | 3K |
+| `change` | impact | impact-analyst、regression-tester | 6K/4K |
+| `pr` | review | code-reviewer、security-reviewer、test-reviewer | 6K/6K/4K |
+| `global-analyze` | global-analysis | spec-global-analyzer | 10K |
 
 ### 1.5.3 RULES 层（v6.85.0+）
 
@@ -5744,3 +5755,114 @@ SpecCore 早期假设项目端名固定为 `backend/frontend/api/web`，但用�
 - 前端端 → 生成 Vue Component
 
 **后续重构方向**：从 `PROJECT.yaml` 读取每个端的 `type`（如 `Java服务`、`React前端`），根据技术栈类型选择代码生成模板，彻底消除端名与代码类型的绑定。
+
+---
+
+## 附录：v8.3.160+ 子 Agent 隔离架构设计
+
+### 设计背景
+
+SpecCore Pipeline（analyze/split/execute）在长期运行中暴露出三个结构性问题：
+
+1. **上下文漂移（Context Drift）**: AI 在单轮对话中反复 CLI↔AI 循环，早期注入的核心约束（如"禁止写入迭代目录"）在 10+ 轮后被稀释遗忘
+2. **注意力偏差（Attention Bias）**: 单轮对话越长，AI 对 prompt 中间段内容的关注度越低，导致关键规范被忽略
+3. **上下文耗尽**: 国产模型上下文窗口有限（8K-32K），单轮加载过多内容容易触顶，触发被动裁剪后质量不可控
+
+### 核心原则
+
+**步骤隔离 = 每步一个独立会话**。Pipeline 每完成一步，显式返回控制权，新会话从零加载必要上下文。
+
+### 三层架构
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  PipelineEngine（步骤状态机）                                  │
+│  ├─ 步骤定义（id / name / next / condition / subagent）       │
+│  ├─ 状态持久化（.pipeline-{iteration}.json）                  │
+│  └─ 上下文快照（ContextSnapshot）                             │
+├─────────────────────────────────────────────────────────────┤
+│  PromptBuilder（按需加载 + 预算控制）                          │
+│  ├─ contextType: full | incremental | platform-only | contract-only │
+│  ├─ contextBudget: 步骤级 Token 上限                          │
+│  └─ formatPrompt: 四级动态裁剪（TOC → extraSpecs → taskContext → minimal）│
+├─────────────────────────────────────────────────────────────┤
+│  AgentAdapter（子 Agent 统一适配层）                           │
+│  ├─ HeadlessAdapter: 基于文件/状态机模拟（默认）               │
+│  ├─ QoderSdkAdapter: SDK 深度集成（预留）                      │
+│  └─ 角色配置: systemPrompt + skills + 默认预算 + 加载策略       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### ContextSnapshot 结构
+
+每个步骤完成后输出到 `.pipeline-{iteration}-snapshot.json`：
+
+```typescript
+interface ContextSnapshot {
+  keyConstraints: string[];      // CONSTITUTION.md 核心禁令（每轮重注入）
+  completedOutputs: string[];    // 已生成文件路径列表
+  completedSteps: string[];      // 已完成步骤 ID
+  techStackSummary?: string;     // 技术栈摘要
+  currentTask?: string;          // 当前任务
+  iteration: string;
+  nextStep?: string;
+  generatedAt: string;
+}
+```
+
+新会话通过 `--resume` 读取快照，只加载关键约束 + 已完成产出路径，不加载完整对话历史。
+
+### 输出标记体系
+
+| 标记 | 含义 | 动作 |
+|:---|:---|:---|
+| `[SPECCORE_STEP_DONE]` | 当前步骤已完成 | 准备新会话 |
+| `[SPECCORE_NEXT_STEP]` | 下一步指令 | 显示下一步名称和命令 |
+| `[SPECCORE_SUBAGENT: {name}]` | 子 Agent 激活 | 按角色加载专属上下文 |
+| `[SPECCORE_CONTEXT_BUDGET: {n}]` | Token 预算 | 控制 Prompt 大小 |
+| `[SPECCORE_CONTEXT_TYPE: {type}]` | 加载策略 | full/incremental/platform-only/contract-only |
+| `[SPECCORE_CONTEXT_SNAPSHOT]` | 上下文快照 JSON | 新会话恢复依据 |
+
+### 关键优化：按需加载 REQ.md
+
+**改造前**：`buildPrompt` 无条件加载 REQ.md 全文，即使 `contextType: 'incremental'` 也不跳过。
+
+**改造后**：
+
+| contextType | REQ.md 加载策略 | 典型场景 |
+|:---|:---|:---|
+| `full` | 加载全文 | analyze/phase1、execute/prompt-analysis |
+| `incremental` | **不加载** | execute/code-generation（依赖前一步摘要） |
+| `platform-only` | **不加载** | analyze/platform-{x}（AI 通过 platform 参数定向） |
+| `contract-only` | **不加载** | analyze/contract（只加载 API_CONTRACT.yaml） |
+
+**效果**：incremental/platform-only/contract-only 步骤的 Prompt 内容直接减少 3K-8K tokens。
+
+### 角色合并策略
+
+**问题**：5 个 quality-gate 步骤 = 5 次会话切换，每次都有上下文恢复开销。
+
+**合并方案**：
+
+| 合并前 | 合并后 | 新角色职责 |
+|:---|:---|:---|
+| compiler (6K) + test-engineer (5K) | **quality-gate-build** (8K) | compiler 兼管编译检查 + 测试覆盖 |
+| security-reviewer (4K) + performance-expert (4K) | **quality-gate-nfr** (6K) | security-reviewer 兼管安全审查 + 性能检测 |
+| doc-sync-agent (3K) | doc-sync-agent (3K) | 保持不变 |
+
+**效果**：execute Pipeline 从 8 步减至 6 步，会话切换次数 -25%。
+
+### 预算分配原则
+
+| 步骤类型 | 预算范围 | 说明 |
+|:---|:---|:---|
+| 轻量检查/确认 | 3K-4K | confirm-check、doc-sync、effort-estimation |
+| 专项分析 | 4K-6K | clarify、dependency-analysis、contract |
+| 深度生成 | 8K-10K | phase1、platform、prompt-analysis、code-generation |
+| 质量门禁 | 6K-8K | quality-gate-build、quality-gate-nfr |
+
+**降级策略**：`formatPrompt` 四级动态裁剪
+1. Level 1: 隐藏全局 TOC 目录
+2. Level 2: 分层预算控制 extraSpecs（P1:10K / P2:5K / P3:3K）
+3. Level 3: 移除任务关联链
+4. Level 4: 极简模式（仅技术栈 + API + 核心指令）
