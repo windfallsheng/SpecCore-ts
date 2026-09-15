@@ -1,3 +1,22 @@
+## v8.3.164 (2026-09-15) — 空壳任务拦截 + AI 行为约束强化
+
+### Split：内容质量校验 — 拦截空壳任务 (`src/commands/iteration/split.ts`)
+
+- **问题**：AI 返回的 `reqContent`/`techContent` 虽然有长度，但全是 `AI-FILL` 占位符、HTML 注释和 "待补充" 模板，实质内容极少
+- **修复**：拆分前对每个任务进行内容质量检测
+  - 排除 HTML 注释、`AI-FILL` 标记、markdown 格式符号、空白行
+  - 计算实质内容字符数（中文字符 + 英文单词）
+  - 阈值：每个任务 req 和 tech 都低于 80 个实质字符视为空壳
+  - 拦截：空壳任务占比超过 50% 时拒绝创建（`--force` 可绕过）
+- **效果**：强制 AI 在 split 阶段生成有实质内容的任务规格，避免 execute 阶段大量现场生成
+
+### AGENTS.md：新增两条核心禁令
+
+- **第 17 条 — 禁止 AI 直接修改配置文件**：`.speccore.yml`、`.speccore/CONSTITUTION.md`、`.speccore/PROJECT.yaml` 等必须通过 `speccore config --upgrade` 修改，禁止用 Write/SearchReplace 工具直接编辑
+- **第 18 条 — 禁止单会话内连续执行多步骤**：analyze → apply → analyze → split → execute 等 Pipeline 步骤必须分会话执行，每步完成后输出 `[SPECCORE_STEP_DONE]`，新会话 `--resume` 继续
+
+---
+
 ## v8.3.163 (2026-09-15) — 架构漏洞封堵 + Split 粒度约束重构
 
 ### Split 粒度约束重构 (`src/commands/iteration/split.ts`)

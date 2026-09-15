@@ -84,6 +84,8 @@ SpecCore 规范驱动开发项目。
 14. **失败时读取 .issues.md 并按流程处理** — 读取问题清单 → 分析根因 → 修复 → 更新 .issues.md 状态 → 重新执行
 15. **续跑用 --resume** — `speccore execute --resume`
 16. **配置变更用 --upgrade** — `speccore config --upgrade`（`.speccore.yml` / `PROJECT.yaml` 结构升级）
+17. **禁止 AI 直接修改配置文件** — `.speccore.yml`、`.speccore/CONSTITUTION.md`、`.speccore/PROJECT.yaml` 等配置必须通过 `speccore config --upgrade` 修改，禁止用 Write/SearchReplace 工具直接编辑（防止 schema_version 等关键字段被破坏）
+18. **禁止单会话内连续执行多步骤** — analyze → apply → analyze → split → execute 等 Pipeline 步骤必须分会话执行，每步完成后输出 `[SPECCORE_STEP_DONE]`，新会话读取 context snapshot 后 `--resume` 继续。严禁在单会话内循环执行多个 CLI 命令
 
 ## 详细规范索引
 

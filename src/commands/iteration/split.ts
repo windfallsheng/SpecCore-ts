@@ -799,6 +799,76 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           logger.warn('   ⚠️  --force 已启用，继续创建所有任务...');
         }
 
+        // v8.3.164+: 内容质量校验 — 拦截空壳任务（reqContent/techContent 实质内容不足）
+        // 问题：AI 返回的 reqContent/techContent 虽然有长度，但全是 AI-FILL 占位符和模板
+        const MIN_SUBSTANTIVE_CHARS = 80; // 实质内容最低字符数
+        const MAX_EMPTY_SHELL_RATIO = 0.5; // 空壳任务占比上限
+        let emptyShellCount = 0;
+        const emptyShellTasks: string[] = [];
+        
+        for (let i = 0; i < sections.length; i++) {
+          const sec = sections[i];
+          const reqContent = (sec as any)._reqContent as string | undefined;
+          const techContent = (sec as any)._techContent as string | undefined;
+          
+          // 计算实质内容字符数（排除 HTML 注释、AI-FILL 标记、空白行、markdown 格式符号）
+          const calcSubstantive = (text: string | undefined): number => {
+            if (!text || text.trim().length === 0) return 0;
+            // 去除 HTML 注释
+            let cleaned = text.replace(/<!--[\s\S]*?-->/g, '');
+            // 去除 AI-FILL 标记行
+            cleaned = cleaned.replace(/AI-FILL[\s\S]*?$/gm, '');
+            // 去除 markdown 标题符号
+            cleaned = cleaned.replace(/^#+\s*/gm, '');
+            // 去除表格分隔符
+            cleaned = cleaned.replace(/^[\|\-:\s]+$/gm, '');
+            // 去除空白行
+            cleaned = cleaned.replace(/^\s*$/gm, '');
+            // 去除 markdown 列表符号
+            cleaned = cleaned.replace(/^[-*+]\s+/gm, '');
+            // 去除代码块标记
+            cleaned = cleaned.replace(/^```\w*$/gm, '');
+            // 去除纯英文占位符（如 "TBD", "TODO", "待补充" 等）
+            cleaned = cleaned.replace(/\b(TBD|TODO|FIXME|HACK|XXX|待补充|待实现|待填写|待完善|待确认|待定)\b/gi, '');
+            // 计算剩余实质字符（中文字符 + 英文单词）
+            const cnChars = (cleaned.match(/[\u4e00-\u9fa5]/g) || []).length;
+            const enWords = (cleaned.match(/[a-zA-Z]{2,}/g) || []).length;
+            return cnChars + enWords;
+          };
+          
+          const reqSubstantive = calcSubstantive(reqContent);
+          const techSubstantive = calcSubstantive(techContent);
+          
+          // 判定为空壳：req 和 tech 都缺乏实质内容
+          if (reqSubstantive < MIN_SUBSTANTIVE_CHARS && techSubstantive < MIN_SUBSTANTIVE_CHARS) {
+            emptyShellCount++;
+            emptyShellTasks.push(`"${sec.name}" (req=${reqSubstantive}, tech=${techSubstantive})`);
+          }
+        }
+        
+        const emptyRatio = sections.length > 0 ? emptyShellCount / sections.length : 0;
+        if (emptyShellCount > 0) {
+          if (emptyRatio > MAX_EMPTY_SHELL_RATIO) {
+            logger.error(`\n   ❌ 内容质量拦截：${emptyShellCount}/${sections.length} 个任务为空壳（占比 ${Math.round(emptyRatio * 100)}%，上限 ${Math.round(MAX_EMPTY_SHELL_RATIO * 100)}%）`);
+            logger.error(`   💡 空壳任务特征：reqContent/techContent 全是 AI-FILL 占位符、模板内容或 "待补充"`);
+            logger.error(`   🔧 建议操作：`);
+            logger.error(`      1. 重新执行 split，并告诉 AI："请为每个任务生成完整的需求规格和技术方案，不要只输出骨架"`);
+            logger.error(`      2. 或者检查 analyze 阶段的 020-specs/ 是否有足够内容供 split 提取`);
+            for (const t of emptyShellTasks.slice(0, 5)) logger.error(`      • ${t}`);
+            if (emptyShellTasks.length > 5) logger.error(`      ... 还有 ${emptyShellTasks.length - 5} 个`);
+            if (!options.force) {
+              logger.info('\n   ℹ️  如需强制继续，添加 --force 参数');
+              return;
+            }
+            logger.warn('   ⚠️  --force 已启用，继续创建空壳任务...');
+          } else {
+            logger.warn(`\n   ⚠️  内容质量警告：${emptyShellCount}/${sections.length} 个任务为空壳`);
+            for (const t of emptyShellTasks.slice(0, 3)) logger.warn(`      • ${t}`);
+            if (emptyShellTasks.length > 3) logger.warn(`      ... 还有 ${emptyShellTasks.length - 3} 个`);
+            logger.warn(`   💡 这些任务将在 execute 阶段依赖 AI 现场生成内容，可能增加开发时间`);
+          }
+        }
+
         // 交互模式判断：显式 --interactive 或 stdin 是 TTY（--force 时跳过交互，直接执行）
         const isInteractive = (options.interactive || process.stdin.isTTY) && !options.force;
 
