@@ -1,3 +1,30 @@
+## v8.3.166 (2026-09-15) — 多 Subagent 协作：跨 Agent 状态共享 + 端级角色
+
+### Execute：跨 Agent 状态共享 + 端级 Subagent (`src/commands/execute.ts` + `src/core/execution-state.ts`)
+
+- **问题**：多 Subagent 执行时，后面的 Agent 不知道前面 Agent 创建了哪些分支、合并了哪些代码
+- **修复**：
+  - `TaskSummary` 扩展分支字段：`branchName`/`branchBase`/`mergedBranches`/`agent`
+  - `prepareTaskBranch` 创建分支后自动更新 `execution-state.json`，记录分支和合并信息
+  - `runPromptMode` 读取 `execution-summary.md` 注入到 prompt，让当前 Agent 知道之前 Agent 的进度和分支状态
+  - 依赖分支合并列表自动注入 prompt（"已合并的依赖分支：xxx → yyy"）
+  - `--prompt` 模式输出端级 subagent：`spec-executor-{platform}`（如 `spec-executor-backend`）
+- **效果**：每个 execute Agent 都能获取完整的跨 Agent 执行状态和分支依赖关系
+
+### Analyze Phase 2：端级 Subagent (`src/commands/analyze.ts` + `src/core/pipeline-engine.ts`)
+
+- **修复**：
+  - Pipeline 模式：端级步骤 subagent 从 `spec-analyzer` 改为 `spec-analyzer-{platform}`（如 `spec-analyzer-backend`）
+  - 非 Pipeline 模式：Phase 2 `--prompt` 输出前添加 `[SPECCORE_SUBAGENT: spec-analyzer-{platform}]`
+- **效果**：每个端的分析由独立的 spec-analyzer 角色处理，上下文更聚焦
+
+### Split：Subagent 标记 (`src/commands/iteration/split.ts`)
+
+- **修复**：`--prompt` 模式输出前添加 `[SPECCORE_SUBAGENT: task-decomposer]` + `[SPECCORE_CONTEXT_BUDGET: 12000]`
+- **效果**：拆分阶段明确标识为 task-decomposer 角色
+
+---
+
 ## v8.3.165 (2026-09-15) — Subagent 全覆盖：Plan/Execute/Ask Pipeline
 
 ### Plan 命令：添加 Subagent 支持 (`src/commands/plan.ts`)

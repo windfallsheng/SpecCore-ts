@@ -1047,6 +1047,13 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       `当你通过 --apply 写入文档后，CLI 会自动输出 [SPECCORE_STEP_DONE] 标记和下一步命令。\n\n` +
       `**看到 [SPECCORE_STEP_DONE] 后，请在新会话中执行提示的命令**，继续下一步。\n`;
 
+    // v8.3.166+: Phase 2 端级步骤输出端级 subagent 标记
+    const platformSubagent = platformMatch ? `spec-analyzer-${platformMatch[1]}` : undefined;
+    if (platformSubagent) {
+      process.stdout.write(`[SPECCORE_SUBAGENT: ${platformSubagent}]\n`);
+      process.stdout.write(`[SPECCORE_CONTEXT_BUDGET: 8000]\n`);
+      process.stdout.write(`[SPECCORE_CONTEXT_TYPE: platform-only]\n\n`);
+    }
     process.stdout.write(`[SPECCORE_PROMPT]\n${finalPrompt}`);
     process.exitCode = 10;
     return;

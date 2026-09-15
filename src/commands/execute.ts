@@ -881,6 +881,7 @@ async function processBatch(tasks: TaskState[], state: ExecutionState, iteration
     completed.push(task.id);
 
     // 写入任务摘要到 execution-state（文件即记忆）
+    // v8.3.166+: 包含 agent 角色，供跨 Agent 状态共享
     const taskSummary: TaskSummary = {
       taskId: task.id,
       taskName: task.name || task.id,
@@ -890,6 +891,7 @@ async function processBatch(tasks: TaskState[], state: ExecutionState, iteration
       outputs: ['00-specs/', '{platform}/(子任务)/'],
       dependencies: task.dependencies || [],
       completedAt: new Date().toISOString(),
+      agent: 'spec-executor',
     };
     addTaskSummary(state, taskSummary);
 
@@ -1665,6 +1667,7 @@ async function prepareTaskBranch(
 
   // 4b. 合并依赖任务分支
   // 查找顺序：1. 当前会话 createdBranches  2. git-mapping.json  3. git branch 列表
+  const mergedBranches: string[] = [];
   for (const depId of depTaskIds) {
     let depBranch = createdBranches.get(depId);
     let source = '当前会话';
@@ -1678,6 +1681,7 @@ async function prepareTaskBranch(
       try {
         execSync(`git merge "${depBranch}" --no-edit --no-ff`, { cwd: gitCwd, stdio: 'pipe' });
         logger.info(`  🔗 合并依赖分支 [${source}]: ${depBranch}`);
+        mergedBranches.push(depBranch);
       } catch (e: any) {
         logger.warn(`  ⚠️ 合并 ${depBranch} 冲突，需要手动解决`);
       }
@@ -1686,6 +1690,38 @@ async function prepareTaskBranch(
       logger.warn(`     可能原因：1) 依赖任务尚未执行  2) 分支在另一会话创建  3) 分支已被删除`);
     }
   }
+
+  // v8.3.166+: 更新 execution-state，记录分支信息供跨 Agent 共享
+  try {
+    const { loadExecutionState, saveExecutionState } = await import('../core/execution-state');
+    const state = loadExecutionState();
+    if (state && branch) {
+      const existing = state.taskSummaries[task.id];
+      if (existing) {
+        existing.branchName = branch;
+        existing.branchBase = base;
+        if (mergedBranches.length > 0) existing.mergedBranches = mergedBranches;
+      } else {
+        state.taskSummaries[task.id] = {
+          taskId: task.id,
+          taskName: task.name || task.id,
+          type: task.type || 'feature',
+          status: 'completed',
+          summary: '分支已创建',
+          outputs: [],
+          dependencies: depTaskIds,
+          completedAt: new Date().toISOString(),
+          branchName: branch,
+          branchBase: base,
+          mergedBranches: mergedBranches.length > 0 ? mergedBranches : undefined,
+        };
+      }
+      saveExecutionState(state);
+      // 同时更新上下文摘要文件（供新会话 Agent 读取）
+      const { writeContextSummaryFile } = await import('../core/execution-state');
+      await writeContextSummaryFile(state);
+    }
+  } catch { /* ignore state update errors */ }
 
   return branch;
 }
@@ -2271,12 +2307,42 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
     withCode: options.withCode,
   });
 
-  // 在 prompt 中追加分支信息（告诉 AI 在哪个分支上工作）
+  // v8.3.166+: 注入跨 Agent 执行状态（让当前 Agent 知道之前 Agent 的分支和进度）
   let promptText = formatPrompt(prompt);
+
+  // 读取 execution-summary.md（之前 Agent 的执行状态和分支记录）
+  let agentStateContext = '';
+  try {
+    const summaryPath = join('.speccore', 'local', 'execution-summary.md');
+    if (await pathExists(summaryPath)) {
+      const summary = await readFile(summaryPath, 'utf-8');
+      if (summary.trim().length > 0) {
+        agentStateContext = `\n\n## 🤖 跨 Agent 执行状态\n`;
+        agentStateContext += `> 以下信息来自之前 Agent 的执行记录，供你参考依赖关系和分支状态\n\n`;
+        agentStateContext += summary.slice(0, 2000); // 限制长度，避免溢出
+        agentStateContext += '\n';
+      }
+    }
+  } catch { /* ignore */ }
+  if (agentStateContext) {
+    promptText += agentStateContext;
+  }
+
+  // 在 prompt 中追加分支信息（告诉 AI 在哪个分支上工作）
   if (branchName) {
     promptText += `\n\n## 🔀 Git 分支\n`;
     promptText += `当前已切换到任务分支: \`${branchName}\`\n`;
     promptText += `请在此分支上编写代码。\n`;
+    // v8.3.166+: 如果有依赖分支已合并，提示 AI
+    const mergedBranches: string[] = [];
+    for (const [depId, depBranch] of createdBranches) {
+      if (depId !== task) mergedBranches.push(`${depId} → ${depBranch}`);
+    }
+    if (mergedBranches.length > 0) {
+      promptText += `\n**已合并的依赖分支**:\n`;
+      for (const mb of mergedBranches) promptText += `- ${mb}\n`;
+      promptText += `这些分支的代码已合并到当前分支，可以直接使用。\n`;
+    }
   }
 
   // v8.2.0+: 注入相邻任务上下文（同一 Task 的其他端 + 契约）
@@ -2355,8 +2421,28 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
     }
   }
 
+  // v8.3.166+: 推断任务平台（端），输出端级 subagent 标记
+  let platformSubagent = 'spec-executor';
+  try {
+    const entries = await readdir(taskDir, { withFileTypes: true });
+    const platformNames = entries
+      .filter((e: any) => e.isDirectory() && !e.name.startsWith('.') && e.name !== '00-specs' && e.name !== '_shared')
+      .map((e: any) => e.name);
+    if (platformNames.length === 1) {
+      platformSubagent = `spec-executor-${platformNames[0]}`;
+    }
+  } catch { /* ignore */ }
+
   // 输出到 stdout（Skill 通过 execute_command 捕获）
-  process.stdout.write(promptText);
+  // v8.3.166+: 在 prompt 前输出 subagent 标记
+  const finalOutput = [
+    `[SPECCORE_SUBAGENT: ${platformSubagent}]`,
+    `[SPECCORE_CONTEXT_BUDGET: 12000]`,
+    `[SPECCORE_CONTEXT_TYPE: ${options.platform ? 'platform-only' : 'full'}]`,
+    ``,
+    promptText,
+  ].join('\n');
+  process.stdout.write(finalOutput);
 
   // 退出码 10: 表示等待 AI 处理
   process.exitCode = 10;

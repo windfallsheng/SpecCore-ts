@@ -505,7 +505,8 @@ export async function createAnalyzePipeline(
         id: `platform-${platform}-prompt`,
         name: `Phase 2-${i + 1}: ${platform} 端专属文档生成`,
         next: `platform-${platform}-done`,
-        subagent: 'spec-analyzer',
+        // v8.3.166+: 端级 Subagent，每个端有独立的分析角色
+        subagent: `spec-analyzer-${platform}`,
         contextType: 'platform-only',
         contextBudget: 8000,
       });
@@ -513,7 +514,7 @@ export async function createAnalyzePipeline(
         id: `platform-${platform}-done`,
         name: `${platform} 端完成检查`,
         next: nextId,
-        subagent: 'spec-analyzer',
+        subagent: `spec-analyzer-${platform}`,
         contextType: 'incremental',
         contextBudget: 4000,
       });

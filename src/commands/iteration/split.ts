@@ -484,7 +484,15 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
   if (options.prompt) {
     const iter = options.iteration || await getDefaultIteration() || '';
     const prompt = await buildPrompt('split', { iteration: iter });
-    process.stdout.write(formatPrompt(prompt));
+    // v8.3.166+: 输出 subagent 标记（task-decomposer）
+    const output = [
+      `[SPECCORE_SUBAGENT: task-decomposer]`,
+      `[SPECCORE_CONTEXT_BUDGET: 12000]`,
+      `[SPECCORE_CONTEXT_TYPE: full]`,
+      ``,
+      formatPrompt(prompt),
+    ].join('\n');
+    process.stdout.write(output);
     process.exitCode = 10;
     return;
   }

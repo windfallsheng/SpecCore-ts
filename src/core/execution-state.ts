@@ -17,6 +17,11 @@ export interface TaskSummary {
   outputs: string[];         // 关键产出文件路径（相对任务目录）
   dependencies: string[];    // 依赖的任务 ID
   completedAt: string;
+  // v8.3.166+: 跨 Agent 分支状态共享
+  branchName?: string;       // 任务创建的分支名
+  branchBase?: string;       // 分支的 base 分支
+  mergedBranches?: string[]; // 合并到本分支的依赖分支
+  agent?: string;            // 执行本任务的 Agent 角色
 }
 
 export interface ExecutionState {
@@ -177,14 +182,16 @@ export function generateContextSummary(state: ExecutionState): string {
   lines.push(`- 开始时间: ${state.startedAt}`);
   lines.push(``);
 
-  // 已完成任务摘要
+  // 已完成任务摘要（含分支状态）
   if (state.completedTasks.length > 0) {
     lines.push(`## ✅ 已完成`);
     for (const taskId of state.completedTasks) {
       const s = state.taskSummaries[taskId];
       if (s) {
         const outputs = s.outputs.length > 0 ? ` → ${s.outputs.join(', ')}` : '';
-        lines.push(`- **${taskId}** (${s.type}): ${s.summary}${outputs}`);
+        const branch = s.branchName ? ` 🌿 \`${s.branchName}\`` : '';
+        const agent = s.agent ? ` 🤖 ${s.agent}` : '';
+        lines.push(`- **${taskId}** (${s.type})${agent}${branch}: ${s.summary}${outputs}`);
       } else {
         lines.push(`- **${taskId}**: 已完成`);
       }
