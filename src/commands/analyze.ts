@@ -930,11 +930,26 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       pipelineKey = 'GLOBAL';
       initStep = 'init';
     } else {
-      // 迭代层：使用 createAnalyzePipeline（支持契约先行 + 逐端推进 + 变更感知 + 关键路径优先 + 需求澄清）
+      // 迭代层：使用 createAnalyzePipeline（支持契约先行 + 逐端推进 + 变更感知 + 关键路径优先 + 需求澄清 + 功能模块分批）
+      // v8.3.167+: 大项目自动启用功能模块分批
+      let features: string[] | undefined;
+      try {
+        const iterDirForFeatures = await getIterationDir(iter!);
+        if (iterDirForFeatures) {
+          const { parseFeatureList } = await import('../core/spec-paths');
+          const featureList = await parseFeatureList(iterDirForFeatures);
+          if (featureList.length > 2) {
+            features = featureList;
+            logger.info(`📦 检测到 ${featureList.length} 个功能模块，启用分批分析模式`);
+          }
+        }
+      } catch { /* 忽略功能模块检测失败 */ }
+
       const result = await createAnalyzePipeline(iter!, _projectRoot, {
         affectedPlatforms: affectedPlatforms && affectedPlatforms.length > 0 ? affectedPlatforms : undefined,
         platformOrder: platformOrder && platformOrder.length > 0 ? platformOrder : undefined,
         skipClarify: options.skipClarify,
+        features,
       });
       engine = result.engine;
       steps = result.steps;
@@ -959,6 +974,9 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     // 根据当前步骤生成对应的 prompt
     let prompt: string;
     const platformMatch = currentStep.match(/^platform-(.+)-prompt$/);
+
+    // v8.3.167+: 检测功能模块步骤
+    const featureMatch = currentStep.match(/^feature-(.+)-prompt$/);
 
     if (isGlobalScope) {
       // 全局层 Pipeline 步骤映射
@@ -993,6 +1011,13 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       prompt = buildPromptText(await buildPrompt('analyze', {
         iteration: iter!, task: options.task, platform: options.platform,
         analyzeOptions: options,
+      }));
+    } else if (featureMatch) {
+      // v8.3.167+: 功能模块级分析步骤
+      const featureName = featureMatch[1];
+      prompt = buildPromptText(await buildPrompt('analyze', {
+        iteration: iter!,
+        analyzeOptions: { ...options, feature: featureName, phase: '1' },
       }));
     } else if (currentStep === 'contract-prompt') {
       // 契约先行阶段：基于 Phase 1 文档生成跨端契约
@@ -1034,11 +1059,13 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
               ? 'Phase 0/3: 需求确认'
               : currentStep === 'phase1-prompt'
                 ? 'Phase 1/3: 迭代综合文档'
-                : currentStep === 'contract-prompt'
-                  ? 'Phase 2/3: 契约定义'
-                  : platformMatch
-                    ? `Phase 2/3: ${platformMatch[1]} 端专属文档`
-                    : 'Pipeline';
+                : featureMatch
+                  ? `Phase 1b/3: ${featureMatch[1]} 功能模块分析`
+                  : currentStep === 'contract-prompt'
+                    ? 'Phase 2/3: 契约定义'
+                    : platformMatch
+                      ? `Phase 2/3: ${platformMatch[1]} 端专属文档`
+                      : 'Pipeline';
     }
 
     // v8.3.160+: 步骤隔离模式，每步完成后需新会话继续
@@ -1048,8 +1075,14 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       `**看到 [SPECCORE_STEP_DONE] 后，请在新会话中执行提示的命令**，继续下一步。\n`;
 
     // v8.3.166+: Phase 2 端级步骤输出端级 subagent 标记
+    // v8.3.167+: 功能模块步骤输出功能模块级 subagent 标记
     const platformSubagent = platformMatch ? `spec-analyzer-${platformMatch[1]}` : undefined;
-    if (platformSubagent) {
+    const featureSubagent = featureMatch ? `spec-analyzer-feature` : undefined;
+    if (featureSubagent) {
+      process.stdout.write(`[SPECCORE_SUBAGENT: ${featureSubagent}]\n`);
+      process.stdout.write(`[SPECCORE_CONTEXT_BUDGET: 10000]\n`);
+      process.stdout.write(`[SPECCORE_CONTEXT_TYPE: full]\n\n`);
+    } else if (platformSubagent) {
       process.stdout.write(`[SPECCORE_SUBAGENT: ${platformSubagent}]\n`);
       process.stdout.write(`[SPECCORE_CONTEXT_BUDGET: 8000]\n`);
       process.stdout.write(`[SPECCORE_CONTEXT_TYPE: platform-only]\n\n`);
@@ -3199,7 +3232,7 @@ async function buildLayer3ModuleContext(projectRoot: string): Promise<string | n
 
 // ── buildMultiDocPrompt: 多文档协议 ──
 // v8.3.160+: 改为 export，供 prompt-builder.ts 统一调用
-export async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; task?: string; type?: string; scope?: string; withCode?: boolean; platform?: string; phase?: string; autoMode?: boolean }, options?: AnalyzeOptions, clarifyCtx?: { needsClarify: boolean; clarifyTargets: { path: string; level: string }[] }): Promise<string> {
+export async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; task?: string; type?: string; scope?: string; withCode?: boolean; platform?: string; phase?: string; autoMode?: boolean; feature?: string }, options?: AnalyzeOptions, clarifyCtx?: { needsClarify: boolean; clarifyTargets: { path: string; level: string }[] }): Promise<string> {
   const iter = ctx.iteration || '当前迭代';
   const task = ctx.task ? ` — ${ctx.task}` : '';
   const taskType = ctx.type || 'feature';
@@ -4550,7 +4583,12 @@ sequenceDiagram
   const GLOBAL_DOCS = [...GLOBAL_INDEX_DOCS, ...FEATURE_OVERVIEW_DOCS_LIST];
   let taskDocs = docs.filter(([n]) => includeDocs.includes(n));
   if (ctx.phase === '1') {
-    taskDocs = taskDocs.filter(([n]) => GLOBAL_DOCS.includes(n));
+    if (ctx.feature) {
+      // v8.3.167+: 功能模块级分析，只生成该模块的 overview 文档（不含全局索引）
+      taskDocs = taskDocs.filter(([n]) => FEATURE_OVERVIEW_DOCS_LIST.includes(n));
+    } else {
+      taskDocs = taskDocs.filter(([n]) => GLOBAL_DOCS.includes(n));
+    }
   } else if (ctx.phase === '2') {
     taskDocs = taskDocs.filter(([n]) => PLATFORM_DOCS.includes(n));
   }
@@ -4735,7 +4773,8 @@ sequenceDiagram
     techDoc[1] = `# 技术架构（跨端全局）\n\n> ${iter}\n\n## 写作要求\n撰写整体技术架构，覆盖所有端的交互关系：\n- 系统整体分层设计（各端在架构中的位置）\n- 跨端交互协议（前端↔后端通信方式、数据流向）\n- 中间件选型（缓存、消息队列、网关等）\n- 数据库整体设计（核心表结构、ER 关系）\n- 技术栈选型及理由\n`;
   }
 
-  let prompt = `\n# 任务: ${command}${task} (${taskDocs.length}个文档 · ${isTask ? `类型:${taskType}` : '迭代全量'}${ctx.phase ? ` · Phase ${ctx.phase}` : ''})\n\n`;
+  const featureLabel = ctx.feature ? ` · 功能模块:${ctx.feature}` : '';
+  let prompt = `\n# 任务: ${command}${task} (${taskDocs.length}个文档 · ${isTask ? `类型:${taskType}` : '迭代全量'}${ctx.phase ? ` · Phase ${ctx.phase}` : ''}${featureLabel})\n\n`;
 
   // v8.3.160+: 注入子 Agent 角色定义
   if (agentContextText) {
@@ -4973,6 +5012,15 @@ status: "clarified"
   prompt += `- 如果文档内容不完整，标注"文档未提及"，不要自行脑补\n`;
   prompt += `- 分析过程中，始终把迭代名称当作透明信息处理，不做任何功能推断\n\n`;
   prompt += `## 分析范围说明\n`;
+  // v8.3.167+: 功能模块级分析专属指令
+  if (ctx.feature && !isTask) {
+    prompt += `- 当前是**功能模块级分析**，只分析「**${ctx.feature}**」功能模块\n`;
+    prompt += `- **只生成该功能模块的 overview/ 文档**，不要分析其他功能模块\n`;
+    prompt += `- 文档写入路径格式：\`${ctx.feature}/overview/{文件名}\`（如 \`${ctx.feature}/overview/REQUIREMENT.md\`）\n`;
+    prompt += `- **全局索引文档（FUNCTION_MAP.md / INTERACTION_MAP.md / PLATFORMS.md）已在 Phase 1 主步骤生成，不要重复生成**\n`;
+    prompt += `- 分析前请先 Read 全局索引文档，确保本模块内容与全局文档一致\n`;
+    prompt += `- 如果需求文档中该模块的描述不完整，标注"文档未充分描述"，不要自行脑补\n\n`;
+  }
   if (isTask) {
     prompt += `- 当前是**任务级分析**，类型为 \`${taskType}\`，只需产出 ${taskDocs.length} 个文档：${taskDocs.map(([n]) => n).join('、')}\n`;
     prompt += `- bugfix: 聚焦根因分析和修复验证；research: 聚焦技术调研；review: 聚焦代码审查\n`;

@@ -484,6 +484,30 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
   if (options.prompt) {
     const iter = options.iteration || await getDefaultIteration() || '';
     const prompt = await buildPrompt('split', { iteration: iter });
+    // v8.3.167+: 检测功能模块数量，大项目启用分批拆分
+    let featureBatchHint = '';
+    try {
+      const iterDirForSplit = await getIterationDir(iter);
+      if (iterDirForSplit) {
+        const { parseFeatureList } = await import('../../core/spec-paths');
+        const featureList = await parseFeatureList(iterDirForSplit);
+        if (featureList.length > 2) {
+          logger.info(`📦 检测到 ${featureList.length} 个功能模块，启用分批拆分模式`);
+          featureBatchHint = `\n\n## 📦 功能模块分批拆分（v8.3.167+）\n\n`;
+          featureBatchHint += `当前迭代包含 ${featureList.length} 个功能模块：${featureList.join('、')}\n\n`;
+          featureBatchHint += `**分批策略**：\n`;
+          featureBatchHint += `- 本次只拆分 **1-2 个功能模块**（优先拆分基础模块：认证/配置/数据库）\n`;
+          featureBatchHint += `- 确保每个模块的拆分质量（任务定义清晰、依赖关系明确）\n`;
+          featureBatchHint += `- 剩余模块在 JSON 输出后追加续批标记\n\n`;
+          featureBatchHint += `**续批标记格式**：\n`;
+          featureBatchHint += `\`\`\`\n[PENDING: 模块A, 模块B, 模块C]\n`;
+          featureBatchHint += `[SPECCORE_EXEC: speccore iteration split --prompt -I ${iter}]\n`;
+          featureBatchHint += `\`\`\`\n\n`;
+          featureBatchHint += `**重要**：不要一次性拆分所有模块，确保当前批次质量后再续批。\n`;
+        }
+      }
+    } catch { /* 忽略功能模块检测失败 */ }
+
     // v8.3.166+: 输出 subagent 标记（task-decomposer）
     const output = [
       `[SPECCORE_SUBAGENT: task-decomposer]`,
@@ -491,6 +515,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       `[SPECCORE_CONTEXT_TYPE: full]`,
       ``,
       formatPrompt(prompt),
+      featureBatchHint,
     ].join('\n');
     process.stdout.write(output);
     process.exitCode = 10;

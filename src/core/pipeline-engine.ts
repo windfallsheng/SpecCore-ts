@@ -370,6 +370,8 @@ export async function createAnalyzePipeline(
     platformOrder?: string[];
     /** 是否跳过需求澄清 */
     skipClarify?: boolean;
+    /** v8.3.167+: 功能模块列表（用于大项目分批） */
+    features?: string[];
   }
 ): Promise<{
   engine: PipelineEngine;
@@ -401,6 +403,13 @@ export async function createAnalyzePipeline(
 
   // v6.80.0+: 条件判断是否需要需求澄清
   const needsClarify = options?.skipClarify !== true;
+
+  // v8.3.167+: 功能模块级分批检测
+  const features = options?.features || [];
+  const useFeatureBatches = features.length > 2;
+  if (useFeatureBatches) {
+    logger.info(`📦 功能模块分批模式: ${features.length} 个模块将分 ${features.length} 个 Agent 会话处理`);
+  }
 
   // v8.3.160+: 以 _INDEX.md 角色定义为准，将多角色步骤拆分为单角色子步骤
   // clarify 阶段拆分为 product-analyst → interaction-designer → security-reviewer
@@ -446,6 +455,13 @@ export async function createAnalyzePipeline(
     });
   }
 
+  // v8.3.167+: Phase 1 根据功能模块数量调整策略
+  // 大项目：Phase 1 只生成全局索引，功能模块文档由独立 Agent 分批处理
+  // 小项目：Phase 1 一次性生成所有全局文档
+  const phase1NextId = useFeatureBatches
+    ? `feature-${features[0]}-prompt`
+    : (platforms.length >= 2 ? 'contract-prompt' : 'done');
+
   steps.push(
     {
       id: 'confirm-check',
@@ -457,22 +473,52 @@ export async function createAnalyzePipeline(
     },
     {
       id: 'phase1-prompt',
-      name: 'Phase 1: 全局文档生成',
+      name: useFeatureBatches ? 'Phase 1: 全局索引文档生成' : 'Phase 1: 全局文档生成',
       next: 'phase1-done',
       subagent: 'spec-analyzer',
       contextType: 'full',
-      // v8.3.160+: 降为 10K（配合按需加载 REQ.md，实际内容在 8K 以内）
-      contextBudget: 10000,
+      // v8.3.167+: 大项目降低预算（只生成索引），小项目保持 10K
+      contextBudget: useFeatureBatches ? 6000 : 10000,
     },
     {
       id: 'phase1-done',
       name: 'Phase 1 完成检查',
-      next: platforms.length >= 2 ? 'contract-prompt' : 'done',
+      next: phase1NextId,
       subagent: 'spec-analyzer',
       contextType: 'incremental',
       contextBudget: 4000,
     },
   );
+
+  // v8.3.167+: 功能模块级分批步骤（大项目）
+  // 每个功能模块由独立 Agent 会话处理，生成该模块的 overview/ 文档
+  if (useFeatureBatches) {
+    for (let i = 0; i < features.length; i++) {
+      const feature = features[i];
+      const isLastFeature = i === features.length - 1;
+      const featureNextPromptId = isLastFeature
+        ? (platforms.length >= 2 ? 'contract-prompt' : 'done')
+        : `feature-${features[i + 1]}-prompt`;
+
+      steps.push({
+        id: `feature-${feature}-prompt`,
+        name: `Phase 1b-${i + 1}: ${feature} 功能模块分析`,
+        next: `feature-${feature}-done`,
+        // v8.3.167+: 功能模块级 Subagent
+        subagent: 'spec-analyzer',
+        contextType: 'full',
+        contextBudget: 10000,
+      });
+      steps.push({
+        id: `feature-${feature}-done`,
+        name: `${feature} 模块完成检查`,
+        next: featureNextPromptId,
+        subagent: 'spec-analyzer',
+        contextType: 'incremental',
+        contextBudget: 4000,
+      });
+    }
+  }
 
   // 多端项目：插入契约先行 + 逐端分析步骤
   if (platforms.length >= 2) {

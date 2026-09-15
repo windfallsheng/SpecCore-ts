@@ -1,3 +1,27 @@
+## v8.3.167 (2026-09-15) — 多 Subagent 架构：功能模块级分析 + 分批拆分
+
+### Analyze：功能模块级分批分析 (`src/core/pipeline-engine.ts` + `src/commands/analyze.ts`)
+
+- **问题**：大项目迭代分析时，Phase 1 所有功能模块的 overview 文档由单个 Agent 生成，上下文溢出
+- **修复**：
+  - `createAnalyzePipeline` 增加 `features?: string[]` 参数，当功能模块数量 > 2 时自动启用分批模式
+  - Phase 1 拆分为：主步骤（全局索引：FUNCTION_MAP.md / INTERACTION_MAP.md / PLATFORMS.md）+ 功能模块步骤（每个模块独立 Agent）
+  - 新增 `feature-{name}-prompt` / `feature-{name}-done` Pipeline 步骤，每个功能模块由独立 `spec-analyzer-feature` 会话处理
+  - `buildMultiDocPrompt` 支持 `feature` 参数，只生成指定功能模块的 overview/ 文档
+  - 功能模块文档写入路径：`{功能模块}/overview/{文件名}.md`
+- **效果**：大项目分析不再溢出上下文，每个功能模块由独立 Agent 深入分析
+
+### Split：功能模块级分批拆分 (`src/commands/iteration/split.ts` + `src/core/prompt-builder.ts`)
+
+- **问题**：大项目拆分时，所有功能模块由单个 `task-decomposer` 处理，token 消耗高
+- **修复**：
+  - `--prompt` 模式自动检测功能模块数量，> 2 时注入分批指令
+  - 每次只拆分 1-2 个功能模块（优先基础模块），剩余模块输出 `[PENDING]` 续批标记
+  - `buildSplitInstruction` 强化分批策略说明（v8.3.167+）
+- **效果**：大项目拆分可分多批完成，每批质量更可控
+
+---
+
 ## v8.3.166 (2026-09-15) — 多 Subagent 协作：跨 Agent 状态共享 + 端级角色
 
 ### Execute：跨 Agent 状态共享 + 端级 Subagent (`src/commands/execute.ts` + `src/core/execution-state.ts`)
