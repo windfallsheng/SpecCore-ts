@@ -563,6 +563,15 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     await ensureDir(iterDir);
     const backups: string[] = [];
 
+    // v8.3.163+: AI 上下文中禁用 --force（质量门禁和安全限制不可被 AI 自行绕过）
+    const isAiCtx = !process.stdout.isTTY;
+    if (options.force && isAiCtx) {
+      logger.error('❌ AI 上下文中禁止使用 --force 参数');
+      logger.info('   质量门禁（任务数限制、拆分粒度校验）不可被 AI 自行绕过');
+      logger.info('   如需强制继续，请在交互式终端中执行此命令');
+      return;
+    }
+
     // v8.3.160+: 智能提取 JSON（支持 JSON 后附带 [PENDING] / [SPECCORE_EXEC] 标记）
     function extractJsonArray(text: string): { json: string; pending?: string; exec?: string } {
       const result: { json: string; pending?: string; exec?: string } = { json: text };
@@ -730,20 +739,29 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           logger.warn(`   ⚠️  任务数 ${sections.length} 超出建议上限 ${MAX_TASKS_HARD}，--force 已启用，继续...`);
         }
 
-        // 🚨 逐功能单元校验：每个功能单元拆出的任务数不超过 3 个
-        const MAX_TASKS_PER_UNIT = 3;
-        const unitTaskCount: Record<string, number> = {};
+        // v8.3.162+: 逐功能单元×端校验：每个功能单元的每个端最多 3 个任务
+        // 拆分策略：功能单元先按端拆分，每个端内的子任务最多 3 个
+        const MAX_TASKS_PER_UNIT_PLATFORM = 3;
+        const unitPlatformTaskCount: Record<string, number> = {};
         let missingFunctionalUnit = 0;
         
-        // 按 functionalUnit 分组统计（AI 在 JSON 中标注所属功能单元）
+        // 按 functionalUnit × platform 分组统计
         for (let i = 0; i < sections.length; i++) {
-          const task = tasks[i];
-          const unitName = (task as any).functionalUnit;
+          const task = tasks[i] as any;
+          const unitName = task.functionalUnit;
+          const scopes: string[] = Array.isArray(task.scope) ? task.scope : [];
           if (!unitName) {
             missingFunctionalUnit++;
-            unitTaskCount['__missing__'] = (unitTaskCount['__missing__'] || 0) + 1;
+            // 未标注功能单元的任务，按 scope 分别计入 __missing__
+            for (const platform of scopes) {
+              const key = `__missing__|${platform}`;
+              unitPlatformTaskCount[key] = (unitPlatformTaskCount[key] || 0) + 1;
+            }
           } else {
-            unitTaskCount[unitName] = (unitTaskCount[unitName] || 0) + 1;
+            for (const platform of scopes) {
+              const key = `${unitName}|${platform}`;
+              unitPlatformTaskCount[key] = (unitPlatformTaskCount[key] || 0) + 1;
+            }
           }
         }
         
@@ -754,24 +772,25 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           logger.warn(`      💡 建议重新执行 split，确保 Prompt 包含 functionalUnit 要求`);
         }
         
-        // 检查每个功能单元的任务数
+        // 检查每个功能单元×端的任务数
         let hasOverSplit = false;
-        for (const [unitName, count] of Object.entries(unitTaskCount)) {
-          if (count > MAX_TASKS_PER_UNIT) {
+        for (const [key, count] of Object.entries(unitPlatformTaskCount)) {
+          if (count > MAX_TASKS_PER_UNIT_PLATFORM) {
             if (!hasOverSplit) {
-              logger.error(`\n   ❌ 检测到过度拆分！某些功能单元拆出过多任务：`);
+              logger.error(`\n   ❌ 检测到过度拆分！某些功能单元在单个端内拆出过多任务：`);
               hasOverSplit = true;
             }
-            const displayName = unitName === '__missing__' ? '(未标注功能单元)' : unitName;
-            logger.error(`      📌 "${displayName}" 拆出了 ${count} 个任务（上限 ${MAX_TASKS_PER_UNIT}）`);
+            const [unitName, platform] = key.split('|');
+            const displayUnit = unitName === '__missing__' ? '(未标注功能单元)' : unitName;
+            logger.error(`      📌 "${displayUnit}" 在 "${platform}" 端拆出了 ${count} 个任务（上限 ${MAX_TASKS_PER_UNIT_PLATFORM}）`);
           }
         }
         
         if (hasOverSplit) {
-          logger.error(`   💡 核心原则：一个功能单元默认 1 个任务，最多 3 个`);
+          logger.error(`   💡 核心原则：功能单元先按端拆分，每个端内默认 1 个任务，最多 3 个`);
           logger.error(`   🔧 建议操作：`);
           logger.error(`      1. 重新执行 split，并告诉 AI："任务太多，请合并相关功能"`);
-          logger.error(`      2. 或者手动编辑 .speccore/prompts/split-suggestion-${iter}.md，明确要求"每个功能单元最多拆 2 个任务"`);
+          logger.error(`      2. 或者手动编辑 .speccore/prompts/split-suggestion-${iter}.md，明确要求"每个功能单元的每个端最多拆 2 个任务"`);
           logger.error(`      3. 如果确实需要这么多任务，使用 --force 跳过检查（不推荐）`);
           if (!options.force) {
             logger.info('\n   ℹ️  如需强制继续，添加 --force 参数');

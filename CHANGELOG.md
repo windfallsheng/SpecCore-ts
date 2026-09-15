@@ -1,3 +1,27 @@
+## v8.3.163 (2026-09-15) — 架构漏洞封堵 + Split 粒度约束重构
+
+### Split 粒度约束重构 (`src/commands/iteration/split.ts`)
+
+- **问题**：原约束「每个功能单元最多 3 个任务」不够精确，11 个功能模块 × 3 个任务 = 33 个任务，远超 20 个上限
+- **修复**：改为「功能单元先按端拆分，每个端内最多 3 个任务」
+  - 统计维度从 `functionalUnit` 改为 `functionalUnit × platform`
+  - 一个功能单元涉及 N 个端，最多产生 N × 3 个任务（但总任务数仍受 20 上限拦截）
+- **效果**：粒度约束与拆分策略对齐，避免单个端内过度细分
+
+### Analyze Apply：禁用 `@file.json` 文件引用模式 (`src/commands/analyze.ts`)
+
+- **问题**：AI 构造 `requirement_apply.json`、`batch1_apply.json` 等文件，通过 `--apply @file.json` 批量写入，绕过所有 CLI 校验
+- **修复**：AI 上下文（`!process.stdout.isTTY`）中完全禁用 `--apply @file.json`
+- **效果**：AI 必须将 apply 内容直接作为参数传入，接受批量限制（最多 3 个文档）和路径拦截的校验
+
+### Split / Analyze：AI 上下文禁用 `--force` (`src/commands/iteration/split.ts`)
+
+- **问题**：AI 自行添加 `--force` 绕过任务数上限（20 个）、拆分粒度校验、已有任务冲突检测
+- **修复**：AI 上下文中检测到 `--force` 时直接拒绝执行
+- **效果**：质量门禁和安全限制不可被 AI 自行绕过
+
+---
+
 ## v8.3.162 (2026-09-15) — Subagent 调度强化 + 质量门禁防护
 
 ### Ask Pipeline：强制步骤隔离 (`src/commands/ask.ts`)

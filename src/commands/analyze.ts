@@ -1108,7 +1108,15 @@ ${singlePrompt}`);
   // 两层解耦：迭代级分析写 020-specs/，任务级分析只写 Task 目录（不覆盖迭代级基线）
   if (options.apply) {
     // v6.76.0+: 支持 --apply @file.json 从文件读取（解决 Windows 下 JSON 转义问题）
+    // v8.3.163+: AI 上下文中禁用 @file.json 模式（防止 AI 构造批量 apply 数据绕过校验）
     if (options.apply.startsWith('@')) {
+      const isAiCtx = !process.stdout.isTTY;
+      if (isAiCtx) {
+        logger.error('❌ AI 上下文中禁止使用 --apply @file.json 模式');
+        logger.info('   请将 apply 内容直接作为参数传入，而不是通过文件引用');
+        logger.info('   如需批量 apply，请分批执行，每次不超过 3 个文档');
+        return;
+      }
       const filePath = options.apply.slice(1).trim();
       try {
         const fileContent = await readFile(filePath, 'utf-8');
