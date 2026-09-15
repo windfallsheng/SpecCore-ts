@@ -791,8 +791,41 @@ export async function extractStructuredData(
   // 写入缓存
   await ensureDir(dirname(CACHE_PATH));
   await writeFile(CACHE_PATH, JSON.stringify(data, null, 2));
+
+  // v8.3.160+: 按端写入分段文件，AI 分析特定端时只需读取该端数据（大项目关键优化）
+  const cacheDir = dirname(CACHE_PATH);
+  for (const platform of Object.keys(data.endpoints)) {
+    const ep = data.endpoints[platform];
+    const platformData = {
+      generatedAt: data.generatedAt,
+      projectRoot: data.projectRoot,
+      platform,
+      apis: ep.apis,
+      entities: ep.entities,
+      routes: ep.routes,
+      components: ep.components,
+      // 只包含与该端相关的 DTO 和 Service（通过 filePath 匹配）
+      dtos: data.dtos.filter(d => d.filePath.startsWith(platform) || ep.apis.some(a => a.dtoRef === d.name)),
+      services: data.services.filter(s => s.filePath.startsWith(platform)),
+      stats: {
+        totalApis: ep.apis.length,
+        totalEntities: ep.entities.length,
+        totalRoutes: ep.routes.length,
+        totalComponents: ep.components.length,
+        totalDtos: 0,
+        totalServices: 0,
+        totalFiles: totalFiles, // 保持兼容
+      },
+    };
+    platformData.stats.totalDtos = platformData.dtos.length;
+    platformData.stats.totalServices = platformData.services.length;
+    const platformPath = join(cacheDir, `structured-data.${platform}.json`);
+    await writeFile(platformPath, JSON.stringify(platformData, null, 2));
+  }
+
   logger.info(`📊 结构化数据提取完成: ${CACHE_PATH}`);
   logger.info(`   API: ${data.stats.totalApis}, Entity: ${data.stats.totalEntities}, Route: ${data.stats.totalRoutes}, Component: ${data.stats.totalComponents}, DTO: ${data.stats.totalDtos}, Service: ${data.stats.totalServices}, Files: ${totalFiles}`);
+  logger.info(`   分段文件: ${Object.keys(data.endpoints).map(p => `structured-data.${p}.json`).join(', ')}`);
 
   return data;
 }
@@ -807,6 +840,32 @@ export async function loadStructuredData(): Promise<StructuredData | null> {
     return JSON.parse(content) as StructuredData;
   } catch {
     return null;
+  }
+}
+
+// v8.3.160+: 加载特定端的结构化数据（大项目按需读取优化）
+export async function loadStructuredDataForPlatform(platform: string): Promise<any | null> {
+  const platformPath = join(dirname(CACHE_PATH), `structured-data.${platform}.json`);
+  if (!(await pathExists(platformPath))) return null;
+  try {
+    const content = await readFile(platformPath, 'utf-8');
+    return JSON.parse(content);
+  } catch {
+    return null;
+  }
+}
+
+// v8.3.160+: 列出可用的分段结构化数据文件
+export async function listStructuredDataPlatforms(): Promise<string[]> {
+  const cacheDir = dirname(CACHE_PATH);
+  if (!(await pathExists(cacheDir))) return [];
+  try {
+    const files = await readdir(cacheDir);
+    return files
+      .filter(f => f.startsWith('structured-data.') && f.endsWith('.json') && f !== 'structured-data.json')
+      .map(f => f.replace('structured-data.', '').replace('.json', ''));
+  } catch {
+    return [];
   }
 }
 

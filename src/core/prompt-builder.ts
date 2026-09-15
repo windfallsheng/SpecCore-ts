@@ -27,6 +27,8 @@ import { expandSynonyms, extractNormalizedKeywords } from '../utils/synonyms';
 import { loadVisionConfig, describeImage, isVisionEnabled, VisionModelConfig } from './vision-engine';
 // v6.93.0+: Prompt 插件系统
 import { getPluginsForCommand } from './prompt-plugins';
+// v8.3.160+: 子 Agent 适配层（统一注入角色定义和上下文裁剪）
+import { defaultAdapter, AgentContext } from './agent-adapter';
 
 // ═══════════════════════════════════════════════════════════
 // 进程级缓存（避免重复 I/O + 重复解析）
@@ -163,6 +165,12 @@ export interface SpecCorePrompt {
   contextBudget?: number;
   instruction: string;
   outputHint: string;
+  // v8.3.160+: 子 Agent 角色上下文（由 agent-adapter 生成）
+  agentContext?: string;
+  // v8.3.160+: 子 Agent 角色名
+  subagent?: string;
+  // v8.3.160+: 原始 Prompt 文本（analyze 命令使用 buildMultiDocPrompt 生成，绕过常规序列化）
+  rawPrompt?: string;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1400,9 +1408,13 @@ function buildSplitInstruction(): string {
     '   - 哪些功能需要跨端协作？',
     '   - 数据如何在端之间流转？',
     '',
-    '4. **Read `020-specs/{功能模块}/{端名}/TECH.md`**（按功能模块×端组合读取）→ 了解各端技术方案',
+    '4. **Read `020-specs/{功能模块}/{端名}/TECH.md`**（按需读取）→ 了解各端技术方案',
     '   - 先读 FUNCTION_MAP.md 获取功能模块清单',
-    '   - 再按 `020-specs/{功能模块}/{端名}/TECH.md` 读取该功能在各端的技术方案',
+    '   - **分批策略（v8.3.160+）**：',
+    '     - 如功能模块数量 ≤ 2：读取所有模块的 TECH.md，一次性拆分全部',
+    '     - 如功能模块数量 > 2：先读取基础模块（认证/配置/数据库）的 TECH.md，优先拆分基础模块',
+    '     - 然后读取 1-2 个核心功能模块的 TECH.md，拆分这些模块',
+    '     - **不要一次性读取所有模块的 TECH.md**，避免上下文溢出',
     '   - 各端有哪些接口/页面？',
     '   - 各端技术栈和架构约束？',
     '   - **据此确定每个任务涉及哪些端**',
@@ -1495,6 +1507,16 @@ function buildSplitInstruction(): string {
     '- `reqContent`：该任务的需求描述（Markdown 格式，含业务规则、数据模型、接口定义），直接写入 REQ.md',
     '- `techContent`：该任务的技术方案（Markdown 格式，含架构设计、核心逻辑、测试策略），直接写入 TECH.md',
     '- 内容是**子切面**：只包含该任务负责的部分，不是整个功能单元的内容',
+    '',
+    '### 分批续批（v8.3.160+）',
+    '如果本次只拆分了部分功能模块，在 JSON 数组输出后追加续批标记：',
+    '```',
+    '[PENDING: 模块A, 模块B, 模块C]',
+    '[SPECCORE_EXEC: speccore iteration split --prompt -I {迭代名}]',
+    '```',
+    '- `[PENDING: ...]`：列出未拆分的功能模块名称',
+    '- `[SPECCORE_EXEC: ...]`：CLI 会自动读取并继续拆分剩余模块',
+    '- 如果所有模块已拆分完毕，不要输出 PENDING 标记',
     '',
     '### 质量自检',
     '拆分完成后自查:',
@@ -1676,6 +1698,15 @@ function getInstruction(command: PromptCommand, context: { taskName?: string; ap
 /**
  * 构建完整的 SpecCore Prompt
  */
+// v8.3.160+: 命令 → 默认子 Agent 角色映射
+const DEFAULT_SUBAGENT_MAP: Record<string, string> = {
+  analyze: 'spec-analyzer',
+  execute: 'spec-executor',
+  split: 'task-decomposer',
+  plan: 'schedule-planner',
+  change: 'impact-analyst',
+};
+
 export async function buildPrompt(
   command: PromptCommand,
   options: {
@@ -1687,6 +1718,12 @@ export async function buildPrompt(
     // v8.3.160+: 步骤级上下文控制
     contextType?: 'full' | 'incremental' | 'platform-only' | 'contract-only';
     contextBudget?: number;
+    // v8.3.160+: 子 Agent 角色（未指定时按命令自动映射）
+    subagent?: string;
+    // v8.3.160+: analyze 命令支持传递完整的 AnalyzeOptions
+    analyzeOptions?: any;
+    // v8.3.160+: 强制携带源码上下文
+    withCode?: boolean;
   }
 ): Promise<SpecCorePrompt> {
   const cwd = options.cwd || findProjectRoot() || process.cwd();
@@ -1799,16 +1836,33 @@ export async function buildPrompt(
 
   // v8.3.122+: execute / analyze 时深入读取关联源码（完整文件内容，不只是切片）
   // v8.3.122++: 同时注入知识图谱任务上下文，帮助 AI 理解代码关联关系
-  if ((command === 'execute' || command === 'analyze') && searchQuery) {
+  // v8.3.160+: withCode 强制启用时，即使 searchQuery 为空也注入源码上下文
+  const shouldInjectCode = (command === 'execute' || command === 'analyze') && (searchQuery || options.withCode);
+  if (shouldInjectCode) {
+    // 如果 withCode 为 true 但 searchQuery 为空，使用 task 或 iteration 作为默认查询
+    if (!searchQuery && options.withCode) {
+      searchQuery = options.task || options.iteration || 'global';
+    }
     try {
       // v8.3.124+: execute 阶段优先注入结构化事实卡片（structured-data.json）
+      // v8.3.160+: 如指定了 platform，优先读取分段文件 structured-data.{platform}.json
       // 这是最高优先级的改进：用结构化卡片替代原始源码，Token 效率提升 10-20 倍
-      const structuredDataPath = join(cwd, '.speccore', 'cache', 'structured-data.json');
+      let structuredDataPath = join(cwd, '.speccore', 'cache', 'structured-data.json');
+      let structured: any = null;
       let structuredCardsInjected = false;
+
+      // 优先尝试平台分段文件
+      if (options.platform) {
+        const platformPath = join(cwd, '.speccore', 'cache', `structured-data.${options.platform}.json`);
+        if (await pathExists(platformPath)) {
+          structuredDataPath = platformPath;
+        }
+      }
+
       if (await pathExists(structuredDataPath)) {
         try {
           const sdContent = await readFile(structuredDataPath, 'utf-8');
-          const structured = JSON.parse(sdContent);
+          structured = JSON.parse(sdContent);
           // v8.3.125+: 使用同义词扩展，解决 "登录" 与 "auth" 等跨语言/缩写不匹配
           const queryWords = [...expandSynonyms(extractNormalizedKeywords(searchQuery))];
           const matchedApis: any[] = [];
@@ -1817,6 +1871,17 @@ export async function buildPrompt(
           const matchedRoutes: any[] = [];
           const matchedDtos: any[] = [];      // v8.3.126+
           const matchedServices: any[] = [];  // v8.3.126+
+
+          // v8.3.160+: 兼容全量文件(endpoints)和分段文件(平台数据在顶层)两种格式
+          const segPlatform = structured.platform || options.platform || 'unknown';
+          if (!structured.endpoints && structured.apis !== undefined) {
+            // 分段文件格式：包装为 endpoints 结构
+            structured = {
+              endpoints: { [segPlatform]: structured },
+              dtos: structured.dtos || [],
+              services: structured.services || [],
+            };
+          }
 
           for (const [platform, data] of Object.entries(structured.endpoints || {}) as [string, any][]) {
             // API 匹配
@@ -2189,6 +2254,43 @@ export async function buildPrompt(
     }
   }
 
+  // v8.3.160+: analyze 命令路由到 buildMultiDocPrompt（统一入口）
+  if (command === 'analyze' && options.analyzeOptions) {
+    try {
+      const { buildMultiDocPrompt } = await import('../commands/analyze');
+      const ctx = {
+        iteration: options.iteration,
+        task: options.task,
+        type: options.analyzeOptions.type,
+        scope: options.analyzeOptions.scope,
+        withCode: options.analyzeOptions.withCode,
+        platform: options.platform,
+        phase: options.analyzeOptions.phase,
+        autoMode: options.analyzeOptions.autoMode,
+      };
+      const rawPrompt = await buildMultiDocPrompt('analyze', ctx, options.analyzeOptions);
+      return {
+        marker: '[SPECCORE_PROMPT]',
+        version: '1.0',
+        command,
+        iteration: options.iteration || '',
+        task: options.task,
+        platform: options.platform,
+        techStack,
+        apiSpecs: [],
+        dataModels: [],
+        businessRules: [],
+        extraSpecs: [],
+        instruction: '',
+        outputHint: '请返回 Markdown 格式的分析结果',
+        rawPrompt,
+        subagent: options.subagent || DEFAULT_SUBAGENT_MAP[command],
+      };
+    } catch (e: any) {
+      logger?.warn?.(`analyze Prompt 构建失败，回退到默认模板: ${e.message}`);
+    }
+  }
+
   // v6.93.0+: Prompt 插件系统 — 命令特定的增强逻辑由插件提供
   let rulesContent: string | undefined;
   let codeGraphSummary: string | undefined;
@@ -2216,6 +2318,25 @@ export async function buildPrompt(
     // 插件执行失败静默跳过，不影响主流程
   }
 
+  // v8.3.160+: 注入子 Agent 角色定义和上下文裁剪
+  const subagent = options.subagent || DEFAULT_SUBAGENT_MAP[command];
+  let agentContext: string | undefined;
+  if (subagent) {
+    try {
+      const agentCtx: AgentContext = {
+        subagent,
+        iteration: options.iteration || '',
+        contextBudget: options.contextBudget || 12000,
+        contextType: options.contextType || 'full',
+        cwd,
+      };
+      agentContext = await defaultAdapter.prepareContext(agentCtx);
+      logger?.info?.(`   🤖 子 Agent 激活: ${subagent}`);
+    } catch (e) {
+      logger?.debug?.('agent-adapter 注入失败:', e);
+    }
+  }
+
   return {
     marker: '[SPECCORE_PROMPT]',
     version: '1.0',
@@ -2241,6 +2362,8 @@ export async function buildPrompt(
       : command === 'split'
         ? '请返回 JSON 数组格式的任务列表（参见拆分原则中的输出格式）'
         : '请返回 Markdown 格式的分析结果',
+    agentContext,
+    subagent,
   };
 }
 
@@ -2367,11 +2490,23 @@ export function formatPrompt(prompt: SpecCorePrompt, maxTokens?: number): string
 }
 
 /** 实际构建 prompt 文本（无裁剪逻辑） */
-function buildPromptText(prompt: SpecCorePrompt): string {
+export function buildPromptText(prompt: SpecCorePrompt): string {
+  // v8.3.160+: analyze 命令使用 buildMultiDocPrompt 生成的原始 Prompt，直接返回
+  if (prompt.rawPrompt) {
+    return prompt.rawPrompt;
+  }
+
   const lines: string[] = [];
 
   lines.push('[SPECCORE_PROMPT]');
   lines.push('');
+
+  // v8.3.160+: 注入子 Agent 角色定义和上下文裁剪策略
+  if (prompt.agentContext) {
+    lines.push(prompt.agentContext);
+    lines.push('');
+  }
+
   lines.push(`# 任务: ${prompt.command} — ${prompt.task || prompt.iteration}`);
   lines.push('');
 

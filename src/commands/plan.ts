@@ -1,4 +1,4 @@
-import { join, dirname } from 'path';
+import { join, dirname, relative } from 'path';
 import { writeFile, ensureDir, readdir, stat, pathExists, readFile } from 'fs-extra';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration, getIterationDir } from '../core/context';
@@ -52,46 +52,52 @@ export async function planCommand(options: PlanOptions): Promise<void> {
 
     // v8.2.0+: 注入任务详细上下文（依赖关系 + REQ/TECH/DEV_GUIDE 摘要）
     // v8.3.0+: 新增 DEV_GUIDE.md、.issues.md — 计划必须参考改造范围和已知风险
+    // v8.3.160+: 改为路径引用模式，避免大迭代时 Prompt 超出 Token 预算
+    // v8.3.160+: 大项目时显示所有任务概要，但只给前 15 个任务提供详细文档路径
     try {
       const iterDir = await getIterationDir(iter);
-      const taskDetails: string[] = [];
-      for (const t of taskList.slice(0, 15)) { // 最多 15 个任务
+      const taskDocList: string[] = [];
+      const allTaskSummaries: string[] = [];
+      const MAX_DETAILED_TASKS = 15;
+
+      for (let i = 0; i < taskList.length; i++) {
+        const t = taskList[i];
         const tDir = join(iterDir, '030-tasks', t.id);
-        const reqPath = join(tDir, '00-specs', 'REQ.md');
-        const techPath = join(tDir, '00-specs', 'TECH.md');
-        const devGuidePath = join(tDir, '00-specs', 'DEV_GUIDE.md');
-        const issuesPath = join(tDir, '.issues.md');
-        let summary = `### ${t.id}: ${t.name || t.id}\n`;
-        if (t.status) summary += `- 状态: ${t.status}\n`;
-        if (t.dependencies?.length) summary += `- 依赖: ${t.dependencies.join(', ')}\n`;
-        if (await pathExists(reqPath)) {
-          const req = await readFile(reqPath, 'utf-8');
-          summary += `- REQ: ${req.slice(0, 200).replace(/\n+/g, ' ')}\n`;
+        // 所有任务都显示概要（用于依赖拓扑分析）
+        const summaryParts: string[] = [`- ${t.id}: ${t.name || t.id}`];
+        if (t.status) summaryParts.push(`[${t.status}]`);
+        if (t.dependencies?.length) summaryParts.push(`← ${t.dependencies.join(', ')}`);
+        allTaskSummaries.push(summaryParts.join(' '));
+
+        // 前 15 个任务提供详细文档路径
+        if (i < MAX_DETAILED_TASKS) {
+          const lines: string[] = [];
+          lines.push(`### ${t.id}: ${t.name || t.id}`);
+          if (t.status) lines.push(`- 状态: ${t.status}`);
+          if (t.dependencies?.length) lines.push(`- 依赖: ${t.dependencies.join(', ')}`);
+          const reqPath = join(tDir, '00-specs', 'REQ.md');
+          const techPath = join(tDir, '00-specs', 'TECH.md');
+          const devGuidePath = join(tDir, '00-specs', 'DEV_GUIDE.md');
+          const issuesPath = join(tDir, '.issues.md');
+          if (await pathExists(reqPath)) lines.push(`- REQ: \`${relative(iterDir, reqPath)}\``);
+          if (await pathExists(techPath)) lines.push(`- TECH: \`${relative(iterDir, techPath)}\``);
+          if (await pathExists(devGuidePath)) lines.push(`- DEV_GUIDE: \`${relative(iterDir, devGuidePath)}\``);
+          if (await pathExists(issuesPath)) lines.push(`- ISSUES: \`${relative(iterDir, issuesPath)}\``);
+          taskDocList.push(lines.join('\n'));
         }
-        if (await pathExists(techPath)) {
-          const tech = await readFile(techPath, 'utf-8');
-          summary += `- TECH: ${tech.slice(0, 200).replace(/\n+/g, ' ')}\n`;
-        }
-        if (await pathExists(devGuidePath)) {
-          const devGuide = await readFile(devGuidePath, 'utf-8');
-          // 提取改造范围和实施步骤（对计划最关键）
-          const scopeMatch = devGuide.match(/## 1\.?[\s\S]*?(?=## 2\.?|$)/);
-          const stepsMatch = devGuide.match(/## 2\.?[\s\S]*?(?=## 3\.?|$)/);
-          const scope = scopeMatch ? scopeMatch[0].slice(0, 150).replace(/\n+/g, ' ') : devGuide.slice(0, 150).replace(/\n+/g, ' ');
-          summary += `- DEV_GUIDE(改造范围): ${scope}...\n`;
-          if (stepsMatch) {
-            summary += `- DEV_GUIDE(实施步骤): ${stepsMatch[0].slice(0, 150).replace(/\n+/g, ' ')}...\n`;
-          }
-        }
-        if (await pathExists(issuesPath)) {
-          const issues = await readFile(issuesPath, 'utf-8');
-          summary += `- ISSUES: ${issues.slice(0, 150).replace(/\n+/g, ' ')}\n`;
-        }
-        taskDetails.push(summary);
       }
-      if (taskDetails.length > 0) {
-        promptText += `\n\n## 📋 任务详细上下文\n\n`;
-        promptText += taskDetails.join('\n');
+
+      if (allTaskSummaries.length > 0) {
+        promptText += `\n\n## 📋 全部任务概览（共 ${allTaskSummaries.length} 个）\n\n`;
+        promptText += allTaskSummaries.join('\n');
+        if (taskList.length > MAX_DETAILED_TASKS) {
+          promptText += `\n\n> 📌 前 ${MAX_DETAILED_TASKS} 个任务提供详细文档路径（见下），剩余 ${taskList.length - MAX_DETAILED_TASKS} 个任务请按需 Read \`000-overview/PROJECT_GRAPH.md\` 或任务目录下的文档。`;
+        }
+      }
+
+      if (taskDocList.length > 0) {
+        promptText += `\n\n## 📄 任务详细文档（前 ${MAX_DETAILED_TASKS} 个，请按需 Read）\n\n`;
+        promptText += taskDocList.join('\n\n');
       }
     } catch { /* ignore */ }
 
@@ -124,11 +130,12 @@ export async function planCommand(options: PlanOptions): Promise<void> {
     } catch { /* ignore */ }
 
     // v8.2.0+: 注入统一检索 + 知识图谱
+    // v8.3.160+: 限制检索结果大小，防止大项目时 Prompt 溢出
     try {
       const unifiedResult = await unifiedSearch(process.cwd(), { query: `plan ${iter}`, iteration: iter });
       if (unifiedResult.documentChunks.length > 0 || unifiedResult.codeSlices.length > 0) {
         promptText += '\n\n## 🔍 相关上下文（自动检索）\n';
-        promptText += formatUnifiedContext(unifiedResult);
+        promptText += formatUnifiedContext(unifiedResult, 3000);
       }
     } catch { /* ignore */ }
 
@@ -138,7 +145,7 @@ export async function planCommand(options: PlanOptions): Promise<void> {
         const graphCtx = buildCompactContext(graph, {});
         if (graphCtx) {
           promptText += '\n\n## 🧠 知识图谱关联\n';
-          promptText += graphCtx.slice(0, 2000);
+          promptText += graphCtx.slice(0, 1500);
         }
       }
     } catch { /* ignore */ }

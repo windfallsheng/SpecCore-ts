@@ -23,7 +23,10 @@ import { showNextSteps } from '../core/next-steps';
 import { runAnalysis, AnalyzeInput, supplementAnalysis, analyzeSingleFeature, generateSpecsFromRequirements } from '../core/analyze-engine';
 import { readFile, readdir, readdirSync } from 'fs-extra';
 import { generateGlobalArtifacts } from '../core/global-artifacts';
-import { buildPrompt, formatPrompt, processMarkdownContent } from '../core/prompt-builder';
+import { buildPrompt, buildPromptText, formatPrompt, processMarkdownContent } from '../core/prompt-builder';
+// v8.3.160+: 子 Agent 适配层（analyze 自定义 Prompt 中手动注入）
+import { defaultAdapter } from '../core/agent-adapter';
+import type { AgentContext as AdapterAgentContext } from '../core/agent-adapter';
 import { buildAutoModeInstruction, writeQuestions, extractQuestionsFromText, type QuestionItem } from '../core/questions';
 import { resolvePlatform } from '../core/platform-registry';
 import { warnIfIndexStale } from '../core/index-guard';
@@ -960,14 +963,14 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     if (isGlobalScope) {
       // 全局层 Pipeline 步骤映射
       if (currentStep === 'init' || currentStep === 'discovery') {
-        prompt = await buildMultiDocPrompt('analyze', {
-          iteration: iter || 'GLOBAL', task: options.task, type: options.type,
-          scope: 'global', withCode: options.withCode, platform: options.platform,
-        }, options);
+        prompt = buildPromptText(await buildPrompt('analyze', {
+          iteration: iter || 'GLOBAL', task: options.task, platform: options.platform,
+          analyzeOptions: options,
+        }));
       } else if (currentStep === 'global-analysis') {
-        prompt = await buildMultiDocPrompt('analyze', {
-          iteration: iter || 'GLOBAL', scope: 'global', withCode: options.withCode,
-        }, options);
+        prompt = buildPromptText(await buildPrompt('analyze', {
+          iteration: iter || 'GLOBAL', analyzeOptions: options,
+        }));
       } else if (currentStep === 'consistency-check') {
         prompt = `\n# 任务: 全局一致性检查\n\n` +
           `检查各迭代、各端之间的规格是否一致。\n` +
@@ -976,9 +979,9 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         prompt = `\n# 任务: 生成全局索引报告\n\n` +
           `汇总所有分析结果，生成 .speccore/GLOBAL/INDEX.md。\n`;
       } else {
-        prompt = await buildMultiDocPrompt('analyze', {
-          iteration: iter || 'GLOBAL', scope: 'global', withCode: options.withCode,
-        }, options);
+        prompt = buildPromptText(await buildPrompt('analyze', {
+          iteration: iter || 'GLOBAL', analyzeOptions: options,
+        }));
       }
     } else if (currentStep === 'clarify-product' || currentStep === 'clarify-interaction' || currentStep === 'clarify-security') {
       // v8.3.160+: Phase 0 需求澄清（拆分为 product / interaction / security 三个子步骤）
@@ -987,25 +990,26 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       // v6.80.0+: 需求确认阶段 — 输出质量报告提示
       prompt = await buildConfirmCheckPrompt(iter!);
     } else if (currentStep === 'phase1-prompt') {
-      prompt = await buildMultiDocPrompt('analyze', {
-        iteration: iter!, task: options.task, type: options.type,
-        scope: options.scope, withCode: options.withCode, platform: options.platform,
-      }, options);
+      prompt = buildPromptText(await buildPrompt('analyze', {
+        iteration: iter!, task: options.task, platform: options.platform,
+        analyzeOptions: options,
+      }));
     } else if (currentStep === 'contract-prompt') {
       // 契约先行阶段：基于 Phase 1 文档生成跨端契约
       prompt = await buildContractFirstPrompt(iter!);
     } else if (platformMatch) {
       // 逐端推进阶段：为指定端生成专属文档
       const platform = platformMatch[1];
-      prompt = await buildMultiDocPrompt('analyze', {
-        iteration: iter!, phase: '2', platform,
-      }, options);
+      prompt = buildPromptText(await buildPrompt('analyze', {
+        iteration: iter!, platform,
+        analyzeOptions: { ...options, phase: '2' },
+      }));
     } else {
       // 回退到默认 prompt
-      prompt = await buildMultiDocPrompt('analyze', {
-        iteration: iter!, task: options.task, type: options.type,
-        scope: options.scope, withCode: options.withCode, platform: options.platform,
-      }, options);
+      prompt = buildPromptText(await buildPrompt('analyze', {
+        iteration: iter!, task: options.task, platform: options.platform,
+        analyzeOptions: options,
+      }));
     }
 
     // 添加 Pipeline 继续指令
@@ -1072,11 +1076,10 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       const prompts: string[] = [];
       for (let i = 0; i < targetTasks.length; i++) {
         const taskId = targetTasks[i];
-        const singlePrompt = await buildMultiDocPrompt('analyze', {
-          iteration: iter, task: taskId, type: options.type,
-          scope: options.scope, withCode: options.withCode,
-          platform: options.platform, phase: options.phase, autoMode: options.auto,
-        }, options);
+        const singlePrompt = buildPromptText(await buildPrompt('analyze', {
+          iteration: iter, task: taskId, platform: options.platform,
+          analyzeOptions: options,
+        }));
         prompts.push(`<!-- ═══════════════════════════════════════════ -->
 <!-- 任务 ${i + 1}/${targetTasks.length}: ${taskId} -->
 <!-- ═══════════════════════════════════════════ -->
@@ -1088,7 +1091,14 @@ ${singlePrompt}`);
       return;
     }
 
-    const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task, type: options.type, scope: options.scope, withCode: options.withCode, platform: options.platform, phase: options.phase, autoMode: options.auto }, options);
+    // v8.3.160+: 统一使用 buildPrompt 入口
+    const promptObj = await buildPrompt('analyze', {
+      iteration: iter,
+      task: options.task,
+      platform: options.platform,
+      analyzeOptions: options,
+    });
+    const prompt = buildPromptText(promptObj);
     process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
     process.exitCode = 10;
     return;
@@ -1440,14 +1450,32 @@ ${singlePrompt}`);
               continue;
             }
 
-            // 综合文档写入 overview/ 子目录，端专属文档写入 {端}/ 子目录
+            // 综合文档写入 overview/ 子目录，端专属文档写入 {功能模块}/{端}/ 子目录
             // v8.3.24+: 按文件名前缀路由，支持多段指定
-            // 若 cleanFilename 含合法端名前缀（如 api/TECH.md），写入对应端目录
+            // v8.3.25+: 如果 AI 输出旧格式 {端}/{文件}，尝试回退到功能模块路由
             let targetDir: string;
             if (globalSet.has(cleanFilename)) {
               targetDir = join(specDir, GLOBAL_SPECS_DIR);
             } else if (platformDir && validPlatforms.has(platformDir)) {
-              targetDir = join(specDir, platformDir);
+              // 检查是否应归入功能模块（骨架文件已按功能模块创建）
+              let featureFallback: string | null = null;
+              try {
+                const specEntries = await readdir(specDir, { withFileTypes: true });
+                for (const entry of specEntries) {
+                  if (!entry.isDirectory() || entry.name === GLOBAL_SPECS_DIR || validPlatforms.has(entry.name)) continue;
+                  const platformInFeature = join(specDir, entry.name, platformDir);
+                  if (await pathExists(platformInFeature)) {
+                    featureFallback = entry.name;
+                    break;
+                  }
+                }
+              } catch {}
+              if (featureFallback) {
+                targetDir = join(specDir, featureFallback, platformDir);
+                logger.info(`   📁 自动归入功能模块: ${featureFallback}/${platformDir}/${cleanFilename.split('/').pop()}`);
+              } else {
+                targetDir = join(specDir, platformDir);
+              }
             } else {
               targetDir = specDir;
             }
@@ -1958,9 +1986,9 @@ ${singlePrompt}`);
           if (isGlobalScope) {
             // 全局层 Pipeline 步骤映射
             if (state.currentStep === 'global-analysis') {
-              nextPrompt = await buildMultiDocPrompt('analyze', {
-                iteration: options.iteration || 'GLOBAL', scope: 'global', withCode: options.withCode,
-              });
+              nextPrompt = buildPromptText(await buildPrompt('analyze', {
+                iteration: options.iteration || 'GLOBAL', analyzeOptions: options,
+              }));
             } else if (state.currentStep === 'consistency-check') {
               nextPrompt = `\n# 任务: 全局一致性检查\n\n` +
                 `检查各迭代、各端之间的规格是否一致。\n` +
@@ -1969,9 +1997,9 @@ ${singlePrompt}`);
               nextPrompt = `\n# 任务: 生成全局索引报告\n\n` +
                 `汇总所有分析结果，生成 .speccore/GLOBAL/INDEX.md。\n`;
             } else {
-              nextPrompt = await buildMultiDocPrompt('analyze', {
-                iteration: options.iteration || 'GLOBAL', scope: 'global', withCode: options.withCode,
-              });
+              nextPrompt = buildPromptText(await buildPrompt('analyze', {
+                iteration: options.iteration || 'GLOBAL', analyzeOptions: options,
+              }));
             }
           // v8.3.160+: clarify 阶段推进（拆分为 product / interaction / security）
           } else if (state.currentStep === 'clarify-product' || state.currentStep === 'clarify-interaction' || state.currentStep === 'clarify-security') {
@@ -1982,21 +2010,21 @@ ${singlePrompt}`);
             nextPrompt = await buildContractFirstPrompt(options.iteration!);
           } else if (nextPlatformMatch) {
             const platform = nextPlatformMatch[1];
-            nextPrompt = await buildMultiDocPrompt('analyze', {
-              iteration: options.iteration!,
-              phase: '2',
-              platform,
-            });
+            nextPrompt = buildPromptText(await buildPrompt('analyze', {
+              iteration: options.iteration!, platform,
+              analyzeOptions: { ...options, phase: '2' },
+            }));
           } else if (state.currentStep === 'phase2-prompt') {
             // 兼容旧 Pipeline 步骤名
-            nextPrompt = await buildMultiDocPrompt('analyze', {
+            nextPrompt = buildPromptText(await buildPrompt('analyze', {
               iteration: options.iteration!,
-              phase: '2',
-            });
+              analyzeOptions: { ...options, phase: '2' },
+            }));
           } else {
-            nextPrompt = await buildMultiDocPrompt('analyze', {
+            nextPrompt = buildPromptText(await buildPrompt('analyze', {
               iteration: options.iteration!,
-            });
+              analyzeOptions: options,
+            }));
           }
 
           // v8.3.160+: 步骤隔离模式输出标记 + 子 Agent 激活
@@ -2674,6 +2702,10 @@ async function detectGlobalLayerProgress(): Promise<{
   nextLayer: number;
   missing: string[];
   subLayer?: { completed: string[]; next: string };
+  // v8.3.160+: Layer 3 模块级进度
+  pendingModules?: string[];
+  // v8.3.160+: Layer 4d 端级进度
+  pendingPlatforms?: string[];
 }> {
   const globalDir = join((findProjectRoot() || process.cwd()), '.speccore', 'GLOBAL');
   let completedLayer = 0;
@@ -2708,29 +2740,60 @@ async function detectGlobalLayerProgress(): Promise<{
     }
   }
 
-  // Layer 3: 检查各端功能模块深入文档（v8.3.0+ 修复：不再把 _MODULES.md 当 Layer 3 产物）
+  // Layer 3: 检查功能模块深入文档（v8.3.160+: 支持模块级进度追踪）
+  let pendingModules: string[] | undefined;
   if (completedLayer >= 2) {
     try {
+      // v8.3.160+: 优先从 _MODULES.md 读取模块列表，进行模块级进度检测
+      const moduleNames = await parseModuleNamesFromModulesMd(globalDir);
       const platformsDir = join(globalDir, 'platforms');
-      const entries = await readdir(platformsDir, { withFileTypes: true });
-      const platformDirs = entries.filter(e => e.isDirectory() && e.name !== '_shared').map(e => e.name);
 
-      if (platformDirs.length === 0) {
-        missing.push('Layer 3: platforms/{端}/modules/*.md（功能模块深入文档）');
-      } else {
-        const moduleDocChecks = await Promise.all(platformDirs.map(async d => {
-          const modulesDir = join(platformsDir, d, 'modules');
-          if (!await pathExists(modulesDir)) return false;
-          const files = await readdir(modulesDir).catch(() => []);
-          return files.some(f => f.endsWith('.md'));
-        }));
+      if (moduleNames && moduleNames.length > 0) {
+        // 检查 platforms/_shared/modules/{模块名}.md（v8.3.160+ 统一存放位置）
+        const sharedModulesDir = join(platformsDir, '_shared', 'modules');
+        const completedModules = new Set<string>();
 
-        if (moduleDocChecks.every(Boolean)) {
+        if (await pathExists(sharedModulesDir)) {
+          const files = await readdir(sharedModulesDir).catch(() => []);
+          for (const f of files.filter(f => f.endsWith('.md'))) {
+            const baseName = f.replace('.md', '').replace(/-/g, '');
+            for (const modName of moduleNames) {
+              const normalizedMod = modName.toLowerCase().replace(/[^\u4e00-\u9fffa-z0-9]/g, '');
+              if (baseName.includes(normalizedMod) || normalizedMod.includes(baseName)) {
+                completedModules.add(modName);
+              }
+            }
+          }
+        }
+
+        pendingModules = moduleNames.filter(m => !completedModules.has(m));
+        if (pendingModules.length === 0) {
           completedLayer = 3;
         } else {
-          for (const [i, d] of platformDirs.entries()) {
-            if (!moduleDocChecks[i]) {
-              missing.push(`Layer 3: platforms/${d}/modules/*.md（功能模块深入文档）`);
+          missing.push(`Layer 3: 还有 ${pendingModules.length}/${moduleNames.length} 个功能模块待分析`);
+        }
+      } else {
+        // 回退：检查各端 modules/ 目录是否有文档（旧逻辑）
+        const entries = await readdir(platformsDir, { withFileTypes: true });
+        const platformDirs = entries.filter(e => e.isDirectory() && e.name !== '_shared').map(e => e.name);
+
+        if (platformDirs.length === 0) {
+          missing.push('Layer 3: platforms/{端}/modules/*.md（功能模块深入文档）');
+        } else {
+          const moduleDocChecks = await Promise.all(platformDirs.map(async d => {
+            const modulesDir = join(platformsDir, d, 'modules');
+            if (!await pathExists(modulesDir)) return false;
+            const files = await readdir(modulesDir).catch(() => []);
+            return files.some(f => f.endsWith('.md'));
+          }));
+
+          if (moduleDocChecks.every(Boolean)) {
+            completedLayer = 3;
+          } else {
+            for (const [i, d] of platformDirs.entries()) {
+              if (!moduleDocChecks[i]) {
+                missing.push(`Layer 3: platforms/${d}/modules/*.md（功能模块深入文档）`);
+              }
             }
           }
         }
@@ -2742,6 +2805,7 @@ async function detectGlobalLayerProgress(): Promise<{
 
   // Layer 4 子层检测
   let subLayer: { completed: string[]; next: string } | undefined;
+  let pendingPlatforms: string[] = [];
   if (completedLayer >= 3) {
     const overviewDir = join(globalDir, 'overview');
     const requirementsDir = join(globalDir, 'requirements');
@@ -2809,6 +2873,7 @@ async function detectGlobalLayerProgress(): Promise<{
     }
 
     // 4d: 各端技术文档（v8.3.0+ 修复：每个端都要有，不再用 some(Boolean)）
+    // v8.3.160+: 记录未完成的端，用于端级分批
     try {
       const platformsDir = join(globalDir, 'platforms');
       const entries = await readdir(platformsDir, { withFileTypes: true });
@@ -2817,19 +2882,21 @@ async function detectGlobalLayerProgress(): Promise<{
 
       for (const d of platformDirs) {
         const isBackend = /service|server|api|backend/i.test(d);
+        let hasMissing = false;
         if (isBackend) {
           const hasApi = await pathExists(join(platformsDir, d, 'API_INVENTORY.md'));
           const hasData = await pathExists(join(platformsDir, d, 'DATA_MODEL.md'));
-          if (!hasApi) missingPlatformDocs.push(`platforms/${d}/API_INVENTORY.md`);
-          if (!hasData) missingPlatformDocs.push(`platforms/${d}/DATA_MODEL.md`);
+          if (!hasApi) { missingPlatformDocs.push(`platforms/${d}/API_INVENTORY.md`); hasMissing = true; }
+          if (!hasData) { missingPlatformDocs.push(`platforms/${d}/DATA_MODEL.md`); hasMissing = true; }
         } else {
           const hasUi = await pathExists(join(platformsDir, d, 'UI_FLOW.md'));
           const hasApiMap = await pathExists(join(platformsDir, d, 'API_CALL_MAP.md'));
           const hasState = await pathExists(join(platformsDir, d, 'STATE_MANAGEMENT.md'));
-          if (!hasUi) missingPlatformDocs.push(`platforms/${d}/UI_FLOW.md`);
-          if (!hasApiMap) missingPlatformDocs.push(`platforms/${d}/API_CALL_MAP.md`);
-          if (!hasState) missingPlatformDocs.push(`platforms/${d}/STATE_MANAGEMENT.md`);
+          if (!hasUi) { missingPlatformDocs.push(`platforms/${d}/UI_FLOW.md`); hasMissing = true; }
+          if (!hasApiMap) { missingPlatformDocs.push(`platforms/${d}/API_CALL_MAP.md`); hasMissing = true; }
+          if (!hasState) { missingPlatformDocs.push(`platforms/${d}/STATE_MANAGEMENT.md`); hasMissing = true; }
         }
+        if (hasMissing) pendingPlatforms.push(d);
       }
 
       if (missingPlatformDocs.length === 0 && platformDirs.length > 0) {
@@ -2851,13 +2918,13 @@ async function detectGlobalLayerProgress(): Promise<{
     }
   }
 
-  return { completedLayer, nextLayer: Math.min(completedLayer + 1, 4), missing, subLayer };
+  return { completedLayer, nextLayer: Math.min(completedLayer + 1, 4), missing, subLayer, pendingModules, pendingPlatforms };
 }
 
 // ── v7.2.0+: 全局分析下一步引导 ──
 async function buildGlobalAnalysisGuide(options?: AnalyzeOptions): Promise<string | null> {
   const progress = await detectGlobalLayerProgress();
-  const { completedLayer, nextLayer, subLayer } = progress;
+  const { completedLayer, nextLayer, subLayer, pendingModules, pendingPlatforms } = progress;
   const deepDoc = options?.deep;
 
   let guide = '';
@@ -2870,6 +2937,25 @@ async function buildGlobalAnalysisGuide(options?: AnalyzeOptions): Promise<strin
     return `   ${status} ${l}`;
   }).join('\n');
   guide += '\n';
+
+  // v8.3.160+: Layer 3 模块级进度显示
+  if (pendingModules && pendingModules.length > 0) {
+    guide += `\n   📦 Layer 3 待分析模块 (${pendingModules.length} 个):\n`;
+    for (const mod of pendingModules.slice(0, 10)) {
+      guide += `      ⬜ ${mod}\n`;
+    }
+    if (pendingModules.length > 10) {
+      guide += `      ... 还有 ${pendingModules.length - 10} 个模块\n`;
+    }
+  }
+
+  // v8.3.160+: Layer 4d 端级进度显示
+  if (pendingPlatforms && pendingPlatforms.length > 0) {
+    guide += `\n   🖥️  Layer 4d 待处理端 (${pendingPlatforms.length} 个):\n`;
+    for (const p of pendingPlatforms) {
+      guide += `      ⬜ ${p}\n`;
+    }
+  }
 
   if (completedLayer === 4 && (!subLayer || subLayer.completed.length === 4)) {
     guide += '\n🎉 全局分析全部完成！\n';
@@ -2921,10 +3007,10 @@ async function buildGlobalAnalysisGuide(options?: AnalyzeOptions): Promise<strin
 
 // ── v7.4.5+: Layer 3 功能模块代码上下文预提取 ──
 // 从 _MODULES.md 解析功能模块名，从 structured-data.json 交叉匹配相关 API/Entity/Component/Route
-async function buildLayer3ModuleContext(projectRoot: string): Promise<string | null> {
-  const modulesPath = join(projectRoot, '.speccore', 'GLOBAL', 'platforms', '_shared', '_MODULES.md');
-  const structDataPath = join(projectRoot, '.speccore', 'cache', 'structured-data.json');
 
+// v8.3.160+: 提取公共模块解析函数，供进度检测复用
+async function parseModuleNamesFromModulesMd(projectRoot: string): Promise<string[] | null> {
+  const modulesPath = join(projectRoot, '.speccore', 'GLOBAL', 'platforms', '_shared', '_MODULES.md');
   if (!(await pathExists(modulesPath))) return null;
   const modulesContent = await readFile(modulesPath, 'utf-8');
 
@@ -2945,7 +3031,14 @@ async function buildLayer3ModuleContext(projectRoot: string): Promise<string | n
       if (name && name.length >= 2) moduleNames.push(name);
     }
   }
-  if (moduleNames.length === 0) return null;
+  return moduleNames.length > 0 ? moduleNames : null;
+}
+
+async function buildLayer3ModuleContext(projectRoot: string): Promise<string | null> {
+  const moduleNames = await parseModuleNamesFromModulesMd(projectRoot);
+  if (!moduleNames) return null;
+
+  const structDataPath = join(projectRoot, '.speccore', 'cache', 'structured-data.json');
 
   // 读取结构化数据
   let structData: any = null;
@@ -3022,7 +3115,8 @@ async function buildLayer3ModuleContext(projectRoot: string): Promise<string | n
 }
 
 // ── buildMultiDocPrompt: 多文档协议 ──
-async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; task?: string; type?: string; scope?: string; withCode?: boolean; platform?: string; phase?: string; autoMode?: boolean }, options?: AnalyzeOptions, clarifyCtx?: { needsClarify: boolean; clarifyTargets: { path: string; level: string }[] }): Promise<string> {
+// v8.3.160+: 改为 export，供 prompt-builder.ts 统一调用
+export async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; task?: string; type?: string; scope?: string; withCode?: boolean; platform?: string; phase?: string; autoMode?: boolean }, options?: AnalyzeOptions, clarifyCtx?: { needsClarify: boolean; clarifyTargets: { path: string; level: string }[] }): Promise<string> {
   const iter = ctx.iteration || '当前迭代';
   const task = ctx.task ? ` — ${ctx.task}` : '';
   const taskType = ctx.type || 'feature';
@@ -3034,6 +3128,27 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
   // v8.3.0+: 从 clarifyCtx 提取需求澄清状态
   const needsClarify = clarifyCtx?.needsClarify ?? false;
   const clarifyTargets = clarifyCtx?.clarifyTargets ?? [];
+
+  // v8.3.160+: 按 Phase 注入子 Agent 角色定义
+  let agentContextText = '';
+  const phaseSubagentMap: Record<string, string> = {
+    '0': 'product-analyst',
+    '1': 'spec-analyzer',
+    '2': 'spec-analyzer',
+  };
+  const subagent = phaseSubagentMap[ctx.phase || ''] || (isGlobal ? 'spec-global-analyzer' : 'spec-analyzer');
+  try {
+    const agentCtx: AdapterAgentContext = {
+      subagent,
+      iteration: ctx.iteration || '',
+      contextBudget: 12000,
+      contextType: ctx.phase === '2' ? 'platform-only' : 'full',
+      cwd: process.cwd(),
+    };
+    agentContextText = await defaultAdapter.prepareContext(agentCtx);
+  } catch (e: any) {
+    logger.debug?.(`agent-adapter 注入失败（非关键）: ${e.message}`);
+  }
 
   // global 范围: 从源码反推需求 + 生成技术栈配置
   if (isGlobal) {
@@ -3127,6 +3242,11 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
 
     let prompt = `\n# 任务: ${command} (全局分析${ctx.withCode ? '+源码' : ''})\n\n`;
 
+    // v8.3.160+: 注入子 Agent 角色定义
+    if (agentContextText) {
+      prompt = agentContextText + '\n\n' + prompt;
+    }
+
     // v7.2.0+: 分层专注指令 — 强烈约束 AI 只执行当前 layer
     prompt += `## 🎯 当前执行层级: Layer ${targetLayer}/4 — ${layerMeta.role}\n\n`;
     prompt += `> ⚠️ **重要约束**: 你当前只需要完成 **Layer ${targetLayer}** 的工作。不要提前做后续层的内容。\n`;
@@ -3166,36 +3286,22 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `**重要**: 不要直接扫描源码文件。已使用代码扫描工具提取了结构化数据，你只需要读取这些数据并整理成 _INDEX.md。\n\n`;
       prompt += `**步骤**: \n`;
       prompt += `1. Read \`.speccore/cache/structured-data.json\` — 获取所有端的 API/Entity/Route/Component 清单\n`;
+      prompt += `   - **大项目优化**：如端数量 > 3，可按端读取 \`structured-data.{端名}.json\` 分段文件，避免一次性加载过多数据\n`;
       prompt += `2. 对每个端，基于结构化数据生成 \`_INDEX.md\`（补充扫描工具未覆盖的内容）\n`;
       prompt += `3. 扫描工具未覆盖的维度（消息队列、定时任务、配置、外部集成、日志监控、错误处理），需要 Read 相关配置文件补充\n\n`;
-      prompt += `**后端端 _INDEX.md 维度（基于 structured-data.json + 补充扫描）**：\n`;
-      prompt += `| 扫描项 | 读取位置 | 提取内容 |\n`;
-      prompt += `| :--- | :--- | :--- |\n`;
-      prompt += `| 接口层 | Controller/Handler/Resource 目录 | 接口类名、接口路径（从注解/装饰器推断）、鉴权注解 |\n`;
-      prompt += `| 数据层 | Entity/Model/Schema/Domain 目录 | 实体名称、表名、敏感字段标记 |\n`;
-      prompt += `| 业务层 | Service/UseCase/Application 目录 | 服务类名、核心方法名 |\n`;
-      prompt += `| 中间件 | Middleware/Interceptor/Filter/Gateway 目录 | 中间件名、作用范围 |\n`;
-      prompt += `| 消息队列 | 搜索消息相关代码（Kafka/RabbitMQ/NSQ/SQS/Redis PubSub） | 队列名、消费者/生产者类名 |\n`;
-      prompt += `| 定时任务 | 搜索定时任务（@Scheduled/cron/agenda/node-cron） | 任务名、触发频率、执行类 |\n`;
-      prompt += `| 配置管理 | 配置文件（application*.yml/.env/config/） | 环境变量名、Feature Flag、配置中心引用 |\n`;
-      prompt += `| 外部集成 | 搜索第三方调用（HTTP client/SDK/微信支付/短信/邮件/OSS） | 集成目标、调用位置 |\n`;
-      prompt += `| 日志监控 | 搜索日志/监控/埋点代码（logger/metrics/tracing） | 日志级别策略、埋点事件名 |\n`;
-      prompt += `| 错误处理 | 搜索全局异常处理器（ExceptionHandler/ErrorBoundary） | 异常处理类名、错误码范围 |\n`;
-      prompt += `| 依赖项 | pom.xml/package.json/go.mod/requirements.txt | 依赖项列表（识别公共服务候选、过期版本、已知 CVE） |\n\n`;
-      prompt += `**前端端扫描维度（10项）**：\n`;
-      prompt += `| 扫描项 | 读取位置 | 提取内容 |\n`;
-      prompt += `| :--- | :--- | :--- |\n`;
-      prompt += `| 路由 | router/routes 配置文件 | 页面路径、页面名称、组件名、懒加载标记 |\n`;
-      prompt += `| 页面 | pages/views/screens 目录 | 页面名称、主要功能（从文件名推断） |\n`;
-      prompt += `| API 调用 | 搜索 API 调用模式（axios/fetch/$.ajax/uni.request） | 调用的接口路径列表、调用位置 |\n`;
-      prompt += `| 状态管理 | store/pinia/vuex/redux 目录 | 全局状态名称、actions 名称、持久化策略 |\n`;
-      prompt += `| 组件库 | components/ui 目录、设计系统配置 | 组件名、复用度、设计 token |\n`;
-      prompt += `| 拦截器 | 请求/响应拦截器配置 | 拦截器逻辑（鉴权头注入、错误统一处理） |\n`;
-      prompt += `| 外部 SDK | 搜索第三方 SDK 引入（埋点/推送/地图/支付/分享） | SDK 名称、初始化位置、使用范围 |\n`;
-      prompt += `| 国际化 | i18n/locales/lang 目录 | 支持语言、命名空间、 key 数量级 |\n`;
-      prompt += `| 错误处理 | 错误边界/全局错误处理器 | 错误捕获范围、降级策略、上报机制 |\n`;
-      prompt += `| 性能 | 搜索性能相关代码（懒加载/虚拟滚动/缓存/预加载） | 优化手段、适用场景 |\n\n`;
+      // v8.3.160+: 扫描维度从详细表格精简为分类列表
+      prompt += `**后端端扫描维度**（从 structured-data.json + 源码补充）：\n`;
+      prompt += `- 接口层（Controller/Handler）、数据层（Entity/Model）、业务层（Service/UseCase）\n`;
+      prompt += `- 中间件、消息队列、定时任务、配置管理、外部集成\n`;
+      prompt += `- 日志监控、错误处理、依赖项（识别过期版本/CVE）\n\n`;
+      prompt += `**前端端扫描维度**：\n`;
+      prompt += `- 路由、页面、API 调用、状态管理、组件库\n`;
+      prompt += `- 拦截器、外部 SDK、国际化、错误处理、性能优化\n\n`;
       prompt += `**输出**：每个端一个 \`_INDEX.md\`，按上述维度组织，只含名称和路径列表，不含详细逻辑\n`;
+      prompt += `**分批策略（v8.3.160+）**：\n`;
+      prompt += `- 如端数量 ≤ 5：一次生成所有端的 \`_INDEX.md\`\n`;
+      prompt += `- 如端数量 > 5：一次处理 3-5 个端，剩余端在输出末尾标注 \`[PENDING: {端名列表}]\`，供续批处理\n`;
+      prompt += `- 续批命令：\`speccore analyze --scope global --layer 1 --resume\`\n`;
       prompt += `**最小内容标准（v8.3.61+）**：\n`;
       prompt += `- 每个 \_INDEX.md ≥ 80 行（维度少可接受 50+，但严禁 < 30 行）\n`;
       prompt += `- 必须包含：端名、技术栈、目录结构概览、各维度清单表格\n`;
@@ -3238,48 +3344,25 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     // ── Layer 2 指令（仅 targetLayer === 2 时注入）──
     if (targetLayer === 2) {
       prompt += `## 🔗 Layer 2: 跨端关联分析（基于 Layer 1 索引 + structured-data.json）\n\n`;
-      prompt += `> 📊 **结构化数据**: Read \`.speccore/cache/structured-data.json\` 获取 API/Entity 清单，与 Layer 1 索引交叉验证\n\n`;
-      prompt += `1. **匹配前后端接口**：\n`;
-      prompt += `   - 前端 \`_INDEX.md\` 中的 API 调用路径 vs 后端 \`_INDEX.md\` 中的接口路径\n`;
-      prompt += `   - **匹配上** → 建立「前端页面 → 前端 API 调用 → 后端接口 → 后端服务」链路\n`;
-      prompt += `   - **前端有、后端没有** → 标注为「接口缺口」（可能调了第三方/遗留/错误接口）\n`;
-      prompt += `   - **后端有、前端没调** → 标注为「未使用接口」（可能后台管理/内部调度用）\n\n`;
-      prompt += `2. **识别公共服务**：\n`;
-      prompt += `   - 被 2+ 个前端端调用的后端服务 → 公共服务候选\n`;
-      prompt += `   - 被 2+ 个后端端调用的后端服务 → 公共服务候选\n`;
-      prompt += `   - 依赖项中独立部署的服务（如 notification-service、file-service）→ 公共服务候选\n\n`;
-      prompt += `3. **消息流关联**（跨端事件/消息链路）：\n`;
-      prompt += `   - 后端生产者 ↔ 队列名 ↔ 后端消费者 ↔ 前端推送（WebSocket/SSE/轮询）\n`;
-      prompt += `   - 识别「异步事件触发 → 多端状态同步」链路\n`;
-      prompt += `   - 标注：无消费者的消息、无生产者的消息（ orphaned topic ）\n\n`;
-      prompt += `4. **定时任务影响分析**：\n`;
-      prompt += `   - 哪些定时任务修改了被前端展示的数据（数据新鲜度风险）\n`;
-      prompt += `   - 哪些定时任务触发了前端需要感知的通知/推送\n`;
-      prompt += `   - 批处理任务 vs 实时接口的数据竞争风险\n\n`;
-      prompt += `5. **外部集成一致性检查**：\n`;
-      prompt += `   - 多个端是否独立调用了同一第三方 API（重复集成 = 维护风险）\n`;
-      prompt += `   - 前端 SDK 与后端 SDK 版本是否一致（如支付 SDK）\n`;
-      prompt += `   - 第三方回调/Webhook 的接收端分布\n\n`;
-      prompt += `6. **配置一致性检查**：\n`;
-      prompt += `   - 各端的超时配置、重试策略、限流阈值是否一致\n`;
-      prompt += `   - 跨端共享的 Feature Flag 定义是否一致\n`;
-      prompt += `   - 环境变量命名是否规范（如 API_BASE_URL 在各端是否指向同一值）\n\n`;
-      prompt += `7. **归纳功能模块**（从索引聚类，不是从代码反推）：\n`;
-      prompt += `   - **从页面聚类**：哪些页面经常一起出现（如 RoomList + RoomDetail + RoomEdit）\n`;
-      prompt += `   - **从接口聚类**：哪些接口共享同一实体前缀（如 /api/rooms/*）\n`;
-      prompt += `   - **从消息聚类**：哪些消息队列共享同一业务领域\n`;
-      prompt += `   - **交叉验证**：页面聚类 vs 接口聚类 vs 消息聚类 → 确定功能模块边界\n`;
-      prompt += `   - 每个功能模块标注：涉及端、核心页面、核心接口、实体名称、消息队列\n\n`;
+      prompt += `> 📊 **输入**: Read \`.speccore/cache/structured-data.json\` 获取 API/Entity 清单，与 Layer 1 索引交叉验证\n\n`;
+      prompt += `**分析维度**（7 项，每项产出写入 \_ASSOCIATION.md 对应章节）：\n\n`;
+      prompt += `| # | 维度 | 核心动作 | 风险标注 |\n`;
+      prompt += `| :--- | :--- | :--- | :--- |\n`;
+      prompt += `| 1 | 接口匹配 | 前端 API 路径 vs 后端接口路径 → 建立调用链路 | 接口缺口 / 未使用接口 |\n`;
+      prompt += `| 2 | 公共服务 | 被 2+ 端调用的服务 / 独立部署服务 | 重复实现 / 版本不一致 |\n`;
+      prompt += `| 3 | 消息流 | 生产者 ↔ 队列 ↔ 消费者 ↔ 前端推送链路 | orphaned topic / 多端同步缺失 |\n`;
+      prompt += `| 4 | 定时任务 | 修改前端数据的任务 / 触发通知的任务 | 数据新鲜度 / 竞争风险 |\n`;
+      prompt += `| 5 | 外部集成 | 多端独立调用同一第三方 API / SDK 版本 | 重复集成 / 版本漂移 |\n`;
+      prompt += `| 6 | 配置一致性 | 超时/重试/限流 / Feature Flag / 环境变量 | 配置漂移 / 环境差异 |\n`;
+      prompt += `| 7 | 功能模块聚类 | 页面聚类 vs 接口聚类 vs 消息聚类 → 交叉验证 | 边界模糊 / 职责不清 |\n\n`;
+      prompt += `**模块归纳方法**：从索引聚类（非代码反推），每个模块标注：涉及端、核心页面、核心接口、实体名、消息队列\n\n`;
       prompt += `**输出**：\n`;
-      prompt += `- \`_ASSOCIATION.md\`：前后端关联矩阵 + 接口缺口/未使用接口清单 + 消息流链路 + 定时任务影响 + 外部集成分布 + 配置一致性风险\n`;
-      prompt += `  - 此文档中必须包含 **模块关系 Mermaid 图**（graph LR），展示各功能模块间的依赖关系\n`;
-      prompt += `  - 此文档中必须包含 **接口依赖 Mermaid 图**（graph TD），展示前端页面 → 后端接口的调用关系\n`;
-      prompt += `- \`_MODULES.md\`：功能模块候选清单（从源码聚类，含消息/定时任务维度，供 Layer 3 验证）\n`;
-      prompt += `  - 此文档中必须包含 **模块全景 Mermaid 图**（graph LR），展示所有功能模块及其所属端\n`;
+      prompt += `- \`_ASSOCIATION.md\`：关联矩阵 + 接口缺口/未使用清单 + 消息流 + 定时任务影响 + 外部集成 + 配置风险 + 模块关系 Mermaid 图（graph LR）+ 接口依赖 Mermaid 图（graph TD）\n`;
+      prompt += `- \`_MODULES.md\`：功能模块候选清单（含消息/定时任务维度）+ 模块全景 Mermaid 图（graph LR）\n`;
       prompt += `**最小内容标准（v8.3.61+）**：\n`;
-      prompt += `- \_ASSOCIATION.md ≥ 100 行，必须包含前后端关联矩阵 + 至少 1 个 Mermaid 图\n`;
-      prompt += `- \_MODULES.md ≥ 50 行，必须包含功能模块清单 + 模块全景 Mermaid 图\n`;
-      prompt += `- 严禁生成空壳文档（只有标题和几行描述）\n`;
+      prompt += `- \_ASSOCIATION.md ≥ 100 行，含关联矩阵 + ≥1 个 Mermaid 图\n`;
+      prompt += `- \_MODULES.md ≥ 50 行，含模块清单 + 模块全景 Mermaid 图\n`;
+      prompt += `- 严禁空壳文档\n`;
       prompt += `**存放**：\`.speccore/GLOBAL/platforms/_shared/\`\n\n`;
     } // end if (targetLayer === 2)
 
@@ -3310,6 +3393,12 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `- 读取 room-service: RoomController#getAvailability, RoomService 的详细逻辑\n`;
       prompt += `- 关联验证：前端提交的数据字段 vs 后端接收的 DTO 字段是否一致\n`;
       prompt += `- 关联验证：前端展示的状态 vs 后端实体的状态枚举是否一致\n\n`;
+      prompt += `**分批策略（v8.3.160+）**：\n`;
+      prompt += `- 如功能模块数量 ≤ 2：一次生成所有模块的分析文档\n`;
+      prompt += `- 如功能模块数量 > 2：一次处理 1-2 个模块，确保每个模块分析深入、不空洞\n`;
+      prompt += `- 剩余模块在输出末尾标注 \`[PENDING: {模块名列表}]\`，供续批处理\n`;
+      prompt += `- 续批命令：\`speccore analyze --scope global --layer 3 --resume\`\n`;
+      prompt += `- **关键原则**：宁可少分析几个模块，也要保证每个模块的分析质量（≥100 行、有 Mermaid 图、有具体代码引用）\n\n`;
       prompt += `**每个功能模块输出**：\n`;
       prompt += `- 后端端：该功能模块相关的 API 详细设计、数据模型、业务规则、安全策略\n`;
       prompt += `- 前端端：该功能模块相关的页面详细设计、交互流程、字段映射、错误处理\n`;
@@ -3805,25 +3894,36 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
         }
       
         // 4d: 动态构建各端文档清单
+        // v8.3.160+: 按端分批，一次处理 1-2 个端的所有缺失文档
+        const platformMissingDocs: Record<string, string[]> = {};
         if (subLayerTarget === '4d') {
           try {
             const entries = await readdir(platformsDir, { withFileTypes: true });
             const platformNames = entries.filter(e => e.isDirectory() && e.name !== '_shared').map(e => e.name);
             for (const p of platformNames) {
               const isBackend = /service|server|api|backend/i.test(p);
+              const expectedPlatformDocs: string[] = [];
               if (isBackend) {
-                SUB_LAYER_DOCS['4d'].push(`platforms/${p}/API_INVENTORY.md`);
-                SUB_LAYER_DOCS['4d'].push(`platforms/${p}/DATA_MODEL.md`);
-                SUB_LAYER_DOCS['4d'].push(`platforms/${p}/BUSINESS_RULES.md`);
+                expectedPlatformDocs.push(`platforms/${p}/API_INVENTORY.md`);
+                expectedPlatformDocs.push(`platforms/${p}/DATA_MODEL.md`);
+                expectedPlatformDocs.push(`platforms/${p}/BUSINESS_RULES.md`);
               } else {
-                SUB_LAYER_DOCS['4d'].push(`platforms/${p}/UI_FLOW.md`);
-                SUB_LAYER_DOCS['4d'].push(`platforms/${p}/API_CALL_MAP.md`);
-                SUB_LAYER_DOCS['4d'].push(`platforms/${p}/STATE_MANAGEMENT.md`);
+                expectedPlatformDocs.push(`platforms/${p}/UI_FLOW.md`);
+                expectedPlatformDocs.push(`platforms/${p}/API_CALL_MAP.md`);
+                expectedPlatformDocs.push(`platforms/${p}/STATE_MANAGEMENT.md`);
               }
+              SUB_LAYER_DOCS['4d'].push(...expectedPlatformDocs);
+              // 检查该端哪些文档缺失
+              const missing: string[] = [];
+              for (const doc of expectedPlatformDocs) {
+                const fullPath = join((findProjectRoot() || process.cwd()), '.speccore', 'GLOBAL', doc);
+                if (!(await pathExists(fullPath))) missing.push(doc);
+              }
+              if (missing.length > 0) platformMissingDocs[p] = missing;
             }
           } catch {}
         }
-      
+
         // 检测当前子层中哪些文档已存在
         const expectedDocs = SUB_LAYER_DOCS[subLayerTarget] || [];
         const existingDocs: string[] = [];
@@ -3836,24 +3936,48 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
             missingDocs.push(doc);
           }
         }
-      
-        const nextDoc = missingDocs.length > 0 ? missingDocs[0] : null;
-      
-        prompt += `## 🌍 Layer 4: 全局汇总 — 子层 ${subLayerTarget}/4（v7.5.0+ 逐文档模式）\n\n`;
-        prompt += `> ⚠️ **专注约束**: 你当前只执行 **子层 ${subLayerTarget}** 中的 **下一个缺失文档**。\n`;
-        prompt += `> 忽略前面关于其他子层文档的要求，只关注当前要生成的文档。\n`;
+
+        // v8.3.160+: 4d 按端分批模式
+        let targetPlatforms: string[] = [];
+        let nextDoc: string | null = null;
+        if (subLayerTarget === '4d' && Object.keys(platformMissingDocs).length > 0) {
+          targetPlatforms = Object.keys(platformMissingDocs).slice(0, 2); // 一次 1-2 个端
+        } else if (missingDocs.length > 0) {
+          nextDoc = missingDocs[0];
+        }
+
+        prompt += `## 🌍 Layer 4: 全局汇总 — 子层 ${subLayerTarget}/4${subLayerTarget === '4d' ? '（v8.3.160+ 按端分批模式）' : '（v7.5.0+ 逐文档模式）'}\n\n`;
+        if (subLayerTarget === '4d' && targetPlatforms.length > 0) {
+          prompt += `> ⚠️ **专注约束**: 你当前只处理 **${targetPlatforms.join(', ')}** 端的技术文档。\n`;
+          prompt += `> 一次生成这些端的所有缺失文档，不要处理其他端。\n`;
+        } else if (nextDoc) {
+          prompt += `> ⚠️ **专注约束**: 你当前只执行 **子层 ${subLayerTarget}** 中的 **下一个缺失文档**。\n`;
+          prompt += `> 忽略前面关于其他子层文档的要求，只关注当前要生成的文档。\n`;
+        }
         prompt += `> 已存在: ${existingDocs.length}/${expectedDocs.length} 份文档\n`;
         if (missingDocs.length > 0) {
           prompt += `> 缺失: ${missingDocs.slice(0, 5).join('、')}${missingDocs.length > 5 ? '...' : ''}\n`;
         }
         prompt += `\n`;
-      
+
         prompt += `**强制输入**: \n`;
         prompt += `- Read Layer 1 的所有 _INDEX.md\n`;
         prompt += `- Read Layer 2 的 _ASSOCIATION.md + _MODULES.md\n`;
         prompt += `- Read Layer 3 的功能模块深入文档\n\n`;
-      
-        if (nextDoc) {
+
+        if (subLayerTarget === '4d' && targetPlatforms.length > 0) {
+          // v8.3.160+: 按端分批生成所有缺失文档
+          prompt += `## 🎯 本次处理端: ${targetPlatforms.join(', ')}\n\n`;
+          for (const p of targetPlatforms) {
+            const docs = platformMissingDocs[p];
+            prompt += `**${p} 端缺失文档 (${docs.length} 份)**: \n`;
+            for (const doc of docs) {
+              const docName = doc.split('/').pop()!;
+              prompt += `- \`${docName}\`\n`;
+            }
+            prompt += `\n`;
+          }
+        } else if (nextDoc) {
           prompt += `## 🎯 本次只生成: \`${nextDoc}\`\n\n`;
       
           // 根据文档路径生成专属指令
@@ -3901,7 +4025,14 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
           }
       
           // 自动链式推进
-          if (missingDocs.length > 1) {
+          // v8.3.160+: 4d 按端分批续批
+          const remainingPlatforms = Object.keys(platformMissingDocs).filter(p => !targetPlatforms.includes(p));
+          if (subLayerTarget === '4d' && remainingPlatforms.length > 0) {
+            prompt += `\n## 🔗 自动链式推进\n\n`;
+            prompt += `> 当前批次（${targetPlatforms.join(', ')}）写入完成后，**还有 ${remainingPlatforms.length} 个端待处理**。\n`;
+            prompt += `> **立即输出以下标记**继续子层 4d：\n\n`;
+            prompt += `[SPECCORE_EXEC: speccore analyze --scope global --layer 4${options?.withCode ? ' --with-code' : ''}]\n\n`;
+          } else if (missingDocs.length > 1) {
             prompt += `\n## 🔗 自动链式推进\n\n`;
             prompt += `> 当前文档写入完成后，**立即输出以下标记**推进下一个文档：\n\n`;
             prompt += `[SPECCORE_EXEC: speccore analyze --scope global --layer 4${options?.withCode ? ' --with-code' : ''}]\n\n`;
@@ -3951,18 +4082,28 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
     prompt += `- platforms/ 和 requirements/ 下的文件按原路径写（如 \`platforms/backend/_INDEX.md\`）\n`;
     prompt += `- overview/ 下的文件写纯文件名即可（如 \`ARCHITECTURE.md\` 自动路由到 overview/）\n`;
     prompt += `- PATTERNS/ 下的文件写 \`PATTERNS/{分类}/{模式名}.md\`\n`;
+    prompt += `- **Layer 3 功能模块分析文档写** \`platforms/_shared/modules/{kebab-case模块名}.md\`（v8.3.160+ 统一存放，便于进度追踪）\n`;
 
     // v7.4.5+: 自动链式推进 — 用 [SPECCORE_EXEC:] 标记触发下一层
-    const nextLayerCmd = targetLayer < 4
-      ? `speccore analyze --scope global --layer ${targetLayer + 1}${ctx.withCode ? ' --with-code' : ''}`
-      : `speccore analyze --scope global --layer 4${ctx.withCode ? ' --with-code' : ''}`;
+    // v8.3.160+: Layer 3 支持模块级续批，有未完成模块时继续 Layer 3
+    let nextLayerCmd: string;
+    if (targetLayer === 3 && progress.pendingModules && progress.pendingModules.length > 0) {
+      nextLayerCmd = `speccore analyze --scope global --layer 3${ctx.withCode ? ' --with-code' : ''}`;
+    } else {
+      nextLayerCmd = targetLayer < 4
+        ? `speccore analyze --scope global --layer ${targetLayer + 1}${ctx.withCode ? ' --with-code' : ''}`
+        : `speccore analyze --scope global --layer 4${ctx.withCode ? ' --with-code' : ''}`;
+    }
     const isLastSubLayer = targetLayer === 4 && (
       !progress.subLayer || progress.subLayer.next === '4d' ||
       (progress.subLayer.completed.length >= 3)
     );
 
     prompt += `\n## 🔗 自动链式推进\n\n`;
-    if (targetLayer < 4) {
+    if (targetLayer === 3 && progress.pendingModules && progress.pendingModules.length > 0) {
+      prompt += `> 当前 Layer 3 还有 ${progress.pendingModules.length} 个功能模块待分析，**继续执行 Layer 3**（不要推进到 Layer 4）：\n\n`;
+      prompt += `[SPECCORE_EXEC: ${nextLayerCmd}]\n`;
+    } else if (targetLayer < 4) {
       prompt += `> 当前 Layer ${targetLayer} 所有文件写入完成后，**立即输出以下标记**触发下一层（不要等待用户指令）：\n\n`;
       prompt += `[SPECCORE_EXEC: ${nextLayerCmd}]\n`;
     } else if (targetLayer === 4 && !isLastSubLayer) {
@@ -3985,8 +4126,9 @@ async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; t
       prompt += `- [ ] _MODULES.md 行数 ≥ 50，包含功能模块清单 + Mermaid 图\n`;
       prompt += `- [ ] 没有空壳文档\n`;
     } else if (targetLayer === 3) {
-      prompt += `- [ ] 每个功能模块分析文档行数 ≥ 100\n`;
+      prompt += `- [ ] 当前批次处理的 1-2 个功能模块分析文档行数 ≥ 100\n`;
       prompt += `- [ ] 每个文档包含模块概述、涉及端清单、至少 1 个 Mermaid 图\n`;
+      prompt += `- [ ] 如还有未分析模块，输出末尾标注 [PENDING: {模块名列表}]\n`;
       prompt += `- [ ] 没有空壳文档\n`;
     } else if (targetLayer === 4) {
       prompt += `- [ ] 当前子层文档行数达到最小内容标准（见上文）\n`;
@@ -4315,10 +4457,14 @@ sequenceDiagram
   const includeDocs = isTask ? (DOC_MATRIX[taskType] || DOC_MATRIX['feature']) : DOC_MATRIX['feature'];
 
   // ── v6.61.0+: 恢复 Phase 1/Phase 2 分步逻辑，但 CLI 自动触发 Phase 2 ──
-  // Phase 1: 生成综合文档(overview/REQUIREMENT.md、ANALYSIS.md、DEPS.md 等)
-  // Phase 2: 生成各端专属文档({端}/TECH.md、TEST.md、UI_SPEC.md 等)
-  const GLOBAL_DOCS = ['REQUIREMENT.md', 'ANALYSIS.md', 'TECH.md', 'RISK.md', 'DEPS.md', 'REVIEW.md', 'MONITOR.md', 'FUNCTION_MAP.md', 'INTERACTION_MAP.md', 'DEV_GUIDE.md'];
+  // v8.3.160+: 改为功能模块优先 — 全局只保留索引文档，每个功能模块有自己的综合文档
+  // Phase 1: 全局索引(FUNCTION_MAP.md/INTERACTION_MAP.md/PLATFORMS.md) + 各功能模块 overview/
+  // Phase 2: 各功能模块的各端专属文档({功能模块}/{端}/TECH.md 等)
+  const GLOBAL_INDEX_DOCS = ['FUNCTION_MAP.md', 'INTERACTION_MAP.md', 'PLATFORMS.md'];
+  const FEATURE_OVERVIEW_DOCS_LIST = ['REQUIREMENT.md', 'ANALYSIS.md', 'TECH.md', 'RISK.md', 'DEPS.md', 'REVIEW.md', 'MONITOR.md', 'DEV_GUIDE.md'];
   const PLATFORM_DOCS = ['TECH.md', 'TEST.md', 'UI_SPEC.md', 'DEV_GUIDE.md'];
+  // 向后兼容：保留 GLOBAL_DOCS 引用
+  const GLOBAL_DOCS = [...GLOBAL_INDEX_DOCS, ...FEATURE_OVERVIEW_DOCS_LIST];
   let taskDocs = docs.filter(([n]) => includeDocs.includes(n));
   if (ctx.phase === '1') {
     taskDocs = taskDocs.filter(([n]) => GLOBAL_DOCS.includes(n));
@@ -4508,6 +4654,11 @@ sequenceDiagram
 
   let prompt = `\n# 任务: ${command}${task} (${taskDocs.length}个文档 · ${isTask ? `类型:${taskType}` : '迭代全量'}${ctx.phase ? ` · Phase ${ctx.phase}` : ''})\n\n`;
 
+  // v8.3.160+: 注入子 Agent 角色定义
+  if (agentContextText) {
+    prompt = agentContextText + '\n\n' + prompt;
+  }
+
   // v8.3.0+: 如果检测到需求质量不足，在 prompt 开头注入强制澄清阶段
   if (needsClarify && !isGlobal && !isTask && !ctx.phase) {
     const now = new Date().toISOString();
@@ -4677,28 +4828,20 @@ status: "clarified"
 
   // ── v8.1.0+: 逐文档模式自动注入 PRD 内容 + 前序文档摘要 ──
   // v8.3.2+ 修复：PRD 注入不再仅限逐文档模式，Phase 1/2 模式下也必须注入需求内容
+  // v8.3.160+: 改为路径引用模式（不再全文塞进，让 AI 按需 Read）
   if (!isGlobal && !isTask && ctx.iteration && ctx.iteration !== 'GLOBAL') {
     try {
       const iterDirForCtx = await getIterationDir(iter);
       if (iterDirForCtx) {
-        // v8.2.0+: 注入 PRD 内容（优先从黄金需求目录 020-specs/requirements/ 读取）
-        // v8.3.97+: 对 .md 文件自动展开链接 + 提取图片，确保关联内容被读取
-        let prdContent = '';
-        const seenPaths = new Set<string>();
+        // v8.3.160+: 路径引用模式 — 列出文档清单，让 AI 按需 Read
+        const docList: string[] = [];
         const goldenReqDir = join(iterDirForCtx, '020-specs', 'requirements');
         if (await pathExists(goldenReqDir)) {
-          // 黄金需求目录存在，只读这里（唯一依据）
           const files = (await import('fs-extra')).readdirSync(goldenReqDir).filter((f: string) => f.endsWith('.md')).slice(0, 10);
           for (const f of files) {
-            const filePath = join(goldenReqDir, f);
-            let content = await (await import('fs-extra')).readFile(filePath, 'utf-8');
-            content = await processMarkdownContent(content, filePath, seenPaths, undefined, {
-              maxLinkDepth: 2, maxLinkChars: 1200, maxSvgChars: 1500,
-            });
-            prdContent += `\n### ${f}\n${content.slice(0, 2000)}\n`;
+            docList.push(`020-specs/requirements/${f}`);
           }
         } else {
-          // 回退：从 010-requirements/ 读取原始需求
           const reqDir = join(iterDirForCtx, '010-requirements');
           const prdSources = join(reqDir, 'sources');
           const prdConverted = join(reqDir, 'converted');
@@ -4707,42 +4850,31 @@ status: "clarified"
             if (await pathExists(dir)) {
               const files = (await import('fs-extra')).readdirSync(dir).filter((f: string) => f.endsWith('.md')).slice(0, 5);
               for (const f of files) {
-                const filePath = join(dir, f);
-                let content = await (await import('fs-extra')).readFile(filePath, 'utf-8');
-                content = await processMarkdownContent(content, filePath, seenPaths, undefined, {
-                  maxLinkDepth: 2, maxLinkChars: 1200, maxSvgChars: 1500,
-                });
-                prdContent += `\n### ${f}\n${content.slice(0, 2000)}\n`;
+                const relDir = relative(iterDirForCtx, dir);
+                docList.push(`${relDir}/${f}`);
               }
             }
           }
         }
-        if (prdContent.length > 0) {
-          prompt += `\n## 📎 需求文档原文（PRD，写作核心输入）\n\n`;
-          const sourceLabel = await pathExists(goldenReqDir) ? '020-specs/requirements/（黄金需求，已澄清）' : '010-requirements/（原始需求）';
-          prompt += `> 以下是 ${sourceLabel} 下的需求文档，这是你撰写专业分析文档的核心输入。所有分析必须基于这些内容，不要臆造。\n`;
-          prompt += prdContent.slice(0, 5000);
-          prompt += `\n\n`;
+        if (docList.length > 0) {
+          prompt += `\n## 📎 需求文档清单（请按需 Read）\n\n`;
+          prompt += `> 以下是你撰写专业分析文档的核心输入。所有分析必须基于这些内容，不要臆造。\n`;
+          prompt += `> 用 Read 工具按需读取，不需要一次性读完所有文档。\n\n`;
+          for (const docPath of docList) {
+            prompt += `- \`${docPath}\`\n`;
+          }
+          prompt += `\n`;
         }
 
-        // 2. 注入前序已填充文档摘要（仅在逐文档模式下）
+        // 2. 前序已填充文档路径（改为路径引用，不再注入摘要）
         if (perDocStatus?.filled.length && perDocStatus.filled.length > 0) {
-          const specDir = join(iterDirForCtx, '020-specs');
-          prompt += `## 📎 前序已填充文档摘要（当前文档必须与之保持一致）\n\n`;
-          prompt += `> 以下文档已生成，当前文档必须与之保持一致（字段名、接口路径、状态枚举等不能冲突）。\n\n`;
+          prompt += `## 📎 前序已填充文档（必须与之保持一致）\n\n`;
+          prompt += `> 以下文档已生成，当前文档必须与之保持一致（字段名、接口路径、状态枚举等不能冲突）。\n`;
+          prompt += `> 用 Read 工具读取这些文件，提取关键约束。\n\n`;
           for (const filledPath of perDocStatus.filled) {
-            const fullPath = join(specDir, filledPath);
-            try {
-              let content = await (await import('fs-extra')).readFile(fullPath, 'utf-8');
-              if (fullPath.endsWith('.md')) {
-                content = await processMarkdownContent(content, fullPath, seenPaths, undefined, {
-                  maxLinkDepth: 1, maxLinkChars: 800, maxSvgChars: 1000,
-                });
-              }
-              const summary = content.slice(0, 1500);
-              prompt += `### ${filledPath}\n\`\`\`\n${summary}${content.length > 1500 ? '\n... (截断)' : ''}\n\`\`\`\n\n`;
-            } catch { /* skip unreadable */ }
+            prompt += `- \`020-specs/${filledPath}\`\n`;
           }
+          prompt += `\n`;
         }
       }
     } catch (e: any) {
@@ -4819,9 +4951,18 @@ status: "clarified"
       prompt += `- Read 020-specs/overview/ANALYSIS.md → 分析报告\n`;
       prompt += `- Read 020-specs/overview/TECH.md → 整体技术架构\n`;
       prompt += `- Read 020-specs/overview/RISK.md、DEPS.md、REVIEW.md、MONITOR.md（如存在）\n\n`;
-      prompt += `### Step 2: 为每个端撰写专属文档（v8.3.1+ 强制四文档）\n`;
-      prompt += `根据全局上下文，为 PLATFORMS.md 中的**每个端**分别撰写以下 **4 份文档**，缺一不可：\n\n`;
-      prompt += `**1. {端}/TECH.md — 该端专属技术方案（必须对齐 overview/TECH.md 架构）**\n`;
+      prompt += `### Step 2: 按功能模块组织，为每个功能模块的每个端撰写专属文档（v8.3.1+ 强制四文档）\n`;
+      prompt += `先 Read \`020-specs/overview/FUNCTION_MAP.md\` 获取功能模块清单。\n\n`;
+      prompt += `**分批策略（v8.3.160+）**：\n`;
+      prompt += `- 如功能模块数量 ≤ 2：一次生成所有模块的所有端文档\n`;
+      prompt += `- 如功能模块数量 > 2：一次只处理 **1-2 个功能模块** 的所有端文档，确保质量深入\n`;
+      prompt += `- 剩余模块在输出末尾标注 \`[PENDING: {模块名列表}]\`，供续批处理\n`;
+      prompt += `- 续批命令：\`speccore analyze --prompt -I ${iter} --phase 2\`\n`;
+      prompt += `- **关键原则**：宁可少分析几个模块，也要保证每个模块的分析质量（文档充实、有具体代码引用、表格有数据行）\n\n`;
+      prompt += `每个功能模块涉及的每个端，分别撰写以下 **4 份文档**，缺一不可：\n\n`;
+      prompt += `**文件路径格式**：\`{功能模块名}/{端名}/{文件名}\`（如 \`booking/backend/TECH.md\`、\`booking/h5-mobile/UI_SPEC.md\`）\n`;
+      prompt += `> ⚠️ **严禁**只写 \`{端}/{文件}\` 格式（如 \`backend/TECH.md\`），这会导致所有功能模块的文档混在一起无法区分\n\n`;
+      prompt += `**1. {功能模块}/{端}/TECH.md — 该端在该功能模块下的技术方案（必须对齐 overview/TECH.md 架构）**\n`;
       prompt += `  - 该端的分层架构、模块划分、核心接口设计（路径/方法/参数/响应/状态码）\n`;
       prompt += `  - 数据库表结构（字段/类型/索引/约束，如适用）\n`;
       prompt += `  - 业务规则实现（含边界条件和异常流）\n`;
@@ -4829,15 +4970,15 @@ status: "clarified"
       prompt += `  - 表格格式：| 业务模块 | 代码实体 | 关系类型 | 说明 |\n`;
       prompt += `  - 示例：| 会议室档案 | backend/RoomController.java | api_controller | REST 控制器 |\n`;
       prompt += `  - 示例：| 会议室档案 | admin-web/src/pages/RoomList.vue | page | 列表页 |\n\n`;
-      prompt += `**2. {端}/TEST.md — 该端专属测试计划**\n`;
+      prompt += `**2. {功能模块}/{端}/TEST.md — 该端在该功能模块下的测试计划**\n`;
       prompt += `  - 覆盖该端所有功能模块的测试用例（含前置条件、步骤、预期结果）\n`;
       prompt += `  - 边界值和异常输入测试\n`;
       prompt += `  - 必须覆盖 REQUIREMENT.md 中该端的验收标准\n\n`;
-      prompt += `**3. {端}/UI_SPEC.md — 该端专属 UI 规格（仅前端端需要）**\n`;
+      prompt += `**3. {功能模块}/{端}/UI_SPEC.md — 该端在该功能模块下的 UI 规格（仅前端端需要）**\n`;
       prompt += `  - 页面结构与路由（每个页面的路径、入口、权限）\n`;
       prompt += `  - 组件清单和字段→UI 映射\n`;
       prompt += `  - 状态枚举和错误处理策略\n\n`;
-      prompt += `**4. {端}/DEV_GUIDE.md — 该端开发者实现指南（v8.3.1+ 新增强制要求）**\n`;
+      prompt += `**4. {功能模块}/{端}/DEV_GUIDE.md — 该端在该功能模块下的开发者实现指南（v8.3.1+ 新增强制要求）**\n`;
       prompt += `  - ⛔ **禁止只写框架/占位符** — 必须是可执行的实现指导\n`;
       prompt += `  - **本端改造范围清单**：列出本端所有需要新增/修改/删除的文件（相对项目根目录的具体路径），表格表头：| # | 类型 | 文件/目录 | 说明 |\n`;
       prompt += `  - **本端实施步骤（按依赖排序）**：Step-by-step，具体到文件/函数级，说明每步为什么先做\n`;
@@ -4857,10 +4998,14 @@ status: "clarified"
       prompt += `- 如果「验证方式」表格只有表头 → **必须补充可执行的命令/操作**\n`;
       prompt += `- DEV_GUIDE.md 必须有至少 3 个具体文件路径和 3 个可执行验证步骤\n\n`;
       prompt += `### 写入方式\n`;
-      prompt += `**Pipeline 模式**：一次 --apply 写入所有端的文档（推荐）\n`;
-      prompt += `speccore analyze --apply '{"TECH.md":"...","TEST.md":"...","UI_SPEC.md":"...","DEV_GUIDE.md":"..."}' -I ${iter} --platform all\n\n`;
-      prompt += `**或者逐端写入**（每端一次 --apply）：\n`;
-      prompt += `speccore analyze --apply '{"TECH.md":"...","TEST.md":"...","UI_SPEC.md":"...","DEV_GUIDE.md":"..."}' -I ${iter} --platform {端名}\n\n`;
+      prompt += `**按功能模块批量写入**（推荐）：一次 --apply 写入一个功能模块的所有端文档\n`;
+      prompt += `\`\`\`bash\n`;
+      prompt += `speccore analyze --apply '{"booking/backend/TECH.md":"...","booking/backend/TEST.md":"...","booking/h5-mobile/TECH.md":"...","booking/h5-mobile/UI_SPEC.md":"..."}' -I ${iter}\n`;
+      prompt += `\`\`\`\n\n`;
+      prompt += `**或者逐功能模块-逐端写入**（每端一次 --apply）：\n`;
+      prompt += `\`\`\`bash\n`;
+      prompt += `speccore analyze --apply '{"{功能模块}/{端}/TECH.md":"...","{功能模块}/{端}/TEST.md":"..."}' -I ${iter}\n`;
+      prompt += `\`\`\`\n\n`;
       prompt += `### ⛔ 强制约束（违反则分析无效）\n`;
       prompt += `- **禁止省略任何一份文档** — 4 份文档（TECH.md + TEST.md + UI_SPEC.md + DEV_GUIDE.md）缺一不可\n`;
       prompt += `- **禁止输出空表格** — 每个 Markdown 表格必须有至少 1 行数据，只有表头的表格视为未完成\n`;
@@ -4880,25 +5025,31 @@ status: "clarified"
       const tpl = templateMap[doc[0]] || '';
       prompt += `   - ${doc[0]} → 参考 ${tpl}\n`;
     }
-    prompt += `2. 读取全局层产物（建立全局视角，重要）\n`;
-    prompt += `   在读取迭代需求之前，先 Read 全局层已有产物，了解系统当前状态：\n`;
-    prompt += `   a. Read .speccore/GLOBAL/requirements/REQUIREMENT.md → 系统已有功能清单\n`;
-    prompt += `   b. Read .speccore/GLOBAL/overview/FUNCTION_MAP.md → 已有功能单元和涉及端\n`;
-    prompt += `   c. Read .speccore/GLOBAL/overview/API_CONTRACT.yaml → 已有接口契约\n`;
-    prompt += `   d. Read .speccore/GLOBAL/overview/ARCHITECTURE.md → 全局架构（如有）\n`;
-    prompt += `   e. Read .speccore/GLOBAL/platforms/{相关端}/_INDEX.md → 各端已有页面和接口索引\n`;
-    prompt += `   f. Read .speccore/GLOBAL/platforms/_shared/_ASSOCIATION.md → 前后端关联矩阵（如有）\n`;
-    prompt += `   g. Read .speccore/GLOBAL/platforms/_shared/_MODULES.md → 功能模块候选（如有）\n`;
-    prompt += `   ⚠️ 如果全局层产物不存在，跳过该项，继续后续分析\n\n`;
-    prompt += `3. 读取迭代需求文档（按优先级顺序）：\n`;
-    prompt += `   a. 先读 010-requirements/INDEX.md — 了解需求全貌和文件清单\n`;
-    prompt += `   b. 再读 010-requirements/converted/*.md — doc2spec 转换后的核心规格（主要依据）\n`;
-    prompt += `   c. 再读 010-requirements/features/*/README.md — 功能级补充需求\n`;
-    prompt += `   d. 读取 010-requirements/prototypes/ — 原型文件（HTML/图片/链接均读取）\n`;
-    prompt += `      ⚠️ 需求文档中链接到原型的（如 \`![原型](../prototypes/xxx.png)\` 或 \`详见 prototypes/xxx.html\`），必须主动 Read 该原型文件\n`;
-    prompt += `   e. 如用户指定了特定文档，优先读取指定文件；如要求全部，再读 sources/ 原始文档\n`;
-    prompt += `   f. **文档长度自适应**：如果单个需求文档超过 5000 字，先快速扫描目录和章节标题，标记关键章节，再深入阅读。不要在非关键章节上花费过多 tokens\n`;
-    prompt += `4. 读懂需求文档后，按专业模板标准自由撰写每个文档（不是填空表）\n`;
+    prompt += `2. 读取全局层产物（建立全局视角，按需 Read）：\n`;
+    prompt += `   \`.speccore/GLOBAL/\` 下已有系统级产物，按需读取了解当前状态：\n`;
+    prompt += `   - \`requirements/REQUIREMENT.md\`、\`overview/FUNCTION_MAP.md\`、\`overview/API_CONTRACT.yaml\`\n`;
+    prompt += `   - \`overview/ARCHITECTURE.md\`、\`platforms/{端}/_INDEX.md\`、\`platforms/_shared/_ASSOCIATION.md\`\n`;
+    prompt += `   - 如不存在则跳过\n\n`;
+    // v8.3.160+: 迭代级分析结合源码上下文
+    if (ctx.withCode) {
+      prompt += `2b. **源码上下文（--with-code）**：\n`;
+      // v8.3.160+: 大项目按端分段读取，避免一次性加载全量结构化数据
+      prompt += `   - 先 Read \`.speccore/cache/structured-data.json\` 的 stats 部分（了解各端规模）\n`;
+      prompt += `   - **按需读取各端分段文件**：\`.speccore/cache/structured-data.{端名}.json\`（只读取本功能模块涉及的端）\n`;
+      prompt += `   - 再按需 Read 各端源码中与本功能模块相关的关键文件（从 CONSTITUTION.md 获取源码路径）\n`;
+      prompt += `   - 重点关注：接口定义、数据模型、业务逻辑实现、状态管理\n\n`;
+    }
+    prompt += `3. 读取迭代需求文档（按功能模块组织）：\n`;
+    prompt += `   a. 先读 010-requirements/INDEX.md — 获取功能模块清单\n`;
+    prompt += `   b. **按功能模块逐一读取**：每个功能模块独立分析，不要跨模块混淆\n`;
+    prompt += `      - 读取该模块对应的 010-requirements/converted/*.md 或 features/{模块}/README.md\n`;
+    prompt += `      - 读取该模块涉及的原型文件（HTML/图片/链接）\n`;
+    prompt += `   c. **文档长度自适应**：如果单个需求文档超过 5000 字，先快速扫描目录和章节标题，标记关键章节，再深入阅读\n`;
+    prompt += `4. **按功能模块逐一撰写文档（重要）**：\n`;
+    prompt += `   - 每个功能模块独立生成一套综合文档，放在 \`{功能模块}/overview/\` 目录下\n`;
+    prompt += `   - 不要生成全局的 \`overview/REQUIREMENT.md\`（不要把所有模块拟合在一起）\n`;
+    prompt += `   - 全局 \`overview/\` 只保留 FUNCTION_MAP.md、INTERACTION_MAP.md、PLATFORMS.md 作为索引\n`;
+    prompt += `   - 示例：\`booking/overview/REQUIREMENT.md\`、\`booking/overview/ANALYSIS.md\`、\`payment/overview/REQUIREMENT.md\` 等\n`;
     prompt += `5. **文档忠实度约束（最高优先级）**：\n`;
     prompt += `   - **严禁臆造**：只能写需求文档中明确提及的功能、接口、页面、字段、业务规则\n`;
     prompt += `   - **严禁扩展**：不要基于迭代名称或你的知识补充文档中未提及的内容\n`;
@@ -4920,26 +5071,16 @@ status: "clarified"
     prompt += `   - 第 4 步：如果以上都无法确定，根据需求文档内容判断\n`;
     prompt += `   - 第 5 步：将发现的端列表写入 020-specs/PLATFORMS.md\n`;
     // v6.70.0+: REQUIREMENT.md 以产品视角撰写（不按端分章节）
-    // v6.99.0+: 丰富需求文档章节要求
-    prompt += `9. **REQUIREMENT.md 写作风格（重要）**：全局需求文档必须以产品/用户视角撰写\n`;
-    prompt += `   - **按业务场景/用户旅程组织章节**，不按端分章节（如"H5端需求"、"后端需求"）\n`;
-    prompt += `   - 文档结构必须包含（如需求文档中有相关信息）：\n`;
-    prompt += `     - **产品愿景**：本迭代要解决的核心问题和目标价值（1-2段）\n`;
-    prompt += `     - **目标用户画像**：主要用户角色、使用场景、痛点（如有）\n`;
-    prompt += `     - **核心场景地图**：按业务流程组织的场景列表，每个场景标注优先级\n`;
-    prompt += `     - **功能全景图**：所有功能模块的可视化列表（表格或脑图描述）\n`;
-    prompt += `     - **功能优先级矩阵**：P0（必须）/ P1（重要）/ P2（可选）标注\n`;
-    prompt += `     - **发布里程碑**：如有分期计划，标注各阶段交付内容\n`;
-    prompt += `     - **风险预判**：技术风险、业务风险、依赖风险（如有）\n`;
-    prompt += `   - 每个场景描述：用户操作 → 系统响应 → 业务规则 → 边界条件 → 验收标准\n`;
-    prompt += `   - 系统响应中自然包含前后端交互，但不刻意标注技术实现细节\n`;
-    prompt += `   - 示例正确写法：「用户选择时间段后点击预订，系统检查会议室可用性，如可用则锁定会议室并创建待支付订单」\n`;
-    prompt += `   - 示例错误写法：「后端 booking-service 需要新增 /api/bookings 接口，接收 roomId 参数」\n`;
-    prompt += `   - 技术实现细节留在 TECH.md 和各端专属文档中，不在 REQUIREMENT.md 展开\n`;
+    // v8.3.160+: 压缩写作风格说明
+    prompt += `9. **REQUIREMENT.md 写作风格**：产品/用户视角，按业务场景组织章节（不按端分节）\n`;
+    prompt += `   - 必须包含：产品愿景、用户画像、核心场景地图（标注优先级）、功能全景图、功能优先级矩阵（P0/P1/P2）、发布里程碑、风险预判\n`;
+    prompt += `   - 场景描述格式：用户操作 → 系统响应 → 业务规则 → 边界条件 → 验收标准\n`;
+    prompt += `   - ✅ 正确：「用户点击预订，系统检查可用性，如可用则锁定并创建订单」\n`;
+    prompt += `   - ❌ 错误：「后端新增 /api/bookings 接口，接收 roomId」→ 技术细节留给 TECH.md\n`;
     prompt += `   - 端的信息只在「功能模块清单」表格中标注，正文不区分端\n`;
     // v6.49.14+: 功能模块清单必须含涉及端列 + 来源链接
     // v6.71.3+: 增加「与全局层对比」列
-    prompt += `10. **功能模块清单（重要）**：写入 overview/REQUIREMENT.md 时，功能模块清单表格必须包含以下列\n`;
+    prompt += `10. **功能模块清单（重要）**：每个功能模块的 \`overview/REQUIREMENT.md\` 都必须包含功能模块清单表格\n`;
     prompt += `   - 表格格式：| # | 功能模块 | 涉及端 | 全局对比 | 来源 | 说明 |\n`;
     prompt += `   - 「涉及端」：每个模块标注需要**新开发工作**的端（标准端名，逗号分隔）\n`;
     prompt += `     - 「涉及」= 该端需要写新接口/新页面/新逻辑\n`;
@@ -4960,12 +5101,12 @@ status: "clarified"
     prompt += `   - split 命令将读取「涉及端」列来决定创建哪些端的子任务目录\n`;
     // v6.70.0+: 跨端功能映射表（FUNCTION_MAP.md）
     // v6.71.3+: 增加与全局层关联分析
-    prompt += `7a. **迭代需求与全局层关联分析（重要）**：在生成功能模块清单时，必须对比全局层产物\n`;
+    prompt += `7a. **迭代需求与全局层关联分析（重要）**：在每个功能模块的 \`overview/REQUIREMENT.md\` 中，必须对比全局层产物\n`;
     prompt += `   - 对比迭代需求中的功能模块 vs .speccore/GLOBAL/overview/FUNCTION_MAP.md 中的功能单元\n`;
     prompt += `   - 标注每个功能模块的「全局对比」类型（新增/扩展/重构/复用）\n`;
     prompt += `   - 识别冲突：如迭代需求修改了全局层已有接口的字段/路径 → 在 RISK.md 中标注\n`;
     prompt += `   - 识别依赖：如迭代的新功能依赖全局层的某个功能 → 在 FUNCTION_MAP.md「依赖任务」中标注\n\n`;
-    prompt += `7b. **跨端功能映射表（重要）**：在 REQUIREMENT.md 完成后，必须生成 overview/FUNCTION_MAP.md\n`;
+    prompt += `7b. **跨端功能映射表（重要）**：全局索引 \`overview/FUNCTION_MAP.md\` 汇总所有功能模块的映射关系\n`;
     prompt += `   - 这是 split 阶段的核心输入，决定任务如何按功能单元拆分\n`;
     prompt += `   - 表格格式：| # | 功能单元 | 涉及端 | 全局对比 | 共享能力 | 依赖任务 | 说明 |\n`;
     prompt += `   - 「功能单元」必须与 REQUIREMENT.md 功能模块清单一一对应，不允许合并\n`;
@@ -4978,7 +5119,7 @@ status: "clarified"
     prompt += `   - **错误示例**（禁止）：将"审批流程"和"定时任务"合并为一行\n`;
     prompt += `   - FUNCTION_MAP.md 生成后，split 将**严格按此表**创建任务目录，不再由 AI 推断\n`;
     // v6.70.0+: 跨端交互图谱（INTERACTION_MAP.md）
-    prompt += `7c. **跨端交互图谱（重要）**：在 FUNCTION_MAP.md 完成后，必须生成 overview/INTERACTION_MAP.md\n`;
+    prompt += `7c. **跨端交互图谱（重要）**：全局索引 \`overview/INTERACTION_MAP.md\` 汇总所有功能模块的交互时序\n`;
     prompt += `   - 按功能单元组织，每个功能单元一个 Mermaid sequenceDiagram\n`;
     prompt += `   - 展示完整的业务交互时序：用户操作 → 前端处理 → 后端调用 → 数据返回\n`;
     prompt += `   - 明确标出后端服务之间的内部调用（产品文档写"系统处理"的地方）\n`;
@@ -4987,43 +5128,40 @@ status: "clarified"
     prompt += `   - 如涉及状态变更，附「状态流转」表格\n`;
     prompt += `   - INTERACTION_MAP.md 是前后端开发者的共同参考，补全产品文档中隐含的技术交互\n`;
     // 注入工程类型信息（v6.49.0+）
+    // v8.3.160+: 精简为路径引用，具体维度让 AI 从 CONSTITUTION.md 读取
     const platformTypes = await parsePlatformTypes();
     if (platformTypes.size > 0) {
-      prompt += `8. **工程类型识别**：CONSTITUTION.md 已配置各端的工程类型，请据此生成针对性内容\n`;
+      prompt += `8. **工程类型识别**：CONSTITUTION.md 已配置各端的工程类型，请 Read 后据此生成针对性内容\n`;
       prompt += `   | 工程标识 | 工程类型 |\n`;
       prompt += `   | :--- | :--- |\n`;
       for (const [name, type] of platformTypes) {
         prompt += `   | ${name} | ${type} |\n`;
       }
-      prompt += `\n   **根据工程类型应用对应的专业维度**：\n`;
-      prompt += `   - Java服务 → API设计、数据库、缓存、消息队列、安全、性能\n`;
-      prompt += `   - Node服务 → API设计、数据库、中间件、异步处理、安全\n`;
-      prompt += `   - Go服务 → API设计、数据库、并发、微服务、性能\n`;
-      prompt += `   - Python服务 → API设计、数据库、数据分析、AI/ML集成\n`;
-      prompt += `   - H5微信公众号 → 微信JS-SDK、OAuth授权、分享、支付、模板消息\n`;
-      prompt += `   - H5移动端 → 响应式、viewport适配、触摸交互、弱网优化、首屏性能\n`;
-      prompt += `   - Android移动端 → 生命周期、权限、推送、适配、内存优化\n`;
-      prompt += `   - iOS移动端 → Swift/SwiftUI、App Store规范、推送、性能\n`;
-      prompt += `   - 微信小程序 → 包体积(2MB)、平台API、setData优化、页面栈\n`;
-      prompt += `   - Web管理后台 → 复杂表单、数据表格、权限UI、状态管理\n`;
-      prompt += `   - 桌面应用 → 本地存储、系统API、自动更新、离线支持\n`;
+      prompt += `\n`;
     }
     const dirStepNum = platformTypes.size > 0 ? 9 : 8;
     prompt += `${dirStepNum}. **目录结构（严格遵循，禁止自创目录）**：\n`;
-    prompt += `   - **综合文档**（跨端通用）→ 通过 --apply 写入，CLI 自动路由到 \`020-specs/overview/{文件名}\`\n`;
-    prompt += `     - REQUIREMENT.md（需求文档，含功能模块清单+涉及端列）\n`;
-    prompt += `     - ANALYSIS.md（需求分析）\n`;
-    prompt += `     - DEPS.md（依赖清单）\n`;
-    prompt += `   - **端专属文档**（每端各一份）→ 通过 --apply 写入，CLI 自动路由到 \`020-specs/{端名}/{文件名}\`\n`;
-    prompt += `     - TECH.md（技术方案：API/数据库/组件/路由等）\n`;
-    prompt += `     - TEST.md（测试用例）\n`;
-    prompt += `     - UI_SPEC.md（UI 规范，仅前端端）\n`;
-    prompt += `     - RISK.md（风险评估）\n`;
-    prompt += `     - REVIEW.md（评审检查项）\n`;
-    prompt += `     - MONITOR.md（监控指标）\n`;
+    prompt += `   - **全局索引**（跨端汇总）→ 通过 --apply 写入，CLI 自动路由到 \`020-specs/overview/{文件名}\`\n`;
+    prompt += `     - FUNCTION_MAP.md（功能单元 × 端映射表）\n`;
+    prompt += `     - INTERACTION_MAP.md（跨端交互时序图）\n`;
+    prompt += `     - PLATFORMS.md（端列表）\n`;
+    prompt += `   - **功能模块综合文档**（每个功能模块独立）→ 通过 --apply 写入，CLI 自动路由到 \`020-specs/{功能模块名}/overview/{文件名}\`\n`;
+    prompt += `     - {功能模块}/overview/REQUIREMENT.md（该模块的需求规格）\n`;
+    prompt += `     - {功能模块}/overview/ANALYSIS.md（该模块的需求分析）\n`;
+    prompt += `     - {功能模块}/overview/TECH.md（该模块的技术方案）\n`;
+    prompt += `     - {功能模块}/overview/RISK.md（该模块的风险评估）\n`;
+    prompt += `     - {功能模块}/overview/DEPS.md（该模块的依赖清单）\n`;
+    prompt += `     - {功能模块}/overview/REVIEW.md（该模块的评审检查项）\n`;
+    prompt += `     - {功能模块}/overview/MONITOR.md（该模块的监控指标）\n`;
+    prompt += `     - {功能模块}/overview/DEV_GUIDE.md（该模块的实现指南）\n`;
+    prompt += `   - **端专属文档**（按功能模块组织）→ 通过 --apply 写入，CLI 自动路由到 \`020-specs/{功能模块名}/{端名}/{文件名}\`\n`;
+    prompt += `     - {功能模块}/{端}/TECH.md（该模块该端的技术方案）\n`;
+    prompt += `     - {功能模块}/{端}/TEST.md（该模块该端的测试用例）\n`;
+    prompt += `     - {功能模块}/{端}/UI_SPEC.md（该模块该端的 UI 规范，仅前端端）\n`;
+    prompt += `     - {功能模块}/{端}/DEV_GUIDE.md（该模块该端的实现指南）\n`;
     prompt += `   - **禁止**：不要创建 020-specs/ 下的任何额外子目录（如数字编号、中文名称等）\n`;
     prompt += `   - **禁止直接用 Write 工具写文件到 020-specs/**：必须通过 \`speccore analyze --apply '{"文件名":"内容"}' -I ${iter}\` 写入\n`;
-    prompt += `   - ⚠️ 直接 Write 会导致目录结构错误（所有文件扁平在根目录），必须走 --apply 让 CLI 自动路由到 overview/ 或 {端名}/ 子目录\n`;
+    prompt += `   - ⚠️ 直接 Write 会导致目录结构错误，必须走 --apply 让 CLI 自动路由到正确子目录\n`;
     if (ctx.phase !== '1') {
       // 端专业性约束只在默认模式（全量）中输出
       prompt += `\n## ⚠️ 端专业性约束\n`;
@@ -5037,7 +5175,7 @@ status: "clarified"
       prompt += `- 缓存策略/并发与事务/消息队列（如涉及）\n`;
       prompt += `- 安全：SQL 注入防护/接口鉴权/数据脱敏\n`;
       prompt += `- 性能：QPS 预估/慢查询优化/连接池配置\n`;
-      prompt += `- **不需要**产品视角的需求描述（用户故事、业务场景已在 overview/REQUIREMENT.md 中）\n\n`;
+      prompt += `- **不需要**产品视角的需求描述（用户故事、业务场景已在 {功能模块}/overview/REQUIREMENT.md 中）\n\n`;
       prompt += `### 前端端（h5 / admin-web / miniapp）必含内容 — 产品+技术双视角\n`;
       prompt += `- **产品视角（主要）**：\n`;
       prompt += `  - 用户旅程：该端用户如何完成核心任务（步骤流程图）\n`;
@@ -5055,24 +5193,26 @@ status: "clarified"
   // v6.60.0+: 文档与端的对应关系（不再分 Phase）
   // v6.71.0+: 前后端文档差异化
   prompt += `### 文档与端的对应关系\n`;
-  prompt += `- **overview/REQUIREMENT.md**：整体需求（产品视角，按业务场景组织）\n`;
-  prompt += `- **overview/ANALYSIS.md**：整体需求分析\n`;
-  prompt += `- **overview/DEPS.md**：整体依赖清单\n`;
-  prompt += `- **overview/FUNCTION_MAP.md**：功能单元 × 端映射表\n`;
-  prompt += `- **overview/INTERACTION_MAP.md**：跨端交互时序图\n`;
-  prompt += `- **overview/DEV_GUIDE.md**：开发者实现指南（实现步骤、关键代码示例、集成指南、注意事项）\n`;
-  prompt += `- **后端端（*service）/{端}/TECH.md**：纯技术视角 — 接口设计+数据模型+架构+性能\n`;
-  prompt += `- **前端端（h5/admin/miniapp）/{端}/TECH.md**：产品+技术双视角 — 用户旅程+页面清单+交互流程+API调用链\n`;
-  prompt += `- **前端端/{端}/UI_SPEC.md**：UI 规格（字段映射、组件设计、交互细节）\n`;
+  prompt += `- **overview/FUNCTION_MAP.md**：全局索引 — 所有功能单元 × 端映射表\n`;
+  prompt += `- **overview/INTERACTION_MAP.md**：全局索引 — 所有跨端交互时序图\n`;
+  prompt += `- **overview/PLATFORMS.md**：全局索引 — 端列表\n`;
+  prompt += `- **{功能模块}/overview/REQUIREMENT.md**：该功能模块的需求规格（产品视角，按业务场景组织）\n`;
+  prompt += `- **{功能模块}/overview/ANALYSIS.md**：该功能模块的需求分析\n`;
+  prompt += `- **{功能模块}/overview/DEPS.md**：该功能模块的依赖清单\n`;
+  prompt += `- **{功能模块}/overview/DEV_GUIDE.md**：该功能模块的开发者实现指南\n`;
+  prompt += `- **{功能模块}/overview/RISK.md**：该功能模块的风险评估\n`;
+  prompt += `- **{功能模块}/overview/REVIEW.md**：该功能模块的评审检查项\n`;
+  prompt += `- **{功能模块}/overview/MONITOR.md**：该功能模块的监控指标\n`;
+  prompt += `- **后端端（*service）/{功能模块}/{端}/TECH.md**：纯技术视角 — 接口设计+数据模型+架构+性能\n`;
+  prompt += `- **前端端（h5/admin/miniapp）/{功能模块}/{端}/TECH.md**：产品+技术双视角 — 用户旅程+页面清单+交互流程+API调用链\n`;
+  prompt += `- **前端端/{功能模块}/{端}/UI_SPEC.md**：UI 规格（字段映射、组件设计、交互细节）\n`;
     prompt += `  - ⚠️ **必须包含「业务-代码映射」章节**：在 TECH.md 末尾添加一个表格，列出本端涉及的业务模块及其对应的代码实体（文件/表/API/组件等），关系类型由你根据技术栈自主决定（如 api_controller、uses_table、page、component、route、middleware、interceptor、gateway 等）\n`;
     prompt += `  - 表格格式：| 业务模块 | 代码实体 | 关系类型 | 说明 |\n`;
     prompt += `  - 示例：| 会议室档案 | backend/RoomController.java | api_controller | REST 控制器 |\n`;
     prompt += `  - 示例：| 会议室档案 | admin-web/src/pages/RoomList.vue | page | 列表页 |\n`;
-    prompt += `- **{端}/TEST.md**：该端专属测试计划\n`;
-    prompt += `- **{端}/RISK.md**：该端专属风险评估\n`;
-    prompt += `- **{端}/REVIEW.md**：该端专属评审检查项\n`;
-    prompt += `- **{端}/MONITOR.md**：该端专属监控指标\n`;
-    prompt += `- **{端}/UI_SPEC.md**：前端端专属 UI 规格，字段映射必须与后端 API 响应字段一一对应\n`;
+    prompt += `- **{功能模块}/{端}/TEST.md**：该功能模块下该端的测试计划\n`;
+    prompt += `- **{功能模块}/{端}/DEV_GUIDE.md**：该功能模块下该端的实现指南\n`;
+    prompt += `- **{功能模块}/{端}/UI_SPEC.md**：前端端专属 UI 规格，字段映射必须与后端 API 响应字段一一对应\n`;
     prompt += `- 分析完成后会自动生成 QUALITY_AUDIT.md 质量报告，检查各端内容是否完整\n`;
     }
   // 步骤 2-7 已在上面的 phase 分支中处理
@@ -5555,6 +5695,18 @@ async function buildClarifyPhasePrompt(iteration: string): Promise<string> {
   prompt += `4. \`010-requirements/features/*/README.md\` — 功能级补充\n`;
   prompt += `5. \`010-requirements/prototypes/\` — 原型文件\n\n`;
 
+  // v8.3.160+ 修复：列出实际扫描到的源文档清单，明确每份文档独立澄清
+  if (docPaths.length > 0) {
+    prompt += `## 源文档清单（本次需澄清的原始文档）\n\n`;
+    prompt += `共扫描到 ${docPaths.length} 份需求文档，**每份文档必须独立澄清**，分别生成对应的黄金需求文档：\n\n`;
+    for (const p of docPaths) {
+      const name = p.split('/').pop() || '-';
+      const clarifiedName = name.replace(/\.md$/, '') + '-clarified.md';
+      prompt += `- \`${name}\` → 澄清为 \`${clarifiedName}\`\n`;
+    }
+    prompt += `\n> ⚠️ **重要**：每份源文档对应一份独立的澄清文档，禁止将多份源文档合并为一份。\n\n`;
+  }
+
   // v8.2.0+: 如果检测到多个功能单元，启用单元化澄清模式
   if (hasMultipleUnits) {
     prompt += `## ⚠️ 功能单元拆分澄清模式（v8.2.0+）\n\n`;
@@ -5676,9 +5828,39 @@ async function buildClarifyPhasePrompt(iteration: string): Promise<string> {
 
   prompt += `## Step 5: 确认写入\n\n`;
   prompt += `当用户确认 "满意，可以写入" 后：\n\n`;
-  prompt += `1. 将最终版 PRD 写入 \`020-specs/requirements/{源文件名}-clarified.md\`（黄金需求目录）\n`;
-  prompt += `2. 同时生成 \`020-specs/requirements/{源文件名}-clarified-diff.md\` 保存最终对比报告\n`;
-  prompt += `3. 使用以下命令写入：\n\n`;
+  prompt += `**必须为每份源文档分别生成独立的澄清文档**，使用 \`[CLARIFY:requirements/文件名-clarified.md]\` 标记分隔：\n\n`;
+  if (docPaths.length > 1) {
+    prompt += `本次共 ${docPaths.length} 份源文档，需要输出 ${docPaths.length} 个 \`[CLARIFY:...]\` 标记块：\n\n`;
+    for (const p of docPaths) {
+      const name = p.split('/').pop() || '-';
+      const baseName = name.replace(/\.md$/, '');
+      prompt += `\`\`\`\n`;
+      prompt += `[CLARIFY:requirements/${baseName}-clarified.md]\n`;
+      prompt += `---\n`;
+      prompt += `source: "010-requirements/.../${name}"\n`;
+      prompt += `clarified-at: "${new Date().toISOString()}"\n`;
+      prompt += `status: "clarified"\n`;
+      prompt += `---\n\n`;
+      prompt += `# ${baseName}（澄清后的专业 PRD）\n`;
+      prompt += `...\n`;
+      prompt += `\`\`\`\n\n`;
+    }
+  } else {
+    prompt += `\`\`\`\n`;
+    prompt += `[CLARIFY:requirements/xxx-clarified.md]\n`;
+    prompt += `---\n`;
+    prompt += `source: "原始文档路径"\n`;
+    prompt += `clarified-at: "${new Date().toISOString()}"\n`;
+    prompt += `status: "clarified"\n`;
+    prompt += `---\n\n`;
+    prompt += `# 功能名称\n`;
+    prompt += `...\n`;
+    prompt += `\`\`\`\n\n`;
+  }
+  prompt += `> ⚠️ **禁止合并**：每份源文档必须对应一份独立的 \`-clarified.md\`，即使内容有关联也要分开输出。\n\n`;
+  prompt += `同时生成对应的对比报告文件（可选）：\n`;
+  prompt += `- \`020-specs/requirements/{源文件名}-clarified-diff.md\` — 保存最终对比报告\n\n`;
+  prompt += `使用以下命令写入：\n\n`;
   prompt += `\`\`\`bash\n`;
   prompt += `speccore analyze --apply '{"020-specs/requirements/xxx-clarified.md":"...","020-specs/requirements/xxx-clarified-diff.md":"..."}' -I ${iteration}\n`;
   prompt += `\`\`\`\n\n`;

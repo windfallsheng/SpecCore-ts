@@ -495,6 +495,8 @@ program
   .option('--response <response>', '接收宿主 AI 返回的代码内容并写入文件（配合 --prompt 使用）')
   .option('--list-pending', '列出待执行任务清单（拓扑排序 + 批次分组，JSON 格式）')
   .option('--ignore-upstream-update', '跳过上游 020-specs/ 变更检测')
+  .option('--with-code', '携带源码上下文（默认自动检测）')
+  .option('--no-with-code', '禁用源码上下文')
   .action(executeCommand);
 
 // ================================================================

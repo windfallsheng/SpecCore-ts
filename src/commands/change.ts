@@ -17,6 +17,8 @@ import { warnIfIndexStale } from '../core/index-guard';
 // v6.86.0+: AGENTS 全阶段扩展
 import { resolveAgentsForPhase } from '../core/agents';
 import type { AgentContext } from '../core/agents';
+// v8.3.160+: 子 Agent 适配层
+import { defaultAdapter } from '../core/agent-adapter';
 // v6.87.0+: COMMANDS 命令模板
 import { loadCommandTemplate, renderTemplate } from '../core/command-loader';
 import { unifiedSearch, formatUnifiedContext } from '../core/unified-retrieval';
@@ -1020,22 +1022,22 @@ async function processChangeLegacy(options: ChangeOptions): Promise<void> {
   if (options.prompt) {
     let promptText = buildClarifyPrompt(desc || '(从附件分析需求)', allFiles, taskDetails);
 
-    // v6.86.0+: 注入 change/impact 阶段 AGENTS
+    // v8.3.160+: 注入 change/impact 阶段子 Agent（替换旧 AGENTS 系统）
     const projectRoot = process.cwd();
-    const agentContext: AgentContext = {
-      iteration,
-    };
     try {
-      const agents = await resolveAgentsForPhase('change', 'impact', agentContext, projectRoot);
-      if (agents.length > 0) {
-        promptText += '\n\n## 专业角色指引\n\n';
-        for (const ra of agents) {
-          promptText += ra.definition.rolePrompt;
-          promptText += '\n\n';
-        }
+      const agentCtx = {
+        subagent: 'impact-analyst',
+        iteration: iteration || '',
+        contextBudget: 8000,
+        contextType: 'incremental' as const,
+        cwd: projectRoot,
+      };
+      const agentContextText = await defaultAdapter.prepareContext(agentCtx);
+      if (agentContextText) {
+        promptText = agentContextText + '\n\n' + promptText;
       }
     } catch {
-      // AGENTS 加载失败静默跳过
+      // agent-adapter 加载失败静默跳过
     }
 
     // v6.87.0+: 追加命令模板流程指引

@@ -48,7 +48,8 @@ import { loadConfig, loadProjectConfig } from '../core/unified-config';
 import { PipelineEngine } from '../core/pipeline-engine';
 import { checkCodeIndexFreshness, findRelevantCode, readRelevantSource } from '../core/code-scanner';
 // v8.3.126+: 结构化数据精确补充
-import { loadStructuredData, DtoDefinition, ServiceDefinition } from '../core/structured-extractor';
+// v8.3.160+: 支持按平台分段读取
+import { loadStructuredData, loadStructuredDataForPlatform, DtoDefinition, ServiceDefinition, ServiceMethod } from '../core/structured-extractor';
 import { warnIfIndexStale } from '../core/index-guard';
 import { recordAnalysisSnapshot } from '../core/change-detection';
 import { logIssue } from '../core/issue-tracker';
@@ -86,6 +87,8 @@ export interface ExecuteOptions {
   pipeline?: boolean;   // --pipeline: 启用 Pipeline 模式
   // v6.76.0+: 变更检测选项
   ignoreUpstreamUpdate?: boolean; // --ignore-upstream-update: 跳过上游变更检测
+  // v8.3.160+: 源码上下文（默认自动启用）
+  withCode?: boolean;   // --with-code: 携带源码上下文
 }
 
 /**
@@ -104,6 +107,17 @@ async function resolveTaskDir(iterDir: string, taskId?: string): Promise<string>
 export async function executeCommand(options: ExecuteOptions): Promise<void> {
   let lockAcquired = false;
   try {
+    // v8.3.160+: 自动检测是否启用 withCode（端 >= 3 时默认启用）
+    if (options.withCode === undefined) {
+      try {
+        const platforms = await parsePlatformList();
+        if (platforms.length >= 3) {
+          options.withCode = true;
+          logger.info(`🔍 检测到 ${platforms.length} 个端，自动启用源码上下文 (--with-code)`);
+        }
+      } catch { /* ignore auto-detect errors */ }
+    }
+
     const iteration = await getDefaultIteration(options.iteration);
     if (!iteration) {
       logger.error('No active iteration found.');
@@ -163,6 +177,7 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
               task: options.task || '',
               taskDir: await resolveTaskDir(await getIterationDir(iteration), options.task || ''),
               platform: options.platform,
+              withCode: options.withCode,
               // v8.3.160+: 传递步骤级上下文控制
               contextType: result.contextType,
               contextBudget: result.contextBudget,
@@ -2253,6 +2268,7 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
     task,
     taskDir,
     platform: options.platform,
+    withCode: options.withCode,
   });
 
   // 在 prompt 中追加分支信息（告诉 AI 在哪个分支上工作）
@@ -2392,6 +2408,7 @@ async function runApplyMode(iteration: string, options: ExecuteOptions): Promise
           task: options.task || '',
           taskDir: await resolveTaskDir(await getIterationDir(iteration), options.task || ''),
           platform: options.platform,
+          withCode: options.withCode,
           contextType: stepResult.contextType,
           contextBudget: stepResult.contextBudget,
         });
@@ -2495,9 +2512,15 @@ async function runApplyMode(iteration: string, options: ExecuteOptions): Promise
     const supplementContents: Record<string, string> = {};
 
     // v8.3.126+: 预加载结构化数据，用于精确匹配
+    // v8.3.160+: 如指定了 platform，优先读取分段文件
     let structuredData = null;
     try {
-      structuredData = await loadStructuredData();
+      if (options.platform) {
+        structuredData = await loadStructuredDataForPlatform(options.platform);
+      }
+      if (!structuredData) {
+        structuredData = await loadStructuredData();
+      }
     } catch { /* 忽略 */ }
 
     for (const gap of parsed.infoGaps) {
@@ -2508,7 +2531,7 @@ async function runApplyMode(iteration: string, options: ExecuteOptions): Promise
         // 尝试匹配 DTO: "缺少 CreateUserDto 的字段定义"
         const dtoNames = extractIdentifiers(gap, 'dto');
         for (const dtoName of dtoNames) {
-          const dto = (structuredData.dtos || []).find(d => d.name === dtoName);
+          const dto = (structuredData.dtos || []).find((d: DtoDefinition) => d.name === dtoName);
           if (dto) {
             supplementStructured.push(formatDtoSnippet(dto));
             matched = true;
@@ -2519,10 +2542,10 @@ async function runApplyMode(iteration: string, options: ExecuteOptions): Promise
         // 尝试匹配 Service: "缺少 UserService.findById 的返回类型"
         const svcRefs = extractServiceRefs(gap);
         for (const { serviceName, methodName } of svcRefs) {
-          const svc = (structuredData.services || []).find(s => s.name === serviceName);
+          const svc = (structuredData.services || []).find((s: ServiceDefinition) => s.name === serviceName);
           if (svc) {
             if (methodName) {
-              const method = svc.methods.find(m => m.name === methodName);
+              const method = svc.methods.find((m: ServiceMethod) => m.name === methodName);
               if (method) {
                 supplementStructured.push(formatServiceMethodSnippet(svc, method));
                 matched = true;

@@ -15,6 +15,8 @@ import { GLOBAL_SPECS_DIR, parsePlatformList, parseFeatureList } from '../../cor
 import { SKELETON_MARKER, buildQualityRubRIC } from '../../core/spec-skeleton';
 import { buildAutoModeInstruction, writeQuestions, extractQuestionsFromText } from '../../core/questions';
 import { PipelineEngine } from '../../core/pipeline-engine';
+import { defaultAdapter } from '../../core/agent-adapter';
+import type { AgentContext } from '../../core/agent-adapter';
 import { findRelevantCode } from '../../core/code-scanner';
 import { loadFreshKnowledgeGraph } from '../../core/knowledge-graph';
 import { loadGitConfig, GitConfig } from '../../core/git-integration';
@@ -150,6 +152,54 @@ function generateSubtaskId(parentTaskId: string, platform: string): string {
   // v6.49.5+ / v8.3.10+：确定性格式 {taskId}-{platform}，保证全项目唯一
   // 因为每个任务每个端只有一个子任务，所以 {taskId}-{platform} 已经唯一
   return `Task-${parentTaskId}-${platform}`;
+}
+
+/**
+ * v8.3.160+: 根据功能单元名称关键词推断涉及的端
+ * 当 Spec 匹配失败时，使用关键词推断替代回退到所有端
+ */
+function inferPlatformsByKeywords(featureName: string, allPlatforms: string[]): string[] {
+  const name = featureName.toLowerCase();
+
+  // 端分类规则：根据端名特征判断端类型
+  const backendPlatforms = allPlatforms.filter(p =>
+    /service|api|backend|server|core/i.test(p)
+  );
+  const adminPlatforms = allPlatforms.filter(p =>
+    /admin|web|pc|manage|dashboard|portal/i.test(p) && !/mobile|h5|mini|app/i.test(p)
+  );
+  const mobilePlatforms = allPlatforms.filter(p =>
+    /h5|mobile|app|mini|ios|android|wechat/i.test(p)
+  );
+
+  // 关键词 → 端类型映射
+  const keywordMap: { keywords: string[]; platforms: string[] }[] = [
+    // 纯后端功能
+    { keywords: ['接口', 'api', '服务', 'service', '数据表', 'entity', '数据库', 'db', '迁移', 'migration', '脚本', 'job', '定时', 'cron', '缓存', 'cache', '队列', 'queue'], platforms: backendPlatforms },
+    // 管理端功能
+    { keywords: ['报表', '统计', '管理', '配置', '审核', '审批', '后台', 'admin', 'dashboard', '运营', '数据看板', '权限分配', '角色管理'], platforms: [...backendPlatforms, ...adminPlatforms] },
+    // 移动端功能
+    { keywords: ['扫码', '定位', '地图', '推送', '通知', '分享', '支付', '下单', '预约', '签到', '打卡', '拍照', '扫码点餐'], platforms: [...backendPlatforms, ...mobilePlatforms] },
+    // 通用功能（所有端）
+    { keywords: ['登录', '认证', '注册', '鉴权', 'auth', 'login', 'logout', '用户', 'user', '个人中心', 'profile', '设置', 'setting'], platforms: allPlatforms },
+    // 前端展示功能
+    { keywords: ['页面', 'ui', '组件', '展示', '列表', '详情', '首页', '导航', '菜单', '主题', '样式', '布局'], platforms: [...adminPlatforms, ...mobilePlatforms] },
+  ];
+
+  // 匹配关键词
+  const matchedPlatforms = new Set<string>();
+  for (const rule of keywordMap) {
+    if (rule.keywords.some(kw => name.includes(kw.toLowerCase()))) {
+      for (const p of rule.platforms) matchedPlatforms.add(p);
+    }
+  }
+
+  // 如果没有匹配到任何关键词，回退到只包含后端端（最保守策略）
+  if (matchedPlatforms.size === 0) {
+    return backendPlatforms.length > 0 ? backendPlatforms : allPlatforms.slice(0, 1);
+  }
+
+  return Array.from(matchedPlatforms);
 }
 
 /** 拆分约束常量（简化版：每个功能单元按涉及的端拆分，每端1个子任务） */
@@ -512,9 +562,27 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     const iterDir = join(iterDirFull, '030-tasks');
     await ensureDir(iterDir);
     const backups: string[] = [];
+
+    // v8.3.160+: 智能提取 JSON（支持 JSON 后附带 [PENDING] / [SPECCORE_EXEC] 标记）
+    function extractJsonArray(text: string): { json: string; pending?: string; exec?: string } {
+      const result: { json: string; pending?: string; exec?: string } = { json: text };
+      // 提取 [PENDING: ...]
+      const pendingMatch = text.match(/\[PENDING:\s*([^\]]+)\]/);
+      if (pendingMatch) result.pending = pendingMatch[1].trim();
+      // 提取 [SPECCORE_EXEC: ...]
+      const execMatch = text.match(/\[SPECCORE_EXEC:\s*([^\]]+)\]/);
+      if (execMatch) result.exec = execMatch[1].trim();
+      // 提取 JSON 数组（从第一个 [ 到最后一个 ]）
+      const jsonMatch = text.match(/(\[[\s\S]*\])/);
+      if (jsonMatch) result.json = jsonMatch[1];
+      return result;
+    }
+
+    const extracted = extractJsonArray(options.response);
+
     // 尝试解析 AI 返回的 JSON Task 列表
     try {
-      const tasks = JSON.parse(options.response);
+      const tasks = JSON.parse(extracted.json);
       if (Array.isArray(tasks)) {
         const allPlatforms = await detectPlatforms(iterDirFull);
         const sections: Section[] = [];
@@ -787,6 +855,16 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           outputAnalyzeTaskHints(iter, createdSections);
         }
         logger.success(`✅ 创建了 ${createdSections.length}/${sections.length} 个任务（${sections.length - createdSections.length} 个跳过）`);
+
+        // v8.3.160+: 检测是否有待拆分的功能模块
+        if (extracted.pending) {
+          logger.info('');
+          logger.info(`📦 还有未拆分的功能模块: ${extracted.pending}`);
+          logger.info(`   继续拆分: speccore iteration split --prompt -I ${iter}`);
+          if (extracted.exec) {
+            process.stdout.write(`\n[SPECCORE_EXEC: ${extracted.exec}]\n`);
+          }
+        }
       } else {
         logger.warn('AI 返回格式非数组，将作为 Markdown 写入 REQUIREMENT.md');
         const reqPath = join(iterDir, 'REQUIREMENT.md');
@@ -947,6 +1025,23 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       if (await pathExists(reqPath2)) {
         reqContent2 = await readFile(reqPath2, 'utf-8');
       }
+      // v8.3.160+: 如果全局 REQUIREMENT.md 为空/骨架，从各功能模块 overview/REQUIREMENT.md 聚合
+      if (!reqContent2 || reqContent2.trim().length < 200 || reqContent2.includes('<!-- SPEC-SKELETON -->')) {
+        const featureReqParts: string[] = [];
+        const features = await parseFeatureList(iterationDir);
+        for (const feature of features) {
+          const featureReqPath = join(specDir2, feature, 'overview', 'REQUIREMENT.md');
+          if (await pathExists(featureReqPath)) {
+            const content = await readFile(featureReqPath, 'utf-8');
+            if (content.trim().length > 100 && !content.includes('<!-- SPEC-SKELETON -->')) {
+              featureReqParts.push(`# ${feature}\n\n${content.trim()}`);
+            }
+          }
+        }
+        if (featureReqParts.length > 0) {
+          reqContent2 = featureReqParts.join('\n\n---\n\n');
+        }
+      }
       
       const specContents: { name: string; content: string }[] = [];
       // v8.3.21+: 读取全局层文档（overview/ 下）
@@ -1007,7 +1102,12 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       // v6.76.0+: 传入过滤条件，限制拆分范围；传入已有 Task 结构，支持增量拆分
       const modulesFilter = options.modules ? options.modules.split(',').map(m => m.trim()).filter(Boolean) : undefined;
       const platformsFilter = options.platforms ? options.platforms.split(',').map(p => p.trim()).filter(Boolean) : undefined;
-      let splitPrompt = await buildSplitPrompt(iteration, constitutionContent, reqContent2, specContents, allPlatforms, modulesFilter, platformsFilter, existingTaskStructure, iterationDir);
+      // v8.3.160+: 普通模式下默认使用 task-decomposer，full 上下文类型
+      let splitPrompt = await buildSplitPrompt(
+        iteration, constitutionContent, reqContent2, specContents, allPlatforms,
+        modulesFilter, platformsFilter, existingTaskStructure, iterationDir,
+        'task-decomposer', 'full'
+      );
 
       // 注入全局上下文（INDEX + TOC 目录，AI 自主读取）
       const { loadGlobalContext, formatGlobalContext } = await import('../../core/prompt-builder');
@@ -1492,9 +1592,9 @@ async function createTaskFromSection(iterationDir: string, taskId: string, secti
         taskPlatforms.push(platform);
       }
     }
-    // 如果都没检测到，回退到所有端
+    // v8.3.160+ 修复：如果 Spec 匹配失败，根据功能单元关键词推断端，不再回退到所有端
     if (taskPlatforms.length === 0) {
-      taskPlatforms = allPlatforms;
+      taskPlatforms = inferPlatformsByKeywords(sectionFeatureName, allPlatforms);
     }
   }
 
@@ -1625,22 +1725,33 @@ ${taskPlatforms.map((p: string) => `| ${subtaskIdMap.get(p)} | ${p} | ${owner} |
 
   const acItems = generateAcceptanceCriteria(section);
   const aiReqContent = (section as any)._reqContent;
-  // v8.3.0+: REQ.md 三级回退 — AI split 生成 → analyze REQUIREMENT.md 提取 → section.content
-  const analyzeReqContent = extractRelevantSection(specContents['REQUIREMENT.md'] || '', section.name, '需求 功能 业务规则 异常场景 验收标准');
-  if (aiReqContent && aiReqContent.length > 50) {
+  // v8.3.160+: 提升阈值，确保内容质量（200/300 字符起用）
+  // v8.3.160+: 优先从功能模块级 overview/REQUIREMENT.md 提取，回退全局 REQUIREMENT.md
+  const bestReqMatch = findBestSpecMatch(specContents, section.name, undefined, 'REQUIREMENT.md');
+  const analyzeReqContent = bestReqMatch && bestReqMatch.score >= 20
+    ? extractRelevantSection(specContents[bestReqMatch.key], section.name, '需求 功能 业务规则 异常场景 验收标准')
+    : extractRelevantSection(specContents['REQUIREMENT.md'] || '', section.name, '需求 功能 业务规则 异常场景 验收标准');
+  if (aiReqContent && aiReqContent.length > 200) {
     await writeFile(
       join(taskDir, '00-specs', 'REQ.md'),
       `# ${section.name}\n\n${aiReqContent}\n\n## 验收标准\n\n${acItems}\n`
     );
-  } else if (analyzeReqContent && analyzeReqContent.length > 100) {
+  } else if (analyzeReqContent && analyzeReqContent.length > 300) {
     await writeFile(
       join(taskDir, '00-specs', 'REQ.md'),
       `# ${section.name}\n\n> 来源: analyze → REQUIREMENT.md（自动提取）\n\n${analyzeReqContent}\n\n## 验收标准\n\n${acItems}\n`
     );
-  } else {
+  } else if (section.content && section.content.trim().length > 200) {
+    // v8.3.160+: 第三级回退 — section.content 有实质内容时直接使用
     await writeFile(
       join(taskDir, '00-specs', 'REQ.md'),
-      `# ${section.name}\n\n## 需求描述\n\n${section.content}\n\n## 验收标准\n\n${acItems}\n`
+      `# ${section.name}\n\n> 来源: split 阶段 section 原始内容\n\n${section.content.trim()}\n\n## 验收标准\n\n${acItems}\n`
+    );
+  } else {
+    // 最终回退：精简骨架 + section.content（即使很短也放入，方便 AI execute 阶段参考）
+    await writeFile(
+      join(taskDir, '00-specs', 'REQ.md'),
+      `# ${section.name}\n\n## 需求描述\n\n${section.content || '（待补充，请根据功能单元描述填充）'}\n\n## 验收标准\n\n${acItems}\n`
     );
   }
 
@@ -1650,17 +1761,22 @@ ${taskPlatforms.map((p: string) => `| ${subtaskIdMap.get(p)} | ${p} | ${owner} |
   // 从 analyze TECH.md 提取本任务相关内容
   const specTechContent = extractTaskTechContent(specContents, section);
   // v8.3.0+: 从 analyze ANALYSIS.md 补充功能分析内容
-  const analyzeAnalysisContent = extractRelevantSection(specContents['ANALYSIS.md'] || '', section.name, '功能分析 业务流程 数据流 决策逻辑 业务规则');
-  // TECH.md: 优先 AI 生成 → 回退 analyze 提取 → 回退模板
-  if (aiTechContent && aiTechContent.length > 50) {
+  // v8.3.160+: 优先从功能模块级 overview/ANALYSIS.md 提取，回退全局 ANALYSIS.md
+  const bestAnalysisMatch = findBestSpecMatch(specContents, section.name, undefined, 'ANALYSIS.md');
+  const analyzeAnalysisContent = bestAnalysisMatch && bestAnalysisMatch.score >= 20
+    ? extractRelevantSection(specContents[bestAnalysisMatch.key], section.name, '功能分析 业务流程 数据流 决策逻辑 业务规则')
+    : extractRelevantSection(specContents['ANALYSIS.md'] || '', section.name, '功能分析 业务流程 数据流 决策逻辑 业务规则');
+  // v8.3.160+: 提升阈值，确保内容质量（200/150 字符起用）
+  // TECH.md: 优先 AI 生成 → 回退 analyze 提取 → 回退 section 内容提取 → 回退模板
+  if (aiTechContent && aiTechContent.length > 200) {
     await writeFile(
       join(taskDir, '00-specs', 'TECH.md'),
       `# ${section.name} - 技术方案\n\n${aiTechContent}\n`
     );
-  } else if (specTechContent && specTechContent.length > 30) {
+  } else if (specTechContent && specTechContent.length > 150) {
     let techBody = `> 来源: analyze → TECH.md（自动提取）\n\n${specTechContent}`;
     // 追加 ANALYSIS.md 功能分析（如有）
-    if (analyzeAnalysisContent && analyzeAnalysisContent.length > 50) {
+    if (analyzeAnalysisContent && analyzeAnalysisContent.length > 100) {
       techBody += `\n\n---\n\n## 功能分析补充\n\n> 来源: analyze → ANALYSIS.md（自动提取）\n\n${analyzeAnalysisContent}`;
     }
     await writeFile(
@@ -1668,17 +1784,26 @@ ${taskPlatforms.map((p: string) => `| ${subtaskIdMap.get(p)} | ${p} | ${owner} |
       `# ${section.name} - 技术方案\n\n${techBody}\n`
     );
   } else {
-    await writeFile(
-      join(taskDir, '00-specs', 'TECH.md'),
-      `# ${section.name} - 技术方案
+    // v8.3.160+: 第三级回退 — 从 section.content 提取技术相关内容
+    const sectionTechExtract = extractRelevantSection(section.content, section.name, '接口 数据 模型 字段 表结构 技术方案 架构 流程');
+    if (sectionTechExtract && sectionTechExtract.length > 100) {
+      await writeFile(
+        join(taskDir, '00-specs', 'TECH.md'),
+        `# ${section.name} - 技术方案\n\n> 来源: split 阶段 section 原始内容（技术相关段落自动提取）\n\n${sectionTechExtract}\n\n## 接口设计\n${apiDesc}\n`
+      );
+    } else {
+      // 最终回退：精简骨架模板（保留接口信息，减少 AI-FILL 占位符数量）
+      await writeFile(
+        join(taskDir, '00-specs', 'TECH.md'),
+        `# ${section.name} - 技术方案
 
-> ⚠️ 本文档由 split 自动生成框架，AI 执行时会自动填充。
+> ⚠️ 本文档由 split 自动生成框架，内容待 AI execute 阶段填充。
+> 参考：_shared/CONTEXT.md、00-specs/REQ.md、020-specs/overview/TECH.md
 
 ## 1. 方案概述
 <!-- AI-FILL: 简述本任务的业务背景和技术目标 -->
 
 ## 2. 接口设计
-<!-- AI-FILL: 根据以下接口列表设计 Controller / Service 分层 -->
 ${apiDesc}
 
 ### 统一响应格式
@@ -1696,42 +1821,50 @@ ${apiDesc}
 - 单元测试覆盖核心 Service 逻辑
 - 接口测试覆盖正常/异常/边界
 - 自动化测试通过后方可提 PR
-
-## 6. 前端 UI 设计
-<!-- AI-FILL: 页面结构、组件清单、状态管理、路由设计 -->
-### 6.1 页面/路由
-<!-- AI-FILL: 路由表 -->
-
-### 6.2 组件清单
-<!-- AI-FILL: 组件列表及职责 -->
-
-### 6.3 状态管理
-<!-- AI-FILL: 状态字段及枚举值，需与后端保持一致 -->
 `
-    );
+      );
+    }
   }
 
   // v7.4.0+: DEV_GUIDE.md 写入
   // v8.3.0+: 三级回退 — AI split 生成 → analyze DEV_GUIDE.md 提取 → 结构化模板
   const aiDevGuideContent = (section as any)._devGuideContent;
   const analyzeDevGuideContent = extractTaskDevGuideContent(specContents, section, taskPlatforms);
-  if (aiDevGuideContent && aiDevGuideContent.length > 50) {
+  // v8.3.160+: 提升阈值，确保内容质量（200/300 字符起用）
+  if (aiDevGuideContent && aiDevGuideContent.length > 200) {
     await writeFile(
       join(taskDir, '00-specs', 'DEV_GUIDE.md'),
       `# ${section.name} - 开发者实现指南\n\n${aiDevGuideContent}\n`
     );
-  } else if (analyzeDevGuideContent && analyzeDevGuideContent.length > 100) {
+  } else if (analyzeDevGuideContent && analyzeDevGuideContent.length > 300) {
     // v8.3.0+: 从 analyze DEV_GUIDE.md 提取本任务相关内容
     await writeFile(
       join(taskDir, '00-specs', 'DEV_GUIDE.md'),
       `# ${section.name} - 开发者实现指南\n\n> 任务: ${taskId} | ${section.name}\n> 本文档面向开发者，提供可执行的实现指导。\n> 来源: analyze → DEV_GUIDE.md（自动提取）\n\n${analyzeDevGuideContent}\n\n## 全局开发指南引用\n- 环境/规范/联调 → ../../../overview/DEV_GUIDE.md\n`
     );
   } else {
-    // 回退：结构化骨架模板（AI execute 阶段填充）
-    await writeFile(
-      join(taskDir, '00-specs', 'DEV_GUIDE.md'),
+    // v8.3.160+: 第三级回退 — 从 section.content 提取开发相关内容
+    const sectionDevExtract = extractRelevantSection(section.content, section.name, '步骤 实现 改造 文件 函数 类 接口 验证 测试');
+    if (sectionDevExtract && sectionDevExtract.length > 100) {
+      await writeFile(
+        join(taskDir, '00-specs', 'DEV_GUIDE.md'),
+        `# ${section.name} - 开发者实现指南\n\n> 任务: ${taskId} | ${section.name}
+> 本文档面向开发者，提供可执行的实现指导。
+> 来源: split 阶段 section 原始内容（开发相关段落自动提取）
+
+${sectionDevExtract}
+
+## 全局开发指南引用
+- 环境/规范/联调 → ../../../overview/DEV_GUIDE.md
+`
+      );
+    } else {
+      // 最终回退：结构化骨架模板（AI execute 阶段填充）
+      await writeFile(
+        join(taskDir, '00-specs', 'DEV_GUIDE.md'),
       `# ${section.name} - 开发者实现指南\n\n> 任务: ${taskId} | ${section.name}\n> 本文档面向开发者，提供可执行的实现指导。\n\n## 1. 本任务改造范围\n\n<!-- AI-FILL: execute 阶段根据 REQ.md 和 TECH.md 填充 -->\n| 类型 | 文件/目录 | 说明 |\n| :--- | :--- | :--- |\n| 新增 | | |\n| 修改 | | |\n| 删除 | | |\n\n## 2. 实施步骤（按依赖排序）\n\n<!-- AI-FILL: Step-by-step 开发步骤，具体到文件/函数级 -->\n- **Step 1**: ...（为什么先做，依赖什么）\n- **Step 2**: ...（依赖 Step 1 的什么产出）\n- ...\n\n## 3. 关键代码指引\n\n<!-- AI-FILL: 核心逻辑的伪代码或改造前后对比 -->\n\n### 3.1 核心改造点 A\n- **文件**: \`xxx.ts\`\n- **改造**: ...\n- **代码示例**:\n  \`\`\`typescript\n  // 改造后\n  \`\`\`\n\n## 4. 接口契约\n\n<!-- AI-FILL: 本任务涉及的前后接口对照 -->\n| 接口 | 路径 | 后端实现 | 前端调用 | 状态 |\n| :--- | :--- | :--- | :--- | :--- |\n\n## 5. 每步验证\n\n<!-- AI-FILL: 每步改完怎么验证 -->\n| 步骤 | 验证命令/操作 | 通过标准 |\n| :--- | :--- | :--- |\n\n## 6. 回滚方案\n\n<!-- AI-FILL: 改坏了怎么回退 -->\n- 数据库: ...\n- 代码: ...\n\n## 7. 已知坑点\n\n<!-- AI-FILL: 常见坑点及解决方式 -->\n- ⚠️ **坑 1**: ...（解决方式）\n- ⚠️ **坑 2**: ...（解决方式）\n\n## 全局开发指南引用\n- 环境/规范/联调 → ../../../overview/DEV_GUIDE.md\n`
     );
+    }
   }
 
   if (section.content.match(/数据库|数据表|表结构|DDL|ALTER|建表|索引/)) {
@@ -3237,9 +3370,25 @@ async function buildSplitPrompt(
   platformsFilter?: string[],
   existingTasks?: Map<string, string[]>,
   iterationDir?: string,
+  // v8.3.160+: 子 Agent 角色和上下文类型，用于动态调整 Prompt
+  subagent?: string,
+  contextType?: 'full' | 'incremental' | 'platform-only' | 'contract-only',
 ): Promise<string> {
+  // v8.3.160+: 接入 agent-adapter，注入子 Agent 角色定义和上下文裁剪策略
+  const agentCtx: AgentContext = {
+    subagent: subagent || 'task-decomposer',
+    iteration,
+    contextBudget: contextType === 'incremental' ? 5000 : 8000,
+    contextType: contextType || 'full',
+    cwd: iterationDir || process.cwd(),
+  };
+  const agentContextText = await defaultAdapter.prepareContext(agentCtx);
+
   let p = `# SpecCore AI 智能拆分\n\n`;
-  p += `> 迭代: ${iteration} | 生成: ${new Date().toISOString().split('T')[0]}\n\n`;
+  p += `> 迭代: ${iteration} | 子 Agent: ${agentCtx.subagent} | 生成: ${new Date().toISOString().split('T')[0]}\n\n`;
+
+  // 注入子 Agent 上下文（角色定义 + 上下文裁剪策略）
+  p += agentContextText + '\n\n';
 
   // v6.76.0+: 拆分范围限制
   if (modulesFilter?.length || platformsFilter?.length) {
@@ -3272,18 +3421,41 @@ async function buildSplitPrompt(
     p += `- API 契约（_shared/API_CONTRACT.yaml）需要补充新端涉及的接口\n\n`;
   }
 
-  // 技术宪法
-  if (constitutionContent) {
-    p += `## 📜 技术宪法 (CONSTITUTION.md)\n\n${constitutionContent.slice(0, 3000)}\n\n---\n\n`;
+  // v8.3.160+: 路径引用模式 —— 不再把文档全文塞进 Prompt，让 AI 通过 Read 工具按需读取
+  p += `## 📂 文档清单（请按需 Read）\n\n`;
+  p += `> 💡 **路径引用模式**：以下文档已就绪，请根据当前任务需要选择性 Read，不要一次性加载所有文件。\n\n`;
+
+  p += `### 必读文档\n\n`;
+  p += `1. \`CONSTITUTION.md\` — 技术宪法（端列表、命名规范、技术栈）\n`;
+  p += `2. \`010-requirements/INDEX.md\` — 需求全貌索引\n`;
+  p += `3. \`010-requirements/converted/*.md\` — 转换后的需求文档\n`;
+  p += `4. \`020-specs/overview/REQUIREMENT.md\` — 黄金需求文档\n`;
+  p += `5. \`020-specs/overview/TECH.md\` — 全局技术方案\n`;
+  p += `6. \`020-specs/overview/ANALYSIS.md\` — 功能分析\n`;
+  p += `7. \`020-specs/overview/FUNCTION_MAP.md\` — 功能单元与端的映射（拆分核心依据）\n`;
+  if (await pathExists(join(iterationDir || '', '020-specs', 'overview', 'INTERACTION_MAP.md'))) {
+    p += `8. \`020-specs/overview/INTERACTION_MAP.md\` — 跨端交互时序\n`;
   }
+  if (await pathExists(join(iterationDir || '', '020-specs', 'overview', 'DEV_GUIDE.md'))) {
+    p += `9. \`020-specs/overview/DEV_GUIDE.md\` — 开发指南\n`;
+  }
+  p += `\n`;
 
-  // 需求原文
-  p += `## 📋 需求原文 (REQUIREMENT.md)\n\n${reqContent.slice(0, 5000) || '_未找到_'}\n\n---\n\n`;
-
-  // 全部 Spec 文档
+  p += `### 按功能模块读取（020-specs/{功能模块}/）\n\n`;
+  p += `对于每个功能模块，按需 Read：\n`;
   for (const spec of specContents) {
-    p += `## 📜 ${spec.name}\n\n${spec.content.slice(0, 3000)}\n\n---\n\n`;
+    p += `- \`020-specs/${spec.name}\`\n`;
   }
+  p += `\n`;
+
+  p += `> 📖 **读取策略**：\n`;
+  p += `> - 先 Read FUNCTION_MAP.md 了解功能单元划分和涉及端\n`;
+  p += `> - 按功能单元逐个处理，每次只 Read 当前单元相关的文档\n`;
+  p += `> - reqContent 从 REQUIREMENT.md 和对应功能模块的需求文档提取\n`;
+  p += `> - techContent 从 TECH.md 和对应功能模块的技术规格提取\n`;
+  p += `> - devGuideContent 从 DEV_GUIDE.md 提取\n\n`;
+
+  p += `---\n\n`;
 
   // v6.69.3+: 注入标准端名列表
   if (standardPlatforms.length > 0) {
@@ -3420,6 +3592,44 @@ async function buildSplitPrompt(
   p += `- 每个任务必须有明确的 owner（对应 STAFFING 中的成员）\n`;
   p += `- 高优先级任务排在前面\n`;
   p += `- 没有实质性功能内容的章节（如背景、概述、架构、术语等）不能作为拆分依据\n\n`;
+
+  // v8.3.160+: 根据 subagent 动态调整本步骤任务指令
+  if (subagent === 'dependency-analyst') {
+    p += `## 🔗 本步骤任务：依赖关系分析\n\n`;
+    p += `你是 **依赖关系分析师**。你的职责是分析任务间的依赖关系，不需要做拆分或工时估算。\n\n`;
+    p += `**输入**：上一步生成的任务列表（含 id、name、functionalUnit、scope）\n`;
+    p += `**输出**：为每个任务补充 \`dependencies\` 字段，标注该任务依赖哪些其他任务（填写 task id）\n\n`;
+    p += `### 依赖判定规则\n\n`;
+    p += `- **数据依赖**：Task-B 需要 Task-A 创建的数据表/实体 → B 依赖 A\n`;
+    p += `- **API 依赖**：Task-B 调用 Task-A 提供的接口 → B 依赖 A\n`;
+    p += `- **状态依赖**：Task-B 需要 Task-A 完成后的某个业务状态 → B 依赖 A\n`;
+    p += `- **配置依赖**：Task-B 需要 Task-A 完成后的配置/环境 → B 依赖 A\n`;
+    p += `- 依赖链深度 ≤ 3，发现循环依赖必须标注并建议解耦方案\n`;
+    p += `- 同层级任务之间尽量无依赖，可并行执行\n\n`;
+  } else if (subagent === 'effort-estimator') {
+    p += `## ⏱️ 本步骤任务：工时估算与排期\n\n`;
+    p += `你是 **工时估算专家**。你的职责是为每个任务估算工时并确定优先级，不需要重新拆分。\n\n`;
+    p += `**输入**：带依赖关系的任务列表（含 id、name、scope、dependencies）\n`;
+    p += `**输出**：为每个任务补充 \`estimatedHours\`、\`priority\`、\`owner\` 字段\n\n`;
+    p += `### 估算规则\n\n`;
+    p += `- 单个任务工时控制在 **2h-8h** 之间\n`;
+    p += `- 超过 8h 必须拆分为多个任务（返回修改建议，不要硬估）\n`;
+    p += `- 低于 2h 建议合并到关联任务\n`;
+    p += `- **高优先级**：基础模块（认证/数据库/配置）、被多个任务依赖的任务\n`;
+    p += `- **中优先级**：核心业务功能\n`;
+    p += `- **低优先级**：独立第三方集成、纯 UI 调整\n`;
+    p += `- 考虑技术风险和不确定性，预留 20% 缓冲\n\n`;
+  } else {
+    // task-decomposer 默认
+    p += `## 📋 本步骤任务：任务拆分与内容生成\n\n`;
+    p += `你是 **任务拆分专家**。你的职责是将功能模块拆分为原子级开发任务，并为每个任务生成完整的内容。\n\n`;
+    p += `**核心要求**：\n`;
+    p += `- 按 FUNCTION_MAP.md 中的功能单元拆分\n`;
+    p += `- 每个功能单元涉及的端，各生成一个子任务（scope 只包含该端）\n`;
+    p += `- 为每个任务生成完整的 reqContent、techContent、devGuideContent\n`;
+    p += `- **内容必须从 020-specs/ 对应文档中读取并提取**，禁止输出模板化占位符\n`;
+    p += `- 如果某个文档内容不足，标注「基于现有信息推断」而非留空\n\n`;
+  }
 
   // 输出格式
   p += `## 📤 输出格式\n\n`;

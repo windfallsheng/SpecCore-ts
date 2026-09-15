@@ -422,37 +422,49 @@ export function assembleUnifiedContext(
 
 /**
  * 将统一检索结果序列化为文本（直接注入 Prompt）
+ * v8.3.160+: 支持 maxChars 限制，防止大项目时 Prompt 溢出
  */
-export function formatUnifiedContext(result: UnifiedResult): string {
+export function formatUnifiedContext(result: UnifiedResult, maxChars?: number): string {
   const lines: string[] = [];
+  let totalChars = 0;
+  const limit = maxChars || Infinity;
+
+  const push = (text: string) => {
+    if (totalChars + text.length > limit && lines.length > 0) return false;
+    lines.push(text);
+    totalChars += text.length;
+    return true;
+  };
 
   if (result.documentChunks.length > 0) {
-    lines.push('## 相关文档');
+    push('## 相关文档');
     for (const chunk of result.documentChunks) {
-      lines.push(`\n### ${chunk.title}（${chunk.fileName}）`);
-      lines.push(chunk.content);
+      if (!push(`\n### ${chunk.title}（${chunk.fileName}）`)) break;
+      if (!push(chunk.content)) break;
     }
   }
 
   if (result.codeSlices.length > 0) {
-    lines.push('\n## 相关代码');
+    push('\n## 相关代码');
     for (const slice of result.codeSlices) {
-      lines.push(`\n### ${slice.name} (${slice.type}) — ${slice.fileName}:${slice.lineStart}`);
-      if (slice.comments) lines.push(slice.comments);
-      lines.push('```typescript');
-      lines.push(slice.signature);
+      const header = `\n### ${slice.name} (${slice.type}) — ${slice.fileName}:${slice.lineStart}`;
+      if (!push(header)) break;
+      if (slice.comments && !push(slice.comments)) break;
+      if (!push('```typescript')) break;
+      if (!push(slice.signature)) break;
       const body = slice.body.length > 600 ? slice.body.slice(0, 600) + '\n// ... (截断)' : slice.body;
-      lines.push(body);
-      lines.push('```');
+      if (!push(body)) break;
+      if (!push('```')) break;
     }
   }
 
   if (result.graphContext) {
-    lines.push('\n## 知识图谱关联');
-    lines.push(result.graphContext);
+    push('\n## 知识图谱关联');
+    const truncated = result.graphContext.length > 2000 ? result.graphContext.slice(0, 2000) + '\n... (截断)' : result.graphContext;
+    push(truncated);
   }
 
-  lines.push(`\n---\n*检索统计: ${result.stats.docChunksFound} 文档块 + ${result.stats.codeSlicesFound} 代码切片 | 估算 ${result.stats.totalTokensEstimate} tokens*`);
+  push(`\n---\n*检索统计: ${result.stats.docChunksFound} 文档块 + ${result.stats.codeSlicesFound} 代码切片 | 估算 ${result.stats.totalTokensEstimate} tokens*`);
 
   return lines.join('\n');
 }

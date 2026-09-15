@@ -594,11 +594,18 @@ export async function hasValidClarifiedDocs(iterDir: string): Promise<boolean> {
   if (clarifiedFiles.length === 0) return false;
 
   // 检查是否有 source 文档比 clarified 更新
-  const sourcesDir = join(iterDir, '010-requirements', 'sources');
-  const featuresDir = join(iterDir, '010-requirements', 'features');
+  // v8.3.160+ 修复：补充 converted/、staging/、REQUIREMENT.md 及类型目录的监控
+  // 保持与 analyze 命令的需求收集逻辑一致
+  const reqDir = join(iterDir, '010-requirements');
+  const sourcesDir = join(reqDir, 'sources');
+  const featuresDir = join(reqDir, 'features');
+  const convertedDir = join(reqDir, 'converted');
+  const stagingDir = join(reqDir, 'staging');
 
   let latestSourceTime = 0;
-  for (const dir of [sourcesDir, featuresDir]) {
+
+  // 检查各子目录下的 .md 文件
+  for (const dir of [sourcesDir, featuresDir, convertedDir, stagingDir]) {
     if (await pathExists(dir)) {
       try {
         const entries = await readdir(dir, { withFileTypes: true });
@@ -610,6 +617,31 @@ export async function hasValidClarifiedDocs(iterDir: string): Promise<boolean> {
         }
       } catch { /* 忽略 */ }
     }
+  }
+
+  // 检查类型目录 (bugs, refactors, research)
+  for (const typeDir of ['bugs', 'refactors', 'research']) {
+    const typeDirPath = join(reqDir, typeDir);
+    if (await pathExists(typeDirPath)) {
+      try {
+        const entries = await readdir(typeDirPath, { withFileTypes: true });
+        for (const e of entries) {
+          if (e.isFile() && e.name.endsWith('.md')) {
+            const st = await stat(join(typeDirPath, e.name));
+            if (st.mtimeMs > latestSourceTime) latestSourceTime = st.mtimeMs;
+          }
+        }
+      } catch { /* 忽略 */ }
+    }
+  }
+
+  // 检查根目录下的 REQUIREMENT.md
+  const reqRoot = join(reqDir, 'REQUIREMENT.md');
+  if (await pathExists(reqRoot)) {
+    try {
+      const st = await stat(reqRoot);
+      if (st.mtimeMs > latestSourceTime) latestSourceTime = st.mtimeMs;
+    } catch { /* 忽略 */ }
   }
 
   // 如果 source 比 clarify 新，需要重新 clarify

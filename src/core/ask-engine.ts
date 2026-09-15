@@ -245,6 +245,25 @@ const WORKFLOWS: Record<string, PipelineStep[]> = {
     { order: 2, command: 'analyze', args: '--audit', explanation: '深度审计分析', dependsOn: 1 },
     { order: 3, command: 'pr', args: '--auto', explanation: '生成 PR 审查', dependsOn: 2 },
   ],
+  // v8.3.160+: 常见复合意图工作流
+  'analyze-split': [
+    { order: 1, command: 'analyze', args: '--iteration {iteration}', explanation: 'AI 分析需求，生成各端规格文档', dependsOn: undefined },
+    { order: 2, command: 'split', args: '--iteration {iteration}', explanation: '将分析结果拆分为独立开发任务', dependsOn: 1 },
+  ],
+  'analyze-split-plan': [
+    { order: 1, command: 'analyze', args: '--iteration {iteration}', explanation: 'AI 分析需求，生成各端规格文档', dependsOn: undefined },
+    { order: 2, command: 'split', args: '--iteration {iteration}', explanation: '将分析结果拆分为独立开发任务', dependsOn: 1 },
+    { order: 3, command: 'plan', args: '--all', explanation: '生成任务执行计划，确定优先级和依赖', dependsOn: 2 },
+  ],
+  'plan-execute': [
+    { order: 1, command: 'plan', args: '--all', explanation: '生成任务执行计划，确定优先级和依赖', dependsOn: undefined },
+    { order: 2, command: 'execute', args: '--auto', explanation: '按计划依次执行开发任务', dependsOn: 1 },
+  ],
+  'analyze-plan-execute': [
+    { order: 1, command: 'analyze', args: '--iteration {iteration}', explanation: 'AI 分析需求，生成各端规格文档', dependsOn: undefined },
+    { order: 2, command: 'plan', args: '--all', explanation: '生成任务执行计划，确定优先级和依赖', dependsOn: 1 },
+    { order: 3, command: 'execute', args: '--auto', explanation: '按计划依次执行开发任务', dependsOn: 2 },
+  ],
 };
 
 // ============================================================
@@ -816,10 +835,13 @@ function handlePipeline(input: string): AskResult {
 
   // ── 意图得分系统（替代硬关键词匹配，模拟语义理解）──
   // 得分 = 维度加权，而非单关键词触发
+  // v8.3.160+: 增加复合意图维度
   const scores = {
     batchExec: 0,
     newFeature: 0,
     auto: 0,
+    analyzeSplit: 0,
+    planExecute: 0,
   };
 
   // 维度1: 动作词
@@ -829,6 +851,9 @@ function handlePipeline(input: string): AskResult {
     [/(?:执行|跑|运行|execute|run)/, 10, 'batchExec'],
     [/(?:实现|动手|做|开发|feature|新.*功能|新.*模块)/, 40, 'newFeature'],
     [/(?:自主|自动|一键|不用确认|直接|全部.*执行|全自动)/, 30, 'auto'],
+    // v8.3.160+: 复合意图动作词
+    [/(?:分析.*拆分|拆分.*任务|分析.*然后.*拆分|先分析.*再拆分)/, 40, 'analyzeSplit'],
+    [/(?:计划.*执行|排程.*执行|先计划.*再执行|分析.*计划.*执行)/, 40, 'planExecute'],
   ];
   for (const [re, wt, key] of actionWords) {
     if (re.test(lower)) scores[key] += wt;
@@ -839,12 +864,18 @@ function handlePipeline(input: string): AskResult {
   if (/任务|task|代码审查|review|测试|test/.test(lower)) scores.batchExec += 15;
   if (/所有|全部|都|each|every|all/.test(lower)) scores.auto += 20;
   if (/先看|先列|先.*看|预览|看看|再说|然后|再.*执行/.test(lower)) scores.auto -= 30; // 说明想要交互
+  // v8.3.160+: 复合意图上下文词
+  if (/分析|analyze|audit|审计/.test(lower) && /拆分|split|task|任务/.test(lower)) scores.analyzeSplit += 20;
+  if (/计划|plan|排程/.test(lower) && /执行|execute|跑|运行/.test(lower)) scores.planExecute += 20;
+  if (/分析|analyze/.test(lower) && /计划|plan/.test(lower) && /执行|execute/.test(lower)) scores.planExecute += 15;
 
   // 维度3: 复杂度 — 只要有一点不确定，必须确认
   // 触发复杂度 = 任何多步骤/定时/多任务/审查/修改 的信号
   const isComplex = (
     // 计划+执行 组合
     (/计划|plan|安排|排程/.test(lower) && /执行|跑|execute/.test(lower)) ||
+    // 分析+拆分 组合
+    (/分析|analyze|审计/.test(lower) && /拆分|split|任务|task/.test(lower)) ||
     // 时间调度
     /定时|指定时间|几点|晚.*点|早上.*点|明天.*点|到.*点|稍后|一会/.test(lower) ||
     // 审查/测试/安全 任务
@@ -864,7 +895,7 @@ function handlePipeline(input: string): AskResult {
   const isSimple = !isComplex && lower.length < 40 && !/计划|安排|然后|再|同时|并且|也|还/.test(lower);
 
   // 维度4: 否定词减分
-  if (/别|不要|不.*执行|先别|取消/.test(lower)) { scores.batchExec = 0; scores.auto = 0; }
+  if (/别|不要|不.*执行|先别|取消/.test(lower)) { scores.batchExec = 0; scores.auto = 0; scores.analyzeSplit = 0; scores.planExecute = 0; }
 
   // 判断：batchExec 最高 → 批量流程
   const hasAuto = scores.auto > 0;
@@ -883,6 +914,32 @@ function handlePipeline(input: string): AskResult {
       detail: buildPipelineDetail(steps, input),
       commands: steps.map(s => s.command),
       pipeline: { steps, input, confirm: needConfirm },
+    };
+  }
+
+  // v8.3.160+: 匹配 analyze-split 复合意图
+  if (scores.analyzeSplit >= 40) {
+    const steps = WORKFLOWS['analyze-split-plan'];
+    return {
+      mode: 'pipeline',
+      summary: `已编排「分析→拆分→计划」流程（${steps.length} 步）`,
+      detail: buildPipelineDetail(steps, input),
+      commands: steps.map(s => s.command),
+      pipeline: { steps, input, confirm: true },
+    };
+  }
+
+  // v8.3.160+: 匹配 plan-execute 复合意图
+  if (scores.planExecute >= 40) {
+    const hasAnalyze = /分析|analyze|审计|audit/.test(lower);
+    const wfName = hasAnalyze ? 'analyze-plan-execute' : 'plan-execute';
+    const steps = WORKFLOWS[wfName];
+    return {
+      mode: 'pipeline',
+      summary: `已编排「${hasAnalyze ? '分析→' : ''}计划→执行」流程（${steps.length} 步）`,
+      detail: buildPipelineDetail(steps, input),
+      commands: steps.map(s => s.command),
+      pipeline: { steps, input, confirm: true },
     };
   }
 

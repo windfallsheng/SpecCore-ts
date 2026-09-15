@@ -1,3 +1,74 @@
+## v8.3.161 (2026-09-15) — 大项目分批调度 + 复合意图 Pipeline + 上下文溢出防护
+
+### 全局分析：大项目分批调度
+
+**Layer 1 索引扫描维度精简** (`src/commands/analyze.ts`):
+- **改造前**: 21 个扫描维度（路由、API、DTO、Service、Entity、组件等）全部嵌入 Prompt，大项目时占 3K-5K tokens
+- **改造后**: 维度清单改为**路径引用**（`Read platforms/{端}/_INDEX.md`），Prompt 只列出维度名称和读取路径
+- **效果**: Layer 1 Prompt 减少 ~60% tokens，AI 按需读取而非一次性注入
+
+**Layer 3 功能模块级分批** (`src/commands/analyze.ts`):
+- **Light Path（Prompt 级）**: 模块 >2 时，Prompt 指导 AI 一次处理 1-2 个模块，剩余标注 `[PENDING: {模块名列表}]`
+- **Full Path（CLI 级）**: `detectGlobalLayerProgress()` 新增 `pendingModules` 字段，记录未完成的模块；自动链式推进检测未完成模块时继续 Layer 3 而非推进到 Layer 4
+- **效果**: 全局分析最深层的上下文瓶颈（模块文档生成）可控，确保每个模块分析质量深入（≥100 行、Mermaid 图、代码引用）
+
+**Layer 4d 端级分批** (`src/commands/analyze.ts`):
+- **改造前**: 4d 子层一次生成一个文档（粒度太细，端多时上下文碎片化）
+- **改造后**: 一次处理 1-2 个端的**所有缺失文档**（后端 3 份 + 前端 3 份），自动输出 `[SPECCORE_EXEC]` 续批
+- **进度检测**: `detectGlobalLayerProgress()` 新增 `pendingPlatforms` 字段，引导显示待处理端列表
+
+**structured-data.json 平台分段** (`src/core/structured-extractor.ts`, `src/core/prompt-builder.ts`):
+- **改造前**: 全量结构化数据写入单个 `structured-data.json`，端多时读取时占用大量 tokens
+- **改造后**: 额外写入 `structured-data.{platform}.json`（每个端一份），`prompt-builder.ts` 优先读取平台分段文件
+- **效果**: 单端执行时结构化数据读取量减少 60-80%
+
+### 迭代分析优化
+
+**迭代级 analyze 功能模块分批** (`src/commands/analyze.ts`):
+- Phase 2 按功能模块组织文档时，>2 个模块时分批处理，每次 1-2 个模块的所有端文档
+- 剩余模块标注 `[PENDING]`，续批命令 `--phase 2`
+
+**--with-code 源码上下文修复** (`src/commands/analyze.ts`):
+- 修复迭代级分析 `--with-code` 时源码上下文未正确注入的缺陷（路径解析错误导致空内容）
+
+**analyze 统一 buildPrompt 入口** (`src/core/prompt-builder.ts`):
+- analyze 命令路由到 `buildMultiDocPrompt`，彻底消除自定义 Prompt 构建路径
+- `buildPrompt` options 新增 `analyzeOptions?: any` 字段
+
+### 执行阶段优化
+
+**--with-code 默认启用** (`src/commands/execute.ts`, `src/cli.ts`):
+- 端数量 >=3 时自动启用 `--with-code`，无需用户手动指定
+- CLI 新增 `--with-code` / `--no-with-code` 选项，支持显式控制
+- `buildPrompt` 中 `withCode` 强制启用时即使 `searchQuery` 为空也注入源码上下文
+
+**平台分段结构化数据读取** (`src/core/prompt-builder.ts`):
+- execute 阶段读取结构化数据时，优先使用 `structured-data.{platform}.json`
+- 兼容全量和分段两种数据结构
+
+### 其他命令优化
+
+**Split 功能模块分批** (`src/core/prompt-builder.ts`, `src/commands/iteration/split.ts`):
+- `buildSplitInstruction()` 添加分批策略：模块 >2 时一次处理 1-2 个模块
+- `extractJsonArray()` 智能提取 JSON（支持 JSON 后附带 `[PENDING]` / `[SPECCORE_EXEC]`）
+- Response 处理后检测 pending 模块，提示继续拆分
+
+**Ask 多步骤 Pipeline** (`src/core/ask-engine.ts`):
+- WORKFLOWS 新增 4 个复合意图工作流：`analyze-split`、`analyze-split-plan`、`plan-execute`、`analyze-plan-execute`
+- 意图得分系统新增 `analyzeSplit` 和 `planExecute` 维度，识别"分析然后拆分"、"计划然后执行"等复合意图
+- 复杂度检测扩展"分析+拆分"组合信号
+
+**Plan 大任务量优化** (`src/commands/plan.ts`, `src/core/unified-retrieval.ts`):
+- **全量任务概览**: 任务 >15 时，列出所有任务概要（ID+名称+状态+依赖）用于拓扑分析
+- **详细文档限制**: 只给前 15 个任务提供文档路径引用，其余提示 Read `PROJECT_GRAPH.md`
+- **检索限制**: `formatUnifiedContext()` 新增 `maxChars` 参数，Plan 中限制为 3000 字符；知识图谱限制为 1500 字符
+
+### 设计文档
+
+- `docs/DESIGN.md`: 新增附录「v8.3.161+ 大项目分批调度设计」
+
+---
+
 ## v8.3.160 (2026-09-14) — 子 Agent 隔离架构 + 步骤隔离模式 + Token 优化
 
 ### 架构改造（核心）
