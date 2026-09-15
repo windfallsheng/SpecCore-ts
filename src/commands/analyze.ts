@@ -1143,6 +1143,15 @@ ${singlePrompt}`);
       if (!taskDir) { logger.error(`未找到任务: ${taskId}`); return; }
     }
 
+    // v8.3.161+: AI 上下文中禁止 --skip-clarify（质量门禁不可被 AI 自行绕过）
+    if (options.skipClarify && !process.stdout.isTTY) {
+      logger.warn('⚠️ AI 上下文检测到 --skip-clarify，此行为不推荐');
+      logger.info('   需求澄清是质量门禁，应由人类用户确认后使用');
+      logger.info('   如果需求文档已经过 clarify 流程，会自动跳过澄清阶段');
+      logger.info('   如需强制跳过，请在交互式终端中执行此命令');
+      // 不阻止，但输出强烈警告（保持向后兼容）
+    }
+
     // v8.3.0+: 解析 [CLARIFY:xxx] 标记 — 需求澄清是强制前置步骤
     const clarifyBlocks = parseClarifyMarkers(options.apply);
     if (clarifyBlocks.size > 0 && !isGlobalScope) {
@@ -1203,6 +1212,35 @@ ${singlePrompt}`);
     if (options.apply.startsWith('{')) {
       try {
         const docs: Record<string, string> = JSON.parse(options.apply);
+        const docEntries = Object.entries(docs);
+
+        // v8.3.161+: 批量 apply 防护 — JSON 模式同样限制文档数量
+        const MAX_DOCS_PER_APPLY = 3;
+        if (docEntries.length > MAX_DOCS_PER_APPLY) {
+          logger.error(`❌ 批量 apply 拦截: JSON 包含 ${docEntries.length} 个文档，超过单次上限 ${MAX_DOCS_PER_APPLY}`);
+          logger.info('   请分批 apply，每次不超过 3 个文档：');
+          const docNames = docEntries.map(([k]) => k);
+          for (let i = 0; i < docNames.length; i += MAX_DOCS_PER_APPLY) {
+            const batch = docNames.slice(i, i + MAX_DOCS_PER_APPLY);
+            logger.info(`   批次 ${Math.floor(i / MAX_DOCS_PER_APPLY) + 1}: ${batch.join(', ')}`);
+          }
+          logger.info('');
+          logger.info('   原因：单会话内批量生成过多文档会导致上下文溢出、质量下降');
+          return;
+        }
+
+        // v8.3.161+: 迭代级 analyze 禁止直接写入 overview/REQUIREMENT.md
+        if (!isGlobalScope) {
+          for (const filename of Object.keys(docs)) {
+            if (filename === 'overview/REQUIREMENT.md' || filename === 'REQUIREMENT.md') {
+              logger.error(`❌ 写入路径拦截: analyze --apply 不允许直接写入迭代级的 ${filename}`);
+              logger.info('   原始需求文档应在 010-requirements/ 中维护');
+              logger.info('   analyze 的输出应为分析规格文档（TECH.md / TEST.md / UI_SPEC.md 等）');
+              return;
+            }
+          }
+        }
+
         let count = 0;
 
         if (isTaskLevel && taskDir) {
@@ -1641,6 +1679,36 @@ ${singlePrompt}`);
     // v8.2.0+: [DOC:xxx] 标记解析 —— 统一报告自动拆分
     // AI 输出格式: [DOC:REQUIREMENT.md]...内容...[DOC:TECH.md]...内容...
     const docBlocks = parseDocMarkers(options.apply);
+
+    // v8.3.161+: 批量 apply 防护 — 禁止单会话内批量写入过多文档
+    const MAX_DOCS_PER_APPLY = 3;
+    if (docBlocks.size > MAX_DOCS_PER_APPLY) {
+      logger.error(`❌ 批量 apply 拦截: 检测到 ${docBlocks.size} 个 [DOC:xxx] 文档，超过单次上限 ${MAX_DOCS_PER_APPLY}`);
+      logger.info('   请分批 apply，每次不超过 3 个文档：');
+      const docNames = Array.from(docBlocks.keys());
+      for (let i = 0; i < docNames.length; i += MAX_DOCS_PER_APPLY) {
+        const batch = docNames.slice(i, i + MAX_DOCS_PER_APPLY);
+        logger.info(`   批次 ${Math.floor(i / MAX_DOCS_PER_APPLY) + 1}: ${batch.join(', ')}`);
+      }
+      logger.info('');
+      logger.info('   原因：单会话内批量生成过多文档会导致上下文溢出、质量下降');
+      logger.info('   请在新会话中逐个批次执行，确保每个文档的质量深入');
+      return;
+    }
+
+    // v8.3.161+: 迭代级 analyze 禁止直接写入 overview/REQUIREMENT.md
+    if (!isGlobalScope) {
+      for (const docName of docBlocks.keys()) {
+        if (docName === 'overview/REQUIREMENT.md' || docName === 'REQUIREMENT.md') {
+          logger.error(`❌ 写入路径拦截: analyze --apply 不允许直接写入迭代级的 ${docName}`);
+          logger.info('   原始需求文档应在 010-requirements/ 中维护');
+          logger.info('   analyze 的输出应为分析规格文档（TECH.md / TEST.md / UI_SPEC.md 等）');
+          logger.info(`   如需更新需求文档，请使用: speccore doc2spec 或手动编辑 010-requirements/`);
+          return;
+        }
+      }
+    }
+
     if (docBlocks.size > 1) {
       // 将 [DOC:xxx] 格式转换为 JSON 格式复用现有写入逻辑
       const docs: Record<string, string> = {};

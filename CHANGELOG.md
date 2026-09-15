@@ -1,3 +1,31 @@
+## v8.3.162 (2026-09-15) — Subagent 调度强化 + 质量门禁防护
+
+### Ask Pipeline：强制步骤隔离 (`src/commands/ask.ts`)
+
+- **问题**：AI 在单会话内循环执行 Pipeline 所有步骤，上下文溢出 + 无法切换 Subagent 角色
+- **修复**：AI 上下文（`isAiContext() || !process.stdout.isTTY`）中强制只执行第一步，输出 `[SPECCORE_STEP_DONE]` + `[SPECCORE_NEXT_STEP]` + `[SPECCORE_EXEC]` 后退出
+- **效果**：多步骤 Pipeline 必须通过新会话续跑，每个步骤可分配独立 Subagent 角色和上下文预算
+
+### Analyze Apply：批量写入拦截 (`src/commands/analyze.ts`)
+
+- **问题**：AI 直接构造 `requirement_apply.json`、`batch1_apply.json` 等批量 apply 数据，单会话内写入 10+ 文档，质量不可控
+- **修复**：`[DOC:xxx]` 模式和 JSON 模式均限制单次 apply 最多 3 个文档，超过则拒绝并提示分批
+- **效果**：强制 AI 按功能模块/文档分批处理，确保每个文档的质量深入
+
+### Analyze Apply：写入路径拦截 (`src/commands/analyze.ts`)
+
+- **问题**：analyze --apply 直接写入迭代级的 `overview/REQUIREMENT.md`，混淆了需求输入和分析输出的边界
+- **修复**：非全局 scope 时，禁止 `--apply` 写入 `overview/REQUIREMENT.md` 或 `REQUIREMENT.md`
+- **提示**：引导用户通过 `speccore doc2spec` 或手动编辑 `010-requirements/` 维护原始需求
+
+### 需求澄清：AI 上下文警告 (`src/commands/analyze.ts`)
+
+- **问题**：AI 自行使用 `--skip-clarify` 绕过质量门禁
+- **修复**：AI 上下文中检测到 `--skip-clarify` 时输出强烈警告，提示需求澄清应由人类用户确认
+- **保留**：不强制阻止（保持向后兼容），但增加明显警告日志
+
+---
+
 ## v8.3.161 (2026-09-15) — 大项目分批调度 + 复合意图 Pipeline + 上下文溢出防护
 
 ### 全局分析：大项目分批调度

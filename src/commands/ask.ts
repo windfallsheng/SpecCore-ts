@@ -239,13 +239,19 @@ export async function askCommand(input: string, _options: any): Promise<void> {
     }
 
     // 1. Pipeline 交互执行（逐步骤确认）
+    // v8.3.161+: AI 上下文中强制步骤隔离，禁止单会话内连续执行多步
     if (result.pipeline && result.mode === 'pipeline') {
       const isAuto = /一键|全自动|自主|auto/i.test(input) || !result.pipeline?.confirm;
-      process.stdout.write(`\n📋 管道模式: ${result.pipeline.steps.length} 步\n`);
+      const steps = result.pipeline.steps;
+      process.stdout.write(`\n📋 管道模式: ${steps.length} 步\n`);
       if (!isAuto) process.stdout.write(`⚠️ 交互模式: 每步执行前需要确认\n`);
 
-      for (let i = 0; i < result.pipeline.steps.length; i++) {
-        const step = result.pipeline.steps[i];
+      // v8.3.161+: AI 上下文强制步骤隔离 — 只执行第一步，后续步骤通过 [SPECCORE_STEP_DONE] 调度
+      const isAiCtx = isAiContext() || !process.stdout.isTTY;
+      const maxStepsInSession = isAiCtx ? 1 : steps.length;
+
+      for (let i = 0; i < Math.min(steps.length, maxStepsInSession); i++) {
+        const step = steps[i];
         const argsFilled = (step.args || '').replace(/\{(\w+)\}/g, (_: string, k: string) => {
           if (k === 'time') return extractTime(input);
           if (k === 'batch') { const m = input.match(/(\d+)[批次个]/); return m ? m[1] : '5'; }
@@ -256,7 +262,7 @@ export async function askCommand(input: string, _options: any): Promise<void> {
 
         // 交互模式: 每步确认
         if (!isAuto) {
-          process.stdout.write(`[SPECCORE_CONFIRM_STEP: ${step.order}/${result.pipeline.steps.length}] ${fullCmd} — ${step.explanation}\n`);
+          process.stdout.write(`[SPECCORE_CONFIRM_STEP: ${step.order}/${steps.length}] ${fullCmd} — ${step.explanation}\n`);
           process.stdout.write(`[SPECCORE_CONFIRM_ASK: 执行这一步? (确认=y, 跳过=s, 停止=q)]\n`);
         }
 
@@ -264,6 +270,24 @@ export async function askCommand(input: string, _options: any): Promise<void> {
         if (!r.ok) {
           process.stdout.write(`[SPECCORE_STEP_FAIL: ${step.command}] 用户决定: [重试/跳过/停止]\n`);
           break;
+        }
+
+        // v8.3.161+: AI 上下文执行完第一步后，强制步骤隔离
+        if (isAiCtx && steps.length > 1) {
+          const nextStep = steps[i + 1];
+          if (nextStep) {
+            const nextArgs = (nextStep.args || '').replace(/\{(\w+)\}/g, (_: string, k: string) => {
+              if (k === 'time') return extractTime(input);
+              if (k === 'batch') { const m = input.match(/(\d+)[批次个]/); return m ? m[1] : '5'; }
+              if (k === 'iteration') { const m = input.match(/Iteration[- ]?\S+|Q\d+|sample/i); return m ? m[0].replace(/^Iteration[- ]?/, '') : ''; }
+              return '';
+            });
+            const nextCmd = `speccore ${nextStep.command} ${nextArgs}`.trim();
+            process.stdout.write(`\n[SPECCORE_STEP_DONE]\n`);
+            process.stdout.write(`[SPECCORE_NEXT_STEP] 步骤 ${nextStep.order}/${steps.length}: ${nextStep.explanation}\n`);
+            process.stdout.write(`[SPECCORE_EXEC: ${nextCmd}]\n`);
+          }
+          break; // 强制退出循环，不再执行后续步骤
         }
       }
       await askHtml(input);
