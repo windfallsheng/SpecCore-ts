@@ -1,3 +1,19 @@
+## v8.3.168 (2026-09-15) — 文档补充：多 Subagent 架构设计文档
+
+### 文档更新
+
+- `docs/DESIGN.md`: 新增「v8.3.167+ 多 Subagent 功能模块级架构设计」附录章节
+  - 三层分批架构（迭代级）：Phase 0 → Phase 1 → Phase 2
+  - 功能模块检测机制与触发条件
+  - Split 分批拆分策略与 Prompt 注入机制
+  - 跨 Agent 状态共享双层机制（JSON + Markdown）
+  - 端级 Subagent 角色分配完整映射表
+  - 输出标记体系扩展（[PENDING] / spec-analyzer-feature）
+- `README.md`: 更新版本号、AI 架构升级为「多层 AI 架构（v8.3.167+）」
+- `CHANGELOG.en.md`: 同步 v8.3.166/v8.3.167 英文变更记录
+
+---
+
 ## v8.3.167 (2026-09-15) — 多 Subagent 架构：功能模块级分析 + 分批拆分
 
 ### Analyze：功能模块级分批分析 (`src/core/pipeline-engine.ts` + `src/commands/analyze.ts`)

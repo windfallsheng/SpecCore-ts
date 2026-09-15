@@ -337,7 +337,7 @@ speccore status                                       # 查看分析进度和过
 
 ```bash
 npm install -g speccore
-speccore --version   # v8.3.95
+speccore --version   # v8.3.167
 ```
 
 ## 命令列表
@@ -380,14 +380,17 @@ speccore --version   # v8.3.95
 - **终端**：Unicode 框线美化输出
 - **AI 调用**：自动生成 Ocean 主题 HTML 页面（四边脉冲扫描线）
 
-## 🤖 三层 AI 架构
+## 🤖 多层 AI 架构（v8.3.167+）
 
 ```
 @spec-ask "..."  (AI IDE 入口)
   ├─ 🧠 自有 LLM   → OpenAI / Ollama（SPECCORE_LLM_KEY 环境变量）
   ├─ 🤖 宿主 AI    → WorkBuddy / TRAE / Qoder（自动检测）
-  └─ 📐 规则引擎   → 18 条命令 KB + 4 预定义工作流（永远可用）
+  ├─ 📐 规则引擎   → 18 条命令 KB + 4 预定义工作流（永远可用）
+  └─ 🎭 多 Subagent → 按阶段/端/模块分配专属角色（步骤隔离）
 ```
+
+**多 Subagent 协作**：大项目自动启用功能模块级分批，每个模块由独立 Agent 深入分析，避免上下文溢出。
 
 零配置：没配 Key 自动降级，功能不受影响。
 

@@ -5938,3 +5938,140 @@ SpecCore 在 5+ 端、10+ 功能模块的大项目中，全局分析一次性生
 | structured-data 读取 | 5K-10K tokens（全量） | 1K-2K tokens（单端分段） |
 | 模块分析质量 | 空壳文档（<30 行） | 深入文档（≥100 行 + Mermaid） |
 | 失败后恢复成本 | 从头开始 | 续批未完成的模块/端 |
+
+---
+
+## 附录：v8.3.167+ 多 Subagent 功能模块级架构设计
+
+### 设计背景
+
+v8.3.160+ 的子 Agent 隔离架构解决了单轮对话的上下文漂移和耗尽问题，但在大项目（5+ 端、10+ 功能模块）场景下仍存在两个瓶颈：
+
+1. **Phase 1 单 Agent 瓶颈**：迭代分析的 overview 文档（REQUIREMENT.md / FUNCTION_MAP.md / INTERACTION_MAP.md）由单个 `spec-analyzer` 生成，所有功能模块的需求同时注入，token 消耗高、质量稀释
+2. **Split 单 Agent 瓶颈**：所有功能模块的拆分由单个 `task-decomposer` 处理，模块间干扰导致拆分粒度不一致
+
+### 核心原则
+
+**功能模块 = 最小独立分析单元**。每个功能模块由独立的 Agent 会话分析，模块间通过文件系统共享产出。
+
+### 三层分批架构（迭代级）
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Phase 0: 需求澄清（多角色串行）                               │
+│  ├─ product-analyst → interaction-designer → security-reviewer│
+│  └─ 条件执行：security-reviewer 只在检测到安全相关需求时触发      │
+├─────────────────────────────────────────────────────────────┤
+│  Phase 1: 全局索引 + 功能模块分批（大项目）                    │
+│  ├─ 小项目（≤2 模块）: 单 spec-analyzer 生成所有 overview 文档 │
+│  ├─ 大项目（>2 模块）:                                         │
+│  │   ├─ 主步骤: spec-analyzer 生成 FUNCTION_MAP / PLATFORMS   │
+│  │   └─ 模块步骤: 每个模块独立 spec-analyzer-feature 会话      │
+│  │       生成 {feature}/overview/{REQUIREMENT,ANALYSIS,TECH}.md│
+├─────────────────────────────────────────────────────────────┤
+│  Phase 2: 功能模块 × 端 分批（大项目）                         │
+│  ├─ 小项目: 逐端处理，每个端 spec-analyzer-{platform}          │
+│  └─ 大项目: 按功能模块分组，每个模块的各端由同一 Agent 处理      │
+│      减少跨模块上下文切换                                       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 功能模块检测机制
+
+`analyze-context-guard.ts` 在 Pipeline 创建前检测功能模块数量：
+
+```typescript
+// 从 020-specs/ 目录解析功能模块列表
+const features = await parseFeatureList(iterationDir);
+// > 2 个模块时启用分批模式
+const useFeatureBatches = features.length > 2;
+```
+
+触发条件：
+- **自动触发**：`analyze --auto` 模式下自动检测
+- **手动控制**：`--modules` 参数指定只分析特定模块
+- **Pipeline 模式**：`createAnalyzePipeline()` 的 `features` 参数传入模块列表
+
+### Split 分批拆分策略
+
+```
+功能模块 ≤ 2: 一次性拆分所有模块
+detek功能模块 > 2: 每批 1-2 个模块（优先基础模块）
+  ├─ 第一批：认证 / 用户 / 配置 / 数据库（基础依赖）
+  ├─ 第二批：核心业务模块
+  ├─ 第三批：辅助/边缘模块
+  └─ 每批输出 [PENDING: 剩余模块列表] + [SPECCORE_EXEC: 续批命令]
+```
+
+Prompt 注入：`buildSplitInstruction()` 自动在指令中附加分批策略说明，AI 无需额外理解即可按规则执行。
+
+### 跨 Agent 状态共享（v8.3.166+ → v8.3.167 增强）
+
+**问题**：多个 Agent 会话处理同一迭代的任务时，后面的 Agent 不知道前面 Agent 创建了哪些分支、合并了哪些代码。
+
+**双层状态机制**：
+
+| 层级 | 文件 | 格式 | 消费方 |
+|:---|:---|:---|:---|
+| 机器可读 | `.speccore/local/execution-state.json` | JSON | CLI 工具链 |
+| AI 可读 | `.speccore/local/execution-summary.md` | Markdown | 后续 Agent Prompt 注入 |
+
+**状态内容**：
+
+```typescript
+interface TaskSummary {
+  taskId: string;
+  taskName: string;
+  status: 'completed' | 'failed' | 'skipped';
+  // v8.3.166+: 跨 Agent 分支状态
+  branchName?: string;       // 创建的分支名
+  branchBase?: string;       // 分支基于的 commit
+  mergedBranches?: string[]; // 已合并的依赖分支
+  agent?: string;            // 执行 Agent 的角色名
+}
+```
+
+**注入时机**：`execute --prompt` 模式下，`runPromptMode()` 自动读取 `execution-summary.md` 并注入到 Prompt 中，当前 Agent 可获取：
+- 已完成任务的列表和摘要
+- 已创建的分支和合并关系
+- 当前任务依赖的分支是否已合并
+
+### 端级 Subagent 角色分配
+
+所有 Pipeline 步骤均分配专属 Subagent 角色：
+
+| 阶段 | 命令 | Subagent | 上下文类型 | 预算 |
+|:---|:---|:---|:---|:---:|
+| 需求澄清 | analyze | `product-analyst` | full | 4K |
+| 交互设计 | analyze | `interaction-designer` | full | 4K |
+| 安全审查 | analyze | `security-reviewer` | full | 4K |
+| Phase 1 分析 | analyze | `spec-analyzer` | full | 8K |
+| 功能模块分析 | analyze | `spec-analyzer-feature` | full | 8K |
+| Phase 2 端级 | analyze | `spec-analyzer-{platform}` | platform-only | 8K |
+| 任务拆分 | split | `task-decomposer` | full | 12K |
+| 执行计划 | plan | `schedule-planner` | full | 12K |
+| 代码执行 | execute | `spec-executor-{platform}` | platform-only | 12K |
+| 代码审查 | pr | `spec-reviewer` | full | 8K |
+
+### 输出标记体系（扩展）
+
+v8.3.167 在原有标记体系基础上增加：
+
+| 标记 | 含义 | 新增于 |
+|:---|:---|:---:|
+| `[SPECCORE_SUBAGENT: spec-analyzer-feature]` | 功能模块分析 Agent | v8.3.167 |
+| `[SPECCORE_SUBAGENT: spec-analyzer-{platform}]` | 端级分析 Agent | v8.3.166 |
+| `[SPECCORE_SUBAGENT: spec-executor-{platform}]` | 端级执行 Agent | v8.3.166 |
+| `[PENDING: 模块A, 模块B]` | 待续批的模块列表 | v8.3.167 |
+
+### 效果
+
+| 指标 | 改造前 | 改造后 |
+|:---|:---|:---|
+| Phase 1 Prompt 大小 | 15K-25K tokens（所有模块） | 3K-5K tokens（全局索引）+ 8K/模块 |
+| 单模块分析深度 | 空壳文档（<50 行） | 深入文档（≥150 行 + Mermaid） |
+| Split 单批质量 | 模块间干扰，粒度不均 | 每批 1-2 模块，定义清晰 |
+| 失败后恢复 | 从头开始 | 续批未完成的模块 |
+| Agent 角色聚焦 | 单一 spec-analyzer | 按阶段/按端/按模块分配 |
+
+---

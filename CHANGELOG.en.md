@@ -2,6 +2,35 @@
 
 ---
 
+## v8.3.167 (2026-09-15) — Multi-Subagent Architecture: Feature Module Analysis + Batch Split
+
+### Multi-Subagent Feature-Module-Level Analysis
+
+- `createAnalyzePipeline`: added `features` parameter, auto-enables batch mode when feature count > 2
+- Phase 1 split into: main step (global index) + feature steps (each module independent Agent)
+- New Pipeline steps: `feature-{name}-prompt` / `feature-{name}-done`, each handled by `spec-analyzer-feature`
+- `buildMultiDocPrompt`: supports `feature` parameter for module-specific overview docs
+- Feature module docs written to: `{feature}/overview/{filename}.md`
+
+### Multi-Subagent Batch Split
+
+- `--prompt` mode auto-detects feature module count, injects batch instructions when > 2
+- Split 1-2 modules per batch (priority: base modules), output `[PENDING]` continuation marker
+- `buildSplitInstruction`: enhanced batch strategy description (v8.3.167+)
+
+### Cross-Agent State Sharing (v8.3.166+)
+
+- `TaskSummary` extended with branch fields: `branchName` / `branchBase` / `mergedBranches` / `agent`
+- `prepareTaskBranch` auto-updates `execution-state.json` after branch creation
+- `runPromptMode` injects `execution-summary.md` into prompt for cross-Agent awareness
+
+### Phase 2 Platform-Level Subagent (v8.3.166+)
+
+- Pipeline platform steps: subagent changed from `spec-analyzer` to `spec-analyzer-{platform}`
+- Non-Pipeline Phase 2 `--prompt`: outputs `[SPECCORE_SUBAGENT: spec-analyzer-{platform}]`
+
+---
+
 ## v8.3.60 (2026-09-07) — Environment-Driven Deployment + Full Command Skill Coverage
 
 ### Added
