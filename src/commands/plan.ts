@@ -150,7 +150,15 @@ export async function planCommand(options: PlanOptions): Promise<void> {
       }
     } catch { /* ignore */ }
 
-    process.stdout.write(promptText);
+    // v8.3.165+: 输出 subagent 角色标记（schedule-planner）
+    const subagentOutput = [
+      `[SPECCORE_SUBAGENT: schedule-planner]`,
+      `[SPECCORE_CONTEXT_BUDGET: 12000]`,
+      `[SPECCORE_CONTEXT_TYPE: full]`,
+      ``,
+      promptText,
+    ].join('\n');
+    process.stdout.write(subagentOutput);
     process.exitCode = 10;
     return;
   }

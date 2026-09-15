@@ -1,3 +1,26 @@
+## v8.3.165 (2026-09-15) — Subagent 全覆盖：Plan/Execute/Ask Pipeline
+
+### Plan 命令：添加 Subagent 支持 (`src/commands/plan.ts`)
+
+- **修复**：`--prompt` 模式输出前添加 `[SPECCORE_SUBAGENT: schedule-planner]` + `[SPECCORE_CONTEXT_BUDGET: 12000]` + `[SPECCORE_CONTEXT_TYPE: full]`
+- **效果**：宿主 AI 识别到计划制定步骤时，可切换为 schedule-planner 角色
+
+### Ask Pipeline：复合工作流步骤级 Subagent (`src/core/ask-engine.ts` + `src/commands/ask.ts`)
+
+- **修复**：
+  - `PipelineStep` 接口新增 `subagent?: string` 字段
+  - 所有预定义 WORKFLOWS（new feature / bugfix / analyze-split / plan-execute 等）的每个步骤配置 subagent 角色
+  - `STEP_SUBAGENT_MAP` 定义命令 → 默认角色映射（analyze→spec-analyzer, split→task-decomposer, plan→schedule-planner, execute→spec-executor, pr→spec-reviewer, validate→spec-reviewer, change→impact-analyst, verify→spec-tester）
+  - ask.ts 步骤隔离输出时，在 `[SPECCORE_EXEC]` 之前输出 `[SPECCORE_SUBAGENT]` + `[SPECCORE_CONTEXT_BUDGET]`
+- **效果**：Pipeline 每一步执行前，宿主 AI 都能知道应该切换到什么角色
+
+### Execute 命令：Subagent 默认值确认 (`src/core/prompt-builder.ts`)
+
+- **现状**：`DEFAULT_SUBAGENT_MAP` 中 execute 已映射为 `spec-executor`，无需修改
+- **确认**：execute 命令的 subagent 标记输出已存在且正常工作
+
+---
+
 ## v8.3.164 (2026-09-15) — 空壳任务拦截 + AI 行为约束强化
 
 ### Split：内容质量校验 — 拦截空壳任务 (`src/commands/iteration/split.ts`)

@@ -37,6 +37,8 @@ export interface PipelineStep {
   args: string;
   explanation: string;
   dependsOn?: number;
+  // v8.3.165+: 该步骤的 subagent 角色（覆盖命令默认角色）
+  subagent?: string;
 }
 
 /** Pipeline 计划 */
@@ -217,52 +219,66 @@ const SYNONYM_MAP: Record<string, string> = {
 // 任务指引 — 预定义工作流
 // ============================================================
 
+// v8.3.165+: 命令 → 默认 subagent 角色映射
+const STEP_SUBAGENT_MAP: Record<string, string | undefined> = {
+  analyze: 'spec-analyzer',
+  split: 'task-decomposer',
+  plan: 'schedule-planner',
+  execute: 'spec-executor',
+  pr: 'spec-reviewer',
+  validate: 'spec-reviewer',
+  change: 'impact-analyst',
+  verify: 'spec-tester',
+  'code-index': 'spec-global-analyzer',
+};
+
 const WORKFLOWS: Record<string, PipelineStep[]> = {
   'new feature': [
     { order: 1, command: 'init', args: '', explanation: '初始化项目（如果还没有）', dependsOn: undefined },
     { order: 2, command: 'doc2spec', args: '-f PRD.docx --iter {iteration}', explanation: '导入 PRD 文档，AI 分析生成需求规格', dependsOn: 1 },
-    { order: 3, command: 'analyze', args: '--iteration {iteration} --audit', explanation: 'AI 分析需求，生成审计报告', dependsOn: 2 },
-    { order: 4, command: 'split', args: '-f REQUIREMENT.md', explanation: '将需求拆分为独立开发任务', dependsOn: 3 },
-    { order: 5, command: 'plan', args: '--all', explanation: '生成任务执行计划，确定优先级和依赖', dependsOn: 4 },
-    { order: 6, command: 'execute', args: '--auto', explanation: '按计划依次执行开发任务', dependsOn: 5 },
-    { order: 7, command: 'pr', args: '--auto', explanation: '代码提交后创建 Pull Request', dependsOn: 6 },
+    { order: 3, command: 'analyze', args: '--iteration {iteration} --audit', explanation: 'AI 分析需求，生成审计报告', dependsOn: 2, subagent: 'spec-analyzer' },
+    { order: 4, command: 'split', args: '-f REQUIREMENT.md', explanation: '将需求拆分为独立开发任务', dependsOn: 3, subagent: 'task-decomposer' },
+    { order: 5, command: 'plan', args: '--all', explanation: '生成任务执行计划，确定优先级和依赖', dependsOn: 4, subagent: 'schedule-planner' },
+    { order: 6, command: 'execute', args: '--auto', explanation: '按计划依次执行开发任务', dependsOn: 5, subagent: 'spec-executor' },
+    { order: 7, command: 'pr', args: '--auto', explanation: '代码提交后创建 Pull Request', dependsOn: 6, subagent: 'spec-reviewer' },
     { order: 8, command: 'done', args: '--all', explanation: '全部完成后归档收尾', dependsOn: 7 },
   ],
   'bugfix': [
     { order: 1, command: 'task', args: 'new --name "{bug}" --type bugfix', explanation: '创建 Bug 修复任务', dependsOn: undefined },
-    { order: 2, command: 'analyze', args: '--prompt --task {task}', explanation: '分析 Bug 根因和影响范围', dependsOn: 1 },
-    { order: 3, command: 'plan', args: '--prompt --task {task}', explanation: '生成修复方案和排程', dependsOn: 2 },
-    { order: 4, command: 'execute', args: '--prompt --task {task}', explanation: '按方案执行修复', dependsOn: 3 },
-    { order: 5, command: 'validate', args: '', explanation: '验证修复完整性', dependsOn: 4 },
-    { order: 6, command: 'pr', args: '--task {task}', explanation: '提交修复 PR', dependsOn: 5 },
+    { order: 2, command: 'analyze', args: '--prompt --task {task}', explanation: '分析 Bug 根因和影响范围', dependsOn: 1, subagent: 'spec-analyzer' },
+    { order: 3, command: 'plan', args: '--prompt --task {task}', explanation: '生成修复方案和排程', dependsOn: 2, subagent: 'schedule-planner' },
+    { order: 4, command: 'execute', args: '--prompt --task {task}', explanation: '按方案执行修复', dependsOn: 3, subagent: 'spec-executor' },
+    { order: 5, command: 'validate', args: '', explanation: '验证修复完整性', dependsOn: 4, subagent: 'spec-reviewer' },
+    { order: 6, command: 'pr', args: '--task {task}', explanation: '提交修复 PR', dependsOn: 5, subagent: 'spec-reviewer' },
     { order: 7, command: 'done', args: '--task {task}', explanation: '归档修复记录', dependsOn: 6 },
   ],
   'batch execute': [
-    { order: 1, command: 'plan', args: '--select', explanation: '列出所有可执行任务（编号 + CLI命令），用户多选', dependsOn: undefined },
+    { order: 1, command: 'plan', args: '--select', explanation: '列出所有可执行任务（编号 + CLI命令），用户多选', dependsOn: undefined, subagent: 'schedule-planner' },
   ],
   'code review': [
-    { order: 1, command: 'validate', args: '', explanation: '合规检查 Spec 完整性', dependsOn: undefined },
-    { order: 2, command: 'analyze', args: '--audit', explanation: '深度审计分析', dependsOn: 1 },
-    { order: 3, command: 'pr', args: '--auto', explanation: '生成 PR 审查', dependsOn: 2 },
+    { order: 1, command: 'validate', args: '', explanation: '合规检查 Spec 完整性', dependsOn: undefined, subagent: 'spec-reviewer' },
+    { order: 2, command: 'analyze', args: '--audit', explanation: '深度审计分析', dependsOn: 1, subagent: 'spec-analyzer' },
+    { order: 3, command: 'pr', args: '--auto', explanation: '生成 PR 审查', dependsOn: 2, subagent: 'spec-reviewer' },
   ],
   // v8.3.160+: 常见复合意图工作流
+  // v8.3.165+: 各步骤配置 subagent 角色
   'analyze-split': [
-    { order: 1, command: 'analyze', args: '--iteration {iteration}', explanation: 'AI 分析需求，生成各端规格文档', dependsOn: undefined },
-    { order: 2, command: 'split', args: '--iteration {iteration}', explanation: '将分析结果拆分为独立开发任务', dependsOn: 1 },
+    { order: 1, command: 'analyze', args: '--iteration {iteration}', explanation: 'AI 分析需求，生成各端规格文档', dependsOn: undefined, subagent: 'spec-analyzer' },
+    { order: 2, command: 'split', args: '--iteration {iteration}', explanation: '将分析结果拆分为独立开发任务', dependsOn: 1, subagent: 'task-decomposer' },
   ],
   'analyze-split-plan': [
-    { order: 1, command: 'analyze', args: '--iteration {iteration}', explanation: 'AI 分析需求，生成各端规格文档', dependsOn: undefined },
-    { order: 2, command: 'split', args: '--iteration {iteration}', explanation: '将分析结果拆分为独立开发任务', dependsOn: 1 },
-    { order: 3, command: 'plan', args: '--all', explanation: '生成任务执行计划，确定优先级和依赖', dependsOn: 2 },
+    { order: 1, command: 'analyze', args: '--iteration {iteration}', explanation: 'AI 分析需求，生成各端规格文档', dependsOn: undefined, subagent: 'spec-analyzer' },
+    { order: 2, command: 'split', args: '--iteration {iteration}', explanation: '将分析结果拆分为独立开发任务', dependsOn: 1, subagent: 'task-decomposer' },
+    { order: 3, command: 'plan', args: '--all', explanation: '生成任务执行计划，确定优先级和依赖', dependsOn: 2, subagent: 'schedule-planner' },
   ],
   'plan-execute': [
-    { order: 1, command: 'plan', args: '--all', explanation: '生成任务执行计划，确定优先级和依赖', dependsOn: undefined },
-    { order: 2, command: 'execute', args: '--auto', explanation: '按计划依次执行开发任务', dependsOn: 1 },
+    { order: 1, command: 'plan', args: '--all', explanation: '生成任务执行计划，确定优先级和依赖', dependsOn: undefined, subagent: 'schedule-planner' },
+    { order: 2, command: 'execute', args: '--auto', explanation: '按计划依次执行开发任务', dependsOn: 1, subagent: 'spec-executor' },
   ],
   'analyze-plan-execute': [
-    { order: 1, command: 'analyze', args: '--iteration {iteration}', explanation: 'AI 分析需求，生成各端规格文档', dependsOn: undefined },
-    { order: 2, command: 'plan', args: '--all', explanation: '生成任务执行计划，确定优先级和依赖', dependsOn: 1 },
-    { order: 3, command: 'execute', args: '--auto', explanation: '按计划依次执行开发任务', dependsOn: 2 },
+    { order: 1, command: 'analyze', args: '--iteration {iteration}', explanation: 'AI 分析需求，生成各端规格文档', dependsOn: undefined, subagent: 'spec-analyzer' },
+    { order: 2, command: 'plan', args: '--all', explanation: '生成任务执行计划，确定优先级和依赖', dependsOn: 1, subagent: 'schedule-planner' },
+    { order: 3, command: 'execute', args: '--auto', explanation: '按计划依次执行开发任务', dependsOn: 2, subagent: 'spec-executor' },
   ],
 };
 

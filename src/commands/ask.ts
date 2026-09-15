@@ -8,6 +8,19 @@ import { logger } from '../utils/logger';
 import { isAiContext, detectHostAi } from '../core/ask-host-ai';
 import { askEngine, AskResult, PipelinePlan, extractTime } from '../core/ask-engine';
 
+// v8.3.165+: 命令 → 默认 subagent 角色映射（本地副本，避免循环依赖）
+const STEP_SUBAGENT_MAP: Record<string, string | undefined> = {
+  analyze: 'spec-analyzer',
+  split: 'task-decomposer',
+  plan: 'schedule-planner',
+  execute: 'spec-executor',
+  pr: 'spec-reviewer',
+  validate: 'spec-reviewer',
+  change: 'impact-analyst',
+  verify: 'spec-tester',
+  'code-index': 'spec-global-analyzer',
+};
+
 const COLORS = {
   reset: '\x1b[0m', bold: '\x1b[1m', dim: '\x1b[2m',
   cyan: '\x1b[36m', green: '\x1b[32m', yellow: '\x1b[33m',
@@ -273,6 +286,7 @@ export async function askCommand(input: string, _options: any): Promise<void> {
         }
 
         // v8.3.161+: AI 上下文执行完第一步后，强制步骤隔离
+        // v8.3.165+: 输出下一步 subagent 角色标记
         if (isAiCtx && steps.length > 1) {
           const nextStep = steps[i + 1];
           if (nextStep) {
@@ -283,8 +297,13 @@ export async function askCommand(input: string, _options: any): Promise<void> {
               return '';
             });
             const nextCmd = `speccore ${nextStep.command} ${nextArgs}`.trim();
+            const nextSubagent = nextStep.subagent || STEP_SUBAGENT_MAP[nextStep.command];
             process.stdout.write(`\n[SPECCORE_STEP_DONE]\n`);
             process.stdout.write(`[SPECCORE_NEXT_STEP] 步骤 ${nextStep.order}/${steps.length}: ${nextStep.explanation}\n`);
+            if (nextSubagent) {
+              process.stdout.write(`[SPECCORE_SUBAGENT: ${nextSubagent}]\n`);
+              process.stdout.write(`[SPECCORE_CONTEXT_BUDGET: 12000]\n`);
+            }
             process.stdout.write(`[SPECCORE_EXEC: ${nextCmd}]\n`);
           }
           break; // 强制退出循环，不再执行后续步骤
