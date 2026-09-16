@@ -138,9 +138,10 @@ export async function scanTasks(iteration: string): Promise<TaskState[]> {
     return [];
   }
   
-  // 优先从 030-tasks/ 扫描（split 创建的标准位置），兼容旧布局（迭代根目录）
+  // v8.3.171+: 只从 030-tasks/ 扫描（删除迭代根目录旧布局兼容）
   const tasksDir = join(iterationDir, '030-tasks');
-  const scanRoot = (await pathExists(tasksDir)) ? tasksDir : iterationDir;
+  if (!await pathExists(tasksDir)) return [];
+  const scanRoot = tasksDir;
   
   const tasks: TaskState[] = [];
   

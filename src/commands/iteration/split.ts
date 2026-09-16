@@ -3381,9 +3381,9 @@ function extractTaskDevGuideContent(
     }
   }
 
-  // 回退：从全局 DEV_GUIDE.md 提取（overview/DEV_GUIDE.md 或根目录 DEV_GUIDE.md）
+  // v8.3.171+: 从全局 DEV_GUIDE.md 提取（唯一路径 overview/DEV_GUIDE.md）
   if (results.length === 0) {
-    const globalDevGuide = specContents['DEV_GUIDE.md'] || specContents['overview/DEV_GUIDE.md'];
+    const globalDevGuide = specContents['overview/DEV_GUIDE.md'];
     if (globalDevGuide) {
       const extracted = extractRelevantSection(globalDevGuide, section.name, '改造范围 实施步骤 接口契约 验证方式 回滚 坑点');
       if (extracted && extracted.trim().length > 50) {
@@ -5080,11 +5080,11 @@ async function buildContentFillingPrompt(
   p += `- 数据模型字段名、类型、必填性必须前后端一致\n`;
   p += `- 状态枚举值必须前后端对齐\n\n`;
 
-  p += `## ⚠️ 绝对禁止\n\n`;
-  p += `- 不要创建新目录 — 目录已由 CLI 创建\n`;
+  // v8.3.171+: 简化路径约束
+  p += `## ⚠️ 约束\n\n`;
+  p += `- 文件已预创建，只覆盖已有文件，不要创建新文件或新目录\n`;
   p += `- 不要修改 .meta/ 下的文件\n`;
   p += `- 不要修改 TASK.md（已由 CLI 生成）\n`;
-  p += `- 只覆盖已存在的 REQ.md 和 TECH.md，不要创建新文件\n`;
 
   p += '\n' + buildAutoModeInstruction('split', iteration) + '\n';
 

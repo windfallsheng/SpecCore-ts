@@ -865,8 +865,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
           }
         }
 
-        // v7.4.3+ 兼容：先运行一次旧版 sanitize 迁移遗留文件（一次性）
-        await sanitizeSpecDirectories(iterDirForSkeleton);
+        // v8.3.171+: 删除 sanitize 自动调用（保留为 speccore migrate 工具）
 
         // v8.3.21+: 按需求文档名组织（020-specs/{需求名}/）
         const phase = options.phase as '1' | '2' | undefined;
@@ -1668,8 +1667,7 @@ ${singlePrompt}`);
             logger.debug(`空模板检测失败（非关键）: ${e.message}`);
           }
 
-          // v6.90.0+: 事后校验——检测并清理 AI 绕过 --apply 创建的非法目录/文件
-          await sanitizeSpecDirectories(iterDir!);
+          // v8.3.171+: 删除 sanitize 自动调用（保留为 speccore migrate 工具）
 
           // v8.3.14+: analyze --apply 后自动清理归档文件和临时文件
           await cleanupByType({
@@ -1731,7 +1729,8 @@ ${singlePrompt}`);
           }
 
           // v6.72.0+: FUNCTION_MAP.md 自检
-          const fmContent = docs['FUNCTION_MAP.md'] || docs['overview/FUNCTION_MAP.md'] || docs['global/FUNCTION_MAP.md'];
+          // v8.3.171+: 路径收敛，只读 overview/FUNCTION_MAP.md
+          const fmContent = docs['overview/FUNCTION_MAP.md'];
           if (fmContent) {
             const platforms = Array.from(validPlatforms);
             const fmResult = validateFunctionMap(fmContent, platforms);
@@ -1958,7 +1957,7 @@ ${singlePrompt}`);
             logger.warn(`⚠️ 共跳过 ${skippedCount} 个非法目录的文档，请检查 AI 输出是否包含非端名目录`);
           }
           logger.success(`✅ ${count} 个 Spec 文档已写入 020-specs/`);
-          await sanitizeSpecDirectories(iterDir!);
+          // v8.3.171+: 删除 sanitize 自动调用（保留为 speccore migrate 工具）
 
           // v8.3.14+: analyze --apply 后自动清理归档文件和临时文件
           await cleanupByType({
@@ -4978,9 +4977,10 @@ status: "clarified"
     prompt += `- \`020-specs/overview/\` 下的 REQUIREMENT.md, ANALYSIS.md, TECH.md, DEPS.md, RISK.md, REVIEW.md, MONITOR.md, FUNCTION_MAP.md, INTERACTION_MAP.md, DEV_GUIDE.md\n`;
     prompt += `- \`020-specs/{功能模块}/{端名}/\` 下的 TECH.md, TEST.md, UI_SPEC.md, DEV_GUIDE.md\n\n`;
   }
+  // v8.3.171+: 简化路径提示（骨架已预创建，CLI 掌控路径）
   prompt += `\n**注意**：\n`;
-  prompt += `- 只覆盖上述已存在的文件，不要创建新文件或新目录\n`;
-  prompt += `- 每个文件写入正确路径（如 \`overview/ANALYSIS.md\`，不是根目录的 \`ANALYSIS.md\`）\n`;
+  prompt += `- 以下文件已预创建（含占位内容），请用 Write 工具逐个覆盖\n`;
+  prompt += `- 只覆盖已存在的文件，不要创建新文件\n`;
   prompt += `- 写完后用 Read 验证文件内容已替换占位内容\n\n`;
 
   // ── v8.1.0+: 逐文档模式自动注入 PRD 内容 + 前序文档摘要 ──
@@ -5324,10 +5324,9 @@ status: "clarified"
     prompt += `     - {功能模块}/{端}/TECH.md（该模块该端的技术方案）\n`;
     prompt += `     - {功能模块}/{端}/TEST.md（该模块该端的测试用例）\n`;
     prompt += `     - {功能模块}/{端}/UI_SPEC.md（该模块该端的 UI 规范，仅前端端）\n`;
-    prompt += `     - {功能模块}/{端}/DEV_GUIDE.md（该模块该端的实现指南）\n`;
-    prompt += `   - **禁止**：不要创建 020-specs/ 下的任何额外子目录（如数字编号、中文名称等）\n`;
-    prompt += `   - **禁止直接用 Write 工具写文件到 020-specs/**：必须通过 \`speccore analyze --apply '{"文件名":"内容"}' -I ${iter}\` 写入\n`;
-    prompt += `   - ⚠️ 直接 Write 会导致目录结构错误，必须走 --apply 让 CLI 自动路由到正确子目录\n`;
+    prompt += `   - {功能模块}/{端}/DEV_GUIDE.md（该模块该端的实现指南）\n`;
+    // v8.3.171+: 简化路径约束（骨架已预创建，CLI 掌控路径）
+    prompt += `   - 文件已预创建，用 Write 工具覆盖已有路径即可，不要创建新文件或新目录\n`;
     if (ctx.phase !== '1') {
       // 端专业性约束只在默认模式（全量）中输出
       prompt += `\n## ⚠️ 端专业性约束\n`;

@@ -1,9 +1,9 @@
 /**
  * spec-paths — 020-specs/ 目录路径辅助函数
  * 
- * v6.41.0+ 迭代综合文档迁移到 020-specs/overview/ 子目录（原 global/，v6.78.0+ 改名）。
+ * v8.3.171+: 路径收敛，唯一正确路径为 020-specs/overview/。
+ * 删除所有历史路径回退（global/、根目录、platforms/ 等）。
  * 「overview」表示迭代层总览 spec，避免与「全局层 (--scope global)」概念混淆。
- * 本模块提供统一的路径解析和写入路径生成，支持向后兼容。
  */
 import { join } from 'path';
 import { pathExists, ensureDir, readFile, readdir } from 'fs-extra';
@@ -24,17 +24,12 @@ export const GLOBAL_SPEC_FILES = [
 ];
 
 /**
- * 解析迭代综合 spec 文件路径（优先 overview/，回退旧版 global/，再回退根目录）
- * 用于读取侧：兼容新旧三种路径
+ * 解析迭代综合 spec 文件路径（唯一路径：overview/）
+ * v8.3.171+: 删除 global/ 和根目录回退，只保留 overview/
  */
 export async function resolveGlobalSpecPath(specDir: string, filename: string): Promise<string | null> {
-  const newPath = join(specDir, GLOBAL_SPECS_DIR, filename);
-  if (await pathExists(newPath)) return newPath;
-  // v6.78.0+ 向后兼容：旧版 global/ 目录
-  const legacyPath = join(specDir, 'global', filename);
-  if (await pathExists(legacyPath)) return legacyPath;
-  const oldPath = join(specDir, filename);
-  if (await pathExists(oldPath)) return oldPath;
+  const path = join(specDir, GLOBAL_SPECS_DIR, filename);
+  if (await pathExists(path)) return path;
   return null;
 }
 

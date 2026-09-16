@@ -792,13 +792,7 @@ async function loadAllTaskContext(
     const specsDir = join(iterDir, '020-specs');
     if (await pathExists(specsDir)) {
       try {
-        // 2a. 根目录下的 .md（TECH.md、TEST.md 等端无关模板）
-        const items = await readdir(specsDir, { withFileTypes: true });
-        for (const item of items) {
-          if (!item.name.endsWith('.md') || isTimestampBackup(item.name)) continue;
-          await addFile(join(specsDir, item.name), `迭代规格: ${item.name}`, `020-specs/${item.name}`);
-        }
-        // 2b. overview/ 子目录下的全局文档（v6.78.0+ 新路径，兼容旧版 global/）
+        // v8.3.171+: 只读取 overview/ 子目录下的全局文档（删除根目录 .md 回退）
         const overviewDir = join(specsDir, GLOBAL_SPECS_DIR);
         if (await pathExists(overviewDir)) {
           const overviewItems = await readdir(overviewDir, { withFileTypes: true });

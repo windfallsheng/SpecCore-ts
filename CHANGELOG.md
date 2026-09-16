@@ -1,3 +1,24 @@
+## v8.3.172 (2026-09-16) — P0 架构收敛：路径回退消除 + 防乱写机制精简
+
+### P0-1: 路径收敛 — 删除所有回退分支
+
+- **`spec-paths.ts`**: `resolveGlobalSpecPath()` 删除 `global/` 和根目录回退，只保留 `overview/`
+- **`knowledge-graph.ts`**: 删除 `020-specs/platforms/{端}/` 旧路径兼容扫描
+- **`analyze.ts`**: 删除 `docs['FUNCTION_MAP.md'] || docs['overview/'] || docs['global/']` 三重回退
+- **`analyze.ts`**: 删除 `sanitizeSpecDirectories` 自动调用（保留函数作为后续 `speccore migrate` 工具）
+- **`split.ts`**: 删除 `specContents['DEV_GUIDE.md'] || specContents['overview/DEV_GUIDE.md']` 回退
+- **`audit.ts`**: 删除 `apiMap['overview/'] || apiMap['global/'] || apiMap['REQUIREMENT.md']` 三重回退
+- **`spec-skeleton.ts`**: 删除旧结构兼容（无功能模块前缀的 platform 文档）
+- **`prompt-builder.ts`**: 删除根目录 `.md` 文件读取回退，只读 `overview/`
+- **`state.ts`**: 删除迭代根目录旧布局兼容（`030-tasks/` 不存在时回退到迭代根目录）
+
+### P0-2: 防乱写机制收敛 — 简化 Prompt 路径约束
+
+- **`analyze.ts`**: 简化路径提示，从 "不要创建目录 + 写入正确路径 + 不要绕过 --apply" 收敛为 "文件已预创建，只覆盖已有文件"
+- **`split.ts`**: 简化 "⚠️ 绝对禁止" 段落为 "⚠️ 约束"，合并路径约束为单条指令
+
+---
+
 ## v8.3.171 (2026-09-16) — 补全遗漏项 + SDK 优化
 
 ### 补全：change 命令集成 SDK 调度
