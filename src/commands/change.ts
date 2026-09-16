@@ -16,9 +16,9 @@ import { scanInbox, markProcessed, logInboxScan, buildClarifyPrompt, parseClarif
 import { warnIfIndexStale } from '../core/index-guard';
 // v6.86.0+: AGENTS 全阶段扩展
 import { resolveAgentsForPhase } from '../core/agents';
-import type { AgentContext } from '../core/agents';
 // v8.3.160+: 子 Agent 适配层
-import { defaultAdapter } from '../core/agent-adapter';
+import { defaultAdapter, dispatchSubagent } from '../core/agent-adapter';
+import type { AgentContext as AdapterAgentContext } from '../core/agent-adapter';
 // v6.87.0+: COMMANDS 命令模板
 import { loadCommandTemplate, renderTemplate } from '../core/command-loader';
 import { unifiedSearch, formatUnifiedContext } from '../core/unified-retrieval';
@@ -1081,8 +1081,45 @@ async function processChangeLegacy(options: ChangeOptions): Promise<void> {
       }
     } catch { /* ignore */ }
 
+    // v8.3.171+: 尝试通过 Qoder SDK 直接调度子 Agent（非 TTY 模式）
+    if (!process.stdout.isTTY) {
+      try {
+        const agentCtx: AdapterAgentContext = {
+          subagent: 'impact-analyst',
+          iteration: iteration || '',
+          contextBudget: 8000,
+          contextType: 'incremental',
+          cwd: process.cwd(),
+        };
+        const dispatchResult = await dispatchSubagent(agentCtx, promptText);
+        if (dispatchResult && dispatchResult.success) {
+          logger.info(`[change] 子 Agent impact-analyst SDK 调度成功`);
+          process.stdout.write(`\n[SPECCORE_RESULT] 子 Agent impact-analyst 通过 Qoder SDK 完成执行\n`);
+          if (dispatchResult.filesChanged && dispatchResult.filesChanged.length > 0) {
+            process.stdout.write(`📄 文件变更: ${dispatchResult.filesChanged.join(', ')}\n`);
+          }
+          if (dispatchResult.content) {
+            process.stdout.write(`\n--- 执行结果 ---\n${dispatchResult.content.slice(0, 3000)}${dispatchResult.content.length > 3000 ? '\n... (截断)' : ''}\n`);
+          }
+          process.stdout.write(`\n> 请审查上述结果，确认后执行 speccore change --response 应用变更\n`);
+          process.exitCode = 0;
+          return;
+        }
+      } catch (e: any) {
+        logger.debug(`[change] SDK 调度尝试失败: ${e.message}，回退到 Prompt 模式`);
+      }
+    }
+
+    // v8.3.171+: 输出 subagent 标记
+    const finalOutput = [
+      `[SPECCORE_SUBAGENT: impact-analyst]`,
+      `[SPECCORE_CONTEXT_BUDGET: 8000]`,
+      `[SPECCORE_CONTEXT_TYPE: incremental]`,
+      ``,
+      promptText,
+    ].join('\n');
     logger.info('[SPECCORE_PROMPT]');
-    process.stdout.write(promptText);
+    process.stdout.write(finalOutput);
     return;
   }
 

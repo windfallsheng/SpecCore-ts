@@ -2,6 +2,22 @@
 
 ---
 
+## v8.3.171 (2026-09-16) — Missing Items Fix + SDK Optimization
+
+### Fixed: change Command SDK Dispatch Integration
+
+- **change.ts `--prompt` mode**: added `[SPECCORE_SUBAGENT: impact-analyst]` marker + `dispatchSubagent` SDK dispatch attempt
+- Unified trigger condition: non-TTY + Qoder environment
+- Unified failure fallback: automatic fallback to Prompt mode
+
+### Optimized: Qoder SDK Adapter Layer
+
+- **`buildQoderAgentDefinition` tools field**: added `'Agent'` tool to support subagent recursive dispatch
+- **`mapToQoderAgentName` mapping table expansion**: covers SpecCore core subagents (spec-analyzer, spec-executor, task-decomposer, schedule-planner, impact-analyst, code-reviewer, security-reviewer) → Qoder built-in agents
+- **`dispatchSubagent` singleton optimization**: QoderSdkAdapter instance reuse, avoids repeated dynamic SDK imports on each call
+
+---
+
 ## v8.3.170 (2026-09-16) — SDK Dispatch Coverage for All Prompt Mode Commands
 
 ### Extended: SDK Dispatch in All Prompt Mode Commands

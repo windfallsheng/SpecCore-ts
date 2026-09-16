@@ -1,3 +1,19 @@
+## v8.3.171 (2026-09-16) — 补全遗漏项 + SDK 优化
+
+### 补全：change 命令集成 SDK 调度
+
+- **change.ts `--prompt` 模式**：补上 `[SPECCORE_SUBAGENT: impact-analyst]` 标记 + `dispatchSubagent` SDK 调度尝试
+- 统一触发条件：非 TTY + Qoder 环境
+- 统一失败回退：自动回退到 Prompt 模式
+
+### 优化：Qoder SDK 适配层
+
+- **`buildQoderAgentDefinition` tools 字段**：新增 `'Agent'` 工具，支持子 Agent 递归调度
+- **`mapToQoderAgentName` 映射表扩展**：覆盖 SpecCore 核心子 Agent（spec-analyzer、spec-executor、task-decomposer、schedule-planner、impact-analyst、code-reviewer、security-reviewer）→ Qoder 内置 Agent
+- **`dispatchSubagent` 单例优化**：QoderSdkAdapter 实例复用，避免每次调用重复动态 import SDK
+
+---
+
 ## v8.3.170 (2026-09-16) — SDK 调度覆盖全部 Prompt 模式命令
 
 ### 扩展：全部 Prompt 模式命令集成 SDK 调度

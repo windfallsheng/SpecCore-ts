@@ -475,18 +475,28 @@ function buildQoderAgentDefinition(config: SubagentConfig): any {
   return {
     description: config.description,
     prompt: config.systemPrompt,
-    tools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash'],
+    tools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'Agent'],
     maxTurns: 30,
     permissionMode: 'acceptEdits',
   };
 }
 
-/** 内置 subagent 名称映射（优先使用 Qoder 内置 Agent） */
+/** 内置 subagent 名称映射（优先使用 Qoder 内置 Agent）
+ * v8.3.171+: 扩展映射表，覆盖 SpecCore 核心子 Agent */
 function mapToQoderAgentName(subagent: string): string | undefined {
   const builtinMap: Record<string, string> = {
+    // Qoder 内置通用 Agent
     'general-purpose': 'general-purpose',
     'Explore': 'Explore',
     'Plan': 'Plan',
+    // v8.3.171+: SpecCore 核心子 Agent → Qoder 内置 Agent 映射
+    'spec-analyzer': 'general-purpose',
+    'spec-executor': 'general-purpose',
+    'task-decomposer': 'Plan',
+    'schedule-planner': 'Plan',
+    'impact-analyst': 'general-purpose',
+    'code-reviewer': 'general-purpose',
+    'security-reviewer': 'general-purpose',
   };
   // 如果 SpecCore subagent 名与 Qoder 内置 Agent 匹配，直接返回
   if (builtinMap[subagent]) return builtinMap[subagent];
@@ -644,6 +654,16 @@ export function isSubagentDispatchSupported(): boolean {
 // 统一调度入口（v8.3.169+）
 // ═══════════════════════════════════════════════════════════
 
+// v8.3.171+: QoderSdkAdapter 单例（避免重复动态 import SDK）
+let _qoderSdkAdapter: QoderSdkAdapter | null = null;
+
+function getQoderSdkAdapter(): QoderSdkAdapter {
+  if (!_qoderSdkAdapter) {
+    _qoderSdkAdapter = new QoderSdkAdapter();
+  }
+  return _qoderSdkAdapter;
+}
+
 /**
  * 调度子 Agent 执行任务
  *
@@ -658,7 +678,7 @@ export async function dispatchSubagent(
 
   // Qoder 环境：尝试 SDK 调度
   if (tool === 'qoder') {
-    const adapter = new QoderSdkAdapter();
+    const adapter = getQoderSdkAdapter();
     const result = await adapter.dispatchSubagent!(ctx, taskPrompt);
     if (result) return result;
   }
