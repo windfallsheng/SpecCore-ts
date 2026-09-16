@@ -2,6 +2,43 @@
 
 ---
 
+## v8.3.169 (2026-09-16) — Qoder Agent SDK Integration: Real Multi-Agent Dispatch
+
+### Qoder Agent SDK Integration (`src/core/agent-adapter.ts`)
+
+- **Package**: `@qoder-ai/qoder-agent-sdk` as `optionalDependencies`
+- **Real `QoderSdkAdapter` implementation** (replaces previous stub):
+  - Dynamic `import()` loading with automatic Headless fallback
+  - `dispatchSubagent()` calls `query({ prompt, options })` to invoke Qoder Agent directly
+  - Builds `AgentDefinition` for custom subagents (`spec-analyzer`, `spec-executor`, etc.)
+  - Consumes SDK message stream, collects text responses and file changes
+  - Built-in agent name mapping (`general-purpose` / `Explore` / `Plan`)
+- **New `dispatchSubagent` unified dispatch entry**:
+  - Qoder environment → `QoderSdkAdapter.dispatchSubagent()`
+  - Other environments → `null` (outer AI takes over via `[SPECCORE_SUBAGENT]` marker)
+- **Headless always as fallback**: any SDK failure auto-falls back to text marker mode
+
+### Multi-Tool Adapter Support (`src/core/ask-host-ai.ts`)
+
+- **Extended `HostAiTool`**: added `cursor` / `windsurf` / `claude` / `codebuddy`
+- **Fixed `detectHostAi`**: `.qoder` directory now correctly returns `'qoder'` (was incorrectly `'trae'`)
+- **Precise directory mapping**: `DIR_TO_TOOL` maps each directory to its exact tool
+- **Added `QODER_SESSION` env detection**
+
+### Analyze Command Integration (`src/commands/analyze.ts`)
+
+- **Pipeline mode SDK dispatch**: before outputting Prompt, attempts `dispatchSubagent` direct dispatch
+- **Only triggers in non-TTY + Qoder environment**, seamless fallback to Prompt mode on failure
+- **Result summary**: outputs `[SPECCORE_STEP_DONE]` + `[SPECCORE_RESULT]` + file change list on SDK success
+
+### Architecture
+
+- **Extended `AgentAdapterMode`**: `'headless' | 'qoder-sdk' | 'cursor-sdk' | 'windsurf-sdk' | 'claude-sdk' | 'codebuddy-sdk'`
+- **Extended `AgentAdapter` interface**: added optional `dispatchSubagent()` method
+- **`createAgentAdapter()` auto-detection**: selects adapter based on `detectHostAi()` (Qoder → QoderSdkAdapter, others → HeadlessAdapter)
+
+---
+
 ## v8.3.167 (2026-09-15) — Multi-Subagent Architecture: Feature Module Analysis + Batch Split
 
 ### Multi-Subagent Feature-Module-Level Analysis

@@ -2,20 +2,23 @@
  * AgentAdapter — 子 Agent 统一适配层
  *
  * v8.3.160+: 实现子 Agent 隔离，解决上下文漂移问题。
+ * v8.3.169+: 真正集成 Qoder Agent SDK，支持多工具动态适配：
+ *   - Qoder: 通过 @qoder-ai/qoder-agent-sdk 直接调度子 Agent
+ *   - Cursor/Windsurf/Claude/CodeBuddy/Trae: Headless 模式（文本标记）
+ *   - 所有工具默认兜底 Headless
+ *
  * 每个 Pipeline 步骤可以指定 subagent，由适配层负责：
  *   1. 准备该 subagent 所需的紧凑上下文
  *   2. 控制上下文大小（Token 预算）
- *   3. 输出子 Agent 激活标记和指令
- *
- * 适配模式:
- *   - Headless: 基于文件/状态机模拟子 Agent（默认，无需 SDK）
- *   - QoderSdk: 通过 Qoder SDK API 创建独立子 Agent（预留接口）
+ *   3. 输出子 Agent 激活标记和指令（Headless）
+ *   4. 或直接通过 SDK 调度子 Agent 执行（Qoder SDK）
  */
 
 import { readFile, pathExists } from 'fs-extra';
 import { join } from 'path';
 import { ContextSnapshot } from './pipeline-engine';
 import { logger } from '../utils/logger';
+import { detectHostAi, type HostAiTool } from './ask-host-ai';
 
 // ── 子 Agent 上下文 ──
 export interface AgentContext {
@@ -53,6 +56,27 @@ export interface SubagentConfig {
   skills: string[];
 }
 
+// ── 适配器模式 ──
+export type AgentAdapterMode =
+  | 'headless'
+  | 'qoder-sdk'
+  | 'cursor-sdk'
+  | 'windsurf-sdk'
+  | 'claude-sdk'
+  | 'codebuddy-sdk';
+
+// ── 子 Agent 调度结果 ──
+export interface SubagentDispatchResult {
+  /** 是否成功执行 */
+  success: boolean;
+  /** Agent 的文本回复 */
+  content?: string;
+  /** 被修改/创建的文件路径列表 */
+  filesChanged?: string[];
+  /** 错误信息 */
+  error?: string;
+}
+
 // ── AgentAdapter 接口 ──
 export interface AgentAdapter {
   /** 注册子 Agent 配置 */
@@ -64,7 +88,10 @@ export interface AgentAdapter {
   /** 构建子 Agent 激活标记和指令 */
   buildActivationPrompt(ctx: AgentContext, nextPrompt: string): string;
   /** 获取支持的适配模式 */
-  getMode(): 'headless' | 'qoder-sdk';
+  getMode(): AgentAdapterMode;
+  /** v8.3.169+: 直接调度子 Agent 执行任务（SDK 模式）
+   * 返回 null 表示当前适配器不支持直接调度，需由外层 AI 接管 */
+  dispatchSubagent?(ctx: AgentContext, taskPrompt: string): Promise<SubagentDispatchResult | null>;
 }
 
 // ── 全局子 Agent 注册表 ──
@@ -248,8 +275,13 @@ export class HeadlessAdapter implements AgentAdapter {
     }
   }
 
-  getMode(): 'headless' | 'qoder-sdk' {
+  getMode(): AgentAdapterMode {
     return 'headless';
+  }
+
+  /** v8.3.169+: Headless 模式不支持直接调度，返回 null 由外层 AI 接管 */
+  async dispatchSubagent(_ctx: AgentContext, _taskPrompt: string): Promise<SubagentDispatchResult | null> {
+    return null;
   }
 
   registerSubagent(name: string, config: SubagentConfig): void {
@@ -435,12 +467,36 @@ export class HeadlessAdapter implements AgentAdapter {
 }
 
 // ═══════════════════════════════════════════════════════════
-// QoderSdkAdapter — Qoder SDK 深度集成（预留接口）
+// QoderSdkAdapter — Qoder Agent SDK 深度集成（v8.3.169+）
 // ═══════════════════════════════════════════════════════════
+
+/** SpecCore subagent → Qoder AgentDefinition 的映射 */
+function buildQoderAgentDefinition(config: SubagentConfig): any {
+  return {
+    description: config.description,
+    prompt: config.systemPrompt,
+    tools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash'],
+    maxTurns: 30,
+    permissionMode: 'acceptEdits',
+  };
+}
+
+/** 内置 subagent 名称映射（优先使用 Qoder 内置 Agent） */
+function mapToQoderAgentName(subagent: string): string | undefined {
+  const builtinMap: Record<string, string> = {
+    'general-purpose': 'general-purpose',
+    'Explore': 'Explore',
+    'Plan': 'Plan',
+  };
+  // 如果 SpecCore subagent 名与 Qoder 内置 Agent 匹配，直接返回
+  if (builtinMap[subagent]) return builtinMap[subagent];
+  // 否则使用自定义 Agent（通过 agents 选项注册）
+  return undefined;
+}
 
 export class QoderSdkAdapter implements AgentAdapter {
   private registry: Map<string, SubagentConfig>;
-  // private sdkClient: any; // Qoder SDK 客户端（运行时动态加载）
+  private sdkModule: any | null = null;
 
   constructor() {
     this.registry = new Map(subagentRegistry);
@@ -451,7 +507,7 @@ export class QoderSdkAdapter implements AgentAdapter {
     }
   }
 
-  getMode(): 'headless' | 'qoder-sdk' {
+  getMode(): AgentAdapterMode {
     return 'qoder-sdk';
   }
 
@@ -463,45 +519,194 @@ export class QoderSdkAdapter implements AgentAdapter {
     return this.registry.get(name);
   }
 
+  /** 上下文准备：回退到 Headless（Prompt 构建阶段统一使用） */
   async prepareContext(ctx: AgentContext): Promise<string> {
-    // TODO: 通过 Qoder SDK 创建子 Agent，传递 systemPrompt 和上下文
-    // 当前回退到 Headless 实现
-    logger.warn('[QoderSdkAdapter] SDK 未初始化，回退到 Headless 模式');
     const headless = new HeadlessAdapter();
     return headless.prepareContext(ctx);
   }
 
+  /** 激活标记：回退到 Headless（SDK 模式下也输出标记作为备用） */
   buildActivationPrompt(ctx: AgentContext, nextPrompt: string): string {
-    // TODO: 调用 Qoder SDK 创建子 Agent 并触发执行
-    // 当前回退到 Headless 实现
     const headless = new HeadlessAdapter();
     return headless.buildActivationPrompt(ctx, nextPrompt);
   }
+
+  /** v8.3.169+: 通过 Qoder Agent SDK 直接调度子 Agent */
+  async dispatchSubagent(ctx: AgentContext, taskPrompt: string): Promise<SubagentDispatchResult | null> {
+    try {
+      // 1. 动态加载 SDK（optional dependency）
+      if (!this.sdkModule) {
+        try {
+          this.sdkModule = await import('@qoder-ai/qoder-agent-sdk');
+          logger.info('[QoderSdkAdapter] SDK 加载成功');
+        } catch (sdkErr: any) {
+          logger.warn(`[QoderSdkAdapter] SDK 加载失败: ${sdkErr.message}，回退到 Headless`);
+          return null;
+        }
+      }
+
+      const { query, accessTokenFromEnv } = this.sdkModule;
+      if (!query) {
+        logger.warn('[QoderSdkAdapter] SDK 不可用（缺少 query 函数），回退到 Headless');
+        return null;
+      }
+
+      const config = this.registry.get(ctx.subagent);
+
+      // 2. 构建自定义 agents 定义
+      const customAgents: Record<string, any> = {};
+      if (config) {
+        customAgents[ctx.subagent] = buildQoderAgentDefinition(config);
+      }
+
+      // 3. 确定使用的 agent 名称
+      const qoderAgentName = mapToQoderAgentName(ctx.subagent) || ctx.subagent;
+
+      // 4. 构建 options
+      const options: any = {
+        auth: accessTokenFromEnv ? accessTokenFromEnv() : undefined,
+        cwd: ctx.cwd,
+        allowedTools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'Agent'],
+        permissionMode: 'acceptEdits',
+      };
+
+      // 如果有自定义 agent 定义，注入 agents
+      if (Object.keys(customAgents).length > 0) {
+        options.agents = customAgents;
+      }
+      // 如果映射到内置 agent，使用 agent 选项
+      if (mapToQoderAgentName(ctx.subagent)) {
+        options.agent = qoderAgentName;
+      }
+
+      logger.info(`[QoderSdkAdapter] 调度子 Agent: ${ctx.subagent} (Qoder agent: ${qoderAgentName})`);
+
+      // 5. 调用 SDK query()
+      const stream = query({ prompt: taskPrompt, options });
+
+      // 6. 消费消息流，收集结果
+      let content = '';
+      const filesChanged: string[] = [];
+      let error: string | undefined;
+
+      for await (const message of stream) {
+        if (message.type === 'assistant') {
+          for (const block of message.message?.content || []) {
+            if (block.type === 'text') {
+              content += block.text;
+            } else if (block.type === 'tool_use') {
+              logger.debug(`[QoderSdkAdapter] 工具调用: ${block.name}`);
+              if (block.name === 'Write' || block.name === 'Edit') {
+                const path = block.input?.path || block.input?.file_path;
+                if (path && !filesChanged.includes(path)) {
+                  filesChanged.push(path);
+                }
+              }
+            }
+          }
+        } else if (message.type === 'result') {
+          if (message.subtype === 'error') {
+            error = message.result?.message || '子 Agent 执行出错';
+          }
+          logger.info(`[QoderSdkAdapter] 子 Agent ${ctx.subagent} 执行完成: ${message.subtype}`);
+        }
+      }
+
+      return {
+        success: !error,
+        content: content || undefined,
+        filesChanged: filesChanged.length > 0 ? filesChanged : undefined,
+        error,
+      };
+    } catch (e: any) {
+      logger.warn(`[QoderSdkAdapter] 调度失败: ${e.message}，回退到 Headless`);
+      return null;
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// 工具能力检测
+// ═══════════════════════════════════════════════════════════
+
+/** 判断当前工具是否支持 SDK 级子 Agent 调度 */
+export function isSdkDispatchSupported(tool?: HostAiTool): boolean {
+  const t = tool || detectHostAi();
+  return t === 'qoder';
+}
+
+/** 判断当前环境是否支持直接子 Agent 调度（SDK 或 Headless） */
+export function isSubagentDispatchSupported(): boolean {
+  return true; // Headless 始终支持（通过标记模式）
+}
+
+// ═══════════════════════════════════════════════════════════
+// 统一调度入口（v8.3.169+）
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * 调度子 Agent 执行任务
+ *
+ * - Qoder 环境：通过 @qoder-ai/qoder-agent-sdk 直接调用
+ * - 其他环境：返回 null（由外层 AI 通过 [SPECCORE_SUBAGENT] 标记接管）
+ */
+export async function dispatchSubagent(
+  ctx: AgentContext,
+  taskPrompt: string
+): Promise<SubagentDispatchResult | null> {
+  const tool = detectHostAi();
+
+  // Qoder 环境：尝试 SDK 调度
+  if (tool === 'qoder') {
+    const adapter = new QoderSdkAdapter();
+    const result = await adapter.dispatchSubagent!(ctx, taskPrompt);
+    if (result) return result;
+  }
+
+  // 其他环境：Headless 模式，返回 null 让外层 AI 接管
+  logger.debug(`[dispatchSubagent] 工具 ${tool} 不支持 SDK 直接调度，使用 Headless 模式`);
+  return null;
 }
 
 // ═══════════════════════════════════════════════════════════
 // 工厂函数
 // ═══════════════════════════════════════════════════════════
 
-export function createAgentAdapter(mode?: 'headless' | 'qoder-sdk'): AgentAdapter {
-  const envMode = process.env.SPECCORE_AGENT_MODE as 'headless' | 'qoder-sdk' | undefined;
-  const effectiveMode = mode || envMode || 'headless';
+/**
+ * 创建适配器
+ * v8.3.169+: 根据检测到的宿主工具自动选择适配器
+ */
+export function createAgentAdapter(mode?: AgentAdapterMode): AgentAdapter {
+  const envMode = process.env.SPECCORE_AGENT_MODE as AgentAdapterMode | undefined;
+  const effectiveMode = mode || envMode;
 
-  if (effectiveMode === 'qoder-sdk') {
-    // 检查 Qoder SDK 是否可用
-    try {
-      // require('@qoder/sdk'); // 运行时检查
-      logger.info('[AgentAdapter] 使用 Qoder SDK 模式');
+  // 如果显式指定了模式，按模式创建
+  if (effectiveMode) {
+    if (effectiveMode === 'qoder-sdk') {
+      logger.info('[AgentAdapter] 使用 Qoder SDK 模式（显式指定）');
       return new QoderSdkAdapter();
-    } catch {
-      logger.warn('[AgentAdapter] Qoder SDK 不可用，回退到 Headless 模式');
-      return new HeadlessAdapter();
     }
+    logger.debug(`[AgentAdapter] 使用 Headless 模式（显式指定: ${effectiveMode}）`);
+    return new HeadlessAdapter();
   }
 
-  logger.debug('[AgentAdapter] 使用 Headless 模式');
-  return new HeadlessAdapter();
+  // 自动检测：根据宿主工具选择
+  const tool = detectHostAi();
+  switch (tool) {
+    case 'qoder':
+      logger.info('[AgentAdapter] 自动检测到 Qoder 环境，使用 QoderSdkAdapter');
+      return new QoderSdkAdapter();
+    case 'workbuddy':
+    case 'trae':
+    case 'cursor':
+    case 'windsurf':
+    case 'claude':
+    case 'codebuddy':
+    default:
+      logger.debug(`[AgentAdapter] 工具 ${tool} 使用 Headless 模式`);
+      return new HeadlessAdapter();
+  }
 }
 
-// 默认导出 HeadlessAdapter（向后兼容）
+// 默认导出 HeadlessAdapter（向后兼容：prepareContext 阶段所有工具通用）
 export const defaultAdapter = new HeadlessAdapter();

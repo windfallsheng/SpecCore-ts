@@ -1,3 +1,40 @@
+## v8.3.169 (2026-09-16) — Qoder Agent SDK 集成：真正的多 Agent 调度
+
+### 新增：Qoder Agent SDK 集成 (`src/core/agent-adapter.ts`)
+
+- **安装**: `@qoder-ai/qoder-agent-sdk` 作为 `optionalDependencies`
+- **QoderSdkAdapter 真正实现**（替代之前的空壳预留接口）：
+  - 使用动态 `import()` 加载 SDK，未安装时自动回退 Headless
+  - `dispatchSubagent()` 通过 `query({ prompt, options })` 直接调用 Qoder Agent
+  - 构建 `AgentDefinition` 自定义子 Agent（`spec-analyzer`、`spec-executor` 等映射到 Qoder 子 Agent）
+  - 消费 SDK 消息流，收集文本回复和文件变更列表
+  - 内置 Agent 名称映射（`general-purpose` / `Explore` / `Plan`）
+- **新增 `dispatchSubagent` 统一调度入口**：
+  - Qoder 环境 → 调用 `QoderSdkAdapter.dispatchSubagent()`
+  - 其他环境 → 返回 `null`（由外层 AI 通过 `[SPECCORE_SUBAGENT]` 标记接管）
+- **Headless 始终兜底**：任何 SDK 调用失败自动回退到文本标记模式
+
+### 新增：多工具适配支持 (`src/core/ask-host-ai.ts`)
+
+- **扩展 `HostAiTool`**: 新增 `cursor` / `windsurf` / `claude` / `codebuddy`
+- **修复 `detectHostAi`**: `.qoder` 目录现在正确返回 `'qoder'`（之前错误返回 `'trae'`）
+- **精确目录映射**: `DIR_TO_TOOL` 按目录名精确映射到对应工具
+- **新增 `QODER_SESSION` 环境变量检测**
+
+### Analyze 命令集成 (`src/commands/analyze.ts`)
+
+- **Pipeline 模式 SDK 调度**: 在输出 Prompt 之前，尝试通过 `dispatchSubagent` 直接调度子 Agent
+- **仅在非 TTY + Qoder 环境下触发**，失败时无缝回退到 Prompt 模式
+- **输出结果摘要**: SDK 执行成功后输出 `[SPECCORE_STEP_DONE]` + `[SPECCORE_RESULT]` + 文件变更列表
+
+### 架构设计
+
+- **AgentAdapterMode 扩展**: `'headless' | 'qoder-sdk' | 'cursor-sdk' | 'windsurf-sdk' | 'claude-sdk' | 'codebuddy-sdk'`
+- **AgentAdapter 接口扩展**: 新增可选 `dispatchSubagent()` 方法
+- **`createAgentAdapter()` 自动检测**: 根据 `detectHostAi()` 结果自动选择适配器（Qoder → QoderSdkAdapter，其他 → HeadlessAdapter）
+
+---
+
 ## v8.3.168 (2026-09-15) — 文档补充：多 Subagent 架构设计文档
 
 ### 文档更新

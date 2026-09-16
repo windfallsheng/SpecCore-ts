@@ -25,7 +25,8 @@ import { readFile, readdir, readdirSync } from 'fs-extra';
 import { generateGlobalArtifacts } from '../core/global-artifacts';
 import { buildPrompt, buildPromptText, formatPrompt, processMarkdownContent } from '../core/prompt-builder';
 // v8.3.160+: 子 Agent 适配层（analyze 自定义 Prompt 中手动注入）
-import { defaultAdapter } from '../core/agent-adapter';
+// v8.3.169+: 新增 dispatchSubagent 支持 Qoder SDK 直接调度
+import { defaultAdapter, dispatchSubagent } from '../core/agent-adapter';
 import type { AgentContext as AdapterAgentContext } from '../core/agent-adapter';
 import { buildAutoModeInstruction, writeQuestions, extractQuestionsFromText, type QuestionItem } from '../core/questions';
 import { resolvePlatform } from '../core/platform-registry';
@@ -1087,6 +1088,40 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       process.stdout.write(`[SPECCORE_CONTEXT_BUDGET: 8000]\n`);
       process.stdout.write(`[SPECCORE_CONTEXT_TYPE: platform-only]\n\n`);
     }
+
+    // v8.3.169+: 尝试通过 Qoder SDK 直接调度子 Agent（Qoder 环境且非 TTY 模式）
+    const activeSubagent = featureSubagent || platformSubagent;
+    if (activeSubagent && !process.stdout.isTTY) {
+      try {
+        const agentCtx: AdapterAgentContext = {
+          subagent: activeSubagent,
+          iteration: iter || '',
+          platform: platformMatch?.[1],
+          contextBudget: featureSubagent ? 10000 : 8000,
+          contextType: featureSubagent ? 'full' : 'platform-only',
+          cwd: _projectRoot,
+        };
+        const dispatchResult = await dispatchSubagent(agentCtx, prompt);
+        if (dispatchResult && dispatchResult.success) {
+          logger.info(`[analyze] 子 Agent ${activeSubagent} SDK 调度成功`);
+          process.stdout.write(`\n[SPECCORE_STEP_DONE]\n`);
+          process.stdout.write(`[SPECCORE_RESULT] 子 Agent ${activeSubagent} 通过 Qoder SDK 完成执行\n`);
+          if (dispatchResult.filesChanged && dispatchResult.filesChanged.length > 0) {
+            process.stdout.write(`📄 文件变更: ${dispatchResult.filesChanged.join(', ')}\n`);
+          }
+          if (dispatchResult.content) {
+            process.stdout.write(`\n--- 执行结果 ---\n${dispatchResult.content.slice(0, 3000)}${dispatchResult.content.length > 3000 ? '\n... (截断)' : ''}\n`);
+          }
+          // 提示用户审查结果后手动 --apply
+          process.stdout.write(`\n> 请审查上述结果，确认后执行 speccore analyze --apply 写入文档\n`);
+          process.exitCode = 0;
+          return;
+        }
+      } catch (e: any) {
+        logger.debug(`[analyze] SDK 调度尝试失败: ${e.message}，回退到 Prompt 模式`);
+      }
+    }
+
     process.stdout.write(`[SPECCORE_PROMPT]\n${finalPrompt}`);
     process.exitCode = 10;
     return;

@@ -5766,8 +5766,11 @@ SpecCore Pipeline（analyze/split/execute）在长期运行中暴露出三个结
 │  └─ formatPrompt: 四级动态裁剪（TOC → extraSpecs → taskContext → minimal）│
 ├─────────────────────────────────────────────────────────────┤
 │  AgentAdapter（子 Agent 统一适配层）                           │
-│  ├─ HeadlessAdapter: 基于文件/状态机模拟（默认）               │
-│  ├─ QoderSdkAdapter: SDK 深度集成（预留）                      │
+│  ├─ HeadlessAdapter: 基于文件/状态机模拟（默认/兜底）          │
+│  ├─ QoderSdkAdapter: @qoder-ai/qoder-agent-sdk 深度集成        │
+│  │   └─ dispatchSubagent: query() → AgentDefinition → 消息流   │
+│  ├─ CursorAdapter / WindsurfAdapter / ClaudeAdapter /          │
+│  │   CodeBuddyAdapter: Headless 变体（工具特定标记）            │
 │  └─ 角色配置: systemPrompt + skills + 默认预算 + 加载策略       │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -5797,10 +5800,11 @@ interface ContextSnapshot {
 |:---|:---|:---|
 | `[SPECCORE_STEP_DONE]` | 当前步骤已完成 | 准备新会话 |
 | `[SPECCORE_NEXT_STEP]` | 下一步指令 | 显示下一步名称和命令 |
-| `[SPECCORE_SUBAGENT: {name}]` | 子 Agent 激活 | 按角色加载专属上下文 |
+| `[SPECCORE_SUBAGENT: {name}]` | 子 Agent 激活 | 按角色加载专属上下文（Headless 模式） |
 | `[SPECCORE_CONTEXT_BUDGET: {n}]` | Token 预算 | 控制 Prompt 大小 |
 | `[SPECCORE_CONTEXT_TYPE: {type}]` | 加载策略 | full/incremental/platform-only/contract-only |
 | `[SPECCORE_CONTEXT_SNAPSHOT]` | 上下文快照 JSON | 新会话恢复依据 |
+| `[SPECCORE_RESULT]` | v8.3.169+: SDK 子 Agent 执行结果 | 展示子 Agent 通过 Qoder SDK 完成的摘要 |
 
 ### 关键优化：按需加载 REQ.md
 
@@ -6052,5 +6056,158 @@ v8.3.167 在原有标记体系基础上增加：
 | Split 单批质量 | 模块间干扰，粒度不均 | 每批 1-2 模块，定义清晰 |
 | 失败后恢复 | 从头开始 | 续批未完成的模块 |
 | Agent 角色聚焦 | 单一 spec-analyzer | 按阶段/按端/按模块分配 |
+
+---
+
+## 附录：v8.3.169+ Qoder Agent SDK 集成架构
+
+### 设计背景
+
+v8.3.160+ 的子 Agent 架构依赖 `[SPECCORE_SUBAGENT]` 文本标记，由外层 AI 识别后手动切换角色。这种方式：
+- 依赖 AI 对标记的识别准确性
+- 子 Agent 与主 Agent 共享同一上下文，没有真正的隔离
+- 不支持并行执行
+
+v8.3.169+ 引入 **Qoder Agent SDK** (`@qoder-ai/qoder-agent-sdk`)，实现真正的子 Agent 调度：
+- CLI 直接通过 SDK API 创建和调度子 Agent
+- 每个子 Agent 有独立的 system prompt 和上下文
+- 支持流式响应和工具调用
+- 失败时自动回退到 Headless 模式
+
+### 适配器架构
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  AgentAdapter（子 Agent 统一适配层）                           │
+│  ├─ AgentAdapterMode                                         │
+│  │   ├─ 'headless'    ──→ HeadlessAdapter（所有工具兜底）     │
+│  │   ├─ 'qoder-sdk'   ──→ QoderSdkAdapter（Qoder 专属）      │
+│  │   ├─ 'cursor-sdk'  ──→ HeadlessAdapter（标记变体）         │
+│  │   ├─ 'windsurf-sdk'──→ HeadlessAdapter（标记变体）         │
+│  │   ├─ 'claude-sdk'  ──→ HeadlessAdapter（标记变体）         │
+│  │   └─ 'codebuddy-sdk'──→ HeadlessAdapter（标记变体）        │
+│  │                                                            │
+│  ├─ HeadlessAdapter                                          │
+│  │   ├─ prepareContext()  → 角色定义 + 上下文裁剪策略文本       │
+│  │   ├─ buildActivationPrompt() → [SPECCORE_SUBAGENT] 标记    │
+│  │   └─ dispatchSubagent() → null（外层 AI 接管）              │
+│  │                                                            │
+│  └─ QoderSdkAdapter                                          │
+│      ├─ prepareContext()  → 同 Headless（Prompt 构建通用）     │
+│      ├─ buildActivationPrompt() → 同 Headless（备用标记）      │
+│      └─ dispatchSubagent() → SDK query() → 消息流消费 → 结果  │
+│          ├─ 动态 import('@qoder-ai/qoder-agent-sdk')           │
+│          ├─ 构建 AgentDefinition（systemPrompt + tools）       │
+│          ├─ query({ prompt, options: { agents, agent } })      │
+│          └─ for await (msg of stream) 收集结果                 │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 工具检测与自动适配
+
+```typescript
+// ask-host-ai.ts
+const DIR_TO_TOOL: Record<string, HostAiTool> = {
+  '.trae-cn': 'trae',
+  '.trae': 'trae',
+  '.qoder': 'qoder',       // v8.3.169: 修复之前错误返回 'trae'
+  '.cursor': 'cursor',
+  '.windsurf': 'windsurf',
+  '.claude': 'claude',
+  '.codebuddy': 'codebuddy',
+};
+
+// agent-adapter.ts: createAgentAdapter()
+const tool = detectHostAi();
+switch (tool) {
+  case 'qoder':  return new QoderSdkAdapter();
+  default:       return new HeadlessAdapter(); // 兜底
+}
+```
+
+### Qoder SDK 调用流程
+
+```typescript
+// 1. 构建 AgentDefinition（映射 SpecCore subagent → Qoder Agent）
+const agentDef = {
+  description: 'SpecCore 需求分析专家',
+  prompt: '你是 SpecCore 需求分析专家...',
+  tools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash'],
+  maxTurns: 30,
+  permissionMode: 'acceptEdits',
+};
+
+// 2. 调用 SDK
+const stream = query({
+  prompt: taskPrompt,
+  options: {
+    auth: accessTokenFromEnv(),           // QODER_PERSONAL_ACCESS_TOKEN
+    cwd: ctx.cwd,
+    agents: { [ctx.subagent]: agentDef }, // 注册自定义 Agent
+    agent: ctx.subagent,                   // 使用自定义 Agent 作为主角色
+    allowedTools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'Agent'],
+    permissionMode: 'acceptEdits',
+  },
+});
+
+// 3. 消费消息流
+for await (const message of stream) {
+  if (message.type === 'assistant') {
+    // 收集文本回复
+  } else if (message.type === 'result') {
+    // 执行完成
+  }
+}
+```
+
+### 调度入口
+
+```typescript
+// dispatchSubagent() — 统一调度入口
+dispatchSubagent(ctx, taskPrompt)
+  ├─ Qoder 环境
+  │   └─ QoderSdkAdapter.dispatchSubagent()
+  │       ├─ 成功 → SubagentDispatchResult { success, content, filesChanged }
+  │       └─ 失败 → null（回退 Headless）
+  └─ 其他环境
+      └─ null（外层 AI 通过 [SPECCORE_SUBAGENT] 接管）
+```
+
+### 与 Analyze 命令集成
+
+在 `analyze.ts` Pipeline 模式的 Prompt 输出点：
+
+```typescript
+// 输出 [SPECCORE_SUBAGENT] 标记后，尝试 SDK 调度
+const activeSubagent = featureSubagent || platformSubagent;
+if (activeSubagent && !process.stdout.isTTY) {
+  const result = await dispatchSubagent(agentCtx, prompt);
+  if (result && result.success) {
+    // SDK 执行成功，输出结果摘要
+    process.stdout.write('[SPECCORE_STEP_DONE]\n');
+    process.stdout.write('[SPECCORE_RESULT] ...\n');
+    return;
+  }
+}
+// SDK 失败或未触发，继续输出 Prompt
+process.stdout.write('[SPECCORE_PROMPT]\n${finalPrompt}');
+```
+
+### 兼容性设计
+
+| 场景 | 行为 |
+|:---|:---|
+| Qoder 环境 + SDK 已安装 | 通过 SDK 直接调度子 Agent |
+| Qoder 环境 + SDK 未安装 | 自动回退 Headless，输出标记 |
+| 非 Qoder 环境 | Headless 模式，输出标记 |
+| SDK 调用过程中出错 | catch 错误，回退到 Prompt 模式 |
+| TTY 模式（终端直接运行）| 不触发 SDK 调度（避免阻塞终端）|
+
+### 未来扩展
+
+- **Cursor SDK**: Cursor 提供 Agent API 后，可实现 `CursorSdkAdapter`
+- **Windsurf SDK**: Cascade API 集成
+- **结果自动 apply**: SDK 返回的结果可自动解析并写入文件（需实现 Markdown → 文件映射）
+- **并行子 Agent**: 多个功能模块同时通过 SDK 调度（需 Qoder 支持并行会话）
 
 ---

@@ -1,6 +1,6 @@
 {
   "name": "speccore",
-  "version": "8.3.168",
+  "version": "8.3.169",
   "description": "SpecCore - Code by Spec, Not by Vibe.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -50,5 +50,8 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "optionalDependencies": {
+    "@qoder-ai/qoder-agent-sdk": "^1.0.41"
   }
 }

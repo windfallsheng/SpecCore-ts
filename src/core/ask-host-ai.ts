@@ -1,6 +1,8 @@
 /**
- * ask-host-ai — 宿主 AI 层（WorkBuddy / TRAE / Qoder）
+ * ask-host-ai — 宿主 AI 层（WorkBuddy / TRAE / Qoder / Cursor / Windsurf / Claude / CodeBuddy）
  * 通过文件协议与用户当前使用的 AI 工具通信
+ * 
+ * v8.3.169+: 扩展多工具检测与适配支持
  * 
  * 协议:
  *   1. CLI 写入 ~/.speccore/.ai-request.json
@@ -44,13 +46,33 @@ const MAX_WAIT = 15000;      // 15s timeout
 
 /**
  * 检测当前运行环境中的 AI 工具
+ * v8.3.169+: 扩展支持 cursor / windsurf / claude / codebuddy
  */
-export type HostAiTool = 'workbuddy' | 'trae' | 'qoder' | 'none';
+export type HostAiTool =
+  | 'workbuddy'
+  | 'trae'
+  | 'qoder'
+  | 'cursor'
+  | 'windsurf'
+  | 'claude'
+  | 'codebuddy'
+  | 'none';
 
 /** 判断当前是否在 AI 工具上下文（WorkBuddy/TRAE/Qoder 调用，非纯终端） */
 export function isAiContext(): boolean {
   return detectHostAi() !== 'none' || !process.stdout.isTTY;
 }
+
+/** 目录名到工具名的映射 */
+const DIR_TO_TOOL: Record<string, HostAiTool> = {
+  '.trae-cn': 'trae',
+  '.trae': 'trae',
+  '.qoder': 'qoder',
+  '.codebuddy': 'codebuddy',
+  '.cursor': 'cursor',
+  '.claude': 'claude',
+  '.windsurf': 'windsurf',
+};
 
 export function detectHostAi(): HostAiTool {
   // WorkBuddy: 检查会话文件
@@ -61,12 +83,18 @@ export function detectHostAi(): HostAiTool {
   if (process.env.TRAE_SESSION || process.env.TENCENT_AI_CODING) {
     return 'trae';
   }
-  // TRAE/Qoder: 检查工具目录（兜底，回溯到项目根目录）
+  // Qoder
+  if (process.env.QODER_SESSION) {
+    return 'qoder';
+  }
+  // v8.3.169+: 检查工具目录（兜底，回溯到项目根目录）
   const { pathExistsSync } = require('fs-extra');
   let searchDir = process.cwd();
   for (let i = 0; i < 5; i++) {
-    for (const dir of ['.trae-cn', '.trae', '.qoder', '.codebuddy', '.cursor', '.claude', '.windsurf']) {
-      if (pathExistsSync(join(searchDir, dir))) return 'trae';
+    for (const dir of Object.keys(DIR_TO_TOOL)) {
+      if (pathExistsSync(join(searchDir, dir))) {
+        return DIR_TO_TOOL[dir];
+      }
     }
     const parent = join(searchDir, '..');
     if (parent === searchDir) break;
@@ -197,8 +225,10 @@ export async function tryHostAi(
     emitWorkBuddySignal(type, input, context);
   }
 
-  // TRAE/Qoder: 仅文件协议
-  if (tool === 'trae' || tool === 'qoder') {
+  // v8.3.169+: 支持更多工具的宿主 AI 通信
+  // 这些工具统一使用文件协议（WorkBuddy 额外支持信号标记）
+  const fileProtocolTools: HostAiTool[] = ['trae', 'qoder', 'cursor', 'windsurf', 'claude', 'codebuddy'];
+  if (fileProtocolTools.includes(tool)) {
     return askHostAi(type, input, context);
   }
 
