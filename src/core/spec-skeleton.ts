@@ -1181,24 +1181,8 @@ export function buildSkeletonFileList(
     }
   }
 
-  // 4. 兼容旧结构：无功能模块前缀的 platform 文档
-  const legacyPlatformEntries = platformEntries.filter(e => !extractFeaturePrefix(e.relPath));
-  if (legacyPlatformEntries.length > 0) {
-    const legacyGroups = new Map<string, SpecFileEntry[]>();
-    for (const e of legacyPlatformEntries) {
-      const p = e.platform || 'unknown';
-      if (!legacyGroups.has(p)) legacyGroups.set(p, []);
-      legacyGroups.get(p)!.push(e);
-    }
-    text += `### 各端专属文档\n`;
-    for (const [platform, platformEntries] of legacyGroups) {
-      text += `\n**${platform}/**\n`;
-      for (const e of platformEntries) {
-        text += `- \`${e.relPath}\`\n`;
-      }
-    }
-    text += `\n`;
-  }
+  // v8.3.171+: 删除旧结构兼容（无功能模块前缀的 platform 文档）
+  // 当前态：所有 platform 文档必须在功能模块目录下（020-specs/{feature}/{端}/）
 
   text += `> 完整路径前缀: \`${specDir}/\`\n`;
   text += `> 写入方式: 用 Write 工具直接覆盖上述路径的文件，不要创建新文件\n`;

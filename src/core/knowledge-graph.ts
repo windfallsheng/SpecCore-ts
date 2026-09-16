@@ -213,24 +213,14 @@ async function scanSpecs(iterDir: string): Promise<{
     });
   }
 
-  // 扫描各端子目录（新路径 020-specs/{端}/，兼容旧路径 020-specs/platforms/{端}/）
+  // v8.3.171+: 扫描各端子目录（唯一路径 020-specs/{端}/，删除 platforms/ 旧路径兼容）
   // v8.3.65+: 加入 requirements（黄金需求目录，由 scanRequirements 单独扫描）
-  const knownNonPlatformDirs = new Set(['sources', 'assets', 'prototypes', 'converted', 'features', 'bugs', 'refactors', 'research', 'staging', 'platforms', 'snapshots', 'requirements']);
+  const knownNonPlatformDirs = new Set(['sources', 'assets', 'prototypes', 'converted', 'features', 'bugs', 'refactors', 'research', 'staging', 'snapshots', 'requirements']);
   const platformDirs: string[] = [];
   const specsEntries = await readdir(specsDir, { withFileTypes: true });
   for (const e of specsEntries) {
     if (e.isDirectory() && !e.name.startsWith('_') && !e.name.startsWith('.') && !knownNonPlatformDirs.has(e.name)) {
       platformDirs.push(e.name);
-    }
-  }
-  // 旧路径回退
-  const platformsDir = join(specsDir, 'platforms');
-  if (await pathExists(platformsDir)) {
-    const platformEntries = await readdir(platformsDir, { withFileTypes: true });
-    for (const pe of platformEntries) {
-      if (pe.isDirectory() && !pe.name.startsWith('.') && !platformDirs.includes(pe.name)) {
-        platformDirs.push(pe.name);
-      }
     }
   }
   for (const pName of platformDirs) {

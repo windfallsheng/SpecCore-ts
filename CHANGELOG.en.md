@@ -2,6 +2,27 @@
 
 ---
 
+## v8.3.173 (2026-09-16) — P0 Architecture Convergence: Path Fallback Removal + Anti-Mess Mechanism Simplification
+
+### P0-1: Path Convergence — Remove All Fallback Branches
+
+- **`spec-paths.ts`**: `resolveGlobalSpecPath()` removed `global/` and root directory fallbacks, only `overview/` remains
+- **`knowledge-graph.ts`**: removed `020-specs/platforms/{platform}/` legacy path compatibility scanning
+- **`analyze.ts`**: removed `docs['FUNCTION_MAP.md'] || docs['overview/'] || docs['global/']` triple fallback
+- **`analyze.ts`**: removed `sanitizeSpecDirectories` auto-calls (function preserved for future `speccore migrate` tool)
+- **`split.ts`**: removed `specContents['DEV_GUIDE.md'] || specContents['overview/DEV_GUIDE.md']` fallback
+- **`audit.ts`**: removed `apiMap['overview/'] || apiMap['global/'] || apiMap['REQUIREMENT.md']` triple fallback
+- **`spec-skeleton.ts`**: removed legacy structure compatibility (platform docs without feature module prefix)
+- **`prompt-builder.ts`**: removed root `.md` file reading fallback, only reads `overview/`
+- **`state.ts`**: removed iteration root directory old layout compatibility
+
+### P0-2: Anti-Mess Mechanism Convergence — Simplify Prompt Path Constraints
+
+- **`analyze.ts`**: simplified path hints from "don't create dirs + write correct path + don't bypass --apply" to "files pre-created, only overwrite existing files"
+- **`split.ts`**: simplified "⚠️ Absolute Prohibition" section to "⚠️ Constraints", merged path constraints into single instruction
+
+---
+
 ## v8.3.171 (2026-09-16) — Missing Items Fix + SDK Optimization
 
 ### Fixed: change Command SDK Dispatch Integration

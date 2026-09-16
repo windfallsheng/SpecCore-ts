@@ -525,10 +525,10 @@ function checkApiPathConsistency(contents: Record<string, string>): SpecAuditIss
     }
   }
 
-  // 检查同一端内路径一致性（简化：只检查全局 vs 各端）
-  const globalApis = apiMap['overview/REQUIREMENT.md'] || apiMap['global/REQUIREMENT.md'] || apiMap['REQUIREMENT.md'] || {};
+  // v8.3.171+: 检查同一端内路径一致性（唯一路径 overview/REQUIREMENT.md）
+  const globalApis = apiMap['overview/REQUIREMENT.md'] || {};
   for (const [file, apis] of Object.entries(apiMap)) {
-    if (file.includes('overview/') || file.includes('global/') || file === 'REQUIREMENT.md') continue;
+    if (file.includes('overview/') || file === 'REQUIREMENT.md') continue;
     for (const [path, method] of Object.entries(apis)) {
       const globalMethod = Object.entries(globalApis).find(([p]) => p === path)?.[1];
       if (globalMethod && globalMethod !== method) {
