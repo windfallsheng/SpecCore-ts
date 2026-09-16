@@ -13,6 +13,9 @@ import { loadKnowledgeGraph } from '../core/knowledge-graph';
 import { buildCompactContext } from '../core/context-builder';
 import { version } from '../../package.json';
 import { nextPlanId } from '../core/global-counters';
+// v8.3.169+: Qoder SDK 子 Agent 调度
+import { dispatchSubagent } from '../core/agent-adapter';
+import type { AgentContext } from '../core/agent-adapter';
 
 function promptUser(question: string): Promise<string> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -151,6 +154,35 @@ export async function planCommand(options: PlanOptions): Promise<void> {
     } catch { /* ignore */ }
 
     // v8.3.165+: 输出 subagent 角色标记（schedule-planner）
+    // v8.3.169+: 尝试通过 Qoder SDK 直接调度子 Agent
+    if (!process.stdout.isTTY) {
+      try {
+        const agentCtx: AgentContext = {
+          subagent: 'schedule-planner',
+          iteration: options.iteration || '',
+          contextBudget: 12000,
+          contextType: 'full',
+          cwd: process.cwd(),
+        };
+        const dispatchResult = await dispatchSubagent(agentCtx, promptText);
+        if (dispatchResult && dispatchResult.success) {
+          logger.info(`[plan] 子 Agent schedule-planner SDK 调度成功`);
+          process.stdout.write(`\n[SPECCORE_RESULT] 子 Agent schedule-planner 通过 Qoder SDK 完成执行\n`);
+          if (dispatchResult.filesChanged && dispatchResult.filesChanged.length > 0) {
+            process.stdout.write(`📄 文件变更: ${dispatchResult.filesChanged.join(', ')}\n`);
+          }
+          if (dispatchResult.content) {
+            process.stdout.write(`\n--- 执行结果 ---\n${dispatchResult.content.slice(0, 3000)}${dispatchResult.content.length > 3000 ? '\n... (截断)' : ''}\n`);
+          }
+          process.stdout.write(`\n> 请审查上述结果，确认后执行 speccore plan --response 写入计划\n`);
+          process.exitCode = 0;
+          return;
+        }
+      } catch (e: any) {
+        logger.debug(`[plan] SDK 调度尝试失败: ${e.message}，回退到 Prompt 模式`);
+      }
+    }
+
     const subagentOutput = [
       `[SPECCORE_SUBAGENT: schedule-planner]`,
       `[SPECCORE_CONTEXT_BUDGET: 12000]`,

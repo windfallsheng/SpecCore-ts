@@ -15,7 +15,7 @@ import { GLOBAL_SPECS_DIR, parsePlatformList, parseFeatureList } from '../../cor
 import { SKELETON_MARKER, buildQualityRubRIC } from '../../core/spec-skeleton';
 import { buildAutoModeInstruction, writeQuestions, extractQuestionsFromText } from '../../core/questions';
 import { PipelineEngine } from '../../core/pipeline-engine';
-import { defaultAdapter } from '../../core/agent-adapter';
+import { defaultAdapter, dispatchSubagent } from '../../core/agent-adapter';
 import type { AgentContext } from '../../core/agent-adapter';
 import { findRelevantCode } from '../../core/code-scanner';
 import { loadFreshKnowledgeGraph } from '../../core/knowledge-graph';
@@ -509,13 +509,42 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     } catch { /* 忽略功能模块检测失败 */ }
 
     // v8.3.166+: 输出 subagent 标记（task-decomposer）
+    // v8.3.169+: 尝试通过 Qoder SDK 直接调度子 Agent
+    const promptText = formatPrompt(prompt) + featureBatchHint;
+    if (!process.stdout.isTTY) {
+      try {
+        const agentCtx: AgentContext = {
+          subagent: 'task-decomposer',
+          iteration: iter || '',
+          contextBudget: 12000,
+          contextType: 'full',
+          cwd: process.cwd(),
+        };
+        const dispatchResult = await dispatchSubagent(agentCtx, promptText);
+        if (dispatchResult && dispatchResult.success) {
+          logger.info(`[split] 子 Agent task-decomposer SDK 调度成功`);
+          process.stdout.write(`\n[SPECCORE_RESULT] 子 Agent task-decomposer 通过 Qoder SDK 完成执行\n`);
+          if (dispatchResult.filesChanged && dispatchResult.filesChanged.length > 0) {
+            process.stdout.write(`📄 文件变更: ${dispatchResult.filesChanged.join(', ')}\n`);
+          }
+          if (dispatchResult.content) {
+            process.stdout.write(`\n--- 执行结果 ---\n${dispatchResult.content.slice(0, 3000)}${dispatchResult.content.length > 3000 ? '\n... (截断)' : ''}\n`);
+          }
+          process.stdout.write(`\n> 请审查上述结果，确认后执行 speccore iteration split --response 写入任务\n`);
+          process.exitCode = 0;
+          return;
+        }
+      } catch (e: any) {
+        logger.debug(`[split] SDK 调度尝试失败: ${e.message}，回退到 Prompt 模式`);
+      }
+    }
+
     const output = [
       `[SPECCORE_SUBAGENT: task-decomposer]`,
       `[SPECCORE_CONTEXT_BUDGET: 12000]`,
       `[SPECCORE_CONTEXT_TYPE: full]`,
       ``,
-      formatPrompt(prompt),
-      featureBatchHint,
+      promptText,
     ].join('\n');
     process.stdout.write(output);
     process.exitCode = 10;

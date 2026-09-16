@@ -1,3 +1,20 @@
+## v8.3.170 (2026-09-16) — SDK 调度覆盖全部 Prompt 模式命令
+
+### 扩展：全部 Prompt 模式命令集成 SDK 调度
+
+- **`execute`**: `runPromptMode` 末尾集成 `dispatchSubagent`，支持 `spec-executor` / `spec-executor-{platform}` 子 Agent SDK 调度
+- **`split`**: `--prompt` 模式集成 `dispatchSubagent`，支持 `task-decomposer` 子 Agent SDK 调度
+- **`plan`**: `--prompt` 模式集成 `dispatchSubagent`，支持 `schedule-planner` 子 Agent SDK 调度
+- **统一模式**：非 TTY + Qoder 环境下触发，失败时无缝回退到 Prompt 模式
+- **统一输出**：SDK 成功时输出 `[SPECCORE_RESULT]` + 文件变更列表 + 执行结果摘要
+
+### 说明
+
+- `ask` 命令不直接集成：ask 输出的是 `[SPECCORE_EXEC: speccore xxx]` 命令路由，由目标命令（analyze/split/plan/execute）在执行时自行触发 SDK 调度
+- Pipeline 推进点（`[SPECCORE_STEP_DONE]` + `[SPECCORE_NEXT_STEP]`）保持原有标记模式，避免 CLI 内部状态机与 SDK 异步执行冲突
+
+---
+
 ## v8.3.169 (2026-09-16) — Qoder Agent SDK 集成：真正的多 Agent 调度
 
 ### 新增：Qoder Agent SDK 集成 (`src/core/agent-adapter.ts`)

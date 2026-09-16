@@ -2,6 +2,23 @@
 
 ---
 
+## v8.3.170 (2026-09-16) — SDK Dispatch Coverage for All Prompt Mode Commands
+
+### Extended: SDK Dispatch in All Prompt Mode Commands
+
+- **`execute`**: `runPromptMode` integrates `dispatchSubagent`, supports `spec-executor` / `spec-executor-{platform}` subagent SDK dispatch
+- **`split`**: `--prompt` mode integrates `dispatchSubagent`, supports `task-decomposer` subagent SDK dispatch
+- **`plan`**: `--prompt` mode integrates `dispatchSubagent`, supports `schedule-planner` subagent SDK dispatch
+- **Unified pattern**: triggers in non-TTY + Qoder environment, seamless fallback to Prompt mode on failure
+- **Unified output**: on SDK success, outputs `[SPECCORE_RESULT]` + file change list + execution result summary
+
+### Notes
+
+- `ask` command not directly integrated: ask outputs `[SPECCORE_EXEC: speccore xxx]` command routing, target commands (analyze/split/plan/execute) trigger SDK dispatch themselves when executed
+- Pipeline advancement points (`[SPECCORE_STEP_DONE]` + `[SPECCORE_NEXT_STEP]`) keep existing marker mode to avoid conflicts between CLI internal state machine and SDK async execution
+
+---
+
 ## v8.3.169 (2026-09-16) — Qoder Agent SDK Integration: Real Multi-Agent Dispatch
 
 ### Qoder Agent SDK Integration (`src/core/agent-adapter.ts`)

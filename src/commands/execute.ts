@@ -47,6 +47,9 @@ import { writeArbitrationReport } from '../core/arbitration/verdict-generator';
 import { loadConfig, loadProjectConfig } from '../core/unified-config';
 import { PipelineEngine } from '../core/pipeline-engine';
 import { checkCodeIndexFreshness, findRelevantCode, readRelevantSource } from '../core/code-scanner';
+// v8.3.169+: Qoder SDK 子 Agent 调度
+import { dispatchSubagent } from '../core/agent-adapter';
+import type { AgentContext } from '../core/agent-adapter';
 // v8.3.126+: 结构化数据精确补充
 // v8.3.160+: 支持按平台分段读取
 import { loadStructuredData, loadStructuredDataForPlatform, DtoDefinition, ServiceDefinition, ServiceMethod } from '../core/structured-extractor';
@@ -2432,6 +2435,36 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
       platformSubagent = `spec-executor-${platformNames[0]}`;
     }
   } catch { /* ignore */ }
+
+  // v8.3.169+: 尝试通过 Qoder SDK 直接调度子 Agent（Qoder 环境且非 TTY 模式）
+  if (!process.stdout.isTTY) {
+    try {
+      const agentCtx: AgentContext = {
+        subagent: platformSubagent,
+        iteration: iteration || '',
+        platform: options.platform,
+        contextBudget: 12000,
+        contextType: options.platform ? 'platform-only' : 'full',
+        cwd: process.cwd(),
+      };
+      const dispatchResult = await dispatchSubagent(agentCtx, promptText);
+      if (dispatchResult && dispatchResult.success) {
+        logger.info(`[execute] 子 Agent ${platformSubagent} SDK 调度成功`);
+        process.stdout.write(`\n[SPECCORE_RESULT] 子 Agent ${platformSubagent} 通过 Qoder SDK 完成执行\n`);
+        if (dispatchResult.filesChanged && dispatchResult.filesChanged.length > 0) {
+          process.stdout.write(`📄 文件变更: ${dispatchResult.filesChanged.join(', ')}\n`);
+        }
+        if (dispatchResult.content) {
+          process.stdout.write(`\n--- 执行结果 ---\n${dispatchResult.content.slice(0, 3000)}${dispatchResult.content.length > 3000 ? '\n... (截断)' : ''}\n`);
+        }
+        process.stdout.write(`\n> 请审查上述结果，确认后执行 speccore execute --apply 写入代码\n`);
+        process.exitCode = 0;
+        return;
+      }
+    } catch (e: any) {
+      logger.debug(`[execute] SDK 调度尝试失败: ${e.message}，回退到 Prompt 模式`);
+    }
+  }
 
   // 输出到 stdout（Skill 通过 execute_command 捕获）
   // v8.3.166+: 在 prompt 前输出 subagent 标记
