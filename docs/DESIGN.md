@@ -28,7 +28,7 @@ workspace/
 │   │   ├── ARCHITECTURE.md      ← 全量架构文档
 │   │   └── TECH_FULL.md         ← 全量技术方案
 │   └── {端名}/                  ← [synthesize --full 生成] 各端分析文档（新路径）
-│       └── {platform}/           ← 端名来自 CONSTITUTION（如 admin/h5/backend）
+│       └── {platform}/           ← 端名来自 CONSTITUTION（如 admin-web/h5-mobile/booking-service）
 │
 ├── project-a/                     ← 独立工程 A
 │   ├── .speccore/                 ← 工程自己的配置（独立）
@@ -73,7 +73,7 @@ PATTERNS/
 ├── security/              ← 跨端通用安全模式
 ├── performance/           ← 跨端通用性能模式
 ├── shared/                ← 跨端共享模式（v8.3.0+：前后端同名组件自动识别）
-├── {端名}/                ← 端专属模式（如 backend/ h5/ admin/）
+├── {端名}/                ← 端专属模式（如 booking-service/ h5-mobile/ admin-web/）
 │   ├── architecture/
 │   ├── data-model/
 │   ├── api-contract/
@@ -99,8 +99,8 @@ PATTERNS/
   - 例: `architecture/microservice-gateway.md`
   - 例: `security/jwt-auth.md`
 - **端专属模式**（绑定特定端）: `{端名}/{分类}/{kebab-case模式名}.md`
-  - 例: `backend/security/jwt-auth.md`
-  - 例: `h5/performance/virtual-scroll.md`
+  - 例: `booking-service/security/jwt-auth.md`
+  - 例: `h5-mobile/performance/virtual-scroll.md`
 
 #### 文件内容格式
 
@@ -174,13 +174,14 @@ PATTERNS/
 | `analyze` | confirm-check | product-analyst | 4K |
 | `analyze` | phase1 | spec-analyzer | 10K |
 | `analyze` | contract | spec-analyzer | 6K |
-| `analyze` | platform-{x} | spec-analyzer | 8K |
-| `split` | prompt-analysis | task-decomposer | 8K |
+| `analyze` | phase1 (大项目) | spec-analyzer-feature | 8K |
+| `analyze` | platform-{x} | spec-analyzer-{platform} | 8K |
+| `split` | prompt-analysis | task-decomposer | 12K |
 | `split` | dependency-analysis | dependency-analyst | 5K |
 | `split` | effort-estimation | effort-estimator | 4K |
-| `plan` | default | schedule-planner、risk-assessor | 6K/4K |
-| `execute` | prompt-analysis | spec-executor | 10K |
-| `execute` | code-generation | spec-executor | 10K |
+| `plan` | default | schedule-planner、risk-assessor | 12K/4K |
+| `execute` | prompt-analysis | spec-executor-{platform} | 12K |
+| `execute` | code-generation | spec-executor-{platform} | 12K |
 | `execute` | quality-gate-build | compiler (兼测试) | 8K |
 | `execute` | quality-gate-nfr | security-reviewer (兼性能) | 6K |
 | `execute` | quality-gate-doc-sync | doc-sync-agent | 3K |
@@ -490,7 +491,7 @@ speccore graph render --extract ARCHITECTURE.md  # 从 Markdown 提取
 
 ```markdown
 ### feature-name/TECH.md
-- **文件**: `Iteration-001/020-specs/feature-name/backend/TECH.md`
+- **文件**: `Iteration-001/020-specs/feature-name/{platform}/TECH.md`
 - **标题**: 用户认证模块技术规格
 - **章节**: 接口设计 | 数据模型 | 业务规则 | 错误处理 | 部署清单
 - **摘要**: 本模块基于 JWT + RBAC 实现用户认证，包含登录/注册/令牌刷新...
@@ -821,7 +822,7 @@ cache/iterations/Q2/
 - 手动清理：`speccore analyze --clear-cache`
 - 过期清理：超过 30 天的缓存自动删除
 
-### 1.5.12 用户自定义文档模板层（v8.3.41+）
+### 1.5.17 用户自定义文档模板层（v8.3.41+）
 
 **职责**：允许用户用自己的文档模板覆盖或扩展 `analyze` 命令生成的规格文档风格。
 
@@ -839,7 +840,7 @@ cache/iterations/Q2/
 ├── iteration/       ← 迭代级文档模板（各端的 TECH.md、TEST.md、UI_SPEC.md 等）
 └── task/            ← 任务级文档模板（RISK.md、DEPS.md、MONITOR.md、REVIEW.md 等）
     ├── feature/
-    │   ├── api/     ← 仅 api 端的功能任务
+    │   ├── {端名}/  ← 仅特定端的功能任务
     │   └── _shared/ ← 所有 feature 类型任务通用
     ├── bugfix/
     └── _shared/     ← 所有任务类型通用
@@ -959,7 +960,7 @@ CONSTITUTION.md 的「## 端列表」章节是全项目唯一的端名来源：
 Layer 0: CONSTITUTION.md「## 端列表」章节 ← v6.46.0+ 全局权威
 Layer 1: CONSTITUTION.md「对应端」列
 Layer 2: 020-specs/{feature}/ 下的子目录扫描 ← 从功能模块目录中收集端名
-Layer 3: 默认 ['web']
+Layer 3: 回退到空数组（v8.3.32+ 不再硬编码 ['web']，提示用户配置 CONSTITUTION.md 端列表）
 ```
 
 **跨端需求处理链路**：
@@ -1132,12 +1133,12 @@ CONSTITUTION.md 中定义的端名可能是中文（如 `H5移动端`、`后台�
 引入 `PLATFORM_ALIAS_MAP` 语义映射表，支持多种写法自动映射到标准端名。
 
 ```typescript
+// 示例映射表（端名由用户在 CONSTITUTION.md 中自定义，以下为常见示例）
 const PLATFORM_ALIAS_MAP: Record<string, string[]> = {
-  'h5': ['h5', 'h5移动端', 'h5移动', 'mobile', '移动端', '手机浏览器'],
-  'admin': ['admin', '后台管理端', '后台', '管理端', 'web', 'pc', '桌面端'],
-  'app': ['app', '客户端', 'ios', 'android', 'native', '原生'],
-  'miniapp': ['miniapp', '小程序', '微信小程序', '支付宝小程序'],
-  'backend': ['backend', '后端', '服务', 'api', 'server', '服务端']
+  'h5-mobile': ['h5', 'h5移动端', 'h5移动', 'mobile', '移动端', '手机浏览器'],
+  'admin-web': ['admin', '后台管理端', '后台', '管理端', 'web', 'pc', '桌面端'],
+  'booking-service': ['backend', '后端', '服务', 'api', 'server', '服务端']
+  // 其他端名按项目实际配置添加
 };
 ```
 
@@ -1446,10 +1447,10 @@ v6.41.0-v8.3.16 期间，`020-specs/` 采用「端平铺」结构：全局文档
 │   │   ├── REQUIREMENT.md
 │   │   ├── ANALYSIS.md
 │   │   └── TECH.md
-│   ├── api/                         ← 后端服务端
+│   ├── booking-service/             ← 后端服务端
 │   │   ├── TECH.md
 │   │   └── TEST.md
-│   └── h5/                          ← 前端端
+│   └── h5-mobile/                   ← 前端端
 │       ├── TECH.md
 │       ├── TEST.md
 │       └── UI_SPEC.md
@@ -1513,7 +1514,7 @@ Iteration-NNN-name/
 │   │   │   ├── REQUIREMENT.md
 │   │   │   ├── ANALYSIS.md
 │   │   │   └── TECH.md
-│   │   └── {端名}/                ← 各端专属文档（如 api/h5/admin）
+│   │   └── {端名}/                ← 各端专属文档（如 booking-service/h5-mobile/admin-web）
 │   │       ├── TECH.md            ← 该端在该模块下的技术方案
 │   │       ├── TEST.md            ← 该端测试计划
 │   │       └── UI_SPEC.md         ← 该端 UI 规格（仅前端）
@@ -1559,15 +1560,15 @@ Iteration-NNN-name/
 
 ```
 文档:  010-requirements/user-auth/README.md
-分析:  020-specs/REQUIREMENT.md（全局） + 020-specs/admin/TECH.md（管理端专属） + 020-specs/h5/TECH.md（H5 端专属）
+分析:  020-specs/REQUIREMENT.md（全局） + 020-specs/admin-web/TECH.md（管理端专属） + 020-specs/h5-mobile/TECH.md（H5 端专属）
 任务:  030-tasks/feature/Task-001-user-auth/
        ├── 00-specs/TECH.md ← 从对应端的 TECH.md 提取
-       ├── backend/          ← 后端子任务（平铺）
-       ├── admin/            ← 管理端子任务（平铺）
-       └── h5/               ← H5 端子任务（平铺）
+       ├── booking-service/  ← 后端子任务（平铺）
+       ├── admin-web/        ← 管理端子任务（平铺）
+       └── h5-mobile/        ← H5 端子任务（平铺）
 ```
 
-端名称来自 CONSTITUTION.md「对应需求端」列（如 app/h5/miniapp/admin），split 时自动读取并创建对应前端子目录。
+端名称来自 CONSTITUTION.md「对应需求端」列（如 h5-mobile/admin-web/booking-service），split 时自动读取并创建对应端子目录。
 
 ### 双层规格解耦
 
@@ -1578,9 +1579,9 @@ Iteration-NNN-name/
     │
     ├── REQUIREMENT.md（全局需求规格，含「涉及端」列）
     ├── TECH.md（跨端通用技术方案）
-    ├── admin/TECH.md（管理端专属技术方案）
-    ├── h5/TECH.md（H5 端专属技术方案）
-    └── backend/TECH.md（后端专属技术方案）
+    ├── admin-web/TECH.md（管理端专属技术方案）
+    ├── h5-mobile/TECH.md（H5 端专属技术方案）
+    └── booking-service/TECH.md（后端专属技术方案）
     │
     │  split 读取 REQUIREMENT.md 按章节拆分
     │  从对应端的 TECH.md 提取该端内容
@@ -1806,10 +1807,9 @@ init → doc2spec → analyze → split → plan → execute → pr → done →
 
 ```
 Phase 1: 逐端分析（per-platform analysis）
-  ├── 后端工程 → analyze → .speccore/GLOBAL/backend/ANALYSIS.md + TECH.md
-  ├── Web 前端 → analyze → .speccore/GLOBAL/web/ANALYSIS.md + TECH.md
-  ├── Admin 端  → analyze → .speccore/GLOBAL/admin/ANALYSIS.md + TECH.md
-  └── App 端    → analyze → .speccore/GLOBAL/app/ANALYSIS.md + TECH.md
+  ├── 后端工程 → analyze → .speccore/GLOBAL/booking-service/ANALYSIS.md + TECH.md
+  ├── Web 前端 → analyze → .speccore/GLOBAL/h5-mobile/ANALYSIS.md + TECH.md
+  ├── Admin 端  → analyze → .speccore/GLOBAL/admin-web/ANALYSIS.md + TECH.md
 
 Phase 2: 跨端综合（cross-platform synthesis）
   ├── 汇总各端 specs
@@ -2530,7 +2530,6 @@ program
 
 | Skill | 命令 | 自然语言示例 |
 |:---|:---|:---|
-| `spec-init` | `speccore init` | `/init 初始化项目` |
 | `spec-welcome` | `speccore welcome` | `/welcome 查看欢迎页` |
 | `spec-help` | `speccore help` | `/help 有哪些命令` |
 | `spec-dashboard` | `speccore dashboard` | `/dashboard 查看进度` |
@@ -2543,14 +2542,6 @@ program
 | `spec-done` | `speccore done` | `/done 归档任务` |
 | `spec-spec2doc` | `speccore spec2doc` | `/spec2doc 导出规格` |
 | `spec-change` | `speccore change` | `/change 需求变更` |
-| `spec-validate` | `speccore validate` | `/validate 验证合规性` |
-| `spec-search` | `speccore search` | `/search 登录相关文档` |
-| `spec-track` | `speccore track` | `/track 追踪 REQ-001` |
-| `spec-sync` | `speccore sync` | `/sync 同步代码和 Spec` |
-| `spec-rename` | `speccore rename` | `/rename 把 Q1 改成 Q2` |
-| `spec-retro` | `speccore retro` | `/retro 复盘 Task-001` |
-| `spec-context` | `speccore context` | `/context 切换到 Q1` |
-| `spec-ops` | `speccore ops` | `/ops 查看操作历史` |
 | `spec-deploy` | `speccore pipeline` | `/deploy 部署到测试环境` |
 | `spec-verify` | `speccore verify` | `/verify 跑冒烟测试` |
 
@@ -2567,7 +2558,7 @@ program
 
 1. **精确入口 + 语义理解**：`/命令` 精确路由到 Skill，后续自然语言由 AI 在窄域内解析
 2. **不影响 ask 能力**：Skill 只预处理参数，最终仍调用 `speccore ask` 执行
-3. **全命令覆盖**：26+ 个命令全部有 Skill，无一遗漏
+3. **核心命令覆盖**：18 个核心命令有对应 Skill，其他命令通过 `speccore ask` 通用入口处理
 4. **双模式支持**：自然语言为主（最友好），显式参数为辅（最精确）
 
 ---
@@ -2585,35 +2576,23 @@ program
 ├── .qoder/rules/          ← Qoder 规则
 │   └── speccore.md
 ├── .qoder/commands/       ← Qoder 斜杠命令（spec-*.md 格式）
-├── .agents/skills/        ← Skills 技能（26+ 个，v8.3.60+ 全命令覆盖）
+├── .agents/skills/        ← Skills 技能（18 个核心命令）
 │   ├── speccore-router/SKILL.md   ← 智能路由器
 │   ├── spec-ask/SKILL.md          ← Ask 引擎入口
 │   ├── spec-analyze/SKILL.md      ← 需求分析
 │   ├── spec-change/SKILL.md       ← 需求变更
-│   ├── spec-context/SKILL.md      ← 上下文切换
 │   ├── spec-dashboard/SKILL.md    ← 仪表盘
 │   ├── spec-deploy/SKILL.md       ← 部署流水线（build/deploy/pipeline）
-│   ├── spec-dev/SKILL.md          ← 开发流水线
 │   ├── spec-doc2spec/SKILL.md     ← 文档导入
 │   ├── spec-done/SKILL.md         ← 任务归档
 │   ├── spec-execute/SKILL.md      ← 任务执行
 │   ├── spec-help/SKILL.md         ← 帮助中心
-│   ├── spec-init/SKILL.md         ← 项目初始化
 │   ├── spec-iteration-create/SKILL.md ← 迭代创建
-│   ├── spec-ops/SKILL.md          ← 操作历史
 │   ├── spec-plan/SKILL.md         ← 计划生成
 │   ├── spec-pr/SKILL.md           ← PR 提交
-│   ├── spec-reindex/SKILL.md      ← 索引重建
-│   ├── spec-rename/SKILL.md       ← 重命名
-│   ├── spec-retro/SKILL.md        ← 回顾复盘
-│   ├── spec-search/SKILL.md       ← 全文搜索
 │   ├── spec-spec2doc/SKILL.md     ← 规格导出
 │   ├── spec-split/SKILL.md        ← 任务拆分
-│   ├── spec-sync/SKILL.md         ← 双向同步
-│   ├── spec-synthesize/SKILL.md   ← 多端综合
 │   ├── spec-task-create/SKILL.md  ← 任务创建
-│   ├── spec-track/SKILL.md        ← 全链路追踪
-│   ├── spec-validate/SKILL.md     ← 合规验证
 │   ├── spec-verify/SKILL.md       ← 测试验证
 │   └── spec-welcome/SKILL.md      ← 欢迎页
 ├── .claude/commands/      ← Claude Code 斜杠命令
@@ -2761,7 +2740,7 @@ Get-WmiObject Win32_Process | Where-Object {
 | 迭代 | `Iteration-{ID}-{slug}` | `Iteration-001-ecommerce` |
 | 任务 | `Task-{ID}` | `Task-001` |
 | 目录 | 3位数字步长10英文 | `000-overview` `010-requirements` |
-| 需求端 | 小写英文 | `app` `h5` `miniapp` `admin` |
+| 需求端 | 小写英文 | `h5-mobile` `admin-web` `booking-service`（由 CONSTITUTION.md 定义） |
 | 分支 | `feature/Task-{ID}` | CONSTITUTION 定义 |
 
 #### CLI 命令命名规范（v8.3.54+）
@@ -2856,7 +2835,7 @@ Get-WmiObject Win32_Process | Where-Object {
 | v8.3.54 | 09-04 | CLI 命令命名规范化：`ops` → `history`，统一全拼+缩写规范；history 合并操作日志+需求变更历史 |
 | v8.3.60 | 09-07 | 环境驱动部署流水线：`pipeline --env` 自动读取环境配置 branch，自动 merge 当前分支 → build → deploy；五层环境模型（local/dev/test/staging/production）；全命令 Skill 覆盖（26+ 个 `/命令 + 自然语言` 快捷入口）；`verify --env-file` 支持环境配置合并测试参数 |
 
-> **最后更新**: 2026-09-07 (v8.3.60) — 环境驱动部署 + 全命令 Skill 覆盖
+> **最后更新**: 2026-09-15 (v8.3.168) — 多 Subagent 功能模块级架构 + 跨 Agent 状态共享
 
 ---
 ## 10. 可执行编排引擎（spec-ask v4）
