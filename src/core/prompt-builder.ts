@@ -19,6 +19,10 @@ import {
   assembleChunksForPrompt, indexTaskDocuments, extractHtmlText,
 } from './rag-engine';
 import { unifiedSearch, assembleUnifiedContext } from './unified-retrieval';
+// v8.3.183+: 统一内容供给管线（md 大纲摘要，替代链接全文内联）
+import { extractMdOutline } from './content-delivery';
+// v8.3.183+: HTML 原型渲染（Playwright 截图 + accessibility tree，替代纯文本）
+import { renderHtmlPrototype } from './html-prototype';
 // v8.3.122+: execute 时深入读取关联源码
 import { findRelevantCode, readRelevantSource } from './code-scanner';
 // v8.3.125+: 同义词扩展，解决中英文/缩写关键词匹配失败
@@ -3010,38 +3014,22 @@ async function expandMarkdownLinks(
       let linkContent = await readFile(resolved, 'utf-8');
       if (linkContent.trim().length <= 30) continue;
 
-      // v8.3.138+: HTML/原型文件使用独立阈值（8KB），避免原型文件被过度截断。
-      // 超过阈值不截断 inline（避免结构残缺误导 AI），而是提示宿主 AI 直接打开查看。
       const isHtml = resolved.endsWith('.html') || resolved.endsWith('.htm');
-      const htmlMaxChars = 8192; // 8KB，足够覆盖大多数 HTML 原型
-      const isLarge = isHtml ? linkContent.length > htmlMaxChars : linkContent.length > maxChars;
-
-      if (isHtml && isLarge) {
-        expansions.push(
-          `\n\n---\n📄 **HTML 原型文件**（内容过大未展开，宿主 AI 请务必直接打开查看）：\n` +
-          `- 文件: ${resolved}\n` +
-          `- 大小: ${(linkContent.length / 1024).toFixed(1)} KB\n` +
-          `- 描述: ${link.text || '无描述'}\n` +
-          `> ⚠️ **请打开此 HTML 文件查看完整内容**。此为页面原型/设计稿，与需求理解高度相关，CLI 因文件过大未完整展开，需要你直接打开文件查看。`
-        );
-        continue;
-      }
-
-      // v8.3.122+: HTML 原型文件保留完整内容，不再提取纯文本
+      // v8.3.183+: 统一用结构化摘要替代全文内联
+      //   - html → Playwright accessibility tree（页面结构），失败降级 extractHtmlText
+      //   - md → 标题大纲
+      let rawSummary: string;
       if (isHtml) {
-        // 保留原始 HTML（包含 CSS/JS/结构），让 AI 完整解析原型
+        const proto = await renderHtmlPrototype(resolved);
+        rawSummary = proto?.accessibilityTree || extractHtmlText(linkContent);
+      } else {
+        rawSummary = extractMdOutline(linkContent);
       }
-
-      const isTruncated = isHtml ? linkContent.length > htmlMaxChars : linkContent.length > maxChars;
-      if (isTruncated) {
-        linkContent = linkContent.slice(0, maxChars) +
-          `\n\n---\n📄 **文件内容已截断**（宿主 AI 请务必打开查看完整内容）：\n` +
-          `- 文件: ${resolved}\n` +
-          `- 大小: ${(await stat(resolved)).size} 字节\n` +
-          `> ⚠️ **请打开此文件查看完整内容**。此文件与需求理解高度相关，CLI 因长度限制已截断，需要你直接打开文件查看。`;
-      }
+      const summary = rawSummary.length > maxChars
+        ? rawSummary.slice(0, maxChars) + '\n…(摘要截断)'
+        : rawSummary;
       expansions.push(
-        `\n\n<!-- 展开链接: ${link.path} -->\n**[链接展开] ${link.text}** (${link.path}):\n\n${linkContent}`
+        `\n\n**[链接] ${link.text}** (${link.path}):\n${summary}\n> 全文见 \`${resolved}\``
       );
     } catch { /* 忽略读取失败的链接文件 */ }
   }
@@ -3122,16 +3110,19 @@ async function inlineMarkdownImages(
         inlines.push(`\n\n---\n🖼️ **图片文件**（视觉模型异常，宿主 AI 请务必直接打开查看）：\n- ${img.alt || '无描述'}: ${resolved}\n> ⚠️ **请打开此图片文件查看内容**。此图片与需求理解高度相关，视觉模型异常未能描述，需要你直接打开文件查看。`);
       }
     } else {
-      // v8.3.138+: 无视觉模型时，明确提示宿主 AI 打开图片查看（不要用 HTML 注释，AI 会忽略）
-      inlines.push(`\n\n---\n🖼️ **图片文件**（CLI 无法解析图片内容，宿主 AI 请务必直接打开查看）：`);
-      inlines.push(`- ${img.alt || '无描述'}: ${resolved}`);
-      try {
-        if (await pathExists(resolved)) {
-          const st = await stat(resolved);
-          inlines.push(`- 文件大小: ${(st.size / 1024).toFixed(1)} KB`);
-        }
-      } catch { /* ignore */ }
-      inlines.push(`> ⚠️ **请打开此图片文件查看内容**。此图片与需求理解高度相关，CLI 无法自动解析图片内容，需要你直接打开文件查看。`);
+      // v8.3.183+: 无视觉模型时，用 alt 语义兜底（硬保证有描述），"请打开"降为补充
+      const altDesc = img.alt && img.alt.trim() ? img.alt.trim() : '';
+      if (altDesc) {
+        inlines.push(`\n\n---\n🖼️ **图片** ${altDesc}：\`${resolved}\`\n> 图片细节需宿主 AI 打开查看（CLI 无视觉模型，仅能提供 alt 语义）`);
+      } else {
+        inlines.push(`\n\n---\n🖼️ **图片文件**（无 alt 描述，宿主 AI 请打开查看）：\n- ${resolved}`);
+        try {
+          if (await pathExists(resolved)) {
+            const st = await stat(resolved);
+            inlines.push(`- 文件大小: ${(st.size / 1024).toFixed(1)} KB`);
+          }
+        } catch { /* ignore */ }
+      }
     }
   }
 

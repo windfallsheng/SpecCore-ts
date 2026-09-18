@@ -18,6 +18,8 @@ import { join, relative, basename } from 'path';
 import { logger } from '../utils/logger';
 import { isTimestampBackup } from '../utils/task-utils';
 import { buildCodeIndex, findRelevantCode, readRelevantSource, isIndexStale, loadFullIndex, resolveIterationScope } from './code-scanner';
+// v8.3.183+: tree-sitter 结构化摘要，替代原文 slice(0,N) 硬切
+import { summarizeSources } from './multi-lang-parser';
 // v8.3.125+: 同义词扩展，解决中英文/缩写匹配失败问题
 import { expandSynonyms, extractNormalizedKeywords } from '../utils/synonyms';
 import { generateAIContext, AIContextInput, AIContextResult } from './ai-context-generator';
@@ -251,6 +253,7 @@ async function analyzeRequirements(input: AnalyzeInput): Promise<AnalysisResult>
   // ── 需求分析时默认读取关联代码（避免分析不接地气 + 减少重复 token 消耗） ──
   // v8.3.122+: 增加文件数和字节配额，确保深入阅读业务逻辑
   let sourceContents: Record<string, string> = {};
+  let sourceSummaries: Record<string, string> = {};
   const shouldReadSource = input.readSource !== false;
   if (shouldReadSource && (input.iteration || input.taskId)) {
     const limit = input.depth === 'deep' ? 25 : (input.depth === 'quick' ? 5 : 12);
@@ -261,6 +264,8 @@ async function analyzeRequirements(input: AnalyzeInput): Promise<AnalysisResult>
       const scopeHint = input.sourceScope ? ` (范围: ${input.sourceScope})` : '';
       const totalChars = Object.values(sourceContents).reduce((a, c) => a + c.length, 0);
       logger.info(`   📖 需求分析已关联 ${Object.keys(sourceContents).length} 个源码文件 (${Math.round(totalChars / 1000)}K 字符)${scopeHint}`);
+      // tree-sitter 结构化摘要（替代原文硬切，失败静默降级原文截断）
+      try { sourceSummaries = await summarizeSources(sourceContents); } catch {}
     }
   }
 
@@ -273,12 +278,12 @@ async function analyzeRequirements(input: AnalyzeInput): Promise<AnalysisResult>
   } else if (input.scope === 'task') {
     // task scope — 已在入口校验
     outputPath = join(`Iteration-${input.iteration}`, '030-tasks', input.taskId!, '00-specs', input.output || 'ANALYSIS.md');
-    report = buildTaskReqReport(input, issues, archImpact, sourceContents);
+    report = buildTaskReqReport(input, issues, archImpact, sourceContents, sourceSummaries);
   } else {
     // iteration (default)
     const iterDir = `Iteration-${input.iteration || 'current'}`;
     outputPath = join(iterDir, '020-specs', input.output || 'ANALYSIS.md');
-    report = buildIterationReqReport(input, issues, archImpact, sourceContents);
+    report = buildIterationReqReport(input, issues, archImpact, sourceContents, sourceSummaries);
 
     // 按端分目录输出
     await writePerPlatform(iterDir, report, input.output || 'ANALYSIS.md');
@@ -946,6 +951,7 @@ function buildIterationReqReport(
   issues: Issue[],
   archImpact: ArchImpact,
   sourceContents?: Record<string, string>,
+  sourceSummaries?: Record<string, string>,
 ): string {
   const now = new Date().toISOString().split('T')[0];
   const iter = input.iteration || 'current';
@@ -994,8 +1000,14 @@ function buildIterationReqReport(
     r += `> 以下源码文件与当前需求相关，供技术方案参考\n\n`;
     const previewLimit = input.depth === 'deep' ? 3000 : (input.depth === 'quick' ? 800 : 1500);
     for (const [path, content] of Object.entries(sourceContents)) {
-      const preview = content.slice(0, previewLimit).replace(/\n/g, '\n  ');
-      r += `### \`${path}\`\n\n\`\`\`${path.split('.').pop() || 'ts'}\n${preview}${content.length > previewLimit ? '\n  // ... 截断 ...' : ''}\n\`\`\`\n\n`;
+      const summary = sourceSummaries?.[path];
+      if (summary) {
+        // 结构化摘要：签名 + 符号 + 接口，避免原文被按字符腰斩
+        r += `### \`${path}\`\n\n\`\`\`\n${summary}\n\`\`\`\n\n`;
+      } else {
+        const preview = content.slice(0, previewLimit).replace(/\n/g, '\n  ');
+        r += `### \`${path}\`\n\n\`\`\`${path.split('.').pop() || 'ts'}\n${preview}${content.length > previewLimit ? '\n  // ... 截断 ...' : ''}\n\`\`\`\n\n`;
+      }
     }
   }
 
@@ -1013,6 +1025,7 @@ function buildTaskReqReport(
   issues: Issue[],
   archImpact: ArchImpact,
   sourceContents?: Record<string, string>,
+  sourceSummaries?: Record<string, string>,
 ): string {
   const now = new Date().toISOString().split('T')[0];
   let r = `# 任务需求分析\n\n`;
@@ -1030,8 +1043,13 @@ function buildTaskReqReport(
     r += `\n## 关联代码\n\n`;
     r += `> 以下源码与当前任务相关\n\n`;
     for (const [path, content] of Object.entries(sourceContents)) {
-      const preview = content.slice(0, 400).replace(/\n/g, '\n  ');
-      r += `- **\`${path}\`**\n\n  \`\`\`${path.split('.').pop() || 'ts'}\n  ${preview}${content.length > 400 ? '\n  // ... 截断 ...' : ''}\n  \`\`\`\n\n`;
+      const summary = sourceSummaries?.[path];
+      if (summary) {
+        r += `- **\`${path}\`**\n\n  \`\`\`\n  ${summary}\n  \`\`\`\n\n`;
+      } else {
+        const preview = content.slice(0, 400).replace(/\n/g, '\n  ');
+        r += `- **\`${path}\`**\n\n  \`\`\`${path.split('.').pop() || 'ts'}\n  ${preview}${content.length > 400 ? '\n  // ... 截断 ...' : ''}\n  \`\`\`\n\n`;
+      }
     }
   }
 

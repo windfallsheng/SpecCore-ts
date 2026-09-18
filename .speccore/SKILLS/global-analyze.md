@@ -15,6 +15,11 @@
 - 全局规范（.speccore/GLOBAL/）
 - 跨端契约文件
 - CONSTITUTION.md（全局架构约定）
+- 关联源码的结构化摘要（tree-sitter 签名/符号/接口，不要读原文）
+
+## 上下文供给方式
+
+CLI 已产出结构化摘要，**默认读摘要、按需读原文**：源码 → tree-sitter 摘要、HTML 原型 → accessibility tree + 截图、文档引用 → 大纲摘要 + 「全文见路径」。
 
 ## 输出格式
 

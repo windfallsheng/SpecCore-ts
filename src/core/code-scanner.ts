@@ -18,6 +18,8 @@ import { scanCodeForSpecAnnotations } from './reverse-sync';
 import { parsePlatformList } from './spec-paths';
 // v8.3.125+: 同义词扩展，补充 SEMANTIC_MAP 覆盖范围
 import { expandSynonyms } from '../utils/synonyms';
+// v8.3.183+: 多语言 AST 解析（tree-sitter WASM），替换脆弱正则
+import { extractWithTreeSitter, isTreeSitterLang, extractVueScript } from './multi-lang-parser';
 
 // ── 端名缓存（v6.48.0+）：从 CONSTITUTION.md 加载，优先于通用模式匹配 ──
 let _constitutionPlatforms: string[] | null = null;
@@ -35,6 +37,7 @@ export interface CodeFile {
   language: string;
   exports: string[];       // 导出的类/函数名
   apis: string[];          // 包含的 API 路径
+  apiDetails: string[];    // "GET /path" 形式，保留 HTTP 方法（v8.3.183+）
   imports: string[];       // 导入的模块路径
   lastModified: number;
   lines: number;           // 代码行数
@@ -191,9 +194,7 @@ async function scanDirectory(
           }
 
           const content = await readFile(fullPath, 'utf-8');
-          const exports = extractExports(content, lang);
-          const apis = extractApis(content, lang);
-          const imports = extractImports(content, lang);
+          const { exports, apis, apiDetails, imports } = await extractCodeInfo(content, lang);
           const lines = content.split(/\r?\n/).length;
           const endpoint = await detectEndpoint(relPath);
           const module = detectModule(relPath);
@@ -203,6 +204,7 @@ async function scanDirectory(
             language: lang,
             exports,
             apis,
+            apiDetails,
             imports,
             lastModified: st.mtimeMs,
             lines,
@@ -223,6 +225,36 @@ async function scanDirectory(
   } catch {
     // 跳过无权限目录
   }
+}
+
+/**
+ * 统一提取入口：tree-sitter 优先，失败/不支持则回退正则。
+ * - java/go/python/rust → tree-sitter（精确）
+ * - vue → 抽取 <script> 块后按 js 处理
+ * - ts/js/sql/yaml → 正则（保留原逻辑）
+ */
+async function extractCodeInfo(
+  content: string,
+  lang: string,
+): Promise<{ exports: string[]; apis: string[]; apiDetails: string[]; imports: string[] }> {
+  if (isTreeSitterLang(lang)) {
+    const parsed = await extractWithTreeSitter(content, lang);
+    if (parsed) return parsed;
+  } else if (lang === 'vue') {
+    const script = extractVueScript(content);
+    return {
+      exports: extractExports(script, 'javascript'),
+      apis: extractApis(script, 'javascript'),
+      apiDetails: [],
+      imports: extractImports(script, 'javascript'),
+    };
+  }
+  return {
+    exports: extractExports(content, lang),
+    apis: extractApis(content, lang),
+    apiDetails: [],
+    imports: extractImports(content, lang),
+  };
 }
 
 function extractExports(content: string, lang: string): string[] {

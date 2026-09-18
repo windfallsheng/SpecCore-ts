@@ -31,7 +31,8 @@
   "files": [
     "dist",
     "bin",
-    ".agents"
+    ".agents",
+    "vendor"
   ],
   "dependencies": {
     "commander": "^11.1.0",
@@ -39,7 +40,8 @@
     "glob": "^10.3.10",
     "js-yaml": "^4.1.0",
     "jszip": "^3.10.1",
-    "playwright": "^1.62.1"
+    "playwright": "^1.62.1",
+    "web-tree-sitter": "0.20.8"
   },
   "devDependencies": {
     "@types/fs-extra": "^11.0.4",

@@ -15,6 +15,14 @@
 - 跨端 API 契约（_shared/API_CONTRACT.yaml）
 - CONSTITUTION.md（命名规范、端名标准、技术栈）
 - 已完成端的规格（如需参考）
+- 关联源码的结构化摘要（`--with-code` 时 CLI 已用 tree-sitter 提取签名/符号/接口，不要读原文）
+
+## 上下文供给方式
+
+CLI 已产出结构化摘要，**默认读摘要、按需读原文**：
+- 源码 → tree-sitter 结构化摘要（签名/符号/接口）
+- HTML 原型 → accessibility tree + 截图
+- 文档引用 → 大纲摘要 + 「全文见路径」提示
 
 ## 输出格式
 
