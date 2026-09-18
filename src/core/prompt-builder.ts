@@ -2575,6 +2575,24 @@ export function formatPrompt(prompt: SpecCorePrompt, maxTokens?: number): string
   return result;
 }
 
+// ═══════════════════════════════════════════════════════════
+// v8.3.187+ 通用行为准则（degrade to honesty 体系）
+// 融合业界最佳实践：
+//   - Claude Code 官方系统提示词：Read before write / Minimal change / 不臆造 API
+//   - Anthropic Prompt Library：avoid over-engineering / hallucination-free / 诚实标注
+//   - Karpathy 12 规则：Think before coding / Precise edits / 主动澄清 / 明确失败报告
+// 原则：少而精（5–8 条为宜，过多会导致合规率骤降），每条可操作、正面指令 + 明确禁止结合。
+// ═══════════════════════════════════════════════════════════
+const UNIVERSAL_BEHAVIOR_RULES: string[] = [
+  '- **Spec 优先（最高优先级）**：代码、口头要求与 Spec（REQ/TECH/API_CONTRACT）冲突时，一律以 Spec 为准，并明确指出冲突点与差异。',
+  '- **先读后写**：动手改代码前，先读相关 Spec 与现有实现；禁止凭空臆造不存在的 API、字段、路径或库方法，不确定就查，查不到就如实说明。',
+  '- **不迎合用户**：优先保证技术正确与真实，而非附和用户；需求有缺陷、自相矛盾或不合理处，直接指出并给建议，不为顺从而照做。',
+  '- **最小改动**：只做当前任务要求或明确必要的改动；不顺手重构无关代码、不添加超出需求的「改进」、不过度设计；无用代码直接删除，不留兼容性 hack。',
+  '- **主动澄清**：需求或 Spec 有歧义、缺关键信息时，先提出澄清问题或明确列出假设，不擅自猜测后闷头实现。',
+  '- **降级到诚实**：区分「事实 / 推断 / 猜测」；不确定的信息标注置信度，不编造；做不到或没把握的方案，说明局限，不给自信的错误答案。',
+  '- **破坏性操作先确认**：删除、覆盖、迁移文件或改动公共 API 等影响面大/不可逆的操作，先说明影响并确认后再执行。',
+];
+
 /** 实际构建 prompt 文本（无裁剪逻辑） */
 export function buildPromptText(prompt: SpecCorePrompt): string {
   // v8.3.160+: analyze 命令使用 buildMultiDocPrompt 生成的原始 Prompt，直接返回
@@ -2587,12 +2605,9 @@ export function buildPromptText(prompt: SpecCorePrompt): string {
   lines.push('[SPECCORE_PROMPT]');
   lines.push('');
 
-  // v8.3.184+ 通用行为准则（degrade to honesty：不迎合、不假装确定、Spec 优先）
+  // v8.3.184+ 通用行为准则（v8.3.187+ 扩展并抽取为 UNIVERSAL_BEHAVIOR_RULES 常量）
   lines.push('## 通用行为准则');
-  lines.push('- **不迎合用户**：需求若有缺陷、矛盾或不合理之处，直接指出并给建议，不为顺从而照做。');
-  lines.push('- **不假装确定**：不确定的信息诚实标注「这是推断/猜测」，不用确定口吻编造事实。');
-  lines.push('- **Spec 优先**：代码或口头要求与 Spec（REQ/TECH/API_CONTRACT）冲突时，以 Spec 为准并指出冲突。');
-  lines.push('- **降级到诚实**：做不到或没把握的方案，宁可说明局限，也不给自信的错误答案。');
+  for (const rule of UNIVERSAL_BEHAVIOR_RULES) lines.push(rule);
   lines.push('');
 
   // v8.3.160+: 注入子 Agent 角色定义和上下文裁剪策略
