@@ -126,16 +126,31 @@ function walk(
   importsSet: Set<string>,
   apisSet: Set<string>,
   apiDetailsSet: Set<string>,
+  classPrefix: string = '',
 ): void {
   const t: string = node.type;
 
+  // 进入类声明时，提取类级 @RequestMapping 前缀（如 /api/auth），供方法级注解合并完整路径
+  let currentPrefix = classPrefix;
+  if (lang === 'java' && t === 'class_declaration') {
+    const prefix = extractClassPathPrefix(node, src);
+    if (prefix) currentPrefix = prefix;
+  }
+
   collectExport(t, node, src, lang, exportsSet);
   collectImport(t, node, src, lang, importsSet);
-  collectApi(t, node, src, lang, apisSet, apiDetailsSet);
+  collectApi(t, node, src, lang, apisSet, apiDetailsSet, currentPrefix);
 
   for (let i = 0; i < node.childCount; i++) {
-    walk(node.child(i), src, lang, exportsSet, importsSet, apisSet, apiDetailsSet);
+    walk(node.child(i), src, lang, exportsSet, importsSet, apisSet, apiDetailsSet, currentPrefix);
   }
+}
+
+/** 提取类级 @RequestMapping 前缀（class_declaration 头部，方法体之前） */
+function extractClassPathPrefix(node: any, src: string): string {
+  const txt = src.slice(node.startIndex, node.endIndex);
+  const m = txt.match(/@RequestMapping\s*\(\s*(?:value\s*=\s*)?"(\/[^"]*)"/);
+  return m ? m[1] : '';
 }
 
 /** 从节点文本中取名字（首个 identifier 类子节点） */
@@ -192,15 +207,33 @@ function collectImport(t: string, node: any, src: string, lang: string, out: Set
   }
 }
 
-function collectApi(t: string, node: any, src: string, lang: string, out: Set<string>, detailOut: Set<string>): void {
+function collectApi(t: string, node: any, src: string, lang: string, out: Set<string>, detailOut: Set<string>, classPrefix: string = ''): void {
   if (lang === 'java' && t === 'annotation') {
     const txt = src.slice(node.startIndex, node.endIndex);
     // @GetMapping("/path") / @RequestMapping("/path") / @RequestMapping(value="/path", method=POST)
     const m = txt.match(/@(Get|Post|Put|Delete|Patch|Request)Mapping\s*\(\s*(?:value\s*=\s*)?"(\/[^"]*)"/);
     if (m) {
-      out.add(m[2]);
-      const method = m[1] === 'Request' ? 'ANY' : m[1].toUpperCase();
-      detailOut.add(`${method} ${m[2]}`);
+      const kind = m[1];
+      const rawPath = m[2];
+      if (kind === 'Request') {
+        // @RequestMapping：类级（路径==前缀，method=ANY）或方法级（method=XXX）
+        const isClassLevel = classPrefix && rawPath === classPrefix;
+        if (isClassLevel) {
+          out.add(rawPath);
+          detailOut.add(`ANY ${rawPath}`);
+        } else {
+          const merged = mergePath(classPrefix, rawPath);
+          const methodMatch = txt.match(/method\s*=\s*\{?([A-Za-z.]+)/);
+          const method = methodMatch ? normalizeMethod(methodMatch[1]) : 'ANY';
+          out.add(merged);
+          detailOut.add(`${method} ${merged}`);
+        }
+      } else {
+        // @GetMapping 等方法级注解：合并类级前缀
+        const merged = mergePath(classPrefix, rawPath);
+        out.add(merged);
+        detailOut.add(`${kind.toUpperCase()} ${merged}`);
+      }
     }
   } else if (lang === 'python' && t === 'decorated_definition') {
     const txt = src.slice(node.startIndex, node.endIndex);
@@ -218,6 +251,20 @@ function collectApi(t: string, node: any, src: string, lang: string, out: Set<st
     }
   }
   // rust: actix 的 #[get("/path")] 少见，暂不处理
+}
+
+/** 合并类级前缀 + 方法级路径：/api/auth + /login → /api/auth/login */
+function mergePath(prefix: string, path: string): string {
+  if (!prefix) return path;
+  if (!path) return prefix;
+  if (path.startsWith(prefix)) return path; // 已是完整路径
+  return prefix.replace(/\/$/, '') + (path.startsWith('/') ? path : '/' + path);
+}
+
+/** 规范化 HTTP 方法：RequestMethod.POST → POST */
+function normalizeMethod(m: string): string {
+  const parts = m.split('.');
+  return parts[parts.length - 1].toUpperCase();
 }
 
 // ─────────────────────────────────────────────────────────────
