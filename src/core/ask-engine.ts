@@ -103,6 +103,8 @@ const COMMAND_KB: CommandKnowledge[] = [
     usage: 'speccore done [--task <id>] [--all] [--interactive]', examples: ['speccore done --task T-01', 'speccore done --all'], related: ['execute', 'pr'], triggers: ['完成', 'done', '归档', '结束', '做完'] },
   { name: 'dev', aliases: ['d'], description: '智能级联：--auto 全自动流水线 detect→execute',
     usage: 'speccore dev [--auto] [--from <phase>] [--to <phase>]', examples: ['speccore dev --auto', 'speccore dev --from analyze --to execute'], related: ['execute', 'plan'], triggers: ['dev', '流水线', '自动', '级联'] },
+  { name: 'run', aliases: ['r'], description: '端到端流水线：一句话需求→澄清→分析→拆分→执行→验证→部署（默认三闸口，--demo 放宽 A/B）',
+    usage: 'speccore run [需求描述] [--from <phase>] [--to <phase>] [--demo]', examples: ['speccore run "做用户积分功能"', 'speccore run --demo "做演示页面"', 'speccore run --from split'], related: ['dev', 'clarify', 'execute'], triggers: ['run', '跑一遍', '端到端', '全流程', '一键开发', '自动开发', '从头到尾', '完整流程'] },
   { name: 'task', aliases: ['tk'], description: '任务管理：创建/列表/状态。子命令: new, list, status',
     usage: 'speccore task new --name <name> [--id <id>] | speccore task list | speccore task status', examples: ['speccore task new --name "用户登录"', 'speccore task list'], related: ['plan', 'execute'], triggers: ['task', '任务列表', '查看任务', '列出任务'] },
   { name: 'iteration', aliases: ['it'], description: '迭代管理：创建时自动生成唯一编码（Iteration-001-功能名），支持拆分/列表',

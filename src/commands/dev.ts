@@ -20,6 +20,8 @@ interface DevOptions {
   web?: boolean; output?: string; lang?: string;
   pipeline?: boolean;   // --pipeline: 启用 Pipeline 模式
   resume?: boolean;     // --resume: 恢复之前的 Pipeline
+  demo?: boolean;       // v8.3.184+: --demo 演示模式（放宽闸口 A/B，保留 C）
+  demand?: string;      // v8.3.184+: 一句话需求描述（clarify 阶段入口）
 }
 
 const I18N: Record<string, Record<string, string>> = {
@@ -116,15 +118,27 @@ function showPhase(phase: string, cmds: string[]) {
 async function autoPipeline(options: DevOptions): Promise<void> {
   const PIPELINE_PHASES = [
     { key: 'init',      cmd: 'speccore init' },
+    { key: 'clarify',   cmd: 'speccore clarify' },
     { key: 'doc2spec',  cmd: 'speccore doc2spec' },
     { key: 'analyze',   cmd: 'speccore analyze' },
+    { key: 'validate',  cmd: 'speccore validate' },
     { key: 'split',     cmd: 'speccore iteration split' },
     { key: 'plan',      cmd: 'speccore plan' },
     { key: 'execute',   cmd: 'speccore execute' },
+    { key: 'verify',    cmd: 'speccore verify' },
+    { key: 'pipeline',  cmd: 'speccore pipeline' },
     { key: 'pr',        cmd: 'speccore pr' },
     { key: 'done',      cmd: 'speccore done' },
     { key: 'spec2doc',  cmd: 'speccore spec2doc' },
   ];
+
+  // v8.3.184+: review 闸口（功能开发质量底线）——阶段执行前触发，软停等待宿主 AI 确认
+  // A: split 前（Spec 定稿）、B: verify 前（代码 review）、C: pipeline 前（部署前确认，永不跳过）
+  const GATES: Record<string, { id: string; title: string; hint: string; resumeFrom: string }> = {
+    split:    { id: 'A', title: 'Spec 定稿',   hint: '请 review 生成的 Spec（功能单元/端覆盖/验收标准），确认后继续', resumeFrom: 'split' },
+    verify:   { id: 'B', title: '代码 review', hint: '请 review 生成的代码（重点扫 AI 标记的低置信点 / .issues.md / .deviations），确认后继续', resumeFrom: 'verify' },
+    pipeline: { id: 'C', title: '部署前确认',  hint: '即将部署到环境（destructive 操作），确认后才执行', resumeFrom: 'pipeline' },
+  };
 
   const iteration = await getDefaultIteration(options.iteration);
   if (!iteration) {
@@ -187,8 +201,23 @@ async function autoPipeline(options: DevOptions): Promise<void> {
   }
 
   // ── 逐步执行 ──
+  let pausedGate: string | null = null;
   for (let i = startIdx; i <= endIdx; i++) {
     const phase = PIPELINE_PHASES[i];
+
+    // v8.3.184+: review 闸口软停（功能开发质量底线）
+    const gate = GATES[phase.key];
+    if (gate) {
+      const skipGate = options.demo && gate.id !== 'C';  // demo 跳过 A/B，C 永不跳过
+      if (!skipGate) {
+        logger.warn(`\n🛑 [SPECCORE_GATE_${gate.id}] ${gate.title}`);
+        logger.warn(`   ${gate.hint}`);
+        logger.warn(`   确认后继续: speccore run --auto --from ${gate.resumeFrom} -I ${iteration}\n`);
+        pausedGate = gate.id;
+        break;  // 软停，等宿主 AI 确认后 --from 继续
+      }
+    }
+
     logger.info(`━━━ [${i + 1}/${endIdx - startIdx + 1}] ${phase.key} ━━━`);
     const phaseStart = Date.now();
     let phaseStatus: PhaseResult['status'] = 'success';
@@ -202,6 +231,19 @@ async function autoPipeline(options: DevOptions): Promise<void> {
           execSync('speccore init', { stdio: 'inherit' });
         } else {
           logger.info('  ✅ 已初始化，跳过');
+        }
+        break;
+      }
+      case 'clarify': {
+        // v8.3.184+: 一句话需求 → PRD（口语化需求入口，与 doc2spec 二选一）
+        const reqDoc = join(iterDir, '010-requirements', 'REQUIREMENT.md');
+        const hasFeatures = await hasFeatureDirs(iterDir);
+        if ((await pathExists(reqDoc)) || hasFeatures) {
+          logger.info('  ✅ 需求已存在，跳过 clarify');
+        } else if (options.demand) {
+          execSync(`speccore clarify "${options.demand}" --to ${iteration}`, { stdio: 'inherit' });
+        } else {
+          logger.info('  ℹ️ 未提供一句话需求，跳过 clarify（走 doc2spec 导入文档）');
         }
         break;
       }
@@ -266,6 +308,16 @@ async function autoPipeline(options: DevOptions): Promise<void> {
         }
         break;
       }
+      case 'validate': {
+        // v8.3.184+: Spec 质量门禁（analyze 后校验完整性/一致性，不通过不进入 split）
+        const analysis = join(iterDir, '020-specs', 'overview', 'ANALYSIS.md');
+        if (await pathExists(analysis)) {
+          execSync(`speccore validate --iteration=${iteration}`, { stdio: 'inherit' });
+        } else {
+          logger.info('  ⏭️ 无 Spec 可校验，跳过 validate');
+        }
+        break;
+      }
       case 'split': {
         let hasTasks = false;
         try {
@@ -310,6 +362,26 @@ async function autoPipeline(options: DevOptions): Promise<void> {
         } else {
           execSync(`speccore execute --auto -i ${iteration}`, { stdio: 'inherit' });
         }
+        break;
+      }
+      case 'verify': {
+        // v8.3.184+: 验证（execute 后，编译+Lint+测试+ui 截图，只报告不阻断）
+        let hasPendingV = false;
+        try {
+          const { scanTasks } = await import('../core/state');
+          const tasks = await scanTasks(iteration);
+          hasPendingV = tasks.some(t => t.status === 'pending');
+        } catch {}
+        if (hasPendingV) {
+          logger.info('  ⏭️ 还有 pending 任务，跳过 verify');
+        } else {
+          execSync(`speccore verify`, { stdio: 'inherit' });
+        }
+        break;
+      }
+      case 'pipeline': {
+        // v8.3.184+: 部署（闸口 C 在阶段前已软停，确认后才到这）
+        execSync(`speccore pipeline --all`, { stdio: 'inherit' });
         break;
       }
       case 'pr': {
@@ -409,7 +481,12 @@ async function autoPipeline(options: DevOptions): Promise<void> {
 
   report += `\n---\n> 报告自动生成 by speccore dev auto-pipeline\n`;
   await writeFile(reportPath, report, 'utf-8');
-  logger.success(`\n✅ Pipeline 完成: ${PIPELINE_PHASES.slice(startIdx, endIdx + 1).map(p => p.key).join(' → ')}`);
+  if (pausedGate) {
+    logger.warn(`\n🛑 Pipeline 已暂停在闸口 ${pausedGate}（完成至 ${phaseResults.map(p => p.key).join(' → ')}）`);
+    logger.warn(`   确认后继续: speccore run --auto --from ${GATES[Object.keys(GATES).find(k => GATES[k].id === pausedGate)!].resumeFrom} -I ${iteration}\n`);
+  } else {
+    logger.success(`\n✅ Pipeline 完成: ${PIPELINE_PHASES.slice(startIdx, endIdx + 1).map(p => p.key).join(' → ')}`);
+  }
   logger.info(`📊 执行报告 → ${reportPath}\n`);
 }
 

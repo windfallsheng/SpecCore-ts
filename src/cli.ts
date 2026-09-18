@@ -205,13 +205,29 @@ program
   .description('智能级联：--auto 全自动流水线，--from/--to 指定起止阶段')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('--force', 'Auto-execute without confirmation')
-  .option('--auto', '全自动流水线：init→doc2spec→analyze→split→plan→execute→pr→done→spec2doc')
-  .option('--auto-steps <steps>', '指定连续步骤自动执行（如 analyze,split,execute）')
-  .option('--from <phase>', '从指定阶段开始（init/doc2spec/analyze/split/plan/execute/pr/done/spec2doc）')
-  .option('--to <phase>', '到指定阶段结束（init/doc2spec/analyze/split/plan/execute/pr/done/spec2doc）')
+  .option('--auto', '全自动流水线：init→clarify→doc2spec→analyze→validate→split→plan→execute→verify→pipeline→pr→done→spec2doc')
+  .option('--auto-steps <steps>', '指定连续步骤自动执行（如 analyze,validate,split,execute）')
+  .option('--from <phase>', '从指定阶段开始（init/clarify/doc2spec/analyze/validate/split/plan/execute/verify/pipeline/pr/done/spec2doc）')
+  .option('--to <phase>', '到指定阶段结束（init/clarify/doc2spec/analyze/validate/split/plan/execute/verify/pipeline/pr/done/spec2doc）')
+  .option('--demo', '演示模式（放宽闸口 A/B，保留部署前确认）')
   .option('--web', '强制输出 HTML 页面')
   .option('--lang <lang>', 'en 英文 / zh 中文（默认中文）')
   .action(devCommand);
+
+program
+  .command('run [demand...]')
+  .alias('r')
+  .description('端到端流水线：一句话需求 → 澄清 → 分析 → 拆分 → 执行 → 验证 → 部署（默认三闸口，--demo 放宽 A/B）')
+  .option('-i, --iteration <iteration>', 'Target iteration')
+  .option('--auto', '全自动（run 默认即全自动，此选项为续跑一致性保留）')
+  .option('--from <phase>', '从指定阶段开始（init/clarify/doc2spec/analyze/validate/split/plan/execute/verify/pipeline/pr/done/spec2doc）')
+  .option('--to <phase>', '到指定阶段结束（同上）')
+  .option('--demo', '演示模式（放宽闸口 A/B，保留部署前确认）')
+  .option('--env <env>', '部署环境（透传给 pipeline，默认 staging）')
+  .action((demand: string[], options: any) => {
+    // pipeline: true 让 devCommand 走 autoPipeline（非 TTY 下不会落到 HTML 渲染分支）
+    devCommand({ ...options, auto: true, pipeline: true, demand: demand && demand.length ? demand.join(' ') : undefined });
+  });
 
 program
   .command('prompts')
