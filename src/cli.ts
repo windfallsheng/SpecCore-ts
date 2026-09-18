@@ -1080,6 +1080,7 @@ program
   .description('全文搜索：跨所有 Spec 文件关键词检索')
   .option('--task <id>', 'Limit search to a task')
   .option('--iteration <name>', 'Limit search to an iteration')
+  .option('--global', '全局层语义检索（RAG + 知识图谱加分，而非关键词搜索）')
   .action((query: string, opts: any) => searchCommand({ ...opts, query }));
 
 program

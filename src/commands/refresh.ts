@@ -17,6 +17,7 @@ import { buildCodeIndex } from '../core/code-scanner';
 import { refreshRagIndex, checkRagIndexFreshness, loadRagIndex, indexDirectoryDocuments } from '../core/rag-engine';
 import { refreshKnowledgeGraph, loadKnowledgeGraph } from '../core/knowledge-graph';
 import { getDefaultIteration } from '../core/context';
+import { detectStaleGlobalDocs, printStaleDocReport } from '../core/change-impact-global';
 
 export interface RefreshOptions {
   code?: boolean;
@@ -177,6 +178,15 @@ export async function refreshCommand(options: RefreshOptions): Promise<void> {
     logger.success(`✅ 全部刷新完成（${successCount} 项成功）`);
   } else {
     logger.warn(`⚠️ 刷新完成（${successCount} 成功, ${failCount} 失败）`);
+  }
+
+  // ── 4. 检测全局文档过期（v8.3.187+ 接线 change-impact-global）──
+  // 刷新索引后，顺带检测哪些全局分析文档在源码变更后未更新，提示用户增量重建
+  try {
+    const staleDocs = await detectStaleGlobalDocs(cwd);
+    printStaleDocReport(staleDocs);
+  } catch (err: any) {
+    logger.debug(`全局文档过期检测跳过: ${err.message}`);
   }
 }
 

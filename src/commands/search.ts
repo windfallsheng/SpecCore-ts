@@ -4,14 +4,16 @@
 
 import { pathExists, readFile, readdir } from 'fs-extra';
 import { join } from 'path';
-import { logger } from '../utils/logger';
+import { logger, Spinner } from '../utils/logger';
 import { t } from '../i18n/t';
 import { isTimestampBackup } from '../utils/task-utils';
+import { searchGlobalKnowledge } from '../core/global-retrieval';
 
 export interface SearchOptions {
   query: string;
   task?: string;
   iteration?: string;
+  global?: boolean;
 }
 
 interface SearchResult {
@@ -27,6 +29,13 @@ export async function searchCommand(options: SearchOptions): Promise<void> {
   }
 
   const cwd = process.cwd();
+
+  // v8.3.187+: 全局层语义检索（RAG + 图谱加分），区别于关键词全文搜索
+  if (options.global) {
+    await searchGlobalKnowledgeCmd(options.query);
+    return;
+  }
+
   const keyword = options.query.toLowerCase();
   const results: SearchResult[] = [];
 
@@ -81,6 +90,40 @@ async function searchInIterationOrTask(cwd: string, keyword: string, results: Se
     }
   } else if (options.iteration) {
     await searchInDir(join(cwd, options.iteration), keyword, results);
+  }
+}
+
+async function searchGlobalKnowledgeCmd(query: string): Promise<void> {
+  const spinner = new Spinner('全局知识检索中...');
+  spinner.start();
+  try {
+    const result = await searchGlobalKnowledge({ query, topK: 10 });
+    spinner.stop(`找到 ${result.totalFound} 个相关块`);
+    logger.info('');
+
+    if (result.totalFound === 0) {
+      logger.info('  暂无全局知识匹配。可先运行 `speccore refresh --rag` 建立全局索引。');
+      return;
+    }
+
+    if (result.matchedEntities.length > 0) {
+      logger.info(`  图谱实体: ${result.matchedEntities.join(', ')}`);
+      logger.info('');
+    }
+
+    for (const chunk of result.chunks) {
+      const summary = (chunk.summary || chunk.content || '').slice(0, 120);
+      const label = chunk.filePath || chunk.fileName;
+      logger.info(`  📄 ${label}${chunk.title ? ` — ${chunk.title}` : ''}`);
+      if (summary) logger.info(`     ${summary}${summary.length >= 120 ? '...' : ''}`);
+    }
+    logger.info('');
+    if (result.graphBoosted) {
+      logger.info('  ℹ️ 已结合知识图谱加分重排');
+    }
+  } catch (err: any) {
+    spinner.fail('全局知识检索失败');
+    logger.warn(`  ${err.message}`);
   }
 }
 
