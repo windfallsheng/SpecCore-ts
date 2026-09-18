@@ -561,8 +561,8 @@ export async function dispatchSubagent(
 ): Promise<SubagentDispatchResult | null> {
   const tool = detectHostAi();
 
-  // Qoder 环境：尝试 SDK 调度
-  if (tool === 'qoder') {
+  // Qoder 环境：尝试 SDK 调度（复用 isSdkDispatchSupported，避免内联判断）
+  if (isSdkDispatchSupported(tool)) {
     const adapter = getQoderSdkAdapter();
     const result = await adapter.dispatchSubagent!(ctx, taskPrompt);
     if (result) return result;

@@ -13,6 +13,7 @@ import { devAiGuide, DevPhase, DevPipelineState } from '../core/dev-llm';
 import { tryHostAi } from '../core/ask-host-ai';
 import { PipelineEngine } from '../core/pipeline-engine';
 import { collectQuestionFiles } from '../core/questions';
+import { generateHandoff, type HandoffStage } from '../core/handoff-generator';
 
 interface DevOptions {
   iteration?: string; force?: boolean; auto?: boolean; autoSteps?: string;
@@ -437,6 +438,29 @@ async function autoPipeline(options: DevOptions): Promise<void> {
       questions: phaseQuestions,
       duration: Math.round((Date.now() - phaseStart) / 1000),
     });
+
+    // v8.3.187+: 阶段交接摘要（generateHandoff）——关键阶段成功后生成精简传递摘要，
+    // 完整产物存文件、传递摘要只给下一阶段 AI 看，控制跨阶段上下文大小。
+    // 13 阶段流水线 → 6 阶段 handoff 映射：verify 对应 review 闸口。
+    if (phaseStatus === 'success') {
+      const handoffMap: Record<string, [HandoffStage, HandoffStage]> = {
+        analyze: ['analyze', 'split'],
+        split: ['split', 'plan'],
+        plan: ['plan', 'execute'],
+        execute: ['execute', 'review'],
+        verify: ['review', 'done'],
+      };
+      const handoff = handoffMap[phase.key];
+      if (handoff) {
+        try {
+          const handoffPath = await generateHandoff(handoff[0], handoff[1], iteration);
+          logger.info(`  📋 阶段交接摘要: ${handoffPath}`);
+        } catch (err: any) {
+          logger.debug(`  交接摘要生成跳过: ${err.message}`);
+        }
+      }
+    }
+
     logger.info('');
   }
 
