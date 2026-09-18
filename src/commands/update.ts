@@ -7,7 +7,7 @@ import { join, relative } from 'path';
 import { execSync } from 'child_process';
 import { createInterface } from 'readline';
 import { logger, Spinner } from '../utils/logger';
-import { findProjectRoot } from '../utils/task-utils';
+import { findProjectRoot, isNewerVersion } from '../utils/task-utils';
 import { version as CURRENT_VERSION } from '../../package.json';
 import { safeWriteWithBackup, safeCopyDirWithBackup, _updateConflicts, generateAIRulesContent, TOOL_COMMANDS, initAgentsDir, initRulesDir, initCommandsDir, initSkillsDir, initHooksDir, syncAgentsMd, writeUpgradePage, generateExampleConfigs } from './init';
 import {
@@ -514,7 +514,7 @@ export async function updateCommand(options: { force?: boolean; tool?: string; y
       await writeFile(checkCachePath, JSON.stringify({ latest: latestVersion, checkedAt: new Date().toISOString() }, null, 2));
     }
 
-    if (latestVersion && latestVersion !== CURRENT_VERSION) {
+    if (latestVersion && isNewerVersion(latestVersion, CURRENT_VERSION)) {
       logger.info('');
       logger.info(`🎉 发现新版本: v${latestVersion}（当前: v${CURRENT_VERSION}）`);
       logger.info(`   👉 升级命令: npm update -g speccore`);

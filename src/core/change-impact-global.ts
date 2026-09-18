@@ -79,9 +79,10 @@ export async function detectStaleGlobalDocs(projectRoot: string): Promise<StaleD
       } else if (/\.(md|yaml|yml)$/.test(entry.name)) {
         const s = await stat(fullPath);
         const docMtime = s.mtime;
-        if (sourceMtime > docMtime) {
-          const diffMs = sourceMtime.getTime() - docMtime.getTime();
-          const staleDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        const diffMs = sourceMtime.getTime() - docMtime.getTime();
+        const staleDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        // 只报告「过期 ≥ 1 天」的文档，避免源码与文档同一天修改时的噪音提示
+        if (staleDays >= 1) {
           const relPath = fullPath.replace(globalDir + '/', '');
 
           // 根据文档路径生成更新建议

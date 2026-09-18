@@ -699,6 +699,9 @@ export interface ConfigDiff {
   structureChanged: { path: string; description: string }[];
 }
 
+/** 开放式字典字段：允许用户自定义键（如 git.branch_types 的分支类型名），不检测 removed */
+const OPEN_DICT_PATHS = new Set<string>(['git.branch_types']);
+
 /**
  * 递归比较当前配置与目标配置（DEFAULT_CONFIG），检测所有差异
  */
@@ -721,6 +724,8 @@ export function detectConfigDiff(current: unknown, target: unknown, path = ''): 
     // 检测删除的字段（当前有，目标没有）
     for (const key of currentKeys) {
       if (!targetKeys.includes(key)) {
+        // 开放式字典字段：用户自定义键是合法的（如自定义分支类型），不判为 removed
+        if (OPEN_DICT_PATHS.has(path)) continue;
         diff.removed.push(path ? `${path}.${key}` : key);
       }
     }

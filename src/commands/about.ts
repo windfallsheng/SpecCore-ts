@@ -1,7 +1,7 @@
 import { join } from 'path';
 import { readFile, pathExists } from 'fs-extra';
 import { logger } from '../utils/logger';
-import { findProjectRoot } from '../utils/task-utils';
+import { findProjectRoot, isNewerVersion } from '../utils/task-utils';
 
 export async function aboutCommand(): Promise<void> {
   const pkg = require('../../package.json');
@@ -13,7 +13,7 @@ export async function aboutCommand(): Promise<void> {
     const checkCachePath = join(projectRoot, '.speccore', 'local', 'version-check.json');
     if (await pathExists(checkCachePath)) {
       const cache = JSON.parse(await readFile(checkCachePath, 'utf-8'));
-      if (cache.latest && cache.latest !== ver) {
+      if (cache.latest && isNewerVersion(cache.latest, ver)) {
         logger.info(`🎉 发现新版本: v${cache.latest}（当前: v${ver}）`);
         logger.info(`   👉 升级命令: npm update -g speccore`);
         logger.info('');

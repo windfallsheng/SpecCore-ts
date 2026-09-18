@@ -733,6 +733,7 @@ program
   .option('--get <key>', 'Get configuration value by path (e.g., arbitration.mode)')
   .option('--set <key=value>', 'Set configuration value (e.g., arbitration.mode=l1-only)')
   .option('--upgrade', 'Upgrade config structure to latest schema_version')
+  .option('--project', 'Operate on project config (.speccore/PROJECT.yaml) instead of system config')
   .option('-r, --rule <name>', 'Target spec-rule (CONSTITUTION.md)')
   .option('-t, --tech <target>', 'Target tech-stack (TECH_STACK.md): <端名>')
   .option('--reset', 'Reset to default configuration')
