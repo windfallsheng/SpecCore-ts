@@ -1228,7 +1228,8 @@ async function buildGlobalTOC(globalDir: string): Promise<TOCEntry[]> {
 export async function loadGlobalContext(
   cwd: string,
   _command: PromptCommand,
-  platform?: string
+  platform?: string,
+  feature?: string
 ): Promise<GlobalContext> {
   const globalDir = join(cwd, '.speccore', 'GLOBAL');
   const ctx: GlobalContext = { toc: [] };
@@ -1246,35 +1247,14 @@ export async function loadGlobalContext(
   // 支持单文件（单文件模式）+ BUSINESS_RULES/ 目录（推荐，支持按 platform 过滤）
   if (!ctx.keyFileSummaries) ctx.keyFileSummaries = [];
 
-  // 1. 单文件模式：GLOBAL/BUSINESS_RULES.md
-  const legacyPath = join(globalDir, 'BUSINESS_RULES.md');
-  if (await pathExists(legacyPath)) {
-    try {
-      const content = await readFile(legacyPath, 'utf-8');
-      ctx.keyFileSummaries.push({ path: 'BUSINESS_RULES.md', content: content.slice(0, 4000) });
-    } catch { /* 忽略 */ }
-  }
-
-  // 2. 新路径：GLOBAL/BUSINESS_RULES/ 目录，按 platform 过滤加载
-  const businessRulesDir = join(globalDir, 'BUSINESS_RULES');
-  if (await pathExists(businessRulesDir)) {
-    try {
-      const files = (await readdir(businessRulesDir))
-        .filter(f => f.endsWith('.md'))
-        .sort();
-      for (const file of files) {
-        // platform 过滤：无 platform 时加载全部；有 platform 时加载 common + 匹配端
-        if (platform) {
-          const base = file.replace(/\.md$/, '');
-          const isCommon = base.includes('-common');
-          const isPlatformMatch = base === platform || base.endsWith(`-${platform}`) || base.includes(`-${platform}-`);
-          if (!isCommon && !isPlatformMatch) continue;
-        }
-        const content = await readFile(join(businessRulesDir, file), 'utf-8');
-        ctx.keyFileSummaries.push({ path: `BUSINESS_RULES/${file}`, content: content.slice(0, 4000) });
-      }
-    } catch { /* 忽略 */ }
-  }
+  // v8.3.184+: 业务规则三层统一加载（全局 BUSINESS_RULES/ + 端级 + 功能级）
+  try {
+    const { loadBusinessRules } = await import('./business-rules');
+    const rules = await loadBusinessRules({ cwd, platform, feature });
+    for (const item of rules) {
+      ctx.keyFileSummaries.push({ path: item.path, content: item.content });
+    }
+  } catch { /* 忽略 */ }
 
   // 3. v8.3.134+: RULES/ 规则文件自动注入（四层架构第二层）
   // 按 frontmatter priority 降序排序，优先加载高优先级规则；总量上限 8000 字符
