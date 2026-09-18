@@ -154,54 +154,6 @@ function generateSubtaskId(parentTaskId: string, platform: string): string {
   return `Task-${parentTaskId}-${platform}`;
 }
 
-/**
- * v8.3.160+: 根据功能单元名称关键词推断涉及的端
- * 当 Spec 匹配失败时，使用关键词推断替代回退到所有端
- */
-function inferPlatformsByKeywords(featureName: string, allPlatforms: string[]): string[] {
-  const name = featureName.toLowerCase();
-
-  // 端分类规则：根据端名特征判断端类型
-  const backendPlatforms = allPlatforms.filter(p =>
-    /service|api|backend|server|core/i.test(p)
-  );
-  const adminPlatforms = allPlatforms.filter(p =>
-    /admin|web|pc|manage|dashboard|portal/i.test(p) && !/mobile|h5|mini|app/i.test(p)
-  );
-  const mobilePlatforms = allPlatforms.filter(p =>
-    /h5|mobile|app|mini|ios|android|wechat/i.test(p)
-  );
-
-  // 关键词 → 端类型映射
-  const keywordMap: { keywords: string[]; platforms: string[] }[] = [
-    // 纯后端功能
-    { keywords: ['接口', 'api', '服务', 'service', '数据表', 'entity', '数据库', 'db', '迁移', 'migration', '脚本', 'job', '定时', 'cron', '缓存', 'cache', '队列', 'queue'], platforms: backendPlatforms },
-    // 管理端功能
-    { keywords: ['报表', '统计', '管理', '配置', '审核', '审批', '后台', 'admin', 'dashboard', '运营', '数据看板', '权限分配', '角色管理'], platforms: [...backendPlatforms, ...adminPlatforms] },
-    // 移动端功能
-    { keywords: ['扫码', '定位', '地图', '推送', '通知', '分享', '支付', '下单', '预约', '签到', '打卡', '拍照', '扫码点餐'], platforms: [...backendPlatforms, ...mobilePlatforms] },
-    // 通用功能（所有端）
-    { keywords: ['登录', '认证', '注册', '鉴权', 'auth', 'login', 'logout', '用户', 'user', '个人中心', 'profile', '设置', 'setting'], platforms: allPlatforms },
-    // 前端展示功能
-    { keywords: ['页面', 'ui', '组件', '展示', '列表', '详情', '首页', '导航', '菜单', '主题', '样式', '布局'], platforms: [...adminPlatforms, ...mobilePlatforms] },
-  ];
-
-  // 匹配关键词
-  const matchedPlatforms = new Set<string>();
-  for (const rule of keywordMap) {
-    if (rule.keywords.some(kw => name.includes(kw.toLowerCase()))) {
-      for (const p of rule.platforms) matchedPlatforms.add(p);
-    }
-  }
-
-  // 如果没有匹配到任何关键词，回退到只包含后端端（最保守策略）
-  if (matchedPlatforms.size === 0) {
-    return backendPlatforms.length > 0 ? backendPlatforms : allPlatforms.slice(0, 1);
-  }
-
-  return Array.from(matchedPlatforms);
-}
-
 /** 拆分约束常量（简化版：每个功能单元按涉及的端拆分，每端1个子任务） */
 const SPLIT_RULES = {
   maxTasksPerIteration: 20,     // 单次迭代总任务数上限
@@ -1741,9 +1693,19 @@ async function createTaskFromSection(iterationDir: string, taskId: string, secti
         taskPlatforms.push(platform);
       }
     }
-    // v8.3.160+ 修复：如果 Spec 匹配失败，根据功能单元关键词推断端，不再回退到所有端
+    // v8.3.185+: Spec 匹配失败时，用六层端推断机制（显式声明→_matrix→目录→关键词→AI）
     if (taskPlatforms.length === 0) {
-      taskPlatforms = inferPlatformsByKeywords(sectionFeatureName, allPlatforms);
+      const { inferFeaturePlatforms } = await import('../../core/platform-inference');
+      const featureDir = join(iterationDir, '010-requirements', 'features', sectionFeatureName);
+      const inference = await inferFeaturePlatforms({
+        featureName: sectionFeatureName,
+        featureDir,
+        allPlatforms,
+      });
+      taskPlatforms = inference.platforms;
+      if (inference.needsConfirm || inference.source === 'ai-required') {
+        logger.warn(`   ⚠️  功能「${sectionFeatureName}」端推断置信度 ${inference.confidence}（${inference.source}），建议人工确认 _matrix.md`);
+      }
     }
   }
 
