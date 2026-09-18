@@ -1,3 +1,8 @@
+---
+name: product-analyst-frontend
+title: 前端产品分析师
+---
+
 # Agent: product-analyst-frontend
 
 ## 职责
@@ -70,3 +75,4 @@
 
 ### 修改建议
 给出具体的前端需求补充建议。
+

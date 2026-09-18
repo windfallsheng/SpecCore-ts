@@ -1,3 +1,8 @@
+---
+name: security-reviewer-finance
+title: 金融安全审查员
+---
+
 # Agent: security-reviewer-finance
 
 ## 职责
@@ -65,3 +70,4 @@
 
 ### 合规建议
 给出具体的合规加固建议。
+

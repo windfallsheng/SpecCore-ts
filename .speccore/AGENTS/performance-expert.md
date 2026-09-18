@@ -1,4 +1,6 @@
 ---
+name: performance-expert
+title: 性能专家
 activations:
   - command: execute
     phase: quality-gate

@@ -13,6 +13,7 @@
 
 import { join } from 'path';
 import { pathExists, readFile, readdir } from 'fs-extra';
+import * as yaml from 'js-yaml';
 import {
   AgentDefinition,
   AgentActivation,
@@ -28,14 +29,45 @@ const BUILTIN_AGENTS_DIR = join(__dirname, '..', 'defaults');
 // 1. Markdown 解析
 // ============================================================
 
+/** 解析 markdown 的 frontmatter（yaml） */
+function parseFrontmatter(content: string): Record<string, any> | null {
+  const m = content.match(/^---\n([\s\S]*?)\n---\n?/);
+  if (!m) return null;
+  try {
+    const parsed = yaml.load(m[1]);
+    return (parsed && typeof parsed === 'object') ? parsed as Record<string, any> : null;
+  } catch {
+    return null;
+  }
+}
+
 function parseAgentMarkdown(content: string, source: 'builtin' | 'user-defined'): AgentDefinition {
-  const name = extractHeading(content) || 'unknown';
-  const description = extractSection(content, '职责') || extractSection(content, 'Description') || '';
-  const responsibilities = extractListItems(content, '职责') || extractListItems(content, 'Responsibilities') || [];
-  const inputSpec = extractSection(content, '输入') || extractSection(content, 'Input') || '';
+  const fm = parseFrontmatter(content);
+
+  const name = (fm && fm.name) || extractHeading(content) || 'unknown';
+  const description = (fm && fm.description) || extractSection(content, '职责') || extractSection(content, 'Description') || '';
+  const responsibilities = (fm && Array.isArray(fm.responsibilities) && fm.responsibilities)
+    || extractListItems(content, '职责')
+    || extractListItems(content, 'Responsibilities')
+    || [];
+  const inputSpec = (fm && fm.inputSpec) || extractSection(content, '输入') || extractSection(content, 'Input') || '';
   const checkList = extractCheckboxItems(content) || [];
-  const outputFormat = extractSection(content, '输出格式') || extractSection(content, 'Output Format') || '';
-  const activations = parseSelfDescribedActivations(content);
+  const outputFormat = (fm && fm.outputFormat) || extractSection(content, '输出格式') || extractSection(content, 'Output Format') || '';
+
+  // activations：优先 frontmatter（修复 v8.3.183：现有 activations 在 frontmatter 而非「## 激活规则」章节）
+  const rawActs = (fm && Array.isArray(fm.activations) && fm.activations) || [];
+  const activations: AgentActivation[] = rawActs
+    .map((a: any) => ({
+      command: String(a.command || ''),
+      phase: String(a.phase || ''),
+      priority: a.priority ? parseInt(a.priority, 10) || 50 : 50,
+      condition: a.condition || undefined,
+    }))
+    .filter(a => a.command && a.phase);
+  if (activations.length === 0) {
+    // 兜底：章节式激活规则（旧格式）
+    activations.push(...parseSelfDescribedActivations(content));
+  }
 
   // rolePrompt = 整个文档内容（作为 AI 的 system prompt 注入）
   const rolePrompt = content;
@@ -50,6 +82,12 @@ function parseAgentMarkdown(content: string, source: 'builtin' | 'user-defined')
     rolePrompt,
     source,
     activations,
+    // v8.3.183+: frontmatter 元数据（单一事实源）
+    title: fm && fm.title,
+    systemPrompt: fm && fm.systemPrompt,
+    contextType: fm && fm.contextType,
+    contextBudget: fm && fm.contextBudget,
+    skills: fm && Array.isArray(fm.skills) ? fm.skills : undefined,
   };
 }
 

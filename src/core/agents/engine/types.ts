@@ -14,6 +14,12 @@ export interface AgentDefinition {
   rolePrompt: string;
   source: 'builtin' | 'user-defined';
   activations: AgentActivation[]; // v6.84.0+: 自描述激活规则
+  // v8.3.183+: frontmatter 元数据（单一事实源，从 md frontmatter 解析）
+  title?: string;
+  systemPrompt?: string;
+  contextType?: 'full' | 'incremental' | 'platform-only' | 'contract-only';
+  contextBudget?: number;
+  skills?: string[];
 }
 
 export interface AgentActivation {

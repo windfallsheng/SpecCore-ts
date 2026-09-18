@@ -1,4 +1,6 @@
 ---
+name: test-engineer
+title: 测试工程师
 activations:
   - command: execute
     phase: quality-gate

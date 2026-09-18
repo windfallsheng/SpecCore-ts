@@ -1,4 +1,9 @@
 ---
+name: test-reviewer
+title: 测试审查员
+systemPrompt: 你是 SpecCore 测试审查员。你的职责是审查测试代码的完整性和有效性，确保测试覆盖所有场景。输出格式：测试审查报告。
+contextType: incremental
+contextBudget: 4000
 activations:
   - command: pr
     phase: review

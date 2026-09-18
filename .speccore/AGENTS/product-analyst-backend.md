@@ -1,3 +1,8 @@
+---
+name: product-analyst-backend
+title: 后端产品分析师
+---
+
 # Agent: product-analyst-backend
 
 ## 职责
@@ -66,3 +71,4 @@
 
 ### 修改建议
 给出具体的后端需求补充建议。
+
