@@ -333,32 +333,39 @@ export function classifyMode(input: string): AskMode {
   return 'match';
 }
 
+/** 匹配类型（degrade to honesty：不同匹配层级的可靠性不同，需诚实区分） */
+type KbMatchType = 'name' | 'alias' | 'synonym' | 'trigger';
+
+/** 最近一次 KB 匹配类型（供置信度诚实赋值：触发词匹配不能伪装成精确匹配） */
+let lastKbMatchType: KbMatchType | null = null;
+
 /** 匹配命令知识（精确匹配 → 同义词表 → 触发词 三层降级） */
 function matchCommandInKB(input: string): CommandKnowledge | null {
   const lower = input.toLowerCase();
-  // 精确匹配命令名
+  // 精确匹配命令名（最可靠）
   for (const cmd of COMMAND_KB) {
-    if (lower.includes(cmd.name)) return cmd;
+    if (lower.includes(cmd.name)) { lastKbMatchType = 'name'; return cmd; }
     for (const alias of cmd.aliases) {
-      if (lower.includes(alias) && alias.length > 1) return cmd;
+      if (lower.includes(alias) && alias.length > 1) { lastKbMatchType = 'alias'; return cmd; }
     }
   }
   // 同义词表优先于触发词：同义词表是显式映射，更准确
   for (const [syn, cmdName] of Object.entries(SYNONYM_MAP)) {
     if (lower.includes(syn)) {
       const found = COMMAND_KB.find(c => c.name === cmdName);
-      if (found) return found;
+      if (found) { lastKbMatchType = 'synonym'; return found; }
     }
   }
-  // 触发词匹配兆底
+  // 触发词匹配（最不可靠，需诚实声明低置信度）
   let best: CommandKnowledge | null = null;
   let bestScore = 0;
   for (const cmd of COMMAND_KB) {
     const score = cmd.triggers.filter(t => lower.includes(t)).length;
     if (score > bestScore) { bestScore = score; best = cmd; }
   }
-  if (bestScore > 0) return best;
+  if (bestScore > 0 && best) { lastKbMatchType = 'trigger'; return best; }
 
+  lastKbMatchType = null;
   return null;
 }
 
@@ -1454,12 +1461,17 @@ export async function askEngine(input: string, options?: AskEngineOptions): Prom
   localResult = await enrichWithKG(localResult, input);
 
   // 计算本地置信度（explain/guide/pipeline 视为高置信度）
-  // KB 匹配成功（含同义词表）给予较高基础分，避免误路由到宿主 AI
+  // v8.3.184+ degrade to honesty：按匹配层级诚实赋值，触发词匹配不得伪装成精确匹配
   const hasKbMatch = localResult.commands.length > 0 && localResult.mode === 'match' && !localResult.summary.includes('未识别');
-  const fallbackConfidence = localResult.autoExec ? 85 : (mode === 'explain' || mode === 'pipeline') ? 90 : hasKbMatch ? 75 : 55;
-  // 同义词表匹配时，用 max() 确保置信度不低于 75（高分区），避免触发不必要的 AI 调用
+  const kbMatchConf = lastKbMatchType === 'name' || lastKbMatchType === 'alias' ? 90   // 精确匹配命令名
+    : lastKbMatchType === 'synonym' ? 80                                                // 同义词表（显式映射）
+    : lastKbMatchType === 'trigger' ? 60                                                // 触发词（是猜的，需确认）
+    : 55;
+  const fallbackConfidence = localResult.autoExec ? 85 : (mode === 'explain' || mode === 'pipeline') ? 90 : hasKbMatch ? kbMatchConf : 55;
   const localConfidence = hasKbMatch
-    ? Math.max(localCandidates[0]?.confidence || 0, fallbackConfidence)
+    ? (lastKbMatchType === 'trigger'
+        ? 60  // 触发词匹配：诚实封顶 60，走中分区（宿主 AI 双路确认），不被意图识别虚高分抬升
+        : Math.max(localCandidates[0]?.confidence || 0, fallbackConfidence))
     : (localCandidates[0]?.confidence || fallbackConfidence);
 
   // --rules / forceHostAi 强制所有请求走 AI

@@ -2587,6 +2587,14 @@ export function buildPromptText(prompt: SpecCorePrompt): string {
   lines.push('[SPECCORE_PROMPT]');
   lines.push('');
 
+  // v8.3.184+ 通用行为准则（degrade to honesty：不迎合、不假装确定、Spec 优先）
+  lines.push('## 通用行为准则');
+  lines.push('- **不迎合用户**：需求若有缺陷、矛盾或不合理之处，直接指出并给建议，不为顺从而照做。');
+  lines.push('- **不假装确定**：不确定的信息诚实标注「这是推断/猜测」，不用确定口吻编造事实。');
+  lines.push('- **Spec 优先**：代码或口头要求与 Spec（REQ/TECH/API_CONTRACT）冲突时，以 Spec 为准并指出冲突。');
+  lines.push('- **降级到诚实**：做不到或没把握的方案，宁可说明局限，也不给自信的错误答案。');
+  lines.push('');
+
   // v8.3.160+: 注入子 Agent 角色定义和上下文裁剪策略
   if (prompt.agentContext) {
     lines.push(prompt.agentContext);
