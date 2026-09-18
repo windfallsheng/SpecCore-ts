@@ -14,10 +14,10 @@ import { basename } from 'path';
 import { logger } from '../utils/logger';
 import {
   loadRagIndex, checkRagIndexFreshness, refreshRagIndex,
-  retrieveRelevantChunks, assembleChunksForPrompt, DocumentChunk,
+  retrieveRelevantChunks, retrieveWithGraphContext, assembleChunksForPrompt, DocumentChunk,
 } from './rag-engine';
 import { loadFullIndex, CodeIndex, CodeFile, findRelevantCode } from './code-scanner';
-import { loadFreshKnowledgeGraph, KnowledgeGraph } from './knowledge-graph';
+import { loadFreshKnowledgeGraph, loadKnowledgeGraph, KnowledgeGraph } from './knowledge-graph';
 import { buildCompactContext } from './context-builder';
 
 // ═══════════════════════════════════════════════════════════
@@ -286,18 +286,43 @@ export async function unifiedSearch(
     indexFiles.push('kg-rag-index.json');
 
     // 逐个加载索引，合并结果
+    // v8.3.184+: 全局索引用知识图谱加分检索（图谱实体匹配 → 邻居扩展 → RAG → 加分重排）
     const allChunks: DocumentChunk[] = [];
+    let globalGraph: KnowledgeGraph | null = null;
     for (const fileName of indexFiles) {
       const ragIndex = await loadRagIndex(cwd, fileName);
       if (ragIndex) {
-        const chunks = retrieveRelevantChunks(ragIndex, {
-          query: queryStr,
-          topK: 8,
-          minScore: 0.15,
-          maxChunkChars: 1500,
-          maxTotalChars: 8000,
-          platforms: platforms || (platform ? [platform] : undefined),
-        });
+        const isGlobalIndex = fileName === 'rag-index-global.json';
+        let chunks: DocumentChunk[];
+        if (isGlobalIndex) {
+          // 全局索引：加载图谱并启用图谱加分（图谱缺失时降级纯 RAG）
+          if (!globalGraph) {
+            try { globalGraph = await loadKnowledgeGraph(cwd); } catch { /* 图谱缺失 */ }
+          }
+          if (globalGraph && Object.keys(globalGraph.entities).length > 0) {
+            chunks = retrieveWithGraphContext(
+              ragIndex,
+              globalGraph as unknown as Parameters<typeof retrieveWithGraphContext>[1],
+              {
+                query: queryStr, topK: 8, minScore: 0.15,
+                maxChunkChars: 1500, maxTotalChars: 8000,
+                platforms: platforms || (platform ? [platform] : undefined),
+              } as Parameters<typeof retrieveWithGraphContext>[2],
+            );
+          } else {
+            chunks = retrieveRelevantChunks(ragIndex, {
+              query: queryStr, topK: 8, minScore: 0.15,
+              maxChunkChars: 1500, maxTotalChars: 8000,
+              platforms: platforms || (platform ? [platform] : undefined),
+            });
+          }
+        } else {
+          chunks = retrieveRelevantChunks(ragIndex, {
+            query: queryStr, topK: 8, minScore: 0.15,
+            maxChunkChars: 1500, maxTotalChars: 8000,
+            platforms: platforms || (platform ? [platform] : undefined),
+          });
+        }
         allChunks.push(...chunks);
       }
     }
