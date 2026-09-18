@@ -151,72 +151,19 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalysisResult> 
     } catch {} // 非关键，静默失败
   }
 
-  // ── 为当前 scope 构建/刷新 RAG 索引（按 scope 分文件，避免互相覆盖）──
+  // ── 统一刷新知识底座（RAG 索引 + 代码索引 + 知识图谱）──
+  // v8.3.184+: 收拢到 refresh-scheduler 统一调度（按 scope 分文件 + stale 判定）
   try {
-    const cwd = process.cwd();
-    if (effectiveInput.scope === 'task' && effectiveInput.taskId && effectiveInput.iteration) {
-      // task 模式：索引任务目录（默认文件名 rag-index.json）
-      const taskDir = join(`Iteration-${effectiveInput.iteration}`, '030-tasks', effectiveInput.taskId);
-      if (await pathExists(taskDir)) {
-        const { staleFiles, newFiles } = await checkRagIndexFreshness(cwd);
-        await refreshRagIndex(cwd, taskDir, effectiveInput.iteration);
-        const totalChanges = staleFiles.length + newFiles.length;
-        if (totalChanges > 0) {
-          logger.info(`   🔄 RAG 索引已增量刷新 (${totalChanges} 个文件更新): ${taskDir}`);
-        } else {
-          logger.info(`   🔍 RAG 索引已生成: ${taskDir}`);
-        }
-      }
-    } else if (effectiveInput.scope === 'iteration' && effectiveInput.iteration) {
-      // iteration 模式：索引 020-specs/ + 010-requirements/ 目录（v8.3.65+ 扩展需求文档）
-      const specsDir = join(`Iteration-${effectiveInput.iteration}`, '020-specs');
-      const reqDir = join(`Iteration-${effectiveInput.iteration}`, '010-requirements');
-      const dirs: string[] = [];
-      if (await pathExists(specsDir)) dirs.push(specsDir);
-      if (await pathExists(reqDir)) dirs.push(reqDir);
-      if (dirs.length > 0) {
-        const scope = `${effectiveInput.iteration}_iteration_all`;
-        const fileName = `rag-index-${effectiveInput.iteration}.json`;
-        await indexDirectoryDocuments(cwd, dirs, scope, fileName);
-        logger.info(`   🔍 迭代 RAG 索引已生成: ${dirs.join(', ')} → ${fileName}`);
-      }
-    } else if (effectiveInput.scope === 'global') {
-      // global 模式：索引全局产出目录 + RULES/SKILLS/PATTERNS（v8.3.134+ 四层架构：RAG 全覆盖）
-      const globalDir = join(cwd, '.speccore', 'GLOBAL');
-      const fallbackDir = join(cwd, '.speccore');
-      const targetDir = await pathExists(globalDir) ? globalDir : fallbackDir;
-      const dirs: string[] = [targetDir];
-      const rulesDir = join(cwd, '.speccore', 'RULES');
-      const skillsDir = join(cwd, '.speccore', 'SKILLS');
-      const patternsDir = join(cwd, '.speccore', 'PATTERNS');
-      if (await pathExists(rulesDir)) dirs.push(rulesDir);
-      if (await pathExists(skillsDir)) dirs.push(skillsDir);
-      if (await pathExists(patternsDir)) dirs.push(patternsDir);
-      const scope = 'GLOBAL_all_global_all';
-      await indexDirectoryDocuments(cwd, dirs, scope, 'rag-index-global.json');
-      logger.info(`   🔍 全局 RAG 索引已生成: ${dirs.join(', ')} → rag-index-global.json`);
-    }
+    const { refreshKnowledgeBase } = await import('./refresh-scheduler');
+    await refreshKnowledgeBase({
+      cwd: process.cwd(),
+      iteration: effectiveInput.iteration,
+      scope: effectiveInput.scope,
+      taskId: effectiveInput.taskId,
+      force: true, // 分析命令强制刷新，保证上下文最新
+    });
   } catch (e) {
-    logger.debug('RAG 索引生成失败（非关键）:', e);
-  }
-
-  // ── 统一刷新代码索引 + 知识图谱（所有 scope）──
-  // v8.3.125+: 按迭代端名筛选源码路径，减少增量刷新范围
-  try {
-    logger.info('   🔄 刷新代码索引...');
-    const codeIndexScope = await resolveIterationScope(effectiveInput.iteration);
-    await buildCodeIndex(codeIndexScope, true);
-    logger.info('   ✅ 代码索引已刷新');
-  } catch (e) {
-    logger.debug('代码索引刷新失败（非关键）:', e);
-  }
-
-  try {
-    logger.info('   🔄 刷新知识图谱...');
-    await refreshKnowledgeGraph(process.cwd(), effectiveInput.iteration);
-    logger.info('   ✅ 知识图谱已刷新');
-  } catch (e) {
-    logger.debug('知识图谱刷新失败（非关键）:', e);
+    logger.debug('知识底座刷新失败（非关键）:', e);
   }
 
   return result;
