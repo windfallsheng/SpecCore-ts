@@ -10,15 +10,15 @@ import { askEngine, AskResult, PipelinePlan, extractTime } from '../core/ask-eng
 
 // v8.3.165+: 命令 → 默认 subagent 角色映射（本地副本，避免循环依赖）
 const STEP_SUBAGENT_MAP: Record<string, string | undefined> = {
-  analyze: 'spec-analyzer',
+  analyze: 'requirement-analyzer',
   split: 'task-decomposer',
   plan: 'schedule-planner',
-  execute: 'spec-executor',
+  execute: 'code-generator',
   pr: 'spec-reviewer',
   validate: 'spec-reviewer',
   change: 'impact-analyst',
   verify: 'spec-tester',
-  'code-index': 'spec-global-analyzer',
+  'code-index': 'global-analyzer',
 };
 
 const COLORS = {

@@ -911,7 +911,7 @@ async function processBatch(tasks: TaskState[], state: ExecutionState, iteration
       outputs: ['00-specs/', '{platform}/(子任务)/'],
       dependencies: task.dependencies || [],
       completedAt: new Date().toISOString(),
-      agent: 'spec-executor',
+      agent: 'code-generator',
     };
     addTaskSummary(state, taskSummary);
 
@@ -2458,14 +2458,14 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
   }
 
   // v8.3.166+: 推断任务平台（端），输出端级 subagent 标记
-  let platformSubagent = 'spec-executor';
+  let platformSubagent = 'code-generator';
   try {
     const entries = await readdir(taskDir, { withFileTypes: true });
     const platformNames = entries
       .filter((e: any) => e.isDirectory() && !e.name.startsWith('.') && e.name !== '00-specs' && e.name !== '_shared')
       .map((e: any) => e.name);
     if (platformNames.length === 1) {
-      platformSubagent = `spec-executor-${platformNames[0]}`;
+      platformSubagent = `code-generator-${platformNames[0]}`;
     }
   } catch { /* ignore */ }
 

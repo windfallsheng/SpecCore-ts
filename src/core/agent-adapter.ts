@@ -126,7 +126,7 @@ const DEFAULT_SUBAGENTS: SubagentConfig[] = [
   },
   // analyze 阶段
   {
-    name: 'spec-analyzer',
+    name: 'requirement-analyzer',
     description: '需求分析专家：逐端分析、架构设计、技术方案',
     systemPrompt: '你是 SpecCore 需求分析专家。你的职责是根据需求文档和契约，为指定端生成完整的技术规格。必须遵循 CONSTITUTION.md 中的命名规范和端名标准。输出格式：Markdown 技术文档。',
     defaultContextType: 'platform-only',
@@ -136,12 +136,12 @@ const DEFAULT_SUBAGENTS: SubagentConfig[] = [
   },
   // execute 阶段
   {
-    name: 'spec-executor',
+    name: 'code-generator',
     description: '代码生成专家：读取规格、生成代码、遵循规范',
     systemPrompt: '你是 SpecCore 代码生成专家。你的职责是根据 TASK.md 和技术规格，生成符合项目规范的代码实现。必须遵循 CONSTITUTION.md 的命名规范、端名标准和错误码体系。输出格式：JSON 文件列表。',
     defaultContextType: 'incremental',
     defaultContextBudget: 10000,
-    skills: ['.speccore/AGENTS/execute.md'],
+    skills: ['.speccore/AGENTS/code-generator.md'],
   },
   // execute / quality-gate 阶段
   // v8.3.160+: compiler 合并 test-engineer 职责（quality-gate-build）
@@ -197,13 +197,13 @@ const DEFAULT_SUBAGENTS: SubagentConfig[] = [
   },
   // global-analyze 阶段
   {
-    name: 'spec-global-analyzer',
+    name: 'global-analyzer',
     description: '全局分析专家：跨迭代依赖、全局架构、一致性检查',
     systemPrompt: '你是 SpecCore 全局分析专家。你的职责是分析跨迭代的依赖关系、全局架构一致性和技术债务。必须识别所有跨端关联和重复实现。输出格式：Markdown 全局报告。',
     defaultContextType: 'full',
     // v8.3.160+: 配合按需加载优化，降至 10K
     defaultContextBudget: 10000,
-    skills: ['.speccore/AGENTS/global-analyze.md'],
+    skills: ['.speccore/AGENTS/global-analyzer.md'],
   },
   // plan 阶段（预留）
   {
@@ -395,12 +395,12 @@ export class HeadlessAdapter implements AgentAdapter {
         '🔗 **路径引用**：技术栈文档格式规范',
         '❌ **不加载**：测试用例、性能数据',
       ],
-      'spec-analyzer': [
+      'requirement-analyzer': [
         '📖 **全文读取**：需求文档、跨端契约',
         '📖 **全文读取**：CONSTITUTION.md（命名规范、端名标准）',
         '🔗 **路径引用**：已有端的规格（参考但不全文加载）',
       ],
-      'spec-executor': [
+      'code-generator': [
         '📖 **全文读取**：TASK.md、TECH.md',
         '📖 **全文读取**：结构化代码事实卡片（匹配相关部分）',
         '🔗 **路径引用**：已有代码文件（按需 Read，不全文加载）',
@@ -490,8 +490,8 @@ function mapToQoderAgentName(subagent: string): string | undefined {
     'Explore': 'Explore',
     'Plan': 'Plan',
     // v8.3.171+: SpecCore 核心子 Agent → Qoder 内置 Agent 映射
-    'spec-analyzer': 'general-purpose',
-    'spec-executor': 'general-purpose',
+    'requirement-analyzer': 'general-purpose',
+    'code-generator': 'general-purpose',
     'task-decomposer': 'Plan',
     'schedule-planner': 'Plan',
     'impact-analyst': 'general-purpose',

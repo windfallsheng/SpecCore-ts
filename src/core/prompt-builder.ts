@@ -1805,8 +1805,8 @@ function getInstruction(command: PromptCommand, context: { taskName?: string; ap
  */
 // v8.3.160+: 命令 → 默认子 Agent 角色映射
 const DEFAULT_SUBAGENT_MAP: Record<string, string> = {
-  analyze: 'spec-analyzer',
-  execute: 'spec-executor',
+  analyze: 'requirement-analyzer',
+  execute: 'code-generator',
   split: 'task-decomposer',
   plan: 'schedule-planner',
   change: 'impact-analyst',

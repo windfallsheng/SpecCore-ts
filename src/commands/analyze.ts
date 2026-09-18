@@ -1116,8 +1116,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 
     // v8.3.166+: Phase 2 端级步骤输出端级 subagent 标记
     // v8.3.167+: 功能模块步骤输出功能模块级 subagent 标记
-    const platformSubagent = platformMatch ? `spec-analyzer-${platformMatch[1]}` : undefined;
-    const featureSubagent = featureMatch ? `spec-analyzer-feature` : undefined;
+    const platformSubagent = platformMatch ? `requirement-analyzer-${platformMatch[1]}` : undefined;
+    const featureSubagent = featureMatch ? `requirement-analyzer-feature` : undefined;
     if (featureSubagent) {
       process.stdout.write(`[SPECCORE_SESSION_AGENT: ${featureSubagent}]\n`);
       process.stdout.write(`[SPECCORE_CONTEXT_BUDGET: 10000]\n`);
@@ -3317,10 +3317,10 @@ export async function buildMultiDocPrompt(command: string, ctx: { iteration?: st
   let agentContextText = '';
   const phaseSubagentMap: Record<string, string> = {
     '0': 'product-analyst',
-    '1': 'spec-analyzer',
-    '2': 'spec-analyzer',
+    '1': 'requirement-analyzer',
+    '2': 'requirement-analyzer',
   };
-  const subagent = phaseSubagentMap[ctx.phase || ''] || (isGlobal ? 'spec-global-analyzer' : 'spec-analyzer');
+  const subagent = phaseSubagentMap[ctx.phase || ''] || (isGlobal ? 'global-analyzer' : 'requirement-analyzer');
   try {
     const agentCtx: AdapterAgentContext = {
       subagent,
