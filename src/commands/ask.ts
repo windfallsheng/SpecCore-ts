@@ -14,10 +14,10 @@ const STEP_SUBAGENT_MAP: Record<string, string | undefined> = {
   split: 'task-decomposer',
   plan: 'schedule-planner',
   execute: 'code-generator',
-  pr: 'spec-reviewer',
-  validate: 'spec-reviewer',
+  pr: 'code-reviewer',
+  validate: 'code-reviewer',
   change: 'impact-analyst',
-  verify: 'spec-tester',
+  verify: 'test-engineer',
   'code-index': 'global-analyzer',
 };
 

@@ -225,10 +225,10 @@ const STEP_SUBAGENT_MAP: Record<string, string | undefined> = {
   split: 'task-decomposer',
   plan: 'schedule-planner',
   execute: 'code-generator',
-  pr: 'spec-reviewer',
-  validate: 'spec-reviewer',
+  pr: 'code-reviewer',
+  validate: 'code-reviewer',
   change: 'impact-analyst',
-  verify: 'spec-tester',
+  verify: 'test-engineer',
   'code-index': 'global-analyzer',
 };
 
@@ -240,7 +240,7 @@ const WORKFLOWS: Record<string, PipelineStep[]> = {
     { order: 4, command: 'split', args: '-f REQUIREMENT.md', explanation: '将需求拆分为独立开发任务', dependsOn: 3, subagent: 'task-decomposer' },
     { order: 5, command: 'plan', args: '--all', explanation: '生成任务执行计划，确定优先级和依赖', dependsOn: 4, subagent: 'schedule-planner' },
     { order: 6, command: 'execute', args: '--auto', explanation: '按计划依次执行开发任务', dependsOn: 5, subagent: 'code-generator' },
-    { order: 7, command: 'pr', args: '--auto', explanation: '代码提交后创建 Pull Request', dependsOn: 6, subagent: 'spec-reviewer' },
+    { order: 7, command: 'pr', args: '--auto', explanation: '代码提交后创建 Pull Request', dependsOn: 6, subagent: 'code-reviewer' },
     { order: 8, command: 'done', args: '--all', explanation: '全部完成后归档收尾', dependsOn: 7 },
   ],
   'bugfix': [
@@ -248,17 +248,17 @@ const WORKFLOWS: Record<string, PipelineStep[]> = {
     { order: 2, command: 'analyze', args: '--prompt --task {task}', explanation: '分析 Bug 根因和影响范围', dependsOn: 1, subagent: 'requirement-analyzer' },
     { order: 3, command: 'plan', args: '--prompt --task {task}', explanation: '生成修复方案和排程', dependsOn: 2, subagent: 'schedule-planner' },
     { order: 4, command: 'execute', args: '--prompt --task {task}', explanation: '按方案执行修复', dependsOn: 3, subagent: 'code-generator' },
-    { order: 5, command: 'validate', args: '', explanation: '验证修复完整性', dependsOn: 4, subagent: 'spec-reviewer' },
-    { order: 6, command: 'pr', args: '--task {task}', explanation: '提交修复 PR', dependsOn: 5, subagent: 'spec-reviewer' },
+    { order: 5, command: 'validate', args: '', explanation: '验证修复完整性', dependsOn: 4, subagent: 'code-reviewer' },
+    { order: 6, command: 'pr', args: '--task {task}', explanation: '提交修复 PR', dependsOn: 5, subagent: 'code-reviewer' },
     { order: 7, command: 'done', args: '--task {task}', explanation: '归档修复记录', dependsOn: 6 },
   ],
   'batch execute': [
     { order: 1, command: 'plan', args: '--select', explanation: '列出所有可执行任务（编号 + CLI命令），用户多选', dependsOn: undefined, subagent: 'schedule-planner' },
   ],
   'code review': [
-    { order: 1, command: 'validate', args: '', explanation: '合规检查 Spec 完整性', dependsOn: undefined, subagent: 'spec-reviewer' },
+    { order: 1, command: 'validate', args: '', explanation: '合规检查 Spec 完整性', dependsOn: undefined, subagent: 'code-reviewer' },
     { order: 2, command: 'analyze', args: '--audit', explanation: '深度审计分析', dependsOn: 1, subagent: 'requirement-analyzer' },
-    { order: 3, command: 'pr', args: '--auto', explanation: '生成 PR 审查', dependsOn: 2, subagent: 'spec-reviewer' },
+    { order: 3, command: 'pr', args: '--auto', explanation: '生成 PR 审查', dependsOn: 2, subagent: 'code-reviewer' },
   ],
   // v8.3.160+: 常见复合意图工作流
   // v8.3.165+: 各步骤配置 subagent 角色
