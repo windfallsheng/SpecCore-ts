@@ -37,6 +37,14 @@ allowed-tools: ["Bash", "Read", "Write", "Edit"]
 - `[SPECCORE_DASHBOARD: <path>]` → **立即执行** `present_files(<path>)` 展示仪表盘页
 - `[SPECCORE_EXEC: <cmd>]` → 直接 `execute_command` 执行
 - `[SPECCORE_INTENT]` → 展示给用户确认
+- `[SPECCORE_GATE_A]` / `[SPECCORE_GATE_B]` / `[SPECCORE_GATE_C]` → **🚨 停下来 review，等用户确认后再继续，禁止自动续跑**：
+  1. 读取 stdout 中闸口块的 title + hint + 「确认后继续」命令
+  2. 按闸口类型把 review 产物展示给用户：
+     - **Gate A（Spec 定稿）** → 展示 `020-specs/` 的 REQUIREMENT / ANALYSIS / TECH / API_CONTRACT，让用户确认功能单元边界、端覆盖、验收标准
+     - **Gate B（代码 review）** → 展示 `.issues.md` / `.deviations` 及 AI 标记的低置信点，让用户确认或修正
+     - **Gate C（部署前确认）** → 明确告知这是 destructive 部署操作，展示部署目标（env/platform），必须用户明确同意
+  3. 停下来问用户「是否确认继续？」，**用户明确确认后**才执行「确认后继续」命令（`speccore run --auto --from <stage>`）
+  4. ❌ 禁止在用户未确认时自动执行续跑命令；❌ 禁止只说"检测到闸口"而不展示 review 产物
 
 ## ⛔ 最高优先级：用户意图优先于效率判断
 
@@ -284,12 +292,16 @@ allowed-tools: ["Bash", "Read", "Write", "Edit"]
 | {owner} 的工作回顾 | owner | `speccore retro --owner {owner}` |
 | {type} 类型的回顾 | type | `speccore retro --type {type}` |
 
-### 智能级联
+### 智能级联 / 端到端流水线
 | 用户说法 | 提取参数 | CLI 命令 |
 | :--- | :--- | :--- |
 | 智能级联/全流程推进 | - | `speccore dev` |
 | 推进项目/继续开发 | - | `speccore dev` |
-| 全自动推进 | - | `speccore dev --auto` |
+| 全自动推进/跑流水线 | - | `speccore run` |
+| 端到端/一键开发/自动开发 | demand? | `speccore run "{demand}"` |
+| {一句话需求描述}（如"做积分功能"） | demand | `speccore run "{demand}"` |
+| 演示模式跑一遍 {需求} | demand | `speccore run --demo "{demand}"` |
+| 从 {stage} 继续 | stage | `speccore run --auto --from {stage}` |
 
 ### 全量层管理
 | 用户说法 | 提取参数 | CLI 命令 |
