@@ -168,28 +168,28 @@ PATTERNS/
 **已覆盖阶段** (v8.3.177+ 子 Agent 隔离架构):
 | 命令 | 阶段 | 角色 | 上下文预算 |
 |------|------|------|:---:|
-| `analyze` | overview-skeleton | spec-analyzer | 6K |
-| `analyze` | overview-full | spec-analyzer | 8K |
+| `analyze` | overview-skeleton | requirement-analyzer | 6K |
+| `analyze` | overview-full | requirement-analyzer | 8K |
 | `analyze` | clarify-product | product-analyst | 4K |
 | `analyze` | clarify-interaction | interaction-designer | 4K |
 | `analyze` | clarify-security | security-reviewer (conditional) | 3K |
 | `analyze` | confirm-check | product-analyst | 4K |
-| `analyze` | phase1 | spec-analyzer | 10K |
-| `analyze` | contract | spec-analyzer | 6K |
-| `analyze` | phase1 (大项目) | spec-analyzer-feature | 8K |
-| `analyze` | platform-{x} | spec-analyzer-{platform} | 8K |
+| `analyze` | phase1 | requirement-analyzer | 10K |
+| `analyze` | contract | requirement-analyzer | 6K |
+| `analyze` | phase1 (大项目) | requirement-analyzer-feature | 8K |
+| `analyze` | platform-{x} | requirement-analyzer-{platform} | 8K |
 | `split` | prompt-analysis | task-decomposer | 12K |
 | `split` | dependency-analysis | dependency-analyst | 5K |
 | `split` | effort-estimation | effort-estimator | 4K |
 | `plan` | default | schedule-planner、risk-assessor | 12K/4K |
-| `execute` | prompt-analysis | spec-executor-{platform} | 12K |
-| `execute` | code-generation | spec-executor-{platform} | 12K |
+| `execute` | prompt-analysis | code-generator-{platform} | 12K |
+| `execute` | code-generation | code-generator-{platform} | 12K |
 | `execute` | quality-gate-build | compiler (兼测试) | 8K |
 | `execute` | quality-gate-nfr | security-reviewer (兼性能) | 6K |
 | `execute` | quality-gate-doc-sync | doc-sync-agent | 3K |
 | `change` | impact | impact-analyst、regression-tester | 6K/4K |
 | `pr` | review | code-reviewer、security-reviewer、test-reviewer | 6K/6K/4K |
-| `global-analyze` | global-analysis | spec-global-analyzer | 10K |
+| `global-analyze` | global-analysis | global-analyzer | 10K |
 
 ### 1.5.3 RULES 层（v6.85.0+）
 
@@ -6072,7 +6072,7 @@ SpecCore 在 5+ 端、10+ 功能模块的大项目中，全局分析一次性生
 
 v8.3.160+ 的子 Agent 隔离架构解决了单轮对话的上下文漂移和耗尽问题，但在大项目（5+ 端、10+ 功能模块）场景下仍存在两个瓶颈：
 
-1. **Phase 1 单 Agent 瓶颈**：迭代分析的 overview 文档（REQUIREMENT.md / FUNCTION_MAP.md / INTERACTION_MAP.md）由单个 `spec-analyzer` 生成，所有功能模块的需求同时注入，token 消耗高、质量稀释
+1. **Phase 1 单 Agent 瓶颈**：迭代分析的 overview 文档（REQUIREMENT.md / FUNCTION_MAP.md / INTERACTION_MAP.md）由单个 `requirement-analyzer` 生成，所有功能模块的需求同时注入，token 消耗高、质量稀释
 2. **Split 单 Agent 瓶颈**：所有功能模块的拆分由单个 `task-decomposer` 处理，模块间干扰导致拆分粒度不一致
 
 ### 核心原则
@@ -6088,14 +6088,14 @@ v8.3.160+ 的子 Agent 隔离架构解决了单轮对话的上下文漂移和耗
 │  └─ 条件执行：security-reviewer 只在检测到安全相关需求时触发      │
 ├─────────────────────────────────────────────────────────────┤
 │  Phase 1: 全局索引 + 功能模块分批（大项目）                    │
-│  ├─ 小项目（≤2 模块）: 单 spec-analyzer 生成所有 overview 文档 │
+│  ├─ 小项目（≤2 模块）: 单 requirement-analyzer 生成所有 overview 文档 │
 │  ├─ 大项目（>2 模块）:                                         │
-│  │   ├─ 主步骤: spec-analyzer 生成 FUNCTION_MAP / PLATFORMS   │
-│  │   └─ 模块步骤: 每个模块独立 spec-analyzer-feature 会话      │
+│  │   ├─ 主步骤: requirement-analyzer 生成 FUNCTION_MAP / PLATFORMS   │
+│  │   └─ 模块步骤: 每个模块独立 requirement-analyzer-feature 会话      │
 │  │       生成 {feature}/overview/{REQUIREMENT,ANALYSIS,TECH}.md│
 ├─────────────────────────────────────────────────────────────┤
 │  Phase 2: 功能模块 × 端 分批（大项目）                         │
-│  ├─ 小项目: 逐端处理，每个端 spec-analyzer-{platform}          │
+│  ├─ 小项目: 逐端处理，每个端 requirement-analyzer-{platform}          │
 │  └─ 大项目: 按功能模块分组，每个模块的各端由同一 Agent 处理      │
 │      减少跨模块上下文切换                                       │
 └─────────────────────────────────────────────────────────────┘
@@ -6170,13 +6170,13 @@ interface TaskSummary {
 | 需求澄清 | analyze | `product-analyst` | full | 4K |
 | 交互设计 | analyze | `interaction-designer` | full | 4K |
 | 安全审查 | analyze | `security-reviewer` | full | 4K |
-| Phase 1 分析 | analyze | `spec-analyzer` | full | 8K |
-| 功能模块分析 | analyze | `spec-analyzer-feature` | full | 8K |
-| Phase 2 端级 | analyze | `spec-analyzer-{platform}` | platform-only | 8K |
+| Phase 1 分析 | analyze | `requirement-analyzer` | full | 8K |
+| 功能模块分析 | analyze | `requirement-analyzer-feature` | full | 8K |
+| Phase 2 端级 | analyze | `requirement-analyzer-{platform}` | platform-only | 8K |
 | 任务拆分 | split | `task-decomposer` | full | 12K |
 | 执行计划 | plan | `schedule-planner` | full | 12K |
-| 代码执行 | execute | `spec-executor-{platform}` | platform-only | 12K |
-| 代码审查 | pr | `spec-reviewer` | full | 8K |
+| 代码执行 | execute | `code-generator-{platform}` | platform-only | 12K |
+| 代码审查 | pr | `code-reviewer` | full | 8K |
 
 ### 输出标记体系（扩展）
 
@@ -6184,9 +6184,9 @@ v8.3.167 在原有标记体系基础上增加：
 
 | 标记 | 含义 | 新增于 |
 |:---|:---|:---:|
-| `[SPECCORE_SUBAGENT: spec-analyzer-feature]` | 功能模块分析 Agent | v8.3.167 |
-| `[SPECCORE_SUBAGENT: spec-analyzer-{platform}]` | 端级分析 Agent | v8.3.166 |
-| `[SPECCORE_SUBAGENT: spec-executor-{platform}]` | 端级执行 Agent | v8.3.166 |
+| `[SPECCORE_SUBAGENT: requirement-analyzer-feature]` | 功能模块分析 Agent | v8.3.167 |
+| `[SPECCORE_SUBAGENT: requirement-analyzer-{platform}]` | 端级分析 Agent | v8.3.166 |
+| `[SPECCORE_SUBAGENT: code-generator-{platform}]` | 端级执行 Agent | v8.3.166 |
 | `[PENDING: 模块A, 模块B]` | 待续批的模块列表 | v8.3.167 |
 
 ### 效果
@@ -6197,7 +6197,7 @@ v8.3.167 在原有标记体系基础上增加：
 | 单模块分析深度 | 空壳文档（<50 行） | 深入文档（≥150 行 + Mermaid） |
 | Split 单批质量 | 模块间干扰，粒度不均 | 每批 1-2 模块，定义清晰 |
 | 失败后恢复 | 从头开始 | 续批未完成的模块 |
-| Agent 角色聚焦 | 单一 spec-analyzer | 按阶段/按端/按模块分配 |
+| Agent 角色聚焦 | 单一 requirement-analyzer | 按阶段/按端/按模块分配 |
 
 ---
 
@@ -6352,5 +6352,49 @@ process.stdout.write('[SPECCORE_PROMPT]\n${finalPrompt}');
 - **Windsurf SDK**: Cascade API 集成
 - **结果自动 apply**: SDK 返回的结果可自动解析并写入文件（需实现 Markdown → 文件映射）
 - **并行子 Agent**: 多个功能模块同时通过 SDK 调度（需 Qoder 支持并行会话）
+
+---
+
+## 16. 单一事实源改造（v8.3.183+，方案 C）
+
+### 16.1 背景与动机
+
+SpecCore 的 AI 角色定义长期存在「双份事实源」，违反"Spec 是单一事实源"的自身哲学：
+
+| 问题 | 旧状态 |
+|:---|:---|
+| 双份角色定义 | `.speccore/AGENTS/`（21 运行时角色）与 `.agents/agents/`（11 宿主角色）各自手写 |
+| 命名割裂 | `spec-analyzer`/`spec-executor` 等 spec-* 命名与 `compiler`/`code-reviewer` 等普通命名并存 |
+| 路径散落 | 角色文件散在 `AGENTS/` 和 `SKILLS/` 两个目录（如 `execute.md` 是角色却放在 SKILLS） |
+| 硬编码副本 | `agent-adapter.ts` 的 `DEFAULT_SUBAGENTS`（18 条）与 md frontmatter 各存一份元数据 |
+
+### 16.2 目标架构：单一事实源
+
+```
+权威 md（.speccore/AGENTS 的 frontmatter：name/title/systemPrompt/contextType/contextBudget/skills/activations）
+   ├── 对内 → agent-loader 解析 frontmatter → agent-adapter 懒加载构建 registry（运行时）
+   └── 对外 → syncAgentsMd 从 frontmatter 提取 title+职责 → AGENTS.md（宿主 AI 看角色清单）
+```
+
+角色定义只存在于 md frontmatter 一处，对内（运行时）和对外（宿主投影）都从它生成。
+
+### 16.3 改造清单（7 个 commit）
+
+| commit | 内容 |
+|:---|:---|
+| `accc504d` | 路径统一（execute/global-analyze 从 SKILLS 迁 AGENTS）+ frontmatter 元数据下沉 |
+| `a2928780` | agent-loader 解析 frontmatter + 修复 activations 读取 bug（原来从章节提取，实际在 frontmatter） |
+| `5436d61f` | 命名统一：spec-analyzer→requirement-analyzer、spec-executor→code-generator、spec-global-analyzer→global-analyzer |
+| `88cdde02` | agent-adapter 从 frontmatter 构建 registry，删除硬编码 DEFAULT_SUBAGENTS（-166 行） |
+| `0659fcbe` | 修复 spec-reviewer/spec-tester 遗漏（→code-reviewer/test-engineer） |
+| `0250f3da` | 方案 A：删除 .agents/agents 双份角色，AGENTS.md 从权威 md 投影 |
+| `f4c40b25` | 宿主 skill 极简化为薄封装，参数提取/校验下沉 CLI |
+
+### 16.4 关键设计决策
+
+1. **事实源载体 = md + frontmatter**（而非 TS 数组）：角色详细内容（检查清单/评估矩阵/分析维度）是差异化文档，TS 模板字符串承载会巨量难维护，md 是自然载体。
+2. **隔离参数留在 frontmatter 但只由 TS 读**：`contextType`/`contextBudget` 不下沉到投影 md，守住「隔离逻辑不被投影污染」的红线。
+3. **懒加载构建 registry**：`HeadlessAdapter`/`QoderSdkAdapter` 首次 `prepareContext` 时从 `loadAllAgents` 构建，不改调用方。
+4. **宿主侧薄封装化**：skill = command = 转交 `speccore ask`，参数提取/校验下沉 CLI（ask-engine 意图识别 + 命令内部校验），消除宿主侧重复。`speccore-router` 保留（核心路由 + CLI 输出标记处理 + 模糊意图拦截）。
 
 ---
