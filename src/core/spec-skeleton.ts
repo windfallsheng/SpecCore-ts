@@ -1034,23 +1034,8 @@ export function computeFeatureBasedAnalyzeManifest(
           placeholder: doc.buildPlaceholder(iteration, feature),
         });
       }
-      // v8.3.184+: 端覆盖矩阵（feature 根目录 _matrix.md，端推断机制填充）
-      entries.push({
-        relPath: join(feature, '_matrix.md'),
-        category: 'overview',
-        docName: '_matrix.md',
-        placeholder: `${SKELETON_MARKER}
-# ${feature} 端覆盖矩阵
-
-> 迭代: ${iteration} | 功能: ${feature} | 生成: 待填充
-
-## 写作要求
-记录该功能涉及哪些端（由端推断机制或 AI 填充）：
-| 端 | 是否涉及 | 来源 | 关键需求 |
-|:---|:---|:---|:---|
-${platforms.map(p => `| ${p} | _待确认_ | | |`).join('\n')}
-`,
-      });
+      // 注：_matrix.md 端覆盖矩阵在需求层 010-requirements/features/{feature}/_matrix.md
+      //（doc2spec 生成 + 端推断 Layer2 读取），迭代层 020-specs 不重复生成，避免双写漂移。
     }
   }
 
