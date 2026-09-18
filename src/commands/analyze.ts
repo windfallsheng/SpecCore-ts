@@ -135,6 +135,8 @@ export interface AnalyzeOptions {
   resumeUnits?: boolean;  // --resume-units: 断点续跑未完成的单元分析
   // v8.3.122+: 增量合并模式
   merge?: boolean;         // --merge: 与现有文档合并（按标题替换/追加），不覆盖
+  // v8.3.184+: 从源码反推需求（两跳 IR→UR）
+  fromCode?: boolean;      // --from-code: 读源码生成候选需求（逐模块 IR → 合成 UR）
 }
 
 /**
@@ -246,6 +248,34 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 
   if (options.scope === 'global' && !options.iteration) {
     options.iteration = 'GLOBAL';
+  }
+
+  // ── --from-code 模式: 从源码反推需求（两跳 IR→UR 渐进抽象）──
+  // v8.3.184+: CLI 确定性产出「逐模块 IR 骨架 + 合成 UR 骨架 + 两跳 prompt」，宿主 AI 完成语义抽象
+  if (options.fromCode) {
+    const { reverseRequirementsFromCode } = await import('../core/reverse-requirement');
+    const sources = options.source
+      ? options.source.split(',').map(s => s.trim()).filter(Boolean)
+      : options.sourceScope
+        ? options.sourceScope.split(',').map(s => s.trim()).filter(Boolean)
+        : [];
+    try {
+      const result = await reverseRequirementsFromCode({
+        sources,
+        depth: options.depth,
+        platforms: options.platform ? options.platform.split(',').map(p => p.trim()).filter(Boolean) : undefined,
+      });
+      logger.info('');
+      logger.info(`🎯 源码反推需求完成（status: candidate，澄清后才成 Spec）`);
+      logger.info(`   📄 UR 骨架: ${join(result.outputDir, 'REQUIREMENT.md')}`);
+      logger.info(`   🧩 IR 目录: ${result.irDir}（${result.irCount} 个模块）`);
+      logger.info(`   📝 两跳指引: ${result.promptPath}`);
+      logger.info('');
+      logger.info(`   下一步：让宿主 AI 按 REVERSE_PROMPT.md 完成两跳语义抽象，再人工确认功能单元边界。`);
+    } catch (e: any) {
+      logger.error(`源码反推需求失败: ${e?.message || e}`);
+    }
+    return;
   }
 
   // ── --full 模式: 委托给 synthesizeCommand（原 synthesize 命令） ──
