@@ -250,16 +250,21 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     options.iteration = 'GLOBAL';
   }
 
-  // ── --from-code 模式: 从源码反推需求（两跳 IR→UR 渐进抽象）──
-  // v8.3.184+: CLI 确定性产出「逐模块 IR 骨架 + 合成 UR 骨架 + 两跳 prompt」，宿主 AI 完成语义抽象
+  // ── --from-code 模式: 从源码反推需求（两跳 IR→UR）+ 全局技术分析 ──
+  // v8.3.184+: CLI 确定性产出「逐模块 IR 骨架 + 合成 UR 骨架 + 两跳 prompt + 全局技术分析文档集」，
+  //           宿主 AI 完成语义抽象
   if (options.fromCode) {
     const { reverseRequirementsFromCode } = await import('../core/reverse-requirement');
+    const { generateGlobalArtifacts } = await import('../core/global-artifacts');
     const sources = options.source
       ? options.source.split(',').map(s => s.trim()).filter(Boolean)
       : options.sourceScope
         ? options.sourceScope.split(',').map(s => s.trim()).filter(Boolean)
         : [];
     try {
+      // 1. 全局技术分析文档（TECH_STACK/CODE_INDEX/ARCHITECTURE/API_INVENTORY/DATA_MODEL/GLOSSARY/按端 OVERVIEW+TECH）
+      await generateGlobalArtifacts(sources, options.depth || 'normal');
+      // 2. 从源码反推需求（两跳 IR→UR）
       const result = await reverseRequirementsFromCode({
         sources,
         depth: options.depth,
