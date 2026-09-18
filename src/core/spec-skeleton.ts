@@ -560,6 +560,23 @@ ${feature} 的架构视角综合方案（跨端），端级细节下放到 {端}
 - 与 overview/TECH.md 保持一致
 `,
   },
+  {
+    name: 'BUSINESS_RULES.md',
+    buildPlaceholder: (iter, feature) => `${SKELETON_MARKER}
+# ${feature} 业务规则
+
+> 迭代: ${iter} | 功能: ${feature} | 生成: 待填充
+
+## 写作要求
+记录 ${feature} 特有的业务规则（可执行逻辑，非模糊描述）：
+| 规则 | 触发条件 | 行为 | 异常处理 |
+|:---|:---|:---|:---|
+| R-01 | | | |
+
+> 全局通用规则放 GLOBAL/BUSINESS_RULES/（跨功能），端级规则放 platforms/{端}/BUSINESS_RULES.md。
+> 本文件只记录该功能特有的规则，供业务规则三层加载（business-rules.ts Layer3）。
+`,
+  },
 ];
 
 // ================================================================
