@@ -1,3 +1,32 @@
+## v8.3.187 (2026-09-19) — 诚实降级体系与工程加固
+
+### 通用行为准则优化（4 → 7 条）
+
+- **`prompt-builder.ts` 抽取 `UNIVERSAL_BEHAVIOR_RULES` 常量**：原 4 条硬编码准则扩展为 7 条，融合业界最佳实践
+  - 新增「先读后写」「最小改动」「主动澄清」「破坏性操作先确认」
+  - 「不假装确定」合并进「降级到诚实」，升级为「事实/推断/猜测」三档置信度
+  - 依据：Claude Code 官方系统提示词、Anthropic Prompt Library、Karpathy 12 规则
+
+### 死代码清理
+
+- 删除 8 个零引用命令文件（2009 行）：backup/context/current/global-status/health/import/lifecycle/status
+- 删除 `understandIntent` + `synthesizeIntent` 死代码（321 行，askEngine 才是 ask 主入口）
+
+### 功能接线（A 类孤儿模块）
+
+- **`refresh` 接入 `detectStaleGlobalDocs`**：刷新后检测全局文档过期（≥1 天才报告），提示增量重建
+- **`search --global` 接入 `searchGlobalKnowledge`**：全局层 RAG+图谱语义检索，区别于关键词搜索
+- **`dev` 接入 `generateHandoff`**：13 阶段流水线关键阶段成功后生成阶段交接摘要（13→6 阶段映射）
+
+### bug 修复（meeting-system 实测）
+
+- **`config --project` 选项缺失**：cli.ts 补注册 `--project`，修复 doctor 提示的升级命令报 unknown option
+- **`detectConfigDiff` 开放式字典误判**：`git.branch_types` 等 Record 字段不再误报用户自定义键为 removed
+- **`detectStaleGlobalDocs` 过期 0 天噪音**：只报告过期 ≥1 天的文档
+- **版本比较误报**：about/update 改用 semver 比较，不再把旧版本（如 v8.3.161 < 182）误报为「新版本」
+
+---
+
 ## v8.3.182 (2026-09-18) — 文档路由显式化与白名单精细化
 
 ### 文档路由表（r4）

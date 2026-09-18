@@ -367,7 +367,8 @@ speccore --version   # v8.3.167
 | `graph` | `g` | 🕸️ 统一图谱查询（知识+代码）+ Mermaid 渲染 |
 | `knowledge` | `kg` |  🌐 知识图谱可视化 + 衰减检测 + 代码图谱查询 |
 | `track` | `trk` | 🔗 🔒 REQ→Task→Code 全链路 |
-| `search` | `sh` | 🔍 跨 Spec 全文搜索 |
+| `search` | `sh` | 🔍 跨 Spec 全文搜索 + 全局语义检索（--global） |
+| `refresh` | `rf` | 🔄 统一刷新检索层（代码索引 + 文档 RAG + 知识图谱）+ 全局文档过期检测 |
 | `retro` | `rt` | 📝 🔒 任务回顾复盘 + 评分 |
 | `rename` | `rn` | ✏️ 🔒 重命名 |
 | `history` | `hi` | 📜 历史记录（操作日志 / 需求变更） |
