@@ -612,14 +612,8 @@ program
   .description('项目状态 → status-panel（同一入口）')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('-a, --assignee <assignee>', 'Filter by assignee')
+  .option('--health', '项目健康度报告（原 health 命令，已合并）')
   .action(statusPanelCommand);
-
-program
-  .command('health')
-  .alias('hl')
-  .description('项目健康度 → status-panel --health')
-  .option('-i, --iteration <iteration>', 'Target iteration')
-  .action((opts: any) => statusPanelCommand({ ...opts, health: true }));
 
 program
   .command('progress')
