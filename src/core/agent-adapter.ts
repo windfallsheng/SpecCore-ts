@@ -19,6 +19,8 @@ import { join } from 'path';
 import { ContextSnapshot } from './pipeline-engine';
 import { logger } from '../utils/logger';
 import { detectHostAi, type HostAiTool } from './ask-host-ai';
+import { loadAllAgents } from './agents/engine/agent-loader';
+import type { AgentDefinition } from './agents/engine/types';
 
 // ── 子 Agent 上下文 ──
 export interface AgentContext {
@@ -98,165 +100,23 @@ export interface AgentAdapter {
 const subagentRegistry = new Map<string, SubagentConfig>();
 
 // ── 默认子 Agent 配置（以 _INDEX.md 角色定义为准） ──
-const DEFAULT_SUBAGENTS: SubagentConfig[] = [
-  // analyze / clarify 阶段
-  {
-    name: 'product-analyst',
-    description: '产品分析师：业务流程完整性、遗漏识别、术语统一',
-    systemPrompt: '你是 SpecCore 产品分析师。你的职责是审查业务流程完整性、识别需求遗漏、检查术语统一性。输出格式：Markdown 产品分析报告。',
-    defaultContextType: 'full',
-    defaultContextBudget: 4000,
-    skills: ['.speccore/AGENTS/product-analyst.md'],
-  },
-  {
-    name: 'interaction-designer',
-    description: '交互设计师：信息架构、状态矩阵、前后端一致性',
-    systemPrompt: '你是 SpecCore 交互设计师。你的职责是设计页面信息架构、定义交互状态矩阵、检查前后端交互一致性。输出格式：Markdown 交互审查报告。',
-    defaultContextType: 'full',
-    defaultContextBudget: 4000,
-    skills: ['.speccore/AGENTS/interaction-designer.md'],
-  },
-  {
-    name: 'security-reviewer',
-    description: '安全审查员：认证授权、输入验证、数据保护',
-    systemPrompt: '你是 SpecCore 安全审查员。你的职责是识别需求/代码中的安全风险，检查认证、授权、输入验证、数据保护。输出格式：安全问题列表。',
-    defaultContextType: 'full',
-    defaultContextBudget: 4000,
-    skills: ['.speccore/AGENTS/security-reviewer.md'],
-  },
-  // analyze 阶段
-  {
-    name: 'requirement-analyzer',
-    description: '需求分析专家：逐端分析、架构设计、技术方案',
-    systemPrompt: '你是 SpecCore 需求分析专家。你的职责是根据需求文档和契约，为指定端生成完整的技术规格。必须遵循 CONSTITUTION.md 中的命名规范和端名标准。输出格式：Markdown 技术文档。',
-    defaultContextType: 'platform-only',
-    // v8.3.160+: 配合按需加载优化，降至 10K
-    defaultContextBudget: 10000,
-    skills: ['.speccore/AGENTS/product-analyst-backend.md', '.speccore/AGENTS/product-analyst-frontend.md'],
-  },
-  // execute 阶段
-  {
-    name: 'code-generator',
-    description: '代码生成专家：读取规格、生成代码、遵循规范',
-    systemPrompt: '你是 SpecCore 代码生成专家。你的职责是根据 TASK.md 和技术规格，生成符合项目规范的代码实现。必须遵循 CONSTITUTION.md 的命名规范、端名标准和错误码体系。输出格式：JSON 文件列表。',
-    defaultContextType: 'incremental',
-    defaultContextBudget: 10000,
-    skills: ['.speccore/AGENTS/code-generator.md'],
-  },
-  // execute / quality-gate 阶段
-  // v8.3.160+: compiler 合并 test-engineer 职责（quality-gate-build）
-  {
-    name: 'compiler',
-    description: '构建质量检查员：编译检查 + 测试覆盖',
-    systemPrompt: '你是 SpecCore 构建质量检查员。你的职责是：1) 检查代码编译可行性，识别语法错误和类型错误；2) 检查单元测试和集成测试覆盖率，确保新增代码有配套测试。输出格式：构建质量报告（含编译结果 + 测试覆盖）。',
-    defaultContextType: 'incremental',
-    defaultContextBudget: 8000,
-    skills: ['.speccore/AGENTS/compiler.md', '.speccore/AGENTS/test-engineer.md'],
-  },
-  // v8.3.160+: security-reviewer 合并 performance-expert 职责（quality-gate-nfr）
-  {
-    name: 'security-reviewer',
-    description: '非功能质量检查员：安全审查 + 性能检测',
-    systemPrompt: '你是 SpecCore 非功能质量检查员。你的职责是：1) 识别代码中的安全风险（认证、授权、输入验证、数据保护）；2) 检查性能瓶颈（N+1 查询、内存泄漏、不必要的重渲染）。输出格式：非功能质量报告（含安全 + 性能）。',
-    defaultContextType: 'incremental',
-    defaultContextBudget: 6000,
-    skills: ['.speccore/AGENTS/security-reviewer.md', '.speccore/AGENTS/performance-expert.md'],
-  },
-  {
-    name: 'doc-sync-agent',
-    description: '文档同步检查员：代码与文档一致性',
-    systemPrompt: '你是 SpecCore 文档同步检查员。你的职责是检查代码与文档的一致性，确保 API 文档与实际接口匹配，注释和文档未过时。输出格式：文档同步报告。',
-    defaultContextType: 'incremental',
-    defaultContextBudget: 3000,
-    skills: ['.speccore/AGENTS/doc-sync-agent.md'],
-  },
-  // split 阶段
-  {
-    name: 'task-decomposer',
-    description: '任务拆分专家：功能模块拆分为原子级开发任务',
-    systemPrompt: '你是 SpecCore 任务拆分专家。你的职责是将功能模块拆分为原子级开发任务，确保每个任务可独立执行、可验收，工时控制在 2h-8h。输出格式：任务列表。',
-    defaultContextType: 'full',
-    defaultContextBudget: 8000,
-    skills: ['.speccore/AGENTS/task-decomposer.md'],
-  },
-  {
-    name: 'dependency-analyst',
-    description: '依赖关系分析师：任务间依赖、循环依赖检测',
-    systemPrompt: '你是 SpecCore 依赖关系分析师。你的职责是识别任务间的依赖关系，构建任务依赖图，发现循环依赖，推荐任务执行顺序。输出格式：依赖分析报告。',
-    defaultContextType: 'incremental',
-    defaultContextBudget: 5000,
-    skills: ['.speccore/AGENTS/dependency-analyst.md'],
-  },
-  {
-    name: 'effort-estimator',
-    description: '工时估算专家：任务工时估算',
-    systemPrompt: '你是 SpecCore 工时估算专家。你的职责是根据任务复杂度和历史数据，为每个任务估算工时。输出格式：工时估算表。',
-    defaultContextType: 'incremental',
-    defaultContextBudget: 4000,
-    skills: [],
-  },
-  // global-analyze 阶段
-  {
-    name: 'global-analyzer',
-    description: '全局分析专家：跨迭代依赖、全局架构、一致性检查',
-    systemPrompt: '你是 SpecCore 全局分析专家。你的职责是分析跨迭代的依赖关系、全局架构一致性和技术债务。必须识别所有跨端关联和重复实现。输出格式：Markdown 全局报告。',
-    defaultContextType: 'full',
-    // v8.3.160+: 配合按需加载优化，降至 10K
-    defaultContextBudget: 10000,
-    skills: ['.speccore/AGENTS/global-analyzer.md'],
-  },
-  // plan 阶段（预留）
-  {
-    name: 'schedule-planner',
-    description: '排期规划专家：任务排期、资源分配',
-    systemPrompt: '你是 SpecCore 排期规划专家。你的职责是根据任务列表和人员配置，生成执行计划，识别可并行的任务批次。输出格式：执行计划。',
-    defaultContextType: 'full',
-    defaultContextBudget: 6000,
-    skills: ['.speccore/AGENTS/schedule-planner.md'],
-  },
-  {
-    name: 'risk-assessor',
-    description: '风险评估专家：技术风险、依赖风险识别',
-    systemPrompt: '你是 SpecCore 风险评估专家。你的职责是评估任务执行中的技术风险和依赖风险，参考 RISK.md 和 .issues.md。输出格式：风险评估报告。',
-    defaultContextType: 'incremental',
-    defaultContextBudget: 4000,
-    skills: ['.speccore/AGENTS/risk-assessor.md'],
-  },
-  // change 阶段（预留）
-  {
-    name: 'impact-analyst',
-    description: '影响范围分析师：变更影响分析',
-    systemPrompt: '你是 SpecCore 影响范围分析师。你的职责是分析变更对现有代码、文档、测试的影响范围，识别需要同步修改的关联模块。输出格式：影响范围分析报告。',
-    defaultContextType: 'full',
-    defaultContextBudget: 6000,
-    skills: ['.speccore/AGENTS/impact-analyst.md'],
-  },
-  {
-    name: 'regression-tester',
-    description: '回归测试专家：回归测试范围确定',
-    systemPrompt: '你是 SpecCore 回归测试专家。你的职责是根据变更内容确定回归测试范围，确保变更不会破坏已有功能。输出格式：回归测试计划。',
-    defaultContextType: 'incremental',
-    defaultContextBudget: 4000,
-    skills: ['.speccore/AGENTS/regression-tester.md'],
-  },
-  // pr 阶段（预留）
-  {
-    name: 'code-reviewer',
-    description: '代码审查员：代码质量、可读性、可维护性',
-    systemPrompt: '你是 SpecCore 代码审查员。你的职责是审查代码质量、可读性、可维护性，检查是否符合项目编码规范。输出格式：代码审查报告。',
-    defaultContextType: 'incremental',
-    defaultContextBudget: 6000,
-    skills: ['.speccore/AGENTS/code-reviewer.md'],
-  },
-  {
-    name: 'test-reviewer',
-    description: '测试审查员：测试完整性审查',
-    systemPrompt: '你是 SpecCore 测试审查员。你的职责是审查测试代码的完整性和有效性，确保测试覆盖所有场景。输出格式：测试审查报告。',
-    defaultContextType: 'incremental',
-    defaultContextBudget: 4000,
-    skills: ['.speccore/AGENTS/test-reviewer.md'],
-  },
-];
+/** v8.3.183+: 从 AgentDefinition（frontmatter 元数据）构建 SubagentConfig，替代硬编码 DEFAULT_SUBAGENTS */
+function agentDefinitionToConfig(def: AgentDefinition): SubagentConfig {
+  return {
+    name: def.name,
+    description: def.title || def.name,
+    systemPrompt: def.systemPrompt || def.rolePrompt,
+    defaultContextType: def.contextType || 'full',
+    defaultContextBudget: def.contextBudget || 4000,
+    skills: (def.skills || []).map(s => `.speccore/AGENTS/${s}.md`),
+  };
+}
+
+/** 判断是否为「主 subagent」（有 systemPrompt + contextType，区别于子角色/特化角色） */
+function isMainSubagent(def: AgentDefinition): boolean {
+  return !!(def.systemPrompt && def.contextType);
+}
+
 
 // ═══════════════════════════════════════════════════════════
 // HeadlessAdapter — 基于文件/状态机的子 Agent 模拟
@@ -264,15 +124,26 @@ const DEFAULT_SUBAGENTS: SubagentConfig[] = [
 
 export class HeadlessAdapter implements AgentAdapter {
   private registry: Map<string, SubagentConfig>;
+  private registryLoaded = false;
 
   constructor() {
     this.registry = new Map(subagentRegistry);
-    // 注册默认子 Agent
-    for (const config of DEFAULT_SUBAGENTS) {
-      if (!this.registry.has(config.name)) {
-        this.registry.set(config.name, config);
+  }
+
+  /** v8.3.183+: 懒加载从 frontmatter 元数据构建 registry（替代硬编码 DEFAULT_SUBAGENTS） */
+  private async ensureRegistryLoaded(cwd: string): Promise<void> {
+    if (this.registryLoaded) return;
+    try {
+      const agents = await loadAllAgents(cwd);
+      for (const [name, def] of agents) {
+        if (isMainSubagent(def) && !this.registry.has(name)) {
+          this.registry.set(name, agentDefinitionToConfig(def));
+        }
       }
+    } catch (e: any) {
+      logger.warn(`[AgentAdapter] 从 frontmatter 加载子 Agent 失败: ${e.message}`);
     }
+    this.registryLoaded = true;
   }
 
   getMode(): AgentAdapterMode {
@@ -295,6 +166,7 @@ export class HeadlessAdapter implements AgentAdapter {
 
   /** 准备子 Agent 的紧凑上下文 */
   async prepareContext(ctx: AgentContext): Promise<string> {
+    await this.ensureRegistryLoaded(ctx.cwd);
     const config = this.registry.get(ctx.subagent);
     const lines: string[] = [];
 
@@ -507,14 +379,26 @@ function mapToQoderAgentName(subagent: string): string | undefined {
 export class QoderSdkAdapter implements AgentAdapter {
   private registry: Map<string, SubagentConfig>;
   private sdkModule: any | null = null;
+  private registryLoaded = false;
 
   constructor() {
     this.registry = new Map(subagentRegistry);
-    for (const config of DEFAULT_SUBAGENTS) {
-      if (!this.registry.has(config.name)) {
-        this.registry.set(config.name, config);
+  }
+
+  /** v8.3.183+: 懒加载从 frontmatter 元数据构建 registry */
+  private async ensureRegistryLoaded(cwd: string): Promise<void> {
+    if (this.registryLoaded) return;
+    try {
+      const agents = await loadAllAgents(cwd);
+      for (const [name, def] of agents) {
+        if (isMainSubagent(def) && !this.registry.has(name)) {
+          this.registry.set(name, agentDefinitionToConfig(def));
+        }
       }
+    } catch (e: any) {
+      logger.warn(`[QoderSdkAdapter] 从 frontmatter 加载子 Agent 失败: ${e.message}`);
     }
+    this.registryLoaded = true;
   }
 
   getMode(): AgentAdapterMode {
@@ -561,6 +445,7 @@ export class QoderSdkAdapter implements AgentAdapter {
         return null;
       }
 
+      await this.ensureRegistryLoaded(ctx.cwd);
       const config = this.registry.get(ctx.subagent);
 
       // 2. 构建自定义 agents 定义
