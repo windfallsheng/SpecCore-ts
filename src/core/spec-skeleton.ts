@@ -250,6 +250,54 @@ const PHASE1_DOCS: { name: string; buildPlaceholder: (iter: string) => string }[
 - ⚠️ **坑 2**: ...（解决方式）
 `,
   },
+  {
+    name: 'ARCHITECTURE.md',
+    buildPlaceholder: (iter) => `${SKELETON_MARKER}
+# 系统架构
+
+> 迭代: ${iter} | 生成: 待填充
+
+## 写作要求
+描述本迭代的系统架构（区别于 TECH.md 的技术选型，这里聚焦结构关系）：
+- 服务拓扑（Mermaid graph）：本迭代涉及哪些服务/模块，如何组织
+- 数据流：请求从哪端进入，经过哪些层
+- 跨端交互（调用方 → 被调方、协议）
+`,
+  },
+  {
+    name: 'API_CONTRACT.yaml',
+    buildPlaceholder: (iter) => `# SPEC-SKELETON
+# 跨功能接口契约（被 2+ 功能单元引用的接口，前后端唯一锚点）
+# 迭代: ${iter} | 生成: 待填充
+# 各端 API_CONTRACT.yaml 从这里派生，保持路径一致
+
+version: "1.0"
+iteration: "${iter}"
+apis: []
+# 示例：
+# - name: login
+#   method: POST
+#   path: /api/auth/login
+#   consumer_features: [用户认证]
+#   provider: backend
+`,
+  },
+  {
+    name: 'CLARIFY.md',
+    buildPlaceholder: (iter) => `${SKELETON_MARKER}
+# 全局澄清记录
+
+> 迭代: ${iter} | 生成: 待填充
+
+## 写作要求
+记录跨功能模块的共性问题澄清（影响所有/多个功能单元的决策）：
+| ID | 问题 | 回答 | 影响功能 |
+|:---|:---|:---|:---|
+| G-Q001 | | | |
+
+> 功能单元特有的澄清放 {feature}/overview/CLARIFY.md（引用本文件，不复制）。
+`,
+  },
 ];
 
 // ================================================================
@@ -348,6 +396,24 @@ ${backend ? `- 单元测试覆盖（Service/DAO 层）
 
 ### 6. 本端坑点
 - ⚠️ ...
+`,
+  },
+  {
+    name: 'API_CONTRACT.yaml',
+    buildPlaceholder: (iter, platform) => `# SPEC-SKELETON
+# ${platform} 接口契约（本端对外提供的接口，前端引用本文件对齐）
+# 迭代: ${iter} | 端: ${platform} | 生成: 待填充
+
+platform: "${platform}"
+iteration: "${iter}"
+apis: []
+# 示例：
+# - name: login
+#   method: POST
+#   path: /api/auth/login
+#   request: { phone: string, password: string }
+#   response: { token: string }
+#   errors: [1001, 1002, 2001]
 `,
   },
 ];
@@ -457,6 +523,41 @@ const FEATURE_OVERVIEW_DOCS: { name: string; buildPlaceholder: (iter: string, fe
 - Mermaid sequenceDiagram
 - 标注接口路径和调用关系
 - 附接口契约索引表
+`,
+  },
+  {
+    name: 'CLARIFY.md',
+    buildPlaceholder: (iter, feature) => `${SKELETON_MARKER}
+# ${feature} 模块澄清记录
+
+> 迭代: ${iter} | 功能: ${feature} | 生成: 待填充
+
+## 依赖的全局澄清（引用，不复制）
+| ID | 问题 | 回答 |
+|:---|:---|:---|
+| G-Q001 | | |
+
+## 本模块澄清
+| ID | 问题 | 回答 |
+|:---|:---|:---|
+| M-Q101 | | |
+
+> 只记录 ${feature} 特有的澄清，跨功能共性问题引用 overview/CLARIFY.md。
+`,
+  },
+  {
+    name: 'TECH.md',
+    buildPlaceholder: (iter, feature) => `${SKELETON_MARKER}
+# ${feature} 综合技术方案
+
+> 迭代: ${iter} | 功能: ${feature} | 生成: 待填充
+
+## 写作要求
+${feature} 的架构视角综合方案（跨端），端级细节下放到 {端}/TECH.md：
+- 该功能的整体技术设计（跨端协作）
+- 端级方案总览（各端做什么、谁先做）
+- 关键技术决策与取舍
+- 与 overview/TECH.md 保持一致
 `,
   },
 ];
@@ -933,6 +1034,23 @@ export function computeFeatureBasedAnalyzeManifest(
           placeholder: doc.buildPlaceholder(iteration, feature),
         });
       }
+      // v8.3.184+: 端覆盖矩阵（feature 根目录 _matrix.md，端推断机制填充）
+      entries.push({
+        relPath: join(feature, '_matrix.md'),
+        category: 'overview',
+        docName: '_matrix.md',
+        placeholder: `${SKELETON_MARKER}
+# ${feature} 端覆盖矩阵
+
+> 迭代: ${iteration} | 功能: ${feature} | 生成: 待填充
+
+## 写作要求
+记录该功能涉及哪些端（由端推断机制或 AI 填充）：
+| 端 | 是否涉及 | 来源 | 关键需求 |
+|:---|:---|:---|:---|
+${platforms.map(p => `| ${p} | _待确认_ | | |`).join('\n')}
+`,
+      });
     }
   }
 
@@ -941,6 +1059,8 @@ export function computeFeatureBasedAnalyzeManifest(
     for (const feature of features) {
       for (const platform of platforms) {
         for (const doc of PHASE2_DOCS) {
+          // v8.3.184+: API_CONTRACT.yaml 只在后端端生成（前端引用后端契约，不定义）
+          if (doc.name === 'API_CONTRACT.yaml' && !isBackendPlatform(platform)) continue;
           entries.push({
             relPath: join(feature, platform, doc.name),
             category: 'platform',
