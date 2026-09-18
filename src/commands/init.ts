@@ -308,9 +308,6 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
     // v6.88.0+: HOOKS 生命周期钩子
     await initHooksDir(projectRoot);
 
-    // v6.99.0+: AGENTS 专用角色定义目录
-    await ensureDir(join(projectRoot, '.agents', 'agents'));
-
     // v6.98.0+: 同步 AGENTS.md — 将 .speccore/ 规范数据库投影到 AGENTS.md
     await syncAgentsMd(projectRoot);
 
@@ -1843,10 +1840,10 @@ export async function syncAgentsMd(projectRoot: string, force = false): Promise<
   // 2. 收集自动区内容
   const sections: string[] = [];
 
-  // 2a. 扫描 .speccore/AGENTS/
+  // 2a. 扫描 .speccore/AGENTS/（单一事实源：从 frontmatter 提取 title + 职责）
   const agentsDir = join(projectRoot, '.speccore', 'AGENTS');
   const agentInlines: string[] = [];
-  const agentLinks: string[] = [];
+  const agentRows: { name: string; title: string; duties: string[] }[] = [];
   if (await pathExists(agentsDir)) {
     const files = (await readdir(agentsDir))
       .filter(f => f.endsWith('.md') && !f.startsWith('_') && !f.startsWith('.'))
@@ -1856,14 +1853,32 @@ export async function syncAgentsMd(projectRoot: string, force = false): Promise<
         const content = await readFile(join(agentsDir, f), 'utf-8');
         agentInlines.push(content.trim());
       } else {
-        const name = f.replace(/\.md$/, '').replace(/[-_]/g, ' ');
-        agentLinks.push(`- [${name}](.speccore/AGENTS/${f})`);
+        const content = await readFile(join(agentsDir, f), 'utf-8');
+        const titleMatch = content.match(/^title:\s*(.+)$/m);
+        const title = titleMatch ? titleMatch[1].trim() : f.replace(/\.md$/, '').replace(/[-_]/g, ' ');
+        const name = f.replace(/\.md$/, '');
+        const duties: string[] = [];
+        const dutiesMatch = content.match(/## 职责\s*\n([\s\S]*?)(?=\n## |\n---|$)/);
+        if (dutiesMatch) {
+          for (const line of dutiesMatch[1].split('\n')) {
+            const m = line.match(/^\s*[-*]\s+(.+)$/);
+            if (m) duties.push(m[1].trim());
+          }
+        }
+        agentRows.push({ name, title, duties });
       }
     }
   }
   const agentParts: string[] = [];
   if (agentInlines.length > 0) agentParts.push(...agentInlines);
-  if (agentLinks.length > 0) agentParts.push('### 更多角色\n' + agentLinks.join('\n'));
+  if (agentRows.length > 0) {
+    let table = '| 角色 | 职责 |\n| :--- | :--- |\n';
+    for (const r of agentRows) {
+      const dutyStr = r.duties.slice(0, 2).join('；') || r.title;
+      table += `| [\`${r.name}\`](.speccore/AGENTS/${r.name}.md) ${r.title} | ${dutyStr} |\n`;
+    }
+    agentParts.push(table);
+  }
   if (agentParts.length > 0) {
     sections.push('## 角色与职责\n\n' + agentParts.join('\n\n'));
   }
@@ -1893,50 +1908,13 @@ export async function syncAgentsMd(projectRoot: string, force = false): Promise<
     sections.push('## 规范与参考\n\n' + ruleParts.join('\n\n'));
   }
 
-  // 2c. 扫描 .agents/agents/（v6.99.0+: Agent 角色定义投影）
-  const projectAgentsDir = join(projectRoot, '.agents', 'agents');
-  const agentRoles: { name: string; description: string; duties: string[] }[] = [];
-  if (await pathExists(projectAgentsDir)) {
-    const files = (await readdir(projectAgentsDir))
-      .filter(f => f.endsWith('.md') && !f.startsWith('_') && !f.startsWith('.') && f !== 'README.md')
-      .sort();
-    for (const f of files) {
-      const content = await readFile(join(projectAgentsDir, f), 'utf-8');
-      // 提取 YAML frontmatter 中的 name 和 description
-      const nameMatch = content.match(/^name:\s*(.+)$/m);
-      const descMatch = content.match(/^description:\s*(.+)$/m);
-      // 提取职责范围（前3条）
-      const duties: string[] = [];
-      const dutiesMatch = content.match(/## 职责范围\s*\n([\s\S]*?)(?=## |\n## |\n---|$)/);
-      if (dutiesMatch) {
-        const dutyLines = dutiesMatch[1].match(/^\d+\.\s*\*\*(.+?)\*\*/gm);
-        if (dutyLines) {
-          duties.push(...dutyLines.slice(0, 3).map(l => l.replace(/^\d+\.\s*\*\*(.+?)\*\*/, '$1')));
-        }
-      }
-      agentRoles.push({
-        name: nameMatch ? nameMatch[1].trim() : f.replace(/\.md$/, ''),
-        description: descMatch ? descMatch[1].trim() : '',
-        duties,
-      });
-    }
-  }
-  if (agentRoles.length > 0) {
-    let agentSection = '## Agent 角色定义（v6.99.0+）\n\n';
-    agentSection += '> 来源：`.agents/agents/`，项目级专用 Agent 角色定义\n\n';
-    agentSection += '| Agent | 职责 | 核心能力 |\n';
-    agentSection += '| :--- | :--- | :--- |\n';
-    for (const agent of agentRoles) {
-      const dutyStr = agent.duties.slice(0, 2).join('、') || agent.description;
-      agentSection += `| ${agent.name} | ${agent.description} | ${dutyStr} |\n`;
-    }
-    agentSection += '\n### 所有 Agent 共用的核心约束\n\n';
-    agentSection += '- 不要自己创建目录 — 使用 `speccore` CLI\n';
-    agentSection += '- 不要写脚本绕过 CLI — 所有操作通过 `speccore` 命令完成\n';
-    agentSection += '- 代码写到 CONSTITUTION.md 指定的源码路径，不写到迭代目录内\n';
-    agentSection += '- 迭代内写 Spec，迭代外写代码\n';
-    sections.push(agentSection);
-  }
+  // 2c. 所有 Agent 共用的核心约束
+  sections.push('## 核心约束\n\n' + [
+    '- 不要自己创建目录 — 使用 `speccore` CLI',
+    '- 不要写脚本绕过 CLI — 所有操作通过 `speccore` 命令完成',
+    '- 代码写到 CONSTITUTION.md 指定的源码路径，不写到迭代目录内',
+    '- 迭代内写 Spec，迭代外写代码',
+  ].join('\n'));
 
   // 3. 组合新内容
   let newContent = manualPart;
