@@ -301,7 +301,7 @@ export async function askCommand(input: string, _options: any): Promise<void> {
             process.stdout.write(`\n[SPECCORE_STEP_DONE]\n`);
             process.stdout.write(`[SPECCORE_NEXT_STEP] 步骤 ${nextStep.order}/${steps.length}: ${nextStep.explanation}\n`);
             if (nextSubagent) {
-              process.stdout.write(`[SPECCORE_SUBAGENT: ${nextSubagent}]\n`);
+              process.stdout.write(`[SPECCORE_SESSION_AGENT: ${nextSubagent}]\n`);
               process.stdout.write(`[SPECCORE_CONTEXT_BUDGET: 12000]\n`);
             }
             process.stdout.write(`[SPECCORE_EXEC: ${nextCmd}]\n`);

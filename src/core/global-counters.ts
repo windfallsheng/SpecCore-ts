@@ -48,7 +48,7 @@ async function scanMaxIds(): Promise<Counters> {
       const iterDir = join(cwd, name);
       try {
         const subEntries = await readdir(iterDir);
-        // 030-tasks/{type}/Task-NNN* （新布局 + 旧布局兼容）
+        // 030-tasks/{type}/Task-NNN* （新布局）
         const tasksDir = join(iterDir, '030-tasks');
         if (subEntries.includes('030-tasks')) {
           const taskEntries = await readdir(tasksDir);
@@ -69,7 +69,7 @@ async function scanMaxIds(): Promise<Counters> {
             } catch {}
           }
         }
-        // 兼容旧布局：迭代根目录下的 Task-NNN
+        // 迭代根目录下的 Task-NNN
         for (const t of subEntries) {
           const m = t.match(/^Task-(\d+)/);
           if (m) tasks = Math.max(tasks, parseInt(m[1], 10));

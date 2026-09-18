@@ -35,7 +35,6 @@ const LEGACY_NAMES = new Set(['spec-status', 'spec-status-panel', 'spec-global-s
 
 /**
  * 检测并终止遗留的 speccore schedule daemon / watch 进程
- * v8.3.60+: schedule 和 watch 命令已移除，此函数用于清理旧版本残留的运行中进程
  */
 function cleanupLegacyDaemons(): { killed: number; pids: number[] } {
   const result = { killed: 0, pids: [] as number[] };
@@ -141,13 +140,13 @@ export async function updateCommand(options: { force?: boolean; tool?: string; y
 
   const isSameVersion = oldVersion === CURRENT_VERSION;
 
-  // 始终执行更新和清理，不再因版本相同跳过（确保旧格式文件、废弃命令等被清理）
+  // 始终执行更新和清理，不再因版本相同跳过（确保历史文件、废弃命令等被清理）
   const spinner = new Spinner(isSameVersion ? `刷新 v${CURRENT_VERSION} 命令文件...` : `升级 v${oldVersion} → v${CURRENT_VERSION}...`);
   spinner.start();
   if (!isSameVersion) {
     logger.info(`  📦 从 v${oldVersion} 升级到 v${CURRENT_VERSION}...`);
   } else {
-    logger.info(`  🔄 刷新 v${CURRENT_VERSION} 命令文件 + 清理旧格式残留...`);
+    logger.info(`  🔄 刷新 v${CURRENT_VERSION} 命令文件 + 清理历史残留...`);
   }
 
   logger.info(`  🎯 目标工具: ${tools.map(t => t.replace('.', '')).join(', ') || '无'}`);
@@ -173,7 +172,7 @@ export async function updateCommand(options: { force?: boolean; tool?: string; y
     }
   } catch { /* 静默失败 */ }
 
-  // v8.3.28+: 清理 templates/ 下旧版残留 skill 文件（已被 .agents/skills/ 替代）
+  // v8.3.28+: 清理 templates/ 下历史 skill 文件（已被 .agents/skills/ 替代）
   const legacyTemplateSkills = [
     join(projectRoot, 'templates', 'spec-ask.md'),
     join(projectRoot, 'templates', 'commands', 'spec-analyze.md'),
@@ -190,7 +189,7 @@ export async function updateCommand(options: { force?: boolean; tool?: string; y
     } catch { /* 静默失败 */ }
   }
 
-  // ── 1. 清理旧版命令文件（按工具目录）──
+  // ── 1. 清理历史命令文件（按工具目录）──
 
   for (const tool of tools) {
     const toolCommandsDir = join(projectRoot, tool, 'commands');
@@ -204,7 +203,7 @@ export async function updateCommand(options: { force?: boolean; tool?: string; y
     }
   }
 
-  // Qoder 旧版清理（spec/ 子目录 + 旧命令文件）
+  // Qoder 历史清理（spec/ 子目录 + 旧命令文件）
   const qoderCommandsDir = join(projectRoot, '.qoder', 'commands');
   if (await pathExists(qoderCommandsDir)) {
     const oldSpecDir = join(projectRoot, '.qoder', 'commands', 'spec');
@@ -212,7 +211,7 @@ export async function updateCommand(options: { force?: boolean; tool?: string; y
       await require('fs-extra').remove(oldSpecDir);
     }
     for (const f of await readdir(qoderCommandsDir)) {
-      // 清理旧版 spec: 前缀文件（已改用 spec- 前缀，跨平台安全）
+      // 清理spec: 前缀文件（已改用 spec- 前缀，跨平台安全）
       if (f.startsWith('spec:') && f.endsWith('.md')) {
         await require('fs-extra').remove(join(qoderCommandsDir, f));
         continue;
@@ -434,7 +433,7 @@ export async function updateCommand(options: { force?: boolean; tool?: string; y
     testConfigCreated = await initTestConfigs(projectRoot);
   } catch {}
 
-  // 4d. 清理旧版本残留的命令文件和 Skill 目录
+  // 4d. 清理历史命令文件和 Skill 目录
   const skillNames = (await require('fs-extra').readdir(skillsSrc)).filter((f: string) => !f.startsWith('.'));
   await cleanupStaleFiles(projectRoot, ALL_COMMANDS, skillNames);
 
@@ -490,7 +489,7 @@ export async function updateCommand(options: { force?: boolean; tool?: string; y
     if (globalVer !== CURRENT_VERSION) {
       logger.warn(`⚠️  全局 speccore CLI 版本: ${globalVer}，项目要求: ${CURRENT_VERSION}`);
       logger.warn(`   👉 请执行: npm update -g speccore`);
-      logger.warn(`   否则 AI 运行的 analyze/split/plan 等命令会使用旧版本，导致结果异常`);
+      logger.warn(`   否则 AI 运行的 analyze/split/plan 等命令会使用历史版本，导致结果异常`);
     }
   } catch { /* non-critical */ }
 
@@ -598,7 +597,7 @@ export async function updateCommand(options: { force?: boolean; tool?: string; y
   }
   // 冲突文件汇总
   if (_updateConflicts.length > 0) {
-    logger.info(`  ⚠️  ${_updateConflicts.length} 个文件有内容冲突，旧版已重命名为时间戳格式`);
+    logger.info(`  ⚠️  ${_updateConflicts.length} 个文件有内容冲突，已重命名为时间戳格式`);
     for (const { file, backup } of _updateConflicts) {
       const rel = relative(projectRoot, file);
       const backupRel = relative(projectRoot, backup);
@@ -616,7 +615,7 @@ export async function updateCommand(options: { force?: boolean; tool?: string; y
   logger.info('━'.repeat(50));
   logger.info('');
 
-  // ── 5. 自动迁移任务目录（如果存在旧结构）──
+  // ── 5. 自动迁移任务目录（如果存在历史结构）──
   try {
     const { migrateTasks } = await import('./migrate');
     const entries = await require('fs-extra').readdir(projectRoot, { withFileTypes: true });
@@ -625,7 +624,7 @@ export async function updateCommand(options: { force?: boolean; tool?: string; y
         const iterDir = join(projectRoot, entry.name);
         const hasOldTasks = (await require('fs-extra').readdir(iterDir)).some((f: string) => f.match(/^Task-\d+$/));
         if (hasOldTasks) {
-          logger.info('🔄 检测到旧版任务目录结构，开始自动迁移...');
+          logger.info('🔄 检测到旧任务目录结构，开始自动迁移...');
           logger.info('');
           await migrateTasks(projectRoot, entry.name, { dryRun: false, force: false });
           break; // 只处理第一个有旧任务的迭代
@@ -643,7 +642,7 @@ export async function updateCommand(options: { force?: boolean; tool?: string; y
 // speccore update 时自动检查所有必要文件的升级问题
 interface UpgradeIssue {
   file: string;
-  type: 'structural-diff' | 'missing-field' | 'missing-file' | 'missing-dir' | 'format-deprecated';
+  type: 'structural-diff' | 'missing-field' | 'missing-file' | 'missing-dir' | 'format-legacy';
   message: string;
   suggestion?: string;
 }
@@ -788,7 +787,7 @@ async function checkAllUpgradeIssues(projectRoot: string): Promise<UpgradeCheckR
     }
   } catch { /* 静默失败 */ }
 
-  // ── 6. 迭代目录旧结构检测 ──
+  // ── 6. 迭代目录历史结构检测 ──
   try {
     const entries = await require('fs-extra').readdir(projectRoot, { withFileTypes: true });
     for (const entry of entries) {
@@ -799,8 +798,8 @@ async function checkAllUpgradeIssues(projectRoot: string): Promise<UpgradeCheckR
           result.hasIssues = true;
           result.issues.push({
             file: `${entry.name}/`,
-            type: 'format-deprecated',
-            message: '检测到旧版任务目录结构（Task-NNN 平铺）',
+            type: 'format-legacy',
+            message: '检测到旧任务目录结构（Task-NNN 平铺）',
             suggestion: '运行: speccore migrate --iter ' + entry.name,
           });
           break;

@@ -3,7 +3,7 @@
  *
  * 三种模式：
  *
- * 模式 A: 简单合成（向后兼容）
+ * 模式 A: 简单合成 
  *   将 converted/*.md 合并为 REQUIREMENT.md
  *   CLI:  speccore synthesize -I <迭代名>
  *
@@ -11,7 +11,7 @@
  *   Phase 1: 逐端分析 → .speccore/GLOBAL/platforms/{端名}/ 各端独立 specs
  *   Phase 2: 跨端关系提取（直接读 PRD）→ .speccore/GLOBAL/synthesis/ CROSS_PLATFORM.md + ARCHITECTURE.md + TECH_FULL.md
  *   Phase 3: 生成索引 → .speccore/GLOBAL/INDEX.md（供 AI 导航）
- *   旧版自动归档到 .speccore/GLOBAL/snapshots/{时间戳}/
+ *   自动归档到 .speccore/GLOBAL/snapshots/{时间戳}/
  *   CLI:  speccore synthesize --full -I <迭代名>
  *
  * 模式 C: 单阶段执行（--phase N）
@@ -85,11 +85,11 @@ export async function synthesizeCommand(options: SynthesizeOptions): Promise<voi
   // 全局层目录：Phase 1/2 写入此处
   const globalDir = join('.speccore', 'GLOBAL');
 
-  // ── Apply 模式（简单合成，向后兼容）──
+  // ── Apply 模式（简单合成）──
   if (options.apply && !options.applyPhase) {
     await ensureDir(reqDir);
     const bk = await backupWithTimestamp(outputPath);
-    if (bk) logger.info(`   📦 旧版已备份: ${bk.split('/').pop()}`);
+    if (bk) logger.info(`   📦 已备份: ${bk.split('/').pop()}`);
     await writeFile(outputPath, options.apply);
     logger.success(`✅ 综合需求文档已生成: 010-requirements/REQUIREMENT.md`);
     return;
@@ -117,7 +117,7 @@ export async function synthesizeCommand(options: SynthesizeOptions): Promise<voi
     return;
   }
 
-  // ── 默认模式：简单合成（向后兼容）──
+  // ── 默认模式：简单合成 ──
   await runSimpleSynthesize(iter, iterDir, reqDir, convDir, outputPath, options.withCode);
 }
 
@@ -141,7 +141,7 @@ async function handleApplyPhase(
     // Phase 2 apply: 解析分隔标记，写入 GLOBAL/synthesis/ 下的独立文件
     const synthesisDir = join(globalDir, 'synthesis');
     await ensureDir(synthesisDir);
-    // 备份旧版到 GLOBAL/snapshots/
+    // 备份到 GLOBAL/snapshots/
     const snapshotsDir = join(globalDir, 'snapshots');
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 16);
     if (await pathExists(synthesisDir)) {
@@ -154,7 +154,7 @@ async function handleApplyPhase(
           const dst = join(snapshotDir, f);
           await writeFile(dst, await readFile(src));
         }
-        logger.info(`   📦 旧版已归档: snapshots/${timestamp}/`);
+        logger.info(`   📦 已归档: snapshots/${timestamp}/`);
       }
     }
     // 解析分隔标记写入独立文件
@@ -193,7 +193,7 @@ async function handleApplyPhase(
   } else if (phase === 3) {
     await ensureDir(reqDir);
     const bk = await backupWithTimestamp(join(reqDir, 'REQUIREMENT.md'));
-    if (bk) logger.info(`   📦 旧版已备份: ${bk.split('/').pop()}`);
+    if (bk) logger.info(`   📦 已备份: ${bk.split('/').pop()}`);
     await writeFile(join(reqDir, 'REQUIREMENT.md'), content);
     logger.success(`✅ Phase 3 结果已写入: 010-requirements/REQUIREMENT.md`);
     logger.info(`\n   ✅ 全量分析合成完成！`);
@@ -401,7 +401,7 @@ function buildPhase1Prompt(
   p += `- **缓存策略**：缓存粒度、失效策略、穿透/雪崩防护\n`;
   p += `- **并发与事务**：QPS 预估、分布式锁、事务隔离级别\n`;
   p += `- **消息队列**：异步场景、消息可靠性、消费幂等\n`;
-  p += `- **API 版本管理**：向后兼容、废弃策略\n`;
+  p += `- **API 版本管理**：版本管理策略\n`;
   p += `- **日志与监控**：结构化日志、链路追踪、告警规则\n`;
   p += `- **安全**：SQL 注入防护、接口鉴权、数据脱敏、日志屏蔽\n\n`;
 
@@ -788,7 +788,7 @@ async function generateGlobalIndex(globalDir: string): Promise<void> {
 }
 
 // ================================================================
-// 简单合成（向后兼容）
+// 简单合成 
 // ================================================================
 async function runSimpleSynthesize(
   iter: string, iterDir: string, reqDir: string, convDir: string,
@@ -855,7 +855,7 @@ function buildSynthesizePrompt(
 
   if (existingReq) {
     prompt += `## 现有 REQUIREMENT.md\n`;
-    prompt += `以下是当前已有的综合需求文档（可能是旧版或机械拼接版），请在此基础上改进：\n\n`;
+    prompt += `以下是当前已有的综合需求文档（机械拼接版），请在此基础上改进：\n\n`;
     const truncated = existingReq.length > 3000 ? existingReq.slice(0, 3000) + '\n...（内容过长，已截断）' : existingReq;
     prompt += '```markdown\n' + truncated + '\n```\n\n';
   }

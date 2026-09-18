@@ -9,7 +9,7 @@ import { getDefaultIteration, getIterationDir } from '../core/context';
 import { getIssues } from '../core/issue-tracker';
 
 /**
- * 解析任务目录基础路径：优先 030-tasks/，兼容旧布局
+ * 解析任务目录基础路径：优先 030-tasks/，扫描任务目录
  */
 async function resolveTaskBase(iterDir: string): Promise<string> {
   const tasksDir = join(iterDir, '030-tasks');
@@ -133,7 +133,7 @@ export async function generateReport(taskId: string, iterDir: string): Promise<R
     } catch {}
   }
 
-  // 检查验证状态（优先 00-specs/，兼容旧路径）
+  // 检查验证状态（优先 00-specs/，回退路径）
   const analysisFile = join(taskDir, '00-specs', 'ANALYSIS.md');
   const legacyAnalysis = join(taskDir, 'ANALYSIS.md');
   const actualAnalysis = (await pathExists(analysisFile)) ? analysisFile : (await pathExists(legacyAnalysis)) ? legacyAnalysis : null;
@@ -145,7 +145,7 @@ export async function generateReport(taskId: string, iterDir: string): Promise<R
   // 检查问题记录
   const issues = await getIssues(taskDir);
 
-  // 读取质量门禁结果（如果存在）—— 新结构在任务根目录，旧结构在 99-artifacts/
+  // 读取质量门禁结果（如果存在）—— 任务根目录或 99-artifacts/
   let verifyResult: RetroReport['verifyResult'];
   const verifyPath = await pathExists(join(taskDir, 'VERIFY_REPORT.md'))
     ? join(taskDir, 'VERIFY_REPORT.md')

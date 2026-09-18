@@ -141,6 +141,11 @@ Task-001/
 - 用途：按功能模块统计任务数量和工时
 - 可手动修改，后期调整归属
 
+**功能单元元数据（v8.3.177+）：**
+- 每个功能单元在 `010-requirements/features/{feature}/_matrix.md` 中维护端覆盖矩阵
+- 内容包含：`platforms`（涉及端列表）、`dependencies`（依赖的功能单元）、`apis`（跨功能接口）
+- CLI 通过 `feature-metadata.ts` 扫描所有 `_matrix.md` 构建总览输入，控制 AI 上下文预算
+
 ### 4. 核心规格与子任务文档分离
 
 **加载顺序：**

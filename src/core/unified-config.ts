@@ -152,6 +152,9 @@ export interface SpecConfig {
     sync: { auto_check: boolean };
     patterns: { auto_save: 'off' | 'smart' | 'aggressive' };
     review: { check_assignee: boolean };
+    /** v8.3.174+: 模式参数收敛 — CLI 模式默认配置 */
+    pipeline?: boolean;
+    with_code?: boolean;
     /** v8.3.94+: 视觉模型配置（用于 specs 图片理解、UI 验证截图分析） */
     vision?: {
       enabled: boolean;
@@ -183,7 +186,7 @@ export interface SpecConfig {
   tools?: {
     /** pandoc 可执行文件路径（用于 doc2spec / spec2doc） */
     pandoc?: string;
-    /** LibreOffice 可执行文件路径（用于 .doc 旧格式转换） */
+    /** LibreOffice 可执行文件路径（用于 .doc 格式转换） */
     libreoffice?: string;
   };
 }
@@ -247,6 +250,8 @@ export const DEFAULT_CONFIG: SpecConfig = {
     sync: { auto_check: true },
     patterns: { auto_save: 'smart' },
     review: { check_assignee: false },
+    pipeline: false,
+    with_code: false,
   },
   ask: {
     routing: { mode: 'hybrid', high_threshold: 70, low_threshold: 45, auto_host_ai: true, cache_enabled: true, cache_min_hits: 3 },
@@ -487,7 +492,7 @@ export async function loadProjectConfigWithEnv(envFileOrName?: string): Promise<
   return merged;
 }
 
-/** 兼容旧代码：getConfig = loadConfig */
+/** 别名：getConfig = loadConfig */
 export async function getConfig(): Promise<SpecConfig> {
   return loadConfig();
 }
@@ -1480,7 +1485,7 @@ function toYaml(config: SpecConfig): string {
   yaml += 'tools:\n';
   yaml += '  # pandoc: 用于 doc2spec（Word→Markdown）和 spec2doc（Markdown→Word/PDF）\n';
   yaml += `  pandoc: ${config.tools?.pandoc || '""'}\n`;
-  yaml += '  # libreoffice: 用于 .doc 旧格式转换（可选）\n';
+  yaml += '  # libreoffice: 用于 .doc 格式转换（可选）\n';
   yaml += `  libreoffice: ${config.tools?.libreoffice || '""'}\n`;
 
   if (config.config_history.length > 0) {

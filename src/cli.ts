@@ -37,6 +37,7 @@ import { knowledgeCommand, knowledgeExplainCommand, knowledgePathCommand, knowle
 import { graphQueryCommand, graphEntityCommand, graphRelatedCommand, graphStatsCommand, graphPathCommand, graphRenderCommand } from './commands/graph';
 import { doc2specCommand } from './commands/doc2spec';
 import { spec2docCommand } from './commands/spec2doc';
+import { unitsCommand } from './commands/units';
 import { registerCodeIndexCommand } from './commands/code-index';
 import { registerRagIndexCommand } from './commands/rag-index';
 import { registerRefreshCommand } from './commands/refresh';
@@ -64,19 +65,13 @@ import { retroCommand } from './commands/retro';
 import { reindexCommand } from './commands/reindex';
 import { updateCommand } from './commands/update';
 import { migrateCommand } from './commands/migrate';
-// v4.6.0 迁移命令
-// v4.7.0 体验增强
 import { completionCommand } from './commands/completion';
-// v4.8.0 高级功能
 
-// v5.3.0 新增
 import { diffCommand } from './commands/diff';
 import { traceCommand } from './commands/trace';
 import { mergeCheck, rollbackTask, updateArchitecture } from './commands/merge-check';
 import { trackerCommand } from './commands/tracker';
-// v5.5.0 新增
 import { deleteCommand } from './commands/delete';
-// v5.6.0 新增
 import { searchCommand } from './commands/search';
 import { promptsCommand } from './commands/prompts';
 import { cleanupCommand } from './commands/cleanup';
@@ -137,12 +132,6 @@ program
   .action(statusPanelCommand);
 
 program
-  .command('status-panel')
-  .alias('sp')
-  .description('→ dashboard（同一命令）')
-  .action((opts: any) => statusPanelCommand(opts));
-
-program
   .command('knowledge')
   .alias('kg')
   .description('知识图谱可视化：交互式图谱 + 衰减检测 + RAG 上下文预览')
@@ -168,7 +157,6 @@ program
   .description('自然语言查询代码知识图谱')
   .action(knowledgeQueryCommand);
 
-// v7.0.0+: 统一图谱查询命令（融合知识图谱 + 代码图谱）
 const graphCmd = program
   .command('graph')
   .alias('g')
@@ -215,7 +203,6 @@ graphCmd
   .option('-t, --type <type>', '统计范围: all | knowledge | code', 'all')
   .action((opts: any) => graphStatsCommand({ type: opts.type }));
 
-// v7.0.0+: Mermaid 图表渲染
 graphCmd
   .command('render [file]')
   .alias('r')
@@ -242,22 +229,6 @@ program
   .option('--web', '强制输出 HTML 页面')
   .option('--lang <lang>', 'en 英文 / zh 中文（默认中文）')
   .action(devCommand);
-
-program
-  .command('synthesize')
-  .alias('syn')
-  .description('→ analyze --full（同一命令，向后兼容别名）')
-  .option('-I, --iteration <iteration>', '目标迭代')
-  .option('--with-code', '结合源码检查需求冲突')
-  .option('--prompt', '输出结构化 Prompt 到 stdout（Skill 协作模式）')
-  .option('--apply <content>', '接收 AI 合成结果写入文件（配合 --prompt）')
-  .option('--full', '全自动三阶段：逐端分析 → 跨端综合 → 功能单元需求合成')
-  .option('--phase <n>', '单阶段执行: 1=逐端分析, 2=跨端综合, 3=功能单元合成')
-  .option('--apply-phase <n>', '配合 --apply 使用，指定写入哪个阶段的结果')
-  .action((opts: any) => {
-    // 向后兼容：synthesize 自动转为 analyze --full
-    analyzeCommand({ ...opts, full: true });
-  });
 
 program
   .command('prompts')
@@ -509,7 +480,7 @@ program
 program
   .command('change')
   .alias('ch')
-  .description('需求变更：联动更新所有关联 Spec → 支持口语 (v6.73.0+ AI 驱动)')
+  .description('需求变更：联动更新所有关联 Spec → 支持口语化输入')
   .option('-t, --task <task>', 'Target task')
   .option('-r, --req <req>', 'Requirement ID')
   .option('-d, --desc <desc>', 'Change description')
@@ -523,7 +494,6 @@ program
   .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
   .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
   .option('--interactive', 'Interactive: preview → adjust → confirm → apply')
-  // v6.73.0+ 变更驱动工作流 v2
   .option('--file <file>', '指定变更需求文件（逗号分隔多个）')
   .option('--dir <dir>', '指定变更需求目录（批量处理）')
   .option('--inbox', '读取默认变更收件箱 .speccore/changes/pending/')
@@ -576,7 +546,6 @@ program
   .option('--format <format>', 'Output format: text, json', 'text')
   .action(validateCommand);
 
-// v8.3.141+: Spec 自审命令
 program
   .command('review')
   .alias('rv')
@@ -598,7 +567,6 @@ program
   .option('--type <type>', 'Check type: compile, lint, test, all', 'all')
   .option('--path <path>', 'Code path to verify')
   .option('--timeout <ms>', 'Check timeout in ms', '120000')
-  // v8.3.60+: 分层测试阶段（快捷方式，自动设置一组推荐参数）
   .option('--stage <stage>', '测试阶段: dev(编译+单元) | pr(全量代码+关键UI+API) | deploy(冒烟) | release(全量回归)', '')
   .option('--ui', '启用 UI 验证（冒烟测试 + 视觉检查）')
   .option('--smoke-only', '仅执行冒烟测试（不执行视觉检查）')
@@ -614,7 +582,6 @@ program
   .option('--api-contract', '执行 API 契约测试（需要 API_CONTRACT.yaml）')
   .option('--perf', '执行性能基线测试（需要 PERF_SPEC.yaml）')
   .option('--update-perf-baseline', '更新性能基线')
-  // v8.3.57+: 路由/页面自动发现 + 模块过滤
   .option('--discover-routes', '自动发现前端路由配置并测试')
   .option('--discover-pages', '自动扫描页面目录结构并测试')
   .option('--generate-spec', '自动生成 VERIFY_SPEC.yaml（不执行测试）')
@@ -623,7 +590,6 @@ program
   .option('--page <pages>', '按页面路径过滤（逗号分隔，如 /login,/dashboard）')
   .option('--scenario <names>', '按场景名称过滤（逗号分隔）')
   .option('--base-url <url>', '自动发现时使用的基地址', 'http://localhost:8080')
-  // v8.3.60+: 测试场景配置驱动
   .option('--config <path>', '测试场景配置文件路径')
   .option('--env-file <path>', '环境配置文件（与 --config 联动）')
   .action(async (options: any) => {
@@ -640,10 +606,8 @@ registerRagIndexCommand(program);
 // 统一刷新所有检索层
 registerRefreshCommand(program);
 
-// v6.95.0+: 通知管理
 registerNotifyCommand(program);
 
-// v6.96.0+: 智能推荐
 registerRecommendCommand(program);
 
 // 全量索引重建与一致性检查
@@ -822,7 +786,19 @@ program
     .option("--prompt", "输出验证 Prompt 到 stdout（Skill 协作模式）")
   .option("--response <response>", "接收 AI 修正内容写入文件")
   .option("--classify", "AI 智能分类 sources/ 文档 → staging/（按类型提取）")
+  .option("--split", "拆分为功能单元 → features/（按标题结构自动拆分）")
   .action(doc2specCommand);
+
+program
+  .command('units')
+  .alias('u')
+  .description('功能单元管理：列出、调整、合并 features/ 下的需求单元')
+  .option('-i, --iter <name>', '目标迭代')
+  .option('-l, --list', '列出所有功能单元')
+  .option('-e, --edit [unit]', '编辑功能单元（不带参数进入交互模式）')
+  .option('-d, --delete <unit>', '删除功能单元')
+  .option('-m, --merge <units>', '合并功能单元: "单元A,单元B"')
+  .action(unitsCommand);
 
 program
   .command('spec2doc')
@@ -871,23 +847,6 @@ program
   .action(rollbackCommand);
 
 program
-  .command('global-status')
-  .alias('gs')
-  .description('→ dashboard --scope global')
-  .action(() => statusPanelCommand({ scope: 'global' }));
-
-program
-  .command('sync-global')
-  .alias('syg')
-  .description('→ sync --global（同一命令，向后兼容别名）')
-  .option('-i, --iteration <iteration>', 'Target iteration')
-  .option('-d, --direction <dir>', 'Sync direction: to_global | from_global', 'to_global')
-  .option('--auto', 'Auto-apply without confirmation')
-  .option('--dry-run', 'Preview without modifying')
-  .option('--force', 'Skip confirmation')
-  .action((opts: any) => syncGlobalCommand(opts));
-
-program
   .command('history')
   .alias('hi')
   .description('📜 历史记录：默认显示操作日志，--req 查看需求变更历史')
@@ -927,7 +886,7 @@ program
   .option('-I, --iteration <iteration>', '目标迭代 (scope=iteration|task 时必填)')
   .option('-t, --task <task-id>', '任务 ID (--scope task 快捷方式)')
   .option('--type <type>', '任务类型: feature|bugfix|refactor|research|review|test|docs|deploy|security|performance', 'feature')
-  .option('--scope <scope>', '输出范围: global(全局文档) | iteration(迭代, 默认) | task(任务)')
+  .option('--scope <scope>', '输出范围: global(全局文档) | iteration(迭代, 默认) | task(任务) | overview(总览)')
   .option('--src, --source <dirs>', '源码目录 (逗号分隔，如 --src <端1/src>,<端2/src>)')
   .option('--req, --requirements <files>', '需求文档 (逗号分隔: --req docs/a.md,docs/b.md)')
   .option('-o, --output <file>', '输出文件名 (覆盖默认)')
@@ -948,26 +907,25 @@ program
   .option('--full', '全自动三阶段合成：逐端分析 → 跨端综合 → 功能单元需求合成（原 synthesize）')
   .option('--phase <n>', '单阶段合成执行: 1=逐端分析, 2=跨端综合, 3=功能单元合成')
   .option('--apply-phase <n>', '配合 --apply 使用，指定写入哪个阶段的合成结果')
-  .option('--streaming', 'v6.74.0+: 启用流式全局分析（Phase 0→6，后端优先，实时关联调整）')
+  .option('--streaming', '启用流式全局分析（Phase 0→6，后端优先，实时关联调整）')
   .option('--streaming-phase <phase>', '流式分析指定阶段: phase0-scan|phase1-primary|phase2-global-update|phase3-secondary|phase4-cross-check|phase5-vertical-check|phase6-final-audit')
-  .option('--incremental', 'v6.75.0+: 增量分析模式（基于上次分析，只分析变更/遗漏）')
-  .option('--reanalyze', 'v6.75.0+: 重新分析（同 --incremental，检查遗漏+更新）')
-  .option('--add-platform <platform>', 'v6.75.0+: 新增端分析（单独分析新端，更新全局文档）')
-  .option('--context-guard', 'v6.75.0+: 启用上下文爆炸防护（预估大小+智能分段）')
-  .option('--estimate-only', 'v6.75.0+: 只输出上下文预估报告，不执行分析')
-  .option('--module <name>', 'v6.76.0+: 功能模块级全局分析（更新全局层+各端文档，区别于 --feature 局部分析）')
-  .option('--skip-clarify', 'v8.3.0+: 跳过需求澄清阶段（默认必须澄清，检测到口语化/非专业需求时自动整理为 PRD）')
-  .option('--layer <n>', 'v7.2.0+: 全局分析指定层级: 1=索引扫描, 2=跨端关联, 3=模块深入, 4=全局汇总')
-  .option('--deep <doc>', 'v7.2.0+: 全局分析时对指定文档进行深度分析（如 ARCHITECTURE.md），只生成该文档')
-  .option('--iterative', 'v7.2.0+: 迭代式补全模式 — 先输出大纲，确认后再逐节深入（配合 --deep 使用）')
-  .option('--filter <keywords>', 'v7.2.0+: 按需分析 — 只分析与关键词匹配的模块（如 "auth|login|session"）')
-  .option('--extract-units', 'v8.2.0+: 自动提取功能单元清单（从需求文档）')
-  .option('--unit <id>', 'v8.2.0+: 分析单个功能单元（如 M-01，配合 --prompt）')
-  .option('--consolidate', 'v8.2.0+: 汇总所有单元分析为统一报告（配合 --prompt/--apply）')
-  .option('--resume-units', 'v8.2.0+: 断点续跑未完成的单元分析')
+  .option('--incremental', '增量分析模式（基于上次分析，只分析变更/遗漏）')
+  .option('--reanalyze', '重新分析（同 --incremental，检查遗漏+更新）')
+  .option('--add-platform <platform>', '新增端分析（单独分析新端，更新全局文档）')
+  .option('--context-guard', '启用上下文爆炸防护（预估大小+智能分段）')
+  .option('--estimate-only', '只输出上下文预估报告，不执行分析')
+  .option('--module <name>', '功能模块级全局分析（更新全局层+各端文档，区别于 --feature 局部分析）')
+  .option('--skip-clarify', '跳过需求澄清阶段（默认必须澄清，检测到口语化/非专业需求时自动整理为 PRD）')
+  .option('--layer <n>', '全局分析指定层级: 1=索引扫描, 2=跨端关联, 3=模块深入, 4=全局汇总')
+  .option('--deep <doc>', '全局分析时对指定文档进行深度分析（如 ARCHITECTURE.md），只生成该文档')
+  .option('--iterative', '迭代式补全模式 — 先输出大纲，确认后再逐节深入（配合 --deep 使用）')
+  .option('--filter <keywords>', '按需分析 — 只分析与关键词匹配的模块（如 "auth|login|session"）')
+  .option('--extract-units', '自动提取功能单元清单（从需求文档）')
+  .option('--unit <id>', '分析单个功能单元（如 M-01，配合 --prompt）')
+  .option('--consolidate', '汇总所有单元分析为统一报告（配合 --prompt/--apply）')
+  .option('--resume-units', '断点续跑未完成的单元分析')
   .action(analyzeCommand);
 
-// v6.76.0+: 需求专业化命令
 program
   .command('clarify')
   .alias('cl')
@@ -979,17 +937,16 @@ program
   .option('--apply <content>', '接收 AI 整理结果写入文件（配合 --prompt）')
   .option('--check <file>', '检测指定文件的专业度，不整理')
   .option('--force', '强制整理（即使文档已足够专业）')
-  .option('--extract-units', 'v8.2.0+: 从原始需求提取功能单元清单')
-  .option('--unit <id>', 'v8.2.0+: 澄清单个功能单元（如 M-01，配合 --prompt/--apply）')
-  .option('--consolidate', 'v8.2.0+: 汇总所有单元澄清为统一 PRD（配合 --apply）')
-  .option('--resume-units', 'v8.2.0+: 断点续跑未完成的单元澄清')
-  .option('--local', 'v8.3.0+: 临时工作区模式（不绑定迭代，输出到 .speccore/local/workspace/）')
-  .option('--promote <entryId>', 'v8.3.0+: 将工作区条目提升到迭代层（配合 --to）')
+  .option('--extract-units', '从原始需求提取功能单元清单')
+  .option('--unit <id>', '澄清单个功能单元（如 M-01，配合 --prompt/--apply）')
+  .option('--consolidate', '汇总所有单元澄清为统一 PRD（配合 --apply）')
+  .option('--resume-units', '断点续跑未完成的单元澄清')
+  .option('--local', '临时工作区模式（不绑定迭代，输出到 .speccore/local/workspace/）')
+  .option('--promote <entryId>', '将工作区条目提升到迭代层（配合 --to）')
   .action((input: string | undefined, opts: any) => {
     clarifyCommand({ ...opts, input });
   });
 
-// v8.3.0+: 临时工作区管理
 program
   .command('workspace')
   .alias('ws')
@@ -1045,16 +1002,6 @@ program
 // v4.7.0 体验增强命令
 program
 program
-  .command('lifecycle')
-  .alias('lc')
-  .description('任务生命周期 → status-panel --lifecycle')
-  .option('-t, --task <task>', 'Target task')
-  .option('-s, --status <status>', 'Set status: pending/testing/review/done')
-  .option('-i, --iteration <iteration>', 'Target iteration')
-  .option('--check', 'Check TEST.md/REVIEW.md progress')
-  .action((opts: any) => statusPanelCommand({ ...opts, lifecycle: true }));
-
-program
   .command('done')
   .alias('dn')
   .description('收尾归档：校验→同步→审计，--all 批量归档，--interactive 预览确认')
@@ -1068,7 +1015,6 @@ program
   .option("--response <response>", "接收 AI 验收总结")
   .action(doneCommand);
 
-// v8.3.24+: 契约冲突裁决
 program
   .command('verdict')
   .alias('vd')
@@ -1088,23 +1034,13 @@ program
   .description('Generate shell completion script (bash/zsh)')
   .action(completionCommand);
 
-// v4.8.0 高级功能
-program
-
-// v5.27 新增命令: speccore update (项目升级)
 program
   .command('diff')
   .alias('df')
-  .description('Compare two iterations or baselines (v5.3)')
+  .description('Compare two iterations or baselines')
   .requiredOption('--source <name>', 'Source iteration/baseline')
   .requiredOption('--target <name>', 'Target iteration/baseline')
   .action(diffCommand);
-
-program
-  .command('tracker')
-  .alias('tr')
-  .description('→ track（同一命令，向后兼容别名）')
-  .action(() => trackerCommand());
 
 program
   .command('merge-check')
@@ -1114,32 +1050,6 @@ program
   .action(async (options: any) => { const { getDefaultIteration } = await import('./core/context'); const it = await getDefaultIteration(options.iteration); if (it) await mergeCheck(it); });
 
 program
-
-program
-  .command('arch-update')
-  .alias('au')
-  .description('→ update --arch（同一命令，向后兼容别名）')
-  .option('-i, --iteration <iteration>', 'Source iteration')
-  .option('--apis <apis>', 'Comma-separated API paths')
-  .option('--tables <tables>', 'Comma-separated table names')
-  .action(async (options: any) => { const it = await require('../core/context').getDefaultIteration(options.iteration); if (it) await updateArchitecture(it, (options.apis || '').split(',').filter(Boolean), (options.tables || '').split(',').filter(Boolean)); });
-
-program
-
-program
-
-program
-
-program
-  .command('trace')
-  .description('→ track（同一命令，向后兼容别名）')
-  .option('--req <id>', 'Trace from requirement ID')
-  .option('--task <id>', 'Trace from task ID')
-  .option('--full', 'Full project trace')
-  .action((opts: any) => traceCommand(opts));
-
-// v5.25 — 统一追踪入口
-program
   .command('track')
   .alias('trk')
   .description('REQ→Task→Code 全链路追踪')
@@ -1148,17 +1058,15 @@ program
   .option('--full', 'Full project trace')
   .action(traceCommand);
 
-// v5.5.0 新增命令
 program
   .command('delete')
   .alias('dl')
-  .description('Delete a task or iteration (moves to trash + cleans references) (v5.5)')
+  .description('Delete a task or iteration (moves to trash + cleans references)')
   .option('--task <id>', 'Task ID to delete')
   .option('--iteration <name>', 'Iteration name to delete')
   .option('--force', 'Skip confirmation prompt')
   .action(deleteCommand);
 
-// v8.3.12+: 本地临时缓存清理
 program
   .command('cleanup')
   .alias('cl')
@@ -1172,7 +1080,6 @@ program
     dryRun: opts.dryRun,
   }));
 
-// v5.6.0 新增命令
 program
   .command('search <query>')
   .alias('sh')
@@ -1213,13 +1120,11 @@ if (process.argv.length <= 2) {
       if (idirs.length > 0) {
         iteration = idirs[0].slice(3);
         const base = idirs[0];
-        const req = join(base, '020-specs', 'global', 'REQUIREMENT.md');
-        const reqFallback = join(base, '020-specs', 'REQUIREMENT.md');
-        const ana = join(base, '020-specs', 'global', 'ANALYSIS.md');
-        const anaFallback = join(base, '020-specs', 'ANALYSIS.md');
-        if (!existsSync(req) && !existsSync(reqFallback)) {
+        const req = join(base, '020-specs', 'overview', 'REQUIREMENT.md');
+        const ana = join(base, '020-specs', 'overview', 'ANALYSIS.md');
+        if (!existsSync(req)) {
           phase = 'require'; nextCmd = 'speccore doc2spec --iteration ' + iteration; nextDesc = '导入需求文档';
-        } else if (!existsSync(ana) && !existsSync(anaFallback)) {
+        } else if (!existsSync(ana)) {
           phase = 'analyze'; nextCmd = 'speccore analyze --iteration=' + iteration; nextDesc = '需求分析';
         } else {
           const tds = readdirSync(base).filter((d: string) => d.startsWith('Task-'));
@@ -1228,7 +1133,7 @@ if (process.argv.length <= 2) {
           } else {
             total = tds.length;
             for (const td of tds) {
-              // 向后兼容: 检查 {端}/TASK.md → _shared/TASK.md → 00-specs/TASK.md
+              // 扫描子目录中的 TASK.md 判断任务状态
               const taskDirPath = join(base, td);
               let found = false;
               // 新结构: 扫描子目录中的 TASK.md
@@ -1245,11 +1150,6 @@ if (process.argv.length <= 2) {
                   }
                 }
               } catch {}
-              // 旧结构回退
-              if (!found) {
-                const tm = join(base, td, '00-specs', 'TASK.md');
-                if (existsSync(tm) && readFileSync(tm, 'utf-8').includes('已完成')) found = true;
-              }
               if (found) done2++;
             }
             if (done2 < total) {
@@ -1290,7 +1190,6 @@ if (process.argv.length <= 2) {
 }
 
 // ── Natural language intent (e.g. speccore "帮我分析需求") ──
-// v8.3.61+: 保留 stderr 错误输出，参数错误时额外输出到 stdout 便于 AI 识别
 program.exitOverride().configureOutput({ outputError: (str) => process.stderr.write(str) });
 try {
   program.parse();

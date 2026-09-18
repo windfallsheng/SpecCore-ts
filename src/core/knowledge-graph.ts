@@ -213,7 +213,7 @@ async function scanSpecs(iterDir: string): Promise<{
     });
   }
 
-  // v8.3.171+: 扫描各端子目录（唯一路径 020-specs/{端}/，删除 platforms/ 旧路径兼容）
+  // 扫描各端子目录（唯一路径 020-specs/{端}/）
   // v8.3.65+: 加入 requirements（黄金需求目录，由 scanRequirements 单独扫描）
   const knownNonPlatformDirs = new Set(['sources', 'assets', 'prototypes', 'converted', 'features', 'bugs', 'refactors', 'research', 'staging', 'snapshots', 'requirements']);
   const platformDirs: string[] = [];
@@ -347,9 +347,9 @@ async function scanBusinessCodeMappings(iterDir: string): Promise<{
 
   if (!(await pathExists(specsDir))) return { entities, relations };
 
-  // v8.3.122+: 同时兼容新旧两种路径结构
+  // v8.3.122+: 同时扫描多种路径结构
   // 新结构: 020-specs/{feature}/{platform}/TECH.md
-  // 旧结构: 020-specs/{platform}/TECH.md
+  // 结构: 020-specs/{platform}/TECH.md
   const knownNonPlatformDirs = new Set(['sources', 'assets', 'prototypes', 'converted', 'features', 'bugs', 'refactors', 'research', 'staging', 'platforms', 'snapshots', 'global', 'overview', 'requirements']);
   const specsEntries = await readdir(specsDir, { withFileTypes: true });
 
@@ -359,11 +359,11 @@ async function scanBusinessCodeMappings(iterDir: string): Promise<{
     const featureName = featureEntry.name;
     const featureDir = join(specsDir, featureName);
 
-    // 检测是旧结构（直接有 TECH.md）还是新结构（有子目录）
+    // 检测结构（直接有 TECH.md）还是新结构（有子目录）
     const hasTechMdDirectly = await pathExists(join(featureDir, 'TECH.md'));
 
     if (hasTechMdDirectly) {
-      // 旧结构: 020-specs/{platform}/TECH.md — 把 featureName 当成 platformName
+      // 结构: 020-specs/{platform}/TECH.md — 把 featureName 当成 platformName
       await processTechMdForMappings(featureDir, featureName, '', entities, relations);
     } else {
       // 新结构: 020-specs/{feature}/{platform}/TECH.md
@@ -505,7 +505,7 @@ async function scanTasks(iterDir: string): Promise<{
 
   if (!(await pathExists(tasksDir))) return { entities, relations };
 
-  // 扫描类型子目录 + 旧布局
+  // 扫描类型子目录
   const taskDirs: { taskId: string; taskPath: string; type: string }[] = [];
 
   for (const type of TASK_TYPES) {
@@ -519,7 +519,7 @@ async function scanTasks(iterDir: string): Promise<{
     }
   }
 
-  // 旧布局: 030-tasks/Task-XXX/
+  // 布局: 030-tasks/Task-XXX/
   const rootEntries = await readdir(tasksDir, { withFileTypes: true });
   for (const e of rootEntries) {
     if (e.isDirectory() && e.name.startsWith('Task-')) {
@@ -659,7 +659,7 @@ async function scanTasks(iterDir: string): Promise<{
           relations.push({ from: subTaskId, to: taskId, type: 'subtask_of' });
         }
       } else {
-        // 兼容：端目录下无子任务，端本身作为子任务（如旧数据的单端任务）
+        // 端目录下无子任务，端本身作为子任务（单端任务）
         const platformTaskMd = join(platformPath, 'TASK.md');
         let subTitle = `${title} — ${de.name}`;
         let subStatus = 'pending';

@@ -175,7 +175,7 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
           if (globalVer !== projectVer) {
             logger.warn(`⚠️  全局 speccore CLI 版本: ${globalVer}，项目要求: ${projectVer}`);
             logger.warn(`   👉 请执行: npm update -g speccore`);
-            logger.warn(`   否则 AI 运行的 analyze/split/plan 等命令会使用旧版本，导致结果异常`);
+            logger.warn(`   否则 AI 运行的 analyze/split/plan 等命令会使用历史版本，导致结果异常`);
           }
         } catch { /* non-critical */ }
         return;
@@ -478,7 +478,7 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 | bugfix | — | — | develop | 修复开发环境 Bug |
 | release | — | — | develop | 版本发布准备 |
 | hotfix | — | — | main | 生产环境紧急修复 |
-| support | — | — | main | 长期支持旧版本 |
+| support | — | — | main | 长期支持历史版本 |
 
 > **分支类型说明**：
 > - **分支名格式**：\`{类型}/{前缀}{任务名}{后缀}\`，前缀和后缀均可选
@@ -488,7 +488,7 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 > - **bugfix**：修复开发中的 Bug，从 develop 创建，完成后合并回 develop
 > - **release**：准备发布版本，从 develop 创建，完成后合并到 main + develop
 > - **hotfix**：生产环境紧急修复，从 main 创建，完成后合并到 main + develop
-> - **support**：长期支持旧版本，从 main 创建，用于维护历史版本
+> - **support**：长期支持历史版本，从 main 创建，用于维护历史版本
 > - 可自定义添加其他类型（如 refactor、docs、test 等）
 
 ## Git 配置
@@ -1274,12 +1274,12 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
   logger.info(`   🤖 已部署 ${skillsCopied}/${skillNames.length} 个 Skill`);
   logger.info('   🤖 已适配: Claude / CodeBuddy / Cursor / Trae / WindSurf / QCoder');
 
-  // ── 清理旧版本残留文件 ──
+  // ── 清理历史残留文件 ──
   await cleanupStaleFiles(projectRoot, commands, skillNames);
 }
 
 /**
- * 清理旧版本残留的命令文件和 Skill 目录。
+ * 清理历史版本残留的命令文件和 Skill 目录。
  * 遍历所有工具目录和 .agents/skills/，移除当前版本不存在的文件。
  */
 export async function cleanupStaleFiles(
@@ -1291,7 +1291,7 @@ export async function cleanupStaleFiles(
   const validCmdNames = new Set(commands.map(([name]) => name + '.md'));
   let cleanedCount = 0;
 
-  // 0. 清理旧版 -old 后缀备份文件（v5.87.2 之前创建的）
+  // 0. 清理历史 -old 后缀备份文件（v5.87.2 之前创建的）
   const oldSuffixPatterns = ['-old', '-backup'];
   for (const tool of [...allTools, 'qoder']) {
     const dirs = [
@@ -1361,7 +1361,7 @@ export async function cleanupStaleFiles(
     }
   } catch { /* ignore */ }
 
-  // 3. 清理旧版 .codebuddy/skills/ 和 .trae/skills/ 下的 stale 文件
+  // 3. 清理历史 .codebuddy/skills/ 和 .trae/skills/ 下的 stale 文件
   for (const tool of ['codebuddy', 'trae']) {
     const toolSkillsDir = join(projectRoot, '.' + tool, 'skills');
     try {
@@ -1377,7 +1377,7 @@ export async function cleanupStaleFiles(
   }
 
   if (cleanedCount > 0) {
-    logger.info(`   🧹 已清理 ${cleanedCount} 个旧版本残留文件`);
+    logger.info(`   🧹 已清理 ${cleanedCount} 个历史残留文件`);
   }
 }
 
@@ -1705,9 +1705,9 @@ Iteration-NNN-name/            ← 迭代目录
 | \`[SPECCORE_NEEDS_INFO]\` | 缺参数提示 | 命令缺少必要参数时输出，引导用户补充 |
 | \`[SPECCORE_STEP_DONE]\` | 步骤完成 | 当前步骤已完成，需新会话继续 |
 | \`[SPECCORE_NEXT_STEP]\` | 下一步指令 | 提示下一步骤和继续命令 |
-| \`[SPECCORE_SUBAGENT]\` | 子 Agent 激活 | v8.3.160+: 指定当前步骤的子 Agent 角色和上下文预算 |
+| \`[SPECCORE_SESSION_AGENT]\` | 子 Agent 激活 | v8.3.160+: 指定当前步骤的子 Agent 角色和上下文预算 |
 | \`[SPECCORE_CONTEXT_SNAPSHOT]\` | 上下文快照 | 紧凑上下文，供新会话恢复 |
-| \`[SPECCORE_PIPELINE_NEXT]\` | Pipeline 下一步 | ⚠️ 已弃用（v8.3.160+ 使用 STEP_DONE） |
+| \`[SPECCORE_PIPELINE_NEXT]\` | Pipeline 下一步 | ⚠️ 已弃用 |
 | \`[SPECCORE_TASK_SUMMARY]\` | 任务总览报告 | 展示任务拆分/执行后的总览报告 |
 | \`[SPECCORE_NEXT_STEPS]\` | 下一步操作 | 展示建议的后续操作步骤 |
 | \`[SPECCORE_GUIDE]\` | 分析指南 | 展示分析阶段的引导指南 |
@@ -2113,13 +2113,13 @@ export async function checkUpgradeHints(projectRoot: string, speccoreDir: string
   const constitutionPath = join(speccoreDir, 'CONSTITUTION.md');
   const hasConstitution = await pathExists(constitutionPath);
 
-  // ── CONSTITUTION.md 格式迁移检测（不受版本限制，只要旧格式存在就迁移）──
+  // ── CONSTITUTION.md 格式迁移检测（不受版本限制，只要历史格式存在就迁移）──
   if (hasConstitution) {
     const content = await readFile(constitutionPath, 'utf-8');
     let updated = content;
     const migrations: string[] = [];
 
-    // ── 自动迁移：补充缺失的"项目名称"列 ──
+    // ── 迁移：补充缺失的"项目名称"列 ──
     // 精确匹配表头格式：| 工程 | 源码路径 |（旧5列）→ 需要补列
     // 不能用 includes('项目名称')，因为说明文字/示例中可能已出现该词
     const hasOldHeader = /\|\s*工程\s*\|\s*源码路径\s*\|/.test(updated);
@@ -2148,7 +2148,7 @@ export async function checkUpgradeHints(projectRoot: string, speccoreDir: string
       migrations.push('自动补充「项目名称」列（值暂填"待填写"，请后续修改）');
     }
 
-    // ── 自动迁移：旧版"项目标识"纵向表 → 新版"项目信息"横向表 ──
+    // ── 迁移：「项目标识」纵向表 → 新版"项目信息"横向表 ──
     const hasOldFormat = /##\s*项目标识/.test(updated) && /\|\s*属性\s*\|\s*值\s*\|/.test(updated);
     const hasNewFormat = /##\s*项目信息/.test(updated) && /\|\s*工程\s*\|/.test(updated);
     if (hasOldFormat && !hasNewFormat) {
@@ -2166,10 +2166,10 @@ export async function checkUpgradeHints(projectRoot: string, speccoreDir: string
         new RegExp('##\\s*\u9879\u76ee\u6807\u8bc6[\\s\\S]*?(?=##\\s|\\Z)'),
         `## 项目信息\n\n| 工程标识 | 工程类型 | 工程名 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应需求端 |\n| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n| ${projShort} | 待填写 | 待填写 | ${projName} | ./ | ${repo} | main | 待填写 |\n`
       );
-      migrations.push(`旧版「项目标识」纵向表 → 新版「项目信息」横向表（项目名称: ${projName}）`);
+      migrations.push(`「项目标识」纵向表 → 新版「项目信息」横向表（项目名称: ${projName}）`);
     }
 
-    // ── 自动迁移：补充缺失的「保护分支」配置 ──
+    // ── 迁移：补充缺失的「保护分支」配置 ──
     const hasBranchSection = /##\s*Git\s*分支策略/.test(updated);
     const hasProtectedBranch = /保护分支/.test(updated);
     if (hasBranchSection && !hasProtectedBranch) {
@@ -2208,7 +2208,7 @@ export async function checkUpgradeHints(projectRoot: string, speccoreDir: string
       logger.info('');
       for (const m of migrations) logger.info(`   ✅ ${m}`);
       logger.info('');
-      logger.info('   💡 旧版已备份，请补充「项目名称」列的实际值');
+      logger.info('   💡 已备份，请补充「项目名称」列的实际值');
       logger.info('━'.repeat(50));
       logger.info('');
     } else if (missingSections.length > 0) {
@@ -2570,7 +2570,7 @@ examples/
 | bugfix | — | — | develop | 修复开发环境 Bug |
 | release | — | — | develop | 版本发布准备 |
 | hotfix | — | — | main | 生产环境紧急修复 |
-| support | — | — | main | 长期支持旧版本 |
+| support | — | — | main | 长期支持历史版本 |
 
 > **分支类型说明**：
 > - **分支名格式**：\`{类型}/{前缀}-{任务名}-{后缀}\`，前缀和后缀均可选
@@ -2580,7 +2580,7 @@ examples/
 > - **bugfix**：修复开发中的 Bug，从 develop 创建，完成后合并回 develop
 > - **release**：准备发布版本，从 develop 创建，完成后合并到 main + develop
 > - **hotfix**：生产环境紧急修复，从 main 创建，完成后合并到 main + develop
-> - **support**：长期支持旧版本，从 main 创建，用于维护历史版本
+> - **support**：长期支持历史版本，从 main 创建，用于维护历史版本
 > - 可自定义添加其他类型（如 refactor、docs、test 等）
 
 ---

@@ -733,7 +733,7 @@ export async function indexTaskDocuments(
     join(cwd, taskDir, '00-specs', 'CONTEXT.md'),
     // 共享契约
     join(cwd, taskDir, '_shared', 'API_CONTRACT.yaml'),
-    // 回退: 旧结构 _shared/
+    // 回退: _shared/
     join(cwd, taskDir, '_shared', 'CONTEXT.md'),
     join(cwd, taskDir, '_shared', 'TECH.md'),
     join(cwd, taskDir, '_shared', 'REQ.md'),
@@ -745,7 +745,7 @@ export async function indexTaskDocuments(
     join(cwd, taskDir, 'COMPARISON.md'),
   ];
 
-  // 端平铺结构: 扫描 {platform}/ 下的子任务文档（v8.3.65+ 移除 10-backend/20-frontend 旧结构）
+  // 端平铺结构: 扫描 {platform}/ 下的子任务文档（端平铺结构）
   const taskDirEntries = await readdir(join(cwd, taskDir), { withFileTypes: true }).catch(() => [] as any[]);
   for (const entry of taskDirEntries) {
     if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name === 'node_modules') continue;
@@ -769,7 +769,7 @@ export async function indexTaskDocuments(
     }
   }
 
-  // 回退: 旧结构 99-artifacts/
+  // 回退: 99-artifacts/
   candidates.push(
     join(cwd, taskDir, '99-artifacts', 'TEST.md'),
     join(cwd, taskDir, '99-artifacts', 'REVIEW.md'),

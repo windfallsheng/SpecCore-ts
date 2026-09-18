@@ -10,7 +10,7 @@ import { execSync } from 'child_process';
 import { join, sep } from 'path';
 import { pathExists, readFile, writeFile, ensureDir, readdir, copySync, existsSync } from 'fs-extra';
 import { logger } from '../utils/logger';
-// v6.84.0+: AGENTS 引擎集成
+// AGENTS 引擎集成
 import {
   resolveAgentsForPhase,
   buildAgentPrompt,
@@ -960,7 +960,7 @@ async function checkTestCoverage(codePath: string, taskDir: string): Promise<Che
         }
       }
     } catch { /* 跳过 */ }
-    // 旧结构回退
+    // 结构回退
     testPaths.push(join(taskDir, '99-artifacts', 'TEST.md'));
     let testContent = '';
     for (const p of testPaths) {
@@ -1031,7 +1031,7 @@ async function checkReviewCompliance(codePath: string, taskDir: string): Promise
         }
       }
     } catch { /* 跳过 */ }
-    // 旧结构回退
+    // 结构回退
     reviewPaths.push(join(taskDir, '99-artifacts', 'REVIEW.md'));
     let reviewContent = '';
     for (const p of reviewPaths) {
@@ -1102,7 +1102,7 @@ async function checkArtifactConsistency(codePath: string, taskDir: string, filen
         }
       }
     } catch { /* 跳过 */ }
-    // 旧结构回退
+    // 结构回退
     filePaths.push(join(taskDir, '99-artifacts', filename));
     let content = '';
     for (const p of filePaths) {
@@ -1553,7 +1553,7 @@ export interface QualityGateResult {
   blockingFailed: CheckResult[];
   warnings: CheckResult[];
   report: VerifyReport;
-  agentChecks?: AgentQualityCheck[]; // v6.84.0+: AGENTS 扩展检查
+  agentChecks?: AgentQualityCheck[]; // AGENTS 扩展检查
 }
 
 /**
@@ -1565,79 +1565,89 @@ export async function runQualityGate(
   taskId: string,
   codePath: string,
   taskDir: string,
-  options?: { timeout?: number; withAgents?: boolean; projectRoot?: string }
+  options?: { timeout?: number; withAgents?: boolean; projectRoot?: string; strict?: boolean }
 ): Promise<QualityGateResult> {
   const projectType = await detectProjectType(codePath);
   const commands = getCommands(projectType, codePath);
   const timeout = options?.timeout || 120000;
+  const strict = options?.strict || false;
   const checks: CheckResult[] = [];
 
   logger.info('');
-  logger.info(`🚧 质量门禁 — ${taskId} (${projectType})`);
+  logger.info(`🚧 质量门禁 — ${taskId} (${projectType})${strict ? ' [严格模式]' : ''}`);
+
+  // ═══════════════════════════════════════════════════════════
+  // 默认门禁（4 项关键检查，始终执行）
+  // ═══════════════════════════════════════════════════════════
 
   // 1. 编译检查（唯一阻塞项：编译不过 = 代码不可用）
   logger.info('   📦 编译检查...');
   checks.push(runCheck('编译检查', commands.compile, codePath, timeout, true));
 
-  // 2. Lint 检查（非阻塞，记录报告）
-  logger.info('   🔎 Lint 检查...');
-  checks.push(runCheck('Lint 检查', commands.lint, codePath, timeout, false));
-
-  // 3. 单元测试（非阻塞，记录报告）
+  // 2. 单元测试（非阻塞，记录报告）
   logger.info('   🧪 单元测试...');
   checks.push(runCheck('单元测试', commands.test, codePath, timeout, false));
 
-  // 4. 依赖完整性（非阻塞，记录报告）
-  logger.info('   📋 依赖检查...');
-  checks.push(checkDependencies(codePath, projectType));
-
-  // 5. 安全扫描（非阻塞）
-  logger.info('   🔒 安全扫描...');
-  checks.push(checkSecurity(codePath, projectType));
-
-  // 6. Spec 一致性（非阻塞，L1 关键词 + L2 语义匹配）
-  logger.info('   📐 Spec 一致性...');
-  checks.push(await checkSpecConsistency(codePath, taskDir));
-
-  // 7. DEV_GUIDE 合规（v8.3.0+，结构化检查：改造范围清单 + 接口契约）
-  logger.info('   📋 DEV_GUIDE 合规...');
-  checks.push(await checkDevGuideCompliance(codePath, taskDir));
-
-  // 8. API 契约合规（v8.3.0+，解析 API_CONTRACT.yaml 检查接口实现）
+  // 3. API 契约合规（v8.3.0+，解析 API_CONTRACT.yaml 检查接口实现）
   logger.info('   🔌 API 契约合规...');
   checks.push(await checkApiContractCompliance(codePath, taskDir));
 
-  // 9. Schema 一致性（v8.3.0+，解析 SCHEMA.md 检查实体字段）
-  logger.info('   🗄️  Schema 一致性...');
-  checks.push(await checkSchemaConsistency(codePath, taskDir));
-
-  // 10. 测试用例覆盖率（非阻塞，读取 TEST.md）
-  logger.info('   🧪 测试用例覆盖...');
-  checks.push(await checkTestCoverage(codePath, taskDir));
-
-  // 11. 评审项合规（非阻塞，读取 REVIEW.md）
-  logger.info('   📝 评审项合规...');
-  checks.push(await checkReviewCompliance(codePath, taskDir));
-
-  // 12. 部署清单检查（非阻塞，读取 DEPLOY.md）
-  logger.info('   🚀 部署清单...');
-  checks.push(await checkArtifactConsistency(codePath, taskDir, 'DEPLOY.md', '部署项检查'));
-
-  // 13. 错误码一致性（非阻塞，读取 ERROR_CODES.md）
-  logger.info('   🔢 错误码一致性...');
-  checks.push(await checkArtifactConsistency(codePath, taskDir, 'ERROR_CODES.md', '错误码一致性'));
-
-  // 14. 知识图谱依赖一致性（v8.3.0+，检查上游依赖接口是否已可用）
-  logger.info('   🔗 依赖一致性...');
-  checks.push(await checkDependencyGraphConsistency(codePath, taskDir, taskId));
-
-  // 15. 规格文档质量校验（v8.1.0+，检查 REQ.md/TECH.md 是否有实质内容）
+  // 4. 规格文档质量校验（v8.1.0+，检查 REQ.md/TECH.md 是否有实质内容 = 无占位符）
   logger.info('   📋 规格文档质量...');
   checks.push(await checkSpecDocQuality(taskDir));
 
-  // 16. 代码文件非空检查（v8.1.0+，确保 src/ 下有实际代码）
-  logger.info('   📁 代码文件检查...');
-  checks.push(await checkCodeFilesExist(codePath));
+  // ═══════════════════════════════════════════════════════════
+  // 严格模式附加检查（12 项，--strict 时启用）
+  // ═══════════════════════════════════════════════════════════
+  if (strict) {
+    // 5. Lint 检查
+    logger.info('   🔎 Lint 检查...');
+    checks.push(runCheck('Lint 检查', commands.lint, codePath, timeout, false));
+
+    // 6. 依赖完整性
+    logger.info('   📋 依赖检查...');
+    checks.push(checkDependencies(codePath, projectType));
+
+    // 7. 安全扫描
+    logger.info('   🔒 安全扫描...');
+    checks.push(checkSecurity(codePath, projectType));
+
+    // 8. Spec 一致性
+    logger.info('   📐 Spec 一致性...');
+    checks.push(await checkSpecConsistency(codePath, taskDir));
+
+    // 9. DEV_GUIDE 合规
+    logger.info('   📋 DEV_GUIDE 合规...');
+    checks.push(await checkDevGuideCompliance(codePath, taskDir));
+
+    // 10. Schema 一致性
+    logger.info('   🗄️  Schema 一致性...');
+    checks.push(await checkSchemaConsistency(codePath, taskDir));
+
+    // 11. 测试用例覆盖率
+    logger.info('   🧪 测试用例覆盖...');
+    checks.push(await checkTestCoverage(codePath, taskDir));
+
+    // 12. 评审项合规
+    logger.info('   📝 评审项合规...');
+    checks.push(await checkReviewCompliance(codePath, taskDir));
+
+    // 13. 部署清单检查
+    logger.info('   🚀 部署清单...');
+    checks.push(await checkArtifactConsistency(codePath, taskDir, 'DEPLOY.md', '部署项检查'));
+
+    // 14. 错误码一致性
+    logger.info('   🔢 错误码一致性...');
+    checks.push(await checkArtifactConsistency(codePath, taskDir, 'ERROR_CODES.md', '错误码一致性'));
+
+    // 15. 知识图谱依赖一致性
+    logger.info('   🔗 依赖一致性...');
+    checks.push(await checkDependencyGraphConsistency(codePath, taskDir, taskId));
+
+    // 16. 代码文件非空检查
+    logger.info('   📁 代码文件检查...');
+    checks.push(await checkCodeFilesExist(codePath));
+  }
 
   // 汇总
   const report: VerifyReport = {
@@ -1669,7 +1679,7 @@ export async function runQualityGate(
     logger.info(`   ${icon} ${c.name}${block}: ${c.details}`);
   }
 
-  // v6.84.0+: AGENTS 扩展检查（可选）
+  // AGENTS 扩展检查（可选）
   let agentChecks: AgentQualityCheck[] | undefined;
   if (options?.withAgents && options?.projectRoot) {
     try {

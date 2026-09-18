@@ -112,7 +112,7 @@ export function createTaskBranch(
       const hash4 = randomBytes(2).toString('hex');
       // 前缀段：有值时追加连字符，无值时为空
       const prefixSegment = gitConfig.branchPrefix ? `${gitConfig.branchPrefix}-` : '';
-      // 按格式模板生成分支名（兼容旧逻辑）
+      // 按格式模板生成分支名（兜底）
       branchName = formatBranchName(gitConfig.branchFormat, {
         type: branchType,
         prefix: prefixSegment,
@@ -242,7 +242,7 @@ export function loadSubtaskGitConfig(taskDir: string): Partial<GitConfig> {
     const taskSuffix = extractValue('后缀');
     if (taskSuffix) config.taskSuffix = taskSuffix;
 
-    // 分支前缀（兼容旧语义：如日期编号 2060708）
+    // 分支前缀（如日期编号 2060708）
     const branchPrefix = extractValue('分支前缀');
     if (branchPrefix) config.branchPrefix = branchPrefix;
 
@@ -378,7 +378,7 @@ export function loadGitConfig(iteration?: string, taskDir?: string): GitConfig {
   };
 }
 
-/** 检测默认分支 — 兼容旧接口，内部调用 loadGitConfig
+/** 检测默认分支 — 内部调用 loadGitConfig
  * v8.3.87+: 增加 cwd 参数，支持 speccore 与工程代码分离
  */
 export function detectDefaultBranch(iteration?: string, cwd?: string): string | undefined {

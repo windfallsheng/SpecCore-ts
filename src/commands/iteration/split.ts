@@ -427,7 +427,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
             ``,
             // v8.3.160+: 子 Agent 激活标记
             ...(result.subagent ? [
-              `[SPECCORE_SUBAGENT: ${result.subagent}]`,
+              `[SPECCORE_SESSION_AGENT: ${result.subagent}]`,
               `[SPECCORE_CONTEXT_BUDGET: ${result.contextBudget || 12000}]`,
               `[SPECCORE_CONTEXT_TYPE: ${result.contextType || 'full'}]`,
               ``,
@@ -540,7 +540,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     }
 
     const output = [
-      `[SPECCORE_SUBAGENT: task-decomposer]`,
+      `[SPECCORE_SESSION_AGENT: task-decomposer]`,
       `[SPECCORE_CONTEXT_BUDGET: 12000]`,
       `[SPECCORE_CONTEXT_TYPE: full]`,
       ``,
@@ -603,7 +603,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           ``,
           // v8.3.160+: 子 Agent 激活标记
           ...(stepResult.subagent ? [
-            `[SPECCORE_SUBAGENT: ${stepResult.subagent}]`,
+            `[SPECCORE_SESSION_AGENT: ${stepResult.subagent}]`,
             `[SPECCORE_CONTEXT_BUDGET: ${stepResult.contextBudget || 12000}]`,
             `[SPECCORE_CONTEXT_TYPE: ${stepResult.contextType || 'full'}]`,
             ``,
@@ -1022,7 +1022,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
         const bk = await backupWithTimestamp(reqPath);
         if (bk) {
           backups.push(bk);
-          logger.info(`   📦 旧版已备份: ${basename(bk)}`);
+          logger.info(`   📦 已备份: ${basename(bk)}`);
         }
         await writeFile(reqPath, options.response);
       }
@@ -1031,7 +1031,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       const bk = await backupWithTimestamp(reqPath);
       if (bk) {
         backups.push(bk);
-        logger.info(`   📦 旧版已备份: ${bk.split('/').pop()}`);
+        logger.info(`   📦 已备份: ${bk.split('/').pop()}`);
       }
       await writeFile(reqPath, options.response);
     }
@@ -1128,7 +1128,6 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     }
 
     // ── 1. 检查 ANALYSIS.md + AI 智能拆分建议 ──
-    // v8.3.38: 兼容新旧结构
     const analysisPathNew = join(iterationDir, '020-specs', GLOBAL_SPECS_DIR, 'ANALYSIS.md');
     const analysisPathOld = join(iterationDir, '020-specs', 'ANALYSIS.md');
     const analysisPath = await pathExists(analysisPathNew) ? analysisPathNew : analysisPathOld;
@@ -1274,7 +1273,6 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       logger.info('   ℹ️ 未找到 ANALYSIS.md，建议先运行 speccore analyze');
     }
 
-    // v8.3.38: 兼容新旧结构 — 优先查新路径 020-specs/overview/REQUIREMENT.md，回退旧路径 020-specs/REQUIREMENT.md
     const reqFileNew = join(iterationDir, '020-specs', GLOBAL_SPECS_DIR, options.file || 'REQUIREMENT.md');
     const reqFileOld = join(iterationDir, '020-specs', options.file || 'REQUIREMENT.md');
     const reqFile = await pathExists(reqFileNew) ? reqFileNew : reqFileOld;
@@ -2469,7 +2467,6 @@ ${relatedTasks.length > 0 ? relatedTasks.join('\n') : '> 暂无关联任务（sp
 ${taskPlatforms.map((p: string) => `| ${p} | 待补充 |`).join('\n')}
 `;
   await writeFile(join(taskDir, '_shared', 'CONTEXT.md'), contextContent);
-  // 兼容：00-specs/ 下也保留一份（部分旧代码可能读取 00-specs/CONTEXT.md）
   await writeFile(join(taskDir, '00-specs', 'CONTEXT.md'), contextContent);
 
   // ── 7. 问题追踪 ──
@@ -2914,7 +2911,6 @@ async function generateEnvExample(iterationDir: string, sections: Section[]): Pr
 }
 
 async function injectTechFromAnalysis(iterationDir: string, taskDir: string, sectionName: string): Promise<void> {
-  // v8.3.38: 兼容新旧结构
   const analysisPathNew = join(iterationDir, '020-specs', GLOBAL_SPECS_DIR, 'ANALYSIS.md');
   const analysisPathOld = join(iterationDir, '020-specs', 'ANALYSIS.md');
   const analysisPath = await pathExists(analysisPathNew) ? analysisPathNew : analysisPathOld;
@@ -3338,7 +3334,7 @@ function extractFrontendContent(techContent: string, taskName: string, platform:
 }
 
 /** 从 specContents 提取任务级 TECH 内容（优先读取对应端的文档）
- * v8.3.37: 兼容新旧结构 — 新结构 key 为 {feature}/{platform}/TECH.md，旧结构为 {platform}/TECH.md
+ {feature}/{platform}/TECH.md key 为 {feature}/{platform}/TECH.md
  * v8.3.125+: 使用三层匹配（精确+关键词+标题）替代字符串查找
  */
 function extractTaskTechContent(specContents: Record<string, string>, section: Section, platform?: string): string {
@@ -3360,7 +3356,7 @@ function extractTaskTechContent(specContents: Record<string, string>, section: S
 }
 
 /** v8.3.0+: 从 analyze DEV_GUIDE.md 提取任务级开发指南内容
- * v8.3.37: 兼容新旧结构 — 新结构 key 为 {feature}/{platform}/DEV_GUIDE.md
+ {feature}/{platform}/TECH.md key 为 {feature}/{platform}/DEV_GUIDE.md
  * v8.3.125+: 使用三层匹配替代字符串查找
  */
 function extractTaskDevGuideContent(
@@ -4024,7 +4020,7 @@ function detectSemanticDependencies(sections: Section[]): Map<string, string[]> 
 
 async function detectExistingTasks(iterDir: string): Promise<string[]> {
   const tasks: string[] = [];
-  // 优先从 030-tasks/ 扫描，兼容旧布局（迭代根目录）
+  // 优先从 030-tasks/ 扫描
   const scanDir = join(iterDir, '030-tasks');
   const targetDir = (await pathExists(scanDir)) ? scanDir : iterDir;
   const scanRecursive = async (dir: string) => {

@@ -105,7 +105,7 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalysisResult> 
         };
         await scanDir(productReqDir);
       }
-      // 兼容旧路径: 如果没有 01-产品需求/, 回退到 010-requirements/REQUIREMENT.md
+      // 回退路径: 如果没有 01-产品需求/, 回退到 010-requirements/REQUIREMENT.md
       if (requirements.length === 0) {
         const legacyReq = join(`Iteration-${input.iteration}`, '010-requirements', 'REQUIREMENT.md');
         if (await pathExists(legacyReq)) {
@@ -2035,7 +2035,7 @@ function buildDynamicAliasesFromTechStack(
 }
 
 /** 从 CONSTITUTION.md 提取平台列表（两层确定性匹配）
- *  Layer 1: 表格「对应端」/「对应需求端」列（旧版回退）
+ *  Layer 1: 表格「对应端」/「对应需求端」列（兜底）
  *  Layer 2: 技术栈章节标题 ### 中文端名 (English Name)
  *  ⚠️ 不再提供硬编码默认值 — 端列表应由 AI 根据项目实际情况判断
  */
@@ -2054,7 +2054,7 @@ async function detectPlatformsFromConstitution(): Promise<string[]> {
       const content = require('fs').readFileSync(constitutionPath, 'utf-8');
       const lines = content.split('\n');
       
-      // ── Layer 1: 表格「对应端」/「对应需求端」列（旧版回退）──
+      // ── Layer 1: 表格「对应端」/「对应需求端」列（兜底）──
       let headerRowIndex = -1;
       let platformColIdx = -1;
       let identifierColIdx = -1;
@@ -2144,7 +2144,7 @@ async function detectPlatformsFromConstitution(): Promise<string[]> {
         }
       }
       
-      // Layer 2.5: 简单正则匹配（兼容旧格式）
+      // Layer 2.5: 简单正则匹配（兜底）
       const match = content.match(/对应需求端[|｜]\s*([a-z,\s]+)/i);
       if (match) {
         const result = match[1].split(/[,，]/).map((s: string) => s.trim()).filter(Boolean);

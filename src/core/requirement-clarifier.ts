@@ -141,7 +141,7 @@ export function parseClarifiedRequirement(response: string): {
  * 写入澄清后的需求文档
  * v8.2.0+: 改为写入 020-specs/requirements/ 作为黄金需求目录
  * 原始需求保留在 010-requirements/ 不变
- * v8.3.35+: 文件名改为 {原需求名}-clarified.md，多次澄清时自动备份旧版
+ * v8.3.35+: 文件名改为 {原需求名}-clarified.md，多次澄清时自动备份
  */
 export async function writeClarifiedDoc(
   content: string,
@@ -162,10 +162,10 @@ export async function writeClarifiedDoc(
   const filename = `${baseName}-clarified.md`;
   const filepath = join(goldenDir, filename);
 
-  // 已存在则备份旧版（重命名为带时间戳的文件），再写入新版
+  // 已存在则备份（重命名为带时间戳的文件），再写入新版
   const backup = await backupWithTimestamp(filepath);
   if (backup) {
-    logger.info(`   📦 旧版已备份: ${basename(backup)}`);
+    logger.info(`   📦 已备份: ${basename(backup)}`);
   }
 
   await writeFile(filepath, content, 'utf-8');
@@ -582,20 +582,63 @@ export async function writeClarifyReport(
 
 /**
  * 检测迭代是否已有有效的 clarified 文档
- * v8.2.0+: 改为检查 020-specs/requirements/ 目录
+ * v8.3.181+: 支持两级澄清（全局 overview/CLARIFY.md + 模块 {feature}/overview/CLARIFY.md）
+ * 同时保持对旧路径 020-specs/requirements/ 的兼容
+ *
+ * 逻辑：
+ * 1. 收集所有 clarified 文件的最新修改时间
+ * 2. 如果没有 clarified 文件 → 返回 false
+ * 3. 收集所有 source 文件的最新修改时间
+ * 4. 返回 latestClarifyTime >= latestSourceTime
  */
 export async function hasValidClarifiedDocs(iterDir: string): Promise<boolean> {
-  const goldenDir = join(iterDir, '020-specs', 'requirements');
-  if (!(await pathExists(goldenDir))) return false;
+  const specsDir = join(iterDir, '020-specs');
 
-  const files = await readdir(goldenDir);
-  // v8.3.67+ 修复：检查所有 .md 文件（不仅是 -clarified.md），排除 diff 记录文件
-  const clarifiedFiles = files.filter(f => f.endsWith('.md') && !f.endsWith('-diff.md'));
-  if (clarifiedFiles.length === 0) return false;
+  // ── 1. 收集所有澄清文件的最新修改时间 ──
+  let latestClarifyTime = 0;
+  let hasAnyClarify = false;
+  const checkClarifyMtime = async (fp: string) => {
+    try {
+      if (await pathExists(fp)) {
+        hasAnyClarify = true;
+        const st = await stat(fp);
+        if (st.mtimeMs > latestClarifyTime) latestClarifyTime = st.mtimeMs;
+      }
+    } catch { /* 忽略 */ }
+  };
 
-  // 检查是否有 source 文档比 clarified 更新
-  // v8.3.160+ 修复：补充 converted/、staging/、REQUIREMENT.md 及类型目录的监控
-  // 保持与 analyze 命令的需求收集逻辑一致
+  // 新路径：全局澄清
+  await checkClarifyMtime(join(specsDir, 'overview', 'CLARIFY.md'));
+
+  // 新路径：模块澄清
+  try {
+    if (await pathExists(specsDir)) {
+      const entries = await readdir(specsDir, { withFileTypes: true });
+      for (const e of entries) {
+        if (e.isDirectory() && e.name !== 'overview') {
+          await checkClarifyMtime(join(specsDir, e.name, 'overview', 'CLARIFY.md'));
+        }
+      }
+    }
+  } catch { /* 忽略 */ }
+
+  // 兼容旧路径
+  const goldenDir = join(specsDir, 'requirements');
+  if (await pathExists(goldenDir)) {
+    try {
+      const files = await readdir(goldenDir);
+      for (const f of files) {
+        if (f.endsWith('.md') && !f.endsWith('-diff.md')) {
+          await checkClarifyMtime(join(goldenDir, f));
+        }
+      }
+    } catch { /* 忽略 */ }
+  }
+
+  // 没有任何 clarified 文件
+  if (!hasAnyClarify) return false;
+
+  // ── 2. 收集所有 source 文档的最新修改时间 ──
   const reqDir = join(iterDir, '010-requirements');
   const sourcesDir = join(reqDir, 'sources');
   const featuresDir = join(reqDir, 'features');
@@ -642,13 +685,6 @@ export async function hasValidClarifiedDocs(iterDir: string): Promise<boolean> {
       const st = await stat(reqRoot);
       if (st.mtimeMs > latestSourceTime) latestSourceTime = st.mtimeMs;
     } catch { /* 忽略 */ }
-  }
-
-  // 如果 source 比 clarify 新，需要重新 clarify
-  let latestClarifyTime = 0;
-  for (const f of clarifiedFiles) {
-    const st = await stat(join(goldenDir, f));
-    if (st.mtimeMs > latestClarifyTime) latestClarifyTime = st.mtimeMs;
   }
 
   return latestClarifyTime >= latestSourceTime;

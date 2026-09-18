@@ -108,11 +108,11 @@ const NON_PLATFORM_DIRS = new Set(['.', '_', '9', '.meta', '_shared', '99-artifa
 
 /** 判断某个目录是否为端子任务目录（含 TASK.md 且不是特殊目录）
  * v8.3.8+: 支持两种结构
- *   旧结构: {platform}/TASK.md
+ *   结构: {platform}/TASK.md
  *   新结构: {platform}/{subtaskId}/TASK.md（split.ts 生成的平铺架构）
  */
 async function isPlatformDir(dirPath: string): Promise<boolean> {
-  // 1. 旧结构：目录下直接有 TASK.md
+  // 1. 结构：目录下直接有 TASK.md
   const taskMd = join(dirPath, 'TASK.md');
   if (await pathExists(taskMd)) return true;
 
@@ -138,7 +138,7 @@ export async function scanTasks(iteration: string): Promise<TaskState[]> {
     return [];
   }
   
-  // v8.3.171+: 只从 030-tasks/ 扫描（删除迭代根目录旧布局兼容）
+  // v8.3.171+: 只从 030-tasks/ 扫描（只从 030-tasks/ 扫描）
   const tasksDir = join(iterationDir, '030-tasks');
   if (!await pathExists(tasksDir)) return [];
   const scanRoot = tasksDir;
@@ -213,7 +213,7 @@ export async function scanTasks(iteration: string): Promise<TaskState[]> {
     }
     
     // 扫描各端子任务目录（v8.3.8+: 兼容两种结构）
-    //   旧结构: {platform}/TASK.md
+    //   结构: {platform}/TASK.md
     //   新结构: {platform}/{subtaskId}/TASK.md（split.ts 平铺架构）
     let hasSubTasks = false;
     const subTasks: TaskState[] = [];
@@ -232,7 +232,7 @@ export async function scanTasks(iteration: string): Promise<TaskState[]> {
         // 收集所有包含 TASK.md 的执行单元路径
         const subtaskPaths: string[] = [];
 
-        // 1. 旧结构：端目录下直接有 TASK.md
+        // 1. 结构：端目录下直接有 TASK.md
         if (await pathExists(join(platformDirPath, 'TASK.md'))) {
           subtaskPaths.push(platformDirPath);
         }
@@ -310,7 +310,7 @@ export async function scanTasks(iteration: string): Promise<TaskState[]> {
       // 新结构: 展开为各端子任务
       tasks.push(...subTasks);
     } else {
-      // 旧结构或无子任务的父任务
+      // 无子任务的父任务
       tasks.push({
         id: taskId,
         name,

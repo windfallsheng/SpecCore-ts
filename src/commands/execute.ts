@@ -95,14 +95,14 @@ export interface ExecuteOptions {
 }
 
 /**
- * 解析任务目录路径：支持类型子目录（030-tasks/{type}/Task-XXX/）+ 旧布局兼容
+ * 解析任务目录路径：支持类型子目录（030-tasks/{type}/Task-XXX/）
  */
 async function resolveTaskDir(iterDir: string, taskId?: string): Promise<string> {
   const tasksDir = join(iterDir, '030-tasks');
   const base = (await pathExists(tasksDir)) ? tasksDir : iterDir;
   if (!taskId) return base;
 
-  // 用 findTaskDir 递归查找（支持 030-tasks/{type}/Task-XXX/ 和旧布局）
+  // 用 findTaskDir 递归查找（支持 030-tasks/{type}/Task-XXX/）
   const found = await findTaskDir(base, taskId);
   return found || join(base, taskId);
 }
@@ -110,6 +110,23 @@ async function resolveTaskDir(iterDir: string, taskId?: string): Promise<string>
 export async function executeCommand(options: ExecuteOptions): Promise<void> {
   let lockAcquired = false;
   try {
+    // v8.3.174+: 模式参数收敛 — pipeline/with_code/strict 从 .speccore.yml 读取（CLI 参数可覆盖）
+    try {
+      const config = await loadConfig();
+      if (options.pipeline === undefined && config.settings.pipeline !== undefined) {
+        options.pipeline = config.settings.pipeline;
+      }
+      if (options.withCode === undefined && config.settings.with_code !== undefined) {
+        options.withCode = config.settings.with_code;
+      }
+      if (options.strict === undefined) {
+        options.strict = config.settings.validation.strict_mode;
+        if (options.strict) {
+          logger.info(`🔒 严格模式已启用（来自 .speccore.yml settings.validation.strict_mode）`);
+        }
+      }
+    } catch { /* ignore config read errors */ }
+
     // v8.3.160+: 自动检测是否启用 withCode（端 >= 3 时默认启用）
     if (options.withCode === undefined) {
       try {
@@ -198,7 +215,7 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
               ``,
               // v8.3.160+: 子 Agent 激活标记
               ...(result.subagent ? [
-                `[SPECCORE_SUBAGENT: ${result.subagent}]`,
+                `[SPECCORE_SESSION_AGENT: ${result.subagent}]`,
                 `[SPECCORE_CONTEXT_BUDGET: ${result.contextBudget || 12000}]`,
                 `[SPECCORE_CONTEXT_TYPE: ${result.contextType || 'full'}]`,
                 ``,
@@ -602,7 +619,7 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
     logger.info(`[${String(i + 1).padStart(2, '0')}/${total}] ${bar} ${progress}%`);
     logger.info(`  🔄 ${task.id} ${task.name || ''} (${task.type || 'feature'})`);
 
-    // ── 横向依赖检查（v6.69.0+ 增强策略四）──
+    // ── 横向依赖检查（增强策略四）──
     await checkCrossTaskDependencies(task, iteration, completed.map(c => c.split(' - ')[0]));
 
     // ── 懒创建分支 + 合并依赖 ──
@@ -654,7 +671,7 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
     } catch {}
   }
 
-  // 质量门禁已移至 executionVerifyLoop（v6.79.0+ Pipeline 化）
+  // 质量门禁已移至 executionVerifyLoop（Pipeline 化）
   
   // 自动刷新知识图谱（v6.49.10+）
   try {
@@ -1290,7 +1307,7 @@ async function filterByPlatformType(
     : /web|h5|miniapp|app|frontend|前端|ios|android|admin/i;
   const matchedPlatforms = projectPlatforms.length > 0
     ? projectPlatforms.filter(p => pattern.test(p))
-    : type === 'backend' ? ['api'] : ['web']; // fallback 兼容旧项目
+    : type === 'backend' ? ['api'] : ['web'];// fallback
 
   const matchedIds = new Set<string>();
   for (const platform of matchedPlatforms) {
@@ -1864,7 +1881,7 @@ async function executionVerifyLoop(
 
       if (!arbConfig.enabled) {
         // 仲裁已禁用：回退到传统质量门禁
-        const gate = await runQualityGate(task.id, taskCodePath, taskDir);
+        const gate = await runQualityGate(task.id, taskCodePath, taskDir, { strict: options.strict });
         await writeVerifyReport(gate.report, taskDir);
         if (options.auto) {
           logger.info(`   🚧 质量门禁: ${gate.passed ? '✅ 通过' : '❌ 失败'} (arbitration=off)`);
@@ -2010,7 +2027,7 @@ async function executionVerifyLoop(
         logger.info(`   💡 AI 将修复未通过项。使用 speccore execute --task=${task.id} --force 重新执行代码生成`);
         await writeFile(join(taskDir, '.needs-retry'), String(round));
         // 输出 [SPECCORE_EXEC] 让 AI 修复（回退到质量门禁报告）
-        const gate = await runQualityGate(task.id, taskCodePath, taskDir);
+        const gate = await runQualityGate(task.id, taskCodePath, taskDir, { strict: options.strict });
         if (!gate.passed) {
           await outputFixTag(gate.report, taskDir, round);
         }
@@ -2349,39 +2366,55 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
   }
 
   // v8.2.0+: 注入相邻任务上下文（同一 Task 的其他端 + 契约）
+  // v8.3.178+: 只传契约，不传实现——其他端的 REQ.md/TECH.md 不再加载
   try {
     const taskBaseDir = dirname(taskDir);
     const siblingContexts: string[] = [];
 
-    // 1. 同一 Task 下的其他端子任务
+    // 1. 同一 Task 下的其他端子任务 —— 只加载契约，不加载 REQ.md/TECH.md
     try {
       const entries = await readdir(taskBaseDir, { withFileTypes: true });
       for (const entry of entries) {
         if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name === '00-specs' || entry.name === '_shared') continue;
         const siblingDir = join(taskBaseDir, entry.name);
         if (siblingDir === taskDir) continue;
-        const siblingReq = join(siblingDir, 'REQ.md');
-        const siblingTech = join(siblingDir, 'TECH.md');
-        if (await pathExists(siblingReq)) {
-          const content = await readFile(siblingReq, 'utf-8');
-          siblingContexts.push(`### ${entry.name} 端 REQ.md\n${content.slice(0, 400)}`);
-        } else if (await pathExists(siblingTech)) {
-          const content = await readFile(siblingTech, 'utf-8');
-          siblingContexts.push(`### ${entry.name} 端 TECH.md\n${content.slice(0, 400)}`);
+        // 只加载该端的 API 契约（如果存在），不加载 REQ.md/TECH.md
+        const siblingContract = join(siblingDir, 'API_CONTRACT.yaml');
+        if (await pathExists(siblingContract)) {
+          const content = await readFile(siblingContract, 'utf-8');
+          siblingContexts.push(`### ${entry.name} 端 API 契约\n\`\`\`yaml\n${content.slice(0, 400)}\n\`\`\``);
         }
       }
     } catch { /* ignore */ }
 
-    // 2. API 契约
+    // 2. 本 Task 的共享 API 契约
     const contractPath = join(taskBaseDir, '_shared', 'API_CONTRACT.yaml');
     if (await pathExists(contractPath)) {
       const contract = await readFile(contractPath, 'utf-8');
-      siblingContexts.push(`### API 契约\n\`\`\`yaml\n${contract.slice(0, 600)}\n\`\`\``);
+      siblingContexts.push(`### 共享 API 契约\n\`\`\`yaml\n${contract.slice(0, 600)}\n\`\`\``);
     }
 
+    // 3. 上游任务的 API 契约（只传契约，不传实现）
+    try {
+      const allTasks = await scanTasks(iteration);
+      const currentTaskState = allTasks.find(t => t.id === task);
+      if (currentTaskState?.dependencies?.length) {
+        const iterDir = await getIterationDir(iteration);
+        for (const depId of currentTaskState.dependencies) {
+          const depTaskDir = await resolveTaskDir(iterDir, depId);
+          const depContract = join(depTaskDir, '_shared', 'API_CONTRACT.yaml');
+          if (await pathExists(depContract)) {
+            const content = await readFile(depContract, 'utf-8');
+            siblingContexts.push(`### 上游 ${depId} API 契约\n\`\`\`yaml\n${content.slice(0, 400)}\n\`\`\``);
+          }
+        }
+      }
+    } catch { /* ignore */ }
+
     if (siblingContexts.length > 0) {
-      promptText += `\n\n## 🔗 相邻任务上下文（同一功能单元的其他端 + 契约）\n`;
-      promptText += `> 以下是与当前任务相关的其他端实现和接口契约，编写代码时请保持一致性。\n\n`;
+      promptText += `\n\n## 🔗 相关契约（同一功能单元的其他端 + 上游任务）\n`;
+      promptText += `> 以下是与当前任务相关的接口契约，编写代码时请保持一致性。\n`;
+      promptText += `> ⚠️ 只提供契约，不提供实现细节。\n\n`;
       promptText += siblingContexts.join('\n\n');
       promptText += '\n';
     }
@@ -2469,7 +2502,7 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
   // 输出到 stdout（Skill 通过 execute_command 捕获）
   // v8.3.166+: 在 prompt 前输出 subagent 标记
   const finalOutput = [
-    `[SPECCORE_SUBAGENT: ${platformSubagent}]`,
+    `[SPECCORE_SESSION_AGENT: ${platformSubagent}]`,
     `[SPECCORE_CONTEXT_BUDGET: 12000]`,
     `[SPECCORE_CONTEXT_TYPE: ${options.platform ? 'platform-only' : 'full'}]`,
     ``,
@@ -2548,7 +2581,7 @@ async function runApplyMode(iteration: string, options: ExecuteOptions): Promise
           ``,
           // v8.3.160+: 子 Agent 激活标记
           ...(stepResult.subagent ? [
-            `[SPECCORE_SUBAGENT: ${stepResult.subagent}]`,
+            `[SPECCORE_SESSION_AGENT: ${stepResult.subagent}]`,
             `[SPECCORE_CONTEXT_BUDGET: ${stepResult.contextBudget || 12000}]`,
             `[SPECCORE_CONTEXT_TYPE: ${stepResult.contextType || 'full'}]`,
             ``,
@@ -2606,7 +2639,7 @@ async function runApplyMode(iteration: string, options: ExecuteOptions): Promise
       logger.info(`   📂 使用 CONSTITUTION 工程路径: ${projectPath}`);
       writtenPlatforms.add(possiblePlatform);
     } else {
-      // 回退：写入迭代目录（兼容旧行为）
+      // 回退：写入迭代目录
       fullPath = join(iterDir, file.path);
     }
     
@@ -2888,7 +2921,6 @@ async function getPlatformSubtaskDirs(taskDir: string): Promise<PlatformSubtask[
       }
     } catch { /* ignore */ }
   }
-  // v8.3.121+: 已移除 10-backend/20-frontend 旧结构回退
   return result;
 }
 

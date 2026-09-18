@@ -156,7 +156,7 @@ async function createSingleTask(options: TaskNewOptions): Promise<void> {
     const isResearch = taskType === 'research';
     let projectPlatforms = await parsePlatformList();
     if (projectPlatforms.length === 0) {
-      projectPlatforms = ['api', 'web']; // fallback 兼容旧项目
+      projectPlatforms = ['api', 'web'];// fallback
     }
 
     // 根据参数过滤要创建的端

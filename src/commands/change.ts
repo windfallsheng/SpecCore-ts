@@ -52,7 +52,7 @@ import {
 } from '../core/ai-impact-analyzer';
 
 /**
- * 解析任务目录基础路径：优先 030-tasks/，兼容旧布局
+ * 解析任务目录基础路径：优先 030-tasks/，扫描任务目录
  */
 async function resolveTaskBase(iterDir: string): Promise<string> {
   const tasksDir = join(iterDir, '030-tasks');
@@ -457,8 +457,8 @@ export async function changeCommand(options: ChangeOptions): Promise<void> {
   }
 
   if (!options.task && !options.global) {
-    // v6.73.0+ 变更驱动工作流 v2
-    // --prompt/--response 模式保持向后兼容
+   // 变更驱动工作流
+   // --prompt/--response 模式
     if (options.prompt || options.response) {
       await processChangeLegacy(options);
       return;
@@ -942,7 +942,7 @@ async function syncToAnalysis(iteration: string, taskId: string, desc: string): 
 // ═══════════════════════════════════════════════════════════════
 
 /**
- * v6.72.0 及之前版本的变更处理流程（向后兼容）
+ * --prompt / --response 模式变更处理流程
  * 用于 --prompt / --response 模式
  */
 async function processChangeLegacy(options: ChangeOptions): Promise<void> {
@@ -1112,7 +1112,7 @@ async function processChangeLegacy(options: ChangeOptions): Promise<void> {
 
     // v8.3.171+: 输出 subagent 标记
     const finalOutput = [
-      `[SPECCORE_SUBAGENT: impact-analyst]`,
+      `[SPECCORE_SESSION_AGENT: impact-analyst]`,
       `[SPECCORE_CONTEXT_BUDGET: 8000]`,
       `[SPECCORE_CONTEXT_TYPE: incremental]`,
       ``,

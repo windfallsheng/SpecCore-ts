@@ -178,10 +178,16 @@ speccore analyze --filter status:doing               # 按状态自动发现并�
 speccore analyze --global --withCode # 全局代码分析（四层扫描+功能模块驱动）
 speccore analyze --clarify           # 需求专业度检测，口语化时自动澄清
 speccore analyze --dev-guide         # 分析同时生成 DEV_GUIDE.md 开发者实现指南
+speccore analyze --scope=overview --phase=skeleton -I Iteration-001   # 生成骨架总览（v8.3.177+）
+speccore analyze --scope=overview --phase=full -I Iteration-001       # 生成完整总览（v8.3.177+）
 ```
 别名: `al`
 
 > 💡 `--auto` 模式会自动生成 prompt 交给宿主 AI 执行专业分析，产出全套 Spec 文件。支持 `--platform` 指定端过滤。
+>
+> **v8.3.177+ 新增参数：**
+> - `--scope=overview`: 生成迭代级总览（而非逐个分析功能单元）。先 skeleton（骨架：功能地图+端覆盖），后 full（完整：架构+数据流+风险）
+> - `--phase=skeleton|full`: 与 `--scope=overview` 配合，指定总览阶段
 >
 > **v6.77.0+ 新增参数：**
 > - `--clarify`: 检测需求文档专业度，若过于口语化（"我要/我想/能不能"），自动进入 clarify 流程整理为 PRD 级文档
@@ -189,6 +195,7 @@ speccore analyze --dev-guide         # 分析同时生成 DEV_GUIDE.md 开发者
 > - `--apply @file.json`: Windows 兼容方式，从文件读取 JSON 避免 shell 转义问题
 
 **分阶段分析架构(v6.64.0)**:
+- **Overview 阶段(v8.3.177+)**: CLI 扫描 `_matrix.md` 元数据 → 生成迭代总览（40-80 行），建立全局视角
 - **Phase 1**: 生成全局文档(overview/REQUIREMENT.md、ANALYSIS.md、DEPS.md 等)，建立跨端统一视角
 - **Phase 2**: 生成各端专属文档({端}/TECH.md、TEST.md、UI_SPEC.md 等)，参考全局上下文后注入端专属专业维度
 - **自动触发**: CLI 在 Phase 1 完成后,检测到 ≥2 个端时自动输出 Phase 2 prompt,无需用户手动执行两次命令
@@ -424,8 +431,14 @@ speccore iteration split -i Q1 --force
 ### 📐 plan — 执行计划 🔒 AI 命令
 ```bash
 speccore plan [--all] [--task <id>] [--interactive]
+speccore plan --prompt -I Iteration-001    # 生成执行计划 Prompt（v8.3.178+）
 ```
 别名: `pl`
+
+> **v8.3.178+ CLI 算图模式**：任务数 >= 5 时，`plan --prompt` 自动启用 CLI 算图。
+> - CLI 计算：依赖图 → 拓扑排序 → 执行批次 → 关键路径 → 资源冲突检测
+> - AI 决策：基于 100-200 行结构化 JSON，判断优先级冲突、资源冲突、风险
+> - 任务数 < 5 时保持原有模式（路径引用 + 详细文档）
 
 ### ⚡ execute — 开发执行 🔒 AI 命令
 ```bash

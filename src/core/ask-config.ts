@@ -121,7 +121,7 @@ export async function loadAskConfig(): Promise<AskConfig> {
     }
   } catch { /* 静默回退到 ask.json */ }
 
-  // 回退到 ask.json（旧的独立配置）
+  // 回退到 ask.json
   if (source === 'default' && (await pathExists(CONFIG_PATH))) {
     try {
       fileConfig = (await readJson(CONFIG_PATH)) as Partial<AskConfig>;

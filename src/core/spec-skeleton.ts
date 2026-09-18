@@ -1181,7 +1181,7 @@ export function buildSkeletonFileList(
     }
   }
 
-  // v8.3.171+: 删除旧结构兼容（无功能模块前缀的 platform 文档）
+  // 已收敛路径：所有 platform 文档必须在功能模块目录下（020-specs/{feature}/{端}/）
   // 当前态：所有 platform 文档必须在功能模块目录下（020-specs/{feature}/{端}/）
 
   text += `> 完整路径前缀: \`${specDir}/\`\n`;

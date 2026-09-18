@@ -720,7 +720,7 @@ async function findAllMarkdownFiles(dir: string): Promise<string[]> {
 // ── 辅助函数 ──
 
 /**
- * 获取全局文档根目录（优先迭代级 020-specs/overview/，回退旧版 global/，再回退项目级 .speccore/GLOBAL/）
+ * 获取全局文档根目录（优先迭代级 020-specs/overview/，回退 global/，再回退项目级 .speccore/GLOBAL/）
  */
 async function resolveGlobalDir(iterDir: string): Promise<string> {
   const iterOverview = join(iterDir, '020-specs', 'overview');

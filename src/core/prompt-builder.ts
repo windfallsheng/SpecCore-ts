@@ -259,7 +259,7 @@ async function loadKeyConstraints(cwd: string): Promise<string[]> {
 }
 
 /**
- * 定位 REQ.md 实际路径（支持新旧结构）
+ * 定位 REQ.md 实际路径（支持多种结构）
  */
 async function resolveReqPath(cwd: string, taskDir: string): Promise<string | null> {
   const paths = [
@@ -503,7 +503,6 @@ async function loadExtraSpecs(
         );
       }
     }
-    // v8.3.121+: 已移除 10-backend/20-frontend 旧结构回退，端平铺结构 {platform}/{subtask}/ 为标准
   }
 
   for (const f of files) {
@@ -525,9 +524,21 @@ async function loadExtraSpecs(
       if (content.trim().length <= 50 || content.trim().match(/^#+\s*待填充|^<!--\s*AI-FILL\s*-->$/m)) {
         continue;
       }
-      // 单文件大小限制
-      if (content.length > MAX_PER_FILE) {
-        content = content.slice(0, MAX_PER_FILE) + `\n\n> ... (已截断，原文件 ${rawContent.length} 字，完整内容请 Read: ${fullPath})`;
+      // v8.3.181+: 按文件类型细分预算
+      const fileName = basename(f.path);
+      const budget = getFileBudget(fileName);
+      if (content.length > budget.limit) {
+        if (budget.mode === 'error') {
+          logger.error(`[prompt-builder] ${fileName} 超过预算上限 (${content.length} > ${budget.limit})。`);
+          logger.error(`  该文件属于"必须完整"类型，不会被截断。建议精简方式：`);
+          logger.error(`  - 删除过时的注释和示例代码`);
+          logger.error(`  - 将详细说明链接到外部文档`);
+          logger.error(`  - 使用表格代替冗长的列表`);
+          logger.error(`  - 精简后重新执行: speccore execute --resume`);
+          // 不截断，保留完整内容
+        } else {
+          content = content.slice(0, budget.limit) + `\n\n> ... (已截断，原文件 ${rawContent.length} 字，预算上限 ${budget.limit}，完整内容请 Read: ${fullPath})`;
+        }
       }
       // 总大小限制
       if (totalChars + content.length > MAX_TOTAL) {
@@ -565,8 +576,10 @@ async function loadExtraSpecs(
       if (content.trim().length <= 50 || content.trim().match(/^#+\s*待填充|^<!--\s*AI-FILL\s*-->$/m)) {
         continue;
       }
-      if (content.length > MAX_PER_FILE) {
-        content = content.slice(0, MAX_PER_FILE) + `\n\n> ... (已截断，原文件 ${content.length} 字)`;
+      // v8.3.181+: 自定义文件使用默认预算
+      const customBudget = getFileBudget(basename(uf.path));
+      if (content.length > customBudget.limit) {
+        content = content.slice(0, customBudget.limit) + `\n\n> ... (已截断，原文件 ${content.length} 字，预算上限 ${customBudget.limit})`;
       }
       if (totalChars + content.length > MAX_TOTAL) {
         const remain = MAX_TOTAL - totalChars;
@@ -634,10 +647,45 @@ async function loadExtraSpecs(
 }
 
 /**
- * v8.3.15+: 扫描用户自定义文档
- * 扫描 00-specs/ 和子任务目录下所有 .md/.yaml/.yml/.json 文件
- * 排除白名单已覆盖的文件和系统目录
+ * v8.3.181+: 扫描用户自定义文档（白名单模式）
+ * 只加载 ALLOWED_EXTRA_FILES 白名单内的文件，防止上下文污染
+ * 白名单外文件将被忽略并输出提示
  */
+// v8.3.182+: 白名单分两级（核心 + 条件）
+// 核心白名单：所有任务都需要
+const CORE_EXTRA_FILES = new Set([
+  'CONTEXT.md',      // 任务上下文（来源追溯 + 关联任务）
+  'ERROR_CODES.md',  // 错误码定义
+]);
+
+// 条件白名单：按平台类型加载
+function getPlatformExtraFiles(platform?: string): Set<string> {
+  if (!platform) return new Set();
+  const p = platform.toLowerCase();
+  if (p.includes('backend') || p.includes('service') || p.includes('api') || p.includes('server')) {
+    return new Set(['SCHEMA.md']);
+  }
+  if (p.includes('web') || p.includes('mobile') || p.includes('h5') || p.includes('frontend') || p.includes('admin')) {
+    return new Set(['COMPONENT_TREE.md', 'ROUTES.md', 'STATE.md']);
+  }
+  return new Set();
+}
+
+// v8.3.181+: 按文件类型细分预算（必须完整 vs 可以截断）
+const FILE_BUDGETS: Record<string, { limit: number; mode: 'error' | 'truncate' }> = {
+  'CONSTITUTION.md': { limit: 6000, mode: 'error' },
+  'REQ.md': { limit: 2000, mode: 'error' },
+  'API_CONTRACT.yaml': { limit: 2000, mode: 'error' },
+  'TASK.md': { limit: 1500, mode: 'truncate' },
+  'TECH.md': { limit: 3000, mode: 'truncate' },
+  'DEV_GUIDE.md': { limit: 2000, mode: 'truncate' },
+};
+const DEFAULT_BUDGET = { limit: 1000, mode: 'truncate' as const };
+
+function getFileBudget(fileName: string): { limit: number; mode: 'error' | 'truncate' } {
+  return FILE_BUDGETS[fileName] ?? DEFAULT_BUDGET;
+}
+
 async function scanUserCustomFiles(
   cwd: string,
   taskDir: string,
@@ -647,8 +695,13 @@ async function scanUserCustomFiles(
   const results: { name: string; path: string }[] = [];
   const validExts = ['.md', '.yaml', '.yml', '.json', '.html', '.htm'];
   const skipDirs = new Set(['.meta', '.git', 'node_modules', 'tests', 'src', 'dist', 'build']);
+  const ignoredFiles: string[] = [];
 
-  // 1. 扫描 00-specs/ 下所有文件（排除已在白名单中的）
+  // v8.3.182+: 合并核心白名单 + 条件白名单
+  const platformExtras = getPlatformExtraFiles(platform);
+  const allowedFiles = new Set([...CORE_EXTRA_FILES, ...platformExtras]);
+
+  // 1. 扫描 00-specs/ 下白名单内的文件
   const specsDir = join(cwd, taskDir, '00-specs');
   try {
     if (await pathExists(specsDir)) {
@@ -657,6 +710,10 @@ async function scanUserCustomFiles(
         if (e.isDirectory()) continue;
         const ext = e.name.slice(e.name.lastIndexOf('.'));
         if (!validExts.includes(ext)) continue;
+        if (!allowedFiles.has(e.name)) {
+          ignoredFiles.push(`00-specs/${e.name}`);
+          continue;
+        }
         const relPath = join('00-specs', e.name);
         const fullPath = join(cwd, taskDir, relPath);
         if (!seenPaths.has(fullPath)) {
@@ -666,7 +723,7 @@ async function scanUserCustomFiles(
     }
   } catch { /* 忽略 */ }
 
-  // 2. 扫描子任务目录下所有文件（递归）
+  // 2. 扫描子任务目录下白名单内的文件（递归）
   if (platform) {
     const platformBase = join(cwd, taskDir, platform);
     try {
@@ -675,16 +732,27 @@ async function scanUserCustomFiles(
         for (const subE of subtaskEntries) {
           if (!subE.isDirectory() || subE.name.startsWith('.')) continue;
           const subtaskDir = join(platformBase, subE.name);
-          await scanDirRecursive(subtaskDir, join(platform, subE.name), results, seenPaths, skipDirs, validExts, cwd, taskDir);
+          await scanDirRecursive(subtaskDir, join(platform, subE.name), results, seenPaths, skipDirs, validExts, cwd, taskDir, ignoredFiles, allowedFiles);
         }
       }
     } catch { /* 忽略 */ }
   }
 
+  // 输出被忽略的文件提示
+  if (ignoredFiles.length > 0) {
+    console.warn(`[prompt-builder] 以下文件不在白名单中，已忽略（如需加载请在 TASK.md 中声明）：`);
+    for (const f of ignoredFiles.slice(0, 10)) {
+      console.warn(`  - ${f}`);
+    }
+    if (ignoredFiles.length > 10) {
+      console.warn(`  ... 还有 ${ignoredFiles.length - 10} 个文件被忽略`);
+    }
+  }
+
   return results;
 }
 
-/** 递归扫描目录，收集用户自定义文档 */
+/** 递归扫描目录，收集用户自定义文档（白名单模式） */
 async function scanDirRecursive(
   dir: string,
   relPrefix: string,
@@ -694,6 +762,8 @@ async function scanDirRecursive(
   validExts: string[],
   cwd: string,
   taskDir: string,
+  ignoredFiles: string[],
+  allowedFiles: Set<string>,
 ): Promise<void> {
   try {
     const entries = await readdir(dir, { withFileTypes: true });
@@ -703,10 +773,14 @@ async function scanDirRecursive(
 
       if (e.isDirectory()) {
         if (skipDirs.has(e.name) || e.name.startsWith('.')) continue;
-        await scanDirRecursive(join(dir, e.name), relPath, results, seenPaths, skipDirs, validExts, cwd, taskDir);
+        await scanDirRecursive(join(dir, e.name), relPath, results, seenPaths, skipDirs, validExts, cwd, taskDir, ignoredFiles, allowedFiles);
       } else if (e.isFile()) {
         const ext = e.name.slice(e.name.lastIndexOf('.'));
         if (!validExts.includes(ext)) continue;
+        if (!allowedFiles.has(e.name)) {
+          ignoredFiles.push(relPath);
+          continue;
+        }
         if (!seenPaths.has(fullPath)) {
           results.push({ name: `用户补充/${relPath}`, path: relPath });
         }
@@ -719,7 +793,7 @@ async function scanDirRecursive(
 // 全量兜底读取（检索不足时，读取所有内容）
 // ═══════════════════════════════════════════════════════════
 
-/** 全量兜底：当统一检索结果不足时，读取任务目录 + 迭代规格 + 关联任务的所有内容 */
+/** 全量兜底：当统一检索结果不足时，读取任务目录 + 迭代规格 + 关联任务的 API 契约（只传契约，不传实现） */
 async function loadAllTaskContext(
   cwd: string, taskDir: string, platform?: string, iteration?: string,
   graph?: KnowledgeGraph | null,
@@ -747,8 +821,22 @@ async function loadAllTaskContext(
       });
     }
     if (content.trim().length <= 50 || content.trim().match(/^#+\s*待填充|^<!--\s*AI-FILL\s*-->$/m)) return;
-    if (content.length > MAX_PER_FILE) {
-      content = content.slice(0, MAX_PER_FILE) + `\n\n> ... (已截断，原文件 ${rawContent.length} 字，完整内容请 Read: ${fullPath})`;
+    // v8.3.181+: 兜底模式也按文件类型检查预算（放宽到 2 倍）
+    const fileName = basename(fullPath);
+    const budget = getFileBudget(fileName);
+    const fallbackLimit = budget.limit * 2;
+    if (content.length > fallbackLimit) {
+      if (budget.mode === 'error') {
+        logger.error(`[prompt-builder] ${fileName} 超过兜底预算上限 (${content.length} > ${fallbackLimit})。`);
+        logger.error(`  该文件属于"必须完整"类型，不会被截断。建议精简方式：`);
+        logger.error(`  - 删除过时的注释和示例代码`);
+        logger.error(`  - 将详细说明链接到外部文档`);
+        logger.error(`  - 使用表格代替冗长的列表`);
+        logger.error(`  - 精简后重新执行: speccore execute --resume`);
+        // 不截断
+      } else {
+        content = content.slice(0, fallbackLimit) + `\n\n> ... (已截断，原文件 ${rawContent.length} 字，兜底预算上限 ${fallbackLimit})`;
+      }
     }
     if (totalChars + content.length > MAX_TOTAL) return;
     totalChars += content.length;
@@ -757,7 +845,7 @@ async function loadAllTaskContext(
 
   // 1. 递归扫描任务目录所有 .md / .yaml 文件
   // 排除自检/审查/产出阶段文件（这些在代码生成后的 verify 阶段才需要）
-  // 排除非代码目录（保留 10-backend/20-frontend 排除项以兼容旧项目数据）
+  // 排除非代码目录（排除 10-backend/20-frontend）
   const CODEGEN_EXCLUDE_DIRS = new Set(['node_modules', '10-backend', '20-frontend', '00-specs', '_shared', '99-artifacts', '.meta']);
   const CODEGEN_EXCLUDE_FILES = new Set(['test.md', 'schema.md', 'review.md', 'changelog.md', 'deploy.md', '.issues.md']);
   const scanTaskDir = async (dir: string, prefix: string) => {
@@ -801,19 +889,28 @@ async function loadAllTaskContext(
             await addFile(join(overviewDir, item.name), `迭代综合规格: ${item.name}`, `020-specs/${GLOBAL_SPECS_DIR}/${item.name}`);
           }
         }
-        // v8.3.21+: 各端规格 — 扫描 020-specs/{feature}/{platform}/ 下的文档
+        // v8.3.179+: 各端规格 — 改为阅读清单模式（不加载全文，只列文件路径）
+        // 避免兜底模式下加载过多其他 feature 的端规格导致上下文爆炸
         if (platform) {
           try {
             const features = await parseFeatureList(iterDir);
+            const readingList: string[] = [];
             for (const feature of features) {
               const featurePlatDir = join(specsDir, feature, platform);
               if (await pathExists(featurePlatDir)) {
                 const platItems = await readdir(featurePlatDir, { withFileTypes: true });
                 for (const item of platItems) {
                   if (!item.name.endsWith('.md') || isTimestampBackup(item.name)) continue;
-                  await addFile(join(featurePlatDir, item.name), `${feature}-${platform}端规格: ${item.name}`, `020-specs/${feature}/${platform}/${item.name}`);
+                  readingList.push(`- \`020-specs/${feature}/${platform}/${item.name}\` — ${feature} ${platform}端规格`);
                 }
               }
+            }
+            if (readingList.length > 0) {
+              extras.push({
+                name: '📚 迭代层端级规格阅读清单（兜底模式）',
+                path: 'reading-list.md',
+                content: `## 📚 迭代层端级规格阅读清单\n> 以下文档与当前任务相关，如需深入了解请按需 Read 对应文件。\n\n${readingList.join('\n')}\n`,
+              });
             }
           } catch { /* ignore */ }
         }
@@ -821,7 +918,8 @@ async function loadAllTaskContext(
     }
   }
 
-  // 3. 关联任务的 00-specs/（从知识图谱获取依赖任务）
+  // 3. 关联任务的 API 契约（从知识图谱获取依赖任务）
+  // v8.3.179+: 只传契约，不传实现 —— 关联任务不再加载 00-specs/ 下的 REQ.md/TECH.md 等
   if (graph) {
     const relatedIds: string[] = [];
     for (const rel of graph.relations) {
@@ -834,15 +932,14 @@ async function loadAllTaskContext(
       const iterDir = join(cwd, `Iteration-${iteration}`);
       const tasksDir = join(iterDir, '030-tasks');
       for (const relId of uniqueRelated.slice(0, 3)) {
-        const relTaskDir = join(tasksDir, relId, '00-specs');
-        if (await pathExists(relTaskDir)) {
-          try {
-            const relItems = await readdir(relTaskDir, { withFileTypes: true });
-            for (const item of relItems) {
-              if (!item.name.endsWith('.md') || isTimestampBackup(item.name)) continue;
-              await addFile(join(relTaskDir, item.name), `关联任务 ${relId}: ${item.name}`, `030-tasks/${relId}/00-specs/${item.name}`);
-            }
-          } catch { /* 跳过 */ }
+        const relTaskDir = join(tasksDir, relId);
+        // 优先读取 _shared/API_CONTRACT.yaml，回退到 00-specs/API_CONTRACT.yaml
+        const contractPath = join(relTaskDir, '_shared', 'API_CONTRACT.yaml');
+        const fallbackContractPath = join(relTaskDir, '00-specs', 'API_CONTRACT.yaml');
+        if (await pathExists(contractPath)) {
+          await addFile(contractPath, `关联任务 ${relId} API 契约`, `030-tasks/${relId}/_shared/API_CONTRACT.yaml`);
+        } else if (await pathExists(fallbackContractPath)) {
+          await addFile(fallbackContractPath, `关联任务 ${relId} API 契约`, `030-tasks/${relId}/00-specs/API_CONTRACT.yaml`);
         }
       }
     }
@@ -1142,10 +1239,10 @@ export async function loadGlobalContext(
   }
 
   // v8.3.132+: 关键全局文件自动全文注入
-  // 支持单文件（兼容旧路径）+ BUSINESS_RULES/ 目录（推荐，支持按 platform 过滤）
+  // 支持单文件（单文件模式）+ BUSINESS_RULES/ 目录（推荐，支持按 platform 过滤）
   if (!ctx.keyFileSummaries) ctx.keyFileSummaries = [];
 
-  // 1. 兼容旧路径：GLOBAL/BUSINESS_RULES.md
+  // 1. 单文件模式：GLOBAL/BUSINESS_RULES.md
   const legacyPath = join(globalDir, 'BUSINESS_RULES.md');
   if (await pathExists(legacyPath)) {
     try {
@@ -2253,7 +2350,7 @@ export async function buildPrompt(
       lines.push('');
       lines.push('**重要**：输出文件时，路径必须以工程标识开头。');
       lines.push('例如：`booking-service/src/main/java/...` 会写入 `../outputs-project/backend/booking-service/src/main/java/...`');
-      lines.push('如果不以工程标识开头，文件将写入迭代目录（兼容旧行为）。');
+      lines.push('如果不以工程标识开头，文件将写入迭代目录（兜底）。');
       projectPathsInfo = lines.join('\n');
     }
   }

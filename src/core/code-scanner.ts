@@ -734,7 +734,7 @@ export async function loadCodeIndex(): Promise<CodeIndex | null> {
   return null;
 }
 
-// 兼容旧调用
+// 兼容调用
 async function loadIndex(): Promise<CodeIndex | null> {
   return loadCodeIndex();
 }

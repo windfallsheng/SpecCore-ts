@@ -145,7 +145,8 @@ Iteration-NNN-name/            ← 迭代目录
 │   ├── converted/             ← [自动生成] doc2spec 转换后的 MD
 │   ├── features/              ← [手动维护] 按功能模块组织
 │   │   └── {feature}/
-│   │       └── README.md
+│   │       ├── README.md
+│   │       └── _matrix.md     ← [v8.3.177+] 端覆盖矩阵（platforms/dependencies/apis）
 │   ├── prototypes/            ← 原型（HTML/图片/链接，内容不限）
 │   ├── assets/                ← 素材资源
 │   │   ├── extracted/         ← doc2spec 提取的图片/媒体
@@ -158,13 +159,24 @@ Iteration-NNN-name/            ← 迭代目录
 │   ├── REQUIREMENT.md         ← [可选] 主需求文档
 │   └── CLARIFY_REPORT.md      ← [可选] 需求澄清报告
 ├── 020-specs/                 ← 需求分析（analyze 输出）
-│   ├── overview/              ← 全局规格（跨端共享）
-│   │   └── REQUIREMENT.md / ANALYSIS.md / TECH.md / DEV_GUIDE.md ...
+│   ├── overview/              ← [索引类] 迭代级全局规格（描述功能之间的关系）
+│   │   ├── FUNCTION_MAP.md    ← 功能清单（有哪些功能）
+│   │   ├── INTERACTION_MAP.md ← 功能交互图（功能之间怎么交互）
+│   │   ├── PLATFORMS.md       ← 端列表（有哪些端）
+│   │   ├── DEPENDENCY_MAP.md  ← 功能依赖图（谁依赖谁）
+│   │   ├── CLARIFY.md         ← 全局澄清（跨功能共性问题）
+│   │   └── API_CONTRACT.yaml  ← 跨功能接口契约（被 2+ 功能引用的）
 │   ├── {功能模块}/            ← 按功能模块组织
+│   │   ├── overview/          ← [内容类] 该功能的综合规格（描述功能内部细节）
+│   │   │   ├── REQUIREMENT.md ← 该功能的需求（澄清后）
+│   │   │   ├── CLARIFY.md     ← 该功能的澄清（模块特有）
+│   │   │   ├── ANALYSIS.md    ← 该功能的需求分析（⚠️ 禁止放在全局 overview/ 下）
+│   │   │   ├── TECH.md        ← 该功能的综合技术方案
+│   │   │   ├── RISK.md        ← 该功能的风险
+│   │   │   └── DEPS.md        ← 该功能的依赖
 │   │   └── {端名}/            ← 端级规格
 │   │       └── TECH.md / TEST.md / UI_SPEC.md / DEV_GUIDE.md ...
-│   ├── requirements/          ← 黄金需求（clarify 输出，analyze 读取）
-│   ├── PLATFORMS.md           ← 端列表
+│   ├── requirements/          ← [兼容旧路径] 黄金需求（clarify 输出）
 │   └── QUALITY_AUDIT.md       ← 质量审计报告
 ├── 030-tasks/                 ← 开发任务
 │   └── Task-*/                ← 功能模块分组（聚合相关子任务）
@@ -244,7 +256,7 @@ Iteration-NNN-name/            ← 迭代目录
 | `[SPECCORE_PROMPT]` | AI Prompt 块 | 将后续内容作为 Prompt 传给宿主 AI |
 | `[SPECCORE_STEP_DONE]` | 步骤完成 | 当前步骤已完成，需新会话继续 |
 | `[SPECCORE_NEXT_STEP]` | 下一步指令 | 提示下一步骤和继续命令 |
-| `[SPECCORE_SUBAGENT]` | 子 Agent 激活 | v8.3.160+: 指定当前步骤的子 Agent 角色和上下文预算 |
+| `[SPECCORE_SESSION_AGENT]` | 子 Agent 激活 | v8.3.160+: 指定当前步骤的子 Agent 角色和上下文预算 |
 | `[SPECCORE_CONTEXT_SNAPSHOT]` | 上下文快照 | 紧凑上下文，供新会话恢复 |
 | `[SPECCORE_PIPELINE_NEXT]` | Pipeline 下一步 | ⚠️ 已弃用（v8.3.160+ 使用 STEP_DONE） |
 | `[SPECCORE_TASK_SUMMARY]` | 任务总览报告 | 展示任务拆分/执行后的总览报告 |

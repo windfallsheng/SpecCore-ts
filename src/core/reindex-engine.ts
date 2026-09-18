@@ -240,7 +240,7 @@ async function scanIterationLayer(cwd: string, iteration: string): Promise<Layer
         await checkPlatformsConsistency(taskPath, entry.name, result);
       }
     }
-    // 兼容旧布局
+    // 扫描布局
     const rootEntries = await readdir(tasksDir, { withFileTypes: true });
     for (const entry of rootEntries) {
       if (!entry.isDirectory() || !entry.name.startsWith('Task-')) continue;

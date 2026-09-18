@@ -13,7 +13,7 @@
  *   这样所有 Task 共享同一份原型图，不需要重复存放。
  *
  * 依赖: pandoc (macOS: brew install pandoc)
- * 可选: LibreOffice (处理 .doc 旧格式: brew install libreoffice)
+ * 可选: LibreOffice (处理 .doc 格式: brew install libreoffice)
  */
 import { logger, Spinner } from '../utils/logger';
 import { execSync } from 'child_process';
@@ -135,6 +135,7 @@ interface Word2SpecOptions {
   prompt?: boolean;   // --prompt: 输出验证 Prompt 到 stdout
   response?: string;  // --response: 接收 AI 修正后的内容
   classify?: boolean; // --classify: AI 智能分类 → staging/
+  split?: boolean;    // --split: 拆分为功能单元 → features/
 }
 
 export async function doc2specCommand(options: Word2SpecOptions): Promise<void> {
@@ -300,7 +301,7 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
       await writeFile(outputPath, converted);
       spinner.stop('📝 .md 直接导入');
     } else if (ext === 'doc') {
-      // .doc 旧格式 → LibreOffice 转 .docx
+      // .doc 格式 → LibreOffice 转 .docx
       try {
         const tmpDir = tmpdir();
         const sofficeBin = findCommand('libreoffice', customLibreoffice) || 'soffice';
@@ -313,7 +314,7 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
         cleanupFile = sourceFile;
         spinner.stop('📄 .doc → .docx');
       } catch {
-        spinner.fail('需要 LibreOffice 来处理 .doc 旧格式。请安装: brew install libreoffice');
+        spinner.fail('需要 LibreOffice 来处理 .doc 格式。请安装: brew install libreoffice');
         return;
       }
     } else if (ext === 'pdf') {
@@ -448,6 +449,13 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
       logger.info(`  2. 补充接口定义表格`);
       logger.info(`  3. speccore iteration split`);
       logger.info(`  4. speccore execute --task=Task-001 --force`);
+    }
+
+    // ── 功能单元拆分（--split）──
+    if (options.split && !taskId) {
+      logger.info('');
+      logger.info('🔪 开始功能单元拆分...');
+      await splitDocumentToUnits(iterDir, outputPath, platformLabel, basename(options.file));
     }
   } catch (error) {
     spinner.fail(`转换失败: ${error}`);
@@ -776,7 +784,7 @@ async function importExcelBugList(file: string, iteration: string): Promise<void
     const bk = await backupWithTimestamp(taskReqPath);
     if (bk) {
       backups.push(bk);
-      logger.info(`   📦 旧版已备份: ${basename(bk)}`);
+      logger.info(`   📦 已备份: ${basename(bk)}`);
     }
     await writeFile(taskReqPath, reqLines.join('\n'));
     created++;
@@ -799,4 +807,166 @@ async function importExcelBugList(file: string, iteration: string): Promise<void
   logger.info('💡 推荐下一步:');
   logger.info(`   speccore analyze --prompt -I ${iteration}`);
   logger.info(`   speccore execute --prompt -t Task-001 -I ${iteration}`);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 功能单元拆分
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface ScannedUnit {
+  title: string;
+  level: number;
+  startLine: number;
+  endLine: number;
+  sourceSection: string;
+}
+
+/**
+ * 将转换后的文档拆分为功能单元，写入 features/
+ */
+async function splitDocumentToUnits(
+  iterDir: string,
+  outputPath: string,
+  platformLabel: string,
+  sourceFileName: string
+): Promise<void> {
+  const content = await readFile(outputPath, 'utf-8');
+  const units = scanUnits(content);
+
+  if (units.length === 0) {
+    logger.warn('未检测到可拆分的功能单元，跳过拆分');
+    return;
+  }
+
+  logger.info(`🔍 检测到 ${units.length} 个候选功能单元`);
+  for (const u of units) {
+    logger.info(`   • ${u.title}`);
+  }
+
+  const featuresDir = join(iterDir, '010-requirements', 'features');
+  await ensureDir(featuresDir);
+
+  let written = 0;
+  for (const unit of units) {
+    const unitDirName = sanitizeUnitName(unit.title);
+    const unitDir = join(featuresDir, unitDirName);
+    await ensureDir(unitDir);
+    await ensureDir(join(unitDir, '.meta'));
+
+    const unitContent = extractUnitContent(content, unit);
+    const readmePath = join(unitDir, 'README.md');
+    await writeFile(readmePath, unitContent);
+
+    // 来源标记
+    const sourceMeta = `---\norigin: doc2spec\nsource_file: ${sourceFileName}\nsource_section: "${unit.sourceSection}"\nplatform: ${platformLabel}\ncreated_at: ${new Date().toISOString().split('T')[0]}\nstatus: draft\n---\n`;
+    await writeFile(join(unitDir, '.meta', 'source'), sourceMeta);
+    
+    // 端覆盖矩阵（初始值，后续由 analyze / 用户调整）
+    const platforms = platformLabel
+      .split(/[,，;；]/)
+      .map(p => p.trim())
+      .filter(Boolean);
+    const matrixContent = `# ${unit.title} - 端覆盖矩阵\n\nfeature: ${unit.title}\nplatforms:\n${platforms.map(p => `  - ${p}`).join('\n') || '  - backend'}\ndependencies: []\napis: []\n`;
+    await writeFile(join(unitDir, '_matrix.md'), matrixContent);
+    
+    // 初始变更记录
+    const changelogContent = `# ${unit.title} - 变更履历\n\n## v1 - ${new Date().toISOString().split('T')[0]}\n**类型**: 新增\n**来源**: doc2spec --split\n**说明**: 从 ${sourceFileName} 的「${unit.sourceSection}」章节拆分\n`;
+    await writeFile(join(unitDir, 'CHANGELOG.md'), changelogContent);
+
+    written++;
+    logger.info(`   ✅ ${unit.title} → features/${unitDirName}/`);
+  }
+
+  // 更新 features/INDEX.md
+  const featuresIndexPath = join(featuresDir, 'INDEX.md');
+  let featuresIndex = '# 功能单元索引\n\n> 由 doc2spec --split 自动生成\n\n';
+  featuresIndex += '| 功能单元 | 来源章节 | 状态 | 涉及端 |\n';
+  featuresIndex += '| :--- | :--- | :--- | :--- |\n';
+  for (const unit of units) {
+    featuresIndex += `| ${unit.title} | ${unit.sourceSection} | draft | ${platformLabel} |\n`;
+  }
+  await writeFile(featuresIndexPath, featuresIndex);
+
+  logger.success(`✅ 已拆分 ${written} 个功能单元到 features/`);
+  logger.info(`   📂 ${featuresDir}/`);
+}
+
+/**
+ * 扫描 Markdown 内容，识别功能单元边界
+ * 策略：以 ## 级别标题作为功能单元主边界，### 作为子章节
+ */
+function scanUnits(content: string): ScannedUnit[] {
+  const lines = content.split('\n');
+  const units: ScannedUnit[] = [];
+  let currentUnit: ScannedUnit | null = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const h2Match = line.match(/^##\s+(.+)$/);
+    const h3Match = line.match(/^###\s+(.+)$/);
+
+    if (h2Match) {
+      // 结束上一个单元
+      if (currentUnit) {
+        currentUnit.endLine = i - 1;
+        units.push(currentUnit);
+      }
+      // 开始新单元
+      currentUnit = {
+        title: h2Match[1].trim(),
+        level: 2,
+        startLine: i,
+        endLine: lines.length - 1,
+        sourceSection: h2Match[1].trim(),
+      };
+    } else if (h3Match && !currentUnit) {
+      // 如果文档以 ### 开头（没有 ##），以 ### 作为单元边界
+      currentUnit = {
+        title: h3Match[1].trim(),
+        level: 3,
+        startLine: i,
+        endLine: lines.length - 1,
+        sourceSection: h3Match[1].trim(),
+      };
+    }
+  }
+
+  // 结束最后一个单元
+  if (currentUnit) {
+    currentUnit.endLine = lines.length - 1;
+    units.push(currentUnit);
+  }
+
+  // 过滤掉非功能单元的章节（如"附录"、"术语表"等）
+  const skipPatterns = /^(附录|术语表|参考文献|目录|引言|概述|总结|致谢|版权声明|修订记录|changelog|glossary|references|table of contents|introduction|overview|summary|acknowledgments)/i;
+  return units.filter(u => !skipPatterns.test(u.title));
+}
+
+/**
+ * 提取指定单元的内容
+ */
+function extractUnitContent(content: string, unit: ScannedUnit): string {
+  const lines = content.split('\n');
+  const unitLines = lines.slice(unit.startLine, unit.endLine + 1);
+
+  // 如果单元内容太短（<10行），可能是一个无效单元，返回原始内容
+  if (unitLines.length < 10) {
+    return unitLines.join('\n');
+  }
+
+  // 构建单元文档
+  let result = `# ${unit.title}\n\n`;
+  result += `> 来源: ${unit.sourceSection}\n> 生成时间: ${new Date().toISOString().split('T')[0]}\n\n`;
+  result += unitLines.join('\n');
+  return result;
+}
+
+/**
+ * 清理单元名称，用于目录名
+ */
+function sanitizeUnitName(name: string): string {
+  return name
+    .replace(/[^a-zA-Z0-9\u4e00-\u9fa5\-_]/g, '')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 50) || 'untitled';
 }

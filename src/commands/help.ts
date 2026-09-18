@@ -303,7 +303,7 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     ],
   },
   synthesize: {
-    desc: '→ analyze --full（同一命令，向后兼容别名）',
+    desc: '→ analyze --full（同一命令）',
     params: [
       { flag: '-I, --iteration <iteration>', meaning: '目标迭代' },
       { flag: '--full', meaning: '全自动三阶段：逐端分析 → 跨端综合 → 功能单元合成' },
@@ -312,7 +312,7 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     examples: [
       'speccore analyze --full -I Q2',
       'speccore analyze --phase 1 -I Q2',
-      'speccore synthesize -I Q2  # 向后兼容',
+      'speccore synthesize -I Q2',
     ],
   },
   refresh: {

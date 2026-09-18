@@ -15,7 +15,7 @@ export async function detectConflicts(
   taskId: string,
   codePath: string,
   taskDir: string,
-  options?: { timeout?: number; withAgents?: boolean; projectRoot?: string }
+  options?: { timeout?: number; withAgents?: boolean; projectRoot?: string; strict?: boolean }
 ): Promise<ConflictDetectionResult> {
   const gateResult = await runQualityGate(taskId, codePath, taskDir, options);
 

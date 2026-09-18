@@ -16,6 +16,12 @@ import { nextPlanId } from '../core/global-counters';
 // v8.3.169+: Qoder SDK 子 Agent 调度
 import { dispatchSubagent } from '../core/agent-adapter';
 import type { AgentContext } from '../core/agent-adapter';
+// v8.3.178+: 计划阶段 CLI 算图（上下文控制）
+import {
+  buildPlanGraph,
+  generatePlanJson,
+  buildPlanDecisionPrompt,
+} from '../core/plan-graph';
 
 function promptUser(question: string): Promise<string> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -49,6 +55,40 @@ export async function planCommand(options: PlanOptions): Promise<void> {
   if (options.prompt) {
     const iter = options.iteration || await getDefaultIteration();
     const taskList = await scanTasks(iter);
+
+    // v8.3.178+: CLI 先算图，AI 后决策（上下文控制）
+    // 当任务数 >= 5 时，使用结构化 JSON 模式；否则保持原有详细模式
+    const USE_GRAPH_MODE = taskList.length >= 5;
+    if (USE_GRAPH_MODE) {
+      const graph = buildPlanGraph(taskList);
+      const planJson = generatePlanJson(graph);
+      const decisionPrompt = buildPlanDecisionPrompt(planJson);
+
+      logger.info(`📊 CLI 算图完成: ${taskList.length} 个任务 → ${graph.batches.length} 个批次`);
+      if (graph.conflicts.length > 0) {
+        logger.info(`   ⚠️ 检测到 ${graph.conflicts.length} 个冲突`);
+        for (const c of graph.conflicts) {
+          logger.info(`      • ${c.description}`);
+        }
+      }
+      logger.info(`   📈 关键路径: ${graph.criticalPath.join(' → ')}`);
+      logger.info(`   ⏱️  总工期: ${graph.totalDuration} 小时`);
+      logger.info('');
+      logger.info('💡 已将 CLI 计算结果注入 Prompt，AI 只需做判断和决策');
+      logger.info('');
+
+      const subagentOutput = [
+        `[SPECCORE_SESSION_AGENT: schedule-planner]`,
+        `[SPECCORE_CONTEXT_BUDGET: 8000]`,
+        `[SPECCORE_CONTEXT_TYPE: plan-graph]`,
+        ``,
+        decisionPrompt,
+      ].join('\n');
+      process.stdout.write(subagentOutput);
+      process.exitCode = 10;
+      return;
+    }
+
     const taskNames = taskList.map(t => t.id.replace(/^Task-/, '')).join(',');
     const prompt = await buildPrompt('plan', { iteration: iter, task: taskNames || undefined });
     let promptText = formatPrompt(prompt);
@@ -184,7 +224,7 @@ export async function planCommand(options: PlanOptions): Promise<void> {
     }
 
     const subagentOutput = [
-      `[SPECCORE_SUBAGENT: schedule-planner]`,
+      `[SPECCORE_SESSION_AGENT: schedule-planner]`,
       `[SPECCORE_CONTEXT_BUDGET: 12000]`,
       `[SPECCORE_CONTEXT_TYPE: full]`,
       ``,

@@ -172,8 +172,8 @@ export async function parseFeatureList(iterDir: string): Promise<string[]> {
 }
 
 /**
- * v8.3.17+: 检测 020-specs/ 是否为旧结构（端平铺结构）
- * 旧结构特征：根目录下存在端名目录（如 api/、web/、h5/）
+ * v8.3.17+: 检测 020-specs/ 结构检测
+ * 历史结构特征：根目录下存在端名目录（如 api/、web/、h5/）
  * 新结构特征：根目录下是功能模块目录（如 用户管理/、订单系统/）
  */
 export async function isLegacySpecDir(specDir: string): Promise<boolean> {
@@ -184,7 +184,7 @@ export async function isLegacySpecDir(specDir: string): Promise<boolean> {
     const entries = await readdir(specDir, { withFileTypes: true });
     for (const entry of entries) {
       if (entry.isDirectory() && platformSet.has(entry.name)) {
-        return true; // 发现端目录 → 旧结构
+        return true; // 发现端目录 → 历史结构
       }
     }
   } catch { /* ignore */ }
@@ -242,7 +242,7 @@ export async function parsePlatformList(): Promise<string[]> {
   if (platforms.size > 0) return [...platforms];
 
   // 2. 回退：解析「工程标识」列（第一列）—— v7.5.1+ 修复
-  // 旧版读「对应需求端」列返回中文值（如"后台管理端"），但目录名用的是工程标识（如 admin-web）
+  // 读取「对应需求端」列返回中文值（如"后台管理端"），但目录名用的是工程标识（如 admin-web）
   // 现在改为读「工程标识」列，确保返回值与目录名一致
   let headerIdx = -1;
   for (let i = 0; i < lines.length; i++) {
@@ -351,8 +351,8 @@ export interface ProjectInfo {
   projectName: string;      // 项目名称（第4列）
   projectDesc: string;      // 项目描述（第5列）
   srcPath: string;          // 工程源码路径
-  gitRepo: string;          // Git 仓库（向后兼容旧格式）
-  branch: string;           // 默认分支（向后兼容旧格式）
+  gitRepo: string;          // Git 仓库 
+  branch: string;           // 默认分支 
   platform: string;         // 涉及需求端：需求文档名称/标识，仅作 AI 参考
   notes: string;            // 备注
 }
@@ -371,8 +371,8 @@ export async function parseProjectInfo(): Promise<Map<string, ProjectInfo>> {
   let projNameColIdx = -1;   // 项目名称列
   let projDescColIdx = -1;   // 项目描述列
   let pathColIdx = -1;
-  let gitColIdx = -1;        // 向后兼容旧格式
-  let branchColIdx = -1;     // 向后兼容旧格式
+  let gitColIdx = -1;       // Git/分支列
+  let branchColIdx = -1;    // Git/分支列
   let platformColIdx = -1;   // 涉及需求端列
   let notesColIdx = -1;      // 备注列
   const result = new Map<string, ProjectInfo>();
@@ -415,7 +415,7 @@ export async function parseProjectInfo(): Promise<Map<string, ProjectInfo>> {
         h === '源码路径' || h === '工程源码路径' || h === '工程路径' ||
         h.includes('源码路径') || h.includes('工程路径')
       );
-      // Git 列：向后兼容旧格式（项目信息表中含 Git 列的情况）
+     // Git 列
       gitColIdx = cells.findIndex(h =>
         h === 'Git 仓库' || h === 'Git' || h.includes('Git')
       );
@@ -460,12 +460,12 @@ export async function parseProjectInfo(): Promise<Map<string, ProjectInfo>> {
 }
 
 /**
- * 根据端名获取实际的工程路径（v6.49.6+）
+ * 根据端名获取实际的工程路径
  * 用于 execute 命令确定代码输出位置
  *
  * 匹配顺序：
  * 1. 精确匹配工程标识（name 列）
- * 2. 回退匹配旧格式「对应端」列（向后兼容，v8.3.107+ 新格式中「涉及需求端」为需求文档名，不参与匹配）
+ * 2. 回退匹配「对应端」列（仅匹配工程标识）
  */
 export async function getProjectPathForPlatform(platform: string): Promise<string | null> {
   const projectInfoMap = await parseProjectInfo();
@@ -473,7 +473,7 @@ export async function getProjectPathForPlatform(platform: string): Promise<strin
   if (projectInfoMap.has(platform)) {
     return projectInfoMap.get(platform)!.srcPath || null;
   }
-  // 再回退匹配旧格式「对应端」列（向后兼容）
+ // 再匹配「涉及需求端」列
   for (const [, info] of projectInfoMap) {
     if (info.platform === platform || info.platform.split(',').map(p => p.trim()).includes(platform)) {
       return info.srcPath || null;

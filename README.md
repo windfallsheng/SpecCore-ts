@@ -53,10 +53,12 @@ speccore dashboard                                                             #
 ## 核心流水线 🔒 AI 命令
 
 ```
-init → doc2spec → analyze → split → plan → execute → pr → done → spec2doc
+init → doc2spec → analyze(overview) → analyze(功能单元) → split → plan → execute → pr → done → spec2doc
                    └─ .issues.md ← 问题发现 ── → AI 辅助修复
                    └─ .needs-retry ← 失败标记 ── → execute --resume
 ```
+
+> **v8.3.177+ 新增 `analyze --scope=overview`**：在逐个分析功能单元前，CLI 先扫描 `_matrix.md` 元数据生成迭代总览（40-80 行），让 AI 建立全局视角。
 
 ## 命令列表
 
@@ -83,7 +85,9 @@ Iteration-001-meeting/
 │   ├── sources/                ← [只读] 原始 PRD/Word/PDF
 │   ├── converted/              ← [自动生成] doc2spec 转换后的 MD
 │   ├── features/               ← [手动维护] 按功能模块组织
-│   │   └── {feature}/README.md
+│   │   └── {feature}/
+│   │       ├── README.md
+│   │       └── _matrix.md      ← [v8.3.177+] 端覆盖矩阵（platforms/dependencies/apis）
 │   ├── prototypes/             ← 原型（HTML/图片/链接）
 │   └── assets/                 ← 素材（extracted/）
 ├── 020-specs/                  ← analyze 输出（三层架构 v8.3.17+）

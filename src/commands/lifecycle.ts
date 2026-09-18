@@ -11,7 +11,7 @@ import { resolveTask, formatResolveResult } from '../core/resolver';
 import { showNextSteps } from '../core/next-steps';
 
 /**
- * 解析任务目录基础路径：优先 030-tasks/，兼容旧布局（迭代根目录）
+ * 解析任务目录基础路径：优先 030-tasks/，扫描任务目录
  */
 async function resolveTaskBase(iterDir: string): Promise<string> {
   const tasksDir = join(iterDir, '030-tasks');
@@ -85,7 +85,7 @@ export async function lifecycleCommand(options: LifecycleOptions): Promise<void>
 
   const iterDir = await getIterationDir(iteration);
   const taskRoot = await resolveTaskBase(iterDir);
-  // 优先 00-specs/，兼容旧路径 backend/
+  // 优先 00-specs/，回退 backend/
   const taskDir = join(taskRoot, task.id, '00-specs');
   const legacyTaskDir = join(taskRoot, task.id, 'backend');
   const taskMdPath = join(taskDir, 'TASK.md');

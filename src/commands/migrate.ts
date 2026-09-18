@@ -120,7 +120,7 @@ export async function migrateTasks(projectRoot: string, iterationName: string, o
       const backupPath = await backupDirWithTimestamp(destPath);
       if (backupPath) {
         backups.push(backupPath);
-        logger.info(`   📦 旧版已备份: ${backupPath.split('/').pop()}`);
+        logger.info(`   📦 已备份: ${backupPath.split('/').pop()}`);
       }
       await remove(destPath);
     }
@@ -153,14 +153,14 @@ export async function migrateTasks(projectRoot: string, iterationName: string, o
     logger.info('   💡 如不再需要可手动删除');
   }
   
-  // 清理 030-tasks/ 根目录下的旧版 Task-* 目录（迁移后残留）
+  // 清理 030-tasks/ 根目录下的历史 Task-* 目录
   if (migrated > 0) {
     const tasksEntries = await readdir(tasksDir, { withFileTypes: true });
     for (const entry of tasksEntries) {
       if (entry.isDirectory() && entry.name.match(/^Task-\d+(-[a-z0-9]+)*$/i)) {
         const oldPath = join(tasksDir, entry.name);
         await remove(oldPath);
-        logger.info(`🧹 清理旧版残留: 030-tasks/${entry.name}/`);
+        logger.info(`🧹 清理历史残留: 030-tasks/${entry.name}/`);
       }
     }
   }

@@ -452,9 +452,9 @@ export class HeadlessAdapter implements AgentAdapter {
     const config = this.registry.get(ctx.subagent);
     const lines: string[] = [];
 
-    lines.push(`[SPECCORE_SUBAGENT: ${ctx.subagent}]`);
+    lines.push(`[SPECCORE_SESSION_AGENT: ${ctx.subagent}]`);
     if (config) {
-      lines.push(`[SPECCORE_SUBAGENT_DESC: ${config.description}]`);
+      lines.push(`[SPECCORE_SESSION_AGENT_DESC: ${config.description}]`);
     }
     lines.push(`[SPECCORE_CONTEXT_BUDGET: ${ctx.contextBudget}]`);
     lines.push(`[SPECCORE_CONTEXT_TYPE: ${ctx.contextType}]`);
@@ -668,7 +668,7 @@ function getQoderSdkAdapter(): QoderSdkAdapter {
  * 调度子 Agent 执行任务
  *
  * - Qoder 环境：通过 @qoder-ai/qoder-agent-sdk 直接调用
- * - 其他环境：返回 null（由外层 AI 通过 [SPECCORE_SUBAGENT] 标记接管）
+ * - 其他环境：返回 null（由外层 AI 通过 [SPECCORE_SESSION_AGENT] 标记接管）
  */
 export async function dispatchSubagent(
   ctx: AgentContext,
@@ -728,5 +728,5 @@ export function createAgentAdapter(mode?: AgentAdapterMode): AgentAdapter {
   }
 }
 
-// 默认导出 HeadlessAdapter（向后兼容：prepareContext 阶段所有工具通用）
+// 默认导出 HeadlessAdapter（prepareContext 阶段所有工具通用）
 export const defaultAdapter = new HeadlessAdapter();

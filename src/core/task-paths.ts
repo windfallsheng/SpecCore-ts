@@ -30,15 +30,15 @@ export function getTaskRelativePath(taskId: string): string {
 }
 
 /**
- * 在 030-tasks/ 下递归查找 Task 目录（兼容新旧布局 + 子任务目录）
- * 旧布局: 030-tasks/Task-001/
+ * 在 030-tasks/ 下递归查找 Task 目录（支持子任务目录）
+ * 布局: 030-tasks/Task-001/
  * 新布局: 030-tasks/feature/Task-001-slug/
  * 子任务: 030-tasks/feature/Task-001/{platform}/Task-001-platform/
  */
 export async function findTaskDir(tasksRoot: string, taskId: string): Promise<string | null> {
   if (!(await pathExists(tasksRoot))) return null;
 
-  // 1. 先查旧布局: 030-tasks/Task-NNN/
+  // 1. 先查布局: 030-tasks/Task-NNN/
   const legacyPath = join(tasksRoot, taskId);
   if (await pathExists(legacyPath)) return legacyPath;
 

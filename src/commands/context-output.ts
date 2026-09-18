@@ -53,7 +53,7 @@ export async function contextCommand(options: ContextOptions): Promise<void> {
   if (!taskEntry) { logger.error(`Task not found: ${taskId}`); return; }
 
   const taskBase = join(iterDir, taskEntry.name);
-  // 新结构: 00-specs/ 优先，旧结构: backend/ 回退
+  // 新结构: 00-specs/ 优先，backend/ 回退
   const specsDir = join(taskBase, '00-specs');
   const backendDir = (await pathExists(join(specsDir, 'REQ.md'))) ? specsDir : join(taskBase, 'backend');
   const sharedDir = join(taskBase, '_shared');

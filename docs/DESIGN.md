@@ -165,9 +165,11 @@ PATTERNS/
 - **特化版本解析**：`product-analyst` → `product-analyst-backend`（platform）→ `product-analyst-finance`（industry）的回退链
 - **条件过滤**：支持简单表达式（`project.securityLevel > 2`、`project.industry == 'finance'`）
 
-**已覆盖阶段** (v8.3.160+ 子 Agent 隔离架构):
+**已覆盖阶段** (v8.3.177+ 子 Agent 隔离架构):
 | 命令 | 阶段 | 角色 | 上下文预算 |
 |------|------|------|:---:|
+| `analyze` | overview-skeleton | spec-analyzer | 6K |
+| `analyze` | overview-full | spec-analyzer | 8K |
 | `analyze` | clarify-product | product-analyst | 4K |
 | `analyze` | clarify-interaction | interaction-designer | 4K |
 | `analyze` | clarify-security | security-reviewer (conditional) | 3K |
@@ -852,6 +854,146 @@ cache/iterations/Q2/
 
 **初始化行为**：
 `speccore init` 自动创建 `.speccore/templates/{global,iteration,task}/` 三个空目录，并写入 `README.md` 说明用法。
+
+### 1.5.18 上下文控制架构（v8.3.177+ — v8.3.179+）
+
+**核心问题**：随着项目规模增长，AI 的上下文窗口被无限膨胀的文档淹没。一个中型项目（8 个任务 × 5 个端）的分析阶段可能产生 30000+ 字的规格文档，全部塞进 Prompt 既不现实也无必要。
+
+**解决原则**：CLI 做确定性计算，AI 只做判断和生成。用结构化元数据替代自然语言文档，用阅读清单替代全文预加载。
+
+---
+
+#### 元数据基础设施（v8.3.177+）
+
+**功能单元端覆盖矩阵**（`_matrix.md`）：
+
+每个功能单元在 `010-requirements/features/{feature}/_matrix.md` 中维护元数据：
+
+```yaml
+feature: 用户认证
+platforms:
+  - booking-service
+  - h5-mobile
+  - admin-web
+dependencies:
+  - 用户管理
+apis:
+  - POST /api/v1/auth/login
+  - POST /api/v1/auth/refresh
+```
+
+**扫描器**（`src/core/feature-metadata.ts`）：
+- 扫描所有 `_matrix.md`，提取端覆盖、依赖关系、跨功能接口
+- 计算端覆盖率、识别跨功能 API 冲突
+- 输出 50-80 行的结构化 JSON，作为总览生成的输入
+
+---
+
+#### 总览两阶段生成（v8.3.177+）
+
+在逐个分析功能单元之前，先生成迭代级总览，让 AI 建立全局视角：
+
+```
+Phase 1: 骨架总览（skeleton）
+  → 输入: feature-metadata JSON（50-80 行）
+  → 输出: 功能地图 + 端覆盖矩阵 + 跨功能接口清单
+  → 长度: 40-60 行
+
+Phase 2: 完整总览（full）
+  → 输入: skeleton + 已分析功能单元的摘要
+  → 输出: 系统架构 + 数据流 + 技术选型 + 风险矩阵
+  → 长度: 60-80 行
+```
+
+```bash
+speccore analyze --scope=overview --phase=skeleton -I Iteration-001
+speccore analyze --scope=overview --phase=full -I Iteration-001
+```
+
+**关键约束**：总览只描述"有哪些功能和端"，不复制功能单元的内容。功能单元的详细规格留在各自目录中，按需读取。
+
+---
+
+#### 计划阶段 CLI 算图（v8.3.178+）
+
+**核心原则**：依赖图、拓扑排序、关键路径、冲突检测由 CLI 计算，AI 只做判断。
+
+```
+CLI 算图流程:
+  1. 扫描 Task 目录，提取元数据（depends_on、platform、estimated_hours、assignee）
+  2. 构建有向依赖图
+  3. 拓扑排序 → 执行批次
+  4. 计算关键路径（最长依赖链）
+  5. 检测资源冲突（同一人在同一批次有多个任务）
+  6. 生成 100-200 行结构化 JSON
+
+AI 决策:
+  → 输入: CLI 计算的 JSON
+  → 判断: 优先级冲突、资源冲突、风险、批次大小调整
+  → 输出: 执行计划（PLAN.md）
+```
+
+```bash
+speccore plan --prompt -I Iteration-001
+# 任务数 >= 5 时自动启用 CLI 算图模式
+# 任务数 < 5 时保持原有详细模式（路径引用）
+```
+
+**上下文对比**：
+
+| 模式 | 输入大小 | 内容 |
+|:---|:---|:---|
+| 旧模式 | 3000+ 行 | 所有任务的 REQ.md/TECH.md 路径和摘要 |
+| CLI 算图模式 | 100-200 行 | 结构化 JSON（任务列表、依赖图、批次、关键路径、冲突） |
+
+---
+
+#### 执行阶段只传契约（v8.3.178+ — v8.3.179+）
+
+**核心规则**：相邻任务和上游任务只传 `API_CONTRACT.yaml`，不加载 REQ.md/TECH.md/DEV_GUIDE.md。
+
+**执行时上下文加载策略**：
+
+| 来源 | 加载内容 | 限制 |
+|:---|:---|:---|
+| 当前任务 | 00-specs/REQ.md、TECH.md、DEV_GUIDE.md、SCHEMA.md | MAX_PER_FILE=2000, MAX_TOTAL=8000 |
+| 同一 Task 其他端 | 仅 API_CONTRACT.yaml | 最多 400 字/端 |
+| 上游依赖任务 | 仅 API_CONTRACT.yaml（_shared/ 优先） | 最多 400 字/任务 |
+| 迭代全局 | 020-specs/overview/*.md | MAX_PER_FILE=8000 |
+| 020-specs 端规格 | 阅读清单模式（标题+章节+摘要） | 每个文件 ~100 字 |
+| 兜底模式（检索不足时） | 任务目录全文 + 关联任务 API_CONTRACT.yaml + 端规格阅读清单 | MAX_TOTAL=20000 |
+
+**阅读清单模式**（v8.3.126+）：
+
+`020-specs/{feature}/{platform}/` 下的端级规格不直接加载全文，而是生成阅读清单：
+
+```markdown
+## 迭代层端级规格阅读清单
+> 以下文档与当前任务相关，如需深入了解请按需 Read 对应文件。
+
+### user-auth/TECH.md
+- **文件**: `Iteration-001/020-specs/user-auth/booking-service/TECH.md`
+- **标题**: 用户认证模块技术规格
+- **章节**: 接口设计 | 数据模型 | 业务规则 | 错误处理 | 部署清单
+- **摘要**: 本模块基于 JWT + RBAC 实现用户认证...
+```
+
+---
+
+#### 跨阶段上下文传递
+
+**传递摘要（Handoff）**：阶段之间只传递精简摘要，不传递完整输出。
+
+| 阶段 | 传递给下一阶段的内容 |
+|:---|:---|
+| overview（骨架） | 功能地图 + 端覆盖矩阵 |
+| overview（完整） | 系统架构摘要 + 跨功能接口清单 |
+| analyze（功能单元） | 该单元的 REQ/TECH/TEST 规格 |
+| split | 任务列表 + 依赖关系 + 预估工时 |
+| plan | 执行批次 + 关键路径 + 冲突列表 |
+| execute | 子任务 TASK.md + API_CONTRACT.yaml + 相关契约 |
+
+**会话边界**：每个 Pipeline 阶段 = 独立 AI 会话，完成后关闭。新会话通过 `--resume` 恢复，只加载当前阶段的必要上下文。
 
 ---
 
@@ -6090,7 +6232,8 @@ v8.3.169+ 引入 **Qoder Agent SDK** (`@qoder-ai/qoder-agent-sdk`)，实现真�
 │  ├─ HeadlessAdapter                                          │
 │  │   ├─ prepareContext()  → 角色定义 + 上下文裁剪策略文本       │
 │  │   ├─ buildActivationPrompt() → [SPECCORE_SUBAGENT] 标记    │
-│  │   └─ dispatchSubagent() → null（外层 AI 接管）              │
+│  │   └─ dispatchSubagent() → null（外层 AI 接管）              │‘
+
 │  │                                                            │
 │  └─ QoderSdkAdapter                                          │
 │      ├─ prepareContext()  → 同 Headless（Prompt 构建通用）     │

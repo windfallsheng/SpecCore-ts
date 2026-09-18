@@ -96,7 +96,7 @@ export async function iterationFromGlobalCommand(options: IterationFromGlobalOpt
     const backups: string[] = [];
     if (bk) {
       backups.push(bk);
-      logger.info(`   📦 旧版已备份: ${bk.split('/').pop()}`);
+      logger.info(`   📦 已备份: ${bk.split('/').pop()}`);
     }
     await writeFile(reqPath, reqContent);
 

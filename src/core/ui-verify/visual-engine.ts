@@ -243,5 +243,5 @@ function parseVisualModelConfig(
   return { provider: 'qwen-vl', model: 'qwen-vl-max' };
 }
 
-// 重新导出，兼容旧代码
+// 重新导出
 export { isVisualModelAvailable };

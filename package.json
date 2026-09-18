@@ -1,6 +1,6 @@
 {
   "name": "speccore",
-  "version": "8.3.173",
+  "version": "8.3.182",
   "description": "SpecCore - Code by Spec, Not by Vibe.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

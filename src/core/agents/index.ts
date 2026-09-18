@@ -6,7 +6,7 @@
  * 每个角色包含：角色定义、专业 prompt 构建、领域特定检查清单
  */
 
-// ── 向后兼容：保留 v6.83.0 硬编码角色（内部使用，不鼓励新代码直接引用）──
+// ── 保留硬编码角色（内部使用，不鼓励新代码直接引用）──
 export {
   PRODUCT_ANALYST_ROLE,
   INTERACTION_DESIGNER_ROLE,

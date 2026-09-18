@@ -65,7 +65,7 @@ export async function importCommand(options: ImportOptions): Promise<void> {
       return;
     }
 
-    // 兼容旧逻辑
+    // 导入逻辑
     const sources = (options.source || 'all').split(',');
     const results: string[] = [];
 
@@ -128,7 +128,7 @@ async function importToGlobalLayer(
         // 备份旧目录为时间戳格式
         backupPath = await backupDirWithTimestamp(existingDir);
         if (backupPath) {
-          logger.info(`🔁 强制覆盖模式：旧版已备份为 ${backupPath.split('/').pop()}`);
+          logger.info(`🔁 强制覆盖模式：已备份为 ${backupPath.split('/').pop()}`);
         } else {
           logger.info('🔁 强制覆盖模式：已存在项目将被重新扫描替换');
         }
@@ -545,7 +545,7 @@ async function updateGlobalChangelog(description: string, version: string): Prom
 }
 
 // ============================================================
-// 旧版兼容函数
+// 兼容函数
 // ============================================================
 
 async function importCode(sourcePath: string): Promise<string> {

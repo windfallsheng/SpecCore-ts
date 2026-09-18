@@ -529,7 +529,7 @@ function extractConstitutionForAI(content: string): string {
     }
   }
 
-  // 如果没能提取到任何章节，回退到原始过滤逻辑（兼容旧格式）
+  // 如果没能提取到任何章节，回退到原始过滤逻辑（兜底）
   if (result.length === 0) {
     return content.split('\n')
       .filter(l => l.trim() && !l.trim().startsWith('# ') && !l.trim().startsWith('> '))

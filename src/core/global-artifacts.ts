@@ -13,7 +13,7 @@ async function safeWrite(filePath: string, newContent: string): Promise<void> {
       const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
       const backupPath = filePath.replace(/\.md$/, `-${ts}.md`);
       await rename(filePath, backupPath);
-      logger.info(`   ⚠️  冲突: ${join('.', filePath)} → 旧版重命名为 ${join('.', backupPath)}`);
+      logger.info(`   ⚠️  冲突: ${join('.', filePath)} → 重命名为 ${join('.', backupPath)}`);
     }
   }
   await writeFile(filePath, newContent);
