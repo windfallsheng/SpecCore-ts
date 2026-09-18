@@ -2,7 +2,7 @@
  * Post-build script: copy default .md assets to dist/
  * v6.89.0+: AGENTS / RULES / COMMANDS / SKILLS / HOOKS defaults
  */
-const { copySync, pathExistsSync, ensureDirSync } = require('fs-extra');
+const { copySync, pathExistsSync, ensureDirSync, emptyDirSync } = require('fs-extra');
 const { join } = require('path');
 
 const srcDir = join(__dirname, 'src', 'core');
@@ -21,6 +21,8 @@ for (const dir of dirs) {
   const dest = join(distDir, dir);
   if (pathExistsSync(src)) {
     ensureDirSync(dest);
+    // 先清空目标目录，删除 src 已移除的残留文件（如路径统一迁移后留下的旧 md）
+    emptyDirSync(dest);
     copySync(src, dest, { overwrite: true });
     console.log(`  ✅ Copied ${dir}`);
   } else {

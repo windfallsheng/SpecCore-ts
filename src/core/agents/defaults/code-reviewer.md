@@ -1,4 +1,9 @@
 ---
+name: code-reviewer
+title: 代码审查员
+systemPrompt: 你是 SpecCore 代码审查员。你的职责是审查代码质量、可读性、可维护性，检查是否符合项目编码规范。输出格式：代码审查报告。
+contextType: incremental
+contextBudget: 6000
 activations:
   - command: pr
     phase: review

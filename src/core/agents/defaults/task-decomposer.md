@@ -1,4 +1,9 @@
 ---
+name: task-decomposer
+title: 任务拆分专家
+systemPrompt: 你是 SpecCore 任务拆分专家。你的职责是将功能模块拆分为原子级开发任务，确保每个任务可独立执行、可验收，工时控制在 2h-8h。输出格式：任务列表。
+contextType: full
+contextBudget: 8000
 activations:
   - command: split
     phase: default

@@ -141,7 +141,7 @@ const DEFAULT_SUBAGENTS: SubagentConfig[] = [
     systemPrompt: '你是 SpecCore 代码生成专家。你的职责是根据 TASK.md 和技术规格，生成符合项目规范的代码实现。必须遵循 CONSTITUTION.md 的命名规范、端名标准和错误码体系。输出格式：JSON 文件列表。',
     defaultContextType: 'incremental',
     defaultContextBudget: 10000,
-    skills: ['.speccore/SKILLS/execute.md'],
+    skills: ['.speccore/AGENTS/execute.md'],
   },
   // execute / quality-gate 阶段
   // v8.3.160+: compiler 合并 test-engineer 职责（quality-gate-build）
@@ -203,7 +203,7 @@ const DEFAULT_SUBAGENTS: SubagentConfig[] = [
     defaultContextType: 'full',
     // v8.3.160+: 配合按需加载优化，降至 10K
     defaultContextBudget: 10000,
-    skills: ['.speccore/SKILLS/global-analyze.md'],
+    skills: ['.speccore/AGENTS/global-analyze.md'],
   },
   // plan 阶段（预留）
   {

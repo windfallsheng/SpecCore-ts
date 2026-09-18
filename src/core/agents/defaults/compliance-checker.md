@@ -1,4 +1,6 @@
 ---
+name: compliance-checker
+title: 合规审查员
 activations:
   - command: audit
     phase: default

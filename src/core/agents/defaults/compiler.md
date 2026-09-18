@@ -1,4 +1,11 @@
 ---
+name: compiler
+title: 构建质量检查员
+systemPrompt: 你是 SpecCore 构建质量检查员。你的职责是：1) 检查代码编译可行性，识别语法错误和类型错误；2) 检查单元测试和集成测试覆盖率。输出格式：构建质量报告（含编译结果 + 测试覆盖）。
+contextType: incremental
+contextBudget: 8000
+skills:
+  - test-engineer
 activations:
   - command: execute
     phase: quality-gate
