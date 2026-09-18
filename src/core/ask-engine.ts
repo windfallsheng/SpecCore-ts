@@ -76,7 +76,7 @@ const COMMAND_KB: CommandKnowledge[] = [
     usage: 'speccore doc2spec -f <file> --iter <iteration> [--task <task>] [--no-ai] [--classify [--prompt] [--response <json>]]', examples: ['speccore doc2spec -f PRD.docx --iter Q3', 'speccore doc2spec -f 需求.docx --iter Q2 --task T-01 --no-ai', 'speccore doc2spec --classify --prompt -I Q3', 'speccore doc2spec --classify -I Q3'], related: ['spec2doc', 'analyze'], triggers: ['导入', 'doc2spec', 'word转', '文档转换', 'PRD', '需求文档', '智能分类', 'classify', '分类文档', '提取需求'] },
   { name: 'spec2doc', aliases: ['s2d'], description: 'SpecCore MD 导出为 Word/PDF/HTML/PPTX',
     usage: 'speccore spec2doc [-i <iteration>] [-t <task>] [-f <format>] [-o <output>]', examples: ['speccore spec2doc -i Q3 -o 需求.docx', 'speccore spec2doc -t T-01 -f html'], related: ['doc2spec'], triggers: ['导出', 'spec2doc', '生成文档', '导出word', '导出pdf'] },
-  { name: 'dashboard', aliases: ['db', 'sp'], description: '项目仪表盘：迭代状态/进度/健康度，--scope global 全量视图',
+  { name: 'dashboard', aliases: ['db'], description: '项目仪表盘：迭代状态/进度/健康度，--scope global 全量视图',
     usage: 'speccore dashboard [--scope global|iteration] [--export html] [--health] [--lifecycle]', examples: ['speccore dashboard', 'speccore dashboard --scope global --export html'], related: ['analyze', 'health'], triggers: ['看板', '仪表盘', 'dashboard', '进度', '状态'] },
   { name: 'analyze', aliases: ['al'], description: '统一分析：需求文档+源码→分析报告。支持 --full 三阶段合成，--deep 单文档深度分析（字数/图表翻倍），--iterative 迭代式生成（大纲→逐节填充），--filter 按需分析指定模块，--with-code 注入代码结构化数据，--phase 单阶段合成，--feature 局部分析功能模块，--doc 局部分析类型文档，--sync 任务分析后局部回写 020-specs/，--no-source 跳过源码，--supplement 追加源码',
     usage: 'speccore analyze [--task <id>] [--iteration <name>] [--full] [--deep <doc>] [--iterative] [--filter <keywords>] [--with-code] [--phase <n>] [--feature <module>] [--doc <type/slug>] [--no-source] [--source-scope <dirs>] [--supplement] [--sync] [--scope global] [--dev-guide]', examples: ['speccore analyze', 'speccore analyze --full -i Q2', 'speccore analyze --deep ARCHITECTURE.md --iterative', 'speccore analyze --filter "订单,支付" --with-code', 'speccore analyze --phase 1 -i Q2', 'speccore analyze --feature 支付模块', 'speccore analyze --doc bugs/login-timeout', 'speccore analyze --with-code', 'speccore analyze --supplement --source-scope src/core', 'speccore analyze --task Task-001 --apply "..." --sync'], related: ['dashboard', 'validate', 'code-index', 'refresh', 'synthesize'], triggers: ['分析', 'analyze', '审计', 'audit', '检查', '结合源码', '连代码', '带代码', '源码分析', '迭代分析', '分析迭代', '倒推需求', '反推', '从代码生成', '分析代码', '不读源码', '不读代码', '跳过源码', '指定目录分析', '只扫描', '补充分析', '追加分析', '补充源码', '追加源码', '遗漏', '没分析到', '没覆盖', '漏掉', '再分析', '多读几个', '局部分析', '单个模块', '单独分析', 'bug分析', '重构分析', '局部回写', '回写spec', '同步spec', '合成需求', '合并需求', '需求合成', '智能合成', '需求合并', '多端合成', '全量分析', '跨端综合', '全量合成', '开发指南', '生成开发指南', '带开发指南', '深度分析', '深入分析', '详细分析', '迭代生成', '逐节分析', '大纲分析', '按需分析', '只分析', '过滤分析', '聚焦分析'] },
@@ -339,14 +339,24 @@ type KbMatchType = 'name' | 'alias' | 'synonym' | 'trigger';
 /** 最近一次 KB 匹配类型（供置信度诚实赋值：触发词匹配不能伪装成精确匹配） */
 let lastKbMatchType: KbMatchType | null = null;
 
+/** 单词边界匹配：word 作为独立 token 出现，避免短 alias 误匹配包含它的词（如 "split" 误匹配 "sp"/"pl"） */
+function wordMatch(text: string, word: string): boolean {
+  try {
+    const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(^|[^a-z0-9])${escaped}($|[^a-z0-9])`, 'i').test(text);
+  } catch {
+    return text.includes(word);
+  }
+}
+
 /** 匹配命令知识（精确匹配 → 同义词表 → 触发词 三层降级） */
 function matchCommandInKB(input: string): CommandKnowledge | null {
   const lower = input.toLowerCase();
-  // 精确匹配命令名（最可靠）
+  // 精确匹配命令名（单词边界，最可靠）
   for (const cmd of COMMAND_KB) {
-    if (lower.includes(cmd.name)) { lastKbMatchType = 'name'; return cmd; }
+    if (wordMatch(lower, cmd.name)) { lastKbMatchType = 'name'; return cmd; }
     for (const alias of cmd.aliases) {
-      if (lower.includes(alias) && alias.length > 1) { lastKbMatchType = 'alias'; return cmd; }
+      if (alias.length > 1 && wordMatch(lower, alias)) { lastKbMatchType = 'alias'; return cmd; }
     }
   }
   // 同义词表优先于触发词：同义词表是显式映射，更准确
