@@ -33,7 +33,7 @@ import { helpCommand } from './commands/help';
 import { devCommand } from './commands/dev';
 import { welcomeCommand } from './commands/welcome';
 import { statusPanelCommand } from './commands/status-panel';
-import { knowledgeCommand, knowledgeExplainCommand, knowledgePathCommand, knowledgeQueryCommand } from './commands/knowledge';
+import { knowledgeCommand } from './commands/knowledge';
 import { graphQueryCommand, graphEntityCommand, graphRelatedCommand, graphStatsCommand, graphPathCommand, graphRenderCommand } from './commands/graph';
 import { doc2specCommand } from './commands/doc2spec';
 import { spec2docCommand } from './commands/spec2doc';
@@ -139,24 +139,7 @@ program
   .option('--export <path>', 'Export HTML to custom path')
   .action(knowledgeCommand);
 
-program
-  .command('knowledge-explain <node>')
-  .alias('kg-explain')
-  .description('解释代码知识图谱中的节点及其连接')
-  .action(knowledgeExplainCommand);
-
-program
-  .command('knowledge-path <from> <to>')
-  .alias('kg-path')
-  .description('查找代码图谱中两个节点之间的最短路径')
-  .action(knowledgePathCommand);
-
-program
-  .command('knowledge-query <question>')
-  .alias('kg-query')
-  .description('自然语言查询代码知识图谱')
-  .action(knowledgeQueryCommand);
-
+// v8.3.186+: knowledge-explain/path/query 已合并到 graph 子命令（graph 是超集，融合知识图谱+代码图谱）
 const graphCmd = program
   .command('graph')
   .alias('g')
