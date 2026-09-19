@@ -14,6 +14,7 @@ import { loadContext, detectActiveIteration, Context } from './context';
 export type IntentType =
   | 'change'              // 需求变更
   | 'execute'             // 执行开发
+  | 'run'                 // 流水线执行（v8.3.190+：命名流水线 + 起止点）
   | 'create'              // 创建功能/任务
   | 'iteration_create'    // 创建迭代
   | 'analyze'             // 分析需求
@@ -112,6 +113,21 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     triggers: ['开始', '执行', '干活', '继续', '开发', '做', '跑', '开工', '跑一下'],
     patterns: ['开始(.+)', '继续(.+)', '开发(.+)', '做(.+)', '执行(.+)'],
     description: '执行控制中心 — 按过滤条件执行开发任务，支持断点续传',
+  },
+  // 流水线执行（run — 命名流水线 + 起止点编排，v8.3.190+）
+  {
+    id: 'run',
+    intent: 'run',
+    priority: 95,
+    triggers: [
+      '执行流水线', '跑流水线', '运行流水线', '全自动执行', '自动执行', '端到端',
+      '一键执行', '跑全流程', '执行全流程', '跑完整流程', '全流程执行',
+      '部署流水线', '交付流水线', '开发流水线', '导入需求流水线', '文档导出流水线',
+      '自动跑流水线', '自动执行流水线',
+      '部署', '上线', '交付', '提代码', '提交代码', '发布',
+    ],
+    patterns: ['跑(?:.+?)流水线', '执行(?:.+?)流水线', '运行(?:.+?)流水线', '帮我(?:.+?)', '自动(?:.+?)', '从(?:.+?)(?:到|至)(?:.+?)'],
+    description: '端到端流水线执行 — 按 preset 或起止点自动编排（run）',
   },
   // Bug 修复
   {
@@ -330,7 +346,7 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     id: 'handover',
     intent: 'handover',
     priority: 65,
-    triggers: ['交接', '转交', '移交', '交付'],
+    triggers: ['交接', '转交', '移交', '交接文档', '交接一下'],
     patterns: ['交接(.+)', '转交(.+)', '生成交接文档'],
     description: '生成交接文档 — 汇总迭代关键信息和待办事项',
   },
@@ -806,6 +822,51 @@ function extractParams(input: string, mapping: CommandMapping): Record<string, s
     params.clarify = 'on';
   } else if (/跳过.{0,4}澄清|不做.{0,4}澄清|不要.{0,4}澄清|无需.{0,4}澄清|不澄清/.test(input)) {
     params.clarify = 'off';
+  }
+
+  // 检测 run 流水线意图（v8.3.190+）：起止点优先，其次 preset 名
+  if (mapping.intent === 'run') {
+    // 口语阶段名 → 流水线阶段 key（与 run.ts PIPELINE_PHASES 对齐）
+    const stageNameMap: Record<string, string> = {
+      '需求': 'req-doc', 'req-doc': 'req-doc', 'reqdoc': 'req-doc',
+      '导入': 'doc2spec', 'doc2spec': 'doc2spec', '导需求': 'doc2spec',
+      '分析': 'analyze', 'analyze': 'analyze',
+      '校验': 'validate', 'validate': 'validate',
+      '拆分': 'split', 'split': 'split',
+      '计划': 'plan', 'plan': 'plan',
+      '执行': 'execute', 'execute': 'execute', '开发': 'execute',
+      '验证': 'verify', 'verify': 'verify',
+      '部署': 'pipeline', 'pipeline': 'pipeline', '上线': 'pipeline',
+      '提交': 'pr', 'pr': 'pr', '提代码': 'pr',
+      '归档': 'done', 'done': 'done', '复盘': 'done',
+      '导出': 'spec2doc', 'spec2doc': 'spec2doc',
+    };
+    const normalizeStage = (s: string) => stageNameMap[s] || s;
+
+    // 起止点优先（更精确）："从 X [执行/跑] 到/至 Y"
+    const rangeMatch = input.match(/从(.+?)(?:开始|执行|跑|自动)?(?:到|至)(.+?)(?:执行|跑|自动|结束|为止)?$/);
+    if (rangeMatch) {
+      params.from = normalizeStage(rangeMatch[1].trim());
+      params.to = normalizeStage(rangeMatch[2].trim());
+    } else {
+      // preset 名 → 内置 preset（与 run.ts 的 PRESETS 对齐）
+      const presetMap: Record<string, string[]> = {
+        deploy: ['deploy', '部署', '上线', '发布'],
+        deliver: ['deliver', '交付', '提交代码', '提代码'],
+        full: ['full', '全流程', '完整流程', '端到端', '全量'],
+        develop: ['develop', '开发流程', '开发到验证'],
+        import: ['import', '导入需求', '导入'],
+        docs: ['docs', '导出文档', '生成文档', '文档导出', '导出'],
+        analyze: ['analyze', '只分析', '仅分析'],
+      };
+      const lowerRun = input.toLowerCase();
+      for (const [preset, keywords] of Object.entries(presetMap)) {
+        if (keywords.some(k => lowerRun.includes(k.toLowerCase()))) {
+          params.preset = preset;
+          break;
+        }
+      }
+    }
   }
 
   // 检测重新/补充分析参数（--supplement / --sync）

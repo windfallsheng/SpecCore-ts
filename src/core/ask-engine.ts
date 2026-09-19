@@ -103,8 +103,8 @@ const COMMAND_KB: CommandKnowledge[] = [
     usage: 'speccore done [--task <id>] [--all] [--interactive]', examples: ['speccore done --task T-01', 'speccore done --all'], related: ['execute', 'pr'], triggers: ['完成', 'done', '归档', '结束', '做完'] },
   { name: 'next', aliases: ['n'], description: '检测当前迭代进度，提示下一步操作（只指引，不执行）',
     usage: 'speccore next [--iteration <name>]', examples: ['speccore next', 'speccore next -i Q2'], related: ['run', 'status'], triggers: ['下一步', '接下来', '该做什么', '接下来做什么', 'next', '做到哪了', '下一步做什么', '现在到哪了'] },
-  { name: 'run', aliases: ['r'], description: '端到端全自动流水线：导入需求→分析→拆分→执行→验证→部署→归档→导出（13 阶段，默认三闸口）',
-    usage: 'speccore run [需求描述] [--from <phase>] [--to <phase>] [--demo]', examples: ['speccore run "做用户积分功能"', 'speccore run --demo', 'speccore run --from split'], related: ['next', 'req-doc', 'execute'], triggers: ['run', '跑一遍', '端到端', '全流程', '一键开发', '自动开发', '从头到尾', '完整流程', '全自动', '流水线'] },
+  { name: 'run', aliases: ['r'], description: '端到端命名流水线：支持 preset（full/import/analyze/develop/deliver/deploy/docs）或起止点（--from/--to），默认 develop（分析→验证），三闸口',
+    usage: 'speccore run [--preset <name>] [--from <phase>] [--to <phase>] [--demo]', examples: ['speccore run --preset deploy', 'speccore run --from analyze --to execute', 'speccore run --demo'], related: ['next', 'req-doc', 'execute'], triggers: ['run', '跑一遍', '端到端', '全流程', '一键开发', '自动开发', '从头到尾', '完整流程', '全自动', '流水线'] },
   { name: 'task', aliases: ['tk'], description: '任务管理：创建/列表/状态。子命令: new, list, status',
     usage: 'speccore task new --name <name> [--id <id>] | speccore task list | speccore task status', examples: ['speccore task new --name "用户登录"', 'speccore task list'], related: ['plan', 'execute'], triggers: ['task', '任务列表', '查看任务', '列出任务'] },
   { name: 'iteration', aliases: ['it'], description: '迭代管理：创建时自动生成唯一编码（Iteration-001-功能名），支持拆分/列表',
@@ -301,6 +301,17 @@ export function classifyMode(input: string): AskMode {
     /(what|how).*use.*(dashboard|dev|init|execute|plan|pr|verify|sync|code-index|graph)/i,
   ];
   if (explainPatterns.some(p => p.test(lower))) return 'explain';
+
+  // v8.3.190+: run 流水线意图前置检测（"从 X 到 Y"、"跑/执行流水线"、"帮我部署/交付"等）
+  // 优先于 pipeline/guide 判定，让 run 命名流水线编排走 match 分支
+  const runPipelinePatterns = [
+    /从.+?(?:到|至).+/,
+    /(?:跑|执行|运行).{0,4}流水线/,
+    /帮我(?:部署|交付|上线|提代码|提交代码)/,
+    /(?:部署|交付|上线).{0,4}流水线/,
+    /(?:跑|执行).{0,4}全流程/,
+  ];
+  if (runPipelinePatterns.some(p => p.test(input))) return 'match';
 
   // 模式4: 复杂编排 — 包含多个动作词 + 时序/数量词
   // v8.3.189+: 补充「分析」「拆分」动作词和「并且」「以及」并列连接词，
@@ -628,6 +639,14 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
   const clarifyFlag = best && best.command === 'analyze' && best.extractedParams?.clarify === 'on' ? ' --clarify'
     : best && best.command === 'analyze' && best.extractedParams?.clarify === 'off' ? ' --skip-clarify'
     : '';
+  // v8.3.190+: run 流水线 flag（preset / 起止点，供各分支命令展示统一使用）
+  let runFlag = '';
+  if (best && best.command === 'run') {
+    const rp = best.extractedParams || {};
+    if (rp.preset) runFlag += ` --preset ${rp.preset}`;
+    if (rp.from) runFlag += ` --from ${rp.from}`;
+    if (rp.to) runFlag += ` --to ${rp.to}`;
+  }
   
   // 如果 KB 有匹配且置信度高于意图识别，用 KB（但要整合意图识别的参数）
   if (kbMatch && (!best || best.confidence < 60)) {
@@ -641,6 +660,12 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
     // v8.3.190+: 澄清三态 ask 单次覆盖（仅 analyze）
     if (kbMatch.name === 'analyze' && params.clarify === 'on') { fullCommand += ` --clarify`; paramNotes.push(`🔍 澄清: 强制澄清`); }
     if (kbMatch.name === 'analyze' && params.clarify === 'off') { fullCommand += ` --skip-clarify`; paramNotes.push(`⏭️ 澄清: 跳过`); }
+    // v8.3.190+: run 流水线意图（preset / 起止点）
+    if (kbMatch.name === 'run') {
+      if (params.preset) { fullCommand += ` --preset ${params.preset}`; paramNotes.push(`🎯 流水线: ${params.preset}`); }
+      if (params.from) { fullCommand += ` --from ${params.from}`; paramNotes.push(`📍 起点: ${params.from}`); }
+      if (params.to) { fullCommand += ` --to ${params.to}`; paramNotes.push(`🏁 终点: ${params.to}`); }
+    }
 
     // 补充分析意图已在 askEngine 顶层检测，此处不再重复
     
@@ -696,7 +721,7 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
       '🤔 我识别到你可能想执行 speccore 命令，但不确定这是调用 CLI 还是普通技术讨论：',
       '',
       `  你的输入: "${input}"`,
-      `  匹配意图: ${best.intent} → speccore ${best.command}${clarifyFlag}`,
+      `  匹配意图: ${best.intent} → speccore ${best.command}${clarifyFlag}${runFlag}`,
       '',
       '如果是 speccore 操作，请补充明确的上下文词，例如：',
       '  • "用 speccore 分析本迭代需求"',
@@ -706,7 +731,7 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
       '',
       '如果是普通技术讨论（解释代码、审查片段、讨论需求），请直接描述你的问题。',
       '',
-      '或输入 y 确认执行: speccore ' + best.command + clarifyFlag,
+      '或输入 y 确认执行: speccore ' + best.command + clarifyFlag + runFlag,
     ];
     return {
       mode: 'ambiguous',
@@ -720,7 +745,7 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
   if (best.confidence < config.routing.highThreshold && best.confidence >= config.routing.lowThreshold) {
     const lines = ['🤔 我理解你想做这个，但不太确定，请确认:', ''];
     lines.push(`🎯 我的理解: ${best.intent} (${best.confidence}%)`);
-    lines.push(`📋 建议命令: speccore ${best.command}${clarifyFlag}`);
+    lines.push(`📋 建议命令: speccore ${best.command}${clarifyFlag}${runFlag}`);
     lines.push('');
     if (results.length > 1) {
       lines.push('其他可能:');
@@ -777,6 +802,21 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
       } else if (params.clarify === 'off') {
         fullCommand += ` --skip-clarify`;
         paramNotes.push(`⏭️ 澄清: 跳过`);
+      }
+    }
+    // v8.3.190+: run 流水线意图 — preset 或起止点自动编排
+    if (best.command === 'run') {
+      if (params.preset) {
+        fullCommand += ` --preset ${params.preset}`;
+        paramNotes.push(`🎯 流水线: ${params.preset}`);
+      }
+      if (params.from) {
+        fullCommand += ` --from ${params.from}`;
+        paramNotes.push(`📍 起点: ${params.from}`);
+      }
+      if (params.to) {
+        fullCommand += ` --to ${params.to}`;
+        paramNotes.push(`🏁 终点: ${params.to}`);
       }
     }
     // v6.97.0+: 重新/补充分析模式
