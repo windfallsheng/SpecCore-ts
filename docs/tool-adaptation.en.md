@@ -48,7 +48,7 @@ Tells WorkBuddy this is a Speccore project:
 ### SKILL.md (Speccore Skill)
 
 Teaches WorkBuddy Speccore commands and best practices:
-- **Command cheat sheet**: 20 commands organized by category
+- **Command cheat sheet**: Commands organized by category
 - **Global layer**: GLOBAL/ directory architecture
 - **Intent recognition**: Natural language matching rules
 - **Directory structure**: Iteration → Task → multi-platform frontend specs

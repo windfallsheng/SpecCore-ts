@@ -84,7 +84,7 @@ speccore refresh --graph            # Only knowledge graph
 | Doc | Content |
 |:---|:---|
 | 🚀 [Quick Start](docs/quick-start.en.md) | Full tutorial |
-| 🔧 [Command Reference](docs/commands.en.md) | All 20 commands |
+| 🔧 [Command Reference](docs/commands.en.md) | Full command reference |
 | 🎬 [Scenarios](docs/scenarios.en.md) | Real-world examples |
 | 🗺 [Overview](docs/overview.md) | Architecture & philosophy |
 | 📝 [SDD Methodology](docs/sdd-methodology.en.md) | Spec-driven development |
