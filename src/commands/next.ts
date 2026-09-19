@@ -13,19 +13,19 @@ export interface NextOptions {
 }
 
 /** 阶段定义（与 run 的 13 阶段一致，这里仅用于进度检测与指引展示） */
-const PHASES: { key: string; label: string; layer: 'prepare' | 'main'; gate?: string; gateTitle?: string }[] = [
-  { key: 'init',     label: '初始化',     layer: 'prepare' },
-  { key: 'doc2spec', label: '导入需求',   layer: 'prepare' },
-  { key: 'analyze',  label: '分析需求',   layer: 'main' },
-  { key: 'validate', label: '校验 Spec',  layer: 'main' },
-  { key: 'split',    label: '拆分任务',   layer: 'main', gate: 'A', gateTitle: 'Spec 定稿 review' },
-  { key: 'plan',     label: '执行计划',   layer: 'main' },
-  { key: 'execute',  label: '执行开发',   layer: 'main' },
-  { key: 'verify',   label: '验证',       layer: 'main', gate: 'B', gateTitle: '代码 review' },
-  { key: 'pipeline', label: '部署',       layer: 'main', gate: 'C', gateTitle: '部署前确认' },
-  { key: 'pr',       label: '合并请求',   layer: 'main' },
-  { key: 'done',     label: '复盘归档',   layer: 'main' },
-  { key: 'spec2doc', label: '导出文档',   layer: 'main' },
+const PHASES: { key: string; label: string; layer: 'prepare' | 'main'; ask?: string; gate?: string; gateTitle?: string }[] = [
+  { key: 'init',     label: '初始化',     layer: 'prepare', ask: '初始化 SpecCore 项目' },
+  { key: 'doc2spec', label: '导入需求',   layer: 'prepare', ask: '导入 PRD 文档到本迭代' },
+  { key: 'analyze',  label: '分析需求',   layer: 'main',    ask: '分析本迭代需求' },
+  { key: 'validate', label: '校验 Spec',  layer: 'main',    ask: '校验本迭代 Spec 完整性' },
+  { key: 'split',    label: '拆分任务',   layer: 'main',    ask: '拆分本迭代需求为任务', gate: 'A', gateTitle: 'Spec 定稿 review' },
+  { key: 'plan',     label: '执行计划',   layer: 'main',    ask: '生成本迭代执行计划' },
+  { key: 'execute',  label: '执行开发',   layer: 'main',    ask: '执行本迭代开发任务' },
+  { key: 'verify',   label: '验证',       layer: 'main',    ask: '验证本迭代代码', gate: 'B', gateTitle: '代码 review' },
+  { key: 'pipeline', label: '部署',       layer: 'main',    ask: '部署本迭代', gate: 'C', gateTitle: '部署前确认' },
+  { key: 'pr',       label: '合并请求',   layer: 'main',    ask: '创建本迭代 PR' },
+  { key: 'done',     label: '复盘归档',   layer: 'main',    ask: '归档本迭代' },
+  { key: 'spec2doc', label: '导出文档',   layer: 'main',    ask: '导出本迭代文档' },
 ];
 
 async function hasFeatureDirs(iterDir: string): Promise<boolean> {
@@ -115,7 +115,7 @@ export async function nextCommand(options: NextOptions): Promise<void> {
   logger.info('');
   logger.info(`🎯 下一步: ${phase.label}`);
 
-  // 下一步命令
+  // 下一步命令 + ask 提示词（均可直接复制）
   const cmdMap: Record<string, string> = {
     init: 'speccore init',
     doc2spec: 'speccore doc2spec -f PRD.docx -i ' + iteration,
@@ -130,7 +130,8 @@ export async function nextCommand(options: NextOptions): Promise<void> {
     done: 'speccore done --all -i ' + iteration,
     spec2doc: 'speccore spec2doc -i ' + iteration,
   };
-  logger.info(`   → ${cmdMap[phase.key]}`);
+  logger.info(`   命令: ${cmdMap[phase.key]}`);
+  if (phase.ask) logger.info(`   或 ask: speccore ask "${phase.ask}"`);
 
   // 前方闸口提醒
   if (phase.gate) {
@@ -138,9 +139,15 @@ export async function nextCommand(options: NextOptions): Promise<void> {
     logger.warn(`   确认后继续: speccore run --from ${phase.key} -I ${iteration}`);
   }
 
-  // 剩余路线图
-  const remaining = PHASES.slice(nextIdx).map(p => p.label);
-  logger.info(`\n🗺️ 剩余流程: ${remaining.join(' → ')}`);
+  // 后续步骤（带参数命令示例，可直接复制）
+  const remaining = PHASES.slice(nextIdx + 1);
+  if (remaining.length > 0) {
+    logger.info(`\n📋 后续步骤（可直接复制执行）:`);
+    for (const p of remaining) {
+      const gateTag = p.gate ? ` [闸口${p.gate}]` : '';
+      logger.info(`   ${p.label}${gateTag}: ${cmdMap[p.key]}`);
+    }
+  }
 
   // 一键执行提示
   if (!isPrepare) {
