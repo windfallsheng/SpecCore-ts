@@ -138,7 +138,7 @@ const COMMAND_KB: CommandKnowledge[] = [
   // v8.3.0+: 需求澄清
   { name: 'req-doc', aliases: ['rd'], description: '需求文档化：将口语化/非专业需求整理为 PRD 级文档。支持 --local 临时工作区模式',
     usage: 'speccore req-doc "<描述>" | req-doc --from <file> [--to <iteration> | --local]',
-    examples: ['speccore req-doc "我要加个购物车"', 'speccore req-doc --from notes.md --local', 'speccore req-doc --promote <entryId> --to <iteration>'], related: ['analyze', 'doc2spec'], triggers: ['澄清', '整理需求', '专业化', '规范化', '整理一下', '写成PRD', '润色需求', '需求整理', '整理成文档', '需求文档化'] },
+    examples: ['speccore req-doc "我要加个购物车"', 'speccore req-doc --from notes.md --local', 'speccore req-doc --promote <entryId> --to <iteration>'], related: ['analyze', 'doc2spec'], triggers: ['整理需求', '专业化', '规范化', '整理一下', '写成PRD', '润色需求', '需求整理', '整理成文档', '需求文档化', '需求专业化'] },
   // v8.3.24+: 契约冲突裁决
   { name: 'verdict', aliases: ['vd'], description: '契约冲突裁决：查看待裁决冲突、进行人工裁决、查看裁决书',
     usage: 'speccore verdict [--list] [--conflict <id> --decide <pass|reject|defer> --reason <reason>] [--report] [--task <id>]',
@@ -624,6 +624,10 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
   
   const results = await recognizeIntent(input);
   const best = results[0];
+  // v8.3.190+: 澄清三态 flag（仅 analyze 命令，供各分支命令展示统一使用）
+  const clarifyFlag = best && best.command === 'analyze' && best.extractedParams?.clarify === 'on' ? ' --clarify'
+    : best && best.command === 'analyze' && best.extractedParams?.clarify === 'off' ? ' --skip-clarify'
+    : '';
   
   // 如果 KB 有匹配且置信度高于意图识别，用 KB（但要整合意图识别的参数）
   if (kbMatch && (!best || best.confidence < 60)) {
@@ -634,6 +638,9 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
     if (params.name) { fullCommand += ` -n "${params.name}"`; paramNotes.push(`📛 名称: ${params.name}`); }
     if (params.iteration) { fullCommand += ` --iter "${params.iteration}"`; paramNotes.push(`🔄 迭代: ${params.iteration}`); }
     if (params.scope) { fullCommand += ` --scope ${params.scope}`; paramNotes.push(`🌐 范围: ${params.scope}`); }
+    // v8.3.190+: 澄清三态 ask 单次覆盖（仅 analyze）
+    if (kbMatch.name === 'analyze' && params.clarify === 'on') { fullCommand += ` --clarify`; paramNotes.push(`🔍 澄清: 强制澄清`); }
+    if (kbMatch.name === 'analyze' && params.clarify === 'off') { fullCommand += ` --skip-clarify`; paramNotes.push(`⏭️ 澄清: 跳过`); }
 
     // 补充分析意图已在 askEngine 顶层检测，此处不再重复
     
@@ -689,7 +696,7 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
       '🤔 我识别到你可能想执行 speccore 命令，但不确定这是调用 CLI 还是普通技术讨论：',
       '',
       `  你的输入: "${input}"`,
-      `  匹配意图: ${best.intent} → speccore ${best.command}`,
+      `  匹配意图: ${best.intent} → speccore ${best.command}${clarifyFlag}`,
       '',
       '如果是 speccore 操作，请补充明确的上下文词，例如：',
       '  • "用 speccore 分析本迭代需求"',
@@ -699,7 +706,7 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
       '',
       '如果是普通技术讨论（解释代码、审查片段、讨论需求），请直接描述你的问题。',
       '',
-      '或输入 y 确认执行: speccore ' + best.command,
+      '或输入 y 确认执行: speccore ' + best.command + clarifyFlag,
     ];
     return {
       mode: 'ambiguous',
@@ -713,7 +720,7 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
   if (best.confidence < config.routing.highThreshold && best.confidence >= config.routing.lowThreshold) {
     const lines = ['🤔 我理解你想做这个，但不太确定，请确认:', ''];
     lines.push(`🎯 我的理解: ${best.intent} (${best.confidence}%)`);
-    lines.push(`📋 建议命令: speccore ${best.command}`);
+    lines.push(`📋 建议命令: speccore ${best.command}${clarifyFlag}`);
     lines.push('');
     if (results.length > 1) {
       lines.push('其他可能:');
@@ -761,6 +768,16 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
     if (params.withCode) {
       fullCommand += ` --with-code`;
       paramNotes.push(`🔍 源码扫描: 结合工程源码分析`);
+    }
+    // v8.3.190+: 澄清步骤 ask 单次覆盖（仅 analyze 命令消费 optional_steps.clarify）
+    if (best.command === 'analyze') {
+      if (params.clarify === 'on') {
+        fullCommand += ` --clarify`;
+        paramNotes.push(`🔍 澄清: 强制澄清`);
+      } else if (params.clarify === 'off') {
+        fullCommand += ` --skip-clarify`;
+        paramNotes.push(`⏭️ 澄清: 跳过`);
+      }
     }
     // v6.97.0+: 重新/补充分析模式
     if (params.supplement) {

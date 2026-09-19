@@ -268,8 +268,8 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     id: 'req-doc',
     intent: 'req_doc',
     priority: 89,
-    triggers: ['澄清', '整理需求', '专业化', '规范化', '整理一下', '写成PRD', '润色需求', '需求整理', '整理成文档', '需求文档化'],
-    patterns: ['澄清(.+)', '整理需求', '写成PRD', '整理(.+)需求', '把(.+)整理成PRD', '润色(.+)'],
+    triggers: ['整理需求', '专业化', '规范化', '整理一下', '写成PRD', '润色需求', '需求整理', '整理成文档', '需求文档化', '需求专业化'],
+    patterns: ['整理需求', '写成PRD', '整理(.+)需求', '把(.+)整理成PRD', '润色(.+)', '需求(.+)文档化'],
     description: '需求文档化 — 将口语化/非专业需求整理为 PRD 级文档',
   },
   // 计划层
@@ -286,8 +286,8 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     id: 'archive',
     intent: 'archive',
     priority: 75,
-    triggers: ['归档', '存档', '清理', '整理'],
-    patterns: ['归档(.+)', '清理(.+)', '整理(.+)'],
+    triggers: ['归档', '存档', '清理'],
+    patterns: ['归档(.+)', '清理(.+)'],
     description: '归档任务 — 将已完成任务移动到归档目录',
   },
   // 参考层
@@ -799,6 +799,13 @@ function extractParams(input: string, mapping: CommandMapping): Record<string, s
   const codeKeywords = ['源码', '代码', '结合源码', '扫描代码', '读代码', '看代码', 'with-code', 'with code'];
   if (codeKeywords.some(k => input.includes(k))) {
     params.withCode = 'true';
+  }
+
+  // 检测澄清步骤三态（v8.3.190+：ask 单次覆盖 analyze 的 optional_steps.clarify）
+  if (/强制.{0,4}澄清|必须.{0,4}澄清|一定要.{0,4}澄清|务必.{0,4}澄清/.test(input)) {
+    params.clarify = 'on';
+  } else if (/跳过.{0,4}澄清|不做.{0,4}澄清|不要.{0,4}澄清|无需.{0,4}澄清|不澄清/.test(input)) {
+    params.clarify = 'off';
   }
 
   // 检测重新/补充分析参数（--supplement / --sync）
