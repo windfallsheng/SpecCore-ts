@@ -372,6 +372,16 @@ function mapToQoderAgentName(subagent: string): string | undefined {
   };
   // 如果 SpecCore subagent 名与 Qoder 内置 Agent 匹配，直接返回
   if (builtinMap[subagent]) return builtinMap[subagent];
+  // v8.3.189+: 归一化带后缀的端级/功能级 subagent 名
+  // 如 requirement-analyzer-admin-web → requirement-analyzer、code-generator-room-service → code-generator
+  // 从后往前剥离 -segment，匹配到基础角色名即映射到对应 Qoder 内置 Agent
+  let base = subagent;
+  while (true) {
+    const idx = base.lastIndexOf('-');
+    if (idx <= 0) break;
+    base = base.slice(0, idx);
+    if (builtinMap[base]) return builtinMap[base];
+  }
   // 否则使用自定义 Agent（通过 agents 选项注册）
   return undefined;
 }
