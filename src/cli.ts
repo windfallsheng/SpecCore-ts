@@ -885,6 +885,7 @@ program
   .option('--prompt', '输出结构化 Prompt 到 stdout（Skill 协作模式）')
   .option('--with-code', '结合 CONSTITUTION.md 配置的工程源码一起分析')
   .option('--from-code', '从源码反推候选需求（两跳：逐模块 IR → 合成 UR，含 EARS 验收标准）')
+  .option('--out-dir <path>', '反推需求产出目录（默认 .speccore/GLOBAL/requirements）')
   .option('--no-source', '不读取源码内容（默认会读）')
   .option('--source-scope <dirs>', '指定源码扫描目录（逗号分隔，如 src/commands,src/core）')
   .option('--supplement', '补充模式：追加未覆盖的源码到现有报告（不重新生成）')

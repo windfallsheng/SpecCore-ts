@@ -138,6 +138,8 @@ export interface AnalyzeOptions {
   merge?: boolean;         // --merge: 与现有文档合并（按标题替换/追加），不覆盖
   // v8.3.184+: 从源码反推需求（两跳 IR→UR）
   fromCode?: boolean;      // --from-code: 读源码生成候选需求（逐模块 IR → 合成 UR）
+  // v8.3.191+: 反推需求产出目录（--out-dir，默认 .speccore/GLOBAL/requirements）
+  outDir?: string;
 }
 
 /**
@@ -291,6 +293,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         sources,
         depth: options.depth,
         platforms: options.platform ? options.platform.split(',').map(p => p.trim()).filter(Boolean) : undefined,
+        outputDir: options.outDir,
       });
       logger.info('');
       logger.info(`🎯 源码反推需求完成（status: candidate，澄清后才成 Spec）`);
@@ -2749,6 +2752,7 @@ function parseArgv(options: AnalyzeOptions): void {
     [['--depth'], (v) => { options.depth = v as any; }],
     [['--feature'], (v) => { options.feature = v; }],
     [['--phase'], (v) => { options.phase = v; }],
+    [['--out-dir'], (v) => { options.outDir = v; }],
   ];
 
   for (let i = 0; i < argv.length; i++) {
