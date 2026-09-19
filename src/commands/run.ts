@@ -16,6 +16,7 @@ export interface RunOptions {
   from?: string; to?: string;
   demo?: boolean;       // v8.3.184+: --demo 演示模式（放宽闸口 A/B，保留 C）
   demand?: string;      // v8.3.184+: 一句话需求描述（req-doc 阶段入口）
+  preset?: string;      // v8.3.190+: --preset 预设/自定义流水线名
 }
 
 async function hasFeatureDirs(iterDir: string): Promise<boolean> {
@@ -32,11 +33,10 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
 async function autoPipeline(options: RunOptions): Promise<void> {
   const PIPELINE_PHASES = [
-    // ── 准备层（一次性初始化 + 需求入口二选一）──
-    { key: 'init',      cmd: 'speccore init',            layer: 'prepare' },
+    // ── 需求入口（二选一：req-doc 一句话需求 / doc2spec 导入文档）──
     { key: 'req-doc',   cmd: 'speccore req-doc',         layer: 'prepare' },
     { key: 'doc2spec',  cmd: 'speccore doc2spec',        layer: 'prepare' },
-    // ── 主流程（常用：导入需求后分析→…→导出）──
+    // ── 主流程（分析→校验→拆分→计划→执行→验证→部署→合并→归档→导出）──
     { key: 'analyze',   cmd: 'speccore analyze',         layer: 'main' },
     { key: 'validate',  cmd: 'speccore validate',        layer: 'main' },
     { key: 'split',     cmd: 'speccore iteration split', layer: 'main' },
@@ -48,6 +48,17 @@ async function autoPipeline(options: RunOptions): Promise<void> {
     { key: 'done',      cmd: 'speccore done',            layer: 'main' },
     { key: 'spec2doc',  cmd: 'speccore spec2doc',        layer: 'main' },
   ];
+
+  // v8.3.190+: 内置预设流水线（起止点对，覆盖常见业务操作）
+  const PRESETS: Record<string, { from: string; to: string; desc: string }> = {
+    full:    { from: 'req-doc',  to: 'spec2doc', desc: '全流程：需求→导出' },
+    import:  { from: 'doc2spec', to: 'pr',       desc: '导入需求→合并请求' },
+    analyze: { from: 'analyze',  to: 'validate', desc: '只分析校验' },
+    develop: { from: 'analyze',  to: 'execute',  desc: '分析→执行' },
+    deliver: { from: 'execute',  to: 'pr',       desc: '执行→提交代码' },
+    deploy:  { from: 'analyze',  to: 'pipeline', desc: '分析→部署验证' },
+    docs:    { from: 'analyze',  to: 'spec2doc', desc: '分析→文档导出' },
+  };
 
   // v8.3.184+: review 闸口（功能开发质量底线）——阶段执行前触发，软停等待宿主 AI 确认
   // A: split 前（Spec 定稿）、B: verify 前（代码 review）、C: pipeline 前（部署前确认，永不跳过）
@@ -67,11 +78,13 @@ async function autoPipeline(options: RunOptions): Promise<void> {
   const iterDir = `Iteration-${iteration}`;
   logger.info(`\n🤖 Auto-pipeline: ${iteration}\n`);
 
-  // v8.3.190+: 读取 optional_steps 配置（off 的步骤跳过）
+  // v8.3.190+: 读取 optional_steps（off 跳过）+ pipelines（命名流水线）配置
   let optionalSteps: Record<string, 'auto' | 'on' | 'off'> = {};
+  let pipelinesConfig: { default?: string; custom?: Record<string, string> } = {};
   try {
     const { config } = await loadConfigWithMeta();
     optionalSteps = (config.settings.optional_steps || {}) as Record<string, 'auto' | 'on' | 'off'>;
+    pipelinesConfig = (config.settings.pipelines || {}) as { default?: string; custom?: Record<string, string> };
   } catch { /* 配置读取失败用默认 */ }
 
   // v7.4.0+: Pipeline 阶段结果追踪
@@ -85,25 +98,42 @@ async function autoPipeline(options: RunOptions): Promise<void> {
   const phaseResults: PhaseResult[] = [];
   const pipelineStart = Date.now();
 
-  // ── 解析 auto-steps 范围 ──
+  // ── 解析流水线范围（优先级：--auto-steps > --from/--to > --preset/默认 > full）──
   let startIdx = 0;
   let endIdx = PIPELINE_PHASES.length - 1;
 
-  // v8.3.189+: 默认（无 --from/--auto-steps）从主流程 analyze 开始，
-  // 跳过准备层的 init（一次性）与 req-doc/doc2spec（需求入口，应显式指定或手动执行）。
-  // 未初始化时仍从 init 开始。
-  if (!options.from && !options.autoSteps) {
-    const hasInit = await pathExists(join(process.cwd(), '.speccore'));
-    if (hasInit) {
-      const analyzeIdx = PIPELINE_PHASES.findIndex(p => p.key === 'analyze');
-      if (analyzeIdx >= 0) {
-        startIdx = analyzeIdx;
-        logger.info('ℹ️ 已初始化，默认从主流程 analyze 开始（跳过 init/req-doc/doc2spec）');
-        logger.info('   如需从需求入口开始: speccore run --from req-doc 或 --from doc2spec\n');
-      }
+  // 1. 解析预设/自定义流水线（--preset > 配置 default > 内置 full）
+  const presetName = options.preset || pipelinesConfig.default || 'full';
+  let presetFrom: string | undefined;
+  let presetTo: string | undefined;
+  if (PRESETS[presetName]) {
+    presetFrom = PRESETS[presetName].from;
+    presetTo = PRESETS[presetName].to;
+    if (options.preset) logger.info(`🎯 预设流水线 [${presetName}]: ${presetFrom} → ${presetTo}（${PRESETS[presetName].desc}）\n`);
+  } else if (pipelinesConfig.custom?.[presetName]) {
+    const steps = pipelinesConfig.custom![presetName].split(',').map(s => s.trim()).filter(Boolean);
+    if (steps.length > 0) {
+      presetFrom = steps[0];
+      presetTo = steps[steps.length - 1];
+      logger.info(`🎯 自定义流水线 [${presetName}]: ${presetFrom} → ${presetTo}\n`);
     }
+  } else if (presetName !== 'full') {
+    logger.warn(`⚠️ 未知流水线 "${presetName}"，回退到 full`);
+    presetFrom = PRESETS.full.from;
+    presetTo = PRESETS.full.to;
   }
 
+  // 2. 应用 preset 起止点（--from/--to 会覆盖）
+  if (presetFrom) {
+    const fi = PIPELINE_PHASES.findIndex(p => p.key === presetFrom);
+    if (fi >= 0) startIdx = fi;
+  }
+  if (presetTo) {
+    const ti = PIPELINE_PHASES.findIndex(p => p.key === presetTo);
+    if (ti >= 0) endIdx = ti;
+  }
+
+  // 3. --from/--to 显式覆盖
   if (options.from) {
     const fi = PIPELINE_PHASES.findIndex(p => p.key === options.from);
     if (fi >= 0) startIdx = fi;
@@ -115,7 +145,7 @@ async function autoPipeline(options: RunOptions): Promise<void> {
     else { logger.error(`未知阶段: ${options.to}`); return; }
   }
 
-  // ── --auto-steps: 指定连续步骤自动执行 ──
+  // 4. --auto-steps 最高优先级（指定连续步骤）
   if (options.autoSteps) {
     const stepKeys = options.autoSteps.split(',').map(s => s.trim());
     const indices = stepKeys.map(k => PIPELINE_PHASES.findIndex(p => p.key === k));
@@ -174,14 +204,6 @@ async function autoPipeline(options: RunOptions): Promise<void> {
 
     try {
       switch (phase.key) {
-      case 'init': {
-        if (!(await pathExists('.speccore'))) {
-          execSync('speccore init', { stdio: 'inherit' });
-        } else {
-          logger.info('  ✅ 已初始化，跳过');
-        }
-        break;
-      }
       case 'req-doc': {
         // v8.3.184+: 一句话需求 → PRD（口语化需求入口，与 doc2spec 二选一）
         const reqDoc = join(iterDir, '010-requirements', 'REQUIREMENT.md');

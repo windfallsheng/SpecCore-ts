@@ -165,6 +165,13 @@ export interface SpecConfig {
       done?: 'auto' | 'on' | 'off';
       spec2doc?: 'auto' | 'on' | 'off';
     };
+    /** v8.3.190+: 命名流水线（preset + 用户自定义 + 默认） */
+    pipelines?: {
+      /** 默认流水线名（内置 preset 或 custom 名，默认 full） */
+      default?: string;
+      /** 用户自定义命名流水线：名称 → 逗号分隔的阶段串（如 "analyze,validate,split,execute"） */
+      custom?: Record<string, string>;
+    };
     /** v8.3.94+: 视觉模型配置（用于 specs 图片理解、UI 验证截图分析） */
     vision?: {
       enabled: boolean;
@@ -263,6 +270,7 @@ export const DEFAULT_CONFIG: SpecConfig = {
     pipeline: false,
     with_code: false,
     optional_steps: { clarify: 'auto', verify: 'auto', pipeline: 'auto', pr: 'auto', done: 'auto', spec2doc: 'auto' },
+    pipelines: { default: 'full', custom: {} },
   },
   ask: {
     routing: { mode: 'hybrid', high_threshold: 70, low_threshold: 45, auto_host_ai: true, cache_enabled: true, cache_min_hits: 3 },
@@ -1461,6 +1469,22 @@ function toYaml(config: SpecConfig): string {
   yaml += `    done: ${os?.done ?? 'auto'}\n`;
   yaml += '    # spec2doc: 导出文档（Word/PDF/HTML）\n';
   yaml += `    spec2doc: ${os?.spec2doc ?? 'auto'}\n`;
+  yaml += '  # ── 命名流水线（preset + 自定义 + 默认）──\n';
+  yaml += '  pipelines:\n';
+  yaml += '    # default: 默认流水线名（内置 full/import/analyze/develop/deliver/deploy/docs 或自定义名）\n';
+  yaml += `    default: ${config.settings.pipelines?.default ?? 'full'}\n`;
+  yaml += '    # custom: 用户自定义命名流水线（名称: 逗号分隔的阶段串）\n';
+  yaml += '    custom:\n';
+  const customs = config.settings.pipelines?.custom || {};
+  const customKeys = Object.keys(customs);
+  if (customKeys.length > 0) {
+    for (const k of customKeys) {
+      yaml += `      ${k}: ${customs[k]}\n`;
+    }
+  } else {
+    yaml += '      # my-flow: analyze,validate,split,plan,execute\n';
+  }
+
 
   yaml += '\n# ─────────────────────────────────────────────────────────────────────────────\n';
   yaml += '# Ask 引擎路由配置（控制 speccore ask 的行为）\n';
