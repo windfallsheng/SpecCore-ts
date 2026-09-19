@@ -192,7 +192,7 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     ],
   },
   done: {
-    desc: '完成任务归档 + 自进化规则',
+    desc: '一键收尾：校验→归档→复盘→同步全局（内部调用 archive/retro/sync-global）',
     params: [
       { flag: '-t, --task <id>', meaning: '指定 Task' },
       { flag: '--all', meaning: '归档所有已完成 Task' },
@@ -349,6 +349,50 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
       'speccore reindex',
       'speccore reindex --check',
     ],
+  },
+  dashboard: {
+    desc: '项目仪表盘（HTML 全量视图）：迭代状态+进度+健康度；终端轻量查看用 next/status',
+    params: [
+      { flag: '--scope global', meaning: '全量视图（所有项目+迭代）' },
+      { flag: '--export <path>', meaning: '导出 HTML' },
+    ],
+    examples: ['speccore dashboard', 'speccore dashboard --scope global'],
+  },
+  progress: {
+    desc: '迭代进度（终端轻量）：任务完成率+各阶段统计；全量可视化见 dashboard',
+    params: [
+      { flag: '-i, --iteration <iteration>', meaning: '目标迭代' },
+    ],
+    examples: ['speccore progress', 'speccore progress -i Q1'],
+  },
+  archive: {
+    desc: '归档任务（done 的原子步骤）：移至 archive/ 或恢复；一键收尾用 done',
+    params: [
+      { flag: '-t, --task <id>', meaning: '指定 Task' },
+    ],
+    examples: ['speccore archive -t Task-001'],
+  },
+  retro: {
+    desc: '任务回顾（done 的原子步骤）：生成复盘报告（RETRO.md+HTML）；一键收尾用 done',
+    params: [
+      { flag: '-t, --task <id>', meaning: '指定 Task' },
+    ],
+    examples: ['speccore retro -t Task-001'],
+  },
+  impact: {
+    desc: 'AI 影响分析：变更的上下游影响（what-if）；冲突预测用 merge-check，版本对比用 diff',
+    params: [],
+    examples: ['speccore impact <变更描述>'],
+  },
+  'merge-check': {
+    desc: '合并冲突预测：预测任务分支的合并冲突；变更影响用 impact，版本对比用 diff',
+    params: [],
+    examples: ['speccore merge-check'],
+  },
+  diff: {
+    desc: '版本对比：两个迭代/基线的差异；变更影响用 impact，冲突预测用 merge-check',
+    params: [],
+    examples: ['speccore diff <迭代A> <迭代B>'],
   },
 };
 
