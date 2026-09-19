@@ -7,9 +7,11 @@
  *   3. 从环境配置读取 branch（目标分支）
  *   4. checkout → pull → merge → build → [pre-deploy 测试] → deploy → [post-deploy 测试]
  *
- * 测试时机由 pipeline.test.stage 控制：
+ * 测试时机由 pipeline.test.stage 控制（与 verify --stage 语义对齐）：
  *   - pre-deploy: build 后 deploy 前（默认，可阻断部署）
+ *       ≈ verify --stage=pr（代码质量 + API 契约，部署前验证，可阻断）
  *   - post-deploy: deploy 后（已上线，只报告不阻断）
+ *       ≈ verify --stage=deploy/release（冒烟 + 回归，部署后验证，只报告）
  *   - both: 前后都测
  *
  * 支持单端/多端批量执行，失败不阻断其他端。

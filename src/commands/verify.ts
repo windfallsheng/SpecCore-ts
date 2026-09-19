@@ -4,11 +4,19 @@
  * 执行后验证代码质量：编译检查 + Lint + 单元测试
  * 支持项目级和任务级验证
  *
+ * 验证阶段模型（--stage，与 pipeline 部署时机对齐）：
+ *   - dev     开发阶段：编译 + Lint + 单元测试（代码/规范/案例，无关浏览器）
+ *   - pr      PR 阶段：代码质量 + 关键 UI 冒烟 + API 契约（≈ pipeline pre-deploy，可阻断）
+ *   - deploy  部署阶段：UI 冒烟测试（≈ pipeline post-deploy，只报告）
+ *   - release 发布阶段：全量 UI + API + 性能回归（部署后，只报告）
+ * 即：部署前验证（dev/pr，代码/规范/契约）可阻断；部署后验证（deploy/release，冒烟/回归）只报告。
+ *
  * 用法:
  *   speccore verify                          # 验证当前迭代所有任务
  *   speccore verify -t Task-001              # 验证单个任务
  *   speccore verify -t Task-001 --type=lint  # 只跑 lint
  *   speccore verify --path=./backend         # 指定代码路径
+ *   speccore verify --stage=pr               # PR 阶段（部署前）验证
  */
 
 import { logger, Spinner } from '../utils/logger';
