@@ -1,3 +1,30 @@
+## v8.3.191 (2026-09-19) — ask 流水线编排 + 命名根治 + 端类型统一
+
+### ask 自然语言编排流水线
+- run 流水线意图：识别 preset 名（部署/交付/全流程/开发流程等）+ 起止点（"从 X 到 Y"）
+- 口语阶段名归一化：部署→pipeline、提交→pr、切分功能单元→split-units、拆分/任务化→taskify
+- run 意图带 preset/起止点时优先编排（runForced 跳过歧义检测与中置信度确认）
+- 新增 spec preset（doc2spec→taskify，导入需求→任务化生成 Spec）
+
+### 命名根治：拆分任务 split → taskify
+- 「切分功能单元」（split-units）与「拆分任务」（split）命名混淆，拆分任务阶段 key 改为 taskify
+- 命令 iteration split 保留（加 alias taskify 过渡），流水线 key/ask 归一化/handoff/闸口/preset 全部切 taskify
+
+### 端类型判定统一
+- 新增 resolvePlatformType 统一入口，优先级：PROJECT.yaml type > CONSTITUTION.md 端列表 > 目录名正则兜底
+- 消除 analyze/spec-skeleton 多处硬编码正则判定与两层判定不一致
+
+### 切分与澄清职责分离
+- 切分功能单元独立成流水线步骤（split-units），澄清纯化（req-doc 不再自己切分）
+
+### 命令审计与文档完善
+- 命令审计：3 组重叠命令标注层级（status/progress/dashboard、done/archive/retro、impact/merge-check/diff）
+- help 首页突出常用命令 10 个，弱化完整命令数
+- README/文档修正过时命令数量（26+/20）与 dev 命令残留
+- HTML 模板清理（6 个死模板）
+- config-reference 补 optional_steps 三态开关 + pipelines 命名流水线
+- analyze --from-code 暴露 --out-dir 指定反推需求产出目录
+
 ## v8.3.190 (2026-09-19) — 澄清三态开关 + 命名流水线 + js-yaml 根治
 
 ### 澄清语义重构与三态开关

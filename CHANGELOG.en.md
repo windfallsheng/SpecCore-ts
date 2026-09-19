@@ -2,6 +2,33 @@
 
 ---
 
+## v8.3.191 (2026-09-19) — ask Pipeline Orchestration + Naming Fix + Platform Type Unification
+
+### ask natural-language pipeline orchestration
+- run pipeline intent: recognizes preset names + start/end ranges ("from X to Y")
+- colloquial stage normalization: 部署→pipeline, 提交→pr, 切分功能单元→split-units, 拆分/任务化→taskify
+- run intent with preset/range gets priority (runForced skips ambiguity detection)
+- new spec preset (doc2spec→taskify, import requirements → taskify to generate Spec)
+
+### Naming fix: task split renamed split → taskify
+- 「切分功能单元」(split-units) and 「拆分任务」(split) were confusing; task split stage key renamed to taskify
+- command iteration split kept (alias taskify added); pipeline key/ask normalization/handoff/gate/preset all use taskify
+
+### Platform type unification
+- new resolvePlatformType unified entry: PROJECT.yaml type > CONSTITUTION.md platform list > directory-name regex fallback
+- removes scattered hardcoded regex detection and inconsistent two-layer detection
+
+### Split vs clarify responsibility separation
+- split-units becomes an independent pipeline step; clarify is pure (req-doc no longer splits)
+
+### Command audit & docs polish
+- 3 overlapping command groups annotated with hierarchy
+- help home highlights 10 core commands, de-emphasizes total count
+- README/docs fixed outdated command counts (26+/20) and dev command remnants
+- HTML templates cleaned (6 dead templates)
+- config-reference added optional_steps tri-state + pipelines named pipelines
+- analyze --from-code exposes --out-dir for custom reverse-requirement output dir
+
 ## v8.3.190 (2026-09-19) — Clarify Tri-state + Named Pipelines + js-yaml
 
 ### Clarify semantics refactor & tri-state switch
