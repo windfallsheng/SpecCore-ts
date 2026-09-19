@@ -1287,6 +1287,8 @@ function parseYaml(content: string): unknown {
     if (trimmed.startsWith('- ')) {
       const value = trimmed.slice(2).trim();
       if (!Array.isArray(parent)) continue;
+      // v8.3.190+: 兼容历史脏写法「- # 注释」（旧 toYaml 把注释放 - 后），跳过而非当作元素值
+      if (!value || value.startsWith('#')) continue;
       if (value.includes(':')) {
         const obj: any = {};
         const [k, ...rest] = value.split(':');
@@ -1345,6 +1347,8 @@ function parseYaml(content: string): unknown {
 function autoType(v: string): unknown {
   if (v === 'true') return true;
   if (v === 'false') return false;
+  if (v === '[]') return [];
+  if (v === '{}') return {};
   if (/^-?\d+$/.test(v)) return parseInt(v, 10);
   if (/^-?\d+\.\d+$/.test(v)) return parseFloat(v);
   return v;
@@ -1543,8 +1547,8 @@ function toYaml(config: SpecConfig): string {
     yaml += '  # ── LLM 提供商（可选）──\n';
     yaml += '  llm_providers:\n';
     for (const p of config.ask.llm_providers) {
-      yaml += `    - # 提供商名称\n`;
-      yaml += `      name: ${p.name}\n`;
+      yaml += '    # 提供商名称\n';
+      yaml += `    - name: ${p.name}\n`;
       yaml += `      # 是否启用\n`;
       yaml += `      enabled: ${p.enabled}\n`;
       yaml += `      # 类型：ollama | openai | anthropic | custom\n`;
@@ -1582,8 +1586,8 @@ function toYaml(config: SpecConfig): string {
     yaml += '\n# ── 配置升级历史（自动生成）──\n';
     yaml += 'config_history:\n';
     for (const h of config.config_history) {
-      yaml += `  - # 升级日期\n`;
-      yaml += `    date: ${h.date}\n`;
+      yaml += '  # 升级日期\n';
+      yaml += `  - date: ${h.date}\n`;
       yaml += `    # 变更说明\n`;
       yaml += `    change: ${h.change}\n`;
       if (h.changed_by) {
