@@ -2,6 +2,21 @@
 
 ---
 
+## v8.3.188 (2026-09-19) — Config Upgrade Pipeline Fixes & Diagnostics
+
+### Config upgrade pipeline fixes (5 defects)
+
+- **`detectConfigDiffFromFile`**: reads the on-disk raw YAML to detect missing fields (deep-merge autofill in `loadConfigWithMeta` masked missing fields, so `detectConfigDiff` never saw them)
+- **`upgradeConfig`/`upgradeProjectConfig` early-return fix**: no longer return early on schema_version match + empty warnings; now keyed on fileDiff so same-version missing fields get backfilled
+- **toYaml array serialization switched to block style**: the flow style `['desktop']` is not recognized by the custom parseYaml, round-tripping to a string and crashing `devices.map`; added `normalizeStringArray` to tolerate legacy dirty data
+- **toYaml `pipeline`/`with_code` indentation fix**: were 4-space (nested under `review`), corrected to 2-space
+- **toYaml `schema_version` uncommented**: was commented out, causing validateConfig to keep reporting "must be a number"
+
+### Diagnostics
+
+- **`doctor` spec-database consistency check**: upgraded from "directory existence only" to "compare against built-in defaults list", surfacing missing built-in files (e.g. new agents / `_INDEX`) with backfill suggestions
+- **`update` stale-CLI warning**: warns when project init version > current CLI version, suggesting a CLI upgrade first
+
 ## v8.3.187 (2026-09-19) — Honesty Degradation System & Engineering Hardening
 
 ### Universal behavior rules refined (4 → 7)

@@ -1,3 +1,18 @@
+## v8.3.188 (2026-09-19) — 配置升级链路修复与诊断增强
+
+### 配置升级链路修复（5 个缺陷）
+
+- **`detectConfigDiffFromFile`**：新增读磁盘原始 YAML 检测缺失字段（`loadConfigWithMeta` 深度合并补全会掩盖缺失，导致 `detectConfigDiff` 永远看不到磁盘缺的新字段）
+- **`upgradeConfig`/`upgradeProjectConfig` 提前返回修复**：不再因 schema_version 匹配 + warnings 空就提前返回，改用 fileDiff 判断，同版本缺失字段也能补全
+- **toYaml 数组序列化改用块级写法**：flow 写法 `['desktop']` 自定义 parseYaml 不认识，回读成字符串导致 `devices.map` 崩溃；新增 `normalizeStringArray` 兼容历史脏数据
+- **toYaml `pipeline`/`with_code` 缩进修复**：原 4 空格误嵌套进 `review`，改为 2 空格
+- **toYaml `schema_version` 取消注释**：原被注释导致 validateConfig 持续报「必须是数字」
+
+### 诊断增强
+
+- **`doctor` 规范库一致性检查**：从「只查目录存在性」升级为「对比内置 defaults 清单」，能发现缺失的内置文件（如新增 agent / `_INDEX`），给出补全建议
+- **`update` 版本过旧警告**：检测「项目初始化版本 > 当前 CLI 版本」时警告 CLI 过旧，提示先升级 CLI 再执行 upgrade
+
 ## v8.3.187 (2026-09-19) — 诚实降级体系与工程加固
 
 ### 通用行为准则优化（4 → 7 条）
