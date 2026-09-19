@@ -175,9 +175,40 @@ async function checkSpecDatabase(projectRoot: string): Promise<DiagnosisResult[]
       message: exists ? `.speccore/${layer}/ 已初始化` : `.speccore/${layer}/ 未初始化`,
       fix: exists ? undefined : `speccore init（会自动创建 ${layer}）`,
     });
+
+    // v8.3.187+: 内容一致性检查——对比内置 defaults 清单，找出缺失文件
+    if (exists) {
+      const missing = await findMissingBuiltinFiles(layer, dirPath);
+      if (missing.length > 0) {
+        const preview = missing.slice(0, 4).join(', ');
+        results.push({
+          ok: false,
+          category: '规范数据库',
+          message: `.speccore/${layer}/ 缺 ${missing.length} 个内置文件: ${preview}${missing.length > 4 ? ' 等' : ''}`,
+          fix: `speccore update（会用最新内置文件补齐）`,
+        });
+      }
+    }
   }
 
   return results;
+}
+
+/** 对比 dist 内置 defaults 清单，找出项目里缺失的文件（含 _INDEX/_TEMPLATE） */
+async function findMissingBuiltinFiles(layer: string, projectDir: string): Promise<string[]> {
+  const defaultsDir = join(__dirname, '..', 'core', layer.toLowerCase(), 'defaults');
+  if (!(await pathExists(defaultsDir))) return [];
+
+  const entries = await readdir(defaultsDir);
+  const builtinFiles = entries.filter(e => e.endsWith('.md'));
+
+  const missing: string[] = [];
+  for (const file of builtinFiles) {
+    if (!(await pathExists(join(projectDir, file)))) {
+      missing.push(file);
+    }
+  }
+  return missing;
 }
 
 async function checkCodeGraph(projectRoot: string): Promise<DiagnosisResult[]> {

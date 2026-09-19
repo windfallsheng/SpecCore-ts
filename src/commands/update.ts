@@ -140,6 +140,16 @@ export async function updateCommand(options: { force?: boolean; tool?: string; y
 
   const isSameVersion = oldVersion === CURRENT_VERSION;
 
+  // v8.3.187+: 检测当前 CLI 版本过旧（项目是用更高版本初始化的，继续升级会导致规范库/配置缺失）
+  if (oldVersion && oldVersion !== 'unknown' && isNewerVersion(oldVersion, CURRENT_VERSION)) {
+    logger.warn('');
+    logger.warn(`⚠️  当前 CLI 版本 (v${CURRENT_VERSION}) 低于项目初始化版本 (v${oldVersion})`);
+    logger.warn('   项目是用更高版本的 SpecCore 初始化的，用旧版 CLI 升级会导致内置规范库/配置缺失');
+    logger.warn('   👉 请先升级 CLI: npm install -g speccore@latest');
+    logger.warn('   或改用最新本地构建的 speccore 执行升级');
+    logger.warn('');
+  }
+
   // 始终执行更新和清理，不再因版本相同跳过（确保历史文件、废弃命令等被清理）
   const spinner = new Spinner(isSameVersion ? `刷新 v${CURRENT_VERSION} 命令文件...` : `升级 v${oldVersion} → v${CURRENT_VERSION}...`);
   spinner.start();
