@@ -3145,8 +3145,10 @@ async function detectGlobalLayerProgress(): Promise<{
       const platformDirs = entries.filter(e => e.isDirectory() && e.name !== '_shared').map(e => e.name);
       const missingPlatformDocs: string[] = [];
 
+      const { resolvePlatformType } = await import('../core/spec-paths');
       for (const d of platformDirs) {
-        const isBackend = /service|server|api|backend/i.test(d);
+        // v8.3.191+: 端类型统一判定（配置优先：PROJECT.yaml type > CONSTITUTION.md > 目录名正则兜底）
+        const isBackend = (await resolvePlatformType(d)) === 'backend';
         let hasMissing = false;
         if (isBackend) {
           const hasApi = await pathExists(join(platformsDir, d, 'API_INVENTORY.md'));

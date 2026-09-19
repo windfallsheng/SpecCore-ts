@@ -336,6 +336,35 @@ export async function parsePlatformTypes(): Promise<Map<string, string>> {
 }
 
 /**
+ * 端类型判定（v8.3.191+）：统一入口，标准从「目录名正则猜」升级为「配置优先」
+ * 优先级：PROJECT.yaml platforms[].type > CONSTITUTION.md 端列表 > 目录名正则兜底
+ * 返回值归一化为 backend | frontend | infra | unknown
+ */
+export async function resolvePlatformType(platformName: string): Promise<'backend' | 'frontend' | 'infra' | 'unknown'> {
+  // 1. PROJECT.yaml 显式声明（最高优先级；动态 import 避免循环依赖）
+  try {
+    const { loadProjectConfigWithMeta } = await import('./unified-config');
+    const { config } = await loadProjectConfigWithMeta();
+    const p = (config.platforms || []).find((x: any) => x.name === platformName);
+    if (p?.type === 'backend' || p?.type === 'frontend' || p?.type === 'infra') return p.type;
+  } catch { /* PROJECT.yaml 不存在或解析失败则降级 */ }
+
+  // 2. CONSTITUTION.md 端列表（工程类型列）
+  const types = await parsePlatformTypes();
+  const t = types.get(platformName);
+  if (t) {
+    const lower = t.toLowerCase();
+    if (/backend|后端|service|服务|api|server|go|java|node|python|rust/.test(lower)) return 'backend';
+    if (/frontend|前端|web|h5|miniprogram|小程序|app|管理后台|移动端/.test(lower)) return 'frontend';
+    if (/infra|基础设施|middleware|中间件|gateway|网关/.test(lower)) return 'infra';
+  }
+
+  // 3. 目录名正则兜底（历史行为）
+  if (/service|server|api|backend/i.test(platformName)) return 'backend';
+  return 'frontend';
+}
+
+/**
  * 从 CONSTITUTION.md 解析项目信息表（v8.3.107+）
  * 返回 Map<工程标识, ProjectInfo>
  * 用于 execute 命令确定代码输出位置

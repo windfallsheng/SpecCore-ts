@@ -817,9 +817,9 @@ export function buildQualityRubRIC(docName: string, platform?: string): string {
 
   let text = `\n## 📋 质量标准（${docName}）\n\n`;
 
-  // 端特定提示
+  // 端特定提示（统一到 isBackendPlatform，消除同文件两套判定）
   if (platform && docName === 'TECH.md') {
-    const isBackend = /service|api|server|backend/i.test(platform);
+    const isBackend = isBackendPlatform(platform);
     if (isBackend) {
       text += `> 🎯 **${platform} 是后端服务**，TECH.md 必须包含：接口签名（路径/方法/参数/响应）、数据模型（表/字段/索引）、业务逻辑、安全方案\n\n`;
     } else {
