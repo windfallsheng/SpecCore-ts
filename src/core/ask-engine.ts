@@ -303,10 +303,12 @@ export function classifyMode(input: string): AskMode {
   if (explainPatterns.some(p => p.test(lower))) return 'explain';
 
   // 模式4: 复杂编排 — 包含多个动作词 + 时序/数量词
-  const pipelineKeywords = ['然后', '再', '接着', '最后', '同时', '之后',
+  // v8.3.189+: 补充「分析」「拆分」动作词和「并且」「以及」并列连接词，
+  // 使「分析…拆分…」这类复合意图能进入 pipeline 编排（analyze-split-plan）
+  const pipelineKeywords = ['然后', '再', '接着', '最后', '同时', '之后', '并且', '以及', '还要',
     'then', 'after', 'finally', '同时执行', 'pipeline'];
-  const actionWords = ['计划', '执行', '分批', '安排',
-    'plan', 'execute', 'batch'];
+  const actionWords = ['计划', '执行', '分批', '安排', '分析', '拆分',
+    'plan', 'execute', 'batch', 'analyze', 'split'];
   const hasTiming = /晚.*点|早上.*点|明天|今天|后天|下周|周[一到日]|(\d+)[点时]/i.test(lower);
   const hasBatch = /分批|批次|batch|一批|一组/i.test(lower);
   const hasBugfix = /bug|修复|fix|defect/i.test(lower);
