@@ -310,6 +310,8 @@ export function classifyMode(input: string): AskMode {
     /帮我(?:部署|交付|上线|提代码|提交代码)/,
     /(?:部署|交付|上线).{0,4}流水线/,
     /(?:跑|执行).{0,4}全流程/,
+    /(?:生成|出).{0,2}(?:spec|规格)/,
+    /.{0,6}到拆分/,
   ];
   if (runPipelinePatterns.some(p => p.test(input))) return 'match';
 
@@ -649,7 +651,9 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
   }
   
   // 如果 KB 有匹配且置信度高于意图识别，用 KB（但要整合意图识别的参数）
-  if (kbMatch && (!best || best.confidence < 60)) {
+  // v8.3.191+: run 意图有 preset/起止点时，优先 run 编排（避免被 KB 的 split/deploy 等抢占）
+  const runHasParams = best?.command === 'run' && (best.extractedParams?.preset || best.extractedParams?.from || best.extractedParams?.to);
+  if (kbMatch && (!best || best.confidence < 60) && !runHasParams) {
     const params = best?.extractedParams || {};
     let fullCommand = `speccore ${kbMatch.name}`;
     const paramNotes: string[] = [];

@@ -58,6 +58,7 @@ async function autoPipeline(options: RunOptions): Promise<void> {
     full:    { from: 'req-doc',  to: 'spec2doc', desc: '全流程：需求→导出（含收尾）' },
     import:  { from: 'doc2spec', to: 'pr',       desc: '导入需求→合并请求' },
     analyze: { from: 'analyze',  to: 'validate', desc: '只分析校验' },
+    spec:    { from: 'doc2spec', to: 'split',    desc: '导入需求→拆分（生成 Spec，看效果）' },
     develop: { from: 'analyze',  to: 'verify',   desc: '分析→验证（默认，代码+验证完成）' },
     deliver: { from: 'execute',  to: 'pr',       desc: '执行→提交代码' },
     deploy:  { from: 'analyze',  to: 'pipeline', desc: '分析→部署验证' },
