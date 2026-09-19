@@ -20,10 +20,10 @@ speccore analyze --prompt --pipeline --resume -I <iteration>
 
 ```bash
 # 启动任务拆分 Pipeline
-speccore iteration split --pipeline --prompt -I <iteration>
+speccore iteration taskify --pipeline --prompt -I <iteration>
 
 # 恢复之前的拆分 Pipeline
-speccore iteration split --pipeline --resume -I <iteration>
+speccore iteration taskify --pipeline --resume -I <iteration>
 ```
 
 ### 3. execute 命令

@@ -214,12 +214,12 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     description: 'AI 分析 — 需求完整性 + 改动范围 + 风险矩阵（支持全局级/迭代级/任务级/重新分析/深度分析/按需分析/代码关联）',
     args: '-I <iteration> 或 --scope global|task --deep <doc> --iterative --filter <keywords> --with-code --supplement --sync',
   },
-  // 任务拆分
+  // 任务拆分（任务化）
   {
-    id: 'iteration split',
+    id: 'iteration taskify',
     intent: 'split',
     priority: 88,
-    triggers: ['拆分任务', '拆分需求', '任务拆分', '智能拆分'],
+    triggers: ['拆分任务', '拆分需求', '任务拆分', '智能拆分', '任务化'],
     patterns: ['拆分(.+)任务', '拆分(.+)需求', '把(.+)拆'],
     description: '智能拆分 — 复杂度估算 + 人员分配 + 语义依赖',
     args: '-i <iteration> --interactive',

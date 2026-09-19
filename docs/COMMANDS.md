@@ -32,7 +32,7 @@ init → doc2spec → analyze → split → plan → execute → pr → done →
 
 ```bash
 speccore iteration create -n <name> --topic <topic>    # 创建迭代
-speccore iteration split -i <iteration>                # 拆分任务
+speccore iteration taskify -i <iteration>                # 拆分任务
 speccore iteration list                                # 列出迭代
 ```
 

@@ -40,7 +40,7 @@ const ERROR_PATTERNS: ErrorPattern[] = [
     suggestions: [
       '运行 speccore status 查看当前迭代的任务列表',
       '使用任务 ID 的完整形式（如 Task-001）',
-      '检查是否已运行 speccore split 拆分任务',
+      '检查是否已运行 speccore iteration taskify 拆分任务',
     ],
   },
   {

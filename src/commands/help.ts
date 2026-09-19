@@ -71,13 +71,13 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     ],
     examples: ['speccore iteration create -n Q1 --from=2026-04-01 --to=2026-06-30 --owner=赵六'],
   },
-  'iteration split': {
+  'iteration taskify': {
     desc: '需求拆分为开发任务（任务化，别名 taskify）',
     params: [
       { flag: '-i, --iteration <id>', meaning: '目标迭代' },
       { flag: '--interactive', meaning: '预览后逐一确认' },
     ],
-    examples: ['speccore iteration split -i Q1', 'speccore iteration split -i Q1 --interactive'],
+    examples: ['speccore iteration taskify -i Q1', 'speccore iteration taskify -i Q1 --interactive'],
   },
   'task new': {
     desc: '手动创建 Task',
@@ -409,7 +409,7 @@ function showAllCommands(): void {
 
   const categories: Record<string, string[]> = {
     '🏗️ 初始化': ['init', 'import', 'doc2spec'],
-    '📋 迭代与任务': ['iteration create', 'iteration split', 'task new', 'rename'],
+    '📋 迭代与任务': ['iteration create', 'iteration taskify', 'task new', 'rename'],
     '🔍 分析与计划': ['analyze', 'plan'],
     '⚡ 执行与审查': ['execute', 'pr', 'done'],
     '🐛 变更与修复': ['change', 'bugfix'],
@@ -455,7 +455,7 @@ speccore import --project=user-svc --path=./src --type=<端名> --interactive  #
     {
       title: '三、分析 + 拆分',
       code: `speccore analyze -i Q1                    # 需求分析
-speccore iteration split -i Q1              # 拆分为 Task
+speccore iteration taskify -i Q1              # 拆分为 Task
 speccore plan -i Q1                         # 生成执行计划`,
     },
     {

@@ -21,7 +21,7 @@ speccore iteration create -n Q1     # Create iteration
 # 🔒 AI usage (in WorkBuddy/Cursor/Trae via @spec-ask)
 @spec-ask "import requirements.docx to Q1 iteration"
 @spec-ask "analyze Q1 requirements and code health"
-@spec-ask "split Q1 iteration into tasks"
+@spec-ask "taskify Q1 iteration into tasks"
 @spec-ask "generate execution plan for Q1"
 @spec-ask "execute Task-001 with AI"
 @spec-ask "archive Task-001 after validation"
@@ -50,7 +50,7 @@ speccore iteration create -n Q1     # Create iteration
 | **Start a new project** | `speccore init --interactive` |
 | **Import a PRD document** | `@spec-ask "import PRD.docx to Q1"` 🔒 |
 | **Analyze requirements + code health** | `@spec-ask "analyze Q1 requirements"` 🔒 |
-| **Split requirements into tasks** | `speccore iteration split -I Q1 --interactive` |
+| **Split requirements into tasks** | `speccore iteration taskify -I Q1 --interactive` |
 | **Fix a bug** | `speccore task new -n "Login timeout" --type=bugfix` |
 | **Batch fix bugs** | `speccore task new --batch-file=bugs.xlsx --type=bugfix` |
 | **Refresh retrieval layers** | `speccore refresh` |

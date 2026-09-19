@@ -557,7 +557,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 
     logger.info('');
     logger.info('📋 下一步:');
-    logger.info(`   speccore split -I ${iter}          # 重新拆分任务`);
+    logger.info(`   speccore iteration taskify -I ${iter}          # 重新拆分任务`);
     logger.info(`   speccore reindex                    # 完整重建索引`);
     return;
   }
@@ -593,7 +593,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 
     logger.info('');
     logger.info('📋 下一步:');
-    logger.info(`   speccore split -I ${iter}          # 重新拆分任务`);
+    logger.info(`   speccore iteration taskify -I ${iter}          # 重新拆分任务`);
     logger.info(`   speccore reindex                    # 完整重建索引`);
     return;
   }
@@ -4382,7 +4382,7 @@ export async function buildMultiDocPrompt(command: string, ctx: { iteration?: st
       prompt += `[SPECCORE_EXEC: ${nextLayerCmd}]\n`;
     } else {
       prompt += `> 🎉 全局分析全部完成！所有 Layer 和子层的文档已生成。\n`;
-      prompt += `> 下一步: 运行 \`speccore split -I <迭代名>\` 进行任务拆分。\n`;
+      prompt += `> 下一步: 运行 \`speccore iteration taskify -I <迭代名>\` 进行任务拆分。\n`;
     }
 
     // v8.3.61+: 质量自检 Checklist
@@ -5661,7 +5661,7 @@ status: "clarified"
       if (platforms.length >= 2 && hasPlatformUnfilled) {
         prompt += `> 下一步: 生成各端专属文档 → \`speccore analyze --prompt -I ${iter} --phase 2\`\n`;
       } else {
-        prompt += `> 下一步: 运行 \`speccore split -I ${iter}\` 进行任务拆分\n`;
+        prompt += `> 下一步: 运行 \`speccore iteration taskify -I ${iter}\` 进行任务拆分\n`;
       }
     }
   }

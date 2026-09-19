@@ -86,8 +86,8 @@ const COMMAND_KB: CommandKnowledge[] = [
     usage: 'speccore execute [--task <id>] [--batch-size <n>] [--auto]', examples: ['speccore execute', 'speccore execute --batch-size 3'], related: ['plan', 'done'], triggers: ['执行', 'execute', '开发', '开始做', '干活'] },
   { name: 'plan', aliases: ['pl'], description: '生成执行计划+管理历史：创建/交互/列表/详情/取消',
     usage: 'speccore plan [--all] [--task <id>] [--interactive]', examples: ['speccore plan --all', 'speccore plan --interactive'], related: ['execute'], triggers: ['计划', 'plan', '安排', '规划'] },
-  { name: 'split', aliases: ['sp'], description: '拆分需求为独立 Task：默认 AI 智能分析（--prompt）→ AI 输出 JSON → 自动创建；也可传统模式按 REQUIREMENT.md 章节拆分',
-    usage: 'speccore split [--prompt] [--response <json>] [-f <file>] [--preview] [--iteration <name>]', examples: ['speccore split --prompt', 'speccore split --response "<ai_json>"', 'speccore split -f REQUIREMENT.md', 'speccore split --preview'], related: ['task', 'plan'], triggers: ['拆分', 'split', '分解', '划分', '拆', '拆需求', '拆任务', '任务拆分', '需求拆分'] },
+  { name: 'taskify', aliases: [], description: '拆分需求为开发任务（任务化）：默认 AI 智能分析（--prompt）→ AI 输出 JSON → 自动创建；也可传统模式按 REQUIREMENT.md 章节拆分',
+    usage: 'speccore iteration taskify [--prompt] [--response <json>] [-f <file>] [--preview] [--iteration <name>]', examples: ['speccore iteration taskify --prompt', 'speccore iteration taskify --response "<ai_json>"', 'speccore iteration taskify -f REQUIREMENT.md', 'speccore iteration taskify --preview'], related: ['task', 'plan'], triggers: ['拆分', '分解', '划分', '拆', '拆需求', '拆任务', '任务拆分', '需求拆分', '任务化'] },
   { name: 'pr', aliases: ['mr'], description: '创建 Pull Request：提交预览+文件选择+交互确认',
     usage: 'speccore pr [--task <id>] [--auto]', examples: ['speccore pr', 'speccore pr --task T-01 --auto'], related: ['done', 'execute'], triggers: ['pr', 'pull request', '提交', '合并', 'MR'] },
   // v8.3.95+: verify 命令

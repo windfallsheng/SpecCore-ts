@@ -282,9 +282,7 @@ iterationCmd
   .action(iterationCreateCommand);
 
 iterationCmd
-  .command('split')
-  .alias('taskify')
-  .alias('sp')
+  .command('taskify')
   .description('拆分需求为开发任务（任务化）：预览→逐一确认/一键创建')
   .option('-f, --file <file>', 'Requirement file path', 'REQUIREMENT.md')
   .option('-i, --iteration <iteration>', 'Target iteration')
@@ -1122,7 +1120,7 @@ if (process.argv.length <= 2) {
         } else {
           const tds = readdirSync(base).filter((d: string) => d.startsWith('Task-'));
           if (tds.length === 0) {
-            phase = 'split'; nextCmd = 'speccore iteration split --iteration=' + iteration; nextDesc = '拆分任务';
+            phase = 'taskify'; nextCmd = 'speccore iteration taskify --iteration=' + iteration; nextDesc = '拆分任务';
           } else {
             total = tds.length;
             for (const td of tds) {

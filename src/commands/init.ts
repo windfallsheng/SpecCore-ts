@@ -1484,7 +1484,7 @@ SpecCore 规范驱动开发项目。
 | **全局分析质量规范** | \`.speccore/RULES/ANALYSIS_QUALITY.md\` | \`speccore analyze --scope global\` |
 | **迭代层分析强制约束** | \`.speccore/RULES/ITERATION_QUALITY.md\` | \`speccore analyze -I <迭代名>\` |
 | **执行阶段强制约束** | \`.speccore/RULES/EXECUTION.md\` | \`speccore execute\` |
-| **任务拆分强制约束** | \`.speccore/RULES/TASK_SPLIT.md\` | \`speccore split\` |
+| **任务拆分强制约束** | \`.speccore/RULES/TASK_SPLIT.md\` | \`speccore iteration taskify\` |
 
 > **Agent 角色执行前，必须先读取 \`.speccore/RULES/\` 中 \`appliesTo\` 匹配当前技术栈的规则，将技术栈专属检查项叠加到通用清单中。** 完整阶段-角色映射见 \`.speccore/AGENTS/_INDEX.md\`。`;
 
@@ -1725,7 +1725,7 @@ Iteration-NNN-name/            ← 迭代目录
 \`\`\`bash
 speccore status                          # 当前迭代状态面板
 speccore analyze -I <迭代名> --auto      # 全量分析
-speccore split -I <迭代名>               # 自动拆分任务
+speccore iteration taskify -I <迭代名>               # 自动拆分任务
 speccore execute -i <迭代名> --all       # 执行所有任务
 \`\`\``},
   ];

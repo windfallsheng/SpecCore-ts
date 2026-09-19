@@ -14,7 +14,7 @@ Same command, different syntax depending on context. Full classification by cate
 |:---|:---|:---|:---|
 | Init | `speccore init` | `/spec-init` | ✅ CLI |
 | Import | — | `@spec-ask "import PRD.docx"` | 🔒 AI |
-| Split | `speccore iteration split -i Q1` | `@spec-ask "split Q1"` | 🔒 AI |
+| Split | `speccore iteration taskify -i Q1` | `@spec-ask "taskify Q1"` | 🔒 AI |
 | Execute | — | `@spec-ask "execute Task-001"` | 🔒 AI |
 | PR | — | `@spec-ask "create PR for Task-001"` | 🔒 AI |
 | Done | — | `@spec-ask "archive Task-001"` | 🔒 AI |
@@ -85,12 +85,12 @@ speccore init --force
 | Command | Alias | Description | Options |
 | :--- | :--- | :--- | :--- |
 | `speccore iteration create` | `it cr` | Create iteration | `--name <name>` `--goal <goal>` |
-| `speccore iteration split` | `it sp` | Split requirements into tasks | `--iteration <name>` `--dry-run` |
+| `speccore iteration taskify` | `it tf` | Split requirements into tasks | `--iteration <name>` `--dry-run` |
 | `speccore iteration-from-global` | `ifg` | Generate iteration from global layer | `--reqs <ids>` `--name <name>` `--project <name>` |
 
 ```bash
 speccore iteration create --name="2026-07-Meeting" --goal="Meeting booking"
-speccore iteration split --iteration=2026-07-Meeting --dry-run
+speccore iteration taskify --iteration=2026-07-Meeting --dry-run
 speccore iteration-from-global --reqs=REQ-001,REQ-002 --name=2026-07-Meeting
 ```
 
@@ -186,10 +186,10 @@ speccore analyze -I Q1 --src backend/src                  # Combined req+code (e
 speccore analyze --src backend,frontend --req docs/a.md,docs/b.md --scope global
 
 # AI smart split — ANALYSIS.md check + granularity + staffing
-speccore iteration split -i Q1                            # Auto (reads STAFFING.md, recommends granularity)
-speccore iteration split -i Q1 -g macro                   # Coarse granularity (1-2 weeks/task)
-speccore iteration split -i Q1 -g atomic                  # Fine granularity (1-3 days/task)
-speccore iteration split -i Q1 --force                    # Force re-split (cleans old tasks)
+speccore iteration taskify -i Q1                            # Auto (reads STAFFING.md, recommends granularity)
+speccore iteration taskify -i Q1 -g macro                   # Coarse granularity (1-2 weeks/task)
+speccore iteration taskify -i Q1 -g atomic                  # Fine granularity (1-3 days/task)
+speccore iteration taskify -i Q1 --force                    # Force re-split (cleans old tasks)
 
 # Execute — auto branch + dependency-aware
 speccore execute -i Q1 --all                              # From CONSTITUTION default branch
@@ -315,7 +315,7 @@ speccore trace --full
 | `ctx` | context | `sg` | sync --global |
 | `iu` | index-update | `if` | impact |
 | `it cr` | iteration create | `bl` | baseline |
-| `it sp` | iteration split | `db` | status-panel |
+| `it tf` | iteration taskify | `db` | status-panel |
 | `ifg` | iteration-from-global | `ad` | audit |
 | `gs` | global-status | `hs` | ops |
 | `pg` | status-panel | `st` | status |
@@ -384,7 +384,7 @@ speccore analyze -I Q1                  → 期次-Q1/00-需求文档/  🔒
                                             ├── ANALYSIS.md (change scope, risk matrix, file impact)
                                             ├── TECH/TEST/REVIEW/RISK/DEPS/MONITOR.md
                                             └── .speccore/prompts/analyze-iteration-Q1.md
-speccore iteration split -i Q1          → reads ANALYSIS.md + STAFFING.md  🔒
+speccore iteration taskify -i Q1          → reads ANALYSIS.md + STAFFING.md  🔒
                                             ├── Complexity estimation (API/DB/page counts)
                                             ├── Smart priority (high/medium/low)
                                             ├── Semantic dependency detection

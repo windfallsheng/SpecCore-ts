@@ -41,7 +41,7 @@ async function autoPipeline(options: RunOptions): Promise<void> {
     // ── 主流程（分析→校验→任务化→计划→执行→验证→部署→合并→归档→导出）──
     { key: 'analyze',   cmd: 'speccore analyze',         layer: 'main' },
     { key: 'validate',  cmd: 'speccore validate',        layer: 'main' },
-    { key: 'taskify',   cmd: 'speccore iteration split', layer: 'main' },
+    { key: 'taskify',   cmd: 'speccore iteration taskify', layer: 'main' },
     { key: 'plan',      cmd: 'speccore plan',            layer: 'main' },
     { key: 'execute',   cmd: 'speccore execute',         layer: 'main' },
     { key: 'verify',    cmd: 'speccore verify',          layer: 'main' },
@@ -343,7 +343,7 @@ async function autoPipeline(options: RunOptions): Promise<void> {
           hasTasks = entries.some((e: any) => e.isDirectory() && e.name.startsWith('Task-'));
         } catch {}
         if (!hasTasks) {
-          execSync(`speccore iteration split -i ${iteration} --force`, { stdio: 'inherit' });
+          execSync(`speccore iteration taskify -i ${iteration} --force`, { stdio: 'inherit' });
         } else {
           logger.info('  ✅ 任务已拆分，跳过');
         }

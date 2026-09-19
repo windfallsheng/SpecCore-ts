@@ -28,7 +28,7 @@
 
 | File | Source | Editable? | After Editing |
 | :--- | :--- | :--- | :--- |
-| `PROJECT_GRAPH.md` | iteration split generates | ❌ **No** | Use `update` / `plan`; CLI overwrites manual changes |
+| `PROJECT_GRAPH.md` | iteration taskify generates | ❌ **No** | Use `update` / `plan`; CLI overwrites manual changes |
 
 ### Task Layer (`Task-xxx/`, created by task new)
 

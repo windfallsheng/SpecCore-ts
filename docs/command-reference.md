@@ -149,7 +149,7 @@ speccore doc2spec --classify --response <json> -I <iteration>
 2. `speccore doc2spec --classify --prompt -I <iter>` → AI 理解文档意图（nature）+ 映射类型（type）
 3. `speccore doc2spec --classify --response <json> -I <iter>` → 写入 `staging/`
 4. `speccore analyze -I <iter>` → 按类型路由到 `020-specs/{features,bugs,refactors,research}/`
-5. `speccore split -I <iter>` → 模块驱动拆分：从 `overview/REQUIREMENT.md` 读取功能模块清单及「涉及端」列，每个模块创建一个 Task，按涉及端创建子任务目录
+5. `speccore iteration taskify -I <iter>` → 模块驱动拆分：从 `overview/REQUIREMENT.md` 读取功能模块清单及「涉及端」列，每个模块创建一个 Task，按涉及端创建子任务目录
 
 **AI 意图理解：**
 
@@ -349,7 +349,7 @@ speccore workspace clean --days 30         # 清理 30 天前的未提升条目
 
 ### 📦 split — 任务拆分 🔒 AI 命令
 ```bash
-speccore iteration split [-i <iteration>] [-f <file>] [-g <level>] [--force] [--interactive]
+speccore iteration taskify [-i <iteration>] [-f <file>] [-g <level>] [--force] [--interactive]
 ```
 别名: `sp`
 
@@ -419,13 +419,13 @@ AI 输出 JSON 拆分方案
 
 ```bash
 # 默认拆分（自动推荐粒度）
-speccore iteration split -i Q1
+speccore iteration taskify -i Q1
 
 # 指定粗粒度（小团队）
-speccore iteration split -i Q1 -g macro
+speccore iteration taskify -i Q1 -g macro
 
 # 强制重新拆分（清理旧任务）
-speccore iteration split -i Q1 --force
+speccore iteration taskify -i Q1 --force
 ```
 
 ### 📐 plan — 执行计划 🔒 AI 命令
@@ -702,7 +702,7 @@ speccore ops
 ### iteration
 ```bash
 speccore iteration create -n <name>          # ✅ CLI
-speccore iteration split                      # 🔒 AI 命令
+speccore iteration taskify                      # 🔒 AI 命令
 speccore iteration list                       # ✅ CLI
 ```
 别名: `it`

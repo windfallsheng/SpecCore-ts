@@ -337,12 +337,12 @@ speccore global-status
 speccore iteration-from-global --reqs=REQ-001,REQ-002 --name=2026-Q3-Sprint
 
 # 3. Preview split plan
-speccore iteration split
-# Strict: speccore iteration split --strict  (preview each section)
+speccore iteration taskify
+# Strict: speccore iteration taskify --strict  (preview each section)
 # Outputs: IMPACT.md (risk + dependencies), .env.example --iteration=2026-Q3-Sprint --dry-run
 
 # 4. Execute split (auto-generates Task dirs + Spec stubs)
-speccore iteration split --iteration=2026-Q3-Sprint
+speccore iteration taskify --iteration=2026-Q3-Sprint
 
 # 5. Check progress
 speccore status-panel --iteration=2026-Q3-Sprint --detail
@@ -644,7 +644,7 @@ speccore doc2spec --files "backend.docx=backend-admin,web.md=web" --iter=Q3
 | File | Type | Purpose |
 | :--- | :--- | :--- |
 | `{platform}-requirements.md` | Manual | Per-platform standalone requirement doc |
-| `REQUIREMENT.md` | **Auto-generated** | Aggregated view for `iteration split` |
+| `REQUIREMENT.md` | **Auto-generated** | Aggregated view for `iteration taskify` |
 | `INDEX.md` | **Auto-generated** | Platform index for automatic detection |
 
 ### When Requirements Change

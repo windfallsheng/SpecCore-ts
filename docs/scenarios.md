@@ -94,10 +94,10 @@ speccore analyze --scope task -t Task-01 -I Q1
 
 ```bash
 # 方式 1: 自动拆分（默认）
-speccore iteration split -I Q1
+speccore iteration taskify -I Q1
 
 # 方式 2: 交互拆分（预览+逐一确认）
-speccore iteration split -I Q1 --interactive
+speccore iteration taskify -I Q1 --interactive
 
 # 方式 3: 手动创建
 speccore task new --name=用户登录 --type=feature
@@ -182,7 +182,7 @@ speccore dashboard
 speccore init                    ① 初始化
 speccore doc2spec                ② 导入需求文档
 speccore analyze                 ③ 分析（需求+代码）
-speccore iteration split         ④ 拆分 Task
+speccore iteration taskify         ④ 拆分 Task
 speccore plan                    ⑤ 执行计划
 speccore execute --force         ⑥ AI 开发
 speccore pr                      ⑦ 提 PR
@@ -260,7 +260,7 @@ speccore doc2spec --files \
 | 文件 | 类型 | 说明 |
 | :--- | :--- | :--- |
 | `{端名}需求.md` | 手动维护 | 各端独立的需求文档 |
-| `REQUIREMENT.md` | **自动生成** | 各端汇总，供 `iteration split` 使用 |
+| `REQUIREMENT.md` | **自动生成** | 各端汇总，供 `iteration taskify` 使用 |
 | `INDEX.md` | **自动生成** | 端列表索引，供 `split` 智能端检测 |
 | `images/` | **自动生成** | Word 中提取的图片 |
 
@@ -489,17 +489,17 @@ speccore baseline --restore=v1.0-release --req=REQ-005
 speccore doc2spec --files "admin.docx=后台管理端,h5.md=后台H5端,web.docx=Web" --iter=Q3
 
 # 2. 预览拆分
-speccore iteration split --dry-run
+speccore iteration taskify --dry-run
 
 # 3. 执行拆分（自动检测端 + 按端分配）
-speccore iteration split
+speccore iteration taskify
 # → Platforms: 后台管理端, 后台H5端, Web          ← 从 INDEX.md 自动检测
 # → ## 后台管理端需求 下的 section  → 只建 backend/管理/
 # → ## 后台H5端需求   下的 section  → 只建 backend/H5/
 # → ## Web端需求       下的 section  → 只建 frontend/Web/
 
 # 4. 手动指定端
-speccore iteration split --platforms=web,mini,h5
+speccore iteration taskify --platforms=web,mini,h5
 ```
 
 **方式二：从全量需求池拉取**
@@ -512,7 +512,7 @@ speccore global-status
 speccore iteration-from-global --reqs=REQ-001,REQ-002 --name=期次-2026-Q3
 
 # 3. 执行拆分
-speccore iteration split -I 期次-2026-Q3
+speccore iteration taskify -I 期次-2026-Q3
 
 # 4. 查看进度
 speccore dashboard -I 期次-2026-Q3 --detail
@@ -537,7 +537,7 @@ speccore dashboard -I 期次-2026-Q3 --detail
 
 **严格模式**：
 ```bash
-speccore iteration split --strict
+speccore iteration taskify --strict
 # → 逐 section 预览：端分配、内容摘要
 # → [y]确认 [e]编辑名称 [N]跳过 [q]取消
 # → 不确认不创建，批量确认后一次性生成

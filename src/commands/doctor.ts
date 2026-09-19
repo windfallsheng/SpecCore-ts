@@ -288,7 +288,7 @@ async function checkIterations(projectRoot: string): Promise<DiagnosisResult[]> 
         ok: false,
         category: '迭代',
         message: `${iter}: 无 030-tasks/ 目录（可能未执行 split）`,
-        fix: `speccore split -I ${iter}`,
+        fix: `speccore iteration taskify -I ${iter}`,
       });
     }
   }
