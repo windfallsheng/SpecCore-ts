@@ -831,12 +831,14 @@ function extractParams(input: string, mapping: CommandMapping): Record<string, s
   // 检测 run 流水线意图（v8.3.190+）：起止点优先，其次 preset 名
   if (mapping.intent === 'run') {
     // 口语阶段名 → 流水线阶段 key（与 run.ts PIPELINE_PHASES 对齐）
+    // 注意：切分功能单元（split-units，需求→功能单元）与拆分任务（split，Spec→Task）是两个不同阶段，勿混淆
     const stageNameMap: Record<string, string> = {
       '需求': 'req-doc', 'req-doc': 'req-doc', 'reqdoc': 'req-doc',
       '导入': 'doc2spec', 'doc2spec': 'doc2spec', '导需求': 'doc2spec',
+      '切分': 'split-units', '切分功能单元': 'split-units', '切分单元': 'split-units', '功能单元': 'split-units', 'split-units': 'split-units', 'split_units': 'split-units',
       '分析': 'analyze', 'analyze': 'analyze',
       '校验': 'validate', 'validate': 'validate',
-      '拆分': 'split', 'split': 'split',
+      '拆分': 'split', '拆分任务': 'split', '任务拆分': 'split', 'split': 'split',
       '计划': 'plan', 'plan': 'plan',
       '执行': 'execute', 'execute': 'execute', '开发': 'execute',
       '验证': 'verify', 'verify': 'verify',
