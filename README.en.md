@@ -1,90 +1,236 @@
 # SpecCore — Code by Spec, Not by Vibe
 
-**SpecCore is not a code generator — it's a human-AI collaboration operating system.** It turns requirements, splitting, planning, execution, and delivery into a closed loop — every step previewable and adjustable, ensuring human and AI reach consensus before a single line of code is written.
+🖥️ Spec-driven development CLI · Requirements to deployment · Environment-driven deploy · Full command Skill coverage · Multi-layer AI architecture
 
-> Juggling 5 microservices and 3 frontend platforms? SpecCore turns requirements → splits → plans → code → delivery into a traceable, automated pipeline.
+SpecCore drives requirements all the way to deliverable code: import → split into feature units → analyze → taskify → develop → verify → deploy. The whole flow is Spec-driven — AI only steps in where judgment and generation are needed, and critical actions wait for your confirmation.
 
-```
-  init → doc2spec → analyze(overview) → analyze(units) → split → plan → execute → pr → done → spec2doc
-  🚀Setup   📝Import   🧠Analyze   🧠Analyze   📦Split  📋Plan  💻Build  🔀PR  ✅Archive  📤Export
-  ✅ CLI    🔒 AI      🔒 AI       🔒 AI       🔒 AI     🔒 AI    🔒 AI    🔒 AI  🔒 AI      🔒 AI
-```
+---
 
-## 🚀 5 Minutes to First Task
+## Quick Start
 
 ```bash
-# CLI usage (direct terminal commands)
 npm install -g speccore
-speccore init
-speccore iteration create -n Q1     # Create iteration
-
-# 🔒 AI usage (in WorkBuddy/Cursor/Trae via @spec-ask)
-@spec-ask "import requirements.docx to Q1 iteration"
-@spec-ask "analyze Q1 requirements and code health"
-@spec-ask "taskify Q1 iteration into tasks"
-@spec-ask "generate execution plan for Q1"
-@spec-ask "execute Task-001 with AI"
-@spec-ask "archive Task-001 after validation"
+speccore init                        # initialize project, generate config guide
 ```
 
-**📋 Setup Guide** — `speccore init` auto-generates a 6-step onboarding guide:
+Four steps through one iteration:
 
-![Setup Guide](docs/screenshots/setup-guide-top.png)
+| Step | Command | Description |
+|------|---------|-------------|
+| ① Import | `speccore doc2spec -f PRD.docx` | Convert source docs to MD, split into feature units |
+| ② Analyze | `speccore analyze` | AI generates technical specs |
+| ③ Develop | `speccore execute` | Develop code by plan |
+| ④ Deliver | `speccore pr` | Summarize changes + commit |
 
-## 🧠 Knowledge Graph Visualization
+> 💡 **Don't want to memorize?** Use the natural-language entry `speccore ask "build a payment feature"`, and AI orchestrates the pipeline. Or talk to `@spec-ask` in an AI IDE.
 
-`speccore knowledge` generates an interactive HTML knowledge graph with 8 shape types for entity distinction and automatic decay detection:
+---
 
-**Full View (Large Nodes)**
+## Core Pipeline
 
-![Knowledge Graph Full](docs/screenshots/knowledge-graph-full.png)
-
-**Zoomed View (Compact Layout)**
-
-![Knowledge Graph Zoom](docs/screenshots/knowledge-graph-zoom.png)
-
-## 🎯 What do you want to do?
-
-| I want to... | Command |
-|:---|:---|
-| **Start a new project** | `speccore init --interactive` |
-| **Import a PRD document** | `@spec-ask "import PRD.docx to Q1"` 🔒 |
-| **Analyze requirements + code health** | `@spec-ask "analyze Q1 requirements"` 🔒 |
-| **Split requirements into tasks** | `speccore iteration taskify -I Q1 --interactive` |
-| **Fix a bug** | `speccore task new -n "Login timeout" --type=bugfix` |
-| **Batch fix bugs** | `speccore task new --batch-file=bugs.xlsx --type=bugfix` |
-| **Refresh retrieval layers** | `speccore refresh` |
-| **AI auto-development** | `@spec-ask "execute Task-001"` 🔒 |
-| **Create a Pull Request** | `@spec-ask "create PR for Task-001"` 🔒 |
-| **Archive a completed task** | `@spec-ask "archive Task-001"` 🔒 |
-| **Check project status** | `speccore` or `speccore dashboard` |
-| **Natural language queries** | `@spec-ask "analyze current requirements"` 🔒 |
-
-> 📋 Full command reference → [Command Reference](docs/commands.en.md) | 中文文档 → [README.zh.md](README.md)
-
-## 🤝 Interactive Mode
-
-6 commands support `--interactive` — preview changes before confirming:
-
-| `🧠 analyze --interactive` | `🧠 split --interactive` | `🧠 plan --interactive` |
-|:---|:---|:---|
-| `🧠 pr --interactive` | `🧠 change --interactive` | `🧠 done --interactive` |
-
-## 🔄 Unified Retrieval Refresh
+One `run` command covers the whole flow, using **presets** to start/stop by scenario:
 
 ```bash
-speccore refresh                    # Refresh all retrieval layers (code index + RAG + knowledge graph)
-speccore refresh --code             # Only code index
-speccore refresh --rag              # Only document RAG
-speccore refresh --graph            # Only knowledge graph
+speccore run --preset develop   # analyze → verify (default)
+speccore run --preset spec      # import → taskify (generate Spec to review)
+speccore run --preset deploy    # analyze → deploy & verify
+speccore run --preset deliver   # execute → submit code
+speccore run                    # no args = develop
 ```
 
-## 📚 Documentation
+### 8 presets
 
-| Doc | Content |
-|:---|:---|
-| 🚀 [Quick Start](docs/quick-start.en.md) | Full tutorial |
-| 🔧 [Command Reference](docs/commands.en.md) | Full command reference |
-| 🎬 [Scenarios](docs/scenarios.en.md) | Real-world examples |
-| 🗺 [Overview](docs/overview.md) | Architecture & philosophy |
-| 📝 [SDD Methodology](docs/sdd-methodology.en.md) | Spec-driven development |
+| preset | range | scenario |
+|---|---|---|
+| `develop` | analyze → verify | analyze → verify (**default**) |
+| `full` | req-doc → spec2doc | full flow (incl. finishing) |
+| `import` | doc2spec → pr | import → merge request |
+| `spec` | doc2spec → taskify | import → taskify |
+| `analyze` | analyze → validate | analyze only |
+| `deliver` | execute → pr | execute → submit code |
+| `deploy` | analyze → pipeline | analyze → deploy & verify |
+| `docs` | analyze → spec2doc | analyze → export docs |
+
+### Precise range control
+
+```bash
+speccore run --from split-units --to execute   # from splitting feature units to develop
+speccore run --from taskify --to pr            # from taskify to submit
+```
+
+### Pipeline stages
+
+```
+Requirements entry (pick one)     Structure        Quality (optional)
+req-doc ──┐
+          ├─→ split-units ──→ clarify (auto/on/off)
+doc2spec ─┘                        │
+                                   ▼
+analyze → validate → taskify → plan → execute → verify
+                                                │
+               ┌────────────┬──────────┬────────┴─────────┐
+               ▼            ▼          ▼                  ▼
+           pipeline      pr(submit)  done(archive)    spec2doc(export)
+           (deploy)      (independent finishing steps, on demand)
+```
+
+**Three gates** (pause for your confirmation in auto mode): Spec finalized → code review → pre-deploy confirm.
+
+### Custom + default pipelines
+
+Define your own named pipelines and set the default in `.speccore.yml`:
+
+```yaml
+settings:
+  pipelines:
+    default: develop
+    custom:
+      hotfix: execute,verify,pipeline,pr
+      quick: analyze,taskify,execute
+```
+
+### Configurable steps (tri-state)
+
+Optional steps support `auto / on / off` tri-state — configure defaults, or override per command/natural language:
+
+```yaml
+settings:
+  optional_steps:
+    clarify: auto     # requirement clarification: auto=by professionalism / on=force / off=skip
+    verify: auto
+    pipeline: auto
+    pr: auto
+    done: auto
+    spec2doc: auto
+```
+
+Even when clarification is skipped, a **quality review report** (`010-requirements/QUALITY_REPORT.md`) is still generated, listing issues and concrete fix commands per document.
+
+---
+
+## Common Commands
+
+Can't remember 60 commands? These are the ones that matter:
+
+| Command | Purpose |
+|---------|---------|
+| `run` | named pipeline entry (preset / range) |
+| `ask` | natural-language entry (auto-orchestration) |
+| `doc2spec` | import PRD → SpecCore MD |
+| `req-doc` | one-liner requirement → PRD doc |
+| `analyze` | AI requirement analysis |
+| `taskify` | split requirements into dev tasks |
+| `execute` | develop by plan |
+| `pr` | summarize changes + commit |
+| `spec2doc` | export Word/PDF/HTML |
+| `status` | check progress |
+
+> Full list: [Command Reference](docs/commands.en.md), or `speccore help`.
+
+---
+
+## Core Capabilities
+
+### 🧠 Natural-language entry
+
+`speccore ask "..."` with four modes: explain / guide / match / orchestrate:
+
+```bash
+speccore ask "deploy for me"                    # → run --preset deploy
+speccore ask "from analyze to develop"          # → run --from analyze --to execute
+```
+
+### 🧠 Knowledge graph & code graph
+
+```bash
+speccore graph query "order-related code"       # natural-language query
+speccore graph path Task-001 Task-002           # shortest dependency path
+speccore knowledge                               # interactive HTML graph
+```
+
+### 📊 Dashboard
+
+`speccore dashboard` generates a Jira-standard 7-dimension board.
+
+### 🚀 Environment-driven deploy
+
+`speccore pipeline` with five environment layers (local → dev → test → staging → production):
+
+```bash
+speccore pipeline --env staging --all
+speccore pipeline --env test --platforms h5,api
+```
+
+### 🧪 Quality verification
+
+`speccore verify` layered testing: compile + lint + unit + UI smoke + API contract + performance baseline. Pre-deploy can block; post-deploy only reports.
+
+```bash
+speccore verify --stage pr
+speccore verify -t Task-001 --ui
+```
+
+---
+
+## Complete Commands (categorized)
+
+| Category | Commands |
+|----------|----------|
+| Pipeline / core | `run` `ask` `doc2spec` `req-doc` `analyze` `validate` `taskify` `plan` `execute` |
+| Finishing | `pipeline` `pr` `done` `spec2doc` |
+| Status / nav | `status` `next` `dashboard` `progress` |
+| Init / config | `init` `config` `doctor` `update` |
+| Management | `units` `pattern` `rollback` `history` `baseline` `rename` `cleanup` |
+| Change / special | `change` `retro` `verdict` `review` `sync` |
+| Knowledge | `graph` `knowledge` `query` `entity` `related` `path` `search` `stats` |
+
+---
+
+## Directory Structure
+
+```
+Iteration-001-meeting/
+├── 000-overview/               ← progress tracking
+├── 010-requirements/           ← requirements (by feature)
+│   ├── sources/                ← [read-only] original PRD/Word/PDF
+│   ├── converted/              ← [auto] doc2spec converted MD
+│   ├── features/               ← [manual] split feature units
+│   └── QUALITY_REPORT.md       ← [auto] quality review report
+├── 020-specs/                  ← analyze output (three-layer)
+├── 030-tasks/                  ← taskify dev tasks
+└── STAFFING.md                 ← staffing
+```
+
+---
+
+## Multi-layer AI Architecture
+
+```
+@spec-ask "..."  (AI IDE entry)
+  ├─ 🧠 own LLM   → OpenAI / Ollama (SPECCORE_LLM_KEY env)
+  ├─ 🤖 host AI   → WorkBuddy / TRAE / Qcoder (auto-detect)
+  ├─ 📐 rule engine → command KB + predefined workflows (always available)
+  └─ 🎭 multi-subagent → per stage/platform/module roles (step isolation)
+```
+
+**Zero-config fallback**: no key configured → auto-degrade, features unaffected.
+
+---
+
+## 📖 Documentation
+
+| Doc | Description |
+|-----|-------------|
+| [Quick Start](docs/quick-start.en.md) | 5 minutes to first task |
+| [Commands](docs/commands.en.md) | full command reference |
+| [Scenarios](docs/scenarios.en.md) | real-world scenarios |
+| [SDD](docs/sdd-methodology.en.md) | spec-driven development |
+| [Workspace](docs/workspace-organization.en.md) | directory structure |
+| [Adapters](docs/tool-adaptation.en.md) | AI tool integration |
+| [CHANGELOG](CHANGELOG.en.md) | version history |
+
+---
+
+## License
+
+See the LICENSE file.

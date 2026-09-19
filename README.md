@@ -2,419 +2,269 @@
 
 🖥️ 规范驱动开发 CLI · 需求到部署全流程 · 环境驱动部署 · 全命令 Skill 覆盖 · 多层 AI 架构
 
-```bash
-@spec-ask "分析会议预订系统的需求文档，拆分为独立开发任务，按依赖顺序执行"
-```
-
-![Welcome](docs/screenshots/welcome.png)
-
-**🧠 万能 AI 入口** — 一个命令解决所有问题
-
-![Ask Onboarding](docs/screenshots/ask-onboarding.png)
+SpecCore 把「需求文档」一路规范驱动到「可交付代码」：导入需求 → 切分功能单元 → 分析 → 拆分任务 → 开发 → 验证 → 部署。整个过程由规格（Spec）驱动，AI 只在需要判断和生成的地方介入，关键动作留给你确认。
 
 ---
-
-## 架构概览
-
-```
-@spec-ask "..."  ← AI 入口 →  @spec-ask "全自动执行"
-    │                                     │
-    ├─ 📖 命令解释 "dashboard 怎么用"      ├─ 🏗️ 初始化
-    ├─ 🗺️ 任务指引 "我想做登录"           ├─ 📝 导入需求
-    ├─ 🎯 意图匹配 "查看进度"              ├─ 🧠 AI 分析
-    └─ ⚡ 复杂编排 "计划→定时→分批"        ├─ 📦 拆分任务
-                                          ├─ ⚡ 执行开发
-    ┌─────────────────────────────┐        ├─ 🔀 提交 PR
-    │  speccore dashboard         │        ├─ ✅ 归档收尾
-    │  ─ 全局仪表盘 (7 大维度)     │        └─ 📊 生成回顾
-    │  ─ 9 主题 / 中英文 / 字号   │
-    │  ─ F 键全屏 / 四边扫描线    │
-    └─────────────────────────────┘
-```
 
 ## 快速开始
 
 ```bash
 npm install -g speccore
-speccore init                                                    # 初始化项目（CLI）
-speccore iteration create -n Q1 --topic meeting-system --owner luzhaosheng  # 创建迭代（CLI）
-speccore task new -n "用户登录" --topic user-login -i meeting-system         # 创建任务（CLI）
-# 只提供 --name 时也会自动提取 slug（v8.3.78+）："User管理" → Task-001-user，"用户登录" → Task-001-xxx（hash）
-speccore context --set --iteration Iteration-001-meeting-system              # 切换上下文（CLI）
-speccore dashboard                                                             # 查看仪表盘（CLI）
+speccore init                        # 初始化项目，生成配置引导
 ```
 
-**📋 配置引导页** — `speccore init` 后自动生成 6 步引导，帮助新用户快速上手：
+四步走完一个迭代：
+
+| 步骤 | 命令 | 说明 |
+|------|------|------|
+| ① 导入需求 | `speccore doc2spec -f PRD.docx` | 源文档转 MD，按需切分功能单元 |
+| ② 分析 | `speccore analyze` | AI 生成技术规格（Spec） |
+| ③ 开发 | `speccore execute` | 按计划开发代码 |
+| ④ 交付 | `speccore pr` | 总结变更 + 提交 |
+
+> 💡 **不想记命令？** 用自然语言入口 `speccore ask "我想做一个支付功能"`，AI 自动编排流水线。或在 AI IDE 中通过 `@spec-ask` 直接对话。
+
+---
+
+## 核心流水线
+
+一条 `run` 命令覆盖全流程，用**预设流水线（preset）**按场景起停：
+
+```bash
+speccore run --preset develop   # 分析→验证（默认）
+speccore run --preset spec      # 导入需求→拆分任务（生成 Spec 看效果）
+speccore run --preset deploy    # 分析→部署验证
+speccore run --preset deliver   # 执行→提交代码
+speccore run                    # 不带参数 = develop
+```
+
+### 8 个预设流水线
+
+| preset | 起止 | 场景 |
+|---|---|---|
+| `develop` | analyze → verify | 分析→验证（**默认**，代码+验证完成） |
+| `full` | req-doc → spec2doc | 全流程（含收尾） |
+| `import` | doc2spec → pr | 导入需求→合并请求 |
+| `spec` | doc2spec → taskify | 导入需求→拆分任务 |
+| `analyze` | analyze → validate | 只分析校验 |
+| `deliver` | execute → pr | 执行→提交代码 |
+| `deploy` | analyze → pipeline | 分析→部署验证 |
+| `docs` | analyze → spec2doc | 分析→文档导出 |
+
+### 精确控制起止点
+
+```bash
+speccore run --from split-units --to execute   # 从切分功能单元到开发
+speccore run --from taskify --to pr            # 从拆分任务到提交
+```
+
+### 流水线阶段全景
+
+```
+需求入口（二选一）     结构化          质量提升（可选）
+req-doc ──┐
+          ├─→ split-units ──→ 澄清(auto/on/off)
+doc2spec ─┘                        │
+                                   ▼
+analyze → validate → taskify → plan → execute → verify
+                                                │
+               ┌────────────┬──────────┬────────┴─────────┐
+               ▼            ▼          ▼                  ▼
+           pipeline      pr(提交)    done(归档)        spec2doc(导出)
+           (部署)         （独立收尾，按需调用）
+```
+
+**三个闸口**（全自动时停下来等你确认）：Spec 定稿 → 代码 review → 部署前确认。
+
+### 自定义 + 默认流水线
+
+在 `.speccore.yml` 里定义自己的命名流水线，并设置默认：
+
+```yaml
+settings:
+  pipelines:
+    default: develop
+    custom:
+      hotfix: execute,verify,pipeline,pr
+      quick: analyze,taskify,execute
+```
+
+### 可配置步骤（三态开关）
+
+非必要步骤支持 `auto / on / off` 三态，配置默认行为，也可命令/自然语言单次覆盖：
+
+```yaml
+settings:
+  optional_steps:
+    clarify: auto     # 需求澄清：auto=按专业度判定 / on=强制 / off=跳过
+    verify: auto      # 验证
+    pipeline: auto    # 部署
+    pr: auto          # 提交
+    done: auto        # 归档
+    spec2doc: auto    # 导出文档
+```
+
+跳过澄清时，仍会生成**需求质量审查报告**（`010-requirements/QUALITY_REPORT.md`），列出每份文档的问题清单和具体修正命令。
+
+---
+
+## 常用命令
+
+记不住 60 个命令？高频就这几个：
+
+| 命令 | 作用 |
+|------|------|
+| `run` | 命名流水线入口（preset / 起止点） |
+| `ask` | 自然语言入口（说人话，自动编排） |
+| `doc2spec` | 导入 PRD → SpecCore MD |
+| `req-doc` | 一句话需求 → PRD 文档 |
+| `analyze` | AI 需求分析 |
+| `taskify` | 拆分需求为开发任务 |
+| `execute` | 按计划开发 |
+| `pr` | 总结变更 + 提交代码 |
+| `spec2doc` | 导出 Word/PDF/HTML |
+| `status` | 查看进度 |
+
+> 完整命令见 [命令参考](docs/command-reference.md)，或 `speccore help` 查看分类。
+
+---
+
+## 核心能力
+
+### 🧠 自然语言入口
+
+`speccore ask "..."` 四模式：命令解释 / 任务指引 / 意图匹配 / 复杂编排。口语即可，无需记忆命令：
+
+```bash
+speccore ask "帮我部署"                    # → run --preset deploy
+speccore ask "从分析到开发"                # → run --from analyze --to execute
+speccore ask "分析本迭代需求，跳过澄清"     # → analyze --skip-clarify
+```
+
+### 🧠 知识图谱 & 代码图谱
+
+`speccore graph` 统一查询（知识 + 代码），`speccore knowledge` 可视化图谱：
+
+```bash
+speccore graph query "订单相关代码"        # 自然语言查询
+speccore graph path Task-001 Task-002      # 最短依赖路径
+speccore knowledge                          # 交互式 HTML 知识图谱
+```
+
+### 📊 仪表盘
+
+`speccore dashboard` 生成 Jira 标准 7 维度看板（需求状态 / 项目健康度 / 进度条）。
+
+### 🚀 环境驱动部署
+
+`speccore pipeline` 五层环境模型（local → dev → test → staging → production）：
+
+```bash
+speccore pipeline --env staging --all      # 一键 merge → build → deploy
+speccore pipeline --env test --platforms h5,api
+```
+
+### 🧪 质量验证
+
+`speccore verify` 分层测试：编译 + Lint + 单元测试 + UI 冒烟 + API 契约 + 性能基线。部署前可阻断，部署后只报告。
+
+```bash
+speccore verify --stage pr                 # PR 阶段：代码质量 + 冒烟 + 契约
+speccore verify -t Task-001 --ui           # 单任务 UI 冒烟
+```
+
+### 📖 配置引导
+
+`speccore init` 后自动生成 6 步引导页，帮助新用户快速上手。
 
 ![Setup Guide Top](docs/screenshots/setup-guide-top.png)
 
-> 💡 **AI 命令**（在 WorkBuddy/Trae/Qcoder 中通过 `@spec-ask` 或 `/spec-ask` 使用）：分析需求、制定计划、执行开发。详见 [AGENTS.md](./AGENTS.md)。
+---
 
-## 核心流水线 🔒 AI 命令
-
-```
-init → doc2spec → analyze(overview) → analyze(功能单元) → split → plan → execute → pr → done → spec2doc
-                   └─ .issues.md ← 问题发现 ── → AI 辅助修复
-                   └─ .needs-retry ← 失败标记 ── → execute --resume
-```
-
-> **v8.3.177+ 新增 `analyze --scope=overview`**：在逐个分析功能单元前，CLI 先扫描 `_matrix.md` 元数据生成迭代总览（40-80 行），让 AI 建立全局视角。
-
-## 命令列表
+## 完整命令（分类）
 
 | 分类 | 命令 |
 |------|------|
-| CLI 入口 | `init` `welcome` `help` |
-| CLI 管理 | `iteration` `task` `context` ✅ |
-| CLI 查看 | `dashboard` `validate` `about` `config` `archive` `verdict` |
-| CLI 工具 | `workspace` `clarify` `pattern` `code-index` `graph` |
-| 🔒 AI 入口 | `ask` |
-| 🔒 AI 流水线 | `doc2spec` `analyze` `split` `plan` `execute` `pr` `done` `spec2doc` |
-| 🔒 AI 智能 | `dev` |
-| 🔒 AI 变更 | `change` `retro` |
-| ✅ 质量验证 | `verify` `verify --ui` `verify --stage` `verify --api-contract` `verify --perf` `verify --project-dir` |
+| 流水线 / 核心 | `run` `ask` `doc2spec` `req-doc` `analyze` `validate` `taskify` `plan` `execute` |
+| 收尾 | `pipeline` `pr` `done` `spec2doc` |
+| 状态 / 导航 | `status` `next` `dashboard` `progress` |
+| 初始化 / 配置 | `init` `config` `doctor` `update` |
+| 管理工具 | `units` `pattern` `rollback` `history` `baseline` `rename` `cleanup` |
+| 变更 / 专项 | `change` `retro` `verdict` `review` `sync` |
+| 知识检索 | `graph` `knowledge` `query` `entity` `related` `path` `search` `stats` |
 
-## 目录结构（全英文）
+> 💡 **全命令 Skill**：所有命令均支持 `/命令 + 自然语言` 快捷入口，如 `/deploy 部署到测试环境`、`/verify 跑冒烟测试`。
+
+---
+
+## 目录结构
 
 ```
 Iteration-001-meeting/
 ├── 000-overview/               ← 进度跟踪
 ├── 010-requirements/           ← 需求文档（按功能组织）
-│   ├── README.md               ← 目录规范说明
-│   ├── INDEX.md                ← 需求文档索引
 │   ├── sources/                ← [只读] 原始 PRD/Word/PDF
 │   ├── converted/              ← [自动生成] doc2spec 转换后的 MD
-│   ├── features/               ← [手动维护] 按功能模块组织
-│   │   └── {feature}/
-│   │       ├── README.md
-│   │       └── _matrix.md      ← [v8.3.177+] 端覆盖矩阵（platforms/dependencies/apis）
-│   ├── prototypes/             ← 原型（HTML/图片/链接）
-│   └── assets/                 ← 素材（extracted/）
-├── 020-specs/                  ← analyze 输出（三层架构 v8.3.17+）
-│   ├── overview/               ← 迭代级全局文档（REQUIREMENT/ANALYSIS/FUNCTION_MAP/RISK/DEPS）
-│   ├── {feature}/              ← 功能模块目录（如 用户认证/订单管理）
-│   │   ├── overview/           ← 功能模块综合文档
-│   │   └── {platform}/         ← 各端专属（TECH/TEST/UI_SPEC）
+│   ├── features/               ← [手动维护] 切分后的功能单元
+│   └── QUALITY_REPORT.md       ← [自动生成] 需求质量审查报告
+├── 020-specs/                  ← analyze 输出（三层架构）
+│   ├── overview/               ← 迭代级全局文档
+│   ├── {feature}/              ← 功能模块目录
 │   └── PLATFORMS.md            ← 端列表元数据
-├── 030-tasks/                  ← split 开发任务
+├── 030-tasks/                  ← taskify 开发任务
 │   └── Task-001-*/
-│       ├── .meta/              ← 任务元信息（type/status/owner/feature/created-at）
-│       ├── _shared/            ← 共享契约（API_CONTRACT.yaml）
-│       ├── 00-specs/           ← 执行前核心规格（REQ/TECH/TASK/SCHEMA/CHANGELOG）
-│       ├── {platform}/         ← 各端实现（平铺，如 booking-service/ h5-mobile/ admin-web/）
+│       ├── 00-specs/           ← 执行前核心规格
+│       ├── {platform}/         ← 各端实现
 │       └── .issues.md          ← 问题追踪
 └── STAFFING.md                 ← 人员排期
 ```
 
-## 环境驱动部署（v8.3.60+）
+---
 
-```bash
-# 一键流水线：merge → build → deploy
-speccore pipeline --env staging --all              # 部署到预发布环境
-speccore pipeline --env test --platforms h5,api    # 只部署 H5 和 API
-speccore pipeline --env dev --all --dry-run        # 预览模式
-
-# Pipeline 内置测试节点（v8.3.60+）
-speccore pipeline --env staging --all --test-enabled --test-type smoke
-
-# 独立构建/部署
-speccore build --env staging --platform h5         # 构建 H5 端
-speccore deploy --env production --all             # 部署到生产环境
-```
-
-**五层环境模型**：`local` → `dev` → `test` → `staging` → `production`
-
-**环境配置**（`.speccore/environments/staging.yaml`）：
-```yaml
-env: staging
-branch: staging
-defaults:
-  build_cmd: npm run build:staging
-platforms:
-  h5:
-    build_cmd: npm run build:h5:staging
-    deploy:
-      type: static
-      output_dir: dist
-      target: s3://mybucket-staging/h5/
-```
-
-**特性**：
-- `--env` 读取环境配置中的 `branch`，自动 merge 当前分支
-- 配置覆盖：环境文件 > PROJECT.yaml > 默认值
-- 失败不阻断：某端失败继续处理其他端
-- 支持任意数量自定义环境
-
-## 质量验证（v8.3.47+）
-
-```bash
-# UI 验证：冒烟测试 + 视觉检查
-speccore verify -t Task-001 --ui                          # 任务绑定模式
-speccore verify --ui --url=https://example.com --spec=./test.yaml  # 独立模式
-
-# 配置驱动测试（v8.3.60+）
-speccore verify --config ./tests/smoke.yaml --env-file test  # 加载测试场景 + 合并环境配置
-
-# API 契约测试（v8.3.49+）
-speccore verify -t Task-001 --api-contract
-
-# 性能基线测试（v8.3.49+）
-speccore verify -t Task-001 --perf
-
-# 分层测试策略（v8.3.60+）
-speccore verify --stage dev                  # 开发阶段：编译 + Lint + 单元测试
-speccore verify --stage pr                   # PR 阶段：代码质量 + 冒烟 + API 契约
-speccore verify --stage deploy               # 部署阶段：仅冒烟测试
-speccore verify --stage release              # 发布阶段：全量 UI + API + 性能回归
-
-# 测试外部项目（v8.3.60+）
-speccore verify --project-dir ~/projects/other-app --stage deploy
-
-# 视觉模型切换（v8.3.50+）
-speccore verify --ui --visual-model=qwen-vl               # 阿里云 DashScope（默认）
-speccore verify --ui --visual-model=local                 # 本地模型
-speccore verify --ui --visual-model='{"provider":"openai","model":"gpt-4o"}'
-```
-
-**三层使用模式**：独立模式（零门槛）→ 项目内独立（不绑任务）→ 任务绑定（规范驱动）。
-
-**配置示例**（`.speccore.yml`）：
-```yaml
-quality_gates:
-  verify_ui:
-    enabled: true
-    threshold: normal
-    visual_model:
-      provider: qwen-vl
-      model: qwen-vl-max
-```
-
-## 断点重试 🔒 AI 命令
-
-```bash
-# 在 AI IDE 中通过 @spec-ask 使用：
-@spec-ask "全量执行"           # 全量执行
-# 部分任务失败 → 写入 .issues.md + .needs-retry
-@spec-ask "断点续传"           # 扫描 .needs-retry 续跑
-```
-
-## 批量回顾 🔒 AI 命令
-
-```bash
-# 在 AI IDE 中通过 @spec-ask 使用：
-@spec-ask "生成所有任务的回顾"
-@spec-ask "生成张三的所有任务回顾"
-@spec-ask "生成所有 bugfix 类型任务的回顾"
-```
-
-### 🧠 AI 语义入口
-
-在 AI IDE 中使用 `@spec-ask` 或 `/spec-ask`，无需记忆命令：
-
-**📖 命令解释** — `@spec-ask "dashboard 怎么用"`
-
-![Ask Explain](docs/screenshots/ask-explain.png)
-
-**🎯 意图匹配** — `@spec-ask "查看进度"` → AI 自动匹配 dashboard
-
-![Ask Match](docs/screenshots/ask-match.png)
-
-**🗺️ 任务指引** — `@spec-ask "我想做一个支付功能"` → AI 自动编排全流程
-
-![Ask Guide](docs/screenshots/ask-guide.png)
-
-**⚡ 复杂编排** — `@spec-ask "分析+计划自动，执行前确认"` → analyze→plan 连续跑
-
-![Ask Pipeline](docs/screenshots/ask-pipeline.png)
-
-**🔍 深度分析单文档**（v8.3.79+ 支持路径前缀）：
-```bash
-@spec-ask "全局深度分析 ARCHITECTURE.md"
-@spec-ask "详细分析 overview/TECH.md"
-@spec-ask "深入分析 020-specs/overview/SECURITY_AUDIT.md"
-```
-
-### 🧠 knowledge — 知识图谱可视化与代码图谱查询
-`speccore knowledge` 生成交互式 HTML 知识图谱：
-- vis-network 力导向图：9 种形状区分实体类型（需求◆ 规格🛢 功能模块■ 任务▲ 全局★ 业务模块⭐ 源码）
-- 业务-代码关联图谱：从 TECH.md 提取业务模块→代码实体映射，支持开放关系类型
-- 衰减检测：自动发现内容变更、下游过期、文件丢失、代码超前等风险
-- RAG 上下文预览：查看 AI 检索时会注入的完整上下文
-- 9 套主题 / 3 种字体 / 4 档字号 / 全屏模式 / 实体搜索 / 类型过滤
-
-**v6.90.0+ 代码知识图谱** — 本地 AST 解析，零 LLM Token：
-```bash
-speccore code-index --graph --scope src           # 构建代码知识图谱
-speccore knowledge-explain "buildCodeGraph"       # 解释节点及其连接
-speccore knowledge-path "AuthModule" "UserDB"     # 查找最短依赖路径
-speccore knowledge-query "how does payment work"  # 自然语言查询
-```
-- 基于 TypeScript 编译器 API 本地解析（代码不出本机）
-- 自动生成 `graph.json` + `GRAPH_REPORT.md` + `graph.html`
-- 社区检测自动划分子系统，识别 God nodes 和跨社区桥梁
-- v6.91.0+ 支持 API Contract / SQL Schema 多模态纳入图谱
-
-**v7.0.0+ 统一图谱查询** — 融合知识图谱 + 代码图谱：
-```bash
-speccore graph query "订单相关代码"              # 自然语言统一查询（默认 LLM 语义增强）
-speccore graph query "订单相关代码" --fast        # 快速模式（零 Token）
-speccore graph entity SRC:auth-AuthController      # 查询实体详情（含语义标签）
-speccore graph related Task-001                    # 查询关联实体
-speccore graph path Task-001 Task-002              # 查找最短路径
-speccore graph stats                               # 统计信息（含语义标签覆盖率）
-```
-- 语义标签匹配：查询 "订单" 也能匹配到 `booking`、`purchase`、`交易` 相关代码
-- LLM 语义排序：综合得分 = 本地匹配 × 0.4 + LLM 语义 × 0.6
-- 查询结果融合：同时搜索知识图谱（需求/任务）和代码图谱（类/方法）
-
-**v7.1.0+ Mermaid 图表渲染** — 将分析产物可视化：
-```bash
-speccore graph render diagrams/architecture.mmd    # 渲染单个图表
-speccore graph render --all                         # 批量渲染所有 .mmd
-speccore graph render --extract ARCHITECTURE.md     # 从 Markdown 提取图表
-```
-- 全局分析自动在文档中嵌入 Mermaid 图表（模块关系图、时序图、流程图、状态图）
-- 独立 `.mmd` 文件输出到 `.speccore/GLOBAL/diagrams/`
-- 生成响应式 HTML 页面，支持打印和主题切换
-
-**v7.2.0+ 全局分析深度增强** — 解决「文档只有框架没有实质内容」：
-```bash
-speccore analyze --scope global --iterative         # 大纲→逐节填充，深度生成
-speccore analyze --scope global --deep              # 单文档深度模式，字数翻倍
-speccore analyze --scope global --filter "订单,支付" # 只分析指定功能模块
-speccore analyze --scope global --with-code         # 注入代码结构化数据（零 Token）
-```
-- 结构化数据提取：TypeScript AST 本地解析 API/Entity/Route/Component
-- 自动引导：分 4 层渐进执行，每步显示进度和下一步命令
-- 质量门禁：自动生成质量评分，检测占位符/空表格/缺失图表
-- 交叉引用：自动生成文档间关联链接
-- 变更感知：Git diff 检测代码变更，标记受影响文档
-
-**v7.2.0+ 迭代分析细粒度增强** — 支持「分析订单模块在 TECH.md 中的实现」：
-```bash
-@spec-ask "分析 TECH.md 中的订单模块"               # 自然语言细粒度分析
-@spec-ask "深入分析 REQUIREMENT.md 的支付流程"       # 单功能单元深度分析
-speccore status                                       # 查看分析进度和过期文档
-```
-- 语义定位引擎：关键词同义词扩展，跨文档/跨代码自动定位
-- 代码自动关联：分析时自动注入源码中的接口定义和组件信息
-- 意图识别增强：自动提取 docName + featureName，精准定位分析目标
-- 临时缓存：`.speccore/cache/iterations/{name}/` 存储分析中间产物
-
-![Knowledge Graph](docs/screenshots/knowledge-graph-full.png)
-
-![Knowledge Graph Zoom](docs/screenshots/knowledge-graph-zoom.png)
-
-### 📊 dashboard — 全局仪表盘
-`speccore dashboard --scope global` 生成 Jira 标准 7 维度 HTML 看板：
-- 需求状态分布（饼图）+ 项目需求分布（柱状图）+ Created vs Resolved
-- 项目健康度评分 + 期次进度条 + 需求详情表（按期次倒序）
-- 9 套主题、中英文切换、字体/字号调节、F 键全屏、四边脉冲扫描线
-
-**全局项目看板**
-
-![Dashboard Global](docs/screenshots/dashboard-global.png)
-
-**迭代看板**（`speccore dashboard --export html`）
-- 迭代时间线 + 里程碑 + Gantt 图 + Burndown 图
-- 任务分布 + 完成率 + 团队分工 + 个人进度
-
-![Dashboard Iteration](docs/screenshots/dashboard-iteration.png)
-
-### 🔄 dev — 智能级联
-在 AI IDE 中智能推进：`@spec-ask "全自动执行"`
-
-![Dev Pipeline](docs/screenshots/dev.png)
-
-### 🚀 全量流水线 🔒 AI 命令（在 IDE 中使用）
-| 阶段 | 命令 | AI 模式 |
-|------|------|------|
-| 导入需求 | `doc2spec -f PRD.docx` | 📖 命令解释 |
-| AI 分析 | `analyze --audit` | 🗺️ 任务指引 |
-| 拆分任务 | `split` | 🎯 意图匹配 |
-| 执行计划 | `plan --all` | ⚡ 复杂编排 |
-| 开发执行 | `execute --batch-size 3` | ⚡ 复杂编排 |
-| 提交 PR | `pr --auto` | 🎯 意图匹配 |
-| 归档收尾 | `done --all` | 🎯 意图匹配 |
-
-## 安装 & 环境
-
-```bash
-npm install -g speccore
-speccore --version   # v8.3.167
-```
-
-## 命令列表
-
-| 命令 | 别名 | 功能 |
-|------|------|------|
-| `ask` | — | 🧠 🔒 万能 AI 入口（4 模式） |
-| `welcome` | — | 🏷️ 项目名片 + 使用引导 |
-| `dashboard` | `db` | 📊 期次/全局仪表盘 |
-| `dev` | `d` | 🔄 🔒 智能级联流水线 |
-| `init` | `in` | 🏗️ 项目初始化 |
-| `doc2spec` | `d2s` | 📝 🔒 PRD→SpecCore MD |
-| `spec2doc` | `s2d` | 📤 🔒 SpecCore MD→Word/PDF/HTML |
-| `analyze` | `al` | 🧠 🔒 AI 需求分析 |
-| `split` | — | 📦 🔒 需求拆分 |
-| `plan` | `pl` | 📐 🔒 执行计划 |
-| `execute` | `ex` | ⚡ 🔒 执行开发 |
-| `pr` | `mr` | 🔀 🔒 Pull Request |
-| `done` | `dn` | ✅ 🔒 归档收尾 |
-| `change` | `ch` | 🔄 🔒 需求变更 |
-| `sync` | `sy` | 🔄 🔒 双向同步 |
-| `validate` | `vl` | ✅ 合规验证 |
-| `graph` | `g` | 🕸️ 统一图谱查询（知识+代码）+ Mermaid 渲染 |
-| `knowledge` | `kg` |  🌐 知识图谱可视化 + 衰减检测 + 代码图谱查询 |
-| `track` | `trk` | 🔗 🔒 REQ→Task→Code 全链路 |
-| `search` | `sh` | 🔍 跨 Spec 全文搜索 + 全局语义检索（--global） |
-| `refresh` | `rf` | 🔄 统一刷新检索层（代码索引 + 文档 RAG + 知识图谱）+ 全局文档过期检测 |
-| `retro` | `rt` | 📝 🔒 任务回顾复盘 + 评分 |
-| `rename` | `rn` | ✏️ 🔒 重命名 |
-| `history` | `hi` | 📜 历史记录（操作日志 / 需求变更） |
-| `pipeline` | `pln` | 🚀 环境驱动流水线（merge → build → deploy） |
-| `build` | `bd` | 🔨 按端构建 |
-| `deploy` | `dp` | 🚀 按端部署 |
-| `verify` | `vf` | 🧪 代码验证 + UI 测试 |
-
-> 💡 **全命令 Skill**：所有命令均支持 `/命令 + 自然语言` 快捷入口，如 `/deploy 部署到测试环境`、`/verify 跑冒烟测试`。详见 [DESIGN.md](docs/DESIGN.md#58-全命令-skill-覆盖v8360)。
-
-## TTY 智能适配
-
-所有 AI 命令 (`ask`, `welcome`, `dev`, `dashboard`, `help`) 自动检测环境：
-- **终端**：Unicode 框线美化输出
-- **AI 调用**：自动生成 Ocean 主题 HTML 页面（四边脉冲扫描线）
-
-## 🤖 多层 AI 架构（v8.3.167+）
+## 多层 AI 架构
 
 ```
 @spec-ask "..."  (AI IDE 入口)
   ├─ 🧠 自有 LLM   → OpenAI / Ollama（SPECCORE_LLM_KEY 环境变量）
-  ├─ 🤖 宿主 AI    → WorkBuddy / TRAE / Qoder（自动检测）
-  ├─ 📐 规则引擎   → 18 条命令 KB + 4 预定义工作流（永远可用）
+  ├─ 🤖 宿主 AI    → WorkBuddy / TRAE / Qcoder（自动检测）
+  ├─ 📐 规则引擎   → 命令 KB + 预定义工作流（永远可用）
   └─ 🎭 多 Subagent → 按阶段/端/模块分配专属角色（步骤隔离）
 ```
 
-**多 Subagent 协作**：大项目自动启用功能模块级分批，每个模块由独立 Agent 深入分析，避免上下文溢出。
+**零配置降级**：没配 Key 自动降级，功能不受影响。
 
-零配置：没配 Key 自动降级，功能不受影响。
+---
 
 ## 📖 文档
 
-| 中文 | English | 说明 |
-|------|---------|------|
-| [快速开始](docs/quick-start.md) | [Quick Start](docs/quick-start.en.md) | 5 分钟上手，安装 → 完整流程 |
-| [命令参考](docs/command-reference.md) | [Commands](docs/commands.en.md) | 完整命令 + 子命令 + 示例 |
-| [总览](docs/overview.md) | — | 核心概念 + 工作流 + 三种使用方式 |
-| [场景实战](docs/scenarios.md) | [Scenarios](docs/scenarios.en.md) | 35 个真实开发场景 |
-| [SDD 方法论](docs/sdd-methodology.md) | [SDD](docs/sdd-methodology.en.md) | 规范驱动开发理念 |
-| [工作空间组织](docs/workspace-organization.md) | [Workspace](docs/workspace-organization.en.md) | 目录结构与文件规范 |
-| [工具适配说明](docs/tool-adapters.md) | [Adapters](docs/tool-adaptation.en.md) | Qoder/TRAE 等 AI 工具集成 |
-| [三层加载机制](docs/spec-layers.md) | — | GLOBAL/ITERATION/TASK 加载原理 |
-| [CI-CD 集成](docs/ci-cd-spec-integration.md) | — | CI/CD 流水线 + Spec 注释 |
-| [迁移指南](docs/migration-guide.md) | [Migration](docs/migration-guide.en.md) | 从旧版本升级 |
-| [CHANGELOG](CHANGELOG.md) | [CHANGELOG](CHANGELOG.en.md) | 版本历史 |
+| 文档 | 说明 |
+|------|------|
+| [快速开始](docs/quick-start.md) | 5 分钟上手 |
+| [命令参考](docs/command-reference.md) | 完整命令 + 子命令 + 示例 |
+| [总览](docs/overview.md) | 核心概念 + 工作流 |
+| [配置参考](docs/config-reference.md) | 全部配置项（含 pipelines / optional_steps） |
+| [场景实战](docs/scenarios.md) | 几十个真实开发场景 |
+| [SDD 方法论](docs/sdd-methodology.md) | 规范驱动开发理念 |
+| [工作空间组织](docs/workspace-organization.md) | 目录结构与文件规范 |
+| [三层加载机制](docs/spec-layers.md) | GLOBAL/ITERATION/TASK 加载原理 |
+| [测试指南](docs/testing-guide.md) | 分层测试与质量验证 |
+| [CI-CD 集成](docs/ci-cd-spec-integration.md) | CI/CD 流水线 + Spec 注释 |
+| [工具适配](docs/tool-adapters.md) | Qcoder/TRAE 等 AI 工具集成 |
+| [架构设计](docs/ARCHITECTURE.md) | 系统架构 |
+| [CHANGELOG](CHANGELOG.md) | 版本历史 |
+
+**设计文档**（面向开发者/架构师）：
+
+| 文档 | 说明 |
+|------|------|
+| [架构设计全集](docs/DESIGN.md) | 详细架构设计 |
+| [知识库设计](docs/knowledge-base-design.md) | 知识图谱与 RAG 设计 |
+| [Task 目录结构设计](docs/task-directory-design.md) | 任务目录规范 |
+| [需求变更设计](docs/change-and-new-requirement-design.md) | 变更与新增需求交互 |
+| [Pipeline 扩展示例](docs/pipeline-extension-example.md) | 流水线引擎扩展 |
+
+---
 
 ## 许可
 
-MIT © 2026 SpecCore Team
+详见 LICENSE 文件。
