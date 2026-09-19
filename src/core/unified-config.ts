@@ -159,6 +159,11 @@ export interface SpecConfig {
     /** v8.3.190+: 非必要流水线步骤的三态开关（默认 auto=智能判定 / on=强制 / off=跳过） */
     optional_steps?: {
       clarify?: 'auto' | 'on' | 'off';
+      verify?: 'auto' | 'on' | 'off';
+      pipeline?: 'auto' | 'on' | 'off';
+      pr?: 'auto' | 'on' | 'off';
+      done?: 'auto' | 'on' | 'off';
+      spec2doc?: 'auto' | 'on' | 'off';
     };
     /** v8.3.94+: 视觉模型配置（用于 specs 图片理解、UI 验证截图分析） */
     vision?: {
@@ -257,7 +262,7 @@ export const DEFAULT_CONFIG: SpecConfig = {
     review: { check_assignee: false },
     pipeline: false,
     with_code: false,
-    optional_steps: { clarify: 'auto' },
+    optional_steps: { clarify: 'auto', verify: 'auto', pipeline: 'auto', pr: 'auto', done: 'auto', spec2doc: 'auto' },
   },
   ask: {
     routing: { mode: 'hybrid', high_threshold: 70, low_threshold: 45, auto_host_ai: true, cache_enabled: true, cache_min_hits: 3 },
@@ -1441,10 +1446,21 @@ function toYaml(config: SpecConfig): string {
   yaml += '  # with_code: 分析时是否默认关联代码\n';
   yaml += `  with_code: ${config.settings.with_code}\n`;
   yaml += '  # ── 非必要流水线步骤开关（三态）──\n';
-  yaml += '  #   auto = 智能判定（默认） | on = 强制执行 | off = 跳过\n';
+  yaml += '  #   auto = 按内置逻辑（默认） | on = 强制执行 | off = 跳过\n';
   yaml += '  optional_steps:\n';
-  yaml += '    # clarify: 需求澄清（auto=按专业度判定 / on=强制 / off=跳过）\n';
-  yaml += `    clarify: ${config.settings.optional_steps?.clarify ?? 'auto'}\n`;
+  const os = config.settings.optional_steps;
+  yaml += '    # clarify: 需求澄清（auto=按专业度判定）\n';
+  yaml += `    clarify: ${os?.clarify ?? 'auto'}\n`;
+  yaml += '    # verify: 验证（代码 review + 契约/性能 + UI）\n';
+  yaml += `    verify: ${os?.verify ?? 'auto'}\n`;
+  yaml += '    # pipeline: 部署（合并→构建→测试→部署）\n';
+  yaml += `    pipeline: ${os?.pipeline ?? 'auto'}\n`;
+  yaml += '    # pr: 合并请求（本地开发可不 PR）\n';
+  yaml += `    pr: ${os?.pr ?? 'auto'}\n`;
+  yaml += '    # done: 归档复盘（可延后）\n';
+  yaml += `    done: ${os?.done ?? 'auto'}\n`;
+  yaml += '    # spec2doc: 导出文档（Word/PDF/HTML）\n';
+  yaml += `    spec2doc: ${os?.spec2doc ?? 'auto'}\n`;
 
   yaml += '\n# ─────────────────────────────────────────────────────────────────────────────\n';
   yaml += '# Ask 引擎路由配置（控制 speccore ask 的行为）\n';

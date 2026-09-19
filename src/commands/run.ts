@@ -9,6 +9,7 @@ import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
 import { collectQuestionFiles } from '../core/questions';
 import { generateHandoff, type HandoffStage } from '../core/handoff-generator';
+import { loadConfigWithMeta } from '../core/unified-config';
 
 export interface RunOptions {
   iteration?: string; force?: boolean; auto?: boolean; autoSteps?: string;
@@ -65,6 +66,13 @@ async function autoPipeline(options: RunOptions): Promise<void> {
 
   const iterDir = `Iteration-${iteration}`;
   logger.info(`\n🤖 Auto-pipeline: ${iteration}\n`);
+
+  // v8.3.190+: 读取 optional_steps 配置（off 的步骤跳过）
+  let optionalSteps: Record<string, 'auto' | 'on' | 'off'> = {};
+  try {
+    const { config } = await loadConfigWithMeta();
+    optionalSteps = (config.settings.optional_steps || {}) as Record<string, 'auto' | 'on' | 'off'>;
+  } catch { /* 配置读取失败用默认 */ }
 
   // v7.4.0+: Pipeline 阶段结果追踪
   interface PhaseResult {
@@ -305,6 +313,12 @@ async function autoPipeline(options: RunOptions): Promise<void> {
         break;
       }
       case 'verify': {
+        if (optionalSteps['verify'] === 'off') {
+          logger.info('  ⏭️ 已配置跳过（optional_steps.verify = off）');
+          phaseStatus = 'skipped';
+          phaseMessage = '已配置跳过';
+          break;
+        }
         // v8.3.184+: 验证（execute 后，编译+Lint+测试+ui 截图，只报告不阻断）
         let hasPendingV = false;
         try {
@@ -320,11 +334,23 @@ async function autoPipeline(options: RunOptions): Promise<void> {
         break;
       }
       case 'pipeline': {
+        if (optionalSteps['pipeline'] === 'off') {
+          logger.info('  ⏭️ 已配置跳过（optional_steps.pipeline = off）');
+          phaseStatus = 'skipped';
+          phaseMessage = '已配置跳过';
+          break;
+        }
         // v8.3.184+: 部署（闸口 C 在阶段前已软停，确认后才到这）
         execSync(`speccore pipeline --all`, { stdio: 'inherit' });
         break;
       }
       case 'pr': {
+        if (optionalSteps['pr'] === 'off') {
+          logger.info('  ⏭️ 已配置跳过（optional_steps.pr = off）');
+          phaseStatus = 'skipped';
+          phaseMessage = '已配置跳过';
+          break;
+        }
         // v6.91.1+: 检查是否有未提交的代码变更
         let hasChanges = false;
         try {
@@ -340,6 +366,12 @@ async function autoPipeline(options: RunOptions): Promise<void> {
         break;
       }
       case 'done': {
+        if (optionalSteps['done'] === 'off') {
+          logger.info('  ⏭️ 已配置跳过（optional_steps.done = off）');
+          phaseStatus = 'skipped';
+          phaseMessage = '已配置跳过';
+          break;
+        }
         // v6.91.1+: 检查是否已归档
         const retroPath = join(iterDir, '000-overview', 'RETRO.md');
         if (await pathExists(retroPath)) {
@@ -350,6 +382,12 @@ async function autoPipeline(options: RunOptions): Promise<void> {
         break;
       }
       case 'spec2doc': {
+        if (optionalSteps['spec2doc'] === 'off') {
+          logger.info('  ⏭️ 已配置跳过（optional_steps.spec2doc = off）');
+          phaseStatus = 'skipped';
+          phaseMessage = '已配置跳过';
+          break;
+        }
         execSync(`speccore spec2doc -i ${iteration}`, { stdio: 'inherit' });
         break;
       }
