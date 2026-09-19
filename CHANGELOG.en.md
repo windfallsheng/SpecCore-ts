@@ -2,6 +2,33 @@
 
 ---
 
+## v8.3.190 (2026-09-19) — Clarify Tri-state + Named Pipelines + js-yaml
+
+### Clarify semantics refactor & tri-state switch
+
+- **clarify renamed to req-doc**: clarify semantics reassigned, removing the "clarify = requirement documentation" ambiguity
+- **Clarify tri-state switch**: `optional_steps.clarify` supports `auto` (professional-level detection) / `on` (force) / `off` (skip)
+- **Three-layer override**: command flag (`--clarify`/`--skip-clarify`) > ask intent > config `optional_steps` > default `auto`
+- **Quality report decoupling**: 7-dimension review (`assessRequirementQuality`) generates `QUALITY_REPORT.md` regardless of clarify mode — skipped clarify still leaves a report
+
+### Pipeline refactor & named pipelines
+
+- **dev split into run + next**: `run` = sole execution entry, `next` = progress guidance
+- **Named pipeline system**: `init` removed from pipeline; built-in presets (`full`/`import`/`analyze`/`develop`/`deliver`/`deploy`/`docs`); user custom + default (`settings.pipelines`)
+- **Default pipeline narrowed**: `pr`/`done`/`spec2doc` are standalone closing ops; default `develop` (analyze→verify)
+- **plan single-task skip**: Task ≤ 1 skips plan, multiple tasks trigger planning
+- **optional_steps extended**: clarify/verify/pipeline/pr/done/spec2doc six optional steps configurable
+
+### Config parsing fix
+
+- **parseYaml switched to js-yaml**: root-fixes "read-back asymmetry" — flow arrays, list placeholder `- # comment`, empty array `[]` resolved at once (js-yaml for read, handwritten for write to preserve comments)
+
+### Intent recognition & subagent fixes
+
+- Composite intent "analyze + split" now correctly enters pipeline orchestration
+- Platform/feature-level subagent mapping gap fixed (`requirement-analyzer-admin-web` normalized mapping)
+- req-doc subagent dispatch added
+
 ## v8.3.188 (2026-09-19) — Config Upgrade Pipeline Fixes & Diagnostics
 
 ### Config upgrade pipeline fixes (5 defects)

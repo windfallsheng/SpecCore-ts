@@ -1,3 +1,30 @@
+## v8.3.190 (2026-09-19) — 澄清三态开关 + 命名流水线 + js-yaml 根治
+
+### 澄清语义重构与三态开关
+
+- **clarify 改名 req-doc**：澄清语义重新归属，消除「澄清=需求文档化」歧义
+- **澄清三态开关**：`optional_steps.clarify` 支持 `auto`（按专业度判定）/ `on`（强制）/ `off`（跳过）
+- **三层覆盖**：命令 flag（`--clarify`/`--skip-clarify`）> ask 意图 > 配置 `optional_steps` > 默认 `auto`
+- **质量报告解耦**：7 维度审查（`assessRequirementQuality`）无论澄清模式都生成 `QUALITY_REPORT.md` 留痕，跳过澄清也有报告
+
+### 流水线重构与命名流水线
+
+- **dev 拆分为 run + next**：`run`=唯一执行入口，`next`=进度指引（阶段检测 + 下一步 + 闸口提醒）
+- **命名流水线体系**：`init` 移出流水线；内置 preset（`full`/`import`/`analyze`/`develop`/`deliver`/`deploy`/`docs`）；用户自定义 + 默认（`settings.pipelines`）
+- **默认流水线收窄**：`pr`/`done`/`spec2doc` 为独立收尾操作，默认 `develop`（analyze→verify）
+- **plan 单任务跳过**：Task ≤ 1 跳过 plan，多任务才列计划
+- **optional_steps 扩展**：clarify/verify/pipeline/pr/done/spec2doc 六个非必要步骤可配置
+
+### 配置解析根治
+
+- **parseYaml 换 js-yaml**：根治「回读不对称」——flow 数组、列表占位项 `- # 注释`、空数组 `[]` 三类序列化 bug 一次性解决（读用 js-yaml、写保留手写注释）
+
+### 意图识别与 subagent 修复
+
+- 复合意图「分析+拆分」正确进入 pipeline 编排
+- 端级/功能级 subagent 映射缺口修复（`requirement-analyzer-admin-web` 等归一化映射）
+- req-doc 补 subagent 调度
+
 ## v8.3.188 (2026-09-19) — 配置升级链路修复与诊断增强
 
 ### 配置升级链路修复（5 个缺陷）
