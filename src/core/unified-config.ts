@@ -270,7 +270,7 @@ export const DEFAULT_CONFIG: SpecConfig = {
     pipeline: false,
     with_code: false,
     optional_steps: { clarify: 'auto', verify: 'auto', pipeline: 'auto', pr: 'auto', done: 'auto', spec2doc: 'auto' },
-    pipelines: { default: 'full', custom: {} },
+    pipelines: { default: 'develop', custom: {} },
   },
   ask: {
     routing: { mode: 'hybrid', high_threshold: 70, low_threshold: 45, auto_host_ai: true, cache_enabled: true, cache_min_hits: 3 },

@@ -50,11 +50,13 @@ async function autoPipeline(options: RunOptions): Promise<void> {
   ];
 
   // v8.3.190+: 内置预设流水线（起止点对，覆盖常见业务操作）
+  // 默认流水线为 develop（分析→验证，代码完成即止）；pr/done/spec2doc 为独立收尾操作，
+  // 需「提交代码/归档/导出」时用 deliver/import/docs preset 或单独跑命令。
   const PRESETS: Record<string, { from: string; to: string; desc: string }> = {
-    full:    { from: 'req-doc',  to: 'spec2doc', desc: '全流程：需求→导出' },
+    full:    { from: 'req-doc',  to: 'spec2doc', desc: '全流程：需求→导出（含收尾）' },
     import:  { from: 'doc2spec', to: 'pr',       desc: '导入需求→合并请求' },
     analyze: { from: 'analyze',  to: 'validate', desc: '只分析校验' },
-    develop: { from: 'analyze',  to: 'execute',  desc: '分析→执行' },
+    develop: { from: 'analyze',  to: 'verify',   desc: '分析→验证（默认，代码+验证完成）' },
     deliver: { from: 'execute',  to: 'pr',       desc: '执行→提交代码' },
     deploy:  { from: 'analyze',  to: 'pipeline', desc: '分析→部署验证' },
     docs:    { from: 'analyze',  to: 'spec2doc', desc: '分析→文档导出' },
@@ -302,6 +304,22 @@ async function autoPipeline(options: RunOptions): Promise<void> {
         break;
       }
       case 'plan': {
+        // v8.3.190+: 单任务跳过 plan（无需调度计划，直接 execute）；多任务才列计划
+        let taskCount = 0;
+        try {
+          const { readdir: rd3 } = require('fs-extra');
+          const tasksDir = join(iterDir, '030-tasks');
+          if (await pathExists(tasksDir)) {
+            const entries = await rd3(tasksDir, { withFileTypes: true });
+            taskCount = entries.filter((e: any) => e.isDirectory() && e.name.startsWith('Task-')).length;
+          }
+        } catch {}
+        if (taskCount <= 1) {
+          logger.info(`  ⏭️ 仅 ${taskCount} 个任务，跳过 plan（单任务无需调度计划）`);
+          phaseStatus = 'skipped';
+          phaseMessage = '单任务跳过 plan';
+          break;
+        }
         // v6.91.1+: 检查是否已有计划，避免重复生成
         const plansDir = join(iterDir, '000-overview', 'plans');
         let hasPlan = false;
