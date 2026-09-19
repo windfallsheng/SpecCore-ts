@@ -126,6 +126,7 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
       '自动跑流水线', '自动执行流水线',
       '部署', '上线', '交付', '提代码', '提交代码', '发布',
       '生成spec', '出spec', '生成规格', '出规格', '到拆分', '生成拆分方案',
+      '开发流程', '开发到验证', '开发到执行', '跑开发', '分析到开发', '需求到开发',
     ],
     patterns: ['跑(?:.+?)流水线', '执行(?:.+?)流水线', '运行(?:.+?)流水线', '帮我(?:.+?)', '自动(?:.+?)', '从(?:.+?)(?:到|至)(?:.+?)'],
     description: '端到端流水线执行 — 按 preset 或起止点自动编排（run）',
@@ -772,10 +773,12 @@ function extractParams(input: string, mapping: CommandMapping): Record<string, s
     }
   }
 
-  // 检测是否指定了迭代
-  const iterMatch = input.match(/迭代[：:]*\s*(\S+)/);
-  if (iterMatch) {
-    params.iteration = iterMatch[1];
+  // 检测是否指定了迭代（排除「本迭代/当前迭代」——映射到上下文当前迭代，不需显式 --iter）
+  if (!/本迭代|当前迭代|该迭代/.test(input)) {
+    const iterMatch = input.match(/迭代[：:]*\s*(\S+)/);
+    if (iterMatch) {
+      params.iteration = iterMatch[1];
+    }
   }
 
   // 检测 scope 参数（全局分析 vs 迭代分析 vs 任务分析）
@@ -855,7 +858,7 @@ function extractParams(input: string, mapping: CommandMapping): Record<string, s
         deploy: ['deploy', '部署', '上线', '发布'],
         deliver: ['deliver', '交付', '提交代码', '提代码'],
         full: ['full', '全流程', '完整流程', '端到端', '全量'],
-        develop: ['develop', '开发流程', '开发到验证'],
+        develop: ['develop', '开发流程', '开发到验证', '开发到执行', '跑开发', '分析到开发', '需求到开发'],
         spec: ['spec', '生成spec', '出spec', '生成规格', '出规格', '到拆分', '生成拆分'],
         import: ['import', '导入需求', '导入'],
         docs: ['docs', '导出文档', '生成文档', '文档导出', '导出'],

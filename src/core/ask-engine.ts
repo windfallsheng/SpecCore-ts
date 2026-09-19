@@ -312,6 +312,8 @@ export function classifyMode(input: string): AskMode {
     /(?:跑|执行).{0,4}全流程/,
     /(?:生成|出).{0,2}(?:spec|规格)/,
     /.{0,6}到拆分/,
+    /开发(?:流程|到验证|到执行)/,
+    /(?:分析|需求).{0,4}到开发/,
   ];
   if (runPipelinePatterns.some(p => p.test(input))) return 'match';
 
@@ -636,7 +638,17 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
   const config = await loadAskConfig();
   
   const results = await recognizeIntent(input);
-  const best = results[0];
+  let best = results[0];
+  // v8.3.191+: run 意图带 preset/起止点（extractParams 已精确识别编排）时优先 run 编排，
+  // 避免被 execute/analyze 的宽泛触发词（跑/开发/分析）抢占。
+  // 条件：confidence>=40 兜底，防止极低置信度的 run 误抢。
+  // runForced：preset/起止点已精确识别 → 跳过歧义检测与中置信度确认，直接编排执行。
+  let runForced = false;
+  const runWithParams = results.find(r => r.intent === 'run' && r.confidence >= 40 && (r.extractedParams?.preset || r.extractedParams?.from || r.extractedParams?.to));
+  if (runWithParams && best?.intent !== 'run') {
+    best = runWithParams;
+    runForced = true;
+  }
   // v8.3.190+: 澄清三态 flag（仅 analyze 命令，供各分支命令展示统一使用）
   const clarifyFlag = best && best.command === 'analyze' && best.extractedParams?.clarify === 'on' ? ' --clarify'
     : best && best.command === 'analyze' && best.extractedParams?.clarify === 'off' ? ' --skip-clarify'
@@ -699,7 +711,7 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
 
   // ── 歧义检测: 第二候选与第一差距 < 15% ──
   const second = results[1];
-  if (second && (best.confidence - second.confidence) < 15) {
+  if (!runForced && second && (best.confidence - second.confidence) < 15) {
     const candidates = results.slice(0, 4);
     const lines = ['🤔 检测到多个可能意图，请选择:', ''];
     candidates.forEach((r, i) => {
@@ -746,7 +758,7 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
   }
 
   // ── 中置信度确认: 匹配到了但不确定，询问用户 ──
-  if (best.confidence < config.routing.highThreshold && best.confidence >= config.routing.lowThreshold) {
+  if (!runForced && best.confidence < config.routing.highThreshold && best.confidence >= config.routing.lowThreshold) {
     const lines = ['🤔 我理解你想做这个，但不太确定，请确认:', ''];
     lines.push(`🎯 我的理解: ${best.intent} (${best.confidence}%)`);
     lines.push(`📋 建议命令: speccore ${best.command}${clarifyFlag}${runFlag}`);
