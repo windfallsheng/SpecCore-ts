@@ -2,6 +2,18 @@
 
 ---
 
+## v8.3.193 (2026-09-19) — Full rename: iteration taskify
+
+### Command rename
+- `iteration split` fully renamed to `iteration taskify` (no transitional alias)
+- Synced across: run.ts pipeline cmd/execSync, intent recognition id, ask KB, help/error-diagnosis/doctor/init hints, docs (9 `speccore split` → `speccore iteration taskify`)
+- ask now distinguishes: "拆分任务" → `iteration taskify`; "从拆分到开发" → `run --from taskify`; "从切分功能单元到开发" → `run --from split-units`
+
+### Repo sync
+- Added GitHub remote `github` (windfallsheng/SpecCore.git), dual-remote sync with gitee
+
+---
+
 ## v8.3.191 (2026-09-19) — ask Pipeline Orchestration + Naming Fix + Platform Type Unification
 
 ### ask natural-language pipeline orchestration

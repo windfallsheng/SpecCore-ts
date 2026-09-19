@@ -1,3 +1,15 @@
+## v8.3.193 (2026-09-19) — 命令名彻底改名 iteration taskify
+
+### 命令名彻底改名
+- `iteration split` 命令名彻底改为 `iteration taskify`（不再保留 split 过渡 alias）
+- 同步更新：run.ts 流水线 cmd/execSync、intent 识别 id、ask 知识库、help/error-diagnosis/doctor/init 提示、docs 文档（9 处 `speccore split` → `speccore iteration taskify`）
+- ask 识别「拆分任务」→ `iteration taskify`；「从拆分到开发」→ `run --from taskify`；「从切分功能单元到开发」→ `run --from split-units`（两概念彻底区分）
+
+### 仓库同步
+- 新增 GitHub 远程 `github`（windfallsheng/SpecCore.git），与 gitee 双远程同步
+
+---
+
 ## v8.3.191 (2026-09-19) — ask 流水线编排 + 命名根治 + 端类型统一
 
 ### ask 自然语言编排流水线
