@@ -520,15 +520,15 @@ function detectContradictions(content: string): string[] {
  * 生成 CLARIFY_REPORT.md
  * v6.80.0+: 汇总所有需求文档的质量评价
  */
-export async function writeClarifyReport(
+export async function writeQualityReport(
   iterDir: string,
   reports: RequirementQualityReport[]
 ): Promise<string> {
-  const reportPath = join(iterDir, '010-requirements', 'CLARIFY_REPORT.md');
+  const reportPath = join(iterDir, '010-requirements', 'QUALITY_REPORT.md');
   await ensureDir(join(iterDir, '010-requirements'));
 
   const now = new Date().toISOString().split('T')[0];
-  let md = `# 需求澄清报告\n\n> 生成时间: ${now}\n> 文档数: ${reports.length}\n\n`;
+  let md = `# 需求质量审查报告\n\n> 生成时间: ${now}\n> 文档数: ${reports.length}\n\n`;
 
   // 汇总表
   md += `## 质量评分汇总\n\n`;

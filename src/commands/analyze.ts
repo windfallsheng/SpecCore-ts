@@ -49,7 +49,7 @@ import {
 } from '../core/streaming-analyzer';
 import {
   assessRequirementQuality,
-  writeClarifyReport,
+  writeQualityReport,
   hasValidClarifiedDocs,
   buildClarifiedHeader,
   extractUnitsFromText,
@@ -1238,24 +1238,29 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
   if (options.prompt) {
     const iter = options.scope === 'global' ? 'GLOBAL' : (options.iteration || await getDefaultIteration());
 
-    if (iter !== 'GLOBAL' && clarifyMode !== 'off' && !options.pipeline) {
-      // v8.3.190+: 三态开关统一判定
-      //   on   → 强制澄清
+    if (iter !== 'GLOBAL' && !options.pipeline) {
+      // v8.3.190+: 三态开关统一判定 + 无论澄清与否都生成质量报告留痕
+      //   on   → 强制澄清（buildClarifyPhasePrompt 内生成报告 + 澄清 prompt）
       //   auto → auto 分支已按专业度算出 needsClarify；纯 prompt 模式用 hasValidClarifiedDocs 引导
+      //   off  → 跳过澄清，但生成质量报告
       let shouldClarify: boolean;
       if (clarifyMode === 'on') {
         shouldClarify = true;
-      } else {
+      } else if (clarifyMode === 'auto') {
         const iterDir = await getIterationDir(iter);
         shouldClarify = options.auto ? needsClarify : !(await hasValidClarifiedDocs(iterDir));
+      } else {
+        shouldClarify = false;
       }
       if (shouldClarify) {
-        // 需要澄清，先执行 clarify
+        // 需要澄清，先执行 clarify（内部已生成质量报告）
         const clarifyPrompt = await buildClarifyPhasePrompt(iter);
         process.stdout.write(`[SPECCORE_PROMPT]\n${clarifyPrompt}`);
         process.exitCode = 10;
         return;
       }
+      // 跳过澄清（off 或 auto 判定 high）：仍生成质量报告，供后续修正参考
+      await generateQualityReport(iter);
     }
 
     // v8.3.94+: 多子任务分析支持
@@ -5938,7 +5943,11 @@ async function getSubtaskDirs(taskDir: string): Promise<string[]> {
 // ═══════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════
 
-async function buildClarifyPhasePrompt(iteration: string): Promise<string> {
+/**
+ * 生成需求质量审查报告（v8.3.190+：从澄清流程解耦，无论澄清模式都生成留痕）
+ * 返回收集到的需求文档路径，供澄清 prompt 生成复用
+ */
+async function generateQualityReport(iteration: string): Promise<{ docPaths: string[]; reports: RequirementQualityReport[] }> {
   const iterDir = await getIterationDir(iteration);
   const reqDir = join(iterDir, '010-requirements');
 
@@ -5949,7 +5958,7 @@ async function buildClarifyPhasePrompt(iteration: string): Promise<string> {
     try {
       const entries = await readdir(dir, { withFileTypes: true });
       for (const e of entries) {
-        if (e.name.startsWith('.') || e.name === 'INDEX.md') continue;
+        if (e.name.startsWith('.') || e.name === 'INDEX.md' || e.name === 'QUALITY_REPORT.md' || e.name === 'CLARIFY_REPORT.md') continue;
         const fullPath = join(dir, e.name);
         if (e.isDirectory()) {
           await scanReqDir(fullPath);
@@ -5971,10 +5980,18 @@ async function buildClarifyPhasePrompt(iteration: string): Promise<string> {
     } catch { /* ignore */ }
   }
 
-  // 生成质量报告文件
+  // 生成质量报告文件（无论澄清模式，都留痕，便于后续修正）
   if (qualityReports.length > 0) {
-    await writeClarifyReport(iterDir, qualityReports);
+    await writeQualityReport(iterDir, qualityReports);
   }
+
+  return { docPaths, reports: qualityReports };
+}
+
+async function buildClarifyPhasePrompt(iteration: string): Promise<string> {
+  // 生成质量报告（复用抽离的审查逻辑）+ 拿到文档清单与质量报告
+  const iterDir = await getIterationDir(iteration);
+  const { docPaths, reports: qualityReports } = await generateQualityReport(iteration);
 
   let allDocContent = '';
   for (const p of docPaths) {
