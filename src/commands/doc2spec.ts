@@ -823,8 +823,9 @@ interface ScannedUnit {
 
 /**
  * 将转换后的文档拆分为功能单元，写入 features/
+ * v8.3.191+: 导出供 run 流水线「切分功能单元」步骤复用（对已转换文档切分，无需 --file）
  */
-async function splitDocumentToUnits(
+export async function splitDocumentToUnits(
   iterDir: string,
   outputPath: string,
   platformLabel: string,

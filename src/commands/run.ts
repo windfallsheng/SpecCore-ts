@@ -3,7 +3,7 @@
  * 唯一执行入口：13 阶段全自动流水线（--auto 默认，--from/--to 指定起止，--demo 放宽闸口 A/B）
  */
 import { pathExists, readdir, writeFile, ensureDir, readFile } from 'fs-extra';
-import { join } from 'path';
+import { join, basename } from 'path';
 import { execSync } from 'child_process';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
@@ -36,6 +36,8 @@ async function autoPipeline(options: RunOptions): Promise<void> {
     // ── 需求入口（二选一：req-doc 一句话需求 / doc2spec 导入文档）──
     { key: 'req-doc',   cmd: 'speccore req-doc',         layer: 'prepare' },
     { key: 'doc2spec',  cmd: 'speccore doc2spec',        layer: 'prepare' },
+    // ── 结构化：切分功能单元（1→N，独立于澄清）──
+    { key: 'split-units', cmd: 'speccore doc2spec --split', layer: 'prepare' },
     // ── 主流程（分析→校验→拆分→计划→执行→验证→部署→合并→归档→导出）──
     { key: 'analyze',   cmd: 'speccore analyze',         layer: 'main' },
     { key: 'validate',  cmd: 'speccore validate',        layer: 'main' },
@@ -238,6 +240,49 @@ async function autoPipeline(options: RunOptions): Promise<void> {
             logger.info('  ⚠️ 需求文档存在但内容为空，请手动 doc2spec 导入');
           }
         }
+        break;
+      }
+      case 'split-units': {
+        // v8.3.191+: 切分功能单元（结构化，独立于澄清）
+        // 已切分（features/ 非空）则跳过；否则对 converted/ 和 REQUIREMENT.md 文档切分
+        const featuresDir = join(iterDir, '010-requirements', 'features');
+        let hasFeatures = false;
+        try {
+          const entries = await readdir(featuresDir, { withFileTypes: true });
+          hasFeatures = entries.some((e: any) => e.isDirectory() && !e.name.startsWith('.'));
+        } catch {}
+        if (hasFeatures) {
+          logger.info('  ✅ 功能单元已切分，跳过');
+          phaseStatus = 'skipped';
+          phaseMessage = '功能单元已切分';
+          break;
+        }
+        // 收集待切分的需求文档（converted/ + REQUIREMENT.md）
+        const docsToSplit: string[] = [];
+        const convDir = join(iterDir, '010-requirements', 'converted');
+        if (await pathExists(convDir)) {
+          const files = await readdir(convDir);
+          for (const f of files.filter((f: string) => f.endsWith('.md'))) docsToSplit.push(join(convDir, f));
+        }
+        const reqRoot = join(iterDir, '010-requirements', 'REQUIREMENT.md');
+        if (await pathExists(reqRoot)) docsToSplit.push(reqRoot);
+        if (docsToSplit.length === 0) {
+          logger.info('  ℹ️ 无需求文档可切分，跳过');
+          phaseStatus = 'skipped';
+          phaseMessage = '无需求文档可切分';
+          break;
+        }
+        const { splitDocumentToUnits } = await import('./doc2spec');
+        let written = 0;
+        for (const doc of docsToSplit) {
+          try {
+            await splitDocumentToUnits(iterDir, doc, '', basename(doc));
+            written++;
+          } catch (e: any) {
+            logger.warn(`  ⚠️ 切分失败: ${basename(doc)} — ${e?.message || e}`);
+          }
+        }
+        logger.info(`  🔪 切分功能单元完成: ${written}/${docsToSplit.length} 个文档`);
         break;
       }
       case 'analyze': {

@@ -751,6 +751,26 @@ export function extractUnitsFromText(content: string): ClarifyUnit[] {
   return units;
 }
 
+/**
+ * 从 features/ 目录加载功能单元（v8.3.191+：切分独立于澄清）
+ * 每个 features/{name}/README.md 是一个功能单元，id 用目录名保持映射。
+ * 切分由 doc2spec --split 完成，澄清（req-doc --unit）只读已切分的单元，不再自己切分。
+ */
+export async function loadFeatureUnits(iterDir: string): Promise<ClarifyUnit[]> {
+  const featuresDir = join(iterDir, '010-requirements', 'features');
+  if (!(await pathExists(featuresDir))) return [];
+  const entries = await readdir(featuresDir, { withFileTypes: true });
+  const units: ClarifyUnit[] = [];
+  for (const e of entries) {
+    if (!e.isDirectory() || e.name.startsWith('.')) continue;
+    const readmePath = join(featuresDir, e.name, 'README.md');
+    if (!(await pathExists(readmePath))) continue;
+    const content = await readFile(readmePath, 'utf-8');
+    units.push({ id: e.name, name: e.name, content });
+  }
+  return units;
+}
+
 /** 构建单个功能单元的澄清 Prompt（v8.2.0+ 智能上下文组装） */
 export async function buildUnitClarifyPrompt(
   unit: ClarifyUnit,

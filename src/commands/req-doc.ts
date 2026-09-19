@@ -23,7 +23,7 @@ import {
   writeClarifiedDoc,
   assessRequirementDoc,
   buildClarifiedHeader,
-  extractUnitsFromText,
+  loadFeatureUnits,
   buildUnitClarifyPrompt,
   consolidateClarifiedUnits,
   type ClarifyUnit,
@@ -121,18 +121,23 @@ export async function reqDocCommand(options: ReqDocOptions): Promise<void> {
     return;
   }
 
-  // ── v8.2.0+: 功能单元聚焦澄清模式 ──
+  // ── v8.3.191+: 功能单元聚焦澄清模式（切分独立于澄清）──
+  // 切分由 doc2spec --split 完成（产出 features/），澄清只读已切分的单元，不再自己切分
   if (options.extractUnits || options.unit || options.consolidate || options.resumeUnits) {
-    const units = extractUnitsFromText(rawContent);
+    const units = await loadFeatureUnits(iterDir);
 
     if (options.extractUnits) {
-      logger.info(`📋 功能单元清单已提取: ${units.length} 个`);
+      if (units.length === 0) {
+        logger.warn('⚠️ 未找到功能单元，请先切分: speccore doc2spec --split');
+        return;
+      }
+      logger.info(`📋 已切分的功能单元: ${units.length} 个`);
       for (const u of units) {
-        logger.info(`   ${u.id}: ${u.name}`);
+        logger.info(`   ${u.id}`);
       }
       logger.info('');
       logger.info('📋 下一步: 逐个澄清功能单元');
-      logger.info(`   speccore req-doc --from "${sourceName}" --to ${iteration} --unit M-01 --prompt`);
+      logger.info(`   speccore req-doc --to ${iteration} --unit ${units[0].id} --prompt`);
       return;
     }
 
@@ -196,7 +201,9 @@ export async function reqDocCommand(options: ReqDocOptions): Promise<void> {
     }
 
     if (targetUnit && options.prompt) {
-      const prompt = await buildUnitClarifyPrompt(targetUnit, rawContent, {
+      // v8.3.191+: 上下文用已切分单元拼接（替代 rawContent，澄清不依赖原始全文切分）
+      const allContent = units.map(u => u.content).join('\n\n');
+      const prompt = await buildUnitClarifyPrompt(targetUnit, allContent, {
         iteration, sourceFile: sourceName, iterDir, allUnits: units,
       });
       process.stdout.write(prompt);
