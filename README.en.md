@@ -5,9 +5,9 @@
 > Juggling 5 microservices and 3 frontend platforms? SpecCore turns requirements → splits → plans → code → delivery into a traceable, automated pipeline.
 
 ```
-  init → doc2spec → analyze → split → plan → execute → pr → done
-  🚀Setup   📝Import   🧠Analyze  📦Split  📋Plan  💻Build  🔀PR  ✅Archive
-  ✅ CLI    🔒 AI      🔒 AI      🔒 AI     🔒 AI    🔒 AI    🔒 AI  🔒 AI
+  init → doc2spec → analyze(overview) → analyze(units) → split → plan → execute → pr → done → spec2doc
+  🚀Setup   📝Import   🧠Analyze   🧠Analyze   📦Split  📋Plan  💻Build  🔀PR  ✅Archive  📤Export
+  ✅ CLI    🔒 AI      🔒 AI       🔒 AI       🔒 AI     🔒 AI    🔒 AI    🔒 AI  🔒 AI      🔒 AI
 ```
 
 ## 🚀 5 Minutes to First Task
@@ -53,7 +53,7 @@ speccore iteration create -n Q1     # Create iteration
 | **Split requirements into tasks** | `speccore iteration split -I Q1 --interactive` |
 | **Fix a bug** | `speccore task new -n "Login timeout" --type=bugfix` |
 | **Batch fix bugs** | `speccore task new --batch-file=bugs.xlsx --type=bugfix` |
-| **Schedule overnight execution** | `speccore schedule create --at "02:00" --all -I Q1` |
+| **Refresh retrieval layers** | `speccore refresh` |
 | **AI auto-development** | `@spec-ask "execute Task-001"` 🔒 |
 | **Create a Pull Request** | `@spec-ask "create PR for Task-001"` 🔒 |
 | **Archive a completed task** | `@spec-ask "archive Task-001"` 🔒 |
@@ -70,13 +70,13 @@ speccore iteration create -n Q1     # Create iteration
 |:---|:---|:---|
 | `🧠 pr --interactive` | `🧠 change --interactive` | `🧠 done --interactive` |
 
-## ⏰ Scheduled Execution
+## 🔄 Unified Retrieval Refresh
 
 ```bash
-speccore task new -n "Data migration" --schedule=night         # Queue for night
-speccore schedule create --at "2026-08-10 02:00" --all -I Q1   # Exact time
-speccore schedule daemon start                                  # Auto-execute on schedule
-# 🔒 AI: @spec-ask "run all scheduled tasks"
+speccore refresh                    # Refresh all retrieval layers (code index + RAG + knowledge graph)
+speccore refresh --code             # Only code index
+speccore refresh --rag              # Only document RAG
+speccore refresh --graph            # Only knowledge graph
 ```
 
 ## 📚 Documentation

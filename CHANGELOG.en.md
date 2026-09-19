@@ -2,6 +2,35 @@
 
 ---
 
+## v8.3.187 (2026-09-19) — Honesty Degradation System & Engineering Hardening
+
+### Universal behavior rules refined (4 → 7)
+
+- **`prompt-builder.ts` extracted `UNIVERSAL_BEHAVIOR_RULES` constant**: expanded from 4 to 7 rules, incorporating industry best practices
+  - Added "read before write", "minimal changes", "proactive clarification", "confirm destructive operations"
+  - Merged "don't pretend certainty" into "degrade to honesty", upgraded to "fact / inference / guess" confidence tiers
+  - Basis: Claude Code official system prompt, Anthropic Prompt Library, Karpathy's 12 rules
+
+### Dead code cleanup
+
+- Removed 8 zero-reference command files (2009 lines): backup/context/current/global-status/health/import/lifecycle/status
+- Removed `understandIntent` + `synthesizeIntent` dead code (321 lines; askEngine is the real ask entry point)
+
+### Feature wiring (orphan A-class modules)
+
+- **`refresh` wired `detectStaleGlobalDocs`**: detects stale global docs after refresh (≥1 day), prompts incremental rebuild
+- **`search --global` wired `searchGlobalKnowledge`**: global-layer RAG + knowledge-graph semantic retrieval, distinct from keyword search
+- **`dev` wired `generateHandoff`**: generates stage handoff summaries after key pipeline stages (13→6 stage mapping)
+
+### Bug fixes (verified on meeting-system)
+
+- **`config --project` option missing**: added to cli.ts, fixes doctor-suggested upgrade command reporting unknown option
+- **`detectConfigDiff` open-dict misjudgment**: Record fields like `git.branch_types` no longer flag user-defined keys as removed
+- **`detectStaleGlobalDocs` "0 days stale" noise**: only reports docs stale ≥1 day
+- **Version comparison false positive**: about/update now use semver comparison, no longer report older versions as "new"
+
+---
+
 ## v8.3.182 (2026-09-18) — Explicit Document Routing & Refined Whitelist
 
 ### Document Routing Table (r4)
