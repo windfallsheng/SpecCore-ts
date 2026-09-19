@@ -685,6 +685,71 @@ settings:
 - SVG 图片无需视觉模型，直接 inline XML 文本（零成本）
 - 未配置时完全跳过视觉模型调用（零成本）
 
+#### 3.12.10 optional_steps（非必要流水线步骤三态开关）
+
+**类型**：`object`
+
+**说明**：非必要流水线步骤的三态开关，控制默认行为。三态：`auto`（智能判定，默认）、`on`（强制执行）、`off`（确定性跳过）。
+
+| 字段 | 类型 | 默认值 | 可选值 | 说明 |
+|------|------|--------|--------|------|
+| `clarify` | `enum` | `auto` | `auto` / `on` / `off` | 需求澄清：auto=按专业度判定 / on=强制 / off=跳过 |
+| `verify` | `enum` | `auto` | `auto` / `on` / `off` | 代码验证 |
+| `pipeline` | `enum` | `auto` | `auto` / `on` / `off` | 部署 |
+| `pr` | `enum` | `auto` | `auto` / `on` / `off` | 合并请求 |
+| `done` | `enum` | `auto` | `auto` / `on` / `off` | 归档 |
+| `spec2doc` | `enum` | `auto` | `auto` / `on` / `off` | 导出文档 |
+
+**配置示例**：
+```yaml
+settings:
+  optional_steps:
+    clarify: auto      # 文档专业就跳过澄清
+    verify: auto
+    pipeline: auto
+    pr: off            # 本地开发不自动提 PR
+    done: auto
+    spec2doc: off      # 不需要导出文档
+```
+
+**三层覆盖**（优先级从高到低）：命令 flag（`--clarify` / `--skip-clarify`）> ask 自然语言（"强制澄清"/"跳过澄清"）> 配置 optional_steps > 默认 auto。
+
+#### 3.12.11 pipelines（命名流水线）
+
+**类型**：`object`
+
+**说明**：命名流水线体系，把常见起止点组合命名，用户说 `run --preset <name>` 而非拼阶段名。
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `default` | `string` | `develop` | 默认流水线名（不指定 --preset 时用） |
+| `custom` | `map` | `{}` | 自定义命名流水线：名称 → 逗号分隔阶段串 |
+
+**内置 preset**：
+
+| preset | 起止 | 场景 |
+|--------|------|------|
+| `full` | req-doc → spec2doc | 全流程（含收尾） |
+| `import` | doc2spec → pr | 导入需求→合并 |
+| `spec` | doc2spec → taskify | 导入需求→任务化（生成 Spec） |
+| `analyze` | analyze → validate | 只分析校验 |
+| `develop` | analyze → verify | 分析→验证（默认） |
+| `deliver` | execute → pr | 执行→提交代码 |
+| `deploy` | analyze → pipeline | 分析→部署验证 |
+| `docs` | analyze → spec2doc | 分析→文档导出 |
+
+**配置示例**：
+```yaml
+settings:
+  pipelines:
+    default: develop
+    custom:
+      my-flow: analyze,validate,taskify,plan,execute
+      hotfix: execute,verify,pipeline,pr
+```
+
+**阶段 key**（--from/--to 与 custom 使用）：`req-doc`、`doc2spec`、`split-units`（切分功能单元）、`analyze`、`validate`、`taskify`（拆分任务）、`plan`、`execute`、`verify`、`pipeline`、`pr`、`done`、`spec2doc`。
+
 ---
 
 ### 3.13 ask
