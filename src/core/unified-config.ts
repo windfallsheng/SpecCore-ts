@@ -795,6 +795,40 @@ export function requiresUserConfirmation(diff: ConfigDiff): boolean {
 }
 
 /**
+ * 检测磁盘 .speccore.yml 与默认配置的差异（直接读原始文件，不做深度合并）
+ *
+ * 背景：loadConfigWithMeta 会 deepMerge 默认值补全缺失字段，导致
+ * detectConfigDiff(config, DEFAULT_CONFIG) 永远看不到磁盘文件缺失的新字段。
+ * update 需要用本函数才能检测到「升级后配置文件缺了哪些新字段」并补全。
+ *
+ * 返回 null 表示文件不存在或解析失败。
+ */
+export async function detectConfigDiffFromFile(): Promise<ConfigDiff | null> {
+  if (!(await pathExists(CONFIG_PATH))) return null;
+  try {
+    const raw = await readFile(CONFIG_PATH, 'utf-8');
+    const parsed = parseYaml(raw) as Record<string, unknown>;
+    return detectConfigDiff(parsed, DEFAULT_CONFIG);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 检测磁盘 .speccore/PROJECT.yaml 与默认项目配置的差异（直接读原始文件）
+ */
+export async function detectProjectConfigDiffFromFile(): Promise<ConfigDiff | null> {
+  if (!(await pathExists(PROJECT_CONFIG_PATH))) return null;
+  try {
+    const raw = await readFile(PROJECT_CONFIG_PATH, 'utf-8');
+    const parsed = parseYaml(raw) as Record<string, unknown>;
+    return detectConfigDiff(parsed, DEFAULT_PROJECT_CONFIG);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * 格式化差异为可读文本
  */
 export function formatConfigDiff(diff: ConfigDiff): string[] {
@@ -839,13 +873,16 @@ export function formatConfigDiff(diff: ConfigDiff): string[] {
 export async function upgradeConfig(): Promise<ConfigLoadResult> {
   const { config, warnings } = await loadConfigWithMeta();
 
-  if (config.schema_version === CURRENT_SCHEMA_VERSION && warnings.length === 0) {
+  // v8.3.187+: 用磁盘原始文件检测缺失字段（loadConfigWithMeta 深度合并补全后看不到）
+  const fileDiff = await detectConfigDiffFromFile();
+
+  if (config.schema_version === CURRENT_SCHEMA_VERSION && warnings.length === 0 && !(fileDiff && fileDiff.added.length > 0)) {
     logger.info(`✅ .speccore.yml 已经是 schema_version=${CURRENT_SCHEMA_VERSION}，无需升级`);
     return { config, warnings: [], migrated: false };
   }
 
-  // 1. 检测配置差异（当前配置 vs 目标配置）
-  const diff = detectConfigDiff(config, DEFAULT_CONFIG);
+  // 1. 检测配置差异（优先用磁盘原始文件差异，能看到缺失的新字段）
+  const diff = fileDiff || detectConfigDiff(config, DEFAULT_CONFIG);
   const needsConfirm = requiresUserConfirmation(diff);
 
   if (needsConfirm) {
@@ -944,13 +981,16 @@ export async function upgradeConfig(): Promise<ConfigLoadResult> {
 export async function upgradeProjectConfig(): Promise<ProjectConfigLoadResult> {
   const { config, warnings } = await loadProjectConfigWithMeta();
 
-  if (config.schema_version === PROJECT_CURRENT_SCHEMA_VERSION && warnings.length === 0) {
+  // v8.3.187+: 用磁盘原始文件检测缺失字段（loadProjectConfigWithMeta 补全后看不到）
+  const fileDiff = await detectProjectConfigDiffFromFile();
+
+  if (config.schema_version === PROJECT_CURRENT_SCHEMA_VERSION && warnings.length === 0 && !(fileDiff && fileDiff.added.length > 0)) {
     logger.info(`✅ .speccore/PROJECT.yaml 已经是 schema_version=${PROJECT_CURRENT_SCHEMA_VERSION}，无需升级`);
     return { config, warnings: [], migrated: false };
   }
 
-  // 1. 检测配置差异（当前配置 vs 目标配置）
-  const diff = detectConfigDiff(config, DEFAULT_PROJECT_CONFIG);
+  // 1. 检测配置差异（优先用磁盘原始文件差异，能看到缺失的新字段）
+  const diff = fileDiff || detectConfigDiff(config, DEFAULT_PROJECT_CONFIG);
   const needsConfirm = requiresUserConfirmation(diff);
 
   if (needsConfirm) {
@@ -1305,6 +1345,26 @@ function autoType(v: string): unknown {
   return v;
 }
 
+/**
+ * 将字符串数组字段规范化为数组。
+ * 兼容历史脏数据：旧版 toYaml 用 flow 写法（如 `['desktop']`）序列化数组，
+ * 而自定义 parseYaml 不认识 flow sequence，回读成字符串 `"['desktop']"`。
+ * 此函数把这类字符串还原为数组，避免 `vui.devices.map is not a function`。
+ */
+function normalizeStringArray(v: unknown): string[] {
+  if (Array.isArray(v)) return v as string[];
+  if (typeof v === 'string') {
+    const s = v.trim();
+    if (s.startsWith('[') && s.endsWith(']')) {
+      return s.slice(1, -1).split(',')
+        .map((x) => x.trim().replace(/^['"]|['"]$/g, ''))
+        .filter(Boolean);
+    }
+    if (s) return s.split(',').map((x) => x.trim()).filter(Boolean);
+  }
+  return [];
+}
+
 function toYaml(config: SpecConfig): string {
   let yaml = '# =============================================================================\n';
   yaml += '# SpecCore 系统配置 (.speccore.yml)\n';
@@ -1314,7 +1374,7 @@ function toYaml(config: SpecConfig): string {
   yaml += '#   - .speccore.yml      → 系统级（质量门禁、AI 路由、自动化策略）\n';
   yaml += '#   - .speccore/PROJECT.yaml → 项目级（工程列表、Git 配置、源码路径）\n';
   yaml += '# =============================================================================\n';
-  yaml += `# schema_version: ${config.schema_version}\n`;
+  yaml += `schema_version: ${config.schema_version}\n`;
   yaml += `# ${new Date().toISOString().split('T')[0]}\n\n`;
 
   yaml += '# ─────────────────────────────────────────────────────────────────────────────\n';
@@ -1351,9 +1411,15 @@ function toYaml(config: SpecConfig): string {
     yaml += '    #   loose  → 仅严重问题\n';
     yaml += `    threshold: ${vui.threshold}\n`;
     yaml += '    # devices: 测试设备列表\n';
-    yaml += `    devices: [${vui.devices.map((d) => `'${d}'`).join(', ')}]\n`;
+    const devices = normalizeStringArray(vui.devices);
+    yaml += devices.length > 0
+      ? '    devices:\n' + devices.map((d) => `      - ${d}\n`).join('')
+      : '    devices: []\n';
     yaml += '    # browsers: 测试浏览器列表\n';
-    yaml += `    browsers: [${vui.browsers.map((b) => `'${b}'`).join(', ')}]\n`;
+    const browsers = normalizeStringArray(vui.browsers);
+    yaml += browsers.length > 0
+      ? '    browsers:\n' + browsers.map((b) => `      - ${b}\n`).join('')
+      : '    browsers: []\n';
     yaml += '    # timeout: 单场景超时（毫秒）\n';
     yaml += `    timeout: ${vui.timeout}\n`;
     if (vui.visual_model) {
@@ -1431,6 +1497,12 @@ function toYaml(config: SpecConfig): string {
   yaml += '  review:\n';
   yaml += '    # check_assignee: 审查时是否检查指派人与执行人一致\n';
   yaml += `    check_assignee: ${config.settings.review.check_assignee}\n`;
+  yaml += '  # ── 流水线（Pipeline）──\n';
+  yaml += '  # pipeline: 是否默认启用 Pipeline 模式\n';
+  yaml += `  pipeline: ${config.settings.pipeline}\n`;
+  yaml += '  # ── 关联代码（with_code）──\n';
+  yaml += '  # with_code: 分析时是否默认关联代码\n';
+  yaml += `  with_code: ${config.settings.with_code}\n`;
 
   yaml += '\n# ─────────────────────────────────────────────────────────────────────────────\n';
   yaml += '# Ask 引擎路由配置（控制 speccore ask 的行为）\n';
@@ -1478,6 +1550,9 @@ function toYaml(config: SpecConfig): string {
       yaml += `      # 优先级（数字越小优先级越高）\n`;
       yaml += `      priority: ${p.priority}\n`;
     }
+  } else {
+    yaml += '  # ── LLM 提供商（可选，默认空）──\n';
+    yaml += '  llm_providers: []\n';
   }
 
   // tools 配置
@@ -1520,7 +1595,7 @@ function toProjectYaml(config: ProjectConfig): string {
   yaml += '#   - .speccore/PROJECT.yaml → 项目级（工程列表、Git 配置、源码路径）\n';
   yaml += '#   - .speccore.yml          → 系统级（质量门禁、AI 路由、自动化策略）\n';
   yaml += '# =============================================================================\n';
-  yaml += `# schema_version: ${config.schema_version}\n`;
+  yaml += `schema_version: ${config.schema_version}\n`;
   yaml += `# ${new Date().toISOString().split('T')[0]}\n\n`;
 
   yaml += 'project:\n';

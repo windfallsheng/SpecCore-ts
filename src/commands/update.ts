@@ -16,6 +16,8 @@ import {
   loadConfigWithMeta,
   loadProjectConfigWithMeta,
   detectConfigDiff,
+  detectConfigDiffFromFile,
+  detectProjectConfigDiffFromFile,
   requiresUserConfirmation,
   DEFAULT_CONFIG,
   DEFAULT_PROJECT_CONFIG,
@@ -294,7 +296,8 @@ export async function updateCommand(options: { force?: boolean; tool?: string; y
       await initConfig();
     } else {
       const { config, warnings } = await loadConfigWithMeta();
-      const diff = detectConfigDiff(config, DEFAULT_CONFIG);
+      // 用磁盘原始文件检测（loadConfigWithMeta 会补全，看不到缺失字段）
+      const diff = (await detectConfigDiffFromFile()) || detectConfigDiff(config, DEFAULT_CONFIG);
       const needsConfirm = requiresUserConfirmation(diff);
       const hasSchemaIssue = config.schema_version < CURRENT_SCHEMA_VERSION;
       const hasAddedOnly = diff.added.length > 0 && !needsConfirm;
@@ -372,7 +375,7 @@ export async function updateCommand(options: { force?: boolean; tool?: string; y
       await initProjectConfig(projectName);
     } else {
       const { config, warnings } = await loadProjectConfigWithMeta();
-      const diff = detectConfigDiff(config, DEFAULT_PROJECT_CONFIG);
+      const diff = (await detectProjectConfigDiffFromFile()) || detectConfigDiff(config, DEFAULT_PROJECT_CONFIG);
       const needsConfirm = requiresUserConfirmation(diff);
       const hasAddedOnly = diff.added.length > 0 && !needsConfirm;
       const hasChanges = hasAddedOnly || needsConfirm || warnings.length > 0;
