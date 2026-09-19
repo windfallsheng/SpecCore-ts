@@ -369,6 +369,12 @@ function mapToQoderAgentName(subagent: string): string | undefined {
     'impact-analyst': 'general-purpose',
     'code-reviewer': 'general-purpose',
     'security-reviewer': 'general-purpose',
+    // v8.3.189+: 补齐流水线其余阶段的 subagent 映射
+    'product-analyst': 'general-purpose',
+    'doc-sync-agent': 'general-purpose',
+    'compliance-checker': 'general-purpose',
+    'test-engineer': 'general-purpose',
+    'regression-tester': 'general-purpose',
   };
   // 如果 SpecCore subagent 名与 Qoder 内置 Agent 匹配，直接返回
   if (builtinMap[subagent]) return builtinMap[subagent];

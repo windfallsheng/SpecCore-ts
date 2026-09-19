@@ -30,6 +30,7 @@ import {
   type ClarifiedUnit,
 } from '../core/requirement-clarifier';
 import { stageContent, writeWorkspaceOutput, promoteToIteration } from '../core/workspace-manager';
+import { dispatchSubagent, type AgentContext } from '../core/agent-adapter';
 
 export interface ReqDocOptions {
   input?: string;       // 直接输入的需求描述
@@ -240,6 +241,36 @@ export async function reqDocCommand(options: ReqDocOptions): Promise<void> {
       iteration,
       sourceFile: sourceName,
     });
+
+    // v8.3.189+: 非 TTY 下尝试通过 Qoder SDK 直接调度 product-analyst 完成需求文档化
+    if (!process.stdout.isTTY) {
+      try {
+        const agentCtx: AgentContext = {
+          subagent: 'product-analyst',
+          iteration: iteration || '',
+          contextBudget: 10000,
+          contextType: 'full',
+          cwd: process.cwd(),
+        };
+        const dispatchResult = await dispatchSubagent(agentCtx, prompt);
+        if (dispatchResult && dispatchResult.success) {
+          logger.info(`[req-doc] 子 Agent product-analyst SDK 调度成功`);
+          process.stdout.write(`\n[SPECCORE_RESULT] 子 Agent product-analyst 通过 Qoder SDK 完成执行\n`);
+          if (dispatchResult.filesChanged && dispatchResult.filesChanged.length > 0) {
+            process.stdout.write(`📄 文件变更: ${dispatchResult.filesChanged.join(', ')}\n`);
+          }
+          if (dispatchResult.content) {
+            process.stdout.write(`\n--- 执行结果 ---\n${dispatchResult.content.slice(0, 3000)}${dispatchResult.content.length > 3000 ? '\n... (截断)' : ''}\n`);
+          }
+          process.stdout.write(`\n> 请审查上述结果，确认后执行 speccore req-doc --apply '<PRD内容>' 写入文档\n`);
+          process.exitCode = 0;
+          return;
+        }
+      } catch (e: any) {
+        logger.debug(`[req-doc] SDK 调度尝试失败: ${e.message}，回退到 Prompt 模式`);
+      }
+    }
+
     process.stdout.write(prompt);
     process.exitCode = 10;
 
