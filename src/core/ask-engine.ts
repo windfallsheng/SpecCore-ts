@@ -71,7 +71,7 @@ export interface AskEngineOptions {
 
 const COMMAND_KB: CommandKnowledge[] = [
   { name: 'init', aliases: ['in'], description: '初始化 SpecCore 项目，创建 .speccore 目录和配置',
-    usage: 'speccore init [--interactive] [--name <name>]', examples: ['speccore init', 'speccore init --name my-project'], related: ['dev', 'config'], triggers: ['初始化', 'init', '开始', '新建项目', '创建项目'] },
+    usage: 'speccore init [--interactive] [--name <name>]', examples: ['speccore init', 'speccore init --name my-project'], related: ['run', 'config'], triggers: ['初始化', 'init', '开始', '新建项目', '创建项目'] },
   { name: 'doc2spec', aliases: ['d2s'], description: '导入 PRD/Word 文档，AI + Pandoc 双路转换为 SpecCore MD。--classify 智能分类 sources/ 文档到 staging/（按类型提取 feature/bug/refactor/research）',
     usage: 'speccore doc2spec -f <file> --iter <iteration> [--task <task>] [--no-ai] [--classify [--prompt] [--response <json>]]', examples: ['speccore doc2spec -f PRD.docx --iter Q3', 'speccore doc2spec -f 需求.docx --iter Q2 --task T-01 --no-ai', 'speccore doc2spec --classify --prompt -I Q3', 'speccore doc2spec --classify -I Q3'], related: ['spec2doc', 'analyze'], triggers: ['导入', 'doc2spec', 'word转', '文档转换', 'PRD', '需求文档', '智能分类', 'classify', '分类文档', '提取需求'] },
   { name: 'spec2doc', aliases: ['s2d'], description: 'SpecCore MD 导出为 Word/PDF/HTML/PPTX',
@@ -81,7 +81,7 @@ const COMMAND_KB: CommandKnowledge[] = [
   { name: 'analyze', aliases: ['al'], description: '统一分析：需求文档+源码→分析报告。支持 --full 三阶段合成，--deep 单文档深度分析（字数/图表翻倍），--iterative 迭代式生成（大纲→逐节填充），--filter 按需分析指定模块，--with-code 注入代码结构化数据，--phase 单阶段合成，--feature 局部分析功能模块，--doc 局部分析类型文档，--sync 任务分析后局部回写 020-specs/，--no-source 跳过源码，--supplement 追加源码',
     usage: 'speccore analyze [--task <id>] [--iteration <name>] [--full] [--deep <doc>] [--iterative] [--filter <keywords>] [--with-code] [--phase <n>] [--feature <module>] [--doc <type/slug>] [--no-source] [--source-scope <dirs>] [--supplement] [--sync] [--scope global] [--dev-guide]', examples: ['speccore analyze', 'speccore analyze --full -i Q2', 'speccore analyze --deep ARCHITECTURE.md --iterative', 'speccore analyze --filter "订单,支付" --with-code', 'speccore analyze --phase 1 -i Q2', 'speccore analyze --feature 支付模块', 'speccore analyze --doc bugs/login-timeout', 'speccore analyze --with-code', 'speccore analyze --supplement --source-scope src/core', 'speccore analyze --task Task-001 --apply "..." --sync'], related: ['dashboard', 'validate', 'code-index', 'refresh', 'synthesize'], triggers: ['分析', 'analyze', '审计', 'audit', '检查', '结合源码', '连代码', '带代码', '源码分析', '迭代分析', '分析迭代', '倒推需求', '反推', '从代码生成', '分析代码', '不读源码', '不读代码', '跳过源码', '指定目录分析', '只扫描', '补充分析', '追加分析', '补充源码', '追加源码', '遗漏', '没分析到', '没覆盖', '漏掉', '再分析', '多读几个', '局部分析', '单个模块', '单独分析', 'bug分析', '重构分析', '局部回写', '回写spec', '同步spec', '合成需求', '合并需求', '需求合成', '智能合成', '需求合并', '多端合成', '全量分析', '跨端综合', '全量合成', '开发指南', '生成开发指南', '带开发指南', '深度分析', '深入分析', '详细分析', '迭代生成', '逐节分析', '大纲分析', '按需分析', '只分析', '过滤分析', '聚焦分析'] },
   { name: 'code-index', aliases: ['ci', 'idx'], description: '源码索引：扫描项目代码，自动识别多端/模块/依赖，生成 Markdown 索引',
-    usage: 'speccore code-index [--full] [--scope <dirs>] [--show]', examples: ['speccore code-index', 'speccore code-index --full', 'speccore code-index --scope src/commands,src/core', 'speccore code-index --show'], related: ['analyze', 'dev'], triggers: ['代码索引', '源码索引', 'code-index', '索引', '建索引', '更新索引', '扫描代码', '代码结构', '模块索引', '项目结构'] },
+    usage: 'speccore code-index [--full] [--scope <dirs>] [--show]', examples: ['speccore code-index', 'speccore code-index --full', 'speccore code-index --scope src/commands,src/core', 'speccore code-index --show'], related: ['analyze', 'run'], triggers: ['代码索引', '源码索引', 'code-index', '索引', '建索引', '更新索引', '扫描代码', '代码结构', '模块索引', '项目结构'] },
   { name: 'execute', aliases: ['ex'], description: '执行开发任务：依赖排序+分批+交互引导+计划联动',
     usage: 'speccore execute [--task <id>] [--batch-size <n>] [--auto]', examples: ['speccore execute', 'speccore execute --batch-size 3'], related: ['plan', 'done'], triggers: ['执行', 'execute', '开发', '开始做', '干活'] },
   { name: 'plan', aliases: ['pl'], description: '生成执行计划+管理历史：创建/交互/列表/详情/取消',
@@ -96,21 +96,21 @@ const COMMAND_KB: CommandKnowledge[] = [
   { name: 'validate', aliases: ['vl'], description: '合规验证：检查 Spec 完整性与一致性',
     usage: 'speccore validate [--iteration <name>]', examples: ['speccore validate', 'speccore validate --iteration Q2'], related: ['analyze', 'audit'], triggers: ['验证', 'validate', '检查', '合规', '校验'] },
   { name: 'sync', aliases: ['sy'], description: '双向同步：代码↔Spec，--global 同步到全局层（原 sync-global）',
-    usage: 'speccore sync [--task <id>] [--iteration <name>] [--global] [--direction to_global|from_global]', examples: ['speccore sync --task Task-001', 'speccore sync --global', 'speccore sync --global --direction from_global'], related: ['dev'], triggers: ['同步', 'sync', '对齐', '更新', '同步全量', '同步全局', '更新全量层', '同步到全量'] },
+    usage: 'speccore sync [--task <id>] [--iteration <name>] [--global] [--direction to_global|from_global]', examples: ['speccore sync --task Task-001', 'speccore sync --global', 'speccore sync --global --direction from_global'], related: ['run'], triggers: ['同步', 'sync', '对齐', '更新', '同步全量', '同步全局', '更新全量层', '同步到全量'] },
   { name: 'change', aliases: ['ch'], description: '需求变更：联动更新所有关联 Spec，支持口语化输入',
     usage: 'speccore change "<description>" [--task <id>]', examples: ['speccore change "把登录改成验证码登录"', 'speccore change "加上支付功能" --task T-03'], related: ['analyze'], triggers: ['变更', 'change', '修改', '改', '更新需求'] },
   { name: 'done', aliases: ['dn'], description: '收尾归档：校验→同步→审计，--all 批量归档',
     usage: 'speccore done [--task <id>] [--all] [--interactive]', examples: ['speccore done --task T-01', 'speccore done --all'], related: ['execute', 'pr'], triggers: ['完成', 'done', '归档', '结束', '做完'] },
-  { name: 'dev', aliases: ['d'], description: '智能级联：--auto 全自动流水线 detect→execute',
-    usage: 'speccore dev [--auto] [--from <phase>] [--to <phase>]', examples: ['speccore dev --auto', 'speccore dev --from analyze --to execute'], related: ['execute', 'plan'], triggers: ['dev', '流水线', '自动', '级联'] },
-  { name: 'run', aliases: ['r'], description: '端到端流水线：一句话需求→澄清→分析→拆分→执行→验证→部署（默认三闸口，--demo 放宽 A/B）',
-    usage: 'speccore run [需求描述] [--from <phase>] [--to <phase>] [--demo]', examples: ['speccore run "做用户积分功能"', 'speccore run --demo "做演示页面"', 'speccore run --from split'], related: ['dev', 'clarify', 'execute'], triggers: ['run', '跑一遍', '端到端', '全流程', '一键开发', '自动开发', '从头到尾', '完整流程'] },
+  { name: 'next', aliases: ['n'], description: '检测当前迭代进度，提示下一步操作（只指引，不执行）',
+    usage: 'speccore next [--iteration <name>]', examples: ['speccore next', 'speccore next -i Q2'], related: ['run', 'status'], triggers: ['下一步', '接下来', '该做什么', '接下来做什么', 'next', '做到哪了', '下一步做什么', '现在到哪了'] },
+  { name: 'run', aliases: ['r'], description: '端到端全自动流水线：导入需求→分析→拆分→执行→验证→部署→归档→导出（13 阶段，默认三闸口）',
+    usage: 'speccore run [需求描述] [--from <phase>] [--to <phase>] [--demo]', examples: ['speccore run "做用户积分功能"', 'speccore run --demo', 'speccore run --from split'], related: ['next', 'clarify', 'execute'], triggers: ['run', '跑一遍', '端到端', '全流程', '一键开发', '自动开发', '从头到尾', '完整流程', '全自动', '流水线'] },
   { name: 'task', aliases: ['tk'], description: '任务管理：创建/列表/状态。子命令: new, list, status',
     usage: 'speccore task new --name <name> [--id <id>] | speccore task list | speccore task status', examples: ['speccore task new --name "用户登录"', 'speccore task list'], related: ['plan', 'execute'], triggers: ['task', '任务列表', '查看任务', '列出任务'] },
   { name: 'iteration', aliases: ['it'], description: '迭代管理：创建时自动生成唯一编码（Iteration-001-功能名），支持拆分/列表',
     usage: 'speccore iteration create -n <name> | speccore iteration split | speccore iteration list', examples: ['speccore iteration create -n Q3 → Iteration-001-Q3', 'speccore iteration list'], related: ['task', 'plan'], triggers: ['迭代', 'iteration', '迭代', 'sprint'] },
   { name: 'context', aliases: ['ctx'], description: '查看/设置当前上下文：迭代、任务、阶段',
-    usage: 'speccore context [--set --iteration <name>] [--list]', examples: ['speccore context --list', 'speccore context --set --iteration Q1'], related: ['dashboard', 'dev'], triggers: ['切换', '上下文', 'context', '当前.*迭代', '设置.*迭代', '换到', '切换到'] },
+    usage: 'speccore context [--set --iteration <name>] [--list]', examples: ['speccore context --list', 'speccore context --set --iteration Q1'], related: ['dashboard', 'run'], triggers: ['切换', '上下文', 'context', '当前.*迭代', '设置.*迭代', '换到', '切换到'] },
   { name: 'search', aliases: ['sh'], description: '全文搜索：跨所有 Spec 文件关键词检索',
     usage: 'speccore search <query> [--task <id>] [--iteration <name>]', examples: ['speccore search "登录"', 'speccore search "支付" --iteration Q2'], related: ['track'], triggers: ['搜索', 'search', '查找', '检索', 'grep'] },
   { name: 'track', aliases: ['trk', 'tr'], description: 'REQ→Task→Code 全链路追踪（合并原 trace + tracker）',
@@ -201,8 +201,8 @@ const SYNONYM_MAP: Record<string, string> = {
   '建索引': 'code-index', '扫描代码': 'code-index', '代码结构': 'code-index',
   // ── iteration ──
   'sprint': 'iteration',
-  // ── dev ──
-  '流水线': 'dev', '全自动': 'dev',
+  // ── run（原 dev，v8.3.189 合并）──
+  '流水线': 'run', '全自动': 'run',
   // ── verify ──
   '冒烟': 'verify', 'smoke': 'verify', '视觉检查': 'verify', 'ui验证': 'verify', '跑测试': 'verify', '测一下': 'verify', '检查页面': 'verify',
   // ── refresh ──
@@ -590,7 +590,7 @@ function handleGuide(input: string): AskResult | null {
     `---`,
     `执行方式:`,
     `  逐步执行: 按顺序手动执行每一步`,
-    `  一键执行: speccore dev --auto（自动检测并推进）`,
+    `  一键执行: speccore run（自动检测并推进）`,
     `  编排执行: speccore ask "完整描述你的需求" --pipeline`,
   ].join('\n');
 
@@ -826,7 +826,7 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
   // v6.97.0+ 修复：强制确认命令列表 — 即使置信度高也需要用户确认
   // 这些命令会产生文件/副作用，不能误执行
   const FORCE_CONFIRM_COMMANDS = new Set([
-    'analyze', 'split', 'plan', 'execute', 'dev',
+    'analyze', 'split', 'plan', 'execute', 'run',
     'doc2spec', 'spec2doc', 'iteration', 'task',
     'pr', 'done', 'change', 'reindex',
   ]);
@@ -1437,7 +1437,7 @@ function buildGuideDetail(name: string, steps: PipelineStep[]): string {
     `---`,
     `执行方式:`,
     `  逐步执行: 按顺序手动执行每一步`,
-    `  一键执行: speccore dev --auto（自动检测并推进）`,
+    `  一键执行: speccore run（自动检测并推进）`,
     `  编排执行: speccore ask "完整描述你的需求" --pipeline`,
   ].join('\n');
 }

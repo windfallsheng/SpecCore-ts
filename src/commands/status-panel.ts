@@ -262,13 +262,13 @@ async function getCurrentBranch(): Promise<string | null> {
 async function getNextAction(phase: string, iterDir: string): Promise<string> {
   const actions: Record<string, string> = {
     init: 'speccore init',
-    require: 'speccore analyze 或 speccore dev',
-    analyze: 'speccore iteration split 或 speccore dev',
+    require: 'speccore analyze 或 speccore run',
+    analyze: 'speccore iteration split 或 speccore run',
     dev: 'speccore execute --task=Task-001 --force',
     review: 'speccore lifecycle 或 speccore pr',
     done: 'speccore dashboard 查看全景',
   };
-  return actions[phase] || 'speccore dev';
+  return actions[phase] || 'speccore run';
 }
 
 // 导出功能

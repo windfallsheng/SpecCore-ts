@@ -231,17 +231,27 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
       'speccore change -t Task-001 --interactive',
     ],
   },
-  dev: {
-    desc: '智能检测当前阶段 + 全自动级联流水线',
+  next: {
+    desc: '检测当前迭代进度，提示下一步操作（只指引，不执行）',
     params: [
-      { flag: '--auto', meaning: '全自动：级联执行 init→import→analyze→split→plan→execute→pr→done' },
-      { flag: '--from <phase>', meaning: '从指定阶段开始：init|import|analyze|split|plan|execute|pr|done' },
       { flag: '-i, --iteration <id>', meaning: '目标迭代' },
     ],
     examples: [
-      'speccore dev',
-      'speccore dev --auto',
-      'speccore dev --auto --from=split',
+      'speccore next',
+      'speccore next -i Q2',
+    ],
+  },
+  run: {
+    desc: '端到端全自动流水线（13 阶段，默认三闸口）',
+    params: [
+      { flag: '--auto', meaning: '全自动（run 默认即全自动）' },
+      { flag: '--from <phase>', meaning: '从指定阶段开始：init|clarify|doc2spec|analyze|validate|split|plan|execute|verify|pipeline|pr|done|spec2doc' },
+      { flag: '--demo', meaning: '演示模式（放宽闸口 A/B，保留 C）' },
+    ],
+    examples: [
+      'speccore run',
+      'speccore run --from split',
+      'speccore run "做用户积分功能"',
     ],
   },
   validate: {
@@ -413,8 +423,9 @@ speccore done --task=Task-001                              # 完成归档`,
     },
     {
       title: '六、全自动流水线',
-      code: `speccore dev --auto                        # 一键跑完所有阶段
-speccore dev --auto --from=split             # 从拆分开始自动化`,
+      code: `speccore run                             # 一键跑完所有阶段
+speccore run --from split                 # 从拆分开始自动化
+speccore next                             # 只提示下一步，不执行`,
     },
     {
       title: '七、查看进度',
@@ -609,9 +620,9 @@ async function helpHtml(options: HelpOptions): Promise<void> {
         desc: '进度看板、知识图谱可视化、代码验证、源码索引'
       },
       '🛠️ 智能开发助手': { 
-        cmds: ['dev'],
+        cmds: ['run', 'next'],
         icon: '🛠️',
-        desc: '自动化开发流程编排'
+        desc: '全自动流水线执行 + 下一步指引'
       },
       '🔧 维护与升级': {
         cmds: ['update', 'doctor', 'config'],
