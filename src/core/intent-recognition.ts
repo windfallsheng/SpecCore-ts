@@ -33,7 +33,7 @@ export type IntentType =
   | 'welcome'             // 引导
   | 'init'                // 初始化
   | 'bugfix'              // Bug 修复
-  | 'clarify'             // 需求澄清
+  | 'req_doc'             // 需求文档化（原 clarify）
   | 'research'            // 调研
   | 'sync'                // 同步
   | 'retro'               // 回顾
@@ -263,14 +263,14 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     patterns: ['调研(.+)方案', '调研(.+)技术', '评估(.+)技术', '对比(.+)', '(.+)怎么实现', '(.+)有什么方案'],
     description: '技术调研 — 评估技术方案、对比工具选项',
   },
-  // 需求澄清
+  // 需求文档化
   {
-    id: 'clarify',
-    intent: 'clarify',
-    priority: 82,
-    triggers: ['澄清', '整理需求', '专业化', '规范化', '整理一下', '写成PRD', '润色需求', '需求整理', '整理成文档'],
-    patterns: ['澄清(.+)', '整理(.+)需求', '把(.+)整理成PRD', '润色(.+)'],
-    description: '需求专业化 — 将口语化/非专业需求整理为 PRD 级文档',
+    id: 'req-doc',
+    intent: 'req_doc',
+    priority: 89,
+    triggers: ['澄清', '整理需求', '专业化', '规范化', '整理一下', '写成PRD', '润色需求', '需求整理', '整理成文档', '需求文档化'],
+    patterns: ['澄清(.+)', '整理需求', '写成PRD', '整理(.+)需求', '把(.+)整理成PRD', '润色(.+)'],
+    description: '需求文档化 — 将口语化/非专业需求整理为 PRD 级文档',
   },
   // 计划层
   {
@@ -941,7 +941,7 @@ const SPECCORE_CONTEXT_KEYWORDS = [
 /** 容易与"普通 AI 对话"混淆的意图 */
 export const AMBIGUOUS_INTENTS = new Set<IntentType>([
   'analyze', 'split', 'execute', 'plan', 'review',
-  'clarify', 'research', // v8.3.0+: 澄清/调研也容易和普通AI对话混淆
+  'req_doc', 'research', // v8.3.0+: 文档化/调研也容易和普通AI对话混淆
 ]);
 
 /**

@@ -104,7 +104,7 @@ const COMMAND_KB: CommandKnowledge[] = [
   { name: 'next', aliases: ['n'], description: '检测当前迭代进度，提示下一步操作（只指引，不执行）',
     usage: 'speccore next [--iteration <name>]', examples: ['speccore next', 'speccore next -i Q2'], related: ['run', 'status'], triggers: ['下一步', '接下来', '该做什么', '接下来做什么', 'next', '做到哪了', '下一步做什么', '现在到哪了'] },
   { name: 'run', aliases: ['r'], description: '端到端全自动流水线：导入需求→分析→拆分→执行→验证→部署→归档→导出（13 阶段，默认三闸口）',
-    usage: 'speccore run [需求描述] [--from <phase>] [--to <phase>] [--demo]', examples: ['speccore run "做用户积分功能"', 'speccore run --demo', 'speccore run --from split'], related: ['next', 'clarify', 'execute'], triggers: ['run', '跑一遍', '端到端', '全流程', '一键开发', '自动开发', '从头到尾', '完整流程', '全自动', '流水线'] },
+    usage: 'speccore run [需求描述] [--from <phase>] [--to <phase>] [--demo]', examples: ['speccore run "做用户积分功能"', 'speccore run --demo', 'speccore run --from split'], related: ['next', 'req-doc', 'execute'], triggers: ['run', '跑一遍', '端到端', '全流程', '一键开发', '自动开发', '从头到尾', '完整流程', '全自动', '流水线'] },
   { name: 'task', aliases: ['tk'], description: '任务管理：创建/列表/状态。子命令: new, list, status',
     usage: 'speccore task new --name <name> [--id <id>] | speccore task list | speccore task status', examples: ['speccore task new --name "用户登录"', 'speccore task list'], related: ['plan', 'execute'], triggers: ['task', '任务列表', '查看任务', '列出任务'] },
   { name: 'iteration', aliases: ['it'], description: '迭代管理：创建时自动生成唯一编码（Iteration-001-功能名），支持拆分/列表',
@@ -136,9 +136,9 @@ const COMMAND_KB: CommandKnowledge[] = [
     usage: 'speccore graph query <question> | speccore graph entity <id> | speccore graph related <id> | speccore graph path <from> <to> | speccore graph stats',
     examples: ['speccore graph query "订单相关代码"', 'speccore graph entity SRC:auth-AuthController', 'speccore graph related Task-001', 'speccore graph path Task-001 Task-002', 'speccore graph stats'], related: ['knowledge', 'code-index', 'search', 'track'], triggers: ['图谱', 'graph', '知识图谱', '代码图谱', '查询图谱', '图谱查询', '查图谱', '找关联', '找路径', '实体查询', '图谱统计'] },
   // v8.3.0+: 需求澄清
-  { name: 'clarify', aliases: ['cl'], description: '需求专业化：将口语化/非专业需求整理为 PRD 级文档。支持 --local 临时工作区模式',
-    usage: 'speccore clarify "<描述>" | clarify --from <file> [--to <iteration> | --local]',
-    examples: ['speccore clarify "我要加个购物车"', 'speccore clarify --from notes.md --local', 'speccore clarify --promote <entryId> --to <iteration>'], related: ['analyze', 'doc2spec'], triggers: ['澄清', '整理需求', '专业化', '规范化', '整理一下', '写成PRD', '润色需求', '需求整理', '整理成文档'] },
+  { name: 'req-doc', aliases: ['rd'], description: '需求文档化：将口语化/非专业需求整理为 PRD 级文档。支持 --local 临时工作区模式',
+    usage: 'speccore req-doc "<描述>" | req-doc --from <file> [--to <iteration> | --local]',
+    examples: ['speccore req-doc "我要加个购物车"', 'speccore req-doc --from notes.md --local', 'speccore req-doc --promote <entryId> --to <iteration>'], related: ['analyze', 'doc2spec'], triggers: ['澄清', '整理需求', '专业化', '规范化', '整理一下', '写成PRD', '润色需求', '需求整理', '整理成文档', '需求文档化'] },
   // v8.3.24+: 契约冲突裁决
   { name: 'verdict', aliases: ['vd'], description: '契约冲突裁决：查看待裁决冲突、进行人工裁决、查看裁决书',
     usage: 'speccore verdict [--list] [--conflict <id> --decide <pass|reject|defer> --reason <reason>] [--report] [--task <id>]',

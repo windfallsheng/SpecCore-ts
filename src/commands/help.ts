@@ -245,7 +245,7 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     desc: '端到端全自动流水线（13 阶段，默认三闸口）',
     params: [
       { flag: '--auto', meaning: '全自动（run 默认即全自动）' },
-      { flag: '--from <phase>', meaning: '从指定阶段开始：init|clarify|doc2spec|analyze|validate|split|plan|execute|verify|pipeline|pr|done|spec2doc' },
+      { flag: '--from <phase>', meaning: '从指定阶段开始：init|req-doc|doc2spec|analyze|validate|split|plan|execute|verify|pipeline|pr|done|spec2doc' },
       { flag: '--demo', meaning: '演示模式（放宽闸口 A/B，保留 C）' },
     ],
     examples: [

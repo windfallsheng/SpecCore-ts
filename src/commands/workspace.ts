@@ -39,7 +39,7 @@ export async function workspaceCommand(options: WorkspaceOptions): Promise<void>
 
     if (entries.length === 0) {
       logger.info('📭 临时工作区为空');
-      logger.info('   使用 speccore clarify --local 或 speccore research 创建条目');
+      logger.info('   使用 speccore req-doc --local 或 speccore research 创建条目');
       return;
     }
 
@@ -119,7 +119,7 @@ export async function workspaceCommand(options: WorkspaceOptions): Promise<void>
 
     logger.info('');
     logger.info('操作:');
-    logger.info(`  speccore clarify --promote ${entry.id} --to <iteration>  提升到迭代层`);
+    logger.info(`  speccore req-doc --promote ${entry.id} --to <iteration>  提升到迭代层`);
     return;
   }
 

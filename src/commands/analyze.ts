@@ -1360,7 +1360,7 @@ ${singlePrompt}`);
           logger.info('');
           logger.info('解决方式：');
           logger.info('   1. 在 AI 输出中先包含 [CLARIFY:{feature}/overview/CLARIFY.md] 标记的澄清文档');
-          logger.info('   2. 或先手动运行: speccore clarify --from "<需求文件>" --to ' + options.iteration + ' --prompt');
+          logger.info('   2. 或先手动运行: speccore req-doc --from "<需求文件>" --to ' + options.iteration + ' --prompt');
           logger.info('');
           logger.info('   如需跳过澄清（不推荐）:');
           logger.info(`   speccore analyze --apply ... -I ${options.iteration} --skip-clarify`);

@@ -14,7 +14,7 @@ export interface RunOptions {
   iteration?: string; force?: boolean; auto?: boolean; autoSteps?: string;
   from?: string; to?: string;
   demo?: boolean;       // v8.3.184+: --demo 演示模式（放宽闸口 A/B，保留 C）
-  demand?: string;      // v8.3.184+: 一句话需求描述（clarify 阶段入口）
+  demand?: string;      // v8.3.184+: 一句话需求描述（req-doc 阶段入口）
 }
 
 async function hasFeatureDirs(iterDir: string): Promise<boolean> {
@@ -33,7 +33,7 @@ async function autoPipeline(options: RunOptions): Promise<void> {
   const PIPELINE_PHASES = [
     // ── 准备层（一次性初始化 + 需求入口二选一）──
     { key: 'init',      cmd: 'speccore init',            layer: 'prepare' },
-    { key: 'clarify',   cmd: 'speccore clarify',         layer: 'prepare' },
+    { key: 'req-doc',   cmd: 'speccore req-doc',         layer: 'prepare' },
     { key: 'doc2spec',  cmd: 'speccore doc2spec',        layer: 'prepare' },
     // ── 主流程（常用：导入需求后分析→…→导出）──
     { key: 'analyze',   cmd: 'speccore analyze',         layer: 'main' },
@@ -82,7 +82,7 @@ async function autoPipeline(options: RunOptions): Promise<void> {
   let endIdx = PIPELINE_PHASES.length - 1;
 
   // v8.3.189+: 默认（无 --from/--auto-steps）从主流程 analyze 开始，
-  // 跳过准备层的 init（一次性）与 clarify/doc2spec（需求入口，应显式指定或手动执行）。
+  // 跳过准备层的 init（一次性）与 req-doc/doc2spec（需求入口，应显式指定或手动执行）。
   // 未初始化时仍从 init 开始。
   if (!options.from && !options.autoSteps) {
     const hasInit = await pathExists(join(process.cwd(), '.speccore'));
@@ -90,8 +90,8 @@ async function autoPipeline(options: RunOptions): Promise<void> {
       const analyzeIdx = PIPELINE_PHASES.findIndex(p => p.key === 'analyze');
       if (analyzeIdx >= 0) {
         startIdx = analyzeIdx;
-        logger.info('ℹ️ 已初始化，默认从主流程 analyze 开始（跳过 init/clarify/doc2spec）');
-        logger.info('   如需从需求入口开始: speccore run --from clarify 或 --from doc2spec\n');
+        logger.info('ℹ️ 已初始化，默认从主流程 analyze 开始（跳过 init/req-doc/doc2spec）');
+        logger.info('   如需从需求入口开始: speccore run --from req-doc 或 --from doc2spec\n');
       }
     }
   }
@@ -174,16 +174,16 @@ async function autoPipeline(options: RunOptions): Promise<void> {
         }
         break;
       }
-      case 'clarify': {
+      case 'req-doc': {
         // v8.3.184+: 一句话需求 → PRD（口语化需求入口，与 doc2spec 二选一）
         const reqDoc = join(iterDir, '010-requirements', 'REQUIREMENT.md');
         const hasFeatures = await hasFeatureDirs(iterDir);
         if ((await pathExists(reqDoc)) || hasFeatures) {
-          logger.info('  ✅ 需求已存在，跳过 clarify');
+          logger.info('  ✅ 需求已存在，跳过 req-doc');
         } else if (options.demand) {
-          execSync(`speccore clarify "${options.demand}" --to ${iteration}`, { stdio: 'inherit' });
+          execSync(`speccore req-doc "${options.demand}" --to ${iteration}`, { stdio: 'inherit' });
         } else {
-          logger.info('  ℹ️ 未提供一句话需求，跳过 clarify（走 doc2spec 导入文档）');
+          logger.info('  ℹ️ 未提供一句话需求，跳过 req-doc（走 doc2spec 导入文档）');
         }
         break;
       }

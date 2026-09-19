@@ -1,5 +1,5 @@
 /**
- * clarify — 需求专业化命令
+ * req-doc — 需求文档化命令（原 clarify，v8.3.189 改名消除「澄清」歧义）
  *
  * 将用户原始需求描述（口语化/非专业）整理为 PRD 级专业需求文档，
  * 写入 010-requirements/converted/，供 analyze 使用。
@@ -7,10 +7,10 @@
  * v6.76.0+
  *
  * 用法:
- *   speccore clarify "我要加个购物车功能，能加商品、改数量、算总价"
- *   speccore clarify --from docs/raw-notes.md --to Iteration-001
- *   speccore clarify --from docs/raw-notes.md --prompt          # 输出 prompt 给 AI
- *   speccore clarify --apply "<AI 返回的 PRD>" --to Iteration-001
+ *   speccore req-doc "我要加个购物车功能，能加商品、改数量、算总价"
+ *   speccore req-doc --from docs/raw-notes.md --to Iteration-001
+ *   speccore req-doc --from docs/raw-notes.md --prompt          # 输出 prompt 给 AI
+ *   speccore req-doc --apply "<AI 返回的 PRD>" --to Iteration-001
  */
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration, getIterationDir } from '../core/context';
@@ -31,7 +31,7 @@ import {
 } from '../core/requirement-clarifier';
 import { stageContent, writeWorkspaceOutput, promoteToIteration } from '../core/workspace-manager';
 
-export interface ClarifyOptions {
+export interface ReqDocOptions {
   input?: string;       // 直接输入的需求描述
   from?: string;        // --from: 从文件读取原始需求
   to?: string;          // --to: 目标迭代
@@ -49,7 +49,7 @@ export interface ClarifyOptions {
   promote?: string;       // --promote <entryId>: 将工作区内容提升到迭代层
 }
 
-export async function clarifyCommand(options: ClarifyOptions): Promise<void> {
+export async function reqDocCommand(options: ReqDocOptions): Promise<void> {
   // ── v8.3.0+: --promote 模式：将工作区内容提升到迭代层 ──
   if (options.promote) {
     const iteration = options.to || await getDefaultIteration() || '';
@@ -131,7 +131,7 @@ export async function clarifyCommand(options: ClarifyOptions): Promise<void> {
       }
       logger.info('');
       logger.info('📋 下一步: 逐个澄清功能单元');
-      logger.info(`   speccore clarify --from "${sourceName}" --to ${iteration} --unit M-01 --prompt`);
+      logger.info(`   speccore req-doc --from "${sourceName}" --to ${iteration} --unit M-01 --prompt`);
       return;
     }
 
@@ -256,7 +256,7 @@ export async function clarifyCommand(options: ClarifyOptions): Promise<void> {
       logger.info('');
       logger.info('下一步:');
       logger.info(`   将 Prompt 发给 AI，获取整理后的 PRD`);
-      logger.info(`   然后执行: speccore clarify --apply '<PRD内容>' --local`);
+      logger.info(`   然后执行: speccore req-doc --apply '<PRD内容>' --local`);
     }
     return;
   }
@@ -297,7 +297,7 @@ export async function clarifyCommand(options: ClarifyOptions): Promise<void> {
         logger.info('');
         logger.info('后续操作:');
         logger.info(`  1. 查看文档内容确认无误`);
-        logger.info(`  2. 提升到迭代层: speccore clarify --promote ${entryId} --to <iteration>`);
+        logger.info(`  2. 提升到迭代层: speccore req-doc --promote ${entryId} --to <iteration>`);
       } else {
         const writtenPath = await writeClarifiedDoc(finalContent, iterDir, sourceName);
         spinner.stop('✅ 需求文档已整理并写入');
@@ -342,13 +342,13 @@ export async function clarifyCommand(options: ClarifyOptions): Promise<void> {
   logger.info('📝 需求整理流程:');
   logger.info('');
   logger.info('Step 1: 生成整理 Prompt');
-  logger.info(`   speccore clarify --from "${sourceName}" --to ${iteration} --prompt`);
+  logger.info(`   speccore req-doc --from "${sourceName}" --to ${iteration} --prompt`);
   logger.info('');
   logger.info('Step 2: 将 Prompt 发给 AI，获取整理后的 PRD');
   logger.info('');
   logger.info('Step 3: 将 AI 返回的 PRD 写入文件');
-  logger.info(`   speccore clarify --apply '<AI 返回的内容>' --to ${iteration}`);
+  logger.info(`   speccore req-doc --apply '<AI 返回的内容>' --to ${iteration}`);
   logger.info('');
   logger.info('💡 或直接一步完成（如果 AI 在你的环境中）:');
-  logger.info(`   speccore clarify "${rawContent.slice(0, 40)}..." --to ${iteration} --prompt | ai | speccore clarify --apply - --to ${iteration}`);
+  logger.info(`   speccore req-doc "${rawContent.slice(0, 40)}..." --to ${iteration} --prompt | ai | speccore req-doc --apply - --to ${iteration}`);
 }

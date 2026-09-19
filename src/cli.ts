@@ -50,7 +50,7 @@ import { impactCommand } from './commands/impact';
 import { baselineCommand } from './commands/baseline';
 import { auditCommand } from './commands/audit';
 import { analyzeCommand } from './commands/analyze';
-import { clarifyCommand } from './commands/clarify';
+import { reqDocCommand } from './commands/req-doc';
 import { prCommand } from './commands/pr';
 import { buildCommand } from './commands/build';
 import { deployCommand } from './commands/deploy';
@@ -214,7 +214,7 @@ program
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('--auto', '全自动（run 默认即全自动，此选项为续跑一致性保留）')
   .option('--auto-steps <steps>', '指定连续步骤自动执行（如 analyze,validate,split,execute）')
-  .option('--from <phase>', '从指定阶段开始（init/clarify/doc2spec/analyze/validate/split/plan/execute/verify/pipeline/pr/done/spec2doc）')
+  .option('--from <phase>', '从指定阶段开始（init/req-doc/doc2spec/analyze/validate/split/plan/execute/verify/pipeline/pr/done/spec2doc）')
   .option('--to <phase>', '到指定阶段结束（同上）')
   .option('--demo', '演示模式（放宽闸口 A/B，保留部署前确认）')
   .option('--env <env>', '部署环境（透传给 pipeline，默认 staging）')
@@ -915,9 +915,9 @@ program
   .action(analyzeCommand);
 
 program
-  .command('clarify')
-  .alias('cl')
-  .description('需求专业化：将口语化/非专业需求整理为 PRD 级文档')
+  .command('req-doc')
+  .alias('rd')
+  .description('需求文档化：将口语化/非专业需求整理为 PRD 级文档')
   .argument('[input]', '需求描述（口语化）')
   .option('--from <file>', '从文件读取原始需求')
   .option('--to <iteration>', '目标迭代（决定写入位置）')
@@ -932,7 +932,7 @@ program
   .option('--local', '临时工作区模式（不绑定迭代，输出到 .speccore/local/workspace/）')
   .option('--promote <entryId>', '将工作区条目提升到迭代层（配合 --to）')
   .action((input: string | undefined, opts: any) => {
-    clarifyCommand({ ...opts, input });
+    reqDocCommand({ ...opts, input });
   });
 
 program
