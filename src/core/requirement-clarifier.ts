@@ -7,7 +7,7 @@
  * v6.76.0+
  */
 import { ensureDir, writeFile, pathExists, readFile, readdir, stat } from 'fs-extra';
-import { join, basename } from 'path';
+import { join, basename, relative } from 'path';
 import { logger } from '../utils/logger';
 import { backupWithTimestamp } from '../utils/task-utils';
 import { assembleUnitContext } from './unit-context-assembler';
@@ -530,19 +530,20 @@ export async function writeQualityReport(
   const now = new Date().toISOString().split('T')[0];
   let md = `# 需求质量审查报告\n\n> 生成时间: ${now}\n> 文档数: ${reports.length}\n\n`;
 
-  // 汇总表
+  // 汇总表（按综合评分升序，问题最多的排最前）
+  const sorted = [...reports].sort((a, b) => a.overallScore - b.overallScore);
   md += `## 质量评分汇总\n\n`;
   md += `| 文档 | 综合评分 | 等级 | 问题数 | 状态 |\n`;
   md += `| :--- | :--- | :--- | :--- | :--- |\n`;
-  for (const r of reports) {
+  for (const r of sorted) {
     const name = basename(r.filePath) || '-';
     const badge = r.level === 'high' ? '✅' : r.level === 'medium' ? '⚠️' : '❌';
     const status = r.clarified ? '已澄清' : r.level === 'high' ? '无需澄清' : '待澄清';
     md += `| ${name} | ${r.overallScore} | ${badge} ${r.level.toUpperCase()} | ${r.dimensions.reduce((s, d) => s + d.issues.length, 0)} | ${status} |\n`;
   }
 
-  // 详细报告
-  for (const r of reports) {
+  // 详细报告（同样按评分升序，问题最多的在前）
+  for (const r of sorted) {
     const name = basename(r.filePath) || '-';
     md += `\n## ${name}\n\n`;
     md += `**综合评分**: ${r.overallScore}/100 | **等级**: ${r.level.toUpperCase()}\n\n`;
@@ -570,8 +571,16 @@ export async function writeQualityReport(
   md += `## 下一步\n\n`;
   const needClarify = reports.filter(r => r.level !== 'high' && !r.clarified);
   if (needClarify.length > 0) {
-    md += `- ${needClarify.length} 个文档需要澄清，请执行: \`speccore analyze --prompt -I <迭代>\`\n`;
-    md += `- 或跳过澄清: \`speccore analyze --prompt -I <迭代> --skip-clarify\`\n`;
+    // v8.3.190+: 命令针对具体文档名（加粗），让用户可直接复制执行
+    const iterName = basename(iterDir).replace(/^Iteration-/, '');
+    md += `${needClarify.length} 个文档需要澄清整理：\n\n`;
+    for (const r of needClarify) {
+      const name = basename(r.filePath);
+      const relPath = relative(iterDir, r.filePath);
+      md += `- **${name}** → \`speccore req-doc --from ${relPath} --to ${iterName}\`\n`;
+    }
+    md += `\n或一次性全部澄清: \`speccore analyze --prompt -I ${iterName}\`\n`;
+    md += `或跳过澄清: \`speccore analyze --prompt -I ${iterName} --skip-clarify\`\n`;
   } else {
     md += `- ✅ 所有文档质量达标，可直接执行技术方案生成\n`;
   }
