@@ -11,7 +11,7 @@ Commands in this document fall into two categories:
 | ✅ | **CLI Commands** | Terminal: `speccore xxx` | `speccore init`, `speccore task new` |
 | 🔒 | **AI Commands** | AI IDE: `@spec-ask "description"` | `execute`, `analyze`, `plan`, `pr`, `done`, `change` |
 
-> 💡 **Important**: `speccore execute`, `speccore pr`, `speccore done`, `speccore change`, `speccore retro`, `speccore analyze`, `speccore plan`, `speccore doc2spec`, `speccore dev` are 🔒 AI commands — **cannot run directly in terminal**. Use `@spec-ask` in WorkBuddy/Cursor/Trae instead.
+> 💡 **Important**: `speccore execute`, `speccore pr`, `speccore done`, `speccore change`, `speccore retro`, `speccore analyze`, `speccore plan`, `speccore doc2spec`, `speccore run` are 🔒 AI commands — **cannot run directly in terminal**. Use `@spec-ask` in WorkBuddy/Cursor/Trae instead.
 
 ---
 

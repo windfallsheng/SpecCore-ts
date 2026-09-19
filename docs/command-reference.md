@@ -20,11 +20,11 @@ title: 命令参考
 ### 架构
 
 ```
-speccore ask ←── 万能 AI 入口 ──→ speccore dev
+speccore ask ←── 万能 AI 入口 ──→ speccore run
     │                                  │
-    ├─ 📖 命令解释                      ├─ 初始化→导入→分析→拆分
+    ├─ 📖 命令解释                      ├─ 初始化→导入→分析→任务化
     ├─ 🗺️ 任务指引                      ├─ 计划→执行→PR→归档
-    ├─ 🎯 意图匹配                      └─ 7 阶段自动推进
+    ├─ 🎯 意图匹配                      └─ 命名流水线自动推进
     └─ ⚡ 复杂编排
 ```
 
@@ -79,11 +79,11 @@ speccore dashboard [--scope global|iteration] [--export html] [--health] [--life
 ```
 别名: `db`, `sp`
 
-### 🔄 dev — 智能级联 🔒 AI 命令
+### 🔄 run — 命名流水线 🔒 AI 命令
 ```bash
-speccore dev [--auto] [--from <phase>] [--to <phase>]
+speccore run [--preset <name>] [--from <phase>] [--to <phase>]
 ```
-别名: `d`
+别名: `r`
 
 ### 🏗️ init — 项目初始化
 ```bash

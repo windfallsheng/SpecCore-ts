@@ -11,7 +11,7 @@
 | ✅ | **CLI 命令** | 终端直接输入 `speccore xxx` | `speccore init`, `speccore task new` |
 | 🔒 | **AI 命令** | AI IDE 中使用 `@spec-ask "描述"` | `execute`, `analyze`, `plan`, `pr`, `done`, `change` |
 
-> 💡 **重要**: `speccore execute`, `speccore pr`, `speccore done`, `speccore change`, `speccore retro`, `speccore analyze`, `speccore plan`, `speccore doc2spec`, `speccore dev` 均为 🔒 AI 命令，**不能在终端直接执行**，需在 WorkBuddy/Cursor/Trae 中通过 `@spec-ask` 使用。
+> 💡 **重要**: `speccore execute`, `speccore pr`, `speccore done`, `speccore change`, `speccore retro`, `speccore analyze`, `speccore plan`, `speccore doc2spec`, `speccore run` 均为 🔒 AI 命令，**不能在终端直接执行**，需在 WorkBuddy/Cursor/Trae 中通过 `@spec-ask` 使用。
 
 ## 📑 目录
 
@@ -824,18 +824,18 @@ SpecCore 是 SDD 工具（Spec-Driven Development）工具，但定位不同：
 
 ## 场景三十一：智能引导（一个命令走天下）
 
-**背景**: 20 个命令太多记不住？只需记住一个。
+**背景**: 命令太多记不住？只需记住一个。
 
 ```bash
 # 自动检测项目阶段，提示下一步
-speccore dev
+speccore next
 # → 📍 期次: Q1
 # → 🔍 检测到: 有需求文档但未分析
 # → 📋 下一步: speccore analyze -I Q1
 
 # 自动级联执行（慎用）
-speccore dev --force
-# → analyze → split → execute → pr（自动推进）
+speccore run
+# → analyze → taskify → execute → pr（自动推进）
 ```
 
 **支持的阶段检测**: 未初始化 / 缺需求 / 未分析 / 未拆分 / 待开发 / 待审查 / 全部完成

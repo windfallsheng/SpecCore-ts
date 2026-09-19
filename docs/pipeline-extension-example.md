@@ -36,14 +36,14 @@ speccore execute --pipeline --prompt --task <task-id> -I <iteration>
 speccore execute --pipeline --resume --task <task-id> -I <iteration>
 ```
 
-### 4. dev 命令
+### 4. run 命令
 
 ```bash
 # 启动开发 Pipeline
-speccore dev --pipeline -I <iteration>
+speccore run --preset develop -I <iteration>
 
 # 恢复之前的开发 Pipeline
-speccore dev --pipeline --resume -I <iteration>
+speccore run --preset develop --resume -I <iteration>
 ```
 
 ## Pipeline 引擎架构

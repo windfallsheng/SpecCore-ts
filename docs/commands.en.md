@@ -36,7 +36,7 @@ Same command, different syntax depending on context. Full classification by cate
 |:---|:---|
 | `execute --verify` | Combined flags (AI-only feature) |
 | `dashboard --export --assignee` | Export/filter params |
-| `dev --auto --from=split` | Automation pipeline (AI-only) |
+| `run --preset develop --from=split-units` | Automation pipeline (AI-only) |
 | `task new --batch-file --type=bugfix --schedule` | Bulk + scheduling |
 
 ### 💬 AI Chat Only (needs AI context)
