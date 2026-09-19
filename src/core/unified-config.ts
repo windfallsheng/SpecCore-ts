@@ -9,6 +9,7 @@
  */
 import { readFile, writeFile, pathExists, ensureDir } from 'fs-extra';
 import { join } from 'path';
+import yaml from 'js-yaml';
 import { logger } from '../utils/logger';
 
 /** 当前系统配置 schema 版本号（.speccore.yml） */
@@ -1266,93 +1267,20 @@ export async function getEffectiveGitConfig(platformName: string): Promise<Effec
 // YAML 解析 / 序列化
 // ─────────────────────────────────────────
 
+/**
+ * 解析 YAML 配置（v8.3.190+：改用 js-yaml 根治「回读不对称」）
+ * 之前的行级手写解析器只认块级数组，不认 flow 写法（[a,b]/[]/{}），
+ * 且把「- # 注释」误当元素值，已 3 次踩坑。js-yaml 是标准解析器，彻底根治。
+ */
 function parseYaml(content: string): unknown {
-  const result: any = {};
-  const lines = content.split('\n');
-  let stack: { obj: any; indent: number }[] = [{ obj: result, indent: -1 }];
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (!line.trim() || line.trim().startsWith('#')) continue;
-
-    const indent = line.length - line.trimStart().length;
-    // 回退到正确层级
-    while (stack.length > 1 && indent <= stack[stack.length - 1].indent) {
-      stack.pop();
-    }
-
-    const trimmed = line.trim();
-    const parent = stack[stack.length - 1].obj;
-
-    if (trimmed.startsWith('- ')) {
-      const value = trimmed.slice(2).trim();
-      if (!Array.isArray(parent)) continue;
-      // v8.3.190+: 兼容历史脏写法「- # 注释」（旧 toYaml 把注释放 - 后），跳过而非当作元素值
-      if (!value || value.startsWith('#')) continue;
-      if (value.includes(':')) {
-        const obj: any = {};
-        const [k, ...rest] = value.split(':');
-        const v = rest.join(':').trim();
-        if (v) obj[k.trim()] = autoType(v);
-        parent.push(obj);
-        stack.push({ obj, indent });
-      } else {
-        parent.push(autoType(value));
-      }
-    } else if (trimmed.endsWith(':')) {
-      const key = trimmed.slice(0, -1).trim();
-      // v8.3.89+: 前瞻性检测数组 — 查看后续同层级缩进的行是否以 - 开头
-      const currentIndent = indent;
-      let isArray = false;
-      for (let j = i + 1; j < lines.length; j++) {
-        const nextLine = lines[j];
-        if (!nextLine.trim() || nextLine.trim().startsWith('#')) continue;
-        const nextIndent = nextLine.length - nextLine.trimStart().length;
-        if (nextIndent <= currentIndent) break; // 层级回退
-        if (nextLine.trim().startsWith('- ')) {
-          isArray = true;
-          break;
-        }
-        if (nextIndent > currentIndent) break; // 有内容但不是数组
-      }
-      const newObj = isArray ? [] : {};
-      if (Array.isArray(parent)) {
-        const last = parent[parent.length - 1];
-        if (last && typeof last === 'object' && !Array.isArray(last)) {
-          last[key] = newObj;
-          stack.push({ obj: last[key], indent });
-        }
-      } else {
-        if (!parent[key]) parent[key] = newObj;
-        stack.push({ obj: parent[key], indent });
-      }
-    } else if (trimmed.includes(':')) {
-      const [k, ...rest] = trimmed.split(':');
-      const v = rest.join(':').trim();
-      if (Array.isArray(parent)) {
-        const last = parent[parent.length - 1];
-        if (last && typeof last === 'object') {
-          last[k.trim()] = autoType(v);
-        }
-      } else {
-        parent[k.trim()] = autoType(v);
-      }
-    }
+  try {
+    // JSON_SCHEMA: 不做 YAML 特有的日期/二进制推断（避免 date: 2026-09-19 被解析成 Date 对象）
+    return yaml.load(content, { schema: yaml.JSON_SCHEMA }) ?? {};
+  } catch {
+    return {};
   }
-
-  return result;
 }
 
-/** 自动推断简单值的类型 */
-function autoType(v: string): unknown {
-  if (v === 'true') return true;
-  if (v === 'false') return false;
-  if (v === '[]') return [];
-  if (v === '{}') return {};
-  if (/^-?\d+$/.test(v)) return parseInt(v, 10);
-  if (/^-?\d+\.\d+$/.test(v)) return parseFloat(v);
-  return v;
-}
 
 /**
  * 将字符串数组字段规范化为数组。
