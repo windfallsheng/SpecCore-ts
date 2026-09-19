@@ -2,7 +2,7 @@
 
 ---
 
-## v8.3.188 (2026-09-19) — Config Upgrade Pipeline Fixes & Diagnostics
+## v8.3.189 (2026-09-19) — Config Upgrade Pipeline Fixes & Diagnostics
 
 ### Config upgrade pipeline fixes (5 defects)
 

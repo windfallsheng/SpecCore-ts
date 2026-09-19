@@ -1,6 +1,6 @@
 {
   "name": "speccore",
-  "version": "8.3.188",
+  "version": "8.3.189",
   "description": "SpecCore - Code by Spec, Not by Vibe.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -26,7 +26,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/windfallsheng/SpecCore-ts"
+    "url": "git+https://github.com/windfallsheng/SpecCore-ts.git"
   },
   "files": [
     "dist",
