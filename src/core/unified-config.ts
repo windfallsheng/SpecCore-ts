@@ -155,6 +155,10 @@ export interface SpecConfig {
     /** v8.3.174+: 模式参数收敛 — CLI 模式默认配置 */
     pipeline?: boolean;
     with_code?: boolean;
+    /** v8.3.190+: 非必要流水线步骤的三态开关（默认 auto=智能判定 / on=强制 / off=跳过） */
+    optional_steps?: {
+      clarify?: 'auto' | 'on' | 'off';
+    };
     /** v8.3.94+: 视觉模型配置（用于 specs 图片理解、UI 验证截图分析） */
     vision?: {
       enabled: boolean;
@@ -252,6 +256,7 @@ export const DEFAULT_CONFIG: SpecConfig = {
     review: { check_assignee: false },
     pipeline: false,
     with_code: false,
+    optional_steps: { clarify: 'auto' },
   },
   ask: {
     routing: { mode: 'hybrid', high_threshold: 70, low_threshold: 45, auto_host_ai: true, cache_enabled: true, cache_min_hits: 3 },
@@ -1503,6 +1508,11 @@ function toYaml(config: SpecConfig): string {
   yaml += '  # ── 关联代码（with_code）──\n';
   yaml += '  # with_code: 分析时是否默认关联代码\n';
   yaml += `  with_code: ${config.settings.with_code}\n`;
+  yaml += '  # ── 非必要流水线步骤开关（三态）──\n';
+  yaml += '  #   auto = 智能判定（默认） | on = 强制执行 | off = 跳过\n';
+  yaml += '  optional_steps:\n';
+  yaml += '    # clarify: 需求澄清（auto=按专业度判定 / on=强制 / off=跳过）\n';
+  yaml += `    clarify: ${config.settings.optional_steps?.clarify ?? 'auto'}\n`;
 
   yaml += '\n# ─────────────────────────────────────────────────────────────────────────────\n';
   yaml += '# Ask 引擎路由配置（控制 speccore ask 的行为）\n';

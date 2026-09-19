@@ -31,6 +31,7 @@ import type { AgentContext as AdapterAgentContext } from '../core/agent-adapter'
 import { buildAutoModeInstruction, writeQuestions, extractQuestionsFromText, type QuestionItem } from '../core/questions';
 import { resolvePlatform } from '../core/platform-registry';
 import { warnIfIndexStale } from '../core/index-guard';
+import { loadConfigWithMeta } from '../core/unified-config';
 import { GLOBAL_SPECS_DIR, GLOBAL_SPEC_FILES, parsePlatformTypes, parsePlatformList, parseFeatureList } from '../core/spec-paths';
 import { computeAnalyzeManifest, computeFeatureBasedAnalyzeManifest, generateSkeleton, detectSkeletonProgress, buildSkeletonFileList, validateContentQuality } from '../core/spec-skeleton';
 import { unifiedSearch, formatUnifiedContext } from '../core/unified-retrieval';
@@ -225,6 +226,27 @@ function mergeDocumentContent(existing: string, newContent: string): string {
   }
 
   return result.join('\n\n');
+}
+
+/** 澄清步骤三态：auto=按专业度判定 / on=强制澄清 / off=跳过澄清 */
+type ClarifyMode = 'auto' | 'on' | 'off';
+
+/**
+ * 解析澄清步骤的最终模式（三层覆盖）：
+ *   1. 命令覆盖优先：--clarify → on，--skip-clarify → off
+ *   2. 配置兜底：settings.optional_steps.clarify（默认 auto）
+ */
+async function resolveClarifyMode(options: AnalyzeOptions): Promise<ClarifyMode> {
+  // 命令层覆盖（单次，优先级最高）
+  if (options.clarify) return 'on';
+  if (options.skipClarify) return 'off';
+  // 配置层（默认 auto）
+  try {
+    const { config } = await loadConfigWithMeta();
+    const configured = config.settings.optional_steps?.clarify;
+    if (configured === 'on' || configured === 'off') return configured;
+  } catch { /* 配置读取失败时回退默认 */ }
+  return 'auto';
 }
 
 /** 写入文件，支持 --merge 模式（与现有内容按标题合并） */
@@ -756,6 +778,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
   // v8.3.0+: 需求澄清检测状态（跨代码块共享）
   let needsClarify = false;
   const clarifyTargets: { path: string; level: string }[] = [];
+  // v8.3.190+: 澄清步骤三态开关（配置 optional_steps.clarify + 命令 --clarify/--skip-clarify 覆盖）
+  const clarifyMode = await resolveClarifyMode(options);
 
   // 备份追踪
   const backups: string[] = [];
@@ -877,8 +901,14 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       return;
     }
 
-    // v8.3.0+: 需求澄清作为必须过程（除非 --skip-clarify）
-    if (!options.skipClarify) {
+    // v8.3.190+: 澄清步骤三态开关（off 跳过 / on 强制 / auto 按专业度判定）
+    if (clarifyMode === 'on') {
+      // 强制澄清：所有需求文档都标记为需要澄清（无视专业度）
+      needsClarify = true;
+      for (const reqPath of requirements) {
+        clarifyTargets.push({ path: reqPath, level: 'low' });
+      }
+    } else if (clarifyMode === 'auto') {
       const { detectProfessionalLevel } = await import('../core/requirement-clarifier');
       for (const reqPath of requirements) {
         const reqContent = await readFile(reqPath, 'utf-8');
@@ -889,13 +919,14 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
           logger.warn(`   ⚠️  需求文档质量${level.toUpperCase()}: ${relative(iterDir!, reqPath)}`);
         }
       }
-      if (needsClarify) {
-        logger.info('');
-        logger.info(`📋 ${clarifyTargets.length}/${requirements.length} 个需求文档需要澄清整理`);
-        logger.info('   将在分析流程中自动注入需求澄清阶段（Phase 0）');
-        logger.info('   如需跳过: speccore analyze -I ${iter} --skip-clarify');
-        logger.info('');
-      }
+    }
+    // off：跳过澄清检测
+    if (needsClarify) {
+      logger.info('');
+      logger.info(`📋 ${clarifyTargets.length}/${requirements.length} 个需求文档需要澄清整理`);
+      logger.info('   将在分析流程中自动注入需求澄清阶段（Phase 0）');
+      logger.info(`   如需跳过: speccore analyze -I ${iter} --skip-clarify`);
+      logger.info('');
     }
 
     // 【v6.40.2 修复】--auto 不再跳过 AI，而是自动生成 prompt 让宿主 AI 执行专业分析
@@ -1021,17 +1052,19 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         }
       } catch { /* 忽略功能模块检测失败 */ }
 
+      // v8.3.190+: 三态开关决定是否跳过 clarify 步骤（off 跳过；auto 且无需澄清跳过；on 强制）
+      const skipClarifyStep = clarifyMode === 'off' || (clarifyMode === 'auto' && !needsClarify);
       const result = await createAnalyzePipeline(iter!, _projectRoot, {
         affectedPlatforms: affectedPlatforms && affectedPlatforms.length > 0 ? affectedPlatforms : undefined,
         platformOrder: platformOrder && platformOrder.length > 0 ? platformOrder : undefined,
-        skipClarify: options.skipClarify,
+        skipClarify: skipClarifyStep,
         features,
       });
       engine = result.engine;
       steps = result.steps;
       pipelineKey = iter!;
       // v8.3.160+: clarify 拆分为 product → interaction → security 三个子步骤
-      initStep = options.skipClarify ? 'phase1-prompt' : 'clarify-product';
+      initStep = skipClarifyStep ? 'phase1-prompt' : 'clarify-product';
     }
 
     // 检查是否有活跃的 Pipeline（恢复模式）
@@ -1205,11 +1238,19 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
   if (options.prompt) {
     const iter = options.scope === 'global' ? 'GLOBAL' : (options.iteration || await getDefaultIteration());
 
-    if (iter !== 'GLOBAL' && !options.skipClarify && !options.pipeline) {
-      const iterDir = await getIterationDir(iter);
-      const hasClarified = await hasValidClarifiedDocs(iterDir);
-      if (!hasClarified) {
-        // 未澄清过，先执行 clarify
+    if (iter !== 'GLOBAL' && clarifyMode !== 'off' && !options.pipeline) {
+      // v8.3.190+: 三态开关统一判定
+      //   on   → 强制澄清
+      //   auto → auto 分支已按专业度算出 needsClarify；纯 prompt 模式用 hasValidClarifiedDocs 引导
+      let shouldClarify: boolean;
+      if (clarifyMode === 'on') {
+        shouldClarify = true;
+      } else {
+        const iterDir = await getIterationDir(iter);
+        shouldClarify = options.auto ? needsClarify : !(await hasValidClarifiedDocs(iterDir));
+      }
+      if (shouldClarify) {
+        // 需要澄清，先执行 clarify
         const clarifyPrompt = await buildClarifyPhasePrompt(iter);
         process.stdout.write(`[SPECCORE_PROMPT]\n${clarifyPrompt}`);
         process.exitCode = 10;
@@ -1332,8 +1373,8 @@ ${singlePrompt}`);
       logger.info('');
     }
 
-    // v8.3.0+: 需求澄清验证 — 如果需求质量不足但未澄清，拒绝写入
-    if (!isGlobalScope && !isTaskLevel && !options.skipClarify) {
+    // v8.3.190+: 需求澄清验证 — off 跳过门禁；auto/on 下质量不足且未澄清则拒绝写入
+    if (!isGlobalScope && !isTaskLevel && clarifyMode !== 'off') {
       const { hasValidClarifiedDocs } = await import('../core/requirement-clarifier');
       const hasClarifiedDocs = await hasValidClarifiedDocs(iterDir!);
       if (!hasClarifiedDocs && clarifyBlocks.size === 0) {
