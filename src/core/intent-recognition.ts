@@ -838,7 +838,7 @@ function extractParams(input: string, mapping: CommandMapping): Record<string, s
       '切分': 'split-units', '切分功能单元': 'split-units', '切分单元': 'split-units', '功能单元': 'split-units', 'split-units': 'split-units', 'split_units': 'split-units',
       '分析': 'analyze', 'analyze': 'analyze',
       '校验': 'validate', 'validate': 'validate',
-      '拆分': 'split', '拆分任务': 'split', '任务拆分': 'split', 'split': 'split',
+      '拆分': 'taskify', '拆分任务': 'taskify', '任务拆分': 'taskify', '任务化': 'taskify', 'taskify': 'taskify', 'split': 'taskify',
       '计划': 'plan', 'plan': 'plan',
       '执行': 'execute', 'execute': 'execute', '开发': 'execute',
       '验证': 'verify', 'verify': 'verify',

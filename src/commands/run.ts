@@ -38,10 +38,10 @@ async function autoPipeline(options: RunOptions): Promise<void> {
     { key: 'doc2spec',  cmd: 'speccore doc2spec',        layer: 'prepare' },
     // ── 结构化：切分功能单元（1→N，独立于澄清）──
     { key: 'split-units', cmd: 'speccore doc2spec --split', layer: 'prepare' },
-    // ── 主流程（分析→校验→拆分→计划→执行→验证→部署→合并→归档→导出）──
+    // ── 主流程（分析→校验→任务化→计划→执行→验证→部署→合并→归档→导出）──
     { key: 'analyze',   cmd: 'speccore analyze',         layer: 'main' },
     { key: 'validate',  cmd: 'speccore validate',        layer: 'main' },
-    { key: 'split',     cmd: 'speccore iteration split', layer: 'main' },
+    { key: 'taskify',   cmd: 'speccore iteration split', layer: 'main' },
     { key: 'plan',      cmd: 'speccore plan',            layer: 'main' },
     { key: 'execute',   cmd: 'speccore execute',         layer: 'main' },
     { key: 'verify',    cmd: 'speccore verify',          layer: 'main' },
@@ -58,7 +58,7 @@ async function autoPipeline(options: RunOptions): Promise<void> {
     full:    { from: 'req-doc',  to: 'spec2doc', desc: '全流程：需求→导出（含收尾）' },
     import:  { from: 'doc2spec', to: 'pr',       desc: '导入需求→合并请求' },
     analyze: { from: 'analyze',  to: 'validate', desc: '只分析校验' },
-    spec:    { from: 'doc2spec', to: 'split',    desc: '导入需求→拆分（生成 Spec，看效果）' },
+    spec:    { from: 'doc2spec', to: 'taskify',  desc: '导入需求→任务化（生成 Spec，看效果）' },
     develop: { from: 'analyze',  to: 'verify',   desc: '分析→验证（默认，代码+验证完成）' },
     deliver: { from: 'execute',  to: 'pr',       desc: '执行→提交代码' },
     deploy:  { from: 'analyze',  to: 'pipeline', desc: '分析→部署验证' },
@@ -66,9 +66,9 @@ async function autoPipeline(options: RunOptions): Promise<void> {
   };
 
   // v8.3.184+: review 闸口（功能开发质量底线）——阶段执行前触发，软停等待宿主 AI 确认
-  // A: split 前（Spec 定稿）、B: verify 前（代码 review）、C: pipeline 前（部署前确认，永不跳过）
+  // A: taskify 前（Spec 定稿）、B: verify 前（代码 review）、C: pipeline 前（部署前确认，永不跳过）
   const GATES: Record<string, { id: string; title: string; hint: string; resumeFrom: string }> = {
-    split:    { id: 'A', title: 'Spec 定稿',   hint: '请 review 生成的 Spec（功能单元/端覆盖/验收标准），确认后继续', resumeFrom: 'split' },
+    taskify:  { id: 'A', title: 'Spec 定稿',   hint: '请 review 生成的 Spec（功能单元/端覆盖/验收标准），确认后继续', resumeFrom: 'taskify' },
     verify:   { id: 'B', title: '代码 review', hint: '请 review 生成的代码（重点扫 AI 标记的低置信点 / .issues.md / .deviations），确认后继续', resumeFrom: 'verify' },
     pipeline: { id: 'C', title: '部署前确认',  hint: '即将部署到环境（destructive 操作），确认后才执行', resumeFrom: 'pipeline' },
   };
@@ -336,7 +336,7 @@ async function autoPipeline(options: RunOptions): Promise<void> {
         }
         break;
       }
-      case 'split': {
+      case 'taskify': {
         let hasTasks = false;
         try {
           const entries = await readdir(join(iterDir, '030-tasks'), { withFileTypes: true });
@@ -507,8 +507,8 @@ async function autoPipeline(options: RunOptions): Promise<void> {
     // 13 阶段流水线 → 6 阶段 handoff 映射：verify 对应 review 闸口。
     if (phaseStatus === 'success') {
       const handoffMap: Record<string, [HandoffStage, HandoffStage]> = {
-        analyze: ['analyze', 'split'],
-        split: ['split', 'plan'],
+        analyze: ['analyze', 'taskify'],
+        taskify: ['taskify', 'plan'],
         plan: ['plan', 'execute'],
         execute: ['execute', 'review'],
         verify: ['review', 'done'],

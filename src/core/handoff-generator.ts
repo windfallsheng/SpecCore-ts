@@ -7,7 +7,7 @@
 import { pathExists, readFile, readdir, writeFile, ensureDir } from 'fs-extra';
 import { join } from 'path';
 
-export type HandoffStage = 'analyze' | 'split' | 'plan' | 'execute' | 'review' | 'done';
+export type HandoffStage = 'analyze' | 'taskify' | 'plan' | 'execute' | 'review' | 'done';
 
 interface HandoffConfig {
   maxLines: number;
@@ -15,8 +15,8 @@ interface HandoffConfig {
 }
 
 const HANDOFF_LIMITS: Record<string, HandoffConfig> = {
-  'analyze-split': { maxLines: 60, requiredSections: ['modules', 'dependencies', 'constraints'] },
-  'split-plan': { maxLines: 60, requiredSections: ['tasks', 'dependencies', 'staffing'] },
+  'analyze-taskify': { maxLines: 60, requiredSections: ['modules', 'dependencies', 'constraints'] },
+  'taskify-plan': { maxLines: 60, requiredSections: ['tasks', 'dependencies', 'staffing'] },
   'plan-execute': { maxLines: 150, requiredSections: ['currentTask', 'upstreamContracts', 'globalConstraints'] },
   'execute-review': { maxLines: 80, requiredSections: ['deliverables', 'acceptanceCriteria'] },
   'review-done': { maxLines: 40, requiredSections: ['reviewResults', 'openIssues'] },
@@ -72,11 +72,11 @@ async function buildHandoffContent(
 
   // 根据阶段组合生成不同内容
   switch (`${from}-${to}`) {
-    case 'analyze-split':
-      await appendAnalyzeToSplit(lines, iterDir);
+    case 'analyze-taskify':
+      await appendAnalyzeToTaskify(lines, iterDir);
       break;
-    case 'split-plan':
-      await appendSplitToPlan(lines, iterDir);
+    case 'taskify-plan':
+      await appendTaskifyToPlan(lines, iterDir);
       break;
     case 'plan-execute':
       await appendPlanToExecute(lines, iterDir);
@@ -114,9 +114,9 @@ async function buildHandoffContent(
 }
 
 /**
- * analyze → split: 功能模块清单 + 依赖关系 + 关键约束
+ * analyze → taskify: 功能模块清单 + 依赖关系 + 关键约束
  */
-async function appendAnalyzeToSplit(lines: string[], iterDir: string): Promise<void> {
+async function appendAnalyzeToTaskify(lines: string[], iterDir: string): Promise<void> {
   const featuresDir = join(iterDir, '010-requirements', 'features');
 
   lines.push('## 2. 功能模块清单');
@@ -156,9 +156,9 @@ async function appendAnalyzeToSplit(lines: string[], iterDir: string): Promise<v
 }
 
 /**
- * split → plan: 任务清单 + 人员配置 + 关键路径
+ * taskify → plan: 任务清单 + 人员配置 + 关键路径
  */
-async function appendSplitToPlan(lines: string[], iterDir: string): Promise<void> {
+async function appendTaskifyToPlan(lines: string[], iterDir: string): Promise<void> {
   const tasksDir = join(iterDir, '030-tasks');
 
   lines.push('## 2. 任务清单');

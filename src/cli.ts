@@ -283,8 +283,9 @@ iterationCmd
 
 iterationCmd
   .command('split')
+  .alias('taskify')
   .alias('sp')
-  .description('拆分需求为独立Task：预览→逐一确认/一键创建')
+  .description('拆分需求为开发任务（任务化）：预览→逐一确认/一键创建')
   .option('-f, --file <file>', 'Requirement file path', 'REQUIREMENT.md')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('--sections <sections>', 'Specific sections to split')

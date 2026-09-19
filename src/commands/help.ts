@@ -72,7 +72,7 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     examples: ['speccore iteration create -n Q1 --from=2026-04-01 --to=2026-06-30 --owner=赵六'],
   },
   'iteration split': {
-    desc: '需求拆分为原子 Task',
+    desc: '需求拆分为开发任务（任务化，别名 taskify）',
     params: [
       { flag: '-i, --iteration <id>', meaning: '目标迭代' },
       { flag: '--interactive', meaning: '预览后逐一确认' },
@@ -242,15 +242,18 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     ],
   },
   run: {
-    desc: '端到端全自动流水线（13 阶段，默认三闸口）',
+    desc: '端到端全自动流水线：命名流水线（preset）+ 起止点 + 三闸口',
     params: [
       { flag: '--auto', meaning: '全自动（run 默认即全自动）' },
-      { flag: '--from <phase>', meaning: '从指定阶段开始：init|req-doc|doc2spec|analyze|validate|split|plan|execute|verify|pipeline|pr|done|spec2doc' },
+      { flag: '--preset <name>', meaning: '预设流水线：full/import/spec/develop/deliver/deploy/docs/analyze' },
+      { flag: '--from <phase>', meaning: '从指定阶段开始：req-doc|doc2spec|split-units|analyze|validate|taskify|plan|execute|verify|pipeline|pr|done|spec2doc' },
+      { flag: '--to <phase>', meaning: '到指定阶段结束' },
       { flag: '--demo', meaning: '演示模式（放宽闸口 A/B，保留 C）' },
     ],
     examples: [
       'speccore run',
-      'speccore run --from split',
+      'speccore run --preset develop',
+      'speccore run --from split-units --to execute',
       'speccore run "做用户积分功能"',
     ],
   },
