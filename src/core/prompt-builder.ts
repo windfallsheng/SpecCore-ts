@@ -432,15 +432,17 @@ async function loadExtraSpecs(
   const visionConfig = await loadVisionConfig(cwd);
 
   const files = [
-    { name: '开发指南', path: '00-specs/DEV_GUIDE.md' },
-    { name: '任务上下文', path: '_shared/CONTEXT.md' },
-    { name: '技术方案', path: '00-specs/TECH.md' },
-    { name: '技术方案(旧)', path: '_shared/TECH.md' },
+    // v8.3.205+: 顺序即优先级——「做什么(需求)」优先于「怎么做(技术/指南)」优先于「数据契约」。
+    // 超总预算(MAX_TOTAL)时后面的文件会被 break 丢弃，需求规格必须最先保留。
     { name: '需求规格', path: '00-specs/REQ.md' },
     { name: '需求规格(旧)', path: '_shared/REQ.md' },
+    { name: '技术方案', path: '00-specs/TECH.md' },
+    { name: '技术方案(旧)', path: '_shared/TECH.md' },
+    { name: '开发指南', path: '00-specs/DEV_GUIDE.md' },
     { name: '数据库设计', path: '00-specs/SCHEMA.md' },
     { name: '数据库设计(旧)', path: '_shared/SCHEMA.md' },
     { name: 'API 契约', path: '_shared/API_CONTRACT.yaml' },
+    { name: '任务上下文', path: '_shared/CONTEXT.md' },
     { name: '已知问题', path: '.issues.md' },
   ];
 
