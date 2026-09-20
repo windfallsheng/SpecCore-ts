@@ -18,6 +18,7 @@ export interface RunOptions {
   demand?: string;      // v8.3.184+: 一句话需求描述（req-doc 阶段入口）
   preset?: string;      // v8.3.190+: --preset 预设/自定义流水线名
   gate?: 'manual' | 'auto'; // v8.3.195+: --gate 闸口模式（manual=都停 / auto=跳过A/B，C永不跳过）
+  env?: string;         // v8.3.196+: --env 部署环境（透传给 pipeline 阶段）
 }
 
 async function hasFeatureDirs(iterDir: string): Promise<boolean> {
@@ -99,6 +100,9 @@ async function autoPipeline(options: RunOptions): Promise<void> {
   if (options.gate) gateMode = options.gate;  // 命令 flag 最高优先级
   if (options.demo) gateMode = 'auto';        // --demo 兼容：等价于 --gate auto
 
+  // v8.3.196+: 自定义流水线步骤参数（custom 里「阶段:参数」语法，如 pipeline:--env=production）
+  const stepParams: Record<string, string> = {};
+
   // v7.4.0+: Pipeline 阶段结果追踪
   interface PhaseResult {
     key: string;
@@ -123,11 +127,25 @@ async function autoPipeline(options: RunOptions): Promise<void> {
     presetTo = PRESETS[presetName].to;
     if (options.preset) logger.info(`🎯 预设流水线 [${presetName}]: ${presetFrom} → ${presetTo}（${PRESETS[presetName].desc}）\n`);
   } else if (pipelinesConfig.custom?.[presetName]) {
-    const steps = pipelinesConfig.custom![presetName].split(',').map(s => s.trim()).filter(Boolean);
-    if (steps.length > 0) {
-      presetFrom = steps[0];
-      presetTo = steps[steps.length - 1];
-      logger.info(`🎯 自定义流水线 [${presetName}]: ${presetFrom} → ${presetTo}\n`);
+    const rawSteps = pipelinesConfig.custom![presetName].split(',').map(s => s.trim()).filter(Boolean);
+    // v8.3.196+: 识别「阶段:参数」语法（如 pipeline:--env=production），
+    // 参数存入 stepParams，执行阶段时附加；冒号前的阶段名用于确定起止点
+    const stepKeys: string[] = [];
+    for (const raw of rawSteps) {
+      const idx = raw.indexOf(':');
+      if (idx < 0) { stepKeys.push(raw); continue; }
+      const key = raw.slice(0, idx).trim();
+      const arg = raw.slice(idx + 1).trim();
+      stepKeys.push(key);
+      if (arg) stepParams[key] = arg;
+    }
+    if (stepKeys.length > 0) {
+      presetFrom = stepKeys[0];
+      presetTo = stepKeys[stepKeys.length - 1];
+      const paramNote = Object.keys(stepParams).length > 0
+        ? `（参数: ${Object.entries(stepParams).map(([k, v]) => `${k}=${v}`).join(' ')}）`
+        : '';
+      logger.info(`🎯 自定义流水线 [${presetName}]: ${presetFrom} → ${presetTo}${paramNote}\n`);
     }
   } else if (presetName !== 'full') {
     logger.warn(`⚠️ 未知流水线 "${presetName}"，回退到 full`);
@@ -439,7 +457,9 @@ async function autoPipeline(options: RunOptions): Promise<void> {
           break;
         }
         // v8.3.184+: 部署（闸口 C 在阶段前已软停，确认后才到这）
-        execSync(`speccore pipeline --all`, { stdio: 'inherit' });
+        // v8.3.196+: 透传环境参数——custom 步骤参数(stepParams)优先，其次 run --env，默认 pipeline 内部 staging
+        const pipelineArg = stepParams['pipeline'] || (options.env ? `--env ${options.env}` : '');
+        execSync(`speccore pipeline --all${pipelineArg ? ` ${pipelineArg}` : ''}`, { stdio: 'inherit' });
         break;
       }
       case 'pr': {
