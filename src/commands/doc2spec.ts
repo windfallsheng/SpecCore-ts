@@ -27,6 +27,7 @@ import { showNextSteps } from '../core/next-steps';
 import { validateContent, generateReport } from '../core/doc-validator';
 import { buildPrompt, formatPrompt } from '../core/prompt-builder';
 import { loadConfig } from '../core/unified-config';
+import { callLlm } from '../core/ask-llm';
 function findCommand(cmd: string, customPath?: string): string | null {
   // v8.3.70+: 优先使用配置中指定的路径
   if (customPath && customPath.trim()) {
@@ -832,7 +833,8 @@ export async function splitDocumentToUnits(
   sourceFileName: string
 ): Promise<void> {
   const content = await readFile(outputPath, 'utf-8');
-  const units = scanUnits(content);
+  // v8.3.194+: 优先 AI 语义切分（识别业务功能），失败回退本地正则切分（兜底）
+  const units = (await scanUnitsWithAI(content)) ?? scanUnits(content);
 
   if (units.length === 0) {
     logger.warn('未检测到可拆分的功能单元，跳过拆分');
@@ -893,6 +895,101 @@ export async function splitDocumentToUnits(
 }
 
 /**
+ * AI 语义切分功能单元（v8.3.194+）
+ * 让 LLM 理解 PRD 内容，识别真正的「业务功能」（而非机械按 ## 标题切分出文档章节）。
+ * 成功返回功能单元列表，失败返回 null（调用方回退本地正则切分兜底）。
+ */
+async function scanUnitsWithAI(content: string): Promise<ScannedUnit[] | null> {
+  try {
+    const systemPrompt = [
+      '你是资深产品需求分析师。任务：从 PRD 文档中识别「业务功能单元」。',
+      '',
+      '业务功能单元的定义：',
+      '- 是用户可以感知、可独立交付的业务能力（如「会议室管理」「快速预订」「扫码签到」「费用管理」「消息通知」）',
+      '- 不是文档结构章节（如「文档概述」「名词约定」「验收标准」「上线计划」「关联文档」「项目背景」）',
+      '- 一个业务功能可能横跨多个章节；一个章节也可能只包含某功能的一部分',
+      '',
+      '严格只返回 JSON，格式：',
+      '{"units":[{"name":"功能名","sections":["对应的章节标题1","章节标题2"]}]}',
+      'sections 必须是文档中真实存在的章节标题（去掉编号前缀，如「会议室管理」而非「三、会议室管理」）。',
+      '不要输出任何 JSON 以外的文字。',
+    ].join('\n');
+
+    const userPrompt = `以下是 PRD 文档内容，请识别其中的业务功能单元：\n\n${content.slice(0, 8000)}`;
+
+    const response = await callLlm(systemPrompt, userPrompt);
+    if (!response) return null;
+
+    const parsed = parseUnitsJson(response);
+    if (!parsed || !Array.isArray(parsed.units) || parsed.units.length === 0) return null;
+
+    const units: ScannedUnit[] = [];
+    for (const u of parsed.units) {
+      const name = String(u.name || '').trim();
+      const sections: string[] = Array.isArray(u.sections) ? u.sections.map(String) : [];
+      if (!name || sections.length === 0) continue;
+      // 将章节名映射回文档行号范围
+      const ranges = sections
+        .map((s) => findSectionRange(content, s))
+        .filter((r): r is { start: number; end: number } => r !== null);
+      if (ranges.length === 0) continue;
+      const startLine = Math.min(...ranges.map((r) => r.start));
+      const endLine = Math.max(...ranges.map((r) => r.end));
+      units.push({
+        title: name,
+        level: 2,
+        startLine,
+        endLine,
+        sourceSection: sections.join('、'),
+      });
+    }
+
+    return units.length > 0 ? units : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 解析 AI 返回的功能单元 JSON */
+function parseUnitsJson(text: string): { units: { name: string; sections: string[] }[] } | null {
+  try {
+    const trimmed = text.trim();
+    const jsonStr = trimmed.startsWith('{') ? trimmed : trimmed.match(/\{[\s\S]*\}/)?.[0];
+    if (!jsonStr) return null;
+    const obj = JSON.parse(jsonStr);
+    if (obj && Array.isArray(obj.units)) return obj;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** 在文档中找到指定章节标题的行号范围（返回该章节到下一同级/更高级标题之间） */
+function findSectionRange(content: string, sectionTitle: string): { start: number; end: number } | null {
+  const lines = content.split('\n');
+  const target = sectionTitle.trim();
+  if (!target) return null;
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^#{1,4}\s+(.+)$/);
+    if (!m) continue;
+    const heading = m[1].trim();
+    // 模糊匹配：章节标题互相包含即命中
+    if (!heading.includes(target) && !target.includes(heading)) continue;
+    const level = (lines[i].match(/^#+/) || ['#'])[0].length;
+    let end = lines.length - 1;
+    for (let j = i + 1; j < lines.length; j++) {
+      const m2 = lines[j].match(/^#{1,4}\s+/);
+      if (m2) {
+        const l2 = (lines[j].match(/^#+/) || ['#'])[0].length;
+        if (l2 <= level) { end = j - 1; break; }
+      }
+    }
+    return { start: i, end };
+  }
+  return null;
+}
+
+/**
  * 扫描 Markdown 内容，识别功能单元边界
  * 策略：以 ## 级别标题作为功能单元主边界，### 作为子章节
  */
@@ -939,8 +1036,22 @@ function scanUnits(content: string): ScannedUnit[] {
   }
 
   // 过滤掉非功能单元的章节（如"附录"、"术语表"等）
-  const skipPatterns = /^(附录|术语表|参考文献|目录|引言|概述|总结|致谢|版权声明|修订记录|changelog|glossary|references|table of contents|introduction|overview|summary|acknowledgments)/i;
-  return units.filter(u => !skipPatterns.test(u.title));
+  // v8.3.194+: 先剥离章节号前缀（"一、"、"1."、"第一章"等），再匹配非功能章节词，
+  // 避免"一、文档概述"这类「章节号 + 概述」被误当功能单元
+  const stripSectionNo = (t: string) =>
+    t.replace(/^[一二三四五六七八九十百]+[、.．\s]+/, '')
+     .replace(/^\d+[、.．\s]+/, '')
+     .replace(/^第[一二三四五六七八九十百\d]+[章节篇部分]+[、.．\s]*/, '');
+  const skipPrefix = /^(附录|术语表|参考文献|目录|引言|总结|致谢|版权声明|修订记录|changelog|glossary|references|table of contents|introduction|summary|acknowledgments)/i;
+  // 包含匹配：标题里含这些词即视为非功能章节（如"文档概述"、"项目背景"、"验收标准汇总"）
+  const skipContains = ['概述', '名词', '背景', '目标', '验收标准', '上线计划', '关联文档', '功能需求', '非功能需求', 'overview'];
+  return units.filter(u => {
+    const title = stripSectionNo(u.title).trim();
+    if (!title) return false;
+    if (skipPrefix.test(title)) return false;
+    if (skipContains.some(w => title.includes(w))) return false;
+    return true;
+  });
 }
 
 /**

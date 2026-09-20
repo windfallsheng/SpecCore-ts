@@ -131,7 +131,7 @@ export async function parseFeatureList(iterDir: string): Promise<string[]> {
   // v8.3.81+: 移除 'REQUIREMENT'，用户命名自由，REQUIREMENT.md 也可作为功能模块名
   // v8.3.158+: 加回 REQUIREMENT，避免 REQUIREMENT.md 被误识别为功能模块名
   const excludeNames = new Set([
-    'README', 'INDEX', 'CLARIFY_REPORT', 'REQUIREMENT',
+    'README', 'INDEX', 'CLARIFY_REPORT', 'QUALITY_REPORT', 'REQUIREMENT',
     'CHANGELOG', 'LICENSE', 'CONTRIBUTING', 'TEMPLATE',
   ]);
 

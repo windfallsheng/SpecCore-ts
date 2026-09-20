@@ -106,10 +106,10 @@ export async function askWithLlm(input: string): Promise<AskResult | null> {
 }
 
 /**
- * 调用 LLM
+ * 调用 LLM（导出供其他模块复用，如 doc2spec 的 AI 功能单元切分）
  * 优先使用环境变量 SPECCORE_LLM_ENDPOINT，否则尝试 OpenAI 兼容接口
  */
-async function callLlm(systemPrompt: string, userPrompt: string): Promise<string | null> {
+export async function callLlm(systemPrompt: string, userPrompt: string): Promise<string | null> {
   // 方案1: OpenAI 兼容接口
   const endpoint = process.env.SPECCORE_LLM_ENDPOINT || 'https://api.openai.com/v1/chat/completions';
   const apiKey = process.env.SPECCORE_LLM_KEY || process.env.OPENAI_API_KEY;
