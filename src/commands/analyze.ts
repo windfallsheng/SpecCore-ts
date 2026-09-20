@@ -1229,10 +1229,12 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       aiProvider = config.settings.ai?.provider || 'host';
     } catch { /* 默认 host */ }
     if (aiProvider === 'llm') {
-      const { callLlm } = await import('../core/ask-llm');
+      const { callLlm, resolveAiProviders } = await import('../core/ask-llm');
+      const providers = await resolveAiProviders('analyze');
       const llmContent = await callLlm(
         '你是资深需求分析师。请按用户 prompt 的要求分析需求，并只输出 JSON 文档格式：{"文档文件名": "文档内容"}。文件名用 020-specs 下的 Spec 文档名（如 TECH.md / TEST.md / UI_SPEC.md），不要输出 JSON 以外的任何文字。',
-        prompt
+        prompt,
+        providers
       );
       if (llmContent) {
         const applied = await applyJsonDocs(llmContent, iter!);

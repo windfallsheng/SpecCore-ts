@@ -181,6 +181,12 @@ export interface SpecConfig {
     ai?: {
       /** host = 宿主 AI（Qoder SDK / Headless，默认）| llm = 自配 LLM（callLlm）| auto = 宿主优先，失败回退自配 LLM */
       provider?: 'host' | 'llm' | 'auto';
+      /** 自配 LLM provider 池（定义一次，各功能按 name 引用；支持 ollama 本地/openai/anthropic/custom） */
+      providers?: LlmProviderConfig[];
+      /** 各功能的默认 provider name（如 analyze: gpt4o、taskify: local、split: local） */
+      defaults?: Record<string, string>;
+      /** 兜底 provider name（defaults 未指定或指定不可用时用） */
+      fallback?: string;
     };
     /** v8.3.94+: 视觉模型配置（用于 specs 图片理解、UI 验证截图分析） */
     vision?: {
@@ -282,7 +288,7 @@ export const DEFAULT_CONFIG: SpecConfig = {
     optional_steps: { clarify: 'auto', verify: 'auto', pipeline: 'auto', pr: 'auto', done: 'auto', spec2doc: 'auto' },
     pipelines: { default: 'develop', custom: {} },
     gates: { mode: 'manual' },
-    ai: { provider: 'host' },
+    ai: { provider: 'host', providers: [], defaults: {}, fallback: '' },
   },
   ask: {
     routing: { mode: 'hybrid', high_threshold: 70, low_threshold: 45, auto_host_ai: true, cache_enabled: true, cache_min_hits: 3 },
@@ -1503,10 +1509,50 @@ function toYaml(config: SpecConfig): string {
   yaml += `    mode: ${config.settings.gates?.mode ?? 'manual'}\n`;
   yaml += '  # ── AI 内容生成来源 ──\n';
   yaml += '  #   host = 宿主 AI（Qoder SDK / Headless，默认）\n';
-  yaml += '  #   llm  = 自配 LLM（SPECCORE_LLM_KEY 或本地 Ollama）\n';
+  yaml += '  #   llm  = 自配 LLM（走下方 providers 池）\n';
   yaml += '  #   auto = 宿主优先，失败回退自配 LLM\n';
   yaml += '  ai:\n';
   yaml += `    provider: ${config.settings.ai?.provider ?? 'host'}\n`;
+  const aiProviders = config.settings.ai?.providers || [];
+  if (aiProviders.length > 0) {
+    yaml += '    # providers: 自配 LLM 池（定义一次，各功能按 name 引用；支持 ollama/openai/anthropic/custom）\n';
+    yaml += '    providers:\n';
+    for (const p of aiProviders) {
+      yaml += `      - name: ${p.name}\n`;
+      yaml += `        enabled: ${p.enabled !== false}\n`;
+      yaml += `        type: ${p.type}\n`;
+      yaml += `        endpoint: ${p.endpoint}\n`;
+      yaml += `        model: ${p.model}\n`;
+      if (p.apiKey) yaml += `        apiKey: ${p.apiKey}\n`;
+      yaml += `        priority: ${p.priority ?? 1}\n`;
+    }
+  } else {
+    yaml += '    # providers: 自配 LLM 池（示例：本地 Ollama + 云端）\n';
+    yaml += '    # providers:\n';
+    yaml += '    #   - name: local\n';
+    yaml += '    #     type: ollama\n';
+    yaml += '    #     endpoint: http://localhost:11434\n';
+    yaml += '    #     model: qwen2.5:7b\n';
+    yaml += '    #     priority: 1\n';
+  }
+  const aiDefaults = config.settings.ai?.defaults || {};
+  const aiDefaultKeys = Object.keys(aiDefaults);
+  if (aiDefaultKeys.length > 0) {
+    yaml += '    # defaults: 各功能的默认 provider name（analyze/taskify/execute/split/ask）\n';
+    yaml += '    defaults:\n';
+    for (const k of aiDefaultKeys) {
+      yaml += `      ${k}: ${aiDefaults[k]}\n`;
+    }
+  } else {
+    yaml += '    # defaults: 各功能默认 provider（如 analyze: gpt4o、taskify: local）\n';
+    yaml += '    # defaults:\n';
+    yaml += '    #   analyze: local\n';
+  }
+  if (config.settings.ai?.fallback) {
+    yaml += `    fallback: ${config.settings.ai.fallback}\n`;
+  } else {
+    yaml += '    # fallback: 兜底 provider name（可选）\n';
+  }
 
 
   yaml += '\n# ─────────────────────────────────────────────────────────────────────────────\n';

@@ -6,6 +6,7 @@
 
 import { logger } from '../utils/logger';
 import { COMMAND_KB, WORKFLOWS, classifyMode, AskResult, PipelinePlan } from './ask-engine';
+import { loadConfigWithMeta, type LlmProviderConfig } from './unified-config';
 
 // ============================================================
 // Prompt 构建
@@ -109,8 +110,76 @@ export async function askWithLlm(input: string): Promise<AskResult | null> {
  * 调用 LLM（导出供其他模块复用，如 doc2spec 的 AI 功能单元切分）
  * 优先使用环境变量 SPECCORE_LLM_ENDPOINT，否则尝试 OpenAI 兼容接口
  */
-export async function callLlm(systemPrompt: string, userPrompt: string): Promise<string | null> {
-  // 方案1: OpenAI 兼容接口
+/** v8.3.196+: 按 provider type 分发调用单个 LLM provider（ollama 走 /api/generate，其余走 OpenAI 兼容 chat/completions） */
+async function callProvider(p: LlmProviderConfig, systemPrompt: string, userPrompt: string): Promise<string | null> {
+  if (p.enabled === false) return null;
+  try {
+    if (p.type === 'ollama') {
+      const endpoint = p.endpoint || 'http://localhost:11434';
+      const res = await fetch(`${endpoint}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: p.model || 'qwen2.5:7b',
+          prompt: `${systemPrompt}\n\n${userPrompt}`,
+          stream: false,
+          options: { temperature: 0.1, num_predict: 1000 },
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (res.ok) {
+        const data: any = await res.json();
+        return data?.response || null;
+      }
+      return null;
+    }
+    // openai / anthropic / custom 统一走 OpenAI 兼容 chat/completions
+    const endpoint = p.endpoint || 'https://api.openai.com/v1/chat/completions';
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(p.apiKey ? { Authorization: `Bearer ${p.apiKey}` } : {}),
+      },
+      body: JSON.stringify({
+        model: p.model || 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0.1,
+        max_tokens: 1000,
+      }),
+      signal: AbortSignal.timeout(30000),
+    });
+    if (res.ok) {
+      const data: any = await res.json();
+      return data?.choices?.[0]?.message?.content || null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 调用 LLM（三级降级：providers 池 → 环境变量 → WorkBuddy/Ollama）
+ * v8.3.196+: 新增 providers 参数，按 priority 顺序尝试池里的 provider
+ */
+export async function callLlm(systemPrompt: string, userPrompt: string, providers?: LlmProviderConfig[]): Promise<string | null> {
+  // 方案0: providers 池（按 priority 顺序尝试）
+  if (providers && providers.length > 0) {
+    const sorted = [...providers]
+      .filter(p => p.enabled !== false)
+      .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999));
+    for (const p of sorted) {
+      const result = await callProvider(p, systemPrompt, userPrompt);
+      if (result) return result;
+    }
+    logger.debug('[callLlm] providers 池全部失败，回退环境变量');
+  }
+
+  // 方案1: OpenAI 兼容接口（环境变量）
   const endpoint = process.env.SPECCORE_LLM_ENDPOINT || 'https://api.openai.com/v1/chat/completions';
   const apiKey = process.env.SPECCORE_LLM_KEY || process.env.OPENAI_API_KEY;
 
@@ -137,6 +206,29 @@ export async function callLlm(systemPrompt: string, userPrompt: string): Promise
     return data?.choices?.[0]?.message?.content || null;
   } catch {
     return callViaWorkBuddy(systemPrompt, userPrompt);
+  }
+}
+
+/**
+ * v8.3.196+: 解析指定功能的 provider 列表（供 callLlm 使用）
+ * 顺序：defaults[feature] 指定的排最前 → 其余按 priority → fallback 兜底
+ * 配置读取失败或无池返回 []（callLlm 回退环境变量）
+ */
+export async function resolveAiProviders(feature: string): Promise<LlmProviderConfig[]> {
+  try {
+    const { config } = await loadConfigWithMeta();
+    const ai = config.settings.ai;
+    if (!ai?.providers || ai.providers.length === 0) return [];
+    const pool = ai.providers.filter(p => p.enabled !== false);
+    const sorted = [...pool].sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999));
+    const preferred = ai.defaults?.[feature] || ai.fallback;
+    if (preferred) {
+      const hit = sorted.find(p => p.name === preferred);
+      if (hit) return [hit, ...sorted.filter(p => p.name !== preferred)];
+    }
+    return sorted;
+  } catch {
+    return [];
   }
 }
 

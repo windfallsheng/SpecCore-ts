@@ -27,7 +27,7 @@ import { showNextSteps } from '../core/next-steps';
 import { validateContent, generateReport } from '../core/doc-validator';
 import { buildPrompt, formatPrompt } from '../core/prompt-builder';
 import { loadConfig } from '../core/unified-config';
-import { callLlm } from '../core/ask-llm';
+import { callLlm, resolveAiProviders } from '../core/ask-llm';
 function findCommand(cmd: string, customPath?: string): string | null {
   // v8.3.70+: 优先使用配置中指定的路径
   if (customPath && customPath.trim()) {
@@ -996,7 +996,9 @@ async function scanUnitsWithAI(content: string): Promise<UnitScanResult | null> 
 
     const userPrompt = `以下是 PRD 文档内容，请识别其中的业务功能单元和项目级通用信息：\n\n${content.slice(0, 8000)}`;
 
-    const response = await callLlm(systemPrompt, userPrompt);
+    // v8.3.196+: 读 settings.ai.providers 池，按 defaults.split/priority 降级
+    const providers = await resolveAiProviders('split');
+    const response = await callLlm(systemPrompt, userPrompt, providers);
     if (!response) return null;
 
     const parsed = parseUnitsJson(response);
