@@ -1248,7 +1248,7 @@ async function checkDevGuideCompliance(codePath: string, taskDir: string): Promi
  * API_CONTRACT.yaml 合规检查
  * 解析 YAML 中的 paths → 检查代码中是否有对应路由实现
  */
-async function checkApiContractCompliance(codePath: string, taskDir: string): Promise<CheckResult> {
+async function checkApiContractCompliance(codePath: string, taskDir: string, blocking = false): Promise<CheckResult> {
   const start = Date.now();
   try {
     const contractPaths = [
@@ -1300,7 +1300,7 @@ async function checkApiContractCompliance(codePath: string, taskDir: string): Pr
       duration: Date.now() - start,
       output: issues.slice(0, 8).map(i => `  - ${i}`).join('\n'),
       details: `${checkCount - issues.length}/${checkCount} 个接口有实现, ${issues.length} 个缺失`,
-      blocking: false,
+      blocking,
     };
   } catch {
     return { name: 'API 契约合规', status: 'skip', duration: Date.now() - start, output: '', details: '检查失败', blocking: false };
@@ -1565,32 +1565,35 @@ export async function runQualityGate(
   taskId: string,
   codePath: string,
   taskDir: string,
-  options?: { timeout?: number; withAgents?: boolean; projectRoot?: string; strict?: boolean }
+  options?: { timeout?: number; withAgents?: boolean; projectRoot?: string; strict?: boolean; blockLevel?: 'compile' | 'standard' }
 ): Promise<QualityGateResult> {
   const projectType = await detectProjectType(codePath);
   const commands = getCommands(projectType, codePath);
   const timeout = options?.timeout || 120000;
   const strict = options?.strict || false;
+  // v8.3.194+: 阻塞级别——standard(默认) = 编译+单测+契约阻塞；compile = 仅编译阻塞（旧行为）
+  const blockLevel = options?.blockLevel || 'standard';
+  const blockStandard = blockLevel === 'standard';
   const checks: CheckResult[] = [];
 
   logger.info('');
-  logger.info(`🚧 质量门禁 — ${taskId} (${projectType})${strict ? ' [严格模式]' : ''}`);
+  logger.info(`🚧 质量门禁 — ${taskId} (${projectType})${strict ? ' [严格模式]' : ''}${blockStandard ? ' [阻塞:编译+单测+契约]' : ' [阻塞:仅编译]'}`);
 
   // ═══════════════════════════════════════════════════════════
   // 默认门禁（4 项关键检查，始终执行）
   // ═══════════════════════════════════════════════════════════
 
-  // 1. 编译检查（唯一阻塞项：编译不过 = 代码不可用）
+  // 1. 编译检查（始终阻塞：编译不过 = 代码不可用）
   logger.info('   📦 编译检查...');
   checks.push(runCheck('编译检查', commands.compile, codePath, timeout, true));
 
-  // 2. 单元测试（非阻塞，记录报告）
+  // 2. 单元测试（standard 阻塞，compile 仅记录）
   logger.info('   🧪 单元测试...');
-  checks.push(runCheck('单元测试', commands.test, codePath, timeout, false));
+  checks.push(runCheck('单元测试', commands.test, codePath, timeout, blockStandard));
 
-  // 3. API 契约合规（v8.3.0+，解析 API_CONTRACT.yaml 检查接口实现）
+  // 3. API 契约合规（v8.3.0+，解析 API_CONTRACT.yaml 检查接口实现；standard 阻塞）
   logger.info('   🔌 API 契约合规...');
-  checks.push(await checkApiContractCompliance(codePath, taskDir));
+  checks.push(await checkApiContractCompliance(codePath, taskDir, blockStandard));
 
   // 4. 规格文档质量校验（v8.1.0+，检查 REQ.md/TECH.md 是否有实质内容 = 无占位符）
   logger.info('   📋 规格文档质量...');

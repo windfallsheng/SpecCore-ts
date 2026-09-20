@@ -1,4 +1,4 @@
-import { pathExists, readFile, writeFile, ensureDir, readdir } from 'fs-extra';
+import { pathExists, readFile, writeFile, ensureDir, readdir, remove } from 'fs-extra';
 import { join, dirname, isAbsolute, relative } from 'path';
 import { createInterface } from 'readline';
 import { readdirSync } from 'fs';
@@ -1871,8 +1871,16 @@ async function executionVerifyLoop(
     const taskCodePath = (await pathExists(join(taskDir, 'code'))) ? join(taskDir, 'code') : absCodePath;
     let allPassed = true;
 
-    for (let round = 1; round <= maxRounds; round++) {
-      if (round > 1) logger.info(`   🔄 第 ${round} 轮修复...`);
+    // v8.3.194+: 读取历史重试轮次（跨会话闭环），失败修复后从下一轮继续
+    const retryFile = join(taskDir, '.needs-retry');
+    let startRound = 1;
+    if (await pathExists(retryFile)) {
+      const prev = parseInt((await readFile(retryFile, 'utf-8')).trim(), 10);
+      if (!isNaN(prev)) startRound = Math.min(prev + 1, maxRounds);
+    }
+
+    for (let round = startRound; round <= maxRounds; round++) {
+      if (round > startRound) logger.info(`   🔄 第 ${round} 轮修复验证...`);
       allPassed = true;
 
       // ── Step 1: 契约冲突裁决 / 传统质量门禁 ──
@@ -2022,7 +2030,7 @@ async function executionVerifyLoop(
 
       if (allPassed) break;
 
-      // 自动修复提示
+      // 自动修复提示（跨会话闭环：失败后立即返回，让 AI 修复后重新 execute 继续下一轮）
       if (round < maxRounds) {
         logger.info(`   💡 AI 将修复未通过项。使用 speccore execute --task=${task.id} --force 重新执行代码生成`);
         await writeFile(join(taskDir, '.needs-retry'), String(round));
@@ -2031,7 +2039,11 @@ async function executionVerifyLoop(
         if (!gate.passed) {
           await outputFixTag(gate.report, taskDir, round);
         }
+        // v8.3.194+: 关键修复——立即返回，不在单次进程内重复验证未修复的代码
+        logger.info(`   🔄 修复后重新执行 speccore execute --resume 继续第 ${round + 1} 轮验证`);
+        return;
       }
+      // round === maxRounds：最后一轮仍失败，退出循环走最终判定的失败分支
     }
 
     // ── Step 5: UI 验证（v8.3.49+ 移到 verify 命令执行）──
@@ -2044,6 +2056,8 @@ async function executionVerifyLoop(
     // 最终判定
     if (allPassed) {
       await writeFile(join(taskDir, '.verification'), 'passed');
+      // v8.3.194+: 通过后清理重试标记
+      await remove(join(taskDir, '.needs-retry')).catch(() => {});
       logger.info(`   ✅ ${task.id} 全部检查通过，可以 speccore done`);
 
       // v8.3.23+: 执行通过后检测可复用模式候选（适配端平铺结构 + 自动写入）
@@ -2105,8 +2119,9 @@ async function executionVerifyLoop(
         }
       } catch { /* 静默失败 */ }
     } else {
-      logger.info(`   ⚠️ ${task.id} 仍有未通过项，请审查后手动 done`);
-      logger.info(`   💡 修复后重试: speccore execute --resume`);
+      logger.info(`   ⚠️ ${task.id} 已重试 ${maxRounds} 轮仍未通过，请人工介入审查`);
+      logger.info(`   💡 清理重试状态后重新执行: speccore execute --task=${task.id} --force`);
+      await remove(join(taskDir, '.needs-retry')).catch(() => {});
     }
     logger.info('');
   }
