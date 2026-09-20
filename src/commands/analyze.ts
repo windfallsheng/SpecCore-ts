@@ -265,27 +265,45 @@ async function writeFileMerged(
   await writeFile(fp, content);
 }
 
-/** v8.3.196+: 把 AI 返回的 JSON 文档内容落盘到 020-specs/，返回落盘数量（非 JSON 或空则 0） */
-async function applyJsonDocs(content: string, iter: string): Promise<number> {
+/**
+ * v8.3.203+: 把 AI 返回的内容落盘到 020-specs/，返回落盘数量。
+ * 同时支持两种格式（修复「subagent 返回 [DOC:] 标记但落盘只认 JSON」导致的空模板）：
+ *   1. JSON 对象格式：{"文件名": "内容"}
+ *   2. [DOC:文件名]...内容... 标记格式（analyze prompt 的标准输出格式）
+ */
+async function applyDocContent(content: string, iter: string): Promise<number> {
   const trimmed = content.trim();
-  if (!trimmed.startsWith('{')) return 0;
-  try {
-    const docs = JSON.parse(trimmed);
-    if (!docs || typeof docs !== 'object' || Array.isArray(docs)) return 0;
-    const iterDir = await getIterationDir(iter);
-    const specDir = join(iterDir, '020-specs');
-    let applied = 0;
-    for (const [filename, docContent] of Object.entries(docs)) {
-      if (typeof docContent !== 'string') continue;
-      // 迭代级需求文档不在此写（原始需求在 010-requirements）
-      if (filename === 'REQUIREMENT.md' || filename === 'overview/REQUIREMENT.md') continue;
-      const fp = join(specDir, filename);
-      await ensureDir(dirname(fp));
-      await writeFile(fp, docContent);
-      applied++;
-    }
-    return applied;
-  } catch { return 0; }
+  const iterDir = await getIterationDir(iter);
+  const specDir = join(iterDir, '020-specs');
+  let docs: Record<string, string> = {};
+
+  // 格式 1：JSON 对象
+  if (trimmed.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        docs = parsed as Record<string, string>;
+      }
+    } catch { /* 继续尝试 [DOC:] 格式 */ }
+  }
+
+  // 格式 2：[DOC:xxx] 标记（analyze prompt 的标准输出格式）
+  if (Object.keys(docs).length === 0) {
+    const blocks = parseDocMarkers(trimmed);
+    for (const [name, c] of blocks) docs[name] = c;
+  }
+
+  let applied = 0;
+  for (const [filename, docContent] of Object.entries(docs)) {
+    if (typeof docContent !== 'string' || !docContent.trim()) continue;
+    // 迭代级需求文档不在此写（原始需求在 010-requirements）
+    if (filename === 'REQUIREMENT.md' || filename === 'overview/REQUIREMENT.md') continue;
+    const fp = join(specDir, filename);
+    await ensureDir(dirname(fp));
+    await writeFile(fp, docContent);
+    applied++;
+  }
+  return applied;
 }
 
 /**
@@ -303,7 +321,7 @@ async function tryLlmGenerate(prompt: string, iter: string): Promise<boolean> {
       8000
     );
     if (llmContent) {
-      const applied = await applyJsonDocs(llmContent, iter);
+      const applied = await applyDocContent(llmContent, iter);
       if (applied > 0) {
         logger.info(`✅ [llm] 自配 LLM 生成并写入 ${applied} 个文档到 020-specs/`);
         process.stdout.write(`[SPECCORE_STEP_DONE]\n`);
@@ -1342,7 +1360,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
           }
           if (dispatchResult.content) {
             // v8.3.196+: 若子 Agent 返回 JSON 文档格式，自动落盘（修复「分析结果只打印不落盘」）
-            const autoApplied = await applyJsonDocs(dispatchResult.content, iter!);
+            const autoApplied = await applyDocContent(dispatchResult.content, iter!);
             if (autoApplied > 0) {
               process.stdout.write(`✅ 已自动写入 ${autoApplied} 个文档到 020-specs/（宿主子 Agent 直接落盘）\n`);
               process.exitCode = 0;

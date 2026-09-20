@@ -2455,7 +2455,9 @@ export async function buildPrompt(
       ? '请返回格式: {"files": [{"path": "工程标识/相对路径", "content": "代码内容"}]}'
       : command === 'split'
         ? '请返回 JSON 数组格式的任务列表（参见拆分原则中的输出格式）'
-        : '请返回 Markdown 格式的分析结果',
+        : command === 'analyze'
+          ? '请按文档分段输出，每个文档以单独一行的 [DOC:文件名] 标记开头（如 [DOC:overview/TECH.md]），文档内容紧跟其后，下一个文档再用新的 [DOC:文件名] 分隔。文件名必须用 020-specs 下的 Spec 文档名（TECH.md / TEST.md / UI_SPEC.md / overview/REQUIREMENT.md / overview/FUNCTION_MAP.md 等），不要输出 JSON 以外的其他解释文字，这样 CLI 才能自动落盘。'
+          : '请返回 Markdown 格式的分析结果',
     agentContext,
     subagent,
   };
