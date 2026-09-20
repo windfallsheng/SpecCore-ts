@@ -61,10 +61,22 @@ SpecCore 规范驱动开发项目。
 
 ## 核心工作方式
 
-- **AI 只拼命令，不执行命令**。识别用户意图后，输出 `speccore` CLI 命令给用户在终端执行。
-- **所有确定性操作通过 `speccore` CLI 完成**（创建目录、读写文件、校验格式）。
+- **所有确定性操作通过 `speccore` CLI 完成**（创建目录、读写文件、校验格式）。AI 识别意图后，经 `speccore ask` 引擎自动执行，或看到 `[SPECCORE_EXEC: <cmd>]` 标记时直接 `execute_command`，不要自行用 Write/SearchReplace 改 Spec 文件。
 - **代码生成通过宿主 AI 完成**，CLI 负责准备 Spec 上下文和写入文件。
 - **代码写到 CONSTITUTION.md / PROJECT.yaml 指定的源码路径**，不要写到迭代目录里。
+
+## 功能单元目录对齐（切分层 ↔ 分析层）
+
+`doc2spec --split` 切分出的功能单元目录名，是 `analyze` 分析产物的**对齐锚点**，两者必须一致：
+
+| 层 | 目录 | 产出 |
+|:---|:---|:---|
+| 切分层 | `010-requirements/features/{功能单元}/` | README.md + _matrix.md + CHANGELOG.md（doc2spec 产出） |
+| 分析层 | `020-specs/{功能单元}/` | overview/（单元概述）+ {端名}/（TECH/TEST/UI_SPEC） |
+| 全局层 | `010-requirements/overview/GLOBAL_CONTEXT-*.md` + `020-specs/overview/` | 非功能全局信息 + FUNCTION_MAP/REQUIREMENT 汇总 |
+
+- **禁止**把 `overview/GLOBAL_CONTEXT-*.md`、`features/{单元}/_matrix.md` 当成功能单元（它们是全局信息/元数据，不是功能单元）。
+- **分析产物必须落盘**：`analyze` 后 020-specs 下不得残留 `<!-- SPEC-SKELETON -->` 空模板，否则 taskify/execute 拿空需求会瞎编代码。
 
 ## ⛔ 核心禁令
 

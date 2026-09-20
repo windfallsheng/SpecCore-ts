@@ -29,6 +29,33 @@ async function hasFeatureDirs(iterDir: string): Promise<boolean> {
   } catch { return false; }
 }
 
+/**
+ * v8.3.202+: 检测 020-specs 下仍为骨架状态（<!-- SPEC-SKELETON -->）的文档。
+ * 空模板会一路传到 taskify/execute，导致 AI 拿空需求瞎编代码，必须硬停。
+ */
+async function detectEmptySkeletonDocs(iterDir: string): Promise<string[]> {
+  const specDir = join(iterDir, '020-specs');
+  if (!await pathExists(specDir)) return [];
+  const skeletons: string[] = [];
+  const check = async (dir: string, prefix = '') => {
+    let entries;
+    try { entries = await readdir(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      const rel = prefix ? `${prefix}/${e.name}` : e.name;
+      const full = join(dir, e.name);
+      if (e.isDirectory()) { await check(full, rel); }
+      else if (e.name.endsWith('.md')) {
+        try {
+          const content = await readFile(full, 'utf-8');
+          if (content.includes('<!-- SPEC-SKELETON -->')) skeletons.push(rel);
+        } catch { /* ignore */ }
+      }
+    }
+  };
+  await check(specDir);
+  return skeletons;
+}
+
 export async function runCommand(options: RunOptions): Promise<void> {
   await autoPipeline(options);
 }
@@ -330,12 +357,31 @@ async function autoPipeline(options: RunOptions): Promise<void> {
           } catch { needsSpecs = true; }
         }
         if (needsAnalysis || needsSpecs) {
-          execSync(`speccore analyze --auto -I ${iteration}`, { stdio: 'inherit' });
+          try {
+            execSync(`speccore analyze --auto -I ${iteration}`, { stdio: 'inherit' });
+          } catch (e: any) {
+            // analyze --auto 输出分析 Prompt 让宿主 AI 接管（exitCode 10），不算失败
+            logger.info('  ⚠️ analyze 已输出分析 Prompt，等待 AI 分析结果落盘');
+          }
         } else {
           logger.info('  ✅ 分析已完成，跳过');
           phaseStatus = 'skipped';
           phaseMessage = '分析已完成，跳过';
         }
+
+        // v8.3.202+: 骨架硬闸口——检测 020-specs 是否仍有空模板，有则硬停防止下游雪崩
+        const emptySkeleton = await detectEmptySkeletonDocs(iterDir);
+        if (emptySkeleton.length > 0) {
+          logger.error(`\n🛑 [SPECCORE_GATE] 需求分析未完成——${emptySkeleton.length} 个 Spec 文档仍是空模板`);
+          for (const d of emptySkeleton.slice(0, 8)) logger.error(`   ❌ ${d}`);
+          if (emptySkeleton.length > 8) logger.error(`   ... 还有 ${emptySkeleton.length - 8} 个`);
+          logger.error('   空模板会让 taskify/execute 拿不到真实需求，生成代码质量极差。');
+          logger.error(`   请先完成需求分析落盘: speccore analyze -I ${iteration} --auto`);
+          logger.error(`   确认落盘后继续: speccore run --auto --from taskify -I ${iteration}\n`);
+          process.exitCode = 1;
+          return;
+        }
+
         // v7.4.0+: CLARIFY_REPORT 质量检查
         const clarifyPath = join(iterDir, '010-requirements', 'CLARIFY_REPORT.md');
         if (await pathExists(clarifyPath)) {
