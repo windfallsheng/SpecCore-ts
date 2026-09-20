@@ -372,11 +372,50 @@ async function autoPipeline(options: RunOptions): Promise<void> {
         // v8.3.202+: 骨架硬闸口——检测 020-specs 是否仍有空模板，有则硬停防止下游雪崩
         const emptySkeleton = await detectEmptySkeletonDocs(iterDir);
         if (emptySkeleton.length > 0) {
+          // v8.3.203+: 区分根因——澄清未完成 vs 分析未落盘，给精准修复指引
+          let clarifyBlocked = false;
+          try {
+            const { hasValidClarifiedDocs, detectProfessionalLevel } = await import('../core/requirement-clarifier');
+            const hasClarified = await hasValidClarifiedDocs(iterDir);
+            if (!hasClarified) {
+              let lowQuality = 0;
+              const reqDir = join(iterDir, '010-requirements');
+              const checkReqQuality = async (dir: string) => {
+                if (!await pathExists(dir)) return;
+                try {
+                  const files = await readdir(dir, { withFileTypes: true });
+                  for (const f of files) {
+                    if (f.name.startsWith('.')) continue;
+                    const full = join(dir, f.name);
+                    if (f.isDirectory()) await checkReqQuality(full);
+                    else if (f.name.endsWith('.md')) {
+                      try {
+                        const c = await readFile(full, 'utf-8');
+                        if (detectProfessionalLevel(c) !== 'high') lowQuality++;
+                      } catch { /* ignore */ }
+                    }
+                  }
+                } catch { /* ignore */ }
+              };
+              await checkReqQuality(reqDir);
+              clarifyBlocked = lowQuality > 0;
+            }
+          } catch { /* ignore */ }
+
           logger.error(`\n🛑 [SPECCORE_GATE] 需求分析未完成——${emptySkeleton.length} 个 Spec 文档仍是空模板`);
           for (const d of emptySkeleton.slice(0, 8)) logger.error(`   ❌ ${d}`);
           if (emptySkeleton.length > 8) logger.error(`   ... 还有 ${emptySkeleton.length - 8} 个`);
-          logger.error('   空模板会让 taskify/execute 拿不到真实需求，生成代码质量极差。');
-          logger.error(`   请先完成需求分析落盘: speccore analyze -I ${iteration} --auto`);
+
+          if (clarifyBlocked) {
+            logger.error('');
+            logger.error('   ⚠️ 根因：需求澄清未完成——需求文档质量不足且未生成澄清产物。');
+            logger.error('   请先澄清需求（二选一）:');
+            logger.error(`   1. speccore req-doc --from "<需求文档>" --to ${iteration} --prompt   # 引导澄清后落盘黄金需求`);
+            logger.error(`   2. speccore analyze -I ${iteration} --skip-clarify                    # 跳过澄清直接分析（不推荐）`);
+          } else {
+            logger.error('   空模板会让 taskify/execute 拿不到真实需求，生成代码质量极差。');
+            logger.error(`   请先完成需求分析落盘: speccore analyze -I ${iteration} --auto`);
+          }
           logger.error(`   确认落盘后继续: speccore run --auto --from taskify -I ${iteration}\n`);
           process.exitCode = 1;
           return;
