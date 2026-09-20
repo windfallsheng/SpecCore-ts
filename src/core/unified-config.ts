@@ -177,6 +177,11 @@ export interface SpecConfig {
       /** manual = 三闸口都软停人工确认（默认，最安全）| auto = 三闸口都跳过（含 C 部署） */
       mode?: 'manual' | 'auto';
     };
+    /** v8.3.196+: AI 内容生成来源（analyze/taskify/execute 等 AI 步骤） */
+    ai?: {
+      /** host = 宿主 AI（Qoder SDK / Headless，默认）| llm = 自配 LLM（callLlm）| auto = 宿主优先，失败回退自配 LLM */
+      provider?: 'host' | 'llm' | 'auto';
+    };
     /** v8.3.94+: 视觉模型配置（用于 specs 图片理解、UI 验证截图分析） */
     vision?: {
       enabled: boolean;
@@ -277,6 +282,7 @@ export const DEFAULT_CONFIG: SpecConfig = {
     optional_steps: { clarify: 'auto', verify: 'auto', pipeline: 'auto', pr: 'auto', done: 'auto', spec2doc: 'auto' },
     pipelines: { default: 'develop', custom: {} },
     gates: { mode: 'manual' },
+    ai: { provider: 'host' },
   },
   ask: {
     routing: { mode: 'hybrid', high_threshold: 70, low_threshold: 45, auto_host_ai: true, cache_enabled: true, cache_min_hits: 3 },
@@ -1495,6 +1501,12 @@ function toYaml(config: SpecConfig): string {
   yaml += '  #   auto   = 三闸口都跳过（含 C 部署，自动执行，谨慎）\n';
   yaml += '  gates:\n';
   yaml += `    mode: ${config.settings.gates?.mode ?? 'manual'}\n`;
+  yaml += '  # ── AI 内容生成来源 ──\n';
+  yaml += '  #   host = 宿主 AI（Qoder SDK / Headless，默认）\n';
+  yaml += '  #   llm  = 自配 LLM（SPECCORE_LLM_KEY 或本地 Ollama）\n';
+  yaml += '  #   auto = 宿主优先，失败回退自配 LLM\n';
+  yaml += '  ai:\n';
+  yaml += `    provider: ${config.settings.ai?.provider ?? 'host'}\n`;
 
 
   yaml += '\n# ─────────────────────────────────────────────────────────────────────────────\n';

@@ -1220,9 +1220,35 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
             process.stdout.write(`📄 文件变更: ${dispatchResult.filesChanged.join(', ')}\n`);
           }
           if (dispatchResult.content) {
+            // v8.3.196+: 若子 Agent 返回 JSON 文档格式，自动落盘（修复「分析结果只打印不落盘」）
+            const trimmed = dispatchResult.content.trim();
+            let autoApplied = 0;
+            if (trimmed.startsWith('{')) {
+              try {
+                const docs = JSON.parse(trimmed);
+                if (docs && typeof docs === 'object' && !Array.isArray(docs)) {
+                  const iterDir2 = await getIterationDir(iter!);
+                  const specDir = join(iterDir2, '020-specs');
+                  for (const [filename, docContent] of Object.entries(docs)) {
+                    if (typeof docContent !== 'string') continue;
+                    // 迭代级需求文档不在此写（原始需求在 010-requirements）
+                    if (filename === 'REQUIREMENT.md' || filename === 'overview/REQUIREMENT.md') continue;
+                    const fp = join(specDir, filename);
+                    await ensureDir(dirname(fp));
+                    await writeFile(fp, docContent);
+                    autoApplied++;
+                  }
+                }
+              } catch { /* content 非合法 JSON，回退手动 --apply */ }
+            }
+            if (autoApplied > 0) {
+              process.stdout.write(`✅ 已自动写入 ${autoApplied} 个文档到 020-specs/（宿主子 Agent 直接落盘）\n`);
+              process.exitCode = 0;
+              return;
+            }
             process.stdout.write(`\n--- 执行结果 ---\n${dispatchResult.content.slice(0, 3000)}${dispatchResult.content.length > 3000 ? '\n... (截断)' : ''}\n`);
           }
-          // 提示用户审查结果后手动 --apply
+          // 提示用户审查结果后手动 --apply（非 JSON 格式时）
           process.stdout.write(`\n> 请审查上述结果，确认后执行 speccore analyze --apply 写入文档\n`);
           process.exitCode = 0;
           return;
