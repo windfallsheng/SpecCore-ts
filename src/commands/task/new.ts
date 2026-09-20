@@ -22,6 +22,9 @@ export interface TaskNewOptions {
   batchFile?: string;
   interactive?: boolean;
   feature?: string;      // --feature: 关联功能模块（影响 bugfix 分支 base）
+  module?: string;       // Excel 表「模块」列解析出的功能模块（优先于 --feature）
+  priority?: string;     // Excel 表「优先级」列
+  severity?: string;     // Excel 表「严重度」列
   images?: { ext: string; buffer: Buffer }[];  // Excel 内嵌图片（bug 截图，随任务落盘）
   autoExecute?: boolean; // --auto-execute: 创建后自动 analyze→execute 修复
 }
@@ -43,7 +46,7 @@ export async function taskNewCommand(options: TaskNewOptions): Promise<void> {
 
 /** 批量创建 Task */
 async function batchCreateTasks(options: TaskNewOptions): Promise<void> {
-  interface TaskItem { name: string; desc: string; images: { ext: string; buffer: Buffer }[] }
+  interface TaskItem { name: string; desc: string; images: { ext: string; buffer: Buffer }[]; priority?: string; severity?: string; module?: string }
   const items: TaskItem[] = [];
 
   if (options.batchFile) {
@@ -53,12 +56,19 @@ async function batchCreateTasks(options: TaskNewOptions): Promise<void> {
     }
     const ext = options.batchFile.split('.').pop()?.toLowerCase();
     if (ext === 'xlsx' || ext === 'xls') {
-      // v8.3.207+: 优先 exceljs（含内嵌图片），fallback xlsx 纯文本
+      // v8.3.207+: 优先 exceljs（含内嵌图片 + 优先级/严重度/模块列），fallback xlsx 纯文本
       const bugs = await extractExcelBugs(options.batchFile);
       if (bugs) {
         for (const b of bugs) {
           const desc = b.cells.join(' — ');
-          items.push({ name: desc.slice(0, 60), desc, images: b.images.map(i => ({ ext: i.ext, buffer: i.buffer })) });
+          items.push({
+            name: desc.slice(0, 60),
+            desc,
+            images: b.images.map(i => ({ ext: i.ext, buffer: i.buffer })),
+            priority: b.priority,
+            severity: b.severity,
+            module: b.module,
+          });
         }
         const imgCount = bugs.reduce((s, b) => s + b.images.length, 0);
         logger.info(`📊 从 Excel 导入 ${bugs.length} 个 bug${imgCount > 0 ? `（含 ${imgCount} 张截图）` : ''}: ${options.batchFile}`);
@@ -94,7 +104,8 @@ async function batchCreateTasks(options: TaskNewOptions): Promise<void> {
   if (options.interactive) {
     logger.info(`\n📋 共 ${items.length} 个任务:\n`);
     for (let i = 0; i < items.length; i++) {
-      logger.info(`  ${i + 1}. ${items[i].name}${items[i].images.length > 0 ? ` 🖼️x${items[i].images.length}` : ''}`);
+      const meta = [items[i].priority ? `P${items[i].priority}` : '', items[i].severity ? `S${items[i].severity}` : '', items[i].module ? `模块:${items[i].module}` : ''].filter(Boolean).join(' ');
+      logger.info(`  ${i + 1}. ${items[i].name}${items[i].images.length > 0 ? ` 🖼️x${items[i].images.length}` : ''}${meta ? `  [${meta}]` : ''}`);
     }
     const readline = require('readline');
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -117,6 +128,9 @@ async function batchCreateTasks(options: TaskNewOptions): Promise<void> {
         desc: item.desc,
         type,
         images: item.images,
+        priority: item.priority,
+        severity: item.severity,
+        module: item.module,
       });
       created++;
     } catch (e: any) {
@@ -205,8 +219,11 @@ async function createSingleTask(options: TaskNewOptions): Promise<void> {
     await writeFile(join(taskDir, '.meta', 'status'), status);
     await writeFile(join(taskDir, '.meta', 'owner'), '未分配');
     await writeFile(join(taskDir, '.meta', 'created-at'), today);
-    // 功能单元标识（v6.49.4+）：优先 --feature 关联功能模块，否则取任务名称
-    await writeFile(join(taskDir, '.meta', 'feature'), options.feature || options.name || '未分类');
+    // 功能单元标识（v6.49.4+）：Excel 模块列 > --feature > 任务名称
+    await writeFile(join(taskDir, '.meta', 'feature'), options.module || options.feature || options.name || '未分类');
+    // v8.3.209+: 优先级 / 严重度（Excel 表解析，可选）
+    if (options.priority) await writeFile(join(taskDir, '.meta', 'priority'), options.priority);
+    if (options.severity) await writeFile(join(taskDir, '.meta', 'severity'), options.severity);
 
     // Generate task content
     const taskContent = await generateTaskContent(options);

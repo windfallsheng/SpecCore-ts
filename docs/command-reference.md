@@ -749,3 +749,32 @@ speccore task list
 speccore task status
 ```
 别名: `tk`
+
+**bug 表批量导入（v8.3.207+）**：
+
+```bash
+# 从 Excel 批量导入 bug（自动提取内嵌截图 + 优先级/严重度/模块列）
+speccore task new --batch-file bug.xlsx --type bugfix
+
+# 关联功能模块（影响分支 base：从该模块任务分支拉）
+speccore task new --batch-file bug.xlsx --type bugfix --feature 会议室管理
+
+# 无人值守：导入后自动 analyze→execute 修复
+speccore task new --batch-file bug.xlsx --type bugfix --auto-execute
+
+# 交互确认（展示解析出的优先级/严重度/模块，确认后创建）
+speccore task new --batch-file bug.xlsx --type bugfix --interactive
+```
+
+**bug 表标准模板（表头列名约定）**：
+
+| 列 | 标准列名 | 模糊匹配（不标准时尽力解析） |
+|:---|:---|:---|
+| 标题 | `标题` / `问题` / `缺陷名` | title / name / bug |
+| 描述 | `描述` / `说明` / `现象` / `复现步骤` | description / detail / desc |
+| 优先级 | `优先级` | priority / 等级 / level / P1/P2... |
+| 严重度 | `严重度` / `严重程度` | severity / S1/S2... |
+| 模块 | `所属模块` / `功能模块` | 模块 / 子系统 / feature / module |
+| 截图 | 内嵌图片（任意列） | 按图片所在行自动关联 |
+
+> 表头不标准时按模糊关键词尽力解析；解析出的「模块」列自动写入 `.meta/feature`（关联功能模块、影响 bugfix 分支 base），优先级/严重度写入 `.meta/priority` / `.meta/severity`。Excel 内嵌截图提取到任务目录 `assets/screenshots/` 并在 REQ.md 引用，宿主 AI 可直接 Read 看到缺陷。

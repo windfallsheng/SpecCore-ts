@@ -25,10 +25,39 @@ export interface ExcelBugRow {
   cells: string[];
   /** 该行关联的图片 */
   images: ExcelImage[];
+  /** 优先级列（若表头识别到） */
+  priority?: string;
+  /** 严重度列（若表头识别到） */
+  severity?: string;
+  /** 模块列（若表头识别到，可喂给 .meta/feature 关联功能模块） */
+  module?: string;
+}
+
+/** 表头列名 → 字段 的模糊匹配规则（先精确后宽松） */
+const COLUMN_HINTS: Record<string, RegExp> = {
+  priority: /优先级|优先|priority|紧急程度|等级|level|p\d/i,
+  severity: /严重度|严重程度|severity|s\d/i,
+  module: /所属模块|功能模块|模块|子系统|feature|module/i,
+  title: /标题|名称|问题|摘要|主题|缺陷名|title|name|bug/i,
+  desc: /描述|说明|详情|现象|复现|description|detail|desc/i,
+};
+
+/** 提取单元格文本（字符串/数字/富文本/公式） */
+function cellText(v: any): string {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number') return String(v);
+  if (typeof v === 'object') {
+    if (v.richText) return v.richText.map((r: any) => r.text).join('');
+    if (v.result !== undefined) return String(v.result);
+    if (v.text !== undefined) return String(v.text);
+    return String(v);
+  }
+  return String(v);
 }
 
 /**
- * 提取 Excel 的 bug 行（文本 + 内嵌图片）
+ * 提取 Excel 的 bug 行（文本 + 内嵌图片 + 优先级/严重度/模块列）
  * @param filePath xlsx 文件路径
  * @returns bug 行数组；exceljs 不可用或解析失败时返回 null
  */
@@ -46,6 +75,18 @@ export async function extractExcelBugs(filePath: string): Promise<ExcelBugRow[] 
     const worksheet = workbook.worksheets[0];
     if (!worksheet) return null;
 
+    // 0. 读表头（第一行），识别优先级/严重度/模块等列
+    const colHints: Record<string, number> = {};
+    worksheet.getRow(1).eachCell({ includeEmpty: false }, (cell: any, colNumber: number) => {
+      const text = cellText(cell.value).trim().toLowerCase();
+      if (!text) return;
+      for (const [field, re] of Object.entries(COLUMN_HINTS)) {
+        if (colHints[field] === undefined && re.test(text)) {
+          colHints[field] = colNumber;
+        }
+      }
+    });
+
     // 1. 提取所有图片，按行号分组
     const imagesByRow = new Map<number, ExcelImage[]>();
     for (const img of worksheet.getImages()) {
@@ -60,32 +101,31 @@ export async function extractExcelBugs(filePath: string): Promise<ExcelBugRow[] 
       imagesByRow.set(row, list);
     }
 
-    // 2. 提取每行文本（跳过首行表头）
+    // 2. 提取每行文本 + 结构化字段（跳过首行表头）
     const rows: ExcelBugRow[] = [];
     worksheet.eachRow({ includeEmpty: false }, (row: any, rowNumber: number) => {
       if (rowNumber <= 1) return; // 跳过表头
       const cells: string[] = [];
-      row.eachCell({ includeEmpty: false }, (cell: any) => {
-        const v = cell.value;
-        if (v === null || v === undefined) return;
-        let text = '';
-        if (typeof v === 'string') text = v;
-        else if (typeof v === 'number') text = String(v);
-        else if (typeof v === 'object') {
-          // 富文本 / 公式 / 超链接等
-          if (v.richText) text = v.richText.map((r: any) => r.text).join('');
-          else if (v.result !== undefined) text = String(v.result);
-          else if (v.text !== undefined) text = String(v.text);
-          else text = String(v);
-        } else {
-          text = String(v);
+      const cellByCol: Record<number, string> = {};
+      row.eachCell({ includeEmpty: false }, (cell: any, colNumber: number) => {
+        const t = cellText(cell.value).trim();
+        if (t) {
+          cells.push(t);
+          cellByCol[colNumber] = t;
         }
-        const t = text.trim();
-        if (t) cells.push(t);
       });
       if (cells.length === 0) return;
       const idx = rowNumber - 1; // 转 0-based
-      rows.push({ rowIndex: idx, cells, images: imagesByRow.get(idx) || [] });
+      const get = (field: string): string | undefined =>
+        colHints[field] !== undefined ? cellByCol[colHints[field]] : undefined;
+      rows.push({
+        rowIndex: idx,
+        cells,
+        images: imagesByRow.get(idx) || [],
+        priority: get('priority'),
+        severity: get('severity'),
+        module: get('module'),
+      });
     });
 
     return rows;

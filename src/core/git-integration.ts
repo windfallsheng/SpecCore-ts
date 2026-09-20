@@ -323,6 +323,16 @@ export function loadGitConfig(iteration?: string, taskDir?: string): GitConfig {
           .map((s: string) => s.trim())
           .filter(Boolean);
       }
+
+      // v8.3.209+: 依赖合并策略（auto/manual/off）+ 黑白名单
+      const mergeDepMatch = content.match(/依赖合并策略[：:]\s*(\S+)/);
+      if (mergeDepMatch && ['auto', 'manual', 'off'].includes(mergeDepMatch[1])) {
+        config.mergeDependencies = mergeDepMatch[1] as 'auto' | 'manual' | 'off';
+      }
+      const mergeWlMatch = content.match(/合并白名单[：:]\s*(.+)/);
+      if (mergeWlMatch) config.mergeWhitelist = mergeWlMatch[1].split(/[,，]/).map((s: string) => s.trim()).filter(Boolean);
+      const mergeBlMatch = content.match(/合并黑名单[：:]\s*(.+)/);
+      if (mergeBlMatch) config.mergeBlacklist = mergeBlMatch[1].split(/[,，]/).map((s: string) => s.trim()).filter(Boolean);
     }
   } catch {}
 
@@ -366,6 +376,14 @@ export function loadGitConfig(iteration?: string, taskDir?: string): GitConfig {
         // 远程名称
         const remoteName = extractValue('远程名称');
         if (remoteName) config.remoteName = remoteName;
+
+        // v8.3.209+: 依赖合并策略 + 黑白名单
+        const mergeDep = extractValue('依赖合并策略');
+        if (mergeDep && ['auto', 'manual', 'off'].includes(mergeDep)) config.mergeDependencies = mergeDep as 'auto' | 'manual' | 'off';
+        const mergeWl = extractValue('合并白名单');
+        if (mergeWl) config.mergeWhitelist = mergeWl.split(/[,，]/).map((s: string) => s.trim()).filter(Boolean);
+        const mergeBl = extractValue('合并黑名单');
+        if (mergeBl) config.mergeBlacklist = mergeBl.split(/[,，]/).map((s: string) => s.trim()).filter(Boolean);
       }
     } catch {}
   }
