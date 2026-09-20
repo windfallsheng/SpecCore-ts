@@ -463,7 +463,30 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     // v8.3.166+: 输出 subagent 标记（task-decomposer）
     // v8.3.169+: 尝试通过 Qoder SDK 直接调度子 Agent
     const promptText = formatPrompt(prompt) + featureBatchHint;
-    if (!process.stdout.isTTY) {
+    // v8.3.196+: provider=llm 时用自配 LLM 生成任务 JSON，复用 --response 落盘
+    let llmHandled = false;
+    let aiProvider = 'host';
+    try {
+      const { loadConfigWithMeta } = await import('../../core/unified-config');
+      const { config } = await loadConfigWithMeta();
+      aiProvider = config.settings.ai?.provider || 'host';
+    } catch { /* 默认 host */ }
+    if (aiProvider === 'llm') {
+      const { callLlm, resolveAiProviders } = await import('../../core/ask-llm');
+      const providers = await resolveAiProviders('taskify');
+      const llmContent = await callLlm(
+        '你是任务拆解专家。请按 prompt 要求拆分任务，只输出 JSON 数组格式的任务列表，不要输出 JSON 以外的文字。',
+        promptText,
+        providers
+      );
+      if (llmContent) {
+        options.response = llmContent;
+        llmHandled = true;
+      } else {
+        logger.warn('⚠️ [llm] 自配 LLM 未生成任务，回退 prompt 模式');
+      }
+    }
+    if (!llmHandled && !process.stdout.isTTY) {
       try {
         const agentCtx: AgentContext = {
           subagent: 'task-decomposer',
@@ -491,16 +514,18 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       }
     }
 
-    const output = [
-      `[SPECCORE_SESSION_AGENT: task-decomposer]`,
-      `[SPECCORE_CONTEXT_BUDGET: 12000]`,
-      `[SPECCORE_CONTEXT_TYPE: full]`,
-      ``,
-      promptText,
-    ].join('\n');
-    process.stdout.write(output);
-    process.exitCode = 10;
-    return;
+    if (!llmHandled) {
+      const output = [
+        `[SPECCORE_SESSION_AGENT: task-decomposer]`,
+        `[SPECCORE_CONTEXT_BUDGET: 12000]`,
+        `[SPECCORE_CONTEXT_TYPE: full]`,
+        ``,
+        promptText,
+      ].join('\n');
+      process.stdout.write(output);
+      process.exitCode = 10;
+      return;
+    }
   }
 
   // ── Response 模式 ──

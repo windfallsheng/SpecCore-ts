@@ -2469,6 +2469,29 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
     }
   } catch { /* ignore */ }
 
+  // v8.3.196+: provider=llm 时用自配 LLM 生成代码，复用 runApplyMode 落盘
+  let aiProvider = 'host';
+  try {
+    const { loadConfigWithMeta } = await import('../core/unified-config');
+    const { config } = await loadConfigWithMeta();
+    aiProvider = config.settings.ai?.provider || 'host';
+  } catch { /* 默认 host */ }
+  if (aiProvider === 'llm') {
+    const { callLlm, resolveAiProviders } = await import('../core/ask-llm');
+    const providers = await resolveAiProviders('execute');
+    const llmContent = await callLlm(
+      '你是资深开发工程师。请按 prompt 要求编写代码，只输出 JSON 格式：{"files": [{"path": "文件路径", "content": "代码内容"}]}，不要输出 JSON 以外的文字。',
+      promptText,
+      providers
+    );
+    if (llmContent) {
+      options.response = llmContent;
+      await runApplyMode(iteration, options);
+      return;
+    }
+    logger.warn('⚠️ [llm] 自配 LLM 未生成代码，回退 prompt 模式');
+  }
+
   // v8.3.169+: 尝试通过 Qoder SDK 直接调度子 Agent（Qoder 环境且非 TTY 模式）
   if (!process.stdout.isTTY) {
     try {
