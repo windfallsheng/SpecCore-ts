@@ -442,26 +442,22 @@ async function extractGlobalConstraints(
     } catch { /* ignore */ }
   }
 
-  // 2. 接口契约
+  // 2. 接口契约（需求核心，保留更多内容）
   const contractPath = join(iterDir, '030-tasks', '_shared', 'API_CONTRACT.yaml');
   if (await pathExists(contractPath)) {
     try {
       const content = await readFile(contractPath, 'utf-8');
-      if (usedBudget + content.length < budget * 0.8) {
-        result.apiContract = content.slice(0, 1500);
-        usedBudget += result.apiContract.length;
-      }
+      result.apiContract = content.slice(0, 4000);
+      usedBudget += result.apiContract.length;
     } catch { /* ignore */ }
   }
 
-  // 3. 数据模型
+  // 3. 数据模型（需求核心，保留更多内容）
   const schemaPath = join(iterDir, '020-specs', 'SCHEMA.md');
   if (await pathExists(schemaPath)) {
     try {
       const content = await readFile(schemaPath, 'utf-8');
-      if (usedBudget + content.length < budget) {
-        result.dataModel = content.slice(0, 1500);
-      }
+      result.dataModel = content.slice(0, 4000);
     } catch { /* ignore */ }
   }
 
@@ -530,12 +526,20 @@ function truncateByBudget(
     }
   }
 
-  // 优先级 3：全局层 — 只加术语表（最重要）
-  if (globals.terminology && usedChars < maxChars * 0.98) {
-    lines.push('\n---\n\n## 术语表（全局共享）\n');
+  // 优先级 3：全局层 — 术语表 > 接口契约 > 数据模型（需求核心，尽量保留）
+  const globalParts = [
+    { label: '术语表（全局共享）', content: globals.terminology },
+    { label: '接口契约（全局共享）', content: globals.apiContract },
+    { label: '数据模型（全局共享）', content: globals.dataModel },
+  ];
+  for (const gp of globalParts) {
+    if (!gp.content) continue;
+    if (usedChars >= maxChars) break;
     const remaining = maxChars - usedChars - 50;
-    lines.push(globals.terminology.slice(0, remaining));
-    usedChars += globals.terminology.slice(0, remaining).length;
+    if (remaining <= 0) break;
+    lines.push(`\n---\n\n## ${gp.label}\n`);
+    lines.push(gp.content.slice(0, remaining));
+    usedChars += gp.label.length + gp.content.slice(0, remaining).length;
   }
 
   return lines.join('');

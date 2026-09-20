@@ -676,18 +676,47 @@ function getPlatformExtraFiles(platform?: string): Set<string> {
 }
 
 // v8.3.181+: 按文件类型细分预算（必须完整 vs 可以截断）
+// 需求/Spec 类一律 mode='error'（超限只告警不截断），落实「Spec 优先」原则
 const FILE_BUDGETS: Record<string, { limit: number; mode: 'error' | 'truncate' }> = {
   'CONSTITUTION.md': { limit: 6000, mode: 'error' },
-  'REQ.md': { limit: 2000, mode: 'error' },
-  'API_CONTRACT.yaml': { limit: 2000, mode: 'error' },
+  'REQ.md': { limit: 4000, mode: 'error' },
+  'REQUIREMENT.md': { limit: 4000, mode: 'error' },
+  'SCHEMA.md': { limit: 4000, mode: 'error' },
+  'ANALYSIS.md': { limit: 4000, mode: 'error' },
+  'DESIGN.md': { limit: 4000, mode: 'error' },
+  'TECH.md': { limit: 4000, mode: 'error' },
+  'DEV_GUIDE.md': { limit: 3000, mode: 'error' },
+  'CONTEXT.md': { limit: 2000, mode: 'error' },
+  'API_CONTRACT.yaml': { limit: 3000, mode: 'error' },
   'TASK.md': { limit: 1500, mode: 'truncate' },
-  'TECH.md': { limit: 3000, mode: 'truncate' },
-  'DEV_GUIDE.md': { limit: 2000, mode: 'truncate' },
 };
 const DEFAULT_BUDGET = { limit: 1000, mode: 'truncate' as const };
 
 function getFileBudget(fileName: string): { limit: number; mode: 'error' | 'truncate' } {
   return FILE_BUDGETS[fileName] ?? DEFAULT_BUDGET;
+}
+
+/**
+ * v8.3.194+: 判断 extraSpec 是否属于「需求/Spec」内容（最高优先级，不裁剪）
+ * 依据 name 判断（前缀 + 关键词），与 formatPrompt 的分层预算 P0 判定保持一致。
+ * 覆盖：需求/规格/数据库设计/技术方案/开发指南/分析/契约/任务上下文/统一检索文档块/阅读清单/用户补充
+ */
+function isSpecContent(name: string): boolean {
+  const n = name;
+  // 统一检索文档块 / 阅读清单 / 用户补充文档
+  if (n.startsWith('📄') || n.startsWith('📚')) return true;
+  if (n.includes('用户补充')) return true;
+  const nn = n.toLowerCase();
+  const keywords = [
+    '需求', '规格', 'requirement', 'req.md', 'schema',
+    '数据库', '数据模型', 'tech', '技术', 'design', '设计',
+    '契约', 'api_contract', '开发指南', 'dev_guide', 'analysis', '分析',
+    'constitution', '已知问题', '任务上下文', '子任务', 'context.md',
+  ];
+  for (const k of keywords) {
+    if (nn.includes(k)) return true;
+  }
+  return false;
 }
 
 async function scanUserCustomFiles(
@@ -2493,22 +2522,28 @@ export function formatPrompt(prompt: SpecCorePrompt, maxTokens?: number): string
   }
 
   // Level 2: 分层预算控制 extraSpecs（v8.3.125+ unit-context-assembler）
-  // 优先级: P1(结构化卡片/源码/INFO_GAP) > P2(KG上下文) > P3(全局规范/一致性检查)
+  // v8.3.194+: 优先级修正为 P0(需求/Spec，不裁剪) > P1(结构化卡片/源码/前端结构/INFO_GAP) > P2(KG上下文/任务链) > P3(其他)
   if (prompt.extraSpecs.length > 0) {
-    const BUDGET_P1 = 10000; // 高优先级: 结构化卡片、关联源码、INFO_GAP补充
+    const BUDGET_P1 = 10000; // 高优先级: 结构化卡片、关联源码、前端结构、INFO_GAP补充
     const BUDGET_P2 = 5000;  // 中优先级: 知识图谱上下文、任务关联链
     const BUDGET_P3 = 3000;  // 低优先级: 全局规范、一致性检查、项目路径
 
     function getPriority(spec: { name: string }): number {
       const n = spec.name;
-      if (n.includes('结构化代码事实') || n.includes('INFO_GAP') || n.includes('关联源码')) return 1;
-      if (n.includes('知识图谱') || n.includes('任务关联上下文')) return 2;
+      // P0: 需求/Spec 文档（最高优先级，不裁剪）
+      if (isSpecContent(n)) return 0;
+      // P1: 代码卡片 / 关联源码 / 统一检索代码切片 / 前端结构 / INFO_GAP
+      if (n.includes('结构化代码事实') || n.includes('INFO_GAP') || n.includes('关联源码')
+        || n.startsWith('🔍') || n.startsWith('💻')
+        || n.includes('组件树') || n.includes('路由') || n.includes('状态管理')) return 1;
+      // P2: 知识图谱上下文 / 任务关联链
+      if (n.includes('知识图谱') || n.includes('任务关联上下文') || n.includes('任务关联链')) return 2;
       return 3; // CONSISTENCY_CHECK、工程路径、全局规范等
     }
 
     const sorted = [...prompt.extraSpecs].sort((a, b) => getPriority(a) - getPriority(b));
     const budgeted: typeof prompt.extraSpecs = [];
-    let usedP1 = 0, usedP2 = 0, usedP3 = 0;
+    let usedP0 = 0, usedP1 = 0, usedP2 = 0, usedP3 = 0;
 
     for (const spec of sorted) {
       const p = getPriority(spec);
@@ -2516,7 +2551,10 @@ export function formatPrompt(prompt: SpecCorePrompt, maxTokens?: number): string
       let keep = true;
       let content = spec.content;
 
-      if (p === 1) {
+      if (p === 0) {
+        // P0 需求/Spec：无条件完整保留，不占 P1/P2/P3 预算（已在上游限流）
+        usedP0 += len;
+      } else if (p === 1) {
         if (usedP1 + len > BUDGET_P1) {
           const remain = Math.max(0, BUDGET_P1 - usedP1);
           if (remain < 200) { keep = false; }
@@ -2546,7 +2584,7 @@ export function formatPrompt(prompt: SpecCorePrompt, maxTokens?: number): string
     tokens = estimateTokens(result);
     if (tokens <= budget) {
       const removed = prompt.extraSpecs.length - budgeted.length;
-      logger?.info?.(`   🪶 Prompt 已简化：分层预算控制 (P1:${usedP1}/${BUDGET_P1} P2:${usedP2}/${BUDGET_P2} P3:${usedP3}/${BUDGET_P3}${removed > 0 ? ` 移除${removed}项` : ''})`);
+      logger?.info?.(`   🪶 Prompt 已简化：分层预算控制 (P0:${usedP0}字不裁剪 P1:${usedP1}/${BUDGET_P1} P2:${usedP2}/${BUDGET_P2} P3:${usedP3}/${BUDGET_P3}${removed > 0 ? ` 移除${removed}项` : ''})`);
       return result;
     }
   }
