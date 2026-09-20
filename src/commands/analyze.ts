@@ -264,6 +264,29 @@ async function writeFileMerged(
   await writeFile(fp, content);
 }
 
+/** v8.3.196+: 把 AI 返回的 JSON 文档内容落盘到 020-specs/，返回落盘数量（非 JSON 或空则 0） */
+async function applyJsonDocs(content: string, iter: string): Promise<number> {
+  const trimmed = content.trim();
+  if (!trimmed.startsWith('{')) return 0;
+  try {
+    const docs = JSON.parse(trimmed);
+    if (!docs || typeof docs !== 'object' || Array.isArray(docs)) return 0;
+    const iterDir = await getIterationDir(iter);
+    const specDir = join(iterDir, '020-specs');
+    let applied = 0;
+    for (const [filename, docContent] of Object.entries(docs)) {
+      if (typeof docContent !== 'string') continue;
+      // 迭代级需求文档不在此写（原始需求在 010-requirements）
+      if (filename === 'REQUIREMENT.md' || filename === 'overview/REQUIREMENT.md') continue;
+      const fp = join(specDir, filename);
+      await ensureDir(dirname(fp));
+      await writeFile(fp, docContent);
+      applied++;
+    }
+    return applied;
+  } catch { return 0; }
+}
+
 export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
   // v6.97.0+ 修复：全局分析时统一设置 iteration 为 'GLOBAL'，避免任何 fallback 到 getDefaultIteration()
   // 这是根治方案：后面所有 "options.iteration || await getDefaultIteration()" 都会命中 options.iteration
@@ -1199,6 +1222,31 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       process.stdout.write(`[SPECCORE_CONTEXT_TYPE: platform-only]\n\n`);
     }
 
+    // v8.3.196+: 读取 AI provider，llm 时用自配 LLM 直接生成并落盘（不依赖宿主）
+    let aiProvider: string = 'host';
+    try {
+      const { config } = await loadConfigWithMeta();
+      aiProvider = config.settings.ai?.provider || 'host';
+    } catch { /* 默认 host */ }
+    if (aiProvider === 'llm') {
+      const { callLlm } = await import('../core/ask-llm');
+      const llmContent = await callLlm(
+        '你是资深需求分析师。请按用户 prompt 的要求分析需求，并只输出 JSON 文档格式：{"文档文件名": "文档内容"}。文件名用 020-specs 下的 Spec 文档名（如 TECH.md / TEST.md / UI_SPEC.md），不要输出 JSON 以外的任何文字。',
+        prompt
+      );
+      if (llmContent) {
+        const applied = await applyJsonDocs(llmContent, iter!);
+        if (applied > 0) {
+          logger.info(`✅ [llm] 自配 LLM 生成并写入 ${applied} 个文档到 020-specs/`);
+          process.stdout.write(`[SPECCORE_STEP_DONE]\n`);
+          process.stdout.write(`✅ 已用自配 LLM 生成并写入 ${applied} 个文档\n`);
+          process.exitCode = 0;
+          return;
+        }
+      }
+      logger.warn('⚠️ [llm] 自配 LLM 未生成有效内容，回退到 prompt 模式');
+    }
+
     // v8.3.169+: 尝试通过 Qoder SDK 直接调度子 Agent（Qoder 环境且非 TTY 模式）
     const activeSubagent = featureSubagent || platformSubagent;
     if (activeSubagent && !process.stdout.isTTY) {
@@ -1221,26 +1269,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
           }
           if (dispatchResult.content) {
             // v8.3.196+: 若子 Agent 返回 JSON 文档格式，自动落盘（修复「分析结果只打印不落盘」）
-            const trimmed = dispatchResult.content.trim();
-            let autoApplied = 0;
-            if (trimmed.startsWith('{')) {
-              try {
-                const docs = JSON.parse(trimmed);
-                if (docs && typeof docs === 'object' && !Array.isArray(docs)) {
-                  const iterDir2 = await getIterationDir(iter!);
-                  const specDir = join(iterDir2, '020-specs');
-                  for (const [filename, docContent] of Object.entries(docs)) {
-                    if (typeof docContent !== 'string') continue;
-                    // 迭代级需求文档不在此写（原始需求在 010-requirements）
-                    if (filename === 'REQUIREMENT.md' || filename === 'overview/REQUIREMENT.md') continue;
-                    const fp = join(specDir, filename);
-                    await ensureDir(dirname(fp));
-                    await writeFile(fp, docContent);
-                    autoApplied++;
-                  }
-                }
-              } catch { /* content 非合法 JSON，回退手动 --apply */ }
-            }
+            const autoApplied = await applyJsonDocs(dispatchResult.content, iter!);
             if (autoApplied > 0) {
               process.stdout.write(`✅ 已自动写入 ${autoApplied} 个文档到 020-specs/（宿主子 Agent 直接落盘）\n`);
               process.exitCode = 0;
