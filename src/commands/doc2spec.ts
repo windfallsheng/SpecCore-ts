@@ -846,14 +846,17 @@ export async function splitDocumentToUnits(
     globalSections = getGlobalSections(content, units);
   }
 
-  if (units.length === 0) {
+  // 无功能单元且无全局信息才跳过（纯总览文档如 PRD 的全局信息仍要归到 overview）
+  if (units.length === 0 && globalSections.length === 0) {
     logger.warn('未检测到可拆分的功能单元，跳过拆分');
     return;
   }
 
-  logger.info(`🔍 检测到 ${units.length} 个候选功能单元`);
-  for (const u of units) {
-    logger.info(`   • ${u.title}`);
+  if (units.length > 0) {
+    logger.info(`🔍 检测到 ${units.length} 个候选功能单元`);
+    for (const u of units) {
+      logger.info(`   • ${u.title}`);
+    }
   }
   if (globalSections.length > 0) {
     logger.info(`   📋 ${globalSections.length} 个全局信息章节 → overview/（产品定位/名词/验收标准等，不拆分）`);
@@ -904,10 +907,12 @@ export async function splitDocumentToUnits(
   await writeFile(featuresIndexPath, featuresIndex);
 
   // v8.3.194+: 全局信息章节（产品定位/名词约定/验收标准等）归到 overview/，不丢弃
+  // 按源文档名分文件，避免多文档的全局信息互相覆盖
   if (globalSections.length > 0) {
     const overviewDir = join(iterDir, '010-requirements', 'overview');
     await ensureDir(overviewDir);
-    let globalContent = `# 项目全局上下文\n\n> 由 doc2spec --split 自动整理（非功能内容：产品定位/名词约定/非功能需求/验收标准汇总等）\n> 来源: ${sourceFileName}\n> 生成时间: ${new Date().toISOString().split('T')[0]}\n\n`;
+    const docSlug = sanitizeUnitName(basename(sourceFileName) || 'context');
+    let globalContent = `# 项目全局上下文 — ${sourceFileName}\n\n> 由 doc2spec --split 自动整理（非功能内容：产品定位/名词约定/非功能需求/验收标准汇总等）\n> 来源: ${sourceFileName}\n> 生成时间: ${new Date().toISOString().split('T')[0]}\n\n`;
     let collected = 0;
     for (const gs of globalSections) {
       const range = findSectionRange(content, gs);
@@ -917,8 +922,8 @@ export async function splitDocumentToUnits(
       collected++;
     }
     if (collected > 0) {
-      await writeFile(join(overviewDir, 'GLOBAL_CONTEXT.md'), globalContent);
-      logger.info(`   📋 全局上下文已写入: overview/GLOBAL_CONTEXT.md (${collected} 个章节)`);
+      await writeFile(join(overviewDir, `GLOBAL_CONTEXT-${docSlug}.md`), globalContent);
+      logger.info(`   📋 全局上下文已写入: overview/GLOBAL_CONTEXT-${docSlug}.md (${collected} 个章节)`);
     }
   }
 
@@ -938,7 +943,7 @@ function getGlobalSections(content: string, units: ScannedUnit[]): string[] {
      .replace(/^\d+[、.．\s]+/, '')
      .replace(/^第[一二三四五六七八九十百\d]+[章节篇部分]+[、.．\s]*/, '');
   const skipPrefix = /^(附录|术语表|参考文献|目录|引言|总结|致谢|版权声明|修订记录|changelog|glossary|references|table of contents|introduction|summary|acknowledgments)/i;
-  const skipContains = ['概述', '名词', '背景', '目标', '验收标准', '上线计划', '关联文档', '功能需求', '非功能需求', 'overview'];
+  const skipContains = ['概述', '名词', '背景', '目标', '验收标准', '上线计划', '关联文档', '功能需求', '非功能需求', '用户画像', '功能架构', '风险与缓解', '产品视角', 'overview'];
   const global: string[] = [];
   for (const line of lines) {
     const m = line.match(/^##\s+(.+)$/);
@@ -1120,7 +1125,7 @@ function scanUnits(content: string): ScannedUnit[] {
      .replace(/^第[一二三四五六七八九十百\d]+[章节篇部分]+[、.．\s]*/, '');
   const skipPrefix = /^(附录|术语表|参考文献|目录|引言|总结|致谢|版权声明|修订记录|changelog|glossary|references|table of contents|introduction|summary|acknowledgments)/i;
   // 包含匹配：标题里含这些词即视为非功能章节（如"文档概述"、"项目背景"、"验收标准汇总"）
-  const skipContains = ['概述', '名词', '背景', '目标', '验收标准', '上线计划', '关联文档', '功能需求', '非功能需求', 'overview'];
+  const skipContains = ['概述', '名词', '背景', '目标', '验收标准', '上线计划', '关联文档', '功能需求', '非功能需求', '用户画像', '功能架构', '风险与缓解', '产品视角', 'overview'];
   return units.filter(u => {
     const title = stripSectionNo(u.title).trim();
     if (!title) return false;
