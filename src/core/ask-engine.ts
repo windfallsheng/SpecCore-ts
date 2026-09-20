@@ -673,6 +673,9 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
     if (params.name) { fullCommand += ` -n "${params.name}"`; paramNotes.push(`📛 名称: ${params.name}`); }
     if (params.iteration) { fullCommand += ` --iter "${params.iteration}"`; paramNotes.push(`🔄 迭代: ${params.iteration}`); }
     if (params.scope) { fullCommand += ` --scope ${params.scope}`; paramNotes.push(`🌐 范围: ${params.scope}`); }
+    // v8.3.193+: 源码反推（--from-code）/ 源码扫描（--with-code），互斥
+    if (kbMatch.name === 'analyze' && params.fromCode) { fullCommand += ` --from-code`; paramNotes.push(`🔍 源码反推: 从源码生成需求文档`); }
+    if (kbMatch.name === 'analyze' && params.withCode) { fullCommand += ` --with-code`; paramNotes.push(`🔍 源码扫描: 结合工程源码分析`); }
     // v8.3.190+: 澄清三态 ask 单次覆盖（仅 analyze）
     if (kbMatch.name === 'analyze' && params.clarify === 'on') { fullCommand += ` --clarify`; paramNotes.push(`🔍 澄清: 强制澄清`); }
     if (kbMatch.name === 'analyze' && params.clarify === 'off') { fullCommand += ` --skip-clarify`; paramNotes.push(`⏭️ 澄清: 跳过`); }
@@ -805,6 +808,10 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
     if (params.task) {
       fullCommand += ` --task "${params.task}"`;
       paramNotes.push(`📋 任务: ${params.task}`);
+    }
+    if (params.fromCode) {
+      fullCommand += ` --from-code`;
+      paramNotes.push(`🔍 源码反推: 从源码生成需求与技术文档`);
     }
     if (params.withCode) {
       fullCommand += ` --with-code`;

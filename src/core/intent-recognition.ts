@@ -183,6 +183,9 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
       '聚焦分析', '限定分析', '针对分析',
       // v7.2.0+: 代码关联 — --with-code
       '带代码分析', '连代码分析', '源码分析', '结构化分析',
+      // v8.3.193+: 从源码反推需求 — --from-code（spec-source-to-global 工作流）
+      '从源码反推', '源码反推', '从代码反推', '代码反推', '反推需求',
+      '逆向分析', '逆向生成', '反推', '逆向工程',
     ],
     patterns: [
       '分析(.+)需求', '分析(.+)代码',
@@ -212,7 +215,7 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
       '迭代(.+)深度分析(.+)', '分析迭代(.+)中的(.+)',
     ],
     description: 'AI 分析 — 需求完整性 + 改动范围 + 风险矩阵（支持全局级/迭代级/任务级/重新分析/深度分析/按需分析/代码关联）',
-    args: '-I <iteration> 或 --scope global|task --deep <doc> --iterative --filter <keywords> --with-code --supplement --sync',
+    args: '-I <iteration> 或 --scope global|task --deep <doc> --iterative --filter <keywords> --with-code --from-code --supplement --sync',
   },
   // 任务拆分（任务化）
   {
@@ -815,10 +818,17 @@ function extractParams(input: string, mapping: CommandMapping): Record<string, s
     params.task = taskNameMatch[1];
   }
 
-  // 检测 --with-code 参数（源码扫描）
-  const codeKeywords = ['源码', '代码', '结合源码', '扫描代码', '读代码', '看代码', 'with-code', 'with code'];
-  if (codeKeywords.some(k => input.includes(k))) {
-    params.withCode = 'true';
+  // 检测 --from-code 参数（从源码反推需求，spec-source-to-global 工作流）
+  // 注意：与 --with-code 互斥，反推是更强信号（反推 > 扫描）
+  const fromCodeKeywords = ['从源码反推', '源码反推', '从代码反推', '代码反推', '反推需求', '反推', '逆向分析', '逆向生成', '逆向工程'];
+  if (fromCodeKeywords.some(k => input.includes(k))) {
+    params.fromCode = 'true';
+  } else {
+    // 检测 --with-code 参数（源码扫描）
+    const codeKeywords = ['源码', '代码', '结合源码', '扫描代码', '读代码', '看代码', 'with-code', 'with code'];
+    if (codeKeywords.some(k => input.includes(k))) {
+      params.withCode = 'true';
+    }
   }
 
   // 检测澄清步骤三态（v8.3.190+：ask 单次覆盖 analyze 的 optional_steps.clarify）
