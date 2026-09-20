@@ -249,8 +249,43 @@ export async function reqDocCommand(options: ReqDocOptions): Promise<void> {
       sourceFile: sourceName,
     });
 
+    // v8.3.196+: provider=llm 时用自配 LLM 生成 PRD（复用 --apply 落盘）
+    let aiProvider = 'host';
+    try {
+      const { loadConfigWithMeta } = await import('../core/unified-config');
+      const { config } = await loadConfigWithMeta();
+      aiProvider = config.settings.ai?.provider || 'host';
+    } catch { /* 默认 host */ }
+
+    const tryLlmReqDoc = async (): Promise<boolean> => {
+      try {
+        const { callLlm, resolveAiProviders } = await import('../core/ask-llm');
+        const providers = await resolveAiProviders('req-doc');
+        const llmContent = await callLlm(
+          '你是产品分析师。请按 prompt 要求将原始需求整理为专业的需求文档（PRD），只输出 Markdown 文档内容，不要输出其他文字。',
+          prompt,
+          providers,
+          8000
+        );
+        if (llmContent) {
+          options.apply = llmContent;
+          return true;
+        }
+      } catch (e: any) {
+        logger.debug(`[req-doc] 自配 LLM 生成失败: ${e.message}`);
+      }
+      return false;
+    };
+
+    // llm 优先模式：先用自配 LLM，失败回退宿主
+    if (aiProvider === 'llm') {
+      if (!(await tryLlmReqDoc())) {
+        logger.warn('⚠️ [llm] 自配 LLM 未生成结果，回退宿主模式');
+      }
+    }
+
     // v8.3.189+: 非 TTY 下尝试通过 Qoder SDK 直接调度 product-analyst 完成需求文档化
-    if (!process.stdout.isTTY) {
+    if (!options.apply && !process.stdout.isTTY) {
       try {
         const agentCtx: AgentContext = {
           subagent: 'product-analyst',
@@ -273,30 +308,37 @@ export async function reqDocCommand(options: ReqDocOptions): Promise<void> {
           process.exitCode = 0;
           return;
         }
+        // 宿主 SDK 调度失败（success=false）→ auto 时回退自配 LLM
+        if (aiProvider === 'auto') await tryLlmReqDoc();
       } catch (e: any) {
-        logger.debug(`[req-doc] SDK 调度尝试失败: ${e.message}，回退到 Prompt 模式`);
+        logger.debug(`[req-doc] SDK 调度尝试失败: ${e.message}`);
+        // 宿主异常 → auto 时回退自配 LLM
+        if (aiProvider === 'auto') await tryLlmReqDoc();
       }
     }
 
-    process.stdout.write(prompt);
-    process.exitCode = 10;
+    // 有自配 LLM 结果则 fall through 到下方 Apply 落盘；否则输出 Prompt
+    if (!options.apply) {
+      process.stdout.write(prompt);
+      process.exitCode = 10;
 
-    // v8.3.0+: local 模式下提示闭环命令
-    if (isLocal) {
-      const entryId = await stageContent(process.cwd(), rawContent, {
-        type: 'clarify',
-        source: options.from ? 'file' : 'direct',
-        sourcePath: options.from,
-      });
-      logger.info('');
-      logger.info('📋 临时工作区条目已创建:');
-      logger.info(`   ID: ${entryId}`);
-      logger.info('');
-      logger.info('下一步:');
-      logger.info(`   将 Prompt 发给 AI，获取整理后的 PRD`);
-      logger.info(`   然后执行: speccore req-doc --apply '<PRD内容>' --local`);
+      // v8.3.0+: local 模式下提示闭环命令
+      if (isLocal) {
+        const entryId = await stageContent(process.cwd(), rawContent, {
+          type: 'clarify',
+          source: options.from ? 'file' : 'direct',
+          sourcePath: options.from,
+        });
+        logger.info('');
+        logger.info('📋 临时工作区条目已创建:');
+        logger.info(`   ID: ${entryId}`);
+        logger.info('');
+        logger.info('下一步:');
+        logger.info(`   将 Prompt 发给 AI，获取整理后的 PRD`);
+        logger.info(`   然后执行: speccore req-doc --apply '<PRD内容>' --local`);
+      }
+      return;
     }
-    return;
   }
 
   // ── Apply 模式：接收 AI 结果写入文件 ──

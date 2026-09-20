@@ -19,6 +19,7 @@
 import { pathExists, readFile, stat } from 'fs-extra';
 import { join } from 'path';
 import { renderHtmlPrototype } from './html-prototype';
+import { classifyContent, ContentPriority } from './context-budget';
 
 // ═══════════════════════════════════════════════════════════
 // 类型定义
@@ -27,8 +28,22 @@ import { renderHtmlPrototype } from './html-prototype';
 /** 内容类型 */
 export type ContentType = 'md' | 'code' | 'image' | 'html' | 'yaml' | 'json' | 'external';
 
-/** 相关性分级 */
+/**
+ * 相关性分级（三档，映射自 context-budget 的统一四档 ContentPriority）
+ *   core(0) = 需求/Spec        ← P0
+ *   related(1|2) = 代码/源码/图谱 ← P1 + P2
+ *   peripheral(3) = 其他        ← P3
+ * 分级判定统一走 context-budget.classifyContent，本文件不再自行定义关键词。
+ */
 export type Relevance = 'core' | 'related' | 'peripheral';
+
+/** 统一分级（唯一来源：context-budget.classifyContent）→ 三档 Relevance */
+export function classifyRelevance(name: string): Relevance {
+  const p: ContentPriority = classifyContent(name);
+  if (p === 0) return 'core';
+  if (p === 1 || p === 2) return 'related';
+  return 'peripheral';
+}
 
 /** 宿主 AI 能力（由 ask-host-ai / agent-adapter 探测后传入） */
 export interface HostCapabilities {

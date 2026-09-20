@@ -463,7 +463,6 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     // v8.3.166+: 输出 subagent 标记（task-decomposer）
     // v8.3.169+: 尝试通过 Qoder SDK 直接调度子 Agent
     const promptText = formatPrompt(prompt) + featureBatchHint;
-    // v8.3.196+: provider=llm 时用自配 LLM 生成任务 JSON，复用 --response 落盘
     let llmHandled = false;
     let aiProvider = 'host';
     try {
@@ -471,20 +470,32 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       const { config } = await loadConfigWithMeta();
       aiProvider = config.settings.ai?.provider || 'host';
     } catch { /* 默认 host */ }
+    // v8.3.196+: 用自配 LLM 生成任务 JSON，成功设 llmHandled（供 llm 优先 / auto 回退复用）
+    const tryLlmTaskify = async (): Promise<boolean> => {
+      try {
+        const { callLlm, resolveAiProviders } = await import('../../core/ask-llm');
+        const providers = await resolveAiProviders('taskify');
+        const llmContent = await callLlm(
+          '你是任务拆解专家。请按 prompt 要求拆分任务，只输出 JSON 数组格式的任务列表，不要输出 JSON 以外的文字。',
+          promptText,
+          providers,
+          4000
+        );
+        if (llmContent) {
+          options.response = llmContent;
+          llmHandled = true;
+          return true;
+        }
+      } catch (e: any) {
+        logger.debug(`[split] 自配 LLM 生成失败: ${e.message}`);
+      }
+      return false;
+    };
+
+    // llm 优先模式：先用自配 LLM，失败回退宿主
     if (aiProvider === 'llm') {
-      const { callLlm, resolveAiProviders } = await import('../../core/ask-llm');
-      const providers = await resolveAiProviders('taskify');
-      const llmContent = await callLlm(
-        '你是任务拆解专家。请按 prompt 要求拆分任务，只输出 JSON 数组格式的任务列表，不要输出 JSON 以外的文字。',
-        promptText,
-        providers,
-        4000
-      );
-      if (llmContent) {
-        options.response = llmContent;
-        llmHandled = true;
-      } else {
-        logger.warn('⚠️ [llm] 自配 LLM 未生成任务，回退 prompt 模式');
+      if (!(await tryLlmTaskify())) {
+        logger.warn('⚠️ [llm] 自配 LLM 未生成任务，回退宿主模式');
       }
     }
     if (!llmHandled && !process.stdout.isTTY) {
@@ -510,8 +521,12 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           process.exitCode = 0;
           return;
         }
+        // 宿主 SDK 调度失败（success=false）→ auto 时回退自配 LLM
+        if (aiProvider === 'auto') await tryLlmTaskify();
       } catch (e: any) {
-        logger.debug(`[split] SDK 调度尝试失败: ${e.message}，回退到 Prompt 模式`);
+        logger.debug(`[split] SDK 调度尝试失败: ${e.message}`);
+        // 宿主异常 → auto 时回退自配 LLM
+        if (aiProvider === 'auto') await tryLlmTaskify();
       }
     }
 

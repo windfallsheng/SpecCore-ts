@@ -19,6 +19,8 @@ import {
   assembleChunksForPrompt, indexTaskDocuments, extractHtmlText,
 } from './rag-engine';
 import { unifiedSearch, assembleUnifiedContext } from './unified-retrieval';
+// v8.3.194+: 统一内容分级 + 预算（单一事实源，替代本地 isSpecContent/getPriority）
+import { applyTierBudget, TIER_BUDGETS } from './context-budget';
 // v8.3.183+: 统一内容供给管线（md 大纲摘要，替代链接全文内联）
 import { extractMdOutline } from './content-delivery';
 // v8.3.183+: HTML 原型渲染（Playwright 截图 + accessibility tree，替代纯文本）
@@ -694,29 +696,6 @@ const DEFAULT_BUDGET = { limit: 1000, mode: 'truncate' as const };
 
 function getFileBudget(fileName: string): { limit: number; mode: 'error' | 'truncate' } {
   return FILE_BUDGETS[fileName] ?? DEFAULT_BUDGET;
-}
-
-/**
- * v8.3.194+: 判断 extraSpec 是否属于「需求/Spec」内容（最高优先级，不裁剪）
- * 依据 name 判断（前缀 + 关键词），与 formatPrompt 的分层预算 P0 判定保持一致。
- * 覆盖：需求/规格/数据库设计/技术方案/开发指南/分析/契约/任务上下文/统一检索文档块/阅读清单/用户补充
- */
-function isSpecContent(name: string): boolean {
-  const n = name;
-  // 统一检索文档块 / 阅读清单 / 用户补充文档
-  if (n.startsWith('📄') || n.startsWith('📚')) return true;
-  if (n.includes('用户补充')) return true;
-  const nn = n.toLowerCase();
-  const keywords = [
-    '需求', '规格', 'requirement', 'req.md', 'schema',
-    '数据库', '数据模型', 'tech', '技术', 'design', '设计',
-    '契约', 'api_contract', '开发指南', 'dev_guide', 'analysis', '分析',
-    'constitution', '已知问题', '任务上下文', '子任务', 'context.md',
-  ];
-  for (const k of keywords) {
-    if (nn.includes(k)) return true;
-  }
-  return false;
 }
 
 async function scanUserCustomFiles(
@@ -2521,64 +2500,12 @@ export function formatPrompt(prompt: SpecCorePrompt, maxTokens?: number): string
     }
   }
 
-  // Level 2: 分层预算控制 extraSpecs（v8.3.125+ unit-context-assembler）
-  // v8.3.194+: 优先级修正为 P0(需求/Spec，不裁剪) > P1(结构化卡片/源码/前端结构/INFO_GAP) > P2(KG上下文/任务链) > P3(其他)
+  // Level 2: 分层预算控制 extraSpecs（v8.3.194+: 收敛到 context-budget 统一分级 + 预算）
+  // 优先级: P0(需求/Spec 不裁剪) > P1(结构化卡片/源码/前端结构/INFO_GAP) > P2(KG/任务链) > P3(其他)
   if (prompt.extraSpecs.length > 0) {
-    const BUDGET_P1 = 10000; // 高优先级: 结构化卡片、关联源码、前端结构、INFO_GAP补充
-    const BUDGET_P2 = 5000;  // 中优先级: 知识图谱上下文、任务关联链
-    const BUDGET_P3 = 3000;  // 低优先级: 全局规范、一致性检查、项目路径
-
-    function getPriority(spec: { name: string }): number {
-      const n = spec.name;
-      // P0: 需求/Spec 文档（最高优先级，不裁剪）
-      if (isSpecContent(n)) return 0;
-      // P1: 代码卡片 / 关联源码 / 统一检索代码切片 / 前端结构 / INFO_GAP
-      if (n.includes('结构化代码事实') || n.includes('INFO_GAP') || n.includes('关联源码')
-        || n.startsWith('🔍') || n.startsWith('💻')
-        || n.includes('组件树') || n.includes('路由') || n.includes('状态管理')) return 1;
-      // P2: 知识图谱上下文 / 任务关联链
-      if (n.includes('知识图谱') || n.includes('任务关联上下文') || n.includes('任务关联链')) return 2;
-      return 3; // CONSISTENCY_CHECK、工程路径、全局规范等
-    }
-
-    const sorted = [...prompt.extraSpecs].sort((a, b) => getPriority(a) - getPriority(b));
-    const budgeted: typeof prompt.extraSpecs = [];
-    let usedP0 = 0, usedP1 = 0, usedP2 = 0, usedP3 = 0;
-
-    for (const spec of sorted) {
-      const p = getPriority(spec);
-      const len = spec.content.length;
-      let keep = true;
-      let content = spec.content;
-
-      if (p === 0) {
-        // P0 需求/Spec：无条件完整保留，不占 P1/P2/P3 预算（已在上游限流）
-        usedP0 += len;
-      } else if (p === 1) {
-        if (usedP1 + len > BUDGET_P1) {
-          const remain = Math.max(0, BUDGET_P1 - usedP1);
-          if (remain < 200) { keep = false; }
-          else { content = content.slice(0, remain) + '\n> ... (P1预算截断)'; }
-        }
-        if (keep) usedP1 += content.length;
-      } else if (p === 2) {
-        if (usedP2 + len > BUDGET_P2) {
-          const remain = Math.max(0, BUDGET_P2 - usedP2);
-          if (remain < 200) { keep = false; }
-          else { content = content.slice(0, remain) + '\n> ... (P2预算截断)'; }
-        }
-        if (keep) usedP2 += content.length;
-      } else {
-        if (usedP3 + len > BUDGET_P3) {
-          const remain = Math.max(0, BUDGET_P3 - usedP3);
-          if (remain < 200) { keep = false; }
-          else { content = content.slice(0, remain) + '\n> ... (P3预算截断)'; }
-        }
-        if (keep) usedP3 += content.length;
-      }
-
-      if (keep) budgeted.push({ ...spec, content });
-    }
+    const { kept: budgeted, used } = applyTierBudget(prompt.extraSpecs);
+    const { p0: usedP0, p1: usedP1, p2: usedP2, p3: usedP3 } = used;
+    const BUDGET_P1 = TIER_BUDGETS.P1, BUDGET_P2 = TIER_BUDGETS.P2, BUDGET_P3 = TIER_BUDGETS.P3;
 
     result = buildPromptText({ ...prompt, extraSpecs: budgeted });
     tokens = estimateTokens(result);

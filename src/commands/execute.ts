@@ -2476,21 +2476,32 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
     const { config } = await loadConfigWithMeta();
     aiProvider = config.settings.ai?.provider || 'host';
   } catch { /* 默认 host */ }
-  if (aiProvider === 'llm') {
-    const { callLlm, resolveAiProviders } = await import('../core/ask-llm');
-    const providers = await resolveAiProviders('execute');
-    const llmContent = await callLlm(
-      '你是资深开发工程师。请按 prompt 要求编写代码，只输出 JSON 格式：{"files": [{"path": "文件路径", "content": "代码内容"}]}，不要输出 JSON 以外的文字。',
-      promptText,
-      providers,
-      8000
-    );
-    if (llmContent) {
-      options.response = llmContent;
-      await runApplyMode(iteration, options);
-      return;
+  // v8.3.196+: 用自配 LLM 生成代码并落盘，成功返回 true（供 llm 优先 / auto 回退复用）
+  const tryLlmExecute = async (): Promise<boolean> => {
+    try {
+      const { callLlm, resolveAiProviders } = await import('../core/ask-llm');
+      const providers = await resolveAiProviders('execute');
+      const llmContent = await callLlm(
+        '你是资深开发工程师。请按 prompt 要求编写代码，只输出 JSON 格式：{"files": [{"path": "文件路径", "content": "代码内容"}]}，不要输出 JSON 以外的文字。',
+        promptText,
+        providers,
+        8000
+      );
+      if (llmContent) {
+        options.response = llmContent;
+        await runApplyMode(iteration, options);
+        return true;
+      }
+    } catch (e: any) {
+      logger.debug(`[execute] 自配 LLM 生成失败: ${e.message}`);
     }
-    logger.warn('⚠️ [llm] 自配 LLM 未生成代码，回退 prompt 模式');
+    return false;
+  };
+
+  // llm 优先模式：先用自配 LLM，失败回退宿主
+  if (aiProvider === 'llm') {
+    if (await tryLlmExecute()) return;
+    logger.warn('⚠️ [llm] 自配 LLM 未生成代码，回退宿主模式');
   }
 
   // v8.3.169+: 尝试通过 Qoder SDK 直接调度子 Agent（Qoder 环境且非 TTY 模式）
@@ -2518,8 +2529,12 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
         process.exitCode = 0;
         return;
       }
+      // 宿主 SDK 调度失败（success=false）→ auto 时回退自配 LLM
+      if (aiProvider === 'auto' && await tryLlmExecute()) return;
     } catch (e: any) {
-      logger.debug(`[execute] SDK 调度尝试失败: ${e.message}，回退到 Prompt 模式`);
+      logger.debug(`[execute] SDK 调度尝试失败: ${e.message}`);
+      // 宿主异常 → auto 时回退自配 LLM
+      if (aiProvider === 'auto' && await tryLlmExecute()) return;
     }
   }
 

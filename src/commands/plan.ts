@@ -193,9 +193,45 @@ export async function planCommand(options: PlanOptions): Promise<void> {
       }
     } catch { /* ignore */ }
 
+    // v8.3.196+: provider=llm 时用自配 LLM 生成计划（复用 --response 落盘）
+    let aiProvider = 'host';
+    try {
+      const { loadConfigWithMeta } = await import('../core/unified-config');
+      const { config } = await loadConfigWithMeta();
+      aiProvider = config.settings.ai?.provider || 'host';
+    } catch { /* 默认 host */ }
+
+    const tryLlmPlan = async (): Promise<boolean> => {
+      try {
+        const { callLlm, resolveAiProviders } = await import('../core/ask-llm');
+        const providers = await resolveAiProviders('plan');
+        const llmContent = await callLlm(
+          '你是项目计划专家。请按 prompt 要求生成开发计划，只输出 Markdown 计划内容，不要输出其他文字。',
+          promptText,
+          providers,
+          8000
+        );
+        if (llmContent) {
+          options.response = llmContent;
+          options.iteration = options.iteration || iter; // 保证 response 落盘可用
+          return true;
+        }
+      } catch (e: any) {
+        logger.debug(`[plan] 自配 LLM 生成失败: ${e.message}`);
+      }
+      return false;
+    };
+
+    // llm 优先模式：先用自配 LLM，失败回退宿主
+    if (aiProvider === 'llm') {
+      if (!(await tryLlmPlan())) {
+        logger.warn('⚠️ [llm] 自配 LLM 未生成计划，回退宿主模式');
+      }
+    }
+
     // v8.3.165+: 输出 subagent 角色标记（schedule-planner）
     // v8.3.169+: 尝试通过 Qoder SDK 直接调度子 Agent
-    if (!process.stdout.isTTY) {
+    if (!options.response && !process.stdout.isTTY) {
       try {
         const agentCtx: AgentContext = {
           subagent: 'schedule-planner',
@@ -218,21 +254,28 @@ export async function planCommand(options: PlanOptions): Promise<void> {
           process.exitCode = 0;
           return;
         }
+        // 宿主 SDK 调度失败（success=false）→ auto 时回退自配 LLM
+        if (aiProvider === 'auto') await tryLlmPlan();
       } catch (e: any) {
-        logger.debug(`[plan] SDK 调度尝试失败: ${e.message}，回退到 Prompt 模式`);
+        logger.debug(`[plan] SDK 调度尝试失败: ${e.message}`);
+        // 宿主异常 → auto 时回退自配 LLM
+        if (aiProvider === 'auto') await tryLlmPlan();
       }
     }
 
-    const subagentOutput = [
-      `[SPECCORE_SESSION_AGENT: schedule-planner]`,
-      `[SPECCORE_CONTEXT_BUDGET: 12000]`,
-      `[SPECCORE_CONTEXT_TYPE: full]`,
-      ``,
-      promptText,
-    ].join('\n');
-    process.stdout.write(subagentOutput);
-    process.exitCode = 10;
-    return;
+    // 有自配 LLM 结果则 fall through 到下方 Response 落盘；否则输出 Prompt
+    if (!options.response) {
+      const subagentOutput = [
+        `[SPECCORE_SESSION_AGENT: schedule-planner]`,
+        `[SPECCORE_CONTEXT_BUDGET: 12000]`,
+        `[SPECCORE_CONTEXT_TYPE: full]`,
+        ``,
+        promptText,
+      ].join('\n');
+      process.stdout.write(subagentOutput);
+      process.exitCode = 10;
+      return;
+    }
   }
 
   // ── Response 模式: AI 写入计划内容 ──

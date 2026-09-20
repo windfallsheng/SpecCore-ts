@@ -287,6 +287,35 @@ async function applyJsonDocs(content: string, iter: string): Promise<number> {
   } catch { return 0; }
 }
 
+/**
+ * v8.3.196+: 用自配 LLM 生成分析文档并落盘，成功返回 true。
+ * 供 provider=llm（llm 优先）和 provider=auto（宿主失败回退 llm）复用。
+ */
+async function tryLlmGenerate(prompt: string, iter: string): Promise<boolean> {
+  try {
+    const { callLlm, resolveAiProviders } = await import('../core/ask-llm');
+    const providers = await resolveAiProviders('analyze');
+    const llmContent = await callLlm(
+      '你是资深需求分析师。请按用户 prompt 的要求分析需求，并只输出 JSON 文档格式：{"文档文件名": "文档内容"}。文件名用 020-specs 下的 Spec 文档名（如 TECH.md / TEST.md / UI_SPEC.md），不要输出 JSON 以外的任何文字。',
+      prompt,
+      providers,
+      8000
+    );
+    if (llmContent) {
+      const applied = await applyJsonDocs(llmContent, iter);
+      if (applied > 0) {
+        logger.info(`✅ [llm] 自配 LLM 生成并写入 ${applied} 个文档到 020-specs/`);
+        process.stdout.write(`[SPECCORE_STEP_DONE]\n`);
+        process.stdout.write(`✅ 已用自配 LLM 生成并写入 ${applied} 个文档\n`);
+        return true;
+      }
+    }
+  } catch (e: any) {
+    logger.debug(`[analyze] 自配 LLM 生成失败: ${e.message}`);
+  }
+  return false;
+}
+
 export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
   // v6.97.0+ 修复：全局分析时统一设置 iteration 为 'GLOBAL'，避免任何 fallback 到 getDefaultIteration()
   // 这是根治方案：后面所有 "options.iteration || await getDefaultIteration()" 都会命中 options.iteration
@@ -1222,32 +1251,23 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       process.stdout.write(`[SPECCORE_CONTEXT_TYPE: platform-only]\n\n`);
     }
 
-    // v8.3.196+: 读取 AI provider，llm 时用自配 LLM 直接生成并落盘（不依赖宿主）
+    // v8.3.196+: 读取 AI provider
+    //   host = 仅宿主 AI（SDK 子 Agent / Prompt 模式）
+    //   llm  = 自配 LLM 优先，失败回退宿主
+    //   auto = 宿主优先，宿主失败回退自配 LLM
     let aiProvider: string = 'host';
     try {
       const { config } = await loadConfigWithMeta();
       aiProvider = config.settings.ai?.provider || 'host';
     } catch { /* 默认 host */ }
+
+    // llm 优先模式：先用自配 LLM，失败再走宿主
     if (aiProvider === 'llm') {
-      const { callLlm, resolveAiProviders } = await import('../core/ask-llm');
-      const providers = await resolveAiProviders('analyze');
-      const llmContent = await callLlm(
-        '你是资深需求分析师。请按用户 prompt 的要求分析需求，并只输出 JSON 文档格式：{"文档文件名": "文档内容"}。文件名用 020-specs 下的 Spec 文档名（如 TECH.md / TEST.md / UI_SPEC.md），不要输出 JSON 以外的任何文字。',
-        prompt,
-        providers,
-        8000
-      );
-      if (llmContent) {
-        const applied = await applyJsonDocs(llmContent, iter!);
-        if (applied > 0) {
-          logger.info(`✅ [llm] 自配 LLM 生成并写入 ${applied} 个文档到 020-specs/`);
-          process.stdout.write(`[SPECCORE_STEP_DONE]\n`);
-          process.stdout.write(`✅ 已用自配 LLM 生成并写入 ${applied} 个文档\n`);
-          process.exitCode = 0;
-          return;
-        }
+      if (await tryLlmGenerate(prompt, iter!)) {
+        process.exitCode = 0;
+        return;
       }
-      logger.warn('⚠️ [llm] 自配 LLM 未生成有效内容，回退到 prompt 模式');
+      logger.warn('⚠️ [llm] 自配 LLM 未生成有效内容，回退到宿主模式');
     }
 
     // v8.3.169+: 尝试通过 Qoder SDK 直接调度子 Agent（Qoder 环境且非 TTY 模式）
@@ -1285,8 +1305,18 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
           process.exitCode = 0;
           return;
         }
+        // 宿主 SDK 调度失败（success=false）→ auto 时回退自配 LLM
+        if (aiProvider === 'auto' && await tryLlmGenerate(prompt, iter!)) {
+          process.exitCode = 0;
+          return;
+        }
       } catch (e: any) {
-        logger.debug(`[analyze] SDK 调度尝试失败: ${e.message}，回退到 Prompt 模式`);
+        logger.debug(`[analyze] SDK 调度尝试失败: ${e.message}`);
+        // 宿主异常 → auto 时回退自配 LLM
+        if (aiProvider === 'auto' && await tryLlmGenerate(prompt, iter!)) {
+          process.exitCode = 0;
+          return;
+        }
       }
     }
 

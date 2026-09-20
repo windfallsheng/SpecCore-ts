@@ -365,9 +365,40 @@ export async function prCommand(options: PrOptions): Promise<void> {
       // AGENTS 加载失败静默跳过
     }
 
-    process.stdout.write(`[SPECCORE_PROMPT]\n${finalPrompt}\n[/SPECCORE_PROMPT]`);
-    process.exitCode = 10;
-    return;
+    // v8.3.196+: provider=llm 时用自配 LLM 生成 PR 结果（复用 --response 落盘）
+    let aiProvider = 'host';
+    try {
+      const { loadConfigWithMeta } = await import('../core/unified-config');
+      const { config } = await loadConfigWithMeta();
+      aiProvider = config.settings.ai?.provider || 'host';
+    } catch { /* 默认 host */ }
+
+    if (aiProvider === 'llm') {
+      try {
+        const { callLlm, resolveAiProviders } = await import('../core/ask-llm');
+        const providers = await resolveAiProviders('pr');
+        const llmContent = await callLlm(
+          '你是代码评审专家。请按 prompt 要求分析 git 变更，只输出 JSON 格式（含 commitMsg/analysisMatch/mismatchReason/recommendation 字段），不要输出 JSON 以外的文字。',
+          finalPrompt,
+          providers,
+          2000
+        );
+        if (llmContent) {
+          options.response = llmContent;
+        } else {
+          logger.warn('⚠️ [llm] 自配 LLM 未生成 PR 结果，回退宿主模式');
+        }
+      } catch (e: any) {
+        logger.debug(`[pr] 自配 LLM 生成失败: ${e.message}`);
+      }
+    }
+
+    // 有自配 LLM 结果则 fall through 到下方 Response 落盘；否则输出 Prompt
+    if (!options.response) {
+      process.stdout.write(`[SPECCORE_PROMPT]\n${finalPrompt}\n[/SPECCORE_PROMPT]`);
+      process.exitCode = 10;
+      return;
+    }
   }
 
   // ── Response 模式：AI 返回结果，CLI 执行提交 ──

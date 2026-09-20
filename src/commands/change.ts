@@ -1081,8 +1081,43 @@ async function processChangeLegacy(options: ChangeOptions): Promise<void> {
       }
     } catch { /* ignore */ }
 
+    // v8.3.196+: provider=llm 时用自配 LLM 生成澄清结果（复用 --response 落盘）
+    let aiProvider = 'host';
+    try {
+      const { loadConfigWithMeta } = await import('../core/unified-config');
+      const { config } = await loadConfigWithMeta();
+      aiProvider = config.settings.ai?.provider || 'host';
+    } catch { /* 默认 host */ }
+
+    const tryLlmClarify = async (): Promise<boolean> => {
+      try {
+        const { callLlm, resolveAiProviders } = await import('../core/ask-llm');
+        const providers = await resolveAiProviders('change');
+        const llmContent = await callLlm(
+          '你是需求变更分析专家。请按 prompt 要求分析需求变更，只输出 JSON 格式（含 intent/structuredDesc/keyPoints/acceptanceCriteria/impactReport/suggestedActions 字段），不要输出 JSON 以外的文字。',
+          promptText,
+          providers,
+          4000
+        );
+        if (llmContent) {
+          options.response = llmContent;
+          return true;
+        }
+      } catch (e: any) {
+        logger.debug(`[change] 自配 LLM 生成失败: ${e.message}`);
+      }
+      return false;
+    };
+
+    // llm 优先模式：先用自配 LLM，失败回退宿主
+    if (aiProvider === 'llm') {
+      if (!(await tryLlmClarify())) {
+        logger.warn('⚠️ [llm] 自配 LLM 未生成结果，回退宿主模式');
+      }
+    }
+
     // v8.3.171+: 尝试通过 Qoder SDK 直接调度子 Agent（非 TTY 模式）
-    if (!process.stdout.isTTY) {
+    if (!options.response && !process.stdout.isTTY) {
       try {
         const agentCtx: AdapterAgentContext = {
           subagent: 'impact-analyst',
@@ -1105,22 +1140,29 @@ async function processChangeLegacy(options: ChangeOptions): Promise<void> {
           process.exitCode = 0;
           return;
         }
+        // 宿主 SDK 调度失败（success=false）→ auto 时回退自配 LLM
+        if (aiProvider === 'auto') await tryLlmClarify();
       } catch (e: any) {
-        logger.debug(`[change] SDK 调度尝试失败: ${e.message}，回退到 Prompt 模式`);
+        logger.debug(`[change] SDK 调度尝试失败: ${e.message}`);
+        // 宿主异常 → auto 时回退自配 LLM
+        if (aiProvider === 'auto') await tryLlmClarify();
       }
     }
 
-    // v8.3.171+: 输出 subagent 标记
-    const finalOutput = [
-      `[SPECCORE_SESSION_AGENT: impact-analyst]`,
-      `[SPECCORE_CONTEXT_BUDGET: 8000]`,
-      `[SPECCORE_CONTEXT_TYPE: incremental]`,
-      ``,
-      promptText,
-    ].join('\n');
-    logger.info('[SPECCORE_PROMPT]');
-    process.stdout.write(finalOutput);
-    return;
+    // 有自配 LLM 结果则 fall through 到下方 Response 落盘；否则输出 Prompt
+    if (!options.response) {
+      // v8.3.171+: 输出 subagent 标记
+      const finalOutput = [
+        `[SPECCORE_SESSION_AGENT: impact-analyst]`,
+        `[SPECCORE_CONTEXT_BUDGET: 8000]`,
+        `[SPECCORE_CONTEXT_TYPE: incremental]`,
+        ``,
+        promptText,
+      ].join('\n');
+      logger.info('[SPECCORE_PROMPT]');
+      process.stdout.write(finalOutput);
+      return;
+    }
   }
 
   // ── 4. Response 模式 ──
