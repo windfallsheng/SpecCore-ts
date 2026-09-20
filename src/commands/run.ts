@@ -67,7 +67,8 @@ async function autoPipeline(options: RunOptions): Promise<void> {
   };
 
   // v8.3.184+: review 闸口（功能开发质量底线）——阶段执行前触发，软停等待宿主 AI 确认
-  // A: taskify 前（Spec 定稿）、B: verify 前（代码 review）、C: pipeline 前（部署前确认，永不跳过）
+  // A: taskify 前（Spec 定稿）、B: verify 前（代码 review）、C: pipeline 前（部署前确认）
+  // v8.3.195+: 三闸口统一由 gates.mode 控制（manual=都停 / auto=都跳过，含 C）
   const GATES: Record<string, { id: string; title: string; hint: string; resumeFrom: string }> = {
     taskify:  { id: 'A', title: 'Spec 定稿',   hint: '请 review 生成的 Spec（功能单元/端覆盖/验收标准），确认后继续', resumeFrom: 'taskify' },
     verify:   { id: 'B', title: '代码 review', hint: '请 review 生成的代码（重点扫 AI 标记的低置信点 / .issues.md / .deviations），确认后继续', resumeFrom: 'verify' },
@@ -197,15 +198,18 @@ async function autoPipeline(options: RunOptions): Promise<void> {
     // v8.3.184+: review 闸口软停（功能开发质量底线）
     const gate = GATES[phase.key];
     if (gate) {
-      // v8.3.195+: 闸口模式（C 永不跳过）
-      //   manual = A/B 都软停人工确认；auto = 跳过 A/B（--gate auto 或 --demo）
-      const skipGate = gate.id !== 'C' && gateMode === 'auto';
+      // v8.3.195+: 闸口模式统一（A/B/C 均遵循）
+      //   manual = 都软停人工确认；auto = 都跳过（--gate auto 或 --demo）
+      const skipGate = gateMode === 'auto';
       if (!skipGate) {
         logger.warn(`\n🛑 [SPECCORE_GATE_${gate.id}] ${gate.title}`);
         logger.warn(`   ${gate.hint}`);
         logger.warn(`   确认后继续: speccore run --auto --from ${gate.resumeFrom} -I ${iteration}\n`);
         pausedGate = gate.id;
         break;  // 软停，等宿主 AI 确认后 --from 继续
+      } else if (gate.id === 'C') {
+        // auto 跳过闸口 C（部署）时给醒目警告——部署是 destructive 操作
+        logger.warn(`\n⚠️  [auto] 已跳过闸口 C（部署前确认），即将自动部署到环境。`);
       }
     }
 

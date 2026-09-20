@@ -218,7 +218,7 @@ program
   .option('--from <phase>', '从指定阶段开始（req-doc/doc2spec/analyze/validate/split/plan/execute/verify/pipeline/pr/done/spec2doc）')
   .option('--to <phase>', '到指定阶段结束（同上）')
   .option('--demo', '演示模式（放宽闸口 A/B，保留部署前确认）')
-  .option('--gate <mode>', '闸口模式：manual=闸口A/B/C都人工确认（默认）| auto=跳过A/B，C（部署前确认）永不跳过')
+  .option('--gate <mode>', '闸口模式：manual=闸口A/B/C都人工确认（默认）| auto=三闸口都跳过（含C部署，自动执行）')
   .option('--env <env>', '部署环境（透传给 pipeline，默认 staging）')
   .action((demand: string[], options: any) => {
     runCommand({ ...options, demand: demand && demand.length ? demand.join(' ') : undefined });

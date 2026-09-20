@@ -172,9 +172,9 @@ export interface SpecConfig {
       /** 用户自定义命名流水线：名称 → 逗号分隔的阶段串（如 "analyze,validate,split,execute"） */
       custom?: Record<string, string>;
     };
-    /** v8.3.195+: 流水线 review 闸口模式（闸口 C=部署前确认 永不跳过） */
+    /** v8.3.195+: 流水线 review 闸口模式（A=Spec定稿 / B=代码review / C=部署确认） */
     gates?: {
-      /** manual = 闸口 A/B 都软停人工确认（默认，最安全）| auto = 跳过闸口 A/B（Spec定稿/代码review），C 仍停 */
+      /** manual = 三闸口都软停人工确认（默认，最安全）| auto = 三闸口都跳过（含 C 部署） */
       mode?: 'manual' | 'auto';
     };
     /** v8.3.94+: 视觉模型配置（用于 specs 图片理解、UI 验证截图分析） */
@@ -1491,8 +1491,8 @@ function toYaml(config: SpecConfig): string {
     yaml += '      # my-flow: analyze,validate,split,plan,execute\n';
   }
   yaml += '  # ── 流水线 review 闸口模式 ──\n';
-  yaml += '  #   manual = 闸口 A/B 都软停人工确认（默认，最安全）\n';
-  yaml += '  #   auto   = 跳过闸口 A/B（Spec定稿/代码review），C（部署前确认）永不跳过\n';
+  yaml += '  #   manual = 闸口 A/B/C 都软停人工确认（默认，最安全）\n';
+  yaml += '  #   auto   = 三闸口都跳过（含 C 部署，自动执行，谨慎）\n';
   yaml += '  gates:\n';
   yaml += `    mode: ${config.settings.gates?.mode ?? 'manual'}\n`;
 
