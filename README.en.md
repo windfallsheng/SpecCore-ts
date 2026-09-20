@@ -223,11 +223,15 @@ Iteration-001-meeting/
 |-----|-------------|
 | [Quick Start](docs/quick-start.en.md) | 5 minutes to first task |
 | [Commands](docs/commands.en.md) | full command reference |
+| [Config Reference](docs/config-reference.en.md) | all config fields (incl. pipelines / optional_steps) |
 | [Scenarios](docs/scenarios.en.md) | real-world scenarios |
 | [SDD](docs/sdd-methodology.en.md) | spec-driven development |
 | [Workspace](docs/workspace-organization.en.md) | directory structure |
 | [File Editing Guide](docs/usage-guide.en.md) | which files to edit vs. commands |
 | [Quick Reference](docs/quick-reference.en.md) | common commands at a glance |
+| [Spec Layers](docs/spec-layers.en.md) | GLOBAL/ITERATION/TASK loading |
+| [Testing Guide](docs/testing-guide.en.md) | layered testing & quality |
+| [CI/CD](docs/ci-cd-spec-integration.en.md) | CI/CD pipeline + @spec annotation |
 | [Adapters](docs/tool-adaptation.en.md) | AI tool integration |
 | [CHANGELOG](CHANGELOG.en.md) | version history |
 

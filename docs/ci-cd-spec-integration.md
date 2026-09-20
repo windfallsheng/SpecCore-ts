@@ -47,7 +47,7 @@ jobs:
           speccore validate --strict  # 严格模式校验
 
       - name: Health Check
-        run: speccore health
+        run: speccore doctor
 
       - name: Progress Report
         run: speccore dashboard --format=json
@@ -187,6 +187,6 @@ speccore dashboard               # 确认状态更新
 
 ## 五、更多参考
 
-- [34 场景实战](docs/scenarios.md) — 场景实战文档重点讲 CI/CD
+- [34 场景实战](scenarios.md) — 场景实战文档重点讲 CI/CD
 - [命令参考](docs/command-reference.md) — sync/validate/hooks 详细参数
 - [examples/task-management](examples/task-management/) — 完整示例项目
