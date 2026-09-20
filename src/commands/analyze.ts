@@ -131,7 +131,8 @@ export interface AnalyzeOptions {
   docName?: string;       // 目标文档名（如 TECH.md）
   featureName?: string;   // 目标功能名（如 "订单模块"）
   extractUnits?: boolean; // --extract-units: 自动提取功能单元清单
-  unit?: string;          // --unit <ID>: 分析单个功能单元（如 M-01）
+  unit?: string;          // --unit <ID>: 分析功能单元，支持逗号分隔多个（如 M-01,M-03）
+  autoUnits?: boolean;    // --auto-units: 自动遍历所有待分析的功能单元
   consolidate?: boolean;  // --consolidate: 汇总所有单元分析为统一报告
   resumeUnits?: boolean;  // --resume-units: 断点续跑未完成的单元分析
   // v8.3.122+: 增量合并模式
@@ -689,8 +690,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     return;
   }
 
-  // ── v8.2.0+: 功能单元聚焦分析模式（--extract-units / --unit / --consolidate / --resume-units）──
-  if (options.extractUnits || options.unit || options.consolidate || options.resumeUnits) {
+  // ── v8.2.0+: 功能单元聚焦分析模式（--extract-units / --unit / --consolidate / --resume-units / --auto-units）──
+  if (options.extractUnits || options.unit || options.consolidate || options.resumeUnits || options.autoUnits) {
     const iter = options.iteration || await getDefaultIteration();
     if (!iter) { logger.error('请指定迭代: -I <iteration>'); return; }
     const iterDir = await getIterationDir(iter);
@@ -744,8 +745,23 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       return;
     }
 
-    // Step 3: 断点续跑（--resume-units）
-    let targetUnit: IterationUnit | undefined;
+    // Step 3: 确定目标功能单元集合（--auto-units / --resume-units / --unit 可逗号分隔）
+    let targetUnitIds: string[] = [];
+
+    // 3a. --auto-units: 自动遍历所有待分析单元
+    if (options.autoUnits) {
+      const pending = await detectPendingUnits(iter, units);
+      if (pending.length === 0) {
+        logger.success('🎉 所有功能单元分析已完成！');
+        logger.info('   运行 --consolidate 汇总为统一报告');
+        logger.info(`   speccore analyze --prompt -I ${iter} --consolidate`);
+        return;
+      }
+      targetUnitIds = pending.map(u => u.id);
+      logger.info(`🚀 自动遍历 ${targetUnitIds.length} 个待分析单元: ${targetUnitIds.join(', ')}`);
+    }
+
+    // 3b. --resume-units: 断点续跑（取第一个待分析单元）
     if (options.resumeUnits) {
       const pending = await detectPendingUnits(iter, units);
       if (pending.length === 0) {
@@ -754,38 +770,72 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         logger.info(`   speccore analyze --prompt -I ${iter} --consolidate`);
         return;
       }
-      targetUnit = pending[0];
-      logger.info(`🔄 断点续跑: ${targetUnit.id} ${targetUnit.name}（剩余 ${pending.length} 个）`);
+      targetUnitIds = [pending[0].id];
+      logger.info(`🔄 断点续跑: ${pending[0].id} ${pending[0].name}（剩余 ${pending.length} 个）`);
     }
 
-    // Step 4: 分析单个单元（--unit M-01）
+    // 3c. --unit: 指定单元（支持逗号分隔多个，如 M-01,M-03）
     if (options.unit) {
-      targetUnit = units.find(u => u.id === options.unit);
-      if (!targetUnit) {
-        logger.error(`未找到功能单元: ${options.unit}`);
+      targetUnitIds = options.unit.split(',').map(s => s.trim()).filter(Boolean);
+      const invalid = targetUnitIds.filter(id => !units.some(u => u.id === id));
+      if (invalid.length > 0) {
+        logger.error(`未找到功能单元: ${invalid.join(', ')}`);
         logger.info(`   可用单元: ${units.map(u => u.id).join(', ')}`);
         return;
       }
     }
 
-    if (targetUnit && options.prompt) {
-      const prompt = await buildUnitAnalysisPrompt(iterDir, iter, targetUnit, units);
-      process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
-      process.exitCode = 10;
-      return;
-    }
+    const targetUnits = targetUnitIds
+      .map(id => units.find(u => u.id === id))
+      .filter((u): u is IterationUnit => !!u);
 
-    if (targetUnit && options.apply) {
-      // AI 输出的是 [DOC:xxx] 格式，由 --apply 的 parseDocMarkers 处理
-      logger.info(`✅ 功能单元 ${targetUnit.id} 分析结果已接收`);
-      logger.info('   结果已通过 --apply 的 [DOC:xxx] 解析写入');
-      return;
-    }
-
-    if (targetUnit) {
+    // 单单元：保持原有行为
+    if (targetUnits.length === 1) {
+      const targetUnit = targetUnits[0];
+      if (options.prompt) {
+        const prompt = await buildUnitAnalysisPrompt(iterDir, iter, targetUnit, units);
+        process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
+        process.exitCode = 10;
+        return;
+      }
+      if (options.apply) {
+        // AI 输出的是 [DOC:xxx] 格式，由 --apply 的 parseDocMarkers 处理
+        logger.info(`✅ 功能单元 ${targetUnit.id} 分析结果已接收`);
+        logger.info('   结果已通过 --apply 的 [DOC:xxx] 解析写入');
+        return;
+      }
       logger.info(`📋 功能单元: ${targetUnit.id} ${targetUnit.name}`);
       logger.info(`   来源: ${targetUnit.source}#L${targetUnit.sourceRange.startLine}`);
       logger.info('   使用 --prompt 生成分析 Prompt，或 --apply 写入分析结果');
+      return;
+    }
+
+    // 多单元：逐个输出独立 Prompt（保持每个单元独立上下文，步骤隔离）
+    if (targetUnits.length > 1) {
+      if (options.prompt) {
+        const parts: string[] = [];
+        parts.push(`# 功能单元批量分析指令（${targetUnits.length} 个单元）`);
+        parts.push('');
+        parts.push('> ⚠️ **步骤隔离要求**：每个功能单元独立分析、独立提交，不要跨单元混合内容。');
+        parts.push('> 请**逐个单元**处理：每完成一个单元，立即用对应命令提交该单元结果，再处理下一个。');
+        parts.push('');
+        for (const u of targetUnits) {
+          const p = await buildUnitAnalysisPrompt(iterDir, iter, u, units);
+          parts.push(`\n\n===== 功能单元 ${u.id}: ${u.name} =====\n`);
+          parts.push(p);
+          parts.push(`\n> 提交本单元: speccore analyze --unit ${u.id} --apply '[DOC:...]' -I ${iter}\n`);
+        }
+        process.stdout.write(parts.join('\n'));
+        process.exitCode = 10;
+        return;
+      }
+      if (options.apply) {
+        logger.warn('⚠️ 多单元模式下 --apply 请逐个单元执行（指定单个 --unit）');
+        logger.info(`   待分析单元: ${targetUnits.map(u => u.id).join(', ')}`);
+        return;
+      }
+      logger.info(`📋 已选择 ${targetUnits.length} 个功能单元: ${targetUnits.map(u => u.id).join(', ')}`);
+      logger.info('   使用 --prompt 逐个生成分析 Prompt，或 --auto-units 自动遍历全部待分析单元');
       return;
     }
   }

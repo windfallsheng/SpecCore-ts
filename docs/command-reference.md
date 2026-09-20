@@ -224,6 +224,23 @@ speccore analyze --global --withCode
 - Phase 1 完成后自动调用 `refreshKnowledgeGraph()` 重建知识图谱和 RAG 索引
 - 确保 Phase 2 能基于最新的全局文档生成各端专属方案
 
+**功能单元聚焦分析（v8.2.0+，大项目推荐）**：
+
+切分功能单元（`doc2spec --split`）后，逐个单元独立上下文分析，避免大需求一次性塞进上下文导致爆炸/漂移：
+
+```bash
+speccore analyze --extract-units -I <iter>             # 提取功能单元清单
+speccore analyze --unit M-01 -I <iter> --prompt        # 分析单个单元
+speccore analyze --unit M-01,M-03 -I <iter> --prompt   # 分析多个单元（逗号分隔，逐个输出独立 Prompt）
+speccore analyze --auto-units -I <iter> --prompt       # 自动遍历所有待分析单元
+speccore analyze --resume-units -I <iter>              # 断点续跑未完成单元
+speccore analyze --consolidate -I <iter> --prompt      # 汇总所有单元为统一报告
+```
+
+- **步骤隔离**：每个单元独立上下文（核心需求 60% + 上下游摘要 + 全局约束，约 6000 tokens），互不污染
+- `--unit` 支持逗号分隔多个 ID；`--auto-units` 自动遍历所有待分析单元（逐个输出独立 Prompt，请逐个提交，不要跨单元混合）
+- 多单元模式下 `--apply` 需逐个单元执行（指定单个 `--unit`）
+
 **任务级深度分析（v6.44.0+）**：
 
 split 后，每个 Task 的 00-specs/ 已有基础内容（机械提取）。执行 `analyze --task` 时，AI Read 这些内容 + global/ 全局上下文 + {端}/ 专属上下文，重新生成任务级深度分析。

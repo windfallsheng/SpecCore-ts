@@ -750,6 +750,65 @@ settings:
 
 **阶段 key**（--from/--to 与 custom 使用）：`req-doc`、`doc2spec`、`split-units`（切分功能单元）、`analyze`、`validate`、`taskify`（拆分任务）、`plan`、`execute`、`verify`、`pipeline`、`pr`、`done`、`spec2doc`。
 
+#### 3.12.12 ai（AI provider 池，v8.3.193+）
+
+**类型**：`object`
+
+**说明**：统一 LLM provider 池 + 每功能默认 + 兜底。让各功能都能自定义 LLM（含本地模型），并指定 AI 来源（宿主 vs 自配 LLM）。
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `provider` | `enum` | `host` | `host` / `llm` / `auto`，AI 来源开关 |
+| `providers` | `array` | `[]` | provider 池（定义一次，各功能复用） |
+| `defaults` | `map` | `{}` | 每功能默认 provider（如 analyze: gpt4o） |
+| `fallback` | `string` | — | 兜底 provider 名（全失败时用） |
+
+**provider 三态语义**：
+
+| 值 | 行为 |
+|----|------|
+| `host` | 仅宿主 AI（SDK 子 Agent / Prompt 模式） |
+| `llm` | 自配 LLM 优先，失败回退宿主 |
+| `auto` | 宿主优先，宿主失败自动回退自配 LLM |
+
+**providers 池元素**：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `name` | `string` | provider 名（defaults/fallback 引用） |
+| `type` | `enum` | `ollama` / `openai` / `anthropic` / `custom` |
+| `endpoint` | `string` | API 端点 |
+| `model` | `string` | 模型名 |
+| `apiKey` | `string` | 密钥（可用环境变量） |
+| `enabled` | `boolean` | 是否启用 |
+| `priority` | `number` | 优先级（小者优先） |
+
+**决策链**（多 provider 时）：功能 `defaults` 指定 → 用指定；否则 `priority` 最小；指定/优先不可用 → 按 priority 顺序降级；全失败 → `fallback` → 回宿主（auto）。
+
+**支持的功能**：`analyze`（分析）、`split`（切分功能单元）、`taskify`（拆分任务）、`execute`（执行）、`change`（影响分析）、`req-doc`（澄清）、`plan`（计划）、`pr`（PR 描述）。未在 `defaults` 指定的功能走 priority/fallback。
+
+**配置示例**：
+```yaml
+settings:
+  ai:
+    provider: auto
+    providers:
+      - name: local
+        type: ollama
+        endpoint: "http://localhost:11434"
+        model: qwen2.5:7b
+        priority: 1
+      - name: gpt4o
+        type: openai
+        model: gpt-4o
+        apiKey: "${OPENAI_API_KEY}"
+        priority: 2
+    defaults:
+      analyze: gpt4o
+      split: local
+    fallback: local
+```
+
 ---
 
 ### 3.13 ask

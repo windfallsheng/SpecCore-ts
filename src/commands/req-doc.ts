@@ -42,7 +42,8 @@ export interface ReqDocOptions {
   force?: boolean;      // --force: 强制覆盖已有文件
   // v8.2.0+: 功能单元聚焦澄清（解决注意力漂移）
   extractUnits?: boolean; // --extract-units: 从原始需求提取功能单元清单
-  unit?: string;          // --unit <ID>: 澄清单个功能单元（如 M-01）
+  unit?: string;          // --unit <ID>: 澄清单个功能单元，支持逗号分隔多个（如 M-01,M-03）
+  autoUnits?: boolean;    // --auto-units: 自动遍历所有待澄清的功能单元
   consolidate?: boolean;  // --consolidate: 汇总所有单元澄清为统一 PRD
   resumeUnits?: boolean;  // --resume-units: 断点续跑未完成的单元澄清
   // v8.3.0+: 临时工作区模式
@@ -123,7 +124,7 @@ export async function reqDocCommand(options: ReqDocOptions): Promise<void> {
 
   // ── v8.3.191+: 功能单元聚焦澄清模式（切分独立于澄清）──
   // 切分由 doc2spec --split 完成（产出 features/），澄清只读已切分的单元，不再自己切分
-  if (options.extractUnits || options.unit || options.consolidate || options.resumeUnits) {
+  if (options.extractUnits || options.unit || options.consolidate || options.resumeUnits || options.autoUnits) {
     const units = await loadFeatureUnits(iterDir);
 
     if (options.extractUnits) {
@@ -172,11 +173,13 @@ export async function reqDocCommand(options: ReqDocOptions): Promise<void> {
       return;
     }
 
-    // 断点续跑（--resume-units）
-    let targetUnit: ClarifyUnit | undefined;
-    if (options.resumeUnits) {
-      const goldenDir = join(iterDir, '020-specs', 'requirements');
-      const pending = [];
+    // 确定目标功能单元集合（--auto-units / --resume-units / --unit 可逗号分隔）
+    const goldenDir = join(iterDir, '020-specs', 'requirements');
+    let targetUnitIds: string[] = [];
+
+    // --auto-units: 自动遍历所有待澄清单元
+    if (options.autoUnits) {
+      const pending: ClarifyUnit[] = [];
       for (const u of units) {
         const unitFile = join(goldenDir, `unit-${u.id}.md`);
         if (!await pathExists(unitFile)) pending.push(u);
@@ -186,48 +189,100 @@ export async function reqDocCommand(options: ReqDocOptions): Promise<void> {
         logger.info('   运行 --consolidate 汇总为统一 PRD');
         return;
       }
-      targetUnit = pending[0];
-      logger.info(`🔄 断点续跑: ${targetUnit.id} ${targetUnit.name}（剩余 ${pending.length} 个）`);
+      targetUnitIds = pending.map(u => u.id);
+      logger.info(`🚀 自动遍历 ${targetUnitIds.length} 个待澄清单元: ${targetUnitIds.join(', ')}`);
     }
 
-    // 澄清单个单元（--unit M-01）
+    // 断点续跑（--resume-units）
+    if (options.resumeUnits) {
+      const pending: ClarifyUnit[] = [];
+      for (const u of units) {
+        const unitFile = join(goldenDir, `unit-${u.id}.md`);
+        if (!await pathExists(unitFile)) pending.push(u);
+      }
+      if (pending.length === 0) {
+        logger.success('🎉 所有功能单元澄清已完成！');
+        logger.info('   运行 --consolidate 汇总为统一 PRD');
+        return;
+      }
+      targetUnitIds = [pending[0].id];
+      logger.info(`🔄 断点续跑: ${pending[0].id} ${pending[0].name}（剩余 ${pending.length} 个）`);
+    }
+
+    // 澄清单个/多个单元（--unit M-01,M-03）
     if (options.unit) {
-      targetUnit = units.find(u => u.id === options.unit);
-      if (!targetUnit) {
-        logger.error(`未找到功能单元: ${options.unit}`);
+      targetUnitIds = options.unit.split(',').map(s => s.trim()).filter(Boolean);
+      const invalid = targetUnitIds.filter(id => !units.some(u => u.id === id));
+      if (invalid.length > 0) {
+        logger.error(`未找到功能单元: ${invalid.join(', ')}`);
         logger.info(`   可用单元: ${units.map(u => u.id).join(', ')}`);
         return;
       }
     }
 
-    if (targetUnit && options.prompt) {
-      // v8.3.191+: 上下文用已切分单元拼接（替代 rawContent，澄清不依赖原始全文切分）
-      const allContent = units.map(u => u.content).join('\n\n');
-      const prompt = await buildUnitClarifyPrompt(targetUnit, allContent, {
-        iteration, sourceFile: sourceName, iterDir, allUnits: units,
-      });
-      process.stdout.write(prompt);
-      process.exitCode = 10;
-      return;
-    }
+    const targetUnits = targetUnitIds
+      .map(id => units.find(u => u.id === id))
+      .filter((u): u is ClarifyUnit => !!u);
 
-    if (targetUnit && options.apply) {
-      const goldenDir = join(iterDir, '020-specs', 'requirements');
-      await ensureDir(goldenDir);
-      const unitFile = join(goldenDir, `unit-${targetUnit.id}.md`);
-      let finalContent = options.apply;
-      // 提取 [UNIT:xxx] 标记中的内容
-      const markerMatch = finalContent.match(/\[UNIT:[^\]]+\]([\s\S]*?)(?=\[UNIT:|$)/);
-      if (markerMatch) finalContent = markerMatch[1].trim();
-      if (!finalContent.startsWith('---')) finalContent = buildClarifiedHeader(`${sourceName}#${targetUnit.id}`) + finalContent;
-      await writeFile(unitFile, finalContent);
-      logger.success(`✅ 单元澄清已写入: 020-specs/requirements/unit-${targetUnit.id}.md`);
-      return;
-    }
-
-    if (targetUnit) {
+    // 单单元：保持原有行为
+    if (targetUnits.length === 1) {
+      const targetUnit = targetUnits[0];
+      if (options.prompt) {
+        // v8.3.191+: 上下文用已切分单元拼接（替代 rawContent，澄清不依赖原始全文切分）
+        const allContent = units.map(u => u.content).join('\n\n');
+        const prompt = await buildUnitClarifyPrompt(targetUnit, allContent, {
+          iteration, sourceFile: sourceName, iterDir, allUnits: units,
+        });
+        process.stdout.write(prompt);
+        process.exitCode = 10;
+        return;
+      }
+      if (options.apply) {
+        await ensureDir(goldenDir);
+        const unitFile = join(goldenDir, `unit-${targetUnit.id}.md`);
+        let finalContent = options.apply;
+        // 提取 [UNIT:xxx] 标记中的内容
+        const markerMatch = finalContent.match(/\[UNIT:[^\]]+\]([\s\S]*?)(?=\[UNIT:|$)/);
+        if (markerMatch) finalContent = markerMatch[1].trim();
+        if (!finalContent.startsWith('---')) finalContent = buildClarifiedHeader(`${sourceName}#${targetUnit.id}`) + finalContent;
+        await writeFile(unitFile, finalContent);
+        logger.success(`✅ 单元澄清已写入: 020-specs/requirements/unit-${targetUnit.id}.md`);
+        return;
+      }
       logger.info(`📋 功能单元: ${targetUnit.id} ${targetUnit.name}`);
       logger.info('   使用 --prompt 生成澄清 Prompt，或 --apply 写入澄清结果');
+      return;
+    }
+
+    // 多单元：逐个输出独立 Prompt（保持每个单元独立上下文）
+    if (targetUnits.length > 1) {
+      if (options.prompt) {
+        const allContent = units.map(u => u.content).join('\n\n');
+        const parts: string[] = [];
+        parts.push(`# 功能单元批量澄清指令（${targetUnits.length} 个单元）`);
+        parts.push('');
+        parts.push('> ⚠️ **步骤隔离要求**：每个功能单元独立澄清、独立提交，不要跨单元混合内容。');
+        parts.push('> 请**逐个单元**处理：每完成一个单元，立即用对应命令提交该单元结果，再处理下一个。');
+        parts.push('');
+        for (const u of targetUnits) {
+          const p = await buildUnitClarifyPrompt(u, allContent, {
+            iteration, sourceFile: sourceName, iterDir, allUnits: units,
+          });
+          parts.push(`\n\n===== 功能单元 ${u.id}: ${u.name} =====\n`);
+          parts.push(p);
+          parts.push(`\n> 提交本单元: speccore req-doc --to ${iteration} --unit ${u.id} --apply '[UNIT:${u.id}]...'\n`);
+        }
+        process.stdout.write(parts.join('\n'));
+        process.exitCode = 10;
+        return;
+      }
+      if (options.apply) {
+        logger.warn('⚠️ 多单元模式下 --apply 请逐个单元执行（指定单个 --unit）');
+        logger.info(`   待澄清单元: ${targetUnits.map(u => u.id).join(', ')}`);
+        return;
+      }
+      logger.info(`📋 已选择 ${targetUnits.length} 个功能单元: ${targetUnits.map(u => u.id).join(', ')}`);
+      logger.info('   使用 --prompt 逐个生成澄清 Prompt，或 --auto-units 自动遍历全部待澄清单元');
       return;
     }
   }

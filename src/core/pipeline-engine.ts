@@ -37,6 +37,8 @@ export interface ContextSnapshot {
   iteration: string;
   /** 已完成的步骤 ID 列表 */
   completedSteps: string[];
+  /** v8.3.194+: 每个已完成步骤的一句话摘要（步骤ID → 摘要），供新会话恢复「这一步做了什么」 */
+  stepSummaries?: Record<string, string>;
   /** 下一步骤 ID */
   nextStep?: string;
   /** 生成时间 */
@@ -227,11 +229,17 @@ export class PipelineEngine {
   // ── v8.3.160+: 构建上下文快照 ──
   private async buildSnapshot(nextStepId?: string): Promise<ContextSnapshot> {
     const completedOutputs: string[] = [];
-    // 根据已完成步骤推断产出文件路径
+    // 根据已完成步骤推断产出文件路径 + 生成步骤摘要
+    const stepSummaries: Record<string, string> = {};
     for (const stepId of this.state!.completedSteps) {
+      const stepDef = this.steps.get(stepId);
+      const stepName = stepDef?.name || stepId;
       if (stepId.endsWith('-done') || stepId === 'phase1-prompt') {
         // 分析类步骤的产出通常写入 020-specs/
         completedOutputs.push(`Iteration-${this.iteration}/020-specs/`);
+        stepSummaries[stepId] = `完成「${stepName}」，产出写入 020-specs/`;
+      } else {
+        stepSummaries[stepId] = `完成「${stepName}」`;
       }
     }
 
@@ -241,6 +249,7 @@ export class PipelineEngine {
       techStackSummary: '', // 由调用方填充
       iteration: this.iteration,
       completedSteps: [...this.state!.completedSteps],
+      stepSummaries,
       nextStep: nextStepId,
       generatedAt: new Date().toISOString(),
     };
