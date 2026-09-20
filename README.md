@@ -246,6 +246,8 @@ Iteration-001-meeting/
 | [场景实战](docs/scenarios.md) | 几十个真实开发场景 |
 | [SDD 方法论](docs/sdd-methodology.md) | 规范驱动开发理念 |
 | [工作空间组织](docs/workspace-organization.md) | 目录结构与文件规范 |
+| [文件编辑指南](docs/usage-guide.md) | 哪些文件能改、哪些用命令 |
+| [速查表](docs/quick-reference.md) | 常用命令一页速查 |
 | [三层加载机制](docs/spec-layers.md) | GLOBAL/ITERATION/TASK 加载原理 |
 | [测试指南](docs/testing-guide.md) | 分层测试与质量验证 |
 | [CI-CD 集成](docs/ci-cd-spec-integration.md) | CI/CD 流水线 + Spec 注释 |

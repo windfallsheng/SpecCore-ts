@@ -15,7 +15,7 @@ speccore dashboard                    # View progress
 speccore update -t T-001 --status=completed  # Update status
 speccore sync                         # Reverse sync @spec → TASK.md
 speccore diff --source=A --target=B   # Compare iterations
-speccore trace --req=REQ-001          # Trace chain
+speccore track --req=REQ-001          # Trace chain
 speccore delete -t Task-005           # Safe delete (trash + clean refs)
 speccore search "payment"             # Cross-spec search
 speccore validate                     # Compliance check
@@ -59,7 +59,7 @@ workspace/
 # .github/workflows/speccore-ci.yml
 - run: npm install -g speccore
 - run: speccore validate --all
-- run: speccore health
+- run: speccore doctor
 ```
 
 ## 🔗 Key Links

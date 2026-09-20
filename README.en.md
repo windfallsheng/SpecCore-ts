@@ -226,6 +226,8 @@ Iteration-001-meeting/
 | [Scenarios](docs/scenarios.en.md) | real-world scenarios |
 | [SDD](docs/sdd-methodology.en.md) | spec-driven development |
 | [Workspace](docs/workspace-organization.en.md) | directory structure |
+| [File Editing Guide](docs/usage-guide.en.md) | which files to edit vs. commands |
+| [Quick Reference](docs/quick-reference.en.md) | common commands at a glance |
 | [Adapters](docs/tool-adaptation.en.md) | AI tool integration |
 | [CHANGELOG](CHANGELOG.en.md) | version history |
 

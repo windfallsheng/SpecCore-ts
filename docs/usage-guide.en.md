@@ -1,6 +1,6 @@
-# SpecCore File Safety Guide
+# SpecCore File Editing Guide
 
-> What can I edit manually? What requires a command? What to do after editing?
+> Which files can I edit manually? Which require a command? What to do after editing?
 
 > 💡 **Command Types**: `speccore change` below is a 🔒 AI command — use `@spec-ask` in AI IDE.
 
