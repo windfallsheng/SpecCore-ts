@@ -867,7 +867,10 @@ export async function splitDocumentToUnits(
 
   let written = 0;
   for (const unit of units) {
-    const unitDirName = sanitizeUnitName(unit.title);
+    // v8.3.198+: 剥离章节号前缀（"四、" → ""）+ 加需求文档名前缀，防止跨文档重名
+    unit.title = stripSectionPrefix(unit.title) || unit.title;
+    const docSlug = sanitizeUnitName(basename(sourceFileName, '.md')) || 'doc';
+    const unitDirName = sanitizeUnitName(`${docSlug}-${unit.title}`);
     const unitDir = join(featuresDir, unitDirName);
     await ensureDir(unitDir);
     await ensureDir(join(unitDir, '.meta'));
@@ -1159,6 +1162,19 @@ function extractUnitContent(content: string, unit: ScannedUnit): string {
 /**
  * 清理单元名称，用于目录名
  */
+/**
+ * v8.3.198+: 剥离章节号前缀，返回干净的功能名。
+ * 覆盖「四、」「第3章」「1.」「（一）」等常见编号格式（中文数字/阿拉伯数字/括号）。
+ */
+function stripSectionPrefix(t: string): string {
+  return t
+    .replace(/^第[一二三四五六七八九十百\d]+[章节篇部分]+[、.．\s]*/, '')
+    .replace(/^[一二三四五六七八九十百]+[、.．\s]+/, '')
+    .replace(/^\d+[、.．\s]+/, '')
+    .replace(/^[（(][一二三四五六七八九十百\d]+[）)][、.．\s]*/, '')
+    .trim();
+}
+
 function sanitizeUnitName(name: string): string {
   return name
     .replace(/[^a-zA-Z0-9\u4e00-\u9fa5\-_]/g, '')
