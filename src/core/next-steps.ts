@@ -30,7 +30,7 @@ function getHints(stage: string, ctx: Record<string, string>): StepHint[] {
       return [
         { action: `speccore doc2spec -f <PRD文件> --iter=${iter || '<迭代名>'}`, desc: '导入需求文档到 010-requirements/' },
         { action: `speccore analyze --prompt -I ${iter || '<迭代名>'}`, desc: '分析需求 → 生成 020-specs/ 规格文档' },
-        { action: `speccore iteration split -I ${iter || '<迭代名>'}`, desc: '拆分为开发任务 → 030-tasks/' },
+        { action: `speccore iteration taskify -I ${iter || '<迭代名>'}`, desc: '拆分为开发任务 → 030-tasks/' },
       ];
 
     case 'init':
@@ -47,7 +47,7 @@ function getHints(stage: string, ctx: Record<string, string>): StepHint[] {
 
     case 'analyze':
       return [
-        { action: `speccore iteration split${iter ? ` --iteration=${iter}` : ''}`, desc: '拆分需求为 Task (--interactive 预览依赖)', args: '--strict 逐项确认' },
+        { action: `speccore iteration taskify${iter ? ` --iteration=${iter}` : ''}`, desc: '拆分需求为 Task (--interactive 预览依赖)', args: '--strict 逐项确认' },
         { action: `如果 ANALYSIS.md 有阻断问题请先修复`, desc: '' },
         { action: `补全技术方案:`, desc: '编辑 ANALYSIS.md 中的技术方案部分（选型/DB变更/接口依赖）' },
       ];

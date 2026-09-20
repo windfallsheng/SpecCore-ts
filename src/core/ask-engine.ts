@@ -108,7 +108,7 @@ const COMMAND_KB: CommandKnowledge[] = [
   { name: 'task', aliases: ['tk'], description: '任务管理：创建/列表/状态。子命令: new, list, status',
     usage: 'speccore task new --name <name> [--id <id>] | speccore task list | speccore task status', examples: ['speccore task new --name "用户登录"', 'speccore task list'], related: ['plan', 'execute'], triggers: ['task', '任务列表', '查看任务', '列出任务'] },
   { name: 'iteration', aliases: ['it'], description: '迭代管理：创建时自动生成唯一编码（Iteration-001-功能名），支持拆分/列表',
-    usage: 'speccore iteration create -n <name> | speccore iteration split | speccore iteration list', examples: ['speccore iteration create -n Q3 → Iteration-001-Q3', 'speccore iteration list'], related: ['task', 'plan'], triggers: ['迭代', 'iteration', '迭代', 'sprint'] },
+    usage: 'speccore iteration create -n <name> | speccore iteration taskify | speccore iteration list', examples: ['speccore iteration create -n Q3 → Iteration-001-Q3', 'speccore iteration list'], related: ['task', 'plan'], triggers: ['迭代', 'iteration', '迭代', 'sprint'] },
   { name: 'context', aliases: ['ctx'], description: '查看/设置当前上下文：迭代、任务、阶段',
     usage: 'speccore context [--set --iteration <name>] [--list]', examples: ['speccore context --list', 'speccore context --set --iteration Q1'], related: ['dashboard', 'run'], triggers: ['切换', '上下文', 'context', '当前.*迭代', '设置.*迭代', '换到', '切换到'] },
   { name: 'search', aliases: ['sh'], description: '全文搜索：跨所有 Spec 文件关键词检索',
@@ -735,7 +735,7 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
   }
 
   // ── 意图域检测: 区分 speccore 操作 vs 普通 AI 对话 ──
-  // v6.97.0+ 新增：如果匹配到容易混淆的意图（analyze/split/execute/plan），
+  // v6.97.0+ 新增：如果匹配到容易混淆的意图（analyze/taskify/execute/plan），
   // 但输入中没有 speccore 上下文词（如"迭代""全局""speccore"等），
   // 可能是用户在普通聊天（如"分析代码""讨论需求"），应返回确认而非直接执行
   // v6.97.0+ 修复：显式调用（/spec-ask Skill）时跳过此检测，直接执行

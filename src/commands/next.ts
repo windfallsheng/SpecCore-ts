@@ -121,7 +121,7 @@ export async function nextCommand(options: NextOptions): Promise<void> {
     doc2spec: 'speccore doc2spec -f PRD.docx -i ' + iteration,
     analyze: 'speccore analyze --iteration=' + iteration,
     validate: 'speccore validate --iteration=' + iteration,
-    split: 'speccore iteration split -i ' + iteration,
+    split: 'speccore iteration taskify -i ' + iteration,
     plan: 'speccore plan -i ' + iteration,
     execute: 'speccore execute --auto -i ' + iteration,
     verify: 'speccore verify',

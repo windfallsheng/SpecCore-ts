@@ -1606,7 +1606,7 @@ function buildSplitInstruction(): string {
     '**续批标记格式**（JSON 数组输出后追加）：',
     '```',
     '[PENDING: 模块A, 模块B, 模块C]',
-    '[SPECCORE_EXEC: speccore iteration split --prompt -I {迭代名}]',
+    '[SPECCORE_EXEC: speccore iteration taskify --prompt -I {迭代名}]',
     '```',
     '- `[PENDING: ...]`：列出未拆分的功能模块名称',
     '- `[SPECCORE_EXEC: ...]`：CLI 会自动读取并继续拆分剩余模块',
@@ -3159,8 +3159,8 @@ function generateExamples(command: string, req: Omit<NeedsInfoRequest, 'marker'>
       ];
     case 'split':
       return [
-        `- 拆分任务: \`speccore iteration split --prompt -I ${iter}\``,
-        `- 指定负责人: \`speccore iteration split --prompt -I ${iter} --owner 张三\``,
+        `- 拆分任务: \`speccore iteration taskify --prompt -I ${iter}\``,
+        `- 指定负责人: \`speccore iteration taskify --prompt -I ${iter} --owner 张三\``,
       ];
     default:
       return [`\`speccore ${command} --prompt ${req.missing.map(m => `<${m}>`).join(' ')}\``];

@@ -359,7 +359,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           logger.info('');
           
           // v8.3.160+: 步骤隔离模式输出标记 + 子 Agent 激活
-          const nextCmd = `speccore iteration split -I ${iter} --resume --pipeline`;
+          const nextCmd = `speccore iteration taskify -I ${iter} --resume --pipeline`;
           const prompt = await buildPrompt('split', {
             iteration: iter,
             // v8.3.160+: 传递步骤级上下文控制
@@ -453,7 +453,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           featureBatchHint += `- 剩余模块在 JSON 输出后追加续批标记\n\n`;
           featureBatchHint += `**续批标记格式**：\n`;
           featureBatchHint += `\`\`\`\n[PENDING: 模块A, 模块B, 模块C]\n`;
-          featureBatchHint += `[SPECCORE_EXEC: speccore iteration split --prompt -I ${iter}]\n`;
+          featureBatchHint += `[SPECCORE_EXEC: speccore iteration taskify --prompt -I ${iter}]\n`;
           featureBatchHint += `\`\`\`\n\n`;
           featureBatchHint += `**重要**：不要一次性拆分所有模块，确保当前批次质量后再续批。\n`;
         }
@@ -517,7 +517,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           if (dispatchResult.content) {
             process.stdout.write(`\n--- 执行结果 ---\n${dispatchResult.content.slice(0, 3000)}${dispatchResult.content.length > 3000 ? '\n... (截断)' : ''}\n`);
           }
-          process.stdout.write(`\n> 请审查上述结果，确认后执行 speccore iteration split --response 写入任务\n`);
+          process.stdout.write(`\n> 请审查上述结果，确认后执行 speccore iteration taskify --response 写入任务\n`);
           process.exitCode = 0;
           return;
         }
@@ -582,7 +582,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
         }
         
         // v8.3.160+: 步骤隔离模式输出标记 + 子 Agent 激活
-        const nextCmd = `speccore iteration split -I ${iter} --resume --pipeline`;
+        const nextCmd = `speccore iteration taskify -I ${iter} --resume --pipeline`;
         const output = [
           `[SPECCORE_STEP_DONE]`,
           `步骤 "${state.currentStep}" 已完成。`,
@@ -1004,7 +1004,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
         if (extracted.pending) {
           logger.info('');
           logger.info(`📦 还有未拆分的功能模块: ${extracted.pending}`);
-          logger.info(`   继续拆分: speccore iteration split --prompt -I ${iter}`);
+          logger.info(`   继续拆分: speccore iteration taskify --prompt -I ${iter}`);
           if (extracted.exec) {
             process.stdout.write(`\n[SPECCORE_EXEC: ${extracted.exec}]\n`);
           }

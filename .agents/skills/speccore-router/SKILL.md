@@ -4,7 +4,7 @@ description: >
   SpecCore CLI 命令路由器。仅在用户明确提到 speccore、迭代、期次、Spec 等关键词，
   或明确要求通过 speccore 命令行工具执行操作，且意图涉及以下概念时使用：
   迭代管理、需求文档导入（doc2spec）、Spec 分析生成（analyze --prompt）、
-  任务拆分（split）、执行计划（plan --prompt）、代码执行（execute --prompt）、
+  任务拆分（taskify）、执行计划（plan --prompt）、代码执行（execute --prompt）、
   任务归档（done）、PR 提交（pr）、状态查看（status/dashboard/doctor）、智能级联（dev）。
   将用户意图映射为 speccore CLI 命令，通过 execute_command 执行。
   核心原则：必须直接执行，决不输出命令文本。唯一下例外："只看不跑"。
@@ -111,7 +111,7 @@ allowed-tools: ["Bash", "Read", "Write", "Edit"]
 
 ### 1. 有 speccore 上下文（放行）
 
-如果当前对话中用户**之前已经明确使用过 speccore**（如执行过 analyze/split/execute 等命令，或提到过迭代/期次/Task 等），则视为有上下文：
+如果当前对话中用户**之前已经明确使用过 speccore**（如执行过 analyze/taskify/execute 等命令，或提到过迭代/期次/Task 等），则视为有上下文：
 - ✅ 模糊意图（如"分析需求"、"拆分任务"）**直接按 speccore 处理**，无需重复确认
 - 除非用户明确说"这次不用 speccore"、"不用 speccore 分析"、"正常讨论就行"等，才按正常 AI 对话处理
 
@@ -125,7 +125,7 @@ allowed-tools: ["Bash", "Read", "Write", "Edit"]
 - `Task-`、`任务号`
 - `010-requirements`、`020-specs`、`030-tasks`
 - `.speccore/` 目录相关操作
-- `/analyze`、`/split`、`/execute` 等快捷命令
+- `/analyze`、`/taskify`、`/execute` 等快捷命令
 
 **必须追问确认（无上述关键词）**：
 | 用户说法 | 处理方式 |
@@ -219,10 +219,10 @@ allowed-tools: ["Bash", "Read", "Write", "Edit"]
 ### 任务拆分
 | 用户说法 | 提取参数 | AI 上下文（需宿主AI交互） |
 | :--- | :--- | :--- |
-| 拆分任务/拆解需求 | iter, owner? | `speccore iteration split -I {iter}` |
-| 分配任务 | iter, owner? | `speccore iteration split -I {iter} --owner {owner}` |
-| 拆分 {iter} | iter | `speccore iteration split -I {iter}` |
-| 生成任务列表 | iter | `speccore iteration split -I {iter}` |
+| 拆分任务/拆解需求 | iter, owner? | `speccore iteration taskify -I {iter}` |
+| 分配任务 | iter, owner? | `speccore iteration taskify -I {iter} --owner {owner}` |
+| 拆分 {iter} | iter | `speccore iteration taskify -I {iter}` |
+| 生成任务列表 | iter | `speccore iteration taskify -I {iter}` |
 
 ### 执行开发
 | 用户说法 | 提取参数 | AI 上下文（需宿主AI交互） |
@@ -429,7 +429,7 @@ allowed-tools: ["Bash", "Read", "Write", "Edit"]
 | :--- | :--- | :--- |
 | 导入需求 {file} | `speccore doc2spec --prompt -f {file}` | `--response '...'` |
 | 分析 {iter} | `speccore analyze --prompt -I {iter}` | `--apply '...'` |
-| 拆分 {iter} | `speccore iteration split --prompt -I {iter}` | `--response '...'` |
+| 拆分 {iter} | `speccore iteration taskify --prompt -I {iter}` | `--response '...'` |
 | 生成计划 {iter} | `speccore plan --prompt -I {iter}` | `--response '...'` |
 | 执行/开发 {task} | `speccore execute --prompt -t {task}` | `--response '...'` |
 | 需求变更/新增 {desc} | `speccore change --prompt "{desc}"` | AI澄清→**用户确认**→`--response '{JSON}'` |

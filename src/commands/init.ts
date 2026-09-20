@@ -1124,7 +1124,7 @@ export const TOOL_COMMANDS: [string, string, string][] = [
   ['spec-doc2spec', '文档转规格专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（文件存在性、格式检测），参数缺失时输出交互式提示。不影响 speccore ask 的意图识别能力。', 'speccore doc2spec -f ${1:PRD.docx} --iter ${2:Q1}'],
   ['spec-analyze', '需求分析专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（迭代存在性、需求文档检测、专业度评估、端列表读取），参数缺失时输出交互式提示。不影响 speccore ask 的意图识别能力。', '直接执行: execute_command("speccore ask \'用户原话\'")\n\n不要输出命令文本，不要分析意图，一切交给 speccore ask。'],
   ['spec-from-source', '源码反推专属 Skill（分析源码生成需求/全局资产）。在调用 speccore ask 之前，执行参数提取（源码目录列表，多端用逗号分隔），用户未提供源码目录时输出交互式提示。不影响 speccore ask 的意图识别能力。', '直接执行: execute_command("speccore ask \'用户原话\'")\n\n不要输出命令文本，不要分析意图，一切交给 speccore ask。\n用户未提供源码目录时，先询问源码目录（如 backend/src,admin-web/src）再执行。'],
-  ['spec-split', '任务拆分专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（analyze 是否完成、端列表提取、变更检测），参数缺失时输出交互式提示（参数说明 + 使用示例）。不影响 speccore ask 的意图识别能力。', '## ⛔ 铁律: 分析完成后必须拆分，禁止跳过\n1. Read 020-specs/ for analysis docs\n2. Dry-run split and show preview\n3. Execute: speccore iteration split -i ${1:Q1} --owner ${2|张三,李四,王五|}'],
+  ['spec-taskify', '任务拆分专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（analyze 是否完成、端列表提取、变更检测），参数缺失时输出交互式提示（参数说明 + 使用示例）。不影响 speccore ask 的意图识别能力。', '直接执行: execute_command("speccore ask \'用户原话\'")\n\n不要输出命令文本，不要分析意图，一切交给 speccore ask。'],
   ['spec-execute', '执行开发专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（任务状态检查、代码模式读取、上下文准备），参数缺失时输出交互式提示（参数说明 + 使用示例）。不影响 speccore ask 的意图识别能力。', '## ⛔ 铁律: 有任务就执行，禁止说"已完成"跳过\n1. Read Task REQ.md + TECH.md\n2. Show plan then execute: speccore execute -i ${1:Q1} -t ${2:Task-001} --force'],
   ['spec-plan', '执行计划专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（任务是否已拆分、依赖关系检测、执行顺序优化），参数缺失时输出交互式提示（参数说明 + 使用示例）。不影响 speccore ask 的意图识别能力。', '1. 仅生成并展示计划页面，不执行代码修复\n2. speccore plan -I ${1:Q1} --owner ${2|张三,李四,王五|} --html\n3. 打开 speccore-plan.html'],
   ['spec-pr', '代码提交与 PR 专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（分支安全检查、未提交变更检测、ANALYSIS.md 路径校验、冲突检测），参数缺失时输出交互式提示。不影响 speccore ask 的意图识别能力。', 'speccore pr --task=${1:Task-001}'],
@@ -1166,7 +1166,7 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
     await ensureDir(toolDir);
     for (const [name, desc, cmd] of commands) {
       // v6.77.2+: 所有有 SKILL.md 的命令使用动态路由格式（走 speccore ask 引擎）
-      const isDynamicRouting = ['spec-analyze', 'spec-ask', 'spec-change', 'spec-doc2spec', 'spec-done', 'spec-execute', 'spec-from-source', 'spec-iteration-create', 'spec-plan', 'spec-pr', 'spec-spec2doc', 'spec-split', 'spec-task-create'].includes(name);
+      const isDynamicRouting = ['spec-analyze', 'spec-ask', 'spec-change', 'spec-doc2spec', 'spec-done', 'spec-execute', 'spec-from-source', 'spec-iteration-create', 'spec-plan', 'spec-pr', 'spec-spec2doc', 'spec-taskify', 'spec-task-create'].includes(name);
       const content = isDynamicRouting
         ? '---\nname: ' + name + '\ndescription: ' + desc + '\n---\n\n' + cmd
         : '---\nname: ' + name + '\ndescription: ' + desc + '\n---\n' + cmd;
@@ -1238,7 +1238,7 @@ export async function createToolIntegrations(projectRoot: string, toolFilter?: s
     'spec-iteration-create',
     'spec-analyze',
     'spec-from-source',
-    'spec-split',
+    'spec-taskify',
     'spec-execute',
     'spec-plan',
     'spec-change',
@@ -2274,7 +2274,7 @@ export function generateAIRulesContent(): string {
     '| spec-spec2doc | **AI内容编排+Pandoc格式转换+质量验证** | "导出文档"/"生成交付文档" |',
     '| spec-analyze | 深度需求分析（拆解→映射→风险） | "分析需求" |',
     '| spec-from-source | 从源码反推需求/全局资产（两跳 IR→UR） | "分析源码"/"从源码反推需求" |',
-    '| spec-split | 智能任务拆分（分组→分配→依赖） | "拆分任务" |',
+    '| spec-taskify | 智能任务拆分（分组→分配→依赖） | "拆分任务" |',
     '| spec-execute | 代码生成+编译+测试+修复循环 | "开发Task-001" |',
     '| spec-plan | 排程+里程碑+并行策略 | "生成计划" |',
 

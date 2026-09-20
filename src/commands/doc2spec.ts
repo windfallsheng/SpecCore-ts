@@ -448,7 +448,7 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
       logger.info('  ⚠️ 纯 pandoc 模式（无 AI 精炼）');
       logger.info(`  1. 检查自动转换的标题层级`);
       logger.info(`  2. 补充接口定义表格`);
-      logger.info(`  3. speccore iteration split`);
+      logger.info(`  3. speccore iteration taskify`);
       logger.info(`  4. speccore execute --task=Task-001 --force`);
     }
 

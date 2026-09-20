@@ -271,6 +271,18 @@ export async function updateCommand(options: { force?: boolean; tool?: string; y
     await copy(skillsSrc, skillsDest, { overwrite: true });
   }
 
+  // 4b-2. 清理孤儿 Skill 目录（v8.3.207+: 命名演进后旧目录残留，copy 只覆盖不删除）
+  const LEGACY_SKILL_DIRS = ['spec-split'];
+  if (await pathExists(skillsDest)) {
+    for (const legacySkill of LEGACY_SKILL_DIRS) {
+      const lp = join(skillsDest, legacySkill);
+      if (await pathExists(lp)) {
+        await require('fs-extra').remove(lp);
+        logger.info(`  🗑️  清理废弃 Skill: .agents/skills/${legacySkill}（已更名 ${legacySkill === 'spec-split' ? 'spec-taskify' : ''}）`);
+      }
+    }
+  }
+
   // 4c. 更新 AGENTS.md / CLAUDE.md
   try {
     const agentsSrc = join(__dirname, '..', '..', 'AGENTS.md');

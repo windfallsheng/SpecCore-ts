@@ -148,7 +148,7 @@ function attachParamFlags(prompts: PromptTemplate[]): PromptTemplate[] {
     'spec-dev': { '迭代名': '-i', '阶段': '--from' },
     'spec-analyze': { '迭代名': '-I', '文档名': '--deep', '功能名': '--feature', '模块关键词': '--filter' },
     'spec-from-source': { '源码目录': '--src' },
-    'spec-split': { '迭代名': '-i', '功能模块': '--filter' },
+    'spec-taskify': { '迭代名': '-i', '功能模块': '--filter' },
     'spec-change': { '迭代名': '-i' },
     'spec-iteration-create': { '迭代名': '-n', '主题': '--topic', '负责人': '--owner', '需求文档路径': '-f' },
     'spec-execute': { '迭代名': '-i', '任务ID': '--task', '数量': '--batch-size' },
