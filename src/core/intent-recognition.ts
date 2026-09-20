@@ -860,7 +860,10 @@ function extractParams(input: string, mapping: CommandMapping): Record<string, s
     const normalizeStage = (s: string) => stageNameMap[s] || s;
 
     // 起止点优先（更精确）："从 X [执行/跑] 到/至 Y"
-    const rangeMatch = input.match(/从(.+?)(?:开始|执行|跑|自动)?(?:到|至)(.+?)(?:执行|跑|自动|结束|为止)?$/);
+    // v8.3.195+: 先剥离闸口/全自动等后缀修饰词，避免污染 from/to 提取
+    //   （否则「从X到开发，全自动执行」会把 to 提取成「开发，全自动」）
+    const cleanInput = input.replace(/[,，]?\s*(?:全自动|无人值守|无人干预|自动执行|一条龙|不中断|不需确认|无需确认|不用确认)(?:执行|跑)?[\s，。]*/g, '');
+    const rangeMatch = cleanInput.match(/从(.+?)(?:开始|执行|跑|自动)?(?:到|至)(.+?)(?:执行|跑|自动|结束|为止)?$/);
     if (rangeMatch) {
       params.from = normalizeStage(rangeMatch[1].trim());
       params.to = normalizeStage(rangeMatch[2].trim());
@@ -883,6 +886,11 @@ function extractParams(input: string, mapping: CommandMapping): Record<string, s
           break;
         }
       }
+    }
+
+    // v8.3.195+: 闸口模式检测（全自动/无人值守 → 跳过闸口 A/B，保留 C）
+    if (/全自动|无人值守|不用确认|无需确认|不需确认|不用人工|无需人工|无人干预|一条龙|自动执行|不中断/.test(input)) {
+      params.gate = 'auto';
     }
   }
 

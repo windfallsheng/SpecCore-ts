@@ -17,6 +17,7 @@ export interface RunOptions {
   demo?: boolean;       // v8.3.184+: --demo 演示模式（放宽闸口 A/B，保留 C）
   demand?: string;      // v8.3.184+: 一句话需求描述（req-doc 阶段入口）
   preset?: string;      // v8.3.190+: --preset 预设/自定义流水线名
+  gate?: 'manual' | 'auto'; // v8.3.195+: --gate 闸口模式（manual=都停 / auto=跳过A/B，C永不跳过）
 }
 
 async function hasFeatureDirs(iterDir: string): Promise<boolean> {
@@ -86,11 +87,16 @@ async function autoPipeline(options: RunOptions): Promise<void> {
   // v8.3.190+: 读取 optional_steps（off 跳过）+ pipelines（命名流水线）配置
   let optionalSteps: Record<string, 'auto' | 'on' | 'off'> = {};
   let pipelinesConfig: { default?: string; custom?: Record<string, string> } = {};
+  // v8.3.195+: 闸口模式（命令 flag > 配置 > 默认 manual）
+  let gateMode: 'manual' | 'auto' = 'manual';
   try {
     const { config } = await loadConfigWithMeta();
     optionalSteps = (config.settings.optional_steps || {}) as Record<string, 'auto' | 'on' | 'off'>;
     pipelinesConfig = (config.settings.pipelines || {}) as { default?: string; custom?: Record<string, string> };
+    if (config.settings.gates?.mode === 'auto') gateMode = 'auto';
   } catch { /* 配置读取失败用默认 */ }
+  if (options.gate) gateMode = options.gate;  // 命令 flag 最高优先级
+  if (options.demo) gateMode = 'auto';        // --demo 兼容：等价于 --gate auto
 
   // v7.4.0+: Pipeline 阶段结果追踪
   interface PhaseResult {
@@ -191,7 +197,9 @@ async function autoPipeline(options: RunOptions): Promise<void> {
     // v8.3.184+: review 闸口软停（功能开发质量底线）
     const gate = GATES[phase.key];
     if (gate) {
-      const skipGate = options.demo && gate.id !== 'C';  // demo 跳过 A/B，C 永不跳过
+      // v8.3.195+: 闸口模式（C 永不跳过）
+      //   manual = A/B 都软停人工确认；auto = 跳过 A/B（--gate auto 或 --demo）
+      const skipGate = gate.id !== 'C' && gateMode === 'auto';
       if (!skipGate) {
         logger.warn(`\n🛑 [SPECCORE_GATE_${gate.id}] ${gate.title}`);
         logger.warn(`   ${gate.hint}`);

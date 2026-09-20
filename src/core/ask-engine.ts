@@ -644,9 +644,11 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
   // 条件：confidence>=40 兜底，防止极低置信度的 run 误抢。
   // runForced：preset/起止点已精确识别 → 跳过歧义检测与中置信度确认，直接编排执行。
   let runForced = false;
-  const runWithParams = results.find(r => r.intent === 'run' && r.confidence >= 40 && (r.extractedParams?.preset || r.extractedParams?.from || r.extractedParams?.to));
-  if (runWithParams && best?.intent !== 'run') {
-    best = runWithParams;
+  const runWithParams = results.find(r => r.intent === 'run' && r.confidence >= 40 && (r.extractedParams?.preset || r.extractedParams?.from || r.extractedParams?.to || r.extractedParams?.gate));
+  if (runWithParams) {
+    // v8.3.195+: run 带精确参数（preset/起止点/闸口）即视为已识别编排意图，
+    // 无论 best 是否已是 run 都强制编排（否则 run 排第一但与 execute 差距<15% 时会走歧义、丢参数）
+    if (best?.intent !== 'run') best = runWithParams;
     runForced = true;
   }
   // v8.3.190+: 澄清三态 flag（仅 analyze 命令，供各分支命令展示统一使用）
@@ -660,11 +662,12 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
     if (rp.preset) runFlag += ` --preset ${rp.preset}`;
     if (rp.from) runFlag += ` --from ${rp.from}`;
     if (rp.to) runFlag += ` --to ${rp.to}`;
+    if (rp.gate) runFlag += ` --gate ${rp.gate}`;  // v8.3.195+: 全自动 → 跳过闸口 A/B
   }
   
   // 如果 KB 有匹配且置信度高于意图识别，用 KB（但要整合意图识别的参数）
   // v8.3.191+: run 意图有 preset/起止点时，优先 run 编排（避免被 KB 的 split/deploy 等抢占）
-  const runHasParams = best?.command === 'run' && (best.extractedParams?.preset || best.extractedParams?.from || best.extractedParams?.to);
+  const runHasParams = best?.command === 'run' && (best.extractedParams?.preset || best.extractedParams?.from || best.extractedParams?.to || best.extractedParams?.gate);
   if (kbMatch && (!best || best.confidence < 60) && !runHasParams) {
     const params = best?.extractedParams || {};
     let fullCommand = `speccore ${kbMatch.name}`;
@@ -684,6 +687,7 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
       if (params.preset) { fullCommand += ` --preset ${params.preset}`; paramNotes.push(`🎯 流水线: ${params.preset}`); }
       if (params.from) { fullCommand += ` --from ${params.from}`; paramNotes.push(`📍 起点: ${params.from}`); }
       if (params.to) { fullCommand += ` --to ${params.to}`; paramNotes.push(`🏁 终点: ${params.to}`); }
+      if (params.gate) { fullCommand += ` --gate ${params.gate}`; paramNotes.push(`🤖 闸口: 全自动（跳过 A/B）`); }
     }
 
     // 补充分析意图已在 askEngine 顶层检测，此处不再重复
@@ -840,6 +844,10 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
       if (params.to) {
         fullCommand += ` --to ${params.to}`;
         paramNotes.push(`🏁 终点: ${params.to}`);
+      }
+      if (params.gate) {
+        fullCommand += ` --gate ${params.gate}`;
+        paramNotes.push(`🤖 闸口: 全自动（跳过 A/B）`);
       }
     }
     // v6.97.0+: 重新/补充分析模式
