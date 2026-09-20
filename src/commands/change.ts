@@ -469,6 +469,7 @@ export interface ChangeOptions {
   newFlag?: boolean;     // v6.73.0+: --new 显式指定新增需求
   withCode?: boolean;    // v6.73.0+: --with-code 启用代码级影响分析
   auto?: boolean;        // v6.73.0+: --auto 全自动模式
+  autoExecute?: boolean; // v8.3.207+: --auto-execute 处理完自动衔接 analyze→execute 修复
   keep?: boolean;        // v6.73.0+: --keep 保留原始文件
   deleteAfterProcess?: boolean; // v6.73.0+: --delete-after-process 处理后删除
   archiveStrategy?: ArchiveStrategy; // v6.73.0+: 归档策略
@@ -1434,6 +1435,7 @@ async function processChangeV2(options: ChangeOptions): Promise<void> {
 
   const processedEntries: ChangeInboxFileEntry[] = [];
   const allAffectedIds: string[] = [];
+  const newTaskIds: string[] = [];
   let changeCounter = 0;
 
   for (let i = 0; i < entries.length; i++) {
@@ -1461,7 +1463,8 @@ async function processChangeV2(options: ChangeOptions): Promise<void> {
 
       // Step 3: 新增需求 → 走新增流程
       if (changeRequest.type === 'new') {
-        await handleNewRequirementV2(changeRequest, iteration);
+        const newId = await handleNewRequirementV2(changeRequest, iteration);
+        if (newId) newTaskIds.push(newId);
         processedEntries.push(entry);
         continue;
       }
@@ -1559,6 +1562,23 @@ async function processChangeV2(options: ChangeOptions): Promise<void> {
   logger.info('   speccore status                              # 查看当前迭代状态');
   logger.info('   speccore analyze --global --withCode         # 刷新全局层');
   logger.info('   speccore execute --task <Task-XXX> --force   # 重新执行受影响任务');
+
+  // v8.3.207+: --auto-execute 全自动衔接 analyze→execute 修复（bug 无人值守流水线）
+  if (options.autoExecute) {
+    const execIds = [...new Set([...allAffectedIds, ...newTaskIds])];
+    if (execIds.length > 0) {
+      logger.info('');
+      logger.info(`🚀 [auto-execute] 自动修复 ${execIds.length} 个任务...`);
+      const { execSync } = await import('child_process');
+      for (const tid of execIds) {
+        logger.info(`   🔄 ${tid}: analyze --sync`);
+        try { execSync(`speccore analyze --task=${tid} --sync -I ${iteration}`, { stdio: 'inherit' }); } catch (e: any) { logger.warn(`   ⚠️ analyze 失败: ${e.message}`); }
+        logger.info(`   ⚡ ${tid}: execute --force`);
+        try { execSync(`speccore execute --task=${tid} --force -I ${iteration}`, { stdio: 'inherit' }); } catch (e: any) { logger.warn(`   ⚠️ execute 失败: ${e.message}`); }
+      }
+      logger.success('✅ [auto-execute] 自动修复完成');
+    }
+  }
 
   // 自动刷新知识图谱和 RAG 索引（v8.3.65+）
   try {
@@ -1682,7 +1702,7 @@ async function applyAiImpactToTasks(
 /**
  * 新增需求处理 v2（增强版）
  */
-async function handleNewRequirementV2(changeRequest: ChangeRequest, iteration: string): Promise<void> {
+async function handleNewRequirementV2(changeRequest: ChangeRequest, iteration: string): Promise<string> {
   const iterDir = await getIterationDir(iteration);
   const taskBase = await resolveTaskBase(iterDir);
   await ensureDir(taskBase);
@@ -1760,4 +1780,6 @@ async function handleNewRequirementV2(changeRequest: ChangeRequest, iteration: s
       logger.info('🔍 迭代 RAG 索引已刷新');
     }
   } catch {}
+
+  return taskId;
 }

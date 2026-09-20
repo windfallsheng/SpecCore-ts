@@ -330,7 +330,9 @@ taskCmd
   .option('--frontend-only', '仅创建前端端（自动识别项目中的前端端名）')
   .option('-i, --iteration <iteration>', '目标迭代')
   .option('--batch <tasks>', '批量创建')
-  .option('--batch-file <path>', '从文件批量导入')
+  .option('--batch-file <path>', '从文件批量导入（支持 xlsx，自动提取内嵌图片）')
+  .option('--feature <module>', '关联功能模块（bug 修复时指定所属功能模块，影响分支 base）')
+  .option('--auto-execute', '创建后自动 analyze→execute 修复（bug 无人值守）')
   .option('--interactive', '交互式创建')
   .option('--id <id>', '手动指定任务 ID（如 Task-005），计数器仍会递增')
   .action(taskNewCommand);
@@ -485,6 +487,7 @@ program
   .option('--dry-run', 'Preview impact without modifying')
   .option('--force', 'Skip preview and apply directly')
   .option('--auto', '全自动流水线：无人干预级联执行全部阶段')
+  .option('--auto-execute', '处理完自动衔接 analyze→execute 修复受影响任务（bug 无人值守）')
   .option('--from <phase>', '从指定阶段开始（init/analyze/split/plan/execute/pr/done）')
   .option('--interactive', 'Interactive: preview → adjust → confirm → apply')
   .option('--file <file>', '指定变更需求文件（逗号分隔多个）')

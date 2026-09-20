@@ -37,7 +37,7 @@ import {
   ExecutionState,
   TaskSummary,
 } from '../core/execution-state';
-import { createTaskBranch, detectDefaultBranch, findBranchByTaskId, isProtectedBranch, loadGitConfig } from '../core/git-integration';
+import { createTaskBranch, detectDefaultBranch, findBranchByTaskId, findBranchByFeature, isProtectedBranch, loadGitConfig } from '../core/git-integration';
 import { buildPrompt, formatPrompt, parseAiResponse, outputNeedsInfo } from '../core/prompt-builder';
 import { runVerification, writeVerifyReport, outputFixTag, runQualityGate, syncTestDocFromResults } from '../core/verify-engine';
 import { runArbitration, type ArbitrationEngineResult, getArbitrationConfig } from '../core/arbitration/arbitration-engine';
@@ -1652,8 +1652,26 @@ async function prepareTaskBranch(
     }
   } catch {}
 
+  // v8.3.207+: bugfix 关联功能模块时，从该模块的任务分支拉（默认仍从 main）
+  let bugfixBase: string | undefined;
+  if (taskType === 'bugfix') {
+    try {
+      const featurePath = join(taskDir, '.meta', 'feature');
+      if (await pathExists(featurePath)) {
+        const feature = (await readFile(featurePath, 'utf-8')).trim();
+        if (feature && feature !== '未分类') {
+          const fb = findBranchByFeature(feature, gitCwd);
+          if (fb) {
+            bugfixBase = fb;
+            logger.info(`  🔗 bugfix 关联功能模块「${feature}」，从分支 ${fb} 拉取`);
+          }
+        }
+      }
+    } catch {}
+  }
+
   // 3. 创建任务分支（传入 taskDir + taskType + cwd 支持子任务级 git 配置 + 工程目录分离）
-  const branch = createTaskBranch(task.id, task.name || task.id, undefined, iteration, taskDir, taskType, gitCwd);
+  const branch = createTaskBranch(task.id, task.name || task.id, bugfixBase, iteration, taskDir, taskType, gitCwd);
   if (!branch) return null;
   createdBranches.set(task.id, branch);
 

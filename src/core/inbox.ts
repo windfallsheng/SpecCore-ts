@@ -2,9 +2,10 @@
  * inbox — 需求收件箱
  * 管理 .speccore/inbox/ 目录：扫描新文件、追踪处理状态、读取文件内容
  */
-import { join } from 'path';
+import { join, basename } from 'path';
 import { readdir, readFile, writeFile, pathExists, stat, ensureDir } from 'fs-extra';
 import { logger } from '../utils/logger';
+import { extractExcelBugs } from './excel-extract';
 
 // ── 类型定义 ──
 
@@ -123,6 +124,27 @@ async function readInboxFile(filePath: string, fileType: InboxFileEntry['type'])
       return readFile(filePath, 'utf-8');
 
     case 'excel':
+      // v8.3.207+: exceljs 优先（含内嵌图片提取），fallback xlsx 纯文本
+      try {
+        const bugs = await extractExcelBugs(filePath);
+        if (bugs) {
+          const assetsDir = join(getInboxDir(), 'assets');
+          await ensureDir(assetsDir);
+          const lines: string[] = [];
+          let imgIdx = 0;
+          for (const b of bugs) {
+            lines.push(b.cells.join(' — '));
+            for (const img of b.images) {
+              imgIdx++;
+              const fn = `${basename(filePath).replace(/\.xlsx?$/i, '')}-bug-${String(imgIdx).padStart(2, '0')}.${img.ext}`;
+              await writeFile(join(assetsDir, fn), img.buffer);
+              lines.push(`  [截图: ${join(assetsDir, fn)}]`);
+            }
+          }
+          return lines.join('\n');
+        }
+      } catch { /* 回退到纯文本 */ }
+
       try {
         const XLSX = require('xlsx');
         const wb = XLSX.readFile(filePath);

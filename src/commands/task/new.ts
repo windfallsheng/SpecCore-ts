@@ -4,6 +4,7 @@ import { logger, Spinner } from '../../utils/logger';
 import { getDefaultIteration, updateContext, getIterationDir } from '../../core/context';
 import { nextTaskId } from '../../core/global-counters';
 import { parsePlatformList } from '../../core/spec-paths';
+import { extractExcelBugs, extractExcelTextOnly, type ExcelBugRow } from '../../core/excel-extract';
 
 export interface TaskNewOptions {
   name?: string;
@@ -20,6 +21,9 @@ export interface TaskNewOptions {
   batch?: string;
   batchFile?: string;
   interactive?: boolean;
+  feature?: string;      // --feature: 关联功能模块（影响 bugfix 分支 base）
+  images?: { ext: string; buffer: Buffer }[];  // Excel 内嵌图片（bug 截图，随任务落盘）
+  autoExecute?: boolean; // --auto-execute: 创建后自动 analyze→execute 修复
 }
 
 export async function taskNewCommand(options: TaskNewOptions): Promise<void> {
@@ -39,37 +43,48 @@ export async function taskNewCommand(options: TaskNewOptions): Promise<void> {
 
 /** 批量创建 Task */
 async function batchCreateTasks(options: TaskNewOptions): Promise<void> {
-  let batchText = options.batch || '';
+  interface TaskItem { name: string; desc: string; images: { ext: string; buffer: Buffer }[] }
+  const items: TaskItem[] = [];
 
-  // 从文件读取
   if (options.batchFile) {
     if (!await pathExists(options.batchFile)) {
       logger.error('文件不存在: ' + options.batchFile);
       return;
     }
     const ext = options.batchFile.split('.').pop()?.toLowerCase();
-    if (ext === 'xlsx') {
-      try {
-        const XLSX = require('xlsx');
-        const wb = XLSX.readFile(options.batchFile);
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const data: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
-        batchText = data.slice(1)
-          .filter((row: any[]) => row.some((c: any) => c))
-          .map((row: any[]) => row.filter((c: any) => c).join(' — '))
-          .join('\n');
-        logger.info('📊 从 Excel 导入: ' + options.batchFile);
-      } catch (e: any) {
-        logger.error('Excel 解析失败: ' + e.message);
-        return;
+    if (ext === 'xlsx' || ext === 'xls') {
+      // v8.3.207+: 优先 exceljs（含内嵌图片），fallback xlsx 纯文本
+      const bugs = await extractExcelBugs(options.batchFile);
+      if (bugs) {
+        for (const b of bugs) {
+          const desc = b.cells.join(' — ');
+          items.push({ name: desc.slice(0, 60), desc, images: b.images.map(i => ({ ext: i.ext, buffer: i.buffer })) });
+        }
+        const imgCount = bugs.reduce((s, b) => s + b.images.length, 0);
+        logger.info(`📊 从 Excel 导入 ${bugs.length} 个 bug${imgCount > 0 ? `（含 ${imgCount} 张截图）` : ''}: ${options.batchFile}`);
+      } else {
+        const rows = await extractExcelTextOnly(options.batchFile);
+        if (rows) {
+          for (const r of rows) items.push({ name: r.slice(0, 60), desc: r, images: [] });
+          logger.info('📊 从 Excel 导入（纯文本，exceljs 未安装）: ' + options.batchFile);
+        } else {
+          logger.error('Excel 解析失败: ' + options.batchFile);
+          return;
+        }
       }
     } else {
-      batchText = await readFile(options.batchFile, 'utf-8');
+      const text = await readFile(options.batchFile, 'utf-8');
+      for (const line of text.split('\n').filter(b => b.trim())) {
+        items.push({ name: line.trim().slice(0, 60), desc: line.trim(), images: [] });
+      }
       logger.info('📄 从文件导入: ' + options.batchFile);
+    }
+  } else if (options.batch) {
+    for (const line of options.batch.split('\n').filter(b => b.trim())) {
+      items.push({ name: line.trim().slice(0, 60), desc: line.trim(), images: [] });
     }
   }
 
-  const items = batchText.split('\n').filter(b => b.trim());
   if (items.length === 0) {
     logger.error('未找到有效的任务描述');
     return;
@@ -79,7 +94,7 @@ async function batchCreateTasks(options: TaskNewOptions): Promise<void> {
   if (options.interactive) {
     logger.info(`\n📋 共 ${items.length} 个任务:\n`);
     for (let i = 0; i < items.length; i++) {
-      logger.info(`  ${i + 1}. ${items[i].trim()}`);
+      logger.info(`  ${i + 1}. ${items[i].name}${items[i].images.length > 0 ? ` 🖼️x${items[i].images.length}` : ''}`);
     }
     const readline = require('readline');
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -95,18 +110,17 @@ async function batchCreateTasks(options: TaskNewOptions): Promise<void> {
   let created = 0;
 
   for (const item of items) {
-    const trimmed = item.trim();
-    if (!trimmed) continue;
     try {
       await createSingleTask({
         ...options,
-        name: trimmed.slice(0, 60),
-        desc: trimmed,
+        name: item.name,
+        desc: item.desc,
         type,
+        images: item.images,
       });
       created++;
     } catch (e: any) {
-      logger.error(`创建失败 "${trimmed.slice(0, 30)}": ${e.message}`);
+      logger.error(`创建失败 "${item.name.slice(0, 30)}": ${e.message}`);
     }
   }
 
@@ -191,14 +205,29 @@ async function createSingleTask(options: TaskNewOptions): Promise<void> {
     await writeFile(join(taskDir, '.meta', 'status'), status);
     await writeFile(join(taskDir, '.meta', 'owner'), '未分配');
     await writeFile(join(taskDir, '.meta', 'created-at'), today);
-    // 功能单元标识（v6.49.4+）：默认取任务名称
-    await writeFile(join(taskDir, '.meta', 'feature'), options.name || '未分类');
+    // 功能单元标识（v6.49.4+）：优先 --feature 关联功能模块，否则取任务名称
+    await writeFile(join(taskDir, '.meta', 'feature'), options.feature || options.name || '未分类');
 
     // Generate task content
     const taskContent = await generateTaskContent(options);
 
+    // v8.3.207+: 落盘 Excel 内嵌图片 + REQ.md 引用（bug 截图进任务上下文）
+    let reqContent = taskContent.req;
+    if (options.images && options.images.length > 0) {
+      const shotsDir = join(taskDir, 'assets', 'screenshots');
+      await ensureDir(shotsDir);
+      const refs: string[] = [];
+      for (let i = 0; i < options.images.length; i++) {
+        const img = options.images[i];
+        const fn = `bug-${String(i + 1).padStart(2, '0')}.${img.ext}`;
+        await writeFile(join(shotsDir, fn), img.buffer);
+        refs.push(`![缺陷截图${i + 1}](../assets/screenshots/${fn})`);
+      }
+      reqContent += `\n\n## 缺陷截图\n\n${refs.join('\n\n')}\n`;
+    }
+
     // Write core specs to 00-specs/
-    await writeFile(join(taskDir, '00-specs', 'REQ.md'), taskContent.req);
+    await writeFile(join(taskDir, '00-specs', 'REQ.md'), reqContent);
     await writeFile(join(taskDir, '00-specs', 'TECH.md'), taskContent.tech);
     await writeFile(join(taskDir, '00-specs', 'CHANGELOG.md'), `# ${options.name} - 变更记录\n\n| 时间 | 版本 | 变更内容 | 变更人 |\n| :--- | :--- | :--- | :--- |\n| ${today} | v1.0 | 初始创建 | CLI |\n`);
 
@@ -227,6 +256,17 @@ async function createSingleTask(options: TaskNewOptions): Promise<void> {
     });
 
     spinner.stop(`Task created: Task-${taskId} - ${options.name}`);
+
+    // v8.3.207+: --auto-execute 创建后自动 analyze→execute 修复（bug 无人值守）
+    if (options.autoExecute) {
+      const { execSync } = await import('child_process');
+      logger.info(`🚀 [auto-execute] 自动修复 Task-${taskId}...`);
+      logger.info(`   🔄 analyze --sync`);
+      try { execSync(`speccore analyze --task=Task-${taskId} --sync -I ${iteration}`, { stdio: 'inherit' }); } catch (e: any) { logger.warn(`   ⚠️ analyze 失败: ${e.message}`); }
+      logger.info(`   ⚡ execute --force`);
+      try { execSync(`speccore execute --task=Task-${taskId} --force -I ${iteration}`, { stdio: 'inherit' }); } catch (e: any) { logger.warn(`   ⚠️ execute 失败: ${e.message}`); }
+      logger.success('✅ [auto-execute] 自动修复完成');
+    }
   } catch (error) {
     spinner.fail(`Failed to create task: ${error}`);
     throw error;

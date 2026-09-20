@@ -654,6 +654,38 @@ export function findBranchByTaskId(taskId: string, cwd?: string): string | null 
   return null;
 }
 
+/**
+ * v8.3.207+: 根据功能模块名（feature）查找对应任务分支
+ * bugfix 任务关联功能模块时，从其开发分支拉取
+ * 查找顺序：1. git-mapping.json（taskName/taskId 含 feature 名）  2. git branch 列表（feature/ 分支名含 feature）
+ */
+export function findBranchByFeature(feature: string, cwd?: string): string | null {
+  const gitCwd = cwd || process.cwd();
+  const kw = feature.trim();
+  if (!kw) return null;
+
+  // 1. git-mapping.json
+  const mapping = loadMapping();
+  for (const [branch, info] of Object.entries(mapping)) {
+    if ((info.taskName && info.taskName.includes(kw)) || (info.taskId && info.taskId.includes(kw))) {
+      return branch;
+    }
+  }
+
+  // 2. git branch 列表（feature/ 分支名含 feature）
+  try {
+    const branches = execSync('git branch -a', { cwd: gitCwd, encoding: 'utf-8', stdio: 'pipe' });
+    for (const line of branches.split(/\r?\n/)) {
+      const b = line.trim().replace(/^\*?\s*/, '').replace(/^remotes\/[^/]+\//, '');
+      if (b.includes('feature/') && b.includes(kw)) {
+        return b;
+      }
+    }
+  } catch {}
+
+  return null;
+}
+
 function getChangedFiles(cwd?: string): string[] {
   const gitCwd = cwd || process.cwd();
   try {
