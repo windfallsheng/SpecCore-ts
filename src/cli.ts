@@ -917,6 +917,18 @@ program
   .action(analyzeCommand);
 
 program
+  .command('spec-from-source')
+  .alias('reverse')
+  .description('从源码反推全局资产（需求文档 + 技术文档）— analyze --from-code 的便捷入口')
+  .option('--src, --source <dirs>', '源码目录（逗号分隔，如 --src <端1/src>,<端2/src>）')
+  .option('--depth <depth>', '分析深度: quick | normal(默认) | deep')
+  .option('--platform <platform>', '指定端（如 backend）')
+  .option('--out-dir <path>', '反推需求产出目录（默认 .speccore/GLOBAL/requirements）')
+  .action((options: any) => {
+    analyzeCommand({ ...options, fromCode: true, scope: 'global' });
+  });
+
+program
   .command('req-doc')
   .alias('rd')
   .description('需求文档化：将口语化/非专业需求整理为 PRD 级文档')

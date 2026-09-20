@@ -833,8 +833,18 @@ export async function splitDocumentToUnits(
   sourceFileName: string
 ): Promise<void> {
   const content = await readFile(outputPath, 'utf-8');
-  // v8.3.194+: 优先 AI 语义切分（识别业务功能），失败回退本地正则切分（兜底）
-  const units = (await scanUnitsWithAI(content)) ?? scanUnits(content);
+  // v8.3.194+: 优先 AI 语义切分（识别业务功能 + 全局信息），失败回退本地正则切分（兜底）
+  const aiResult = await scanUnitsWithAI(content);
+  let units: ScannedUnit[];
+  let globalSections: string[] = [];
+  if (aiResult) {
+    units = aiResult.units;
+    globalSections = aiResult.globalSections;
+  } else {
+    units = scanUnits(content);
+    // 本地兜底：被过滤掉的非功能章节（产品定位/名词/验收标准等）作为全局上下文
+    globalSections = getGlobalSections(content, units);
+  }
 
   if (units.length === 0) {
     logger.warn('未检测到可拆分的功能单元，跳过拆分');
@@ -844,6 +854,9 @@ export async function splitDocumentToUnits(
   logger.info(`🔍 检测到 ${units.length} 个候选功能单元`);
   for (const u of units) {
     logger.info(`   • ${u.title}`);
+  }
+  if (globalSections.length > 0) {
+    logger.info(`   📋 ${globalSections.length} 个全局信息章节 → overview/（产品定位/名词/验收标准等，不拆分）`);
   }
 
   const featuresDir = join(iterDir, '010-requirements', 'features');
@@ -890,32 +903,93 @@ export async function splitDocumentToUnits(
   }
   await writeFile(featuresIndexPath, featuresIndex);
 
+  // v8.3.194+: 全局信息章节（产品定位/名词约定/验收标准等）归到 overview/，不丢弃
+  if (globalSections.length > 0) {
+    const overviewDir = join(iterDir, '010-requirements', 'overview');
+    await ensureDir(overviewDir);
+    let globalContent = `# 项目全局上下文\n\n> 由 doc2spec --split 自动整理（非功能内容：产品定位/名词约定/非功能需求/验收标准汇总等）\n> 来源: ${sourceFileName}\n> 生成时间: ${new Date().toISOString().split('T')[0]}\n\n`;
+    let collected = 0;
+    for (const gs of globalSections) {
+      const range = findSectionRange(content, gs);
+      if (!range) continue;
+      const sectionContent = content.split('\n').slice(range.start, range.end + 1).join('\n');
+      globalContent += `\n---\n\n${sectionContent.trim()}\n`;
+      collected++;
+    }
+    if (collected > 0) {
+      await writeFile(join(overviewDir, 'GLOBAL_CONTEXT.md'), globalContent);
+      logger.info(`   📋 全局上下文已写入: overview/GLOBAL_CONTEXT.md (${collected} 个章节)`);
+    }
+  }
+
   logger.success(`✅ 已拆分 ${written} 个功能单元到 features/`);
   logger.info(`   📂 ${featuresDir}/`);
 }
 
 /**
- * AI 语义切分功能单元（v8.3.194+）
- * 让 LLM 理解 PRD 内容，识别真正的「业务功能」（而非机械按 ## 标题切分出文档章节）。
- * 成功返回功能单元列表，失败返回 null（调用方回退本地正则切分兜底）。
+ * 本地兜底：识别被过滤掉的非功能章节（产品定位/名词/验收标准等），作为全局上下文
+ * （与 scanUnits 的过滤规则保持一致）
  */
-async function scanUnitsWithAI(content: string): Promise<ScannedUnit[] | null> {
+function getGlobalSections(content: string, units: ScannedUnit[]): string[] {
+  const lines = content.split('\n');
+  const unitTitles = new Set(units.map((u) => u.title));
+  const stripSectionNo = (t: string) =>
+    t.replace(/^[一二三四五六七八九十百]+[、.．\s]+/, '')
+     .replace(/^\d+[、.．\s]+/, '')
+     .replace(/^第[一二三四五六七八九十百\d]+[章节篇部分]+[、.．\s]*/, '');
+  const skipPrefix = /^(附录|术语表|参考文献|目录|引言|总结|致谢|版权声明|修订记录|changelog|glossary|references|table of contents|introduction|summary|acknowledgments)/i;
+  const skipContains = ['概述', '名词', '背景', '目标', '验收标准', '上线计划', '关联文档', '功能需求', '非功能需求', 'overview'];
+  const global: string[] = [];
+  for (const line of lines) {
+    const m = line.match(/^##\s+(.+)$/);
+    if (!m) continue;
+    const rawTitle = m[1].trim();
+    const title = stripSectionNo(rawTitle).trim();
+    if (!title || unitTitles.has(rawTitle) || unitTitles.has(title)) continue;
+    if (skipPrefix.test(title) || skipContains.some((w) => title.includes(w))) {
+      global.push(rawTitle);
+    }
+  }
+  return global;
+}
+
+/** AI 语义切分结果 */
+interface UnitScanResult {
+  /** 业务功能单元（切分到 features/） */
+  units: ScannedUnit[];
+  /** 项目级通用信息章节名（产品定位/名词约定/验收标准等，归到 overview，不丢弃） */
+  globalSections: string[];
+}
+
+/**
+ * AI 语义切分功能单元（v8.3.194+）
+ * 让 LLM 理解 PRD 内容，识别「业务功能」和「项目级通用信息」两类：
+ * - 业务功能（units）→ 切分到 features/
+ * - 通用信息（global，如产品定位/名词约定/非功能需求/验收标准汇总）→ 归到 overview，不丢弃
+ * 失败返回 null（调用方回退本地正则切分兜底）。
+ */
+async function scanUnitsWithAI(content: string): Promise<UnitScanResult | null> {
   try {
     const systemPrompt = [
-      '你是资深产品需求分析师。任务：从 PRD 文档中识别「业务功能单元」。',
+      '你是资深产品需求分析师。任务：从 PRD 文档中识别「业务功能单元」和「项目级通用信息」。',
       '',
-      '业务功能单元的定义：',
+      '业务功能单元（units）的定义：',
       '- 是用户可以感知、可独立交付的业务能力（如「会议室管理」「快速预订」「扫码签到」「费用管理」「消息通知」）',
-      '- 不是文档结构章节（如「文档概述」「名词约定」「验收标准」「上线计划」「关联文档」「项目背景」）',
       '- 一个业务功能可能横跨多个章节；一个章节也可能只包含某功能的一部分',
       '',
+      '项目级通用信息（global）的定义：',
+      '- 不是某个具体功能，而是项目/产品的通用背景与规则',
+      '- 例如：产品定位、项目背景、名词约定、术语表、用户画像、功能架构、非功能需求（性能/安全等）、验收标准汇总、上线计划、风险与缓解、关联文档、文档概述',
+      '- 这些内容不应拆成功能单元，而应作为「全局上下文」保留',
+      '',
       '严格只返回 JSON，格式：',
-      '{"units":[{"name":"功能名","sections":["对应的章节标题1","章节标题2"]}]}',
-      'sections 必须是文档中真实存在的章节标题（去掉编号前缀，如「会议室管理」而非「三、会议室管理」）。',
+      '{"units":[{"name":"功能名","sections":["对应的章节标题1","章节标题2"]}],"global":["全局信息章节标题1","全局信息章节标题2"]}',
+      'sections 和 global 必须是文档中真实存在的章节标题（去掉编号前缀，如「会议室管理」而非「三、会议室管理」）。',
+      '如果某章节既含功能描述又含通用规则，优先归入最相关的功能。',
       '不要输出任何 JSON 以外的文字。',
     ].join('\n');
 
-    const userPrompt = `以下是 PRD 文档内容，请识别其中的业务功能单元：\n\n${content.slice(0, 8000)}`;
+    const userPrompt = `以下是 PRD 文档内容，请识别其中的业务功能单元和项目级通用信息：\n\n${content.slice(0, 8000)}`;
 
     const response = await callLlm(systemPrompt, userPrompt);
     if (!response) return null;
@@ -944,14 +1018,16 @@ async function scanUnitsWithAI(content: string): Promise<ScannedUnit[] | null> {
       });
     }
 
-    return units.length > 0 ? units : null;
+    const globalSections = Array.isArray(parsed.global) ? parsed.global.map(String).filter(Boolean) : [];
+
+    return units.length > 0 ? { units, globalSections } : null;
   } catch {
     return null;
   }
 }
 
-/** 解析 AI 返回的功能单元 JSON */
-function parseUnitsJson(text: string): { units: { name: string; sections: string[] }[] } | null {
+/** 解析 AI 返回的功能单元 JSON（含 global 全局信息章节） */
+function parseUnitsJson(text: string): { units: { name: string; sections: string[] }[]; global?: string[] } | null {
   try {
     const trimmed = text.trim();
     const jsonStr = trimmed.startsWith('{') ? trimmed : trimmed.match(/\{[\s\S]*\}/)?.[0];
