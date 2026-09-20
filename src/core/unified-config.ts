@@ -115,6 +115,8 @@ export interface SpecConfig {
     enforce_testing: boolean;
     enforce_review: boolean;
     require_pr: boolean;
+    /** v8.3.197+: 阻塞级别——standard(默认)=编译+单测+契约阻塞；compile=仅编译阻塞 */
+    block_level?: 'compile' | 'standard';
     verify_ui?: {
       enabled: boolean;
       smoke_test: boolean;
@@ -258,6 +260,7 @@ export const DEFAULT_CONFIG: SpecConfig = {
     enforce_testing: true,
     enforce_review: true,
     require_pr: true,
+    block_level: 'standard',
     verify_ui: {
       enabled: false,
       smoke_test: true,
@@ -1124,6 +1127,9 @@ function validateConfig(obj: Record<string, unknown>): ValidationResult {
       if (obj.quality_gates[key] !== undefined && typeof obj.quality_gates[key] !== 'boolean') {
         issues.push(`quality_gates.${key} 必须是布尔值`);
       }
+    }
+    if (obj.quality_gates.block_level !== undefined && !['compile', 'standard'].includes(obj.quality_gates.block_level as string)) {
+      issues.push('quality_gates.block_level 必须是 compile/standard 之一');
     }
 
     // verify_ui 校验

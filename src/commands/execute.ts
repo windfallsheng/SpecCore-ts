@@ -1863,6 +1863,8 @@ async function executionVerifyLoop(
   const projectConfig = await loadProjectConfig();
   const codePath = projectConfig.code_scope?.[0] || process.cwd();
   const absCodePath = isAbsolute(codePath) ? codePath : join(process.cwd(), codePath);
+  // v8.3.197+: 质量门禁阻塞级别（standard=编译+单测+契约阻塞；compile=仅编译）
+  const blockLevel: 'compile' | 'standard' = config.quality_gates?.block_level || 'standard';
 
   for (const task of tasks) {
     logger.info(`\n🔍 验证 ${task.id}...`);
@@ -1889,7 +1891,7 @@ async function executionVerifyLoop(
 
       if (!arbConfig.enabled) {
         // 仲裁已禁用：回退到传统质量门禁
-        const gate = await runQualityGate(task.id, taskCodePath, taskDir, { strict: options.strict });
+        const gate = await runQualityGate(task.id, taskCodePath, taskDir, { strict: options.strict, blockLevel });
         await writeVerifyReport(gate.report, taskDir);
         if (options.auto) {
           logger.info(`   🚧 质量门禁: ${gate.passed ? '✅ 通过' : '❌ 失败'} (arbitration=off)`);
@@ -2035,7 +2037,7 @@ async function executionVerifyLoop(
         logger.info(`   💡 AI 将修复未通过项。使用 speccore execute --task=${task.id} --force 重新执行代码生成`);
         await writeFile(join(taskDir, '.needs-retry'), String(round));
         // 输出 [SPECCORE_EXEC] 让 AI 修复（回退到质量门禁报告）
-        const gate = await runQualityGate(task.id, taskCodePath, taskDir, { strict: options.strict });
+        const gate = await runQualityGate(task.id, taskCodePath, taskDir, { strict: options.strict, blockLevel });
         if (!gate.passed) {
           await outputFixTag(gate.report, taskDir, round);
         }

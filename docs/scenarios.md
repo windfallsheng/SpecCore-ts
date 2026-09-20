@@ -461,6 +461,21 @@ speccore sync --global
 | 迭代层 | 单个 Iteration | analyze, split, execute |
 | 全量层 | 跨所有迭代 | sync --global, dashboard --scope global |
 
+**存量项目补全量层 — 源码反推**:
+
+已有代码工程（还没有 Spec）时，从源码反推需求 + 全局技术文档：
+
+```bash
+# 从源码反推全局资产（两跳 IR→UR）
+speccore spec-from-source --src backend/src,admin-web/src
+# → .speccore/GLOBAL/ 下生成需求 + TECH_STACK / ARCHITECTURE / API_INVENTORY / DATA_MODEL 等
+
+# 等价命令
+speccore analyze --from-code --scope global --src backend/src
+```
+
+> 适用场景：老项目想建立 SpecCore 全局层，不想手写需求/架构文档。
+
 ---
 
 ## 场景十一：项目健康检查

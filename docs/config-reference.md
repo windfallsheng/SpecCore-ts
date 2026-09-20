@@ -496,6 +496,14 @@ error_codes:
 | `enforce_testing` | `boolean` | `true` | 是否强制要求测试（检查 TEST.md 存在性） |
 | `enforce_review` | `boolean` | `true` | 是否强制要求审查（检查 REVIEW.md 存在性） |
 | `require_pr` | `boolean` | `true` | 是否要求通过 PR 合并（保护分支检查） |
+| `block_level` | `enum` | `standard` | 质量门禁阻塞级别（v8.3.197+） |
+
+**block_level 详解**：
+
+| 值 | 行为 | 适用场景 |
+|----|------|----------|
+| `standard` | 编译 + 单元测试 + API 契约失败都**阻断**（默认，推荐） | 大多数项目，防止「能编译但测试红」的代码溜过 |
+| `compile` | 仅编译失败阻断，单测/契约只记录不阻断 | 测试环境不稳定、想放宽门禁的项目 |
 
 #### 3.10.1 verify_ui（v8.3.95+）
 

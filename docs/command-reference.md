@@ -263,6 +263,24 @@ split 后，每个 Task 的 00-specs/ 已有基础内容（机械提取）。执
 
 analyze 从 CONSTITUTION.md「## 端列表」章节读取全局权威端名列表，不再动态推断。
 
+### 🔄 spec-from-source — 源码反推（v8.3.191+）🔒 AI 命令
+```bash
+speccore spec-from-source --src backend/src,admin-web/src   # 从源码反推需求 + 全局资产
+speccore spec-from-source --src <端1/src>,<端2/src> --depth normal
+speccore reverse --src backend/src                          # 别名 reverse
+```
+别名: `reverse`
+
+> 从**现有代码工程**反推需求文档和技术文档（两跳 IR→UR：逐模块 IR 骨架 → 合成 UR），产出到 `.speccore/GLOBAL/`（需求 + TECH_STACK / CODE_INDEX / ARCHITECTURE / API_INVENTORY / DATA_MODEL / GLOSSARY + 按端 OVERVIEW/TECH）。是「存量项目补 SpecCore 全局层」的入口。
+
+**参数**：
+- `--src, --source <dirs>`：源码目录，多端用逗号分隔（如 `backend/src,admin-web/src`）
+- `--depth <depth>`：分析深度 `quick` / `normal`（默认）/ `deep`
+- `--platform <platform>`：只分析指定端
+- `--out-dir <path>`：产出目录（默认 `.speccore/GLOBAL/requirements`）
+
+**等价命令**：`speccore analyze --from-code --scope global --src <dirs>`
+
 ### 🔍 review — Spec 自审（v8.3.141+）🔒 AI 命令
 
 ```bash
