@@ -914,7 +914,7 @@ export async function splitDocumentToUnits(
   if (globalSections.length > 0) {
     const overviewDir = join(iterDir, '010-requirements', 'overview');
     await ensureDir(overviewDir);
-    const docSlug = sanitizeUnitName(basename(sourceFileName) || 'context');
+    const docSlug = sanitizeUnitName(basename(sourceFileName, '.md') || 'context');
     let globalContent = `# 项目全局上下文 — ${sourceFileName}\n\n> 由 doc2spec --split 自动整理（非功能内容：产品定位/名词约定/非功能需求/验收标准汇总等）\n> 来源: ${sourceFileName}\n> 生成时间: ${new Date().toISOString().split('T')[0]}\n\n`;
     let collected = 0;
     for (const gs of globalSections) {
