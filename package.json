@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "speccore": "./bin/speccore"
+    "speccore": "bin/speccore"
   },
   "scripts": {
     "build": "node sync-version.js && tsc && node build-post.js",

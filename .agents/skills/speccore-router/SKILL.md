@@ -204,6 +204,8 @@ allowed-tools: ["Bash", "Read", "Write", "Edit"]
 | 做需求分析 | iter? | `speccore analyze -I {iter}` |
 | 评审需求 | iter? | `speccore analyze -I {iter}` |
 | 分析需求（检测并澄清） | iter? | `speccore analyze -I {iter} --clarify` |
+| 从源码反推需求/分析源码生成需求 | src? | `speccore spec-from-source --src {src}`（多端逗号分隔，如 backend/src,admin-web/src） |
+| 源码反推全局资产/反向生成文档 | src? | `speccore spec-from-source --src {src}` |
 
 ### 全局层分析（项目级，非迭代级）
 | 用户说法 | 提取参数 | CLI 命令 |
