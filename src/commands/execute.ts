@@ -37,7 +37,7 @@ import {
   ExecutionState,
   TaskSummary,
 } from '../core/execution-state';
-import { createTaskBranch, detectDefaultBranch, findBranchByTaskId, isProtectedBranch } from '../core/git-integration';
+import { createTaskBranch, detectDefaultBranch, findBranchByTaskId, isProtectedBranch, loadGitConfig } from '../core/git-integration';
 import { buildPrompt, formatPrompt, parseAiResponse, outputNeedsInfo } from '../core/prompt-builder';
 import { runVerification, writeVerifyReport, outputFixTag, runQualityGate, syncTestDocFromResults } from '../core/verify-engine';
 import { runArbitration, type ArbitrationEngineResult, getArbitrationConfig } from '../core/arbitration/arbitration-engine';
@@ -1685,28 +1685,76 @@ async function prepareTaskBranch(
     }
   }
 
-  // 4b. 合并依赖任务分支
+  // 4b. 合并依赖任务分支（v8.3.206+: 预览 + 策略控制 + 黑白名单）
   // 查找顺序：1. 当前会话 createdBranches  2. git-mapping.json  3. git branch 列表
   const mergedBranches: string[] = [];
+
+  // 读取合并策略（子任务级 > 迭代级 > 全局 > 默认 auto）
+  let mergePolicy: 'auto' | 'manual' | 'off' = 'auto';
+  let mergeWhitelist: string[] = [];
+  let mergeBlacklist: string[] = [];
+  try {
+    const gc = loadGitConfig(iteration, taskDir);
+    mergePolicy = gc.mergeDependencies || 'auto';
+    mergeWhitelist = gc.mergeWhitelist || [];
+    mergeBlacklist = gc.mergeBlacklist || [];
+  } catch {}
+
+  // 解析每个依赖任务对应的分支
+  const depBranchMap: { depId: string; branch: string | null; source: string }[] = [];
   for (const depId of depTaskIds) {
     let depBranch = createdBranches.get(depId);
     let source = '当前会话';
-
     if (!depBranch) {
       depBranch = findBranchByTaskId(depId, gitCwd) || undefined;
       source = 'git-mapping / branch 列表';
     }
+    depBranchMap.push({ depId, branch: depBranch || null, source });
+  }
 
-    if (depBranch) {
-      try {
-        execSync(`git merge "${depBranch}" --no-edit --no-ff`, { cwd: gitCwd, stdio: 'pipe' });
-        logger.info(`  🔗 合并依赖分支 [${source}]: ${depBranch}`);
-        mergedBranches.push(depBranch);
-      } catch (e: any) {
-        logger.warn(`  ⚠️ 合并 ${depBranch} 冲突，需要手动解决`);
-      }
-    } else {
-      logger.warn(`  ⚠️ 找不到依赖任务 ${depId} 的分支，跳过合并`);
+  // 应用黑白名单过滤（先过滤掉找不到分支的、黑名单的、白名单之外的）
+  const filtered = depBranchMap.filter(m => {
+    if (!m.branch) return false;
+    if (mergeBlacklist.length > 0 && mergeBlacklist.includes(m.depId)) return false;
+    if (mergeWhitelist.length > 0 && !mergeWhitelist.includes(m.depId)) return false;
+    return true;
+  });
+
+  // 预览：清晰显示本任务将合并哪些依赖分支
+  if (filtered.length > 0) {
+    logger.info(`  🔗 依赖合并预览：依赖 [${depTaskIds.join(', ')}] → 将合并 ${filtered.map(m => m.branch).join(', ')}`);
+  }
+
+  // 按策略决定最终合并列表
+  let finalMerge = filtered;
+  if (mergePolicy === 'off') {
+    if (filtered.length > 0) {
+      logger.info(`  ⏭️  依赖合并策略 = off，跳过合并（可在 git 配置里设 mergeDependencies 调整）`);
+    }
+    finalMerge = [];
+  } else if (mergePolicy === 'manual') {
+    if (filtered.length > 0 && process.stdin.isTTY) {
+      finalMerge = await promptMergeSelection(filtered, task.id);
+    } else if (filtered.length > 0) {
+      logger.info(`  ℹ️  依赖合并策略 = manual 但非交互环境，自动合并`);
+    }
+  }
+  // auto 或无依赖：finalMerge 保持 filtered
+
+  for (const m of finalMerge) {
+    try {
+      execSync(`git merge "${m.branch}" --no-edit --no-ff`, { cwd: gitCwd, stdio: 'pipe' });
+      logger.info(`  🔗 已合并依赖分支 [${m.source}]: ${m.branch}`);
+      mergedBranches.push(m.branch!);
+    } catch (e: any) {
+      logger.warn(`  ⚠️ 合并 ${m.branch} 冲突，需要手动解决`);
+    }
+  }
+
+  // 找不到分支的依赖，给出可操作的提示
+  for (const m of depBranchMap) {
+    if (!m.branch) {
+      logger.warn(`  ⚠️ 找不到依赖任务 ${m.depId} 的分支，跳过合并`);
       logger.warn(`     可能原因：1) 依赖任务尚未执行  2) 分支在另一会话创建  3) 分支已被删除`);
     }
   }
@@ -1744,6 +1792,33 @@ async function prepareTaskBranch(
   } catch { /* ignore state update errors */ }
 
   return branch;
+}
+
+/**
+ * 交互确认合并哪些依赖分支（manual 模式）
+ * 列出候选分支，用户可选择全部/跳过/按编号选择
+ */
+async function promptMergeSelection(
+  branches: { depId: string; branch: string | null; source: string }[],
+  taskId: string
+): Promise<typeof branches> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const list = branches.map((m, i) => `  [${i + 1}] ${m.depId} → ${m.branch}`).join('\n');
+  return new Promise((resolve) => {
+    rl.question(
+      `\n🔗 任务 ${taskId} 依赖以下分支，请选择合并范围：\n${list}\n  [a] 全部合并  [n] 跳过  [编号] 逗号选择: `,
+      (answer) => {
+        rl.close();
+        const a = answer.trim().toLowerCase();
+        if (a === 'a' || a === 'y' || a === '') resolve(branches);
+        else if (a === 'n' || a === 'q') resolve([]);
+        else {
+          const idx = a.split(/[,，]/).map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n >= 1 && n <= branches.length);
+          resolve(branches.filter((_, i) => idx.includes(i + 1)));
+        }
+      }
+    );
+  });
 }
 
 /**

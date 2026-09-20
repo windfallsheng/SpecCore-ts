@@ -48,6 +48,12 @@ export interface GitConfig {
   remoteName: string;
   /** 保护分支列表 */
   protectedBranches: string[];
+  /** 依赖分支合并策略：auto=自动合并 / manual=交互确认 / off=不合并 */
+  mergeDependencies: 'auto' | 'manual' | 'off';
+  /** 只合并白名单中的依赖分支（任务 ID，空数组表示不限） */
+  mergeWhitelist: string[];
+  /** 排除黑名单中的依赖分支（任务 ID） */
+  mergeBlacklist: string[];
 }
 
 /** 任务类型 → 分支类型映射 */
@@ -67,6 +73,9 @@ const DEFAULT_GIT_CONFIG: GitConfig = {
   autoPull: false,
   remoteName: 'origin',
   protectedBranches: ['main', 'master'],
+  mergeDependencies: 'auto',
+  mergeWhitelist: [],
+  mergeBlacklist: [],
 };
 
 /**
@@ -264,6 +273,16 @@ export function loadSubtaskGitConfig(taskDir: string): Partial<GitConfig> {
     // 远程名称
     const remoteName = extractValue('远程名称');
     if (remoteName) config.remoteName = remoteName;
+
+    // 依赖分支合并策略（auto/manual/off）
+    const mergeDep = extractValue('依赖合并策略');
+    if (mergeDep && ['auto', 'manual', 'off'].includes(mergeDep)) config.mergeDependencies = mergeDep as 'auto' | 'manual' | 'off';
+
+    // 合并白名单 / 黑名单（逗号分隔的任务 ID）
+    const mergeWhitelist = extractValue('合并白名单');
+    if (mergeWhitelist) config.mergeWhitelist = mergeWhitelist.split(/[,，]/).map(s => s.trim()).filter(Boolean);
+    const mergeBlacklist = extractValue('合并黑名单');
+    if (mergeBlacklist) config.mergeBlacklist = mergeBlacklist.split(/[,，]/).map(s => s.trim()).filter(Boolean);
   } catch {}
   return config;
 }
@@ -362,6 +381,9 @@ export function loadGitConfig(iteration?: string, taskDir?: string): GitConfig {
     if (subtaskConfig.branchFormat !== undefined) config.branchFormat = subtaskConfig.branchFormat;
     if (subtaskConfig.autoPull !== undefined) config.autoPull = subtaskConfig.autoPull;
     if (subtaskConfig.remoteName !== undefined) config.remoteName = subtaskConfig.remoteName;
+    if (subtaskConfig.mergeDependencies !== undefined) config.mergeDependencies = subtaskConfig.mergeDependencies;
+    if (subtaskConfig.mergeWhitelist !== undefined) config.mergeWhitelist = subtaskConfig.mergeWhitelist;
+    if (subtaskConfig.mergeBlacklist !== undefined) config.mergeBlacklist = subtaskConfig.mergeBlacklist;
   }
 
   // ── 4. 合并默认值 ──
@@ -375,6 +397,9 @@ export function loadGitConfig(iteration?: string, taskDir?: string): GitConfig {
     autoPull: config.autoPull !== undefined ? config.autoPull : DEFAULT_GIT_CONFIG.autoPull,
     remoteName: config.remoteName || DEFAULT_GIT_CONFIG.remoteName,
     protectedBranches: config.protectedBranches || DEFAULT_GIT_CONFIG.protectedBranches,
+    mergeDependencies: config.mergeDependencies || DEFAULT_GIT_CONFIG.mergeDependencies,
+    mergeWhitelist: config.mergeWhitelist || DEFAULT_GIT_CONFIG.mergeWhitelist,
+    mergeBlacklist: config.mergeBlacklist || DEFAULT_GIT_CONFIG.mergeBlacklist,
   };
 }
 

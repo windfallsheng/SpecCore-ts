@@ -1160,6 +1160,15 @@ Layer 3: 回退到空数组（v8.3.32+ 不再硬编码 ['web']，提示用户配
 - 多依赖时依次合并多个分支，冲突提示手动解决
 - 分支名默认格式：`{type}/{prefix}{taskId}`，支持自定义 `branchFormat`
 
+**依赖合并策略（可配置，v8.3.206+）：**
+- 执行前打印「依赖合并预览」——列出本任务依赖哪些任务、将合并哪些分支
+- `mergeDependencies` 三态控制合并行为：
+  - `auto`（默认）：自动合并所有依赖分支
+  - `manual`：交互确认——列出候选分支，用户可选全部/跳过/按编号选择
+  - `off`：跳过依赖合并（依赖代码由用户手动处理）
+- `mergeWhitelist` / `mergeBlacklist`：任务 ID 白名单/黑名单，精确控制合并哪些依赖分支
+- 配置位置：子任务 `.meta/git-config`（`依赖合并策略`/`合并白名单`/`合并黑名单`）> 迭代 > 全局 CONSTITUTION.md > 默认 `auto`
+
 ```
 Task-001-booking-service 执行前:
   checkout main → 创建 feature/Task-001-booking-service → 执行

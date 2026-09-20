@@ -89,6 +89,13 @@ function detectIntent(desc: string): 'new' | 'change' {
  */
 async function analyzeImpact(desc: string, iterDir: string, taskBase: string): Promise<ImpactReport> {
   const keywords = extractKeywords(desc);
+  // v8.3.206+: 接口变更清单（从 API_CONTRACT 匹配收集）
+  const apiChanges: string[] = [];
+  // 接口路径关键词（/api/xxx、/users 等）
+  const apiPathKeywords = (desc.match(/\/[a-zA-Z][a-zA-Z0-9_\-\/]{1,}/g) || []);
+  // 接口名关键词（"xx接口"、"API: login"）
+  const apiNameKeywords = (desc.match(/(?:接口|API|api)\s*[:：]?\s*([a-zA-Z][a-zA-Z0-9_]{1,})/g) || [])
+    .map(s => s.replace(/(?:接口|API|api)\s*[:：]?\s*/g, ''));
   const { readdir: rd } = await import('fs-extra');
 
   // 读取依赖图
@@ -140,6 +147,31 @@ async function analyzeImpact(desc: string, iterDir: string, taskBase: string): P
         if (content.includes(kw)) {
           score++;
           if (!matchedFiles.includes(fc.label)) matchedFiles.push(fc.label);
+        }
+      }
+    }
+
+    // v8.3.206+: 接口契约匹配——命中 API_CONTRACT 里声明的接口，精准定位受影响任务
+    const contractPaths = [
+      join(taskDir, '_shared', 'API_CONTRACT.yaml'),
+      join(taskDir, '00-specs', 'API_CONTRACT.yaml'),
+    ];
+    for (const cp of contractPaths) {
+      if (!await pathExists(cp)) continue;
+      const contract = await readFile(cp, 'utf-8');
+      for (const pk of apiPathKeywords) {
+        if (contract.includes(pk)) {
+          score += 2;
+          if (!matchedFiles.includes('API_CONTRACT.yaml')) matchedFiles.push('API_CONTRACT.yaml');
+          if (!apiChanges.includes(pk)) apiChanges.push(pk);
+        }
+      }
+      for (const nk of apiNameKeywords) {
+        if (contract.includes(`name: ${nk}`) || contract.includes(`name:${nk}`) || contract.includes(`name: "${nk}"`)) {
+          score += 2;
+          if (!matchedFiles.includes('API_CONTRACT.yaml')) matchedFiles.push('API_CONTRACT.yaml');
+          const tag = `接口 ${nk}`;
+          if (!apiChanges.includes(tag)) apiChanges.push(tag);
         }
       }
     }
@@ -218,7 +250,7 @@ async function analyzeImpact(desc: string, iterDir: string, taskBase: string): P
     }
   }
 
-  return { directTasks, indirectTasks, unaffectedTasks };
+  return { directTasks, indirectTasks, unaffectedTasks, apiChanges: [...new Set(apiChanges)] };
 }
 
 /**
@@ -832,6 +864,15 @@ async function writeChangeSummary(iterDir: string, changeDesc: string, impactRep
   // 追加本次变更记录
   content += `\n---\n\n## ${now} — ${changeDesc}\n\n`;
 
+  // v8.3.206+: 接口变更清单（从 API_CONTRACT 匹配提取）
+  if (impactReport.apiChanges && impactReport.apiChanges.length > 0) {
+    content += `### 🔌 接口/字段变更清单\n\n`;
+    for (const c of impactReport.apiChanges) {
+      content += `- ${c}\n`;
+    }
+    content += `\n> 涉及上述接口的任务需同步更新契约，下游引用方需回归。\n\n`;
+  }
+
   // 直接影响
   if (impactReport.directTasks.length > 0) {
     content += `### 🔴 直接影响（需修改 Spec + 重新执行）\n\n`;
@@ -860,6 +901,19 @@ async function writeChangeSummary(iterDir: string, changeDesc: string, impactRep
   }
 
   content += `**已应用变更的任务**: ${affectedIds.join(', ')}\n`;
+
+  // v8.3.206+: 可执行的同步清单（直接影响→重分析+重执行；间接→回归）
+  const syncLines: string[] = [];
+  for (const t of impactReport.directTasks) {
+    syncLines.push(`- [ ] **${t.id}** 重新分析并回写 Spec → \`speccore analyze --task=${t.id} --sync\` → \`speccore execute --task=${t.id} --force\``);
+  }
+  for (const t of impactReport.indirectTasks) {
+    if (t.needRegression) syncLines.push(`- [ ] **${t.id}** 回归验证（上游接口变更）`);
+  }
+  if (syncLines.length > 0) {
+    content += `\n### ✅ 同步清单\n\n`;
+    content += syncLines.join('\n') + '\n\n';
+  }
 
   await writeFile(summaryPath, content);
 }

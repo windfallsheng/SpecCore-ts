@@ -53,6 +53,8 @@ export interface ImpactReport {
   directTasks: TaskImpact[];    // 直接影响：需修改 Spec + 重新执行
   indirectTasks: TaskImpact[];  // 间接影响：需回归验证
   unaffectedTasks: TaskImpact[]; // 无影响
+  /** v8.3.206+: 本次变更涉及的接口/字段清单（从 API_CONTRACT 匹配提取），供同步清单展示 */
+  apiChanges?: string[];
 }
 
 // ── 常量 ──
@@ -443,6 +445,15 @@ export function logImpactReport(report: ImpactReport): void {
   logger.info('');
   logger.info('📋 影响范围分析:');
   logger.info('┌─────────────────────────────────────┐');
+
+  // v8.3.206+: 接口/字段变更清单
+  if (report.apiChanges && report.apiChanges.length > 0) {
+    logger.info('│ 🔌 接口/字段变更:');
+    for (const c of report.apiChanges) {
+      logger.info(`│   ${c}`);
+    }
+    logger.info('│');
+  }
 
   if (report.directTasks.length > 0) {
     logger.info('│ 🔴 直接影响（需修改 Spec + 重新执行）:');
