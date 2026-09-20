@@ -2482,7 +2482,8 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
     const llmContent = await callLlm(
       '你是资深开发工程师。请按 prompt 要求编写代码，只输出 JSON 格式：{"files": [{"path": "文件路径", "content": "代码内容"}]}，不要输出 JSON 以外的文字。',
       promptText,
-      providers
+      providers,
+      8000
     );
     if (llmContent) {
       options.response = llmContent;

@@ -1234,7 +1234,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       const llmContent = await callLlm(
         '你是资深需求分析师。请按用户 prompt 的要求分析需求，并只输出 JSON 文档格式：{"文档文件名": "文档内容"}。文件名用 020-specs 下的 Spec 文档名（如 TECH.md / TEST.md / UI_SPEC.md），不要输出 JSON 以外的任何文字。',
         prompt,
-        providers
+        providers,
+        8000
       );
       if (llmContent) {
         const applied = await applyJsonDocs(llmContent, iter!);

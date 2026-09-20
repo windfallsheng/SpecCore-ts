@@ -477,7 +477,8 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       const llmContent = await callLlm(
         '你是任务拆解专家。请按 prompt 要求拆分任务，只输出 JSON 数组格式的任务列表，不要输出 JSON 以外的文字。',
         promptText,
-        providers
+        providers,
+        4000
       );
       if (llmContent) {
         options.response = llmContent;

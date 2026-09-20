@@ -998,7 +998,7 @@ async function scanUnitsWithAI(content: string): Promise<UnitScanResult | null> 
 
     // v8.3.196+: 读 settings.ai.providers 池，按 defaults.split/priority 降级
     const providers = await resolveAiProviders('split');
-    const response = await callLlm(systemPrompt, userPrompt, providers);
+    const response = await callLlm(systemPrompt, userPrompt, providers, 2000);
     if (!response) return null;
 
     const parsed = parseUnitsJson(response);

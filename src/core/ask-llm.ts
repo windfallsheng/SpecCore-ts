@@ -111,7 +111,7 @@ export async function askWithLlm(input: string): Promise<AskResult | null> {
  * 优先使用环境变量 SPECCORE_LLM_ENDPOINT，否则尝试 OpenAI 兼容接口
  */
 /** v8.3.196+: 按 provider type 分发调用单个 LLM provider（ollama 走 /api/generate，其余走 OpenAI 兼容 chat/completions） */
-async function callProvider(p: LlmProviderConfig, systemPrompt: string, userPrompt: string): Promise<string | null> {
+async function callProvider(p: LlmProviderConfig, systemPrompt: string, userPrompt: string, maxTokens = 1000): Promise<string | null> {
   if (p.enabled === false) return null;
   try {
     if (p.type === 'ollama') {
@@ -123,7 +123,7 @@ async function callProvider(p: LlmProviderConfig, systemPrompt: string, userProm
           model: p.model || 'qwen2.5:7b',
           prompt: `${systemPrompt}\n\n${userPrompt}`,
           stream: false,
-          options: { temperature: 0.1, num_predict: 1000 },
+          options: { temperature: 0.1, num_predict: maxTokens },
         }),
         signal: AbortSignal.timeout(15000),
       });
@@ -148,7 +148,7 @@ async function callProvider(p: LlmProviderConfig, systemPrompt: string, userProm
           { role: 'user', content: userPrompt },
         ],
         temperature: 0.1,
-        max_tokens: 1000,
+        max_tokens: maxTokens,
       }),
       signal: AbortSignal.timeout(30000),
     });
@@ -166,14 +166,14 @@ async function callProvider(p: LlmProviderConfig, systemPrompt: string, userProm
  * 调用 LLM（三级降级：providers 池 → 环境变量 → WorkBuddy/Ollama）
  * v8.3.196+: 新增 providers 参数，按 priority 顺序尝试池里的 provider
  */
-export async function callLlm(systemPrompt: string, userPrompt: string, providers?: LlmProviderConfig[]): Promise<string | null> {
+export async function callLlm(systemPrompt: string, userPrompt: string, providers?: LlmProviderConfig[], maxTokens = 1000): Promise<string | null> {
   // 方案0: providers 池（按 priority 顺序尝试）
   if (providers && providers.length > 0) {
     const sorted = [...providers]
       .filter(p => p.enabled !== false)
       .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999));
     for (const p of sorted) {
-      const result = await callProvider(p, systemPrompt, userPrompt);
+      const result = await callProvider(p, systemPrompt, userPrompt, maxTokens);
       if (result) return result;
     }
     logger.debug('[callLlm] providers 池全部失败，回退环境变量');
@@ -199,7 +199,7 @@ export async function callLlm(systemPrompt: string, userPrompt: string, provider
           { role: 'user', content: userPrompt },
         ],
         temperature: 0.1,
-        max_tokens: 1000,
+        max_tokens: maxTokens,
       }),
     });
     const data: any = await res.json();
