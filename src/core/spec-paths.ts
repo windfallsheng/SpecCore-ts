@@ -141,6 +141,10 @@ export async function parseFeatureList(iterDir: string): Promise<string[]> {
   const excludeNames = new Set([
     'README', 'INDEX', 'CLARIFY_REPORT', 'QUALITY_REPORT', 'REQUIREMENT',
     'CHANGELOG', 'LICENSE', 'CONTRIBUTING', 'TEMPLATE',
+    // v8.3.210+: AI 生成的系统报告/验证文档，非功能模块
+    'VALIDATION', 'VERIFICATION', 'VALIDATION_REPORT', 'ANALYSIS_REPORT',
+    'TEST_REPORT', 'TEST_PLAN', 'GLOSSARY', 'FUNCTION_MAP', 'API_INVENTORY',
+    'DATA_MODEL', 'ARCHITECTURE', 'TERMINOLOGY',
   ]);
 
   async function scanDir(dir: string) {

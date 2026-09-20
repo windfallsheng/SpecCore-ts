@@ -307,29 +307,9 @@ async function generateTaskContent(options: TaskNewOptions): Promise<{ req: stri
   const name = options.name || 'New Task';
   const desc = options.desc || '';
   const type = options.type || 'feature';
+  const priority = options.priority || 'medium';
 
-  const req = `# ${name}
-
-## 需求描述
-
-${desc}
-
-## 验收标准
-
-- [ ] AC-1: 
-- [ ] AC-2: 
-- [ ] AC-3: 
-
-## 输入/输出
-
-### 输入
-
-### 输出
-
-## 业务规则
-
-## 错误处理
-`;
+  const req = buildReqByType(type, name, desc);
 
   const tech = `# ${name} - 技术方案
 
@@ -363,7 +343,7 @@ ${desc}
 ## 任务信息
 - 类型: ${type}
 - 状态: 🔲 待开发
-- 优先级: medium
+- 优先级: ${priority}
 - 预计耗时: 2h
 - 创建时间: ${new Date().toISOString().split('T')[0]}
 
@@ -392,4 +372,22 @@ ${desc}
 `;
 
   return { req, tech, task };
+}
+
+/** v8.3.210+: 按任务类型差异化 REQ 结构（差异下沉到文档模板，交互不变） */
+function buildReqByType(type: string, name: string, desc: string): string {
+  const t = (type || 'feature').toLowerCase();
+  const templates: Record<string, string> = {
+    feature: `# ${name}\n\n## 需求描述\n\n${desc}\n\n## 验收标准\n\n- [ ] AC-1: \n- [ ] AC-2: \n- [ ] AC-3: \n\n## 输入/输出\n\n### 输入\n\n### 输出\n\n## 业务规则\n\n## 错误处理\n`,
+    bugfix: `# ${name}\n\n## 缺陷描述\n\n${desc}\n\n## 复现步骤\n\n1. \n2. \n3. \n\n## 预期行为\n\n## 实际行为\n\n## 影响范围\n\n- 影响端/模块：\n- 影响程度：\n\n## 修复验收\n\n- [ ] 复现步骤可稳定复现\n- [ ] 修复后不再复现\n- [ ] 无回归\n`,
+    refactor: `# ${name}\n\n## 重构目标\n\n${desc}\n\n## 现状问题\n\n- \n\n## 重构方案要点\n\n- \n\n## 重构边界\n\n> ⚠️ 仅重构内部实现，不改变外部行为/接口\n\n## 验收标准\n\n- [ ] 行为不变（原测试全过）\n- [ ] 代码结构改善\n`,
+    test: `# ${name}\n\n## 测试范围\n\n${desc}\n\n## 覆盖目标\n\n- [ ] 功能路径\n- [ ] 边界条件\n- [ ] 异常处理\n\n## 测试环境\n\n## 交付物\n\n- 测试用例 + 结果\n`,
+    security: `# ${name}\n\n## 安全风险描述\n\n${desc}\n\n## 攻击面\n\n- \n\n## 修复目标\n\n- \n\n## 验收标准\n\n- [ ] 漏洞已修复\n- [ ] 无新暴露面\n`,
+    performance: `# ${name}\n\n## 性能指标\n\n${desc}\n\n## 当前基线\n\n- \n\n## 优化目标\n\n- \n\n## 验收标准\n\n- [ ] 达到目标指标\n- [ ] 无功能回归\n`,
+    docs: `# ${name}\n\n## 文档范围\n\n${desc}\n\n## 目标受众\n\n## 交付物\n\n- \n`,
+    review: `# ${name}\n\n## 审查范围\n\n${desc}\n\n## 审查要点\n\n- [ ] 正确性\n- [ ] 完整性\n- [ ] 一致性\n- [ ] 安全性\n\n## 审查结论\n`,
+    research: `# ${name}\n\n## 调研目标\n\n${desc}\n\n## 待验证假设\n\n- \n\n## 调研结论\n\n## 建议\n`,
+    deploy: `# ${name}\n\n## 部署范围\n\n${desc}\n\n## 部署步骤\n\n- \n\n## 回滚方案\n\n## 验收标准\n\n- [ ] 部署成功且可回滚\n`,
+  };
+  return templates[t] || templates.feature;
 }

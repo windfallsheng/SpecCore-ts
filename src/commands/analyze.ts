@@ -6563,12 +6563,21 @@ export async function extractIterationUnits(iterDir: string): Promise<IterationU
   }
 
   const reqFiles: string[] = [];
+  // v8.3.210+: 系统报告/验证文档（非功能单元），兜底扫描时跳过
+  const systemDocs = new Set(['VALIDATION', 'VALIDATION_REPORT', 'VERIFICATION', 'QUALITY_REPORT', 'CLARIFY_REPORT', 'INDEX', 'README', 'CHANGELOG', 'FUNCTION_MAP', 'GLOSSARY']);
+  const resourceDirs = new Set(['assets', 'images', 'prototypes', 'screenshots', 'sources', 'designs', 'extracted']);
   async function scanDir(dir: string) {
     const entries = await readdir(dir, { withFileTypes: true });
     for (const entry of entries) {
       const fullPath = join(dir, entry.name);
-      if (entry.isDirectory()) await scanDir(fullPath);
-      else if (entry.name.endsWith('.md')) reqFiles.push(fullPath);
+      if (entry.isDirectory()) {
+        if (resourceDirs.has(entry.name)) continue; // 不递归资源目录
+        await scanDir(fullPath);
+      } else if (entry.name.endsWith('.md')) {
+        const base = entry.name.slice(0, -3);
+        if (systemDocs.has(base) || base.startsWith('unit-') || base.startsWith('_')) continue;
+        reqFiles.push(fullPath);
+      }
     }
   }
   await scanDir(reqDir);
