@@ -6519,6 +6519,31 @@ export async function extractIterationUnits(iterDir: string): Promise<IterationU
 
   if (!await pathExists(reqDir)) return units;
 
+  // v8.3.201+: 优先读 010-requirements/features/ 的一级子目录名作为功能单元（与 doc2spec 切分目录对齐）。
+  // 旧逻辑「递归扫描所有 .md 的 ## 标题」会误读 _matrix.md / GLOBAL_CONTEXT-*.md / CHANGELOG.md，
+  // 反而读不到真正的功能单元目录名。
+  const featuresDir = join(reqDir, 'features');
+  if (await pathExists(featuresDir)) {
+    const entries = await readdir(featuresDir, { withFileTypes: true });
+    const dirs = entries.filter(e => e.isDirectory() && !e.name.startsWith('.') && !e.name.startsWith('_'));
+    for (const dir of dirs) {
+      const readmePath = join(featuresDir, dir.name, 'README.md');
+      let content = '';
+      if (await pathExists(readmePath)) {
+        content = (await readFile(readmePath, 'utf-8')).slice(0, 500);
+      }
+      units.push({
+        id: `M-${String(idCounter++).padStart(2, '0')}`,
+        name: dir.name,
+        source: relative(reqDir, readmePath),
+        sourceRange: { startLine: 1, endLine: 1 },
+        content,
+      });
+      if (idCounter > 30) break;
+    }
+    if (units.length > 0) return units;
+  }
+
   const reqFiles: string[] = [];
   async function scanDir(dir: string) {
     const entries = await readdir(dir, { withFileTypes: true });

@@ -126,6 +126,14 @@ async function getValidPlatformIdentifiers(): Promise<Set<string>> {
  * 提取文件名（不含扩展名）作为功能模块名，去重返回
  */
 export async function parseFeatureList(iterDir: string): Promise<string[]> {
+  // v8.3.201+: 优先读 010-requirements/features/ 的一级子目录名（doc2spec --split 产出的功能单元目录）。
+  // 旧逻辑「递归扫描所有 .md 文件名」会误识别 overview/GLOBAL_CONTEXT-*.md、features/{unit}/_matrix.md
+  // 为功能模块，反而读不到真正的功能单元目录名（features/{docSlug}-{单元名}/），导致 020-specs 骨架错乱。
+  const featuresDir = join(iterDir, '010-requirements', 'features');
+  const fromDirs = await readFeatureDirs(featuresDir);
+  if (fromDirs.length > 0) return fromDirs;
+
+  // 兜底：老项目无 features/ 目录时，回退到扫描 .md 文件名（兼容历史结构）
   const features = new Set<string>();
   // 排除非功能文档（系统文件、汇总文件）
   // v8.3.81+: 移除 'REQUIREMENT'，用户命名自由，REQUIREMENT.md 也可作为功能模块名
@@ -169,6 +177,25 @@ export async function parseFeatureList(iterDir: string): Promise<string[]> {
   await scanDir(join(iterDir, '020-specs', 'requirements'));
 
   return [...features];
+}
+
+/**
+ * v8.3.201+: 读取 features/ 下的一级子目录名作为功能单元清单。
+ * 只认「目录」，忽略 INDEX.md 等文件；排除 . 开头（.meta 等）与 _ 开头（_shared 等）的系统目录。
+ */
+async function readFeatureDirs(featuresDir: string): Promise<string[]> {
+  if (!await pathExists(featuresDir)) return [];
+  const names: string[] = [];
+  try {
+    const entries = await readdir(featuresDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      if (entry.name.startsWith('.')) continue;
+      if (entry.name.startsWith('_')) continue;
+      names.push(entry.name);
+    }
+  } catch { /* ignore */ }
+  return names;
 }
 
 /**
