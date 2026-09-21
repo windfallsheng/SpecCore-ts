@@ -316,11 +316,14 @@ async function autoPipeline(options: RunOptions): Promise<void> {
         // v8.3.191+: 切分功能单元（结构化，独立于澄清）
         // 已切分（features/ 非空）则跳过；否则对 converted/ 和 REQUIREMENT.md 文档切分
         const featuresDir = join(iterDir, '010-requirements', 'features');
-        let hasFeatures = false;
-        try {
-          const entries = await readdir(featuresDir, { withFileTypes: true });
-          hasFeatures = entries.some((e: any) => e.isDirectory() && !e.name.startsWith('.'));
-        } catch {}
+        // v8.3.222+: 统计 features/ 一级子目录（功能单元）数，排除 . / _ 开头系统目录
+        const countFeatureDirs = async (): Promise<number> => {
+          try {
+            const entries = await readdir(featuresDir, { withFileTypes: true });
+            return entries.filter((e: any) => e.isDirectory() && !e.name.startsWith('.') && !e.name.startsWith('_')).length;
+          } catch { return 0; }
+        };
+        let hasFeatures = (await countFeatureDirs()) > 0;
         if (hasFeatures) {
           logger.info('  ✅ 功能单元已切分，跳过');
           phaseStatus = 'skipped';
@@ -342,17 +345,40 @@ async function autoPipeline(options: RunOptions): Promise<void> {
           phaseMessage = '无需求文档可切分';
           break;
         }
+        // v8.3.222+: 切分前统计需求文档的功能单元候选（## 二级标题数），用于切分后覆盖验证
+        let candidateUnits = 0;
+        for (const doc of docsToSplit) {
+          try {
+            const c = await readFile(doc, 'utf-8');
+            const h2 = c.split('\n').filter(l => /^##\s+.+/.test(l));
+            candidateUnits += h2.length;
+          } catch { /* ignore */ }
+        }
         const { splitDocumentToUnits } = await import('./doc2spec');
-        let written = 0;
         for (const doc of docsToSplit) {
           try {
             await splitDocumentToUnits(iterDir, doc, '', basename(doc));
-            written++;
           } catch (e: any) {
             logger.warn(`  ⚠️ 切分失败: ${basename(doc)} — ${e?.message || e}`);
           }
         }
-        logger.info(`  🔪 切分功能单元完成: ${written}/${docsToSplit.length} 个文档`);
+        // v8.3.222+: 切分结果验证——以「实际产出的功能单元目录数」为准，而非「调用次数」。
+        // 修复「切分完成 4/4 但 features/ 一个单元都没产出」的假完成。
+        const producedUnits = await countFeatureDirs();
+        logger.info(`  🔪 切分功能单元: 实际产出 ${producedUnits} 个功能单元（${docsToSplit.length} 个需求文档，${candidateUnits} 个候选章节）`);
+        if (producedUnits === 0) {
+          logger.error(`\n🛑 [SPECCORE_GATE] 切分功能单元失败——features/ 未产出任何功能单元`);
+          logger.error('   需求文档可能不含可识别的功能单元章节（## 二级标题），或切分逻辑未生效。');
+          logger.error(`   涉及文档: ${docsToSplit.map(d => basename(d)).join(', ')}`);
+          logger.error('   功能单元应体现为需求文档的「## 章节」（如 ## 会议室管理、## 预订管理）。');
+          process.exitCode = 1;
+          return;
+        }
+        // v8.3.222+: 覆盖验证——产出数明显少于候选章节数时警告（可能漏切），不阻断（AI 语义合并是合理的）
+        if (candidateUnits > 0 && producedUnits < Math.floor(candidateUnits * 0.5)) {
+          logger.warn(`  ⚠️ 功能单元产出 ${producedUnits} 个，候选章节 ${candidateUnits} 个，可能漏切（部分 ## 章节被合并或未识别）`);
+          logger.warn(`     如需完整拆分，可检查 features/ 是否覆盖所有功能章节，或手动补切。`);
+        }
         break;
       }
       case 'analyze': {
@@ -477,6 +503,17 @@ async function autoPipeline(options: RunOptions): Promise<void> {
           logger.error(`   确认落盘后继续: speccore run --auto --from taskify -I ${iteration}\n`);
           process.exitCode = 1;
           return;
+        }
+        // v8.3.222+: 切分功能单元感知——features/ 未切分时警告（--from taskify 会跳过 split-units）。
+        // taskify 核心依赖是 020-specs（analyze 产出），features/ 缺失仅导致功能单元粒度过粗，故警告不阻断。
+        let hasFeatureUnits = false;
+        try {
+          const fEntries = await readdir(join(iterDir, '010-requirements', 'features'), { withFileTypes: true });
+          hasFeatureUnits = fEntries.some((e: any) => e.isDirectory() && !e.name.startsWith('.') && !e.name.startsWith('_'));
+        } catch {}
+        if (!hasFeatureUnits) {
+          logger.warn('  ⚠️ 功能单元未切分（010-requirements/features/ 为空）——taskify 将按需求文档粒度拆分，任务可能过粗');
+          logger.warn('     建议先切分: speccore doc2spec --split 或 speccore run --from split-units');
         }
         let hasTasks = false;
         try {
