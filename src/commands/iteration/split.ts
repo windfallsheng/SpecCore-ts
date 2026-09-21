@@ -514,12 +514,15 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           if (dispatchResult.filesChanged && dispatchResult.filesChanged.length > 0) {
             process.stdout.write(`📄 文件变更: ${dispatchResult.filesChanged.join(', ')}\n`);
           }
-          if (dispatchResult.content) {
-            process.stdout.write(`\n--- 执行结果 ---\n${dispatchResult.content.slice(0, 3000)}${dispatchResult.content.length > 3000 ? '\n... (截断)' : ''}\n`);
+          // v8.3.212+: SDK 直连真闭环——返回内容自动落盘（复用 --response 流程，设 llmHandled 避免重复输出 prompt）
+          if (dispatchResult.content && dispatchResult.content.trim()) {
+            options.response = dispatchResult.content;
+            llmHandled = true;
+          } else {
+            process.stdout.write(`\n> 请审查结果后手动 speccore iteration taskify --response 写入任务\n`);
+            process.exitCode = 0;
+            return;
           }
-          process.stdout.write(`\n> 请审查上述结果，确认后执行 speccore iteration taskify --response 写入任务\n`);
-          process.exitCode = 0;
-          return;
         }
         // 宿主 SDK 调度失败（success=false）→ auto 时回退自配 LLM
         if (aiProvider === 'auto') await tryLlmTaskify();

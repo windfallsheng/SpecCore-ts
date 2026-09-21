@@ -247,12 +247,15 @@ export async function planCommand(options: PlanOptions): Promise<void> {
           if (dispatchResult.filesChanged && dispatchResult.filesChanged.length > 0) {
             process.stdout.write(`📄 文件变更: ${dispatchResult.filesChanged.join(', ')}\n`);
           }
-          if (dispatchResult.content) {
-            process.stdout.write(`\n--- 执行结果 ---\n${dispatchResult.content.slice(0, 3000)}${dispatchResult.content.length > 3000 ? '\n... (截断)' : ''}\n`);
+          // v8.3.212+: SDK 直连真闭环——返回内容自动落盘（fall through 到 Response 落盘）
+          if (dispatchResult.content && dispatchResult.content.trim()) {
+            options.response = dispatchResult.content;
+            options.iteration = options.iteration || iter; // 保证 response 落盘可用
+          } else {
+            process.stdout.write(`\n> 请审查结果后手动 speccore plan --response 写入计划\n`);
+            process.exitCode = 0;
+            return;
           }
-          process.stdout.write(`\n> 请审查上述结果，确认后执行 speccore plan --response 写入计划\n`);
-          process.exitCode = 0;
-          return;
         }
         // 宿主 SDK 调度失败（success=false）→ auto 时回退自配 LLM
         if (aiProvider === 'auto') await tryLlmPlan();

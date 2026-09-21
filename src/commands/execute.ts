@@ -2629,11 +2629,22 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
       if (dispatchResult && dispatchResult.success) {
         logger.info(`[execute] 子 Agent ${platformSubagent} SDK 调度成功`);
         process.stdout.write(`\n[SPECCORE_RESULT] 子 Agent ${platformSubagent} 通过 Qoder SDK 完成执行\n`);
+        // v8.3.212+: SDK 直连真闭环——Qoder 已直接写文件则确认成功，返回 JSON files 则自动落盘
         if (dispatchResult.filesChanged && dispatchResult.filesChanged.length > 0) {
-          process.stdout.write(`📄 文件变更: ${dispatchResult.filesChanged.join(', ')}\n`);
+          process.stdout.write(`✅ 代码已由子 Agent 直接写入 ${dispatchResult.filesChanged.length} 个文件:\n`);
+          for (const f of dispatchResult.filesChanged) process.stdout.write(`   📄 ${f}\n`);
+          process.exitCode = 0;
+          return;
         }
-        if (dispatchResult.content) {
-          process.stdout.write(`\n--- 执行结果 ---\n${dispatchResult.content.slice(0, 3000)}${dispatchResult.content.length > 3000 ? '\n... (截断)' : ''}\n`);
+        if (dispatchResult.content && dispatchResult.content.trim()) {
+          const c = dispatchResult.content.trim();
+          if (c.startsWith('{') || c.includes('"files"')) {
+            // 返回 JSON files 格式 → 复用 runApplyMode 自动落盘
+            options.response = dispatchResult.content;
+            await runApplyMode(iteration, options);
+            return;
+          }
+          process.stdout.write(`\n--- 执行结果 ---\n${c.slice(0, 3000)}${c.length > 3000 ? '\n... (截断)' : ''}\n`);
         }
         process.stdout.write(`\n> 请审查上述结果，确认后执行 speccore execute --apply 写入代码\n`);
         process.exitCode = 0;
