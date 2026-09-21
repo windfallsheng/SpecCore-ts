@@ -464,6 +464,20 @@ async function autoPipeline(options: RunOptions): Promise<void> {
         break;
       }
       case 'taskify': {
+        // v8.3.221+: 骨架硬闸口——检测 020-specs 是否仍有空模板，有则硬停。
+        // 空骨架会一路传到 taskify，AI 把「写作要求/质量标准」等骨架文字误当功能模块，拆出垃圾任务。
+        // 之前 analyze 阶段的闸口会被 --from taskify 绕过，故在此处再设一道。
+        const emptySkeleton = await detectEmptySkeletonDocs(iterDir);
+        if (emptySkeleton.length > 0) {
+          logger.error(`\n🛑 [SPECCORE_GATE] 需求分析未完成——${emptySkeleton.length} 个 Spec 文档仍是空模板，无法拆分任务`);
+          for (const d of emptySkeleton.slice(0, 6)) logger.error(`   ❌ ${d}`);
+          if (emptySkeleton.length > 6) logger.error(`   ... 还有 ${emptySkeleton.length - 6} 个`);
+          logger.error('   空模板会让 taskify 把「写作要求/质量标准」等骨架文字误当功能模块，拆出垃圾任务。');
+          logger.error(`   请先完成需求分析落盘: speccore analyze -I ${iteration} --auto`);
+          logger.error(`   确认落盘后继续: speccore run --auto --from taskify -I ${iteration}\n`);
+          process.exitCode = 1;
+          return;
+        }
         let hasTasks = false;
         try {
           const entries = await readdir(join(iterDir, '030-tasks'), { withFileTypes: true });

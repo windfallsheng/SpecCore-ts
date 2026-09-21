@@ -245,7 +245,7 @@ async function preSplitGate(iterationDir: string): Promise<{
     level: 'warn',
   });
 
-  // 检查全局 REQUIREMENT.md（警告级）
+  // 检查全局 REQUIREMENT.md（阻塞级——taskify 的核心需求上下文，骨架则无法拆分）
   const reqPath = join(specDir, GLOBAL_SPECS_DIR, 'REQUIREMENT.md');
   const reqExists = await pathExists(reqPath);
   let reqIsSkeleton = false;
@@ -256,11 +256,29 @@ async function preSplitGate(iterationDir: string): Promise<{
   items.push({
     path: reqPath,
     name: 'REQUIREMENT.md',
-    purpose: '本迭代的完整需求规格，包含功能模块清单和验收标准',
-    impact: '缺失时，AI 拆分缺少需求上下文，可能遗漏功能点或拆分粒度过粗',
+    purpose: '本迭代的完整需求规格，包含功能模块清单和验收标准（taskify 拆分任务的核心依据）',
+    impact: '缺失或仍为骨架时，AI 拆分缺少需求上下文，会拆出无意义任务（如把「写作要求」当功能模块）',
     exists: reqExists,
     isSkeleton: reqIsSkeleton,
-    level: 'warn',
+    level: 'block',
+  });
+
+  // v8.3.221+: 检查全局 ANALYSIS.md（阻塞级——功能分析，骨架说明 analyze 未落盘）
+  const analysisGatePath = join(specDir, GLOBAL_SPECS_DIR, 'ANALYSIS.md');
+  const analysisGateExists = await pathExists(analysisGatePath);
+  let analysisGateIsSkeleton = false;
+  if (analysisGateExists) {
+    const ac = await readFile(analysisGatePath, 'utf-8');
+    analysisGateIsSkeleton = ac.includes('<!-- SPEC-SKELETON -->') || ac.trim().length < 100;
+  }
+  items.push({
+    path: analysisGatePath,
+    name: 'ANALYSIS.md',
+    purpose: '需求功能分析（功能点清单 F-xx），taskify 拆分任务的输入之一',
+    impact: '仍为骨架说明 analyze 阶段未落盘，拆分会遗漏功能点',
+    exists: analysisGateExists,
+    isSkeleton: analysisGateIsSkeleton,
+    level: 'block',
   });
 
   // 检查功能模块级文档（警告级）

@@ -1,3 +1,15 @@
+## v8.3.221 (2026-09-21) — taskify 骨架硬闸口（堵住「空骨架拆垃圾任务」）
+
+### taskify 骨架硬闸口
+- run 流水线 taskify 阶段新增 `detectEmptySkeletonDocs` 检查：020-specs 仍含空骨架时硬停，防止 `--from taskify` 绕过 analyze 闸口后，AI 把「写作要求/质量标准」等骨架文字误当功能模块拆出垃圾任务（假完成）
+- `preSplitGate` 的 REQUIREMENT.md、ANALYSIS.md 从 warn 升级为 block（taskify 拆分任务的核心需求上下文，骨架则无法拆分）
+
+### 诊断结论（切分/analyze 断点根因）
+- 切分（split-units）逻辑正常（scanUnits 正则能识别功能单元），meeting-system 的 features/ 未产出是「--from taskify 跳过了 split-units」，非切分 bug
+- analyze 未落盘根因是 `settings.ai.provider: host`（仅宿主 AI，无自配 LLM）——analyze 在 host 模式依赖宿主 AI 逐文档 `--apply`，全自动流水线无法自动串起落盘循环
+
+---
+
 ## v8.3.220 (2026-09-21) — 功能单元来源收敛 + FUNCTION_MAP 依赖降级
 
 ### 功能单元权威来源收敛
