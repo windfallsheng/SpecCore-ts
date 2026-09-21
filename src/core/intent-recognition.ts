@@ -127,6 +127,9 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
       '部署', '上线', '交付', '提代码', '提交代码', '发布',
       '生成spec', '出spec', '生成规格', '出规格', '到拆分', '生成拆分方案',
       '开发流程', '开发到验证', '开发到执行', '跑开发', '分析到开发', '需求到开发',
+      // v8.3.218+: 冒烟节点消歧——开发完冒烟/部署+冒烟 是流水线意图（不是单独跑冒烟测试）
+      '开发完成', '开发完', '开发后',
+      '冒烟', '本地冒烟', '环境冒烟', '部署冒烟', '部署前冒烟', '部署后冒烟', '上线冒烟', '上线后冒烟',
     ],
     patterns: ['跑(?:.+?)流水线', '执行(?:.+?)流水线', '运行(?:.+?)流水线', '帮我(?:.+?)', '自动(?:.+?)', '从(?:.+?)(?:到|至)(?:.+?)'],
     description: '端到端流水线执行 — 按 preset 或起止点自动编排（run）',
@@ -852,6 +855,9 @@ function extractParams(input: string, mapping: CommandMapping): Record<string, s
       '计划': 'plan', 'plan': 'plan',
       '执行': 'execute', 'execute': 'execute', '开发': 'execute',
       '验证': 'verify', 'verify': 'verify',
+      // v8.3.218+: 冒烟节点归一化——冒烟不是独立阶段，依附 verify（本地冒烟）/ pipeline（部署前/后冒烟）
+      '冒烟': 'verify', '本地冒烟': 'verify', '本地验证': 'verify', '开发完冒烟': 'verify',
+      '环境冒烟': 'pipeline', '部署冒烟': 'pipeline', '部署后冒烟': 'pipeline', '上线冒烟': 'pipeline', '上线后冒烟': 'pipeline', '部署前冒烟': 'pipeline', '上线前冒烟': 'pipeline',
       '部署': 'pipeline', 'pipeline': 'pipeline', '上线': 'pipeline',
       '提交': 'pr', 'pr': 'pr', '提代码': 'pr',
       '归档': 'done', 'done': 'done', '复盘': 'done',
@@ -873,7 +879,7 @@ function extractParams(input: string, mapping: CommandMapping): Record<string, s
         deploy: ['deploy', '部署', '上线', '发布'],
         deliver: ['deliver', '交付', '提交代码', '提代码'],
         full: ['full', '全流程', '完整流程', '端到端', '全量'],
-        develop: ['develop', '开发流程', '开发到验证', '开发到执行', '跑开发', '分析到开发', '需求到开发'],
+        develop: ['develop', '开发流程', '开发到验证', '开发到执行', '跑开发', '分析到开发', '需求到开发', '开发完成', '开发完', '本地冒烟'],
         spec: ['spec', '生成spec', '出spec', '生成规格', '出规格', '到拆分', '生成拆分'],
         import: ['import', '导入需求', '导入'],
         docs: ['docs', '导出文档', '生成文档', '文档导出', '导出'],

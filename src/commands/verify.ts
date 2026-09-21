@@ -627,8 +627,9 @@ async function extractTestAccountHint(projectRoot: string): Promise<string | und
   try {
     const { glob } = await import('glob');
     const patterns = [
-      join(projectRoot, 'Iteration-*', '010-requirements', '**', '*.md'),
+      // Spec 优先（测试账号约定/元素标识是实现约定的权威来源，analyze 产出）
       join(projectRoot, 'Iteration-*', '020-specs', '**', '*.md'),
+      join(projectRoot, 'Iteration-*', '010-requirements', '**', '*.md'),
       join(projectRoot, '.speccore', '**', '*.md'),
     ];
     const files: string[] = [];

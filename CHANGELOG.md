@@ -1,3 +1,17 @@
+## v8.3.218 (2026-09-21) — 冒烟意图消歧 + 测试约定归位 Spec
+
+### ask 冒烟节点消歧
+- 冒烟不是独立流水线阶段，依附 verify（本地冒烟）/ pipeline（部署前/后冒烟）
+- 阶段归一化：本地冒烟/开发完冒烟 → verify；环境冒烟/部署前冒烟/部署后冒烟 → pipeline
+- preset develop 关键词补「开发完成/开发完/本地冒烟」，「开发完成，本地冒烟」→ develop（分析→验证）
+
+### 测试约定职责归位（需求 vs 分析）
+- 需求文档（PRD）只保留「测试账号」业务约定（账号名+角色），移除 data-testid/seed 等实现细节
+- 分析文档（Spec）承载实现约定：TEST.md 骨架补「测试账号约定」，UI_SPEC.md 骨架补「元素标识（data-testid）约定」
+- extractTestAccountHint 扫描优先级改为 Spec（020-specs）优先
+
+---
+
 ## v8.3.217 (2026-09-21) — 冒烟三时机 × 范围统一设计
 
 ### 冒烟测试统一配置（settings.smoke）
