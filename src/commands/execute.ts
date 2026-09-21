@@ -2640,11 +2640,16 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
           const c = dispatchResult.content.trim();
           if (c.startsWith('{') || c.includes('"files"')) {
             // 返回 JSON files 格式 → 复用 runApplyMode 自动落盘
-            options.response = dispatchResult.content;
-            await runApplyMode(iteration, options);
-            return;
+            // v8.3.214+: 全量执行（无 --task）时 runApplyMode 会因缺 task 报错，跳过自动落盘改打印结果
+            if (options.task) {
+              options.response = dispatchResult.content;
+              await runApplyMode(iteration, options);
+              return;
+            }
+            process.stdout.write(`\n--- 执行结果 ---\n${c.slice(0, 3000)}${c.length > 3000 ? '\n... (截断)' : ''}\n`);
+          } else {
+            process.stdout.write(`\n--- 执行结果 ---\n${c.slice(0, 3000)}${c.length > 3000 ? '\n... (截断)' : ''}\n`);
           }
-          process.stdout.write(`\n--- 执行结果 ---\n${c.slice(0, 3000)}${c.length > 3000 ? '\n... (截断)' : ''}\n`);
         }
         process.stdout.write(`\n> 请审查上述结果，确认后执行 speccore execute --apply 写入代码\n`);
         process.exitCode = 0;
