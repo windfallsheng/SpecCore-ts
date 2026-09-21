@@ -13,7 +13,10 @@
     "watch": "tsc --watch",
     "prepublish": "npm run build",
     "test": "jest",
-    "lint": "eslint src/**/*.ts"
+    "lint": "eslint src/**/*.ts",
+    "release:verify": "bash scripts/release.sh verify",
+    "release:beta": "bash scripts/release.sh beta",
+    "release:stable": "bash scripts/release.sh stable"
   },
   "keywords": [
     "spec-driven-development",

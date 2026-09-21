@@ -353,6 +353,31 @@ function buildQoderAgentDefinition(config: SubagentConfig): any {
   };
 }
 
+/**
+ * v8.3.211+: 检测 prompt 是否引用图片/截图，若是则追加显式读图指令。
+ * 把「宿主 AI 自觉读图」的软约定变成硬指令，提升 bug 修复场景截图消费的确定性。
+ * 图片引用特征：🖼️ 标记、markdown 图片语法、截图目录、常见图片后缀路径。
+ */
+function appendImageReadInstruction(prompt: string): string {
+  const hasImageRef =
+    prompt.includes('🖼️') ||
+    /!\[[^\]]*\]\([^)]*\.(png|jpe?g|gif|webp|bmp)\)/i.test(prompt) ||
+    /assets\/screenshots?/i.test(prompt) ||
+    /(?:^|[\s`("])([^\s`()"]+\.(?:png|jpe?g|gif|webp|bmp))/i.test(prompt);
+
+  if (!hasImageRef) return prompt;
+
+  const instr = [
+    '',
+    '',
+    '> ⚠️ 【读图指令】当前任务上下文引用了图片/截图（缺陷截图、原型图等）。',
+    '> 请务必使用 Read 工具逐一打开上述图片文件查看内容，再据此输出分析/修复结果，',
+    '> 不要仅凭文字描述或 alt 语义猜测图片内容。',
+  ].join('\n');
+
+  return prompt + instr;
+}
+
 /** 内置 subagent 名称映射（优先使用 Qoder 内置 Agent）
  * v8.3.171+: 扩展映射表，覆盖 SpecCore 核心子 Agent */
 function mapToQoderAgentName(subagent: string): string | undefined {
@@ -492,8 +517,11 @@ export class QoderSdkAdapter implements AgentAdapter {
 
       logger.info(`[QoderSdkAdapter] 调度子 Agent: ${ctx.subagent} (Qoder agent: ${qoderAgentName})`);
 
-      // 5. 调用 SDK query()
-      const stream = query({ prompt: taskPrompt, options });
+      // 5. v8.3.211+: 显式读图指令——若 prompt 引用图片/截图，追加硬指令让 Qoder 用 Read 读取
+      const finalPrompt = appendImageReadInstruction(taskPrompt);
+
+      // 6. 调用 SDK query()
+      const stream = query({ prompt: finalPrompt, options });
 
       // 6. 消费消息流，收集结果
       let content = '';
