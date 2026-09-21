@@ -6412,3 +6412,86 @@ SpecCore 的 AI 角色定义长期存在「双份事实源」，违反"Spec 是�
 4. **宿主侧薄封装化**：skill = command = 转交 `speccore ask`，参数提取/校验下沉 CLI（ask-engine 意图识别 + 命令内部校验），消除宿主侧重复。`speccore-router` 保留（核心路由 + CLI 输出标记处理 + 模糊意图拦截）。
 
 ---
+
+## 附录：v8.3.215+ 冒烟测试体系设计
+
+### 设计背景
+
+冒烟测试从「单一 UI 冒烟」演进为完整的「登录 + 三时机 + 范围 + 意图消歧」体系，解决四个核心问题：
+
+1. 有登录墙的系统无法冒烟（无账号来源，首次开发不知账号密码）；
+2. 账号填充时机错误（init 时账号还没定，应在冒烟前装配）；
+3. 冒烟时机/范围不清晰（本地 / 部署前 / 部署后，全量 / 模块）；
+4. 自然语言「冒烟」有歧义（本地冒烟 vs 部署冒烟）。
+
+### 核心架构：三时机 × 两级范围（v8.3.217+）
+
+三个冒烟点对应常规开发流程，默认全自动：
+
+| 冒烟点 | key | 触发 | 失败处理 |
+|:---|:---|:---|:---|
+| ①本地冒烟 | `local` | execute 后、commit 前 | 警告不阻断 |
+| ②部署前冒烟 | `pre-deploy` | pipeline build 后 deploy 前 | critical 阻断 |
+| ③环境冒烟 | `post-deploy` | deploy 后 | 只报告 + 回滚提示 |
+
+**范围两级**：`full`（全量）/ `module`（当前功能模块），按环境差异化（`scope_by_env`，如 production→full、dev→module）。`diff`（变更级）依赖「变更影响面追踪」，后续实现。
+
+**配置**（`.speccore.yml` 的 `settings.smoke`）：
+
+```yaml
+settings:
+  smoke:
+    points:
+      local: auto        # ① 三态 auto/on/off
+      pre-deploy: auto   # ②
+      post-deploy: auto  # ③
+    scope: module
+    scope_by_env:
+      production: full
+```
+
+**单次控制**：`speccore run/pipeline --smoke`（强制）/ `--skip-smoke`（跳过）/ `--scope full|module`（单次范围），flag 覆盖配置。
+
+**接入点**：`run.ts` verify 阶段读 `points.local`；`pipeline.ts` executePipelineTest 读 `points.pre-deploy/post-deploy`（`build-check` 基础门禁不受冒烟开关影响）。
+
+### 登录账号自动装配（v8.3.215 / 8.3.216）
+
+**AuthConfig 结构**：`login_url` + 账号/密码/提交选择器 + `credentials`（环境变量 `username_env`/`password_env` 优先，明文兜底）+ 登录成功判定（`success_url_contains`/`success_selector`）。
+
+**装配时机 = 冒烟前（非 init）**：账号不该在 init 时填占位（那时账号还没定），而是在「开发完成、即将冒烟」时自动装配：
+- `describeAuthResolution` 解析账号/密码来源，生成「改了什么 / 缺什么」清单；
+- `extractTestAccountHint` 从 Spec「测试账号约定」章节提取账号名（email 优先）；
+- 内存装配不落盘（密码不进 git），账号未就绪时登录降级跳过、不阻断页面可达性检查；
+- 自动模式同样打印装配清单，用户可见。
+
+### 测试约定职责归位（v8.3.218）
+
+测试账号、data-testid、seed 都是**技术侧**约定，不放需求文档：
+
+| 位置 | 内容 |
+|:---|:---|
+| 需求文档（PRD） | 纯业务：角色 / 功能 / 场景 / 验收标准 |
+| 分析文档（Spec，analyze 产出） | 技术侧：`TEST.md` 测试账号约定 + `UI_SPEC.md` 元素标识（data-testid）约定 |
+| 环境配置（environments） | 测试基础设施：`tests.auth` + `base_urls`/`local_urls` |
+
+**spec-skeleton 骨架**：`TEST.md` 补「测试账号约定」写作要求，`UI_SPEC.md` 补「元素标识（data-testid）约定」写作要求，analyze 生成 Spec 时强制产出。
+
+### ask 冒烟意图消歧（v8.3.218）
+
+**核心认知**：冒烟不是独立流水线阶段，依附 `verify`（本地冒烟）/ `pipeline`（部署前/后冒烟）。
+
+**归一化**（intent-recognition `stageNameMap` + run triggers）：
+- 本地冒烟 / 开发完冒烟 → `verify`（→ preset `develop`）；
+- 环境冒烟 / 部署前冒烟 / 部署后冒烟 → `pipeline`（→ preset `deploy`）。
+
+**消歧规则**：run 意图 triggers 补「冒烟 / 开发完成 / 本地冒烟 / 环境冒烟」等词，命中 run 后由 presetMap 提取 preset（开发完成→develop、部署→deploy），`runWithParams` 成立则强制 run 编排。单独「冒烟」run 无参数不被提升，仍走 verify。
+
+实测：「开发完成，本地冒烟」→ `run --preset develop`；「开发完成本地冒烟，再部署到准生产并冒烟」→ `run --preset deploy`。
+
+### 业务流程冒烟骨架生成（v8.3.216）
+
+`generateFlowScenariosFromSpec` 从需求/Spec 文档「业务流程」章节提取含 `→` 的流程步骤，生成流程级场景骨架（导航 + `data-testid="{step}-page"` 占位断言）。骨架定位是「起点」而非「成品」——精确的 fill/click 交互步骤与选择器，由前端按 data-testid 约定加标识后，AI/人工在骨架上补充。
+
+---
+
+

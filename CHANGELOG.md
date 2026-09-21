@@ -1,3 +1,18 @@
+## v8.3.219 (2026-09-21) — 冒烟体系文档沉淀 + 流水线示例补 verify
+
+### 设计文档（docs/DESIGN.md）
+- 新增附录章节「冒烟测试体系」：三时机（本地/部署前/部署后）× 范围（full/module）× 配置（settings.smoke）+ 单次 flag
+- 覆盖 auth 登录配置、冒烟前自动装配账号、ask 冒烟消歧、测试约定职责归位（需求 vs Spec）等全部技术点
+
+### 说明文档（README.md）
+- 「质量验证」章节补充：auth 登录配置、settings.smoke 三时机开关、run/pipeline 单次 flag（--smoke/--skip-smoke/--scope）
+
+### HTML 模板
+- 修复 speccore-help / ask-pipeline / ask-guide 里 3 处过时 `speccore split` → `speccore iteration taskify`
+- ask-pipeline（5→6 步）、ask-guide（8→9 步）流水线示例在 execute 后补 `verify`（本地冒烟）阶段
+
+---
+
 ## v8.3.218 (2026-09-21) — 冒烟意图消歧 + 测试约定归位 Spec
 
 ### ask 冒烟节点消歧

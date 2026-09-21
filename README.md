@@ -173,6 +173,17 @@ speccore verify --stage pr                 # PR 阶段：代码质量 + 冒烟 +
 speccore verify -t Task-001 --ui           # 单任务 UI 冒烟
 ```
 
+**冒烟测试三时机 × 范围**（v8.3.217+）：开发完成后自动「本地冒烟 → 提交 → 部署前冒烟 → 部署 → 环境冒烟」，范围可按环境差异化（全量 / 当前功能模块），支持登录账号自动装配：
+
+```bash
+speccore run --preset develop              # 开发完自动本地冒烟
+speccore run --preset deploy --env staging # 部署 + 环境冒烟
+speccore run --scope full                  # 单次指定全量
+speccore run --skip-smoke                  # 单次跳过冒烟
+```
+
+登录账号在 `.speccore/environments/*.yaml` 的 `tests.auth` 配置，冒烟前自动装配（密码走 `SMOKE_PASSWORD` 环境变量，不落库）；三时机开关与范围在 `.speccore.yml` 的 `settings.smoke` 配置。详见 [测试指南](docs/testing-guide.md)。
+
 ### 📖 配置引导
 
 `speccore init` 后自动生成 6 步引导页，帮助新用户快速上手。
