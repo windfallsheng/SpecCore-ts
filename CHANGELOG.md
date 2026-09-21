@@ -1,3 +1,22 @@
+## v8.3.217 (2026-09-21) — 冒烟三时机 × 范围统一设计
+
+### 冒烟测试统一配置（settings.smoke）
+- 新增 `settings.smoke` 配置：三时机开关（points.local/pre-deploy/post-deploy）+ 范围（scope）+ 按环境差异化（scope_by_env）
+- 三时机对应常规开发流程：①本地冒烟（开发完、提交前）→ ②部署前冒烟（critical 阻断）→ ③环境冒烟（只报告）
+- 范围两级：full=全量 / module=当前功能模块（diff 变更级后续）；可按环境差异化（如 production→full、dev→module）
+
+### 三时机接入
+- `run` 流水线 verify 阶段接入 points.local 开关 + scope（本地冒烟默认 auto）
+- `pipeline` test 阶段接入 points.pre-deploy/post-deploy 开关（build-check 不受冒烟开关影响）
+
+### 单次控制 flag
+- `speccore run` / `speccore pipeline` 新增 `--smoke`（强制）/ `--skip-smoke`（跳过）/ `--scope full|module`（单次范围）
+
+### 文档
+- config-reference 补 settings.smoke 字段详解
+
+---
+
 ## v8.3.216 (2026-09-21) — 冒烟前自动装配登录账号 + 流程级冒烟骨架
 
 ### 冒烟前自动装配登录账号（解决「init 时账号还没定」的时序矛盾）

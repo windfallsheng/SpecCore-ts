@@ -18,7 +18,7 @@
  */
 import { execSync } from 'child_process';
 import { logger } from '../utils/logger';
-import { loadProjectConfigWithEnv } from '../core/unified-config';
+import { loadProjectConfigWithEnv, loadConfigWithMeta } from '../core/unified-config';
 import { loadEnvironmentByNameOrPath } from '../core/environment-config';
 import { buildCommand } from './build';
 import { deployCommand } from './deploy';
@@ -36,6 +36,8 @@ export interface PipelineOptions {
   envFile?: string;
   skipBuild?: boolean;
   dryRun?: boolean;
+  smoke?: 'on' | 'off'; // v8.3.217+: --smoke / --skip-smoke 单次强制/跳过冒烟
+  scope?: 'full' | 'module'; // v8.3.217+: --scope 单次指定冒烟范围
 }
 
 interface PipelineResult {
@@ -139,6 +141,18 @@ function getCurrentIteration(): string | null {
 export async function pipelineCommand(options: PipelineOptions): Promise<void> {
   const env = options.env || 'staging';
   const dryRun = options.dryRun || false;
+
+  // v8.3.217+: 读冒烟统一配置（三时机开关 + 范围），--smoke/--skip-smoke 单次覆盖
+  let smokeCfg: { points?: Record<string, 'auto' | 'on' | 'off'>; scope?: 'full' | 'module'; scope_by_env?: Record<string, 'full' | 'module'> } = {};
+  try {
+    const { config } = await loadConfigWithMeta();
+    smokeCfg = (config.settings.smoke || {}) as typeof smokeCfg;
+  } catch { /* 用默认 */ }
+  const resolveSmokePoint = (stage: 'pre-deploy' | 'post-deploy'): 'auto' | 'on' | 'off' => {
+    if (options.smoke === 'off') return 'off';
+    if (options.smoke === 'on') return 'on';
+    return smokeCfg.points?.[stage] ?? 'auto';
+  };
 
   // 读取环境配置，获取目标分支
   const envConfig = await loadEnvironmentByNameOrPath(options.envFile || env);
@@ -359,6 +373,14 @@ export async function pipelineCommand(options: PipelineOptions): Promise<void> {
     async function executePipelineTest(stage: 'pre-deploy' | 'post-deploy'): Promise<{ passed: boolean; shouldContinue: boolean }> {
       if (!testEnabled) return { passed: true, shouldContinue: true };
       if (testStage !== stage && testStage !== 'both') return { passed: true, shouldContinue: true };
+
+      // v8.3.217+: 冒烟三时机开关（settings.smoke.points，off 跳过该时机的冒烟；build-check 不受影响）
+      const smokePoint = resolveSmokePoint(stage);
+      const isSmokeType = testType === 'smoke' || testType === 'visual' || testType === 'all';
+      if (smokePoint === 'off' && isSmokeType) {
+        logger.info(`   ⏭️ 已配置跳过 ${stage} 冒烟（settings.smoke.points.${stage} = off）`);
+        return { passed: true, shouldContinue: true };
+      }
 
       const stepNum = stage === 'pre-deploy' ? '4' : '6';
       logger.info(`   ${stepNum}. 测试 ${platform.name} [${testType}] (${stage})...`);

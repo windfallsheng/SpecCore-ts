@@ -19,6 +19,8 @@ export interface RunOptions {
   preset?: string;      // v8.3.190+: --preset 预设/自定义流水线名
   gate?: 'manual' | 'auto'; // v8.3.195+: --gate 闸口模式（manual=都停 / auto=跳过A/B，C永不跳过）
   env?: string;         // v8.3.196+: --env 部署环境（透传给 pipeline 阶段）
+  smoke?: 'on' | 'off'; // v8.3.217+: --smoke / --skip-smoke 单次强制/跳过冒烟
+  scope?: 'full' | 'module'; // v8.3.217+: --scope 单次指定冒烟范围
 }
 
 async function hasFeatureDirs(iterDir: string): Promise<boolean> {
@@ -116,16 +118,26 @@ async function autoPipeline(options: RunOptions): Promise<void> {
   // v8.3.190+: 读取 optional_steps（off 跳过）+ pipelines（命名流水线）配置
   let optionalSteps: Record<string, 'auto' | 'on' | 'off'> = {};
   let pipelinesConfig: { default?: string; custom?: Record<string, string> } = {};
+  // v8.3.217+: 冒烟测试统一配置（三时机开关 + 范围 + 按环境差异化）
+  let smokeCfg: { points?: Record<string, 'auto' | 'on' | 'off'>; scope?: 'full' | 'module'; scope_by_env?: Record<string, 'full' | 'module'> } = {};
   // v8.3.195+: 闸口模式（命令 flag > 配置 > 默认 manual）
   let gateMode: 'manual' | 'auto' = 'manual';
   try {
     const { config } = await loadConfigWithMeta();
     optionalSteps = (config.settings.optional_steps || {}) as Record<string, 'auto' | 'on' | 'off'>;
     pipelinesConfig = (config.settings.pipelines || {}) as { default?: string; custom?: Record<string, string> };
+    smokeCfg = (config.settings.smoke || {}) as typeof smokeCfg;
     if (config.settings.gates?.mode === 'auto') gateMode = 'auto';
   } catch { /* 配置读取失败用默认 */ }
   if (options.gate) gateMode = options.gate;  // 命令 flag 最高优先级
   if (options.demo) gateMode = 'auto';        // --demo 兼容：等价于 --gate auto
+
+  // v8.3.217+: 冒烟范围解析（命令 --scope > 按环境 scope_by_env > 默认 scope）
+  const resolveSmokeScope = (env?: string): 'full' | 'module' => {
+    if (options.scope) return options.scope;
+    if (env && smokeCfg.scope_by_env?.[env]) return smokeCfg.scope_by_env[env];
+    return smokeCfg.scope || 'module';
+  };
 
   // v8.3.196+: 自定义流水线步骤参数（custom 里「阶段:参数」语法，如 pipeline:--env=production）
   const stepParams: Record<string, string> = {};
@@ -531,18 +543,26 @@ async function autoPipeline(options: RunOptions): Promise<void> {
           logger.info('  ⏭️ 还有 pending 任务，跳过 verify');
         } else {
           execSync(`speccore verify`, { stdio: 'inherit' });
-          // v8.3.215+: 开发完成后若配置了冒烟测试场景，追加 UI 冒烟（local 环境优先，失败降级不阻断）
-          const smokeConfig = '.speccore/tests/smoke.yaml';
-          if (await pathExists(smokeConfig)) {
-            try {
-              execSync(`speccore verify --config ${smokeConfig} --env-file local`, { stdio: 'inherit' });
-            } catch {
-              logger.warn('  ⚠️ UI 冒烟测试未通过或环境未就绪（首次开发可能尚未部署/启动），已降级为仅代码验证');
-              phaseStatus = 'warning';
-              phaseMessage = 'UI 冒烟未通过或环境未就绪，仅完成代码验证';
-            }
+          // v8.3.217+: 本地冒烟（①）——受 settings.smoke.points.local 三态控制，--smoke/--skip-smoke 单次覆盖
+          const localPoint = options.smoke === 'off' ? 'off' : options.smoke === 'on' ? 'on' : (smokeCfg.points?.local ?? 'auto');
+          if (localPoint === 'off') {
+            logger.info('  ⏭️ 已配置跳过本地冒烟（settings.smoke.points.local = off）');
           } else {
-            logger.info('  ℹ️ 未配置冒烟测试（.speccore/tests/smoke.yaml），跳过 UI 冒烟');
+            const smokeConfig = '.speccore/tests/smoke.yaml';
+            if (await pathExists(smokeConfig)) {
+              const scope = resolveSmokeScope('local');
+              const scopeNote = scope === 'module' ? '（module 范围：未显式指定模块时按全量跑）' : '';
+              try {
+                execSync(`speccore verify --config ${smokeConfig} --env-file local`, { stdio: 'inherit' });
+                logger.info(`  ✅ 本地冒烟完成（范围 ${scope}${scopeNote}）`);
+              } catch {
+                logger.warn('  ⚠️ UI 冒烟测试未通过或环境未就绪（首次开发可能尚未部署/启动），已降级为仅代码验证');
+                phaseStatus = 'warning';
+                phaseMessage = 'UI 冒烟未通过或环境未就绪，仅完成代码验证';
+              }
+            } else {
+              logger.info('  ℹ️ 未配置冒烟测试（.speccore/tests/smoke.yaml），跳过 UI 冒烟');
+            }
           }
         }
         break;

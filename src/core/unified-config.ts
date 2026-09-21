@@ -203,6 +203,22 @@ export interface SpecConfig {
       /** 图片最大尺寸（KB），超过则跳过（默认 2048） */
       imageMaxSizeKb?: number;
     };
+    /** v8.3.217+: 冒烟测试统一配置（三时机开关 + 范围 + 按环境差异化） */
+    smoke?: {
+      /** 三个冒烟点开关（auto=智能判定 / on=强制 / off=跳过） */
+      points?: {
+        /** ①本地冒烟：execute 完成后、commit 前（默认 auto） */
+        local?: 'auto' | 'on' | 'off';
+        /** ②部署前冒烟：pipeline build 后、deploy 前（默认 auto，critical 阻断） */
+        'pre-deploy'?: 'auto' | 'on' | 'off';
+        /** ③环境冒烟：deploy 后（默认 auto，只报告） */
+        'post-deploy'?: 'auto' | 'on' | 'off';
+      };
+      /** 默认冒烟范围（full=全量 / module=当前功能模块；diff 变更级后续） */
+      scope?: 'full' | 'module';
+      /** 按环境差异化范围（键为环境名，值同 scope） */
+      scope_by_env?: Record<string, 'full' | 'module'>;
+    };
   };
   ask: {
     routing: {
@@ -292,6 +308,11 @@ export const DEFAULT_CONFIG: SpecConfig = {
     pipelines: { default: 'develop', custom: {} },
     gates: { mode: 'manual' },
     ai: { provider: 'host', providers: [], defaults: {}, fallback: '' },
+    smoke: {
+      points: { local: 'auto', 'pre-deploy': 'auto', 'post-deploy': 'auto' },
+      scope: 'module',
+      scope_by_env: {},
+    },
   },
   ask: {
     routing: { mode: 'hybrid', high_threshold: 70, low_threshold: 45, auto_host_ai: true, cache_enabled: true, cache_min_hits: 3 },
@@ -1513,6 +1534,26 @@ function toYaml(config: SpecConfig): string {
   yaml += '  #   auto   = 三闸口都跳过（含 C 部署，自动执行，谨慎）\n';
   yaml += '  gates:\n';
   yaml += `    mode: ${config.settings.gates?.mode ?? 'manual'}\n`;
+  yaml += '  # ── 冒烟测试统一配置（三时机开关 + 范围 + 按环境差异化）──\n';
+  yaml += '  smoke:\n';
+  const smokePts = config.settings.smoke?.points || {};
+  yaml += `    points:\n`;
+  yaml += `      local: ${smokePts.local ?? 'auto'}        # ①本地冒烟（开发完成后、提交前）\n`;
+  yaml += `      pre-deploy: ${smokePts['pre-deploy'] ?? 'auto'}  # ②部署前冒烟（critical 阻断）\n`;
+  yaml += `      post-deploy: ${smokePts['post-deploy'] ?? 'auto'} # ③环境冒烟（只报告）\n`;
+  yaml += `    scope: ${config.settings.smoke?.scope ?? 'module'}    # full=全量 / module=当前功能模块\n`;
+  const scopeByEnv = config.settings.smoke?.scope_by_env || {};
+  const envKeys = Object.keys(scopeByEnv);
+  if (envKeys.length > 0) {
+    yaml += '    scope_by_env:\n';
+    for (const k of envKeys) {
+      yaml += `      ${k}: ${scopeByEnv[k]}\n`;
+    }
+  } else {
+    yaml += '    # scope_by_env:\n';
+    yaml += '    #   dev: module\n';
+    yaml += '    #   production: full\n';
+  }
   yaml += '  # ── AI 内容生成来源 ──\n';
   yaml += '  #   host = 宿主 AI（Qoder SDK / Headless，默认）\n';
   yaml += '  #   llm  = 自配 LLM（走下方 providers 池）\n';

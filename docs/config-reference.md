@@ -819,6 +819,39 @@ settings:
 
 ---
 
+#### 3.12.13 smoke（冒烟测试统一配置，v8.3.217+）
+
+**类型**：`object`
+
+**说明**：冒烟测试的「三时机开关 + 范围 + 按环境差异化」。三时机对应常规开发流程：①本地冒烟（execute 后、commit 前）、②部署前冒烟（pipeline build 后、deploy 前，critical 阻断）、③环境冒烟（deploy 后，只报告）。
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `points.local` | `enum` | `auto` | ①本地冒烟开关（auto/on/off） |
+| `points.pre-deploy` | `enum` | `auto` | ②部署前冒烟开关（auto/on/off） |
+| `points.post-deploy` | `enum` | `auto` | ③环境冒烟开关（auto/on/off） |
+| `scope` | `enum` | `module` | 默认范围：full=全量 / module=当前功能模块 |
+| `scope_by_env` | `object` | `{}` | 按环境差异化范围（键=环境名，值=full/module） |
+
+**示例**：
+```yaml
+settings:
+  smoke:
+    points:
+      local: auto        # 开发完默认先本地冒一下
+      pre-deploy: auto   # 部署前门禁
+      post-deploy: auto  # 部署后确认环境活着
+    scope: module        # 日常默认模块级
+    scope_by_env:
+      dev: module
+      staging: module
+      production: full   # 生产发布才全量
+```
+
+**单次控制（flag 覆盖配置）**：`speccore run --smoke`（强制）/ `--skip-smoke`（跳过）/ `--scope full|module`（单次范围）；`speccore pipeline` 同样支持。
+
+---
+
 ### 3.13 ask
 
 **类型**：`object`

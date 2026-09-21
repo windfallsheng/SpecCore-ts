@@ -220,7 +220,12 @@ program
   .option('--demo', '演示模式（放宽闸口 A/B，保留部署前确认）')
   .option('--gate <mode>', '闸口模式：manual=闸口A/B/C都人工确认（默认）| auto=三闸口都跳过（含C部署，自动执行）')
   .option('--env <env>', '部署环境（透传给 pipeline，默认 staging）')
+  .option('--smoke', '单次强制冒烟（覆盖 settings.smoke.points 为 on）')
+  .option('--skip-smoke', '单次跳过冒烟（覆盖 settings.smoke.points 为 off）')
+  .option('--scope <scope>', '单次指定冒烟范围：full=全量 / module=当前功能模块')
   .action((demand: string[], options: any) => {
+    if (options.smoke) options.smoke = 'on';
+    else if (options.skipSmoke) options.smoke = 'off';
     runCommand({ ...options, demand: demand && demand.length ? demand.join(' ') : undefined });
   });
 
@@ -378,7 +383,14 @@ program
   .option('--env-file <path>', '环境配置文件路径')
   .option('--skip-build', '跳过构建')
   .option('--dry-run', '预览模式')
-  .action(pipelineCommand);
+  .option('--smoke', '单次强制冒烟（覆盖 settings.smoke.points 为 on）')
+  .option('--skip-smoke', '单次跳过冒烟（覆盖 settings.smoke.points 为 off）')
+  .option('--scope <scope>', '单次指定冒烟范围：full=全量 / module=当前功能模块')
+  .action((options: any) => {
+    if (options.smoke) options.smoke = 'on';
+    else if (options.skipSmoke) options.smoke = 'off';
+    pipelineCommand(options);
+  });
 
 program
   .command('build')
