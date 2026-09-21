@@ -613,7 +613,13 @@ export async function dispatchSubagent(
   }
 
   // 其他环境：Headless 模式，返回 null 让外层 AI 接管
-  logger.debug(`[dispatchSubagent] 工具 ${tool} 不支持 SDK 直接调度，使用 Headless 模式`);
+  // v8.3.213+: 非 Qoder 的宿主 AI 工具（cursor/claude/codebuddy 等）明确提示不支持 SDK 直连，
+  // 结果需手动 --apply/--response 落盘；纯终端（none）静默（用户本来就在手动模式）
+  if (tool !== 'none') {
+    logger.warn(`[dispatchSubagent] 当前宿主工具「${tool}」不支持 SDK 直连自动落盘，已降级为标记模式（结果需外层 AI 用 --apply/--response 落盘）`);
+  } else {
+    logger.debug(`[dispatchSubagent] 工具 ${tool} 不支持 SDK 直接调度，使用 Headless 模式`);
+  }
   return null;
 }
 
