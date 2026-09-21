@@ -1,3 +1,25 @@
+## v8.3.215 (2026-09-21) — 冒烟测试登录账号配置 + 开发完成后自动冒烟
+
+### 冒烟测试登录账号配置（auth）
+- 新增 `auth` 测试登录配置：冒烟/视觉测试执行前自动登录，登录态在所有场景间共享
+- 支持凭据来源双模式：环境变量引用（`username_env`/`password_env`，推荐，密码不落库）+ 明文兜底
+- 可配置登录页、账号/密码/提交按钮选择器、登录成功判定（URL 含片段 / 元素出现）
+- 配置位置：测试场景文件（`.speccore/tests/*.yaml`）或环境配置（`.speccore/environments/*.yaml` 的 `tests.auth`），测试配置优先级更高
+- 首次开发项目的账号来源约定：PRD 定义测试账号 → 后端 seed 脚本创建默认账号 → 环境配置引用
+
+### 开发完成后自动冒烟
+- `run` 流水线 verify 阶段在代码验证（编译+Lint+单测）后，若存在 `.speccore/tests/smoke.yaml` 自动追加 UI 冒烟（local 环境优先，失败降级为 warning 不阻断）
+
+### 元素标识规范
+- 文档新增 data-testid 命名规范（`{模块}-{页面}-{元素}`），业务流程验证依赖稳定元素标识
+- 环境配置模板（`update-env-configs`）补 `tests.auth` 字段，新项目 init 即带登录配置
+
+### 文档
+- testing-guide.md 新增 §4.5 登录账号配置 + §4.6 元素标识规范
+- config-reference.md 补 `tests.auth` / `tests.local_urls` 字段详解
+
+---
+
 ## v8.3.193 (2026-09-19) — 命令名彻底改名 iteration taskify
 
 ### 命令名彻底改名

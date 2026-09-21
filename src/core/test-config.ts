@@ -12,6 +12,7 @@
 import { readFile, pathExists } from 'fs-extra';
 import { logger } from '../utils/logger';
 import * as yaml from 'js-yaml';
+import type { AuthConfig, AuthCredentials } from './ui-verify/types';
 
 export interface TestConfigTarget {
   url?: string;
@@ -44,6 +45,8 @@ export interface TestConfig {
   tests: TestCase[];
   visual_model?: VisualModelConfig;
   output?: string;
+  /** 测试登录配置（v8.3.215+）：冒烟/视觉测试执行前自动登录 */
+  auth?: AuthConfig;
 }
 
 /** 解析测试配置 YAML（v8.3.122+: 使用标准 js-yaml 解析器） */
@@ -162,6 +165,11 @@ export async function loadTestConfig(filePath: string): Promise<TestConfig | nul
 
     if (parsed.output) config.output = String(parsed.output);
 
+    // v8.3.215+: 解析测试登录配置 auth
+    if (parsed.auth && typeof parsed.auth === 'object') {
+      config.auth = parseAuthConfig(parsed.auth as Record<string, unknown>);
+    }
+
     return config;
   } catch (e: any) {
     logger.warn(`⚠️ 测试配置文件解析失败: ${filePath} — ${e.message}`);
@@ -169,10 +177,61 @@ export async function loadTestConfig(filePath: string): Promise<TestConfig | nul
   }
 }
 
+/** 解析 auth 配置对象（v8.3.215+），供测试配置与环境配置复用 */
+export function parseAuthConfig(raw: Record<string, unknown>): AuthConfig {
+  const credentials: AuthCredentials = {};
+  if (raw.credentials && typeof raw.credentials === 'object') {
+    const c = raw.credentials as Record<string, unknown>;
+    if (c.username !== undefined) credentials.username = String(c.username);
+    if (c.password !== undefined) credentials.password = String(c.password);
+    if (c.username_env !== undefined) credentials.username_env = String(c.username_env);
+    if (c.password_env !== undefined) credentials.password_env = String(c.password_env);
+  }
+
+  return {
+    login_url: raw.login_url !== undefined ? String(raw.login_url) : undefined,
+    username_selector: raw.username_selector !== undefined ? String(raw.username_selector) : '',
+    password_selector: raw.password_selector !== undefined ? String(raw.password_selector) : '',
+    submit_selector: raw.submit_selector !== undefined ? String(raw.submit_selector) : '',
+    success_url_contains: raw.success_url_contains !== undefined ? String(raw.success_url_contains) : undefined,
+    success_selector: raw.success_selector !== undefined ? String(raw.success_selector) : undefined,
+    wait_after_login: raw.wait_after_login !== undefined ? Number(raw.wait_after_login) : undefined,
+    credentials,
+  };
+}
+
+/**
+ * 解析登录凭据：环境变量优先，明文兜底（v8.3.215+）
+ *
+ * 若配置了 username_env/password_env，从 process.env 读取；
+ * 否则回退到明文的 username/password。
+ */
+export function resolveAuthCredentials(
+  auth: AuthConfig | undefined
+): { username: string; password: string } | null {
+  if (!auth) return null;
+
+  const username = auth.credentials.username_env
+    ? process.env[auth.credentials.username_env] || ''
+    : auth.credentials.username || '';
+  const password = auth.credentials.password_env
+    ? process.env[auth.credentials.password_env] || ''
+    : auth.credentials.password || '';
+
+  if (!username || !password) return null;
+  return { username, password };
+}
+
 /** 合并环境配置中的测试参数 */
 export function mergeTestConfigWithEnv(
   testConfig: TestConfig,
-  envConfig?: { tests?: { base_urls?: Record<string, string>; visual_model?: VisualModelConfig } }
+  envConfig?: {
+    tests?: {
+      base_urls?: Record<string, string>;
+      visual_model?: VisualModelConfig;
+      auth?: AuthConfig;
+    };
+  }
 ): TestConfig {
   if (!envConfig?.tests) return testConfig;
 
@@ -186,6 +245,11 @@ export function mergeTestConfigWithEnv(
   // 合并 visual_model（测试配置优先级更高）
   if (envConfig.tests.visual_model && !testConfig.visual_model) {
     merged.visual_model = envConfig.tests.visual_model;
+  }
+
+  // 合并 auth（测试配置优先级更高）
+  if (envConfig.tests.auth && !testConfig.auth) {
+    merged.auth = envConfig.tests.auth;
   }
 
   return merged;

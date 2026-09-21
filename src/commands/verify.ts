@@ -676,6 +676,7 @@ async function runTestConfigMode(options: VerifyOptions): Promise<void> {
         timeout,
         executablePath: process.env.SPECCORE_BROWSER_PATH,
         headless: !options.headed,
+        auth: mergedConfig.auth,
       });
 
       let visualResults: import('../core/ui-verify').VisualResult[] = [];

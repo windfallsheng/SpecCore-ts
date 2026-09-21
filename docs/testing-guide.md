@@ -132,6 +132,8 @@ pipeline:
 | 配置项 | 类型 | 默认值 | 说明 |
 |:---|:---|:---|:---|
 | `tests.base_urls` | `object` | — | 各端测试基地址 |
+| `tests.local_urls` | `object` | — | 各端本地测试地址（pre-deploy 使用） |
+| `tests.auth` | `object` | — | 测试登录配置（v8.3.215+，见下文 §4.5） |
 | `tests.visual_model` | `object` | — | 视觉模型提供商配置 |
 | `stages.{stage}.config` | `string\|null` | — | 阶段对应的测试场景文件路径 |
 | `pipeline.test.enabled` | `boolean` | `false` | 是否启用 Pipeline 内置测试 |
@@ -198,6 +200,93 @@ output: ./reports/smoke-test-report.html
 | `threshold` | `enum` | — | `strict` / `normal` / `loose` |
 | `devices` | `array` | — | `desktop` / `mobile` / `tablet` |
 | `browsers` | `array` | — | `chromium` / `firefox` / `webkit` |
+
+---
+
+## 4.5 登录账号配置（auth）
+
+> v8.3.215+ 新增。冒烟/视觉测试执行前自动登录，登录态在所有场景间共享。
+
+有登录墙的系统（如 Admin 后台）做冒烟测试时，需要先登录才能访问核心页面。`auth` 配置让引擎在执行场景前自动完成登录，无需在每个场景里手写登录动作。
+
+### 配置位置
+
+`auth` 可放在**测试场景文件**（`.speccore/tests/*.yaml`）或**环境配置**（`.speccore/environments/*.yaml` 的 `tests` 下）。测试场景文件里的 `auth` 优先级更高（环境配置仅作兜底）。
+
+```yaml
+# 推荐放在环境配置（账号按环境隔离）
+# .speccore/environments/staging.yaml
+tests:
+  base_urls:
+    admin: https://admin-staging.example.com
+  auth:
+    login_url: /login                # 登录页路径（相对 base_url 解析，也可写绝对 URL）
+    username_selector: "input[name='username']"   # 用户名输入框选择器
+    password_selector: "input[name='password']"   # 密码输入框选择器
+    submit_selector: "button[type='submit']"      # 登录按钮选择器
+    success_url_contains: /dashboard  # 可选：登录成功判定（URL 含此片段）
+    # success_selector: ".layout-main"  # 可选：登录成功判定（元素出现）
+    wait_after_login: 1500            # 可选：登录后额外等待（毫秒）
+    credentials:
+      username: admin                 # 用户名（明文，非敏感可用）
+      password_env: SMOKE_PASSWORD    # 密码从环境变量读取（推荐，密码不落库）
+      # password: admin123            # 或明文（仅内网默认账号可接受）
+```
+
+### 凭据来源：环境变量优先，明文兜底
+
+| 字段 | 说明 |
+|:---|:---|
+| `username_env` / `password_env` | 从环境变量读取（**推荐**，密码不进入 git 仓库） |
+| `username` / `password` | 明文（仅用于内网默认账号等非敏感场景） |
+
+解析优先级：`*_env` 存在且环境变量有值 → 用环境变量；否则回退明文。
+
+### 首次开发项目的账号来源约定
+
+首次流水线开发部署时，测试账号的确定顺序：
+
+1. **PRD / 需求文档定义**：需求里应明确"测试账号"章节（如 `admin / admin123`），这是最权威的源头；
+2. **后端 seed 脚本创建**：后端初始化/迁移脚本创建默认账号（`seed.sql`、`init-data.py` 等），保证账号在部署后真实存在；
+3. **环境配置引用**：把账号（或密码的环境变量名）填进 `tests.auth.credentials`。
+
+> 冒烟测试是"验证系统能启动、核心页面能打开"，账号只是访问受保护页面的通行证。**不要**为了冒烟测试单独造账号体系——复用 seed 的默认账号即可。
+
+---
+
+## 4.6 业务流程验证与元素标识规范
+
+### 为什么需要元素标识
+
+业务流程验证（登录、创建订单、审批等）依赖**稳定定位页面元素**。用 CSS 选择器定位时，若用 `div > div > button` 这类脆弱的结构选择器，前端一改样式/结构测试就失效。**约定用 `data-testid` 作为稳定标识**，与视觉样式解耦。
+
+### data-testid 命名规范
+
+```
+data-testid="{模块}-{页面}-{元素}"
+```
+
+| 层级 | 规则 | 示例 |
+|:---|:---|:---|
+| 页面容器 | `{module}-{page}-page` | `order-list-page`、`booking-create-page` |
+| 关键交互元素 | `{module}-{page}-{action}` | `create-order-btn`、`confirm-approval-btn` |
+| 表单字段 | `{module}-{page}-{field}` | `login-username-input`、`booking-room-select` |
+
+```html
+<!-- 页面根元素 -->
+<div data-testid="order-list-page">
+  <!-- 关键按钮 -->
+  <button data-testid="create-order-btn">新建订单</button>
+</div>
+```
+
+### 与冒烟配置的配合
+
+- **页面级冒烟**（`smoke` 类型）：断言用 `[data-testid="{module}-{page}-page"]`，验证页面容器已渲染、不白屏；
+- **流程级验证**（VERIFY_SPEC 的 `scenarios`）：用 `click`/`fill` 动作 + `data-testid` 选择器，验证完整业务流程；
+- **自动生成**：`verify --discover-routes` / `--discover-pages` 自动生成的 VERIFY_SPEC 会统一使用 `data-testid` 风格的 `{module}-{page}-page` 选择器。
+
+> 前端开发时，页面根元素和关键交互元素加上 `data-testid`，是让冒烟测试"真正能跑"的前提。缺失时测试会因找不到元素而失败。
 
 ---
 

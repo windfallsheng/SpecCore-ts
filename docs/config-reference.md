@@ -912,6 +912,8 @@ ask:
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `base_urls` | `object` | 各端测试基地址，键为端名，值为 URL |
+| `local_urls` | `object` | 各端本地测试地址（pre-deploy 使用） |
+| `auth` | `object` | 测试登录配置（v8.3.215+），冒烟/视觉测试前自动登录 |
 | `visual_model` | `object` | 视觉模型配置（provider, model, apiKey, endpoint, timeout） |
 
 **示例**：
@@ -921,11 +923,37 @@ tests:
     h5: https://staging.example.com/h5
     admin: https://admin-staging.example.com
     api: https://api-staging.example.com
+  # v8.3.215+: 测试登录配置（登录态在所有场景间共享）
+  auth:
+    login_url: /login
+    username_selector: "input[name='username']"
+    password_selector: "input[name='password']"
+    submit_selector: "button[type='submit']"
+    success_url_contains: /dashboard
+    credentials:
+      username: admin
+      password_env: SMOKE_PASSWORD   # 密码从环境变量读取（推荐）
   visual_model:
     provider: qwen-vl
     model: qwen-vl-max
     timeout: 60000
 ```
+
+**auth 字段详解**：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `login_url` | `string` | 登录页路径（相对 base_url 解析，或绝对 URL） |
+| `username_selector` | `string` | 用户名输入框选择器 |
+| `password_selector` | `string` | 密码输入框选择器 |
+| `submit_selector` | `string` | 登录提交按钮选择器 |
+| `success_url_contains` | `string` | 可选：登录成功判定（URL 含此片段） |
+| `success_selector` | `string` | 可选：登录成功判定（元素出现） |
+| `wait_after_login` | `number` | 可选：登录后额外等待（毫秒） |
+| `credentials.username` | `string` | 用户名（明文） |
+| `credentials.password` | `string` | 密码（明文，仅内网默认账号可接受） |
+| `credentials.username_env` | `string` | 从环境变量读用户名 |
+| `credentials.password_env` | `string` | 从环境变量读密码（推荐） |
 
 ---
 

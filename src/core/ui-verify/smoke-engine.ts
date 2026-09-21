@@ -8,6 +8,7 @@ import { chromium, firefox, webkit, Browser, BrowserContext, Page, Frame } from 
 import { join } from 'path';
 import { ensureDir, pathExists } from 'fs-extra';
 import { logger } from '../../utils/logger';
+import { resolveAuthCredentials } from '../test-config';
 import {
   VerifySpec,
   Scenario,
@@ -15,6 +16,7 @@ import {
   Assertion,
   SmokeResult,
   StepResult,
+  AuthConfig,
 } from './types';
 
 interface SmokeOptions {
@@ -25,6 +27,8 @@ interface SmokeOptions {
   screenshotDir: string;
   /** v8.3.95+: 自定义浏览器可执行文件路径（内网环境使用系统 Chrome/Edge） */
   executablePath?: string;
+  /** v8.3.215+: 测试登录配置（执行前自动登录，登录态在所有场景间共享） */
+  auth?: AuthConfig;
 }
 
 export async function runSmokeTest(
@@ -46,6 +50,11 @@ export async function runSmokeTest(
   const results: SmokeResult[] = [];
 
   try {
+    // v8.3.215+: 执行前自动登录（登录态共享到所有场景）
+    if (options.auth) {
+      await performLogin(context, options.auth, spec.url, timeout);
+    }
+
     for (const scenario of spec.scenarios) {
       const page = await context.newPage();
       page.setDefaultTimeout(timeout);
@@ -61,6 +70,67 @@ export async function runSmokeTest(
   }
 
   return results;
+}
+
+/**
+ * 自动登录（v8.3.215+）
+ *
+ * 在同一 browser context 内导航到登录页、填入凭据、提交并等待登录成功。
+ * 登录成功后 cookie/localStorage 保留在 context 内，后续所有场景共享登录态。
+ * 登录失败不阻断测试（降级为未登录态执行）。
+ */
+async function performLogin(
+  context: BrowserContext,
+  auth: AuthConfig,
+  baseUrl: string,
+  timeout: number
+): Promise<void> {
+  const creds = resolveAuthCredentials(auth);
+  if (!creds) {
+    logger.warn('   ⚠️ 登录凭据缺失（credentials 为空或环境变量未设置），跳过自动登录');
+    return;
+  }
+
+  if (!auth.username_selector || !auth.password_selector || !auth.submit_selector) {
+    logger.warn('   ⚠️ auth 配置不完整（缺少 username/password/submit 选择器），跳过自动登录');
+    return;
+  }
+
+  const page = await context.newPage();
+  page.setDefaultTimeout(timeout);
+
+  try {
+    const loginUrl = auth.login_url
+      ? auth.login_url.startsWith('http')
+        ? auth.login_url
+        : new URL(auth.login_url, baseUrl).toString()
+      : baseUrl;
+
+    logger.info(`   🔐 自动登录: ${loginUrl}`);
+    await page.goto(loginUrl, { waitUntil: 'networkidle' });
+    await page.fill(auth.username_selector, creds.username);
+    await page.fill(auth.password_selector, creds.password);
+
+    if (auth.success_url_contains || auth.success_selector) {
+      await Promise.all([
+        page.click(auth.submit_selector),
+        auth.success_url_contains
+          ? page.waitForURL((url) => url.href.includes(auth.success_url_contains!), { timeout })
+          : page.waitForSelector(auth.success_selector!, { timeout }),
+      ]);
+    } else {
+      await page.click(auth.submit_selector);
+      await page.waitForTimeout(auth.wait_after_login ?? 2000);
+    }
+
+    if (auth.wait_after_login) await page.waitForTimeout(auth.wait_after_login);
+    logger.success('   ✅ 登录成功，登录态已共享到后续场景');
+  } catch (e: any) {
+    const message = e instanceof Error ? e.message : String(e);
+    logger.warn(`   ⚠️ 自动登录失败: ${message}（后续场景将以未登录态执行）`);
+  } finally {
+    await page.close();
+  }
 }
 
 async function launchBrowser(

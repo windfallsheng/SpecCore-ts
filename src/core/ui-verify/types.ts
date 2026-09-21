@@ -120,3 +120,42 @@ export interface UIVerifyOptions {
   };
   timeout?: number;
 }
+
+/**
+ * 测试登录凭据（v8.3.215+）
+ *
+ * 支持两种来源（环境变量优先，明文兜底）：
+ *   - username_env / password_env：从环境变量读取（推荐，密码不落库）
+ *   - username / password：明文（仅用于非敏感的内网默认账号）
+ */
+export interface AuthCredentials {
+  username?: string;
+  password?: string;
+  username_env?: string;
+  password_env?: string;
+}
+
+/**
+ * 测试登录配置（v8.3.215+）
+ *
+ * 冒烟测试执行前的自动登录流程：导航到登录页 → 填入账号密码 → 提交 → 等待登录成功。
+ * 登录成功后 cookie/localStorage 保留在同一浏览器 context 内，后续所有场景共享登录态。
+ */
+export interface AuthConfig {
+  /** 登录页 URL（相对路径或绝对 URL；相对路径基于 baseUrl 解析） */
+  login_url?: string;
+  /** 用户名输入框选择器 */
+  username_selector: string;
+  /** 密码输入框选择器 */
+  password_selector: string;
+  /** 登录提交按钮选择器 */
+  submit_selector: string;
+  /** 登录成功判定：URL 包含此片段 */
+  success_url_contains?: string;
+  /** 登录成功判定：等待此元素出现 */
+  success_selector?: string;
+  /** 登录后额外等待（毫秒） */
+  wait_after_login?: number;
+  /** 登录凭据 */
+  credentials: AuthCredentials;
+}

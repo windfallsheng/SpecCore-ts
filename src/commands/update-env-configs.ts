@@ -193,6 +193,22 @@ tests:
     model: qwen-vl-max
     timeout: 60000
 
+  # ── 测试登录账号（v8.3.215+）──
+  # 冒烟/视觉测试访问受保护页面（如 Admin 后台）前自动登录。
+  # 首次开发项目的账号来源约定：
+  #   1. 后端 seed 脚本创建默认账号（如 admin / 初始密码）
+  #   2. 密码通过环境变量 SMOKE_PASSWORD 注入（不落库、不进 git）
+  #   3. 前端登录表单 input 加 data-testid 稳定标识，对应下方选择器
+  auth:
+    login_url: /login
+    username_selector: "[data-testid='login-username-input']"
+    password_selector: "[data-testid='login-password-input']"
+    submit_selector: "[data-testid='login-submit-btn']"
+    success_url_contains: /dashboard   # 可选：登录成功后 URL 含此片段
+    credentials:
+      username: admin                   # seed 默认账号（按实际调整）
+      password_env: SMOKE_PASSWORD      # 密码从环境变量读取（推荐）
+
 # 分层测试配置（v8.3.60+）
 # 与 speccore verify --stage <stage> 联动，不同阶段自动加载对应测试场景。
 # 也可直接运行: speccore verify --config .speccore/tests/smoke.yaml --env-file ${t.name}

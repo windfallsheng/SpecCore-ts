@@ -10,6 +10,8 @@ import { readFile, pathExists } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
 import type { DeployEnvConfig } from './unified-config';
+import type { AuthConfig } from './ui-verify/types';
+import { parseAuthConfig } from './test-config';
 
 export interface EnvironmentPlatformConfig {
   /** 构建命令（覆盖 PROJECT.yaml 中的配置） */
@@ -45,6 +47,8 @@ export interface EnvironmentConfig {
       endpoint?: string;
       timeout?: number;
     };
+    /** 测试登录配置（v8.3.215+）：冒烟/视觉测试执行前自动登录 */
+    auth?: AuthConfig;
   };
   /** Pipeline 测试配置（v8.3.60+） */
   pipeline?: {
@@ -185,6 +189,10 @@ export async function loadEnvironmentConfig(filePath: string): Promise<Environme
       }
       if (t.visual_model && typeof t.visual_model === 'object') {
         config.tests.visual_model = t.visual_model as any;
+      }
+      // v8.3.215+: 解析测试登录配置 auth
+      if (t.auth && typeof t.auth === 'object') {
+        config.tests.auth = parseAuthConfig(t.auth as Record<string, unknown>);
       }
     }
 

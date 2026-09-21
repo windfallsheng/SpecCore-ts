@@ -531,6 +531,19 @@ async function autoPipeline(options: RunOptions): Promise<void> {
           logger.info('  ⏭️ 还有 pending 任务，跳过 verify');
         } else {
           execSync(`speccore verify`, { stdio: 'inherit' });
+          // v8.3.215+: 开发完成后若配置了冒烟测试场景，追加 UI 冒烟（local 环境优先，失败降级不阻断）
+          const smokeConfig = '.speccore/tests/smoke.yaml';
+          if (await pathExists(smokeConfig)) {
+            try {
+              execSync(`speccore verify --config ${smokeConfig} --env-file local`, { stdio: 'inherit' });
+            } catch {
+              logger.warn('  ⚠️ UI 冒烟测试未通过或环境未就绪（首次开发可能尚未部署/启动），已降级为仅代码验证');
+              phaseStatus = 'warning';
+              phaseMessage = 'UI 冒烟未通过或环境未就绪，仅完成代码验证';
+            }
+          } else {
+            logger.info('  ℹ️ 未配置冒烟测试（.speccore/tests/smoke.yaml），跳过 UI 冒烟');
+          }
         }
         break;
       }
