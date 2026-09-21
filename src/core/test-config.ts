@@ -222,6 +222,85 @@ export function resolveAuthCredentials(
   return { username, password };
 }
 
+/**
+ * 冒烟登录账号装配结果（v8.3.216+）
+ *
+ * 用于「开发完成、即将冒烟」的时间点，把 auth 配置解析成明确的账号/密码，
+ * 并生成「改了什么 / 缺什么」的清单告知用户（自动模式同样可见）。
+ */
+export interface AuthResolutionInfo {
+  /** 最终账号名（可能为空=未确定） */
+  username: string;
+  /** 最终密码（可能为空=未确定） */
+  password: string;
+  /** 账号名来源说明 */
+  usernameSource: string;
+  /** 密码来源说明 */
+  passwordSource: string;
+  /** 账号密码是否都已就绪（可执行登录） */
+  ready: boolean;
+  /** 需要用户注意/处理的项 */
+  warnings: string[];
+}
+
+/**
+ * 描述冒烟登录账号的装配结果（v8.3.216+）
+ *
+ * 解析优先级：
+ *   - 账号：username_env 环境变量 > username 明文 > 需求文档「测试账号」章节提取 > 未配置
+ *   - 密码：password_env 环境变量 > password 明文 > 未配置
+ *
+ * 不写回配置文件（密码不进 git），只在冒烟前做内存装配 + 透明告知。
+ */
+export function describeAuthResolution(auth: AuthConfig, testAccountHint?: string): AuthResolutionInfo {
+  const warnings: string[] = [];
+
+  // ── 账号名 ──
+  let username = '';
+  let usernameSource = '';
+  if (auth.credentials.username_env) {
+    username = process.env[auth.credentials.username_env] || '';
+    usernameSource = `环境变量 ${auth.credentials.username_env}${username ? '' : '（未设置）'}`;
+  } else if (auth.credentials.username) {
+    username = auth.credentials.username;
+    usernameSource = '配置明文';
+  }
+  if (!username && testAccountHint) {
+    username = testAccountHint;
+    usernameSource = '需求文档「测试账号」章节';
+  }
+  if (!username) {
+    usernameSource = '未配置';
+    warnings.push('账号名未配置（credentials.username / username_env，或需求文档「测试账号」章节）');
+  }
+
+  // ── 密码 ──
+  let password = '';
+  let passwordSource = '';
+  if (auth.credentials.password_env) {
+    password = process.env[auth.credentials.password_env] || '';
+    passwordSource = `环境变量 ${auth.credentials.password_env}${password ? '' : '（未设置）'}`;
+    if (!password) {
+      warnings.push(`密码环境变量 ${auth.credentials.password_env} 未设置，请 export ${auth.credentials.password_env}=<初始密码>`);
+    }
+  } else if (auth.credentials.password) {
+    password = auth.credentials.password;
+    passwordSource = '配置明文';
+  } else {
+    passwordSource = '未配置';
+    warnings.push('密码未配置（credentials.password / password_env）');
+  }
+
+  return {
+    username,
+    password,
+    usernameSource,
+    passwordSource,
+    ready: !!username && !!password,
+    warnings,
+  };
+}
+
 /** 合并环境配置中的测试参数 */
 export function mergeTestConfigWithEnv(
   testConfig: TestConfig,

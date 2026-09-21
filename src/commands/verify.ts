@@ -63,7 +63,7 @@ import {
   mergeQualityGate,
   shouldRunUIVerify,
 } from '../core/quality-gate';
-import { loadTestConfig, mergeTestConfigWithEnv } from '../core/test-config';
+import { loadTestConfig, mergeTestConfigWithEnv, describeAuthResolution } from '../core/test-config';
 import type { TestConfig, TestCase } from '../core/test-config';
 import { collectTaskReports, generateQualityReport } from '../core/verify-report-aggregator';
 import { findProjectRoot } from '../utils/task-utils';
@@ -622,6 +622,35 @@ function parseVisualModelCli(input: string): string | import('../core/quality-ga
 // v8.3.60+ 测试场景配置驱动模式
 // ============================================================
 
+/** 从需求/Spec 文档提取「测试账号」章节里的账号名（v8.3.216+） */
+async function extractTestAccountHint(projectRoot: string): Promise<string | undefined> {
+  try {
+    const { glob } = await import('glob');
+    const patterns = [
+      join(projectRoot, 'Iteration-*', '010-requirements', '**', '*.md'),
+      join(projectRoot, 'Iteration-*', '020-specs', '**', '*.md'),
+      join(projectRoot, '.speccore', '**', '*.md'),
+    ];
+    const files: string[] = [];
+    for (const p of patterns) {
+      files.push(...(await glob(p, { ignore: ['**/node_modules/**'] })));
+    }
+    for (const f of files.slice(0, 80)) {
+      const content = await readFile(f, 'utf-8');
+      const idx = content.indexOf('测试账号');
+      if (idx === -1) continue;
+      const section = content.slice(idx, idx + 400);
+      // 优先 email 格式
+      const email = section.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+      if (email) return email[0];
+      // 兜底 admin 开头
+      const admin = section.match(/\b(admin[a-zA-Z0-9_]*)\b/i);
+      if (admin) return admin[1];
+    }
+  } catch {}
+  return undefined;
+}
+
 async function runTestConfigMode(options: VerifyOptions): Promise<void> {
   logger.info('📄 测试场景配置模式');
 
@@ -640,6 +669,25 @@ async function runTestConfigMode(options: VerifyOptions): Promise<void> {
     if (envConfig) {
       mergedConfig = mergeTestConfigWithEnv(testConfig, envConfig);
       logger.info(`🌍 已合并环境配置: ${options.envFile}`);
+    }
+  }
+
+  // v8.3.216+: 冒烟前自动装配登录账号（开发完成、即将冒烟的时间点，内存装配 + 透明告知）
+  if (mergedConfig.auth) {
+    const hint = await extractTestAccountHint(findProjectRoot() || process.cwd());
+    const resolution = describeAuthResolution(mergedConfig.auth, hint);
+    // 写回内存装配结果（不落盘，密码不进 git），让后续 runSmokeTest 能拿到提取的账号
+    if (resolution.username) mergedConfig.auth.credentials.username = resolution.username;
+    if (resolution.password) mergedConfig.auth.credentials.password = resolution.password;
+
+    logger.info(`\n🔐 冒烟登录账号装配：`);
+    logger.info(`   - 账号: ${resolution.username || '（未确定）'}（来源：${resolution.usernameSource}）`);
+    logger.info(`   - 密码: ${resolution.password ? '已就绪（' + resolution.password.length + ' 位）' : '（未确定）'}（来源：${resolution.passwordSource}）`);
+    if (resolution.warnings.length > 0) {
+      for (const w of resolution.warnings) {
+        logger.warn(`   ⚠️ ${w}`);
+      }
+      logger.warn(`   💡 冒烟时若账号未就绪，登录将自动降级跳过（不影响页面可达性检查）`);
     }
   }
 

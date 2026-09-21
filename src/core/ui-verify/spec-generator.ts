@@ -193,3 +193,73 @@ function specToYaml(spec: VerifySpec): string {
 
   return lines.join('\n');
 }
+
+/**
+ * 从 Spec/需求文档的「业务流程」章节生成流程级场景骨架（v8.3.216+）
+ *
+ * 提取含「→」的流程描述，把每个流程步骤拆成独立场景（导航 + 页面/关键元素断言）。
+ * 选择器按 data-testid 约定生成占位（前端需按约定加 data-testid 才生效），
+ * 精确的 fill/click 交互步骤由 AI/人工在骨架基础上补充。
+ */
+export function generateFlowScenariosFromSpec(
+  specText: string,
+  _options: SpecGenerationOptions
+): Scenario[] {
+  const scenarios: Scenario[] = [];
+  const lines = specText.split('\n');
+  let inFlowSection = false;
+  const seen = new Set<string>();
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    // 进入流程章节
+    if (/^#{2,4}\s*(业务流程|核心流程|用户场景|操作流程|流程)/.test(line)) {
+      inFlowSection = true;
+      continue;
+    }
+    // 离开流程章节（遇到其他同级标题）
+    if (inFlowSection && /^#{2,4}\s/.test(line) && !/流程|场景/.test(line)) {
+      inFlowSection = false;
+      continue;
+    }
+    if (!inFlowSection) continue;
+
+    // 提取含箭头（→ 或 ->）的流程行
+    if (!line.includes('→') && !line.includes('->')) continue;
+
+    // 拆分步骤（去掉序号、代码块标记、冒号后的说明）
+    const steps = line
+      .split(/\s*[→]\s*|\s*->\s*/)
+      .map((s) => s.replace(/^[\d.、\-*>\s]+/, '').replace(/[:：].*$/, '').trim())
+      .filter((s) => s.length >= 2 && s.length <= 20);
+
+    for (const step of steps) {
+      const key = slugifyFlow(step);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      scenarios.push({
+        name: `流程-${step}`,
+        description: '流程级场景骨架（从业务流程提取）；精确选择器需前端按 data-testid 约定补充',
+        actions: [
+          { type: 'navigate' },
+          { type: 'wait', delay: 800 },
+        ],
+        assertions: [
+          { type: 'visible', selector: `[data-testid="${key}-page"]`, description: `${step}页面容器已加载` },
+          { type: 'visible', selector: 'body', description: '页面已加载（兜底）' },
+        ],
+      });
+    }
+  }
+
+  return scenarios;
+}
+
+/** 流程步骤名转 data-testid 安全 slug */
+function slugifyFlow(s: string): string {
+  return s
+    .replace(/[^a-zA-Z0-9\u4e00-\u9fa5]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase()
+    .slice(0, 40);
+}
