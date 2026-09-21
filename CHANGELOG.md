@@ -1,3 +1,18 @@
+## v8.3.220 (2026-09-21) — 功能单元来源收敛 + FUNCTION_MAP 依赖降级
+
+### 功能单元权威来源收敛
+- 功能单元的权威来源统一为 `010-requirements/features/` 目录（doc2spec --split 产出），FUNCTION_MAP 降为「功能×端映射」参考
+- split 的功能单元上下文回退链补 features/ 目录兜底：FUNCTION_MAP → ANALYSIS.md → features/ 目录（三者皆空才无清单）
+
+### FUNCTION_MAP 依赖降级
+- `preSplitGate` 的 FUNCTION_MAP 从 block 阻塞降为 warn 警告，缺失/骨架不再阻断 split
+- 更新 purpose/impact 注释与骨架说明（「唯一依据」→「参考」）
+
+### 路径 bug 修复
+- 修复 2 处 ANALYSIS.md 回退路径漏 `overview/` 目录（`020-specs/ANALYSIS.md` → `020-specs/overview/ANALYSIS.md`），导致骨架场景回退读不到
+
+---
+
 ## v8.3.219 (2026-09-21) — 冒烟体系文档沉淀 + 流水线示例补 verify
 
 ### 设计文档（docs/DESIGN.md）

@@ -225,7 +225,9 @@ async function preSplitGate(iterationDir: string): Promise<{
   const items: PreSplitCheckItem[] = [];
   const specDir = join(iterationDir, '020-specs');
 
-  // 检查全局 FUNCTION_MAP.md（阻塞级）
+  // 检查全局 FUNCTION_MAP.md（警告级）
+  // v8.3.220+: 降级为 warn——功能单元的权威来源是 010-requirements/features/ 目录（doc2spec --split 产出），
+  // FUNCTION_MAP 仅作「功能×端映射」参考。split 的 prompt 构建已有多级回退（FUNCTION_MAP → ANALYSIS.md → features/）。
   const funcMapPath = join(specDir, GLOBAL_SPECS_DIR, 'FUNCTION_MAP.md');
   const funcMapExists = await pathExists(funcMapPath);
   let funcMapIsSkeleton = false;
@@ -236,11 +238,11 @@ async function preSplitGate(iterationDir: string): Promise<{
   items.push({
     path: funcMapPath,
     name: 'FUNCTION_MAP.md',
-    purpose: '列出本迭代所有功能模块及涉及端，是 split 拆分的唯一依据',
-    impact: '缺失或不完整时，split 不知道要拆哪些任务，可能拆出不完整或错误的任务',
+    purpose: '功能单元×端映射参考（权威来源为 010-requirements/features/ 目录）',
+    impact: '缺失或不完整时仅作提示，split 以 features/ 目录为准拆分，不影响任务生成',
     exists: funcMapExists,
     isSkeleton: funcMapIsSkeleton,
-    level: 'block',
+    level: 'warn',
   });
 
   // 检查全局 REQUIREMENT.md（警告级）
@@ -2458,7 +2460,7 @@ ${relatedTasks.length > 0 ? relatedTasks.join('\n') : '> 暂无关联任务（sp
 
 ## 跨端关联
 
-> 来自 FUNCTION_MAP.md
+> 来自 FUNCTION_MAP.md（功能×端映射参考）
 
 | 属性 | 值 |
 |:---|:---|
@@ -3585,7 +3587,7 @@ async function buildSplitPrompt(
   p += `4. \`020-specs/overview/REQUIREMENT.md\` — 黄金需求文档\n`;
   p += `5. \`020-specs/overview/TECH.md\` — 全局技术方案\n`;
   p += `6. \`020-specs/overview/ANALYSIS.md\` — 功能分析\n`;
-  p += `7. \`020-specs/overview/FUNCTION_MAP.md\` — 功能单元与端的映射（拆分核心依据）\n`;
+  p += `7. \`020-specs/overview/FUNCTION_MAP.md\` — 功能单元与端的映射（参考，权威来源为 010-requirements/features/ 目录）\n`;
   if (await pathExists(join(iterationDir || '', '020-specs', 'overview', 'INTERACTION_MAP.md'))) {
     p += `8. \`020-specs/overview/INTERACTION_MAP.md\` — 跨端交互时序\n`;
   }
@@ -3602,7 +3604,7 @@ async function buildSplitPrompt(
   p += `\n`;
 
   p += `> 📖 **读取策略**：\n`;
-  p += `> - 先 Read FUNCTION_MAP.md 了解功能单元划分和涉及端\n`;
+  p += `> - 先 Read 010-requirements/features/ 目录了解功能单元划分（权威来源），FUNCTION_MAP.md 作功能×端映射参考\n`;
   p += `> - 按功能单元逐个处理，每次只 Read 当前单元相关的文档\n`;
   p += `> - reqContent 从 REQUIREMENT.md 和对应功能模块的需求文档提取\n`;
   p += `> - techContent 从 TECH.md 和对应功能模块的技术规格提取\n`;
@@ -3645,9 +3647,9 @@ async function buildSplitPrompt(
         }
       }
 
-      // v7.5.0+: FUNCTION_MAP.md 不存在时，从 ANALYSIS.md 提取功能单元清单
+      // v7.5.0+: FUNCTION_MAP.md 不存在或为空时，从 ANALYSIS.md 提取功能单元清单
       if (!funcUnitsInjected) {
-        const analysisPath = join(iterationDir, '020-specs', 'ANALYSIS.md');
+        const analysisPath = join(iterationDir, '020-specs', GLOBAL_SPECS_DIR, 'ANALYSIS.md');
         if (await pathExists(analysisPath)) {
           const analysisContent = await readFile(analysisPath, 'utf-8');
           const analysisUnits = parseAnalysisFunctionalUnits(analysisContent, standardPlatforms);
@@ -3665,6 +3667,25 @@ async function buildSplitPrompt(
             p += `- 每个功能单元必须在某个任务的 \`functionalUnit\` 字段中被引用\n`;
             p += `- 合并时，在任务描述中列出所有合并的功能单元编号（如 F-02, F-03）\n`;
             p += `- 不允许将不同端的功能单元合并到同一个任务\n\n`;
+          }
+        }
+
+        // v8.3.220+: FUNCTION_MAP 和 ANALYSIS 都为空/骨架时，回退到 features/ 目录（功能单元权威来源）
+        if (!funcUnitsInjected) {
+          const featureDirs = await parseFeatureList(iterationDir);
+          if (featureDirs.length > 0) {
+            p += `## 🧩 功能单元清单（CLI 从 010-requirements/features/ 目录提取，v8.3.220+）\n\n`;
+            p += `> 以下是从 features/ 目录读取的 **全部功能单元**（权威来源）。\n`;
+            p += `> ⚠️ **你必须为每个功能单元创建至少 1 个任务，不允许遗漏任何功能单元。**\n\n`;
+            p += `| 功能单元 |\n`;
+            p += `|:---|\n`;
+            for (const fn of featureDirs) {
+              p += `| ${fn} |\n`;
+            }
+            p += `\n**拆分要求**：\n`;
+            p += `- 每个功能单元必须在某个任务的 \`functionalUnit\` 字段中被引用\n`;
+            p += `- 涉及端从 CONSTITUTION.md 端列表判断，或从 features/{单元}/.meta/source 读取\n\n`;
+            funcUnitsInjected = true;
           }
         }
       }
@@ -4657,7 +4678,7 @@ async function tryModuleDrivenSplit(
 
     // 2.5 v7.5.0+: 回退：从 ANALYSIS.md 提取功能单元清单（按端分节的 F-xx 表格）
     if (!modulePlatformsParsed) {
-      const analysisPath = join(iterationDir, '020-specs', 'ANALYSIS.md');
+      const analysisPath = join(iterationDir, '020-specs', GLOBAL_SPECS_DIR, 'ANALYSIS.md');
       if (await pathExists(analysisPath)) {
         try {
           const content = await readFile(analysisPath, 'utf-8');

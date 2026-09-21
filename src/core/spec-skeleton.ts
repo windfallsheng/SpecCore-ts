@@ -180,7 +180,8 @@ const PHASE1_DOCS: { name: string; buildPlaceholder: (iter: string) => string }[
 > 迭代: ${iter} | 生成: 待填充
 
 ## 写作要求
-列出本迭代所有功能模块及其涉及端，供 split 命令读取。
+列出本迭代所有功能模块及其涉及端，供 split 命令作「功能×端映射」参考。
+> 功能单元的权威来源是 010-requirements/features/ 目录（doc2spec --split 产出），本文件仅作映射补充。
 
 | # | 功能模块 | 涉及端 | 优先级 | 来源 |
 |:---|:---|:---|:---|:---|
