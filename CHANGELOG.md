@@ -1,3 +1,10 @@
+## v8.3.230 (2026-09-22) — code-index idx 别名补齐（与 AI 识别层一致）
+
+### 别名一致性修复
+- ask-engine 声明 code-index 别名 `['ci', 'idx']`，CLI 只注册了 `ci`，`speccore idx` 报 unknown command；补注册 `.alias('idx')`
+
+---
+
 ## v8.3.229 (2026-09-22) — unitize 独立命令（切需求）与 taskify（拆任务）语义对称
 
 ### 切需求独立能力化

@@ -178,6 +178,7 @@ export function registerCodeIndexCommand(program: Command): void {
   program
     .command('code-index')
     .alias('ci')
+    .alias('idx')
     .description('扫描源码生成代码索引（多端识别 + 模块分组 + git 联动）')
     .option('--full', '全量重新扫描（默认增量更新）')
     .option('--scope <dirs>', '指定扫描目录（逗号分隔）')
