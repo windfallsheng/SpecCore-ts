@@ -37,6 +37,7 @@ import { statusPanelCommand } from './commands/status-panel';
 import { knowledgeCommand } from './commands/knowledge';
 import { graphQueryCommand, graphEntityCommand, graphRelatedCommand, graphStatsCommand, graphPathCommand, graphRenderCommand } from './commands/graph';
 import { doc2specCommand } from './commands/doc2spec';
+import { unitizeCommand } from './commands/unitize';
 import { spec2docCommand } from './commands/spec2doc';
 import { unitsCommand } from './commands/units';
 import { registerCodeIndexCommand } from './commands/code-index';
@@ -818,8 +819,18 @@ program
     .option("--prompt", "输出验证 Prompt 到 stdout（Skill 协作模式）")
   .option("--response <response>", "接收 AI 修正内容写入文件")
   .option("--classify", "AI 智能分类 sources/ 文档 → staging/（按类型提取）")
-  .option("--split", "拆分为功能单元 → features/（按标题结构自动拆分）")
+  .option("--split", "切分功能单元 → features/（已拆出独立命令 unitize，保留兼容）")
   .action(doc2specCommand);
+
+program
+  .command('unitize')
+  .alias('unitz')
+  .description('切分需求文档为功能单元 → features/（独立能力；拆任务用 taskify）')
+  .option('-f, --file <path>', '需求文档路径（.md，通常为 converted/*.md）')
+  .option('--files <files>', '批量: "a.md=平台1,b.md=平台2"')
+  .option('-i, --iter <name>', '目标迭代（缺省用当前活跃迭代）')
+  .option('-p, --platform <name>', '平台标识（端名，缺省由 analyze 端推断）')
+  .action(unitizeCommand);
 
 program
   .command('units')

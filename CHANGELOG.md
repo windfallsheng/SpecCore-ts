@@ -1,3 +1,19 @@
+## v8.3.229 (2026-09-22) — unitize 独立命令（切需求）与 taskify（拆任务）语义对称
+
+### 切需求独立能力化
+- 新增独立命令 `unitize`（别名 unitz）：切分需求文档（.md）→ 功能单元（features/），与「拆任务」taskify 命名对称、职责区分：
+  - `speccore unitize --file converted/admin-web.md --iter <迭代> [--platform <端>]`：需求文档 → 功能单元（SOURCE.md 切片 + _matrix.md 类型/端矩阵）
+  - `speccore taskify -I <迭代>`：功能单元 → 开发任务（Task-*，原 split 别名）
+- 支持批量 `--files "a.md=端1,b.md"`；`--iter` 缺省读当前活跃迭代（context.json）
+- `doc2spec --split` 保留兼容（描述标注「已拆出独立命令 unitize」）
+- 帮助面板/命令知识库/AGENTS.md 速查表同步更新（核心流水线：init → doc2spec → unitize → analyze → taskify）
+
+### 验证
+- tsc/build 通过，全量测试基线一致（216 passed / 14 failed），无回归
+- 会议系统实测：unitize 直接对 converted/admin-web.md 切分得到 9 个按文档顺序的功能单元
+
+---
+
 ## v8.3.228 (2026-09-22) — 功能单元类型标记（feature/global-rule）+ analyze 读取内聚
 
 ### 单元类型判定（_matrix.md type 字段）

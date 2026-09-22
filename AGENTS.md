@@ -67,7 +67,7 @@ SpecCore 规范驱动开发项目。
 
 ## 功能单元目录对齐（切分层 ↔ 分析层）
 
-`doc2spec --split` 切分出的功能单元目录名，是 `analyze` 分析产物的**对齐锚点**，两者必须一致：
+`unitize`（切需求，原 doc2spec --split）切分出的功能单元目录名，是 `analyze` 分析产物的**对齐锚点**，两者必须一致：
 
 | 层 | 目录 | 产出 |
 |:---|:---|:---|
@@ -284,8 +284,9 @@ Iteration-NNN-name/            ← 迭代目录
 
 ```bash
 speccore status                          # 当前迭代状态面板
+speccore unitize --file <md路径> --iter <迭代名>   # 切分需求文档 → 功能单元（features/）
 speccore analyze -I <迭代名> --auto      # 全量分析
-speccore split -I <迭代名>               # 自动拆分任务
+speccore taskify -I <迭代名>             # 拆功能单元 → 开发任务（split 别名）
 speccore execute -i <迭代名> --all       # 执行所有任务
 ```
 

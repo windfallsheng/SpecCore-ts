@@ -3,19 +3,20 @@
 export const HELP_PANEL = `
 ┌──────────────────────────────────────────────────────────────┐
 │  🧠 = 协作式（支持 --interactive）  ⚡ = 单次执行              │
-│  核心流水线: init → doc2spec → analyze → split                 │
+│  核心流水线: init → doc2spec → unitize → analyze → taskify    │
 │            → plan → execute → pr → done → spec2doc           │
 ├──────────────────────────────────────────────────────────────┤
 │  📥 资产接入                                                  │
 │  🚀 init          ⚡ 初始化项目                                │
 │  📅 iteration     ⚡ 迭代管理                                  │
 │  📝 doc2spec      ⚡ 导入 PRD → Spec MD（AI 精炼推荐）          │
+│  🔪 unitize       ⚡ 切分需求文档 → 功能单元（features/）        │
 │  📤 spec2doc      ⚡ Spec MD → Word/PDF（AI 排版推荐）          │
 │  📦 task new      ⚡ 创建任务                                  │
 ├──────────────────────────────────────────────────────────────┤
 │  🤝 协作决策                                                  │
 │  🔍 analyze       🧠 需求分析+代码审查+多端合成（--full）       │
-│  📊 split         🧠 拆分为Task（--interactive）               │
+│  📊 taskify       🧠 拆功能单元 → 开发任务（split 别名）        │
 │  📋 plan          🧠 执行计划（--interactive）                  │
 ├──────────────────────────────────────────────────────────────┤
 │  🚀 执行交付                                                  │
