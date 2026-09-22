@@ -1,3 +1,16 @@
+## v8.3.233 (2026-09-22) — 空骨架兜底闭环：检测→报告→定向重析→再检测
+
+### 兜底闭环（针对「执行中断留空骨架」的最后一块）
+- `detectPendingUnits` 纳入骨架检测：单元虽有完成记录，但 020-specs 落盘内容仍为 `<!-- SPEC-SKELETON -->`/空内容 → 仍视为待分析，`--resume-units`/`--auto-units` 会把有问题的单元重新捡起，直到干净
+- `analyze --apply` 写入后质量报告增强：输出 `[SPECCORE_SKELETON_REPORT]` 结构化标记（宿主 AI 可感知）+ 问题文档清单 + 问题单元归类 + 兜底修复指引（`speccore analyze --resume-units -I <迭代>`，循环直到无空骨架）
+- 调度循环 `maxRetries` 1→2：一轮内最多 3 次尝试（初始+2 重试），循环外 resume 还可无限续跑
+
+### 验证
+- 实测三用例：①完成记录+骨架内容→被重新捡起 ②完成记录+有效内容→视为完成 ③无完成记录→待分析，全部正确
+- tsc/build 通过，全量测试 216 passed / 14 failed（与基线一致，无回归）
+
+---
+
 ## v8.3.232 (2026-09-22) — spec-unitize skill 补齐 + 三个入口同步 + unitize 非 Markdown 拦截
 
 ### spec-unitize skill（与 spec-taskify 同款薄包装）

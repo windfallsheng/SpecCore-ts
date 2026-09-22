@@ -1989,17 +1989,23 @@ ${singlePrompt}`);
               }
             };
             await checkDir(specDir);
-            if (emptySkeletonDocs.length > 0) {
-              logger.warn('');
-              logger.warn(`⚠️ 检测到 ${emptySkeletonDocs.length} 个文档仍为骨架状态（含 <!-- SPEC-SKELETON -->）:`);
-              for (const d of emptySkeletonDocs) logger.warn(`   ❌ ${d}`);
-              logger.info('   💡 建议重新执行 analyze 补充这些文档');
-            }
-            if (emptyTableDocs.length > 0) {
-              logger.warn('');
-              logger.warn(`⚠️ 检测到 ${emptyTableDocs.length} 个文档含空表格（只有表头无数据）:`);
-              for (const d of emptyTableDocs) logger.warn(`   ❌ ${d}`);
-              logger.info('   💡 建议重新执行 analyze 补充表格数据');
+            if (emptySkeletonDocs.length > 0 || emptyTableDocs.length > 0) {
+              // v8.3.233+: 结构化报告 + 兜底指引——报告给用户，可对有问题单元再次分析直到干净
+              const iterName = basename(iterDir!);
+              const problemUnits = new Set<string>();
+              const mapUnit = (d: string) => {
+                const seg = d.split('/')[0];
+                if (seg && seg !== 'overview') problemUnits.add(seg);
+              };
+              emptySkeletonDocs.forEach(mapUnit);
+              emptyTableDocs.forEach(mapUnit);
+              process.stdout.write('\n[SPECCORE_SKELETON_REPORT]\n');
+              logger.warn(`⚠️ 质量检查: ${emptySkeletonDocs.length} 个空骨架 / ${emptyTableDocs.length} 个空表格`);
+              for (const d of emptySkeletonDocs) logger.warn(`   ❌ 空骨架: 020-specs/${d}`);
+              for (const d of emptyTableDocs) logger.warn(`   ⚠️ 空表格: 020-specs/${d}`);
+              logger.info('   💡 兜底修复（循环直到干净）:');
+              logger.info(`      speccore analyze --resume-units -I ${iterName.replace(/^Iteration-/, '')}`);
+              logger.info('      （仍为骨架的单元会被重新纳入分析；也可 --unit <单元名> 定向重析）');
             }
           } catch (e: any) {
             logger.debug(`空模板检测失败（非关键）: ${e.message}`);
@@ -6681,7 +6687,30 @@ export async function loadUnitAnalyses(iteration: string): Promise<UnitAnalysis[
 export async function detectPendingUnits(iteration: string, allUnits: IterationUnit[]): Promise<IterationUnit[]> {
   const completed = await loadUnitAnalyses(iteration);
   const completedIds = new Set(completed.map(a => a.id));
-  return allUnits.filter(u => !completedIds.has(u.id));
+  const iterDir = `Iteration-${iteration.replace(/^Iteration-/, '')}`;
+  const pending: IterationUnit[] = [];
+  for (const u of allUnits) {
+    if (!completedIds.has(u.id)) {
+      pending.push(u);
+      continue;
+    }
+    // v8.3.233+: 完成记录存在但落盘内容仍为骨架 → 仍视为待分析（兜底：
+    // 用户可对有问题的单元再次分析，直到无空骨架）
+    if (await unitHasSkeletonOutput(iterDir, u)) pending.push(u);
+  }
+  return pending;
+}
+
+/** v8.3.233+: 检查单元落盘规格是否仍为骨架/空内容（用于 pending 判定兜底，不写缓存） */
+async function unitHasSkeletonOutput(iterDir: string, unit: IterationUnit): Promise<boolean> {
+  const specDir = getUnitSpecDir(iterDir, unit);
+  for (const f of ['REQUIREMENT.md', 'ANALYSIS.md', 'TECH.md']) {
+    const fp = join(specDir, f);
+    if (!(await pathExists(fp))) continue;
+    const content = (await readFile(fp, 'utf-8')).trim();
+    if (content && !content.includes('SPEC-SKELETON') && content.length >= 200) return false;
+  }
+  return true; // 三个候选全无效 → 视为骨架状态
 }
 
 /** 汇总所有单元分析为统一报告（带 [DOC:xxx] 标记） */
@@ -7103,7 +7132,8 @@ async function runUnitDispatchLoop(
   return runDispatchLoopRound(steps, {
     projectRoot: findProjectRoot() || process.cwd(),
     scope: `analyze-units:${iter}`,
-    maxRetries: 1,
+    // v8.3.233+: 一轮内最多 3 次尝试（初始 + 2 重试）；循环外 resume 还可无限续跑
+    maxRetries: 2,
   });
 }
 
