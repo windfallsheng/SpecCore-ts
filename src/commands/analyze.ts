@@ -6448,6 +6448,15 @@ async function buildConfirmCheckPrompt(iteration: string): Promise<string> {
   const reportPath = join(iterDir, '010-requirements', 'CLARIFY_REPORT.md');
   const goldenDir = join(iterDir, '020-specs', 'requirements');
 
+  // v8.3.235+: 报告不存在时自动生成（修复「CLARIFY_REPORT.md 无代码生成、确认步骤永远读不到」断链）
+  if (!(await pathExists(reportPath))) {
+    try {
+      const { writeClarifyReport } = await import('../core/requirement-clarifier');
+      const p = await writeClarifyReport(iterDir);
+      logger.info(`📋 已生成澄清报告: ${relative(process.cwd(), p)}`);
+    } catch { /* 生成失败不阻塞确认步骤 */ }
+  }
+
   let prompt = `\n# 任务: 需求确认（Phase 0: 确认检查，v6.83.0+）\n\n`;
 
   if (await pathExists(reportPath)) {

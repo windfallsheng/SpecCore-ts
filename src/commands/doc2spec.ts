@@ -1199,7 +1199,16 @@ async function scanUnitsWithAI(content: string): Promise<UnitScanResult | null> 
       '不要输出任何 JSON 以外的文字。',
     ].join('\n');
 
-    const userPrompt = `以下是 PRD 文档内容，请识别其中的业务功能单元和项目级通用信息：\n\n${content.slice(0, 8000)}`;
+    // v8.3.235+: 大文档不再只传前 8000 字符（后半章节 AI 看不到导致漏切）——
+    //   改为「全文标题大纲 + 正文前 30000 字符」，保证功能边界识别覆盖全文
+    const outline = content
+      .split('\n')
+      .filter((l) => /^#{1,4}\s+/.test(l))
+      .join('\n');
+    const truncated = content.length > 30000;
+    const body = content.slice(0, 30000);
+    const userPrompt = `以下是 PRD 文档的完整标题大纲：\n\n${outline}\n\n` +
+      `以下是文档正文${truncated ? '（较长，仅前 30000 字符，结合大纲判断完整功能边界）' : ''}：\n\n${body}`;
 
     // v8.3.196+: 读 settings.ai.providers 池，按 defaults.split/priority 降级
     const providers = await resolveAiProviders('split');
@@ -1385,7 +1394,40 @@ function scanUnits(content: string): ScannedUnit[] {
       unitType: classifyUnitType(c.title, c.parentIsRuleContainer),
     });
   }
-  return units;
+
+  // v8.3.235+: 深度小节提升——H4+ 叶子单元提升到最近祖先候选（修复碎片切分：
+  //   端级文档「二、仪表盘(H3)」下的小节模板「2.1 用户场景 / 2.4 业务规则(H4)」
+  //   被切成 20+ 独立单元；真正的功能单元是 H3 章节，小节是它的组成部分）
+  const finalUnits: ScannedUnit[] = [];
+  const promotedKeys = new Set<string>();
+  for (const u of units) {
+    if (u.level < 4) { finalUnits.push(u); continue; }
+    // 找最近祖先候选（line 在 u 之前、层级更浅）
+    let parentCand: (typeof candidates)[number] | null = null;
+    for (let j = candidates.length - 1; j >= 0; j--) {
+      if (candidates[j].line < u.startLine && candidates[j].level < u.level) {
+        parentCand = candidates[j];
+        break;
+      }
+    }
+    if (!parentCand) { finalUnits.push(u); continue; }
+    const key = String(parentCand.line);
+    if (promotedKeys.has(key)) continue; // 同一父的多个小节只提升一次
+    promotedKeys.add(key);
+    let endLine = lines.length - 1;
+    for (const h of headings) {
+      if (h.line > parentCand.line && h.level <= parentCand.level) { endLine = h.line - 1; break; }
+    }
+    finalUnits.push({
+      title: parentCand.title,
+      level: parentCand.level,
+      startLine: parentCand.line,
+      endLine,
+      sourceSection: parentCand.title,
+      unitType: classifyUnitType(parentCand.title, parentCand.parentIsRuleContainer),
+    });
+  }
+  return finalUnits;
 }
 
 /**

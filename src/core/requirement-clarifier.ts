@@ -591,6 +591,90 @@ export async function writeQualityReport(
 }
 
 /**
+ * v8.3.235+: 生成 CLARIFY_REPORT.md——澄清执行报告（confirm-check 前调用）。
+ * 修复「CLARIFY_REPORT.md 无任何代码生成、需求确认步骤永远读不到」的断链：
+ * 汇总源文档 → 澄清产物（黄金需求 *-clarified.md + 两级 CLARIFY.md）的映射与完成状态。
+ */
+export async function writeClarifyReport(iterDir: string): Promise<string> {
+  const reportPath = join(iterDir, '010-requirements', 'CLARIFY_REPORT.md');
+  await ensureDir(join(iterDir, '010-requirements'));
+
+  const specsDir = join(iterDir, '020-specs');
+  const goldenDir = join(specsDir, 'requirements');
+
+  // 源文档（sources/ 与 converted/）
+  const sources: string[] = [];
+  for (const dir of ['sources', 'converted']) {
+    try {
+      const d = join(iterDir, '010-requirements', dir);
+      if (!(await pathExists(d))) continue;
+      for (const f of await readdir(d)) {
+        if (f.endsWith('.md')) sources.push(`010-requirements/${dir}/${f}`);
+      }
+    } catch { /* ignore */ }
+  }
+
+  // 澄清产物：黄金需求 + 两级 CLARIFY.md
+  const clarified: string[] = [];
+  try {
+    if (await pathExists(goldenDir)) {
+      for (const f of await readdir(goldenDir)) {
+        if (f.endsWith('.md')) clarified.push(`020-specs/requirements/${f}`);
+      }
+    }
+  } catch { /* ignore */ }
+  try {
+    const ov = join(specsDir, 'overview', 'CLARIFY.md');
+    if (await pathExists(ov)) clarified.push('020-specs/overview/CLARIFY.md');
+    if (await pathExists(specsDir)) {
+      for (const e of await readdir(specsDir, { withFileTypes: true })) {
+        if (!e.isDirectory() || e.name === 'overview' || e.name === 'requirements') continue;
+        const c = join(specsDir, e.name, 'overview', 'CLARIFY.md');
+        if (await pathExists(c)) clarified.push(`020-specs/${e.name}/overview/CLARIFY.md`);
+      }
+    }
+  } catch { /* ignore */ }
+
+  const now = new Date().toISOString().replace('T', ' ').slice(0, 16);
+  let md = `# 需求澄清报告\n\n`;
+  md += `> 生成时间: ${now}\n`;
+  md += `> 澄清模式: 三态开关（auto 按专业度判定 / on 强制 / off 跳过）\n\n`;
+
+  md += `## 澄清结果总览\n\n`;
+  md += `- 源文档: ${sources.length} 份\n`;
+  md += `- 澄清产物: ${clarified.length} 份\n`;
+  md += `- 状态: ${clarified.length > 0 ? '已澄清（见下方清单）' : '⚠️ 尚未澄清——源文档待专业化整理'}\n\n`;
+
+  if (clarified.length > 0) {
+    md += `## 澄清产物清单\n\n`;
+    md += `| 产物 | 类型 |\n`;
+    md += `| :--- | :--- |\n`;
+    for (const c of clarified) {
+      const type = c.includes('/requirements/') ? '黄金需求（独立澄清）' : '两级 CLARIFY.md';
+      md += `| \`${c}\` | ${type} |\n`;
+    }
+    md += `\n`;
+  }
+
+  if (sources.length > 0) {
+    md += `## 源文档清单（待澄清对象）\n\n`;
+    for (const s of sources) md += `- \`${s}\`\n`;
+    md += `\n`;
+  }
+
+  if (clarified.length === 0) {
+    const iterName = basename(iterDir).replace(/^Iteration-/, '');
+    md += `## 下一步\n\n`;
+    md += `- 执行澄清: \`speccore analyze --prompt -I ${iterName}\`（专业度非 high 自动触发）\n`;
+    md += `- 强制澄清: \`speccore analyze --prompt -I ${iterName} --clarify\`\n`;
+    md += `- 跳过澄清: \`speccore analyze --prompt -I ${iterName} --skip-clarify\`\n`;
+  }
+
+  await writeFile(reportPath, md, 'utf-8');
+  return reportPath;
+}
+
+/**
  * 检测迭代是否已有有效的 clarified 文档
  * v8.3.181+: 支持两级澄清（全局 overview/CLARIFY.md + 模块 {feature}/overview/CLARIFY.md）
  * 同时保持对旧路径 020-specs/requirements/ 的兼容
