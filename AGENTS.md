@@ -71,7 +71,7 @@ SpecCore 规范驱动开发项目。
 
 | 层 | 目录 | 产出 |
 |:---|:---|:---|
-| 切分层 | `010-requirements/features/{功能单元}/` | README.md + _matrix.md + CHANGELOG.md（doc2spec 产出） |
+| 切分层 | `010-requirements/features/{功能单元}/` | SOURCE.md（需求原文切片，旧版为 README.md） + _matrix.md + CHANGELOG.md（doc2spec 产出） |
 | 分析层 | `020-specs/{功能单元}/` | overview/（单元概述）+ {端名}/（TECH/TEST/UI_SPEC） |
 | 全局层 | `010-requirements/overview/GLOBAL_CONTEXT-*.md` + `020-specs/overview/` | 非功能全局信息 + FUNCTION_MAP/REQUIREMENT 汇总 |
 
@@ -157,7 +157,7 @@ Iteration-NNN-name/            ← 迭代目录
 │   ├── converted/             ← [自动生成] doc2spec 转换后的 MD
 │   ├── features/              ← [手动维护] 按功能模块组织
 │   │   └── {feature}/
-│   │       ├── README.md
+│   │       ├── SOURCE.md      ← [v8.3.226+] 需求原文切片（旧版本为 README.md）
 │   │       └── _matrix.md     ← [v8.3.177+] 端覆盖矩阵（platforms/dependencies/apis）
 │   ├── prototypes/            ← 原型（HTML/图片/链接，内容不限）
 │   ├── assets/                ← 素材资源

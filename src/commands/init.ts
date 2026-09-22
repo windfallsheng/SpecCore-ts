@@ -2028,7 +2028,7 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
     '',
     '## 分析配置',
     '',
-    '- **默认读取**：converted/*.md + features/*/README.md',
+    '- **默认读取**：converted/*.md + features/*/SOURCE.md（旧项目为 README.md）',
     '- **指定文档**：speccore analyze -I sample --req converted/login.md',
     '- **全部文档**：speccore analyze -I sample --scope all',
   ].join('\n'));

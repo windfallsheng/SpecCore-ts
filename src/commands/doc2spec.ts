@@ -17,11 +17,13 @@
  */
 import { logger, Spinner } from '../utils/logger';
 import { execSync } from 'child_process';
+import { createHash } from 'crypto';
 import { pathExists, ensureDir, readFile, writeFile, readdir, stat, unlink, copy } from 'fs-extra';
 import { join, basename, extname } from 'path';
 import { tmpdir } from 'os';
 import { backupWithTimestamp } from '../utils/task-utils';
 import { nextTaskId } from '../core/global-counters';
+import { resolveUnitSourcePath } from '../core/feature-source';
 
 import { showNextSteps } from '../core/next-steps';
 import { validateContent, generateReport } from '../core/doc-validator';
@@ -881,6 +883,16 @@ export async function splitDocumentToUnits(
       if (e.isDirectory() && !e.name.startsWith('.')) existingUnitDirs.add(e.name);
     }
   } catch {}
+  // v8.3.226+: 跨文档重复防护——收集已有单元的内容指纹，新切单元内容与已有单元
+  // 完全一致时跳过（如 REQUIREMENT.md 与 converted/overview.md 含相同章节，重复切分
+  // 会产出 13 对内容一模一样的单元，污染 taskify/execute）
+  const existingContentHashes = new Map<string, string>();
+  for (const dir of existingUnitDirs) {
+    try {
+      const existing = await readFile(await resolveUnitSourcePath(join(featuresDir, dir)), 'utf-8');
+      existingContentHashes.set(dir, contentFingerprint(existing));
+    } catch { /* 无需求原文的目录不参与指纹比对 */ }
+  }
   
   let written = 0;
   let skipped = 0;
@@ -897,12 +909,26 @@ export async function splitDocumentToUnits(
       continue;
     }
     seenUnitDirs.add(unitDirName);
+
+    // v8.3.226+: 跨文档重复章节检测（内容指纹比对，与幂等目录跳过互补）——
+    // 必须在目录创建前完成，避免重复单元残留空壳目录
+    const unitContent = extractUnitContent(content, unit);
+    const fp = contentFingerprint(unitContent);
+    const dupEntry = [...existingContentHashes.entries()].find(([, h]) => h === fp);
+    if (dupEntry) {
+      logger.info(`   ⏭️  ${unit.title} 与已有单元 ${dupEntry[0]} 内容重复（跨文档重复章节），跳过`);
+      skipped++;
+      continue;
+    }
+    existingContentHashes.set(unitDirName, fp);
+
     const unitDir = join(featuresDir, unitDirName);
     await ensureDir(unitDir);
     await ensureDir(join(unitDir, '.meta'));
 
-    const unitContent = extractUnitContent(content, unit);
-    const readmePath = join(unitDir, 'README.md');
+    // v8.3.226+: 需求原文切片写 SOURCE.md（语义名，取代 README.md），
+    // 读取端经 resolveUnitSourcePath 兼容旧 README.md
+    const readmePath = join(unitDir, 'SOURCE.md');
     await writeFile(readmePath, unitContent);
 
     // 来源标记
@@ -999,6 +1025,20 @@ const NON_FUNCTION_STARTS = ['概述', '背景', '目标', '名词'];
 // 支持「项目背景与目标」「产品目标与范围」等复合形式
 // 功能单元「绩效目标」「订单背景」等不含修饰词前缀，不会被误杀
 const NON_FUNCTION_TAIL = /^(项目|需求|产品|总体|整体|建设|设计|开发|实施|运营|文档|全文)(背景|目标|概述|范围|定位)((与|和|及|、)?(背景|目标|概述|范围|定位))?$/;
+// v8.3.226+: UI 交互说明类章节（操作步骤/页面布局/动效/手势等）不是功能单元——
+// 它们描述「怎么操作」，不构成可开发的独立功能，归为全局上下文（GLOBAL_CONTEXT）
+const NON_FUNCTION_UI_TAIL = /(操作步骤|操作流程|操作指引|操作指南|页面布局|页面结构|页面动效|交互动效|动画说明|手势操作|交互手势|交互方式|字段说明|数据字典|字典说明)$/;
+
+/** 归一化内容指纹（剔除生成时间等易变行后 sha1），用于跨文档重复章节检测 */
+function contentFingerprint(content: string): string {
+  const normalized = content
+    .split('\n')
+    .filter(l => !/^> 生成时间:/.test(l.trim()))
+    .map(l => l.trim())
+    .filter(Boolean)
+    .join('\n');
+  return createHash('sha1').update(normalized).digest('hex');
+}
 
 function isNonFunctionalSection(rawTitle: string): boolean {
   const title = stripSectionNo(rawTitle).trim();
@@ -1007,6 +1047,7 @@ function isNonFunctionalSection(rawTitle: string): boolean {
   if (NON_FUNCTION_CONTAINS.some(w => title.includes(w))) return true;
   if (NON_FUNCTION_STARTS.some(w => title.startsWith(w))) return true;
   if (NON_FUNCTION_TAIL.test(title)) return true;
+  if (NON_FUNCTION_UI_TAIL.test(title)) return true;
   return false;
 }
 
@@ -1200,9 +1241,13 @@ function scanUnits(content: string): ScannedUnit[] {
   if (headings.length === 0) return [];
 
   // 文档标题：唯一的最浅层标题（如「## XX产品需求文档」），不作为功能单元
+  // v8.3.226+: 唯一最浅标题仅在「存在更深层标题」时才视为文档标题——
+  // 单章节文档（只有一个 H2）时它本身就是功能单元，不应被误判为文档标题
   const minLevel = Math.min(...headings.map(h => h.level));
   const shallowest = headings.filter(h => h.level === minLevel);
-  const docTitleLine = shallowest.length === 1 ? shallowest[0].line : -1;
+  const docTitleLine = (shallowest.length === 1 && headings.length > shallowest.length)
+    ? shallowest[0].line
+    : -1;
 
   // 候选功能单元标题（非功能章节过滤 + 子树传播排除）
   const candidates: { level: number; title: string; line: number }[] = [];

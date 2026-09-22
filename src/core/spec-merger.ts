@@ -12,6 +12,7 @@
 import { readFile, writeFile, pathExists, readdir, ensureDir } from 'fs-extra';
 import { join, basename } from 'path';
 import { logger } from '../utils/logger';
+import { resolveUnitSourcePath, UNIT_SOURCE_FILE } from './feature-source';
 
 // ═══════════════════════════════════════════════
 // 类型定义
@@ -296,8 +297,8 @@ export async function findAffectedFeatures(
     }
 
     if (score > 0) {
-      // 推导对应的需求源路径
-      const reqPath = `010-requirements/features/${featureName}/README.md`;
+      // 推导对应的需求源路径（v8.3.226+: SOURCE.md，兼容旧 README.md）
+      const reqPath = `010-requirements/features/${featureName}/${UNIT_SOURCE_FILE}`;
       results.push({ name: featureName, specPath, reqPath, confidence: score });
     }
   }
@@ -611,7 +612,7 @@ async function readTaskSpecByFilename(
  * 2. 读取任务的 _shared/REQ.md
  * 3. 按关键词匹配原需求文档（010-requirements/features/ 或 converted/）
  * 4. 用 mergeSpecContent() 做 section 级合并
- * 5. 未匹配到原文档的，追加到 features/{slug}/README.md
+ * 5. 未匹配到原文档的，追加到 features/{slug}/SOURCE.md（兼容旧 README.md）
  */
 export async function mergeNewRequirementsOnArchive(
   iterDir: string
@@ -666,21 +667,21 @@ export async function mergeNewRequirementsOnArchive(
         result.changes.push({ file: matchedOriginal.relativePath, sectionsPatched: [], action: 'skipped' });
       }
     } else {
-      // 未匹配到原文档 → 追加到 features/{slug}/README.md
+      // 未匹配到原文档 → 新建 features/{slug}/SOURCE.md（v8.3.226+ 语义名，兼容旧 README.md）
       const slug = slugify(taskTitle);
       const featureDir = join(iterDir, '010-requirements', 'features', slug);
-      const featurePath = join(featureDir, 'README.md');
+      const featurePath = await resolveUnitSourcePath(featureDir);
 
       if (!(await pathExists(featurePath))) {
         await ensureDir(featureDir);
         await writeFile(featurePath, reqContent, 'utf-8');
         result.filesUpdated++;
         result.changes.push({
-          file: `010-requirements/features/${slug}/README.md`,
+          file: `010-requirements/features/${slug}/${UNIT_SOURCE_FILE}`,
           sectionsPatched: ['(新建)'],
           action: 'created',
         });
-        logger.info(`   ✨ ${taskId} → 新建 features/${slug}/README.md`);
+        logger.info(`   ✨ ${taskId} → 新建 features/${slug}/${UNIT_SOURCE_FILE}`);
       } else {
         // 已存在 → section 级合并
         const existing = await readFile(featurePath, 'utf-8');
@@ -689,11 +690,11 @@ export async function mergeNewRequirementsOnArchive(
           await writeFile(featurePath, content, 'utf-8');
           result.filesUpdated++;
           result.changes.push({
-            file: `010-requirements/features/${slug}/README.md`,
+            file: `010-requirements/features/${slug}/${UNIT_SOURCE_FILE}`,
             sectionsPatched: patchedSections,
             action: 'patched',
           });
-          logger.info(`   ✅ ${taskId} → features/${slug}/README.md: 合并 ${patchedSections.length} 个段落`);
+          logger.info(`   ✅ ${taskId} → features/${slug}/${UNIT_SOURCE_FILE}: 合并 ${patchedSections.length} 个段落`);
         }
       }
     }
@@ -778,7 +779,8 @@ async function findMatchingOriginalRequirement(
     const entries = await readdir(featuresDir, { withFileTypes: true });
     for (const entry of entries) {
       if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
-      const readmePath = join(featuresDir, entry.name, 'README.md');
+      // v8.3.226+: SOURCE.md 优先，兼容旧 README.md
+      const readmePath = await resolveUnitSourcePath(join(featuresDir, entry.name));
       if (!(await pathExists(readmePath))) continue;
 
       let score = 0;
@@ -798,7 +800,7 @@ async function findMatchingOriginalRequirement(
       if (score > 0) {
         candidates.push({
           path: readmePath,
-          relativePath: `010-requirements/features/${entry.name}/README.md`,
+          relativePath: `010-requirements/features/${entry.name}/${basename(readmePath)}`,
           score,
         });
       }

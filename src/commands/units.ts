@@ -10,6 +10,7 @@ import { logger } from '../utils/logger';
 import { pathExists, readFile, readdir, writeFile, ensureDir, remove } from 'fs-extra';
 import { join, basename } from 'path';
 import { loadConfig } from '../core/unified-config';
+import { resolveUnitSourcePath } from '../core/feature-source';
 
 interface UnitsOptions {
   iter?: string;
@@ -228,7 +229,7 @@ async function mergeUnits(featuresDir: string, names: string[]): Promise<void> {
   mergedContent += '---\n\n';
 
   for (const name of names) {
-    const readmePath = join(featuresDir, name, 'README.md');
+    const readmePath = await resolveUnitSourcePath(join(featuresDir, name));
     const content = await readFile(readmePath, 'utf-8');
     mergedContent += `## ${name}\n\n${content}\n\n`;
   }
@@ -304,10 +305,10 @@ interface ChangeInfo {
 }
 
 /**
- * 创建版本快照（备份当前 README.md 到 .meta/versions/）
+ * 创建版本快照（备份当前需求原文切片 SOURCE.md（兼容旧 README.md）到 .meta/versions/）
  */
 async function createVersionSnapshot(unitDir: string): Promise<void> {
-  const readmePath = join(unitDir, 'README.md');
+  const readmePath = await resolveUnitSourcePath(unitDir);
   if (!(await pathExists(readmePath))) return;
 
   const versionsDir = join(unitDir, '.meta', 'versions');

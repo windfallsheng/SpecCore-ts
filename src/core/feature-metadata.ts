@@ -2,12 +2,13 @@
  * feature-metadata — 功能单元元数据扫描器
  *
  * 扫描 features/ 目录下的所有功能单元，提取元数据用于总览生成。
- * 核心原则：不读全文，只读 _matrix.md + README.md 前 2 句。
+ * 核心原则：不读全文，只读 _matrix.md + 需求原文切片（SOURCE.md，兼容旧 README.md）前 2 句。
  */
 import { pathExists, readFile, readdir } from 'fs-extra';
 import { join } from 'path';
 import yaml from 'js-yaml';
 import { logger } from '../utils/logger';
+import { resolveUnitSourcePath } from './feature-source';
 
 export interface FeatureMetadata {
   feature: string;
@@ -91,10 +92,10 @@ async function parseMatrixFile(featureDir: string): Promise<Partial<FeatureMetad
 }
 
 /**
- * 从 README.md 提取前 2 句话作为摘要
+ * 从需求原文切片（SOURCE.md，兼容旧 README.md）提取前 2 句话作为摘要
  */
 async function extractSummary(featureDir: string): Promise<string> {
-  const readmePath = join(featureDir, 'README.md');
+  const readmePath = await resolveUnitSourcePath(featureDir);
   if (!(await pathExists(readmePath))) {
     return '';
   }

@@ -18,6 +18,7 @@ import { cleanupByType } from './cleanup';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration, getIterationDir } from '../core/context';
 import { findTaskDir } from '../core/task-paths';
+import { resolveUnitSourcePath } from '../core/feature-source';
 import { extractQuestions, showQuestionChecklist } from '../core/question-checklist';
 import { showNextSteps } from '../core/next-steps';
 import { runAnalysis, AnalyzeInput, supplementAnalysis, analyzeSingleFeature, generateSpecsFromRequirements } from '../core/analyze-engine';
@@ -588,7 +589,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       if (!reqModules.includes(moduleName)) {
         logger.warn(`⚠️ 需求文档中未找到功能模块 "${moduleName}"`);
         logger.info(`   需求中已有的模块: ${reqModules.slice(0, 10).join(', ')}${reqModules.length > 10 ? '...' : ''}`);
-        logger.info(`   建议: 先确认模块名称是否正确，或在 010-requirements/features/ 中创建 ${moduleName}/README.md`);
+        logger.info(`   建议: 先确认模块名称是否正确，或在 010-requirements/features/ 中创建 ${moduleName}/SOURCE.md`);
       }
     }
 
@@ -631,7 +632,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 
     const result = await analyzeSingleFeature(iterDir, featureName);
     if (!result) {
-      spinner.fail(`未找到功能模块: 010-requirements/features/${featureName}/README.md`);
+      spinner.fail(`未找到功能模块: 010-requirements/features/${featureName}/SOURCE.md（旧项目为 README.md）`);
       return;
     }
 
@@ -1067,14 +1068,14 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       const reqRoot = join(reqDir, 'REQUIREMENT.md');
       if (await pathExists(reqRoot)) requirements.push(reqRoot);
 
-      // 收集 features/*/README.md
+      // 收集 features/*/SOURCE.md（v8.3.226+ 语义名，兼容旧 README.md）
       const featuresDir = join(reqDir, 'features');
       if (await pathExists(featuresDir)) {
         try {
           const featureEntries = await readdir(featuresDir, { withFileTypes: true });
           for (const fe of featureEntries) {
             if (fe.isDirectory() && !fe.name.startsWith('.')) {
-              const readmePath = join(featuresDir, fe.name, 'README.md');
+              const readmePath = await resolveUnitSourcePath(join(featuresDir, fe.name));
               if (await pathExists(readmePath)) requirements.push(readmePath);
             }
           }
@@ -5567,7 +5568,7 @@ status: "clarified"
     prompt += `3. 读取迭代需求文档（按功能模块组织）：\n`;
     prompt += `   a. 先读 010-requirements/INDEX.md — 获取功能模块清单\n`;
     prompt += `   b. **按功能模块逐一读取**：每个功能模块独立分析，不要跨模块混淆\n`;
-    prompt += `      - 读取该模块对应的 010-requirements/converted/*.md 或 features/{模块}/README.md\n`;
+    prompt += `      - 读取该模块对应的 010-requirements/converted/*.md 或 features/{模块}/SOURCE.md（旧项目为 README.md）\n`;
     prompt += `      - 读取该模块涉及的原型文件（HTML/图片/链接）\n`;
     prompt += `   c. **文档长度自适应**：如果单个需求文档超过 5000 字，先快速扫描目录和章节标题，标记关键章节，再深入阅读\n`;
     prompt += `4. **按功能模块逐一撰写文档（重要）**：\n`;
@@ -5620,7 +5621,7 @@ status: "clarified"
     prompt += `   - 「来源」：该功能模块在需求文档中的具体位置，用 Markdown 链接格式\n`;
     prompt += `     - 格式：[文档名](相对路径#章节锚点)，如 [PRD v2.0](../010-requirements/sources/PRD-v2.0.md#3-2-会议室管理)\n`;
     prompt += `     - 如果模块来自 converted 文档：[xxx需求](../010-requirements/converted/xxx.md#相关章节)\n`;
-    prompt += `     - 如果来自 features 目录：[xxx功能](../010-requirements/features/xxx/README.md)\n`;
+    prompt += `     - 如果来自 features 目录：[xxx功能](../010-requirements/features/xxx/SOURCE.md)\n`;
     prompt += `     - 目的是让阅读者能直接点击跳转到原始需求位置\n`;
     prompt += `   - 示例：| M-01 | 会议室档案管理 | room-service, admin-web | 扩展：增加设备管理 | [PRD v2.0](../010-requirements/sources/PRD-v2.0.md#2-1) | 会议室 CRUD、设备管理 |\n`;
     prompt += `   - split 命令将读取「涉及端」列来决定创建哪些端的子任务目录\n`;
@@ -6251,7 +6252,7 @@ async function buildClarifyPhasePrompt(iteration: string): Promise<string> {
   prompt += `1. \`010-requirements/INDEX.md\` — 需求全貌\n`;
   prompt += `2. \`010-requirements/sources/*.md\` — 原始需求（主要依据）\n`;
   prompt += `3. \`010-requirements/converted/*.md\` — 已转换文档\n`;
-  prompt += `4. \`010-requirements/features/*/README.md\` — 功能级补充\n`;
+  prompt += `4. \`010-requirements/features/*/SOURCE.md\`（旧项目为 README.md） — 功能级补充\n`;
   prompt += `5. \`010-requirements/prototypes/\` — 原型文件\n\n`;
 
   // v8.3.160+ 修复：列出实际扫描到的源文档清单，明确每份文档独立澄清
@@ -6573,7 +6574,7 @@ export async function extractIterationUnits(iterDir: string): Promise<IterationU
     const entries = await readdir(featuresDir, { withFileTypes: true });
     const dirs = entries.filter(e => e.isDirectory() && !e.name.startsWith('.') && !e.name.startsWith('_'));
     for (const dir of dirs) {
-      const readmePath = join(featuresDir, dir.name, 'README.md');
+      const readmePath = await resolveUnitSourcePath(join(featuresDir, dir.name));
       let content = '';
       if (await pathExists(readmePath)) {
         content = (await readFile(readmePath, 'utf-8')).slice(0, 500);

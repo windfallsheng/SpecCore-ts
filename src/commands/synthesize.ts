@@ -23,10 +23,11 @@
  */
 
 import { writeFile, pathExists, ensureDir, readFile, readdir } from 'fs-extra';
-import { join } from 'path';
+import { join, basename } from 'path';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration, getIterationDir } from '../core/context';
 import { backupWithTimestamp, isTimestampBackup } from '../utils/task-utils';
+import { resolveUnitSourcePath } from '../core/feature-source';
 
 export interface SynthesizeOptions {
   iteration?: string;
@@ -510,9 +511,10 @@ async function runPhase2(
   if (await pathExists(featuresDir)) {
     for (const e of await readdir(featuresDir, { withFileTypes: true })) {
       if (e.isDirectory() && !e.name.startsWith('.')) {
-        const readme = join(featuresDir, e.name, 'README.md');
+        // v8.3.226+: SOURCE.md 优先，兼容旧 README.md
+        const readme = await resolveUnitSourcePath(join(featuresDir, e.name));
         if (await pathExists(readme)) {
-          prdDocs.push({ name: `features/${e.name}/README.md`, content: await readFile(readme, 'utf-8') });
+          prdDocs.push({ name: `features/${e.name}/${basename(readme)}`, content: await readFile(readme, 'utf-8') });
         }
       }
     }
@@ -714,7 +716,7 @@ async function generatePhase3Index(
     const featureEntries = await readdir(featuresDir, { withFileTypes: true });
     for (const e of featureEntries) {
       if (e.isDirectory() && !e.name.startsWith('.')) {
-        lines.push(`- \`${join('010-requirements/features', e.name, 'README.md')}\``);
+        lines.push(`- \`${join('010-requirements/features', e.name, 'SOURCE.md')}\`（旧项目为 README.md）`);
       }
     }
   }
@@ -810,10 +812,10 @@ async function runSimpleSynthesize(
     const entries = await readdir(featuresDir, { withFileTypes: true });
     for (const e of entries) {
       if (e.isDirectory() && !e.name.startsWith('.')) {
-        const readme = join(featuresDir, e.name, 'README.md');
+        const readme = await resolveUnitSourcePath(join(featuresDir, e.name));
         if (await pathExists(readme)) {
           const content = await readFile(readme, 'utf-8');
-          sourceDocs.push({ name: `features/${e.name}/README.md`, content });
+          sourceDocs.push({ name: `features/${e.name}/${basename(readme)}`, content });
         }
       }
     }

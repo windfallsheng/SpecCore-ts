@@ -128,7 +128,7 @@ async function createIterationFiles(iterationDir: string, fullName: string, opti
 |:---|:---|:---|
 | \`INDEX.md\` | 整文件 | 登记所有需求文档清单，AI 先读它了解全貌 |
 | \`converted/*.md\` | 全部 .md 文件 | doc2spec 转换后的核心规格，AI 分析的主要依据 |
-| \`features/*/README.md\` | 每个子目录的 README.md | feature 型：按功能模块组织的需求补充 |
+| \`features/*/SOURCE.md\` | 每个子目录的 SOURCE.md（旧项目为 README.md） | feature 型：按功能模块组织的需求补充 |
 | \`bugs/*.md\` | 全部 .md 文件 | bugfix 型：bug 描述与影响分析 |
 | \`refactors/*.md\` | 全部 .md 文件 | refactor 型：重构目标与方案 |
 | \`research/*.md\` | 全部 .md 文件 | research 型：研究主题与对比 |
@@ -195,7 +195,7 @@ research/
 
 ## 分析配置
 
-- **默认读取**：converted/*.md + features/*/README.md
+- **默认读取**：converted/*.md + features/*/SOURCE.md（旧项目为 README.md）
 - **指定文档**：speccore analyze -I ${options.name} --req converted/login.md
 - **全部文档**：speccore analyze -I ${options.name} --scope all
 `

@@ -8,6 +8,7 @@
 import { readFile, pathExists, readdir } from 'fs-extra';
 import { join, isAbsolute, basename } from 'path';
 import { logger } from '../utils/logger';
+import { resolveUnitSourcePath } from './feature-source';
 
 export interface FeatureLocation {
   source: 'doc' | 'requirements' | 'code' | 'global';
@@ -123,7 +124,7 @@ export async function locateFeatureInRequirements(iterDir: string, featureName: 
     const entries = await readdir(featuresDir, { withFileTypes: true });
     for (const entry of entries) {
       if (entry.isDirectory()) {
-        const readmePath = join(featuresDir, entry.name, 'README.md');
+        const readmePath = await resolveUnitSourcePath(join(featuresDir, entry.name));
         if (await pathExists(readmePath)) {
           const loc = await locateFeatureInDoc(readmePath, featureName);
           if (loc) locations.push(loc);

@@ -17,6 +17,7 @@ import { readFile, writeFile, pathExists, readdir, stat, ensureDir } from 'fs-ex
 import { join, relative, basename } from 'path';
 import { logger } from '../utils/logger';
 import { isTimestampBackup } from '../utils/task-utils';
+import { resolveUnitSourcePath } from './feature-source';
 import { buildCodeIndex, findRelevantCode, readRelevantSource, isIndexStale, loadFullIndex, resolveIterationScope } from './code-scanner';
 // v8.3.183+: tree-sitter 结构化摘要，替代原文 slice(0,N) 硬切
 import { summarizeSources } from './multi-lang-parser';
@@ -1549,7 +1550,8 @@ export async function analyzeSingleFeature(
   featureName: string,
 ): Promise<{ outputPath: string; report: string } | null> {
   const reqDir = join(iterDir, '010-requirements');
-  const featureReqPath = join(reqDir, 'features', featureName, 'README.md');
+  // v8.3.226+: SOURCE.md 优先，兼容旧 README.md
+  const featureReqPath = await resolveUnitSourcePath(join(reqDir, 'features', featureName));
 
   if (!(await pathExists(featureReqPath))) {
     return null;
@@ -1696,7 +1698,7 @@ async function writePerFeature(iterDir: string, report: string, filename: string
  * 按类型写入 020-specs/{bugs,refactors,research}/
  *
  * 与 writePerFeature 的区别：
- * - feature 用子目录（features/{module}/README.md）
+ * - feature 用子目录（features/{module}/SOURCE.md，兼容旧 README.md）
  * - bugfix/refactor/research 用扁平文件（bugs/{slug}.md）
  *
  * 对每个类型目录下的 .md 文件，生成对应的分析报告到 020-specs/ 下

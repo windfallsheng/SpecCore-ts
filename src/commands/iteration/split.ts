@@ -2,6 +2,7 @@ import { ensureDir, writeFile, pathExists, readFile, readdir, remove } from 'fs-
 import { join, isAbsolute, basename, relative } from 'path';
 import { logger, Spinner } from '../../utils/logger';
 import { getDefaultIteration, getIterationDir } from '../../core/context';
+import { resolveUnitSourcePath } from '../../core/feature-source';
 import { scoreRisk, generateRiskReport } from '../../core/risk-scorer';
 import { nextTaskId } from '../../core/global-counters';
 import { backupWithTimestamp, isTimestampBackup } from '../../utils/task-utils';
@@ -4741,7 +4742,7 @@ async function tryModuleDrivenSplit(
       }
     }
 
-    // 3. 回退：读取 features/*/README.md（无涉及端信息，使用全端）
+    // 3. 回退：读取 features/*/SOURCE.md（v8.3.226+，兼容旧 README.md）（无涉及端信息，使用全端）
     if (!modulePlatformsParsed) {
       const featuresDir = join(reqDir, 'features');
       if (await pathExists(featuresDir)) {
@@ -4749,11 +4750,11 @@ async function tryModuleDrivenSplit(
           const entries = await readdir(featuresDir, { withFileTypes: true });
           for (const entry of entries) {
             if (entry.isDirectory() && !entry.name.startsWith('.')) {
-              const readmePath = join(featuresDir, entry.name, 'README.md');
+              const readmePath = await resolveUnitSourcePath(join(featuresDir, entry.name));
               if (await pathExists(readmePath)) {
                 modules.push({
                   name: entry.name, slug: slugify(entry.name), type: 'feature',
-                  sourceFile: `features/${entry.name}/README.md`,
+                  sourceFile: `features/${entry.name}/${basename(readmePath)}`,
                   platforms: [...allPlatforms],
                 });
               }

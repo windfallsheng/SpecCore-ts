@@ -16,6 +16,7 @@ import { join } from 'path';
 import { pathExists, readFile, readdir } from 'fs-extra';
 import { logger } from '../utils/logger';
 import { parsePlatformList, parsePlatformTypes } from './spec-paths';
+import { resolveUnitSourcePath } from './feature-source';
 
 // ── 类型定义 ──
 
@@ -195,7 +196,7 @@ export function buildModuleAnalysisPrompt(
   prompt += `\n`;
 
   prompt += `### Step 2: 读取需求文档\n`;
-  prompt += `- Read \`010-requirements/features/${moduleName}/README.md\`（如存在）\n`;
+  prompt += `- Read \`010-requirements/features/${moduleName}/SOURCE.md\`（旧项目为 README.md，如存在）\n`;
   prompt += `- 在 \`010-requirements/converted/*.md\` 中搜索 "${moduleName}" 相关内容\n`;
   prompt += `- 在 \`010-requirements/INDEX.md\` 中定位该模块来源\n\n`;
 
@@ -280,7 +281,7 @@ async function findModuleInRequirements(iterDir: string, moduleName: string): Pr
   // 1. 检查 features/ 目录
   const featuresDir = join(iterDir, '010-requirements', 'features', moduleName);
   if (await pathExists(featuresDir)) {
-    const readmePath = join(featuresDir, 'README.md');
+    const readmePath = await resolveUnitSourcePath(featuresDir);
     if (await pathExists(readmePath)) {
       const content = await readFile(readmePath, 'utf-8');
       // 尝试从内容中提取涉及端
@@ -288,8 +289,8 @@ async function findModuleInRequirements(iterDir: string, moduleName: string): Pr
       return {
         name: moduleName,
         involvedPlatforms: platforms,
-        description: `来自 features/${moduleName}/README.md`,
-        sourceFile: `010-requirements/features/${moduleName}/README.md`,
+        description: `来自 features/${moduleName}/SOURCE.md`,
+        sourceFile: `010-requirements/features/${moduleName}/SOURCE.md`,
       };
     }
   }

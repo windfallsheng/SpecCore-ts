@@ -356,7 +356,7 @@ export async function buildSegmentationPlan(
           target: mod,
           estimatedTokens: Math.round(estimate.estimatedTokens / modules.length),
           dependencies: ['global-scan'],
-          inputs: [`010-requirements/features/${mod}/README.md`, 'overview/API_CONTRACT.yaml'],
+          inputs: [`010-requirements/features/${mod}/SOURCE.md`, 'overview/API_CONTRACT.yaml'],
           outputs: [`020-specs/features/${mod}.md`],
         });
       }

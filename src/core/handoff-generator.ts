@@ -6,6 +6,7 @@
  */
 import { pathExists, readFile, readdir, writeFile, ensureDir } from 'fs-extra';
 import { join } from 'path';
+import { resolveUnitSourcePath } from './feature-source';
 
 export type HandoffStage = 'analyze' | 'taskify' | 'plan' | 'execute' | 'review' | 'done';
 
@@ -128,7 +129,8 @@ async function appendAnalyzeToTaskify(lines: string[], iterDir: string): Promise
     const entries = await readdir(featuresDir, { withFileTypes: true });
     const units = entries.filter(e => e.isDirectory() && !e.name.startsWith('.'));
     for (const unit of units.slice(0, 20)) { // 限制行数
-      const readmePath = join(featuresDir, unit.name, 'README.md');
+      // v8.3.226+: SOURCE.md 优先，兼容旧 README.md
+      const readmePath = await resolveUnitSourcePath(join(featuresDir, unit.name));
       let summary = '';
       if (await pathExists(readmePath)) {
         const content = await readFile(readmePath, 'utf-8');
