@@ -1,3 +1,21 @@
+## v8.3.226 (2026-09-22) — 切分质量修复 + 需求原文切片语义改名 SOURCE.md
+
+### 切分质量修复（会议项目验证暴露）
+- **跨文档重复切分防护**：内容指纹（sha1，剔除生成时间行）比对——REQUIREMENT.md 与 converted/overview.md 相同章节只切一次，跳过且不残留空壳目录（会议项目曾产出 13 对完全重复的单元）
+- **UI 交互说明章节不再切为功能单元**：操作步骤/操作流程/页面布局/页面动效/手势操作/字段说明等章节归全局上下文（GLOBAL_CONTEXT），不再作为可开发的独立功能单元
+- **单章节文档修复**：唯一最浅标题仅在存在更深标题时才视为文档标题，单个 H2 章节不再被整体误判跳过
+
+### 语义命名
+- 功能单元需求原文切片 `README.md` → `SOURCE.md`（语义「来源切片」）
+- 新增 `core/feature-source.ts`：`resolveUnitSourcePath` 统一解析，优先 SOURCE.md，兼容旧迭代目录 README.md，无需迁移
+- 13 个读取点全部切换（analyze/split/synthesize/units/spec-merger/feature-metadata/module-analyzer/requirement-clarifier/semantic-locator/handoff-generator/analyze-engine）+ AI prompt 文本与 AGENTS.md 同步更新
+
+### 验证
+- tsc/build 通过，全量测试基线一致（216 passed / 14 failed），无回归
+- 实测：重复章节跳过、UI 章节归全局、SOURCE.md 写入、旧 README.md 兼容读取
+
+---
+
 ## v8.3.225 (2026-09-22) — 端覆盖矩阵兜底 backend 污染端推断修复
 
 ### 问题根因
