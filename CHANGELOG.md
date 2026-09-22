@@ -1,3 +1,25 @@
+## v8.3.223 (2026-09-22) — 闭环调度循环改造（方式 Y 宿主会话内闭环）
+
+### analyze Pipeline 死代码复活
+- `--pipeline` 选项此前从未在 cli.ts 注册（整个 Pipeline 模式是死代码）→ 已注册
+- Pipeline 步骤模式从「输出 prompt 后退出」改为方式 Y 调度循环：AI provider 提前读取，llm/SDK 成功落盘后进程内 `advance()` 自动推进下一步
+- 新增 `buildPipelineStepPrompt` 统一函数（初始化块与 --apply 推进块复用）与 `advanceToWorkStep` helper（自动跳过 `*-done` 纯检查步骤）
+- 修复块 B 既有 bug：engine 创建未传 features/skipClarify 导致步骤链不一致跳错步骤；修复不存在的 `--resume` 选项
+- 步骤隔离放宽为「同一会话继续」：`[SPECCORE_STEP_DONE]` 后宿主在同一会话执行 `speccore analyze --prompt --pipeline` 接力
+
+### 各调度点方式 Y 闭环铺开
+- plan.ts：graph 模式（任务 ≥5）补上 llm/SDK 调度闭环，新增 `savePlanToFile` 统一落盘；修复 `contextType` 非法字面量
+- execute.ts：批次间 `[SPECCORE_CONTINUE]` 文案统一为「同一会话继续执行下一批次」
+- change.ts：host 输出 prompt 后补上缺失的 `exitCode = 10`
+- split.ts：接力文案统一为「同一会话继续」（PENDING 续批机制保留）
+- 确认 execute batch-size 为确定性骨架生成（非 AI 调度点）、verify 为确定性校验，均无需循环化
+
+### 验证
+- 会议项目全流程实测：13 单元澄清循环 + 40 步 analyze Pipeline 完整跑通（含宿主接力/恢复/跳过检查步骤）
+- 全量测试基线一致（216 passed / 14 failed），无回归
+
+---
+
 ## v8.3.222 (2026-09-21) — 切分功能单元确定性修复（与 AI 解耦）
 
 ### 切分结果确定性

@@ -21,6 +21,7 @@ export interface RunOptions {
   env?: string;         // v8.3.196+: --env 部署环境（透传给 pipeline 阶段）
   smoke?: 'on' | 'off'; // v8.3.217+: --smoke / --skip-smoke 单次强制/跳过冒烟
   scope?: 'full' | 'module'; // v8.3.217+: --scope 单次指定冒烟范围
+  noDepCheck?: boolean;  // v8.3.223+: --no-dep-check 跳过阶段前置依赖检查（逃生舱）
 }
 
 async function hasFeatureDirs(iterDir: string): Promise<boolean> {
@@ -114,6 +115,100 @@ async function autoPipeline(options: RunOptions): Promise<void> {
 
   const iterDir = `Iteration-${iteration}`;
   logger.info(`\n🤖 Auto-pipeline: ${iteration}\n`);
+
+  // v8.3.223+: 检测需求文档是否已导入（converted/、sources/ 下的文档或 REQUIREMENT.md 有实质内容）
+  const hasRequirementDocs = async (): Promise<boolean> => {
+    const reqDir = join(iterDir, '010-requirements');
+    const reqMd = join(reqDir, 'REQUIREMENT.md');
+    if (await pathExists(reqMd)) {
+      try {
+        const content = await readFile(reqMd, 'utf-8');
+        if (content.replace(/\s/g, '').length > 100) return true;
+      } catch { /* ignore */ }
+    }
+    for (const d of ['converted', 'sources']) {
+      const dir = join(reqDir, d);
+      if (await pathExists(dir)) {
+        const entries = await readdir(dir).catch(() => []);
+        if (entries.some((e: any) => /\.(md|docx|doc|pdf)$/i.test(e.name))) return true;
+      }
+    }
+    return false;
+  };
+
+  // v8.3.223+: 阶段前置依赖表——上游依赖未满足时阻断流水线，防止下游空跑产出垃圾产物。
+  // 历史教训：`--from taskify` 跳过 split-units 后，features/ 为空仍按需求文档粒度拆分，
+  // AI 把骨架「📋 质量标准」标题当功能单元，产出 Task-NNN-requirement-md 垃圾任务。
+  // hard=true 缺失时硬阻断（🛑 + 补救命令）；hard=false 缺失时警告继续。--no-dep-check 可全部跳过。
+  const PRECONDITIONS: Record<string, {
+    desc: string; impact: string; remedy: string; bypassNote: string; hard: boolean;
+    check: () => Promise<boolean>;
+  }> = {
+    'split-units': {
+      desc: '存在可切分的需求文档（converted/、sources/ 或 REQUIREMENT.md 有实质内容）',
+      impact: '无需求文档则切分功能单元无从谈起，下游 analyze 拿不到输入',
+      remedy: `先导入需求: speccore doc2spec -I ${iteration}（或 speccore run --from doc2spec -I ${iteration}）`,
+      bypassNote: '需求已由手动方式准备',
+      hard: true,
+      check: hasRequirementDocs,
+    },
+    analyze: {
+      desc: '存在需求文档（converted/、sources/ 或 REQUIREMENT.md 有实质内容）',
+      impact: '无需求文档 analyze 无输入，会产出空 Spec 骨架',
+      remedy: `先导入需求: speccore doc2spec -I ${iteration}`,
+      bypassNote: '需求已由手动方式准备',
+      hard: true,
+      check: hasRequirementDocs,
+    },
+    taskify: {
+      desc: '功能单元已切分（010-requirements/features/ 下存在功能单元目录）',
+      impact: '未切分将按需求文档粒度拆分，任务粒度过粗；AI 易把骨架引导标题（质量标准/写作要求）误当功能单元，产出垃圾任务',
+      remedy: `先切分功能单元: speccore doc2spec --split -I ${iteration}（或 speccore run --from split-units -I ${iteration}）`,
+      bypassNote: '确认按需求文档粒度拆分（小型项目）',
+      hard: true,
+      check: async () => await hasFeatureDirs(iterDir),
+    },
+    plan: {
+      desc: '开发任务已拆分（030-tasks 下存在真实任务）',
+      impact: '无任务无法生成执行计划，后续 execute 空转假成功',
+      remedy: `先拆分任务: speccore iteration taskify -I ${iteration} --force（或 speccore run --from taskify -I ${iteration}）`,
+      bypassNote: '任务目录由手动创建',
+      hard: true,
+      check: async () => {
+        try {
+          const { scanTasks } = await import('../core/state');
+          return (await scanTasks(iteration)).length > 0;
+        } catch { return false; }
+      },
+    },
+    execute: {
+      desc: '开发任务已拆分（030-tasks 下存在真实任务）',
+      impact: '无任务 execute 0 秒空转假成功，用户误以为代码已开发',
+      remedy: `先拆分任务: speccore iteration taskify -I ${iteration} --force（或 speccore run --from taskify -I ${iteration}）`,
+      bypassNote: '任务目录由手动创建',
+      hard: true,
+      check: async () => {
+        try {
+          const { scanTasks } = await import('../core/state');
+          return (await scanTasks(iteration)).length > 0;
+        } catch { return false; }
+      },
+    },
+    verify: {
+      desc: '存在已完成的开发任务（代码已生成）',
+      impact: '无任务产物 verify 没有验证对象',
+      remedy: `先执行开发: speccore run --from execute -I ${iteration}`,
+      bypassNote: '跳过验证',
+      hard: false,
+      check: async () => {
+        try {
+          const { scanTasks } = await import('../core/state');
+          const tasks = await scanTasks(iteration);
+          return tasks.length > 0 && tasks.some(t => t.status === 'completed');
+        } catch { return false; }
+      },
+    },
+  };
 
   // v8.3.190+: 读取 optional_steps（off 跳过）+ pipelines（命名流水线）配置
   let optionalSteps: Record<string, 'auto' | 'on' | 'off'> = {};
@@ -238,6 +333,13 @@ async function autoPipeline(options: RunOptions): Promise<void> {
     logger.info(`🎯 自动步骤: ${stepKeys.join(' → ')}\n`);
   }
 
+  // v8.3.223+: 提示被跳过的上游阶段（--from 起点之前的阶段不会执行，依赖需已满足）
+  if (startIdx > 0) {
+    const skipped = PIPELINE_PHASES.slice(0, startIdx).map(p => p.key);
+    logger.warn(`⏭️  从 ${PIPELINE_PHASES[startIdx].key} 开始，上游阶段已跳过: ${skipped.join(' → ')}`);
+    logger.warn(`    每个阶段执行前会校验前置依赖，缺失时硬阻断（--no-dep-check 可强制跳过检查）\n`);
+  }
+
   // ── 逐步执行 ──
   let pausedGate: string | null = null;
   let prevLayer = '';
@@ -250,6 +352,31 @@ async function autoPipeline(options: RunOptions): Promise<void> {
       logger.info(phase.layer === 'prepare'
         ? '\n────────── 🏗️ 准备层（初始化 + 需求入口）──────────'
         : '\n────────── 🚀 主流程（分析→拆分→执行→验证→部署→归档→导出）──────────');
+    }
+
+    // v8.3.223+: 阶段前置依赖校验——上游依赖未满足时阻断流水线。
+    // 解决「--from taskify 跳过 split-units 仍继续拆分」类问题：依赖缺失必须停下并给补救命令。
+    // 注意：必须在 review 闸口软停之前——依赖不满足时应第一时间硬阻断，
+    // 而不是让用户先在闸口确认、之后才被告知依赖缺失。
+    if (!options.noDepCheck) {
+      const pre = PRECONDITIONS[phase.key];
+      if (pre) {
+        const preOk = await pre.check();
+        if (!preOk) {
+          if (pre.hard) {
+            logger.error(`\n🛑 [SPECCORE_GATE] 阶段前置依赖未满足: ${phase.key}`);
+            logger.error(`   缺少: ${pre.desc}`);
+            logger.error(`   影响: ${pre.impact}`);
+            logger.error(`   补救: ${pre.remedy}`);
+            logger.error(`   继续: 补齐依赖后重新执行 speccore run --from ${phase.key} -I ${iteration}`);
+            logger.error(`   绕过: 如确需跳过检查（${pre.bypassNote}），加 --no-dep-check 显式继续\n`);
+            process.exitCode = 1;
+            return;
+          }
+          logger.warn(`  ⚠️ 前置依赖建议: ${pre.desc}`);
+          logger.warn(`     ${pre.remedy}（软依赖，继续执行...）`);
+        }
+      }
     }
 
     // v8.3.184+: review 闸口软停（功能开发质量底线）
@@ -269,7 +396,7 @@ async function autoPipeline(options: RunOptions): Promise<void> {
         logger.warn(`\n⚠️  [auto] 已跳过闸口 C（部署前确认），即将自动部署到环境。`);
       }
     }
-
+    
     logger.info(`━━━ [${i - startIdx + 1}/${endIdx - startIdx + 1}] ${phase.key} ━━━`);
     const phaseStart = Date.now();
     let phaseStatus: PhaseResult['status'] = 'success';
@@ -383,7 +510,9 @@ async function autoPipeline(options: RunOptions): Promise<void> {
       }
       case 'analyze': {
         const analysis = join(iterDir, '020-specs', 'ANALYSIS.md');
-        const techSpec = join(iterDir, '020-specs', 'ANALYSIS.md');
+        // v8.3.223+: 修复复制粘贴 bug——techSpec 原指向 ANALYSIS.md，
+        // 与 analysis 同文件导致技术方案校验形同虚设，应指向 TECH.md
+        const techSpec = join(iterDir, '020-specs', 'TECH.md');
         let needsAnalysis = !(await pathExists(analysis));
         let needsSpecs = false;
         if (!needsAnalysis) {
@@ -504,21 +633,14 @@ async function autoPipeline(options: RunOptions): Promise<void> {
           process.exitCode = 1;
           return;
         }
-        // v8.3.222+: 切分功能单元感知——features/ 未切分时警告（--from taskify 会跳过 split-units）。
-        // taskify 核心依赖是 020-specs（analyze 产出），features/ 缺失仅导致功能单元粒度过粗，故警告不阻断。
-        let hasFeatureUnits = false;
-        try {
-          const fEntries = await readdir(join(iterDir, '010-requirements', 'features'), { withFileTypes: true });
-          hasFeatureUnits = fEntries.some((e: any) => e.isDirectory() && !e.name.startsWith('.') && !e.name.startsWith('_'));
-        } catch {}
-        if (!hasFeatureUnits) {
-          logger.warn('  ⚠️ 功能单元未切分（010-requirements/features/ 为空）——taskify 将按需求文档粒度拆分，任务可能过粗');
-          logger.warn('     建议先切分: speccore doc2spec --split 或 speccore run --from split-units');
-        }
+        // v8.3.223+: 功能单元切分校验已提升到阶段级前置依赖检查（PRECONDITIONS.taskify，硬阻断），
+        // 此处不再重复 warn——只有 --no-dep-check 逃生舱时才可能走到这且 features/ 为空。
+        // v8.3.223+: 改用 scanTasks 判断任务是否已拆分——游离目录（无 .meta/TASK.md）
+        // 不再误判为已拆分（旧逻辑只看 030-tasks 根下 Task- 前缀目录，垃圾目录导致 taskify 假跳过）
         let hasTasks = false;
         try {
-          const entries = await readdir(join(iterDir, '030-tasks'), { withFileTypes: true });
-          hasTasks = entries.some((e: any) => e.isDirectory() && e.name.startsWith('Task-'));
+          const { scanTasks } = await import('../core/state');
+          hasTasks = (await scanTasks(iteration)).length > 0;
         } catch {}
         if (!hasTasks) {
           execSync(`speccore iteration taskify -i ${iteration} --force`, { stdio: 'inherit' });
@@ -557,7 +679,8 @@ async function autoPipeline(options: RunOptions): Promise<void> {
         if (hasPlan) {
           logger.info('  ✅ 执行计划已存在，跳过');
         } else {
-          execSync(`speccore plan -i ${iteration} --force`, { stdio: 'inherit' });
+          // v8.3.223+: plan 命令无 --force 选项，此前调用必然报 unknown option 失败
+          execSync(`speccore plan -i ${iteration}`, { stdio: 'inherit' });
         }
         break;
       }
@@ -572,7 +695,8 @@ async function autoPipeline(options: RunOptions): Promise<void> {
         if (!hasPending) {
           logger.info('  ✅ 所有任务已完成，跳过 execute');
         } else {
-          execSync(`speccore execute --auto -i ${iteration}`, { stdio: 'inherit' });
+          // v8.3.223+: --auto 仅执行第一个待执行任务，必须加 --all 覆盖全部 pending
+          execSync(`speccore execute --auto --all -i ${iteration}`, { stdio: 'inherit' });
         }
         break;
       }

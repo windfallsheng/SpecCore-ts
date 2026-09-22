@@ -20,7 +20,7 @@ import {
 } from './rag-engine';
 import { unifiedSearch, assembleUnifiedContext } from './unified-retrieval';
 // v8.3.194+: 统一内容分级 + 预算（单一事实源，替代本地 isSpecContent/getPriority）
-import { applyTierBudget, TIER_BUDGETS } from './context-budget';
+import { applyTierBudget, classifyContent, TIER_BUDGETS } from './context-budget';
 // v8.3.183+: 统一内容供给管线（md 大纲摘要，替代链接全文内联）
 import { extractMdOutline } from './content-delivery';
 // v8.3.183+: HTML 原型渲染（Playwright 截图 + accessibility tree，替代纯文本）
@@ -2526,6 +2526,27 @@ export function formatPrompt(prompt: SpecCorePrompt, maxTokens?: number): string
     tokens = estimateTokens(result);
     if (tokens <= budget) {
       logger?.info?.(`   🪶 Prompt 已简化：隐藏任务关联链`);
+      return result;
+    }
+  }
+
+  // Level 3.5: 中间态——非 P0 全部移除，P0 截断保留（v8.3.223+）
+  // 替代旧「Level 4 直接 extraSpecs: []」的悬崖式清空：让 AI 至少保留 Spec 核心依据
+  const p0Items = prompt.extraSpecs.filter(i => classifyContent(i.name) === 0);
+  if (p0Items.length > 0) {
+    const p0Text = p0Items.map(i => i.content).join('\n\n');
+    const P0_FLOOR = 20000;
+    const truncatedP0 = p0Text.length > P0_FLOOR
+      ? p0Text.slice(0, P0_FLOOR) + '\n> ... (极简模式 P0 截断：剩余 Spec 请按需 Read 源文件)'
+      : p0Text;
+    result = buildPromptText({
+      ...prompt,
+      extraSpecs: [{ name: '📄 Spec 核心（P0 截断）', path: '', content: truncatedP0 }],
+      taskContext: undefined,
+    });
+    tokens = estimateTokens(result);
+    if (tokens <= budget) {
+      logger?.info?.(`   🪶 Prompt 已简化：保留 P0 截断版（非 P0 内容移除）`);
       return result;
     }
   }

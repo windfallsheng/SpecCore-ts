@@ -18,6 +18,9 @@ export interface TaskState {
   platform?: string;
   /** 父任务 ID（子任务才有） */
   parentTaskId?: string;
+  /** v8.3.223+: 任务目录绝对路径（扫描时记录，供 retro/execute 直接定位，
+   *  避免 TASK.md 内子任务 ID 与目录名不一致时解析失败） */
+  path?: string;
 }
 
 export interface IterationState {
@@ -145,6 +148,17 @@ export async function scanTasks(iteration: string): Promise<TaskState[]> {
   
   const tasks: TaskState[] = [];
   
+  // v8.3.223+: 判断目录是否为真实任务目录（含 .meta/、TASK.md、00-specs/ 或 _shared/ 任一任务产物）。
+  // 仅含 RETRO.md 等收尾产物的游离目录（旧版 retro 路径 bug 产生）不是任务，必须过滤，
+  // 否则会被当作 pending 父任务参与 execute，造成假执行。
+  const hasTaskArtifacts = async (dir: string): Promise<boolean> => {
+    try {
+      const names = (await readdir(dir)).map((n: string) => n.toLowerCase());
+      return names.includes('.meta') || names.includes('task.md')
+        || names.includes('00-specs') || names.includes('_shared');
+    } catch { return false; }
+  };
+  
   // 递归扫描: 支持 030-tasks/Task-XXX/ 和 030-tasks/{type}/Task-XXX/ 两种布局
   const taskDirs: { taskId: string; taskPath: string }[] = [];
   const rootEntries = await readdir(scanRoot, { withFileTypes: true });
@@ -152,7 +166,10 @@ export async function scanTasks(iteration: string): Promise<TaskState[]> {
   for (const entry of rootEntries) {
     if (!entry.isDirectory()) continue;
     if (entry.name.startsWith('Task-')) {
-      taskDirs.push({ taskId: entry.name, taskPath: join(scanRoot, entry.name) });
+      // v8.3.223+: 只纳入含任务产物的真实任务目录
+      if (await hasTaskArtifacts(join(scanRoot, entry.name))) {
+        taskDirs.push({ taskId: entry.name, taskPath: join(scanRoot, entry.name) });
+      }
     } else if (!entry.name.startsWith('.') && !entry.name.startsWith('0')) {
       // 可能是类型子目录（feature/bugfix/refactor/research）
       const typeDir = join(scanRoot, entry.name);
@@ -301,6 +318,7 @@ export async function scanTasks(iteration: string): Promise<TaskState[]> {
             estimatedHours: subHours,
             platform,
             parentTaskId: taskId,
+            path: subtaskPath,
           });
         }
       }
@@ -321,6 +339,7 @@ export async function scanTasks(iteration: string): Promise<TaskState[]> {
         priority,
         progress: parentStatus === 'completed' ? 100 : 0,
         estimatedHours,
+        path: taskPath,
       });
     }
   }

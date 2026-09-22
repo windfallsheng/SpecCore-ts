@@ -1,6 +1,6 @@
 {
   "name": "speccore",
-  "version": "8.3.222",
+  "version": "8.3.223",
   "description": "SpecCore - Code by Spec, Not by Vibe.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -12,7 +12,7 @@
     "sync-version": "node sync-version.js",
     "watch": "tsc --watch",
     "prepublish": "npm run build",
-    "test": "jest",
+    "test": "vitest run",
     "lint": "eslint src/**/*.ts",
     "release:verify": "bash scripts/release.sh verify",
     "release:beta": "bash scripts/release.sh beta",

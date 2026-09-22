@@ -7,6 +7,7 @@ import { pathExists, readFile, writeFile, ensureDir, readdir } from 'fs-extra';
 import { logger } from '../utils/logger';
 import { getDefaultIteration, getIterationDir } from '../core/context';
 import { getIssues } from '../core/issue-tracker';
+import { findTaskDir, TASK_TYPES } from '../core/task-paths';
 
 /**
  * 解析任务目录基础路径：优先 030-tasks/，扫描任务目录
@@ -14,6 +15,55 @@ import { getIssues } from '../core/issue-tracker';
 async function resolveTaskBase(iterDir: string): Promise<string> {
   const tasksDir = join(iterDir, '030-tasks');
   return (await pathExists(tasksDir)) ? tasksDir : iterDir;
+}
+
+/**
+ * v8.3.223+: 递归查找新结构子任务路径（030-tasks/{type}/Task-XXX/{端}/{subtaskId}/）。
+ * 修复：旧逻辑用扁平 join(taskBase, taskId) 生成 RETRO.md，对子任务 ID 会在
+ * 030-tasks 根下 ensureDir 创建游离垃圾目录（仅含 RETRO.md，无任务产物），
+ * 后续被 scanTasks/run 误判为待办任务。
+ */
+async function findNestedSubtaskDir(tasksRoot: string, taskId: string): Promise<string | null> {
+  if (!(await pathExists(tasksRoot))) return null;
+  for (const type of TASK_TYPES) {
+    const typeDir = join(tasksRoot, type);
+    if (!(await pathExists(typeDir))) continue;
+    const parents = await readdir(typeDir, { withFileTypes: true });
+    for (const p of parents) {
+      if (!p.isDirectory() || !p.name.startsWith('Task-')) continue;
+      const parentPath = join(typeDir, p.name);
+      const platformDirs = await readdir(parentPath, { withFileTypes: true }).catch(() => []);
+      for (const pd of platformDirs) {
+        if (!pd.isDirectory() || pd.name.startsWith('.') || pd.name.startsWith('_') || pd.name.startsWith('0')) continue;
+        const sub = join(parentPath, pd.name, taskId);
+        if (await pathExists(sub)) return sub;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * v8.3.223+: 解析 RETRO 目标任务目录——新结构优先（嵌套子任务 → 类型父任务 → 旧扁平）。
+ * 返回 null 表示任务不存在，调用方不应写入 RETRO.md。
+ */
+async function resolveRetroTaskDir(taskBase: string, taskId: string): Promise<string | null> {
+  const nested = await findNestedSubtaskDir(taskBase, taskId);
+  if (nested) return nested;
+  const found = await findTaskDir(taskBase, taskId);
+  if (found) {
+    // 旧扁平路径可能是历史 bug 产生的游离目录（仅 RETRO.md）——校验任务产物后决定是否可用
+    const flat = join(taskBase, taskId);
+    if (found !== flat) return found;
+    try {
+      const names = (await readdir(found)).map((n: string) => n.toLowerCase());
+      const hasArtifacts = names.includes('.meta') || names.includes('task.md')
+        || names.includes('00-specs') || names.includes('_shared');
+      if (hasArtifacts) return found;
+    } catch { /* ignore */ }
+    return null;
+  }
+  return null;
 }
 
 interface RetroOptions {
@@ -49,11 +99,17 @@ export async function retroCommand(options: RetroOptions): Promise<void> {
 
   // 确定要生成回顾的任务列表
   let taskIds: string[] = [];
+  // v8.3.223+: 记录 scanTasks 返回的真实目录路径（TASK.md 内 ID 可能与目录名不一致）
+  const taskPathMap = new Map<string, string>();
   if ((options as any).all && iterDir) {
     try {
-      const taskBase = await resolveTaskBase(iterDir);
-      const entries = await readdir(taskBase, { withFileTypes: true });
-      taskIds = entries.filter((e: any) => e.isDirectory() && e.name.startsWith('Task-')).map((e: any) => e.name);
+      // v8.3.223+: 复用 scanTasks（支持新旧布局，且过滤无任务产物的游离目录）
+      const { scanTasks } = await import('../core/state');
+      const tasks = await scanTasks(iteration);
+      taskIds = tasks.map(t => t.id);
+      for (const t of tasks) {
+        if (t.path) taskPathMap.set(t.id, t.path);
+      }
     } catch {}
   } else if ((options as any).tasks) {
     taskIds = (options as any).tasks.split(',').map((t: string) => t.trim());
@@ -91,7 +147,8 @@ export async function retroCommand(options: RetroOptions): Promise<void> {
 
   // 逐个生成报告
   for (const taskId of taskIds) {
-    const report = await generateReport(taskId, iterDir);
+    const report = await generateReport(taskId, iterDir, taskPathMap.get(taskId));
+    if (!report) continue;
 
     if (!process.stdout.isTTY) {
       const html = renderRetroHtml(report);
@@ -118,10 +175,19 @@ export async function retroCommand(options: RetroOptions): Promise<void> {
   logger.info(`\n📊 共生成 ${taskIds.length} 份回顾报告`);
 }
 
-export async function generateReport(taskId: string, iterDir: string): Promise<RetroReport> {
+export async function generateReport(taskId: string, iterDir: string, taskDirHint?: string): Promise<RetroReport | null> {
   const taskBase = await resolveTaskBase(iterDir);
-  const taskDir = join(taskBase, taskId);
+  // v8.3.223+: 优先使用 scanTasks 记录的真实目录；否则新结构优先解析。
+  // 解析不到说明任务目录不存在——不 fallback 到扁平 join，防止在 030-tasks 根下制造游离目录。
+  const taskDir = (taskDirHint && await pathExists(taskDirHint))
+    ? taskDirHint
+    : await resolveRetroTaskDir(taskBase, taskId);
   const now = new Date().toISOString().split('T')[0];
+  // v8.3.223+: 任务目录不存在时直接跳过（旧逻辑 ensureDir 会在 030-tasks 根下制造游离目录）
+  if (!taskDir) {
+    logger.warn(`⏭️ 任务目录不存在，跳过 RETRO.md: ${taskId}`);
+    return null;
+  }
   let filesChanged = 0;
   let validationPassed = false;
 
@@ -233,8 +299,9 @@ export async function generateReport(taskId: string, iterDir: string): Promise<R
   };
 
   // 持久化 RETRO.md 到任务目录
-  if (iterDir && await pathExists(iterDir)) {
-    await ensureDir(taskDir);
+  // v8.3.223+: 任务目录不存在时不落盘（旧逻辑 ensureDir 无条件创建目录，
+  // 对子任务 ID 会在 030-tasks 根下制造仅含 RETRO.md 的游离垃圾目录）
+  if (iterDir && await pathExists(iterDir) && await pathExists(taskDir)) {
     const retroMd = [
       `# 任务回顾 · ${taskId}`,
       '',
@@ -270,6 +337,8 @@ export async function generateReport(taskId: string, iterDir: string): Promise<R
     ].join('\n');
     await writeFile(join(taskDir, 'RETRO.md'), retroMd);
     logger.info(`📄 已生成: ${join(taskDir, 'RETRO.md')}`);
+  } else {
+    logger.warn(`⏭️ 任务目录不存在，跳过 RETRO.md: ${taskId}`);
   }
 
   return report;

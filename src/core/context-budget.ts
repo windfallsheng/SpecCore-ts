@@ -16,9 +16,11 @@
 /** 内容优先级：0=需求/Spec（不裁剪） 1=代码卡片/源码 2=知识图谱/任务链 3=其他 */
 export type ContentPriority = 0 | 1 | 2 | 3;
 
-/** 每档预算（字符数）。P0 需求/Spec 不裁剪（已在上游限流）。 */
+/** 每档预算（字符数）。P0 需求/Spec 设真实上限（约 30K tokens），超限按中间态截断。 */
 export const TIER_BUDGETS = {
-  P0: Infinity, // 需求/Spec：无条件完整保留
+  // v8.3.223+: 原为 Infinity——P0 永不裁剪导致大单元照样爆上下文，
+  // 且降级时悬崖式清空（要么全量、要么归零）。改为真实上限 + 截断中间态。
+  P0: 40000,
   P1: 10000,    // 代码卡片 / 关联源码 / 前端结构 / INFO_GAP
   P2: 5000,     // 知识图谱 / 任务关联链
   P3: 3000,     // 其他（一致性检查 / 可选清单 / 工程路径）
@@ -82,8 +84,9 @@ export interface BudgetResult {
  */
 export function applyTierBudget(
   items: BudgetItem[],
-  opts?: { budgetP1?: number; budgetP2?: number; budgetP3?: number },
+  opts?: { budgetP0?: number; budgetP1?: number; budgetP2?: number; budgetP3?: number },
 ): BudgetResult {
+  const B0 = opts?.budgetP0 ?? TIER_BUDGETS.P0;
   const B1 = opts?.budgetP1 ?? TIER_BUDGETS.P1;
   const B2 = opts?.budgetP2 ?? TIER_BUDGETS.P2;
   const B3 = opts?.budgetP3 ?? TIER_BUDGETS.P3;
@@ -99,7 +102,14 @@ export function applyTierBudget(
     let content = item.content;
 
     if (p === 0) {
-      used.p0 += len; // 需求/Spec 无条件完整保留
+      // v8.3.223+: P0 设上限后不再无条件保留——超限时截断并提示按需 Read 源文件，
+      // 替代旧「Infinity 全量 + 悬崖式清空」两级极端（中间态）
+      if (used.p0 + len > B0) {
+        const remain = Math.max(0, B0 - used.p0);
+        if (remain < 400) keep = false;
+        else content = content.slice(0, remain) + '\n> ... (P0预算截断：剩余内容请按需 Read 源文件)';
+      }
+      if (keep) used.p0 += content.length;
     } else if (p === 1) {
       if (used.p1 + len > B1) {
         const remain = Math.max(0, B1 - used.p1);

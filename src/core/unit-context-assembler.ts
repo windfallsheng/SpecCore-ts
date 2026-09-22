@@ -16,6 +16,7 @@ import { join, basename } from 'path';
 import { findRelevantCode } from './code-scanner';
 import { loadFreshKnowledgeGraph } from './knowledge-graph';
 import { unifiedSearch } from './unified-retrieval';
+import { GLOBAL_SPECS_DIR } from './spec-paths';
 import { logger } from '../utils/logger';
 
 // ═══════════════════════════════════════════════════════════
@@ -423,20 +424,40 @@ async function extractGlobalConstraints(
   const result: { terminology?: string; apiContract?: string; dataModel?: string } = {};
   let usedBudget = 0;
 
-  // 1. 术语表：从黄金需求目录的所有文档中提取
+  // 1. 术语表：从黄金需求目录 + 新路径两级 CLARIFY.md 中提取
+  // v8.3.223+: 适配新路径澄清产物——用两级澄清产出的项目黄金目录为空，
+  // 旧逻辑只读 requirements/ 导致术语表提取不到
+  const clarifyCandidates: string[] = [];
   const goldenDir = join(iterDir, '020-specs', 'requirements');
   if (await pathExists(goldenDir)) {
     try {
       const files = await readdir(goldenDir);
       for (const f of files.filter(f => f.endsWith('.md'))) {
-        const content = await readFile(join(goldenDir, f), 'utf-8');
-        const glossaryMatch = content.match(/#{2,3}\s+术语表[\s\S]*?(?=\n#{2,3}|$)/i);
-        if (glossaryMatch) {
-          const text = glossaryMatch[0].trim();
-          if (usedBudget + text.length < budget * 0.5) {
-            result.terminology = (result.terminology || '') + '\n' + text;
-            usedBudget += text.length;
-          }
+        clarifyCandidates.push(join(goldenDir, f));
+      }
+    } catch { /* ignore */ }
+  }
+  const specsDir = join(iterDir, '020-specs');
+  const ovClarify = join(specsDir, 'overview', 'CLARIFY.md');
+  if (await pathExists(ovClarify)) clarifyCandidates.push(ovClarify);
+  try {
+    const specEntries = await readdir(specsDir, { withFileTypes: true });
+    for (const se of specEntries) {
+      if (!se.isDirectory() || se.name === 'overview' || se.name === 'requirements') continue;
+      const c = join(specsDir, se.name, 'overview', 'CLARIFY.md');
+      if (await pathExists(c)) clarifyCandidates.push(c);
+    }
+  } catch { /* ignore */ }
+
+  for (const fp of clarifyCandidates) {
+    try {
+      const content = await readFile(fp, 'utf-8');
+      const glossaryMatch = content.match(/#{2,3}\s+术语表[\s\S]*?(?=\n#{2,3}|$)/i);
+      if (glossaryMatch) {
+        const text = glossaryMatch[0].trim();
+        if (usedBudget + text.length < budget * 0.5) {
+          result.terminology = (result.terminology || '') + '\n' + text;
+          usedBudget += text.length;
         }
       }
     } catch { /* ignore */ }
@@ -543,4 +564,200 @@ function truncateByBudget(
   }
 
   return lines.join('');
+}
+
+// ═══════════════════════════════════════════════════════════
+// v8.3.223+: 概览文档关键词提取（原 split.ts 本地 assembleUnitContext 副本，已收敛至此）
+// 与 assembleUnitContext 的职责区分：
+//   - assembleUnitContext：单元内容 + 关联单元 + 源码三层组装（analyze 链路）
+//   - extractOverviewContext：从 020-specs 概览文档按关键词提取片段（taskify 链路）
+// 此前两套实现并存、已漂移，现已统一到本模块维护。
+// ═══════════════════════════════════════════════════════════
+
+/** 将名称转为目录安全的短 slug（2-4 词）——与 split.ts 原实现一致 */
+function slugify(name: string): string {
+  const latinMatches = name.match(/[a-zA-Z0-9]+/g);
+  if (latinMatches && latinMatches.length > 0) {
+    return latinMatches.slice(0, 3).join('-').toLowerCase();
+  }
+  const hash = Math.abs(name.split('').reduce((a, c) => a * 31 + c.charCodeAt(0), 7)).toString(36);
+  return hash.slice(0, 6);
+}
+
+/**
+ * v7.4.2+: 按功能单元从各分析文档中精准提取相关上下文
+ * CLI 做计算（提取），AI 做内容（填充）
+ */
+export async function extractOverviewContext(
+  iterationDir: string,
+  unitName: string,
+  platforms: string[],
+): Promise<string> {
+  const specsBase = join(iterationDir, '020-specs');
+  const overviewDir = join(specsBase, GLOBAL_SPECS_DIR);
+  const ctx: string[] = [];
+  // 关键词拆分：将功能单元名拆成多个搜索词（如「预订管理」→「预订」「管理」）
+  const keywords = unitName.split(/(?<=[\u4e00-\u9fff])(?=[\u4e00-\u9fff])/).filter(k => k.length >= 1);
+  // 也加入英文关键词（如 booking、checkin）
+  const slugKeywords = slugify(unitName).split('-').filter(k => k.length >= 3);
+  const allKeywords = [...keywords, ...slugKeywords];
+
+  const matchLine = (line: string) => allKeywords.some(k => line.includes(k));
+
+  // 1. 从 overview/REQUIREMENT.md 提取相关章节
+  const reqPath = join(overviewDir, 'REQUIREMENT.md');
+  if (await pathExists(reqPath)) {
+    try {
+      const content = await readFile(reqPath, 'utf-8');
+      const lines = content.split(/\r?\n/);
+      const relevant: string[] = [];
+      let inRelevantSection = false;
+      for (const line of lines) {
+        if (line.startsWith('## ') || line.startsWith('### ')) {
+          inRelevantSection = matchLine(line);
+        }
+        if (inRelevantSection || (line.startsWith('|') && matchLine(line))) {
+          relevant.push(line);
+        }
+      }
+      if (relevant.length > 0) {
+        ctx.push(`### 📋 需求规格（REQUIREMENT.md 相关片段）\n\`\`\`\n${relevant.slice(0, 60).join('\n')}\n\`\`\``);
+      }
+    } catch {}
+  }
+
+  // 2. 从 platforms/_shared/_MODULES.md 提取相关模块
+  const modulesPath = join(specsBase, 'platforms', '_shared', '_MODULES.md');
+  if (await pathExists(modulesPath)) {
+    try {
+      const content = await readFile(modulesPath, 'utf-8');
+      const lines = content.split(/\r?\n/);
+      const relevant: string[] = [];
+      let inRelevantBlock = false;
+      let blockLines: string[] = [];
+      for (const line of lines) {
+        if (line.startsWith('## ')) {
+          // 保存上一个块
+          if (inRelevantBlock && blockLines.length > 0) {
+            relevant.push(...blockLines);
+          }
+          inRelevantBlock = matchLine(line);
+          blockLines = [line];
+        } else if (inRelevantBlock) {
+          blockLines.push(line);
+        } else if (line.startsWith('|') && matchLine(line)) {
+          relevant.push(line);
+        }
+      }
+      if (inRelevantBlock && blockLines.length > 0) relevant.push(...blockLines);
+      if (relevant.length > 0) {
+        ctx.push(`### 🧩 功能模块（_MODULES.md 相关片段）\n\`\`\`\n${relevant.slice(0, 50).join('\n')}\n\`\`\``);
+      }
+    } catch {}
+  }
+
+  // 3. 从各端 _INDEX.md 提取相关接口/页面
+  for (const platform of platforms) {
+    const indexPath = join(specsBase, 'platforms', platform, '_INDEX.md');
+    if (await pathExists(indexPath)) {
+      try {
+        const content = await readFile(indexPath, 'utf-8');
+        const lines = content.split(/\r?\n/);
+        const relevant: string[] = [];
+        let inRelevantSection = false;
+        for (const line of lines) {
+          if (line.startsWith('## ') || line.startsWith('### ')) {
+            inRelevantSection = matchLine(line);
+          }
+          if (inRelevantSection || (line.startsWith('|') && matchLine(line))) {
+            relevant.push(line);
+          }
+        }
+        if (relevant.length > 0) {
+          ctx.push(`### 🖥️ ${platform} 端相关（_INDEX.md 片段）\n\`\`\`\n${relevant.slice(0, 40).join('\n')}\n\`\`\``);
+        }
+      } catch {}
+    }
+  }
+
+  // 4. 从 overview/FUNCTION_MAP.md 提取本单元行 + 依赖单元
+  const funcMapPath = join(overviewDir, 'FUNCTION_MAP.md');
+  if (await pathExists(funcMapPath)) {
+    try {
+      const content = await readFile(funcMapPath, 'utf-8');
+      const lines = content.split(/\r?\n/);
+      const matchedRows = lines.filter(l => l.startsWith('|') && matchLine(l));
+      if (matchedRows.length > 0) {
+        ctx.push(`### 🗺️ 功能映射（FUNCTION_MAP.md）\n\`\`\`\n${matchedRows.join('\n')}\n\`\`\``);
+      }
+    } catch {}
+  }
+
+  // 5. 从 overview/TECH.md 提取相关架构信息
+  const techPath = join(overviewDir, 'TECH.md');
+  if (await pathExists(techPath)) {
+    try {
+      const content = await readFile(techPath, 'utf-8');
+      const lines = content.split(/\r?\n/);
+      const relevant: string[] = [];
+      let inRelevantSection = false;
+      for (const line of lines) {
+        if (line.startsWith('## ') || line.startsWith('### ')) {
+          inRelevantSection = matchLine(line);
+        }
+        if (inRelevantSection) relevant.push(line);
+      }
+      if (relevant.length > 0) {
+        ctx.push(`### 🏗️ 技术架构相关（TECH.md 片段）\n\`\`\`\n${relevant.slice(0, 40).join('\n')}\n\`\`\``);
+      }
+    } catch {}
+  }
+
+  // v8.2.0+: 知识图谱 + 源码关联增强
+  // v8.3.125+: 自动检查过期并刷新
+  try {
+    const graph = await loadFreshKnowledgeGraph(process.cwd());
+    if (graph) {
+      const unitNameLower = unitName.toLowerCase();
+      const matchedReqIds = new Set<string>();
+      const codeFiles: string[] = [];
+
+      // 找匹配当前功能单元的 requirement 实体
+      for (const entity of Object.values(graph.entities)) {
+        if (entity.type !== 'requirement') continue;
+        const titleLower = entity.title.toLowerCase();
+        if (titleLower.includes(unitNameLower) || unitNameLower.includes(titleLower)) {
+          matchedReqIds.add(entity.id);
+        }
+      }
+
+      // 通过关系链找关联的 source-file 实体
+      for (const rel of graph.relations) {
+        if (!matchedReqIds.has(rel.from) && !matchedReqIds.has(rel.to)) continue;
+        const neighborId = matchedReqIds.has(rel.from) ? rel.to : rel.from;
+        const neighbor = graph.entities[neighborId];
+        if (neighbor && neighbor.type === 'source-file' && neighbor.file) {
+          codeFiles.push(neighbor.file);
+        }
+      }
+
+      if (codeFiles.length > 0) {
+        ctx.push(`### 💻 相关源码文件（知识图谱关联）\n${codeFiles.slice(0, 5).map(f => `- \`${f}\``).join('\n')}`);
+      }
+    }
+  } catch { /* ignore */ }
+
+  // v8.2.0+: findRelevantCode 语义关联补充
+  try {
+    const matches = await findRelevantCode(unitName, 5);
+    if (matches.length > 0) {
+      const files = matches.map(m => `- \`${m.file}\` (相关度: ${m.score.toFixed(2)})`);
+      ctx.push(`### 🔍 语义关联源码文件\n${files.join('\n')}`);
+    }
+  } catch { /* ignore */ }
+
+  if (ctx.length === 0) {
+    return `> 功能单元「${unitName}」未在分析文档中找到直接相关内容，请根据全局文档推断。`;
+  }
+  return ctx.join('\n\n');
 }

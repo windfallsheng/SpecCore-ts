@@ -30,6 +30,20 @@ function promptUser(question: string): Promise<string> {
   });
 }
 
+/** v8.3.225+: 计划内容落盘（--response 分支与 graph 模式 SDK 闭环共用） */
+async function savePlanToFile(iteration: string, content: string, topic?: string): Promise<void> {
+  const iterDir = await getIterationDir(iteration);
+  const plansRoot = join(iterDir, '000-overview', 'plans');
+  await ensureDir(plansRoot);
+  const slug = topic || 'plan';
+  const { id: planId } = await nextPlanId(slug, topic);
+  const planDir = join(plansRoot, planId);
+  const planMdPath = join(planDir, 'PLAN.md');
+  await writeFile(planMdPath, content, 'utf-8');
+  logger.success(`✅ 计划已保存: ${planId}/PLAN.md`);
+  printPlanFromMarkdown(content, iteration);
+}
+
 export interface PlanOptions {
   iteration?: string;
   topic?: string;   // AI 提取的主题词
@@ -76,6 +90,63 @@ export async function planCommand(options: PlanOptions): Promise<void> {
       logger.info('');
       logger.info('💡 已将 CLI 计算结果注入 Prompt，AI 只需做判断和决策');
       logger.info('');
+
+      // v8.3.225+: graph 模式补上 AI 调度闭环（llm/SDK 成功则自动落盘，失败输出 prompt 接力）
+      let graphProvider = 'host';
+      try {
+        const { loadConfigWithMeta } = await import('../core/unified-config');
+        const { config } = await loadConfigWithMeta();
+        graphProvider = config.settings.ai?.provider || 'host';
+      } catch { /* 默认 host */ }
+
+      const tryLlmGraph = async (): Promise<boolean> => {
+        try {
+          const { callLlm, resolveAiProviders } = await import('../core/ask-llm');
+          const providers = await resolveAiProviders('plan');
+          const llmContent = await callLlm(
+            '你是项目计划专家。请按 prompt 要求制定开发计划，输出用 [DOC:PLAN] 标记包裹的计划内容。',
+            decisionPrompt,
+            providers,
+            8000
+          );
+          if (llmContent) {
+            await savePlanToFile(iter, llmContent, options.topic);
+            return true;
+          }
+        } catch (e: any) {
+          logger.debug(`[plan] 自配 LLM 生成失败: ${e.message}`);
+        }
+        return false;
+      };
+
+      if (graphProvider === 'llm' && !(await tryLlmGraph())) {
+        logger.warn('⚠️ [llm] 自配 LLM 未生成计划，回退宿主模式');
+      }
+
+      if (!process.stdout.isTTY) {
+        try {
+          // graph 模式：CLI 已算好批次/关键路径，子 Agent 只需决策 → full 上下文
+          const agentCtx: AgentContext = {
+            subagent: 'schedule-planner',
+            iteration: options.iteration || '',
+            contextBudget: 8000,
+            contextType: 'full',
+            cwd: process.cwd(),
+          };
+          const dispatchResult = await dispatchSubagent(agentCtx, decisionPrompt);
+          if (dispatchResult && dispatchResult.success) {
+            logger.info(`[plan] 子 Agent schedule-planner SDK 调度成功`);
+            if (dispatchResult.content && dispatchResult.content.trim()) {
+              await savePlanToFile(iter, dispatchResult.content, options.topic);
+              return;
+            }
+          }
+          if (graphProvider === 'auto') await tryLlmGraph();
+        } catch (e: any) {
+          logger.debug(`[plan] SDK 调度尝试失败: ${e.message}`);
+          if (graphProvider === 'auto') await tryLlmGraph();
+        }
+      }
 
       const subagentOutput = [
         `[SPECCORE_SESSION_AGENT: schedule-planner]`,
@@ -284,17 +355,7 @@ export async function planCommand(options: PlanOptions): Promise<void> {
   // ── Response 模式: AI 写入计划内容 ──
   if (options.response) {
     if (!options.iteration) { logger.error('--response 需要 --iteration'); return; }
-    const iterDir = await getIterationDir(options.iteration);
-    const plansRoot = join(iterDir, '000-overview', 'plans');
-    await ensureDir(plansRoot);
-    const slug = options.topic || 'plan';
-    const { id: planId } = await nextPlanId(slug, options.topic);
-    const planDir = join(plansRoot, planId);
-    await ensureDir(planDir);
-    const planMdPath = join(planDir, 'PLAN.md');
-    await writeFile(planMdPath, options.response, 'utf-8');
-    logger.success(`✅ 计划已保存: ${planId}/PLAN.md`);
-    printPlanFromMarkdown(options.response, options.iteration);
+    await savePlanToFile(options.iteration, options.response, options.topic);
     return;
   }
   if (options.list) { await showPlanHistory(); return; }

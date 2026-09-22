@@ -208,7 +208,7 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
               ``,
               `[SPECCORE_NEXT_STEP]`,
               `下一步: ${result.nextStepName || result.nextStepId}`,
-              `请在新的对话中执行: ${nextCmd}`,
+              `请在同一会话继续执行: ${nextCmd}`,
               ``,
               `[SPECCORE_CONTEXT_SNAPSHOT]`,
               JSON.stringify(result.contextSnapshot || {}),
@@ -2555,10 +2555,10 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
         summaryPath = await writeContextSummaryFile(existingState);
       }
       promptText += `\n[SPECCORE_CONTINUE${summaryPath ? `: ${summaryPath}` : ''}]\n`;
-      promptText += `本批次已完成。请开始新的对话，然后执行:\n`;
+      promptText += `本批次已完成。请在同一会话继续执行下一批次:\n`;
       promptText += `speccore execute --prompt --task=${nextTask.id} -i ${iteration}\n`;
       if (summaryPath) {
-        promptText += `\n💡 新会话会自动读取摘要文件恢复上下文\n`;
+        promptText += `\n💡 上下文摘要文件 ${summaryPath} 已写入，可随时读取恢复上下文\n`;
       }
     } else if (nextTask) {
       promptText += `\n下一个任务: ${nextTask.id}（继续当前对话）\n`;
@@ -2739,7 +2739,7 @@ async function runApplyMode(iteration: string, options: ExecuteOptions): Promise
           ``,
           `[SPECCORE_NEXT_STEP]`,
           `下一步: ${state.currentStep}`,
-          `请在新的对话中执行: ${nextCmd}`,
+          `请在同一会话继续执行: ${nextCmd}`,
           ``,
           `[SPECCORE_CONTEXT_SNAPSHOT]`,
           JSON.stringify(stepResult.contextSnapshot || {}),

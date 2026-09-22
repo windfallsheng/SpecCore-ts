@@ -223,6 +223,7 @@ program
   .option('--smoke', '单次强制冒烟（覆盖 settings.smoke.points 为 on）')
   .option('--skip-smoke', '单次跳过冒烟（覆盖 settings.smoke.points 为 off）')
   .option('--scope <scope>', '单次指定冒烟范围：full=全量 / module=当前功能模块')
+  .option('--no-dep-check', '跳过阶段前置依赖检查（默认硬阻断上游依赖缺失，仅确知风险时使用）')
   .action((demand: string[], options: any) => {
     if (options.smoke) options.smoke = 'on';
     else if (options.skipSmoke) options.smoke = 'off';
@@ -307,6 +308,34 @@ iterationCmd
   .option('--ignore-specs-update', '跳过 020-specs/ 变更检测')
   .option('-g, --granularity <level>', '拆分粒度: macro(粗) | module(中,默认) | atomic(细)')
   .action(iterationSplitCommand);
+
+// v8.3.223+: 顶层 split/taskify 别名——统一命令命名。
+// 此前 AGENTS.md 速查表写 speccore split、各 AI 命令副本写 speccore iteration split，
+// 均不存在，AI 拿到错误命令。现注册顶层 split/taskify 作为 iteration taskify 的别名。
+function registerSplitAlias(cmdName: string): void {
+  program
+    .command(cmdName)
+    .description('拆分需求为开发任务（iteration taskify 的别名）：预览→逐一确认/一键创建')
+    .option('-f, --file <file>', 'Requirement file path', 'REQUIREMENT.md')
+    .option('-i, --iteration <iteration>', 'Target iteration')
+    .option('--sections <sections>', 'Specific sections to split')
+    .option('--target <target>', 'Merge into existing task')
+    .option('-p, --platforms <platforms>', 'Comma-separated platforms (auto-detected if omitted)')
+    .option('--modules <modules>', 'Comma-separated module names to split (e.g. " 购物车,订单")')
+    .option('--dry-run', 'Preview without creating')
+    .option('--interactive', 'Preview → adjust → confirm before creating')
+    .option('--strict', 'Review each section before creating tasks')
+    .option('--verify', '生成代码后自动检查 TEST/REVIEW/DEPLOY → 最多3轮自动修复')
+    .option('--prompt', '输出结构化 Prompt 到 stdout（Skill 协作模式）')
+    .option('--response <response>', '接收 AI 拆分结果创建 Task（配合 --prompt）')
+    .option('--force', '已有任务时强制覆盖')
+    .option('--prune', '清理与当前 FUNCTION_MAP.md 不匹配的旧任务（移动到 archive ）')
+    .option('--ignore-specs-update', '跳过 020-specs/ 变更检测')
+    .option('-g, --granularity <level>', '拆分粒度: macro(粗) | module(中,默认) | atomic(细)')
+    .action(iterationSplitCommand);
+}
+registerSplitAlias('split');
+registerSplitAlias('taskify');
 
 iterationCmd
   .command('list')
@@ -931,6 +960,7 @@ program
   .option('--auto-units', '自动遍历所有待分析的功能单元（逐个输出独立 Prompt）')
   .option('--consolidate', '汇总所有单元分析为统一报告（配合 --prompt/--apply）')
   .option('--resume-units', '断点续跑未完成的单元分析')
+  .option('--pipeline', 'Pipeline 模式：自动执行 Phase 0/1/2 全部步骤（配合 --prompt，宿主会话内闭环推进）')
   .action(analyzeCommand);
 
 program

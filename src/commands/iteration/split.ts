@@ -25,6 +25,7 @@ import { loadProjectConfig } from '../../core/unified-config';
 import { scanRoutes, generateSpecFromRoutes, writeVerifySpec } from '../../core/ui-verify';
 // v8.3.125+: 公共同义词扩展模块（从 split.ts 提取，供全链路使用）
 import { extractNormalizedKeywords, expandSynonyms } from '../../utils/synonyms';
+import { extractOverviewContext } from '../../core/unit-context-assembler';
 
 /**
  * 将 AI 返回的 scope 简写映射到 CONSTITUTION.md 标准端名
@@ -392,7 +393,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
             ``,
             `[SPECCORE_NEXT_STEP]`,
             `下一步: ${result.nextStepName || result.nextStepId}`,
-            `请在新的对话中执行: ${nextCmd}`,
+            `请在同一会话继续执行: ${nextCmd}`,
             ``,
             `[SPECCORE_CONTEXT_SNAPSHOT]`,
             JSON.stringify(result.contextSnapshot || {}),
@@ -420,7 +421,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
             const finalPrompt = prompt + `\n\n## ⚠️ Pipeline 模式：步骤隔离\n\n` +
               `当前是 Split Pipeline 模式。当你通过 --response 写入任务拆分结果后，` +
               `CLI 会自动输出 [SPECCORE_STEP_DONE] 标记，提示你在新会话中执行下一步。\n\n` +
-              `**看到 [SPECCORE_STEP_DONE] 后，请在新会话中执行提示的命令**，继续下一步。\n`;
+              `**看到 [SPECCORE_STEP_DONE] 后，请在同一会话继续执行下一步命令**。\n`;
 
             process.stdout.write(`[SPECCORE_PROMPT]\n${finalPrompt}`);
             process.exitCode = 10;
@@ -445,7 +446,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     const finalPrompt = prompt + `\n\n## ⚠️ Pipeline 模式：步骤隔离\n\n` +
       `当前是 Split Pipeline 模式。当你通过 --response 写入任务拆分结果后，` +
       `CLI 会自动输出 [SPECCORE_STEP_DONE] 标记，提示你在新会话中执行下一步。\n\n` +
-      `**看到 [SPECCORE_STEP_DONE] 后，请在新会话中执行提示的命令**，继续下一步。\n`;
+      `**看到 [SPECCORE_STEP_DONE] 后，请在同一会话继续执行下一步命令**。\n`;
 
     process.stdout.write(`[SPECCORE_PROMPT]\n${finalPrompt}`);
     process.exitCode = 10;
@@ -612,7 +613,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           ``,
           `[SPECCORE_NEXT_STEP]`,
           `下一步: ${state.currentStep}`,
-          `请在新的对话中执行: ${nextCmd}`,
+          `请在同一会话继续执行: ${nextCmd}`,
           ``,
           `[SPECCORE_CONTEXT_SNAPSHOT]`,
           JSON.stringify(stepResult.contextSnapshot || {}),
@@ -732,6 +733,24 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
           if (task.reason) (section as any)._reason = task.reason;
           if (taskScopePlatforms.length > 0) (section as any)._scopePlatforms = taskScopePlatforms;
           sections.push(section);
+        }
+
+        // v8.3.223+: 过滤骨架质量标准标题泄漏为功能单元名（spec-skeleton 注入的引导标题
+        // 「📋 质量标准（{docName}）」被 AI 当功能单元，产出垃圾任务名如 Task-NNN-requirement-md）
+        const rubricFiltered = sections.filter(s => {
+          const name = (((s as any).functionalUnit as string) || s.name || '').trim();
+          return !/^📋\s*质量标准/.test(name) && !/^质量标准\s*（[^）]*）$/.test(name);
+        });
+        if (rubricFiltered.length < sections.length) {
+          const removed = sections.length - rubricFiltered.length;
+          logger.warn(`   🧹 已过滤 ${removed} 个「质量标准」骨架标题伪功能单元（AI 未删除骨架引导标题）`);
+          logger.warn('     请检查 AI 拆分结果是否覆盖真实功能单元（参考 FUNCTION_MAP.md）');
+          sections.length = 0;
+          sections.push(...rubricFiltered);
+          if (sections.length === 0) {
+            logger.error('   ❌ 过滤后无有效功能单元，拆分中止。请重新拆分并告诉 AI：不要将「质量标准」骨架标题作为功能单元');
+            return;
+          }
         }
 
         // v8.3.4+: 校验所有任务的 scope 是否只含标准端名
@@ -1635,6 +1654,9 @@ const TEMPLATE_PATTERNS = [
   /^建设目标$/,
   /^业务背景$/,
   /^技术背景$/,
+  // v8.3.223+: 骨架质量标准引导标题（spec-skeleton 注入，AI 填充时可能未删除）不应成为任务
+  /^📋\s*质量标准/,
+  /^质量标准\s*（[^）]*）$/,
 ];
 
 function filterTemplateNoise(sections: Section[]): Section[] {
@@ -3653,7 +3675,7 @@ async function buildSplitPrompt(
           p += `> 以下是从 FUNCTION_MAP.md 中为每个功能单元提取的相关上下文。\n`;
           p += `> 拆分时必须基于这些功能单元，每个功能单元对应 1~3 个任务。\n\n`;
           for (const unit of funcUnits) {
-            const unitCtx = await assembleUnitContext(iterationDir, unit.name, unit.platforms);
+            const unitCtx = await extractOverviewContext(iterationDir, unit.name, unit.platforms);
             p += `### 📌 功能单元: ${unit.name}\n`;
             p += `- 涉及端: ${unit.platforms.join(', ')}\n`;
             if (unit.sharedCapability && unit.sharedCapability !== '无') p += `- 共享能力: ${unit.sharedCapability}\n`;
@@ -4879,183 +4901,8 @@ async function tryModuleDrivenSplit(
   return true;
 }
 
-/**
- * v7.4.2+: 按功能单元从各分析文档中精准提取相关上下文
- * CLI 做计算（提取），AI 做内容（填充）
- */
-async function assembleUnitContext(
-  iterationDir: string,
-  unitName: string,
-  platforms: string[],
-): Promise<string> {
-  const specsBase = join(iterationDir, '020-specs');
-  const overviewDir = join(specsBase, GLOBAL_SPECS_DIR);
-  const ctx: string[] = [];
-  // 关键词拆分：将功能单元名拆成多个搜索词（如「预订管理」→「预订」「管理」）
-  const keywords = unitName.split(/(?<=[\u4e00-\u9fff])(?=[\u4e00-\u9fff])/).filter(k => k.length >= 1);
-  // 也加入英文关键词（如 booking、checkin）
-  const slugKeywords = slugify(unitName).split('-').filter(k => k.length >= 3);
-  const allKeywords = [...keywords, ...slugKeywords];
-
-  const matchLine = (line: string) => allKeywords.some(k => line.includes(k));
-
-  // 1. 从 overview/REQUIREMENT.md 提取相关章节
-  const reqPath = join(overviewDir, 'REQUIREMENT.md');
-  if (await pathExists(reqPath)) {
-    try {
-      const content = await readFile(reqPath, 'utf-8');
-      const lines = content.split(/\r?\n/);
-      const relevant: string[] = [];
-      let inRelevantSection = false;
-      for (const line of lines) {
-        if (line.startsWith('## ') || line.startsWith('### ')) {
-          inRelevantSection = matchLine(line);
-        }
-        if (inRelevantSection || (line.startsWith('|') && matchLine(line))) {
-          relevant.push(line);
-        }
-      }
-      if (relevant.length > 0) {
-        ctx.push(`### 📋 需求规格（REQUIREMENT.md 相关片段）\n\`\`\`\n${relevant.slice(0, 60).join('\n')}\n\`\`\``);
-      }
-    } catch {}
-  }
-
-  // 2. 从 platforms/_shared/_MODULES.md 提取相关模块
-  const modulesPath = join(specsBase, 'platforms', '_shared', '_MODULES.md');
-  if (await pathExists(modulesPath)) {
-    try {
-      const content = await readFile(modulesPath, 'utf-8');
-      const lines = content.split(/\r?\n/);
-      const relevant: string[] = [];
-      let inRelevantBlock = false;
-      let blockLines: string[] = [];
-      for (const line of lines) {
-        if (line.startsWith('## ')) {
-          // 保存上一个块
-          if (inRelevantBlock && blockLines.length > 0) {
-            relevant.push(...blockLines);
-          }
-          inRelevantBlock = matchLine(line);
-          blockLines = [line];
-        } else if (inRelevantBlock) {
-          blockLines.push(line);
-        } else if (line.startsWith('|') && matchLine(line)) {
-          relevant.push(line);
-        }
-      }
-      if (inRelevantBlock && blockLines.length > 0) relevant.push(...blockLines);
-      if (relevant.length > 0) {
-        ctx.push(`### 🧩 功能模块（_MODULES.md 相关片段）\n\`\`\`\n${relevant.slice(0, 50).join('\n')}\n\`\`\``);
-      }
-    } catch {}
-  }
-
-  // 3. 从各端 _INDEX.md 提取相关接口/页面
-  for (const platform of platforms) {
-    const indexPath = join(specsBase, 'platforms', platform, '_INDEX.md');
-    if (await pathExists(indexPath)) {
-      try {
-        const content = await readFile(indexPath, 'utf-8');
-        const lines = content.split(/\r?\n/);
-        const relevant: string[] = [];
-        let inRelevantSection = false;
-        for (const line of lines) {
-          if (line.startsWith('## ') || line.startsWith('### ')) {
-            inRelevantSection = matchLine(line);
-          }
-          if (inRelevantSection || (line.startsWith('|') && matchLine(line))) {
-            relevant.push(line);
-          }
-        }
-        if (relevant.length > 0) {
-          ctx.push(`### 🖥️ ${platform} 端相关（_INDEX.md 片段）\n\`\`\`\n${relevant.slice(0, 40).join('\n')}\n\`\`\``);
-        }
-      } catch {}
-    }
-  }
-
-  // 4. 从 overview/FUNCTION_MAP.md 提取本单元行 + 依赖单元
-  const funcMapPath = join(overviewDir, 'FUNCTION_MAP.md');
-  if (await pathExists(funcMapPath)) {
-    try {
-      const content = await readFile(funcMapPath, 'utf-8');
-      const lines = content.split(/\r?\n/);
-      const matchedRows = lines.filter(l => l.startsWith('|') && matchLine(l));
-      if (matchedRows.length > 0) {
-        ctx.push(`### 🗺️ 功能映射（FUNCTION_MAP.md）\n\`\`\`\n${matchedRows.join('\n')}\n\`\`\``);
-      }
-    } catch {}
-  }
-
-  // 5. 从 overview/TECH.md 提取相关架构信息
-  const techPath = join(overviewDir, 'TECH.md');
-  if (await pathExists(techPath)) {
-    try {
-      const content = await readFile(techPath, 'utf-8');
-      const lines = content.split(/\r?\n/);
-      const relevant: string[] = [];
-      let inRelevantSection = false;
-      for (const line of lines) {
-        if (line.startsWith('## ') || line.startsWith('### ')) {
-          inRelevantSection = matchLine(line);
-        }
-        if (inRelevantSection) relevant.push(line);
-      }
-      if (relevant.length > 0) {
-        ctx.push(`### 🏗️ 技术架构相关（TECH.md 片段）\n\`\`\`\n${relevant.slice(0, 40).join('\n')}\n\`\`\``);
-      }
-    } catch {}
-  }
-
-  // v8.2.0+: 知识图谱 + 源码关联增强
-  // v8.3.125+: 自动检查过期并刷新
-  try {
-    const graph = await loadFreshKnowledgeGraph(process.cwd());
-    if (graph) {
-      const unitNameLower = unitName.toLowerCase();
-      const matchedReqIds = new Set<string>();
-      const codeFiles: string[] = [];
-
-      // 找匹配当前功能单元的 requirement 实体
-      for (const entity of Object.values(graph.entities)) {
-        if (entity.type !== 'requirement') continue;
-        const titleLower = entity.title.toLowerCase();
-        if (titleLower.includes(unitNameLower) || unitNameLower.includes(titleLower)) {
-          matchedReqIds.add(entity.id);
-        }
-      }
-
-      // 通过关系链找关联的 source-file 实体
-      for (const rel of graph.relations) {
-        if (!matchedReqIds.has(rel.from) && !matchedReqIds.has(rel.to)) continue;
-        const neighborId = matchedReqIds.has(rel.from) ? rel.to : rel.from;
-        const neighbor = graph.entities[neighborId];
-        if (neighbor && neighbor.type === 'source-file' && neighbor.file) {
-          codeFiles.push(neighbor.file);
-        }
-      }
-
-      if (codeFiles.length > 0) {
-        ctx.push(`### 💻 相关源码文件（知识图谱关联）\n${codeFiles.slice(0, 5).map(f => `- \`${f}\``).join('\n')}`);
-      }
-    }
-  } catch { /* ignore */ }
-
-  // v8.2.0+: findRelevantCode 语义关联补充
-  try {
-    const matches = await findRelevantCode(unitName, 5);
-    if (matches.length > 0) {
-      const files = matches.map(m => `- \`${m.file}\` (相关度: ${m.score.toFixed(2)})`);
-      ctx.push(`### 🔍 语义关联源码文件\n${files.join('\n')}`);
-    }
-  } catch { /* ignore */ }
-
-  if (ctx.length === 0) {
-    return `> 功能单元「${unitName}」未在分析文档中找到直接相关内容，请根据全局文档推断。`;
-  }
-  return ctx.join('\n\n');
-}
+// v8.3.223+: 本地 assembleUnitContext 副本已收敛到 core/unit-context-assembler.ts 的
+// extractOverviewContext（此前两套实现并存、已漂移），本文件统一引用该实现
 
 /**
  * 生成内容填充 Prompt — AI 为预创建的任务填充 REQ.md/TECH.md
@@ -5095,7 +4942,7 @@ async function buildContentFillingPrompt(
       p += `  - ${platform}/*/TECH.md — 子任务技术方案\n`;
     }
     // v7.4.2+: 注入该功能单元的精准上下文
-    const unitCtx = await assembleUnitContext(iterationDir, featureName, modPlatforms);
+    const unitCtx = await extractOverviewContext(iterationDir, featureName, modPlatforms);
     p += `\n#### 📎 功能单元「${featureName}」相关上下文\n\n${unitCtx}\n\n`;
     p += `\n`;
   }

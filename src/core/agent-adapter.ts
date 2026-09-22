@@ -387,15 +387,19 @@ function mapToQoderAgentName(subagent: string): string | undefined {
     'Explore': 'Explore',
     'Plan': 'Plan',
     // v8.3.171+: SpecCore 核心子 Agent → Qoder 内置 Agent 映射
-    'requirement-analyzer': 'general-purpose',
+    // v8.3.223+: 分析/探索类角色映射 Explore（只读探索型），规划类映射 Plan，
+    // 生成/审查类保留 general-purpose——修复「全量退化到 general-purpose」的映射问题。
+    // 注意：registry 中存在 SpecCore 自定义角色定义时，dispatchSubagent 优先使用
+    // 自定义定义（此映射仅作未定义角色时的兜底）。
+    'requirement-analyzer': 'Explore',
     'code-generator': 'general-purpose',
     'task-decomposer': 'Plan',
     'schedule-planner': 'Plan',
-    'impact-analyst': 'general-purpose',
+    'impact-analyst': 'Explore',
     'code-reviewer': 'general-purpose',
     'security-reviewer': 'general-purpose',
     // v8.3.189+: 补齐流水线其余阶段的 subagent 映射
-    'product-analyst': 'general-purpose',
+    'product-analyst': 'Explore',
     'doc-sync-agent': 'general-purpose',
     'compliance-checker': 'general-purpose',
     'test-engineer': 'general-purpose',
@@ -496,7 +500,9 @@ export class QoderSdkAdapter implements AgentAdapter {
       }
 
       // 3. 确定使用的 agent 名称
-      const qoderAgentName = mapToQoderAgentName(ctx.subagent) || ctx.subagent;
+      // v8.3.223+: 有 SpecCore 自定义角色定义时优先用自定义 agent（角色特化真正生效）；
+      // 只有未定义时才回退到 Qoder 内置映射——修复「自定义定义被 general-purpose 覆盖」的退化
+      const qoderAgentName = config ? ctx.subagent : (mapToQoderAgentName(ctx.subagent) || ctx.subagent);
 
       // 4. 构建 options
       const options: any = {
@@ -510,8 +516,9 @@ export class QoderSdkAdapter implements AgentAdapter {
       if (Object.keys(customAgents).length > 0) {
         options.agents = customAgents;
       }
-      // 如果映射到内置 agent，使用 agent 选项
-      if (mapToQoderAgentName(ctx.subagent)) {
+      // v8.3.223+: 仅当未注入自定义定义时才映射到内置 agent——
+      // 旧代码无条件设置 options.agent，导致 SpecCore 自定义角色定义被 general-purpose 覆盖
+      if (Object.keys(customAgents).length === 0 && mapToQoderAgentName(ctx.subagent)) {
         options.agent = qoderAgentName;
       }
 

@@ -606,10 +606,15 @@ export async function hasValidClarifiedDocs(iterDir: string): Promise<boolean> {
   // ── 1. 收集所有澄清文件的最新修改时间 ──
   let latestClarifyTime = 0;
   let hasAnyClarify = false;
+  // v8.3.223+: 澄清覆盖率统计（修复「只澄清 1/5 模块也整体放行」的漏判）
+  let clarifyFileCount = 0;      // 澄清文件总数
+  let newPathClarifyCount = 0;   // 新路径 CLARIFY.md 数
+  let sourceDocCount = 0;        // 源需求文档数
   const checkClarifyMtime = async (fp: string) => {
     try {
       if (await pathExists(fp)) {
         hasAnyClarify = true;
+        clarifyFileCount++;
         const st = await stat(fp);
         if (st.mtimeMs > latestClarifyTime) latestClarifyTime = st.mtimeMs;
       }
@@ -617,6 +622,9 @@ export async function hasValidClarifiedDocs(iterDir: string): Promise<boolean> {
   };
 
   // 新路径：全局澄清
+  if (await pathExists(join(specsDir, 'overview', 'CLARIFY.md'))) {
+    newPathClarifyCount++;
+  }
   await checkClarifyMtime(join(specsDir, 'overview', 'CLARIFY.md'));
 
   // 新路径：模块澄清
@@ -625,6 +633,9 @@ export async function hasValidClarifiedDocs(iterDir: string): Promise<boolean> {
       const entries = await readdir(specsDir, { withFileTypes: true });
       for (const e of entries) {
         if (e.isDirectory() && e.name !== 'overview') {
+          if (await pathExists(join(specsDir, e.name, 'overview', 'CLARIFY.md'))) {
+            newPathClarifyCount++;
+          }
           await checkClarifyMtime(join(specsDir, e.name, 'overview', 'CLARIFY.md'));
         }
       }
@@ -663,6 +674,7 @@ export async function hasValidClarifiedDocs(iterDir: string): Promise<boolean> {
         const entries = await readdir(dir, { withFileTypes: true });
         for (const e of entries) {
           if (e.isFile() && e.name.endsWith('.md')) {
+            sourceDocCount++;
             const st = await stat(join(dir, e.name));
             if (st.mtimeMs > latestSourceTime) latestSourceTime = st.mtimeMs;
           }
@@ -679,6 +691,7 @@ export async function hasValidClarifiedDocs(iterDir: string): Promise<boolean> {
         const entries = await readdir(typeDirPath, { withFileTypes: true });
         for (const e of entries) {
           if (e.isFile() && e.name.endsWith('.md')) {
+            sourceDocCount++;
             const st = await stat(join(typeDirPath, e.name));
             if (st.mtimeMs > latestSourceTime) latestSourceTime = st.mtimeMs;
           }
@@ -691,9 +704,31 @@ export async function hasValidClarifiedDocs(iterDir: string): Promise<boolean> {
   const reqRoot = join(reqDir, 'REQUIREMENT.md');
   if (await pathExists(reqRoot)) {
     try {
+      sourceDocCount++;
       const st = await stat(reqRoot);
       if (st.mtimeMs > latestSourceTime) latestSourceTime = st.mtimeMs;
     } catch { /* 忽略 */ }
+  }
+
+  // v8.3.223+: 覆盖率漏判修复——旧实现「任一澄清文件新于所有源文件」即 true，
+  // 只澄清了 1/5 模块也整体放行。此处按「任一路径覆盖过半」判定：
+  //   - 新路径：CLARIFY.md 数 ≥ 功能单元总数的一半
+  //   - 旧路径：平铺澄清文件数 ≥ 源文档数的一半
+  if (hasAnyClarify) {
+    const oldPathClarifyCount = clarifyFileCount - newPathClarifyCount;
+    let newPathEnough = false;
+    if (newPathClarifyCount > 0) {
+      // 功能单元总数 = features/ 一级子目录数
+      let unitCount = 0;
+      try {
+        const fe = await readdir(featuresDir, { withFileTypes: true });
+        unitCount = fe.filter(e => e.isDirectory() && !e.name.startsWith('.')).length;
+      } catch { /* ignore */ }
+      newPathEnough = unitCount === 0 || newPathClarifyCount >= Math.ceil(unitCount / 2);
+    }
+    const oldPathEnough = oldPathClarifyCount > 0
+      && (sourceDocCount <= 1 || oldPathClarifyCount >= Math.ceil(sourceDocCount / 2));
+    if (!newPathEnough && !oldPathEnough) return false;
   }
 
   return latestClarifyTime >= latestSourceTime;

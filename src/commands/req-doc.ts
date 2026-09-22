@@ -15,7 +15,7 @@
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration, getIterationDir } from '../core/context';
 import { readFile, pathExists, ensureDir, writeFile } from 'fs-extra';
-import { join, basename, relative } from 'path';
+import { join, basename, dirname, relative } from 'path';
 import {
   detectProfessionalLevel,
   buildClarifyPrompt,
@@ -31,6 +31,9 @@ import {
 } from '../core/requirement-clarifier';
 import { stageContent, writeWorkspaceOutput, promoteToIteration } from '../core/workspace-manager';
 import { dispatchSubagent, type AgentContext } from '../core/agent-adapter';
+// v8.3.225+: 调度循环状态机（方式 Y 宿主会话内闭环）
+import { runDispatchLoopRound, type LoopRoundResult, type LoopStep } from '../core/dispatch-loop';
+import { findProjectRoot } from '../utils/task-utils';
 
 export interface ReqDocOptions {
   input?: string;       // 直接输入的需求描述
@@ -49,6 +52,115 @@ export interface ReqDocOptions {
   // v8.3.0+: 临时工作区模式
   local?: boolean;        // --local: 不绑定迭代，输出到临时工作区
   promote?: string;       // --promote <entryId>: 将工作区内容提升到迭代层
+}
+
+/**
+ * v8.3.224+: 解析功能单元的澄清文件路径（新旧双轨兼容）。
+ * 新路径（与切分目录一一对应）: 020-specs/{unit}/overview/CLARIFY.md
+ * 旧路径（平铺命名，兼容 v8.3.191-v8.3.223 的老项目）: 020-specs/requirements/unit-{unit}.md
+ * unit.id 即 features/ 目录名（loadFeatureUnits 保证）。
+ */
+async function resolveUnitClarifyPath(iterDir: string, unitId: string): Promise<{ filePath: string; legacy: boolean } | null> {
+  const newPath = join(iterDir, '020-specs', unitId, 'overview', 'CLARIFY.md');
+  if (await pathExists(newPath)) return { filePath: newPath, legacy: false };
+  const legacyPath = join(iterDir, '020-specs', 'requirements', `unit-${unitId}.md`);
+  if (await pathExists(legacyPath)) return { filePath: legacyPath, legacy: true };
+  return null;
+}
+
+// ═══════════════════════════════════════════════════════════
+// 澄清调度循环（v8.3.225+，方式 Y 宿主会话内闭环）
+// ═══════════════════════════════════════════════════════════
+
+/** 校验单元澄清产物：020-specs/{unit}/overview/CLARIFY.md 存在且内容有效 */
+async function validateUnitClarify(iterDir: string, unit: ClarifyUnit): Promise<string | null> {
+  const resolved = await resolveUnitClarifyPath(iterDir, unit.id);
+  if (!resolved) {
+    return `020-specs/${unit.id}/overview/CLARIFY.md 不存在（澄清结果未落盘）`;
+  }
+  const content = (await readFile(resolved.filePath, 'utf-8')).trim();
+  if (content.length < 100) {
+    return `020-specs/${unit.id}/overview/CLARIFY.md 内容过短（<100 字符），疑似未完成`;
+  }
+  return null;
+}
+
+/** 构建单元澄清循环 prompt：复用现有 prompt + 落盘约束 + 重试反馈 */
+async function buildUnitClarifyLoopPrompt(
+  iterDir: string,
+  iteration: string,
+  sourceName: string,
+  unit: ClarifyUnit,
+  allUnits: ClarifyUnit[],
+  attempt: number,
+  lastError?: string,
+): Promise<string> {
+  const allContent = allUnits.map(u => u.content).join('\n\n');
+  const base = await buildUnitClarifyPrompt(unit, allContent, {
+    iteration, sourceFile: sourceName, iterDir, allUnits,
+  });
+
+  const outputPath = `020-specs/${unit.id}/overview/CLARIFY.md`;
+  let extra = `
+
+## 落盘方式（重要 — 请直接写文件）
+
+请使用 Write 工具将澄清后的需求规格直接写入（不要只在回复中输出内容）：
+
+- \`${outputPath}\`
+
+约束：
+- 内容不少于 100 字符，必须是完整的需求规格（功能描述/业务规则/异常场景）
+- 写入前先创建目录；写完后回复一行：\`DONE ${unit.id}\`
+`;
+
+  if (attempt > 1 && lastError) {
+    extra += `
+## ⚠️ 上次尝试未通过校验（第 ${attempt - 1} 次尝试）
+
+失败原因：${lastError}
+
+请检查文件是否写入了正确路径（\`${outputPath}\`），并确保内容完整。
+`;
+  }
+
+  return base + extra;
+}
+
+/** 澄清调度循环：构建步骤清单并推进一轮 */
+async function runClarifyDispatchLoop(
+  iteration: string,
+  iterDir: string,
+  sourceName: string,
+  units: ClarifyUnit[],
+): Promise<LoopRoundResult> {
+  const steps: LoopStep[] = units.map((u) => ({
+    id: `clarify:${u.id}`,
+    name: u.id,
+    validate: () => validateUnitClarify(iterDir, u),
+    buildPrompt: ({ attempt, lastError }) => buildUnitClarifyLoopPrompt(iterDir, iteration, sourceName, u, units, attempt, lastError),
+  }));
+
+  return runDispatchLoopRound(steps, {
+    projectRoot: findProjectRoot() || process.cwd(),
+    scope: `clarify-units:${iteration}`,
+    maxRetries: 1,
+  });
+}
+
+/** 输出澄清循环完成汇总 */
+function printClarifyLoopSummary(iteration: string, result: LoopRoundResult): void {
+  const s = result.summary!;
+  if (s.failed.length > 0) {
+    logger.warn(`⚠️ 功能单元澄清循环完成: ${s.done.length} 完成 / ${s.failed.length} 失败`);
+    for (const id of s.failed) {
+      logger.warn(`   ❌ ${id}: ${s.failedErrors[id] || '未知原因'}`);
+    }
+    logger.info(`   重跑失败单元: speccore req-doc --to ${iteration} --unit "<单元名>" --prompt`);
+  } else {
+    logger.success(`🎉 所有 ${s.done.length} 个功能单元澄清完成！`);
+  }
+  logger.info(`   下一步: 汇总统一 PRD speccore req-doc --to ${iteration} --consolidate`);
 }
 
 export async function reqDocCommand(options: ReqDocOptions): Promise<void> {
@@ -117,6 +229,10 @@ export async function reqDocCommand(options: ReqDocOptions): Promise<void> {
       logger.info('✅ 文档质量良好');
     }
     return;
+  } else if (options.extractUnits || options.unit || options.consolidate || options.resumeUnits || options.autoUnits) {
+    // v8.3.224+: 功能单元澄清模式不依赖 --from/直接输入（单元内容从 features/ 读取），
+    // 修复「req-doc --unit 被“请提供需求描述”前置检查挡死”的问题，继续走到下方单元模式块
+    rawContent = '';
   } else {
     logger.error('请提供需求描述: clarify "描述" 或 --from <文件>');
     return;
@@ -144,13 +260,12 @@ export async function reqDocCommand(options: ReqDocOptions): Promise<void> {
 
     // 汇总模式（--consolidate）
     if (options.consolidate) {
-      // 从黄金需求目录读取已澄清的单元
-      const goldenDir = join(iterDir, '020-specs', 'requirements');
+      // v8.3.224+: 从单元澄清位置读取（新路径 {unit}/overview/CLARIFY.md 优先，旧路径 requirements/unit-*.md 兼容）
       const clarifiedUnits: ClarifiedUnit[] = [];
       for (const u of units) {
-        const unitFile = join(goldenDir, `unit-${u.id}.md`);
-        if (await pathExists(unitFile)) {
-          const content = await readFile(unitFile, 'utf-8');
+        const resolved = await resolveUnitClarifyPath(iterDir, u.id);
+        if (resolved) {
+          const content = await readFile(resolved.filePath, 'utf-8');
           clarifiedUnits.push({ id: u.id, name: u.name, clarifiedContent: content, timestamp: new Date().toISOString() });
         }
       }
@@ -174,15 +289,13 @@ export async function reqDocCommand(options: ReqDocOptions): Promise<void> {
     }
 
     // 确定目标功能单元集合（--auto-units / --resume-units / --unit 可逗号分隔）
-    const goldenDir = join(iterDir, '020-specs', 'requirements');
     let targetUnitIds: string[] = [];
 
     // --auto-units: 自动遍历所有待澄清单元
     if (options.autoUnits) {
       const pending: ClarifyUnit[] = [];
       for (const u of units) {
-        const unitFile = join(goldenDir, `unit-${u.id}.md`);
-        if (!await pathExists(unitFile)) pending.push(u);
+        if (!(await resolveUnitClarifyPath(iterDir, u.id))) pending.push(u);
       }
       if (pending.length === 0) {
         logger.success('🎉 所有功能单元澄清已完成！');
@@ -197,8 +310,7 @@ export async function reqDocCommand(options: ReqDocOptions): Promise<void> {
     if (options.resumeUnits) {
       const pending: ClarifyUnit[] = [];
       for (const u of units) {
-        const unitFile = join(goldenDir, `unit-${u.id}.md`);
-        if (!await pathExists(unitFile)) pending.push(u);
+        if (!(await resolveUnitClarifyPath(iterDir, u.id))) pending.push(u);
       }
       if (pending.length === 0) {
         logger.success('🎉 所有功能单元澄清已完成！');
@@ -207,6 +319,22 @@ export async function reqDocCommand(options: ReqDocOptions): Promise<void> {
       }
       targetUnitIds = [pending[0].id];
       logger.info(`🔄 断点续跑: ${pending[0].id} ${pending[0].name}（剩余 ${pending.length} 个）`);
+    }
+
+    // v8.3.225+: --auto-units / --resume-units 澄清调度循环（方式 Y 宿主会话内闭环）
+    //   CLI 每轮推进状态机：校验澄清产物 → 已就绪自动标记并推进，未就绪输出该单元 prompt
+    //   → 宿主 AI 落盘 CLARIFY.md → 再次调用本命令 → 自动推进下一个单元，直到全部完成
+    if (options.autoUnits || options.resumeUnits) {
+      const loopResult = await runClarifyDispatchLoop(iteration, iterDir, sourceName, units);
+      if (loopResult.finished) {
+        printClarifyLoopSummary(iteration, loopResult);
+        return;
+      }
+      process.stdout.write(
+        `[SPECCORE_PROMPT]\n${loopResult.prompt}\n\n## 完成后继续\n\n落盘后运行以下命令，CLI 将校验产出并自动推进到下一个单元：\n\n\`\`\`bash\nspeccore req-doc --to ${iteration} --resume-units\n\`\`\`\n`
+      );
+      process.exitCode = 10;
+      return;
     }
 
     // 澄清单个/多个单元（--unit M-01,M-03）
@@ -238,15 +366,17 @@ export async function reqDocCommand(options: ReqDocOptions): Promise<void> {
         return;
       }
       if (options.apply) {
-        await ensureDir(goldenDir);
-        const unitFile = join(goldenDir, `unit-${targetUnit.id}.md`);
+        // v8.3.224+: 写入与切分目录一一对应的位置 020-specs/{unit}/overview/CLARIFY.md
+        // （unit.id 即 features/ 目录名，与两级澄清路径 C 同构，消除 unit-*.md 平铺命名的 ID 分裂）
+        const unitClarifyFile = join(iterDir, '020-specs', targetUnit.id, 'overview', 'CLARIFY.md');
+        await ensureDir(dirname(unitClarifyFile));
         let finalContent = options.apply;
         // 提取 [UNIT:xxx] 标记中的内容
         const markerMatch = finalContent.match(/\[UNIT:[^\]]+\]([\s\S]*?)(?=\[UNIT:|$)/);
         if (markerMatch) finalContent = markerMatch[1].trim();
         if (!finalContent.startsWith('---')) finalContent = buildClarifiedHeader(`${sourceName}#${targetUnit.id}`) + finalContent;
-        await writeFile(unitFile, finalContent);
-        logger.success(`✅ 单元澄清已写入: 020-specs/requirements/unit-${targetUnit.id}.md`);
+        await writeFile(unitClarifyFile, finalContent);
+        logger.success(`✅ 单元澄清已写入: 020-specs/${targetUnit.id}/overview/CLARIFY.md`);
         return;
       }
       logger.info(`📋 功能单元: ${targetUnit.id} ${targetUnit.name}`);

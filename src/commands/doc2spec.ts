@@ -18,7 +18,7 @@
 import { logger, Spinner } from '../utils/logger';
 import { execSync } from 'child_process';
 import { pathExists, ensureDir, readFile, writeFile, readdir, stat, unlink, copy } from 'fs-extra';
-import { join, basename } from 'path';
+import { join, basename, extname } from 'path';
 import { tmpdir } from 'os';
 import { backupWithTimestamp } from '../utils/task-utils';
 import { nextTaskId } from '../core/global-counters';
@@ -268,7 +268,11 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     const targetDir = baseDir;
     const imageDir = join(iterDir, '010-requirements', 'assets', 'extracted'); // PRD 提取的图片
     const platform = options.platform || '';
-    const outputPath = join(targetDir, platform ? `${platform}requirements.md` : 'requirements.md');
+    // v8.3.223+: 输出文件名基于源文件名（platform 时加端前缀），
+    // 修复「多文档导入互相覆盖 requirements.md」的问题
+    const sourceBase = sanitizeUnitName(basename(options.file, extname(options.file))) || 'requirements';
+    const outputFilename = platform ? `${platform}requirements.md` : `${sourceBase}-requirements.md`;
+    const outputPath = join(targetDir, outputFilename);
 
     await ensureDir(targetDir);
     await ensureDir(imageDir);
@@ -353,8 +357,9 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     let content = await readFile(outputPath, 'utf-8');
 
     // 1. 标题层级规范化
-    content = content.replace(/^## /gm, '### ');
-    content = content.replace(/^# /gm, '## ');
+    // v8.3.223+: 单次替换把 #~##### 全部降一级——修复旧两步替换的层级错乱
+    //（旧顺序先 ##→### 再 #→##，原文档的 ### 未降级，会与原 ## 压到同一层级）
+    content = content.replace(/^(#{1,5}) /gm, '#$1 ');
 
     // 2. 空行清理
     content = content.replace(/\n{3,}/g, '\n\n');
@@ -389,7 +394,7 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
       indexContent = '# 本期需求文档索引\n\n> doc2spec 自动生成\n\n| 端 | 文件 | 转换时间 | 来源 |\n| :--- | :--- | :--- | :--- |\n';
     }
     const platformLabel = platform || '通用';
-    const outputFilename = platform ? `${platform}requirements.md` : 'requirements.md';
+    // v8.3.223+: outputFilename 已在转换阶段按源文件名生成，此处直接复用（INDEX 表）
     if (!indexContent.includes(`| ${platformLabel} |`)) {
       const entry = `| ${platformLabel} | ${outputFilename} | ${new Date().toISOString().split('T')[0]} | ${basename(options.file)} |`;
       indexContent += entry + '\n';
@@ -397,7 +402,7 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     await writeFile(indexPath, indexContent);
 
     // ── 自动合并到 REQUIREMENT.md（汇总各端需求，供 iteration split 使用）──
-    await mergeToRequirement(iterDir, targetDir, platformLabel);
+    await mergeToRequirement(iterDir, targetDir, platformLabel, outputFilename);
 
     // ── 检测多端文档，提示智能合成 ──
     const convDir = join(iterDir, '010-requirements', 'converted');
@@ -468,8 +473,8 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
  * 将各端需求文档自动合并到统一的 REQUIREMENT.md
  * 格式: ## {端名}需求（取自 {端名}requirements.md 的 ## 接口定义 表格）
  */
-async function mergeToRequirement(iterDir: string, targetDir: string, platform: string): Promise<void> {
-  const reqFilename = (platform === '通用' || !platform) ? 'requirements.md' : `${platform}requirements.md`;
+async function mergeToRequirement(iterDir: string, targetDir: string, platform: string, outputFilename?: string): Promise<void> {
+  const reqFilename = outputFilename || ((platform === '通用' || !platform) ? 'requirements.md' : `${platform}requirements.md`);
   const reqPath = join(targetDir, reqFilename);
   const globalReqPath = join(targetDir, 'REQUIREMENT.md');
 
@@ -496,13 +501,17 @@ async function mergeToRequirement(iterDir: string, targetDir: string, platform: 
     globalContent = `# 本期需求文档\n\n> 由 doc2spec 自动合并各端需求\n\n`;
   }
 
-  const sectionLabel = platform.endsWith('端') ? platform + 'requirements' : platform + '端需求';
-  const platformSection = `\n## ${sectionLabel}\n\n${descContent.slice(0, 500)}${apiSection}\n`;
-  
+  // v8.3.223+: sectionLabel 与去重正则统一使用中文「需求」——旧代码 sectionLabel 用英文
+  // requirements 而正则匹配「需求」，platform 以「端」结尾时去重永远失效、同端内容重复追加
+  const sectionLabel = platform.endsWith('端') ? `${platform}需求` : `${platform}端需求`;
+  // v8.3.223+: 去掉 slice(0, 500) 硬截断——多端需求合并不再丢内容
+  const platformSection = `\n## ${sectionLabel}\n\n${descContent}${apiSection}\n`;
+
   // 去重：如果已有同端内容，替换
-  const sectionRegex = new RegExp(`\\n## ${platform.replace(/端$/, '')}端?需求[\\s\\S]*?(?=\\n## |$)`, 'g');
+  const escaped = platform.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const sectionRegex = new RegExp(`(^|\\n)## ${escaped}端?需求[\\s\\S]*?(?=\\n## |$)`, 'g');
   if (globalContent.match(sectionRegex)) {
-    globalContent = globalContent.replace(sectionRegex, platformSection);
+    globalContent = globalContent.replace(sectionRegex, (_m, p1: string) => p1 + platformSection.replace(/^\n/, ''));
   } else {
     globalContent += platformSection;
   }
@@ -865,12 +874,29 @@ export async function splitDocumentToUnits(
   const featuresDir = join(iterDir, '010-requirements', 'features');
   await ensureDir(featuresDir);
 
+  // v8.3.223+: 幂等——先收集已存在的功能单元目录，重复运行不再重写覆盖
+  const existingUnitDirs = new Set<string>();
+  try {
+    for (const e of await readdir(featuresDir, { withFileTypes: true })) {
+      if (e.isDirectory() && !e.name.startsWith('.')) existingUnitDirs.add(e.name);
+    }
+  } catch {}
+  
   let written = 0;
+  let skipped = 0;
+  const seenUnitDirs = new Set<string>(existingUnitDirs);
   for (const unit of units) {
-    // v8.3.198+: 剥离章节号前缀（"四、" → ""）+ 加需求文档名前缀，防止跨文档重名
+    // v8.3.198+: 剥离章节号前缀（"四、" → ""）+ 加需求文档名前缀，防止跨文档重 名
     unit.title = stripSectionPrefix(unit.title) || unit.title;
     const docSlug = sanitizeUnitName(basename(sourceFileName, '.md')) || 'doc';
     const unitDirName = sanitizeUnitName(`${docSlug}-${unit.title}`);
+    // v8.3.223+: 同名/已存在单元跳过（幂等 + 去重）
+    if (seenUnitDirs.has(unitDirName)) {
+      logger.info(`   ⏭️  ${unit.title} 已存在，跳过: features/${unitDirName}/`);
+      skipped++;
+      continue;
+    }
+    seenUnitDirs.add(unitDirName);
     const unitDir = join(featuresDir, unitDirName);
     await ensureDir(unitDir);
     await ensureDir(join(unitDir, '.meta'));
@@ -899,13 +925,28 @@ export async function splitDocumentToUnits(
     logger.info(`   ✅ ${unit.title} → features/${unitDirName}/`);
   }
 
-  // 更新 features/INDEX.md
+  // 更新 features/INDEX.md（v8.3.223+: 增量合并——保留已有条目、追加新条目，
+  // 修复重复运行整体重写/丢行的问题）
   const featuresIndexPath = join(featuresDir, 'INDEX.md');
   let featuresIndex = '# 功能单元索引\n\n> 由 doc2spec --split 自动生成\n\n';
   featuresIndex += '| 功能单元 | 来源章节 | 状态 | 涉及端 |\n';
   featuresIndex += '| :--- | :--- | :--- | :--- |\n';
+  const existingRows = new Set<string>();
+  if (await pathExists(featuresIndexPath)) {
+    try {
+      const prev = await readFile(featuresIndexPath, 'utf-8');
+      for (const line of prev.split('\n')) {
+        if (line.startsWith('|') && !line.startsWith('| :') && !line.startsWith('| 功能单元')) {
+          existingRows.add(line);
+          featuresIndex += line + '\n';
+        }
+      }
+    } catch {}
+  }
   for (const unit of units) {
-    featuresIndex += `| ${unit.title} | ${unit.sourceSection} | draft | ${platformLabel} |\n`;
+    const row = `| ${unit.title} | ${unit.sourceSection} | draft | ${platformLabel} |`;
+    if (existingRows.has(row)) continue;
+    featuresIndex += row + '\n';
   }
   await writeFile(featuresIndexPath, featuresIndex);
 
@@ -930,32 +971,74 @@ export async function splitDocumentToUnits(
     }
   }
 
-  logger.success(`✅ 已拆分 ${written} 个功能单元到 features/`);
+  logger.success(`✅ 已拆分 ${written} 个功能单元到 features/${skipped > 0 ? `（跳过 ${skipped} 个已存在）` : ''}`);
   logger.info(`   📂 ${featuresDir}/`);
 }
 
 /**
- * 本地兜底：识别被过滤掉的非功能章节（产品定位/名词/验收标准等），作为全局上下文
- * （与 scanUnits 的过滤规则保持一致）
+ * v8.3.223+: 「非功能章节」判定（getGlobalSections 与 scanUnits 共享，保证两处过滤规则一致）。
+ * 修复宽泛 contains 误杀：「背景/目标/概述/名词」等弱语义词必须位于标题首/尾
+ * 才算非功能章节——「绩效目标」「订单背景」「会议目标管理」这类真实功能单元不再被误杀。
+ */
+function stripSectionNo(t: string): string {
+  return t
+    .replace(/^[一二三四五六七八九十百]+[、.．\s]+/, '')
+    .replace(/^\d+(\.\d+)*[、.．\s]+/, '')
+    .replace(/^[A-Za-z]-\d+[、.．\s]+/, '')
+    .replace(/^第[一二三四五六七八九十百\d]+[章节篇部分]+[、.．\s]*/, '');
+}
+
+const NON_FUNCTION_PREFIX = /^(附录|术语表|参考文献|目录|引言|总结|致谢|版权声明|修订记录|changelog|glossary|references|table of contents|introduction|summary|acknowledgments)/i;
+// 强语义：任意位置包含即视为非功能章节
+const NON_FUNCTION_CONTAINS = ['验收标准', '上线计划', '关联文档', '功能需求', '非功能需求', '用户画像', '功能架构', '风险与缓解', '产品视角', 'overview'];
+// 弱语义：标题以这些词开头即视为非功能章节（「概述…」「背景介绍」「目标与原则」「名词解释」）
+const NON_FUNCTION_STARTS = ['概述', '背景', '目标', '名词'];
+// 弱语义组合：{修饰词}{弱义词} 的短标题（「项目背景」「总体目标」「产品概述」），
+// 支持「项目背景与目标」「产品目标与范围」等复合形式
+// 功能单元「绩效目标」「订单背景」等不含修饰词前缀，不会被误杀
+const NON_FUNCTION_TAIL = /^(项目|需求|产品|总体|整体|建设|设计|开发|实施|运营|文档|全文)(背景|目标|概述|范围|定位)((与|和|及|、)?(背景|目标|概述|范围|定位))?$/;
+
+function isNonFunctionalSection(rawTitle: string): boolean {
+  const title = stripSectionNo(rawTitle).trim();
+  if (!title) return true;
+  if (NON_FUNCTION_PREFIX.test(title)) return true;
+  if (NON_FUNCTION_CONTAINS.some(w => title.includes(w))) return true;
+  if (NON_FUNCTION_STARTS.some(w => title.startsWith(w))) return true;
+  if (NON_FUNCTION_TAIL.test(title)) return true;
+  return false;
+}
+
+/**
+ * 本地兜底：识别被过滤掉的非功能章节（产品定位/名词/验收标准等），作为全局上下 文
+ * （与 scanUnits 的过滤规则保持一致——共用 isNonFunctionalSection）
+ * v8.3.224+: 改为 H2~H6 全层级扫描 + 子树传播，只收集「被排除子树的根」，
+ * 修复旧逻辑只认 ## 层级导致深层级非功能章节（如 ### 一、项目背景与目标）漏收
  */
 function getGlobalSections(content: string, units: ScannedUnit[]): string[] {
   const lines = content.split('\n');
   const unitTitles = new Set(units.map((u) => u.title));
-  const stripSectionNo = (t: string) =>
-    t.replace(/^[一二三四五六七八九十百]+[、.．\s]+/, '')
-     .replace(/^\d+[、.．\s]+/, '')
-     .replace(/^第[一二三四五六七八九十百\d]+[章节篇部分]+[、.．\s]*/, '');
-  const skipPrefix = /^(附录|术语表|参考文献|目录|引言|总结|致谢|版权声明|修订记录|changelog|glossary|references|table of contents|introduction|summary|acknowledgments)/i;
-  const skipContains = ['概述', '名词', '背景', '目标', '验收标准', '上线计划', '关联文档', '功能需求', '非功能需求', '用户画像', '功能架构', '风险与缓解', '产品视角', 'overview'];
   const global: string[] = [];
-  for (const line of lines) {
-    const m = line.match(/^##\s+(.+)$/);
-    if (!m) continue;
-    const rawTitle = m[1].trim();
-    const title = stripSectionNo(rawTitle).trim();
-    if (!title || unitTitles.has(rawTitle) || unitTitles.has(title)) continue;
-    if (skipPrefix.test(title) || skipContains.some((w) => title.includes(w))) {
-      global.push(rawTitle);
+  const headings: { level: number; title: string; line: number }[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^(#{2,6})\s+(.+)$/);
+    if (m) headings.push({ level: m[1].length, title: m[2].trim(), line: i });
+  }
+  if (headings.length === 0) return global;
+  // 文档标题不作为全局章节（避免收集整个文档范围）
+  const minLevel = Math.min(...headings.map(h => h.level));
+  const shallowest = headings.filter(h => h.level === minLevel);
+  const docTitleLine = shallowest.length === 1 ? shallowest[0].line : -1;
+  const stack: { level: number; excluded: boolean }[] = [];
+  for (const h of headings) {
+    while (stack.length > 0 && h.level <= stack[stack.length - 1].level) stack.pop();
+    const parentExcluded = stack.length > 0 && stack[stack.length - 1].excluded;
+    // （负向后行断言排除「非功能需求」——它包含「功能需求」子串但应整体排除子树）
+    const isContainer = /(?<!非)功能需求|功能清单|功能列表/.test(h.title);
+    const excluded = parentExcluded || (isNonFunctionalSection(h.title) && !isContainer);
+    stack.push({ level: h.level, excluded });
+    if (excluded && !parentExcluded && h.line !== docTitleLine) {
+      const title = stripSectionNo(h.title).trim();
+      if (title && !unitTitles.has(h.title) && !unitTitles.has(title)) global.push(h.title);
     }
   }
   return global;
@@ -1055,12 +1138,8 @@ function findSectionRange(content: string, sectionTitle: string): { start: numbe
   const lines = content.split('\n');
   const target = sectionTitle.trim();
   if (!target) return null;
-  for (let i = 0; i < lines.length; i++) {
-    const m = lines[i].match(/^#{1,4}\s+(.+)$/);
-    if (!m) continue;
-    const heading = m[1].trim();
-    // 模糊匹配：章节标题互相包含即命中
-    if (!heading.includes(target) && !target.includes(heading)) continue;
+
+  const rangeOf = (i: number): { start: number; end: number } => {
     const level = (lines[i].match(/^#+/) || ['#'])[0].length;
     let end = lines.length - 1;
     for (let j = i + 1; j < lines.length; j++) {
@@ -1071,73 +1150,91 @@ function findSectionRange(content: string, sectionTitle: string): { start: numbe
       }
     }
     return { start: i, end };
+  };
+
+  // 归一化：去章节号 + 去空白（忽略全角/半角空格差异）
+  const norm = (t: string) => stripSectionNo(t).replace(/\s+/g, '').toLowerCase();
+  const targetNorm = norm(target);
+
+  // v8.3.223+: 第一轮精确匹配（忽略章节号）——修复「用户管理」命中「用户管理权限」
+  // 导致边界错切的互相包含歧义
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^#{1,4}\s+(.+)$/);
+    if (!m) continue;
+    if (norm(m[1]) === targetNorm) return rangeOf(i);
+  }
+
+  // 第二轮包含匹配兜底（仅当目标足够具体：归一化后 ≥4 字符，
+  // 且标题与目标互为前缀关系，避免短词大面积误命中）
+  if (targetNorm.length >= 4) {
+    for (let i = 0; i < lines.length; i++) {
+      const m = lines[i].match(/^#{1,4}\s+(.+)$/);
+      if (!m) continue;
+      const headingNorm = norm(m[1]);
+      if (headingNorm.startsWith(targetNorm) || targetNorm.startsWith(headingNorm)) {
+        return rangeOf(i);
+      }
+    }
   }
   return null;
 }
 
 /**
- * 扫描 Markdown 内容，识别功能单元边界
- * 策略：以 ## 级别标题作为功能单元主边界，### 作为子章节
+ * 扫描 Markdown 内容，识别功能单元边界（v8.3.224+: 层级自适应）
+ * 旧策略硬编码「## 为单元边界、### 为子章节」，在功能单元位于深层级（如 ####/#####）
+ * 的文档中只能切出文档标题一个假单元。新策略：
+ *   1. 收集 H2~H6 标题构建层级栈，非功能章节（背景/目标/名词/验收标准等）排除其整棵子树
+ *   2. 「功能需求/功能清单/功能列表」类容器章节仅排除自身，不排除后代（其后代才是功能单元）
+ *   3. 文档唯一最浅层标题视为文档标题，不作为单元
+ *   4. 单元 = 过滤后剩余标题中的叶子（其后没有更深层级的候选标题）
  */
 function scanUnits(content: string): ScannedUnit[] {
   const lines = content.split('\n');
-  const units: ScannedUnit[] = [];
-  let currentUnit: ScannedUnit | null = null;
-
+  const headings: { level: number; title: string; line: number }[] = [];
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const h2Match = line.match(/^##\s+(.+)$/);
-    const h3Match = line.match(/^###\s+(.+)$/);
+    const m = lines[i].match(/^(#{2,6})\s+(.+)$/);
+    if (m) headings.push({ level: m[1].length, title: m[2].trim(), line: i });
+  }
+  if (headings.length === 0) return [];
 
-    if (h2Match) {
-      // 结束上一个单元
-      if (currentUnit) {
-        currentUnit.endLine = i - 1;
-        units.push(currentUnit);
-      }
-      // 开始新单元
-      currentUnit = {
-        title: h2Match[1].trim(),
-        level: 2,
-        startLine: i,
-        endLine: lines.length - 1,
-        sourceSection: h2Match[1].trim(),
-      };
-    } else if (h3Match && !currentUnit) {
-      // 如果文档以 ### 开头（没有 ##），以 ### 作为单元边界
-      currentUnit = {
-        title: h3Match[1].trim(),
-        level: 3,
-        startLine: i,
-        endLine: lines.length - 1,
-        sourceSection: h3Match[1].trim(),
-      };
+  // 文档标题：唯一的最浅层标题（如「## XX产品需求文档」），不作为功能单元
+  const minLevel = Math.min(...headings.map(h => h.level));
+  const shallowest = headings.filter(h => h.level === minLevel);
+  const docTitleLine = shallowest.length === 1 ? shallowest[0].line : -1;
+
+  // 候选功能单元标题（非功能章节过滤 + 子树传播排除）
+  const candidates: { level: number; title: string; line: number }[] = [];
+  const stack: { level: number; subtreeExcluded: boolean }[] = [];
+  for (const h of headings) {
+    while (stack.length > 0 && h.level <= stack[stack.length - 1].level) stack.pop();
+    const parentExcluded = stack.length > 0 && stack[stack.length - 1].subtreeExcluded;
+    // 「功能需求」类容器章节：自身非单元，但后代是功能单元，不传播排除
+    // （负向后行断言排除「非功能需求」——它包含「功能需求」子串但应整体排除子树）
+    const isContainer = /(?<!非)功能需求|功能清单|功能列表/.test(h.title);
+    const subtreeExcluded = parentExcluded || (isNonFunctionalSection(h.title) && !isContainer);
+    stack.push({ level: h.level, subtreeExcluded });
+    if (subtreeExcluded || isContainer || isNonFunctionalSection(h.title) || h.line === docTitleLine) continue;
+    candidates.push(h);
+  }
+
+  // 单元 = 候选中的叶子；内容范围到下一个同层级或更浅的标题（含被过滤标题）为止
+  const units: ScannedUnit[] = [];
+  for (let i = 0; i < candidates.length; i++) {
+    const c = candidates[i];
+    let isLeaf = true;
+    for (let j = i + 1; j < candidates.length; j++) {
+      if (candidates[j].level <= c.level) break;
+      isLeaf = false;
+      break;
     }
+    if (!isLeaf) continue;
+    let endLine = lines.length - 1;
+    for (const h of headings) {
+      if (h.line > c.line && h.level <= c.level) { endLine = h.line - 1; break; }
+    }
+    units.push({ title: c.title, level: c.level, startLine: c.line, endLine, sourceSection: c.title });
   }
-
-  // 结束最后一个单元
-  if (currentUnit) {
-    currentUnit.endLine = lines.length - 1;
-    units.push(currentUnit);
-  }
-
-  // 过滤掉非功能单元的章节（如"附录"、"术语表"等）
-  // v8.3.194+: 先剥离章节号前缀（"一、"、"1."、"第一章"等），再匹配非功能章节词，
-  // 避免"一、文档概述"这类「章节号 + 概述」被误当功能单元
-  const stripSectionNo = (t: string) =>
-    t.replace(/^[一二三四五六七八九十百]+[、.．\s]+/, '')
-     .replace(/^\d+[、.．\s]+/, '')
-     .replace(/^第[一二三四五六七八九十百\d]+[章节篇部分]+[、.．\s]*/, '');
-  const skipPrefix = /^(附录|术语表|参考文献|目录|引言|总结|致谢|版权声明|修订记录|changelog|glossary|references|table of contents|introduction|summary|acknowledgments)/i;
-  // 包含匹配：标题里含这些词即视为非功能章节（如"文档概述"、"项目背景"、"验收标准汇总"）
-  const skipContains = ['概述', '名词', '背景', '目标', '验收标准', '上线计划', '关联文档', '功能需求', '非功能需求', '用户画像', '功能架构', '风险与缓解', '产品视角', 'overview'];
-  return units.filter(u => {
-    const title = stripSectionNo(u.title).trim();
-    if (!title) return false;
-    if (skipPrefix.test(title)) return false;
-    if (skipContains.some(w => title.includes(w))) return false;
-    return true;
-  });
+  return units;
 }
 
 /**
@@ -1170,7 +1267,8 @@ function stripSectionPrefix(t: string): string {
   return t
     .replace(/^第[一二三四五六七八九十百\d]+[章节篇部分]+[、.．\s]*/, '')
     .replace(/^[一二三四五六七八九十百]+[、.．\s]+/, '')
-    .replace(/^\d+[、.．\s]+/, '')
+    .replace(/^\d+(\.\d+)*[、.．\s]+/, '')
+    .replace(/^[A-Za-z]-\d+[、.．\s]+/, '')
     .replace(/^[（(][一二三四五六七八九十百\d]+[）)][、.．\s]*/, '')
     .trim();
 }

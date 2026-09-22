@@ -1218,6 +1218,7 @@ async function processChangeLegacy(options: ChangeOptions): Promise<void> {
       ].join('\n');
       logger.info('[SPECCORE_PROMPT]');
       process.stdout.write(finalOutput);
+      process.exitCode = 10;
       return;
     }
   }
