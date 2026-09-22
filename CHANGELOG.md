@@ -1,3 +1,19 @@
+## v8.3.225 (2026-09-22) — 端覆盖矩阵兜底 backend 污染端推断修复
+
+### 问题根因
+- run 流水线切分时 platformLabel 传空字符串，doc2spec 的 _matrix.md 兜底 `'  - backend'` 生效——会议项目 62 个功能单元全部标成非标准端名 backend（标准端名应为 booking-service/room-service/h5-mobile/admin-web）
+- platform-inference Layer 2 读 matrix 时不做标准端名校验，直接以 0.95 置信度采信，端推断被全面误导
+
+### 修复
+- doc2spec：未指定端时写 `platforms: []`，交由 analyze 端推断（platform-inference）填充
+- platform-inference：Layer 2 matrix 端名归一化到 CONSTITUTION 标准端名，全部非标准时不再误采信，降级下层推断
+
+### 验证
+- 会议项目旧数据实测：matrix 全标 backend 时正确降级为关键词推断（0.75 置信度 + 人工确认），不再被错误值短路
+- 全量测试基线一致（216 passed / 14 failed），无回归
+
+---
+
 ## v8.3.224 (2026-09-22) — 意图缓存版本感知修复（旧缓存固化错误识别）
 
 ### 问题根因
