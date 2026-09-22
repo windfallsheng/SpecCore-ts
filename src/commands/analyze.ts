@@ -34,7 +34,7 @@ import { resolvePlatform } from '../core/platform-registry';
 import { warnIfIndexStale } from '../core/index-guard';
 import { loadConfigWithMeta } from '../core/unified-config';
 import { GLOBAL_SPECS_DIR, GLOBAL_SPEC_FILES, parsePlatformTypes, parsePlatformList, parseFeatureList } from '../core/spec-paths';
-import { computeAnalyzeManifest, computeFeatureBasedAnalyzeManifest, generateSkeleton, detectSkeletonProgress, buildSkeletonFileList, validateContentQuality } from '../core/spec-skeleton';
+import { computeAnalyzeManifest, computeFeatureBasedAnalyzeManifest, generateSkeleton, detectSkeletonProgress, buildSkeletonFileList, validateContentQuality, SKELETON_MARKER, PHASE1_INDEX_DOC_NAMES, PHASE1_DOC_NAMES, FEATURE_OVERVIEW_DOC_NAMES } from '../core/spec-skeleton';
 import { unifiedSearch, formatUnifiedContext } from '../core/unified-retrieval';
 import { assembleUnitContext } from '../core/unit-context-assembler';
 // v8.3.225+: 调度循环状态机（方式 Y 宿主会话内闭环）
@@ -266,7 +266,14 @@ async function collectUnitClarifyDocs(specDir: string): Promise<string[]> {
     for (const e of entries) {
       if (!e.isDirectory() || e.name === 'overview' || e.name === 'requirements') continue;
       const clarify = join(specDir, e.name, 'overview', 'CLARIFY.md');
-      if (await pathExists(clarify)) docs.push(clarify);
+      if (!(await pathExists(clarify))) continue;
+      // v8.3.236+: 骨架 CLARIFY.md（内容未生成）不算已澄清产物——
+      // 修复「空骨架被附加进 requirements 导致专业度检测误判、澄清被跳过」
+      try {
+        const c = await readFile(clarify, 'utf-8');
+        if (/<!--\s*SPEC-SKELETON\s*-->/.test(c)) continue;
+      } catch { /* 读取失败按存在处理 */ }
+      docs.push(clarify);
     }
   } catch {}
   return docs;
@@ -314,10 +321,13 @@ async function applyDocContent(content: string, iter: string): Promise<number> {
   }
 
   let applied = 0;
+  // v8.3.237+: 与 --apply 主通道一致——有功能模块的项目才拦截（内容类归 {feature}/overview/，
+  // 全局 overview/REQUIREMENT.md 由 split 聚合），无功能模块的老项目放行
+  const featureCount = (await parseFeatureList(iterDir)).length;
   for (const [filename, docContent] of Object.entries(docs)) {
     if (typeof docContent !== 'string' || !docContent.trim()) continue;
     // 迭代级需求文档不在此写（原始需求在 010-requirements）
-    if (filename === 'REQUIREMENT.md' || filename === 'overview/REQUIREMENT.md') continue;
+    if (featureCount > 0 && (filename === 'REQUIREMENT.md' || filename === 'overview/REQUIREMENT.md')) continue;
     const fp = join(specDir, filename);
     await ensureDir(dirname(fp));
     await writeFile(fp, docContent);
@@ -1073,18 +1083,18 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       if (await pathExists(reqRoot)) requirements.push(reqRoot);
 
       // 收集 features/*/SOURCE.md（v8.3.226+ 语义名，兼容旧 README.md）
+      // v8.3.236+: converted/ 非空时跳过切片收集——切片源自 converted 切分，
+      // 内容重复会污染澄清清单（会议项目实测 78 份「源文档」大部分是切片元数据）
       const featuresDir = join(reqDir, 'features');
-      if (await pathExists(featuresDir)) {
+      let hasConvertedDocs = false;
+      try { hasConvertedDocs = (await readdir(convDir)).some((f: string) => f.endsWith('.md')); } catch {}
+      if (await pathExists(featuresDir) && !hasConvertedDocs) {
         try {
           const featureEntries = await readdir(featuresDir, { withFileTypes: true });
           for (const fe of featureEntries) {
             if (fe.isDirectory() && !fe.name.startsWith('.')) {
               const readmePath = await resolveUnitSourcePath(join(featuresDir, fe.name));
               if (await pathExists(readmePath)) requirements.push(readmePath);
-              // v8.3.228+: 端覆盖矩阵（type/platforms/dependencies/apis）紧随切片注入，
-              // 保证功能单元的外链元数据（类型/依赖/API 契约）一定被 AI 读到
-              const matrixPath = join(featuresDir, fe.name, '_matrix.md');
-              if (await pathExists(matrixPath)) requirements.push(matrixPath);
             }
           }
         } catch {}
@@ -1117,7 +1127,13 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       // 修复「用两级澄清产出的项目，黄金目录为空 → 回退原始需求 → 澄清白做」的问题
       const clarifyDocs = await collectUnitClarifyDocs(specDir);
       const overviewClarify = join(specDir, 'overview', 'CLARIFY.md');
-      if (await pathExists(overviewClarify)) clarifyDocs.unshift(overviewClarify);
+      // v8.3.236+: 全局 CLARIFY.md 同样过滤骨架（与 collectUnitClarifyDocs 一致）
+      if (await pathExists(overviewClarify)) {
+        try {
+          const oc = await readFile(overviewClarify, 'utf-8');
+          if (!/<!--\s*SPEC-SKELETON\s*-->/.test(oc)) clarifyDocs.unshift(overviewClarify);
+        } catch { clarifyDocs.unshift(overviewClarify); }
+      }
       if (clarifyDocs.length > 0) {
         requirements.push(...clarifyDocs);
         logger.info(`   📝 黄金需求目录为空，已附加新路径澄清文档 ${clarifyDocs.length} 个（020-specs/*/overview/CLARIFY.md）`);
@@ -1294,7 +1310,12 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       steps = result.steps;
       pipelineKey = iter!;
       // v8.3.160+: clarify 拆分为 product → interaction → security 三个子步骤
-      initStep = skipClarifyStep ? 'phase1-prompt' : 'clarify-product';
+      // v8.3.236+: confirm-check 与 clarify 解耦——auto 模式下已有澄清产物时跳过 clarify
+      // 子步骤但仍执行 confirm-check（确认检查独立于澄清，读 CLARIFY_REPORT 验证产物完整性）；
+      // off 模式才完全跳过（用户明确关闭澄清）
+      initStep = skipClarifyStep
+        ? (clarifyMode === 'auto' ? 'confirm-check' : 'phase1-prompt')
+        : 'clarify-product';
     }
 
     // 检查是否有活跃的 Pipeline（恢复模式）
@@ -1567,6 +1588,200 @@ ${singlePrompt}`);
       if (!taskDir) { logger.error(`未找到任务: ${taskId}`); return; }
     }
 
+    // v8.3.237+: Pipeline 推进逻辑抽取为共享函数——JSON / [DOC:] 多文档通道写入后
+    // 提前 return，此前会跳过尾部的 Pipeline 推进（bug: 只有单文件模式能推进），
+    // 现将「RAG 刷新 + Pipeline 推进」抽为共享函数，三个写入通道成功后都调用。
+    // 返回 true 表示存在活跃 Pipeline 并已处理（调用点应直接 return，不再输出后续提示）。
+    const advancePipelineAfterApply = async (): Promise<boolean> => {
+      if (isTaskLevel) return false;
+
+      // v8.3.238+: 步骤完成检查——计算当前步骤尚未填充的骨架清单（相对 020-specs/ 的路径）。
+      // 单文档模式一次 --apply 通常只写 1~2 个文档，但一个步骤（如 phase1-prompt）有多个
+      // 骨架待填充；此前写 1 个就推进，剩余骨架会错位到下一步骤。
+      // 返回空数组 = 步骤已完成，可推进；非空 = 仍有骨架未填充，不推进。
+      const getPendingStepSkeletons = async (stepId: string): Promise<string[]> => {
+        if (isGlobalScope) return []; // 全局层 Pipeline 无骨架清单，保持原行为
+        const iterDirForCheck = await getIterationDir(options.iteration!);
+        if (!iterDirForCheck) return [];
+        const specDirForCheck = join(iterDirForCheck, '020-specs');
+        let checkDocs: string[] = [];
+        let baseRel = '';
+        if (stepId === 'phase1-prompt') {
+          // 有功能模块的项目只生成全局索引；老项目生成全部全局文档。
+          // CLARIFY.md 由 clarify 阶段产出，不在本步骤检查范围（skip clarify 时不会卡住）。
+          const featureCount = (await parseFeatureList(iterDirForCheck)).length;
+          checkDocs = (featureCount > 0 ? PHASE1_INDEX_DOC_NAMES : PHASE1_DOC_NAMES)
+            .filter((n) => n !== 'CLARIFY.md');
+          baseRel = GLOBAL_SPECS_DIR;
+        } else {
+          const m = stepId.match(/^feature-(.+)-prompt$/);
+          if (!m) return []; // 其他步骤（clarify / confirm / contract / platform）不做骨架完成检查
+          baseRel = join(m[1], 'overview');
+          checkDocs = FEATURE_OVERVIEW_DOC_NAMES.filter((n) => n !== 'CLARIFY.md');
+        }
+        const pending: string[] = [];
+        for (const doc of checkDocs) {
+          const fp = join(specDirForCheck, baseRel, doc);
+          if (!(await pathExists(fp))) { pending.push(join(baseRel, doc)); continue; }
+          try {
+            const content = await readFile(fp, 'utf-8');
+            if (!content.trim() || content.includes(SKELETON_MARKER)) pending.push(join(baseRel, doc));
+          } catch { pending.push(join(baseRel, doc)); }
+        }
+        return pending;
+      };
+
+      try {
+        // 自动刷新知识图谱和 RAG 索引（v8.3.67+）
+        if (options.iteration) {
+          try {
+            const { refreshKnowledgeGraph } = await import('../core/knowledge-graph');
+            await refreshKnowledgeGraph(_projectRoot, options.iteration);
+            logger.info('🧠 知识图谱已刷新');
+          } catch {}
+          try {
+            const { indexDirectoryDocuments } = await import('../core/rag-engine');
+            const iterDir = `Iteration-${options.iteration}`;
+            const specsDir = join(iterDir, '020-specs');
+            const reqDir = join(iterDir, '010-requirements');
+            const dirs: string[] = [];
+            if (await pathExists(specsDir)) dirs.push(specsDir);
+            if (await pathExists(reqDir)) dirs.push(reqDir);
+            if (dirs.length > 0) {
+              await indexDirectoryDocuments(_projectRoot, dirs, `${options.iteration}_iteration_all`, `rag-index-${options.iteration}.json`);
+              logger.info('🔍 迭代 RAG 索引已刷新');
+            }
+          } catch {}
+        }
+
+        // ── v6.68.0+: Pipeline 自动推进 ──
+        const pipelineKey = isGlobalScope ? 'GLOBAL' : options.iteration;
+        if (!pipelineKey) return false;
+
+        const hasPipeline = await PipelineEngine.hasActivePipeline(_projectRoot, pipelineKey);
+        if (hasPipeline) {
+          const { createAnalyzePipeline, createGlobalAnalyzePipeline } = await import('../core/pipeline-engine');
+
+          // v6.69.0+: 推进时保持与初始化时相同的过滤和排序条件
+          let engine: PipelineEngine;
+          if (isGlobalScope) {
+            engine = (await createGlobalAnalyzePipeline()).engine;
+          } else {
+            const { detectAffectedPlatforms, detectPlatformPriorityOrder } = await import('../core/change-detection');
+            const affectedPlatforms = await detectAffectedPlatforms(_projectRoot);
+            const platformOrder = await detectPlatformPriorityOrder(options.iteration!);
+            // v8.3.225+: 与初始化时保持一致的功能模块分批与澄清开关（否则步骤链不一致会跳错步骤）
+            let features: string[] | undefined;
+            try {
+              const iterDirForFeatures = await getIterationDir(options.iteration!);
+              if (iterDirForFeatures) {
+                const { parseFeatureList } = await import('../core/spec-paths');
+                const featureList = await parseFeatureList(iterDirForFeatures);
+                if (featureList.length > 2) features = featureList;
+              }
+            } catch { /* 忽略功能模块检测失败 */ }
+            const skipClarifyStep = clarifyMode === 'off' || (clarifyMode === 'auto' && !needsClarify);
+            engine = (await createAnalyzePipeline(options.iteration!, _projectRoot, {
+              affectedPlatforms: affectedPlatforms.length > 0 ? affectedPlatforms : undefined,
+              platformOrder: platformOrder.length > 0 ? platformOrder : undefined,
+              skipClarify: skipClarifyStep,
+              features,
+            })).engine;
+          }
+          // v8.3.238+: 步骤完成检查（推进前）——本步骤的骨架未全部填充时不推进，
+          // 输出剩余骨架清单 + 当前步骤 Prompt（同一会话内继续填充，无需重跑命令）。
+          const stateBefore = await engine.getState();
+          if (stateBefore?.currentStep) {
+            const pendingSkeletons = await getPendingStepSkeletons(stateBefore.currentStep);
+            if (pendingSkeletons.length > 0) {
+              logger.warn(`⏸️ 步骤 "${stateBefore.currentStep}" 尚未完成: ${pendingSkeletons.length} 个骨架未填充，Pipeline 不推进`);
+              logger.info(`   剩余待填充: ${pendingSkeletons.slice(0, 8).join(', ')}${pendingSkeletons.length > 8 ? ' …' : ''}`);
+              try {
+                const stepPrompt = await buildPipelineStepPrompt({
+                  currentStep: stateBefore.currentStep,
+                  isGlobalScope,
+                  iter: options.iteration || 'GLOBAL',
+                  stepIds: stateBefore.steps || [stateBefore.currentStep],
+                  options,
+                });
+                const scopeFlag = isGlobalScope ? '--scope global' : `-I ${options.iteration}`;
+                const nextCmd = `speccore analyze --prompt --pipeline ${scopeFlag}`;
+                const output = [
+                  `[SPECCORE_NEXT_STEP]`,
+                  `当前步骤 "${stateBefore.currentStep}" 尚未完成，请继续填充剩余骨架后再次 --apply。`,
+                  `如需重新获取本步骤 Prompt: ${nextCmd}`,
+                  ``,
+                  `--- 当前步骤 Prompt ---`,
+                  stepPrompt.prompt,
+                ].join('\n');
+                process.stdout.write(output);
+              } catch (e: any) {
+                logger.debug(`步骤 Prompt 生成失败（非关键）: ${e.message}`);
+              }
+              process.exitCode = 10;
+              return true;
+            }
+          }
+
+          // v8.3.160+: 默认步骤隔离模式
+          const stepResult = await advanceToWorkStep(engine);
+
+          const state = await engine.getState();
+          if (state?.currentStep === 'done') {
+            logger.success('🎉 Pipeline 完成!');
+            // v6.69.1: 记录分析快照，支持下次增量分析
+            const snapshotScope = isGlobalScope ? 'global' : (options.iteration ? `Iteration-${options.iteration}` : 'unknown');
+            await recordAnalysisSnapshot(snapshotScope);
+            await engine.reset();
+          } else if (state?.currentStep) {
+            logger.info('');
+            logger.info(`🔄 Pipeline 推进: ${state.currentStep}`);
+            logger.info('');
+
+            // v8.3.225+: 生成下一步 prompt（复用统一函数，与 --prompt --pipeline 路径保持一致）
+            const stepPrompt = await buildPipelineStepPrompt({
+              currentStep: state.currentStep,
+              isGlobalScope,
+              iter: options.iteration || 'GLOBAL',
+              stepIds: state.steps || [state.currentStep],
+              options,
+            });
+
+            // v8.3.225+: 方式 Y 输出标记 — 宿主会话内继续执行即可，不再强制新对话
+            const scopeFlag = isGlobalScope ? '--scope global' : `-I ${options.iteration}`;
+            const nextCmd = `speccore analyze --prompt --pipeline ${scopeFlag}`;
+            const output = [
+              `[SPECCORE_STEP_DONE]`,
+              `步骤 "${state.currentStep}" 已完成。`,
+              ``,
+              `[SPECCORE_NEXT_STEP]`,
+              `下一步: ${state.currentStep}`,
+              `请在同一会话继续执行: ${nextCmd}`,
+              ``,
+              `[SPECCORE_CONTEXT_SNAPSHOT]`,
+              JSON.stringify(stepResult.contextSnapshot || {}),
+              ``,
+              // v8.3.160+: 子 Agent 激活标记
+              ...(stepResult.subagent ? [
+                `[SPECCORE_SESSION_AGENT: ${stepResult.subagent}]`,
+                `[SPECCORE_CONTEXT_BUDGET: ${stepResult.contextBudget || 12000}]`,
+                `[SPECCORE_CONTEXT_TYPE: ${stepResult.contextType || 'full'}]`,
+                ``,
+              ] : []),
+              `--- 下一步 Prompt ---`,
+              stepPrompt.prompt,
+            ].join('\n');
+            process.stdout.write(output);
+            process.exitCode = 10;
+          }
+        }
+        return hasPipeline;
+      } catch (e: any) {
+        logger.debug(`Pipeline 推进失败（非关键）: ${e.message}`);
+        return false;
+      }
+    };
+
     if (options.skipClarify && !process.stdout.isTTY) {
       logger.warn('⚠️ AI 上下文检测到 --skip-clarify，此行为不推荐');
       logger.info('   需求澄清是质量门禁，应由人类用户确认后使用');
@@ -1658,12 +1873,19 @@ ${singlePrompt}`);
         }
 
         if (!isGlobalScope) {
-          for (const filename of Object.keys(docs)) {
-            if (filename === 'overview/REQUIREMENT.md' || filename === 'REQUIREMENT.md') {
-              logger.error(`❌ 写入路径拦截: analyze --apply 不允许直接写入迭代级的 ${filename}`);
-              logger.info('   原始需求文档应在 010-requirements/ 中维护');
-              logger.info('   analyze 的输出应为分析规格文档（TECH.md / TEST.md / UI_SPEC.md 等）');
-              return;
+          // v8.3.237+: 拦截条件化为「有功能模块的项目」——内容类归 {feature}/overview/，
+          // 全局 overview/REQUIREMENT.md 由 split 阶段从功能模块聚合生成，AI 不应直接写。
+          // 无功能模块的老项目放行（内容类唯一容器就是 overview/）。
+          const featureCount = iterDir ? (await parseFeatureList(iterDir)).length : 0;
+          if (featureCount > 0) {
+            for (const filename of Object.keys(docs)) {
+              if (filename === 'overview/REQUIREMENT.md' || filename === 'REQUIREMENT.md') {
+                logger.error(`❌ 写入路径拦截: analyze --apply 不允许直接写入迭代级的 ${filename}`);
+                logger.info('   原始需求文档应在 010-requirements/ 中维护');
+                logger.info('   本迭代有功能模块，模块需求写 {功能模块}/overview/REQUIREMENT.md，');
+                logger.info('   全局 overview/REQUIREMENT.md 由 split 阶段自动聚合生成');
+                return;
+              }
             }
           }
         }
@@ -2100,6 +2322,7 @@ ${singlePrompt}`);
           }
         }
         printBackupSummary();
+        await advancePipelineAfterApply();
         return;
       } catch {
         // fallback to single-file mode
@@ -2125,18 +2348,24 @@ ${singlePrompt}`);
     }
 
     if (!isGlobalScope) {
-      for (const docName of docBlocks.keys()) {
-        if (docName === 'overview/REQUIREMENT.md' || docName === 'REQUIREMENT.md') {
-          logger.error(`❌ 写入路径拦截: analyze --apply 不允许直接写入迭代级的 ${docName}`);
-          logger.info('   原始需求文档应在 010-requirements/ 中维护');
-          logger.info('   analyze 的输出应为分析规格文档（TECH.md / TEST.md / UI_SPEC.md 等）');
-          logger.info(`   如需更新需求文档，请使用: speccore doc2spec 或手动编辑 010-requirements/`);
-          return;
+      // v8.3.237+: 与 JSON 通道一致——有功能模块的项目拦截，无功能模块的老项目放行
+      const featureCount = iterDir ? (await parseFeatureList(iterDir)).length : 0;
+      if (featureCount > 0) {
+        for (const docName of docBlocks.keys()) {
+          if (docName === 'overview/REQUIREMENT.md' || docName === 'REQUIREMENT.md') {
+            logger.error(`❌ 写入路径拦截: analyze --apply 不允许直接写入迭代级的 ${docName}`);
+            logger.info('   原始需求文档应在 010-requirements/ 中维护');
+            logger.info('   本迭代有功能模块，模块需求写 {功能模块}/overview/REQUIREMENT.md，');
+            logger.info('   全局 overview/REQUIREMENT.md 由 split 阶段自动聚合生成');
+            return;
+          }
         }
       }
     }
 
-    if (docBlocks.size > 1) {
+    // v8.3.238+: size===1 也走多文档写入——单个 [DOC:xxx] 文档此前被错误落入
+    // 单文件模式，把含 [DOC:] 标记的原文整体写入 ANALYSIS.md（目标文档反而没写）。
+    if (docBlocks.size > 0) {
       // 将 [DOC:xxx] 格式转换为 JSON 格式复用现有写入逻辑
       const docs: Record<string, string> = {};
       for (const [docName, content] of docBlocks) {
@@ -2337,14 +2566,20 @@ ${singlePrompt}`);
         }
 
         printBackupSummary();
+        await advancePipelineAfterApply();
         return;
       } catch (e) {
         logger.warn('⚠️ [DOC:xxx] 解析后写入失败，回退到单文件模式');
       }
     }
 
+    // v8.3.236+: [CLARIFY:] 标记块已单独写入（1591 行起），apply 原文（含标记）不得再当
+    // ANALYSIS.md 写入——修复「澄清 payload 污染 020-specs/overview/ANALYSIS.md（带时间戳备份）」bug。
+    // 注意：不能提前 return，否则会跳过后续的 Pipeline 推进逻辑（--apply 靠它推进 confirm-check）
+    const hasClarifyMarkers = /\[CLARIFY:[^\]]+\]/.test(options.apply);
+
     // 单文件模式
-    if (isTaskLevel && taskDir) {
+    if (!hasClarifyMarkers && isTaskLevel && taskDir) {
       // 任务级：写 Task/00-specs/（v6.44.0+）
       const targetSubDir = '00-specs';
       const taskSpecDir = join(taskDir, targetSubDir);
@@ -2360,7 +2595,7 @@ ${singlePrompt}`);
         const platformLabel = options.platform ? `/${options.platform}` : '';
         logger.success(`✅ ANALYSIS.md 已写入 ${options.task}${platformLabel}/`);
       } else { logger.info(`   ⏭️  用户取消覆盖`); }
-    } else if (isGlobalScope) {
+    } else if (!hasClarifyMarkers && isGlobalScope) {
       // 全局级：写 .speccore/GLOBAL/ANALYSIS.md
       const globalDir = join(_projectRoot, '.speccore', 'GLOBAL');
       await ensureDir(globalDir);
@@ -2374,7 +2609,7 @@ ${singlePrompt}`);
         await writeFile(globalAnalysisPath, options.apply);
         logger.success(`✅ ANALYSIS.md 已写入 .speccore/GLOBAL/`);
       } else { logger.info(`   ⏭️  用户取消覆盖`); }
-    } else {
+    } else if (!hasClarifyMarkers) {
       // 迭代级：写 020-specs/overview/（迭代综合文档，v6.78.0+）
       const specDir = join(iterDir!, '020-specs');
       const globalDir = join(specDir, GLOBAL_SPECS_DIR);
@@ -2411,120 +2646,10 @@ ${singlePrompt}`);
 
     printBackupSummary();
 
-    // 自动刷新知识图谱和 RAG 索引（v8.3.67+）
-    if (options.iteration) {
-      try {
-        const { refreshKnowledgeGraph } = await import('../core/knowledge-graph');
-        await refreshKnowledgeGraph(_projectRoot, options.iteration);
-        logger.info('🧠 知识图谱已刷新');
-      } catch {}
-      try {
-        const { indexDirectoryDocuments } = await import('../core/rag-engine');
-        const iterDir = `Iteration-${options.iteration}`;
-        const specsDir = join(iterDir, '020-specs');
-        const reqDir = join(iterDir, '010-requirements');
-        const dirs: string[] = [];
-        if (await pathExists(specsDir)) dirs.push(specsDir);
-        if (await pathExists(reqDir)) dirs.push(reqDir);
-        if (dirs.length > 0) {
-          await indexDirectoryDocuments(_projectRoot, dirs, `${options.iteration}_iteration_all`, `rag-index-${options.iteration}.json`);
-          logger.info('🔍 迭代 RAG 索引已刷新');
-        }
-      } catch {}
-    }
-
-    // ── v6.68.0+: Pipeline 自动推进 ──
-    // v6.69.0+: 支持全局 Pipeline 推进（增强策略二）
-    if (!isTaskLevel) {
-      const isGlobalScope = options.scope === 'global';
-      const pipelineKey = isGlobalScope ? 'GLOBAL' : options.iteration;
-      if (!pipelineKey) return;
-
-      const hasPipeline = await PipelineEngine.hasActivePipeline(_projectRoot, pipelineKey);
-      if (hasPipeline) {
-        const { createAnalyzePipeline, createGlobalAnalyzePipeline } = await import('../core/pipeline-engine');
-
-        // v6.69.0+: 推进时保持与初始化时相同的过滤和排序条件
-        let engine: PipelineEngine;
-        if (isGlobalScope) {
-          engine = (await createGlobalAnalyzePipeline()).engine;
-        } else {
-          const { detectAffectedPlatforms, detectPlatformPriorityOrder } = await import('../core/change-detection');
-          const affectedPlatforms = await detectAffectedPlatforms(_projectRoot);
-          const platformOrder = await detectPlatformPriorityOrder(options.iteration!);
-          // v8.3.225+: 与初始化时保持一致的功能模块分批与澄清开关（否则步骤链不一致会跳错步骤）
-          let features: string[] | undefined;
-          try {
-            const iterDirForFeatures = await getIterationDir(options.iteration!);
-            if (iterDirForFeatures) {
-              const { parseFeatureList } = await import('../core/spec-paths');
-              const featureList = await parseFeatureList(iterDirForFeatures);
-              if (featureList.length > 2) features = featureList;
-            }
-          } catch { /* 忽略功能模块检测失败 */ }
-          const skipClarifyStep = clarifyMode === 'off' || (clarifyMode === 'auto' && !needsClarify);
-          engine = (await createAnalyzePipeline(options.iteration!, _projectRoot, {
-            affectedPlatforms: affectedPlatforms.length > 0 ? affectedPlatforms : undefined,
-            platformOrder: platformOrder.length > 0 ? platformOrder : undefined,
-            skipClarify: skipClarifyStep,
-            features,
-          })).engine;
-        }
-        // v8.3.160+: 默认步骤隔离模式
-        const stepResult = await advanceToWorkStep(engine);
-
-        const state = await engine.getState();
-        if (state?.currentStep === 'done') {
-          logger.success('🎉 Pipeline 完成!');
-          // v6.69.1: 记录分析快照，支持下次增量分析
-          const snapshotScope = isGlobalScope ? 'global' : (options.iteration ? `Iteration-${options.iteration}` : 'unknown');
-          await recordAnalysisSnapshot(snapshotScope);
-          await engine.reset();
-        } else if (state?.currentStep) {
-          logger.info('');
-          logger.info(`🔄 Pipeline 推进: ${state.currentStep}`);
-          logger.info('');
-
-          // v8.3.225+: 生成下一步 prompt（复用统一函数，与 --prompt --pipeline 路径保持一致）
-          const stepPrompt = await buildPipelineStepPrompt({
-            currentStep: state.currentStep,
-            isGlobalScope,
-            iter: options.iteration || 'GLOBAL',
-            stepIds: state.steps || [state.currentStep],
-            options,
-          });
-
-          // v8.3.225+: 方式 Y 输出标记 — 宿主会话内继续执行即可，不再强制新对话
-          const scopeFlag = isGlobalScope ? '--scope global' : `-I ${options.iteration}`;
-          const nextCmd = `speccore analyze --prompt --pipeline ${scopeFlag}`;
-          const output = [
-            `[SPECCORE_STEP_DONE]`,
-            `步骤 "${state.currentStep}" 已完成。`,
-            ``,
-            `[SPECCORE_NEXT_STEP]`,
-            `下一步: ${state.currentStep}`,
-            `请在同一会话继续执行: ${nextCmd}`,
-            ``,
-            `[SPECCORE_CONTEXT_SNAPSHOT]`,
-            JSON.stringify(stepResult.contextSnapshot || {}),
-            ``,
-            // v8.3.160+: 子 Agent 激活标记
-            ...(stepResult.subagent ? [
-              `[SPECCORE_SESSION_AGENT: ${stepResult.subagent}]`,
-              `[SPECCORE_CONTEXT_BUDGET: ${stepResult.contextBudget || 12000}]`,
-              `[SPECCORE_CONTEXT_TYPE: ${stepResult.contextType || 'full'}]`,
-              ``,
-            ] : []),
-            `--- 下一步 Prompt ---`,
-            stepPrompt.prompt,
-          ].join('\n');
-          process.stdout.write(output);
-          process.exitCode = 10;
-        }
-
-        return;
-      }
-    }
+    // v8.3.237+: RAG 刷新 + Pipeline 推进已抽取为 advancePipelineAfterApply（见 apply 分支开头），
+    // 三个写入通道（JSON / [DOC:] / 单文件模式）统一调用，避免多文档通道提前 return 跳过推进。
+    const pipelineHandled = await advancePipelineAfterApply();
+    if (pipelineHandled) return;
 
     // ── v6.64.0+: Phase 1 完成后自动触发 Phase 2（仅多端项目，非 Pipeline 模式）──
     if (!options.phase && !isTaskLevel && options.iteration) {
@@ -4957,7 +5082,10 @@ sequenceDiagram
   if (ctx.phase === '1') {
     if (ctx.feature) {
       // v8.3.167+: 功能模块级分析，只生成该模块的 overview 文档（不含全局索引）
-      taskDocs = taskDocs.filter(([n]) => FEATURE_OVERVIEW_DOCS_LIST.includes(n));
+      // v8.3.238+: 文档集与骨架预建清单（FEATURE_OVERVIEW_DOC_NAMES）对齐——旧名单含
+      // RISK/DEPS/REVIEW/MONITOR/DEV_GUIDE（任务级文档残留，骨架未预建），会导致 prompt
+      // 要求生成骨架外的文档，且与步骤完成检查名单错位；CLARIFY.md 由澄清阶段产出，不在本步骤生成。
+      taskDocs = taskDocs.filter(([n]) => FEATURE_OVERVIEW_DOC_NAMES.includes(n) && n !== 'CLARIFY.md');
     } else {
       taskDocs = taskDocs.filter(([n]) => GLOBAL_DOCS.includes(n));
     }
@@ -4975,7 +5103,13 @@ sequenceDiagram
       if (iterDir) {
         const specDir = join(iterDir, '020-specs');
         const platforms = await parsePlatformList();
-        const manifest = computeAnalyzeManifest(platforms, undefined, ctx.iteration);
+        // v8.3.237+: 有功能模块的项目用功能模块 manifest（内容类骨架在 {feature}/overview/，
+        // 全局 overview/ 只含索引类），避免旧 manifest 把 overview/REQUIREMENT.md 当
+        // 「下一个待填充」但 --apply 又按路由表拦截 → 单文档模式死锁。
+        const features = await parseFeatureList(iterDir);
+        const manifest = features.length > 0
+          ? computeFeatureBasedAnalyzeManifest(features, platforms, undefined, ctx.iteration)
+          : computeAnalyzeManifest(platforms, undefined, ctx.iteration);
         perDocStatus = await detectSkeletonProgress(specDir, manifest);
         if (perDocStatus.nextUnfilled) {
           const nextDocName = perDocStatus.nextUnfilled.docName;
@@ -5015,7 +5149,13 @@ sequenceDiagram
         } else if (perDocStatus.filledCount === perDocStatus.totalCount) {
           logger.info(`🎉 所有 ${perDocStatus.totalCount} 个骨架文件均已填充`);
           // v8.1.1+: DOC_MATRIX 交叉校验 — 检查骨架清单之外是否有遗漏的文档
-          const expectedGlobalDocs = GLOBAL_DOCS.filter(d => includeDocs.includes(d));
+          // v8.3.237+: 有功能模块的项目全局 overview/ 只应有索引类文档，
+          // 内容类（REQUIREMENT.md 等）归 {feature}/overview/，不得在此补建骨架
+          const hasFeatures = (await parseFeatureList(iterDir)).length > 0;
+          const expectedGlobalDocs = (hasFeatures
+            ? PHASE1_INDEX_DOC_NAMES
+            : GLOBAL_DOCS)
+            .filter(d => includeDocs.includes(d));
           const missingDocs: string[] = [];
           for (const doc of expectedGlobalDocs) {
             const docPath = join(specDir, GLOBAL_SPECS_DIR, doc);
@@ -5689,6 +5829,7 @@ status: "clarified"
     prompt += `| PLATFORMS.md | 020-specs/overview/ | 索引类 | 端列表（全局） |\n`;
     prompt += `| CLARIFY.md | 020-specs/overview/ | 索引类 | 全局澄清（跨功能共性问题） |\n`;
     prompt += `| API_CONTRACT.yaml | 020-specs/overview/ | 索引类 | 跨功能接口契约（全局） |\n`;
+    prompt += `| ARCHITECTURE.md | 020-specs/overview/ | 索引类 | 迭代全局架构（服务拓扑/数据流） |\n`;
     prompt += `| REQUIREMENT.md | 020-specs/{feature}/overview/ | 内容类 | 该功能模块的需求规格 |\n`;
     prompt += `| ANALYSIS.md | 020-specs/{feature}/overview/ | 内容类 | 该功能模块的需求分析 |\n`;
     prompt += `| TECH.md | 020-specs/{feature}/overview/ | 内容类 | 该功能模块的技术方案（Phase 1） |\n`;
@@ -5704,7 +5845,8 @@ status: "clarified"
     prompt += `> **重要规则**：\n`;
     prompt += `> - 索引类文档（FUNCTION_MAP.md / INTERACTION_MAP.md / PLATFORMS.md / CLARIFY.md / API_CONTRACT.yaml）**必须**写入 020-specs/overview/，严禁写入 {feature}/overview/\n`;
     prompt += `> - 内容类文档（REQUIREMENT.md / ANALYSIS.md / TECH.md / RISK.md / DEPS.md / REVIEW.md / MONITOR.md / DEV_GUIDE.md）**必须**写入 020-specs/{feature}/overview/，严禁写入 020-specs/overview/\n`;
-    prompt += `> - ANALYSIS.md 属于内容类，严禁放在 020-specs/overview/ 下\n\n`;
+    prompt += `> - ANALYSIS.md 属于内容类，严禁放在 020-specs/overview/ 下\n`;
+    prompt += `> - 全局 overview/REQUIREMENT.md 由 split 阶段从各功能模块 {feature}/overview/REQUIREMENT.md 自动聚合生成，AI 不要直接写入（会被拦截）\n\n`;
 
     const dirStepNum = platformTypes.size > 0 ? 10 : 9;
     prompt += `${dirStepNum}. **目录结构（严格遵循，禁止自创目录）**：\n`;
@@ -6196,7 +6338,18 @@ async function generateQualityReport(iteration: string): Promise<{ docPaths: str
 async function buildClarifyPhasePrompt(iteration: string): Promise<string> {
   // 生成质量报告（复用抽离的审查逻辑）+ 拿到文档清单与质量报告
   const iterDir = await getIterationDir(iteration);
-  const { docPaths, reports: qualityReports } = await generateQualityReport(iteration);
+  const raw = await generateQualityReport(iteration);
+  // v8.3.236+: 过滤非需求文档——功能单元元数据（features/*/）、全局上下文（overview/GLOBAL_CONTEXT-*）
+  // 与报告/索引类（VALIDATION/QUALITY_REPORT/INDEX）不进澄清清单，
+  // 修复「78 份源文档大半是切片元数据、AI 为 CHANGELOG/_matrix 写澄清垃圾」
+  const qualityReports = raw.reports.filter((r) => {
+    const rel = relative(iterDir, r.filePath);
+    if (rel.startsWith('features/') || rel.includes('/features/')) return false;
+    if (rel.includes('GLOBAL_CONTEXT-')) return false;
+    if (/(VALIDATION|QUALITY_REPORT|INDEX)\.md$/.test(r.filePath)) return false;
+    return true;
+  });
+  const docPaths = qualityReports.map((r) => r.filePath);
 
   let allDocContent = '';
   for (const p of docPaths) {

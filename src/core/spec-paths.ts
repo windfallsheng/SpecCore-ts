@@ -21,6 +21,9 @@ export const GLOBAL_SPEC_FILES = [
   'DEPS.md', 'REVIEW.md', 'MONITOR.md',
   'DEV_GUIDE.md', 'CHANGELOG.md', 'SCHEMA.md',
   'FUNCTION_MAP.md', 'INTERACTION_MAP.md', 'API_CONTRACT.yaml',
+  // v8.3.238+: 补充全局索引类文档（与 PHASE1_INDEX_DOC_NAMES 对齐）——
+  // 此前缺失导致 [DOC:PLATFORMS.md] 等 apply 时被路由到 020-specs/ 根目录而非 overview/
+  'PLATFORMS.md', 'ARCHITECTURE.md', 'CLARIFY.md',
 ];
 
 /**

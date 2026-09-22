@@ -19,6 +19,9 @@ import { resolveUnitSourcePath } from './feature-source';
  */
 export function detectProfessionalLevel(content: string): 'high' | 'medium' | 'low' {
   if (!content || content.trim().length < 50) return 'low';
+  // v8.3.236+: 骨架文件（内容尚未生成）不可能是「专业文档」，必须澄清——
+  // 修复「空骨架 CLARIFY.md 被当已澄清产物，专业度检测通过导致澄清被跳过」的循环
+  if (/<!--\s*SPEC-SKELETON\s*-->/.test(content)) return 'low';
 
   const checks = {
     // 1. 口语化检测：大量短句、无标点或口语词

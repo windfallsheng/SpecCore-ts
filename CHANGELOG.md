@@ -1,3 +1,31 @@
+## v8.3.238 (2026-09-22) — analyze Pipeline 闭环调度四连修（会议项目实测驱动）
+
+> 会议项目（meeting-system，21 功能单元 × 4 端）全链路实测中暴露的 4 个流水线断点，
+> 修复后 Pipeline 从「卡死/错位」恢复为「每步骨架填充完毕才推进、三通道统一推进」。
+
+### 澄清层
+- **骨架文件不视为已澄清**：`detectProfessionalLevel` 对含 `SPEC-SKELETON` 标记的内容直接判 low——修复「空骨架 CLARIFY.md 被当已澄清产物，专业度检测通过导致澄清被跳过」的循环
+
+### 骨架预建（spec-skeleton）
+- **死锁修复**：有功能模块的项目，全局 overview/ 只预建索引类骨架（`PHASE1_INDEX_DOC_NAMES`：FUNCTION_MAP/INTERACTION_MAP/PLATFORMS/CLARIFY/API_CONTRACT/ARCHITECTURE），内容类归 {feature}/overview/——此前预建 overview/REQUIREMENT.md 等骨架提示 AI 填充，但 --apply 按 v8.3.182+ 路由表拦截该路径，永远无法推进
+- 新增 PLATFORMS.md 骨架（端列表文档，此前缺失导致 AI 无处填写端列表）
+
+### apply 三通道统一推进（analyze）
+- **Pipeline 推进抽取共享函数** `advancePipelineAfterApply`：JSON 多文档通道与 [DOC:] 多文档通道此前写入后提前 return，跳过尾部 Pipeline 推进（只有单文件模式能推进）；三通道统一调用（含 RAG 刷新 + 推进 + 状态输出）
+- **单 [DOC:xxx] 文档写入修复**：`docBlocks.size > 0`（原 >1）——单个 [DOC:] 文档此前被错误落入单文件模式，把含标记的原文整体写入 ANALYSIS.md，目标文档反而没写
+- **索引文档路由修复**：GLOBAL_SPEC_FILES 补 PLATFORMS.md/ARCHITECTURE.md/CLARIFY.md——此前 [DOC:PLATFORMS.md] 等被路由到 020-specs/ 根目录而非 overview/
+- **apply 拦截条件化**：有功能模块的项目才拦截 overview/REQUIREMENT.md 直写（提示改由 split 聚合生成），无功能模块的老项目放行
+
+### 步骤完成检查（Pipeline 引擎）
+- **骨架完成检查** `getPendingStepSkeletons`：推进前检查当前步骤骨架是否全部填充（phase1-prompt 检查全局索引类、feature-{name}-prompt 检查该模块 overview 文档），未完成不推进并输出剩余骨架清单 + 当前步骤 Prompt——修复「单文档模式一次 apply 写 1 个就推进，剩余骨架错位到下一步骤」
+- 功能模块 prompt 文档集与骨架预建清单对齐（去掉任务级文档残留 RISK/DEPS/REVIEW/MONITOR/DEV_GUIDE）
+
+### 验证（会议项目实测）
+- phase1-prompt 步骤：FUNCTION_MAP → INTERACTION_MAP → PLATFORMS → ARCHITECTURE 逐个 apply，检查逐次递减（4→3→2→1），全部填充后正确推进到 feature-REQUIREMENT-01-prompt
+- 编译/构建通过，全量测试 216 passed / 14 failed（与基线一致，无回归；14 个失败均为旧目录结构过时用例）
+
+---
+
 ## v8.3.235 (2026-09-22) — 切分碎片修复 + 澄清报告断链接线（会议项目实测驱动）
 
 ### 切分层（unitize/doc2spec --split）

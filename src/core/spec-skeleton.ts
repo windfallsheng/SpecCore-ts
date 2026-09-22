@@ -284,6 +284,20 @@ apis: []
 `,
   },
   {
+    name: 'PLATFORMS.md',
+    buildPlaceholder: (iter) => `${SKELETON_MARKER}
+# 端列表
+
+> 迭代: ${iter} | 生成: 待填充
+
+## 写作要求
+列出本迭代涉及的端（来源：.speccore/CONSTITUTION.md「端列表」章节）：
+| 工程标识 | 描述 | 工程类型 |
+| :--- | :--- | :--- |
+| | | |
+`,
+  },
+  {
     name: 'CLARIFY.md',
     buildPlaceholder: (iter) => `${SKELETON_MARKER}
 # 全局澄清记录
@@ -300,6 +314,32 @@ apis: []
 `,
   },
 ];
+
+/** v8.3.238+: Phase 1 全局 overview/ 全部文档名单（无功能模块老项目的步骤完成检查用） */
+export const PHASE1_DOC_NAMES: string[] = PHASE1_DOCS.map((doc) => doc.name);
+
+// ================================================================
+// v8.3.237+: Phase 1 索引类文档（有功能模块的项目，全局 overview/ 只放索引类）
+//
+// 修复「骨架预建清单与 v8.3.182+ 路由表不一致」的死锁：
+//   - 有 features 的项目：内容类（REQUIREMENT/ANALYSIS/TECH/DEPS/RISK/REVIEW/MONITOR/DEV_GUIDE）
+//     必须放 {feature}/overview/，全局 overview/ 只预建索引类骨架，否则单文档模式提示
+//     AI 填充 overview/REQUIREMENT.md，但 --apply 按路由表拦截该路径 → 永远无法推进。
+//   - 无 features 的老项目：仍用 PHASE1_DOCS 全量清单（内容类唯一容器就是 overview/）。
+// ================================================================
+
+/** v8.3.238+: 全局 overview/ 索引类骨架名单（骨架预建与步骤完成检查共用） */
+export const PHASE1_INDEX_DOC_NAMES: string[] = [
+  'FUNCTION_MAP.md',
+  'INTERACTION_MAP.md',
+  'PLATFORMS.md',
+  'CLARIFY.md',
+  'API_CONTRACT.yaml',
+  'ARCHITECTURE.md',
+];
+
+const PHASE1_INDEX_DOCS: { name: string; buildPlaceholder: (iter: string) => string }[] =
+  PHASE1_DOCS.filter((doc) => PHASE1_INDEX_DOC_NAMES.includes(doc.name));
 
 // ================================================================
 // Phase 2 文档清单（各端专属文档）
@@ -581,6 +621,9 @@ ${feature} 的架构视角综合方案（跨端），端级细节下放到 {端}
 `,
   },
 ];
+
+/** v8.3.238+: 功能模块 overview/ 骨架名单（feature 步骤完成检查与 prompt 文档集对齐用） */
+export const FEATURE_OVERVIEW_DOC_NAMES: string[] = FEATURE_OVERVIEW_DOCS.map((doc) => doc.name);
 
 // ================================================================
 // 质量标准（Quality Rubrics）— v8.1.0+
@@ -1035,8 +1078,9 @@ export function computeFeatureBasedAnalyzeManifest(
 
   // Phase 1: 全局 overview/ + 各功能模块 overview/
   if (!phase || phase === '1') {
-    // 全局 overview 文档（保留现有结构）
-    for (const doc of PHASE1_DOCS) {
+    // v8.3.237+: 有功能模块时全局 overview/ 只预建索引类骨架（内容类归 {feature}/overview/）
+    const globalDocs = features.length > 0 ? PHASE1_INDEX_DOCS : PHASE1_DOCS;
+    for (const doc of globalDocs) {
       entries.push({
         relPath: join(GLOBAL_SPECS_DIR, doc.name),
         category: 'overview',
