@@ -19,7 +19,8 @@ import { logger, Spinner } from '../utils/logger';
 import { execSync } from 'child_process';
 import { createHash } from 'crypto';
 import { pathExists, ensureDir, readFile, writeFile, readdir, stat, unlink, copy } from 'fs-extra';
-import { join, basename, extname, dirname } from 'path';
+import { join, basename, extname, dirname, resolve, relative } from 'path';
+import { existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { backupWithTimestamp } from '../utils/task-utils';
 import { nextTaskId } from '../core/global-counters';
@@ -994,8 +995,10 @@ export async function splitDocumentToUnits(
 
     // v8.3.226+: 需求原文切片写 SOURCE.md（语义名，取代 README.md），
     // 读取端经 resolveUnitSourcePath 兼容旧 README.md
+    // v8.3.241+: 写入前重写相对引用——原文档在 converted/，单元目录比它深一层，
+    // 原文的「../assets/…」「./overview.md」等相对路径在 SOURCE.md 语境下全部失效
     const readmePath = join(unitDir, 'SOURCE.md');
-    await writeFile(readmePath, unitContent);
+    await writeFile(readmePath, rewriteUnitLinks(unitContent, dirname(outputPath), unitDir));
 
     // 来源标记
     const sourceMeta = `---\norigin: doc2spec\nsource_file: ${sourceFileName}\nsource_section: "${unit.sourceSection}"\nplatform: ${platformLabel}\ncreated_at: ${new Date().toISOString().split('T')[0]}\nstatus: draft\n---\n`;
@@ -1070,7 +1073,8 @@ export async function splitDocumentToUnits(
       collected++;
     }
     if (collected > 0) {
-      await writeFile(join(overviewDir, `GLOBAL_CONTEXT-${docSlug}.md`), globalContent);
+      // v8.3.241+: 与单元切片一致重写相对引用（文档互链 ./overview.md 等指向 converted/）
+      await writeFile(join(overviewDir, `GLOBAL_CONTEXT-${docSlug}.md`), rewriteUnitLinks(globalContent, dirname(outputPath), overviewDir));
       logger.info(`   📋 全局上下文已写入: overview/GLOBAL_CONTEXT-${docSlug}.md (${collected} 个章节)`);
     }
   }
@@ -1558,4 +1562,40 @@ function sanitizeUnitName(name: string): string {
     .replace(/[^a-zA-Z0-9\u4e00-\u9fa5\-_]/g, '')
     .replace(/^-+|-+$/g, '')
     .slice(0, 50) || 'untitled';
+}
+
+/**
+ * v8.3.241+: 切分写 SOURCE.md 前重写相对引用。
+ *
+ * 背景：需求原文在 converted/ 下，功能单元在 features/{单元}/ 下（比 converted 深一层），
+ * 原文中的相对引用（「../assets/prototypes/xx.html」「./overview.md」）在 SOURCE.md
+ * 语境下全部失效——澄清/分析阶段 AI 按 SOURCE.md 所在目录解析会找不到文件。
+ *
+ * 策略：以原文档目录（fromDir）为基准解析引用，再计算相对单元目录（toDir）的新路径；
+ * 文档互链的目标文件可能被 doc2spec 改名（overview.md → overview-requirements.md），
+ * 目标不存在时按「sanitize(原名)-requirements.md / sanitize(原名)requirements.md」
+ * 模式在 converted/ 下匹配实际文件。
+ */
+function rewriteUnitLinks(content: string, fromDir: string, toDir: string): string {
+  return content.replace(/\]\(([^)\s]+)\)/g, (m, target: string) => {
+    // 跳过绝对 URL / 锚点 / 绝对路径 / data URI
+    if (/^(https?:|#|\/|mailto:|data:)/i.test(target)) return m;
+    const resolved = resolve(fromDir, target);
+    let finalPath = relative(toDir, resolved);
+    // 目标文件已被 doc2spec 改名时，按命名模式匹配 converted/ 下的实际文件
+    if (!existsSync(resolved)) {
+      const base = sanitizeUnitName(basename(resolved, extname(resolved)));
+      const dir = dirname(resolved);
+      const candidates = [
+        join(dir, `${base}-requirements.md`),
+        join(dir, `${base}requirements.md`),
+        // v8.3.241+: sources/ 是原始文档只读存档（保留原文件名），互链目标可能只存在那里
+        join(dir, '..', 'sources', basename(resolved)),
+      ];
+      const hit = candidates.find(c => existsSync(c));
+      if (hit) finalPath = relative(toDir, hit);
+      // 未命中时保留层级重写结果（占位符如 xxx.png 也至少层级正确）
+    }
+    return `](${finalPath})`;
+  });
 }
