@@ -1,3 +1,22 @@
+## v8.3.232 (2026-09-22) — spec-unitize skill 补齐 + 三个入口同步 + unitize 非 Markdown 拦截
+
+### spec-unitize skill（与 spec-taskify 同款薄包装）
+- 新增 `.agents/skills/spec-unitize/SKILL.md`：触发词（切分功能单元/单元化/切需求）与 spec-taskify 消歧（unitize 切需求→features/，taskify 拆任务→Task-*）
+- description 写明 unitize 特有的四个前置校验点：输入格式路由（.md 直切、.docx/.pdf 先 doc2spec）、端名与 CONSTITUTION.md 端列表一致、重切覆盖语义、批量 --files
+
+### 入口同步（此前 unitize 在宿主 AI 入口缺位）
+- spec-ask description 命令清单：`split` → `unitize` + `taskify`（旧词清理）
+- speccore-router：意图表新增「功能单元切分（unitize）」区块 + Prompt/Apply 映射表补 unitize 行 + description 概念清单补「需求切分（unitize）」
+- 6 个 AI 工具目录（.claude/.cursor/.codebuddy/.windsurf/.trae/.trae-cn）补齐 `commands/spec-unitize.md` 斜杠命令
+
+### CLI 增强
+- `unitize` 对非 .md 输入直接报错指路（`unitize 只切分 Markdown → 💡 请先转换: speccore doc2spec --file=...`），不再把 .docx/.pdf 交给切分器裸切
+
+### 验证
+- 实测：`unitize --file fake.docx` 报错并指路 doc2spec 转换；tsc/build 通过；全量测试 216 passed / 14 failed（与基线一致，无回归）
+
+---
+
 ## v8.3.231 (2026-09-22) — 移除 split 双名：拆任务唯一叫 taskify + ask 意图层补 unitize
 
 ### 命名归一（拆任务只保留一个名字）

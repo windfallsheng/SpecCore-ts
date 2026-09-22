@@ -3,7 +3,7 @@ name: speccore-router
 description: >
   SpecCore CLI 命令路由器。仅在用户明确提到 speccore、迭代、期次、Spec 等关键词，
   或明确要求通过 speccore 命令行工具执行操作，且意图涉及以下概念时使用：
-  迭代管理、需求文档导入（doc2spec）、Spec 分析生成（analyze --prompt）、
+  迭代管理、需求文档导入（doc2spec）、需求切分（unitize）、Spec 分析生成（analyze --prompt）、
   任务拆分（taskify）、执行计划（plan --prompt）、代码执行（execute --prompt）、
   任务归档（done）、PR 提交（pr）、状态查看（status/dashboard/doctor）、智能级联（dev）。
   将用户意图映射为 speccore CLI 命令，通过 execute_command 执行。
@@ -175,6 +175,15 @@ allowed-tools: ["Bash", "Read", "Write", "Edit"]
 | 批量导入需求 {files} | files=逗号分隔 | `speccore doc2spec --files "{files}"` |
 | 分析这个 PRD 文档 | file | **激活 spec-doc2spec Skill → 完整AI+Pandoc流程** |
 | 帮我看看这个需求文档 | file | **激活 spec-doc2spec Skill** |
+
+### 功能单元切分（unitize — 需求文档→功能单元）
+| 用户说法 | 提取参数 | CLI 命令 / 行为 |
+| :--- | :--- | :--- |
+| 切分功能单元 / 单元化 | file?, iter? | **激活 spec-unitize Skill** |
+| 切分需求文档 {file} | file, iter? | `speccore unitize --file {file} --iter {iter}` |
+| 切分 {file}（.md）到 {iter} | file, iter | `speccore unitize --file {file} --iter {iter}` |
+| 批量切分 {files} | files="a.md=端1,b.md" | `speccore unitize --files "{files}" --iter {iter}` |
+| 切分 {file}（.docx/.pdf） | file | 先 `speccore doc2spec -f {file}` 转换再 unitize |
 
 ### 文档导出（spec2doc — AI排版）
 | 用户说法 | 提取参数 | CLI 命令 / 行为 |
@@ -428,6 +437,7 @@ allowed-tools: ["Bash", "Read", "Write", "Edit"]
 | 用户意图 | --prompt 命令 | --apply/--response |
 | :--- | :--- | :--- |
 | 导入需求 {file} | `speccore doc2spec --prompt -f {file}` | `--response '...'` |
+| 切分功能单元 {file} | `speccore unitize --file {file} -I {iter}` | 直接执行（本地规则+AI 双路） |
 | 分析 {iter} | `speccore analyze --prompt -I {iter}` | `--apply '...'` |
 | 拆分 {iter} | `speccore iteration taskify --prompt -I {iter}` | `--response '...'` |
 | 生成计划 {iter} | `speccore plan --prompt -I {iter}` | `--response '...'` |

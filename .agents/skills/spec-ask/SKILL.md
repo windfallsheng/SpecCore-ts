@@ -3,7 +3,8 @@ name: spec-ask
 description: >
   SpecCore CLI 执行引擎。仅在用户明确要求通过 speccore 命令行工具执行以下操作时触发：
   - analyze --prompt：生成迭代级/全局级 Spec 分析文档（ANALYSIS.md、TECH.md 等），不是单纯解释代码
-  - split：将需求拆分为开发任务并写入迭代目录
+  - unitize：切分需求文档为功能单元（features/，原 doc2spec --split）
+  - taskify：将功能单元拆分为开发任务并写入迭代目录（原 split）
   - plan --prompt：制定执行计划并写入 Task 目录
   - execute --prompt：执行开发任务并生成代码
   - doc2spec：导入 PRD/Word 文档到迭代目录

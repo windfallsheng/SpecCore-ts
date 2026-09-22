@@ -37,6 +37,12 @@ async function unitizeSingle(file: string, platform: string, iterName: string): 
     logger.error(`文件不存在: ${file}`);
     return;
   }
+  // v8.3.232+: 非 Markdown 直接报错指路（unitize 只切 .md；docx/pdf 需先 doc2spec 转换）
+  if (!/\.md$/i.test(file)) {
+    logger.error(`unitize 只切分 Markdown: ${basename(file)}`);
+    logger.info(`  💡 请先转换: speccore doc2spec --file=${file} --iter=${iterName}`);
+    return;
+  }
   const iterDir = `Iteration-${iterName.replace(/^Iteration-/, '')}`;
   if (!(await pathExists(iterDir))) {
     logger.error(`迭代目录不存在: ${iterDir}`);
