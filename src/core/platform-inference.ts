@@ -66,7 +66,16 @@ export async function inferFeaturePlatforms(
   if (featureDir) {
     const matrixPlatforms = await readMatrixPlatforms(featureDir);
     if (matrixPlatforms.length > 0) {
-      return finalize(matrixPlatforms, 0.95, 'matrix', []);
+      // v8.3.224+: matrix 端名必须归一化到 CONSTITUTION 标准端名（旧数据可能写了 backend 等简写）
+      const normalized = [...new Set(
+        matrixPlatforms
+          .map(p => normalizePlatformToken(p, allPlatforms))
+          .filter((p): p is string => !!p),
+      )];
+      if (normalized.length > 0) {
+        return finalize(normalized, 0.95, 'matrix', []);
+      }
+      // 全部非标准端名（如旧数据全标 backend）→ 不采信，继续下层推断
     }
 
     // ── Layer 3: 目录结构推断 ──

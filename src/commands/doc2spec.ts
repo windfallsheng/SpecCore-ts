@@ -910,11 +910,13 @@ export async function splitDocumentToUnits(
     await writeFile(join(unitDir, '.meta', 'source'), sourceMeta);
     
     // 端覆盖矩阵（初始值，后续由 analyze / 用户调整）
+    // v8.3.224+: 未指定端时写空数组，由 analyze 的端推断（platform-inference）填充，
+    // 不再兜底成 'backend'（非标准端名会以 0.95 置信度被误采信，污染全部分析）
     const platforms = platformLabel
       .split(/[,，;；]/)
       .map(p => p.trim())
       .filter(Boolean);
-    const matrixContent = `# ${unit.title} - 端覆盖矩阵\n\nfeature: ${unit.title}\nplatforms:\n${platforms.map(p => `  - ${p}`).join('\n') || '  - backend'}\ndependencies: []\napis: []\n`;
+    const matrixContent = `# ${unit.title} - 端覆盖矩阵\n\nfeature: ${unit.title}\nplatforms:\n${platforms.map(p => `  - ${p}`).join('\n') || '  []'}\ndependencies: []\napis: []\n`;
     await writeFile(join(unitDir, '_matrix.md'), matrixContent);
     
     // 初始变更记录
