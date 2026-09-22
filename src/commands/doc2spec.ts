@@ -897,11 +897,15 @@ export async function splitDocumentToUnits(
   let written = 0;
   let skipped = 0;
   const seenUnitDirs = new Set<string>(existingUnitDirs);
-  for (const unit of units) {
+  for (let unitIndex = 0; unitIndex < units.length; unitIndex++) {
+    const unit = units[unitIndex];
     // v8.3.198+: 剥离章节号前缀（"四、" → ""）+ 加需求文档名前缀，防止跨文档重 名
     unit.title = stripSectionPrefix(unit.title) || unit.title;
     const docSlug = sanitizeUnitName(basename(sourceFileName, '.md')) || 'doc';
-    const unitDirName = sanitizeUnitName(`${docSlug}-${unit.title}`);
+    // v8.3.227+: 目录名加两位序号前缀（按文档内章节顺序），
+    // 保证文件系统排序 == 文档顺序，解决切分目录乱序问题
+    const seq = String(unitIndex + 1).padStart(2, '0');
+    const unitDirName = sanitizeUnitName(`${docSlug}-${seq}-${unit.title}`);
     // v8.3.223+: 同名/已存在单元跳过（幂等 + 去重）
     if (seenUnitDirs.has(unitDirName)) {
       logger.info(`   ⏭️  ${unit.title} 已存在，跳过: features/${unitDirName}/`);
@@ -1028,6 +1032,31 @@ const NON_FUNCTION_TAIL = /^(项目|需求|产品|总体|整体|建设|设计|�
 // v8.3.226+: UI 交互说明类章节（操作步骤/页面布局/动效/手势等）不是功能单元——
 // 它们描述「怎么操作」，不构成可开发的独立功能，归为全局上下文（GLOBAL_CONTEXT）
 const NON_FUNCTION_UI_TAIL = /(操作步骤|操作流程|操作指引|操作指南|页面布局|页面结构|页面动效|交互动效|动画说明|手势操作|交互手势|交互方式|字段说明|数据字典|字典说明)$/;
+// v8.3.227+: 功能章节内部的「描述维度」小节——标题（去编号后）精确等于这些通用
+// 维度词时不是功能单元，而是父功能的组成部分（如「三、会议室管理」下的「3.1 用户
+// 场景」「3.5 业务规则」）。精确匹配而非 contains，避免误杀「会议室资源规则」
+// 「计费规则」这类具体业务规则（它们标题不精确等于维度词，是真正的功能单元）
+const NON_FUNCTION_DIMENSION_EXACT = new Set([
+  '用户场景', '业务规则', '异常场景处理', '页面布局', '操作步骤', '操作流程',
+  '页面动效', '手势操作', '字段说明', '验收标准', '状态流转规则', '订单状态说明',
+  '计费标准', '可配置参数', '通知业务规则', '通知事件一览', '通知消息模板',
+  '消息类型与内容', '用户故事', '核心用户流程', '页面清单', '数据字典',
+  '列表与操作规则', '预订状态展示规则', '签到窗口规则', '签到时间窗口规则',
+  '离线场景降级', '二维码规范', '交互动效', '页面结构', '操作指引', '操作指南',
+  '计费规则', '智能推荐规则', '用户角色权限表', '超时未签到处理', '签到操作流程',
+]);
+
+/**
+ * v8.3.227+: 「规则/说明」类容器章节——自身不是功能单元，其后代才是
+ * （如 REQUIREMENT.md 的「5.3 核心业务规则」下的「计费规则」「冲突检测规则」）。
+ * 判定：标题（剥离括号注释后）以规则/说明/规范/一览/模板结尾，且有更深层的候选后代。
+ * 括号注释如「核心业务规则（跨端通用）」需先剥离，否则尾部不匹配导致容器误判
+ */
+function isRuleContainerHeading(rawTitle: string, hasDeeperCandidate: boolean): boolean {
+  if (!hasDeeperCandidate) return false;
+  const title = stripParenthetical(stripSectionNo(rawTitle)).trim();
+  return /(规则|说明|规范|一览|模板)$/.test(title);
+}
 
 /** 归一化内容指纹（剔除生成时间等易变行后 sha1），用于跨文档重复章节检测 */
 function contentFingerprint(content: string): string {
@@ -1040,26 +1069,39 @@ function contentFingerprint(content: string): string {
   return createHash('sha1').update(normalized).digest('hex');
 }
 
-function isNonFunctionalSection(rawTitle: string): boolean {
-  const title = stripSectionNo(rawTitle).trim();
+/**
+ * 判定标题是否非功能章节（不切为功能单元）
+ * parentIsRuleContainer：父是「规则/说明」容器（如 5.3 核心业务规则）时，
+ * 维度词豁免——容器下的「计费规则」是功能单元而非维度小节
+ * v8.3.227+: 先剥离括号注释再匹配——「操作流程（预订完整流程）」应命中「操作流程」
+ */
+function isNonFunctionalSection(rawTitle: string, parentIsRuleContainer = false): boolean {
+  const title = stripParenthetical(stripSectionNo(rawTitle)).trim();
   if (!title) return true;
   if (NON_FUNCTION_PREFIX.test(title)) return true;
   if (NON_FUNCTION_CONTAINS.some(w => title.includes(w))) return true;
   if (NON_FUNCTION_STARTS.some(w => title.startsWith(w))) return true;
   if (NON_FUNCTION_TAIL.test(title)) return true;
   if (NON_FUNCTION_UI_TAIL.test(title)) return true;
+  if (NON_FUNCTION_DIMENSION_EXACT.has(title) && !parentIsRuleContainer) return true;
   return false;
 }
 
+/** 剥离括号注释（如「操作流程（预订完整流程）」「核心业务规则（跨端通用）」） */
+function stripParenthetical(rawTitle: string): string {
+  return rawTitle.replace(/[（(][^（）()]*[）)]/g, '').trim();
+}
+
 /**
- * 本地兜底：识别被过滤掉的非功能章节（产品定位/名词/验收标准等），作为全局上下 文
+ * 本地兜底：识别被过滤掉的非功能章节（产品定位/名词/验收标准等），作为全局上下文
  * （与 scanUnits 的过滤规则保持一致——共用 isNonFunctionalSection）
  * v8.3.224+: 改为 H2~H6 全层级扫描 + 子树传播，只收集「被排除子树的根」，
  * 修复旧逻辑只认 ## 层级导致深层级非功能章节（如 ### 一、项目背景与目标）漏收
+ * v8.3.227+: 维度小节若父标题是功能单元（内容已在单元内），不重复收集到全局
  */
 function getGlobalSections(content: string, units: ScannedUnit[]): string[] {
   const lines = content.split('\n');
-  const unitTitles = new Set(units.map((u) => u.title));
+  const unitTitles = new Set(units.map((u) => stripSectionNo(u.title).trim()));
   const global: string[] = [];
   const headings: { level: number; title: string; line: number }[] = [];
   for (let i = 0; i < lines.length; i++) {
@@ -1070,17 +1112,35 @@ function getGlobalSections(content: string, units: ScannedUnit[]): string[] {
   // 文档标题不作为全局章节（避免收集整个文档范围）
   const minLevel = Math.min(...headings.map(h => h.level));
   const shallowest = headings.filter(h => h.level === minLevel);
-  const docTitleLine = shallowest.length === 1 ? shallowest[0].line : -1;
-  const stack: { level: number; excluded: boolean }[] = [];
-  for (const h of headings) {
+  const docTitleLine = (shallowest.length === 1 && headings.length > shallowest.length)
+    ? shallowest[0].line
+    : -1;
+  // v8.3.227+: 预计算 hasDeeperCandidate（与 scanUnits 一致）
+  const hasDeeper: boolean[] = new Array(headings.length).fill(false);
+  for (let i = 0; i < headings.length; i++) {
+    for (let j = i + 1; j < headings.length; j++) {
+      if (headings[j].level <= headings[i].level) break;
+      hasDeeper[i] = true;
+      break;
+    }
+  }
+  const stack: { level: number; excluded: boolean; ruleContainer: boolean; title: string }[] = [];
+  for (let i = 0; i < headings.length; i++) {
+    const h = headings[i];
     while (stack.length > 0 && h.level <= stack[stack.length - 1].level) stack.pop();
-    const parentExcluded = stack.length > 0 && stack[stack.length - 1].excluded;
+    const parent = stack.length > 0 ? stack[stack.length - 1] : null;
+    const parentExcluded = parent ? parent.excluded : false;
+    const parentIsRuleContainer = parent ? parent.ruleContainer : false;
     // （负向后行断言排除「非功能需求」——它包含「功能需求」子串但应整体排除子树）
     const isContainer = /(?<!非)功能需求|功能清单|功能列表/.test(h.title);
-    const excluded = parentExcluded || (isNonFunctionalSection(h.title) && !isContainer);
-    stack.push({ level: h.level, excluded });
+    const ruleContainer = isRuleContainerHeading(h.title, hasDeeper[i]);
+    const excluded = parentExcluded || (isNonFunctionalSection(h.title, parentIsRuleContainer) && !isContainer);
+    stack.push({ level: h.level, excluded, ruleContainer, title: h.title });
     if (excluded && !parentExcluded && h.line !== docTitleLine) {
       const title = stripSectionNo(h.title).trim();
+      // v8.3.227+: 父标题是功能单元时，维度小节内容已在单元内，不重复收集
+      const parentTitle = parent && !parent.excluded ? stripSectionNo(parent.title).trim() : '';
+      if (parentTitle && unitTitles.has(parentTitle)) continue;
       if (title && !unitTitles.has(h.title) && !unitTitles.has(title)) global.push(h.title);
     }
   }
@@ -1230,6 +1290,11 @@ function findSectionRange(content: string, sectionTitle: string): { start: numbe
  *   2. 「功能需求/功能清单/功能列表」类容器章节仅排除自身，不排除后代（其后代才是功能单元）
  *   3. 文档唯一最浅层标题视为文档标题，不作为单元
  *   4. 单元 = 过滤后剩余标题中的叶子（其后没有更深层级的候选标题）
+ * v8.3.227+:
+ *   5. 「描述维度」小节（用户场景/业务规则/操作步骤等）随父功能合并——维度小节
+ *      过滤后，其父功能章节成为叶子单元（如「三、会议室管理」含 3.1~3.7 全维度内容）
+ *   6. 「规则/说明」容器（如 5.3 核心业务规则）不切自身，其下具体规则是功能单元，
+ *      维度词在容器下豁免（「计费规则」在 5.3 下是单元，在费用管理下是维度）
  */
 function scanUnits(content: string): ScannedUnit[] {
   const lines = content.split('\n');
@@ -1249,18 +1314,33 @@ function scanUnits(content: string): ScannedUnit[] {
     ? shallowest[0].line
     : -1;
 
+  // v8.3.227+: 预计算 hasDeeperCandidate——其后（到下一个同级/更浅标题前）是否存在更深标题
+  const hasDeeper: boolean[] = new Array(headings.length).fill(false);
+  for (let i = 0; i < headings.length; i++) {
+    for (let j = i + 1; j < headings.length; j++) {
+      if (headings[j].level <= headings[i].level) break;
+      hasDeeper[i] = true;
+      break;
+    }
+  }
+
   // 候选功能单元标题（非功能章节过滤 + 子树传播排除）
   const candidates: { level: number; title: string; line: number }[] = [];
-  const stack: { level: number; subtreeExcluded: boolean }[] = [];
-  for (const h of headings) {
+  const stack: { level: number; subtreeExcluded: boolean; ruleContainer: boolean }[] = [];
+  for (let i = 0; i < headings.length; i++) {
+    const h = headings[i];
     while (stack.length > 0 && h.level <= stack[stack.length - 1].level) stack.pop();
-    const parentExcluded = stack.length > 0 && stack[stack.length - 1].subtreeExcluded;
+    const parent = stack.length > 0 ? stack[stack.length - 1] : null;
+    const parentExcluded = parent ? parent.subtreeExcluded : false;
+    const parentIsRuleContainer = parent ? parent.ruleContainer : false;
     // 「功能需求」类容器章节：自身非单元，但后代是功能单元，不传播排除
     // （负向后行断言排除「非功能需求」——它包含「功能需求」子串但应整体排除子树）
     const isContainer = /(?<!非)功能需求|功能清单|功能列表/.test(h.title);
-    const subtreeExcluded = parentExcluded || (isNonFunctionalSection(h.title) && !isContainer);
-    stack.push({ level: h.level, subtreeExcluded });
-    if (subtreeExcluded || isContainer || isNonFunctionalSection(h.title) || h.line === docTitleLine) continue;
+    const ruleContainer = isRuleContainerHeading(h.title, hasDeeper[i]);
+    const nonFunctional = isNonFunctionalSection(h.title, parentIsRuleContainer);
+    const subtreeExcluded = parentExcluded || (nonFunctional && !isContainer);
+    stack.push({ level: h.level, subtreeExcluded, ruleContainer });
+    if (subtreeExcluded || isContainer || nonFunctional || h.line === docTitleLine) continue;
     candidates.push(h);
   }
 
