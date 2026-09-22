@@ -793,6 +793,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         logger.success('🎉 所有功能单元分析已完成！');
         logger.info('   运行 --consolidate 汇总为统一报告');
         logger.info(`   speccore analyze --prompt -I ${iter} --consolidate`);
+        // v8.3.234+: 执行完成质量报告（成功/失败清单 + 产出物评分）
+        await buildAndSaveQualityReport(iterDir, iter, units);
         return;
       }
       targetUnitIds = pending.map(u => u.id);
@@ -806,6 +808,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         logger.success('🎉 所有功能单元分析已完成！');
         logger.info('   运行 --consolidate 汇总为统一报告');
         logger.info(`   speccore analyze --prompt -I ${iter} --consolidate`);
+        // v8.3.234+: 执行完成质量报告（成功/失败清单 + 产出物评分）
+        await buildAndSaveQualityReport(iterDir, iter, units);
         return;
       }
       targetUnitIds = [pending[0].id];
@@ -818,7 +822,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     if (options.autoUnits || options.resumeUnits) {
       const loopResult = await runUnitDispatchLoop(iter, iterDir, units);
       if (loopResult.finished) {
-        printUnitLoopSummary(iter, loopResult);
+        await printUnitLoopSummary(iter, iterDir, units, loopResult);
         return;
       }
       process.stdout.write(
@@ -7138,7 +7142,7 @@ async function runUnitDispatchLoop(
 }
 
 /** 输出调度循环完成汇总 */
-function printUnitLoopSummary(iter: string, result: LoopRoundResult): void {
+async function printUnitLoopSummary(iter: string, iterDir: string, units: IterationUnit[], result: LoopRoundResult): Promise<void> {
   const s = result.summary!;
   if (s.failed.length > 0) {
     logger.warn(`⚠️ 功能单元分析循环完成: ${s.done.length} 完成 / ${s.failed.length} 失败`);
@@ -7150,6 +7154,76 @@ function printUnitLoopSummary(iter: string, result: LoopRoundResult): void {
     logger.success(`🎉 所有 ${s.done.length} 个功能单元分析完成！`);
   }
   logger.info(`   下一步: 汇总统一报告 speccore analyze --prompt -I ${iter} --consolidate`);
+  // v8.3.234+: 执行完成质量报告（成功/失败清单 + 产出物评分）落盘 QUALITY_AUDIT.md
+  await buildAndSaveQualityReport(iterDir, iter, units);
+}
+
+/**
+ * v8.3.234+: 生成并落盘「功能单元分析质量报告」——成功/失败清单 + 每单元产出物评分。
+ * 落盘到 020-specs/QUALITY_AUDIT.md；无可评单元时返回 null。
+ */
+export async function buildAndSaveQualityReport(iterDir: string, iter: string, units: IterationUnit[]): Promise<string | null> {
+  if (units.length === 0) return null;
+  const { validateContentQuality } = await import('../core/spec-skeleton');
+  interface UnitReportEntry { unit: string; ok: boolean; rows: { doc: string; score: number; issues: string[] }[]; }
+  const report: UnitReportEntry[] = [];
+  for (const u of units) {
+    const specDir = getUnitSpecDir(iterDir, u);
+    const rows: UnitReportEntry['rows'] = [];
+    for (const f of ['REQUIREMENT.md', 'ANALYSIS.md', 'TECH.md']) {
+      const fp = join(specDir, f);
+      if (!(await pathExists(fp))) continue;
+      const content = (await readFile(fp, 'utf-8')).trim();
+      if (!content || content.includes('SPEC-SKELETON') || content.length < 200) continue;
+      const q = await validateContentQuality(f, content, '');
+      rows.push({ doc: f, score: q.score, issues: q.issues });
+    }
+    report.push({ unit: u.name, ok: rows.length > 0, rows });
+  }
+  const okCount = report.filter(r => r.ok).length;
+  const failCount = report.length - okCount;
+  const totalDocs = report.reduce((a, r) => a + r.rows.length, 0);
+  const avgScore = totalDocs > 0 ? Math.round(report.reduce((a, r) => a + r.rows.reduce((b, row) => b + row.score, 0), 0) / totalDocs) : 0;
+
+  const lines: string[] = [];
+  lines.push('# 功能单元分析质量报告');
+  lines.push('');
+  lines.push(`> 生成时间: ${new Date().toISOString()}`);
+  lines.push(`> 迭代: ${iter}`);
+  lines.push(`> 结果: ${okCount} 成功 / ${failCount} 失败（共 ${units.length} 单元，评 ${totalDocs} 份文档，平均 ${avgScore} 分）`);
+  lines.push('');
+  lines.push('## 评分明细');
+  lines.push('');
+  lines.push('| 单元 | 状态 | 文档 | 评分 | 主要扣分项 |');
+  lines.push('|:---|:---|:---|:---|:---|');
+  for (const r of report) {
+    if (r.ok) {
+      for (const row of r.rows) {
+        lines.push(`| ${r.unit} | ✅ | ${row.doc} | ${row.score} | ${row.issues.slice(0, 3).join('；') || '—'} |`);
+      }
+    } else {
+      lines.push(`| ${r.unit} | ❌ 失败 | — | — | 缺少有效规格文档（REQUIREMENT/ANALYSIS/TECH 至少一份，内容 ≥200 字符且非骨架） |`);
+    }
+  }
+  lines.push('');
+  lines.push('## 失败单元修复');
+  lines.push('');
+  if (failCount === 0) {
+    lines.push('无失败单元。');
+  } else {
+    lines.push('```bash');
+    lines.push(`speccore analyze --resume-units -I ${iter}`);
+    lines.push('```');
+    lines.push('仍为骨架/空内容的单元会被重新纳入分析，循环直到干净。');
+  }
+  lines.push('');
+
+  const specRoot = join(iterDir, '020-specs');
+  await ensureDir(specRoot);
+  const reportPath = join(specRoot, 'QUALITY_AUDIT.md');
+  await writeFile(reportPath, lines.join('\n'));
+  logger.info(`   📊 质量报告已落盘: 020-specs/QUALITY_AUDIT.md（${okCount} 成功 / ${failCount} 失败，平均 ${avgScore} 分）`);
+  return reportPath;
 }
 
 // ═══════════════════════════════════════════════════════════
