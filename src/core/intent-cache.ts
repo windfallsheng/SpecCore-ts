@@ -9,9 +9,9 @@
  */
 
 import { pathExists, readJson, writeJson, ensureDir } from 'fs-extra';
-import { join } from 'path';
 import { logger } from '../utils/logger';
 import type { AskResult } from './ask-engine';
+import { version as CLI_VERSION } from '../../package.json';
 
 // ═══════════════════════════════════════════════════════════
 // 类型定义
@@ -32,6 +32,8 @@ export interface CachedIntent {
   createdAt: string;
   /** 最后命中时间 */
   lastUsed: string;
+  /** v8.3.224+: 创建该条目时的 CLI 版本（识别逻辑升级后旧缓存自动失效） */
+  cliVersion: string;
 }
 
 export interface IntentCache {
@@ -46,7 +48,7 @@ export interface IntentCache {
 // ═══════════════════════════════════════════════════════════
 
 const CACHE_PATH = '.speccore/local/intent-cache.json';
-const CACHE_VERSION = '1.1'; // 升级到 1.1 支持 normalizedInput
+const CACHE_VERSION = '1.2'; // 1.2: 条目级 cliVersion，识别逻辑升级后旧缓存自动失效
 const MAX_ENTRIES = 200;
 const FUZZY_THRESHOLD = 2; // 编辑距离阈值
 
@@ -105,17 +107,25 @@ async function saveCache(cache: IntentCache): Promise<void> {
 
 /**
  * 查询缓存：精确 → 归一化语义 → 编辑距离模糊
+ * v8.3.224+: 条目级 cliVersion 校验——旧版本 CLI 产生的缓存条目不再命中，
+ * 避免识别逻辑修复后被旧错误结果固化（如「从切分功能单元到开发」被旧缓存固化为歧义）。
  */
 export async function getCachedIntent(input: string): Promise<AskResult | null> {
   const cache = await loadCache();
 
+  // v8.3.224+: 条目级 cliVersion 校验，旧版本 CLI 产生的条目不再命中
+  const isStale = (entry: CachedIntent) => entry.cliVersion !== CLI_VERSION;
+  const touch = async (entry: CachedIntent, hitType: string, extra = '') => {
+    entry.hitCount++;
+    entry.lastUsed = new Date().toISOString();
+    await saveCache(cache);
+    logger.info(`💾 意图缓存命中(${hitType}): "${input.slice(0, 30)}..."${extra} → ${entry.result.summary.slice(0, 30)}`);
+  };
+
   // 1. 精确匹配
   const exact = cache.entries[input];
-  if (exact) {
-    exact.hitCount++;
-    exact.lastUsed = new Date().toISOString();
-    await saveCache(cache);
-    logger.info(`💾 意图缓存命中(精确): "${input.slice(0, 30)}..." → ${exact.result.summary.slice(0, 30)}`);
+  if (exact && !isStale(exact)) {
+    await touch(exact, '精确');
     return exact.result;
   }
 
@@ -123,11 +133,8 @@ export async function getCachedIntent(input: string): Promise<AskResult | null> 
   const normalized = normalizeInput(input);
   if (normalized) {
     for (const entry of Object.values(cache.entries)) {
-      if (entry.normalizedInput === normalized) {
-        entry.hitCount++;
-        entry.lastUsed = new Date().toISOString();
-        await saveCache(cache);
-        logger.info(`💾 意图缓存命中(语义): "${input.slice(0, 30)}..." ≈ "${entry.input.slice(0, 30)}..."`);
+      if (!isStale(entry) && entry.normalizedInput === normalized) {
+        await touch(entry, '语义', ` ≈ "${entry.input.slice(0, 30)}..."`);
         return entry.result;
       }
     }
@@ -136,18 +143,26 @@ export async function getCachedIntent(input: string): Promise<AskResult | null> 
   // 3. 模糊匹配（编辑距离 ≤ 2，且长度比例合理）
   // 防止短字符串误匹配：如"补充测试"匹配"补充分析"（编辑距离 2 但语义完全不同）
   for (const [cachedInput, entry] of Object.entries(cache.entries)) {
+    if (isStale(entry)) continue;
     const dist = levenshtein(input, cachedInput);
     const maxLen = Math.max(input.length, cachedInput.length);
     const minLen = Math.min(input.length, cachedInput.length);
     // 长度比例保护：编辑距离 ≤ 2 时，要求较短串长度 ≥ 6（避免 4 字中文短句误匹配）
     // 且编辑距离占较长串比例 ≤ 30%（避免长串被短串误匹配）
     if (dist <= FUZZY_THRESHOLD && minLen >= 6 && dist / maxLen <= 0.3) {
-      entry.hitCount++;
-      entry.lastUsed = new Date().toISOString();
-      await saveCache(cache);
-      logger.info(`💾 意图缓存命中(模糊): "${input.slice(0, 30)}..." ≈ "${cachedInput.slice(0, 30)}..."`);
+      await touch(entry, '模糊', ` ≈ "${cachedInput.slice(0, 30)}..."`);
       return entry.result;
     }
+  }
+
+  // 惰性清理：存在旧版本条目时重建缓存结构，避免旧条目无限堆积
+  if (Object.keys(cache.entries).some(k => isStale(cache.entries[k]))) {
+    const totalBefore = Object.keys(cache.entries).length;
+    cache.entries = Object.fromEntries(
+      Object.entries(cache.entries).filter(([, e]) => !isStale(e))
+    );
+    await saveCache(cache);
+    logger.info(`💾 意图缓存：已清除 ${totalBefore - Object.keys(cache.entries).length} 条旧版本缓存（当前 CLI ${CLI_VERSION}）`);
   }
 
   return null;
@@ -155,8 +170,14 @@ export async function getCachedIntent(input: string): Promise<AskResult | null> 
 
 /**
  * 写入缓存
+ * v8.3.224+: 拒绝缓存 ambiguous（歧义是中间态，固化会把旧错误结果永久锁定）
  */
 export async function cacheIntent(input: string, result: AskResult, source: string = 'host-ai'): Promise<void> {
+  if (result.mode === 'ambiguous') {
+    logger.debug(`💾 意图缓存：跳过 ambiguous 结果（歧义是中间态，不固化）: "${input.slice(0, 30)}..."`);
+    return;
+  }
+
   const cache = await loadCache();
 
   cache.entries[input] = {
@@ -167,6 +188,7 @@ export async function cacheIntent(input: string, result: AskResult, source: stri
     hitCount: 1,
     createdAt: new Date().toISOString(),
     lastUsed: new Date().toISOString(),
+    cliVersion: CLI_VERSION,
   };
 
   // 超限清理：保留最近使用的 150 条
