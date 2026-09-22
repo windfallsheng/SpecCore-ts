@@ -1821,6 +1821,8 @@ export async function buildPrompt(
     withCode?: boolean;
   }
 ): Promise<SpecCorePrompt> {
+  // v8.3.242+: 重置资产审计清单（每次构建独立）
+  resetAssetAudit();
   const cwd = options.cwd || findProjectRoot() || process.cwd();
   const techStack = await loadTechStack(cwd);
   const taskDir = options.taskDir || '';
@@ -2587,7 +2589,8 @@ const UNIVERSAL_BEHAVIOR_RULES: string[] = [
 export function buildPromptText(prompt: SpecCorePrompt): string {
   // v8.3.160+: analyze 命令使用 buildMultiDocPrompt 生成的原始 Prompt，直接返回
   if (prompt.rawPrompt) {
-    return prompt.rawPrompt;
+    const audit = getAssetAuditText();
+    return audit ? `${prompt.rawPrompt}\n${audit}` : prompt.rawPrompt;
   }
 
   const lines: string[] = [];
@@ -2717,6 +2720,10 @@ export function buildPromptText(prompt: SpecCorePrompt): string {
 
   // 尾标记
   lines.push('[/SPECCORE_PROMPT]');
+
+  // v8.3.242+: 末尾附加资产审计清单（断链/缺文件不再静默丢失）
+  const audit = getAssetAuditText();
+  if (audit) lines.push(audit);
 
   return lines.join('\n');
 }
@@ -2993,6 +3000,7 @@ async function expandMarkdownLinks(
   for (const link of links) {
     if (isExternalLink(link.path)) {
       externalLinks.set(link.path, link.text);
+      recordAssetAudit(link.path, '外链（宿主 AI 按需读取）');
       continue;
     }
     const resolved = resolveLinkPath(baseDir, link.path);
@@ -3000,7 +3008,10 @@ async function expandMarkdownLinks(
     seenPaths.add(resolved);
 
     try {
-      if (!await pathExists(resolved)) continue;
+      if (!await pathExists(resolved)) {
+        recordAssetAudit(link.path, '⚠️ 链接目标缺失（未内联）');
+        continue;
+      }
       const st = await stat(resolved);
       if (!st.isFile()) continue;
 
@@ -3024,6 +3035,7 @@ async function expandMarkdownLinks(
       expansions.push(
         `\n\n**[链接] ${link.text}** (${link.path}):\n${summary}\n> 全文见 \`${resolved}\``
       );
+      recordAssetAudit(link.path, '已展开（内联摘要）');
     } catch { /* 忽略读取失败的链接文件 */ }
   }
 
@@ -3067,22 +3079,29 @@ async function inlineMarkdownImages(
     if (isExternalLink(img.path)) {
       externalImages.set(img.path, img.alt);
       inlines.push(`\n<!-- 外链图片: ${img.alt || '无描述'} | URL: ${img.path} -->`);
+      recordAssetAudit(img.path, '外链图片（宿主 AI 按需查看）');
       continue;
     }
     const resolved = resolveLinkPath(baseDir, img.path);
     if (seenPaths.has(resolved)) continue;
     seenPaths.add(resolved);
 
+    // v8.3.242+: 图片文件缺失早退——避免输出一条指向不存在文件的提示
+    if (!(await pathExists(resolved))) {
+      recordAssetAudit(img.path, '⚠️ 图片文件缺失（未内联）');
+      continue;
+    }
+
     // SVG 直接 inline 其文本内容
     if (resolved.endsWith('.svg')) {
       try {
-        if (await pathExists(resolved)) {
-          const svgContent = await readFile(resolved, 'utf-8');
-          if (svgContent.length <= maxSvgChars) {
-            inlines.push(`\n<!-- SVG 图片: ${img.path} -->\n${svgContent}`);
-          } else {
-            inlines.push(`\n\n---\n🖼️ **SVG 图片文件**（内容过长已省略，宿主 AI 请务必直接打开查看）：\n- ${img.path}\n- 大小: ${svgContent.length} 字符（超出 ${maxSvgChars} 字符限制）\n> ⚠️ **请打开此 SVG 文件查看完整内容**。此 SVG 与需求理解高度相关，因内容过长被省略，需要你直接打开文件查看。`);
-          }
+        const svgContent = await readFile(resolved, 'utf-8');
+        if (svgContent.length <= maxSvgChars) {
+          recordAssetAudit(img.path, 'SVG 已内联');
+          inlines.push(`\n<!-- SVG 图片: ${img.path} -->\n${svgContent}`);
+        } else {
+          recordAssetAudit(img.path, 'SVG 过长（宿主 AI 请打开查看）');
+          inlines.push(`\n\n---\n🖼️ **SVG 图片文件**（内容过长已省略，宿主 AI  请务必直接打开查看）：\n- ${img.path}\n- 大小: ${svgContent.length} 字符（超出 ${maxSvgChars} 字符限制）\n> ⚠️ **请打开此 SVG 文件查看完整内容**。此 SVG 与需求理解高度相关，因内容过长被省略，需要你直接打开文件查看。`);
         }
       } catch { /* ignore */ }
     } else if (isVisionEnabled(visionConfig) && visionCallCount < maxVisionCalls) {
@@ -3091,23 +3110,28 @@ async function inlineMarkdownImages(
       try {
         const result = await describeImage(resolved, visionConfig!);
         if (result.success) {
+          recordAssetAudit(img.path, '视觉模型已描述');
           inlines.push(
             `\n<!-- 图片描述 (视觉模型: ${visionConfig!.provider}): ${img.path} -->\n**[图片内容]** ${img.alt || '无描述'}\n\n${result.description}`
           );
         } else {
           // v8.3.138+: Vision 描述失败时，明确提示宿主 AI 打开文件查看
+          recordAssetAudit(img.path, '视觉模型描述失败（宿主 AI 请打开查看）');
           inlines.push(`\n\n---\n🖼️ **图片文件**（视觉模型描述失败，宿主 AI 请务必直接打开查看）：\n- ${img.alt || '无描述'}: ${resolved}\n> ⚠️ **请打开此图片文件查看内容**。此图片与需求理解高度相关，视觉模型未能成功描述，需要你直接打开文件查看。`);
         }
       } catch (e: any) {
         // v8.3.138+: 描述异常时，同样提示宿主 AI 打开查看
+        recordAssetAudit(img.path, '视觉模型异常（宿主 AI 请打开查看）');
         inlines.push(`\n\n---\n🖼️ **图片文件**（视觉模型异常，宿主 AI 请务必直接打开查看）：\n- ${img.alt || '无描述'}: ${resolved}\n> ⚠️ **请打开此图片文件查看内容**。此图片与需求理解高度相关，视觉模型异常未能描述，需要你直接打开文件查看。`);
       }
     } else {
       // v8.3.183+: 无视觉模型时，用 alt 语义兜底（硬保证有描述），"请打开"降为补充
       const altDesc = img.alt && img.alt.trim() ? img.alt.trim() : '';
       if (altDesc) {
+        recordAssetAudit(img.path, '图片已引用（宿主 AI 需打开查看）');
         inlines.push(`\n\n---\n🖼️ **图片** ${altDesc}：\`${resolved}\`\n> 图片细节需宿主 AI 打开查看（CLI 无视觉模型，仅能提供 alt 语义）`);
       } else {
+        recordAssetAudit(img.path, '图片已引用（无 alt，宿主 AI 请打开查看）');
         inlines.push(`\n\n---\n🖼️ **图片文件**（无 alt 描述，宿主 AI 请打开查看）：\n- ${resolved}`);
         try {
           if (await pathExists(resolved)) {
@@ -3129,6 +3153,37 @@ async function inlineMarkdownImages(
   }
 
   return content + inlines.join('');
+}
+
+// v8.3.242+: 资产审计清单——记录本上下文组装过程中每张图片/链接的处理结果。
+// 断链/缺文件时不再「静默丢失」：审计块会列出哪些资产进了分析视野、哪些缺失。
+const assetAuditRecords = new Map<string, string>(); // 引用路径 -> 处理状态
+
+function recordAssetAudit(path: string, status: string): void {
+  if (!assetAuditRecords.has(path)) assetAuditRecords.set(path, status);
+}
+
+/** 每次 buildPrompt 开始时重置（避免跨命令串味） */
+export function resetAssetAudit(): void {
+  assetAuditRecords.clear();
+}
+
+/** 生成资产审计块（无记录时返回空串） */
+export function getAssetAuditText(): string {
+  if (assetAuditRecords.size === 0) return '';
+  const rows = [...assetAuditRecords.entries()]
+    .map(([p, s]) => `| ${p} | ${s} |`)
+    .join('\n');
+  return [
+    '',
+    '## 📋 资产审计清单',
+    '',
+    '> 本上下文已处理的图片/链接。标记为「缺失」的资产未进入分析视野，若与需求强相关请向用户确认。',
+    '',
+    '| 资产 | 处理状态 |',
+    '| :--- | :--- |',
+    rows,
+  ].join('\n');
 }
 
 /**
