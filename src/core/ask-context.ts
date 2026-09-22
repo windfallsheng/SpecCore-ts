@@ -190,11 +190,11 @@ function getAvailableCommandsForPhase(phase: ProjectContext['phase']): string[] 
 
   switch (phase) {
     case 'init':
-      return [...base, 'init', 'iteration create', 'doc2spec'];
+      return [...base, 'init', 'iteration create', 'doc2spec', 'unitize'];
     case 'analyze':
-      return [...base, 'analyze', 'doc2spec', 'split', 'validate'];
+      return [...base, 'analyze', 'doc2spec', 'unitize', 'taskify', 'validate'];
     case 'split':
-      return [...base, 'split', 'task new', 'plan', 'analyze'];
+      return [...base, 'taskify', 'task new', 'plan', 'analyze'];
     case 'plan':
       return [...base, 'plan', 'execute', 'task new', 'validate'];
     case 'execute':

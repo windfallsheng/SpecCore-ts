@@ -61,6 +61,12 @@ function getHints(stage: string, ctx: Record<string, string>): StepHint[] {
         { action: `speccore lifecycle --all${iter ? ` --iteration=${iter}` : ''}`, desc: '查看任务看板' },
       ];
 
+    case 'split-units':
+      return [
+        { action: `speccore analyze -I ${iter || '<迭代>'}`.trim(), desc: '🧠 基于功能单元做需求分析 → 020-specs/（确保无 SPEC-SKELETON 残留）' },
+        { action: `speccore iteration taskify${iter ? ` --iteration=${iter}` : ''}`, desc: '功能单元 → 开发任务（Task-*，--interactive 预览）' },
+      ];
+
     case 'execute':
       return [
         { action: `speccore lifecycle --task=${ctx.task || 'Task-001'} --status=testing`, desc: '推进到测试阶段' },

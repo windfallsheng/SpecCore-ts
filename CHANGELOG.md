@@ -1,3 +1,24 @@
+## v8.3.231 (2026-09-22) — 移除 split 双名：拆任务唯一叫 taskify + ask 意图层补 unitize
+
+### 命名归一（拆任务只保留一个名字）
+- 移除顶层 `split` 命令别名——「切需求 unitize」与「拆任务 taskify」双动词明确分工，双名易混；旧脚本仍可用 `speccore iteration taskify`
+- 4 个 AI 工具目录（.claude/.cursor/.codebuddy/.windsurf）的 `spec-split.md` 斜杠命令更名为 `spec-taskify.md`，废弃命令 `speccore split` 全部清理
+- 帮助面板/命令文档/阶段命令推荐/下一步建议中的 split 命令名统一改为 taskify（`speccore split` 现报 unknown command）
+
+### ask 意图识别层补 unitize（此前主意图匹配表缺条目）
+- COMMAND_MAPPINGS 新增 unitize 意图条目（intent: split-units，priority 89）：「切分功能单元/切需求/单元化/切分xx文档」→ `speccore unitize`
+- taskify 条目补充英文 trigger `split`：用户说「split」归一为 taskify（拆任务），不再与 unitize（切需求）混淆
+- run 流水线阶段映射补 `unitize/unitz → split-units`，「从 unitize 开始跑」可识别
+- STEP_SUBAGENT_MAP：unitize → product-analyst；split → taskify
+- next-steps 新增 split-units 下一步指引（analyze → taskify）
+
+### 验证
+- 意图识别实测：切分功能单元→unitize / 拆分任务、split→taskify / unitize→unitize，全部正确
+- `speccore split` 报 unknown command；`speccore taskify`、`speccore unitize` 均可用
+- tsc/build 通过，全量测试 216 passed / 14 failed（与基线一致，无回归）
+
+---
+
 ## v8.3.230 (2026-09-22) — code-index idx 别名补齐（与 AI 识别层一致）
 
 ### 别名一致性修复

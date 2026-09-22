@@ -18,7 +18,8 @@ export type IntentType =
   | 'create'              // 创建功能/任务
   | 'iteration_create'    // 创建迭代
   | 'analyze'             // 分析需求
-  | 'split'               // 任务拆分
+  | 'split'               // 任务拆分（taskify）
+  | 'split-units'         // 切分功能单元（unitize）
   | 'pr'                  // Pull Request
   | 'done'                // 完成任务
   | 'review'              // 审查
@@ -220,12 +221,22 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     description: 'AI 分析 — 需求完整性 + 改动范围 + 风险矩阵（支持全局级/迭代级/任务级/重新分析/深度分析/按需分析/代码关联）',
     args: '-I <iteration> 或 --scope global|task --deep <doc> --iterative --filter <keywords> --with-code --from-code --supplement --sync',
   },
+  // 切分功能单元（单元化，区别于下面的 taskify 拆任务）
+  {
+    id: 'unitize',
+    intent: 'split-units',
+    priority: 89,
+    triggers: ['切分功能单元', '切分单元', '切需求文档', '切需求', '单元化', '功能单元', 'unitize'],
+    patterns: ['切分(.+)文档', '切(.+)需求文档', '把(.+)切分'],
+    description: '单元化 — 需求文档 → 功能单元（SOURCE.md 切片 + 类型标记 + 端覆盖矩阵）',
+    args: '--file <md路径> [--iter <迭代>] [--platform <端名>] [--files "a.md=端1,b.md"]',
+  },
   // 任务拆分（任务化）
   {
     id: 'iteration taskify',
     intent: 'split',
     priority: 88,
-    triggers: ['拆分任务', '拆分需求', '任务拆分', '智能拆分', '任务化'],
+    triggers: ['拆分任务', '拆分需求', '任务拆分', '智能拆分', '任务化', 'split'],
     patterns: ['拆分(.+)任务', '拆分(.+)需求', '把(.+)拆'],
     description: '智能拆分 — 复杂度估算 + 人员分配 + 语义依赖',
     args: '-i <iteration> --interactive',
@@ -844,11 +855,11 @@ function extractParams(input: string, mapping: CommandMapping): Record<string, s
   // 检测 run 流水线意图（v8.3.190+）：起止点优先，其次 preset 名
   if (mapping.intent === 'run') {
     // 口语阶段名 → 流水线阶段 key（与 run.ts PIPELINE_PHASES 对齐）
-    // 注意：切分功能单元（split-units，需求→功能单元）与拆分任务（split，Spec→Task）是两个不同阶段，勿混淆
+    // 注意：切分功能单元（split-units，需求→功能单元，命令 unitize）与拆分任务（taskify，Spec→Task）是两个不同阶段，勿混淆
     const stageNameMap: Record<string, string> = {
       '需求': 'req-doc', 'req-doc': 'req-doc', 'reqdoc': 'req-doc',
       '导入': 'doc2spec', 'doc2spec': 'doc2spec', '导需求': 'doc2spec',
-      '切分': 'split-units', '切分功能单元': 'split-units', '切分单元': 'split-units', '功能单元': 'split-units', 'split-units': 'split-units', 'split_units': 'split-units',
+      '切分': 'split-units', '切分功能单元': 'split-units', '切分单元': 'split-units', '功能单元': 'split-units', 'split-units': 'split-units', 'split_units': 'split-units', 'unitize': 'split-units', 'unitz': 'split-units',
       '分析': 'analyze', 'analyze': 'analyze',
       '校验': 'validate', 'validate': 'validate',
       '拆分': 'taskify', '拆分任务': 'taskify', '任务拆分': 'taskify', '任务化': 'taskify', 'taskify': 'taskify', 'split': 'taskify',

@@ -310,10 +310,10 @@ iterationCmd
   .option('-g, --granularity <level>', '拆分粒度: macro(粗) | module(中,默认) | atomic(细)')
   .action(iterationSplitCommand);
 
-// v8.3.223+: 顶层 split/taskify 别名——统一命令命名。
-// 此前 AGENTS.md 速查表写 speccore split、各 AI 命令副本写 speccore iteration split，
-// 均不存在，AI 拿到错误命令。现注册顶层 split/taskify 作为 iteration taskify 的别名。
-function registerSplitAlias(cmdName: string): void {
+// v8.3.223+: 顶层 taskify 命令（拆功能单元 → 开发任务）。
+// v8.3.231+: 移除 split 别名——「切需求 unitize」与「拆任务 taskify」两个动词明确分工，
+// 双名易混；旧脚本可继续用 speccore iteration taskify。
+function registerTaskifyAlias(cmdName: string): void {
   program
     .command(cmdName)
     .description('拆分需求为开发任务（iteration taskify 的别名）：预览→逐一确认/一键创建')
@@ -335,8 +335,7 @@ function registerSplitAlias(cmdName: string): void {
     .option('-g, --granularity <level>', '拆分粒度: macro(粗) | module(中,默认) | atomic(细)')
     .action(iterationSplitCommand);
 }
-registerSplitAlias('split');
-registerSplitAlias('taskify');
+registerTaskifyAlias('taskify');
 
 iterationCmd
   .command('list')

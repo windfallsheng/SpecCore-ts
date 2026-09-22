@@ -226,7 +226,7 @@ speccore analyze --global --withCode
 
 **功能单元聚焦分析（v8.2.0+，大项目推荐）**：
 
-切分功能单元（`doc2spec --split`）后，逐个单元独立上下文分析，避免大需求一次性塞进上下文导致爆炸/漂移：
+切分功能单元（`speccore unitize`，原 doc2spec --split）后，逐个单元独立上下文分析，避免大需求一次性塞进上下文导致爆炸/漂移：
 
 ```bash
 speccore analyze --extract-units -I <iter>             # 提取功能单元清单
@@ -243,7 +243,7 @@ speccore analyze --consolidate -I <iter> --prompt      # 汇总所有单元为�
 
 **任务级深度分析（v6.44.0+）**：
 
-split 后，每个 Task 的 00-specs/ 已有基础内容（机械提取）。执行 `analyze --task` 时，AI Read 这些内容 + global/ 全局上下文 + {端}/ 专属上下文，重新生成任务级深度分析。
+taskify 后，每个 Task 的 00-specs/ 已有基础内容（机械提取）。执行 `analyze --task` 时，AI Read 这些内容 + global/ 全局上下文 + {端}/ 专属上下文，重新生成任务级深度分析。
 
 **多子任务批量分析（v8.3.94+）**：
 - `--task Task-001,Task-002,Task-003`：同时分析多个子任务，生成合并 prompt
@@ -382,11 +382,11 @@ speccore workspace show <entryId>          # 查看详情 + 原始输入摘要
 speccore workspace clean --days 30         # 清理 30 天前的未提升条目
 ```
 
-### 📦 split — 任务拆分 🔒 AI 命令
+### 📦 taskify — 任务拆分 🔒 AI 命令（原 split，v8.3.231+ 只保留 taskify 一名）
 ```bash
 speccore iteration taskify [-i <iteration>] [-f <file>] [-g <level>] [--force] [--interactive]
 ```
-别名: `sp`
+别名: 无（`speccore iteration taskify` 全称唯一；口语 split/拆分/拆任务均由 ask 意图识别归一为 taskify）
 
 **参数说明：**
 

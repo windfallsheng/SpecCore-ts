@@ -69,7 +69,7 @@ async function autoPipeline(options: RunOptions): Promise<void> {
     { key: 'req-doc',   cmd: 'speccore req-doc',         layer: 'prepare' },
     { key: 'doc2spec',  cmd: 'speccore doc2spec',        layer: 'prepare' },
     // ── 结构化：切分功能单元（1→N，独立于澄清）──
-    { key: 'split-units', cmd: 'speccore doc2spec --split', layer: 'prepare' },
+    { key: 'split-units', cmd: 'speccore unitize', layer: 'prepare' },
     // ── 主流程（分析→校验→任务化→计划→执行→验证→部署→合并→归档→导出）──
     { key: 'analyze',   cmd: 'speccore analyze',         layer: 'main' },
     { key: 'validate',  cmd: 'speccore validate',        layer: 'main' },
@@ -163,7 +163,7 @@ async function autoPipeline(options: RunOptions): Promise<void> {
     taskify: {
       desc: '功能单元已切分（010-requirements/features/ 下存在功能单元目录）',
       impact: '未切分将按需求文档粒度拆分，任务粒度过粗；AI 易把骨架引导标题（质量标准/写作要求）误当功能单元，产出垃圾任务',
-      remedy: `先切分功能单元: speccore doc2spec --split -I ${iteration}（或 speccore run --from split-units -I ${iteration}）`,
+      remedy: `先切分功能单元: speccore unitize --files "..." -I ${iteration}（或 speccore run --from split-units -I ${iteration}）`,
       bypassNote: '确认按需求文档粒度拆分（小型项目）',
       hard: true,
       check: async () => await hasFeatureDirs(iterDir),
