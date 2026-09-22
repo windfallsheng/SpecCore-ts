@@ -50,7 +50,7 @@ SpecCore 规范驱动开发项目。
 |:---|:---|:---|
 | **命令** | `speccore analyze --scope global` | `speccore analyze -I <迭代名>` |
 | **产出位置** | `.speccore/GLOBAL/` | `Iteration-NNN/020-specs/` |
-| **产出内容** | 跨迭代复用的全局资产（端索引、跨端关联、全局架构、各端技术文档） | 当前迭代专属的分析文档（任务级规格、UI设计、测试用例） |
+| **产出内容** | 跨迭代复用的全局资产（端索引、跨端关联、全局架构、各端技术文档：`platforms/{端}/API_INVENTORY.md` 接口清单 / DATA_MODEL / OVERVIEW / TECH） | 当前迭代专属的分析文档（任务级规格、UI设计、测试用例） |
 | **分层** | Layer 1→2→3→4（4a/4b/4c/4d 子层） | Phase 1（综合文档）→ Phase 2（各端专属） |
 | **何时执行** | 项目首次接入 / 新增端 / 全局架构变更 | 每个迭代的需求分析阶段 |
 
@@ -97,7 +97,7 @@ SpecCore 规范驱动开发项目。
 15. **续跑用 --resume** — `speccore execute --resume`
 16. **配置变更用 --upgrade** — `speccore config --upgrade`（`.speccore.yml` / `PROJECT.yaml` 结构升级）
 17. **禁止 AI 直接修改配置文件** — `.speccore.yml`、`.speccore/CONSTITUTION.md`、`.speccore/PROJECT.yaml` 等配置必须通过 `speccore config --upgrade` 修改，禁止用 Write/SearchReplace 工具直接编辑（防止 schema_version 等关键字段被破坏）
-18. **禁止单会话内连续执行多步骤** — analyze → apply → analyze → split → execute 等 Pipeline 步骤必须分会话执行，每步完成后输出 `[SPECCORE_STEP_DONE]`，新会话读取 context snapshot 后 `--resume` 继续。严禁在单会话内循环执行多个 CLI 命令
+18. **禁止单会话内连续执行多步骤** — analyze → apply → analyze → taskify → execute 等 Pipeline 步骤必须分会话执行，每步完成后输出 `[SPECCORE_STEP_DONE]`，新会话读取 context snapshot 后 `--resume` 继续。严禁在单会话内循环执行多个 CLI 命令
 
 ## 详细规范索引
 
@@ -108,7 +108,7 @@ SpecCore 规范驱动开发项目。
 | **全局分析质量规范** | `.speccore/RULES/ANALYSIS_QUALITY.md` | `speccore analyze --scope global` |
 | **迭代层分析强制约束** | `.speccore/RULES/ITERATION_QUALITY.md` | `speccore analyze -I <迭代名>` |
 | **执行阶段强制约束** | `.speccore/RULES/EXECUTION.md` | `speccore execute` |
-| **任务拆分强制约束** | `.speccore/RULES/TASK_SPLIT.md` | `speccore split` |
+| **任务拆分强制约束** | `.speccore/RULES/TASK_SPLIT.md` | `speccore iteration taskify` |
 
 > **Agent 角色执行前，必须先读取 `.speccore/RULES/` 中 `appliesTo` 匹配当前技术栈的规则，将技术栈专属检查项叠加到通用清单中。** 完整阶段-角色映射见 `.speccore/AGENTS/_INDEX.md`。
 
@@ -144,107 +144,34 @@ SpecCore 规范驱动开发项目。
 
 ```
 Iteration-NNN-name/            ← 迭代目录
-├── 000-overview/              ← 进度总览与报告
-│   ├── PROJECT_GRAPH.md       ← 项目任务图谱（split 后生成）
-│   ├── task-summaries/        ← 任务总览报告（TASK_SUMMARY-*.md）
-│   ├── plans/                 ← 执行计划（PLAN.md + HTML 可视化）
-│   ├── RETRO.md               ← 迭代复盘报告（done 后生成）
-│   └── PIPELINE_REPORT.md     ← Pipeline 执行报告（dev 后生成）
-├── 010-requirements/          ← 需求文档（按功能组织）
-│   ├── README.md              ← 目录规范说明
-│   ├── INDEX.md               ← 需求文档索引
-│   ├── sources/               ← [只读] 原始 PRD（.docx/.pdf/.md）
-│   ├── converted/             ← [自动生成] doc2spec 转换后的 MD
-│   ├── features/              ← [手动维护] 按功能模块组织
-│   │   └── {feature}/
-│   │       ├── SOURCE.md      ← [v8.3.226+] 需求原文切片（旧版本为 README.md）
-│   │       └── _matrix.md     ← [v8.3.177+] 端覆盖矩阵（platforms/dependencies/apis）
-│   ├── prototypes/            ← 原型（HTML/图片/链接，内容不限）
-│   ├── assets/                ← 素材资源
-│   │   ├── extracted/         ← doc2spec 提取的图片/媒体
-│   │   ├── prototypes/        ← 产品原型
-│   │   ├── designs/           ← UI 设计稿
-│   │   └── screenshots/       ← 参考截图
-│   ├── bugs/                  ← [可选] bug 需求文档
-│   ├── refactors/             ← [可选] 重构需求文档
-│   ├── research/              ← [可选] 调研需求文档
-│   ├── REQUIREMENT.md         ← [可选] 主需求文档
-│   └── CLARIFY_REPORT.md      ← [可选] 需求澄清报告
+├── 000-overview/              ← 进度总览（PROJECT_GRAPH / plans / RETRO / PIPELINE_REPORT）
+├── 010-requirements/          ← 需求层
+│   ├── sources/ converted/    ← [只读] 原始 PRD / doc2spec 转换
+│   ├── features/{功能单元}/   ← unitize 切分产出（功能单元目录 = analyze 对齐锚点）
+│   ├── bugs/ refactors/ research/  ← 三类需求文档（与任务类型对应）
+│   └── CLARIFY_REPORT.md      ← 澄清报告
 ├── 020-specs/                 ← 需求分析（analyze 输出）
-│   ├── overview/              ← [索引类] 迭代级全局规格（描述功能之间的关系）
-│   │   ├── FUNCTION_MAP.md    ← 功能清单（有哪些功能）
-│   │   ├── INTERACTION_MAP.md ← 功能交互图（功能之间怎么交互）
-│   │   ├── PLATFORMS.md       ← 端列表（有哪些端）
-│   │   ├── DEPENDENCY_MAP.md  ← 功能依赖图（谁依赖谁）
-│   │   ├── CLARIFY.md         ← 全局澄清（跨功能共性问题）
-│   │   └── API_CONTRACT.yaml  ← 跨功能接口契约（被 2+ 功能引用的）
-│   ├── {功能模块}/            ← 按功能模块组织
-│   │   ├── overview/          ← [内容类] 该功能的综合规格（描述功能内部细节）
-│   │   │   ├── REQUIREMENT.md ← 该功能的需求（澄清后）
-│   │   │   ├── CLARIFY.md     ← 该功能的澄清（模块特有）
-│   │   │   ├── ANALYSIS.md    ← 该功能的需求分析（⚠️ 禁止放在全局 overview/ 下）
-│   │   │   ├── TECH.md        ← 该功能的综合技术方案
-│   │   │   ├── RISK.md        ← 该功能的风险
-│   │   │   └── DEPS.md        ← 该功能的依赖
-│   │   └── {端名}/            ← 端级规格
-│   │       └── TECH.md / TEST.md / UI_SPEC.md / DEV_GUIDE.md ...
-│   ├── requirements/          ← [兼容旧路径] 黄金需求（clarify 输出）
+│   ├── overview/              ← [索引类] 功能间关系（FUNCTION_MAP/INTERACTION_MAP/PLATFORMS/DEPENDENCY_MAP/CLARIFY/API_CONTRACT.yaml）
+│   ├── {功能模块}/
+│   │   ├── overview/          ← [内容类] 功能内部细节（REQUIREMENT/ANALYSIS/INTERACTION/CLARIFY/TECH/RISK/DEPS/MONITOR/BUSINESS_RULES）
+│   │   └── {端名}/            ← 端级规格（TECH/TEST/UI_SPEC/DEV_GUIDE）
+│   ├── requirements/          ← 黄金需求（clarify 输出，analyze 读取）
 │   └── QUALITY_AUDIT.md       ← 质量审计报告
-├── 030-tasks/                 ← 开发任务
-│   └── Task-*/                ← 功能模块分组（聚合相关子任务）
-│       ├── .meta/             ← 任务元信息
-│       │   ├── feature        ← 功能单元名
-│       │   ├── type           ← 任务类型（feature/bugfix/refactor/research）
-│       │   ├── status         ← 状态（todo/doing/done）
-│       │   ├── owner          ← 负责人
-│       │   ├── created-at     ← 创建时间
-│       │   └── estimated-hours ← 预估工时
-│       ├── _shared/           ← 共享契约
-│       │   ├── API_CONTRACT.yaml
-│       │   └── CONTEXT.md
-│       ├── 00-specs/          ← 模块级核心规格（analyze 阶段写入）
-│       │   ├── REQ.md         ← 需求规格
-│       │   ├── TECH.md        ← 技术规格
-│       │   ├── SCHEMA.md      ← 数据模型（条件创建）
-│       │   ├── CHANGELOG.md   ← 变更记录
-│       │   └── CONTEXT.md     ← [兼容] 任务上下文副本
-│       ├── {端名}/            ← 端平铺（如 booking-service / h5-mobile / admin-web）
-│       │   └── {子任务}/      ← 执行单元
-│       │       ├── .meta/     ← 子任务元信息
-│       │       │   ├── type
-│       │       │   ├── status
-│       │       │   ├── owner
-│       │       │   ├── created-at
-│       │       │   ├── estimated-hours ← 预估工时
-│       │       │   ├── feature       ← 功能单元名
-│       │       │   └── git-config    ← 子任务级 Git 配置
-│       │       ├── TASK.md    ← 子任务追踪
-│       │       ├── TEST.md    ← 测试用例
-│       │       ├── RISK.md    ← 风险评估
-│       │       ├── DEPS.md    ← 依赖分析
-│       │       ├── MONITOR.md ← 监控方案
-│       │       ├── REVIEW.md  ← 评审清单
-│       │       ├── DEPLOY.md  ← 部署清单
-│       │       ├── ERROR_CODES.md
-│       │       ├── COMPONENT_TREE.md  ← 组件树（仅前端）
-│       │       ├── ROUTES.md          ← 路由设计（仅前端）
-│       │       └── STATE.md           ← 状态管理（仅前端）
+├── 030-tasks/                 ← 开发任务（taskify 输出）
+│   └── {类型}/Task-*/         ← 按类型分子目录（feature/bugfix/refactor/research）
+│       ├── .meta/             ← 任务元信息（feature/type/status/owner/工时）
+│       ├── _shared/           ← 共享契约（API_CONTRACT.yaml + CONTEXT.md）
+│       ├── 00-specs/          ← 任务级核心规格（REQ/TECH/DEV_GUIDE，SCHEMA 条件创建）
+│       ├── {端名}/{子任务}/   ← 端平铺执行单元（TASK/REQ/TECH 骨架/TEST/REVIEW/ERROR_CODES 等，按类型裁剪；
+│       │                         前端多 COMPONENT_TREE/ROUTES/STATE/STYLE_GUIDE/VERIFY_SPEC）
 │       └── .issues.md         ← 问题追踪
-│
-│   > ⚠️ 代码输出位置：AI 生成的代码写入 CONSTITUTION.md/PROJECT.yaml 中声明的「源码路径」，
-│   > 禁止写入迭代目录内。子任务目录只存放规格文档（TASK.md/TEST.md/RISK.md 等）。
-│
-│   research 类型任务目录结构（无前后端分层）：
-│       ├── _shared/
-│       │   └── CONTEXT.md
-│       ├── 00-specs/
-│       │   ├── REQ.md
-│       │   └── TECH.md
-│       ├── RESEARCH.md        ← 调研报告
-│       ├── COMPARISON.md      ← 方案对比
-│       └── .issues.md         ← 问题追踪
+│   （research 类型为独立结构：RESEARCH.md + COMPARISON.md，无端平铺）
 └── STAFFING.md                ← 人员排期
 ```
+
+> **组织原则**：索引类放 overview（有哪些）、内容类放 {功能模块}/overview（是什么）、端级放 {端}/（怎么做）。
+> **⚠️ 代码写入 CONSTITUTION.md/PROJECT.yaml 声明的「源码路径」，禁止写入迭代目录**；子任务目录只存放规格文档。
+> 本结构图为快照：实际目录以 CLI 生成为准（speccore taskify/analyze）；子任务文档的完整清单见各子任务 TASK.md 的「产出物」表。
 
 ## SpecCore 输出标记
 
@@ -286,8 +213,10 @@ Iteration-NNN-name/            ← 迭代目录
 speccore status                          # 当前迭代状态面板
 speccore unitize --file <md路径> --iter <迭代名>   # 切分需求文档 → 功能单元（features/）
 speccore analyze -I <迭代名> --auto      # 全量分析
-speccore taskify -I <迭代名>             # 拆功能单元 → 开发任务（split 别名）
+speccore taskify -I <迭代名>             # 拆功能单元 → 开发任务（原 split，v8.3.231+ 正名）
 speccore execute -i <迭代名> --all       # 执行所有任务
+speccore verify                          # 测试验证（冒烟/回归）
+speccore pr                              # 代码提交 + 创建 Pull Request
 ```
 
 ### 更多规范
@@ -302,23 +231,32 @@ speccore execute -i <迭代名> --all       # 执行所有任务
 - [testing](.speccore/RULES/testing.md)
 - [typescript](.speccore/RULES/typescript.md)
 
-## Agent 角色定义（v6.99.0+）
+## Agent 角色定义（v8.3.160+）
 
-> 来源：`.agents/agents/`，项目级专用 Agent 角色定义
+> 唯一权威来源：`.speccore/AGENTS/_INDEX.md`（注册表）+ `.speccore/AGENTS/*.md`（角色定义）。
+> 新增角色后，在 _INDEX.md 添加一行即可挂载到对应流程。
 
-| Agent | 职责 | 核心能力 | 映射到 _INDEX.md 角色 |
-| :--- | :--- | :--- | :--- |
-| spec-analyzer | SpecCore 需求分析与任务规划 Agent | 需求分析、功能识别 | `spec-analyzer`（analyze/phase1, analyze/phase2） |
-| spec-architect | SpecCore 架构守护与演进 Agent | 架构一致性检查、技术债务识别 | 预留，待挂载到全局分析阶段 |
-| spec-change-detector | SpecCore 变更感知与影响分析 Agent | 变更监听、影响分析 | `impact-analyst` + `regression-tester`（change/impact） |
-| spec-clarifier | SpecCore 需求澄清 Agent | 模糊点识别、缺失信息检测 | ⚠️ v8.3.160+ **已拆分**为 `product-analyst` + `interaction-designer` + `security-reviewer` |
-| spec-executor | SpecCore 开发执行与交付 Agent | 读取规格、代码生成 | `spec-executor`（execute/prompt-analysis, execute/code-generation） |
-| spec-gatekeeper | SpecCore 质量门禁 Agent | 编译检查、测试检查 | ⚠️ v8.3.160+ **已合并**为 `quality-gate-build` (compiler 兼测试) → `quality-gate-nfr` (security-reviewer 兼性能) → `quality-gate-doc-sync` |
-| spec-global-analyzer | SpecCore 全局源码分析 Agent | 源码扫描、跨端关联 | `spec-global-analyzer`（global-analyze） |
-| spec-knowledge-curator | SpecCore 知识沉淀与维护 Agent | 模式更新、术语维护 | 预留，待挂载到 done 阶段 |
-| spec-reviewer | SpecCore 代码审查与质量验证 Agent | Spec 符合性检查、代码质量检查 | `code-reviewer` + `test-reviewer`（pr/review） |
-| spec-security-auditor | SpecCore 安全审计 Agent | 代码安全扫描、敏感数据处理 | `security-reviewer`（analyze/clarify, execute/quality-gate, pr/review） |
-| spec-tester | SpecCore 测试专项 Agent | 测试策略设计、测试用例生成 | `test-engineer`（execute/quality-gate） |
+### 流程 × 角色映射（实际激活）
+
+| 流程 | 步骤 | 激活角色 |
+| :--- | :--- | :--- |
+| clarify / analyze | Phase 0 澄清三连 | `product-analyst` → `interaction-designer` → `security-reviewer`（securityLevel > 2 时） |
+| analyze | Phase 1 全局索引 / 功能模块分批 | `requirement-analyzer` |
+| analyze | Phase 2 逐端分析 | `requirement-analyzer`（端级动态名 `requirement-analyzer-{端名}`，⚠️ AGENTS/ 暂无独立角色文件，Qoder 适配层归一化兜底到基础角色） |
+| analyze | 契约先行 | `requirement-analyzer` |
+| taskify | 拆分全流程 | `task-decomposer` + `dependency-analyst` + `effort-estimator` |
+| plan | 排期规划 | `schedule-planner`（+ `risk-assessor`） |
+| execute | 代码生成 | `code-generator` |
+| execute | 质量门禁三步 | `compiler`（兼测试）→ `security-reviewer`（兼性能）→ `doc-sync-agent` |
+| change | 影响分析 | `impact-analyst` + `regression-tester` |
+| pr | 代码审查 | `code-reviewer` + `test-reviewer`（+ `security-reviewer`） |
+| global-analyze | 全局分析全流程 | `global-analyzer` |
+
+### 全部角色清单
+
+`.speccore/AGENTS/` 下共 23 个角色文件：
+
+`product-analyst`、`product-analyst-backend`、`product-analyst-frontend`、`interaction-designer`、`security-reviewer`、`security-reviewer-finance`、`requirement-analyzer`、`task-decomposer`、`dependency-analyst`、`effort-estimator`、`schedule-planner`、`risk-assessor`、`code-generator`、`compiler`、`test-engineer`、`doc-sync-agent`、`code-reviewer`、`test-reviewer`、`impact-analyst`、`regression-tester`、`global-analyzer`、`compliance-checker`、`performance-expert`
 
 ### 所有 Agent 共用的核心约束
 

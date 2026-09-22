@@ -1,3 +1,34 @@
+## v8.3.239 (2026-09-22) — 任务类型体系收敛 + 任务文档体系修复（全链路体检驱动）
+
+> 对切分→分析→任务层→执行层的文档来源与子 Agent 体系做了一次全链路体检，
+> 修复任务文档的空洞断链（骨架填充、死提取、模板悬空命令），并完成 split → taskify 正名。
+
+### 任务类型体系收敛（split → taskify 正名全链路）
+- 子任务文档按任务类型裁剪（docSet 矩阵）：bugfix 轻量 5 份 / refactor 中等 9 份 / feature 全套 15 份；030-tasks 按类型分子目录（feature/bugfix/refactor/research）
+- `split` → `taskify` 正名：ask-engine 意图表与流水线命令、AI-RULES 流程、prompts presets、HTML 引导页、文档引用全面同步；unitize 独立承接「切需求文档」语义
+- 子任务清单补 REQ/TECH 骨架与 ADR.md；SCHEMA.md 标注改为「条件创建（涉及数据库变更时）」
+
+### 任务文档体系修复（taskify）
+- **SCHEMA.md DDL 提取链修复**：改 `findBestSpecMatch` 三层匹配（兼容 `{feature}/overview/TECH.md` 嵌套键），旧扁平键 `specContents['TECH.md']` 取不到 DDL
+- **删除 REVIEW/DEPLOY 死提取分支**：分析层 9 份名单无此二文档、提取恒空，改走内容感知模板（generate 函数保留 material 参数，未来补提取源即可恢复）
+- **material 阈值统一 10/30 → 200**：防止空模板被短垃圾材料覆盖（11 处：TEST/REVIEW/SCHEMA/DEPLOY/RISK/DEPS/MONITOR/COMPONENT_TREE/ROUTES/STATE/STYLE_GUIDE）
+- **DEPLOY.md 模板悬空命令修正**：`speccore lifecycle --check` → `speccore verify`
+- **API_CONTRACT.yaml 单一真相源**：全局契约已写入时不再被 section 提取版覆盖（保留 rate limit/幂等性/版本策略）
+
+### execute
+- 执行前必读清单加「用 Write 覆盖本端子任务目录下预建的 REQ.md/TECH.md 骨架（SKELETON_MARKER），写出专业规格，不得遗留骨架占位符」
+- API 契约上下文路径修正：`00-specs/API_CONTRACT.yaml` → `_shared/API_CONTRACT.yaml`
+
+### AGENTS.md / init.ts（结构图精简 + 悬空表重写）
+- 悬空「来源：.agents/agents/ 的 spec-* 角色表」重写：唯一权威指向 `.speccore/AGENTS/_INDEX.md` + 流程×角色映射表（11 行）+ 23 个角色清单
+- 迭代结构图精简 ~110 行 → 25 行三层骨架（000/010/020/030 各一行说清职责）+ 组织原则 + 快照声明（实际目录以 CLI 生成为准）
+- 常用命令速查补 unitize/verify/pr；spec-skeleton 产物文案与 4 处注释旧术语统一（split → taskify、doc2spec --split → unitize）
+
+### 验证
+- 编译/构建通过；全量测试 216 passed / 14 failed（与基线一致，零回归）
+
+---
+
 ## v8.3.238 (2026-09-22) — analyze Pipeline 闭环调度四连修（会议项目实测驱动）
 
 > 会议项目（meeting-system，21 功能单元 × 4 端）全链路实测中暴露的 4 个流水线断点，

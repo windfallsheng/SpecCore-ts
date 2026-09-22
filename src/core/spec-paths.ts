@@ -129,7 +129,7 @@ async function getValidPlatformIdentifiers(): Promise<Set<string>> {
  * 提取文件名（不含扩展名）作为功能模块名，去重返回
  */
 export async function parseFeatureList(iterDir: string): Promise<string[]> {
-  // v8.3.201+: 优先读 010-requirements/features/ 的一级子目录名（doc2spec --split 产出的功能单元目录）。
+  // v8.3.201+: 优先读 010-requirements/features/ 的一级子目录名（unitize 产出的功能单元目录）。
   // 旧逻辑「递归扫描所有 .md 文件名」会误识别 overview/GLOBAL_CONTEXT-*.md、features/{unit}/_matrix.md
   // 为功能模块，反而读不到真正的功能单元目录名（features/{docSlug}-{单元名}/），导致 020-specs 骨架错乱。
   const featuresDir = join(iterDir, '010-requirements', 'features');

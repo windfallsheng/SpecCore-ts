@@ -721,7 +721,14 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
             priority: task.priority || 'medium',
           };
           (section as any)._owner = task.owner || '未分配';
-          (section as any)._taskType = (task.type && ['feature', 'bugfix', 'refactor', 'research', 'security', 'performance'].includes(task.type)) ? task.type : 'feature';
+          // v8.3.239+: 任务类型收敛为 4 种（与 task-paths.ts TASK_TYPES 对齐）——
+          // security 按 feature 交付（安全加固是完整交付，威胁分析归入 TECH.md 安全章节），
+          // performance 按 refactor 执行（性能优化本质是重构）
+          const rawType = task.type;
+          let taskType = (rawType && ['feature', 'bugfix', 'refactor', 'research'].includes(rawType)) ? rawType : 'feature';
+          if (rawType === 'security') { taskType = 'feature'; logger.info(`   🔒 任务「${task.name}」类型 security 收敛为 feature（安全加固按完整交付）`); }
+          if (rawType === 'performance') { taskType = 'refactor'; logger.info(`   ⚡ 任务「${task.name}」类型 performance 收敛为 refactor（性能优化按重构执行）`); }
+          (section as any)._taskType = taskType;
           // 保存 topic slug，用于生成任务目录名（v8.3.77+: 多层提取）
           (section as any)._topic = extractTopic(task);
           // 保存 AI 生成的实际内容（用于写入 REQ.md / TECH.md）
@@ -2066,7 +2073,11 @@ ${sectionDevExtract}
   }
 
   if (section.content.match(/数据库|数据表|表结构|DDL|ALTER|建表|索引/)) {
-    const schemaMaterial = extractRelevantSection(specContents['TECH.md'] || '', section.name, 'DDL 建表 表结构 索引 CREATE TABLE');
+    // v8.3.239+: 三层匹配提取 DDL（兼容 {feature}/overview/TECH.md 嵌套键，旧扁平键取不到 DDL）
+    const bestTechMatch = findBestSpecMatch(specContents, section.name, undefined, 'TECH.md');
+    const schemaMaterial = extractRelevantSection(
+      (bestTechMatch && bestTechMatch.score >= 20 ? specContents[bestTechMatch.key] : specContents['TECH.md']) || '',
+      section.name, 'DDL 建表 表结构 索引 CREATE TABLE');
     await writeFile(join(taskDir, '00-specs', 'SCHEMA.md'), generateSchemaTemplate(section, schemaMaterial));
   }
 
@@ -2081,7 +2092,9 @@ ${sectionDevExtract}
   );
 
   // API_CONTRACT.yaml 统一放 _shared/
-  if (apiLines.length > 0) {
+  // v8.3.239+: 全局契约是单一真相源——已写入时不再覆盖（保留 rate limit/幂等性/版本策略），
+  // section 提取版仅作兜底（全局契约不存在时）
+  if (apiLines.length > 0 && !(await pathExists(join(taskDir, '_shared', 'API_CONTRACT.yaml')))) {
     // 从 section 内容提取每个 API 的请求/响应字段
     const sectionContent = section.content || '';
     const apiFieldMap: Record<string, string[]> = {};
@@ -2125,12 +2138,32 @@ ${sectionDevExtract}
   // ── 4. 子任务目录（按任务类型差异化） ──
 
   // 预加载执行产出模板材料（每个子任务都需要）
-  const testMaterial = extractRelevantSection(specContents['TEST.md'] || '', section.name);
-  const reviewMaterial = extractRelevantSection(specContents['REVIEW.md'] || '', section.name);
-  const deployMaterial = extractRelevantSection(specContents['DEPLOY.md'] || '', section.name);
-  const riskMaterial = extractRelevantSection(specContents['RISK.md'] || '', section.name);
-  const depsMaterial = extractRelevantSection(specContents['DEPS.md'] || '', section.name);
-  const monitorMaterial = extractRelevantSection(specContents['MONITOR.md'] || '', section.name);
+  // v8.3.239+: 材料提取统一走三层匹配——兼容 overview/ 扁平键与 {feature}/overview/ 嵌套键
+  // （新结构下 RISK/DEPS/MONITOR 在功能模块目录，旧结构下在 overview/ 平铺）
+  const extractMaterial = (docName: string): string => {
+    const best = findBestSpecMatch(specContents, section.name, undefined, docName);
+    if (best && best.score >= 20) {
+      return extractRelevantSection(specContents[best.key], section.name);
+    }
+    return extractRelevantSection(specContents[docName] || '', section.name);
+  };
+  const testMaterial = extractMaterial('TEST.md');
+  // v8.3.239+: 分析层 9 份名单无 REVIEW/DEPLOY，提取恒空 → 不再提取，走内容感知模板
+  // （generateReviewChecklist/generateDeployChecklist 保留 material 参数，未来补提取源即可恢复）
+  const riskMaterial = extractMaterial('RISK.md');
+  const depsMaterial = extractMaterial('DEPS.md');
+  const monitorMaterial = extractMaterial('MONITOR.md');
+
+  // v8.3.239+: 子任务文档按类型裁剪——bugfix 轻量（修缺陷无需部署/监控/前端设计），
+  // refactor 中等（保留风险与组件树，跳过路由/样式/部署/监控），feature 全套
+  const docSet = {
+    hasRisk: taskType !== 'bugfix',
+    hasMonitor: taskType === 'feature',
+    hasDeploy: taskType === 'feature',
+    hasFeDesign: taskType === 'feature',          // ROUTES/STATE/STYLE_GUIDE
+    hasComponentTree: taskType !== 'bugfix',      // feature/refactor 前端影响面
+    hasAdr: taskType !== 'bugfix',
+  };
 
   // ── 4a. research 类型：不创建平台/子任务目录，直接产出调研文档 ──
   if (isResearch) {
@@ -2169,7 +2202,7 @@ ${section.content}
     );
   } else {
     // ── 4b. feature/bugfix/refactor：端平铺 → 子任务（v6.49.0+ 统一架构）──
-    
+
     // 创建子任务的通用函数
     const createSubtask = async (
       subtaskDir: string, subtaskId: string, platformName: string,
@@ -2290,11 +2323,10 @@ ${isBk ? apiList : pageList}
 | :--- | :--- | :--- | :--- |
 | TASK.md | ✅ | ./TASK.md | 本文件 |
 | TEST.md | ⏳ | ./TEST.md | ${isBk ? '单元测试 + 接口测试' : 'UI 测试 + 组件测试'} |
-| RISK.md | ⏳ | ./RISK.md | 风险评估 |
-| REVIEW.md | ⏳ | ./REVIEW.md | 评审清单 |
-| DEPLOY.md | ⏳ | ./DEPLOY.md | 部署检查 |
-| ERROR_CODES.md | ⏳ | ./ERROR_CODES.md | 错误码定义 |
-> ⚠️ 代码输出位置：AI 生成的代码写入 CONSTITUTION.md/PROJECT.yaml 中声明的「源码路径」，
+${docSet.hasRisk ? '| RISK.md | ⏳ | ./RISK.md | 风险评估 |\n' : ''}| DEPS.md | ⏳ | ./DEPS.md | 依赖清单 |
+${docSet.hasMonitor ? '| MONITOR.md | ⏳ | ./MONITOR.md | 监控指标 |\n' : ''}| REVIEW.md | ⏳ | ./REVIEW.md | 评审清单 |
+${docSet.hasDeploy ? '| DEPLOY.md | ⏳ | ./DEPLOY.md | 部署检查 |\n' : ''}| ERROR_CODES.md | ⏳ | ./ERROR_CODES.md | 错误码定义 |
+${!isBk && docSet.hasComponentTree ? '| COMPONENT_TREE.md | ⏳ | ./COMPONENT_TREE.md | 组件树 |\n' : ''}${!isBk && docSet.hasFeDesign ? '| ROUTES.md | ⏳ | ./ROUTES.md | 路由设计 |\n| STATE.md | ⏳ | ./STATE.md | 状态管理 |\n| STYLE_GUIDE.md | ⏳ | ./STYLE_GUIDE.md | 样式规范 |\n' : ''}> ⚠️ 代码输出位置：AI 生成的代码写入 CONSTITUTION.md/PROJECT.yaml 中声明的「源码路径」,
 > 不写入迭代目录。子任务目录只存放规格文档。
 
 ## 变更履历
@@ -2304,15 +2336,19 @@ ${isBk ? apiList : pageList}
 `
       );
 
-      // 前端设计文档（仅非 backend 端）
-      if (!isBk) {
+      // 前端设计文档（仅非 backend 端，按任务类型裁剪：bugfix 跳过，refactor 仅组件树）
+      if (!isBk && docSet.hasComponentTree) {
         const feContent = extractTaskTechContent(specContents, section, platformName);
         await writeFile(join(subtaskDir, 'COMPONENT_TREE.md'), generateComponentTree(section, platformName, feContent));
-        await writeFile(join(subtaskDir, 'ROUTES.md'), generateRoutesDoc(section, platformName, feContent));
-        await writeFile(join(subtaskDir, 'STATE.md'), generateStateDoc(section, platformName, feContent));
-        await writeFile(join(subtaskDir, 'STYLE_GUIDE.md'), generateStyleGuide(section, platformName, feContent));
+        if (docSet.hasFeDesign) {
+          await writeFile(join(subtaskDir, 'ROUTES.md'), generateRoutesDoc(section, platformName, feContent));
+          await writeFile(join(subtaskDir, 'STATE.md'), generateStateDoc(section, platformName, feContent));
+          await writeFile(join(subtaskDir, 'STYLE_GUIDE.md'), generateStyleGuide(section, platformName, feContent));
+        }
+      }
 
-        // v8.3.60+: 自动生成 VERIFY_SPEC.yaml（从源码路由扫描）
+      // v8.3.60+: 自动生成 VERIFY_SPEC.yaml（从源码路由扫描，所有前端端均生成）
+      if (!isBk) {
         try {
           const projectConfig = await loadProjectConfig();
           const platformConfig = projectConfig.platforms.find(p => p.name === platformName);
@@ -2340,14 +2376,14 @@ ${isBk ? apiList : pageList}
         }
       }
 
-      // 执行产出文档
+      // 执行产出文档（按任务类型裁剪：bugfix 无 RISK/MONITOR/DEPLOY，refactor 无 MONITOR/DEPLOY）
       await writeFile(join(subtaskDir, 'TEST.md'), generateTestOutline(section, testMaterial));
-      await writeFile(join(subtaskDir, 'REVIEW.md'), generateReviewChecklist(section, reviewMaterial));
-      await writeFile(join(subtaskDir, 'DEPLOY.md'), generateDeployChecklist(section, deployMaterial));
+      await writeFile(join(subtaskDir, 'REVIEW.md'), generateReviewChecklist(section));
+      if (docSet.hasDeploy) await writeFile(join(subtaskDir, 'DEPLOY.md'), generateDeployChecklist(section));
       await writeFile(join(subtaskDir, 'ERROR_CODES.md'), generateErrorCodes(section));
-      await writeFile(join(subtaskDir, 'RISK.md'), generateRiskTemplate(section, riskMaterial));
+      if (docSet.hasRisk) await writeFile(join(subtaskDir, 'RISK.md'), generateRiskTemplate(section, riskMaterial));
       await writeFile(join(subtaskDir, 'DEPS.md'), generateDepsTemplate(section, depsMaterial));
-      await writeFile(join(subtaskDir, 'MONITOR.md'), generateMonitorTemplate(section, monitorMaterial));
+      if (docSet.hasMonitor) await writeFile(join(subtaskDir, 'MONITOR.md'), generateMonitorTemplate(section, monitorMaterial));
 
       // v8.0.0+: 预创建 REQ.md 和 TECH.md 骨架文件
       // AI 用 Write 覆盖这些文件，不再自行创建路径（消除路径错误）
@@ -2360,9 +2396,11 @@ ${isBk ? apiList : pageList}
         `${SKELETON_MARKER}\n# ${section.name} — ${platformLabel} 技术方案\n\n> 本文件由 CLI 预创建，请用 Write 工具覆盖为专业技术方案。\n\n## 接口定义\n<!-- AI-FILL: 请求/响应结构体 -->\n\n## 数据模型\n<!-- AI-FILL: 字段/类型/约束 -->\n\n## 核心逻辑\n<!-- AI-FILL -->\n\n## 依赖说明\n<!-- AI-FILL -->\n`
       );
 
-      const adr = generateAdr(section);
-      if (adr) {
-        await writeFile(join(subtaskDir, 'ADR.md'), adr);
+      if (docSet.hasAdr) {
+        const adr = generateAdr(section);
+        if (adr) {
+          await writeFile(join(subtaskDir, 'ADR.md'), adr);
+        }
       }
     };
 
@@ -2429,14 +2467,14 @@ ${isBk ? apiList : pageList}
 - TECH.md → ../../../00-specs/TECH.md
 `
     );
-    // 自动补充的后端也需要执行产出文档
+    // 自动补充的后端也需要执行产出文档（按任务类型裁剪）
     await writeFile(join(autoSubtaskDir, 'TEST.md'), generateTestOutline(section, testMaterial));
-    await writeFile(join(autoSubtaskDir, 'REVIEW.md'), generateReviewChecklist(section, reviewMaterial));
-    await writeFile(join(autoSubtaskDir, 'DEPLOY.md'), generateDeployChecklist(section, deployMaterial));
+    await writeFile(join(autoSubtaskDir, 'REVIEW.md'), generateReviewChecklist(section));
+    if (docSet.hasDeploy) await writeFile(join(autoSubtaskDir, 'DEPLOY.md'), generateDeployChecklist(section));
     await writeFile(join(autoSubtaskDir, 'ERROR_CODES.md'), generateErrorCodes(section));
-    await writeFile(join(autoSubtaskDir, 'RISK.md'), generateRiskTemplate(section, riskMaterial));
+    if (docSet.hasRisk) await writeFile(join(autoSubtaskDir, 'RISK.md'), generateRiskTemplate(section, riskMaterial));
     await writeFile(join(autoSubtaskDir, 'DEPS.md'), generateDepsTemplate(section, depsMaterial));
-    await writeFile(join(autoSubtaskDir, 'MONITOR.md'), generateMonitorTemplate(section, monitorMaterial));
+    if (docSet.hasMonitor) await writeFile(join(autoSubtaskDir, 'MONITOR.md'), generateMonitorTemplate(section, monitorMaterial));
     taskPlatforms.push(fallbackBackend);
     subtaskIdMap.set(fallbackBackend, `${taskId}-${fallbackBackend}-auto`);
   }
@@ -2453,7 +2491,7 @@ ${isBk ? apiList : pageList}
     ? `020-specs/${sourceFile}`
     : `020-specs/${taskType === 'feature' ? 'features' : taskType === 'bugfix' ? 'bugs' : taskType === 'refactor' ? 'refactors' : 'research'}/${topic}.md`;
   // 任务类型中文标签
-  const typeLabels: Record<string, string> = { feature: '功能开发', bugfix: '缺陷修复', refactor: '重构优化', research: '技术调研', security: '安全修复', performance: '性能优化' };
+  const typeLabels: Record<string, string> = { feature: '功能开发', bugfix: '缺陷修复', refactor: '重构优化', research: '技术调研' };
   const typeLabel = typeLabels[taskType] || taskType;
 
   // 收集同迭代的其它任务（用于关联关系）
@@ -2550,8 +2588,8 @@ async function updateProjectGraph(iterationDir: string, sections: Section[]): Pr
  * 根据需求内容自动生成测试用例框架
  */
 function generateTestOutline(section: Section, material?: string): string {
-  // v6.79.0+: 降低阈值，让更多 analyze 内容被使用
-  if (material && material.trim().length > 10) {
+  // v8.3.239+: 阈值统一 200 字符，低质量提取片段不再替换内容感知模板
+  if (material && material.trim().length > 200) {
     return `# ${section.name} — 测试用例\n\n> 来源: analyze → TEST.md（自动提取）\n\n${material.trim()}\n`;
   }
   const name = section.name;
@@ -2630,7 +2668,8 @@ function extractApiRowsFromContent(content: string): Array<{ method: string; pat
  * 根据需求内容自动生成代码审查清单
  */
 function generateReviewChecklist(section: Section, material?: string): string {
-  if (material && material.trim().length > 10) {
+  // v8.3.239+: 阈值统一 200 字符（分析层暂无 REVIEW 提取源，material 恒空，走内容感知模板）
+  if (material && material.trim().length > 200) {
     return `# ${section.name} — Code Review Checklist\n\n> 来源: analyze → REVIEW.md（自动提取）\n\n${material.trim()}\n`;
   }
   const name = section.name;
@@ -2851,7 +2890,7 @@ async function generateImpactGraph(
 
 function generateSchemaTemplate(section: Section, material?: string): string {
   const name = section.name;
-  if (material && material.trim().length > 30) {
+  if (material && material.trim().length > 200) {
     return `# ${name} — Database Schema\n\n> 来源: analyze → TECH.md（自动提取）\n\n${material.trim()}\n`;
   }
   return `# ${name} — Database Schema
@@ -2893,7 +2932,8 @@ function generateSchemaTemplate(section: Section, material?: string): string {
 }
 
 function generateDeployChecklist(section: Section, material?: string): string {
-  if (material && material.trim().length > 10) {
+  // v8.3.239+: 阈值统一 200 字符（分析层暂无 DEPLOY 提取源，material 恒空，走内容感知模板）
+  if (material && material.trim().length > 200) {
     return `# ${section.name} — 部署检查清单\n\n> 来源: analyze → DEPLOY.md（自动提取）\n\n${material.trim()}\n`;
   }
   const name = section.name;
@@ -2902,7 +2942,7 @@ function generateDeployChecklist(section: Section, material?: string): string {
 
 ## Pre-Deploy
 
-- [ ] All tests pass (\`speccore lifecycle --task=${name} --check\`)
+- [ ] All tests pass (\`speccore verify\`)
 - [ ] Code review approved (REVIEW.md all checked)
 - [ ] PR merged to main
 - [ ] CI/CD pipeline green
@@ -3154,7 +3194,7 @@ function generateAcceptanceCriteria(section: Section): string {
 
 // 风险评估
 function generateRiskTemplate(section: Section, material?: string): string {
-  if (material && material.trim().length > 30) {
+  if (material && material.trim().length > 200) {
     return `# ${section.name} — 风险评估\n\n> 来源: analyze → RISK.md（自动提取）\n\n${material.trim()}\n`;
   }
   return `# ${section.name} — 风险评估\n\n> split | ${new Date().toISOString().split('T')[0]}\n\n## 风险矩阵\n\n| 风险 | 可能 | 影响 | 缓解 |\n| :--- | :--- | :--- | :--- |\n| 兼容性 | 中 | 高 | 版本号+测试 |\n| 性能 | 低 | 中 | 压测+索引 |\n| 依赖故障 | 低 | 高 | 降级方案 |\n\n## 回滚\n\n1. 触发: 线上错误率 > 1%\n2. 步骤: git revert → 重部署\n3. 验证: 冒烟测试 + 监控\n`;
@@ -3162,7 +3202,7 @@ function generateRiskTemplate(section: Section, material?: string): string {
 
 // 依赖清单
 function generateDepsTemplate(section: Section, material?: string): string {
-  if (material && material.trim().length > 30) {
+  if (material && material.trim().length > 200) {
     return `# ${section.name} — 依赖清单\n\n> 来源: analyze → DEPS.md（自动提取）\n\n${material.trim()}\n`;
   }
   return `# ${section.name} — 依赖清单\n\n## 上游依赖\n\n| 服务 | 版本 | 用途 | SLA |\n| :--- | :--- | :--- | :--- |\n| _待补充_ | — | — | — |\n\n## 下游影响\n\n| 服务 | 影响 | 通知 |\n| :--- | :--- | :--- |\n| _待补充_ | — | — |\n`;
@@ -3170,7 +3210,7 @@ function generateDepsTemplate(section: Section, material?: string): string {
 
 // 监控指标
 function generateMonitorTemplate(section: Section, material?: string): string {
-  if (material && material.trim().length > 30) {
+  if (material && material.trim().length > 200) {
     return `# ${section.name} — 监控\n\n> 来源: analyze → MONITOR.md（自动提取）\n\n${material.trim()}\n`;
   }
   return `# ${section.name} — 监控\n\n## 关键指标\n\n| 指标 | 阈值 | 级别 |\n| :--- | :--- | :--- |\n| 成功率 | <99.9% | P1 |\n| P99延迟 | >1000ms | P2 |\n| 错误率 | >0.1% | P0 |\n\n## 关键日志\n\n- 请求入口 (traceId)\n- 业务异常 (上下文)\n- 外部调用 (耗时)\n`;
@@ -3442,7 +3482,7 @@ function extractTaskDevGuideContent(
 
 // 前端专属：组件树
 function generateComponentTree(section: Section, platform: string, material?: string): string {
-  if (material && material.trim().length > 30) {
+  if (material && material.trim().length > 200) {
     return `# ${section.name} — 组件树 (${platform})\n\n> 来源: analyze → TECH.md（自动提取）\n\n${material.trim()}\n`;
   }
   return `# ${section.name} — 组件树 (${platform})
@@ -3466,7 +3506,7 @@ function generateComponentTree(section: Section, platform: string, material?: st
 
 // 前端专属：路由
 function generateRoutesDoc(section: Section, platform: string, material?: string): string {
-  if (material && material.trim().length > 30) {
+  if (material && material.trim().length > 200) {
     return `# ${section.name} — 路由设计 (${platform})\n\n> 来源: analyze → TECH.md（自动提取）\n\n${material.trim()}\n`;
   }
   return `# ${section.name} — 路由设计 (${platform})
@@ -3485,7 +3525,7 @@ function generateRoutesDoc(section: Section, platform: string, material?: string
 
 // 前端专属：状态管理
 function generateStateDoc(section: Section, platform: string, material?: string): string {
-  if (material && material.trim().length > 30) {
+  if (material && material.trim().length > 200) {
     return `# ${section.name} — 状态管理 (${platform})\n\n> 来源: analyze → TECH.md（自动提取）\n\n${material.trim()}\n`;
   }
   return `# ${section.name} — 状态管理 (${platform})
@@ -3509,7 +3549,7 @@ function generateStateDoc(section: Section, platform: string, material?: string)
 
 // 前端专属：样式规范
 function generateStyleGuide(section: Section, platform: string, material?: string): string {
-  if (material && material.trim().length > 30) {
+  if (material && material.trim().length > 200) {
     return `# ${section.name} — 样式规范 (${platform})\n\n> 来源: analyze → TECH.md（自动提取）\n\n${material.trim()}\n`;
   }
   const isH5 = platform.includes('h5') || platform.includes('mobile');

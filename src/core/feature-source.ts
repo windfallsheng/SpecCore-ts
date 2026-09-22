@@ -5,7 +5,7 @@
  * README.md（语义不清，README 通常指「自述说明」）更名为 SOURCE.md
  * （强调「来源切片」——从 PRD 切出的需求原文）。
  *
- * - 写入端（doc2spec --split / spec-merger 新建单元）：写 SOURCE.md
+ * - 写入端（unitize / spec-merger 新建单元）：写 SOURCE.md
  * - 读取端：本文件提供的 resolveUnitSourcePath 优先读 SOURCE.md，
  *   兼容旧迭代目录已落盘的 README.md，无需迁移
  */

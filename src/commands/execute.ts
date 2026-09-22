@@ -1905,7 +1905,7 @@ function buildAgentContext(tasks: TaskState[], agent: string): string {
     ctx += `1. \`Iteration-*/${task.id}/{platform}/{subtask}/TASK.md\` — 子任务概览（所有端平铺）\n`;
     ctx += `2. \`Iteration-*/${task.id}/00-specs/REQ.md\` — 需求 + 验收标准\n`;
     ctx += `3. \`Iteration-*/${task.id}/00-specs/TECH.md\` — 技术设计\n`;
-    ctx += `4. \`Iteration-*/${task.id}/00-specs/API_CONTRACT.yaml\` — API 契约 (if exists)\n\n`;
+    ctx += `4. \`Iteration-*/${task.id}/_shared/API_CONTRACT.yaml\` — API 契约 (if exists)\n\n`;
 
     ctx += `**Supplementary (read only if needed):**\n`;
     ctx += `- 子任务目录/TEST.md (测试用例) | 子任务目录/REVIEW.md (评审清单)\n`;
@@ -1923,6 +1923,7 @@ function buildAgentContext(tasks: TaskState[], agent: string): string {
   ctx += `- [ ] 已阅读子任务 TASK.md，了解任务范围和状态\n`;
   ctx += `- [ ] 已阅读 00-specs/REQ.md，理解需求和验收标准\n`;
   ctx += `- [ ] 已阅读 00-specs/TECH.md，理解技术方案\n`;
+  ctx += `- [ ] 用 Write 覆盖本端子任务目录下预建的 REQ.md/TECH.md 骨架（含 SKELETON_MARKER 标记的文件），写出本端的专业规格，不得遗留骨架占位符\n`;
   ctx += `- [ ] 代码实现严格遵循 REQ.md 的验收标准和 TECH.md 的技术方案\n`;
   ctx += `- [ ] 如涉及 API 变更，确保前后端接口签名一致\n`;
   ctx += `- [ ] 完成后更新 TASK.md 状态（doing → done）\n\n`;

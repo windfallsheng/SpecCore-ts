@@ -12,7 +12,7 @@
 ## 核心流水线
 
 ```
-init → doc2spec → analyze → split → plan → execute → pr → done → spec2doc
+init → doc2spec → unitize → analyze → taskify → plan → execute → pr → done → spec2doc
 ```
 
 ## 命令快速参考
@@ -23,7 +23,8 @@ init → doc2spec → analyze → split → plan → execute → pr → done →
 | doc2spec | Word→Spec MD (CLI) | -f <文件> --iter <迭代> | PRD/Word | 010-requirements/*.md |
 | **spec-doc2spec** | **AI+Pandoc 双路交叉验证导入** | **(Skill 自动触发)** | PRD原文 | REQUIREMENT.md + VALIDATION.md |
 | analyze | 需求分析 | -I <迭代> --task <任务> | 010-requirements/ | 020-specs/ANALYSIS.md |
-| split | 拆分任务 | -i <迭代> --owner <人> | 020-specs/ | Task-001~NNN/ |
+| unitize | 切分需求文档 | --file <md> -i <迭代> | PRD/需求 MD | features/{功能单元}/ |
+| taskify | 拆分任务 | -i <迭代> --owner <人> | 020-specs/ | Task-001~NNN/ |
 | plan | 执行计划 | -I <迭代> --owner <人> | Task 列表 | plan.json |
 | execute | 执行开发 | -i <迭代> -t <任务> --type <类型> | REQ.md/TECH.md | 代码 + .issues.md |
 | pr | 创建PR | --task <任务> | 代码提交 | Pull Request |
@@ -44,7 +45,7 @@ init → doc2spec → analyze → split → plan → execute → pr → done →
 | spec-doc2spec | **AI语义提取+Pandoc机械转换+交叉验证** | "帮我分析这个PRD"/"导入需求文档" |
 | spec-spec2doc | **AI内容编排+Pandoc格式转换+质量验证** | "导出文档"/"生成交付文档" |
 | spec-analyze | 深度需求分析（拆解→映射→风险） | "分析需求" |
-| spec-split | 智能任务拆分（分组→分配→依赖） | "拆分任务" |
+| spec-taskify | 智能任务拆分（分组→分配→依赖） | "拆分任务" |
 | spec-execute | 代码生成+编译+测试+修复循环 | "开发Task-001" |
 | spec-plan | 排程+里程碑+并行策略 | "生成计划" |
 | spec-change | 变更记录+影响分析+代码更新 | "需求变更" |

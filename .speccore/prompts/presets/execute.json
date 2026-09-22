@@ -4,7 +4,7 @@
     "name": "全自动流水线",
     "category": "execute",
     "icon": "🤖",
-    "description": "analyze→split→plan→execute→pr→done 全自动",
+    "description": "analyze→taskify→plan→execute→pr→done 全自动",
     "prompt": "全自动完成 {迭代名} 的开发",
     "env": "ai",
     "skill": "spec-dev",
@@ -23,7 +23,7 @@
     "sort": 1,
     "examples": [
       "从零开始全自动完成迭代开发",
-      "不想手动执行 analyze→split→plan→execute"
+      "不想手动执行 analyze→taskify→plan→execute"
     ]
   },
   {
@@ -31,7 +31,7 @@
     "name": "从指定阶段继续",
     "category": "execute",
     "icon": "⏭️",
-    "description": "从 split/plan/execute 等指定阶段继续 dev",
+    "description": "从 taskify/plan/execute 等指定阶段继续 dev",
     "prompt": "从 {阶段} 阶段继续开发 {迭代名}",
     "env": "ai",
     "skill": "spec-dev",
@@ -43,7 +43,7 @@
       },
       {
         "key": "阶段",
-        "placeholder": "split",
+        "placeholder": "taskify",
         "required": true
       }
     ],
@@ -127,7 +127,7 @@
     "description": "只拆分指定功能模块的任务",
     "prompt": "按 {功能模块} 拆分 {迭代名} 的任务",
     "env": "ai",
-    "skill": "spec-split",
+    "skill": "spec-taskify",
     "params": [
       {
         "key": "迭代名",
@@ -159,7 +159,7 @@
     "description": "已有任务后追加新任务，不覆盖",
     "prompt": "追加拆分 {迭代名}",
     "env": "ai",
-    "skill": "spec-split",
+    "skill": "spec-taskify",
     "params": [
       {
         "key": "迭代名",

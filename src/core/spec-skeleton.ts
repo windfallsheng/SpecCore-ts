@@ -180,8 +180,8 @@ const PHASE1_DOCS: { name: string; buildPlaceholder: (iter: string) => string }[
 > 迭代: ${iter} | 生成: 待填充
 
 ## 写作要求
-列出本迭代所有功能模块及其涉及端，供 split 命令作「功能×端映射」参考。
-> 功能单元的权威来源是 010-requirements/features/ 目录（doc2spec --split 产出），本文件仅作映射补充。
+列出本迭代所有功能模块及其涉及端，供 taskify 命令作「功能×端映射」参考。
+> 功能单元的权威来源是 010-requirements/features/ 目录（unitize 产出），本文件仅作映射补充。
 
 | # | 功能模块 | 涉及端 | 优先级 | 来源 |
 |:---|:---|:---|:---|:---|
@@ -604,6 +604,54 @@ ${feature} 的架构视角综合方案（跨端），端级细节下放到 {端}
 `,
   },
   {
+    name: 'RISK.md',
+    buildPlaceholder: (iter, feature) => `${SKELETON_MARKER}
+# ${feature} 风险清单
+
+> 迭代: ${iter} | 功能: ${feature} | 生成: 待填充
+
+## 写作要求
+记录 ${feature} 的功能模块级风险（跨端视角）：
+| 风险 | 可能性 | 影响 | 缓解措施 |
+|:---|:---|:---|:---|
+| R-01 | 高/中/低 | 高/中/低 | |
+
+> 端级风险下放到 {端}/TECH.md 的风险章节，本文件只记录功能级共性风险。
+`,
+  },
+  {
+    name: 'DEPS.md',
+    buildPlaceholder: (iter, feature) => `${SKELETON_MARKER}
+# ${feature} 依赖清单
+
+> 迭代: ${iter} | 功能: ${feature} | 生成: 待填充
+
+## 写作要求
+记录 ${feature} 的功能模块级依赖（供 taskify 提取到子任务 DEPS.md）：
+- 内部服务依赖（服务名/用途/接口/SLA）
+- 第三方依赖（包名/版本/用途/许可证）
+- 集成方式（SDK/API/消息队列）与版本兼容性风险
+
+> 端级依赖下放到 {端}/TECH.md，本文件只记录功能级共性依赖。
+`,
+  },
+  {
+    name: 'MONITOR.md',
+    buildPlaceholder: (iter, feature) => `${SKELETON_MARKER}
+# ${feature} 监控指标
+
+> 迭代: ${iter} | 功能: ${feature} | 生成: 待填充
+
+## 写作要求
+记录 ${feature} 的功能模块级监控方案（供 taskify 提取到子任务 MONITOR.md）：
+| 指标 | 类型 | 采集方式 | 告警阈值 |
+|:---|:---|:---|:---|
+| M-01 | 业务/技术 | 日志/埋点/链路 | |
+
+> 大盘看板与告警规则在此定义，端级采集细节放 {端}/TECH.md。
+`,
+  },
+  {
     name: 'BUSINESS_RULES.md',
     buildPlaceholder: (iter, feature) => `${SKELETON_MARKER}
 # ${feature} 业务规则
@@ -737,6 +785,32 @@ export const QUALITY_RUBRICS: Record<string, { checklist: string[]; antiPatterns
       '指标无阈值',
       '告警规则无通知渠道',
       '只有系统指标没有业务指标',
+    ],
+  },
+  'INTERACTION.md': {
+    checklist: [
+      '跨端交互时序图（Mermaid sequenceDiagram）',
+      '接口调用链路（调用方 → 被调方 → 接口路径）',
+      '异常分支与重试/降级策略',
+      '接口契约索引表',
+    ],
+    antiPatterns: [
+      '只有文字描述无时序图',
+      '接口路径与 API_CONTRACT.yaml 不一致',
+      '遗漏异常分支',
+    ],
+  },
+  'BUSINESS_RULES.md': {
+    checklist: [
+      '规则表（规则/触发条件/行为/异常处理）',
+      '每条规则可执行（非模糊描述）',
+      '规则编号唯一（R-01, R-02...）',
+      '与全局/端级业务规则分层不重复',
+    ],
+    antiPatterns: [
+      '规则描述模糊（如「合理校验」）',
+      '跨功能通用规则写入模块文件（应放 GLOBAL/BUSINESS_RULES/）',
+      '无异常处理列',
     ],
   },
   'FUNCTION_MAP.md': {

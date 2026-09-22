@@ -172,7 +172,7 @@ speccore analyze [--iteration <name>] [--task <id>] [--audit]
 speccore analyze --full              # 全量分析（原 synthesize）
 speccore analyze --auto              # 全自动分析（经过 AI，不交互）
 speccore analyze --auto --platform admin  # 只分析指定端
-speccore analyze --task Task-001     # 任务级深度分析（split 后执行）
+speccore analyze --task Task-001     # 任务级深度分析（taskify 后执行）
 speccore analyze --task Task-001,Task-002,Task-003  # 批量分析多个子任务（v8.3.94+）
 speccore analyze --filter status:doing               # 按状态自动发现并批量分析（v8.3.94+）
 speccore analyze --global --withCode # 全局代码分析（四层扫描+功能模块驱动）

@@ -5036,18 +5036,14 @@ sequenceDiagram
   ];
 
   // 任务类型 × 文档矩阵: 每种类型生成哪些文档
-  // v7.4.0+: DEV_GUIDE.md 是所有任务类型的标准文档，必须生成
+  // v8.3.239+: 类型收敛为 4 种（与 task-paths.ts TASK_TYPES 对齐）——
+  // review/test/docs/deploy 是动作不是类型（feature 任务自身包含这些阶段），
+  // security/performance 是 feature/refactor 的关注点（写入 TECH.md 安全/性能章节）
   const DOC_MATRIX: Record<string, string[]> = {
     feature:    ['REQUIREMENT.md','ANALYSIS.md','TECH.md','TEST.md','REVIEW.md','RISK.md','DEPS.md','MONITOR.md','UI_SPEC.md','FUNCTION_MAP.md','INTERACTION_MAP.md','DEV_GUIDE.md'],
     refactor:   ['ANALYSIS.md','TECH.md','TEST.md','REVIEW.md','RISK.md','DEV_GUIDE.md'],
     bugfix:     ['ANALYSIS.md','TECH.md','TEST.md','DEV_GUIDE.md'],
     research:   ['ANALYSIS.md','DEV_GUIDE.md'],
-    review:     ['REVIEW.md','RISK.md','DEV_GUIDE.md'],
-    test:       ['TEST.md','RISK.md','DEV_GUIDE.md'],
-    docs:       ['ANALYSIS.md','DEV_GUIDE.md'],
-    deploy:     ['ANALYSIS.md','TECH.md','RISK.md','DEPS.md','MONITOR.md','DEV_GUIDE.md'],
-    security:   ['ANALYSIS.md','TEST.md','REVIEW.md','RISK.md','DEV_GUIDE.md'],
-    performance:['ANALYSIS.md','TECH.md','TEST.md','MONITOR.md','DEV_GUIDE.md'],
   };
   const includeDocs = isTask ? (DOC_MATRIX[taskType] || DOC_MATRIX['feature']) : DOC_MATRIX['feature'];
 
@@ -5217,11 +5213,6 @@ sequenceDiagram
       refactor:   ['REQ.md', 'TECH.md', 'TASK.md'],
       bugfix:     ['REQ.md', 'TECH.md'],
       research:   ['REQ.md'],
-      review:     ['REQ.md'],
-      test:       ['REQ.md', 'TECH.md'],
-      deploy:     ['REQ.md', 'TECH.md'],
-      security:   ['REQ.md', 'TECH.md'],
-      performance:['REQ.md', 'TECH.md'],
     };
     const taskDocNames = TASK_DOCS[taskType] || TASK_DOCS['feature'];
     taskDocs = taskDocs.filter(([n]) => taskDocNames.includes(n));

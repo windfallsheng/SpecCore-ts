@@ -877,7 +877,7 @@ export function extractUnitsFromText(content: string): ClarifyUnit[] {
 /**
  * 从 features/ 目录加载功能单元（v8.3.191+：切分独立于澄清）
  * 每个 features/{name}/SOURCE.md（兼容旧 README.md）是一个功能单元，id 用目录名保持映射。
- * 切分由 doc2spec --split 完成，澄清（req-doc --unit）只读已切分的单元，不再自己切分。
+ * 切分由 unitize 完成，澄清（req-doc --unit）只读已切分的单元，不再自己切分。
  */
 export async function loadFeatureUnits(iterDir: string): Promise<ClarifyUnit[]> {
   const featuresDir = join(iterDir, '010-requirements', 'features');

@@ -85,7 +85,7 @@
     "description": "将迭代需求拆分为可执行的开发任务",
     "prompt": "把 {迭代名} 迭代的需求拆分成开发任务",
     "env": "ai",
-    "skill": "spec-split",
+    "skill": "spec-taskify",
     "params": [
       {
         "key": "迭代名",
@@ -169,7 +169,7 @@
     "name": "智能级联开发",
     "category": "workflow",
     "icon": "🤖",
-    "description": "全自动 analyze→split→plan→execute→pr→done",
+    "description": "全自动 analyze→taskify→plan→execute→pr→done",
     "prompt": "全自动完成 {迭代名} 的开发",
     "env": "ai",
     "skill": "spec-dev",
@@ -188,7 +188,7 @@
     "sort": 7,
     "examples": [
       "一键全自动完成整个迭代",
-      "analyze→split→plan→execute→pr→done"
+      "analyze→taskify→plan→execute→pr→done"
     ]
   },
   {

@@ -175,7 +175,7 @@ async function doInit(projectRoot: string, options: InitOptions, spinner: Spinne
           if (globalVer !== projectVer) {
             logger.warn(`⚠️  全局 speccore CLI 版本: ${globalVer}，项目要求: ${projectVer}`);
             logger.warn(`   👉 请执行: npm update -g speccore`);
-            logger.warn(`   否则 AI 运行的 analyze/split/plan 等命令会使用历史版本，导致结果异常`);
+            logger.warn(`   否则 AI 运行的 analyze/taskify/plan 等命令会使用历史版本，导致结果异常`);
           }
         } catch { /* non-critical */ }
         return;
@@ -353,7 +353,7 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
     join(speccoreDir, 'CONSTITUTION.md'),
     `# 技术宪法
 
-> 本文档是 SpecCore 与 AI 的**最高优先级契约**。analyze/split/execute 均据此执行。
+> 本文档是 SpecCore 与 AI 的**最高优先级契约**。analyze/taskify/execute 均据此执行。
 > AI 读取顺序：CONSTITUTION → context.json → 迭代目录
 
 ## 字段对照总表
@@ -392,7 +392,7 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 
 ## 端列表（全局权威）
 
-> ⚠️ **工程标识是全项目唯一的端标识符**，所有命令（analyze/split/execute）、目录名（020-specs/{端}/）、模板目录（templates/{level}/{端}/）均使用此处声明的端名。
+> ⚠️ **工程标识是全项目唯一的端标识符**，所有命令（analyze/taskify/execute）、目录名（020-specs/{端}/）、模板目录（templates/{level}/{端}/）均使用此处声明的端名。
 
 | 工程标识 | 描述 | 工程类型 |
 | :--- | :--- | :--- |
@@ -405,7 +405,7 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 > - 工程标识 ≠ 工程名：工程标识是唯一技术标识（如 app/h5/admin），工程名是业务名称（如 "预订服务"）
 > - 全小写、无空格、用短横线分隔（如 order-service）
 > - 工程类型：AI 据此生成针对性内容（见下方工程类型枚举）
-> - 此列表是 analyze/split/execute 的唯一端名来源
+> - 此列表是 analyze/taskify/execute 的唯一端名来源
 > - 「对应需求端」列引用此列表中的工程标识，每行只填一个
 
 > **工程类型枚举**（可自定义）：
@@ -1116,7 +1116,7 @@ async function askUser(prompt: string): Promise<string> {
 }
 
 export const TOOL_COMMANDS: [string, string, string][] = [
-  ['spec-ask', 'SpecCore CLI 执行引擎。仅在用户明确要求通过 speccore 命令行工具执行以下操作时触发：analyze --prompt、split、plan --prompt、execute --prompt、doc2spec、spec2doc、iteration create、done、pr、dev、dashboard/status/doctor。以下情况明确不触发此 Skill：解释代码逻辑、审查代码片段、讨论需求合理性、排查具体 bug、一般性技术咨询、算法实现、架构讨论、任何不涉及 speccore CLI 执行的请求。', '##  核心铁律\n1. 用户说"重新/再/重跑"禁止用"未变/已完成"拒绝\n2. 分析结果必须落盘 020-specs/，禁止只输出聊天文字\n3. 全流程（analyze→split→plan→execute）必须自动继续\n4. 复杂流程先展示执行计划页面再执行\n5. 用户说"自主/全自动"，展示计划后直接执行，禁止每步确认\n\n## 🎯 HTML 页面强制展示\n\n执行任何 `speccore` 命令后，检查 stdout 中的标记，**立即执行** `present_files(<path>)`：\n- `[SPECCORE_ONBOARD: <path>]` → 引导页（🚨 最先处理，禁止跳过）\n- `[SPECCORE_SETUP_GUIDE: <path>]` → 配置引导页\n- `[SPECCORE_ABOUT: <path>]` → 版本信息页\n- `[SPECCORE_HELP: <path>]` → 帮助中心页\n- `[SPECCORE_WELCOME: <path>]` → 项目名片页\n- `[SPECCORE_DEV: <path>]` → 开发流程页\n- `[SPECCORE_KNOWLEDGE: <path>]` → 知识图谱页\n- `[SPECCORE_PLAN: <path>]` → 执行计划页\n- `[SPECCORE_RETRO: <path>]` → 回顾报告页\n- `[SPECCORE_DASHBOARD: <path>]` → 仪表盘页\n\n❌ 禁止只说"检测到"而不执行展示\n❌ 禁止用文字描述代替实际展示\n\n## 执行\n1. Read CONITUTION.md + context.json\n2. 识别意图，展示执行计划\n3. speccore ask "${1:描述你的需求}"'],
+  ['spec-ask', 'SpecCore CLI 执行引擎。仅在用户明确要求通过 speccore 命令行工具执行以下操作时触发：analyze --prompt、unitize、taskify、plan --prompt、execute --prompt、doc2spec、spec2doc、iteration create、done、pr、dev、dashboard/status/doctor。以下情况明确不触发此 Skill：解释代码逻辑、审查代码片段、讨论需求合理性、排查具体 bug、一般性技术咨询、算法实现、架构讨论、任何不涉及 speccore CLI 执行的请求。', '##  核心铁律\n1. 用户说"重新/再/重跑"禁止用"未变/已完成"拒绝\n2. 分析结果必须落盘 020-specs/，禁止只输出聊天文字\n3. 全流程（analyze→taskify→plan→execute）必须自动继续\n4. 复杂流程先展示执行计划页面再执行\n5. 用户说"自主/全自动"，展示计划后直接执行，禁止每步确认\n\n## 🎯 HTML 页面强制展示\n\n执行任何 `speccore` 命令后，检查 stdout 中的标记，**立即执行** `present_files(<path>)`：\n- `[SPECCORE_ONBOARD: <path>]` → 引导页（🚨 最先处理，禁止跳过）\n- `[SPECCORE_SETUP_GUIDE: <path>]` → 配置引导页\n- `[SPECCORE_ABOUT: <path>]` → 版本信息页\n- `[SPECCORE_HELP: <path>]` → 帮助中心页\n- `[SPECCORE_WELCOME: <path>]` → 项目名片页\n- `[SPECCORE_DEV: <path>]` → 开发流程页\n- `[SPECCORE_KNOWLEDGE: <path>]` → 知识图谱页\n- `[SPECCORE_PLAN: <path>]` → 执行计划页\n- `[SPECCORE_RETRO: <path>]` → 回顾报告页\n- `[SPECCORE_DASHBOARD: <path>]` → 仪表盘页\n\n❌ 禁止只说"检测到"而不执行展示\n❌ 禁止用文字描述代替实际展示\n\n## 执行\n1. Read CONITUTION.md + context.json\n2. 识别意图，展示执行计划\n3. speccore ask "${1:描述你的需求}"'],
   ['spec-welcome', '欢迎页专属 Skill。在调用 speccore ask 之前，检测项目是否已初始化（.speccore/ 目录是否存在），未初始化时引导用户先执行 speccore init。不影响 speccore ask 的意图识别能力。', 'speccore welcome'],
   ['spec-help', '帮助中心专属 Skill。在调用 speccore ask 之前，检测 CLI 版本是否为最新，发现新版本时提示用户更新。不影响 speccore ask 的意图识别能力。', 'speccore help'],
   ['spec-dashboard', '仪表盘专属 Skill。在调用 speccore ask 之前，检测当前是否有活跃迭代，无迭代时提示用户先创建迭代。不影响 speccore ask 的意图识别能力。', 'speccore dashboard --scope global'],
@@ -1581,101 +1581,34 @@ export async function initRulesDir(projectRoot: string): Promise<void> {
 
 \`\`\`
 Iteration-NNN-name/            ← 迭代目录
-├── 000-overview/              ← 进度总览与报告
-│   ├── PROJECT_GRAPH.md       ← 项目任务图谱（split 后生成）
-│   ├── task-summaries/        ← 任务总览报告（TASK_SUMMARY-*.md）
-│   ├── plans/                 ← 执行计划（PLAN.md + HTML 可视化）
-│   ├── RETRO.md               ← 迭代复盘报告（done 后生成）
-│   └── PIPELINE_REPORT.md     ← Pipeline 执行报告（dev 后生成）
-├── 010-requirements/          ← 需求文档（按功能组织）
-│   ├── README.md              ← 目录规范说明
-│   ├── INDEX.md               ← 需求文档索引
-│   ├── sources/               ← [只读] 原始 PRD（.docx/.pdf/.md）
-│   ├── converted/             ← [自动生成] doc2spec 转换后的 MD
-│   ├── features/              ← [手动维护] 按功能模块组织
-│   │   └── {feature}/
-│   │       └── README.md
-│   ├── prototypes/            ← 原型（HTML/图片/链接，内容不限）
-│   ├── assets/                ← 素材资源
-│   │   ├── extracted/         ← doc2spec 提取的图片/媒体
-│   │   ├── prototypes/        ← 产品原型
-│   │   ├── designs/           ← UI 设计稿
-│   │   └── screenshots/       ← 参考截图
-│   ├── bugs/                  ← [可选] bug 需求文档
-│   ├── refactors/             ← [可选] 重构需求文档
-│   ├── research/              ← [可选] 调研需求文档
-│   ├── REQUIREMENT.md         ← [可选] 主需求文档
-│   └── CLARIFY_REPORT.md      ← [可选] 需求澄清报告
+├── 000-overview/              ← 进度总览（PROJECT_GRAPH / plans / RETRO / PIPELINE_REPORT）
+├── 010-requirements/          ← 需求层
+│   ├── sources/ converted/    ← [只读] 原始 PRD / doc2spec 转换
+│   ├── features/{功能单元}/   ← unitize 切分产出（功能单元目录 = analyze 对齐锚点）
+│   ├── bugs/ refactors/ research/  ← 三类需求文档（与任务类型对应）
+│   └── CLARIFY_REPORT.md      ← 澄清报告
 ├── 020-specs/                 ← 需求分析（analyze 输出）
-│   ├── overview/              ← 全局规格（跨端共享）
-│   │   └── REQUIREMENT.md / ANALYSIS.md / TECH.md / DEV_GUIDE.md ...
-│   ├── {功能模块}/            ← 按功能模块组织
-│   │   └── {端名}/            ← 端级规格
-│   │       └── TECH.md / TEST.md / UI_SPEC.md / DEV_GUIDE.md ...
+│   ├── overview/              ← [索引类] 功能间关系（FUNCTION_MAP/INTERACTION_MAP/PLATFORMS/DEPENDENCY_MAP/CLARIFY/API_CONTRACT.yaml）
+│   ├── {功能模块}/
+│   │   ├── overview/          ← [内容类] 功能内部细节（REQUIREMENT/ANALYSIS/INTERACTION/CLARIFY/TECH/RISK/DEPS/MONITOR/BUSINESS_RULES）
+│   │   └── {端名}/            ← 端级规格（TECH/TEST/UI_SPEC/DEV_GUIDE）
 │   ├── requirements/          ← 黄金需求（clarify 输出，analyze 读取）
-│   ├── PLATFORMS.md           ← 端列表
 │   └── QUALITY_AUDIT.md       ← 质量审计报告
-├── 030-tasks/                 ← 开发任务
-│   └── Task-*/                ← 功能模块分组（聚合相关子任务）
-│       ├── .meta/             ← 任务元信息
-│       │   ├── feature        ← 功能单元名
-│       │   ├── type           ← 任务类型（feature/bugfix/refactor/research）
-│       │   ├── status         ← 状态（todo/doing/done）
-│       │   ├── owner          ← 负责人
-│       │   ├── created-at     ← 创建时间
-│       │   └── estimated-hours ← 预估工时
-│       ├── _shared/           ← 共享契约
-│       │   ├── API_CONTRACT.yaml
-│       │   └── CONTEXT.md
-│       ├── 00-specs/          ← 模块级核心规格（analyze 阶段写入）
-│       │   ├── REQ.md         ← 需求规格
-│       │   ├── TECH.md        ← 技术规格
-│       │   ├── SCHEMA.md      ← 数据模型（条件创建）
-│       │   ├── CHANGELOG.md   ← 变更记录
-│       │   └── CONTEXT.md     ← [兼容] 任务上下文副本
-│       ├── {端名}/            ← 端平铺（如 booking-service / h5-mobile / admin-web）
-│       │   └── {子任务}/      ← 执行单元
-│       │       ├── .meta/     ← 子任务元信息
-│       │       │   ├── type
-│       │       │   ├── status
-│       │       │   ├── owner
-│       │       │   ├── created-at
-│       │       │   ├── estimated-hours ← 预估工时
-│       │       │   ├── feature       ← 功能单元名
-│       │       │   └── git-config    ← 子任务级 Git 配置（v8.3.114+）
-│       │       │                         格式示例：
-│       │       │                           分支类型: hotfix
-│       │       │                           前缀: api-
-│       │       │                           后缀: urgent
-│       │       │                           源分支: main
-│       │       │                         → 分支名: hotfix/api-子任务名-urgent
-│       │       ├── TASK.md    ← 子任务追踪
-│       │       ├── TEST.md    ← 测试用例
-│       │       ├── RISK.md    ← 风险评估
-│       │       ├── DEPS.md    ← 依赖分析
-│       │       ├── MONITOR.md ← 监控方案
-│       │       ├── REVIEW.md  ← 评审清单
-│       │       ├── DEPLOY.md  ← 部署清单
-│       │       ├── ERROR_CODES.md
-│       │       ├── COMPONENT_TREE.md  ← 组件树（仅前端）
-│       │       ├── ROUTES.md          ← 路由设计（仅前端）
-│       │       └── STATE.md           ← 状态管理（仅前端）
+├── 030-tasks/                 ← 开发任务（taskify 输出）
+│   └── {类型}/Task-*/         ← 按类型分子目录（feature/bugfix/refactor/research）
+│       ├── .meta/             ← 任务元信息（feature/type/status/owner/工时）
+│       ├── _shared/           ← 共享契约（API_CONTRACT.yaml + CONTEXT.md）
+│       ├── 00-specs/          ← 任务级核心规格（REQ/TECH/DEV_GUIDE，SCHEMA 条件创建）
+│       ├── {端名}/{子任务}/   ← 端平铺执行单元（TASK/REQ/TECH 骨架/TEST/REVIEW/ERROR_CODES 等，按类型裁剪；
+│       │                         前端多 COMPONENT_TREE/ROUTES/STATE/STYLE_GUIDE/VERIFY_SPEC）
 │       └── .issues.md         ← 问题追踪
-│
-│   > ⚠️ 代码输出位置：AI 生成的代码写入 CONSTITUTION.md/PROJECT.yaml 中声明的「源码路径」，
-│   > 禁止写入迭代目录内。子任务目录只存放规格文档（TASK.md/TEST.md/RISK.md 等）。
-│
-│   research 类型任务目录结构（无前后端分层）：
-│       ├── _shared/
-│       │   └── CONTEXT.md
-│       ├── 00-specs/
-│       │   ├── REQ.md
-│       │   └── TECH.md
-│       ├── RESEARCH.md        ← 调研报告
-│       ├── COMPARISON.md      ← 方案对比
-│       └── .issues.md         ← 问题追踪
+│   （research 类型为独立结构：RESEARCH.md + COMPARISON.md，无端平铺）
 └── STAFFING.md                ← 人员排期
-\`\`\``,},
+\`\`\`
+
+> **组织原则**：索引类放 overview（有哪些）、内容类放 {功能模块}/overview（是什么）、端级放 {端}/（怎么做）。
+> **⚠️ 代码写入 CONSTITUTION.md/PROJECT.yaml 声明的「源码路径」，禁止写入迭代目录**；子任务目录只存放规格文档。
+> 本结构图为快照：实际目录以 CLI 生成为准（speccore taskify/analyze）；子任务文档的完整清单见各子任务 TASK.md 的「产出物」表。`,},
     {
       name: '02-OUTPUT_MARKERS.inline.md',
       content: `## SpecCore 输出标记
@@ -1935,7 +1868,7 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
   const iterDir = join(projectRoot, 'Iteration-sample');
   await ensureDir(iterDir);
   
-  // 030-tasks/ — 所有开发任务（由 split 创建）
+  // 030-tasks/ — 所有开发任务（由 taskify 创建）
   await ensureDir(join(iterDir, '030-tasks'));
 
   // STAFFING.md
@@ -1947,7 +1880,7 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
     '| 张三 | APP, H5 | 80% |',
     '| 李四 | admin, 小程序 | 70% |',
     '',
-    '> 编辑此文件后重新运行 split 即可更新默认分配',
+    '> 编辑此文件后重新运行 taskify 即可更新默认分配',
   ].join('\n'));
 
   // 010-requirements/ — 按需求组织（非按端），analyze 自动提取端相关内容
@@ -2241,7 +2174,7 @@ export function generateAIRulesContent(): string {
     '## 核心流水线',
     '',
     '```',
-    'init → doc2spec → analyze → split → plan → execute → pr → done → spec2doc',
+    'init → doc2spec → unitize → analyze → taskify → plan → execute → pr → done → spec2doc',
     '```',
     '',
     '## 命令快速参考',
@@ -2252,7 +2185,8 @@ export function generateAIRulesContent(): string {
     '| doc2spec | Word→Spec MD (CLI) | -f <文件> --iter <迭代> | PRD/Word | 010-requirements/*.md |',
     '| **spec-doc2spec** | **AI+Pandoc 双路交叉验证导入** | **(Skill 自动触发)** | PRD原文 | REQUIREMENT.md + VALIDATION.md |',
     '| analyze | 需求分析 | -I <迭代> --task <任务> | 010-requirements/ | 020-specs/ANALYSIS.md |',
-    '| split | 拆分任务 | -i <迭代> --owner <人> | 020-specs/ | Task-001~NNN/ |',
+    '| unitize | 切分需求文档 | --file <md> -i <迭代> | PRD/需求 MD | features/{功能单元}/ |',
+    '| taskify | 拆分任务 | -i <迭代> --owner <人> | 020-specs/ | Task-001~NNN/ |',
     '| plan | 执行计划 | -I <迭代> --owner <人> | Task 列表 | plan.json |',
     '| execute | 执行开发 | -i <迭代> -t <任务> --type <类型> | REQ.md/TECH.md | 代码 + .issues.md |',
     '| pr | 创建PR | --task <任务> | 代码提交 | Pull Request |',
@@ -2486,7 +2420,7 @@ examples/
 
 ## 端列表（全局权威）
 
-> ⚠️ **工程标识是全项目唯一的端标识符**，所有命令（analyze/split/execute）、目录名（020-specs/{端}/）、模板目录（templates/{level}/{端}/）均使用此处声明的端名。
+> ⚠️ **工程标识是全项目唯一的端标识符**，所有命令（analyze/taskify/execute）、目录名（020-specs/{端}/）、模板目录（templates/{level}/{端}/）均使用此处声明的端名。
 
 | 工程标识 | 描述 | 工程类型 |
 | :--- | :--- | :--- |
@@ -2499,7 +2433,7 @@ examples/
 > - 工程标识 ≠ 工程名：工程标识是唯一技术标识（如 admin-web），工程名是业务名称（如 "预订服务"）
 > - 全小写、无空格、用短横线分隔（如 order-service）
 > - 工程类型：AI 据此生成针对性内容（见下方工程类型枚举）
-> - 此列表是 analyze/split/execute 的唯一端名来源
+> - 此列表是 analyze/taskify/execute 的唯一端名来源
 
 ---
 

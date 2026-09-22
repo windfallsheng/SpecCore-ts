@@ -241,7 +241,7 @@ const WORKFLOWS: Record<string, PipelineStep[]> = {
     { order: 1, command: 'init', args: '', explanation: '初始化项目（如果还没有）', dependsOn: undefined },
     { order: 2, command: 'doc2spec', args: '-f PRD.docx --iter {iteration}', explanation: '导入 PRD 文档，AI 分析生成需求规格', dependsOn: 1 },
     { order: 3, command: 'analyze', args: '--iteration {iteration} --audit', explanation: 'AI 分析需求，生成审计报告', dependsOn: 2, subagent: 'requirement-analyzer' },
-    { order: 4, command: 'split', args: '-f REQUIREMENT.md', explanation: '将需求拆分为独立开发任务', dependsOn: 3, subagent: 'task-decomposer' },
+    { order: 4, command: 'iteration taskify', args: '-f REQUIREMENT.md', explanation: '将需求拆分为独立开发任务', dependsOn: 3, subagent: 'task-decomposer' },
     { order: 5, command: 'plan', args: '--all', explanation: '生成任务执行计划，确定优先级和依赖', dependsOn: 4, subagent: 'schedule-planner' },
     { order: 6, command: 'execute', args: '--auto', explanation: '按计划依次执行开发任务', dependsOn: 5, subagent: 'code-generator' },
     { order: 7, command: 'pr', args: '--auto', explanation: '代码提交后创建 Pull Request', dependsOn: 6, subagent: 'code-reviewer' },
@@ -268,11 +268,11 @@ const WORKFLOWS: Record<string, PipelineStep[]> = {
   // v8.3.165+: 各步骤配置 subagent 角色
   'analyze-split': [
     { order: 1, command: 'analyze', args: '--iteration {iteration}', explanation: 'AI 分析需求，生成各端规格文档', dependsOn: undefined, subagent: 'requirement-analyzer' },
-    { order: 2, command: 'split', args: '--iteration {iteration}', explanation: '将分析结果拆分为独立开发任务', dependsOn: 1, subagent: 'task-decomposer' },
+    { order: 2, command: 'iteration taskify', args: '-i {iteration}', explanation: '将分析结果拆分为独立开发任务', dependsOn: 1, subagent: 'task-decomposer' },
   ],
   'analyze-split-plan': [
     { order: 1, command: 'analyze', args: '--iteration {iteration}', explanation: 'AI 分析需求，生成各端规格文档', dependsOn: undefined, subagent: 'requirement-analyzer' },
-    { order: 2, command: 'split', args: '--iteration {iteration}', explanation: '将分析结果拆分为独立开发任务', dependsOn: 1, subagent: 'task-decomposer' },
+    { order: 2, command: 'iteration taskify', args: '-i {iteration}', explanation: '将分析结果拆分为独立开发任务', dependsOn: 1, subagent: 'task-decomposer' },
     { order: 3, command: 'plan', args: '--all', explanation: '生成任务执行计划，确定优先级和依赖', dependsOn: 2, subagent: 'schedule-planner' },
   ],
   'plan-execute': [
@@ -296,10 +296,10 @@ export function classifyMode(input: string): AskMode {
 
   // 模式1: 命令解释 — 询问特定命令用法
   const explainPatterns = [
-    /(dashboard|dev|init|execute|plan|pr|verify|sync|validate|analyze|split|search|track|rename|doc2spec|spec2doc|ask|code-index|graph)\s*(命令|用法|怎么用|是什么|功能|参数|选项)/,
-    /怎么用\s*(dashboard|dev|init|execute|plan|pr|verify|sync|validate|analyze|split|search|track|code-index|graph)/,
-    /(dashboard|dev|init|execute|plan|pr|verify|sync|validate|analyze|split|search|track|code-index|graph)\s*有哪些/,
-    /解释[一下]?\s*(dashboard|dev|init|execute|plan|pr|verify|sync|validate|analyze|split|search|track|code-index|graph)/,
+    /(dashboard|dev|init|execute|plan|pr|verify|sync|validate|analyze|taskify|unitize|search|track|rename|doc2spec|spec2doc|ask|code-index|graph)\s*(命令|用法|怎么用|是什么|功能|参数|选项)/,
+    /怎么用\s*(dashboard|dev|init|execute|plan|pr|verify|sync|validate|analyze|taskify|unitize|search|track|code-index|graph)/,
+    /(dashboard|dev|init|execute|plan|pr|verify|sync|validate|analyze|taskify|unitize|search|track|code-index|graph)\s*有哪些/,
+    /解释[一下]?\s*(dashboard|dev|init|execute|plan|pr|verify|sync|validate|analyze|taskify|unitize|search|track|code-index|graph)/,
     /(what|how).*use.*(dashboard|dev|init|execute|plan|pr|verify|sync|code-index|graph)/i,
   ];
   if (explainPatterns.some(p => p.test(lower))) return 'explain';
