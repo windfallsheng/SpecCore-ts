@@ -4,7 +4,7 @@
  * 消除 goal/bugfix/research/new-task 中的重复代码
  */
 
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, unlinkSync } from 'fs';
 import { rename, pathExists } from 'fs-extra';
 import { join } from 'path';
 
@@ -99,6 +99,18 @@ export function now(): string {
  */
 export async function backupWithTimestamp(filePath: string): Promise<string | null> {
   if (await pathExists(filePath)) {
+    // v8.3.240+: 旧文件内容仍是骨架占位（SPEC-SKELETON）或空白时，直接删除不备份。
+    // 骨架是可再生资源（analyze --prompt 时 generateSkeleton 随时重建），备份毫无价值，
+    // 反而会：① 让 grep SPEC-SKELETON 的骨架检测/质量门禁持续误报；
+    // ② 每轮 analyze 都再备份一轮，制造堆积的物理垃圾文件。
+    try {
+      const oldContent = readFileSync(filePath, 'utf-8');
+      if (oldContent.includes('SPEC-SKELETON') || oldContent.trim() === '') {
+        unlinkSync(filePath);
+        return null;
+      }
+    } catch { /* 读失败按正常备份流程处理 */ }
+
     const ext = filePath.match(/\.[^.]+$/)?.[0] || '';
     const base = filePath.slice(0, filePath.length - ext.length);
     const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);

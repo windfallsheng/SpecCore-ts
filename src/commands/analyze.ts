@@ -1275,6 +1275,9 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       platformOrder = await detectPlatformPriorityOrder(iter);
     }
 
+    // v8.3.167+: 大项目自动启用功能模块分批（声明在分支外，供恢复模式差异检测复用）
+    let features: string[] | undefined;
+
     if (isGlobalScope) {
       // 全局层：使用 createGlobalAnalyzePipeline（增强策略二）
       const result = await createGlobalAnalyzePipeline();
@@ -1284,8 +1287,6 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       initStep = 'init';
     } else {
       // 迭代层：使用 createAnalyzePipeline（支持契约先行 + 逐端推进 + 变更感知 + 关键路径优先 + 需求澄清 + 功能模块分批）
-      // v8.3.167+: 大项目自动启用功能模块分批
-      let features: string[] | undefined;
       try {
         const iterDirForFeatures = await getIterationDir(iter!);
         if (iterDirForFeatures) {
@@ -1326,6 +1327,25 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       const existingState = await PipelineEngine.loadExistingState(_projectRoot, pipelineKey);
       currentStep = existingState?.currentStep || initStep;
       logger.info(`🔄 恢复 Pipeline: ${currentStep}`);
+
+      // v8.3.240+: 骨架全量预建与 Pipeline 步骤固化不同步的防护——
+      // 步骤列表只在首次 init 固化，之后新增的功能单元（重新切分/补充文档）
+      // 不会追加步骤，其 020-specs 骨架将永久残留无人填充。恢复时对比差异并警告。
+      if (existingState && !isGlobalScope && features && features.length > 0) {
+        const stepFeatures = new Set(
+          existingState.steps
+            .filter((s: string) => s.startsWith('feature-') && s.endsWith('-prompt'))
+            .map((s: string) => s.replace(/^feature-/, '').replace(/-prompt$/, ''))
+        );
+        const missing = features.filter(f => !stepFeatures.has(f));
+        const orphan = [...stepFeatures].filter(f => !features.includes(f));
+        if (missing.length > 0 || orphan.length > 0) {
+          logger.warn('⚠️ 功能单元与 Pipeline 步骤列表不一致（步骤列表在首次 init 固化，不自动追加）：');
+          if (missing.length > 0) logger.warn(`   新增单元（无分析步骤，骨架将残留）: ${missing.join(', ')}`);
+          if (orphan.length > 0) logger.warn(`   已移除单元（对应步骤将空转跳过）: ${orphan.join(', ')}`);
+          logger.warn('   💡 建议: 删除 .speccore/local/.pipeline-<迭代>.json 后重新运行 analyze 重建步骤列表');
+        }
+      }
     } else {
       await engine.init(initStep);
       currentStep = initStep;

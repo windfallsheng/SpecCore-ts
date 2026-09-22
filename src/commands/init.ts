@@ -1591,8 +1591,10 @@ Iteration-NNN-name/            ← 迭代目录
 │   ├── overview/              ← [索引类] 功能间关系（FUNCTION_MAP/INTERACTION_MAP/PLATFORMS/DEPENDENCY_MAP/CLARIFY/API_CONTRACT.yaml）
 │   ├── {功能模块}/
 │   │   ├── overview/          ← [内容类] 功能内部细节（REQUIREMENT/ANALYSIS/INTERACTION/CLARIFY/TECH/RISK/DEPS/MONITOR/BUSINESS_RULES）
+│   │   │                         其中 CLARIFY.md = 澄清产物，其余 = 分析产物（同树共存，靠文件名区分，不物理分层）
 │   │   └── {端名}/            ← 端级规格（TECH/TEST/UI_SPEC/DEV_GUIDE）
-│   ├── requirements/          ← 黄金需求（clarify 输出，analyze 读取）
+│   ├── requirements/          ← 黄金需求（旧路径文档级澄清产物，新项目不再生成）
+│   ├── README.md              ← 结构契约（CLI 自动维护，写清澄清/分析产物区分）
 │   └── QUALITY_AUDIT.md       ← 质量审计报告
 ├── 030-tasks/                 ← 开发任务（taskify 输出）
 │   └── {类型}/Task-*/         ← 按类型分子目录（feature/bugfix/refactor/research）

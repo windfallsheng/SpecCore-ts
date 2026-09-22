@@ -19,7 +19,7 @@ import { logger, Spinner } from '../utils/logger';
 import { execSync } from 'child_process';
 import { createHash } from 'crypto';
 import { pathExists, ensureDir, readFile, writeFile, readdir, stat, unlink, copy } from 'fs-extra';
-import { join, basename, extname } from 'path';
+import { join, basename, extname, dirname } from 'path';
 import { tmpdir } from 'os';
 import { backupWithTimestamp } from '../utils/task-utils';
 import { nextTaskId } from '../core/global-counters';
@@ -59,9 +59,13 @@ function findCommand(cmd: string, customPath?: string): string | null {
 
 function parseBatchFiles(files: string): [string, string][] {
   return files.split(',').map(pair => {
-    const eq = pair.lastIndexOf('=');
-    if (eq < 0) return null;
-    return [pair.substring(0, eq).trim(), pair.substring(eq + 1).trim()] as [string, string];
+    const trimmed = pair.trim();
+    if (!trimmed) return null;
+    const eq = trimmed.lastIndexOf('=');
+    // v8.3.240+: 无 = 的元素视为「无端文档」（端名为空）而非静默丢弃，
+    // 否则「4 份输入只导 2 份」的静默丢失难以察觉，成功率提示还会误导用户
+    if (eq < 0) return [trimmed, ''] as [string, string];
+    return [trimmed.substring(0, eq).trim(), trimmed.substring(eq + 1).trim()] as [string, string];
   }).filter(Boolean) as [string, string][];
 }
 
@@ -493,6 +497,9 @@ async function mergeToRequirement(iterDir: string, targetDir: string, platform: 
     .replace(/^<!--[\s\S]*?-->\n/gm, '')
     .replace(/\| 方法 \|.*(\n\|.*)*/g, '')
     .replace(/\n{3,}/g, '\n\n')
+    // v8.3.240+: 端文档 H1 标题降级为 H2——嵌入合并版后若保留「# 标题」，
+    // 层级倒挂（## 大节内出现 # 标题）会让 unitize 把大节截断成 3 行桩
+    .replace(/^# /gm, '## ')
     .trim();
 
   // 检查是否已有此端的内容
@@ -518,9 +525,11 @@ async function mergeToRequirement(iterDir: string, targetDir: string, platform: 
     globalContent += platformSection;
   }
 
-  // 清理模板占位符（避免 split 时拆出无意义章节）
+  // 清理模板占位符（仅删空壳章节标题，不删真实正文）——
+  // 旧正则用 [\s\S]*? 把「标题到下一标题」的全部内容删掉，
+  // 真实文档的正文章节会被误删，合并版 REQUIREMENT.md 只剩空壳桩
   globalContent = globalContent
-    .replace(/#{1,3}\s+\d+\.\s*(需求概述|功能需求|非功能需求|验收标准|附录)[\s\S]*?(?=#{1,3}\s|$)/g, '');
+    .replace(/#{1,3}\s+\d+\.\s*(需求概述|功能需求|非功能需求|验收标准|附录)[\s]*(?=#{1,3}\s|$)/g, '');
 
   await writeFile(globalReqPath, globalContent);
 }
@@ -889,12 +898,29 @@ export async function splitDocumentToUnits(
   // 完全一致时跳过（如 REQUIREMENT.md 与 converted/overview.md 含相同章节，重复切分
   // 会产出 13 对内容一模一样的单元，污染 taskify/execute）
   const existingContentHashes = new Map<string, string>();
+  // v8.3.240+: 同时保留原文内容，供近似重复（Jaccard 相似度）比对
+  const existingUnitContents = new Map<string, string>();
   for (const dir of existingUnitDirs) {
     try {
       const existing = await readFile(await resolveUnitSourcePath(join(featuresDir, dir)), 'utf-8');
       existingContentHashes.set(dir, contentFingerprint(existing));
+      existingUnitContents.set(dir, existing);
     } catch { /* 无需求原文的目录不参与指纹比对 */ }
   }
+
+  // v8.3.240+: 文档级近似重复检测——合并版 REQUIREMENT.md 的「## {端}端需求」
+  // 大节内容与端文档全文高度相似，端文档已切过时该大节应跳过，
+  // 否则产出「父级聚合单元」，analyze 会对同一需求重复分析
+  const docFullContents = new Map<string, string>();
+  try {
+    const convertedDir = dirname(outputPath);
+    for (const f of await readdir(convertedDir)) {
+      if (!f.endsWith('.md') || f === basename(outputPath)) continue;
+      try {
+        docFullContents.set(f, await readFile(join(convertedDir, f), 'utf-8'));
+      } catch { /* 读失败跳过 */ }
+    }
+  } catch {}
   
   let written = 0;
   let skipped = 0;
@@ -906,11 +932,13 @@ export async function splitDocumentToUnits(
     const docSlug = sanitizeUnitName(basename(sourceFileName, '.md')) || 'doc';
     // v8.3.227+: 目录名加两位序号前缀（按文档内章节顺序），
     // 保证文件系统排序 == 文档顺序，解决切分目录乱序问题
-    const seq = String(unitIndex + 1).padStart(2, '0');
+    // v8.3.240+: 序号基于实际写入数（written+1）而非原始索引，
+    // 修复「跳过重复单元导致编号空洞」（如 1~56 全跳过后从 57 开始）
+    const seq = String(written + 1).padStart(2, '0');
     const unitDirName = sanitizeUnitName(`${docSlug}-${seq}-${unit.title}`);
     // v8.3.223+: 同名/已存在单元跳过（幂等 + 去重）
     if (seenUnitDirs.has(unitDirName)) {
-      logger.info(`   ⏭️  ${unit.title} 已存在，跳过: features/${unitDirName}/`);
+      logger.info(`   ⏭️  ${unit.title} 已存在（同名单元），跳过`);
       skipped++;
       continue;
     }
@@ -926,7 +954,39 @@ export async function splitDocumentToUnits(
       skipped++;
       continue;
     }
+    // v8.3.240+: 近似重复检测——与已有单元 Jaccard 相似度 > 0.85 即视为同一需求
+    // 被重复切分（标题层级/段落缺失等小差异不会阻止跳过）
+    let nearDup: string | null = null;
+    for (const [dir, existing] of existingUnitContents) {
+      if (contentSimilarity(unitContent, existing) > 0.85) { nearDup = dir; break; }
+    }
+    if (nearDup) {
+      logger.info(`   ⏭️  ${unit.title} 与已有单元 ${nearDup} 内容高度相似（>85%），视为重复切分跳过`);
+      skipped++;
+      continue;
+    }
+    // v8.3.240+: 文档级近似重复——候选单元与 converted/ 其他文档全文相似度 > 0.85
+    // （典型：合并版 REQUIREMENT.md 的「## admin-web端需求」大节 = 端文档全文），
+    // 跳过避免 analyze 重复分析同一需求
+    let docDup: string | null = null;
+    for (const [docName, full] of docFullContents) {
+      if (contentSimilarity(unitContent, full) > 0.85) { docDup = docName; break; }
+    }
+    if (docDup) {
+      logger.info(`   ⏭️  ${unit.title} 与文档 ${docDup} 全文高度相似（>85%，合并版大节），跳过`);
+      skipped++;
+      continue;
+    }
+    // v8.3.240+: 兜底——内容极短的「桩章节」（仅标题，如被 H1 倒挂截断的
+    // 合并版大节）不构成有效功能单元，跳过避免 analyze 拿到空需求
+    const bodyText = unitContent.replace(/^#{1,3}\s+[^\n]*\n?/gm, '').trim();
+    if (bodyText.length < 40) {
+      logger.info(`   ⏭️  ${unit.title} 内容过短（桩章节，仅 ${bodyText.length} 字），跳过`);
+      skipped++;
+      continue;
+    }
     existingContentHashes.set(unitDirName, fp);
+    existingUnitContents.set(unitDirName, unitContent);
 
     const unitDir = join(featuresDir, unitDirName);
     await ensureDir(unitDir);
@@ -952,7 +1012,7 @@ export async function splitDocumentToUnits(
     await writeFile(join(unitDir, '_matrix.md'), matrixContent);
     
     // 初始变更记录
-    const changelogContent = `# ${unit.title} - 变更履历\n\n## v1 - ${new Date().toISOString().split('T')[0]}\n**类型**: 新增\n**来源**: doc2spec --split\n**说明**: 从 ${sourceFileName} 的「${unit.sourceSection}」章节拆分\n`;
+    const changelogContent = `# ${unit.title} - 变更履历\n\n## v1 - ${new Date().toISOString().split('T')[0]}\n**类型**: 新增\n**来源**: unitize\n**说明**: 从 ${sourceFileName} 的「${unit.sourceSection}」章节拆分\n`;
     await writeFile(join(unitDir, 'CHANGELOG.md'), changelogContent);
 
     written++;
@@ -961,25 +1021,35 @@ export async function splitDocumentToUnits(
 
   // 更新 features/INDEX.md（v8.3.223+: 增量合并——保留已有条目、追加新条目，
   // 修复重复运行整体重写/丢行的问题）
+  // v8.3.240+: 去重键改为「功能单元名 + 来源章节」（前两列，不含端标签列），
+  // 修复同一单元跨切分批次（端标签不同）或同文档内同名章节重复追加的问题
   const featuresIndexPath = join(featuresDir, 'INDEX.md');
-  let featuresIndex = '# 功能单元索引\n\n> 由 doc2spec --split 自动生成\n\n';
+  let featuresIndex = '# 功能单元索引\n\n> 由 unitize 自动生成\n\n';
   featuresIndex += '| 功能单元 | 来源章节 | 状态 | 涉及端 |\n';
   featuresIndex += '| :--- | :--- | :--- | :--- |\n';
-  const existingRows = new Set<string>();
+  const seenRows = new Set<string>();
+  const preservedRows: string[] = [];
   if (await pathExists(featuresIndexPath)) {
     try {
       const prev = await readFile(featuresIndexPath, 'utf-8');
       for (const line of prev.split('\n')) {
         if (line.startsWith('|') && !line.startsWith('| :') && !line.startsWith('| 功能单元')) {
-          existingRows.add(line);
-          featuresIndex += line + '\n';
+          const cells = line.split('|').map(c => c.trim());
+          const dedupKey = `${cells[1]}|${cells[2]}`;
+          if (seenRows.has(dedupKey)) continue;
+          seenRows.add(dedupKey);
+          preservedRows.push(line);
         }
       }
     } catch {}
   }
+  if (preservedRows.length > 0) featuresIndex += preservedRows.join('\n') + '\n';
   for (const unit of units) {
     const row = `| ${unit.title} | ${unit.sourceSection} | draft | ${platformLabel} |`;
-    if (existingRows.has(row)) continue;
+    const cells = row.split('|').map(c => c.trim());
+    const dedupKey = `${cells[1]}|${cells[2]}`;
+    if (seenRows.has(dedupKey)) continue;
+    seenRows.add(dedupKey);
     featuresIndex += row + '\n';
   }
   await writeFile(featuresIndexPath, featuresIndex);
@@ -990,7 +1060,7 @@ export async function splitDocumentToUnits(
     const overviewDir = join(iterDir, '010-requirements', 'overview');
     await ensureDir(overviewDir);
     const docSlug = sanitizeUnitName(basename(sourceFileName, '.md') || 'context');
-    let globalContent = `# 项目全局上下文 — ${sourceFileName}\n\n> 由 doc2spec --split 自动整理（非功能内容：产品定位/名词约定/非功能需求/验收标准汇总等）\n> 来源: ${sourceFileName}\n> 生成时间: ${new Date().toISOString().split('T')[0]}\n\n`;
+    let globalContent = `# 项目全局上下文 — ${sourceFileName}\n\n> 由 unitize 自动整理（非功能内容：产品定位/名词约定/非功能需求/验收标准汇总等）\n> 来源: ${sourceFileName}\n> 生成时间: ${new Date().toISOString().split('T')[0]}\n\n`;
     let collected = 0;
     for (const gs of globalSections) {
       const range = findSectionRange(content, gs);
@@ -1075,14 +1145,31 @@ function classifyUnitType(rawTitle: string, parentIsRuleContainer: boolean): 'fe
 }
 
 /** 归一化内容指纹（剔除生成时间等易变行后 sha1），用于跨文档重复章节检测 */
-function contentFingerprint(content: string): string {
-  const normalized = content
+/** 归一化内容为行数组（去时间戳/空行/trim），供指纹与相似度共用 */
+function normalizedLines(content: string): string[] {
+  return content
     .split('\n')
     .filter(l => !/^> 生成时间:/.test(l.trim()))
     .map(l => l.trim())
-    .filter(Boolean)
-    .join('\n');
-  return createHash('sha1').update(normalized).digest('hex');
+    .filter(Boolean);
+}
+
+function contentFingerprint(content: string): string {
+  return createHash('sha1').update(normalizedLines(content).join('\n')).digest('hex');
+}
+
+/**
+ * v8.3.240+: 跨文档近似重复检测——行集合 Jaccard 相似度。
+ * 同一份 PRD 被不同源文档各切一遍时，切片往往不完全逐字一致
+ * （标题层级 ### vs ##、个别段落缺失），完全一致的指纹比对拦不住。
+ */
+function contentSimilarity(a: string, b: string): number {
+  const la = new Set(normalizedLines(a));
+  const lb = new Set(normalizedLines(b));
+  if (la.size === 0 && lb.size === 0) return 1;
+  let inter = 0;
+  for (const l of la) if (lb.has(l)) inter++;
+  return inter / Math.max(la.size, lb.size);
 }
 
 /**

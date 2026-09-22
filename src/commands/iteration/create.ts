@@ -332,6 +332,9 @@ async function updateIterationsIndex(name: string, options: IterationCreateOptio
   if (await pathExists(indexPath)) {
     content = await readFile(indexPath, 'utf-8');
   } else {
+    // v8.3.240+: 首次创建迭代时 ITERATIONS/ 目录可能不存在（旧项目 init / 清理后），
+    // writeFile 不会自动创建父目录，必须先 ensureDir，否则 ENOENT 崩溃
+    await ensureDir(join('.speccore', 'ITERATIONS'));
     content = '# 迭代索引\n\n| 迭代名称 | 时间范围 | 状态 | 负责人 | 备注 |\n| :--- | :--- | :--- | :--- | :--- |\n';
   }
 
