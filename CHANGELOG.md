@@ -1,3 +1,18 @@
+## v8.3.228 (2026-09-22) — 功能单元类型标记（feature/global-rule）+ analyze 读取内聚
+
+### 单元类型判定（_matrix.md type 字段）
+- 新增 `classifyUnitType` 确定性判定：父是规则容器（如 5.3 核心业务规则）→ global-rule；标题（剥括号后）以规则/策略/规范/机制/概览/模板/一览/字典结尾 → global-rule；其他 → feature
+- type 写入 `_matrix.md`（feature | global-rule），feature-metadata 解析并供 analyze 识别「共享能力」与「端功能」
+- 会议系统实测：三文档全部命中（8 页面功能 feature + 5 跨端规则 global-rule + 通知触发机制 global-rule），后续可被 AI/人工修正
+
+### analyze 读取内聚
+- 收集 features/*/SOURCE.md 时同步注入 _matrix.md（type/platforms/dependencies/apis），保证功能单元的外链元数据（类型/依赖/API 契约）一定被 AI 读到
+
+### 验证
+- tsc/build 通过，全量测试基线一致（216 passed / 14 failed），无回归
+
+---
+
 ## v8.3.227 (2026-09-22) — 切分粒度回归功能级 + 功能单元目录按文档顺序
 
 ### 切分粒度：维度小节并入父功能（会议系统验证暴露）

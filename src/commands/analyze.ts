@@ -1077,6 +1077,10 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
             if (fe.isDirectory() && !fe.name.startsWith('.')) {
               const readmePath = await resolveUnitSourcePath(join(featuresDir, fe.name));
               if (await pathExists(readmePath)) requirements.push(readmePath);
+              // v8.3.228+: 端覆盖矩阵（type/platforms/dependencies/apis）紧随切片注入，
+              // 保证功能单元的外链元数据（类型/依赖/API 契约）一定被 AI 读到
+              const matrixPath = join(featuresDir, fe.name, '_matrix.md');
+              if (await pathExists(matrixPath)) requirements.push(matrixPath);
             }
           }
         } catch {}

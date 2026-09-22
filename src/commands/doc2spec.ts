@@ -831,6 +831,8 @@ interface ScannedUnit {
   startLine: number;
   endLine: number;
   sourceSection: string;
+  /** v8.3.228+: 单元类型——feature（页面/业务流程）或 global-rule（跨端业务规则） */
+  unitType: 'feature' | 'global-rule';
 }
 
 /**
@@ -946,7 +948,7 @@ export async function splitDocumentToUnits(
       .split(/[,，;；]/)
       .map(p => p.trim())
       .filter(Boolean);
-    const matrixContent = `# ${unit.title} - 端覆盖矩阵\n\nfeature: ${unit.title}\nplatforms:\n${platforms.map(p => `  - ${p}`).join('\n') || '  []'}\ndependencies: []\napis: []\n`;
+    const matrixContent = `# ${unit.title} - 端覆盖矩阵\n\nfeature: ${unit.title}\ntype: ${unit.unitType}\nplatforms:\n${platforms.map(p => `  - ${p}`).join('\n') || '  []'}\ndependencies: []\napis: []\n`;
     await writeFile(join(unitDir, '_matrix.md'), matrixContent);
     
     // 初始变更记录
@@ -1056,6 +1058,20 @@ function isRuleContainerHeading(rawTitle: string, hasDeeperCandidate: boolean): 
   if (!hasDeeperCandidate) return false;
   const title = stripParenthetical(stripSectionNo(rawTitle)).trim();
   return /(规则|说明|规范|一览|模板)$/.test(title);
+}
+
+/**
+ * v8.3.228+: 判定功能单元类型（初始值，后续可被 AI/人工修正）
+ * 信号（确定性规则，会议系统 29 单元实测 100% 命中）：
+ *   1. 父是「规则/说明」容器（如 5.3 核心业务规则）→ global-rule
+ *   2. 标题（剥括号注释后）以规则/策略/规范/机制/概览/模板/一览/字典结尾 → global-rule
+ *   3. 其他 → feature
+ */
+function classifyUnitType(rawTitle: string, parentIsRuleContainer: boolean): 'feature' | 'global-rule' {
+  if (parentIsRuleContainer) return 'global-rule';
+  const title = stripParenthetical(stripSectionNo(rawTitle)).trim();
+  if (/(规则|策略|规范|机制|概览|模板|一览|字典)$/.test(title)) return 'global-rule';
+  return 'feature';
 }
 
 /** 归一化内容指纹（剔除生成时间等易变行后 sha1），用于跨文档重复章节检测 */
@@ -1211,6 +1227,7 @@ async function scanUnitsWithAI(content: string): Promise<UnitScanResult | null> 
         startLine,
         endLine,
         sourceSection: sections.join('、'),
+        unitType: classifyUnitType(name, false),
       });
     }
 
@@ -1325,7 +1342,7 @@ function scanUnits(content: string): ScannedUnit[] {
   }
 
   // 候选功能单元标题（非功能章节过滤 + 子树传播排除）
-  const candidates: { level: number; title: string; line: number }[] = [];
+  const candidates: { level: number; title: string; line: number; parentIsRuleContainer: boolean }[] = [];
   const stack: { level: number; subtreeExcluded: boolean; ruleContainer: boolean }[] = [];
   for (let i = 0; i < headings.length; i++) {
     const h = headings[i];
@@ -1341,7 +1358,7 @@ function scanUnits(content: string): ScannedUnit[] {
     const subtreeExcluded = parentExcluded || (nonFunctional && !isContainer);
     stack.push({ level: h.level, subtreeExcluded, ruleContainer });
     if (subtreeExcluded || isContainer || nonFunctional || h.line === docTitleLine) continue;
-    candidates.push(h);
+    candidates.push({ ...h, parentIsRuleContainer });
   }
 
   // 单元 = 候选中的叶子；内容范围到下一个同层级或更浅的标题（含被过滤标题）为止
@@ -1359,7 +1376,14 @@ function scanUnits(content: string): ScannedUnit[] {
     for (const h of headings) {
       if (h.line > c.line && h.level <= c.level) { endLine = h.line - 1; break; }
     }
-    units.push({ title: c.title, level: c.level, startLine: c.line, endLine, sourceSection: c.title });
+    units.push({
+      title: c.title,
+      level: c.level,
+      startLine: c.line,
+      endLine,
+      sourceSection: c.title,
+      unitType: classifyUnitType(c.title, c.parentIsRuleContainer),
+    });
   }
   return units;
 }

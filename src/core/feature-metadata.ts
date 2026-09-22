@@ -12,6 +12,8 @@ import { resolveUnitSourcePath } from './feature-source';
 
 export interface FeatureMetadata {
   feature: string;
+  /** v8.3.228+: 单元类型（feature | global-rule），来自 _matrix.md type 字段 */
+  unitType: string;
   platforms: string[];
   dependencies: string[];
   apis: Array<{ path: string; method?: string; description?: string }>;
@@ -52,6 +54,7 @@ export async function scanFeatureMetadata(iteration: string): Promise<FeatureMet
 
     metadata.push({
       feature: matrix.feature || dirName,
+      unitType: matrix.unitType || 'feature',
       platforms: matrix.platforms || [],
       dependencies: matrix.dependencies || [],
       apis: matrix.apis || [],
@@ -81,6 +84,7 @@ async function parseMatrixFile(featureDir: string): Promise<Partial<FeatureMetad
 
     return {
       feature: data?.feature || '',
+      unitType: data?.type || '',
       platforms: Array.isArray(data?.platforms) ? data.platforms : [],
       dependencies: Array.isArray(data?.dependencies) ? data.dependencies : [],
       apis: Array.isArray(data?.apis) ? data.apis : [],
