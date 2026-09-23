@@ -79,7 +79,9 @@ const COMMAND_KB: CommandKnowledge[] = [
   { name: 'dashboard', aliases: ['db'], description: '项目仪表盘：迭代状态/进度/健康度，--scope global 全量视图',
     usage: 'speccore dashboard [--scope global|iteration] [--export html] [--health] [--lifecycle]', examples: ['speccore dashboard', 'speccore dashboard --scope global --export html'], related: ['analyze', 'health'], triggers: ['看板', '仪表盘', 'dashboard', '进度', '状态'] },
   { name: 'analyze', aliases: ['al'], description: '迭代层分析：需求文档+源码→分析报告（产物 020-specs/）。支持 --full 三阶段合成，--deep 单文档深度分析，--iterative 迭代式生成，--filter 按需分析指定模块，--with-code 注入代码结构化数据，--phase 单阶段合成，--feature 局部分析功能模块，--doc 局部分析类型文档，--no-source 跳过源码，--supplement 追加源码；全局层（源码→技术文档/反推需求）用 speccore global',
-    usage: 'speccore analyze [--iteration <name>] [--full] [--deep <doc>] [--iterative] [--filter <keywords>] [--with-code] [--phase <n>] [--feature <module>] [--doc <type/slug>] [--no-source] [--source-scope <dirs>] [--supplement] [--dev-guide]', examples: ['speccore analyze', 'speccore analyze --full -i Q2', 'speccore analyze --deep ARCHITECTURE.md --iterative', 'speccore analyze --filter "订单,支付" --with-code', 'speccore analyze --phase 1 -i Q2', 'speccore analyze --feature 支付模块', 'speccore analyze --doc bugs/login-timeout', 'speccore analyze --with-code', 'speccore analyze --supplement --source-scope src/core', 'speccore global analyze --layer 1', 'speccore global from-source --src src/core'], related: ['dashboard', 'validate', 'code-index', 'refresh', 'synthesize'], triggers: ['分析', 'analyze', '审计', 'audit', '检查', '结合源码', '连代码', '带代码', '源码分析', '迭代分析', '分析迭代', '倒推需求', '反推', '从代码生成', '分析代码', '不读源码', '不读代码', '跳过源码', '指定目录分析', '只扫描', '补充分析', '追加分析', '补充源码', '追加源码', '遗漏', '没分析到', '没覆盖', '漏掉', '再分析', '多读几个', '局部分析', '单个模块', '单独分析', 'bug分析', '重构分析', '局部回写', '回写spec', '同步spec', '合成需求', '合并需求', '需求合成', '智能合成', '需求合并', '多端合成', '全量分析', '跨端综合', '全量合成', '开发指南', '生成开发指南', '带开发指南', '深度分析', '深入分析', '详细分析', '迭代生成', '逐节分析', '大纲分析', '按需分析', '只分析', '过滤分析', '聚焦分析'] },
+    usage: 'speccore analyze [--iteration <name>] [--full] [--deep <doc>] [--iterative] [--filter <keywords>] [--with-code] [--phase <n>] [--feature <module>] [--doc <type/slug>] [--no-source] [--source-scope <dirs>] [--supplement] [--dev-guide]', examples: ['speccore analyze', 'speccore analyze --full -i Q2', 'speccore analyze --deep ARCHITECTURE.md --iterative', 'speccore analyze --filter "订单,支付" --with-code', 'speccore analyze --phase 1 -i Q2', 'speccore analyze --feature 支付模块', 'speccore analyze --doc bugs/login-timeout', 'speccore analyze --with-code', 'speccore analyze --supplement --source-scope src/core', 'speccore global analyze --layer 1', 'speccore global from-source --src src/core'], related: ['dashboard', 'validate', 'code-index', 'refresh', 'synthesize'], triggers: ['分析', 'analyze', '审计', 'audit', '检查', '结合源码', '连代码', '带代码', '源码分析', '迭代分析', '分析迭代', '分析代码', '不读源码', '不读代码', '跳过源码', '指定目录分析', '只扫描', '补充分析', '追加分析', '补充源码', '追加源码', '遗漏', '没分析到', '没覆盖', '漏掉', '再分析', '多读几个', '局部分析', '单个模块', '单独分析', 'bug分析', '重构分析', '局部回写', '回写spec', '同步spec', '合成需求', '合并需求', '需求合成', '智能合成', '需求合并', '开发指南', '生成开发指南', '带开发指南', '深度分析', '深入分析', '详细分析', '迭代生成', '逐节分析', '大纲分析', '按需分析', '只分析', '过滤分析', '聚焦分析'] },
+  { name: 'global', aliases: [], description: '全局层分析：源码→技术文档（global analyze，Layer 1→4 推进）/ 源码→需求文档（global from-source，反推）。产物 .speccore/GLOBAL/，独立于迭代层 analyze',
+    usage: 'speccore global analyze [--layer 1-4] [--with-code] [--auto] | speccore global from-source --src <dirs> [--depth <depth>]', examples: ['speccore global analyze --layer 1', 'speccore global analyze --with-code', 'speccore global from-source --src backend/src,admin-web/src'], related: ['analyze', 'code-index'], triggers: ['全局分析', '全局层分析', '分析全局', '全局架构', '全局代码分析', '全局技术分析', '分析所有端', '分析所有源码', '分析所有工程', '分析整体架构', '项目架构分析', '全量分析', '跨端综合', '全量合成', '多端合成', '源码反推', '从源码反推', '源码生成需求', '反推需求', '从代码生成', '倒推需求', '反推', '逆向工程'] },
   { name: 'code-index', aliases: ['ci', 'idx'], description: '源码索引：扫描项目代码，自动识别多端/模块/依赖，生成 Markdown 索引',
     usage: 'speccore code-index [--full] [--scope <dirs>] [--show]', examples: ['speccore code-index', 'speccore code-index --full', 'speccore code-index --scope src/commands,src/core', 'speccore code-index --show'], related: ['analyze', 'run'], triggers: ['代码索引', '源码索引', 'code-index', '索引', '建索引', '更新索引', '扫描代码', '代码结构', '模块索引', '项目结构'] },
   { name: 'execute', aliases: ['ex'], description: '执行开发任务：依赖排序+分批+交互引导+计划联动',
@@ -164,13 +166,13 @@ const SYNONYM_MAP: Record<string, string> = {
   '局部分析': 'analyze', '单个模块': 'analyze', '单独分析': 'analyze',
   'bug分析': 'analyze', '重构分析': 'analyze',
   '合成需求': 'analyze', '需求合成': 'analyze', '智能合成': 'analyze',
-  '需求合并': 'analyze', '多端合成': 'analyze', '全量分析': 'analyze',
-  '跨端综合': 'analyze', '全量合成': 'analyze',
+  '需求合并': 'analyze', '多端合成': 'global', '全量分析': 'global',
+  '跨端综合': 'global', '全量合成': 'global',
   // ── execute ──
   '开始做': 'execute', '干活': 'execute', '开工': 'execute',
   '跑任务': 'execute', '开发任务': 'execute',
-  // ── split ──
-  '分解': 'split', '划分': 'split', '拆需求': 'split', '拆任务': 'split',
+  // ── taskify ──
+  '分解': 'taskify', '划分': 'taskify', '拆需求': 'taskify', '拆任务': 'taskify',
   // ── pr ──
   '提交代码': 'pr', '发起PR': 'pr', '发起MR': 'pr', '创建MR': 'pr',
   // ── validate ──
@@ -389,7 +391,9 @@ function matchCommandInKB(input: string): CommandKnowledge | null {
   let best: CommandKnowledge | null = null;
   let bestScore = 0;
   for (const cmd of COMMAND_KB) {
-    const score = cmd.triggers.filter(t => lower.includes(t)).length;
+    // v8.3.257: 用匹配触发词的总长度加权——长词（如「全局分析」4字）比短词（「分析」2字）更具体，
+    // 避免「全局分析」被 analyze 的泛触发词「分析」抢占
+    const score = cmd.triggers.filter(t => lower.includes(t)).reduce((s, t) => s + t.length, 0);
     if (score > bestScore) { bestScore = score; best = cmd; }
   }
   if (bestScore > 0 && best) { lastKbMatchType = 'trigger'; return best; }
@@ -631,6 +635,13 @@ const SUPPLEMENT_INTENT = /补充分析|追加分析|补充源码|追加源码|�
 /** 排除模式：这些场景不应触发补充分析 */
 const SUPPLEMENT_EXCLUDE = /补充测试|补充用例|补充文档|补.*文档|补充.*报告/;
 
+/** v8.3.257: 意图展示命令格式化 — global 命令族需拼子命令（反推词→from-source，否则→analyze） */
+function formatCommandDisplay(r: IntentResult): string {
+  return r.command === 'global'
+    ? `global ${r.extractedParams?.fromCode ? 'from-source' : 'analyze'}`
+    : r.command;
+}
+
 /** 模式3: 意图匹配（当前 ask 逻辑） */
 async function handleMatch(input: string, isExplicit = false): Promise<AskResult> {
   // 补充分析意图已在 askEngine 顶层检测（第零层），此处不再重复
@@ -673,11 +684,24 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
   if (kbMatch && (!best || best.confidence < 60) && !runHasParams) {
     const params = best?.extractedParams || {};
     let fullCommand = `speccore ${kbMatch.name}`;
+    // v8.3.255+: global 命令族需子命令（反推词→from-source，否则→analyze）
+    if (kbMatch.name === 'global') {
+      fullCommand = params.fromCode ? `speccore global from-source` : `speccore global analyze`;
+    }
     const paramNotes: string[] = [];
     if (params.tool) { fullCommand += ` --tool="${params.tool}"`; paramNotes.push(`🔧 平台: ${params.tool}`); }
-    if (params.name) { fullCommand += ` -n "${params.name}"`; paramNotes.push(`📛 名称: ${params.name}`); }
-    if (params.iteration) { fullCommand += ` --iter "${params.iteration}"`; paramNotes.push(`🔄 迭代: ${params.iteration}`); }
-    if (params.scope) { fullCommand += ` --scope ${params.scope}`; paramNotes.push(`🌐 范围: ${params.scope}`); }
+    // v8.3.257: KB 命令名是顶层（如 task/iteration），-n/--iter 只存在于子命令，拼上即死参数。
+    // name 仅作提示；iteration 用全名 --iteration（大多数命令注册了该选项）
+    if (params.name) { paramNotes.push(`📛 名称: ${params.name}`); }
+    if (params.iteration) { fullCommand += ` --iteration "${params.iteration}"`; paramNotes.push(`🔄 迭代: ${params.iteration}`); }
+    // v8.3.255+: global 子命令无 --scope 选项（scope 已在子命令选择时消费）
+    // v8.3.257: --scope 不是通用选项（仅 dashboard/verify/analyze 注册）。sync 用 --global 布尔，
+    // 其余命令只作提示，避免死参数
+    if (params.scope && kbMatch.name !== 'global' && kbMatch.name !== 'analyze') {
+      if (kbMatch.name === 'sync') { fullCommand += ` --global`; }
+      else if (kbMatch.name === 'dashboard') { fullCommand += ` --scope ${params.scope}`; }
+      paramNotes.push(`🌐 范围: ${params.scope}`);
+    }
     // v8.3.193+: 源码反推（--from-code）/ 源码扫描（--with-code），互斥
     if (kbMatch.name === 'analyze' && params.fromCode) { fullCommand += ` --from-code`; paramNotes.push(`🔍 源码反推: 从源码生成需求文档`); }
     if (kbMatch.name === 'analyze' && params.withCode) { fullCommand += ` --with-code`; paramNotes.push(`🔍 源码扫描: 结合工程源码分析`); }
@@ -691,6 +715,8 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
       if (params.to) { fullCommand += ` --to ${params.to}`; paramNotes.push(`🏁 终点: ${params.to}`); }
       if (params.gate) { fullCommand += ` --gate ${params.gate}`; paramNotes.push(`🤖 闸口: 全自动（跳过 A/B）`); }
     }
+    // v8.3.257: taskify 默认走 AI 增强路径（--prompt），除非用户明确要求传统模式
+    if (kbMatch.name === 'taskify' && !params.splitDirect) { fullCommand += ` --prompt`; paramNotes.push(`🧠 模式: AI 智能拆分`); }
 
     // 补充分析意图已在 askEngine 顶层检测，此处不再重复
     
@@ -724,7 +750,7 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
     const candidates = results.slice(0, 4);
     const lines = ['🤔 检测到多个可能意图，请选择:', ''];
     candidates.forEach((r, i) => {
-      lines.push(`[${i + 1}] ${r.intent} (${r.confidence}%) — speccore ${r.command}`);
+      lines.push(`[${i + 1}] ${r.intent} (${r.confidence}%) — speccore ${formatCommandDisplay(r)}`);
     });
     lines.push('');
     lines.push('输入编号选择，或重新描述你的需求。');
@@ -742,11 +768,13 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
   // 可能是用户在普通聊天（如"分析代码""讨论需求"），应返回确认而非直接执行
   // v6.97.0+ 修复：显式调用（/spec-ask Skill）时跳过此检测，直接执行
   if (!isExplicit && AMBIGUOUS_INTENTS.has(best.intent) && !isSpeccoreOperation(input)) {
+    // v8.3.257: global 命令族需子命令（反推词→from-source，否则→analyze）
+    const displayCmd = formatCommandDisplay(best);
     const lines = [
       '🤔 我识别到你可能想执行 speccore 命令，但不确定这是调用 CLI 还是普通技术讨论：',
       '',
       `  你的输入: "${input}"`,
-      `  匹配意图: ${best.intent} → speccore ${best.command}${clarifyFlag}${runFlag}`,
+      `  匹配意图: ${best.intent} → speccore ${displayCmd}${clarifyFlag}${runFlag}`,
       '',
       '如果是 speccore 操作，请补充明确的上下文词，例如：',
       '  • "用 speccore 分析本迭代需求"',
@@ -756,7 +784,7 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
       '',
       '如果是普通技术讨论（解释代码、审查片段、讨论需求），请直接描述你的问题。',
       '',
-      '或输入 y 确认执行: speccore ' + best.command + clarifyFlag + runFlag,
+      '或输入 y 确认执行: speccore ' + displayCmd + clarifyFlag + runFlag,
     ];
     return {
       mode: 'ambiguous',
@@ -770,12 +798,12 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
   if (!runForced && best.confidence < config.routing.highThreshold && best.confidence >= config.routing.lowThreshold) {
     const lines = ['🤔 我理解你想做这个，但不太确定，请确认:', ''];
     lines.push(`🎯 我的理解: ${best.intent} (${best.confidence}%)`);
-    lines.push(`📋 建议命令: speccore ${best.command}${clarifyFlag}${runFlag}`);
+    lines.push(`📋 建议命令: speccore ${formatCommandDisplay(best)}${clarifyFlag}${runFlag}`);
     lines.push('');
     if (results.length > 1) {
       lines.push('其他可能:');
       for (const r of results.slice(1, 3)) {
-        lines.push(`  • ${r.intent} (${r.confidence}%) — speccore ${r.command}`);
+        lines.push(`  • ${r.intent} (${r.confidence}%) — speccore ${formatCommandDisplay(r)}`);
       }
       lines.push('');
     }
@@ -798,22 +826,49 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
   } else if (best.command === 'iteration-create') {
     const name = params.name || input.slice(0, 20);
     fullCommand = `speccore iteration create -n "${name}"`;
+  } else if (best.command === 'global') {
+    // v8.3.255+: global 命令族 — 反推词→from-source，否则→analyze
+    // 注：extractParams 中 fromCode 与 withCode 互斥（反推优先级高于扫描）
+    fullCommand = (params.fromCode || (params.scope === 'global' && /反推|逆向|生成需求/.test(input)))
+      ? `speccore global from-source`
+      : `speccore global analyze`;
+    if (params.withCode) fullCommand += ` --with-code`;
+  } else if (best.command === 'bugfix' || best.command === 'research') {
+    // v8.3.257: bugfix/research 无独立 CLI 命令 — 路由到 task new -t <type>
+    const name = params.name || params.desc || input.slice(0, 30);
+    fullCommand = `speccore task new -t ${best.command} -n "${name}"`;
+    paramNotes.push(`📦 任务类型: ${best.command}`);
+  } else if (best.command === 'search') {
+    // v8.3.257: search 用位置参数而非 -n（search 无 -n 选项，避免死参数）
+    fullCommand = `speccore search "${params.name || input.slice(0, 40)}"`;
   } else {
     fullCommand = `speccore ${best.command}`;
-    if (params.name) fullCommand += ` -n "${params.name}"`;
-    if (params.iteration) fullCommand += ` --iter "${params.iteration}"`;
-    if (params.scope) {
-      fullCommand += ` --scope ${params.scope}`;
-      paramNotes.push(`🌐 范围: ${params.scope}`);
-      // v6.97.0+: 全局分析默认结合源码扫描，确保不 fallback 到迭代层文档
-      if (params.scope === 'global' && !params.withCode) {
-        params.withCode = 'true';
-      }
+    // v8.3.257: -n/--iter 不是通用选项——仅 task new/iteration create 注册了 -n，
+    // 仅 unitize 注册了 --iter；change 用位置参数，其余命令忽略 name 避免死参数
+    if (params.name && (best.command === 'task new' || best.command === 'iteration create')) {
+      fullCommand += ` -n "${params.name}"`;
+    } else if (params.name && best.command === 'change') {
+      fullCommand += ` "${params.name}"`;
     }
-    // v6.97.0+: 任务级分析时自动附加 --task 参数
-    if (params.task) {
-      fullCommand += ` --task "${params.task}"`;
-      paramNotes.push(`📋 任务: ${params.task}`);
+    if (params.iteration) {
+      fullCommand += best.command === 'unitize'
+        ? ` --iter "${params.iteration}"`
+        : ` --iteration "${params.iteration}"`;
+    }
+    // v8.3.257: --scope 不是通用选项（仅 dashboard/verify/analyze 注册）。sync 用 --global 布尔，
+    // 其余命令只作提示，避免死参数
+    if (params.scope && best.command !== 'analyze') {
+      if (best.command === 'sync') {
+        fullCommand += ` --global`;
+      } else if (best.command === 'dashboard') {
+        fullCommand += ` --scope ${params.scope}`;
+      }
+      paramNotes.push(`🌐 范围: ${params.scope}`);
+    }
+    // v8.3.255+: analyze 意图若仍带 scope=global（旧语料），改路由到 global analyze，不拼 --scope global
+    if (best.command === 'analyze' && params.scope === 'global') {
+      fullCommand = params.fromCode ? `speccore global from-source` : `speccore global analyze`;
+      paramNotes.push(`🌐 全局层: 已路由到 speccore global`);
     }
     if (params.fromCode) {
       fullCommand += ` --from-code`;
@@ -866,8 +921,9 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
       paramNotes.push(`🔧 工具/平台: ${params.tool}`);
     }
     // v7.4.0+: DEV_GUIDE.md 是标准文档，始终生成，无需参数控制
-    // split 默认走 AI 增强路径（--prompt），除非用户明确要求传统模式
-    if (best.command === 'split' && !params.splitDirect) {
+    // v8.3.257: taskify 默认走 AI 增强路径（--prompt），除非用户明确要求传统模式。
+    // v8.3.231 起 split 已正名 taskify（command 恒为 'iteration taskify'，旧判断是死分支）
+    if ((best.command === 'iteration taskify' || best.command === 'taskify') && !params.splitDirect) {
       fullCommand += ` --prompt`;
       paramNotes.push(`🧠 模式: AI 智能拆分（输出 Prompt 供 AI 分析）`);
     }
@@ -902,7 +958,7 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
   if (results.length > 1) {
     detailLines.push('💡 备选意图:');
     for (const r of results.slice(1, 4)) {
-      detailLines.push(`  • ${r.intent} (${r.confidence}%) — speccore ${r.command}`);
+      detailLines.push(`  • ${r.intent} (${r.confidence}%) — speccore ${formatCommandDisplay(r)}`);
     }
     detailLines.push('');
   }
@@ -916,7 +972,7 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
   // v6.97.0+ 修复：强制确认命令列表 — 即使置信度高也需要用户确认
   // 这些命令会产生文件/副作用，不能误执行
   const FORCE_CONFIRM_COMMANDS = new Set([
-    'analyze', 'split', 'plan', 'execute', 'run',
+    'analyze', 'global', 'iteration taskify', 'taskify', 'plan', 'execute', 'run',
     'doc2spec', 'spec2doc', 'iteration', 'task',
     'pr', 'done', 'change', 'reindex',
   ]);

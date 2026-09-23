@@ -57,6 +57,7 @@ export type IntentType =
   | 'doc2spec'           // Word 需求文档导入
   | 'synthesize'         // 需求文档智能合成
   | 'verdict'            // v8.3.24+: 契约冲突裁决
+  | 'global_analyze'     // v8.3.255+: 全局层分析（speccore global 独立命令）
   | 'next';              // v8.3.189+: 下一步指引（检测进度）
 
 /** 意图匹配结果 */
@@ -155,7 +156,32 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     description: '创建新迭代 — 生成 STAFFING + 产品需求 + 需求文档目录',
     args: '--name=<name> --owner=<owner>',
   },
-  // 需求分析（全局级 + 迭代级 + 任务级 + 重新/补充分析）
+  // 全局层分析（v8.3.255+：speccore global 独立命令，源码→技术文档 / 源码→需求文档）
+  // 优先级高于 analyze，避免「全局分析」误落迭代层
+  {
+    id: 'global',
+    intent: 'global_analyze',
+    priority: 92,
+    triggers: [
+      '全局分析', '全局层分析', '分析全局层', '分析全局',
+      '全量分析', '全量层分析', '分析全量层', '分析全量',
+      '项目分析', '分析项目', '分析整体架构',
+      '分析所有端', '分析所有工程', '跨端分析', '全局架构分析',
+      '整体分析', '全项目分析', '项目架构分析',
+      '分析整个系统', '分析整个项目', '分析所有源码',
+      // v8.3.255+: 源码反推需求 → global from-source
+      '从源码反推', '源码反推', '从代码反推', '代码反推', '反推需求',
+      '逆向分析', '逆向生成', '反推', '逆向工程',
+    ],
+    patterns: [
+      '全局分析(.+)', '全量分析(.+)', '分析所有(.+)',
+      '分析项目(.+)', '项目(.+)分析', '整体(.+)分析',
+      '跨端(.+)分析', '架构(.+)分析',
+      '全局深度分析(.+)', '全量深入分析(.+)',
+    ],
+    description: '全局层分析 — 源码→技术文档（global analyze）/ 源码→需求文档（global from-source），产物 .speccore/GLOBAL/，独立于迭代层 analyze',
+  },
+  // 需求分析（纯迭代层 + 重新/补充分析）
   {
     id: 'analyze',
     intent: 'analyze',
@@ -164,43 +190,23 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
       // 迭代级
       '分析需求', '需求分析', 'AI分析', '代码分析', '分析代码',
       '迭代分析', '分析迭代', '本迭代分析', '当前迭代分析',
-      // 全局级（v6.97.0+ 修复：避免全局分析 fallback 到迭代层）
-      '全局分析', '全局层分析', '分析全局层', '分析全局',
-      '全量分析', '全量层分析', '分析全量层', '分析全量',
-      '项目分析', '分析项目', '分析整体架构',
-      '分析所有端', '分析所有工程', '跨端分析', '全局架构分析',
-      '整体分析', '全项目分析', '项目架构分析',
-      '分析整个系统', '分析整个项目', '分析所有源码',
-      // 任务级（v6.97.0+ 新增：子任务/单任务分析）
-      '任务分析', '分析任务', '子任务分析', '分析子任务',
-      'Task分析', '分析Task', '当前任务分析', '单任务分析',
-      // 重新/补充分析（v6.97.0+ 新增：覆盖 --supplement / --sync）
+      // 重新/补充分析（v6.97.0+ 新增：覆盖 --supplement）
       '重新分析', '再分析', '重新生成分析', '重新跑分析',
       '补充分析', '追加分析', '更新分析', '修正分析',
       '完善分析', '刷新分析', '重新评估', '重新审查',
       // v7.2.0+: 深度分析 — --deep / --iterative
       '深度分析', '深入分析', '详细分析', '深度生成',
-      '迭代分析', '逐节分析', '大纲分析', '分步分析',
+      '逐节分析', '大纲分析', '分步分析',
       '慢慢分析', '一步一步分析',
       // v7.2.0+: 按需分析 — --filter
       '按需分析', '只分析', '仅分析', '过滤分析',
       '聚焦分析', '限定分析', '针对分析',
       // v7.2.0+: 代码关联 — --with-code
       '带代码分析', '连代码分析', '源码分析', '结构化分析',
-      // v8.3.193+: 从源码反推需求 — --from-code（spec-source-to-global 工作流）
-      '从源码反推', '源码反推', '从代码反推', '代码反推', '反推需求',
-      '逆向分析', '逆向生成', '反推', '逆向工程',
     ],
     patterns: [
       '分析(.+)需求', '分析(.+)代码',
       '迭代(.+)分析', '本迭代(.+)分析',
-      // 全局级匹配模式
-      '全局分析(.+)', '全量分析(.+)', '分析所有(.+)',
-      '分析项目(.+)', '项目(.+)分析', '整体(.+)分析',
-      '跨端(.+)分析', '架构(.+)分析',
-      // 任务级匹配模式
-      '任务(.+)分析', '分析任务(.+)', '子任务(.+)分析',
-      'Task(.+)分析', '分析Task(.+)',
       // 重新/补充分析匹配模式
       '重新(.+)分析', '再(.+)分析', '补充(.+)分析',
       '更新(.+)分析', '修正(.+)分析', '完善(.+)分析',
@@ -209,17 +215,15 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
       '查看(.+)中的(.+)', '查看(.+)的(.+)',
       // v7.2.0+: 深度分析模式 — 指定文档 + 深度意愿
       '深度分析(.+)', '深入分析(.+)', '详细分析(.+)',
-      '迭代分析(.+)', '逐节分析(.+)', '大纲分析(.+)',
+      '逐节分析(.+)', '大纲分析(.+)',
       // v7.2.0+: 按需分析模式 — 指定模块/关键词
       '只分析(.+)', '仅分析(.+)', '过滤分析(.+)',
       '聚焦(.+)分析', '针对(.+)分析',
-      // v7.2.0+: 全局 + 深度组合
-      '全局深度分析(.+)', '全量深入分析(.+)',
       // v7.2.0+: 迭代 + 细粒度组合
       '迭代(.+)深度分析(.+)', '分析迭代(.+)中的(.+)',
     ],
     description: 'AI 分析 — 需求完整性 + 改动范围 + 风险矩阵（迭代层 020-specs/；全局层用 speccore global）',
-    args: '-I <iteration> 或 --scope overview --deep <doc> --iterative --filter <keywords> --with-code --from-code --supplement',
+    args: '-I <iteration> 或 --scope overview --deep <doc> --iterative --filter <keywords> --with-code --supplement',
   },
   // 切分功能单元（单元化，区别于下面的 taskify 拆任务）
   {
@@ -325,23 +329,23 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     patterns: ['归档(.+)', '清理(.+)'],
     description: '归档任务 — 将已完成任务移动到归档目录',
   },
-  // 参考层
+  // 参考查找（v8.3.257: 无独立 reference 命令，路由到 search 全文检索）
   {
-    id: 'reference',
+    id: 'search',
     intent: 'reference',
     priority: 75,
     triggers: ['参考', '借鉴', '类似', '有没有', '之前', '以前'],
     patterns: ['参考(.+)', '借鉴(.+)', '有没有(.+)示例'],
-    description: '模式搜索 — 在 PATTERNS 中搜索相关技术参考',
+    description: '参考查找 — 在 Spec 文档/PATTERNS 中搜索相关技术参考（search）',
   },
-  // 同步
+  // 同步（含全量层双向同步，--global 模式，原 sync-global）
   {
     id: 'sync',
     intent: 'sync',
     priority: 70,
-    triggers: ['同步', '反向同步', '更新Spec', '对齐'],
-    patterns: ['同步(.+)', '更新(.+)Spec', '对齐(.+)'],
-    description: '反向同步 — 检测代码与 Spec 的差异并同步更新',
+    triggers: ['同步', '反向同步', '更新Spec', '对齐', '同步全量', '同步全局', '更新全量层', '同步到全量'],
+    patterns: ['同步(.+)', '更新(.+)Spec', '对齐(.+)', '同步(.*)到全量层', '更新全量层', '同步全量'],
+    description: '双向同步 — 代码↔Spec；--global 同步到全局层（原 sync-global）',
   },
   // 进度层
   {
@@ -369,14 +373,14 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     patterns: ['交接(.+)', '转交(.+)', '生成交接文档'],
     description: '生成交接文档 — 汇总迭代关键信息和待办事项',
   },
-  // 健康度
+  // 健康度（v8.3.257: 无独立 health 命令，路由到 doctor）
   {
-    id: 'health',
+    id: 'doctor',
     intent: 'health',
     priority: 65,
     triggers: ['健康', '质量', '评分'],
     patterns: ['健康度(.+)', '质量(.+)', '评分(.+)'],
-    description: '项目健康度 — 4 维度质量评估与风险预警',
+    description: '项目健康诊断 — doctor 命令 4 维度质量评估与风险预警',
   },
   // 回顾
   {
@@ -396,15 +400,7 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     patterns: ['配置(.+)', '设置(.+)'],
     description: '配置管理 — 查看和修改框架功能开关',
   },
-  // 模板
-  {
-    id: 'template-add',
-    intent: 'template_add',
-    priority: 55,
-    triggers: ['添加模板', '新增模板', '保存模板'],
-    patterns: ['添加(.+)模板', '新增(.+)模板', '保存(.+)模板'],
-    description: '添加代码模板 — 将现有代码保存为可复用模板',
-  },
+  // 模板（v8.3.257: template-add 无对应 CLI 命令，已移除 mapping）
   // 帮助
   {
     id: 'help',
@@ -414,14 +410,14 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     patterns: ['帮助(.+)', '怎么用(.+)', '教程(.+)'],
     description: '命令帮助 — 查看所有可用命令和参数说明',
   },
-  // 体验
+  // 体验（v8.3.257: 无独立 demo 命令，路由到 welcome 引导页）
   {
-    id: 'demo',
+    id: 'welcome',
     intent: 'demo',
     priority: 45,
     triggers: ['示例', '体验', '试一下', 'demo'],
     patterns: ['示例(.+)', '体验(.+)', '试一下(.+)'],
-    description: '快速体验 — 5 分钟体验 SpecCore 完整流程',
+    description: '快速体验 — 欢迎页引导 5 分钟体验 SpecCore 完整流程（welcome）',
   },
   // 引导
   {
@@ -435,15 +431,7 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
   // ============================================================
   // 全量层命令
   // ============================================================
-  // 导入到全量层
-  {
-    id: 'import-to-global',
-    intent: 'import_to_global',
-    priority: 83,
-    triggers: ['导入项目', '导入到全量层', '添加项目到全量'],
-    patterns: ['导入(.+)项目到全量', '添加(.+)到全量层', '导入(.+)作为(.+)项目'],
-    description: '导入到全量层 — 扫描项目代码并填充 GLOBAL/ 目录',
-  },
+  // 导入到全量层（v8.3.257: import-to-global 无对应 CLI 命令，已移除 mapping）
   // 从全量生成迭代
   {
     id: 'iteration-from-global',
@@ -453,18 +441,10 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     patterns: ['从全量(.*)生成迭代创建迭代', '选择(.*)需求生成迭代'],
     description: '从全量层生成迭代 — 按需求 ID 选择并生成新的迭代',
   },
-  // 同步全量（已整合到 sync --global）
+  // 同步全量（v8.3.257: 已合并到上方 sync mapping，避免同 intent 双 mapping 歧义平手）
+  // 全量状态（v8.3.257: 无独立 global-status 命令，路由到 dashboard）
   {
-    id: 'sync-global',
-    intent: 'sync',
-    priority: 70,
-    triggers: ['同步全量', '同步全局', '更新全量层', '同步到全量'],
-    patterns: ['同步(.*)到全量层', '更新全量层', '同步全量'],
-    description: '全量层双向同步 — 已整合到 sync --global（迭代与全量层之间的双向同步）',
-  },
-  // 全量状态
-  {
-    id: 'global-status',
+    id: 'dashboard',
     intent: 'global_status',
     priority: 65,
     triggers: ['全量状态', '全局状态', '全量层', '查看全量', '全局看板'],
@@ -531,24 +511,16 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
   // ============================================================
   // v4.0.0 新增命令
   // ============================================================
-  // 新建多平台 Task (v4.0)
+  // 新建多平台 Task (v4.0)（v8.3.257: 无独立 new-task 命令，id 正名 task new）
   {
-    id: 'new-task',
+    id: 'task new',
     intent: 'new_task',
     priority: 84,
     triggers: ['新建任务', '创建任务', '多端任务', '全平台任务'],
     patterns: ['新建(.*)任务', '创建(.*)任务', '做一个(.*)任务', '为(.*)创建任务'],
-    description: '创建多平台任务 — 支持 --platforms 指定前端平台',
+    description: '创建多平台任务 — 支持 --platforms 指定前端平台（task new）',
   },
-  // 添加平台 (v4.0)
-  {
-    id: 'platform-add',
-    intent: 'platform_add',
-    priority: 62,
-    triggers: ['添加平台', '新增平台', '增加端', '新平台'],
-    patterns: ['添加(.*)平台', '新增(.*)端', '增加(.*)平台'],
-    description: '动态添加平台 — 自动同步到 platforms.yaml 和现有 Task',
-  },
+  // 添加平台 (v4.0)（v8.3.257: platform-add 无对应 CLI 命令，已移除 mapping）
   // 更新索引 (v4.0) → v8.3.138: 映射到 refresh 命令，覆盖四层架构全部目录
   {
     id: 'refresh',
@@ -576,13 +548,13 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     patterns: ['导入.*文档', '.*word.*转', '需求.*word', 'PRD.*导入', '文档.*转换'],
     description: 'Word 需求文档导入 — 将 .docx/.doc 格式的 PRD 转换为 SpecCore Markdown',
   },
-  // 需求文档智能合成（已整合到 analyze --full）
+  // 需求文档智能合成（已整合到 analyze --full，v8.3.257: id 正名 analyze，避免路由到已删的 synthesize 命令）
   {
-    id: 'synthesize',
+    id: 'analyze',
     intent: 'analyze',
     priority: 44,
-    triggers: ['合成需求', '合并需求', '需求合成', 'synthesize', '智能合成', '需求合并', '多端合成', '全量分析', '跨端综合', '全量合成'],
-    patterns: ['合成.*需求', '合并.*需求', '需求.*合成', '多端.*合并', '.*综合需求', '全量.*分析', '跨端.*综合', '.*功能单元.*合成'],
+    triggers: ['合成需求', '合并需求', '需求合成', '智能合成', '需求合并'],
+    patterns: ['合成.*需求', '合并.*需求', '需求.*合成', '多端.*合并', '.*综合需求', '.*功能单元.*合成'],
     description: '需求文档智能合成 — 已整合到 analyze --full（多端全量分析 → 跨端综合 → 功能单元合成）',
   },
   // v8.3.24+: 契约冲突裁决
@@ -798,12 +770,8 @@ function extractParams(input: string, mapping: CommandMapping): Record<string, s
     }
   }
 
-  // 检测 scope 参数（全局分析 vs 迭代分析 vs 任务分析）
-  // v6.97.0+ 新增：任务级 scope 映射，优先级高于全局（先匹配先命中）
+  // 检测 scope 参数（全局 vs 迭代；任务层分析已废弃 v8.3.254）
   const scopeKeywords: Record<string, string> = {
-    // 任务级（优先匹配，避免"任务"被误判为迭代级）
-    '子任务': 'task', '单任务': 'task',
-    '任务级': 'task', '任务层': 'task',
     // 全局级
     '全局': 'global', '全局层': 'global', '全局范围': 'global',
     '全量': 'global', '全量层': 'global', '全量范围': 'global',
@@ -1034,6 +1002,8 @@ const SPECCORE_CONTEXT_KEYWORDS = [
   '迭代', 'iteration', 'sprint', 'STAFFING',
   // 全局分析（speccore 专有概念）
   '全局', '全局层', '全量', '全量层', '跨端',
+  // v8.3.255+: 源码反推 → global from-source
+  '反推', '逆向', '生成需求', '从源码', '源码反推',
   // 任务/拆分
   '拆分', 'split', '子任务', 'Task-', 'task-',
   // 文档/规格
@@ -1050,7 +1020,7 @@ const SPECCORE_CONTEXT_KEYWORDS = [
 
 /** 容易与"普通 AI 对话"混淆的意图 */
 export const AMBIGUOUS_INTENTS = new Set<IntentType>([
-  'analyze', 'split', 'execute', 'plan', 'review',
+  'analyze', 'global_analyze', 'split', 'execute', 'plan', 'review',
   'req_doc', 'research', // v8.3.0+: 文档化/调研也容易和普通AI对话混淆
 ]);
 

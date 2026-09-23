@@ -966,9 +966,9 @@ program
 program
   .command('analyze')
   .alias('al')
-  .description('统一分析: 需求文档 + 源码目录 → 按范围(全局/迭代/任务)生成分析报告，--audit 审计模式')
-  .option('-I, --iteration <iteration>', '目标迭代 (scope=iteration 时必填)')
-  .option('--scope <scope>', '输出范围: global(全局文档) | iteration(迭代, 默认) | overview(总览)')
+  .description('迭代层需求分析: 需求文档 + 功能单元 → 020-specs/ 分析文档（全局层分析请用 speccore global）')
+  .option('-I, --iteration <iteration>', '目标迭代')
+  .option('--scope <scope>', '输出范围: iteration(迭代, 默认) | overview(总览)；global 已废弃，请用 speccore global analyze')
   .option('--src, --source <dirs>', '源码目录 (逗号分隔，如 --src <端1/src>,<端2/src>)')
   .option('--req, --requirements <files>', '需求文档 (逗号分隔: --req docs/a.md,docs/b.md)')
   .option('-o, --output <file>', '输出文件名 (覆盖默认)')
@@ -1001,8 +1001,8 @@ program
   .option('--module <name>', '功能模块级全局分析（更新全局层+各端文档，区别于 --feature 局部分析）')
   .option('--clarify', '强制需求澄清（无视专业度判定，默认 auto=按专业度智能短路）')
   .option('--skip-clarify', '跳过需求澄清阶段（确定性关闭，优先于配置 optional_steps.clarify）')
-  .option('--layer <n>', '全局分析指定层级: 1=索引扫描, 2=跨端关联, 3=模块深入, 4=全局汇总')
-  .option('--deep <doc>', '全局分析时对指定文档进行深度分析（如 ARCHITECTURE.md），只生成该文档')
+  .option('--layer <n>', '全局分析指定层级: 1=索引扫描, 2=跨端关联, 3=模块深入, 4=全局汇总（旧 global 入口过渡用，请用 speccore global analyze --layer）')
+  .option('--deep <doc>', '全局分析时对指定文档进行深度分析（如 ARCHITECTURE.md），只生成该文档（旧 global 入口过渡用）')
   .option('--iterative', '迭代式补全模式 — 先输出大纲，确认后再逐节深入（配合 --deep 使用）')
   .option('--filter <keywords>', '按需分析 — 只分析与关键词匹配的模块（如 "auth|login|session"）')
   .option('--extract-units', '自动提取功能单元清单（从需求文档）')
@@ -1022,7 +1022,8 @@ program
   .option('--platform <platform>', '指定端（如 backend）')
   .option('--out-dir <path>', '反推需求产出目录（默认 .speccore/GLOBAL/requirements）')
   .action((options: any) => {
-    analyzeCommand({ ...options, fromCode: true, scope: 'global' });
+    // v8.3.255+: 薄别名，直接走 global from-source 引擎（屏蔽 analyze --scope global 废弃提示）
+    analyzeCommand({ ...options, fromCode: true, scope: 'global', _fromGlobal: true } as never);
   });
 
 // ════════════════════════════════════════════════════════════════

@@ -203,17 +203,17 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     examples: ['speccore done --task=Task-001', 'speccore done --all'],
   },
   bugfix: {
-    desc: 'Bug 修复（单条 / 批量 / 文件导入）',
+    desc: 'Bug 修复任务（v8.3.257: 无独立 bugfix 命令，用 task new -t bugfix）',
     params: [
       { flag: '-n, --name <name>', meaning: 'Bug 名称' },
       { flag: '-d, --desc <desc>', meaning: '详细描述' },
-      { flag: '--batch <bugs>', meaning: '批量导入（换行分隔）' },
+      { flag: '--batch <tasks>', meaning: '批量创建（换行分隔）' },
       { flag: '--batch-file <path>', meaning: '从 .xlsx / .csv 文件批量导入' },
       { flag: '--interactive', meaning: '预览 → 编辑 → 确认 → 创建' },
       { flag: '-i, --iteration <id>', meaning: '目标迭代' },
     ],
     examples: [
-      'speccore bugfix -n "登录超时" -d "token过期未刷新"',
+      'speccore task new -t bugfix -n "登录超时" -d "token过期未刷新"',
     ],
   },
   change: {
@@ -408,13 +408,13 @@ function showAllCommands(): void {
   logger.info('');
 
   const categories: Record<string, string[]> = {
-    '🏗️ 初始化': ['init', 'import', 'doc2spec'],
+    '🏗️ 初始化': ['init', 'doc2spec'],
     '📋 迭代与任务': ['iteration create', 'iteration taskify', 'task new', 'rename'],
-    '🔍 分析与计划': ['analyze', 'plan'],
+    '🔍 分析与计划': ['analyze', 'global', 'plan'],
     '⚡ 执行与审查': ['execute', 'pr', 'done'],
-    '🐛 变更与修复': ['change', 'bugfix'],
-    ' 状态与查询': ['status-panel', 'validate', 'ops', 'code-index', 'refresh', 'reindex'],
-    ' 智能入口': ['ask', 'dev', 'prompts'],
+    '🐛 变更与修复': ['change', 'task new'],
+    ' 状态与查询': ['status', 'validate', 'code-index', 'refresh', 'reindex'],
+    ' 智能入口': ['ask', 'run', 'prompts'],
   };
 
   for (const [cat, cmds] of Object.entries(categories)) {
@@ -471,7 +471,7 @@ speccore done --task=Task-001                              # 完成归档`,
     {
       title: '六、全自动流水线',
       code: `speccore run                             # 一键跑完所有阶段
-speccore run --from split                 # 从拆分开始自动化
+speccore run --from taskify               # 从拆分开始自动化
 speccore next                             # 只提示下一步，不执行`,
     },
     {
@@ -655,14 +655,14 @@ async function helpHtml(options: HelpOptions): Promise<void> {
         desc: '创建迭代、拆分任务、重命名'
       },
       '📝 文档转换与合成': { 
-        cmds: ['doc2spec', 'spec2doc', 'synthesize'],
+        cmds: ['doc2spec', 'spec2doc', 'analyze'],
         icon: '📄',
-        desc: 'Word/PDF/MD → 规格文档，多端需求合成'
+        desc: 'Word/PDF/MD → 规格文档，多端需求合成（analyze --full）'
       },
       '🔍 分析与计划': { 
-        cmds: ['analyze', 'plan', 'split'],
+        cmds: ['analyze', 'global', 'plan', 'taskify'],
         icon: '🔬',
-        desc: 'AI 需求分析、生成执行计划、原子化拆分'
+        desc: 'AI 需求分析、全局层分析、生成执行计划、任务拆分'
       },
       '⚡ 执行与交付': { 
         cmds: ['execute', 'pr', 'done'],

@@ -6,15 +6,19 @@
 
 import { logger } from '../utils/logger';
 
+// v8.3.257: 与 cli.ts 实际注册命令对齐，移除已删命令（import/health/goal/bugfix/research/
+// template-add/demo/sync-global/global-status/new-task/platform-add/backup/hooks/current/trace/watch）
 const COMMANDS = [
-  'init', 'import', 'validate', 'archive', 'progress', 'status', 'health',
-  'report', 'config', 'iteration', 'task', 'plan', 'execute', 'ask',
-  'goal', 'bugfix', 'research', 'change', 'sync', 'handover', 'retro',
-  'template-add', 'help', 'demo', 'welcome', 'iteration-from-global',
-  'sync-global', 'global-status', 'history', 'impact', 'baseline',
-  'dashboard', 'audit', 'rename', 'new-task', 'platform-add',
-  'context', 'migrate', 'completion', 'backup', 'hooks', 'current',
-  'update', 'diff', 'trace', 'delete', 'search', 'watch', 'refresh', 'rag-index',
+  'init', 'doc2spec', 'unitize', 'taskify', 'analyze', 'global', 'spec-from-source',
+  'validate', 'plan', 'execute', 'run', 'pipeline', 'verify', 'pr', 'done',
+  'status', 'progress', 'dashboard', 'doctor', 'report', 'handover', 'archive',
+  'config', 'constitution', 'iteration', 'task', 'change', 'sync', 'track',
+  'search', 'history', 'impact', 'baseline', 'rollback', 'pattern', 'audit',
+  'rename', 'retro', 'verdict', 'req-doc', 'workspace', 'iteration-from-global',
+  'context', 'update', 'migrate', 'diff', 'merge-check', 'delete', 'cleanup',
+  'code-index', 'rag-index', 'refresh', 'reindex', 'knowledge', 'graph',
+  'prompts', 'next', 'notify', 'recommend',
+  'help', 'about', 'welcome', 'ask', 'completion',
 ];
 
 /**
