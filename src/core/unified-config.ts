@@ -1543,15 +1543,17 @@ function toYaml(config: SpecConfig): string {
   yaml += '    # default: 默认流水线名（内置 full/import/analyze/develop/deliver/deploy/docs 或自定义名）\n';
   yaml += `    default: ${config.settings.pipelines?.default ?? 'full'}\n`;
   yaml += '    # custom: 用户自定义命名流水线（名称: 逗号分隔的阶段串）\n';
-  yaml += '    custom:\n';
   const customs = config.settings.pipelines?.custom || {};
   const customKeys = Object.keys(customs);
   if (customKeys.length > 0) {
+    yaml += '    custom:\n';
     for (const k of customKeys) {
       yaml += `      ${k}: ${customs[k]}\n`;
     }
   } else {
-    yaml += '      # my-flow: analyze,validate,split,plan,execute\n';
+    // v8.3.259: 输出实际空键（此前仅注释示例，YAML 解析为 null）
+    yaml += '    # custom 示例: my-flow: analyze,validate,split,plan,execute\n';
+    yaml += '    custom: {}\n';
   }
   yaml += '  # ── 流水线 review 闸口模式 ──\n';
   yaml += '  #   manual = 闸口 A/B/C 都软停人工确认（默认，最安全）\n';
@@ -1574,9 +1576,9 @@ function toYaml(config: SpecConfig): string {
       yaml += `      ${k}: ${scopeByEnv[k]}\n`;
     }
   } else {
-    yaml += '    # scope_by_env:\n';
-    yaml += '    #   dev: module\n';
-    yaml += '    #   production: full\n';
+    // v8.3.259: 输出实际空键（此前仅注释示例，导致 upgrade 反复假补全）
+    yaml += '    # scope_by_env 示例: dev: module / production: full\n';
+    yaml += '    scope_by_env: {}\n';
   }
   yaml += '  # ── AI 内容生成来源 ──\n';
   yaml += '  #   host = 宿主 AI（Qoder SDK / Headless，默认）\n';
@@ -1598,13 +1600,14 @@ function toYaml(config: SpecConfig): string {
       yaml += `        priority: ${p.priority ?? 1}\n`;
     }
   } else {
-    yaml += '    # providers: 自配 LLM 池（示例：本地 Ollama + 云端）\n';
-    yaml += '    # providers:\n';
+    // v8.3.259: 输出实际空键（此前仅注释示例，导致 upgrade 反复假补全）
+    yaml += '    # providers 示例: 本地 Ollama + 云端\n';
     yaml += '    #   - name: local\n';
     yaml += '    #     type: ollama\n';
     yaml += '    #     endpoint: http://localhost:11434\n';
     yaml += '    #     model: qwen2.5:7b\n';
     yaml += '    #     priority: 1\n';
+    yaml += '    providers: []\n';
   }
   const aiDefaults = config.settings.ai?.defaults || {};
   const aiDefaultKeys = Object.keys(aiDefaults);
@@ -1615,14 +1618,16 @@ function toYaml(config: SpecConfig): string {
       yaml += `      ${k}: ${aiDefaults[k]}\n`;
     }
   } else {
-    yaml += '    # defaults: 各功能默认 provider（如 analyze: gpt4o、taskify: local）\n';
-    yaml += '    # defaults:\n';
-    yaml += '    #   analyze: local\n';
+    // v8.3.259: 输出实际空键（此前仅注释示例，导致 upgrade 反复假补全）
+    yaml += '    # defaults 示例: analyze: gpt4o / taskify: local\n';
+    yaml += '    defaults: {}\n';
   }
   if (config.settings.ai?.fallback) {
     yaml += `    fallback: ${config.settings.ai.fallback}\n`;
   } else {
+    // v8.3.259: 输出实际空键（此前仅注释示例，导致 upgrade 反复假补全）
     yaml += '    # fallback: 兜底 provider name（可选）\n';
+    yaml += "    fallback: ''\n";
   }
 
 
