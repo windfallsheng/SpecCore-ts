@@ -1,0 +1,41 @@
+# =============================================================================
+# Helm Values 模板 — dev 环境
+# =============================================================================
+# 用途：Helm chart 的 values 覆盖文件（helm 类型部署时调用）
+# 位置：.speccore/environments/scripts/values-dev.yaml
+# 执行：speccore deploy --env dev --platform <platform>
+#
+# 请根据实际项目修改镜像、副本数、资源限制等。
+# =============================================================================
+
+replicaCount: 2
+
+image:
+  repository: registry.example.com/user-service
+  pullPolicy: IfNotPresent
+  tag: 'dev'
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

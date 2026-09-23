@@ -1,0 +1,132 @@
+# PROJECT.yaml — 项目配置（由 CLI 自动生成，不建议手动编辑）
+# 如需修改，请编辑 CONSTITUTION.md 后运行 speccore update
+# ─────────────────────────────────────────────────────────────────────────────
+
+schema_version: 1
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 项目基本信息
+# ─────────────────────────────────────────────────────────────────────────────
+project:
+  # 项目名称（全局标识）
+  name: my-project
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 端列表（每个端 = 一个独立工程）
+# ─────────────────────────────────────────────────────────────────────────────
+# 工程标识：全小写、无空格、短横线分隔，全局唯一
+# 工程类型：AI 据此生成针对性内容（Java服务/H5移动端/Web管理后台等）
+# code_path：相对于项目根目录的源码位置
+# project_name：给人和 AI 看的业务名称
+# project_desc：工程的详细说明
+# requirement_unit：需求文档名称/标识，仅作 AI 参考，不做校验
+# notes：额外信息
+# ─────────────────────────────────────────────────────────────────────────────
+platforms:
+  - name: admin-web
+    type: Web管理后台
+    description: 后台管理
+    code_path: ./packages/admin
+    project_name: 运营后台
+    project_desc: 运营人员使用的后台管理系统
+    requirement_unit: 后台管理端需求文档
+    notes: 核心系统
+
+  - name: h5-mobile
+    type: H5移动端
+    description: H5商城
+    code_path: ./packages/h5
+    project_name: 移动商城
+    project_desc: 用户端H5购物页面
+    requirement_unit: 移动端需求文档
+    notes: 高优先级
+
+  - name: miniapp
+    type: 微信小程序
+    description: 小程序
+    code_path: ./packages/miniapp
+    project_name: 微信小程序
+    project_desc: 微信内嵌小程序商城
+    requirement_unit: 小程序端需求文档
+    notes: 待上架
+
+  - name: backend-api
+    type: Java服务
+    description: 订单服务
+    code_path: ./packages/backend
+    project_name: 订单与支付
+    project_desc: 订单创建、支付、退款核心服务
+    requirement_unit: 订单系统PRD
+    notes: 核心业务
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Git 配置
+# ─────────────────────────────────────────────────────────────────────────────
+# default_base：默认基础分支（PR 合并目标）
+# branch_prefix：功能分支前缀
+# protected_branches：受保护分支（禁止直接 push，只能通过 PR 合并）
+# branch_types：分支类型定义
+#   - 类型名自带前缀（如 hotfix/、feature/）
+#   - prefix：任务名前的前缀（可选），如 api-、backend-
+#   - suffix：任务名后的后缀（可选），如 urgent、review
+#   - source：创建源分支，如 develop、main
+# ─────────────────────────────────────────────────────────────────────────────
+git:
+  # 默认基础分支（PR 合并目标）
+  default_base: main
+  # 功能分支前缀
+  branch_prefix: feature/
+  # 受保护分支（禁止直接 push，只能通过 PR 合并）
+  protected_branches:
+    - main
+    - master
+  # 分支类型定义。prefix=任务前前缀, suffix=任务后后缀, 均可选
+  branch_types:
+    feature:
+      source: develop
+    bugfix:
+      source: develop
+    release:
+      source: develop
+    hotfix:
+      source: main
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 代码扫描范围
+# ─────────────────────────────────────────────────────────────────────────────
+# AI 全局分析时扫描的源码目录
+# ─────────────────────────────────────────────────────────────────────────────
+code_scope:
+  - src/
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 端级 Git 覆盖示例（如需为某个端单独配置）
+# ─────────────────────────────────────────────────────────────────────────────
+# ⚠️ 端级字段直接平铺在 platform 下，不要包在 git: 子对象里
+#
+#   ❌ 错误写法：
+#     platforms:
+#       - name: booking-service
+#         git:                      ← 不要这样写
+#           default_branch: develop
+#
+#   ✅ 正确写法：
+#     platforms:
+#       - name: booking-service
+#         type: Java服务
+#         description: 预订服务
+#         code_path: ./packages/booking
+#         project_name: 预订与支付
+#         project_desc: 处理订单创建、支付、退款核心逻辑
+#         # 端级 Git 覆盖 — 直接平铺，不要包在 git: 里
+#         default_branch: develop    # 覆盖全局 git.default_base
+#         branch_prefix: hotfix/     # 覆盖全局 git.branch_prefix
+#         protected_branches:        # 覆盖全局 git.protected_branches
+#           - main
+#           - release/*
+#         branch_types:              # 覆盖/扩展全局 git.branch_types
+#           hotfix:
+#             prefix: api-
+#             suffix: urgent
+#             source: main
+# ─────────────────────────────────────────────────────────────────────────────

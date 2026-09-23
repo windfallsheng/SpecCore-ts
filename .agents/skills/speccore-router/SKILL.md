@@ -235,10 +235,10 @@ allowed-tools: ["Bash", "Read", "Write", "Edit"]
 ### 任务拆分
 | 用户说法 | 提取参数 | AI 上下文（需宿主AI交互） |
 | :--- | :--- | :--- |
-| 拆分任务/拆解需求 | iter, owner? | `speccore iteration taskify -I {iter}` |
-| 分配任务 | iter, owner? | `speccore iteration taskify -I {iter} --owner {owner}` |
-| 拆分 {iter} | iter | `speccore iteration taskify -I {iter}` |
-| 生成任务列表 | iter | `speccore iteration taskify -I {iter}` |
+| 拆分任务/拆解需求 | iter, owner? | `speccore iteration taskify -i {iter}` |
+| 分配任务 | iter, owner? | `speccore iteration taskify -i {iter}` |
+| 拆分 {iter} | iter | `speccore iteration taskify -i {iter}` |
+| 生成任务列表 | iter | `speccore iteration taskify -i {iter}` |
 
 ### 执行开发
 | 用户说法 | 提取参数 | AI 上下文（需宿主AI交互） |
@@ -324,10 +324,10 @@ allowed-tools: ["Bash", "Read", "Write", "Edit"]
 ### 全量层管理
 | 用户说法 | 提取参数 | CLI 命令 |
 | :--- | :--- | :--- |
-| 导入源码 {project} | project, path?, type? | `speccore import --project {project}` |
-| 全局状态 | - | `speccore global-status` |
-| 同步到全局 | iter? | `speccore sync-global --iteration {iter}` |
-| 从全局创建迭代 | project? | `speccore iteration-from-global --project {project}` |
+| 导入源码 {project} | project, path?, type? | `speccore global from-source --src {project}` |
+| 全局状态 | - | `speccore dashboard --scope global` |
+| 同步到全局 | iter? | `speccore sync --global --iteration {iter}` |
+| 从全局创建迭代 | reqs? | `speccore iteration-from-global --reqs {reqs} --name {name}` |
 
 ---
 

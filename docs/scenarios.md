@@ -94,10 +94,10 @@ speccore analyze --scope task -t Task-01 -I Q1
 
 ```bash
 # 方式 1: 自动拆分（默认）
-speccore iteration taskify -I Q1
+speccore iteration taskify -i Q1
 
 # 方式 2: 交互拆分（预览+逐一确认）
-speccore iteration taskify -I Q1 --interactive
+speccore iteration taskify -i Q1 --interactive
 
 # 方式 3: 手动创建
 speccore task new --name=用户登录 --type=feature
@@ -167,10 +167,10 @@ speccore task new --batch-file=bugs.xlsx --type=bugfix --interactive
 # 预览 → 编辑/跳过 → 确认创建
 
 # 检查合规
-speccore validate -I Q1
+speccore validate -i Q1
 
 # 操作历史
-speccore ops
+speccore history
 
 # 可视化看板
 speccore dashboard
@@ -287,17 +287,17 @@ ls 期次-Q3/00-需求文档/
 
 ```bash
 # 查看流程图
-speccore lifecycle
+speccore dashboard --lifecycle
 # → 🔲 pending → 🔵 in_progress → 🟡 testing → 🟣 review → 🟢 done
 
 # 看板
-speccore lifecycle --all
+speccore dashboard --lifecycle
 
-# 推进状态
-speccore lifecycle -t Task-001 --status=testing
+# 推进状态（状态随 execute/pr/done 流水线自动流转）
+speccore execute -t Task-001
 
 # 检查 TEST.md/REVIEW.md 进度
-speccore lifecycle -t Task-001 --check
+speccore track --task Task-001
 ```
 
 ## 场景四：日常开发执行
@@ -369,7 +369,7 @@ speccore update -t Task-001 --status=in_progress
 speccore diff --source=before-change --target=current
 
 # 6. 验证
-speccore validate -I 期次-2026-07
+speccore validate -i 期次-2026-07
 ```
 
 ---
@@ -423,9 +423,9 @@ jobs:
       - name: Validate Specs
         run: |
           speccore init --force
-          speccore validate -I
+          speccore validate -i
       - name: Health Check
-        run: speccore health
+        run: speccore doctor
       - name: Status Report
         run: speccore dashboard --format=json
 ```
@@ -481,8 +481,8 @@ speccore analyze --from-code --scope global --src backend/src
 ## 场景十一：项目健康检查
 
 ```bash
-speccore health
-speccore health -t Task-001
+speccore doctor
+speccore doctor -t Task-001
 ```
 
 ---
@@ -520,17 +520,17 @@ speccore iteration taskify --platforms=web,mini,h5
 **方式二：从全量需求池拉取**
 ```bash
 # 1. 查看全量需求池
-speccore global-status
+speccore dashboard --scope global
 # → REQ-001  用户认证   待规划
 
 # 2. 拉取需求 → 生成期次
 speccore iteration-from-global --reqs=REQ-001,REQ-002 --name=期次-2026-Q3
 
 # 3. 执行拆分
-speccore iteration taskify -I 期次-2026-Q3
+speccore iteration taskify -i 期次-2026-Q3
 
 # 4. 查看进度
-speccore dashboard -I 期次-2026-Q3 --detail
+speccore progress -i 期次-2026-Q3 --detail
 ```
 
 ---
@@ -604,7 +604,7 @@ speccore change -t Task-001 --desc="新增: 批量删除"
 speccore validate --fix
 
 # 查看详细错误
-speccore validate -I
+speccore validate -i
 ```
 
 ---
@@ -684,8 +684,8 @@ speccore sync -t Task-002 --detect
 ```bash
 # 检查不同分支各跑各的
 speccore dashboard          # 整体进度
-speccore health -t Task-001  # 健康度
-speccore health -t Task-002
+speccore doctor -t Task-001  # 健康度
+speccore doctor -t Task-002
 ```
 
 ---

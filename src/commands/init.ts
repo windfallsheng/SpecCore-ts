@@ -960,8 +960,8 @@ This project uses **SpecCore** (\`speccore\` CLI) for spec-driven development.
 ## Workflow
 
 1. \`speccore init\` — first-time setup (already done)
-2. \`speccore import --project=<name>\` — import source code
-3. \`speccore goal\` — create requirements
+2. \`speccore global from-source --src <dirs>\` — import source code
+3. \`speccore task new -n <name>\` — create requirements
 4. \`speccore iteration create\` — start iteration
 5. \`speccore spec "<query>"\` — smart entry via intent recognition
 
@@ -1034,31 +1034,31 @@ A project is a Speccore project if \`.speccore/\` exists in the project root. Ke
 
 ### Setup & Import
 - \`speccore init\` — Initialize (already done)
-- \`speccore import --project=<name> [--type=backend|web|...] --path=<path>\` — Import source code
-- \`speccore global-status\` — View multi-project overview
+- \`speccore global from-source --src=<dirs>\` — Import source code
+- \`speccore dashboard --scope global\` — View multi-project overview
 
 ### Spec-Driven Development
-- \`speccore spec "<natural language>"\` — Smart entry via intent recognition
-- \`speccore goal --name="<name>" [--iteration=<it>]\` — Create new requirement
+- \`speccore ask "<natural language>"\` — Smart entry via intent recognition
+- \`speccore task new -n="<name>" [--iteration=<it>]\` — Create new requirement
 
 ### Iteration Management
-- \`speccore iteration create --name="<name>" [--goal=<goal>]\` — Start iteration
-- \`speccore iteration-from-global [--project=<name>]\` — Generate from global layer
-- \`speccore sync-global [--iteration=<name>]\` — Sync back to global
+- \`speccore iteration create -n="<name>" [--topic=<topic>]\` — Start iteration
+- \`speccore iteration-from-global --reqs=<REQ-001> --name=<name>\` — Generate from global layer
+- \`speccore sync --global [--iteration=<name>]\` — Sync back to global
 
 ### Analysis & Quality
 - \`speccore impact --req=<id>\` — Change impact analysis
-- \`speccore audit [--strict]\` — Quality audit (duplicates, conflicts)
+- \`speccore audit [--fix]\` — Quality audit (duplicates, conflicts)
 - \`speccore dashboard\` — HTML dashboard
 - \`speccore history [--req=<id>]\` — Change history
 
 ### Maintenance
-- \`speccore bugfix --title="<desc>"\` — Quick bug fix
+- \`speccore task new -t bugfix -n="<desc>"\` — Quick bug fix
 - \`speccore change --req=<id> --desc="<desc>"\` — Requirement change
 - \`speccore handover [--iteration=<name>]\` — Handover document
 - \`speccore retro [--iteration=<name>]\` — Retrospective
 - \`speccore rename --target=<old> --new-name=<new>\` — Rename
-- \`speccore baseline create --name=<name>\` — Version snapshot
+- \`speccore baseline --name=<name>\` — Version snapshot
 
 ## Working with Speccore Projects
 
@@ -1073,19 +1073,17 @@ A project is a Speccore project if \`.speccore/\` exists in the project root. Ke
 | Alias | Command |
 |-------|---------|
 | in | init |
-| imp | import |
 | it | iteration |
-| ex | expand |
+| ex | execute |
 | pl | plan |
-| pg | program |
-| ch | create |
+| pg | progress |
+| ch | change |
 | if | impact |
 | bl | baseline |
 | db | dashboard |
 | ad | audit |
-| sg | sync-global |
-| gs | global-status |
-| hs | history |
+| sy | sync |
+| hi | history |
 | ifg | iteration-from-global |
 `
   );
@@ -1124,27 +1122,29 @@ export const TOOL_COMMANDS: [string, string, string][] = [
   ['spec-doc2spec', '文档转规格专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（文件存在性、格式检测），参数缺失时输出交互式提示。不影响 speccore ask 的意图识别能力。', 'speccore doc2spec -f ${1:PRD.docx} --iter ${2:Q1}'],
   ['spec-analyze', '需求分析专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（迭代存在性、需求文档检测、专业度评估、端列表读取），参数缺失时输出交互式提示。不影响 speccore ask 的意图识别能力。', '直接执行: execute_command("speccore ask \'用户原话\'")\n\n不要输出命令文本，不要分析意图，一切交给 speccore ask。'],
   ['spec-from-source', '源码反推专属 Skill（分析源码生成需求/全局资产）。在调用 speccore ask 之前，执行参数提取（源码目录列表，多端用逗号分隔），用户未提供源码目录时输出交互式提示。不影响 speccore ask 的意图识别能力。', '直接执行: execute_command("speccore ask \'用户原话\'")\n\n不要输出命令文本，不要分析意图，一切交给 speccore ask。\n用户未提供源码目录时，先询问源码目录（如 backend/src,admin-web/src）再执行。'],
+  ['spec-unitize', '切分需求专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（输入文件格式：.md 可直接切、.docx/.pdf 先 doc2spec 转换；端名须与 CONSTITUTION.md 端列表一致；重切会覆盖旧切片），参数缺失时输出交互式提示（参数说明 + 使用示例）。不影响 speccore ask 的意图识别能力。', '## ⛔ 铁律: 分析前必须先切分功能单元，禁止跳过\n1. 输入 .md 直接切分；.docx/.pdf 先 speccore doc2spec 转换\n2. 直接执行: execute_command("speccore ask \'用户原话\'")\n\n注意: 切需求 = unitize（需求文档→功能单元 features/）；拆任务 = taskify（功能单元→开发任务 Task-*），勿混淆。'],
   ['spec-taskify', '任务拆分专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（analyze 是否完成、端列表提取、变更检测），参数缺失时输出交互式提示（参数说明 + 使用示例）。不影响 speccore ask 的意图识别能力。', '直接执行: execute_command("speccore ask \'用户原话\'")\n\n不要输出命令文本，不要分析意图，一切交给 speccore ask。'],
   ['spec-execute', '执行开发专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（任务状态检查、代码模式读取、上下文准备），参数缺失时输出交互式提示（参数说明 + 使用示例）。不影响 speccore ask 的意图识别能力。', '## ⛔ 铁律: 有任务就执行，禁止说"已完成"跳过\n1. Read Task REQ.md + TECH.md\n2. Show plan then execute: speccore execute -i ${1:Q1} -t ${2:Task-001} --force'],
-  ['spec-plan', '执行计划专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（任务是否已拆分、依赖关系检测、执行顺序优化），参数缺失时输出交互式提示（参数说明 + 使用示例）。不影响 speccore ask 的意图识别能力。', '1. 仅生成并展示计划页面，不执行代码修复\n2. speccore plan -I ${1:Q1} --owner ${2|张三,李四,王五|} --html\n3. 打开 speccore-plan.html'],
+  ['spec-plan', '执行计划专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（任务是否已拆分、依赖关系检测、执行顺序优化），参数缺失时输出交互式提示（参数说明 + 使用示例）。不影响 speccore ask 的意图识别能力。', '1. 仅生成并展示计划页面，不执行代码修复\n2. speccore plan -i ${1:Q1} --interactive\n3. 打开 speccore-plan.html'],
   ['spec-pr', '代码提交与 PR 专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（分支安全检查、未提交变更检测、ANALYSIS.md 路径校验、冲突检测），参数缺失时输出交互式提示。不影响 speccore ask 的意图识别能力。', 'speccore pr --task=${1:Task-001}'],
   ['spec-done', '任务归档收尾专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（Task 状态检查、依赖完成性检查、feature 分支合并检查），参数缺失时输出交互式提示。不影响 speccore ask 的意图识别能力。', 'speccore done --task=${1:Task-001}'],
   ['spec-spec2doc', '规格转文档专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（迭代/Task 存在性），参数缺失时输出交互式提示。不影响 speccore ask 的意图识别能力。', 'speccore spec2doc -i ${1:Q1} -o ${2|需求.docx,方案.pdf|}'],
 
-  ['spec-change', '需求变更专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（当前迭代、已有 Task 列表、变更类型判断），参数缺失时输出交互式提示。不影响 speccore ask 的意图识别能力。', 'speccore change "${1:变更描述}" --task=${2:Task-001} --type ${3|feature,bugfix|}'],
+  ['spec-change', '需求变更专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（当前迭代、已有 Task 列表、变更类型判断），参数缺失时输出交互式提示。不影响 speccore ask 的意图识别能力。', 'speccore change "${1:变更描述}" --task=${2:Task-001}'],
   ['spec-validate', '合规验证: 迭代=${1:Q1}', 'speccore validate --iteration=${1:Q1}'],
   ['spec-search', '全文搜索: ${1:关键词}', 'speccore search ${1:关键词}'],
   ['spec-track', '全链路追踪: 需求=${1:REQ-001}', 'speccore track --req=${1:REQ-001}'],
   ['spec-sync', '双向同步全局', 'speccore sync --global'],
-  ['spec-rename', '重命名: 旧名=${1:Q1} 新名=${2:Q2}', 'speccore rename --iteration ${1:Q1} ${2:Q2}'],
+  ['spec-rename', '重命名: 旧名=${1:Q1} 新名=${2:Q2}', 'speccore rename --target ${1:Q1} --new-name ${2:Q2}'],
   ['spec-iteration-create', '创建迭代专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（迭代名是否已存在、主题词有效性），参数缺失时输出交互式提示。不影响 speccore ask 的意图识别能力。', 'speccore iteration create -n ${1:Q2} --owner=${2|张三,李四,王五|}'],
   ['spec-task-create', '创建开发任务专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（迭代存在性、主题词有效性、命名冲突检测），参数缺失时输出交互式提示。不影响 speccore ask 的意图识别能力。', 'speccore task new --name ${1:任务名称}'],
   ['spec-retro', '回顾报告: 任务=${1:Task-001} 可批量 --all', 'speccore retro --task ${1:Task-001}'],
   ['spec-context', '切换上下文: 迭代=${1:Q1}', 'speccore context --set --iteration ${1:Q1}'],
-  ['spec-ops', '操作历史', 'speccore ops'],
+  ['spec-history', '操作历史', 'speccore history'],
+  ['spec-run', '端到端流水线专属 Skill。在调用 speccore run 之前，执行参数提取（需求描述、迭代、起止阶段、演示模式），参数缺失时输出交互式提示。不影响 speccore run 的意图识别能力。', '直接执行: execute_command("speccore run \'用户的一句话需求\'")\n\n不要输出命令文本，不要分析意图，一切交给 speccore run。\n\n流水线会自动从澄清一路跑到部署，中间三个 review 闸口（Spec 定稿 / 代码 review / 部署前确认）会停下来等你确认，看到 [SPECCORE_GATE_X] 标记时停下 review 并询问用户。'],
 
   ['spec-deploy', '部署专属 Skill。覆盖 build / deploy / pipeline 命令的意图识别与参数提取。支持自然语言（"部署到测试环境"）和显式参数（--env test --all）。参数缺失时交互式提示，前置校验环境配置与平台有效性。不影响 speccore ask 的意图识别能力。', 'speccore pipeline --env ${1|local,dev,test,staging,production|} --all'],
-  ['spec-verify', '测试验证专属 Skill。覆盖 verify 命令的测试意图识别与参数提取。支持自然语言（"跑一下冒烟测试"）和显式参数（--config ./tests/smoke.yaml）。参数缺失时交互式提示，自动发现测试配置文件。不影响 speccore ask 的意图识别能力。', 'speccore verify --ui --env ${1|local,dev,test,staging,production|}'],
+  ['spec-verify', '测试验证专属 Skill。覆盖 verify 命令的测试意图识别与参数提取。支持自然语言（"跑一下冒烟测试"）和显式参数（--config ./tests/smoke.yaml）。参数缺失时交互式提示，自动发现测试配置文件。不影响 speccore ask 的意图识别能力。', 'speccore verify --ui --stage ${1|dev,pr,deploy,release|}'],
 ];
 
 export async function createToolIntegrations(projectRoot: string, toolFilter?: string): Promise<void> {

@@ -1,0 +1,29 @@
+# =============================================================================
+# Java Spring Boot systemd 服务模板
+# =============================================================================
+# 用途：systemd 管理 Java 服务（ssh 类型部署时配合 script 使用）
+# 位置：服务器 /etc/systemd/system/order-api.service
+# 命令：sudo systemctl daemon-reload && sudo systemctl enable order-api
+#
+# 请根据实际项目修改服务名、用户、jar 包路径、JVM 参数等。
+# =============================================================================
+
+[Unit]
+Description=Order API Service
+After=network.target
+
+[Service]
+Type=simple
+User=deploy
+Group=deploy
+WorkingDirectory=/opt/services/order-api
+ExecStart=/usr/bin/java -jar -Xms512m -Xmx1024m -Dspring.profiles.active=production /opt/services/order-api/app.jar
+ExecStop=/bin/kill -SIGTERM $MAINPID
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=order-api
+
+[Install]
+WantedBy=multi-user.target

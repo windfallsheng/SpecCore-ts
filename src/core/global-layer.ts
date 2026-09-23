@@ -413,7 +413,7 @@ export async function writeProjectRequirements(
 > **元数据（Metadata）**
 > | 字段 | 值 |
 > | :--- | :--- |
-> | 来源 | \`speccore import\` \\| 项目：${project} \\| 导入时间：${today} |
+> | 来源 | \`speccore global from-source\` \\| 项目：${project} \\| 导入时间：${today} |
 > | 当前版本 | v1.0 |
 > | 状态 | 📦 已有实现 |
 > | 最后修改 | ${today} \\| 修改人：SpecCore |
@@ -431,7 +431,7 @@ ${req.description || '从代码分析提取的需求描述'}
 **📝 变更历史（Changelog）**
 | 版本 | 日期 | 变更内容 | 变更来源 | 修改人 |
 | :--- | :--- | :--- | :--- | :--- |
-| v1.0 | ${today} | 初始创建：从 ${project} 代码导入 | \`speccore import\` | SpecCore |
+| v1.0 | ${today} | 初始创建：从 ${project} 代码导入 | \`speccore global from-source\` | SpecCore |
 
 `;
     entries.push({

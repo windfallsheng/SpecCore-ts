@@ -1,0 +1,63 @@
+# =============================================================================
+# K8s Deployment + Service 模板
+# =============================================================================
+# 用途：Kubernetes 部署配置（k8s 类型部署时调用）
+# 位置：.speccore/environments/scripts/k8s-deployment.yaml
+# 执行：speccore deploy --env <env> --platform <platform>
+#
+# 请根据实际项目修改镜像名、端口、资源限制等。
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  labels:
+    app: gateway
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: gateway
+  template:
+    metadata:
+      labels:
+        app: gateway
+    spec:
+      containers:
+        - name: gateway
+          image: registry.example.com/gateway:latest
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              memory: '128Mi'
+              cpu: '100m'
+            limits:
+              memory: '512Mi'
+              cpu: '500m'
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+spec:
+  selector:
+    app: gateway
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+  type: ClusterIP

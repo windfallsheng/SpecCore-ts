@@ -47,7 +47,7 @@ export async function impactCommand(options: ImpactOptions): Promise<void> {
     if (!sourceReq) {
       const target = options.req || options.task;
       spinner.fail(`未找到 ${target}`);
-      logger.info('请运行 speccore global-status 查看可用需求列表');
+      logger.info('请运行 speccore dashboard --scope global 查看可用需求列表');
       return;
     }
 
@@ -265,7 +265,7 @@ function outputImpactReport(
   if (impacts.lateralImpacts.length > 0) {
     logger.info(`   ${idx++}. 🟡 建议联合评审 ${sourceReq.id} 和相关需求`);
   }
-  logger.info(`   ${idx++}. 📋 运行 speccore sync-global 同步更新全量层`);
+  logger.info(`   ${idx++}. 📋 运行 speccore sync --global 同步更新全量层`);
 }
 
 /**

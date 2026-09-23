@@ -1758,9 +1758,14 @@ function toProjectYaml(config: ProjectConfig): string {
   yaml += '#   protected_branches  → 端级受保护分支（覆盖全局 git.protected_branches，可选）\n';
   yaml += '#   requirement_unit    → 涉及需求端：需求文档名称/标识（如"订单系统PRD"），仅作 AI 参考，不做校验\n';
   yaml += '#   notes               → 备注：额外信息、特殊说明\n';
-  yaml += 'platforms:\n';
   if (config.platforms.length === 0) {
-    yaml += '  # 示例：添加你的第一个工程（复制后修改）\n';
+    // v8.3.260: 空时输出实际空键（此前 platforms: 后仅注释示例，YAML 解析为 null，会触发假补全）
+    yaml += 'platforms: []\n';
+    yaml += '# 示例：添加你的第一个工程（替换上面的 [] 为下方内容）\n';
+  } else {
+    yaml += 'platforms:\n';
+  }
+  if (config.platforms.length === 0) {
     yaml += '  # - name: api-service\n';
     yaml += '  #   type: backend\n';
     yaml += '  #   description: API 服务\n';

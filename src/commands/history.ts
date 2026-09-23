@@ -40,7 +40,7 @@ async function showOpsHistory(): Promise<void> {
 async function showReqHistory(options: HistoryOptions): Promise<void> {
   if (!options.req) {
     logger.error('请提供需求 ID。用法: speccore history --req=<REQ-XXX>');
-    logger.info('提示: 使用 speccore global-status 查看可用需求列表');
+    logger.info('提示: 使用 speccore dashboard --scope global 查看可用需求列表');
     return;
   }
 
@@ -56,7 +56,7 @@ async function showReqHistory(options: HistoryOptions): Promise<void> {
       spinner.fail(`需求 ${options.req} 不存在`);
       logger.info('');
       logger.info('在 GLOBAL/INDEX.md 中未找到该需求 ID。');
-      logger.info('请运行 speccore global-status 查看可用需求列表。');
+      logger.info('请运行 speccore dashboard --scope global 查看可用需求列表。');
       return;
     }
 

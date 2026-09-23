@@ -200,7 +200,7 @@
     "icon": "🌍",
     "description": "查看全量层整体状态",
     "prompt": "查看全局状态",
-    "command": "speccore global-status",
+    "command": "speccore dashboard --scope global",
     "env": "cli",
     "params": [],
     "tags": [

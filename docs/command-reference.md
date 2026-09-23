@@ -146,10 +146,10 @@ speccore doc2spec --classify --response <json> -I <iteration>
 **分类流程：**
 
 1. 将待分类文档放入 `010-requirements/sources/`
-2. `speccore doc2spec --classify --prompt -I <iter>` → AI 理解文档意图（nature）+ 映射类型（type）
-3. `speccore doc2spec --classify --response <json> -I <iter>` → 写入 `staging/`
+2. `speccore doc2spec --classify --prompt --iter <iter>` → AI 理解文档意图（nature）+ 映射类型（type）
+3. `speccore doc2spec --classify --response <json> --iter <iter>` → 写入 `staging/`
 4. `speccore analyze -I <iter>` → 按类型路由到 `020-specs/{features,bugs,refactors,research}/`
-5. `speccore iteration taskify -I <iter>` → 模块驱动拆分：从 `overview/REQUIREMENT.md` 读取功能模块清单及「涉及端」列，每个模块创建一个 Task，按涉及端创建子任务目录
+5. `speccore iteration taskify -i <iter>` → 模块驱动拆分：从 `overview/REQUIREMENT.md` 读取功能模块清单及「涉及端」列，每个模块创建一个 Task，按涉及端创建子任务目录
 
 **AI 意图理解：**
 
@@ -525,7 +525,7 @@ speccore sync --global --direction to_global   # 迭代 → 全量层
 ```
 别名: `sy`
 
-> 💡 `--global` 选项整合了原 `sync-global` 命令（sync-global 保留为向后兼容别名）。
+> 💡 `--global` 选项整合了原 `sync-global` 命令。
 
 ### ✅ validate — 合规验证
 ```bash
@@ -723,11 +723,11 @@ speccore rename [--iteration <old> <new>] [--task <old> <new>]
 ```
 别名: `rn`
 
-### 📜 ops — 操作历史
+### 📜 history — 操作历史
 ```bash
-speccore ops
+speccore history
 ```
-别名: `op`
+别名: `hi`
 
 ---
 

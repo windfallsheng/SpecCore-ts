@@ -265,7 +265,7 @@ async function getNextAction(phase: string, iterDir: string): Promise<string> {
     require: 'speccore analyze 或 speccore run',
     analyze: 'speccore iteration taskify 或 speccore run',
     dev: 'speccore execute --task=Task-001 --force',
-    review: 'speccore lifecycle 或 speccore pr',
+    review: 'speccore dashboard --lifecycle 或 speccore pr',
     done: 'speccore dashboard 查看全景',
   };
   return actions[phase] || 'speccore run';

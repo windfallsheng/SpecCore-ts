@@ -213,7 +213,7 @@ async function generateGlobalSummary(
 
   const summary = `# 全局技术概览 ${iterInfo}
 
-> 📌 本文件由 \_speccore sync-global\_ 自动生成，**可手动编辑**。不完美没关系，大方向对就行。
+> 📌 本文件由 \_speccore sync --global\_ 自动生成，**可手动编辑**。不完美没关系，大方向对就行。
 > 
 > 🔄 最后更新: ${now}
 

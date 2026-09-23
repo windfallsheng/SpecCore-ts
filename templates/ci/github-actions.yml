@@ -32,7 +32,7 @@ jobs:
           fi
 
       - name: Check Project Health
-        run: speccore health
+        run: speccore doctor
 
       - name: Progress Report
         run: speccore progress --format=json > progress.json

@@ -90,7 +90,8 @@ function fallbackAnalysis(prompt: string): string {
   if (hasProblem && !hasChange && !hasNew) {
     intent = 'bugfix';
     confidence = 55;
-    suggestion = 'speccore bugfix --name="自动检测的Bug"';
+    // v8.3.260: bugfix 无独立 CLI 命令，路由到 task new -t bugfix
+    suggestion = 'speccore task new -t bugfix -n "自动检测的Bug"';
     explanation = `检测到问题描述（"${matchExtract(input, /(?:出问题|报错|挂了|崩了|超时|500)/)}"），建议创建 Bug 修复任务`;
   } else if (hasChange && !hasProblem) {
     intent = 'change';
@@ -100,7 +101,8 @@ function fallbackAnalysis(prompt: string): string {
   } else if (hasNew && !hasProblem) {
     intent = 'new_task';
     confidence = 60;
-    suggestion = 'speccore new-task';
+    // v8.3.260: new-task 无独立 CLI 命令，路由到 task new
+    suggestion = 'speccore task new -n "<任务名>"';
     explanation = '检测到新增意图，建议创建新任务';
   } else if (hasQuery) {
     intent = 'query_progress';

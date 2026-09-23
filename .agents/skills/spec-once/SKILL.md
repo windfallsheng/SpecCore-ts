@@ -52,7 +52,7 @@ disable-model-invocation: false
 5. 向用户汇报分析产出摘要（单元、文档、关键结论），**停下等确认**
 
 ### Step 2 拆分任务
-1. 用户确认后执行 `speccore iteration taskify -I <迭代>`
+1. 用户确认后执行 `speccore iteration taskify -i <迭代>`
 2. 若报告「🔴 阻塞项」（如 ANALYSIS.md 缺失）→ 回到 Step 1 补齐分析产物再重试，不要跳过阻塞
 3. 展示拆分出的任务清单（030-tasks/Task-*）与依赖关系
 4. **停下问用户**：任务拆分是否合理？需要调整吗？

@@ -30,13 +30,14 @@ function getHints(stage: string, ctx: Record<string, string>): StepHint[] {
       return [
         { action: `speccore doc2spec -f <PRD文件> --iter=${iter || '<迭代名>'}`, desc: '导入需求文档到 010-requirements/' },
         { action: `speccore analyze --prompt -I ${iter || '<迭代名>'}`, desc: '分析需求 → 生成 020-specs/ 规格文档' },
-        { action: `speccore iteration taskify -I ${iter || '<迭代名>'}`, desc: '拆分为开发任务 → 030-tasks/' },
+        { action: `speccore iteration taskify -i ${iter || '<迭代名>'}`, desc: '拆分为开发任务 → 030-tasks/' },
       ];
 
     case 'init':
       return [
         { action: 'speccore iteration create --name=Q3', desc: '创建该迭代', args: '--from/--to 指定时间范围' },
-        { action: 'speccore import --project=backend --path=./src', desc: '导入现有代码到全量层', args: '--type backend|frontend|shell' },
+        // v8.3.260: import 命令已移除，导入现有代码到全量层由 global from-source 承担
+        { action: 'speccore global from-source --src ./src', desc: '从现有代码反推需求到全量层', args: '--src 逗号分隔多端源码目录' },
       ];
 
     case 'doc2spec':
@@ -54,11 +55,11 @@ function getHints(stage: string, ctx: Record<string, string>): StepHint[] {
 
     case 'split':
       return [
-        { action: `speccore execute --prompt${iter ? ` -I ${iter}` : ''}`, desc: '🧠 宿主 AI 填充 00-specs/ 后开发（taskify 已预创建骨架）' },
+        { action: `speccore execute --prompt${iter ? ` -i ${iter}` : ''}`, desc: '🧠 宿主 AI 填充 00-specs/ 后开发（taskify 已预创建骨架）' },
         { action: `cat Iteration-${iter || 'X'}/IMPACT.md`, desc: '查看风险评分 + 任务依赖关系' },
         { action: `speccore execute --task=Task-001 --strict --force${iter ? ` --iteration=${iter}` : ''}`, desc: '严格模式开发：逐项确认后再生成代码' },
         { action: `speccore execute --all --force${iter ? ` --iteration=${iter}` : ''}`, desc: '快速模式开发：AI 自动生成所有 Task 代码' },
-        { action: `speccore lifecycle --all${iter ? ` --iteration=${iter}` : ''}`, desc: '查看任务看板' },
+        { action: `speccore task list${iter ? ` -i ${iter}` : ''}`, desc: '查看任务看板' },
       ];
 
     case 'split-units':
@@ -69,21 +70,19 @@ function getHints(stage: string, ctx: Record<string, string>): StepHint[] {
 
     case 'execute':
       return [
-        { action: `speccore lifecycle --task=${ctx.task || 'Task-001'} --status=testing`, desc: '推进到测试阶段' },
-        { action: `speccore lifecycle --task=${ctx.task || 'Task-001'} --check`, desc: '检查 TEST.md / REVIEW.md 进度' },
+        { action: `speccore verify --task=${ctx.task || 'Task-001'}`, desc: '验证测试用例与回归（子任务目录/TEST.md）' },
         { action: `speccore validate --task=${ctx.task || 'Task-001'}`, desc: '校验 Spec 一致性' },
       ];
 
     case 'lifecycle':
       return [
-        { action: '参照子任务目录/TEST.md 逐项验证', desc: '测试通过后推进', args: `speccore lifecycle --task=${ctx.task || 'Task-001'} --status=review` },
-        { action: '对照子任务目录/REVIEW.md 审查', desc: '审查通过后推进', args: `speccore lifecycle --task=${ctx.task || 'Task-001'} --status=done` },
-        { action: `speccore archive --task=${ctx.task || 'Task-001'}`, desc: '归档完成的任务' },
+        { action: '参照子任务目录/TEST.md 逐项验证', desc: '测试通过后进入审查', args: `speccore review${iter ? ` -I ${iter}` : ''}` },
+        { action: '对照子任务目录/REVIEW.md 审查', desc: '审查通过后归档', args: `speccore archive --task=${ctx.task || 'Task-001'}` },
       ];
 
     case 'archive':
       return [
-        { action: `speccore sync-global --iteration=${iter || 'Q3'} --direction=to_global`, desc: '同步到全量层' },
+        { action: `speccore sync --global --iteration=${iter || 'Q3'} --direction=to_global`, desc: '同步到全量层' },
         { action: 'speccore dashboard', desc: '查看全景仪表盘' },
         { action: 'speccore retro', desc: '迭代回顾' },
       ];

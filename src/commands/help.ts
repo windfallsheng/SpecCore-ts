@@ -83,7 +83,7 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     desc: '手动创建 Task',
     params: [
       { flag: '-n, --name <name>', meaning: 'Task 名称（必填）' },
-      { flag: '-t, --type <type>', meaning: '类型：feature | bugfix | research | optimization' },
+      { flag: '-t, --type <type>', meaning: '类型：feature | bugfix | research | refactor | docs 等（默认 feature）' },
       { flag: '-d, --desc <desc>', meaning: '详细描述' },
       { flag: '--platforms <p1,p2>', meaning: '指定平台列表，逗号分隔（如 <端名1>,<端名2>）' },
       { flag: '--backend-only', meaning: '只创建后端端（自动识别项目中的后端端名）' },
@@ -96,22 +96,16 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
       'speccore task new -n 首页重构 --platforms=<端名1>,<端名2>',
     ],
   },
-  import: {
-    desc: '从存量项目导入（源码 / Excel / CSV）',
+  'global from-source': {
+    desc: '从存量源码反推需求文档（原 import 命令已移除，v8.3.260+）',
     params: [
-      { flag: '--project <name>', meaning: '项目名（必填）' },
-      { flag: '--path <path>', meaning: '源码路径或文件路径' },
-      { flag: '--type <type>', meaning: '项目类型：<端名>（工程标识，必填）' },
-      { flag: '--force', meaning: '强制覆盖已有项目' },
-      { flag: '--update', meaning: '增量追加' },
-      { flag: '--interactive', meaning: '预览扫描结果后确认' },
-      { flag: '--scope <scope>', meaning: '扫描范围：all | core | api' },
+      { flag: '--src <dirs>', meaning: '源码目录（逗号分隔多端，如 <端1/src>,<端2/src>）' },
+      { flag: '--depth <depth>', meaning: '分析深度：quick | normal(默认) | deep' },
+      { flag: '--platform <platform>', meaning: '指定端' },
     ],
     examples: [
-      'speccore import --project=user-svc --path=./src --type=<端名>',
-      'speccore import --project=bugs --path=bugs.xlsx',
-      'speccore import --project=req --path=requirements.csv',
-      'speccore import --project=user-svc --path=./src --type=<端名> --interactive',
+      'speccore global from-source --src ./src',
+      'speccore global from-source --src <端1/src>,<端2/src>',
     ],
   },
   doc2spec: {
@@ -119,31 +113,32 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     params: [
       { flag: '-f, --file <path>', meaning: '文档路径' },
       { flag: '-p, --platform <p>', meaning: '平台：<端名>（工程标识，如 CONSTITUTION.md 端列表中的端名）' },
-      { flag: '-i, --iteration <id>', meaning: '目标迭代' },
+      { flag: '--iter <name>', meaning: '目标迭代（必填）' },
       { flag: '--classify', meaning: 'AI 智能分类 sources/ 文档 → staging/' },
     ],
     examples: [
-      'speccore doc2spec -f PRD.docx -p <端名> -i Q1',
-      'speccore doc2spec --classify --prompt -I Q1          # 智能分类',
-      'speccore doc2spec --classify --response <json> -I Q1',
+      'speccore doc2spec -f PRD.docx -p <端名> --iter Q1',
+      'speccore doc2spec --classify --prompt --iter Q1     # 智能分类',
+      'speccore doc2spec --classify --response <json> --iter Q1',
     ],
   },
   analyze: {
     desc: '统一分析：需求文档 + 源码 + 多端合成（--full）',
     params: [
-      { flag: '-i, --iteration <id>', meaning: '目标迭代' },
-      { flag: '-t, --task <id>', meaning: '指定 Task ID' },
+      { flag: '-I, --iteration <id>', meaning: '目标迭代' },
+      { flag: '--req <files>', meaning: '指定需求文档（逗号分隔）' },
+      { flag: '--src <dirs>', meaning: '指定源码目录（逗号分隔）' },
       { flag: '--auto', meaning: '自动模式（跳过交互提问）' },
       { flag: '--interactive', meaning: '交互问答模式' },
       { flag: '--full', meaning: '全自动三阶段合成（原 synthesize）：逐端→跨端→功能单元' },
       { flag: '--phase <n>', meaning: '单阶段合成: 1=逐端, 2=跨端, 3=功能单元' },
       { flag: '--feature <module>', meaning: '局部分析单个功能模块' },
-      { flag: '--sync', meaning: '任务分析后局部回写 020-specs/' },
+      { flag: '--unit <ids>', meaning: '指定功能单元分析（如 M-01,M-03）' },
     ],
     examples: [
-      'speccore analyze -i Q1',
-      'speccore analyze --full -i Q2',
-      'speccore analyze --phase 1 -i Q2',
+      'speccore analyze -I Q1',
+      'speccore analyze --full -I Q2',
+      'speccore analyze --phase 1 -I Q2',
       'speccore analyze --feature 支付模块',
     ],
   },
@@ -184,7 +179,7 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
       { flag: '--draft', meaning: '创建草稿 PR' },
       { flag: '--title <title>', meaning: '自定义 PR 标题' },
       { flag: '--base <branch>', meaning: '目标分支（默认 main）' },
-      { flag: '-i, --iteration <id>', meaning: '目���迭代' },
+      { flag: '-i, --iteration <id>', meaning: '目标迭代' },
     ],
     examples: [
       'speccore pr -t Task-001',
@@ -192,9 +187,9 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     ],
   },
   done: {
-    desc: '一键收尾：校验→归档→复盘→同步全局（内部调用 archive/retro/sync-global）',
+    desc: '一键收尾：校验→归档→复盘→同步全局（内部调用 archive/retro/sync --global）',
     params: [
-      { flag: '-t, --task <id>', meaning: '指定 Task' },
+      { flag: '--task <id>', meaning: '指定 Task（逗号分隔批量）' },
       { flag: '--all', meaning: '归档所有已完成 Task' },
       { flag: '--interactive', meaning: '预览归档结果后确认' },
       { flag: '--skip-validate', meaning: '跳过合规验证' },
@@ -273,10 +268,12 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     ],
     examples: ['speccore rename --task=Task-001 --name=用户模块重构'],
   },
-  ops: {
-    desc: '查看操作历史',
-    params: [],
-    examples: ['speccore ops'],
+  history: {
+    desc: '查看操作历史（原 ops 命令已移除，v8.3.260+）',
+    params: [
+      { flag: '--req <reqId>', meaning: '查看指定需求的变更历史' },
+    ],
+    examples: ['speccore history', 'speccore history --req REQ-001'],
   },
   ask: {
     desc: '自然语言智能入口：说人话，自动匹配命令',
@@ -315,19 +312,6 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
       'speccore prompts --web',
     ],
   },
-  synthesize: {
-    desc: '→ analyze --full（同一命令）',
-    params: [
-      { flag: '-I, --iteration <iteration>', meaning: '目标迭代' },
-      { flag: '--full', meaning: '全自动三阶段：逐端分析 → 跨端综合 → 功能单元合成' },
-      { flag: '--phase <n>', meaning: '单阶段执行: 1=逐端分析, 2=跨端综合, 3=功能单元合成' },
-    ],
-    examples: [
-      'speccore analyze --full -I Q2',
-      'speccore analyze --phase 1 -I Q2',
-      'speccore synthesize -I Q2',
-    ],
-  },
   refresh: {
     desc: '统一刷新所有检索层：代码索引 + 文档 RAG + 知识图谱',
     params: [
@@ -346,7 +330,7 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     desc: '全量重建所有层级索引 + 知识图谱 + 衰减检测',
     params: [
       { flag: '--check', meaning: '只检查一致性，不修复' },
-      { flag: '-I, --iteration <iteration>', meaning: '指定迭代' },
+      { flag: '-i, --iteration <iteration>', meaning: '指定迭代' },
     ],
     examples: [
       'speccore reindex',
@@ -443,18 +427,17 @@ function showExamples(): void {
     {
       title: '一、从零开始',
       code: `speccore init                              # 初始化
-speccore iteration create -n Q1 --from=2026-04-01 --to=2026-06-30 --owner=赵六
-speccore doc2spec -f PRD.docx -p <端名> -i Q1  # 导入需求文档`,
+speccore iteration create -n Q1 --from=analyze --to=execute --owner=赵六
+speccore doc2spec -f PRD.docx -p <端名> --iter Q1  # 导入需求文档`,
     },
     {
-      title: '二、存量项目导入',
-      code: `speccore import --project=user-svc --path=./src --type=<端名>     # 源码导入
-speccore import --project=bugs --path=bugs.xlsx                         # Excel 导入
-speccore import --project=user-svc --path=./src --type=<端名> --interactive  # 交互确认`,
+      title: '二、存量项目反推',
+      code: `speccore global from-source --src <端1/src>,<端2/src>   # 从存量源码反推需求
+speccore global analyze --layer 1-4                   # 全局层四层分析`,
     },
     {
       title: '三、分析 + 拆分',
-      code: `speccore analyze -i Q1                    # 需求分析
+      code: `speccore analyze -I Q1                    # 需求分析
 speccore iteration taskify -i Q1              # 拆分为 Task
 speccore plan -i Q1                         # 生成执行计划`,
     },
@@ -614,7 +597,7 @@ async function helpHtml(options: HelpOptions): Promise<void> {
           <div class="step-arrow">→</div>
           <div class="step-item">
             <div class="step-num">3</div>
-            <div class="step-text"><strong>导入需求</strong><br><code>import --project=my-app</code></div>
+            <div class="step-text"><strong>导入需求</strong><br><code>doc2spec -f PRD.docx</code></div>
           </div>
           <div class="step-arrow">→</div>
           <div class="step-item">
@@ -626,7 +609,7 @@ async function helpHtml(options: HelpOptions): Promise<void> {
     `;
 
     // v8.3.191+: 常用命令（10 个高频，覆盖 90% 场景）——突出展示，弱化完整命令数
-    const CORE_COMMANDS = ['run', 'ask', 'doc2spec', 'analyze', 'split', 'execute', 'pr', 'spec2doc', 'status', 'next'];
+    const CORE_COMMANDS = ['run', 'ask', 'doc2spec', 'analyze', 'taskify', 'execute', 'pr', 'spec2doc', 'status', 'next'];
     const coreCommandsSection = `
       <div class="core-commands">
         <div class="section-header">
@@ -670,7 +653,7 @@ async function helpHtml(options: HelpOptions): Promise<void> {
         desc: '自动执行任务、代码审查、标记完成'
       },
       '🔄 同步与变更管理': { 
-        cmds: ['change', 'sync', 'retro', 'ops'],
+        cmds: ['change', 'sync', 'retro', 'history'],
         icon: '🔄',
         desc: '需求变更追踪、任务回顾、操作历史查询'
       },

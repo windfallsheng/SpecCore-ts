@@ -18,7 +18,7 @@
 
 ## 需求列表
 
-_暂无需求，等待 `speccore import` 导入_
+_暂无需求，等待 `speccore global from-source` 导入_
 
 ---
 

@@ -45,6 +45,7 @@ init → doc2spec → unitize → analyze → taskify → plan → execute → p
 | spec-doc2spec | **AI语义提取+Pandoc机械转换+交叉验证** | "帮我分析这个PRD"/"导入需求文档" |
 | spec-spec2doc | **AI内容编排+Pandoc格式转换+质量验证** | "导出文档"/"生成交付文档" |
 | spec-analyze | 深度需求分析（拆解→映射→风险） | "分析需求" |
+| spec-from-source | 从源码反推需求/全局资产（两跳 IR→UR） | "分析源码"/"从源码反推需求" |
 | spec-taskify | 智能任务拆分（分组→分配→依赖） | "拆分任务" |
 | spec-execute | 代码生成+编译+测试+修复循环 | "开发Task-001" |
 | spec-plan | 排程+里程碑+并行策略 | "生成计划" |

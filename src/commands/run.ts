@@ -147,7 +147,7 @@ async function autoPipeline(options: RunOptions): Promise<void> {
     'split-units': {
       desc: '存在可切分的需求文档（converted/、sources/ 或 REQUIREMENT.md 有实质内容）',
       impact: '无需求文档则切分功能单元无从谈起，下游 analyze 拿不到输入',
-      remedy: `先导入需求: speccore doc2spec -I ${iteration}（或 speccore run --from doc2spec -I ${iteration}）`,
+      remedy: `先导入需求: speccore doc2spec --iter ${iteration}（或 speccore run --from doc2spec -i ${iteration}）`,
       bypassNote: '需求已由手动方式准备',
       hard: true,
       check: hasRequirementDocs,
@@ -155,7 +155,7 @@ async function autoPipeline(options: RunOptions): Promise<void> {
     analyze: {
       desc: '存在需求文档（converted/、sources/ 或 REQUIREMENT.md 有实质内容）',
       impact: '无需求文档 analyze 无输入，会产出空 Spec 骨架',
-      remedy: `先导入需求: speccore doc2spec -I ${iteration}`,
+      remedy: `先导入需求: speccore doc2spec --iter ${iteration}`,
       bypassNote: '需求已由手动方式准备',
       hard: true,
       check: hasRequirementDocs,
@@ -163,7 +163,7 @@ async function autoPipeline(options: RunOptions): Promise<void> {
     taskify: {
       desc: '功能单元已切分（010-requirements/features/ 下存在功能单元目录）',
       impact: '未切分将按需求文档粒度拆分，任务粒度过粗；AI 易把骨架引导标题（质量标准/写作要求）误当功能单元，产出垃圾任务',
-      remedy: `先切分功能单元: speccore unitize --files "..." -I ${iteration}（或 speccore run --from split-units -I ${iteration}）`,
+      remedy: `先切分功能单元: speccore unitize --files "..." -i ${iteration}（或 speccore run --from split-units -i ${iteration}）`,
       bypassNote: '确认按需求文档粒度拆分（小型项目）',
       hard: true,
       check: async () => await hasFeatureDirs(iterDir),
@@ -171,7 +171,7 @@ async function autoPipeline(options: RunOptions): Promise<void> {
     plan: {
       desc: '开发任务已拆分（030-tasks 下存在真实任务）',
       impact: '无任务无法生成执行计划，后续 execute 空转假成功',
-      remedy: `先拆分任务: speccore iteration taskify -I ${iteration} --force（或 speccore run --from taskify -I ${iteration}）`,
+      remedy: `先拆分任务: speccore iteration taskify -i ${iteration} --force（或 speccore run --from taskify -i ${iteration}）`,
       bypassNote: '任务目录由手动创建',
       hard: true,
       check: async () => {
@@ -184,7 +184,7 @@ async function autoPipeline(options: RunOptions): Promise<void> {
     execute: {
       desc: '开发任务已拆分（030-tasks 下存在真实任务）',
       impact: '无任务 execute 0 秒空转假成功，用户误以为代码已开发',
-      remedy: `先拆分任务: speccore iteration taskify -I ${iteration} --force（或 speccore run --from taskify -I ${iteration}）`,
+      remedy: `先拆分任务: speccore iteration taskify -i ${iteration} --force（或 speccore run --from taskify -i ${iteration}）`,
       bypassNote: '任务目录由手动创建',
       hard: true,
       check: async () => {
@@ -197,7 +197,7 @@ async function autoPipeline(options: RunOptions): Promise<void> {
     verify: {
       desc: '存在已完成的开发任务（代码已生成）',
       impact: '无任务产物 verify 没有验证对象',
-      remedy: `先执行开发: speccore run --from execute -I ${iteration}`,
+      remedy: `先执行开发: speccore run --from execute -i ${iteration}`,
       bypassNote: '跳过验证',
       hard: false,
       check: async () => {
@@ -583,7 +583,7 @@ async function autoPipeline(options: RunOptions): Promise<void> {
             logger.error('   空模板会让 taskify/execute 拿不到真实需求，生成代码质量极差。');
             logger.error(`   请先完成需求分析落盘: speccore analyze -I ${iteration} --auto`);
           }
-          logger.error(`   确认落盘后继续: speccore run --auto --from taskify -I ${iteration}\n`);
+          logger.error(`   确认落盘后继续: speccore run --auto --from taskify -i ${iteration}\n`);
           process.exitCode = 1;
           return;
         }
@@ -629,7 +629,7 @@ async function autoPipeline(options: RunOptions): Promise<void> {
           if (emptySkeleton.length > 6) logger.error(`   ... 还有 ${emptySkeleton.length - 6} 个`);
           logger.error('   空模板会让 taskify 把「写作要求/质量标准」等骨架文字误当功能模块，拆出垃圾任务。');
           logger.error(`   请先完成需求分析落盘: speccore analyze -I ${iteration} --auto`);
-          logger.error(`   确认落盘后继续: speccore run --auto --from taskify -I ${iteration}\n`);
+          logger.error(`   确认落盘后继续: speccore run --auto --from taskify -i ${iteration}\n`);
           process.exitCode = 1;
           return;
         }
