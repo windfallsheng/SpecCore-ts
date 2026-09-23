@@ -1380,6 +1380,17 @@ function toYaml(config: SpecConfig): string {
   yaml += `schema_version: ${config.schema_version}\n`;
   yaml += `# ${new Date().toISOString().split('T')[0]}\n\n`;
 
+  // v8.3.258: logging 段补写（此前手写序列化器漏写，导致配置文件开关失效）
+  yaml += '# ─────────────────────────────────────────────────────────────────────────────\n';
+  yaml += '# 本地文件日志（v8.3.253+）\n';
+  yaml += '# ─────────────────────────────────────────────────────────────────────────────\n';
+  yaml += '# 开关三级优先级：--log 参数 > SPECCORE_LOG=1 环境变量 > logging.enabled\n';
+  yaml += '# 开启后所有 logger 输出同步写盘 .speccore/local/logs/speccore-<日期>.log\n';
+  yaml += '# 排查问题时可直接把日志文件发给 AI 分析。默认关闭，零开销。\n';
+  yaml += 'logging:\n';
+  yaml += '  # enabled: 是否启用本地文件日志\n';
+  yaml += `  enabled: ${config.logging?.enabled ?? false}\n`;
+
   yaml += '# ─────────────────────────────────────────────────────────────────────────────\n';
   yaml += '# 质量门禁（Quality Gates）\n';
   yaml += '# ─────────────────────────────────────────────────────────────────────────────\n';
@@ -1394,6 +1405,11 @@ function toYaml(config: SpecConfig): string {
   yaml += '  # require_pr: 是否强制通过 PR 合并代码\n';
   yaml += '  #   true  → 禁止直接 push 到保护分支，必须通过 speccore pr 提交\n';
   yaml += `  require_pr: ${config.quality_gates.require_pr}\n`;
+  // v8.3.258: block_level 补写（v8.3.197 新增字段此前未被序列化器输出）
+  yaml += '  # block_level: 质量门禁阻塞级别（v8.3.197+）\n';
+  yaml += '  #   standard → 编译+单测+契约阻塞（默认）\n';
+  yaml += '  #   compile  → 仅编译阻塞\n';
+  yaml += `  block_level: ${config.quality_gates.block_level ?? 'standard'}\n`;
 
   // verify_ui 配置
   const vui = config.quality_gates.verify_ui;
