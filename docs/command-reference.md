@@ -166,16 +166,22 @@ speccore spec2doc [-i <iteration>] [-t <task>] [-f <format>] [-o <output>]
 ```
 别名: `s2d`
 
+### 🌐 global — 全局层分析 🔒 AI 命令（v8.3.255+，原 analyze --scope global）
+```bash
+speccore global analyze [--layer 1-4] [--with-code] [--auto]   # 源码→技术文档四层推进
+speccore global from-source --src <dirs>                       # 源码反推需求文档
+speccore global rules / speccore global patterns               # 源码/既有资产生成规则与模式
+```
+别名: 无（`speccore analyze --scope global` 输出废弃提示，请改用 `speccore global analyze`）
+
+> 💡 全局层产物落盘 `.speccore/GLOBAL/`（端索引、全局架构、技术文档、RULES/PATTERNS 候选），与迭代层 `020-specs/` 彻底分离。`spec-from-source` 保留为 `global from-source` 的兼容别名。
+
 ### 🧠 analyze — AI 分析 🔒 AI 命令
 ```bash
-speccore analyze [--iteration <name>] [--task <id>] [--audit]
+speccore analyze [--iteration <name>] [--audit]
 speccore analyze --full              # 全量分析（原 synthesize）
 speccore analyze --auto              # 全自动分析（经过 AI，不交互）
 speccore analyze --auto --platform admin  # 只分析指定端
-speccore analyze --task Task-001     # 任务级深度分析（taskify 后执行）
-speccore analyze --task Task-001,Task-002,Task-003  # 批量分析多个子任务（v8.3.94+）
-speccore analyze --filter status:doing               # 按状态自动发现并批量分析（v8.3.94+）
-speccore analyze --global --withCode # 全局代码分析（四层扫描+功能模块驱动）
 speccore analyze --clarify           # 需求专业度检测，口语化时自动澄清
 speccore analyze --dev-guide         # 分析同时生成 DEV_GUIDE.md 开发者实现指南
 speccore analyze --scope=overview --phase=skeleton -I Iteration-001   # 生成骨架总览（v8.3.177+）
@@ -183,6 +189,7 @@ speccore analyze --scope=overview --phase=full -I Iteration-001       # 生成�
 ```
 别名: `al`
 
+> v8.3.254+ analyze 纯迭代化：任务层分析已移除（任务文档由 taskify 生成 00-specs 骨架后宿主 AI 填充）；全局层分析走 `speccore global analyze`。
 > 💡 `--auto` 模式会自动生成 prompt 交给宿主 AI 执行专业分析，产出全套 Spec 文件。支持 `--platform` 指定端过滤。
 >
 > **v8.3.177+ 新增参数：**
@@ -201,10 +208,11 @@ speccore analyze --scope=overview --phase=full -I Iteration-001       # 生成�
 - **自动触发**: CLI 在 Phase 1 完成后,检测到 ≥2 个端时自动输出 Phase 2 prompt,无需用户手动执行两次命令
 - **自动模式(v6.71.0+)**: `--auto` 下 AI 直接推断执行 Phase 2，无需用户确认
 
-**全局代码分析 — 四层扫描架构(v6.71.2+)**:
+**全局层分析 — 四层扫描架构（v8.3.255+ 独立命令）**:
 ```bash
-speccore analyze --global --withCode
+speccore global analyze --with-code
 ```
+（原 `speccore analyze --global --withCode` 已废弃，请改用 `speccore global analyze --with-code`）
 - **Layer 1**: 快速扫描所有端 → 各端 `_INDEX.md`（只提取索引，不深入代码）
 - **Layer 2**: 跨端关联分析 → `_ASSOCIATION.md` + `_MODULES.md`（匹配前后端接口、识别公共服务、归纳功能模块）
 - **Layer 3**: 按功能模块深入分析（不是按端）→ 逐个功能模块读取涉及端的详细源码
@@ -241,18 +249,9 @@ speccore analyze --consolidate -I <iter> --prompt      # 汇总所有单元为�
 - `--unit` 支持逗号分隔多个 ID；`--auto-units` 自动遍历所有待分析单元（逐个输出独立 Prompt，请逐个提交，不要跨单元混合）
 - 多单元模式下 `--apply` 需逐个单元执行（指定单个 `--unit`）
 
-**任务级深度分析（v6.44.0+）**：
+**任务级文档生成（v8.3.254+）**：
 
-taskify 后，每个 Task 的 00-specs/ 已有基础内容（机械提取）。执行 `analyze --task` 时，AI Read 这些内容 + global/ 全局上下文 + {端}/ 专属上下文，重新生成任务级深度分析。
-
-**多子任务批量分析（v8.3.94+）**：
-- `--task Task-001,Task-002,Task-003`：同时分析多个子任务，生成合并 prompt
-- `--filter status:doing`：按 .meta/status 自动发现并批量分析（支持 todo/doing/done）
-- `--filter owner:张三`：按 .meta/owner 自动发现并批量分析
-- `--filter type:feature`：按 .meta/type 自动发现并批量分析（feature/bugfix/refactor/research）
-- `--filter platform:web`：按端目录自动发现并批量分析
-- `--filter keyword:auth`：按关键词（任务名/feature/REQ.md 内容）自动发现并批量分析
-- `--apply` 模式暂不支持多任务批量写入，需逐个任务执行
+taskify 后，每个 Task 的 00-specs/ 骨架（REQ.md、TECH.md、TASK.md）已由 CLI 预创建。宿主 AI 执行 `speccore execute` 时 Read 这些骨架 + 020-specs/ 迭代级上下文 + {端}/ 专属上下文，用 Write 填充专业内容。任务层不再单独 analyze。
 
 - 文档集按任务类型区分：feature → REQ/TECH/TASK/SCHEMA，bugfix → REQ/TECH
 - 链式生成：文档按依赖顺序逐个生成，通过图谱 RAG 智能检索相关内容（不是无脑全读）
@@ -263,13 +262,13 @@ taskify 后，每个 Task 的 00-specs/ 已有基础内容（机械提取）。�
 
 analyze 从 CONSTITUTION.md「## 端列表」章节读取全局权威端名列表，不再动态推断。
 
-### 🔄 spec-from-source — 源码反推（v8.3.191+）🔒 AI 命令
+### 🔄 global from-source — 源码反推（v8.3.255+，原 spec-from-source）🔒 AI 命令
 ```bash
-speccore spec-from-source --src backend/src,admin-web/src   # 从源码反推需求 + 全局资产
-speccore spec-from-source --src <端1/src>,<端2/src> --depth normal
-speccore reverse --src backend/src                          # 别名 reverse
+speccore global from-source --src backend/src,admin-web/src   # 从源码反推需求 + 全局资产
+speccore global from-source --src <端1/src>,<端2/src> --depth normal
+speccore spec-from-source --src backend/src                   # 兼容别名（薄封装，指向 global from-source）
 ```
-别名: `reverse`
+别名: `reverse`（`spec-from-source` 保留为兼容别名）
 
 > 从**现有代码工程**反推需求文档和技术文档（两跳 IR→UR：逐模块 IR 骨架 → 合成 UR），产出到 `.speccore/GLOBAL/`（需求 + TECH_STACK / CODE_INDEX / ARCHITECTURE / API_INVENTORY / DATA_MODEL / GLOSSARY + 按端 OVERVIEW/TECH）。是「存量项目补 SpecCore 全局层」的入口。
 
@@ -279,7 +278,7 @@ speccore reverse --src backend/src                          # 别名 reverse
 - `--platform <platform>`：只分析指定端
 - `--out-dir <path>`：产出目录（默认 `.speccore/GLOBAL/requirements`）
 
-**等价命令**：`speccore analyze --from-code --scope global --src <dirs>`
+**等价命令**：`speccore global from-source --src <dirs>`
 
 ### 🔍 review — Spec 自审（v8.3.141+）🔒 AI 命令
 

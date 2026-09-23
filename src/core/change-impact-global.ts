@@ -88,13 +88,13 @@ export async function detectStaleGlobalDocs(projectRoot: string): Promise<StaleD
           // 根据文档路径生成更新建议
           let suggestion = '';
           if (relPath.includes('platforms/')) {
-            suggestion = `speccore analyze --scope global --layer 1 --with-code`;
+            suggestion = `speccore global analyze --layer 1 --with-code`;
           } else if (relPath.includes('overview/')) {
-            suggestion = `speccore analyze --scope global --layer 4`;
+            suggestion = `speccore global analyze --layer 4`;
           } else if (relPath.includes('requirements/')) {
-            suggestion = `speccore analyze --scope global --layer 4`;
+            suggestion = `speccore global analyze --layer 4`;
           } else {
-            suggestion = `speccore analyze --scope global --layer 3`;
+            suggestion = `speccore global analyze --layer 3`;
           }
 
           staleDocs.push({
@@ -137,5 +137,5 @@ export function printStaleDocReport(docs: StaleDoc[]): void {
   }
 
   logger.info('');
-  logger.info('💡 快速更新: speccore analyze --scope global --incremental');
+  logger.info('💡 快速更新: speccore global analyze --incremental');
 }

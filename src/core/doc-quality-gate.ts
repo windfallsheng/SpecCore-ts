@@ -327,7 +327,7 @@ export function printQualityReport(reports: QualityReport[]): void {
   if (totalErrors > 0) {
     logger.info('');
     logger.info('💡 修复建议:');
-    logger.info('   speccore analyze --scope global --layer 4 --deep <文档名>');
+    logger.info('   speccore global analyze --layer 4 --deep <文档名>');
     logger.info('   或使用 --iterative 逐节补全');
   }
 }

@@ -198,7 +198,6 @@ async function showAllRagStatus(cwd: string): Promise<void> {
     logger.info('  ❌ 暂无 RAG 索引');
     logger.info('');
     logger.info('  💡 生成方式:');
-    logger.info('     speccore analyze --task <task>     # 分析时自动生成');
     logger.info('     speccore rag-index --refresh --task <task>  # 手动刷新');
     logger.info('     speccore rag-index --full --task <task>     # 全量重建');
     return;
@@ -241,7 +240,6 @@ async function showRagStatus(cwd: string, taskDir: string, iteration?: string): 
     logger.info('  ❌ 暂无 RAG 索引');
     logger.info('');
     logger.info('  💡 生成方式:');
-    logger.info('     speccore analyze --task <task>     # 分析时自动生成');
     logger.info('     speccore rag-index --refresh --task <task>  # 手动刷新');
     logger.info('     speccore rag-index --full --task <task>     # 全量重建');
     return;
@@ -300,7 +298,7 @@ export function registerRagIndexCommand(program: Command): void {
   \x1b[33m查看状态\x1b[0m        speccore rag-index
   \x1b[33m增量刷新\x1b[0m        speccore rag-index --refresh --task Task-001
   \x1b[33m全量重建\x1b[0m        speccore rag-index --full --task Task-001
-  \x1b[33m分析时自动\x1b[0m      speccore analyze --task Task-001（自动建索引）
+  \x1b[33m分析时自动\x1b[0m      speccore rag-index --refresh --task Task-001（taskify 后刷新）
 
 \x1b[36m何时需要手动刷新:\x1b[0m
   • 你手动修改了 TECH.md / REQ.md / SCHEMA.md 等参考文档

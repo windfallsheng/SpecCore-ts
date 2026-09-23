@@ -48,7 +48,7 @@ SpecCore 规范驱动开发项目。
 
 | 维度 | 全局分析 | 迭代层分析 |
 |:---|:---|:---|
-| **命令** | `speccore analyze --scope global` | `speccore analyze -I <迭代名>` |
+| **命令** | `speccore global analyze` | `speccore analyze -I <迭代名>` |
 | **产出位置** | `.speccore/GLOBAL/` | `Iteration-NNN/020-specs/` |
 | **产出内容** | 跨迭代复用的全局资产（端索引、跨端关联、全局架构、各端技术文档：`platforms/{端}/API_INVENTORY.md` 接口清单 / DATA_MODEL / OVERVIEW / TECH） | 当前迭代专属的分析文档（任务级规格、UI设计、测试用例） |
 | **分层** | Layer 1→2→3→4（4a/4b/4c/4d 子层） | Phase 1（综合文档）→ Phase 2（各端专属） |
@@ -57,7 +57,7 @@ SpecCore 规范驱动开发项目。
 **绝对禁止混淆**：
 - 全局分析的 `requirements/REQUIREMENT.md`（全局需求总纲）**不等于**迭代层的 `020-specs/overview/REQUIREMENT.md`（迭代专属需求）
 - 全局分析的 `platforms/{端}/`（端级技术资产）**不等于**迭代层的 `{端}/`（任务级实现规格）
-- 补充全局需求文档时**必须**使用 `--scope global`，不能用迭代层命令替代
+- 补充全局需求文档时**必须**使用 `speccore global analyze`（或 `speccore global from-source`），不能用迭代层命令替代
 
 ## 核心工作方式
 
@@ -88,7 +88,7 @@ SpecCore 规范驱动开发项目。
 6. **禁止直接用 Write 工具写 020-specs/ 或 .speccore/GLOBAL/ 下的文件** — 必须通过 `speccore analyze --apply` 写入，CLI 自动路由到正确子目录
 7. **不要自己解析需求** — 用 `speccore analyze`
 8. **端名必须使用 CONSTITUTION.md 标准端名** — 禁止用 `api`/`web`/`backend`/`frontend`/`admin`/`h5` 等简写或中文
-9. **全局分析每层完成后必须自动推进下一层** — 看到 `[SPECCORE_EXEC: speccore analyze --scope global --layer N]` 后必须立即执行，不能等待用户指令
+9. **全局分析每层完成后必须自动推进下一层** — 看到 `[SPECCORE_EXEC: speccore global analyze --layer N]` 后必须立即执行，不能等待用户指令
 10. **步骤隔离模式** — v8.3.160+ 默认步骤隔离，每步完成后输出 `[SPECCORE_STEP_DONE]` + `[SPECCORE_NEXT_STEP]`，新会话通过 `--resume` 继续。看到 `[SPECCORE_EXEC]` 后自动执行
 11. **质量门禁拦截后必须修复所有 error** — 不能跳过质量门禁继续推进
 12. **PATTERNS 只提取真正独特且可复用的模式** — 严禁为每个项目都生成 JWT/Redis/拦截器等框架自带的标准用法说明
@@ -105,7 +105,7 @@ SpecCore 规范驱动开发项目。
 
 | 规范 | 文件路径 | 适用阶段 |
 |:---|:---|:---|
-| **全局分析质量规范** | `.speccore/RULES/ANALYSIS_QUALITY.md` | `speccore analyze --scope global` |
+| **全局分析质量规范** | `.speccore/RULES/ANALYSIS_QUALITY.md` | `speccore global analyze` |
 | **迭代层分析强制约束** | `.speccore/RULES/ITERATION_QUALITY.md` | `speccore analyze -I <迭代名>` |
 | **执行阶段强制约束** | `.speccore/RULES/EXECUTION.md` | `speccore execute` |
 | **任务拆分强制约束** | `.speccore/RULES/TASK_SPLIT.md` | `speccore iteration taskify` |
@@ -213,9 +213,11 @@ Iteration-NNN-name/            ← 迭代目录
 
 ```bash
 speccore status                          # 当前迭代状态面板
+speccore global analyze --layer 1-4      # 全局层源码分析（四层推进，产物 .speccore/GLOBAL/）
+speccore global from-source --src <dirs> # 全局层源码反推需求文档
 speccore unitize --file <md路径> --iter <迭代名>   # 切分需求文档 → 功能单元（features/）
-speccore analyze -I <迭代名> --auto      # 全量分析
-speccore taskify -I <迭代名>             # 拆功能单元 → 开发任务（原 split，v8.3.231+ 正名）
+speccore analyze -I <迭代名> --auto      # 迭代层全量分析（产物 020-specs/）
+speccore taskify -I <迭代名>             # 拆功能单元 → 开发任务（v8.3.254 源码正名 taskify.ts）
 speccore execute -i <迭代名> --all       # 执行所有任务
 speccore verify                          # 测试验证（冒烟/回归）
 speccore pr                              # 代码提交 + 创建 Pull Request

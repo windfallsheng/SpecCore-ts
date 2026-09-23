@@ -1,10 +1,11 @@
 /**
  * spec-merger — Section 级局部更新引擎
  *
- * 统一处理三种场景的局部合并：
- * 1. analyze --task --sync → 任务分析结果局部回写 020-specs/
- * 2. change → 需求变更后局部更新受影响的 specs
- * 3. sync-global → 迭代 specs 局部合并到全局层
+ * 统一处理两种场景的局部合并：
+ * 1. change → 需求变更后局部更新受影响的 specs
+ * 2. sync-global → 迭代 specs 局部合并到全局层
+ *
+ * （v8.3.254: 任务层 analyze --task --sync 已废弃，任务级回写由宿主 AI 直接填充 00-specs/）
  *
  * 核心原则：只更新受影响的部分，其余内容不动
  */

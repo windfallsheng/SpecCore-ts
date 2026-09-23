@@ -4257,7 +4257,7 @@ export async function buildMultiDocPrompt(command: string, ctx: { iteration?: st
           prompt += `## 2. 章节标题\n`;
           prompt += `> 一句话说明该章节内容\n`;
           prompt += `\`\`\`\n\n`;
-          prompt += `**下一步**: 大纲输出后，用户会审核修改，然后执行 \`speccore analyze --scope global --layer 4 --deep ${deepDoc} --iterative\` 进入逐节填充阶段。\n`;
+          prompt += `**下一步**: 大纲输出后，用户会审核修改，然后执行 \`speccore global analyze --layer 4 --deep ${deepDoc} --iterative\` 进入逐节填充阶段。\n`;
         } else if (options?.iterative && hasOutline) {
           // 迭代模式第二步：根据大纲逐节填充
           const outlineContent = await readFile(outlinePath, 'utf-8');
@@ -4461,18 +4461,18 @@ export async function buildMultiDocPrompt(command: string, ctx: { iteration?: st
             prompt += `\n## 🔗 自动链式推进\n\n`;
             prompt += `> 当前批次（${targetPlatforms.join(', ')}）写入完成后，**还有 ${remainingPlatforms.length} 个端待处理**。\n`;
             prompt += `> **立即输出以下标记**继续子层 4d：\n\n`;
-            prompt += `[SPECCORE_EXEC: speccore analyze --scope global --layer 4${options?.withCode ? ' --with-code' : ''}]\n\n`;
+            prompt += `[SPECCORE_EXEC: speccore global analyze --layer 4${options?.withCode ? ' --with-code' : ''}]\n\n`;
           } else if (missingDocs.length > 1) {
             prompt += `\n## 🔗 自动链式推进\n\n`;
             prompt += `> 当前文档写入完成后，**立即输出以下标记**推进下一个文档：\n\n`;
-            prompt += `[SPECCORE_EXEC: speccore analyze --scope global --layer 4${options?.withCode ? ' --with-code' : ''}]\n\n`;
+            prompt += `[SPECCORE_EXEC: speccore global analyze --layer 4${options?.withCode ? ' --with-code' : ''}]\n\n`;
             prompt += `> 💡 CLI 会自动检测下一个缺失文档并聚焦生成。重复直到子层 ${subLayerTarget} 完成，然后进入下一子层。\n`;
           } else {
             prompt += `\n> 🎉 这是子层 ${subLayerTarget} 的最后一份文档！写入后将自动进入下一子层。\n`;
           }
         } else {
           prompt += `> ✅ 子层 ${subLayerTarget} 所有文档已存在，请执行下一子层。\n`;
-          prompt += `\`speccore analyze --scope global --layer 4\`\n`;
+          prompt += `\`speccore global analyze --layer 4\`\n`;
         }
       
         prompt += `\n**质量要求**: \n`;
@@ -4518,11 +4518,11 @@ export async function buildMultiDocPrompt(command: string, ctx: { iteration?: st
     // v8.3.160+: Layer 3 支持模块级续批，有未完成模块时继续 Layer 3
     let nextLayerCmd: string;
     if (targetLayer === 3 && progress.pendingModules && progress.pendingModules.length > 0) {
-      nextLayerCmd = `speccore analyze --scope global --layer 3${ctx.withCode ? ' --with-code' : ''}`;
+      nextLayerCmd = `speccore global analyze --layer 3${ctx.withCode ? ' --with-code' : ''}`;
     } else {
       nextLayerCmd = targetLayer < 4
-        ? `speccore analyze --scope global --layer ${targetLayer + 1}${ctx.withCode ? ' --with-code' : ''}`
-        : `speccore analyze --scope global --layer 4${ctx.withCode ? ' --with-code' : ''}`;
+        ? `speccore global analyze --layer ${targetLayer + 1}${ctx.withCode ? ' --with-code' : ''}`
+        : `speccore global analyze --layer 4${ctx.withCode ? ' --with-code' : ''}`;
     }
     const isLastSubLayer = targetLayer === 4 && (
       !progress.subLayer || progress.subLayer.next === '4d' ||

@@ -2378,7 +2378,7 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
       command: 'execute',
       missing: ['analysis'],
       provided: { iteration, task },
-      hint: `${reason}\n请先执行: speccore analyze --prompt -I ${iteration} --task ${task}`,
+      hint: `${reason}\n请先填充 00-specs/ 规格（REQ.md/TECH.md，taskify 预创建骨架后由宿主 AI 填充）`,
     });
     return;
   }
@@ -3036,7 +3036,7 @@ function outputPostSummary(iteration: string, task: string, fileCount: number, f
   if (hasApiChange || hasModelChange) {
     logger.info('');
     logger.warn('🔄 检测到接口/实体变更，建议刷新全局层:');
-    logger.info(`   → speccore analyze --global --withCode  # 刷新全局 FUNCTION_MAP.md / API_CONTRACT.yaml`);
+    logger.info(`   → speccore global analyze --with-code  # 刷新全局 FUNCTION_MAP.md / API_CONTRACT.yaml`);
     logger.info(`   → speccore refresh                    # 刷新检索索引`);
   }
   logger.info('━'.repeat(40));

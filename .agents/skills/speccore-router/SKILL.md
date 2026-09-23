@@ -5,6 +5,7 @@ description: >
   或明确要求通过 speccore 命令行工具执行操作，且意图涉及以下概念时使用：
   迭代管理、需求文档导入（doc2spec）、需求切分（unitize）、Spec 分析生成（analyze --prompt）、
   任务拆分（taskify）、执行计划（plan --prompt）、代码执行（execute --prompt）、
+  全局层分析（global analyze/from-source，源码→技术文档/反推需求）、
   任务归档（done）、PR 提交（pr）、状态查看（status/dashboard/doctor）、智能级联/端到端流水线（run）。
   将用户意图映射为 speccore CLI 命令，通过 execute_command 执行。
   核心原则：必须直接执行，决不输出命令文本。唯一下例外："只看不跑"。
@@ -213,23 +214,23 @@ allowed-tools: ["Bash", "Read", "Write", "Edit"]
 ### 需求分析
 | 用户说法 | 提取参数 | AI 上下文（需宿主AI交互） |
 | :--- | :--- | :--- |
-| 分析需求/检查需求 | iter?, task? | `speccore analyze -I {iter}` |
+| 分析需求/检查需求 | iter? | `speccore analyze -I {iter}` |
 | 分析 {iter} 的需求 | iter | `speccore analyze -I {iter}` |
-| 分析 {task} | iter?, task | `speccore analyze -I {iter} --task {task}` |
 | 做需求分析 | iter? | `speccore analyze -I {iter}` |
 | 评审需求 | iter? | `speccore analyze -I {iter}` |
 | 分析需求（检测并澄清） | iter? | `speccore analyze -I {iter} --clarify` |
-| 从源码反推需求/分析源码生成需求 | src? | `speccore spec-from-source --src {src}`（多端逗号分隔，如 backend/src,admin-web/src） |
-| 源码反推全局资产/反向生成文档 | src? | `speccore spec-from-source --src {src}` |
+| 从源码反推需求/分析源码生成需求 | src? | `speccore global from-source --src {src}`（多端逗号分隔，如 backend/src,admin-web/src） |
+| 源码反推全局资产/反向生成文档 | src? | `speccore global from-source --src {src}` |
 
 ### 全局层分析（项目级，非迭代级）
 | 用户说法 | 提取参数 | CLI 命令 |
 | :--- | :--- | :--- |
-| 全局分析所有工程源码 | - | `speccore analyze --scope global --with-code --prompt` |
-| 全局层分析所有端 | - | `speccore analyze --scope global --with-code --prompt` |
-| 分析所有端源码 | - | `speccore analyze --scope global --with-code --prompt` |
-| 全局分析/全量分析 | - | `speccore analyze --scope global --prompt` |
-| 分析项目整体架构 | - | `speccore analyze --scope global --with-code --prompt` |
+| 全局分析所有工程源码 | - | `speccore global analyze --with-code` |
+| 全局层分析所有端 | - | `speccore global analyze --with-code` |
+| 分析所有端源码 | - | `speccore global analyze --with-code` |
+| 全局分析/全量分析 | - | `speccore global analyze` |
+| 分析项目整体架构 | - | `speccore global analyze --with-code` |
+| 全局 Layer N 推进 | layer | `speccore global analyze --layer {layer}` |
 
 ### 任务拆分
 | 用户说法 | 提取参数 | AI 上下文（需宿主AI交互） |

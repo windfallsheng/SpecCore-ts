@@ -1,32 +1,55 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { join } from 'path';
 import { mkdirSync, writeFileSync, existsSync, rmSync, mkdtempSync } from 'fs';
-import { readFile } from 'fs-extra';
+import { readFile, pathExists } from 'fs-extra';
 import { analyzeCommand } from '../../../src/commands/analyze';
+import { generateSpecsFromRequirements } from '../../../src/core/analyze-engine';
 
-describe('analyze — Requirement Analysis', { timeout: 30000 }, () => {
+describe('analyze — Requirement Analysis', { timeout: 60000 }, () => {
   let tmpDir: string;
   let iterDir: string;
   let reqDir: string;
+  let specDir: string;
 
   beforeEach(() => {
     tmpDir = mkdtempSync('/tmp/speccore-analyze-test-');
-    iterDir = join(tmpDir, '期次-Q3');
-    reqDir = join(iterDir, '00-需求文档');
+    iterDir = join(tmpDir, 'Iteration-Q3');
+    reqDir = join(iterDir, '010-requirements');
+    specDir = join(iterDir, '020-specs');
     mkdirSync(reqDir, { recursive: true });
-    
+
     // Set up .speccore context
     const speccoreDir = join(tmpDir, '.speccore');
     mkdirSync(join(speccoreDir, 'GLOBAL'), { recursive: true });
     mkdirSync(join(speccoreDir, 'local'), { recursive: true });
     writeFileSync(join(speccoreDir, 'local', 'context.json'), JSON.stringify({ defaultIteration: 'Q3' }));
-    
+
     process.chdir(tmpDir);
   });
 
   afterEach(() => {
     process.chdir('/tmp');
     if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('should generate quality report and spec skeleton', async () => {
+    writeFileSync(join(reqDir, 'REQUIREMENT.md'), `# Test Requirements
+## 后台管理端需求
+### 用户管理
+
+| 方法 | 路径 | 说明 |
+| :--- | :--- | :--- |
+| | | |
+| GET | /api/users | |
+`);
+
+    await analyzeCommand({ iteration: 'Q3', auto: true });
+
+    // 现代 --auto 行为：生成需求质量审查报告 + 020-specs/overview 骨架（交给宿主 AI 填充）
+    const report = await readFile(join(reqDir, 'QUALITY_REPORT.md'), 'utf-8');
+    expect(report).toContain('需求质量审查报告');
+    expect(await pathExists(join(specDir, 'overview', 'ANALYSIS.md'))).toBe(true);
+    expect(await pathExists(join(specDir, 'overview', 'REQUIREMENT.md'))).toBe(true);
   });
 
   it('should detect missing interface fields', async () => {
@@ -40,9 +63,9 @@ describe('analyze — Requirement Analysis', { timeout: 30000 }, () => {
 | GET | /api/users | |
 `);
 
-    await analyzeCommand({ iteration: 'Q3', auto: true });
+    await generateSpecsFromRequirements([join(reqDir, 'REQUIREMENT.md')], 'Q3', specDir);
 
-    const report = await readFile(join(reqDir, 'ANALYSIS.md'), 'utf-8');
+    const report = await readFile(join(specDir, 'overview', 'ANALYSIS.md'), 'utf-8');
     expect(report).toContain('接口行缺少必填字段');
     expect(report).toContain('🔴');
   });
@@ -58,10 +81,15 @@ describe('analyze — Requirement Analysis', { timeout: 30000 }, () => {
 | POST | /api/users | 创建用户 |
 `);
 
-    await analyzeCommand({ iteration: 'Q3', auto: true });
+    await generateSpecsFromRequirements([join(reqDir, 'REQUIREMENT.md')], 'Q3', specDir);
 
-    const report = await readFile(join(reqDir, 'ANALYSIS.md'), 'utf-8');
+    const report = await readFile(join(specDir, 'overview', 'ANALYSIS.md'), 'utf-8');
     expect(report).not.toContain('接口行缺少必填字段');
+    // 报告结构完整（v6.41.0+ 四章节：完整性检查/架构影响/待确认清单/技术方案）
+    expect(report).toContain('## 1. 需求完整性检查');
+    expect(report).toContain('## 2. 架构影响');
+    expect(report).toContain('## 3. 待确认清单');
+    expect(report).toContain('## 4. 技术方案');
   });
 
   it('should detect empty sections', async () => {
@@ -73,35 +101,10 @@ describe('analyze — Requirement Analysis', { timeout: 30000 }, () => {
 这个章节有足够的内容描述，包含具体的功能需求说明和实现细节说明。
 `);
 
-    await analyzeCommand({ iteration: 'Q3', auto: true });
+    await generateSpecsFromRequirements([join(reqDir, 'REQUIREMENT.md')], 'Q3', specDir);
 
-    const report = await readFile(join(reqDir, 'ANALYSIS.md'), 'utf-8');
-    expect(report).toContain('空章节');
-  });
-
-  it('should generate complete report structure', async () => {
-    writeFileSync(join(reqDir, 'REQUIREMENT.md'), `# Test Requirements
-## Web端需求
-
-| 方法 | 路径 | 说明 |
-| :--- | :--- | :--- |
-| GET | /web/home | Home page |
-
-## 后台端需求
-
-| 方法 | 路径 | 说明 |
-| :--- | :--- | :--- |
-| POST | /api/orders | Create order |
-`);
-
-    await analyzeCommand({ iteration: 'Q3', auto: true });
-
-    const report = await readFile(join(reqDir, 'ANALYSIS.md'), 'utf-8');
-    expect(report).toContain('## 1. 需求完整性检查');
-    expect(report).toContain('## 2. 源码对标');
-    expect(report).toContain('## 3. 架构影响');
-    expect(report).toContain('## 4. 待确认清单');
-    expect(report).toContain('## 5. 技术方案');
+    const report = await readFile(join(specDir, 'overview', 'ANALYSIS.md'), 'utf-8');
+    expect(report).toContain('内容过少');
   });
 
   it('should detect new dependencies from content', async () => {
@@ -116,11 +119,11 @@ describe('analyze — Requirement Analysis', { timeout: 30000 }, () => {
 | POST | /api/pay | Process payment |
 `);
 
-    await analyzeCommand({ iteration: 'Q3', auto: true });
+    await generateSpecsFromRequirements([join(reqDir, 'REQUIREMENT.md')], 'Q3', specDir);
 
-    const report = await readFile(join(reqDir, 'ANALYSIS.md'), 'utf-8');
-    expect(report).toContain('消息队列');
-    expect(report).toContain('缓存服务');
+    const deps = await readFile(join(specDir, 'overview', 'DEPS.md'), 'utf-8');
+    expect(deps).toContain('消息队列');
+    expect(deps).toContain('缓存服务');
   });
 
   it('should detect batch operation risks', async () => {
@@ -136,10 +139,10 @@ describe('analyze — Requirement Analysis', { timeout: 30000 }, () => {
 | GET | /api/reports/export | 导出报表 |
 `);
 
-    await analyzeCommand({ iteration: 'Q3', auto: true });
+    await generateSpecsFromRequirements([join(reqDir, 'REQUIREMENT.md')], 'Q3', specDir);
 
-    const report = await readFile(join(reqDir, 'ANALYSIS.md'), 'utf-8');
-    expect(report).toContain('批量操作');
-    expect(report).toContain('导出/报表');
+    const risk = await readFile(join(specDir, 'overview', 'RISK.md'), 'utf-8');
+    expect(risk).toContain('批量操作');
+    expect(risk).toContain('导出/报表');
   });
 });

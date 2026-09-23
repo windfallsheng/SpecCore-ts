@@ -1063,7 +1063,7 @@ export async function iterationTaskifyCommand(options: IterationTaskifyOptions):
           process.stdout.write('\n[SPECCORE_TASK_SUMMARY]\n');
           process.stdout.write(summaryMd);
           process.stdout.write('\n[/SPECCORE_TASK_SUMMARY]\n');
-          // 输出下一步操作标记：引导宿主 AI 对每个 Task 执行 analyze --task
+          // 输出下一步操作标记：引导宿主 AI 填充任务级 00-specs/ 文档（analyze --task 已删除）
           outputAnalyzeTaskHints(iter, createdSections);
         }
         logger.success(`✅ 创建了 ${createdSections.length}/${sections.length} 个任务（${sections.length - createdSections.length} 个跳过）`);
@@ -1184,6 +1184,8 @@ export async function iterationTaskifyCommand(options: IterationTaskifyOptions):
     if (!options.prompt && !options.response) {
       const moduleDrivenResult = await tryModuleDrivenSplit(iteration, iterationDir, options);
       if (moduleDrivenResult) {
+        // v8.3.256: spinner 未 stop 会导致 ora interval 保持事件循环存活、进程挂起
+        spinner.stop('✅ 模块驱动拆分完成');
         return;
       }
     }
@@ -4303,25 +4305,21 @@ async function generateTaskSummary(
 }
 
 /**
- * 输出 [SPECCORE_NEXT_STEPS] 标记，引导宿主 AI 对每个 Task 执行 analyze --task
- * split 完成后调用，生成任务级 00-specs/ 文档
+ * 输出 [SPECCORE_NEXT_STEPS] 标记，引导宿主 AI 填充任务级 00-specs/ 文档
+ * v8.3.256: 任务层 analyze（--task）已删除，任务级规格由 taskify 预创建骨架 + 宿主 AI 填充
  */
 function outputAnalyzeTaskHints(iteration: string, sections: Section[]): void {
   if (sections.length === 0) return;
   const iterFlag = iteration ? ` -I ${iteration}` : '';
-  let md = `\n## 🧠 下一步：任务级 Spec 分析\n\n`;
-  md += `拆分完成！每个 Task 需要执行 AI 分析，生成任务级 00-specs/ 文档（REQ.md、TECH.md、TASK.md、SCHEMA.md）。\n\n`;
-  md += `AI 会 Read global/ 和 {端}/ 的全局 spec 作为参考，根据本 Task 的原子范围生成针对性分析。\n\n`;
-  md += `### 执行命令\n\n`;
+  let md = `\n## 🧠 下一步：填充任务级 00-specs/ 文档\n\n`;
+  md += `拆分完成！每个 Task 的 00-specs/ 骨架已由 CLI 预创建（REQ.md、TECH.md、TASK.md），请宿主 AI 直接 Read 对应端目录下的骨架并用 Write 填充专业内容。\n\n`;
+  md += `参考上下文：020-specs/overview/ 全局规格 + 020-specs/{功能单元}/ 单元规格。\n\n`;
+  md += `### 待填充任务\n\n`;
   for (const sec of sections) {
     const taskId = (sec as any)._taskId || sec.name;
-    md += `\`\`\`bash
-speccore analyze --task ${taskId}${iterFlag}
-\`\`\`
-
-`;
+    md += `- ${taskId}：Read 030-tasks/**/${taskId}/{端}/ 下子任务目录的 00-specs/REQ.md 与 TECH.md，填充需求规格与技术方案\n`;
   }
-  md += `> 自动模式可逐个执行，或告诉 AI：“对所有新建 Task 执行 analyze --task”\n`;
+  md += `\n> 填充完成后运行 \`speccore execute --resume\` 或 \`speccore plan${iterFlag}\` 制定执行计划。\n`;
   process.stdout.write('\n[SPECCORE_NEXT_STEPS]\n');
   process.stdout.write(md);
   process.stdout.write('\n[/SPECCORE_NEXT_STEPS]\n');

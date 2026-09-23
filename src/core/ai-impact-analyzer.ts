@@ -370,7 +370,7 @@ function buildImpactAnalysisPrompt(
   sections.push('    { "file": "User.java", "currentImplementation": "phone: String(11)", "suggestedChange": "phone: String(20); countryCode: String(5)", "reason": "字段长度需要扩展" }');
   sections.push('  ],');
   sections.push('  "globalImpacts": [');
-  sections.push('    { "artifact": "API_CONTRACT.yaml", "reason": "phone 字段格式定义需更新", "suggestedAction": "运行 speccore analyze --global --withCode" }');
+  sections.push('    { "artifact": "API_CONTRACT.yaml", "reason": "phone 字段格式定义需更新", "suggestedAction": "运行 speccore global analyze --with-code" }');
   sections.push('  ],');
   sections.push('  "crossIterationImpacts": [],');
   sections.push('  "executionPlan": {');
@@ -522,24 +522,24 @@ function inferGlobalImpacts(category: ChangeCategory): GlobalImpact[] {
       impacts.push({
         artifact: 'API_CONTRACT.yaml',
         reason: '字段类型/长度/格式变更需同步到接口契约',
-        suggestedAction: '运行 speccore analyze --global --withCode',
+        suggestedAction: '运行 speccore global analyze --with-code',
       });
       impacts.push({
         artifact: 'CONSISTENCY_CHECK.md',
         reason: '前后端字段定义需保持一致',
-        suggestedAction: '运行 speccore analyze --global --focus consistency',
+        suggestedAction: '运行 speccore global analyze --layer 4',
       });
       break;
     case 'api-change':
       impacts.push({
         artifact: 'API_CONTRACT.yaml',
         reason: '接口 URL/参数/返回值变更',
-        suggestedAction: '运行 speccore analyze --global --withCode',
+        suggestedAction: '运行 speccore global analyze --with-code',
       });
       impacts.push({
         artifact: 'FUNCTION_MAP.md',
         reason: '接口列表变更',
-        suggestedAction: '运行 speccore analyze --global',
+        suggestedAction: '运行 speccore global analyze',
       });
       break;
     case 'flow-change':

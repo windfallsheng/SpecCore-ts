@@ -218,8 +218,8 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
       // v7.2.0+: 迭代 + 细粒度组合
       '迭代(.+)深度分析(.+)', '分析迭代(.+)中的(.+)',
     ],
-    description: 'AI 分析 — 需求完整性 + 改动范围 + 风险矩阵（支持全局级/迭代级/任务级/重新分析/深度分析/按需分析/代码关联）',
-    args: '-I <iteration> 或 --scope global|task --deep <doc> --iterative --filter <keywords> --with-code --from-code --supplement --sync',
+    description: 'AI 分析 — 需求完整性 + 改动范围 + 风险矩阵（迭代层 020-specs/；全局层用 speccore global）',
+    args: '-I <iteration> 或 --scope overview --deep <doc> --iterative --filter <keywords> --with-code --from-code --supplement',
   },
   // 切分功能单元（单元化，区别于下面的 taskify 拆任务）
   {

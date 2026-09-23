@@ -1039,6 +1039,9 @@ globalCmd
   .option('--layer <n>', '指定层 1-4（默认自动检测进度）')
   .option('--with-code', '结合 CONSTITUTION.md 配置的工程源码')
   .option('--auto', '自动模式（连续推进不等待确认）')
+  .option('--deep <doc>', 'Layer 4 单文档深度分析')
+  .option('--iterative', 'Layer 4 迭代式生成（大纲→逐节填充）')
+  .option('--incremental', '增量更新（只刷新变更部分）')
   .action(globalAnalyzeCommand);
 
 globalCmd

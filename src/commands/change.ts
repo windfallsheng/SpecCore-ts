@@ -418,8 +418,7 @@ async function handleNewRequirement(desc: string, iteration: string, clarifyResu
   logger.info(`   📄 ${taskId}/00-specs/TASK.md`);
   logger.info('');
   logger.info('💡 下一步:');
-  logger.info(`   speccore analyze --task=${taskId} --sync  # 分析并局部回写 020-specs/`);
-  logger.info(`   speccore execute --task=${taskId} --force  # 执行任务`);
+  logger.info(`   speccore execute --task=${taskId} --force  # 执行任务（00-specs/ 由宿主 AI 填充）`);
   logger.info(`   speccore done --all                      # 归档时自动合并新增需求到原文档`);
 
   // 自动刷新知识图谱和 RAG 索引（v8.3.65+）
@@ -595,7 +594,7 @@ export async function changeCommand(options: ChangeOptions): Promise<void> {
     }
     logger.info('下一步:');
     if (options.task) {
-      logger.info(`  1. speccore analyze --task=${options.task} --sync  # 局部回写受影响的 specs`);
+      logger.info(`  1. 宿主 AI 更新受影响任务的 00-specs/（任务层 analyze 已废弃）`);
       logger.info(`  2. speccore validate --task=${options.task}  # 验证完整性`);
       logger.info(`  3. 检查受影响的下游任务是否需要回归`);
       logger.info(`  4. speccore execute --task=${options.task} --force  # 重新执行`);
@@ -906,7 +905,7 @@ async function writeChangeSummary(iterDir: string, changeDesc: string, impactRep
   // v8.3.206+: 可执行的同步清单（直接影响→重分析+重执行；间接→回归）
   const syncLines: string[] = [];
   for (const t of impactReport.directTasks) {
-    syncLines.push(`- [ ] **${t.id}** 重新分析并回写 Spec → \`speccore analyze --task=${t.id} --sync\` → \`speccore execute --task=${t.id} --force\``);
+    syncLines.push(`- [ ] **${t.id}** 宿主 AI 更新 00-specs/（任务层 analyze 已废弃） → \`speccore execute --task=${t.id} --force\``);
   }
   for (const t of impactReport.indirectTasks) {
     if (t.needRegression) syncLines.push(`- [ ] **${t.id}** 回归验证（上游接口变更）`);
@@ -1332,9 +1331,7 @@ async function processChangeLegacy(options: ChangeOptions): Promise<void> {
   logger.info(`   📄 变更摘要: 020-specs/CHANGE_SUMMARY.md`);
   logger.info('');
   logger.info('💡 下一步:');
-  for (const id of affectedIds) {
-    logger.info(`   speccore analyze --task=${id} --sync`);
-  }
+  logger.info(`   宿主 AI 更新受影响任务的 00-specs/（任务层 analyze 已废弃）`);
   logger.info(`   speccore execute --task=${affectedIds.join(',')} --force`);
 
   // 自动刷新知识图谱和 RAG 索引（v8.3.65+）
@@ -1563,7 +1560,7 @@ async function processChangeV2(options: ChangeOptions): Promise<void> {
   logger.info('');
   logger.info('💡 下一步:');
   logger.info('   speccore status                              # 查看当前迭代状态');
-  logger.info('   speccore analyze --global --withCode         # 刷新全局层');
+  logger.info('   speccore global analyze --with-code         # 刷新全局层');
   logger.info('   speccore execute --task <Task-XXX> --force   # 重新执行受影响任务');
 
   // v8.3.207+: --auto-execute 全自动衔接 analyze→execute 修复（bug 无人值守流水线）
@@ -1574,8 +1571,7 @@ async function processChangeV2(options: ChangeOptions): Promise<void> {
       logger.info(`🚀 [auto-execute] 自动修复 ${execIds.length} 个任务...`);
       const { execSync } = await import('child_process');
       for (const tid of execIds) {
-        logger.info(`   🔄 ${tid}: analyze --sync`);
-        try { execSync(`speccore analyze --task=${tid} --sync -I ${iteration}`, { stdio: 'inherit' }); } catch (e: any) { logger.warn(`   ⚠️ analyze 失败: ${e.message}`); }
+        logger.info(`   🔄 ${tid}: 00-specs/ 由宿主 AI 更新（任务层 analyze 已废弃）`);
         logger.info(`   ⚡ ${tid}: execute --force`);
         try { execSync(`speccore execute --task=${tid} --force -I ${iteration}`, { stdio: 'inherit' }); } catch (e: any) { logger.warn(`   ⚠️ execute 失败: ${e.message}`); }
       }

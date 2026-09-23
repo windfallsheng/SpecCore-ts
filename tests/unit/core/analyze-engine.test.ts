@@ -8,6 +8,7 @@ describe('generateSpecsFromRequirements - 双层文档架构', () => {
   let tempDir: string;
   let specDir: string;
   let reqDir: string;
+  let origCwd: string;
 
   beforeEach(async () => {
     // 创建临时目录
@@ -17,6 +18,23 @@ describe('generateSpecsFromRequirements - 双层文档架构', () => {
     
     await mkdir(specDir, { recursive: true });
     await mkdir(reqDir, { recursive: true });
+    
+    // 创建测试宪法（端列表），供 detectPlatformsFromConstitution 解析
+    // v8.3.255+: 端列表由 CONSTITUTION.md「端列表」章节显式声明
+    const speccoreDir = join(tempDir, '.speccore');
+    await mkdir(speccoreDir, { recursive: true });
+    await writeFile(join(speccoreDir, 'CONSTITUTION.md'), `# 技术宪法（测试）
+
+## 端列表
+
+| 工程标识 | 端名 | 说明 |
+| :--- | :--- | :--- |
+| admin | admin | 管理端 |
+| h5 | h5 | 移动端 |
+| backend | backend | 后端服务 |
+`);
+    origCwd = process.cwd();
+    process.chdir(tempDir);
     
     // 创建模拟需求文档
     const requirementMd = join(reqDir, 'REQUIREMENT.md');
@@ -47,7 +65,7 @@ describe('generateSpecsFromRequirements - 双层文档架构', () => {
 `);
   });
 
-  it('应该生成全局文档到根目录', async () => {
+  it('应该生成全局文档到 overview 子目录', async () => {
     const result = await generateSpecsFromRequirements(
       [join(reqDir, 'REQUIREMENT.md')],
       'test-iteration',
@@ -57,12 +75,12 @@ describe('generateSpecsFromRequirements - 双层文档架构', () => {
     // 验证返回结果
     expect(result.summary.withContent).toBeGreaterThan(0);
     
-    // 验证全局文档存在
+    // 验证全局文档存在（v6.41.0+: 全局文档统一放在 overview/ 子目录）
     const fs = await import('fs-extra');
-    expect(await fs.pathExists(join(specDir, 'REQUIREMENT.md'))).toBe(true);
-    expect(await fs.pathExists(join(specDir, 'ANALYSIS.md'))).toBe(true);
-    expect(await fs.pathExists(join(specDir, 'DEPS.md'))).toBe(true);
-    expect(await fs.pathExists(join(specDir, 'RISK.md'))).toBe(true);
+    expect(await fs.pathExists(join(specDir, 'overview', 'REQUIREMENT.md'))).toBe(true);
+    expect(await fs.pathExists(join(specDir, 'overview', 'ANALYSIS.md'))).toBe(true);
+    expect(await fs.pathExists(join(specDir, 'overview', 'DEPS.md'))).toBe(true);
+    expect(await fs.pathExists(join(specDir, 'overview', 'RISK.md'))).toBe(true);
   });
 
   it('应该生成各端专属文档到子目录', async () => {
@@ -102,7 +120,7 @@ describe('generateSpecsFromRequirements - 双层文档架构', () => {
     );
 
     const fs = await import('fs-extra');
-    const content = await fs.readFile(join(specDir, 'REQUIREMENT.md'), 'utf-8');
+    const content = await fs.readFile(join(specDir, 'overview', 'REQUIREMENT.md'), 'utf-8');
     
     // 验证涉及端列存在
     expect(content).toContain('涉及端');
@@ -121,6 +139,11 @@ describe('generateSpecsFromRequirements - 双层文档架构', () => {
     const adminTech = await fs.readFile(join(specDir, 'admin', 'TECH.md'), 'utf-8');
     const h5Tech = await fs.readFile(join(specDir, 'h5', 'TECH.md'), 'utf-8');
     const backendTech = await fs.readFile(join(specDir, 'backend', 'TECH.md'), 'utf-8');
+
+    // 各端 TECH.md 存在且非空
+    expect(adminTech.length).toBeGreaterThan(0);
+    expect(h5Tech.length).toBeGreaterThan(0);
+    expect(backendTech.length).toBeGreaterThan(0);
     
     // 前端应该有页面路由、组件设计
     expect(adminTech.toLowerCase()).toMatch(/页面|路由|组件|状态管理/i);
@@ -131,7 +154,8 @@ describe('generateSpecsFromRequirements - 双层文档架构', () => {
   });
 
   afterEach(async () => {
-    // 清理临时目录
+    // 恢复工作目录并清理临时目录
+    process.chdir(origCwd);
     await rm(tempDir, { recursive: true, force: true });
   });
 });

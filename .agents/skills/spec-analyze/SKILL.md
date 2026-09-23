@@ -1,10 +1,11 @@
 ---
 name: spec-analyze
 description: >
-  SpecCore 需求分析专属 Skill。仅在用户明确提到 speccore、迭代、期次、Spec、
+  SpecCore 迭代层需求分析专属 Skill（产物 020-specs/）。仅在用户明确提到 speccore、迭代、Spec、
   /analyze 等关键词，或明确要求通过 speccore 执行 analyze 操作时使用。
   参数提取与前置校验（迭代存在性、需求文档检测、
   专业度评估、端列表读取）由 speccore ask 引擎执行；参数缺失时引擎输出 [SPECCORE_NEEDS_INFO] 交互式提示。
+  全局层分析（源码→技术文档/反推需求）走 speccore global，不属于本 Skill。
   不处理一般性的"分析需求"讨论（如"帮我分析一下登录功能"），只处理 speccore 上下文中的分析。
 allowed-tools: ["Bash", "Read", "Write", "Edit"]
 disable-model-invocation: false
