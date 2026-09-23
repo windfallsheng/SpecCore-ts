@@ -1541,12 +1541,14 @@ export async function initAgentsDir(projectRoot: string): Promise<void> {
 
 /** 已知过时标记：正则 + 描述 */
 const OBSOLETE_MARKERS: { pattern: RegExp; desc: string }[] = [
-  { pattern: /^\s*[│├└].*10-backend\/|^\s*[│├└].*20-frontend\//m, desc: '旧端分类层（10-backend/20-frontend/）' },
+  { pattern: /^\s*[│├└].*10-backend\/|^\s*[│├└].*20-frontend\//m, desc: '旧端分 类层（10-backend/20-frontend/）' },
   { pattern: /^\s*[│|]\s+.*src\/\s+←\s+AI\s+输出代码\s*$/m, desc: '子任务目录含 src/' },
-  { pattern: /^\s*[│|]\s+.*tests\/\s+←\s+AI\s+输出测试\s*$/m, desc: '子任务目录含 tests/' },
+  { pattern: /^\s*[│|]\s+.*tests\/\s+←\s+AI\s+输出测试\s*$/m, desc: '子任务目录 含 tests/' },
   { pattern: /execute\s+-I\s+/, desc: 'execute -I（应为 -i）' },
+  { pattern: /speccore\s+split|split\s+-I/, desc: 'split 死命令（v8.3.231+ 应为 taskify）' },
+  { pattern: /taskify\s+-I/, desc: 'taskify -I（应为 -i）' },
   { pattern: /CONSTITUTION\.md\s+指定的源码路径(?!\s*\/\s*PROJECT\.yaml)/, desc: '缺少 PROJECT.yaml 引用' },
-  { pattern: /禁止在迭代目录下创建\s+10-backend/, desc: '旧表述：迭代目录（应为任务目录）' },
+  { pattern: /禁止在迭代目录下创建\s+10-backend/, desc: '旧表述：迭代目录（应为 任务目录）' },
 ];
 
 function detectObsoleteContent(content: string): { hasObsolete: boolean; markers: string[] } {
@@ -1666,9 +1668,14 @@ Iteration-NNN-name/            ← 迭代目录
 
 \`\`\`bash
 speccore status                          # 当前迭代状态面板
-speccore analyze -I <迭代名> --auto      # 全量分析
-speccore iteration taskify -I <迭代名>               # 自动拆分任务
+speccore global analyze --layer 1-4      # 全局层源码分析（四层推进，产物 .speccore/GLOBAL/）
+speccore global from-source --src <dirs> # 全局层源码反推需求文档
+speccore unitize --file <md路径> --iter <迭代名>   # 切分需求文档 → 功能单元（features/）
+speccore analyze -I <迭代名> --auto      # 迭代层全量分析（产物 020-specs/）
+speccore taskify -i <迭代名>             # 拆功能单元 → 开发任务（v8.3.231+ 替代 split）
 speccore execute -i <迭代名> --all       # 执行所有任务
+speccore verify                          # 测试验证（冒烟/回归）
+speccore pr                              # 代码提交 + 创建 Pull Request
 \`\`\``},
   ];
   for (const tpl of inlineTemplates) {
