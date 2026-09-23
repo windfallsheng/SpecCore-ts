@@ -280,7 +280,7 @@ async function createSingleTask(options: TaskNewOptions): Promise<void> {
       logger.info(`🚀 [auto-execute] 自动修复 Task-${taskId}...`);
       logger.info(`   🔄 00-specs/ 由宿主 AI 填充（任务层 analyze 已废弃）`);
       logger.info(`   ⚡ execute --force`);
-      try { execSync(`speccore execute --task=Task-${taskId} --force -I ${iteration}`, { stdio: 'inherit' }); } catch (e: any) { logger.warn(`   ⚠️ execute 失败: ${e.message}`); }
+      try { execSync(`speccore execute --task=Task-${taskId} --force -i ${iteration}`, { stdio: 'inherit' }); } catch (e: any) { logger.warn(`   ⚠️ execute 失败: ${e.message}`); }
       logger.success('✅ [auto-execute] 自动修复完成');
     }
   } catch (error) {

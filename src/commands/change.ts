@@ -1573,7 +1573,7 @@ async function processChangeV2(options: ChangeOptions): Promise<void> {
       for (const tid of execIds) {
         logger.info(`   🔄 ${tid}: 00-specs/ 由宿主 AI 更新（任务层 analyze 已废弃）`);
         logger.info(`   ⚡ ${tid}: execute --force`);
-        try { execSync(`speccore execute --task=${tid} --force -I ${iteration}`, { stdio: 'inherit' }); } catch (e: any) { logger.warn(`   ⚠️ execute 失败: ${e.message}`); }
+        try { execSync(`speccore execute --task=${tid} --force -i ${iteration}`, { stdio: 'inherit' }); } catch (e: any) { logger.warn(`   ⚠️ execute 失败: ${e.message}`); }
       }
       logger.success('✅ [auto-execute] 自动修复完成');
     }

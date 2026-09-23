@@ -283,14 +283,10 @@ export async function updateCommand(options: { force?: boolean; tool?: string; y
     }
   }
 
-  // 4c. 更新 AGENTS.md / CLAUDE.md
+  // 4c. 更新 CLAUDE.md（AGENTS.md 由下方 syncAgentsMd 统一生成，不再用包内快照覆盖，
+  //     避免包内静态 AUTO_INDEX 区与项目动态投影永远不同导致冲突误报 + 时间戳备份堆积）
   try {
-    const agentsSrc = join(__dirname, '..', '..', 'AGENTS.md');
-    if (await pathExists(agentsSrc)) {
-      const newAgents = await readFile(agentsSrc, 'utf-8');
-      await safeWriteWithBackup(join(projectRoot, 'AGENTS.md'), newAgents);
-      await safeWriteWithBackup(join(projectRoot, 'CLAUDE.md'), '<!-- 规则请参考 AGENTS.md -->\n\n@AGENTS.md\n');
-    }
+    await safeWriteWithBackup(join(projectRoot, 'CLAUDE.md'), '<!-- 规则请参考 AGENTS.md -->\n\n@AGENTS.md\n');
   } catch {}
 
   // 4c-2. 全面升级检查（v8.3.25+）

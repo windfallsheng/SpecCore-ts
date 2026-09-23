@@ -178,7 +178,7 @@ async function doDone(
     spinner.stop();
     logger.info('   4/5 同步到全局...');
     try {
-      execSync(`speccore sync-global --iteration=${iteration} --direction=to_global`, { stdio: 'pipe' });
+      execSync(`speccore sync --global --iteration=${iteration} --direction=to_global`, { stdio: 'pipe' });
       steps.push({ ok: true, step: 'sync-global' });
       logger.info('     ✅ 已同步');
     } catch {
