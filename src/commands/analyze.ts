@@ -1148,6 +1148,18 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       const reqRoot = join(reqDir, 'REQUIREMENT.md');
       if (await pathExists(reqRoot)) requirements.push(reqRoot);
 
+      // v8.3.263: 全局上下文（unitize 过滤出的非功能章节：名词约定/非功能需求等）
+      // 纳入澄清清单——此前 GLOBAL_CONTEXT-*.md 无任何下游读取（断链）
+      const reqOverviewDir = join(reqDir, 'overview');
+      if (await pathExists(reqOverviewDir)) {
+        try {
+          const ovFiles = await readdir(reqOverviewDir);
+          for (const f of ovFiles.filter((f: string) => f.startsWith('GLOBAL_CONTEXT-') && f.endsWith('.md') && !isTimestampBackup(f))) {
+            requirements.push(join(reqOverviewDir, f));
+          }
+        } catch {}
+      }
+
       // 收集 features/*/SOURCE.md（v8.3.226+ 语义名，兼容旧 README.md）
       // v8.3.236+: converted/ 非空时跳过切片收集——切片源自 converted 切分，
       // 内容重复会污染澄清清单（会议项目实测 78 份「源文档」大部分是切片元数据）

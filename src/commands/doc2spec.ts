@@ -856,8 +856,18 @@ export async function splitDocumentToUnits(
   sourceFileName: string
 ): Promise<void> {
   const content = await readFile(outputPath, 'utf-8');
-  // v8.3.194+: 优先 AI 语义切分（识别业务功能 + 全局信息），失败回退本地正则切分（兜底）
-  const aiResult = await scanUnitsWithAI(content);
+  // v8.3.263: 收集同目录其它文档名（端级文档）——总纲文档（如 overview-requirements.md）
+  // 的端级汇总章节与端文档切出的单元语义重复（文本层面不相似，Jaccard 拦不住），
+  // 需由 AI 切分阶段识别「该章节是端级汇总」并归入 global
+  const siblingDocNames: string[] = [];
+  try {
+    const convertedDir = dirname(outputPath);
+    for (const f of await readdir(convertedDir)) {
+      if (f.endsWith('.md') && f !== basename(outputPath)) siblingDocNames.push(f);
+    }
+  } catch { /* 无同级文档不影响切分 */ }
+  // v8.3.194+: 优先 AI 语义切分（识别业务功能 + 全局信息），失败回退本地正则切 分（兜底）
+  const aiResult = await scanUnitsWithAI(content, siblingDocNames);
   let units: ScannedUnit[];
   let globalSections: string[] = [];
   if (aiResult) {
@@ -867,6 +877,38 @@ export async function splitDocumentToUnits(
     units = scanUnits(content);
     // 本地兜底：被过滤掉的非功能章节（产品定位/名词/验收标准等）作为全局上下文
     globalSections = getGlobalSections(content, units);
+    // v8.3.263: 本地兜底端级汇总章节过滤——AI 不可用时，章节标题与同级端文档
+    // 词元匹配（如「Web管理后台」含 admin-web 的 web 词元）视为端级汇总章节，
+    // 移入 globalSections，避免与端文档切出的单元语义重复
+    if (siblingDocNames.length > 0) {
+      const docTokens = new Set<string>();
+      for (const n of siblingDocNames) {
+        for (const tok of n.replace(/\.md$/i, '').split(/[^a-z0-9]+/i)) {
+          if (tok.length >= 2) docTokens.add(tok.toLowerCase());
+        }
+      }
+      const kept: ScannedUnit[] = [];
+      const moved: string[] = [];
+      for (const u of units) {
+        const title = u.title || '';
+        const t = title.toLowerCase();
+        const hitToken = [...docTokens].some((tok) => t.includes(tok));
+        const hitZh = ((/web|admin/i.test(t) && /管理后台|后台/.test(title)) ||
+          (/mobile|h5/i.test(t) && /移动端/.test(title)));
+        if ((hitToken || hitZh) && !/通用|规则|标准|总则|业务规则/.test(title)) {
+          moved.push(title);
+          continue;
+        }
+        kept.push(u);
+      }
+      for (const m of moved) {
+        if (!globalSections.includes(m)) globalSections.push(m);
+      }
+      units = kept;
+      if (moved.length > 0) {
+        logger.info(`   📋 端级汇总章节归入 global（与同级端文档重复，不拆单元）: ${moved.join('、')}`);
+      }
+    }
   }
 
   // 无功能单元且无全局信息才跳过（纯总览文档如 PRD 的全局信息仍要归到 overview）
@@ -1269,26 +1311,40 @@ interface UnitScanResult {
  * - 通用信息（global，如产品定位/名词约定/非功能需求/验收标准汇总）→ 归到 overview，不丢弃
  * 失败返回 null（调用方回退本地正则切分兜底）。
  */
-async function scanUnitsWithAI(content: string): Promise<UnitScanResult | null> {
+async function scanUnitsWithAI(content: string, siblingDocNames: string[] = []): Promise<UnitScanResult | null> {
   try {
     const systemPrompt = [
       '你是资深产品需求分析师。任务：从 PRD 文档中识别「业务功能单元」和「项目级通用信息」。',
       '',
       '业务功能单元（units）的定义：',
-      '- 是用户可以感知、可独立交付的业务能力（如「会议室管理」「快速预订」「扫码签到」「费用管理」「消息通知」）',
+      '- 是用户可以感知、可独立交付的业务能力（如「会议室管理」「快速预订」「扫 码签到」「费用管理」「消息通知」）',
       '- 一个业务功能可能横跨多个章节；一个章节也可能只包含某功能的一部分',
       '',
       '项目级通用信息（global）的定义：',
       '- 不是某个具体功能，而是项目/产品的通用背景与规则',
-      '- 例如：产品定位、项目背景、名词约定、术语表、用户画像、功能架构、非功能需求（性能/安全等）、验收标准汇总、上线计划、风险与缓解、关联文档、文档概述',
+      '- 例如：产品定位、项目背景、名词约定、术语表、用户画像、功能架构、非功能 需求（性能/安全等）、验收标准汇总、上线计划、风险与缓解、关联文档、文档概述',
       '- 这些内容不应拆成功能单元，而应作为「全局上下文」保留',
+    ];
+    // v8.3.263: 同目录已有端级文档时注入上下文——总纲文档的端级汇总章节
+    // （如「Web管理后台」「H5移动端」）与端文档内容语义重复，应归入 global
+    if (siblingDocNames.length > 0) {
+      systemPrompt.push(
+        '',
+        '重要约束（端级汇总章节识别）：',
+        `当前文档所在目录已存在以下独立文档: ${siblingDocNames.join(', ')}`,
+        '- 这些文档通常是各端（Web后台/移动端/服务端）的详细需求',
+        '- 如果当前文档的某个章节与这些文档主题相同（如「Web管理后台」对应 admin-web、「H5移动端」对应 h5-mobile），说明该章节是端级需求的汇总章节',
+        '- 这类汇总章节必须归入 global，不得拆成功能单元，避免与端文档切出的单元重复',
+      );
+    }
+    systemPrompt.push(
       '',
       '严格只返回 JSON，格式：',
       '{"units":[{"name":"功能名","sections":["对应的章节标题1","章节标题2"]}],"global":["全局信息章节标题1","全局信息章节标题2"]}',
       'sections 和 global 必须是文档中真实存在的章节标题（去掉编号前缀，如「会议室管理」而非「三、会议室管理」）。',
       '如果某章节既含功能描述又含通用规则，优先归入最相关的功能。',
       '不要输出任何 JSON 以外的文字。',
-    ].join('\n');
+    );
 
     // v8.3.235+: 大文档不再只传前 8000 字符（后半章节 AI 看不到导致漏切）——
     //   改为「全文标题大纲 + 正文前 30000 字符」，保证功能边界识别覆盖全文
@@ -1303,7 +1359,7 @@ async function scanUnitsWithAI(content: string): Promise<UnitScanResult | null> 
 
     // v8.3.196+: 读 settings.ai.providers 池，按 defaults.split/priority 降级
     const providers = await resolveAiProviders('split');
-    const response = await callLlm(systemPrompt, userPrompt, providers, 2000);
+    const response = await callLlm(systemPrompt.join('\n'), userPrompt, providers, 2000);
     if (!response) return null;
 
     const parsed = parseUnitsJson(response);

@@ -662,8 +662,9 @@ export async function iterationTaskifyCommand(options: IterationTaskifyOptions):
     const backups: string[] = [];
 
     // v8.3.163+: AI 上下文中禁用 --force（质量门禁和安全限制不可被 AI 自行绕过）
+    // v8.3.266: run 流水线容器内豁免（上游硬闸口已校验，SPECCORE_PIPELINE_RUN 由 run.ts 注入）
     const isAiCtx = !process.stdout.isTTY;
-    if (options.force && isAiCtx) {
+    if (options.force && isAiCtx && process.env.SPECCORE_PIPELINE_RUN !== '1') {
       logger.error('❌ AI 上下文中禁止使用 --force 参数');
       logger.info('   质量门禁（任务数限制、拆分粒度校验）不可被 AI 自行绕过');
       logger.info('   如需强制继续，请在交互式终端中执行此命令');

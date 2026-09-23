@@ -36,6 +36,25 @@ async function hasFeatureDirs(iterDir: string): Promise<boolean> {
  * v8.3.202+: 检测 020-specs 下仍为骨架状态（<!-- SPEC-SKELETON -->）的文档。
  * 空模板会一路传到 taskify/execute，导致 AI 拿空需求瞎编代码，必须硬停。
  */
+
+// v8.3.266: 流水线子命令统一执行器——子命令输出 [SPECCORE_PROMPT]/[SPECCORE_STEP_DONE]
+// 后 exit 10 表示「内容需宿主 AI 响应落盘」，此时应明确交接并停止流水线，
+// 而非让 execSync 抛未捕获异常崩溃（此前 6 处调用全裸奔，Prompt 打了没人接）。
+// 返回 'handoff' 时调用方必须 return 停止流水线。
+function runPhaseCommand(cmd: string, phase: string, iteration: string, extraEnv?: Record<string, string>): 'ok' | 'handoff' {
+  try {
+    execSync(cmd, { stdio: 'inherit', ...(extraEnv ? { env: { ...process.env, ...extraEnv } } : {}) });
+    return 'ok';
+  } catch (e: any) {
+    if (e && (e.status === 10 || e.code === 10 || e.exitCode === 10)) {
+      logger.warn(`  🤖 [${phase}] 已输出 AI Prompt（exit 10）——需要宿主 AI 响应上方输出落盘`);
+      logger.warn(`     落盘完成后继续: speccore run --from ${phase} -i ${iteration}`);
+      return 'handoff';
+    }
+    throw e;
+  }
+}
+
 async function detectEmptySkeletonDocs(iterDir: string): Promise<string[]> {
   const specDir = join(iterDir, '020-specs');
   if (!await pathExists(specDir)) return [];
@@ -415,7 +434,7 @@ async function autoPipeline(options: RunOptions): Promise<void> {
         if ((await pathExists(reqDoc)) || hasFeatures) {
           logger.info('  ✅ 需求已存在，跳过 req-doc');
         } else if (options.demand) {
-          execSync(`speccore req-doc "${options.demand}" --to ${iteration}`, { stdio: 'inherit' });
+          if (runPhaseCommand(`speccore req-doc "${options.demand}" --to ${iteration}`, 'req-doc', iteration) === 'handoff') return;
         } else {
           logger.info('  ℹ️ 未提供一句话需求，跳过 req-doc（走 doc2spec 导入文档）');
         }
@@ -526,11 +545,15 @@ async function autoPipeline(options: RunOptions): Promise<void> {
             needsSpecs = meaningful.length < 50;
           } catch { needsSpecs = true; }
         }
+        // v8.3.265: analyze 输出 [SPECCORE_PROMPT] 后 exit 10 的接力标记——
+        // 内容需宿主 AI 响应落盘，硬闸口拦截时据此给出「AI 接力」指引而非普通报错
+        let analyzePromptHandoff = false;
         if (needsAnalysis || needsSpecs) {
           try {
             execSync(`speccore analyze --auto -I ${iteration}`, { stdio: 'inherit' });
           } catch (e: any) {
-            // analyze --auto 输出分析 Prompt 让宿主 AI 接管（exitCode 10），不算失败
+            // analyze --auto 输出分析 Prompt 让宿主 AI 接管（exitCode 10），不 算失败
+            analyzePromptHandoff = (e && (e.status === 10 || e.code === 10 || e.exitCode === 10));
             logger.info('  ⚠️ analyze 已输出分析 Prompt，等待 AI 分析结果落盘');
           }
         } else {
@@ -578,10 +601,18 @@ async function autoPipeline(options: RunOptions): Promise<void> {
 
           if (clarifyBlocked) {
             logger.error('');
-            logger.error('   ⚠️ 根因：需求澄清未完成——需求文档质量不足且未生成澄清产物。');
+            logger.error('   ⚠️ 根因：需求澄清未完成——需求文档质量不足且未生成澄 清产物。');
             logger.error('   请先澄清需求（二选一）:');
             logger.error(`   1. speccore req-doc --from "<需求文档>" --to ${iteration} --prompt   # 引导澄清后落盘黄金需求`);
             logger.error(`   2. speccore analyze -I ${iteration} --skip-clarify                    # 跳过澄清直接分析（不推荐）`);
+          } else if (analyzePromptHandoff) {
+            // v8.3.265: analyze 刚输出过 [SPECCORE_PROMPT]——接力棒在此，指引宿主
+            // AI 直接响应上方 Prompt 落盘，而不是再跑一次 analyze --auto（否则宿主 AI
+            // 只会重复拿到 Prompt 而不会动手生成内容）
+            logger.error('');
+            logger.error('   🤖 宿主 AI 接力：请响应上方 [SPECCORE_PROMPT] 输出，逐单元生成分析内容');
+            logger.error(`      并通过 speccore analyze --apply "[DOC:...]" -I ${iteration} 落盘；`);
+            logger.error(`      全部落盘后运行: speccore run --from taskify -i ${iteration}`);
           } else {
             logger.error('   空模板会让 taskify/execute 拿不到真实需求，生成代码质量极差。');
             logger.error(`   请先完成需求分析落盘: speccore analyze -I ${iteration} --auto`);
@@ -646,7 +677,9 @@ async function autoPipeline(options: RunOptions): Promise<void> {
           hasTasks = (await scanTasks(iteration)).length > 0;
         } catch {}
         if (!hasTasks) {
-          execSync(`speccore iteration taskify -i ${iteration} --force`, { stdio: 'inherit' });
+          // v8.3.266: AI 上下文（非 TTY）中 taskify 默认禁 --force，但 run 流水线已
+          // 通过上游硬闸口校验，容器内调用需豁免；同时处理 exit 10 接力
+          if (runPhaseCommand(`speccore iteration taskify -i ${iteration} --force`, 'taskify', iteration, { SPECCORE_PIPELINE_RUN: '1' }) === 'handoff') return;
         } else {
           logger.info('  ✅ 任务已拆分，跳过');
         }
@@ -683,7 +716,7 @@ async function autoPipeline(options: RunOptions): Promise<void> {
           logger.info('  ✅ 执行计划已存在，跳过');
         } else {
           // v8.3.223+: plan 命令无 --force 选项，此前调用必然报 unknown option 失败
-          execSync(`speccore plan -i ${iteration}`, { stdio: 'inherit' });
+          if (runPhaseCommand(`speccore plan -i ${iteration}`, 'plan', iteration) === 'handoff') return;
         }
         break;
       }
@@ -699,7 +732,7 @@ async function autoPipeline(options: RunOptions): Promise<void> {
           logger.info('  ✅ 所有任务已完成，跳过 execute');
         } else {
           // v8.3.223+: --auto 仅执行第一个待执行任务，必须加 --all 覆盖全部 pending
-          execSync(`speccore execute --auto --all -i ${iteration}`, { stdio: 'inherit' });
+          if (runPhaseCommand(`speccore execute --auto --all -i ${iteration}`, 'execute', iteration) === 'handoff') return;
         }
         break;
       }
@@ -775,7 +808,7 @@ async function autoPipeline(options: RunOptions): Promise<void> {
         if (!hasChanges) {
           logger.info('  ✅ 没有未提交的变更，跳过 pr');
         } else {
-          execSync(`speccore pr -i ${iteration} --force`, { stdio: 'inherit' });
+          if (runPhaseCommand(`speccore pr -i ${iteration} --force`, 'pr', iteration) === 'handoff') return;
         }
         break;
       }
@@ -791,7 +824,7 @@ async function autoPipeline(options: RunOptions): Promise<void> {
         if (await pathExists(retroPath)) {
           logger.info('  ✅ 已生成复盘报告，跳过 done');
         } else {
-          execSync(`speccore done --all -i ${iteration}`, { stdio: 'inherit' });
+          if (runPhaseCommand(`speccore done --all -i ${iteration}`, 'done', iteration) === 'handoff') return;
         }
         break;
       }

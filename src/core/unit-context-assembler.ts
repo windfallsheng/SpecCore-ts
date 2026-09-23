@@ -427,6 +427,8 @@ async function extractGlobalConstraints(
   // 1. 术语表：从黄金需求目录 + 新路径两级 CLARIFY.md 中提取
   // v8.3.223+: 适配新路径澄清产物——用两级澄清产出的项目黄金目录为空，
   // 旧逻辑只读 requirements/ 导致术语表提取不到
+  // v8.3.263: GLOBAL_CONTEXT-*.md 也纳入来源——unitize 过滤出的「名词约定」
+  // 章节此前无任何下游读取（断链），clarify/analyze 两链路均取不到术语表
   const clarifyCandidates: string[] = [];
   const goldenDir = join(iterDir, '020-specs', 'requirements');
   if (await pathExists(goldenDir)) {
@@ -434,6 +436,15 @@ async function extractGlobalConstraints(
       const files = await readdir(goldenDir);
       for (const f of files.filter(f => f.endsWith('.md'))) {
         clarifyCandidates.push(join(goldenDir, f));
+      }
+    } catch { /* ignore */ }
+  }
+  const globalCtxDir = join(iterDir, '010-requirements', 'overview');
+  if (await pathExists(globalCtxDir)) {
+    try {
+      const gf = await readdir(globalCtxDir);
+      for (const f of gf.filter(f => f.startsWith('GLOBAL_CONTEXT-') && f.endsWith('.md'))) {
+        clarifyCandidates.push(join(globalCtxDir, f));
       }
     } catch { /* ignore */ }
   }
@@ -452,7 +463,7 @@ async function extractGlobalConstraints(
   for (const fp of clarifyCandidates) {
     try {
       const content = await readFile(fp, 'utf-8');
-      const glossaryMatch = content.match(/#{2,3}\s+术语表[\s\S]*?(?=\n#{2,3}|$)/i);
+      const glossaryMatch = content.match(/#{2,3}\s+(术语表|名词约定|名词定义|术语约定)[\s\S]*?(?=\n#{2,3}|$)/i);
       if (glossaryMatch) {
         const text = glossaryMatch[0].trim();
         if (usedBudget + text.length < budget * 0.5) {
