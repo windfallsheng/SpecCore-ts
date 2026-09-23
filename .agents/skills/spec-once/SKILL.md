@@ -1,10 +1,12 @@
 ---
 name: spec-once
 description: >
-  SpecCore 单会话端到端执行 Skill。将「澄清 → 分析 → 拆分任务 → 执行开发」整条链
-  在单次会话内跑完，全程与用户交互确认。触发词：spec once、/once、一次跑完、快速跑、
-  快速分析、小步快跑、端到端 等。与流水线（speccore run/dev）的区别：spec-once 由宿主
-  AI 单会话编排现有命令，适合少量功能单元（建议 ≤3 个）的快速推进；大范围多单元请走流水线。
+  SpecCore 单会话端到端执行 Skill。任意形式的需求入口（已切分的功能单元 / 一个文档地址 /
+  一句话需求）→ 澄清 → 分析 → 拆分任务 → 执行开发 → 本地冒烟，整条链在单次会话内跑完，
+  全程与用户交互确认。触发词：spec once、/once、一次跑完、快速跑、快速分析、小步快跑、
+  端到端 等。与流水线（speccore run/dev）的区别：spec-once 由宿主 AI 单会话编排现有命令，
+  覆盖「开发到冒烟」的快速闭环（不含 PR 提交/归档收尾，那些按需走 pr/done），
+  适合少量功能单元（建议 ≤3 个）的快速推进；大范围多单元请走流水线。
 allowed-tools: ["Bash", "Read", "Write", "Edit"]
 disable-model-invocation: false
 ---
@@ -12,7 +14,7 @@ disable-model-invocation: false
 # spec-once — 单会话端到端执行
 
 ## 定位
-把「澄清→分析→拆分→执行」四步装进一次会话，一步到位，但**每一步都停下来跟用户确认**。
+把「澄清→分析→拆分→执行→冒烟」五步装进一次会话，一步到位，但**每一步都停下来跟用户确认**。
 底层全部复用 speccore 现有命令，本 skill 只做编排与交互节点（像 article-to-html 一样
 把复杂流程装进一份剧本，但每个关键节点用户可喊停）。
 
@@ -25,7 +27,7 @@ disable-model-invocation: false
 **入口 A：已切分好的功能单元**（用户指定了单元名或说「全部」）
 - 直接进入下方「范围确认」，无需预处理
 
-**入口 B：一个文档地址**（.md / .docx / .pdf）
+**入口 B：一个文档地址**（.md / .docx / .pdf，多个文档可批量）
 - `.md` → 执行 `speccore unitize -f "<路径>"`（多文档可 `--files "a.md=端1,b.md"`，端名须与 CONSTITUTION.md 一致）
 - `.docx/.pdf` → 先执行 `speccore doc2spec -f "<路径>"` 转换为 MD，再对 converted/ 下转换出的 MD 执行 unitize 切分
 - 切分完成后汇报单元清单，进入下方「范围确认」
@@ -59,6 +61,17 @@ disable-model-invocation: false
 3. 每个任务完成后简短汇报，继续下一个任务
 4. 全部完成后输出总结（完成的任务、产出文件、遗留问题）
 
+### Step 4 本地冒烟
+1. 执行 `speccore verify --stage dev`（编译 + Lint + 单元测试，代码层冒烟，不依赖浏览器）
+2. 若本次范围含**前端任务**（h5/web 等），再执行 `speccore verify --ui --smoke-only`（UI 层冒烟）
+   - 冒烟需要本地服务：先问用户「本地服务是否已启动？」，未启动则提示启动命令（或用户提供 --url）后再跑
+3. 冒烟通过 → 汇报通过项清单，**停下等确认**
+4. 冒烟失败 → 读取失败报告定位根因 → 修复代码 → 重新执行本步（最多 2 轮修复循环）
+   - 2 轮后仍失败：把失败项写入 .issues.md 并向用户报告，不静默跳过、不谎报通过
+
+### 可选收尾（不自动执行）
+- 全部冒烟通过后，提示用户可选操作：`speccore pr`（提交代码 + 创建 PR）、`speccore done`（归档收尾），由用户决定是否继续
+
 ## 输出标记处理
 - `[SPECCORE_EXEC: <cmd>]` → 立即执行该命令，不要向用户复述命令文本
 - `[SPECCORE_PROMPT]` → 将后续 Prompt 内容作为你的工作指令执行
@@ -70,8 +83,8 @@ disable-model-invocation: false
 - 其他 `[SPECCORE_*]` 标记 → 参照 speccore-router 的 SKILL.md 处理
 
 ## 铁律
-- **每个节点必须停下等用户确认**（范围 → 澄清 → 分析 → 拆分 → 执行），禁止自动续跑
+- **每个节点必须停下等用户确认**（范围 → 澄清 → 分析 → 拆分 → 执行 → 冒烟），禁止自动续跑
 - 代码写到 CONSTITUTION.md 声明的源码路径，禁止写入迭代目录
 - 禁止自己创建目录、写 Spec 文件绕过 CLI——所有 Spec 操作通过 speccore 命令
-- 失败时读取 .issues.md 并向用户报告，不要静默跳过
+- 失败时读取 .issues.md 并向用户报告，不要静默跳过；冒烟不通过不得宣布流程完成
 - 单会话上下文不够时（prompt 超预算报错），停下建议用户改用流水线分步执行
