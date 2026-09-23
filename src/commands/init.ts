@@ -1456,10 +1456,22 @@ SpecCore 规范驱动开发项目。
 - 全局分析的 \`platforms/{端}/\`（端级技术资产）**不等于**迭代层的 \`{端}/\`（任务级实现规格）
 - 补充全局需求文档时**必须**使用 \`--scope global\`，不能用迭代层命令替代
 
+## 功能单元目录对齐（切分层 ↔ 分析层）
+
+\`unitize\`（切需求，原 doc2spec --split）切分出的功能单元目录名，是 \`analyze\` 分析产物的**对齐锚点**，两者必须一致：
+
+| 层 | 目录 | 产出 |
+|:---|:---|:---|
+| 切分层 | \`010-requirements/features/{功能单元}/\` | SOURCE.md（需求原文切片，旧版为 README.md） + _matrix.md + CHANGELOG.md（doc2spec 产出） |
+| 分析层 | \`020-specs/{功能单元}/\` | overview/（单元概述）+ {端名}/（TECH/TEST/UI_SPEC） |
+| 全局层 | \`010-requirements/overview/GLOBAL_CONTEXT-*.md\` + \`020-specs/overview/\` | 非功能全局信息 + FUNCTION_MAP/REQUIREMENT 汇总 |
+
+- **禁止**把 \`overview/GLOBAL_CONTEXT-*.md\`、\`features/{单元}/_matrix.md\` 当成功能单元（它们是全局信息/元数据，不是功能单元）。
+- **分析产物必须落盘**：\`analyze\` 后 020-specs 下不得残留 \`<!-- SPEC-SKELETON -->\` 空模板，否则 taskify/execute 拿空需求会瞎编代码。
+
 ## 核心工作方式
 
-- **AI 只拼命令，不执行命令**。识别用户意图后，输出 \`speccore\` CLI 命令给用户在终端执行。
-- **所有确定性操作通过 \`speccore\` CLI 完成**（创建目录、读写文件、校验格式）。
+- **所有确定性操作通过 \`speccore\` CLI 完成**（创建目录、读写文件、校验格式）。AI 识别意图后，经 \`speccore ask\` 引擎自动执行，或看到 \`[SPECCORE_EXEC: <cmd>]\` 标记时直接 \`execute_command\`，不要自行用 Write/SearchReplace 改 Spec 文件。
 - **代码生成通过宿主 AI 完成**，CLI 负责准备 Spec 上下文和写入文件。
 - **代码写到 CONSTITUTION.md / PROJECT.yaml 指定的源码路径**，不要写到迭代目录里。
 
@@ -1473,7 +1485,7 @@ SpecCore 规范驱动开发项目。
 6. **禁止直接用 Write 工具写 020-specs/ 或 .speccore/GLOBAL/ 下的文件** — 必须通过 \`speccore analyze --apply\` 写入，CLI 自动路由到正确子目录
 7. **不要自己解析需求** — 用 \`speccore analyze\`
 8. **端名必须使用 CONSTITUTION.md 标准端名** — 禁止用 \`api\`/\`web\`/\`backend\`/\`frontend\`/\`admin\`/\`h5\` 等简写或中文
-9. **全局分析每层完成后必须自动推进下一层** — 看到 \`[SPECCORE_EXEC: speccore global analyze --layer N]\` 后必须立即执行，不能等待用户指令
+9. **全局分析每层完成后必须自动推进下一层** — 看到 \`[SPECCORE_EXEC: speccore analyze --scope global --layer N]\` 后必须立即执行，不能等待用户指令
 10. **步骤隔离模式** — v8.3.160+ 默认步骤隔离，每步完成后输出 \`[SPECCORE_STEP_DONE]\` + \`[SPECCORE_NEXT_STEP]\`，新会话通过 \`--resume\` 继续。看到 \`[SPECCORE_EXEC]\` 后自动执行
 11. **质量门禁拦截后必须修复所有 error** — 不能跳过质量门禁继续推进
 12. **PATTERNS 只提取真正独特且可复用的模式** — 严禁为每个项目都生成 JWT/Redis/拦截器等框架自带的标准用法说明
@@ -1481,6 +1493,8 @@ SpecCore 规范驱动开发项目。
 14. **失败时读取 .issues.md 并按流程处理** — 读取问题清单 → 分析根因 → 修复 → 更新 .issues.md 状态 → 重新执行
 15. **续跑用 --resume** — \`speccore execute --resume\`
 16. **配置变更用 --upgrade** — \`speccore config --upgrade\`（\`.speccore.yml\` / \`PROJECT.yaml\` 结构升级）
+17. **禁止 AI 直接修改配置文件** — \`.speccore.yml\`、\`.speccore/CONSTITUTION.md\`、\`.speccore/PROJECT.yaml\` 等配置必须通过 \`speccore config --upgrade\` 修改，禁止用 Write/SearchReplace 工具直接编辑（防止 schema_version 等关键字段被破坏）
+18. **禁止单会话内连续执行多步骤** — analyze → apply → analyze → taskify → execute 等 Pipeline 步骤必须分会话执行，每步完成后输出 \`[SPECCORE_STEP_DONE]\`，新会话读取 context snapshot 后 \`--resume\` 继续。严禁在单会话内循环执行多个 CLI 命令
 
 ## 详细规范索引
 
@@ -1491,7 +1505,7 @@ SpecCore 规范驱动开发项目。
 | **全局分析质量规范** | \`.speccore/RULES/ANALYSIS_QUALITY.md\` | \`speccore analyze --scope global\` |
 | **迭代层分析强制约束** | \`.speccore/RULES/ITERATION_QUALITY.md\` | \`speccore analyze -I <迭代名>\` |
 | **执行阶段强制约束** | \`.speccore/RULES/EXECUTION.md\` | \`speccore execute\` |
-| **任务拆分强制约束** | \`.speccore/RULES/TASK_SPLIT.md\` | \`speccore iteration taskify\` |
+| **任务拆分强制约束** | \`.speccore/RULES/TASK_SPLIT.md\` | \`speccore taskify\` |
 
 > **Agent 角色执行前，必须先读取 \`.speccore/RULES/\` 中 \`appliesTo\` 匹配当前技术栈的规则，将技术栈专属检查项叠加到通用清单中。** 完整阶段-角色映射见 \`.speccore/AGENTS/_INDEX.md\`。`;
 
@@ -1668,7 +1682,7 @@ Iteration-NNN-name/            ← 迭代目录
 
 \`\`\`bash
 speccore status                          # 当前迭代状态面板
-speccore global analyze --layer 1-4      # 全局层源码分析（四层推进，产物 .speccore/GLOBAL/）
+speccore analyze --scope global --layer 1-4 # 全局层源码分析（四层推进，产物 .speccore/GLOBAL/）
 speccore global from-source --src <dirs> # 全局层源码反推需求文档
 speccore unitize --file <md路径> --iter <迭代名>   # 切分需求文档 → 功能单元（features/）
 speccore analyze -I <迭代名> --auto      # 迭代层全量分析（产物 020-specs/）

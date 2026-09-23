@@ -19,6 +19,8 @@ defaults:
   build_cmd: npm run build:test
 
 # 按端覆盖配置
+# v8.3.82+: 每个端可单独配置 branch，覆盖全局 branch
+#   branch: main   # 该端使用独立分支，pipeline 时优先使用
 platforms:
   # 前端示例：H5 移动端 → S3/CDN
   h5:
@@ -40,8 +42,25 @@ platforms:
       post_deploy:
         - ssh deploy@test-server.example.com "sudo nginx -s reload"
 
-  # 后端示例：Java API 服务 → Docker
+  # 后端示例：Java Spring Boot → SSH + systemd（推荐）
+  # 前置：服务器上配置好 /etc/systemd/system/order-api.service
   order-api:
+    build_cmd: ./mvnw clean package -DskipTests -Ptest
+    deploy:
+      type: ssh
+      output_dir: target
+      host: deploy@test-server.example.com:22
+      remote_dir: /opt/services/order-api/
+      key: ~/.ssh/deploy_key
+      script: |
+        sudo systemctl stop order-api
+        sudo cp /opt/services/order-api/*.jar /opt/services/order-api/app.jar
+        sudo systemctl start order-api
+      post_deploy:
+        - ssh -i ~/.ssh/deploy_key deploy@test-server.example.com "sudo systemctl status order-api"
+
+  # 后端示例：Java API 服务 → Docker（容器化部署）
+  order-api-docker:
     build_cmd: ./mvnw package -DskipTests -Ptest
     deploy:
       type: docker
@@ -55,7 +74,7 @@ platforms:
     deploy:
       type: pm2
       output_dir: .
-      pm2_config: ecosystem.config.js
+      pm2_config: .speccore/environments/scripts/ecosystem.config.js
       # 如需远程部署，取消注释:
       # host: deploy@server.example.com
       # remote_dir: /opt/services/notification
@@ -66,14 +85,14 @@ platforms:
     deploy:
       type: k8s
       target: test
-      script: k8s/gateway-deployment.yaml
+      script: .speccore/environments/scripts/k8s-deployment.yaml
 
   # 后端示例：Python 处理 → 脚本部署
   data-processor:
     build_cmd: pip install -r requirements.txt -t dist/
     deploy:
       type: script
-      script: ./scripts/deploy-processor.sh
+      script: .speccore/environments/scripts/deploy.sh
 
   # 后端示例：用户服务 → Helm
   user-service:
@@ -82,7 +101,7 @@ platforms:
       type: helm
       target: test
       script: ./helm/user-service
-      output_dir: values-test.yaml
+      output_dir: .speccore/environments/scripts/values-test.yaml
 
   # 后端示例：定时任务 → SFTP 到服务器
   scheduler:
@@ -113,6 +132,22 @@ tests:
     provider: qwen-vl
     model: qwen-vl-max
     timeout: 60000
+
+  # ── 测试登录账号（v8.3.215+）──
+  # 冒烟/视觉测试访问受保护页面（如 Admin 后台）前自动登录。
+  # 首次开发项目的账号来源约定：
+  #   1. 后端 seed 脚本创建默认账号（如 admin / 初始密码）
+  #   2. 密码通过环境变量 SMOKE_PASSWORD 注入（不落库、不进 git）
+  #   3. 前端登录表单 input 加 data-testid 稳定标识，对应下方选择器
+  auth:
+    login_url: /login
+    username_selector: "[data-testid='login-username-input']"
+    password_selector: "[data-testid='login-password-input']"
+    submit_selector: "[data-testid='login-submit-btn']"
+    success_url_contains: /dashboard   # 可选：登录成功后 URL 含此片段
+    credentials:
+      username: admin                   # seed 默认账号（按实际调整）
+      password_env: SMOKE_PASSWORD      # 密码从环境变量读取（推荐）
 
 # 分层测试配置（v8.3.60+）
 # 与 speccore verify --stage <stage> 联动，不同阶段自动加载对应测试场景。

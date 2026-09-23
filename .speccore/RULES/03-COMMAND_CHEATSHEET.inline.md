@@ -2,7 +2,7 @@
 
 ```bash
 speccore status                          # 当前迭代状态面板
-speccore global analyze --layer 1-4      # 全局层源码分析（四层推进，产物 .speccore/GLOBAL/）
+speccore analyze --scope global --layer 1-4 # 全局层源码分析（四层推进，产物 .speccore/GLOBAL/）
 speccore global from-source --src <dirs> # 全局层源码反推需求文档
 speccore unitize --file <md路径> --iter <迭代名>   # 切分需求文档 → 功能单元（features/）
 speccore analyze -I <迭代名> --auto      # 迭代层全量分析（产物 020-specs/）
