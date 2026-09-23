@@ -266,12 +266,30 @@ async function preSplitGate(iterationDir: string): Promise<{
   });
 
   // v8.3.221+: 检查全局 ANALYSIS.md（阻塞级——功能分析，骨架说明 analyze 未落盘）
+  // v8.3.248+: 模块级回退——v8.3.238 后 analyze 指示 AI 把 ANALYSIS.md 写在 {feature}/overview/ 下
+  // （全局 overview 只留索引类文档），若仍硬性要求全局文件，新流程将永远阻塞无法拆分。
+  // 全局缺失/骨架时，任一功能模块的 overview/ANALYSIS.md 非骨架即视为分析已落盘。
   const analysisGatePath = join(specDir, GLOBAL_SPECS_DIR, 'ANALYSIS.md');
-  const analysisGateExists = await pathExists(analysisGatePath);
+  let analysisGateExists = await pathExists(analysisGatePath);
   let analysisGateIsSkeleton = false;
   if (analysisGateExists) {
     const ac = await readFile(analysisGatePath, 'utf-8');
     analysisGateIsSkeleton = ac.includes('<!-- SPEC-SKELETON -->') || ac.trim().length < 100;
+  }
+  if (!analysisGateExists || analysisGateIsSkeleton) {
+    try {
+      const fList = await parseFeatureList(iterationDir);
+      for (const f of fList) {
+        const fAnalysisPath = join(specDir, f, 'overview', 'ANALYSIS.md');
+        if (!(await pathExists(fAnalysisPath))) continue;
+        const c = await readFile(fAnalysisPath, 'utf-8');
+        if (!c.includes('<!-- SPEC-SKELETON -->') && c.trim().length >= 100) {
+          analysisGateExists = true;
+          analysisGateIsSkeleton = false;
+          break;
+        }
+      }
+    } catch { /* 回退失败保持原判定 */ }
   }
   items.push({
     path: analysisGatePath,
