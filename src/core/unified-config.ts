@@ -111,6 +111,11 @@ export interface LlmProviderConfig {
 /** 系统配置 — .speccore.yml（CLI 运行时行为开关） */
 export interface SpecConfig {
   schema_version: number;
+  /** v8.3.253+: 本地文件日志开关（写入 .speccore/local/logs/，默认关） */
+  logging?: {
+    /** true → 所有命令的 logger 输出落盘到本地日志文件 */
+    enabled?: boolean;
+  };
   quality_gates: {
     enforce_testing: boolean;
     enforce_review: boolean;
@@ -272,6 +277,9 @@ export interface ProjectConfig {
 
 export const DEFAULT_CONFIG: SpecConfig = {
   schema_version: CURRENT_SCHEMA_VERSION,
+  logging: {
+    enabled: false,
+  },
   quality_gates: {
     enforce_testing: true,
     enforce_review: true,

@@ -1,34 +1,53 @@
-import { createWriteStream, existsSync, mkdirSync } from 'fs';
-import { WriteStream } from 'fs';
+import { appendFileSync, existsSync, mkdirSync } from 'fs';
 
 // Logger implementation
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'success';
 
 export class Logger {
-  private logFile?: WriteStream;
+  // v8.3.253+: 文件日志用 appendFileSync 同步写（存路径而非流），
+  // 保证进程 exit 时尾部日志不丢失；开关由 cli 入口按 --log / 环境变量 / 配置决定
+  private logFile?: string;
   private verbose: boolean;
 
   constructor(options?: { logFile?: string; verbose?: boolean }) {
     this.verbose = options?.verbose ?? false;
-    
+
     if (options?.logFile) {
-      const dir = options.logFile.substring(0, options.logFile.lastIndexOf('/'));
-      if (dir && !existsSync(dir)) {
-        mkdirSync(dir, { recursive: true });
-      }
-      this.logFile = createWriteStream(options.logFile, { flags: 'a' });
+      this.enableFile(options.logFile);
     }
+  }
+
+  /** 启用文件日志（幂等；目录自动创建） */
+  enableFile(filePath: string): void {
+    if (this.logFile) return;
+    const dir = filePath.substring(0, filePath.lastIndexOf('/'));
+    if (dir && !existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
+    this.logFile = filePath;
+  }
+
+  closeFile(): void {
+    this.logFile = undefined;
+  }
+
+  get fileEnabled(): boolean {
+    return !!this.logFile;
   }
 
   log(level: LogLevel, message: string, ...args: unknown[]): void {
     const timestamp = new Date().toISOString();
     const formatted = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
-    
+
     if (this.verbose || level !== 'debug') {
       console.log(this.colorize(level, formatted), ...args);
     }
-    
-    this.logFile?.write(`${formatted}\n`);
+
+    if (this.logFile) {
+      try {
+        appendFileSync(this.logFile, `${formatted}\n`);
+      } catch { /* 文件写失败不影响 CLI 主流程 */ }
+    }
   }
 
   debug(message: string, ...args: unknown[]): void {
@@ -65,12 +84,22 @@ export class Logger {
   }
 
   close(): void {
-    this.logFile?.end();
+    this.closeFile();
   }
 }
 
 // Global logger instance
+
 export const logger = new Logger();
+
+/** 启用全局文件日志（幂等），供 CLI 入口按开关调用 — v8.3.253+ */
+export function enableFileLogging(filePath: string): void {
+  logger.enableFile(filePath);
+}
+
+export function closeFileLogging(): void {
+  logger.closeFile();
+}
 
 // Progress bar utility
 export class ProgressBar {

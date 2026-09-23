@@ -2,7 +2,8 @@ import { program } from 'commander';
 import { version } from '../package.json';
 import { readFileSync, existsSync } from 'fs';
 import { join, resolve } from 'path';
-import { logger } from './utils/logger';
+import { logger, enableFileLogging, closeFileLogging } from './utils/logger';
+import { findProjectRoot } from './utils/task-utils';
 import { initCommand } from './commands/init';
 import { validateCommand } from './commands/validate';
 import { reviewCommand } from './commands/review';
@@ -80,12 +81,50 @@ import { cleanupCommand } from './commands/cleanup';
 import { HELP_PANEL } from './core/help-panel';
 import { i18n } from './i18n';
 
+// ─────────────────────────────────────────
+// v8.3.253+: 本地文件日志开关（三级优先级：--log 参数 > SPECCORE_LOG=1 > .speccore.yml logging.enabled）
+// 开启后所有 logger 输出同步写盘 .speccore/local/logs/speccore-<日期>.log，
+// 用户排查问题时可直接把日志文件发给 AI 分析。默认关闭，零开销。
+// ─────────────────────────────────────────
+let fileLoggingStarted = false;
+
+function readLoggingConfig(): boolean {
+  try {
+    const root = findProjectRoot();
+    if (!root) return false;
+    const ymlPath = join(root, '.speccore.yml');
+    if (!existsSync(ymlPath)) return false;
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const yaml = require('js-yaml');
+    const cfg = yaml.load(readFileSync(ymlPath, 'utf-8')) as { logging?: { enabled?: boolean } };
+    return cfg?.logging?.enabled === true;
+  } catch { return false; }
+}
+
+function setupFileLogging(opts: Record<string, unknown>): void {
+  if (fileLoggingStarted) return;
+  const enabled = !!opts.log || process.env.SPECCORE_LOG === '1' || readLoggingConfig();
+  if (!enabled) return;
+  fileLoggingStarted = true;
+  const root = findProjectRoot() || process.cwd();
+  const day = new Date().toISOString().slice(0, 10);
+  const logPath = join(root, '.speccore', 'local', 'logs', `speccore-${day}.log`);
+  enableFileLogging(logPath);
+  const startTs = Date.now();
+  logger.info(`┌─ 文件日志已启用: ${logPath}`);
+  process.on('exit', (code) => {
+    logger.info(`└─ 命令结束 exit=${code} 耗时=${Date.now() - startTs}ms`);
+    closeFileLogging();
+  });
+}
+
 program
   .name('speccore')
   .description('SpecCore - Code by Spec, Not by Vibe.')
   .version(version, '-v, --version', 'Display current version')
   .option('--lang <locale>', 'Language: zh-CN (default) or en-US', 'zh-CN')
   .option('--project-dir <path>', '指定外部项目目录（所有配置从该目录读取）')
+  .option('--log', '启用本地文件日志（写入 .speccore/local/logs/speccore-<日期>.log）')
   .hook('preAction', (thisCommand) => {
     const opts = thisCommand.opts();
     if (opts.lang && (opts.lang === 'zh-CN' || opts.lang === 'en-US')) {
@@ -96,6 +135,8 @@ program
       process.chdir(targetDir);
       logger.info(`📂 切换到项目目录: ${targetDir}`);
     }
+    // v8.3.253+: 文件日志开关（须在 chdir 之后，日志写入目标项目目录）
+    setupFileLogging(opts as Record<string, unknown>);
   });
 
 program
