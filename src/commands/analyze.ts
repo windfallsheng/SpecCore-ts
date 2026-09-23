@@ -42,6 +42,7 @@ import { assembleUnitContext } from '../core/unit-context-assembler';
 import { runDispatchLoopRound, type LoopRoundResult, type LoopStep } from '../core/dispatch-loop';
 import { PipelineEngine, createAnalyzePipeline, createGlobalAnalyzePipeline, type StepResult } from '../core/pipeline-engine';
 import { detectAffectedPlatforms, detectPlatformPriorityOrder, recordAnalysisSnapshot } from '../core/change-detection';
+import { recordAiTrace } from '../utils/ai-trace';
 import {
   buildPhasePrompt,
   detectBacktrackingNeeds,
@@ -305,6 +306,15 @@ async function applyDocContent(content: string, iter: string): Promise<number> {
   const specDir = join(iterDir, '020-specs');
   let docs: Record<string, string> = {};
 
+  // v8.3.252+: 飞行记录仪——解析前原样留档（格式错误也留痕），
+  // 区分「AI 没给」与「给了但被解析丢弃」
+  await recordAiTrace(iter, 'apply-in', {
+    rawLength: content.length,
+    hasJson: trimmed.startsWith('{'),
+    hasDocMarkers: /\[DOC:[^\]]+\]/.test(trimmed),
+    rawPreview: trimmed.slice(0, 500),
+  });
+
   // 格式 1：JSON 对象
   if (trimmed.startsWith('{')) {
     try {
@@ -321,6 +331,12 @@ async function applyDocContent(content: string, iter: string): Promise<number> {
     for (const [name, c] of blocks) docs[name] = c;
   }
 
+  if (Object.keys(docs).length === 0) {
+    await recordAiTrace(iter, 'apply-fail', { reason: 'no-parsable-content', rawInput: content });
+    logger.warn('⚠️ 已收到 AI 回传内容，但 JSON 与 [DOC:] 两种格式均未解析出文档，请检查回传格式');
+    return 0;
+  }
+
   let applied = 0;
   // v8.3.237+: 与 --apply 主通道一致——有功能模块的项目才拦截（内容类归 {feature}/overview/，
   // 全局 overview/REQUIREMENT.md 由 split 聚合），无功能模块的老项目放行
@@ -334,6 +350,11 @@ async function applyDocContent(content: string, iter: string): Promise<number> {
     await writeFile(fp, docContent);
     applied++;
   }
+  await recordAiTrace(iter, 'apply-done', {
+    applied,
+    files: Object.keys(docs),
+    totalChars: Object.values(docs).reduce((s, c) => s + (typeof c === 'string' ? c.length : 0), 0),
+  });
   return applied;
 }
 
@@ -879,6 +900,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       const targetUnit = targetUnits[0];
       if (options.prompt) {
         const prompt = await buildUnitAnalysisPrompt(iterDir, iter, targetUnit, units);
+        await recordAiTrace(iter, 'prompt-out', { mode: 'unit', unit: targetUnit.id, promptLength: prompt.length, prompt });
         process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
         process.exitCode = 10;
         return;
@@ -886,21 +908,31 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       if (options.apply) {
         // v8.3.249+: 此前为“空实现”——只打印「已接收」但 [DOC:xxx] 内容从不落盘，
         // AI 认真提交后产物丢失，taskify 拿不到分析结果。现在真正解析写入。
+        await recordAiTrace(iter, 'apply-in', {
+          unit: targetUnit.id,
+          rawLength: options.apply.length,
+          hasDocMarkers: /\[DOC:[^\]]+\]/.test(options.apply),
+          rawPreview: options.apply.trim().slice(0, 500),
+        });
         const docBlocks = parseDocMarkers(options.apply);
         if (docBlocks.size === 0) {
+          await recordAiTrace(iter, 'apply-fail', { unit: targetUnit.id, reason: 'no-doc-markers', rawInput: options.apply });
           logger.warn('⚠️ 未检测到 [DOC:xxx] 标记，请按 prompt 格式输出');
           return;
         }
         const specDir = getUnitSpecDir(iterDir, targetUnit);
         await ensureDir(specDir);
         let written = 0;
+        const writtenFiles: string[] = [];
         for (const [docName, content] of docBlocks) {
           const safeName = basename(docName);
           if (!/^[A-Za-z_][A-Za-z0-9_-]*\.(md|yaml)$/.test(safeName)) continue;
           if (content.trim().length < 50) { logger.warn(`   ⏭️  跳过 ${safeName}（内容过短）`); continue; }
           await writeFile(join(specDir, safeName), content.trim());
           written++;
+          writtenFiles.push(safeName);
         }
+        await recordAiTrace(iter, 'apply-done', { unit: targetUnit.id, applied: written, files: writtenFiles });
         logger.success(`✅ 功能单元 ${targetUnit.id} 分析结果已写入 ${written} 个文档`);
         logger.info(`   📂 020-specs/${sanitizeUnitDirName(targetUnit.name)}/overview/`);
         return;
@@ -2781,6 +2813,7 @@ ${singlePrompt}`);
     }
 
     const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task, type: options.type, scope: options.scope, withCode: options.withCode, platform: options.platform, phase: options.phase, autoMode: options.auto }, options, needsClarify ? { needsClarify, clarifyTargets } : undefined);
+    await recordAiTrace(iter, 'prompt-out', { mode: 'analyze-main', scope: options.scope, promptLength: prompt.length, prompt });
     process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
 
     // v7.2.0+: 全局分析完成后输出下一步引导
