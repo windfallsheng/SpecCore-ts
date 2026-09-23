@@ -28,6 +28,7 @@ import { changeCommand } from './commands/change';
 import { syncCommand } from './commands/sync';
 import { historyCommand } from './commands/history';
 import { patternCommand } from './commands/pattern';
+import { globalAnalyzeCommand, globalFromSourceCommand, globalRulesCommand, globalPatternsCommand } from './commands/global';
 import { rollbackCommand } from './commands/rollback';
 import { handoverCommand } from './commands/handover';
 import { helpCommand } from './commands/help';
@@ -1015,7 +1016,7 @@ program
 program
   .command('spec-from-source')
   .alias('reverse')
-  .description('从源码反推全局资产（需求文档 + 技术文档）— analyze --from-code 的便捷入口')
+  .description('从源码反推全局资产（需求文档 + 技术文档）— global from-source 的兼容别名')
   .option('--src, --source <dirs>', '源码目录（逗号分隔，如 --src <端1/src>,<端2/src>）')
   .option('--depth <depth>', '分析深度: quick | normal(默认) | deep')
   .option('--platform <platform>', '指定端（如 backend）')
@@ -1023,6 +1024,42 @@ program
   .action((options: any) => {
     analyzeCommand({ ...options, fromCode: true, scope: 'global' });
   });
+
+// ════════════════════════════════════════════════════════════════
+// 🌐 global —— 全局层分析独立命令（v8.3.255+）
+//    源码→技术文档 / 源码→需求文档 / 规则与模式指引，与迭代层 analyze 分家
+// ════════════════════════════════════════════════════════════════
+const globalCmd = program
+  .command('global')
+  .description('全局层分析：源码→技术文档、源码→需求文档（独立于迭代层 analyze）');
+
+globalCmd
+  .command('analyze')
+  .description('源码技术分析（Layer 1→4 自动推进，产物 .speccore/GLOBAL/）')
+  .option('--layer <n>', '指定层 1-4（默认自动检测进度）')
+  .option('--with-code', '结合 CONSTITUTION.md 配置的工程源码')
+  .option('--auto', '自动模式（连续推进不等待确认）')
+  .action(globalAnalyzeCommand);
+
+globalCmd
+  .command('from-source')
+  .alias('reverse')
+  .description('从源码反推需求文档（原 spec-from-source 能力）')
+  .option('--src, --source <dirs>', '源码目录（逗号分隔，如 --src <端1/src>,<端2/src>）')
+  .option('--depth <depth>', '分析深度: quick | normal(默认) | deep')
+  .option('--platform <platform>', '指定端（如 backend）')
+  .option('--out-dir <path>', '反推需求产出目录（默认 .speccore/GLOBAL/requirements）')
+  .action(globalFromSourceCommand);
+
+globalCmd
+  .command('rules')
+  .description('规则生成指引（产物 .speccore/GLOBAL/RULES/）')
+  .action(globalRulesCommand);
+
+globalCmd
+  .command('patterns')
+  .description('模式沉淀指引（复用 pattern 命令）')
+  .action(globalPatternsCommand);
 
 program
   .command('req-doc')

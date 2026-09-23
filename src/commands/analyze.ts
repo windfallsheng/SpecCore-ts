@@ -384,6 +384,11 @@ async function tryLlmGenerate(prompt: string, iter: string): Promise<boolean> {
 }
 
 export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
+  // v8.3.255+: 全局层分析已独立为 speccore global 命令，旧入口保留一版过渡
+  if (options.scope === 'global' && !(options as Record<string, unknown>)._fromGlobal) {
+    logger.warn('⚠️  analyze --scope global 已废弃，请改用: speccore global analyze');
+  }
+
   // v6.97.0+ 修复：全局分析时统一设置 iteration 为 'GLOBAL'，避免任何 fallback 到 getDefaultIteration()
   // 这是根治方案：后面所有 "options.iteration || await getDefaultIteration()" 都会命中 options.iteration
   // v8.3.102+: 向上查找项目根目录（支持在子目录执行）
@@ -1424,8 +1429,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 
     // v8.3.225+: 方式 Y 调度循环 — SDK/llm 成功落盘后进程内 advance 继续下一步，直到 Pipeline 完成；
     //   host 模式输出自包含 prompt 接力（exitCode 10，宿主会话内 --apply 后继续调用本命令即可断点续跑）
-    const scopeFlag = isGlobalScope ? '--scope global' : `-I ${iter}`;
-    const resumeCmd = `speccore analyze --prompt --pipeline ${scopeFlag}`;
+    const scopeFlag = isGlobalScope ? '' : `-I ${iter}`;
+    const resumeCmd = isGlobalScope ? 'speccore global analyze --prompt --pipeline' : `speccore analyze --prompt --pipeline ${scopeFlag}`;
     const maxRounds = steps.length * 2 + 2; // 防异常死循环保护
     let round = 0;
 
@@ -1742,8 +1747,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
                   stepIds: stateBefore.steps || [stateBefore.currentStep],
                   options,
                 });
-                const scopeFlag = isGlobalScope ? '--scope global' : `-I ${options.iteration}`;
-                const nextCmd = `speccore analyze --prompt --pipeline ${scopeFlag}`;
+                const scopeFlag = isGlobalScope ? '' : `-I ${options.iteration}`;
+                const nextCmd = isGlobalScope ? 'speccore global analyze --prompt --pipeline' : `speccore analyze --prompt --pipeline ${scopeFlag}`;
                 const output = [
                   `[SPECCORE_NEXT_STEP]`,
                   `当前步骤 "${stateBefore.currentStep}" 尚未完成，请继续填充剩余骨架后再次 --apply。`,
@@ -1786,8 +1791,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
             });
 
             // v8.3.225+: 方式 Y 输出标记 — 宿主会话内继续执行即可，不再强制新对话
-            const scopeFlag = isGlobalScope ? '--scope global' : `-I ${options.iteration}`;
-            const nextCmd = `speccore analyze --prompt --pipeline ${scopeFlag}`;
+            const scopeFlag = isGlobalScope ? '' : `-I ${options.iteration}`;
+            const nextCmd = isGlobalScope ? 'speccore global analyze --prompt --pipeline' : `speccore analyze --prompt --pipeline ${scopeFlag}`;
             const output = [
               `[SPECCORE_STEP_DONE]`,
               `步骤 "${state.currentStep}" 已完成。`,
@@ -2013,14 +2018,14 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
             logger.info(`\n💡 AI 请按以下步骤修复：`);
             logger.info(`   1. 读取上述问题文档的当前内容`);
             logger.info(`   2. 根据质量报告中的错误信息补充/修正内容`);
-            logger.info(`   3. 用 speccore analyze --apply '{"文件路径":"修正后内容"}' --scope global 重新写入`);
+            logger.info(`   3. 用 speccore global analyze --apply '{"文件路径":"修正后内容"}' 重新写入`);
             process.stdout.write(`\n[SPECCORE_PROMPT]\n# 质量门禁修复任务\n\n以下全局分析文档未通过质量校验，请修复后重新写入：\n\n`);
             for (const r of criticalErrors.slice(0, 5)) {
               const fname = r.file.split('/').slice(-2).join('/');
               const errs = r.issues.filter(i => i.severity === 'error').map(i => `- ${i.message}`).join('\n');
               process.stdout.write(`## ${fname}\n${errs}\n\n`);
             }
-            process.stdout.write(`修复完成后重新执行：speccore analyze --scope global --layer 4\n`);
+            process.stdout.write(`修复完成后重新执行：speccore global analyze --layer 4\n`);
             process.exitCode = 10;
             return;
           }
@@ -2662,8 +2667,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       const progress = await detectGlobalLayerProgress();
       if (progress.completedLayer < 4) {
         const nextCmd = progress.nextLayer === 4 && progress.subLayer
-          ? `speccore analyze --scope global --layer 4${options.withCode ? ' --with-code' : ''}`
-          : `speccore analyze --scope global --layer ${progress.nextLayer}${options.withCode ? ' --with-code' : ''}`;
+          ? `speccore global analyze --layer 4${options.withCode ? ' --with-code' : ''}`
+          : `speccore global analyze --layer ${progress.nextLayer}${options.withCode ? ' --with-code' : ''}`;
         process.stdout.write(`\n[SPECCORE_EXEC: ${nextCmd}]\n`);
         process.stdout.write(`> 全局分析 ${progress.completedLayer}/4 层完成，自动推进到下一层...\n`);
         process.exitCode = 10;
@@ -3388,7 +3393,7 @@ async function buildGlobalAnalysisGuide(options?: AnalyzeOptions): Promise<strin
   if (completedLayer === 4 && (!subLayer || subLayer.completed.length === 4)) {
     guide += '\n🎉 全局分析全部完成！\n';
     guide += '   所有文档已生成在 .speccore/GLOBAL/ 目录\n';
-    guide += '   如需补充某份文档: speccore analyze --scope global --layer 4 --deep <文档名>\n';
+    guide += '   如需补充某份文档: speccore global analyze --layer 4 --deep <文档名>\n';
     return guide;
   }
 
@@ -3401,13 +3406,13 @@ async function buildGlobalAnalysisGuide(options?: AnalyzeOptions): Promise<strin
     if (!hasOutline) {
       guide += `   1. 将 AI 输出的大纲保存到: ${outlinePath}\n`;
       guide += `   2. 审核/修改大纲\n`;
-      guide += `   3. 再次执行: speccore analyze --scope global --layer 4 --deep ${deepDoc} --iterative\n`;
+      guide += `   3. 再次执行: speccore global analyze --layer 4 --deep ${deepDoc} --iterative\n`;
     } else {
       guide += `   1. 将 AI 输出的本节内容追加到文档\n`;
-      guide += `   2. 继续下一节: speccore analyze --scope global --layer 4 --deep ${deepDoc} --iterative\n`;
+      guide += `   2. 继续下一节: speccore global analyze --layer 4 --deep ${deepDoc} --iterative\n`;
     }
   } else if (deepDoc) {
-    guide += `   speccore analyze --scope global --layer 4 --deep ${deepDoc}\n`;
+    guide += `   speccore global analyze --layer 4 --deep ${deepDoc}\n`;
     guide += `   （如需迭代式补全: 加 --iterative 参数）\n`;
   } else if (nextLayer === 4 && subLayer) {
     const subNames: Record<string, string> = {
@@ -3416,19 +3421,19 @@ async function buildGlobalAnalysisGuide(options?: AnalyzeOptions): Promise<strin
       '4c': '全局技术扩展文档（overview/）',
       '4d': '各端技术文档（platforms/）',
     };
-    guide += `   speccore analyze --scope global --layer 4\n`;
+    guide += `   speccore global analyze --layer 4\n`;
     guide += `   （即将生成: ${subNames[subLayer.next] || subLayer.next}）\n`;
   } else {
-    guide += `   speccore analyze --scope global --layer ${nextLayer}\n`;
+    guide += `   speccore global analyze --layer ${nextLayer}\n`;
   }
 
   // 快捷命令提示
   guide += '\n💡 快捷命令:\n';
   guide += `   查看进度: speccore status\n`;
   if (completedLayer >= 3) {
-    guide += `   深度分析单文档: speccore analyze --scope global --layer 4 --deep ARCHITECTURE.md\n`;
+    guide += `   深度分析单文档: speccore global analyze --layer 4 --deep ARCHITECTURE.md\n`;
   }
-  guide += `   全量重新分析: speccore analyze --scope global --with-code\n`;
+  guide += `   全量重新分析: speccore global analyze --with-code\n`;
 
   return guide;
 }
@@ -3675,7 +3680,7 @@ export async function buildMultiDocPrompt(command: string, ctx: { iteration?: st
     // v7.2.0+: 分层专注指令 — 强烈约束 AI 只执行当前 layer
     prompt += `## 🎯 当前执行层级: Layer ${targetLayer}/4 — ${layerMeta.role}\n\n`;
     prompt += `> ⚠️ **重要约束**: 你当前只需要完成 **Layer ${targetLayer}** 的工作。不要提前做后续层的内容。\n`;
-    prompt += `> 每层完成后通过 \`speccore analyze --scope global --layer ${targetLayer + 1 <= 4 ? targetLayer + 1 : 4}\` 进入下一层。\n\n`;
+    prompt += `> 每层完成后通过 \`speccore global analyze --layer ${targetLayer + 1 <= 4 ? targetLayer + 1 : 4}\` 进入下一层。\n\n`;
     prompt += `| 层级 | 角色 | 核心任务 | 产出物 |\n`;
     prompt += `| :--- | :--- | :--- | :--- |\n`;
     prompt += `| 1 | 代码索引专家 | 扫描源码结构，提取索引 | platforms/{端}/_INDEX.md |\n`;
@@ -3726,7 +3731,7 @@ export async function buildMultiDocPrompt(command: string, ctx: { iteration?: st
       prompt += `**分批策略（v8.3.160+）**：\n`;
       prompt += `- 如端数量 ≤ 5：一次生成所有端的 \`_INDEX.md\`\n`;
       prompt += `- 如端数量 > 5：一次处理 3-5 个端，剩余端在输出末尾标注 \`[PENDING: {端名列表}]\`，供续批处理\n`;
-      prompt += `- 续批命令：\`speccore analyze --scope global --layer 1 --resume\`\n`;
+      prompt += `- 续批命令：\`speccore global analyze --layer 1 --resume\`\n`;
       prompt += `**最小内容标准（v8.3.61+）**：\n`;
       prompt += `- 每个 \_INDEX.md ≥ 80 行（维度少可接受 50+，但严禁 < 30 行）\n`;
       prompt += `- 必须包含：端名、技术栈、目录结构概览、各维度清单表格\n`;
@@ -3822,7 +3827,7 @@ export async function buildMultiDocPrompt(command: string, ctx: { iteration?: st
       prompt += `- 如功能模块数量 ≤ 2：一次生成所有模块的分析文档\n`;
       prompt += `- 如功能模块数量 > 2：一次处理 1-2 个模块，确保每个模块分析深入、不空洞\n`;
       prompt += `- 剩余模块在输出末尾标注 \`[PENDING: {模块名列表}]\`，供续批处理\n`;
-      prompt += `- 续批命令：\`speccore analyze --scope global --layer 3 --resume\`\n`;
+      prompt += `- 续批命令：\`speccore global analyze --layer 3 --resume\`\n`;
       prompt += `- **关键原则**：宁可少分析几个模块，也要保证每个模块的分析质量（≥100 行、有 Mermaid 图、有具体代码引用）\n\n`;
       prompt += `**每个功能模块输出**：\n`;
       prompt += `- 后端端：该功能模块相关的 API 详细设计、数据模型、业务规则、安全策略\n`;
