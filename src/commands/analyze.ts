@@ -25,6 +25,7 @@ import { runAnalysis, AnalyzeInput, supplementAnalysis, analyzeSingleFeature, ge
 import { readFile, readdir, readdirSync } from 'fs-extra';
 import { generateGlobalArtifacts } from '../core/global-artifacts';
 import { buildPrompt, buildPromptText, formatPrompt, processMarkdownContent } from '../core/prompt-builder';
+import { parseProjectInfo } from '../core/spec-paths';
 // v8.3.160+: 子 Agent 适配层（analyze 自定义 Prompt 中手动注入）
 // v8.3.169+: 新增 dispatchSubagent 支持 Qoder SDK 直接调度
 import { defaultAdapter, dispatchSubagent } from '../core/agent-adapter';
@@ -3095,6 +3096,9 @@ function parseArgv(options: AnalyzeOptions): void {
     [['--output', '-o'], (v) => { options.output = v; }],
     [['--depth'], (v) => { options.depth = v as any; }],
     [['--feature'], (v) => { options.feature = v; }],
+    // v8.3.248+: --unit 指定功能单元（支持逗号分隔多个），此前多单元 prompt 指示的
+    // 「analyze --unit {id} --apply」提交命令因未注册该选项而静默失效
+    [['--unit'], (v) => { options.unit = v; }],
     [['--phase'], (v) => { options.phase = v; }],
     [['--out-dir'], (v) => { options.outDir = v; }],
   ];
@@ -5727,8 +5731,18 @@ status: "clarified"
       // v8.3.160+: 大项目按端分段读取，避免一次性加载全量结构化数据
       prompt += `   - 先 Read \`.speccore/cache/structured-data.json\` 的 stats 部分（了解各端规模）\n`;
       prompt += `   - **按需读取各端分段文件**：\`.speccore/cache/structured-data.{端名}.json\`（只读取本功能模块涉及的端）\n`;
-      prompt += `   - 再按需 Read 各端源码中与本功能模块相关的关键文件（从 CONSTITUTION.md 获取源码路径）\n`;
-      prompt += `   - 重点关注：接口定义、数据模型、业务逻辑实现、状态管理\n\n`;
+      // v8.3.248+: 直接注入各端工程路径表（此前仅提示 AI「从 CONSTITUTION.md 获取源码路径」，
+      // AI 需自行翻表定位；现在直接给出，减少一步间接查找、杜绝瞎猜）
+      try {
+        const projectInfoMap = await parseProjectInfo();
+        if (projectInfoMap.size > 0) {
+          prompt += `   - **各端工程路径**（结合源码分析时按此定位，CONSTITUTION.md 工程表权威）：\n`;
+          for (const [identifier, info] of projectInfoMap) {
+            prompt += `     - \`${identifier}\`（${info.projectType || '-'}）→ \`${info.srcPath}\`\n`;
+          }
+        }
+      } catch { /* 路径解析失败不阻断分析 */ }
+      prompt += `   - 再按需 Read 各端源码中与本功能模块相关的关键文件，重点关注：接口定义、数据模型、业务逻辑实现、状态管理\n\n`;
     }
     prompt += `3. 读取迭代需求文档（按功能模块组织）：\n`;
     prompt += `   a. 先读 010-requirements/INDEX.md — 获取功能模块清单\n`;

@@ -44,16 +44,17 @@ disable-model-invocation: false
 5. 目录/任务命名由 CLI 确定性生成（单元目录 {文档slug}-{序号}-{标题}、Task-{编号}-{slug}、子任务 Task-{父任务}-{端名}），不要自己改
 
 ### Step 1 澄清与分析
-1. 执行 `speccore analyze --prompt -I <迭代> [--feature <单元>]`
-2. stdout 出现 `[SPECCORE_PROMPT]` → 将 Prompt 内容作为你的工作指令执行（不要改写、不要略过）
+1. 执行 `speccore analyze --prompt -I <迭代> --with-code`（--with-code 使 Prompt 携带各端工程路径表与源码上下文；指定范围用 `--unit M-01,M-03`，不要用 --feature——那是确定性局部分析，不出 Prompt）
+2. stdout 出现 `[SPECCORE_PROMPT]` → 将 Prompt 内容作为你的工作指令执行（不要改写、不要略过）；多单元时按 Prompt 内的「逐个单元」指示处理，每个单元用 `analyze --unit <id> --apply '<内容>'` 提交
 3. 分析中发现需求模糊点 → **向用户提问澄清**，不要自行脑补
 4. 分析完成后按 Prompt 中的写入格式执行 `speccore analyze --apply '{json}' -I <迭代>` 落盘
 5. 向用户汇报分析产出摘要（单元、文档、关键结论），**停下等确认**
 
 ### Step 2 拆分任务
 1. 用户确认后执行 `speccore iteration taskify -I <迭代>`
-2. 展示拆分出的任务清单（030-tasks/Task-*）与依赖关系
-3. **停下问用户**：任务拆分是否合理？需要调整吗？
+2. 若报告「🔴 阻塞项」（如 ANALYSIS.md 缺失）→ 回到 Step 1 补齐分析产物再重试，不要跳过阻塞
+3. 展示拆分出的任务清单（030-tasks/Task-*）与依赖关系
+4. **停下问用户**：任务拆分是否合理？需要调整吗？
 
 ### Step 3 执行开发
 1. 用户确认后，逐任务执行 `speccore execute --prompt -t <Task>`
