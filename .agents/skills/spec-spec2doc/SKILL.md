@@ -1,10 +1,9 @@
 ---
 name: spec-spec2doc
 description: >
-  规格转文档专属 Skill。在调用 speccore ask 之前，执行参数提取、
-  前置校验（迭代/Task 存在性），参数缺失时输出交互式提示。
+  规格转文档专属 Skill。参数提取与前置校验（迭代/Task 存在性）由 speccore ask 引擎执行；参数缺失时引擎输出 [SPECCORE_NEEDS_INFO] 交互式提示。
   不影响 speccore ask 的意图识别能力。
-allowed-tools: ["Bash", "Read"]
+allowed-tools: ["Bash", "Read", "Write", "Edit"]
 disable-model-invocation: false
 ---
 

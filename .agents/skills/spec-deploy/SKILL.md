@@ -1,9 +1,9 @@
 ---
 name: spec-deploy
 description: >
-  部署专属 Skill。覆盖 build / deploy / pipeline 命令的意图识别与参数提取。
+  部署专属 Skill。覆盖 build / deploy / pipeline 命令的意图识别与参数提取（由引擎执行）。
   支持自然语言（"部署到测试环境"）和显式参数（--env test --all）。
-  参数缺失时交互式提示，前置校验环境配置与平台有效性。
+  参数缺失时引擎输出 [SPECCORE_NEEDS_INFO] 交互式提示；前置校验（环境配置与平台有效性）由引擎执行。
   支持 Pipeline 内置测试节点（--test-enabled）和分层测试策略。
   不影响 speccore ask 的意图识别能力。
 allowed-tools: ["Bash", "Read"]
