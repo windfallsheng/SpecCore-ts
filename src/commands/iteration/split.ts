@@ -1189,6 +1189,9 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     }
 
     // ── 1. 检查 ANALYSIS.md + AI 智能拆分建议 ──
+    // v8.3.249+: reqContent2/reqContent2Aggregated 提升到块外声明，供下方实际拆分源复用
+    let reqContent2 = '';
+    let reqContent2Aggregated = false;
     const analysisPathNew = join(iterationDir, '020-specs', GLOBAL_SPECS_DIR, 'ANALYSIS.md');
     const analysisPathOld = join(iterationDir, '020-specs', 'ANALYSIS.md');
     const analysisPath = await pathExists(analysisPathNew) ? analysisPathNew : analysisPathOld;
@@ -1232,12 +1235,21 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
       const specDir2 = join(iterationDir, '020-specs');
       // REQUIREMENT.md 从 overview/ 读取
       const reqPath2 = join(specDir2, GLOBAL_SPECS_DIR, 'REQUIREMENT.md');
-      let reqContent2 = '';
       if (await pathExists(reqPath2)) {
         reqContent2 = await readFile(reqPath2, 'utf-8');
       }
       // v8.3.160+: 如果全局 REQUIREMENT.md 为空/骨架，从各功能模块 overview/REQUIREMENT.md 聚合
-      if (!reqContent2 || reqContent2.trim().length < 200 || reqContent2.includes('<!-- SPEC-SKELETON -->')) {
+      // v8.3.249+: 增加陈旧检测——聚合文档不含当前 features 单元名时视为过期，强制重新聚合。
+      // 此前仅按空/骨架判断，旧聚合文档与新切分单元不同步时 taskify 用陈旧数据拆分，
+      // 漏掉新单元（--modules 指定新单元也匹配不到任何 section，反而全量拆分）。
+      let reqContent2IsStale = false;
+      if (reqContent2 && reqContent2.trim().length >= 200 && !reqContent2.includes('<!-- SPEC-SKELETON -->')) {
+        const featuresAll = await parseFeatureList(iterationDir);
+        for (const feature of featuresAll) {
+          if (!reqContent2.includes(feature)) { reqContent2IsStale = true; break; }
+        }
+      }
+      if (!reqContent2 || reqContent2.trim().length < 200 || reqContent2.includes('<!-- SPEC-SKELETON -->') || reqContent2IsStale) {
         const featureReqParts: string[] = [];
         const features = await parseFeatureList(iterationDir);
         for (const feature of features) {
@@ -1251,6 +1263,7 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
         }
         if (featureReqParts.length > 0) {
           reqContent2 = featureReqParts.join('\n\n---\n\n');
+          reqContent2Aggregated = true;
         }
       }
       
@@ -1344,7 +1357,9 @@ export async function iterationSplitCommand(options: IterationSplitOptions): Pro
     }
 
     const content = await readFile(reqFile, 'utf-8');
-    let sections = extractSections(content, options.sections);
+    // v8.3.249+: 聚合后的最新需求内容（含新切分单元）优先于陈旧聚合文档作为实际拆分源
+    const finalContent = (reqContent2Aggregated && reqContent2) ? reqContent2 : content;
+    let sections = extractSections(finalContent, options.sections);
 
     // v6.76.0+: 按功能模块过滤
     if (options.modules) {
@@ -4800,7 +4815,9 @@ async function tryModuleDrivenSplit(
       }
     }
 
-    // 3. 回退：读取 features/*/SOURCE.md（v8.3.226+，兼容旧 README.md）（无涉及端信息，使用全端）
+    // 3. 回退：读取 features/*/SOURCE.md（v8.3.226+，兼容旧 README.md）
+    // v8.3.249+: 优先读 _matrix.md 端声明（unitize 切分时写入），替代全端兜底——
+    // 此前全部配全端，单端功能（如仅 booking-service）也会拆出 4 个子任务
     if (!modulePlatformsParsed) {
       const featuresDir = join(reqDir, 'features');
       if (await pathExists(featuresDir)) {
@@ -4810,10 +4827,23 @@ async function tryModuleDrivenSplit(
             if (entry.isDirectory() && !entry.name.startsWith('.')) {
               const readmePath = await resolveUnitSourcePath(join(featuresDir, entry.name));
               if (await pathExists(readmePath)) {
+                let unitPlatforms: string[] = [...allPlatforms];
+                const matrixPath = join(featuresDir, entry.name, '_matrix.md');
+                if (await pathExists(matrixPath)) {
+                  const mc = await readFile(matrixPath, 'utf-8');
+                  const m = mc.match(/^platforms:\s*\n((?:\s+-\s+\S+\s*\n?)+)/m);
+                  if (m) {
+                    const declared = m[1].split('\n')
+                      .map(l => l.replace(/^\s+-\s+/, '').trim()).filter(Boolean);
+                    if (declared.length > 0) {
+                      unitPlatforms = declared.filter(p => allPlatforms.includes(p));
+                    }
+                  }
+                }
                 modules.push({
                   name: entry.name, slug: slugify(entry.name), type: 'feature',
                   sourceFile: `features/${entry.name}/${basename(readmePath)}`,
-                  platforms: [...allPlatforms],
+                  platforms: unitPlatforms,
                 });
               }
             }
@@ -4845,6 +4875,23 @@ async function tryModuleDrivenSplit(
 
   if (modules.length === 0) {
     return false; // 无功能模块，回退到传统流程
+  }
+
+  // v8.3.249+: --modules 过滤——模块驱动拆分此前完全忽略该选项，
+  // 指定单个单元时仍全量拆分（FUNCTION_MAP 全部单元照拆）
+  if (options.modules) {
+    const moduleFilters = options.modules.split(',').map(m => m.trim()).filter(Boolean);
+    const beforeCount = modules.length;
+    const filtered = modules.filter(mod =>
+      moduleFilters.some(f => mod.name.includes(f) || mod.slug.includes(f))
+    );
+    if (filtered.length === 0) {
+      logger.warn(`没有匹配 "${options.modules}" 的功能模块（可用: ${modules.slice(0, 5).map(m => m.name).join(', ')}${modules.length > 5 ? '...' : ''}），回退传统流程`);
+      return false;
+    }
+    modules.length = 0;
+    modules.push(...filtered);
+    logger.info(`   🎯 模块过滤: ${beforeCount} → ${filtered.length}（只拆分: ${moduleFilters.join(', ')}）`);
   }
 
   // 检测已有任务
@@ -4909,9 +4956,22 @@ async function tryModuleDrivenSplit(
     const { id: taskId } = await nextTaskId(mod.name, mod.slug);
     const modPlatforms = mod.platforms.length > 0 ? mod.platforms : [...allPlatforms];
 
+    // v8.3.249+: section.content 从 sourceFile（SOURCE.md 等）读取——此前硬编码空串，
+    // 导致 REQ.md 四级回退全部落空（aiReq/analyzeReq/短 section.content 均不满足），
+    // 最终写出「待补充」骨架，execute 阶段拿不到有价值的需求文档
+    let sectionContent = '';
+    if (mod.sourceFile) {
+      try {
+        const srcPath = join(iterationDir, '010-requirements', mod.sourceFile);
+        if (await pathExists(srcPath)) {
+          sectionContent = await readFile(srcPath, 'utf-8');
+        }
+      } catch { /* 读取失败保持空 */ }
+    }
+
     const section: Section = {
       name: mod.name,
-      content: '',
+      content: sectionContent,
       level: 2,
     };
     (section as any)._topic = mod.slug;

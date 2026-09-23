@@ -846,7 +846,23 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     // 3c. --unit: 指定单元（支持逗号分隔多个，如 M-01,M-03）
     if (options.unit) {
       targetUnitIds = options.unit.split(',').map(s => s.trim()).filter(Boolean);
-      const invalid = targetUnitIds.filter(id => !units.some(u => u.id === id));
+      // v8.3.249+: 支持目录名直接指定——unitize 切分的目录名（如 v3-service-01-门禁授权同步）
+      // 与缓存 M-ID 体系无映射，仅按 u.id 匹配会让用户面对目录名无法指定单元
+      const matchUnit = (q: string, list: IterationUnit[]) =>
+        list.some(u => u.id === q || u.name === q);
+      let invalid = targetUnitIds.filter(id => !matchUnit(id, units));
+      // v8.3.249+: unitize/doc2spec 切分不写 units.json 缓存，新切分的单元不在缓存清单中——
+      // 回退磁盘提取（features/ 目录）合并后再匹配，避免「刚切完就找不到」的断层
+      if (invalid.length > 0) {
+        const diskUnits = await extractIterationUnits(iterDir);
+        if (diskUnits.length > units.length) {
+          units = diskUnits;
+          await ensureDir(dirname(unitsCachePath));
+          await writeFile(unitsCachePath, JSON.stringify(units, null, 2));
+          logger.info(`📋 检测到新切分单元，清单已刷新: ${units.length} 个`);
+          invalid = targetUnitIds.filter(id => !matchUnit(id, units));
+        }
+      }
       if (invalid.length > 0) {
         logger.error(`未找到功能单元: ${invalid.join(', ')}`);
         logger.info(`   可用单元: ${units.map(u => u.id).join(', ')}`);
@@ -855,7 +871,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     }
 
     const targetUnits = targetUnitIds
-      .map(id => units.find(u => u.id === id))
+      .map(id => units.find(u => u.id === id || u.name === id))
       .filter((u): u is IterationUnit => !!u);
 
     // 单单元：保持原有行为
@@ -868,9 +884,25 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         return;
       }
       if (options.apply) {
-        // AI 输出的是 [DOC:xxx] 格式，由 --apply 的 parseDocMarkers 处理
-        logger.info(`✅ 功能单元 ${targetUnit.id} 分析结果已接收`);
-        logger.info('   结果已通过 --apply 的 [DOC:xxx] 解析写入');
+        // v8.3.249+: 此前为“空实现”——只打印「已接收」但 [DOC:xxx] 内容从不落盘，
+        // AI 认真提交后产物丢失，taskify 拿不到分析结果。现在真正解析写入。
+        const docBlocks = parseDocMarkers(options.apply);
+        if (docBlocks.size === 0) {
+          logger.warn('⚠️ 未检测到 [DOC:xxx] 标记，请按 prompt 格式输出');
+          return;
+        }
+        const specDir = getUnitSpecDir(iterDir, targetUnit);
+        await ensureDir(specDir);
+        let written = 0;
+        for (const [docName, content] of docBlocks) {
+          const safeName = basename(docName);
+          if (!/^[A-Za-z_][A-Za-z0-9_-]*\.(md|yaml)$/.test(safeName)) continue;
+          if (content.trim().length < 50) { logger.warn(`   ⏭️  跳过 ${safeName}（内容过短）`); continue; }
+          await writeFile(join(specDir, safeName), content.trim());
+          written++;
+        }
+        logger.success(`✅ 功能单元 ${targetUnit.id} 分析结果已写入 ${written} 个文档`);
+        logger.info(`   📂 020-specs/${sanitizeUnitDirName(targetUnit.name)}/overview/`);
         return;
       }
       logger.info(`📋 功能单元: ${targetUnit.id} ${targetUnit.name}`);
@@ -6994,6 +7026,22 @@ export async function consolidateUnitAnalyses(
   return lines.join('\n');
 }
 
+/**
+ * v8.3.249+: 构建「各端工程路径」段——从 CONSTITUTION.md 工程表解析各端源码路径。
+ * 单元级/全量分析 prompt 共用，避免 AI 自行翻表定位源码。解析失败时返回空串不阻断。
+ */
+async function buildProjectPathsSection(): Promise<string> {
+  try {
+    const projectInfoMap = await parseProjectInfo();
+    if (projectInfoMap.size === 0) return '';
+    const lines: string[] = [];
+    for (const [identifier, info] of projectInfoMap) {
+      lines.push(`- \`${identifier}\`（${info.projectType || '-'}）→ \`${info.srcPath}\``);
+    }
+    return lines.join('\n') + '\n';
+  } catch { /* 路径解析失败不阻断分析 */ return ''; }
+}
+
 /** 构建单个功能单元的深度分析 Prompt */
 export async function buildUnitAnalysisPrompt(
   iterDir: string,
@@ -7001,7 +7049,6 @@ export async function buildUnitAnalysisPrompt(
   unit: IterationUnit,
   allUnits: IterationUnit[],
 ): Promise<string> {
-  // 使用智能上下文组装引擎（三层上下文模型）
   const unitRef = { id: unit.id, name: unit.name, content: unit.content };
   const allUnitRefs = allUnits.map(u => ({ id: u.id, name: u.name, content: u.content }));
   const ctxResult = await assembleUnitContext(iterDir, iteration, unitRef, allUnitRefs, {
@@ -7020,6 +7067,9 @@ export async function buildUnitAnalysisPrompt(
 - 来源: ${unit.source}#L${unit.sourceRange.startLine}
 - 全迭代共 ${allUnits.length} 个功能单元
 - 上下文预算: ${ctxResult.stats.estimatedTokens} tokens (核心${ctxResult.stats.coreChars}字符 + 关联${ctxResult.stats.relatedUnitChars + ctxResult.stats.codeChars}字符 + 全局${ctxResult.stats.globalChars}字符)
+
+## 各端工程路径（结合源码分析时按此定位）
+${await buildProjectPathsSection()}
 
 ## 需求上下文
 ${ctxResult.context}
