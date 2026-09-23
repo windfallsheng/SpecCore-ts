@@ -106,7 +106,9 @@ async function autoPipeline(options: RunOptions): Promise<void> {
     pipeline: { id: 'C', title: '部署前确认',  hint: '即将部署到环境（destructive 操作），确认后才执行', resumeFrom: 'pipeline' },
   };
 
-  const iteration = await getDefaultIteration(options.iteration);
+  // v8.3.262: 迭代名归一化——context.json 的 currentIteration 可能带 Iteration- 前缀
+  // （历史版本写入），不归一化会拼出 Iteration-Iteration-xxx 双前缀，导致前置依赖误判
+  const iteration = (await getDefaultIteration(options.iteration)).replace(/^Iteration-/, '');
   if (!iteration) {
     logger.info('🤖 Auto-pipeline: 未找到迭代，先初始化...');
     execSync('speccore init', { stdio: 'inherit' });
@@ -130,7 +132,8 @@ async function autoPipeline(options: RunOptions): Promise<void> {
       const dir = join(reqDir, d);
       if (await pathExists(dir)) {
         const entries = await readdir(dir).catch(() => []);
-        if (entries.some((e: any) => /\.(md|docx|doc|pdf)$/i.test(e.name))) return true;
+        // v8.3.262: readdir 未传 withFileTypes 时返回字符串数组，直接 test 文件名
+        if (entries.some((e: any) => /\.(md|docx|doc|pdf)$/i.test(e))) return true;
       }
     }
     return false;
