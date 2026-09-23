@@ -5,7 +5,7 @@ description: >
   或明确要求通过 speccore 命令行工具执行操作，且意图涉及以下概念时使用：
   迭代管理、需求文档导入（doc2spec）、需求切分（unitize）、Spec 分析生成（analyze --prompt）、
   任务拆分（taskify）、执行计划（plan --prompt）、代码执行（execute --prompt）、
-  任务归档（done）、PR 提交（pr）、状态查看（status/dashboard/doctor）、智能级联（dev）。
+  任务归档（done）、PR 提交（pr）、状态查看（status/dashboard/doctor）、智能级联/端到端流水线（run）。
   将用户意图映射为 speccore CLI 命令，通过 execute_command 执行。
   核心原则：必须直接执行，决不输出命令文本。唯一下例外："只看不跑"。
   以下情况明确不处理：解释代码逻辑、审查代码片段、讨论需求合理性、
@@ -312,8 +312,8 @@ allowed-tools: ["Bash", "Read", "Write", "Edit"]
 ### 智能级联 / 端到端流水线
 | 用户说法 | 提取参数 | CLI 命令 |
 | :--- | :--- | :--- |
-| 智能级联/全流程推进 | - | `speccore dev` |
-| 推进项目/继续开发 | - | `speccore dev` |
+| 智能级联/全流程推进 | - | `speccore run` |
+| 推进项目/继续开发 | - | `speccore run --auto` |
 | 全自动推进/跑流水线 | - | `speccore run` |
 | 端到端/一键开发/自动开发 | demand? | `speccore run "{demand}"` |
 | {一句话需求描述}（如"做积分功能"） | demand | `speccore run "{demand}"` |

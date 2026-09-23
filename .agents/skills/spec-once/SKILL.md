@@ -25,7 +25,8 @@ disable-model-invocation: false
 先识别用户给了什么，按入口执行预处理，再统一做范围确认：
 
 **入口 A：已切分好的功能单元**（用户指定了单元名或说「全部」）
-- 直接进入下方「范围确认」，无需预处理
+- 无需预处理，直接进入下方「范围确认」
+- 用户只给单元名（如「features/ 下的 v3-service-01-门禁授权同步」）时：先 `speccore status` 探测活跃迭代（.speccore/local/context.json 的 currentIteration）；探不到或单元不在该迭代，向用户确认迭代名，不要猜
 
 **入口 B：一个文档地址**（.md / .docx / .pdf，多个文档可批量）
 - `.md` → 执行 `speccore unitize -f "<路径>"`（多文档可 `--files "a.md=端1,b.md"`，端名须与 CONSTITUTION.md 一致）
@@ -44,7 +45,7 @@ disable-model-invocation: false
 5. 目录/任务命名由 CLI 确定性生成（单元目录 {文档slug}-{序号}-{标题}、Task-{编号}-{slug}、子任务 Task-{父任务}-{端名}），不要自己改
 
 ### Step 1 澄清与分析
-1. 执行 `speccore analyze --prompt -I <迭代> --with-code`（--with-code 使 Prompt 携带各端工程路径表与源码上下文；指定范围用 `--unit M-01,M-03`，不要用 --feature——那是确定性局部分析，不出 Prompt）
+1. 执行 `speccore analyze --prompt -I <迭代> --with-code`（--with-code 使 Prompt 携带各端工程路径表与源码上下文；指定范围用 `--unit`，直接写切分出的目录名即可——如 `--unit "v3-service-01-门禁授权同步"` 或 `--unit M-01,M-03` 均可（v8.3.250+ 目录名与 M-ID 双匹配）；不要用 --feature——那是确定性局部分析，不出 Prompt）
 2. stdout 出现 `[SPECCORE_PROMPT]` → 将 Prompt 内容作为你的工作指令执行（不要改写、不要略过）；多单元时按 Prompt 内的「逐个单元」指示处理，每个单元用 `analyze --unit <id> --apply '<内容>'` 提交
 3. 分析中发现需求模糊点 → **向用户提问澄清**，不要自行脑补
 4. 分析完成后按 Prompt 中的写入格式执行 `speccore analyze --apply '{json}' -I <迭代>` 落盘
