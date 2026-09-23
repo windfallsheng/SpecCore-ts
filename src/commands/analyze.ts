@@ -58,6 +58,7 @@ import {
   buildClarifiedHeader,
   extractUnitsFromText,
   type RequirementQualityReport,
+  type ClarifyUnit,
 } from '../core/requirement-clarifier';
 import {
   PRODUCT_ANALYST_ROLE,
@@ -6086,8 +6087,29 @@ async function generateQualityReport(iteration: string): Promise<{ docPaths: str
   return { docPaths, reports: qualityReports };
 }
 
+// v8.3.263: 澄清阶段的功能单元优先从 features/ 目录提取（切分层对齐锚点）——
+// 文档章节提取会把「使用规范/修订记录」等元章节误当功能单元，导致澄清粒度错位；
+// features/ 为空时才回退到文档章节提取。
+async function extractUnitsForClarify(iterDir: string, allDocContent: string): Promise<ClarifyUnit[]> {
+  const featuresDir = join(iterDir, '010-requirements', 'features');
+  try {
+    if (await pathExists(featuresDir)) {
+      const entries = await readdir(featuresDir, { withFileTypes: true });
+      const dirs = entries.filter((e) => e.isDirectory() && !e.name.startsWith('.'));
+      if (dirs.length > 0) {
+        return dirs.map((e, i) => ({
+          id: `M-${String(i + 1).padStart(2, '0')}`,
+          name: e.name,
+          content: '',
+        }));
+      }
+    }
+  } catch { /* features/ 不可读时回退章节提取 */ }
+  return extractUnitsFromText(allDocContent);
+}
+
+// 生成质量报告（复用抽离的审查逻辑）+ 拿到文档清单与质量报告
 async function buildClarifyPhasePrompt(iteration: string): Promise<string> {
-  // 生成质量报告（复用抽离的审查逻辑）+ 拿到文档清单与质量报告
   const iterDir = await getIterationDir(iteration);
   const raw = await generateQualityReport(iteration);
   // v8.3.236+: 过滤非需求文档——功能单元元数据（features/*/）、全局上下文（overview/GLOBAL_CONTEXT-*）
@@ -6100,7 +6122,22 @@ async function buildClarifyPhasePrompt(iteration: string): Promise<string> {
     if (/(VALIDATION|QUALITY_REPORT|INDEX)\.md$/.test(r.filePath)) return false;
     return true;
   });
-  const docPaths = qualityReports.map((r) => r.filePath);
+  // v8.3.263: 排除 010-requirements 根 README.md（目录规范说明，非业务需求文档），
+  // 同名文档去重（sources/ 与 converted/ 各一份时 converted 优先——doc2spec 转换版更规范）
+  const rootReadme = join(iterDir, '010-requirements', 'README.md');
+  const dedupMap = new Map<string, RequirementQualityReport>();
+  for (const r of qualityReports) {
+    if (r.filePath === rootReadme) continue;
+    const base = basename(r.filePath);
+    const prev = dedupMap.get(base);
+    if (!prev || (r.filePath.includes('converted') && !prev.filePath.includes('converted'))) {
+      dedupMap.set(base, r);
+    }
+  }
+  const dedupedReports = qualityReports.filter(
+    (r) => r.filePath !== rootReadme && dedupMap.get(basename(r.filePath)) === r
+  );
+  const docPaths = dedupedReports.map((r) => r.filePath);
 
   let allDocContent = '';
   for (const p of docPaths) {
@@ -6108,7 +6145,7 @@ async function buildClarifyPhasePrompt(iteration: string): Promise<string> {
       allDocContent += await readFile(p, 'utf-8') + '\n\n';
     } catch { /* ignore */ }
   }
-  const extractedUnits = extractUnitsFromText(allDocContent);
+  const extractedUnits = await extractUnitsForClarify(iterDir, allDocContent);
   const hasMultipleUnits = extractedUnits.length >= 2;
 
   let prompt = `\n# 任务: 需求专业化（Phase 0: 需求澄清，v6.84.0+)\n\n`;
@@ -6143,7 +6180,7 @@ async function buildClarifyPhasePrompt(iteration: string): Promise<string> {
   }
 
   prompt += `## 质量评价摘要（7维度）\n\n`;
-  for (const r of qualityReports) {
+  for (const r of dedupedReports) {
     const name = r.filePath.split('/').pop() || '-';
     prompt += `### ${name} — 综合评分 ${r.overallScore}/100 (${r.level.toUpperCase()})\n\n`;
     prompt += `| 维度 | 评分 | 问题数 | 状态 |\n`;

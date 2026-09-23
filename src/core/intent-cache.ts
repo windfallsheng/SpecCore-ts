@@ -115,6 +115,9 @@ export async function getCachedIntent(input: string): Promise<AskResult | null> 
 
   // v8.3.224+: 条目级 cliVersion 校验，旧版本 CLI 产生的条目不再命中
   const isStale = (entry: CachedIntent) => entry.cliVersion !== CLI_VERSION;
+  // v8.3.263: 负面结果条目（commands 为空）永不命中——「未匹配」是中间态，
+  // 固化会把识别修复永久锁死（如暗号句被固化为「未匹配到编排模式」）
+  const isNegative = (entry: CachedIntent) => !entry.result.commands || entry.result.commands.length === 0;
   const touch = async (entry: CachedIntent, hitType: string, extra = '') => {
     entry.hitCount++;
     entry.lastUsed = new Date().toISOString();
@@ -124,7 +127,7 @@ export async function getCachedIntent(input: string): Promise<AskResult | null> 
 
   // 1. 精确匹配
   const exact = cache.entries[input];
-  if (exact && !isStale(exact)) {
+  if (exact && !isStale(exact) && !isNegative(exact)) {
     await touch(exact, '精确');
     return exact.result;
   }
@@ -133,7 +136,7 @@ export async function getCachedIntent(input: string): Promise<AskResult | null> 
   const normalized = normalizeInput(input);
   if (normalized) {
     for (const entry of Object.values(cache.entries)) {
-      if (!isStale(entry) && entry.normalizedInput === normalized) {
+      if (!isStale(entry) && !isNegative(entry) && entry.normalizedInput === normalized) {
         await touch(entry, '语义', ` ≈ "${entry.input.slice(0, 30)}..."`);
         return entry.result;
       }
@@ -143,7 +146,7 @@ export async function getCachedIntent(input: string): Promise<AskResult | null> 
   // 3. 模糊匹配（编辑距离 ≤ 2，且长度比例合理）
   // 防止短字符串误匹配：如"补充测试"匹配"补充分析"（编辑距离 2 但语义完全不同）
   for (const [cachedInput, entry] of Object.entries(cache.entries)) {
-    if (isStale(entry)) continue;
+    if (isStale(entry) || isNegative(entry)) continue;
     const dist = levenshtein(input, cachedInput);
     const maxLen = Math.max(input.length, cachedInput.length);
     const minLen = Math.min(input.length, cachedInput.length);
@@ -155,14 +158,15 @@ export async function getCachedIntent(input: string): Promise<AskResult | null> 
     }
   }
 
-  // 惰性清理：存在旧版本条目时重建缓存结构，避免旧条目无限堆积
-  if (Object.keys(cache.entries).some(k => isStale(cache.entries[k]))) {
+  // 惰性清理：存在旧版本或负面结果条目时重建缓存结构，避免旧条目无限堆积
+  // v8.3.263: 一并清掉历史负面缓存（识别修复前固化的「未匹配」条目）
+  if (Object.keys(cache.entries).some(k => isStale(cache.entries[k]) || isNegative(cache.entries[k]))) {
     const totalBefore = Object.keys(cache.entries).length;
     cache.entries = Object.fromEntries(
-      Object.entries(cache.entries).filter(([, e]) => !isStale(e))
+      Object.entries(cache.entries).filter(([, e]) => !isStale(e) && !isNegative(e))
     );
     await saveCache(cache);
-    logger.info(`💾 意图缓存：已清除 ${totalBefore - Object.keys(cache.entries).length} 条旧版本缓存（当前 CLI ${CLI_VERSION}）`);
+    logger.info(`💾 意图缓存：已清除 ${totalBefore - Object.keys(cache.entries).length} 条旧版本/负面缓存（当前 CLI ${CLI_VERSION}）`);
   }
 
   return null;
@@ -175,6 +179,12 @@ export async function getCachedIntent(input: string): Promise<AskResult | null> 
 export async function cacheIntent(input: string, result: AskResult, source: string = 'host-ai'): Promise<void> {
   if (result.mode === 'ambiguous') {
     logger.debug(`💾 意图缓存：跳过 ambiguous 结果（歧义是中间态，不固化）: "${input.slice(0, 30)}..."`);
+    return;
+  }
+
+  // v8.3.263: 拒绝缓存「未匹配」负面结果——commands 为空的固化会永久锁死识别修复
+  if (!result.commands || result.commands.length === 0) {
+    logger.debug(`💾 意图缓存：跳过负面结果（未匹配不固化）: "${input.slice(0, 30)}..."`);
     return;
   }
 

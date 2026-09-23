@@ -1288,6 +1288,13 @@ export async function askEngine(input: string, options?: AskEngineOptions): Prom
     }
     case 'pipeline':
       localResult = handlePipeline(input);
+      // v8.3.263: 编排未匹配时回退单命令识别——「分析/执行」双动作词会误入
+      // pipeline 判定，但「对当前迭代执行需求分析并落盘」实为 analyze 单命令；
+      // 不兜底会输出「未匹配到编排模式」且被负面缓存固化
+      if (!localResult.commands || localResult.commands.length === 0) {
+        localCandidates = await recognizeIntent(input);
+        localResult = await handleMatch(input, isExplicit);
+      }
       break;
     default:
       localCandidates = await recognizeIntent(input);

@@ -69,6 +69,8 @@ export interface IntentResult {
   matchedTriggers: string[];
   extractedParams: Record<string, string>;
   contextAware: boolean;
+  /** v8.3.263+: 命中关键词 trigger 的总长度——同分时精确短语优先于宽泛单字（如「执行需求分析并落盘」应命中 analyze 而非 execute 的「执行」） */
+  triggerSpecificity?: number;
 }
 
 /** 命令映射条目 */
@@ -190,6 +192,10 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
       // 迭代级
       '分析需求', '需求分析', 'AI分析', '代码分析', '分析代码',
       '迭代分析', '分析迭代', '本迭代分析', '当前迭代分析',
+      // v8.3.263+: 分析落盘类短语——「对当前迭代执行需求分析并落盘」等 run 门禁
+      // 指引/宿主 AI 转述语，须优先于 execute 的「执行」宽 trigger 命中 analyze
+      '执行需求分析', '需求分析并落盘', '分析并落盘', '执行分析',
+      '执行迭代分析', '对当前迭代执行需求分析',
       // 重新/补充分析（v6.97.0+ 新增：覆盖 --supplement）
       '重新分析', '再分析', '重新生成分析', '重新跑分析',
       '补充分析', '追加分析', '更新分析', '修正分析',
@@ -207,6 +213,8 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     patterns: [
       '分析(.+)需求', '分析(.+)代码',
       '迭代(.+)分析', '本迭代(.+)分析',
+      // v8.3.263+: 执行分析/分析落盘类——压过 execute「执行」宽 trigger
+      '执行(.+)分析', '(.+)分析并落盘', '执行需求(.+)',
       // 重新/补充分析匹配模式
       '重新(.+)分析', '再(.+)分析', '补充(.+)分析',
       '更新(.+)分析', '修正(.+)分析', '完善(.+)分析',
@@ -707,6 +715,11 @@ export async function recognizeIntent(input: string): Promise<IntentResult[]> {
       // 6. 提取参数
       const extractedParams = extractParams(input, mapping);
 
+      // v8.3.263: 命中 trigger 总长度——同分决胜层，精确短语优先于宽泛词
+      const triggerSpecificity = matched
+        .filter((m) => m.startsWith('关键词:'))
+        .reduce((sum, m) => sum + ((m.split('"')[1] || '').length), 0);
+
       results.push({
         intent: mapping.intent,
         command: mapping.id,
@@ -715,13 +728,17 @@ export async function recognizeIntent(input: string): Promise<IntentResult[]> {
         matchedTriggers: matched,
         extractedParams,
         contextAware,
+        triggerSpecificity,
       });
     }
   }
 
-  // 按置信度降序排列
+  // 按置信度降序排列；同分时 trigger 精确度（命中短语总长）降序；再同则 priority 降序
   return results.sort((a, b) => {
     if (b.confidence !== a.confidence) return b.confidence - a.confidence;
+    if ((b.triggerSpecificity || 0) !== (a.triggerSpecificity || 0)) {
+      return (b.triggerSpecificity || 0) - (a.triggerSpecificity || 0);
+    }
     return b.priority - a.priority;
   });
 }
