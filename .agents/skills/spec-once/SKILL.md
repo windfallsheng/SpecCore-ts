@@ -18,11 +18,28 @@ disable-model-invocation: false
 
 ## 流程（逐步执行，禁止跳步，禁止自动续跑）
 
-### Step 0 侦察与范围确认
+### Step 0 入口识别与范围确认
+
+先识别用户给了什么，按入口执行预处理，再统一做范围确认：
+
+**入口 A：已切分好的功能单元**（用户指定了单元名或说「全部」）
+- 直接进入下方「范围确认」，无需预处理
+
+**入口 B：一个文档地址**（.md / .docx / .pdf）
+- `.md` → 执行 `speccore unitize -f "<路径>"`（多文档可 `--files "a.md=端1,b.md"`，端名须与 CONSTITUTION.md 一致）
+- `.docx/.pdf` → 先执行 `speccore doc2spec -f "<路径>"` 转换为 MD，再对 converted/ 下转换出的 MD 执行 unitize 切分
+- 切分完成后汇报单元清单，进入下方「范围确认」
+
+**入口 C：一句话需求**
+- 执行 `speccore req-doc "<用户原话>" --prompt --to <迭代>`，按 `[SPECCORE_PROMPT]` 把口语化需求整理为 PRD 级需求文档
+- 落盘后再走入口 B（unitize 切分该文档），进入下方「范围确认」
+
+**范围确认（三入口统一汇合点）**
 1. 执行 `speccore status` 查看当前迭代、功能单元清单（010-requirements/features/）、020-specs 已有产物
 2. 向用户确认本次范围：指定哪几个功能单元，还是全部
 3. 边界提醒：单会话建议 ≤3 个单元；全部单元时警告「上下文可能超载，建议分批或改用流水线」，用户坚持再继续
 4. 对每个单元检查 020-specs/{单元}/ 是否已有分析产物——有则问用户「跳过 / 重新分析」
+5. 目录/任务命名由 CLI 确定性生成（单元目录 {文档slug}-{序号}-{标题}、Task-{编号}-{slug}、子任务 Task-{父任务}-{端名}），不要自己改
 
 ### Step 1 澄清与分析
 1. 执行 `speccore analyze --prompt -I <迭代> [--feature <单元>]`
