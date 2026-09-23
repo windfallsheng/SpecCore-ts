@@ -12,7 +12,7 @@ import { progressCommand } from './commands/progress';
 import { reportCommand } from './commands/report';
 import { configCommand } from './commands/config';
 import { iterationCreateCommand } from './commands/iteration/create';
-import { iterationSplitCommand } from './commands/iteration/split';
+import { iterationTaskifyCommand } from './commands/iteration/taskify';
 import { iterationListCommand } from './commands/iteration/list';
 import { taskNewCommand } from './commands/task/new';
 import { taskListCommand } from './commands/task/list';
@@ -349,7 +349,7 @@ iterationCmd
   .option('--prune', '清理与当前 FUNCTION_MAP.md 不匹配的旧任务（移动到 archive）')
   .option('--ignore-specs-update', '跳过 020-specs/ 变更检测')
   .option('-g, --granularity <level>', '拆分粒度: macro(粗) | module(中,默认) | atomic(细)')
-  .action(iterationSplitCommand);
+  .action(iterationTaskifyCommand);
 
 // v8.3.223+: 顶层 taskify 命令（拆功能单元 → 开发任务）。
 // v8.3.231+: 移除 split 别名——「切需求 unitize」与「拆任务 taskify」两个动词明确分工，
@@ -374,7 +374,7 @@ function registerTaskifyAlias(cmdName: string): void {
     .option('--prune', '清理与当前 FUNCTION_MAP.md 不匹配的旧任务（移动到 archive ）')
     .option('--ignore-specs-update', '跳过 020-specs/ 变更检测')
     .option('-g, --granularity <level>', '拆分粒度: macro(粗) | module(中,默认) | atomic(细)')
-    .action(iterationSplitCommand);
+    .action(iterationTaskifyCommand);
 }
 registerTaskifyAlias('taskify');
 
@@ -966,10 +966,8 @@ program
   .command('analyze')
   .alias('al')
   .description('统一分析: 需求文档 + 源码目录 → 按范围(全局/迭代/任务)生成分析报告，--audit 审计模式')
-  .option('-I, --iteration <iteration>', '目标迭代 (scope=iteration|task 时必填)')
-  .option('-t, --task <task-id>', '任务 ID (--scope task 快捷方式)')
-  .option('--type <type>', '任务类型: feature|bugfix|refactor|research|review|test|docs|deploy|security|performance', 'feature')
-  .option('--scope <scope>', '输出范围: global(全局文档) | iteration(迭代, 默认) | task(任务) | overview(总览)')
+  .option('-I, --iteration <iteration>', '目标迭代 (scope=iteration 时必填)')
+  .option('--scope <scope>', '输出范围: global(全局文档) | iteration(迭代, 默认) | overview(总览)')
   .option('--src, --source <dirs>', '源码目录 (逗号分隔，如 --src <端1/src>,<端2/src>)')
   .option('--req, --requirements <files>', '需求文档 (逗号分隔: --req docs/a.md,docs/b.md)')
   .option('-o, --output <file>', '输出文件名 (覆盖默认)')
@@ -988,9 +986,8 @@ program
   .option('--doc <path>', '局部分析：类型文档（如 bugs/login-timeout, refactors/db-pool）')
   .option('--platform <platform>', '指定端分析：只分析指定端的需求（如 admin / h5 / app / miniapp）')
   .option('--apply <content>', '接收 AI 分析结果写入 ANALYSIS.md（配合 --prompt）')
-  .option('--audit-fix', '读取 QUALITY_AUDIT.md 并生成修复指令（配合 --prompt，最多 2 轮）')
-  .option('--sync', '任务分析后局部回写 020-specs/（只更新受影响的功能模块，不全覆盖）')
-  .option('--full', '全自动三阶段合成：逐端分析 → 跨端综合 → 功能单元需求合成（原 synthesize）')
+  .option('--audit-fix', '读取 QUALITY_AUDIT.md 并生成修复指令（配合 --prompt， 最多 2 轮）')
+  .option('--full', '全自动三阶段合成：逐端分析 → 跨端综合 → 功能单元需求合成（ 原 synthesize）')
   .option('--phase <n>', '单阶段合成执行: 1=逐端分析, 2=跨端综合, 3=功能单元合成')
   .option('--apply-phase <n>', '配合 --apply 使用，指定写入哪个阶段的合成结果')
   .option('--streaming', '启用流式全局分析（Phase 0→6，后端优先，实时关联调整）')

@@ -17,7 +17,6 @@ import { backupWithTimestamp, isTimestampBackup, shouldOverwrite, findProjectRoo
 import { cleanupByType } from './cleanup';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration, getIterationDir } from '../core/context';
-import { findTaskDir } from '../core/task-paths';
 import { resolveUnitSourcePath } from '../core/feature-source';
 import { extractQuestions, showQuestionChecklist } from '../core/question-checklist';
 import { showNextSteps } from '../core/next-steps';
@@ -86,13 +85,11 @@ export interface AnalyzeOptions {
   output?: string;
   auto?: boolean;
   interactive?: boolean;
-  task?: string;
-  type?: string;   // 任务类型: feature|bugfix|refactor/...
   platform?: string; // 指定端: backend/web/admin/...
   // NEW options (CLI passes comma-separated strings)
   source?: string;
   requirements?: string;
-  scope?: 'global' | 'iteration' | 'task' | 'overview';
+  scope?: 'global' | 'iteration' | 'overview';
   depth?: 'quick' | 'normal' | 'deep';
   prompt?: boolean;     // --prompt: 输出结构化分析 Prompt 到 stdout
   apply?: string;       // --apply: 接收 AI 分析结果写入 ANALYSIS.md
@@ -102,7 +99,6 @@ export interface AnalyzeOptions {
   supplement?: boolean; // --supplement: 补充模式（追加源码到现有报告）
   feature?: string;     // --feature: 局部分析单个功能模块
   doc?: string;         // --doc: 局部分析类型文档（如 bugs/login-timeout, refactors/db-pool）
-  sync?: boolean;       // --sync: 任务分析后局部回写 020-specs/（不全覆盖）
   auditFix?: boolean;   // --audit-fix: 读取质量审计报告并生成修复指令
   // synthesize 整合选项
   full?: boolean;       // --full: 全自动三阶段合成（原 synthesize --full）
@@ -1591,32 +1587,9 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       await generateQualityReport(iter);
     }
 
-    // v8.3.94+: 多子任务分析支持
-    const targetTasks = await resolveTargetTasks(options);
-    if (targetTasks.length > 1) {
-      logger.info(`🔄 批量分析 ${targetTasks.length} 个子任务: ${targetTasks.join(', ')}`);
-      const prompts: string[] = [];
-      for (let i = 0; i < targetTasks.length; i++) {
-        const taskId = targetTasks[i];
-        const singlePrompt = buildPromptText(await buildPrompt('analyze', {
-          iteration: iter, task: taskId, platform: options.platform,
-          analyzeOptions: options,
-        }));
-        prompts.push(`<!-- ═══════════════════════════════════════════ -->
-<!-- 任务 ${i + 1}/${targetTasks.length}: ${taskId} -->
-<!-- ═══════════════════════════════════════════ -->
-${singlePrompt}`);
-      }
-      const mergedPrompt = `# 批量分析 ${targetTasks.length} 个子任务\n\n请分别为以下每个任务生成分析文档。每个任务之间用分隔线隔开。\n\n${prompts.join('\n\n---\n\n')}`;
-      process.stdout.write(`[SPECCORE_PROMPT]\n${mergedPrompt}`);
-      process.exitCode = 10;
-      return;
-    }
-
     // v8.3.160+: 统一使用 buildPrompt 入口
     const promptObj = await buildPrompt('analyze', {
       iteration: iter,
-      task: options.task,
       platform: options.platform,
       analyzeOptions: options,
     });
@@ -1654,31 +1627,11 @@ ${singlePrompt}`);
     if (!isGlobalScope && !options.iteration) { logger.error('--apply 需要 --iteration'); return; }
     const iterDir = isGlobalScope ? undefined : await getIterationDir(options.iteration!);
 
-    // v8.3.94+: 多子任务 apply 检测
-    if (options.task && options.task.includes(',')) {
-      logger.error('❌ --apply 模式下暂不支持多任务批量写入');
-      logger.info('   请逐个任务执行 apply：');
-      const taskIds = parseTaskIds(options.task);
-      for (const taskId of taskIds) {
-        logger.info(`      speccore analyze --apply '<JSON>' -I ${options.iteration} --task ${taskId}`);
-      }
-      return;
-    }
-
-    const isTaskLevel = !isGlobalScope && !!options.task;
-    let taskDir: string | null = null;
-    if (isTaskLevel) {
-      const taskId = options.task!.startsWith('Task-') ? options.task! : `Task-${options.task!}`;
-      taskDir = await findTaskDir(join(iterDir!, '030-tasks'), taskId);
-      if (!taskDir) { logger.error(`未找到任务: ${taskId}`); return; }
-    }
-
     // v8.3.237+: Pipeline 推进逻辑抽取为共享函数——JSON / [DOC:] 多文档通道写入后
     // 提前 return，此前会跳过尾部的 Pipeline 推进（bug: 只有单文件模式能推进），
     // 现将「RAG 刷新 + Pipeline 推进」抽为共享函数，三个写入通道成功后都调用。
     // 返回 true 表示存在活跃 Pipeline 并已处理（调用点应直接 return，不再输出后续提示）。
     const advancePipelineAfterApply = async (): Promise<boolean> => {
-      if (isTaskLevel) return false;
 
       // v8.3.238+: 步骤完成检查——计算当前步骤尚未填充的骨架清单（相对 020-specs/ 的路径）。
       // 单文档模式一次 --apply 通常只写 1~2 个文档，但一个步骤（如 phase1-prompt）有多个
@@ -1901,7 +1854,7 @@ ${singlePrompt}`);
     }
 
     // v8.3.190+: 需求澄清验证 — off 跳过门禁；auto/on 下质量不足且未澄清则拒绝写入
-    if (!isGlobalScope && !isTaskLevel && clarifyMode !== 'off') {
+    if (!isGlobalScope && clarifyMode !== 'off') {
       const { hasValidClarifiedDocs } = await import('../core/requirement-clarifier');
       const hasClarifiedDocs = await hasValidClarifiedDocs(iterDir!);
       if (!hasClarifiedDocs && clarifyBlocks.size === 0) {
@@ -1977,25 +1930,7 @@ ${singlePrompt}`);
 
         let count = 0;
 
-        if (isTaskLevel && taskDir) {
-          // 任务级：写 Task/00-specs/（v6.44.0+ 统一写入 00-specs/）
-          const targetSubDir = options.platform && !isTaskLevel ? options.platform : '00-specs';
-          const taskSpecDir = join(taskDir, targetSubDir);
-          await ensureDir(taskSpecDir);
-          for (const [filename, content] of Object.entries(docs)) {
-            const fp = join(taskSpecDir, filename);
-            if (!(await shouldOverwrite(fp, !!options.interactive))) { logger.info(`   ⏭️  跳过: ${filename}`); continue; }
-            const bk = await backupWithTimestamp(fp);
-            if (bk) {
-              backups.push(bk);
-              logger.info(`   📦 ${filename} 已备份: ${basename(bk)}`);
-            }
-            await writeFile(fp, content);
-            count++;
-          }
-          const platformLabel = options.platform ? `/${options.platform}` : '';
-          logger.success(`✅ ${count} 个 Spec 文档已写入 ${options.task}${platformLabel}/（任务级，迭代基线不变）`);
-        } else if (isGlobalScope) {
+        if (isGlobalScope) {
           // 全局级：写入 .speccore/GLOBAL/（与 platforms/ 同级，非迭代目录）
           const globalBaseDir = join(_projectRoot, '.speccore', 'GLOBAL');
           await ensureDir(globalBaseDir);
@@ -2462,21 +2397,7 @@ ${singlePrompt}`);
       try {
         const docs: Record<string, string> = JSON.parse(options.apply);
         let count = 0;
-        if (isTaskLevel && taskDir) {
-          const targetSubDir = options.platform && !isTaskLevel ? options.platform : '00-specs';
-          const taskSpecDir = join(taskDir, targetSubDir);
-          await ensureDir(taskSpecDir);
-          for (const [filename, content] of Object.entries(docs)) {
-            const fp = join(taskSpecDir, filename);
-            if (!(await shouldOverwrite(fp, !!options.interactive))) { logger.info(`   ⏭️  跳过: ${filename}`); continue; }
-            const bk = await backupWithTimestamp(fp);
-            if (bk) { backups.push(bk); logger.info(`   📦 ${filename} 已备份: ${basename(bk)}`); }
-            await writeFile(fp, content);
-            count++;
-          }
-          const platformLabel = options.platform ? `/${options.platform}` : '';
-          logger.success(`✅ ${count} 个 Spec 文档已写入 ${options.task}${platformLabel}/（任务级，迭代基线不变）`);
-        } else if (isGlobalScope) {
+        if (isGlobalScope) {
           const globalBaseDir = join(_projectRoot, '.speccore', 'GLOBAL');
           await ensureDir(globalBaseDir);
           const globalSet = new Set(GLOBAL_SPEC_FILES);
@@ -2664,23 +2585,7 @@ ${singlePrompt}`);
     const hasClarifyMarkers = /\[CLARIFY:[^\]]+\]/.test(options.apply);
 
     // 单文件模式
-    if (!hasClarifyMarkers && isTaskLevel && taskDir) {
-      // 任务级：写 Task/00-specs/（v6.44.0+）
-      const targetSubDir = '00-specs';
-      const taskSpecDir = join(taskDir, targetSubDir);
-      await ensureDir(taskSpecDir);
-      const taskAnalysisPath = join(taskSpecDir, 'ANALYSIS.md');
-      if (await shouldOverwrite(taskAnalysisPath, !!options.interactive)) {
-        const taskBackup = await backupWithTimestamp(taskAnalysisPath);
-        if (taskBackup) {
-          backups.push(taskBackup);
-          logger.info(`   📦 已备份: ${taskBackup.split('/').pop()}`);
-        }
-        await writeFile(taskAnalysisPath, options.apply);
-        const platformLabel = options.platform ? `/${options.platform}` : '';
-        logger.success(`✅ ANALYSIS.md 已写入 ${options.task}${platformLabel}/`);
-      } else { logger.info(`   ⏭️  用户取消覆盖`); }
-    } else if (!hasClarifyMarkers && isGlobalScope) {
+    if (!hasClarifyMarkers && isGlobalScope) {
       // 全局级：写 .speccore/GLOBAL/ANALYSIS.md
       const globalDir = join(_projectRoot, '.speccore', 'GLOBAL');
       await ensureDir(globalDir);
@@ -2710,25 +2615,6 @@ ${singlePrompt}`);
         logger.success(`✅ ANALYSIS.md 已写入 020-specs/overview/`);
       } else { logger.info(`   ⏭️  用户取消覆盖`); }
     }
-    // ── --sync: 任务分析后局部回写 020-specs/ ──
-    if (options.sync && isTaskLevel && taskDir) {
-      logger.info('');
-      logger.info('🔄 局部回写: 将任务分析结果同步到 020-specs/ ...');
-      try {
-        const { syncTaskToSpecs } = await import('../core/spec-merger');
-        const iterDirPath = iterDir!;
-        const taskName = options.task || '';
-        const mergeResult = await syncTaskToSpecs(iterDirPath, taskDir, taskName);
-        if (mergeResult.filesUpdated > 0) {
-          logger.success(`✅ 局部回写完成: ${mergeResult.filesUpdated} 个 spec 文件已更新`);
-        } else {
-          logger.info('   ℹ️ 未找到匹配的 spec 文件，无需回写');
-        }
-      } catch (e) {
-        logger.debug('局部回写失败（非关键）:', e);
-      }
-    }
-
     printBackupSummary();
 
     // v8.3.237+: RAG 刷新 + Pipeline 推进已抽取为 advancePipelineAfterApply（见 apply 分支开头），
@@ -2737,7 +2623,7 @@ ${singlePrompt}`);
     if (pipelineHandled) return;
 
     // ── v6.64.0+: Phase 1 完成后自动触发 Phase 2（仅多端项目，非 Pipeline 模式）──
-    if (!options.phase && !isTaskLevel && options.iteration) {
+    if (!options.phase && options.iteration) {
       // 检查是否有多个端
       const platforms = await parsePlatformList();
       
@@ -2812,7 +2698,7 @@ ${singlePrompt}`);
       } catch { /* ignore */ }
     }
 
-    const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, task: options.task, type: options.type, scope: options.scope, withCode: options.withCode, platform: options.platform, phase: options.phase, autoMode: options.auto }, options, needsClarify ? { needsClarify, clarifyTargets } : undefined);
+    const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, scope: options.scope, withCode: options.withCode, platform: options.platform, phase: options.phase, autoMode: options.auto }, options, needsClarify ? { needsClarify, clarifyTargets } : undefined);
     await recordAiTrace(iter, 'prompt-out', { mode: 'analyze-main', scope: options.scope, promptLength: prompt.length, prompt });
     process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
 
@@ -3006,154 +2892,12 @@ async function generateIterationSpecDocs(iteration: string): Promise<void> {
 }
 
 /**
- * 任务级文档补全 (原 perTaskAnalyze 逻辑)
- */
-async function enrichTaskDocs(iteration: string, taskId: string, reqFiles: string[]): Promise<void> {
-  const { readdirSync } = require('fs');
-  const iterDir = await getIterationDir(iteration);
-  
-  if (!(await pathExists(iterDir))) return;
-
-  const entries = readdirSync(iterDir, { withFileTypes: true });
-  const taskEntry = entries.find((e: any) => e.isDirectory() && e.name.startsWith(taskId));
-  // enrichTaskDocs continues, but taskEntry logic remains...
-  if (!taskEntry) return;
-  
-  if (!taskEntry) {
-    logger.info(`   ℹ️ 未找到任务目录 ${taskId}，跳过文档补全`);
-    return;
-  }
-
-  const fullTaskDir = join(iterDir, taskEntry.name);
-  // _shared/ → 00-specs/
-  const specsDir = (await pathExists(join(fullTaskDir, '_shared')))
-    ? join(fullTaskDir, '_shared')
-    : join(fullTaskDir, '00-specs');
-  
-  if (!(await pathExists(specsDir))) return;
-
-  let reqContent = '';
-  
-  // 读取任务 REQ 或传入的需求文件
-  const taskReqPath = join(specsDir, 'REQ.md');
-  if (await pathExists(taskReqPath)) {
-    reqContent = await require('fs-extra').readFile(taskReqPath, 'utf-8');
-  } else if (reqFiles.length > 0) {
-    for (const f of reqFiles) {
-      if (await pathExists(f)) reqContent += await require('fs-extra').readFile(f, 'utf-8') + '\n';
-    }
-  }
-
-  if (!reqContent) return;
-
-  // 补全 TECH.md
-  const techPath = join(specsDir, 'TECH.md');
-  let techContent = '';
-  if (await pathExists(techPath)) {
-    techContent = await require('fs-extra').readFile(techPath, 'utf-8');
-    if (!techContent.includes('## 分析建议')) {
-      const items: string[] = [];
-      const apis = (reqContent.match(/\/api\/[a-zA-Z0-9\/-]+/g) || []).map((a: string) => a.trim());
-      if (apis.length > 0) {
-        items.push(`检测到 ${apis.length} 个 API:`);
-        for (const api of [...new Set(apis)]) items.push(`  \`${api}\``);
-      }
-      if (reqContent.match(/数据库|表|DDL/)) items.push('涉及数据库变更，请补充 DDL');
-      if (reqContent.match(/权限|RBAC|鉴权/)) items.push('涉及权限控制，注意鉴权边界');
-      if (items.length > 0) {
-        techContent += `\n\n---\n\n## 分析建议\n\n> 自动生成\n\n${items.map(i => `- ${i}`).join('\n')}\n`;
-        await writeFile(techPath, techContent);
-        logger.info(`   📄 更新 TECH.md`);
-      }
-    }
-  }
-
-  // 补全 TEST.md（v6.49.9+: 扫描平铺的端目录）
-  const testFiles: string[] = [];
-  const subtaskPaths = await getSubtaskDirs(fullTaskDir);
-  for (const stDir of subtaskPaths) {
-    const fp = join(stDir, 'TEST.md');
-    if (await pathExists(fp)) testFiles.push(fp);
-  }
-  if (testFiles.length === 0) {
-    const legacy = join(fullTaskDir, '99-artifacts', 'TEST.md');
-    if (await pathExists(legacy)) testFiles.push(legacy);
-  }
-  for (const testPath of testFiles) {
-    let testContent = await require('fs-extra').readFile(testPath, 'utf-8');
-    if (!testContent.includes('## 补充分析')) {
-      const items: string[] = [];
-      if (reqContent.includes('POST') || reqContent.includes('创建')) items.push('[ ] 正常参数 + 异常参数测试');
-      if (reqContent.includes('GET') || reqContent.includes('查询')) items.push('[ ] 分页 / 筛选 / 空结果测试');
-      if (reqContent.includes('DELETE') || reqContent.includes('删除')) items.push('[ ] 删除确认 + 级联处理');
-      if (reqContent.includes('权限') || reqContent.includes('RBAC')) items.push('[ ] 无权限访问 + 越权检测');
-      if (items.length > 0) {
-        testContent += `\n\n---\n\n## 补充分析\n${items.join('\n')}\n`;
-        await writeFile(testPath, testContent);
-        logger.info(`   📄 更新 ${relative(fullTaskDir, testPath)}`);
-      }
-    }
-  }
-
-  // 补全 REVIEW.md（v6.49.9+: 扫描平铺的端目录）
-  const reviewFiles: string[] = [];
-  for (const stDir of subtaskPaths) {
-    const fp = join(stDir, 'REVIEW.md');
-    if (await pathExists(fp)) reviewFiles.push(fp);
-  }
-  if (reviewFiles.length === 0) {
-    const legacy = join(fullTaskDir, '99-artifacts', 'REVIEW.md');
-    if (await pathExists(legacy)) reviewFiles.push(legacy);
-  }
-  for (const reviewPath of reviewFiles) {
-    let reviewContent = await require('fs-extra').readFile(reviewPath, 'utf-8');
-    if (!reviewContent.includes('## 本任务专项检查')) {
-      const items: string[] = [];
-      if (reqContent.includes('POST') || reqContent.includes('创建')) items.push('[ ] 参数校验 + 幂等性处理');
-      if (reqContent.includes('数据库') || reqContent.includes('表')) items.push('[ ] 索引覆盖 + 迁移脚本可回滚');
-      if (reqContent.includes('权限') || reqContent.includes('RBAC')) items.push('[ ] 鉴权注解/中间件正确配置');
-      if (items.length > 0) {
-        reviewContent += `\n\n---\n\n## 本任务专项检查\n${items.join('\n')}\n`;
-        await writeFile(reviewPath, reviewContent);
-        logger.info(`   📄 更新 ${relative(fullTaskDir, reviewPath)}`);
-      }
-    }
-  }
-
-  // 创建缺失文件（v6.49.9+: 扫描平铺的端目录）
-  const subtaskDirs: string[] = subtaskPaths;
-  // 结构回退
-  if (subtaskDirs.length === 0) {
-    const legacyArtifacts = join(fullTaskDir, '99-artifacts');
-    if (await pathExists(legacyArtifacts)) subtaskDirs.push(legacyArtifacts);
-    else subtaskDirs.push(fullTaskDir); // 最后回退到任务根
-  }
-
-  const templates: [string, string][] = [
-    ['RISK.md', `# 风险评估\n\n> analyze | ${new Date().toISOString().split('T')[0]}\n\n## 风险矩阵\n| 风险 | 可能 | 影响 | 缓解 |\n| :--- | :--- | :--- | :--- |\n| 兼容性 | 中 | 高 | 版本号+测试 |\n\n## 回滚\n1. 触发: 线上错误率 > 1%\n2. 步骤: git revert → 重部署\n`],
-    ['DEPS.md', `# 依赖清单\n\n## 上游依赖\n| 服务 | 版本 | 用途 |\n| :--- | :--- | :--- |\n| _待补充_ | — | — |\n`],
-    ['MONITOR.md', `# 监控\n\n## 关键指标\n| 指标 | 阈值 | 级别 |\n| :--- | :--- | :--- |\n| 成功率 | <99.9% | P1 |\n| P99延迟 | >1000ms | P2 |\n`],
-  ];
-
-  for (const subtaskDir of subtaskDirs) {
-    for (const [filename, content] of templates) {
-      const fp = join(subtaskDir, filename);
-      if (!(await pathExists(fp))) {
-        await writeFile(fp, content);
-        logger.info(`   📄 创建 ${relative(fullTaskDir, fp)}`);
-      }
-    }
-  }
-}
-
-/**
  * 从 process.argv 手动解析选项 (Commander.js 偶发不传递部分选项)
  */
 function parseArgv(options: AnalyzeOptions): void {
   const argv = process.argv;
   const strFlags: [string[], (v: string) => void][] = [
     [['--iteration', '-i', '-I'], (v) => { options.iteration = v; }],
-    [['--task', '-t'], (v) => { options.task = v; }],
     [['--platform'], (v) => { options.platform = v; }],
     [['--scope'], (v) => { options.scope = v as any; }],
     [['--src', '--source'], (v) => { options.source = v; }],
@@ -3800,12 +3544,9 @@ async function buildLayer3ModuleContext(projectRoot: string): Promise<string | n
 
 // ── buildMultiDocPrompt: 多文档协议 ──
 // v8.3.160+: 改为 export，供 prompt-builder.ts 统一调用
-export async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; task?: string; type?: string; scope?: string; withCode?: boolean; platform?: string; phase?: string; autoMode?: boolean; feature?: string }, options?: AnalyzeOptions, clarifyCtx?: { needsClarify: boolean; clarifyTargets: { path: string; level: string }[] }): Promise<string> {
+export async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; scope?: string; withCode?: boolean; platform?: string; phase?: string; autoMode?: boolean; feature?: string }, options?: AnalyzeOptions, clarifyCtx?: { needsClarify: boolean; clarifyTargets: { path: string; level: string }[] }): Promise<string> {
   const iter = ctx.iteration || '当前迭代';
-  const task = ctx.task ? ` — ${ctx.task}` : '';
-  const taskType = ctx.type || 'feature';
   const now = new Date().toISOString().split('T')[0];
-  const isTask = ctx.scope === 'task' || !!ctx.task;
   const isGlobal = ctx.scope === 'global';
   const autoMode = ctx.autoMode || false;
 
@@ -5134,7 +4875,7 @@ sequenceDiagram
     bugfix:     ['ANALYSIS.md','TECH.md','TEST.md','DEV_GUIDE.md'],
     research:   ['ANALYSIS.md','DEV_GUIDE.md'],
   };
-  const includeDocs = isTask ? (DOC_MATRIX[taskType] || DOC_MATRIX['feature']) : DOC_MATRIX['feature'];
+  const includeDocs = DOC_MATRIX['feature'];
 
   // ── v6.61.0+: 恢复 Phase 1/Phase 2 分步逻辑，但 CLI 自动触发 Phase 2 ──
   // v8.3.160+: 改为功能模块优先 — 全局只保留索引文档，每个功能模块有自己的综合文档
@@ -5182,7 +4923,7 @@ sequenceDiagram
   // 替代 v7.5.0 的 detectIterationDocsStatus（基于文件是否存在）
   let perDocStatus: Awaited<ReturnType<typeof detectSkeletonProgress>> | null = null;
   let lastDocQuality: { docName: string; score: number; issues: string[] } | null = null;
-  if (!isGlobal && !isTask && !ctx.phase && ctx.iteration && ctx.iteration !== 'GLOBAL') {
+  if (!isGlobal && !ctx.phase && ctx.iteration && ctx.iteration !== 'GLOBAL') {
     try {
       const iterDir = await getIterationDir(ctx.iteration);
       if (iterDir) {
@@ -5295,37 +5036,6 @@ sequenceDiagram
     }
   }
 
-  // ── 任务级文档覆盖：00-specs/ 使用任务级文档集（v6.44.0+） ──
-  if (isTask && !ctx.phase) {
-    const TASK_DOCS: Record<string, string[]> = {
-      feature:    ['REQ.md', 'TECH.md', 'TASK.md', 'SCHEMA.md'],
-      refactor:   ['REQ.md', 'TECH.md', 'TASK.md'],
-      bugfix:     ['REQ.md', 'TECH.md'],
-      research:   ['REQ.md'],
-    };
-    const taskDocNames = TASK_DOCS[taskType] || TASK_DOCS['feature'];
-    taskDocs = taskDocs.filter(([n]) => taskDocNames.includes(n));
-    // 补充 TASK.md 和 SCHEMA.md（不在全局 docs 数组中）
-    if (taskDocNames.includes('TASK.md') && !taskDocs.find(([n]) => n === 'TASK.md')) {
-      taskDocs.push(['TASK.md', '']);
-    }
-    if (taskDocNames.includes('SCHEMA.md') && !taskDocs.find(([n]) => n === 'SCHEMA.md')) {
-      taskDocs.push(['SCHEMA.md', '']);
-    }
-    // 任务级模板覆盖（v6.44.0+）
-    for (const doc of taskDocs) {
-      if (doc[0] === 'REQ.md') {
-        doc[1] = `# \u672c\u4efb\u52a1\u9700\u6c42\u89c4\u683c\n\n> ${iter} | ${ctx.task} | ${now}\n\n## \u5199\u4f5c\u8981\u6c42\n\u6839\u636e split \u4ea7\u51fa\u7684\u9700\u6c42\u5207\u7247\uff0c\u7ed3\u5408\u5168\u5c40\u4e0a\u4e0b\u6587\uff0c\u91cd\u65b0\u7ec4\u7ec7\u672c\u4efb\u52a1\u7684\u9700\u6c42\u89c4\u683c\uff1a\n- \u660e\u786e\u672c\u4efb\u52a1\u7684\u9a8c\u6536\u6807\u51c6\uff08\u53ef\u6d4b\u8bd5\u7684\u3001\u5177\u4f53\u7684\uff09\n- \u7ec6\u5316\u4e1a\u52a1\u89c4\u5219\u548c\u8fb9\u754c\u6761\u4ef6\n- \u5217\u51fa\u5f02\u5e38\u573a\u666f\u548c\u5904\u7406\u65b9\u5f0f\n- \u6807\u6ce8\u4e0e\u5176\u4ed6 Task \u7684\u4f9d\u8d56\u5173\u7cfb\n`;
-      } else if (doc[0] === 'TECH.md') {
-        doc[1] = `# \u672c\u4efb\u52a1\u6280\u672f\u65b9\u6848\n\n> ${iter} | ${ctx.task} | ${now}\n\n## \u5199\u4f5c\u8981\u6c42\n\u57fa\u4e8e overview/TECH.md \u7684\u6574\u4f53\u67b6\u6784\uff0c\u7ec6\u5316\u5230\u51fd\u6570/\u63a5\u53e3\u7ea7\u522b\uff1a\n- \u5177\u4f53\u7684\u63a5\u53e3\u5b9a\u4e49\uff08\u8def\u5f84/\u53c2\u6570/\u54cd\u5e94\uff09\n- \u6570\u636e\u6a21\u578b\u8bbe\u8ba1\uff08Entity/DTO/VO \u5b57\u6bb5\u6620\u5c04\uff09\n- \u6838\u5fc3\u4e1a\u52a1\u903b\u8f91\u7684\u4f2a\u4ee3\u7801\u6216\u6d41\u7a0b\u63cf\u8ff0\n- \u524d\u7aef\u7ec4\u4ef6\u62c6\u5206\u548c\u72b6\u6001\u8bbe\u8ba1\n- \u5fc5\u987b\u4e0e overview/TECH.md \u7684\u6574\u4f53\u67b6\u6784\u4fdd\u6301\u4e00\u81f4\n`;
-      } else if (doc[0] === 'TASK.md') {
-        doc[1] = `# \u5b9e\u65bd\u8ba1\u5212\n\n> ${iter} | ${ctx.task} | ${now}\n\n## \u5199\u4f5c\u8981\u6c42\n\u6839\u636e\u672c\u4efb\u52a1\u7684\u9700\u6c42\u548c\u6280\u672f\u65b9\u6848\uff0c\u5236\u5b9a\u5177\u4f53\u5b9e\u65bd\u6b65\u9aa4\uff1a\n- \u6309\u5f00\u53d1\u987a\u5e8f\u5217\u51fa\u5177\u4f53\u6b65\u9aa4\n- \u6bcf\u4e2a\u6b65\u9aa4\u6709\u660e\u786e\u7684\u5b8c\u6210\u6807\u51c6\n- \u6807\u6ce8\u6b65\u9aa4\u95f4\u7684\u4f9d\u8d56\u5173\u7cfb\n- \u4f30\u7b97\u6bcf\u6b65\u7684\u5de5\u4f5c\u91cf\n`;
-      } else if (doc[0] === 'SCHEMA.md') {
-        doc[1] = `# \u6570\u636e\u6a21\u578b\n\n> ${iter} | ${ctx.task} | ${now}\n\n## \u5199\u4f5c\u8981\u6c42\n\u68b3\u7406\u672c\u4efb\u52a1\u6d89\u53ca\u7684\u6570\u636e\u6a21\u578b\u53d8\u66f4\uff1a\n- \u5b8c\u6574\u7684\u5b57\u6bb5\u5b9a\u4e49\uff08\u540d\u79f0/\u7c7b\u578b/\u7ea6\u675f/\u8bf4\u660e\uff09\n- \u7d22\u5f15\u8bbe\u8ba1\n- DDL \u8bed\u53e5\uff08\u5982\u9002\u7528\uff09\n- \u5b57\u6bb5\u2192API \u54cd\u5e94\u5b57\u6bb5\u7684\u6620\u5c04\u5173\u7cfb\n`;
-      }
-    }
-  }
-
   // v7.2.0+: 细粒度分析 — 只生成指定文档的指定功能
   if (options?.docName && options?.featureName && !isGlobal) {
     const targetDoc = options.docName.endsWith('.md') ? options.docName : `${options.docName}.md`;
@@ -5339,8 +5049,8 @@ sequenceDiagram
   }
 
   // ── 用户自定义模板集成（v6.45.0+）──
-  const templateLevel = isGlobal ? 'global' : (isTask ? 'task' : 'iteration');
-  const userTemplates = await loadUserTemplates(templateLevel, isTask ? taskType : undefined, ctx.platform);
+  const templateLevel = isGlobal ? 'global' : 'iteration';
+  const userTemplates = await loadUserTemplates(templateLevel, undefined, ctx.platform);
   const hasUserTemplates = userTemplates.size > 0;
 
   if (hasUserTemplates) {
@@ -5365,7 +5075,7 @@ sequenceDiagram
   }
 
   const featureLabel = ctx.feature ? ` · 功能模块:${ctx.feature}` : '';
-  let prompt = `\n# 任务: ${command}${task} (${taskDocs.length}个文档 · ${isTask ? `类型:${taskType}` : '迭代全量'}${ctx.phase ? ` · Phase ${ctx.phase}` : ''}${featureLabel})\n\n`;
+  let prompt = `\n# 任务: ${command} (${taskDocs.length}个文档 · 迭代全量${ctx.phase ? ` · Phase ${ctx.phase}` : ''}${featureLabel})\n\n`;
 
   // v8.3.160+: 注入子 Agent 角色定义
   if (agentContextText) {
@@ -5373,7 +5083,7 @@ sequenceDiagram
   }
 
   // v8.3.0+: 如果检测到需求质量不足，在 prompt 开头注入强制澄清阶段
-  if (needsClarify && !isGlobal && !isTask && !ctx.phase) {
+  if (needsClarify && !isGlobal && !ctx.phase) {
     const now = new Date().toISOString();
     prompt += `## 🚨 Phase 0: 需求澄清（强制前置 — 未完成则禁止进入 Phase 1）\n\n`;
     prompt += `检测到以下需求文档质量不足，**必须先完成专业化整理，才能继续技术分析**：\n\n`;
@@ -5471,7 +5181,7 @@ status: "clarified"
     }
   }
 
-  if (!isGlobal && !isTask && ctx.iteration && ctx.iteration !== 'GLOBAL') {
+  if (!isGlobal && ctx.iteration && ctx.iteration !== 'GLOBAL') {
     try {
       const iterDir = await getIterationDir(ctx.iteration);
       const reportPath = join(iterDir, '010-requirements', 'CLARIFY_REPORT.md');
@@ -5497,7 +5207,7 @@ status: "clarified"
   }
 
   // ── v6.67.0+: 在 prompt 开头就明确完整工作流程 ──
-  if (!ctx.phase && !isTask) {
+  if (!ctx.phase) {
     const platforms = await parsePlatformList();
     if (platforms.length >= 2) {
       prompt += `## 📋 完整工作流程（两阶段分析）\n\n`;
@@ -5542,7 +5252,7 @@ status: "clarified"
   // ── v8.1.0+: 逐文档模式自动注入 PRD 内容 + 前序文档摘要 ──
   // v8.3.2+ 修复：PRD 注入不再仅限逐文档模式，Phase 1/2 模式下也必须注入需求内容
   // v8.3.160+: 改为路径引用模式（不再全文塞进，让 AI 按需 Read）
-  if (!isGlobal && !isTask && ctx.iteration && ctx.iteration !== 'GLOBAL') {
+  if (!isGlobal && ctx.iteration && ctx.iteration !== 'GLOBAL') {
     try {
       const iterDirForCtx = await getIterationDir(iter);
       if (iterDirForCtx) {
@@ -5642,7 +5352,7 @@ status: "clarified"
   prompt += `- 分析过程中，始终把迭代名称当作透明信息处理，不做任何功能推断\n\n`;
   prompt += `## 分析范围说明\n`;
   // v8.3.167+: 功能模块级分析专属指令
-  if (ctx.feature && !isTask) {
+  if (ctx.feature) {
     prompt += `- 当前是**功能模块级分析**，只分析「**${ctx.feature}**」功能模块\n`;
     prompt += `- **只生成该功能模块的 overview/ 文档**，不要分析其他功能模块\n`;
     prompt += `- 文档写入路径格式：\`${ctx.feature}/overview/{文件名}\`（如 \`${ctx.feature}/overview/REQUIREMENT.md\`）\n`;
@@ -5650,49 +5360,6 @@ status: "clarified"
     prompt += `- 分析前请先 Read 全局索引文档，确保本模块内容与全局文档一致\n`;
     prompt += `- 如果需求文档中该模块的描述不完整，标注"文档未充分描述"，不要自行脑补\n\n`;
   }
-  if (isTask) {
-    prompt += `- 当前是**任务级分析**，类型为 \`${taskType}\`，只需产出 ${taskDocs.length} 个文档：${taskDocs.map(([n]) => n).join('、')}\n`;
-    prompt += `- bugfix: 聚焦根因分析和修复验证；research: 聚焦技术调研；review: 聚焦代码审查\n`;
-    prompt += `- feature/refactor: 全量分析（功能、接口、数据、规则）\n`;
-    prompt += `- **双层解耦**：分析结果写入 Task/00-specs/，不覆盖 020-specs/（迭代基线）\n`;
-    // ── 任务级深度分析指令（v6.44.0+）──
-    prompt += `\n## 🧠 任务级深度分析\n\n`;
-    prompt += `当前是对 **单个 Task** 的深度分析。split 已在 00-specs/ 中生成了基础内容（机械提取），你需要 Read 这些内容 + 全局上下文，重新生成**任务级深度分析**。\n\n`;
-    prompt += `### Step 1: 读取已有任务文档（split 产出）\n`;
-    prompt += `- Read ${ctx.task}/00-specs/REQ.md → 本任务的需求切片\n`;
-    prompt += `- Read ${ctx.task}/00-specs/TECH.md → 本任务的技术方案框架\n`;
-    prompt += `- Read ${ctx.task}/00-specs/TASK.md（如存在）→ 已有的实施计划\n`;
-    prompt += `- Read ${ctx.task}/00-specs/SCHEMA.md（如存在）→ 已有的数据模型\n`;
-    prompt += `- Read ${ctx.task}/_shared/API_CONTRACT.yaml（如存在）→ 共享 API 契约\n\n`;
-    prompt += `### Step 2: 读取全局上下文（作为参考）\n`;
-    prompt += `- Read .speccore/CONSTITUTION.md → 项目配置\n`;
-    prompt += `- Read 020-specs/PLATFORMS.md → 端列表\n`;
-    prompt += `- Read 020-specs/overview/REQUIREMENT.md → 迭代综合需求规格\n`;
-    prompt += `- Read 020-specs/overview/TECH.md → 迭代综合技术架构\n`;
-    prompt += `- Read 020-specs/overview/ANALYSIS.md → 迭代综合分析报告\n`;
-    prompt += `- Read 020-specs/{功能模块}/{本任务端名}/TECH.md → 该端专属技术方案\n\n`;
-    prompt += `### Step 3: 撰写任务级深度分析文档\n\n`;
-    prompt += `**REQ.md** — 本任务的需求规格（不是 overview/REQUIREMENT.md 的复制）：\n`;
-    prompt += `- 明确本任务的验收标准（可测试的、具体的）\n`;
-    prompt += `- 细化业务规则和边界条件\n`;
-    prompt += `- 列出本任务涉及的异常场景\n\n`;
-    prompt += `**TECH.md** — 本任务的实现方案（基于全局架构，细化到函数/接口级）：\n`;
-    prompt += `- 具体的接口定义（路径/参数/响应）\n`;
-    prompt += `- 数据模型设计（Entity/DTO/VO 字段映射）\n`;
-    prompt += `- 核心业务逻辑的伪代码或流程描述\n`;
-    prompt += `- 前端组件拆分和状态设计\n`;
-    prompt += `- 必须与 overview/TECH.md 的整体架构保持一致\n\n`;
-    prompt += `**TASK.md** — 本任务的实施步骤：\n`;
-    prompt += `- 按开发顺序列出具体步骤\n`;
-    prompt += `- 每个步骤有明确的完成标准\n`;
-    prompt += `- 标注步骤间的依赖关系\n\n`;
-    prompt += `**SCHEMA.md** — 本任务涉及的数据模型：\n`;
-    prompt += `- 完整的字段定义（名称/类型/约束/说明）\n`;
-    prompt += `- 索引设计\n`;
-    prompt += `- DDL 语句（如适用）\n\n`;
-    prompt += `### 写入方式\n`;
-    prompt += `speccore analyze --apply '{"REQ.md":"...","TECH.md":"...","TASK.md":"...","SCHEMA.md":"..."}' -I ${iter} --task ${ctx.task || 'Task-NNN'}\n\n`;
-  } else {
     prompt += `- 当前是**迭代级分析**，需产出全部 8 个文档，覆盖需求→技术→测试→评审→风险→依赖→监控→UI规格\n`;
     if (ctx.platform) {
       prompt += `- **只分析 ${ctx.platform} 端**：从 CONSTITUTION.md 读取端列表，但只生成 ${ctx.platform} 端的专属文档\n`;
@@ -5987,7 +5654,6 @@ status: "clarified"
       prompt += `  - 状态管理：全局状态设计、与后端数据同步策略\n`;
       prompt += `  - 适配/性能/安全等前端专项（按端类型选择）\n\n`;
     }
-  }
   // v6.60.0+: 文档与端的对应关系（不再分 Phase）
   // v6.71.0+: 前后端文档差异化
   prompt += `### 文档与端的对应关系\n`;
@@ -6014,17 +5680,14 @@ status: "clarified"
     prompt += `- 分析完成后会自动生成 QUALITY_AUDIT.md 质量报告，检查各端内容是否完整\n`;
     }
   // 步骤 2-7 已在上面的 phase 分支中处理
-  const taskFlag = isTask && ctx.task ? ` --task ${ctx.task}` : '';
   const platformFlag = ctx.platform ? ` --platform ${ctx.platform}` : '';
 
   // ── 链式生成指令（v6.45.0+）──
-  if (hasUserTemplates || isTask) {
+  if (hasUserTemplates) {
     prompt += `\n## 🔗 链式生成（重要）\n\n`;
     prompt += `请按以下顺序**逐个生成**文档，每个文档生成后立即 --apply 写入，然后 Read 自己的产出再生成下一个：\n\n`;
     // 定义生成顺序
-    const chainOrder = isTask
-      ? ['REQ.md', 'TECH.md', 'SCHEMA.md', 'TASK.md']
-      : ['REQUIREMENT.md', 'FUNCTION_MAP.md', 'INTERACTION_MAP.md', 'API_CONTRACT.yaml', 'ANALYSIS.md', 'TECH.md', 'TEST.md', 'REVIEW.md', 'RISK.md', 'DEPS.md', 'MONITOR.md', 'UI_SPEC.md', 'DEV_GUIDE.md'];
+    const chainOrder = ['REQUIREMENT.md', 'FUNCTION_MAP.md', 'INTERACTION_MAP.md', 'API_CONTRACT.yaml', 'ANALYSIS.md', 'TECH.md', 'TEST.md', 'REVIEW.md', 'RISK.md', 'DEPS.md', 'MONITOR.md', 'UI_SPEC.md', 'DEV_GUIDE.md'];
     const orderedDocs = taskDocs.filter(([n]) => chainOrder.includes(n));
     const customDocs = taskDocs.filter(([n]) => !chainOrder.includes(n));
     const ordered = [...orderedDocs.sort((a, b) => chainOrder.indexOf(a[0]) - chainOrder.indexOf(b[0])), ...customDocs];
@@ -6038,19 +5701,19 @@ status: "clarified"
     }
     prompt += `\n每个文档用单独的 --apply 调用写入：\n`;
     for (const doc of ordered) {
-      prompt += `speccore analyze --apply '{"${doc[0]}":"..."}' -I ${iter}${taskFlag}${platformFlag}\n`;
+      prompt += `speccore analyze --apply '{"${doc[0]}":"..."}' -I ${iter}${platformFlag}\n`;
     }
     prompt += `\n`;
   } else if (ctx.phase !== '2') {
     // 传统模式：一次性写入
-    prompt += `7. 写入: speccore analyze --apply '{${taskDocs.map(([n]) => `"${n}":"..."`).join(',')}}' -I ${iter}${taskFlag}${platformFlag}\n\n`;
+    prompt += `7. 写入: speccore analyze --apply '{${taskDocs.map(([n]) => `"${n}":"..."`).join(',')}}' -I ${iter}${platformFlag}\n\n`;
   }
   // v6.60.0+: 移除两阶段分析提示，一次性生成所有文档
   prompt += '\n' + buildAutoModeInstruction('analyze', iter) + '\n';
 
   // ── v6.65.0+: Phase 1 完成后主动询问用户是否继续 Phase 2 ──
   // v6.70.0+: 自动模式下跳过确认，AI 直接推断执行
-  if (!ctx.phase && !isTask && !autoMode) {
+  if (!ctx.phase && !autoMode) {
     prompt += `\n## ⚠️ 重要：Phase 1 完成后的下一步\n\n`;
     prompt += `当你通过 --apply 写入所有综合文档后，CLI 会检测到项目有多个端（≥2 个端）。\n`;
     prompt += `**此时你需要主动询问用户**：\n\n`;
@@ -6061,7 +5724,7 @@ status: "clarified"
     prompt += `\`speccore analyze --prompt -I ${iter} --phase 2\`\n\n`;
     prompt += `**不要等待 CLI 的提示信息**，CLI 的输出你可能看不到。你需要主动询问用户。\n\n`;
   }
-  if (autoMode && !ctx.phase && !isTask) {
+  if (autoMode && !ctx.phase) {
     prompt += `\n## 🤖 自动模式说明\n\n`;
     prompt += `当前处于自动模式（--auto），不需要人工确认。\n`;
     prompt += `请在生成综合文档后，**直接继续**生成各端专属文档（Phase 2）。\n`;
@@ -6098,7 +5761,7 @@ status: "clarified"
   }
 
   // ── v6.52.0+: 图谱 RAG 上下文注入（analyze 阶段也检索项目关联内容）──
-  if (!isTask && ctx.phase !== '2') {
+  if (ctx.phase !== '2') {
     try {
       const ragResult = await unifiedSearch((findProjectRoot() || process.cwd()), {
         query: ctx.iteration || '',
@@ -6356,25 +6019,6 @@ async function buildContractFirstPrompt(iteration: string): Promise<string> {
   prompt += `- 契约应**精确且完整**，避免后续各端分析时出现接口不一致\n\n`;
 
   return await injectGraphSummary(prompt);
-}
-
-// ── v6.49.9+: 扫描平铺的端目录，返回所有子任务目录路径 ──
-async function getSubtaskDirs(taskDir: string): Promise<string[]> {
-  const result: string[] = [];
-  const platformList = await parsePlatformList();
-  for (const platform of platformList) {
-    const platDir = join(taskDir, platform);
-    if (!(await pathExists(platDir))) continue;
-    try {
-      const entries = await readdir(platDir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.isDirectory() && !entry.name.startsWith('.')) {
-          result.push(join(platDir, entry.name));
-        }
-      }
-    } catch { /* ignore */ }
-  }
-  return result;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -7193,7 +6837,7 @@ async function buildPipelineStepPrompt(args: {
     // 全局层 Pipeline 步骤映射
     if (currentStep === 'init' || currentStep === 'discovery') {
       prompt = buildPromptText(await buildPrompt('analyze', {
-        iteration: iter, task: options.task, platform: options.platform,
+        iteration: iter, platform: options.platform,
         analyzeOptions: options,
       }));
     } else if (currentStep === 'global-analysis') {
@@ -7219,7 +6863,7 @@ async function buildPipelineStepPrompt(args: {
     prompt = await buildConfirmCheckPrompt(iter);
   } else if (currentStep === 'phase1-prompt') {
     prompt = buildPromptText(await buildPrompt('analyze', {
-      iteration: iter, task: options.task, platform: options.platform,
+      iteration: iter, platform: options.platform,
       analyzeOptions: options,
     }));
   } else if (featureMatch) {
@@ -7248,7 +6892,7 @@ async function buildPipelineStepPrompt(args: {
   } else {
     // 回退到默认 prompt
     prompt = buildPromptText(await buildPrompt('analyze', {
-      iteration: iter, task: options.task, platform: options.platform,
+      iteration: iter, platform: options.platform,
       analyzeOptions: options,
     }));
   }
@@ -7494,142 +7138,6 @@ export async function buildAndSaveQualityReport(iterDir: string, iter: string, u
   await writeFile(reportPath, lines.join('\n'));
   logger.info(`   📊 质量报告已落盘: 020-specs/QUALITY_AUDIT.md（${okCount} 成功 / ${failCount} 失败，平均 ${avgScore} 分）`);
   return reportPath;
-}
-
-// ═══════════════════════════════════════════════════════════
-// 多子任务分析支持（v8.3.94+）
-// ═══════════════════════════════════════════════════════════
-
-/** 解析逗号分隔的任务 ID */
-function parseTaskIds(taskOpt: string): string[] {
-  return taskOpt
-    .split(',')
-    .map(t => t.trim())
-    .filter(Boolean)
-    .map(t => t.startsWith('Task-') ? t : `Task-${t}`);
-}
-
-/**
- * 根据过滤条件扫描迭代目录下的任务
- * 支持: status:doing | owner:张三 | type:feature | platform:web | keyword:auth
- */
-async function filterTasks(iterDir: string, filter: string): Promise<string[]> {
-  const tasksDir = join(iterDir, '030-tasks');
-  if (!await pathExists(tasksDir)) return [];
-
-  const entries = await readdir(tasksDir, { withFileTypes: true });
-  const taskDirs = entries.filter(e => e.isDirectory() && e.name.startsWith('Task-')).map(e => e.name);
-  if (taskDirs.length === 0) return [];
-
-  const matched: string[] = [];
-
-  for (const taskId of taskDirs) {
-    const taskDir = join(tasksDir, taskId);
-    const metaDir = join(taskDir, '.meta');
-
-    // 解析过滤条件
-    const filterLower = filter.toLowerCase();
-
-    // 1. 状态过滤: status:doing
-    if (filterLower.startsWith('status:')) {
-      const statusFile = join(metaDir, 'status');
-      if (await pathExists(statusFile)) {
-        const status = (await readFile(statusFile, 'utf-8')).trim().toLowerCase();
-        if (status === filterLower.slice(7).trim()) matched.push(taskId);
-      }
-      continue;
-    }
-
-    // 2. 负责人过滤: owner:张三
-    if (filterLower.startsWith('owner:')) {
-      const ownerFile = join(metaDir, 'owner');
-      if (await pathExists(ownerFile)) {
-        const owner = (await readFile(ownerFile, 'utf-8')).trim();
-        if (owner.includes(filter.slice(6).trim())) matched.push(taskId);
-      }
-      continue;
-    }
-
-    // 3. 类型过滤: type:feature
-    if (filterLower.startsWith('type:')) {
-      const typeFile = join(metaDir, 'type');
-      if (await pathExists(typeFile)) {
-        const type = (await readFile(typeFile, 'utf-8')).trim().toLowerCase();
-        if (type === filterLower.slice(5).trim()) matched.push(taskId);
-      }
-      continue;
-    }
-
-    // 4. 端过滤: platform:web
-    if (filterLower.startsWith('platform:')) {
-      const targetPlat = filterLower.slice(9).trim();
-      try {
-        const subEntries = await readdir(taskDir, { withFileTypes: true });
-        const hasPlatform = subEntries.some(e =>
-          e.isDirectory() &&
-          !e.name.startsWith('.') &&
-          e.name !== '_shared' &&
-          e.name !== '00-specs' &&
-          e.name.toLowerCase().includes(targetPlat)
-        );
-        if (hasPlatform) matched.push(taskId);
-      } catch { /* ignore */ }
-      continue;
-    }
-
-    // 5. 关键词过滤: keyword:auth（或无前缀的默认行为）
-    const keyword = filterLower.startsWith('keyword:') ? filterLower.slice(8).trim() : filterLower;
-    // 检查任务目录名、feature 名、TASK.md 内容
-    let hasKeyword = taskId.toLowerCase().includes(keyword);
-    if (!hasKeyword) {
-      const featureFile = join(metaDir, 'feature');
-      if (await pathExists(featureFile)) {
-        const feature = (await readFile(featureFile, 'utf-8')).trim().toLowerCase();
-        if (feature.includes(keyword)) hasKeyword = true;
-      }
-    }
-    if (!hasKeyword) {
-      const taskMd = join(taskDir, '00-specs', 'REQ.md');
-      if (await pathExists(taskMd)) {
-        const content = (await readFile(taskMd, 'utf-8')).toLowerCase();
-        if (content.includes(keyword)) hasKeyword = true;
-      }
-    }
-    if (hasKeyword) matched.push(taskId);
-  }
-
-  return matched;
-}
-
-/**
- * 综合解析目标任务列表
- * - 优先使用 options.task（支持逗号分隔）
- * - 其次使用 options.filter 自动发现
- */
-async function resolveTargetTasks(options: AnalyzeOptions): Promise<string[]> {
-  // 1. 直接指定多个任务
-  if (options.task && options.task.includes(',')) {
-    return parseTaskIds(options.task);
-  }
-
-  // 2. 单任务
-  if (options.task) {
-    const taskId = options.task.startsWith('Task-') ? options.task : `Task-${options.task}`;
-    return [taskId];
-  }
-
-  // 3. 通过 filter 自动发现
-  if (options.filter && options.iteration) {
-    const iterDir = await getIterationDir(options.iteration);
-    const matched = await filterTasks(iterDir, options.filter);
-    if (matched.length > 0) {
-      logger.info(`🔍 filter "${options.filter}" 匹配到 ${matched.length} 个任务: ${matched.join(', ')}`);
-      return matched;
-    }
-    logger.warn(`⚠️ filter "${options.filter}" 未匹配到任何任务`);
-  }
-
-  return [];
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

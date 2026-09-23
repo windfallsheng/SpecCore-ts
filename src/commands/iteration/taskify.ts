@@ -168,7 +168,7 @@ function promptUser(question: string): Promise<string> {
     rl.question(`${question} `, answer => { rl.close(); resolve(answer.trim()); });
   });
 }
-export interface IterationSplitOptions {
+export interface IterationTaskifyOptions {
   file?: string;
   iteration?: string;
   sections?: string;
@@ -370,7 +370,7 @@ function printPreSplitReport(iterationDir: string, blockers: PreSplitCheckItem[]
   logger.info('   让 AI 补充缺失的分析产物，然后再执行 split');
 }
 
-export async function iterationSplitCommand(options: IterationSplitOptions): Promise<void> {
+export async function iterationTaskifyCommand(options: IterationTaskifyOptions): Promise<void> {
   // ── Pipeline 模式 ──
   if (options.pipeline) {
     const iter = options.iteration || await getDefaultIteration() || '';
@@ -4727,7 +4727,7 @@ function parseAnalysisFunctionalUnits(content: string, allPlatforms: string[]): 
  * 成功返回 true，无功能模块时返回 false（回退到传统流程）
  */
 async function tryModuleDrivenSplit(
-  iteration: string, iterationDir: string, options: IterationSplitOptions
+  iteration: string, iterationDir: string, options: IterationTaskifyOptions
 ): Promise<boolean> {
   const reqDir = join(iterationDir, '010-requirements');
   const allPlatforms = await detectPlatforms(iterationDir);
