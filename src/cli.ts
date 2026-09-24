@@ -861,6 +861,9 @@ program
   .option("--response <response>", "接收 AI 修正内容写入文件")
   .option("--classify", "AI 智能分类 sources/ 文档 → staging/（按类型提取）")
   .option("--split", "切分功能单元 → features/（已拆出独立命令 unitize，保留兼容）")
+  .option("--translate-en <mode>", "单元标题英译: auto(默认) | host | off")
+  .option("--translate-response <json>", "接收宿主 AI 英译 JSON（配合 --translate-en host）")
+  .option("--on-duplicate <mode>", "同名单元处理: ask(默认) | skip | overwrite | rename | abort")
   .action(doc2specCommand);
 
 program
@@ -871,6 +874,9 @@ program
   .option('--files <files>', '批量: "a.md=平台1,b.md=平台2"')
   .option('-i, --iter <name>', '目标迭代（缺省用当前活跃迭代）')
   .option('-p, --platform <name>', '平台标识（端名，缺省由 analyze 端推断）')
+  .option("--translate-en <mode>", "单元标题英译: auto(默认) | host | off")
+  .option("--translate-response <json>", "接收宿主 AI 英译 JSON（配合 --translate-en host）")
+  .option("--on-duplicate <mode>", "同名单元处理: ask(默认) | skip | overwrite | rename | abort")
   .action(unitizeCommand);
 
 program

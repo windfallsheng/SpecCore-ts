@@ -117,6 +117,7 @@ settings:
 | `run` | 命名流水线入口（preset / 起止点） |
 | `ask` | 自然语言入口（说人话，自动编排） |
 | `doc2spec` | 导入 PRD → SpecCore MD |
+| `unitize` | 切分需求文档 → 功能单元（原 doc2spec --split） |
 | `req-doc` | 一句话需求 → PRD 文档 |
 | `analyze` | AI 需求分析 |
 | `taskify` | 拆分需求为开发任务 |
@@ -140,6 +141,10 @@ speccore ask "帮我部署"                    # → run --preset deploy
 speccore ask "从分析到开发"                # → run --from analyze --to execute
 speccore ask "分析本迭代需求，跳过澄清"     # → analyze --skip-clarify
 ```
+
+### ⚡ spec-once 单会话端到端
+
+一句「spec once」把需求到部署整条链装进一次会话：需求入口（功能单元 / 文档地址 / 一句话需求）→ 澄清 → 分析 → 拆分任务 → 开发 → 本地冒烟 → 部署验证。**双模式**：默认人机交互（每个节点停下确认），说「全自动/别停」切全自动（仅范围确认、质量门禁失败、冒烟失败三个安全点停下）。哪一步不满意可**回退重跑**：重分析（`analyze --unit` 覆盖+备份）、重拆（`taskify --modules`）、重执行（`execute` 单任务）、重切（`unitize --on-duplicate`）。适合少量功能单元（≤3）的快速闭环，大范围走 `speccore run` 流水线。
 
 ### 🧠 知识图谱 & 代码图谱
 

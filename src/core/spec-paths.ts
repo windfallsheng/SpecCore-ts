@@ -199,6 +199,10 @@ async function readFeatureDirs(featuresDir: string): Promise<string[]> {
       if (!entry.isDirectory()) continue;
       if (entry.name.startsWith('.')) continue;
       if (entry.name.startsWith('_')) continue;
+      // v8.3.267: unitize 可能把「核心业务规则（跨端通用）」等全局章节切成
+      // features/overview-xxx 目录（违反「全局信息不进 features」规范），
+      // 扫描层过滤 overview- 前缀，防止假单元污染 analyze/taskify 的单元清单
+      if (entry.name.startsWith('overview-')) continue;
       names.push(entry.name);
     }
   } catch { /* ignore */ }

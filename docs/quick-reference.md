@@ -18,7 +18,11 @@ speccore diff --source=A --target=B   # 对比迭代
 speccore track --req=REQ-001          # 全链路追溯
 speccore delete -t Task-005           # 安全删除（回收站 + 清理引用）
 speccore search "payment"             # 跨 Spec 搜索
+speccore unitize -f <md> -i <迭代名>   # 切分需求文档 → 功能单元（features/）
+speccore taskify -i <迭代名>           # 拆功能单元 → 开发任务
 ```
+
+> 🔄 回退重跑（v8.3.275+）：重分析 `analyze --unit X --apply`（覆盖+备份）；重拆 `taskify --modules "模块A"`（旧任务自动备份 .backup-*，其余保留）；重切 `unitize --on-duplicate overwrite|rename`（同名单元三选一）。
 
 ## 🔒 AI 命令（在 AI IDE 中用 @spec-ask：WorkBuddy/Cursor/Trae）
 

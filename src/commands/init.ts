@@ -1463,6 +1463,8 @@ SpecCore 规范驱动开发项目。
 | 层 | 目录 | 产出 |
 |:---|:---|:---|
 | 切分层 | \`010-requirements/features/{功能单元}/\` | SOURCE.md（需求原文切片，旧版为 README.md） + _matrix.md + CHANGELOG.md（doc2spec 产出） |
+
+> **功能单元命名（v8.3.271+）**：目录名 = \`{文档/端}-{序号}-{英文slug}\`（中文标题转全拼，如 \`admin-web-01-yudingguanli\`）；中文显示名保留在 SOURCE.md 标题与 \`_matrix.md\` 的 \`feature\` 字段。旧迭代中文目录名兼容不迁移。
 | 分析层 | \`020-specs/{功能单元}/\` | overview/（单元概述）+ {端名}/（TECH/TEST/UI_SPEC） |
 | 全局层 | \`010-requirements/overview/GLOBAL_CONTEXT-*.md\` + \`020-specs/overview/\` | 非功能全局信息 + FUNCTION_MAP/REQUIREMENT 汇总 |
 
@@ -1489,7 +1491,7 @@ SpecCore 规范驱动开发项目。
 10. **步骤隔离模式** — v8.3.160+ 默认步骤隔离，每步完成后输出 \`[SPECCORE_STEP_DONE]\` + \`[SPECCORE_NEXT_STEP]\`，新会话通过 \`--resume\` 继续。看到 \`[SPECCORE_EXEC]\` 后自动执行
 11. **质量门禁拦截后必须修复所有 error** — 不能跳过质量门禁继续推进
 12. **PATTERNS 只提取真正独特且可复用的模式** — 严禁为每个项目都生成 JWT/Redis/拦截器等框架自带的标准用法说明
-13. **多任务执行用批次** — \`speccore execute --list-pending --batch-size 3\` 获取清单，每批完成后开新对话续跑
+13. **多任务执行用批次** — \`speccore execute --list-pending --batch-size 3\` 获取清单，每批完成后优先在同一会话继续下一批（CLI 会输出 \`[SPECCORE_CONTINUE]\` 与下一任务命令）；仅当上下文紧张时开新对话，先读摘要文件再续跑
 14. **失败时读取 .issues.md 并按流程处理** — 读取问题清单 → 分析根因 → 修复 → 更新 .issues.md 状态 → 重新执行
 15. **续跑用 --resume** — \`speccore execute --resume\`
 16. **配置变更用 --upgrade** — \`speccore config --upgrade\`（\`.speccore.yml\` / \`PROJECT.yaml\` 结构升级）
@@ -1674,7 +1676,7 @@ Iteration-NNN-name/            ← 迭代目录
 | \`[SPECCORE_CONFIRM_ASK: ...]\` | Pipeline 步骤询问 | 等待用户输入 y（确认）/ s（跳过）/ q（停止） |
 | \`[SPECCORE_STEP_FAIL: <cmd>]\` | Pipeline 步骤失败 | 提示用户选择重试/跳过/停止 |
 | \`[SPECCORE_AMBIGUOUS: <cmd1> \\| <cmd2>]\` | 意图模糊 | 展示匹配选项让用户选择 |
-| \`[SPECCORE_CONTINUE: <path>]\` | 批次执行完成，需续批 | **必须开始新对话**，先读取 \`<path>\` 恢复上下文，再按提示命令继续下一批次 |`,
+| \`[SPECCORE_CONTINUE: <path>]\` | 批次执行完成，需续批 | **优先在同一会话继续**（按标记中的命令执行下一批）；上下文紧张时开新对话，先读取 \`<path>\` 恢复上下文再续批 |`,
     },
     {
       name: '03-COMMAND_CHEATSHEET.inline.md',
@@ -1943,7 +1945,9 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
     '├── converted/             ← [自动生成] doc2spec 转换后的 Markdown 规格',
     '├── features/              ← [手动维护] 按功能模块组织的需求补充',
     '│   └── {feature}/',
-    '│       └── README.md',
+    '│       ├── SOURCE.md    ← [自动生成] 需求原文切片（旧版为 README.md）',
+    '│       ├── _matrix.md   ← [自动生成] 端覆盖矩阵',
+    '│       └── CHANGELOG.md ← [自动生成] 单元变更记录',
     '├── prototypes/            ← 原型（HTML/图片/链接，内容不限）',
     '├── assets/                ← 素材资源',
     '│   ├── extracted/         ← doc2spec 提取的图片/媒体文件',
@@ -2254,7 +2258,7 @@ export function generateAIRulesContent(): string {
     '│   ├── sources/        ← [只读] 原始 PRD/Word/PDF',
     '│   ├── converted/      ← [自动生成] doc2spec 转换后的 MD',
     '│   ├── features/       ← [手动维护] 按功能模块组织',
-    '│   │   └── {feature}/README.md',
+    '│   │   └── {feature}/SOURCE.md + _matrix.md + CHANGELOG.md ← [自动生成] doc2spec 产出',
     '│   ├── prototypes/        ← 原型（HTML/图片/链接，内容不限）',
     '│   └── assets/            ← doc2spec 提取的图片',
     '├── 020-specs/     ← analyze 输出',

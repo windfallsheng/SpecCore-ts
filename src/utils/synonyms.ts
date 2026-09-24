@@ -52,7 +52,14 @@ export const SYNONYM_GROUPS: string[][] = [
   ['workflow', 'process', 'flow', '审批', '流程', '工作流'],
   ['api', 'apis', 'interface', 'interfaces', 'endpoint', 'endpoints', '接口'],
   ['database', 'db', 'data', 'storage', 'store', '数据库', '数据', '存储'],
-  ['frontend', 'web', 'h5', 'mobile', 'app', 'ui', '前端', '页面', '移动端'],
+  // v8.3.269: 端标识词不做跨端同义——原组 ['frontend','web','h5','mobile','app','ui','前端','页面','移动端']
+  // 把互斥的端名（web/h5/mobile/app）当同义词，导致 findBestSpecMatch 对含端名前缀的任务名
+  // 在异端文档键上刷出虚高 overlap 分（admin-web-02 的 REQ 被匹配到 h5-mobile-01 文档）。
+  // 拆分为：frontend↔前端（概念同义）、h5/mobile/app↔移动端（移动端概念同义）、ui↔页面；
+  // 'web' 作为独立端标识不再与其他端词互刷。
+  ['frontend', '前端'],
+  ['h5', 'mobile', 'app', '移动端'],
+  ['ui', '页面'],
   ['backend', 'server', 'service', 'services', '后端', '服务端'],
   ['interceptor', 'interceptors', 'middleware', 'guard', 'guards', 'pipe', 'pipes', 'filter', 'filters', '拦截器', '中间件', '守卫', '管道'],
 ];

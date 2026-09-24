@@ -3,8 +3,8 @@
  * 防护机制：读取时扫描实际目录，确保计数器不低于已有最大编号
  * 即使 counters.json 被删除或损坏，也不会产生重复 ID
  */
-import { readFile, writeFile, pathExists, readdir } from 'fs-extra';
-import { join } from 'path';
+import { readFile, writeFile, pathExists, readdir, ensureDir } from 'fs-extra';
+import { join, dirname } from 'path';
 
 interface Counters {
   iterations: number;
@@ -138,9 +138,15 @@ export async function nextPlanId(name?: string, topic?: string): Promise<{ id: s
 }
 
 export async function initCounters(): Promise<void> {
-  await writeFile(path(), JSON.stringify({ iterations: 0, tasks: 0, plans: 0 }), 'utf-8');
+  const p = path();
+  await ensureDir(dirname(p));
+  await writeFile(p, JSON.stringify({ iterations: 0, tasks: 0, plans: 0 }), 'utf-8');
 }
 
 async function save(c: Counters): Promise<void> {
-  await writeFile(path(), JSON.stringify(c, null, 2), 'utf-8');
+  const p = path();
+  // 防护：.speccore/local/ 可能尚未创建（如未初始化或部分初始化的项目），
+  // 直接 writeFile 会抛 ENOENT 导致任务/迭代 ID 生成失败
+  await ensureDir(dirname(p));
+  await writeFile(p, JSON.stringify(c, null, 2), 'utf-8');
 }

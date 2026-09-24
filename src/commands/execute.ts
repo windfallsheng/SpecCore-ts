@@ -1,5 +1,5 @@
 import { pathExists, readFile, writeFile, ensureDir, readdir, remove } from 'fs-extra';
-import { join, dirname, isAbsolute, relative } from 'path';
+import { join, dirname, basename, isAbsolute, relative } from 'path';
 import { createInterface } from 'readline';
 import { readdirSync } from 'fs';
 import { execSync } from 'child_process';
@@ -2346,11 +2346,20 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
     join(taskDir, 'REQUIREMENT.md'),
   ];
   // 按端执行时，额外检查该端子任务的 TASK.md
+  // v8.3.265+: 端平铺架构（v6.49.3+）动态扫描 {端}/ 下子任务目录，替代 legacy 的 10-/20- 前缀拼接（平铺架构下该路径永远不存在）
   if (options.platform) {
-    const isBackend = options.platform === 'backend' || options.platform.startsWith('后台');
-    const prefix = isBackend ? '10-' : '20-';
-    const subtaskName = isBackend && options.platform === 'backend' ? 'api' : options.platform;
-    candidates.unshift(join(taskDir, `${prefix}${subtaskName}`, 'TASK.md'));
+    try {
+      const platformBase = join(taskDir, options.platform);
+      if (await pathExists(platformBase)) {
+        const entries = await readdir(platformBase, { withFileTypes: true });
+        const subDirs = entries
+          .filter((e: any) => e.isDirectory() && !e.name.startsWith('.'))
+          .map((e: any) => e.name);
+        if (subDirs.length > 0) {
+          candidates.unshift(join(platformBase, subDirs[0], 'TASK.md'));
+        }
+      }
+    } catch { /* 端目录扫描失败时保持原有候选链 */ }
   }
 
   // 读取文件内容验证有效性（接受 ANALYSIS.md / REQ.md / REQUIREMENT.md）
@@ -2985,6 +2994,59 @@ async function runApplyMode(iteration: string, options: ExecuteOptions): Promise
     await ensureDir(metaDir);
     await writeFile(join(metaDir, 'status'), 'completed');
   } catch {}
+
+  // v8.3.273+: 联动 TASK.md——状态行改「已完成」+ 工作清单全勾选（修复状态与 checklist 脱节）
+  try {
+    const taskMdPath = join(taskDirForStatus, 'TASK.md');
+    if (await pathExists(taskMdPath)) {
+      let md = await readFile(taskMdPath, 'utf-8');
+      md = md.replace(/^(- \*\*状态\*\*: ).*$/m, '$1已完成');
+      md = md.replace(/^- \[ \]/gm, '- [x]');
+      await writeFile(taskMdPath, md);
+    }
+  } catch { /* TASK.md 联动失败不阻断 */ }
+
+  // v8.3.273+: 完成门禁提示——端级 REQ.md/TECH.md 若仍是骨架占位，提醒宿主 AI 补写规格
+  try {
+    const skeletonFiles: string[] = [];
+    for (const fn of ['REQ.md', 'TECH.md']) {
+      const p = join(taskDirForStatus, fn);
+      if (await pathExists(p)) {
+        const c = await readFile(p, 'utf-8');
+        if (c.includes('SPEC-SKELETON')) skeletonFiles.push(fn);
+      }
+    }
+    if (skeletonFiles.length > 0) {
+      logger.warn(`   ⚠️  ${skeletonFiles.join('、')} 仍是骨架占位（含 SPEC-SKELETON），请用本端专业规格覆盖，否则下游审查/回归将缺依据`);
+    }
+  } catch { /* 骨架检测失败不阻断 */ }
+
+  // v8.3.273+: 组级状态聚合——所属 Task 组全部子任务完成后，组级 .meta/status 同步 completed
+  try {
+    const parts = taskDirForStatus.split('/');
+    const taskIdx = parts.findIndex(p => /^Task-\d+/.test(p));
+    if (taskIdx >= 0) {
+      const groupDir = parts.slice(0, taskIdx + 1).join('/');
+      const statuses: string[] = [];
+      const collect = async (dir: string): Promise<void> => {
+        for (const e of await readdir(dir, { withFileTypes: true })) {
+          if (!e.isDirectory()) continue;
+          const stPath = join(dir, e.name, '.meta', 'status');
+          if (await pathExists(stPath)) {
+            statuses.push((await readFile(stPath, 'utf-8')).trim());
+          } else {
+            await collect(join(dir, e.name));
+          }
+        }
+      };
+      await collect(groupDir);
+      const subtaskStatuses = statuses.filter((_, i) => i !== 0); // 排除组级自身
+      if (subtaskStatuses.length > 0 && subtaskStatuses.every(s => s === 'completed')) {
+        await writeFile(join(groupDir, '.meta', 'status'), 'completed');
+        logger.info(`   📊 组级状态已同步: ${basename(groupDir)} → completed（${subtaskStatuses.length} 个子任务全部完成）`);
+      }
+    }
+  } catch { /* 组级聚合失败不阻断 */ }
 
   logger.success(`\n📁 完成: ${writtenCount} 个文件已写入`);
   logger.info(`   📂 位置: ${iterDir}/`);

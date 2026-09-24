@@ -470,6 +470,29 @@ export class QoderSdkAdapter implements AgentAdapter {
     return headless.buildActivationPrompt(ctx, nextPrompt);
   }
 
+  /**
+   * v8.3.266: 三级鉴权降级——
+   * 1. 国际版 PAT 环境变量（SDK 原生识别名 QODER_PERSONAL_ACCESS_TOKEN）
+   * 2. Qoder CN 的 PAT 环境变量（docs.qoder.cn 官方文档用 QODERCN_PERSONAL_ACCESS_TOKEN，
+   *    SDK 不识别此名——此前按 CN 文档设置的用户会白设并报「未设置 QODER_PERSONAL_ACCESS_TOKEN」）
+   * 3. Qoder CLI 登录态（qodercliAuth，零配置路径）
+   */
+  private async resolveSdkAuth(): Promise<any> {
+    if (process.env.QODER_PERSONAL_ACCESS_TOKEN) {
+      return { accessToken: process.env.QODER_PERSONAL_ACCESS_TOKEN };
+    }
+    if (process.env.QODERCN_PERSONAL_ACCESS_TOKEN) {
+      return { accessToken: process.env.QODERCN_PERSONAL_ACCESS_TOKEN };
+    }
+    try {
+      if (this.sdkModule?.qodercliAuth) {
+        const cliAuth = await this.sdkModule.qodercliAuth();
+        if (cliAuth) return cliAuth;
+      }
+    } catch { /* Qoder CLI 登录态不可用则返回 undefined，由调用方回退标记模式 */ }
+    return undefined;
+  }
+
   /** v8.3.169+: 通过 Qoder Agent SDK 直接调度子 Agent */
   async dispatchSubagent(ctx: AgentContext, taskPrompt: string): Promise<SubagentDispatchResult | null> {
     try {
@@ -506,7 +529,7 @@ export class QoderSdkAdapter implements AgentAdapter {
 
       // 4. 构建 options
       const options: any = {
-        auth: accessTokenFromEnv ? accessTokenFromEnv() : undefined,
+        auth: await this.resolveSdkAuth(),
         cwd: ctx.cwd,
         allowedTools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'Agent'],
         permissionMode: 'acceptEdits',
@@ -551,8 +574,11 @@ export class QoderSdkAdapter implements AgentAdapter {
             }
           }
         } else if (message.type === 'result') {
-          if (message.subtype === 'error') {
-            error = message.result?.message || '子 Agent 执行出错';
+          // v8.3.266: SDK 的失败 result 有多种 subtype（error / error_during_execution / error_max_turns 等），
+          // 且带 is_error: true 标记——此前只匹配 subtype === 'error'，导致 error_during_execution
+          // 被当作成功派单，调度循环空转耗尽所有单元尝试次数并误标 failed
+          if (message.subtype === 'error' || (message as any).is_error === true) {
+            error = message.result?.message || message.subtype || '子 Agent 执行出错';
           }
           logger.info(`[QoderSdkAdapter] 子 Agent ${ctx.subagent} 执行完成: ${message.subtype}`);
         }
@@ -565,7 +591,17 @@ export class QoderSdkAdapter implements AgentAdapter {
         error,
       };
     } catch (e: any) {
-      logger.warn(`[QoderSdkAdapter] 调度失败: ${e.message}，回退到 Headless`);
+      // v8.3.266: 缺 PAT 是最常见失败原因（Qoder CN IDE 登录态不会自动传给 CLI 子进程），
+      // 给出可操作指引而不是只留一条 warn——否则用户永远不知道为什么没走 SDK 派单
+      if (/token|auth|QODER_PERSONAL_ACCESS_TOKEN/i.test(e.message || '')) {
+        logger.warn(`[QoderSdkAdapter] SDK 鉴权失败: 未设置访问令牌。`);
+        logger.warn(`   启用方式（任选其一）:`);
+        logger.warn(`   1. Qoder CN 企业版: https://account-devops.aliyun.com/settings/personalAccessToken 生成 PAT（权限选「Qoder CN-开发者-只读」），然后 export QODERCN_PERSONAL_ACCESS_TOKEN=<令牌>`);
+        logger.warn(`   2. 国际版: https://qoder.com/account/integrations 生成后 export QODER_PERSONAL_ACCESS_TOKEN=<令牌>`);
+        logger.warn(`   3. 零配置: 安装 Qoder CLI 并登录（qoder login）`);
+      } else {
+        logger.warn(`[QoderSdkAdapter] 调度失败: ${e.message}，回退到 Headless`);
+      }
       return null;
     }
   }
@@ -622,8 +658,13 @@ export async function dispatchSubagent(
   // 其他环境：Headless 模式，返回 null 让外层 AI 接管
   // v8.3.213+: 非 Qoder 的宿主 AI 工具（cursor/claude/codebuddy 等）明确提示不支持 SDK 直连，
   // 结果需手动 --apply/--response 落盘；纯终端（none）静默（用户本来就在手动模式）
+  // v8.3.266: 区分「工具不支持」与「支持但本次调度失败」（如缺 PAT）——后者不能说不支持
   if (tool !== 'none') {
-    logger.warn(`[dispatchSubagent] 当前宿主工具「${tool}」不支持 SDK 直连自动落盘，已降级为标记模式（结果需外层 AI 用 --apply/--response 落盘）`);
+    if (isSdkDispatchSupported(tool)) {
+      logger.warn(`[dispatchSubagent] SDK 调度未成功（原因见上方日志），已降级为标记模式（结果需外层 AI 用 --apply/--response 落盘）`);
+    } else {
+      logger.warn(`[dispatchSubagent] 当前宿主工具「${tool}」不支持 SDK 直连自动落盘，已降级为标记模式（结果需外层 AI 用 --apply/--response 落盘）`);
+    }
   } else {
     logger.debug(`[dispatchSubagent] 工具 ${tool} 不支持 SDK 直接调度，使用 Headless 模式`);
   }

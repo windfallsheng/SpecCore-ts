@@ -83,8 +83,10 @@ export function detectHostAi(): HostAiTool {
   if (process.env.TRAE_SESSION || process.env.TENCENT_AI_CODING) {
     return 'trae';
   }
-  // Qoder
-  if (process.env.QODER_SESSION) {
+  // Qoder / Qoder CN（中文版）。v8.3.266: Qoder CN 不注入 QODER_SESSION，
+  // 改用 QODERCN_IDE / QODER_CN_IDE / QODERCN_AGENT / QODER_SITE 识别，
+  // 否则 SDK 调度（isSdkDispatchSupported 仅认 'qoder'）在 Qoder CN 下永远降级为标记模式
+  if (process.env.QODER_SESSION || process.env.QODERCN_IDE || process.env.QODER_CN_IDE || process.env.QODERCN_AGENT || process.env.QODER_SITE === 'CN') {
     return 'qoder';
   }
   // v8.3.169+: 检查工具目录（兜底，回溯到项目根目录）

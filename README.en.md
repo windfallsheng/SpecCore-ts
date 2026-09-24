@@ -117,6 +117,7 @@ Can't remember 60 commands? These are the ones that matter:
 | `run` | named pipeline entry (preset / range) |
 | `ask` | natural-language entry (auto-orchestration) |
 | `doc2spec` | import PRD → SpecCore MD |
+| `unitize` | split requirement doc → feature units (formerly doc2spec --split) |
 | `req-doc` | one-liner requirement → PRD doc |
 | `analyze` | AI requirement analysis |
 | `taskify` | split requirements into dev tasks |
@@ -139,6 +140,10 @@ Can't remember 60 commands? These are the ones that matter:
 speccore ask "deploy for me"                    # → run --preset deploy
 speccore ask "from analyze to develop"          # → run --from analyze --to execute
 ```
+
+### ⚡ spec-once single-session end-to-end
+
+One "spec once" phrase packs the whole requirement-to-deploy chain into a single session: entry (feature units / doc path / one-liner) → clarify → analyze → taskify → execute → local smoke → deploy verification. **Dual mode**: interactive by default (pauses at every node); say "full-auto / don't stop" to switch to auto mode (pauses only at three safety points: scope confirmation, quality-gate failure, smoke failure). Unsatisfied with a step? **Roll back and rerun**: re-analyze (`analyze --unit` overwrite + backup), re-taskify (`taskify --modules`), re-execute (`execute` single task), re-unitize (`unitize --on-duplicate`). Best for a few feature units (≤3); larger scope goes through `speccore run`.
 
 ### 🧠 Knowledge graph & code graph
 

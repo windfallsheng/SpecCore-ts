@@ -76,8 +76,19 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     params: [
       { flag: '-i, --iteration <id>', meaning: '目标迭代' },
       { flag: '--interactive', meaning: '预览后逐一确认' },
+      { flag: '--modules <names>', meaning: '只重建指定模块（v8.3.275+）：旧任务自动备份 .backup-*，其余保留' },
     ],
-    examples: ['speccore iteration taskify -i Q1', 'speccore iteration taskify -i Q1 --interactive'],
+    examples: ['speccore iteration taskify -i Q1', 'speccore iteration taskify -i Q1 --interactive', 'speccore iteration taskify -i Q1 --modules "购物车"'],
+  },
+  unitize: {
+    desc: '切分需求文档为功能单元（原 doc2spec --split；v8.3.271+ 目录名 ASCII 化）',
+    params: [
+      { flag: '-f, --file <path>', meaning: '需求文档路径（.md 直接切；.docx/.pdf 先 doc2spec 转换）' },
+      { flag: '--files "a.md=端1,b.md"', meaning: '多文档批量切分，可指定端' },
+      { flag: '--on-duplicate <mode>', meaning: '同名单元三选一（v8.3.275+）：ask/skip/overwrite（备份可回滚）/rename/abort' },
+      { flag: '--translate-en <mode>', meaning: '标题英译：auto（默认，LLM+拼音兜底）/ off / host（接力模式）' },
+    ],
+    examples: ['speccore unitize -f PRD.md -i Q1', 'speccore unitize -f PRD.md -i Q1 --on-duplicate overwrite'],
   },
   'task new': {
     desc: '手动创建 Task',
@@ -638,9 +649,9 @@ async function helpHtml(options: HelpOptions): Promise<void> {
         desc: '创建迭代、拆分任务、重命名'
       },
       '📝 文档转换与合成': { 
-        cmds: ['doc2spec', 'spec2doc', 'analyze'],
+        cmds: ['doc2spec', 'unitize', 'spec2doc', 'analyze'],
         icon: '📄',
-        desc: 'Word/PDF/MD → 规格文档，多端需求合成（analyze --full）'
+        desc: 'Word/PDF/MD → 规格文档、需求切分功能单元，多端需求合成（analyze --full）'
       },
       '🔍 分析与计划': { 
         cmds: ['analyze', 'global', 'plan', 'taskify'],

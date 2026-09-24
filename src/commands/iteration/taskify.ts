@@ -1,4 +1,4 @@
-import { ensureDir, writeFile, pathExists, readFile, readdir, remove } from 'fs-extra';
+import { ensureDir, writeFile, pathExists, readFile, readdir, remove, rename } from 'fs-extra';
 import { join, isAbsolute, basename, relative } from 'path';
 import { logger, Spinner } from '../../utils/logger';
 import { getDefaultIteration, getIterationDir } from '../../core/context';
@@ -439,7 +439,7 @@ export async function iterationTaskifyCommand(options: IterationTaskifyOptions):
             // v8.3.160+: 步骤隔离模式，每步完成后需新会话继续
             const finalPrompt = prompt + `\n\n## ⚠️ Pipeline 模式：步骤隔离\n\n` +
               `当前是 Split Pipeline 模式。当你通过 --response 写入任务拆分结果后，` +
-              `CLI 会自动输出 [SPECCORE_STEP_DONE] 标记，提示你在新会话中执行下一步。\n\n` +
+              `CLI 会自动输出 [SPECCORE_STEP_DONE] 标记与下一步命令。\n\n` +
               `**看到 [SPECCORE_STEP_DONE] 后，请在同一会话继续执行下一步命令**。\n`;
 
             process.stdout.write(`[SPECCORE_PROMPT]\n${finalPrompt}`);
@@ -464,7 +464,7 @@ export async function iterationTaskifyCommand(options: IterationTaskifyOptions):
     // v8.3.160+: 步骤隔离模式，每步完成后需新会话继续
     const finalPrompt = prompt + `\n\n## ⚠️ Pipeline 模式：步骤隔离\n\n` +
       `当前是 Split Pipeline 模式。当你通过 --response 写入任务拆分结果后，` +
-      `CLI 会自动输出 [SPECCORE_STEP_DONE] 标记，提示你在新会话中执行下一步。\n\n` +
+      `CLI 会自动输出 [SPECCORE_STEP_DONE] 标记与下一步命令。\n\n` +
       `**看到 [SPECCORE_STEP_DONE] 后，请在同一会话继续执行下一步命令**。\n`;
 
     process.stdout.write(`[SPECCORE_PROMPT]\n${finalPrompt}`);
@@ -689,8 +689,10 @@ export async function iterationTaskifyCommand(options: IterationTaskifyOptions):
     const extracted = extractJsonArray(options.response);
 
     // 尝试解析 AI 返回的 JSON Task 列表
+    let jsonParsed = false;
     try {
       const tasks = JSON.parse(extracted.json);
+      jsonParsed = true;
       if (Array.isArray(tasks)) {
         const allPlatforms = await detectPlatforms(iterDirFull);
         const sections: Section[] = [];
@@ -758,7 +760,12 @@ export async function iterationTaskifyCommand(options: IterationTaskifyOptions):
           if (task.sourceFile) (section as any)._sourceFile = task.sourceFile;
           if (task.functionalUnit) (section as any).functionalUnit = task.functionalUnit;
           if (task.reason) (section as any)._reason = task.reason;
-          if (taskScopePlatforms.length > 0) (section as any)._scopePlatforms = taskScopePlatforms;
+          if (taskScopePlatforms.length > 0) {
+            (section as any)._scopePlatforms = taskScopePlatforms;
+            // v8.3.277: 标记 AI 显式声明了 scope（用于区分「推断出的端」与「AI 明确意图」，
+            // 显式 scope 不自动补后端，推断 scope 保留自动补后端）
+            (section as any)._explicitScope = true;
+          }
           sections.push(section);
         }
 
@@ -830,10 +837,21 @@ export async function iterationTaskifyCommand(options: IterationTaskifyOptions):
 
         // 检测已有任务 + 冲突处理
         const existingTasks = await detectExistingTasks(iterDirFull);
+        const scopeModules = options.modules ? options.modules.split(',').map(m => m.trim()).filter(Boolean) : [];
         if (existingTasks.length > 0 && !options.force) {
-          logger.warn(`   ⚠️  已有 ${existingTasks.length} 个任务: ${existingTasks.slice(0, 5).join(', ')}...`);
-          logger.info('   使用 --force 强制覆盖');
-          return;
+          if (scopeModules.length > 0) {
+            // v8.3.275: --modules 指定范围重建——只备份移除匹配模块的旧任务，其余保留
+            const removed = await pruneTasksByModules(iterDirFull, scopeModules);
+            if (removed.length > 0) {
+              logger.info(`   🔄 指定范围重建: 备份移除 ${removed.length} 个模块任务（${removed.join(', ')}），其余 ${existingTasks.length - removed.length} 个保留`);
+            } else {
+              logger.info(`   ℹ️  未找到匹配模块「${scopeModules.join(', ')}」的已有任务，全部保留，仅新增新任务`);
+            }
+          } else {
+            logger.warn(`   ⚠️  已有 ${existingTasks.length} 个任务: ${existingTasks.slice(0, 5).join(', ')}...`);
+            logger.info('   使用 --force 强制覆盖，或 --modules <模块> 指定范围重建');
+            return;
+          }
         }
 
         // --force 清理旧任务（避免新旧叠加编号暴增）
@@ -1014,8 +1032,24 @@ export async function iterationTaskifyCommand(options: IterationTaskifyOptions):
 
         // 逐任务交互确认
         const createdSections: Section[] = [];
+        const moduleFilter = (unit: string): boolean => {
+          if (scopeModules.length === 0) return true;
+          const u = (unit || '').toLowerCase();
+          return scopeModules.some((m) => {
+            const mf = m.toLowerCase();
+            return u === mf || u.includes(mf) || mf.includes(u);
+          });
+        };
+        let filteredCount = 0;
         for (let i = 0; i < sections.length; i++) {
           const sec = sections[i];
+          // v8.3.277: --modules 指定范围重建时，只创建匹配模块的任务，其余跳过（避免重复）
+          const secUnit = (sec as any).functionalUnit || sec.name || '';
+          if (!moduleFilter(secUnit)) {
+            filteredCount++;
+            logger.info(`   ⏭️  跳过「${sec.name}」（不属于 --modules 指定范围，已保留旧任务）`);
+            continue;
+          }
           const complexity = (sec as any)._complexity || {};
           const taskType = (sec as any)._taskType || 'feature';
           const deps = (tasks[i].dependencies || []) as string[];
@@ -1067,7 +1101,7 @@ export async function iterationTaskifyCommand(options: IterationTaskifyOptions):
           // 输出下一步操作标记：引导宿主 AI 填充任务级 00-specs/ 文档（analyze --task 已删除）
           outputAnalyzeTaskHints(iter, createdSections);
         }
-        logger.success(`✅ 创建了 ${createdSections.length}/${sections.length} 个任务（${sections.length - createdSections.length} 个跳过）`);
+        logger.success(`✅ 创建了 ${createdSections.length}/${sections.length - filteredCount} 个任务（${sections.length - createdSections.length - filteredCount} 个跳过）`);
 
         // v8.3.160+: 检测是否有待拆分的功能模块
         if (extracted.pending) {
@@ -1088,14 +1122,23 @@ export async function iterationTaskifyCommand(options: IterationTaskifyOptions):
         }
         await writeFile(reqPath, options.response);
       }
-    } catch {
-      const reqPath = join(iterDir, 'REQUIREMENT.md');
-      const bk = await backupWithTimestamp(reqPath);
-      if (bk) {
-        backups.push(bk);
-        logger.info(`   📦 已备份: ${bk.split('/').pop()}`);
+    } catch (e: any) {
+      if (!jsonParsed) {
+        // JSON 解析失败 → 回退 Markdown（保留原始输出）
+        const reqPath = join(iterDir, 'REQUIREMENT.md');
+        const bk = await backupWithTimestamp(reqPath);
+        if (bk) {
+          backups.push(bk);
+          logger.info(`   📦 已备份: ${bk.split('/').pop()}`);
+        }
+        await writeFile(reqPath, options.response);
+      } else {
+        // 任务创建过程异常 → 必须显式报错，禁止静默吞掉冒充成功
+        logger.error(`❌ 任务创建失败: ${e?.message || e}`);
+        if (backups.length > 0) logger.info(`   📦 已备份文件仍保留，可回滚: ${backups.join(', ')}`);
+        process.exitCode = 1;
+        return;
       }
-      await writeFile(reqPath, options.response);
     }
     // v7.4.0+: 从 AI 输出中提取疑问并持久化
     const extractedQs = extractQuestionsFromText(options.response);
@@ -1384,12 +1427,23 @@ export async function iterationTaskifyCommand(options: IterationTaskifyOptions):
 
     // ── 冲突检测: 检查是否已有 Task 目录 ──
     const existingTasks = await detectExistingTasks(iterationDir);
+    const scopeModules = options.modules ? options.modules.split(',').map(m => m.trim()).filter(Boolean) : [];
     if (existingTasks.length > 0 && !options.force) {
-      spinner.stop();
-      logger.warn(`\n⚠️  检测到已有 ${existingTasks.length} 个任务: ${existingTasks.slice(0,5).join(', ')}${existingTasks.length > 5 ? '...' : ''}`);
-      logger.info('   重新 split 会覆盖 TASK.md 中的进度和状态。');
-      logger.info('   使用 --force 强制覆盖，或手动删除不需要的任务。\n');
-      return;
+      if (scopeModules.length > 0) {
+        // v8.3.275: --modules 指定范围重建——只备份移除匹配模块的旧任务，其余保留
+        const removed = await pruneTasksByModules(iterationDir, scopeModules);
+        if (removed.length > 0) {
+          logger.info(`   🔄 指定范围重建: 备份移除 ${removed.length} 个模块任务（${removed.join(', ')}），其余 ${existingTasks.length - removed.length} 个保留`);
+        } else {
+          logger.info(`   ℹ️  未找到匹配模块「${scopeModules.join(', ')}」的已有任务，全部保留，仅新增新任务`);
+        }
+      } else {
+        spinner.stop();
+        logger.warn(`\n⚠️  检测到已有 ${existingTasks.length} 个任务: ${existingTasks.slice(0,5).join(', ')}${existingTasks.length > 5 ? '...' : ''}`);
+        logger.info('   重新 split 会覆盖 TASK.md 中的进度和状态。');
+        logger.info('   使用 --force 强制覆盖，或 --modules <模块> 指定范围重建。\n');
+        return;
+      }
     }
 
     // ── 智能分析: 复杂度 + 优先级 + 工时 ──
@@ -1814,27 +1868,47 @@ async function createTaskFromSection(iterationDir: string, taskId: string, secti
   } else if (section.platform) {
     taskPlatforms = [section.platform];
   } else {
-    // v8.3.125+: 使用三层匹配推断平台（替代脆弱的字符串包含匹配）
+    // v8.3.268: 端覆盖裁剪——_matrix 显式声明优先；为空时从 020-specs 端级文档反推
+    // （仅当端级存在非骨架、≥200 字符的 TECH/TEST/UI_SPEC 才算涉及端）；
+    // 仍无结果才回退 Spec 匹配 + 六层推断。修复 _matrix platforms 全空时
+    // 每 Task 平铺全部端、幽灵端子任务无中生有（17 Task × 4 端 ≈ 半数无真实规格）。
     taskPlatforms = [];
     const sectionFeatureName = section.name.replace(/^\d+(\.\d+)*\s*/, '').trim();
-    for (const platform of allPlatforms) {
-      const bestMatch = findBestSpecMatch(specContents, sectionFeatureName, platform, 'TECH.md');
-      if (bestMatch && bestMatch.score >= 20) {
-        taskPlatforms.push(platform);
+    const matrixPlatforms = await readMatrixPlatforms(iterationDir, sectionFeatureName);
+    if (matrixPlatforms.length > 0) {
+      taskPlatforms = matrixPlatforms;
+    } else {
+      for (const platform of allPlatforms) {
+        const hasRealSpec = Object.entries(specContents).some(([key, content]) => {
+          const parts = key.split('/');
+          return parts.length >= 3 && parts[0].includes(sectionFeatureName) && parts[1] === platform &&
+            /(TECH|TEST|UI_SPEC)\.md$/.test(parts[2]) &&
+            !content.includes('SPEC-SKELETON') && content.trim().length >= 200;
+        });
+        if (hasRealSpec) taskPlatforms.push(platform);
       }
     }
-    // v8.3.185+: Spec 匹配失败时，用六层端推断机制（显式声明→_matrix→目录→关键词→AI）
     if (taskPlatforms.length === 0) {
-      const { inferFeaturePlatforms } = await import('../../core/platform-inference');
-      const featureDir = join(iterationDir, '010-requirements', 'features', sectionFeatureName);
-      const inference = await inferFeaturePlatforms({
-        featureName: sectionFeatureName,
-        featureDir,
-        allPlatforms,
-      });
-      taskPlatforms = inference.platforms;
-      if (inference.needsConfirm || inference.source === 'ai-required') {
-        logger.warn(`   ⚠️  功能「${sectionFeatureName}」端推断置信度 ${inference.confidence}（${inference.source}），建议人工确认 _matrix.md`);
+      // v8.3.125+: 使用三层匹配推断平台（替代脆弱的字符串包含匹配）
+      for (const platform of allPlatforms) {
+        const bestMatch = findBestSpecMatch(specContents, sectionFeatureName, platform, 'TECH.md');
+        if (bestMatch && bestMatch.score >= 20) {
+          taskPlatforms.push(platform);
+        }
+      }
+      // v8.3.185+: Spec 匹配失败时，用六层端推断机制（显式声明→_matrix→目录→关键词→AI）
+      if (taskPlatforms.length === 0) {
+        const { inferFeaturePlatforms } = await import('../../core/platform-inference');
+        const featureDir = join(iterationDir, '010-requirements', 'features', sectionFeatureName);
+        const inference = await inferFeaturePlatforms({
+          featureName: sectionFeatureName,
+          featureDir,
+          allPlatforms,
+        });
+        taskPlatforms = inference.platforms;
+        if (inference.needsConfirm || inference.source === 'ai-required') {
+          logger.warn(`   ⚠️  功能「${sectionFeatureName}」端推断置信度 ${inference.confidence}（${inference.source}），建议人工确认 _matrix.md`);
+        }
       }
     }
   }
@@ -1960,6 +2034,43 @@ ${taskPlatforms.map((p: string) => `| ${subtaskIdMap.get(p)} | ${p} | ${owner} |
     if (contractYaml) {
       await writeFile(join(taskDir, '_shared', 'API_CONTRACT.yaml'), contractYaml);
     }
+  }
+
+  // v8.3.268: 合并端级契约——全局契约可能是空壳（apis: [] 或无接口），
+  // 真契约在各功能单元的 020-specs/{feature}/{端}/API_CONTRACT.yaml。
+  // 修复 execute 注入 _shared/API_CONTRACT.yaml 时拿到空契约、AI 无中生有发明接口的断链。
+  const featName = section.name.replace(/^\d+(\.\d+)*\s*/, '').trim();
+  const specsRoot = join(iterationDir, '020-specs');
+  const platContractParts: string[] = [];
+  if (await pathExists(specsRoot)) {
+    const featEntries = await readdir(specsRoot, { withFileTypes: true });
+    for (const fe of featEntries) {
+      if (!fe.isDirectory() || !fe.name.includes(featName)) continue;
+      const platEntries = await readdir(join(specsRoot, fe.name), { withFileTypes: true });
+      for (const pe of platEntries) {
+        if (!pe.isDirectory()) continue;
+        const contractPath = join(specsRoot, fe.name, pe.name, 'API_CONTRACT.yaml');
+        if (!(await pathExists(contractPath))) continue;
+        const contractContent = await readFile(contractPath, 'utf-8');
+        // 空壳判定：无接口条目（apis: [] / paths 缺 / 仅说明文字）
+        const hasApis = /apis:\s*[\n\r]\s*-\s/m.test(contractContent) || /^paths:\s*$/m.test(contractContent);
+        if (!hasApis) continue;
+        platContractParts.push(`## ${pe.name} 端契约（${fe.name}）\n\n${contractContent.trim()}`);
+      }
+    }
+  }
+  if (platContractParts.length > 0) {
+    const sharedContractPath = join(taskDir, '_shared', 'API_CONTRACT.yaml');
+    let baseContract = await pathExists(sharedContractPath)
+      ? await readFile(sharedContractPath, 'utf-8')
+      : '';
+    // 全局索引壳保留，但去掉空 apis 标记，避免误导（真契约已合并于下方）
+    baseContract = baseContract.replace(/\n?apis:\s*\[\]\s*$/, '').trimEnd();
+    const merged = (baseContract
+      ? `${baseContract}\n\n---\n\n`
+      : '# 任务级接口契约（合并自端级契约）\n\n') + platContractParts.join('\n\n---\n\n') + '\n';
+    await writeFile(sharedContractPath, merged);
+    logger.debug(`   📄 ${taskDir.split('/').pop()}: _shared 契约合并 ${platContractParts.length} 份端级契约`);
   }
 
   // ── 4. 核心规格写入 00-specs/（REQ/TECH/SCHEMA/CHANGELOG） ──
@@ -2457,10 +2568,14 @@ ${!isBk && docSet.hasComponentTree ? '| COMPONENT_TREE.md | ⏳ | ./COMPONENT_TR
 
   // 确保至少有 backend 子任务（AI 未输出 backend 时自动补充，仅非 research）
   // v6.48.0+：从 CONSTITUTION.md 端列表查找后端端名，不再硬编码 'backend'
+  // v8.3.277: 仅当 AI 未显式声明 scope（_scopePlatforms 缺失/为空）时才自动补充；
+  // scope 已显式给出时尊重 AI 意图，不制造幽灵后端子任务
   const hasAnyBackend = taskPlatforms.some((p: string) =>
     p === 'backend' || p.startsWith('后台') || /-(service|api|server|backend)$/i.test(p)
   );
-  if (!isResearch && !hasAnyBackend) {
+  // AI 显式声明 scope 时尊重意图，不自动补后端；推断出的 scope 保留自动补充
+  const shouldAutoBackend = !(section as any)._explicitScope;
+  if (!isResearch && !hasAnyBackend && shouldAutoBackend) {
     // 从端列表查找第一个后端端名作为 fallback（v6.48.0+）
     const allPlatforms = await parsePlatformList();
     const fallbackBackend = allPlatforms.find(p =>
@@ -2598,6 +2713,8 @@ ${taskPlatforms.map((p: string) => `| ${p} | 待补充 |`).join('\n')}
 
 async function updateProjectGraph(iterationDir: string, sections: Section[]): Promise<void> {
   const graphPath = join(iterationDir, '000-overview', 'PROJECT_GRAPH.md');
+  // 防护：000-overview/ 可能尚不存在（全新迭代首次拆分），写前先建目录
+  await ensureDir(join(iterationDir, '000-overview'));
   
   let content = '';
   if (await pathExists(graphPath)) {
@@ -3257,6 +3374,35 @@ function generateMonitorTemplate(section: Section, material?: string): string {
 // ═══════════════════════════════════════════════
 
 /** 加载迭代级 020-specs/ 文档内容（包括 global/ 全局文档 + 根目录回退 + 各端子目录文档） */
+/**
+ * v8.3.268: 读取功能单元的端覆盖声明（010-requirements/features/{feature}/_matrix.md 的 platforms 字段）。
+ * 修复 _matrix platforms 全空/缺失时 taskify 每 Task 平铺全部端、幽灵端子任务无中生有的问题。
+ * 解析格式：platforms: 后跟随 `  - 端名` 行；`  []`（空标记）或不存在时返回空数组，交由反推逻辑处理。
+ */
+async function readMatrixPlatforms(iterationDir: string, featureName: string): Promise<string[]> {
+  try {
+    const featuresDir = join(iterationDir, '010-requirements', 'features');
+    if (!(await pathExists(featuresDir))) return [];
+    const entries = await readdir(featuresDir, { withFileTypes: true });
+    for (const e of entries) {
+      // v8.3.277: 排除时间戳备份目录——备份目录名仍包含 featureName，
+      // 读到旧版 _matrix.md 会返回过期的端覆盖声明
+      if (!e.isDirectory() || !e.name.includes(featureName) || isTimestampBackup(e.name)) continue;
+      const matrixPath = join(featuresDir, e.name, '_matrix.md');
+      if (!(await pathExists(matrixPath))) continue;
+      const raw = await readFile(matrixPath, 'utf-8');
+      const m = raw.match(/platforms:\s*\n((?:\s*[-\[]?[\s\S]*?))(?=\n(?:dependencies|apis|interfaces|$))/);
+      const block = m ? m[1] : '';
+      if (!block || /^\s*\[\s*\]\s*$/.test(block.trim())) continue;
+      const plats = block.split('\n')
+        .map(l => l.replace(/^\s*-\s*/, '').trim())
+        .filter(p => p && !p.startsWith('#') && !p.includes(':'));
+      if (plats.length > 0) return plats;
+    }
+  } catch { /* 读取失败不阻断，回退端级规格反推逻辑 */ }
+  return [];
+}
+
 async function loadSpecContents(iterationDir: string): Promise<Record<string, string>> {
   const specs: Record<string, string> = {};
   const specDir = join(iterationDir, '020-specs');
@@ -3363,7 +3509,10 @@ function findBestSpecMatch(
     let score = 0;
 
     // 第一层：精确匹配（字符串包含，最高权重）
-    const normalizedTask = taskName.toLowerCase().replace(/\s+/g, '');
+    // v8.3.269: 归一化对称——taskName 与 key 同样去除分隔符（-/_.）。
+    // 此前 taskName 只去空格、key 去分隔符，含连字符的任务名（如 admin-web-02-会议室管理）
+    // 第一层 includes 永远不命中，端前缀匹配失效，只能靠二三层同义词/标题刷分兜底。
+    const normalizedTask = taskName.toLowerCase().replace(/[\s\/\-_\.]+/g, '');
     const normalizedKey = key.toLowerCase().replace(/[\/\-_\.]/g, '');
     if (normalizedKey.includes(normalizedTask) || normalizedTask.includes(normalizedKey)) {
       score += 100;
@@ -3388,10 +3537,28 @@ function findBestSpecMatch(
 
   if (candidates.length === 0) return null;
   candidates.sort((a, b) => b.score - a.score);
+  // v8.3.265+: 并列最高分告警——双向 includes 在通用词任务名（如「管理」）下可能命中多个模块，静默取第一个会错配文档
+  const topScore = candidates[0].score;
+  const ties = candidates.filter(c => c.score === topScore);
+  if (ties.length > 1) {
+    logger.warn(`   ⚠️  Spec 文档匹配并列 ${ties.length} 个候选（任务「${taskName}」，得分 ${topScore}），已取第一个: ${ties[0].key}`);
+    logger.warn(`      并列候选: ${ties.map(t => t.key).join(' | ')}`);
+  }
   return candidates[0];
 }
 
 /** 从完整文档中提取与任务名相关的段落 */
+/** v8.3.269: 展开 analyze 落盘的 Python 数组字面量（['| a | b |', '| c | d |']）为多行表格行。
+ * analyze 阶段 AI 用 Python 生成验收标准表格时偶发未展开数组即写入 Markdown，
+ * taskify 提取时原样搬运会把不可读的单行数组塞进 REQ.md，此处做数据容错还原。 */
+function expandPythonListLiteral(content: string): string {
+  if (!content.includes("['")) return content;
+  return content.replace(/\['((?=[^']*\|)[^']*(?:'\s*,\s*'[^']*)*)'\]/g, (...args) => {
+    const inner: string = args[1];
+    return inner.split(/'\s*,\s*'/).join('\n');
+  });
+}
+
 function extractRelevantSection(fullContent: string, taskName: string, sectionHint?: string): string {
   if (!fullContent || !taskName) return '';
   const lines = fullContent.split(/\r?\n/);
@@ -3429,7 +3596,7 @@ function extractRelevantSection(fullContent: string, taskName: string, sectionHi
       matched.push(`${prefix} ${sec.heading}\n${sec.content.trim()}`);
     }
   }
-  if (matched.length > 0) return matched.join('\n\n');
+  if (matched.length > 0) return expandPythonListLiteral(matched.join('\n\n'));
 
   // 回退：提取包含关键词的连续行
   const fallback: string[] = [];
@@ -3437,7 +3604,7 @@ function extractRelevantSection(fullContent: string, taskName: string, sectionHi
     const lower = line.toLowerCase();
     if (kwArray.some(kw => lower.includes(kw))) fallback.push(line);
   }
-  return fallback.length > 0 ? fallback.join('\n') : '';
+  return fallback.length > 0 ? expandPythonListLiteral(fallback.join('\n')) : '';
 }
 
 /** 从 TECH.md 提取前端平台相关内容 */
@@ -3516,10 +3683,45 @@ function extractTaskDevGuideContent(
   return results.join('\n\n');
 }
 
+// v8.3.268: 按文档类型从 TECH 提取中分化内容——按 ### 标题切段，
+// 只保留与文档类型相关的段落。修复「一段多用」：ROUTES/STATE/STYLE_GUIDE/
+// COMPONENT_TREE 四份文档正文完全相同（仅标题不同）的问题。
+function extractSectionByKeywords(material: string, keywords: string[]): string {
+  const sections = material.split(/^#{2,4}\s+/m);
+  const matched: string[] = [];
+  for (const sec of sections) {
+    const lines = sec.split('\n');
+    const headLine = lines[0] || '';
+    if (keywords.some(kw => headLine.includes(kw))) {
+      // v8.3.273: split 仅切掉 # 前缀，标题文字（如「4. 组件拆分」）仍留在首行——
+      // 剥掉标题行，只保留正文（修复 COMPONENT_TREE/ROUTES 开头残留章节序号）
+      matched.push(lines.slice(1).join('\n').trim());
+    }
+  }
+  // 无 ### 标题结构的兜底：整段中关键词密度最高的前 N 行
+  if (matched.length === 0 && material.includes('\n|')) {
+    const lines = material.split('\n');
+    const tableStart = lines.findIndex(l => keywords.some(kw => l.includes(kw)));
+    if (tableStart >= 0) {
+      const block: string[] = [];
+      for (let i = tableStart; i < lines.length; i++) {
+        if (i > tableStart && /^#{2,4}\s/.test(lines[i])) break;
+        block.push(lines[i]);
+      }
+      return block.join('\n').trim();
+    }
+  }
+  return matched.join('\n\n');
+}
+
 // 前端专属：组件树
 function generateComponentTree(section: Section, platform: string, material?: string): string {
   if (material && material.trim().length > 200) {
-    return `# ${section.name} — 组件树 (${platform})\n\n> 来源: analyze → TECH.md（自动提取）\n\n${material.trim()}\n`;
+    // v8.3.268: 仅提取组件拆分/组件清单相关段落
+    const extracted = extractSectionByKeywords(material, ['组件拆分', '组件清单', '组件树', '共享组件']);
+    if (extracted) {
+      return `# ${section.name} — 组件树 (${platform})\n\n> 来源: analyze → TECH.md（组件拆分段提取）\n\n${extracted}\n`;
+    }
   }
   return `# ${section.name} — 组件树 (${platform})
 
@@ -3543,7 +3745,11 @@ function generateComponentTree(section: Section, platform: string, material?: st
 // 前端专属：路由
 function generateRoutesDoc(section: Section, platform: string, material?: string): string {
   if (material && material.trim().length > 200) {
-    return `# ${section.name} — 路由设计 (${platform})\n\n> 来源: analyze → TECH.md（自动提取）\n\n${material.trim()}\n`;
+    // v8.3.268: 仅提取页面清单与路由相关段落
+    const extracted = extractSectionByKeywords(material, ['页面清单', '路由', '导航']);
+    if (extracted) {
+      return `# ${section.name} — 路由设计 (${platform})\n\n> 来源: analyze → TECH.md（页面/路由段提取）\n\n${extracted}\n`;
+    }
   }
   return `# ${section.name} — 路由设计 (${platform})
 
@@ -3562,7 +3768,11 @@ function generateRoutesDoc(section: Section, platform: string, material?: string
 // 前端专属：状态管理
 function generateStateDoc(section: Section, platform: string, material?: string): string {
   if (material && material.trim().length > 200) {
-    return `# ${section.name} — 状态管理 (${platform})\n\n> 来源: analyze → TECH.md（自动提取）\n\n${material.trim()}\n`;
+    // v8.3.268: 仅提取状态管理/Store/数据流相关段落
+    const extracted = extractSectionByKeywords(material, ['状态管理', 'Store', '数据流', '状态枚举']);
+    if (extracted) {
+      return `# ${section.name} — 状态管理 (${platform})\n\n> 来源: analyze → TECH.md（状态管理段提取）\n\n${extracted}\n`;
+    }
   }
   return `# ${section.name} — 状态管理 (${platform})
 
@@ -3586,7 +3796,11 @@ function generateStateDoc(section: Section, platform: string, material?: string)
 // 前端专属：样式规范
 function generateStyleGuide(section: Section, platform: string, material?: string): string {
   if (material && material.trim().length > 200) {
-    return `# ${section.name} — 样式规范 (${platform})\n\n> 来源: analyze → TECH.md（自动提取）\n\n${material.trim()}\n`;
+    // v8.3.268: 仅提取样式/主题/设计 Token 相关段落
+    const extracted = extractSectionByKeywords(material, ['样式', '主题', '设计 Token', '视觉', '响应式']);
+    if (extracted) {
+      return `# ${section.name} — 样式规范 (${platform})\n\n> 来源: analyze → TECH.md（样式/主题段提取）\n\n${extracted}\n`;
+    }
   }
   const isH5 = platform.includes('h5') || platform.includes('mobile');
   const isMiniapp = platform.includes('miniapp') || platform.includes('小程序');
@@ -4187,6 +4401,48 @@ async function detectExistingTasks(iterDir: string): Promise<string[]> {
 }
 
 /**
+ * v8.3.275: --modules 指定范围重建——备份移除匹配模块的已有任务目录，其余保留。
+ * 匹配依据：任务 .meta/feature（功能单元名）与模块列表精确/包含匹配；无 feature 时按任务名包含匹配。
+ * 备份目录以 .backup- 前缀改名（detectExistingTasks 只认 Task- 前缀，不会误收集，也不参与重建）。
+ */
+async function pruneTasksByModules(iterDir: string, modules: string[]): Promise<string[]> {
+  const removed: string[] = [];
+  const tasksRoot = join(iterDir, '030-tasks');
+  if (!(await pathExists(tasksRoot))) return removed;
+  const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+  const matchModule = (feature: string, name: string) =>
+    modules.some((m) => {
+      const mf = m.trim().toLowerCase();
+      if (!mf) return false;
+      const f = feature.toLowerCase();
+      const n = name.toLowerCase();
+      return f === mf || f.includes(mf) || mf.includes(f) || n.includes(mf);
+    });
+  const collect = async (dir: string) => {
+    try {
+      for (const e of await readdir(dir, { withFileTypes: true })) {
+        if (!e.isDirectory()) continue;
+        const full = join(dir, e.name);
+        if (e.name.startsWith('Task-')) {
+          let feature = '';
+          try {
+            feature = (await readFile(join(full, '.meta', 'feature'), 'utf-8')).trim();
+          } catch { /* 无 feature 元信息时按任务名匹配 */ }
+          if (matchModule(feature, e.name)) {
+            await rename(full, join(dir, `.backup-${e.name}-${ts}`));
+            removed.push(e.name);
+          }
+        } else if (!e.name.startsWith('.')) {
+          await collect(full);
+        }
+      }
+    } catch {}
+  };
+  await collect(tasksRoot);
+  return removed;
+}
+
+/**
  * v8.3.24+: 扫描已有 Task 的端结构
  * 返回每个 Task 已有的端目录（端平铺结构: {端名}/）
  */
@@ -4509,7 +4765,11 @@ function parseFunctionMapTable(content: string, allPlatforms: string[]): {
     if (cells.every(c => /^[-:]+$/.test(c))) continue;
     if (cells.some(c => c.includes('功能单元')) || cells.some(c => c.includes('涉及端'))) continue;
 
-    const unitName = cells[1];
+    // v8.3.268: 功能单元列取 cells[0]（表头第一列）。此前取 cells[1] 依赖旧数据
+    // 「| 目录名 | 名称 | 端列表 | …」的列错位（cells[1]=名称），一旦表格对齐表头
+    // （cells[1]=涉及端）任务名就变成端列表。「dir（名称）」格式剥尾部括号注释。
+    const unitNameRaw = cells[0] || cells[1];
+    const unitName = unitNameRaw.replace(/[（(][^）)]*[）)]$/, '').trim();
     if (!unitName || unitName === '#' || unitName === '功能单元') continue;
 
     let platforms: string[] = [];
@@ -4517,6 +4777,18 @@ function parseFunctionMapTable(content: string, allPlatforms: string[]): {
       const raw = cells[platformColIdx];
       if (raw && raw !== '无' && raw !== '—' && raw !== '-') {
         platforms = raw.split(/[,，]/).map(p => p.trim()).filter(p => p && allPlatforms.includes(p));
+      }
+    }
+    // v8.3.268: 端列自适应——AI 落盘 FUNCTION_MAP 表格可能列错位（涉及端表头下是
+    // 名称、端列表落在其他列），按表头解析落空时扫描整行，找「逗号分隔且 ≥2 个
+    // 值全部属于标准端名」的单元格作为端列，避免静默回退全端平铺。
+    if (platforms.length === 0) {
+      for (const cell of cells) {
+        const parts = cell.split(/[,，]/).map(p => p.trim()).filter(Boolean);
+        if (parts.length >= 2 && parts.every(p => allPlatforms.includes(p))) {
+          platforms = parts;
+          break;
+        }
       }
     }
     if (platforms.length === 0) platforms = [...allPlatforms];
@@ -4823,7 +5095,8 @@ async function tryModuleDrivenSplit(
         try {
           const entries = await readdir(featuresDir, { withFileTypes: true });
           for (const entry of entries) {
-            if (entry.isDirectory() && !entry.name.startsWith('.')) {
+            // v8.3.277: 排除时间戳备份目录（unitize overwrite 产生的 xxx-20260924083058）
+            if (entry.isDirectory() && !entry.name.startsWith('.') && !isTimestampBackup(entry.name)) {
               const readmePath = await resolveUnitSourcePath(join(featuresDir, entry.name));
               if (await pathExists(readmePath)) {
                 let unitPlatforms: string[] = [...allPlatforms];

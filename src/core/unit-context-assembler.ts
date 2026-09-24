@@ -12,11 +12,15 @@
  */
 
 import { readFile, pathExists, readdir } from 'fs-extra';
-import { join, basename } from 'path';
+import { join, basename, resolve } from 'path';
 import { findRelevantCode } from './code-scanner';
 import { loadFreshKnowledgeGraph } from './knowledge-graph';
 import { unifiedSearch } from './unified-retrieval';
 import { GLOBAL_SPECS_DIR } from './spec-paths';
+import { resolveUnitSourcePath } from './feature-source';
+import { processMarkdownContent } from './prompt-builder';
+import { loadVisionConfig } from './vision-engine';
+import { findProjectRoot } from '../utils/task-utils';
 import { logger } from '../utils/logger';
 
 // ═══════════════════════════════════════════════════════════
@@ -62,6 +66,45 @@ export interface UnitContextResult {
   };
 }
 
+/** 提取 Markdown 图片引用路径（去重） */
+function extractImageRefPaths(content: string): string[] {
+  const refs = new Set<string>();
+  const re = /!\[[^\]]*\]\(([^)\s]+)\)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(content)) !== null) refs.add(m[1]);
+  return [...refs];
+}
+
+/**
+ * v8.3.267: 构建单元图片清单段落。
+ * 图片引用可能落在 500 字符截断之外，此处显式列出 + 存在性校验，
+ * 并指示 AI 用 Read 工具查看原型图（图片不进纯文本上下文，只能靠 Read）。
+ */
+async function buildUnitImageSection(
+  unit: UnitRef,
+  iterDir: string,
+  coreContent: string,
+): Promise<string> {
+  const refs = extractImageRefPaths(coreContent);
+  if (refs.length === 0) return '';
+  const unitDir = join(iterDir, '010-requirements', 'features', unit.name);
+  const lines: string[] = [
+    '## 需求图片/原型',
+    '> 以下图片与需求理解强相关。图片内容不在纯文本上下文中，请用 Read 工具打开查看后再分析。',
+    '',
+  ];
+  for (const ref of refs) {
+    if (/^(https?:|data:|#)/i.test(ref)) {
+      lines.push(`- 🌐 外链图片: ${ref}`);
+      continue;
+    }
+    const resolved = resolve(unitDir, ref);
+    const exists = await pathExists(resolved);
+    lines.push(`- ${exists ? '✅' : '⚠️ 缺失'} \`${ref}\`${exists ? '' : '（文件不存在，已忽略）'}`);
+  }
+  return lines.join('\n');
+}
+
 // ═══════════════════════════════════════════════════════════
 // 主入口：组装功能单元上下文
 // ═══════════════════════════════════════════════════════════
@@ -103,10 +146,39 @@ export async function assembleUnitContext(
   lines.push('');
   lines.push('## 需求描述');
   lines.push('');
-  const coreContent = unit.content;
+  // v8.3.267: 资产内容注入——图片/原型/互链与需求文本同为一等资产，
+  // 必须优先注入核心层，让 AI 无需自行发现即可直接获得资产内容：
+  //   图片 → 视觉模型描述内联（未配置视觉模型时输出路径 + 打开提示）
+  //   SVG  → 文本内联
+  //   HTML 原型 → Playwright accessibility tree 文本内联
+  //   MD 互链 → 标题大纲内联
+  let coreContent = unit.content;
+  try {
+    const sourcePath = await resolveUnitSourcePath(join(iterDir, '010-requirements', 'features', unit.name));
+    const projectRoot = findProjectRoot() || iterDir;
+    const visionConfig = await loadVisionConfig(projectRoot);
+    const seenAssets = new Set<string>();
+    coreContent = await processMarkdownContent(unit.content, sourcePath, seenAssets, visionConfig, {
+      maxLinkDepth: 2,
+      maxLinkChars: 1200,
+      maxSvgChars: 1500,
+    });
+  } catch (e) {
+    // 资产注入失败不影响主流程，降级为原文
+    logger.debug(`单元资产内容注入失败（降级为原文）: ${(e as Error).message}`);
+  }
   lines.push(coreContent);
   lines.push('');
   coreChars = coreContent.length;
+
+  // v8.3.267: 资产状态审计清单——基于原文提取图片引用并校验存在性，
+  // 与上面的内容注入互补：内容注入给「看得见的描述」，审计清单给「文件状态」（路径缺失标注 ⚠️）
+  const unitImgSection = await buildUnitImageSection(unit, iterDir, unit.content);
+  if (unitImgSection) {
+    lines.push(unitImgSection);
+    lines.push('');
+    coreChars += unitImgSection.length;
+  }
 
   // ── 2. 关联层：上下游单元 + 相关源码 ──
   lines.push('---');
@@ -195,7 +267,13 @@ export async function assembleUnitContext(
 
   if (estimatedTokens > opts.maxTokens) {
     logger.debug(`单元上下文超出预算: ${estimatedTokens}/${opts.maxTokens} tokens，执行截断`);
-    context = truncateByBudget(context, unit, relatedUnits, codeFiles, globals, opts, charsPerToken);
+    // v8.3.267: 截断重建基于 unit.content，资产内联内容与审计清单段需并入副本
+    // 才能保留（否则会被 truncateByBudget 重建时丢弃，图片/原型线索静默丢失）
+    const enhancedUnit = {
+      ...unit,
+      content: `${coreContent}${unitImgSection ? `\n\n${unitImgSection}` : ''}`,
+    };
+    context = truncateByBudget(context, enhancedUnit, relatedUnits, codeFiles, globals, opts, charsPerToken);
     totalChars = context.length;
     estimatedTokens = Math.ceil(totalChars / charsPerToken);
   }
@@ -516,9 +594,36 @@ function truncateByBudget(
   const coreTotal = coreHeader.length + coreContent.length;
 
   if (coreTotal > maxChars * 0.6) {
-    // 核心层本身就超了，只保留核心层的前 60%
+    // v8.3.267: 资产优先截断——图片/原型与需求文本同为一等资产，
+    // 预算紧张时正文截断让路，资产块（[链接] 内联、图片提示、审计清单）优先保留
+    const maxCoreChars = Math.floor(maxChars * 0.6);
+    const assetStart = coreContent.search(/\*\*\[链接\]|\n## 需求图片\/原型/);
+    let head = coreContent;
+    let assets = '';
+    if (assetStart > 0) {
+      head = coreContent.slice(0, assetStart);
+      assets = coreContent.slice(assetStart);
+    }
+    // 审计清单（短、信息密度高）从资产区拆出，优先完整保留；
+    // 长内联块（原型 accessibility tree）拿剩余预算
+    let listKeep = '';
+    const listIdx = assets.indexOf('\n## 需求图片/原型');
+    if (listIdx >= 0) {
+      listKeep = assets.slice(listIdx);
+      assets = assets.slice(0, listIdx);
+    }
+    const assetCap = Math.floor(maxCoreChars * 0.45);
+    const listFinal = listKeep.slice(0, Math.floor(assetCap * 0.5));
+    const assetKeep = assets.slice(0, assetCap - listFinal.length) + listFinal;
+    const headBudget = maxCoreChars - coreHeader.length - assetKeep.length;
     lines.push(coreHeader);
-    lines.push(coreContent.slice(0, Math.floor(maxChars * 0.6) - coreHeader.length));
+    if (headBudget > 0) {
+      lines.push(head.slice(0, headBudget));
+      if (assetKeep) lines.push(assetKeep);
+    } else {
+      // 极端预算：连正文都装不下时，资产块优先于正文保留
+      lines.push(assetKeep || head.slice(0, maxCoreChars - coreHeader.length));
+    }
     lines.push('\n\n> ⚠️ 需求内容过长，已截断。如需完整内容请阅读原文档。');
     return lines.join('');
   }

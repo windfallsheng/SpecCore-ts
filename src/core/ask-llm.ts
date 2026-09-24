@@ -233,14 +233,14 @@ export async function resolveAiProviders(feature: string): Promise<LlmProviderCo
 }
 
 /**
- * 通过 WorkBuddy 的 LLM 通信
- * 写入 prompt 到临时文件，WorkBuddy 的 AI 助手读取并返回
+ * 本地降级：尝试本地 Ollama 服务（localhost:11434）。
+ * v8.3.273: 修正注释谎言——原注释宣称「通过文件通信调 WorkBuddy 宿主 AI」，
+ * 实际从未实现文件通信（CLI 无法回调宿主 AI，宿主协作走 exitCode 10 接力协议）。
+ * 无本地 Ollama 时返回 null，由调用方决定拼音兜底或 [SPECCORE_PROMPT] 接力。
  */
 async function callViaWorkBuddy(systemPrompt: string, userPrompt: string): Promise<string | null> {
-  // 在 WorkBuddy 环境中，当前 AI 直接处理
-  // 使用一个标记来检测是否能直接回答
   const combined = `${systemPrompt}\n\n${userPrompt}`;
-  
+
   try {
     // 尝试通过 HTTP 调用（如果有本地 LLM 服务）
     const localRes = await fetch('http://localhost:11434/api/generate', {

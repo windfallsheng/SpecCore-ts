@@ -203,6 +203,20 @@ const PHASE1_DOCS: { name: string; buildPlaceholder: (iter: string) => string }[
 `,
   },
   {
+    name: 'DEPENDENCY_MAP.md',
+    buildPlaceholder: (iter) => `${SKELETON_MARKER}
+# 功能依赖图
+
+> 迭代: ${iter} | 生成: 待填充
+
+## 写作要求
+列出功能单元之间的依赖关系（谁依赖谁），供 taskify/plan 排执行顺序：
+- 每个功能单元一行：依赖的前置功能 + 被依赖的下游功能
+- 跨功能共享契约（API/数据模型）在此标注
+- 供 030-tasks 的 _shared/CONTEXT.md 与 execute 上下文组装引用
+`,
+  },
+  {
     name: 'DEV_GUIDE.md',
     buildPlaceholder: (iter) => `${SKELETON_MARKER}
 # 开发者实现指南
@@ -332,6 +346,7 @@ export const PHASE1_DOC_NAMES: string[] = PHASE1_DOCS.map((doc) => doc.name);
 export const PHASE1_INDEX_DOC_NAMES: string[] = [
   'FUNCTION_MAP.md',
   'INTERACTION_MAP.md',
+  'DEPENDENCY_MAP.md',
   'PLATFORMS.md',
   'CLARIFY.md',
   'API_CONTRACT.yaml',

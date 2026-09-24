@@ -136,10 +136,12 @@ export async function backupDirWithTimestamp(dirPath: string): Promise<string | 
 }
 
 /**
- * 判断文件名是否为时间戳备份文件（如 ANALYSIS-20260813021034.md）
+ * 判断文件名/目录名是否为时间戳备份
+ * 文件备份: ANALYSIS-20260813021034.md（时间戳后有扩展名）
+ * 目录备份: smoke-01-booking-management-20260924083058（backupDirWithTimestamp，无扩展名）
  */
 export function isTimestampBackup(filename: string): boolean {
-  return /-\d{14}\./.test(filename);
+  return /-\d{14}(\.|$)/.test(filename);
 }
 
 /**

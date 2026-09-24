@@ -6494,4 +6494,55 @@ settings:
 
 ---
 
+## 附录：v8.3.274+ 单会话端到端与重名/重跑体系设计
+
+### 翻译交互键约定统一（v8.3.274）
+
+unitize 批量标题英译（v8.3.272 引入）的交互契约：
+
+- **单一标识源**：Prompt 清单编号与 `--translate-response` JSON 键统一为序号（1~N），中文标题仅作展示，杜绝「清单编号 vs 中文标题键」两套标识错位；
+- **双键兼容解析**（`parseTranslationResponse`）：数字键按序号映射回标题、中文标题键直接使用——旧响应不失效，新响应强对应；
+- **防冲突**：重复标题键不再互相覆盖，序号键一一对应无歧义。
+
+### 步骤重跑体系与重名三选一（v8.3.275）
+
+**unitize 重名三选一**（`--on-duplicate ask|skip|overwrite|rename|abort`）：
+
+| 模式 | 行为 | 适用 |
+|:---|:---|:---|
+| skip（非 TTY 默认） | 跳过同名单元 | 幂等重跑，保底安全 |
+| overwrite | 旧目录整目录改名时间戳备份（`backupDirWithTimestamp`），可回滚 | 需求已变，推倒重建 |
+| rename | 加 -2/-3 递增后缀保留两个单元 | 用户裁决为不同内容 |
+| abort | 中止整个切分 | 全盘出错 |
+
+关键点：交互模式仅 stdin+stdout 双 TTY 才创建 readline（单 TTY 管道环境不阻塞）；overwrite/rename 均设 `_skipDupCheck` 绕过内容指纹检测（用户已裁决，不得被「跨文档重复」误拦）；overwrite 用**整目录改名备份**而非文件级备份（文件级备份会被随后的目录删除连累）。
+
+**taskify --modules 指定范围重建**：`pruneTasksByModules` 按 `.meta/feature` 精确/包含匹配，仅备份移除匹配模块的旧任务（`.backup-Task-*-时间戳`，`detectExistingTasks` 只认 Task- 前缀不误收集），其余任务保留。与 `--force` 全量推倒的区别：删除范围严格限定 + 备份可回滚，因此不受「AI 上下文禁用 --force」约束。
+
+### spec-once 双模式 + 步骤回退重跑协议（v8.3.275）
+
+- **双模式**：默认人机交互每节点确认；用户说「全自动/自动跑/别停」切全自动，仅三个安全点停下（范围确认/质量门禁失败/冒烟失败）；部署验证默认不自动执行；中途可切回交互；
+- **步骤回退四路径**：重分析（`analyze --unit X --apply` 覆盖+备份）、重拆（`taskify --modules X`）、重执行（`execute --prompt -t <Task>`）、重切（`unitize --on-duplicate`）——各路径上下文来源明确：重分析读 SOURCE.md 原文，重拆读各单元 REQUIREMENT.md，重执行读 00-specs；
+- **使用说明响应协议**（v8.3.276）：用户仅询问「怎么用/使用说明」时不启动流程，按「使用说明」节输出纯文字指南。
+
+### 拆分流健壮性加固（v8.3.277）
+
+冒烟验证暴露并修复的五类静默失败：
+
+1. **计数器 ENOENT**：`global-counters.save/initCounters` 直接写 `.speccore/local/counters.json`，目录未创建时抛异常致 taskify 首个任务即失败。修法：写前 `ensureDir`；
+2. **异常静默吞没**：taskify response 路径 catch 把任何异常都当「JSON 非数组」回退并输出「✅ 任务已创建」——创建失败被冒充成功。修法：`jsonParsed` 标志区分 JSON 解析失败（回退 Markdown）与创建过程异常（显式报错 + exitCode 1 + 备份清单提示）；
+3. **PROJECT_GRAPH ENOENT**：`updateProjectGraph` 写 `000-overview/PROJECT_GRAPH.md` 前未建目录。修法：写前 ensureDir；
+4. **幽灵后端子任务**：AI 显式声明 scope（如仅 admin-web）时仍被「确保至少有 backend 子任务」强制补后端子任务。修法：`_explicitScope` 标记区分「AI 显式声明」与「推断出的端」，仅推断路径保留自动补后端；
+5. **--modules 范围重建重复创建**：指定范围重建时响应中的非模块任务也被重建（同模块新旧两份）。修法：创建循环按 functionalUnit 与模块列表匹配过滤，非模块任务跳过（保留旧任务）。
+
+### 备份目录指纹隔离（v8.3.277）
+
+overwrite 产生的时间戳备份目录（`xxx-20260924083058`，无扩展名）此前不被 `isTimestampBackup` 识别（原正则仅匹配 `-\d{14}\.` 文件备份），会被当功能单元：污染 doc2spec 幂等指纹、被 taskify/analyze 收入单元清单、`readMatrixPlatforms` 读到旧版 _matrix 返回过期端声明。修法：
+
+- `isTimestampBackup` 正则扩展为 `-\d{14}(\.|$)`，同时识别文件与目录备份；
+- 四处 features/ 扫描点（doc2spec 幂等收集、taskify 模块驱动、analyze requirements 收集、readMatrixPlatforms）统一加 `!isTimestampBackup` 过滤（`.backup-Task-*` 另有 `.` 前缀双保险）；
+- docSlug 避开全局保留词：converted/ 下名为 `overview.md` 的文档直接作前缀会让全部单元目录名以 `overview-` 开头、被「全局章节拦截」误杀，现 `overview/global` 前缀替换为 `doc`。
+
+---
+
 

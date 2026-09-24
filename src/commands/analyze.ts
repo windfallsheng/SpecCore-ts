@@ -27,7 +27,7 @@ import { buildPrompt, buildPromptText, formatPrompt, processMarkdownContent } fr
 import { parseProjectInfo } from '../core/spec-paths';
 // v8.3.160+: 子 Agent 适配层（analyze 自定义 Prompt 中手动注入）
 // v8.3.169+: 新增 dispatchSubagent 支持 Qoder SDK 直接调度
-import { defaultAdapter, dispatchSubagent } from '../core/agent-adapter';
+import { defaultAdapter, dispatchSubagent, isSdkDispatchSupported } from '../core/agent-adapter';
 import type { AgentContext as AdapterAgentContext } from '../core/agent-adapter';
 import { buildAutoModeInstruction, writeQuestions, extractQuestionsFromText, type QuestionItem } from '../core/questions';
 import { resolvePlatform } from '../core/platform-registry';
@@ -799,6 +799,24 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         logger.info(`   speccore analyze --prompt -I ${iter} --unit M-01`);
         return;
       }
+    } else if (options.autoUnits || options.resumeUnits) {
+      // v8.3.266+: 缓存与磁盘 features/ 权威源对照——旧缓存可能含 unitize 重切前的假单元
+      // （实测会议项目 23 个缓存单元中 6 个在 features/ 不存在），调度循环会给假单元生成
+      // Prompt 写到 features 锚点之外的目录，白写且 taskify/Phase 2 均不读。
+      const diskUnits = await extractIterationUnits(iterDir);
+      const cacheNames = new Set(units.map((u: IterationUnit) => u.name));
+      const diskNames = new Set(diskUnits.map((u: IterationUnit) => u.name));
+      const mismatched = diskUnits.length > 0
+        && (diskUnits.length !== units.length || [...diskNames].some((n: string) => !cacheNames.has(n)));
+      if (mismatched) {
+        units = diskUnits;
+        await ensureDir(dirname(unitsCachePath));
+        await writeFile(unitsCachePath, JSON.stringify(units, null, 2));
+        logger.warn(`⚠️ 单元清单与磁盘 features/ 目录不一致，已刷新: ${units.length} 个`);
+        for (const u of units) {
+          logger.info(`   ${u.id}: ${u.name} (${u.source}#L${u.sourceRange.startLine})`);
+        }
+      }
     }
 
     // Step 2: 汇总模式（--consolidate）
@@ -862,14 +880,33 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     //   CLI 每轮推进状态机：校验产出 → 已就绪自动标记并推进，未就绪输出该单元 prompt（exitCode 10）
     //   → 宿主 AI 落盘 → 再次调用本命令 → CLI 校验通过自动推进下一个单元，直到全部完成
     if (options.autoUnits || options.resumeUnits) {
-      const loopResult = await runUnitDispatchLoop(iter, iterDir, units);
-      if (loopResult.finished) {
-        await printUnitLoopSummary(iter, iterDir, units, loopResult);
-        return;
+      // v8.3.266: Qoder 环境非 TTY 下优先 SDK 派单——CLI 进程内直接调起子 Agent
+      // （独立上下文、acceptEdits 直接写文件），校验通过后自动推进下一单元，宿主全程
+      // 不参与；SDK 不可用/失败时回退标记模式（exitCode 10 宿主接力）。
+      // 收敛性：每轮单元状态必然前进（done/failed）或 SDK 失败退出，不会死循环。
+      const sdkSupported = !process.stdout.isTTY && isSdkDispatchSupported();
+      const maxDispatchRounds = units.length * 3 + 5; // 防御性上限（每单元最多 3 次尝试 + 余量）
+      let dispatchCount = 0;
+      while (true) {
+        const loopResult = await runUnitDispatchLoop(iter, iterDir, units);
+        if (loopResult.finished) {
+          await printUnitLoopSummary(iter, iterDir, units, loopResult);
+          return;
+        }
+        const fallbackPrompt = `${loopResult.prompt}\n\n## 完成后继续\n\n落盘后运行以下命令，CLI 将校验产出并自动推进到下一个单元：\n\n\`\`\`bash\nspeccore analyze --resume-units -I ${iter}\n\`\`\`\n`;
+        if (!sdkSupported || !(await trySdkDispatchUnit(loopResult.prompt!, iter, loopResult.step!.name))) {
+          // 回退标记模式（非 Qoder 宿主 / TTY / SDK 失败均走此路径）
+          await emitAiPrompt(iter, fallbackPrompt, { mode: 'resume-units-loop' });
+          process.exitCode = 10;
+          return;
+        }
+        if (++dispatchCount >= maxDispatchRounds) {
+          logger.warn(`⚠️ SDK 派单轮次超限（${maxDispatchRounds}），退出调度循环`);
+          process.exitCode = 10;
+          return;
+        }
       }
-      await emitAiPrompt(iter, `${loopResult.prompt}\n\n## 完成后继续\n\n落盘后运行以下命令，CLI 将校验产出并自动推进到下一个单元：\n\n\`\`\`bash\nspeccore analyze --resume-units -I ${iter}\n\`\`\`\n`, { mode: 'resume-units-loop' });
-      process.exitCode = 10;
-      return;
+      // 理论不可达：while(true) 内所有路径均 return
     }
 
     // 3c. --unit: 指定单元（支持逗号分隔多个，如 M-01,M-03）
@@ -1176,7 +1213,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         try {
           const featureEntries = await readdir(featuresDir, { withFileTypes: true });
           for (const fe of featureEntries) {
-            if (fe.isDirectory() && !fe.name.startsWith('.')) {
+            // v8.3.277: 排除时间戳备份目录（unitize overwrite 产生的 xxx-20260924083058）
+            if (fe.isDirectory() && !fe.name.startsWith('.') && !isTimestampBackup(fe.name)) {
               const readmePath = await resolveUnitSourcePath(join(featuresDir, fe.name));
               if (await pathExists(readmePath)) requirements.push(readmePath);
             }
@@ -1856,6 +1894,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     const clarifyBlocks = parseClarifyMarkers(options.apply);
     if (clarifyBlocks.size > 0 && !isGlobalScope) {
       logger.info(`📋 检测到 ${clarifyBlocks.size} 个澄清文档，先写入...`);
+      // v8.3.267: 提前取真实功能单元名集合（只取一次），供幽灵路由判定
+      const validFeatures = new Set(iterDir ? await parseFeatureList(iterDir) : []);
       for (const [filename, content] of clarifyBlocks) {
         const { parseClarifiedRequirement, buildClarifiedHeader } = await import('../core/requirement-clarifier');
         const { content: cleaned } = parseClarifiedRequirement(content);
@@ -1864,7 +1904,23 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         // 解析写入路径：支持新格式（overview/、{feature}/overview/）和旧格式（requirements/）
         let fp: string;
         if (filename.includes('/') || filename.includes('\\')) {
-          fp = join(iterDir!, '020-specs', filename);
+          // v8.3.267: 幽灵路由归一化——AI 常把「文档 slug」当 feature-name 生成
+          // [CLARIFY:overview/overview/CLARIFY.md]、[CLARIFY:admin-web/overview/CLARIFY.md]
+          // 等标记，原样落地会产出 overview/overview/、admin-web/ 等幽灵目录。
+          // 首段不是真实功能单元时：
+          //   「overview」→ 全局澄清 020-specs/overview/CLARIFY.md
+          //   其余文档 slug → 文档级黄金需求 020-specs/requirements/{slug}-clarified.md
+          const seg = filename.split(/[\\/]/)[0];
+          const isUnitOverview = /^[^\\/]+\/overview\/CLARIFY\.md$/i.test(filename);
+          if (isUnitOverview && seg === 'overview') {
+            fp = join(iterDir!, '020-specs', 'overview', 'CLARIFY.md');
+            logger.warn(`   ↪ ${filename} 首段「overview」为全局澄清，已归一化到 020-specs/overview/CLARIFY.md`);
+          } else if (isUnitOverview && !validFeatures.has(seg)) {
+            fp = join(iterDir!, '020-specs', 'requirements', `${seg}-clarified.md`);
+            logger.warn(`   ↪ ${filename} 首段「${seg}」非功能单元，已路由到 requirements/${seg}-clarified.md（文档级黄金需求）`);
+          } else {
+            fp = join(iterDir!, '020-specs', filename);
+          }
         } else {
           // 兼容旧格式：无路径前缀的文件名写入 requirements/
           fp = join(iterDir!, '020-specs', 'requirements', filename);
@@ -2386,7 +2442,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       }
       logger.info('');
       logger.info('   原因：单会话内批量生成过多文档会导致上下文溢出、质量下降');
-      logger.info('   请在新会话中逐个批次执行，确保每个文档的质量深入');
+      logger.info('   请逐个批次执行（同一会话内连续跑批次即可），确保每个文档的质量深入；上下文紧张时开新会话继续剩余批次');
       return;
     }
 
@@ -4749,6 +4805,8 @@ export async function buildMultiDocPrompt(command: string, ctx: { iteration?: st
 
 ### 告警规则
 - 按 Fatal/Critical/Warning/Info 分级，定义触发条件、通知方式、响应时间
+
+⚠️ 硬约束（v8.3.273）：端级 MONITOR 只写本端的章节——前端端只写「业务指标 + 前端技术指标 + 告警规则」，后端端只写「业务指标 + 后端技术指标 + 告警规则」。禁止把另一端的技术指标（如后端 SLF4J/Actuator/Prometheus）套到前端端文档。
 `],
 
     ['UI_SPEC.md',
@@ -4764,6 +4822,8 @@ export async function buildMultiDocPrompt(command: string, ctx: { iteration?: st
 - 状态枚举（前后端共享的状态值定义，如 0=空闲 1=使用中 2=维护中）
 
 ⚠️ 这是前后端契约的关键桥梁 — 字段映射必须与后端 API 响应字段一一对应
+
+⚠️ 硬约束（v8.3.273）：UI_SPEC.md 仅前端端需要。后端端（如 booking-service/room-service）生成时直接写「本端为后端服务，无 UI，UI 交互见对应前端端 UI_SPEC.md」即可，不得生成页面清单/组件拆分等伪 UI 内容。
 `],
 
     ['FUNCTION_MAP.md',
@@ -6540,12 +6600,25 @@ export async function extractIterationUnits(iterDir: string): Promise<IterationU
   const featuresDir = join(reqDir, 'features');
   if (await pathExists(featuresDir)) {
     const entries = await readdir(featuresDir, { withFileTypes: true });
-    const dirs = entries.filter(e => e.isDirectory() && !e.name.startsWith('.') && !e.name.startsWith('_'));
+    // v8.3.267: 过滤 overview- 前缀的全局章节目录（unitize 误切产物，
+    // 如「核心业务规则跨端通用」），防止假单元混入调度循环
+    const dirs = entries.filter(e => e.isDirectory() && !e.name.startsWith('.') && !e.name.startsWith('_') && !e.name.startsWith('overview-'));
     for (const dir of dirs) {
       const readmePath = await resolveUnitSourcePath(join(featuresDir, dir.name));
       let content = '';
       if (await pathExists(readmePath)) {
-        content = (await readFile(readmePath, 'utf-8')).slice(0, 500);
+        // v8.3.267: 图片引用可能落在 500 字符截断之外，显式保留引用行，
+        // 保证单元上下文的图片清单完整（AI 可据此 Read 原型图）
+        const full = await readFile(readmePath, 'utf-8');
+        content = full.slice(0, 500);
+        const imgRefs = new Set<string>();
+        const imgRe = /!\[[^\]]*\]\(([^)\s]+)\)/g;
+        let m: RegExpExecArray | null;
+        while ((m = imgRe.exec(full)) !== null) imgRefs.add(m[1]);
+        const outside = [...imgRefs].filter(r => !content.includes(r));
+        if (outside.length > 0) {
+          content += `\n\n<!-- 原文图片引用（截断外保留）-->\n${outside.map(r => `![图片](${r})`).join('\n')}`;
+        }
       }
       units.push({
         id: `M-${String(idCounter++).padStart(2, '0')}`,
@@ -6645,7 +6718,9 @@ export async function loadUnitAnalyses(iteration: string): Promise<UnitAnalysis[
 export async function detectPendingUnits(iteration: string, allUnits: IterationUnit[]): Promise<IterationUnit[]> {
   const completed = await loadUnitAnalyses(iteration);
   const completedIds = new Set(completed.map(a => a.id));
-  const iterDir = `Iteration-${iteration.replace(/^Iteration-/, '')}`;
+  // v8.3.266+: 用绝对路径迭代目录替代相对路径拼接——cwd 不在迭代父目录时旧写法会指向错误路径，
+  // 导致 unitHasSkeletonOutput 兜底检查全部误判为骨架（路径不存在）
+  const iterDir = await getIterationDir(iteration);
   const pending: IterationUnit[] = [];
   for (const u of allUnits) {
     if (!completedIds.has(u.id)) {
@@ -7077,6 +7152,7 @@ async function buildUnitLoopPrompt(
 约束：
 - 每个文件内容不少于 200 字符，禁止输出空模板或骨架占位
 - 写入前先创建目录；写完后回复一行：\`DONE ${unit.name}\`
+- 若上下文中含「需求图片/原型」或 \`![...](...)\` 图片引用，请先用 Read 工具打开图片文件查看，再结合图片信息撰写规格；不要忽略图片提示
 `;
 
   if (attempt > 1 && lastError) {
@@ -7090,6 +7166,84 @@ async function buildUnitLoopPrompt(
   }
 
   return base + extra;
+}
+
+/**
+ * v8.3.266: 调度循环 SDK 派单——Qoder 环境非 TTY 下由 CLI 直接调起子 Agent
+ * （独立上下文、acceptEdits 直接写文件），返回 true 表示派单成功（含自动落盘）。
+ */
+async function trySdkDispatchUnit(prompt: string, iter: string, unitName: string): Promise<boolean> {
+  try {
+    const agentCtx: AdapterAgentContext = {
+      subagent: 'requirement-analyzer',
+      iteration: iter,
+      contextBudget: 6000,
+      contextType: 'incremental',
+      cwd: findProjectRoot() || process.cwd(),
+    };
+    const dispatchResult = await dispatchSubagent(agentCtx, prompt);
+    if (!dispatchResult || !dispatchResult.success) {
+      logger.debug('[analyze] SDK 派单未成功，回退标记模式');
+      return false;
+    }
+    // v8.3.266: 防御空转——success 但既没写文件也没返回可落盘内容，视为无效派单，
+    // 立即回退标记模式（否则循环会白白耗尽该单元 3 次尝试并误标 failed）
+    if (!dispatchResult.content && (!dispatchResult.filesChanged || dispatchResult.filesChanged.length === 0)) {
+      logger.warn('[analyze] SDK 派单无产出（未写文件且无回传内容），回退标记模式');
+      return false;
+    }
+    logger.info(`[analyze] 调度循环子 Agent SDK 派单成功: ${unitName}`);
+    // v8.3.196+ 自动落盘：子 Agent 未直接写文件时，解析其返回的 JSON/[DOC:] 内容
+    // 并路由到该单元的 overview/ 目录（applyDocContent 无单元路由，此处专用落盘）
+    if (dispatchResult.content) {
+      const autoApplied = await applyUnitLoopDocs(dispatchResult.content, iter, unitName);
+      if (autoApplied > 0) {
+        process.stdout.write(`✅ 已自动写入 ${autoApplied} 个文档到 020-specs/${sanitizeUnitDirName(unitName)}/overview/\n`);
+      }
+    }
+    if (dispatchResult.filesChanged && dispatchResult.filesChanged.length > 0) {
+      process.stdout.write(`📄 文件变更: ${dispatchResult.filesChanged.join(', ')}\n`);
+    }
+    return true;
+  } catch (e: any) {
+    logger.debug(`[analyze] SDK 派单异常: ${e.message}，回退标记模式`);
+    return false;
+  }
+}
+
+/**
+ * v8.3.266: 把子 Agent 回传的 JSON/[DOC:] 内容写入指定单元的 overview/ 目录。
+ * 文档名归一化：analyze prompt 用 [DOC:REQ.md]，落盘用 REQUIREMENT.md（validateUnitSpec 校验名单）。
+ */
+async function applyUnitLoopDocs(content: string, iter: string, unitName: string): Promise<number> {
+  const trimmed = content.trim();
+  if (!trimmed) return 0;
+  const iterDir = await getIterationDir(iter);
+  const unitDir = join(iterDir, '020-specs', sanitizeUnitDirName(unitName), 'overview');
+  let docs: Record<string, string> = {};
+  if (trimmed.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) docs = parsed as Record<string, string>;
+    } catch { /* 回退 [DOC:] 标记 */ }
+  }
+  if (Object.keys(docs).length === 0) {
+    for (const [name, c] of parseDocMarkers(trimmed)) docs[name] = c;
+  }
+  if (Object.keys(docs).length === 0) return 0;
+
+  const NAME_MAP: Record<string, string> = { 'REQ.md': 'REQUIREMENT.md' };
+  let applied = 0;
+  for (const [filename, docContent] of Object.entries(docs)) {
+    if (typeof docContent !== 'string' || !docContent.trim()) continue;
+    const baseName = (filename.split('/').pop() || filename).trim();
+    const normalized = NAME_MAP[baseName] || baseName;
+    if (!normalized.endsWith('.md') || normalized.startsWith('.')) continue;
+    await ensureDir(unitDir);
+    await writeFile(join(unitDir, normalized), docContent);
+    applied++;
+  }
+  return applied;
 }
 
 /** 单元分析调度循环：构建步骤清单并推进一轮 */
@@ -7126,8 +7280,44 @@ async function printUnitLoopSummary(iter: string, iterDir: string, units: Iterat
     logger.success(`🎉 所有 ${s.done.length} 个功能单元分析完成！`);
   }
   logger.info(`   下一步: 汇总统一报告 speccore analyze --prompt -I ${iter} --consolidate`);
+  // v8.3.266+: 循环只保证 overview/ 3 份，端级文档（{feature}/{端}/）由 Phase 2 负责——
+  // 此前完成提示不提 Phase 2，用户以为分析已闭环，taskify 时端级内容仍是骨架
+  const platformSk = await countPlatformSkeletons(iterDir);
+  if (platformSk.total > 0 && platformSk.skeleton > 0) {
+    logger.warn(`⚠️ 端级文档仍有 ${platformSk.skeleton}/${platformSk.total} 份为骨架（overview/ 之外）`);
+    logger.info(`   Phase 2 生成各端专属文档: speccore analyze --prompt -I ${iter} --phase 2`);
+  }
   // v8.3.234+: 执行完成质量报告（成功/失败清单 + 产出物评分）落盘 QUALITY_AUDIT.md
   await buildAndSaveQualityReport(iterDir, iter, units);
+}
+
+/**
+ * v8.3.266+: 统计 020-specs/{feature}/{端}/ 下仍为骨架的 .md 文件数。
+ * 用于调度循环完成后引导 Phase 2（调度循环只保证 overview/ 3 份落盘）。
+ */
+async function countPlatformSkeletons(iterDir: string): Promise<{ skeleton: number; total: number }> {
+  let skeleton = 0;
+  let total = 0;
+  try {
+    const specDir = join(iterDir, '020-specs');
+    if (!(await pathExists(specDir))) return { skeleton, total };
+    const features = await parseFeatureList(iterDir);
+    const platforms = await parsePlatformList();
+    for (const feature of features) {
+      for (const platform of platforms) {
+        const pDir = join(specDir, feature, platform);
+        if (!(await pathExists(pDir))) continue;
+        const entries = await readdir(pDir, { withFileTypes: true }).catch(() => []);
+        for (const entry of entries) {
+          if (!entry.name.endsWith('.md') || !entry.isFile()) continue;
+          total++;
+          const content = (await readFile(join(pDir, entry.name), 'utf-8').catch(() => '')).trim();
+          if (!content || content.includes('SPEC-SKELETON') || content.length < 200) skeleton++;
+        }
+      }
+    }
+  } catch { /* 统计失败不阻断主流程 */ }
+  return { skeleton, total };
 }
 
 /**

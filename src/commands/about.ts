@@ -32,10 +32,17 @@ export async function aboutCommand(): Promise<void> {
     { icon: '🚀', title: '环境驱动部署', desc: 'pipeline --env 自动 merge → build → deploy' },
     { icon: '🧪', title: '配置驱动测试', desc: 'verify --config 多环境/多页面批量测试' },
     { icon: '🔍', title: 'Spec 自审', desc: 'review 命令让 AI 自检分析文档质量并输出修订建议' },
+    { icon: '⚡', title: 'spec-once 单会话闭环', desc: '一句「spec once」需求到部署端到端，双模式 + 回退重跑' },
+    { icon: '✂️', title: 'unitize 切分', desc: '需求切功能单元（ASCII 目录名），同名三选一可回滚' },
   ];
 
   // 近期亮点
   const highlights = [
+    'spec-once 单会话端到端 — 「spec once」一句话跑完需求→分析→拆分→开发→冒烟→部署，人机交互/全自动双模式',
+    '步骤回退重跑 — 重分析/重拆/重执行/重切四路径，哪一步不满意都无需推倒重来',
+    'unitize 同名三选一 — skip/overwrite（时间戳备份可回滚）/rename，重切不再慌乱',
+    'taskify --modules 范围重建 — 只重拆指定模块，旧任务自动备份其余保留，告别 --force 全量推倒',
+    '功能单元目录 ASCII 化 — 英文 slug + 拼音兜底 + LLM 英译，中文路径兼容风险归零',
     '环境驱动部署 — pipeline --env 自动读取环境配置 branch，merge → build → deploy',
     '五层环境模型 — local / dev / test / staging / production，支持任意数量自定义环境',
     '全命令 Skill 覆盖 — 26+ 命令均有 /命令 + 自然语言 快捷入口',
@@ -56,6 +63,8 @@ export async function aboutCommand(): Promise<void> {
 
   // 重要里程碑版本
   const milestones = [
+    { v: '8.3.277', date: '2026-09', desc: '拆分流健壮性加固 + 备份目录指纹隔离（五类静默失败清零）' },
+    { v: '8.3.275', date: '2026-09', desc: '步骤重跑体系（taskify --modules / unitize 同名三选一）+ spec-once 双模式' },
     { v: '8.3.146', date: '2026-09', desc: 'Spec 自审 + 端名动态化 + 全面清理 backend/frontend 硬编码' },
     { v: '8.3', date: '2026-09', desc: '环境驱动部署 + 全命令 Skill 覆盖 + 配置驱动测试' },
     { v: '6.8', date: '2026-08', desc: '统一检索层 + RAG 检索 + 全局知识沉淀' },

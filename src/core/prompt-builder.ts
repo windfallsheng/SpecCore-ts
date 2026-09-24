@@ -267,6 +267,14 @@ async function loadKeyConstraints(cwd: string): Promise<string[]> {
 /**
  * 定位 REQ.md 实际路径（支持多种结构）
  */
+/**
+ * v8.3.268: 迭代目录名归一化——兼容短名（013-meeting-system）与完整名（Iteration-013-meeting-system）。
+ * 修复 execute 传入完整目录名时 `Iteration-${iteration}` 双重前缀、020-specs/030-tasks 路径失效的问题。
+ */
+function resolveIterDirName(iteration: string): string {
+  return iteration.startsWith('Iteration-') ? iteration : `Iteration-${iteration}`;
+}
+
 async function resolveReqPath(cwd: string, taskDir: string): Promise<string | null> {
   const paths = [
     join(cwd, taskDir, '_shared', 'REQ.md'),
@@ -451,7 +459,7 @@ async function loadExtraSpecs(
   const readingListItems: { path: string; feature: string; name: string }[] = [];
 
   if (iteration) {
-    const iterDir = join(cwd, `Iteration-${iteration}`);
+    const iterDir = join(cwd, resolveIterDirName(iteration));
     files.push(
       { name: '迭代设计文档', path: join(iterDir, '020-specs', 'DESIGN.md') },
     );
@@ -890,7 +898,7 @@ async function loadAllTaskContext(
 
   // 2. 迭代规格 020-specs/ 所有 .md（含 global/ 子目录）
   if (iteration) {
-    const iterDir = join(cwd, `Iteration-${iteration}`);
+    const iterDir = join(cwd, resolveIterDirName(iteration));
     const specsDir = join(iterDir, '020-specs');
     if (await pathExists(specsDir)) {
       try {
@@ -943,7 +951,7 @@ async function loadAllTaskContext(
     }
     const uniqueRelated = [...new Set(relatedIds)];
     if (iteration && uniqueRelated.length > 0) {
-      const iterDir = join(cwd, `Iteration-${iteration}`);
+      const iterDir = join(cwd, resolveIterDirName(iteration));
       const tasksDir = join(iterDir, '030-tasks');
       for (const relId of uniqueRelated.slice(0, 3)) {
         const relTaskDir = join(tasksDir, relId);
@@ -1684,7 +1692,7 @@ function getInstruction(command: PromptCommand, context: { taskName?: string; ap
         '## 相邻任务关联（Layer 2）',
         '在开始编码前，先读取相邻任务的文档，建立任务间关联认知：',
         '1. **读取前置任务**（本任务依赖的任务）：',
-        '   - 在 030-tasks/ 下查找依赖本任务的任务目录',
+        '   - 在 030-tasks/ 下查找本任务依赖的前置任务目录',
         '   - Read 其 _shared/CONTEXT.md 和 00-specs/REQ.md → 了解前置任务的输出接口/数据模型',
         '   - Read 其 _shared/API_CONTRACT.yaml → 了解前置任务定义的契约',
         '2. **读取并行任务**（同一功能单元的其他端任务）：',
@@ -2293,7 +2301,8 @@ export async function buildPrompt(
     try {
       const iterDir = dirname(dirname(taskDir)); // Task-NNN/ → 030-tasks/ → Iteration-XXX/
       const ccPaths = [
-        join(iterDir, '020-specs', 'global', 'CONSISTENCY_CHECK.md'),
+        // v8.3.265+: 全局规格目录统一走 GLOBAL_SPECS_DIR（'overview'），此前硬编码 'global' 导致一致性校验报告永远注入失败
+        join(iterDir, '020-specs', GLOBAL_SPECS_DIR, 'CONSISTENCY_CHECK.md'),
         join(cwd, '.speccore', 'GLOBAL', 'CONSISTENCY_CHECK.md'),
       ];
       for (const ccPath of ccPaths) {

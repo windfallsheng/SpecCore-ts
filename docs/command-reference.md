@@ -160,6 +160,27 @@ speccore doc2spec --classify --response <json> -I <iteration>
 | 技术债、性能优化 | refactor | "首页加载慢" |
 | 调研、选型 | research | "WebSocket vs SSE" |
 
+### ✂️ unitize — 切分功能单元 🔒 AI 命令（原 doc2spec --split，v8.3.271+ 目录名 ASCII 化）
+
+```bash
+speccore unitize -f <md路径> -i <迭代名>                       # 单文档切分
+speccore unitize --files "a.md=端1,b.md" -i <迭代名>          # 多文档批量（可指定端）
+speccore unitize -f <md路径> -i <迭代名> --on-duplicate overwrite  # 同名单元三选一
+speccore unitize -f <md路径> -i <迭代名> --translate-en off    # 关闭标题英译（纯拼音）
+```
+
+切分需求文档为功能单元（`010-requirements/features/{文档slug}-{序号}-{英文slug}/`，中文显示名保留在 SOURCE.md 标题与 `_matrix.md` feature 字段）。目录名是 analyze 分析产物的对齐锚点，由 CLI 确定性生成。
+
+| 参数 | 说明 |
+|:--|:--|
+| `-f, --file <path>` | 需求文档路径（.md 直接切；.docx/.pdf 先 doc2spec 转换） |
+| `--files "a.md=端1,b.md"` | 多文档批量切分，可指定端（端名须与 CONSTITUTION.md 一致） |
+| `--on-duplicate <mode>` | 同名单元处理（v8.3.275+）：`ask`（TTY 交互）/ `skip`（默认，非 TTY）/ `overwrite`（旧目录改名时间戳备份后重建，可回滚）/ `rename`（加 -2/-3 后缀保留两个单元）/ `abort`（中止） |
+| `--translate-en <mode>` | 标题英译（v8.3.272+）：`auto`（默认，LLM 英译 + 拼音兜底）/ `off`（纯拼音）/ `host`（无 LLM 环境时输出 `[SPECCORE_PROMPT]` 清单，宿主 AI 翻译后 `--translate-response '<JSON>'` 续跑） |
+| `--translate-response <json>` | 接力响应：宿主 AI 翻译结果（键为清单序号 1~N，兼容中文标题键） |
+
+> 💡 重复单元防护：跨文档重复章节（内容指纹）、近似重复（Jaccard > 0.85）、桩章节（< 40 字）自动跳过；用户裁决 overwrite/rename 的单元绕过指纹检测。全局信息章节自动归入 `010-requirements/overview/GLOBAL_CONTEXT-*.md`，不切为功能单元。
+
 ### 📤 spec2doc — 文档导出 🔒 AI 命令
 ```bash
 speccore spec2doc [-i <iteration>] [-t <task>] [-f <format>] [-o <output>]
@@ -394,7 +415,7 @@ speccore iteration taskify [-i <iteration>] [-f <file>] [-g <level>] [--force] [
 | `-i, --iteration <name>` | 目标迭代名称（短名，如 `Q1`） |
 | `-f, --file <file>` | 需求文件路径（默认 `REQUIREMENT.md`） |
 | `-g, --granularity <level>` | 拆分粒度: `macro`(粗) / `module`(中,默认) / `atomic`(细) |
-| `--modules <names>` | 只拆分指定功能模块（逗号分隔，如 `"购物车,订单"`） |
+| `--modules <names>` | 只拆分指定功能模块（逗号分隔，如 `"购物车,订单"`）；已有任务时**只重建指定模块**（v8.3.275+）：匹配模块的旧任务自动备份为 `.backup-Task-*-时间戳`（可回滚），其余任务保留——替代 --force 全量推倒 |
 | `--platforms <list>` | 只拆分指定端（逗号分隔，如 `api,h5`） |
 | `--prune` | 清理不匹配的旧任务 |
 | `--dev-guide` | 生成任务级 DEV_GUIDE.md 开发者实现指南 |
@@ -460,6 +481,9 @@ speccore iteration taskify -i Q1 -g macro
 
 # 强制重新拆分（清理旧任务）
 speccore iteration taskify -i Q1 --force
+
+# 只重建指定模块（旧任务自动备份，其余保留，可回滚）
+speccore iteration taskify -i Q1 --modules "购物车,订单"
 ```
 
 ### 📐 plan — 执行计划 🔒 AI 命令

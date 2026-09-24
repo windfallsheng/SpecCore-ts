@@ -16,13 +16,15 @@
  * 可选: LibreOffice (处理 .doc 格式: brew install libreoffice)
  */
 import { logger, Spinner } from '../utils/logger';
+import { pinyin } from 'pinyin-pro';
 import { execSync } from 'child_process';
 import { createHash } from 'crypto';
 import { pathExists, ensureDir, readFile, writeFile, readdir, stat, unlink, copy } from 'fs-extra';
 import { join, basename, extname, dirname, resolve, relative } from 'path';
 import { existsSync } from 'fs';
+import { createInterface } from 'readline';
 import { tmpdir } from 'os';
-import { backupWithTimestamp } from '../utils/task-utils';
+import { backupWithTimestamp, backupDirWithTimestamp, isTimestampBackup } from '../utils/task-utils';
 import { nextTaskId } from '../core/global-counters';
 import { resolveUnitSourcePath } from '../core/feature-source';
 
@@ -144,6 +146,9 @@ interface Word2SpecOptions {
   response?: string;  // --response: 接收 AI 修正后的内容
   classify?: boolean; // --classify: AI 智能分类 → staging/
   split?: boolean;    // --split: 拆分为功能单元 → features/
+  translateEn?: string; // --translate-en: auto(默认) | host | off（单元标题英译）
+  translateResponse?: string; // --translate-response: 接收宿主 AI 英译 JSON（配合 host）
+  onDuplicate?: string; // --on-duplicate: 同名单元处理 ask(默认，TTY 交互三选一) | skip | overwrite | rename | abort
 }
 
 export async function doc2specCommand(options: Word2SpecOptions): Promise<void> {
@@ -468,7 +473,7 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     if (options.split && !taskId) {
       logger.info('');
       logger.info('🔪 开始功能单元拆分...');
-      await splitDocumentToUnits(iterDir, outputPath, platformLabel, basename(options.file));
+      await splitDocumentToUnits(iterDir, outputPath, platformLabel, basename(options.file), options.translateEn, options.translateResponse, options.onDuplicate);
     }
   } catch (error) {
     spinner.fail(`转换失败: ${error}`);
@@ -845,6 +850,39 @@ interface ScannedUnit {
   unitType: 'feature' | 'global-rule';
 }
 
+type DuplicateAction = 'skip' | 'overwrite' | 'rename' | 'abort';
+
+/**
+ * v8.3.275: 同名单元处理——TTY 交互三选一，非 TTY 按 --on-duplicate（默认 skip 保幂等）。
+ * 不静默跳过、不静默覆盖：覆盖重建前备份 SOURCE.md，重命名加 -2/-3 后缀。
+ */
+async function resolveDuplicateAction(
+  unitTitle: string,
+  unitDirName: string,
+  onDuplicate: string | undefined,
+  rl: ReturnType<typeof createInterface> | null
+): Promise<DuplicateAction> {
+  const mode = onDuplicate || 'ask';
+  if (['skip', 'overwrite', 'rename', 'abort'].includes(mode)) {
+    return mode as DuplicateAction;
+  }
+  // v8.3.275: stdin+stdout 双 TTY 才算真交互（仅 stdin TTY 的管道环境仍会阻塞等输入）
+  if (!process.stdin.isTTY || !process.stdout.isTTY || !rl) {
+    logger.warn(`   ⚠️  非交互环境遇同名单元 ${unitDirName}，默认跳过（--on-duplicate overwrite|rename 可改）`);
+    return 'skip';
+  }
+  const answer = await new Promise<string>((resolve) => {
+    rl.question(
+      `   ❓ 功能单元「${unitTitle}」已存在（${unitDirName}）:\n      [s] 跳过（默认）  [o] 覆盖重建  [r] 重命名加后缀  [a] 全部中止\n      → `,
+      (a) => resolve(a.trim().toLowerCase())
+    );
+  });
+  if (answer === 'o' || answer === 'overwrite') return 'overwrite';
+  if (answer === 'r' || answer === 'rename') return 'rename';
+  if (answer === 'a' || answer === 'abort') return 'abort';
+  return 'skip';
+}
+
 /**
  * 将转换后的文档拆分为功能单元，写入 features/
  * v8.3.191+: 导出供 run 流水线「切分功能单元」步骤复用（对已转换文档切分，无需 --file）
@@ -853,7 +891,10 @@ export async function splitDocumentToUnits(
   iterDir: string,
   outputPath: string,
   platformLabel: string,
-  sourceFileName: string
+  sourceFileName: string,
+  translateEn?: string,
+  translateResponse?: string,
+  onDuplicate?: string
 ): Promise<void> {
   const content = await readFile(outputPath, 'utf-8');
   // v8.3.263: 收集同目录其它文档名（端级文档）——总纲文档（如 overview-requirements.md）
@@ -931,10 +972,12 @@ export async function splitDocumentToUnits(
   await ensureDir(featuresDir);
 
   // v8.3.223+: 幂等——先收集已存在的功能单元目录，重复运行不再重写覆盖
+  // v8.3.277: 排除时间戳备份目录（overwrite 产生的 xxx-20260924083058），
+  // 否则备份目录会被当功能单元污染指纹比对与 taskify/analyze 的单元清单
   const existingUnitDirs = new Set<string>();
   try {
     for (const e of await readdir(featuresDir, { withFileTypes: true })) {
-      if (e.isDirectory() && !e.name.startsWith('.')) existingUnitDirs.add(e.name);
+      if (e.isDirectory() && !e.name.startsWith('.') && !isTimestampBackup(e.name)) existingUnitDirs.add(e.name);
     }
   } catch {}
   // v8.3.226+: 跨文档重复防护——收集已有单元的内容指纹，新切单元内容与已有单元
@@ -967,31 +1010,82 @@ export async function splitDocumentToUnits(
   
   let written = 0;
   let skipped = 0;
+  // v8.3.272+: 标题英译（循环外批量：LLM 翻译 + 缓存，失败回落拼音）
+  // v8.3.273+: host 模式无 LLM 环境 → [SPECCORE_PROMPT] 接力，宿主 AI 经 --translate-response 续跑
+  for (const u of units) {
+    u.title = stripSectionPrefix(u.title) || u.title;
+  }
+  const unitNames = translateEn === 'off'
+    ? new Map<string, string>()
+    : await translateUnitTitles(units.map(u => u.title), featuresDir, translateEn || 'auto', translateResponse);
+  if (unitNames === null) {
+    // 接力中断：已输出 [SPECCORE_PROMPT] 且 exitCode 置 10，等待宿主 AI 翻译后 --translate-response 续跑
+    return;
+  }
   const seenUnitDirs = new Set<string>(existingUnitDirs);
+  // v8.3.275: 同名单元处理三选一（TTY 交互 / --on-duplicate），懒创建 readline
+  let rl: ReturnType<typeof createInterface> | null = null;
   for (let unitIndex = 0; unitIndex < units.length; unitIndex++) {
     const unit = units[unitIndex];
-    // v8.3.198+: 剥离章节号前缀（"四、" → ""）+ 加需求文档名前缀，防止跨文档重 名
-    unit.title = stripSectionPrefix(unit.title) || unit.title;
-    const docSlug = sanitizeUnitName(basename(sourceFileName, '.md')) || 'doc';
+    // v8.3.277: docSlug 避开全局保留词（overview/global）——
+    // converted/ 下常见 overview.md 这类文件名，直接作前缀会让全部单元目录名
+    // 以 overview- 开头，被下方「全局章节拦截」误杀
+    let docSlug = sanitizeUnitName(basename(sourceFileName, '.md')) || 'doc';
+    docSlug = docSlug.replace(/^(overview|global)(-|$)/i, 'doc$2');
     // v8.3.227+: 目录名加两位序号前缀（按文档内章节顺序），
     // 保证文件系统排序 == 文档顺序，解决切分目录乱序问题
     // v8.3.240+: 序号基于实际写入数（written+1）而非原始索引，
     // 修复「跳过重复单元导致编号空洞」（如 1~56 全跳过后从 57 开始）
     const seq = String(written + 1).padStart(2, '0');
-    const unitDirName = sanitizeUnitName(`${docSlug}-${seq}-${unit.title}`);
-    // v8.3.223+: 同名/已存在单元跳过（幂等 + 去重）
+    // v8.3.271+: 目录名尾段用英文 slug（v8.3.272+ 优先 LLM 英译，失败拼音兜底）；
+    // 中文显示名保留在 SOURCE.md 标题与 _matrix.md feature 字段
+    const slugSource = unitNames.get(unit.title) || unit.title;
+    let unitDirName = sanitizeUnitName(`${docSlug}-${seq}-${toEnglishSlug(slugSource)}`);
+    // v8.3.223+: 同名/已存在单元三选一（v8.3.275 由静默跳过升级为交互裁决）
     if (seenUnitDirs.has(unitDirName)) {
-      logger.info(`   ⏭️  ${unit.title} 已存在（同名单元），跳过`);
-      skipped++;
-      continue;
+      if (!rl && process.stdin.isTTY && process.stdout.isTTY) rl = createInterface({ input: process.stdin, output: process.stdout });
+      const action = await resolveDuplicateAction(unit.title, unitDirName, onDuplicate, rl);
+      if (action === 'abort') {
+        logger.warn('   ⏹️  用户中止切分');
+        break;
+      }
+      if (action === 'skip') {
+        logger.info(`   ⏭️  ${unit.title} 已存在（同名单元），跳过`);
+        skipped++;
+        continue;
+      }
+      if (action === 'overwrite') {
+        // 覆盖重建：旧目录整体改名为时间戳备份（保留完整旧内容），再走下方创建流程
+        // 同时绕过全部指纹检测——用户已裁决覆盖，不得被其它同名内容单元误拦
+        logger.info(`   🔄 ${unit.title} 覆盖重建: ${unitDirName}`);
+        const bak = await backupDirWithTimestamp(join(featuresDir, unitDirName)).catch(() => null);
+        if (bak) logger.info(`   📦 旧单元已备份: ${bak.split('/').pop()}`);
+        existingContentHashes.delete(unitDirName);
+        existingUnitContents.delete(unitDirName);
+        seenUnitDirs.delete(unitDirName);
+        (unit as any)._skipDupCheck = true;
+        // 继续走下方创建流程
+      } else {
+        // 重命名：加 -2/-3 递增后缀，保留两个单元（用户已裁决为不同内容）
+        let candidate = `${unitDirName}-2`;
+        let n = 2;
+        while (seenUnitDirs.has(candidate)) candidate = `${unitDirName}-${++n}`;
+        unitDirName = candidate;
+        // 绕过内容指纹检测（旧目录同内容仍在，不绕过会被「跨文档重复」误拦）
+        (unit as any)._skipDupCheck = true;
+        logger.info(`   ✏️  ${unit.title} 重命名为 ${unitDirName}`);
+      }
     }
     seenUnitDirs.add(unitDirName);
 
     // v8.3.226+: 跨文档重复章节检测（内容指纹比对，与幂等目录跳过互补）——
     // 必须在目录创建前完成，避免重复单元残留空壳目录
+    // v8.3.275: 用户已裁决重命名的单元绕过指纹检测
     const unitContent = extractUnitContent(content, unit);
     const fp = contentFingerprint(unitContent);
-    const dupEntry = [...existingContentHashes.entries()].find(([, h]) => h === fp);
+    const dupEntry = !(unit as any)._skipDupCheck
+      ? [...existingContentHashes.entries()].find(([, h]) => h === fp)
+      : undefined;
     if (dupEntry) {
       logger.info(`   ⏭️  ${unit.title} 与已有单元 ${dupEntry[0]} 内容重复（跨文档重复章节），跳过`);
       skipped++;
@@ -1000,8 +1094,10 @@ export async function splitDocumentToUnits(
     // v8.3.240+: 近似重复检测——与已有单元 Jaccard 相似度 > 0.85 即视为同一需求
     // 被重复切分（标题层级/段落缺失等小差异不会阻止跳过）
     let nearDup: string | null = null;
-    for (const [dir, existing] of existingUnitContents) {
-      if (contentSimilarity(unitContent, existing) > 0.85) { nearDup = dir; break; }
+    if (!(unit as any)._skipDupCheck) {
+      for (const [dir, existing] of existingUnitContents) {
+        if (contentSimilarity(unitContent, existing) > 0.85) { nearDup = dir; break; }
+      }
     }
     if (nearDup) {
       logger.info(`   ⏭️  ${unit.title} 与已有单元 ${nearDup} 内容高度相似（>85%），视为重复切分跳过`);
@@ -1012,8 +1108,10 @@ export async function splitDocumentToUnits(
     // （典型：合并版 REQUIREMENT.md 的「## admin-web端需求」大节 = 端文档全文），
     // 跳过避免 analyze 重复分析同一需求
     let docDup: string | null = null;
-    for (const [docName, full] of docFullContents) {
-      if (contentSimilarity(unitContent, full) > 0.85) { docDup = docName; break; }
+    if (!(unit as any)._skipDupCheck) {
+      for (const [docName, full] of docFullContents) {
+        if (contentSimilarity(unitContent, full) > 0.85) { docDup = docName; break; }
+      }
     }
     if (docDup) {
       logger.info(`   ⏭️  ${unit.title} 与文档 ${docDup} 全文高度相似（>85%，合并版大节），跳过`);
@@ -1024,7 +1122,26 @@ export async function splitDocumentToUnits(
     // 合并版大节）不构成有效功能单元，跳过避免 analyze 拿到空需求
     const bodyText = unitContent.replace(/^#{1,3}\s+[^\n]*\n?/gm, '').trim();
     if (bodyText.length < 40) {
-      logger.info(`   ⏭️  ${unit.title} 内容过短（桩章节，仅 ${bodyText.length} 字），跳过`);
+      logger.info(`   ⏭️  ${unit.title} 内容过短（桩章节，仅 ${bodyText.length}  字），跳过`);
+      skipped++;
+      continue;
+    }
+    // v8.3.267: 全局章节兕底——unitize 可能把「核心业务规则（跨端通用）」等
+    // 全局信息切成 overview- 前缀目录（违反「全局信息不进 features」规范）。
+    // 此类章节应进 010-requirements/overview/GLOBAL_CONTEXT-*.md，
+    // 写盘前拦截，防止假单元污染 analyze/taskify 的单元清单
+    // v8.3.268: 第五处漏网——「文档名-序号」模式的全局章节（如
+    // metting-system-prd-01-核心业务规则跨端通用，源自 PRD「5.3 核心业务规则（跨端通用）」）。
+    // overview- 前缀拦不住，需语义检测：标题括号注释为全局修饰词（跨端通用/全局/公共），
+    // 且剥括号后是规则/说明/规范等容器词——全局共享章节，应进 GLOBAL_CONTEXT 而非功能单元。
+    // 「计费规则」「签到窗口规则」等无括号注释的具体规则不受影响。
+    const rawUnitTitle = unit.title || '';
+    const bracketNote = rawUnitTitle.match(/[（(]([^）)]+)[）)]/);
+    const isGlobalAnnotated = !!bracketNote && /(跨端通用|全局通用|全局|通用|公共)/.test(bracketNote[1]);
+    const baseUnitTitle = stripParenthetical(stripSectionNo(rawUnitTitle)).trim();
+    const isRuleLikeGlobal = isGlobalAnnotated && /(规则|说明|规范|一览|模板|约定)$/.test(baseUnitTitle);
+    if (unitDirName.startsWith('overview-') || isRuleLikeGlobal) {
+      logger.info(`   ⏭️  ${unit.title} 是全局章节（${unitDirName.startsWith('overview-') ? 'overview- 前缀' : '跨端通用语义'}），跳过切分（应进 GLOBAL_CONTEXT）`);
       skipped++;
       continue;
     }
@@ -1040,7 +1157,11 @@ export async function splitDocumentToUnits(
     // v8.3.241+: 写入前重写相对引用——原文档在 converted/，单元目录比它深一层，
     // 原文的「../assets/…」「./overview.md」等相对路径在 SOURCE.md 语境下全部失效
     const readmePath = join(unitDir, 'SOURCE.md');
-    await writeFile(readmePath, rewriteUnitLinks(unitContent, dirname(outputPath), unitDir));
+    const rw = rewriteUnitLinks(unitContent, dirname(outputPath), unitDir);
+    await writeFile(readmePath, rw.content);
+    if (rw.broken.length > 0) {
+      logger.warn(`   ⚠️  ${rw.broken.length} 个引用未找到目标文件（保留层级重写，可能断链）: ${rw.broken.slice(0, 5).join(', ')}`);
+    }
 
     // 来源标记
     const sourceMeta = `---\norigin: doc2spec\nsource_file: ${sourceFileName}\nsource_section: "${unit.sourceSection}"\nplatform: ${platformLabel}\ncreated_at: ${new Date().toISOString().split('T')[0]}\nstatus: draft\n---\n`;
@@ -1090,7 +1211,9 @@ export async function splitDocumentToUnits(
   }
   if (preservedRows.length > 0) featuresIndex += preservedRows.join('\n') + '\n';
   for (const unit of units) {
-    const row = `| ${unit.title} | ${unit.sourceSection} | draft | ${platformLabel} |`;
+    // v8.3.273: 状态列由无意义的英文 draft 改为「待分析」（语义与 Task 状态体系一致；
+    // 分析完成后的状态流转由 overview/FUNCTION_MAP 承担，INDEX 仅在切分时初始化）
+    const row = `| ${unit.title} | ${unit.sourceSection} | 待分析 | ${platformLabel} |`;
     const cells = row.split('|').map(c => c.trim());
     const dedupKey = `${cells[1]}|${cells[2]}`;
     if (seenRows.has(dedupKey)) continue;
@@ -1116,12 +1239,17 @@ export async function splitDocumentToUnits(
     }
     if (collected > 0) {
       // v8.3.241+: 与单元切片一致重写相对引用（文档互链 ./overview.md 等指向 converted/）
-      await writeFile(join(overviewDir, `GLOBAL_CONTEXT-${docSlug}.md`), rewriteUnitLinks(globalContent, dirname(outputPath), overviewDir));
+      const grw = rewriteUnitLinks(globalContent, dirname(outputPath), overviewDir);
+      await writeFile(join(overviewDir, `GLOBAL_CONTEXT-${docSlug}.md`), grw.content);
+      if (grw.broken.length > 0) {
+        logger.warn(`   ⚠️  GLOBAL_CONTEXT 中 ${grw.broken.length} 个引用未找到目标文件: ${grw.broken.slice(0, 5).join(', ')}`);
+      }
       logger.info(`   📋 全局上下文已写入: overview/GLOBAL_CONTEXT-${docSlug}.md (${collected} 个章节)`);
     }
   }
 
   logger.success(`✅ 已拆分 ${written} 个功能单元到 features/${skipped > 0 ? `（跳过 ${skipped} 个已存在）` : ''}`);
+  if (rl) rl.close();
   logger.info(`   📂 ${featuresDir}/`);
 }
 
@@ -1621,6 +1749,168 @@ function sanitizeUnitName(name: string): string {
 }
 
 /**
+ * v8.3.271+: 功能单元目录名 ASCII 化——标题转英文 slug（英文/数字保留，中文转全拼）。
+ * 中文显示名不丢失：保留在 SOURCE.md 标题与 _matrix.md 的 feature 字段中。
+ */
+function toEnglishSlug(title: string): string {
+  if (!title) {
+    return 'unit';
+  }
+  let out = '';
+  let cn = '';
+  const flush = () => {
+    if (cn) {
+      out += pinyin(cn, { toneType: 'none', type: 'array' }).join('');
+      cn = '';
+    }
+  };
+  for (const ch of title) {
+    if (/[a-zA-Z0-9]/.test(ch)) {
+      flush();
+      out += ch;
+    } else if (/[\u4e00-\u9fff]/.test(ch)) {
+      cn += ch;
+    } else {
+      flush();
+      out += '-';
+    }
+  }
+  flush();
+  const slug = out.toLowerCase().replace(/-+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+  return slug || 'unit';
+}
+
+/**
+ * v8.3.272+: 单元标题批量英译——缓存优先，失败/非法结果回落拼音。
+ * 翻译映射落盘 010-requirements/.unit-names.json，保证重跑切分目录名稳定（幂等）。
+ * v8.3.273+: 支持宿主 AI 接力——host 模式无 LLM 环境时输出 [SPECCORE_PROMPT]
+ * 并返回 null（exitCode 已置 10）；宿主 AI 翻译后经 --translate-response 写回缓存续跑。
+ * 三级降级：缓存命中 → LLM 翻译（providers 池 → 环境变量 → 本地 Ollama）→ 拼音。
+ */
+async function translateUnitTitles(
+  titles: string[],
+  featuresDir: string,
+  mode: string,
+  translateResponse?: string
+): Promise<Map<string, string> | null> {
+  const cacheFile = join(dirname(featuresDir), '.unit-names.json');
+  const cache: Record<string, string> = {};
+  try {
+    if (await pathExists(cacheFile)) {
+      Object.assign(cache, JSON.parse(await readFile(cacheFile, 'utf-8')));
+    }
+  } catch { /* 缓存损坏则重建 */ }
+
+  // 宿主 AI 接力响应：解析英译 JSON 写入缓存后继续切分
+  // v8.3.273: 键约定统一为序号（1~N，与 PROMPT 清单编号及 LLM 直呼路径一致），
+  // 中文标题仅作展示——避免重复标题键冲突与两套标识错位；也兼容中文标题作键
+  if (translateResponse) {
+    const parsed = parseTranslationResponse(translateResponse, titles);
+    let valid = 0;
+    for (const [zh, en] of parsed) {
+      if (/^[a-z0-9][a-z0-9-]{0,39}$/i.test(en)) {
+        cache[zh] = en.toLowerCase();
+        valid++;
+      }
+    }
+    if (valid > 0) {
+      await writeFile(cacheFile, JSON.stringify(cache, null, 2));
+      logger.info(`📝 已接收宿主 AI 英译 ${valid} 条，写入 010-requirements/.unit-names.json`);
+    } else {
+      logger.warn('--translate-response 未解析出有效翻译（键须为序号或中文标题），按缓存/拼音继续');
+    }
+  }
+
+  const misses = titles.filter(t => t && !cache[t]);
+  if (misses.length === 0) {
+    return new Map(Object.entries(cache));
+  }
+
+  const providers = await resolveAiProviders('unitize');
+  const llmAvailable = providers.length > 0 || !!process.env.SPECCORE_LLM_KEY || !!process.env.OPENAI_API_KEY;
+
+  if (!llmAvailable && mode === 'host') {
+    // 宿主 AI 接力：输出翻译清单（序号与响应 JSON 键一一对应），exitCode 10 等待 --translate-response 续跑
+    logger.info('');
+    logger.info('[SPECCORE_PROMPT]');
+    logger.info('当前环境未配置 LLM（无 providers 池/环境变量）。请将以下功能单元标题翻译为英文 kebab-case 目录名（小写字母/数字/连字符，2~5 词，禁用拼音），然后执行续跑：');
+    logger.info(`  speccore unitize --file <文件> --iter <迭代> --translate-en host --translate-response '<JSON>'`);
+    logger.info('');
+    logger.info('标题清单（序号即响应 JSON 的键，按序号一一对应，勿改名重排）:');
+    for (const [i, t] of misses.entries()) {
+      logger.info(`  ${i + 1}. ${t}`);
+    }
+    logger.info('');
+    logger.info('响应 JSON 格式（键=序号，值=英文 slug）:');
+    logger.info(JSON.stringify(Object.fromEntries(misses.map((t, i) => [String(i + 1), `feature-${i + 1}`])), null, 2));
+    process.exitCode = 10;
+    return null;
+  }
+
+  if (!llmAvailable) {
+    // auto 模式：无 LLM 环境直接拼音兜底（全自动不中断）
+    return new Map(Object.entries(cache));
+  }
+
+  const numbered = misses.map((t, i) => `${i + 1}. ${t}`).join('\n');
+  const response = await callLlm(
+    '你是软件需求术语翻译专家。将中文功能单元标题翻译为简洁的英文 kebab-case 目录名：小写字母/数字/连字符，2~5 个单词，禁用拼音。',
+    `将下列标题逐一翻译为英文 slug（kebab-case），严格只输出 JSON 对象：{"1":"booking-management",...}\n\n${numbered}`,
+    providers,
+    500
+  );
+  if (response) {
+    for (const [zh, en] of parseTranslationResponse(response, misses)) {
+      if (/^[a-z0-9][a-z0-9-]{0,39}$/i.test(en)) {
+        cache[zh] = en.toLowerCase();
+      }
+    }
+    try {
+      await writeFile(cacheFile, JSON.stringify(cache, null, 2));
+    } catch { /* 写缓存失败不阻塞，下次重跑再试 */ }
+  }
+  return new Map(Object.entries(cache));
+}
+
+/** 解析 LLM 翻译响应：优先 JSON 对象，失败逐行正则兜底（支持序号键与中文标题键、中文冒号） */
+function parseTranslationResponse(response: string, titles: string[]): Array<[string, string]> {
+  const pairs: Array<[string, string]> = [];
+  try {
+    const start = response.indexOf('{');
+    const end = response.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      const obj = JSON.parse(response.slice(start, end + 1));
+      for (const [k, v] of Object.entries(obj)) {
+        if (typeof v !== 'string') continue;
+        // v8.3.273: 双键兼容——数字键按序号映射回标题，中文标题键直接用（防重复标题冲突时序号优先）
+        if (/^\d+$/.test(k)) {
+          const idx = parseInt(k, 10) - 1;
+          if (idx >= 0 && idx < titles.length) {
+            pairs.push([titles[idx], v]);
+          }
+        } else if (titles.includes(k)) {
+          pairs.push([k, v]);
+        }
+      }
+      if (pairs.length > 0) {
+        return pairs;
+      }
+    }
+  } catch { /* JSON 解析失败走逐行正则 */ }
+  const lines = response.split('\n');
+  for (const line of lines) {
+    const m = line.match(/^\s*"?(\d+)"?\s*[:：]\s*"?([a-zA-Z0-9][a-zA-Z0-9-]{0,39})"?\s*$/);
+    if (m) {
+      const idx = parseInt(m[1], 10) - 1;
+      if (idx >= 0 && idx < titles.length) {
+        pairs.push([titles[idx], m[2].toLowerCase()]);
+      }
+    }
+  }
+  return pairs;
+}
+
+/**
  * v8.3.241+: 切分写 SOURCE.md 前重写相对引用。
  *
  * 背景：需求原文在 converted/ 下，功能单元在 features/{单元}/ 下（比 converted 深一层），
@@ -1631,9 +1921,13 @@ function sanitizeUnitName(name: string): string {
  * 文档互链的目标文件可能被 doc2spec 改名（overview.md → overview-requirements.md），
  * 目标不存在时按「sanitize(原名)-requirements.md / sanitize(原名)requirements.md」
  * 模式在 converted/ 下匹配实际文件。
+ *
+ * v8.3.267: 返回值改为 { content, broken }——三层匹配都未命中的目标不再静默，
+ * 收集进 broken 由调用方告警（此前「保留层级重写」对断链零提示）。
  */
-function rewriteUnitLinks(content: string, fromDir: string, toDir: string): string {
-  return content.replace(/\]\(([^)\s]+)\)/g, (m, target: string) => {
+function rewriteUnitLinks(content: string, fromDir: string, toDir: string): { content: string; broken: string[] } {
+  const broken: string[] = [];
+  const rewritten = content.replace(/\]\(([^)\s]+)\)/g, (m, target: string) => {
     // 跳过绝对 URL / 锚点 / 绝对路径 / data URI
     if (/^(https?:|#|\/|mailto:|data:)/i.test(target)) return m;
     const resolved = resolve(fromDir, target);
@@ -1650,8 +1944,9 @@ function rewriteUnitLinks(content: string, fromDir: string, toDir: string): stri
       ];
       const hit = candidates.find(c => existsSync(c));
       if (hit) finalPath = relative(toDir, hit);
-      // 未命中时保留层级重写结果（占位符如 xxx.png 也至少层级正确）
+      else broken.push(target); // v8.3.267: 未命中收集，调用方告警（不再静默断链）
     }
     return `](${finalPath})`;
   });
+  return { content: rewritten, broken };
 }

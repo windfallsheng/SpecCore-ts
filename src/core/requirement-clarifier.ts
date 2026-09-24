@@ -886,6 +886,9 @@ export async function loadFeatureUnits(iterDir: string): Promise<ClarifyUnit[]> 
   const units: ClarifyUnit[] = [];
   for (const e of entries) {
     if (!e.isDirectory() || e.name.startsWith('.')) continue;
+    // v8.3.267: 过滤 unitize 误切的全局章节目录（overview- 前缀，如
+    // 「核心业务规则跨端通用」），防止文档 slug 被当澄清单元写入幽灵路径
+    if (e.name.startsWith('overview-')) continue;
     const readmePath = await resolveUnitSourcePath(join(featuresDir, e.name));
     if (!(await pathExists(readmePath))) continue;
     const content = await readFile(readmePath, 'utf-8');

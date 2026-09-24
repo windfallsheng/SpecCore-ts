@@ -56,11 +56,14 @@ export async function findTaskDir(tasksRoot: string, taskId: string): Promise<st
   }
 
   // 3. v8.3.8+: 查子任务目录（如 Task-001-booking-service）
-  // 提取父任务 ID：Task-001-booking-service → Task-001
+  // v8.3.269: 父任务 ID 推断修复——任务组名可为多段（Task-{seq}-{端}-{序号}，v8.3.268 起），
+  // 原实现只截取前两段（Task-{seq}），对多段任务组名必然解析失败。
+  // 改为从最长前缀逐段递减尝试匹配（Task-222-admin-web-02-admin-web →
+  // 依次尝试父组 Task-222-admin-web-02-admin-web / Task-222-admin-web-02 / Task-222）。
   if (taskId.startsWith('Task-')) {
     const parts = taskId.split('-');
-    if (parts.length >= 3) {
-      const parentTaskId = `${parts[0]}-${parts[1]}`;
+    for (let k = parts.length - 1; k >= 2; k--) {
+      const parentTaskId = parts.slice(0, k).join('-');
       for (const type of TASK_TYPES) {
         const typeDir = join(tasksRoot, type);
         if (!(await pathExists(typeDir))) continue;

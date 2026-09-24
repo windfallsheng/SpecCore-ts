@@ -20,6 +20,9 @@ interface UnitizeOptions {
   files?: string; // batch: "a.md=平台1,b.md=平台2"
   iter?: string;
   platform?: string;
+  translateEn?: string; // --translate-en: auto(默认) | host | off（单元标题英译）
+  translateResponse?: string; // --translate-response: 接收宿主 AI 英译 JSON（配合 host）
+  onDuplicate?: string; // --on-duplicate: 同名单元处理 ask(默认) | skip | overwrite | rename | abort
 }
 
 /** 批量参数解析（与 doc2spec --files 同格式："path1.md=平台1,path2.md=平台2"） */
@@ -32,7 +35,7 @@ function parseBatch(files: string): [string, string][] {
   return pairs;
 }
 
-async function unitizeSingle(file: string, platform: string, iterName: string): Promise<void> {
+async function unitizeSingle(file: string, platform: string, iterName: string, translateEn?: string, translateResponse?: string, onDuplicate?: string): Promise<void> {
   if (!(await pathExists(file))) {
     logger.error(`文件不存在: ${file}`);
     return;
@@ -49,7 +52,7 @@ async function unitizeSingle(file: string, platform: string, iterName: string): 
     return;
   }
   logger.info(`\n🔪 切分: ${basename(file)}${platform ? `（端: ${platform}）` : ''}`);
-  await splitDocumentToUnits(iterDir, file, platform, basename(file));
+  await splitDocumentToUnits(iterDir, file, platform, basename(file), translateEn, translateResponse, onDuplicate);
 }
 
 export async function unitizeCommand(options: UnitizeOptions): Promise<void> {
@@ -67,7 +70,7 @@ export async function unitizeCommand(options: UnitizeOptions): Promise<void> {
     }
     logger.info(`📦 批量切分 ${pairs.length} 个文档...`);
     for (const [file, platform] of pairs) {
-      await unitizeSingle(file, platform, iterName);
+      await unitizeSingle(file, platform, iterName, options.translateEn, options.translateResponse, options.onDuplicate);
     }
     return;
   }
@@ -83,5 +86,5 @@ export async function unitizeCommand(options: UnitizeOptions): Promise<void> {
     logger.error('请指定迭代: speccore unitize --file=<md 路径> --iter=<迭代>');
     return;
   }
-  await unitizeSingle(options.file, options.platform || '', iterName);
+  await unitizeSingle(options.file, options.platform || '', iterName, options.translateEn, options.translateResponse, options.onDuplicate);
 }

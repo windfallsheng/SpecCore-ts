@@ -1,3 +1,133 @@
+## v8.3.277 (2026-09-24) — 拆分流健壮性加固 + 备份目录指纹隔离
+
+### 修复
+- **计数器 ENOENT**（global-counters）：save/initCounters 写前 ensureDir，修复 `.speccore/local/` 不存在时 taskify 首个任务即失败
+- **异常静默吞没**（taskify）：response 路径 catch 以 `jsonParsed` 标志区分「JSON 解析失败（回退 Markdown）」与「创建过程异常（显式报错 + exitCode 1 + 备份清单提示）」，修复创建失败被冒充「✅ 任务已创建」
+- **PROJECT_GRAPH ENOENT**（taskify）：updateProjectGraph 写前 ensureDir，修复全新迭代 `000-overview/` 不存在时拆分报错
+- **幽灵后端子任务**（taskify）：`_explicitScope` 标记区分「AI 显式声明 scope」与「推断出的端」——AI 显式声明仅 admin-web 时不再被「确保至少有 backend 子任务」强制补后端，推断路径保留自动补后端
+- **--modules 范围重建重复创建**（taskify）：创建循环按 functionalUnit 与模块列表匹配过滤，响应中非模块任务不再被重建（同模块新旧两份）
+- **备份目录指纹隔离**：isTimestampBackup 正则扩展为 `-\d{14}(\.|$)` 同时识别文件与目录备份；doc2spec 幂等收集、taskify 模块驱动、analyze requirements 收集、readMatrixPlatforms 四处扫描点统一过滤——修复 overwrite 备份目录被当功能单元，污染指纹比对与单元清单、读到旧版 _matrix 过期端声明
+- **docSlug 保留词避开**（doc2spec/unitize）：converted/ 下 `overview.md` 类文档名作前缀会让全部单元目录被「全局章节拦截」误杀，现 `overview/global` 前缀替换为 `doc`
+
+## v8.3.276 (2026-09-24) — spec-once 使用说明响应协议
+
+### 新增
+- **spec-once 使用说明响应**：用户仅询问「怎么用/使用说明/使用步骤/能干什么」时不启动端到端流程，按 SKILL「使用说明」节输出纯文字指南（是什么/怎么触发/三入口/双模式/六步流程/回退重跑/适用边界），不执行任何 speccore 命令
+
+## v8.3.275 (2026-09-24) — 步骤重跑体系 + spec-once 双模式
+
+### 新增
+- **unitize 同名单元三选一**（--on-duplicate ask|skip|overwrite|rename|abort）：TTY 交互三选一，非 TTY 默认 skip 保幂等；覆盖重建前旧目录整目录改名为时间戳备份（可回滚），重命名加 -2/-3 递增后缀且绕过内容指纹检测（用户已裁决，不被同名内容误拦）
+- **taskify 指定范围重建**（--modules）：已有任务时只备份移除匹配模块的旧任务（.backup- 前缀改名，detectExistingTasks 不误收集），其余任务保留，替代 --force 全量推倒
+- **spec-once 双模式**：默认人机交互（每节点确认）；用户说「全自动/别停」切全自动模式，仅范围确认/质量门禁失败/冒烟失败三个安全点停下
+- **spec-once 部署收尾节点**：冒烟通过后接 speccore deploy 本地部署验证（默认不自动执行），形成「开发到部署」完整闭环
+- **spec-once 步骤回退重跑协议**：重分析（analyze --unit 覆盖+备份）、重拆（taskify --modules）、重执行（execute 单任务）、重切（unitize --on-duplicate）四路径
+
+### 修复
+- 交互判定改用 stdin+stdout 双 TTY：仅 stdin 为 TTY 的管道环境（如 agent 终端）不再阻塞等输入
+- 覆盖重建绕过指纹检测：修复「overwrite 删旧目录后重建被其它同名内容单元指纹误拦」导致的目录消失
+
+## v8.3.274 (2026-09-24) — 翻译交互键约定统一（序号键一一对应）
+
+### 修复
+- **接力响应键约定统一**（doc2spec/unitize）：PROMPT 清单编号与 `--translate-response` JSON 键统一为序号（1~N 与标题一一对应，中文标题仅作展示）——修复「清单编号 vs 中文键」两套标识错位（AI 按序号回译会落空）与重复标题键冲突；解析器兼容序号键与中文标题键双格式。
+
+## v8.3.273 (2026-09-24) — 翻译接力协议 + 任务层产物质量修复
+
+### 新增
+- **翻译接力协议**（doc2spec/unitize）：`--translate-en host` 模式无 LLM 环境时输出 `[SPECCORE_PROMPT]` 标题清单并 exitCode 10，宿主 AI 翻译后经 `--translate-response '<JSON>'` 写回缓存续跑（贴合 analyze 既有接力协议）；`auto` 保持全自动（无 LLM 拼音兜底不中断）。
+- **完成门禁提示**（execute）：子任务标记完成时检测端级 REQ.md/TECH.md 若仍含 SPEC-SKELETON，警告宿主 AI 补写规格。
+
+### 修复
+- **TASK.md 联动**（execute）：标记完成时同步状态行「已完成」+ 工作清单全勾选（修复状态与 checklist 脱节）。
+- **组级状态聚合**（execute）：Task 组全部子任务完成后，组级 .meta/status 自动同步 completed。
+- **提取残留章节序号**（taskify）：extractSectionByKeywords 剥掉标题行，修复 COMPONENT_TREE/ROUTES/STATE/STYLE_GUIDE 开头残留「4. 组件拆分」类序号。
+- **端类型感知**（analyze）：MONITOR/UI_SPEC 写作要求加硬约束——前端端禁写后端技术指标（SLF4J/Actuator），后端端禁写伪 UI 内容。
+- **callViaWorkBuddy 注释谎言**（ask-llm）：修正「文件通信调宿主 AI」虚假注释（实际仅本地 Ollama 降级，宿主协作走 exitCode 10 接力）。
+- **INDEX 状态列**（doc2spec）：无意义英文 draft 改为「待分析」。
+
+## v8.3.272 (2026-09-24) — 单元标题 LLM 英译（拼音兜底 + 缓存幂等）
+
+### 变更
+- **LLM 批量英译**（doc2spec/unitize）：切分时调用 LLM 将单元标题译为英文 kebab-case 目录名（`admin-web-01-booking-management`）；复用 `callLlm` 三级降级（providers 池 → 环境变量 → WorkBuddy），失败/超时自动拼音兜底（v8.3.271 链路）。
+- **翻译缓存**：映射落盘 `010-requirements/.unit-names.json`，重跑切分目录名稳定（幂等，LLM 翻译漂移不破坏对齐锚点）；翻译结果非法（非 ASCII/超长）自动回退拼音。
+- **开关**：`--translate-en auto(默认) | off`（doc2spec 与 unitize 均已注册）；`--translate-en off` 或未配 LLM 时纯拼音命名。
+
+## v8.3.271 (2026-09-24) — 功能单元目录名 ASCII 化（英文 slug + 中文元数据）
+
+### 变更
+- **单元目录名英文 slug**（doc2spec）：目录名尾段由中文标题改为英文 slug（`admin-web-01-预订管理` → `admin-web-01-yudingguanli`；英文/数字保留，中文转全拼，新增 pinyin-pro 依赖）。解决中文路径在 Windows/CI/Docker/URL 等场景的兼容风险，对齐任务层已纯 ASCII 的既有事实。
+- **中文显示名不丢**：保留在 SOURCE.md 标题与 `_matrix.md` 的 `feature` 字段（FUNCTION_MAP 别名继续展示中文）。
+- **兼容不迁移**：旧迭代中文目录名继续可用（对齐锚点按目录名匹配，不强制改名）；AGENTS.md/init.ts 补充命名规范说明。
+
+## v8.3.270 (2026-09-24) — 「开新会话」指令残留清剿
+
+### 修复
+- **Skill 指令层清剿**：`.agents/skills/` 下 21 个 SKILL.md 仍在教宿主 AI「[SPECCORE_STEP_DONE] → 需开新会话继续」「[SPECCORE_CONTINUE] → 提示用户开新对话」，与 CLI 实际输出的「请在同一会话继续执行」矛盾——宿主 AI 遵从注入指令，把同会话接力改写成「请开新对话」。全部改为同会话优先，仅上下文紧张才开新会话。
+- **taskify prompt 矛盾文案**：Pipeline prompt 前半句「提示你在新会话中执行下一步」与后半句「请在同一会话继续」自相矛盾，改为「输出 [SPECCORE_STEP_DONE] 标记与下一步命令」。
+- **analyze 批次提示**：「请在新会话中逐个批次执行」改为同会话连续跑批次、上下文紧张才开新会话。
+
+## v8.3.269 (2026-09-24) — 同义词组端名混淆修复 + 任务定位与数据容错
+
+### 修复
+- **findBestSpecMatch 归一化对称**：taskName 与 key 同样去除分隔符（-/_.）。此前含连字符的任务名（如 admin-web-02-会议室管理）第一层 includes 永不命中，端前缀精确匹配失效。
+- **端标识拆组（synonyms.ts）**：`['frontend','web','h5','mobile','app','ui','前端','页面','移动端']` 把互斥端名当同义词，导致 admin-web 任务在 h5-mobile 文档键上刷出虚高 overlap 分，REQ.md 批量错位成「H5 首页」内容。拆为 frontend↔前端 / h5,mobile,app↔移动端 / ui↔页面 三组，'web' 不再与其他端词互刷。
+- **findTaskDir 子任务 ID 直解**：父任务 ID 推断不再只截取前两段（Task-{seq}），改为最长前缀逐段递减匹配，多段任务组名（Task-{seq}-{端}-{序号}）的子任务 ID 可直接 -t 解析。
+- **Python 数组字面量展开**：analyze 落盘的 `['| AC-01 | ...', ...]` 单行数组（AI 用 Python 生成未展开）在 taskify 提取时还原为多行表格，REQ.md 不再携带不可读字面量。
+
+## v8.3.268 (2026-09-24) — 任务层六处断链修复（契约/端裁剪/文档分化/幽灵过滤）
+
+> 会议项目任务层体检揭示的六个机制性断链一次性修复：execute 拿到空 API 契约、
+> 每 Task 平铺全部端（68 子任务半数无中生有）、前端四份文档「一段多用」、
+> 幽灵单元第五处漏网、overview 缺 DEPENDENCY_MAP、迭代路径双重前缀。
+> 会议项目 taskify 重跑后：16 任务 × 3 端 = 48 子任务（收敛 20 个），
+> 契约从 286 字节空壳变为含真接口的合并契约。
+
+### 任务层断链修复
+- **API 契约断链**（taskify）：`_shared/API_CONTRACT.yaml` 合并端级契约——全局契约空壳（`apis: []`）时，从 `020-specs/{feature}/{端}/API_CONTRACT.yaml` 收集真接口，多文档 `---` 分隔合并进 `_shared`；修复 execute 注入空契约、AI 无中生有发明接口
+- **端覆盖裁剪**（taskify）：`_matrix.md` 显式声明优先；为空时从 020-specs 端级文档反推（仅当端级存在非骨架、≥200 字符的 TECH/TEST/UI_SPEC 才涉及该端）；修复 FUNCTION_MAP 列错位时静默回退全端平铺
+- **FUNCTION_MAP 端列自适应**（taskify）：AI 落盘表格列错位（涉及端表头下是名称）时，扫描整行找「逗号分隔且 ≥2 个值全部属于标准端名」的单元格作端列；功能单元列改取 cells[0]（此前取 cells[1] 依赖旧数据列错位歪打正着）
+- **前端四份文档分化**（taskify）：ROUTES/STATE/STYLE_GUIDE/COMPONENT_TREE 从 TECH 提取中按类型提取段落（extractSectionByKeywords：按 ### 标题切段匹配关键词），不再整段复制；提不到时回退类型模板
+
+### 切分层
+- **第五处幽灵过滤**（doc2spec）：标题括号注释为全局修饰词（跨端通用/全局/公共）且剥括号后是规则/说明/规范等容器词 → 拦截进 GLOBAL_CONTEXT（「计费规则」「签到窗口规则」等无注释的具体规则不受影响）
+
+### 规格骨架与上下文
+- **overview manifest 补 DEPENDENCY_MAP**（spec-skeleton）：PHASE1_INDEX_DOC_NAMES 增加功能依赖图，对齐 AGENTS.md 结构图
+- **迭代路径归一化**（prompt-builder）：`resolveIterDirName` 兼容短名与 `Iteration-` 完整名，修复三重路径（020-specs/DESIGN、规格扫描、关联任务）双重前缀失效
+
+### 验证
+- 构建 ✅ + 全量测试 230/230 ✅
+- 会议项目 taskify 实测：幽灵任务消失、16 Task 名称正确、端裁剪 48 子任务、契约合并 1540 字节含真接口、四份前端文档正文互异（diff 26/35 行）
+
+## v8.3.267 (2026-09-24) — 幽灵目录清理 + 文档资产一等公民化（图片/原型优先注入）
+
+> 会议项目实测驱动的两大战役：其一，切分与分析链路会把全局章节切成「幽灵目录」，
+> 澄清文档写错位置导致内容“失踪”；其二，需求文档里的图片/原型等资产，
+> 在上下文里只被当成附尾清单，AI 未必会看——本次将资产内容直接注入核心层，
+> 与需求文本同为一等公民，预算紧张时正文截断让路、资产优先保留。
+
+### 幽灵目录根因修复（v8.3.267）
+- **扫描层三入口过滤**：`readFeatureDirs` / `extractIterationUnits` / `loadFeatureUnits` 统一过滤 `overview-` 前缀，杜绝「核心业务规则（跨端通用）」等全局章节被当成功能单元
+- **切分层拦截**：`splitDocumentToUnits` 跳过 `overview-` 前缀章节（应进 GLOBAL_CONTEXT）
+- **[CLARIFY:] 路由归一化**：AI 生成的澄清标记首段若为「overview」→ 归位全局 `overview/CLARIFY.md`；若非真实功能单元 → 路由到 `requirements/{slug}-clarified.md`（文档级黄金需求），不再落成幽灵目录
+
+### 文档资产一等公民化（v8.3.267）
+- **资产内容注入核心层**：图片/原型/互链与需求文本同级注入——HTML 原型 → Playwright accessibility tree 文本内联；图片 → 视觉模型描述内联（未配置则输出绝对路径 + 强提示打开查看）；SVG → 文本内联；MD 互链 → 标题大纲
+- **资产优先截断**：核心层超预算时正文截断让路，资产块（原型内联 + 审计清单）优先保留，审计清单（短小、信息密度高）完整保留
+- **断链告警**：`rewriteUnitLinks` 返回 `{content, broken}`，切分后三层匹配（`-requirements.md` 后缀/拼接/原始存档）仍不命中的链接显式告警，不再静默断链
+- **提取层图片保留**：`extractIterationUnits` 500 字符截断外的图片引用行显式附加，不再静默丢失
+
+### 执行链路修复（v8.3.265-v8.3.266）
+- **v8.3.265**：execute 端平铺架构动态扫描（替代 legacy 10-/20- 前缀拼接）；并列最高分告警（通用词任务名命中多模块时不再静默取第一个错配文档）
+- **v8.3.266**：Qoder SDK 派单链路——三级鉴权降级（QODER_PERSONAL_ACCESS_TOKEN 等）；失败 result subtype 不再误判为成功派单（修复调度循环空转耗尽单元尝试次数）；缺 PAT 给可操作指引；「工具不支持」与「支持但本次调度失败」区分；Qoder CN 会话识别
+
+### 验证
+- 构建 0 error；全量测试 230 passed（零回归）
+- 会议项目 16 单元实测：13 个有资产单元截断后资产零丢失，3 个无资产单元正常截断无退化
+
+---
+
 ## v8.3.239 (2026-09-22) — 任务类型体系收敛 + 任务文档体系修复（全链路体检驱动）
 
 > 对切分→分析→任务层→执行层的文档来源与子 Agent 体系做了一次全链路体检，

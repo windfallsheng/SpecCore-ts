@@ -66,6 +66,8 @@ SpecCore 规范驱动开发项目。
 | 层 | 目录 | 产出 |
 |:---|:---|:---|
 | 切分层 | `010-requirements/features/{功能单元}/` | SOURCE.md（需求原文切片，旧版为 README.md） + _matrix.md + CHANGELOG.md（doc2spec 产出） |
+
+> **功能单元命名（v8.3.271+）**：目录名 = `{文档/端}-{序号}-{英文slug}`（中文标题转全拼，如 `admin-web-01-yudingguanli`）；中文显示名保留在 SOURCE.md 标题与 `_matrix.md` 的 `feature` 字段。旧迭代中文目录名兼容不迁移。
 | 分析层 | `020-specs/{功能单元}/` | overview/（单元概述）+ {端名}/（TECH/TEST/UI_SPEC） |
 | 全局层 | `010-requirements/overview/GLOBAL_CONTEXT-*.md` + `020-specs/overview/` | 非功能全局信息 + FUNCTION_MAP/REQUIREMENT 汇总 |
 
@@ -92,7 +94,7 @@ SpecCore 规范驱动开发项目。
 10. **步骤隔离模式** — v8.3.160+ 默认步骤隔离，每步完成后输出 `[SPECCORE_STEP_DONE]` + `[SPECCORE_NEXT_STEP]`，新会话通过 `--resume` 继续。看到 `[SPECCORE_EXEC]` 后自动执行
 11. **质量门禁拦截后必须修复所有 error** — 不能跳过质量门禁继续推进
 12. **PATTERNS 只提取真正独特且可复用的模式** — 严禁为每个项目都生成 JWT/Redis/拦截器等框架自带的标准用法说明
-13. **多任务执行用批次** — `speccore execute --list-pending --batch-size 3` 获取清单，每批完成后开新对话续跑
+13. **多任务执行用批次** — `speccore execute --list-pending --batch-size 3` 获取清单，每批完成后优先在同一会话继续下一批（CLI 会输出 `[SPECCORE_CONTINUE]` 与下一任务命令）；仅当上下文紧张时开新对话，先读摘要文件再续跑
 14. **失败时读取 .issues.md 并按流程处理** — 读取问题清单 → 分析根因 → 修复 → 更新 .issues.md 状态 → 重新执行
 15. **续跑用 --resume** — `speccore execute --resume`
 16. **配置变更用 --upgrade** — `speccore config --upgrade`（`.speccore.yml` / `PROJECT.yaml` 结构升级）
@@ -163,7 +165,9 @@ Iteration-NNN-name/            ← 迭代目录
 │   ├── converted/             ← [自动生成] doc2spec 转换后的 MD
 │   ├── features/              ← [手动维护] 按功能模块组织
 │   │   └── {feature}/
-│   │       └── README.md
+│   │       ├── SOURCE.md      ← [自动生成] 需求原文切片（旧版为 README.md）
+│   │       ├── _matrix.md     ← [自动生成] 端覆盖矩阵（platforms/dependencies/apis）
+│   │       └── CHANGELOG.md   ← [自动生成] 单元变更记录
 │   ├── prototypes/            ← 原型（HTML/图片/链接，内容不限）
 │   ├── assets/                ← 素材资源
 │   │   ├── extracted/         ← doc2spec 提取的图片/媒体
@@ -252,7 +256,7 @@ Iteration-NNN-name/            ← 迭代目录
 | `[SPECCORE_MODE: <mode>]` | 意图模式 | 识别模式后进入对应流程 |
 | `[SPECCORE_EXEC: <cmd>]` | 自动执行命令 | 直接 execute_command |
 | `[SPECCORE_INTENT]` | 意图确认块 | 展示给用户确认 |
-| `[SPECCORE_CONTINUE: <path>]` | 批次执行完成，需续批 | **必须开始新对话**，先读取 `<path>` 恢复上下文，再按提示命令继续下一批次 |
+| `[SPECCORE_CONTINUE: <path>]` | 批次执行完成，需续批 | **优先在同一会话继续**（按标记中的命令执行下一批）；上下文紧张时开新对话，先读取 `<path>` 恢复上下文再续批 |
 
 ## 常用命令速查
 
@@ -261,8 +265,10 @@ speccore status                          # 当前迭代状态面板
 speccore analyze --scope global --layer 1-4 # 全局层源码分析（四层推进，产物 .speccore/GLOBAL/）
 speccore global from-source --src <dirs> # 全局层源码反推需求文档
 speccore unitize --file <md路径> --iter <迭代名>   # 切分需求文档 → 功能单元（features/）
+speccore unitize --on-duplicate overwrite ...      # 同名单元三选一（skip/overwrite 备份可回滚/rename/abort）
 speccore analyze -I <迭代名> --auto      # 迭代层全量分析（产物 020-specs/）
 speccore taskify -i <迭代名>             # 拆功能单元 → 开发任务（v8.3.231+ 替代 split）
+speccore taskify -i <迭代名> --modules "模块A"   # 只重建指定模块（旧任务自动备份 .backup-*，其余保留）
 speccore execute -i <迭代名> --all       # 执行所有任务
 speccore verify                          # 测试验证（冒烟/回归）
 speccore pr                              # 代码提交 + 创建 Pull Request
