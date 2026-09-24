@@ -7,6 +7,7 @@
  */
 import { join } from 'path';
 import { pathExists, ensureDir, readFile, readdir } from 'fs-extra';
+import { isTimestampBackup } from '../utils/task-utils';
 
 /** 迭代综合文档子目录名（v6.78.0+ 从 'global' 改为 'overview'） */
 export const GLOBAL_SPECS_DIR = 'overview';
@@ -203,6 +204,9 @@ async function readFeatureDirs(featuresDir: string): Promise<string[]> {
       // features/overview-xxx 目录（违反「全局信息不进 features」规范），
       // 扫描层过滤 overview- 前缀，防止假单元污染 analyze/taskify 的单元清单
       if (entry.name.startsWith('overview-')) continue;
+      // v8.3.278: 排除时间戳备份目录（v8.3.275+ unitize 同名三选一/换名重切的
+      // .backup 时间戳产物）——备份目录被当单元会导致 analyze 为旧目录再建全端骨架
+      if (isTimestampBackup(entry.name)) continue;
       names.push(entry.name);
     }
   } catch { /* ignore */ }

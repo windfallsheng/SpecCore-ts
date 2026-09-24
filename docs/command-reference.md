@@ -226,6 +226,7 @@ speccore analyze --scope=overview --phase=full -I Iteration-001       # 生成�
 - **Overview 阶段(v8.3.177+)**: CLI 扫描 `_matrix.md` 元数据 → 生成迭代总览（40-80 行），建立全局视角
 - **Phase 1**: 生成全局文档(overview/REQUIREMENT.md、ANALYSIS.md、DEPS.md 等)，建立跨端统一视角
 - **Phase 2**: 生成各端专属文档({端}/TECH.md、TEST.md、UI_SPEC.md 等)，参考全局上下文后注入端专属专业维度
+- **端覆盖矩阵收敛(v8.3.278+)**: Phase 2 骨架生成按 `_matrix.md` 的 `platforms` 声明展开「单元 × 声明端」，不再做「单元 × 全部端」笛卡尔积——单元不涉及的端不预建骨架；声明为空/缺失的单元全端兜底。骨架生成后自动清理声明外的残留空骨架目录（已有真实内容的端目录保留并警告），修改声明后重跑 `speccore analyze --prompt` 即收敛
 - **自动触发**: CLI 在 Phase 1 完成后,检测到 ≥2 个端时自动输出 Phase 2 prompt,无需用户手动执行两次命令
 - **自动模式(v6.71.0+)**: `--auto` 下 AI 直接推断执行 Phase 2，无需用户确认
 

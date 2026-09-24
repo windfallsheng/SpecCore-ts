@@ -9,8 +9,10 @@
  *   新: CLI → 预创建骨架 → AI 覆盖内容 → 文件已在正确位置（不需要清理）
  */
 import { join, dirname } from 'path';
-import { pathExists, ensureDir, readFile, writeFile } from 'fs-extra';
+import { pathExists, ensureDir, readFile, writeFile, readdir, remove } from 'fs-extra';
 import { GLOBAL_SPECS_DIR } from './spec-paths';
+import { isTimestampBackup } from '../utils/task-utils';
+import { logger } from '../utils/logger';
 
 // ================================================================
 // 常量
@@ -1156,12 +1158,15 @@ export function computeAnalyzeManifest(
  * @param platforms 端列表
  * @param phase '1' = Phase 1 (overview), '2' = Phase 2 (各端), undefined = 全部
  * @param iteration 迭代名（用于占位内容）
+ * @param featurePlatforms v8.3.278+: 「单元 → 声明端」映射（_matrix.md platforms 字段）。
+ *   声明非空的单元只生成声明端的骨架；未声明的单元全端兜底。
  */
 export function computeFeatureBasedAnalyzeManifest(
   features: string[],
   platforms: string[],
   phase?: '1' | '2',
   iteration: string = '',
+  featurePlatforms?: Map<string, string[]>,
 ): SpecFileEntry[] {
   const entries: SpecFileEntry[] = [];
 
@@ -1195,7 +1200,16 @@ export function computeFeatureBasedAnalyzeManifest(
   // Phase 2: 各功能模块的各端专属文档
   if (!phase || phase === '2') {
     for (const feature of features) {
-      for (const platform of platforms) {
+      // v8.3.278: 按 _matrix.md 声明端收敛——只生成该单元涉及端的骨架，
+      // 不再做「单元 × 全部端」笛卡尔积（未涉及端不生成，从源头消灭空骨架误报）
+      let unitPlatforms = platforms;
+      if (featurePlatforms) {
+        const declared = featurePlatforms.get(feature);
+        if (declared && declared.length > 0) {
+          unitPlatforms = declared.filter(p => platforms.includes(p));
+        }
+      }
+      for (const platform of unitPlatforms) {
         for (const doc of PHASE2_DOCS) {
           // v8.3.184+: API_CONTRACT.yaml 只在后端端生成（前端引用后端契约，不定义）
           if (doc.name === 'API_CONTRACT.yaml' && !isBackendPlatform(platform)) continue;
@@ -1241,8 +1255,101 @@ export function computeTaskManifest(
 }
 
 // ================================================================
-// 骨架生成器
+// 端覆盖矩阵（v8.3.278+）
 // ================================================================
+
+/**
+ * v8.3.278: 解析 _matrix.md 的 platforms 字段（与 taskify readMatrixPlatforms 同格式）。
+ * 格式：`platforms:` 后跟随 `  - 端名` 行；`  []`（空标记）或不存在 → 空数组（未声明）。
+ */
+async function parseMatrixPlatforms(matrixPath: string): Promise<string[]> {
+  try {
+    if (!(await pathExists(matrixPath))) return [];
+    const raw = await readFile(matrixPath, 'utf-8');
+    const m = raw.match(/platforms:\s*\n((?:\s*[-\[]?[\s\S]*?))(?=\n(?:dependencies|apis|interfaces|$))/);
+    const block = m ? m[1] : '';
+    if (!block || /^\s*\[\s*\]\s*$/.test(block.trim())) return [];
+    return block.split('\n')
+      .map(l => l.replace(/^\s*-\s*/, '').trim())
+      .filter(p => p && !p.startsWith('#') && !p.includes(':'));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * v8.3.278: 构建「单元 → 声明端」映射。
+ * 读取 010-requirements/features/{单元}/_matrix.md 的 platforms 字段，与合法端列表交叉验证。
+ * 声明为空/缺失的单元不写入映射 → 调用方按「全端兜底」处理。
+ * @param featuresDir 010-requirements/features/ 绝对路径
+ * @param features 单元目录名列表（parseFeatureList 产物）
+ * @param allPlatforms CONSTITUTION.md 全量端列表（未经 --platform 过滤）
+ */
+export async function resolveFeaturePlatformMap(
+  featuresDir: string,
+  features: string[],
+  allPlatforms: string[],
+): Promise<Map<string, string[]>> {
+  const map = new Map<string, string[]>();
+  if (!(await pathExists(featuresDir))) return map;
+  for (const feature of features) {
+    // 备份目录不在 features 清单里，但双保险：跳过时间戳备份目录名
+    if (isTimestampBackup(feature)) continue;
+    const declared = await parseMatrixPlatforms(join(featuresDir, feature, '_matrix.md'));
+    const valid = declared.filter(p => allPlatforms.includes(p));
+    if (valid.length > 0) map.set(feature, valid);
+  }
+  return map;
+}
+
+/**
+ * v8.3.278: 清理「未涉及端」的空骨架端目录。
+ *
+ * 背景：v8.3.277 及以前 analyze 按「单元 × 全部端」笛卡尔积预建骨架，
+ * 不读 _matrix.md 声明。单元只涉及部分端时，未涉及端的空骨架目录残留，
+ * 被 countPlatformSkeletons / detectSkeletonProgress / 质量门禁反复扫到误报。
+ *
+ * 安全边界：只删除「目录内所有文件均为空骨架（SPEC-SKELETON 或空白）」的端目录；
+ * 存在已填充真实内容的端目录不删除，计入 kept 供调用方警告（防 _matrix.md 声明不完整时误删）。
+ */
+export async function pruneUninvolvedPlatformSkeletons(
+  specDir: string,
+  features: string[],
+  featurePlatforms: Map<string, string[]>,
+): Promise<{ removed: string[]; kept: string[] }> {
+  const removed: string[] = [];
+  const kept: string[] = [];
+  for (const feature of features) {
+    const declared = featurePlatforms.get(feature);
+    if (!declared || declared.length === 0) continue; // 未声明端 → 全端兜底，不清理
+    const unitDir = join(specDir, feature);
+    if (!(await pathExists(unitDir))) continue;
+    const entries = await readdir(unitDir, { withFileTypes: true }).catch(() => [] as import('fs').Dirent[]);
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name === 'overview' || entry.name.startsWith('.')) continue;
+      if (declared.includes(entry.name)) continue; // 声明内的端目录，保留
+      const platformDir = join(unitDir, entry.name);
+      const files = await readdir(platformDir, { withFileTypes: true }).catch(() => [] as import('fs').Dirent[]);
+      const fileList = files.filter(f => f.isFile());
+      // 全部文件为空骨架（或目录为空）→ 可安全删除
+      let allSkeleton = true;
+      for (const f of fileList) {
+        const content = (await readFile(join(platformDir, f.name), 'utf-8').catch(() => '')).trim();
+        if (content && !content.includes(SKELETON_MARKER)) {
+          allSkeleton = false;
+          break;
+        }
+      }
+      if (allSkeleton) {
+        await remove(platformDir);
+        removed.push(`${feature}/${entry.name}`);
+      } else {
+        kept.push(`${feature}/${entry.name}`);
+      }
+    }
+  }
+  return { removed, kept };
+}
 
 /**
  * 预创建文件骨架

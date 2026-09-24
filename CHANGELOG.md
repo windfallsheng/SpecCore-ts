@@ -1,4 +1,14 @@
-## v8.3.277 (2026-09-24) — 拆分流健壮性加固 + 备份目录指纹隔离
+## v8.3.278 (2026-09-24) — analyze 端覆盖矩阵收敛 + 未涉及端空骨架自动清理
+
+### 新增
+- **analyze 端覆盖矩阵收敛**：骨架生成按 `_matrix.md` 的 platforms 声明展开「单元 × 声明端」，替代旧「单元 × 全部端」笛卡尔积——单元只涉及部分端时，不再为未涉及端预建空骨架；声明为空/缺失的单元全端兜底（兼容旧迭代）。进度检测（detectSkeletonProgress）与骨架统计（countPlatformSkeletons）同口径收敛
+- **未涉及端空骨架自动清理**（pruneUninvolvedPlatformSkeletons）：analyze 骨架生成后扫描 `020-specs/{单元}/`，声明外且目录内全部文件仍为 SKELETON 占位的端目录物理删除（清理 v8.3.277 及以前全端笛卡尔积残留）；已有真实内容的端目录保留并警告（防 _matrix.md 声明不完整时误删）
+- **骨架生成日志可视化**：输出「📍 端覆盖矩阵收敛: 单元→[端,...]」逐单元可见收敛结果
+- **unitize 英译降级提示**：无 LLM 环境拼音兜底时明示「⚙️ 未配置 LLM，N 个标题英译降级拼音」+ 指路两条拿英文名的路径（配置 SPECCORE_LLM_KEY 重切 / --translate-en host 接力），不再静默降级让人误以为没有英译步骤
+- **换名重切同名检测**（unitize）：拼音→英文重切时目录名变了，走不到目录名命中、被内容指纹检测误拦「内容重复」卡死——新增「标题命中 + 指纹相同」两级同名检测，换名场景正确触发三选一（标题相同但内容不同的同名章节不误伤）
+
+### 修复
+- **备份目录第五处漏网**（spec-paths readFeatureDirs / feature-metadata 扫描器）：时间戳备份目录被 parseFeatureList 当功能单元，analyze 为旧目录再建全端骨架、FUNCTION_MAP 总览被假单元污染——两处扫描统一加 isTimestampBackup 过滤
 
 ### 修复
 - **计数器 ENOENT**（global-counters）：save/initCounters 写前 ensureDir，修复 `.speccore/local/` 不存在时 taskify 首个任务即失败

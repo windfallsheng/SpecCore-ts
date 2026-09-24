@@ -34,7 +34,7 @@ import { resolvePlatform } from '../core/platform-registry';
 import { warnIfIndexStale } from '../core/index-guard';
 import { loadConfigWithMeta } from '../core/unified-config';
 import { GLOBAL_SPECS_DIR, GLOBAL_SPEC_FILES, parsePlatformTypes, parsePlatformList, parseFeatureList } from '../core/spec-paths';
-import { computeAnalyzeManifest, computeFeatureBasedAnalyzeManifest, generateSkeleton, detectSkeletonProgress, buildSkeletonFileList, validateContentQuality, SKELETON_MARKER, PHASE1_INDEX_DOC_NAMES, PHASE1_DOC_NAMES, FEATURE_OVERVIEW_DOC_NAMES } from '../core/spec-skeleton';
+import { computeAnalyzeManifest, computeFeatureBasedAnalyzeManifest, generateSkeleton, detectSkeletonProgress, buildSkeletonFileList, validateContentQuality, SKELETON_MARKER, PHASE1_INDEX_DOC_NAMES, PHASE1_DOC_NAMES, FEATURE_OVERVIEW_DOC_NAMES, resolveFeaturePlatformMap, pruneUninvolvedPlatformSkeletons } from '../core/spec-skeleton';
 import { unifiedSearch, formatUnifiedContext } from '../core/unified-retrieval';
 import { assembleUnitContext } from '../core/unit-context-assembler';
 // v8.3.225+: 调度循环状态机（方式 Y 宿主会话内闭环）
@@ -1325,7 +1325,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         // v8.0.0+: 骨架优先架构 — CLI 预创建所有文件，AI 只覆盖内容
         const iterDirForSkeleton = await getIterationDir(iterForDirs);
         const specDir = join(iterDirForSkeleton, '020-specs');
-        let platforms = await parsePlatformList();
+        const allPlatforms = await parsePlatformList();
+        let platforms = [...allPlatforms];
         const iterName = iterForDirs;
 
         // v8.3.16+: 如果指定了 --platform，只创建指定端的骨架
@@ -1345,15 +1346,31 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         // v8.3.21+: 按需求文档名组织（020-specs/{需求名}/）
         const phase = options.phase as '1' | '2' | undefined;
         const features = await parseFeatureList(iterDirForSkeleton);
+        // v8.3.278+: 读 _matrix.md 端声明，按「单元 × 声明端」收敛骨架生成——
+        // 不涉及的端不再预建空骨架（旧笛卡尔积产物由 pruneUninvolvedPlatformSkeletons 清理）
+        const featurePlatforms = await resolveFeaturePlatformMap(
+          join(iterDirForSkeleton, '010-requirements', 'features'), features, allPlatforms);
         let manifest: import('../core/spec-skeleton').SpecFileEntry[];
         if (features.length > 0) {
-          manifest = computeFeatureBasedAnalyzeManifest(features, platforms, phase, iterName);
+          manifest = computeFeatureBasedAnalyzeManifest(features, platforms, phase, iterName, featurePlatforms);
           logger.info(`📂 按需求文档组织: ${features.length} 个功能模块`);
+          if (featurePlatforms.size > 0) {
+            const declared = [...featurePlatforms.entries()].map(([f, ps]) => `${f}→[${ps.join(',')}]`).join('；');
+            logger.info(`📍 端覆盖矩阵收敛: ${declared}`);
+          }
         } else {
           manifest = computeFeatureBasedAnalyzeManifest([], platforms, phase, iterName);
           logger.info(`📂 未检测到需求文档，仅创建全局 overview/`);
         }
         const skeletonResult = await generateSkeleton(specDir, manifest);
+        // v8.3.278+: 清理「未涉及端」的旧空骨架目录（v8.3.277 及以前的全端笛卡尔积残留）
+        const pruneResult = await pruneUninvolvedPlatformSkeletons(specDir, features, featurePlatforms);
+        if (pruneResult.removed.length > 0) {
+          logger.info(`🧹 已清理 ${pruneResult.removed.length} 个未涉及端的空骨架目录: ${pruneResult.removed.join(', ')}`);
+        }
+        if (pruneResult.kept.length > 0) {
+          logger.warn(`⚠️ 以下端目录不在 _matrix.md 声明中但已有真实内容，保留未删（请确认声明完整性）: ${pruneResult.kept.join(', ')}`);
+        }
         if (skeletonResult.created.length > 0) {
           logger.info(`🦴 已创建 ${skeletonResult.created.length} 个文件骨架: ${skeletonResult.created.join(', ')}`);
         }
@@ -5015,8 +5032,12 @@ sequenceDiagram
         // 全局 overview/ 只含索引类），避免旧 manifest 把 overview/REQUIREMENT.md 当
         // 「下一个待填充」但 --apply 又按路由表拦截 → 单文档模式死锁。
         const features = await parseFeatureList(iterDir);
+        // v8.3.278+: 进度检测同样按端声明收敛，与骨架生成口径一致，
+        // 避免把不涉及端的旧骨架目录误判为「下一个待填充」
+        const featurePlatforms = await resolveFeaturePlatformMap(
+          join(iterDir, '010-requirements', 'features'), features, platforms);
         const manifest = features.length > 0
-          ? computeFeatureBasedAnalyzeManifest(features, platforms, undefined, ctx.iteration)
+          ? computeFeatureBasedAnalyzeManifest(features, platforms, undefined, ctx.iteration, featurePlatforms)
           : computeAnalyzeManifest(platforms, undefined, ctx.iteration);
         perDocStatus = await detectSkeletonProgress(specDir, manifest);
         if (perDocStatus.nextUnfilled) {
@@ -7303,8 +7324,14 @@ async function countPlatformSkeletons(iterDir: string): Promise<{ skeleton: numb
     if (!(await pathExists(specDir))) return { skeleton, total };
     const features = await parseFeatureList(iterDir);
     const platforms = await parsePlatformList();
+    // v8.3.278+: 统计口径与骨架生成一致——只统计声明端（未声明单元全端兜底），
+    // 避免把不涉及端的旧残留目录计入骨架提示
+    const featurePlatforms = await resolveFeaturePlatformMap(
+      join(iterDir, '010-requirements', 'features'), features, platforms);
     for (const feature of features) {
-      for (const platform of platforms) {
+      const declared = featurePlatforms.get(feature);
+      const unitPlatforms = declared && declared.length > 0 ? declared : platforms;
+      for (const platform of unitPlatforms) {
         const pDir = join(specDir, feature, platform);
         if (!(await pathExists(pDir))) continue;
         const entries = await readdir(pDir, { withFileTypes: true }).catch(() => []);

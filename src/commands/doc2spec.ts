@@ -884,6 +884,19 @@ async function resolveDuplicateAction(
 }
 
 /**
+ * v8.3.278: 读已有单元的显示标题（SOURCE.md 首个 H1，兼容旧 README.md），
+ * 用于拼音→英文换名重切时的「标题命中 + 指纹相同」同名检测。
+ */
+async function readUnitTitle(unitDir: string): Promise<string> {
+  try {
+    const src = await readFile(await resolveUnitSourcePath(unitDir), 'utf-8');
+    // 兼容多级标题（如 `## 1. 站内信通知`）与序号前缀，剥离后与 unit.title 对齐
+    const m = src.match(/^#{1,6}\s+(.+)$/m);
+    return m ? stripSectionNo(m[1].trim()).trim() : '';
+  } catch { return ''; }
+}
+
+/**
  * 将转换后的文档拆分为功能单元，写入 features/
  * v8.3.191+: 导出供 run 流水线「切分功能单元」步骤复用（对已转换文档切分，无需 --file）
  */
@@ -1041,10 +1054,25 @@ export async function splitDocumentToUnits(
     // 中文显示名保留在 SOURCE.md 标题与 _matrix.md feature 字段
     const slugSource = unitNames.get(unit.title) || unit.title;
     let unitDirName = sanitizeUnitName(`${docSlug}-${seq}-${toEnglishSlug(slugSource)}`);
+    // v8.3.278: 同名检测两级——目录名命中，或「标题命中 + 内容指纹相同」的换名场景
+    // （拼音→英文重切时目录名变了但内容同源，仍应走三选一而非被指纹检测误拦；
+    // 标题相同但内容不同的同名章节不命中，避免误伤）
+    const unitContent = extractUnitContent(content, unit);
+    const fp = contentFingerprint(unitContent);
+    let conflictDir = seenUnitDirs.has(unitDirName) ? unitDirName : '';
+    if (!conflictDir) {
+      for (const d of existingUnitDirs) {
+        if (d === unitDirName) continue;
+        if ((await readUnitTitle(join(featuresDir, d))) === unit.title && existingContentHashes.get(d) === fp) {
+          conflictDir = d;
+          break;
+        }
+      }
+    }
     // v8.3.223+: 同名/已存在单元三选一（v8.3.275 由静默跳过升级为交互裁决）
-    if (seenUnitDirs.has(unitDirName)) {
+    if (conflictDir) {
       if (!rl && process.stdin.isTTY && process.stdout.isTTY) rl = createInterface({ input: process.stdin, output: process.stdout });
-      const action = await resolveDuplicateAction(unit.title, unitDirName, onDuplicate, rl);
+      const action = await resolveDuplicateAction(unit.title, conflictDir, onDuplicate, rl);
       if (action === 'abort') {
         logger.warn('   ⏹️  用户中止切分');
         break;
@@ -1057,12 +1085,13 @@ export async function splitDocumentToUnits(
       if (action === 'overwrite') {
         // 覆盖重建：旧目录整体改名为时间戳备份（保留完整旧内容），再走下方创建流程
         // 同时绕过全部指纹检测——用户已裁决覆盖，不得被其它同名内容单元误拦
-        logger.info(`   🔄 ${unit.title} 覆盖重建: ${unitDirName}`);
-        const bak = await backupDirWithTimestamp(join(featuresDir, unitDirName)).catch(() => null);
+        logger.info(`   🔄 ${unit.title} 覆盖重建: ${conflictDir}`);
+        const bak = await backupDirWithTimestamp(join(featuresDir, conflictDir)).catch(() => null);
         if (bak) logger.info(`   📦 旧单元已备份: ${bak.split('/').pop()}`);
-        existingContentHashes.delete(unitDirName);
-        existingUnitContents.delete(unitDirName);
-        seenUnitDirs.delete(unitDirName);
+        existingContentHashes.delete(conflictDir);
+        existingUnitContents.delete(conflictDir);
+        existingUnitDirs.delete(conflictDir);
+        seenUnitDirs.delete(conflictDir);
         (unit as any)._skipDupCheck = true;
         // 继续走下方创建流程
       } else {
@@ -1081,8 +1110,6 @@ export async function splitDocumentToUnits(
     // v8.3.226+: 跨文档重复章节检测（内容指纹比对，与幂等目录跳过互补）——
     // 必须在目录创建前完成，避免重复单元残留空壳目录
     // v8.3.275: 用户已裁决重命名的单元绕过指纹检测
-    const unitContent = extractUnitContent(content, unit);
-    const fp = contentFingerprint(unitContent);
     const dupEntry = !(unit as any)._skipDupCheck
       ? [...existingContentHashes.entries()].find(([, h]) => h === fp)
       : undefined;
@@ -1848,7 +1875,12 @@ async function translateUnitTitles(
   }
 
   if (!llmAvailable) {
-    // auto 模式：无 LLM 环境直接拼音兜底（全自动不中断）
+    // auto 模式：无 LLM 环境直接拼音兜底（全自动不中断），但必须提示——
+    // 静默降级会让用户误以为「没有英译这一步」
+    if (misses.length > 0) {
+      logger.warn(`⚙️  未配置 LLM，${misses.length} 个标题英译降级拼音（yibiaopan 而非 dashboard）`);
+      logger.info(`   💡 拿英文名两条路：① 配置 SPECCORE_LLM_KEY 后重切  ② --translate-en host 由宿主 AI 翻译接力`);
+    }
     return new Map(Object.entries(cache));
   }
 

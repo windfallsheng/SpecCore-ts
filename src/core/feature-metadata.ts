@@ -9,6 +9,7 @@ import { join } from 'path';
 import yaml from 'js-yaml';
 import { logger } from '../utils/logger';
 import { resolveUnitSourcePath } from './feature-source';
+import { isTimestampBackup } from '../utils/task-utils';
 
 export interface FeatureMetadata {
   feature: string;
@@ -42,7 +43,12 @@ export async function scanFeatureMetadata(iteration: string): Promise<FeatureMet
   }
 
   const entries = await readdir(featuresDir, { withFileTypes: true });
-  const featureDirs = entries.filter(e => e.isDirectory()).map(e => e.name);
+  // v8.3.278: 排除系统目录与时间戳备份目录（重切/换名产物），防止假单元污染总览
+  const featureDirs = entries
+    .filter(e => e.isDirectory())
+    .filter(e => !e.name.startsWith('.') && !e.name.startsWith('overview-'))
+    .filter(e => !isTimestampBackup(e.name))
+    .map(e => e.name);
 
   const metadata: FeatureMetadata[] = [];
   for (const dirName of featureDirs) {

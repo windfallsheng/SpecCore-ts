@@ -6546,3 +6546,23 @@ overwrite 产生的时间戳备份目录（`xxx-20260924083058`，无扩展名�
 ---
 
 
+
+## 附录：v8.3.278+ 端覆盖矩阵收敛与未涉及端空骨架清理设计
+
+### 问题背景
+
+v8.3.277 及以前，analyze 的骨架生成（`computeFeatureBasedAnalyzeManifest`）按「单元 × 全部端」笛卡尔积展开，不读 `_matrix.md` 的端声明。功能单元只涉及部分端时，未涉及端同样预建空骨架，随后被 `countPlatformSkeletons` / `detectSkeletonProgress` / 质量门禁反复扫到误报（会议项目 430 空骨架拦截事件的机制根源之一）。而 taskify 侧（v8.3.268+）早已按 `_matrix.md` 声明收敛——两端口径不一致。
+
+### 设计要点
+
+1. **声明优先收敛**：`resolveFeaturePlatformMap` 读取 `010-requirements/features/{单元}/_matrix.md` 的 `platforms` 字段（与 taskify `readMatrixPlatforms` 同格式解析），与 CONSTITUTION.md 全量端列表交叉验证后构建「单元 → 声明端」映射。声明为空/缺失的单元不写入映射，调用方按全端兜底（兼容旧迭代与未声明单元）。
+2. **骨架生成按声明展开**：`computeFeatureBasedAnalyzeManifest` 新增可选参数 `featurePlatforms`，Phase 2 以「单元 × 声明端（∩ --platform 过滤）」替代「单元 × 全部端」；参数缺省时行为与旧版完全一致（向后兼容）。
+3. **三处同口径收敛**：骨架生成、进度检测（`detectSkeletonProgress`）、骨架统计（`countPlatformSkeletons`）统一传入映射，杜绝「生成收敛、检测全端」的口径错位。
+4. **残留清理带安全边界**（`pruneUninvolvedPlatformSkeletons`）：骨架生成后扫描 `020-specs/{单元}/`，声明外的端目录若「全部文件仍为 SKELETON 占位或空白」则物理删除（清理旧版全端笛卡尔积残留）；存在已填充真实内容的端目录保留不删并输出警告——防 `_matrix.md` 声明不完整时误删真文档。
+5. **备份目录第五处漏网**：`spec-paths.readFeatureDirs` 与 `feature-metadata` 扫描器统一加 `isTimestampBackup` 过滤，修复时间戳备份目录被当功能单元、analyze 为旧目录再建全端骨架的连锁污染。
+
+### 收益
+
+- 单元声明 `app+h5` 时，020-specs 下不再出现 admin/miniapp 空骨架目录，质量门禁与骨架统计的误报源从源头消灭；
+- 修改 `_matrix.md` 声明后重跑 `analyze --prompt` 即自动收敛（新端补建骨架、废弃端清空残留）；
+- 任务拆分（taskify）与需求分析（analyze）的端口径首次达成一致。
