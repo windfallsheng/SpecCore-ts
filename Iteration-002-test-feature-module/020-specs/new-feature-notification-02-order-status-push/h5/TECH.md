@@ -1,7 +1,7 @@
 <!-- SPEC-SKELETON -->
-# admin 技术架构
+# h5 技术架构
 
-> 迭代: Iteration-002-test-feature-module | 端: admin | 生成: 待填充
+> 迭代: Iteration-002-test-feature-module | 端: h5 | 生成: 待填充
 
 ## 写作要求
 基于 overview/TECH.md 的整体架构，细化本端的技术方案：
@@ -13,7 +13,7 @@
 
 ## 📋 质量标准（TECH.md）
 
-> 🎯 **admin 是前端端**，TECH.md 必须包含：用户旅程、页面清单与路由、API 调用清单、组件设计、状态管理
+> 🎯 **h5 是前端端**，TECH.md 必须包含：用户旅程、页面清单与路由、API 调用清单、组件设计、状态管理
 
 **必含内容**：
 - [ ] 整体架构图（Mermaid graph/flowchart）

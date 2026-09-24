@@ -1,7 +1,7 @@
 <!-- SPEC-SKELETON -->
-# admin 开发者实现指南
+# h5 开发者实现指南
 
-> 迭代: Iteration-002-test-feature-module | 端: admin | 生成: 待填充
+> 迭代: Iteration-002-test-feature-module | 端: h5 | 生成: 待填充
 
 ## 写作要求
 本端专属的**可执行实现指导**。

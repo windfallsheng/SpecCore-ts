@@ -1,7 +1,7 @@
 <!-- SPEC-SKELETON -->
-# admin 测试计划
+# h5 测试计划
 
-> 迭代: Iteration-002-test-feature-module | 端: admin | 生成: 待填充
+> 迭代: Iteration-002-test-feature-module | 端: h5 | 生成: 待填充
 
 ## 写作要求
 - 页面流转测试（路由跳转/权限拦截）

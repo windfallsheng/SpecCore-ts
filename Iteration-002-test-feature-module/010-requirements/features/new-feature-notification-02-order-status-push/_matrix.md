@@ -2,8 +2,10 @@
 
 feature: 订单状态推送
 type: feature
+# 推断来源: keyword（置信度 0.75，自动填充，可人工修改）
 platforms:
   - app
-  - admin
+  - h5
+  - miniapp
 dependencies: []
 apis: []

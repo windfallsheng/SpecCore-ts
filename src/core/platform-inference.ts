@@ -15,8 +15,9 @@
  */
 
 import { join } from 'path';
-import { pathExists, readFile, readdir } from 'fs-extra';
+import { pathExists, readFile, readdir, writeFile } from 'fs-extra';
 import * as yaml from 'js-yaml';
+import { resolveUnitSourcePath } from './feature-source';
 
 export type PlatformInferenceSource =
   | 'explicit'    // 显式声明
@@ -198,15 +199,19 @@ function inferPlatformsByKeywords(featureName: string, requirementContent: strin
     { keywords: ['页面', 'ui', '组件', '展示', '列表', '详情', '首页', '导航', '菜单', '主题', '样式', '布局'], platforms: [...adminPlatforms, ...mobilePlatforms] },
   ];
 
-  const matched = new Set<string>();
+  const matchedGroups: string[][] = [];
   for (const rule of keywordMap) {
     if (rule.keywords.some(kw => text.includes(kw.toLowerCase()))) {
-      for (const p of rule.platforms) matched.add(p);
+      matchedGroups.push(rule.platforms);
     }
   }
 
-  // 注意：不兜底。没匹配到时返回空，让六层机制自然走到 Layer5（AI 判断）。
-  return [...matched];
+  // v8.3.279: 多组命中取交集——union 会让「通知+列表」这类常见组合膨胀成全端（收敛形同虚设）。
+  // 「用户/设置」组为全端集合，取交集等于保留其余组的结论；交集为空则放弃关键词推断，
+  // 交给 Layer 5 AI 判断（宁少勿滥：宁可全端兜底，不瞎收敛）。
+  if (matchedGroups.length === 0) return [];
+  const intersected = matchedGroups.reduce((acc, group) => acc.filter(p => group.includes(p)));
+  return intersected;
 }
 
 // ── Layer 5: AI 判断 prompt ──
@@ -221,4 +226,97 @@ function buildAiInferencePrompt(featureName: string, requirementContent: string,
     '输出格式（JSON）:',
     '{"platforms": ["backend", "h5-mobile"], "confidence": 0.8, "uncertainties": []}',
   ].join('\n');
+}
+
+// ================================================================
+// v8.3.279+: 推断结果持久化（写回 _matrix.md）
+// ================================================================
+
+/**
+ * v8.3.279: 把高置信度推断结果写回 _matrix.md 的 platforms 字段（持久化）。
+ * 只替换 platforms 块（保持 feature/type/dependencies/apis 其余字段不变），
+ * 并在块上方标注推断来源与置信度注释（可人工修改）；重复写回时旧注释不叠加。
+ */
+export async function persistInferredPlatforms(
+  featureDir: string,
+  platforms: string[],
+  source: PlatformInferenceSource,
+  confidence: number,
+): Promise<boolean> {
+  const matrixPath = join(featureDir, '_matrix.md');
+  if (!(await pathExists(matrixPath))) return false;
+  try {
+    const NL = String.fromCharCode(10); // 避免正则在工具链路中转义损坏，用字符码拼换行
+    const raw = await readFile(matrixPath, 'utf-8');
+    const lines = raw.split(NL);
+    // 定位 platforms: 行；块结束于 dependencies/apis/interfaces 行或文件尾
+    let pIdx = -1;
+    let endIdx = lines.length;
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].trim() === 'platforms:' && pIdx === -1) pIdx = i;
+      else if (pIdx >= 0 && /^(dependencies|apis|interfaces):/.test(lines[i].trim())) { endIdx = i; break; }
+    }
+    if (pIdx === -1) return false;
+    // 去掉紧邻 platforms: 前的旧「推断来源」注释行，避免重复叠加
+    if (pIdx > 0 && lines[pIdx - 1].includes('推断来源')) {
+      lines.splice(pIdx - 1, 1);
+      pIdx--;
+      endIdx--;
+    }
+    const listLines = platforms.map(p => `  - ${p}`);
+    const note = `# 推断来源: ${source}（置信度 ${confidence}，自动填充，可人工修改）`;
+    const block = [note, 'platforms:', ...listLines];
+    lines.splice(pIdx, endIdx - pIdx, ...block);
+    await writeFile(matrixPath, lines.join(NL), 'utf-8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * v8.3.279: 对「声明为空」的单元批量跑六层推断，高置信度结果写回 _matrix.md。
+ * 返回合并后的「单元 → 声明端」映射与推断过程清单。
+ * 已声明单元不重复推断（幂等）；前四层无结果（需 AI/人工）的单元记入 pending，全端兜底。
+ */
+export async function inferAndPersistFeaturePlatforms(
+  featuresDir: string,
+  features: string[],
+  allPlatforms: string[],
+  existingMap: Map<string, string[]>,
+): Promise<{
+  map: Map<string, string[]>;
+  inferred: { feature: string; platforms: string[]; source: PlatformInferenceSource; confidence: number }[];
+  pending: string[];
+}> {
+  const map = new Map(existingMap);
+  const inferred: { feature: string; platforms: string[]; source: PlatformInferenceSource; confidence: number }[] = [];
+  const pending: string[] = [];
+  for (const feature of features) {
+    if (map.has(feature)) continue; // 已有声明，不重复推断
+    const featureDir = join(featuresDir, feature);
+    let requirementContent = '';
+    try {
+      const srcPath = await resolveUnitSourcePath(featureDir);
+      if (await pathExists(srcPath)) requirementContent = await readFile(srcPath, 'utf-8');
+    } catch { /* 读不到需求切片不阻断 */ }
+    const inference = await inferFeaturePlatforms({
+      featureName: feature,
+      featureDir,
+      requirementContent,
+      allPlatforms,
+    });
+    // 高置信度确定性来源（显式声明 1.0 / 目录结构 0.9 / 关键词 0.75）→ 写回持久化
+    if (inference.platforms.length > 0 && ['explicit', 'directory', 'keyword'].includes(inference.source)) {
+      const ok = await persistInferredPlatforms(featureDir, inference.platforms, inference.source, inference.confidence);
+      if (ok) {
+        map.set(feature, inference.platforms);
+        inferred.push({ feature, platforms: inference.platforms, source: inference.source, confidence: inference.confidence });
+        continue;
+      }
+    }
+    // 推断无结果或写回失败 → 全端兜底 + 待 AI/人工
+    pending.push(feature);
+  }
+  return { map, inferred, pending };
 }

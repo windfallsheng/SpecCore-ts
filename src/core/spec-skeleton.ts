@@ -1583,6 +1583,7 @@ export function buildSkeletonFileList(
 
   text += `> 完整路径前缀: \`${specDir}/\`\n`;
   text += `> 写入方式: 用 Write 工具直接覆盖上述路径的文件，不要创建新文件\n`;
+  text += `> 端声明核对（v8.3.279+）: 若分析发现某单元实际涉及的端与 010-requirements/features/{单元}/_matrix.md 的 platforms 声明不符，用 Write 更新该文件后重跑 analyze，骨架将按声明收敛\n`;
 
   return text;
 }

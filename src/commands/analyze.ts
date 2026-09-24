@@ -1348,8 +1348,21 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         const features = await parseFeatureList(iterDirForSkeleton);
         // v8.3.278+: 读 _matrix.md 端声明，按「单元 × 声明端」收敛骨架生成——
         // 不涉及的端不再预建空骨架（旧笛卡尔积产物由 pruneUninvolvedPlatformSkeletons 清理）
-        const featurePlatforms = await resolveFeaturePlatformMap(
-          join(iterDirForSkeleton, '010-requirements', 'features'), features, allPlatforms);
+        const featuresDir = join(iterDirForSkeleton, '010-requirements', 'features');
+        let featurePlatforms = await resolveFeaturePlatformMap(featuresDir, features, allPlatforms);
+        // v8.3.279+: 声明为空的单元跑六层端推断，高置信度结果写回 _matrix.md 并参与本轮收敛，
+        // 兑现 doc2spec「空数组由 analyze 端推断填充」的承诺（此前从未实现）
+        const { inferAndPersistFeaturePlatforms } = await import('../core/platform-inference');
+        const inferResult = await inferAndPersistFeaturePlatforms(featuresDir, features, allPlatforms, featurePlatforms);
+        featurePlatforms = inferResult.map;
+        if (inferResult.inferred.length > 0) {
+          const detail = inferResult.inferred.map(i => `${i.feature}→[${i.platforms.join(',')}](${i.source} ${i.confidence})`).join('；');
+          logger.info(`🤖 端推断填充 ${inferResult.inferred.length} 个单元声明: ${detail}`);
+        }
+        if (inferResult.pending.length > 0) {
+          logger.info(`💡 ${inferResult.pending.length} 个单元无法推断涉及端，按全端兜底: ${inferResult.pending.join(', ')}`);
+          logger.info(`   分析完成后可人工确认/更新各单元 _matrix.md 的 platforms 声明，重跑 analyze 即收敛`);
+        }
         let manifest: import('../core/spec-skeleton').SpecFileEntry[];
         if (features.length > 0) {
           manifest = computeFeatureBasedAnalyzeManifest(features, platforms, phase, iterName, featurePlatforms);

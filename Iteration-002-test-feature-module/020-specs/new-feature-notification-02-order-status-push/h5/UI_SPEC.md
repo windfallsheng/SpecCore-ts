@@ -1,7 +1,7 @@
 <!-- SPEC-SKELETON -->
-# admin UI 规格
+# h5 UI 规格
 
-> 迭代: Iteration-002-test-feature-module | 端: admin | 生成: 待填充
+> 迭代: Iteration-002-test-feature-module | 端: h5 | 生成: 待填充
 
 ## 写作要求
 - 页面清单与路由
