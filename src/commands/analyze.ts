@@ -42,6 +42,14 @@ import { runDispatchLoopRound, type LoopRoundResult, type LoopStep } from '../co
 import { PipelineEngine, createAnalyzePipeline, createGlobalAnalyzePipeline, type StepResult } from '../core/pipeline-engine';
 import { detectAffectedPlatforms, detectPlatformPriorityOrder, recordAnalysisSnapshot } from '../core/change-detection';
 import { recordAiTrace } from '../utils/ai-trace';
+
+// v8.3.264: AI 交棒统一出口——所有 [SPECCORE_PROMPT] 输出必留 prompt-out 轨迹，
+// 与 ai-trace 飞行记录仪的 apply-in/apply-done/apply-fail 配对，形成「发起→回传→落盘」闭环证据链。
+// 此前 14 处输出点仅 2 处埋点，澄清链等 12 处交棒全程无痕（ai-trace/ 目录空白即因此）。
+async function emitAiPrompt(iter: string, prompt: string, meta: Record<string, unknown> = {}): Promise<void> {
+  await recordAiTrace(iter, 'prompt-out', { promptLength: prompt.length, ...meta, prompt });
+  process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
+}
 import {
   buildPhasePrompt,
   detectBacktrackingNeeds,
@@ -473,7 +481,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     prompt += `3. 修复后重新运行 \`speccore analyze -I ${iter}\` 重新审计\n`;
     prompt += `4. 最多修复 2 轮，超过 2 轮仍有问题则标记为“需人工确认”\n`;
     prompt += `5. 写入: speccore analyze --apply '{...}' -I ${iter}\n`;
-    process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
+    await emitAiPrompt(iter, prompt, { mode: 'audit-fix' });
     process.exitCode = 10;
     return;
   }
@@ -497,7 +505,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     if (options.estimateOnly) {
       // 只输出预估报告到 prompt
       const prompt = buildContextGuardPrompt(estimate, plan);
-      process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
+      await emitAiPrompt(iter, prompt, { mode: 'context-guard' });
       process.exitCode = 10;
       return;
     }
@@ -530,7 +538,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 
     if (options.prompt) {
       const prompt = buildIncrementalPrompt(iterDir, analysis, iter);
-      process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
+      await emitAiPrompt(iter, prompt, { mode: 'incremental' });
       process.exitCode = 10;
       return;
     }
@@ -580,7 +588,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 
     if (options.prompt) {
       const prompt = buildNewPlatformPrompt(iterDir, analysis, iter);
-      process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
+      await emitAiPrompt(iter, prompt, { mode: 'new-platform' });
       process.exitCode = 10;
       return;
     }
@@ -634,7 +642,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 
     if (options.prompt) {
       const prompt = buildModuleAnalysisPrompt(iterDir, result, iter);
-      process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
+      await emitAiPrompt(iter, prompt, { mode: 'module-analysis' });
       process.exitCode = 10;
       return;
     }
@@ -757,7 +765,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 
     // ── prompt 模式：生成 AI Prompt ──
     const prompt = buildOverviewPrompt(overviewInput, coverage, crossApis, phase);
-    process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
+    await emitAiPrompt(iter, prompt, { mode: 'overview' });
     process.exitCode = 10;
     return;
   }
@@ -803,7 +811,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       }
       const report = await consolidateUnitAnalyses(iter, units, analyses);
       if (options.prompt) {
-        process.stdout.write(`[SPECCORE_PROMPT]\n${report}\n\n## 操作选项\n\n**选项 A：确认通过，写入所有文档**\n\`\`\`bash\nspeccore analyze --apply '[DOC:...]' -I ${iter}\n\`\`\`\n`);
+        await emitAiPrompt(iter, `${report}\n\n## 操作选项\n\n**选项 A：确认通过，写入所有文档**\n\`\`\`bash\nspeccore analyze --apply '[DOC:...]' -I ${iter}\n\`\`\`\n`, { mode: 'consolidate-report' });
         process.exitCode = 10;
         return;
       }
@@ -859,9 +867,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         await printUnitLoopSummary(iter, iterDir, units, loopResult);
         return;
       }
-      process.stdout.write(
-        `[SPECCORE_PROMPT]\n${loopResult.prompt}\n\n## 完成后继续\n\n落盘后运行以下命令，CLI 将校验产出并自动推进到下一个单元：\n\n\`\`\`bash\nspeccore analyze --resume-units -I ${iter}\n\`\`\`\n`
-      );
+      await emitAiPrompt(iter, `${loopResult.prompt}\n\n## 完成后继续\n\n落盘后运行以下命令，CLI 将校验产出并自动推进到下一个单元：\n\n\`\`\`bash\nspeccore analyze --resume-units -I ${iter}\n\`\`\`\n`, { mode: 'resume-units-loop' });
       process.exitCode = 10;
       return;
     }
@@ -902,8 +908,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       const targetUnit = targetUnits[0];
       if (options.prompt) {
         const prompt = await buildUnitAnalysisPrompt(iterDir, iter, targetUnit, units);
-        await recordAiTrace(iter, 'prompt-out', { mode: 'unit', unit: targetUnit.id, promptLength: prompt.length, prompt });
-        process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
+        await emitAiPrompt(iter, prompt, { mode: 'unit', unit: targetUnit.id });
         process.exitCode = 10;
         return;
       }
@@ -1566,7 +1571,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         process.stdout.write(`[SPECCORE_CONTEXT_TYPE: platform-only]\n\n`);
       }
 
-      process.stdout.write(`[SPECCORE_PROMPT]\n${finalPrompt}`);
+      await emitAiPrompt(iter, finalPrompt, { mode: 'subagent-final' });
       process.exitCode = 10;
       return;
     }
@@ -1597,7 +1602,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       if (shouldClarify) {
         // 需要澄清，先执行 clarify（内部已生成质量报告）
         const clarifyPrompt = await buildClarifyPhasePrompt(iter);
-        process.stdout.write(`[SPECCORE_PROMPT]\n${clarifyPrompt}`);
+        await emitAiPrompt(iter, clarifyPrompt, { mode: 'clarify-phase' });
         process.exitCode = 10;
         return;
       }
@@ -1612,7 +1617,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       analyzeOptions: options,
     });
     const prompt = buildPromptText(promptObj);
-    process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
+    await emitAiPrompt(iter, prompt, { mode: 'analyze-host' });
     process.exitCode = 10;
     return;
   }
@@ -2032,7 +2037,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
             logger.info(`   1. 读取上述问题文档的当前内容`);
             logger.info(`   2. 根据质量报告中的错误信息补充/修正内容`);
             logger.info(`   3. 用 speccore global analyze --apply '{"文件路径":"修正后内容"}' 重新写入`);
-            process.stdout.write(`\n[SPECCORE_PROMPT]\n# 质量门禁修复任务\n\n以下全局分析文档未通过质量校验，请修复后重新写入：\n\n`);
+            await emitAiPrompt(options.iteration || 'GLOBAL', `\n# 质量门禁修复任务\n\n以下全局分析文档未通过质量校验，请修复后重新写入：\n\n`, { mode: 'global-gate-fix' });
             for (const r of criticalErrors.slice(0, 5)) {
               const fname = r.file.split('/').slice(-2).join('/');
               const errs = r.issues.filter(i => i.severity === 'error').map(i => `- ${i.message}`).join('\n');
@@ -2717,8 +2722,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     }
 
     const prompt = await buildMultiDocPrompt('analyze', { iteration: iter, scope: options.scope, withCode: options.withCode, platform: options.platform, phase: options.phase, autoMode: options.auto }, options, needsClarify ? { needsClarify, clarifyTargets } : undefined);
-    await recordAiTrace(iter, 'prompt-out', { mode: 'analyze-main', scope: options.scope, promptLength: prompt.length, prompt });
-    process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
+    await emitAiPrompt(iter, prompt, { mode: 'analyze-main', scope: options.scope });
 
     // v7.2.0+: 全局分析完成后输出下一步引导
     if (options.scope === 'global') {
