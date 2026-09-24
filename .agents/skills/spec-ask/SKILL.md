@@ -12,7 +12,7 @@ description: >
   - iteration create：创建新迭代目录
   - done：任务归档收尾
   - pr：代码提交与创建 Pull Request
-  - dev：智能级联推进全流程
+  - run：端到端全自动流水线推进全流程
   - dashboard/status/doctor：查看项目状态/健康度
   以下情况明确不触发此 Skill（走正常 AI 对话）：
   解释代码逻辑、审查代码片段、讨论需求合理性、排查具体 bug、

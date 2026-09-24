@@ -33,7 +33,7 @@ init → doc2spec → unitize → analyze → taskify → plan → execute → p
 | **spec-spec2doc** | **AI排版+Pandoc导出+验证** | **(Skill 自动触发)** | SpecCore文档 | 精美排版文档 |
 | retro | 任务回顾 | --task/--all/--owner/--type | done后 | 回顾报告 |
 | change | 需求变更 | <描述> --task <任务> --type | 进行中任务 | 变更记录 |
-| dev | 智能级联 | --auto/--from/--to | 全部阶段 | 自动全流程 |
+| run | 端到端全自动流水线 | --from/--to/--preset | 全部阶段 | 全流程（默认三闸口） |
 
 ## AI Skills（.agents/skills/）
 

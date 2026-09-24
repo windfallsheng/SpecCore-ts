@@ -157,7 +157,7 @@ Iteration-NNN-name/            ← 迭代目录
 │   ├── task-summaries/        ← 任务总览报告（TASK_SUMMARY-*.md）
 │   ├── plans/                 ← 执行计划（PLAN.md + HTML 可视化）
 │   ├── RETRO.md               ← 迭代复盘报告（done 后生成）
-│   └── PIPELINE_REPORT.md     ← Pipeline 执行报告（dev 后生成）
+│   └── PIPELINE_REPORT.md     ← Pipeline 执行报告（run 后生成）
 ├── 010-requirements/          ← 需求文档（按功能组织）
 │   ├── README.md              ← 目录规范说明
 │   ├── INDEX.md               ← 需求文档索引

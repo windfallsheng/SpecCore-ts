@@ -1,3 +1,8 @@
+## v8.3.280 (2026-09-24) — dev 命令残留清理：文档与模板统一指向 run 流水线
+
+### 修复
+- **dev 命令残留清理**：`speccore dev`（智能级联）早已被 `speccore run` 端到端流水线取代（v8.3.190 已移除命令本体），但文档与技能描述仍残留 dev 引用——本轮统一清理：AGENTS.md（PIPELINE_REPORT.md 生成方改为 run）、.speccore/AI-RULES.md 命令表（dev 行改为 run 行）、spec-ask/spec-once/speccore-router 技能描述、六个编辑器斜杠命令 spec-ask.md、init.ts 的 AGENTS.md 与 TOOL_COMMANDS 模板（触发词 dev→run、删除 [SPECCORE_DEV] 标记行）、docs/DESIGN.md（删除 speccore-dev.html 页面清单行与 [SPECCORE_DEV] 标记行）
+
 ## v8.3.279 (2026-09-24) — 端推断自动填充 _matrix.md 声明
 
 ### 新增

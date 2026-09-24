@@ -2824,7 +2824,6 @@ h1, h2 {
 | `speccore-about.html` | 关于页面：版本、GitHub、维护状态 | `speccore about` |
 | `speccore-ask-onboarding.html` | Ask 首次引导页：4 模式流程图 | `speccore ask "…"` (无高速?缓存时) |
 | `speccore-ask-result.html` | Ask 结果展示 | `speccore ask` |
-| `speccore-dev.html` | 开发者工作台 | `speccore dev` |
 | `speccore-setup-guide.html` | 项目配置引导页：6 步引导新用户完成初始化 | `speccore init` 后自动生成 |
 | `deploy/welcome.html` | 项目名片/欢迎页 | `speccore welcome` |
 | `deploy/index.html` | 全局看板（所有项目聚合） | `speccore dashboard --scope global` |
@@ -3967,7 +3966,6 @@ knowledge-graph.json 自动包含业务-代码映射
 | `[SPECCORE_ABOUT: <path>]` | `about` | 版本信息页 |
 | `[SPECCORE_HELP: <path>]` | `help` | 帮助中心页 |
 | `[SPECCORE_WELCOME: <path>]` | `welcome` | 项目名片页 |
-| `[SPECCORE_DEV: <path>]` | `dev` | 流水线页 |
 | `[SPECCORE_KNOWLEDGE: <path>]` | `knowledge` | 知识图谱页 |
 | `[SPECCORE_PLAN: <path>]` | `plan` | 执行计划页 |
 | `[SPECCORE_RETRO: <path>]` | `retro` | 回顾报告页 |

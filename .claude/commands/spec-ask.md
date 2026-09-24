@@ -18,7 +18,6 @@ description: SpecCore CLI 执行引擎。仅在用户明确要求通过 speccore
 - `[SPECCORE_ABOUT: <path>]` → 版本信息页
 - `[SPECCORE_HELP: <path>]` → 帮助中心页
 - `[SPECCORE_WELCOME: <path>]` → 项目名片页
-- `[SPECCORE_DEV: <path>]` → 开发流程页
 - `[SPECCORE_KNOWLEDGE: <path>]` → 知识图谱页
 - `[SPECCORE_PLAN: <path>]` → 执行计划页
 - `[SPECCORE_RETRO: <path>]` → 回顾报告页

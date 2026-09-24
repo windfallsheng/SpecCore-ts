@@ -8,7 +8,7 @@ description: >
   触发词：spec once、/once、一次跑完、快速跑、快速分析、小步快跑、端到端 等。
   用户仅询问使用方法（「spec-once 怎么用 / 使用说明 / 使用步骤 / 能干什么」）时不启动流程，
   按正文「使用说明」节输出纯文字指南，不要执行任何 speccore 命令。
-  与流水线（speccore run/dev）的区别：spec-once 由宿主 AI 单会话编排现有命令，
+  与流水线（speccore run）的区别：spec-once 由宿主 AI 单会话编排现有命令，
   覆盖「开发到部署验证」的快速闭环（不含 PR 提交/归档收尾，那些按需走 pr/done），
   适合少量功能单元（建议 ≤3 个）的快速推进；大范围多单元请走流水线。
 allowed-tools: ["Bash", "Read", "Write", "Edit"]

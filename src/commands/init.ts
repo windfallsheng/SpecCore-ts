@@ -1114,7 +1114,7 @@ async function askUser(prompt: string): Promise<string> {
 }
 
 export const TOOL_COMMANDS: [string, string, string][] = [
-  ['spec-ask', 'SpecCore CLI 执行引擎。仅在用户明确要求通过 speccore 命令行工具执行以下操作时触发：analyze --prompt、unitize、taskify、plan --prompt、execute --prompt、doc2spec、spec2doc、iteration create、done、pr、dev、dashboard/status/doctor。以下情况明确不触发此 Skill：解释代码逻辑、审查代码片段、讨论需求合理性、排查具体 bug、一般性技术咨询、算法实现、架构讨论、任何不涉及 speccore CLI 执行的请求。', '##  核心铁律\n1. 用户说"重新/再/重跑"禁止用"未变/已完成"拒绝\n2. 分析结果必须落盘 020-specs/，禁止只输出聊天文字\n3. 全流程（analyze→taskify→plan→execute）必须自动继续\n4. 复杂流程先展示执行计划页面再执行\n5. 用户说"自主/全自动"，展示计划后直接执行，禁止每步确认\n\n## 🎯 HTML 页面强制展示\n\n执行任何 `speccore` 命令后，检查 stdout 中的标记，**立即执行** `present_files(<path>)`：\n- `[SPECCORE_ONBOARD: <path>]` → 引导页（🚨 最先处理，禁止跳过）\n- `[SPECCORE_SETUP_GUIDE: <path>]` → 配置引导页\n- `[SPECCORE_ABOUT: <path>]` → 版本信息页\n- `[SPECCORE_HELP: <path>]` → 帮助中心页\n- `[SPECCORE_WELCOME: <path>]` → 项目名片页\n- `[SPECCORE_DEV: <path>]` → 开发流程页\n- `[SPECCORE_KNOWLEDGE: <path>]` → 知识图谱页\n- `[SPECCORE_PLAN: <path>]` → 执行计划页\n- `[SPECCORE_RETRO: <path>]` → 回顾报告页\n- `[SPECCORE_DASHBOARD: <path>]` → 仪表盘页\n\n❌ 禁止只说"检测到"而不执行展示\n❌ 禁止用文字描述代替实际展示\n\n## 执行\n1. Read CONITUTION.md + context.json\n2. 识别意图，展示执行计划\n3. speccore ask "${1:描述你的需求}"'],
+  ['spec-ask', 'SpecCore CLI 执行引擎。仅在用户明确要求通过 speccore 命令行工具执行以下操作时触发：analyze --prompt、unitize、taskify、plan --prompt、execute --prompt、doc2spec、spec2doc、iteration create、done、pr、run、dashboard/status/doctor。以下情况明确不触发此 Skill：解释代码逻辑、审查代码片段、讨论需求合理性、排查具体 bug、一般性技术咨询、算法实现、架构讨论、任何不涉及 speccore CLI 执行的请求。', '##  核心铁律\n1. 用户说"重新/再/重跑"禁止用"未变/已完成"拒绝\n2. 分析结果必须落盘 020-specs/，禁止只输出聊天文字\n3. 全流程（analyze→taskify→plan→execute）必须自动继续\n4. 复杂流程先展示执行计划页面再执行\n5. 用户说"自主/全自动"，展示计划后直接执行，禁止每步确认\n\n## 🎯 HTML 页面强制展示\n\n执行任何 `speccore` 命令后，检查 stdout 中的标记，**立即执行** `present_files(<path>)`：\n- `[SPECCORE_ONBOARD: <path>]` → 引导页（🚨 最先处理，禁止跳过）\n- `[SPECCORE_SETUP_GUIDE: <path>]` → 配置引导页\n- `[SPECCORE_ABOUT: <path>]` → 版本信息页\n- `[SPECCORE_HELP: <path>]` → 帮助中心页\n- `[SPECCORE_WELCOME: <path>]` → 项目名片页\n- `[SPECCORE_KNOWLEDGE: <path>]` → 知识图谱页\n- `[SPECCORE_PLAN: <path>]` → 执行计划页\n- `[SPECCORE_RETRO: <path>]` → 回顾报告页\n- `[SPECCORE_DASHBOARD: <path>]` → 仪表盘页\n\n❌ 禁止只说"检测到"而不执行展示\n❌ 禁止用文字描述代替实际展示\n\n## 执行\n1. Read CONITUTION.md + context.json\n2. 识别意图，展示执行计划\n3. speccore ask "${1:描述你的需求}"'],
   ['spec-welcome', '欢迎页专属 Skill。在调用 speccore ask 之前，检测项目是否已初始化（.speccore/ 目录是否存在），未初始化时引导用户先执行 speccore init。不影响 speccore ask 的意图识别能力。', 'speccore welcome'],
   ['spec-help', '帮助中心专属 Skill。在调用 speccore ask 之前，检测 CLI 版本是否为最新，发现新版本时提示用户更新。不影响 speccore ask 的意图识别能力。', 'speccore help'],
   ['spec-dashboard', '仪表盘专属 Skill。在调用 speccore ask 之前，检测当前是否有活跃迭代，无迭代时提示用户先创建迭代。不影响 speccore ask 的意图识别能力。', 'speccore dashboard --scope global'],
@@ -1648,7 +1648,6 @@ Iteration-NNN-name/            ← 迭代目录
 | \`[SPECCORE_ABOUT: <path>]\` | 版本信息页 | 用 present_files 展示 |
 | \`[SPECCORE_DASHBOARD: <path>]\` | 项目/迭代仪表盘 | 用 present_files 展示仪表盘 HTML |
 | \`[SPECCORE_RETRO: <path>]\` | 迭代复盘报告 | 用 present_files 展示复盘报告 HTML |
-| \`[SPECCORE_DEV: <path>]\` | dev 级联引导页 | 用 present_files 展示 dev 引导页 HTML |
 | \`[SPECCORE_HELP: <path>]\` | 帮助页 | 用 present_files 展示帮助页 HTML |
 | \`[SPECCORE_PLAN: <path>]\` | 计划可视化 | 用 present_files 展示计划可视化 HTML |
 | \`[SPECCORE_PROMPTS: <path>]\` | 提示词库 | 用 present_files 展示提示词库 HTML |

@@ -31,7 +31,6 @@ allowed-tools: ["Bash", "Read", "Write", "Edit"]
 - `[SPECCORE_ABOUT: <path>]` → **立即执行** `present_files(<path>)` 展示版本信息页
 - `[SPECCORE_HELP: <path>]` → **立即执行** `present_files(<path>)` 展示帮助中心页
 - `[SPECCORE_WELCOME: <path>]` → **立即执行** `present_files(<path>)` 展示项目名片页
-- `[SPECCORE_DEV: <path>]` → **立即执行** `present_files(<path>)` 展示开发流程页
 - `[SPECCORE_KNOWLEDGE: <path>]` → **立即执行** `present_files(<path>)` 展示知识图谱页
 - `[SPECCORE_PLAN: <path>]` → **立即执行** `present_files(<path>)` 展示执行计划页
 - `[SPECCORE_RETRO: <path>]` → **立即执行** `present_files(<path>)` 展示回顾报告页
