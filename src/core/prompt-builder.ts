@@ -1689,6 +1689,13 @@ function getInstruction(command: PromptCommand, context: { taskName?: string; ap
       return [
         `请根据以下 Spec 规范，为 "${context.taskName || '当前任务'}" 生成完整的代码实现。`,
         '',
+        '## 📝 规格骨架覆盖指令（v8.3.282+）',
+        '',
+        '在生成代码的同时，检查并覆盖本端子任务目录下的规格骨架（空模板残留会阻塞下游审查/回归）：',
+        '1. 子任务级 `REQ.md` / `TECH.md` — 若含 `SKELETON_MARKER` 骨架占位符，用本端的专业规格覆盖，写出真实需求与验收标准，不得遗留占位符',
+        '2. 前端端的 `STATE.md` / `ROUTES.md` / `COMPONENT_TREE.md` / `STYLE_GUIDE.md` — 若含 `_待AI分析_` 占位或 `AI-FILL` 注释，按本任务实际设计填充（状态结构、路由表、组件树、样式指南），不得遗留空表格占位',
+        '3. 覆盖完成后自查：不得存在 `SPEC-SKELETON` / `_待AI分析_` / `AI-FILL` 任一骨架残留',
+        '',
         '## 相邻任务关联（Layer 2）',
         '在开始编码前，先读取相邻任务的文档，建立任务间关联认知：',
         '1. **读取前置任务**（本任务依赖的任务）：',

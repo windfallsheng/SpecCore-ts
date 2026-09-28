@@ -1941,6 +1941,7 @@ function buildAgentContext(tasks: TaskState[], agent: string): string {
   ctx += `- [ ] 已阅读 00-specs/REQ.md，理解需求和验收标准\n`;
   ctx += `- [ ] 已阅读 00-specs/TECH.md，理解技术方案\n`;
   ctx += `- [ ] 用 Write 覆盖本端子任务目录下预建的 REQ.md/TECH.md 骨架（含 SKELETON_MARKER 标记的文件），写出本端的专业规格，不得遗留骨架占位符\n`;
+  ctx += `- [ ] 前端端覆盖 STATE.md/ROUTES.md/COMPONENT_TREE.md/STYLE_GUIDE.md 骨架（含 _待AI分析_ 占位或 AI-FILL 注释的文件），按实际设计填充状态结构/路由表/组件树/样式指南（v8.3.282+）\n`;
   ctx += `- [ ] 代码实现严格遵循 REQ.md 的验收标准和 TECH.md 的技术方案\n`;
   ctx += `- [ ] 如涉及 API 变更，确保前后端接口签名一致\n`;
   ctx += `- [ ] 完成后更新 TASK.md 状态（doing → done）\n\n`;

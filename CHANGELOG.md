@@ -1,3 +1,10 @@
+## v8.3.282 (2026-09-28) — unitize 名称污染与 execute 骨架覆盖链修复（会议项目体检验证）
+
+### 修复
+- **unitize slug 剥离括号注释**：功能单元目录名生成时未剥离标题括号注释，「通知触发机制（跨页面通用）」→ `admin-web-09-tongzhichufajizhi-kuayemiantongyong`，说明性后缀污染目录名——现在 slug 只取主体「通知触发机制」（单元内容、INDEX 显示名不受影响）
+- **INDEX 历史幽灵行清理**：features/INDEX.md 增量合并不删除已不存在的条目，被全局章节拦截（v8.3.268+）的「核心业务规则（跨端通用）」旧行永久残留——重切时按全局章节语义过滤旧行，幽灵条目不再保留
+- **execute 单任务 prompt 补骨架覆盖指令**：SDK 派单路径的子 Agent prompt 从未要求覆盖骨架文件，且 STATE.md/ROUTES.md/COMPONENT_TREE.md/STYLE_GUIDE.md 的 `_待AI分析_`/AI-FILL 占位完全无下游覆盖指令（仅 REQ/TECH 有）——单任务 prompt 与 --agent 清单同步扩展，前端设计文档骨架纳入必覆盖范围
+
 ## v8.3.281 (2026-09-28) — execute 执行链路信息可见性修复（会议项目实战反馈）
 
 ### 修复

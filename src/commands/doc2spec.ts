@@ -1052,7 +1052,9 @@ export async function splitDocumentToUnits(
     const seq = String(written + 1).padStart(2, '0');
     // v8.3.271+: 目录名尾段用英文 slug（v8.3.272+ 优先 LLM 英译，失败拼音兜底）；
     // 中文显示名保留在 SOURCE.md 标题与 _matrix.md feature 字段
-    const slugSource = unitNames.get(unit.title) || unit.title;
+    // v8.3.282: slug 剥离括号注释——「通知触发机制（跨页面通用）」只取「通知触发机制」主体，
+    // 避免「kuayemiantongyong」这类说明性后缀污染目录名（单元内容不受影响）
+    const slugSource = stripParenthetical(unitNames.get(unit.title) || unit.title);
     let unitDirName = sanitizeUnitName(`${docSlug}-${seq}-${toEnglishSlug(slugSource)}`);
     // v8.3.278: 同名检测两级——目录名命中，或「标题命中 + 内容指纹相同」的换名场景
     // （拼音→英文重切时目录名变了但内容同源，仍应走三选一而非被指纹检测误拦；
@@ -1230,6 +1232,15 @@ export async function splitDocumentToUnits(
           const cells = line.split('|').map(c => c.trim());
           const dedupKey = `${cells[1]}|${cells[2]}`;
           if (seenRows.has(dedupKey)) continue;
+          // v8.3.282: 清理历史幽灵行——曾被全局章节拦截（v8.3.268+）的单元，
+          // 其旧行会永久残留在增量合并的 INDEX 中（如「核心业务规则（跨端通用）」）。
+          // 重切时按全局章节语义过滤，不再保留。
+          const prevTitle = cells[1] || '';
+          const prevBracket = prevTitle.match(/[（(]([^）)]+)[）)]/);
+          const prevIsGlobal = !!prevBracket
+            && /(跨端通用|全局通用|全局|通用|公共)/.test(prevBracket[1])
+            && /(规则|说明|规范|一览|模板|约定)$/.test(stripParenthetical(stripSectionNo(prevTitle)).trim());
+          if (prevIsGlobal) continue;
           seenRows.add(dedupKey);
           preservedRows.push(line);
         }
