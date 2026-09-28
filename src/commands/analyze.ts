@@ -2309,6 +2309,16 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
           }
           logger.success(`✅ ${count} 个 Spec 文档已写入 020-specs/`);
 
+          // v8.3.285+: --apply 主通道收尾刷新澄清报告——
+          // 此前报告仅在确认步骤（buildConfirmCheckPrompt）兜底生成，
+          // AI 接力写回的 CLARIFY.md 无法进入报告；此处每轮 apply 后刷新，
+          // 聚合两级 CLARIFY.md 的待确认项，auto 短路路径也留下澄清窗口
+          try {
+            const { writeClarifyReport } = await import('../core/requirement-clarifier');
+            await writeClarifyReport(iterDir!);
+            logger.info(`📋 澄清报告已同步: ${relative(process.cwd(), join(iterDir!, '010-requirements', 'CLARIFY_REPORT.md'))}`);
+          } catch { /* 报告刷新失败不阻塞 apply 主流程 */ }
+
           // v8.3.1+: 空模板检测 — 写入后立即检查是否有文档仍为骨架状态
           const emptySkeletonDocs: string[] = [];
           const emptyTableDocs: string[] = [];

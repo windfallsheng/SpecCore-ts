@@ -638,6 +638,25 @@ export async function writeClarifyReport(iterDir: string): Promise<string> {
     }
   } catch { /* ignore */ }
 
+  // v8.3.285+: 聚合两级 CLARIFY.md 的待确认/已确认事项——
+  // 此前报告只是产物清单，待确认项散落在各 CLARIFY.md 里，无汇总窗口
+  const pendingItems: { file: string; text: string }[] = [];
+  let confirmedCount = 0;
+  for (const c of clarified) {
+    if (!c.endsWith('CLARIFY.md')) continue;
+    try {
+      const content = await readFile(join(iterDir, c), 'utf-8');
+      for (const line of content.split('\n')) {
+        const pending = line.match(/^\s*-\s*\[ \]\s*(.+)$/);
+        if (pending) {
+          pendingItems.push({ file: c, text: pending[1].trim() });
+          continue;
+        }
+        if (/^\s*-\s*\[[xX✓]\]/.test(line)) confirmedCount++;
+      }
+    } catch { /* 单个文件读取失败不阻塞报告生成 */ }
+  }
+
   const now = new Date().toISOString().replace('T', ' ').slice(0, 16);
   let md = `# 需求澄清报告\n\n`;
   md += `> 生成时间: ${now}\n`;
@@ -646,7 +665,18 @@ export async function writeClarifyReport(iterDir: string): Promise<string> {
   md += `## 澄清结果总览\n\n`;
   md += `- 源文档: ${sources.length} 份\n`;
   md += `- 澄清产物: ${clarified.length} 份\n`;
+  md += `- 待确认事项: ${pendingItems.length} 条（已确认 ${confirmedCount} 条）\n`;
   md += `- 状态: ${clarified.length > 0 ? '已澄清（见下方清单）' : '⚠️ 尚未澄清——源文档待专业化整理'}\n\n`;
+
+  if (pendingItems.length > 0) {
+    md += `## 待确认事项汇总\n\n`;
+    md += `| # | 待确认事项 | 来源 |\n`;
+    md += `| :--- | :--- | :--- |\n`;
+    pendingItems.forEach((p, i) => {
+      md += `| ${i + 1} | ${p.text.replace(/\|/g, '\\|')} | \`${p.file}\` |\n`;
+    });
+    md += `\n`;
+  }
 
   if (clarified.length > 0) {
     md += `## 澄清产物清单\n\n`;
@@ -672,6 +702,22 @@ export async function writeClarifyReport(iterDir: string): Promise<string> {
     md += `- 强制澄清: \`speccore analyze --prompt -I ${iterName} --clarify\`\n`;
     md += `- 跳过澄清: \`speccore analyze --prompt -I ${iterName} --skip-clarify\`\n`;
   }
+
+  // v8.3.285+: 澄清机制语义宣导——两级 CLARIFY.md 即官方澄清产物，
+  // 黄金需求目录仅文档级澄清时生成，auto 短路不是澄清缺失
+  md += `## 澄清机制说明\n\n`;
+  md += `- **两级 CLARIFY.md 即官方澄清产物**（v8.3.181+）：\`020-specs/overview/CLARIFY.md\`（全局澄清）+ \`020-specs/{功能模块}/overview/CLARIFY.md\`（模块澄清），由 analyze 流程填充，无需独立 clarify 命令\n`;
+  md += `- **黄金需求目录 \`020-specs/requirements/\`**：仅在文档级澄清时生成（\`*-clarified.md\` / \`unit-*.md\`），非必需产物，为空不代表澄清缺失\n`;
+  md += `- **三态开关**：\`analyze --clarify\`（强制澄清）/ \`--skip-clarify\`（跳过）/ 默认 \`auto\`（按专业度智能短路）\n`;
+  md += `- **auto 短路不是澄清缺失**：源文档专业度高（结构化标题、验收标准、业务规则齐全）时澄清环节智能跳过，分析直接进入 Phase 1\n\n`;
+
+  // v8.3.285+: 内容未变化时跳过写入（--apply 高频调用下的幂等保护，
+  // 避免每次 apply 都重写报告造成无意义 diff）
+  try {
+    if (await pathExists(reportPath)) {
+      if (await readFile(reportPath, 'utf-8') === md) return reportPath;
+    }
+  } catch { /* 读取失败视为需写入 */ }
 
   await writeFile(reportPath, md, 'utf-8');
   return reportPath;
