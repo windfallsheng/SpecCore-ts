@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 560" width="880" height="560">
+  <defs>
+    <marker id="ar" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L9,3 L0,6 Z" fill="black"/>
+    </marker>
+    <marker id="ar2" markerWidth="10" markerHeight="10" refX="1" refY="3" orient="auto">
+      <path d="M9,0 L0,3 L9,6 Z" fill="black"/>
+    </marker>
+  </defs>
+  <style>
+    text { font-family: SimSun, STSong, serif; fill: black; }
+    .t { font-size: 20px; font-weight: bold; }
+    .s { font-size: 14px; }
+    .lbl { font-size: 13px; }
+    .box { fill: white; stroke: black; stroke-width: 2; }
+  </style>
+
+  <!-- 智能决策层 -->
+  <rect class="box" x="110" y="30" width="550" height="130"/>
+  <text class="t" x="385" y="62" text-anchor="middle">智能决策层（AI 层）</text>
+  <text class="s" x="385" y="100" text-anchor="middle">理解用户意图、决定执行操作</text>
+  <text class="s" x="385" y="128" text-anchor="middle">生成代码内容、读取规范数据库指导决策</text>
+
+  <!-- 确定性执行层 -->
+  <rect class="box" x="110" y="215" width="550" height="145"/>
+  <text class="t" x="385" y="247" text-anchor="middle">确定性执行层（CLI 层）</text>
+  <text class="s" x="385" y="285" text-anchor="middle">创建目录结构、读写配置与规格文件、解析 YAML/JSON 配置</text>
+  <text class="s" x="385" y="313" text-anchor="middle">执行合规校验、事务保护（失败自动回滚）</text>
+
+  <!-- 结构化知识层 -->
+  <rect class="box" x="110" y="415" width="550" height="115"/>
+  <text class="t" x="385" y="447" text-anchor="middle">结构化知识层（规范数据库层）</text>
+  <text class="s" x="385" y="485" text-anchor="middle">AGENTS 角色定义、RULES 编码规范、COMMANDS 命令模板</text>
+  <text class="s" x="385" y="513" text-anchor="middle">SKILLS 可复用技能、HOOKS 生命周期钩子</text>
+
+  <!-- 左侧：决策指令（AI -> CLI） -->
+  <line x1="130" y1="160" x2="130" y2="209" stroke="black" stroke-width="2" marker-end="url(#ar)"/>
+  <text class="lbl" x="142" y="190">决策指令</text>
+
+  <!-- 左侧：读写规范（CLI <-> 知识层） -->
+  <line x1="130" y1="360" x2="130" y2="409" stroke="black" stroke-width="2" marker-end="url(#ar)" marker-start="url(#ar2)"/>
+  <text class="lbl" x="142" y="392">读写规范</text>
+
+  <!-- 右侧：执行结果（CLI -> AI） -->
+  <line x1="700" y1="215" x2="700" y2="166" stroke="black" stroke-width="2" marker-end="url(#ar)"/>
+  <text class="lbl" x="715" y="196">执行结果</text>
+
+  <!-- 右侧：规范知识输入（知识层 -> AI） -->
+  <line x1="800" y1="415" x2="800" y2="166" stroke="black" stroke-width="2" marker-end="url(#ar)"/>
+  <text class="lbl" x="820" y="230" text-anchor="middle"><tspan x="820" dy="0">规</tspan><tspan x="820" dy="17">范</tspan><tspan x="820" dy="17">知</tspan><tspan x="820" dy="17">识</tspan><tspan x="820" dy="17">输</tspan><tspan x="820" dy="17">入</tspan></text>
+</svg>

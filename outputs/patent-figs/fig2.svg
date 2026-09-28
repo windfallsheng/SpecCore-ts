@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 1000" width="700" height="1000">
+  <defs>
+    <marker id="ar" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L9,3 L0,6 Z" fill="black"/>
+    </marker>
+  </defs>
+  <style>
+    text { font-family: SimSun, STSong, serif; fill: black; }
+    .b { font-size: 15px; }
+    .lbl { font-size: 13px; }
+    .box { fill: white; stroke: black; stroke-width: 2; }
+  </style>
+
+  <!-- S1 -->
+  <rect class="box" x="240" y="30" width="220" height="46"/>
+  <text class="b" x="350" y="59" text-anchor="middle">S1 初始化</text>
+  <!-- S2 -->
+  <rect class="box" x="240" y="112" width="220" height="46"/>
+  <text class="b" x="350" y="141" text-anchor="middle">S2 需求导入</text>
+  <!-- S3 -->
+  <rect class="box" x="240" y="194" width="220" height="46"/>
+  <text class="b" x="350" y="223" text-anchor="middle">S3 需求切分</text>
+  <!-- S4 -->
+  <rect class="box" x="240" y="276" width="220" height="46"/>
+  <text class="b" x="350" y="305" text-anchor="middle">S4 分层分析</text>
+  <!-- S5 -->
+  <rect class="box" x="240" y="358" width="220" height="46"/>
+  <text class="b" x="350" y="387" text-anchor="middle">S5 任务拆分</text>
+  <!-- S6 -->
+  <rect class="box" x="240" y="440" width="220" height="46"/>
+  <text class="b" x="350" y="469" text-anchor="middle">S6 代码生成与写入</text>
+
+  <!-- 连接箭头 S1~S6 -->
+  <line x1="350" y1="76" x2="350" y2="106" stroke="black" stroke-width="2" marker-end="url(#ar)"/>
+  <line x1="350" y1="158" x2="350" y2="188" stroke="black" stroke-width="2" marker-end="url(#ar)"/>
+  <line x1="350" y1="240" x2="350" y2="270" stroke="black" stroke-width="2" marker-end="url(#ar)"/>
+  <line x1="350" y1="322" x2="350" y2="352" stroke="black" stroke-width="2" marker-end="url(#ar)"/>
+  <line x1="350" y1="404" x2="350" y2="434" stroke="black" stroke-width="2" marker-end="url(#ar)"/>
+  <line x1="350" y1="486" x2="350" y2="510" stroke="black" stroke-width="2" marker-end="url(#ar)"/>
+
+  <!-- 菱形判断 -->
+  <polygon points="350,514 470,556 350,598 230,556" fill="white" stroke="black" stroke-width="2"/>
+  <text class="b" x="350" y="552" text-anchor="middle">质量门禁</text>
+  <text class="b" x="350" y="574" text-anchor="middle">校验通过？</text>
+
+  <!-- 否 -> 回流到 S6 -->
+  <line x1="230" y1="556" x2="110" y2="556" stroke="black" stroke-width="2"/>
+  <line x1="110" y1="556" x2="110" y2="463" stroke="black" stroke-width="2"/>
+  <line x1="110" y1="463" x2="234" y2="463" stroke="black" stroke-width="2" marker-end="url(#ar)"/>
+  <text class="lbl" x="118" y="544">否，返回修改</text>
+
+  <!-- 是 -> S7 -->
+  <text class="lbl" x="482" y="552">是</text>
+  <line x1="470" y1="556" x2="530" y2="556" stroke="black" stroke-width="2"/>
+  <line x1="530" y1="556" x2="530" y2="640" stroke="black" stroke-width="2"/>
+  <line x1="530" y1="640" x2="466" y2="640" stroke="black" stroke-width="2" marker-end="url(#ar)"/>
+
+  <!-- S7 -->
+  <rect class="box" x="240" y="640" width="220" height="46"/>
+  <text class="b" x="350" y="669" text-anchor="middle">S7 验证归档</text>
+  <!-- S8 -->
+  <rect class="box" x="240" y="722" width="220" height="46"/>
+  <text class="b" x="350" y="751" text-anchor="middle">S8 追溯更新</text>
+  <line x1="350" y1="686" x2="350" y2="716" stroke="black" stroke-width="2" marker-end="url(#ar)"/>
+  <line x1="350" y1="768" x2="350" y2="796" stroke="black" stroke-width="2" marker-end="url(#ar)"/>
+
+  <!-- 结束 -->
+  <ellipse cx="350" cy="830" rx="55" ry="26" fill="white" stroke="black" stroke-width="2"/>
+  <text class="b" x="350" y="836" text-anchor="middle">结束</text>
+</svg>

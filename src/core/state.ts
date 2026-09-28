@@ -21,6 +21,9 @@ export interface TaskState {
   /** v8.3.223+: 任务目录绝对路径（扫描时记录，供 retro/execute 直接定位，
    *  避免 TASK.md 内子任务 ID 与目录名不一致时解析失败） */
   path?: string;
+  /** v8.3.281+: 功能单元名（读自 .meta/feature，为 analyze/taskify 的对齐锚点），
+   *  供 execute 上下文直显真实单元名，避免 AI 从 slug 目录名反推 */
+  feature?: string;
 }
 
 export interface IterationState {
@@ -209,6 +212,15 @@ export async function scanTasks(iteration: string): Promise<TaskState[]> {
       if (await pathExists(typePath)) type = (await readFile(typePath, 'utf-8')).trim();
     }
     
+    // v8.3.281+: 读功能单元名（对齐锚点，analyze/taskify 写入 .meta/feature）——
+    // execute 上下文直显真实单元名，AI 不必从 slug 目录名反推
+    let feature: string | undefined;
+    const featurePath = join(taskPath, '.meta', 'feature');
+    if (await pathExists(featurePath)) {
+      const fv = (await readFile(featurePath, 'utf-8')).trim();
+      if (fv) feature = fv;
+    }
+    
     // 从 _shared/ 或 00-specs/ 读取父任务名称
     let name = taskId;
     const sharedTaskMd = join(taskPath, '_shared', 'TASK.md');
@@ -306,6 +318,14 @@ export async function scanTasks(iteration: string): Promise<TaskState[]> {
             }
           }
 
+          // v8.3.281+: 子任务 .meta/feature 优先，回退父任务 feature
+          let subFeature = feature;
+          const subFeaturePath = join(subtaskPath, '.meta', 'feature');
+          if (await pathExists(subFeaturePath)) {
+            const fv = (await readFile(subFeaturePath, 'utf-8')).trim();
+            if (fv) subFeature = fv;
+          }
+
           subTasks.push({
             id: subTaskId,
             name: subName,
@@ -319,6 +339,7 @@ export async function scanTasks(iteration: string): Promise<TaskState[]> {
             platform,
             parentTaskId: taskId,
             path: subtaskPath,
+            feature: subFeature,
           });
         }
       }
@@ -340,6 +361,7 @@ export async function scanTasks(iteration: string): Promise<TaskState[]> {
         progress: parentStatus === 'completed' ? 100 : 0,
         estimatedHours,
         path: taskPath,
+        feature,
       });
     }
   }

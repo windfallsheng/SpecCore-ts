@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 560" width="720" height="560">
+  <defs>
+    <marker id="ar" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L9,3 L0,6 Z" fill="black"/>
+    </marker>
+  </defs>
+  <style>
+    text { font-family: SimSun, STSong, serif; fill: black; }
+    .t { font-size: 18px; font-weight: bold; }
+    .s { font-size: 15px; }
+    .lbl { font-size: 13px; }
+    .box { fill: white; stroke: black; stroke-width: 2; }
+  </style>
+
+  <!-- 左侧竖线 -->
+  <line x1="60" y1="60" x2="60" y2="422" stroke="black" stroke-width="2"/>
+  <text class="t" x="70" y="42">规范数据库</text>
+
+  <!-- 五层横条 -->
+  <rect class="box" x="80" y="60" width="380" height="50"/>
+  <text class="s" x="270" y="91" text-anchor="middle">AGENTS 专业角色定义层</text>
+  <rect class="box" x="80" y="138" width="380" height="50"/>
+  <text class="s" x="270" y="169" text-anchor="middle">RULES 编码规范层</text>
+  <rect class="box" x="80" y="216" width="380" height="50"/>
+  <text class="s" x="270" y="247" text-anchor="middle">COMMANDS 命令模板层</text>
+  <rect class="box" x="80" y="294" width="380" height="50"/>
+  <text class="s" x="270" y="325" text-anchor="middle">SKILLS 可复用技能层</text>
+  <rect class="box" x="80" y="372" width="380" height="50"/>
+  <text class="s" x="270" y="403" text-anchor="middle">HOOKS 生命周期钩子层</text>
+
+  <!-- 右侧：智能决策层 -->
+  <rect class="box" x="500" y="150" width="180" height="150"/>
+  <text class="t" x="590" y="186" text-anchor="middle">智能决策层</text>
+  <text class="s" x="590" y="214" text-anchor="middle">（AI 层）</text>
+  <text class="lbl" x="590" y="286" text-anchor="middle">结构化知识输入</text>
+
+  <!-- 五条箭头汇聚 -->
+  <line x1="460" y1="85" x2="494" y2="185" stroke="black" stroke-width="2" marker-end="url(#ar)"/>
+  <line x1="460" y1="163" x2="494" y2="206" stroke="black" stroke-width="2" marker-end="url(#ar)"/>
+  <line x1="460" y1="241" x2="494" y2="228" stroke="black" stroke-width="2" marker-end="url(#ar)"/>
+  <line x1="460" y1="319" x2="494" y2="250" stroke="black" stroke-width="2" marker-end="url(#ar)"/>
+  <line x1="460" y1="397" x2="494" y2="272" stroke="black" stroke-width="2" marker-end="url(#ar)"/>
+
+  <!-- 动态激活说明 -->
+  <text class="lbl" x="80" y="452">按项目技术栈动态匹配规范、按优先级排序注入、用户自定义覆盖内置默认</text>
+</svg>

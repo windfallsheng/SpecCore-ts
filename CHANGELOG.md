@@ -1,3 +1,11 @@
+## v8.3.281 (2026-09-28) — execute 执行链路信息可见性修复（会议项目实战反馈）
+
+### 修复
+- **scanTasks 读 .meta/feature**：TaskState 新增 feature 字段（父任务与子任务均读，子任务优先回退父任务）——功能单元名是对齐锚点，此前 execute 上下文只有 slug 目录名，AI 被迫自己挖 .meta/feature 找真实单元名
+- **--agent 上下文真实路径**：buildAgentContext 优先输出 scanTasks 记录的绝对路径（子任务 TASK.md、00-specs/REQ/TECH、_shared 契约、子任务级 REQ/TECH 骨架），不再让 AI 从 `Iteration-*` 通配符猜目录；Task 行直显功能单元名及对应 020-specs 规格源
+- **SDK 派单降级原因上主通道**：execute 的 SDK 派单失败/TTY 降级原因此前仅 warn 到 stderr，外层 AI 主读 stdout 看不到，误以为派单成功，导致 prompt 无人消费的 exitCode 10 死锁——现在 finalOutput 头部输出 `[SPECCORE_SDK_FALLBACK]` 明确降级原因与落盘路径（--apply/--response）
+- **--agent 帮助文本语义纠偏**：`External AI: ...` 让人误以为自动执行，实际只是打包上下文复制粘贴——改为「外部 AI 上下文打包」，并在输出中指路真正自动派单（execute --prompt 非 TTY 时自动 Qoder SDK 派子 Agent）
+
 ## v8.3.280 (2026-09-24) — dev 命令残留清理：文档与模板统一指向 run 流水线
 
 ### 修复

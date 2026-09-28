@@ -600,6 +600,8 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
     logger.info(agentCtx);
     logger.info('--- AGENT CONTEXT END ---');
     logger.info('\n💡 复制以上内容粘贴到 ' + options.agent + ' 中即可生成代码');
+    // v8.3.281+: 指路真正的自动派单——--agent 只打包上下文，Qoder 环境自动执行走 execute 主流程
+    logger.info('   ⚡ 自动执行: 由宿主 AI 以子进程方式调用 speccore execute --prompt（非 TTY）时，CLI 自动通过 Qoder SDK 派子 Agent 执行并落盘，无需复制粘贴');
     logOperation('speccore execute --agent', options.agent);
     return;
   }
@@ -1897,15 +1899,30 @@ function buildAgentContext(tasks: TaskState[], agent: string): string {
 
   // 2. Per-task context
   for (const task of tasks) {
+    // v8.3.281+: 真实路径优先（scanTasks 记录的 path），AI 不再从 Iteration-* 通配符猜目录；
+    // 子任务向上两级即 Task-xxx/（00-specs、_shared 所在）
+    const subtaskDir = task.path || '';
+    const isSubtask = !!(task.parentTaskId && subtaskDir);
+    const taskRoot = isSubtask ? join(subtaskDir, '..', '..') : subtaskDir;
     ctx += `### Task: ${task.id} — ${task.name || task.id}\n`;
+    if (task.feature) ctx += `功能单元: ${task.feature}（对齐锚点，对应 020-specs/${task.feature}/ 规格源）\n`;
     ctx += `Status: ${task.status} | Priority: ${task.priority} | Type: ${task.type}\n\n`;
     
     // Progressive loading order
     ctx += `**Read in this order (progressive disclosure):**\n`;
-    ctx += `1. \`Iteration-*/${task.id}/{platform}/{subtask}/TASK.md\` — 子任务概览（所有端平铺）\n`;
-    ctx += `2. \`Iteration-*/${task.id}/00-specs/REQ.md\` — 需求 + 验收标准\n`;
-    ctx += `3. \`Iteration-*/${task.id}/00-specs/TECH.md\` — 技术设计\n`;
-    ctx += `4. \`Iteration-*/${task.id}/_shared/API_CONTRACT.yaml\` — API 契约 (if exists)\n\n`;
+    if (taskRoot) {
+      const taskMdPath = isSubtask ? join(subtaskDir, 'TASK.md') : join(taskRoot, '_shared', 'TASK.md');
+      ctx += `1. \`${taskMdPath}\` — 子任务概览（所有端平铺）\n`;
+      ctx += `2. \`${join(taskRoot, '00-specs', 'REQ.md')}\` — 需求 + 验收标准\n`;
+      ctx += `3. \`${join(taskRoot, '00-specs', 'TECH.md')}\` — 技术设计\n`;
+      ctx += `4. \`${join(taskRoot, '_shared', 'API_CONTRACT.yaml')}\` — API 契约 (if exists)\n`;
+      ctx += `5. \`${join(subtaskDir, 'REQ.md')}\` / \`${join(subtaskDir, 'TECH.md')}\` — 本端子任务规格（骨架，待 Step 2.5 覆盖）\n\n`;
+    } else {
+      ctx += `1. \`Iteration-*/${task.id}/{platform}/{subtask}/TASK.md\` — 子任务概览（所有端平铺）\n`;
+      ctx += `2. \`Iteration-*/${task.id}/00-specs/REQ.md\` — 需求 + 验收标准\n`;
+      ctx += `3. \`Iteration-*/${task.id}/00-specs/TECH.md\` — 技术设计\n`;
+      ctx += `4. \`Iteration-*/${task.id}/_shared/API_CONTRACT.yaml\` — API 契约 (if exists)\n\n`;
+    }
 
     ctx += `**Supplementary (read only if needed):**\n`;
     ctx += `- 子任务目录/TEST.md (测试用例) | 子任务目录/REVIEW.md (评审清单)\n`;
@@ -2624,6 +2641,10 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
     logger.warn('⚠️ [llm] 自配 LLM 未生成代码，回退宿主模式');
   }
 
+  // v8.3.281+: SDK 派单降级原因记录——此前仅 warn 到 stderr，外层 AI 主读 stdout 看不到，
+  // 误以为派单成功，导致 prompt 无人消费（exitCode 10 死锁）。现将原因上主通道。
+  let sdkFallbackReason: string | null = null;
+
   // v8.3.169+: 尝试通过 Qoder SDK 直接调度子 Agent（Qoder 环境且非 TTY 模式）
   if (!process.stdout.isTTY) {
     try {
@@ -2665,18 +2686,34 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
         process.exitCode = 0;
         return;
       }
+      if (!dispatchResult) {
+        // dispatchSubagent 返回 null：非 Qoder 宿主 / SDK 依赖缺失 / 鉴权未配置
+        sdkFallbackReason = 'Qoder SDK 直连通道不可用（非 Qoder 宿主 / SDK 依赖缺失 / 鉴权未配置），已降级为标记模式';
+      } else {
+        sdkFallbackReason = dispatchResult.error
+          ? `子 Agent 执行失败: ${dispatchResult.error}`
+          : '子 Agent 执行失败（原因见上方日志），已降级为标记模式';
+      }
       // 宿主 SDK 调度失败（success=false）→ auto 时回退自配 LLM
       if (aiProvider === 'auto' && await tryLlmExecute()) return;
     } catch (e: any) {
       logger.debug(`[execute] SDK 调度尝试失败: ${e.message}`);
+      sdkFallbackReason = `SDK 调度异常: ${e.message}`;
       // 宿主异常 → auto 时回退自配 LLM
       if (aiProvider === 'auto' && await tryLlmExecute()) return;
     }
+  } else {
+    sdkFallbackReason = '终端交互模式（TTY）：SDK 自动派单仅在宿主 AI 子进程调用（非 TTY）时触发，建议由 AI 助手代为执行本命令';
   }
 
   // 输出到 stdout（Skill 通过 execute_command 捕获）
   // v8.3.166+: 在 prompt 前输出 subagent 标记
+  // v8.3.281+: 降级原因上主通道，外层 AI 必读，防止 prompt 无人消费的 exitCode 10 死锁
+  const fallbackHeader = sdkFallbackReason
+    ? `[SPECCORE_SDK_FALLBACK] ${sdkFallbackReason}\n→ 请按下方 prompt 生成代码，完成后用 speccore execute --apply / --response 落盘\n\n`
+    : '';
   const finalOutput = [
+    fallbackHeader,
     `[SPECCORE_SESSION_AGENT: ${platformSubagent}]`,
     `[SPECCORE_CONTEXT_BUDGET: 12000]`,
     `[SPECCORE_CONTEXT_TYPE: ${options.platform ? 'platform-only' : 'full'}]`,

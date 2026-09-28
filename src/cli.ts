@@ -538,7 +538,7 @@ program
   .option('--base <branch>', 'Base branch for task branching (default: current)')
   .option('--skip <tasks>', 'Comma-separated task IDs to skip')
   .option('--only <tasks>', 'Comma-separated task IDs to execute exclusively (whitelist)')
-  .option('--agent <tool>', 'External AI: copilot/claude/cursor/trae/qoder/windsurf/codebuddy')
+  .option('--agent <tool>', '外部 AI 上下文打包: copilot/claude/cursor/trae/qoder/windsurf/codebuddy（生成提示手动粘贴；自动派单走 execute --prompt 非 TTY）')
   .option('--hotfix', 'Emergency fix: skip reverse sync (30min grace, 24h mandatory)')
   .option('--prompt', '输出结构化 Prompt 到 stdout，等待宿主 AI 生成代码（Skill 协作模式）')
   .option('--response <response>', '接收宿主 AI 返回的代码内容并写入文件（配合 --prompt 使用）')

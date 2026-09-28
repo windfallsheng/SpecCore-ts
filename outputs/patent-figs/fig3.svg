@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 460" width="880" height="460">
+  <defs>
+    <marker id="ar" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L9,3 L0,6 Z" fill="black"/>
+    </marker>
+  </defs>
+  <style>
+    text { font-family: SimSun, STSong, serif; fill: black; }
+    .b { font-size: 16px; }
+    .s { font-size: 13px; }
+    .lbl { font-size: 13px; }
+    .box { fill: white; stroke: black; stroke-width: 2; }
+    .dash { stroke-dasharray: 6 4; }
+  </style>
+
+  <!-- 主链三框 -->
+  <rect class="box" x="60" y="110" width="190" height="70"/>
+  <text class="b" x="155" y="140" text-anchor="middle">需求文档</text>
+  <text class="s" x="155" y="164" text-anchor="middle">（REQ）</text>
+
+  <rect class="box" x="345" y="110" width="190" height="70"/>
+  <text class="b" x="440" y="140" text-anchor="middle">开发任务</text>
+  <text class="s" x="440" y="164" text-anchor="middle">（Task）</text>
+
+  <rect class="box" x="630" y="110" width="190" height="70"/>
+  <text class="b" x="725" y="140" text-anchor="middle">源代码</text>
+  <text class="s" x="725" y="164" text-anchor="middle">（Code）</text>
+
+  <!-- 正向：拆分 / 生成 -->
+  <line x1="250" y1="133" x2="339" y2="133" stroke="black" stroke-width="2" marker-end="url(#ar)"/>
+  <text class="lbl" x="295" y="126" text-anchor="middle">任务拆分</text>
+  <line x1="535" y1="133" x2="624" y2="133" stroke="black" stroke-width="2" marker-end="url(#ar)"/>
+  <text class="lbl" x="580" y="126" text-anchor="middle">生成写入</text>
+
+  <!-- 反向：全链路追踪 -->
+  <line x1="624" y1="170" x2="541" y2="170" stroke="black" stroke-width="1.5" class="dash" marker-end="url(#ar)"/>
+  <line x1="339" y1="170" x2="256" y2="170" stroke="black" stroke-width="1.5" class="dash" marker-end="url(#ar)"/>
+  <text class="lbl" x="440" y="192" text-anchor="middle">全链路追踪（speccore track）</text>
+
+  <!-- 变更感知旁路 -->
+  <line x1="725" y1="180" x2="725" y2="228" stroke="black" stroke-width="1.5" class="dash"/>
+  <line x1="725" y1="228" x2="345" y2="228" stroke="black" stroke-width="1.5" class="dash"/>
+  <line x1="345" y1="228" x2="345" y2="252" stroke="black" stroke-width="1.5" class="dash" marker-end="url(#ar)"/>
+  <text class="lbl" x="555" y="222" text-anchor="middle">代码变更感知</text>
+
+  <rect class="box" x="280" y="256" width="130" height="46"/>
+  <text class="s" x="345" y="285" text-anchor="middle">版本差异检测</text>
+  <line x1="410" y1="279" x2="432" y2="279" stroke="black" stroke-width="2" marker-end="url(#ar)"/>
+  <rect class="box" x="438" y="256" width="130" height="46"/>
+  <text class="s" x="503" y="285" text-anchor="middle">变更影响分析</text>
+  <line x1="568" y1="279" x2="590" y2="279" stroke="black" stroke-width="2" marker-end="url(#ar)"/>
+  <rect class="box" x="596" y="256" width="160" height="46"/>
+  <text class="s" x="676" y="285" text-anchor="middle">标记受影响规范文档</text>
+
+  <!-- 底部：图谱索引更新 -->
+  <rect class="box dash" x="300" y="360" width="280" height="46"/>
+  <text class="s" x="440" y="389" text-anchor="middle">知识图谱 / 代码图谱索引更新</text>
+  <line x1="440" y1="302" x2="440" y2="354" stroke="black" stroke-width="1.5" class="dash" marker-end="url(#ar)"/>
+</svg>
