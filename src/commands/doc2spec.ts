@@ -1168,6 +1168,12 @@ export async function splitDocumentToUnits(
     if (unitDirName.startsWith('overview-') || isRuleLikeGlobal) {
       logger.info(`   ⏭️  ${unit.title} 是全局章节（${unitDirName.startsWith('overview-') ? 'overview- 前缀' : '跨端通用语义'}），跳过切分（应进 GLOBAL_CONTEXT）`);
       skipped++;
+      // v8.3.284: 被拦截的全局章节回流 globalSections——此前只 continue，
+      // 单元既不进 features 也不进 GLOBAL_CONTEXT，跨端核心规则（如 PRD 5.3
+      // 的 R-RM/R-BK/R-FEE 规则表）在迭代产物中凭空消失；
+      // 回流后经 findSectionRange 切原文写入 GLOBAL_CONTEXT-*.md
+      const gsTitle = (unit.sourceSection || unit.title).trim();
+      if (gsTitle && !globalSections.includes(gsTitle)) globalSections.push(gsTitle);
       continue;
     }
     existingContentHashes.set(unitDirName, fp);
