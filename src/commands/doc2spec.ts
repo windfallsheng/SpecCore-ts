@@ -1164,11 +1164,7 @@ export async function splitDocumentToUnits(
     // overview- 前缀拦不住，需语义检测：标题括号注释为全局修饰词（跨端通用/全局/公共），
     // 且剥括号后是规则/说明/规范等容器词——全局共享章节，应进 GLOBAL_CONTEXT 而非功能单元。
     // 「计费规则」「签到窗口规则」等无括号注释的具体规则不受影响。
-    const rawUnitTitle = unit.title || '';
-    const bracketNote = rawUnitTitle.match(/[（(]([^）)]+)[）)]/);
-    const isGlobalAnnotated = !!bracketNote && /(跨端通用|全局通用|全局|通用|公共)/.test(bracketNote[1]);
-    const baseUnitTitle = stripParenthetical(stripSectionNo(rawUnitTitle)).trim();
-    const isRuleLikeGlobal = isGlobalAnnotated && /(规则|说明|规范|一览|模板|约定)$/.test(baseUnitTitle);
+    const isRuleLikeGlobal = isGlobalAnnotatedTitle(unit.title || '');
     if (unitDirName.startsWith('overview-') || isRuleLikeGlobal) {
       logger.info(`   ⏭️  ${unit.title} 是全局章节（${unitDirName.startsWith('overview-') ? 'overview- 前缀' : '跨端通用语义'}），跳过切分（应进 GLOBAL_CONTEXT）`);
       skipped++;
@@ -1235,12 +1231,7 @@ export async function splitDocumentToUnits(
           // v8.3.282: 清理历史幽灵行——曾被全局章节拦截（v8.3.268+）的单元，
           // 其旧行会永久残留在增量合并的 INDEX 中（如「核心业务规则（跨端通用）」）。
           // 重切时按全局章节语义过滤，不再保留。
-          const prevTitle = cells[1] || '';
-          const prevBracket = prevTitle.match(/[（(]([^）)]+)[）)]/);
-          const prevIsGlobal = !!prevBracket
-            && /(跨端通用|全局通用|全局|通用|公共)/.test(prevBracket[1])
-            && /(规则|说明|规范|一览|模板|约定)$/.test(stripParenthetical(stripSectionNo(prevTitle)).trim());
-          if (prevIsGlobal) continue;
+          if (isGlobalAnnotatedTitle(cells[1] || '')) continue;
           seenRows.add(dedupKey);
           preservedRows.push(line);
         }
@@ -1249,6 +1240,9 @@ export async function splitDocumentToUnits(
   }
   if (preservedRows.length > 0) featuresIndex += preservedRows.join('\n') + '\n';
   for (const unit of units) {
+    // v8.3.283: 全局章节（目录创建处被拦截的残留单元对象）不再写回 INDEX——
+    // 修复 v8.3.282 幽灵行清理不彻底（旧行过滤生效，但 units 残留经本循环复活幽灵行）
+    if (isGlobalAnnotatedTitle(unit.title || '')) continue;
     // v8.3.273: 状态列由无意义的英文 draft 改为「待分析」（语义与 Task 状态体系一致；
     // 分析完成后的状态流转由 overview/FUNCTION_MAP 承担，INDEX 仅在切分时初始化）
     const row = `| ${unit.title} | ${unit.sourceSection} | 待分析 | ${platformLabel} |`;
@@ -1286,7 +1280,8 @@ export async function splitDocumentToUnits(
     }
   }
 
-  logger.success(`✅ 已拆分 ${written} 个功能单元到 features/${skipped > 0 ? `（跳过 ${skipped} 个已存在）` : ''}`);
+  // v8.3.283: 跳过计数含「已存在/重复切分/全局章节拦截」三类，文案不限定「已存在」
+  logger.success(`✅ 已拆分 ${written} 个功能单元到 features/${skipped > 0 ? `（跳过 ${skipped} 个）` : ''}`);
   if (rl) rl.close();
   logger.info(`   📂 ${featuresDir}/`);
 }
@@ -1405,6 +1400,18 @@ function isNonFunctionalSection(rawTitle: string, parentIsRuleContainer = false)
 /** 剥离括号注释（如「操作流程（预订完整流程）」「核心业务规则（跨端通用）」） */
 function stripParenthetical(rawTitle: string): string {
   return rawTitle.replace(/[（(][^（）()]*[）)]/g, '').trim();
+}
+
+/** v8.3.283: 全局注释语义判定——标题带括号注释且为跨端/全局/公共等修饰词，
+ * 且剥括号后是规则/说明/规范等容器词（「核心业务规则（跨端通用）」命中；
+ * 「计费规则」「签到窗口规则」等无括号注释的具体规则不命中）。
+ * 目录创建拦截、INDEX 旧行过滤、INDEX 新行写入三处共用同一判定，
+ * 修复 v8.3.282 只过滤旧行、units 残留对象经 INDEX 循环复活幽灵行的问题 */
+function isGlobalAnnotatedTitle(rawTitle: string): boolean {
+  const bracketNote = rawTitle.match(/[（(]([^）)]+)[）)]/);
+  const isGlobalAnnotated = !!bracketNote && /(跨端通用|全局通用|全局|通用|公共)/.test(bracketNote[1]);
+  const baseTitle = stripParenthetical(stripSectionNo(rawTitle)).trim();
+  return isGlobalAnnotated && /(规则|说明|规范|一览|模板|约定)$/.test(baseTitle);
 }
 
 /**
