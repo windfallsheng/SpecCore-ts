@@ -298,6 +298,70 @@ java_docker_example:
   tag: staging
 
 # ═══════════════════════════════════════════════════════════
+# 13. Nginx 站点配置（纯服务器托管前端，ssh 类型配套）
+# ═══════════════════════════════════════════════════════════
+#
+# 适用场景：前端 ssh 类型部署到服务器后，由服务器 Nginx 托管。
+# 服务器端完整站点配置模板见 templates/deploy-nginx/nginx-site.conf
+# （含 SPA 回退、gzip、静态缓存、API 反代到本地后端、HTTPS/WebSocket）。
+#
+# 服务器端准备（只需一次）：
+#   sudo cp templates/deploy-nginx/nginx-site.conf /etc/nginx/conf.d/<站点>.conf
+#   # 替换 {{DOMAIN}} / {{APP_DIR}} / {{BACKEND_HOST}} 后：
+#   sudo nginx -t && sudo nginx -s reload
+#
+nginx_site_example:
+  type: ssh
+  build_cmd: npm run build:staging
+  output_dir: dist
+  host: deployer@staging-server.example.com:22
+  key: ~/.ssh/id_rsa
+  remote_dir: /var/www/html/admin-web     # 与站点配置的 {{APP_DIR}} 一致
+  script: sudo nginx -s reload            # 部署完成后重载 Nginx
+
+# ═══════════════════════════════════════════════════════════
+# 14. Go 后端部署（systemd 管理，方式同 Java）
+# ═══════════════════════════════════════════════════════════
+#
+# 适用场景：Go 服务编译为单个二进制，上传服务器由 systemd 管理。
+# systemd service 模板参考 templates/deploy-java/spring-boot.service
+# （将 ExecStart 改为二进制路径即可）。
+#
+go_systemd_example:
+  type: ssh
+  build_cmd: CGO_ENABLED=0 go build -o bin/gateway ./cmd/gateway
+  output_dir: bin
+  host: deployer@staging-server.example.com:22
+  key: ~/.ssh/id_rsa
+  remote_dir: /opt/services/gateway
+  script: sudo systemctl restart gateway
+
+# Go 服务容器化部署
+# Dockerfile 要点：多阶段（golang:1.22-alpine 编译 → alpine 运行），
+# 运行阶段仅复制二进制，参考 deploy-java/Dockerfile 结构。
+go_docker_example:
+  type: docker
+  dockerfile: ./Dockerfile
+  registry: registry.example.com
+  image: my-project/gateway
+  tag: staging
+
+# ═══════════════════════════════════════════════════════════
+# 15. Python 后端部署（gunicorn + systemd）
+# ═══════════════════════════════════════════════════════════
+#
+# 适用场景：Django / Flask / FastAPI 服务，服务器上用 gunicorn 运行。
+# 建议直接使用 ssh 类型 + 自定义脚本完成：构建（打包依赖）→ 上传 → 重启。
+#
+python_gunicorn_example:
+  type: script
+  build_cmd: pip install -r requirements.txt -t dist/
+  script: ./scripts/deploy-python.sh
+  # deploy-python.sh 内容示例（上传 + 重启 gunicorn）：
+  #   rsync -az --delete dist/ deployer@server:/opt/services/api/app/
+  #   ssh deployer@server "sudo systemctl restart api-gunicorn"
+
+# ═══════════════════════════════════════════════════════════
 # 完整 PROJECT.yaml 示例（含部署配置）
 # ═══════════════════════════════════════════════════════════
 
@@ -357,16 +421,27 @@ deploy:
   remote_dir: /var/www/html/sr-web-operation
 
 # ═══════════════════════════════════════════════════════════
-# 常用脚本示例
+# 常用脚本示例（实体文件见 templates/deploy-scripts/）
 # ═══════════════════════════════════════════════════════════
+#
+# 脚本实体与说明：
+#   templates/deploy-scripts/trigger-jenkins.sh       Jenkins 构建触发
+#   templates/deploy-scripts/deploy-ftp.sh            lftp FTP 上传
+#   templates/deploy-scripts/deploy-password-ssh.sh   sshpass 密码 SSH
+#   templates/deploy-scripts/deploy-compose.sh        docker-compose 编排
+#   templates/deploy-scripts/deploy-python.sh         Python gunicorn 部署
+#   templates/deploy-java/deploy.sh                   服务器端 Java 部署（备份→替换→重启）
+#   templates/deploy-docker/deploy-remote.sh          服务器端 Docker 容器管理
+#
+# 以下为脚本要点摘录（完整版以实体文件为准）：
 
-# --- scripts/trigger-jenkins.sh ---
+# --- trigger-jenkins.sh（要点）---
 # #!/bin/bash
 # curl -X POST \
 #   -u "$JENKINS_USER:$JENKINS_TOKEN" \
 #   "http://jenkins.example.com/job/my-project-$1/build"
 
-# --- scripts/deploy-ftp.sh ---
+# --- deploy-ftp.sh（要点，完整版含环境变量校验）---
 # #!/bin/bash
 # # 使用 lftp 进行 FTP 上传（支持密码）
 # lftp -u "$FTP_USER,$FTP_PASS" "$FTP_HOST" <<EOF
@@ -375,7 +450,7 @@ deploy:
 # bye
 # EOF
 
-# --- scripts/deploy-password-ssh.sh ---
+# --- deploy-password-ssh.sh（要点，完整版含环境变量校验）---
 # #!/bin/bash
 # # 使用 sshpass 进行密码认证的 SSH 部署（需安装 sshpass）
 # # macOS: brew install sshpass
@@ -383,7 +458,7 @@ deploy:
 # sshpass -p "$SSH_PASSWORD" scp -r dist/* "$SSH_USER@$SSH_HOST:$REMOTE_DIR/"
 # sshpass -p "$SSH_PASSWORD" ssh "$SSH_USER@$SSH_HOST" "sudo nginx -s reload"
 
-# --- scripts/deploy-java.sh（服务器端执行） ---
+# --- deploy-java.sh（实体：templates/deploy-java/deploy.sh，服务器端执行）---
 # #!/bin/bash
 # # Java 后端部署脚本（放在服务器上，由 SSH 调用或手动执行）
 # APP_NAME="${1:-order-service}"

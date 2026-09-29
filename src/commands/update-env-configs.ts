@@ -199,6 +199,12 @@ tests:
   #   1. 后端 seed 脚本创建默认账号（如 admin / 初始密码）
   #   2. 密码通过环境变量 SMOKE_PASSWORD 注入（不落库、不进 git）
   #   3. 前端登录表单 input 加 data-testid 稳定标识，对应下方选择器
+  #
+  # data-testid 命名遵循 UI_SPEC 元素标识约定（v8.3.294+）：
+  #   {模块}-{页面}-{元素}，页面容器以 -page 结尾。
+  #   示例：登录页容器 login-page，其内元素为 login-username-input、
+  #         login-password-input、login-submit-btn（模块前缀视 UI_SPEC 约定补充）。
+  #   冒烟失败时可用「selector 自愈提示」核对页面实际 testid 清单。
   auth:
     login_url: /login
     username_selector: "[data-testid='login-username-input']"

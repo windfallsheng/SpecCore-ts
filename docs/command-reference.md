@@ -657,9 +657,10 @@ speccore deploy --env production --platform h5 --dry-run
 > 💡 **部署为可选功能**：如未配置部署参数，speccore 会自动跳过部署步骤，继续执行测试。详见 `templates/deploy-examples.yaml`。
 >
 > 详细示例：
+> - `templates/deploy-examples.yaml` — 15 种部署场景配置示例（ssh/sftp/static/script/docker/pm2/k8s/helm/vercel/serverless + Nginx 站点/Java/Go/Python）
+> - `templates/deploy-docker/README.md` — Docker 前后端远程部署（含 Node 后端 Dockerfile）
+> - `templates/deploy-nginx/README.md` — 纯服务器 Nginx 站点配置（ssh 类型配套）
 > - `templates/deploy-java/README.md` — Java + systemd / Docker 部署
-> - `templates/deploy-docker/README.md` — Docker 前后端远程部署
-> - `templates/deploy-examples.yaml` — 12 种部署场景配置示例
 
 ---
 

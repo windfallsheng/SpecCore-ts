@@ -64,141 +64,69 @@ v8.3.25+ 将配置拆分为**系统配置**和**项目配置**，解决两个独
 
 ## 2. 完整配置示例
 
-```yaml
-# SpecCore Configuration
-# schema_version: 1
-# 2026-08-28
+> **v8.3.296+ 推荐**：完整示例已独立为模板文件 [`templates/speccore-yml-example.yml`](../templates/speccore-yml-example.yml)，
+> 覆盖全部现行字段（含 v8.3.94+ vision、v8.3.193+ ai、v8.3.215+ tests.auth、v8.3.217+ smoke/stages/pipeline.test 等），
+> `speccore init` 会将其落地到 `.speccore/examples/config/SPECCORE-YML-EXAMPLE.yml`。
+> 以下为骨架速览（字段详解见第 3 节）：
 
+```yaml
 schema_version: 1
 
-project:
+project:            # 项目信息
   name: my-project
   description: 示例项目
   version: 1.0.0
 
-tech_stack:
+tech_stack:         # 技术栈（供 AI 生成针对性内容）
   backend: TypeScript / NestJS
   frontend: Vue 3 / Element Plus
-  database: PostgreSQL
-  cache: Redis
-  mq: RabbitMQ
 
-team:
+team:               # 团队（执行人追踪）
   members:
     - name: alice
       role: lead
       assignee: true
-    - name: bob
-      role: developer
-      assignee: true
 
-platforms:
-  - name: app
-    type: frontend
-    description: 移动端 APP
-    code_path: ./packages/app
-    git_repo: git@github.com:my-org/app.git
-    default_branch: main
-  - name: admin
-    type: frontend
-    description: 后台管理端
-    code_path: ./packages/admin
-    git_repo: git@github.com:my-org/admin.git
-    default_branch: main
-  - name: api
-    type: backend
-    description: 后端 API 服务
-    code_path: ./packages/api
-    git_repo: git@github.com:my-org/api.git
-    default_branch: main
-
-git:
-  default_base: main
-  branch_prefix: feature/
-  protected_branches:
-    - main
-    - master
-    - release/*
-    - production
-
-code_scope:
-  - src/
-  - packages/*/src/
-
-conventions:
-  commit: conventional-commits
-  naming:
-    interface: /api/v1/{module}/{operation}
-    error_code: 4-digit-by-module
-    database: snake_case
-    code: camelCase / PascalCase
-  review: true
-
-error_codes:
-  - code: 1001
-    meaning: 用户不存在
-    scenario: 登录时手机号未注册
-  - code: 1002
-    meaning: 密码错误
-    scenario: 登录密码不匹配
-
-quality_gates:
+quality_gates:      # 质量门禁（enforce_testing/review/require_pr/block_level/verify_ui）
   enforce_testing: true
   enforce_review: true
   require_pr: true
 
-arbitration:
+arbitration:        # 契约裁决（v8.3.24+）：full / l1-only / report-only
   enabled: true
   mode: full
 
-settings:
+settings:           # 运行时行为（assignee/trace/vision/optional_steps/pipelines/ai/smoke 等）
   assignee:
     enabled: true
     mode: loose
-  trace:
-    enabled: true
-    auto_annotate: true
-  archive:
-    auto_cleanup: false
-  plan:
-    parallel_suggest: true
-  validation:
-    strict_mode: false
-  sync:
-    auto_check: true
-  patterns:
-    auto_save: smart
-  review:
-    check_assignee: false
+  smoke:            # v8.3.217+ 冒烟三时机
+    points:
+      local: auto
+      pre-deploy: auto
+      post-deploy: auto
+    scope: module
 
-ask:
+ask:                # Ask 引擎（routing/rules/llm_providers）
   routing:
     mode: hybrid
-    high_threshold: 70
-    low_threshold: 45
-    auto_host_ai: true
-    cache_enabled: true
-    cache_min_hits: 3
-  rules:
-    force_host_ai: false
-  llm_providers:
-    - name: ollama-local
-      enabled: false
-      type: ollama
-      endpoint: http://localhost:11434
-      model: qwen2.5:7b
-      priority: 1
-    - name: openai-compatible
-      enabled: false
-      type: openai
-      endpoint: https://api.openai.com/v1/chat/completions
-      model: gpt-4o-mini
-      priority: 2
 
-config_history:
-  - date: 2026-08-28
+tests:              # 测试基础设施（base_urls/auth/visual_model）
+  base_urls:
+    h5: https://staging.example.com/h5
+
+stages:             # 分层测试阶段（verify --stage 联动）
+  dev:
+    config: null
+
+pipeline:           # Pipeline 内置测试节点
+  test:
+    enabled: true
+    type: smoke
+
+config_history:     # 由 speccore config --upgrade 自动维护
+  - date: 2026-09-01
     change: 初始配置
-    changed_by: alice
 ```
 
 ---
@@ -345,6 +273,11 @@ team:
 | `post_deploy` | `string[]` | — | 部署后执行的命令 |
 
 完整示例见 [`templates/deploy-examples.yaml`](../templates/deploy-examples.yaml)。
+
+配套模板（按部署方式选用）：
+- [`templates/deploy-nginx/nginx-site.conf`](../templates/deploy-nginx/nginx-site.conf) — 纯服务器 Nginx 站点配置（ssh 类型配套）
+- [`templates/deploy-docker/`](../templates/deploy-docker/README.md) — 前端/Node 后端 Dockerfile、Nginx 容器配置、Compose 编排
+- [`templates/deploy-java/`](../templates/deploy-java/README.md) — Java 后端 systemd/Docker 部署
 
 **示例**（含前端 + Java 后端部署配置）：
 ```yaml

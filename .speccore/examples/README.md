@@ -11,6 +11,7 @@ examples/
 ├── config/                      ← 配置文件示例
 │   ├── CONSTITUTION-EXAMPLE.md  ← CONSTITUTION.md 完整示例（多工程）
 │   ├── PROJECT-EXAMPLE.yaml     ← PROJECT.yaml 完整示例（多工程）
+│   ├── SPECCORE-YML-EXAMPLE.yml ← .speccore.yml 主配置完整示例（v8.3.296+）
 │   ├── GIT-CONFIG-EXAMPLE.txt   ← 子任务 .meta/git-config 格式示例
 │   ├── BUSINESS-RULES-EXAMPLE/  ← 业务规则示例目录（通用 + 端级规则）
 │   ├── API-DESIGN-EXAMPLE.md    ← API 设计规范示例（RESTful + 鉴权 + 版本）
@@ -18,6 +19,8 @@ examples/
 │   ├── SECURITY-EXAMPLE.md      ← 安全规范示例（OWASP + 加密 + 审计）
 │   ├── DEPLOY-EXAMPLE.yaml      ← 部署配置示例（speccore deploy 使用）
 │   └── VERIFY-EXAMPLE.yaml      ← 测试验证配置示例（speccore verify 使用）
+├── ci/                          ← CI/CD 配置示例（v8.3.296+）
+│   └── github-actions.yml       ← GitHub Actions 校验流水线（validate 阶段）
 └── project/                     ← 完整项目示例（预留，未来扩展）
 ```
 
@@ -32,7 +35,9 @@ examples/
 7. 查看 `config/SECURITY-EXAMPLE.md`，了解安全规范，可作为 `.speccore/RULES/security.md` 素材
 8. 查看 `config/DEPLOY-EXAMPLE.yaml`，了解部署配置格式（用于 `speccore deploy`）
 9. 查看 `config/VERIFY-EXAMPLE.yaml`，了解测试验证配置格式（用于 `speccore verify --config`）
-10. 修改后运行 `speccore update` 自动同步到 PROJECT.yaml
+10. 查看 `config/SPECCORE-YML-EXAMPLE.yml`，了解主配置 .speccore.yml 全部字段（质量门禁/冒烟三时机/流水线/AI provider）
+11. 查看 `ci/github-actions.yml`，复制到 `.github/workflows/` 启用 CI 校验
+12. 修改后运行 `speccore update` 自动同步到 PROJECT.yaml
 
 ## 注意事项
 

@@ -31,6 +31,28 @@ export interface DeployResult {
   skipped?: boolean;  // v8.3.97+: 未配置时跳过，非失败
 }
 
+/**
+ * 配置路径双基准解析（v8.3.296+）
+ *
+ * 部署配置中的 script / pm2_config / manifest / values 路径有两种写法：
+ *   1. 端工程内相对路径（如 ./scripts/deploy.sh）→ 基准 cwd（端 code_path）
+ *   2. 项目根相对路径（如 .speccore/environments/scripts/deploy.sh）→ 基准 projectRoot
+ *
+ * 优先 cwd（端内脚本优先），回退 projectRoot（.speccore 资产），
+ * 都找不到时返回 cwd 基准路径（由调用方兜底为命令/默认名语义）。
+ */
+export async function resolveConfigPath(configPath: string, cwd: string): Promise<string> {
+  if (isAbsolute(configPath)) return configPath;
+  const inCwd = join(cwd, configPath);
+  if (await pathExists(inCwd)) return inCwd;
+  const projectRoot = findProjectRoot();
+  if (projectRoot && projectRoot !== cwd) {
+    const inRoot = join(projectRoot, configPath);
+    if (await pathExists(inRoot)) return inRoot;
+  }
+  return inCwd;
+}
+
 // ── 主入口 ──
 export async function deployPlatform(
   platform: PlatformConfig,
@@ -332,8 +354,8 @@ async function deployScript(
 
   logger.info(`  📜 执行脚本: ${config.script}`);
 
-  // 判断是文件路径还是直接命令
-  const scriptPath = join(cwd, config.script);
+  // 判断是文件路径还是直接命令（v8.3.296+: 双基准解析，兼容端内/项目根两种写法）
+  const scriptPath = await resolveConfigPath(config.script, cwd);
   if (await pathExists(scriptPath)) {
     // v8.3.105+: 跨平台执行脚本（Windows 直接用 execSync 执行文件）
     execSync(scriptPath, { stdio: 'inherit', cwd });
@@ -362,7 +384,8 @@ async function deployK8s(
   cwd: string
 ): Promise<void> {
   const namespace = config.target || 'default';
-  const manifest = config.script || 'k8s-deployment.yaml';
+  // v8.3.296+: 双基准解析 manifest 路径（兼容 .speccore/environments/scripts/ 项目根写法）
+  const manifest = await resolveConfigPath(config.script || 'k8s-deployment.yaml', cwd);
 
   logger.info(`  ☸️  K8s 部署: namespace=${namespace}`);
   execSync(`kubectl apply -f ${manifest} -n ${namespace}`, { stdio: 'inherit', cwd });
@@ -445,9 +468,9 @@ async function deployHelm(
 
   logger.info(`  ⎈ Helm 部署: release=${releaseName}, namespace=${namespace}`);
 
-  // 检查是否有 values 文件
-  const valuesPath = join(cwd, valuesFile);
-  const valuesOpt = (await pathExists(valuesPath)) ? `-f ${valuesFile}` : '';
+  // 检查是否有 values 文件（v8.3.296+: 双基准解析，避免端 code_path 下静默丢失 -f）
+  const valuesPath = await resolveConfigPath(valuesFile, cwd);
+  const valuesOpt = (await pathExists(valuesPath)) ? `-f ${valuesPath}` : '';
 
   execSync(
     `helm upgrade --install ${releaseName} ${chart} --namespace ${namespace} --create-namespace ${valuesOpt}`,
@@ -471,10 +494,12 @@ async function deployPm2(
 
   const pm2Config = config.pm2_config || 'ecosystem.config.js';
   const outputDir = config.output_dir || '.';
+  // v8.3.296+: 双基准解析 pm2 配置路径（兼容 .speccore/environments/scripts/ 项目根写法）
+  const pm2ConfigPath = await resolveConfigPath(pm2Config, cwd);
 
   // 2. 本地 PM2 重启
   logger.info(`  📦 PM2 重启: ${pm2Config}`);
-  execSync(`cd ${outputDir} && npx pm2 reload ${pm2Config} --env ${env}`, {
+  execSync(`cd ${outputDir} && npx pm2 reload ${pm2ConfigPath} --env ${env}`, {
     stdio: 'inherit',
     cwd,
   });

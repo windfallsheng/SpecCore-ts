@@ -13,32 +13,36 @@
 #   两种格式 speccore verify --config 均可自动识别。
 #
 # v8.3.95+ 支持: cookie / localStorage / script / scroll / upload / iframe / waitForRequest / waitForResponse
+# v8.3.294+ 推荐: 选择器优先用 data-testid（UI_SPEC 元素标识约定 {模块}-{页面}-{元素}），
+#   冒烟装配四阶段会自动从 UI_SPEC 提取元素清单生成场景，失败时输出自愈提示。
 
 name: 示例项目冒烟测试
 platform: h5-mobile
 url: /
 
 scenarios:
-  # ── 场景1: 登录流程 ──
+  # ── 场景1: 登录流程（data-testid 选择器，推荐）──
+  # 登录态也可由 environments 配置的 tests.auth 自动装配（v8.3.215+），
+  # 本场景演示手工登录写法；受保护页面免登录可用 cookie/localStorage 注入（见场景2/3）。
   - name: 登录-账号密码登录
     description: 模块:auth 页面:/login
     actions:
       - type: navigate
         value: /login
       - type: fill
-        selector: 'input[name="username"]'
+        selector: "[data-testid='login-username-input']"
         value: test_user
       - type: fill
-        selector: 'input[name="password"]'
+        selector: "[data-testid='login-password-input']"
         value: test_password
       - type: click
-        selector: 'button[type="submit"]'
-        waitFor: '.dashboard-container'
+        selector: "[data-testid='login-submit-btn']"
+        waitFor: "[data-testid='dashboard-page']"
     assertions:
       - type: url
         contains: /dashboard
       - type: visible
-        selector: '.dashboard-container'
+        selector: "[data-testid='dashboard-page']"
 
   # ── 场景2: Cookie 注入免登录 ──
   # 适用于: 已有登录态 Cookie，跳过登录页直接测试业务模块

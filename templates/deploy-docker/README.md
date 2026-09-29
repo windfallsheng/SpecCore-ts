@@ -9,11 +9,15 @@
 ```
 deploy-docker/
 ├── frontend.Dockerfile      # 前端 Nginx 多阶段构建示例
+├── backend-node.Dockerfile  # Node.js 后端多阶段构建示例（Express/NestJS/Koa）
 ├── nginx.conf               # Nginx 自定义配置（SPA 路由 + API 代理 + 静态缓存）
 ├── docker-compose.yml       # 前后端 + MySQL + Redis 编排示例
 ├── deploy-remote.sh         # 服务器端 Docker 部署脚本
 └── README.md                # 本文件
 ```
+
+> Java 后端 Dockerfile 见 `templates/deploy-java/Dockerfile`；
+> 纯服务器 Nginx 站点配置（非容器）见 `templates/deploy-nginx/nginx-site.conf`。
 
 ---
 
@@ -132,6 +136,14 @@ docker-compose -f /opt/deploy/docker-compose.yml up -d
 ```bash
 docker build --build-arg BUILD_ENV=staging -t admin-web:staging .
 ```
+
+### backend-node.Dockerfile
+
+Node.js 后端多阶段构建（Express / NestJS / Koa）：
+- **阶段 1**（Node）：`npm ci && npm run build`
+- **阶段 2**（Node）：仅生产依赖 + `dist/`，非 root 用户运行
+
+内置健康检查（`/healthz`，按实际路由调整），与 docker-compose 的 healthcheck 联动。
 
 ### nginx.conf
 

@@ -1,3 +1,24 @@
+## v8.3.296 (2026-09-29) — 部署配置/脚本示例补齐 + 配置示例家底盘点 + 引擎路径断链修复
+
+### 新增
+- **纯服务器 Nginx 站点模板** `templates/deploy-nginx/`：nginx-site.conf（SPA 回退/gzip/静态缓存/API 反代/WebSocket 升级/healthz 透传/HTTPS 占位，{{DOMAIN}}/{{APP_DIR}}/{{BACKEND_HOST}} 占位符）+ README——与 Docker 场景 nginx.conf 互补，补上「无容器直接装 Nginx」的缺口
+- **Node 后端 Dockerfile** `templates/deploy-docker/backend-node.Dockerfile`：多阶段构建 + 非 root 运行 + HEALTHCHECK，与 frontend.Dockerfile/nginx.conf 组成完整前后端 Docker 示例
+- **5 个缺失实体脚本** `templates/deploy-scripts/`：deploy-compose.sh / deploy-ftp.sh（lftp 直传）/ deploy-password-ssh.sh（sshpass 免交互）/ trigger-jenkins.sh（远程触发流水线）/ deploy-python.sh（venv+systemd）——set -euo pipefail + 密码 token 不落配置 + 缺失校验
+- **主配置完整示例** `templates/speccore-yml-example.yml`（222 行）：覆盖 .speccore.yml 全部现行字段（quality_gates.block_level/verify_ui、arbitration、settings.vision/optional_steps/pipelines/ai/smoke 三时机、tests.auth、stages、pipeline.test），每段标注特性版本号；init 落地到 examples/config/SPECCORE-YML-EXAMPLE.yml
+- **CI 示例落地链路**：templates/ci/github-actions.yml 此前「有文件无链路」——init 从未复制给用户，现同步到 examples/ci/，README 增第 11 条指引
+
+### 修复
+- **部署配置路径断链（核心 bug）**：engine.ts 的 script/pm2_config/manifest/values 路径只以端目录（cwd）为基准，而 init 生成的示例配置用项目根相对路径 .speccore/environments/scripts/...——端配 code_path 就断链（helm values 静默丢失 -f 最隐蔽）。新增导出 resolveConfigPath 双基准解析（优先 cwd、回退项目根 findProjectRoot），deployScript/deployK8s/deployHelm/deployPm2 四处改造
+
+### 增强
+- **deploy-examples.yaml 补 13/14/15 节**：nginx_site_example（ssh + remote_dir + reload 脚本）、go_systemd/go_docker、python_gunicorn——12 种场景扩到 15 种；脚本注释指向 templates/deploy-scripts/ 实体文件
+- **VERIFY-EXAMPLE data-testid 对齐**：登录场景换三段式选择器（{模块}-{页面}-{元素}），补 tests.auth 自动登录注释（v8.3.215+）
+- **config-reference.md §2 去双轨**：过时完整示例（停留 2026-08-28 老 schema，缺 8 个新字段）改为骨架速览 + 指向新模板
+- **staging.yaml.example 与 update-env-configs.ts 同步**：auth 段补 data-testid 三段式约定注释
+
+### 验证
+- 291 测试全绿（285 + resolveConfigPath 6 用例）；npm pack 确认 deploy-scripts/、deploy-nginx/、backend-node.Dockerfile、speccore-yml-example.yml、ci/github-actions.yml 全部随包
+
 ## v8.3.295 (2026-09-29) — 静态资源发布链路修复：引导页链接 404 根治 + 防御加固
 
 ### 修复

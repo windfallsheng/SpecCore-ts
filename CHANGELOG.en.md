@@ -4,6 +4,27 @@
 
 > 📌 **Note**: English entries below cover selected releases. For the complete version history (v8.3.194 → v8.3.289), see the Chinese [CHANGELOG.md](CHANGELOG.md).
 
+## v8.3.296 (2026-09-29) — Deploy template/script completion + config example audit + engine path-chain fix
+
+### Added
+- **Bare-server Nginx site template** `templates/deploy-nginx/`: nginx-site.conf (SPA fallback/gzip/static cache/API reverse proxy/WebSocket upgrade/healthz passthrough/HTTPS placeholder) + README — complements the Docker-scene nginx.conf for non-containerized Nginx
+- **Node backend Dockerfile** `templates/deploy-docker/backend-node.Dockerfile`: multi-stage build + non-root runtime + HEALTHCHECK
+- **5 concrete deploy scripts** `templates/deploy-scripts/`: deploy-compose.sh / deploy-ftp.sh (lftp) / deploy-password-ssh.sh (sshpass) / trigger-jenkins.sh / deploy-python.sh (venv+systemd) — `set -euo pipefail`, credentials via env vars only
+- **Full main-config example** `templates/speccore-yml-example.yml` (222 lines): covers all current .speccore.yml fields (quality_gates.block_level/verify_ui, arbitration, settings.vision/optional_steps/pipelines/ai/smoke, tests.auth, stages, pipeline.test) with feature-version tags; `init` lands it at examples/config/SPECCORE-YML-EXAMPLE.yml
+- **CI example delivery path**: templates/ci/github-actions.yml existed but init never copied it to user projects — now lands at examples/ci/
+
+### Fixed
+- **Deploy config path chain break (core bug)**: engine.ts resolved script/pm2_config/manifest/values paths only against the platform cwd, while init-generated examples use project-root-relative paths (.speccore/environments/scripts/...) — broken whenever code_path is set (helm values silently lost -f). New exported `resolveConfigPath` resolves against cwd first, then project root; applied to deployScript/deployK8s/deployHelm/deployPm2
+
+### Enhanced
+- **deploy-examples.yaml sections 13/14/15**: nginx_site / go_systemd+go_docker / python_gunicorn — 12 scenes → 15; script comments point to concrete files in templates/deploy-scripts/
+- **VERIFY-EXAMPLE data-testid alignment**: login scenario switched to the three-part selector convention ({module}-{page}-{element}); added tests.auth auto-login notes (v8.3.215+)
+- **config-reference.md §2 de-duplication**: stale full example (2026-08-28 schema, missing 8 newer fields) replaced with a skeleton overview pointing to the new template
+- **staging.yaml.example & update-env-configs.ts**: data-testid three-part convention comment in the auth section
+
+### Verification
+- 291 tests green (285 + 6 resolveConfigPath cases); npm pack confirms deploy-scripts/, deploy-nginx/, backend-node.Dockerfile, speccore-yml-example.yml, ci/github-actions.yml all ship in the package
+
 ## v8.3.295 (2026-09-29) — Static asset publish chain fixed: onboarding link 404 cured + defensive hardening
 
 ### Fixes

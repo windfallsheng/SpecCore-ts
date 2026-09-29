@@ -1,0 +1,222 @@
+# ═══════════════════════════════════════════════════════════
+# SpecCore 主配置完整示例（.speccore.yml）
+# ═══════════════════════════════════════════════════════════
+# 位置：项目根 .speccore.yml（与 .speccore/PROJECT.yaml 分工：
+#       PROJECT.yaml 管「端/源码/Git/部署」，本文件管「行为/门禁/测试/AI」）
+# 升级：speccore config --upgrade（不要手动编辑 schema_version）
+# 参考：docs/config-reference.md（字段详解）
+#
+# 特性版本标记：
+#   v8.3.24+   arbitration 契约裁决        v8.3.94+  settings.vision
+#   v8.3.95+   quality_gates.verify_ui      v8.3.193+ settings.ai provider 池
+#   v8.3.197+  quality_gates.block_level    v8.3.215+ tests.auth 登录装配
+#   v8.3.217+  settings.smoke 三时机        v8.3.217+ stages / pipeline.test
+# ═══════════════════════════════════════════════════════════
+
+schema_version: 1
+
+# ── 项目信息 ──
+project:
+  name: my-project
+  description: 示例项目
+  version: 1.0.0
+
+# ── 技术栈（供 AI 生成针对性内容）──
+tech_stack:
+  backend: TypeScript / NestJS
+  frontend: Vue 3 / Element Plus
+  database: PostgreSQL
+  cache: Redis
+  mq: RabbitMQ
+
+# ── 团队 ──
+team:
+  members:
+    - name: alice
+      role: lead
+      assignee: true
+    - name: bob
+      role: developer
+      assignee: true
+
+# ── 质量门禁 ──
+quality_gates:
+  enforce_testing: true
+  enforce_review: true
+  require_pr: true
+  # 阻塞级别：standard（编译+单测+契约都阻断，默认）/ compile（仅编译阻断）
+  block_level: standard
+  # v8.3.95+: UI 验证默认行为（speccore verify --ui）
+  verify_ui:
+    enabled: true
+    smoke_test: true
+    visual_check: true
+    threshold: normal            # strict / normal / loose
+    devices: [desktop, mobile]
+    browsers: [chromium]
+    timeout: 30000
+    headed: false
+    visual_model:
+      provider: qwen-vl
+      model: qwen-vl-max
+
+# ── 契约裁决（v8.3.24+）：full 全流程 / l1-only / report-only ──
+arbitration:
+  enabled: true
+  mode: full
+
+# ── 运行时行为 ──
+settings:
+  # 指派策略：strict 阻断不一致 / loose 自动填+警告（推荐）/ off 关闭
+  assignee:
+    enabled: true
+    mode: loose
+  # 双向追溯 + @spec 注释
+  trace:
+    enabled: true
+    auto_annotate: true
+  # 归档时自动清理
+  archive:
+    auto_cleanup: false
+  # 并行执行建议
+  plan:
+    parallel_suggest: true
+  # 严格校验模式
+  validation:
+    strict_mode: false
+  # 自动检查规范库最新
+  sync:
+    auto_check: true
+  # 模式沉淀：off / smart（推荐）/ aggressive
+  patterns:
+    auto_save: smart
+  # 审查时检查执行人签名
+  review:
+    check_assignee: false
+  # v8.3.94+: 视觉模型（specs 文档图片理解，默认关闭）
+  vision:
+    enabled: false
+    provider: qwen-vl
+    model: qwen-vl-plus
+    apiKey: ${DASHSCOPE_API_KEY}
+    maxImagesPerPrompt: 10
+    imageMaxSizeKb: 2048
+  # 非必要流水线步骤三态开关：auto（智能，默认）/ on 强制 / off 跳过
+  optional_steps:
+    clarify: auto               # 文档专业就跳过澄清
+    verify: auto
+    pipeline: auto
+    pr: off                     # 本地开发不自动提 PR
+    done: auto
+    spec2doc: off               # 不需要导出文档
+  # 命名流水线（run --preset <name>）
+  pipelines:
+    default: develop            # full/import/spec/analyze/develop/deliver/deploy/docs
+    custom:
+      my-flow: analyze,validate,taskify,plan,execute
+      hotfix: execute,verify,pipeline,pr
+  # v8.3.193+: 统一 LLM provider 池（host=宿主AI / llm=自配 / auto=宿主优先）
+  ai:
+    provider: auto
+    providers:
+      - name: local
+        type: ollama
+        endpoint: "http://localhost:11434"
+        model: qwen2.5:7b
+        priority: 1
+      - name: gpt4o
+        type: openai
+        model: gpt-4o
+        apiKey: "${OPENAI_API_KEY}"
+        priority: 2
+    defaults:
+      analyze: gpt4o
+      split: local
+    fallback: local
+  # v8.3.217+: 冒烟三时机开关 + 范围（run --smoke / --skip-smoke / --scope 单次覆盖）
+  smoke:
+    points:
+      local: auto               # 开发完本地冒烟
+      pre-deploy: auto          # 部署前门禁
+      post-deploy: auto         # 部署后确认环境活着
+    scope: module               # full 全量 / module 当前功能模块
+    scope_by_env:
+      dev: module
+      staging: module
+      production: full          # 生产发布才全量
+
+# ── Ask 引擎 ──
+ask:
+  routing:
+    mode: hybrid                # hybrid / cli-only / host-ai-only
+    high_threshold: 70
+    low_threshold: 45
+    auto_host_ai: true
+    cache_enabled: true
+    cache_min_hits: 3
+  rules:
+    force_host_ai: false
+  llm_providers:
+    - name: ollama-local
+      enabled: false
+      type: ollama
+      endpoint: http://localhost:11434
+      model: qwen2.5:7b
+      priority: 1
+    - name: openai-compatible
+      enabled: false
+      type: openai
+      endpoint: https://api.openai.com/v1/chat/completions
+      model: gpt-4o-mini
+      priority: 2
+
+# ── 测试基础设施（与 verify / pipeline 联动）──
+tests:
+  base_urls:
+    h5: https://staging.example.com/h5
+    admin: https://admin-staging.example.com
+    api: https://api-staging.example.com
+  local_urls:
+    h5: http://localhost:5173
+  # v8.3.215+: 测试登录（冒烟/视觉访问受保护页面前自动登录）
+  # data-testid 遵循 UI_SPEC 元素标识约定：{模块}-{页面}-{元素}
+  auth:
+    login_url: /login
+    username_selector: "[data-testid='login-username-input']"
+    password_selector: "[data-testid='login-password-input']"
+    submit_selector: "[data-testid='login-submit-btn']"
+    success_url_contains: /dashboard
+    credentials:
+      username: admin
+      password_env: SMOKE_PASSWORD  # 密码从环境变量读取（推荐，不落库不进 git）
+  visual_model:
+    provider: qwen-vl
+    model: qwen-vl-max
+    timeout: 60000
+
+# ── 分层测试阶段（verify --stage <stage> 联动）──
+stages:
+  dev:
+    config: null                              # 使用内置代码质量验证
+  pr:
+    config: .speccore/tests/pr.yaml
+  deploy:
+    config: .speccore/tests/smoke.yaml
+  release:
+    config: .speccore/tests/release.yaml
+
+# ── Pipeline 内置测试节点（build 后 deploy 前/后执行）──
+pipeline:
+  test:
+    enabled: true
+    type: smoke                # build-check / smoke / visual / api / all
+    stage: pre-deploy          # pre-deploy / post-deploy / both
+    fail_on_error: true        # 失败是否阻断部署（仅 critical）
+    auto_fix: true
+    max_retries: 3
+
+# ── 配置变更历史（speccore config --upgrade 自动维护，勿手动编辑）──
+config_history:
+  - date: 2026-09-01
+    change: 初始配置
+    changed_by: alice
