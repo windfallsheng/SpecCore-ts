@@ -1,3 +1,11 @@
+## v8.3.298 (2026-09-29) — 旧版主配置升级截停修复：旧字段自动迁移，新字段补全不再卡壳
+
+### 修复
+- **旧版 .speccore.yml 升级被「需人工确认」截停（核心 bug）**：早期版本 platforms/git/code_scope/project 等字段存在主配置里（后来归属 PROJECT.yaml），升级时 detectConfigDiff 把它们判为 removed → requiresUserConfirmation 截停 → 只生成 upgrade-diff.md 不执行升级 → 用户配置里永远缺 logging/verify_ui 等新字段。修复：旧版顶层字段白名单（project/platforms/git/code_scope 自动迁移至 .speccore/PROJECT.yaml 缺失/空时回填不覆盖；tech_stack/team/conventions/error_codes 废弃删除），removed 过滤后不再阻断，升级全自动执行
+
+### 验证
+- 291 测试全绿；老格式复现：修复前截停（25 新增 + 6 删除需确认）→ 修复后一次升级完成，logging 注释块/verify_ui 段落盘、旧字段清零、platforms 完整迁移至 PROJECT.yaml（name 保留）
+
 ## v8.3.297 (2026-09-29) — vision 升级假补全修复 + 配置文档归属更正
 
 ### 修复

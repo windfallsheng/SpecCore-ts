@@ -4,6 +4,14 @@
 
 > 📌 **Note**: English entries below cover selected releases. For the complete version history (v8.3.194 → v8.3.289), see the Chinese [CHANGELOG.md](CHANGELOG.md).
 
+## v8.3.298 (2026-09-29) — Legacy main-config upgrade blocking fixed: old fields auto-migrated, new fields no longer stuck
+
+### Fixed
+- **Old .speccore.yml upgrade blocked by "manual confirmation" (core bug)**: early versions kept platforms/git/code_scope/project in the main config (later moved to PROJECT.yaml), so upgrade detected them as `removed` → `requiresUserConfirmation` aborted → only an upgrade-diff.md was written, never the upgrade → users' configs never gained logging/verify_ui etc. Fix: legacy top-level field whitelist (project/platforms/git/code_scope auto-migrated into .speccore/PROJECT.yaml with backfill-only-if-empty semantics; tech_stack/team/conventions/error_codes dropped as deprecated); after filtering, removed no longer blocks and the upgrade runs fully automatic
+
+### Verification
+- 291 tests green; old-format repro: before the fix upgrade aborted (25 added + 6 removed awaiting confirmation) → after the fix one run completes, logging block & verify_ui section land on disk, old fields cleared, platforms fully migrated into PROJECT.yaml (name preserved)
+
 ## v8.3.297 (2026-09-29) — vision upgrade fake-fill fixed + config doc ownership correction
 
 ### Fixed

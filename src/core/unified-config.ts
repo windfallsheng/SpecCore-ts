@@ -947,6 +947,66 @@ export function formatConfigDiff(diff: ConfigDiff): string[] {
 // 配置升级（补全缺失字段 + 执行迁移 + 更新版本号）
 // ─────────────────────────────────────────
 
+// v8.3.298: 旧版 .speccore.yml 顶层字段白名单（升级时不阻断，自动迁移/丢弃）
+// 背景：早期版本 platforms/git/code_scope 等字段存在 .speccore.yml 里，后来归属 PROJECT.yaml；
+// 若不豁免，detectConfigDiff 会报 removed → 升级被「需人工确认」截停 → 新字段（logging/verify_ui 等）永远补不上。
+const LEGACY_MIGRATE_KEYS = new Set(['project', 'platforms', 'git', 'code_scope']);
+const LEGACY_DROP_KEYS = new Set(['tech_stack', 'team', 'conventions', 'error_codes']);
+const LEGACY_MAIN_CONFIG_KEYS = new Set([...LEGACY_MIGRATE_KEYS, ...LEGACY_DROP_KEYS]);
+
+/**
+ * v8.3.298+: 迁移旧版 .speccore.yml 的顶层字段
+ * - project/platforms/git/code_scope → 合并进 .speccore/PROJECT.yaml（缺失/空时回填，不覆盖新数据）
+ * - tech_stack/team/conventions/error_codes → 已废弃，直接删除
+ */
+async function migrateLegacyMainConfig(config: SpecConfig): Promise<string[]> {
+  const logs: string[] = [];
+  const raw = config as unknown as Record<string, unknown>;
+  const legacy: Record<string, unknown> = {};
+  let hasLegacy = false;
+
+  for (const key of LEGACY_MIGRATE_KEYS) {
+    if (key in raw) {
+      legacy[key] = raw[key];
+      delete raw[key];
+      hasLegacy = true;
+    }
+  }
+  for (const key of LEGACY_DROP_KEYS) {
+    if (key in raw) {
+      delete raw[key];
+      hasLegacy = true;
+    }
+  }
+  if (!hasLegacy) return logs;
+
+  try {
+    const { config: projectCfg } = await loadProjectConfigWithMeta();
+    const merged: Record<string, unknown> = { ...projectCfg } as unknown as Record<string, unknown>;
+    const legacyAny = legacy as Record<string, unknown>;
+    if (legacyAny.project) {
+      merged.project = deepMerge((merged.project as object) || {}, legacyAny.project);
+    }
+    if (Array.isArray(legacyAny.platforms) && legacyAny.platforms.length > 0
+      && (!Array.isArray(merged.platforms) || (merged.platforms as unknown[]).length === 0)) {
+      merged.platforms = legacyAny.platforms;
+    }
+    if (legacyAny.git) {
+      merged.git = deepMerge((merged.git as object) || {}, legacyAny.git);
+    }
+    if (Array.isArray(legacyAny.code_scope) && legacyAny.code_scope.length > 0
+      && (!Array.isArray(merged.code_scope) || (merged.code_scope as unknown[]).length === 0)) {
+      merged.code_scope = legacyAny.code_scope;
+    }
+    await saveProjectConfig(merged as unknown as ProjectConfig);
+    logs.push('旧版 .speccore.yml 字段（platforms/git/code_scope 等）已迁移至 .speccore/PROJECT.yaml');
+  } catch {
+    logs.push('旧版字段迁移至 PROJECT.yaml 失败（已从主配置移除，可手动核对 .speccore/PROJECT.yaml）');
+  }
+  logs.push('废弃字段（tech_stack/team/conventions/error_codes）已移除');
+  return logs;
+}
+
 export async function upgradeConfig(): Promise<ConfigLoadResult> {
   const { config, warnings } = await loadConfigWithMeta();
 
@@ -960,7 +1020,12 @@ export async function upgradeConfig(): Promise<ConfigLoadResult> {
 
   // 1. 检测配置差异（优先用磁盘原始文件差异，能看到缺失的新字段）
   const diff = fileDiff || detectConfigDiff(config, DEFAULT_CONFIG);
-  const needsConfirm = requiresUserConfirmation(diff);
+  // v8.3.298: 旧版顶层字段（已归属 PROJECT.yaml 或废弃）不触发「需人工确认」，自动迁移
+  const effectiveDiff: ConfigDiff = {
+    ...diff,
+    removed: diff.removed.filter((p) => !LEGACY_MAIN_CONFIG_KEYS.has(p.split('.')[0])),
+  };
+  const needsConfirm = requiresUserConfirmation(effectiveDiff);
 
   if (needsConfirm) {
     // 生成差异报告文件
@@ -1008,6 +1073,9 @@ export async function upgradeConfig(): Promise<ConfigLoadResult> {
   // 2. 用默认值深度合并（补全缺失字段）
   const upgraded = deepMerge(DEFAULT_CONFIG, config);
 
+  // v8.3.298+: 旧版顶层字段自动迁移（platforms/git/code_scope → PROJECT.yaml，废弃字段删除）
+  const legacyLogs = await migrateLegacyMainConfig(upgraded);
+
   // 3. 执行跨版本迁移（rename / add / remove / transform）
   const migrationLogs = runMigrations(upgraded, MIGRATIONS, CURRENT_SCHEMA_VERSION);
 
@@ -1046,6 +1114,11 @@ export async function upgradeConfig(): Promise<ConfigLoadResult> {
   if (migrationLogs.length > 0) {
     logger.info('   执行了以下迁移:');
     for (const log of migrationLogs) logger.info(`   ${log}`);
+  }
+
+  if (legacyLogs.length > 0) {
+    logger.info('   旧版字段处理:');
+    for (const log of legacyLogs) logger.info(`   ${log}`);
   }
 
   return { config: upgraded, warnings, migrated: true };
