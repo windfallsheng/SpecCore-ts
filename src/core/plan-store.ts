@@ -29,6 +29,7 @@ export interface ExecutionPlan {
     platform?: string;
     backend?: boolean;
     frontend?: boolean;
+    module?: string;
   };
   /** 创建时间 */
   createdAt: string;

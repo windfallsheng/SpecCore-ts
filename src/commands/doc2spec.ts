@@ -31,8 +31,8 @@ import { resolveUnitSourcePath } from '../core/feature-source';
 import { showNextSteps } from '../core/next-steps';
 import { validateContent, generateReport } from '../core/doc-validator';
 import { buildPrompt, formatPrompt } from '../core/prompt-builder';
-import { loadConfig } from '../core/unified-config';
-import { callLlm, resolveAiProviders } from '../core/ask-llm';
+import { loadConfig, loadConfigWithMeta } from '../core/unified-config';
+import { callLlm, resolveAiProviders, parseTranslationResponse } from '../core/ask-llm';
 function findCommand(cmd: string, customPath?: string): string | null {
   // v8.3.70+: 优先使用配置中指定的路径
   if (customPath && customPath.trim()) {
@@ -1880,26 +1880,36 @@ async function translateUnitTitles(
   const providers = await resolveAiProviders('unitize');
   const llmAvailable = providers.length > 0 || !!process.env.SPECCORE_LLM_KEY || !!process.env.OPENAI_API_KEY;
 
-  if (!llmAvailable && mode === 'host') {
-    // 宿主 AI 接力：输出翻译清单（序号与响应 JSON 键一一对应），exitCode 10 等待 --translate-response 续跑
-    logger.info('');
-    logger.info('[SPECCORE_PROMPT]');
-    logger.info('当前环境未配置 LLM（无 providers 池/环境变量）。请将以下功能单元标题翻译为英文 kebab-case 目录名（小写字母/数字/连字符，2~5 词，禁用拼音），然后执行续跑：');
-    logger.info(`  speccore unitize --file <文件> --iter <迭代> --translate-en host --translate-response '<JSON>'`);
-    logger.info('');
-    logger.info('标题清单（序号即响应 JSON 的键，按序号一一对应，勿改名重排）:');
-    for (const [i, t] of misses.entries()) {
-      logger.info(`  ${i + 1}. ${t}`);
-    }
-    logger.info('');
-    logger.info('响应 JSON 格式（键=序号，值=英文 slug）:');
-    logger.info(JSON.stringify(Object.fromEntries(misses.map((t, i) => [String(i + 1), `feature-${i + 1}`])), null, 2));
-    process.exitCode = 10;
-    return null;
-  }
-
   if (!llmAvailable) {
-    // auto 模式：无 LLM 环境直接拼音兜底（全自动不中断），但必须提示——
+    // v8.3.289+: auto 模式消费 auto_host_ai——宿主 AI 优先于静默拼音。
+    // ai.provider=host 或 auto_host_ai: true 均视为宿主模式（与 task new 导入链路一致）；
+    // 显式 --translate-en host 无条件接力（v8.3.273 语义不变）。
+    // 已携带 --translate-response 时不再接力（响应无效说明宿主已参与，防接力死循环），回退拼音。
+    let hostPreferred = mode === 'host';
+    if (!hostPreferred) {
+      try {
+        const { config } = await loadConfigWithMeta();
+        hostPreferred = config.settings?.ai?.provider === 'host' || config.ask?.routing?.auto_host_ai === true;
+      } catch { /* 配置读取失败按非宿主处理 */ }
+    }
+    if (hostPreferred && !translateResponse) {
+      // 宿主 AI 接力：输出翻译清单（序号与响应 JSON 键一一对应），exitCode 10 等待 --translate-response 续跑
+      logger.info('');
+      logger.info('[SPECCORE_PROMPT]');
+      logger.info('当前环境未配置 LLM（无 providers 池/环境变量）。请将以下功能单元标题翻译为英文 kebab-case 目录名（小写字母/数字/连字符，2~5 词，禁用拼音），然后执行续跑：');
+      logger.info(`  speccore unitize --file <文件> --iter <迭代> --translate-en host --translate-response '<JSON>'`);
+      logger.info('');
+      logger.info('标题清单（序号即响应 JSON 的键，按序号一一对应，勿改名重排）:');
+      for (const [i, t] of misses.entries()) {
+        logger.info(`  ${i + 1}. ${t}`);
+      }
+      logger.info('');
+      logger.info('响应 JSON 格式（键=序号，值=英文 slug）:');
+      logger.info(JSON.stringify(Object.fromEntries(misses.map((t, i) => [String(i + 1), `feature-${i + 1}`])), null, 2));
+      process.exitCode = 10;
+      return null;
+    }
+    // auto 模式且非宿主：无 LLM 环境直接拼音兜底（全自动不中断），但必须提示——
     // 静默降级会让用户误以为「没有英译这一步」
     if (misses.length > 0) {
       logger.warn(`⚙️  未配置 LLM，${misses.length} 个标题英译降级拼音（yibiaopan 而非 dashboard）`);
@@ -1926,44 +1936,6 @@ async function translateUnitTitles(
     } catch { /* 写缓存失败不阻塞，下次重跑再试 */ }
   }
   return new Map(Object.entries(cache));
-}
-
-/** 解析 LLM 翻译响应：优先 JSON 对象，失败逐行正则兜底（支持序号键与中文标题键、中文冒号） */
-function parseTranslationResponse(response: string, titles: string[]): Array<[string, string]> {
-  const pairs: Array<[string, string]> = [];
-  try {
-    const start = response.indexOf('{');
-    const end = response.lastIndexOf('}');
-    if (start >= 0 && end > start) {
-      const obj = JSON.parse(response.slice(start, end + 1));
-      for (const [k, v] of Object.entries(obj)) {
-        if (typeof v !== 'string') continue;
-        // v8.3.273: 双键兼容——数字键按序号映射回标题，中文标题键直接用（防重复标题冲突时序号优先）
-        if (/^\d+$/.test(k)) {
-          const idx = parseInt(k, 10) - 1;
-          if (idx >= 0 && idx < titles.length) {
-            pairs.push([titles[idx], v]);
-          }
-        } else if (titles.includes(k)) {
-          pairs.push([k, v]);
-        }
-      }
-      if (pairs.length > 0) {
-        return pairs;
-      }
-    }
-  } catch { /* JSON 解析失败走逐行正则 */ }
-  const lines = response.split('\n');
-  for (const line of lines) {
-    const m = line.match(/^\s*"?(\d+)"?\s*[:：]\s*"?([a-zA-Z0-9][a-zA-Z0-9-]{0,39})"?\s*$/);
-    if (m) {
-      const idx = parseInt(m[1], 10) - 1;
-      if (idx >= 0 && idx < titles.length) {
-        pairs.push([titles[idx], m[2].toLowerCase()]);
-      }
-    }
-  }
-  return pairs;
 }
 
 /**

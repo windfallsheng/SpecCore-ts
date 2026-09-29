@@ -13,22 +13,20 @@
  *   - iteration → Iteration-XX/020-specs/         迭代级基线（默认）
  *   - task      → Iteration-XX/030-tasks/Task-NN/00-specs/  任务级独立
  */
-import { readFile, writeFile, pathExists, readdir, stat, ensureDir } from 'fs-extra';
+import { readFile, writeFile, pathExists, readdir, ensureDir } from 'fs-extra';
 import { join, relative, basename } from 'path';
 import { logger } from '../utils/logger';
 import { isTimestampBackup } from '../utils/task-utils';
 import { resolveUnitSourcePath } from './feature-source';
-import { buildCodeIndex, findRelevantCode, readRelevantSource, isIndexStale, loadFullIndex, resolveIterationScope } from './code-scanner';
+import { buildCodeIndex, findRelevantCode, readRelevantSource, isIndexStale, loadFullIndex, resolveIterationScope, ensureCodeIndexFresh } from './code-scanner';
 // v8.3.183+: tree-sitter 结构化摘要，替代原文 slice(0,N) 硬切
 import { summarizeSources } from './multi-lang-parser';
 // v8.3.125+: 同义词扩展，解决中英文/缩写匹配失败问题
 import { expandSynonyms, extractNormalizedKeywords } from '../utils/synonyms';
-import { generateAIContext, AIContextInput, AIContextResult } from './ai-context-generator';
+import { generateAIContext, AIContextResult } from './ai-context-generator';
 import { cleanStaleCache } from './git-integration';
-import { refreshRagIndex, checkRagIndexFreshness, indexDirectoryDocuments } from './rag-engine';
-import { refreshKnowledgeGraph } from './knowledge-graph';
 import { generateQualityAudit } from './quality-audit';
-import { GLOBAL_SPECS_DIR, GLOBAL_SPEC_FILES, globalSpecWritePath, parsePlatformList } from './spec-paths';
+import { GLOBAL_SPECS_DIR, parsePlatformList } from './spec-paths';
 // v8.3.97+: Markdown 链接展开 + 图片提取（需求文档关联内容读取）
 import { processMarkdownContent } from './prompt-builder';
 
@@ -204,6 +202,10 @@ async function analyzeRequirements(input: AnalyzeInput): Promise<AnalysisResult>
   let sourceSummaries: Record<string, string> = {};
   const shouldReadSource = input.readSource !== false;
   if (shouldReadSource && (input.iteration || input.taskId)) {
+    // v8.3.3xx+: 消费前兜底——索引缺失/过期时自动重建 + 无索引告警
+    const codeIndexScope = input.sourceScope || await resolveIterationScope(input.iteration);
+    await ensureCodeIndexFresh(codeIndexScope);
+
     const limit = input.depth === 'deep' ? 25 : (input.depth === 'quick' ? 5 : 12);
     const maxBytes = input.depth === 'deep' ? 150000 : (input.depth === 'quick' ? 30000 : 70000);
     const rawMatches = await findRelevantCode(fullContent, limit, input.sourceScope, input.iteration, input.taskId);
@@ -349,16 +351,10 @@ async function analyzeCombined(input: AnalyzeInput): Promise<AnalysisResult> {
   const apiInventory = await buildApiInventory(input.sources);
 
   // 确保代码索引是最新的
-  // v8.3.125+: 按迭代端名筛选 scope + 增量刷新 + mtime 精确判断过期
+  // v8.3.125+: 按迭代端名筛选 scope
+  // v8.3.3xx+: 统一收敛到 ensureCodeIndexFresh（缺失告警 + 过期增量重建）
   const codeIndexScope = await resolveIterationScope(input.iteration);
-  if (await isIndexStale(codeIndexScope)) {
-    logger.info('   🔍 索引已过期，自动重建代码索引...');
-    await buildCodeIndex(codeIndexScope, true);
-    logger.info('   ✅ 代码索引已更新（包含多端识别 + 模块分组 + git 联动分析）');
-    logger.info('   💡 提示：可手动运行 `speccore code-index --show` 查看索引摘要');
-  } else {
-    logger.info('   📚 使用缓存的代码索引（源码未变更）');
-  }
+  await ensureCodeIndexFresh(codeIndexScope);
 
   // ── AI 上下文生成: 替代关键词匹配（传入已读取的需求内容，避免重复 readFile） ──
   const aiContext = await generateAIContext({

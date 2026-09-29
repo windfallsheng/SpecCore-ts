@@ -108,13 +108,12 @@ const ENDPOINT_PATTERNS: Record<string, { patterns: string[]; techHints: Record<
 };
 
 /**
- * 扫描项目目录，构建代码索引
- * scope: 扫描范围 ("src/:backend/**" 表示只扫 backend 下的 src)
- */
-/**
  * 全量扫描构建代码索引
+ * scope: 扫描范围（逗号分隔目录）
+ * preScannedFiles: v8.3.3xx+ 同源模式——复用 collectScanFiles 已收集的绝对路径文件列表，
+ *                  跳过目录扫描，供 code-index 与 code-graph 一次构建两份资产
  */
-export async function buildCodeIndex(scope?: string, incremental: boolean = false): Promise<number> {
+export async function buildCodeIndex(scope?: string, incremental: boolean = false, preScannedFiles?: string[]): Promise<number> {
   await ensureDir(CACHE_DIR);
 
   // 增量模式：加载现有索引
@@ -123,13 +122,21 @@ export async function buildCodeIndex(scope?: string, incremental: boolean = fals
     existingIndex = await loadIndex();
   }
 
-  const dirs = scope ? scope.split(',').map(s => s.trim()) : DEFAULT_SCOPE;
   const files: CodeFile[] = existingIndex ? [...existingIndex.files] : [];
   const processedPaths = new Set(files.map(f => f.path));
 
-  for (const dir of dirs) {
-    if (!(await pathExists(dir))) continue;
-    await scanDirectory(dir, dir, files, processedPaths, incremental);
+  if (preScannedFiles && preScannedFiles.length > 0) {
+    // 同源模式：复用 code-index --graph 已收集的文件列表
+    for (const fullPath of preScannedFiles) {
+      const relPath = relative(process.cwd(), fullPath);
+      await indexSingleFile(fullPath, relPath, files, processedPaths, incremental);
+    }
+  } else {
+    const dirs = scope ? scope.split(',').map(s => s.trim()) : DEFAULT_SCOPE;
+    for (const dir of dirs) {
+      if (!(await pathExists(dir))) continue;
+      await scanDirectory(dir, dir, files, processedPaths, incremental);
+    }
   }
 
   // 多端识别
@@ -152,6 +159,13 @@ export async function buildCodeIndex(scope?: string, incremental: boolean = fals
   return files.length;
 }
 
+/** 源码文件扩展名 → 语言映射（scanDirectory 与 collectScanFiles 共用） */
+const LANG_MAP: Record<string, string> = {
+  ts: 'typescript', tsx: 'typescript', js: 'javascript', jsx: 'javascript',
+  py: 'python', java: 'java', go: 'go', rs: 'rust',
+  vue: 'vue', sql: 'sql', yaml: 'yaml', yml: 'yaml',
+};
+
 async function scanDirectory(
   root: string, dir: string, result: CodeFile[],
   processedPaths?: Set<string>, incremental?: boolean
@@ -167,63 +181,104 @@ async function scanDirectory(
       
       if (entry.isDirectory()) {
         const depth = fullPath.split('/').length - root.split('/').length;
-        if (depth < 6) await scanDirectory(root, fullPath, result, processedPaths, incremental);
+        if (depth < 10) await scanDirectory(root, fullPath, result, processedPaths, incremental);
       } else if (entry.isFile()) {
-        const ext = entry.name.split('.').pop() || '';
-        const langMap: Record<string, string> = {
-          ts: 'typescript', tsx: 'typescript', js: 'javascript', jsx: 'javascript',
-          py: 'python', java: 'java', go: 'go', rs: 'rust',
-          vue: 'vue', sql: 'sql', yaml: 'yaml', yml: 'yaml',
-        };
-        const lang = langMap[ext];
+        const lang = LANG_MAP[entry.name.split('.').pop() || ''];
         if (!lang) continue;
+        const relPath = relative(process.cwd(), fullPath);
+        await indexSingleFile(fullPath, relPath, result, processedPaths, incremental);
+      }
+    }
+  } catch {
+    // 跳过无权限目录
+  }
+}
 
-        try {
-          const st = await stat(fullPath);
-          const relPath = relative(process.cwd(), fullPath);
+/**
+ * v8.3.3xx+: 收集 scope 下的源码文件绝对路径（code-index 与 code-graph 同源复用）
+ * 过滤规则与 scanDirectory 完全一致，保证两份资产基于同一文件集合。
+ */
+export async function collectScanFiles(scope?: string): Promise<string[]> {
+  const dirs = scope ? scope.split(',').map(s => s.trim()).filter(Boolean) : DEFAULT_SCOPE;
+  const files: string[] = [];
+  for (const dir of dirs) {
+    if (!(await pathExists(dir))) continue;
+    await collectFilesRecursive(dir, files, 0);
+  }
+  return files;
+}
 
-          // 增量模式：跳过未修改的文件
-          if (incremental && processedPaths) {
-            const existing = result.find(f => f.path === relPath);
-            if (existing && existing.lastModified >= st.mtimeMs) continue;
-            // 文件已修改，移除旧记录
-            if (existing) {
-              const idx = result.indexOf(existing);
-              result.splice(idx, 1);
-            }
-          }
-
-          const content = await readFile(fullPath, 'utf-8');
-          const { exports, apis, apiDetails, imports } = await extractCodeInfo(content, lang);
-          const lines = content.split(/\r?\n/).length;
-          const endpoint = await detectEndpoint(relPath);
-          const module = detectModule(relPath);
-
-          const fileEntry: CodeFile = {
-            path: relPath,
-            language: lang,
-            exports,
-            apis,
-            apiDetails,
-            imports,
-            lastModified: st.mtimeMs,
-            lines,
-            endpoint,
-            module,
-          };
-
-          // 增量模式替换旧记录
-          if (incremental && processedPaths) {
-            processedPaths.add(relPath);
-          }
-          result.push(fileEntry);
-        } catch {
-          // 跳过二进制/不可读文件
+async function collectFilesRecursive(dir: string, result: string[], depth: number): Promise<void> {
+  try {
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = join(dir, entry.name);
+      if (entry.name.startsWith('.') && entry.name !== '.env') continue;
+      if (['node_modules', 'dist', 'build', 'target', '__pycache__', 'outputs', '.speccore', 'templates', 'docs', 'tests', 'examples'].includes(entry.name)) continue;
+      if (entry.isDirectory()) {
+        if (depth < 10) await collectFilesRecursive(fullPath, result, depth + 1);
+      } else if (entry.isFile()) {
+        if (LANG_MAP[entry.name.split('.').pop() || '']) {
+          result.push(fullPath);
         }
       }
     }
   } catch {
     // 跳过无权限目录
+  }
+}
+
+/** 解析单个源码文件并写入索引（scanDirectory 与同源模式共用） */
+async function indexSingleFile(
+  fullPath: string,
+  relPath: string,
+  result: CodeFile[],
+  processedPaths?: Set<string>,
+  incremental?: boolean
+): Promise<void> {
+  try {
+    const st = await stat(fullPath);
+
+    // 增量模式：跳过未修改的文件
+    if (incremental && processedPaths) {
+      const existing = result.find(f => f.path === relPath);
+      if (existing && existing.lastModified >= st.mtimeMs) return;
+      // 文件已修改，移除旧记录
+      if (existing) {
+        const idx = result.indexOf(existing);
+        result.splice(idx, 1);
+      }
+    }
+
+    const lang = LANG_MAP[fullPath.split('.').pop() || ''];
+    if (!lang) return;
+
+    const content = await readFile(fullPath, 'utf-8');
+    const { exports, apis, apiDetails, imports } = await extractCodeInfo(content, lang);
+    const lines = content.split(/\r?\n/).length;
+    const endpoint = await detectEndpoint(relPath);
+    const module = detectModule(relPath);
+
+    const fileEntry: CodeFile = {
+      path: relPath,
+      language: lang,
+      exports,
+      apis,
+      apiDetails,
+      imports,
+      lastModified: st.mtimeMs,
+      lines,
+      endpoint,
+      module,
+    };
+
+    // 增量模式替换旧记录
+    if (incremental && processedPaths) {
+      processedPaths.add(relPath);
+    }
+    result.push(fileEntry);
+  } catch {
+    // 跳过二进制/不可读文件
   }
 }
 
@@ -812,7 +867,7 @@ export async function checkCodeIndexFreshness(
       indexAge: 0,
       sourceAge,
       staleFiles,
-      message: '代码索引不存在，请先运行: speccore code-index',
+      message: '代码索引不存在，将在本命令内自动兜底构建（CLI 导航 + 宿主 AI 按需深读）',
     };
   }
 
@@ -1001,6 +1056,40 @@ function extractTechnicalKeywords(content: string): string[] {
 }
 
 /**
+ * v8.3.3xx+: 消费前兜底——索引缺失/过期时自动重建，并输出无索引告警
+ *
+ * 供 analyze/execute 的 findRelevantCode 消费链路在读取索引前调用：
+ *   - 索引不存在 → warn 告警 + 全量构建
+ *   - 索引过期 → info 提示 + 增量重建
+ *   - 索引新鲜 → 直接复用
+ *
+ * @returns 本次是否执行了重建
+ */
+export async function ensureCodeIndexFresh(scope?: string): Promise<boolean> {
+  try {
+    const index = await loadIndex();
+    if (!index) {
+      logger.warn('   ⚠️ 代码索引不存在，首次运行将自动构建（后续 analyze/execute 直接复用）');
+      logger.info('   🔍 正在构建代码索引...');
+      await buildCodeIndex(scope, false);
+      logger.info('   ✅ 代码索引已建立');
+      return true;
+    }
+    if (await isIndexStale(scope)) {
+      logger.info('   🔍 代码索引已过期，自动增量重建...');
+      await buildCodeIndex(scope, true);
+      logger.info('   ✅ 代码索引已更新');
+      return true;
+    }
+    logger.info('   📚 使用缓存的代码索引（源码未变更）');
+    return false;
+  } catch (e: any) {
+    logger.warn(`   ⚠️ 代码索引检查失败（不阻断分析）: ${e?.message || e}`);
+    return false;
+  }
+}
+
+/**
  * 检查索引是否过期
  * v8.3.125+: 基于实际文件 mtime 判断 + 24h 强制刷新（捕获新增文件）
  */
@@ -1086,37 +1175,60 @@ export async function resolveIterationScope(iteration?: string): Promise<string 
     const iterDir = await getIterationDir(iteration);
     if (!(await pathExists(iterDir))) return undefined;
 
-    // 读取 CONSTITUTION.md 获取源码路径
-    const constitutionPath = join(process.cwd(), '.speccore', 'CONSTITUTION.md');
-    let sourcePaths: string[] = ['src'];
-    if (await pathExists(constitutionPath)) {
-      const content = await readFile(constitutionPath, 'utf-8');
-      const match = content.match(/源码路径[\s\S]*?\n\s*-\s*`?([^`\n]+)`?/g);
-      if (match) {
-        sourcePaths = match.map(m => m.replace(/.*-\s*`?/, '').replace(/`?$/, '').trim()).filter(Boolean);
+    // 读取源码路径：优先 PROJECT.yaml 结构化字段，回退 CONSTITUTION.md 文本解析
+    let sourcePaths: string[] = [];
+    const projectYamlPath = join(process.cwd(), '.speccore', 'PROJECT.yaml');
+    if (await pathExists(projectYamlPath)) {
+      const yamlContent = await readFile(projectYamlPath, 'utf-8');
+      const codePaths = yamlContent.match(/code_path:\s*(\S+)/g);
+      if (codePaths) {
+        sourcePaths = codePaths.map(m => m.replace(/^code_path:\s*/, '').trim()).filter(Boolean);
       }
     }
-    if (sourcePaths.length <= 1) return undefined;
-
-    // 1. 尝试从 PLATFORMS.md 读取端列表
-    let platformNames: string[] = [];
-    const platformsPath = join(iterDir, '020-specs', 'PLATFORMS.md');
-    if (await pathExists(platformsPath)) {
-      const pContent = await readFile(platformsPath, 'utf-8');
-      const pMatch = pContent.match(/-\s*(\w+)/g);
-      if (pMatch) platformNames = pMatch.map(m => m.replace(/^-\s*/, '').trim().toLowerCase());
+    if (sourcePaths.length === 0) {
+      const constitutionPath = join(process.cwd(), '.speccore', 'CONSTITUTION.md');
+      if (await pathExists(constitutionPath)) {
+        const content = await readFile(constitutionPath, 'utf-8');
+        // 兼容两种格式：`- path` 列表 与 `| ... | path | ... |` 表格
+        const match = content.match(/源码路径[\s\S]*?\n\s*-\s*`?([^`\n]+)`?/g);
+        if (match) {
+          sourcePaths = match.map(m => m.replace(/.*-\s*`?/, '').replace(/`?$/, '').trim()).filter(Boolean);
+        } else {
+          // 表格/自由格式：提取含 / 的路径 token（去重）
+          const pathTokens = content.match(/(?:\.\.\/|\.\/)[\w.-]+(?:\/[\w.-]+)+/g) || [];
+          sourcePaths = [...new Set(pathTokens.map(p => p.replace(/[|`].*$/, '').trim()).filter(Boolean))];
+        }
+      }
     }
-    // 2. fallback：从 020-specs/ 子目录推断端名
+    if (sourcePaths.length === 0) return undefined;
+
+    // 1. 优先从 PROJECT.yaml 读取端名（与 code_path 同源，最可靠）
+    let platformNames: string[] = [];
+    if (await pathExists(projectYamlPath)) {
+      const yamlContent = await readFile(projectYamlPath, 'utf-8');
+      const names = yamlContent.match(/^  - name:\s*(\S+)/gm);
+      if (names) platformNames = names.map(n => n.replace(/^  - name:\s*/, '').trim().toLowerCase());
+    }
+    // 2. 尝试从 PLATFORMS.md 读取端列表
+    if (platformNames.length === 0) {
+      const platformsPath = join(iterDir, '020-specs', 'PLATFORMS.md');
+      if (await pathExists(platformsPath)) {
+        const pContent = await readFile(platformsPath, 'utf-8');
+        const pMatch = pContent.match(/-\s*(\w+)/g);
+        if (pMatch) platformNames = pMatch.map(m => m.replace(/^-\s*/, '').trim().toLowerCase());
+      }
+    }
+    // 3. fallback：从 020-specs/ 子目录推断端名（排除功能单元目录：带序号后缀如 xxx-01-slug）
     if (platformNames.length === 0) {
       const specsDir = join(iterDir, '020-specs');
       if (await pathExists(specsDir)) {
         const entries = await readdir(specsDir, { withFileTypes: true });
         platformNames = entries
-          .filter(e => e.isDirectory() && e.name !== 'overview' && e.name !== 'requirements')
+          .filter(e => e.isDirectory() && e.name !== 'overview' && e.name !== 'requirements' && !/-\d+-/.test(e.name))
           .map(e => e.name.toLowerCase());
       }
     }
-    // 3. 筛选 sourcePaths
+    // 4. 按端名筛选 sourcePaths；端名无法匹配（如推断失败）时回退全部解析到的路径
     if (platformNames.length > 0) {
       const matched = sourcePaths.filter(sp => {
         const lower = sp.toLowerCase();
@@ -1130,6 +1242,8 @@ export async function resolveIterationScope(iteration?: string): Promise<string 
         return combined.join(',');
       }
     }
+    log?.info?.(`   📂 代码索引 scope: ${sourcePaths.join(', ')}`);
+    return sourcePaths.join(',');
   } catch {
     // 筛选失败不阻断
   }

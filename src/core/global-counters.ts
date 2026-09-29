@@ -5,6 +5,7 @@
  */
 import { readFile, writeFile, pathExists, readdir, ensureDir } from 'fs-extra';
 import { join, dirname } from 'path';
+import { pinyin } from 'pinyin-pro';
 
 interface Counters {
   iterations: number;
@@ -91,19 +92,27 @@ async function scanMaxIds(): Promise<Counters> {
   return { iterations, tasks, plans };
 }
 
-/** 中英文名称转 slug（保留英文/数字，纯中文时 hash fallback） */
+/** 中英文名称转 slug（保留英文/数字，纯中文时拼音兜底） */
 function toSlug(name: string): string {
   // 去掉 Iteration- 前缀
   const clean = name.replace(/^Iteration-/, '');
   // 优先提取连续的英文/数字片段（如 "User管理" → "User"）
   const latinMatches = clean.match(/[a-zA-Z0-9]+/g);
   if (latinMatches && latinMatches.length > 0) {
-    return latinMatches.join('-').toLowerCase().slice(0, 30);
+    return latinMatches.join('-').toLowerCase().slice(0, 40);
   }
-  // 纯中文且无英文 → hash 回退
+  // 纯中文且无英文 → 拼音兜底（v8.3.286+：替代无语义 hash 乱码「iter-cl0w」，
+  // 同一输入拼音稳定，幂等性不变）
+  // v8.3.289+: 去掉 iter- 前缀——toSlug 被 nextTaskId/nextPlanId 复用，
+  // 「iter-」混进任务目录名产生 Task-001-iter-zhifuxiugai 噪音；
+  // 迭代 ID 本身已带 Iteration- 前缀，无需二次标记
   if (/[\u4e00-\u9fff]/.test(clean)) {
-    const hash = Math.abs(clean.split('').reduce((a, c) => a + c.charCodeAt(0), 0)).toString(36).slice(0, 4);
-    return 'iter-' + hash;
+    return (pinyin(clean, { toneType: 'none', type: 'array' }) as string[])
+      .map((s) => s.replace(/[^a-z0-9]/gi, ''))
+      .filter(Boolean)
+      .join('-')
+      .toLowerCase()
+      .slice(0, 24);
   }
   return 'project';
 }
@@ -123,7 +132,10 @@ export async function nextTaskId(name?: string, topic?: string): Promise<{ id: s
   await save(c);
   const padded = String(c.tasks).padStart(3, '0');
   const keyword = topic || name;
-  const suffix = keyword ? `-${toSlug(keyword).slice(0, 20)}` : '';
+  // v8.3.289+: 上限 20→40，与 toSlug 拉丁片段上限对齐——
+  // LLM 英译 slug 2~5 词可达 30+ 字符（booking-order-status-not-synced），
+  // 20 字符截断会吃掉词尾造成语义残片
+  const suffix = keyword ? `-${toSlug(keyword).slice(0, 40)}` : '';
   return { id: `Task-${padded}${suffix}`, num: c.tasks };
 }
 
@@ -133,7 +145,7 @@ export async function nextPlanId(name?: string, topic?: string): Promise<{ id: s
   await save(c);
   const padded = String(c.plans).padStart(3, '0');
   const keyword = topic || name;
-  const suffix = keyword ? `-${toSlug(keyword).slice(0, 20)}` : '';
+  const suffix = keyword ? `-${toSlug(keyword).slice(0, 40)}` : '';
   return { id: `Plan-${padded}${suffix}`, num: c.plans };
 }
 

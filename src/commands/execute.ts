@@ -1,7 +1,6 @@
 import { pathExists, readFile, writeFile, ensureDir, readdir, remove } from 'fs-extra';
 import { join, dirname, basename, isAbsolute, relative } from 'path';
 import { createInterface } from 'readline';
-import { readdirSync } from 'fs';
 import { execSync } from 'child_process';
 import { logger } from '../utils/logger';
 import { getDefaultIteration, updateContext, recordHistory, startHotfix, getIterationDir } from '../core/context';
@@ -19,7 +18,7 @@ import { cleanupByType } from './cleanup';
 import { extractQuestions, showQuestionChecklist } from '../core/question-checklist';
 import { resolvePlatform } from '../core/platform-registry';
 import { findTaskDir } from '../core/task-paths';
-import { savePlan, markPlanExecuted, getPlan, ExecutionPlan } from '../core/plan-store';
+import { savePlan, markPlanExecuted, getPlan } from '../core/plan-store';
 import { generatePlan, formatPlanMarkdown } from './plan';
 import { generatePlanHtml } from '../core/plan-html';
 import { nextPlanId } from '../core/global-counters';
@@ -39,14 +38,12 @@ import {
 } from '../core/execution-state';
 import { createTaskBranch, detectDefaultBranch, findBranchByTaskId, findBranchByFeature, isProtectedBranch, loadGitConfig } from '../core/git-integration';
 import { buildPrompt, formatPrompt, parseAiResponse, outputNeedsInfo } from '../core/prompt-builder';
-import { runVerification, writeVerifyReport, outputFixTag, runQualityGate, syncTestDocFromResults } from '../core/verify-engine';
-import { runArbitration, type ArbitrationEngineResult, getArbitrationConfig } from '../core/arbitration/arbitration-engine';
-import { loadTaskQualityGate, mergeQualityGate, shouldRunUIVerify, type ResolvedQualityGate } from '../core/quality-gate';
-import { runUIVerification, logUIReport } from './verify';
+import { writeVerifyReport, outputFixTag, runQualityGate, syncTestDocFromResults } from '../core/verify-engine';
+import { runArbitration, getArbitrationConfig } from '../core/arbitration/arbitration-engine';
 import { writeArbitrationReport } from '../core/arbitration/verdict-generator';
 import { loadConfig, loadProjectConfig } from '../core/unified-config';
 import { PipelineEngine } from '../core/pipeline-engine';
-import { checkCodeIndexFreshness, findRelevantCode, readRelevantSource } from '../core/code-scanner';
+import { findRelevantCode, readRelevantSource } from '../core/code-scanner';
 // v8.3.169+: Qoder SDK 子 Agent 调度
 import { dispatchSubagent } from '../core/agent-adapter';
 import type { AgentContext } from '../core/agent-adapter';
@@ -68,6 +65,7 @@ export interface ExecuteOptions {
   platform?: string;
   backend?: boolean;
   frontend?: boolean;
+  module?: string;     // v8.3.288+: 按所属功能模块筛选（匹配 .meta/feature）
   interactive?: boolean;
   dryRun?: boolean;
   resume?: boolean;
@@ -295,6 +293,12 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
     if (options.priority) tasks = tasks.filter(t => t.priority === options.priority);
     if (options.status) tasks = tasks.filter(t => t.status === options.status);
     if (options.assignee) tasks = tasks.filter(t => t.assignee === options.assignee);
+    // v8.3.288+: 按所属功能模块筛选（模糊包含，如「支付」命中「支付模块」）
+    if (options.module) {
+      const before = tasks.length;
+      tasks = tasks.filter(t => (t.feature || '').includes(options.module!));
+      logger.info(`🎯 模块筛选「${options.module}」: ${before} → ${tasks.length} 个任务`);
+    }
     // v8.3.145+: 使用项目实际端名过滤，不再硬编码 backend/frontend
     if (options.backend) tasks = await filterByPlatformType(tasks, iteration, 'backend');
     if (options.frontend) tasks = await filterByPlatformType(tasks, iteration, 'frontend');
@@ -370,6 +374,7 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
           platform: options.platform,
           backend: options.backend,
           frontend: options.frontend,
+          module: options.module,
         },
       });
 
@@ -2291,7 +2296,14 @@ async function listPendingTasks(iteration: string, options: ExecuteOptions): Pro
   }
 
   // 过滤已完成的任务
-  const pending = tasks.filter(t => t.status !== 'completed' && t.status !== 'archived');
+  let pending = tasks.filter(t => t.status !== 'completed' && t.status !== 'archived');
+
+  // v8.3.288+: 按所属功能模块筛选（--module，匹配 .meta/feature）
+  if (options.module) {
+    const before = pending.length;
+    pending = pending.filter(t => (t.feature || '').includes(options.module!));
+    logger.info(`🎯 模块筛选「${options.module}」: ${before} → ${pending.length} 个任务`);
+  }
   if (pending.length === 0) {
     logger.info('✅ 所有任务已完成');
     return;

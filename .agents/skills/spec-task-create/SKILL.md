@@ -20,3 +20,18 @@ disable-model-invocation: false
 - `[SPECCORE_CONTINUE: <path>]` → 优先在同一会话继续下一批（按标记中的命令执行）；上下文紧张时开新对话，先读取 <path> 恢复上下文
 - `[SPECCORE_INTENT]` / `[SPECCORE_RESULT]` → 原样转达用户
 - 其他 `[SPECCORE_*]` 标记 → 参照 speccore-router 的 SKILL.md 处理
+
+## 英译接力剧本（宿主 AI 接手翻译，v8.3.289+）
+
+`task new --batch-file <xlsx>` 批量导入 bug 时，CLI 会把全部「Bug 标题」批量英译为任务目录 slug（Task-001-booking-order-status-not-synced）。若当前环境无直连 LLM（无 providers 池/SPECCORE_LLM_KEY/OPENAI_API_KEY）且项目处于宿主模式（ai.provider=host 或 auto_host_ai: true），CLI 会输出 `[SPECCORE_PROMPT]` + 编号标题清单（1~N）并以退出码 10 结束。
+
+宿主 AI 收到后：
+1. 将清单中每个中文标题翻译为英文 kebab-case 目录名（小写字母/数字/连字符，2~5 词，禁用拼音）。
+2. 构造 JSON：键=清单序号（1~N，与编号一一对应），值=英文 slug。
+3. 以 `--translate-response '<JSON>'` 续跑同一条 task new 命令（其他参数保持不变）。
+
+```bash
+speccore task new --batch-file TEST/bugs-20260928.xlsx --type bugfix --translate-response '{"1":"booking-order-status-not-synced","2":"check-in-qr-scan-failed"}'
+```
+
+注意：翻译必须逐条对应序号；漏翻的条目回退拼音。若不希望英译，加 `--translate-en off`。

@@ -36,6 +36,7 @@ export const SYNONYM_GROUPS: string[][] = [
   ['register', 'signup', 'sign-up', '注册', ' enrollment'],
   ['user', 'users', 'account', 'accounts', 'member', 'members', '用户', '账号', '账户', '会员'],
   ['order', 'orders', 'booking', 'bookings', '订单', '预约', '预定', '预订'],
+  ['meeting', 'conference', 'meetings', '会议室', '会议', '房间', 'room', 'rooms'],
   ['payment', 'pay', 'payments', 'checkout', '支付', '付款', '收银', '结算'],
   ['product', 'products', 'goods', 'sku', 'spu', '商品', '产品', '货品'],
   ['cart', 'basket', 'shopping', '购物车', '购物篮'],
@@ -71,6 +72,18 @@ export function expandSynonyms(keywords: string[]): Set<string> {
     const lower = kw.toLowerCase();
     for (const group of SYNONYM_GROUPS) {
       if (group.some(g => g.toLowerCase() === lower)) {
+        for (const g of group) result.add(g.toLowerCase());
+      }
+    }
+  }
+  // 反向子串匹配：中文无分词器时贪婪切分会把「会议室预订系统」切成「会议室预」等碎片词，
+  // 组内词是关键词的子串（如「预订」⊂「会议室预订系统」）同样命中，保证中英映射不丢
+  for (const kw of keywords) {
+    if (kw.length < 2) continue;
+    const lower = kw.toLowerCase();
+    for (const group of SYNONYM_GROUPS) {
+      const hit = group.find(g => g.length >= 2 && lower.includes(g.toLowerCase()));
+      if (hit) {
         for (const g of group) result.add(g.toLowerCase());
       }
     }

@@ -6581,6 +6581,116 @@ v8.3.278 的收敛依赖 `_matrix.md` 声明非空，但 unitize 切分默认写
 
 ### 实测
 
-- 单元声明空 + SOURCE.md 无显式字段 → 关键词交集推断 `app,h5,miniapp`，骨架只生成三端（12 份/单元）；
+- 单元声明空 + SOURCE.md 无显式字段 → 关键词交集推断 `app,h5,miniapp`，骨架只生 成三端（12 份/单元）；
 - 单元声明空 + SOURCE.md 含「涉及端: admin」→ 显式声明推断 `admin`，骨架只生成单端（4 份/单元）；
 - 重跑 analyze 幂等：推断注释不叠加、28 份骨架保留、不再重复推断。
+
+---
+
+## 附录：v8.3.290+ run 智能续跑与快捷语法糖设计
+
+### 问题背景
+
+高频操作（续跑流水线、切分文档、跑冒烟）长期依赖 `speccore ask` 意图引擎：用户（或宿主 AI）要先说人话 → 意图识别 → 映射命令 → 确认 → 执行，链路冗长且不可直接复述命令。本附录回答两个问题：①「无参 run 能不能自己知道下一步做什么」；②「常用操作能不能不经过 ask、直接一行命令完成」。
+
+### 一、智能续跑（无参 run 快捷操作）
+
+#### 1. 里程碑检测 `detectPipelineCheckpoint(iterDir, iteration)`
+
+按**产物谓词**判定 9 个里程碑完成态，全部复用既有函数（不新增状态源）：
+
+| 里程碑 | 谓词（产物佐证） | 半途判定 |
+|:---|:---|:---|
+| 需求导入 | `hasRequirementDocs`：REQUIREMENT.md 实质内容 >100 字符 或 converted//sources/ 含文档 | — |
+| 切分功能单元 | `hasFeatureDirs`：features/ 下有单元目录 | — |
+| 需求分析 | 020-specs 存在且无 SKELETON 残留（`detectEmptySkeletonDocs`） | 有骨架残留（续跑继续逐文档填充） |
+| 质量审计 | `020-specs/QUALITY_AUDIT.md` 存在 | — |
+| 任务拆分 | `scanTasks` 返回任务数 >0 | — |
+| 执行计划 | `000-overview/plans/**/PLAN.md` 存在（递归） | — |
+| 执行开发 | 全部任务 `.meta/status === 'completed'` | 部分完成（execute --resume 续跑） |
+| 验证 | `000-overview/VERIFY_REPORT.md` 存在 | — |
+| 部署验证 | `000-overview/PIPELINE_REPORT.md` 存在 | — |
+
+断点 = 第一个未完成（或半途）里程碑；`fresh` = 无单元目录且无 020-specs 且无任务。
+
+#### 2. 四分支决策（smartResume，即无参且无 --preset/--from/--to/--auto-steps/--demand）
+
+| 分支 | 判定 | 行为 | 退出码 |
+|:---|:---|:---|:---|
+| 无需求 | `!hasReq` | 面板提示「先导入需求」+ 入口命令，软停 | 10 |
+| 全新项目 | `fresh` | 自动 `split-units → pipeline` 全流程 | 0/10 |
+| 有断点 | 断点存在 | `[SPECCORE_RESUME]` 面板：✅ 已完成里程碑 + ⬜ 断点（半途标 ⚠）+ 选项（从断点续/重新切分/自定义起止），软停 | 10 |
+| 全部完成 | 9 项全 ✅ | 🎉 指路收尾（deliver/docs），正常退出 | 0 |
+
+**断点 = split-units 时的面板收敛**：选项「从断点续」与「重新切分」同命令，此时省略前者只展示「重新切分 / 自定义起止」。
+
+#### 3. 宿主 AI 接力协议
+
+- 软停统一 `process.exitCode = 10`，与既有 `[SPECCORE_PROMPT]` 接力协议同一信号。
+- `[SPECCORE_RESUME]` 面板输出后，宿主 AI **必须停下**用 AskUserQuestion 询问用户选哪一项，**未确认不得自行续跑**（防止智能续跑变成擅自续跑）。
+
+### 二、快捷语法糖体系（不依赖 ask 的直呼命令）
+
+#### 1. 单一事实源 `src/core/stage-aliases.ts`
+
+```typescript
+PIPELINE_STAGE_KEYS  // 13 个规范阶段名（req-doc → spec2doc）
+STAGE_ALIASES        // 10 个别名映射（split→split-units, smoke→verify, deploy→pipeline,
+                     //   code→execute, tasks→taskify, ship→pr, archive→done, docs→spec2doc,
+                     //   import→doc2spec, req→req-doc）
+resolveStageToken()  // token → 规范阶段名（别名表只做映射，不做逻辑判定）
+parseRunRange()      // 范围文法解析（<from> to <to> / <from>..<to>，不静默降级）
+formatStageAliases() // 报错提示用别名表
+validateStageAliases() // 启动自检（别名撞规范名/指向未知阶段/重复映射）
+```
+
+#### 2. run 位置参数文法（五形态，按序消歧）
+
+| 输入形态 | 解析结果 |
+|:---|:---|
+| `run <preset名>` | preset 直呼（单 token 命中内置/自定义流水线名，**优先于别名**——docs 既是 preset 又是别名） |
+| `run <阶段/别名>` | 单阶段快捷：from=<阶段>, to=pipeline（如 `run smoke`、`run split`） |
+| `run <from> to <to>` | 范围（自然语言式） |
+| `run <from>..<to>` | 范围（紧凑式） |
+| `run <其他多词>` | 一句话需求（req-doc 消费） |
+| `run`（无参） | 智能续跑 |
+| `run --demand <text>` | 逃生舱：显式声明是需求（`demandExplicit` 标志跳过文法解析，防需求文本恰为保留字） |
+
+**消歧规则（不静默降级）**：范围解析首 token 命中阶段/别名、末 token 不命中 → **报错并列出全部可用阶段**，绝不吞为一句话需求（用户明显想写范围但写错了，静默降级会把「run split to smok」变成一条需求）。
+
+#### 3. 其他命令的位置化糖
+
+| 命令 | 形态 | 等价 |
+|:---|:---|:---|
+| `analyze -g` / `analyze --global` | 单选项直呼 | `speccore global analyze` |
+| `doc2spec [file]` | 文件位置参数 | `doc2spec -f <file>` |
+| `unitize [file]` | 文件位置参数 | `unitize --file <file>` |
+| `verify [stage]` | 测试阶段位置参数（dev/pr/deploy/release，非法值报错不静默） | `verify --stage <stage>` |
+
+#### 4. 设计原则
+
+1. **单一事实源**：别名只存在于 stage-aliases.ts，消费方（run/cli/help）统一经 resolveStageToken/parseRunRange，杜绝别名在文档与代码间漂移。
+2. **渐进解析**：preset 直呼 → 单阶段快捷 → 范围 → 需求，前序形态命中即停止，不回溯。
+3. **不静默降级**：任何「明显想写 X 但写错」的场景报错而非吞掉，错误信息自带修复提示（别名表/合法值清单）。
+4. **逃生舱**：`--demand` 显式声明需求语义，保留字冲突时用户永远有退路。
+5. **接力不擅自**：智能续跑断点处软停 + exit 10，续跑决策权在用户（经宿主 AI 询问）。
+6. **启动自检**：cli 启动时 `validateStageAliases()` 校验别名表健康度，别名配置错误在开发期即暴露。
+
+### 三、实现过程中的修复记录
+
+| 问题 | 根因 | 修复 |
+|:---|:---|:---|
+| hasRequirementDocs 编译错误 | 谓词函数定义在 autoPipeline 闭包内，detectPipelineCheckpoint 无法引用 | 提升为模块级函数（参数化 iterDir），PRECONDITIONS 改闭包引用 |
+| 断点=split-units 面板选项重复 | 「从断点续」与「重新切分」命令相同 | 该断点下省略前者 |
+| 有需求的全新项目误软停 | fresh 判定误含 `!hasReq` | fresh 只看产物（单元/规格/任务），无需求由调用方先走需求入口 |
+| --demand 逃生舱失效 | cli.ts 的 demand 与位置参数同源，run.ts 无法区分 | RunOptions 加 `demandExplicit` 标志，cli 层传值 |
+| `run smoke` 被当一句话需求 | 文法缺单 token 阶段形态 | 新增单阶段快捷分支（preset 之后、范围之前判定） |
+
+### 四、实测验证矩阵
+
+- 断点面板：会议项目 Iteration-014（features 缺失 → 断点 split-units 如实标注）+ exit 10 ✅
+- 无需求面板：/tmp 空迭代 → 入口提示软停 ✅
+- 全新有需求：/tmp 项目 → 自动 split-units→pipeline ✅
+- 全完成：/tmp 全产物迭代 → 9 项全 ✅ + 🎉 指路（deliver/docs）+ exit 0 ✅
+- 9 个语法形态逐一实测（preset 直呼 / 范围 to / 范围 .. / 单阶段快捷 / 错误不降级 / --demand 逃生舱 / unitize 位置参数 / verify 非法与合法值 / analyze -g 路由）✅
+- 278/278 单元测试连续三次全绿（一次偶发失败未复现）✅

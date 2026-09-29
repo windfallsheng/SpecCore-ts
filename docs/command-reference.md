@@ -81,9 +81,32 @@ speccore dashboard [--scope global|iteration] [--export html] [--health] [--life
 
 ### 🔄 run — 命名流水线 🔒 AI 命令
 ```bash
-speccore run [--preset <name>] [--from <phase>] [--to <phase>]
+speccore run [<preset名>] [<阶段/别名>] [<from> to <to> | <from>..<to>] [<一句话需求>]
+speccore run [--preset <name>] [--from <phase>] [--to <phase>] [--demand <text>]
 ```
 别名: `r`
+
+**位置参数文法（v8.3.290+ 快捷语法糖，按序消歧）：**
+
+| 输入形态 | 行为 | 示例 |
+|:---|:---|:---|
+| 无参 | 智能续跑：检测 9 个里程碑断点，从第一个未完成阶段继续（全完成时指路收尾） | `speccore run` |
+| `<preset名>` | preset 直呼（优先于别名） | `speccore run develop` |
+| `<阶段/别名>` | 单阶段快捷：从该阶段续跑至部署验证 | `speccore run smoke` |
+| `<from> to <to>` | 阶段范围（自然语言式，首 token 不命中阶段则视为需求） | `speccore run split to execute` |
+| `<from>..<to>` | 阶段范围（紧凑式） | `speccore run split..execute` |
+| 其他多词 | 一句话需求（req-doc 阶段消费） | `speccore run "做用户积分功能"` |
+| `--demand <text>` | 逃生舱：显式声明是需求（需求文本恰为保留字时） | `speccore run --demand deploy` |
+
+> 阶段别名：`split→split-units`、`smoke→verify`、`deploy→pipeline`、`code→execute`、`tasks→taskify`、`ship→pr`、`archive→done`、`docs→spec2doc`、`import→doc2spec`、`req→req-doc`。
+> 范围解析首 token 命中阶段但末 token 不命中 → 报错列出全部可用阶段，不静默降级为一句话需求。
+
+| 选项 | 说明 |
+| :--- | :--- |
+| `--preset <name>` | 预设流水线：full/import/spec/develop/deliver/deploy/docs/analyze（或自定义） |
+| `--from <phase>` | 从指定阶段开始（规范阶段名或别名） |
+| `--to <phase>` | 到指定阶段结束 |
+| `--demand <text>` | 显式指定一句话需求（跳过位置参数文法解析） |
 
 ### 🏗️ init — 项目初始化
 ```bash

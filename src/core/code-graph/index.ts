@@ -30,6 +30,8 @@ export interface BuildGraphOptions {
   scope?: string;
   projectRoot?: string;
   projectName?: string;
+  /** v8.3.3xx+ 同源模式：复用 code-scanner 已收集的绝对路径文件列表，跳过 glob 扫描 */
+  preScannedFiles?: string[];
 }
 
 /**
@@ -42,11 +44,17 @@ export async function buildCodeKnowledgeGraph(options: BuildGraphOptions = {}): 
 
   const scopePath = join(projectRoot, scope);
 
-  // 1. 扫描文件
-  logger.info(`🔍 扫描代码文件: ${scope}`);
-  const pattern = join(scopePath, '**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs}');
-  const files = await glob(pattern, { absolute: true });
-  logger.info(`   发现 ${files.length} 个文件`);
+  // 1. 扫描文件（同源模式：复用 code-scanner 已收集的文件列表）
+  let files: string[];
+  if (options.preScannedFiles && options.preScannedFiles.length > 0) {
+    files = options.preScannedFiles;
+    logger.info(`🔍 复用同源扫描文件: ${files.length} 个`);
+  } else {
+    logger.info(`🔍 扫描代码文件: ${scope}`);
+    const pattern = join(scopePath, '**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs}');
+    files = await glob(pattern, { absolute: true });
+    logger.info(`   发现 ${files.length} 个文件`);
+  }
 
   // 2. AST 解析
   logger.info(`🌳 AST 解析中...`);

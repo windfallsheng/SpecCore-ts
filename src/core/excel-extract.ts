@@ -31,6 +31,18 @@ export interface ExcelBugRow {
   severity?: string;
   /** 模块列（若表头识别到，可喂给 .meta/feature 关联功能模块） */
   module?: string;
+  /** 标题列（若表头识别到，作为任务名；v8.3.288+ 消费，此前识别后未用） */
+  title?: string;
+  /** 描述列（若表头识别到，作为任务描述主体；v8.3.288+） */
+  desc?: string;
+  /** 涉及端列（若表头识别到，「所有端」/「api,web」） */
+  platforms?: string;
+  /** Bug 编号列（若表头识别到；留空则导入时自动生成 YYYYMMDD-XXXX） */
+  bugId?: string;
+  /** 提出人列（若表头识别到，区别于负责人=处理人） */
+  reporter?: string;
+  /** 负责人列（若表头识别到，作为任务处理人写入 .meta/owner） */
+  owner?: string;
 }
 
 /** 表头列名 → 字段 的模糊匹配规则（先精确后宽松） */
@@ -38,8 +50,18 @@ const COLUMN_HINTS: Record<string, RegExp> = {
   priority: /优先级|优先|priority|紧急程度|等级|level|p\d/i,
   severity: /严重度|严重程度|severity|s\d/i,
   module: /所属模块|功能模块|模块|子系统|feature|module/i,
-  title: /标题|名称|问题|摘要|主题|缺陷名|title|name|bug/i,
+  // v8.3.288+: desc 先于 title 检测——「Bug 描述」列含「Bug」，若 title 先测 会被
+  // /bug/i 抢走误当标题列；描述类词与标题列互斥，先测 desc 不会误伤「Bug 标 题」
   desc: /描述|说明|详情|现象|复现|description|detail|desc/i,
+  // v8.3.288+: bugId 先于 title 检测——「Bug 编号」含「Bug」，防被 title 的 /bug/i 抢
+  bugId: /缺陷编号|缺陷.?id|bug.?编号|bug.?id|issue.?id|^编号$|^id$/i,
+  title: /标题|名称|问题|摘要|主题|缺陷名|title|name|bug/i,
+  // v8.3.288+: 涉及端列（「所有端」/「api,web」），决定该任务的端子任务集
+  platforms: /涉及端|影响端|端范围|所有端|所属端|平台|platforms?|platform/i,
+  // v8.3.288+: 提出人列（区别于「负责人」=处理人；整词匹配防误伤）
+  reporter: /提出人|报告人|提交人|上报人|发现人|reporter|creator/i,
+  // v8.3.288+: 负责人列（处理人，写入 .meta/owner；排在 reporter 后防「提出人」被抢）
+  owner: /负责人|处理人|指派给|分配给|owner|assignee/i,
 };
 
 /** 提取单元格文本（字符串/数字/富文本/公式） */
@@ -81,7 +103,11 @@ export async function extractExcelBugs(filePath: string): Promise<ExcelBugRow[] 
       const text = cellText(cell.value).trim().toLowerCase();
       if (!text) return;
       for (const [field, re] of Object.entries(COLUMN_HINTS)) {
-        if (colHints[field] === undefined && re.test(text)) {
+        if (colHints[field] !== undefined) continue;
+        // v8.3.288+: 列独占——该列已被其他字段占用则跳过，
+        // 防「Bug 编号/Bug 描述」含「Bug」被 title 的 /bug/i 同时抢走
+        if (Object.values(colHints).includes(colNumber)) continue;
+        if (re.test(text)) {
           colHints[field] = colNumber;
         }
       }
@@ -125,6 +151,12 @@ export async function extractExcelBugs(filePath: string): Promise<ExcelBugRow[] 
         priority: get('priority'),
         severity: get('severity'),
         module: get('module'),
+        title: get('title'),
+        desc: get('desc'),
+        platforms: get('platforms'),
+        bugId: get('bugId'),
+        reporter: get('reporter'),
+        owner: get('owner'),
       });
     });
 
@@ -135,19 +167,34 @@ export async function extractExcelBugs(filePath: string): Promise<ExcelBugRow[] 
 }
 
 /**
- * 纯文本回退：用 xlsx（SheetJS）读 Excel，只拿单元格文本（无图片）
- * 供 exceljs 不可用时的降级路径
+ * 纯文本回退：用 exceljs 读 Excel，只拿单元格文本（无图片）
+ * 供结构化解析失败时的降级路径
+ * （v8.3.288 前用 xlsx 库，但 xlsx 从未进入 package.json，回退链实际是断的——
+ *  exceljs 缺失时这里也必然失败；统一改为 exceljs）
  */
 export async function extractExcelTextOnly(filePath: string): Promise<string[] | null> {
+  let ExcelJS: any;
   try {
-    const XLSX = require('xlsx');
-    const wb = XLSX.readFile(filePath);
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const data: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
-    return data
-      .slice(1)
-      .filter((row: any[]) => row.some((c: any) => c))
-      .map((row: any[]) => row.filter((c: any) => c).join(' — '));
+    ExcelJS = require('exceljs');
+  } catch {
+    return null;
+  }
+  try {
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(filePath);
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet) return null;
+    const rows: string[] = [];
+    worksheet.eachRow({ includeEmpty: false }, (row: any, rowNumber: number) => {
+      if (rowNumber <= 1) return; // 跳过表头
+      const texts: string[] = [];
+      row.eachCell({ includeEmpty: false }, (cell: any) => {
+        const t = cellText(cell.value).trim();
+        if (t) texts.push(t);
+      });
+      if (texts.length > 0) rows.push(texts.join(' — '));
+    });
+    return rows;
   } catch {
     return null;
   }

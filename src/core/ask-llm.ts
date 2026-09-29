@@ -279,3 +279,45 @@ function parseLlmResponse(text: string): LlmResponse | null {
   }
   return null;
 }
+
+/**
+ * 解析批量英译响应（unitize 单元标题 / task new 任务名共用）：
+ * 优先 JSON 对象，失败逐行正则兜底（支持序号键与中文标题键、中文冒号）。
+ * v8.3.273: 双键兼容——数字键按序号映射回标题，中文标题键直接用（防重复标题冲突时序号优先）
+ * v8.3.289: 从 doc2spec.ts 提升为共享工具，task new 批量导入链路复用
+ */
+export function parseTranslationResponse(response: string, titles: string[]): Array<[string, string]> {
+  const pairs: Array<[string, string]> = [];
+  try {
+    const start = response.indexOf('{');
+    const end = response.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      const obj = JSON.parse(response.slice(start, end + 1));
+      for (const [k, v] of Object.entries(obj)) {
+        if (typeof v !== 'string') continue;
+        if (/^\d+$/.test(k)) {
+          const idx = parseInt(k, 10) - 1;
+          if (idx >= 0 && idx < titles.length) {
+            pairs.push([titles[idx], v]);
+          }
+        } else if (titles.includes(k)) {
+          pairs.push([k, v]);
+        }
+      }
+      if (pairs.length > 0) {
+        return pairs;
+      }
+    }
+  } catch { /* JSON 解析失败走逐行正则 */ }
+  const lines = response.split('\n');
+  for (const line of lines) {
+    const m = line.match(/^\s*"?(\d+)"?\s*[:：]\s*"?([a-zA-Z0-9][a-zA-Z0-9-]{0,39})"?\s*$/);
+    if (m) {
+      const idx = parseInt(m[1], 10) - 1;
+      if (idx >= 0 && idx < titles.length) {
+        pairs.push([titles[idx], m[2].toLowerCase()]);
+      }
+    }
+  }
+  return pairs;
+}

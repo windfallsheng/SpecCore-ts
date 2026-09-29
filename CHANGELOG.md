@@ -1,3 +1,84 @@
+## v8.3.290 (2026-09-28) — run 无参智能续跑 + 快捷语法糖：高频操作不再依赖 ask 引擎
+
+### 新增
+- **run 无参 = 智能续跑**：不带任何参数时按里程碑产物检测断点（需求导入/切分单元/分析/审计/任务化/计划/执行/验证/部署 9 个里程碑，谓词全部复用 PRECONDITIONS 与 analyze 既有检测函数），输出「智能续跑检测」面板（✅ 已完成/🔄 半途/⬜ 未执行 + 产物佐证）
+- **四种状态分支**：无需求文档 → [SPECCORE_RESUME] 面板软停（exit 10）请用户选需求入口（导入 PRD / 一句话需求）；全新且有需求 → 不询问自动从 split-units 续跑至 pipeline；部分完成 → 面板软停问「①从断点继续 ②重新切分 ③自定义起止」（断点恰为 split-units 时 ② 与 ① 同义自动省略）；全部完成 → 指路收尾（run deliver / run docs）
+- **hasRequirementDocs 提升模块级**：从 autoPipeline 闭包提升为模块级函数（参数化 iterDir），PRECONDITIONS 与智能续跑检测共用同一谓词
+- **run 位置参数文法（语法糖）**：`run <preset名>` 直呼预设流水线（含自定义 pipelines.custom，优先于同名阶段别名）；`run <阶段/别名>` 单阶段快捷（从该阶段续跑至部署验证，如 `run smoke` / `run split`）；`run <from> to <to>` / `run <from>..<to>` 阶段范围（首 token 命中阶段/别名才解析，一句话需求如 "fix login to support OTP" 不误判）；`run <一句话需求>` 需求入口；`--demand` 逃生舱（需求恰为保留字时显式指定，跳过文法解析）
+- **阶段别名表单一事实源**：新建 src/core/stage-aliases.ts（STAGE_ALIASES + resolveStageToken + parseRunRange + formatStageAliases + validateStageAliases 启动自检），别名 split→split-units、smoke→verify、deploy→pipeline、code→execute、tasks→taskify、ship→pr、archive→done、docs→spec2doc、import→doc2spec、req→req-doc；范围解析失败（首 token 命中但末 token 不命中）报错列别名表，不静默降级为一句话需求
+- **analyze -g/--global**：快捷糖 ≡ speccore global analyze（Layer 1→4 自动推进）
+- **unitize/doc2spec 文件位置参数**：`unitize 需求.md` / `doc2spec PRD.docx`（--file 兼容保留）
+- **verify 位置参数**：`verify dev|pr|deploy|release` 直呼测试阶段（≡ --stage，非法值报错）
+
+### 文档
+- **spec-run SKILL.md + 6 份 agent 命令副本**（.claude/.codebuddy/.cursor/.trae/.trae-cn/.windsurf）同步补「智能续跑 + 位置参数文法」剧本：[SPECCORE_RESUME] 面 板 → 宿主 AI 用 AskUserQuestion 询问用户 → 用户选定后执行面板对应命令，未确认不 得自行续跑；run 文法形态直接拼命令不转 ask
+- **run --help** 展示文法树与别名表（糖的悲剧是用户不知道有糖）
+- **DESIGN.md 新增附录「v8.3.290+ run 智能续跑与快捷语法糖设计」**：里程碑谓词表/四分支决策/宿主 AI 接力协议/语法糖体系/设计原则（单一事实源/渐进解析/不静默降级/逃生舱/接力不擅自/启动自检）/修复记录/实测矩阵
+- **README.md 核心流水线段**：「无参 = 智能续跑」+ 快捷语法糖示例；**docs/command-reference.md** run 章节补位置参数文法表与选项表；**AGENTS.md 常用命令速查**（含 init.ts 模板与 .speccore/RULES/03-COMMAND_CHEATSHEET.inline.md 注入源同步）补 run 快捷操作段
+- **help 命令 run 详解**（src/commands/help.ts）补全位置参数文法/智能续跑/逃生舱参数与示例；templates/html/speccore-help.html 静态样例重生成；speccore-setup-guide.html 补智能续跑 + 语法糖提示
+
+### 验证
+- 278 测试全绿（无回归；一次性偶发失败三次重跑未复现）；端到端验证：会议项目 Iteration-014（部分完成，features 缺失）面板如实标注断点 split-units + exit 10；/tmp 空迭代无需求 → 需求入口面板；/tmp 全新有需求 → 自动续跑 split-units → pipeline（后续 unitize 闸口正常硬停拦截测试文档）；/tmp 全产物迭代 → 9 项全 ✅ + 🎉 指路收尾 + exit 0；run develop/smoke/split/verify/docs（preset 直呼/单阶段快捷/preset 优先于别名）/split to pipeline/split..split/split to xxx 报错/一句话需求不误判/--demand 逃生舱/unitize 位置参数/verify 非法与合法 stage 共 12 个形态逐一实测
+
+## v8.3.289 (2026-09-28) — 任务名/单元标题英译链路贯通：宿主 AI 接力 + iter- 前缀根治
+
+### 新增
+- **task new 批量导入英译链路**：批量导入 bug 时一次 LLM 调用把全部「Bug 标题」英译为任务目录 slug（与 unitize/taskify 对齐）——宿主 AI 优先（无直连 LLM 且 ai.provider=host 或 auto_host_ai: true 时输出 [SPECCORE_PROMPT] 清单 + exitCode 10 接力，--translate-response '<JSON>' 续跑）；自配 LLM 兜底（providers 池 → 环境变量 → 本地 Ollama）；失败回退拼音。新增 --translate-en auto|host|off 与 --translate-response 选项
+- **parseTranslationResponse 提升为共享工具**：从 doc2spec.ts 迁入 ask-llm.ts 导出（序号键/中文标题键/逐行正则三格式），unitize 单元标题与 task new 任务名两条链路共用
+
+### 修复
+- **iter- 前缀根治**：toSlug 拼音兜底自带 iter- 前缀（v8.3.286 遗留），被 nextTaskId/nextPlanId 复用后任务目录名变成 Task-001-iter-zhifuxiugai——去掉前缀；同时英文 slug 上限 20→40（toSlug 拉丁片段 30→40 + nextTaskId/nextPlanId 切片 20→40），LLM 英译长词不再截断（Task-001-booking-order-status-not-synced 完整保留）
+- **unitize auto 模式消费 auto_host_ai**：此前 auto_host_ai: true 配置闲置，无 LLM 时静默拼音降级（会议项目日志实锤 yibiaopan）——现 auto 模式无 LLM 且宿主模式（ai.provider=host 或 auto_host_ai: true）时自动转宿主接力（清单 + exitCode 10），不再静默拼音；已携带 --translate-response 时不再二次接力（响应无效回退拼音，防接力死循环）
+
+### 文档
+- **spec-unitize SKILL.md 补英译接力剧本**：宿主 AI 收到 [SPECCORE_PROMPT] 翻译清单 → 逐条翻译 kebab-case slug（禁用拼音）→ --translate-response '<JSON>' 续跑（键=清单序号）；spec-task-create SKILL.md 同步补 task new 导入接力剧本
+
+### 验证
+- 新增 tests/unit/core/translation-response.test.ts（5 用例：序号键/中文键/带前缀文本/逐行正则/越界忽略）+ tests/unit/core/global-counters.test.ts（5 用例：拼音无 iter- 前缀/长英文 slug 不截断/中英混合提取/Plan/Iteration）
+- 278 测试全绿（267 既有 + 11 新增）；端到端验证（会议项目）：批量导入无 LLM 接力 exit 10 → 宿主英译续跑 Task-270-booking-order-status-not-synced 等 10/10 创建；临时项目 unitize auto 接力 → 缓存命中 PRD-01-booking-management；--translate-en off 拼音兜底 Task-001-zhi-fu-hui-tiao-yi-chang（无 iter- 前缀）
+
+## v8.3.288 (2026-09-28) — bug Excel 导入链路增强：端列识别 + 标准模板 + 模块筛选与精确统计
+
+### 新增
+- **Excel 端列识别与「所有端」展开**：excel-extract 新增 platforms 列模糊识别（涉及端/影响端/平台等）；task new 批量导入消费端列，「所有端/全部端/所有平台/all」别名展开为项目全部端，逗号分隔端名过滤项目端列表
+- **title/desc 死代码复活**：导入任务名改用「Bug 标题」列（无则回退描述切片），描述列写入任务描述；列检测顺序调整（desc 先于 title）防「Bug 描述」被 /bug/i 抢当标题列
+- **任务性质标明所属功能模块**：父任务 TASK.md 任务信息表加所属模块/涉及端/严重度行；bugfix REQ.md 头部属性表加类型/所属模块/涉及端/优先级/严重度；.meta/feature 锚点供筛选与统计
+- **speccore task template**：导出标准 bug 导入模板 xlsx——Sheet1「bug-import」纯净表头（Bug 标题/Bug 描述/所属模块/涉及端/优先级/严重度/负责人/发现环境）+ Sheet2「说明」使用指南（示例行放 Sheet2 避免被导入误读）
+- **execute --module 筛选**：按所属功能模块过滤待执行任务（匹配 .meta/feature 模糊包含），主执行路径与 --list-pending 均生效；执行计划 filters 快照同步
+- **status/dashboard 模块统计**：终端面板与 HTML 看板新增「模块统计」段（按 feature 分组：任务数/完成/完成率/进度条）
+
+### 修复
+- **看板 bug 任务隐形**：dashboard HTML 导出与终端 status 此前只扫迭代根级 Task- 目录，task new 导入的 bug 任务（030-tasks/bugfix/ 布局）全部隐形——collectTasks 重构为多根扫描 + .meta 优先读状态/类型/模块
+- **迭代名前缀重复**：context.json 存全名 Iteration-NNN，status/dashboard/health/lifecycle 视图再拼 Iteration- 前缀产生 Iteration-Iteration- 死路径——统一 resolveIterDir 归一化
+- **多端子任务 id 冲突**：task new 为各端创建同名 Task-{id}-impl 子任务目录，scanTasks/topologicalSort 按 id 去重导致「所有端」展开后只剩 1 个执行单元——子任务目录名带端后缀（Task-{id}-{端}）
+- **导出回退链断裂**：extractExcelTextOnly 引用不存在的 xlsx 库（package.json 仅 exceljs），文本提取回退永远返回 null——统一改为 exceljs 实现
+
+### 验证
+- 新增 tests/unit/core/excel-extract.test.ts（5 用例：列识别/英文列名/变体/缺列兜底/文本回退）
+- 267 测试全绿（262 既有 + 5 新增）；端到端手工验证：模板生成 → 导入 2/2（任务名=标题列）→ .meta/REQ.md/TASK.md 模块属性 → 「所有端」展开 4 端 → execute --module 支付筛选 5→4 → status/HTML 看板模块统计精确呈现
+
+## v8.3.287 (2026-09-28) — ask 意图引擎系统性根治（虚词归一化 + 锚点表体系化 +  回归基线）
+
+### 修复
+- **口语虚词隔断词组 trigger 全局根治**：v8.3.286 已修迭代创建场景，但「导入一下文档」「拆分一下任务」等同一类隔断在全表范围存在。新增 `normalizeInput` 预处理——剥离保守虚词表（一下/一个/帮我/请帮我/麻烦你/给我/一项/一条/一份，不剥「的/再/下/请」等歧义单字），匹配输入集合变为「原输入 + 归一化输入」双集合，每个 trigger/pattern 任一命中只计分一次（绝不双计）；参数提取仍用原输入，捕获组不受归一化污染
+- **名词锚点表 ANCHOR_RULES 体系化**：v8.3.286 的迭代/项目/任务三处共现补丁是硬编码，现统一为 `{intent, anchors, verbs, bonus, guard}` 规则表在打分循环统一消费。迁移 286 三处（迭代 +35 排除「迭代的」定语、项目句尾宾语 +20、XX任务短语让位），新增：功能锚点（做一个/添加/实现 + 功能|模块|页面|接口|服务|系统 → create +20，修「做一个支付模块」被 execute 抢走）、文档锚点（导入/转换 + 文档|PRD|word|docx → doc2spec +25，修「导入一下文档」低置信度）、需求文档锚点（切分 + 需求文档|功能单元 → split-units +20）；短语让位提到 -40 以抵消功能锚点与上下文加成叠加
+- **宽触发词降权**：trigger ≤2 字符（做/跑/开/检查/配置/设置等）计分 20→12，长词组保持 20——「做」不再轻松碾压「做一个」
+- **迭代上下文加成补齐**：活跃迭代 +15 原仅限 execute/query_progress/review/change，现由 ITERATION_CONTEXT_INTENTS 集合（16 个迭代工作意图）统一享受；无活跃迭代 execute/query_progress -20 与全局分析豁免不变
+- **重复 id 映射去重**：analyze×2、task new×2、welcome×2、dashboard×2 四对重复映射曾污染歧义展示，现按 (intent, command) 对去重——真重复只留最高分，不同意图共享命令名（task new/create、welcome/demo、dashboard/global_status）必须共存，避免 new_task 被 create 吞掉
+
+### 验证
+- **新增回归基线 tests/unit/core/intent-recognition.test.ts**（53 用例，真实 recognizeIntent 引擎，mock 上下文双模式）：固化两枪误判原话 + v8.3.286 验证过的 12 句 + 虚词隔断/宽 trigger 抢分/锚点让位/常规回归共 24 句核心语料 × 无迭代/有活跃迭代双场景
+- 262 测试全绿（209 既有 + 53 新增）；两枪原话与 10 句新增误判句双场景手工验证 24/24 通过
+
+## v8.3.286 (2026-09-28) — ask 迭代创建误判双枪修复 + 目录名 hash 乱码改拼音（会议项目实战反馈）
+
+### 修复
+- **「新建迭代」被识成 execute、「创建新迭代」被识成 task new**：三根因叠加——①词组 trigger「创建迭代/新建迭代」被口语虚词（「一个/个/新」）隔断只剩 pattern 分；②execute/create 的宽 trigger（「做/创建/新建」）+ 宽 pattern 拿 50 分基数再加活跃迭代上下文 +15，反超窄意图；③「迭代」锚点无专门加权。修复：iteration_create 补口语变体与英文 trigger（创建一个迭代/新建新迭代/iteration create 等）；新增「名词锚点共现加权」——句中出现迭代类名词（迭代/sprint/期次）+ 创建类动词即 +35（排除「XX迭代的功能模块」定语结构）；反向保护 create/new_task 宽 pattern 捕获迭代名词时 -35、明确「XX任务」短语时让位 -25；CONTEXT_RULES 补 iteration create 键（活跃迭代 +15，与 execute 对齐）。同构加固 init：「新建项目/创建一个项目」被宽「新建/创建」抢时由项目宾语共现夺回（「项目管理/项目计划」定语不误伤）。实测两枪原话均 100% 命中 iteration_create，12 组回归全绿
+- **目录名 hash 乱码改拼音兜底**：`toSlug` 对纯中文名（无拉丁片段）用字符码和 hash 生成无语义乱码（「一个新迭代」→ `iter-cl0w`），目录名不可读——改用 pinyin-pro 全拼兜底（同一输入拼音稳定，幂等性不变）：「会议系统」→ `iter-hui-yi-xi-tong`；有 LLM 英译链路的 unitize/taskify 不受影响（仍走缓存→LLM→拼音三级）
+
+### 验证
+- 230 测试全绿；两枪原话 + 建任务/新建任务/执行/分析/新建项目/项目定语/sprint/口语开迭代等 12 组意图路由验证通过；toSlug 拼音/英文提取双路径验证通过
+
 ## v8.3.285 (2026-09-28) — 澄清报告实时汇总与语义宣导（会议项目澄清窗口补齐）
 
 ### 改进

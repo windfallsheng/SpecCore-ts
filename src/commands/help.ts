@@ -248,19 +248,28 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     ],
   },
   run: {
-    desc: '端到端全自动流水线：命名流水线（preset）+ 起止点 + 三闸口',
+    desc: '端到端全自动流水线：无参智能续跑（检测断点自动续）+ 位置参数语法糖（preset 直呼/单阶段快捷/阶段范围/一句话需求）+ 命名流水线 + 起止点 + 三闸口',
     params: [
+      { flag: '（无参）', meaning: '智能续跑：检测 9 个里程碑断点，从第一个未完成阶段继续（全完成时指路收尾；断点处软停 exit 10 由宿主 AI 询问用户）' },
+      { flag: '<preset名>', meaning: 'preset 直呼：full/import/spec/develop/deliver/deploy/docs/analyze（优先于阶段别名）' },
+      { flag: '<阶段/别名>', meaning: '单阶段快捷：从该阶段续跑至部署验证（如 run smoke、run split）' },
+      { flag: '<from> to <to> / <from>..<to>', meaning: '阶段范围（别名: split→split-units, smoke→verify, deploy→pipeline, code→execute, tasks→taskify, ship→pr, archive→done, docs→spec2doc, import→doc2spec, req→req-doc；首 token 命中而末 token 不命中时报错不静默降级）' },
+      { flag: '<一句话需求>', meaning: '其他多词输入视为需求，从需求出发全流程' },
+      { flag: '--demand <text>', meaning: '逃生舱：显式声明是需求（需求文本恰为 preset/阶段保留字时）' },
       { flag: '--auto', meaning: '全自动（run 默认即全自动）' },
-      { flag: '--preset <name>', meaning: '预设流水线：full/import/spec/develop/deliver/deploy/docs/analyze' },
+      { flag: '--preset <name>', meaning: '预设流水线（与位置参数 preset 直呼等价）' },
       { flag: '--from <phase>', meaning: '从指定阶段开始：req-doc|doc2spec|split-units|analyze|validate|taskify|plan|execute|verify|pipeline|pr|done|spec2doc' },
       { flag: '--to <phase>', meaning: '到指定阶段结束' },
       { flag: '--demo', meaning: '演示模式（放宽闸口 A/B，保留 C）' },
     ],
     examples: [
       'speccore run',
-      'speccore run --preset develop',
-      'speccore run --from split-units --to execute',
+      'speccore run develop',
+      'speccore run smoke',
+      'speccore run split to execute',
+      'speccore run split..execute',
       'speccore run "做用户积分功能"',
+      'speccore run --from split-units --to execute',
     ],
   },
   validate: {
@@ -676,7 +685,7 @@ async function helpHtml(options: HelpOptions): Promise<void> {
       '🛠️ 智能开发助手': { 
         cmds: ['run', 'next'],
         icon: '🛠️',
-        desc: '全自动流水线执行 + 下一步指引'
+        desc: '无参智能续跑 + 语法糖（run develop / run smoke / run split to execute）+ 下一步指引'
       },
       '🔧 维护与升级': {
         cmds: ['update', 'doctor', 'config'],

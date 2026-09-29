@@ -788,6 +788,14 @@ export async function extractStructuredData(
   data.stats.totalServices = data.services.length;  // v8.3.126+
   data.stats.totalFiles = totalFiles;
 
+  // v8.3.3xx+: 空壳防护——扫描到 0 个文件时告警且不写任何结构化数据文件，
+  // 避免空壳 structured-data.json 误导下游（analyze/execute 会误以为已有数据）
+  if (totalFiles === 0) {
+    logger.warn('   ⚠️ 结构化数据提取: 扫描到 0 个源码文件，跳过写入（避免空壳数据误导下游分析）');
+    logger.warn(`      请检查 CONSTITUTION.md 源码路径配置: ${sourcePaths.join(', ')}`);
+    return data;
+  }
+
   // 写入缓存
   await ensureDir(dirname(CACHE_PATH));
   await writeFile(CACHE_PATH, JSON.stringify(data, null, 2));

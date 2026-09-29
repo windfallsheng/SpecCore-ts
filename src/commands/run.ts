@@ -10,6 +10,7 @@ import { getDefaultIteration } from '../core/context';
 import { collectQuestionFiles } from '../core/questions';
 import { generateHandoff, type HandoffStage } from '../core/handoff-generator';
 import { loadConfigWithMeta } from '../core/unified-config';
+import { parseRunRange, resolveStageToken } from '../core/stage-aliases';
 
 export interface RunOptions {
   iteration?: string; force?: boolean; auto?: boolean; autoSteps?: string;
@@ -22,6 +23,7 @@ export interface RunOptions {
   smoke?: 'on' | 'off'; // v8.3.217+: --smoke / --skip-smoke 单次强制/跳过冒烟
   scope?: 'full' | 'module'; // v8.3.217+: --scope 单次指定冒烟范围
   noDepCheck?: boolean;  // v8.3.223+: --no-dep-check 跳过阶段前置依赖检查（逃生舱）
+  demandExplicit?: boolean; // v8.3.290+: --demand 显式指定（跳过 preset/范围文法解析，防保留字误判）
 }
 
 async function hasFeatureDirs(iterDir: string): Promise<boolean> {
@@ -30,6 +32,115 @@ async function hasFeatureDirs(iterDir: string): Promise<boolean> {
     const entries = await readdir(featuresDir, { withFileTypes: true });
     return entries.some(e => e.isDirectory() && !e.name.startsWith('.'));
   } catch { return false; }
+}
+
+/**
+ * v8.3.223+（v8.3.290 提升为模块级，供智能续跑检测复用）:
+ * 检测需求文档是否已导入（converted/、sources/ 下的文档或 REQUIREMENT.md 有实质内容）
+ */
+async function hasRequirementDocs(iterDir: string): Promise<boolean> {
+  const reqDir = join(iterDir, '010-requirements');
+  const reqMd = join(reqDir, 'REQUIREMENT.md');
+  if (await pathExists(reqMd)) {
+    try {
+      const content = await readFile(reqMd, 'utf-8');
+      if (content.replace(/\s/g, '').length > 100) return true;
+    } catch { /* ignore */ }
+  }
+  for (const d of ['converted', 'sources']) {
+    const dir = join(reqDir, d);
+    if (await pathExists(dir)) {
+      const entries = await readdir(dir).catch(() => []);
+      // v8.3.262: readdir 未传 withFileTypes 时返回字符串数组，直接 test 文件名
+      if (entries.some((e: any) => /\.(md|docx|doc|pdf)$/i.test(e))) return true;
+    }
+  }
+  return false;
+}
+
+// ── v8.3.290: 智能续跑（无参 run 快捷操作）──
+interface CheckpointItem {
+  key: string;
+  label: string;
+  done: boolean;
+  partial?: boolean;   // 半途状态（如骨架半填、任务执行中）——断点仍落在此阶段
+  evidence?: string;   // 已完成/半途的产物佐证，未做阶段留空
+}
+
+/**
+ * v8.3.290+: 里程碑检测——按产物判定各阶段完成态，定位「第一个未完成阶段」。
+ * 谓词全部复用 PRECONDITIONS / analyze 已有的检测函数（hasRequirementDocs /
+ * hasFeatureDirs / detectEmptySkeletonDocs / scanTasks），不新造判定逻辑。
+ * 默认终点 pipeline（部署验证）；pr/done/spec2doc 为收尾阶段，不参与断点定位。
+ */
+async function detectPipelineCheckpoint(iterDir: string, iteration: string): Promise<{
+  items: CheckpointItem[];
+  checkpointKey: string | null;
+  hasRequirement: boolean;
+  fresh: boolean;
+  allDone: boolean;
+}> {
+  const specDir = join(iterDir, '020-specs');
+  const overviewDir = join(iterDir, '000-overview');
+  const hasReq = await hasRequirementDocs(iterDir);
+  const hasFeatures = await hasFeatureDirs(iterDir);
+
+  // analyze 完成：020-specs 存在、无 SKELETON 残留；半途：有骨架残留（续跑继续填充）
+  let specsReady = false;
+  let skeletons: string[] = [];
+  if (await pathExists(specDir)) {
+    skeletons = await detectEmptySkeletonDocs(iterDir);
+    specsReady = skeletons.length === 0 && (await readdir(specDir)).length > 0;
+  }
+
+  // execute 完成：全部任务 status === 'completed'；半途：部分完成（execute --resume 续跑）
+  let tasks: { status: string }[] = [];
+  try {
+    const { scanTasks } = await import('../core/state');
+    tasks = await scanTasks(iteration);
+  } catch { /* ignore */ }
+  const doneCount = tasks.filter(t => t.status === 'completed').length;
+  const allTasksDone = tasks.length > 0 && doneCount === tasks.length;
+
+  // plan 完成：000-overview/plans/ 下任意 PLAN.md（planId 子目录，需递归）
+  let planExists = false;
+  try {
+    const plansDir = join(overviewDir, 'plans');
+    if (await pathExists(plansDir)) {
+      const walk = async (d: string): Promise<boolean> => {
+        for (const e of await readdir(d, { withFileTypes: true })) {
+          const full = join(d, e.name);
+          if (e.isDirectory() && await walk(full)) return true;
+          if (e.isFile() && e.name === 'PLAN.md') return true;
+        }
+        return false;
+      };
+      planExists = await walk(plansDir);
+    }
+  } catch { /* ignore */ }
+
+  const items: CheckpointItem[] = [
+    { key: 'doc2spec',    label: '需求导入',     done: hasReq,      evidence: hasReq ? '需求文档已就绪' : undefined },
+    { key: 'split-units', label: '切分功能单元', done: hasFeatures, evidence: hasFeatures ? 'features/ 已有单元目录' : undefined },
+    { key: 'analyze',     label: '需求分析',     done: specsReady,  partial: !specsReady && skeletons.length > 0, evidence: skeletons.length > 0 ? `骨架残留 ${skeletons.length} 个待填充` : (specsReady ? '020-specs 已生成' : undefined) },
+    { key: 'validate',    label: '质量审计',     done: await pathExists(join(specDir, 'QUALITY_AUDIT.md')), evidence: undefined },
+    { key: 'taskify',     label: '任务拆分',     done: tasks.length > 0, evidence: tasks.length > 0 ? `${tasks.length} 个任务` : undefined },
+    { key: 'plan',        label: '执行计划',     done: planExists,  evidence: planExists ? 'PLAN.md 已生成' : undefined },
+    { key: 'execute',     label: '执行开发',     done: allTasksDone, partial: tasks.length > 0 && !allTasksDone, evidence: allTasksDone ? `${tasks.length} 个任务全部完成` : (tasks.length > 0 ? `${doneCount}/${tasks.length} 个任务完成` : undefined) },
+    { key: 'verify',      label: '验证',         done: await pathExists(join(overviewDir, 'VERIFY_REPORT.md')), evidence: undefined },
+    { key: 'pipeline',    label: '部署验证',     done: await pathExists(join(overviewDir, 'PIPELINE_REPORT.md')), evidence: undefined },
+  ];
+  // 断点 = 第一个未完成阶段；全部 done → allDone（跑完至部署验证）
+  const checkpointItem = items.find(i => !i.done);
+  return {
+    items,
+    checkpointKey: checkpointItem?.key ?? null,
+    hasRequirement: hasReq,
+    // 全新：除需求外无任何阶段产物（无单元目录/无 specs/无任务）；
+    // 无需求时由调用方先走「需求入口」面板，不在此判定
+    fresh: !hasFeatures && !(await pathExists(specDir)) && tasks.length === 0,
+    allDone: !checkpointItem,
+  };
 }
 
 /**
@@ -137,27 +248,6 @@ async function autoPipeline(options: RunOptions): Promise<void> {
   const iterDir = `Iteration-${iteration}`;
   logger.info(`\n🤖 Auto-pipeline: ${iteration}\n`);
 
-  // v8.3.223+: 检测需求文档是否已导入（converted/、sources/ 下的文档或 REQUIREMENT.md 有实质内容）
-  const hasRequirementDocs = async (): Promise<boolean> => {
-    const reqDir = join(iterDir, '010-requirements');
-    const reqMd = join(reqDir, 'REQUIREMENT.md');
-    if (await pathExists(reqMd)) {
-      try {
-        const content = await readFile(reqMd, 'utf-8');
-        if (content.replace(/\s/g, '').length > 100) return true;
-      } catch { /* ignore */ }
-    }
-    for (const d of ['converted', 'sources']) {
-      const dir = join(reqDir, d);
-      if (await pathExists(dir)) {
-        const entries = await readdir(dir).catch(() => []);
-        // v8.3.262: readdir 未传 withFileTypes 时返回字符串数组，直接 test 文件名
-        if (entries.some((e: any) => /\.(md|docx|doc|pdf)$/i.test(e))) return true;
-      }
-    }
-    return false;
-  };
-
   // v8.3.223+: 阶段前置依赖表——上游依赖未满足时阻断流水线，防止下游空跑产出垃圾产物。
   // 历史教训：`--from taskify` 跳过 split-units 后，features/ 为空仍按需求文档粒度拆分，
   // AI 把骨架「📋 质量标准」标题当功能单元，产出 Task-NNN-requirement-md 垃圾任务。
@@ -172,7 +262,7 @@ async function autoPipeline(options: RunOptions): Promise<void> {
       remedy: `先导入需求: speccore doc2spec --iter ${iteration}（或 speccore run --from doc2spec -i ${iteration}）`,
       bypassNote: '需求已由手动方式准备',
       hard: true,
-      check: hasRequirementDocs,
+      check: () => hasRequirementDocs(iterDir),
     },
     analyze: {
       desc: '存在需求文档（converted/、sources/ 或 REQUIREMENT.md 有实质内容）',
@@ -180,7 +270,7 @@ async function autoPipeline(options: RunOptions): Promise<void> {
       remedy: `先导入需求: speccore doc2spec --iter ${iteration}`,
       bypassNote: '需求已由手动方式准备',
       hard: true,
-      check: hasRequirementDocs,
+      check: () => hasRequirementDocs(iterDir),
     },
     taskify: {
       desc: '功能单元已切分（010-requirements/features/ 下存在功能单元目录）',
@@ -269,6 +359,98 @@ async function autoPipeline(options: RunOptions): Promise<void> {
   }
   const phaseResults: PhaseResult[] = [];
   const pipelineStart = Date.now();
+
+  // ── v8.3.290: run 位置参数文法（快捷语法糖，不依赖 ask 引擎）──
+  //   run <preset名>      → preset 直呼（单 token 命中内置/自定义流水线名）
+  //   run <阶段/别名>      → 单阶段快捷（从该阶段续跑至 pipeline，如 run smoke / run split）
+  //   run <from> to <to>  → 范围（自然语言式，首 token 命中阶段/别名才解析）
+  //   run <from>..<to>    → 范围（紧凑式）
+  //   run <其他多词>       → 一句话需求（req-doc 阶段消费）
+  //   run                  → 智能续跑（见下 smartResume 分支）
+  //   --demand 显式传入时跳过文法解析（逃生舱：需求文本恰为 preset/阶段保留字）
+  if (options.demand && !options.demandExplicit) {
+    const demandText = options.demand.trim();
+    const presetNames = [...Object.keys(PRESETS), ...Object.keys(pipelinesConfig.custom || {})];
+    if (presetNames.includes(demandText)) {
+      logger.info(`🎯 位置参数直呼预设流水线 [${demandText}]\n`);
+      options.preset = demandText;
+      options.demand = undefined;
+    } else {
+      // 单 token 命中规范阶段/别名 → 单阶段快捷（从该阶段续跑至部署验证）
+      // preset 优先（docs 既是 preset 又是别名，直呼 preset 更符合直觉）
+      const singleStage = resolveStageToken(demandText);
+      if (singleStage) {
+        logger.info(`🎯 单阶段快捷: ${singleStage} → pipeline\n`);
+        options.from = singleStage;
+        options.to = 'pipeline';
+        options.demand = undefined;
+      } else {
+        const { range, error } = parseRunRange(demandText);
+        if (error) {
+          // 首 token 命中阶段但末 token 不命中 → 用户明显想写范围但写错，报错不静默降级
+          logger.error(error);
+          logger.error(`规范阶段: ${PIPELINE_PHASES.map(p => p.key).join(', ')}`);
+          return;
+        }
+        if (range) {
+          logger.info(`🎯 范围语法: ${range.from} → ${range.to}\n`);
+          options.from = range.from;
+          options.to = range.to;
+          options.demand = undefined;
+        }
+      }
+    }
+  }
+
+  // ── v8.3.290: 智能续跑（无参 run 快捷操作）──
+  // 未指定 --from/--to/--preset/--auto-steps/需求描述 时，按里程碑产物检测断点：
+  //   全新且无需求 → 软停请用户提供需求入口（CLI 无法无米之炊）
+  //   全新且有需求 → 自动从切分功能单元续跑至部署验证（不询问，三闸口兑底）
+  //   部分完成     → [SPECCORE_RESUME] 面板软停，宿主 AI 询问「断点继续/重新切分/自定义」
+  //   全部完成     → 指路收尾（deliver/docs），不重跑
+  const smartResume = !options.from && !options.to && !options.preset && !options.autoSteps && !options.demand;
+  if (smartResume) {
+    const cp = await detectPipelineCheckpoint(iterDir, iteration);
+    logger.info(`\n🤖 智能续跑检测 — ${iterDir}\n`);
+    for (const it of cp.items) {
+      const mark = it.done ? '✅' : (it.partial ? '🔄' : '⬜');
+      logger.info(`  ${mark} ${it.label}${it.evidence ? ` — ${it.evidence}` : ''}`);
+    }
+    logger.info('');
+    if (!cp.hasRequirement) {
+      logger.info('[SPECCORE_RESUME] 未检测到需求文档，请选择需求入口:');
+      logger.info(`  ① 导入 PRD 文档:  speccore doc2spec --iter ${iteration}（或 speccore run --from doc2spec -i ${iteration}）`);
+      logger.info(`  ② 一句话需求:    speccore run "需求描述" -i ${iteration}`);
+      logger.info('');
+      logger.warn('🤖 等待用户选择后执行对应命令（宿主 AI 请用选项询问用户）');
+      process.exitCode = 10;
+      return;
+    }
+    if (cp.fresh) {
+      logger.info(`▶ 全新迭代（需求已就绪），自动从切分功能单元开始: split-units → pipeline\n`);
+      options.from = 'split-units';
+      options.to = 'pipeline';
+    } else if (cp.checkpointKey) {
+      logger.info(`▶ 断点: ${cp.checkpointKey}`);
+      logger.info('[SPECCORE_RESUME] 已有步骤可跳过，请选择续跑方式:');
+      logger.info(`  ① 从断点继续:  speccore run --from ${cp.checkpointKey} --to pipeline -i ${iteration}`);
+      if (cp.checkpointKey !== 'split-units') {
+        // 断点已在切分阶段时「重新切分」与「从断点继续」同义，不重复展示
+        logger.info(`  ② 重新切分:    speccore run --from split-units --to pipeline -i ${iteration}`);
+        logger.info(`  ③ 自定义起止:  speccore run --from <阶段> --to <阶段> -i ${iteration}`);
+      } else {
+        logger.info(`  ② 自定义起止:  speccore run --from <阶段> --to <阶段> -i ${iteration}`);
+      }
+      logger.info('');
+      logger.warn('🤖 等待用户选择后执行对应命令（宿主 AI 请用选项询问用户）');
+      process.exitCode = 10;
+      return;
+    } else {
+      logger.info(`🎉 ${iterDir} 已跑完至部署验证（pipeline），无需续跑。`);
+      logger.info('收尾操作: speccore run deliver（提交代码+PR）/ speccore run docs（导出文档）');
+      return;
+    }
+  }
 
   // ── 解析流水线范围（优先级：--auto-steps > --from/--to > --preset/默认 > full）──
   let startIdx = 0;

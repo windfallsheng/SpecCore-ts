@@ -65,7 +65,7 @@ export async function statusPanelCommand(options: StatusPanelOptions = {}): Prom
   
   if (iteration) {
     logger.info(`│ 迭代: ${iteration.padEnd(37)}│`);
-    const iterDir = `Iteration-${iteration}`;
+    const iterDir = resolveIterDir(iteration);
     
     // Phase detection
     const phase = await detectPhase(iterDir);
@@ -114,6 +114,18 @@ export async function statusPanelCommand(options: StatusPanelOptions = {}): Prom
           logger.info(`│ ${name}: ${pBar} ${s.done}/${s.total}`.padEnd(47) + '│');
         }
       }
+
+      // v8.3.288+: 模块统计（按 .meta/feature 分组，精确到功能模块）
+      const moduleStats = buildModuleStats(tasks);
+      if (Object.keys(moduleStats).length > 0) {
+        logger.info('├──────────────────────────────────────────────┤');
+        logger.info('│ 模块统计:'.padEnd(47) + '│');
+        for (const [name, s] of Object.entries(moduleStats)
+          .sort((a, b) => b[1].total - a[1].total)) {
+          const pBar = buildProgressBar(s.done, s.total);
+          logger.info(`│  ${name}: ${pBar} ${s.done}/${s.total}`.padEnd(47) + '│');
+        }
+      }
       
       // Platform breakdown
       const platformCount = await countPlatforms(iterDir, tasks);
@@ -148,28 +160,70 @@ export async function statusPanelCommand(options: StatusPanelOptions = {}): Prom
   logger.info('');
 }
 
+// ── 共享：迭代目录归一化（context.json 存全名 Iteration-NNN，视图内只加一次前缀）──
+function resolveIterDir(iteration: string): string {
+  return iteration.startsWith('Iteration-') ? iteration : `Iteration-${iteration}`;
+}
+
 // ── 共享：收集所有任务数据 ──
 async function collectTasks(iterDir: string): Promise<any[]> {
   const tasks: any[] = [];
   if (!(await pathExists(iterDir))) return tasks;
-  const entryList = await readdir(iterDir, { withFileTypes: true });
-  for (const e of entryList) {
-    if (e.isDirectory() && e.name.startsWith('Task-')) {
-      const taskPath = join(iterDir, e.name, '00-specs', 'TASK.md');
-      try {
-        if (await pathExists(taskPath)) {
-          const md = await readFile(taskPath, 'utf-8');
-          const status = (md.match(/状态: (.+)/) || [])[1] || 'pending';
-          const type = (md.match(/类型: (.+)/) || [])[1] || 'feature';
-          const assignee = (md.match(/负责人[：:]\s*(\S+)/) || [])[1] || '';
-          tasks.push({ id: e.name, status, type, assignee });
-        } else {
-          tasks.push({ id: e.name, status: 'pending', type: 'feature', assignee: '' });
-        }
-      } catch { tasks.push({ id: e.name, status: 'pending', type: 'feature', assignee: '' }); }
+  // v8.3.288+: 扫描根级 + 030-tasks/{type}/ 两种布局（task new 建在 030-tasks/{type}/ 下，
+  // 此前只扫根级导致导入的 bug 任务在面板隐形，模块统计为空）
+  const roots: string[] = [iterDir];
+  const tasksDir = join(iterDir, '030-tasks');
+  if (await pathExists(tasksDir)) {
+    const subEntries = await readdir(tasksDir, { withFileTypes: true });
+    for (const se of subEntries) {
+      if (se.isDirectory()) roots.push(join(tasksDir, se.name));
+    }
+  }
+  for (const root of roots) {
+    const entryList = await readdir(root, { withFileTypes: true });
+    for (const e of entryList) {
+      if (e.isDirectory() && e.name.startsWith('Task-')) {
+        const taskDir = join(root, e.name);
+        // v8.3.288+: .meta 优先（task new 任务无 00-specs/TASK.md，状态/类型/模块都在 .meta）
+        let feature = '';
+        let metaStatus = '';
+        let metaType = '';
+        try {
+          const featurePath = join(taskDir, '.meta', 'feature');
+          if (await pathExists(featurePath)) feature = (await readFile(featurePath, 'utf-8')).trim();
+          const statusPath = join(taskDir, '.meta', 'status');
+          if (await pathExists(statusPath)) metaStatus = (await readFile(statusPath, 'utf-8')).trim();
+          const typePath = join(taskDir, '.meta', 'type');
+          if (await pathExists(typePath)) metaType = (await readFile(typePath, 'utf-8')).trim();
+        } catch {}
+        const taskPath = join(taskDir, '00-specs', 'TASK.md');
+        try {
+          if (await pathExists(taskPath)) {
+            const md = await readFile(taskPath, 'utf-8');
+            const status = metaStatus || (md.match(/状态: (.+)/) || [])[1] || 'pending';
+            const type = metaType || (md.match(/类型: (.+)/) || [])[1] || 'feature';
+            const assignee = (md.match(/负责人[：:]\s*(\S+)/) || [])[1] || '';
+            tasks.push({ id: e.name, status, type, assignee, feature, dir: taskDir });
+          } else {
+            tasks.push({ id: e.name, status: metaStatus || 'pending', type: metaType || 'feature', assignee: '', feature, dir: taskDir });
+          }
+        } catch { tasks.push({ id: e.name, status: metaStatus || 'pending', type: metaType || 'feature', assignee: '', feature, dir: taskDir }); }
+      }
     }
   }
   return tasks;
+}
+
+// v8.3.288+: 按功能模块分组统计（模块 × 任务数/完成数），供看板与终端精确呈现
+function buildModuleStats(tasks: any[]): Record<string, { total: number; done: number }> {
+  const stats: Record<string, { total: number; done: number }> = {};
+  for (const t of tasks) {
+    const feature = (t.feature || '未分类').trim() || '未分类';
+    if (!stats[feature]) stats[feature] = { total: 0, done: 0 };
+    stats[feature].total++;
+    if (t.status.includes('completed') || t.status.includes('完成')) stats[feature].done++;
+  }
+  return stats;
 }
 
 // ── 共享：按平台统计 ──
@@ -177,7 +231,7 @@ async function countPlatforms(iterDir: string, tasks: any[]): Promise<{backend:n
   let backend = 0, frontend = 0;
   for (const t of tasks) {
     try {
-      const entries = await readdir(join(iterDir, t.id), { withFileTypes: true });
+      const entries = await readdir(t.dir || join(iterDir, t.id), { withFileTypes: true });
       if (entries.some((e: any) => e.name === 'backend')) backend++;
       if (entries.some((e: any) => e.name === 'frontend')) frontend++;
     } catch {}
@@ -279,7 +333,7 @@ async function filterByPlatform(iterDir: string, tasks: any[], platform: string)
   const { join } = require('path');
   const result: any[] = [];
   for (const t of tasks) {
-    const taskDir = join(iterDir, t.id);
+    const taskDir = t.dir || join(iterDir, t.id);
     try {
       const entries = await readdir(taskDir, { withFileTypes: true });
       if (platform === 'backend' && entries.some((e: any) => e.name === 'backend')) result.push(t);
@@ -304,7 +358,7 @@ async function exportStatus(
   };
 
   if (iteration) {
-    const iterDir = join(process.cwd(), 'Iteration-' + iteration);
+    const iterDir = join(process.cwd(), resolveIterDir(iteration));
     const phase = await require('./status-panel').defaultPhase(iterDir);
 
     data.phase = phase;
@@ -357,22 +411,24 @@ async function exportStatus(
 
     const tasks: any[] = [];
     if (await pathExists(iterDir)) {
-      const entryList = await readdir(iterDir, { withFileTypes: true });
-      for (const e of entryList) {
-        if (e.isDirectory() && e.name.startsWith('Task-')) {
-          const taskPath = join(iterDir, e.name, '00-specs', 'TASK.md');
+      // v8.3.288+: 复用 collectTasks 多根扫描（含 030-tasks/{type}/ 布局与 .meta/feature），
+      // 此前只扫迭代根级导致 task new 导入的 bug 任务在看板隐形
+      const base = await collectTasks(iterDir);
+      for (const t of base) {
+        const item: any = { id: t.id, status: t.status, type: t.type, assignee: t.assignee || '', feature: t.feature, created: '', estimate: 0, delay: false };
+        // 补读 00-specs/TASK.md 的扩展字段（task new 任务无此文件，保持空值）
+        try {
+          const taskPath = join(t.dir, '00-specs', 'TASK.md');
           if (await pathExists(taskPath)) {
             const md = await readFile(taskPath, 'utf-8');
-            const status = (md.match(/状态: (.+)/) || [])[1] || 'pending';
-            const type = (md.match(/类型: (.+)/) || [])[1] || 'feature';
-            const created = (md.match(/创建日期[：:]?\s*(\d{4}-\d{2}-\d{2})/) || md.match(/创建:\s*(\d{4}-\d{2}-\d{2})/) || [])[1] || '';
+            item.created = (md.match(/创建日期[：:]?\s*(\d{4}-\d{2}-\d{2})/) || md.match(/创建:\s*(\d{4}-\d{2}-\d{2})/) || [])[1] || '';
             const estimate = (md.match(/预估[工时:：]?\s*(\d+)\s*[hH小时]/) || md.match(/预计耗时[：:]?\s*(\d+)/) || [])[1] || '';
-            const delay = (md.match(/延期\|DELAY/i) || []).length > 0;
-            tasks.push({ id: e.name, status, type, created, estimate: estimate ? parseInt(estimate) : 0, delay, assignee: (md.match(/负责人[：:]\s*(\S+)/) || [])[1] || '' });
-          } else {
-            tasks.push({ id: e.name, status: 'pending' });
+            item.estimate = estimate ? parseInt(estimate, 10) : 0;
+            item.delay = (md.match(/延期\|DELAY/i) || []).length > 0;
+            item.assignee = item.assignee || (md.match(/负责人[：:]\s*(\S+)/) || [])[1] || '';
           }
-        }
+        } catch {}
+        tasks.push(item);
       }
     }
     data.tasks = tasks;
@@ -432,6 +488,7 @@ async function exportStatus(
         else if (!(t.type||'').toLowerCase().includes('research')) pd2[t.assignee].features++;
         pd2[t.assignee].estHours += t.estimate || 0;
       }
+      data.moduleStats = buildModuleStats(filtered);
       // 人员→平台映射
       data.personPlatforms = await buildPersonPlatforms(iterDir, filtered);
       data.personDetail = pd2;
@@ -460,6 +517,8 @@ async function exportStatus(
       personDetail[t.assignee].estHours += t.estimate || 0;
     }
     data.personDetail = personDetail;
+    // v8.3.288+: 模块统计（按 .meta/feature 分组）
+    data.moduleStats = buildModuleStats(tasks);
     // 人员→平台映射
     data.personPlatforms = await buildPersonPlatforms(iterDir, tasks);
     // 每人任务清单
@@ -532,7 +591,7 @@ async function buildPersonPlatforms(iterDir: string, tasks: any[]): Promise<Reco
   for (const t of tasks) {
     if (!t.assignee || map[t.assignee]) continue;
     try {
-      const entries = await readdir(join(iterDir, t.id), { withFileTypes: true });
+      const entries = await readdir(t.dir || join(iterDir, t.id), { withFileTypes: true });
       const platforms: string[] = [];
       // 扫描平铺的端目录
       const { parsePlatformList } = await import('../core/spec-paths');
@@ -590,6 +649,18 @@ function buildHtmlDashboard(data: any): string {
       '</div>';
   }).join('');
   const hasAssignees = assigneeCards.length > 0;
+    // v8.3.288+: 模块统计（按 .meta/feature 分组，供精确项目统计）
+    const moduleStats: Record<string, { total: number; done: number }> = data.moduleStats || {};
+    const moduleRows = Object.entries(moduleStats)
+      .sort((a, b) => b[1].total - a[1].total)
+      .map(([name, s]) => {
+        const pct = s.total > 0 ? Math.round(s.done / s.total * 100) : 0;
+        const barW = s.total > 0 ? Math.round(s.done / s.total * 100) : 0;
+        return '<tr><td style="font-weight:600">' + name + '</td><td>' + s.total + '</td><td>' + s.done + '</td>' +
+          '<td><span style="color:' + (pct === 100 ? 'var(--green)' : 'var(--cyan)') + '">' + pct + '%</span></td>' +
+          '<td><div style="height:4px;background:rgba(255,255,255,.05);border-radius:2px;overflow:hidden;width:120px">' +
+          '<div style="width:' + barW + '%;height:100%;background:linear-gradient(90deg,var(--cyan),var(--green))"></div></div></td></tr>';
+      }).join('');
   const totalAi = data.totalAiTime || 0;
   const totalHuman = data.totalHumanTime || 0;
   const totalReview = data.totalReviewTime || 0;
@@ -1095,6 +1166,9 @@ td.code{font-family:'JetBrains Mono',monospace;color:var(--text);font-weight:600
     </div>
   </div>
 
+  ${moduleRows ? '<div class="panel" style="margin-bottom:20px"><div class="panel-title">MODULE BREAKDOWN · 模块统计</div>' +
+    '<table><thead><tr><th>所属模块</th><th>总任务</th><th>完成</th><th>完成率</th><th>进度</th></tr></thead><tbody>' + moduleRows + '</tbody></table></div>' : ''}
+
   ${hasAssignees ? '<div class="panel" style="margin-bottom:20px"><div class="panel-title">TEAM DETAILS</div>' +
     // ── 按平台分组的汇总表 ──
     (() => {
@@ -1304,7 +1378,7 @@ function setFs(s){document.documentElement.className=document.documentElement.cl
 // ── Health Report (merged from health command) ──
 async function showHealthReport(config: any, iteration: string | null): Promise<void> {
   if (!iteration) { logger.info("无活跃迭代"); return; }
-  const iterDir = `Iteration-${iteration}`;
+  const iterDir = resolveIterDir(iteration);
   const tasks = await scanTaskDirs(iterDir);
   
   let totalTasks = tasks.length, completed = 0, hasTest = 0, hasReview = 0;
@@ -1333,7 +1407,7 @@ async function showHealthReport(config: any, iteration: string | null): Promise<
 // ── Lifecycle Board (merged from lifecycle command) ──
 async function showLifecycleBoard(config: any, iteration: string | null, opts: any): Promise<void> {
   if (!iteration) { logger.info("无活跃迭代"); return; }
-  const iterDir = `Iteration-${iteration}`;
+  const iterDir = resolveIterDir(iteration);
   const tasks = await scanTaskDirs(iterDir);
   
   logger.info('\\n📋 任务生命周期 — ' + iteration);
@@ -1369,7 +1443,7 @@ async function getTaskStatus(iterDir: string, task: string): Promise<string> {
 
 // ── Collect Health Data for export ──
 async function collectHealthData(iteration: string): Promise<any> {
-  const iterDir = join(process.cwd(), "迭代-" + iteration);
+  const iterDir = join(process.cwd(), resolveIterDir(iteration));
   const tasks = await scanTaskDirs(iterDir);
   let total = tasks.length, completed = 0, hasTest = 0, hasReview = 0;
   for (const t of tasks) {
@@ -1387,7 +1461,7 @@ async function collectHealthData(iteration: string): Promise<any> {
 
 // ── Collect Lifecycle Data for export ──
 async function collectLifecycleData(iteration: string): Promise<any> {
-  const iterDir = join(process.cwd(), "迭代-" + iteration);
+  const iterDir = join(process.cwd(), resolveIterDir(iteration));
   const taskDirs = await scanTaskDirs(iterDir);
   const tasks: any[] = [];
   for (const t of taskDirs) {

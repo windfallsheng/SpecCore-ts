@@ -56,16 +56,18 @@ async function saveGraphState(projectRoot: string, state: GraphState): Promise<v
 async function computeFileChanges(
   projectRoot: string,
   scope: string,
-  previousState: GraphState | null
+  previousState: GraphState | null,
+  preScannedFiles?: string[]
 ): Promise<{
   changedFiles: string[];
   unchangedFiles: string[];
   deletedFiles: string[];
   currentFiles: Record<string, FileState>;
 }> {
-  const scopePath = join(projectRoot, scope);
-  const pattern = join(scopePath, '**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs}');
-  const allFiles = await glob(pattern, { absolute: true });
+  // v8.3.3xx+ 同源模式：复用 code-scanner 已收集的文件列表，跳过 glob 扫描
+  const allFiles = preScannedFiles && preScannedFiles.length > 0
+    ? preScannedFiles
+    : await glob(join(projectRoot, scope, '**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs}'), { absolute: true });
 
   const currentFiles: Record<string, FileState> = {};
   const changedFiles: string[] = [];
@@ -143,6 +145,8 @@ export interface IncrementalBuildOptions {
   scope?: string;
   projectRoot?: string;
   projectName?: string;
+  /** v8.3.3xx+ 同源模式：复用 code-scanner 已收集的绝对路径文件列表，跳过 glob 扫描 */
+  preScannedFiles?: string[];
 }
 
 /**
@@ -159,7 +163,7 @@ export async function buildCodeKnowledgeGraphIncremental(
   const existingGraph = previousState ? await loadExistingGraph(projectRoot) : null;
 
   const { changedFiles, unchangedFiles, deletedFiles, currentFiles } =
-    await computeFileChanges(projectRoot, scope, previousState);
+    await computeFileChanges(projectRoot, scope, previousState, options.preScannedFiles);
 
   logger.info(`🔍 增量扫描: ${scope}`);
   logger.info(`   变化文件: ${changedFiles.length} | 未变: ${unchangedFiles.length} | 删除: ${deletedFiles.length}`);

@@ -149,12 +149,21 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
   },
   // 创建层
   // 创建迭代（必须在通用创建之前，优先级更高）
+  // v8.3.286+: triggers 补口语化虚词变体——「创建迭代」「新建迭代」被「一个/个/新」隔断后
+  //   仍能命中；英文变体覆盖「speccore iteration create」这类输入。
+  //   （宽 trigger「新建/创建」故意不收录：那是 task new 的词，靠共现加权决胜，见 recognizeIntent）
   {
     id: 'iteration create',
     intent: 'iteration_create',
     priority: 92,
-    triggers: ['创建迭代', '新建迭代', '创建sprint', '新建sprint', '开新迭代', '新开迭代'],
-    patterns: ['创建(.+)迭代', '新建(.+)迭代', '创建一个叫(.+)的迭代', '创建sprint(.+)', '开(.+)迭代', '迭代叫(.+)'],
+    triggers: [
+      '创建迭代', '新建迭代', '创建sprint', '新建sprint', '开新迭代', '新开迭代',
+      '创建一个迭代', '新建一个迭代', '创建新迭代', '新建新迭代',
+      '创建个迭代', '新建个迭代', '开一个新迭代', '新开一个迭代', '开个新迭代',
+      '创建期次', '新建期次', '创建一个期次', '新建一个期次',
+      'iteration create', 'create iteration', 'create sprint', 'new iteration', 'new sprint',
+    ],
+    patterns: ['创建(.+)迭代', '新建(.+)迭代', '创建一个(.+)迭代', '新建一个(.+)迭代', '创建一个叫(.+)的迭代', '创建sprint(.+)', '开(.+)迭代', '迭代叫(.+)'],
     description: '创建新迭代 — 生成 STAFFING + 产品需求 + 需求文档目录',
     args: '--name=<name> --owner=<owner>',
   },
@@ -594,6 +603,14 @@ const CONTEXT_RULES: Record<string, ContextRule> = {
     withContextEnhancement: (ctx) =>
       `当前迭代: ${ctx.currentIteration}，准备执行待开发任务`,
   },
+  // v8.3.286+: 创建迭代在活跃迭代场景下同样常见（新迭代衔接），补上上下文加成，
+  // 避免「新建一个迭代」在有活跃迭代时被 execute 的上下文 +15 反超。
+  'iteration create': {
+    intent: 'iteration_create',
+    noContextMessage: '',
+    withContextEnhancement: (ctx) =>
+      `当前迭代: ${ctx.currentIteration}，新迭代创建后按需切换活跃迭代`,
+  },
   query_progress: {
     intent: 'query_progress',
     noContextMessage: '当前无活跃迭代，无法查看进度',
@@ -623,6 +640,126 @@ const CONTEXT_RULES: Record<string, ContextRule> = {
 // ============================================================
 
 /**
+ * 口语虚词归一化（v8.3.287+）
+ * 剥离口语填充短语，让词组 trigger 在被「一下/一个/帮我」隔断时仍能连续命中。
+ * 保守原则：只剥完整短语，不剥单字歧义词（的/再/下/请/个/先——「再分析」是 trigger、
+ * 「下一步」是 next trigger、单字剥离会误伤「优先/个别」等）。
+ * 参数提取（extractParams）仍用原输入，捕获组内容不受归一化污染。
+ */
+const ORAL_FILLERS = ['请帮我', '麻烦你', '帮我', '给我', '一下', '一个', '一项', '一条', '一份'];
+
+function normalizeInput(input: string): string {
+  let out = input;
+  for (const filler of ORAL_FILLERS) {
+    out = out.split(filler).join('');
+  }
+  return out;
+}
+
+// ============================================================
+// 名词锚点共现规则（v8.3.287+：体系化 v8.3.286 的三处硬编码补丁）
+// 中文口语里名词比动词可靠：宽 trigger（做/创建/新建）互相抢分时，
+// 名词锚点（迭代/项目/任务/功能/文档）与动词家族共现才是真信号。
+// ============================================================
+
+type AnchorRule =
+  | {
+      kind: 'anchor';        // 共现加权：锚点 + 动词 → 受益意图加分
+      intent: IntentType;
+      anchors: RegExp;       // 名词锚点（对原输入测试）
+      verbs: RegExp;         // 动词家族
+      bonus: number;
+    }
+  | {
+      kind: 'capturePenalty'; // 宽捕获让位：捕获组含锚点名词 → 受罚意图减分
+      intents: IntentType[];
+      anchors: RegExp;        // 对「创建(.+)」类宽捕获组测试
+      bonus: number;          // 正数，实际为减分
+    }
+  | {
+      kind: 'phrasePenalty';  // 短语让位：句中明确短语 → 受罚意图减分
+      intent: IntentType;
+      anchors: RegExp;        // 对原输入测试
+      bonus: number;
+    };
+
+const ANCHOR_RULES: AnchorRule[] = [
+  // 迭代锚点：创建类动词 + 迭代/sprint/期次 → iteration_create 强信号
+  // （排除「XX迭代的功能模块」：迭代后紧跟「的」时迭代是定语不是宾语）
+  {
+    kind: 'anchor', intent: 'iteration_create',
+    anchors: /(?:迭代|sprint|期次)(?!的)/,
+    verbs: /(?:创建|新建|新开|开新|开启|建立|建|开)/,
+    bonus: 35,
+  },
+  // 项目锚点：句子以「项目」结尾 + 初始化类动词 → init
+  // （「项目管理/项目计划」等定语结构不以「项目」结尾，不受影响）
+  {
+    kind: 'anchor', intent: 'init',
+    anchors: /项目[，。\s]*$/,
+    verbs: /(?:创建|新建|建立|初始化|迁移)/,
+    bonus: 20,
+  },
+  // 任务锚点：创建类动词 + 任务名词 → new_task（多端任务）
+  {
+    kind: 'anchor', intent: 'new_task',
+    anchors: /任务/,
+    verbs: /(?:新建|创建|做一个?|添加)/,
+    bonus: 25,
+  },
+  // 功能锚点：做一个/添加/实现 + 功能类名词 → create
+  // （修「做一个支付模块」被 execute 宽 trigger「做」抢走）
+  {
+    kind: 'anchor', intent: 'create',
+    anchors: /(?:功能|模块|页面|接口|服务|系统)/,
+    verbs: /(?:做一个?|添加|实现|新增)/,
+    bonus: 20,
+  },
+  // 文档锚点：导入/转换 + 文档类名词 → doc2spec
+  // （修「导入一下文档」只靠 pattern 分导致低置信度；25 分使其跨过 85 high 线）
+  {
+    kind: 'anchor', intent: 'doc2spec',
+    anchors: /(?:文档|PRD|word|docx)/,
+    verbs: /(?:导入|转换|转)/,
+    bonus: 25,
+  },
+  // 需求文档锚点：切分 + 需求文档/功能单元 → unitize
+  {
+    kind: 'anchor', intent: 'split-units',
+    anchors: /(?:需求文档|功能单元)/,
+    verbs: /(?:切分|切)/,
+    bonus: 20,
+  },
+  // 反向让位：task new 的宽 pattern「创建(.+)」吞掉迭代名词 → 夺回误加分
+  {
+    kind: 'capturePenalty', intents: ['create', 'new_task'],
+    anchors: /(?:迭代|sprint|期次)(?!的)/,
+    bonus: 35,
+  },
+  // 反向让位：宽捕获以「项目」结尾 → 项目初始化优先（「项目管理」定语不受影响）
+  {
+    kind: 'capturePenalty', intents: ['create', 'new_task'],
+    anchors: /项目[，。\s]*$/,
+    bonus: 35,
+  },
+  // 短语让位：「创建任务/新建任务」短语明确 → 多端任务优先于通用创建
+  // （-40：须同时抵消 287 功能锚点 +20 与上下文加成，否则「新建任务，做一个支付模块」
+  //   中 create 仍与 new_task 并列封顶 100，按 priority 反而排前）
+  {
+    kind: 'phrasePenalty', intent: 'create',
+    anchors: /(?:创建|新建|做一个?|添加).{0,2}任务/,
+    bonus: 40,
+  },
+];
+
+/** 迭代工作意图集（v8.3.287+）：活跃迭代场景下统一享 +15 上下文加成，此前仅 4 个意图有 */
+const ITERATION_CONTEXT_INTENTS = new Set<IntentType>([
+  'execute', 'iteration_create', 'analyze', 'split', 'split-units',
+  'plan', 'review', 'change', 'create', 'new_task', 'bugfix',
+  'req_doc', 'doc2spec', 'research', 'query_progress', 'done',
+]);
+
+/**
  * 从用户自然语言输入中识别意图
  */
 export async function recognizeIntent(input: string): Promise<IntentResult[]> {
@@ -634,25 +771,33 @@ export async function recognizeIntent(input: string): Promise<IntentResult[]> {
 
   const results: IntentResult[] = [];
   const inputLower = input.toLowerCase();
+  // v8.3.287+: 口语虚词归一化——词组 trigger 被隔断时在归一化副本恢复连续命中
+  const normInput = normalizeInput(input);
+  const normInputLower = normInput.toLowerCase();
 
   for (const mapping of COMMAND_MAPPINGS) {
     let totalScore = 0;
     const matched: string[] = [];
 
-    // 1. 关键词直接匹配
+    // 1. 关键词直接匹配（原输入 + 归一化副本双集合，任一命中计分一次，绝不双计）
     for (const trigger of mapping.triggers) {
-      if (input.includes(trigger) || inputLower.includes(trigger.toLowerCase())) {
-        totalScore += 20;
+      const tl = trigger.toLowerCase();
+      const hit =
+        input.includes(trigger) || inputLower.includes(tl) ||
+        (normInput !== input && (normInput.includes(trigger) || normInputLower.includes(tl)));
+      if (hit) {
+        // v8.3.287+: 宽触发词（≤2 字符）降权 20→12，长词组保持 20——
+        // 「做/跑/开」等单字词不再轻松碾压「做一个/跑流水线」
+        totalScore += trigger.length <= 2 ? 12 : 20;
         matched.push(`关键词: "${trigger}"`);
       }
     }
 
-    // 2. 正则模式匹配
+    // 2. 正则模式匹配（双集合，任一命中计分一次）
     for (const pattern of mapping.patterns) {
       try {
         const regex = new RegExp(pattern);
-        const match = input.match(regex);
-        if (match) {
+        if (regex.test(input) || (normInput !== input && regex.test(normInput))) {
           totalScore += 30;
           matched.push(`模式: "${pattern}"`);
         }
@@ -661,30 +806,45 @@ export async function recognizeIntent(input: string): Promise<IntentResult[]> {
       }
     }
 
+    // 2.5 名词锚点共现规则（v8.3.287+：统一表，体系化 286 的硬编码补丁）
+    for (const rule of ANCHOR_RULES) {
+      if (rule.kind === 'anchor') {
+        if (mapping.intent !== rule.intent) continue;
+        if (!rule.anchors.test(input) || !rule.verbs.test(input)) continue;
+        totalScore += rule.bonus;
+        matched.push(`锚点共现: +${rule.bonus}`);
+      } else if (rule.kind === 'capturePenalty') {
+        if (!rule.intents.includes(mapping.intent)) continue;
+        const wideCapture = input.match(/(?:创建|新建|新增|添加|做一个?)(.+)/);
+        if (!wideCapture || !rule.anchors.test(wideCapture[1] || '')) continue;
+        totalScore -= rule.bonus;
+        matched.push(`锚点让位: -${rule.bonus}`);
+      } else {
+        // phrasePenalty
+        if (mapping.intent !== rule.intent) continue;
+        if (!rule.anchors.test(input)) continue;
+        totalScore -= rule.bonus;
+        matched.push(`锚点让位: -${rule.bonus}`);
+      }
+    }
+
     if (totalScore > 0) {
       // 3. 优先级加成
       totalScore += mapping.priority * 0.3;
 
-      // 4. 上下文感知增强
+      // 4. 上下文感知增强（v8.3.287+：迭代工作意图集统一享 +15，不再只限 4 个意图）
       let contextAware = false;
       const contextRule = CONTEXT_RULES[mapping.id];
-      if (contextRule) {
-        // v6.97.0+ 修复：用户明确说全局分析时，不因活跃迭代给迭代级意图加分
-        const hasGlobalScope = /全局|全量|所有项目|所有工程|整体架构|跨端|整个系统/.test(input);
-        if (activeIteration && !hasGlobalScope) {
-          totalScore += 15;
-          contextAware = true;
-          matched.push('上下文感知: 有活跃迭代');
-        } else if (activeIteration && hasGlobalScope && mapping.intent === 'analyze') {
-          // 全局分析时，analyze 意图不因活跃迭代加分（避免全局被迭代上下文拉高）
-          matched.push('上下文感知: 有活跃迭代，但用户明确全局分析，不加分');
-        } else if (
-          mapping.intent === 'execute' ||
-          mapping.intent === 'query_progress'
-        ) {
-          totalScore -= 20; // 无上下文降权
-          matched.push('上下文感知: 无活跃迭代');
-        }
+      const ctxIntent = contextRule?.intent || mapping.intent;
+      // v6.97.0+ 修复：用户明确说全局分析时，不因活跃迭代给迭代级意图加分
+      const hasGlobalScope = /全局|全量|所有项目|所有工程|整体架构|跨端|整个系统/.test(input);
+      if (activeIteration && !hasGlobalScope && ITERATION_CONTEXT_INTENTS.has(ctxIntent)) {
+        totalScore += 15;
+        contextAware = true;
+        matched.push('上下文感知: 有活跃迭代');
+      } else if (!activeIteration && (ctxIntent === 'execute' || ctxIntent === 'query_progress')) {
+        totalScore -= 20; // 无上下文降权
+        matched.push('上下文感知: 无活跃迭代');
       }
 
       // 5. 语境加成/减分：区分 speccore 域内 vs 域外表达
@@ -734,12 +894,23 @@ export async function recognizeIntent(input: string): Promise<IntentResult[]> {
   }
 
   // 按置信度降序排列；同分时 trigger 精确度（命中短语总长）降序；再同则 priority 降序
-  return results.sort((a, b) => {
+  const sorted = results.sort((a, b) => {
     if (b.confidence !== a.confidence) return b.confidence - a.confidence;
     if ((b.triggerSpecificity || 0) !== (a.triggerSpecificity || 0)) {
       return (b.triggerSpecificity || 0) - (a.triggerSpecificity || 0);
     }
     return b.priority - a.priority;
+  });
+
+  // v8.3.287+: 同 (intent, command) 对去重——analyze 有双映射（真重复）；
+  // 但 task new（create/new_task）、welcome（demo/welcome）、dashboard（global_status/dashboard）
+  // 是不同意图共享命令名，必须保留，否则 new_task 会被 create 吞掉。
+  const seenCandidates = new Set<string>();
+  return sorted.filter((r) => {
+    const key = `${r.intent}|${r.command}`;
+    if (seenCandidates.has(key)) return false;
+    seenCandidates.add(key);
+    return true;
   });
 }
 

@@ -11,7 +11,7 @@ import { Command } from 'commander';
 import { join } from 'path';
 import { readFile, pathExists } from 'fs-extra';
 import { watch } from 'fs';
-import { buildCodeIndex, loadFullIndex } from '../core/code-scanner';
+import { buildCodeIndex, loadFullIndex, collectScanFiles } from '../core/code-scanner';
 import { generateMarkdownIndex } from '../core/code-index-markdown';
 import { buildCodeKnowledgeGraph, buildCodeKnowledgeGraphIncremental } from '../core/code-graph';
 import { logger, Spinner } from '../utils/logger';
@@ -34,9 +34,12 @@ export async function codeIndexCommand(options: CodeIndexOptions): Promise<void>
     logger.info(`👁️  启动图谱监视模式: ${scope}`);
     logger.info('   按 Ctrl+C 停止');
 
-    // 首次构建（有 --graph 则构建图谱，否则构建代码索引）
+    // 首次构建（有 --graph 则同源构建索引+图谱，否则构建代码索引）
     if (options.graph) {
-      await buildCodeKnowledgeGraphIncremental({ scope });
+      const scope = options.scope || 'src';
+      const files = await collectScanFiles(scope);
+      await buildCodeIndex(scope, false, files);
+      await buildCodeKnowledgeGraphIncremental({ scope, preScannedFiles: files });
     } else {
       await buildCodeIndex(scope, !options.full);
     }
@@ -64,16 +67,24 @@ export async function codeIndexCommand(options: CodeIndexOptions): Promise<void>
     return;
   }
 
-  // --graph: 构建代码知识图谱
+  // --graph: 构建代码知识图谱（同源：一次扫描产出代码索引 + 图谱两份资产）
   if (options.graph) {
+    const scope = options.scope || 'src';
     if (options.incremental) {
-      await buildCodeKnowledgeGraphIncremental({
-        scope: options.scope || 'src',
-      });
+      await buildCodeKnowledgeGraphIncremental({ scope });
+      // 增量模式同步刷新代码索引（只扫变化文件）
+      await buildCodeIndex(scope, true);
     } else {
-      await buildCodeKnowledgeGraph({
-        scope: options.scope || 'src',
-      });
+      // v8.3.3xx+ 同源生成：一次 collectScanFiles，两份资产
+      const files = await collectScanFiles(scope);
+      const fileCount = await buildCodeIndex(scope, false, files);
+      logger.info(`   ✅ 代码索引: ${fileCount} 个文件`);
+      const index = await loadFullIndex();
+      if (index) {
+        await generateMarkdownIndex(index);
+        logger.info(`   ✅ Markdown 索引已生成`);
+      }
+      await buildCodeKnowledgeGraph({ scope, preScannedFiles: files });
     }
     return;
   }

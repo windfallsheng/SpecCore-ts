@@ -3,6 +3,7 @@ import { version } from '../package.json';
 import { readFileSync, existsSync } from 'fs';
 import { join, resolve } from 'path';
 import { logger, enableFileLogging, closeFileLogging } from './utils/logger';
+import { validateStageAliases } from './core/stage-aliases';
 import { findProjectRoot } from './utils/task-utils';
 import { initCommand } from './commands/init';
 import { validateCommand } from './commands/validate';
@@ -14,7 +15,7 @@ import { configCommand } from './commands/config';
 import { iterationCreateCommand } from './commands/iteration/create';
 import { iterationTaskifyCommand } from './commands/iteration/taskify';
 import { iterationListCommand } from './commands/iteration/list';
-import { taskNewCommand } from './commands/task/new';
+import { taskNewCommand, taskTemplateCommand } from './commands/task/new';
 import { taskListCommand } from './commands/task/list';
 import { planCommand } from './commands/plan';
 import { executeCommand } from './commands/execute';
@@ -253,24 +254,30 @@ program
 program
   .command('run [demand...]')
   .alias('r')
-  .description('端到端全自动流水线：导入需求→分析→拆分→执行→验证→部署→归档→导出（12 阶段，默认三闸口；init 为独立初始化功能）')
+  .description('端到端全自动流水线：导入需求→分析→拆分→执行→验证→部署→归档→导出（12 阶段，默认三闸口；init 为独立初始化功能）\n' +
+    '  ├─ run <preset名> → 直呼预设流水线（develop/deploy/deliver/docs/…）\n' +
+    '  ├─ run <阶段/别名> → 单阶段快捷（从该阶段续跑至部署验证，如 run smoke）\n' +
+    '  ├─ run <from> to <to> 或 <from>..<to> → 阶段范围（阶段别名: split→split-units, smoke→verify, deploy→pipeline, code→execute, tasks→taskify, ship→pr, archive→done, docs→spec2doc, import→doc2spec, req→req-doc）\n' +
+    '  ├─ run <一句话需求> → 从需求出发全流程\n' +
+    '  └─ run（无参） → 智能续跑：检测断点从第一个未完成阶段继续（v8.3.290+）')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('--auto', '全自动（run 默认即全自动，此选项为续跑一致性保留）')
   .option('--auto-steps <steps>', '指定连续步骤自动执行（如 analyze,validate,taskify,execute）')
   .option('--preset <name>', '预设/自定义流水线（full/import/analyze/develop/deliver/deploy/docs，或配置 pipelines.custom 的名称）')
   .option('--from <phase>', '从指定阶段开始（req-doc/doc2spec/split-units/analyze/validate/taskify/plan/execute/verify/pipeline/pr/done/spec2doc）')
   .option('--to <phase>', '到指定阶段结束（同上）')
+  .option('--demand <text>', '显式指定一句话需求（逃生舱：需求文本恰为 preset/阶段保留字时使用）')
   .option('--demo', '演示模式（放宽闸口 A/B，保留部署前确认）')
-  .option('--gate <mode>', '闸口模式：manual=闸口A/B/C都人工确认（默认）| auto=三闸口都跳过（含C部署，自动执行）')
+  .option('--gate <mode>', '闸口模式：manual=闸口A/B/C都人工确认（默认）| auto= 三闸口都跳过（含C部署，自动执行）')
   .option('--env <env>', '部署环境（透传给 pipeline，默认 staging）')
   .option('--smoke', '单次强制冒烟（覆盖 settings.smoke.points 为 on）')
   .option('--skip-smoke', '单次跳过冒烟（覆盖 settings.smoke.points 为 off）')
   .option('--scope <scope>', '单次指定冒烟范围：full=全量 / module=当前功能模块')
-  .option('--no-dep-check', '跳过阶段前置依赖检查（默认硬阻断上游依赖缺失，仅确知风险时使用）')
+  .option('--no-dep-check', '跳过阶段前置依赖检查（默认硬阻断上游依赖缺失，仅确 知风险时使用）')
   .action((demand: string[], options: any) => {
     if (options.smoke) options.smoke = 'on';
     else if (options.skipSmoke) options.smoke = 'off';
-    runCommand({ ...options, demand: demand && demand.length ? demand.join(' ') : undefined });
+    runCommand({ ...options, demand: options.demand || (demand && demand.length ? demand.join(' ') : undefined), demandExplicit: !!options.demand });
   });
 
 program
@@ -407,6 +414,8 @@ taskCmd
   .option('-i, --iteration <iteration>', '目标迭代')
   .option('--batch <tasks>', '批量创建')
   .option('--batch-file <path>', '从文件批量导入（支持 xlsx，自动提取内嵌图片）')
+  .option('--translate-en <mode>', '批量导入任务名英译: auto(默认) | host | off')
+  .option('--translate-response <json>', '接收宿主 AI 英译 JSON（配合宿主接力续跑）')
   .option('--feature <module>', '关联功能模块（bug 修复时指定所属功能模块，影响分支 base）')
   .option('--auto-execute', '创建后自动 analyze→execute 修复（bug 无人值守）')
   .option('--interactive', '交互式创建')
@@ -419,6 +428,12 @@ taskCmd
   .description('列出当前迭代的所有任务')
   .option('-i, --iteration <iteration>', '目标迭代')
   .action(taskListCommand);
+
+taskCmd
+  .command('template')
+  .description('导出标准 Bug 导入模板（xlsx：列头/必填说明/示例，截图内嵌支持）')
+  .option('-o, --output <path>', '输出路径（默认 bug-import-template.xlsx）')
+  .action(taskTemplateCommand);
 
 // 完整需求交付
 program
@@ -523,6 +538,7 @@ program
   .option('--backend', '仅后端任务（自动识别项目中的后端端名）')
   .option('--frontend', '仅前端任务（自动识别项目中的前端端名）')
   .option('--platform <platform>', '按端过滤（工程标识，如 CONSTITUTION.md 端列表中的端名）')
+  .option('--module <module>', '按所属功能模块筛选（如 支付，匹配 .meta/feature）')
   .option('--plan <id>', 'Execute a saved plan (from speccore plan --list)')
   .option('--interactive', 'Interactive selection')
   .option('--dry-run', 'Preview execution plan')
@@ -638,9 +654,9 @@ program
   .action(reviewCommand);
 
 program
-  .command('verify')
+  .command('verify [stage]')
   .alias('vf')
-  .description('代码验证：编译检查 + Lint + 单元测试 + UI 冒烟测试（执行后质量门禁）')
+  .description('代码验证：编译检查 + Lint + 单元测试 + UI 冒烟测试（执行后质量门禁；位置参数可直呼测试阶段 dev/pr/deploy/release）')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('-t, --task <task>', 'Verify specific task')
   .option('--type <type>', 'Check type: compile, lint, test, all', 'all')
@@ -671,7 +687,16 @@ program
   .option('--base-url <url>', '自动发现时使用的基地址', 'http://localhost:8080')
   .option('--config <path>', '测试场景配置文件路径')
   .option('--env-file <path>', '环境配置文件（与 --config 联动）')
-  .action(async (options: any) => {
+  .action(async (stage: string | undefined, options: any) => {
+    // v8.3.290+: 位置参数直呼测试阶段（verify dev/pr/deploy/release ≡ --stage）
+    if (stage) {
+      if (!['dev', 'pr', 'deploy', 'release'].includes(stage)) {
+        console.error(`未知测试阶段 "${stage}"，可用: dev / pr / deploy / release`);
+        process.exitCode = 1;
+        return;
+      }
+      options.stage = stage;
+    }
     const { verifyCommand } = await import('./commands/verify');
     return verifyCommand(options);
   });
@@ -848,7 +873,7 @@ program
   .action(iterationFromGlobalCommand);
 
 program
-  .command('doc2spec')
+  .command('doc2spec [file]')
   .alias('d2s')
   .description('导入 PRD/文档 → SpecCore MD（双路验证：AI + Pandoc）')
   .option('-f, --file <path>', '源文件路径')
@@ -864,10 +889,10 @@ program
   .option("--translate-en <mode>", "单元标题英译: auto(默认) | host | off")
   .option("--translate-response <json>", "接收宿主 AI 英译 JSON（配合 --translate-en host）")
   .option("--on-duplicate <mode>", "同名单元处理: ask(默认) | skip | overwrite | rename | abort")
-  .action(doc2specCommand);
+  .action((file: string | undefined, options: any) => doc2specCommand({ ...options, file: options.file || file }));
 
 program
-  .command('unitize')
+  .command('unitize [file]')
   .alias('unitz')
   .description('切分需求文档为功能单元 → features/（独立能力；拆任务用 taskify）')
   .option('-f, --file <path>', '需求文档路径（.md，通常为 converted/*.md）')
@@ -877,7 +902,7 @@ program
   .option("--translate-en <mode>", "单元标题英译: auto(默认) | host | off")
   .option("--translate-response <json>", "接收宿主 AI 英译 JSON（配合 --translate-en host）")
   .option("--on-duplicate <mode>", "同名单元处理: ask(默认) | skip | overwrite | rename | abort")
-  .action(unitizeCommand);
+  .action((file: string | undefined, options: any) => unitizeCommand({ ...options, file: options.file || file }));
 
 program
   .command('units')
@@ -973,6 +998,7 @@ program
   .command('analyze')
   .alias('al')
   .description('迭代层需求分析: 需求文档 + 功能单元 → 020-specs/ 分析文档（全局层分析请用 speccore global）')
+  .option('-g, --global', '快捷糖：等价 speccore global analyze（源码技术分析 Layer 1→4 自动推进，产物 .speccore/GLOBAL/）')
   .option('-I, --iteration <iteration>', '目标迭代')
   .option('--scope <scope>', '输出范围: iteration(迭代, 默认) | overview(总览)；global 已废弃，请用 speccore global analyze')
   .option('--src, --source <dirs>', '源码目录 (逗号分隔，如 --src <端1/src>,<端2/src>)')
@@ -1017,7 +1043,13 @@ program
   .option('--consolidate', '汇总所有单元分析为统一报告（配合 --prompt/--apply）')
   .option('--resume-units', '断点续跑未完成的单元分析')
   .option('--pipeline', 'Pipeline 模式：自动执行 Phase 0/1/2 全部步骤（配合 --prompt，宿主会话内闭环推进）')
-  .action(analyzeCommand);
+  .action((options: any) => {
+    // v8.3.290+: analyze -g 快捷糖 ≡ speccore global analyze（Layer 1→4 自动推进）
+    if (options.global) {
+      return globalAnalyzeCommand({ ...options });
+    }
+    return analyzeCommand(options);
+  });
 
 program
   .command('spec-from-source')
@@ -1339,6 +1371,12 @@ if (process.argv.length <= 2) {
 // ── Natural language intent (e.g. speccore "帮我分析需求") ──
 program.exitOverride().configureOutput({ outputError: (str) => process.stderr.write(str) });
 try {
+  // v8.3.290+: 阶段别名表启动自检（防书写漂移，有问题仅告警不阻塞）
+  const aliasProblems = validateStageAliases();
+  if (aliasProblems.length > 0) {
+    logger.warn(`⚠️  阶段别名表异常: ${aliasProblems.join('；')}`);
+  }
+
   program.parse();
 } catch (err: any) {
   // 参数错误（未知选项、缺少必填值等）→ 输出到 stdout 让 AI 能识别并纠正

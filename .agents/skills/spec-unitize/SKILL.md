@@ -26,3 +26,19 @@ disable-model-invocation: false
 - `[SPECCORE_CONTINUE: <path>]` → 优先在同一会话继续下一批（按标记中的命令执行）；上下文紧张时开新对话，先读取 <path> 恢复上下文
 - `[SPECCORE_INTENT]` / `[SPECCORE_RESULT]` → 原样转达用户
 - 其他 `[SPECCORE_*]` 标记 → 参照 speccore-router 的 SKILL.md 处理
+
+## 英译接力剧本（宿主 AI 接手翻译）
+
+unitize 执行时（auto 默认；v8.3.289+ auto 模式会消费 auto_host_ai 配置），若当前环境无直连 LLM（无 providers 池/SPECCORE_LLM_KEY/OPENAI_API_KEY），且项目处于宿主模式（ai.provider=host 或 auto_host_ai: true），CLI 会：
+1. 输出 `[SPECCORE_PROMPT]` + 编号标题清单（1~N）+ 响应 JSON 格式示例，并以退出码 10 结束。
+
+宿主 AI 收到后按以下剧本接力：
+1. 将清单中每个中文标题翻译为英文 kebab-case 目录名：小写字母/数字/连字符，2~5 个单词，禁用拼音（如「预订管理」→ booking-management，不是 yudingguanli）。
+2. 构造 JSON 对象：键=清单序号（1~N，与编号一一对应，勿改名重排），值=英文 slug。
+3. 以 `--translate-response '<JSON>'` 续跑同一条 unitize 命令（英译写入 010-requirements/.unit-names.json 缓存，重跑幂等）。
+
+```bash
+speccore unitize --file <文件> --iter <迭代> --translate-en host --translate-response '{"1":"booking-management","2":"meeting-room-rules"}'
+```
+
+注意：翻译必须逐条对应序号；漏翻的条目会回退拼音。若不希望英译（接受拼音目录名），续跑时用 `--translate-en off`。

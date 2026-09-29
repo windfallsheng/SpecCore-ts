@@ -35,7 +35,20 @@ speccore run --preset develop   # 分析→验证（默认）
 speccore run --preset spec      # 导入需求→拆分任务（生成 Spec 看效果）
 speccore run --preset deploy    # 分析→部署验证
 speccore run --preset deliver   # 执行→提交代码
-speccore run                    # 不带参数 = develop
+speccore run                    # 无参 = 智能续跑（v8.3.290+）：检测断点，从第一个未完成阶段继续
+```
+
+### 快捷语法糖（v8.3.290+，不依赖 ask 引擎）
+
+```bash
+speccore run develop            # preset 直呼
+speccore run smoke              # 单阶段快捷：从验证跑到部署（别名: split/smoke/code/tasks/ship/…）
+speccore run split to execute   # 范围（自然语言式）
+speccore run split..execute     # 范围（紧凑式）
+speccore run "做用户积分功能"   # 一句话需求，从需求出发全流程
+speccore analyze -g             # 快捷糖：等价 speccore global analyze
+speccore unitize prd.md         # 文件位置参数：等价 unitize --file prd.md
+speccore verify deploy          # 测试阶段位置参数：等价 verify --stage deploy
 ```
 
 ### 8 个预设流水线
