@@ -4,6 +4,17 @@
 
 > 📌 **Note**: English entries below cover selected releases. For the complete version history (v8.3.194 → v8.3.289), see the Chinese [CHANGELOG.md](CHANGELOG.md).
 
+## v8.3.297 (2026-09-29) — vision upgrade fake-fill fixed + config doc ownership correction
+
+### Fixed
+- **settings.vision upgrade fake-fill (hand-written serializer omission)**: the vision field had a type (v8.3.94) and docs, but DEFAULT_CONFIG never included it and the toConfigYaml serializer never emitted it — `config --upgrade` repeatedly claimed "auto-filled" while dropping it on save, so users never saw the vision block. Fix: DEFAULT_CONFIG now includes vision defaults (enabled: false / provider: qwen-vl / maxImagesPerPrompt: 10 / imageMaxSizeKb: 2048); serializer writes the vision block after the review section (enabled/provider/model/apiKey/endpoint/timeout/maxImagesPerPrompt/imageMaxSizeKb)
+
+### Docs
+- **config-reference.md ownership correction**: §3.15 tests / §3.16 stages / §3.17 pipeline.test now marked "not part of .speccore.yml — they belong to .speccore/environments/{env}.yaml (template: staging.yaml.example); writing them into the main config is silently ignored" — previously users configuring per the docs got no effect
+
+### Verification
+- 291 tests green; "run config --upgrade twice" check: first run writes the vision block to disk, second run reports no upgrade needed (fake-fill gone)
+
 ## v8.3.296 (2026-09-29) — Deploy template/script completion + config example audit + engine path-chain fix
 
 ### Added

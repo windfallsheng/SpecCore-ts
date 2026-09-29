@@ -1,3 +1,14 @@
+## v8.3.297 (2026-09-29) — vision 升级假补全修复 + 配置文档归属更正
+
+### 修复
+- **settings.vision 升级假补全（手写序列化器漏写）**：vision 字段类型（v8.3.94）与文档早有，但 DEFAULT_CONFIG 未收录、toConfigYaml 序列化器不输出——`config --upgrade` 反复声称「自动补全」而落盘即丢，用户配置里永远看不到 vision 段。修复：DEFAULT_CONFIG 补 vision 默认值（enabled: false / provider: qwen-vl / maxImagesPerPrompt: 10 / imageMaxSizeKb: 2048）+ 序列化器 review 段后补写 vision 输出（enabled/provider/model/apiKey/endpoint/timeout/maxImagesPerPrompt/imageMaxSizeKb）
+
+### 文档
+- **config-reference.md 归属更正**：§3.15 tests / §3.16 stages / §3.17 pipeline.test 标注「不属于 .speccore.yml 主配置，属于 .speccore/environments/{env}.yaml（模板 staging.yaml.example），写进主配置会被静默忽略」——此前照文档配置的用户字段不生效
+
+### 验证
+- 291 测试全绿；「跑两次 config --upgrade」验证：第一次补 vision 落盘、第二次显示无需升级（不再假补全）
+
 ## v8.3.296 (2026-09-29) — 部署配置/脚本示例补齐 + 配置示例家底盘点 + 引擎路径断链修复
 
 ### 新增

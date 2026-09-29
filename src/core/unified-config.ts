@@ -310,6 +310,14 @@ export const DEFAULT_CONFIG: SpecConfig = {
     sync: { auto_check: true },
     patterns: { auto_save: 'smart' },
     review: { check_assignee: false },
+    // v8.3.297: vision 补入 DEFAULT_CONFIG（此前类型/文档有、升级不产出，序列化器漏写）
+    vision: {
+      enabled: false,
+      provider: 'qwen-vl',
+      model: 'qwen-vl-plus',
+      maxImagesPerPrompt: 10,
+      imageMaxSizeKb: 2048,
+    },
     pipeline: false,
     with_code: false,
     optional_steps: { clarify: 'auto', verify: 'auto', pipeline: 'auto', pr: 'auto', done: 'auto', spec2doc: 'auto' },
@@ -1516,6 +1524,24 @@ function toYaml(config: SpecConfig): string {
   yaml += '  review:\n';
   yaml += '    # check_assignee: 审查时是否检查指派人与执行人一致\n';
   yaml += `    check_assignee: ${config.settings.review.check_assignee}\n`;
+  // v8.3.297: vision 段补写（v8.3.94 新增字段此前未序列化输出，升级假补全）
+  const vis = config.settings.vision;
+  yaml += '  # ── 视觉模型（Vision，v8.3.94+）──\n';
+  yaml += '  #   specs 文档图片理解（PNG/JPG/GIF/WebP 位图自动转文本注入 AI prompt）。默认关闭。\n';
+  yaml += '  vision:\n';
+  yaml += '    # enabled: 是否启用视觉模型\n';
+  yaml += `    enabled: ${vis?.enabled ?? false}\n`;
+  yaml += '    # provider: qwen-vl | openai | anthropic | local\n';
+  yaml += `    provider: ${vis?.provider ?? 'qwen-vl'}\n`;
+  if (vis?.model) yaml += `    model: ${vis.model}\n`;
+  if (vis?.apiKey) {
+    yaml += '    # apiKey: 支持 ${ENV_VAR} 环境变量引用\n';
+    yaml += `    apiKey: ${vis.apiKey}\n`;
+  }
+  if (vis?.endpoint) yaml += `    endpoint: ${vis.endpoint}\n`;
+  if (vis?.timeout) yaml += `    timeout: ${vis.timeout}\n`;
+  if (vis?.maxImagesPerPrompt) yaml += `    maxImagesPerPrompt: ${vis.maxImagesPerPrompt}\n`;
+  if (vis?.imageMaxSizeKb) yaml += `    imageMaxSizeKb: ${vis.imageMaxSizeKb}\n`;
   yaml += '  # ── 流水线（Pipeline）──\n';
   yaml += '  # pipeline: 是否默认启用 Pipeline 模式\n';
   yaml += `  pipeline: ${config.settings.pipeline}\n`;

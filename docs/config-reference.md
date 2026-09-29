@@ -871,6 +871,8 @@ ask:
 
 ### 3.15 tests
 
+> ⚠️ **归属更正（v8.3.297）**：`tests` 不属于 `.speccore.yml` 主配置，属于环境配置文件 `.speccore/environments/{env}.yaml`（如 `staging.yaml`，模板见 `staging.yaml.example`）。写进 `.speccore.yml` 会被静默忽略。
+
 **类型**：`object`
 
 **说明**：测试基础设施配置，与 `speccore verify` 和 `speccore pipeline` 联动。定义测试基地址和视觉模型参数。
@@ -925,6 +927,8 @@ tests:
 
 ### 3.16 stages
 
+> ⚠️ **归属更正（v8.3.297）**：`stages` 不属于 `.speccore.yml` 主配置，属于环境配置文件 `.speccore/environments/{env}.yaml`。写进 `.speccore.yml` 会被静默忽略。
+
 **类型**：`object`
 
 **说明**：分层测试阶段配置，与 `speccore verify --stage <stage>` 联动。不同阶段自动加载对应的测试场景配置文件。
@@ -957,6 +961,8 @@ stages:
 ---
 
 ### 3.17 pipeline.test
+
+> ⚠️ **归属更正（v8.3.297）**：`pipeline.test` 不属于 `.speccore.yml` 主配置，属于环境配置文件 `.speccore/environments/{env}.yaml`（Pipeline 内置测试节点随环境生效）。写进 `.speccore.yml` 会被静默忽略。
 
 **类型**：`object`
 
