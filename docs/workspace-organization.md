@@ -34,7 +34,7 @@ workspace/
 │   │   └── local/
 │   │       └── context.json      # 当前活跃迭代
 │   ├── .codebuddy/commands/      # AI 命令（软链接到 speccore 模板）
-│   ├── 期次-2026-07-会议预定/
+│   ├── 迭代-2026-07-会议预定/
 │   └── README.md
 │
 ├── my-backend/                    # 后端代码工程（独立 Git 仓库）
@@ -75,7 +75,7 @@ mkdir spec-project && cd spec-project
 git init
 speccore init
 
-# 2. 从全量层生成期次
+# 2. 从全量层生成迭代
 speccore iteration-from-global --reqs=REQ-001,REQ-002 --name=2026-07-会议预定
 
 # 3. 推送到远程
@@ -105,7 +105,7 @@ ln -s ..speccore project/.codebuddy/commands .codebuddy/commands
 
 | 方式 | 适用场景 | 操作 |
 | :--- | :--- | :--- |
-| **A：在 Spec 仓库中工作** | 集中管理 Spec、创建期次、同步全量层 | 打开 `spec-project/`，所有 `speccore *` 命令可用 |
+| **A：在 Spec 仓库中工作** | 集中管理 Spec、创建迭代、同步全量层 | 打开 `spec-project/`，所有 `speccore *` 命令可用 |
 | **B：在代码工程中开发** | 编写代码时使用 Spec 命令 | 在代码工程中创建软链接，命令同样可用 |
 
 ---
@@ -125,7 +125,7 @@ ln -s ..speccore project/.codebuddy/commands .codebuddy/commands
 
 | 仓库 | 内容 | 提交频率 | 维护者 |
 | :--- | :--- | :--- | :--- |
-| `spec-project/` | `.speccore/` + 期次 + Task | 每次需求变更 | 架构师 / Tech Lead |
+| `spec-project/` | `.speccore/` + 迭代 + Task | 每次需求变更 | 架构师 / Tech Lead |
 | `my-backend/` | 后端代码 | 每次代码变更 | 后端团队 |
 | `my-frontend/` | 前端代码 | 每次代码变更 | 前端团队 |
 

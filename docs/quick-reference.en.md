@@ -9,16 +9,19 @@
 ```bash
 speccore init                         # Initialize project
 speccore iteration create --name=<n>  # Create iteration
-speccore task new --platforms=web,h5  # Create multi-platform task
+speccore task new --platforms=<p1>,<p2>  # Create multi-platform task
+speccore run                          # Smart resume (v8.3.290+): detect breakpoint, continue from first unfinished phase
+speccore run develop                  # preset by name
+speccore run split to execute         # phase range (natural language)
+speccore run split..execute           # phase range (compact)
+speccore run "build a points feature" # one-liner requirement
 speccore validate                     # Compliance check
 speccore dashboard                    # View progress
-speccore update -t T-001 --status=completed  # Update status
 speccore sync                         # Reverse sync @spec → TASK.md
 speccore diff --source=A --target=B   # Compare iterations
 speccore track --req=REQ-001          # Trace chain
 speccore delete -t Task-005           # Safe delete (trash + clean refs)
 speccore search "payment"             # Cross-spec search
-speccore validate                     # Compliance check
 ```
 
 ## 🔒 AI Commands (use @spec-ask in AI IDE: WorkBuddy/Cursor/Trae)

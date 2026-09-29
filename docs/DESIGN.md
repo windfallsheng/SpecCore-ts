@@ -40,7 +40,7 @@ workspace/
 │   │   ├── CONSTITUTION.md       ← 技术栈、工程列表、需求端映射
 │   │   └── local/context.json    ← 当前活跃迭代
 │   ├── src/                      ← 源码
-│   └── Iteration-NNN-name/       ← 期次
+│   └── Iteration-NNN-name/       ← 迭代
 │
 └── project-b/                     ← 独立工程 B
     ├── .speccore/CONSTITUTION.md  ← 不同技术栈
@@ -6694,3 +6694,68 @@ validateStageAliases() // 启动自检（别名撞规范名/指向未知阶段/�
 - 全完成：/tmp 全产物迭代 → 9 项全 ✅ + 🎉 指路（deliver/docs）+ exit 0 ✅
 - 9 个语法形态逐一实测（preset 直呼 / 范围 to / 范围 .. / 单阶段快捷 / 错误不降级 / --demand 逃生舱 / unitize 位置参数 / verify 非法与合法值 / analyze -g 路由）✅
 - 278/278 单元测试连续三次全绿（一次偶发失败未复现）✅
+
+---
+
+## 附录：v8.3.291-295 冒烟装配四阶段时序 + bugfix 复合命名 + 静态资源发布链路设计
+
+### 问题背景
+
+三个看似独立的问题同源自「配置与产物之间的契约断链」：①冒烟测试的 VERIFY_SPEC selector 依赖前端 data-testid，但「分析阶段元素约定」与「冒烟配置生成阶段」之间无人传递；②bugfix 任务在 030-tasks/bugfix/ 下目录名只有 bug 内容，同一模块的 bug 散落无法辨识；③发布包缺失 templates 导致引导页链接 404。本附录记录三者的设计决策与修复链路。
+
+### 一、冒烟装配四阶段时序设计
+
+冒烟配置的完善时机拆为四个阶段，每个阶段只做自己最擅长的事：
+
+| 阶段 | 职责 | 产出 | 实现 |
+|:---|:---|:---|:---|
+| **分析定契约** | UI_SPEC 声明「元素标识约定」（{模块}-{页面}-{元素}，页面容器 xxx-page 结尾） | 元素清单 | analyze 阶段 UI_SPEC.md 骨架 |
+| **拆分装配 selector** | taskify 无源码时从 UI_SPEC/TEST 提取清单 + 业务流程，生成 VERIFY_SPEC 场景骨架 | 场景 + selector | v8.3.293 `extractElementTestIds` / `generateFlowScenariosFromSpec` / `generateSpecFromUiSpec` |
+| **执行落属性** | 代码生成时强制写 data-testid | 前端组件属性 | v8.3.294 execute prompt 强制条款（prompt-builder + buildAgentContext 两消费点同步） |
+| **冒烟装环境** | 账号三层装配（env > 明文 > 文档提取）、URL、浏览器探测、登录降级 | 运行环境 | verify 既有能力 |
+
+「冒烟阶段自动完善」拆为两个动作，时机不同：
+- **按业务内容装配 selector**：最佳时机在 taskify——UI_SPEC 契约已冻结，拆任务时即生成 VERIFY_SPEC 骨架；冒烟阶段补配是补救而非正途。
+- **按 DOM 反向完善**（运行时自愈）：v8.3.294 实现轻量版——失败场景在页面仍可用时扫描实际 data-testid 清单（`SmokeResult.domTestIds`），汇总输出「selector 自愈提示」供修正 VERIFY_SPEC；**不自动回写配置**（运行时 DOM 可能是中间态，自动回写有误判风险，完整 self-heal 留作可选保险）。
+
+#### 提取与装配算法要点
+
+1. **元素清单提取 `extractElementTestIds`**：兼容表格（split('|') 后索引 0 是行首空串，列定位从索引 1 起）/ 行内枚举 / 代码属性三种写法；`validTestId` 过滤模板占位（btn-edit-{id}）；xxx-page 结尾单独归类 pageTestIds。
+2. **流程场景装配三通道**：普通流程箭头行（A → B 步骤链）/ mermaid stateDiagram 流转（`[*]` 初始流转 preferPage 兜底断言页面容器、自环跳过）/ 描述性箭头零误采（仅流程类章节提取）。章节正则兼容中文序号（「## 五、交互状态」）。
+3. **matchElement 匹配策略**：双向包含 + token 分割匹配（「新增/编辑」→「新增按钮」），多候选取最短元素名（「禁用」不误配「禁用确认弹窗」）；v8.3.295 补结构防御（elements 缺失优雅降级不抛 TypeError）。
+
+### 二、bugfix 复合命名设计（v8.3.294）
+
+- **命名格式**：`{模块英文}-{bug内容英文}`（如 Task-003-login-flow-timeout-crash），同模块 bug 任务自然相邻。
+- **翻译优先级**：模块名 AI `moduleTopic`（prompt 层英译）→ functionalUnit 拼音兜底（toSlug 导出）；内容名 `_topic` → 任务名拼音兜底；bugSlug 已含模块前缀时防重复不叠加。
+- **约束**：模块段截 15 字符、总长受 nextTaskId 40 字符上限约束。
+- **被否决方案**：物理上按模块建子目录（打破 CLI 多消费点的固定层级扫描契约，任务会隐形）；纯拼音拼接（可读性差，AI 英译优先是 v8.3.271-274 功能单元命名模式的延伸）。
+
+### 三、静态资源发布链路设计（v8.3.295）
+
+**根因链**：package.json files 白名单缺 `templates` → npm 发布包无模板 → ask.ts/init.ts 两处又用 `process.cwd()/templates/html`（用户项目根，永远不存在）定位 → 引导页关联页复制静默跳过（404）、setup-guide 长期走降级页、init 示例配置复制静默失败。本地开发时仓库根有 templates 掩盖了 bug。
+
+**修复原则**：静态模板随包发布 + 运行时包内定位。
+- files 白名单加 `templates`；模板读取统一 `join(__dirname, '..', '..', 'templates', 'html')`（dist/commands → 包根，与 init.ts 既有示例复制同源）。
+- 弹页机制：`.speccore/local/.ask-onboarded` 记录版本 ≠ CLI 运行版本时弹页；全局 CLI 未升级而 marker 已同版本时恒不弹——升级后需确认 `speccore --version` 或跑 `speccore init` 重置 marker。
+
+### 四、实现过程中的修复记录
+
+| 问题 | 根因 | 修复 |
+|:---|:---|:---|
+| 「前缀」误读「分支前缀」 | extractValue 正则无行首锚定 | `^` + m 标志 + 占位值过滤 |
+| lifecycle 看板漏任务 | 只扫 030-tasks 根级 | collectTasks 多根扫描（含 {type}/ 布局） |
+| 流程场景为 0 | UI_SPEC 交互流程是 stateDiagram 代码块且章节带中文序号 | 重写生成器：stateDiagram 解析 + 中文序号章节正则 |
+| 表格列定位错位 | split('|') 后索引 0 是行首空串 | 列定位从索引 1 起 + testid 列 findIndex |
+| 缺 elements 结构崩溃 | matchElement 只判 !elementInfo | 补 elements 存在性 + pageTestIds 数组性防御 |
+| 引导页链接 404 | files 白名单缺 templates + cwd 定位 | 白名单补齐 + __dirname 包内定位 |
+
+### 五、实测验证矩阵
+
+- spec-generator 十项专项（表格提取 / 模板占位跳过 / 页面容器归类 / stateDiagram 场景数与真实装配 / preferPage 兜底 / 描述性箭头零误采 / 普通流程行 / 结构防御）全 PASS ✅
+- 会议项目 admin-web-04：8 场景 3 真实装配（users-page / btn-add-user / dialog-disable）✅
+- bugfix 命名六分支（全英文 / 拼音兜底 / 双拼音 / 防重复 / 无模块退化 / feature 不受影响）✅
+- 会议项目 status --group-by feature 分组渲染（模块统计 + 模块清单两段式）✅
+- smoke-engine DOM 扫描五结构点（仅失败扫描 / 页面不可用静默 / 汇总提示 / types 字段）✅
+- 会议项目修复后 ask：outputs/ 五关联页全部落盘；npm pack --dry-run 含全量 templates/html ✅
+- 285/285 单元测试全绿 ✅

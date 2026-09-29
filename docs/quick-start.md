@@ -8,7 +8,7 @@
 |:---|:---|:---|
 | 初始化 | `speccore init` | `speccore init` |
 | 查看状态 | `speccore dashboard` | `speccore dashboard` |
-| 创建期次 | `speccore iteration create` | `speccore iteration create` |
+| 创建迭代 | `speccore iteration create` | `speccore iteration create` |
 | 创建任务 | `speccore task new -n 用户登录` | `speccore task new -n 用户登录` |
 | 导入需求 | — | `@spec-ask "导入PRD.docx"` 🔒 |
 | 分析需求 | — | `@spec-ask "分析当前迭代需求"` 🔒 |
@@ -74,22 +74,22 @@ speccore init
 # - API-DESIGN-EXAMPLE.md / DATABASE-EXAMPLE.md / SECURITY-EXAMPLE.md — 业内经典规范示例（v8.3.130+）
 # - GIT-CONFIG-EXAMPLE.txt / DEPLOY-EXAMPLE.yaml / VERIFY-EXAMPLE.yaml — Git/部署/验证配置示例
 
-# ② 新建期次（CLI 命令）
+# ② 新建迭代（CLI 命令）
 speccore iteration create --name=Q1
 
 # ③ 导入需求文档（🔒 AI 命令 — 在 AI IDE 中使用 @spec-ask）
-@spec-ask "导入 PRD.md 到 Q1 期次的 <端名> 平台"
+@spec-ask "导入 PRD.md 到 Q1 迭代的 <端名> 平台"
 
 # ④ 需求分析（🔒 AI 命令）
-@spec-ask "分析 Q1 期次需求"
+@spec-ask "分析 Q1 迭代需求"
 @spec-ask "全局代码健康扫描"
 @spec-ask "联合分析 <端名1> 和 <端名2> 代码"
 
 # ⑤ 拆分为原子 Task（🔒 AI 命令）
-@spec-ask "拆分 Q1 期次为开发任务"
+@spec-ask "拆分 Q1 迭代为开发任务"
 
 # ⑥ 生成执行计划（🔒 AI 命令）
-@spec-ask "生成 Q1 期次的执行计划"
+@spec-ask "生成 Q1 迭代的执行计划"
 
 # ⑦ AI 执行开发（🔒 AI 命令）
 @spec-ask "执行 Task-001 的开发"
@@ -166,7 +166,7 @@ speccore help --examples               # 完整场景示例
 
 ```bash
 # ── 需求 → 任务 ──
-@spec-ask "导入 PRD.docx 到 backend 平台 Q1 期次"
+@spec-ask "导入 PRD.docx 到 backend 平台 Q1 迭代"
 @spec-ask "分析 Q1 需求"
 @spec-ask "全局代码健康报告"
 @spec-ask "拆分 Q1 迭代为开发任务"
@@ -195,18 +195,20 @@ speccore help --examples               # 完整场景示例
 │   ├── PATTERNS/            # 可复用模式（全局分析时参考）
 │   └── GLOBAL/              # 全局分析产出 + 业务规则
 │       └── BUSINESS_RULES/  # 业务规则（自动注入 Prompt）
-├── 期次-Q1/                  # 迭代期次
-│   ├── 00-需求文档/
-│   └── Task-001/            # 原子任务
-│       ├── 00-specs/        # 核心规格
-│       ├── 10-backend/{服务}/{子任务}/
-│       └── 20-frontend/{平台}/{子任务}/
+├── Iteration-NNN-name/      # 迭代目录
+│   ├── 000-overview/         # 进度总览与报告
+│   ├── 010-requirements/     # 需求文档（sources/ + converted/ + features/）
+│   ├── 020-specs/            # 需求分析（按功能模块组织，含各端规格）
+│   └── 030-tasks/            # 开发任务
+│       └── Task-NNN-{模块}/  # 功能模块分组（端平铺）
+│           ├── 00-specs/     # 核心规格（REQ/TECH/SCHEMA）
+│           └── {端名}/       # 各端子任务（如 booking-service / h5-mobile）
 ```
 
 ## 下一步
 
 - [命令参考](command-reference.md) — 所有命令完整说明
 - [总览](overview.md) — 架构与理念
-- [场景实战](scenarios.md) — 35 个真实场景
+- [场景实战](scenarios.md) — 30+ 个真实场景
 - [示例](https://github.com/windfallsheng/SpecCore-ts/tree/main/examples/meeting-system)
 - [SDD 方法论](sdd-methodology.md)

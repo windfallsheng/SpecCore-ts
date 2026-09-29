@@ -38,6 +38,9 @@ export async function aboutCommand(): Promise<void> {
 
   // 近期亮点
   const highlights = [
+    '冒烟装配四阶段闭环 — 分析定契约 → 拆分装配 selector → 执行落 data-testid → 冒烟自愈提示，UI 元素与测试断言不再断链',
+    'bugfix 复合命名 — 任务目录名「模块英文-内容英文」，同一模块 bug 自然相邻',
+    'status --group-by 逻辑分组 — 按功能模块分组查看任务，bugfix 自动启用',
     'spec-once 单会话端到端 — 「spec once」一句话跑完需求→分析→拆分→开发→冒烟→部署，人机交互/全自动双模式',
     '步骤回退重跑 — 重分析/重拆/重执行/重切四路径，哪一步不满意都无需推倒重来',
     'unitize 同名三选一 — skip/overwrite（时间戳备份可回滚）/rename，重切不再慌乱',
@@ -63,6 +66,8 @@ export async function aboutCommand(): Promise<void> {
 
   // 重要里程碑版本
   const milestones = [
+    { v: '8.3.295', date: '2026-09', desc: '静态资源发布链路修复（引导页 404 根治）+ 冒烟装配四阶段闭环' },
+    { v: '8.3.293', date: '2026-09', desc: '冒烟装配链：元素清单提取 + stateDiagram 流程装配 + 无源码 Spec 通道' },
     { v: '8.3.277', date: '2026-09', desc: '拆分流健壮性加固 + 备份目录指纹隔离（五类静默失败清零）' },
     { v: '8.3.275', date: '2026-09', desc: '步骤重跑体系（taskify --modules / unitize 同名三选一）+ spec-once 双模式' },
     { v: '8.3.146', date: '2026-09', desc: 'Spec 自审 + 端名动态化 + 全面清理 backend/frontend 硬编码' },

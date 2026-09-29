@@ -105,17 +105,20 @@ export function createTaskBranch(
       ? (TASK_TYPE_TO_BRANCH_TYPE[taskType] || taskType)
       : gitConfig.branchType;
 
-    // 任务名安全处理
+    // 任务名安全处理（保留 {name} 格式模板变量使用）
     const safeName = taskName.replace(/[^a-zA-Z0-9\u4e00-\u9fff_-]/g, '-');
 
     // v8.3.120+: 用户完全控制 prefix/suffix（包含分隔符），代码只负责拼接
+    // v8.3.293+: 分支名主体统一为 taskId（子任务全局唯一 ID，与 git-config 文档示例
+    // 「前缀=api- → hotfix/api-Task-001-urgent」一致）；此前用中文任务名会导致
+    // findBranchByTaskId 的 taskId 正则匹配失联、CI 平台对中文分支名兼容性差。
     // 示例: prefix='api-' suffix='-urgent' → hotfix/api-Task-001-urgent
     //       prefix='api_' suffix='_urgent' → hotfix/api_Task-001_urgent
     let branchName: string;
     if (gitConfig.taskPrefix !== undefined || gitConfig.taskSuffix !== undefined) {
       const prefix = gitConfig.taskPrefix || '';
       const suffix = gitConfig.taskSuffix || '';
-      branchName = `${branchType}/${prefix}${safeName}${suffix}`.substring(0, 250);
+      branchName = `${branchType}/${prefix}${taskId}${suffix}`.substring(0, 250);
     } else {
       // 4 位随机 hex hash
       const hash4 = randomBytes(2).toString('hex');
@@ -162,13 +165,17 @@ export function createTaskBranch(
   } catch (e: any) {
     // v8.3.6+: 分支创建失败时输出错误信息，不要静默吞掉
     if (e.message?.includes('already exists')) {
+      // v8.3.293+: 优先从 git-mapping.json / 本地分支列表找回已存在分支（命名规则可能被
+      // 用户手动调整过，重建名字不一定与已存在分支一致）；找不到时按当前配置重建。
+      const existing = findBranchByTaskId(taskId, gitCwd);
+      if (existing) return existing;
       const cfg = loadGitConfig(iteration, taskDir);
       const bt = taskType ? (TASK_TYPE_TO_BRANCH_TYPE[taskType] || taskType) : cfg.branchType;
-      // v8.3.114+: 优先使用新格式
+      // v8.3.114+: 优先使用新格式（主体与主流程一致为 taskId）
       if (cfg.taskPrefix !== undefined || cfg.taskSuffix !== undefined) {
         const prefix = cfg.taskPrefix || '';
         const suffix = cfg.taskSuffix || '';
-        return `${bt}/${prefix}${taskId}${suffix}`;
+        return `${bt}/${prefix}${taskId}${suffix}`.substring(0, 250);
       }
       const ps = cfg.branchPrefix ? `${cfg.branchPrefix}-` : '';
       return formatBranchName(cfg.branchFormat, {
@@ -178,7 +185,7 @@ export function createTaskBranch(
         name: '',
         date: '',
         hash4: '',
-      }).replace(/-{2,}/g, '-').replace(/-$/, '');
+      }).replace(/-{2,}/g, '-').replace(/-$/, '').substring(0, 250);
     }
     // 输出具体错误，帮助用户定位问题（如不在 git 仓库中、base 分支不存在等）
     console.error(`[speccore] Git 分支创建失败: ${e.message || e}`);
@@ -228,9 +235,12 @@ export function loadSubtaskGitConfig(taskDir: string): Partial<GitConfig> {
       .filter(line => !line.trim().startsWith('#') && line.trim().length > 0)
       .join('\n');
 
-    // v8.3.6+: 辅助函数：提取值，跳过占位符和无意义值
+    // v8.3.293+: 修复提取正则无行首锚定导致「前缀」误匹配「分支前缀: xxx」行的 bug
+    // （此前全局未配 branch_types.prefix 时，生成的 git-config「前缀:」为注释行、
+    // 「分支前缀:」为真实值，taskPrefix 会被误读为分支前缀的值，分支名拼接错误）。
+    // 锚定行首（^ + m）后，各配置键只匹配以该键开头的行。
     const extractValue = (key: string): string | null => {
-      const match = content.match(new RegExp(`${key}[：:]\\s*(\\S+)`));
+      const match = content.match(new RegExp(`^${key}[：:]\\s*(\\S+)`, 'm'));
       if (!match) return null;
       const val = match[1].trim();
       // 过滤占位符和无效值
@@ -259,11 +269,12 @@ export function loadSubtaskGitConfig(taskDir: string): Partial<GitConfig> {
     const defaultBranch = extractValue('源分支');
     if (defaultBranch) config.defaultBranch = defaultBranch;
 
-    // 分支格式
-    const formatMatch = content.match(/分支格式[：:]\s*(.+)/);
+    // 分支格式（行首锚定 + 无效值过滤）
+    const formatMatch = content.match(/^分支格式[：:]\s*(.+)$/m);
     if (formatMatch) {
       const val = formatMatch[1].trim();
-      if (val !== '继承迭代配置' && val !== '继承全局配置') config.branchFormat = val;
+      const INVALID_VALUES = new Set(['继承迭代配置', '继承全局配置', '(空)', '无', '—', '-', 'undefined', 'null', '']);
+      if (!INVALID_VALUES.has(val)) config.branchFormat = val;
     }
 
     // 自动拉取
@@ -313,7 +324,13 @@ export function loadGitConfig(iteration?: string, taskDir?: string): GitConfig {
 
       // 任务分支前缀（从"任务分支: feature/{Task-ID}"提取前缀）
       const taskBranchMatch = content.match(/任务分支[：:]\s*(\S+?)\//);
-      if (taskBranchMatch) config.branchPrefix = taskBranchMatch[1];
+      if (taskBranchMatch) {
+        const extracted = taskBranchMatch[1];
+        // v8.3.293+: 模板变量（如 {type}）不是真实前缀，忽略以免污染分支命名
+        if (!extracted.includes('{') && !extracted.includes('}')) {
+          config.branchPrefix = extracted;
+        }
+      }
 
       // 保护分支
       const protectMatch = content.match(/保护分支[：:]\s*(.+)/);
@@ -465,9 +482,12 @@ export function getCurrentTaskMapping(cwd?: string): { taskId: string; taskName:
 /**
  * 生成 Commit 消息
  * v8.3.88+: 支持 cwd 参数
+ * v8.3.293+: 增加 taskType 参数，按任务类型生成符合语义的提交前缀（feature→feat/bugfix→fix/refactor→refactor/research→chore）
  */
-export function generateCommitMessage(taskId: string, taskName: string, specs?: string[], cwd?: string): string {
-  const lines = [`feat(${taskId}): ${taskName}`, ''];
+export function generateCommitMessage(taskId: string, taskName: string, specs?: string[], cwd?: string, taskType?: string): string {
+  const typePrefix: Record<string, string> = { feature: 'feat', bugfix: 'fix', refactor: 'refactor', research: 'chore' };
+  const commitType = typePrefix[taskType || 'feature'] || 'feat';
+  const lines = [`${commitType}(${taskId}): ${taskName}`, ''];
 
   const changed = getChangedFiles(cwd);
   if (changed.length > 0) {
@@ -655,6 +675,9 @@ export function findBranchByTaskId(taskId: string, cwd?: string): string | null 
   const mapping = loadMapping();
   for (const [branch, info] of Object.entries(mapping)) {
     if (info.taskId === taskId) return branch;
+    // v8.3.291: 依赖可能以父任务 ID 引用（TASK.md「依赖任务」存父任务 ID），
+    // 父任务 ID 是子任务 ID 前缀（如 Task-002-f1-booking → Task-002-f1-booking-booking-service）
+    if (info.taskId && info.taskId.startsWith(`${taskId}-`)) return branch;
   }
 
   // 2. 从 git branch 列表查找（匹配 feature/{taskId}-* 或 */{taskId}-*）

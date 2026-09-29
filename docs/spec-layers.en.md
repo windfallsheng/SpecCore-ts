@@ -1,6 +1,6 @@
 # Spec Multi-Layer Loading Mechanism
 
-> Applicable: v6.15.x+
+> Applicable: v8.3.x+
 
 > 💡 **Command types**: `speccore execute` below is a 🔒 AI command — use `@spec-ask` in an AI IDE. See [Quick Start](quick-start.en.md).
 
@@ -196,10 +196,10 @@ Task-001-order-management/
 │   ├── TECH.md               → tech plan
 │   ├── CONTEXT.md            → task context
 │   └── TASK.md               → task breakdown
-├── 10-backend/
-│   └── api/order-api/        → backend subtask
-└── 20-frontend/
-    └── web/order-page/       → frontend subtask
+├── booking-service/         → backend service platform
+│   └── order-api/           → subtask (TASK.md; code goes to source path)
+└── h5-mobile/               → mobile H5 platform
+    └── order-page/          → subtask (TASK.md)
 ```
 
 **execute workflow:**

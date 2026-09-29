@@ -35,7 +35,20 @@ speccore run --preset develop   # analyze → verify (default)
 speccore run --preset spec      # import → taskify (generate Spec to review)
 speccore run --preset deploy    # analyze → deploy & verify
 speccore run --preset deliver   # execute → submit code
-speccore run                    # no args = develop
+speccore run                    # no args = smart resume (v8.3.290+): detect breakpoints, continue from first unfinished phase
+```
+
+### Quick syntax sugar (v8.3.290+, independent of ask engine)
+
+```bash
+speccore run develop            # preset by name
+speccore run smoke              # single-phase shortcut: verify → deploy (aliases: split/smoke/code/tasks/ship/…)
+speccore run split to execute   # range (natural language)
+speccore run split..execute     # range (compact)
+speccore run "build a points feature"   # one-liner requirement, full flow from demand
+speccore analyze -g             # sugar: equals speccore global analyze
+speccore unitize prd.md         # file positional arg: equals unitize --file prd.md
+speccore verify deploy          # test phase positional arg: equals verify --stage deploy
 ```
 
 ### 8 presets
@@ -213,7 +226,7 @@ Iteration-001-meeting/
 ```
 @spec-ask "..."  (AI IDE entry)
   ├─ 🧠 own LLM   → OpenAI / Ollama (SPECCORE_LLM_KEY env)
-  ├─ 🤖 host AI   → WorkBuddy / TRAE / Qcoder (auto-detect)
+  ├─ 🤖 host AI   → WorkBuddy / TRAE / Qoder (auto-detect)
   ├─ 📐 rule engine → command KB + predefined workflows (always available)
   └─ 🎭 multi-subagent → per stage/platform/module roles (step isolation)
 ```
@@ -227,7 +240,7 @@ Iteration-001-meeting/
 | Doc | Description |
 |-----|-------------|
 | [Quick Start](docs/quick-start.en.md) | 5 minutes to first task |
-| [Commands](docs/commands.en.md) | full command reference |
+| [Commands](docs/command-reference.md) | full command reference (Chinese; run `speccore help` for categorized commands) |
 | [Config Reference](docs/config-reference.en.md) | all config fields (incl. pipelines / optional_steps) |
 | [Scenarios](docs/scenarios.en.md) | real-world scenarios |
 | [SDD](docs/sdd-methodology.en.md) | spec-driven development |

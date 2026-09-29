@@ -1,6 +1,6 @@
 {
   "name": "speccore",
-  "version": "8.3.290",
+  "version": "8.3.295",
   "description": "SpecCore - Code by Spec, Not by Vibe.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -35,7 +35,8 @@
     "dist",
     "bin",
     ".agents",
-    "vendor"
+    "vendor",
+    "templates"
   ],
   "dependencies": {
     "commander": "^11.1.0",

@@ -28,8 +28,8 @@
 - [场景十：全量层管理](#场景十全量层管理)
 - [场景十一：项目健康检查](#场景十一项目健康检查)
 - [场景十二：建立项目基线](#场景十二建立项目基线)
-- [场景十三：需求拆分全流程](#场景十三需求拆分全流程-全量层--期次--任务)
-- [场景十四：清理废弃任务/期次](#场景十四清理废弃任务期次)
+- [场景十三：需求拆分全流程](#场景十三需求拆分全流程-全量层--迭代--任务)
+- [场景十四：清理废弃任务/迭代](#场景十四清理废弃任务迭代)
 - [场景十五：恢复误归档任务](#场景十五恢复误归档任务)
 - [场景十六：开发中途需求变更](#场景十六开发中途需求变更)
 - [场景十七：Spec 校验报错](#场景十七spec-校验报错--怎么修)
@@ -77,17 +77,18 @@ speccore doc2spec -f PRD.docx -p backend --iter=Q1
 ### 三、需求分析 — 三种粒度
 
 ```bash
-# 方式 1: 期次分析（需求完整性+代码对标+架构影响）
+# 方式 1: 迭代分析（需求完整性+代码对标+架构影响）
 speccore analyze -I Q1
-# 产出: 00-需求文档/ANALYSIS.md + 完整性检查 + 架构影响评估
+# 产出: 020-specs/ 迭代层规格（overview + 各功能单元）
 
-# 方式 2: 代码分析（多目录+全局报告）
-speccore analyze --scope global --src backend,frontend --depth deep
-# 产出: .speccore/GLOBAL/CODE_HEALTH.md + 复杂度热点 + API清单 + 依赖分析
+# 方式 2: 全局层分析（源码 → 全局资产/反推需求）
+speccore global analyze
+speccore global from-source --src backend/src,frontend/src
+# 产出: .speccore/GLOBAL/ 技术文档 + 需求总纲 + 端索引
 
-# 方式 3: 任务级分析
-speccore analyze --scope task -t Task-01 -I Q1
-# 产出: 填充 TECH.md + TEST.md + REVIEW.md + 补齐缺失文件
+# 方式 3: 功能单元级分析
+speccore analyze --unit 支付模块 -I Q1
+# 产出: 020-specs/{功能单元}/ 各端 TECH.md + TEST.md + UI_SPEC.md
 ```
 
 ### 四、拆分任务 — 三种方式
@@ -206,9 +207,9 @@ speccore init
 # → .codebuddy|.cursor|.trae|.windsurf|.claude/commands/ (各27个Slash Command)
 # 💬 或对 AI 说: "初始化一个 SpecCore 项目"
 
-# 2. 创建第一个期次
+# 2. 创建第一个迭代
 speccore iteration create --name=Q3 --from=2026-07 --to=2026-09
-# → 期次-001-Q3（全局唯一编号自动分配）
+# → 迭代-001-Q3（全局唯一编号自动分配）
 
 # 3. 配置技术栈
 speccore config --tech backend --set "Java 17, Spring Boot 3.2, JPA, MySQL 8.0"
@@ -277,8 +278,8 @@ speccore doc2spec --files \
 
 **验证**:
 ```bash
-ls 期次-Q3/00-需求文档/
-# → 后台管理端需求.md 后台H5端需求.md  Web需求.md  H5需求.md  REQUIREMENT.md  INDEX.md  images/
+ls Iteration-Q3/010-requirements/
+# → sources/  converted/  features/  REQUIREMENT.md  INDEX.md
 ```
 
 ---
@@ -369,7 +370,7 @@ speccore update -t Task-001 --status=in_progress
 speccore diff --source=before-change --target=current
 
 # 6. 验证
-speccore validate -i 期次-2026-07
+speccore validate -i 迭代-2026-07
 ```
 
 ---
@@ -496,7 +497,7 @@ speccore baseline --restore=v1.0-release --req=REQ-005
 
 ---
 
-## 场景十三：需求拆分全流程（全量层 → 期次 → 任务）
+## 场景十三：需求拆分全流程（全量层 → 迭代 → 任务）
 
 **方式一：从 Word/MD 文档导入后拆分**
 ```bash
@@ -523,14 +524,14 @@ speccore iteration taskify --platforms=web,mini,h5
 speccore dashboard --scope global
 # → REQ-001  用户认证   待规划
 
-# 2. 拉取需求 → 生成期次
-speccore iteration-from-global --reqs=REQ-001,REQ-002 --name=期次-2026-Q3
+# 2. 拉取需求 → 生成迭代
+speccore iteration-from-global --reqs=REQ-001,REQ-002 --name=迭代-2026-Q3
 
 # 3. 执行拆分
-speccore iteration taskify -i 期次-2026-Q3
+speccore iteration taskify -i 迭代-2026-Q3
 
 # 4. 查看进度
-speccore progress -i 期次-2026-Q3 --detail
+speccore progress -i 迭代-2026-Q3 --detail
 ```
 
 ---
@@ -548,7 +549,7 @@ speccore progress -i 期次-2026-Q3 --detail
 | DEPLOY.md | 部署清单 | 总是 |
 | .risk | 风险评分 | 总是 |
 
-**期次级产出**：IMPACT.md（风险分级 + 任务依赖）, .env.example（环境变量）
+**迭代级产出**：IMPACT.md（风险分级 + 任务依赖）, .env.example（环境变量）
 
 **严格模式**：
 ```bash
@@ -558,17 +559,17 @@ speccore iteration taskify --strict
 # → 不确认不创建，批量确认后一次性生成
 ```
 
-## 场景十四：清理废弃任务/期次
+## 场景十四：清理废弃任务/迭代
 
 ```bash
 # 1. 删除单个任务（软删除，移到 trash）
 speccore delete -t Task-003
 
-# 2. 删除整个测试期次（不确认）
-speccore delete -I 期次-2026-07-test --force
+# 2. 删除整个测试迭代（不确认）
+speccore delete -I 迭代-2026-07-test --force
 
 # 3. 恢复误删（手动移回）
-mv .speccore/trash/期次-2026-07-test-TIMESTAMP 期次-2026-07-test
+mv .speccore/trash/迭代-2026-07-test-TIMESTAMP 迭代-2026-07-test
 ```
 
 ---
@@ -660,13 +661,13 @@ speccore validate --fix        # 自动修复
 ```bash
 # 张三
 git checkout -b 260715-订单管理-zs
-vim 期次-Q3/Task-001-订单管理/backend/REQ.md
+vim Iteration-Q3/030-tasks/Task-001-订单管理/00-specs/REQ.md
 speccore execute -t Task-001 --force
 speccore sync -t Task-001 --detect
 
 # 李四（同时）
 git checkout -b 260715-用户认证-ls
-vim 期次-Q3/Task-002-用户认证/backend/REQ.md
+vim Iteration-Q3/030-tasks/Task-002-用户认证/00-specs/REQ.md
 speccore execute -t Task-002 --force
 speccore sync -t Task-002 --detect
 ```
@@ -718,9 +719,9 @@ speccore done --all -I Q1 --interactive                 # 预览列表 → 确�
 ### context.json 损坏/丢失
 
 ```bash
-# 症状: 任何命令都报 "找不到当前期次"
+# 症状: 任何命令都报 "找不到当前迭代"
 # 修复
-# 💬 "重新定位当前期次"
+# 💬 "重新定位当前迭代"
 ```
 
 ### Task 目录被手动删除
@@ -759,7 +760,7 @@ speccore validate --fix             # 自动修复常见格式问题
 
 ```bash
 # 1. 先查看依赖关系
-cat 期次-001-Q3/IMPACT.md
+cat 迭代-001-Q3/IMPACT.md
 # | Task-002: 订单查询 | → | Task-001: 用户管理 | `/api/users` |
 
 # 2. 先执行无依赖的任务
@@ -806,8 +807,8 @@ speccore rollback -t Task-002 --reason="合并冲突需重新规划"
 ## 场景二十八：任务级分析迭代
 
 ```bash
-speccore analyze --scope task -t Task-01 -I Q1
-# → 预览 TECH/TEST/REVIEW 变更 → [y]确认
+speccore analyze --unit 功能单元名 -I Q1
+# → 预览 TECH/TEST/UI_SPEC 变更 → 确认落盘
 # → 可反复运行，幂等
 ```
 
@@ -844,13 +845,14 @@ SpecCore 是 SDD 工具（Spec-Driven Development）工具，但定位不同：
 ```bash
 # 自动检测项目阶段，提示下一步
 speccore next
-# → 📍 期次: Q1
+# → 📍 迭代: Q1
 # → 🔍 检测到: 有需求文档但未分析
 # → 📋 下一步: speccore analyze -I Q1
 
-# 自动级联执行（慎用）
+# 智能续跑（v8.3.290+）：无参 run 检测 9 个里程碑断点
 speccore run
-# → analyze → taskify → execute → pr（自动推进）
+# → 检测断点 → 面板软停问用户 / 全自动模式下自动推进
+# → 从第一个未完成阶段继续，全完成时指路收尾
 ```
 
 **支持的阶段检测**: 未初始化 / 缺需求 / 未分析 / 未拆分 / 待开发 / 待审查 / 全部完成
@@ -865,7 +867,7 @@ speccore run
 speccore dashboard
 # ┌───────── SpecCore ─────────┐
 # │ 项目: meetbook             │
-# │ 期次: Q1                   │
+# │ 迭代: Q1                   │
 # │ 阶段: 💻 dev               │
 # │ 任务: 3/6 完成             │
 # │ ██████████░░░░░░░░░░ 50%   │
@@ -874,7 +876,7 @@ speccore dashboard
 # └────────────────────────────┘
 ```
 
-**面板内容**: 项目名 / 期次 / 阶段图标 / 任务进度条 / 当前分支 / 下一步建议
+**面板内容**: 项目名 / 迭代 / 阶段图标 / 任务进度条 / 当前分支 / 下一步建议
 
 ---
 

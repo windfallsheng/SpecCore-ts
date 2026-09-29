@@ -201,8 +201,8 @@ export async function askCommand(input: string, _options: any): Promise<void> {
     const outPath = join(process.cwd(), 'outputs', 'speccore-ask-onboarding.html');
     await ensureDir(join(process.cwd(), 'outputs'));
     await writeFile(outPath, html);
-    // 复制关联模板页面到 outputs/
-    const tplDir = join(process.cwd(), 'templates', 'html');
+    // 复制关联模板页面到 outputs/（v8.3.295+: 模板源改为包内定位，修复升级后链接页 404）
+    const tplDir = join(__dirname, '..', '..', 'templates', 'html');
     for (const f of ['speccore-ask-explain.html','speccore-ask-guide.html','speccore-ask-match.html','speccore-ask-pipeline.html','speccore-help.html']) {
       const src = join(tplDir, f);
       if (await pathExists(src)) await copy(src, join(process.cwd(), 'outputs', f));

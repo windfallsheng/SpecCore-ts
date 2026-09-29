@@ -377,10 +377,12 @@ const PHASE2_DOCS: { name: string; buildPlaceholder: (iter: string, platform: st
 ${backend ? `- 接口定义（路径/参数/响应）
 - 数据模型（Entity/DTO/VO）
 - 核心业务逻辑与事务约束
-- 异常处理与幂等设计` : `- 页面结构与路由设计
+- 异常处理与幂等设计
+- 核心接口调用时序图或数据模型 ER 图（Mermaid sequenceDiagram/erDiagram，至少 1 张）` : `- 页面结构与路由设计
 - 组件拆分与复用策略
 - 状态管理方案
-- 与后端接口的对接方式`}
+- 与后端接口的对接方式
+- 页面路由拓扑图（Mermaid graph，至少 1 张）`}
 - 与 overview/TECH.md 保持一致
 `;
     },
@@ -418,6 +420,7 @@ ${backend ? `- 单元测试覆盖（Service/DAO 层）
 - 组件拆分
 - 交互流程
 - 状态管理
+- 核心页面交互状态流转图（Mermaid stateDiagram-v2，覆盖加载/空/错误/成功四态，至少 1 张）
 - 元素标识约定（关键页面/交互元素加 data-testid，命名 {模块}-{页面}-{元素}，供冒烟测试定位）
 `,
   },
@@ -868,6 +871,7 @@ export const QUALITY_RUBRICS: Record<string, { checklist: string[]; antiPatterns
       '组件拆分（组件名/职责/复用级别）',
       '交互流程（关键操作流程+状态变化）',
       '状态管理（全局状态/本地状态/同步策略）',
+      '核心页面状态流转图（Mermaid stateDiagram-v2）',
       '字段映射（前端字段 ↔ 后端 API 响应字段一一对应）',
       '异常状态 UI（空状态/加载态/错误态/骨架屏）',
     ],

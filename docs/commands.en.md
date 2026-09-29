@@ -1,6 +1,8 @@
 # SpecCore — Command Reference
 
-> 🔧 Commands: 20 | 🧠 Intent Types: 41 | v6.16.0 | See [README](../README.en.md)
+> ⚠️ **This page is a legacy quick reference (v6.16.0 era).** For the complete, up-to-date command reference (v8.3.x: 40+ commands, subcommands, and examples), see the Chinese [command-reference.md](command-reference.md) or run `speccore help`.
+
+> 🔧 Legacy quick commands · v6.16.0 · See [README](../README.en.md)
 
 ---
 
@@ -18,7 +20,7 @@ Same command, different syntax depending on context. Full classification by cate
 | Execute | — | `@spec-ask "execute Task-001"` | 🔒 AI |
 | PR | — | `@spec-ask "create PR for Task-001"` | 🔒 AI |
 | Done | — | `@spec-ask "archive Task-001"` | 🔒 AI |
-| Status | `speccore dashboard` | `/spec-status-panel` | ✅ CLI |
+| Status | `speccore dashboard` | `/spec-dashboard` | ✅ CLI |
 | Change | — | `@spec-ask "change desc for Task-001"` | 🔒 AI |
 | Bugfix | `speccore task new -n "name" --type=bugfix` | `/spec-bugfix` | ✅ CLI |
 | Analyze | — | `@spec-ask "analyze Q1"` | 🔒 AI |
@@ -27,7 +29,7 @@ Same command, different syntax depending on context. Full classification by cate
 | Validate | `speccore validate -i Q1` | `/spec-validate Q1` | ✅ CLI |
 | Smart entry | — | `@spec-ask "query"` | 🔒 AI |
 | Dev | — | `@spec-ask "全自动执行"` | 🔒 AI |
-| Ops | `speccore ops` | `/spec-ops` | ✅ CLI |
+| Ops history | `speccore history` | `/spec-history` | ✅ CLI |
 | Rename | `speccore rename --task=ID --name=new` | `/spec-rename` | ✅ CLI |
 
 ### 🖥 CLI Only (complex parameters)
@@ -153,18 +155,16 @@ speccore sync --global --iteration=2026-07-Meeting
 | Command | Alias | Description | Options |
 | :--- | :--- | :--- | :--- |
 | `speccore validate` | `rv` | Compliance check | `--task <id>` `--iteration <name>` `--fix` `--format <json>` |
-| `speccore status-panel` | `pg` | Progress overview | `--iteration <name>` `--platform <name>` `--detail` `--format <json>` |
 | `speccore status` | `st` | Status dashboard | `--iteration <name>` |
-| `speccore health` | `hl` | Project health | `--iteration <name>` |
-| `speccore status-panel --export` | `rp` | Generate report | `--iteration <name>` `--format <md\|html\|json>` `--output <path>` `--team` `--risk` |
+| `speccore dashboard` | `db` | IDE-style dashboard (HTML export) | `--export <md\|html>` |
+| `speccore progress` | `pg` | Progress overview | `--iteration <name>` |
 
 ```bash
 speccore validate --task=Task-001
 speccore validate --fix --format=json
-speccore status-panel --platform=web --detail
 speccore status --iteration=2026-07-Meeting
-speccore health
-speccore status-panel --export --format=html --output=report.html --team --risk
+speccore dashboard
+speccore progress
 ```
 
 ---
@@ -375,12 +375,12 @@ speccore trace --full
 
 ```
 speccore init                           → .speccore/CONSTITUTION.md (project path, git URL, default branch) ✅
-speccore iteration create -n Q1         → 期次-Q1/ ✅
+speccore iteration create -n Q1         → 迭代-Q1/ ✅
                                             ├── STAFFING.md (per-iteration staffing)
-                                            ├── 00-期次总览/PROJECT_GRAPH.md (default branch override)
+                                            ├── 00-迭代总览/PROJECT_GRAPH.md (default branch override)
                                             └── 00-产品需求/ (product requirements, read-only)
 # 🔒 AI commands below:
-speccore analyze -I Q1                  → 期次-Q1/00-需求文档/  🔒
+speccore analyze -I Q1                  → 迭代-Q1/00-需求文档/  🔒
                                             ├── ANALYSIS.md (change scope, risk matrix, file impact)
                                             ├── TECH/TEST/REVIEW/RISK/DEPS/MONITOR.md
                                             └── .speccore/prompts/analyze-iteration-Q1.md

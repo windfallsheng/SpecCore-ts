@@ -1,6 +1,6 @@
 # SpecCore CI/CD 与 @spec 注释集成指南
 
-> 适用版本：v6.15.x+ | 难度：入门
+> 适用版本：v8.3.x+ | 难度：入门
 
 > 💡 **命令类型**: 本文档中的 `speccore execute` 为 🔒 AI 命令，需在 AI IDE 中通过 `@spec-ask` 使用。
 
@@ -72,7 +72,7 @@ jobs:
 │       └── speccore.yml        ← CI 配置
 ├── .speccore/                  ← SpecCore 项目配置
 ├── src/                        ← 你的代码
-└── 期次-Q3/                    ← Spec 文件 + 生成的代码
+└── Iteration-NNN-name/         ← Spec 文件（代码写入各工程源码路径）
 ```
 
 ---
@@ -187,6 +187,6 @@ speccore dashboard               # 确认状态更新
 
 ## 五、更多参考
 
-- [34 场景实战](scenarios.md) — 场景实战文档重点讲 CI/CD
-- [命令参考](docs/command-reference.md) — sync/validate/hooks 详细参数
-- [examples/task-management](examples/task-management/) — 完整示例项目
+- [30+ 场景实战](scenarios.md) — 场景实战文档重点讲 CI/CD
+- [命令参考](command-reference.md) — sync/validate/hooks 详细参数
+- [会议系统示例](https://github.com/windfallsheng/SpecCore-ts/tree/main/examples/meeting-system) — 完整示例项目

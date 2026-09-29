@@ -202,6 +202,8 @@ speccore run --skip-smoke                  # 单次跳过冒烟
 
 登录账号在 `.speccore/environments/*.yaml` 的 `tests.auth` 配置，冒烟前自动装配（密码走 `SMOKE_PASSWORD` 环境变量，不落库）；三时机开关与范围在 `.speccore.yml` 的 `settings.smoke` 配置。详见 [测试指南](docs/testing-guide.md)。
 
+**冒烟装配四阶段闭环**（v8.3.293+）：分析定契约（UI_SPEC 元素标识约定 `{模块}-{页面}-{元素}`）→ 拆分装配 selector（taskify 无源码时从 UI_SPEC 提取元素清单 + stateDiagram/流程步骤，自动生成 VERIFY_SPEC 场景）→ 执行落属性（代码生成强制写 data-testid）→ 冒烟自愈提示（失败场景汇总页面实际 data-testid 清单供修正）。UI 元素与测试断言从分析到运行环环相扣，不再靠人肉对配置。
+
 ### 📖 配置引导
 
 `speccore init` 后自动生成 6 步引导页，帮助新用户快速上手。
@@ -255,7 +257,7 @@ Iteration-001-meeting/
 ```
 @spec-ask "..."  (AI IDE 入口)
   ├─ 🧠 自有 LLM   → OpenAI / Ollama（SPECCORE_LLM_KEY 环境变量）
-  ├─ 🤖 宿主 AI    → WorkBuddy / TRAE / Qcoder（自动检测）
+  ├─ 🤖 宿主 AI    → WorkBuddy / TRAE / Qoder（自动检测）
   ├─ 📐 规则引擎   → 命令 KB + 预定义工作流（永远可用）
   └─ 🎭 多 Subagent → 按阶段/端/模块分配专属角色（步骤隔离）
 ```
@@ -268,19 +270,19 @@ Iteration-001-meeting/
 
 | 文档 | 说明 |
 |------|------|
-| [快速开始](docs/quick-start.md) | 5 分钟上手 |
-| [命令参考](docs/command-reference.md) | 完整命令 + 子命令 + 示例 |
-| [总览](docs/overview.md) | 核心概念 + 工作流 |
+| [快速开始](docs/quick-start.md) | 5 分钟上手：安装 → 完整流程 |
+| [命令参考](docs/command-reference.md) | 全部命令 + 子命令 + 示例 |
+| [总览](docs/overview.md) | 核心概念 + 工作流 + 三种使用方式 |
 | [配置参考](docs/config-reference.md) | 全部配置项（含 pipelines / optional_steps） |
-| [场景实战](docs/scenarios.md) | 几十个真实开发场景 |
+| [场景实战](docs/scenarios.md) | 30+ 个真实开发场景 |
 | [SDD 方法论](docs/sdd-methodology.md) | 规范驱动开发理念 |
 | [工作空间组织](docs/workspace-organization.md) | 目录结构与文件规范 |
 | [文件编辑指南](docs/usage-guide.md) | 哪些文件能改、哪些用命令 |
 | [速查表](docs/quick-reference.md) | 常用命令一页速查 |
-| [三层加载机制](docs/spec-layers.md) | GLOBAL/ITERATION/TASK 加载原理 |
+| [三层加载机制](docs/spec-layers.md) | GLOBAL/迭代/TASK 加载原理 |
 | [测试指南](docs/testing-guide.md) | 分层测试与质量验证 |
 | [CI-CD 集成](docs/ci-cd-spec-integration.md) | CI/CD 流水线 + Spec 注释 |
-| [工具适配](docs/tool-adapters.md) | Qcoder/TRAE 等 AI 工具集成 |
+| [工具适配](docs/tool-adapters.md) | Qoder/TRAE 等 AI 工具集成 |
 | [架构设计](docs/ARCHITECTURE.md) | 系统架构 |
 | [CHANGELOG](CHANGELOG.md) | 版本历史 |
 

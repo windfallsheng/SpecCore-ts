@@ -9,10 +9,14 @@
 ```bash
 speccore init                         # 初始化项目
 speccore iteration create --name=<n>  # 创建迭代
-speccore task new --platforms=web,h5  # 创建多端任务
+speccore task new --platforms=<端名1>,<端名2>  # 创建多端任务
+speccore run                          # 智能续跑（v8.3.290+）：检测断点，从第一个未完成阶段继续
+speccore run develop                  # preset 直呼
+speccore run split to execute         # 阶段范围（自然语言式）
+speccore run split..execute           # 阶段范围（紧凑式）
+speccore run "做用户积分功能"         # 一句话需求
 speccore validate                     # 合规检查
 speccore dashboard                    # 查看进度
-speccore update -t T-001 --status=completed  # 更新状态
 speccore sync                         # 反向同步 @spec → TASK.md
 speccore diff --source=A --target=B   # 对比迭代
 speccore track --req=REQ-001          # 全链路追溯
@@ -39,7 +43,7 @@ speccore taskify -i <迭代名>           # 拆功能单元 → 开发任务
 ```
 ✅ 安全（直接编辑）      ❌ 危险（用命令）
 REQ.md  需求             PROJECT_GRAPH.md 表格
-TECH.md 设计             .task-type 类型
+TECH.md 设计             .meta/ 元信息
 *.md    注释             API_CONTRACT.yaml API
                          .json 数据文件
 ⚠️ 谨慎（编辑后同步）

@@ -31,7 +31,7 @@ workspace/
 │   │   ├── CONSTITUTION.md        ← 技术栈、工程列表、需求端映射
 │   │   └── local/context.json     ← 当前活跃迭代
 │   ├── src/                       ← 源码
-│   └── Iteration-NNN-name/        ← 期次
+│   └── Iteration-NNN-name/        ← 迭代
 │
 └── project-b/                     ← 独立工程 B
     ├── .speccore/CONSTITUTION.md  ← 不同技术栈

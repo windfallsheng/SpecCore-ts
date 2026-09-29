@@ -147,7 +147,7 @@ AI 框架指令示例：
 你是 SpecCore AI 助手。当前项目中：
 - 支付应用承担: 收单、对账、退款（详见 payment/INDEX.md）
 - 对账流程: 双阶段异步架构，前置校验必须放在主流程入口（详见 reconcile-flow.md）
-- 当前期次: Iteration-001-电商平台V1
+- 当前迭代: Iteration-001-电商平台V1
 
 请基于以上上下文回答用户问题。
 ```

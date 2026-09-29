@@ -2,6 +2,96 @@
 
 ---
 
+> 📌 **Note**: English entries below cover selected releases. For the complete version history (v8.3.194 → v8.3.289), see the Chinese [CHANGELOG.md](CHANGELOG.md).
+
+## v8.3.295 (2026-09-29) — Static asset publish chain fixed: onboarding link 404 cured + defensive hardening
+
+### Fixes
+- **Onboarding related-page 404 (core bug)**: `templates` was missing from package.json `files` whitelist, and both ask.ts/init.ts resolved templates via `process.cwd()/templates/html` (the user project root, which never exists) — first-ask onboarding never popped and all in-page mode cards / help links 404'd; setup-guide had been silently falling back to a「template missing」placeholder; init's example config copy (DEPLOY-EXAMPLE.yaml etc.) also silently failed. Fix: add `templates` to `files`; resolve template sources inside the package via `join(__dirname, '..', '..', 'templates', 'html')`.
+- **Diagnosis: no onboarding after upgrade**: the switch `.speccore/local/.ask-onboarded` compares its recorded version against the CLI runtime version — when the global CLI was not actually upgraded (measured 8.3.282) the versions match and the page never pops; after upgrading, confirm `speccore --version` or run `speccore init` (its upgrade branch resets the marker).
+
+### Hardening
+- **generateFlowScenariosFromSpec structure defense**: matchElement/matchPageSelector now check `elementInfo.elements` existence and `pageTestIds` array-ness — malformed external input degrades gracefully instead of throwing TypeError.
+
+### Verification
+- 285 tests green; four rounds of targeted verification (spec-generator 10 checks / status --group-by / toSlug composite naming / smoke-engine DOM scan 5 structure points) all PASS
+- meeting-system real run: after fix, all five related pages (explain/guide/match/pipeline/help) land in outputs/; `npm pack --dry-run` confirms the tarball ships all templates/html/*.html
+
+## v8.3.294 (2026-09-29) — bugfix composite naming + contract baked into code + smoke selector self-heal hint
+
+### Enhancements
+- **bugfix task dir composite naming**: `buildTaskTopic` joins `{module-english}-{bug-english}` (e.g. Task-003-login-flow-timeout-crash) so bugs of the same module sit adjacent under 030-tasks/bugfix/; module name prefers AI `moduleTopic` (prompt-layer translation), falls back to toSlug pinyin for functionalUnit; duplicate-prefix guard when bugSlug already starts with moduleSlug; module segment capped at 15 chars, total under the 40-char nextTaskId limit
+- **execute prompt data-testid mandate (two consumers synced)**: prompt-builder frontend requirements and execute.ts buildAgentContext checklist both now require「add data-testid per UI_SPEC element convention ({module}-{page}-{element}, page containers end with xxx-page) — smoke VERIFY_SPEC assertions depend on them」— closing the last broken link in「taskify assembles selector → execute writes attribute」
+- **Smoke selector self-heal hint**: failed scenarios scan the page's real data-testid list while the page is still usable (`SmokeResult.domTestIds`, silently skipped when the page is gone); runSmokeTest aggregates a「selector self-heal hint」listing actual testids for fixing VERIFY_SPEC placeholder selectors — config is never auto-rewritten (avoids runtime misjudgment)
+
+### Verification
+- Six-branch naming verification (all-English / pinyin fallback / double pinyin / dedupe / no-module degradation / feature unaffected); build + 285 tests green
+
+## v8.3.293 (2026-09-29) — Smoke assembly chain: three broken links fixed (element list extraction + flow scenario assembly + no-source Spec channel)
+
+### New
+- **UI_SPEC element list extraction `extractElementTestIds`**: supports three syntaxes (Markdown table with testid column on either side / inline enumeration / code attributes); template placeholders (btn-edit-{id}) auto-skipped; page containers (xxx-page) collected separately into pageTestIds
+- **Flow scenario assembly `generateFlowScenariosFromSpec` (rewritten)**: three channels — ① plain flow arrow lines (A → B step chains) ② mermaid stateDiagram transitions (incl. `[*]` initial pseudo-state and self-loop skip) ③ descriptive arrows never mis-collected; section regex accepts Chinese ordinal prefixes (「## 五、交互状态」); matchElement bidirectional containment + token-split matching (「新增/编辑」→「新增按钮」) + shortest-element-name strategy; initial transition preferPage fallback asserts the page container
+- **No-source Spec channel `generateSpecFromUiSpec`**: taskify with no source code extracts the element list + business flows from UI_SPEC/TEST and generates VERIFY_SPEC flow scenario skeletons — closing the「analysis-stage element convention → smoke config auto-assembly」loop
+
+### Fixes
+- **Root cause of zero flow scenarios**: admin-web-04 UI_SPEC interaction flows live in mermaid stateDiagram blocks under a Chinese-ordinal section header, which the old extractor never recognized — after the rewrite: 8 scenarios with 3 real assemblies (users-page/btn-add-user/dialog-disable)
+
+### Verification
+- Three-channel verification (stateDiagram assembly / plain flow lines / h5 descriptive arrows zero false-positive); build + 285 tests green
+
+## v8.3.292 (2026-09-29) — Git config fix + Plan A logical grouping view
+
+### Fixes
+- **extractValue line-start anchoring**: regex now anchored with `^` + m flag — 「前缀」no longer misreads the「分支前缀: xxx」line; invalid placeholder values filtered
+- **lifecycle board multi-root scan**: collectTasks previously only scanned the 030-tasks root level, missing the 030-tasks/{type}/ (feature/bugfix/refactor) layout — added multi-root scanning
+
+### Enhancements
+- **status --group-by feature logical grouping**: groups the task list by `.meta/feature` (module stats + module list two-panel view); `--type bugfix` auto-enables the grouped view; physical flat layout untouched (preserves the CLI's multi-consumer fixed-level scan contract)
+- **verify findTaskDir layout compat**: supports both 030-tasks/{type}/ and root-level Task-* layouts
+
+### Verification
+- git fixture parse verified; meeting-system status --group-by feature rendered correctly; build + 285 tests green
+
+## v8.3.291 (2026-09-29) — Task dependency chain fixed end-to-end: AI dependency analysis is no longer dropped; plan topology & branch merge finally have real data
+
+### Fixes
+- **taskify dropped the `dependencies` field (core bug)**: the AI-returned `dependencies` array was only used for log display, never written to `section._dependsOn` — so TASK.md「依赖任务」was always「无」and plan topology / execute dependency branch merging always got an empty array. Fix: pre-assign task IDs + build an「AI temp id → real taskId」mapping + resolve and write `_dependsOn`; unmappable references keep the original value (execute stage reports a hint)
+- **scanTasks hardcoded empty dependencies**: three `dependencies: []` in state.ts never read TASK.md — added `parseDepsFromTaskMd` to parse the「依赖任务」field (both `- **依赖任务**: Task-xxx` and `| 依赖任务 | Task-xxx |` formats, comma/顿号 separated, deduped, non-Task noise filtered), subtask parse failure falls back to parent task
+- **findBranchByTaskId parent-ID prefix fallback**: dependencies reference the parent task ID (e.g. Task-002-f1-booking) while git-mapping matches the subtask ID (Task-002-f1-booking-booking-service) — added `info.taskId.startsWith(taskId + '-')` fallback so cross-repo branch lookup no longer misses
+- **--help/--version exit code**: exitOverride's commander.helpDisplayed/commander.version exceptions fell through to the default exit 1 (output was fine, but scripts/pipes saw failure) — added early exit 0 for both codes
+
+### Enhancements
+- **IMPACT.md「任务声明」dependency rows**: authoritative `_dependsOn` dependencies are listed first (type column marked「任务声明」), coexisting with API-text matching / semantic inference layers
+- **Task summary dependency column**: TASK_SUMMARY now reads from resolved `_dependsOn` (previously the raw AI dependencies array, whose IDs didn't match what was persisted)
+- **Platform-level analysis templates now require diagrams**: Phase 2 TECH.md skeleton「writing requirements」adds backend「core API sequence diagram or data model ER diagram (Mermaid sequenceDiagram/erDiagram)」and frontend「page route topology (Mermaid graph)」; UI_SPEC.md adds「core page interaction state diagram (Mermaid stateDiagram-v2, covering four states)」; QUALITY_RUBRICS 'UI_SPEC.md' checklist adds the diagram check — fixes functional-unit analysis docs having almost no diagrams (measured 5.4% mermaid coverage in the meeting project)
+
+### Verification
+- 285 tests green (7 new state-deps.test.ts cases: two formats / multiple separators / no deps / noise filtering / dedup)
+- /tmp project end-to-end: taskify resolved 2 dependencies → TASK.md「依赖任务: Task-002-f1-booking」→ scanTasks read back `["Task-002-f1-booking"]` → plan topology correct (backend Phase 1, two frontends in parallel Phase 2) + Mermaid dependency graph renders correctly
+
+## v8.3.290 (2026-09-28) — Smart resume for bare `run` + syntax sugar: high-frequency ops no longer depend on the ask engine
+
+### New
+- **bare `run` = smart resume**: with no args, detect breakpoints via milestone artifacts (9 milestones: import / unitize / analyze / audit / taskify / plan / execute / verify / deploy; predicates reuse PRECONDITIONS and existing analyze detectors), print a「Smart Resume Detection」panel (✅ done / 🔄 partial / ⬜ pending + artifact evidence)
+- **Four state branches**: no requirement docs → [SPECCORE_RESUME] panel soft-stop (exit 10) asking the user to pick a requirement entry (import PRD / one-liner); fresh with docs → auto continue split-units → pipeline without asking; partially done → panel soft-stop asking「①continue from breakpoint ②re-unitize ③custom range」(② omitted when breakpoint is split-units); all done → point to wrap-up (run deliver / run docs)
+- **hasRequirementDocs promoted to module level**: moved out of the autoPipeline closure (parameterized iterDir), shared by PRECONDITIONS and smart-resume detection
+- **run positional grammar (sugar)**: `run <preset>` calls the named pipeline (incl. custom pipelines.custom, takes priority over same-named stage aliases); `run <stage/alias>` single-stage shortcut (continue from that stage to deploy verify, e.g. `run smoke` / `run split`); `run <from> to <to>` / `run <from>..<to>` stage ranges (parsed only when the first token hits a stage/alias, so one-liners like "fix login to support OTP" are not misread); `run <one-liner>` requirement entry; `--demand` escape hatch (explicit when the requirement text is a reserved word)
+- **stage alias table as single source of truth**: new src/core/stage-aliases.ts (STAGE_ALIASES + resolveStageToken + parseRunRange + formatStageAliases + validateStageAliases startup self-check); aliases split→split-units, smoke→verify, deploy→pipeline, code→execute, tasks→taskify, ship→pr, archive→done, docs→spec2doc, import→doc2spec, req→req-doc; range parse failure (first token hits but last doesn't) errors with the alias table instead of silently falling back to a one-liner
+- **analyze -g/--global**: sugar ≡ speccore global analyze (Layer 1→4 auto-advance)
+- **unitize/doc2spec file positional args**: `unitize 需求.md` / `doc2spec PRD.docx` (--file kept for compatibility)
+- **verify positional args**: `verify dev|pr|deploy|release` calls the test stage directly (≡ --stage, invalid values error)
+
+### Docs
+- spec-run SKILL.md + 6 agent command copies (.claude/.codebuddy/.cursor/.trae/.trae-cn/.windsurf) synced with the「smart resume + positional grammar」playbook: [SPECCORE_RESUME] panel → host AI asks the user via AskUserQuestion → runs the panel's command after user choice; must not auto-resume without confirmation; run grammar forms map to commands directly, not through ask
+- `run --help` shows the grammar tree and alias table
+- DESIGN.md new appendix「v8.3.290+ run smart resume & syntax sugar design」; README.md core pipeline section; docs/command-reference.md run section; AGENTS.md quick commands; help command run detail; HTML templates regenerated
+
+### Verification
+- 278 tests green; end-to-end: meeting project Iteration-014 (partial, features missing) panel honestly marked split-units breakpoint + exit 10; /tmp empty iteration no docs → requirement entry panel; /tmp fresh with docs → auto continue split-units → pipeline; /tmp fully-built iteration → 9/9 ✅ + 🎉 wrap-up pointer + exit 0; 12 run grammar forms tested one by one
+
+---
+
 ## v8.3.193 (2026-09-19) — Full rename: iteration taskify
 
 ### Command rename

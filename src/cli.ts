@@ -174,6 +174,7 @@ program
   .option('--health', '项目健康度报告')
   .option('--lifecycle', '任务生命周期看板（等效 lifecycle --all）')
   .option('--scope <scope>', '视图: iteration(默认/当前迭代) | global(全量)', 'iteration')
+  .option('--group-by <key>', '任务分组维度: feature（按功能模块分组列出清单）')
   .action(statusPanelCommand);
 
 program
@@ -733,7 +734,12 @@ program
   .description('项目状态 → status-panel（同一入口）')
   .option('-i, --iteration <iteration>', 'Target iteration')
   .option('-a, --assignee <assignee>', 'Filter by assignee')
+  .option('--type <type>', '按任务类型过滤: feature|bugfix|refactor|research（bugfix 自动启用模块分组清单）')
+  .option('--platform <platform>', '按端过滤（工程标识，从 CONSTITUTION.md 端列表读取）')
   .option('--health', '项目健康度报告（原 health 命令，已合并）')
+  .option('--lifecycle', '任务生命周期看板')
+  .option('--scope <scope>', '视图: iteration(默认/当前迭代) | global(全量)', 'iteration')
+  .option('--group-by <key>', '任务分组维度: feature（按功能模块分组列出清单）')
   .action(statusPanelCommand);
 
 program
@@ -1379,6 +1385,12 @@ try {
 
   program.parse();
 } catch (err: any) {
+  // v8.3.291: --help/--version 经 exitOverride 抛 CommanderError，
+  // 内容已由 commander 输出，应正常退出 0（此前落入兜底 exit 1）
+  if (err?.code === 'commander.helpDisplayed' || err?.code === 'commander.version') {
+    process.exit(0);
+  }
+
   // 参数错误（未知选项、缺少必填值等）→ 输出到 stdout 让 AI 能识别并纠正
   if (err.code === 'commander.unknownOption' || err.code === 'commander.missingMandatoryOptionValue') {
     logger.error(`❌ 参数错误: ${err.message}`);

@@ -11,7 +11,7 @@
 | 工具 | 类别 | 集成方式 | 状态 |
 | :--- | :--- | :--- | :--- |
 | **WorkBuddy** | 国内 | `.workbuddy/skills/speccore/SKILL.md` + `.workbuddy/memory/MEMORY.md` | ✅ 完全支持 |
-| **Qcoder** | 国内 | init 自动生成 Slash Commands | ✅ |
+| **Qoder** | 国内 | init 自动生成 Slash Commands | ✅ |
 | **Trae** | 国内 | init 自动生成 Slash Commands | ✅ |
 | **Cursor** | 国际 | init 自动生成 Slash Commands | ✅ |
 | **Claude Code** | 国际 | init 自动生成 Slash Commands | ✅ |
@@ -51,7 +51,7 @@ my-project/
 - **命令速查表**：按场景分类的所有命令（45 个）
 - **多项目全量层**：GLOBAL/ 目录结构说明
 - **意图识别**：自然语言匹配规则
-- **目录结构**：期次→任务→多端的前端目录规范
+- **目录结构**：迭代→任务→多端的前端目录规范
 - **开发流程**：从分析到执行的完整链路
 - **别名速查**：所有命令的快捷别名
 
@@ -91,7 +91,7 @@ my-project/
 | :--- | :--- | :--- |
 | `speccore init` | `speccore init` | 项目初始化 |
 | `speccore task new` | `speccore task-new` | 创建多平台 Task |
-| `speccore iteration create` | `speccore iteration-create` | 创建期次 |
+| `speccore iteration create` | `speccore iteration-create` | 创建迭代 |
 | `speccore execute` | `speccore execute` | 执行开发 |
 | `speccore dashboard` | `speccore progress` | 查看进度 |
 | `speccore validate` | `speccore validate` | 合规检查 |

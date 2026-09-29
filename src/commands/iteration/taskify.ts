@@ -4,7 +4,7 @@ import { logger, Spinner } from '../../utils/logger';
 import { getDefaultIteration, getIterationDir } from '../../core/context';
 import { resolveUnitSourcePath } from '../../core/feature-source';
 import { scoreRisk, generateRiskReport } from '../../core/risk-scorer';
-import { nextTaskId } from '../../core/global-counters';
+import { nextTaskId, toSlug } from '../../core/global-counters';
 import { backupWithTimestamp, isTimestampBackup } from '../../utils/task-utils';
 
 import { showNextSteps } from '../../core/next-steps';
@@ -23,7 +23,7 @@ import { loadFreshKnowledgeGraph } from '../../core/knowledge-graph';
 import { loadGitConfig, GitConfig } from '../../core/git-integration';
 import { cleanupByType } from '../cleanup';
 import { loadProjectConfig } from '../../core/unified-config';
-import { scanRoutes, generateSpecFromRoutes, writeVerifySpec } from '../../core/ui-verify';
+import { scanRoutes, generateSpecFromRoutes, generateSpecFromUiSpec, writeVerifySpec } from '../../core/ui-verify';
 // v8.3.125+: 公共同义词扩展模块（从 split.ts 提取，供全链路使用）
 import { extractNormalizedKeywords, expandSynonyms } from '../../utils/synonyms';
 import { extractOverviewContext } from '../../core/unit-context-assembler';
@@ -143,6 +143,37 @@ function extractTopic(task: any): string {
 
   // 4. fallback 到 hash
   return slugify(task.name || task.functionalUnit || 'task');
+}
+
+/**
+ * 构建任务目录名 topic（v8.3.294+）
+ *
+ * bugfix 任务带模块血缘：目录名拼为「{模块英文}-{bug内容英文}」（如 Task-003-login-flow-timeout-crash），
+ * 同一模块的 bug 任务在 030-tasks/bugfix/ 下自然相邻，方便浏览。
+ * 模块名 AI 英译（moduleTopic）优先、拼音兜底（toSlug 内置 pinyin），
+ * 与功能单元命名「LLM 英译 + 拼音兜底」模式一致。
+ * 其余任务类型保持原语义（functionalUnit → topic → name 链）。
+ */
+function buildTaskTopic(sec: any, taskType: string): string {
+  const functionalUnit = (sec as any).functionalUnit || '';
+  const bugTopic = (sec as any)._topic || '';
+
+  if (taskType === 'bugfix') {
+    // 模块名：AI 英译 moduleTopic 优先 → functionalUnit 拼音兜底
+    const moduleSlug = (sec as any)._moduleTopic
+      || (functionalUnit ? toSlug(functionalUnit) : '');
+    // bug 内容名：AI 英译 topic 优先 → 任务名拼音兜底
+    const bugSlug = bugTopic || toSlug(sec.name || 'bug');
+    if (moduleSlug && bugSlug) {
+      // 防重复：bug 内容名已含模块名时不再叠加（如 topic 写全了 login-flow-timeout）
+      if (bugSlug.startsWith(moduleSlug)) return bugSlug.slice(0, 40);
+      // 模块名前段（≤15）+ 内容名，总长受 nextTaskId 的 40 字符上限约束
+      return `${moduleSlug.slice(0, 15)}-${bugSlug}`.slice(0, 40);
+    }
+    return (moduleSlug || bugSlug).slice(0, 40);
+  }
+
+  return functionalUnit || bugTopic || slugify(sec.name);
 }
 
 /**
@@ -752,11 +783,22 @@ export async function iterationTaskifyCommand(options: IterationTaskifyOptions):
           (section as any)._taskType = taskType;
           // 保存 topic slug，用于生成任务目录名（v8.3.77+: 多层提取）
           (section as any)._topic = extractTopic(task);
+          // v8.3.294+: 透传 AI 提供的模块英文 slug（bugfix 目录名「模块名-内容名」拼接用），
+          // 仅接受合法英文短横线格式，非法时回退拼音兜底
+          if (task.moduleTopic && /^[a-z0-9-]+$/.test(task.moduleTopic)) {
+            (section as any)._moduleTopic = task.moduleTopic;
+          }
           // 保存 AI 生成的实际内容（用于写入 REQ.md / TECH.md）
           if (task.reqContent) (section as any)._reqContent = task.reqContent;
           if (task.techContent) (section as any)._techContent = task.techContent;
           // v7.4.0+: 保存 AI 生成的 DEV_GUIDE 内容
           if ((task as any).devGuideContent) (section as any)._devGuideContent = (task as any).devGuideContent;
+          // v8.3.291: 保存 AI 输出的依赖关系与临时 ID——dependencies 此前只用于日志展示，
+          // 从未写入 _dependsOn，导致 plan 拓扑排期 / execute 依赖分支合并永远拿空数组
+          if (task.id) (section as any)._aiId = String(task.id);
+          if (Array.isArray(task.dependencies)) {
+            (section as any)._aiDeps = (task.dependencies as any[]).filter((d: any) => typeof d === 'string' && d.trim());
+          }
           if (task.sourceFile) (section as any)._sourceFile = task.sourceFile;
           if (task.functionalUnit) (section as any).functionalUnit = task.functionalUnit;
           if (task.reason) (section as any)._reason = task.reason;
@@ -1030,6 +1072,42 @@ export async function iterationTaskifyCommand(options: IterationTaskifyOptions):
           logger.info('');
         }
 
+        // ── v8.3.291: 预分配任务 ID 并解析 AI 依赖关系 ──
+        // 修复：AI 返回的 dependencies 字段此前只用于日志展示（仅 1055 行 const deps），
+        // 从未写入 section._dependsOn，导致 TASK.md「依赖任务」恒为「无」，
+        // 下游 plan 拓扑分阶段 / execute 依赖分支合并（prepareTaskBranch）全部失效。
+        // 预分配 ID 后建立「AI 临时 id → 实际 taskId」映射，把 dependencies 解析为实际 ID。
+        const aiIdToTaskId = new Map<string, string>();
+        for (const sec of sections) {
+          // v8.3.294+: bugfix 任务目录名拼「模块英文-内容英文」，其余类型保持原链
+          const taskType = (sec as any)._taskType || 'feature';
+          const taskTopic = buildTaskTopic(sec, taskType);
+          const { id: taskId } = await nextTaskId(sec.name, taskTopic);
+          (sec as any)._taskId = taskId;
+          const aiId = (sec as any)._aiId as string | undefined;
+          if (aiId) aiIdToTaskId.set(aiId, taskId);
+        }
+        let resolvedDepCount = 0;
+        for (const sec of sections) {
+          const rawDeps = (sec as any)._aiDeps as string[] | undefined;
+          if (!rawDeps || rawDeps.length === 0) continue;
+          const resolved: string[] = [];
+          for (const dep of rawDeps) {
+            const mapped = aiIdToTaskId.get(dep);
+            if (mapped) {
+              resolved.push(mapped);
+              resolvedDepCount++;
+            } else {
+              // 无法映射的依赖（AI 引用了不存在的任务 ID）保留原始引用，execute 阶段会给出提示
+              resolved.push(dep);
+            }
+          }
+          (sec as any)._dependsOn = resolved;
+        }
+        if (resolvedDepCount > 0) {
+          logger.info(`   🔗 已解析 ${resolvedDepCount} 条任务依赖关系`);
+        }
+
         // 逐任务交互确认
         const createdSections: Section[] = [];
         const moduleFilter = (unit: string): boolean => {
@@ -1052,7 +1130,8 @@ export async function iterationTaskifyCommand(options: IterationTaskifyOptions):
           }
           const complexity = (sec as any)._complexity || {};
           const taskType = (sec as any)._taskType || 'feature';
-          const deps = (tasks[i].dependencies || []) as string[];
+          // 依赖已在上方预分配阶段解析为实际 taskId（v8.3.291）
+          const deps = ((sec as any)._dependsOn || []) as string[];
           const acs = (tasks[i].acceptanceCriteria || []) as string[];
 
           // 展示任务摘要
@@ -1080,9 +1159,10 @@ export async function iterationTaskifyCommand(options: IterationTaskifyOptions):
 
           // 使用保存的 topic slug 生成任务ID
           // v8.3.33: 优先使用 functionalUnit 作为 topic，使目录名更有意义
+          // v8.3.291: taskId 已在预分配阶段生成（依赖解析需要），此处直接复用
           const taskTopic = (sec as any).functionalUnit || (sec as any)._topic || slugify(sec.name);
-          const { id: taskId } = await nextTaskId(sec.name, taskTopic);
-          (sec as any)._taskId = taskId;
+          const taskId = (sec as any)._taskId as string;
+          void taskTopic;
           await createTaskFromSection(iterDirFull, taskId, sec, allPlatforms, taskType, sections);
           createdSections.push(sec);
           logger.info(`   ✅ 创建: ${taskId} - [${taskType}] ${sec.name}`);
@@ -1470,7 +1550,9 @@ export async function iterationTaskifyCommand(options: IterationTaskifyOptions):
 
     // ── 预分配任务 ID（确保所有路径使用计数器，避免编号重复） ──
     for (const section of sections) {
-      const topic = slugify(section.name);
+      // v8.3.294+: bugfix 任务目录名拼「模块英文-内容英文」，其余类型保持原链
+      const taskType = (section as any)._taskType || 'feature';
+      const topic = buildTaskTopic(section, taskType);
       const { id: taskId } = await nextTaskId(section.name, topic);
       (section as any)._taskId = taskId;
     }
@@ -2517,6 +2599,28 @@ ${!isBk && docSet.hasComponentTree ? '| COMPONENT_TREE.md | ⏳ | ./COMPONENT_TR
               await writeVerifySpec(spec, join(subtaskDir, 'VERIFY_SPEC.yaml'));
               logger.info(`   📄 VERIFY_SPEC.yaml 已自动生成（${routeResult.routes.length} 个场景）`);
             }
+          } else {
+            // v8.3.293+: 无源码可扫描（首次建设/需求阶段）时，从 020-specs 的 UI_SPEC
+            // 「元素标识约定」清单 + 业务流程生成流程场景骨架，selector 按清单自动装配，
+            // 弥合「分析阶段元素约定」与「冒烟配置生成阶段」之间的断链。
+            const specTexts: string[] = [];
+            for (const [specKey, specBody] of Object.entries(specContents)) {
+              if (specKey.includes(platformName) && /(UI_SPEC|TEST)\.md$/.test(specKey)
+                && !specBody.includes('SPEC-SKELETON')) {
+                specTexts.push(specBody);
+              }
+            }
+            if (specTexts.length > 0) {
+              const spec = generateSpecFromUiSpec(specTexts.join('\n\n'), {
+                baseUrl: 'http://localhost:3000',
+                platform: platformName,
+                name: `${section.name} - ${platformName} UI 验证`,
+              });
+              if (spec.scenarios.length > 0) {
+                await writeVerifySpec(spec, join(subtaskDir, 'VERIFY_SPEC.yaml'));
+                logger.info(`   📄 VERIFY_SPEC.yaml 已按 UI_SPEC 元素清单生成（${spec.scenarios.length} 个流程场景）`);
+              }
+            }
           }
         } catch {
           // 静默失败：源码不可用或扫描失败时不阻断 split 流程
@@ -3021,9 +3125,25 @@ async function generateImpactGraph(
   // 语义依赖检测
   const semanticDeps = detectSemanticDependencies(sections);
 
+  // v8.3.291: 显式输出 AI 声明的依赖（_dependsOn），优先级高于文本/语义推断——
+  // 这是 plan 拓扑排期与 execute 依赖分支合并的权威依据
+  const explicitDeps = new Map<string, string[]>();
+  for (const s of sections) {
+    const taskId = (s as any)._taskId;
+    const declared = (s as any)._dependsOn as string[] | undefined;
+    if (taskId && declared && declared.length > 0) explicitDeps.set(taskId, declared);
+  }
+
   impact += '\n## Dependencies\n\n';
-  if (uniqueDeps.length > 0 || semanticDeps.size > 0) {
+  if (uniqueDeps.length > 0 || semanticDeps.size > 0 || explicitDeps.size > 0) {
     impact += '| Consumer | -> | Producer | 类型 |\n| :--- | :---: | :--- | :--- |\n';
+    // 任务声明的依赖（权威，最先列出）
+    for (const [from, targets] of explicitDeps) {
+      const fromName = sections.find(s => (s as any)._taskId === from)?.name || from;
+      for (const target of targets) {
+        impact += `| ${from}: ${fromName.slice(0, 20)} | → | ${target} | 任务声明 |\n`;
+      }
+    }
     // API 依赖
     for (const d of uniqueDeps) impact += `| ${d.from}: ${d.fromName.slice(0,20)} | → | ${d.to}: ${d.toName.slice(0,20)} | API: \`${d.reason}\` |\n`;
     // 语义依赖
@@ -4143,6 +4263,7 @@ async function buildSplitPrompt(
   p += `[\n  {\n`;
   p += `    "id": "Task-001",\n`;
   p += `    "functionalUnit": "所属功能单元/影响域（必填！见下方类型规则）",\n`;
+  p += `    "moduleTopic": "受影响模块的英文 slug（bugfix 建议提供，如 login-flow、payment-callback，目录名拼为 模块名-bug内容名）",\n`;
   p += `    "name": "任务名称（中文）",\n`;
   p += `    "topic": "english-slug-for-directory",\n`;
   p += `    "type": "feature|bugfix|refactor|research|security|performance",\n`;
@@ -4161,7 +4282,8 @@ async function buildSplitPrompt(
   p += '```\n\n';
   p += `> **functionalUnit 必须填写**：根据任务类型语义不同：\n`;
   p += `>   - feature → 功能模块名（如：用户管理、订单系统、支付模块）\n`;
-  p += `>   - bugfix → 受影响组件/流程（如：登录流程、支付回调、数据同步）\n`;
+  p += `>   - bugfix → 受影响组件/流程（如：登录流程、支付回调、数据同步）；目录名将拼为「模块英文-bug内容英文」，\n`;
+  p += `>     建议同时提供 moduleTopic（模块英文 slug），未提供时用拼音兜底\n`;
   p += `>   - refactor → 重构目标范围（如：数据库层、API网关、状态管理）\n`;
   p += `>   - security → 安全修复范围（如：SQL注入防护、XSS修复、鉴权加固）\n`;
   p += `>   - performance → 性能优化目标（如：查询优化、缓存策略、并发提升）\n`;
@@ -4520,7 +4642,8 @@ async function generateTaskSummary(
     const aiHours = Math.round(estimatedHours * 0.7); // 预估 70% 可由 AI 完成
     const humanHours = estimatedHours - aiHours;
     const priority = task.priority || (sec as any)._complexity?.priority || 'medium';
-    const deps = (task.dependencies || []).join(', ') || '-';
+    // v8.3.291: 依赖从解析后的 _dependsOn 读取（AI 的 dependencies 字段已映射为实际 taskId）
+    const deps = ((sec as any)._dependsOn || []).join(', ') || '-';
     const risk = task.risk || 'medium';
 
     totalHumanHours += humanHours;

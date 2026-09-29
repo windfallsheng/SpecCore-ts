@@ -35,6 +35,33 @@ export interface IterationState {
   completionRate: number;
 }
 
+/**
+ * v8.3.291: 从 TASK.md 解析「依赖任务」字段，填充 TaskState.dependencies。
+ * 此前 scanTasks 对 dependencies 硬编码空数组，导致 plan 拓扑排期与
+ * execute 依赖分支合并（prepareTaskBranch）永远拿不到依赖。
+ * 支持两种格式：
+ *   - 子任务 TASK.md: `- **依赖任务**: Task-002-f1-booking`
+ *   - 父任务 TASK.md: `| 依赖任务 | Task-002-f1-booking |`
+ */
+function parseDepsFromTaskMd(taskMd: string): string[] {
+  const deps: string[] = [];
+  let m = taskMd.match(/\*\*依赖任务\*\*[:\s]*([^\n|]+)/);
+  if (!m) m = taskMd.match(/依赖任务\s*\|\s*([^|\n]+)/);
+  if (m) {
+    const raw = m[1].trim();
+    if (raw && !/^(无|—|-|N\/A|none)$/i.test(raw)) {
+      for (const part of raw.split(/[,，、\s]+/)) {
+        const id = part.trim();
+        if (/^Task-[\w-]+$/.test(id) && !deps.includes(id)) deps.push(id);
+      }
+    }
+  }
+  return deps;
+}
+
+/** 供测试与外部调用（v8.3.291） */
+export { parseDepsFromTaskMd };
+
 export async function readProjectGraph(iteration: string): Promise<IterationState> {
   const { getIterationDir } = await import('./context');
   const iterationDir = await getIterationDir(iteration);
@@ -191,6 +218,7 @@ export async function scanTasks(iteration: string): Promise<TaskState[]> {
     let parentStatus: TaskState['status'] = 'pending';
     let parentAssignee = '';
     let priority: TaskState['priority'] = 'medium';
+    let parentDeps: string[] = [];
     
     let estimatedHours: number | undefined;
     const metaDir = join(taskPath, '.meta');
@@ -239,6 +267,8 @@ export async function scanTasks(iteration: string): Promise<TaskState[]> {
       }
       const ownerMatch = taskMd.match(/负责人[:\s]*([^\n|]+)/);
       if (ownerMatch && !parentAssignee) parentAssignee = ownerMatch[1].trim();
+      // v8.3.291: 解析父任务级依赖（00-specs/TASK.md 的「依赖任务」表格/字段）
+      parentDeps = parseDepsFromTaskMd(taskMd);
     }
     
     // 扫描各端子任务目录（v8.3.8+: 兼容两种结构）
@@ -326,13 +356,16 @@ export async function scanTasks(iteration: string): Promise<TaskState[]> {
             if (fv) subFeature = fv;
           }
 
+          // v8.3.291: 解析子任务依赖（子任务 TASK.md 的「依赖任务」字段，通常与父任务一致）
+          const subDeps = parseDepsFromTaskMd(subTaskMd);
+
           subTasks.push({
             id: subTaskId,
             name: subName,
             type,
             status: subStatus,
             assignee: subAssignee,
-            dependencies: [],
+            dependencies: subDeps.length > 0 ? subDeps : parentDeps,
             priority,
             progress: subStatus === 'completed' ? 100 : 0,
             estimatedHours: subHours,
@@ -356,7 +389,7 @@ export async function scanTasks(iteration: string): Promise<TaskState[]> {
         type,
         status: parentStatus,
         assignee: parentAssignee,
-        dependencies: [],
+        dependencies: parentDeps,
         priority,
         progress: parentStatus === 'completed' ? 100 : 0,
         estimatedHours,

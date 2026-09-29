@@ -59,6 +59,8 @@ export interface SmokeResult {
   duration: number;
   steps: StepResult[];
   screenshot?: string;
+  /** v8.3.294+: 失败场景页面的实际 data-testid 清单（DOM 扫描，供 selector 自愈提示） */
+  domTestIds?: string[];
 }
 
 export interface StepResult {

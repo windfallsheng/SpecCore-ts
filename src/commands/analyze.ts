@@ -2203,8 +2203,11 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
             }
 
             // v7.4.0+: 文件名归一化——剥离 AI 可能携带的 overview/ 前缀，防止嵌套目录
+            // v8.3.292+: 记录前缀存在性——集合外文件（如 DEPENDENCY_MAP.md）带 overview/
+            // 前缀时仍应路由到 overview/，不得因 strip 丢失归属信息落入根目录
+            const hadGlobalPrefix = filename.startsWith(`${GLOBAL_SPECS_DIR}/`);
             let cleanFilename = filename;
-            if (cleanFilename.startsWith(`${GLOBAL_SPECS_DIR}/`)) {
+            if (hadGlobalPrefix) {
               cleanFilename = cleanFilename.slice(`${GLOBAL_SPECS_DIR}/`.length);
             }
 
@@ -2267,7 +2270,7 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
             // v8.3.24+: 按文件名前缀路由，支持多段指定
             // 如果 AI 输出 {端}/{文件}，尝试回退到功能模块路由
             let targetDir: string;
-            if (globalSet.has(cleanFilename)) {
+            if (globalSet.has(cleanFilename) || hadGlobalPrefix) {
               targetDir = join(specDir, GLOBAL_SPECS_DIR);
             } else if (platformDir && validPlatforms.has(platformDir)) {
               // 检查是否应归入功能模块（骨架文件已按功能模块创建）
@@ -2616,9 +2619,45 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
               count++;
               continue;
             }
+            // v8.3.292+: 记录前缀存在性——集合外文件带 overview/ 前缀时仍应路由到 overview/
+            const hadGlobalPrefix = filename.startsWith(`${GLOBAL_SPECS_DIR}/`);
             let cleanFilename = filename;
-            if (cleanFilename.startsWith(`${GLOBAL_SPECS_DIR}/`)) {
+            if (hadGlobalPrefix) {
               cleanFilename = cleanFilename.slice(`${GLOBAL_SPECS_DIR}/`.length);
+            }
+            // v8.3.292+: 功能模块感知路由（对齐 JSON 分支 v8.3.21 逻辑）——
+            // 修复 [DOC:] 通道把 {功能单元}/{端}/xxx.md 剥离前缀后误写 overview/ 的 bug
+            // （会议项目事故：h5-mobile-05-xiaoxizhongxin/h5-mobile/TECH.md 覆盖了迭代级 overview/TECH.md）
+            if (cleanFilename.includes('/')) {
+              const parts = cleanFilename.split('/');
+              const firstPart = parts[0];
+              // 全局文档：overview/xxx → 写入 020-specs/overview/（双前缀防御）
+              if (firstPart === GLOBAL_SPECS_DIR) {
+                const targetDir = join(specDir, GLOBAL_SPECS_DIR);
+                await ensureDir(targetDir);
+                const fp = join(targetDir, parts.slice(1).join('/'));
+                if (!(await shouldOverwrite(fp, !!options.interactive))) { logger.info(`   ⏭️  跳过: ${filename}`); continue; }
+                const bk = await backupWithTimestamp(fp);
+                if (bk) { backups.push(bk); logger.info(`   📦 ${filename} 已备份: ${basename(bk)}`); }
+                await writeFile(fp, content);
+                count++;
+                continue;
+              }
+              // 功能模块路径：第二级是 overview/ 或合法端名 → 写入 020-specs/{功能单元}/{第二级}/{文件}
+              if (!validPlatforms.has(firstPart) && parts.length >= 2) {
+                const secondPart = parts[1];
+                if (secondPart === 'overview' || validPlatforms.has(secondPart)) {
+                  const targetDir = join(specDir, ...parts.slice(0, -1));
+                  await ensureDir(targetDir);
+                  const fp = join(targetDir, parts[parts.length - 1]);
+                  if (!(await shouldOverwrite(fp, !!options.interactive))) { logger.info(`   ⏭️  跳过: ${filename}`); continue; }
+                  const bk = await backupWithTimestamp(fp);
+                  if (bk) { backups.push(bk); logger.info(`   📦 ${filename} 已备份: ${basename(bk)}`); }
+                  await writeFile(fp, content);
+                  count++;
+                  continue;
+                }
+              }
             }
             if (cleanFilename.includes('/')) {
               const prefix = cleanFilename.split('/')[0];
@@ -2636,10 +2675,28 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
             // v8.3.24+: 按文件名前缀路由，支持多段指定
             // 若 cleanFilename 含合法端名前缀（如 api/TECH.md），写入对应端目录
             let targetDir: string;
-            if (globalSet.has(cleanFilename)) {
+            if (globalSet.has(cleanFilename) || hadGlobalPrefix) {
               targetDir = join(specDir, GLOBAL_SPECS_DIR);
             } else if (platformDir && validPlatforms.has(platformDir)) {
-              targetDir = join(specDir, platformDir);
+              // v8.3.292+: 裸端名路径回退功能模块（骨架文件已按功能模块创建，对齐 JSON 分支）
+              let featureFallback: string | null = null;
+              try {
+                const specEntries = await readdir(specDir, { withFileTypes: true });
+                for (const entry of specEntries) {
+                  if (!entry.isDirectory() || entry.name === GLOBAL_SPECS_DIR || validPlatforms.has(entry.name)) continue;
+                  const platformInFeature = join(specDir, entry.name, platformDir);
+                  if (await pathExists(platformInFeature)) {
+                    featureFallback = entry.name;
+                    break;
+                  }
+                }
+              } catch {}
+              if (featureFallback) {
+                targetDir = join(specDir, featureFallback, platformDir);
+                logger.info(`   📁 自动归入功能模块: ${featureFallback}/${platformDir}/${cleanFilename.split('/').pop()}`);
+              } else {
+                targetDir = join(specDir, platformDir);
+              }
             } else {
               targetDir = specDir;
             }

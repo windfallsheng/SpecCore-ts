@@ -25,6 +25,9 @@ export const GLOBAL_SPEC_FILES = [
   // v8.3.238+: 补充全局索引类文档（与 PHASE1_INDEX_DOC_NAMES 对齐）——
   // 此前缺失导致 [DOC:PLATFORMS.md] 等 apply 时被路由到 020-specs/ 根目录而非 overview/
   'PLATFORMS.md', 'ARCHITECTURE.md', 'CLARIFY.md',
+  // v8.3.292+: DEPENDENCY_MAP.md 同属 overview/ 索引文档——
+  // 此前缺失导致 [DOC:overview/DEPENDENCY_MAP.md] strip 前缀后落入 020-specs/ 根目录
+  'DEPENDENCY_MAP.md',
 ];
 
 /**

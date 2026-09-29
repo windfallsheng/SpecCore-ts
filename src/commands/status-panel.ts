@@ -20,6 +20,7 @@ export interface StatusPanelOptions {
   status?: string;
   iteration?: string;
   scope?: 'iteration' | 'global';  // 作用域：迭代（默认）或全量层
+  groupBy?: string;  // v8.3.293+: 分组维度（feature = 按功能模块分组列出任务清单）
 }
 
 export async function statusPanelCommand(options: StatusPanelOptions = {}): Promise<void> {
@@ -126,6 +127,27 @@ export async function statusPanelCommand(options: StatusPanelOptions = {}): Prom
           logger.info(`│  ${name}: ${pBar} ${s.done}/${s.total}`.padEnd(47) + '│');
         }
       }
+
+      // v8.3.293+: 逻辑分组视图（方案 A）——按 .meta/feature 分组列出任务清单，
+      // 解决 bugfix 任务平铺目录下 bug 多不便浏览的问题（元数据分组，不改变物理目录）。
+      // 触发：--group-by feature 显式启用；或 --type bugfix 时自动启用。
+      const groupByFeature = options.groupBy === 'feature' || (options.type || '').toLowerCase() === 'bugfix';
+      if (groupByFeature && Object.keys(moduleStats).length > 0) {
+        logger.info('├──────────────────────────────────────────────┤');
+        logger.info('│ 模块清单:'.padEnd(47) + '│');
+        const grouped = groupTasksByFeature(tasks);
+        for (const [feature, list] of grouped) {
+          const s = moduleStats[feature] || { total: list.length, done: 0 };
+          const name = feature.length > 16 ? feature.slice(0, 15) + '…' : feature;
+          logger.info(`│  ▸ ${name}（${s.done}/${s.total}）`.padEnd(47) + '│');
+          for (const t of list) {
+            const icon = statusIconFor(t.status);
+            const who = t.assignee ? ` · ${t.assignee}` : '';
+            const line = `    ${icon} ${t.id} [${t.status}]${who}`;
+            logger.info(`│${line.slice(0, 45).padEnd(46)}│`);
+          }
+        }
+      }
       
       // Platform breakdown
       const platformCount = await countPlatforms(iterDir, tasks);
@@ -224,6 +246,29 @@ function buildModuleStats(tasks: any[]): Record<string, { total: number; done: n
     if (t.status.includes('completed') || t.status.includes('完成')) stats[feature].done++;
   }
   return stats;
+}
+
+// v8.3.293+: 任务按功能模块分组（组按任务数降序，组内按任务 ID 排序），供逻辑分组视图使用
+function groupTasksByFeature(tasks: any[]): Array<[string, any[]]> {
+  const groups = new Map<string, any[]>();
+  for (const t of tasks) {
+    const feature = (t.feature || '未分类').trim() || '未分类';
+    if (!groups.has(feature)) groups.set(feature, []);
+    groups.get(feature)!.push(t);
+  }
+  return [...groups.entries()]
+    .sort((a, b) => b[1].length - a[1].length)
+    .map(([feature, list]) => [feature, list.sort((x, y) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0))] as [string, any[]]);
+}
+
+// v8.3.293+: 任务状态 → 终端图标（与生命周期看板同色系）
+function statusIconFor(status: string): string {
+  const st = status || '';
+  if (/完成|completed|done/i.test(st)) return '🟢';
+  if (/开发|doing|in_progress|进行/i.test(st)) return '🔵';
+  if (/测试|testing/i.test(st)) return '🟡';
+  if (/审查|review/i.test(st)) return '🟣';
+  return '🔲';
 }
 
 // ── 共享：按平台统计 ──
@@ -1408,15 +1453,16 @@ async function showHealthReport(config: any, iteration: string | null): Promise<
 async function showLifecycleBoard(config: any, iteration: string | null, opts: any): Promise<void> {
   if (!iteration) { logger.info("无活跃迭代"); return; }
   const iterDir = resolveIterDir(iteration);
-  const tasks = await scanTaskDirs(iterDir);
+  // v8.3.293+: 改用 collectTasks 多根扫描（含 030-tasks/{type}/ 布局与 .meta/status），
+  // 修复此前只扫迭代根级 Task- 目录、读旧 .task-status 文件导致 bugfix 等任务在看板隐形
+  const taskList = await collectTasks(iterDir);
   
-  logger.info('\\n📋 任务生命周期 — ' + iteration);
-  const states = { pending: '🔲', in_progress: '🔵', testing: '🟡', review: '🟣', done: '🟢' };
+  logger.info('\n📋 任务生命周期 — ' + iteration);
   
-  for (const t of tasks) {
-    const status = await getTaskStatus(iterDir, t);
-    const icon = (states as any)[status] || '⚪';
-    logger.info('  ' + icon + ' ' + t + '  [' + status + ']');
+  for (const t of taskList) {
+    const status = t.status || 'pending';
+    const icon = statusIconFor(status);
+    logger.info('  ' + icon + ' ' + t.id + '  [' + status + ']');
   }
   logger.info('');
   logger.info('  🔲待开始 → 🔵开发中 → 🟡测试中 → 🟣审查中 → 🟢已完成');
@@ -1444,12 +1490,13 @@ async function getTaskStatus(iterDir: string, task: string): Promise<string> {
 // ── Collect Health Data for export ──
 async function collectHealthData(iteration: string): Promise<any> {
   const iterDir = join(process.cwd(), resolveIterDir(iteration));
-  const tasks = await scanTaskDirs(iterDir);
-  let total = tasks.length, completed = 0, hasTest = 0, hasReview = 0;
-  for (const t of tasks) {
-    if (await isTaskDone(iterDir, t)) completed++;
-    if (await taskHasFile(iterDir, t, 'TEST.md')) hasTest++;
-    if (await taskHasFile(iterDir, t, 'REVIEW.md')) hasReview++;
+  // v8.3.293+: 多根扫描（含 030-tasks/{type}/），修复旧 scanTaskDirs 只扫根级导致漏计
+  const taskList = await collectTasks(iterDir);
+  let total = taskList.length, completed = 0, hasTest = 0, hasReview = 0;
+  for (const t of taskList) {
+    if (/完成|completed|done/i.test(t.status || '')) completed++;
+    if (await taskHasFile(iterDir, t.id, 'TEST.md')) hasTest++;
+    if (await taskHasFile(iterDir, t.id, 'REVIEW.md')) hasReview++;
   }
   const donePct = total > 0 ? Math.round(completed / total * 100) : 0;
   const testPct = total > 0 ? Math.round(hasTest / total * 100) : 0;
@@ -1462,11 +1509,11 @@ async function collectHealthData(iteration: string): Promise<any> {
 // ── Collect Lifecycle Data for export ──
 async function collectLifecycleData(iteration: string): Promise<any> {
   const iterDir = join(process.cwd(), resolveIterDir(iteration));
-  const taskDirs = await scanTaskDirs(iterDir);
+  // v8.3.293+: 多根扫描（含 030-tasks/{type}/），修复旧 scanTaskDirs 只扫根级导致漏计
+  const taskList = await collectTasks(iterDir);
   const tasks: any[] = [];
-  for (const t of taskDirs) {
-    const status = await getTaskStatus(iterDir, t);
-    tasks.push({ id: t, status });
+  for (const t of taskList) {
+    tasks.push({ id: t.id, status: t.status || 'pending' });
   }
   return { tasks, iteration };
 }

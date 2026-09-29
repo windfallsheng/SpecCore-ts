@@ -1,3 +1,72 @@
+## v8.3.295 (2026-09-29) — 静态资源发布链路修复：引导页链接 404 根治 + 防御加固
+
+### 修复
+- **onboarding 引导页关联页 404（核心 bug）**：`templates` 不在 package.json files 白名单，且 ask.ts/init.ts 两处模板读取用 `process.cwd()/templates/html`（用户项目根，永远不存在）——「升级后首次 ask 无引导页 + 页内四模式卡片/帮助链接全部 404」，setup-guide 亦长期走「模板缺失」降级页，连带 init 的部署/测试/规范示例复制（DEPLOY-EXAMPLE.yaml 等）全部静默失败。修复：files 加 `templates`；ask.ts 复制源与 init.ts setup-guide 模板源改为包内定位 `join(__dirname, '..', '..', 'templates', 'html')`（与 init 既有示例复制同源）
+- **升级后首次 ask 不弹页诊断**：弹页开关 `.speccore/local/.ask-onboarded` 记录版本与 CLI 运行版本比对——全局 CLI 未升级（实测 8.3.282）而 marker 已是同版本时恒不弹；升级后需确认 `speccore --version` 或跑 `speccore init`（升级分支会重置 marker）
+
+### 增强
+- **generateFlowScenariosFromSpec 结构防御**：matchElement/matchPageSelector 补 `elementInfo.elements` 存在性与 `pageTestIds` 数组性判断，外部消费点传参不规则时优雅降级不抛 TypeError
+
+### 验证
+- 285 测试全绿；四轮专项验证（spec-generator 十项：表格提取/模板占位跳过/页面容器归类/stateDiagram 场景数与装配/preferPage 兜底/描述性箭头零误采/普通流程行/结构防御；status --group-by 分组视图；toSlug 复合命名底座；smoke-engine DOM 扫描五结构点）全 PASS
+- 会议项目实测：修复后跑 ask，outputs/ 下 explain/guide/match/pipeline/help 五关联页全部落盘（修复前四页缺失）；`npm pack --dry-run` 确认发布包含全量 templates/html/*.html
+
+## v8.3.294 (2026-09-29) — bugfix 复合命名 + 契约压进代码 + 冒烟 selector 自愈提示
+
+### 增强
+- **bugfix 任务目录名复合命名**：`buildTaskTopic` 拼「{模块英文}-{bug内容英文}」（如 Task-003-login-flow-timeout-crash），同一模块 bug 任务在 030-tasks/bugfix/ 下自然相邻；模块名优先 AI `moduleTopic`（prompt 层英译，仅接受合法 slug）、functionalUnit 走 toSlug 拼音兜底（v8.3.294 导出 toSlug）；bugSlug 已含模块前缀时防重复不叠加；模块段截 15 字符、总长受 40 字符上限约束
+- **execute prompt data-testid 强制条款（两消费点同步）**：prompt-builder 前端实现要求与 execute.ts buildAgentContext 执行清单同步新增——「按 UI_SPEC.md 元素标识约定添加 data-testid（{模块}-{页面}-{元素}，页面容器 xxx-page 结尾），冒烟测试 VERIFY_SPEC 断言依赖这些属性」——补齐「拆分装配 selector → 执行落属性」链路的最后断链
+- **冒烟 selector 自愈提示**：失败场景在页面仍可用时扫描 DOM 实际 data-testid 清单（SmokeResult.domTestIds，页面不可用静默跳过），runSmokeTest 汇总输出「selector 自愈提示」——列出失败场景页面的实际 testid 供修正 VERIFY_SPEC 占位 selector，不自动回写配置（防运行时误判）
+
+### 文档
+- DESIGN.md 新增附录「v8.3.291-295 冒烟装配四阶段时序设计 + bugfix 复合命名 + 静态资源发布链路」
+
+### 验证
+- 六分支验证：全英文复合（login-flow-timeout-crash）/拼音兜底/双拼音/防重复/无模块退化/feature 不受影响；构建 + 285 测试全绿
+
+## v8.3.293 (2026-09-29) — 冒烟装配链三断链修复：元素清单提取 + 流程场景装配 + 无源码 Spec 通道
+
+### 新增
+- **UI_SPEC 元素清单提取 `extractElementTestIds`**：兼容三种写法（Markdown 表格含 testid 列任意左右位置 / 行内枚举 data-testid = a / b / 行内代码属性），模板占位（btn-edit-{id}）自动跳过，页面容器（xxx-page）单独归类 pageTestIds
+- **流程场景装配 `generateFlowScenariosFromSpec`（v8.3.293 重写）**：三通道——①普通流程箭头行（A → B 步骤链）②mermaid stateDiagram 流转（含 `[*]` 初始伪状态与自环跳过）③描述性箭头零误采（视觉规范章节不误提取）；章节正则兼容中文序号（「## 五、交互状态」）；matchElement 双向包含 + token 分割匹配（「新增/编辑」→「新增按钮」）+ 最短元素名策略；初始流转 preferPage 兜底断言页面容器
+- **无源码 Spec 通道 `generateSpecFromUiSpec`**：taskify 无源码时从 UI_SPEC/TEST 提取元素清单 + 业务流程，生成 VERIFY_SPEC 流程场景骨架——「分析阶段元素约定 → 冒烟配置自动装配」闭环
+
+### 修复
+- **流程场景为 0 的真因**：admin-web-04 UI_SPEC 交互流程是 mermaid stateDiagram 代码块且章节带中文序号，原提取器只认「业务流程」标题 + 普通箭头行——重写后 8 场景 3 真实装配（users-page/btn-add-user/dialog-disable）
+
+### 验证
+- 三通道验证：stateDiagram 装配 / 普通流程行 / h5 描述性箭头零误采；构建 + 285 测试全绿
+
+## v8.3.292 (2026-09-29) — Git 配置修复 + 方案 A 逻辑分组视图
+
+### 修复
+- **extractValue 行首锚定**：解析正则加 `^` + m 标志，「前缀」不再误匹配「分支前缀: xxx」行（真实值行被注释前缀行吞掉）；无效占位值过滤
+- **lifecycle 看板多根扫描**：只扫 030-tasks 根级，漏掉 030-tasks/{type}/（feature/bugfix/refactor）布局下的任务——collectTasks 补多根扫描
+
+### 增强
+- **status --group-by feature 逻辑分组视图**：按 `.meta/feature` 分组展示任务清单（模块统计 + 模块清单两段式），`--type bugfix` 自动启用分组视图；物理目录平铺不动（保住 CLI 多消费点固定层级扫描契约）
+- **verify findTaskDir 布局兼容**：支持 030-tasks/{type}/ 与根级 Task-* 两种布局
+
+### 验证
+- git fixture 验证解析正确；会议项目 status --group-by feature 实测分组渲染正常；构建 + 285 测试全绿
+
+## v8.3.291 (2026-09-29) — 任务依赖链根治：AI 依赖分析不再丢弃，plan 拓扑/分支合并依据打通
+
+### 修复
+- **taskify 阶段 dependencies 字段丢失（核心 bug）**：AI 返回的 `dependencies` 数组此前只用于日志展示，从未写入 `section._dependsOn`——导致 TASK.md「依赖任务」恒为「无」、plan 拓扑排期与 execute 依赖分支合并永远拿空数组（实测 /tmp 项目 3 任务声明 `Task-002/003 → Task-001` 落盘后全部变「无」）。修复：预分配任务 ID（与 1471 行非 response 模式对齐）+ 建立「AI 临时 id → 实际 taskId」映射 + 解析写入 `_dependsOn`；无法映射的引用保留原值（execute 阶段给出提示）
+- **scanTasks 依赖硬编码空数组**：state.ts 三处 `dependencies: []` 从不读 TASK.md——新增 `parseDepsFromTaskMd` 解析「依赖任务」字段（兼容 `- **依赖任务**: Task-xxx` 与 `| 依赖任务 | Task-xxx |` 两种格式，逗号/顿号分隔、去重、过滤非 Task- 噪声），子任务级解析失败回退父任务级
+- **findBranchByTaskId 父 ID 前缀匹配**：依赖以父任务 ID 引用（如 Task-002-f1-booking），而 git-mapping 精确匹配子任务 ID（Task-002-f1-booking-booking-service）——新增 `info.taskId.startsWith(taskId + '-')` 回退，跨仓库分支查找不再落空
+- **--help/--version 退出码修复**：exitOverride 抛出的 commander.helpDisplayed/commander.version 未在 catch 中处理，落入兜底 exit 1（内容已正常输出，但脚本/管道会误判失败）——新增两码早退 exit 0
+
+### 增强
+- **IMPACT.md 输出「任务声明」依赖行**：`_dependsOn` 权威依赖最先列出（类型列标记「任务声明」），与 API 文本匹配/语义推断分层共存
+- **任务总览表依赖列**：TASK_SUMMARY 从解析后的 `_dependsOn` 读取（此前用 AI 原始 dependencies 数组，ID 与落盘不一致）
+- **端级分析模板补图表要求**：Phase 2 端级 TECH.md 骨架「写作要求」新增后端「核心接口调用时序图或数据模型 ER 图（Mermaid sequenceDiagram/erDiagram）」、前端「页面路由拓扑图（Mermaid graph）」；UI_SPEC.md 新增「核心页面交互状态流转图（Mermaid stateDiagram-v2，覆盖四态）」；QUALITY_RUBRICS 'UI_SPEC.md' checklist 同步补图检查项——修复功能单元分析文档几乎无图的问题（会议项目实测 mermaid 覆盖率仅 5.4%）
+
+### 验证
+- 285 测试全绿（新增 state-deps.test.ts 7 例：两种格式/多分隔符/无依赖/噪声过滤/去重）
+- /tmp 项目端到端实测：taskify 解析 2 条依赖 → TASK.md「依赖任务: Task-002-f1-booking」→ scanTasks 读回 `["Task-002-f1-booking"]` → plan 拓扑分阶段（后端 Phase 1，两个前端 Phase 2 并行）+ Mermaid 依赖图正确渲染
+
 ## v8.3.290 (2026-09-28) — run 无参智能续跑 + 快捷语法糖：高频操作不再依赖 ask 引擎
 
 ### 新增

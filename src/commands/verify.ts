@@ -67,6 +67,8 @@ import { loadTestConfig, mergeTestConfigWithEnv, describeAuthResolution } from '
 import type { TestConfig, TestCase } from '../core/test-config';
 import { collectTaskReports, generateQualityReport } from '../core/verify-report-aggregator';
 import { findProjectRoot } from '../utils/task-utils';
+// v8.3.293+: 复用 core 任务路径定位（支持 030-tasks/{type}/Task-* 新布局与子任务层级）
+import { findTaskDir as coreFindTaskDir, getTasksRoot } from '../core/task-paths';
 
 interface VerifyOptions {
   task?: string;
@@ -326,6 +328,8 @@ async function findTaskCodePath(task: TaskState, iterDir: string, defaultCodePat
 
 /**
  * 查找任务目录（兼容多种布局）
+ * v8.3.293+: 修复此前只查 030-tasks/{taskId} 根级直铺与 {iterDir}/{taskId} 旧布局、
+ * 导致 taskify 产物（030-tasks/{type}/Task-xxx/{端}/{子任务}/）无法定位的断链。
  */
 async function findTaskDir(taskId: string, iterDir: string): Promise<string | null> {
   const candidates = [
@@ -335,7 +339,8 @@ async function findTaskDir(taskId: string, iterDir: string): Promise<string | nu
   for (const c of candidates) {
     if (await pathExists(c)) return c;
   }
-  return null;
+  // 新布局：030-tasks/{type}/Task-xxx/ 与子任务层级（复用 core task-paths 的递归查找）
+  return coreFindTaskDir(getTasksRoot('', iterDir), taskId);
 }
 
 /**
@@ -461,6 +466,73 @@ export async function runUIVerification(
       }
     } catch {
       // 扫描失败，静默回退到原有提示
+    }
+
+    // v8.3.293+: 无源码可扫描（首次建设/需求阶段）时，从任务 Spec 文档生成流程骨架——
+    // UI_SPEC「元素标识约定」清单 → 业务流程步骤 → 场景 selector 自动装配，
+    // 弥合「分析阶段元素约定」与「冒烟配置生成阶段」之间的断链。
+    if (!specPath) {
+      try {
+        const specTexts: string[] = [];
+        // 1. 子任务 TEST.md（含测试场景/业务流程）
+        const testMd = join(taskDir, 'TEST.md');
+        if (await pathExists(testMd)) specTexts.push(await readFile(testMd, 'utf-8'));
+        // 2. 任务级 00-specs 文档
+        const specsDir = join(taskDir, '00-specs');
+        if (await pathExists(specsDir)) {
+          const { readdir: rd } = await import('fs-extra');
+          for (const f of await rd(specsDir)) {
+            if (f.endsWith('.md')) specTexts.push(await readFile(join(specsDir, f), 'utf-8'));
+          }
+        }
+        // 3. 020-specs UI_SPEC（按 .meta/feature 与端名定位，匹配不上则跳过）
+        try {
+          const featureName = (await readFile(join(taskDir, '.meta', 'feature'), 'utf-8')).trim();
+          const platformName = inferPlatformFromTaskDir(taskDir) || '';
+          const specsRoot = join(iterDir, '020-specs');
+          if (featureName && featureName !== '未分类' && platformName && await pathExists(specsRoot)) {
+            const { readdir: rd } = await import('fs-extra');
+            for (const d of await rd(specsRoot)) {
+              if (!d.includes(featureName) && !featureName.includes(d)) continue;
+              const uiSpec = join(specsRoot, d, platformName, 'UI_SPEC.md');
+              if (await pathExists(uiSpec)) { specTexts.push(await readFile(uiSpec, 'utf-8')); break; }
+            }
+          }
+        } catch { /* 定位失败时只用任务文档 */ }
+
+        const combined = specTexts.join('\n\n');
+        if (combined.trim().length > 0) {
+          const { generateSpecFromUiSpec } = await import('../core/ui-verify');
+          const baseUrl = options.baseUrl || options.url || 'http://localhost:3000';
+          const platformName = inferPlatformFromTaskDir(taskDir) || 'web';
+          const specGen = generateSpecFromUiSpec(combined, {
+            baseUrl,
+            platform: platformName,
+            name: `${taskId} UI 验证（Spec 流程骨架）`,
+          });
+          if (specGen.scenarios.length > 0) {
+            generatedSpec = specGen;
+            generatedPath = join(taskDir, 'VERIFY_SPEC.yaml');
+
+            if (process.stdin.isTTY) {
+              logger.info('');
+              const answer = await promptUser('未发现源码路由，是否根据任务 Spec 文档生成流程场景骨架？[Y/n]');
+              if (answer.toLowerCase() === 'n' || answer.toLowerCase() === 'no') {
+                logger.info('⏭️  跳过自动生成，UI 验证取消');
+                return null;
+              }
+            } else {
+              logger.info('💡 非交互环境，根据任务 Spec 文档生成流程场景骨架');
+            }
+
+            await writeVerifySpec(generatedSpec, generatedPath);
+            logger.info(`📄 VERIFY_SPEC.yaml 已按 Spec 文档生成: ${generatedPath}`);
+            specPath = generatedPath;
+          }
+        }
+      } catch {
+        // Spec 提取失败，静默回退到原有提示
+      }
     }
 
     if (!specPath) {

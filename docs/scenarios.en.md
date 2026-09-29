@@ -299,14 +299,14 @@ speccore baseline --list
 | Scenario | First Command | Core Flow |
 | :--- | :--- | :--- |
 | New Project | `speccore init` | `init → iteration create → task new` |
-| Daily Dev | `speccore execute --task=T-001` | `execute → sync → trace → update` |
+| Daily Dev | `speccore execute -t Task-001` | `execute → verify → pr` |
 | Bug Fix | `speccore task new --name="xxx" --type=bugfix` | `bugfix → execute → sync → change` |
 | Change Mgmt | `speccore impact --req=REQ-001` | `impact → baseline → change → validate` |
-| Team Collab | `speccore status-panel --detail` | `update --assignee → execute → handover` |
+| Team Collab | `speccore execute --assignee 张三` | `execute → handover` |
 | Long Chain | `speccore execute --all --batch-size=3` | `execute --resume` |
-| CI/CD | `speccore config install` | hooks + GitHub Actions |
-| Global Layer | `speccore global-status` | `iteration-from-global → sync --global` |
-| Health Check | `speccore health` | `status-panel` |
+| CI/CD | `speccore init` | hooks + GitHub Actions |
+| Global Layer | `speccore iteration-from-global` | `iteration-from-global → sync --global` |
+| Health Check | `speccore doctor` | `doctor` |
 
 ---
 

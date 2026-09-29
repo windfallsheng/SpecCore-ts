@@ -1,25 +1,25 @@
 # Spec 多层加载机制说明
 
-> 适用版本：v6.15.x+
+> 适用版本：v8.3.x+
 
 > 💡 **命令类型**: 本文档中的 `speccore execute` 为 🔒 AI 命令，需在 AI IDE 中通过 `@spec-ask` 使用。详见 [快速开始](quick-start.md)。
 
 ## 多层 Spec 架构
 
-SpecCore 生成的所有 Spec 文件分为多个层次：**全局知识库**（analyze --full 自动生成）、**全局约束**（init 时配置）、**期次上下文**（迭代级文档）、**Task 执行**（任务级输入）。
+SpecCore 生成的所有 Spec 文件分为多个层次：**全局知识库**（analyze --full 自动生成）、**全局约束**（init 时配置）、**迭代上下文**（迭代级文档）、**Task 执行**（任务级输入）。
 
 ```
 Layer 0 — 全局知识库（analyze --full 自动生成 + 智能注入）
   🤖 GLOBAL/platforms/{端}/ → Phase 1 逐端分析
   🤖 GLOBAL/synthesis/      → Phase 2 跨端综合
   🤖 GLOBAL/INDEX.md         → Phase 2 后自动生成的轻量索引
-  ✅ split/execute/analyze   → 必读注入 + TOC 目录，AI 自主 Read
+  ✅ taskify/execute/analyze → 必读注入 + TOC 目录，AI 自主 Read
 
 Layer 1 — 全局约束（execute 自动解析）
   ✅ CONSTITUTION.md  spec-rule 区块 → 代码规范自动生效
   ✅ TECH_STACK.md    tech-stack 区块 → 技术栈自动检测
 
-Layer 2 — 期次上下文（人类文档，手动查阅）
+Layer 2 — 迭代上下文（人类文档，手动查阅）
   📖 010-requirements/  本期需求总览
   📖 020-specs/         架构决策、技术分析
 
@@ -72,7 +72,7 @@ analyze --full Phase 2 完成后
 ├── 写入 GLOBAL/platforms/{端}/（各端专业分析）
 ├── 自动生成 GLOBAL/INDEX.md（轻量索引）
 │
-├──→ split 的 Prompt 自动注入：
+├──→ taskify 的 Prompt 自动注入：
 │    ├── 📌 必读：INDEX.md 全文（≤ 1500 字）
 │    └── 📂 可选：TOC 目录（文件路径 + 描述 + ## 标题列表）
 │
@@ -124,7 +124,7 @@ analyze --full Phase 2 完成后
 | `buildGlobalTOC()` | prompt-builder.ts | 扫描 6 个来源，提取每个文件的 ## 标题行 |
 | `loadGlobalContext()` | prompt-builder.ts | 必读 INDEX.md 直接注入 + 其余只给 TOC 目录 |
 | `generateGlobalIndex()` | synthesize.ts (analyze --full) | Phase 2 apply 后自动生成 INDEX.md |
-| `formatGlobalContext()` | prompt-builder.ts | 格式化为分组 Markdown，formatPrompt 和 split.ts 共用 |
+| `formatGlobalContext()` | prompt-builder.ts | 格式化为分组 Markdown，formatPrompt 和 taskify.ts 共用 |
 
 **关键设计决策：**
 - 不预取内容，只给目录 — AI 自己决定读什么，避免关键词匹配不准
@@ -132,7 +132,7 @@ analyze --full Phase 2 完成后
 - 过滤时间戳备份文件 — `isTimestampBackup()` 排除 `.bak` 类文件
 - 当前端标记 — execute 时自动标记当前端的文档，引导 AI 优先参考
 - 6 个来源全覆盖 — synthesis/platforms/PROJECTS/扁平文件/PATTERNS/RULES 全部纳入 TOC
-- `formatGlobalContext()` 公共函数 — formatPrompt 和 split.ts 共用同一套分组逻辑
+- `formatGlobalContext()` 公共函数 — formatPrompt 和 taskify.ts 共用同一套分组逻辑
 
 ---
 
@@ -189,7 +189,7 @@ speccore execute --task=Task-001 --force
 
 支持检测的语言：Java / TypeScript / Go / Python
 
-## 三、Layer 2：期次上下文（人类文档）
+## 三、Layer 2：迭代上下文（人类文档）
 
 这些文件不参与代码生成，但提供关键的项目信息：
 
@@ -212,16 +212,13 @@ Task-001-订单管理/
 │   ├── TECH.md               → 技术方案
 │   ├── CONTEXT.md            → 任务上下文
 │   └── TASK.md               → 任务分解
-├── 10-backend/
-│   └── api/
-│       └── order-api/        → 后端子任务
-│           ├── src/ + tests/
-│           └── TASK.md
-└── 20-frontend/
-    └── web/
-        └── order-page/       → 前端子任务
-            ├── src/ + tests/
-            └── TASK.md
+├── booking-service/          → 后端服务端（端平铺）
+│   └── order-api/            → 子任务
+│       ├── TASK.md
+│       └── （代码写入源码路径，不在任务目录内）
+└── h5-mobile/                → 移动 H5 端
+    └── order-page/           → 子任务
+        └── TASK.md
 ```
 
 **execute 的工作流程：**
@@ -255,7 +252,7 @@ Task-001-订单管理/
 1. "我的 Java 项目用 Spring Boot + JPA，异常统一用 ApiException"
    → AI 自动创建 CONSTITUTION.md spec-rule + TECH_STACK.md
 
-2. "创建 Q3 期次"
+2. "创建 Q3 迭代"
    → AI 调用 speccore iteration create --name=Q3
 
 3. "创建一个订单管理的 Feature 任务"
@@ -278,12 +275,12 @@ Task-001-订单管理/
 vim .speccore/CONSTITUTION.md      # 加 spec-rule 标记
 vim .speccore/GLOBAL/TECH_STACK.md # 加 tech-stack 标记
 
-# 2. 创建期次和任务
+# 2. 创建迭代和任务
 speccore iteration create --name=Q3
-speccore task new --name="订单管理" --platforms=web,backend
+speccore task new --name="订单管理" --platforms=booking-service,h5-mobile
 
-# 3. 写需求文档
-vim Iteration-Q3/Task-001-订单管理/backend/REQ.md
+# 3. 写需求文档（00-specs/ 核心规格）
+vim Iteration-Q3/030-tasks/Task-001-订单管理/00-specs/REQ.md
 # | POST | /api/v1/orders | 创建订单 |
 # | GET  | /api/v1/orders | 查询列表 |
 

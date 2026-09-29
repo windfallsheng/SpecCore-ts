@@ -1,6 +1,6 @@
 # SpecCore CI/CD & @spec Annotation Integration Guide
 
-> Applicable: v6.15.x+ | Level: beginner
+> Applicable: v8.3.x+ | Level: beginner
 
 > 💡 **Command types**: `speccore execute` below is a 🔒 AI command — use `@spec-ask` in an AI IDE.
 

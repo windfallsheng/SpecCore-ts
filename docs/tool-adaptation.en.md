@@ -11,7 +11,7 @@
 | Tool | Region | Integration Method | Status |
 | :--- | :--- | :--- | :--- |
 | **WorkBuddy** | CN | `.workbuddy/skills/speccore/SKILL.md` + `.workbuddy/memory/MEMORY.md` | ✅ |
-| **Qcoder** | CN | Via AI command templates | ✅ |
+| **Qoder** | CN | Via AI command templates | ✅ |
 | **Trae** | CN | Via AI command templates | ✅ |
 | **Cursor** | Global | Via AI command templates | ✅ |
 | **Claude Code** | Global | Via AI command templates | ✅ |

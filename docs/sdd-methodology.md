@@ -92,7 +92,7 @@ speccore validate                      # 合规校验（自动检测 Spec 完整
 
 ### 4.4 双向追溯
 
-需求 → 期次 → Task → 代码，完整关联链路。每一行代码都能追溯到具体的需求节点。
+需求 → 迭代 → Task → 代码，完整关联链路。每一行代码都能追溯到具体的需求节点。
 
 ```bash
 speccore impact --req=REQ-001    # 查看需求影响范围
@@ -109,7 +109,7 @@ Spec 作为独立仓库管理，代码工程平级部署。权限清晰、版本
 
 ```
 1. 需求分析
-   └→ 创建期次: speccore iteration create
+   └→ 创建迭代: speccore iteration create
    └→ 编写 REQ.md（需求描述）
 
 2. 任务拆分

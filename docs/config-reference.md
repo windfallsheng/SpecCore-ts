@@ -344,7 +344,7 @@ team:
 | `pre_deploy` | `string[]` | — | 部署前执行的命令 |
 | `post_deploy` | `string[]` | — | 部署后执行的命令 |
 
-完整示例见 [`templates/deploy-examples.yaml`](templates/deploy-examples.yaml)。
+完整示例见 [`templates/deploy-examples.yaml`](../templates/deploy-examples.yaml)。
 
 **示例**（含前端 + Java 后端部署配置）：
 ```yaml

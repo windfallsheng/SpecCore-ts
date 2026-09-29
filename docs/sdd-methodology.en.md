@@ -22,7 +22,7 @@ Traditional TDD says "write tests first, then code." SDD says "write Specs first
 
 | Pain Point | Description | SDD Solution |
 | :--- | :--- | :--- |
-| **Context drift** | AI forgets Task-01's architecture by Task-15 | Reload Specs per batch (batch execution + context isolation) |
+| **Context drift** | AI forgets Task-001's architecture by Task-015 | Reload Specs per batch (batch execution + context isolation) |
 | **Style inconsistency** | Same feature, different coding styles across sessions | CONSTITUTION.md defines tech standards globally |
 | **Lost traceability** | Code changes with no link to requirements | Req → Task → Code bidirectional chain |
 | **Token waste** | AI spends tokens on directory creation, file I/O | CLI handles deterministic ops, AI focuses on decisions |

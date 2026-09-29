@@ -92,8 +92,9 @@ async function scanMaxIds(): Promise<Counters> {
   return { iterations, tasks, plans };
 }
 
-/** 中英文名称转 slug（保留英文/数字，纯中文时拼音兜底） */
-function toSlug(name: string): string {
+/** 中英文名称转 slug（保留英文/数字，纯中文时拼音兜底）。
+ * v8.3.294+: 导出供 taskify 拼接 bugfix 复合目录名（模块名 AI 英译 + 拼音兜底）。 */
+export function toSlug(name: string): string {
   // 去掉 Iteration- 前缀
   const clean = name.replace(/^Iteration-/, '');
   // 优先提取连续的英文/数字片段（如 "User管理" → "User"）

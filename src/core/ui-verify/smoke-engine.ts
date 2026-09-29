@@ -69,6 +69,26 @@ export async function runSmokeTest(
     await browser.close();
   }
 
+  // v8.3.294+: selector 自愈提示——失败场景汇总页面实际 data-testid 清单，
+  // 供修正 VERIFY_SPEC 占位 selector（不自动回写配置，避免运行时误判）
+  const failedWithDom = results.filter((r) => !r.passed && r.domTestIds && r.domTestIds.length > 0);
+  if (failedWithDom.length > 0) {
+    logger.info('');
+    logger.info('💡 selector 自愈提示（失败场景页面的实际 data-testid 清单，供修正 VERIFY_SPEC）:');
+    for (const r of failedWithDom) {
+      const failedSelectors = r.steps
+        .filter((s) => !s.passed && s.action.selector && s.action.selector.includes('data-testid'))
+        .map((s) => s.action.selector!);
+      const uniqSelectors = [...new Set(failedSelectors)];
+      logger.info(`   ❌ ${r.scenarioName}`);
+      if (uniqSelectors.length > 0) {
+        logger.info(`      失败 selector: ${uniqSelectors.join('、')}`);
+      }
+      logger.info(`      页面实际 testid: ${(r.domTestIds || []).slice(0, 20).join(', ')}${(r.domTestIds || []).length > 20 ? ' …' : ''}`);
+    }
+    logger.info('   💡 修正方式：将 VERIFY_SPEC 中失败的 selector 替换为上述实际 testid，或按 UI_SPEC「元素标识约定」给组件补齐 data-testid');
+  }
+
   return results;
 }
 
@@ -311,6 +331,22 @@ async function runScenario(
   const passed = steps.every((s) => s.passed);
   const duration = Date.now() - startTime;
 
+  // v8.3.294+: 失败场景扫描页面实际 data-testid 清单（selector 自愈提示素材），
+  // 页面不可用（导航失败/已关闭）时静默跳过；evaluate 用字符串形式（项目 lib 无 DOM）
+  let domTestIds: string[] | undefined;
+  if (!passed) {
+    try {
+      const raw = await page.evaluate(`() =>
+        Array.from(document.querySelectorAll('[data-testid]'))
+          .map((el) => el.getAttribute('data-testid'))
+          .filter((v) => !!v)
+      `);
+      if (Array.isArray(raw)) {
+        domTestIds = (raw as unknown[]).filter((v): v is string => typeof v === 'string') as string[];
+      }
+    } catch { /* 页面不可用时跳过 DOM 扫描 */ }
+  }
+
   logger.info(
     `  ${passed ? '✅' : '❌'} ${scenario.name} (${steps.filter((s) => s.passed).length}/${steps.length} 通过, ${duration}ms)`
   );
@@ -321,6 +357,7 @@ async function runScenario(
     duration,
     steps,
     screenshot,
+    domTestIds,
   };
 }
 
