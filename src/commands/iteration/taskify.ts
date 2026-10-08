@@ -1539,7 +1539,10 @@ export async function iterationTaskifyCommand(options: IterationTaskifyOptions):
       logger.info(`   👥 STAFFING: ${staffing.map(m => `${m.name}(${m.platforms.join(',')})`).join(', ')}`);
       for (const section of sections) {
         if (!(section as any)._owner) {
-          (section as any)._owner = autoAssign(section, platforms, staffing);
+          // v8.3.302+: 单元级声明优先——_matrix.md owners 段 confirmed 拍板结果直接采用，
+          // 未拍板（pending/缺失）回退 STAFFING 负荷均衡 autoAssign（报缺不脑补）
+          const declared = await resolveUnitOwnerFromMatrix(iterationDir, section.name, (section as any).platform || '');
+          (section as any)._owner = declared || autoAssign(section, platforms, staffing);
         }
       }
     } else {
@@ -4415,6 +4418,31 @@ function readStaffing(iterationDir: string): StaffMember[] | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * v8.3.302+: 单元级负责人声明优先——读 010-requirements/features/{单元}/_matrix.md 的
+ * owners 段，返回 section 端匹配的 confirmed 负责人；无/未拍板 → undefined（交由 autoAssign 兜底）
+ */
+async function resolveUnitOwnerFromMatrix(
+  iterationDir: string, sectionName: string, platform: string
+): Promise<string | undefined> {
+  if (!platform || !sectionName) return undefined;
+  try {
+    const featuresDir = join(iterationDir, '010-requirements', 'features');
+    if (!(await pathExists(featuresDir))) return undefined;
+    const entries = await readdir(featuresDir, { withFileTypes: true });
+    for (const e of entries) {
+      // 与 readMatrixPlatforms 同款匹配：目录名包含模块名，排除时间戳备份
+      if (!e.isDirectory() || isTimestampBackup(e.name) || !e.name.includes(sectionName)) continue;
+      const matrixPath = join(featuresDir, e.name, '_matrix.md');
+      if (!(await pathExists(matrixPath))) continue;
+      const { resolveDeclaredOwner } = await import('../../core/unit-staffing');
+      const owner = resolveDeclaredOwner(await readFile(matrixPath, 'utf-8'), platform);
+      if (owner) return owner;
+    }
+  } catch { /* 声明读取失败静默回退 autoAssign */ }
+  return undefined;
 }
 
 /**

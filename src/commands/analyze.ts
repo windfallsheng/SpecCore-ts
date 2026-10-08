@@ -1070,7 +1070,8 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
 
   // v8.3.0+: 需求澄清检测状态（跨代码块共享）
   let needsClarify = false;
-  const clarifyTargets: { path: string; level: string }[] = [];
+  // v8.3.302+: unit 字段——单元级澄清目标（auto 模式按功能单元触发，与 features/ 目录对应）
+  const clarifyTargets: { path: string; level: string; unit?: string }[] = [];
   // v8.3.190+: 澄清步骤三态开关（配置 optional_steps.clarify + 命令 --clarify/--skip-clarify 覆盖）
   const clarifyMode = await resolveClarifyMode(options);
 
@@ -1289,13 +1290,54 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       }
     } else if (clarifyMode === 'auto') {
       const { detectProfessionalLevel } = await import('../core/requirement-clarifier');
-      for (const reqPath of requirements) {
-        const reqContent = await readFile(reqPath, 'utf-8');
-        const level = detectProfessionalLevel(reqContent);
-        if (level !== 'high') {
-          needsClarify = true;
-          clarifyTargets.push({ path: reqPath, level });
-          logger.warn(`   ⚠️  需求文档质量${level.toUpperCase()}: ${relative(iterDir!, reqPath)}`);
+      // v8.3.302+: 有功能单元时按「单元级模糊度」触发澄清——只对 _matrix.md 标记
+      // clarify: needed 的单元产出 CLARIFY.md，专业单元直接分析（缺什么补什么，而非人人过关）
+      const featuresDirAuto = join(iterDir!, '010-requirements', 'features');
+      const featureUnitsAuto = await parseFeatureList(iterDir!);
+      if (featureUnitsAuto.length > 0) {
+        for (const unit of featureUnitsAuto) {
+          const unitDir = join(featuresDirAuto, unit);
+          const srcPath = await resolveUnitSourcePath(unitDir);
+          if (!(await pathExists(srcPath))) continue;
+          const matrixPath = join(unitDir, '_matrix.md');
+          let level: 'high' | 'medium' | 'low' | undefined;
+          if (await pathExists(matrixPath)) {
+            const mc = await readFile(matrixPath, 'utf-8');
+            const cm = mc.match(/^clarify:\s*(needed|optional)\s*$/m);
+            if (cm) level = cm[1] === 'needed' ? 'low' : 'high';
+          }
+          if (!level) {
+            // 旧矩阵无 clarify 标记：现场检测并回填，后续 analyze 免重复检测
+            level = detectProfessionalLevel(await readFile(srcPath, 'utf-8'));
+            if (await pathExists(matrixPath)) {
+              const mc = await readFile(matrixPath, 'utf-8');
+              if (!/^clarify:\s*\S/m.test(mc)) {
+                await writeFile(matrixPath, mc.replace(
+                  /^platforms:\s*\n(?:[\s\S]*?)(?=\n(?:clarify|owners|dependencies|apis)\s*:|\n#)/m,
+                  (m: string) => m + `\nclarify: ${level === 'high' ? 'optional' : 'needed'}`
+                ));
+              }
+            }
+          }
+          if (level !== 'high') {
+            needsClarify = true;
+            clarifyTargets.push({ path: srcPath, level, unit });
+            logger.warn(`   ⚠️  功能单元需澄清（${level.toUpperCase()}）: ${unit}`);
+          }
+        }
+        if (clarifyTargets.length === 0) {
+          logger.info(`   ✅ ${featureUnitsAuto.length} 个功能单元专业度达标，无需澄清`);
+        }
+      } else {
+        // 无功能单元（老项目）：维持文档级检测
+        for (const reqPath of requirements) {
+          const reqContent = await readFile(reqPath, 'utf-8');
+          const level = detectProfessionalLevel(reqContent);
+          if (level !== 'high') {
+            needsClarify = true;
+            clarifyTargets.push({ path: reqPath, level });
+            logger.warn(`   ⚠️  需求文档质量${level.toUpperCase()}: ${relative(iterDir!, reqPath)}`);
+          }
         }
       }
     }
@@ -1373,6 +1415,29 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         if (inferResult.pending.length > 0) {
           logger.info(`💡 ${inferResult.pending.length} 个单元无法推断涉及端，按全端兜底: ${inferResult.pending.join(', ')}`);
           logger.info(`   分析完成后可人工确认/更新各单元 _matrix.md 的 platforms 声明，重跑 analyze 即收敛`);
+        }
+        // v8.3.302+: 负责人前置到单元级——端声明回填后，按 STAFFING 方向推导候选
+        // （方向唯一成员才写 pending；多人/无人报缺），并刷新 OWNERS.md 视图
+        const { loadStaffing, deriveOwnerCandidates, updateMatrixOwners, refreshUnitOwnerViews } = await import('../core/unit-staffing');
+        const staffingMembers = loadStaffing(iterDirForSkeleton);
+        if (staffingMembers.length > 0) {
+          let candidateCount = 0;
+          for (const feature of features) {
+            const unitPlatforms = featurePlatforms.get(feature) || [];
+            if (unitPlatforms.length === 0) continue;
+            const candidates = deriveOwnerCandidates(unitPlatforms, staffingMembers);
+            if (candidates.length === 0) continue;
+            if (await updateMatrixOwners(join(featuresDir, feature, '_matrix.md'), candidates)) {
+              candidateCount += candidates.length;
+            }
+          }
+          if (candidateCount > 0) {
+            logger.info(`👥 STAFFING 候选负责人已写入 ${candidateCount} 条（pending 待拍板，在 _matrix.md 改 confirmed）`);
+          }
+        }
+        const ownerViews = await refreshUnitOwnerViews(specDir, featuresDir, features, featurePlatforms);
+        if (ownerViews > 0) {
+          logger.info(`👥 已刷新 ${ownerViews} 个单元的 OWNERS.md 视图（020-specs/{单元}/overview/）`);
         }
         let manifest: import('../core/spec-skeleton').SpecFileEntry[];
         if (features.length > 0) {
@@ -3730,7 +3795,7 @@ async function buildLayer3ModuleContext(projectRoot: string): Promise<string | n
 
 // ── buildMultiDocPrompt: 多文档协议 ──
 // v8.3.160+: 改为 export，供 prompt-builder.ts 统一调用
-export async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; scope?: string; withCode?: boolean; platform?: string; phase?: string; autoMode?: boolean; feature?: string }, options?: AnalyzeOptions, clarifyCtx?: { needsClarify: boolean; clarifyTargets: { path: string; level: string }[] }): Promise<string> {
+export async function buildMultiDocPrompt(command: string, ctx: { iteration?: string; scope?: string; withCode?: boolean; platform?: string; phase?: string; autoMode?: boolean; feature?: string }, options?: AnalyzeOptions, clarifyCtx?: { needsClarify: boolean; clarifyTargets: { path: string; level: string; unit?: string }[] }): Promise<string> {
   const iter = ctx.iteration || '当前迭代';
   const now = new Date().toISOString().split('T')[0];
   const isGlobal = ctx.scope === 'global';
@@ -5282,8 +5347,10 @@ sequenceDiagram
     prompt += `## 🚨 Phase 0: 需求澄清（强制前置 — 未完成则禁止进入 Phase 1）\n\n`;
     prompt += `检测到以下需求文档质量不足，**必须先完成专业化整理，才能继续技术分析**：\n\n`;
     for (const t of clarifyTargets) {
-      prompt += `- \`${t.path.split('/').slice(-2).join('/')}\`（质量: ${t.level.toUpperCase()}）\n`;
+      const label = t.unit ? `功能单元 \`${t.unit}\`` : `\`${t.path.split('/').slice(-2).join('/')}\``;
+      prompt += `- ${label}（质量: ${t.level.toUpperCase()}）\n`;
     }
+    prompt += `\n> 澄清范围：只对上述列出的单元产出 \`[CLARIFY:{单元}/overview/CLARIFY.md]\`；未列出的单元（clarify: optional）无需澄清。\n`;
     prompt += `\n### 澄清执行步骤（必须按顺序完成）\n\n`;
     prompt += `**Step 1**: 读取上述每个需求文档的原始内容\n`;
     prompt += `**Step 2**: 将口语化/非专业描述整理为 PRD 级专业文档\n`;

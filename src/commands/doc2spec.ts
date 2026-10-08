@@ -27,6 +27,7 @@ import { tmpdir } from 'os';
 import { backupWithTimestamp, backupDirWithTimestamp, isTimestampBackup } from '../utils/task-utils';
 import { nextTaskId } from '../core/global-counters';
 import { resolveUnitSourcePath } from '../core/feature-source';
+import { detectProfessionalLevel } from '../core/requirement-clarifier';
 
 import { showNextSteps } from '../core/next-steps';
 import { validateContent, generateReport } from '../core/doc-validator';
@@ -1205,7 +1206,11 @@ export async function splitDocumentToUnits(
       .split(/[,，;；]/)
       .map(p => p.trim())
       .filter(Boolean);
-    const matrixContent = `# ${unit.title} - 端覆盖矩阵\n\nfeature: ${unit.title}\ntype: ${unit.unitType}\nplatforms:\n${platforms.map(p => `  - ${p}`).join('\n') || '  []'}\ndependencies: []\napis: []\n`;
+    // v8.3.302+: 单元级澄清需求度标记——对需求原文切片做专业度检测，
+    // analyze auto 模式只对标记 needed 的单元产出 CLARIFY.md（从全局专业度细化为单元级模糊度）
+    // v8.3.302+: owners 空声明——analyze 端推断回填 platforms 后推导候选写入 pending，人工拍板 confirmed
+    const clarifyLevel = detectProfessionalLevel(unitContent);
+    const matrixContent = `# ${unit.title} - 端覆盖矩阵\n\nfeature: ${unit.title}\ntype: ${unit.unitType}\nplatforms:\n${platforms.map(p => `  - ${p}`).join('\n') || '  []'}\nclarify: ${clarifyLevel === 'high' ? 'optional' : 'needed'}\nowners: []\ndependencies: []\napis: []\n`;
     await writeFile(join(unitDir, '_matrix.md'), matrixContent);
     
     // 初始变更记录
