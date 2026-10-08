@@ -1462,7 +1462,7 @@ SpecCore 规范驱动开发项目。
 
 | 层 | 目录 | 产出 |
 |:---|:---|:---|
-| 切分层 | \`010-requirements/features/{功能单元}/\` | SOURCE.md（需求原文切片，旧版为 README.md） + _matrix.md + CHANGELOG.md（doc2spec 产出） |
+| 切分层 | \`010-requirements/features/{功能单元}/\` | SOURCE.md（需求原文切片，旧版为 README.md） + _matrix.md（端覆盖 platforms + 澄清需求度 clarify + 负责人 owners）+ CHANGELOG.md（doc2spec 产出） |
 
 > **功能单元命名（v8.3.271+）**：目录名 = \`{文档/端}-{序号}-{英文slug}\`（中文标题转全拼，如 \`admin-web-01-yudingguanli\`）；中文显示名保留在 SOURCE.md 标题与 \`_matrix.md\` 的 \`feature\` 字段。旧迭代中文目录名兼容不迁移。
 | 分析层 | \`020-specs/{功能单元}/\` | overview/（单元概述）+ {端名}/（TECH/TEST/UI_SPEC） |
@@ -1956,7 +1956,7 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
     '├── features/              ← [手动维护] 按功能模块组织的需求补充',
     '│   └── {feature}/',
     '│       ├── SOURCE.md    ← [自动生成] 需求原文切片（旧版为 README.md）',
-    '│       ├── _matrix.md   ← [自动生成] 端覆盖矩阵',
+    '│       ├── _matrix.md   ← [自动生成] 端覆盖矩阵 + 澄清需求度 + 负责人声明',
     '│       └── CHANGELOG.md ← [自动生成] 单元变更记录',
     '├── prototypes/            ← 原型（HTML/图片/链接，内容不限）',
     '├── assets/                ← 素材资源',

@@ -1,3 +1,16 @@
+## v8.3.302 (2026-10-08) — 负责人前置到单元级 + 单元级澄清触发
+
+### 负责人前置（单元级 owner 声明）
+- **_matrix.md owners 段**：unitize 写入空声明（`- platform / name / status`，pending 候选 / confirmed 已拍板）；analyze 端推断回填 platforms 后按 STAFFING 方向推导候选——方向唯一成员才写 pending，多人/无人报缺不脑补；confirmed 人工拍板优先保留、不被候选覆盖
+- **OWNERS.md 视图**：analyze 确定性渲染 `020-specs/{单元}/overview/OWNERS.md`（端 × 负责人 × 状态表），供 SpecTest gen 阶段读取与人类审阅，改 _matrix.md 后重跑 analyze 刷新
+- **taskify 升级**：autoAssign 从「负荷最低」升级为「单元声明 confirmed 优先、负荷均衡兜底」
+- **新核心模块 src/core/unit-staffing.ts**：STAFFING 解析 / 方向匹配（全词边界 + 类别词别名：后台→backend/service、Web→h5/frontend、小程序→miniapp）/ owners 段读写合并
+
+### 单元级澄清触发（替代全局专业度）
+- **unitize 标记**：对需求原文切片做专业度检测，`_matrix.md` 写 `clarify: needed/optional`
+- **analyze 按单元触发**：auto 模式只对标记 needed 的单元产出 CLARIFY.md（专业单元直接分析，缺什么补什么而非人人过关）；旧矩阵无标记时现场检测回填
+- **Phase 0 提示单元范围**：澄清 Prompt 标注需澄清的单元清单，明示「未列出的单元无需澄清」
+
 ## v8.3.301 (2026-10-08) — global from-source 三件套强化：EARS 五句式 + 溯源锚点 + 验证环，ask 端名自动映射
 
 ### 反推需求链（global from-source）
