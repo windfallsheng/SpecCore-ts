@@ -1065,6 +1065,7 @@ program
   .option('--depth <depth>', '分析深度: quick | normal(默认) | deep')
   .option('--platform <platform>', '指定端（如 backend）')
   .option('--out-dir <path>', '反推需求产出目录（默认 .speccore/GLOBAL/requirements）')
+  .option('--verify', '验证环：只校验 UR 溯源锚点与 IR 清单一致性，不重跑反推（宿主 AI 填完 UR 后运行）')
   .action((options: any) => {
     // v8.3.255+: 薄别名，直接走 global from-source 引擎（屏蔽 analyze --scope global 废弃提示）
     analyzeCommand({ ...options, fromCode: true, scope: 'global', _fromGlobal: true } as never);
@@ -1097,6 +1098,7 @@ globalCmd
   .option('--depth <depth>', '分析深度: quick | normal(默认) | deep')
   .option('--platform <platform>', '指定端（如 backend）')
   .option('--out-dir <path>', '反推需求产出目录（默认 .speccore/GLOBAL/requirements）')
+  .option('--verify', '验证环：只校验 UR 溯源锚点与 IR 清单一致性，不重跑反推（宿主 AI 填完 UR 后运行）')
   .action(globalFromSourceCommand);
 
 globalCmd

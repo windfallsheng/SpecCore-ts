@@ -8,7 +8,9 @@ description: >
   本 Skill 对应 speccore global from-source 命令（spec-from-source 为兼容别名），
   底层复用 speccore global 命令族（global analyze 源码技术分析 / global from-source 源码反推需求）。
   参数提取（源码目录列表，多端用逗号分隔）由 speccore ask 引擎执行；
+  用户句中出现端名时 ask 引擎自动映射 --platform 与 --src（PROJECT.yaml code_path）；
   用户未提供源码目录时输出交互式提示（示例: --src backend/src,admin-web/src）。
+  两跳完成后运行 speccore global from-source --src <dirs> --verify 做锚点验证环。
   不处理一般性的"帮我看看这段代码"讨论，只处理 speccore 上下文中的源码反推。
 allowed-tools: ["Bash", "Read", "Write", "Edit"]
 disable-model-invocation: false

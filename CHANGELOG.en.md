@@ -4,6 +4,22 @@
 
 > 📌 **Note**: English entries below cover selected releases. For the complete version history (v8.3.194 → v8.3.289), see the Chinese [CHANGELOG.md](CHANGELOG.md).
 
+## v8.3.301 (2026-10-08) — global from-source reinforced: EARS five-pattern ACs + traceability anchors + verification ring, ask auto-maps platform names
+
+### Reverse requirement chain (global from-source)
+- **EARS five-pattern upgrade**: UR acceptance criteria upgraded from the single "when X, system shall Y" form to five scenario patterns (Ubiquitous / Event-driven / State-driven / Unwanted / Optional), plus two anti-translationese hard rules (subject must be user/business object — no function-name literalism; must carry user value — "outputs JSON" is not an acceptance criterion)
+- **Traceability anchors**: IR business-semantics section gains an anchor field (file#symbol); UR feature-unit table gains an anchor column, every AC carries `[溯源: \`{endpoint}/{module}\`]`
+- **Verification ring (--verify)**: new `verifyReverseAnchors` deterministic check — every REQUIREMENT.md anchor is compared against the IR module whitelist; dangling anchors (referencing non-existent modules) are flagged as suspected AI hallucination and written to VERIFY_REPORT.md; REVERSE_PROMPT gains a third hop; both `global from-source` and `spec-from-source` support --verify
+
+### ask intent recognition
+- **Colloquial triggers expanded**: dictionary + extractParams add 12 reverse-phrase variants (按端反推/按端生成需求/生成需求文档/需求文档反推/代码生成需求/按模块反推/反推文档 etc.) — phrases without 反推/逆向 words now hit global from-source
+- **Platform auto-mapping**: platform names or Chinese descriptions found in the sentence auto-append `--platform <name>` + `--src <code_path>` from PROJECT.yaml (`resolvePlatformFromInput` picks the longest name match to avoid substring collisions; config load failure degrades silently)
+- **LLM fallback backfilled**: intent-ai placeholder fallback gains a global_reverse intent (reverse-semantics regex + suggested command)
+
+### Docs
+- DESIGN.md seven-layer section adds the "source-reverse requirement chain" design note (industry-consensus comparison + three-piece semantics)
+- help.ts / SKILL.md synced with --verify and platform auto-mapping notes
+
 ## v8.3.300 (2026-10-08) — Branch pipeline health-check fixed: default_base/end-level overrides take effect + PROJECT.yaml upgrade blocking resolved
 
 ### Fixes (branch pipeline, this release)

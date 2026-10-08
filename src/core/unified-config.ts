@@ -195,6 +195,11 @@ export interface SpecConfig {
       /** 兜底 provider name（defaults 未指定或指定不可用时用） */
       fallback?: string;
     };
+    /** v8.3.301+: 子 Agent SDK 派单控制（第七层「窗口物理隔离」增强通道） */
+    agent_dispatch?: {
+      /** auto=Qoder 宿主 + token 可用时走 SDK（默认）| on=强制尝试 SDK（失败回退标记模式）| off=禁用，永远标记模式 */
+      mode?: 'auto' | 'on' | 'off';
+    };
     /** v8.3.94+: 视觉模型配置（用于 specs 图片理解、UI 验证截图分析） */
     vision?: {
       enabled: boolean;
@@ -324,6 +329,7 @@ export const DEFAULT_CONFIG: SpecConfig = {
     pipelines: { default: 'develop', custom: {} },
     gates: { mode: 'manual' },
     ai: { provider: 'host', providers: [], defaults: {}, fallback: '' },
+    agent_dispatch: { mode: 'auto' },
     smoke: {
       points: { local: 'auto', 'pre-deploy': 'auto', 'post-deploy': 'auto' },
       scope: 'module',
@@ -1310,6 +1316,9 @@ function validateConfig(obj: Record<string, unknown>): ValidationResult {
     if (isObject(s.patterns) && s.patterns.auto_save && !['off', 'smart', 'aggressive'].includes(s.patterns.auto_save as string)) {
       issues.push('settings.patterns.auto_save 必须是 off/smart/aggressive 之一');
     }
+    if (isObject(s.agent_dispatch) && s.agent_dispatch.mode && !['auto', 'on', 'off'].includes(s.agent_dispatch.mode as string)) {
+      issues.push('settings.agent_dispatch.mode 必须是 auto/on/off 之一');
+    }
   }
 
   return { valid: issues.length === 0, issues };
@@ -1740,6 +1749,12 @@ function toYaml(config: SpecConfig): string {
     yaml += '    # fallback: 兜底 provider name（可选）\n';
     yaml += "    fallback: ''\n";
   }
+  yaml += '  # ── 子 Agent SDK 派单（v8.3.301+，第七层「窗口物理隔离」增强通道）──\n';
+  yaml += '  #   auto = Qoder 宿主 + token 可用（PAT 环境变量或 CLI 登录态）时启用（默认）\n';
+  yaml += '  #   on   = 强制尝试 SDK 派单（token 不可用也尝试，失败回退标记模式）\n';
+  yaml += '  #   off  = 禁用 SDK 派单，永远走标记模式（代码内容经主会话窗口）\n';
+  yaml += '  agent_dispatch:\n';
+  yaml += `    mode: ${config.settings.agent_dispatch?.mode ?? 'auto'}\n`;
 
 
   yaml += '\n# ─────────────────────────────────────────────────────────────────────────────\n';

@@ -50,6 +50,7 @@ function buildAiPrompt(input: string): string {
 - query_progress: 查看进度/状态
 - research: 技术调研/方案评估
 - help: 求助/帮助
+- global_reverse: 从源码/代码反推需求文档（源码→需求，如「根据 X 端生成需求」）
 
 返回格式（仅 JSON，不要其他内容）:
 {
@@ -77,6 +78,7 @@ function fallbackAnalysis(prompt: string): string {
   const input = match ? match[1] : '';
   
   // 深度关键词分析（比 intent-recognition 更精细）
+  const hasReverse = /反推|逆向|(?:源码|代码).{0,6}(?:生成|整理|推导|还原).{0,4}需求|(?:按端|按模块).{0,6}(?:反推|生成).{0,4}需求|从.{0,4}(?:代码|工程|源码).{0,8}(?:生成|推导).{0,4}需求|(?:根据|按|从|给).{0,10}端.{0,4}(?:生成|反推|推导).{0,4}需求/.test(input);
   const hasProblem = /出问题|报错|挂了|崩了|不行|不正常|超时|500|异常|错误/.test(input);
   const hasChange = /改|调整|换成|替换|修改|优化/.test(input);
   const hasNew = /新增|添加|加一个|创建一个|开发|做一个/.test(input);
@@ -87,7 +89,13 @@ function fallbackAnalysis(prompt: string): string {
   let suggestion = 'speccore spec "..."';
   let explanation = '无法确定意图，请用 /spec 命令明确说明';
 
-  if (hasProblem && !hasChange && !hasNew) {
+  // v8.3.301+: 源码反推需求优先于 change/new 判定（「生成需求」无改/新词，此处兜底从代码口径）
+  if (hasReverse) {
+    intent = 'global_reverse';
+    confidence = 58;
+    suggestion = 'speccore global from-source --src <源码目录列表>';
+    explanation = '检测到源码反推需求意图，建议用 global from-source 从存量代码生成候选需求（两跳 IR→UR）';
+  } else if (hasProblem && !hasChange && !hasNew) {
     intent = 'bugfix';
     confidence = 55;
     // v8.3.260: bugfix 无独立 CLI 命令，路由到 task new -t bugfix

@@ -11,6 +11,7 @@ import { loadAskConfig } from './ask-config';
 import { getCachedIntent, cacheIntent } from './intent-cache';
 import { buildAskContext, formatContextForHostAi } from './ask-context';
 import { loadFreshKnowledgeGraph, GraphEntity } from './knowledge-graph';
+import { loadProjectConfig, type PlatformConfig } from './unified-config';
 
 // ============================================================
 // 类型定义
@@ -81,7 +82,7 @@ const COMMAND_KB: CommandKnowledge[] = [
   { name: 'analyze', aliases: ['al'], description: '迭代层分析：需求文档+源码→分析报告（产物 020-specs/）。支持 --full 三阶段合成，--deep 单文档深度分析，--iterative 迭代式生成，--filter 按需分析指定模块，--with-code 注入代码结构化数据，--phase 单阶段合成，--feature 局部分析功能模块，--doc 局部分析类型文档，--no-source 跳过源码，--supplement 追加源码；全局层（源码→技术文档/反推需求）用 speccore global',
     usage: 'speccore analyze [--iteration <name>] [--full] [--deep <doc>] [--iterative] [--filter <keywords>] [--with-code] [--phase <n>] [--feature <module>] [--doc <type/slug>] [--no-source] [--source-scope <dirs>] [--supplement] [--dev-guide]', examples: ['speccore analyze', 'speccore analyze --full -i Q2', 'speccore analyze --deep ARCHITECTURE.md --iterative', 'speccore analyze --filter "订单,支付" --with-code', 'speccore analyze --phase 1 -i Q2', 'speccore analyze --feature 支付模块', 'speccore analyze --doc bugs/login-timeout', 'speccore analyze --with-code', 'speccore analyze --supplement --source-scope src/core', 'speccore global analyze --layer 1', 'speccore global from-source --src src/core'], related: ['dashboard', 'validate', 'code-index', 'refresh', 'synthesize'], triggers: ['分析', 'analyze', '审计', 'audit', '检查', '结合源码', '连代码', '带代码', '源码分析', '迭代分析', '分析迭代', '分析代码', '不读源码', '不读代码', '跳过源码', '指定目录分析', '只扫描', '补充分析', '追加分析', '补充源码', '追加源码', '遗漏', '没分析到', '没覆盖', '漏掉', '再分析', '多读几个', '局部分析', '单个模块', '单独分析', 'bug分析', '重构分析', '局部回写', '回写spec', '同步spec', '合成需求', '合并需求', '需求合成', '智能合成', '需求合并', '开发指南', '生成开发指南', '带开发指南', '深度分析', '深入分析', '详细分析', '迭代生成', '逐节分析', '大纲分析', '按需分析', '只分析', '过滤分析', '聚焦分析'] },
   { name: 'global', aliases: [], description: '全局层分析：源码→技术文档（global analyze，Layer 1→4 推进）/ 源码→需求文档（global from-source，反推）。产物 .speccore/GLOBAL/，独立于迭代层 analyze',
-    usage: 'speccore global analyze [--layer 1-4] [--with-code] [--auto] | speccore global from-source --src <dirs> [--depth <depth>]', examples: ['speccore global analyze --layer 1', 'speccore global analyze --with-code', 'speccore global from-source --src backend/src,admin-web/src'], related: ['analyze', 'code-index'], triggers: ['全局分析', '全局层分析', '分析全局', '全局架构', '全局代码分析', '全局技术分析', '分析所有端', '分析所有源码', '分析所有工程', '分析整体架构', '项目架构分析', '全量分析', '跨端综合', '全量合成', '多端合成', '源码反推', '从源码反推', '源码生成需求', '反推需求', '从代码生成', '倒推需求', '反推', '逆向工程'] },
+    usage: 'speccore global analyze [--layer 1-4] [--with-code] [--auto] | speccore global from-source --src <dirs> [--depth <depth>]', examples: ['speccore global analyze --layer 1', 'speccore global analyze --with-code', 'speccore global from-source --src backend/src,admin-web/src'], related: ['analyze', 'code-index'], triggers: ['全局分析', '全局层分析', '分析全局', '全局架构', '全局代码分析', '全局技术分析', '分析所有端', '分析所有源码', '分析所有工程', '分析整体架构', '项目架构分析', '全量分析', '跨端综合', '全量合成', '多端合成', '源码反推', '从源码反推', '源码生成需求', '反推需求', '从代码生成', '倒推需求', '反推', '逆向工程', '按端反推', '按端生成需求', '根据端生成需求', '端生成需求', '生成需求文档', '需求文档反推', '代码生成需求', '从代码生成需求', '根据代码生成需求', '按模块反推', '反推文档', '从工程生成需求'] },
   { name: 'code-index', aliases: ['ci', 'idx'], description: '源码索引：扫描项目代码，自动识别多端/模块/依赖，生成 Markdown 索引',
     usage: 'speccore code-index [--full] [--scope <dirs>] [--show]', examples: ['speccore code-index', 'speccore code-index --full', 'speccore code-index --scope src/commands,src/core', 'speccore code-index --show'], related: ['analyze', 'run'], triggers: ['代码索引', '源码索引', 'code-index', '索引', '建索引', '更新索引', '扫描代码', '代码结构', '模块索引', '项目结构'] },
   { name: 'execute', aliases: ['ex'], description: '执行开发任务：依赖排序+分批+交互引导+计划联动',
@@ -684,11 +685,19 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
   if (kbMatch && (!best || best.confidence < 60) && !runHasParams) {
     const params = best?.extractedParams || {};
     let fullCommand = `speccore ${kbMatch.name}`;
+    // v8.3.301+: from-source 端名自动映射的备注，等 paramNotes 声明后再 append
+    let srcMapNote: string | undefined;
     // v8.3.255+: global 命令族需子命令（反推词→from-source，否则→analyze）
     if (kbMatch.name === 'global') {
       fullCommand = params.fromCode ? `speccore global from-source` : `speccore global analyze`;
+      if (params.fromCode) {
+        const enriched = await enrichFromSourceCommand(input, fullCommand);
+        fullCommand = enriched.command;
+        srcMapNote = enriched.note;
+      }
     }
     const paramNotes: string[] = [];
+    if (srcMapNote) paramNotes.push(srcMapNote);
     if (params.tool) { fullCommand += ` --tool="${params.tool}"`; paramNotes.push(`🔧 平台: ${params.tool}`); }
     // v8.3.257: KB 命令名是顶层（如 task/iteration），-n/--iter 只存在于子命令，拼上即死参数。
     // name 仅作提示；iteration 用全名 --iteration（大多数命令注册了该选项）
@@ -833,6 +842,12 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
       ? `speccore global from-source`
       : `speccore global analyze`;
     if (params.withCode) fullCommand += ` --with-code`;
+    // v8.3.301+: from-source 端名自动映射（PROJECT.yaml 端名/描述 → --platform + --src）
+    if (fullCommand.includes('from-source')) {
+      const enriched = await enrichFromSourceCommand(input, fullCommand);
+      fullCommand = enriched.command;
+      if (enriched.note) paramNotes.push(enriched.note);
+    }
   } else if (best.command === 'bugfix' || best.command === 'research') {
     // v8.3.257: bugfix/research 无独立 CLI 命令 — 路由到 task new -t <type>
     const name = params.name || params.desc || input.slice(0, 30);
@@ -1641,3 +1656,61 @@ export function extractTime(input: string): string {
 }
 
 export { COMMAND_KB, WORKFLOWS };
+
+// ═══════════════════════════════════════════════════════════
+// v8.3.301+: from-source 端名自动映射（PROJECT.yaml → --platform + --src）
+// 纯函数 resolvePlatformFromInput 供测试直接覆盖，enrichFromSourceCommand 做异步装配
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * 从用户原话中解析端名（先标准端名 name，再中文描述 description/project_name）。
+ * 标准端名取最长命中，避免短名子串误伤（如 api 命中 admin-web 里的 api）。
+ */
+export function resolvePlatformFromInput(input: string, platforms: PlatformConfig[]): PlatformConfig | null {
+  if (!platforms || platforms.length === 0) return null;
+  const lower = input.toLowerCase();
+  let best: PlatformConfig | null = null;
+  let bestLen = 0;
+  for (const p of platforms) {
+    const name = (p.name || '').toLowerCase();
+    if (name.length >= 3 && lower.includes(name) && name.length > bestLen) {
+      best = p;
+      bestLen = name.length;
+    }
+  }
+  if (best) return best;
+  // 中文端描述/工程名（长度≥2 防单字误匹配）
+  for (const p of platforms) {
+    for (const desc of [p.description, p.project_name]) {
+      if (desc && desc.length >= 2 && input.includes(desc)) return p;
+    }
+  }
+  return null;
+}
+
+/**
+ * 为 global from-source 命令自动补端参数：
+ * 用户句中出现 PROJECT.yaml 端名/描述 → --platform <name> + --src <code_path>（配了才加）。
+ * 配置加载失败时静默返回原命令，不影响主流程。
+ */
+export async function enrichFromSourceCommand(
+  input: string,
+  fullCommand: string,
+): Promise<{ command: string; note?: string }> {
+  let platforms: PlatformConfig[] = [];
+  try {
+    const cfg = await loadProjectConfig();
+    platforms = cfg?.platforms || [];
+  } catch {
+    return { command: fullCommand };
+  }
+  const matched = resolvePlatformFromInput(input, platforms);
+  if (!matched) return { command: fullCommand };
+  let command = fullCommand;
+  if (matched.code_path) command += ` --src "${matched.code_path}"`;
+  command += ` --platform "${matched.name}"`;
+  const note = matched.code_path
+    ? `📍 端映射: ${matched.name} → 源码 ${matched.code_path}`
+    : `📍 端映射: ${matched.name}（PROJECT.yaml 未配 code_path，仅按端过滤，需手动 --src）`;
+  return { command, note };
+}

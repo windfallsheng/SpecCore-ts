@@ -19,6 +19,7 @@ import { join } from 'path';
 import { ContextSnapshot } from './pipeline-engine';
 import { logger } from '../utils/logger';
 import { detectHostAi, type HostAiTool } from './ask-host-ai';
+import { loadConfig } from './unified-config';
 import { loadAllAgents } from './agents/engine/agent-loader';
 import type { AgentDefinition } from './agents/engine/types';
 
@@ -477,35 +478,58 @@ export class QoderSdkAdapter implements AgentAdapter {
    *    SDK 不识别此名——此前按 CN 文档设置的用户会白设并报「未设置 QODER_PERSONAL_ACCESS_TOKEN」）
    * 3. Qoder CLI 登录态（qodercliAuth，零配置路径）
    */
+  /** v8.3.301+: 鉴权探测缓存——auto 预检与正式调度复用同一次探测结果，避免重复唤起 CLI 登录态 */
+  private authProbe: { done: boolean; auth?: any } = { done: false };
+
   private async resolveSdkAuth(): Promise<any> {
+    if (this.authProbe.done) return this.authProbe.auth;
+    let auth: any;
     if (process.env.QODER_PERSONAL_ACCESS_TOKEN) {
-      return { accessToken: process.env.QODER_PERSONAL_ACCESS_TOKEN };
+      auth = { accessToken: process.env.QODER_PERSONAL_ACCESS_TOKEN };
+    } else if (process.env.QODERCN_PERSONAL_ACCESS_TOKEN) {
+      auth = { accessToken: process.env.QODERCN_PERSONAL_ACCESS_TOKEN };
+    } else {
+      try {
+        if (this.sdkModule?.qodercliAuth) {
+          const cliAuth = await this.sdkModule.qodercliAuth();
+          if (cliAuth) auth = cliAuth;
+        }
+      } catch { /* Qoder CLI 登录态不可用则返回 undefined，由调用方回退标记模式 */ }
     }
-    if (process.env.QODERCN_PERSONAL_ACCESS_TOKEN) {
-      return { accessToken: process.env.QODERCN_PERSONAL_ACCESS_TOKEN };
-    }
+    this.authProbe = { done: true, auth };
+    return auth;
+  }
+
+  /**
+   * v8.3.301+: 预检鉴权可用性（settings.agent_dispatch.mode=auto 用）——
+   * 先确保 SDK 模块已加载（CLI 登录态探测依赖 qodercliAuth），再做三级鉴权探测
+   */
+  async probeSdkAuth(): Promise<boolean> {
+    if (!(await this.ensureSdkLoaded())) return false;
+    return !!(await this.resolveSdkAuth());
+  }
+
+  /**
+   * v8.3.301+: 动态加载 SDK 模块（optional dependency），返回是否加载成功。
+   * 从 dispatchSubagent 拆出，供 probeSdkAuth 预检复用（CLI 登录态探测依赖 qodercliAuth）。
+   */
+  private async ensureSdkLoaded(): Promise<boolean> {
+    if (this.sdkModule) return true;
     try {
-      if (this.sdkModule?.qodercliAuth) {
-        const cliAuth = await this.sdkModule.qodercliAuth();
-        if (cliAuth) return cliAuth;
-      }
-    } catch { /* Qoder CLI 登录态不可用则返回 undefined，由调用方回退标记模式 */ }
-    return undefined;
+      this.sdkModule = await import('@qoder-ai/qoder-agent-sdk');
+      logger.info('[QoderSdkAdapter] SDK 加载成功');
+      return true;
+    } catch (sdkErr: any) {
+      logger.warn(`[QoderSdkAdapter] SDK 加载失败: ${sdkErr.message}，回退到 Headless`);
+      return false;
+    }
   }
 
   /** v8.3.169+: 通过 Qoder Agent SDK 直接调度子 Agent */
   async dispatchSubagent(ctx: AgentContext, taskPrompt: string): Promise<SubagentDispatchResult | null> {
     try {
       // 1. 动态加载 SDK（optional dependency）
-      if (!this.sdkModule) {
-        try {
-          this.sdkModule = await import('@qoder-ai/qoder-agent-sdk');
-          logger.info('[QoderSdkAdapter] SDK 加载成功');
-        } catch (sdkErr: any) {
-          logger.warn(`[QoderSdkAdapter] SDK 加载失败: ${sdkErr.message}，回退到 Headless`);
-          return null;
-        }
-      }
+      if (!(await this.ensureSdkLoaded())) return null;
 
       const { query, accessTokenFromEnv } = this.sdkModule;
       if (!query) {
@@ -617,6 +641,24 @@ export function isSdkDispatchSupported(tool?: HostAiTool): boolean {
   return t === 'qoder';
 }
 
+export type SdkDispatchMode = 'auto' | 'on' | 'off';
+
+/**
+ * v8.3.301+: 读取 SDK 派单开关（settings.agent_dispatch.mode）
+ * - auto（默认）: Qoder 宿主 + token 可用（PAT 环境变量或 CLI 登录态）时才走 SDK
+ * - on: 强制尝试 SDK（token 不可用也尝试，失败回退标记模式）
+ * - off: 禁用 SDK 派单，永远标记模式
+ * 配置缺失/读取失败/非法值均按 auto 兜底（保持 v8.3.300 前默认行为）
+ */
+export async function getSdkDispatchMode(): Promise<SdkDispatchMode> {
+  try {
+    const cfg = await loadConfig();
+    const mode = cfg?.settings?.agent_dispatch?.mode;
+    if (mode === 'on' || mode === 'off') return mode;
+  } catch { /* 配置读取失败按 auto 兜底 */ }
+  return 'auto';
+}
+
 /** 判断当前环境是否支持直接子 Agent 调度（SDK 或 Headless） */
 export function isSubagentDispatchSupported(): boolean {
   return true; // Headless 始终支持（通过标记模式）
@@ -629,7 +671,8 @@ export function isSubagentDispatchSupported(): boolean {
 // v8.3.171+: QoderSdkAdapter 单例（避免重复动态 import SDK）
 let _qoderSdkAdapter: QoderSdkAdapter | null = null;
 
-function getQoderSdkAdapter(): QoderSdkAdapter {
+/** v8.3.301+: 导出单例获取器（dispatchSubagent 开关拦截逻辑的测试接缝） */
+export function getQoderSdkAdapter(): QoderSdkAdapter {
   if (!_qoderSdkAdapter) {
     _qoderSdkAdapter = new QoderSdkAdapter();
   }
@@ -648,23 +691,33 @@ export async function dispatchSubagent(
 ): Promise<SubagentDispatchResult | null> {
   const tool = detectHostAi();
 
-  // Qoder 环境：尝试 SDK 调度（复用 isSdkDispatchSupported，避免内联判断）
+  // Qoder 环境：按配置开关 + 凭证可用性决定是否尝试 SDK 调度
   if (isSdkDispatchSupported(tool)) {
     const adapter = getQoderSdkAdapter();
+    const mode = await getSdkDispatchMode();
+
+    // v8.3.301+: off=全局禁用（永远标记模式）；auto=需 token 信号（PAT 环境变量或 CLI 登录态）
+    if (mode === 'off') {
+      logger.info('[dispatchSubagent] settings.agent_dispatch.mode=off：SDK 派单已禁用，使用标记模式');
+      return null;
+    }
+    if (mode === 'auto' && !(await adapter.probeSdkAuth())) {
+      logger.info('[dispatchSubagent] 未检测到 Qoder token（PAT 环境变量/CLI 登录态均缺失），auto 策略跳过 SDK 派单，使用标记模式');
+      return null;
+    }
+
     const result = await adapter.dispatchSubagent!(ctx, taskPrompt);
     if (result) return result;
+    // v8.3.266: 区分「工具不支持」与「支持但本次调度失败」（如缺 PAT）——后者不能说不支持
+    logger.warn(`[dispatchSubagent] SDK 调度未成功（原因见上方日志），已降级为标记模式（结果需外层 AI 用 --apply/--response 落盘）`);
+    return null;
   }
 
   // 其他环境：Headless 模式，返回 null 让外层 AI 接管
   // v8.3.213+: 非 Qoder 的宿主 AI 工具（cursor/claude/codebuddy 等）明确提示不支持 SDK 直连，
   // 结果需手动 --apply/--response 落盘；纯终端（none）静默（用户本来就在手动模式）
-  // v8.3.266: 区分「工具不支持」与「支持但本次调度失败」（如缺 PAT）——后者不能说不支持
   if (tool !== 'none') {
-    if (isSdkDispatchSupported(tool)) {
-      logger.warn(`[dispatchSubagent] SDK 调度未成功（原因见上方日志），已降级为标记模式（结果需外层 AI 用 --apply/--response 落盘）`);
-    } else {
-      logger.warn(`[dispatchSubagent] 当前宿主工具「${tool}」不支持 SDK 直连自动落盘，已降级为标记模式（结果需外层 AI 用 --apply/--response 落盘）`);
-    }
+    logger.warn(`[dispatchSubagent] 当前宿主工具「${tool}」不支持 SDK 直连自动落盘，已降级为标记模式（结果需外层 AI 用 --apply/--response 落盘）`);
   } else {
     logger.debug(`[dispatchSubagent] 工具 ${tool} 不支持 SDK 直接调度，使用 Headless 模式`);
   }

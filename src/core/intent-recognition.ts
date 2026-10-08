@@ -183,6 +183,10 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
       // v8.3.255+: 源码反推需求 → global from-source
       '从源码反推', '源码反推', '从代码反推', '代码反推', '反推需求',
       '逆向分析', '逆向生成', '反推', '逆向工程',
+      // v8.3.301+: 反推口语变体（端/模块/工程口径，不带「反推/逆向」字眼也能命中）
+      '按端反推', '按端生成需求', '根据端生成需求', '端生成需求',
+      '生成需求文档', '需求文档反推', '代码生成需求', '从代码生成需求',
+      '根据代码生成需求', '按模块反推', '反推文档', '从工程生成需求',
     ],
     patterns: [
       '全局分析(.+)', '全量分析(.+)', '分析所有(.+)',
@@ -990,8 +994,8 @@ function extractParams(input: string, mapping: CommandMapping): Record<string, s
 
   // 检测 --from-code 参数（从源码反推需求，spec-source-to-global 工作流）
   // 注意：与 --with-code 互斥，反推是更强信号（反推 > 扫描）
-  const fromCodeKeywords = ['从源码反推', '源码反推', '从代码反推', '代码反推', '反推需求', '反推', '逆向分析', '逆向生成', '逆向工程'];
-  if (fromCodeKeywords.some(k => input.includes(k))) {
+  const fromCodeKeywords = ['从源码反推', '源码反推', '从代码反推', '代码反推', '反推需求', '反推', '逆向分析', '逆向生成', '逆向工程', '按端反推', '按端生成需求', '根据端生成需求', '端生成需求', '生成需求文档', '需求文档反推', '代码生成需求', '从代码生成需求', '根据代码生成需求', '按模块反推', '反推文档', '从工程生成需求'];
+  if (fromCodeKeywords.some(k => input.includes(k)) || (/从.{0,4}(?:代码|工程|源码).{0,8}(?:生成|推导).{0,4}需求/.test(input))) {
     params.fromCode = 'true';
   } else {
     // 检测 --with-code 参数（源码扫描）

@@ -957,16 +957,16 @@ speccore plan --prompt -I Iteration-001
 
 **核心规则**：相邻任务和上游任务只传 `API_CONTRACT.yaml`，不加载 REQ.md/TECH.md/DEV_GUIDE.md。
 
-**执行时上下文加载策略**：
+**执行时上下文加载策略**（v8.3.223 修订：数字以 FILE_BUDGETS 为准）：
 
 | 来源 | 加载内容 | 限制 |
 |:---|:---|:---|
-| 当前任务 | 00-specs/REQ.md、TECH.md、DEV_GUIDE.md、SCHEMA.md | MAX_PER_FILE=2000, MAX_TOTAL=8000 |
-| 同一 Task 其他端 | 仅 API_CONTRACT.yaml | 最多 400 字/端 |
-| 上游依赖任务 | 仅 API_CONTRACT.yaml（_shared/ 优先） | 最多 400 字/任务 |
+| 当前任务 | 00-specs/REQ.md、TECH.md、DEV_GUIDE.md、SCHEMA.md | FILE_BUDGETS 按文件类型：REQ/TECH/SCHEMA 4000 字、DEV_GUIDE 3000 字（均为 error 模式——超限告警不截断，落实「Spec 优先」）|
+| 同一 Task 其他端 | 仅 _shared/API_CONTRACT.yaml | FILE_BUDGETS 3000 字 error 模式 |
+| 上游依赖任务 | 仅 API_CONTRACT.yaml（_shared/ 优先，00-specs/ 回退） | 注入最多 3 个契约 + 依赖名全量列表（超 3 按路径引用按需 Read）|
 | 迭代全局 | 020-specs/overview/*.md | MAX_PER_FILE=8000 |
 | 020-specs 端规格 | 阅读清单模式（标题+章节+摘要） | 每个文件 ~100 字 |
-| 兜底模式（检索不足时） | 任务目录全文 + 关联任务 API_CONTRACT.yaml + 端规格阅读清单 | MAX_TOTAL=20000 |
+| 兜底模式（检索不足时） | 任务目录全文 + 关联任务 API_CONTRACT.yaml + 端规格阅读清单 | MAX_PER_FILE=8000、MAX_TOTAL=20000，按类型预算放宽 2 倍 |
 
 **阅读清单模式**（v8.3.126+）：
 
@@ -999,6 +999,62 @@ speccore plan --prompt -I Iteration-001
 | execute | 子任务 TASK.md + API_CONTRACT.yaml + 相关契约 |
 
 **会话边界**：每个 Pipeline 阶段 = 独立 AI 会话，完成后关闭。新会话通过 `--resume` 恢复，只加载当前阶段的必要上下文。
+
+---
+
+#### 宿主 AI 协作七层机制（v8.3.160+ 体系化）
+
+**设计前提**：用户与 AI 的交互粒度不变（一问一答），但 AI 与系统的执行结构全变——确定性操作下沉 CLI，AI 的上下文退化成一个只装标记和摘要的窄窗口。表面仍是「一句话 → AI 处理一串流程」，内部已是接力赛：CLI 是每个棒次的选手，AI 是只拿接力棒（标记）的教练，产物写在地上（磁盘）而不是记在脑子里。
+
+七层机制各司其职：
+
+1. **确定性操作下沉 CLI（治本）**：目录创建、Spec 读写、分支创建、质量门禁全部由 CLI 完成；AI 只负责意图识别与生成性内容。产物落盘即出上下文，AI 窗口里只有路径、没有全文。
+2. **exitCode 10 接力协议（回合制）**：CLI 需要 AI 介入时输出 `[SPECCORE_PROMPT]` 块并以 exitCode 10 退出；AI 用 `--apply`/`--response` 落盘。每次命令都是独立进程往返，「一次回答循环跑完所有命令」在协议层面不可行。
+3. **步骤隔离（v8.3.160+）**：ask.ts 中 `maxStepsInSession = isAiCtx ? 1 : steps.length`——检测到 AI 上下文时管道只执行第一步。每步完成输出 `[SPECCORE_STEP_DONE]` + `[SPECCORE_NEXT_STEP]`（含下一步完整命令）+ `[SPECCORE_CONTEXT_SNAPSHOT]` + `[SPECCORE_SESSION_AGENT]`。
+4. **状态外置（治记忆偏差）**：执行状态、上下文快照、批次摘要全部落盘（`.speccore/local/.pipeline-{iter}-snapshot.json`、`execution-summary.md`），新会话 `--resume` 读文件恢复，权威状态永远在磁盘上，AI 每次 Read 而非 recall。
+5. **子 Agent 角色化 + 预算**：每步绑定子 Agent 角色与 contextBudget（默认 12000），四种 contextType 裁剪（full/incremental/platform-only/contract-only）+ 按角色裁剪（如 product-analyst 全文读需求、不加载代码；interaction-designer 读原型、不读数据库设计）。
+6. **Prompt 五级降级裁剪**：完整构建 → 去全局 TOC → 分层预算（P0:40000/P1:10000/P2:5000/P3:3000）→ 去任务关联链 → P0 截断保底（20000 字）→ 极简模式。P0（需求/Spec）永不归零——宁可瘦，不能断粮（v8.3.223 悬崖式清空改为截断中间态）。
+7. **SDK 派单（v8.3.169+，v8.3.301+ 三态开关）**：QoderSdkAdapter `dispatchSubagent` 直派子 Agent 写文件，主会话只收 `filesChanged` 摘要，代码内容不进主上下文——窗口隔离做到物理层面；降级原因上主通道（v8.3.281）防 prompt 无人消费的 exitCode 10 死锁。
+
+**第七层是增强通道而非唯一通道**——v8.3.301+ 加了三态开关 `settings.agent_dispatch.mode` 控制其启用：
+
+- `auto`（默认）：Qoder 宿主 + 凭证可用（PAT 环境变量 `QODER_PERSONAL_ACCESS_TOKEN`/`QODERCN_PERSONAL_ACCESS_TOKEN` 或 CLI 登录态，`probeSdkAuth` 预检）才走 SDK；无凭证静默跳过，不制造失败噪音
+- `on`：强制尝试 SDK（跳过预检，token 不可用也试），失败回退标记模式并告警
+- `off`：全局禁用，永远标记模式（代码内容经主会话窗口，仍受第六层裁剪约束）
+
+开关在统一入口 `dispatchSubagent` 处拦截（analyze/execute/taskify/plan/change/req-doc 全部调用点一处生效）；凭证探测结果缓存于单例，预检与正式调度共用一次探测。其它宿主工具（cursor/claude/codebuddy 等）后续适配各自 SDK 时，开关与 `isSdkDispatchSupported` 宿主白名单正交，无需改配置语义。
+
+#### 源码反推需求链（global from-source，v8.3.301+ 三件套强化）
+
+反推链（CLI 确定性骨架 + 宿主 AI 两跳 IR→UR 语义抽象）是业界共识范式——recipe-reverse-engineer（discover→generate→verify→review）、codebase-reverse（F-REQ 可追溯元模型）、spec-miner（EARS 句式）都在同一方向上。v8.3.301 吸收业界验证过的三件套，补齐自身弱点：
+
+1. **EARS 五句式**（spec-miner）：UR 验收标准从单一「当 X 时系统应 Y」升级为五种场景句式（普遍性/事件驱动/状态驱动/异常处理/可选特性），并加两条反翻译腔硬约束（主语必须是用户/业务对象，禁止函数名直译；必须带用户价值，禁止「输出 JSON」当验收标准）——压制「需求写得像代码翻译腔」这一两跳执行质量风险
+2. **可追溯锚点**（codebase-reverse）：功能单元表与每条验收标准必须带「溯源: `{端}/{模块}`」锚点，需求可回溯到支撑它的 IR 模块
+3. **验证环**（recipe-reverse-engineer 的 code-verifier）：`--verify` 做 CLI 确定性校验——REQUIREMENT.md 的每条锚点与 IR 模块清单比对，悬空锚点（引用不存在的模块）即疑似 AI 幻觉，落盘 VERIFY_REPORT.md
+
+ask 意图识别同步强化：新增「按端反推/按端生成需求/生成需求文档」等口语触发词（主词典 + LLM 兜底），且用户句中出现 PROJECT.yaml 端名时自动映射 `--platform <name>` 与 `--src <code_path>`（`resolvePlatformFromInput` 取最长端名命中防子串误伤）。
+
+---
+
+#### 跨步骤/跨任务共享机制（隔离的补面）
+
+隔离解决「不该看的看不到」，共享解决「必须对齐的不会各说各话」。**设计原则：隔离实现细节，共享接口约定与状态索引**——每个共享面都是最小信息载体。
+
+| 共享边界 | 载体 | 内容 | 生成端 → 消费端 |
+|:---|:---|:---|:---|
+| 同一任务跨端 | `Task-*/_shared/API_CONTRACT.yaml` + `CONTEXT.md` | 前后端契约 + 任务上下文 | taskify 落盘 → prompt-builder 注入（P0 级，3000 字 error 模式） |
+| 上游任务 → 下游 | 上游 `_shared/API_CONTRACT.yaml` | 只传契约不传实现（v8.3.179+） | 知识图谱依赖关系 → 注入最多 3 个契约 + 依赖名全量列表 |
+| 迭代级 | `020-specs/overview/*.md` | FUNCTION_MAP / INTERACTION_MAP / DEPENDENCY_MAP + 迭代契约索引 | analyze 生成 → execute 按需加载 |
+| 步骤间 | ContextSnapshot | keyConstraints / completedOutputs / completedSteps / stepSummaries | pipeline-engine 落盘 + stdout 标记双通道 → `--resume` 恢复 |
+| 批次间 | `.speccore/local/execution-summary.md` | 完成/失败/分支/产出清单 | execute 批完成落盘 → `[SPECCORE_CONTINUE]` 新会话读摘要续跑 |
+| 跨迭代 | `.speccore/GLOBAL/` | GLOBAL_CONTEXT / 端技术文档 / PATTERNS | 全局分析生成 → L2 自动注入（按文件限量） |
+
+**合理性说明**：
+
+- **契约是跨任务唯一共享面**：SCHEMA/实现不进共享——字段定义承载于 API_CONTRACT.yaml，execute 质量门禁校验「契约字段 vs UI 字段」对齐（契约无字段定义但 UI 有字段映射时报 ⚠️），防止两端各说各话。
+- **快照只传路径不传内容**：completedOutputs 是产出路径列表，新会话按需 Read，避免把上一棒的产物全文灌进下一棒的窗口。
+- **依赖契约上限 3 + 依赖名全量兜底**：契约全文占空间，依赖名列表让 AI 知道「还有谁」、按路径引用按需读取；taskify 约束依赖链深度 ≤3，超限场景罕见。
+- **双路径兼容**（00-specs/ 优先、_shared/ 回退）：新项目契约归 00-specs/，老项目保留 _shared/，读取链两处都查——共享面迁移不破坏既有项目。
 
 ---
 
@@ -3004,6 +3060,7 @@ Get-WmiObject Win32_Process | Where-Object {
 分支 B: ambiguous → 展示候选人 → 用户选 → 分支A
 分支 C: explain  → 直接回答，不调CLI
 分支 D: pipeline  → 展示≤5步 → 逐步确认 → 产物传递
+                （AI 上下文中强制步骤隔离：只执行第一步，后续通过 [SPECCORE_STEP_DONE] 调度）
 分支 E: guide    → 展示流程 → 进D或结束
 ```
 
@@ -5917,7 +5974,7 @@ SpecCore Pipeline（analyze/split/execute）在长期运行中暴露出三个结
 │  PromptBuilder（按需加载 + 预算控制）                          │
 │  ├─ contextType: full | incremental | platform-only | contract-only │
 │  ├─ contextBudget: 步骤级 Token 上限                          │
-│  └─ formatPrompt: 四级动态裁剪（TOC → extraSpecs → taskContext → minimal）│
+│  └─ formatPrompt: 五级动态裁剪（TOC → extraSpecs → taskContext → P0截断 → minimal）│
 ├─────────────────────────────────────────────────────────────┤
 │  AgentAdapter（子 Agent 统一适配层）                           │
 │  ├─ HeadlessAdapter: 基于文件/状态机模拟（默认/兜底）          │
@@ -5931,15 +5988,15 @@ SpecCore Pipeline（analyze/split/execute）在长期运行中暴露出三个结
 
 ### ContextSnapshot 结构
 
-每个步骤完成后输出到 `.pipeline-{iteration}-snapshot.json`：
+每个步骤完成后双通道输出：落盘 `.speccore/local/.pipeline-{iteration}-snapshot.json` + stdout 输出 `[SPECCORE_CONTEXT_SNAPSHOT]` JSON（新会话/宿主 AI 直接可见）：
 
 ```typescript
 interface ContextSnapshot {
   keyConstraints: string[];      // CONSTITUTION.md 核心禁令（每轮重注入）
-  completedOutputs: string[];    // 已生成文件路径列表
+  completedOutputs: string[];    // 已生成产出路径列表（只传路径不传内容）
   completedSteps: string[];      // 已完成步骤 ID
+  stepSummaries: Record<string, string>; // 步骤 → 一句话摘要
   techStackSummary?: string;     // 技术栈摘要
-  currentTask?: string;          // 当前任务
   iteration: string;
   nextStep?: string;
   generatedAt: string;
@@ -5954,7 +6011,7 @@ interface ContextSnapshot {
 |:---|:---|:---|
 | `[SPECCORE_STEP_DONE]` | 当前步骤已完成 | 准备新会话 |
 | `[SPECCORE_NEXT_STEP]` | 下一步指令 | 显示下一步名称和命令 |
-| `[SPECCORE_SUBAGENT: {name}]` | 子 Agent 激活 | 按角色加载专属上下文（Headless 模式） |
+| `[SPECCORE_SESSION_AGENT: {name}]` | 子 Agent 激活 | 按角色加载专属上下文（Headless 模式） |
 | `[SPECCORE_CONTEXT_BUDGET: {n}]` | Token 预算 | 控制 Prompt 大小 |
 | `[SPECCORE_CONTEXT_TYPE: {type}]` | 加载策略 | full/incremental/platform-only/contract-only |
 | `[SPECCORE_CONTEXT_SNAPSHOT]` | 上下文快照 JSON | 新会话恢复依据 |
@@ -5998,11 +6055,12 @@ interface ContextSnapshot {
 | 深度生成 | 8K-10K | phase1、platform、prompt-analysis、code-generation |
 | 质量门禁 | 6K-8K | quality-gate-build、quality-gate-nfr |
 
-**降级策略**：`formatPrompt` 四级动态裁剪
+**降级策略**：`formatPrompt` 五级动态裁剪（v8.3.223 修订：四级 → 五级，Level 3.5 替代悬崖式清空）
 1. Level 1: 隐藏全局 TOC 目录
-2. Level 2: 分层预算控制 extraSpecs（P1:10K / P2:5K / P3:3K）
-3. Level 3: 移除任务关联链
-4. Level 4: 极简模式（仅技术栈 + API + 核心指令）
+2. Level 2: 分层预算控制 extraSpecs（P0:40000 字不裁剪 / P1:10K / P2:5K / P3:3K，原 P0=Infinity 已改为真实上限）
+3. Level 3: 移除任务关联链（知识图谱）
+4. Level 3.5: P0 截断保底（仅保留 Spec 核心 20000 字，非 P0 全部移除）
+5. Level 4: 极简模式（仅技术栈 + API + 核心指令）
 
 ---
 
@@ -6201,6 +6259,8 @@ v8.3.167 在原有标记体系基础上增加：
 | `[SPECCORE_SUBAGENT: code-generator-{platform}]` | 端级执行 Agent | v8.3.166 |
 | `[PENDING: 模块A, 模块B]` | 待续批的模块列表 | v8.3.167 |
 
+> 注：子 Agent 激活标记后续版本统一更名为 `[SPECCORE_SESSION_AGENT]`（见 v8.3.160 附录标记体系），本表保留历史命名仅作演进记录。
+
 ### 效果
 
 | 指标 | 改造前 | 改造后 |
@@ -6243,7 +6303,8 @@ v8.3.169+ 引入 **Qoder Agent SDK** (`@qoder-ai/qoder-agent-sdk`)，实现真�
 │  │                                                            │
 │  ├─ HeadlessAdapter                                          │
 │  │   ├─ prepareContext()  → 角色定义 + 上下文裁剪策略文本       │
-│  │   ├─ buildActivationPrompt() → [SPECCORE_SUBAGENT] 标记    │
+│  │   ├─ buildActivationPrompt() → [SPECCORE_SESSION_AGENT] 标记 │
+│  │   │     （历史名 [SPECCORE_SUBAGENT]，后续版本更名）            │
 │  │   └─ dispatchSubagent() → null（外层 AI 接管）              │‘
 
 │  │                                                            │

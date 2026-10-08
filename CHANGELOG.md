@@ -1,3 +1,19 @@
+## v8.3.301 (2026-10-08) — global from-source 三件套强化：EARS 五句式 + 溯源锚点 + 验证环，ask 端名自动映射
+
+### 反推需求链（global from-source）
+- **EARS 五句式升级**：UR 验收标准从单一「当 X 时系统应 Y」升级为五种场景句式（普遍性/事件驱动/状态驱动/异常处理/可选特性），加两条反翻译腔硬约束（主语必须用户/业务对象、禁止函数名直译；必须带用户价值、禁止「输出 JSON」当验收标准）——压制「需求写得像代码翻译腔」
+- **可追溯锚点**：IR 业务语义段加「溯源锚点」字段；UR 功能单元表加锚点列，每条验收标准必须带「溯源: `{端}/{模块}`」
+- **验证环（--verify）**：新增 verifyReverseAnchors 确定性校验——REQUIREMENT.md 每条锚点与 IR 模块清单比对，悬空锚点（引用不存在的模块）即疑似 AI 幻觉，落盘 VERIFY_REPORT.md；REVERSE_PROMPT 加第三跳指引，global from-source 与 spec-from-source 均支持 --verify
+
+### ask 意图识别
+- **口语触发词扩充**：主词典 + extractParams 新增「按端反推/按端生成需求/根据端生成需求/生成需求文档/需求文档反推/代码生成需求/按模块反推/反推文档」等 12 个反推口语变体，不带「反推/逆向」字眼也能命中 global from-source
+- **端名自动映射**：用户句中出现 PROJECT.yaml 端名/中文描述时自动补 `--platform <name>` + `--src <code_path>`（resolvePlatformFromInput 取最长端名命中防子串误伤，配置加载失败静默回退）
+- **LLM 兜底补位**：intent-ai 占位兜底新增 global_reverse 意图（反推语义正则 + 建议命令），改变此前低置信度反推语料落入 help 的情况
+
+### 文档
+- DESIGN.md 七层机制小节补「源码反推需求链」设计说明（业界共识对照 + 三件套语义）
+- help.ts / SKILL.md 同步 --verify 与端名自动映射说明
+
 ## v8.3.300 (2026-10-08) — 分支处理全链路体检修复：default_base/端级覆盖真正生效 + PROJECT.yaml 升级截停修复
 
 ### 修复（分支链路体检，本轮）

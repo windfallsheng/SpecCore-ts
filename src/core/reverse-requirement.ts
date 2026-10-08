@@ -3,10 +3,11 @@
  *
  * 方法论对齐 UserTrace：源码不是直接跳到用户需求，而是分两跳——
  *   第一跳（源码 → 中间需求 IR）：按技术模块切分，每个模块产出一份「实现级」IR；
- *   第二跳（IR → 用户需求 UR）：合并所有 IR，抽象出「用户级」需求 + EARS 验收标准。
+ *   第二跳（IR → 用户需求 UR）：合并所有 IR，抽象出「用户级」需求 + EARS 五句式验收标准。
+ *   验证环（v8.3.301+）：校验 UR 溯源锚点与 IR 模块清单一致性，悬空锚点即疑似 AI 幻觉。
  *
  * 架构边界（SpecCore 哲学）：
- *   - CLI 只做「确定性」分层：扫描分组、依赖排序、tree-sitter 摘要、骨架生成。
+ *   - CLI 只做「确定性」分层：扫描分组、依赖排序、tree-sitter 摘要、骨架生成、锚点校验。
  *   - 宿主 AI 做「语义」抽象：IR 的业务语义填充、功能单元划分、EARS 验收标准撰写。
  *   - 所有产物标 status: candidate（候选），澄清后才成 Spec。
  *
@@ -18,7 +19,7 @@
  */
 
 import { join, basename } from 'path';
-import { ensureDir, readFile, writeFile, pathExists } from 'fs-extra';
+import { ensureDir, readFile, writeFile, readdir, pathExists } from 'fs-extra';
 import {
   buildCodeIndex,
   loadFullIndex,
@@ -207,6 +208,10 @@ function buildIRSkeleton(m: IRModule): string {
   lines.push('');
   lines.push(`- _AI 填写_`);
   lines.push('');
+  lines.push(`### 溯源锚点`);
+  lines.push('');
+  lines.push(`- _AI 填写：每条语义抽象对应的代码位置（格式 \`文件路径#符号\`，如 \`core/auth-service.ts#login\`）。无锚点的抽象视为未验证。_`);
+  lines.push('');
   lines.push(`## 文件清单`);
   lines.push('');
   m.files.forEach(f => lines.push(`- \`${f}\``));
@@ -226,10 +231,11 @@ function buildURSkeleton(modules: IRModule[]): string {
   lines.push(`## 功能单元清单（宿主 AI 抽象）`);
   lines.push('');
   lines.push(`> 把下面 ${modules.length} 个技术模块按业务语义合并为「功能单元」（一个功能单元可对应多个技术模块，如「用户认证」对应 auth 后端模块 + login 前端模块）。`);
+  lines.push(`> 每个功能单元必须带「溯源锚点」：列出支撑它的 IR 模块 id（格式 \`{端}/{模块}\`），保证需求可追溯到代码。`);
   lines.push('');
-  lines.push(`| 功能单元 | 涉及技术模块 | 涉及端 |`);
-  lines.push(`| :--- | :--- | :--- |`);
-  lines.push(`| _AI 填写_ | _AI 填写_ | _AI 填写_ |`);
+  lines.push(`| 功能单元 | 涉及技术模块 | 涉及端 | 溯源锚点 |`);
+  lines.push(`| :--- | :--- | :--- | :--- |`);
+  lines.push('| _AI 填写_ | _AI 填写_ | _AI 填写_ | _AI 填写：如 `booking-service/order-service`_ |');
   lines.push('');
   lines.push(`## 端覆盖矩阵（CLI 确定）`);
   lines.push('');
@@ -241,21 +247,33 @@ function buildURSkeleton(modules: IRModule[]): string {
     lines.push(`| \`${ep}\` | ${ms.length} | ${ms.map(m => m.module).join(', ')} |`);
   }
   lines.push('');
-  lines.push(`## 验收标准（EARS 格式，宿主 AI 撰写）`);
+  lines.push(`## 验收标准（EARS 五句式，宿主 AI 撰写）`);
   lines.push('');
-  lines.push(`> 每个功能单元至少 3 条验收标准，采用 EARS 模板：`);
-  lines.push(`> 当 [触发条件] 时，系统应 [期望行为]，以便 [用户价值]。`);
+  lines.push(`> 每个功能单元至少 3 条验收标准，按场景从 EARS 五种句式选择（v8.3.301+）：`);
+  lines.push('');
+  lines.push(`| 句式 | 适用场景 | 模板 |`);
+  lines.push(`| :--- | :--- | :--- |`);
+  lines.push(`| 普遍性 Ubiquitous | 无前置条件的基础能力 | 系统应 [期望行为] |`);
+  lines.push(`| 事件驱动 Event-driven | 由用户/外部动作触发 | 当 [触发事件] 时，系统应 [期望行为] |`);
+  lines.push(`| 状态驱动 State-driven | 系统处于某状态期间 | 在 [状态下] 期间，系统应 [期望行为] |`);
+  lines.push(`| 异常处理 Unwanted | 非预期条件出现时 | 如果 [非预期条件]，则系统应 [容错行为] |`);
+  lines.push(`| 可选特性 Optional | 特性启用/配置开启时 | 在 [特性启用时]，系统应 [期望行为] |`);
+  lines.push('');
+  lines.push(`> 反翻译腔规则（两条硬约束）：`);
+  lines.push(`> 1. 主语必须是「用户」或业务对象，禁止函数名/类名/接口名（把「调用 XService.createOrder」写成「用户提交订单」）；`);
+  lines.push(`> 2. 每条必须带用户价值或系统责任，禁止把「输出 JSON / 返回 200」当验收标准。`);
   lines.push('');
   lines.push(`### _功能单元名_`);
   lines.push('');
-  lines.push(`- **AC-01**：当 _触发条件_ 时，系统应 _期望行为_，以便 _用户价值_。`);
-  lines.push(`- **AC-02**：当 _异常条件_ 时，系统应 _容错行为_，以便 _用户价值_。`);
+  lines.push(`- **AC-01**：当 _触发事件_ 时，系统应 _期望行为_。[溯源: \`_AI 填写模块id\`]`);
+  lines.push(`- **AC-02**：如果 _非预期条件_，则系统应 _容错行为_。[溯源: \`_AI 填写模块id\`]`);
   lines.push('');
   lines.push(`## 待确认项（人工确认）`);
   lines.push('');
   lines.push(`- [ ] 功能单元边界是否正确（有无遗漏/重复/需拆分合并）`);
   lines.push(`- [ ] 端覆盖矩阵是否正确`);
   lines.push(`- [ ] 验收标准是否与代码实现一致、可测试`);
+  lines.push(`- [ ] 溯源锚点是否真实存在（完成后运行 \`speccore global from-source --src <dirs> --verify\` 校验）`);
   lines.push(`- [ ] 是否有代码中未体现、但业务上存在的规则需补充`);
   lines.push('');
   return lines.join('\n');
@@ -282,13 +300,20 @@ function buildReversePrompt(outputDir: string, irDir: string, modules: IRModule[
   lines.push('');
   lines.push(`1. 读完所有 IR 后，按业务语义把技术模块合并为「功能单元」；`);
   lines.push(`2. 在 \`${outputDir}/REQUIREMENT.md\` 填写功能单元清单 + EARS 验收标准；`);
-  lines.push(`3. 端覆盖矩阵已由 CLI 确定，勿改动。`);
+  lines.push(`3. 每条验收标准必须带「溯源锚点」（引用真实 IR 模块 id），功能单元表必须填「溯源锚点」列；`);
+  lines.push(`4. 端覆盖矩阵已由 CLI 确定，勿改动。`);
+  lines.push('');
+  lines.push(`## 第三跳：验证环（v8.3.301+，反幻觉门禁）`);
+  lines.push('');
+  lines.push(`完成两跳后，运行 \`speccore global from-source --src <dirs> --verify\` 做锚点一致性校验：`);
+  lines.push(`CLI 会把 REQUIREMENT.md 里的每条「溯源锚点」与 IR 模块清单比对，悬空锚点（引用不存在的模块）即疑似 AI 幻觉，须修正或补充依据后重新校验。`);
   lines.push('');
   lines.push(`## 约束`);
   lines.push('');
   lines.push(`- 产出物一律标 \`status: candidate\`；`);
   lines.push(`- 需求只从前端反推「用户能做什么」，后端只产出「技术约束」（接口/数据模型/规则）；`);
-  lines.push(`- 验收标准必须 EARS 格式、无歧义、可测试。`);
+  lines.push(`- 验收标准必须 EARS 五句式、无歧义、可测试、带溯源锚点；`);
+  lines.push(`- 禁止把 IR 骨架当需求直译交差——先抽象再落笔，函数名/类名不得出现在需求文本里。`);
   lines.push('');
   return lines.join('\n');
 }
@@ -340,4 +365,108 @@ export async function reverseRequirementsFromCode(
 
 function sanitize(id: string): string {
   return id.replace(/[^a-zA-Z0-9_-]/g, '-');
+}
+
+// ── 验证环：锚点一致性校验（v8.3.301+，反幻觉门禁）──
+
+/** 锚点校验结果（UR 溯源锚点 vs IR 模块清单） */
+export interface VerifyAnchorsResult {
+  outputDir: string;
+  /** 已填写的锚点总数（不含 AI 未填的占位） */
+  total: number;
+  /** 能回溯到真实 IR 模块的锚点数 */
+  valid: number;
+  /** 悬空锚点（引用了不存在的模块 id，疑似 AI 幻觉） */
+  dangling: string[];
+  reportPath: string;
+}
+
+/** 提取「溯源: `xxx`」或「[溯源: `xxx`]」中的锚点 */
+const ANCHOR_RE = /\[?溯源[:：]\s*`([^`]+)`\]?/g;
+
+/**
+ * 校验 REQUIREMENT.md 的溯源锚点与 IR 模块清单的一致性。
+ * 锚点与 IR 文件名都经过 sanitize 归一化后比对（'/' → '-'），
+ * 悬空锚点即宿主 AI 引用了不存在的模块——典型幻觉特征，须修正后重新校验。
+ */
+export async function verifyReverseAnchors(outputDir: string): Promise<VerifyAnchorsResult> {
+  const urPath = join(outputDir, 'REQUIREMENT.md');
+  if (!(await pathExists(urPath))) {
+    throw new Error(`未找到 ${urPath}，请先运行 speccore global from-source --src <dirs> 完成反推并填充 UR 后再校验。`);
+  }
+
+  // IR 模块 id 白名单（IR 文件名 = sanitize(moduleId)）
+  let whitelist = new Set<string>();
+  const irDir = join(outputDir, '_ir');
+  if (await pathExists(irDir)) {
+    const files = await readdir(irDir);
+    whitelist = new Set(files.filter(f => f.endsWith('.md')).map(f => f.replace(/\.md$/, '')));
+  }
+
+  const content = await readFile(urPath, 'utf-8');
+  const anchors: string[] = [];
+  let m: RegExpExecArray | null;
+  ANCHOR_RE.lastIndex = 0;
+  while ((m = ANCHOR_RE.exec(content)) !== null) {
+    anchors.push(m[1]);
+  }
+
+  // 占位锚点（AI 未填写）不计入校验
+  const filled = anchors.filter(a => !/_AI 填写|填写模块id/.test(a));
+  const dangling = filled.filter(a => !whitelist.has(sanitize(a)));
+
+  const reportPath = join(outputDir, 'VERIFY_REPORT.md');
+  await writeFile(reportPath, buildVerifyReport(filled.length, dangling));
+
+  logger.info('');
+  logger.info('🔍 验证环：溯源锚点一致性校验');
+  logger.info(`   📄 校验对象: ${urPath}`);
+  logger.info(`   🧩 IR 白名单: ${whitelist.size} 个模块`);
+  logger.info(`   📌 已填锚点: ${filled.length} | 有效: ${filled.length - dangling.length} | 悬空: ${dangling.length}`);
+  if (dangling.length > 0) {
+    logger.warn(`   ⚠️ 悬空锚点（疑似 AI 幻觉，引用不存在的模块）:`);
+    dangling.slice(0, 20).forEach(d => logger.warn(`      - \`${d}\``));
+    logger.warn(`   详见报告: ${reportPath}`);
+  } else {
+    logger.info('   ✅ 全部锚点通过校验，需求可追溯。');
+  }
+  logger.info('');
+
+  return {
+    outputDir,
+    total: filled.length,
+    valid: filled.length - dangling.length,
+    dangling,
+    reportPath,
+  };
+}
+
+function buildVerifyReport(total: number, dangling: string[]): string {
+  const lines: string[] = [];
+  lines.push('# 反推需求验证报告（VERIFY）');
+  lines.push('');
+  lines.push(`> 生成时间: ${new Date().toISOString()}`);
+  lines.push(`> 校验规则: REQUIREMENT.md 中每条「溯源锚点」必须能回溯到真实存在的 IR 模块（\`.speccore/GLOBAL/requirements/_ir/\`）。`);
+  lines.push('');
+  lines.push('## 统计');
+  lines.push('');
+  lines.push(`- 已填锚点总数: ${total}`);
+  lines.push(`- 有效锚点: ${total - dangling.length}（能回溯到真实 IR 模块）`);
+  lines.push(`- 悬空锚点: ${dangling.length}（疑似 AI 幻觉，引用不存在的模块）`);
+  lines.push('');
+  if (dangling.length > 0) {
+    lines.push('## 悬空锚点清单');
+    lines.push('');
+    dangling.forEach(d => lines.push(`- \`${d}\``));
+    lines.push('');
+    lines.push('> 修正方式：把锚点改为真实 IR 模块 id（见 _ir/ 目录文件名），或补充代码依据后重新运行 --verify。');
+    lines.push('');
+  }
+  lines.push('## 结论');
+  lines.push('');
+  lines.push(dangling.length === 0
+    ? '✅ 全部锚点通过校验，需求可追溯。'
+    : '❌ 存在悬空锚点，需求尚未通过验证环，请修正后重新校验。');
+  lines.push('');
+  return lines.join('\n');
 }

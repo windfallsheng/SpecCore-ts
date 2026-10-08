@@ -108,15 +108,17 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     ],
   },
   'global from-source': {
-    desc: '从存量源码反推需求文档（原 import 命令已移除，v8.3.260+）',
+    desc: '从存量源码反推需求文档（两跳 IR→UR + 验证环，原 import 命令已移除，v8.3.260+）',
     params: [
       { flag: '--src <dirs>', meaning: '源码目录（逗号分隔多端，如 <端1/src>,<端2/src>）' },
       { flag: '--depth <depth>', meaning: '分析深度：quick | normal(默认) | deep' },
       { flag: '--platform <platform>', meaning: '指定端' },
+      { flag: '--verify', meaning: '验证环：校验 UR 溯源锚点与 IR 清单一致性，不重跑反推' },
     ],
     examples: [
       'speccore global from-source --src ./src',
       'speccore global from-source --src <端1/src>,<端2/src>',
+      'speccore global from-source --src <端1/src>,<端2/src> --verify',
     ],
   },
   doc2spec: {

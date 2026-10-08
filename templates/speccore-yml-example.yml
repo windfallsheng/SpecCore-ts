@@ -133,7 +133,13 @@ settings:
       analyze: gpt4o
       split: local
     fallback: local
-  # v8.3.217+: 冒烟三时机开关 + 范围（run --smoke / --skip-smoke / --scope 单次覆盖）
+  # v8.3.301+: 子 Agent SDK 派单开关（第七层「窗口物理隔离」增强通道）
+  #   auto = Qoder 宿主 + token 可用（PAT 或 CLI 登录态）时启用（默认）
+  #   on   = 强制尝试 SDK 派单（token 不可用也尝试，失败回退标记模式）
+  #   off  = 禁用 SDK 派单，永远走标记模式（代码内容经主会话窗口）
+  agent_dispatch:
+    mode: auto
+  # v8.3.217+: 冒烟三时机开关 + 范围（run --smoke / --skip-smoke / --scope 单次 覆盖）
   smoke:
     points:
       local: auto               # 开发完本地冒烟

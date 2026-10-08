@@ -149,7 +149,9 @@ export interface AnalyzeOptions {
   merge?: boolean;         // --merge: 与现有文档合并（按标题替换/追加），不覆盖
   // v8.3.184+: 从源码反推需求（两跳 IR→UR）
   fromCode?: boolean;      // --from-code: 读源码生成候选需求（逐模块 IR → 合成 UR）
-  // v8.3.191+: 反推需求产出目录（--out-dir，默认 .speccore/GLOBAL/requirements）
+  // v8.3.301+: 验证环（--verify: 只校验 UR 溯源锚点与 IR 清单一致性，不重跑反推）
+  verify?: boolean;
+  // v8.3.191+: 反推需求产出目录（--out-dir，默认 .speccore/GLOBAL/requirements ）
   outDir?: string;
 }
 
@@ -411,7 +413,16 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
   // v8.3.184+: CLI 确定性产出「逐模块 IR 骨架 + 合成 UR 骨架 + 两跳 prompt + 全局技术分析文档集」，
   //           宿主 AI 完成语义抽象
   if (options.fromCode) {
-    const { reverseRequirementsFromCode } = await import('../core/reverse-requirement');
+    const { reverseRequirementsFromCode, verifyReverseAnchors } = await import('../core/reverse-requirement');
+    // v8.3.301+: 验证环——只校验锚点一致性，不重跑反推（宿主 AI 填完 UR 后运行）
+    if (options.verify) {
+      try {
+        await verifyReverseAnchors(options.outDir || join('.speccore', 'GLOBAL', 'requirements'));
+      } catch (e: any) {
+        logger.error(`锚点校验失败: ${e?.message || e}`);
+      }
+      return;
+    }
     const { generateGlobalArtifacts } = await import('../core/global-artifacts');
     const sources = options.source
       ? options.source.split(',').map(s => s.trim()).filter(Boolean)

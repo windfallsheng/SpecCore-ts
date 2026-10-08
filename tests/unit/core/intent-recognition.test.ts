@@ -134,3 +134,34 @@ describe('recognizeIntent 去重与排序', () => {
     }
   });
 });
+
+// ── v8.3.301+: 源码反推口语变体（global from-source 路由）──
+// 不带「反推/逆向」字眼的反推口语，应命中 global 命令且 extractedParams.fromCode=true
+const FROM_SOURCE_CASES: string[] = [
+  '根据 booking-service 端生成需求文档',
+  '按端生成需求',
+  '从代码生成需求文档',
+  '生成需求文档',
+  '需求文档反推',
+  '代码生成需求',
+  '按模块反推需求',
+  '根据代码生成需求',
+  '反推文档',
+  '从工程生成需求',
+  '源码反推',
+  '反推需求',
+];
+
+describe('from-source 反推路由（v8.3.301+）', () => {
+  for (const input of FROM_SOURCE_CASES) {
+    it(`${input} → global_analyze + fromCode`, async () => {
+      const results = await recognizeIntent(input);
+      const best = results[0];
+      expect(
+        best.intent,
+        `前3: ${results.slice(0, 3).map(r => `${r.intent}:${r.confidence}`).join(' / ')}`,
+      ).toBe('global_analyze');
+      expect(best.extractedParams?.fromCode, `extractedParams: ${JSON.stringify(best.extractedParams)}`).toBe('true');
+    });
+  }
+});
