@@ -8,8 +8,21 @@ import { execSync } from 'child_process';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration, getIterationDir } from '../core/context';
 import { buildPrompt, formatPrompt } from '../core/prompt-builder';
-import { isProtectedBranch } from '../core/git-integration';
+import { isProtectedBranch, isProtectedBranchAsync } from '../core/git-integration';
 import { loadConfig, loadProjectConfig } from '../core/unified-config';
+
+/**
+ * PR 目标分支回退——读 PROJECT.yaml git.default_base（v8.3.300）
+ * 此前硬编码 'main'，注释宣称 default_base 是 PR 合并目标但实现从不读取
+ */
+async function resolvePrBase(): Promise<string> {
+  try {
+    const pc = await loadProjectConfig();
+    return pc.git?.default_base || 'main';
+  } catch {
+    return 'main';
+  }
+}
 import { loadTaskQualityGate, mergeQualityGate, shouldRunUIVerify } from '../core/quality-gate';
 // v6.86.0+: AGENTS 全阶段扩展
 import { resolveAgentsForPhase } from '../core/agents';
@@ -439,7 +452,7 @@ export async function prCommand(options: PrOptions): Promise<void> {
       // 推送
       const branch = execSync('git branch --show-current', { cwd: gitCwd, encoding: 'utf-8' }).trim();
       let pushed = false;
-      if (!isProtectedBranch(branch)) {
+      if (!(await isProtectedBranchAsync(branch))) {
         execSync(`git push -u origin "${branch}"`, { cwd: gitCwd, stdio: 'pipe' });
         logger.success(`✅ 已推送: ${branch}`);
         pushed = true;
@@ -449,7 +462,7 @@ export async function prCommand(options: PrOptions): Promise<void> {
 
       // 自动创建 PR
       if ((options.createPr || options.autoMerge) && pushed) {
-        const prResult = await createPullRequest(options.base || 'main', options.title || commitMsg, options.draft, gitCwd);
+        const prResult = await createPullRequest(options.base || await resolvePrBase(), options.title || commitMsg, options.draft, gitCwd);
         if (prResult.success) {
           logger.success(`✅ ${prResult.message}${prResult.url ? ': ' + prResult.url : ''}`);
           if (options.autoMerge) {
@@ -514,7 +527,7 @@ export async function prCommand(options: PrOptions): Promise<void> {
     }
     const branch = execSync('git branch --show-current', { cwd: gitCwd, encoding: 'utf-8' }).trim();
     let pushed = false;
-    if (!isProtectedBranch(branch)) {
+    if (!(await isProtectedBranchAsync(branch))) {
       try {
         execSync(`git push -u origin "${branch}"`, { cwd: gitCwd, stdio: 'pipe' });
         logger.success(`✅ 已推送: ${branch}`);
@@ -528,7 +541,7 @@ export async function prCommand(options: PrOptions): Promise<void> {
 
     // 自动创建 PR / 合并
     if ((options.createPr || options.autoMerge) && pushed) {
-      const base = options.base || 'main';
+      const base = options.base || await resolvePrBase();
       const title = options.title || msg;
       const prResult = await createPullRequest(base, title, options.draft, gitCwd);
       if (prResult.success) {
@@ -645,7 +658,7 @@ export async function prCommand(options: PrOptions): Promise<void> {
     if (pushAns === 'y') {
       const currentBranch = execSync('git branch --show-current', { cwd: gitCwd, encoding: 'utf-8' }).trim();
       let pushed = false;
-      if (!isProtectedBranch(currentBranch)) {
+      if (!(await isProtectedBranchAsync(currentBranch))) {
         execSync(`git push -u origin "${currentBranch}"`, { cwd: gitCwd, stdio: 'pipe' });
         logger.success(`✅ 已推送: ${currentBranch}`);
         pushed = true;
@@ -655,7 +668,7 @@ export async function prCommand(options: PrOptions): Promise<void> {
 
       // 自动创建 PR / 合并
       if ((options.createPr || options.autoMerge) && pushed) {
-        const base = options.base || 'main';
+        const base = options.base || await resolvePrBase();
         const title = options.title || msg;
         const prResult = await createPullRequest(base, title, options.draft, gitCwd);
         if (prResult.success) {

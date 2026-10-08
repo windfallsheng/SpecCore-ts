@@ -25,6 +25,9 @@ import {
   CURRENT_SCHEMA_VERSION,
   upgradeConfig,
   upgradeProjectConfig,
+  PROJECT_OPTIONAL_PATHS,
+  LEGACY_MAIN_CONFIG_KEYS,
+  type ConfigDiff,
 } from '../core/unified-config';
 import { initEnvironmentConfigs, initTestConfigs } from './update-env-configs';
 
@@ -305,7 +308,12 @@ export async function updateCommand(options: { force?: boolean; tool?: string; y
     } else {
       const { config, warnings } = await loadConfigWithMeta();
       // 用磁盘原始文件检测（loadConfigWithMeta 会补全，看不到缺失字段）
-      const diff = (await detectConfigDiffFromFile()) || detectConfigDiff(config, DEFAULT_CONFIG);
+      const rawDiff = (await detectConfigDiffFromFile()) || detectConfigDiff(config, DEFAULT_CONFIG);
+      // v8.3.299: 与 upgradeConfig 一致——旧版顶层字段白名单过滤 removed（v8.3.298 修复的截停问题同步到此检查段）
+      const diff: ConfigDiff = {
+        ...rawDiff,
+        removed: rawDiff.removed.filter((p) => !LEGACY_MAIN_CONFIG_KEYS.has(p.split('.')[0])),
+      };
       const needsConfirm = requiresUserConfirmation(diff);
       const hasSchemaIssue = config.schema_version < CURRENT_SCHEMA_VERSION;
       const hasAddedOnly = diff.added.length > 0 && !needsConfirm;
@@ -383,7 +391,12 @@ export async function updateCommand(options: { force?: boolean; tool?: string; y
       await initProjectConfig(projectName);
     } else {
       const { config, warnings } = await loadProjectConfigWithMeta();
-      const diff = (await detectProjectConfigDiffFromFile()) || detectConfigDiff(config, DEFAULT_PROJECT_CONFIG);
+      const rawDiff = (await detectProjectConfigDiffFromFile()) || detectConfigDiff(config, DEFAULT_PROJECT_CONFIG);
+      // v8.3.299: 与 upgradeProjectConfig 一致——可选字段白名单过滤 removed，避免误判截停
+      const diff: ConfigDiff = {
+        ...rawDiff,
+        removed: rawDiff.removed.filter((p) => !PROJECT_OPTIONAL_PATHS.has(p)),
+      };
       const needsConfirm = requiresUserConfirmation(diff);
       const hasAddedOnly = diff.added.length > 0 && !needsConfirm;
       const hasChanges = hasAddedOnly || needsConfirm || warnings.length > 0;
@@ -683,7 +696,12 @@ async function checkAllUpgradeIssues(projectRoot: string): Promise<UpgradeCheckR
     const systemConfigPath = join(projectRoot, '.speccore.yml');
     if (await pathExists(systemConfigPath)) {
       const { config } = await loadConfigWithMeta();
-      const diff = detectConfigDiff(config, DEFAULT_CONFIG);
+      const rawDiff = detectConfigDiff(config, DEFAULT_CONFIG);
+      // v8.3.299: 与 upgradeConfig 一致——旧版顶层字段白名单过滤 removed，避免报告与行为不一致
+      const diff: ConfigDiff = {
+        ...rawDiff,
+        removed: rawDiff.removed.filter((p) => !LEGACY_MAIN_CONFIG_KEYS.has(p.split('.')[0])),
+      };
       if (requiresUserConfirmation(diff)) {
         result.hasIssues = true;
         const lines = formatConfigDiff(diff);
@@ -724,7 +742,12 @@ async function checkAllUpgradeIssues(projectRoot: string): Promise<UpgradeCheckR
     const projectConfigPath = join(speccoreDir, 'PROJECT.yaml');
     if (await pathExists(projectConfigPath)) {
       const { config } = await loadProjectConfigWithMeta();
-      const diff = detectConfigDiff(config, DEFAULT_PROJECT_CONFIG);
+      const rawDiff = detectConfigDiff(config, DEFAULT_PROJECT_CONFIG);
+      // v8.3.299: 与 upgradeProjectConfig 一致——可选字段白名单过滤 removed，避免报告与行为不一致
+      const diff: ConfigDiff = {
+        ...rawDiff,
+        removed: rawDiff.removed.filter((p) => !PROJECT_OPTIONAL_PATHS.has(p)),
+      };
       if (requiresUserConfirmation(diff)) {
         result.hasIssues = true;
         const lines = formatConfigDiff(diff);

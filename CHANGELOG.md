@@ -1,3 +1,23 @@
+## v8.3.300 (2026-10-08) — 分支处理全链路体检修复：default_base/端级覆盖真正生效 + PROJECT.yaml 升级截停修复
+
+### 修复（分支链路体检，本轮）
+- **git.default_base 与端级覆盖零消费（核心 bug）**：getEffectiveGitConfig 死函数——类型/默认值/序列化器齐全但无调用方，用户改 default_base、platforms[].default_branch/branch_types 完全不生效；taskify 落盘子任务「源分支」只认全局 branch_types.source，兜底竟是 CONSTITUTION.md 旧值。修复：taskify 改用 getEffectiveGitConfig（端级合并）落盘，default_base 真正成为兜底锚点；补 platforms null 防御
+- **pr.ts PR 目标分支硬编码 main**：三处 options.base || 'main' 从不读配置，注释却宣称 default_base 是「PR 合并目标」。修复：resolvePrBase() 回退读 PROJECT.yaml git.default_base
+- **PROJECT.yaml protected_branches 不生效**：isProtectedBranch 只认 CONSTITUTION.md。修复：新增 getProtectedBranchesMerged/isProtectedBranchAsync（PROJECT.yaml 全局+端级为主源、CONSTITUTION.md 回退），pr/execute 四处切换
+- **init 模板与解析正则不自洽**：CONSTITUTION.md 模板带 Markdown 加粗星号（「- **默认分支**:」），解析正则认不到——新 init 项目默认分支读不到、保护分支恒为空 → isProtectedBranch 恒 false，pr 会直接 push 保护分支。修复：模板去星号 + 解析正则行首锚定 + 双侧星号兼容（同时避开「> - **默认分支**：如 main...」字段说明行误匹配，防「如」字污染分支名）
+- **谎报注释修正**：unified-config.ts「修改后运行 speccore update 自动同步到 CONSTITUTION.md」与 update 行为矛盾（update 明确保持不变），改为真实语义：PROJECT.yaml 是 Git 配置权威源
+
+### 修复（配置升级，v8.3.299 累积）
+- **PROJECT.yaml 升级被 project.description 截停**：早期 init 生成的 PROJECT.yaml 带 description/version，DEFAULT_PROJECT_CONFIG 未收录 → 判 removed → 截停 → git/code_scope 新字段永远补不上。修复：PROJECT_OPTIONAL_PATHS 白名单（project.description/project.version/verify）过滤 removed，用户值保留
+- **verify 序列化器漏写**：ProjectConfig.verify 类型有（v8.3.58+）、DEFAULT 无、toProjectYaml 不输出——升级即丢。修复：toProjectYaml 补 verify 段（router_file）
+- **default_branch 无条件输出 "undefined"**：旧 platforms 元素缺该字段时序列化器写盘字符串 "undefined"。修复：改条件输出
+- **update 报告与行为不一致**：LEGACY 白名单只进 upgradeConfig，update 检查段与 checkAllUpgradeIssues 仍用原始 diff 误报「删除字段需确认」。修复：三处同步过滤
+
+### 验证
+- 构建 0 错误、291 测试全绿
+- 5 项解析实证（星号格式/无星号格式/字段说明行防污染/表格行防污染/通配符语义）全过
+- 「跑两次 upgrade 第二次无需升级」无假补全；旧项目带 description+verify 一次升级自动补全 git/code_scope 且用户值保留、无 "undefined" 写盘
+
 ## v8.3.298 (2026-09-29) — 旧版主配置升级截停修复：旧字段自动迁移，新字段补全不再卡壳
 
 ### 修复

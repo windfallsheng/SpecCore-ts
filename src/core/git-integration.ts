@@ -318,12 +318,12 @@ export function loadGitConfig(iteration?: string, taskDir?: string): GitConfig {
     if (existsSync(constitutionPath)) {
       const content = readFileSync(constitutionPath, 'utf-8');
 
-      // 默认分支
-      const branchMatch = content.match(/默认分支[：:]\s*(\S+)/);
+      // 默认分支（v8.3.300: 行首锚定 + 兼容「**默认分支**」双侧加粗格式，避开「> - **默认分支**：如 main...」字段说明行误匹配）
+      const branchMatch = content.match(/^[-•]\s*\**默认分支\**\s*[：:]\s*([A-Za-z0-9._\/-]+)/m);
       if (branchMatch) config.defaultBranch = branchMatch[1];
 
-      // 任务分支前缀（从"任务分支: feature/{Task-ID}"提取前缀）
-      const taskBranchMatch = content.match(/任务分支[：:]\s*(\S+?)\//);
+      // 任务分支前缀（从"任务分支: feature/{Task-ID}"提取前缀，兼容加粗格式）
+      const taskBranchMatch = content.match(/^[-•]\s*\**任务分支\**\s*[：:]\s*(\S+?)\//m);
       if (taskBranchMatch) {
         const extracted = taskBranchMatch[1];
         // v8.3.293+: 模板变量（如 {type}）不是真实前缀，忽略以免污染分支命名
@@ -332,8 +332,8 @@ export function loadGitConfig(iteration?: string, taskDir?: string): GitConfig {
         }
       }
 
-      // 保护分支
-      const protectMatch = content.match(/保护分支[：:]\s*(.+)/);
+      // 保护分支（行首锚定，兼容「**保护分支**」双侧加粗格式，避开字段说明行）
+      const protectMatch = content.match(/^[-•]\s*\**保护分支\**\s*[：:]\s*(.+)$/m);
       if (protectMatch) {
         config.protectedBranches = protectMatch[1]
           .split(',')
@@ -534,7 +534,8 @@ export function getProtectedBranches(): string[] {
     const constitutionPath = join('.speccore', 'CONSTITUTION.md');
     if (!existsSync(constitutionPath)) return [];
     const content = readFileSync(constitutionPath, 'utf-8');
-    const match = content.match(/保护分支[：:]\s*(.+)/);
+    // v8.3.300: 行首锚定 + 兼容「**保护分支**」双侧加粗格式（此前匹配不到导致保护分支检查失效）
+    const match = content.match(/^[-•]\s*\**保护分支\**\s*[：:]\s*(.+)$/m);
     if (!match) return [];
     return match[1]
       .split(',')
@@ -545,21 +546,54 @@ export function getProtectedBranches(): string[] {
   }
 }
 
+/** 单个保护分支规则匹配（精确匹配 + 通配符如 release/*） */
+function matchesProtectedPattern(branchName: string, pattern: string): boolean {
+  if (pattern.includes('*')) {
+    // 通配符匹配: release/* → release/1.0.0
+    const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+    return regex.test(branchName);
+  }
+  return branchName === pattern;
+}
+
 /**
  * 检查分支是否为保护分支
  * 支持精确匹配和通配符（如 release/*）
+ * 数据源：CONSTITUTION.md 的「保护分支」字段（AI 契约文件）
  */
 export function isProtectedBranch(branchName: string): boolean {
   const protected_ = getProtectedBranches();
   for (const pattern of protected_) {
-    if (pattern.includes('*')) {
-      // 通配符匹配: release/* → release/1.0.0
-      const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
-      if (regex.test(branchName)) return true;
-    } else {
-      // 精确匹配
-      if (branchName === pattern) return true;
+    if (matchesProtectedPattern(branchName, pattern)) return true;
+  }
+  return false;
+}
+
+/**
+ * 合并 PROJECT.yaml 全局 + 端级 protected_branches（v8.3.300）
+ * 此前 PROJECT.yaml 配置的保护分支从未生效（getEffectiveGitConfig 无消费方），
+ * pr/execute 只认 CONSTITUTION.md。此处以 PROJECT.yaml 为主源、CONSTITUTION.md 回退。
+ */
+export async function getProtectedBranchesMerged(): Promise<string[]> {
+  const merged = new Set<string>(getProtectedBranches());
+  try {
+    const { loadProjectConfig } = await import('../core/unified-config');
+    const pc = await loadProjectConfig();
+    for (const b of pc.git?.protected_branches || []) merged.add(b);
+    for (const p of pc.platforms || []) {
+      for (const b of p.protected_branches || []) merged.add(b);
     }
+  } catch {
+    // PROJECT.yaml 读取失败时仅用 CONSTITUTION.md 结果
+  }
+  return [...merged];
+}
+
+/** isProtectedBranch 的异步合并版（含 PROJECT.yaml 全局/端级配置） */
+export async function isProtectedBranchAsync(branchName: string): Promise<boolean> {
+  const protected_ = await getProtectedBranchesMerged();
+  for (const pattern of protected_) {
+    if (matchesProtectedPattern(branchName, pattern)) return true;
   }
   return false;
 }

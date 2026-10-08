@@ -36,7 +36,7 @@ import {
   ExecutionState,
   TaskSummary,
 } from '../core/execution-state';
-import { createTaskBranch, detectDefaultBranch, findBranchByTaskId, findBranchByFeature, isProtectedBranch, loadGitConfig } from '../core/git-integration';
+import { createTaskBranch, detectDefaultBranch, findBranchByTaskId, findBranchByFeature, isProtectedBranchAsync, loadGitConfig } from '../core/git-integration';
 import { buildPrompt, formatPrompt, parseAiResponse, outputNeedsInfo } from '../core/prompt-builder';
 import { writeVerifyReport, outputFixTag, runQualityGate, syncTestDocFromResults } from '../core/verify-engine';
 import { runArbitration, getArbitrationConfig } from '../core/arbitration/arbitration-engine';
@@ -1640,7 +1640,8 @@ async function prepareTaskBranch(
   const base = defaultBase || 'HEAD';
 
   // 1. 切回 base 分支（允许从保护分支拉分支，但 hook 会阻止直接 commit）
-  if (defaultBase && isProtectedBranch(defaultBase)) {
+  // v8.3.300: 改用合并版保护分支判定（含 PROJECT.yaml 全局/端级配置）
+  if (defaultBase && await isProtectedBranchAsync(defaultBase)) {
     logger.info(`  ℹ️ base 分支 '${defaultBase}' 受保护，任务分支将独立工作`);
   }
   try { execSync(`git checkout "${base}"`, { cwd: gitCwd, stdio: 'pipe' }); } catch {

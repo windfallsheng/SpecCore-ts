@@ -552,11 +552,11 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 
 > 公共默认策略。各工程可在「Git 配置」表中覆盖。
 
-- **默认分支**: main（可选: master / develop / trunk）
-- **任务分支**: {branch_prefix}{Task-ID}（如 feature/Task-001）
-- **发布分支**: release/{version}
-- **热修复分支**: hotfix/{description}
-- **保护分支**: main, master, release/*, production
+- 默认分支: main（可选: master / develop / trunk）
+- 任务分支: {branch_prefix}{Task-ID}（如 feature/Task-001）
+- 发布分支: release/{version}
+- 热修复分支: hotfix/{description}
+- 保护分支: main, master, release/*, production
   - 保护分支上禁止直接 commit 和 push，只能通过 PR 合并
   - 支持精确匹配和通配符（如 release/*）
 `

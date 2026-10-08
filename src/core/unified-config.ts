@@ -952,7 +952,7 @@ export function formatConfigDiff(diff: ConfigDiff): string[] {
 // 若不豁免，detectConfigDiff 会报 removed → 升级被「需人工确认」截停 → 新字段（logging/verify_ui 等）永远补不上。
 const LEGACY_MIGRATE_KEYS = new Set(['project', 'platforms', 'git', 'code_scope']);
 const LEGACY_DROP_KEYS = new Set(['tech_stack', 'team', 'conventions', 'error_codes']);
-const LEGACY_MAIN_CONFIG_KEYS = new Set([...LEGACY_MIGRATE_KEYS, ...LEGACY_DROP_KEYS]);
+export const LEGACY_MAIN_CONFIG_KEYS = new Set([...LEGACY_MIGRATE_KEYS, ...LEGACY_DROP_KEYS]);
 
 /**
  * v8.3.298+: 迁移旧版 .speccore.yml 的顶层字段
@@ -1128,6 +1128,11 @@ export async function upgradeConfig(): Promise<ConfigLoadResult> {
 // 项目配置升级（.speccore/PROJECT.yaml）
 // ─────────────────────────────────────────
 
+// v8.3.299: PROJECT.yaml 可选字段白名单（类型/序列化器支持、DEFAULT_PROJECT_CONFIG 未收录的合法字段）
+// 背景：早期 init 生成的 PROJECT.yaml 带 project.description/project.version；v8.3.58+ 支持 verify。
+// 若判 removed → requiresUserConfirmation 截停 → git/code_scope 等新字段永远补不上。
+export const PROJECT_OPTIONAL_PATHS = new Set(['project.description', 'project.version', 'verify']);
+
 export async function upgradeProjectConfig(): Promise<ProjectConfigLoadResult> {
   const { config, warnings } = await loadProjectConfigWithMeta();
 
@@ -1141,7 +1146,13 @@ export async function upgradeProjectConfig(): Promise<ProjectConfigLoadResult> {
 
   // 1. 检测配置差异（优先用磁盘原始文件差异，能看到缺失的新字段）
   const diff = fileDiff || detectConfigDiff(config, DEFAULT_PROJECT_CONFIG);
-  const needsConfirm = requiresUserConfirmation(diff);
+  // v8.3.299: 可选字段白名单过滤 removed——project.description/version、verify 是类型合法可选字段，
+  //           DEFAULT_PROJECT_CONFIG 未收录导致误判删除，进而截停升级（git/code_scope 永远补不上）
+  const effectiveDiff: ConfigDiff = {
+    ...diff,
+    removed: diff.removed.filter((p) => !PROJECT_OPTIONAL_PATHS.has(p)),
+  };
+  const needsConfirm = requiresUserConfirmation(effectiveDiff);
 
   if (needsConfirm) {
     // 生成差异报告文件
@@ -1389,7 +1400,8 @@ export interface EffectiveGitConfig {
  */
 export async function getEffectiveGitConfig(platformName: string): Promise<EffectiveGitConfig> {
   const projectConfig = await loadProjectConfigWithEnv();
-  const platform = projectConfig.platforms.find((p: PlatformConfig) => p.name === platformName);
+  // v8.3.300: platforms 可能为 null/缺端名，找不到端时回退全局配置而非抛异常
+  const platform = (projectConfig.platforms || []).find((p: PlatformConfig) => p.name === platformName);
 
   const globalTypes = projectConfig.git.branch_types || {};
   const platformTypes = platform?.branch_types || {};
@@ -1922,8 +1934,11 @@ function toProjectYaml(config: ProjectConfig): string {
       yaml += `    # Git 仓库地址（用于分支管理和 PR 提交）\n`;
       yaml += `    git_repo: ${p.git_repo}\n`;
     }
-    yaml += `    # 默认分支（如 main, develop）\n`;
-    yaml += `    default_branch: ${p.default_branch}\n`;
+    // v8.3.299: default_branch 改为条件输出（旧文件缺该字段时不再写盘 "undefined"）
+    if (p.default_branch) {
+      yaml += `    # 默认分支（如 main, develop）\n`;
+      yaml += `    default_branch: ${p.default_branch}\n`;
+    }
     if (p.branch_prefix) {
       yaml += `    # 端级分支前缀（覆盖全局 git.branch_prefix）\n`;
       yaml += `    branch_prefix: ${p.branch_prefix}\n`;
@@ -2031,7 +2046,8 @@ function toProjectYaml(config: ProjectConfig): string {
   yaml += '# Git 配置\n';
   yaml += '# ─────────────────────────────────────────────────────────────────────────────\n';
   yaml += '# 说明：\n';
-  yaml += '#   - 修改后运行 speccore update 自动同步到 CONSTITUTION.md\n';
+  yaml += '#   - 本段为 Git 配置权威源：任务分支源分支（taskify 落盘子任务 git-config）、\n';
+  yaml += '#     PR 目标分支（pr 命令回退）、保护分支（pr/execute 合并判定）均从这里读取\n';
   yaml += '#   - 端级可覆盖：在 platforms[].default_branch / branch_prefix / protected_branches / branch_types\n';
   yaml += '#   - 子任务可覆盖：在 Task-*/{端}/{子任务}/.meta/git-config 中配置\n';
   yaml += 'git:\n';
@@ -2076,6 +2092,16 @@ function toProjectYaml(config: ProjectConfig): string {
   yaml += 'code_scope:\n';
   for (const s of config.code_scope) {
     yaml += `  - ${s}\n`;
+  }
+
+  // v8.3.299: verify 段补写（v8.3.58+ 字段此前未序列化输出，升级后该配置会丢）
+  if (config.verify && config.verify.router_file) {
+    yaml += '\n# ─────────────────────────────────────────────────────────────────────────────\n';
+    yaml += '# 验证配置（v8.3.58+）\n';
+    yaml += '# ─────────────────────────────────────────────────────────────────────────────\n';
+    yaml += '# router_file: 显式指定前端路由配置文件路径（覆盖自动发现）\n';
+    yaml += 'verify:\n';
+    yaml += `  router_file: ${config.verify.router_file}\n`;
   }
 
   return yaml;

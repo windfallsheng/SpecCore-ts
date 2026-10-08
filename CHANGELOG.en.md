@@ -4,6 +4,26 @@
 
 > 📌 **Note**: English entries below cover selected releases. For the complete version history (v8.3.194 → v8.3.289), see the Chinese [CHANGELOG.md](CHANGELOG.md).
 
+## v8.3.300 (2026-10-08) — Branch pipeline health-check fixed: default_base/end-level overrides take effect + PROJECT.yaml upgrade blocking resolved
+
+### Fixes (branch pipeline, this release)
+- **git.default_base and end-level overrides never consumed (core bug)**: getEffectiveGitConfig was a dead function — types/defaults/serializers all existed but no caller; changing default_base or platforms[].default_branch/branch_types had no effect. Fixed: taskify now uses getEffectiveGitConfig (end-level merged) when writing the subtask "source branch"; default_base finally acts as the fallback anchor; null-platforms guard added
+- **pr.ts PR target branch hardcoded 'main'**: three `options.base || 'main'` sites never read config. Fixed: resolvePrBase() falls back to PROJECT.yaml git.default_base
+- **PROJECT.yaml protected_branches never took effect**: isProtectedBranch only read CONSTITUTION.md. Fixed: added getProtectedBranchesMerged / isProtectedBranchAsync (PROJECT.yaml global+end-level as primary source, CONSTITUTION.md fallback); switched 4 call sites in pr/execute
+- **init template vs parse regex mismatch**: CONSTITUTION.md template used Markdown bold ("- **默认分支**:"), the parser never matched it — freshly init'ed projects read no default branch and empty protected branches → isProtectedBranch always false → pr would push directly to protected branches. Fixed: template de-bolded + line-anchored regex with double-sided asterisk support (also avoids false match on field-description lines like "> - **默认分支**：如 main...")
+- **Misleading comment corrected**: unified-config.ts claimed "speccore update syncs to CONSTITUTION.md" while update explicitly keeps it untouched; now states PROJECT.yaml is the authoritative Git config source
+
+### Fixes (config upgrade, v8.3.299 accumulated)
+- **PROJECT.yaml upgrade blocked by project.description**: early init-generated PROJECT.yaml carried description/version, not in DEFAULT_PROJECT_CONFIG → judged "removed" → upgrade halted → git/code_scope never backfilled. Fixed: PROJECT_OPTIONAL_PATHS whitelist (project.description/project.version/verify) filters removed, user values preserved
+- **verify serializer omission**: ProjectConfig.verify typed (v8.3.58+) but never serialized — lost on upgrade. Fixed: toProjectYaml now emits the verify section (router_file)
+- **default_branch unconditionally wrote "undefined"**: fixed to conditional output
+- **update report/behavior mismatch**: LEGACY whitelist only reached upgradeConfig; update check + checkAllUpgradeIssues still used raw diff and misreported "fields to delete". Fixed: three sites share the same filter
+
+### Verification
+- Build clean, 291 tests green
+- 5 parser fixtures (bold / non-bold / description-line pollution / table-row pollution / wildcard semantics) all pass
+- Double-upgrade shows "no upgrade needed" (no fake backfill); legacy project with description+verify upgrades once with git/code_scope backfilled, user values kept, no "undefined" written
+
 ## v8.3.298 (2026-09-29) — Legacy main-config upgrade blocking fixed: old fields auto-migrated, new fields no longer stuck
 
 ### Fixed

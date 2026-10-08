@@ -22,7 +22,8 @@ import { findRelevantCode } from '../../core/code-scanner';
 import { loadFreshKnowledgeGraph } from '../../core/knowledge-graph';
 import { loadGitConfig, GitConfig } from '../../core/git-integration';
 import { cleanupByType } from '../cleanup';
-import { loadProjectConfig } from '../../core/unified-config';
+import { loadProjectConfig, getEffectiveGitConfig } from '../../core/unified-config';
+import type { EffectiveGitConfig } from '../../core/unified-config';
 import { scanRoutes, generateSpecFromRoutes, generateSpecFromUiSpec, writeVerifySpec } from '../../core/ui-verify';
 // v8.3.125+: 公共同义词扩展模块（从 split.ts 提取，供全链路使用）
 import { extractNormalizedKeywords, expandSynonyms } from '../../utils/synonyms';
@@ -1864,7 +1865,8 @@ function buildGitConfigContent(
   config: GitConfig,
   platformLabel: string,
   taskType?: string,
-  branchTypes?: Record<string, { prefix?: string; suffix?: string; source: string }>
+  branchTypes?: Record<string, { prefix?: string; suffix?: string; source: string }>,
+  defaultBase?: string,
 ): string {
   const branchType = taskType === 'bugfix' ? 'bugfix' : taskType === 'refactor' ? 'refactor' : taskType === 'research' ? 'research' : 'feature';
   // v8.3.118+: 从全局 branch_types 读取对应类型的前缀/后缀/源分支
@@ -1879,7 +1881,8 @@ function buildGitConfigContent(
     : `# ${key}: ${def}`;
 
   // v8.3.118+: 前缀/后缀/源分支优先从 branch_types 读取，其次从 gitConfig 读取
-  const effectiveSource = hasSource ? typeDef!.source : (config.defaultBranch || '');
+  // v8.3.300: defaultBase 为端级合并后的 PROJECT.yaml git.default_base（此前该配置无消费方，永不生效）
+  const effectiveSource = hasSource ? typeDef!.source : (defaultBase || config.defaultBranch || '');
 
   return `# 子任务级 Git 配置（${platformLabel}）
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1939,6 +1942,9 @@ async function createTaskFromSection(iterationDir: string, taskId: string, secti
   // v8.3.118+: 读取全局 branch_types，用于生成子任务 git-config
   const projectConfig = await loadProjectConfig();
   const branchTypes = projectConfig.git.branch_types;
+  // v8.3.300: 端级合并 Git 配置缓存——端级 branch_types/default_branch 优先于全局，
+  // 兼活 getEffectiveGitConfig（此前零消费方，git.default_base 与端级覆盖从不生效）
+  const effectiveGitByPlatform = new Map<string, EffectiveGitConfig>();
 
   // v8.3.36: 提前加载 spec 内容，用于平台推断 + 任务级文件填充
   const specContents = await loadSpecContents(iterationDir);
@@ -2453,9 +2459,15 @@ ${section.content}
       // v8.3.4+: git-config 自动填充 — 读取迭代级/全局级实际配置值写入
       // v8.3.118+: 传入全局 branch_types，让子任务 git-config 自动填充前缀/后缀/源分支
       const gitConfig = loadGitConfig(iterationName);
+      // v8.3.300: 端级合并配置（端级 branch_types/default_branch 优先于全局，default_base 真正生效）
+      let effectiveGit = effectiveGitByPlatform.get(platformName);
+      if (!effectiveGit) {
+        effectiveGit = await getEffectiveGitConfig(platformName);
+        effectiveGitByPlatform.set(platformName, effectiveGit);
+      }
       await writeFile(
         join(subtaskDir, '.meta', 'git-config'),
-        buildGitConfigContent(gitConfig, platformLabel, (section as any).type, branchTypes)
+        buildGitConfigContent(gitConfig, platformLabel, (section as any).type, effectiveGit.branch_types, effectiveGit.default_base)
       );
 
       // v6.70.0+: 从 section 提取接口/页面清单用于 TASK.md
@@ -2703,7 +2715,7 @@ ${!isBk && docSet.hasComponentTree ? '| COMPONENT_TREE.md | ⏳ | ./COMPONENT_TR
     const gitConfig = loadGitConfig(iterationName);
     await writeFile(
       join(autoSubtaskDir, '.meta', 'git-config'),
-      buildGitConfigContent(gitConfig, '后端', (section as any).type, branchTypes)
+      buildGitConfigContent(gitConfig, '后端', (section as any).type, branchTypes, projectConfig.git.default_base)
     );
     await writeFile(
       join(autoSubtaskDir, 'TASK.md'),
