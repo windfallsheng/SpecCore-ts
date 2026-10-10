@@ -13,6 +13,7 @@ import { existsSync, readFileSync, writeFileSync, ensureFileSync } from 'fs-extr
 import { join } from 'path';
 import { execSync } from 'child_process';
 import { randomBytes } from 'crypto';
+import { loadRawProjectConfig } from './unified-config';
 
 const GIT_MAPPING_PATH = '.speccore/.git-mapping.json';
 
@@ -462,6 +463,63 @@ export function detectDefaultBranch(iteration?: string, cwd?: string): string | 
   } catch {}
 
   return undefined;
+}
+
+/**
+ * 解析任务分支的创建源分支（v8.3.304+）
+ *
+ * 优先级：任务级 .meta/git-config「源分支」 > 迭代级 PROJECT_GRAPH「默认分支」
+ *   > PROJECT.yaml branch_types[{taskType}].source > PROJECT.yaml git.default_base
+ *   > 回退 detectDefaultBranch（CONSTITUTION「默认分支」/ 默认 main / git remote HEAD / 本地分支）
+ *
+ * 背景：此前 execute 拉分支只走 loadGitConfig（CONSTITUTION/任务级 git-config），
+ * PROJECT.yaml 的 git.default_base 与 branch_types[].source 从未参与判定，
+ * 用户在主配置里声明的 source 不生效。
+ */
+export async function resolveTaskBaseBranch(
+  taskType?: string,
+  iteration?: string,
+  taskDir?: string,
+  cwd?: string,
+): Promise<string | undefined> {
+  // 1. 任务级 .meta/git-config「源分支」（最局部，最高优先级）
+  if (taskDir) {
+    const sub = loadSubtaskGitConfig(taskDir);
+    if (sub.defaultBranch) return sub.defaultBranch;
+  }
+
+  // 2. 迭代级 PROJECT_GRAPH.md「默认分支」
+  if (iteration) {
+    try {
+      const iterGraphPath = join(`Iteration-${iteration}`, '000-overview', 'PROJECT_GRAPH.md');
+      if (existsSync(iterGraphPath)) {
+        const content = readFileSync(iterGraphPath, 'utf-8');
+        const tableMatch = content.match(/\|\s*默认分支\s*\|\s*([^|]+)\s*\|/);
+        if (tableMatch) {
+          const val = tableMatch[1].trim();
+          if (val && val !== '继承全局配置' && val !== '-' && val !== '') return val;
+        }
+      }
+    } catch {}
+  }
+
+  // 3. PROJECT.yaml 主配置（读原始文件，只认用户显式声明）:
+  //    branch_types[{taskType}].source 优先，git.default_base 兜底
+  //    不用 loadProjectConfig：其返回的 merge 后配置含 DEFAULT_PROJECT_CONFIG
+  //    预置 branch_types 表，会把「用户没配 release」误判为「显式 source=develop」
+  try {
+    const raw = await loadRawProjectConfig();
+    if (raw) {
+      if (taskType) {
+        const source = raw.git?.branch_types?.[taskType]?.source;
+        if (source) return source;
+      }
+      if (raw.git?.default_base) return raw.git.default_base;
+    }
+  } catch {}
+
+  // 4. 回退：CONSTITUTION「默认分支」/ 默认 main / git remote HEAD / 本地分支
+  return detectDefaultBranch(iteration, cwd);
 }
 
 /**

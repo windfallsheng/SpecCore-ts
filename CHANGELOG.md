@@ -1,3 +1,11 @@
+## v8.3.304 (2026-10-10) — execute 拉分支接入 PROJECT.yaml 主配置
+
+### 任务分支源解析链修复
+- **问题**：execute 创建任务分支时只走 loadGitConfig（CONSTITUTION 文档声明 + 任务级 git-config），PROJECT.yaml 的 `git.default_base` 与 `git.branch_types[{type}].source` 从未参与判定——用户在主配置里声明 feature 从 develop 拉，实际仍从 main 拉
+- **修复**：新增 `resolveTaskBaseBranch` 解析链：任务级 git-config「源分支」 > 迭代级 PROJECT_GRAPH「默认分支」 > PROJECT.yaml `branch_types[{type}].source` > `git.default_base` > git 检测回退；prepareTaskBranch 按任务类型逐一解析，并将解析结果传给 createTaskBranch（消除两处 checkout 不一致）
+- **原始配置读取**：新增 `loadRawProjectConfig`（读磁盘原始 PROJECT.yaml，不 merge 默认值）——merge 后的配置含 DEFAULT_PROJECT_CONFIG 预置 branch_types 表，会把「用户没配 release」误判为「显式 source=develop」；只有用户显式声明才生效
+- **测试**：git-branch-base.test.ts 锁定优先级链（6 用例）+ e2e 验证 feature→develop / hotfix→main / release→default_base
+
 ## v8.3.303 (2026-10-10) — 需求总纲退出自动生成 + unitize 默认发现端级文档
 
 ### doc2spec 转换

@@ -459,6 +459,23 @@ export async function loadProjectConfig(): Promise<ProjectConfig> {
   return config;
 }
 
+/**
+ * 读取磁盘上的原始 PROJECT.yaml（不做默认值合并/迁移，环境变量原样保留）
+ * v8.3.304+: 供「只认用户显式配置」的场景使用——merge 后的配置无法区分
+ * 「用户显式声明」与「DEFAULT_PROJECT_CONFIG 出厂预置」（如 branch_types 预置表），
+ * 拉分支等需要严格遵循用户声明语义的消费方应使用本函数。
+ */
+export async function loadRawProjectConfig(): Promise<ProjectConfig | null> {
+  if (!(await pathExists(PROJECT_CONFIG_PATH))) return null;
+  try {
+    const raw = await readFile(PROJECT_CONFIG_PATH, 'utf-8');
+    const parsed = parseYaml(raw) as Record<string, unknown>;
+    return parsed as unknown as ProjectConfig;
+  } catch {
+    return null;
+  }
+}
+
 /** 获取项目配置 + 元信息 */
 export async function loadProjectConfigWithMeta(): Promise<ProjectConfigLoadResult> {
   const warnings: string[] = [];

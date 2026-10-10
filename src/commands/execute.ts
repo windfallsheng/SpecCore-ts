@@ -36,7 +36,7 @@ import {
   ExecutionState,
   TaskSummary,
 } from '../core/execution-state';
-import { createTaskBranch, detectDefaultBranch, findBranchByTaskId, findBranchByFeature, isProtectedBranchAsync, loadGitConfig } from '../core/git-integration';
+import { createTaskBranch, resolveTaskBaseBranch, findBranchByTaskId, findBranchByFeature, isProtectedBranchAsync, loadGitConfig } from '../core/git-integration';
 import { buildPrompt, formatPrompt, parseAiResponse, outputNeedsInfo } from '../core/prompt-builder';
 import { writeVerifyReport, outputFixTag, runQualityGate, syncTestDocFromResults } from '../core/verify-engine';
 import { runArbitration, getArbitrationConfig } from '../core/arbitration/arbitration-engine';
@@ -579,22 +579,9 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
   // ── 分支策略：懒创建 + 依赖合并 ──
   // 每个任务的分支在执行前才创建，确保依赖任务的代码已存在
   // 有依赖的任务会 merge 依赖分支，拿到前序任务的代码
-  // v8.3.87+: 检测默认分支时使用 PROJECT.yaml 中的 code_path（支持 speccore 与工程分离）
-  let defaultGitCwd = process.cwd();
-  try {
-    const pc = await loadProjectConfig();
-    const firstPlatformWithPath = pc.platforms.find((p) => p.code_path);
-    if (firstPlatformWithPath?.code_path) {
-      defaultGitCwd = isAbsolute(firstPlatformWithPath.code_path)
-        ? firstPlatformWithPath.code_path
-        : join(process.cwd(), firstPlatformWithPath.code_path);
-    } else if (pc.code_scope?.[0]) {
-      defaultGitCwd = isAbsolute(pc.code_scope[0])
-        ? pc.code_scope[0]
-        : join(process.cwd(), pc.code_scope[0]);
-    }
-  } catch {}
-  const defaultBase = base || detectDefaultBranch(iteration, defaultGitCwd);
+  // v8.3.304: base 解析链（任务级 git-config > 迭代级 > PROJECT.yaml source/default_base > git 检测）
+  // 下沉到 prepareTaskBranch 内按任务类型解析，此处仅保留显式 --base
+  const defaultBase = base;
   const createdBranches: Map<string, string> = new Map(); // taskId → branchName
 
   // ── Agent mode: output optimized context for external AI ──
@@ -1637,19 +1624,7 @@ async function prepareTaskBranch(
     // 推断失败时使用 process.cwd()
   }
 
-  const base = defaultBase || 'HEAD';
-
-  // 1. 切回 base 分支（允许从保护分支拉分支，但 hook 会阻止直接 commit）
-  // v8.3.300: 改用合并版保护分支判定（含 PROJECT.yaml 全局/端级配置）
-  if (defaultBase && await isProtectedBranchAsync(defaultBase)) {
-    logger.info(`  ℹ️ base 分支 '${defaultBase}' 受保护，任务分支将独立工作`);
-  }
-  try { execSync(`git checkout "${base}"`, { cwd: gitCwd, stdio: 'pipe' }); } catch {
-    // base 分支不存在时从 HEAD 创建
-    try { execSync('git checkout -', { cwd: gitCwd, stdio: 'pipe' }); } catch {}
-  }
-
-  // 2. 查找任务目录 + 读取任务类型（用于子任务级 git 配置 + 分支类型映射）
+  // 1. 查找任务目录 + 读取任务类型（base 解析依赖 taskType → branch_types source 映射）
   const iterDir = await getIterationDir(iteration);
   const taskDir = await resolveTaskDir(iterDir, task.id);
   let taskType: string | undefined;
@@ -1660,7 +1635,7 @@ async function prepareTaskBranch(
     }
   } catch {}
 
-  // v8.3.207+: bugfix 关联功能模块时，从该模块的任务分支拉（默认仍从 main）
+  // 2. v8.3.207+: bugfix 关联功能模块时，从该模块的任务分支拉（最高优先级）
   let bugfixBase: string | undefined;
   if (taskType === 'bugfix') {
     try {
@@ -1678,8 +1653,23 @@ async function prepareTaskBranch(
     } catch {}
   }
 
-  // 3. 创建任务分支（传入 taskDir + taskType + cwd 支持子任务级 git 配置 + 工程目录分离）
-  const branch = createTaskBranch(task.id, task.name || task.id, bugfixBase, iteration, taskDir, taskType, gitCwd);
+  // 3. 解析 base 分支：bugfix 关联 > 显式 --base > 配置链 > git 检测
+  // v8.3.304: 配置链接入 PROJECT.yaml（branch_types[{type}].source → git.default_base），
+  // 此前该主配置从未参与 execute 拉分支判定，用户配置 source 不生效
+  const base = bugfixBase || defaultBase || await resolveTaskBaseBranch(taskType, iteration, taskDir, gitCwd) || 'HEAD';
+
+  // 4. 切回 base 分支（允许从保护分支拉分支，但 hook 会阻止直接 commit）
+  // v8.3.300: 改用合并版保护分支判定（含 PROJECT.yaml 全局/端级配置）
+  if (base !== 'HEAD' && await isProtectedBranchAsync(base)) {
+    logger.info(`  ℹ️ base 分支 '${base}' 受保护，任务分支将独立工作`);
+  }
+  try { execSync(`git checkout "${base}"`, { cwd: gitCwd, stdio: 'pipe' }); } catch {
+    // base 分支不存在时从 HEAD 创建
+    try { execSync('git checkout -', { cwd: gitCwd, stdio: 'pipe' }); } catch {}
+  }
+
+  // 5. 创建任务分支（传入解析后的 base + taskDir + taskType + cwd，保证两处 checkout 一致）
+  const branch = createTaskBranch(task.id, task.name || task.id, base !== 'HEAD' ? base : undefined, iteration, taskDir, taskType, gitCwd);
   if (!branch) return null;
   createdBranches.set(task.id, branch);
 
