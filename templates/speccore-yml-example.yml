@@ -1,73 +1,54 @@
 # ═══════════════════════════════════════════════════════════
-# SpecCore 主配置完整示例（.speccore.yml）
+# SpecCore 主配置完整示例（.speccore.yml）—— v8.3.303 对齐版
 # ═══════════════════════════════════════════════════════════
 # 位置：项目根 .speccore.yml（与 .speccore/PROJECT.yaml 分工：
-#       PROJECT.yaml 管「端/源码/Git/部署」，本文件管「行为/门禁/测试/AI」）
+#       PROJECT.yaml 管「端/源码/Git/部署」，本文件管「行为/门禁/AI」）
 # 升级：speccore config --upgrade（不要手动编辑 schema_version）
 # 参考：docs/config-reference.md（字段详解）
 #
-# 特性版本标记：
-#   v8.3.24+   arbitration 契约裁决        v8.3.94+  settings.vision
-#   v8.3.95+   quality_gates.verify_ui      v8.3.193+ settings.ai provider 池
-#   v8.3.197+  quality_gates.block_level    v8.3.215+ tests.auth 登录装配
-#   v8.3.217+  settings.smoke 三时机        v8.3.217+ stages / pipeline.test
+# ⚠️ 本示例与 DEFAULT_CONFIG（v8.3.303）逐字段对齐，注意三处归属变化：
+#   1. project → 已迁至 .speccore/PROJECT.yaml；tech_stack/team → 已废弃（升级自动清理）
+#   2. tests/stages/pipeline 测试环境段 → 归属 .speccore/environments/{env}.yaml（见 VERIFY-EXAMPLE.yaml）
+#   3. 新增：logging / tools / settings.pipeline / with_code / gates
 # ═══════════════════════════════════════════════════════════
 
 schema_version: 1
 
-# ── 项目信息 ──
-project:
-  name: my-project
-  description: 示例项目
-  version: 1.0.0
-
-# ── 技术栈（供 AI 生成针对性内容）──
-tech_stack:
-  backend: TypeScript / NestJS
-  frontend: Vue 3 / Element Plus
-  database: PostgreSQL
-  cache: Redis
-  mq: RabbitMQ
-
-# ── 团队 ──
-team:
-  members:
-    - name: alice
-      role: lead
-      assignee: true
-    - name: bob
-      role: developer
-      assignee: true
+# ── 日志（文件日志开关，输出到 .speccore/local/logs/）──
+logging:
+  enabled: false
 
 # ── 质量门禁 ──
 quality_gates:
-  enforce_testing: true
-  enforce_review: true
-  require_pr: true
+  enforce_testing: true       # true → execute 前检查 TEST.md，缺失则阻断
+  enforce_review: true        # true → 执行完自动进入 review 流程
+  require_pr: true            # true → 禁止直接 push 保护分支，走 speccore pr
   # 阻塞级别：standard（编译+单测+契约都阻断，默认）/ compile（仅编译阻断）
   block_level: standard
   # v8.3.95+: UI 验证默认行为（speccore verify --ui）
   verify_ui:
-    enabled: true
-    smoke_test: true
-    visual_check: true
-    threshold: normal            # strict / normal / loose
-    devices: [desktop, mobile]
+    enabled: false            # 演示默认关闭，按需 true
+    smoke_test: true          # 冒烟测试
+    visual_check: true        # 视觉检查
+    headed: false             # 有头浏览器（调试用）
+    # threshold: strict 任何微小差异 / normal 明显差异（默认）/ loose 仅严重问题
+    threshold: normal
+    devices: [desktop]        # desktop / mobile / iPhone13 / Pixel5 ...
     browsers: [chromium]
-    timeout: 30000
-    headed: false
+    timeout: 30000            # 单场景超时（毫秒）
+    # v8.3.50+: 视觉模型（看图判断走外部模型）
     visual_model:
-      provider: qwen-vl
+      provider: qwen-vl       # qwen-vl / openai / anthropic / local
       model: qwen-vl-max
 
-# ── 契约裁决（v8.3.24+）：full 全流程 / l1-only / report-only ──
+# ── 契约裁决：full 全流程 / l1-only / report-only ──
 arbitration:
   enabled: true
   mode: full
 
 # ── 运行时行为 ──
 settings:
-  # 指派策略：strict 阻断不一致 / loose 自动填+警告（推荐）/ off 关闭
+  # 指派策略：strict 阻断不一致 / loose 自动填+警告 / off 关闭
   assignee:
     enabled: true
     mode: loose
@@ -87,7 +68,7 @@ settings:
   # 自动检查规范库最新
   sync:
     auto_check: true
-  # 模式沉淀：off / smart（推荐）/ aggressive
+  # 模式沉淀：off / smart / aggressive
   patterns:
     auto_save: smart
   # 审查时检查执行人签名
@@ -98,26 +79,31 @@ settings:
     enabled: false
     provider: qwen-vl
     model: qwen-vl-plus
-    apiKey: ${DASHSCOPE_API_KEY}
     maxImagesPerPrompt: 10
     imageMaxSizeKb: 2048
+  # 流水线模式开关
+  pipeline: false
+  # 分析时附带源码（from-source 场景）
+  with_code: false
   # 非必要流水线步骤三态开关：auto（智能，默认）/ on 强制 / off 跳过
   optional_steps:
-    clarify: auto               # 文档专业就跳过澄清
+    clarify: auto             # 文档专业就跳过澄清
     verify: auto
     pipeline: auto
-    pr: off                     # 本地开发不自动提 PR
+    pr: auto
     done: auto
-    spec2doc: off               # 不需要导出文档
+    spec2doc: auto
   # 命名流水线（run --preset <name>）
   pipelines:
-    default: develop            # full/import/spec/analyze/develop/deliver/deploy/docs
-    custom:
-      my-flow: analyze,validate,taskify,plan,execute
-      hotfix: execute,verify,pipeline,pr
+    default: develop          # full/import/spec/analyze/develop/deliver/deploy/docs
+    custom: {}                # 自定义: { my-flow: analyze,validate,taskify,plan,execute }
+  # 质量门禁模式
+  gates:
+    mode: manual
   # v8.3.193+: 统一 LLM provider 池（host=宿主AI / llm=自配 / auto=宿主优先）
+  # 演示条目，默认 providers: []——自配时按此结构填写
   ai:
-    provider: auto
+    provider: host
     providers:
       - name: local
         type: ollama
@@ -129,32 +115,27 @@ settings:
         model: gpt-4o
         apiKey: "${OPENAI_API_KEY}"
         priority: 2
-    defaults:
-      analyze: gpt4o
-      split: local
+    defaults: {}              # 按阶段指定 provider: { analyze: gpt4o }
     fallback: local
-  # v8.3.301+: 子 Agent SDK 派单开关（第七层「窗口物理隔离」增强通道）
+  # v8.3.301+: 子 Agent SDK 派单开关
   #   auto = Qoder 宿主 + token 可用（PAT 或 CLI 登录态）时启用（默认）
-  #   on   = 强制尝试 SDK 派单（token 不可用也尝试，失败回退标记模式）
-  #   off  = 禁用 SDK 派单，永远走标记模式（代码内容经主会话窗口）
+  #   on   = 强制尝试 SDK 派单（失败回退标记模式）
+  #   off  = 禁用 SDK 派单，永远走标记模式
   agent_dispatch:
     mode: auto
-  # v8.3.217+: 冒烟三时机开关 + 范围（run --smoke / --skip-smoke / --scope 单次 覆盖）
+  # v8.3.217+: 冒烟三时机开关 + 范围（run --smoke / --skip-smoke / --scope 单次覆盖）
   smoke:
     points:
-      local: auto               # 开发完本地冒烟
-      pre-deploy: auto          # 部署前门禁
-      post-deploy: auto         # 部署后确认环境活着
-    scope: module               # full 全量 / module 当前功能模块
-    scope_by_env:
-      dev: module
-      staging: module
-      production: full          # 生产发布才全量
+      local: auto             # 开发完本地冒烟
+      pre-deploy: auto        # 部署前门禁
+      post-deploy: auto       # 部署后确认环境活着
+    scope: module             # full 全量 / module 当前功能模块
+    scope_by_env: {}          # 按环境覆盖: { production: full }
 
 # ── Ask 引擎 ──
 ask:
   routing:
-    mode: hybrid                # hybrid / cli-only / host-ai-only
+    mode: hybrid              # hybrid / cli-only / host-ai-only
     high_threshold: 70
     low_threshold: 45
     auto_host_ai: true
@@ -162,6 +143,7 @@ ask:
     cache_min_hits: 3
   rules:
     force_host_ai: false
+  # 自配 LLM 池（演示条目，默认 []）
   llm_providers:
     - name: ollama-local
       enabled: false
@@ -176,53 +158,10 @@ ask:
       model: gpt-4o-mini
       priority: 2
 
-# ── 测试基础设施（与 verify / pipeline 联动）──
-tests:
-  base_urls:
-    h5: https://staging.example.com/h5
-    admin: https://admin-staging.example.com
-    api: https://api-staging.example.com
-  local_urls:
-    h5: http://localhost:5173
-  # v8.3.215+: 测试登录（冒烟/视觉访问受保护页面前自动登录）
-  # data-testid 遵循 UI_SPEC 元素标识约定：{模块}-{页面}-{元素}
-  auth:
-    login_url: /login
-    username_selector: "[data-testid='login-username-input']"
-    password_selector: "[data-testid='login-password-input']"
-    submit_selector: "[data-testid='login-submit-btn']"
-    success_url_contains: /dashboard
-    credentials:
-      username: admin
-      password_env: SMOKE_PASSWORD  # 密码从环境变量读取（推荐，不落库不进 git）
-  visual_model:
-    provider: qwen-vl
-    model: qwen-vl-max
-    timeout: 60000
-
-# ── 分层测试阶段（verify --stage <stage> 联动）──
-stages:
-  dev:
-    config: null                              # 使用内置代码质量验证
-  pr:
-    config: .speccore/tests/pr.yaml
-  deploy:
-    config: .speccore/tests/smoke.yaml
-  release:
-    config: .speccore/tests/release.yaml
-
-# ── Pipeline 内置测试节点（build 后 deploy 前/后执行）──
-pipeline:
-  test:
-    enabled: true
-    type: smoke                # build-check / smoke / visual / api / all
-    stage: pre-deploy          # pre-deploy / post-deploy / both
-    fail_on_error: true        # 失败是否阻断部署（仅 critical）
-    auto_fix: true
-    max_retries: 3
+# ── 工具路径（doc2spec 转换依赖，留空自动探测）──
+tools:
+  pandoc: ''
+  libreoffice: ''
 
 # ── 配置变更历史（speccore config --upgrade 自动维护，勿手动编辑）──
-config_history:
-  - date: 2026-09-01
-    change: 初始配置
-    changed_by: alice
+config_history: []

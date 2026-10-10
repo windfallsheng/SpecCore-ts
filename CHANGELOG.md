@@ -17,6 +17,10 @@
 - **截停根因**：v8.3.197 以 block_level 取代 quality_gates.compile，旧项目升级时 compile 被判「删除字段」→ 人工确认截停 → 新字段（verify_ui.devices/browsers/timeout/visual_model 等）永远补不上——同版本项目配置不一致即此因
 - **修复**：新增 LEGACY_DROP_PATHS 已知废弃嵌套字段豁免清单 + filterLegacyRemoved 过滤 + deleteNestedKey 清理；compile 等已知废弃字段升级时自动移除、不截停；老项目重跑 `speccore config --upgrade` 即自动补全
 
+### 示例配置对齐（templates + examples）
+- **主配置示例重写**：speccore-yml-example.yml 与 DEFAULT_CONFIG 逐字段对齐——补 logging/tools/settings.pipeline/with_code/gates 等新字段；移除已迁移/废弃段（project/tech_stack/team/tests/stages/pipeline，旧段照抄会触发升级截停）；头部注明归属变化（tests 环境段 → .speccore/environments/{env}.yaml）
+- **防漂移测试**：config-example-alignment.test.ts 双向锁定（added/removed 均须为空），DEFAULT_CONFIG 增减字段时自动提醒同步示例；templates 与 .speccore/examples 同源一致性一并锁定
+
 ## v8.3.302 (2026-10-08) — 负责人前置到单元级 + 单元级澄清触发
 
 ### 负责人前置（单元级 owner 声明）
