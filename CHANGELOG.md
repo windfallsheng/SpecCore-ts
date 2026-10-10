@@ -1,3 +1,22 @@
+## v8.3.303 (2026-10-10) — 需求总纲退出自动生成 + unitize 默认发现端级文档
+
+### doc2spec 转换
+- **总纲不再自动生成**：删除 mergeToRequirement 自动合并（机械拼盘冒充总纲）；REQUIREMENT.md 改由用户按需经 synthesize 或 AI 生成；转换后提示语降级为「如需总纲请按需生成」
+- **端名自动识别**：--platform 未显式指定时，从源文件名匹配 PROJECT.yaml 端列表（源文档按 {端名}.md 命名免传参数）
+- **产物同名**：端文档产物与源文档同名（{端名}.md），源文档→转换→切分三段命名一条规则贯到底；无端文档回退 {源名}-requirements.md 不变
+
+### unitize 切分
+- **默认发现**：未指定 --file/--files 时自动扫描 converted/，按端名白名单（PROJECT.yaml platforms）匹配端级文档逐一切分——「切分本迭代需求」名副其实；旧命名 {端名}requirements.md 兼容命中不迁移；总纲与无端文档不进自动发现并列出提示
+- **总纲拦截**：显式 --file REQUIREMENT.md 时拦截并指路（切分以端命名需求文档为准）
+- **单文件/批量端名识别**：platform 未显式指定时从文件名自动识别（三个入口统一）
+
+### 文档互链
+- rewriteUnitLinks 候选补「{端名}.md 同名回退」——旧文档「{端名}requirements」互链在升级后不断链
+
+### 配置升级（compile 截停根治）
+- **截停根因**：v8.3.197 以 block_level 取代 quality_gates.compile，旧项目升级时 compile 被判「删除字段」→ 人工确认截停 → 新字段（verify_ui.devices/browsers/timeout/visual_model 等）永远补不上——同版本项目配置不一致即此因
+- **修复**：新增 LEGACY_DROP_PATHS 已知废弃嵌套字段豁免清单 + filterLegacyRemoved 过滤 + deleteNestedKey 清理；compile 等已知废弃字段升级时自动移除、不截停；老项目重跑 `speccore config --upgrade` 即自动补全
+
 ## v8.3.302 (2026-10-08) — 负责人前置到单元级 + 单元级澄清触发
 
 ### 负责人前置（单元级 owner 声明）
