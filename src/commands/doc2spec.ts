@@ -32,7 +32,7 @@ import { detectProfessionalLevel } from '../core/requirement-clarifier';
 import { showNextSteps } from '../core/next-steps';
 import { validateContent, generateReport } from '../core/doc-validator';
 import { buildPrompt, formatPrompt } from '../core/prompt-builder';
-import { loadConfig, loadConfigWithMeta } from '../core/unified-config';
+import { loadConfig, loadConfigWithMeta, loadProjectConfig } from '../core/unified-config';
 import { callLlm, resolveAiProviders, parseTranslationResponse } from '../core/ask-llm';
 function findCommand(cmd: string, customPath?: string): string | null {
   // v8.3.70+: 优先使用配置中指定的路径
@@ -280,11 +280,20 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     const baseDir = taskId ? join(iterDir, taskId) : join(iterDir, '010-requirements', 'converted');
     const targetDir = baseDir;
     const imageDir = join(iterDir, '010-requirements', 'assets', 'extracted'); // PRD 提取的图片
-    const platform = options.platform || '';
-    // v8.3.223+: 输出文件名基于源文件名（platform 时加端前缀），
-    // 修复「多文档导入互相覆盖 requirements.md」的问题
+    let platform = options.platform || '';
+    // v8.3.223+: 输出文件名基于源文件名，修复「多文档导入互相覆盖 requirements.md」的问题
     const sourceBase = sanitizeUnitName(basename(options.file, extname(options.file))) || 'requirements';
-    const outputFilename = platform ? `${platform}requirements.md` : `${sourceBase}-requirements.md`;
+    // v8.3.303+: platform 未显式指定时，从源文件名匹配端列表自动识别
+    // （源文档按 {端名}.md 命名时免传 --platform，产物与源文档同名）
+    if (!platform && sourceBase !== 'requirements') {
+      try {
+        const projectConfig = await loadProjectConfig();
+        const matched = projectConfig.platforms.find(p => p.name === sourceBase);
+        if (matched) platform = matched.name;
+      } catch { /* PROJECT.yaml 缺失时保持无端文档回退 */ }
+    }
+    // v8.3.303+: 端文档产物与源文档同名（{端名}.md）；无端文档回退 {源名}-requirements.md
+    const outputFilename = platform ? `${platform}.md` : `${sourceBase}-requirements.md`;
     const outputPath = join(targetDir, outputFilename);
 
     await ensureDir(targetDir);
@@ -414,16 +423,15 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     }
     await writeFile(indexPath, indexContent);
 
-    // ── 自动合并到 REQUIREMENT.md（汇总各端需求，供 iteration split 使用）──
-    await mergeToRequirement(iterDir, targetDir, platformLabel, outputFilename);
-
-    // ── 检测多端文档，提示智能合成 ──
+    // v8.3.303+: 需求总纲（REQUIREMENT.md）不再由转换自动生成——机械拼盘冒充总纲，
+    // 改由用户按需经 synthesize 命令或 AI 生成。此处仅检测多端文档并提示。
     const convDir = join(iterDir, '010-requirements', 'converted');
     if (await pathExists(convDir)) {
-      const convFiles = (await readdir(convDir)).filter(f => f.endsWith('requirements.md'));
+      const convFiles = (await readdir(convDir)).filter(f => f.endsWith('.md') && !f.startsWith('REQUIREMENT'));
       if (convFiles.length >= 2) {
         logger.info('');
-        logger.info(`🧩 检测到 ${convFiles.length} 份端需求文档，建议智能合成:`);
+        logger.info(`📄 已转换 ${convFiles.length} 份需求文档（converted/）`);
+        logger.info(`   🧩 如需需求总纲（REQUIREMENT.md），请按需生成:`);
         logger.info(`   speccore synthesize -I ${options.iter || '当前迭代'}`);
         logger.info(`   → 章节原子化 · 去重合并 · 跨端关联 · 冲突标注`);
       }
@@ -480,65 +488,6 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     spinner.fail(`转换失败: ${error}`);
     throw error;
   }
-}
-
-/**
- * 将各端需求文档自动合并到统一的 REQUIREMENT.md
- * 格式: ## {端名}需求（取自 {端名}requirements.md 的 ## 接口定义 表格）
- */
-async function mergeToRequirement(iterDir: string, targetDir: string, platform: string, outputFilename?: string): Promise<void> {
-  const reqFilename = outputFilename || ((platform === '通用' || !platform) ? 'requirements.md' : `${platform}requirements.md`);
-  const reqPath = join(targetDir, reqFilename);
-  const globalReqPath = join(targetDir, 'REQUIREMENT.md');
-
-  if (!(await pathExists(reqPath))) return;
-
-  const platformContent = await readFile(reqPath, 'utf-8');
-
-  // 提取接口表格
-  const tableMatch = platformContent.match(/\| 方法 \|.*\n(?:\|[: -]+\|.*\n)+(?:\|.*\|.*\n)+/);
-  const apiSection = tableMatch ? `\n\n### ${platform}端接口\n\n${tableMatch[0]}` : '';
-
-  // 提取需求描述（跳过 HTML 注释和接口表格）
-  const descContent = platformContent
-    .replace(/^<!--[\s\S]*?-->\n/gm, '')
-    .replace(/\| 方法 \|.*(\n\|.*)*/g, '')
-    .replace(/\n{3,}/g, '\n\n')
-    // v8.3.240+: 端文档 H1 标题降级为 H2——嵌入合并版后若保留「# 标题」，
-    // 层级倒挂（## 大节内出现 # 标题）会让 unitize 把大节截断成 3 行桩
-    .replace(/^# /gm, '## ')
-    .trim();
-
-  // 检查是否已有此端的内容
-  let globalContent = '';
-  if (await pathExists(globalReqPath)) {
-    globalContent = await readFile(globalReqPath, 'utf-8');
-  } else {
-    globalContent = `# 本期需求文档\n\n> 由 doc2spec 自动合并各端需求\n\n`;
-  }
-
-  // v8.3.223+: sectionLabel 与去重正则统一使用中文「需求」——旧代码 sectionLabel 用英文
-  // requirements 而正则匹配「需求」，platform 以「端」结尾时去重永远失效、同端内容重复追加
-  const sectionLabel = platform.endsWith('端') ? `${platform}需求` : `${platform}端需求`;
-  // v8.3.223+: 去掉 slice(0, 500) 硬截断——多端需求合并不再丢内容
-  const platformSection = `\n## ${sectionLabel}\n\n${descContent}${apiSection}\n`;
-
-  // 去重：如果已有同端内容，替换
-  const escaped = platform.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const sectionRegex = new RegExp(`(^|\\n)## ${escaped}端?需求[\\s\\S]*?(?=\\n## |$)`, 'g');
-  if (globalContent.match(sectionRegex)) {
-    globalContent = globalContent.replace(sectionRegex, (_m, p1: string) => p1 + platformSection.replace(/^\n/, ''));
-  } else {
-    globalContent += platformSection;
-  }
-
-  // 清理模板占位符（仅删空壳章节标题，不删真实正文）——
-  // 旧正则用 [\s\S]*? 把「标题到下一标题」的全部内容删掉，
-  // 真实文档的正文章节会被误删，合并版 REQUIREMENT.md 只剩空壳桩
-  globalContent = globalContent
-    .replace(/#{1,3}\s+\d+\.\s*(需求概述|功能需求|非功能需求|验收标准|附录)[\s]*(?=#{1,3}\s|$)/g, '');
-
-  await writeFile(globalReqPath, globalContent);
 }
 
 /**
@@ -1972,6 +1921,8 @@ function rewriteUnitLinks(content: string, fromDir: string, toDir: string): { co
       const candidates = [
         join(dir, `${base}-requirements.md`),
         join(dir, `${base}requirements.md`),
+        // v8.3.303+: 端文档产物改为与源文档同名（{端名}.md），旧「{端名}requirements」链接回退同名
+        join(dir, `${base.replace(/requirements$/i, '')}.md`),
         // v8.3.241+: sources/ 是原始文档只读存档（保留原文件名），互链目标可能只存在那里
         join(dir, '..', 'sources', basename(resolved)),
       ];

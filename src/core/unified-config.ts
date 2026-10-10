@@ -960,6 +960,33 @@ const LEGACY_MIGRATE_KEYS = new Set(['project', 'platforms', 'git', 'code_scope'
 const LEGACY_DROP_KEYS = new Set(['tech_stack', 'team', 'conventions', 'error_codes']);
 export const LEGACY_MAIN_CONFIG_KEYS = new Set([...LEGACY_MIGRATE_KEYS, ...LEGACY_DROP_KEYS]);
 
+// v8.3.303: 已知废弃的嵌套字段（带点路径）——升级时自动移除，不触发人工确认
+// 背景：v8.3.197 用 block_level 取代 quality_gates.compile；旧项目升级时 compile 判 removed
+// → requiresUserConfirmation 截停 → 新增字段（verify_ui.devices/browsers/timeout/visual_model 等）永远补不上
+export const LEGACY_DROP_PATHS = new Set(['quality_gates.compile']);
+
+/** v8.3.303: 过滤已知废弃/迁移字段，避免旧字段触发人工确认截停升级 */
+export function filterLegacyRemoved(diff: ConfigDiff): ConfigDiff {
+  return {
+    ...diff,
+    removed: diff.removed.filter(
+      (p) => !LEGACY_MAIN_CONFIG_KEYS.has(p.split('.')[0]) && !LEGACY_DROP_PATHS.has(p)
+    ),
+  };
+}
+
+/** v8.3.303: 按点路径删除嵌套键（路径不存在时静默跳过） */
+export function deleteNestedKey(obj: unknown, path: string): void {
+  const parts = path.split('.');
+  let cur: Record<string, unknown> = obj as Record<string, unknown>;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const next = cur[parts[i]];
+    if (!isPlainObject(next)) return;
+    cur = next as Record<string, unknown>;
+  }
+  delete cur[parts[parts.length - 1]];
+}
+
 /**
  * v8.3.298+: 迁移旧版 .speccore.yml 的顶层字段
  * - project/platforms/git/code_scope → 合并进 .speccore/PROJECT.yaml（缺失/空时回填，不覆盖新数据）
@@ -1027,10 +1054,8 @@ export async function upgradeConfig(): Promise<ConfigLoadResult> {
   // 1. 检测配置差异（优先用磁盘原始文件差异，能看到缺失的新字段）
   const diff = fileDiff || detectConfigDiff(config, DEFAULT_CONFIG);
   // v8.3.298: 旧版顶层字段（已归属 PROJECT.yaml 或废弃）不触发「需人工确认」，自动迁移
-  const effectiveDiff: ConfigDiff = {
-    ...diff,
-    removed: diff.removed.filter((p) => !LEGACY_MAIN_CONFIG_KEYS.has(p.split('.')[0])),
-  };
+  // v8.3.303: 已知废弃嵌套字段（quality_gates.compile 等）同样豁免，自动清理
+  const effectiveDiff: ConfigDiff = filterLegacyRemoved(diff);
   const needsConfirm = requiresUserConfirmation(effectiveDiff);
 
   if (needsConfirm) {
@@ -1078,6 +1103,11 @@ export async function upgradeConfig(): Promise<ConfigLoadResult> {
 
   // 2. 用默认值深度合并（补全缺失字段）
   const upgraded = deepMerge(DEFAULT_CONFIG, config);
+
+  // v8.3.303: 清理已知废弃字段（被新字段取代），避免写回后残留旧键
+  for (const legacyPath of LEGACY_DROP_PATHS) {
+    deleteNestedKey(upgraded, legacyPath);
+  }
 
   // v8.3.298+: 旧版顶层字段自动迁移（platforms/git/code_scope → PROJECT.yaml，废弃字段删除）
   const legacyLogs = await migrateLegacyMainConfig(upgraded);
