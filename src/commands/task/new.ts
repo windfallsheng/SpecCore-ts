@@ -7,6 +7,7 @@ import { parsePlatformList } from '../../core/spec-paths';
 import { extractExcelBugs, extractExcelTextOnly, type ExcelBugRow } from '../../core/excel-extract';
 import { callLlm, resolveAiProviders, parseTranslationResponse } from '../../core/ask-llm';
 import { loadConfigWithMeta } from '../../core/unified-config';
+import { getTaskTypeDefinition, ALL_TASK_TYPES } from '../../core/task-type-registry';
 
 export interface TaskNewOptions {
   name?: string;
@@ -379,6 +380,12 @@ async function createSingleTask(options: TaskNewOptions): Promise<void> {
       ? options.id.replace(/^Task-/, '')
       : counterId.replace(/^Task-/, '');
     const taskType = options.type || 'feature';
+    // v8.3.307+: 非法类型直接拒绝（注册表为准），避免产出未知类型目录
+    if (!ALL_TASK_TYPES.includes(taskType)) {
+      spinner.fail(`未知任务类型: ${taskType}（可用: ${ALL_TASK_TYPES.join('|')}）`);
+      return;
+    }
+    const typeDef = getTaskTypeDefinition(taskType);
     // counterId 已含 slug（nextTaskId 返回 Task-NNN-slug），直接用
     const taskDir = join(iterationDir, '030-tasks', taskType, `Task-${taskId}`);
 
@@ -397,7 +404,9 @@ async function createSingleTask(options: TaskNewOptions): Promise<void> {
     // 创建子任务目录（新结构: {端名}/Task-{taskId}-{端}/，v6.49.2+ 平铺架构）
     // v8.3.288+: 子任务目录名带端后缀，避免多端同名目录导致 scanTasks/topologicalSort 按 id 去重
     // v8.3.145+: 使用项目实际端名（工程标识），不再硬编码 api/web
+    // v8.3.307+: 非代码类型（doc/script/data/research）无端子目录——按注册表 needsPlatforms 裁剪
     const isResearch = taskType === 'research';
+    const needsPlatforms = typeDef.needsPlatforms;
     let projectPlatforms = await parsePlatformList();
     if (projectPlatforms.length === 0) {
       projectPlatforms = ['api', 'web'];// fallback
@@ -421,7 +430,7 @@ async function createSingleTask(options: TaskNewOptions): Promise<void> {
       );
     }
 
-    if (!isResearch) {
+    if (needsPlatforms && !isResearch) {
       for (const platform of platformsToCreate) {
         const subtaskDir = join(taskDir, platform, `Task-${taskId}-${platform}`);
         await ensureDir(join(subtaskDir, '.meta'));
@@ -472,7 +481,7 @@ async function createSingleTask(options: TaskNewOptions): Promise<void> {
 
     // Write per-platform TASK.md + 执行产出文档（新结构: {端名}/Task-{taskId}-{端}/）
     // v8.3.145+: 使用项目实际端名，不再硬编码 api/web
-    if (!isResearch) {
+    if (needsPlatforms && !isResearch) {
       for (const platform of platformsToCreate) {
         const sub = join(taskDir, platform, `Task-${taskId}-${platform}`);
         await writeFile(join(sub, 'TASK.md'), taskContent.task);
@@ -624,6 +633,11 @@ function buildReqByType(
     review: `# ${name}\n\n## 审查范围\n\n${desc}\n\n## 审查要点\n\n- [ ] 正确性\n- [ ] 完整性\n- [ ] 一致性\n- [ ] 安全性\n\n## 审查结论\n`,
     research: `# ${name}\n\n## 调研目标\n\n${desc}\n\n## 待验证假设\n\n- \n\n## 调研结论\n\n## 建议\n`,
     deploy: `# ${name}\n\n## 部署范围\n\n${desc}\n\n## 部署步骤\n\n- \n\n## 回滚方案\n\n## 验收标准\n\n- [ ] 部署成功且可回滚\n`,
+    // v8.3.307+: TaskChain 新类型（doc/script/data）——非代码任务，约束集声明写入 spec 供执行时注入
+    doc: `# ${name}\n\n---\nconstraints: [doc-standards]\n---\n\n## 文档目标\n\n${desc}\n\n## 文档结构\n\n- \n\n## 目标受众\n\n## 交付物\n\n- \n\n## 验收标准\n\n- [ ] 结构完整无占位符残留\n- [ ] 链接全部有效\n- [ ] 术语与既有文档一致\n`,
+    script: `# ${name}\n\n---\nconstraints: [script-standards]\n---\n\n## 脚本目标\n\n${desc}\n\n## 输入/输出\n\n### 输入参数\n\n### 输出\n\n## 验收标准\n\n- [ ] 脚本可运行，参数校验完整\n- [ ] 失败时非零退出码 + 明确错误信息\n- [ ] 幂等可重跑\n`,
+    data: `# ${name}\n\n---\nconstraints: [data-standards]\n---\n\n## 处理目标\n\n${desc}\n\n## 数据源\n\n## 处理步骤\n\n1. \n2. \n\n## 验收标准\n\n- [ ] 数据完整性校验通过\n- [ ] 结果可复现\n- [ ] 异常数据有隔离输出\n`,
   };
+  // 按任务类型回退：注册表定义 > 既有模板 > feature 模板
   return templates[t] || templates.feature;
 }

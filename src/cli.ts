@@ -25,6 +25,7 @@ import { aboutCommand } from './commands/about';
 import { doctorCommand } from './commands/doctor';
 import { registerNotifyCommand } from './commands/notify';
 import { registerRecommendCommand } from './commands/recommend';
+import { registerChainCommand } from './commands/chain';
 import { changeCommand } from './commands/change';
 import { syncCommand } from './commands/sync';
 import { historyCommand } from './commands/history';
@@ -407,7 +408,7 @@ taskCmd
   .description('创建新任务')
   .option('-n, --name <name>', '任务名称（必填）')
   .option('--topic <topic>', '英文主题词（如 user-login）')
-  .option('-t, --type <type>', '任务类型: feature|bugfix|research|review|test|docs|refactor|deploy|security|performance', 'feature')
+  .option('-t, --type <type>', '任务类型: feature|bugfix|refactor|research|doc|script|data', 'feature')
   .option('-d, --desc <desc>', '任务描述')
   .option('--platforms <platforms>', '指定平台列表，逗号分隔（如 <端名1>,<端名2>）')
   .option('--backend-only', '仅创建后端端（自动识别项目中的后端端名）')
@@ -714,6 +715,9 @@ registerRefreshCommand(program);
 registerNotifyCommand(program);
 
 registerRecommendCommand(program);
+
+// TaskChain 无人值守任务链（v8.3.307+）
+registerChainCommand(program);
 
 // 全量索引重建与一致性检查
 program

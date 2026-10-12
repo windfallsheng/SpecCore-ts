@@ -929,6 +929,15 @@ async function createGlobalFiles(speccoreDir: string): Promise<void> {
 | _待补充_ | - | - |
 `
   );
+
+  // v8.3.307+: TaskChain 内置约束集（.speccore/GLOBAL/CONSTRAINTS/）
+  // 「共同前提约束」的落盘：同类任务每次执行前重新加载，保证上下文不漂移
+  const { BUILTIN_CONSTRAINTS } = await import('../core/task-type-registry');
+  const constraintsDir = join(globalDir, 'CONSTRAINTS');
+  await ensureDir(constraintsDir);
+  for (const [name, content] of Object.entries(BUILTIN_CONSTRAINTS)) {
+    await writeFile(join(constraintsDir, `${name}.md`), content);
+  }
 }
 
 /**

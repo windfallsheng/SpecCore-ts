@@ -2490,6 +2490,25 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
     promptText += agentStateContext;
   }
 
+  // v8.3.307+: TaskChain 约束集注入——「共同前提约束」每次执行前重新加载：
+  // 任务 spec 声明（00-specs/REQ.md frontmatter constraints 字段）∪ 任务类型默认约束
+  // （task-type-registry.ts），保证同类任务每次执行都读到同一份前提约束。
+  try {
+    const { loadConstraintSet, parseDeclaredConstraints, formatConstraints } = await import('../core/constraint-set');
+    const specFiles = [join(taskDir, '00-specs', 'REQ.md'), join(taskDir, 'REQ.md'), join(taskDir, 'TASK.md')];
+    let declared: string[] = [];
+    for (const f of specFiles) {
+      if (await pathExists(f)) {
+        declared = parseDeclaredConstraints(await readFile(f, 'utf-8'));
+        if (declared.length > 0) break;
+      }
+    }
+    const { items } = await loadConstraintSet({ taskType: taskState.type, declared });
+    if (items.length > 0) {
+      promptText += `\n\n${formatConstraints(items)}`;
+    }
+  } catch { /* 约束集注入失败不阻断执行 */ }
+
   // 在 prompt 中追加分支信息（告诉 AI 在哪个分支上工作）
   if (branchName) {
     promptText += `\n\n## 🔀 Git 分支\n`;

@@ -1493,7 +1493,7 @@ function inferPlatformFromTaskDir(taskDir: string): string | undefined {
   if (parts.length >= 2) {
     const parentDir = parts[parts.length - 2];
     // 排除常见非端目录名
-    if (parentDir && !['030-tasks', 'feature', 'bugfix', 'refactor', 'research'].includes(parentDir)) {
+    if (parentDir && !['030-tasks', 'feature', 'bugfix', 'refactor', 'research', 'doc', 'script', 'data'].includes(parentDir)) {
       return parentDir;
     }
   }
