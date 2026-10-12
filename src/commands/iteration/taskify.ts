@@ -797,10 +797,8 @@ export async function iterationTaskifyCommand(options: IterationTaskifyOptions):
           // v8.3.239+: 任务类型收敛为 4 种（与 task-paths.ts TASK_TYPES 对齐）——
           // security 按 feature 交付（安全加固是完整交付，威胁分析归入 TECH.md 安全章节），
           // performance 按 refactor 执行（性能优化本质是重构）
-          // v8.3.307+: 支持 TaskChain 新类型（doc/script/data）直通注册表
-          // v8.3.308+: + presentation
           const rawType = task.type;
-          const registryTypes = ['feature', 'bugfix', 'refactor', 'research', 'doc', 'script', 'data', 'presentation'];
+          const registryTypes = ['feature', 'bugfix', 'refactor', 'research'];
           let taskType = (rawType && registryTypes.includes(rawType)) ? rawType : 'feature';
           if (rawType === 'security') { taskType = 'feature'; logger.info(`   🔒 任务「${task.name}」类型 security 收敛为 feature（安全加固按完整交付）`); }
           if (rawType === 'performance') { taskType = 'refactor'; logger.info(`   ⚡ 任务「${task.name}」类型 performance 收敛为 refactor（性能优化按重构执行）`); }

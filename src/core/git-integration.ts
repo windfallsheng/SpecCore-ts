@@ -58,15 +58,12 @@ export interface GitConfig {
   mergeBlacklist: string[];
 }
 
-/** 任务类型 → 分支类型映射（v8.3.307: 与 task-type-registry.ts 对齐，含 TaskChain 新类型） */
+/** 任务类型 → 分支类型映射 */
 export const TASK_TYPE_TO_BRANCH_TYPE: Record<string, string> = {
   feature: 'feature',
   bugfix: 'bugfix',
   refactor: 'refactor',
   research: 'research',
-  doc: 'docs',
-  script: 'feature',
-  data: 'feature',
 };
 
 /** 标准分支类型名集合（v8.3.306: 用于区分「任务分支: X/」中 X 是类型段还是自定义前缀） */

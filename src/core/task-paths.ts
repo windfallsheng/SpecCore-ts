@@ -10,9 +10,7 @@ import { join } from 'path';
 import { pathExists, readdir } from 'fs-extra';
 
 export const TASKS_DIR = '030-tasks';
-// v8.3.307+: TaskChain 泛化——新增 doc/script/data 三种非代码类型（定义见 task-type-registry.ts）
-// v8.3.308+: 新增 presentation（演示文稿）
-export const TASK_TYPES = ['feature', 'bugfix', 'refactor', 'research', 'doc', 'script', 'data', 'presentation'] as const;
+export const TASK_TYPES = ['feature', 'bugfix', 'refactor', 'research'] as const;
 
 /** 获取指定迭代中某个 Task 的完整目录路径（新布局：含类型子目录） */
 export function getTaskPath(iteration: string, taskId: string, cwd?: string): string {

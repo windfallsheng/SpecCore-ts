@@ -1587,29 +1587,6 @@ async function prepareTaskBranch(
   defaultBase: string | undefined,
   createdBranches: Map<string, string>
 ): Promise<string | null> {
-  // ── v8.3.308: 非代码类型默认不建分支，除非 spec 显式声明写代码 ──
-  // 开放类型系统：内置非代码类型（doc/script/data/presentation）与用户自定义
-  // 类型默认与代码世界绝缘；spec frontmatter `code: true` 或「需要写代码: true」
-  // 显式声明时，即使类型默认无分支也走代码链路。
-  const { resolveTaskTypeDefinition, parseSpecCodeDeclaration } = await import('../core/task-type-registry');
-  const typeDef = await resolveTaskTypeDefinition(task.type || 'feature');
-  let specNeedsCode = false;
-  try {
-    const iterDirForSpec = await getIterationDir(iteration);
-    const taskDirForSpec = await resolveTaskDir(iterDirForSpec, task.id);
-    for (const f of ['00-specs/REQ.md', 'REQ.md', 'TASK.md']) {
-      const p = join(taskDirForSpec, f);
-      if (await pathExists(p)) {
-        specNeedsCode = parseSpecCodeDeclaration(await readFile(p, 'utf-8'));
-        if (specNeedsCode) break;
-      }
-    }
-  } catch { /* 读取失败按无声明处理 */ }
-  if (!typeDef.needsBranch && !specNeedsCode) {
-    logger.info(`  ⏭️ ${task.id}: ${typeDef.label}（非代码任务，跳过分支创建）`);
-    return null;
-  }
-
   // ── 0. 确定工程代码目录（从 PROJECT.yaml 读取对应 platform 的 code_path） ──
   const projectConfig = await loadProjectConfig();
   let gitCwd = process.cwd();
@@ -2512,25 +2489,6 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
   if (agentStateContext) {
     promptText += agentStateContext;
   }
-
-  // v8.3.307+: TaskChain 约束集注入——「共同前提约束」每次执行前重新加载：
-  // 任务 spec 声明（00-specs/REQ.md frontmatter constraints 字段）∪ 任务类型默认约束
-  // （task-type-registry.ts），保证同类任务每次执行都读到同一份前提约束。
-  try {
-    const { loadConstraintSet, parseDeclaredConstraints, formatConstraints } = await import('../core/constraint-set');
-    const specFiles = [join(taskDir, '00-specs', 'REQ.md'), join(taskDir, 'REQ.md'), join(taskDir, 'TASK.md')];
-    let declared: string[] = [];
-    for (const f of specFiles) {
-      if (await pathExists(f)) {
-        declared = parseDeclaredConstraints(await readFile(f, 'utf-8'));
-        if (declared.length > 0) break;
-      }
-    }
-    const { items } = await loadConstraintSet({ taskType: taskState.type, declared });
-    if (items.length > 0) {
-      promptText += `\n\n${formatConstraints(items)}`;
-    }
-  } catch { /* 约束集注入失败不阻断执行 */ }
 
   // 在 prompt 中追加分支信息（告诉 AI 在哪个分支上工作）
   if (branchName) {

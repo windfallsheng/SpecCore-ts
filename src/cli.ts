@@ -25,7 +25,6 @@ import { aboutCommand } from './commands/about';
 import { doctorCommand } from './commands/doctor';
 import { registerNotifyCommand } from './commands/notify';
 import { registerRecommendCommand } from './commands/recommend';
-import { registerChainCommand } from './commands/chain';
 import { changeCommand } from './commands/change';
 import { syncCommand } from './commands/sync';
 import { historyCommand } from './commands/history';
@@ -408,7 +407,7 @@ taskCmd
   .description('创建新任务')
   .option('-n, --name <name>', '任务名称（必填）')
   .option('--topic <topic>', '英文主题词（如 user-login）')
-  .option('-t, --type <type>', '任务类型: feature|bugfix|refactor|research|doc|script|data', 'feature')
+  .option('-t, --type <type>', '任务类型: feature|bugfix|refactor|research', 'feature')
   .option('-d, --desc <desc>', '任务描述')
   .option('--platforms <platforms>', '指定平台列表，逗号分隔（如 <端名1>,<端名2>）')
   .option('--backend-only', '仅创建后端端（自动识别项目中的后端端名）')
@@ -419,7 +418,6 @@ taskCmd
   .option('--translate-en <mode>', '批量导入任务名英译: auto(默认) | host | off')
   .option('--translate-response <json>', '接收宿主 AI 英译 JSON（配合宿主接力续跑）')
   .option('--feature <module>', '关联功能模块（bug 修复时指定所属功能模块，影响分支 base）')
-  .option('--group <name>', '聚合模块名：批量创建时关联任务合并为模块任务（模块公共约束 spec 落 00-specs/CONSTRAINTS.md）')
   .option('--auto-execute', '创建后自动 analyze→execute 修复（bug 无人值守）')
   .option('--interactive', '交互式创建')
   .option('--id <id>', '手动指定任务 ID（如 Task-005），计数器仍会递增')
@@ -719,9 +717,6 @@ registerRefreshCommand(program);
 registerNotifyCommand(program);
 
 registerRecommendCommand(program);
-
-// TaskChain 无人值守任务链（v8.3.307+）
-registerChainCommand(program);
 
 // 全量索引重建与一致性检查
 program
