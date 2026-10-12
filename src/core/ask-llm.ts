@@ -309,6 +309,25 @@ export function parseTranslationResponse(response: string, titles: string[]): Ar
       }
     }
   } catch { /* JSON 解析失败走逐行正则 */ }
+
+  // v8.3.309+: 裸 slug 兜底——宿主 AI/LLM 对少量标题常直接输出裸 slug（无 JSON 包装、
+  // 无序号前缀），单标题时尤其常见（如只回 "inbox-notification"）。
+  // 此前该响应解析出 0 条 → warn「未解析出有效翻译」→ 拼音兜底，
+  // 导致「只有一个功能单元时拿不到英文」。
+  // 单标题：整串是合法 kebab-case 即映射；多标题：行数等于清单数时按行序一一映射。
+  const bareLines = response
+    .split('\n')
+    .map(l => l.trim().replace(/^["'`]+|["'`]+$/g, '').replace(/^\d+[\.、:：]\s*/, ''))
+    .filter(l => l && !/^[-#*]/.test(l) && !/json|```/i.test(l));
+  if (titles.length === 1 && bareLines.length === 1) {
+    if (/^[a-z0-9][a-z0-9-]{0,39}$/i.test(bareLines[0])) {
+      return [[titles[0], bareLines[0].toLowerCase()]];
+    }
+  }
+  if (titles.length > 1 && bareLines.length === titles.length && bareLines.every(l => /^[a-z0-9][a-z0-9-]{0,39}$/i.test(l))) {
+    return titles.map((t, i) => [t, bareLines[i].toLowerCase()]);
+  }
+
   const lines = response.split('\n');
   for (const line of lines) {
     const m = line.match(/^\s*"?(\d+)"?\s*[:：]\s*"?([a-zA-Z0-9][a-zA-Z0-9-]{0,39})"?\s*$/);

@@ -147,13 +147,27 @@ function extractTopic(task: any): string {
 }
 
 /**
+ * v8.3.309+: 剥离功能单元目录名的 {文档}-{序号}- 前缀，取语义 slug 尾段
+ * （new-feature-notification-01-inbox-notification → inbox-notification），
+ * 保证任务目录 topic 与切分单元语义一一对应（修复 Task-033-21 残片问题）。
+ * 非目录名格式（自创英文名/中文）无序号段时不匹配，原样返回。
+ * 导出供单测锁定剥离行为。
+ */
+export function stripUnitSeqPrefix(unitDirName: string): string {
+  const m = unitDirName.match(/^[a-z0-9-]+?-\d{2}-(.+)$/);
+  return m ? m[1] : unitDirName;
+}
+
+/**
  * 构建任务目录名 topic（v8.3.294+）
  *
  * bugfix 任务带模块血缘：目录名拼为「{模块英文}-{bug内容英文}」（如 Task-003-login-flow-timeout-crash），
  * 同一模块的 bug 任务在 030-tasks/bugfix/ 下自然相邻，方便浏览。
  * 模块名 AI 英译（moduleTopic）优先、拼音兜底（toSlug 内置 pinyin），
  * 与功能单元命名「LLM 英译 + 拼音兜底」模式一致。
- * 其余任务类型保持原语义（functionalUnit → topic → name 链）。
+ *
+ * v8.3.309+: 其余任务类型 topic 改为「功能单元目录名优先」（剥离 {文档}-{序号}- 前缀取语义段），
+ * 任务目录 Task-NNN-{topic} 与切分单元一一对应，不再依赖 AI 另起英文名。
  */
 function buildTaskTopic(sec: any, taskType: string): string {
   const functionalUnit = (sec as any).functionalUnit || '';
@@ -174,7 +188,13 @@ function buildTaskTopic(sec: any, taskType: string): string {
     return (moduleSlug || bugSlug).slice(0, 40);
   }
 
-  return functionalUnit || bugTopic || slugify(sec.name);
+  // v8.3.309+: 功能单元目录名优先（剥离 {文档}-{序号}- 前缀），AI 自创 topic 次之，
+  // 中文名拼音/拉丁片段兜底——保证任务目录与切分单元一一对应
+  if (functionalUnit && /^[a-z0-9-]+$/.test(functionalUnit)) {
+    return stripUnitSeqPrefix(functionalUnit).slice(0, 40);
+  }
+  if (bugTopic && /^[a-z0-9-]+$/.test(bugTopic)) return bugTopic.slice(0, 40);
+  return slugify(sec.name);
 }
 
 /**
@@ -805,6 +825,14 @@ export async function iterationTaskifyCommand(options: IterationTaskifyOptions):
           }
           if (task.sourceFile) (section as any)._sourceFile = task.sourceFile;
           if (task.functionalUnit) (section as any).functionalUnit = task.functionalUnit;
+          // v8.3.309+: functionalUnit 兜底——AI 回填中文/自创名时，从 sourceFile
+          // 提取功能单元目录名（features/{单元} 或 020-specs/{单元}），保证任务目录
+          // topic 与切分单元一一对应（防 Task-033-21 残片重演）
+          if (!/^[a-z0-9-]+$/.test((section as any).functionalUnit || '')) {
+            const src = String(task.sourceFile || '');
+            const um = src.match(/(?:^|\/)(?:features|020-specs)\/([^\/.]+)/);
+            if (um && /^[a-z0-9-]+$/.test(um[1])) (section as any).functionalUnit = um[1];
+          }
           if (task.reason) (section as any)._reason = task.reason;
           if (taskScopePlatforms.length > 0) {
             (section as any)._scopePlatforms = taskScopePlatforms;
@@ -4301,13 +4329,13 @@ async function buildSplitPrompt(
   p += `  }\n]\n`;
   p += '```\n\n';
   p += `> **functionalUnit 必须填写**：根据任务类型语义不同：\n`;
-  p += `>   - feature → 功能模块名（如：用户管理、订单系统、支付模块）\n`;
+  p += `>   - feature/refactor/research → 必须**原样填写所属功能单元的目录名**（\`010-requirements/features/\` 下的英文目录名，\n`;
+  p += `>     如 \`new-feature-notification-01-inbox-notification\`、\`admin-web-03-yudingguanli\`）；禁止自创名称、禁止填中文，\n`;
+  p += `>     任务目录名将派生为 \`Task-NNN-{单元语义段}\`，与切分单元一一对应\n`;
   p += `>   - bugfix → 受影响组件/流程（如：登录流程、支付回调、数据同步）；目录名将拼为「模块英文-bug内容英文」，\n`;
   p += `>     建议同时提供 moduleTopic（模块英文 slug），未提供时用拼音兜底\n`;
-  p += `>   - refactor → 重构目标范围（如：数据库层、API网关、状态管理）\n`;
   p += `>   - security → 安全修复范围（如：SQL注入防护、XSS修复、鉴权加固）\n`;
   p += `>   - performance → 性能优化目标（如：查询优化、缓存策略、并发提升）\n`;
-  p += `>   - research → 研究主题（如：WebSocket方案、缓存策略）\n`;
   p += `> 同一模块/领域的任务填相同的值，用于粒度校验和任务分组\n`;
   p += `> **topic 必填且必须是英文短横线格式**：\n`;
   p += `>   - 用于生成任务目录名 \`Task-NNN-{topic}\`，如 \`Task-001-user-auth\`\n`;

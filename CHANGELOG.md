@@ -1,4 +1,22 @@
-## v8.3.308 (2026-10-12) — 开放类型系统：自定义任务类型 + 无分支执行 + 演示文稿类型
+## v8.3.309 (2026-10-12) — 单单元裸 slug 英译修复 + 任务目录与功能单元一一对应
+
+### 背景
+- 用户实测反馈：切分功能单元目录名还是拼音（单单元时也拿不到英文）；后续 020-specs 分析目录已对齐切分单元，但 030-tasks 任务目录是「随机数字」（Task-033-21 残片），希望任务目录与切分单元一一对应
+
+### 修复：英译链路
+- **单标题裸 slug 兜底**（ask-llm.ts parseTranslationResponse）：宿主 AI/LLM 对少量标题常直接输出裸 slug（无 JSON 包装/序号，单标题尤其常见，如只回 `inbox-notification`），此前解析 0 条 → warn「未解析出有效翻译」→ 拼音兜底。现单标题整串合法 kebab-case 即映射；多标题行数与清单一致时按行序一一映射（支持带引号/序号前缀剥离）
+- **LLM 失败显式提示**（doc2spec.ts translateUnitTitles）：① callLlm 返回空（已配置但调用失败）补 warn「LLM 调用失败（无有效响应）」+ 宿主接力建议；② 有响应但 0 条可解析时打印响应片段（此前两条路径均静默降级拼音）
+
+### 修复：任务目录对齐
+- **stripUnitSeqPrefix**（taskify.ts）：剥离功能单元目录名 {文档}-{序号}- 前缀取语义尾段（new-feature-notification-01-inbox-notification → inbox-notification），年份式 4 位数字（meeting-2024-01-x）回溯不误剥
+- **buildTaskTopic 优先级调整**：非 bugfix 任务 topic 改为「功能单元目录名（剥离前缀）优先 → AI 自创 topic → 中文名拼音/拉丁片段」，任务目录 Task-NNN-{语义段} 与切分单元一一对应
+- **functionalUnit 兜底**：AI 回填中文/自创名时，从 sourceFile 提取 features/{单元} 或 020-specs/{单元} 目录名（修复 Task-033-21 类残片）
+- **taskify prompt 强化**：feature/refactor/research 的 functionalUnit 必须原样填写功能单元目录名（禁止自创、禁止中文），并说明任务目录派生规则
+
+### 测试
+- translation-response.test.ts 新增 4 用例（单标题裸 slug / 引号剥离 / 多行行序 / 非法回退）；新增 unit-seq-prefix.test.ts 6 用例（标准剥离 / 自创名原样 / 年份回溯 / 中文原样）；全量 408/408 通过
+
+## v8.3.308 (2026-10-12) — 开放类型系统：自定义任务类型 + 无分支执行 + 演示文稿 类型
 
 ### 背景
 - 用户场景延伸：写总结、做 PPT 等与编程无关的泛化工作也要能建任务；非系统定义的任务默认不应与代码世界（分支/源码/端拆分）发生任何关系，除非任务 spec 显式声明要写代码

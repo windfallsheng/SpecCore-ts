@@ -1880,14 +1880,25 @@ async function translateUnitTitles(
     500
   );
   if (response) {
-    for (const [zh, en] of parseTranslationResponse(response, misses)) {
+    const parsed = parseTranslationResponse(response, misses);
+    for (const [zh, en] of parsed) {
       if (/^[a-z0-9][a-z0-9-]{0,39}$/i.test(en)) {
         cache[zh] = en.toLowerCase();
       }
     }
+    // v8.3.309+: LLM 有响应但 0 条可解析（格式异常）时显式提示，防静默降级拼音
+    if (parsed.length === 0) {
+      logger.warn('⚙️  LLM 响应格式无法解析（未提取到有效 slug），标题英译降级拼音');
+      logger.info(`   响应片段: ${response.replace(/\n/g, ' ').slice(0, 120)}`);
+    }
     try {
       await writeFile(cacheFile, JSON.stringify(cache, null, 2));
     } catch { /* 写缓存失败不阻塞，下次重跑再试 */ }
+  } else {
+    // v8.3.309+: LLM 已配置但调用失败/无有效响应时显式提示（此前静默降级拼音，
+    // 用户会误以为「没有英译这一步」或怀疑切分逻辑有 bug）
+    logger.warn('⚙️  LLM 调用失败（无有效响应），标题英译降级拼音');
+    logger.info('   💡 可重试或改用宿主 AI 接力：--translate-en host 后按提示回传 --translate-response');
   }
   return new Map(Object.entries(cache));
 }
