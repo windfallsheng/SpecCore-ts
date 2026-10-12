@@ -66,6 +66,11 @@ export const TASK_TYPE_TO_BRANCH_TYPE: Record<string, string> = {
   research: 'research',
 };
 
+/** 标准分支类型名集合（v8.3.306: 用于区分「任务分支: X/」中 X 是类型段还是自定义前缀） */
+export const STANDARD_BRANCH_TYPES = new Set([
+  'feature', 'bugfix', 'hotfix', 'release', 'support', 'refactor', 'research',
+]);
+
 const DEFAULT_GIT_CONFIG: GitConfig = {
   defaultBranch: 'main',
   branchType: 'feature',
@@ -110,32 +115,9 @@ export function createTaskBranch(
     // 任务名安全处理（保留 {name} 格式模板变量使用）
     const safeName = taskName.replace(/[^a-zA-Z0-9\u4e00-\u9fff_-]/g, '-');
 
-    // v8.3.120+: 用户完全控制 prefix/suffix（包含分隔符），代码只负责拼接
-    // v8.3.293+: 分支名主体统一为 taskId（子任务全局唯一 ID，与 git-config 文档示例
-    // 「前缀=api- → hotfix/api-Task-001-urgent」一致）；此前用中文任务名会导致
-    // findBranchByTaskId 的 taskId 正则匹配失联、CI 平台对中文分支名兼容性差。
-    // 示例: prefix='api-' suffix='-urgent' → hotfix/api-Task-001-urgent
-    //       prefix='api_' suffix='_urgent' → hotfix/api_Task-001_urgent
-    let branchName: string;
-    if (gitConfig.taskPrefix !== undefined || gitConfig.taskSuffix !== undefined) {
-      const prefix = gitConfig.taskPrefix || '';
-      const suffix = gitConfig.taskSuffix || '';
-      branchName = `${branchType}/${prefix}${taskId}${suffix}`.substring(0, 250);
-    } else {
-      // 4 位随机 hex hash
-      const hash4 = randomBytes(2).toString('hex');
-      // 前缀段：有值时追加连字符，无值时为空
-      const prefixSegment = gitConfig.branchPrefix ? `${gitConfig.branchPrefix}-` : '';
-      // 按格式模板生成分支名（兜底）
-      branchName = formatBranchName(gitConfig.branchFormat, {
-        type: branchType,
-        prefix: prefixSegment,
-        taskId,
-        name: safeName,
-        date: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
-        hash4,
-      }).substring(0, 250);
-    }
+    // v8.3.306: 拼接逻辑抽取为 composeBranchName（主流程与 already-exists 重建端共用，
+    // 消除重复实现并锁定「分支名主体 = taskId」的一致性）
+    const branchName = composeBranchName(gitConfig, branchType, taskId, safeName);
 
     // 确定 base 分支: 显式指定 > 子任务配置 > 迭代配置 > 全局 > git检测
     let effectiveBase = baseBranch;
@@ -173,21 +155,8 @@ export function createTaskBranch(
       if (existing) return existing;
       const cfg = loadGitConfig(iteration, taskDir);
       const bt = taskType ? (TASK_TYPE_TO_BRANCH_TYPE[taskType] || taskType) : cfg.branchType;
-      // v8.3.114+: 优先使用新格式（主体与主流程一致为 taskId）
-      if (cfg.taskPrefix !== undefined || cfg.taskSuffix !== undefined) {
-        const prefix = cfg.taskPrefix || '';
-        const suffix = cfg.taskSuffix || '';
-        return `${bt}/${prefix}${taskId}${suffix}`.substring(0, 250);
-      }
-      const ps = cfg.branchPrefix ? `${cfg.branchPrefix}-` : '';
-      return formatBranchName(cfg.branchFormat, {
-        type: bt,
-        prefix: ps,
-        taskId,
-        name: '',
-        date: '',
-        hash4: '',
-      }).replace(/-{2,}/g, '-').replace(/-$/, '').substring(0, 250);
+      // v8.3.306: 与主流程共用 composeBranchName，拼接规则一致
+      return composeBranchName(cfg, bt, taskId, '');
     }
     // 输出具体错误，帮助用户定位问题（如不在 git 仓库中、base 分支不存在等）
     console.error(`[speccore] Git 分支创建失败: ${e.message || e}`);
@@ -215,6 +184,48 @@ function formatBranchName(
     .replace(/-{2,}/g, '-')   // 清理连续连字符
     .replace(/\/$/g, '')       // 清理尾部斜杠
     .replace(/^-|-$/g, '');    // 清理头尾连字符
+}
+
+/**
+ * 按配置组装分支名（纯函数，v8.3.306 抽取自 createTaskBranch）
+ *
+ * v8.3.120+: 用户完全控制 prefix/suffix（包含分隔符），代码只负责拼接
+ * v8.3.293+: 分支名主体统一为 taskId（子任务全局唯一 ID，与 git-config 文档示例
+ * 「前缀=api- → hotfix/api-Task-001-urgent」一致）；此前用中文任务名会导致
+ * findBranchByTaskId 的 taskId 正则匹配失联、CI 平台对中文分支名兼容性差。
+ * 示例: prefix='api-' suffix='-urgent' → hotfix/api-Task-001-urgent
+ *       prefix='api_' suffix='_urgent' → hotfix/api_Task-001_urgent
+ */
+export function composeBranchName(
+  gitConfig: GitConfig,
+  branchType: string,
+  taskId: string,
+  safeName: string,
+): string {
+  if (gitConfig.taskPrefix !== undefined || gitConfig.taskSuffix !== undefined) {
+    const prefix = gitConfig.taskPrefix || '';
+    const suffix = gitConfig.taskSuffix || '';
+    return `${branchType}/${prefix}${taskId}${suffix}`.substring(0, 250);
+  }
+  // 4 位随机 hex hash
+  const hash4 = randomBytes(2).toString('hex');
+  // 前缀段：有值时追加连字符，无值时为空
+  // v8.3.306: branchPrefix 与类型段相同（如 CONSTITUTION「任务分支: feature/」被旧版
+  // 误解析为 branchPrefix=feature）时视为类型段——{type} 已承载，不再重复拼入 {prefix}，
+  // 修复分支名 feature/feature-Task-XXX 与子任务 ID 不一致的问题
+  const effectivePrefix = gitConfig.branchPrefix && gitConfig.branchPrefix !== branchType
+    ? gitConfig.branchPrefix
+    : '';
+  const prefixSegment = effectivePrefix ? `${effectivePrefix}-` : '';
+  // 按格式模板生成分支名（兜底）
+  return formatBranchName(gitConfig.branchFormat, {
+    type: branchType,
+    prefix: prefixSegment,
+    taskId,
+    name: safeName,
+    date: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
+    hash4,
+  }).substring(0, 250);
 }
 
 /**
@@ -324,13 +335,20 @@ export function loadGitConfig(iteration?: string, taskDir?: string): GitConfig {
       const branchMatch = content.match(/^[-•]\s*\**默认分支\**\s*[：:]\s*([A-Za-z0-9._\/-]+)/m);
       if (branchMatch) config.defaultBranch = branchMatch[1];
 
-      // 任务分支前缀（从"任务分支: feature/{Task-ID}"提取前缀，兼容加粗格式）
+      // 任务分支类型段（从"任务分支: feature/{Task-ID}"提取，兼容加粗格式）
+      // v8.3.306: 语义矫正——「任务分支」的 X/ 段是分支类型而非前缀；此前误存
+      // branchPrefix，与 {type} 段重复拼出 feature/feature-Task-XXX，导致分支名与
+      // 子任务 ID 不一致。标准类型名写入 branchType，自定义值（兼容保留）仍入 branchPrefix。
       const taskBranchMatch = content.match(/^[-•]\s*\**任务分支\**\s*[：:]\s*(\S+?)\//m);
       if (taskBranchMatch) {
         const extracted = taskBranchMatch[1];
-        // v8.3.293+: 模板变量（如 {type}）不是真实前缀，忽略以免污染分支命名
+        // v8.3.293+: 模板变量（如 {type}）不是真实值，忽略以免污染分支命名
         if (!extracted.includes('{') && !extracted.includes('}')) {
-          config.branchPrefix = extracted;
+          if (STANDARD_BRANCH_TYPES.has(extracted)) {
+            config.branchType = extracted;
+          } else {
+            config.branchPrefix = extracted;
+          }
         }
       }
 

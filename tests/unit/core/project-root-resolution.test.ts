@@ -76,7 +76,9 @@ describe('项目根定位（v8.3.305 子目录执行修复）', () => {
     try {
       const config = loadGitConfig();
       expect(config.defaultBranch).toBe('develop');
-      expect(config.branchPrefix).toBe('feature');
+      // v8.3.306: 「任务分支: feature/」的 feature 是类型段，写入 branchType 而非 branchPrefix
+      expect(config.branchType).toBe('feature');
+      expect(config.branchPrefix).toBe('');
     } finally {
       process.chdir(origCwd);
     }

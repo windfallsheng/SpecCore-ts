@@ -1,3 +1,14 @@
+## v8.3.306 (2026-10-12) — 分支名与子任务 ID 一致性修复（去除重复类型段）
+
+### 问题
+- CONSTITUTION「任务分支: feature/{Task-ID}」中的 feature 是**分支类型段**，但解析端把它误存为 branchPrefix；taskify 生成 git-config 时又将其固化进「分支前缀: feature」，execute 拼接时 {type} 与 {prefix} 重复，产出 `feature/feature-Task-033-21-h5`——与子任务 ID（Task-033-21-h5）不一致
+
+### 修复
+- **解析端语义矫正**：CONSTITUTION「任务分支: X/」的标准类型名（feature/bugfix/hotfix/release/support/refactor/research）写入 branchType，自定义值兼容保留仍入 branchPrefix
+- **拼接端去重兜底**：branchPrefix 与类型段相同时跳过（覆盖存量 git-config 固化值），统一抽取为纯函数 `composeBranchName`，主流程与 already-exists 重建端共用，消除重复实现
+- **生成端**：buildGitConfigContent 不再把与类型段相同的值写入「分支前缀」
+- **测试**：新增 git-branch-name.test.ts 8 用例（解析端矫正 / 拼接端去重 / 自定义前缀保留 / taskPrefix 路径 / 端到端存量兼容）；真实 git 冒烟验证 `feature/Task-033-21-h5` 落位
+
 ## v8.3.305 (2026-10-12) — 项目资产路径解析统一锚定项目根（子目录执行修复）
 
 ### 问题

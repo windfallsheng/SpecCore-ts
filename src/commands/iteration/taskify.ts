@@ -1924,7 +1924,9 @@ ${config.protectedBranches.map(b => `# - ${b}`).join('\n')}
 
 # === 高级配置（一般不修改）===
 # 分支前缀（旧语义，兼容保留）
-${fmt('分支前缀', config.branchPrefix, '无')}
+# v8.3.306: 与类型段相同的值（如 CONSTITUTION「任务分支: feature/」被旧版误解析
+# 为 branchPrefix=feature）不再写实，防止 execute 拼出 feature/feature-Task-XXX
+${fmt('分支前缀', config.branchPrefix && config.branchPrefix !== branchType ? config.branchPrefix : '', '无')}
 
 # 分支格式: 自定义分支名模板（支持变量: {type} {prefix} {taskId} {name} {date} {hash4}）
 ${fmt('分支格式', config.branchFormat, '{type}/{prefix}{taskId}')}
