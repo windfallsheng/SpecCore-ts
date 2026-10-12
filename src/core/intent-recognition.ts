@@ -51,6 +51,7 @@ export type IntentType =
   | 'audit'               // 智能审计
   | 'rename'              // 重命名
   | 'new_task'            // 新建多平台Task
+  | 'task_append'         // 往已有任务补端子任务
   | 'platform_add'        // 添加平台
   | 'index_update'        // 更新索引
   | 'context'            // 查看上下文
@@ -295,6 +296,17 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     patterns: ['创建(.+)', '新增(.+)', '做一个(.+)', '开发(.+)功能', '实现(.+)功能'],
     description: '创建新 Task — 从需求到代码的全流程',
     args: '"<name>" --desc="<description>"',
+  },
+  // 补子任务（v8.3.311+）：往已有任务补端子任务——优先级高于 task new 两个条目，
+  // 「新建一个子任务」不得再被宽词误路由为新建模块任务
+  {
+    id: 'task append',
+    intent: 'task_append',
+    priority: 88,
+    triggers: ['补子任务', '补个端', '补个任务', '补端', '补一个', '少了一个端', '缺少一个端', '少了个端', '加个子任务', '加个端', '追加子任务', '补充子任务', '新建子任务', '新增子任务', '新增一个端', '补一个端'],
+    patterns: ['补个?(.+)', '少(?:了|一个)(.+)端', '加个(.+)', '追加(.+)', '新建(.+)子任务', '新增(.+)子任务', '补充(.+)端', '给(.+)补(.+)'],
+    description: '往已有任务补端子任务 — 门禁校验上游端级规格（缺失时提示先 analyze --platform）',
+    args: '--into <Task-ID> --platform <端名>',
   },
   // 初始化
   {
@@ -754,12 +766,31 @@ const ANCHOR_RULES: AnchorRule[] = [
     anchors: /(?:创建|新建|做一个?|添加).{0,2}任务/,
     bonus: 40,
   },
+  // 子任务锚点（v8.3.311+）：补/加/追加/新建 + 子任务/个端 → task_append
+  // （「新建一个子任务」必须命中补端子任务，而非 task new 建新模块任务）
+  {
+    kind: 'anchor', intent: 'task_append',
+    anchors: /(?:子任务|个端|一个端)/,
+    verbs: /(?:补|加|追加|新建|新增)/,
+    bonus: 25,
+  },
+  // 子任务让位（v8.3.311+）：「XX 子任务」表达 → 新建任务类意图让位给 task_append
+  {
+    kind: 'phrasePenalty', intent: 'new_task',
+    anchors: /(?:新建|创建|做一个?|添加).{0,2}子任务/,
+    bonus: 40,
+  },
+  {
+    kind: 'phrasePenalty', intent: 'create',
+    anchors: /(?:新建|创建|添加|新增|实现).{0,2}子任务/,
+    bonus: 40,
+  },
 ];
 
 /** 迭代工作意图集（v8.3.287+）：活跃迭代场景下统一享 +15 上下文加成，此前仅 4 个意图有 */
 const ITERATION_CONTEXT_INTENTS = new Set<IntentType>([
   'execute', 'iteration_create', 'analyze', 'split', 'split-units',
-  'plan', 'review', 'change', 'create', 'new_task', 'bugfix',
+  'plan', 'review', 'change', 'create', 'new_task', 'task_append', 'bugfix',
   'req_doc', 'doc2spec', 'research', 'query_progress', 'done',
 ]);
 

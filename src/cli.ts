@@ -423,6 +423,9 @@ taskCmd
   .option('--auto-execute', '创建后自动 analyze→execute 修复（bug 无人值守）')
   .option('--interactive', '交互式创建')
   .option('--id <id>', '手动指定任务 ID（如 Task-005），计数器仍会递增')
+  .option('--into <task>', '补端模式：往已有任务补端子任务（Task-NNN，配合 --platform）')
+  .option('--platform <platform>', '补端模式指定端名（CONSTITUTION 端列表中的工程标识）')
+  .option('--skip-gate', '跳过上游端级规格门禁（有风险：执行会拿空需求瞎编）')
   .action(taskNewCommand);
 
 taskCmd

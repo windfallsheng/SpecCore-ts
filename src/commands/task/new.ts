@@ -1,5 +1,5 @@
 import { ensureDir, writeFile, pathExists, readFile, readdir } from 'fs-extra';
-import { join } from 'path';
+import { join, basename } from 'path';
 import { logger, Spinner } from '../../utils/logger';
 import { getDefaultIteration, updateContext, getIterationDir } from '../../core/context';
 import { nextTaskId, toSlug } from '../../core/global-counters';
@@ -36,9 +36,18 @@ export interface TaskNewOptions {
   autoExecute?: boolean; // --auto-execute: 创建后自动 analyze→execute 修复
   translateEn?: string;        // --translate-en: auto(默认) | host | off（批量导入任务名英译）
   translateResponse?: string;  // --translate-response: 接收宿主 AI 英译 JSON（配合宿主接力续跑）
+  into?: string;          // --into: 补端模式——往已有任务补端子任务（Task-NNN）
+  platform?: string;      // --platform: 补端模式指定端名（CONSTITUTION 端列表，与 --into 配合）
+  skipGate?: boolean;     // --skip-gate: 跳过上游端级规格门禁（有风险：执行会拿空需求瞎编）
 }
 
 export async function taskNewCommand(options: TaskNewOptions): Promise<void> {
+  // ── 补端模式（v8.3.311+）：--into 指向已有任务，往其目录补一个端子任务 ──
+  if (options.into) {
+    await appendPlatformToTask(options);
+    return;
+  }
+
   // ── 批量模式 ──
   if (options.batch || options.batchFile) {
     await batchCreateTasks(options);
@@ -546,7 +555,6 @@ async function createModuleTask(
 
 /** 创建单个 Task */
 async function createSingleTask(options: TaskNewOptions): Promise<void> {
-
   const spinner = new Spinner(`Creating task: ${options.name}`);
   spinner.start();
 
@@ -704,6 +712,264 @@ async function createSingleTask(options: TaskNewOptions): Promise<void> {
     spinner.fail(`Failed to create task: ${error}`);
     throw error;
   }
+}
+
+/**
+ * v8.3.311+: 补端模式 — 往已有任务补一个端子任务（--into Task-NNN --platform 端名）。
+ *
+ * 上游门禁：020-specs/{功能单元}/{端}/ 必须先有非骨架端级规格（TECH/TEST/UI_SPEC ≥200 字符），
+ * 否则拦截并提示先补上游分析（speccore analyze --platform），防止执行拿空需求瞎编（AGENTS.md 禁令）。
+ * 上游达标后，子任务 TASK.md 由端级规格提炼生成（非空模板），并同步任务 CHANGELOG 与当前任务上下文。
+ */
+async function appendPlatformToTask(options: TaskNewOptions): Promise<void> {
+  const iteration = await getDefaultIteration(options.iteration);
+  if (!iteration) {
+    logger.error('No active iteration found. Please specify --iteration or create one first.');
+    return;
+  }
+  const iterationDir = await getIterationDir(iteration);
+  const taskId = (options.into || '').replace(/^Task-/, '').trim();
+  if (!taskId) {
+    logger.error('--into 需要任务编号（如 Task-021 或 021）');
+    return;
+  }
+  const platform = (options.platform || '').trim();
+  if (!platform) {
+    logger.error('--platform 需要端名（CONSTITUTION.md 端列表中的工程标识，禁止 api/web 等简写）');
+    return;
+  }
+
+  // 端名合法性：必须是项目端列表成员
+  const projectPlatforms = await parsePlatformList();
+  if (projectPlatforms.length > 0 && !projectPlatforms.includes(platform)) {
+    logger.error(`端「${platform}」不在项目端列表（CONSTITUTION.md）: ${projectPlatforms.join(', ')}`);
+    return;
+  }
+
+  // 1. 定位宿主任务（支持 030-tasks/Task-XXX 与 030-tasks/{type}/Task-XXX 两种布局；
+  //    兼容 v8.3.309 前历史残片名 Task-NNN-NN——--into Task-NNN 前缀命中即可）
+  const tasksRoot = join(iterationDir, '030-tasks');
+  let hostDir = '';
+  let hostType = 'feature';
+  try {
+    const collect = async (base: string): Promise<string> => {
+      const exact = join(base, `Task-${taskId}`);
+      if (await pathExists(exact)) return exact;
+      // 前缀匹配：Task-033-21 这类带后缀的历史任务目录
+      const entries = await readdir(base);
+      const hit = entries.find((n: string) => n.startsWith(`Task-${taskId}-`));
+      return hit ? join(base, hit) : '';
+    };
+    const rootEntries = await readdir(tasksRoot, { withFileTypes: true });
+    for (const e of rootEntries) {
+      if (!e.isDirectory()) continue;
+      if (e.name.startsWith('Task-')) {
+        const found = await collect(tasksRoot);
+        if (found) { hostDir = found; break; }
+      } else if (!e.name.startsWith('.') && !e.name.startsWith('0')) {
+        const found = await collect(join(tasksRoot, e.name));
+        if (found) { hostDir = found; hostType = e.name; break; }
+      }
+    }
+  } catch { /* 扫描失败走报错 */ }
+  if (!hostDir) {
+    logger.error(`未找到任务 Task-${taskId}（030-tasks/ 下）；--into 必须指向已有任务`);
+    return;
+  }
+  // 前缀命中时归一化：宿主目录实际名（Task-033-21）为准，子任务目录沿用全名（Task-033-21-miniapp）
+  const hostName = basename(hostDir);
+
+  // 2. 子任务已存在检查
+  const subtaskDir = join(hostDir, platform, `${hostName}-${platform}`);
+  if (await pathExists(subtaskDir)) {
+    logger.warn(`   ⏭️  子任务已存在，跳过: ${platform}/${hostName}-${platform}`);
+    return;
+  }
+
+  // 3. 上游门禁：020-specs/{功能单元}/{端}/ 端级规格（与 taskify 端裁剪同一标准）
+  let feature = '';
+  try {
+    const featFile = join(hostDir, '.meta', 'feature');
+    if (await pathExists(featFile)) feature = (await readFile(featFile, 'utf-8')).trim();
+  } catch { /* feature 读取失败留空，门禁按空处理 */ }
+  const upstream = await checkUpstreamPlatformSpec(join(iterationDir, '020-specs'), feature, platform);
+  if (!upstream.found && !options.skipGate) {
+    logger.error(`⛔ 上游门禁未通过：020-specs/ 下没有「${feature || '该功能单元'}」的 ${platform} 端级规格`);
+    logger.info(`   📖 根因：任务层规格唯一合法来源是上游分析产物，缺端硬建子任务只会拿到空模板，`);
+    logger.info(`      执行时按 AGENTS.md 禁令「禁止拿空需求瞎编代码」，无法开工。`);
+    logger.info('');
+    logger.info(`   ✅ 正确两步：`);
+    logger.info(`      ① 补上游端级分析: speccore analyze -I ${iteration} --platform ${platform}`);
+    logger.info(`      ② 补端子任务: speccore task new --into ${hostName} --platform ${platform}`);
+    logger.info(`   ⚠️  确认上游确无此端（本任务不涉及该端）可 --skip-gate 强制建（子任务规格将标注「上游待补」）`);
+    return;
+  }
+
+  // 4. 创建子任务（.meta + TASK.md 由上游规格提炼，不落空模板）
+  const today = new Date().toISOString().split('T')[0];
+  await ensureDir(join(subtaskDir, '.meta'));
+  await writeFile(join(subtaskDir, '.meta', 'type'), hostType);
+  await writeFile(join(subtaskDir, '.meta', 'status'), 'todo');
+  await writeFile(join(subtaskDir, '.meta', 'owner'), options.owner || '未分配');
+  await writeFile(join(subtaskDir, '.meta', 'created-at'), today);
+  if (feature) await writeFile(join(subtaskDir, '.meta', 'feature'), feature);
+  await writeFile(join(subtaskDir, 'TASK.md'), await buildAppendedSubtaskTask(hostName, platform, feature, upstream));
+
+  // 5. 任务级 CHANGELOG 追加补端记录（无则新建）
+  try {
+    const changelog = join(hostDir, '00-specs', 'CHANGELOG.md');
+    const line = `| ${today} | v1.1 | 补端: 新增 ${platform} 端子任务（上游规格 ${upstream.found ? '已达标' : '缺失（--skip-gate 强制）'}） | CLI |\n`;
+    if (await pathExists(changelog)) {
+      const content = await readFile(changelog, 'utf-8');
+      await writeFile(changelog, content + line);
+    } else {
+      await ensureDir(join(hostDir, '00-specs'));
+      await writeFile(changelog, `# ${hostName} - 变更记录\n\n| 时间 | 版本 | 变更内容 | 变更人 |\n| :--- | :--- | :--- | :--- |\n${line}`);
+    }
+  } catch { /* CHANGELOG 追加失败不阻断 */ }
+
+  // 6. 上下文更新
+  await updateContext({
+    currentTask: hostName,
+    currentIteration: iteration,
+    lastUpdated: new Date().toISOString(),
+  });
+
+  logger.success(`✅ 补端完成: ${hostName}/${platform}/${hostName}-${platform}/`);
+  logger.info(`   📖 子任务 TASK.md 由上游端级规格提炼${upstream.found ? '' : '（上游待补，执行前须先补 020-specs）'}`);
+  logger.info(`   ⏭️  后续: speccore execute -t ${hostName} 执行该端子任务`);
+}
+
+/**
+ * 上游端级规格检查（与 taskify 端裁剪判定同一标准：
+ * 非骨架且 ≥200 字符的 TECH/TEST/UI_SPEC 才算涉及端）。
+ */
+async function checkUpstreamPlatformSpec(
+  specsDir: string,
+  feature: string,
+  platform: string
+): Promise<{ found: boolean; sources: string[] }> {
+  if (!(await pathExists(specsDir))) return { found: false, sources: [] };
+  const candidates: string[] = [];
+  try {
+    const entries = await readdir(specsDir, { withFileTypes: true });
+    for (const e of entries) {
+      if (!e.isDirectory() || e.name.startsWith('.') || e.name === 'overview') continue;
+      // 功能单元名匹配：精确命中或相互包含（.meta/feature 可能存中文名或 slug 目录名）
+      if (e.name === feature || (feature && (e.name.includes(feature) || feature.includes(e.name)))) {
+        candidates.push(join(specsDir, e.name));
+      }
+    }
+  } catch { /* 扫描失败按未找到处理 */ }
+
+  const sources: string[] = [];
+  for (const dir of candidates) {
+    const platformDir = join(dir, platform);
+    if (!(await pathExists(platformDir))) continue;
+    for (const f of ['TECH.md', 'TEST.md', 'UI_SPEC.md']) {
+      const fp = join(platformDir, f);
+      if (!(await pathExists(fp))) continue;
+      try {
+        const content = await readFile(fp, 'utf-8');
+        if (!content.includes('SPEC-SKELETON') && content.trim().length >= 200) {
+          sources.push(f);
+        }
+      } catch { /* 读失败忽略 */ }
+    }
+    if (sources.length > 0) break;
+  }
+  return { found: sources.length > 0, sources };
+}
+
+/**
+ * 补端子任务 TASK.md：任务信息 + 上游端级规格要点摘录（标题 + 关键片段），
+ * 绝不落空模板——上游缺失（--skip-gate）时明确标注「上游待补」并列出补救命令。
+ * hostName 为宿主任务目录实际名（含 Task- 前缀，如 Task-033-21）。
+ */
+async function buildAppendedSubtaskTask(
+  hostName: string,
+  platform: string,
+  feature: string,
+  upstream: { found: boolean; sources: string[] }
+): Promise<string> {
+  const today = new Date().toISOString().split('T')[0];
+  const lines = [
+    `# ${hostName}-${platform}（补端子任务）`,
+    '',
+    '## 任务信息',
+    `- 宿主任务: ${hostName}`,
+    `- 端: ${platform}`,
+    `- 功能单元: ${feature || '（未关联）'}`,
+    `- 状态: 🔲 待开发`,
+    `- 创建时间: ${today}`,
+    `- 创建方式: task new --into（补端模式）`,
+    '',
+  ];
+  if (!upstream.found) {
+    lines.push(
+      '## ⚠️ 上游规格待补',
+      '',
+      `> 本子任务经 --skip-gate 强制创建，020-specs/ 下尚无 ${platform} 端级规格。`,
+      '> 执行前必须先补齐上游，否则拿空需求瞎编代码（AGENTS.md 禁令）。',
+      '',
+      '```',
+      `speccore analyze -I <迭代名> --platform ${platform}   # 补上游端级分析`,
+      '```',
+      '',
+    );
+  }
+  lines.push(
+    '## 上游规格要点',
+    '',
+  );
+  // 从上游端级规格提炼标题与首段（与 execute 阅读清单同源）
+  const specsDir = join(await getIterationDir(await getDefaultIteration() || ''), '020-specs');
+  let extracted = false;
+  try {
+    if (await pathExists(specsDir)) {
+      const entries = await readdir(specsDir, { withFileTypes: true });
+      for (const e of entries) {
+        if (!e.isDirectory() || e.name.startsWith('.') || e.name === 'overview') continue;
+        if (feature && e.name !== feature && !e.name.includes(feature) && !feature.includes(e.name)) continue;
+        const platformDir = join(specsDir, e.name, platform);
+        if (!(await pathExists(platformDir))) continue;
+        for (const f of ['TECH.md', 'UI_SPEC.md', 'TEST.md']) {
+          const fp = join(platformDir, f);
+          if (!(await pathExists(fp))) continue;
+          const content = await readFile(fp, 'utf-8');
+          if (content.includes('SPEC-SKELETON') || content.trim().length < 200) continue;
+          // 摘录标题行 + 前 8 个非空内容行（保结构不保全文，全文见上游文档）
+          const trimmed = content.trim().split('\n').filter(l => l.trim());
+          lines.push(`### 来自 020-specs/${e.name}/${platform}/${f}`, '');
+          const headings = trimmed.filter(l => /^#{1,3}\s/.test(l)).slice(0, 8);
+          for (const h of headings) lines.push(`- ${h.replace(/^#{1,3}\s+/, '')}`);
+          lines.push('', `> 📖 完整规格: 020-specs/${e.name}/${platform}/${f}`, '');
+          extracted = true;
+          break;
+        }
+        if (extracted) break;
+      }
+    }
+  } catch { /* 提炼失败不阻断 */ }
+  if (!extracted) {
+    lines.push(upstream.found ? '（未能自动提炼，请直接阅读 020-specs 对应端级规格）' : '（上游规格缺失，执行前必须先补 analyze）');
+  }
+  lines.push(
+    '',
+    '## 交付物',
+    '',
+    '| 产出物 | 状态 | 路径 |',
+    '| :--- | :--- | :--- |',
+    '| TASK.md | ✅ | ./TASK.md |',
+    `| 规格引用 | ${upstream.found ? '✅' : '⏳'} | 020-specs/${feature || '{单元}'}/${platform}/ |`,
+    '',
+    '## 执行说明',
+    '',
+    `- 执行: speccore execute -t ${hostName}（chain 调度全部端子任务，本端为其一）`,
+    '- 本子任务规格以上游 020-specs 端级文档为准，此处仅摘要索引',
+    '',
+  );
+  return lines.join('\n');
 }
 
 async function findNextTaskId(iterationDir: string): Promise<string> {

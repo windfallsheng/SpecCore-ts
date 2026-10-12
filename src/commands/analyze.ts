@@ -6301,6 +6301,9 @@ async function generateQualityReport(iteration: string): Promise<{ docPaths: str
       const entries = await readdir(dir, { withFileTypes: true });
       for (const e of entries) {
         if (e.name.startsWith('.') || e.name === 'INDEX.md' || e.name === 'QUALITY_REPORT.md' || e.name === 'CLARIFY_REPORT.md') continue;
+        // v8.3.311+: 排除时间戳备份目录（unitize overwrite 产生的 xxx-20260924083058），
+        // 否则备份目录内旧版 SOURCE.md/_matrix.md 被重复扫描，汇总表同名文档堆叠无法区分
+        if (e.isDirectory() && isTimestampBackup(e.name)) continue;
         const fullPath = join(dir, e.name);
         if (e.isDirectory()) {
           await scanReqDir(fullPath);

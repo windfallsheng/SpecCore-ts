@@ -1,3 +1,18 @@
+## v8.3.311 (2026-10-12) — 补子任务链路：ask 意图 + task new 补端入口 + 上游门禁 + 质量扫描排除备份目录
+
+### 背景
+- 用户实测：在已有功能模块任务下新建子任务（补缺失的端）时，ask 识别不了，误建了新模块任务；且上游 020-specs 没有该端分析，硬建子任务只会拿到空模板。另：unitize 重切后 features/ 下的时间戳备份目录被质量扫描当正常单元重复扫描（报告里同名 SOURCE.md ×7 堆叠）
+
+### 修复
+- **新增「补子任务」意图**（intent-recognition.ts）：`task_append`（priority 88，高于 task new 两条目）——triggers 补子任务/补个端/少了一个端/新建子任务/加个子任务等 16 词，patterns 8 条，配套子任务锚点共现 +25 与 new_task/create 子任务短语让位 -40；「新建一个子任务」不再被宽词误路由为新建模块任务
+- **ask 路由**（ask-engine.ts）：`task append` 分支——从输入提取 Task 编号（extractParams 已有）与端名（parsePlatformList 反向匹配），生成 `speccore task new --into Task-XXX --platform 端名`；无 Task 锚点时回退新建并附提示
+- **task new 补端入口**（new.ts）：`--into Task-NNN --platform 端名`——定位宿主任务（兼容 030-tasks 两种布局）→ 创建 `{端}/Task-NNN-{端}/` 子任务（.meta 齐备）→ TASK.md 由上游端级规格提炼（标题摘录 + 源路径索引，非空模板）→ 任务 00-specs/CHANGELOG.md 追加补端记录 → 更新当前任务上下文
+- **上游门禁**（new.ts checkUpstreamPlatformSpec）：补端前检查 `020-specs/{功能单元}/{端}/` 是否存在非骨架且 ≥200 字符的 TECH/TEST/UI_SPEC（与 taskify 端裁剪同一判定标准）；缺失则拦截并给出「先 analyze --platform 再补端」正确两步，`--skip-gate` 逃生舱强制建（TASK.md 明确标注「上游待补」）；端名非 CONSTITUTION 端列表成员直接拦截
+- **质量扫描排除时间戳备份目录**（analyze.ts generateQualityReport）：递归扫描 010-requirements/ 时跳过 `isTimestampBackup` 目录（unitize overwrite 备份），备份目录内旧版 SOURCE.md/_matrix.md 不再污染质量报告
+
+### 测试
+- intent-recognition.test.ts 补子任务语料 5 句（两种迭代模式双跑）+ Task 编号提取用例；task-append.test.ts 补端模式 6 用例（上游达标补端/门禁拦截/--skip-gate 标注/已存在跳过/端名非法/宿主不存在）；全量测试零回归
+
 ## v8.3.310 (2026-10-12) — 模块任务聚合：关联任务按模块组织 + 模块公共约束 spec
 
 ### 背景

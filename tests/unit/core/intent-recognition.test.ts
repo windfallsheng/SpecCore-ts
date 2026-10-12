@@ -68,6 +68,12 @@ const COMMON_CASES: CorpusCase[] = [
   { input: '检查一下这个需求有什么遗漏', expect: 'review', note: '检查需求' },
   { input: '全局分析项目架构', expect: 'global_analyze', note: '全局分析（不进迭代上下文加成）' },
   { input: '回滚到上一个版本', expect: 'baseline', note: '基线回滚' },
+  // ── 补子任务意图（v8.3.311+：不得再被宽词误路由为新建模块任务）──
+  { input: '新建一个子任务', expect: 'task_append', note: '补端子任务（曾误判 task new）', minConf: 85 },
+  { input: '给 Task-021 补一个 h5 端', expect: 'task_append', note: '补端原话', minConf: 85 },
+  { input: '在 Task-021 下新建一个子任务', expect: 'task_append', note: '任务下新建子任务' },
+  { input: '子任务少了一个端，需要补个端', expect: 'task_append', note: '补端描述句' },
+  { input: '加个子任务', expect: 'task_append', note: '加子任务口语（曾与 change 的「加」竞争）' },
 ];
 
 // 仅在活跃迭代模式下有意义的语料（无迭代时 execute/query_progress 会 -20 降权）
@@ -132,6 +138,13 @@ describe('recognizeIntent 去重与排序', () => {
     for (let i = 1; i < results.length; i++) {
       expect(results[i - 1].confidence).toBeGreaterThanOrEqual(results[i].confidence);
     }
+  });
+
+  it('补子任务语料提取 Task 编号（--into 路由参数）', async () => {
+    const results = await recognizeIntent('给 Task-021 补一个 h5 端');
+    const best = results[0];
+    expect(best.intent).toBe('task_append');
+    expect(best.extractedParams?.task).toBe('Task-021');
   });
 });
 

@@ -12,6 +12,7 @@ import { getCachedIntent, cacheIntent } from './intent-cache';
 import { buildAskContext, formatContextForHostAi } from './ask-context';
 import { loadFreshKnowledgeGraph, GraphEntity } from './knowledge-graph';
 import { loadProjectConfig, type PlatformConfig } from './unified-config';
+import { parsePlatformList } from './spec-paths';
 
 // ============================================================
 // 类型定义
@@ -853,6 +854,31 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
     const name = params.name || params.desc || input.slice(0, 30);
     fullCommand = `speccore task new -t ${best.command} -n "${name}"`;
     paramNotes.push(`📦 任务类型: ${best.command}`);
+  } else if (best.command === 'task append') {
+    // v8.3.311+: 补端子任务 — 提取 Task-ID 与端名，路由 task new --into/--platform
+    // （上游门禁在 CLI 内：020-specs 无该端规格时拦截并提示先 analyze --platform）
+    const taskId = params.task || '';
+    let platform = '';
+    try {
+      const projectPlatforms = await parsePlatformList();
+      // 按端名长度降序匹配：miniapp 必须优先于 app（否则「补一个 miniapp 端」被子串误命中 app）
+      const sorted = [...projectPlatforms].sort((a, b) => b.length - a.length);
+      platform = sorted.find(p => input.toLowerCase().includes(p.toLowerCase())) || '';
+    } catch { /* 端列表解析失败留空，CLI 侧校验 */ }
+    if (!taskId) {
+      // 注意：pattern 捕获的 params.name 是「新建(.+)子任务」的碎片（如「一个」），
+      // 不能当任务名用；无 Task 锚点时用输入整体截断，避免建出「Task-xxx-yi-ge」这类废任务
+      fullCommand = `speccore task new -n "${input.slice(0, 30)}"`;
+      paramNotes.push('⚠️ 未识别到 Task 编号，按新建任务处理；补端子任务请带上 Task-XXX');
+    } else {
+      fullCommand = `speccore task new --into ${taskId}`;
+      if (platform) {
+        fullCommand += ` --platform ${platform}`;
+        paramNotes.push(`🔌 补端: ${platform}（上游规格缺失时 CLI 会拦截提示先 analyze --platform）`);
+      } else {
+        paramNotes.push('⚠️ 未识别端名，请用 --platform 指定（CONSTITUTION 端列表中的端名）');
+      }
+    }
   } else if (best.command === 'search') {
     // v8.3.257: search 用位置参数而非 -n（search 无 -n 选项，避免死参数）
     fullCommand = `speccore search "${params.name || input.slice(0, 40)}"`;
