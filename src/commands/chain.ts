@@ -22,7 +22,7 @@
  */
 
 import { join, dirname } from 'path';
-import { pathExists, readFile, writeFile, ensureDir } from 'fs-extra';
+import { pathExists, readFile, writeFile, ensureDir, readdir } from 'fs-extra';
 import { logger } from '../utils/logger';
 import { getDefaultIteration, getIterationDir } from '../core/context';
 import { scanTasks, topologicalSort, TaskState } from '../core/state';
@@ -150,6 +150,135 @@ async function readSpecDeclarations(task: TaskState, iteration: string): Promise
     }
   } catch { /* 忽略 */ }
   return { constraints: [], needsCode: false };
+}
+
+/**
+ * v8.3.310+: 列出模块任务的子任务目录（第三层：含 TASK.md 或 .meta 的序号目录）。
+ * scanTasks 只扫两层，第三层子任务不会被误认为独立任务——模块任务与单任务天然隔离。
+ * feature 任务的 {端}/ 子目录不含 TASK.md/.meta（子任务在更深层），不会被误判。
+ */
+async function listModuleSubtasks(task: TaskState, iteration: string): Promise<{ name: string; dir: string }[]> {
+  const iterDir = await getIterationDir(iteration);
+  const taskDir = task.path || join(iterDir, '030-tasks', task.type, task.id);
+  const RESERVED = new Set(['.meta', '00-specs', '_shared']);
+  try {
+    const entries = await readdir(taskDir, { withFileTypes: true });
+    const subs: { name: string; dir: string }[] = [];
+    for (const e of entries) {
+      if (!e.isDirectory() || RESERVED.has(e.name) || e.name.startsWith('.')) continue;
+      const dir = join(taskDir, e.name);
+      const hasArtifacts = (await pathExists(join(dir, 'TASK.md'))) || (await pathExists(join(dir, '.meta')));
+      if (hasArtifacts) subs.push({ name: e.name, dir });
+    }
+    subs.sort((a, b) => a.name.localeCompare(b.name));
+    return subs;
+  } catch { return []; }
+}
+
+/** v8.3.310+: 是否为模块任务（--group 聚合创建，.meta/module-group = true） */
+async function isModuleTask(task: TaskState, iteration: string): Promise<boolean> {
+  try {
+    const iterDir = await getIterationDir(iteration);
+    const taskDir = task.path || join(iterDir, '030-tasks', task.type, task.id);
+    const flag = join(taskDir, '.meta', 'module-group');
+    if (await pathExists(flag)) {
+      return (await readFile(flag, 'utf-8')).trim() === 'true';
+    }
+  } catch { /* 无标记按普通任务 */ }
+  return false;
+}
+
+/** v8.3.310+: 子任务是否完成（子任务目录 .meta/status = done/completed） */
+async function isSubtaskDone(dir: string): Promise<boolean> {
+  try {
+    const statusPath = join(dir, '.meta', 'status');
+    if (await pathExists(statusPath)) {
+      const status = (await readFile(statusPath, 'utf-8')).trim();
+      return ['done', 'completed'].includes(status);
+    }
+  } catch { /* 无状态文件按未完成 */ }
+  return false;
+}
+
+/**
+ * v8.3.310+: 构建模块子任务执行 prompt——模块公共约束（00-specs/CONSTRAINTS.md，
+ * 每次执行前重新读取，修改即生效）+ 模块/子任务 spec 声明 + 全局约束集。
+ */
+async function buildSubtaskPrompt(
+  task: TaskState,
+  sub: { name: string; dir: string },
+  iteration: string,
+  attempt: number,
+  lastError?: string
+): Promise<string> {
+  const def = await resolveTaskTypeDefinition(task.type);
+  const iterDir = await getIterationDir(iteration);
+  const taskDir = task.path || join(iterDir, '030-tasks', task.type, task.id);
+
+  // 约束来源：子任务 TASK.md 声明 ∪ 模块 00-specs/REQ.md 声明（按序去重）
+  const declared: string[] = [];
+  let needsCode = false;
+  for (const p of [join(sub.dir, 'TASK.md'), join(taskDir, '00-specs', 'REQ.md')]) {
+    if (await pathExists(p)) {
+      const content = await readFile(p, 'utf-8');
+      for (const c of parseDeclaredConstraints(content)) {
+        if (c && !declared.includes(c)) declared.push(c);
+      }
+      if (parseSpecCodeDeclaration(content)) needsCode = true;
+    }
+  }
+  const effectiveDeclared = needsCode && !declared.includes('coding-standards')
+    ? [...declared, 'coding-standards']
+    : declared;
+  const { items, missing } = await loadConstraintSet({ taskType: task.type, declared: effectiveDeclared });
+
+  // 模块公共约束 spec（组内共享前提，落模块目录的公共位置）
+  const moduleConstraintsPath = join(taskDir, '00-specs', 'CONSTRAINTS.md');
+  let moduleConstraints = '';
+  if (await pathExists(moduleConstraintsPath)) {
+    moduleConstraints = (await readFile(moduleConstraintsPath, 'utf-8')).slice(0, 3000);
+  }
+
+  const subPathRel = sub.dir.replace(iterDir, '').replace(/^\//, '');
+  const wantsCode = def.needsBranch || needsCode;
+
+  const lines: string[] = [
+    `# TaskChain 模块子任务: ${task.id}/${sub.name} — ${task.name || task.id}`,
+    '',
+    `- 任务类型: ${def.label}（${task.type}${def.builtin ? '' : '，自定义类型'}）`,
+    `- 所属模块: ${task.id}（${task.name || ''}）`,
+    `- 产出目录: ${def.outputDir}`,
+    `- 验收方式: ${def.acceptance}`,
+    `- 子任务目录: ${subPathRel}`,
+    `- 执行形态: ${wantsCode ? '代码类（需创建 git 分支，产出写源码路径）' : '非代码类（不创建分支、不写源码，直接落盘产出目录）'}`,
+    '',
+    '## 执行要求',
+    '',
+    '1. 先读取子任务目录下的 TASK.md（本子任务的专属说明）',
+    '2. 按任务类型产出对应交付物到产出目录',
+    `3. 完成后将子任务目录 ${subPathRel} 下的 .meta/status 更新为 done`,
+    '',
+  ];
+
+  if (moduleConstraints) {
+    lines.push('## 📐 模块公共约束（组内共享前提，每次执行前重新读取）', '', moduleConstraints, '');
+  }
+
+  // 约束集注入（每次执行前重新加载）
+  if (items.length > 0) {
+    lines.push(formatConstraints(items), '');
+  }
+  if (missing.length > 0) {
+    lines.push(`> ⚠️ 声明的约束集文件缺失: ${missing.map(m => `${m}.md`).join(', ')}（.speccore/GLOBAL/CONSTRAINTS/）`, '');
+  }
+
+  if (attempt > 1) {
+    lines.push(`## ⚠️ 第 ${attempt} 次尝试`, '');
+    lines.push(`上次未通过验收。失败原因: ${lastError || '未记录'}`, '');
+    lines.push('请修复问题后重新交付。', '');
+  }
+
+  return lines.join('\n');
 }
 
 /** 构建任务执行 prompt（含约束集注入 + 代码形态判定） */
@@ -282,6 +411,52 @@ export async function chainCommand(options: ChainOptions): Promise<void> {
     // v8.3.308: 开放类型——任何类型（含用户自定义）都走 chain；
     // 未知类型按通用非代码定义执行（不建分支、不写源码），spec code: true 才切代码形态
     const st = iterState[task.id];
+
+    // ── v8.3.310+: 模块任务（--group 聚合）——展开子任务序列，逐个推进 ──
+    if (await isModuleTask(task, iteration)) {
+      const subs = await listModuleSubtasks(task, iteration);
+      const pending: { name: string; dir: string }[] = [];
+      for (const s of subs) {
+        if (!(await isSubtaskDone(s.dir))) pending.push(s);
+      }
+      const iterDir2 = await getIterationDir(iteration);
+      const taskDir2 = task.path || join(iterDir2, '030-tasks', task.type, task.id);
+      if (subs.length > 0 && pending.length === 0) {
+        // 全部子任务完成 → 模块完成（同步 .meta/status 供其他命令识别）
+        try { await writeFile(join(taskDir2, '.meta', 'status'), 'done'); } catch { /* 忽略 */ }
+        iterState[task.id] = { status: 'done', attempt: st?.attempt ?? 1, updatedAt: now };
+        done.push(task.id);
+        logger.info(`[chain] 模块任务 ${task.id} 全部子任务完成（${subs.length}/${subs.length}）`);
+        continue;
+      }
+      // 尝试上限 = 子任务数 × 2（每个子任务最多 2 次推进尝试）
+      const prevAttempt = st?.attempt ?? 0;
+      const maxAttempts = Math.max(subs.length * 2, 2);
+      if (prevAttempt >= maxAttempts) {
+        iterState[task.id] = { status: 'failed', attempt: prevAttempt, lastError: `模块子任务未全部完成（${pending.length}/${subs.length} 待完成）`, updatedAt: now };
+        failed.push(task.id);
+        failedErrors[task.id] = `模块子任务未全部完成（${pending.length}/${subs.length} 待完成）`;
+        continue;
+      }
+      const nextAttempt = prevAttempt + 1;
+      iterState[task.id] = { attempt: nextAttempt, lastError: undefined, updatedAt: now };
+      await saveStateFile(stateFile);
+      const sub = pending[0];
+      const prompt = await buildSubtaskPrompt(task, sub, iteration, nextAttempt,
+        prevAttempt > 0 ? `上次执行后仍有 ${pending.length}/${subs.length} 个子任务未完成` : undefined);
+      const def2 = await resolveTaskTypeDefinition(task.type);
+      await sendNotification(process.cwd(), {
+        type: 'task_status_changed',
+        title: `TaskChain 开始执行 ${task.id}/${sub.name}`,
+        message: `${def2.label} — ${sub.name}（模块 ${task.name || task.id}，第 ${nextAttempt} 次推进）`,
+        iteration,
+        task: task.id,
+      }).catch(() => {});
+      logger.info(`[chain] 模块 ${task.id} 下一子任务: ${sub.name}（第 ${nextAttempt}/${maxAttempts} 次推进，${pending.length}/${subs.length} 待完成）`);
+      process.stdout.write(prompt);
+      process.exitCode = 10;
+      return;
+    }
 
     // 已标记失败：校验是否已手动修复
     if (st?.status === 'failed') {

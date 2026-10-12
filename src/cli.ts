@@ -419,6 +419,7 @@ taskCmd
   .option('--translate-en <mode>', '批量导入任务名英译: auto(默认) | host | off')
   .option('--translate-response <json>', '接收宿主 AI 英译 JSON（配合宿主接力续跑）')
   .option('--feature <module>', '关联功能模块（bug 修复时指定所属功能模块，影响分支 base）')
+  .option('--group <name>', '聚合模块名：批量创建时关联任务合并为模块任务（模块公共约束 spec 落 00-specs/CONSTRAINTS.md）')
   .option('--auto-execute', '创建后自动 analyze→execute 修复（bug 无人值守）')
   .option('--interactive', '交互式创建')
   .option('--id <id>', '手动指定任务 ID（如 Task-005），计数器仍会递增')

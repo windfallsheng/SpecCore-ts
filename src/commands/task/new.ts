@@ -1,8 +1,8 @@
-import { ensureDir, writeFile, pathExists, readFile } from 'fs-extra';
+import { ensureDir, writeFile, pathExists, readFile, readdir } from 'fs-extra';
 import { join } from 'path';
 import { logger, Spinner } from '../../utils/logger';
 import { getDefaultIteration, updateContext, getIterationDir } from '../../core/context';
-import { nextTaskId } from '../../core/global-counters';
+import { nextTaskId, toSlug } from '../../core/global-counters';
 import { parsePlatformList } from '../../core/spec-paths';
 import { extractExcelBugs, extractExcelTextOnly, type ExcelBugRow } from '../../core/excel-extract';
 import { callLlm, resolveAiProviders, parseTranslationResponse } from '../../core/ask-llm';
@@ -26,6 +26,7 @@ export interface TaskNewOptions {
   interactive?: boolean;
   feature?: string;      // --feature: 关联功能模块（影响 bugfix 分支 base）
   module?: string;       // Excel 表「模块」列解析出的功能模块（优先于 --feature）
+  group?: string;        // --group: 聚合模块名——批量创建时关联任务聚合为模块任务（v8.3.310+）
   priority?: string;     // Excel 表「优先级」列
   severity?: string;     // Excel 表「严重度」列
   bugId?: string;        // Bug 唯一编号（Excel「Bug 编号」列；留空则导入时自动生成 YYYYMMDD-XXXX）
@@ -305,8 +306,20 @@ async function batchCreateTasks(options: TaskNewOptions): Promise<void> {
 
   // v8.3.289+: 批量英译任务名——一次 LLM 调用翻译全部标题为目录 slug；
   // 宿主 AI 优先（无 LLM 且宿主模式时接力），自配 LLM 兜底，失败回退拼音
-  const topicMap = await translateTaskTopics(items.map(i => i.name), options.translateEn || 'auto', options.translateResponse);
+  // v8.3.310+: --group 聚合时，模块名一并加入翻译清单（子任务目录与模块目录同批英译）
+  const translateTitles = options.group
+    ? [options.group, ...items.map(i => i.name)]
+    : items.map(i => i.name);
+  const topicMap = await translateTaskTopics(translateTitles, options.translateEn || 'auto', options.translateResponse);
   if (topicMap === null) return; // 宿主接力：已输出翻译清单 + exitCode 10，等待 --translate-response 续跑
+
+  // ── v8.3.310+: --group 聚合模式——关联任务合并为模块任务（子任务平铺在模块目录下），
+  //    模块公共约束 spec 落 00-specs/CONSTRAINTS.md，由 chain 执行子任务时自动注入 ──
+  if (options.group) {
+    const groupTopic = topicMap.get(options.group) || toSlug(options.group);
+    await createModuleTask(options, items, topicMap, groupTopic);
+    return;
+  }
 
   // 交互确认
   if (options.interactive) {
@@ -355,6 +368,180 @@ async function batchCreateTasks(options: TaskNewOptions): Promise<void> {
   }
 
   logger.info(`\n✅ 创建完成: ${created}/${items.length} 个任务`);
+}
+
+/** 模块公共约束模板（chain 每次执行子任务前自动注入） */
+/** 模块公共约束模板（chain 每次执行子任务前自动注入）；导出供单测锁定模板结构 */
+export function buildModuleConstraintsTemplate(groupName: string): string {
+  return [
+    `# 模块公共约束：${groupName}`,
+    '',
+    '> 本文件是模块内所有子任务的**共同前提约束**，TaskChain 每次执行子任务前自动注入，无需逐个子任务重复声明。',
+    '> 修改本文件后，后续子任务执行自动生效。',
+    '',
+    '## 通用纪律',
+    '- （示例）所有产出统一使用约定术语与格式',
+    '- （示例）禁止引入与本模块无关的范围蔓延',
+    '',
+    '## 产出要求',
+    '- （示例）每项子任务产出独立可验收交付物',
+    '- （示例）交付物落盘到任务声明的产出目录',
+    '',
+    '## 验收标准',
+    '- （示例）交付物内容完整、无占位符',
+    '- （示例）执行完成后将子任务目录 .meta/status 更新为 done',
+    '',
+  ].join('\n');
+}
+
+/** 子任务 TASK.md 模板；导出供单测锁定模板结构 */
+export function buildSubtaskTemplate(item: { name: string; desc: string }): string {
+  const parts = [`# ${item.name}`, ''];
+  if (item.desc) parts.push(`${item.desc}`, '');
+  parts.push(
+    '## 执行说明',
+    '',
+    '- 公共约束见模块目录 00-specs/CONSTRAINTS.md（chain 自动注入）',
+    '- 完成后将本目录 .meta/status 更新为 done',
+    '',
+  );
+  return parts.join('\n');
+}
+
+/** 模块 REQ.md 总览：扫描子任务目录生成清单 */
+async function buildModuleOverview(taskDir: string, groupName: string): Promise<string> {
+  const rows: string[] = [];
+  try {
+    const entries = (await readdir(taskDir, { withFileTypes: true }))
+      // 00- 前缀为保留目录（00-specs），子任务序号从 01 起
+      .filter(e => e.isDirectory() && /^\d{2}-/.test(e.name) && !/^00-/.test(e.name))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    for (const e of entries) {
+      let status = 'todo';
+      try {
+        status = (await readFile(join(taskDir, e.name, '.meta', 'status'), 'utf-8')).trim();
+      } catch { /* 无状态文件按 todo */ }
+      rows.push(`| ${e.name.slice(0, 2)} | ${e.name.slice(3)} | ${status} |`);
+    }
+  } catch { /* 扫描失败输出空清单 */ }
+  return [
+    `# ${groupName}`,
+    '',
+    '> 模块任务（任务组）：聚合关联子任务，公共约束见 00-specs/CONSTRAINTS.md。',
+    '',
+    '## 子任务清单',
+    '',
+    '| 序号 | 子任务 | 状态 |',
+    '|:---|:---|:---|',
+    ...rows,
+    '',
+  ].join('\n');
+}
+
+/**
+ * v8.3.310+: 聚合创建模块任务——关联任务合并为一个模块目录（像 feature 任务的 Task 目录），
+ * 子任务按 01-{slug}/ 序号平铺（scanTasks 只扫两层，第三层子任务不会被误认为独立任务），
+ * 模块公共约束 spec 落 00-specs/CONSTRAINTS.md（chain 执行子任务时自动注入）。
+ * 模块已存在时追加子任务（编号续接）。
+ */
+async function createModuleTask(
+  options: TaskNewOptions,
+  items: { name: string; desc: string }[],
+  topicMap: Map<string, string>,
+  groupTopic: string
+): Promise<void> {
+  const iteration = await getDefaultIteration(options.iteration);
+  if (!iteration) {
+    logger.error('No active iteration found. Please specify --iteration or create one first.');
+    return;
+  }
+  const iterationDir = await getIterationDir(iteration);
+  const taskType = options.type || 'feature';
+  const typeDef = getTaskTypeDefinition(taskType);
+  if (!typeDef.builtin) {
+    logger.info(`自定义任务类型「${taskType}」（非系统定义，默认不建分支/不写源码；如需写代码请在 spec 中声明 code: true）`);
+  }
+
+  // 先查找已有模块任务（.meta/module-group=true 且 .meta/feature == 组名）——
+  // 命中则复用其目录追加子任务（不消耗任务计数器）；否则新建
+  let taskDir = '';
+  let taskId = '';
+  const typeRoot = join(iterationDir, '030-tasks', taskType);
+  try {
+    for (const e of await readdir(typeRoot, { withFileTypes: true })) {
+      if (!e.isDirectory() || !e.name.startsWith('Task-')) continue;
+      const flag = join(typeRoot, e.name, '.meta', 'module-group');
+      const feat = join(typeRoot, e.name, '.meta', 'feature');
+      if (!(await pathExists(flag))) continue;
+      const isModule = (await readFile(flag, 'utf-8')).trim() === 'true';
+      const featureName = (await pathExists(feat)) ? (await readFile(feat, 'utf-8')).trim() : '';
+      if (isModule && featureName === (options.group || '')) {
+        taskDir = join(typeRoot, e.name);
+        taskId = e.name.replace(/^Task-/, '');
+        break;
+      }
+    }
+  } catch { /* 扫描失败走新建 */ }
+  if (!taskDir) {
+    const { id: counterId } = await nextTaskId(options.group, groupTopic);
+    taskId = counterId.replace(/^Task-/, '');
+    taskDir = join(typeRoot, `Task-${taskId}`);
+  }
+  const today = new Date().toISOString().split('T')[0];
+
+  const isNew = !await pathExists(taskDir);
+  if (isNew) {
+    await ensureDir(join(taskDir, '.meta'));
+    await ensureDir(join(taskDir, '00-specs'));
+    await ensureDir(join(taskDir, '_shared'));
+    // 模块级元信息
+    await writeFile(join(taskDir, '.meta', 'type'), taskType);
+    await writeFile(join(taskDir, '.meta', 'status'), 'todo');
+    await writeFile(join(taskDir, '.meta', 'owner'), options.owner || '未分配');
+    await writeFile(join(taskDir, '.meta', 'created-at'), today);
+    await writeFile(join(taskDir, '.meta', 'feature'), options.group || '');
+    // 模块任务标记（chain 据此展开子任务序列）
+    await writeFile(join(taskDir, '.meta', 'module-group'), 'true');
+    // 模块公共约束 spec（组内子任务共享前提，落模块目录的公共位置）
+    await writeFile(join(taskDir, '00-specs', 'CONSTRAINTS.md'), buildModuleConstraintsTemplate(options.group || '模块'));
+    await writeFile(join(taskDir, '_shared', 'CONTEXT.md'), `# 模块上下文: ${options.group || '模块'}\n\n> 模块任务：聚合关联子任务，公共约束见 00-specs/CONSTRAINTS.md。\n`);
+    logger.info(`📦 新建模块任务: Task-${taskId}（${options.group}，${items.length} 个子任务）`);
+  } else {
+    logger.info(`📦 追加到已有模块任务: Task-${taskId}`);
+  }
+
+  // 子任务编号续接（已有 01-/02-/... 目录；00- 前缀为保留目录不参与）
+  let seq = 1;
+  try {
+    for (const e of await readdir(taskDir, { withFileTypes: true })) {
+      if (e.isDirectory() && /^\d{2}-/.test(e.name) && !/^00-/.test(e.name)) {
+        const n = parseInt(e.name.slice(0, 2), 10);
+        if (!isNaN(n) && n >= seq) seq = n + 1;
+      }
+    }
+  } catch { /* 读失败从 01 开始 */ }
+
+  // 逐个创建子任务目录
+  let created = 0;
+  for (const item of items) {
+    const slug = topicMap.get(item.name) || toSlug(item.name);
+    const subDir = join(taskDir, `${String(seq + created).padStart(2, '0')}-${slug}`);
+    if (await pathExists(subDir)) {
+      logger.warn(`   ⏭️  子任务目录已存在，跳过: ${subDir.split('/').pop()}`);
+      continue;
+    }
+    await ensureDir(join(subDir, '.meta'));
+    await writeFile(join(subDir, '.meta', 'status'), 'todo');
+    await writeFile(join(subDir, '.meta', 'owner'), options.owner || '未分配');
+    await writeFile(join(subDir, '.meta', 'created-at'), today);
+    await writeFile(join(subDir, 'TASK.md'), buildSubtaskTemplate(item));
+    created++;
+  }
+
+  // 刷新模块 REQ.md 总览（子任务清单）
+  await writeFile(join(taskDir, '00-specs', 'REQ.md'), await buildModuleOverview(taskDir, options.group || '模块'));
+
+  logger.info(`\n✅ 模块任务${isNew ? '创建' : '追加'}完成: ${created}/${items.length} 个子任务 → 030-tasks/${taskType}/Task-${taskId}/`);
 }
 
 /** 创建单个 Task */
