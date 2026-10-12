@@ -7,6 +7,7 @@
 
 import { readFile, pathExists, readdir } from 'fs-extra';
 import { join, relative } from 'path';
+import { getProjectRoot } from '../utils/task-utils';
 
 export interface PatternCandidate {
   name: string;
@@ -355,7 +356,7 @@ export async function autoSavePattern(
   if (mode === 'smart' && !isHigh) return { saved: false, confidence: 'INFERRED' };
 
   const confidence = isHigh ? 'EXTRACTED' : 'INFERRED';
-  const patternsDir = join(process.cwd(), '.speccore', 'PATTERNS');
+  const patternsDir = join(getProjectRoot(), '.speccore', 'PATTERNS');
   const categoryDir = join(patternsDir, candidate.category);
 
   try {
@@ -401,7 +402,7 @@ ${candidate.reason}
 async function loadExistingPatternNames(): Promise<Set<string>> {
   const names = new Set<string>();
   try {
-    const patternsDir = join(process.cwd(), '.speccore', 'PATTERNS');
+    const patternsDir = join(getProjectRoot(), '.speccore', 'PATTERNS');
     if (!(await pathExists(patternsDir))) return names;
     const entries = await readdir(patternsDir, { withFileTypes: true });
     for (const entry of entries) {

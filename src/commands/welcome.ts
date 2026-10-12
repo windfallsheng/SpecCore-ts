@@ -8,6 +8,7 @@ import { isAiContext, detectHostAi } from '../core/ask-host-ai';
 import { join } from 'path';
 import { pathExists, readdir, writeFile, ensureDir } from 'fs-extra';
 import { getDefaultIteration } from '../core/context';
+import { getProjectRoot } from '../utils/task-utils';
 
 const C = { r: '\x1b[0m', b: '\x1b[1m', d: '\x1b[2m', cyan: '\x1b[36m', green: '\x1b[32m', yellow: '\x1b[33m', magenta: '\x1b[35m', gray: '\x1b[90m', blue: '\x1b[34m' };
 const B = { tl: '╭', tr: '╮', bl: '╰', br: '╯', h: '─', v: '│', dot: '◆', arrow: '→' };
@@ -32,9 +33,9 @@ export async function welcomeCommand(_options: WelcomeOptions): Promise<void> {
     if (iterName) { try { const entries = await readdir(`Iteration-${iterName}`, { withFileTypes: true }); taskCount = entries.filter(e => e.isDirectory() && e.name.startsWith('Task-')).length; } catch {} }
     let phase = 'doc';
     if (iterName) {
-      const reqDoc = join(`Iteration-${iterName}`, '020-specs', 'REQUIREMENT.md');
+      const reqDoc = join(getProjectRoot(), `Iteration-${iterName}`, '020-specs', 'REQUIREMENT.md');
       if (!(await pathExists(reqDoc))) phase = 'doc';
-      else if (!(await pathExists(join(`Iteration-${iterName}`, '020-specs', 'ANALYSIS.md')))) phase = 'analyze';
+      else if (!(await pathExists(join(getProjectRoot(), `Iteration-${iterName}`, '020-specs', 'ANALYSIS.md')))) phase = 'analyze';
       else if (taskCount === 0) phase = 'split';
       else phase = 'execute';
     }

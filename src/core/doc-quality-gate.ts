@@ -14,6 +14,7 @@
 import { readFile, pathExists, readdir } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
+import { getProjectRoot } from '../utils/task-utils';
 
 export interface QualityIssue {
   file: string;
@@ -239,7 +240,7 @@ export async function checkDocumentQuality(filePath: string): Promise<QualityRep
  * 扫描全局分析目录，检查所有文档质量
  */
 export async function runGlobalQualityGate(globalDir?: string): Promise<QualityReport[]> {
-  const dir = globalDir || join(process.cwd(), '.speccore', 'GLOBAL');
+  const dir = globalDir || join(getProjectRoot(), '.speccore', 'GLOBAL');
   const reports: QualityReport[] = [];
 
   // 扫描 overview/ 和 requirements/ 和 platforms/

@@ -1,3 +1,16 @@
+## v8.3.305 (2026-10-12) — 项目资产路径解析统一锚定项目根（子目录执行修复）
+
+### 问题
+- `.speccore/` 资产（PROJECT.yaml、CONSTITUTION.md、context.json、迭代目录、缓存/会话/环境）的路径大量硬编码为相对 cwd 或 `join(process.cwd(), '.speccore', ...)`——在项目任意子目录执行 CLI（如 AI 在 code_path 目录跑 execute）时整套规范数据库失联，表现 为「项目信息/端列表找不到」「未初始化」「PROJECT.yaml 不存在」等误判
+- 已存在的 `findProjectRoot`（向上查找 .speccore/）只被 deploy/context 少数模块使用，配置层/git 层/命令层均未接入
+
+### 修复
+- **统一锚点**：task-utils 新增 `getProjectRoot()`；30+ 个文件的 `.speccore/` 资产路径（配置读写、CONSTITUTION、PROJECT_GRAPH、git-mapping、context、会话、缓存、RAG 索引、环境配置、code-graph、inbox、计划存储、迭代目录等）全部改为基于项目根解析，支持在任意子目录执行
+- **惰性解析**：路径解析改为调用时求值（非模块加载时固化），兼容 chdir 场景（测试/多项目切换）
+- **迭代目录统一**：task-utils 的 sync `getIterationDir`（24 个消费方）接入项目根，与 context.ts 的 async 版本行为一致
+- **附带修复**：doctor 端列表检测对 `platforms: null` 兜底（无端配置项目不再报 Cannot read properties of null）
+- **测试**：新增 project-root-resolution.test.ts（深层子目录下 getProjectRoot/getIterationDir/loadGitConfig 均命中项目根资产）；git-integration-subtask 夹具补 `.speccore` 锚点
+
 ## v8.3.304 (2026-10-10) — execute 拉分支接入 PROJECT.yaml 主配置
 
 ### 任务分支源解析链修复

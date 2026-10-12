@@ -153,8 +153,8 @@ describe('loadGitConfig — defaults', () => {
   it('should return defaults when no config files exist', () => {
     // Ensure TEST_DIR exists
     rmSync(TEST_DIR, { recursive: true, force: true });
-    mkdirSync(TEST_DIR, { recursive: true });
-    // chdir to empty dir to avoid reading project root CONSTITUTION.md
+    mkdirSync(join(TEST_DIR, '.speccore'), { recursive: true });
+    // chdir to TEST_DIR（v8.3.305: 向上查找以 .speccore 为项目根锚点，建空 .speccore 隔离源码根 CONSTITUTION.md）
     const origCwd = process.cwd();
     process.chdir(TEST_DIR);
     try {
@@ -200,6 +200,7 @@ describe('loadGitConfig — subtask-level override', () => {
   it('should fall back to default when subtask has no git-config', () => {
     const taskDir = join(TEST_DIR, 'Task-001');
     setupTaskDir(taskDir); // no git-config file
+    mkdirSync(join(TEST_DIR, '.speccore'), { recursive: true });
 
     const origCwd = process.cwd();
     process.chdir(TEST_DIR);
@@ -245,6 +246,7 @@ describe('loadGitConfig — iteration-level override', () => {
       '> 分支格式: {type}/{prefix}{name}-{hash4}',
       '> 自动拉取: true',
     ].join('\n'));
+    mkdirSync(join(TEST_DIR, '.speccore'), { recursive: true });
 
     // Change cwd so relative paths resolve correctly
     const origCwd = process.cwd();
@@ -323,6 +325,7 @@ describe('loadGitConfig — three-level fallback', () => {
     // Subtask — only sets branchPrefix
     const taskDir = join(iterDir, '030-tasks', 'feature', 'Task-002');
     setupTaskDir(taskDir, '分支前缀: SUB-002\n');
+    mkdirSync(join(TEST_DIR, '.speccore'), { recursive: true });
 
     const origCwd = process.cwd();
     process.chdir(TEST_DIR);

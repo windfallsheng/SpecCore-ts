@@ -7,6 +7,7 @@
 import { pathExists, readFile, readdir, writeFile, ensureDir } from 'fs-extra';
 import { join } from 'path';
 import { resolveUnitSourcePath } from './feature-source';
+import { getProjectRoot, getIterationDir } from '../utils/task-utils';
 
 export type HandoffStage = 'analyze' | 'taskify' | 'plan' | 'execute' | 'review' | 'done';
 
@@ -31,8 +32,8 @@ export async function generateHandoff(
   to: HandoffStage,
   iteration: string
 ): Promise<string> {
-  const iterDir = `Iteration-${iteration.replace(/^Iteration-/, '')}`;
-  const handoffDir = join('.speccore', 'local', 'handoffs');
+  const iterDir = getIterationDir(`Iteration-${iteration.replace(/^Iteration-/, '')}`);
+  const handoffDir = join(getProjectRoot(), '.speccore', 'local', 'handoffs');
   await ensureDir(handoffDir);
 
   const handoffKey = `${from}-${to}`;
@@ -242,7 +243,7 @@ async function appendReviewToDone(lines: string[], iterDir: string): Promise<voi
  * 读取 handoff 文件路径
  */
 export function getHandoffPath(from: HandoffStage, to: HandoffStage): string {
-  return join('.speccore', 'local', 'handoffs', `handoff-${from}-${to}.md`);
+  return join(getProjectRoot(), '.speccore', 'local', 'handoffs', `handoff-${from}-${to}.md`);
 }
 
 /**

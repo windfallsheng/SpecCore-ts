@@ -8,6 +8,7 @@
 import { pathExists, readJson, writeJson, ensureDir } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
+import { getProjectRoot } from '../utils/task-utils';
 
 // ═══════════════════════════════════════════════════════════
 // 类型定义
@@ -88,7 +89,7 @@ export const DEFAULT_ASK_CONFIG: AskConfig = {
   ],
 };
 
-const CONFIG_PATH = '.speccore/config/ask.json';
+const askConfigPath = () => join(getProjectRoot(), '.speccore', 'config', 'ask.json');
 
 // ═══════════════════════════════════════════════════════════
 // 配置读写
@@ -122,9 +123,9 @@ export async function loadAskConfig(): Promise<AskConfig> {
   } catch { /* 静默回退到 ask.json */ }
 
   // 回退到 ask.json
-  if (source === 'default' && (await pathExists(CONFIG_PATH))) {
+  if (source === 'default' && (await pathExists(askConfigPath()))) {
     try {
-      fileConfig = (await readJson(CONFIG_PATH)) as Partial<AskConfig>;
+      fileConfig = (await readJson(askConfigPath())) as Partial<AskConfig>;
       // v8.3.25+: 解析环境变量引用（如 apiKey: "${SPECCORE_LLM_KEY}"）
       const { resolveEnvVars } = await import('./unified-config');
       const envResult = resolveEnvVars(fileConfig);
@@ -194,8 +195,8 @@ function mapUnifiedToAskConfig(ask: {
  * 保存 Ask 引擎配置
  */
 export async function saveAskConfig(config: AskConfig): Promise<void> {
-  await ensureDir('.speccore/config');
-  await writeJson(CONFIG_PATH, config, { spaces: 2 });
+  await ensureDir(join(getProjectRoot(), '.speccore', 'config'));
+  await writeJson(askConfigPath(), config, { spaces: 2 });
   cachedConfig = config;
   configLoadTime = Date.now();
 }
@@ -204,7 +205,7 @@ export async function saveAskConfig(config: AskConfig): Promise<void> {
  * 检查配置是否存在
  */
 export async function hasAskConfig(): Promise<boolean> {
-  return pathExists(CONFIG_PATH);
+  return pathExists(askConfigPath());
 }
 
 // ═══════════════════════════════════════════════════════════

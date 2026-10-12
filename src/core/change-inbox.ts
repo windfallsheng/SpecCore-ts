@@ -9,6 +9,7 @@
 import { join } from 'path';
 import { readdir, readFile, writeFile, pathExists, stat, ensureDir, rename } from 'fs-extra';
 import { logger } from '../utils/logger';
+import { getProjectRoot } from '../utils/task-utils';
 
 // ── 类型定义 ──
 
@@ -55,7 +56,7 @@ export type ArchiveStrategy = 'archive' | 'delete' | 'keep';
 
 // ── 常量 ──
 
-const CHANGES_DIR = '.speccore/changes';
+const CHANGES_DIR = join(getProjectRoot(), '.speccore', 'changes');
 const PENDING_DIR = 'pending';
 const PROCESSED_DIR = 'processed';
 const MANIFEST_FILE = 'manifest.json';

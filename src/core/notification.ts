@@ -6,8 +6,9 @@ import { join } from 'path';
 import { writeFile, readFile, pathExists, readdir, ensureDir } from 'fs-extra';
 import { getCurrentUser } from './user-context';
 import { logger } from '../utils/logger';
+import { getProjectRoot } from '../utils/task-utils';
 
-const NOTIFY_DIR = '.speccore/local/notifications';
+const NOTIFY_DIR = join(getProjectRoot(), '.speccore', 'local', 'notifications');
 const READ_MARKER = '.read';
 
 export type NotificationType =

@@ -5,6 +5,7 @@
  */
 import { readFile, writeFile, pathExists, readdir, ensureDir } from 'fs-extra';
 import { join, dirname } from 'path';
+import { getProjectRoot } from '../utils/task-utils';
 import { pinyin } from 'pinyin-pro';
 
 interface Counters {
@@ -14,7 +15,7 @@ interface Counters {
 }
 
 function path(): string {
-  return join(process.cwd(), '.speccore', 'local', 'counters.json');
+  return join(getProjectRoot(), '.speccore', 'local', 'counters.json');
 }
 
 export async function getCounters(): Promise<Counters> {

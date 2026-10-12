@@ -11,6 +11,7 @@
 import { readFile, writeFile, pathExists, ensureDir, readdir, stat } from 'fs-extra';
 import { join, relative, dirname, basename } from 'path';
 import { execSync } from 'child_process';
+import { getProjectRoot } from '../utils/task-utils';
 import { logger } from '../utils/logger';
 import { extractAnnotations, buildModuleGroups, matchModule, discoverProjectRoots } from './spec-annotations';
 import { loadFreshKnowledgeGraph, KnowledgeGraph, getFullTaskContext } from './knowledge-graph';
@@ -79,7 +80,7 @@ export interface CodeIndex {
   gitStats: { totalCommits: number; analyzedCommits: number };
 }
 
-const CACHE_DIR = join('.speccore', 'cache');
+const CACHE_DIR = join(getProjectRoot(), '.speccore', 'cache');
 const INDEX_PATH = join(CACHE_DIR, 'code-structure.json');
 const DEFAULT_SCOPE = ['src/', 'app/', 'lib/', 'pkg/'];
 
@@ -763,8 +764,8 @@ async function loadContractApiPaths(): Promise<string[]> {
   const paths: string[] = [];
   try {
     const { glob } = require('glob');
-    const files: string[] = await glob('.speccore/**/API_CONTRACT.yaml');
-    const iterFiles: string[] = await glob('Iteration-*/**/API_CONTRACT.yaml');
+    const files: string[] = await glob(join(getProjectRoot(), '.speccore', '**', 'API_CONTRACT.yaml'));
+    const iterFiles: string[] = await glob(join(getProjectRoot(), 'Iteration-*', '**', 'API_CONTRACT.yaml'));
     const allFiles = [...files, ...iterFiles];
     for (const f of allFiles) {
       if (!await pathExists(f)) continue;
@@ -1177,7 +1178,7 @@ export async function resolveIterationScope(iteration?: string): Promise<string 
 
     // 读取源码路径：优先 PROJECT.yaml 结构化字段，回退 CONSTITUTION.md 文本解析
     let sourcePaths: string[] = [];
-    const projectYamlPath = join(process.cwd(), '.speccore', 'PROJECT.yaml');
+    const projectYamlPath = join(getProjectRoot(), '.speccore', 'PROJECT.yaml');
     if (await pathExists(projectYamlPath)) {
       const yamlContent = await readFile(projectYamlPath, 'utf-8');
       const codePaths = yamlContent.match(/code_path:\s*(\S+)/g);
@@ -1186,7 +1187,7 @@ export async function resolveIterationScope(iteration?: string): Promise<string 
       }
     }
     if (sourcePaths.length === 0) {
-      const constitutionPath = join(process.cwd(), '.speccore', 'CONSTITUTION.md');
+      const constitutionPath = join(getProjectRoot(), '.speccore', 'CONSTITUTION.md');
       if (await pathExists(constitutionPath)) {
         const content = await readFile(constitutionPath, 'utf-8');
         // 兼容两种格式：`- path` 列表 与 `| ... | path | ... |` 表格

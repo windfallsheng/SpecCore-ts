@@ -2,8 +2,10 @@
  * 计划存储 — 执行计划的历史记录和查询
  */
 import { ensureDir, readJson, writeJson, pathExists } from 'fs-extra';
+import { join } from 'path';
+import { getProjectRoot } from '../utils/task-utils';
 
-const PLANS_PATH = '.speccore/local/plans.json';
+const PLANS_PATH = join(getProjectRoot(), '.speccore', 'local', 'plans.json');
 
 /** 单个执行计划 */
 export interface ExecutionPlan {
@@ -55,7 +57,7 @@ async function load(): Promise<PlanStore> {
 }
 
 async function save(store: PlanStore): Promise<void> {
-  await ensureDir('.speccore/local');
+  await ensureDir(join(getProjectRoot(), '.speccore', 'local'));
   await writeJson(PLANS_PATH, store, { spaces: 2 });
 }
 

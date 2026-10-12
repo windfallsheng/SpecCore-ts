@@ -16,7 +16,7 @@
 import { readFile, writeFile, pathExists, readdir, ensureDir } from 'fs-extra';
 import { join, relative, basename } from 'path';
 import { logger } from '../utils/logger';
-import { isTimestampBackup } from '../utils/task-utils';
+import { isTimestampBackup, getProjectRoot } from '../utils/task-utils';
 import { resolveUnitSourcePath } from './feature-source';
 import { buildCodeIndex, findRelevantCode, readRelevantSource, isIndexStale, loadFullIndex, resolveIterationScope, ensureCodeIndexFresh } from './code-scanner';
 // v8.3.183+: tree-sitter 结构化摘要，替代原文 slice(0,N) 硬切
@@ -90,7 +90,7 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalysisResult> 
   // 自动检测: 都没指定 → 从 01-产品需求/ 递归读取产品原始需求
   if (requirements.length === 0 && sources.length === 0) {
     if (input.scope === 'iteration' && input.iteration) {
-      const productReqDir = join(`Iteration-${input.iteration}`, '010-requirements');
+      const productReqDir = join(getProjectRoot(), `Iteration-${input.iteration}`, '010-requirements');
       if (await pathExists(productReqDir)) {
         // 递归扫描子目录 ({端名}/ 等)
         const scanDir = async (dir: string) => {
@@ -108,7 +108,7 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalysisResult> 
       }
       // 回退路径: 如果没有 01-产品需求/, 回退到 010-requirements/REQUIREMENT.md
       if (requirements.length === 0) {
-        const legacyReq = join(`Iteration-${input.iteration}`, '010-requirements', 'REQUIREMENT.md');
+        const legacyReq = join(getProjectRoot(), `Iteration-${input.iteration}`, '010-requirements', 'REQUIREMENT.md');
         if (await pathExists(legacyReq)) {
           requirements = [legacyReq];
         }
@@ -223,11 +223,11 @@ async function analyzeRequirements(input: AnalyzeInput): Promise<AnalysisResult>
   let report: string;
 
   if (input.scope === 'global') {
-    outputPath = join('.speccore', 'GLOBAL', input.output || 'REQ_CONSISTENCY.md');
+    outputPath = join(getProjectRoot(), '.speccore', 'GLOBAL', input.output || 'REQ_CONSISTENCY.md');
     report = buildReqConsistencyReport(input, issues, archImpact);
   } else if (input.scope === 'task') {
     // task scope — 已在入口校验
-    outputPath = join(`Iteration-${input.iteration}`, '030-tasks', input.taskId!, '00-specs', input.output || 'ANALYSIS.md');
+    outputPath = join(getProjectRoot(), `Iteration-${input.iteration}`, '030-tasks', input.taskId!, '00-specs', input.output || 'ANALYSIS.md');
     report = buildTaskReqReport(input, issues, archImpact, sourceContents, sourceSummaries);
   } else {
     // iteration (default)
@@ -295,7 +295,7 @@ async function analyzeCodebase(input: AnalyzeInput): Promise<AnalysisResult> {
     report = buildCodeHealthReport(input, fileStats, apiInventory, hotspots, deps);
   } else if (input.scope === 'task') {
     // task scope — 已在入口校验
-    outputPath = join(`Iteration-${input.iteration}`, '030-tasks', input.taskId!, '00-specs', input.output || 'CODE_REVIEW.md');
+    outputPath = join(getProjectRoot(), `Iteration-${input.iteration}`, '030-tasks', input.taskId!, '00-specs', input.output || 'CODE_REVIEW.md');
     report = buildTaskCodeReport(input, fileStats, apiInventory, hotspots);
   } else {
     // iteration (default)
@@ -394,7 +394,7 @@ async function analyzeCombined(input: AnalyzeInput): Promise<AnalysisResult> {
     outputPath = join('.speccore', 'GLOBAL', input.output || 'ARCH_IMPACT.md');
     report = await buildAIEnhancedReport(input, 'global', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents });
   } else if (input.scope === 'task') {
-    outputPath = join(`Iteration-${input.iteration}`, '030-tasks', input.taskId!, '00-specs', input.output || 'ANALYSIS.md');
+    outputPath = join(getProjectRoot(), `Iteration-${input.iteration}`, '030-tasks', input.taskId!, '00-specs', input.output || 'ANALYSIS.md');
     report = await buildAIEnhancedReport(input, 'task', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents });
   } else {
     const iterDir = `Iteration-${input.iteration || 'current'}`;
@@ -819,7 +819,7 @@ interface ArchImpact {
 async function analyzeArchitectureImpact(content: string): Promise<ArchImpact> {
   const impact: ArchImpact = { modules: [], newDependencies: [], risks: [], apis: [] };
 
-  const archPath = join(process.cwd(), '.speccore', 'GLOBAL', 'ARCHITECTURE.md');
+  const archPath = join(getProjectRoot(), '.speccore', 'GLOBAL', 'ARCHITECTURE.md');
   if (await pathExists(archPath)) {
     const archContent = await readFile(archPath, 'utf-8');
     if (archContent.match(/## 模块|## 系统边界|## 服务列表/)) {
@@ -2012,7 +2012,7 @@ async function detectPlatformsFromConstitution(): Promise<string[]> {
       return explicitPlatforms;
     }
 
-    const constitutionPath = join(process.cwd(), '.speccore', 'CONSTITUTION.md');
+    const constitutionPath = join(getProjectRoot(), '.speccore', 'CONSTITUTION.md');
     if (require('fs').existsSync(constitutionPath)) {
       const content = require('fs').readFileSync(constitutionPath, 'utf-8');
       const lines = content.split('\n');

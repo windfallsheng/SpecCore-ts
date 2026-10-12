@@ -5,7 +5,7 @@
 import { join } from 'path';
 import { pathExists, readFile, readdir, stat } from 'fs-extra';
 import { logger } from '../utils/logger';
-import { findProjectRoot } from '../utils/task-utils';
+import { findProjectRoot, getProjectRoot } from '../utils/task-utils';
 import { checkLock } from '../core/lock-manager';
 import { getNotifications } from '../core/notification';
 import {
@@ -476,7 +476,7 @@ async function checkConfigFile(_projectRoot: string): Promise<DiagnosisResult[]>
 // v8.3.25+: 检查项目配置 .speccore/PROJECT.yaml
 async function checkProjectConfigFile(_projectRoot: string): Promise<DiagnosisResult[]> {
   const results: DiagnosisResult[] = [];
-  const configPath = join(process.cwd(), '.speccore', 'PROJECT.yaml');
+  const configPath = join(getProjectRoot(), '.speccore', 'PROJECT.yaml');
   const exists = await pathExists(configPath);
 
   results.push({
@@ -498,14 +498,15 @@ async function checkProjectConfigFile(_projectRoot: string): Promise<DiagnosisRe
         fix: config.schema_version !== PROJECT_CURRENT_SCHEMA_VERSION ? '运行 speccore config --upgrade --project' : undefined,
       });
 
-      // 端列表
+      // 端列表（platforms 可能缺失/为 null，兼容无端配置的项目）
+      const platforms = config.platforms || [];
       results.push({
-        ok: config.platforms.length > 0,
+        ok: platforms.length > 0,
         category: '项目配置',
-        message: config.platforms.length > 0
-          ? `端列表: ${config.platforms.map(p => p.name).join(', ')}`
+        message: platforms.length > 0
+          ? `端列表: ${platforms.map(p => p.name).join(', ')}`
           : '端列表为空',
-        fix: config.platforms.length === 0 ? '在 .speccore/PROJECT.yaml 中配置 platforms' : undefined,
+        fix: platforms.length === 0 ? '在 .speccore/PROJECT.yaml 中配置 platforms' : undefined,
       });
 
       // 校验警告

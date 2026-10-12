@@ -14,6 +14,7 @@
  */
 import { ensureDir, pathExists, writeJson, readJson, writeFile, readFile } from 'fs-extra';
 import { join } from 'path';
+import { getProjectRoot } from '../utils/task-utils';
 
 export interface IterationCacheContext {
   iteration: string;
@@ -24,7 +25,7 @@ export interface IterationCacheContext {
 }
 
 function getCacheDir(iteration: string): string {
-  return join(process.cwd(), '.speccore', 'cache', 'iterations', iteration);
+  return join(getProjectRoot(), '.speccore', 'cache', 'iterations', iteration);
 }
 
 /**

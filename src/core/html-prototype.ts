@@ -11,6 +11,7 @@
 import { chromium, Browser } from 'playwright';
 import { pathToFileURL } from 'url';
 import { join, basename } from 'path';
+import { getProjectRoot } from '../utils/task-utils';
 import { ensureDir, pathExists } from 'fs-extra';
 import { existsSync } from 'fs';
 
@@ -32,7 +33,7 @@ export async function renderHtmlPrototype(
 ): Promise<HtmlPrototype | null> {
   if (!(await pathExists(htmlPath))) return null;
 
-  const dir = outputDir || join(process.cwd(), '.speccore', 'cache', 'prototypes');
+  const dir = outputDir || join(getProjectRoot(), '.speccore', 'cache', 'prototypes');
   await ensureDir(dir);
 
   let browser: Browser | null = null;

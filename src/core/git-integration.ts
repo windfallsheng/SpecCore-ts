@@ -14,8 +14,9 @@ import { join } from 'path';
 import { execSync } from 'child_process';
 import { randomBytes } from 'crypto';
 import { loadRawProjectConfig } from './unified-config';
+import { getProjectRoot } from '../utils/task-utils';
 
-const GIT_MAPPING_PATH = '.speccore/.git-mapping.json';
+const gitMappingPath = () => join(getProjectRoot(), '.speccore', '.git-mapping.json');
 
 interface GitMapping {
   [branchName: string]: {
@@ -315,7 +316,7 @@ export function loadGitConfig(iteration?: string, taskDir?: string): GitConfig {
 
   // ── 1. 读取全局 CONSTITUTION.md ──
   try {
-    const constitutionPath = join('.speccore', 'CONSTITUTION.md');
+    const constitutionPath = join(getProjectRoot(), '.speccore', 'CONSTITUTION.md');
     if (existsSync(constitutionPath)) {
       const content = readFileSync(constitutionPath, 'utf-8');
 
@@ -357,7 +358,7 @@ export function loadGitConfig(iteration?: string, taskDir?: string): GitConfig {
   // ── 2. 迭代级 PROJECT_GRAPH.md 覆盖全局 ──
   if (iteration) {
     try {
-      const iterGraphPath = join(`Iteration-${iteration}`, '000-overview', 'PROJECT_GRAPH.md');
+      const iterGraphPath = join(getProjectRoot(), `Iteration-${iteration}`, '000-overview', 'PROJECT_GRAPH.md');
       if (existsSync(iterGraphPath)) {
         const content = readFileSync(iterGraphPath, 'utf-8');
 
@@ -491,7 +492,7 @@ export async function resolveTaskBaseBranch(
   // 2. 迭代级 PROJECT_GRAPH.md「默认分支」
   if (iteration) {
     try {
-      const iterGraphPath = join(`Iteration-${iteration}`, '000-overview', 'PROJECT_GRAPH.md');
+      const iterGraphPath = join(getProjectRoot(), `Iteration-${iteration}`, '000-overview', 'PROJECT_GRAPH.md');
       if (existsSync(iterGraphPath)) {
         const content = readFileSync(iterGraphPath, 'utf-8');
         const tableMatch = content.match(/\|\s*默认分支\s*\|\s*([^|]+)\s*\|/);
@@ -589,7 +590,7 @@ export function generatePRDescription(taskId: string, taskName: string, cwd?: st
  */
 export function getProtectedBranches(): string[] {
   try {
-    const constitutionPath = join('.speccore', 'CONSTITUTION.md');
+    const constitutionPath = join(getProjectRoot(), '.speccore', 'CONSTITUTION.md');
     if (!existsSync(constitutionPath)) return [];
     const content = readFileSync(constitutionPath, 'utf-8');
     // v8.3.300: 行首锚定 + 兼容「**保护分支**」双侧加粗格式（此前匹配不到导致保护分支检查失效）
@@ -744,16 +745,16 @@ speccore validate --warn-only
 
 function loadMapping(): GitMapping {
   try {
-    if (existsSync(GIT_MAPPING_PATH)) {
-      return JSON.parse(readFileSync(GIT_MAPPING_PATH, 'utf-8'));
+    if (existsSync(gitMappingPath())) {
+      return JSON.parse(readFileSync(gitMappingPath(), 'utf-8'));
     }
   } catch {}
   return {};
 }
 
 function saveMapping(mapping: GitMapping): void {
-  ensureFileSync(GIT_MAPPING_PATH);
-  writeFileSync(GIT_MAPPING_PATH, JSON.stringify(mapping, null, 2));
+  ensureFileSync(gitMappingPath());
+  writeFileSync(gitMappingPath(), JSON.stringify(mapping, null, 2));
 }
 
 /**
@@ -832,7 +833,7 @@ function getChangedFiles(cwd?: string): string[] {
 /** 清理过期代码索引缓存（超过24小时自动清理） */
 export function cleanStaleCache(): boolean {
   try {
-    const cacheFile = '.speccore/cache/code-structure.json';
+    const cacheFile = join(getProjectRoot(), '.speccore', 'cache', 'code-structure.json');
     const fs = require('fs');
     if (!fs.existsSync(cacheFile)) return false;
     const stat = fs.statSync(cacheFile);

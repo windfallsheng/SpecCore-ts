@@ -4,6 +4,7 @@
  */
 
 import { logger, Spinner } from '../utils/logger';
+import { getProjectRoot } from '../utils/task-utils';
 import { registerRequirement } from '../core/requirement-tracker';
 import { getDefaultIteration, getIterationDir } from '../core/context';
 import { readFile, writeFile, pathExists, ensureDir } from 'fs-extra';
@@ -777,7 +778,7 @@ async function applyGlobalChange(options: ChangeOptions): Promise<void> {
   const tx = new FileTransaction();
 
   // 更新 CONSTITUTION.md 的变更记录（事务保护）
-  const constPath = join(process.cwd(), '.speccore', 'CONSTITUTION.md');
+  const constPath = join(getProjectRoot(), '.speccore', 'CONSTITUTION.md');
   if (await pathExists(constPath)) {
     let content = await readFile(constPath, 'utf-8');
     const now = new Date().toISOString().split('T')[0];

@@ -8,8 +8,9 @@
 import { ensureFileSync, appendFileSync } from 'fs-extra';
 import { join } from 'path';
 import * as os from 'os';
+import { getProjectRoot } from '../utils/task-utils';
 
-const getLogDir = () => join(process.cwd(), '.speccore', 'logs');
+const getLogDir = () => join(getProjectRoot(), '.speccore', 'logs');
 
 /**
  * 记录操作日志

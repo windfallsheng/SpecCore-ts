@@ -16,6 +16,7 @@ import { readFile, writeFile, pathExists, ensureDir, readdir, stat } from 'fs-ex
 import { join, relative, basename, dirname } from 'path';
 import * as ts from 'typescript';
 import { logger } from '../utils/logger';
+import { getProjectRoot } from '../utils/task-utils';
 
 // ── 输出数据结构 ──
 
@@ -167,7 +168,7 @@ export interface StructuredData {
   };
 }
 
-const CACHE_PATH = join('.speccore', 'cache', 'structured-data.json');
+const structuredCachePath = () => join(getProjectRoot(), '.speccore', 'cache', 'structured-data.json');
 
 // ── TypeScript AST 辅助 ──
 
@@ -797,11 +798,11 @@ export async function extractStructuredData(
   }
 
   // 写入缓存
-  await ensureDir(dirname(CACHE_PATH));
-  await writeFile(CACHE_PATH, JSON.stringify(data, null, 2));
+  await ensureDir(dirname(structuredCachePath()));
+  await writeFile(structuredCachePath(), JSON.stringify(data, null, 2));
 
   // v8.3.160+: 按端写入分段文件，AI 分析特定端时只需读取该端数据（大项目关键优化）
-  const cacheDir = dirname(CACHE_PATH);
+  const cacheDir = dirname(structuredCachePath());
   for (const platform of Object.keys(data.endpoints)) {
     const ep = data.endpoints[platform];
     const platformData = {
@@ -831,7 +832,7 @@ export async function extractStructuredData(
     await writeFile(platformPath, JSON.stringify(platformData, null, 2));
   }
 
-  logger.info(`📊 结构化数据提取完成: ${CACHE_PATH}`);
+  logger.info(`📊 结构化数据提取完成: ${structuredCachePath()}`);
   logger.info(`   API: ${data.stats.totalApis}, Entity: ${data.stats.totalEntities}, Route: ${data.stats.totalRoutes}, Component: ${data.stats.totalComponents}, DTO: ${data.stats.totalDtos}, Service: ${data.stats.totalServices}, Files: ${totalFiles}`);
   logger.info(`   分段文件: ${Object.keys(data.endpoints).map(p => `structured-data.${p}.json`).join(', ')}`);
 
@@ -842,9 +843,9 @@ export async function extractStructuredData(
  * 加载已提取的结构化数据
  */
 export async function loadStructuredData(): Promise<StructuredData | null> {
-  if (!(await pathExists(CACHE_PATH))) return null;
+  if (!(await pathExists(structuredCachePath()))) return null;
   try {
-    const content = await readFile(CACHE_PATH, 'utf-8');
+    const content = await readFile(structuredCachePath(), 'utf-8');
     return JSON.parse(content) as StructuredData;
   } catch {
     return null;
@@ -853,7 +854,7 @@ export async function loadStructuredData(): Promise<StructuredData | null> {
 
 // v8.3.160+: 加载特定端的结构化数据（大项目按需读取优化）
 export async function loadStructuredDataForPlatform(platform: string): Promise<any | null> {
-  const platformPath = join(dirname(CACHE_PATH), `structured-data.${platform}.json`);
+  const platformPath = join(dirname(structuredCachePath()), `structured-data.${platform}.json`);
   if (!(await pathExists(platformPath))) return null;
   try {
     const content = await readFile(platformPath, 'utf-8');
@@ -865,7 +866,7 @@ export async function loadStructuredDataForPlatform(platform: string): Promise<a
 
 // v8.3.160+: 列出可用的分段结构化数据文件
 export async function listStructuredDataPlatforms(): Promise<string[]> {
-  const cacheDir = dirname(CACHE_PATH);
+  const cacheDir = dirname(structuredCachePath());
   if (!(await pathExists(cacheDir))) return [];
   try {
     const files = await readdir(cacheDir);

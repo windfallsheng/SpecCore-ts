@@ -17,6 +17,7 @@ import { join } from 'path';
 import { ensureDir, writeFile, pathExists } from 'fs-extra';
 import { glob } from 'glob';
 import { logger } from '../../utils/logger';
+import { getProjectRoot } from '../../utils/task-utils';
 import { parseProject } from './parser';
 import { buildCodeGraph } from './builder';
 import { generateGraphReport } from './reporter';
@@ -24,7 +25,7 @@ import { buildCodeGraphHtml } from './visualizer';
 import { extractMultimodalNodes } from './multimodal';
 import type { CodeGraph } from './types';
 
-const GRAPH_DIR = '.speccore/code-graph';
+const GRAPH_DIR = join(getProjectRoot(), '.speccore', 'code-graph');
 
 export interface BuildGraphOptions {
   scope?: string;

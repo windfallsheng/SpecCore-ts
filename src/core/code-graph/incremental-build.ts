@@ -7,6 +7,7 @@ import { readFile, writeFile, pathExists, stat, ensureDir } from 'fs-extra';
 import { glob } from 'glob';
 import { createHash } from 'crypto';
 import { logger } from '../../utils/logger';
+import { getProjectRoot } from '../../utils/task-utils';
 import { parseProject } from './parser';
 import { buildCodeGraph } from './builder';
 import { extractMultimodalNodes } from './multimodal';
@@ -14,7 +15,7 @@ import { generateGraphReport } from './reporter';
 import { buildCodeGraphHtml } from './visualizer';
 import type { CodeGraph, CodeNode, CodeEdge } from './types';
 
-const GRAPH_DIR = '.speccore/code-graph';
+const GRAPH_DIR = join(getProjectRoot(), '.speccore', 'code-graph');
 const STATE_FILE = '.graph-state.json';
 
 interface FileState {

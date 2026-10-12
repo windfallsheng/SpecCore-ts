@@ -11,6 +11,7 @@ import { readFile, writeFile, pathExists, ensureDir } from 'fs-extra';
 import { join } from 'path';
 import yaml from 'js-yaml';
 import { logger } from '../utils/logger';
+import { getProjectRoot } from '../utils/task-utils';
 
 /** 当前系统配置 schema 版本号（.speccore.yml） */
 export const CURRENT_SCHEMA_VERSION = 1;
@@ -367,8 +368,8 @@ export const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
   code_scope: ['src/'],
 };
 
-const CONFIG_PATH = join('.speccore.yml');
-const PROJECT_CONFIG_PATH = join('.speccore', 'PROJECT.yaml');
+const resolveConfigPath = () => join(getProjectRoot(), '.speccore.yml');
+const resolveProjectConfigPath = () => join(getProjectRoot(), '.speccore', 'PROJECT.yaml');
 
 // ─────────────────────────────────────────
 // 系统配置加载（含校验 + 自动补全 + 版本检测）
@@ -398,13 +399,13 @@ export async function loadConfig(): Promise<SpecConfig> {
 export async function loadConfigWithMeta(): Promise<ConfigLoadResult> {
   const warnings: string[] = [];
 
-  if (!(await pathExists(CONFIG_PATH))) {
+  if (!(await pathExists(resolveConfigPath()))) {
     warnings.push('⚠️ .speccore.yml 不存在，使用默认配置');
     return { config: { ...DEFAULT_CONFIG }, warnings, migrated: false };
   }
 
   try {
-    const raw = await readFile(CONFIG_PATH, 'utf-8');
+    const raw = await readFile(resolveConfigPath(), 'utf-8');
     const parsed = parseYaml(raw) as Record<string, unknown>;
 
     // v8.3.25+: 解析环境变量引用（如 apiKey: ${SPECCORE_LLM_KEY}）
@@ -466,9 +467,9 @@ export async function loadProjectConfig(): Promise<ProjectConfig> {
  * 拉分支等需要严格遵循用户声明语义的消费方应使用本函数。
  */
 export async function loadRawProjectConfig(): Promise<ProjectConfig | null> {
-  if (!(await pathExists(PROJECT_CONFIG_PATH))) return null;
+  if (!(await pathExists(resolveProjectConfigPath()))) return null;
   try {
-    const raw = await readFile(PROJECT_CONFIG_PATH, 'utf-8');
+    const raw = await readFile(resolveProjectConfigPath(), 'utf-8');
     const parsed = parseYaml(raw) as Record<string, unknown>;
     return parsed as unknown as ProjectConfig;
   } catch {
@@ -480,13 +481,13 @@ export async function loadRawProjectConfig(): Promise<ProjectConfig | null> {
 export async function loadProjectConfigWithMeta(): Promise<ProjectConfigLoadResult> {
   const warnings: string[] = [];
 
-  if (!(await pathExists(PROJECT_CONFIG_PATH))) {
+  if (!(await pathExists(resolveProjectConfigPath()))) {
     warnings.push('⚠️ .speccore/PROJECT.yaml 不存在，使用默认项目配置');
     return { config: { ...DEFAULT_PROJECT_CONFIG }, warnings, migrated: false };
   }
 
   try {
-    const raw = await readFile(PROJECT_CONFIG_PATH, 'utf-8');
+    const raw = await readFile(resolveProjectConfigPath(), 'utf-8');
     const parsed = parseYaml(raw) as Record<string, unknown>;
 
     // 解析环境变量
@@ -604,14 +605,14 @@ export async function getConfig(): Promise<SpecConfig> {
 export async function saveConfig(config: SpecConfig): Promise<void> {
   const enriched = { ...config, schema_version: CURRENT_SCHEMA_VERSION };
   const yaml = toYaml(enriched);
-  await writeFile(CONFIG_PATH, yaml, 'utf-8');
+  await writeFile(resolveConfigPath(), yaml, 'utf-8');
 }
 
 export async function saveProjectConfig(config: ProjectConfig): Promise<void> {
   const enriched = { ...config, schema_version: CURRENT_SCHEMA_VERSION };
   const yaml = toProjectYaml(enriched);
-  await ensureDir(join('.speccore'));
-  await writeFile(PROJECT_CONFIG_PATH, yaml, 'utf-8');
+  await ensureDir(join(getProjectRoot(), '.speccore'));
+  await writeFile(resolveProjectConfigPath(), yaml, 'utf-8');
 }
 
 /**
@@ -904,9 +905,9 @@ export function requiresUserConfirmation(diff: ConfigDiff): boolean {
  * 返回 null 表示文件不存在或解析失败。
  */
 export async function detectConfigDiffFromFile(): Promise<ConfigDiff | null> {
-  if (!(await pathExists(CONFIG_PATH))) return null;
+  if (!(await pathExists(resolveConfigPath()))) return null;
   try {
-    const raw = await readFile(CONFIG_PATH, 'utf-8');
+    const raw = await readFile(resolveConfigPath(), 'utf-8');
     const parsed = parseYaml(raw) as Record<string, unknown>;
     return detectConfigDiff(parsed, DEFAULT_CONFIG);
   } catch {
@@ -918,9 +919,9 @@ export async function detectConfigDiffFromFile(): Promise<ConfigDiff | null> {
  * 检测磁盘 .speccore/PROJECT.yaml 与默认项目配置的差异（直接读原始文件）
  */
 export async function detectProjectConfigDiffFromFile(): Promise<ConfigDiff | null> {
-  if (!(await pathExists(PROJECT_CONFIG_PATH))) return null;
+  if (!(await pathExists(resolveProjectConfigPath()))) return null;
   try {
-    const raw = await readFile(PROJECT_CONFIG_PATH, 'utf-8');
+    const raw = await readFile(resolveProjectConfigPath(), 'utf-8');
     const parsed = parseYaml(raw) as Record<string, unknown>;
     return detectConfigDiff(parsed, DEFAULT_PROJECT_CONFIG);
   } catch {
@@ -1099,8 +1100,8 @@ export async function upgradeConfig(): Promise<ConfigLoadResult> {
     ];
 
     try {
-      const diffPath = join('.speccore', 'config', 'upgrade-diff.md');
-      await ensureDir(join('.speccore', 'config'));
+      const diffPath = join(getProjectRoot(), '.speccore', 'config', 'upgrade-diff.md');
+      await ensureDir(join(getProjectRoot(), '.speccore', 'config'));
       await writeFile(diffPath, reportLines.join('\n'), 'utf-8');
       logger.info(`\n📝 差异报告已保存: ${diffPath}`);
     } catch { /* 静默失败 */ }
@@ -1231,8 +1232,8 @@ export async function upgradeProjectConfig(): Promise<ProjectConfigLoadResult> {
     ];
 
     try {
-      const diffPath = join('.speccore', 'config', 'upgrade-diff-project.md');
-      await ensureDir(join('.speccore', 'config'));
+      const diffPath = join(getProjectRoot(), '.speccore', 'config', 'upgrade-diff-project.md');
+      await ensureDir(join(getProjectRoot(), '.speccore', 'config'));
       await writeFile(diffPath, reportLines.join('\n'), 'utf-8');
       logger.info(`\n📝 差异报告已保存: ${diffPath}`);
     } catch { /* 静默失败 */ }

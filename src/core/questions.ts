@@ -7,6 +7,7 @@
 import { writeFile, ensureDir, pathExists, readFile, readdir } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
+import { getProjectRoot } from '../utils/task-utils';
 
 /** 疑问条目 */
 export interface QuestionItem {
@@ -30,7 +31,7 @@ export interface QuestionContext {
   meta?: string;
 }
 
-const QUESTIONS_DIR = join('.speccore', 'questions');
+const QUESTIONS_DIR = join(getProjectRoot(), '.speccore', 'questions');
 
 /**
  * 生成疑问清单文件路径
@@ -150,7 +151,7 @@ export function extractQuestionsFromText(text: string): QuestionItem[] {
  * 返回按时间排序的文件路径列表
  */
 export async function collectQuestionFiles(): Promise<string[]> {
-  const questionsDir = join('.speccore', 'questions');
+  const questionsDir = join(getProjectRoot(), '.speccore', 'questions');
   if (!(await pathExists(questionsDir))) return [];
   const files = await readdir(questionsDir);
   return files

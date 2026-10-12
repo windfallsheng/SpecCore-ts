@@ -18,6 +18,7 @@ import { join } from 'path';
 import { pathExists, readFile, stat, readdir } from 'fs-extra';
 import { createHash } from 'crypto';
 import { logger } from '../utils/logger';
+import { getProjectRoot } from '../utils/task-utils';
 import { parsePlatformList } from './spec-paths';
 
 // ── 类型定义 ──
@@ -65,7 +66,7 @@ interface AnalysisSnapshot {
 
 // ── 常量 ──
 
-const SNAPSHOT_FILE = '.speccore/cache/last-analysis-snapshot.json';
+const SNAPSHOT_FILE = join(getProjectRoot(), '.speccore', 'cache', 'last-analysis-snapshot.json');
 
 // ── 核心函数 ──
 

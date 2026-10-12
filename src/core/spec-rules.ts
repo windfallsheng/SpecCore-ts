@@ -4,6 +4,7 @@
  */
 import { readFile, pathExists } from 'fs-extra';
 import { join } from 'path';
+import { getProjectRoot } from '../utils/task-utils';
 
 export interface SpecRules {
   exceptionHandler: 'BusinessException' | 'none';
@@ -34,7 +35,7 @@ const DEFAULT_RULES: SpecRules = {
 
 /** 从 CONSTITUTION.md 加载 Spec 规则 */
 export async function loadSpecRules(): Promise<SpecRules> {
-  const constitutionPath = join(process.cwd(), '.speccore', 'CONSTITUTION.md');
+  const constitutionPath = join(getProjectRoot(), '.speccore', 'CONSTITUTION.md');
   if (!(await pathExists(constitutionPath))) {
     return { ...DEFAULT_RULES };
   }
@@ -144,7 +145,7 @@ const DEFAULT_TECH_STACK: TechStack = {
 
 /** 从 TECH_STACK.md 加载技术栈配置 */
 export async function loadTechStack(): Promise<TechStack> {
-  const techPath = join(process.cwd(), '.speccore', 'GLOBAL', 'TECH_STACK.md');
+  const techPath = join(getProjectRoot(), '.speccore', 'GLOBAL', 'TECH_STACK.md');
   if (!(await pathExists(techPath))) {
     return { ...DEFAULT_TECH_STACK };
   }

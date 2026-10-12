@@ -15,6 +15,7 @@
 import { writeFile, ensureDir, readFile, pathExists, rename } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
+import { getProjectRoot } from '../utils/task-utils';
 import { buildCodeIndex, loadFullIndex, type CodeIndex, type CodeFile, type EndpointInfo, type ModuleInfo } from './code-scanner';
 
 /** 写入前检查冲突：内容不同则旧文件重命名为时间戳格式 */
@@ -32,7 +33,7 @@ async function safeWrite(filePath: string, newContent: string): Promise<void> {
 }
 
 export async function generateGlobalArtifacts(sources: string[], depth: string): Promise<void> {
-  const globalDir = join('.speccore', 'GLOBAL');
+  const globalDir = join(getProjectRoot(), '.speccore', 'GLOBAL');
   const overviewDir = join(globalDir, 'overview');
   const platformsDir = join(globalDir, 'platforms');
   const reqDir = join(globalDir, 'requirements');

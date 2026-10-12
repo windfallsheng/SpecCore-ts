@@ -5,6 +5,7 @@
 import { join, basename } from 'path';
 import { readdir, readFile, writeFile, pathExists, stat, ensureDir } from 'fs-extra';
 import { logger } from '../utils/logger';
+import { getProjectRoot } from '../utils/task-utils';
 import { extractExcelBugs } from './excel-extract';
 
 // ── 类型定义 ──
@@ -60,7 +61,7 @@ export interface ImpactReport {
 
 // ── 常量 ──
 
-const INBOX_DIR = '.speccore/inbox';
+const inboxDir = () => join(getProjectRoot(), '.speccore', 'inbox');
 const MANIFEST_FILE = '.manifest.json';
 
 // ── 核心函数 ──
@@ -69,7 +70,8 @@ const MANIFEST_FILE = '.manifest.json';
  * 获取 inbox 目录绝对路径
  */
 export function getInboxDir(): string {
-  return join(process.cwd(), INBOX_DIR);
+  // v8.3.305: inboxDir() 已是基于项目根的绝对路径，不再叠加 cwd
+  return inboxDir();
 }
 
 /**

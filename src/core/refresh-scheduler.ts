@@ -17,6 +17,7 @@
 import { join } from 'path';
 import { pathExists } from 'fs-extra';
 import { logger } from '../utils/logger';
+import { getProjectRoot } from '../utils/task-utils';
 import {
   checkRagIndexFreshness,
   refreshRagIndex,
@@ -131,15 +132,15 @@ async function refreshRagByScope(
   const { iteration, scope, taskId } = options;
 
   if (scope === 'task' && taskId && iteration) {
-    const taskDir = join(`Iteration-${iteration}`, '030-tasks', taskId);
+    const taskDir = join(getProjectRoot(), `Iteration-${iteration}`, '030-tasks', taskId);
     if (await pathExists(taskDir)) {
       const { staleFiles, newFiles } = await checkRagIndexFreshness(cwd);
       await refreshRagIndex(cwd, taskDir, iteration);
       return { refreshed: true, changes: staleFiles.length + newFiles.length };
     }
   } else if (scope === 'iteration' && iteration) {
-    const specsDir = join(`Iteration-${iteration}`, '020-specs');
-    const reqDir = join(`Iteration-${iteration}`, '010-requirements');
+    const specsDir = join(getProjectRoot(), `Iteration-${iteration}`, '020-specs');
+    const reqDir = join(getProjectRoot(), `Iteration-${iteration}`, '010-requirements');
     const dirs: string[] = [];
     if (await pathExists(specsDir)) dirs.push(specsDir);
     if (await pathExists(reqDir)) dirs.push(reqDir);

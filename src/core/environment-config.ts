@@ -9,6 +9,7 @@
 import { readFile, pathExists } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
+import { getProjectRoot } from '../utils/task-utils';
 import type { DeployEnvConfig } from './unified-config';
 import type { AuthConfig } from './ui-verify/types';
 import { parseAuthConfig } from './test-config';
@@ -71,7 +72,7 @@ export interface EnvironmentConfig {
   };
 }
 
-const ENV_DIR = join('.speccore', 'environments');
+const envDir = () => join(getProjectRoot(), '.speccore', 'environments');
 
 /** 解析 YAML（复用统一配置中的解析逻辑） */
 function parseEnvYaml(content: string): Record<string, unknown> {
@@ -223,7 +224,7 @@ export async function loadEnvironmentConfig(filePath: string): Promise<Environme
 
 /** 按环境名解析配置文件路径 */
 export async function resolveEnvironmentConfig(envName: string): Promise<{ config: EnvironmentConfig | null; path: string }> {
-  const envPath = join(ENV_DIR, `${envName}.yaml`);
+  const envPath = join(envDir(), `${envName}.yaml`);
   const config = await loadEnvironmentConfig(envPath);
   return { config, path: envPath };
 }

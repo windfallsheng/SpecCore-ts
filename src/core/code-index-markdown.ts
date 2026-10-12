@@ -8,8 +8,9 @@
 import { writeFile, ensureDir } from 'fs-extra';
 import { join } from 'path';
 import type { CodeIndex, EndpointInfo, ModuleInfo, GitCorrelation } from './code-scanner';
+import { getProjectRoot } from '../utils/task-utils';
 
-const CACHE_DIR = join('.speccore', 'cache');
+const codeIndexCacheDir = () => join(getProjectRoot(), '.speccore', 'cache');
 
 /**
  * 生成所有 Markdown 索引文件
@@ -20,15 +21,15 @@ export async function generateMarkdownIndex(index: CodeIndex): Promise<string[]>
 
   // 1. 总索引 CODE_INDEX.md
   const mainMd = buildMainIndex(index);
-  const mainPath = join(CACHE_DIR, 'CODE_INDEX.md');
-  await ensureDir(join(CACHE_DIR, 'endpoints'));
+  const mainPath = join(codeIndexCacheDir(), 'CODE_INDEX.md');
+  await ensureDir(join(codeIndexCacheDir(), 'endpoints'));
   await writeFile(mainPath, mainMd);
   generated.push(mainPath);
 
   // 2. 各端 endpoints/<name>.md
   for (const ep of index.endpoints) {
     const epMd = buildEndpointMd(ep, index.modules.filter(m => m.endpoint === ep.name));
-    const epPath = join(CACHE_DIR, 'endpoints', `${ep.name}.md`);
+    const epPath = join(codeIndexCacheDir(), 'endpoints', `${ep.name}.md`);
     await writeFile(epPath, epMd);
     generated.push(epPath);
   }

@@ -5,6 +5,7 @@
 
 import { ensureDir, writeFile, readFile, pathExists, readdir } from 'fs-extra';
 import { join } from 'path';
+import { getProjectRoot } from '../utils/task-utils';
 
 // ============================================================
 // 类型定义
@@ -77,7 +78,7 @@ export interface ReqChange {
 // ============================================================
 
 function getGlobalDir(): string {
-  return join(process.cwd(), '.speccore', 'GLOBAL');
+  return join(getProjectRoot(), '.speccore', 'GLOBAL');
 }
 
 function getIndexPath(): string {

@@ -2,9 +2,11 @@
  * 会话状态持久化 — 协作式命令的断点续传
  */
 import { ensureDir, readJson, writeJson, pathExists, remove } from 'fs-extra';
+import { join } from 'path';
 import { logger } from '../utils/logger';
+import { getProjectRoot } from '../utils/task-utils';
 
-const SESSION_PATH = '.speccore/local/sessions.json';
+const sessionPath = () => join(getProjectRoot(), '.speccore', 'local', 'sessions.json');
 
 /** 单个命令的会话状态 */
 export interface CommandSession {
@@ -32,13 +34,13 @@ interface SessionStore {
 }
 
 async function loadStore(): Promise<SessionStore> {
-  if (!(await pathExists(SESSION_PATH))) return { sessions: [] };
-  return readJson(SESSION_PATH);
+  if (!(await pathExists(sessionPath()))) return { sessions: [] };
+  return readJson(sessionPath());
 }
 
 async function saveStore(store: SessionStore): Promise<void> {
-  await ensureDir('.speccore/local');
-  await writeJson(SESSION_PATH, store, { spaces: 2 });
+  await ensureDir(join(getProjectRoot(), '.speccore', 'local'));
+  await writeJson(sessionPath(), store, { spaces: 2 });
 }
 
 /** 保存一个命令的会话状态 */

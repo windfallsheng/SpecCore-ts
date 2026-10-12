@@ -1,6 +1,7 @@
 import { pathExists, readdir, readFile } from 'fs-extra';
 import { join, basename } from 'path';
 import { parseYamlFile, validateApiContract } from './yaml-parser';
+import { getProjectRoot } from '../utils/task-utils';
 
 export interface ValidationError {
   file: string;
@@ -74,7 +75,7 @@ async function validateTask(
     passRate: 0
   };
   
-  const taskPath = join(`Iteration-${iteration}`, taskId);
+  const taskPath = join(getProjectRoot(), `Iteration-${iteration}`, taskId);
   
   // Check if task directory exists
   if (!(await pathExists(taskPath))) {

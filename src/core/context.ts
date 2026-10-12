@@ -1,6 +1,6 @@
 import { ensureDir, readJson, writeJson, pathExists } from 'fs-extra';
 import { join } from "path";
-import { findProjectRoot } from '../utils/task-utils';
+import { findProjectRoot, getProjectRoot } from '../utils/task-utils';
 
 export interface Context {
   currentIteration: string;
@@ -34,11 +34,12 @@ export interface ContextHistoryEntry {
   task?: string;
 }
 
-const CONTEXT_PATH = '.speccore/local/context.json';
+/** 会话上下文文件（v8.3.305: 基于项目根解析，支持在任意子目录执行） */
+const contextPath = () => join(getProjectRoot(), '.speccore', 'local', 'context.json');
 
 export async function loadContext(): Promise<Context> {
-  if (await pathExists(CONTEXT_PATH)) {
-    return await readJson(CONTEXT_PATH) as Context;
+  if (await pathExists(contextPath())) {
+    return await readJson(contextPath()) as Context;
   }
   return {
     currentIteration: '',
@@ -59,9 +60,9 @@ export async function loadContext(): Promise<Context> {
 }
 
 export async function saveContext(context: Context): Promise<void> {
-  await ensureDir('.speccore/local');
+  await ensureDir(join(getProjectRoot(), '.speccore', 'local'));
   context.lastUpdated = new Date().toISOString();
-  await writeJson(CONTEXT_PATH, context, { spaces: 2 });
+  await writeJson(contextPath(), context, { spaces: 2 });
 }
 
 export async function updateContext(partial: Partial<Context>): Promise<void> {
@@ -96,7 +97,7 @@ export async function detectActiveIteration(): Promise<string> {
   }
   
   // Read ITERATIONS/README.md
-  const iterationsPath = join('.speccore', 'ITERATIONS', 'README.md');
+  const iterationsPath = join(getProjectRoot(), '.speccore', 'ITERATIONS', 'README.md');
   if (!(await pathExists(iterationsPath))) {
     return '';
   }

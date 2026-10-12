@@ -38,10 +38,20 @@ export function ensureProjectRoot(): string {
 }
 
 /**
+ * 获取项目根目录（向上查找 .speccore/，找不到回退 cwd）
+ * v8.3.305: 统一项目资产（.speccore/ 配置/宪法/缓存/迭代目录）路径解析锚点，
+ * 修复在子目录执行时「找不到项目信息/端列表」的问题
+ */
+export function getProjectRoot(): string {
+  return findProjectRoot() || process.cwd();
+}
+
+/**
  * 获取迭代目录（统一路径解析）
+ * v8.3.305: 基于项目根解析（向上查找 .speccore/），支持在任意子目录执行
  */
 export function getIterationDir(iteration: string): string {
-  const root = process.cwd();
+  const root = findProjectRoot() || process.cwd();
   return join(root, iteration);
 }
 

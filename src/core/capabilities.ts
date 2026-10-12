@@ -4,8 +4,9 @@
  */
 import { readFile, writeFile, pathExists, readdir } from 'fs-extra';
 import { join } from 'path';
+import { getProjectRoot } from '../utils/task-utils';
 
-const CAP_PATH = join(process.cwd(), '.speccore', 'CAPABILITIES.md');
+const CAP_PATH = join(getProjectRoot(), '.speccore', 'CAPABILITIES.md');
 
 export async function syncCapabilities(options?: {
   importProject?: string;

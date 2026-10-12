@@ -4,6 +4,7 @@
  */
 
 import { logger, Spinner } from '../utils/logger';
+import { getProjectRoot } from '../utils/task-utils';
 import { readGlobalIndex, readRequirementDetail } from '../core/global-layer';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
@@ -13,7 +14,7 @@ export interface HistoryOptions {
 }
 
 async function showOpsHistory(): Promise<void> {
-  const logPath = join(process.cwd(), '.speccore', 'logs', 'operations.log');
+  const logPath = join(getProjectRoot(), '.speccore', 'logs', 'operations.log');
 
   if (!existsSync(logPath)) {
     logger.info('\n  📭 尚无操作记录');

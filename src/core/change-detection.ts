@@ -13,6 +13,7 @@ import { readFile, writeFile, pathExists } from 'fs-extra';
 import { join } from 'path';
 import { execSync } from 'child_process';
 import { logger } from '../utils/logger';
+import { getProjectRoot } from '../utils/task-utils';
 
 export interface PlatformChangeInfo {
   platform: string;
@@ -354,15 +355,15 @@ export interface AnalysisSnapshots {
   [scope: string]: AnalysisSnapshot;
 }
 
-const SNAPSHOT_FILE = join('.speccore', 'cache', 'analysis-snapshots.json');
+const snapshotFile = () => join(getProjectRoot(), '.speccore', 'cache', 'analysis-snapshots.json');
 
 /**
  * 读取分析快照文件
  */
 export async function readAnalysisSnapshots(): Promise<AnalysisSnapshots> {
   try {
-    if (await pathExists(SNAPSHOT_FILE)) {
-      const content = await readFile(SNAPSHOT_FILE, 'utf-8');
+    if (await pathExists(snapshotFile())) {
+      const content = await readFile(snapshotFile(), 'utf-8');
       return JSON.parse(content) as AnalysisSnapshots;
     }
   } catch (e) {
@@ -376,7 +377,7 @@ export async function readAnalysisSnapshots(): Promise<AnalysisSnapshots> {
  */
 export async function writeAnalysisSnapshots(snapshots: AnalysisSnapshots): Promise<void> {
   try {
-    await writeFile(SNAPSHOT_FILE, JSON.stringify(snapshots, null, 2), 'utf-8');
+    await writeFile(snapshotFile(), JSON.stringify(snapshots, null, 2), 'utf-8');
   } catch (e) {
     logger.debug('写入分析快照失败:', e);
   }
@@ -491,7 +492,7 @@ export async function clearAnalysisSnapshot(scope?: string): Promise<void> {
     logger.info(`🗑️ 变更感知: 已清除 ${scope} 的分析快照`);
   } else {
     try {
-      await writeFile(SNAPSHOT_FILE, '{}', 'utf-8');
+      await writeFile(snapshotFile(), '{}', 'utf-8');
       logger.info('🗑️ 变更感知: 已清除所有分析快照');
     } catch (e) {
       logger.debug('清除分析快照失败:', e);

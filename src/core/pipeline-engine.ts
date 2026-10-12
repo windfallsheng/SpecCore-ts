@@ -22,6 +22,7 @@
 import { writeFile, readFile, pathExists, ensureDir, unlink } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
+import { getProjectRoot } from '../utils/task-utils';
 
 // ── 上下文快照（步骤间传递的紧凑上下文，替代对话历史） ──
 export interface ContextSnapshot {
@@ -448,7 +449,7 @@ export async function createAnalyzePipeline(
       // v8.3.160+: 条件判断 securityLevel > 2 时执行，否则跳过
       condition: async () => {
         try {
-          const projectPath = join(cwd || process.cwd(), '.speccore', 'PROJECT.yaml');
+          const projectPath = join(cwd || getProjectRoot(), '.speccore', 'PROJECT.yaml');
           if (!await pathExists(projectPath)) return true; // 默认执行
           const { readFile } = await import('fs-extra');
           const content = await readFile(projectPath, 'utf-8');

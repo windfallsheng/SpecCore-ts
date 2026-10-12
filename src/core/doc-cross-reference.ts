@@ -7,6 +7,7 @@
  */
 import { readFile, writeFile, pathExists, readdir } from 'fs-extra';
 import { join, relative } from 'path';
+import { getProjectRoot } from '../utils/task-utils';
 import { logger } from '../utils/logger';
 
 export interface CrossRefEntry {
@@ -46,7 +47,7 @@ function getDocDescription(filename: string): string {
  * 为指定目录下的所有 Markdown 文档生成交叉引用
  */
 export async function generateCrossReferences(globalDir?: string): Promise<void> {
-  const dir = globalDir || join(process.cwd(), '.speccore', 'GLOBAL');
+  const dir = globalDir || join(getProjectRoot(), '.speccore', 'GLOBAL');
   if (!(await pathExists(dir))) return;
 
   // 收集所有文档路径

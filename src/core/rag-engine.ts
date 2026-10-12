@@ -12,6 +12,7 @@
 import { readFile, pathExists, writeFile, ensureDir, stat, readdir } from 'fs-extra';
 import { join, basename } from 'path';
 import { createHash } from 'crypto';
+import { getProjectRoot } from '../utils/task-utils';
 
 // ═══════════════════════════════════════════════════════════
 // 类型定义
@@ -76,7 +77,7 @@ export interface RetrievalOptions {
 // 常量
 // ═══════════════════════════════════════════════════════════
 
-const RAG_INDEX_PATH = join('.speccore', 'cache', 'rag-index.json');
+const ragIndexPath = () => join(getProjectRoot(), '.speccore', 'cache', 'rag-index.json');
 const RAG_VERSION = '1.0';
 
 /** 停用词 */
