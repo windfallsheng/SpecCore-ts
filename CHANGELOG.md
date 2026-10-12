@@ -1,3 +1,23 @@
+## v8.3.308 (2026-10-12) — 开放类型系统：自定义任务类型 + 无分支执行 + 演示文稿类型
+
+### 背景
+- 用户场景延伸：写总结、做 PPT 等与编程无关的泛化工作也要能建任务；非系统定义的任务默认不应与代码世界（分支/源码/端拆分）发生任何关系，除非任务 spec 显式声明要写代码
+
+### 新增
+- **开放类型系统**：任务类型从「内置 8 种封闭集合」变为「内置 + 用户自定义」——`.speccore/GLOBAL/TASK_TYPES/{类型名}.md` 声明自定义类型定义（label/category/outputDir/acceptance/needsBranch/constraints），`resolveTaskTypeDefinition` 按「内置 → 自定义定义文件 → 通用非代码回退」解析；init 生成 TASK_TYPES/README.md 引导文档
+- **核心规则落地**：非系统定义的类型默认与代码世界绝缘（不建分支、不写源码、不需要端拆分与技术规格）；任务 spec 显式声明 `code: true`（或 needsCode: true / 行内「需要写代码: true」）才切换代码形态
+- **needsBranch 声明**：TaskTypeDefinition 新增字段——doc/script/data/presentation 内置类型 needsBranch=false，execute 的 prepareTaskBranch 对非代码任务直接跳过分支创建（输出 ⏭️ 日志），spec code: true 可覆盖；chain prompt 明确标注「执行形态: 代码类/非代码类」
+- **presentation 内置类型**（演示文稿/PPT）：产出 presentations/，验收「页数达标 + 每页标题与 3-5 要点 + 口播备注分离 + 无占位符」；内置 presentation-standards 约束（Markdown 大纲 + 逐页内容，渲染交给用户）
+- **chain 开放类型调度**：移除未知类型硬过滤，自定义类型照常走链；spec code: true 时自动叠加 coding-standards 约束
+- **task new 开放**：任意自定义类型允许创建（提示非代码形态），未知类型模板按「通用非代码」生成（frontmatter 带 type 声明）
+
+### 变更
+- `getTaskTypeDefinition` 未知类型回退从「feature」改为「通用非代码定义」（type 保留原名、builtin=false、needsBranch=false）；执行侧统一走异步 `resolveTaskTypeDefinition`
+- TASK_TYPES / taskify 类型收敛 / verify 端目录识别同步扩展 presentation
+
+### 测试
+- taskchain.test.ts 新增 12 用例（presentation 断言 / 通用回退 / 自定义定义文件解析三态 / spec code 声明四种格式 / resolveTaskTypeDefinition 三级解析 / 自定义类型约束参与加载）；全量 398/398 通过
+
 ## v8.3.307 (2026-10-12) — TaskChain 泛化层：任务类型注册表 + 约束集 + 无人值守链命令
 
 ### 背景
