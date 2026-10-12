@@ -1,3 +1,20 @@
+## v8.3.307 (2026-10-12) — TaskChain 泛化层：任务类型注册表 + 约束集 + 无人值守链命令
+
+### 背景
+- 长任务链场景：用户在迭代中混排「编码 / 写文档 / 写脚本 / 数据处理」等异质任务，部分任务共享共同前提约束，需无人值守逐个推进，且同类任务每次执行都要重新读取约束以重置上下文
+
+### 新增
+- **任务类型注册表**（task-type-registry.ts）：7 种任务类型单一事实来源——原有 4 种代码类型（feature/bugfix/refactor/research）语义不变，新增 doc（文档）/ script（脚本）/ data（数据处理）；每种类型声明产出目录、验收方式、分支类型、端子目录需求、默认约束集
+- **约束集加载器**（constraint-set.ts）：「共同前提约束」声明式注入——任务 spec 中 `constraints: [a, b]`（frontmatter 数组/列表或行内三种格式）∪ 类型默认约束，每次执行前重新加载；约束文件位于 `.speccore/GLOBAL/CONSTRAINTS/{名}.md`，init 自动生成 5 个内置约束（coding/doc/script/data/research-standards）
+- **chain 命令**（`speccore chain run/status/reset/constraints`）：无人值守任务链——拓扑排序逐个推进，每轮输出下一任务自包含 prompt（含重新加载的约束集），宿主 AI 执行后重复调用直至全部完成；状态文件 `.speccore/local/chain-state.json` 断点续跑，每任务开始/完成发通知
+- **task new 扩展**：支持 --type doc/script/data（非法类型拒绝）；非代码类型按注册表裁剪（无端子目录，REQ.md 预写约束声明）
+- **execute 约束注入**：runPromptMode 执行前按任务类型 + spec 声明重新加载约束集注入 prompt（重置上下文）
+- **类型贯通**：TASK_TYPES / TASK_TYPE_TO_BRANCH_TYPE / taskify 类型收敛 / verify 端目录识别同步扩展 doc/script/data（doc → docs 分支）
+
+### 测试
+- taskchain.test.ts 18 用例（注册表 7 类型断言 / 约束声明三种格式解析 / 约束加载去重与缺失容忍 / 截断 / formatConstraints）；全量 385/385 通过
+- 真实冒烟：init 生成 5 内置约束集 → task new --type doc/script/data 无端子目录 → chain run 注入约束集 → 宿主完成后 chain 汇总/status 正确 → --type 筛选与 constraints 列表正常
+
 ## v8.3.306 (2026-10-12) — 分支名与子任务 ID 一致性修复（去除重复类型段）
 
 ### 问题
