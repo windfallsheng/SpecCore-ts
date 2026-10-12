@@ -932,12 +932,78 @@ async function createGlobalFiles(speccoreDir: string): Promise<void> {
 
   // v8.3.307+: TaskChain 内置约束集（.speccore/GLOBAL/CONSTRAINTS/）
   // 「共同前提约束」的落盘：同类任务每次执行前重新加载，保证上下文不漂移
-  const { BUILTIN_CONSTRAINTS } = await import('../core/task-type-registry');
+  const { BUILTIN_CONSTRAINTS, CUSTOM_TYPES_DIR } = await import('../core/task-type-registry');
   const constraintsDir = join(globalDir, 'CONSTRAINTS');
   await ensureDir(constraintsDir);
   for (const [name, content] of Object.entries(BUILTIN_CONSTRAINTS)) {
     await writeFile(join(constraintsDir, `${name}.md`), content);
   }
+
+  // v8.3.308+: 自定义任务类型目录（开放类型系统引导文档）
+  // 用户在此声明自己的任务类型（如 summary/ppt/translation），非系统定义类型
+  // 默认与代码世界绝缘（不建分支/不写源码），spec 声明 code: true 才切代码形态
+  const customTypesDir = join(globalDir, 'TASK_TYPES');
+  await ensureDir(customTypesDir);
+  await writeFile(
+    join(customTypesDir, 'README.md'),
+    `# 自定义任务类型（v8.3.308+ 开放类型系统）
+
+> 系统内置 8 种类型（feature/bugfix/refactor/research/doc/script/data/presentation）。
+> 本目录声明**用户自定义类型**——写总结、做 PPT、翻译、任何非编程工作都可以是任务。
+
+## 核心规则
+
+**非系统定义的类型，默认与代码世界绝缘**：
+
+- 不创建 git 分支
+- 不写源码路径、不读全局代码上下文
+- 不需要端子目录与技术规格
+- 仅在任务 spec 中**显式声明** \`code: true\`（或「需要写代码: true」）时才切代码形态
+
+## 如何声明一个自定义类型
+
+创建 \`{类型名}.md\`（如 \`summary.md\`），YAML frontmatter 声明定义：
+
+\`\`\`markdown
+---
+label: 总结编写
+category: doc
+outputDir: docs/summaries/
+acceptance: 结构含「成果/问题/下一步」+ 数据有来源
+needsBranch: false
+needsPlatforms: false
+needsTechSpec: false
+constraints: [doc-standards]
+---
+正文：类型说明（可选）。
+\`\`\`
+
+字段说明：
+
+| 字段 | 默认 | 说明 |
+| :--- | :--- | :--- |
+| label | 类型名 | 中文显示名 |
+| category | custom | 泛化类别（code/doc/research/script/data/custom） |
+| outputDir | outputs/ | 产出目录（相对项目根） |
+| acceptance | 按 spec 验收 | 验收方式描述 |
+| needsBranch | false | 是否创建 git 分支 |
+| needsPlatforms | false | 是否按端拆分子目录 |
+| needsTechSpec | false | 是否需要技术规格 |
+| constraints | [] | 默认约束集（对应 CONSTRAINTS/ 下的文件） |
+
+## 任务 spec 的显式覆盖
+
+任务 spec frontmatter 可覆盖类型默认：
+
+\`\`\`markdown
+---
+type: summary
+code: true                # 显式声明要写代码 → 建分支 + 写源码
+constraints: [coding-standards, common-rules]
+---
+\`\`\`
+`
+  );
 }
 
 /**

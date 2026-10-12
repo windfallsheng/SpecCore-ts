@@ -1587,6 +1587,29 @@ async function prepareTaskBranch(
   defaultBase: string | undefined,
   createdBranches: Map<string, string>
 ): Promise<string | null> {
+  // ── v8.3.308: 非代码类型默认不建分支，除非 spec 显式声明写代码 ──
+  // 开放类型系统：内置非代码类型（doc/script/data/presentation）与用户自定义
+  // 类型默认与代码世界绝缘；spec frontmatter `code: true` 或「需要写代码: true」
+  // 显式声明时，即使类型默认无分支也走代码链路。
+  const { resolveTaskTypeDefinition, parseSpecCodeDeclaration } = await import('../core/task-type-registry');
+  const typeDef = await resolveTaskTypeDefinition(task.type || 'feature');
+  let specNeedsCode = false;
+  try {
+    const iterDirForSpec = await getIterationDir(iteration);
+    const taskDirForSpec = await resolveTaskDir(iterDirForSpec, task.id);
+    for (const f of ['00-specs/REQ.md', 'REQ.md', 'TASK.md']) {
+      const p = join(taskDirForSpec, f);
+      if (await pathExists(p)) {
+        specNeedsCode = parseSpecCodeDeclaration(await readFile(p, 'utf-8'));
+        if (specNeedsCode) break;
+      }
+    }
+  } catch { /* 读取失败按无声明处理 */ }
+  if (!typeDef.needsBranch && !specNeedsCode) {
+    logger.info(`  ⏭️ ${task.id}: ${typeDef.label}（非代码任务，跳过分支创建）`);
+    return null;
+  }
+
   // ── 0. 确定工程代码目录（从 PROJECT.yaml 读取对应 platform 的 code_path） ──
   const projectConfig = await loadProjectConfig();
   let gitCwd = process.cwd();

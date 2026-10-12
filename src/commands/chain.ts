@@ -27,7 +27,7 @@ import { logger } from '../utils/logger';
 import { getDefaultIteration, getIterationDir } from '../core/context';
 import { scanTasks, topologicalSort, TaskState } from '../core/state';
 import { sendNotification } from '../core/notification';
-import { getTaskTypeDefinition, ALL_TASK_TYPES } from '../core/task-type-registry';
+import { resolveTaskTypeDefinition, parseSpecCodeDeclaration } from '../core/task-type-registry';
 import {
   loadConstraintSet, parseDeclaredConstraints, formatConstraints, listConstraintSets,
 } from '../core/constraint-set';
@@ -133,8 +133,8 @@ async function isTaskCompleted(task: TaskState, iteration: string): Promise<bool
   }
 }
 
-/** 读取任务 spec 中声明的约束集 */
-async function readDeclaredConstraints(task: TaskState, iteration: string): Promise<string[]> {
+/** 读取任务 spec 中声明的约束集 + 「需要写代码」标记（v8.3.308） */
+async function readSpecDeclarations(task: TaskState, iteration: string): Promise<{ constraints: string[]; needsCode: boolean }> {
   try {
     const iterDir = await getIterationDir(iteration);
     const taskDir = task.path
@@ -144,30 +144,40 @@ async function readDeclaredConstraints(task: TaskState, iteration: string): Prom
     for (const f of specFiles) {
       const p = join(taskDir, f);
       if (await pathExists(p)) {
-        return parseDeclaredConstraints(await readFile(p, 'utf-8'));
+        const content = await readFile(p, 'utf-8');
+        return { constraints: parseDeclaredConstraints(content), needsCode: parseSpecCodeDeclaration(content) };
       }
     }
   } catch { /* 忽略 */ }
-  return [];
+  return { constraints: [], needsCode: false };
 }
 
-/** 构建任务执行 prompt（含约束集注入） */
+/** 构建任务执行 prompt（含约束集注入 + 代码形态判定） */
 async function buildTaskPrompt(task: TaskState, iteration: string, attempt: number, lastError?: string): Promise<string> {
-  const def = getTaskTypeDefinition(task.type);
-  const declared = await readDeclaredConstraints(task, iteration);
-  const { items, missing } = await loadConstraintSet({ taskType: task.type, declared });
+  // v8.3.308: resolveTaskTypeDefinition 支持用户自定义类型（内置 → 自定义定义文件 → 通用回退）
+  const def = await resolveTaskTypeDefinition(task.type);
+  const { constraints: declared, needsCode } = await readSpecDeclarations(task, iteration);
+  // spec 显式声明写代码 → 叠加编码约束（覆盖类型的默认无分支形态）
+  const effectiveDeclared = needsCode && !declared.includes('coding-standards')
+    ? [...declared, 'coding-standards']
+    : declared;
+  const { items, missing } = await loadConstraintSet({ taskType: task.type, declared: effectiveDeclared });
   const iterDir = await getIterationDir(iteration);
   const taskPathRel = task.path
     ? task.path.replace(join(iterDir, '030-tasks'), '030-tasks').replace(/^\//, '')
     : `030-tasks/${task.type}/${task.id}`;
 
+  // 代码形态判定：类型需要分支 OR spec 显式声明写代码
+  const wantsCode = def.needsBranch || needsCode;
+
   const lines: string[] = [
     `# TaskChain 任务: ${task.id} — ${task.name || task.id}`,
     '',
-    `- 任务类型: ${def.label}（${task.type}）`,
+    `- 任务类型: ${def.label}（${task.type}${def.builtin ? '' : '，自定义类型'}）`,
     `- 产出目录: ${def.outputDir}`,
     `- 验收方式: ${def.acceptance}`,
     `- 任务目录: ${taskPathRel}`,
+    `- 执行形态: ${wantsCode ? '代码类（需创建 git 分支，产出写源码路径）' : '非代码类（不创建分支、不写源码，直接落盘产出目录）'}`,
     '',
     '## 执行要求',
     '',
@@ -253,7 +263,8 @@ export async function chainCommand(options: ChainOptions): Promise<void> {
     for (const t of sorted) {
       const st = iterState[t.id]?.status || t.status;
       const icon = st === 'done' || t.status === 'completed' ? '✅' : st === 'failed' ? '❌' : '⏳';
-      const label = getTaskTypeDefinition(t.type).label;
+      // v8.3.308: 自定义类型也解析出 label
+      const label = (await resolveTaskTypeDefinition(t.type)).label;
       logger.info(`   ${icon} ${t.id} [${label}] ${t.name || ''}`);
     }
     return;
@@ -268,8 +279,8 @@ export async function chainCommand(options: ChainOptions): Promise<void> {
   let advancedCount = 0;
 
   for (const task of sorted) {
-    // 忽略不在注册表中的未知类型（保留给传统 execute 处理）
-    if (!ALL_TASK_TYPES.includes(task.type)) continue;
+    // v8.3.308: 开放类型——任何类型（含用户自定义）都走 chain；
+    // 未知类型按通用非代码定义执行（不建分支、不写源码），spec code: true 才切代码形态
     const st = iterState[task.id];
 
     // 已标记失败：校验是否已手动修复
@@ -311,10 +322,11 @@ export async function chainCommand(options: ChainOptions): Promise<void> {
     const prompt = await buildTaskPrompt(task, iteration, nextAttempt, prevAttempt > 0 ? '上次执行未将 .meta/status 更新为 done' : undefined);
 
     // 开始执行通知
+    const def = await resolveTaskTypeDefinition(task.type);
     await sendNotification(process.cwd(), {
       type: 'task_status_changed',
       title: `TaskChain 开始执行 ${task.id}`,
-      message: `${getTaskTypeDefinition(task.type).label} — ${task.name || ''}（第 ${nextAttempt} 次尝试）`,
+      message: `${def.label} — ${task.name || ''}（第 ${nextAttempt} 次尝试）`,
       iteration,
       task: task.id,
     }).catch(() => {});

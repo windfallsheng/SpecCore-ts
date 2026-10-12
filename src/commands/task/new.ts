@@ -7,7 +7,7 @@ import { parsePlatformList } from '../../core/spec-paths';
 import { extractExcelBugs, extractExcelTextOnly, type ExcelBugRow } from '../../core/excel-extract';
 import { callLlm, resolveAiProviders, parseTranslationResponse } from '../../core/ask-llm';
 import { loadConfigWithMeta } from '../../core/unified-config';
-import { getTaskTypeDefinition, ALL_TASK_TYPES } from '../../core/task-type-registry';
+import { getTaskTypeDefinition } from '../../core/task-type-registry';
 
 export interface TaskNewOptions {
   name?: string;
@@ -380,12 +380,11 @@ async function createSingleTask(options: TaskNewOptions): Promise<void> {
       ? options.id.replace(/^Task-/, '')
       : counterId.replace(/^Task-/, '');
     const taskType = options.type || 'feature';
-    // v8.3.307+: 非法类型直接拒绝（注册表为准），避免产出未知类型目录
-    if (!ALL_TASK_TYPES.includes(taskType)) {
-      spinner.fail(`未知任务类型: ${taskType}（可用: ${ALL_TASK_TYPES.join('|')}）`);
-      return;
-    }
+    // v8.3.308+: 开放类型——内置类型直接过，用户自定义类型允许创建（默认非代码形态）
     const typeDef = getTaskTypeDefinition(taskType);
+    if (!typeDef.builtin) {
+      logger.info(`自定义任务类型「${taskType}」（非系统定义，默认不建分支/不写源码；如需写代码请在 spec 中声明 code: true）`);
+    }
     // counterId 已含 slug（nextTaskId 返回 Task-NNN-slug），直接用
     const taskDir = join(iterationDir, '030-tasks', taskType, `Task-${taskId}`);
 
@@ -637,7 +636,11 @@ function buildReqByType(
     doc: `# ${name}\n\n---\nconstraints: [doc-standards]\n---\n\n## 文档目标\n\n${desc}\n\n## 文档结构\n\n- \n\n## 目标受众\n\n## 交付物\n\n- \n\n## 验收标准\n\n- [ ] 结构完整无占位符残留\n- [ ] 链接全部有效\n- [ ] 术语与既有文档一致\n`,
     script: `# ${name}\n\n---\nconstraints: [script-standards]\n---\n\n## 脚本目标\n\n${desc}\n\n## 输入/输出\n\n### 输入参数\n\n### 输出\n\n## 验收标准\n\n- [ ] 脚本可运行，参数校验完整\n- [ ] 失败时非零退出码 + 明确错误信息\n- [ ] 幂等可重跑\n`,
     data: `# ${name}\n\n---\nconstraints: [data-standards]\n---\n\n## 处理目标\n\n${desc}\n\n## 数据源\n\n## 处理步骤\n\n1. \n2. \n\n## 验收标准\n\n- [ ] 数据完整性校验通过\n- [ ] 结果可复现\n- [ ] 异常数据有隔离输出\n`,
+    // v8.3.308+: 演示文稿（PPT）——Markdown 大纲 + 逐页内容，渲染交给用户
+    presentation: `# ${name}\n\n---\nconstraints: [doc-standards, presentation-standards]\n---\n\n## 演示目标\n\n${desc}\n\n## 目标受众\n\n## 页数要求\n\n- 总页数：\n- 结构：封面 / 目录 / 正文 / 总结\n\n## 大纲（每页一句）\n\n- P1 封面: \n- P2: \n- P3: \n\n## 验收标准\n\n- [ ] 页数达标（≥8 页）\n- [ ] 每页含标题与 3-5 要点\n- [ ] 每页有「口播备注」小节\n- [ ] 无占位符残留\n`,
   };
-  // 按任务类型回退：注册表定义 > 既有模板 > feature 模板
-  return templates[t] || templates.feature;
+  // v8.3.308+: 开放类型——未知类型（用户自定义）按通用非代码模板生成，
+  // 默认与代码世界绝缘（不建分支、不写源码），除非 spec 声明 code: true
+  if (templates[t]) return templates[t];
+  return `# ${name}\n\n---\ntype: ${t}\n---\n\n## 任务目标\n\n${desc}\n\n## 交付物\n\n- \n\n## 验收标准\n\n- [ ] \n- [ ] \n`;
 }

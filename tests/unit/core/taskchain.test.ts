@@ -12,6 +12,8 @@ import { mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import {
   TASK_TYPE_REGISTRY, getTaskTypeDefinition, ALL_TASK_TYPES, BUILTIN_CONSTRAINTS,
+  buildGenericDefinition, parseCustomTypeDefinition, parseSpecCodeDeclaration,
+  resolveTaskTypeDefinition, CUSTOM_TYPES_DIR,
 } from '@/core/task-type-registry';
 import {
   parseDeclaredConstraints, loadConstraintSet, formatConstraints, listConstraintSets,
@@ -19,39 +21,51 @@ import {
 
 const TEST_DIR = join(process.cwd(), 'tests', '.tmp', 'taskchain-test');
 
-describe('task-type-registry — 7 种任务类型单一事实来源', () => {
-  it('注册表包含 4 种代码类型 + 3 种 TaskChain 新类型', () => {
+describe('task-type-registry — 内置类型单一事实来源（v8.3.308: 8 种）', () => {
+  it('注册表包含 4 种代码类型 + 4 种 TaskChain 新类型', () => {
     expect(ALL_TASK_TYPES.sort()).toEqual(
-      ['feature', 'bugfix', 'refactor', 'research', 'doc', 'script', 'data'].sort()
+      ['feature', 'bugfix', 'refactor', 'research', 'doc', 'script', 'data', 'presentation'].sort()
     );
   });
 
-  it('代码类型需要端子目录 + 技术规格', () => {
+  it('代码类型需要端子目录 + 技术规格 + 分支', () => {
     for (const t of ['feature', 'bugfix', 'refactor']) {
       expect(TASK_TYPE_REGISTRY[t].needsPlatforms).toBe(true);
       expect(TASK_TYPE_REGISTRY[t].needsTechSpec).toBe(true);
+      expect(TASK_TYPE_REGISTRY[t].needsBranch).toBe(true);
       expect(TASK_TYPE_REGISTRY[t].category).toBe('code');
     }
   });
 
-  it('非代码类型（doc/script/data）不需要端子目录与技术规格', () => {
-    for (const t of ['doc', 'script', 'data']) {
+  it('非代码类型（doc/script/data/presentation）不需要端子目录、技术规格与分支', () => {
+    for (const t of ['doc', 'script', 'data', 'presentation']) {
       expect(TASK_TYPE_REGISTRY[t].needsPlatforms).toBe(false);
       expect(TASK_TYPE_REGISTRY[t].needsTechSpec).toBe(false);
+      expect(TASK_TYPE_REGISTRY[t].needsBranch).toBe(false);
     }
   });
 
-  it('每种类型都声明了产出目录 / 验收方式 / 分支类型 / 默认约束集', () => {
+  it('每种类型都声明了产出目录 / 验收方式 / 默认约束集（branchType 仅代码形态需要）', () => {
     for (const def of Object.values(TASK_TYPE_REGISTRY)) {
       expect(def.outputDir.length).toBeGreaterThan(0);
       expect(def.acceptance.length).toBeGreaterThan(0);
-      expect(def.branchType.length).toBeGreaterThan(0);
       expect(def.defaultConstraints.length).toBeGreaterThan(0);
+      if (def.needsBranch) expect(def.branchType.length).toBeGreaterThan(0);
     }
   });
 
-  it('未知类型回退 feature 定义', () => {
-    expect(getTaskTypeDefinition('nonexistent').type).toBe('feature');
+  it('presentation 默认约束包含 doc-standards 与 presentation-standards', () => {
+    const def = TASK_TYPE_REGISTRY.presentation;
+    expect(def.defaultConstraints).toEqual(['doc-standards', 'presentation-standards']);
+    expect(def.outputDir).toBe('presentations/');
+  });
+
+  it('未知类型回退通用非代码定义（不再回退 feature）', () => {
+    const def = getTaskTypeDefinition('nonexistent');
+    expect(def.type).toBe('nonexistent');
+    expect(def.builtin).toBe(false);
+    expect(def.needsBranch).toBe(false);
+    expect(def.category).toBe('custom');
   });
 
   it('内置约束集覆盖全部默认约束名', () => {
@@ -160,5 +174,115 @@ describe('loadConstraintSet — 约束集加载（声明 ∪ 类型默认）', (
     expect(text).toContain('执行前提约束');
     expect(text).toContain('doc-standards');
     expect(text).toContain('无占位符');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════
+// v8.3.308 开放类型系统：自定义类型 + spec 代码声明
+// ═══════════════════════════════════════════════════════════
+
+describe('parseCustomTypeDefinition — 用户自定义类型定义文件', () => {
+  it('完整 frontmatter 解析出全部字段', () => {
+    const content = '---\nlabel: 总结编写\ncategory: doc\noutputDir: docs/summaries/\nacceptance: 三段式结构\nneedsBranch: false\nneedsPlatforms: false\nneedsTechSpec: false\nconstraints: [doc-standards, team-style]\n---\n正文\n';
+    const def = parseCustomTypeDefinition('summary', content);
+    expect(def).not.toBeNull();
+    expect(def!.type).toBe('summary');
+    expect(def!.label).toBe('总结编写');
+    expect(def!.outputDir).toBe('docs/summaries/');
+    expect(def!.needsBranch).toBe(false);
+    expect(def!.defaultConstraints).toEqual(['doc-standards', 'team-style']);
+    expect(def!.builtin).toBe(false);
+  });
+
+  it('自定义类型显式声明 needsBranch: true（要写代码的泛化任务）', () => {
+    const content = '---\nlabel: 工具链开发\nneedsBranch: true\nbranchType: tool\n---\n';
+    const def = parseCustomTypeDefinition('toolchain', content);
+    expect(def!.needsBranch).toBe(true);
+    expect(def!.branchType).toBe('tool');
+  });
+
+  it('无 frontmatter 返回 null', () => {
+    expect(parseCustomTypeDefinition('x', '# 无 frontmatter')).toBeNull();
+  });
+
+  it('部分字段缺失时回退通用默认（不建分支）', () => {
+    const content = '---\nlabel: 翻译\n---\n';
+    const def = parseCustomTypeDefinition('translation', content)!;
+    expect(def.outputDir).toBe('outputs/');
+    expect(def.needsBranch).toBe(false);
+    expect(def.needsPlatforms).toBe(false);
+    expect(def.defaultConstraints).toEqual([]);
+  });
+});
+
+describe('parseSpecCodeDeclaration — spec 显式「写代码」声明', () => {
+  it('frontmatter code: true → 代码形态', () => {
+    expect(parseSpecCodeDeclaration('---\ntype: summary\ncode: true\n---\n# 正文')).toBe(true);
+  });
+
+  it('frontmatter needsCode: true → 代码形态', () => {
+    expect(parseSpecCodeDeclaration('---\nneedsCode: true\n---\n')).toBe(true);
+  });
+
+  it('行内「需要写代码: true」→ 代码形态', () => {
+    expect(parseSpecCodeDeclaration('# 任务\n\n- 需要写代码: true\n')).toBe(true);
+  });
+
+  it('code: false 或无声明 → 非代码形态', () => {
+    expect(parseSpecCodeDeclaration('---\ncode: false\n---\n')).toBe(false);
+    expect(parseSpecCodeDeclaration('# 普通任务\n')).toBe(false);
+  });
+});
+
+describe('resolveTaskTypeDefinition — 内置 → 自定义定义文件 → 通用回退', () => {
+  let origCwd: string;
+
+  beforeEach(() => {
+    rmSync(TEST_DIR, { recursive: true, force: true });
+    mkdirSync(join(TEST_DIR, '.speccore', 'GLOBAL', 'TASK_TYPES'), { recursive: true });
+    origCwd = process.cwd();
+    process.chdir(TEST_DIR);
+  });
+
+  afterEach(() => {
+    process.chdir(origCwd);
+    rmSync(TEST_DIR, { recursive: true, force: true });
+  });
+
+  it('内置类型优先，不读自定义文件', async () => {
+    writeFileSync(join(TEST_DIR, '.speccore', 'GLOBAL', 'TASK_TYPES', 'doc.md'), '---\nlabel: 干扰\n---\n');
+    const def = await resolveTaskTypeDefinition('doc');
+    expect(def.label).toBe('文档编写');
+    expect(def.builtin).toBe(true);
+  });
+
+  it('自定义类型从定义文件解析', async () => {
+    writeFileSync(
+      join(TEST_DIR, '.speccore', 'GLOBAL', 'TASK_TYPES', 'summary.md'),
+      '---\nlabel: 总结编写\noutputDir: docs/summaries/\nconstraints: [doc-standards]\n---\n',
+    );
+    const def = await resolveTaskTypeDefinition('summary');
+    expect(def.label).toBe('总结编写');
+    expect(def.outputDir).toBe('docs/summaries/');
+    expect(def.defaultConstraints).toEqual(['doc-standards']);
+  });
+
+  it('无定义文件时回退通用非代码定义', async () => {
+    const def = await resolveTaskTypeDefinition('translation');
+    expect(def.builtin).toBe(false);
+    expect(def.needsBranch).toBe(false);
+    expect(def.needsPlatforms).toBe(false);
+    expect(def.outputDir).toBe('outputs/');
+  });
+
+  it('自定义类型的默认约束参与 loadConstraintSet 加载', async () => {
+    mkdirSync(join(TEST_DIR, '.speccore', 'GLOBAL', 'CONSTRAINTS'), { recursive: true });
+    writeFileSync(join(TEST_DIR, '.speccore', 'GLOBAL', 'CONSTRAINTS', 'team-style.md'), '# 团队风格\n');
+    writeFileSync(
+      join(TEST_DIR, '.speccore', 'GLOBAL', 'TASK_TYPES', 'summary.md'),
+      '---\nlabel: 总结\nconstraints: [team-style]\n---\n',
+    );
+    const { items } = await loadConstraintSet({ taskType: 'summary' });
+    expect(items.map(i => i.name)).toEqual(['team-style']);
   });
 });

@@ -1492,8 +1492,9 @@ function inferPlatformFromTaskDir(taskDir: string): string | undefined {
   const parts = taskDir.split('/');
   if (parts.length >= 2) {
     const parentDir = parts[parts.length - 2];
-    // 排除常见非端目录名
-    if (parentDir && !['030-tasks', 'feature', 'bugfix', 'refactor', 'research', 'doc', 'script', 'data'].includes(parentDir)) {
+    // 排除常见非端目录名（v8.3.308: + presentation；用户自定义类型目录名在
+    // 下方 inferPlatformName 的 platformSet 匹配中会被自然过滤）
+    if (parentDir && !['030-tasks', 'feature', 'bugfix', 'refactor', 'research', 'doc', 'script', 'data', 'presentation'].includes(parentDir)) {
       return parentDir;
     }
   }

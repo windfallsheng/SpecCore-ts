@@ -22,7 +22,7 @@
 import { join } from 'path';
 import { pathExists, readFile, readdir } from 'fs-extra';
 import { getProjectRoot } from '../utils/task-utils';
-import { getTaskTypeDefinition } from './task-type-registry';
+import { resolveTaskTypeDefinition } from './task-type-registry';
 
 export interface ConstraintItem {
   /** 约束名（文件名去 .md） */
@@ -106,9 +106,10 @@ export async function loadConstraintSet(
   const items: ConstraintItem[] = [];
   const missing: string[] = [];
 
-  // 合并声明 + 类型默认，保持顺序去重
+  // 合并声明 + 类型默认（v8.3.308: resolveTaskTypeDefinition 支持用户自定义类型），保持顺序去重
+  const typeDef = await resolveTaskTypeDefinition(options.taskType || '', cwd);
   const names: string[] = [];
-  for (const name of [...(options.declared || []), ...getTaskTypeDefinition(options.taskType || '').defaultConstraints]) {
+  for (const name of [...(options.declared || []), ...typeDef.defaultConstraints]) {
     if (name && !names.includes(name)) names.push(name);
   }
 
