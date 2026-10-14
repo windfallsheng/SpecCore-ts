@@ -18,6 +18,7 @@ import { cleanupByType } from './cleanup';
 import { extractQuestions, showQuestionChecklist } from '../core/question-checklist';
 import { resolvePlatform } from '../core/platform-registry';
 import { findTaskDir } from '../core/task-paths';
+import { collectSkeletonResidues, appendSkeletonTodos } from '../core/skeleton-residue';
 import { savePlan, markPlanExecuted, getPlan } from '../core/plan-store';
 import { generatePlan, formatPlanMarkdown } from './plan';
 import { generatePlanHtml } from '../core/plan-html';
@@ -1928,6 +1929,15 @@ function buildAgentContext(tasks: TaskState[], agent: string): string {
 
     ctx += `**Frontend design docs (if exists):**\n`;
     ctx += `- {platform}/COMPONENT_TREE.md | ROUTES.md | STATE.md | STYLE_GUIDE.md\n\n`;
+
+    // v8.3.313+: 本端骨架覆盖清单（精确路径，完成体检会核对，残留将挂待办）
+    if (isSubtask && subtaskDir) {
+      ctx += `**本端骨架覆盖清单（if exists 必须覆盖，不得遗留占位）**：\n`;
+      for (const fn of ['REQ.md', 'TECH.md', 'STATE.md', 'ROUTES.md', 'COMPONENT_TREE.md', 'STYLE_GUIDE.md']) {
+        ctx += `- \`${join(subtaskDir, fn)}\`\n`;
+      }
+      ctx += `\n`;
+    }
   }
 
   // 2.5. 执行规范（v8.3.61+）
@@ -3048,20 +3058,14 @@ async function runApplyMode(iteration: string, options: ExecuteOptions): Promise
     }
   } catch { /* TASK.md 联动失败不阻断 */ }
 
-  // v8.3.273+: 完成门禁提示——端级 REQ.md/TECH.md 若仍是骨架占位，提醒宿主 AI 补写规格
+  // v8.3.313+: 完成骨架体检——端级文档仍含骨架占位时 completed 照常，但挂「骨架待补」待办（TASK.md + .issues.md 双账本）
   try {
-    const skeletonFiles: string[] = [];
-    for (const fn of ['REQ.md', 'TECH.md']) {
-      const p = join(taskDirForStatus, fn);
-      if (await pathExists(p)) {
-        const c = await readFile(p, 'utf-8');
-        if (c.includes('SPEC-SKELETON')) skeletonFiles.push(fn);
-      }
+    const residues = await collectSkeletonResidues(taskDirForStatus);
+    if (residues.length > 0) {
+      logger.warn(`   ⚠️  完成骨架体检：${residues.length} 份端级文档仍含骨架占位，已挂「骨架待补」待办（状态保持 completed，建议尽快补写规格）`);
+      await appendSkeletonTodos(taskDirForStatus, residues);
     }
-    if (skeletonFiles.length > 0) {
-      logger.warn(`   ⚠️  ${skeletonFiles.join('、')} 仍是骨架占位（含 SPEC-SKELETON），请用本端专业规格覆盖，否则下游审查/回归将缺依据`);
-    }
-  } catch { /* 骨架检测失败不阻断 */ }
+  } catch { /* 完成骨架体检失败不阻断 */ }
 
   // v8.3.273+: 组级状态聚合——所属 Task 组全部子任务完成后，组级 .meta/status 同步 completed
   try {

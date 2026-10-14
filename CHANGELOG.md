@@ -1,4 +1,16 @@
-## v8.3.311 (2026-10-12) — 补子任务链路：ask 意图 + task new 补端入口 + 上游门禁 + 质量扫描排除备份目录
+## v8.3.313 (2026-10-14) — 完成骨架体检：软指令升级为可追溯待办账本
+
+### 背景
+- 用户实测：任务 execute 完成（completed）后，端级文档仍留空骨架（SPEC-SKELETON / _待AI分析_ / AI-FILL）。根因：覆盖骨架只是 prompt 软指令，完成时仅 `logger.warn` 一句——不阻塞、不追溯；且旧检查只查任务根 REQ/TECH 两份，子任务目录与前端四文档（STATE/ROUTES/COMPONENT_TREE/STYLE_GUIDE）全是盲区。
+
+### 修复
+- **新增完成骨架体检**（`src/core/skeleton-residue.ts`）：`collectSkeletonResidues` 递归扫描任务目录（组级穿透到 {端}/{子任务}/ 层），覆盖 REQ/TECH + 前端四文档共 6 份，识别 SPEC-SKELETON、_待AI分析_、AI-FILL 三类标记；跳过 00-specs/_shared 等模块级共享文档。
+- **残留处置：completed 照常 + 双账本待办**（`execute.ts`）：命中残留时状态不改，但 TASK.md 追加「⚠️ 骨架待补清单」节（幂等：先摘旧节再写新节）、.issues.md 追加 `[骨架待补]` issue（幂等：先摘旧行再写新行）——下游审查/回归有据可查，不卡流程。
+- **精确覆盖清单**（`buildAgentContext`）：子任务 Prompt 列出本端 6 份骨架文件的精确路径（if exists 必须覆盖），AI 不再有「找不到/忘了哪几份」的借口。
+
+### 测试
+- 新增 skeleton-residue 单测：组级递归穿透、6 份文档名单、三类标记识别、00-specs/_shared 跳过、实文不误报；全量测试零回归。
+
 
 ### 背景
 - 用户实测：在已有功能模块任务下新建子任务（补缺失的端）时，ask 识别不了，误建了新模块任务；且上游 020-specs 没有该端分析，硬建子任务只会拿到空模板。另：unitize 重切后 features/ 下的时间戳备份目录被质量扫描当正常单元重复扫描（报告里同名 SOURCE.md ×7 堆叠）
