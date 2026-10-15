@@ -15,6 +15,7 @@ import {
 } from '../core/agents';
 // v6.85.0+: RULES 规范库
 import { getBuiltinRuleContents } from '../core/rule-loader';
+import { isTimestampBackup } from '../utils/task-utils';
 // v6.87.0+: COMMANDS 命令模板
 import { getBuiltinCommandContents } from '../core/command-loader';
 // v6.88.0+: SKILLS + HOOKS
@@ -1877,7 +1878,7 @@ export async function syncAgentsMd(projectRoot: string, force = false): Promise<
   const agentRows: { name: string; title: string; duties: string[] }[] = [];
   if (await pathExists(agentsDir)) {
     const files = (await readdir(agentsDir))
-      .filter(f => f.endsWith('.md') && !f.startsWith('_') && !f.startsWith('.'))
+      .filter(f => f.endsWith('.md') && !f.startsWith('_') && !f.startsWith('.') && !isTimestampBackup(f))
       .sort();
     for (const f of files) {
       if (f.endsWith('.inline.md')) {

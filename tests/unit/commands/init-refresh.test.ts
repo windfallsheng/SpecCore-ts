@@ -9,7 +9,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdirSync, rmSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'fs';
 import { join } from 'path';
-import { initRulesDir, initAgentsDir } from '@/commands/init';
+import { initRulesDir, initAgentsDir, syncAgentsMd } from '@/commands/init';
 
 const TEST_DIR = join(process.cwd(), 'tests', '.tmp', 'init-refresh');
 
@@ -163,5 +163,23 @@ systemPrompt: 我是团队自定义审查员
 
     const updated = readFileSync(dest, 'utf-8');
     expect(updated).toContain('叠加 RULES/');
+  });
+});
+
+describe('init refresh — 备份文件不污染投影（syncAgentsMd）', () => {
+  beforeEach(() => setup());
+  afterEach(() => cleanup());
+
+  it('AGENTS 目录中的时间戳备份文件不应进入 AGENTS.md 角色表', async () => {
+    const agentsDir = join(TEST_DIR, '.speccore', 'AGENTS');
+    // 正常角色文件 + 时间戳备份文件（升级刷新产生的旧版副本）
+    writeFileSync(join(agentsDir, 'test-reviewer.md'), `---\nname: test-reviewer\ntitle: 测试审查员\n---\n\n## 职责\n- 检查测试\n`);
+    writeFileSync(join(agentsDir, 'test-reviewer-20261015062045.md'), '旧版备份内容');
+
+    await syncAgentsMd(TEST_DIR, true);
+
+    const agentsMd = readFileSync(join(TEST_DIR, 'AGENTS.md'), 'utf-8');
+    expect(agentsMd).toContain('测试审查员');
+    expect(agentsMd).not.toContain('test-reviewer-20261015062045');
   });
 });

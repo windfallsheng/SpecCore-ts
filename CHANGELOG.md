@@ -7,9 +7,10 @@
 - **过时检测双通道**（init.ts）：OBSOLETE_MARKERS 新增「dev 后生成」「必须开始新对话」两命中型标记；inline 模板支持 `required` 缺失型检测（新版独有内容块缺失即视为过时：01-SOURCE.md、02-SPECCORE_NEEDS_INFO、03-run 快捷操作）；01 结构图补 SOURCE.md 行与规范对齐。
 - **EXTRA_BUILTIN_RULES 常量**（init.ts）：CODE_REVIEW.md / POST_COMPLETION.md 内容抽为常量统一维护，createDefaultFiles（首次 init）与 initRulesDir（update 路径）双处消费——旧项目重跑 init --update 自动补写，断链闭合；已存在不覆盖（用户定制保留）。
 - **AGENTS 智能刷新**（initAgentsDir）：旧版角色文件（缺 systemPrompt + 正文「# 角色：」标题）自动备份并刷新为新版 frontmatter；旧版注册表（缺「叠加 RULES/」上下文列）同样备份刷新；用户自定义文件（自建 frontmatter）不受影响。
+- **备份文件消费点过滤**（syncAgentsMd + scanAgentFiles）：刷新产生的 `{name}-{时间戳}.md` 备份文件此前会被扫进 AGENTS.md 角色表并加载成伪角色——两个扫描点统一用 isTimestampBackup 过滤，备份只留痕不入表。
 
 ### 测试
-- 新增 init-refresh.test.ts 9 用例：inline 命中型/缺失型过时检测、幂等不误刷、EXTRA_BUILTIN_RULES 补写与用户定制保留、AGENTS 旧版角色/注册表备份刷新、用户自定义不覆盖；全量 412/412 零回归。
+- 新增 init-refresh.test.ts 10 用例：inline 命中型/缺失型过时检测、幂等不误刷、EXTRA_BUILTIN_RULES 补写与用户定制保留、AGENTS 旧版角色/注册表备份刷新、用户自定义不覆盖、时间戳备份不污染 AGENTS.md 投影；全量 413/413 零回归。
 
 
 

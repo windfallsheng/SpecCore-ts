@@ -13,6 +13,7 @@
 
 import { join } from 'path';
 import { pathExists, readFile, readdir } from 'fs-extra';
+import { isTimestampBackup } from '../../../utils/task-utils';
 import * as yaml from 'js-yaml';
 import {
   AgentDefinition,
@@ -267,6 +268,7 @@ async function scanAgentFiles(dir: string): Promise<{ name: string; content: str
   for (const e of entries) {
     if (!e.isFile() || !e.name.endsWith('.md')) continue;
     if (e.name.startsWith('_')) continue; // _INDEX.md, _TEMPLATE.md 跳过
+    if (isTimestampBackup(e.name)) continue; // v8.3.314+: 时间戳备份文件跳过（升级刷新产生的旧版副本）
 
     const content = await readFile(join(dir, e.name), 'utf-8');
     agents.push({
