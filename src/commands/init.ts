@@ -669,84 +669,11 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
     }, null, 2)
   );
 
-  // CODE_REVIEW.md
-  await writeFile(
-    join(speccoreDir, 'RULES', 'CODE_REVIEW.md'),
-    `# 代码审查规则
-
-## 审查维度
-1. 规范遵循
-2. 代码质量
-3. 测试覆盖
-4. 性能指标
-5. 安全性
-
-## 评分标准
-| 等级 | 分数 | 说明 |
-| :--- | :--- | :--- |
-| A | 90-100 | 优秀 |
-| B | 75-89 | 良好 |
-| C | 60-74 | 合格 |
-| D | <60 | 不合格 |
-`
-  );
-
-  // POST_COMPLETION.md (Feature 完成后的维护流程)
-  await writeFile(
-    join(speccoreDir, 'RULES', 'POST_COMPLETION.md'),
-    `# Feature 完成后的维护流程
-
-> 当 Feature 已签署 ✅ 已完成 后，本文件定义其线上运行与维护期的标准流程。
-
-## 1. Feature 状态扩展
-
-| 状态 | 图标 | 含义 | 触发条件 |
-| :--- | :--- | :--- | :--- |
-| 已完成 | ✅ | Spec 与代码完全对齐，已上线 | 开发完成 + 验收通过 |
-| 待反向同步 | ⚠️ | 代码已改但 Spec 未同步 | 紧急补丁后 |
-| 维护中 | 🔄 | 正在回归或功能增强 | 分配维护任务后 |
-| 已废弃 | 🚫 | 功能下线，不再维护 | 业务下线 + 代码移除 |
-
-## 2. 补丁反向同步流程（⚠️ → ✅）
-
-1. AI 读取当前代码，对比 Spec 文件，生成差异报告
-2. 逐项更新：REQ.md、API_CONTRACT.yaml、TASK.md
-3. 更新变更履历
-4. 更新 PROJECT_GRAPH.md 状态
-
-## 3. Bug 修复流程（✅ → 🔄 → ✅）
-
-1. 标记状态为 🔄 维护中
-2. 根因分析 → 追加到 TASK.md「线上问题记录」
-3. 沉淀到 PATTERNS/ 模式库
-4. 回归验证 → 恢复状态到 ✅
-
-## 4. 功能增强流程（✅ → 🔄 → ✅）
-
-1. 标记状态为 🔄 维护中
-2. 在 REQ.md 追加新需求
-3. 更新 API_CONTRACT.yaml
-4. 更新 TASK.md 和 E2E-TEST-SPEC.md
-5. 完成后改回 ✅
-
-## 5. 功能下线流程（✅ → 🚫）
-
-1. 状态改为 🚫 已废弃
-2. PATTERNS/ 标记相关模式为「仅作历史参考」
-3. 代码保留至少一个迭代周期
-4. 最后一个周期后删除代码和 Spec
-
-## 6. 维护检查清单
-
-- [ ] 是否已更新所有受影响的 Spec 文件？
-- [ ] 是否已在变更履历中追加记录？
-- [ ] 是否已更新 PROJECT_GRAPH.md 状态？
-- [ ] 是否已沉淀到 PATTERNS/ 模式库？
-- [ ] 是否已回归 E2E-TEST-SPEC.md 测试场景？
-
-若有任何一项为"否"，不得将状态改回 ✅ 已完成。
-`
-  );
+  // CODE_REVIEW.md / POST_COMPLETION.md（内容由 EXTRA_BUILTIN_RULES 常量统一维护，
+  // 首次 init 无条件写入；update 路径由 initRulesDir 缺失补写）
+  for (const rule of EXTRA_BUILTIN_RULES) {
+    await writeFile(join(speccoreDir, 'RULES', rule.name), rule.content);
+  }
 
   // v8.3.41+: 用户自定义分析文档模板说明
   const templatesReadmePath = join(speccoreDir, 'templates', 'README.md');
@@ -1529,6 +1456,17 @@ export async function initAgentsDir(projectRoot: string): Promise<void> {
     const destPath = join(agentsDir, `${agent.name}.md`);
     if (!(await pathExists(destPath))) {
       await writeFile(destPath, agent.content);
+    } else {
+      // v8.3.314+: 旧版内置角色智能刷新 — 旧版 CLI 生成的文件只有 activations frontmatter，
+      // 正文以「# 角色：」开头；新版含 name/title/systemPrompt/contextType/contextBudget。
+      // 检测到旧版特征则备份并刷新；用户自定义文件（自建 frontmatter）不受影响。
+      const existing = await readFile(destPath, 'utf-8');
+      const isLegacyBuiltin =
+        !/^---\s*[\s\S]*?systemPrompt:/m.test(existing) && /#\s*角色[：:]\s*\(?/m.test(existing);
+      if (isLegacyBuiltin && existing !== agent.content) {
+        await safeWriteWithBackup(destPath, agent.content);
+        logger.info(`   🔄 刷新旧版角色定义: ${agent.name}.md（原文件已备份）`);
+      }
     }
   }
 
@@ -1538,6 +1476,14 @@ export async function initAgentsDir(projectRoot: string): Promise<void> {
     const registryPath = join(agentsDir, '_INDEX.md');
     if (!(await pathExists(registryPath))) {
       await writeFile(registryPath, registryContent);
+    } else {
+      // v8.3.314+: 旧版注册表智能刷新 — 旧版缺「叠加 RULES/」上下文列，刷新到新版；
+      // 已注册的自定义角色如有丢失可从备份文件恢复。
+      const existing = await readFile(registryPath, 'utf-8');
+      if (!/叠加\s+RULES\//.test(existing) && existing !== registryContent) {
+        await safeWriteWithBackup(registryPath, registryContent);
+        logger.info('   🔄 刷新旧版 AGENTS 注册表: _INDEX.md（原文件已备份，自定义角色请从备份合并）');
+      }
     }
   }
 
@@ -1564,18 +1510,112 @@ const OBSOLETE_MARKERS: { pattern: RegExp; desc: string }[] = [
   { pattern: /speccore\s+split|split\s+-I/, desc: 'split 死命令（v8.3.231+ 应为 taskify）' },
   { pattern: /taskify\s+-I/, desc: 'taskify -I（应为 -i）' },
   { pattern: /CONSTITUTION\.md\s+指定的源码路径(?!\s*\/\s*PROJECT\.yaml)/, desc: '缺少 PROJECT.yaml 引用' },
-  { pattern: /禁止在迭代目录下创建\s+10-backend/, desc: '旧表述：迭代目录（应为 任务目录）' },
+  { pattern: /禁止在迭代目录下创建\s+10-backend/, desc: '旧表述：迭代目录（应为任务目录）' },
+  { pattern: /dev\s+后生成/, desc: '旧流水线表述（dev 已更名 run，v8.3.280+）' },
+  { pattern: /必须开始新对话/, desc: 'SPECCORE_CONTINUE 旧文案（应为优先在同一会话继续）' },
 ];
 
-function detectObsoleteContent(content: string): { hasObsolete: boolean; markers: string[] } {
+/**
+ * v8.3.46+: 智能过时检测（命中型）
+ * v8.3.314+: 支持 requiredPatterns 缺失型检测 — 新版模板独有的关键内容块，旧版文件缺失即视为过时
+ */
+function detectObsoleteContent(content: string, requiredPatterns: RegExp[] = []): { hasObsolete: boolean; markers: string[] } {
   const markers: string[] = [];
   for (const marker of OBSOLETE_MARKERS) {
     if (marker.pattern.test(content)) {
       markers.push(marker.desc);
     }
   }
+  for (const pattern of requiredPatterns) {
+    if (!pattern.test(content)) {
+      markers.push('缺少新版关键内容');
+    }
+  }
   return { hasObsolete: markers.length > 0, markers };
 }
+
+/**
+ * v8.3.314+: 不在 getBuiltinRuleContents 列表内的内置规则。
+ * 首次 init（createDefaultFiles）与 update（initRulesDir）都必须确保其存在，
+ * 否则 AGENTS.md 的引用会出现断链（update 路径此前只补列表内文件）。
+ */
+const EXTRA_BUILTIN_RULES: { name: string; content: string }[] = [
+  {
+    name: 'CODE_REVIEW.md',
+    content: `# 代码审查规则
+
+## 审查维度
+1. 规范遵循
+2. 代码质量
+3. 测试覆盖
+4. 性能指标
+5. 安全性
+
+## 评分标准
+| 等级 | 分数 | 说明 |
+| :--- | :--- | :--- |
+| A | 90-100 | 优秀 |
+| B | 75-89 | 良好 |
+| C | 60-74 | 合格 |
+| D | <60 | 不合格 |
+`,
+  },
+  {
+    name: 'POST_COMPLETION.md',
+    content: `# Feature 完成后的维护流程
+
+> 当 Feature 已签署 ✅ 已完成 后，本文件定义其线上运行与维护期的标准流程。
+
+## 1. Feature 状态扩展
+
+| 状态 | 图标 | 含义 | 触发条件 |
+| :--- | :--- | :--- | :--- |
+| 已完成 | ✅ | Spec 与代码完全对齐，已上线 | 开发完成 + 验收通过 |
+| 待反向同步 | ⚠️ | 代码已改但 Spec 未同步 | 紧急补丁后 |
+| 维护中 | 🔄 | 正在回归或功能增强 | 分配维护任务后 |
+| 已废弃 | 🚫 | 功能下线，不再维护 | 业务下线 + 代码移除 |
+
+## 2. 补丁反向同步流程（⚠️ → ✅）
+
+1. AI 读取当前代码，对比 Spec 文件，生成差异报告
+2. 逐项更新：REQ.md、API_CONTRACT.yaml、TASK.md
+3. 更新变更履历
+4. 更新 PROJECT_GRAPH.md 状态
+
+## 3. Bug 修复流程（✅ → 🔄 → ✅）
+
+1. 标记状态为 🔄 维护中
+2. 根因分析 → 追加到 TASK.md「线上问题记录」
+3. 沉淀到 PATTERNS/ 模式库
+4. 回归验证 → 恢复状态到 ✅
+
+## 4. 功能增强流程（✅ → 🔄 → ✅）
+
+1. 标记状态为 🔄 维护中
+2. 在 REQ.md 追加新需求
+3. 更新 API_CONTRACT.yaml
+4. 更新 TASK.md 和 E2E-TEST-SPEC.md
+5. 完成后改回 ✅
+
+## 5. 功能下线流程（✅ → 🚫）
+
+1. 状态改为 🚫 已废弃
+2. PATTERNS/ 标记相关模式为「仅作历史参考」
+3. 代码保留至少一个迭代周期
+4. 最后一个周期后删除代码和 Spec
+
+## 6. 维护检查清单
+
+- [ ] 是否已更新所有受影响的 Spec 文件？
+- [ ] 是否已在变更履历中追加记录？
+- [ ] 是否已更新 PROJECT_GRAPH.md 状态？
+- [ ] 是否已沉淀到 PATTERNS/ 模式库？
+- [ ] 是否已回归 E2E-TEST-SPEC.md 测试场景？
+
+若有任何一项为"否"，不得将状态改回 ✅ 已完成。
+`,
+  },
+];
 
 /**
  * v6.85.0+: 初始化 RULES 规范库
@@ -1597,9 +1637,11 @@ export async function initRulesDir(projectRoot: string): Promise<void> {
 
   // v6.98.0+: 创建 AGENTS.md 投影用的 .inline.md 文件
   // v8.3.46+: 智能过时检测 — 发现已知过时标记时自动覆盖
+  // v8.3.314+: required 缺失型检测 — 新版模板独有内容块缺失时同样覆盖
   const inlineTemplates = [
     {
       name: '01-PROJECT_STRUCTURE.inline.md',
+      required: [/SOURCE\.md/],
       content: `## 项目结构
 
 \`\`\`
@@ -1608,6 +1650,7 @@ Iteration-NNN-name/            ← 迭代目录
 ├── 010-requirements/          ← 需求层
 │   ├── sources/ converted/    ← [只读] 原始 PRD / doc2spec 转换
 │   ├── features/{功能单元}/   ← unitize 切分产出（功能单元目录 = analyze 对齐锚点）
+│   │   └── SOURCE.md          ← 需求原文切片（旧版为 README.md）
 │   ├── bugs/ refactors/ research/  ← 三类需求文档（与任务类型对应）
 │   └── CLARIFY_REPORT.md      ← 澄清报告
 ├── 020-specs/                 ← 需求分析（analyze 输出）
@@ -1676,6 +1719,7 @@ Iteration-NNN-name/            ← 迭代目录
 | \`[SPECCORE_STEP_FAIL: <cmd>]\` | Pipeline 步骤失败 | 提示用户选择重试/跳过/停止 |
 | \`[SPECCORE_AMBIGUOUS: <cmd1> \\| <cmd2>]\` | 意图模糊 | 展示匹配选项让用户选择 |
 | \`[SPECCORE_CONTINUE: <path>]\` | 批次执行完成，需续批 | **优先在同一会话继续**（按标记中的命令执行下一批）；上下文紧张时开新对话，先读取 \`<path>\` 恢复上下文再续批 |`,
+      required: [/SPECCORE_NEEDS_INFO/],
     },
     {
       name: '03-COMMAND_CHEATSHEET.inline.md',
@@ -1702,8 +1746,19 @@ speccore run --demand deploy             # 逃生舱：显式声明是需求（�
 speccore analyze -g                      # 快捷糖：等价 speccore global analyze
 speccore unitize prd.md                  # 文件位置参数；doc2spec prd.docx 同理
 speccore verify deploy                   # 测试阶段位置参数（dev/pr/deploy/release）
-\`\`\``},
+\`\`\``,
+      required: [/speccore\s+run\s+#/],
+    },
   ];
+  // v8.3.314+: 补写 getBuiltinRuleContents 列表之外的内置规则（CODE_REVIEW/POST_COMPLETION）。
+  // update 路径此前只补列表内文件，旧项目缺失这两份时 AGENTS.md 引用断链。
+  for (const rule of EXTRA_BUILTIN_RULES) {
+    const destPath = join(rulesDir, rule.name);
+    if (!(await pathExists(destPath))) {
+      await writeFile(destPath, rule.content);
+    }
+  }
+
   for (const tpl of inlineTemplates) {
     const destPath = join(rulesDir, tpl.name);
     const exists = await pathExists(destPath);
@@ -1711,8 +1766,9 @@ speccore verify deploy                   # 测试阶段位置参数（dev/pr/dep
       await writeFile(destPath, tpl.content);
     } else if (tpl.name.endsWith('.inline.md')) {
       // v8.3.46+: 智能过时检测 — 发现已知过时标记时自动覆盖
+      // v8.3.314+: 缺新版关键内容（required）同样视为过时
       const existingContent = await readFile(destPath, 'utf-8');
-      const { hasObsolete, markers } = detectObsoleteContent(existingContent);
+      const { hasObsolete, markers } = detectObsoleteContent(existingContent, tpl.required);
       if (hasObsolete) {
         logger.info(`   🔄 检测到过时内容 [${tpl.name}]: ${markers.join('、')}，已自动更新`);
         await writeFile(destPath, tpl.content);

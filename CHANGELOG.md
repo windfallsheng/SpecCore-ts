@@ -1,4 +1,17 @@
-## v8.3.313 (2026-10-14) — 完成骨架体检：软指令升级为可追溯待办账本
+## v8.3.314 (2026-10-15) — 升级盲区三连修：旧项目升级后规范库同步到位
+
+### 背景
+- 会议项目升级到最新版后体检发现三个升级盲区：①RULES/*.inline.md 三份旧版（「dev 后生成」「必须开始新对话」旧文案、缺 run 快捷操作）投影进 AGENTS.md 后残留在新项目里；②旧项目缺 CODE_REVIEW.md / POST_COMPLETION.md 两份规则，AGENTS.md 引用断链；③AGENTS/*.md 角色文件旧 frontmatter（缺 name/title/systemPrompt），子 Agent 激活降级。
+
+### 修复
+- **过时检测双通道**（init.ts）：OBSOLETE_MARKERS 新增「dev 后生成」「必须开始新对话」两命中型标记；inline 模板支持 `required` 缺失型检测（新版独有内容块缺失即视为过时：01-SOURCE.md、02-SPECCORE_NEEDS_INFO、03-run 快捷操作）；01 结构图补 SOURCE.md 行与规范对齐。
+- **EXTRA_BUILTIN_RULES 常量**（init.ts）：CODE_REVIEW.md / POST_COMPLETION.md 内容抽为常量统一维护，createDefaultFiles（首次 init）与 initRulesDir（update 路径）双处消费——旧项目重跑 init --update 自动补写，断链闭合；已存在不覆盖（用户定制保留）。
+- **AGENTS 智能刷新**（initAgentsDir）：旧版角色文件（缺 systemPrompt + 正文「# 角色：」标题）自动备份并刷新为新版 frontmatter；旧版注册表（缺「叠加 RULES/」上下文列）同样备份刷新；用户自定义文件（自建 frontmatter）不受影响。
+
+### 测试
+- 新增 init-refresh.test.ts 9 用例：inline 命中型/缺失型过时检测、幂等不误刷、EXTRA_BUILTIN_RULES 补写与用户定制保留、AGENTS 旧版角色/注册表备份刷新、用户自定义不覆盖；全量 412/412 零回归。
+
+
 
 ### 背景
 - 用户实测：任务 execute 完成（completed）后，端级文档仍留空骨架（SPEC-SKELETON / _待AI分析_ / AI-FILL）。根因：覆盖骨架只是 prompt 软指令，完成时仅 `logger.warn` 一句——不阻塞、不追溯；且旧检查只查任务根 REQ/TECH 两份，子任务目录与前端四文档（STATE/ROUTES/COMPONENT_TREE/STYLE_GUIDE）全是盲区。
