@@ -1,5 +1,18 @@
 # Changelog
 
+## v8.3.332 (2026-10-19) — 全面清查：图片路径类 bug 在其它功能中的同族变体（反斜杠进文本/基准错位/形态漏检）
+
+承接 v8.3.331 图片路径四连修，全仓地毯式排查「反斜杠进 AI 可见文本 / 正斜杠拆分失效 / 形态漏检」同族问题，修 9 处 + 增 5 测试：
+
+- **循环依赖检测失效**（analyzeDependencies）：relPath 未归一化时，graph key 为反斜杠而 import 路径为正斜杠——同一文件两种形态对不上，Windows 上循环依赖检测与报告路径全错。
+- **目录深度限制失效**（walkDir）：`relPath.split('/')` 在 Windows 反斜杠下拆不开，深度恒为 1，maxDepth 形同虚设。
+- **报告/AI 上下文反斜杠**：analyze-engine 三处（文件统计/hotspots/API 清单）+ prompt-builder 阅读清单元数据 + analyze 报告文档清单/模块索引 source 字段——统一归一化正斜杠。
+- **markdown 链接反斜杠**：global-knowledge 文档索引链接、requirement-clarifier 命令示例参数（`\c` 在 md 里是转义符，用户复制即错）。
+- **图片校验漏检/误报**（checkImages）：此前只认 `![]()` 语法，HTML `<img>` 旧产物完全漏检；反斜杠路径 basename 拆分失效导致误报。现支持 HTML img 形态（src/alt 顺序无关）+ 路径反斜杠归一化。
+- **阅读清单锚点匹配**：formatSourceReadingList 的 symbolMap key 与查询均归一化，Windows 上 code-graph filePath 反斜杠不再导致锚点失配。
+- **确认安全无需改动**：change-detection 的 `010-requirements/` 匹配（git 输出恒正斜杠）、zip 条目 `xl/media/`（ZIP 规范恒正斜杠）、doc-cross-reference（已有归一化）、analyze 需求键（逻辑键非文件系统路径）。
+- **测试**：+5（validator 图片校验 HTML img 形态 3 + 反斜杠归一化 2）→ 515/515 全绿。
+
 ## v8.3.331 (2026-10-19) — 修复文档转换图片路径：反斜杠、路径失配、图片静默丢失三连修
 
 - **根因 1（路径形态失配）**：doc2spec 的图片修正正则只匹配 `](media/`，但实测 pandoc 输出 `<img src="<相对cwd完整路径>" ...>`（HTML 标签 + 完整路径）——正则从未命中，md 里留下相对 cwd 的路径，从 md 文件位置解析必错。

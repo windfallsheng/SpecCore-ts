@@ -450,7 +450,7 @@ async function scanSourceDirs(sources: string[], depth: string): Promise<SourceS
   for (const srcDir of sources) {
     if (!(await pathExists(srcDir))) continue;
     await walkDir(srcDir, srcDir, async (filePath) => {
-      const relPath = relative(process.cwd(), filePath);
+      const relPath = relative(process.cwd(), filePath).replace(/\\/g, '/');
       const ext = filePath.split('.').pop()?.toLowerCase() || '';
       const lang = LANG_MAP[ext];
       if (!lang) return;
@@ -500,7 +500,7 @@ async function walkDir(
       if (entry.name.startsWith('.') || ['node_modules', 'dist', 'build', 'target', '__pycache__', '.git'].includes(entry.name)) continue;
       if (entry.isDirectory()) {
         // 使用 path.relative 计算深度，避免尾部斜杠不一致问题
-        const relPath = relative(root, fullPath);
+        const relPath = relative(root, fullPath).replace(/\\/g, '/');
         const curDepth = relPath.split('/').filter(Boolean).length;
         if (curDepth < maxDepth) await walkDir(root, fullPath, callback, maxDepth, visited);
       } else {
@@ -543,7 +543,7 @@ async function buildApiInventory(sources: string[]): Promise<ApiEntry[]> {
 
       try {
         const content = await readFile(filePath, 'utf-8');
-        const relPath = relative(process.cwd(), filePath);
+        const relPath = relative(process.cwd(), filePath).replace(/\\/g, '/');
 
         // Java: @XXXMapping("/api/...")
         const javaApis = content.match(/@\w*Mapping\s*\(\s*"(\/[^"]+)"/g) || [];
@@ -610,7 +610,7 @@ async function detectHotspots(sources: string[]): Promise<Hotspot[]> {
       try {
         const content = await readFile(filePath, 'utf-8');
         const lines = content.split('\n');
-        const relPath = relative(process.cwd(), filePath);
+        const relPath = relative(process.cwd(), filePath).replace(/\\/g, '/');
 
         if (lines.length > 800) {
           hotspots.push({ file: relPath, severity: 'high', reason: `超大文件 (${lines.length} 行)`, lines: lines.length });
@@ -669,7 +669,7 @@ async function analyzeDependencies(sources: string[]): Promise<DepAnalysis> {
 
       try {
         const content = await readFile(filePath, 'utf-8');
-        const relPath = relative(process.cwd(), filePath);
+        const relPath = relative(process.cwd(), filePath).replace(/\\/g, '/');
         allFiles.push(relPath);
 
         // TS/JS imports — 只匹配项目内部引用 (相对路径)

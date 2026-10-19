@@ -639,7 +639,7 @@ async function loadExtraSpecs(
             break;
           }
         }
-        const relPath = relative(cwd, item.path);
+        const relPath = relative(cwd, item.path).replace(/\\/g, '/');
         listLines.push(`### ${item.feature}/${item.name}`);
         listLines.push(`- **文件**: \`${relPath}\``);
         listLines.push(`- **标题**: ${title}`);

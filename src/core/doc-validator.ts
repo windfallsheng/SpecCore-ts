@@ -279,17 +279,27 @@ async function checkImages(
   while ((match = imgRegex.exec(content)) !== null) {
     images.push({ alt: match[1], path: match[2] });
   }
+  // 兼容 HTML <img src="..."> 形态（旧 doc2spec 产物 / 手写文档），v8.3.331+
+  content.replace(/<img\b([^>]*)\/?>/g, (_tag, attrs: string) => {
+    const src = /src="([^"]+)"/.exec(attrs)?.[1];
+    const alt = /alt="([^"]*)"/.exec(attrs)?.[1] ?? '';
+    if (src) images.push({ alt, path: src });
+    return '';
+  });
 
   let missingCount = 0;
   for (const img of images) {
     // 跳过外部 URL
     if (img.path.startsWith('http://') || img.path.startsWith('https://')) continue;
 
+    // Windows 反斜杠归一化（旧产物可能带 \），避免 basename 拆分失效
+    const posix = img.path.replace(/\\/g, '/');
+
     // 尝试在多个可能的位置查找图片
     const possiblePaths = [
-      join(outputDir, img.path),
-      join(iterDir, '010-requirements', 'assets', 'extracted', img.path.replace(/.*\//, '')),
-      join(iterDir, img.path),
+      join(outputDir, posix),
+      join(iterDir, '010-requirements', 'assets', 'extracted', posix.replace(/.*\//, '')),
+      join(iterDir, posix),
     ];
 
     let found = false;
@@ -305,7 +315,7 @@ async function checkImages(
       issues.push({
         severity: 'error',
         category: 'image',
-        description: `图片引用可能失效: ${img.path}`,
+        description: `图片引用可能失效: ${posix}`,
         suggestion: '检查 pandoc 是否正确提取了图片，或手动将图片放入 assets/extracted/ 目录',
         fixed: false,
       });

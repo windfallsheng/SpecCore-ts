@@ -847,10 +847,11 @@ export async function formatSourceReadingList(
       if (graph) {
         for (const node of graph.nodes) {
           if (node.type === 'module') continue;
-          let list = symbolMap.get(node.filePath);
+          const key = node.filePath.replace(/\\/g, '/');
+          let list = symbolMap.get(key);
           if (!list) {
             list = [];
-            symbolMap.set(node.filePath, list);
+            symbolMap.set(key, list);
           }
           list.push({ name: node.name, line: node.line, type: node.type });
         }
@@ -884,7 +885,7 @@ export async function formatSourceReadingList(
     const clues: string[] = [];
     if (m.exports.length > 0) clues.push(`导出 \`${m.exports.slice(0, 4).join(' ').trim()}\``);
     if (m.apis.length > 0) clues.push(`API \`${m.apis.slice(0, 3).join(' ')}\``);
-    const syms = symbolMap.get(m.file);
+    const syms = symbolMap.get(m.file.replace(/\\/g, '/'));
     if (syms && syms.length > 0) {
       // 锚点优先展示本文件导出符号（import 变量行号对深读价值低），再按类型兜底
       const byName = new Map(syms.map((s) => [s.name, s]));

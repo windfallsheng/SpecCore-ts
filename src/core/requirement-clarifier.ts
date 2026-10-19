@@ -580,7 +580,7 @@ export async function writeQualityReport(
     md += `${needClarify.length} 个文档需要澄清整理：\n\n`;
     for (const r of needClarify) {
       const name = basename(r.filePath);
-      const relPath = relative(iterDir, r.filePath);
+      const relPath = relative(iterDir, r.filePath).replace(/\\/g, '/');
       md += `- **${name}** → \`speccore req-doc --from ${relPath} --to ${iterName}\`\n`;
     }
     md += `\n或一次性全部澄清: \`speccore analyze --prompt -I ${iterName}\`\n`;

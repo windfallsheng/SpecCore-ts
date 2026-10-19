@@ -5572,7 +5572,7 @@ status: "clarified"
             if (await pathExists(dir)) {
               const files = (await import('fs-extra')).readdirSync(dir).filter((f: string) => f.endsWith('.md')).slice(0, 5);
               for (const f of files) {
-                const relDir = relative(iterDirForCtx, dir);
+                const relDir = relative(iterDirForCtx, dir).replace(/\\/g, '/');
                 docList.push(`${relDir}/${f}`);
               }
             }
@@ -6805,7 +6805,7 @@ export async function extractIterationUnits(iterDir: string): Promise<IterationU
       units.push({
         id: `M-${String(idCounter++).padStart(2, '0')}`,
         name: dir.name,
-        source: relative(reqDir, readmePath),
+        source: relative(reqDir, readmePath).replace(/\\/g, '/'),
         sourceRange: { startLine: 1, endLine: 1 },
         content,
       });

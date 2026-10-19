@@ -252,7 +252,7 @@ ${uniqueIssues.length > 0
 
 ${files.length > 0
     ? files.map(f => {
-        const relPath = relative(cwd, f.filePath);
+        const relPath = relative(cwd, f.filePath).replace(/\\/g, '/');
         return `- [${basename(relPath)}](${relPath})`;
       }).join('\n')
     : '_暂无文档_'}
