@@ -1,3 +1,10 @@
+## v8.3.327 (2026-10-19) — CI 第二层修复：coverage 依赖补齐 + 锦上添花环节不阻断发布
+
+- **根因**：lock 修复后 CI 首次跑到 `vitest run --coverage`，报 MISSING DEPENDENCY（devDependencies 无 `@vitest/coverage-v8`）——此前被 npm ci 失败截停从未暴露。
+- **修复**：安装 `@vitest/coverage-v8@^1.6.0`；本地验证 coverage 全链 479/479。
+- **ci.yml 加固**：codecov 上传与 CodeQL 两步加 `continue-on-error: true`（私有仓库无 token / 无 Advanced Security 许可时不阻断 publish）。
+- 注意：v8.3.326 已推 tag/release 但未发布成功，由 8.3.327 承接。
+
 ## v8.3.326 (2026-10-19) — CI 发布通道修复：package-lock 同步恢复 npm ci 一致性
 
 - **根因**：package-lock.json 自 8.3.290 后未随版本 bump 同步，CI 的 `npm ci` 严格校验直接失败（Actions 长期红，npm 上线版本靠本地 web auth 绕行）。
